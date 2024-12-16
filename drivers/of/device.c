@@ -195,19 +195,18 @@ EXPORT_SYMBOL(of_device_get_match_data);
 ssize_t of_device_modalias(struct device *dev, char *str, ssize_t len)
 {
 	ssize_t sl;
+	char *ptr __free(kfree) = NULL;
 
 	if (!dev || !dev->of_node || dev->of_node_reused)
 		return -ENODEV;
 
-	sl = of_modalias(dev->of_node, str, len - 2);
-	if (sl < 0)
-		return sl;
-	if (sl > len - 2)
+	ptr = of_modalias(dev->of_node, &sl);
+	if (IS_ERR(ptr))
+		return PTR_ERR(no_free_ptr(ptr));
+	if (sl + 2 > len)
 		return -ENOMEM;
 
-	str[sl++] = '\n';
-	str[sl] = 0;
-	return sl;
+	return snprintf(str, len, "%s\n", ptr);
 }
 EXPORT_SYMBOL_GPL(of_device_modalias);
 
@@ -256,30 +255,20 @@ EXPORT_SYMBOL_GPL(of_device_uevent);
 
 int of_device_uevent_modalias(const struct device *dev, struct kobj_uevent_env *env)
 {
-	int sl;
-	int pos;
+	int ret;
+	char *ptr;
 
 	if ((!dev) || (!dev->of_node) || dev->of_node_reused)
 		return -ENODEV;
 
-	/* Devicetree modalias is tricky, we add it in 2 steps */
-	if (add_uevent_var(env, "MODALIAS="))
-		return -ENOMEM;
+	ptr = of_modalias(dev->of_node, NULL);
+	if (IS_ERR(ptr))
+		return PTR_ERR(ptr);
 
-	/*
-	 * @env->buflen is pointing to the char after '\0' now
-	 * override the '\0' to save MODALIAS value.
-	 */
-	pos = env->buflen - 1;
-	sl = of_modalias(dev->of_node, &env->buf[pos],
-			 sizeof(env->buf) - pos);
-	if (sl < 0)
-		return sl;
-	if (sl >= (sizeof(env->buf) - pos))
-		return -ENOMEM;
-	env->buflen = pos + sl + 1;
+	ret = add_uevent_var(env, "MODALIAS=%s", ptr);
 
-	return 0;
+	kfree(ptr);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(of_device_uevent_modalias);
 

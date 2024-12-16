@@ -8,71 +8,92 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-ssize_t of_modalias(const struct device_node *np, char *str, ssize_t len)
+/*
+ * of_modalias - get MODALIAS string value for a OF device node
+ * @np: the OF device node
+ * @lenp: MODALIAS string length returned if set, exclude '\0'
+ *
+ * This function gets MODALIAS value for a device node.
+ *
+ * Returns MODALIAS string on success, or ERR_PTR() on error.
+ *
+ * Note: please kfree successful return value afer using it.
+ */
+char *of_modalias(const struct device_node *np, ssize_t *lenp)
 {
 	const char *compat;
 	char *c;
 	struct property *p;
 	ssize_t csize;
 	ssize_t tsize;
+	char *str = NULL;
+	ssize_t len = 0;
+	ssize_t pos = 0;
+	int counting = 1;
+
+	if (lenp)
+		*lenp = 0;
 
 	/*
-	 * Prevent a kernel oops in vsnprintf() -- it only allows passing a
-	 * NULL ptr when the length is also 0. Also filter out the negative
-	 * lengths...
+	 * Two cycles controlled by @counting, the fist cycle counts
+	 * chars, the second saves chars.
 	 */
-	if ((len > 0 && !str) || len < 0)
-		return -EINVAL;
+	do {
+		/* Name & Type */
+		/* %p eats all alphanum characters, so %c must be used here */
+		csize = snprintf(str + pos, len - pos, "of:N%pOFn%c%s", np, 'T',
+				 of_node_get_device_type(np));
+		if (counting)
+			tsize = csize;
+		else
+			pos += csize;
 
-	/* Name & Type */
-	/* %p eats all alphanum characters, so %c must be used here */
-	csize = snprintf(str, len, "of:N%pOFn%c%s", np, 'T',
-			 of_node_get_device_type(np));
-	tsize = csize;
-	if (csize >= len)
-		csize = len > 0 ? len - 1 : 0;
-	len -= csize;
-	str += csize;
+		of_property_for_each_string(np, "compatible", p, compat) {
+			csize = snprintf(str + pos, len - pos, "C%s", compat);
+			if (counting) {
+				tsize += csize;
+				continue;
+			}
 
-	of_property_for_each_string(np, "compatible", p, compat) {
-		csize = snprintf(str, len, "C%s", compat);
-		tsize += csize;
-		if (csize >= len)
-			continue;
-		for (c = str; c; ) {
-			c = strchr(c, ' ');
-			if (c)
-				*c++ = '_';
+			for (c = str + pos; c; ) {
+				c = strchr(c, ' ');
+				if (c)
+					*c++ = '_';
+			}
+			pos += csize;
 		}
-		len -= csize;
-		str += csize;
-	}
 
-	return tsize;
+		if (counting) {
+			/* Include '\0' of MODALIAS string. */
+			len = tsize + 1;
+			/* MODALIAS value is too long */
+			if (unlikely(len > 2048))
+				return ERR_PTR(-EINVAL);
+
+			str = kmalloc(len, GFP_KERNEL);
+			if (!str)
+				return ERR_PTR(-ENOMEM);
+		}
+
+	}	while (counting--);
+
+	if (lenp)
+		*lenp = tsize;
+	return str;
 }
 
 int of_request_module(const struct device_node *np)
 {
 	char *str;
-	ssize_t size;
 	int ret;
 
 	if (!np)
 		return -ENODEV;
 
-	size = of_modalias(np, NULL, 0);
-	if (size < 0)
-		return size;
+	str = of_modalias(np, NULL);
+	if (IS_ERR(str))
+		return PTR_ERR(str);
 
-	/* Reserve an additional byte for the trailing '\0' */
-	size++;
-
-	str = kmalloc(size, GFP_KERNEL);
-	if (!str)
-		return -ENOMEM;
-
-	of_modalias(np, str, size);
-	str[size - 1] = '\0';
 	ret = request_module(str);
 	kfree(str);
 
