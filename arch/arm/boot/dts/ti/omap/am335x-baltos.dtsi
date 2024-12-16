@@ -354,8 +354,6 @@
 
 	phy1: ethernet-phy@1 {
 		reg = <7>;
-		eee-broken-100tx;
-		eee-broken-1000t;
 	};
 };
 

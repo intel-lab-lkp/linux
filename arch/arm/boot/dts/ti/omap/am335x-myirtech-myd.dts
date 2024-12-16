@@ -96,7 +96,6 @@
 &davinci_mdio_sw {
 	phy1: ethernet-phy@6 {
 		reg = <6>;
-		eee-broken-1000t;
 	};
 };
 
