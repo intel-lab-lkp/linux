@@ -60,6 +60,16 @@ config LLD_VERSION
 	default $(ld-version) if LD_IS_LLD
 	default 0
 
+config OBJDUMP_IS_GNU
+	def_bool $(success,test "$(objdump-name)" = objdump)
+
+config OBJDUMP_IS_LLVM
+	def_bool $(success,test "$(objdump-name)" = llvm-objdump)
+
+config OBJDUMP_VERSION
+	int
+	default $(objdump-version)
+
 config RUSTC_VERSION
 	int
 	default $(rustc-version)
