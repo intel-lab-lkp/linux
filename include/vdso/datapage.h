@@ -145,8 +145,10 @@ extern struct vdso_rng_data _vdso_rng_data __attribute__((visibility("hidden")))
 #else
 extern const struct vdso_time_data vdso_u_time_data[CS_BASES] __attribute__((visibility("hidden")));
 extern const struct vdso_time_data vdso_u_timens_data[CS_BASES] __attribute__((visibility("hidden")));
+extern const struct vdso_rng_data vdso_u_rng_data __attribute__((visibility("hidden")));
 
 extern struct vdso_time_data *vdso_k_time_data;
+extern struct vdso_rng_data *vdso_k_rng_data;
 #endif
 
 /**
@@ -162,6 +164,7 @@ union vdso_data_store {
 enum vdso_pages {
 	VDSO_TIME_PAGE_OFFSET,
 	VDSO_TIMENS_PAGE_OFFSET,
+	VDSO_RNG_PAGE_OFFSET,
 	VDSO_NR_PAGES
 };
 
@@ -184,6 +187,20 @@ static __always_inline const struct vdso_time_data *__arch_get_vdso_u_timens_dat
 }
 #define __arch_get_timens_vdso_data(vd) __arch_get_vdso_u_timens_data()
 #endif /* CONFIG_TIME_NS */
+
+#ifdef CONFIG_VDSO_GETRANDOM
+static __always_inline const struct vdso_rng_data *__arch_get_vdso_u_rng_data(void)
+{
+	return &vdso_u_rng_data;
+}
+#define __arch_get_vdso_rng_data __arch_get_vdso_u_rng_data
+
+static __always_inline struct vdso_rng_data *__arch_get_vdso_k_rng_data(void)
+{
+	return vdso_k_rng_data;
+}
+#define __arch_get_k_vdso_rng_data __arch_get_vdso_k_rng_data
+#endif /* CONFIG_VDSO_GETRANDOM */
 
 #endif /* CONFIG_GENERIC_VDSO_DATA_STORE */
 
@@ -211,10 +228,17 @@ static __always_inline const struct vdso_time_data *__arch_get_vdso_u_timens_dat
 #define __vdso_u_timens_data
 #endif
 
+#ifdef CONFIG_VDSO_GETRANDOM
+#define __vdso_u_rng_data	PROVIDE(vdso_u_rng_data = vdso_u_data + 2 * PAGE_SIZE);
+#else
+#define __vdso_u_rng_data
+#endif
+
 #define VDSO_VVAR_SYMS						\
 	PROVIDE(vdso_u_data = . - __VDSO_PAGES * PAGE_SIZE);	\
 	PROVIDE(vdso_u_time_data = vdso_u_data);		\
 	__vdso_u_timens_data					\
+	__vdso_u_rng_data					\
 
 
 #endif /* !__ASSEMBLY__ */
