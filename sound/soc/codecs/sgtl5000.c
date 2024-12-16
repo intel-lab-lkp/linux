@@ -1615,6 +1615,16 @@ static int sgtl5000_i2c_probe(struct i2c_client *client)
 		goto disable_regs;
 	}
 
+	if (!of_property_read_u32(np, "mclk-rate", &value)) {
+		if (value > 0) {
+			ret = clk_set_rate(sgtl5000->mclk, value);
+			if (ret) {
+				dev_err(&client->dev, "Failed to set mclock\n");
+				goto disable_regs;
+			}
+		}
+	}
+
 	ret = clk_prepare_enable(sgtl5000->mclk);
 	if (ret) {
 		dev_err(&client->dev, "Error enabling clock %d\n", ret);
