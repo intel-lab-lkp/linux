@@ -14,41 +14,32 @@
 #define BITS_PER_BYTE		8
 
 /*
- * Create a contiguous bitmask starting at bit position @l and ending at
- * position @h. For example
+ * Create a contiguous bitmask starting at bit position @lo and ending at
+ * position @hi. For example
  * GENMASK_ULL(39, 21) gives us the 64bit vector 0x000000ffffe00000.
  */
 #if !defined(__ASSEMBLY__)
 #include <linux/build_bug.h>
-#define GENMASK_INPUT_CHECK(h, l) \
+#define GENMASK_INPUT_CHECK(hi, lo) \
 	(BUILD_BUG_ON_ZERO(__builtin_choose_expr( \
-		__is_constexpr((l) > (h)), (l) > (h), 0)))
+		__is_constexpr((lo) > (hi)), (lo) > (hi), 0)))
+
+#define GENMASK(hi, lo) \
+	(GENMASK_INPUT_CHECK(hi, lo) + __GENMASK(hi, lo))
+#define GENMASK_ULL(hi, lo) \
+	(GENMASK_INPUT_CHECK(hi, lo) + __GENMASK_ULL(hi, lo))
+
+#define GENMASK_U128(hi, lo) \
+	(GENMASK_INPUT_CHECK(hi, lo) + __GENMASK_U128(hi, lo))
 #else
 /*
  * BUILD_BUG_ON_ZERO is not available in h files included from asm files,
- * disable the input check if that is the case.
+ * 128bit exprssions don't work, neither can C 0UL (etc) constants be used.
+ * These definitions only have to work for constants and don't require
+ * that ~0 have any specific number of set bits.
  */
-#define GENMASK_INPUT_CHECK(h, l) 0
-#endif
-
-#define GENMASK(h, l) \
-	(GENMASK_INPUT_CHECK(h, l) + __GENMASK(h, l))
-#define GENMASK_ULL(h, l) \
-	(GENMASK_INPUT_CHECK(h, l) + __GENMASK_ULL(h, l))
-
-#if !defined(__ASSEMBLY__)
-/*
- * Missing asm support
- *
- * __GENMASK_U128() depends on _BIT128() which would not work
- * in the asm code, as it shifts an 'unsigned __init128' data
- * type instead of direct representation of 128 bit constants
- * such as long and unsigned long. The fundamental problem is
- * that a 128 bit constant will get silently truncated by the
- * gcc compiler.
- */
-#define GENMASK_U128(h, l) \
-	(GENMASK_INPUT_CHECK(h, l) + __GENMASK_U128(h, l))
+#define GENMASK(hi, lo) ___GENMASK(1, hi, lo)
+#define GENMASK_ULL(hi, lo) ___GENMASK(1, hi, lo)
 #endif
 
 #endif	/* __LINUX_BITS_H */
