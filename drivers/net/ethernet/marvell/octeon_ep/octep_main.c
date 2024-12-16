@@ -757,6 +757,7 @@ static int octep_stop(struct net_device *netdev)
 {
 	struct octep_device *oct = netdev_priv(netdev);
 
+	synchronize_net();
 	netdev_info(netdev, "Stopping the device ...\n");
 
 	octep_ctrl_net_set_link_status(oct, OCTEP_CTRL_NET_INVALID_VFID, false,
