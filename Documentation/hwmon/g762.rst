@@ -17,7 +17,7 @@ done via a userland daemon like fancontrol.
 Note that those entries do not provide ways to setup the specific
 hardware characteristics of the system (reference clock, pulses per
 fan revolution, ...); Those can be modified via devicetree bindings
-documented in Documentation/devicetree/bindings/hwmon/g762.txt.
+documented in Documentation/devicetree/bindings/hwmon/gmt,g762.yaml.
 
   fan1_target:
 	    set desired fan speed. This only makes sense in closed-loop
