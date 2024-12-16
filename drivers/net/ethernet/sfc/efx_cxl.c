@@ -21,6 +21,8 @@
 int efx_cxl_init(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
+	DECLARE_BITMAP(expected, CXL_MAX_CAPS);
+	DECLARE_BITMAP(found, CXL_MAX_CAPS);
 	struct pci_dev *pci_dev;
 	struct efx_cxl *cxl;
 	struct resource res;
@@ -62,6 +64,24 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 	if (cxl_set_resource(cxl->cxlds, res, CXL_RES_RAM)) {
 		pci_err(pci_dev, "cxl_set_resource RAM failed\n");
 		rc = -EINVAL;
+		goto err_resource_set;
+	}
+
+	rc = cxl_pci_accel_setup_regs(pci_dev, cxl->cxlds);
+	if (rc) {
+		pci_err(pci_dev, "CXL accel setup regs failed");
+		goto err_resource_set;
+	}
+
+	bitmap_clear(expected, 0, CXL_MAX_CAPS);
+	bitmap_set(expected, CXL_DEV_CAP_HDM, 1);
+	bitmap_set(expected, CXL_DEV_CAP_RAS, 1);
+
+	if (!cxl_pci_check_caps(cxl->cxlds, expected, found)) {
+		pci_err(pci_dev,
+			"CXL device capabilities found(%08lx) not as expected(%08lx)",
+			*found, *expected);
+		rc = -EIO;
 		goto err_resource_set;
 	}
 
