@@ -268,6 +268,11 @@
 /* End offset of samples */
 #define SQI_INLIERS_END (SQI_INLIERS_START + SQI_INLIERS_NUM)
 
+#define LAN887X_VEND_CTRL_STAT_REG		0x8013
+#define LAN887X_AN_LOCAL_CFG_FAULT		BIT(10)
+#define LAN887X_AN_LOCAL_SLAVE			BIT(9)
+#define LAN887X_AN_LOCAL_MASTER			BIT(8)
+
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x/LAN887x T1 PHY driver"
 
@@ -1259,11 +1264,6 @@ static int lan887x_get_features(struct phy_device *phydev)
 	/* Enable twisted pair */
 	linkmode_set_bit(ETHTOOL_LINK_MODE_TP_BIT, phydev->supported);
 
-	/* First patch only supports 100Mbps and 1000Mbps force-mode.
-	 * T1 Auto-Negotiation (Clause 98 of IEEE 802.3) will be added later.
-	 */
-	linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->supported);
-
 	return 0;
 }
 
@@ -1342,28 +1342,44 @@ static int lan887x_phy_setup(struct phy_device *phydev)
 	return lan887x_phy_config(phydev, phy_cfg, ARRAY_SIZE(phy_cfg));
 }
 
+static int lan887x_100M_forced_slave_setup(struct phy_device *phydev)
+{
+	static const struct lan887x_regwr_map phy_cfg[] = {
+		{MDIO_MMD_PMAPMD, LAN887X_AFE_PORT_TESTBUS_CTRL4,
+		 0x0038},
+		{MDIO_MMD_VEND1, LAN887X_INIT_COEFF_DFE1_100,
+		 0x0014},
+	};
+
+	return lan887x_phy_config(phydev, phy_cfg, ARRAY_SIZE(phy_cfg));
+}
+
+static int lan887x_100M_common_setup(struct phy_device *phydev)
+{
+	static const struct lan887x_regwr_map phy_comm_cfg[] = {
+		{MDIO_MMD_PMAPMD, LAN887X_AFE_PORT_TESTBUS_CTRL4, 0x00b8},
+		{MDIO_MMD_PMAPMD, LAN887X_TX_AMPLT_1000T1_REG, 0x0038},
+		{MDIO_MMD_VEND1,  LAN887X_INIT_COEFF_DFE1_100, 0x000f},
+	};
+
+	return lan887x_phy_config(phydev, phy_comm_cfg,
+				  ARRAY_SIZE(phy_comm_cfg));
+}
+
 static int lan887x_100M_setup(struct phy_device *phydev)
 {
+	bool is_master;
 	int ret;
 
+	is_master = (phydev->master_slave_set == MASTER_SLAVE_CFG_MASTER_FORCE ||
+		     phydev->master_slave_set == MASTER_SLAVE_CFG_MASTER_PREFERRED);
+
 	/* (Re)configure the speed/mode dependent T1 settings */
-	if (phydev->master_slave_set == MASTER_SLAVE_CFG_MASTER_FORCE ||
-	    phydev->master_slave_set == MASTER_SLAVE_CFG_MASTER_PREFERRED){
-		static const struct lan887x_regwr_map phy_cfg[] = {
-			{MDIO_MMD_PMAPMD, LAN887X_AFE_PORT_TESTBUS_CTRL4, 0x00b8},
-			{MDIO_MMD_PMAPMD, LAN887X_TX_AMPLT_1000T1_REG, 0x0038},
-			{MDIO_MMD_VEND1,  LAN887X_INIT_COEFF_DFE1_100, 0x000f},
-		};
+	if (phydev->autoneg == AUTONEG_ENABLE || is_master)
+		ret = lan887x_100M_common_setup(phydev);
+	else
+		ret = lan887x_100M_forced_slave_setup(phydev);
 
-		ret = lan887x_phy_config(phydev, phy_cfg, ARRAY_SIZE(phy_cfg));
-	} else {
-		static const struct lan887x_regwr_map phy_cfg[] = {
-			{MDIO_MMD_PMAPMD, LAN887X_AFE_PORT_TESTBUS_CTRL4, 0x0038},
-			{MDIO_MMD_VEND1, LAN887X_INIT_COEFF_DFE1_100, 0x0014},
-		};
-
-		ret = lan887x_phy_config(phydev, phy_cfg, ARRAY_SIZE(phy_cfg));
-	}
 	if (ret < 0)
 		return ret;
 
@@ -1384,8 +1400,16 @@ static int lan887x_1000M_setup(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
-	return phy_set_bits_mmd(phydev, MDIO_MMD_PMAPMD, LAN887X_DSP_PMA_CONTROL,
-				LAN887X_DSP_PMA_CONTROL_LNK_SYNC);
+	if (phydev->autoneg == AUTONEG_ENABLE)
+		ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND1,
+				       LAN887X_REG_REG26,
+				       LAN887X_REG_REG26_HW_INIT_SEQ_EN);
+	else
+		ret = phy_set_bits_mmd(phydev, MDIO_MMD_PMAPMD,
+				       LAN887X_DSP_PMA_CONTROL,
+				       LAN887X_DSP_PMA_CONTROL_LNK_SYNC);
+
+	return ret;
 }
 
 static int lan887x_link_setup(struct phy_device *phydev)
@@ -1406,6 +1430,11 @@ static int lan887x_link_setup(struct phy_device *phydev)
 static int lan887x_phy_reset(struct phy_device *phydev)
 {
 	int ret, val;
+
+	/* Disable aneg */
+	ret = genphy_c45_an_disable_aneg(phydev);
+	if (ret < 0)
+		return ret;
 
 	/* Clear 1000M link sync */
 	ret = phy_clear_bits_mmd(phydev, MDIO_MMD_PMAPMD, LAN887X_DSP_PMA_CONTROL,
@@ -1435,22 +1464,70 @@ static int lan887x_phy_reset(struct phy_device *phydev)
 				    5000, 10000, true);
 }
 
+/* LAN887X Errata: The device may not link in auto-neg when both
+ * 100BASE-T1 and 1000BASE-T1 are advertised. Hence advertising
+ * only one speed. In this case auto-neg to determine Leader/Follower.
+ */
+static int lan887x_config_advert(struct phy_device *phydev)
+{
+	linkmode_and(phydev->advertising, phydev->advertising,
+		     phydev->supported);
+
+	if (linkmode_test_bit(ETHTOOL_LINK_MODE_1000baseT1_Full_BIT,
+			      phydev->advertising)) {
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_100baseT1_Full_BIT,
+				   phydev->advertising);
+		phydev->speed = SPEED_1000;
+	} else if (linkmode_test_bit(ETHTOOL_LINK_MODE_100baseT1_Full_BIT,
+				     phydev->advertising)) {
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseT1_Full_BIT,
+				   phydev->advertising);
+		phydev->speed = SPEED_100;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int lan887x_phy_reconfig(struct phy_device *phydev)
 {
 	int ret;
 
-	linkmode_zero(phydev->advertising);
-
-	ret = genphy_c45_pma_setup_forced(phydev);
+	if (phydev->autoneg == AUTONEG_ENABLE)
+		ret = genphy_c45_an_config_aneg(phydev);
+	else
+		ret = genphy_c45_pma_setup_forced(phydev);
 	if (ret < 0)
 		return ret;
 
-	return lan887x_link_setup(phydev);
+	/* For link to comeup, (re)configure the speed/mode
+	 * dependent T1 settings
+	 */
+	ret = lan887x_link_setup(phydev);
+	if (ret < 0)
+		return ret;
+
+	/* Autoneg to be re-started only after all settings are done */
+	if (phydev->autoneg == AUTONEG_ENABLE) {
+		ret = genphy_c45_restart_aneg(phydev);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
 }
 
 static int lan887x_config_aneg(struct phy_device *phydev)
 {
 	int ret;
+
+	/* Reject the not support advertisement settings */
+	if (phydev->autoneg == AUTONEG_ENABLE) {
+		ret  = lan887x_config_advert(phydev);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* LAN887x Errata: speed configuration changes require soft reset
 	 * and chip soft reset
@@ -2058,6 +2135,34 @@ static int lan887x_get_sqi(struct phy_device *phydev)
 	return FIELD_GET(T1_DCQ_SQI_MSK, rc);
 }
 
+static int lan887x_read_status(struct phy_device *phydev)
+{
+	int rc;
+
+	phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
+
+	rc = genphy_c45_read_status(phydev);
+	if (rc < 0)
+		return rc;
+
+	if (phydev->autoneg == AUTONEG_ENABLE) {
+		/* Fetch resolved mode */
+		rc = phy_read_mmd(phydev, MDIO_MMD_AN,
+				  LAN887X_VEND_CTRL_STAT_REG);
+		if (rc < 0)
+			return rc;
+
+		if (rc & LAN887X_AN_LOCAL_MASTER)
+			phydev->master_slave_state = MASTER_SLAVE_STATE_MASTER;
+		else if (rc & LAN887X_AN_LOCAL_SLAVE)
+			phydev->master_slave_state = MASTER_SLAVE_STATE_SLAVE;
+		else if (rc & LAN887X_AN_LOCAL_CFG_FAULT)
+			phydev->master_slave_state = MASTER_SLAVE_STATE_ERR;
+	}
+
+	return 0;
+}
+
 static struct phy_driver microchip_t1_phy_driver[] = {
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_LAN87XX),
@@ -2106,7 +2211,7 @@ static struct phy_driver microchip_t1_phy_driver[] = {
 		.get_strings    = lan887x_get_strings,
 		.suspend	= genphy_suspend,
 		.resume		= genphy_resume,
-		.read_status	= genphy_c45_read_status,
+		.read_status	= lan887x_read_status,
 		.cable_test_start = lan887x_cable_test_start,
 		.cable_test_get_status = lan887x_cable_test_get_status,
 		.config_intr    = lan887x_config_intr,
