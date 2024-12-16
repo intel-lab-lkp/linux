@@ -6896,6 +6896,7 @@ static void ice_update_vsi_ring_stats(struct ice_vsi *vsi)
 	vsi->tx_linearize = 0;
 	vsi->rx_buf_failed = 0;
 	vsi->rx_page_failed = 0;
+	vsi->non_eop_descs = 0;
 
 	rcu_read_lock();
 
@@ -6916,6 +6917,7 @@ static void ice_update_vsi_ring_stats(struct ice_vsi *vsi)
 		vsi_stats->rx_bytes += bytes;
 		vsi->rx_buf_failed += ring_stats->rx_stats.alloc_buf_failed;
 		vsi->rx_page_failed += ring_stats->rx_stats.alloc_page_failed;
+		vsi->non_eop_descs += ring_stats->rx_stats.non_eop_descs;
 	}
 
 	/* update XDP Tx rings counters */

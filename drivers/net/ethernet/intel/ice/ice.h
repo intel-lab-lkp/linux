@@ -345,6 +345,7 @@ struct ice_vsi {
 	u32 rx_buf_failed;
 	u32 rx_page_failed;
 	u16 num_q_vectors;
+	u64 non_eop_descs;
 	/* tell if only dynamic irq allocation is allowed */
 	bool irq_dyn_alloc;
 
