@@ -953,13 +953,10 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 		config.dev = pca9450->dev;
 
 		rdev = devm_regulator_register(pca9450->dev, desc, &config);
-		if (IS_ERR(rdev)) {
-			ret = PTR_ERR(rdev);
-			dev_err(pca9450->dev,
-				"Failed to register regulator(%s): %d\n",
-				desc->name, ret);
-			return ret;
-		}
+		if (IS_ERR(rdev))
+			return dev_err_probe(pca9450->dev, PTR_ERR(rdev),
+				"Failed to register regulator(%s)\n",
+				desc->name);
 	}
 
 	if (pca9450->irq) {
@@ -968,9 +965,9 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 						(IRQF_TRIGGER_FALLING | IRQF_ONESHOT),
 						"pca9450-irq", pca9450);
 		if (ret != 0) {
-			dev_err(pca9450->dev, "Failed to request IRQ: %d\n",
-				pca9450->irq);
-			return ret;
+			return dev_err_probe(pca9450->dev, ret,
+					     "Failed to request IRQ: %d\n",
+					     pca9450->irq);
 		}
 		/* Unmask all interrupt except PWRON/WDOG/RSVD */
 		ret = regmap_update_bits(pca9450->regmap, PCA9450_REG_INT1_MSK,
@@ -1022,10 +1019,10 @@ static int pca9450_i2c_probe(struct i2c_client *i2c)
 	 */
 	pca9450->sd_vsel_gpio = gpiod_get_optional(pca9450->dev, "sd-vsel", GPIOD_OUT_HIGH);
 
-	if (IS_ERR(pca9450->sd_vsel_gpio)) {
-		dev_err(&i2c->dev, "Failed to get SD_VSEL GPIO\n");
-		return PTR_ERR(pca9450->sd_vsel_gpio);
-	}
+	if (IS_ERR(pca9450->sd_vsel_gpio))
+		return dev_err_probe(&i2c->dev,
+				     PTR_ERR(pca9450->sd_vsel_gpio),
+				     "Failed to get SD_VSEL GPIO\n");
 
 	dev_info(&i2c->dev, "%s probed.\n",
 		type == PCA9450_TYPE_PCA9450A ? "pca9450a" :
