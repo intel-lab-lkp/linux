@@ -2895,6 +2895,7 @@ static int compact_node(pg_data_t *pgdat, bool proactive)
 	struct compact_control cc = {
 		.order = -1,
 		.mode = proactive ? MIGRATE_SYNC_LIGHT : MIGRATE_SYNC,
+		.alloc_flags = ALLOC_CMA,
 		.ignore_skip_hint = true,
 		.whole_zone = true,
 		.gfp_mask = GFP_KERNEL,
@@ -3039,7 +3040,7 @@ static bool kcompactd_node_suitable(pg_data_t *pgdat)
 
 		ret = compaction_suit_allocation_order(zone,
 				pgdat->kcompactd_max_order,
-				highest_zoneidx, ALLOC_WMARK_MIN);
+				highest_zoneidx, ALLOC_CMA | ALLOC_WMARK_MIN);
 		if (ret == COMPACT_CONTINUE)
 			return true;
 	}
@@ -3060,6 +3061,7 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 		.search_order = pgdat->kcompactd_max_order,
 		.highest_zoneidx = pgdat->kcompactd_highest_zoneidx,
 		.mode = MIGRATE_SYNC_LIGHT,
+		.alloc_flags = ALLOC_CMA | ALLOC_WMARK_MIN,
 		.ignore_skip_hint = false,
 		.gfp_mask = GFP_KERNEL,
 	};
@@ -3080,7 +3082,7 @@ static void kcompactd_do_work(pg_data_t *pgdat)
 			continue;
 
 		ret = compaction_suit_allocation_order(zone,
-				cc.order, zoneid, ALLOC_WMARK_MIN);
+				cc.order, zoneid, cc.alloc_flags);
 		if (ret != COMPACT_CONTINUE)
 			continue;
 
