@@ -95,8 +95,8 @@ static ssize_t netdev_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		goto err;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (dev_isalive(netdev)) {
 		ret = (*set)(netdev, new);
@@ -190,7 +190,7 @@ static ssize_t carrier_store(struct device *dev, struct device_attribute *attr,
 	struct net_device *netdev = to_net_dev(dev);
 
 	/* The check is also done in change_carrier; this helps returning early
-	 * without hitting the trylock/restart in netdev_store.
+	 * without hitting the lock/restart in netdev_store.
 	 */
 	if (!netdev->netdev_ops->ndo_change_carrier)
 		return -EOPNOTSUPP;
@@ -204,8 +204,8 @@ static ssize_t carrier_show(struct device *dev,
 	struct net_device *netdev = to_net_dev(dev);
 	int ret = -EINVAL;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (netif_running(netdev)) {
 		/* Synchronize carrier state with link watch,
@@ -228,13 +228,13 @@ static ssize_t speed_show(struct device *dev,
 	int ret = -EINVAL;
 
 	/* The check is also done in __ethtool_get_link_ksettings; this helps
-	 * returning early without hitting the trylock/restart below.
+	 * returning early without hitting the lock/restart below.
 	 */
 	if (!netdev->ethtool_ops->get_link_ksettings)
 		return ret;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (netif_running(netdev)) {
 		struct ethtool_link_ksettings cmd;
@@ -254,13 +254,13 @@ static ssize_t duplex_show(struct device *dev,
 	int ret = -EINVAL;
 
 	/* The check is also done in __ethtool_get_link_ksettings; this helps
-	 * returning early without hitting the trylock/restart below.
+	 * returning early without hitting the lock/restart below.
 	 */
 	if (!netdev->ethtool_ops->get_link_ksettings)
 		return ret;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (netif_running(netdev)) {
 		struct ethtool_link_ksettings cmd;
@@ -459,8 +459,8 @@ static ssize_t ifalias_store(struct device *dev, struct device_attribute *attr,
 	if (len >  0 && buf[len - 1] == '\n')
 		--count;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (dev_isalive(netdev)) {
 		ret = dev_set_alias(netdev, buf, count);
@@ -523,13 +523,13 @@ static ssize_t phys_port_id_show(struct device *dev,
 	ssize_t ret = -EINVAL;
 
 	/* The check is also done in dev_get_phys_port_id; this helps returning
-	 * early without hitting the trylock/restart below.
+	 * early without hitting the lock/restart below.
 	 */
 	if (!netdev->netdev_ops->ndo_get_phys_port_id)
 		return -EOPNOTSUPP;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (dev_isalive(netdev)) {
 		struct netdev_phys_item_id ppid;
@@ -551,14 +551,14 @@ static ssize_t phys_port_name_show(struct device *dev,
 	ssize_t ret = -EINVAL;
 
 	/* The checks are also done in dev_get_phys_port_name; this helps
-	 * returning early without hitting the trylock/restart below.
+	 * returning early without hitting the lock/restart below.
 	 */
 	if (!netdev->netdev_ops->ndo_get_phys_port_name &&
 	    !netdev->devlink_port)
 		return -EOPNOTSUPP;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (dev_isalive(netdev)) {
 		char name[IFNAMSIZ];
@@ -580,15 +580,15 @@ static ssize_t phys_switch_id_show(struct device *dev,
 	ssize_t ret = -EINVAL;
 
 	/* The checks are also done in dev_get_phys_port_name; this helps
-	 * returning early without hitting the trylock/restart below. This works
+	 * returning early without hitting the lock/restart below. This works
 	 * because recurse is false when calling dev_get_port_parent_id.
 	 */
 	if (!netdev->netdev_ops->ndo_get_port_parent_id &&
 	    !netdev->devlink_port)
 		return -EOPNOTSUPP;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	if (dev_isalive(netdev)) {
 		struct netdev_phys_item_id ppid = { };
@@ -1282,8 +1282,8 @@ static ssize_t traffic_class_show(struct netdev_queue *queue,
 	if (!netif_is_multiqueue(dev))
 		return -ENOENT;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	index = get_netdev_queue_index(queue);
 
@@ -1327,7 +1327,7 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 		return -EPERM;
 
 	/* The check is also done later; this helps returning early without
-	 * hitting the trylock/restart below.
+	 * hitting the lock/restart below.
 	 */
 	if (!dev->netdev_ops->ndo_set_tx_maxrate)
 		return -EOPNOTSUPP;
@@ -1336,8 +1336,8 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 	if (err < 0)
 		return err;
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	err = -EOPNOTSUPP;
 	if (dev->netdev_ops->ndo_set_tx_maxrate)
@@ -1593,8 +1593,8 @@ static ssize_t xps_cpus_show(struct netdev_queue *queue, char *buf)
 
 	index = get_netdev_queue_index(queue);
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	/* If queue belongs to subordinate dev use its map */
 	dev = netdev_get_tx_queue(dev, index)->sb_dev ? : dev;
@@ -1640,9 +1640,9 @@ static ssize_t xps_cpus_store(struct netdev_queue *queue,
 		return err;
 	}
 
-	if (!rtnl_trylock()) {
+	if (rtnl_lock_interruptible()) {
 		free_cpumask_var(mask);
-		return restart_syscall();
+		return -ERESTARTSYS;
 	}
 
 	err = netif_set_xps_queue(dev, mask, index);
@@ -1664,8 +1664,8 @@ static ssize_t xps_rxqs_show(struct netdev_queue *queue, char *buf)
 
 	index = get_netdev_queue_index(queue);
 
-	if (!rtnl_trylock())
-		return restart_syscall();
+	if (rtnl_lock_interruptible())
+		return -ERESTARTSYS;
 
 	tc = netdev_txq_to_tc(dev, index);
 	rtnl_unlock();
@@ -1699,9 +1699,9 @@ static ssize_t xps_rxqs_store(struct netdev_queue *queue, const char *buf,
 		return err;
 	}
 
-	if (!rtnl_trylock()) {
+	if (rtnl_lock_interruptible()) {
 		bitmap_free(mask);
-		return restart_syscall();
+		return -ERESTARTSYS;
 	}
 
 	cpus_read_lock();
