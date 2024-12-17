@@ -1778,7 +1778,7 @@ static int tn40_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	ret = tn40_phy_register(priv);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to set up PHY.\n");
-		goto err_free_irq;
+		goto err_unregister_swnodes;
 	}
 
 	ret = tn40_priv_init(priv);
@@ -1795,6 +1795,10 @@ static int tn40_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	return 0;
 err_unregister_phydev:
 	tn40_phy_unregister(priv);
+err_unregister_swnodes:
+	fwnode_handle_put(dev_fwnode(&priv->mdio->dev));
+	device_remove_software_node(&priv->mdio->dev);
+	software_node_unregister_node_group(priv->nodes.group);
 err_free_irq:
 	pci_free_irq_vectors(pdev);
 err_unset_drvdata:
@@ -1816,6 +1820,10 @@ static void tn40_remove(struct pci_dev *pdev)
 	unregister_netdev(ndev);
 
 	tn40_phy_unregister(priv);
+	/* cleanup software nodes */
+	fwnode_handle_put(dev_fwnode(&priv->mdio->dev));
+	device_remove_software_node(&priv->mdio->dev);
+	software_node_unregister_node_group(priv->nodes.group);
 	pci_free_irq_vectors(priv->pdev);
 	pci_set_drvdata(pdev, NULL);
 	iounmap(priv->regs);
