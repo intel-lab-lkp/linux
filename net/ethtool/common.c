@@ -870,7 +870,7 @@ int __ethtool_get_ts_info(struct net_device *dev,
 {
 	struct hwtstamp_provider *hwprov;
 
-	hwprov = rtnl_dereference(dev->hwprov);
+	hwprov = rcu_dereference_rtnl(dev->hwprov);
 	/* No provider specified, use default behavior */
 	if (!hwprov) {
 		const struct ethtool_ops *ops = dev->ethtool_ops;
