@@ -79,5 +79,5 @@ int mv88e6xxx_handle_miss_violation(struct mv88e6xxx_chip *chip, int port,
 				       brport, &info.info, NULL);
 	rtnl_unlock();
 
-	return err;
+	return notifier_to_errno(err);
 }
