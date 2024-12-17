@@ -379,7 +379,6 @@ extern int of_count_phandle_with_args(const struct device_node *np,
 	const char *list_name, const char *cells_name);
 
 /* module functions */
-char *of_modalias(const struct device_node *np, ssize_t *lenp);
 extern int of_request_module(const struct device_node *np);
 
 /* phandle iterator functions */
@@ -756,11 +755,6 @@ static inline int of_count_phandle_with_args(const struct device_node *np,
 					     const char *cells_name)
 {
 	return -ENOSYS;
-}
-
-static inline char *of_modalias(const struct device_node *np, ssize_t *lenp)
-{
-	return ERR_PTR(-ENODEV);
 }
 
 static inline int of_request_module(const struct device_node *np)

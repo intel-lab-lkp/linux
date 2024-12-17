@@ -150,6 +150,8 @@ extern void __of_detach_node(struct device_node *np);
 extern void __of_sysfs_remove_bin_file(struct device_node *np,
 				       const struct property *prop);
 
+char *of_modalias(const struct device_node *np, ssize_t *lenp);
+
 /* illegal phandle value (set when unresolved) */
 #define OF_PHANDLE_ILLEGAL	0xdeadbeef
 

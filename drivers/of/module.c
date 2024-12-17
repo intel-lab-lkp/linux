@@ -8,6 +8,8 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
+#include "of_private.h"
+
 /*
  * of_modalias - get MODALIAS string value for a OF device node
  * @np: the OF device node
