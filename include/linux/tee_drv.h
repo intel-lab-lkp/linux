@@ -55,6 +55,7 @@ struct tee_context {
  * @pages:	locked pages from userspace
  * @num_pages:	number of locked pages
  * @refcount:	reference counter
+ * @use_case:	defined by TEE_IOC_UC_* in tee.h
  * @flags:	defined by TEE_SHM_* in tee_core.h
  * @id:		unique id of a shared memory object on this device, shared
  *		with user space
@@ -71,6 +72,7 @@ struct tee_shm {
 	struct page **pages;
 	size_t num_pages;
 	refcount_t refcount;
+	u32 use_case;
 	u32 flags;
 	int id;
 	u64 sec_world_id;
