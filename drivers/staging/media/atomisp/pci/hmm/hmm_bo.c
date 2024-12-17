@@ -604,7 +604,7 @@ found:
 	return bo;
 }
 
-static void free_pages_bulk_array(unsigned long nr_pages, struct page **page_array)
+static void free_pages_bulk(unsigned long nr_pages, struct page **page_array)
 {
 	unsigned long i;
 
@@ -615,7 +615,7 @@ static void free_pages_bulk_array(unsigned long nr_pages, struct page **page_arr
 static void free_private_bo_pages(struct hmm_buffer_object *bo)
 {
 	set_pages_array_wb(bo->pages, bo->pgnr);
-	free_pages_bulk_array(bo->pgnr, bo->pages);
+	free_pages_bulk(bo->pgnr, bo->pages);
 }
 
 /*Allocate pages which will be used only by ISP*/
@@ -624,17 +624,17 @@ static int alloc_private_pages(struct hmm_buffer_object *bo)
 	const gfp_t gfp = __GFP_NOWARN | __GFP_RECLAIM | __GFP_FS;
 	int ret;
 
-	ret = alloc_pages_bulk_array(gfp, bo->pgnr, bo->pages);
+	ret = alloc_pages_bulk(gfp, bo->pgnr, bo->pages);
 	if (ret != bo->pgnr) {
-		free_pages_bulk_array(ret, bo->pages);
-		dev_err(atomisp_dev, "alloc_pages_bulk_array() failed\n");
+		free_pages_bulk(ret, bo->pages);
+		dev_err(atomisp_dev, "alloc_pages_bulk() failed\n");
 		return -ENOMEM;
 	}
 
 	ret = set_pages_array_uc(bo->pages, bo->pgnr);
 	if (ret) {
 		dev_err(atomisp_dev, "set pages uncacheable failed.\n");
-		free_pages_bulk_array(bo->pgnr, bo->pages);
+		free_pages_bulk(bo->pgnr, bo->pages);
 		return ret;
 	}
 
