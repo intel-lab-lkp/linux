@@ -45,6 +45,10 @@ static int verify_one_alg(struct nlattr **attrs, enum xfrm_attr_type_t type,
 		return 0;
 
 	algp = nla_data(rt);
+	if (algp->alg_key_len > INT_MAX) {
+		NL_SET_ERR_MSG(extack, "Invalid AUTH/CRYPT/COMP key length");
+		return -EINVAL;
+	}
 	if (nla_len(rt) < (int)xfrm_alg_len(algp)) {
 		NL_SET_ERR_MSG(extack, "Invalid AUTH/CRYPT/COMP attribute length");
 		return -EINVAL;
@@ -75,6 +79,10 @@ static int verify_auth_trunc(struct nlattr **attrs,
 		return 0;
 
 	algp = nla_data(rt);
+	if (algp->alg_key_len > INT_MAX) {
+		NL_SET_ERR_MSG(extack, "Invalid AUTH_TRUNC key length");
+		return -EINVAL;
+	}
 	if (nla_len(rt) < (int)xfrm_alg_auth_len(algp)) {
 		NL_SET_ERR_MSG(extack, "Invalid AUTH_TRUNC attribute length");
 		return -EINVAL;
@@ -93,6 +101,10 @@ static int verify_aead(struct nlattr **attrs, struct netlink_ext_ack *extack)
 		return 0;
 
 	algp = nla_data(rt);
+	if (algp->alg_key_len > INT_MAX) {
+		NL_SET_ERR_MSG(extack, "Invalid AEAD key length");
+		return -EINVAL;
+	}
 	if (nla_len(rt) < (int)aead_len(algp)) {
 		NL_SET_ERR_MSG(extack, "Invalid AEAD attribute length");
 		return -EINVAL;
