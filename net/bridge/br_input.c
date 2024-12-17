@@ -96,8 +96,10 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	if (br_mst_is_enabled(br)) {
 		state = BR_STATE_FORWARDING;
 	} else {
-		if (p->state == BR_STATE_DISABLED)
-			goto drop;
+		if (p->state == BR_STATE_DISABLED) {
+			kfree_skb_reason(skb, SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE);
+			return 0;
+		}
 
 		state = p->state;
 	}
@@ -155,8 +157,10 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		}
 	}
 
-	if (state == BR_STATE_LEARNING)
-		goto drop;
+	if (state == BR_STATE_LEARNING) {
+		kfree_skb_reason(skb, SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE);
+		return 0;
+	}
 
 	BR_INPUT_SKB_CB(skb)->brdev = br->dev;
 	BR_INPUT_SKB_CB(skb)->src_port_isolated = !!(p->flags & BR_ISOLATED);
@@ -331,8 +335,10 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 	if (unlikely(skb->pkt_type == PACKET_LOOPBACK))
 		return RX_HANDLER_PASS;
 
-	if (!is_valid_ether_addr(eth_hdr(skb)->h_source))
-		goto drop;
+	if (!is_valid_ether_addr(eth_hdr(skb)->h_source)) {
+		kfree_skb_reason(skb, SKB_DROP_REASON_MAC_INVALID_SOURCE);
+		return RX_HANDLER_CONSUMED;
+	}
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (!skb)
@@ -374,7 +380,8 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 			return RX_HANDLER_PASS;
 
 		case 0x01:	/* IEEE MAC (Pause) */
-			goto drop;
+			kfree_skb_reason(skb, SKB_DROP_REASON_MAC_IEEE_MAC_CONTROL);
+			return RX_HANDLER_CONSUMED;
 
 		case 0x0E:	/* 802.1AB LLDP */
 			fwd_mask |= p->br->group_fwd_mask;
@@ -423,8 +430,7 @@ defer_stp_filtering:
 
 		return nf_hook_bridge_pre(skb, pskb);
 	default:
-drop:
-		kfree_skb(skb);
+		kfree_skb_reason(skb, SKB_DROP_REASON_BRIDGE_INGRESS_STP_STATE);
 	}
 	return RX_HANDLER_CONSUMED;
 }
