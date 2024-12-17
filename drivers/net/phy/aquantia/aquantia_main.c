@@ -33,6 +33,9 @@
 #define PHY_ID_AQR115C	0x31c31c33
 #define PHY_ID_AQR813	0x31c31cb2
 
+#define MDIO_AN_10GBT_CTRL_ADV_LTIM		BIT(0)
+#define ADVERTISE_XNP				BIT(12)
+
 #define MDIO_PHYXS_VEND_IF_STATUS		0xe812
 #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_MASK	GENMASK(7, 3)
 #define MDIO_PHYXS_VEND_IF_STATUS_TYPE_KR	0
@@ -50,6 +53,7 @@
 #define MDIO_AN_VEND_PROV_1000BASET_HALF	BIT(14)
 #define MDIO_AN_VEND_PROV_5000BASET_FULL	BIT(11)
 #define MDIO_AN_VEND_PROV_2500BASET_FULL	BIT(10)
+#define MDIO_AN_VEND_PROV_EXC_PHYID_INFO	BIT(6)
 #define MDIO_AN_VEND_PROV_DOWNSHIFT_EN		BIT(4)
 #define MDIO_AN_VEND_PROV_DOWNSHIFT_MASK	GENMASK(3, 0)
 #define MDIO_AN_VEND_PROV_DOWNSHIFT_DFLT	4
@@ -106,6 +110,30 @@
  */
 #define AQR107_OP_IN_PROG_SLEEP		1000
 #define AQR107_OP_IN_PROG_TIMEOUT	100000
+
+static int aqr105_get_features(struct phy_device *phydev)
+{
+	int ret;
+
+	/* Normal feature discovery */
+	ret = genphy_c45_pma_read_abilities(phydev);
+	if (ret)
+		return ret;
+
+	/* The AQR105 PHY misses to indicate the 2.5G and 5G modes, so add them
+	 * here
+	 */
+	linkmode_set_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
+			 phydev->supported);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+			 phydev->supported);
+
+	/* The AQR105 PHY suppports both RJ45 and SFP+ interfaces */
+	linkmode_set_bit(ETHTOOL_LINK_MODE_TP_BIT, phydev->supported);
+	linkmode_set_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, phydev->supported);
+
+	return 0;
+}
 
 static int aqr107_get_sset_count(struct phy_device *phydev)
 {
@@ -164,6 +192,59 @@ static void aqr107_get_stats(struct phy_device *phydev,
 	}
 }
 
+static int aqr105_config_speed(struct phy_device *phydev)
+{
+	int vend = MDIO_AN_VEND_PROV_EXC_PHYID_INFO;
+	int ctrl10 = MDIO_AN_10GBT_CTRL_ADV_LTIM;
+	int adv = ADVERTISE_CSMA;
+	int ret;
+
+	/* Half duplex is not supported */
+	if (phydev->duplex != DUPLEX_FULL)
+		return -EINVAL;
+
+	switch (phydev->speed) {
+	case SPEED_100:
+		adv |= ADVERTISE_100FULL;
+		break;
+	case SPEED_1000:
+		adv |= ADVERTISE_NPAGE;
+		vend |= MDIO_AN_VEND_PROV_1000BASET_FULL;
+		break;
+	case SPEED_2500:
+		adv |= (ADVERTISE_NPAGE | ADVERTISE_XNP);
+		vend |= MDIO_AN_VEND_PROV_2500BASET_FULL;
+		break;
+	case SPEED_5000:
+		adv |= (ADVERTISE_NPAGE | ADVERTISE_XNP);
+		vend |= MDIO_AN_VEND_PROV_5000BASET_FULL;
+		break;
+	case SPEED_10000:
+		adv |= (ADVERTISE_NPAGE | ADVERTISE_XNP);
+		ctrl10 |= MDIO_AN_10GBT_CTRL_ADV10G;
+		break;
+	default:
+		return -EINVAL;
+	}
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, MDIO_AN_ADVERTISE, adv);
+	if (ret < 0)
+		return ret;
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, MDIO_AN_VEND_PROV, vend);
+	if (ret < 0)
+		return ret;
+	ret = phy_write_mmd(phydev, MDIO_MMD_AN, MDIO_AN_10GBT_CTRL, ctrl10);
+	if (ret < 0)
+		return ret;
+
+	/* set by vendor driver, but should be on by default */
+	ret = phy_set_bits_mmd(phydev, MDIO_MMD_AN, MDIO_CTRL1,
+			       MDIO_AN_CTRL1_XNP);
+	if (ret < 0)
+		return ret;
+
+	return genphy_c45_an_disable_aneg(phydev);
+}
+
 static int aqr_set_mdix(struct phy_device *phydev, int mdix)
 {
 	u16 val = 0;
@@ -186,20 +267,10 @@ static int aqr_set_mdix(struct phy_device *phydev, int mdix)
 				      MDIO_AN_RESVD_VEND_PROV_MDIX_MASK, val);
 }
 
-static int aqr_config_aneg(struct phy_device *phydev)
+static int aqr_common_config_aneg(struct phy_device *phydev, bool changed)
 {
-	bool changed = false;
 	u16 reg;
 	int ret;
-
-	ret = aqr_set_mdix(phydev, phydev->mdix_ctrl);
-	if (ret < 0)
-		return ret;
-	if (ret > 0)
-		changed = true;
-
-	if (phydev->autoneg == AUTONEG_DISABLE)
-		return genphy_c45_pma_setup_forced(phydev);
 
 	ret = genphy_c45_an_config_aneg(phydev);
 	if (ret < 0)
@@ -239,6 +310,40 @@ static int aqr_config_aneg(struct phy_device *phydev)
 		changed = true;
 
 	return genphy_c45_check_and_restart_aneg(phydev, changed);
+}
+
+static int aqr105_config_aneg(struct phy_device *phydev)
+{
+	bool changed = false;
+	int ret;
+
+	ret = aqr_set_mdix(phydev, phydev->mdix_ctrl);
+	if (ret < 0)
+		return ret;
+	if (ret > 0)
+		changed = true;
+
+	if (phydev->autoneg == AUTONEG_DISABLE)
+		return aqr105_config_speed(phydev);
+
+	return aqr_common_config_aneg(phydev, changed);
+}
+
+static int aqr_config_aneg(struct phy_device *phydev)
+{
+	bool changed = false;
+	int ret;
+
+	ret = aqr_set_mdix(phydev, phydev->mdix_ctrl);
+	if (ret < 0)
+		return ret;
+	if (ret > 0)
+		changed = true;
+
+	if (phydev->autoneg == AUTONEG_DISABLE)
+		return genphy_c45_pma_setup_forced(phydev);
+
+	return aqr_common_config_aneg(phydev, changed);
 }
 
 static int aqr_config_intr(struct phy_device *phydev)
@@ -333,7 +438,7 @@ static int aqr_read_status(struct phy_device *phydev)
 	return genphy_c45_read_status(phydev);
 }
 
-static int aqr107_read_rate(struct phy_device *phydev)
+static int aqr_common_read_rate(struct phy_device *phydev, int aqr_gen)
 {
 	u32 config_reg;
 	int val;
@@ -377,20 +482,22 @@ static int aqr107_read_rate(struct phy_device *phydev)
 		return 0;
 	}
 
-	val = phy_read_mmd(phydev, MDIO_MMD_VEND1, config_reg);
-	if (val < 0)
-		return val;
+	if (aqr_gen > 1) {
+		val = phy_read_mmd(phydev, MDIO_MMD_VEND1, config_reg);
+		if (val < 0)
+			return val;
 
-	if (FIELD_GET(VEND1_GLOBAL_CFG_RATE_ADAPT, val) ==
-	    VEND1_GLOBAL_CFG_RATE_ADAPT_PAUSE)
-		phydev->rate_matching = RATE_MATCH_PAUSE;
-	else
-		phydev->rate_matching = RATE_MATCH_NONE;
+		if (FIELD_GET(VEND1_GLOBAL_CFG_RATE_ADAPT, val) ==
+		    VEND1_GLOBAL_CFG_RATE_ADAPT_PAUSE)
+			phydev->rate_matching = RATE_MATCH_PAUSE;
+		else
+			phydev->rate_matching = RATE_MATCH_NONE;
+	}
 
 	return 0;
 }
 
-static int aqr107_read_status(struct phy_device *phydev)
+static int aqr_common_read_status(struct phy_device *phydev, int aqr_gen)
 {
 	int val, ret;
 
@@ -415,6 +522,7 @@ static int aqr107_read_status(struct phy_device *phydev)
 	if (ret && ret != -ETIMEDOUT)
 		return ret;
 
+	phydev->rate_matching = RATE_MATCH_NONE;
 	switch (FIELD_GET(MDIO_PHYXS_VEND_IF_STATUS_TYPE_MASK, val)) {
 	case MDIO_PHYXS_VEND_IF_STATUS_TYPE_KR:
 		phydev->interface = PHY_INTERFACE_MODE_10GKR;
@@ -448,7 +556,17 @@ static int aqr107_read_status(struct phy_device *phydev)
 	}
 
 	/* Read possibly downshifted rate from vendor register */
-	return aqr107_read_rate(phydev);
+	return aqr_common_read_rate(phydev, aqr_gen);
+}
+
+static int aqr105_read_status(struct phy_device *phydev)
+{
+	return aqr_common_read_status(phydev, 1);
+}
+
+static int aqr107_read_status(struct phy_device *phydev)
+{
+	return aqr_common_read_status(phydev, 2);
 }
 
 static int aqr107_get_downshift(struct phy_device *phydev, u8 *data)
@@ -911,11 +1029,13 @@ static struct phy_driver aqr_driver[] = {
 {
 	PHY_ID_MATCH_MODEL(PHY_ID_AQR105),
 	.name		= "Aquantia AQR105",
-	.config_aneg    = aqr_config_aneg,
+	.get_features	= aqr105_get_features,
 	.probe		= aqr107_probe,
+	.config_init	= aqr107_config_init,
+	.config_aneg    = aqr105_config_aneg,
 	.config_intr	= aqr_config_intr,
 	.handle_interrupt = aqr_handle_interrupt,
-	.read_status	= aqr_read_status,
+	.read_status	= aqr105_read_status,
 	.suspend	= aqr107_suspend,
 	.resume		= aqr107_resume,
 },
