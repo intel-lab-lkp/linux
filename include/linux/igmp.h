@@ -142,4 +142,11 @@ extern void __ip_mc_inc_group(struct in_device *in_dev, __be32 addr,
 extern void ip_mc_inc_group(struct in_device *in_dev, __be32 addr);
 int ip_mc_check_igmp(struct sk_buff *skb);
 
+#define for_each_pmc_rtnl(in_dev, pmc)				\
+	for (pmc = rtnl_dereference(in_dev->mc_list);		\
+	     pmc != NULL;					\
+	     pmc = rtnl_dereference(pmc->next_rcu))
+
+int inet_fill_ifmcaddr(struct sk_buff *skb, struct net_device *dev,
+		       const struct ip_mc_list *im, int event, int flags);
 #endif

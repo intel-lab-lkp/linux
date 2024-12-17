@@ -179,11 +179,6 @@ static void ip_ma_put(struct ip_mc_list *im)
 	     pmc != NULL;					\
 	     pmc = rcu_dereference(pmc->next_rcu))
 
-#define for_each_pmc_rtnl(in_dev, pmc)				\
-	for (pmc = rtnl_dereference(in_dev->mc_list);		\
-	     pmc != NULL;					\
-	     pmc = rtnl_dereference(pmc->next_rcu))
-
 static void ip_sf_list_clear_all(struct ip_sf_list *psf)
 {
 	struct ip_sf_list *next;
@@ -1432,14 +1427,14 @@ static void ip_mc_hash_remove(struct in_device *in_dev,
 	*mc_hash = im->next_hash;
 }
 
-static int inet_fill_ifmcaddr(struct sk_buff *skb, struct net_device *dev,
-			      const struct ip_mc_list *im, int event)
+int inet_fill_ifmcaddr(struct sk_buff *skb, struct net_device *dev,
+		       const struct ip_mc_list *im, int event, int flags)
 {
 	struct ifa_cacheinfo ci;
 	struct ifaddrmsg *ifm;
 	struct nlmsghdr *nlh;
 
-	nlh = nlmsg_put(skb, 0, 0, event, sizeof(struct ifaddrmsg), 0);
+	nlh = nlmsg_put(skb, 0, 0, event, sizeof(struct ifaddrmsg), flags);
 	if (!nlh)
 		return -EMSGSIZE;
 
@@ -1464,6 +1459,7 @@ static int inet_fill_ifmcaddr(struct sk_buff *skb, struct net_device *dev,
 	nlmsg_end(skb, nlh);
 	return 0;
 }
+EXPORT_SYMBOL(inet_fill_ifmcaddr);
 
 static void inet_ifmcaddr_notify(struct net_device *dev,
 				 const struct ip_mc_list *im, int event)
@@ -1477,7 +1473,7 @@ static void inet_ifmcaddr_notify(struct net_device *dev,
 	if (!skb)
 		goto error;
 
-	err = inet_fill_ifmcaddr(skb, dev, im, event);
+	err = inet_fill_ifmcaddr(skb, dev, im, event, 0);
 	if (err < 0) {
 		WARN_ON_ONCE(err == -EMSGSIZE);
 		nlmsg_free(skb);
