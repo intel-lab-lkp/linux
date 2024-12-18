@@ -115,16 +115,6 @@ int ef4_nic_init_interrupt(struct ef4_nic *efx)
 			goto fail2;
 		}
 		++n_irqs;
-
-#ifdef CONFIG_RFS_ACCEL
-		if (efx->interrupt_mode == EF4_INT_MODE_MSIX &&
-		    channel->channel < efx->n_rx_channels) {
-			rc = irq_cpu_rmap_add(efx->net_dev->rx_cpu_rmap,
-					      channel->irq);
-			if (rc)
-				goto fail2;
-		}
-#endif
 	}
 
 	return 0;

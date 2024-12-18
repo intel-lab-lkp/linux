@@ -1321,6 +1321,15 @@ static void efx_init_napi_channel(struct efx_channel *channel)
 
 	channel->napi_dev = efx->net_dev;
 	netif_napi_add(channel->napi_dev, &channel->napi_str, efx_poll);
+
+	if (efx->interrupt_mode == EFX_INT_MODE_MSIX &&
+	    channel->channel < efx->n_rx_channels)
+#ifdef CONFIG_RFS_ACCEL
+		netif_napi_set_irq(&channel->napi_str, channel->irq,
+				   NAPIF_IRQ_ARFS_RMAP);
+#else
+		netif_napi_set_irq(&channel->napi_str, channel->irq, 0);
+#endif
 }
 
 void efx_siena_init_napi(struct efx_nic *efx)

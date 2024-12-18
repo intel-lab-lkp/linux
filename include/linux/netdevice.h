@@ -354,6 +354,18 @@ struct napi_config {
 	unsigned int napi_id;
 };
 
+enum {
+#ifdef CONFIG_RFS_ACCEL
+	NAPI_IRQ_ARFS_RMAP,		/* Core handles RMAP updates */
+#endif
+};
+
+enum {
+#ifdef CONFIG_RFS_ACCEL
+	NAPIF_IRQ_ARFS_RMAP		= BIT(NAPI_IRQ_ARFS_RMAP),
+#endif
+};
+
 /*
  * Structure for NAPI scheduling similar to tasklet but with weighting
  */

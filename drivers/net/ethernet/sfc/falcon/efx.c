@@ -2004,6 +2004,15 @@ static void ef4_init_napi_channel(struct ef4_channel *channel)
 
 	channel->napi_dev = efx->net_dev;
 	netif_napi_add(channel->napi_dev, &channel->napi_str, ef4_poll);
+
+	if (efx->interrupt_mode == EF4_INT_MODE_MSIX &&
+	    channel->channel < efx->n_rx_channels)
+#ifdef CONFIG_RFS_ACCEL
+		netif_napi_set_irq(&channel->napi_str, channel->irq,
+				   NAPIF_IRQ_ARFS_RMAP);
+#else
+		netif_napi_set_irq(&channel->napi_str, channel->irq, 0);
+#endif
 }
 
 static void ef4_init_napi(struct ef4_nic *efx)

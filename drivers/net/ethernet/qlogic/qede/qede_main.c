@@ -1944,12 +1944,24 @@ static void qede_napi_disable_remove(struct qede_dev *edev)
 
 static void qede_napi_add_enable(struct qede_dev *edev)
 {
+	struct qede_fastpath *fp = &edev->fp_array[i];
 	int i;
 
 	/* Add NAPI objects */
 	for_each_queue(i) {
-		netif_napi_add(edev->ndev, &edev->fp_array[i].napi, qede_poll);
-		napi_enable(&edev->fp_array[i].napi);
+		fp = &edev->fp_array[i];
+		netif_napi_add(edev->ndev, &fp->napi, qede_poll);
+		napi_enable(&fp->napi);
+		if (edev->ndev->rx_cpu_rmap && (fp->type & QEDE_FASTPATH_RX))
+#ifdef CONFIG_RFS_ACCEL
+			netif_napi_set_irq(&edev->fp_array[i].napi,
+					   edev->int_info.msix[i].vector,
+					   NAPIF_IRQ_ARFS_RMAP);
+#else
+			netif_napi_set_irq(&edev->fp_array[i].napi,
+					   edev->int_info.msix[i].vector,
+					   0);
+#endif
 	}
 }
 
@@ -1983,18 +1995,6 @@ static int qede_req_msix_irqs(struct qede_dev *edev)
 	}
 
 	for (i = 0; i < QEDE_QUEUE_CNT(edev); i++) {
-#ifdef CONFIG_RFS_ACCEL
-		struct qede_fastpath *fp = &edev->fp_array[i];
-
-		if (edev->ndev->rx_cpu_rmap && (fp->type & QEDE_FASTPATH_RX)) {
-			rc = irq_cpu_rmap_add(edev->ndev->rx_cpu_rmap,
-					      edev->int_info.msix[i].vector);
-			if (rc) {
-				DP_ERR(edev, "Failed to add CPU rmap\n");
-				qede_free_arfs(edev);
-			}
-		}
-#endif
 		rc = request_irq(edev->int_info.msix[i].vector,
 				 qede_msix_fp_int, 0, edev->fp_array[i].name,
 				 &edev->fp_array[i]);

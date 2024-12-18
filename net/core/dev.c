@@ -6707,8 +6707,22 @@ EXPORT_SYMBOL(netif_queue_set_napi);
 
 void netif_napi_set_irq(struct napi_struct *napi, int irq, unsigned long flags)
 {
+	int  rc;
+
 	napi->irq = irq;
 	napi->irq_flags = flags;
+
+#ifdef CONFIG_RFS_ACCEL
+	if (napi->dev->rx_cpu_rmap && flags & NAPIF_IRQ_ARFS_RMAP) {
+		rc = irq_cpu_rmap_add(napi->dev->rx_cpu_rmap, irq);
+		if (rc) {
+			netdev_warn(napi->dev, "Unable to update ARFS map (%d).\n",
+				    rc);
+			free_irq_cpu_rmap(napi->dev->rx_cpu_rmap);
+			napi->dev->rx_cpu_rmap = NULL;
+		}
+	}
+#endif
 }
 EXPORT_SYMBOL(netif_napi_set_irq);
 
