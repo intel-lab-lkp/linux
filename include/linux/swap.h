@@ -396,6 +396,7 @@ static inline void lru_cache_enable(void)
 }
 
 extern void lru_cache_disable(void);
+extern void maybe_lru_add_drain(void);
 extern void lru_add_drain(void);
 extern void lru_add_drain_cpu(int cpu);
 extern void lru_add_drain_cpu_zone(struct zone *zone);

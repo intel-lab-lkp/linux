@@ -728,6 +728,24 @@ void lru_add_drain(void)
 	mlock_drain_local();
 }
 
+static bool should_lru_add_drain(void)
+{
+	struct cpu_fbatches *fbatches = this_cpu_ptr(&cpu_fbatches);
+	int pending = folio_batch_count(&fbatches->lru_add);
+	pending += folio_batch_count(&fbatches->lru_deactivate);
+	pending += folio_batch_count(&fbatches->lru_deactivate_file);
+	pending += folio_batch_count(&fbatches->lru_lazyfree);
+
+	/* Don't bother draining unless we have several pages pending. */
+	return pending > SWAP_CLUSTER_MAX;
+}
+
+void maybe_lru_add_drain(void)
+{
+	if (should_lru_add_drain())
+		lru_add_drain();
+}
+
 /*
  * It's called from per-cpu workqueue context in SMP case so
  * lru_add_drain_cpu and invalidate_bh_lrus_cpu should run on
