@@ -1243,7 +1243,7 @@ int mlx4_init_eq_table(struct mlx4_dev *dev)
 				}
 
 				err = irq_cpu_rmap_add(
-					info->rmap, eq->irq);
+					info->rmap, eq->irq, NULL, NULL);
 				if (err)
 					mlx4_warn(dev, "Failed adding irq rmap\n");
 			}

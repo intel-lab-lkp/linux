@@ -122,7 +122,7 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 		if (efx->interrupt_mode == EFX_INT_MODE_MSIX &&
 		    channel->channel < efx->n_rx_channels) {
 			rc = irq_cpu_rmap_add(efx->net_dev->rx_cpu_rmap,
-					      channel->irq);
+					      channel->irq, NULL, NULL);
 			if (rc)
 				goto fail2;
 		}

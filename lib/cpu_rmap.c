@@ -220,14 +220,6 @@ int cpu_rmap_update(struct cpu_rmap *rmap, u16 index,
 }
 EXPORT_SYMBOL(cpu_rmap_update);
 
-/* Glue between IRQ affinity notifiers and CPU rmaps */
-
-struct irq_glue {
-	struct irq_affinity_notify notify;
-	struct cpu_rmap *rmap;
-	u16 index;
-};
-
 /**
  * free_irq_cpu_rmap - free a CPU affinity reverse-map used for IRQs
  * @rmap: Reverse-map allocated with alloc_irq_cpu_map(), or %NULL
@@ -300,6 +292,8 @@ EXPORT_SYMBOL(irq_cpu_rmap_remove);
  * irq_cpu_rmap_add - add an IRQ to a CPU affinity reverse-map
  * @rmap: The reverse-map
  * @irq: The IRQ number
+ * @data: Generic data
+ * @notify: Callback function to update the CPU-IRQ rmap
  *
  * This adds an IRQ affinity notifier that will update the reverse-map
  * automatically.
@@ -307,16 +301,22 @@ EXPORT_SYMBOL(irq_cpu_rmap_remove);
  * Must be called in process context, after the IRQ is allocated but
  * before it is bound with request_irq().
  */
-int irq_cpu_rmap_add(struct cpu_rmap *rmap, int irq)
+int irq_cpu_rmap_add(struct cpu_rmap *rmap, int irq, void *data,
+		     void (*notify)(struct irq_affinity_notify *notify,
+				    const cpumask_t *mask))
 {
 	struct irq_glue *glue = kzalloc(sizeof(*glue), GFP_KERNEL);
 	int rc;
 
 	if (!glue)
 		return -ENOMEM;
-	glue->notify.notify = irq_cpu_rmap_notify;
+
+	if (!notify)
+		notify = irq_cpu_rmap_notify;
+	glue->notify.notify = notify;
 	glue->notify.release = irq_cpu_rmap_release;
 	glue->rmap = rmap;
+	glue->data = data;
 	cpu_rmap_get(rmap);
 	rc = cpu_rmap_add(rmap, glue);
 	if (rc < 0)

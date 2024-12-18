@@ -697,7 +697,7 @@ static int hns3_set_rx_cpu_rmap(struct net_device *netdev)
 	for (i = 0; i < priv->vector_num; i++) {
 		tqp_vector = &priv->tqp_vector[i];
 		ret = irq_cpu_rmap_add(netdev->rx_cpu_rmap,
-				       tqp_vector->vector_irq);
+				       tqp_vector->vector_irq, NULL, NULL);
 		if (ret) {
 			hns3_free_rx_cpu_rmap(netdev);
 			return ret;

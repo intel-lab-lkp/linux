@@ -1657,7 +1657,8 @@ static void enic_set_rx_cpu_rmap(struct enic *enic)
 			return;
 		for (i = 0; i < enic->rq_count; i++) {
 			res = irq_cpu_rmap_add(enic->netdev->rx_cpu_rmap,
-					       enic->msix_entry[i].vector);
+					       enic->msix_entry[i].vector,
+					       NULL, NULL);
 			if (unlikely(res)) {
 				enic_free_rx_cpu_rmap(enic);
 				return;

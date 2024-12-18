@@ -11,6 +11,15 @@
 #include <linux/gfp.h>
 #include <linux/slab.h>
 #include <linux/kref.h>
+#include <linux/interrupt.h>
+
+/* Glue between IRQ affinity notifiers and CPU rmaps */
+struct irq_glue {
+	struct irq_affinity_notify notify;
+	struct cpu_rmap *rmap;
+	void *data;
+	u16 index;
+};
 
 /**
  * struct cpu_rmap - CPU affinity reverse-map
@@ -61,6 +70,8 @@ static inline struct cpu_rmap *alloc_irq_cpu_rmap(unsigned int size)
 extern void free_irq_cpu_rmap(struct cpu_rmap *rmap);
 
 int irq_cpu_rmap_remove(struct cpu_rmap *rmap, int irq);
-extern int irq_cpu_rmap_add(struct cpu_rmap *rmap, int irq);
+extern int irq_cpu_rmap_add(struct cpu_rmap *rmap, int irq, void *data,
+			    void (*notify)(struct irq_affinity_notify *notify,
+					   const cpumask_t *mask));
 
 #endif /* __LINUX_CPU_RMAP_H */

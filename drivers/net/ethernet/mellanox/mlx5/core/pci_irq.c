@@ -285,7 +285,7 @@ struct mlx5_irq *mlx5_irq_alloc(struct mlx5_irq_pool *pool, int i,
 
 	if (i && rmap && *rmap) {
 #ifdef CONFIG_RFS_ACCEL
-		err = irq_cpu_rmap_add(*rmap, irq->map.virq);
+		err = irq_cpu_rmap_add(*rmap, irq->map.virq, NULL, NULL);
 		if (err)
 			goto err_irq_rmap;
 #endif
