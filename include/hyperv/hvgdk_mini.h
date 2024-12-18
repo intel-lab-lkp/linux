@@ -1107,7 +1107,6 @@ union hv_register_value {
 	union hv_x64_pending_interruption_register pending_interruption;
 };
 
-#if defined(CONFIG_ARM64)
 /* HvGetVpRegisters returns an array of these output elements */
 struct hv_get_vp_registers_output {
 	union {
@@ -1123,8 +1122,6 @@ struct hv_get_vp_registers_output {
 		} as64 __packed;
 	};
 };
-
-#endif /* CONFIG_ARM64 */
 
 struct hv_register_assoc {
 	u32 name;			/* enum hv_register_name */
