@@ -186,14 +186,14 @@ static int pfcp_add_sock(struct pfcp_dev *pfcp)
 
 static int pfcp_newlink(struct rtnl_newlink_params *params)
 {
+	struct net *link_net = rtnl_newlink_link_net(params);
 	struct net_device *dev = params->dev;
-	struct net *net = params->net;
 	struct pfcp_dev *pfcp;
 	struct pfcp_net *pn;
 	int err;
 
 	pfcp = netdev_priv(dev);
-	pfcp->net = net;
+	pfcp->net = link_net;
 
 	err = pfcp_add_sock(pfcp);
 	if (err) {

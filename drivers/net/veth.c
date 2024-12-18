@@ -1767,10 +1767,10 @@ static int veth_init_queues(struct net_device *dev, struct nlattr *tb[])
 
 static int veth_newlink(struct rtnl_newlink_params *params)
 {
+	struct net *peer_net = rtnl_newlink_peer_net(params);
 	struct netlink_ext_ack *extack = params->extack;
 	struct net_device *dev = params->dev;
 	struct nlattr **data = params->data;
-	struct net *peer_net = params->net;
 	struct nlattr **tb = params->tb;
 	int err;
 	struct net_device *peer;
