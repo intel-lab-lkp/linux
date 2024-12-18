@@ -21,6 +21,28 @@ properties:
   interrupts:
     maxItems: 1
 
+  TX_BUF_BYTE_x_hidden:
+    description:
+      True when TX_BUF_BYTE_x can only be accessed through
+      I2C_WRITE_BYTE_COUNT.
+    type: boolean
+
+  RX_BUF_BYTE_x_hidden:
+    description:
+      True when RX_BUF_BYTE_x can only be accessed through
+      READABLE_BYTE_COUNT.
+    type: boolean
+
+  auto_discharge_disconnect:
+    description:
+      True when TCPC can autonomously discharge vbus on disconnect.
+    type: boolean
+
+  vbus_vsafe0v:
+    description:
+      True when TCPC can detect whether vbus is at VSAFE0V.
+    type: boolean
+
   connector:
     type: object
     $ref: /schemas/connector/usb-connector.yaml#
