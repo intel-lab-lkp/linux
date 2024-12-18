@@ -132,6 +132,8 @@
 				compatible = "microchip,sam9x7-spi", "atmel,at91rm9200-spi";
 				reg = <0x400 0x200>;
 				interrupts = <13 IRQ_TYPE_LEVEL_HIGH 7>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 13>;
 				clock-names = "spi_clk";
 				dmas = <&dma0
@@ -201,6 +203,8 @@
 				compatible = "microchip,sam9x7-spi", "atmel,at91rm9200-spi";
 				reg = <0x400 0x200>;
 				interrupts = <14 IRQ_TYPE_LEVEL_HIGH 7>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 14>;
 				clock-names = "spi_clk";
 				dmas = <&dma0
@@ -683,6 +687,8 @@
 				compatible = "microchip,sam9x7-spi", "atmel,at91rm9200-spi";
 				reg = <0x400 0x200>;
 				interrupts = <5 IRQ_TYPE_LEVEL_HIGH 7>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 5>;
 				clock-names = "spi_clk";
 				dmas = <&dma0
@@ -752,6 +758,8 @@
 				compatible = "microchip,sam9x7-spi", "atmel,at91rm9200-spi";
 				reg = <0x400 0x200>;
 				interrupts = <6 IRQ_TYPE_LEVEL_HIGH 7>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 6>;
 				clock-names = "spi_clk";
 				dmas = <&dma0
@@ -821,6 +829,8 @@
 				compatible = "microchip,sam9x7-spi", "atmel,at91rm9200-spi";
 				reg = <0x400 0x200>;
 				interrupts = <7 IRQ_TYPE_LEVEL_HIGH 7>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 7>;
 				clock-names = "spi_clk";
 				dmas = <&dma0
@@ -890,6 +900,8 @@
 				compatible = "microchip,sam9x7-spi", "atmel,at91rm9200-spi";
 				reg = <0x400 0x200>;
 				interrupts = <8 IRQ_TYPE_LEVEL_HIGH 7>;
+				#address-cells = <1>;
+				#size-cells = <0>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 8>;
 				clock-names = "spi_clk";
 				dmas = <&dma0
