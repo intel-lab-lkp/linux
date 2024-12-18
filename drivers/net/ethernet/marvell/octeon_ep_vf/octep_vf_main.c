@@ -523,6 +523,7 @@ static int octep_vf_stop(struct net_device *netdev)
 {
 	struct octep_vf_device *oct = netdev_priv(netdev);
 
+	synchronize_rcu();
 	netdev_info(netdev, "Stopping the device ...\n");
 
 	/* Stop Tx from stack */
