@@ -4941,10 +4941,7 @@ int check(struct objtool_file *file)
 	}
 
 out:
-	/*
-	 *  For now, don't fail the kernel build on fatal warnings.  These
-	 *  errors are still fairly common due to the growing matrix of
-	 *  supported toolchains and their recent pace of change.
-	 */
+	if (opts.werror && warnings)
+		return 1;
 	return 0;
 }

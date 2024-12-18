@@ -94,6 +94,12 @@ static const struct option check_options[] = {
 	OPT_BOOLEAN(0, "sec-address", &opts.sec_address, "print section addresses in warnings"),
 	OPT_BOOLEAN(0, "stats", &opts.stats, "print statistics"),
 	OPT_BOOLEAN('v', "verbose", &opts.verbose, "verbose warnings"),
+	/*
+	 *  For now, don't fail the kernel build on fatal warnings by default.
+	 *  These errors are still fairly common due to the growing matrix of
+	 *  supported toolchains and their recent pace of change.
+	 */
+	OPT_BOOLEAN(0, "Werror", &opts.werror, "fail on fatal warnings"),
 
 	OPT_END(),
 };
