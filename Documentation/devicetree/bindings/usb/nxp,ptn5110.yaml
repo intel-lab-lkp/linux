@@ -21,6 +21,11 @@ properties:
   interrupts:
     maxItems: 1
 
+  TX_BUF_BYTE_x_hidden: true
+  RX_BUF_BYTE_x_hidden: true
+  auto_discharge_disconnect: true
+  vbus_vsafe0v: true
+
   connector:
     type: object
     $ref: /schemas/connector/usb-connector.yaml#
