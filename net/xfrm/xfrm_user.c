@@ -532,6 +532,7 @@ static int attach_auth(struct xfrm_algo_auth **algpp, u8 *props,
 	struct xfrm_algo *ualg;
 	struct xfrm_algo_auth *p;
 	struct xfrm_algo_desc *algo;
+	unsigned int klen;
 
 	if (!rta)
 		return 0;
@@ -545,14 +546,15 @@ static int attach_auth(struct xfrm_algo_auth **algpp, u8 *props,
 	}
 	*props = algo->desc.sadb_alg_id;
 
-	p = kmalloc(sizeof(*p) + (ualg->alg_key_len + 7) / 8, GFP_KERNEL);
+	klen = xfrm_kblen2klen(ualg->alg_key_len);
+	p = kmalloc(sizeof(*p) + klen, GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 
 	strcpy(p->alg_name, algo->name);
 	p->alg_key_len = ualg->alg_key_len;
 	p->alg_trunc_len = algo->uinfo.auth.icv_truncbits;
-	memcpy(p->alg_key, ualg->alg_key, (ualg->alg_key_len + 7) / 8);
+	memcpy(p->alg_key, ualg->alg_key, klen);
 
 	*algpp = p;
 	return 0;
@@ -1089,23 +1091,22 @@ static bool xfrm_redact(void)
 
 static int copy_to_user_auth(struct xfrm_algo_auth *auth, struct sk_buff *skb)
 {
+	unsigned int klen = xfrm_kblen2klen(auth->alg_key_len);
 	struct xfrm_algo *algo;
 	struct xfrm_algo_auth *ap;
 	struct nlattr *nla;
 	bool redact_secret = xfrm_redact();
 
-	nla = nla_reserve(skb, XFRMA_ALG_AUTH,
-			  sizeof(*algo) + (auth->alg_key_len + 7) / 8);
+	nla = nla_reserve(skb, XFRMA_ALG_AUTH, sizeof(*algo) + klen);
 	if (!nla)
 		return -EMSGSIZE;
 	algo = nla_data(nla);
 	strscpy_pad(algo->alg_name, auth->alg_name, sizeof(algo->alg_name));
 
-	if (redact_secret && auth->alg_key_len)
-		memset(algo->alg_key, 0, (auth->alg_key_len + 7) / 8);
+	if (redact_secret)
+		memset(algo->alg_key, 0, klen);
 	else
-		memcpy(algo->alg_key, auth->alg_key,
-		       (auth->alg_key_len + 7) / 8);
+		memcpy(algo->alg_key, auth->alg_key, klen);
 	algo->alg_key_len = auth->alg_key_len;
 
 	nla = nla_reserve(skb, XFRMA_ALG_AUTH_TRUNC, xfrm_alg_auth_len(auth));
@@ -1115,16 +1116,16 @@ static int copy_to_user_auth(struct xfrm_algo_auth *auth, struct sk_buff *skb)
 	strscpy_pad(ap->alg_name, auth->alg_name, sizeof(ap->alg_name));
 	ap->alg_key_len = auth->alg_key_len;
 	ap->alg_trunc_len = auth->alg_trunc_len;
-	if (redact_secret && auth->alg_key_len)
-		memset(ap->alg_key, 0, (auth->alg_key_len + 7) / 8);
+	if (redact_secret)
+		memset(ap->alg_key, 0, klen);
 	else
-		memcpy(ap->alg_key, auth->alg_key,
-		       (auth->alg_key_len + 7) / 8);
+		memcpy(ap->alg_key, auth->alg_key, klen);
 	return 0;
 }
 
 static int copy_to_user_aead(struct xfrm_algo_aead *aead, struct sk_buff *skb)
 {
+	unsigned int klen = xfrm_kblen2klen(aead->alg_key_len);
 	struct nlattr *nla = nla_reserve(skb, XFRMA_ALG_AEAD, aead_len(aead));
 	struct xfrm_algo_aead *ap;
 	bool redact_secret = xfrm_redact();
@@ -1137,16 +1138,16 @@ static int copy_to_user_aead(struct xfrm_algo_aead *aead, struct sk_buff *skb)
 	ap->alg_key_len = aead->alg_key_len;
 	ap->alg_icv_len = aead->alg_icv_len;
 
-	if (redact_secret && aead->alg_key_len)
-		memset(ap->alg_key, 0, (aead->alg_key_len + 7) / 8);
+	if (redact_secret)
+		memset(ap->alg_key, 0, klen);
 	else
-		memcpy(ap->alg_key, aead->alg_key,
-		       (aead->alg_key_len + 7) / 8);
+		memcpy(ap->alg_key, aead->alg_key, klen);
 	return 0;
 }
 
 static int copy_to_user_ealg(struct xfrm_algo *ealg, struct sk_buff *skb)
 {
+	unsigned int klen = xfrm_kblen2klen(ealg->alg_key_len);
 	struct xfrm_algo *ap;
 	bool redact_secret = xfrm_redact();
 	struct nlattr *nla = nla_reserve(skb, XFRMA_ALG_CRYPT,
@@ -1158,11 +1159,10 @@ static int copy_to_user_ealg(struct xfrm_algo *ealg, struct sk_buff *skb)
 	strscpy_pad(ap->alg_name, ealg->alg_name, sizeof(ap->alg_name));
 	ap->alg_key_len = ealg->alg_key_len;
 
-	if (redact_secret && ealg->alg_key_len)
-		memset(ap->alg_key, 0, (ealg->alg_key_len + 7) / 8);
+	if (redact_secret)
+		memset(ap->alg_key, 0, klen);
 	else
-		memcpy(ap->alg_key, ealg->alg_key,
-		       (ealg->alg_key_len + 7) / 8);
+		memcpy(ap->alg_key, ealg->alg_key, klen);
 
 	return 0;
 }
@@ -3509,7 +3509,7 @@ static inline unsigned int xfrm_sa_len(struct xfrm_state *x)
 		l += nla_total_size(aead_len(x->aead));
 	if (x->aalg) {
 		l += nla_total_size(sizeof(struct xfrm_algo) +
-				    (x->aalg->alg_key_len + 7) / 8);
+				    xfrm_kblen2klen(x->aalg->alg_key_len));
 		l += nla_total_size(xfrm_alg_auth_len(x->aalg));
 	}
 	if (x->ealg)

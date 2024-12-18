@@ -803,13 +803,11 @@ static struct sk_buff *__pfkey_xfrm_state2msg(const struct xfrm_state *x,
 
 	if (add_keys) {
 		if (x->aalg && x->aalg->alg_key_len) {
-			auth_key_size =
-				PFKEY_ALIGN8((x->aalg->alg_key_len + 7) / 8);
+			auth_key_size = PFKEY_ALIGN8(xfrm_kblen2klen(x->aalg->alg_key_len));
 			size += sizeof(struct sadb_key) + auth_key_size;
 		}
 		if (x->ealg && x->ealg->alg_key_len) {
-			encrypt_key_size =
-				PFKEY_ALIGN8((x->ealg->alg_key_len+7) / 8);
+			encrypt_key_size = PFKEY_ALIGN8(xfrm_kblen2klen(x->ealg->alg_key_len));
 			size += sizeof(struct sadb_key) + encrypt_key_size;
 		}
 	}
@@ -967,7 +965,8 @@ static struct sk_buff *__pfkey_xfrm_state2msg(const struct xfrm_state *x,
 		key->sadb_key_exttype = SADB_EXT_KEY_AUTH;
 		key->sadb_key_bits = x->aalg->alg_key_len;
 		key->sadb_key_reserved = 0;
-		memcpy(key + 1, x->aalg->alg_key, (x->aalg->alg_key_len+7)/8);
+		memcpy(key + 1, x->aalg->alg_key,
+		       xfrm_kblen2klen(x->aalg->alg_key_len));
 	}
 	/* encrypt key */
 	if (add_keys && encrypt_key_size) {
@@ -978,7 +977,7 @@ static struct sk_buff *__pfkey_xfrm_state2msg(const struct xfrm_state *x,
 		key->sadb_key_bits = x->ealg->alg_key_len;
 		key->sadb_key_reserved = 0;
 		memcpy(key + 1, x->ealg->alg_key,
-		       (x->ealg->alg_key_len+7)/8);
+		       xfrm_kblen2klen(x->ealg->alg_key_len));
 	}
 
 	/* sa */

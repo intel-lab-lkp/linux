@@ -1912,19 +1912,24 @@ static inline int xfrm_acquire_is_on(struct net *net)
 }
 #endif
 
+static inline unsigned int xfrm_kblen2klen(unsigned int klen_in_bits)
+{
+	return klen_in_bits / 8 + !!(klen_in_bits & 7);
+}
+
 static inline unsigned int aead_len(struct xfrm_algo_aead *alg)
 {
-	return sizeof(*alg) + ((alg->alg_key_len + 7) / 8);
+	return sizeof(*alg) + xfrm_kblen2klen(alg->alg_key_len);
 }
 
 static inline unsigned int xfrm_alg_len(const struct xfrm_algo *alg)
 {
-	return sizeof(*alg) + ((alg->alg_key_len + 7) / 8);
+	return sizeof(*alg) + xfrm_kblen2klen(alg->alg_key_len);
 }
 
 static inline unsigned int xfrm_alg_auth_len(const struct xfrm_algo_auth *alg)
 {
-	return sizeof(*alg) + ((alg->alg_key_len + 7) / 8);
+	return sizeof(*alg) + xfrm_kblen2klen(alg->alg_key_len);
 }
 
 static inline unsigned int xfrm_replay_state_esn_len(struct xfrm_replay_state_esn *replay_esn)

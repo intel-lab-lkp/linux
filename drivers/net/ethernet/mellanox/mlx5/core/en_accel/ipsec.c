@@ -323,7 +323,7 @@ void mlx5e_ipsec_build_accel_xfrm_attrs(struct mlx5e_ipsec_sa_entry *sa_entry,
 	memset(attrs, 0, sizeof(*attrs));
 
 	/* key */
-	crypto_data_len = (x->aead->alg_key_len + 7) / 8;
+	crypto_data_len = xfrm_kblen2klen(x->aead->alg_key_len);
 	key_len = crypto_data_len - 4; /* 4 bytes salt at end */
 
 	memcpy(aes_gcm->aes_key, x->aead->alg_key, key_len);

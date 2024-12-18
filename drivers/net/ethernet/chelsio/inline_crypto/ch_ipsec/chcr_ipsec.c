@@ -165,7 +165,7 @@ static int ch_ipsec_setauthsize(struct xfrm_state *x,
 static int ch_ipsec_setkey(struct xfrm_state *x,
 			   struct ipsec_sa_entry *sa_entry)
 {
-	int keylen = (x->aead->alg_key_len + 7) / 8;
+	int keylen = xfrm_kblen2klen(x->aead->alg_key_len);
 	unsigned char *key = x->aead->alg_key;
 	int ck_size, key_ctx_size = 0;
 	unsigned char ghash_h[AEAD_H_SIZE];

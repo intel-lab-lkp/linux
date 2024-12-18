@@ -365,7 +365,7 @@ static int nfp_net_xfrm_add_state(struct xfrm_state *x,
 	}
 
 	if (x->aalg) {
-		key_len = DIV_ROUND_UP(x->aalg->alg_key_len, BITS_PER_BYTE);
+		key_len = xfrm_kblen2klen(x->aalg->alg_key_len);
 		if (key_len > sizeof(cfg->auth_key)) {
 			NL_SET_ERR_MSG_MOD(extack, "Insufficient space for offloaded auth key");
 			return -EINVAL;
@@ -458,7 +458,7 @@ static int nfp_net_xfrm_add_state(struct xfrm_state *x,
 		int key_offset = 0;
 		int salt_len = 4;
 
-		key_len = DIV_ROUND_UP(x->aead->alg_key_len, BITS_PER_BYTE);
+		key_len = xfrm_kblen2klen(x->aead->alg_key_len);
 		key_len -= salt_len;
 
 		if (key_len > sizeof(cfg->ciph_key)) {
@@ -485,7 +485,7 @@ static int nfp_net_xfrm_add_state(struct xfrm_state *x,
 	}
 
 	if (x->ealg) {
-		key_len = DIV_ROUND_UP(x->ealg->alg_key_len, BITS_PER_BYTE);
+		key_len = xfrm_kblen2klen(x->ealg->alg_key_len);
 
 		if (key_len > sizeof(cfg->ciph_key)) {
 			NL_SET_ERR_MSG_MOD(extack, "ealg: Insufficient space for offloaded key");

@@ -691,7 +691,7 @@ static int ah6_init_state(struct xfrm_state *x, struct netlink_ext_ack *extack)
 
 	ahp->ahash = ahash;
 	if (crypto_ahash_setkey(ahash, x->aalg->alg_key,
-			       (x->aalg->alg_key_len + 7) / 8)) {
+				xfrm_kblen2klen(x->aalg->alg_key_len))) {
 		NL_SET_ERR_MSG(extack, "Kernel was unable to initialize cryptographic operations");
 		goto error;
 	}

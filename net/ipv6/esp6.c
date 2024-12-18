@@ -1065,7 +1065,7 @@ static int esp_init_aead(struct xfrm_state *x, struct netlink_ext_ack *extack)
 	x->data = aead;
 
 	err = crypto_aead_setkey(aead, x->aead->alg_key,
-				 (x->aead->alg_key_len + 7) / 8);
+				 xfrm_kblen2klen(x->aead->alg_key_len));
 	if (err)
 		goto error;
 
@@ -1125,8 +1125,9 @@ static int esp_init_authenc(struct xfrm_state *x,
 
 	x->data = aead;
 
-	keylen = (x->aalg ? (x->aalg->alg_key_len + 7) / 8 : 0) +
-		 (x->ealg->alg_key_len + 7) / 8 + RTA_SPACE(sizeof(*param));
+	keylen = (x->aalg ? xfrm_kblen2klen(x->aalg->alg_key_len) : 0);
+	keylen += xfrm_kblen2klen(x->ealg->alg_key_len);
+	keylen += RTA_SPACE(sizeof(*param));
 	err = -ENOMEM;
 	key = kmalloc(keylen, GFP_KERNEL);
 	if (!key)
@@ -1142,8 +1143,8 @@ static int esp_init_authenc(struct xfrm_state *x,
 	if (x->aalg) {
 		struct xfrm_algo_desc *aalg_desc;
 
-		memcpy(p, x->aalg->alg_key, (x->aalg->alg_key_len + 7) / 8);
-		p += (x->aalg->alg_key_len + 7) / 8;
+		memcpy(p, x->aalg->alg_key, xfrm_kblen2klen(x->aalg->alg_key_len));
+		p += xfrm_kblen2klen(x->aalg->alg_key_len);
 
 		aalg_desc = xfrm_aalg_get_byname(x->aalg->alg_name, 0);
 		BUG_ON(!aalg_desc);
@@ -1163,8 +1164,8 @@ static int esp_init_authenc(struct xfrm_state *x,
 		}
 	}
 
-	param->enckeylen = cpu_to_be32((x->ealg->alg_key_len + 7) / 8);
-	memcpy(p, x->ealg->alg_key, (x->ealg->alg_key_len + 7) / 8);
+	param->enckeylen = cpu_to_be32(xfrm_kblen2klen(x->ealg->alg_key_len));
+	memcpy(p, x->ealg->alg_key, xfrm_kblen2klen(x->ealg->alg_key_len));
 
 	err = crypto_aead_setkey(aead, key, keylen);
 
