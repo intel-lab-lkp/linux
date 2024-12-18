@@ -79,6 +79,7 @@ configure specific aspects of kernel behavior to your liking.
    aoe/index
    auxdisplay/index
    bcache
+   binder_netlink
    binderfs
    binfmt-misc
    blockdev/index
