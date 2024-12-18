@@ -532,15 +532,20 @@ err:
 	return ret;
 }
 
-int ipvlan_link_new(struct net *src_net, struct net_device *dev,
-		    struct nlattr *tb[], struct nlattr *data[],
-		    struct netlink_ext_ack *extack)
+int ipvlan_link_new(struct rtnl_newlink_params *params)
 {
-	struct ipvl_dev *ipvlan = netdev_priv(dev);
+	struct netlink_ext_ack *extack = params->extack;
+	struct net_device *dev = params->dev;
+	struct nlattr **data = params->data;
+	struct net *src_net = params->net;
+	struct nlattr **tb = params->tb;
+	struct ipvl_dev *ipvlan;
 	struct ipvl_port *port;
 	struct net_device *phy_dev;
 	int err;
 	u16 mode = IPVLAN_MODE_L3;
+
+	ipvlan = netdev_priv(dev);
 
 	if (!tb[IFLA_LINK])
 		return -EINVAL;

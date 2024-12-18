@@ -307,13 +307,14 @@ static void wg_setup(struct net_device *dev)
 	wg->dev = dev;
 }
 
-static int wg_newlink(struct net *src_net, struct net_device *dev,
-		      struct nlattr *tb[], struct nlattr *data[],
-		      struct netlink_ext_ack *extack)
+static int wg_newlink(struct rtnl_newlink_params *params)
 {
-	struct wg_device *wg = netdev_priv(dev);
+	struct net_device *dev = params->dev;
+	struct net *src_net = params->net;
+	struct wg_device *wg;
 	int ret = -ENOMEM;
 
+	wg = netdev_priv(dev);
 	rcu_assign_pointer(wg->creating_net, src_net);
 	init_rwsem(&wg->static_identity.lock);
 	mutex_init(&wg->socket_update_lock);

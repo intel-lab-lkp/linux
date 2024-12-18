@@ -1677,15 +1677,18 @@ static void vrf_dellink(struct net_device *dev, struct list_head *head)
 	unregister_netdevice_queue(dev, head);
 }
 
-static int vrf_newlink(struct net *src_net, struct net_device *dev,
-		       struct nlattr *tb[], struct nlattr *data[],
-		       struct netlink_ext_ack *extack)
+static int vrf_newlink(struct rtnl_newlink_params *params)
 {
-	struct net_vrf *vrf = netdev_priv(dev);
+	struct netlink_ext_ack *extack = params->extack;
+	struct net_device *dev = params->dev;
+	struct nlattr **data = params->data;
 	struct netns_vrf *nn_vrf;
+	struct net_vrf *vrf;
 	bool *add_fib_rules;
 	struct net *net;
 	int err;
+
+	vrf = netdev_priv(dev);
 
 	if (!data || !data[IFLA_VRF_TABLE]) {
 		NL_SET_ERR_MSG(extack, "VRF table id is missing");

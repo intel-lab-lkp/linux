@@ -519,12 +519,16 @@ static rx_handler_result_t virt_wifi_rx_handler(struct sk_buff **pskb)
 }
 
 /* Called with rtnl lock held. */
-static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
-			     struct nlattr *tb[], struct nlattr *data[],
-			     struct netlink_ext_ack *extack)
+static int virt_wifi_newlink(struct rtnl_newlink_params *params)
 {
-	struct virt_wifi_netdev_priv *priv = netdev_priv(dev);
+	struct netlink_ext_ack *extack = params->extack;
+	struct net_device *dev = params->dev;
+	struct virt_wifi_netdev_priv *priv;
+	struct net *src_net = params->net;
+	struct nlattr **tb = params->tb;
 	int err;
+
+	priv = netdev_priv(dev);
 
 	if (!tb[IFLA_LINK])
 		return -EINVAL;

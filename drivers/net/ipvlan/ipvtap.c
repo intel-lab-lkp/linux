@@ -73,13 +73,13 @@ static void ipvtap_update_features(struct tap_dev *tap,
 	netdev_update_features(vlan->dev);
 }
 
-static int ipvtap_newlink(struct net *src_net, struct net_device *dev,
-			  struct nlattr *tb[], struct nlattr *data[],
-			  struct netlink_ext_ack *extack)
+static int ipvtap_newlink(struct rtnl_newlink_params *params)
 {
-	struct ipvtap_dev *vlantap = netdev_priv(dev);
+	struct net_device *dev = params->dev;
+	struct ipvtap_dev *vlantap;
 	int err;
 
+	vlantap = netdev_priv(dev);
 	INIT_LIST_HEAD(&vlantap->tap.queue_list);
 
 	/* Since macvlan supports all offloads by default, make
@@ -97,7 +97,7 @@ static int ipvtap_newlink(struct net *src_net, struct net_device *dev,
 	/* Don't put anything that may fail after macvlan_common_newlink
 	 * because we can't undo what it does.
 	 */
-	err =  ipvlan_link_new(src_net, dev, tb, data, extack);
+	err = ipvlan_link_new(params);
 	if (err) {
 		netdev_rx_handler_unregister(dev);
 		return err;
