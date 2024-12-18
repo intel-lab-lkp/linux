@@ -228,6 +228,8 @@ void msm_atomic_commit_tail(struct drm_atomic_state *state)
 	if (kms->funcs->prepare_commit)
 		kms->funcs->prepare_commit(kms, state);
 
+	kms->fault_snapshot_capture = 0;
+
 	/*
 	 * Push atomic updates down to hardware:
 	 */
