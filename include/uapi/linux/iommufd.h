@@ -55,6 +55,7 @@ enum {
 	IOMMUFD_CMD_VIOMMU_ALLOC = 0x90,
 	IOMMUFD_CMD_VDEVICE_ALLOC = 0x91,
 	IOMMUFD_CMD_IOAS_CHANGE_PROCESS = 0x92,
+	IOMMUFD_CMD_VIRQ_ALLOC = 0x93,
 };
 
 /**
@@ -1012,4 +1013,34 @@ struct iommu_ioas_change_process {
 #define IOMMU_IOAS_CHANGE_PROCESS \
 	_IO(IOMMUFD_TYPE, IOMMUFD_CMD_IOAS_CHANGE_PROCESS)
 
+/**
+ * enum iommu_virq_type - Virtual IRQ Type
+ * @IOMMU_VIRQ_TYPE_NONE: INVALID type
+ */
+enum iommu_virq_type {
+	IOMMU_VIRQ_TYPE_NONE = 0,
+};
+
+/**
+ * struct iommu_virq_alloc - ioctl(IOMMU_VIRQ_ALLOC)
+ * @size: sizeof(struct iommu_virq_alloc)
+ * @flags: Must be 0
+ * @viommu: virtual IOMMU ID to associate the virtual IRQ with
+ * @type: Type of the virtual IRQ. Must be defined in enum iommu_virq_type
+ * @out_virq_id: The ID of the new virtual IRQ
+ * @out_virq_fd: The fd of the new virtual IRQ. User space must close the
+ *               successfully returned fd after using it
+ *
+ * Explicitly allocate a virtual IRQ interface for a vIOMMU. A vIOMMU can have
+ * multiple FDs for different @type, but is confined to one FD per @type.
+ */
+struct iommu_virq_alloc {
+	__u32 size;
+	__u32 flags;
+	__u32 viommu_id;
+	__u32 type;
+	__u32 out_virq_id;
+	__u32 out_virq_fd;
+};
+#define IOMMU_VIRQ_ALLOC _IO(IOMMUFD_TYPE, IOMMUFD_CMD_VIRQ_ALLOC)
 #endif

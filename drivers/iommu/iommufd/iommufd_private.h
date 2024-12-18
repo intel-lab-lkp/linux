@@ -547,12 +547,69 @@ static inline int iommufd_hwpt_replace_device(struct iommufd_device *idev,
 	return iommu_group_replace_domain(idev->igroup->group, hwpt->domain);
 }
 
+/*
+ * An iommufd_virq object represents an interface to deliver vIOMMU interrupts
+ * to the user space. These objects are created/destroyed by the user space and
+ * associated with vIOMMU object(s) during the allocations.
+ */
+struct iommufd_virq {
+	struct iommufd_eventq common;
+	struct iommufd_viommu *viommu;
+	struct list_head node;
+
+	unsigned int type;
+};
+
+static inline struct iommufd_virq *eventq_to_virq(struct iommufd_eventq *eventq)
+{
+	return container_of(eventq, struct iommufd_virq, common);
+}
+
+static inline struct iommufd_virq *iommufd_get_virq(struct iommufd_ucmd *ucmd,
+						    u32 id)
+{
+	return container_of(iommufd_get_object(ucmd->ictx, id,
+					       IOMMUFD_OBJ_VIRQ),
+			    struct iommufd_virq, common.obj);
+}
+
+int iommufd_virq_alloc(struct iommufd_ucmd *ucmd);
+void iommufd_virq_destroy(struct iommufd_object *obj);
+void iommufd_virq_abort(struct iommufd_object *obj);
+
+/* An iommufd_virq_header packs a vIOMMU interrupt in an iommufd_virq queue */
+struct iommufd_virq_header {
+	struct list_head node;
+	ssize_t irq_len;
+	void *irq_data;
+};
+
+static inline int iommufd_virq_handler(struct iommufd_virq *virq,
+				       struct iommufd_virq_header *virq_header)
+{
+	return iommufd_eventq_notify(&virq->common, &virq_header->node);
+}
+
 static inline struct iommufd_viommu *
 iommufd_get_viommu(struct iommufd_ucmd *ucmd, u32 id)
 {
 	return container_of(iommufd_get_object(ucmd->ictx, id,
 					       IOMMUFD_OBJ_VIOMMU),
 			    struct iommufd_viommu, obj);
+}
+
+static inline struct iommufd_virq *
+iommufd_viommu_find_virq(struct iommufd_viommu *viommu, u32 type)
+{
+	struct iommufd_virq *virq, *next;
+
+	lockdep_assert_held(&viommu->virqs_rwsem);
+
+	list_for_each_entry_safe(virq, next, &viommu->virqs, node) {
+		if (virq->type == type)
+			return virq;
+	}
+	return NULL;
 }
 
 int iommufd_viommu_alloc_ioctl(struct iommufd_ucmd *ucmd);
