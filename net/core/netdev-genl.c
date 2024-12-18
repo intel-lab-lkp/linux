@@ -238,6 +238,10 @@ int netdev_nl_napi_get_doit(struct sk_buff *skb, struct genl_info *info)
 	napi = napi_by_id(napi_id);
 	if (napi) {
 		err = netdev_nl_napi_fill_one(rsp, napi, info);
+		if (!rsp->len) {
+			err = -ENOENT;
+			goto err_free_msg;
+		}
 	} else {
 		NL_SET_BAD_ATTR(info->extack, info->attrs[NETDEV_A_NAPI_ID]);
 		err = -ENOENT;
