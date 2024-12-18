@@ -69,5 +69,42 @@ unsigned long iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
 }
 EXPORT_SYMBOL_NS_GPL(iommufd_viommu_get_vdev_id, "IOMMUFD");
 
+/* Typically called in driver's threaded IRQ handler */
+int iommufd_viommu_report_irq(struct iommufd_viommu *viommu, unsigned int type,
+			      void *irq_ptr, size_t irq_len)
+{
+	struct iommufd_virq_header *header;
+	struct iommufd_virq *virq;
+	int rc = 0;
+
+	if (!viommu)
+		return -ENODEV;
+	if (WARN_ON_ONCE(!irq_len || !irq_ptr))
+		return -EINVAL;
+
+	down_read(&viommu->virqs_rwsem);
+
+	virq = iommufd_viommu_find_virq(viommu, type);
+	if (!virq) {
+		rc = -EOPNOTSUPP;
+		goto out_unlock_virqs;
+	}
+
+	header = kzalloc(sizeof(*header) + irq_len, GFP_KERNEL);
+	if (!header) {
+		rc = -ENOMEM;
+		goto out_unlock_virqs;
+	}
+	header->irq_data = (void *)header + sizeof(*header);
+	memcpy(header->irq_data, irq_ptr, irq_len);
+	header->irq_len = irq_len;
+
+	iommufd_virq_handler(virq, header);
+out_unlock_virqs:
+	up_read(&viommu->virqs_rwsem);
+	return rc;
+}
+EXPORT_SYMBOL_NS_GPL(iommufd_viommu_report_irq, "IOMMUFD");
+
 MODULE_DESCRIPTION("iommufd code shared with builtin modules");
 MODULE_LICENSE("GPL");

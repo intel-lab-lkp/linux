@@ -192,6 +192,8 @@ struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id);
 unsigned long iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu,
 					 struct device *dev);
+int iommufd_viommu_report_irq(struct iommufd_viommu *viommu, unsigned int type,
+			      void *irq_ptr, size_t irq_len);
 #else /* !CONFIG_IOMMUFD_DRIVER_CORE */
 static inline struct iommufd_object *
 _iommufd_object_alloc(struct iommufd_ctx *ictx, size_t size,
@@ -210,6 +212,13 @@ static inline unsigned long
 iommufd_viommu_get_vdev_id(struct iommufd_viommu *viommu, struct device *dev)
 {
 	return 0;
+}
+
+static inline int iommufd_viommu_report_irq(struct iommufd_viommu *viommu,
+					    unsigned int type, void *irq_ptr,
+					    size_t irq_len)
+{
+	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_IOMMUFD_DRIVER_CORE */
 
