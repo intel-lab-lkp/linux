@@ -896,15 +896,15 @@ close_cq:
 	return err;
 }
 
-void mlx5hws_send_queue_close(struct mlx5hws_send_engine *queue)
+static void hws_send_queue_close(struct mlx5hws_send_engine *queue)
 {
 	hws_send_ring_close(queue);
 	kfree(queue->completed.entries);
 }
 
-int mlx5hws_send_queue_open(struct mlx5hws_context *ctx,
-			    struct mlx5hws_send_engine *queue,
-			    u16 queue_size)
+static int hws_send_queue_open(struct mlx5hws_context *ctx,
+			       struct mlx5hws_send_engine *queue,
+			       u16 queue_size)
 {
 	int err;
 
@@ -936,7 +936,7 @@ free_completed_entries:
 static void __hws_send_queues_close(struct mlx5hws_context *ctx, u16 queues)
 {
 	while (queues--)
-		mlx5hws_send_queue_close(&ctx->send_queue[queues]);
+		hws_send_queue_close(&ctx->send_queue[queues]);
 }
 
 static void hws_send_queues_bwc_locks_destroy(struct mlx5hws_context *ctx)
@@ -1022,7 +1022,7 @@ int mlx5hws_send_queues_open(struct mlx5hws_context *ctx,
 	}
 
 	for (i = 0; i < ctx->queues; i++) {
-		err = mlx5hws_send_queue_open(ctx, &ctx->send_queue[i], queue_size);
+		err = hws_send_queue_open(ctx, &ctx->send_queue[i], queue_size);
 		if (err)
 			goto close_send_queues;
 	}
