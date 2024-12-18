@@ -6705,8 +6705,44 @@ void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 }
 EXPORT_SYMBOL(netif_queue_set_napi);
 
+static void
+netif_irq_cpu_rmap_notify(struct irq_affinity_notify *notify,
+			  const cpumask_t *mask)
+{
+	struct irq_glue *glue =
+		container_of(notify, struct irq_glue, notify);
+	struct napi_struct *napi = glue->data;
+	unsigned int flags;
+	int rc;
+
+	flags = napi->irq_flags;
+
+	if (napi->config && flags & NAPIF_IRQ_AFFINITY)
+		cpumask_copy(&napi->config->affinity_mask, mask);
+
+#ifdef CONFIG_RFS_ACCEL
+	if (napi->dev->rx_cpu_rmap && flags & NAPIF_IRQ_ARFS_RMAP) {
+		rc = cpu_rmap_update(glue->rmap, glue->index, mask);
+		if (rc)
+			pr_warn("%s: update failed: %d\n",
+				__func__, rc);
+	}
+#endif
+}
+
+static void
+netif_napi_affinity_release(struct kref __always_unused *ref)
+{
+	struct irq_glue *glue =
+		container_of(ref, struct irq_glue, notify.kref);
+
+	kfree(glue);
+}
+
 void netif_napi_set_irq(struct napi_struct *napi, int irq, unsigned long flags)
 {
+	struct irq_glue *glue = NULL;
+	bool glue_created;
 	int  rc;
 
 	napi->irq = irq;
@@ -6714,15 +6750,29 @@ void netif_napi_set_irq(struct napi_struct *napi, int irq, unsigned long flags)
 
 #ifdef CONFIG_RFS_ACCEL
 	if (napi->dev->rx_cpu_rmap && flags & NAPIF_IRQ_ARFS_RMAP) {
-		rc = irq_cpu_rmap_add(napi->dev->rx_cpu_rmap, irq);
+		rc = irq_cpu_rmap_add(napi->dev->rx_cpu_rmap, irq, napi,
+				      netif_irq_cpu_rmap_notify);
 		if (rc) {
 			netdev_warn(napi->dev, "Unable to update ARFS map (%d).\n",
 				    rc);
 			free_irq_cpu_rmap(napi->dev->rx_cpu_rmap);
 			napi->dev->rx_cpu_rmap = NULL;
+		} else {
+			glue_created = true;
 		}
 	}
 #endif
+
+	if (!glue_created && flags & NAPIF_IRQ_AFFINITY) {
+		glue = kzalloc(sizeof(*glue), GFP_KERNEL);
+		if (!glue)
+			return;
+		glue->notify.notify = netif_irq_cpu_rmap_notify;
+		glue->notify.release = netif_napi_affinity_release;
+		glue->data = napi;
+		glue->rmap = NULL;
+		napi->irq_flags |= NAPIF_IRQ_NORMAP;
+	}
 }
 EXPORT_SYMBOL(netif_napi_set_irq);
 
@@ -6731,6 +6781,10 @@ static void napi_restore_config(struct napi_struct *n)
 	n->defer_hard_irqs = n->config->defer_hard_irqs;
 	n->gro_flush_timeout = n->config->gro_flush_timeout;
 	n->irq_suspend_timeout = n->config->irq_suspend_timeout;
+
+	if (n->irq > 0 && n->irq_flags & NAPIF_IRQ_AFFINITY)
+		irq_set_affinity(n->irq, &n->config->affinity_mask);
+
 	/* a NAPI ID might be stored in the config, if so use it. if not, use
 	 * napi_hash_add to generate one for us. It will be saved to the config
 	 * in napi_disable.
@@ -6747,6 +6801,11 @@ static void napi_save_config(struct napi_struct *n)
 	n->config->gro_flush_timeout = n->gro_flush_timeout;
 	n->config->irq_suspend_timeout = n->irq_suspend_timeout;
 	n->config->napi_id = n->napi_id;
+
+	if (n->irq > 0 &&
+	    n->irq_flags & (NAPIF_IRQ_AFFINITY | NAPIF_IRQ_NORMAP))
+		irq_set_affinity_notifier(n->irq, NULL);
+
 	napi_hash_del(n);
 }
 
@@ -11211,7 +11270,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 {
 	struct net_device *dev;
 	size_t napi_config_sz;
-	unsigned int maxqs;
+	unsigned int maxqs, i;
 
 	BUG_ON(strlen(name) >= sizeof(dev->name));
 
@@ -11307,6 +11366,9 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	dev->napi_config = kvzalloc(napi_config_sz, GFP_KERNEL_ACCOUNT);
 	if (!dev->napi_config)
 		goto free_all;
+	for (i = 0; i < maxqs; i++)
+		cpumask_copy(&dev->napi_config[i].affinity_mask,
+			     cpu_online_mask);
 
 	strscpy(dev->name, name);
 	dev->name_assign_type = name_assign_type;

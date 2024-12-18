@@ -351,6 +351,7 @@ struct napi_config {
 	u64 gro_flush_timeout;
 	u64 irq_suspend_timeout;
 	u32 defer_hard_irqs;
+	cpumask_t affinity_mask;
 	unsigned int napi_id;
 };
 
@@ -358,12 +359,16 @@ enum {
 #ifdef CONFIG_RFS_ACCEL
 	NAPI_IRQ_ARFS_RMAP,		/* Core handles RMAP updates */
 #endif
+	NAPI_IRQ_AFFINITY,		/* Core manages IRQ affinity */
+	NAPI_IRQ_NORMAP			/* Set by core (internal) */
 };
 
 enum {
 #ifdef CONFIG_RFS_ACCEL
 	NAPIF_IRQ_ARFS_RMAP		= BIT(NAPI_IRQ_ARFS_RMAP),
 #endif
+	NAPIF_IRQ_AFFINITY		= BIT(NAPI_IRQ_AFFINITY),
+	NAPIF_IRQ_NORMAP		= BIT(NAPI_IRQ_NORMAP),
 };
 
 /*
