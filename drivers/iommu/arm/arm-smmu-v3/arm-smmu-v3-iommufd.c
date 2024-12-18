@@ -447,4 +447,20 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	return &vsmmu->core;
 }
 
+int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster, u64 *evt)
+{
+	struct iommu_virq_arm_smmuv3 virq_data =
+		*(struct iommu_virq_arm_smmuv3 *)evt;
+
+	virq_data.evt[0] &= ~EVTQ_0_SID;
+	virq_data.evt[0] |= FIELD_PREP(EVTQ_0_SID, vmaster->vsid);
+
+	virq_data.evt[0] = cpu_to_le64(virq_data.evt[0]);
+	virq_data.evt[1] = cpu_to_le64(virq_data.evt[1]);
+
+	return iommufd_viommu_report_irq(&vmaster->vsmmu->core,
+					 IOMMU_VIRQ_TYPE_ARM_SMMUV3, &virq_data,
+					 sizeof(virq_data));
+}
+
 MODULE_IMPORT_NS("IOMMUFD");

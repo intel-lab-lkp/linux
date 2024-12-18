@@ -1016,9 +1016,24 @@ struct iommu_ioas_change_process {
 /**
  * enum iommu_virq_type - Virtual IRQ Type
  * @IOMMU_VIRQ_TYPE_NONE: INVALID type
+ * @IOMMU_VIRQ_TYPE_ARM_SMMUV3: ARM SMMUv3 Virtual Event
  */
 enum iommu_virq_type {
 	IOMMU_VIRQ_TYPE_NONE = 0,
+	IOMMU_VIRQ_TYPE_ARM_SMMUV3 = 1,
+};
+
+/**
+ * struct iommu_virq_arm_smmuv3 - ARM SMMUv3 Virtual IRQ
+ *                                (IOMMU_VIRQ_TYPE_ARM_SMMUV3)
+ * @evt: 256-bit ARM SMMUv3 Event record, little-endian.
+ *       (Refer to "7.3 Event records" in SMMUv3 HW Spec)
+ *
+ * StreamID field reports a virtual device ID. To receive a virtual IRQ for a
+ * device, a vDEVICE must be allocated via IOMMU_VDEVICE_ALLOC.
+ */
+struct iommu_virq_arm_smmuv3 {
+	__aligned_le64 evt[4];
 };
 
 /**
