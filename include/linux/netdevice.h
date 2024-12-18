@@ -392,6 +392,7 @@ struct napi_struct {
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
 	int			irq;
+	unsigned long		irq_flags;
 	int			index;
 	struct napi_config	*config;
 };
@@ -2671,10 +2672,7 @@ void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 			  enum netdev_queue_type type,
 			  struct napi_struct *napi);
 
-static inline void netif_napi_set_irq(struct napi_struct *napi, int irq)
-{
-	napi->irq = irq;
-}
+void netif_napi_set_irq(struct napi_struct *napi, int irq, unsigned long flags);
 
 /* Default NAPI poll() weight
  * Device drivers are strongly advised to not use bigger value

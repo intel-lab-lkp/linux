@@ -1227,7 +1227,8 @@ static int fbnic_alloc_napi_vector(struct fbnic_dev *fbd, struct fbnic_net *fbn,
 
 	/* Record IRQ to NAPI struct */
 	netif_napi_set_irq(&nv->napi,
-			   pci_irq_vector(to_pci_dev(fbd->dev), nv->v_idx));
+			   pci_irq_vector(to_pci_dev(fbd->dev), nv->v_idx),
+			   0);
 
 	/* Tie nv back to PCIe dev */
 	nv->dev = fbd->dev;

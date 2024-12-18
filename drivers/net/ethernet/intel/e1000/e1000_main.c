@@ -1394,7 +1394,7 @@ int e1000_open(struct net_device *netdev)
 	/* From here on the code is the same as e1000_up() */
 	clear_bit(__E1000_DOWN, &adapter->flags);
 
-	netif_napi_set_irq(&adapter->napi, adapter->pdev->irq);
+	netif_napi_set_irq(&adapter->napi, adapter->pdev->irq, 0);
 	napi_enable(&adapter->napi);
 	netif_queue_set_napi(netdev, 0, NETDEV_QUEUE_TYPE_RX, &adapter->napi);
 	netif_queue_set_napi(netdev, 0, NETDEV_QUEUE_TYPE_TX, &adapter->napi);

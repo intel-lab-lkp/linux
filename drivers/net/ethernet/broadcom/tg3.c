@@ -7447,7 +7447,7 @@ static void tg3_napi_init(struct tg3 *tp)
 	for (i = 0; i < tp->irq_cnt; i++) {
 		netif_napi_add(tp->dev, &tp->napi[i].napi,
 			       i ? tg3_poll_msix : tg3_poll);
-		netif_napi_set_irq(&tp->napi[i].napi, tp->napi[i].irq_vec);
+		netif_napi_set_irq(&tp->napi[i].napi, tp->napi[i].irq_vec, 0);
 	}
 }
 

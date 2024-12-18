@@ -6705,6 +6705,13 @@ void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 }
 EXPORT_SYMBOL(netif_queue_set_napi);
 
+void netif_napi_set_irq(struct napi_struct *napi, int irq, unsigned long flags)
+{
+	napi->irq = irq;
+	napi->irq_flags = flags;
+}
+EXPORT_SYMBOL(netif_napi_set_irq);
+
 static void napi_restore_config(struct napi_struct *n)
 {
 	n->defer_hard_irqs = n->config->defer_hard_irqs;
@@ -6770,7 +6777,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 	 */
 	if (dev->threaded && napi_kthread_create(napi))
 		dev->threaded = false;
-	netif_napi_set_irq(napi, -1);
+	netif_napi_set_irq(napi, -1, 0);
 }
 EXPORT_SYMBOL(netif_napi_add_weight);
 

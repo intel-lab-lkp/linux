@@ -2733,7 +2733,7 @@ static int mlx5e_open_channel(struct mlx5e_priv *priv, int ix,
 	c->lag_port = mlx5e_enumerate_lag_port(mdev, ix);
 
 	netif_napi_add_config(netdev, &c->napi, mlx5e_napi_poll, ix);
-	netif_napi_set_irq(&c->napi, irq);
+	netif_napi_set_irq(&c->napi, irq, 0);
 
 	err = mlx5e_open_queues(c, params, cparam);
 	if (unlikely(err))
