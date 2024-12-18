@@ -50,6 +50,7 @@
 #define TCPC_CONFIG_STD_OUTPUT_ORIENTATION_MASK		BIT(0)
 #define TCPC_CONFIG_STD_OUTPUT_ORIENTATION_NORMAL	0
 #define TCPC_CONFIG_STD_OUTPUT_ORIENTATION_FLIPPED	1
+#define TCPC_CONFIG_STD_OUTPUT_CON_PRES		BIT(1)
 
 #define TCPC_TCPC_CTRL			0x19
 #define TCPC_TCPC_CTRL_ORIENTATION	BIT(0)
@@ -126,6 +127,7 @@
 #define TCPC_STD_INPUT_CAP		0x28
 #define TCPC_STD_OUTPUT_CAP		0x29
 #define TCPC_STD_OUTPUT_CAP_ORIENTATION	BIT(0)
+#define TCPC_STD_OUTPUT_CAP_CONN_PRESENT	BIT(1)
 
 #define TCPC_MSG_HDR_INFO		0x2e
 #define TCPC_MSG_HDR_INFO_DATA_ROLE	BIT(3)
@@ -167,6 +169,7 @@
 
 /* I2C_WRITE_BYTE_COUNT + 1 when TX_BUF_BYTE_x is only accessible I2C_WRITE_BYTE_COUNT */
 #define TCPC_TRANSMIT_BUFFER_MAX_LEN		31
+#define TCPC_RECEIVE_BUFFER_MAX_LEN		32
 
 #define tcpc_presenting_rd(reg, cc) \
 	(!(TCPC_ROLE_CTRL_DRP & (reg)) && \
@@ -177,6 +180,9 @@ struct tcpci;
 /*
  * @TX_BUF_BYTE_x_hidden:
  *		optional; Set when TX_BUF_BYTE_x can only be accessed through I2C_WRITE_BYTE_COUNT.
+ * @RX_BUF_BYTE_x_hidden:
+ *		Optional; Set when READABLE_BYTE_COUNT, RX_BUF_FRAME_TYPE and RX_BUF_BYTE_x
+ *		can only be accessed through READABLE_BYTE_COUNT.
  * @frs_sourcing_vbus:
  *		Optional; Callback to perform chip specific operations when FRS
  *		is sourcing vbus.
@@ -204,6 +210,9 @@ struct tcpci;
  *		swap following Discover Identity on SOP' occurs.
  *		Return true when the TCPM is allowed to request a Vconn swap
  *		after Discovery Identity on SOP.
+ * @conn_present_capable:
+ *		Optional; Enable setting the connection present
+ *		CONFIG_STANDARD_OUTPUT (0x18) bit1.
  * @set_orientation:
  *		Optional; Enable setting the connector orientation
  *		CONFIG_STANDARD_OUTPUT (0x18) bit0.
@@ -211,9 +220,11 @@ struct tcpci;
 struct tcpci_data {
 	struct regmap *regmap;
 	unsigned char TX_BUF_BYTE_x_hidden:1;
+	unsigned char RX_BUF_BYTE_x_hidden:1;
 	unsigned char auto_discharge_disconnect:1;
 	unsigned char vbus_vsafe0v:1;
 	unsigned char cable_comm_capable:1;
+	unsigned char conn_present_capable:1;
 	unsigned char set_orientation:1;
 
 	int (*init)(struct tcpci *tcpci, struct tcpci_data *data);
