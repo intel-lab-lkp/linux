@@ -453,19 +453,26 @@ static int tcpci_set_roles(struct tcpc_dev *tcpc, bool attached,
 			   enum typec_role role, enum typec_data_role data)
 {
 	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
-	unsigned int reg;
+	unsigned int reg = 0;
 	int ret;
 
-	reg = FIELD_PREP(TCPC_MSG_HDR_INFO_REV, PD_REV20);
-	if (role == TYPEC_SOURCE)
-		reg |= TCPC_MSG_HDR_INFO_PWR_ROLE;
-	if (data == TYPEC_HOST)
-		reg |= TCPC_MSG_HDR_INFO_DATA_ROLE;
+	if (attached) {
+		reg = FIELD_PREP(TCPC_MSG_HDR_INFO_REV, PD_REV20);
+		if (role == TYPEC_SOURCE)
+			reg |= TCPC_MSG_HDR_INFO_PWR_ROLE;
+		if (data == TYPEC_HOST)
+			reg |= TCPC_MSG_HDR_INFO_DATA_ROLE;
+	}
 	ret = regmap_write(tcpci->regmap, TCPC_MSG_HDR_INFO, reg);
 	if (ret < 0)
 		return ret;
 
-	return 0;
+	if (tcpci->data->conn_present_capable)
+		return regmap_update_bits(tcpci->regmap, TCPC_CONFIG_STD_OUTPUT,
+					TCPC_CONFIG_STD_OUTPUT_CON_PRES,
+					attached ? TCPC_CONFIG_STD_OUTPUT_CON_PRES : 0);
+	else
+		return 0;
 }
 
 static int tcpci_set_pd_rx(struct tcpc_dev *tcpc, bool enable)
@@ -741,33 +748,86 @@ process_status:
 		struct pd_message msg;
 		unsigned int cnt, payload_cnt;
 		u16 header;
+		unsigned int frame_type;
+		enum tcpm_transmit_type rx_type;
 
 		regmap_read(tcpci->regmap, TCPC_RX_BYTE_CNT, &cnt);
 		/*
 		 * 'cnt' corresponds to READABLE_BYTE_COUNT in section 4.4.14
 		 * of the TCPCI spec [Rev 2.0 Ver 1.0 October 2017] and is
 		 * defined in table 4-36 as one greater than the number of
-		 * bytes received. And that number includes the header. So:
+		 * bytes received. And that number includes the header.
+		 * In Section 4.4.14 of the TCPCI spec [Rev 2.0 Ver 1.0 October, 2017],
+		 * the RECEIVE_BUFFER comprises of three sets of registers:
+		 * READABLE_BYTE_COUNT, RX_BUF_FRAME_TYPE and RX_BUF_BYTE_x.
+		 * These registers can only be accessed by reading at a common
+		 * register address 0x30h.
 		 */
-		if (cnt > 3)
-			payload_cnt = cnt - (1 + sizeof(msg.header));
-		else
-			payload_cnt = 0;
+		if (tcpci->data->RX_BUF_BYTE_x_hidden) {
+			u8 buf[TCPC_RECEIVE_BUFFER_MAX_LEN] = {0,};
+			u8 pos = 0;
 
-		tcpci_read16(tcpci, TCPC_RX_HDR, &header);
-		msg.header = cpu_to_le16(header);
+			/* Read the count and frame type in RECEIVE_BUFFER */
+			regmap_raw_read(tcpci->regmap, TCPC_RX_BYTE_CNT, buf, 2);
+			/* READABLE_BYTE_COUNT */
+			cnt = buf[0];
+			/* RX_BUF_FRAME_TYPE */
+			frame_type = buf[1];
 
-		if (WARN_ON(payload_cnt > sizeof(msg.payload)))
-			payload_cnt = sizeof(msg.payload);
+			/* Read the content of the USB PD message in RECEIVE_BUFFER */
+			regmap_raw_read(tcpci->regmap, TCPC_RX_BYTE_CNT, buf, cnt + 1);
 
-		if (payload_cnt > 0)
-			regmap_raw_read(tcpci->regmap, TCPC_RX_DATA,
-					&msg.payload, payload_cnt);
+			pos += 2;
+			memcpy(&msg.header, &buf[pos], sizeof(msg.header));
+
+			if (cnt > 3) {
+				pos += sizeof(msg.header);
+				payload_cnt = cnt - (1 + sizeof(msg.header));
+				if (WARN_ON(payload_cnt > sizeof(msg.payload)))
+					payload_cnt = sizeof(msg.payload);
+				memcpy(&msg.payload, &buf[pos], payload_cnt);
+			}
+		} else {
+			regmap_read(tcpci->regmap, TCPC_RX_BYTE_CNT, &cnt);
+			/*
+			 * 'cnt' corresponds to READABLE_BYTE_COUNT in section 4.4.14
+			 * of the TCPCI spec [Rev 2.0 Ver 1.0 October 2017] and is
+			 * defined in table 4-36 as one greater than the number of
+			 * bytes received. And that number includes the header. So:
+			 */
+			if (cnt > 3)
+				payload_cnt = cnt - (1 + sizeof(msg.header));
+			else
+				payload_cnt = 0;
+
+			regmap_read(tcpci->regmap, TCPC_RX_BUF_FRAME_TYPE, &frame_type);
+
+			tcpci_read16(tcpci, TCPC_RX_HDR, &header);
+			msg.header = cpu_to_le16(header);
+
+			if (WARN_ON(payload_cnt > sizeof(msg.payload)))
+				payload_cnt = sizeof(msg.payload);
+
+			if (payload_cnt > 0)
+				regmap_raw_read(tcpci->regmap, TCPC_RX_DATA,
+							&msg.payload, payload_cnt);
+		}
 
 		/* Read complete, clear RX status alert bit */
 		tcpci_write16(tcpci, TCPC_ALERT, TCPC_ALERT_RX_STATUS);
 
-		tcpm_pd_receive(tcpci->port, &msg, TCPC_TX_SOP);
+		switch (frame_type) {
+		case TCPC_RX_BUF_FRAME_TYPE_SOP1:
+			rx_type = TCPC_TX_SOP_PRIME;
+			break;
+		case TCPC_RX_BUF_FRAME_TYPE_SOP:
+			rx_type = TCPC_TX_SOP;
+			break;
+		default:
+			rx_type = TCPC_TX_SOP;
+			break;
+		}
+		tcpm_pd_receive(tcpci->port, &msg, rx_type);
 	}
 
 	if (tcpci->data->vbus_vsafe0v && (status & TCPC_ALERT_EXTENDED_STATUS)) {
@@ -915,6 +975,21 @@ static int tcpci_probe(struct i2c_client *client)
 			       sizeof(u16));
 	if (err < 0)
 		return err;
+
+	chip->data.TX_BUF_BYTE_x_hidden =
+		device_property_read_bool(&client->dev, "TX_BUF_BYTE_x_hidden");
+	chip->data.RX_BUF_BYTE_x_hidden =
+		device_property_read_bool(&client->dev, "RX_BUF_BYTE_x_hidden");
+	chip->data.auto_discharge_disconnect =
+		device_property_read_bool(&client->dev, "auto_discharge_disconnect");
+	chip->data.vbus_vsafe0v = device_property_read_bool(&client->dev, "vbus_vsafe0v");
+
+	err = tcpci_check_std_output_cap(chip->data.regmap,
+					 TCPC_STD_OUTPUT_CAP_CONN_PRESENT);
+	if (err < 0)
+		return err;
+
+	chip->data.conn_present_capable = err;
 
 	err = tcpci_check_std_output_cap(chip->data.regmap,
 					 TCPC_STD_OUTPUT_CAP_ORIENTATION);
