@@ -3855,6 +3855,33 @@ organization is given as an example for the first pixel only.
 
     \endgroup
 
+Generic raw formats on serial interfaces
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Those formats transfer raw pixel data typically from raw camera sensors using
+Bayer and other Colour Filter Arrays (CFAs) on serial interfaces. The packing of
+the data on the bus is determined by the hardware, however the bit depth is
+still specific to the format.
+
+.. tabularcolumns:: |p{2.0cm}|p{4.0cm}|p{11.3cm}|
+
+.. cssclass:: longtable
+
+.. flat-table:: Generic raw formats on serial buses
+    :header-rows:  1
+    :stub-columns: 0
+    :widths:       1 1
+
+    * - Format name
+      - Bit depth
+    * - MEDIA_BUS_FMT_RAW_8
+      - 8
+    * - MEDIA_BUS_FMT_RAW_10
+      - 10
+    * - MEDIA_BUS_FMT_RAW_12
+      - 12
+    * - MEDIA_BUS_FMT_RAW_14
+      - 14
 
 Packed YUV Formats
 ^^^^^^^^^^^^^^^^^^
