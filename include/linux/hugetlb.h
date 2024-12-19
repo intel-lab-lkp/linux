@@ -1060,7 +1060,8 @@ static inline int isolate_or_dissolve_huge_page(struct page *page,
 	return -ENOMEM;
 }
 
-int replace_free_hugepage_folios(unsigned long start_pfn, unsigned long end_pfn)
+static inline int replace_free_hugepage_folios(unsigned long start_pfn,
+		unsigned long end_pfn)
 {
 	return 0;
 }
