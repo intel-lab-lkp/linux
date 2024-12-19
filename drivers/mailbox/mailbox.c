@@ -468,6 +468,63 @@ struct mbox_chan *mbox_request_channel_byname(struct mbox_client *cl,
 EXPORT_SYMBOL_GPL(mbox_request_channel_byname);
 
 /**
+ * mbox_request_channel_by_args - request a mailbox channel using client's
+ * channel identifiers.
+ * @cl: identity of the client requesting the channel.
+ * @spec: arguments that describe the channel.
+ *
+ * Used by clients that can discover the channel identifiers at runtime (by
+ * parsing a shared memory for example). The description of
+ * mbox_request_channel() applies here as well.
+ *
+ * Return: Pointer to the channel assigned to the client if successful.
+ *         ERR_PTR for request failure.
+ */
+struct mbox_chan *mbox_request_channel_by_args(struct mbox_client *cl,
+					const struct mbox_xlate_args *spec)
+{
+	struct device *dev = cl->dev;
+	struct mbox_controller *mbox;
+	struct device_node *mbox_np;
+	struct mbox_chan *chan;
+	int ret;
+
+	if (!dev || !dev->of_node) {
+		pr_debug("%s: No owner device node\n", __func__);
+		return ERR_PTR(-ENODEV);
+	}
+
+	mbox_np = of_parse_phandle(dev_of_node(dev), "mbox", 0);
+	if (!mbox_np)
+		return ERR_PTR(-ENODEV);
+
+	mutex_lock(&con_mutex);
+
+	chan = ERR_PTR(-EPROBE_DEFER);
+	list_for_each_entry(mbox, &mbox_cons, node)
+		if (mbox->dev->of_node == mbox_np && mbox->xlate) {
+			chan = mbox->xlate(mbox, spec);
+			if (!IS_ERR(chan))
+				break;
+		}
+
+	of_node_put(mbox_np);
+
+	if (IS_ERR(chan)) {
+		mutex_unlock(&con_mutex);
+		return chan;
+	}
+
+	ret = __mbox_bind_client(chan, cl);
+	if (ret)
+		chan = ERR_PTR(ret);
+
+	mutex_unlock(&con_mutex);
+	return chan;
+}
+EXPORT_SYMBOL_GPL(mbox_request_channel_by_args);
+
+/**
  * mbox_free_channel - The client relinquishes control of a mailbox
  *			channel by this call.
  * @chan: The mailbox channel to be freed.
