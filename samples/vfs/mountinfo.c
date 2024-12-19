@@ -5,6 +5,7 @@
  * contents of /proc/self/mountinfo.
  */
 #define _GNU_SOURCE
+#define __SANE_USERSPACE_TYPES__
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
