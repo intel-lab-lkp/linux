@@ -43,6 +43,14 @@ properties:
       ID in its "clocks" phandle cell. See include/dt-bindings/clock/imx8m-clock.h
       for the full list of i.MX8M clock IDs.
 
+  fsl,nominal-mode:
+    description: Set if SoC is operated in nominal mode
+    $ref: /schemas/types.yaml#/definitions/flag
+
+  fsl,overdrive-mode:
+    description: Set if SoC is operated in overdrive mode
+    $ref: /schemas/types.yaml#/definitions/flag
+
 required:
   - compatible
   - reg
@@ -95,6 +103,12 @@ allOf:
             - const: clk_ext2
             - const: clk_ext3
             - const: clk_ext4
+  - if:
+      required:
+        - fsl,overdrive-mode
+    then:
+      properties:
+        fsl,nominal-mode: false
 
 additionalProperties: false
 
