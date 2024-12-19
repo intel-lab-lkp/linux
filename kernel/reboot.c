@@ -947,13 +947,13 @@ static const char *hw_protection_action_str(enum hw_protection_action action)
 static enum hw_protection_action hw_failure_emergency_action;
 
 /**
- * hw_failure_emergency_poweroff_func - emergency poweroff work after a known delay
- * @work: work_struct associated with the emergency poweroff function
+ * hw_failure_emergency_action_func - emergency action after a known delay
+ * @work: work_struct associated with the emergency action function
  *
  * This function is called in very critical situations to force
- * a kernel poweroff after a configurable timeout value.
+ * a kernel poweroff or reboot after a configurable timeout value.
  */
-static void hw_failure_emergency_poweroff_func(struct work_struct *work)
+static void hw_failure_emergency_action_func(struct work_struct *work)
 {
 	const char *action_str = hw_protection_action_str(hw_failure_emergency_action);
 
@@ -981,8 +981,8 @@ static void hw_failure_emergency_poweroff_func(struct work_struct *work)
 	emergency_restart();
 }
 
-static DECLARE_DELAYED_WORK(hw_failure_emergency_poweroff_work,
-			    hw_failure_emergency_poweroff_func);
+static DECLARE_DELAYED_WORK(hw_failure_emergency_action_work,
+			    hw_failure_emergency_action_func);
 
 /**
  * hw_failure_emergency_schedule - Schedule an emergency system shutdown or reboot
@@ -996,12 +996,12 @@ static void hw_failure_emergency_schedule(enum hw_protection_action action,
 	if (poweroff_delay_ms <= 0)
 		return;
 	hw_failure_emergency_action = action;
-	schedule_delayed_work(&hw_failure_emergency_poweroff_work,
+	schedule_delayed_work(&hw_failure_emergency_action_work,
 			      msecs_to_jiffies(poweroff_delay_ms));
 }
 
 /**
- * __hw_protection_shutdown - Trigger an emergency system shutdown or reboot
+ * __hw_protection_trigger - Trigger an emergency system shutdown or reboot
  *
  * @reason:		Reason of emergency shutdown or reboot to be printed.
  * @ms_until_forced:	Time to wait for orderly shutdown or reboot before
@@ -1018,8 +1018,8 @@ static void hw_failure_emergency_schedule(enum hw_protection_action action,
  * pending even if the previous request has given a large timeout for forced
  * shutdown/reboot.
  */
-void __hw_protection_shutdown(const char *reason, int ms_until_forced,
-			      enum hw_protection_action action)
+void __hw_protection_trigger(const char *reason, int ms_until_forced,
+			     enum hw_protection_action action)
 {
 	static atomic_t allow_proceed = ATOMIC_INIT(1);
 
@@ -1039,7 +1039,7 @@ void __hw_protection_shutdown(const char *reason, int ms_until_forced,
 	else
 		orderly_poweroff(true);
 }
-EXPORT_SYMBOL_GPL(__hw_protection_shutdown);
+EXPORT_SYMBOL_GPL(__hw_protection_trigger);
 
 static int __init reboot_setup(char *str)
 {
