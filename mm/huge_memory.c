@@ -1107,6 +1107,9 @@ static unsigned long __thp_get_unmapped_area(struct file *filp,
 	if (len_pad < len || (off + len_pad) < off)
 		return 0;
 
+	if (!IS_ALIGNED(len, PMD_SIZE))
+		return 0;
+
 	ret = mm_get_unmapped_area_vmflags(current->mm, filp, addr, len_pad,
 					   off >> PAGE_SHIFT, flags, vm_flags);
 
