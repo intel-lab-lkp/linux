@@ -54,6 +54,10 @@ patternProperties:
       A node for each slot provided by the MMC controller
 
     properties:
+      compatible:
+        items:
+          - const: mmc-slot
+
       reg:
         enum: [0, 1, 2]
 

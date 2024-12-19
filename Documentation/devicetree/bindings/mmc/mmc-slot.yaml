@@ -20,19 +20,15 @@ properties:
   $nodename:
     pattern: "^slot(@.*)?$"
 
-  compatible:
-    const: mmc-slot
-
   reg:
     description:
       the slot (or "port") ID
     maxItems: 1
 
 required:
-  - compatible
   - reg
 
-unevaluatedProperties: false
+additionalProperties: true
 
 examples:
   - |
@@ -40,7 +36,6 @@ examples:
       #address-cells = <1>;
       #size-cells = <0>;
       slot@0 {
-        compatible = "mmc-slot";
         reg = <0>;
         bus-width = <4>;
       };
