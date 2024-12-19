@@ -1473,7 +1473,9 @@ static void inet_ifmcaddr_notify(struct net_device *dev,
 	int err = -ENOMEM;
 
 	skb = nlmsg_new(NLMSG_ALIGN(sizeof(struct ifaddrmsg)) +
-			nla_total_size(sizeof(__be32)), GFP_ATOMIC);
+			nla_total_size(sizeof(__be32)) +
+			nla_total_size(sizeof(struct ifa_cacheinfo)),
+			GFP_ATOMIC);
 	if (!skb)
 		goto error;
 
