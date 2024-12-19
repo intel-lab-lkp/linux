@@ -1004,12 +1004,12 @@ static u16 oa_tc6_prepare_spi_tx_buf_for_tx_skbs(struct oa_tc6 *tc6)
 	 */
 	for (used_tx_credits = 0; used_tx_credits < tc6->tx_credits;
 	     used_tx_credits++) {
+		spin_lock_bh(&tc6->tx_skb_lock);
 		if (!tc6->ongoing_tx_skb) {
-			spin_lock_bh(&tc6->tx_skb_lock);
 			tc6->ongoing_tx_skb = tc6->waiting_tx_skb;
 			tc6->waiting_tx_skb = NULL;
-			spin_unlock_bh(&tc6->tx_skb_lock);
 		}
+		spin_unlock_bh(&tc6->tx_skb_lock);
 		if (!tc6->ongoing_tx_skb)
 			break;
 		oa_tc6_add_tx_skb_to_spi_buf(tc6);
