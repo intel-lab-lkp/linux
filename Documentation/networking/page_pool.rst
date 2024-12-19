@@ -62,7 +62,8 @@ a page will cause no race conditions is enough.
    :identifiers: struct page_pool_params
 
 .. kernel-doc:: include/net/page_pool/helpers.h
-   :identifiers: page_pool_put_page page_pool_put_full_page
+   :identifiers: page_pool_put_page
+		 page_pool_put_page_nosync page_pool_put_full_page
 		 page_pool_recycle_direct page_pool_free_va
 		 page_pool_dev_alloc_pages page_pool_dev_alloc_frag
 		 page_pool_dev_alloc page_pool_dev_alloc_va
@@ -93,6 +94,8 @@ much of the page needs to be synced (starting at ``offset``).
 When directly freeing pages in the driver (page_pool_put_page())
 the ``dma_sync_size`` argument specifies how much of the buffer needs
 to be synced.
+If the ``dma_sync_size`` argument is 0, page_pool_put_page_nosync() should be
+used instead of page_pool_put_page().
 
 If in doubt set ``offset`` to 0, ``max_len`` to ``PAGE_SIZE`` and
 pass -1 as ``dma_sync_size``. That combination of arguments is always

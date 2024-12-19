@@ -340,12 +340,14 @@ static inline void page_pool_put_netmem(struct page_pool *pool,
  * the allocator owns the page and will try to recycle it in one of the pool
  * caches. If PP_FLAG_DMA_SYNC_DEV is set, the page will be synced for_device
  * using dma_sync_single_range_for_device().
+ * page_pool_put_page_nosync() should be used if dma_sync_size is 0.
  */
 static inline void page_pool_put_page(struct page_pool *pool,
 				      struct page *page,
 				      unsigned int dma_sync_size,
 				      bool allow_direct)
 {
+	DEBUG_NET_WARN_ON_ONCE(!dma_sync_size);
 	page_pool_put_netmem(pool, page_to_netmem(page), dma_sync_size,
 			     allow_direct);
 }
@@ -370,6 +372,21 @@ static inline void page_pool_put_full_page(struct page_pool *pool,
 					   struct page *page, bool allow_direct)
 {
 	page_pool_put_netmem(pool, page_to_netmem(page), -1, allow_direct);
+}
+
+/**
+ * page_pool_put_page_nosync() - release a reference on a page pool page
+ * @pool:	pool from which page was allocated
+ * @page:	page to release a reference on
+ * @allow_direct: released by the consumer, allow lockless caching
+ *
+ * Similar to page_pool_put_page(), but will not DMA sync the memory area.
+ */
+static inline void page_pool_put_page_nosync(struct page_pool *pool,
+					     struct page *page,
+					     bool allow_direct)
+{
+	page_pool_put_netmem(pool, page_to_netmem(page), 0, allow_direct);
 }
 
 /**
