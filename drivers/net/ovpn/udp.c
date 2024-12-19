@@ -382,7 +382,11 @@ int ovpn_udp_socket_attach(struct socket *sock, struct ovpn_priv *ovpn)
  */
 void ovpn_udp_socket_detach(struct socket *sock)
 {
+	struct ovpn_priv *ovpn = ovpn_from_udp_sock(sock->sk);
 	struct udp_tunnel_sock_cfg cfg = { };
 
+	if (ovpn)
+		/* drop reference to netdev held in sk_user_data */
+		netdev_put(ovpn->dev, &ovpn->dev_tracker);
 	setup_udp_tunnel_sock(sock_net(sock->sk), sock, &cfg);
 }
