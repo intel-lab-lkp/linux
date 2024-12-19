@@ -14,13 +14,18 @@
 #include "aw88081.h"
 #include "aw88395/aw88395_device.h"
 
+enum aw8808x_type {
+	AW88081,
+	AW88083,
+};
+
 struct aw88081 {
 	struct aw_device *aw_pa;
 	struct mutex lock;
 	struct delayed_work start_work;
 	struct regmap *regmap;
 	struct aw_container *aw_cfg;
-
+	enum aw8808x_type devtype;
 	bool phase_sync;
 };
 
@@ -28,6 +33,14 @@ static const struct regmap_config aw88081_regmap_config = {
 	.val_bits = 16,
 	.reg_bits = 8,
 	.max_register = AW88081_REG_MAX,
+	.reg_format_endian = REGMAP_ENDIAN_LITTLE,
+	.val_format_endian = REGMAP_ENDIAN_BIG,
+};
+
+static const struct regmap_config aw88083_regmap_config = {
+	.val_bits = 16,
+	.reg_bits = 8,
+	.max_register = AW88083_REG_MAX,
 	.reg_format_endian = REGMAP_ENDIAN_LITTLE,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 };
@@ -176,6 +189,21 @@ static void aw88081_dev_i2s_tx_enable(struct aw_device *aw_dev, bool flag)
 			~AW88081_I2STXEN_MASK, AW88081_I2STXEN_DISABLE_VALUE);
 }
 
+static void aw88083_i2c_wen(struct aw88081 *aw88081, bool flag)
+{
+	struct aw_device *aw_dev = aw88081->aw_pa;
+
+	if (aw88081->devtype != AW88083)
+		return;
+
+	if (flag)
+		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
+			~AW88083_I2C_WEN_MASK, AW88083_I2C_WEN_ENABLE_VALUE);
+	else
+		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
+			~AW88083_I2C_WEN_MASK, AW88083_I2C_WEN_DISABLE_VALUE);
+}
+
 static void aw88081_dev_pwd(struct aw_device *aw_dev, bool pwd)
 {
 	if (pwd)
@@ -194,6 +222,26 @@ static void aw88081_dev_amppd(struct aw_device *aw_dev, bool amppd)
 	else
 		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
 				~AW88081_EN_PA_MASK, AW88081_EN_PA_WORKING_VALUE);
+}
+
+static void aw88083_dev_amppd(struct aw_device *aw_dev, bool amppd)
+{
+	if (amppd)
+		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
+				~AW88083_AMPPD_MASK, AW88083_AMPPD_POWER_DOWN_VALUE);
+	else
+		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
+				~AW88083_AMPPD_MASK, AW88083_AMPPD_WORKING_VALUE);
+}
+
+static void aw88083_dev_pllpd(struct aw_device *aw_dev, bool pllpd)
+{
+	if (pllpd)
+		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
+				~AW88083_PLL_PD_MASK, AW88083_PLL_PD_WORKING_VALUE);
+	else
+		regmap_update_bits(aw_dev->regmap, AW88081_SYSCTRL_REG,
+				~AW88083_PLL_PD_MASK, AW88083_PLL_PD_POWER_DOWN_VALUE);
 }
 
 static void aw88081_dev_clear_int_status(struct aw_device *aw_dev)
@@ -284,12 +332,91 @@ static void aw88081_dev_uls_hmute(struct aw_device *aw_dev, bool uls_hmute)
 				AW88081_ULS_HMUTE_DISABLE_VALUE);
 }
 
+static int aw88081_dev_reg_value_check(struct aw_device *aw_dev,
+					unsigned int reg_addr, unsigned int *reg_val)
+{
+	unsigned int read_vol;
+
+	if (reg_addr == AW88081_SYSCTRL_REG) {
+		*reg_val &= ~(~AW88081_EN_PA_MASK |
+			      ~AW88081_PWDN_MASK |
+			      ~AW88081_HMUTE_MASK |
+			      ~AW88081_ULS_HMUTE_MASK);
+
+		*reg_val |= AW88081_EN_PA_POWER_DOWN_VALUE |
+			    AW88081_PWDN_POWER_DOWN_VALUE |
+			    AW88081_HMUTE_ENABLE_VALUE |
+			    AW88081_ULS_HMUTE_ENABLE_VALUE;
+	}
+
+	if (reg_addr == AW88081_SYSCTRL2_REG) {
+		read_vol = (*reg_val & (~AW88081_VOL_MASK)) >>
+				AW88081_VOL_START_BIT;
+		aw_dev->volume_desc.init_volume = read_vol;
+	}
+
+	/* i2stxen */
+	if (reg_addr == AW88081_I2SCTRL3_REG) {
+		/* close tx */
+		*reg_val &= AW88081_I2STXEN_MASK;
+		*reg_val |= AW88081_I2STXEN_DISABLE_VALUE;
+	}
+
+	return 0;
+}
+
+static int aw88083_dev_reg_value_check(struct aw_device *aw_dev,
+					unsigned int reg_addr, unsigned int *reg_val)
+{
+	unsigned int read_vol;
+
+	if (reg_addr == AW88081_SYSCTRL_REG) {
+		*reg_val &= ~(~AW88083_AMPPD_MASK |
+			      ~AW88081_PWDN_MASK |
+			      ~AW88081_HMUTE_MASK |
+			      ~AW88083_I2C_WEN_MASK);
+
+		*reg_val |= AW88083_AMPPD_POWER_DOWN_VALUE |
+			    AW88081_PWDN_POWER_DOWN_VALUE |
+			    AW88081_HMUTE_ENABLE_VALUE |
+			    AW88083_I2C_WEN_ENABLE_VALUE;
+	}
+
+	if (reg_addr == AW88081_SYSCTRL2_REG) {
+		read_vol = (*reg_val & (~AW88081_VOL_MASK)) >> AW88081_VOL_START_BIT;
+		aw_dev->volume_desc.init_volume = read_vol;
+	}
+
+	return 0;
+}
+
+static int aw8808x_reg_value_check(struct aw88081 *aw88081,
+					unsigned int reg_addr, unsigned int *reg_val)
+{
+	struct aw_device *aw_dev = aw88081->aw_pa;
+	int ret;
+
+	switch (aw88081->devtype) {
+	case AW88081:
+		ret = aw88081_dev_reg_value_check(aw_dev, reg_addr, reg_val);
+		break;
+	case AW88083:
+		ret = aw88083_dev_reg_value_check(aw_dev, reg_addr, reg_val);
+		break;
+	default:
+		dev_err(aw_dev, "unsupported this device\n");
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
 static int aw88081_dev_reg_update(struct aw88081 *aw88081,
 					unsigned char *data, unsigned int len)
 {
 	struct aw_device *aw_dev = aw88081->aw_pa;
 	struct aw_volume_desc *vol_desc = &aw_dev->volume_desc;
-	unsigned int read_vol;
 	int data_len, i, ret;
 	int16_t *reg_data;
 	u16 reg_val;
@@ -312,30 +439,9 @@ static int aw88081_dev_reg_update(struct aw88081 *aw88081,
 		reg_addr = reg_data[i];
 		reg_val = reg_data[i + 1];
 
-		if (reg_addr == AW88081_SYSCTRL_REG) {
-			reg_val &= ~(~AW88081_EN_PA_MASK |
-				    ~AW88081_PWDN_MASK |
-				    ~AW88081_HMUTE_MASK |
-				    ~AW88081_ULS_HMUTE_MASK);
-
-			reg_val |= AW88081_EN_PA_POWER_DOWN_VALUE |
-				   AW88081_PWDN_POWER_DOWN_VALUE |
-				   AW88081_HMUTE_ENABLE_VALUE |
-				   AW88081_ULS_HMUTE_ENABLE_VALUE;
-		}
-
-		if (reg_addr == AW88081_SYSCTRL2_REG) {
-			read_vol = (reg_val & (~AW88081_VOL_MASK)) >>
-				AW88081_VOL_START_BIT;
-			aw_dev->volume_desc.init_volume = read_vol;
-		}
-
-		/* i2stxen */
-		if (reg_addr == AW88081_I2SCTRL3_REG) {
-			/* close tx */
-			reg_val &= AW88081_I2STXEN_MASK;
-			reg_val |= AW88081_I2STXEN_DISABLE_VALUE;
-		}
+		ret = aw8808x_reg_value_check(aw88081, reg_addr, &reg_val);
+		if (ret)
+			return ret;
 
 		ret = regmap_write(aw_dev->regmap, reg_addr, reg_val);
 		if (ret)
@@ -474,8 +580,59 @@ pll_check_fail:
 	return ret;
 }
 
-static int aw88081_dev_stop(struct aw_device *aw_dev)
+static int aw88083_dev_start(struct aw88081 *aw88081)
 {
+	struct aw_device *aw_dev = aw88081->aw_pa;
+
+	if (aw_dev->status == AW88081_DEV_PW_ON) {
+		dev_dbg(aw_dev->dev, "already power on");
+		return 0;
+	}
+	aw88083_i2c_wen(aw88081, true);
+
+	/* power on */
+	aw88081_dev_pwd(aw_dev, false);
+	usleep_range(AW88081_2000_US, AW88081_2000_US + 10);
+
+	aw88083_dev_pllpd(aw_dev, true);
+	/* amppd on */
+	aw88083_dev_amppd(aw_dev, false);
+	usleep_range(AW88081_2000_US, AW88081_2000_US + 50);
+
+	/* close mute */
+	aw88081_dev_mute(aw_dev, false);
+
+	aw88083_i2c_wen(aw88081, false);
+
+	aw_dev->status = AW88081_DEV_PW_ON;
+
+	return 0;
+}
+
+static int aw8808x_dev_start(struct aw88081 *aw88081)
+{
+	int ret;
+
+	switch (aw88081->devtype) {
+	case AW88081:
+		ret = aw88081_dev_start(aw88081);
+		break;
+	case AW88083:
+		ret = aw88083_dev_start(aw88081);
+		break;
+	default:
+		ret = -EINVAL;
+		dev_err(aw88081->aw_pa->dev, "unsupport device\n");
+		break;
+	}
+
+	return ret;
+}
+
+static int aw88081_dev_stop(struct aw88081 *aw88081)
+{
+	struct aw_device *aw_dev = aw88081->aw_pa;
+
 	if (aw_dev->status == AW88081_DEV_PW_OFF) {
 		dev_dbg(aw_dev->dev, "already power off");
 		return 0;
@@ -501,6 +658,56 @@ static int aw88081_dev_stop(struct aw_device *aw_dev)
 	aw88081_dev_pwd(aw_dev, true);
 
 	return 0;
+}
+
+static int aw88083_dev_stop(struct aw88081 *aw88081)
+{
+	struct aw_device *aw_dev = aw88081->aw_pa;
+
+	if (aw_dev->status == AW88081_DEV_PW_OFF) {
+		dev_dbg(aw_dev->dev, "already power off");
+		return 0;
+	}
+
+	aw_dev->status = AW88081_DEV_PW_OFF;
+
+	aw88083_i2c_wen(aw88081, true);
+	/* set mute */
+	aw88081_dev_mute(aw_dev, true);
+
+	usleep_range(AW88081_2000_US, AW88081_2000_US + 100);
+
+	/* enable amppd */
+	aw88083_dev_amppd(aw_dev, true);
+
+	aw88083_dev_pllpd(aw_dev, false);
+
+	/* set power down */
+	aw88081_dev_pwd(aw_dev, true);
+
+	aw88083_i2c_wen(aw88081, false);
+
+	return 0;
+}
+
+static int aw8808x_stop(struct aw88081 *aw88081)
+{
+	int ret;
+
+	switch (aw88081->devtype) {
+	case AW88081:
+		ret = aw88081_dev_stop(aw88081);
+		break;
+	case AW88083:
+		ret = aw88083_dev_stop(aw88081);
+		break;
+	default:
+		dev_err(aw88081->aw_pa->dev, "unsupport device\n");
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
 }
 
 static int aw88081_reg_update(struct aw88081 *aw88081, bool force)
@@ -530,7 +737,7 @@ static int aw88081_reg_update(struct aw88081 *aw88081, bool force)
 	return 0;
 }
 
-static void aw88081_start_pa(struct aw88081 *aw88081)
+static void aw8808x_start_pa(struct aw88081 *aw88081)
 {
 	int ret, i;
 
@@ -540,7 +747,7 @@ static void aw88081_start_pa(struct aw88081 *aw88081)
 			dev_err(aw88081->aw_pa->dev, "fw update failed, cnt:%d\n", i);
 			continue;
 		}
-		ret = aw88081_dev_start(aw88081);
+		ret = aw8808x_dev_start(aw88081);
 		if (ret) {
 			dev_err(aw88081->aw_pa->dev, "aw88081 device start failed. retry = %d", i);
 			continue;
@@ -557,11 +764,11 @@ static void aw88081_startup_work(struct work_struct *work)
 		container_of(work, struct aw88081, start_work.work);
 
 	mutex_lock(&aw88081->lock);
-	aw88081_start_pa(aw88081);
+	aw8808x_start_pa(aw88081);
 	mutex_unlock(&aw88081->lock);
 }
 
-static void aw88081_start(struct aw88081 *aw88081, bool sync_start)
+static void aw8808x_start(struct aw88081 *aw88081, bool sync_start)
 {
 	if (aw88081->aw_pa->fw_status != AW88081_DEV_FW_OK)
 		return;
@@ -570,7 +777,7 @@ static void aw88081_start(struct aw88081 *aw88081, bool sync_start)
 		return;
 
 	if (sync_start == AW88081_SYNC_START)
-		aw88081_start_pa(aw88081);
+		aw8808x_start_pa(aw88081);
 	else
 		queue_delayed_work(system_wq,
 			&aw88081->start_work,
@@ -745,8 +952,8 @@ static int aw88081_profile_set(struct snd_kcontrol *kcontrol,
 	}
 
 	if (aw88081->aw_pa->status) {
-		aw88081_dev_stop(aw88081->aw_pa);
-		aw88081_start(aw88081, AW88081_SYNC_START);
+		aw8808x_stop(aw88081);
+		aw8808x_start(aw88081, AW88081_SYNC_START);
 	}
 
 	mutex_unlock(&aw88081->lock);
@@ -781,12 +988,15 @@ static int aw88081_volume_set(struct snd_kcontrol *kcontrol,
 	if (value < mc->min || value > mc->max)
 		return -EINVAL;
 
+	aw88083_i2c_wen(aw88081, true);
+
 	if (vol_desc->ctl_volume != value) {
 		vol_desc->ctl_volume = value;
 		aw88081_dev_set_volume(aw88081->aw_pa, vol_desc->ctl_volume);
 		return 1;
 	}
 
+	aw88083_i2c_wen(aw88081, false);
 	return 0;
 }
 
@@ -860,12 +1070,18 @@ static int aw88081_init(struct aw88081 *aw88081, struct i2c_client *i2c, struct 
 		dev_err(&i2c->dev, "%s read chipid error. ret = %d", __func__, ret);
 		return ret;
 	}
-	if (chip_id != AW88081_CHIP_ID) {
+
+	switch (chip_id) {
+	case AW88081_CHIP_ID:
+		dev_dbg(&i2c->dev, "chip id = %x\n", chip_id);
+		break;
+	case AW88083_CHIP_ID:
+		dev_dbg(&i2c->dev, "chip id = %x\n", chip_id);
+		break;
+	default:
 		dev_err(&i2c->dev, "unsupported device");
 		return -ENXIO;
 	}
-
-	dev_dbg(&i2c->dev, "chip id = %x\n", chip_id);
 
 	aw_dev = devm_kzalloc(&i2c->dev, sizeof(*aw_dev), GFP_KERNEL);
 	if (!aw_dev)
@@ -875,7 +1091,7 @@ static int aw88081_init(struct aw88081 *aw88081, struct i2c_client *i2c, struct 
 	aw_dev->i2c = i2c;
 	aw_dev->regmap = regmap;
 	aw_dev->dev = &i2c->dev;
-	aw_dev->chip_id = AW88081_CHIP_ID;
+	aw_dev->chip_id = chip_id;
 	aw_dev->acf = NULL;
 	aw_dev->prof_info.prof_desc = NULL;
 	aw_dev->prof_info.prof_type = AW88395_DEV_NONE_TYPE_ID;
@@ -912,21 +1128,8 @@ static int aw88081_dev_init(struct aw88081 *aw88081, struct aw_container *aw_cfg
 		return ret;
 	}
 
-	aw88081_dev_clear_int_status(aw_dev);
-
-	aw88081_dev_uls_hmute(aw_dev, true);
-
-	aw88081_dev_mute(aw_dev, true);
-
-	usleep_range(AW88081_5000_US, AW88081_5000_US + 10);
-
-	aw88081_dev_i2s_tx_enable(aw_dev, false);
-
-	usleep_range(AW88081_1000_US, AW88081_1000_US + 100);
-
-	aw88081_dev_amppd(aw_dev, true);
-
-	aw88081_dev_pwd(aw_dev, true);
+	aw_dev->status = AW88081_DEV_PW_ON;
+	aw8808x_stop(aw88081);
 
 	return 0;
 }
@@ -974,10 +1177,10 @@ static int aw88081_playback_event(struct snd_soc_dapm_widget *w,
 	mutex_lock(&aw88081->lock);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		aw88081_start(aw88081, AW88081_ASYNC_START);
+		aw8808x_start(aw88081, AW88081_ASYNC_START);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		aw88081_dev_stop(aw88081->aw_pa);
+		aw8808x_stop(aw88081);
 		break;
 	default:
 		break;
@@ -1036,8 +1239,17 @@ static const struct snd_soc_component_driver soc_codec_dev_aw88081 = {
 	.num_controls = ARRAY_SIZE(aw88081_controls),
 };
 
+static const struct i2c_device_id aw88081_i2c_id[] = {
+	{ AW88081_I2C_NAME, AW88081},
+	{ AW88083_I2C_NAME, AW88083},
+	{ }
+};
+MODULE_DEVICE_TABLE(i2c, aw88081_i2c_id);
+
 static int aw88081_i2c_probe(struct i2c_client *i2c)
 {
+	const struct regmap_config *regmap_config;
+	const struct i2c_device_id *id;
 	struct aw88081 *aw88081;
 	int ret;
 
@@ -1049,11 +1261,25 @@ static int aw88081_i2c_probe(struct i2c_client *i2c)
 	if (!aw88081)
 		return -ENOMEM;
 
+	id = i2c_match_id(aw88081_i2c_id, i2c);
+	aw88081->devtype = id->driver_data;
+
 	mutex_init(&aw88081->lock);
 
 	i2c_set_clientdata(i2c, aw88081);
 
-	aw88081->regmap = devm_regmap_init_i2c(i2c, &aw88081_regmap_config);
+	switch (aw88081->devtype) {
+	case AW88081:
+		regmap_config = &aw88081_regmap_config;
+		break;
+	case AW88083:
+		regmap_config = &aw88083_regmap_config;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	aw88081->regmap = devm_regmap_init_i2c(i2c, regmap_config);
 	if (IS_ERR(aw88081->regmap))
 		return dev_err_probe(&i2c->dev, PTR_ERR(aw88081->regmap),
 						"failed to init regmap\n");
@@ -1067,12 +1293,6 @@ static int aw88081_i2c_probe(struct i2c_client *i2c)
 			&soc_codec_dev_aw88081,
 			aw88081_dai, ARRAY_SIZE(aw88081_dai));
 }
-
-static const struct i2c_device_id aw88081_i2c_id[] = {
-	{ AW88081_I2C_NAME },
-	{ }
-};
-MODULE_DEVICE_TABLE(i2c, aw88081_i2c_id);
 
 static struct i2c_driver aw88081_i2c_driver = {
 	.driver = {
