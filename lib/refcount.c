@@ -7,6 +7,7 @@
 #include <linux/refcount.h>
 #include <linux/spinlock.h>
 #include <linux/bug.h>
+#include <net/sock.h>
 
 #define REFCOUNT_WARN(str)	WARN_ONCE(1, "refcount_t: " str ".\n")
 
@@ -155,6 +156,37 @@ bool refcount_dec_and_lock(refcount_t *r, spinlock_t *lock)
 	return true;
 }
 EXPORT_SYMBOL(refcount_dec_and_lock);
+
+/**
+ * refcount_dec_and_lock_sock - return holding locked sock if able to decrement
+ *				refcount to 0
+ * @r: the refcount
+ * @sock: the sock to be locked
+ *
+ * Similar to atomic_dec_and_lock(), it will WARN on underflow and fail to
+ * decrement when saturated at REFCOUNT_SATURATED.
+ *
+ * Provides release memory ordering, such that prior loads and stores are done
+ * before, and provides a control dependency such that free() must come after.
+ * See the comment on top.
+ *
+ * Return: true and hold sock if able to decrement refcount to 0, false
+ *	   otherwise
+ */
+bool refcount_dec_and_lock_sock(refcount_t *r, struct sock *sock)
+{
+	if (refcount_dec_not_one(r))
+		return false;
+
+	bh_lock_sock(sock);
+	if (!refcount_dec_and_test(r)) {
+		bh_unlock_sock(sock);
+		return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL(refcount_dec_and_lock_sock);
 
 /**
  * refcount_dec_and_lock_irqsave - return holding spinlock with disabled

@@ -90,6 +90,17 @@ static inline int kref_put_lock(struct kref *kref,
 	return 0;
 }
 
+static inline int kref_put_sock(struct kref *kref,
+				void (*release)(struct kref *kref),
+				struct sock *sock)
+{
+	if (refcount_dec_and_lock_sock(&kref->refcount, sock)) {
+		release(kref);
+		return 1;
+	}
+	return 0;
+}
+
 /**
  * kref_get_unless_zero - Increment refcount for object unless it is zero.
  * @kref: object.

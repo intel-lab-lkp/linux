@@ -100,6 +100,7 @@
 #include <linux/spinlock_types.h>
 
 struct mutex;
+struct sock;
 
 #define REFCOUNT_INIT(n)	{ .refs = ATOMIC_INIT(n), }
 #define REFCOUNT_MAX		INT_MAX
@@ -358,4 +359,6 @@ extern __must_check bool refcount_dec_and_lock(refcount_t *r, spinlock_t *lock) 
 extern __must_check bool refcount_dec_and_lock_irqsave(refcount_t *r,
 						       spinlock_t *lock,
 						       unsigned long *flags) __cond_acquires(lock);
+extern __must_check bool refcount_dec_and_lock_sock(refcount_t *r,
+						    struct sock *sock);
 #endif /* _LINUX_REFCOUNT_H */
