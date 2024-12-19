@@ -49,6 +49,9 @@ pub mod miscdevice;
 #[cfg(CONFIG_NET)]
 pub mod net;
 pub mod page;
+// Only x86_64 is supported by percpu for now
+#[cfg(CONFIG_X86_64)]
+pub mod percpu;
 pub mod pid_namespace;
 pub mod prelude;
 pub mod print;

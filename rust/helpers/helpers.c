@@ -19,6 +19,7 @@
 #include "mutex.c"
 #include "page.c"
 #include "pid_namespace.c"
+#include "preempt.c"
 #include "rbtree.c"
 #include "refcount.c"
 #include "security.c"
