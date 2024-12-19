@@ -5,9 +5,10 @@ assign appropriate mailbox channel to client drivers.
 
 * Mailbox Controller
 
-Required property:
-- #mbox-cells: Must be at least 1. Number of cells in a mailbox
-		specifier.
+Optional property:
+- #mbox-cells: Must be at least 1. Number of cells in a mailbox specifier.
+               The property becomes mandatory for the cases where the clients
+               reference the controller via the mboxes property.
 
 Example:
 	mailbox: mailbox {
@@ -19,7 +20,11 @@ Example:
 * Mailbox Client
 
 Required property:
+Clients must reference the mailbox controller either via the mboxes or mbox
+properties.
 - mboxes: List of phandle and mailbox channel specifiers.
+- mbox: phandle pointing to the controller. Used by clients that can discover
+        the channel identifiers at runtime.
 
 Optional property:
 - mbox-names: List of identifier strings for each mailbox channel.
@@ -29,7 +34,13 @@ Optional property:
 	  communication between the mailbox client and the remote.
 
 
-Example:
+Example using mbox:
+	power-management {
+		...
+		mbox = <&mailbox>;
+	};
+
+Example using mboxes:
 	pwr_cntrl: power {
 		...
 		mbox-names = "pwr-ctrl", "rpc";
