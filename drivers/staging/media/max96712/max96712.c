@@ -462,6 +462,7 @@ static const struct max96712_info max96712_info_max96712 = {
 
 static const struct max96712_info max96712_info_max96724 = {
 	.dpllfreq = 1200,
+	.have_debug_extra = true,
 };
 
 static const struct of_device_id max96712_of_table[] = {
