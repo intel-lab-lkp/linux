@@ -2625,6 +2625,13 @@ static int dsa_user_phy_connect(struct net_device *user_dev, int addr,
 
 	user_dev->phydev->dev_flags |= flags;
 
+	if (dp->dn) {
+		u32 max_speed;
+
+		if (!of_property_read_u32(dp->dn, "max-speed", &max_speed))
+			phy_set_max_speed(user_dev->phydev, max_speed);
+	}
+
 	return phylink_connect_phy(dp->pl, user_dev->phydev);
 }
 
