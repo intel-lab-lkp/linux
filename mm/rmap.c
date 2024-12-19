@@ -2154,7 +2154,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				hugetlb_vma_unlock_write(vma);
 			}
 			/* Nuke the hugetlb page table entry */
-			pteval = huge_ptep_clear_flush(vma, address, pvmw.pte);
+			pteval = huge_ptep_get_and_clear(mm, address, pvmw.pte);
 		} else {
 			flush_cache_page(vma, address, pfn);
 			/* Nuke the page table entry. */
@@ -2171,7 +2171,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 
 				set_tlb_ubc_flush_pending(mm, pteval, address);
 			} else {
-				pteval = ptep_clear_flush(vma, address, pvmw.pte);
+				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 			}
 		}
 
@@ -2320,6 +2320,14 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 			folio_remove_rmap_pte(folio, subpage, vma);
 		if (vma->vm_flags & VM_LOCKED)
 			mlock_drain_local();
+
+		if (!should_defer_flush(mm, flags)) {
+			if (folio_test_hugetlb(folio))
+				flush_hugetlb_page(vma, address);
+			else
+				flush_tlb_page(vma, address);
+		}
+
 		folio_put(folio);
 	}
 
