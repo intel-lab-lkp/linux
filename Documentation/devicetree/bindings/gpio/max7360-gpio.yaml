@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/max7360-gpio.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Maxim MAX7360 GPIO controller
+
+maintainers:
+  - Kamel Bouhara <kamel.bouhara@bootlin.com>
+  - Mathieu Dubois-Briand <mathieu.dubois-briand@bootlin.com>
+
+description: |
+  Maxim MAX7360 GPIO controller, in MAX7360 MFD
+  https://www.analog.com/en/products/max7360.html
+
+properties:
+  compatible:
+    enum:
+      - maxim,max7360-gpio
+      - maxim,max7360-gpo
+
+  gpio-controller: true
+
+  "#gpio-cells":
+    const: 2
+
+  ngpios:
+    minimum: 0
+    maximum: 8
+
+  interrupt-controller: true
+
+  "#interrupt-cells":
+    const: 2
+
+  interrupts:
+    description: The interrupt line the device is connected to.
+    maxItems: 1
+
+  constant-current-disable:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Bit field, each bit disables constant-current output of the
+                 associated GPIO.
+
+
+required:
+  - compatible
+  - gpio-controller
+  - ngpios
+
+if:
+  properties:
+    compatible:
+      contains:
+        enum:
+          - maxim,max7360-gpio
+then:
+  required:
+    - interrupt-controller
+    - interrupts
+else:
+  properties:
+    interrupt-controller: false
+    interrupts: false
+    constant-current-disable: false
+
+    ngpios:
+      maximum: 6
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    max7360_gpo: max7360_gpo {
+            compatible = "maxim,max7360-gpo";
+            gpio-controller;
+            #gpio-cells = <0x2>;
+            ngpios = <4>;
+    };
+
+    max7360_gpio: max7360_gpio {
+            compatible = "maxim,max7360-gpio";
+
+            gpio-controller;
+            #gpio-cells = <0x2>;
+            ngpios = <8>;
+            constant-current-disable = <0x06>;
+
+            interrupt-controller;
+            #interrupt-cells = <0x2>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <23 IRQ_TYPE_LEVEL_LOW>;
+    };

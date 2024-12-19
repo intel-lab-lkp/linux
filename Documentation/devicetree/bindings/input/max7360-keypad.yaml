@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/max7360-keypad.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Maxim MAX7360 Keypad Controller
+
+maintainers:
+  - Mathieu Dubois-Briand <mathieu.dubois-briand@bootlin.com>
+
+description: |
+  Maxim MAX7360 Keypad Controller, in MAX7360 MFD
+  https://www.analog.com/en/products/max7360.html
+
+allOf:
+  - $ref: matrix-keymap.yaml#
+  - $ref: input.yaml#
+
+properties:
+  compatible:
+    enum:
+      - maxim,max7360-keypad
+
+  interrupts:
+    description: The interrupt line the device is connected to.
+    maxItems: 1
+
+  debounce-delay-ms:
+    description: Debounce delay in ms
+    minimum: 9
+    maximum: 40
+    default: 9
+
+  linux,input-no-autorepeat:
+    description: If present, the keys will not autorepeat when pressed
+
+required:
+  - compatible
+  - interrupts
+  - linux,keymap
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/input/input.h>
+
+    max7360_keypad {
+      compatible = "maxim,max7360-keypad";
+
+      keypad,num-rows = <8>;
+      keypad,num-columns = <4>;
+
+      linux,keymap = <
+        MATRIX_KEY(0x00, 0x00, KEY_F5)
+        MATRIX_KEY(0x01, 0x00, KEY_F4)
+        MATRIX_KEY(0x02, 0x01, KEY_F6)
+        >;
+
+      interrupt-parent = <&gpio1>;
+      interrupts = <23 IRQ_TYPE_LEVEL_LOW>;
+
+      debounce-delay-ms = <10>;
+      linux,input-no-autorepeat;
+    };
