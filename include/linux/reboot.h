@@ -178,10 +178,27 @@ void ctrl_alt_del(void);
 extern void orderly_poweroff(bool force);
 extern void orderly_reboot(void);
 
-enum hw_protection_action { HWPROT_ACT_SHUTDOWN, HWPROT_ACT_REBOOT };
+enum hw_protection_action { HWPROT_ACT_DEFAULT, HWPROT_ACT_SHUTDOWN, HWPROT_ACT_REBOOT };
 
 void __hw_protection_trigger(const char *reason, int ms_until_forced,
 			     enum hw_protection_action action);
+
+/**
+ * hw_protection_trigger - Trigger default emergency system hardware protection action
+ *
+ * @reason:		Reason of emergency shutdown or reboot to be printed.
+ * @ms_until_forced:	Time to wait for orderly shutdown or reboot before
+ *			triggering it. Negative value disables the forced
+ *			shutdown or reboot.
+ *
+ * Initiate an emergency system shutdown or reboot in order to protect
+ * hardware from further damage. The exact action taken is controllable at
+ * runtime and defaults to shutdown.
+ */
+static inline void hw_protection_trigger(const char *reason, int ms_until_forced)
+{
+	__hw_protection_trigger(reason, ms_until_forced, HWPROT_ACT_DEFAULT);
+}
 
 static inline void hw_protection_reboot(const char *reason, int ms_until_forced)
 {
