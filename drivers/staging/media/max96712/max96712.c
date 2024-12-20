@@ -182,7 +182,7 @@ static void max96712_pattern_enable(struct max96712_priv *priv, bool enable)
 	max96712_write_bulk_value(priv, 0x1052, 0, 3);
 	max96712_write_bulk_value(priv, 0x1055, v_sw * h_tot, 3);
 	max96712_write_bulk_value(priv, 0x1058,
-				  (v_active + v_fp + + v_bp) * h_tot, 3);
+				  (v_active + v_fp + v_bp) * h_tot, 3);
 	max96712_write_bulk_value(priv, 0x105b, 0, 3);
 	max96712_write_bulk_value(priv, 0x105e, h_sw, 2);
 	max96712_write_bulk_value(priv, 0x1060, h_active + h_fp + h_bp, 2);
