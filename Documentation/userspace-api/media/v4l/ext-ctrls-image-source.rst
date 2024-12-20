@@ -93,3 +93,46 @@ Image Source Control IDs
     representing a gain of exactly 1.0. For example, if this default value
     is reported as being (say) 128, then a value of 192 would represent
     a gain of exactly 1.5.
+
+``V4L2_CID_CFA_PATTERN (integer)``
+    This control determines the color components and native pixel order in the
+    sensor's CFA (Color Filter Array) when used in conjunction with
+    :ref:`generic raw mbus codes MEDIA_BUS_FMT_RAW_x (where 'x' is the bit
+    depth) <v4l2-mbus-pixelcode-generic-raw>` pixelcodes. The native pixel
+    order is constant for a given device, it is not affected by cropping or
+    flipping.
+
+    This control may only be used on V4L2 sub-devices.
+
+    This is a read-only control.
+
+    Available patterns:
+
+.. flat-table:: V4L2 Color Filter Array Patterns
+    :header-rows:  1
+    :stub-columns: 0
+    :widths:       1 2 1
+
+    * - Macro name
+      - Synopsis
+      - Value
+    * - V4L2_CFA_PATTERN_GRBG
+      - Bayer pattern (2x2 macroblocks). Each macroblock has a green filter in
+        the top-left and bottom-right pixels, a red filter in the top-right
+        pixel, and a blue filter in the bottom-left pixel.
+      - 0x00000000
+    * - V4L2_CFA_PATTERN_RGGB
+      - Bayer pattern (2x2 macroblocks). Each macroblock has a green filter in
+        the top-right and bottom-left pixels, a red filter in the top-left
+        pixel, and a blue filter in the bottom-right pixel.
+      - 0x00000001
+    * - V4L2_CFA_PATTERN_BGGR
+      - Bayer pattern (2x2 macroblocks). Each macroblock has a green filter in
+        the top-right and bottom-left pixels, a blue filter in the top-left
+        pixel, and a red filter in the bottom-right pixel.
+      - 0x00000002
+    * - V4L2_CFA_PATTERN_GBRG
+      - Bayer pattern (2x2 macroblocks). Each macroblock has a green filter in
+        the top-left and bottom-right pixels, a blue filter in the top-right
+        pixel, and a red filter in the bottom-left pixel.
+      - 0x00000003
