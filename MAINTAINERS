@@ -14051,6 +14051,7 @@ M:	Kent Libetario <kent.libetario@analog.com>
 L:	linux-hwmon@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/hwmon/adi,max42500.yaml
+F:	drivers/hwmon/max42500.c
 
 MAX6650 HARDWARE MONITOR AND FAN CONTROLLER DRIVER
 L:	linux-hwmon@vger.kernel.org
