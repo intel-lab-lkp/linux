@@ -989,18 +989,6 @@ static irqreturn_t rswitch_gwca_ts_irq(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
-static int rswitch_gwca_ts_request_irqs(struct rswitch_private *priv)
-{
-	int irq;
-
-	irq = platform_get_irq_byname(priv->pdev, GWCA_TS_IRQ_RESOURCE_NAME);
-	if (irq < 0)
-		return irq;
-
-	return devm_request_irq(&priv->pdev->dev, irq, rswitch_gwca_ts_irq,
-				0, GWCA_TS_IRQ_NAME, priv);
-}
-
 /* Ethernet TSN Agent block (ETHA) and Ethernet MAC IP block (RMAC) */
 static int rswitch_etha_change_mode(struct rswitch_etha *etha,
 				    enum rswitch_etha_mode mode)
@@ -1510,8 +1498,14 @@ static int rswitch_open(struct net_device *ndev)
 	unsigned long flags;
 	int ret;
 
-	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS))
+	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS)) {
+		ret = request_irq(rdev->priv->gwca.ts_irq, rswitch_gwca_ts_irq,
+				  0, "rswitch_ts", rdev->priv);
+		if (ret < 0)
+			return ret;
+
 		iowrite32(GWCA_TS_IRQ_BIT, rdev->priv->addr + GWTSDIE);
+	}
 
 	napi_enable(&rdev->napi);
 
@@ -1535,8 +1529,10 @@ static int rswitch_open(struct net_device *ndev)
 err_request_irq:
 	napi_disable(&rdev->napi);
 
-	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS))
+	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS)) {
 		iowrite32(GWCA_TS_IRQ_BIT, rdev->priv->addr + GWTSDID);
+		free_irq(rdev->priv->gwca.ts_irq, rdev->priv);
+	}
 
 	return ret;
 };
@@ -1562,8 +1558,10 @@ static int rswitch_stop(struct net_device *ndev)
 
 	napi_disable(&rdev->napi);
 
-	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS))
+	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS)) {
 		iowrite32(GWCA_TS_IRQ_BIT, rdev->priv->addr + GWTSDID);
+		free_irq(rdev->priv->gwca.ts_irq, rdev->priv);
+	}
 
 	for (tag = find_first_bit(rdev->ts_skb_used, TS_TAGS_PER_PORT);
 	     tag < TS_TAGS_PER_PORT;
@@ -2001,9 +1999,10 @@ static int rswitch_init(struct rswitch_private *priv)
 	if (err < 0)
 		goto err_ptp_register;
 
-	err = rswitch_gwca_ts_request_irqs(priv);
+	err = platform_get_irq_byname(priv->pdev, GWCA_TS_IRQ_RESOURCE_NAME);
 	if (err < 0)
-		goto err_gwca_ts_request_irq;
+		goto err_gwca_ts_irq;
+	priv->gwca.ts_irq = err;
 
 	err = rswitch_gwca_hw_init(priv);
 	if (err < 0)
@@ -2035,7 +2034,7 @@ err_ether_port_init_all:
 	rswitch_gwca_hw_deinit(priv);
 
 err_gwca_hw_init:
-err_gwca_ts_request_irq:
+err_gwca_ts_irq:
 	rcar_gen4_ptp_unregister(priv->ptp_priv);
 
 err_ptp_register:

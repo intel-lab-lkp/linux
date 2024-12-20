@@ -58,7 +58,6 @@
 #define GWRO			RSWITCH_GWCA0_OFFSET
 
 #define GWCA_TS_IRQ_RESOURCE_NAME	"gwca0_rxts0"
-#define GWCA_TS_IRQ_NAME		"rswitch: gwca0_rxts0"
 #define GWCA_TS_IRQ_BIT			BIT(0)
 
 #define FWRO	0
@@ -978,6 +977,7 @@ struct rswitch_gwca {
 	struct rswitch_gwca_queue *queues;
 	int num_queues;
 	struct rswitch_gwca_queue ts_queue;
+	int ts_irq;
 	DECLARE_BITMAP(used, RSWITCH_MAX_NUM_QUEUES);
 };
 
