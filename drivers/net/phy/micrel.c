@@ -1522,6 +1522,12 @@ static int ksz9477_get_features(struct phy_device *phydev)
 	if (ret)
 		return ret;
 
+	/* See KSZ9477 Errata DS80000754C Module 4 */
+	if (phydev->phy_id == PHY_ID_KSZ9477) {
+		linkmode_zero(phydev->supported_eee);
+		return 0;
+	}
+
 	/* The "EEE control and capability 1" (Register 3.20) seems to be
 	 * influenced by the "EEE advertisement 1" (Register 7.60). Changes
 	 * on the 7.60 will affect 3.20. So, we need to construct our own list
@@ -1999,12 +2005,6 @@ static int ksz9477_config_init(struct phy_device *phydev)
 		if (err)
 			return err;
 	}
-
-	/* According to KSZ9477 Errata DS80000754C (Module 4) all EEE modes
-	 * in this switch shall be regarded as broken.
-	 */
-	if (phydev->dev_flags & MICREL_NO_EEE)
-		linkmode_fill(phydev->eee_broken_modes);
 
 	return kszphy_config_init(phydev);
 }
