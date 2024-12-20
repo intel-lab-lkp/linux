@@ -565,6 +565,39 @@ config MEMORY_HOTPLUG_DEFAULT_ONLINE
 	  Say N here if you want the default policy to keep all hot-plugged
 	  memory blocks in 'offline' state.
 
+choice
+	prompt "Memory Hotplug Default Type"
+	depends on MEMORY_HOTPLUG_DEFAULT_ONLINE
+	default MEMHP_DEFAULT_TYPE_NORMAL
+	help
+	  Default memory zone for driver managed hotplug memory.
+	  Select normal to generally allow kernel usage of this memory.
+	  Select movable to generally disallow kernel usage of this memory.
+	  Example typical kernel usage would be page structs and page tables.
+
+
+config MEMHP_DEFAULT_TYPE_NORMAL
+	bool "Normal"
+	help
+	  Online driver managed hotplug memory into zone normal.
+	  Select this if you want the kernel to be able to utilize
+	  this memory for kernel data (e.g. page tables).
+
+config MEMHP_DEFAULT_TYPE_MOVABLE
+	bool "Movable"
+	help
+	  Online driver managed hotplug memory into zone movable.
+	  Select this if you do not want the kernel to be able to
+	  utilize this memory for kernel data (e.g. page tables).
+
+endchoice
+
+config MEMHP_DEFAULT_TYPE
+       string
+       default "online" if MEMHP_DEFAULT_TYPE_NORMAL
+       default "online_movable" if MEMHP_DEFAULT_TYPE_MOVABLE
+       default "offline"
+
 config MEMORY_HOTREMOVE
 	bool "Allow for memory hot remove"
 	select HAVE_BOOTMEM_INFO_NODE if (X86_64 || PPC64)
