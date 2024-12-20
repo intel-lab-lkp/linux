@@ -10,7 +10,8 @@
 const struct rhashtable_params nfp_tc_ct_merge_params = {
 	.head_offset		= offsetof(struct nfp_fl_ct_tc_merge,
 					   hash_node),
-	.key_len		= sizeof(unsigned long) * 2,
+	.key_len		= sizeof_field(struct nfp_fl_ct_tc_merge,
+						cookie),
 	.key_offset		= offsetof(struct nfp_fl_ct_tc_merge, cookie),
 	.automatic_shrinking	= true,
 };
@@ -18,7 +19,8 @@ const struct rhashtable_params nfp_tc_ct_merge_params = {
 const struct rhashtable_params nfp_nft_ct_merge_params = {
 	.head_offset		= offsetof(struct nfp_fl_nft_tc_merge,
 					   hash_node),
-	.key_len		= sizeof(unsigned long) * 3,
+	.key_len		= sizeof_field(struct nfp_fl_nft_tc_merge,
+						cookie),
 	.key_offset		= offsetof(struct nfp_fl_nft_tc_merge, cookie),
 	.automatic_shrinking	= true,
 };

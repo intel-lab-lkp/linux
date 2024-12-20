@@ -43,7 +43,7 @@ static struct rhashtable bind_hash_table;
 
 static const struct rhashtable_params ht_parms = {
 	.nelem_hint = 768,
-	.key_len = RDS_BOUND_KEY_LEN,
+	.key_len = sizeof_field(struct rds_sock, rs_bound_key),
 	.key_offset = offsetof(struct rds_sock, rs_bound_key),
 	.head_offset = offsetof(struct rds_sock, rs_bound_node),
 	.max_size = 16384,

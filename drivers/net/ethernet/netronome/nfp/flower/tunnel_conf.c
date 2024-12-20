@@ -201,7 +201,7 @@ struct nfp_tun_offloaded_mac {
 static const struct rhashtable_params offloaded_macs_params = {
 	.key_offset	= offsetof(struct nfp_tun_offloaded_mac, addr),
 	.head_offset	= offsetof(struct nfp_tun_offloaded_mac, ht_node),
-	.key_len	= ETH_ALEN,
+	.key_len	= sizeof_field(struct nfp_tun_offloaded_mac, addr),
 	.automatic_shrinking	= true,
 };
 

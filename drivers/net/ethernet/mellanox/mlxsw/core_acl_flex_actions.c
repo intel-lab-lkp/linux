@@ -106,7 +106,7 @@ struct mlxsw_afa_set {
 };
 
 static const struct rhashtable_params mlxsw_afa_set_ht_params = {
-	.key_len = sizeof(struct mlxsw_afa_set_ht_key),
+	.key_len = sizeof_field(struct mlxsw_afa_set, ht_key),
 	.key_offset = offsetof(struct mlxsw_afa_set, ht_key),
 	.head_offset = offsetof(struct mlxsw_afa_set, ht_node),
 	.automatic_shrinking = true,
@@ -124,7 +124,7 @@ struct mlxsw_afa_fwd_entry {
 };
 
 static const struct rhashtable_params mlxsw_afa_fwd_entry_ht_params = {
-	.key_len = sizeof(struct mlxsw_afa_fwd_entry_ht_key),
+	.key_len = sizeof_field(struct mlxsw_afa_fwd_entry, ht_key),
 	.key_offset = offsetof(struct mlxsw_afa_fwd_entry, ht_key),
 	.head_offset = offsetof(struct mlxsw_afa_fwd_entry, ht_node),
 	.automatic_shrinking = true,
@@ -188,7 +188,7 @@ struct mlxsw_afa_policer {
 };
 
 static const struct rhashtable_params mlxsw_afa_policer_ht_params = {
-	.key_len = sizeof(u32),
+	.key_len = sizeof_field(struct mlxsw_afa_policer, fa_index),
 	.key_offset = offsetof(struct mlxsw_afa_policer, fa_index),
 	.head_offset = offsetof(struct mlxsw_afa_policer, ht_node),
 	.automatic_shrinking = true,

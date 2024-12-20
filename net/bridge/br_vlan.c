@@ -22,7 +22,7 @@ static inline int br_vlan_cmp(struct rhashtable_compare_arg *arg,
 static const struct rhashtable_params br_vlan_rht_params = {
 	.head_offset = offsetof(struct net_bridge_vlan, vnode),
 	.key_offset = offsetof(struct net_bridge_vlan, vid),
-	.key_len = sizeof(u16),
+	.key_len = sizeof_field(struct net_bridge_vlan, vid),
 	.nelem_hint = 3,
 	.max_size = VLAN_N_VID,
 	.obj_cmpfn = br_vlan_cmp,

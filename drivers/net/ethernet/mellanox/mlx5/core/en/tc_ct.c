@@ -173,7 +173,7 @@ mlx5_tc_ct_entry_destroy_mod_hdr(struct mlx5_tc_ct_priv *ct_priv,
 static const struct rhashtable_params cts_ht_params = {
 	.head_offset = offsetof(struct mlx5_ct_entry, node),
 	.key_offset = offsetof(struct mlx5_ct_entry, cookie),
-	.key_len = sizeof(((struct mlx5_ct_entry *)0)->cookie),
+	.key_len = sizeof_field(struct mlx5_ct_entry, cookie),
 	.automatic_shrinking = true,
 	.min_size = 16 * 1024,
 };
@@ -181,14 +181,14 @@ static const struct rhashtable_params cts_ht_params = {
 static const struct rhashtable_params zone_params = {
 	.head_offset = offsetof(struct mlx5_ct_ft, node),
 	.key_offset = offsetof(struct mlx5_ct_ft, zone),
-	.key_len = sizeof(((struct mlx5_ct_ft *)0)->zone),
+	.key_len = sizeof_field(struct mlx5_ct_ft, zone),
 	.automatic_shrinking = true,
 };
 
 static const struct rhashtable_params tuples_ht_params = {
 	.head_offset = offsetof(struct mlx5_ct_entry, tuple_node),
 	.key_offset = offsetof(struct mlx5_ct_entry, tuple),
-	.key_len = sizeof(((struct mlx5_ct_entry *)0)->tuple),
+	.key_len = sizeof_field(struct mlx5_ct_entry, tuple),
 	.automatic_shrinking = true,
 	.min_size = 16 * 1024,
 };
@@ -196,7 +196,7 @@ static const struct rhashtable_params tuples_ht_params = {
 static const struct rhashtable_params tuples_nat_ht_params = {
 	.head_offset = offsetof(struct mlx5_ct_entry, tuple_nat_node),
 	.key_offset = offsetof(struct mlx5_ct_entry, tuple_nat),
-	.key_len = sizeof(((struct mlx5_ct_entry *)0)->tuple_nat),
+	.key_len = sizeof_field(struct mlx5_ct_entry, tuple_nat),
 	.automatic_shrinking = true,
 	.min_size = 16 * 1024,
 };

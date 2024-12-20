@@ -147,7 +147,7 @@ struct cls_fl_filter {
 
 static const struct rhashtable_params mask_ht_params = {
 	.key_offset = offsetof(struct fl_flow_mask, key),
-	.key_len = sizeof(struct fl_flow_key),
+	.key_len = sizeof_field(struct fl_flow_mask, key),
 	.head_offset = offsetof(struct fl_flow_mask, ht_node),
 	.automatic_shrinking = true,
 };

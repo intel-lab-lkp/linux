@@ -52,13 +52,13 @@ struct mlxsw_sp_acl_atcam_region_12kb {
 };
 
 static const struct rhashtable_params mlxsw_sp_acl_atcam_lkey_id_ht_params = {
-	.key_len = sizeof(struct mlxsw_sp_acl_atcam_lkey_id_ht_key),
+	.key_len = sizeof_field(struct mlxsw_sp_acl_atcam_lkey_id, ht_key),
 	.key_offset = offsetof(struct mlxsw_sp_acl_atcam_lkey_id, ht_key),
 	.head_offset = offsetof(struct mlxsw_sp_acl_atcam_lkey_id, ht_node),
 };
 
 static const struct rhashtable_params mlxsw_sp_acl_atcam_entries_ht_params = {
-	.key_len = sizeof(struct mlxsw_sp_acl_atcam_entry_ht_key),
+	.key_len = sizeof_field(struct mlxsw_sp_acl_atcam_entry, ht_key),
 	.key_offset = offsetof(struct mlxsw_sp_acl_atcam_entry, ht_key),
 	.head_offset = offsetof(struct mlxsw_sp_acl_atcam_entry, ht_node),
 };

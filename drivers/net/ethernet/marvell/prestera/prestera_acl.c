@@ -79,14 +79,14 @@ struct prestera_acl_vtcam {
 };
 
 static const struct rhashtable_params prestera_acl_ruleset_ht_params = {
-	.key_len = sizeof(struct prestera_acl_ruleset_ht_key),
+	.key_len = sizeof_field(struct prestera_acl_ruleset, ht_key),
 	.key_offset = offsetof(struct prestera_acl_ruleset, ht_key),
 	.head_offset = offsetof(struct prestera_acl_ruleset, ht_node),
 	.automatic_shrinking = true,
 };
 
 static const struct rhashtable_params prestera_acl_rule_ht_params = {
-	.key_len = sizeof(unsigned long),
+	.key_len = sizeof_field(struct prestera_acl_rule, cookie),
 	.key_offset = offsetof(struct prestera_acl_rule, cookie),
 	.head_offset = offsetof(struct prestera_acl_rule, ht_node),
 	.automatic_shrinking = true,
@@ -95,7 +95,7 @@ static const struct rhashtable_params prestera_acl_rule_ht_params = {
 static const struct rhashtable_params __prestera_acl_rule_entry_ht_params = {
 	.key_offset  = offsetof(struct prestera_acl_rule_entry, key),
 	.head_offset = offsetof(struct prestera_acl_rule_entry, ht_node),
-	.key_len     = sizeof(struct prestera_acl_rule_entry_key),
+	.key_len     = sizeof_field(struct prestera_acl_rule_entry, key),
 	.automatic_shrinking = true,
 };
 

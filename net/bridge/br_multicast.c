@@ -39,14 +39,14 @@
 static const struct rhashtable_params br_mdb_rht_params = {
 	.head_offset = offsetof(struct net_bridge_mdb_entry, rhnode),
 	.key_offset = offsetof(struct net_bridge_mdb_entry, addr),
-	.key_len = sizeof(struct br_ip),
+	.key_len = sizeof_field(struct net_bridge_mdb_entry, addr),
 	.automatic_shrinking = true,
 };
 
 static const struct rhashtable_params br_sg_port_rht_params = {
 	.head_offset = offsetof(struct net_bridge_port_group, rhnode),
 	.key_offset = offsetof(struct net_bridge_port_group, key),
-	.key_len = sizeof(struct net_bridge_port_group_sg_key),
+	.key_len = sizeof_field(struct net_bridge_port_group, key),
 	.automatic_shrinking = true,
 };
 

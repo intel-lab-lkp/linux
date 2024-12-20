@@ -29,7 +29,7 @@ static inline int vxlan_vni_cmp(struct rhashtable_compare_arg *arg,
 const struct rhashtable_params vxlan_vni_rht_params = {
 	.head_offset = offsetof(struct vxlan_vni_node, vnode),
 	.key_offset = offsetof(struct vxlan_vni_node, vni),
-	.key_len = sizeof(__be32),
+	.key_len = sizeof_field(struct vxlan_vni_node, vni),
 	.nelem_hint = 3,
 	.max_size = VXLAN_N_VID,
 	.obj_cmpfn = vxlan_vni_cmp,

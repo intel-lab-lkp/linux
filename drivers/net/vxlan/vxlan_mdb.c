@@ -85,7 +85,7 @@ struct vxlan_mdb_flush_desc {
 static const struct rhashtable_params vxlan_mdb_rht_params = {
 	.head_offset = offsetof(struct vxlan_mdb_entry, rhnode),
 	.key_offset = offsetof(struct vxlan_mdb_entry, key),
-	.key_len = sizeof(struct vxlan_mdb_entry_key),
+	.key_len = sizeof_field(struct vxlan_mdb_entry, key),
 	.automatic_shrinking = true,
 };
 

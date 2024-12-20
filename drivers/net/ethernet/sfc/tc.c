@@ -90,31 +90,31 @@ s64 efx_tc_flower_external_mport(struct efx_nic *efx, struct efx_rep *efv)
 }
 
 static const struct rhashtable_params efx_tc_mac_ht_params = {
-	.key_len	= offsetofend(struct efx_tc_mac_pedit_action, h_addr),
-	.key_offset	= 0,
+	.key_len	= sizeof_field(struct efx_tc_mac_pedit_action, h_addr),
+	.key_offset	= offsetof(struct efx_tc_mac_pedit_action, h_addr),
 	.head_offset	= offsetof(struct efx_tc_mac_pedit_action, linkage),
 };
 
 static const struct rhashtable_params efx_tc_encap_match_ht_params = {
-	.key_len	= offsetof(struct efx_tc_encap_match, linkage),
+	.key_len	= offsetofend(struct efx_tc_encap_match, ip_tos_mask),
 	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_tc_encap_match, linkage),
 };
 
 static const struct rhashtable_params efx_tc_match_action_ht_params = {
-	.key_len	= sizeof(unsigned long),
+	.key_len	= sizeof_field(struct efx_tc_flow_rule, cookie),
 	.key_offset	= offsetof(struct efx_tc_flow_rule, cookie),
 	.head_offset	= offsetof(struct efx_tc_flow_rule, linkage),
 };
 
 static const struct rhashtable_params efx_tc_lhs_rule_ht_params = {
-	.key_len	= sizeof(unsigned long),
+	.key_len	= sizeof_field(struct efx_tc_lhs_rule, cookie),
 	.key_offset	= offsetof(struct efx_tc_lhs_rule, cookie),
 	.head_offset	= offsetof(struct efx_tc_lhs_rule, linkage),
 };
 
 static const struct rhashtable_params efx_tc_recirc_ht_params = {
-	.key_len	= offsetof(struct efx_tc_recirc_id, linkage),
+	.key_len	= offsetofend(struct efx_tc_recirc_id, net_dev),
 	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_tc_recirc_id, linkage),
 };

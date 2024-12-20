@@ -198,7 +198,7 @@ struct mlxsw_sp_acl_tcam_ventry {
 };
 
 static const struct rhashtable_params mlxsw_sp_acl_tcam_vchunk_ht_params = {
-	.key_len = sizeof(unsigned int),
+	.key_len = sizeof_field(struct mlxsw_sp_acl_tcam_vchunk, priority),
 	.key_offset = offsetof(struct mlxsw_sp_acl_tcam_vchunk, priority),
 	.head_offset = offsetof(struct mlxsw_sp_acl_tcam_vchunk, ht_node),
 	.automatic_shrinking = true,

@@ -269,7 +269,7 @@ static int mlx5e_rep_netevent_event(struct notifier_block *nb,
 static const struct rhashtable_params mlx5e_neigh_ht_params = {
 	.head_offset = offsetof(struct mlx5e_neigh_hash_entry, rhash_node),
 	.key_offset = offsetof(struct mlx5e_neigh_hash_entry, m_neigh),
-	.key_len = sizeof(struct mlx5e_neigh),
+	.key_len = sizeof_field(struct mlx5e_neigh_hash_entry, m_neigh),
 	.automatic_shrinking = true,
 };
 

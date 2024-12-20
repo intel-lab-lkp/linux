@@ -127,7 +127,7 @@ struct mlxsw_sp_mdb_entry_port {
 static const struct rhashtable_params mlxsw_sp_mdb_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_mdb_entry, key),
 	.head_offset = offsetof(struct mlxsw_sp_mdb_entry, ht_node),
-	.key_len = sizeof(struct mlxsw_sp_mdb_entry_key),
+	.key_len = sizeof_field(struct mlxsw_sp_mdb_entry, key),
 };
 
 static int

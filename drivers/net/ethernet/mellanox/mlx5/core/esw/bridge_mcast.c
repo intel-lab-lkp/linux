@@ -9,7 +9,7 @@
 
 static const struct rhashtable_params mdb_ht_params = {
 	.key_offset = offsetof(struct mlx5_esw_bridge_mdb_entry, key),
-	.key_len = sizeof(struct mlx5_esw_bridge_mdb_key),
+	.key_len = sizeof_field(struct mlx5_esw_bridge_mdb_entry, key),
 	.head_offset = offsetof(struct mlx5_esw_bridge_mdb_entry, ht_node),
 	.automatic_shrinking = true,
 };

@@ -13,7 +13,7 @@
 
 static const struct rhashtable_params ice_fdb_ht_params = {
 	.key_offset = offsetof(struct ice_esw_br_fdb_entry, data),
-	.key_len = sizeof(struct ice_esw_br_fdb_data),
+	.key_len = sizeof_field(struct ice_esw_br_fdb_entry, data),
 	.head_offset = offsetof(struct ice_esw_br_fdb_entry, ht_node),
 	.automatic_shrinking = true,
 };

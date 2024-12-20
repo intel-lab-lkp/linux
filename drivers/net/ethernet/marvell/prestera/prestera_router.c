@@ -67,14 +67,14 @@ struct prestera_kern_fib_cache {
 static const struct rhashtable_params __prestera_kern_neigh_cache_ht_params = {
 	.key_offset  = offsetof(struct prestera_kern_neigh_cache, key),
 	.head_offset = offsetof(struct prestera_kern_neigh_cache, ht_node),
-	.key_len     = sizeof(struct prestera_kern_neigh_cache_key),
+	.key_len     = sizeof_field(struct prestera_kern_neigh_cache, key),
 	.automatic_shrinking = true,
 };
 
 static const struct rhashtable_params __prestera_kern_fib_cache_ht_params = {
 	.key_offset  = offsetof(struct prestera_kern_fib_cache, key),
 	.head_offset = offsetof(struct prestera_kern_fib_cache, ht_node),
-	.key_len     = sizeof(struct prestera_kern_fib_cache_key),
+	.key_len     = sizeof_field(struct prestera_kern_fib_cache, key),
 	.automatic_shrinking = true,
 };
 

@@ -2196,7 +2196,7 @@ struct mlxsw_sp_neigh_entry {
 static const struct rhashtable_params mlxsw_sp_neigh_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_neigh_entry, key),
 	.head_offset = offsetof(struct mlxsw_sp_neigh_entry, ht_node),
-	.key_len = sizeof(struct mlxsw_sp_neigh_key),
+	.key_len = sizeof_field(struct mlxsw_sp_neigh_entry, key),
 };
 
 struct mlxsw_sp_neigh_entry *
@@ -3375,7 +3375,7 @@ bool mlxsw_sp_nexthop_group_has_ipip(struct mlxsw_sp_nexthop *nh)
 static const struct rhashtable_params mlxsw_sp_nexthop_group_vr_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_nexthop_group_vr_entry, key),
 	.head_offset = offsetof(struct mlxsw_sp_nexthop_group_vr_entry, ht_node),
-	.key_len = sizeof(struct mlxsw_sp_nexthop_group_vr_key),
+	.key_len = sizeof_field(struct mlxsw_sp_nexthop_group_vr_entry, key),
 	.automatic_shrinking = true,
 };
 
@@ -3662,7 +3662,7 @@ mlxsw_sp_nexthop6_group_lookup(struct mlxsw_sp *mlxsw_sp,
 static const struct rhashtable_params mlxsw_sp_nexthop_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_nexthop, key),
 	.head_offset = offsetof(struct mlxsw_sp_nexthop, ht_node),
-	.key_len = sizeof(struct mlxsw_sp_nexthop_key),
+	.key_len = sizeof_field(struct mlxsw_sp_nexthop, key),
 };
 
 static int mlxsw_sp_nexthop_insert(struct mlxsw_sp *mlxsw_sp,
@@ -6561,7 +6561,7 @@ mlxsw_sp_fib4_entry_lookup(struct mlxsw_sp *mlxsw_sp,
 static const struct rhashtable_params mlxsw_sp_fib_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_fib_node, key),
 	.head_offset = offsetof(struct mlxsw_sp_fib_node, ht_node),
-	.key_len = sizeof(struct mlxsw_sp_fib_key),
+	.key_len = sizeof_field(struct mlxsw_sp_fib_node, key),
 	.automatic_shrinking = true,
 };
 

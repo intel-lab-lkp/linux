@@ -173,7 +173,6 @@ struct bnxt_tc_tunnel_node {
  */
 struct bnxt_tc_l2_node {
 	/* hash key: first 16b of key */
-#define BNXT_TC_L2_KEY_LEN			16
 	struct bnxt_tc_l2_key	key;
 	struct rhash_head	node;
 

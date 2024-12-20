@@ -34,7 +34,8 @@ struct nfp_fl_stats_ctx_to_flow {
 static const struct rhashtable_params stats_ctx_table_params = {
 	.key_offset	= offsetof(struct nfp_fl_stats_ctx_to_flow, stats_cxt),
 	.head_offset	= offsetof(struct nfp_fl_stats_ctx_to_flow, ht_node),
-	.key_len	= sizeof(u32),
+	.key_len	= sizeof_field(struct nfp_fl_stats_ctx_to_flow,
+					stats_cxt),
 };
 
 static int nfp_release_stats_entry(struct nfp_app *app, u32 stats_context_id)
@@ -485,19 +486,21 @@ const struct rhashtable_params nfp_flower_table_params = {
 const struct rhashtable_params merge_table_params = {
 	.key_offset	= offsetof(struct nfp_merge_info, parent_ctx),
 	.head_offset	= offsetof(struct nfp_merge_info, ht_node),
-	.key_len	= sizeof(u64),
+	.key_len	= sizeof_field(struct nfp_merge_info, parent_ctx),
 };
 
 const struct rhashtable_params nfp_zone_table_params = {
 	.head_offset		= offsetof(struct nfp_fl_ct_zone_entry, hash_node),
-	.key_len		= sizeof(u16),
+	.key_len		= sizeof_field(struct nfp_fl_ct_zone_entry,
+						zone),
 	.key_offset		= offsetof(struct nfp_fl_ct_zone_entry, zone),
 	.automatic_shrinking	= false,
 };
 
 const struct rhashtable_params nfp_ct_map_params = {
 	.head_offset		= offsetof(struct nfp_fl_ct_map_entry, hash_node),
-	.key_len		= sizeof(unsigned long),
+	.key_len		= sizeof_field(struct nfp_fl_ct_map_entry,
+						cookie),
 	.key_offset		= offsetof(struct nfp_fl_ct_map_entry, cookie),
 	.automatic_shrinking	= true,
 };
@@ -505,7 +508,7 @@ const struct rhashtable_params nfp_ct_map_params = {
 const struct rhashtable_params neigh_table_params = {
 	.key_offset	= offsetof(struct nfp_neigh_entry, neigh_cookie),
 	.head_offset	= offsetof(struct nfp_neigh_entry, ht_node),
-	.key_len	= sizeof(unsigned long),
+	.key_len	= sizeof_field(struct nfp_neigh_entry, neigh_cookie),
 };
 
 int nfp_flower_metadata_init(struct nfp_app *app, u64 host_ctx_count,

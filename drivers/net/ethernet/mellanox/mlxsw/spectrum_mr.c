@@ -91,7 +91,7 @@ struct mlxsw_sp_mr_route {
 };
 
 static const struct rhashtable_params mlxsw_sp_mr_route_ht_params = {
-	.key_len = sizeof(struct mlxsw_sp_mr_route_key),
+	.key_len = sizeof_field(struct mlxsw_sp_mr_route, key),
 	.key_offset = offsetof(struct mlxsw_sp_mr_route, key),
 	.head_offset = offsetof(struct mlxsw_sp_mr_route, ht_node),
 	.automatic_shrinking = true,

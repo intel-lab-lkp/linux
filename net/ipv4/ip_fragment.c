@@ -737,8 +737,8 @@ static int ip4_obj_cmpfn(struct rhashtable_compare_arg *arg, const void *ptr)
 
 static const struct rhashtable_params ip4_rhash_params = {
 	.head_offset		= offsetof(struct inet_frag_queue, node),
-	.key_offset		= offsetof(struct inet_frag_queue, key),
-	.key_len		= sizeof(struct frag_v4_compare_key),
+	.key_offset		= offsetof(struct inet_frag_queue, key.v4),
+	.key_len		= sizeof_field(struct inet_frag_queue, key.v4),
 	.hashfn			= ip4_key_hashfn,
 	.obj_hashfn		= ip4_obj_hashfn,
 	.obj_cmpfn		= ip4_obj_cmpfn,

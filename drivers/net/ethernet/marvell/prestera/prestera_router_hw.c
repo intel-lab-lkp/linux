@@ -35,19 +35,19 @@
 static const struct rhashtable_params __prestera_fib_ht_params = {
 	.key_offset  = offsetof(struct prestera_fib_node, key),
 	.head_offset = offsetof(struct prestera_fib_node, ht_node),
-	.key_len     = sizeof(struct prestera_fib_key),
+	.key_len     = sizeof_field(struct prestera_fib_node, key),
 	.automatic_shrinking = true,
 };
 
 static const struct rhashtable_params __prestera_nh_neigh_ht_params = {
 	.key_offset  = offsetof(struct prestera_nh_neigh, key),
-	.key_len     = sizeof(struct prestera_nh_neigh_key),
+	.key_len     = sizeof_field(struct prestera_nh_neigh, key),
 	.head_offset = offsetof(struct prestera_nh_neigh, ht_node),
 };
 
 static const struct rhashtable_params __prestera_nexthop_group_ht_params = {
 	.key_offset  = offsetof(struct prestera_nexthop_group, key),
-	.key_len     = sizeof(struct prestera_nexthop_group_key),
+	.key_len     = sizeof_field(struct prestera_nexthop_group, key),
 	.head_offset = offsetof(struct prestera_nexthop_group, ht_node),
 };
 

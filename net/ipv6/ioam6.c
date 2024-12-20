@@ -61,7 +61,7 @@ static int ioam6_sc_cmpfn(struct rhashtable_compare_arg *arg, const void *obj)
 }
 
 static const struct rhashtable_params rht_ns_params = {
-	.key_len		= sizeof(__be16),
+	.key_len		= sizeof_field(struct ioam6_namespace, id),
 	.key_offset		= offsetof(struct ioam6_namespace, id),
 	.head_offset		= offsetof(struct ioam6_namespace, head),
 	.automatic_shrinking	= true,
@@ -69,7 +69,7 @@ static const struct rhashtable_params rht_ns_params = {
 };
 
 static const struct rhashtable_params rht_sc_params = {
-	.key_len		= sizeof(u32),
+	.key_len		= sizeof_field(struct ioam6_schema, id),
 	.key_offset		= offsetof(struct ioam6_schema, id),
 	.head_offset		= offsetof(struct ioam6_schema, head),
 	.automatic_shrinking	= true,

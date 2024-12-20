@@ -78,14 +78,14 @@ struct mlxsw_sp_acl_rule {
 };
 
 static const struct rhashtable_params mlxsw_sp_acl_ruleset_ht_params = {
-	.key_len = sizeof(struct mlxsw_sp_acl_ruleset_ht_key),
+	.key_len = sizeof_field(struct mlxsw_sp_acl_ruleset, ht_key),
 	.key_offset = offsetof(struct mlxsw_sp_acl_ruleset, ht_key),
 	.head_offset = offsetof(struct mlxsw_sp_acl_ruleset, ht_node),
 	.automatic_shrinking = true,
 };
 
 static const struct rhashtable_params mlxsw_sp_acl_rule_ht_params = {
-	.key_len = sizeof(unsigned long),
+	.key_len = sizeof_field(struct mlxsw_sp_acl_rule, cookie),
 	.key_offset = offsetof(struct mlxsw_sp_acl_rule, cookie),
 	.head_offset = offsetof(struct mlxsw_sp_acl_rule, ht_node),
 	.automatic_shrinking = true,

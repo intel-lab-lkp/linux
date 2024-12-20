@@ -2844,7 +2844,7 @@ struct mlxsw_sp_sample_trigger_node {
 static const struct rhashtable_params mlxsw_sp_sample_trigger_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_sample_trigger_node, trigger),
 	.head_offset = offsetof(struct mlxsw_sp_sample_trigger_node, ht_node),
-	.key_len = sizeof(struct mlxsw_sp_sample_trigger),
+	.key_len = sizeof_field(struct mlxsw_sp_sample_trigger_node, trigger),
 	.automatic_shrinking = true,
 };
 
@@ -3005,7 +3005,7 @@ struct mlxsw_sp_ipv6_addr_node {
 static const struct rhashtable_params mlxsw_sp_ipv6_addr_ht_params = {
 	.key_offset = offsetof(struct mlxsw_sp_ipv6_addr_node, key),
 	.head_offset = offsetof(struct mlxsw_sp_ipv6_addr_node, ht_node),
-	.key_len = sizeof(struct in6_addr),
+	.key_len = sizeof_field(struct mlxsw_sp_ipv6_addr_node, key),
 	.automatic_shrinking = true,
 };
 

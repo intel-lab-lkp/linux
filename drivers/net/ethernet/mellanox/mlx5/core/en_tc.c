@@ -4339,7 +4339,7 @@ static void get_flags(int flags, unsigned long *flow_flags)
 static const struct rhashtable_params tc_ht_params = {
 	.head_offset = offsetof(struct mlx5e_tc_flow, node),
 	.key_offset = offsetof(struct mlx5e_tc_flow, cookie),
-	.key_len = sizeof(((struct mlx5e_tc_flow *)0)->cookie),
+	.key_len = sizeof_field(struct mlx5e_tc_flow, cookie),
 	.automatic_shrinking = true,
 };
 

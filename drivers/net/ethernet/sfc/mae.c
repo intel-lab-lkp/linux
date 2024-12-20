@@ -1053,7 +1053,7 @@ static bool efx_mae_asl_id(u32 id)
 
 /* mport handling */
 static const struct rhashtable_params efx_mae_mports_ht_params = {
-	.key_len	= sizeof(u32),
+	.key_len	= sizeof_field(struct mae_mport_desc, mport_id),
 	.key_offset	= offsetof(struct mae_mport_desc, mport_id),
 	.head_offset	= offsetof(struct mae_mport_desc, linkage),
 };

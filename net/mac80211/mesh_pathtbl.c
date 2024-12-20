@@ -28,7 +28,7 @@ static u32 mesh_table_hash(const void *addr, u32 len, u32 seed)
 static const struct rhashtable_params mesh_rht_params = {
 	.nelem_hint = 2,
 	.automatic_shrinking = true,
-	.key_len = ETH_ALEN,
+	.key_len = sizeof_field(struct mesh_path, dst),
 	.key_offset = offsetof(struct mesh_path, dst),
 	.head_offset = offsetof(struct mesh_path, rhash),
 	.hashfn = mesh_table_hash,

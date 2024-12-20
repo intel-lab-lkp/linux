@@ -757,7 +757,7 @@ struct mac80211_hwsim_data {
 static const struct rhashtable_params hwsim_rht_params = {
 	.nelem_hint = 2,
 	.automatic_shrinking = true,
-	.key_len = ETH_ALEN,
+	.key_len = sizeof_field(struct mac80211_hwsim_data, addresses[1]),
 	.key_offset = offsetof(struct mac80211_hwsim_data, addresses[1]),
 	.head_offset = offsetof(struct mac80211_hwsim_data, rht),
 };

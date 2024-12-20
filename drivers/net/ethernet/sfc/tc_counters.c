@@ -17,14 +17,14 @@
 /* Counter-management hashtables */
 
 static const struct rhashtable_params efx_tc_counter_id_ht_params = {
-	.key_len	= offsetof(struct efx_tc_counter_index, linkage),
-	.key_offset	= 0,
+	.key_len	= sizeof_field(struct efx_tc_counter_index, cookie),
+	.key_offset	= offsetof(struct efx_tc_counter_index, cookie),
 	.head_offset	= offsetof(struct efx_tc_counter_index, linkage),
 };
 
 static const struct rhashtable_params efx_tc_counter_ht_params = {
-	.key_len	= offsetof(struct efx_tc_counter, linkage),
-	.key_offset	= 0,
+	.key_len	= sizeof_field(struct efx_tc_counter, fw_id),
+	.key_offset	= offsetof(struct efx_tc_counter, fw_id),
 	.head_offset	= offsetof(struct efx_tc_counter, linkage),
 };
 

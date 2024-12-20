@@ -393,7 +393,7 @@ static inline int ipmr_hash_cmp(struct rhashtable_compare_arg *arg,
 static const struct rhashtable_params ipmr_rht_params = {
 	.head_offset = offsetof(struct mr_mfc, mnode),
 	.key_offset = offsetof(struct mfc_cache, cmparg),
-	.key_len = sizeof(struct mfc_cache_cmp_arg),
+	.key_len = sizeof_field(struct mfc_cache, cmparg),
 	.nelem_hint = 3,
 	.obj_cmpfn = ipmr_hash_cmp,
 	.automatic_shrinking = true,

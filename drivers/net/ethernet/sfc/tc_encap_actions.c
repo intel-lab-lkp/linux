@@ -17,7 +17,7 @@
 #include <net/arp.h>
 
 static const struct rhashtable_params efx_neigh_ht_params = {
-	.key_len	= offsetof(struct efx_neigh_binder, ha),
+	.key_len	= offsetofend(struct efx_neigh_binder, dst_ip6),
 	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_neigh_binder, linkage),
 };

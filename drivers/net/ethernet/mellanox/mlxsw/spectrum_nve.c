@@ -77,7 +77,7 @@ struct mlxsw_sp_nve_mc_list {
 };
 
 static const struct rhashtable_params mlxsw_sp_nve_mc_list_ht_params = {
-	.key_len = sizeof(struct mlxsw_sp_nve_mc_list_key),
+	.key_len = sizeof_field(struct mlxsw_sp_nve_mc_list, key),
 	.key_offset = offsetof(struct mlxsw_sp_nve_mc_list, key),
 	.head_offset = offsetof(struct mlxsw_sp_nve_mc_list, ht_node),
 };
@@ -810,7 +810,7 @@ struct mlxsw_sp_nve_ipv6_ht_node {
 };
 
 static const struct rhashtable_params mlxsw_sp_nve_ipv6_ht_params = {
-	.key_len = sizeof(struct mlxsw_sp_nve_ipv6_ht_key),
+	.key_len = sizeof_field(struct mlxsw_sp_nve_ipv6_ht_node, key),
 	.key_offset = offsetof(struct mlxsw_sp_nve_ipv6_ht_node, key),
 	.head_offset = offsetof(struct mlxsw_sp_nve_ipv6_ht_node, ht_node),
 };

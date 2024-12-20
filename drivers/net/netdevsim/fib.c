@@ -115,7 +115,7 @@ struct nsim_fib_event {
 static const struct rhashtable_params nsim_fib_rt_ht_params = {
 	.key_offset = offsetof(struct nsim_fib_rt, key),
 	.head_offset = offsetof(struct nsim_fib_rt, ht_node),
-	.key_len = sizeof(struct nsim_fib_rt_key),
+	.key_len = sizeof_field(struct nsim_fib_rt, key),
 	.automatic_shrinking = true,
 };
 
@@ -129,7 +129,7 @@ struct nsim_nexthop {
 static const struct rhashtable_params nsim_nexthop_ht_params = {
 	.key_offset = offsetof(struct nsim_nexthop, id),
 	.head_offset = offsetof(struct nsim_nexthop, ht_node),
-	.key_len = sizeof(u32),
+	.key_len = sizeof_field(struct nsim_nexthop, id),
 	.automatic_shrinking = true,
 };
 

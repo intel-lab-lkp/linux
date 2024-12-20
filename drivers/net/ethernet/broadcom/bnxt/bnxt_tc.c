@@ -1982,28 +1982,28 @@ static int bnxt_tc_setup_indr_cb(struct net_device *netdev, struct Qdisc *sch, v
 static const struct rhashtable_params bnxt_tc_flow_ht_params = {
 	.head_offset = offsetof(struct bnxt_tc_flow_node, node),
 	.key_offset = offsetof(struct bnxt_tc_flow_node, cookie),
-	.key_len = sizeof(((struct bnxt_tc_flow_node *)0)->cookie),
+	.key_len = sizeof_field(struct bnxt_tc_flow_node, cookie),
 	.automatic_shrinking = true
 };
 
 static const struct rhashtable_params bnxt_tc_l2_ht_params = {
 	.head_offset = offsetof(struct bnxt_tc_l2_node, node),
 	.key_offset = offsetof(struct bnxt_tc_l2_node, key),
-	.key_len = BNXT_TC_L2_KEY_LEN,
+	.key_len = offsetofend(struct bnxt_tc_l2_key, inner_vlan_tci),
 	.automatic_shrinking = true
 };
 
 static const struct rhashtable_params bnxt_tc_decap_l2_ht_params = {
 	.head_offset = offsetof(struct bnxt_tc_l2_node, node),
 	.key_offset = offsetof(struct bnxt_tc_l2_node, key),
-	.key_len = BNXT_TC_L2_KEY_LEN,
+	.key_len = offsetofend(struct bnxt_tc_l2_key, inner_vlan_tci),
 	.automatic_shrinking = true
 };
 
 static const struct rhashtable_params bnxt_tc_tunnel_ht_params = {
 	.head_offset = offsetof(struct bnxt_tc_tunnel_node, node),
 	.key_offset = offsetof(struct bnxt_tc_tunnel_node, key),
-	.key_len = sizeof(struct ip_tunnel_key),
+	.key_len = sizeof_field(struct bnxt_tc_tunnel_node, key),
 	.automatic_shrinking = true
 };
 

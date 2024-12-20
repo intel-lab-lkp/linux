@@ -555,7 +555,7 @@ int nfp_flower_setup_qos_offload(struct nfp_app *app, struct net_device *netdev,
 static const struct rhashtable_params stats_meter_table_params = {
 	.key_offset	= offsetof(struct nfp_meter_entry, meter_id),
 	.head_offset	= offsetof(struct nfp_meter_entry, ht_node),
-	.key_len	= sizeof(u32),
+	.key_len	= sizeof_field(struct nfp_meter_entry, meter_id),
 };
 
 struct nfp_meter_entry *
