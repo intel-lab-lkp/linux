@@ -51,7 +51,6 @@
 
 /* TODO: hardcoded ETHA/GWCA settings for now */
 #define GWCA_IRQ_RESOURCE_NAME	"gwca0_rxtx%d"
-#define GWCA_IRQ_NAME		"rswitch: gwca0_rxtx%d"
 #define GWCA_NUM_IRQS		8
 #define GWCA_INDEX		0
 #define AGENT_INDEX_GWCA	3
@@ -828,6 +827,10 @@ enum rswitch_gwca_mode {
 
 /* TOP */
 #define TPEMIMC7(queue)		(TPEMIMC70 + (queue) * 4)
+#define TPEMIMC7_GDICM0			GENMASK(2, 0)
+#define TPEMIMC7_GDICM_SHIFT(i)		((i) * 8)
+#define TPEMIMC7_GDICM(i)		(TPEMIMC7_GDICM0 << TPEMIMC7_GDICM_SHIFT(i))
+#define TPEMIMC7_GDICM_PREP(i, val)	(((val) & TPEMIMC7_GDICM0) << TPEMIMC7_GDICM_SHIFT(i))
 
 /* Descriptors */
 enum RX_DS_CC_BIT {
@@ -967,7 +970,6 @@ struct rswitch_gwca_queue {
 	};
 };
 
-#define RSWITCH_NUM_IRQ_REGS	(RSWITCH_MAX_NUM_QUEUES / BITS_PER_TYPE(u32))
 struct rswitch_gwca {
 	unsigned int index;
 	struct rswitch_desc *linkfix_table;
@@ -977,8 +979,6 @@ struct rswitch_gwca {
 	int num_queues;
 	struct rswitch_gwca_queue ts_queue;
 	DECLARE_BITMAP(used, RSWITCH_MAX_NUM_QUEUES);
-	u32 tx_irq_bits[RSWITCH_NUM_IRQ_REGS];
-	u32 rx_irq_bits[RSWITCH_NUM_IRQ_REGS];
 };
 
 #define NUM_QUEUES_PER_NDEV	2
@@ -990,6 +990,8 @@ struct rswitch_device {
 	void __iomem *addr;
 	struct rswitch_gwca_queue *tx_queue;
 	struct rswitch_gwca_queue *rx_queue;
+	unsigned int irq_index;
+	int irq;
 	struct sk_buff *ts_skb[TS_TAGS_PER_PORT];
 	DECLARE_BITMAP(ts_skb_used, TS_TAGS_PER_PORT);
 	bool disabled;

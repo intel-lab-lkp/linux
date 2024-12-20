@@ -99,15 +99,6 @@ static void rswitch_coma_init(struct rswitch_private *priv)
 	iowrite32(CABPPFLC_INIT_VALUE, priv->addr + CABPPFLC0);
 }
 
-/* R-Switch-2 block (TOP) */
-static void rswitch_top_init(struct rswitch_private *priv)
-{
-	unsigned int i;
-
-	for (i = 0; i < RSWITCH_MAX_NUM_QUEUES; i++)
-		iowrite32((i / 16) << (GWCA_INDEX * 8), priv->addr + TPEMIMC7(i));
-}
-
 /* Forwarding engine block (MFWD) */
 static void rswitch_fwd_init(struct rswitch_private *priv)
 {
@@ -175,29 +166,6 @@ static int rswitch_gwca_axi_ram_reset(struct rswitch_private *priv)
 	return rswitch_reg_wait(priv->addr, GWARIRM, GWARIRM_ARR, GWARIRM_ARR);
 }
 
-static bool rswitch_is_any_data_irq(struct rswitch_private *priv, u32 *dis, bool tx)
-{
-	u32 *mask = tx ? priv->gwca.tx_irq_bits : priv->gwca.rx_irq_bits;
-	unsigned int i;
-
-	for (i = 0; i < RSWITCH_NUM_IRQ_REGS; i++) {
-		if (dis[i] & mask[i])
-			return true;
-	}
-
-	return false;
-}
-
-static void rswitch_get_data_irq_status(struct rswitch_private *priv, u32 *dis)
-{
-	unsigned int i;
-
-	for (i = 0; i < RSWITCH_NUM_IRQ_REGS; i++) {
-		dis[i] = ioread32(priv->addr + GWDIS(i));
-		dis[i] &= ioread32(priv->addr + GWDIE(i));
-	}
-}
-
 static void rswitch_enadis_data_irq(struct rswitch_private *priv,
 				    unsigned int index, bool enable)
 {
@@ -206,12 +174,18 @@ static void rswitch_enadis_data_irq(struct rswitch_private *priv,
 	iowrite32(BIT(index % 32), priv->addr + offs);
 }
 
-static void rswitch_ack_data_irq(struct rswitch_private *priv,
-				 unsigned int index)
+static bool rswitch_check_ack_data_irq(struct rswitch_private *priv,
+				       unsigned int index)
 {
-	u32 offs = GWDIS(index / 32);
+	u32 reg = GWDIS(index / 32);
+	u32 bit = BIT(index % 32);
 
-	iowrite32(BIT(index % 32), priv->addr + offs);
+	if (ioread32(priv->addr + reg) & bit) {
+		iowrite32(bit, priv->addr + reg);
+		return true;
+	}
+
+	return false;
 }
 
 static unsigned int rswitch_next_queue_index(struct rswitch_gwca_queue *gq,
@@ -314,8 +288,6 @@ static int rswitch_gwca_queue_alloc(struct net_device *ndev,
 				    struct rswitch_gwca_queue *gq,
 				    bool dir_tx, unsigned int ring_size)
 {
-	unsigned int i, bit;
-
 	gq->dir_tx = dir_tx;
 	gq->ring_size = ring_size;
 	gq->ndev = ndev;
@@ -344,13 +316,6 @@ static int rswitch_gwca_queue_alloc(struct net_device *ndev,
 
 	if (!gq->rx_ring && !gq->tx_ring)
 		goto out;
-
-	i = gq->index / 32;
-	bit = BIT(gq->index % 32);
-	if (dir_tx)
-		priv->gwca.tx_irq_bits[i] |= bit;
-	else
-		priv->gwca.rx_irq_bits[i] |= bit;
 
 	return 0;
 
@@ -583,6 +548,15 @@ static void rswitch_gwca_put(struct rswitch_private *priv,
 	clear_bit(gq->index, priv->gwca.used);
 }
 
+static void rswitch_gwca_queue_assign_irq(struct rswitch_private *priv,
+					  struct rswitch_gwca_queue *gq,
+					  unsigned int irq_index)
+{
+	rswitch_modify(priv->addr, TPEMIMC7(gq->index),
+		       TPEMIMC7_GDICM(GWCA_INDEX),
+		       TPEMIMC7_GDICM_PREP(GWCA_INDEX, irq_index));
+}
+
 static int rswitch_txdmac_alloc(struct net_device *ndev)
 {
 	struct rswitch_device *rdev = netdev_priv(ndev);
@@ -614,6 +588,7 @@ static int rswitch_txdmac_init(struct rswitch_private *priv, unsigned int index)
 {
 	struct rswitch_device *rdev = priv->rdev[index];
 
+	rswitch_gwca_queue_assign_irq(priv, rdev->tx_queue, rdev->irq_index);
 	return rswitch_gwca_queue_format(rdev->ndev, priv, rdev->tx_queue);
 }
 
@@ -649,6 +624,7 @@ static int rswitch_rxdmac_init(struct rswitch_private *priv, unsigned int index)
 	struct rswitch_device *rdev = priv->rdev[index];
 	struct net_device *ndev = rdev->ndev;
 
+	rswitch_gwca_queue_assign_irq(priv, rdev->rx_queue, rdev->irq_index);
 	return rswitch_gwca_queue_ext_ts_format(ndev, priv, rdev->rx_queue);
 }
 
@@ -933,9 +909,13 @@ err:
 	return 0;
 }
 
-static void rswitch_queue_interrupt(struct net_device *ndev)
+static irqreturn_t rswitch_gwca_data_irq(int irq, void *data)
 {
-	struct rswitch_device *rdev = netdev_priv(ndev);
+	struct rswitch_device *rdev = data;
+
+	if (!rswitch_check_ack_data_irq(rdev->priv, rdev->tx_queue->index) &&
+	    !rswitch_check_ack_data_irq(rdev->priv, rdev->rx_queue->index))
+		return IRQ_NONE;
 
 	if (napi_schedule_prep(&rdev->napi)) {
 		spin_lock(&rdev->priv->lock);
@@ -944,69 +924,8 @@ static void rswitch_queue_interrupt(struct net_device *ndev)
 		spin_unlock(&rdev->priv->lock);
 		__napi_schedule(&rdev->napi);
 	}
-}
-
-static irqreturn_t rswitch_data_irq(struct rswitch_private *priv, u32 *dis)
-{
-	struct rswitch_gwca_queue *gq;
-	unsigned int i, index, bit;
-
-	for (i = 0; i < priv->gwca.num_queues; i++) {
-		gq = &priv->gwca.queues[i];
-		index = gq->index / 32;
-		bit = BIT(gq->index % 32);
-		if (!(dis[index] & bit))
-			continue;
-
-		rswitch_ack_data_irq(priv, gq->index);
-		rswitch_queue_interrupt(gq->ndev);
-	}
 
 	return IRQ_HANDLED;
-}
-
-static irqreturn_t rswitch_gwca_irq(int irq, void *dev_id)
-{
-	struct rswitch_private *priv = dev_id;
-	u32 dis[RSWITCH_NUM_IRQ_REGS];
-	irqreturn_t ret = IRQ_NONE;
-
-	rswitch_get_data_irq_status(priv, dis);
-
-	if (rswitch_is_any_data_irq(priv, dis, true) ||
-	    rswitch_is_any_data_irq(priv, dis, false))
-		ret = rswitch_data_irq(priv, dis);
-
-	return ret;
-}
-
-static int rswitch_gwca_request_irqs(struct rswitch_private *priv)
-{
-	char *resource_name, *irq_name;
-	int i, ret, irq;
-
-	for (i = 0; i < GWCA_NUM_IRQS; i++) {
-		resource_name = kasprintf(GFP_KERNEL, GWCA_IRQ_RESOURCE_NAME, i);
-		if (!resource_name)
-			return -ENOMEM;
-
-		irq = platform_get_irq_byname(priv->pdev, resource_name);
-		kfree(resource_name);
-		if (irq < 0)
-			return irq;
-
-		irq_name = devm_kasprintf(&priv->pdev->dev, GFP_KERNEL,
-					  GWCA_IRQ_NAME, i);
-		if (!irq_name)
-			return -ENOMEM;
-
-		ret = devm_request_irq(&priv->pdev->dev, irq, rswitch_gwca_irq,
-				       0, irq_name, priv);
-		if (ret < 0)
-			return ret;
-	}
-
-	return 0;
 }
 
 static void rswitch_ts(struct rswitch_private *priv)
@@ -1589,11 +1508,17 @@ static int rswitch_open(struct net_device *ndev)
 {
 	struct rswitch_device *rdev = netdev_priv(ndev);
 	unsigned long flags;
+	int ret;
 
 	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS))
 		iowrite32(GWCA_TS_IRQ_BIT, rdev->priv->addr + GWTSDIE);
 
 	napi_enable(&rdev->napi);
+
+	ret = request_irq(rdev->irq, rswitch_gwca_data_irq, IRQF_SHARED,
+			  netdev_name(ndev), rdev);
+	if (ret < 0)
+		goto err_request_irq;
 
 	spin_lock_irqsave(&rdev->priv->lock, flags);
 	bitmap_set(rdev->priv->opened_ports, rdev->port, 1);
@@ -1606,6 +1531,14 @@ static int rswitch_open(struct net_device *ndev)
 	netif_start_queue(ndev);
 
 	return 0;
+
+err_request_irq:
+	napi_disable(&rdev->napi);
+
+	if (bitmap_empty(rdev->priv->opened_ports, RSWITCH_NUM_PORTS))
+		iowrite32(GWCA_TS_IRQ_BIT, rdev->priv->addr + GWTSDID);
+
+	return ret;
 };
 
 static int rswitch_stop(struct net_device *ndev)
@@ -1624,6 +1557,8 @@ static int rswitch_stop(struct net_device *ndev)
 	rswitch_enadis_data_irq(rdev->priv, rdev->rx_queue->index, false);
 	bitmap_clear(rdev->priv->opened_ports, rdev->port, 1);
 	spin_unlock_irqrestore(&rdev->priv->lock, flags);
+
+	free_irq(rdev->irq, rdev);
 
 	napi_disable(&rdev->napi);
 
@@ -1906,6 +1841,34 @@ static void rswitch_etha_init(struct rswitch_private *priv, unsigned int index)
 	etha->psmcs = clk_get_rate(priv->clk) / 100000 / (25 * 2) - 1;
 }
 
+static int rswitch_port_get_irq(struct rswitch_device *rdev)
+{
+	unsigned int irq_index;
+	char *name;
+	int err;
+
+	err = of_property_read_u32(rdev->np_port, "irq-index", &irq_index);
+	if (err == 0) {
+		if (irq_index < GWCA_NUM_IRQS)
+			rdev->irq_index = irq_index;
+		else
+			dev_warn(&rdev->priv->pdev->dev,
+				 "%pOF: irq-index out of range\n",
+				 rdev->np_port);
+	}
+
+	name = kasprintf(GFP_KERNEL, GWCA_IRQ_RESOURCE_NAME, rdev->irq_index);
+	if (!name)
+		return -ENOMEM;
+	err = platform_get_irq_byname(rdev->priv->pdev, name);
+	kfree(name);
+	if (err < 0)
+		return err;
+	rdev->irq = err;
+
+	return 0;
+}
+
 static int rswitch_device_alloc(struct rswitch_private *priv, unsigned int index)
 {
 	struct platform_device *pdev = priv->pdev;
@@ -1954,6 +1917,10 @@ static int rswitch_device_alloc(struct rswitch_private *priv, unsigned int index
 	if (err < 0)
 		goto out_get_params;
 
+	err = rswitch_port_get_irq(rdev);
+	if (err < 0)
+		goto out_get_irq;
+
 	err = rswitch_rxdmac_alloc(ndev);
 	if (err < 0)
 		goto out_rxdmac;
@@ -1968,6 +1935,7 @@ out_txdmac:
 	rswitch_rxdmac_free(ndev);
 
 out_rxdmac:
+out_get_irq:
 out_get_params:
 	of_node_put(rdev->np_port);
 	netif_napi_del(&rdev->napi);
@@ -2003,7 +1971,6 @@ static int rswitch_init(struct rswitch_private *priv)
 	rswitch_reset(priv);
 
 	rswitch_clock_enable(priv);
-	rswitch_top_init(priv);
 	err = rswitch_bpool_config(priv);
 	if (err < 0)
 		return err;
@@ -2033,10 +2000,6 @@ static int rswitch_init(struct rswitch_private *priv)
 				     clk_get_rate(priv->clk));
 	if (err < 0)
 		goto err_ptp_register;
-
-	err = rswitch_gwca_request_irqs(priv);
-	if (err < 0)
-		goto err_gwca_request_irq;
 
 	err = rswitch_gwca_ts_request_irqs(priv);
 	if (err < 0)
@@ -2073,7 +2036,6 @@ err_ether_port_init_all:
 
 err_gwca_hw_init:
 err_gwca_ts_request_irq:
-err_gwca_request_irq:
 	rcar_gen4_ptp_unregister(priv->ptp_priv);
 
 err_ptp_register:
