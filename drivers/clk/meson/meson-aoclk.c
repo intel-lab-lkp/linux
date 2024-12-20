@@ -18,6 +18,7 @@
 
 #include <linux/slab.h>
 #include "meson-aoclk.h"
+#include "clk-regmap.h"
 
 static int meson_aoclk_do_reset(struct reset_controller_dev *rcdev,
 			       unsigned long id)
@@ -70,9 +71,9 @@ int meson_aoclkc_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	/* Populate regmap */
-	for (clkid = 0; clkid < data->num_clks; clkid++)
-		data->clks[clkid]->map = regmap;
+	ret = clk_regmap_init_regmap(dev, regmap);
+	if (ret)
+		return ret;
 
 	/* Register all clks */
 	for (clkid = 0; clkid < data->hw_clks.num; clkid++) {

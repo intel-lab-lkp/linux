@@ -85,11 +85,6 @@ static struct clk_hw_onecell_data meson8_ddr_clk_hw_onecell_data = {
 	.num = 2,
 };
 
-static struct clk_regmap *const meson8_ddr_clk_regmaps[] = {
-	&meson8_ddr_pll_dco,
-	&meson8_ddr_pll,
-};
-
 static const struct regmap_config meson8_ddr_clkc_regmap_config = {
 	.reg_bits = 8,
 	.val_bits = 32,
@@ -113,9 +108,9 @@ static int meson8_ddr_clkc_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	/* Populate regmap */
-	for (i = 0; i < ARRAY_SIZE(meson8_ddr_clk_regmaps); i++)
-		meson8_ddr_clk_regmaps[i]->map = regmap;
+	ret = clk_regmap_init_regmap(&pdev->dev, regmap);
+	if (ret)
+		return ret;
 
 	/* Register all clks */
 	for (i = 0; i < meson8_ddr_clk_hw_onecell_data.num; i++) {

@@ -7,6 +7,7 @@
 #ifndef __CLK_REGMAP_H
 #define __CLK_REGMAP_H
 
+#include <linux/device.h>
 #include <linux/clk-provider.h>
 #include <linux/regmap.h>
 
@@ -30,6 +31,12 @@ static inline struct clk_regmap *to_clk_regmap(struct clk_hw *hw)
 {
 	return container_of(hw, struct clk_regmap, hw);
 }
+
+/* Controllers should call this to provide regmap to clk_regmap clocks */
+int clk_regmap_init_regmap(struct device *dev, struct regmap *map);
+
+/* clk_regmap init op to get and cache regmap from the controllers */
+int clk_regmap_init(struct clk_hw *hw);
 
 /**
  * struct clk_regmap_gate_data - regmap backed gate specific data
