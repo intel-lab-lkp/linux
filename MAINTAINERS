@@ -14046,6 +14046,12 @@ W:	https://ez.analog.com/linux-software-drivers
 F:	Documentation/devicetree/bindings/rtc/adi,max31335.yaml
 F:	drivers/rtc/rtc-max31335.c
 
+MAX42500 POWER-SYSTEM MONITOR DRIVER
+M:	Kent Libetario <kent.libetario@analog.com>
+L:	linux-hwmon@vger.kernel.org
+S:	Supported
+F:	Documentation/devicetree/bindings/hwmon/adi,max42500.yaml
+
 MAX6650 HARDWARE MONITOR AND FAN CONTROLLER DRIVER
 L:	linux-hwmon@vger.kernel.org
 S:	Orphan
