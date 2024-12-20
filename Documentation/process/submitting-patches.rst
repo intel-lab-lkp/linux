@@ -96,6 +96,11 @@ instead of "[This patch] makes xyzzy do frotz" or "[I] changed xyzzy
 to do frotz", as if you are giving orders to the codebase to change
 its behaviour.
 
+The goal of the imperative mood is to make especially commit message
+titles (the :ref:`patch_subject_line`) succinct and to the point.
+The explanation body should be more detailed and take care to explain
+the background motivating the change. (see :ref:`patch_explanation_body`).
+
 If you want to refer to a specific commit, don't just refer to the
 SHA-1 ID of the commit. Please also include the oneline summary of
 the commit, to make it easier for reviewers to know what it is about.
@@ -610,6 +615,8 @@ that, if you have your patches stored in a ``git`` repository, proper patch
 formatting can be had with ``git format-patch``.  The tools cannot create
 the necessary text, though, so read the instructions below anyway.
 
+.. _patch_subject_line:
+
 Subject Line
 ^^^^^^^^^^^^
 
@@ -699,6 +706,8 @@ patch in the permanent changelog.  If the ``from`` line is missing,
 then the ``From:`` line from the email header will be used to determine
 the patch author in the changelog.
 
+.. _patch_explanation_body:
+
 Explanation Body
 ^^^^^^^^^^^^^^^^
 
@@ -716,6 +725,15 @@ If a patch fixes a compile failure, it may not be necessary to include
 _all_ of the compile failures; just enough that it is likely that
 someone searching for the patch can find it. As in the ``summary
 phrase``, it is important to be both succinct as well as descriptive.
+
+Here is one example of a good commit message::
+
+  dt-bindings: ata: pata-common: Add missing additionalProperties on child nodes
+
+  The PATA child node schema is missing constraints to prevent unknown
+  properties. As none of the users of this common binding extend the child
+  nodes with additional properties, adding "additionalProperties: false"
+  here is sufficient.
 
 .. _backtraces:
 
