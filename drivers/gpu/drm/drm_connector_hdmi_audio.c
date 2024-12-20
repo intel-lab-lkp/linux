@@ -16,7 +16,7 @@ static int drm_connector_hdmi_audio_startup(struct device *dev, void *data)
 {
 	struct drm_connector *connector = data;
 	const struct drm_connector_hdmi_audio_funcs *funcs =
-		connector->hdmi_codec.funcs;
+		connector->hdmi_audio.funcs;
 
 	if (funcs->startup)
 		return funcs->startup(connector);
@@ -30,7 +30,7 @@ static int drm_connector_hdmi_audio_prepare(struct device *dev, void *data,
 {
 	struct drm_connector *connector = data;
 	const struct drm_connector_hdmi_audio_funcs *funcs =
-		connector->hdmi_codec.funcs;
+		connector->hdmi_audio.funcs;
 
 	return funcs->prepare(connector, fmt, hparms);
 }
@@ -39,7 +39,7 @@ static void drm_connector_hdmi_audio_shutdown(struct device *dev, void *data)
 {
 	struct drm_connector *connector = data;
 	const struct drm_connector_hdmi_audio_funcs *funcs =
-		connector->hdmi_codec.funcs;
+		connector->hdmi_audio.funcs;
 
 	return funcs->shutdown(connector);
 }
@@ -49,7 +49,7 @@ static int drm_connector_hdmi_audio_mute_stream(struct device *dev, void *data,
 {
 	struct drm_connector *connector = data;
 	const struct drm_connector_hdmi_audio_funcs *funcs =
-		connector->hdmi_codec.funcs;
+		connector->hdmi_audio.funcs;
 
 	if (funcs->mute_stream)
 		return funcs->mute_stream(connector, enable, direction);
@@ -65,14 +65,14 @@ static int drm_connector_hdmi_audio_get_dai_id(struct snd_soc_component *comment
 	struct of_endpoint of_ep;
 	int ret;
 
-	if (connector->hdmi_codec.dai_port < 0)
+	if (connector->hdmi_audio.dai_port < 0)
 		return -ENOTSUPP;
 
 	ret = of_graph_parse_endpoint(endpoint, &of_ep);
 	if (ret < 0)
 		return ret;
 
-	if (of_ep.port == connector->hdmi_codec.dai_port)
+	if (of_ep.port == connector->hdmi_audio.dai_port)
 		return 0;
 
 	return -EINVAL;
@@ -97,14 +97,14 @@ static int drm_connector_hdmi_audio_hook_plugged_cb(struct device *dev,
 {
 	struct drm_connector *connector = data;
 
-	mutex_lock(&connector->hdmi_codec.lock);
+	mutex_lock(&connector->hdmi_audio.lock);
 
-	connector->hdmi_codec.plugged_cb = fn;
-	connector->hdmi_codec.plugged_cb_dev = codec_dev;
+	connector->hdmi_audio.plugged_cb = fn;
+	connector->hdmi_audio.plugged_cb_dev = codec_dev;
 
-	fn(codec_dev, connector->hdmi_codec.last_state);
+	fn(codec_dev, connector->hdmi_audio.last_state);
 
-	mutex_unlock(&connector->hdmi_codec.lock);
+	mutex_unlock(&connector->hdmi_audio.lock);
 
 	return 0;
 }
@@ -112,16 +112,16 @@ static int drm_connector_hdmi_audio_hook_plugged_cb(struct device *dev,
 void drm_connector_hdmi_audio_plugged_notify(struct drm_connector *connector,
 					     bool plugged)
 {
-	mutex_lock(&connector->hdmi_codec.lock);
+	mutex_lock(&connector->hdmi_audio.lock);
 
-	connector->hdmi_codec.last_state = plugged;
+	connector->hdmi_audio.last_state = plugged;
 
-	if (connector->hdmi_codec.plugged_cb &&
-	    connector->hdmi_codec.plugged_cb_dev)
-		connector->hdmi_codec.plugged_cb(connector->hdmi_codec.plugged_cb_dev,
-						 connector->hdmi_codec.last_state);
+	if (connector->hdmi_audio.plugged_cb &&
+	    connector->hdmi_audio.plugged_cb_dev)
+		connector->hdmi_audio.plugged_cb(connector->hdmi_audio.plugged_cb_dev,
+						 connector->hdmi_audio.last_state);
 
-	mutex_unlock(&connector->hdmi_codec.lock);
+	mutex_unlock(&connector->hdmi_audio.lock);
 }
 EXPORT_SYMBOL(drm_connector_hdmi_audio_plugged_notify);
 
@@ -172,8 +172,8 @@ int drm_connector_hdmi_audio_init(struct drm_connector *connector,
 	    !funcs->shutdown)
 		return -EINVAL;
 
-	connector->hdmi_codec.funcs = funcs;
-	connector->hdmi_codec.dai_port = dai_port;
+	connector->hdmi_audio.funcs = funcs;
+	connector->hdmi_audio.dai_port = dai_port;
 
 	pdev = platform_device_register_data(hdmi_codec_dev,
 					     HDMI_CODEC_DRV_NAME,
@@ -182,7 +182,7 @@ int drm_connector_hdmi_audio_init(struct drm_connector *connector,
 	if (IS_ERR(pdev))
 		return PTR_ERR(pdev);
 
-	connector->hdmi_codec.codec_pdev = pdev;
+	connector->hdmi_audio.codec_pdev = pdev;
 
 	return 0;
 }

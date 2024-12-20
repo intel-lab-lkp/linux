@@ -2236,7 +2236,7 @@ struct drm_connector {
 	/**
 	 * @hdmi_codec: HDMI codec properties and non-DRM state.
 	 */
-	struct drm_connector_hdmi_audio hdmi_codec;
+	struct drm_connector_hdmi_audio hdmi_audio;
 };
 
 #define obj_to_connector(x) container_of(x, struct drm_connector, base)
