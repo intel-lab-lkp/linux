@@ -33,6 +33,7 @@ pub mod alloc;
 #[cfg(CONFIG_BLOCK)]
 pub mod block;
 mod build_assert;
+pub mod cpu;
 pub mod cred;
 pub mod device;
 pub mod error;
@@ -40,6 +41,7 @@ pub mod error;
 pub mod firmware;
 pub mod fs;
 pub mod init;
+pub mod io;
 pub mod ioctl;
 pub mod jump_label;
 #[cfg(CONFIG_KUNIT)]
