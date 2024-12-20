@@ -16,8 +16,10 @@
 
 struct link_mode_info {
 	int				speed;
+	u8				min_lanes;
 	u8				lanes;
 	u8				duplex;
+	enum ethtool_link_medium	medium;
 };
 
 struct genl_info;
