@@ -1561,6 +1561,17 @@ void dsa_unregister_switch(struct dsa_switch *ds)
 }
 EXPORT_SYMBOL_GPL(dsa_unregister_switch);
 
+static void dsa_conduit_ethtool_shutdown(struct net_device *dev)
+{
+	struct dsa_port *cpu_dp = dev->dsa_ptr;
+
+	if (netif_is_lag_master(dev))
+		return;
+
+	dev->ethtool_ops = cpu_dp->orig_ethtool_ops;
+	cpu_dp->orig_ethtool_ops = NULL;
+}
+
 /* If the DSA conduit chooses to unregister its net_device on .shutdown, DSA is
  * blocking that operation from completion, due to the dev_hold taken inside
  * netdev_upper_dev_link. Unlink the DSA user interfaces from being uppers of
@@ -1595,8 +1606,10 @@ void dsa_switch_shutdown(struct dsa_switch *ds)
 	/* Disconnect from further netdevice notifiers on the conduit,
 	 * since netdev_uses_dsa() will now return false.
 	 */
-	dsa_switch_for_each_cpu_port(dp, ds)
+	dsa_switch_for_each_cpu_port(dp, ds) {
+		dsa_conduit_ethtool_shutdown(dp->conduit);
 		dp->conduit->dsa_ptr = NULL;
+	}
 
 	rtnl_unlock();
 out:
