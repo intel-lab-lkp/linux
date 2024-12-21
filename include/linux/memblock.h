@@ -417,6 +417,20 @@ static __always_inline void *memblock_alloc(phys_addr_t size, phys_addr_t align)
 				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
 }
 
+static __always_inline void *__memblock_alloc_or_panic(phys_addr_t size,
+						       phys_addr_t align,
+						       const char *func)
+{
+	void *addr = memblock_alloc(size, align);
+
+	if (unlikely(!addr))
+		panic("%s: Failed to allocate %llu bytes\n", func, size);
+	return addr;
+}
+
+#define memblock_alloc_or_panic(size, align)    \
+	 __memblock_alloc_or_panic(size, align, __func__)
+
 static inline void *memblock_alloc_raw(phys_addr_t size,
 					       phys_addr_t align)
 {
