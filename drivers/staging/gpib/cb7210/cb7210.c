@@ -1353,7 +1353,11 @@ static struct pcmcia_driver cb_gpib_cs_driver = {
 
 int cb_pcmcia_init_module(void)
 {
-	pcmcia_register_driver(&cb_gpib_cs_driver);
+	int ret;
+
+	ret = pcmcia_register_driver(&cb_gpib_cs_driver);
+	if (ret < 0)
+		return ret;
 	return 0;
 }
 
@@ -1528,9 +1532,10 @@ static int __init cb7210_init_module(void)
 	gpib_register_driver(&cb_pcmcia_unaccel_interface, THIS_MODULE);
 	err += cb_pcmcia_init_module();
 #endif
-	if (err)
+	if (err) {
+		pr_err("cb7210: registering PCMCIA driver with the bus core failed\n");
 		return -1;
-
+	}
 	return 0;
 }
 
