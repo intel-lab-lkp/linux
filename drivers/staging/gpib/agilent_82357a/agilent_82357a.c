@@ -999,7 +999,7 @@ static int agilent_82357a_line_status(const gpib_board_t *board)
 	struct usb_device *usb_dev = interface_to_usbdev(a_priv->bus_interface);
 	struct agilent_82357a_register_pairlet bus_status;
 	int retval;
-	int status = ValidALL;
+	int status = VALIDALL;
 
 	bus_status.address = BSR;
 	retval = agilent_82357a_read_registers(a_priv, &bus_status, 1, 0);

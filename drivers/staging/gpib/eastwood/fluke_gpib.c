@@ -191,7 +191,7 @@ static void fluke_return_to_local(gpib_board_t *board)
 
 static int fluke_line_status(const gpib_board_t *board)
 {
-	int status = ValidALL;
+	int status = VALIDALL;
 	int bsr_bits;
 	struct fluke_priv *e_priv;
 	struct nec7210_priv *nec_priv;

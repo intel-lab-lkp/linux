@@ -1035,7 +1035,7 @@ static void bb_return_to_local(gpib_board_t *board)
 
 static int bb_line_status(const gpib_board_t *board)
 {
-	int line_status = ValidALL;
+	int line_status = VALIDALL;
 
 //	  dbg_printk(1,"\n");
 

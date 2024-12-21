@@ -223,7 +223,7 @@ static void fmh_gpib_return_to_local(gpib_board_t *board)
 
 static int fmh_gpib_line_status(const gpib_board_t *board)
 {
-	int status = ValidALL;
+	int status = VALIDALL;
 	int bsr_bits;
 	struct fmh_priv *e_priv;
 	struct nec7210_priv *nec_priv;

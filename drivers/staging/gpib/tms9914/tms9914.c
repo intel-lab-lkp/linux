@@ -390,7 +390,7 @@ static unsigned int update_status_nolock(gpib_board_t *board, struct tms9914_pri
 int tms9914_line_status(const gpib_board_t *board, struct tms9914_priv *priv)
 {
 	int bsr_bits;
-	int status = ValidALL;
+	int status = VALIDALL;
 
 	bsr_bits = read_byte(priv, BSR);
 

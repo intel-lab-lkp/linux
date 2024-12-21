@@ -194,7 +194,7 @@ MODULE_DESCRIPTION("GPIB driver for National Instruments boards using tnt4882 or
 
 int tnt4882_line_status(const gpib_board_t *board)
 {
-	int status = ValidALL;
+	int status = VALIDALL;
 	int bcsr_bits;
 	struct tnt4882_priv *tnt_priv;
 
