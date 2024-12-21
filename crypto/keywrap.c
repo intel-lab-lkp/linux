@@ -94,33 +94,6 @@ struct crypto_kw_block {
 	__be64 R;
 };
 
-/*
- * Fast forward the SGL to the "end" length minus SEMIBSIZE.
- * The start in the SGL defined by the fast-forward is returned with
- * the walk variable
- */
-static void crypto_kw_scatterlist_ff(struct scatter_walk *walk,
-				     struct scatterlist *sg,
-				     unsigned int end)
-{
-	unsigned int skip = 0;
-
-	/* The caller should only operate on full SEMIBLOCKs. */
-	BUG_ON(end < SEMIBSIZE);
-
-	skip = end - SEMIBSIZE;
-	while (sg) {
-		if (sg->length > skip) {
-			scatterwalk_start(walk, sg);
-			scatterwalk_advance(walk, skip);
-			break;
-		}
-
-		skip -= sg->length;
-		sg = sg_next(sg);
-	}
-}
-
 static int crypto_kw_decrypt(struct skcipher_request *req)
 {
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
@@ -150,15 +123,13 @@ static int crypto_kw_decrypt(struct skcipher_request *req)
 	dst = req->dst;
 
 	for (i = 0; i < 6; i++) {
-		struct scatter_walk src_walk, dst_walk;
 		unsigned int nbytes = req->cryptlen;
 
 		while (nbytes) {
-			/* move pointer by nbytes in the SGL */
-			crypto_kw_scatterlist_ff(&src_walk, src, nbytes);
+			nbytes -= SEMIBSIZE;
+
 			/* get the source block */
-			scatterwalk_copychunks(&block.R, &src_walk, SEMIBSIZE,
-					       false);
+			memcpy_from_sglist(&block.R, src, nbytes, SEMIBSIZE);
 
 			/* perform KW operation: modify IV with counter */
 			block.A ^= cpu_to_be64(t);
@@ -167,13 +138,8 @@ static int crypto_kw_decrypt(struct skcipher_request *req)
 			crypto_cipher_decrypt_one(cipher, (u8 *)&block,
 						  (u8 *)&block);
 
-			/* move pointer by nbytes in the SGL */
-			crypto_kw_scatterlist_ff(&dst_walk, dst, nbytes);
 			/* Copy block->R into place */
-			scatterwalk_copychunks(&block.R, &dst_walk, SEMIBSIZE,
-					       true);
-
-			nbytes -= SEMIBSIZE;
+			memcpy_to_sglist(dst, nbytes, &block.R, SEMIBSIZE);
 		}
 
 		/* we now start to operate on the dst SGL only */
@@ -231,8 +197,7 @@ static int crypto_kw_encrypt(struct skcipher_request *req)
 
 		while (nbytes) {
 			/* get the source block */
-			scatterwalk_copychunks(&block.R, &src_walk, SEMIBSIZE,
-					       false);
+			memcpy_from_scatterwalk(&block.R, &src_walk, SEMIBSIZE);
 
 			/* perform KW operation: encrypt block */
 			crypto_cipher_encrypt_one(cipher, (u8 *)&block,
@@ -242,8 +207,7 @@ static int crypto_kw_encrypt(struct skcipher_request *req)
 			t++;
 
 			/* Copy block->R into place */
-			scatterwalk_copychunks(&block.R, &dst_walk, SEMIBSIZE,
-					       true);
+			memcpy_to_scatterwalk(&dst_walk, &block.R, SEMIBSIZE);
 
 			nbytes -= SEMIBSIZE;
 		}
