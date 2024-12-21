@@ -23,6 +23,19 @@ struct crypto_scomp;
 
 static const struct crypto_type crypto_acomp_type;
 
+struct acomp_save_req_state {
+	struct list_head head;
+	struct acomp_req *req0;
+	struct acomp_req *cur;
+	int (*op)(struct acomp_req *req);
+	crypto_completion_t compl;
+	void *data;
+};
+
+static void acomp_reqchain_done(void *data, int err);
+static int acomp_save_req(struct acomp_req *req, crypto_completion_t cplt);
+static void acomp_restore_req(struct acomp_req *req);
+
 static inline struct acomp_alg *__crypto_acomp_alg(struct crypto_alg *alg)
 {
 	return container_of(alg, struct acomp_alg, calg.base);
@@ -122,6 +135,277 @@ struct crypto_acomp *crypto_alloc_acomp_node(const char *alg_name, u32 type,
 				node);
 }
 EXPORT_SYMBOL_GPL(crypto_alloc_acomp_node);
+
+static int acomp_save_req(struct acomp_req *req, crypto_completion_t cplt)
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+	struct acomp_save_req_state *state;
+	gfp_t gfp;
+	u32 flags;
+
+	if (!acomp_is_async(tfm))
+		return 0;
+
+	flags = acomp_request_flags(req);
+	gfp = (flags & CRYPTO_TFM_REQ_MAY_SLEEP) ?  GFP_KERNEL : GFP_ATOMIC;
+	state = kmalloc(sizeof(*state), gfp);
+	if (!state)
+		return -ENOMEM;
+
+	state->compl = req->base.complete;
+	state->data = req->base.data;
+	state->req0 = req;
+
+	req->base.complete = cplt;
+	req->base.data = state;
+
+	return 0;
+}
+
+static void acomp_restore_req(struct acomp_req *req)
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+	struct acomp_save_req_state *state;
+
+	if (!acomp_is_async(tfm))
+		return;
+
+	state = req->base.data;
+
+	req->base.complete = state->compl;
+	req->base.data = state->data;
+	kfree(state);
+}
+
+static int acomp_reqchain_finish(struct acomp_save_req_state *state,
+				 int err, u32 mask)
+{
+	struct acomp_req *req0 = state->req0;
+	struct acomp_req *req = state->cur;
+	struct acomp_req *n;
+
+	req->base.err = err;
+
+	if (req == req0)
+		INIT_LIST_HEAD(&req->base.list);
+	else
+		list_add_tail(&req->base.list, &req0->base.list);
+
+	list_for_each_entry_safe(req, n, &state->head, base.list) {
+		list_del_init(&req->base.list);
+
+		req->base.flags &= mask;
+		req->base.complete = acomp_reqchain_done;
+		req->base.data = state;
+		state->cur = req;
+		err = state->op(req);
+
+		if (err == -EINPROGRESS) {
+			if (!list_empty(&state->head))
+				err = -EBUSY;
+			goto out;
+		}
+
+		if (err == -EBUSY)
+			goto out;
+
+		req->base.err = err;
+		list_add_tail(&req->base.list, &req0->base.list);
+	}
+
+	acomp_restore_req(req0);
+
+out:
+	return err;
+}
+
+static void acomp_reqchain_done(void *data, int err)
+{
+	struct acomp_save_req_state *state = data;
+	crypto_completion_t compl = state->compl;
+
+	data = state->data;
+
+	if (err == -EINPROGRESS) {
+		if (!list_empty(&state->head))
+			return;
+		goto notify;
+	}
+
+	err = acomp_reqchain_finish(state, err, CRYPTO_TFM_REQ_MAY_BACKLOG);
+	if (err == -EBUSY)
+		return;
+
+notify:
+	compl(data, err);
+}
+
+int acomp_do_req_chain(struct acomp_req *req,
+		       int (*op)(struct acomp_req *req))
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+	struct acomp_save_req_state *state;
+	struct acomp_save_req_state state0;
+	int err = 0;
+
+	if (!acomp_request_chained(req) || list_empty(&req->base.list) ||
+	    !crypto_acomp_req_chain(tfm))
+		return op(req);
+
+	state = &state0;
+
+	if (acomp_is_async(tfm)) {
+		err = acomp_save_req(req, acomp_reqchain_done);
+		if (err) {
+			struct acomp_req *r2;
+
+			req->base.err = err;
+			list_for_each_entry(r2, &req->base.list, base.list)
+				r2->base.err = err;
+
+			return err;
+		}
+
+		state = req->base.data;
+	}
+
+	state->op = op;
+	state->cur = req;
+	INIT_LIST_HEAD(&state->head);
+	list_splice(&req->base.list, &state->head);
+
+	err = op(req);
+	if (err == -EBUSY || err == -EINPROGRESS)
+		return -EBUSY;
+
+	return acomp_reqchain_finish(state, err, ~0);
+}
+EXPORT_SYMBOL_GPL(acomp_do_req_chain);
+
+static void acomp_async_reqchain_done(struct acomp_req *req0,
+				      struct list_head *state,
+				      int (*op_poll)(struct acomp_req *req))
+{
+	struct acomp_req *req, *n;
+	bool req0_done = false;
+	int err;
+
+	while (!list_empty(state)) {
+
+		if (!req0_done) {
+			err = op_poll(req0);
+			if (!(err == -EAGAIN || err == -EINPROGRESS || err == -EBUSY)) {
+				req0->base.err = err;
+				req0_done = true;
+			}
+		}
+
+		list_for_each_entry_safe(req, n, state, base.list) {
+			err = op_poll(req);
+
+			if (err == -EAGAIN || err == -EINPROGRESS || err == -EBUSY)
+				continue;
+
+			req->base.err = err;
+			list_del_init(&req->base.list);
+			list_add_tail(&req->base.list, &req0->base.list);
+		}
+	}
+
+	while (!req0_done) {
+		err = op_poll(req0);
+		if (!(err == -EAGAIN || err == -EINPROGRESS || err == -EBUSY)) {
+			req0->base.err = err;
+			break;
+		}
+	}
+}
+
+static int acomp_async_reqchain_finish(struct acomp_req *req0,
+				       struct list_head *state,
+				       int (*op_submit)(struct acomp_req *req),
+				       int (*op_poll)(struct acomp_req *req))
+{
+	struct acomp_req *req, *n;
+	int err = 0;
+
+	INIT_LIST_HEAD(&req0->base.list);
+
+	list_for_each_entry_safe(req, n, state, base.list) {
+		BUG_ON(req == req0);
+
+		err = op_submit(req);
+
+		if (!(err == -EINPROGRESS || err == -EBUSY)) {
+			req->base.err = err;
+			list_del_init(&req->base.list);
+			list_add_tail(&req->base.list, &req0->base.list);
+		}
+	}
+
+	acomp_async_reqchain_done(req0, state, op_poll);
+
+	return req0->base.err;
+}
+
+int acomp_do_async_req_chain(struct acomp_req *req,
+			     int (*op_submit)(struct acomp_req *req),
+			     int (*op_poll)(struct acomp_req *req))
+{
+	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
+	struct list_head state;
+	struct acomp_req *r2;
+	int err = 0;
+	void *req0_data = req->base.data;
+
+	if (!acomp_request_chained(req) || list_empty(&req->base.list) ||
+		!acomp_is_async(tfm) || !crypto_acomp_req_chain(tfm)) {
+
+		err = op_submit(req);
+
+		if (err == -EINPROGRESS || err == -EBUSY) {
+			bool req0_done = false;
+
+			while (!req0_done) {
+				err = op_poll(req);
+				if (!(err == -EAGAIN || err == -EINPROGRESS || err == -EBUSY)) {
+					req->base.err = err;
+					break;
+				}
+			}
+		} else {
+			req->base.err = err;
+		}
+
+		req->base.data = req0_data;
+		if (acomp_is_async(tfm))
+			req->base.complete(req->base.data, req->base.err);
+
+		return err;
+	}
+
+	err = op_submit(req);
+	req->base.err = err;
+
+	if (err && !(err == -EINPROGRESS || err == -EBUSY))
+		goto err_prop;
+
+	INIT_LIST_HEAD(&state);
+	list_splice(&req->base.list, &state);
+
+	err = acomp_async_reqchain_finish(req, &state, op_submit, op_poll);
+	req->base.data = req0_data;
+	req->base.complete(req->base.data, req->base.err);
+
+	return err;
+
+err_prop:
+	list_for_each_entry(r2, &req->base.list, base.list)
+		r2->base.err = err;
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(acomp_do_async_req_chain);
 
 struct acomp_req *acomp_request_alloc(struct crypto_acomp *acomp)
 {

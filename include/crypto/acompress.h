@@ -206,6 +206,7 @@ static inline void acomp_request_set_callback(struct acomp_req *req,
 	req->base.data = data;
 	req->base.flags &= CRYPTO_ACOMP_ALLOC_OUTPUT;
 	req->base.flags |= flgs & ~CRYPTO_ACOMP_ALLOC_OUTPUT;
+	req->base.flags &= ~CRYPTO_TFM_REQ_CHAIN;
 }
 
 /**
@@ -235,6 +236,46 @@ static inline void acomp_request_set_params(struct acomp_req *req,
 	req->flags &= ~CRYPTO_ACOMP_ALLOC_OUTPUT;
 	if (!req->dst)
 		req->flags |= CRYPTO_ACOMP_ALLOC_OUTPUT;
+}
+
+static inline u32 acomp_request_flags(struct acomp_req *req)
+{
+	return req->base.flags;
+}
+
+static inline void acomp_reqchain_init(struct acomp_req *req,
+				       u32 flags, crypto_completion_t compl,
+				       void *data)
+{
+	acomp_request_set_callback(req, flags, compl, data);
+	crypto_reqchain_init(&req->base);
+}
+
+static inline void acomp_reqchain_clear(struct acomp_req *req, void *data)
+{
+	struct crypto_wait *wait = (struct crypto_wait *)data;
+	reinit_completion(&wait->completion);
+	crypto_reqchain_clear(&req->base);
+	acomp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				   crypto_req_done, data);
+}
+
+static inline void acomp_request_chain(struct acomp_req *req,
+				       struct acomp_req *head)
+{
+	crypto_request_chain(&req->base, &head->base);
+}
+
+int acomp_do_req_chain(struct acomp_req *req,
+		       int (*op)(struct acomp_req *req));
+
+int acomp_do_async_req_chain(struct acomp_req *req,
+			     int (*op_submit)(struct acomp_req *req),
+			     int (*op_poll)(struct acomp_req *req));
+
+static inline int acomp_request_err(struct acomp_req *req)
+{
+	return req->base.err;
 }
 
 /**
