@@ -11,6 +11,8 @@
 #define _NET_DEVMEM_H
 
 struct netlink_ext_ack;
+struct sockcm_cookie;
+struct sock;
 
 struct net_devmem_dmabuf_binding {
 	struct dma_buf *dmabuf;
@@ -27,6 +29,10 @@ struct net_devmem_dmabuf_binding {
 	 * The binding undos itself and unmaps the underlying dmabuf once all
 	 * those refs are dropped and the binding is no longer desired or in
 	 * use.
+	 *
+	 * net_devmem_get_net_iov() on dmabuf net_iovs will increment this
+	 * reference, making sure that that the binding remains alive until all
+	 * the net_iovs are no longer used.
 	 */
 	refcount_t ref;
 
@@ -42,6 +48,10 @@ struct net_devmem_dmabuf_binding {
 	 * active.
 	 */
 	u32 id;
+
+	/* iov_iter representing all possible net_iov chunks in the dmabuf. */
+	struct iov_iter tx_iter;
+	struct iovec *tx_vec;
 };
 
 #if defined(CONFIG_NET_DEVMEM)
@@ -66,8 +76,10 @@ struct dmabuf_genpool_chunk_owner {
 
 void __net_devmem_dmabuf_binding_free(struct net_devmem_dmabuf_binding *binding);
 struct net_devmem_dmabuf_binding *
-net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
-		       struct netlink_ext_ack *extack);
+net_devmem_bind_dmabuf(struct net_device *dev,
+		       enum dma_data_direction direction,
+		       unsigned int dmabuf_fd, struct netlink_ext_ack *extack);
+struct net_devmem_dmabuf_binding *net_devmem_lookup_dmabuf(u32 id);
 void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding);
 int net_devmem_bind_dmabuf_to_queue(struct net_device *dev, u32 rxq_idx,
 				    struct net_devmem_dmabuf_binding *binding,
@@ -104,10 +116,10 @@ static inline u32 net_iov_binding_id(const struct net_iov *niov)
 	return net_iov_owner(niov)->binding->id;
 }
 
-static inline void
+static inline bool
 net_devmem_dmabuf_binding_get(struct net_devmem_dmabuf_binding *binding)
 {
-	refcount_inc(&binding->ref);
+	return refcount_inc_not_zero(&binding->ref);
 }
 
 static inline void
@@ -125,6 +137,9 @@ void net_devmem_put_net_iov(struct net_iov *niov);
 struct net_iov *
 net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding);
 void net_devmem_free_dmabuf(struct net_iov *ppiov);
+
+struct net_devmem_dmabuf_binding *
+net_devmem_get_sockc_binding(struct sock *sk, struct sockcm_cookie *sockc);
 
 #else
 struct net_devmem_dmabuf_binding;
@@ -144,9 +159,15 @@ __net_devmem_dmabuf_binding_free(struct net_devmem_dmabuf_binding *binding)
 
 static inline struct net_devmem_dmabuf_binding *
 net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
+		       enum dma_data_direction direction,
 		       struct netlink_ext_ack *extack)
 {
 	return ERR_PTR(-EOPNOTSUPP);
+}
+
+static inline struct net_devmem_dmabuf_binding *net_devmem_lookup_dmabuf(u32 id)
+{
+	return NULL;
 }
 
 static inline void
@@ -185,6 +206,17 @@ static inline unsigned long net_iov_virtual_addr(const struct net_iov *niov)
 static inline u32 net_iov_binding_id(const struct net_iov *niov)
 {
 	return 0;
+}
+
+static inline void
+net_devmem_dmabuf_binding_put(struct net_devmem_dmabuf_binding *binding)
+{
+}
+
+static inline struct net_devmem_dmabuf_binding *
+net_devmem_get_sockc_binding(struct sock *sk, struct sockcm_cookie *sockc)
+{
+	return ERR_PTR(-EOPNOTSUPP);
 }
 #endif
 

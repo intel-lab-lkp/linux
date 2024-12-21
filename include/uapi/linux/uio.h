@@ -38,6 +38,11 @@ struct dmabuf_token {
 	__u32 token_count;
 };
 
+struct dmabuf_tx_cmsg {
+	__u32 dmabuf_id;
+	__u64 dmabuf_offset;
+};
+
 /*
  *	UIO_MAXIOV shall be at least 16 1003.1g (5.4.1.1)
  */

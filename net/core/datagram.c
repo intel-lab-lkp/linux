@@ -63,6 +63,8 @@
 #include <net/busy_poll.h>
 #include <crypto/hash.h>
 
+#include "devmem.h"
+
 /*
  *	Is a socket 'connection oriented' ?
  */
@@ -692,9 +694,41 @@ int zerocopy_fill_skb_from_iter(struct sk_buff *skb,
 	return 0;
 }
 
+static int zerocopy_fill_skb_from_devmem(struct sk_buff *skb,
+					 struct msghdr *msg,
+					 struct iov_iter *from, int length)
+{
+	int i = skb_shinfo(skb)->nr_frags;
+	int orig_length = length;
+	netmem_ref netmem;
+	size_t size;
+
+	while (length && iov_iter_count(from)) {
+		if (i == MAX_SKB_FRAGS)
+			return -EMSGSIZE;
+
+		size = min_t(size_t, iter_iov_len(from), length);
+		if (!size)
+			return -EFAULT;
+
+		netmem = net_iov_to_netmem(iter_iov(from)->iov_base);
+		get_netmem(netmem);
+		skb_add_rx_frag_netmem(skb, i, netmem, from->iov_offset, size,
+				       PAGE_SIZE);
+
+		iov_iter_advance(from, size);
+		length -= size;
+		i++;
+	}
+
+	iov_iter_advance(&msg->msg_iter, orig_length);
+
+	return 0;
+}
+
 int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
 			    struct sk_buff *skb, struct iov_iter *from,
-			    size_t length)
+			    size_t length, bool is_devmem)
 {
 	unsigned long orig_size = skb->truesize;
 	unsigned long truesize;
@@ -702,6 +736,8 @@ int __zerocopy_sg_from_iter(struct msghdr *msg, struct sock *sk,
 
 	if (msg && msg->msg_ubuf && msg->sg_from_iter)
 		ret = msg->sg_from_iter(skb, from, length);
+	else if (unlikely(is_devmem))
+		ret = zerocopy_fill_skb_from_devmem(skb, msg, from, length);
 	else
 		ret = zerocopy_fill_skb_from_iter(skb, from, length);
 
@@ -735,7 +771,7 @@ int zerocopy_sg_from_iter(struct sk_buff *skb, struct iov_iter *from)
 	if (skb_copy_datagram_from_iter(skb, 0, from, copy))
 		return -EFAULT;
 
-	return __zerocopy_sg_from_iter(NULL, NULL, skb, from, ~0U);
+	return __zerocopy_sg_from_iter(NULL, NULL, skb, from, ~0U, NULL);
 }
 EXPORT_SYMBOL(zerocopy_sg_from_iter);
 

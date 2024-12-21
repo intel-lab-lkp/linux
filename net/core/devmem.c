@@ -15,6 +15,7 @@
 #include <net/netdev_queues.h>
 #include <net/netdev_rx_queue.h>
 #include <net/page_pool/helpers.h>
+#include <net/sock.h>
 #include <trace/events/page_pool.h>
 
 #include "devmem.h"
@@ -63,8 +64,10 @@ void __net_devmem_dmabuf_binding_free(struct net_devmem_dmabuf_binding *binding)
 	dma_buf_detach(binding->dmabuf, binding->attachment);
 	dma_buf_put(binding->dmabuf);
 	xa_destroy(&binding->bound_rxqs);
+	kfree(binding->tx_vec);
 	kfree(binding);
 }
+EXPORT_SYMBOL(__net_devmem_dmabuf_binding_free);
 
 struct net_iov *
 net_devmem_alloc_dmabuf(struct net_devmem_dmabuf_binding *binding)
@@ -109,6 +112,13 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 	unsigned long xa_idx;
 	unsigned int rxq_idx;
 
+	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
+
+	/* Ensure no tx net_devmem_lookup_dmabuf() are in flight after the
+	 * erase.
+	 */
+	synchronize_net();
+
 	if (binding->list.next)
 		list_del(&binding->list);
 
@@ -121,8 +131,6 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 
 		WARN_ON(netdev_rx_queue_restart(binding->dev, rxq_idx));
 	}
-
-	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
 
 	net_devmem_dmabuf_binding_put(binding);
 }
@@ -174,8 +182,9 @@ err_xa_erase:
 }
 
 struct net_devmem_dmabuf_binding *
-net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
-		       struct netlink_ext_ack *extack)
+net_devmem_bind_dmabuf(struct net_device *dev,
+		       enum dma_data_direction direction,
+		       unsigned int dmabuf_fd, struct netlink_ext_ack *extack)
 {
 	struct net_devmem_dmabuf_binding *binding;
 	static u32 id_alloc_next;
@@ -183,6 +192,7 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 	struct dma_buf *dmabuf;
 	unsigned int sg_idx, i;
 	unsigned long virtual;
+	struct iovec *iov;
 	int err;
 
 	dmabuf = dma_buf_get(dmabuf_fd);
@@ -218,10 +228,16 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 	}
 
 	binding->sgt = dma_buf_map_attachment_unlocked(binding->attachment,
-						       DMA_FROM_DEVICE);
+						       direction);
 	if (IS_ERR(binding->sgt)) {
 		err = PTR_ERR(binding->sgt);
 		NL_SET_ERR_MSG(extack, "Failed to map dmabuf attachment");
+		goto err_detach;
+	}
+
+	if (!binding->sgt || binding->sgt->nents == 0) {
+		err = -EINVAL;
+		NL_SET_ERR_MSG(extack, "Empty dmabuf attachment");
 		goto err_detach;
 	}
 
@@ -234,6 +250,19 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 	if (!binding->chunk_pool) {
 		err = -ENOMEM;
 		goto err_unmap;
+	}
+
+	if (direction == DMA_TO_DEVICE) {
+		virtual = 0;
+		for_each_sgtable_dma_sg(binding->sgt, sg, sg_idx)
+			virtual += sg_dma_len(sg);
+
+		binding->tx_vec = kcalloc(virtual / PAGE_SIZE + 1,
+					  sizeof(struct iovec), GFP_KERNEL);
+		if (!binding->tx_vec) {
+			err = -ENOMEM;
+			goto err_unmap;
+		}
 	}
 
 	virtual = 0;
@@ -277,10 +306,20 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 			niov->owner = owner;
 			page_pool_set_dma_addr_netmem(net_iov_to_netmem(niov),
 						      net_devmem_get_dma_addr(niov));
+
+			if (direction == DMA_TO_DEVICE) {
+				iov = &binding->tx_vec[virtual / PAGE_SIZE + i];
+				iov->iov_base = niov;
+				iov->iov_len = PAGE_SIZE;
+			}
 		}
 
 		virtual += len;
 	}
+
+	if (direction == DMA_TO_DEVICE)
+		iov_iter_init(&binding->tx_iter, WRITE, binding->tx_vec,
+			      virtual / PAGE_SIZE + 1, virtual);
 
 	return binding;
 
@@ -300,6 +339,21 @@ err_free_binding:
 err_put_dmabuf:
 	dma_buf_put(dmabuf);
 	return ERR_PTR(err);
+}
+
+struct net_devmem_dmabuf_binding *net_devmem_lookup_dmabuf(u32 id)
+{
+	struct net_devmem_dmabuf_binding *binding;
+
+	rcu_read_lock();
+	binding = xa_load(&net_devmem_dmabuf_bindings, id);
+	if (binding) {
+		if (!net_devmem_dmabuf_binding_get(binding))
+			binding = NULL;
+	}
+	rcu_read_unlock();
+
+	return binding;
 }
 
 void dev_dmabuf_uninstall(struct net_device *dev)
@@ -330,6 +384,33 @@ void net_devmem_get_net_iov(struct net_iov *niov)
 void net_devmem_put_net_iov(struct net_iov *niov)
 {
 	net_devmem_dmabuf_binding_put(niov->owner->binding);
+}
+
+struct net_devmem_dmabuf_binding *
+net_devmem_get_sockc_binding(struct sock *sk, struct sockcm_cookie *sockc)
+{
+	struct net_devmem_dmabuf_binding *binding;
+	int err = 0;
+
+	binding = net_devmem_lookup_dmabuf(sockc->dmabuf_id);
+	if (!binding || !binding->tx_vec) {
+		err = -EINVAL;
+		goto out_err;
+	}
+
+	if (sock_net(sk) != dev_net(binding->dev)) {
+		err = -ENODEV;
+		goto out_err;
+	}
+
+	iov_iter_advance(&binding->tx_iter, sockc->dmabuf_offset);
+	return binding;
+
+out_err:
+	if (binding)
+		net_devmem_dmabuf_binding_put(binding);
+
+	return ERR_PTR(err);
 }
 
 /*** "Dmabuf devmem memory provider" ***/

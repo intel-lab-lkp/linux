@@ -2908,6 +2908,7 @@ EXPORT_SYMBOL(sock_alloc_send_pskb);
 int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 		     struct sockcm_cookie *sockc)
 {
+	struct dmabuf_tx_cmsg dmabuf_tx;
 	u32 tsflags;
 
 	BUILD_BUG_ON(SOF_TIMESTAMPING_LAST == (1 << 31));
@@ -2961,6 +2962,14 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 		if (!sk_set_prio_allowed(sk, *(u32 *)CMSG_DATA(cmsg)))
 			return -EPERM;
 		sockc->priority = *(u32 *)CMSG_DATA(cmsg);
+		break;
+	case SCM_DEVMEM_DMABUF:
+		if (cmsg->cmsg_len != CMSG_LEN(sizeof(struct dmabuf_tx_cmsg)))
+			return -EINVAL;
+		dmabuf_tx = *(struct dmabuf_tx_cmsg *)CMSG_DATA(cmsg);
+		sockc->dmabuf_id = dmabuf_tx.dmabuf_id;
+		sockc->dmabuf_offset = dmabuf_tx.dmabuf_offset;
+
 		break;
 	default:
 		return -EINVAL;
