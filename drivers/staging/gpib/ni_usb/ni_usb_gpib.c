@@ -2619,14 +2619,21 @@ static struct usb_driver ni_usb_bus_driver = {
 static int __init ni_usb_init_module(void)
 {
 	int i;
+	int ret = 0;
 
 	pr_info("ni_usb_gpib driver loading\n");
 	for (i = 0; i < MAX_NUM_NI_USB_INTERFACES; i++)
 		ni_usb_driver_interfaces[i] = NULL;
-	usb_register(&ni_usb_bus_driver);
-	gpib_register_driver(&ni_usb_gpib_interface, THIS_MODULE);
 
-	return 0;
+	ret = usb_register(&ni_usb_bus_driver);
+	if (ret)
+		return ret;
+
+	ret = gpib_register_driver(&ni_usb_gpib_interface, THIS_MODULE);
+	if (ret)
+		usb_deregister(&ni_usb_bus_driver);
+
+	return ret;
 }
 
 static void __exit ni_usb_exit_module(void)

@@ -361,17 +361,17 @@ static struct pci_driver cec_pci_driver = {
 
 static int __init cec_init_module(void)
 {
-	int result;
+	int result = 0;
 
 	result = pci_register_driver(&cec_pci_driver);
-	if (result) {
-		pr_err("cec_gpib: pci_driver_register failed!\n");
+	if (result)
 		return result;
-	}
 
-	gpib_register_driver(&cec_pci_interface, THIS_MODULE);
+	result = gpib_register_driver(&cec_pci_interface, THIS_MODULE);
+	if (result)
+		pci_unregister_driver(&cec_pci_driver);
 
-	return 0;
+	return result;
 }
 
 static void cec_exit_module(void)
