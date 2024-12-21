@@ -1351,12 +1351,6 @@ static struct pcmcia_driver cb_gpib_cs_driver = {
 	.resume		= cb_gpib_resume,
 };
 
-int cb_pcmcia_init_module(void)
-{
-	pcmcia_register_driver(&cb_gpib_cs_driver);
-	return 0;
-}
-
 void cb_pcmcia_cleanup_module(void)
 {
 	DEBUG(0, "cb_gpib_cs: unloading\n");
@@ -1526,11 +1520,12 @@ static int __init cb7210_init_module(void)
 	gpib_register_driver(&cb_pcmcia_interface, THIS_MODULE);
 	gpib_register_driver(&cb_pcmcia_accel_interface, THIS_MODULE);
 	gpib_register_driver(&cb_pcmcia_unaccel_interface, THIS_MODULE);
-	err += cb_pcmcia_init_module();
+	err = pcmcia_register_driver(&cb_gpib_cs_driver);
 #endif
-	if (err)
+	if (err) {
+		pr_err("cb7210: registering PCMCIA driver with the bus core failed\n");
 		return -1;
-
+	}
 	return 0;
 }
 
