@@ -1467,17 +1467,118 @@ resched:
 * main API
 **********************************/
 
+static bool zswap_batch_compress(struct folio *folio,
+				 long index,
+				 unsigned int batch_size,
+				 struct zswap_entry *entries[],
+				 struct zswap_pool *pool,
+				 struct crypto_acomp_ctx *acomp_ctx)
+{
+	int comp_errors[ZSWAP_MAX_BATCH_SIZE] = { 0 };
+	unsigned int dlens[ZSWAP_MAX_BATCH_SIZE];
+	struct page *pages[ZSWAP_MAX_BATCH_SIZE];
+	unsigned int i, nr_batch_pages;
+	bool ret = true;
+
+	nr_batch_pages = min((unsigned int)(folio_nr_pages(folio) - index), batch_size);
+
+	for (i = 0; i < nr_batch_pages; ++i) {
+		pages[i] = folio_page(folio, index + i);
+		dlens[i] = PAGE_SIZE;
+	}
+
+	mutex_lock(&acomp_ctx->mutex);
+
+	/*
+	 * Batch compress @nr_batch_pages. If IAA is the compressor, the
+	 * hardware will compress @nr_batch_pages in parallel.
+	 */
+	ret = crypto_acomp_batch_compress(
+		acomp_ctx->reqs,
+		&acomp_ctx->wait,
+		pages,
+		acomp_ctx->buffers,
+		dlens,
+		comp_errors,
+		nr_batch_pages);
+
+	if (ret) {
+		/*
+		 * All batch pages were successfully compressed.
+		 * Store the pages in zpool.
+		 */
+		struct zpool *zpool = pool->zpool;
+		gfp_t gfp = __GFP_NORETRY | __GFP_NOWARN | __GFP_KSWAPD_RECLAIM;
+
+		if (zpool_malloc_support_movable(zpool))
+			gfp |= __GFP_HIGHMEM | __GFP_MOVABLE;
+
+		for (i = 0; i < nr_batch_pages; ++i) {
+			unsigned long handle;
+			char *buf;
+			int err;
+
+			err = zpool_malloc(zpool, dlens[i], gfp, &handle);
+
+			if (err) {
+				if (err == -ENOSPC)
+					zswap_reject_compress_poor++;
+				else
+					zswap_reject_alloc_fail++;
+
+				ret = false;
+				break;
+			}
+
+			buf = zpool_map_handle(zpool, handle, ZPOOL_MM_WO);
+			memcpy(buf, acomp_ctx->buffers[i], dlens[i]);
+			zpool_unmap_handle(zpool, handle);
+
+			entries[i]->handle = handle;
+			entries[i]->length = dlens[i];
+		}
+	} else {
+		/* Some batch pages had compression errors. */
+		for (i = 0; i < nr_batch_pages; ++i) {
+			if (comp_errors[i]) {
+				if (comp_errors[i] == -ENOSPC)
+					zswap_reject_compress_poor++;
+				else
+					zswap_reject_compress_fail++;
+			}
+		}
+	}
+
+	mutex_unlock(&acomp_ctx->mutex);
+
+	return ret;
+}
+
 static bool zswap_compress_folio(struct folio *folio,
 				 struct zswap_entry *entries[],
 				 struct zswap_pool *pool)
 {
 	long index, nr_pages = folio_nr_pages(folio);
+	struct crypto_acomp_ctx *acomp_ctx;
+	unsigned int batch_size;
 
-	for (index = 0; index < nr_pages; ++index) {
-		struct page *page = folio_page(folio, index);
+	acomp_ctx = raw_cpu_ptr(pool->acomp_ctx);
+	batch_size = acomp_ctx->nr_reqs;
 
-		if (!zswap_compress(page, entries[index], pool))
-			return false;
+	if ((batch_size > 1) && (nr_pages > 1)) {
+		for (index = 0; index < nr_pages; index += batch_size) {
+
+			if (!zswap_batch_compress(folio, index, batch_size,
+						  &entries[index], pool, acomp_ctx))
+				return false;
+		}
+	} else {
+		for (index = 0; index < nr_pages; ++index) {
+			struct page *page = folio_page(folio, index);
+
+			if (!zswap_compress(page, entries[index], pool))
+				return false;
+		}
 	}
 
 	return true;
