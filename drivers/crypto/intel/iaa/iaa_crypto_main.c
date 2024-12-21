@@ -30,8 +30,9 @@
 /* number of iaa instances probed */
 static unsigned int nr_iaa;
 static unsigned int nr_cpus;
-static unsigned int nr_nodes;
-static unsigned int nr_cpus_per_node;
+static unsigned int nr_packages;
+static unsigned int nr_cpus_per_package;
+static unsigned int nr_iaa_per_package;
 
 /* Number of physical cpus sharing each iaa instance */
 static unsigned int cpus_per_iaa;
@@ -462,17 +463,46 @@ static void remove_device_compression_modes(struct iaa_device *iaa_device)
  * Functions for use in crypto probe and remove interfaces:
  * allocate/init/query/deallocate devices/wqs.
  ***********************************************************/
-static struct iaa_device *iaa_device_alloc(void)
+static struct iaa_device *iaa_device_alloc(struct idxd_device *idxd)
 {
+	struct wq_table_entry *local;
 	struct iaa_device *iaa_device;
 
 	iaa_device = kzalloc(sizeof(*iaa_device), GFP_KERNEL);
 	if (!iaa_device)
-		return NULL;
+		goto err;
+
+	iaa_device->idxd = idxd;
+
+	/* IAA device's local wqs. */
+	iaa_device->iaa_local_wqs = kzalloc(sizeof(struct wq_table_entry), GFP_KERNEL);
+	if (!iaa_device->iaa_local_wqs)
+		goto err;
+
+	local = iaa_device->iaa_local_wqs;
+
+	local->wqs = kzalloc(iaa_device->idxd->max_wqs * sizeof(struct wq *), GFP_KERNEL);
+	if (!local->wqs)
+		goto err;
+
+	local->max_wqs = iaa_device->idxd->max_wqs;
+	local->n_wqs = 0;
 
 	INIT_LIST_HEAD(&iaa_device->wqs);
 
 	return iaa_device;
+
+err:
+	if (iaa_device) {
+		if (iaa_device->iaa_local_wqs) {
+			if (iaa_device->iaa_local_wqs->wqs)
+				kfree(iaa_device->iaa_local_wqs->wqs);
+			kfree(iaa_device->iaa_local_wqs);
+		}
+		kfree(iaa_device);
+	}
+
+	return NULL;
 }
 
 static bool iaa_has_wq(struct iaa_device *iaa_device, struct idxd_wq *wq)
@@ -491,11 +521,9 @@ static struct iaa_device *add_iaa_device(struct idxd_device *idxd)
 {
 	struct iaa_device *iaa_device;
 
-	iaa_device = iaa_device_alloc();
+	iaa_device = iaa_device_alloc(idxd);
 	if (!iaa_device)
 		return NULL;
-
-	iaa_device->idxd = idxd;
 
 	list_add_tail(&iaa_device->list, &iaa_devices);
 
@@ -537,6 +565,7 @@ static int add_iaa_wq(struct iaa_device *iaa_device, struct idxd_wq *wq,
 	iaa_wq->wq = wq;
 	iaa_wq->iaa_device = iaa_device;
 	idxd_wq_set_private(wq, iaa_wq);
+	iaa_wq->mapped = false;
 
 	list_add_tail(&iaa_wq->list, &iaa_device->wqs);
 
@@ -580,6 +609,13 @@ static void free_iaa_device(struct iaa_device *iaa_device)
 		return;
 
 	remove_device_compression_modes(iaa_device);
+
+	if (iaa_device->iaa_local_wqs) {
+		if (iaa_device->iaa_local_wqs->wqs)
+			kfree(iaa_device->iaa_local_wqs->wqs);
+		kfree(iaa_device->iaa_local_wqs);
+	}
+
 	kfree(iaa_device);
 }
 
@@ -716,9 +752,14 @@ static int save_iaa_wq(struct idxd_wq *wq)
 	if (WARN_ON(nr_iaa == 0))
 		return -EINVAL;
 
-	cpus_per_iaa = (nr_nodes * nr_cpus_per_node) / nr_iaa;
+	cpus_per_iaa = (nr_packages * nr_cpus_per_package) / nr_iaa;
 	if (!cpus_per_iaa)
 		cpus_per_iaa = 1;
+
+	nr_iaa_per_package = nr_iaa / nr_packages;
+	if (!nr_iaa_per_package)
+		nr_iaa_per_package = 1;
+
 out:
 	return 0;
 }
@@ -735,53 +776,45 @@ static void remove_iaa_wq(struct idxd_wq *wq)
 	}
 
 	if (nr_iaa) {
-		cpus_per_iaa = (nr_nodes * nr_cpus_per_node) / nr_iaa;
+		cpus_per_iaa = (nr_packages * nr_cpus_per_package) / nr_iaa;
 		if (!cpus_per_iaa)
 			cpus_per_iaa = 1;
-	} else
+
+		nr_iaa_per_package = nr_iaa / nr_packages;
+		if (!nr_iaa_per_package)
+			nr_iaa_per_package = 1;
+	} else {
 		cpus_per_iaa = 1;
+		nr_iaa_per_package = 1;
+	}
 }
 
 /***************************************************************
  * Mapping IAA devices and wqs to cores with per-cpu wq_tables.
  ***************************************************************/
-static void wq_table_free_entry(int cpu)
+/*
+ * Given a cpu, find the closest IAA instance.  The idea is to try to
+ * choose the most appropriate IAA instance for a caller and spread
+ * available workqueues around to clients.
+ */
+static inline int cpu_to_iaa(int cpu)
 {
-	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
+	int package_id, base_iaa, iaa = 0;
 
-	kfree(entry->wqs);
-	memset(entry, 0, sizeof(*entry));
-}
+	if (!nr_packages || !nr_iaa_per_package)
+		return 0;
 
-static void wq_table_clear_entry(int cpu)
-{
-	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
+	package_id = topology_logical_package_id(cpu);
+	base_iaa = package_id * nr_iaa_per_package;
+	iaa = base_iaa + ((cpu % nr_cpus_per_package) / cpus_per_iaa);
 
-	entry->n_wqs = 0;
-	entry->cur_wq = 0;
-	memset(entry->wqs, 0, entry->max_wqs * sizeof(struct idxd_wq *));
-}
+	pr_debug("cpu = %d, package_id = %d, base_iaa = %d, iaa = %d",
+		 cpu, package_id, base_iaa, iaa);
 
-static void clear_wq_table(void)
-{
-	int cpu;
+	if (iaa >= 0 && iaa < nr_iaa)
+		return iaa;
 
-	for (cpu = 0; cpu < nr_cpus; cpu++)
-		wq_table_clear_entry(cpu);
-
-	pr_debug("cleared wq table\n");
-}
-
-static void free_wq_table(void)
-{
-	int cpu;
-
-	for (cpu = 0; cpu < nr_cpus; cpu++)
-		wq_table_free_entry(cpu);
-
-	free_percpu(wq_table);
-
-	pr_debug("freed wq table\n");
+	return (nr_iaa - 1);
 }
 
 static int alloc_wq_table(int max_wqs)
@@ -795,13 +828,11 @@ static int alloc_wq_table(int max_wqs)
 
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
 		entry = per_cpu_ptr(wq_table, cpu);
-		entry->wqs = kcalloc(max_wqs, sizeof(struct wq *), GFP_KERNEL);
-		if (!entry->wqs) {
-			free_wq_table();
-			return -ENOMEM;
-		}
 
+		entry->wqs = NULL;
 		entry->max_wqs = max_wqs;
+		entry->n_wqs = 0;
+		entry->cur_wq = 0;
 	}
 
 	pr_debug("initialized wq table\n");
@@ -809,33 +840,27 @@ static int alloc_wq_table(int max_wqs)
 	return 0;
 }
 
-static void wq_table_add(int cpu, struct idxd_wq *wq)
+static void wq_table_add(int cpu, struct wq_table_entry *iaa_local_wqs)
 {
 	struct wq_table_entry *entry = per_cpu_ptr(wq_table, cpu);
 
-	if (WARN_ON(entry->n_wqs == entry->max_wqs))
-		return;
+	entry->wqs = iaa_local_wqs->wqs;
+	entry->max_wqs = iaa_local_wqs->max_wqs;
+	entry->n_wqs = iaa_local_wqs->n_wqs;
+	entry->cur_wq = 0;
 
-	entry->wqs[entry->n_wqs++] = wq;
-
-	pr_debug("%s: added iaa wq %d.%d to idx %d of cpu %d\n", __func__,
+	pr_debug("%s: cpu %d: added %d iaa local wqs up to wq %d.%d\n", __func__,
+		 cpu, entry->n_wqs,
 		 entry->wqs[entry->n_wqs - 1]->idxd->id,
-		 entry->wqs[entry->n_wqs - 1]->id, entry->n_wqs - 1, cpu);
+		 entry->wqs[entry->n_wqs - 1]->id);
 }
 
 static int wq_table_add_wqs(int iaa, int cpu)
 {
 	struct iaa_device *iaa_device, *found_device = NULL;
-	int ret = 0, cur_iaa = 0, n_wqs_added = 0;
-	struct idxd_device *idxd;
-	struct iaa_wq *iaa_wq;
-	struct pci_dev *pdev;
-	struct device *dev;
+	int ret = 0, cur_iaa = 0;
 
 	list_for_each_entry(iaa_device, &iaa_devices, list) {
-		idxd = iaa_device->idxd;
-		pdev = idxd->pdev;
-		dev = &pdev->dev;
 
 		if (cur_iaa != iaa) {
 			cur_iaa++;
@@ -843,7 +868,8 @@ static int wq_table_add_wqs(int iaa, int cpu)
 		}
 
 		found_device = iaa_device;
-		dev_dbg(dev, "getting wq from iaa_device %d, cur_iaa %d\n",
+		dev_dbg(&found_device->idxd->pdev->dev,
+			"getting wq from iaa_device %d, cur_iaa %d\n",
 			found_device->idxd->id, cur_iaa);
 		break;
 	}
@@ -858,27 +884,56 @@ static int wq_table_add_wqs(int iaa, int cpu)
 		}
 		cur_iaa = 0;
 
-		idxd = found_device->idxd;
-		pdev = idxd->pdev;
-		dev = &pdev->dev;
-		dev_dbg(dev, "getting wq from only iaa_device %d, cur_iaa %d\n",
+		dev_dbg(&found_device->idxd->pdev->dev,
+			"getting wq from only iaa_device %d, cur_iaa %d\n",
 			found_device->idxd->id, cur_iaa);
 	}
 
-	list_for_each_entry(iaa_wq, &found_device->wqs, list) {
-		wq_table_add(cpu, iaa_wq->wq);
-		pr_debug("rebalance: added wq for cpu=%d: iaa wq %d.%d\n",
-			 cpu, iaa_wq->wq->idxd->id, iaa_wq->wq->id);
-		n_wqs_added++;
-	}
+	wq_table_add(cpu, found_device->iaa_local_wqs);
 
-	if (!n_wqs_added) {
-		pr_debug("couldn't find any iaa wqs!\n");
-		ret = -EINVAL;
-		goto out;
-	}
 out:
 	return ret;
+}
+
+static int map_iaa_device_wqs(struct iaa_device *iaa_device)
+{
+	struct wq_table_entry *local;
+	int ret = 0, n_wqs_added = 0;
+	struct iaa_wq *iaa_wq;
+
+	local = iaa_device->iaa_local_wqs;
+
+	list_for_each_entry(iaa_wq, &iaa_device->wqs, list) {
+		if (iaa_wq->mapped && ++n_wqs_added)
+			continue;
+
+		pr_debug("iaa_device %px: processing wq %d.%d\n", iaa_device, iaa_device->idxd->id, iaa_wq->wq->id);
+
+		if (WARN_ON(local->n_wqs == local->max_wqs))
+			break;
+
+		local->wqs[local->n_wqs++] = iaa_wq->wq;
+		pr_debug("iaa_device %px: added local wq %d.%d\n", iaa_device, iaa_device->idxd->id, iaa_wq->wq->id);
+
+		iaa_wq->mapped = true;
+		++n_wqs_added;
+	}
+
+	if (!n_wqs_added && !iaa_device->n_wq) {
+		pr_debug("iaa_device %d: couldn't find any iaa wqs!\n", iaa_device->idxd->id);
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
+static void map_iaa_devices(void)
+{
+	struct iaa_device *iaa_device;
+
+	list_for_each_entry(iaa_device, &iaa_devices, list) {
+		BUG_ON(map_iaa_device_wqs(iaa_device));
+	}
 }
 
 /*
@@ -889,48 +944,42 @@ out:
  */
 static void rebalance_wq_table(void)
 {
-	const struct cpumask *node_cpus;
-	int node, cpu, iaa = -1;
+	int cpu, iaa;
 
 	if (nr_iaa == 0)
 		return;
 
-	pr_debug("rebalance: nr_nodes=%d, nr_cpus %d, nr_iaa %d, cpus_per_iaa %d\n",
-		 nr_nodes, nr_cpus, nr_iaa, cpus_per_iaa);
+	map_iaa_devices();
 
-	clear_wq_table();
+	pr_debug("rebalance: nr_packages=%d, nr_cpus %d, nr_iaa %d, cpus_per_iaa %d\n",
+		 nr_packages, nr_cpus, nr_iaa, cpus_per_iaa);
 
-	if (nr_iaa == 1) {
-		for (cpu = 0; cpu < nr_cpus; cpu++) {
-			if (WARN_ON(wq_table_add_wqs(0, cpu))) {
-				pr_debug("could not add any wqs for iaa 0 to cpu %d!\n", cpu);
-				return;
-			}
+	for (cpu = 0; cpu < nr_cpus; cpu++) {
+		iaa = cpu_to_iaa(cpu);
+		pr_debug("rebalance: cpu=%d iaa=%d\n", cpu, iaa);
+
+		if (WARN_ON(iaa == -1)) {
+			pr_debug("rebalance (cpu_to_iaa(%d)) failed!\n", cpu);
+			return;
 		}
 
-		return;
-	}
-
-	for_each_node_with_cpus(node) {
-		node_cpus = cpumask_of_node(node);
-
-		for (cpu = 0; cpu <  cpumask_weight(node_cpus); cpu++) {
-			int node_cpu = cpumask_nth(cpu, node_cpus);
-
-			if (WARN_ON(node_cpu >= nr_cpu_ids)) {
-				pr_debug("node_cpu %d doesn't exist!\n", node_cpu);
-				return;
-			}
-
-			if ((cpu % cpus_per_iaa) == 0)
-				iaa++;
-
-			if (WARN_ON(wq_table_add_wqs(iaa, node_cpu))) {
-				pr_debug("could not add any wqs for iaa %d to cpu %d!\n", iaa, cpu);
-				return;
-			}
+		if (WARN_ON(wq_table_add_wqs(iaa, cpu))) {
+			pr_debug("could not add any wqs for iaa %d to cpu %d!\n", iaa, cpu);
+			return;
 		}
 	}
+
+	pr_debug("Finished rebalance local wqs.");
+}
+
+static void free_wq_tables(void)
+{
+	if (wq_table) {
+		free_percpu(wq_table);
+		wq_table = NULL;
+	}
+
+	pr_debug("freed local wq table\n");
 }
 
 /***************************************************************
@@ -2347,7 +2396,7 @@ err_register:
 	free_iaa_wq(idxd_wq_get_private(wq));
 err_save:
 	if (first_wq)
-		free_wq_table();
+		free_wq_tables();
 err_alloc:
 	mutex_unlock(&iaa_devices_lock);
 	idxd_drv_disable_wq(wq);
@@ -2397,7 +2446,9 @@ static void iaa_crypto_remove(struct idxd_dev *idxd_dev)
 
 	if (nr_iaa == 0) {
 		iaa_crypto_enabled = false;
-		free_wq_table();
+		free_wq_tables();
+		BUG_ON(!list_empty(&iaa_devices));
+		INIT_LIST_HEAD(&iaa_devices);
 		module_put(THIS_MODULE);
 
 		pr_info("iaa_crypto now DISABLED\n");
@@ -2423,16 +2474,11 @@ static struct idxd_device_driver iaa_crypto_driver = {
 static int __init iaa_crypto_init_module(void)
 {
 	int ret = 0;
-	int node;
+	INIT_LIST_HEAD(&iaa_devices);
 
 	nr_cpus = num_possible_cpus();
-	for_each_node_with_cpus(node)
-		nr_nodes++;
-	if (!nr_nodes) {
-		pr_err("IAA couldn't find any nodes with cpus\n");
-		return -ENODEV;
-	}
-	nr_cpus_per_node = nr_cpus / nr_nodes;
+	nr_cpus_per_package = topology_num_cores_per_package();
+	nr_packages = topology_max_packages();
 
 	if (crypto_has_comp("deflate-generic", 0, 0))
 		deflate_generic_tfm = crypto_alloc_comp("deflate-generic", 0, 0);
