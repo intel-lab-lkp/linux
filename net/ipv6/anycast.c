@@ -278,6 +278,40 @@ static struct ifacaddr6 *aca_alloc(struct fib6_info *f6i,
 	return aca;
 }
 
+static void inet6_ifacaddr_notify(struct net_device *dev,
+				  const struct ifacaddr6 *ifaca, int event)
+{
+	struct inet6_fill_args fillargs = {
+		.portid = 0,
+		.seq = 0,
+		.event = event,
+		.flags = 0,
+		.netnsid = -1,
+	};
+	struct net *net = dev_net(dev);
+	struct sk_buff *skb;
+	int err = -ENOMEM;
+
+	skb = nlmsg_new(NLMSG_ALIGN(sizeof(struct ifaddrmsg)) +
+			nla_total_size(sizeof(struct in6_addr)) +
+			nla_total_size(sizeof(struct ifa_cacheinfo)),
+			GFP_KERNEL);
+	if (!skb)
+		goto error;
+
+	err = inet6_fill_ifacaddr(skb, ifaca, &fillargs);
+	if (err < 0) {
+		WARN_ON_ONCE(err == -EMSGSIZE);
+		nlmsg_free(skb);
+		goto error;
+	}
+
+	rtnl_notify(skb, net, 0, RTNLGRP_IPV6_ACADDR, NULL, GFP_KERNEL);
+	return;
+error:
+	rtnl_set_sk_err(net, RTNLGRP_IPV6_ACADDR, err);
+}
+
 /*
  *	device anycast group inc (add if not found)
  */
@@ -333,6 +367,8 @@ int __ipv6_dev_ac_inc(struct inet6_dev *idev, const struct in6_addr *addr)
 
 	addrconf_join_solict(idev->dev, &aca->aca_addr);
 
+	inet6_ifacaddr_notify(idev->dev, aca, RTM_NEWANYCAST);
+
 	aca_put(aca);
 	return 0;
 out:
@@ -374,6 +410,8 @@ int __ipv6_dev_ac_dec(struct inet6_dev *idev, const struct in6_addr *addr)
 	addrconf_leave_solict(idev, &aca->aca_addr);
 
 	ip6_del_rt(dev_net(idev->dev), aca->aca_rt, false);
+
+	inet6_ifacaddr_notify(idev->dev, aca, RTM_DELANYCAST);
 
 	aca_put(aca);
 	return 0;
