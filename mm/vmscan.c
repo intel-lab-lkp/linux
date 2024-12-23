@@ -283,6 +283,39 @@ static void set_task_reclaim_state(struct task_struct *task,
 	task->reclaim_state = rs;
 }
 
+/**
+ * find_folios_written_back - Find and move the written back folios to a new list.
+ * @list: filios list
+ * @clean: the written back folios list
+ * @is_retrying: whether the list is retrying.
+ */
+static inline void find_folios_written_back(struct list_head *list,
+		struct list_head *clean, bool is_retrying)
+{
+	struct folio *folio;
+	struct folio *next;
+
+	list_for_each_entry_safe_reverse(folio, next, list, lru) {
+		if (!folio_evictable(folio)) {
+			list_del(&folio->lru);
+			folio_putback_lru(folio);
+			continue;
+		}
+
+		/* retry folios that may have missed folio_rotate_reclaimable() */
+		if (!is_retrying && !folio_test_active(folio) && !folio_mapped(folio) &&
+		    !folio_test_dirty(folio) && !folio_test_writeback(folio)) {
+			list_move(&folio->lru, clean);
+			continue;
+		}
+
+		/* don't add rejected folios to the oldest generation */
+		if (lru_gen_enabled() && !lru_gen_distance(folio, false))
+			set_mask_bits(&folio->flags, LRU_REFS_FLAGS, BIT(PG_active));
+	}
+
+}
+
 /*
  * flush_reclaim_state(): add pages reclaimed outside of LRU-based reclaim to
  * scan_control->nr_reclaimed.
@@ -1959,14 +1992,18 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 		enum lru_list lru)
 {
 	LIST_HEAD(folio_list);
+	LIST_HEAD(clean_list);
 	unsigned long nr_scanned;
-	unsigned int nr_reclaimed = 0;
+	unsigned int nr_reclaimed, total_reclaimed = 0;
+	unsigned int nr_pageout = 0;
+	unsigned int nr_unqueued_dirty = 0;
 	unsigned long nr_taken;
 	struct reclaim_stat stat;
 	bool file = is_file_lru(lru);
 	enum vm_event_item item;
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
 	bool stalled = false;
+	bool is_retrying = false;
 
 	while (unlikely(too_many_isolated(pgdat, file, sc))) {
 		if (stalled)
@@ -2000,22 +2037,47 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	if (nr_taken == 0)
 		return 0;
 
+retry:
 	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);
+
+	sc->nr.dirty += stat.nr_dirty;
+	sc->nr.congested += stat.nr_congested;
+	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
+	sc->nr.writeback += stat.nr_writeback;
+	sc->nr.immediate += stat.nr_immediate;
+	total_reclaimed += nr_reclaimed;
+	nr_pageout += stat.nr_pageout;
+	nr_unqueued_dirty += stat.nr_unqueued_dirty;
+
+	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
+			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
+
+	find_folios_written_back(&folio_list, &clean_list, is_retrying);
 
 	spin_lock_irq(&lruvec->lru_lock);
 	move_folios_to_lru(lruvec, &folio_list);
 
 	__mod_lruvec_state(lruvec, PGDEMOTE_KSWAPD + reclaimer_offset(),
 					stat.nr_demoted);
-	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
 	item = PGSTEAL_KSWAPD + reclaimer_offset();
 	if (!cgroup_reclaim(sc))
 		__count_vm_events(item, nr_reclaimed);
 	__count_memcg_events(lruvec_memcg(lruvec), item, nr_reclaimed);
 	__count_vm_events(PGSTEAL_ANON + file, nr_reclaimed);
-	spin_unlock_irq(&lruvec->lru_lock);
 
-	lru_note_cost(lruvec, file, stat.nr_pageout, nr_scanned - nr_reclaimed);
+	if (!list_empty(&clean_list)) {
+		list_splice_init(&clean_list, &folio_list);
+		is_retrying = true;
+		spin_unlock_irq(&lruvec->lru_lock);
+		goto retry;
+	}
+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
+	spin_unlock_irq(&lruvec->lru_lock);
+	sc->nr.taken += nr_taken;
+	if (file)
+		sc->nr.file_taken += nr_taken;
+
+	lru_note_cost(lruvec, file, nr_pageout, nr_scanned - total_reclaimed);
 
 	/*
 	 * If dirty folios are scanned that are not queued for IO, it
@@ -2028,7 +2090,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 	 * the flushers simply cannot keep up with the allocation
 	 * rate. Nudge the flusher threads in case they are asleep.
 	 */
-	if (stat.nr_unqueued_dirty == nr_taken) {
+	if (nr_unqueued_dirty == nr_taken) {
 		wakeup_flusher_threads(WB_REASON_VMSCAN);
 		/*
 		 * For cgroupv1 dirty throttling is achieved by waking up
@@ -2043,18 +2105,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
 	}
 
-	sc->nr.dirty += stat.nr_dirty;
-	sc->nr.congested += stat.nr_congested;
-	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
-	sc->nr.writeback += stat.nr_writeback;
-	sc->nr.immediate += stat.nr_immediate;
-	sc->nr.taken += nr_taken;
-	if (file)
-		sc->nr.file_taken += nr_taken;
-
-	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
-			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
-	return nr_reclaimed;
+	return total_reclaimed;
 }
 
 /*
@@ -4585,12 +4636,10 @@ static int evict_folios(struct lruvec *lruvec, struct scan_control *sc, int swap
 	int reclaimed;
 	LIST_HEAD(list);
 	LIST_HEAD(clean);
-	struct folio *folio;
-	struct folio *next;
 	enum vm_event_item item;
 	struct reclaim_stat stat;
 	struct lru_gen_mm_walk *walk;
-	bool skip_retry = false;
+	bool is_retrying = false;
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
 	struct mem_cgroup *memcg = lruvec_memcg(lruvec);
 	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
@@ -4616,24 +4665,7 @@ retry:
 			scanned, reclaimed, &stat, sc->priority,
 			type ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON);
 
-	list_for_each_entry_safe_reverse(folio, next, &list, lru) {
-		if (!folio_evictable(folio)) {
-			list_del(&folio->lru);
-			folio_putback_lru(folio);
-			continue;
-		}
-
-		/* retry folios that may have missed folio_rotate_reclaimable() */
-		if (!skip_retry && !folio_test_active(folio) && !folio_mapped(folio) &&
-		    !folio_test_dirty(folio) && !folio_test_writeback(folio)) {
-			list_move(&folio->lru, &clean);
-			continue;
-		}
-
-		/* don't add rejected folios to the oldest generation */
-		if (!lru_gen_distance(folio, false))
-			set_mask_bits(&folio->flags, LRU_REFS_FLAGS, BIT(PG_active));
-	}
+	find_folios_written_back(&list, &clean, is_retrying);
 
 	spin_lock_irq(&lruvec->lru_lock);
 
@@ -4656,7 +4688,7 @@ retry:
 	list_splice_init(&clean, &list);
 
 	if (!list_empty(&list)) {
-		skip_retry = true;
+		is_retrying = true;
 		goto retry;
 	}
 

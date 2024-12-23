@@ -342,6 +342,11 @@ static inline void folio_migrate_refs(struct folio *new, struct folio *old)
 {
 
 }
+
+static inline int lru_gen_distance(struct folio *folio, bool reclaiming)
+{
+	return -1;
+}
 #endif /* CONFIG_LRU_GEN */
 
 static __always_inline
