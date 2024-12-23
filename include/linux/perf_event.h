@@ -1685,7 +1685,7 @@ static inline int perf_allow_cpu(void)
 static inline int perf_allow_tracepoint(void)
 {
 	if (sysctl_perf_event_paranoid > -1 && !perfmon_capable())
-		return -EPERM;
+		return -EACCES;
 
 	return security_perf_event_open(PERF_SECURITY_TRACEPOINT);
 }
