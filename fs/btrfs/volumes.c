@@ -13,8 +13,8 @@
 #include <linux/list_sort.h>
 #include <linux/namei.h>
 #include "misc.h"
-#include "ctree.h"
 #include "disk-io.h"
+#include "extent-tree.h"
 #include "transaction.h"
 #include "volumes.h"
 #include "raid56.h"
@@ -48,6 +48,7 @@ struct btrfs_io_geometry {
 	u64 raid56_full_stripe_start;
 	int max_errors;
 	enum btrfs_map_op op;
+	bool use_rst;
 };
 
 const struct btrfs_raid_attr btrfs_raid_array[BTRFS_NR_RAID_TYPES] = {
@@ -1327,7 +1328,14 @@ static int open_fs_devices(struct btrfs_fs_devices *fs_devices,
 	fs_devices->latest_dev = latest_dev;
 	fs_devices->total_rw_bytes = 0;
 	fs_devices->chunk_alloc_policy = BTRFS_CHUNK_ALLOC_REGULAR;
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	fs_devices->rr_min_contiguous_read = BTRFS_DEFAULT_RR_MIN_CONTIGUOUS_READ;
+	fs_devices->read_devid = latest_dev->devid;
+	fs_devices->read_policy =
+		btrfs_read_policy_to_enum(btrfs_get_raid1_balancing(), NULL);
+#else
 	fs_devices->read_policy = BTRFS_READ_POLICY_PID;
+#endif
 
 	return 0;
 }
@@ -5513,33 +5521,34 @@ void btrfs_remove_chunk_map(struct btrfs_fs_info *fs_info, struct btrfs_chunk_ma
 	btrfs_free_chunk_map(map);
 }
 
+static int btrfs_chunk_map_cmp(const struct rb_node *new,
+			       const struct rb_node *exist)
+{
+	const struct btrfs_chunk_map *new_map =
+		rb_entry(new, struct btrfs_chunk_map, rb_node);
+	const struct btrfs_chunk_map *exist_map =
+		rb_entry(exist, struct btrfs_chunk_map, rb_node);
+
+	if (new_map->start == exist_map->start)
+		return 0;
+	if (new_map->start < exist_map->start)
+		return -1;
+	return 1;
+}
+
 EXPORT_FOR_TESTS
 int btrfs_add_chunk_map(struct btrfs_fs_info *fs_info, struct btrfs_chunk_map *map)
 {
-	struct rb_node **p;
-	struct rb_node *parent = NULL;
-	bool leftmost = true;
+	struct rb_node *exist;
 
 	write_lock(&fs_info->mapping_tree_lock);
-	p = &fs_info->mapping_tree.rb_root.rb_node;
-	while (*p) {
-		struct btrfs_chunk_map *entry;
+	exist = rb_find_add_cached(&map->rb_node, &fs_info->mapping_tree,
+				   btrfs_chunk_map_cmp);
 
-		parent = *p;
-		entry = rb_entry(parent, struct btrfs_chunk_map, rb_node);
-
-		if (map->start < entry->start) {
-			p = &(*p)->rb_left;
-		} else if (map->start > entry->start) {
-			p = &(*p)->rb_right;
-			leftmost = false;
-		} else {
-			write_unlock(&fs_info->mapping_tree_lock);
-			return -EEXIST;
-		}
+	if (exist) {
+		write_unlock(&fs_info->mapping_tree_lock);
+		return -EEXIST;
 	}
-	rb_link_node(&map->rb_node, parent, p);
-	rb_insert_color_cached(&map->rb_node, &fs_info->mapping_tree, leftmost);
 	chunk_map_device_set_bits(map, CHUNK_ALLOCATED);
 	chunk_map_device_clear_bits(map, CHUNK_TRIMMED);
 	write_unlock(&fs_info->mapping_tree_lock);
@@ -5959,6 +5968,88 @@ unsigned long btrfs_full_stripe_len(struct btrfs_fs_info *fs_info,
 	return len;
 }
 
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+static int btrfs_read_preferred(struct btrfs_chunk_map *map, int first,
+				int num_stripe)
+{
+	int last = first + num_stripe;
+	int stripe_index;
+
+	for (stripe_index = first; stripe_index < last; stripe_index++) {
+		struct btrfs_device *device = map->stripes[stripe_index].dev;
+
+		if (device->devid == READ_ONCE(device->fs_devices->read_devid))
+			return stripe_index;
+	}
+
+	/* If no read-preferred device, use first stripe */
+	return first;
+}
+
+struct stripe_mirror {
+	u64 devid;
+	int num;
+};
+
+static int btrfs_cmp_devid(const void *a, const void *b)
+{
+	const struct stripe_mirror *s1 = (struct stripe_mirror *)a;
+	const struct stripe_mirror *s2 = (struct stripe_mirror *)b;
+
+	if (s1->devid < s2->devid)
+		return -1;
+	if (s1->devid > s2->devid)
+		return 1;
+	return 0;
+}
+
+/*
+ * btrfs_read_rr.
+ *
+ * Select a stripe for reading using a round-robin algorithm:
+ *
+ *  1. Compute the read cycle as the total sectors read divided by the minimum
+ *  sectors per device.
+ *  2. Determine the stripe number for the current read by taking the modulus
+ *  of the read cycle with the total number of stripes:
+ *
+ *      stripe index = (total sectors / min sectors per dev) % num stripes
+ *
+ * The calculated stripe index is then used to select the corresponding device
+ * from the list of devices, which is ordered by devid.
+ */
+static int btrfs_read_rr(struct btrfs_chunk_map *map, int first, int num_stripe)
+{
+	struct stripe_mirror stripes[BTRFS_RAID1_MAX_MIRRORS] = {0};
+	struct btrfs_fs_devices *fs_devices;
+	struct btrfs_device *device;
+	int read_cycle;
+	int index;
+	int ret_stripe;
+	int total_reads;
+	int reads_per_dev = 0;
+
+	device = map->stripes[first].dev;
+
+	fs_devices = device->fs_devices;
+	reads_per_dev = fs_devices->rr_min_contiguous_read >> SECTOR_SHIFT;
+	index = 0;
+	for (int i = first; i < first + num_stripe; i++) {
+		stripes[index].devid = map->stripes[i].dev->devid;
+		stripes[index].num = i;
+		index++;
+	}
+	sort(stripes, num_stripe, sizeof(struct stripe_mirror),
+	     btrfs_cmp_devid, NULL);
+
+	total_reads = atomic_inc_return(&fs_devices->total_reads);
+	read_cycle = total_reads / reads_per_dev;
+	ret_stripe = stripes[read_cycle % num_stripe].num;
+
+	return ret_stripe;
+}
+#endif
+
 static int find_live_mirror(struct btrfs_fs_info *fs_info,
 			    struct btrfs_chunk_map *map, int first,
 			    int dev_replace_is_ongoing)
@@ -5988,6 +6079,14 @@ static int find_live_mirror(struct btrfs_fs_info *fs_info,
 	case BTRFS_READ_POLICY_PID:
 		preferred_mirror = first + (current->pid % num_stripes);
 		break;
+#ifdef CONFIG_BTRFS_EXPERIMENTAL
+	case BTRFS_READ_POLICY_RR:
+		preferred_mirror = btrfs_read_rr(map, first, num_stripes);
+		break;
+	case BTRFS_READ_POLICY_DEVID:
+		preferred_mirror = btrfs_read_preferred(map, first, num_stripes);
+		break;
+#endif
 	}
 
 	if (dev_replace_is_ongoing &&
@@ -6346,8 +6445,7 @@ static int set_io_stripe(struct btrfs_fs_info *fs_info, u64 logical,
 {
 	dst->dev = map->stripes[io_geom->stripe_index].dev;
 
-	if (io_geom->op == BTRFS_MAP_READ &&
-	    btrfs_need_stripe_tree_update(fs_info, map->type))
+	if (io_geom->op == BTRFS_MAP_READ && io_geom->use_rst)
 		return btrfs_get_raid_extent_offset(fs_info, logical, length,
 						    map->type,
 						    io_geom->stripe_index, dst);
@@ -6362,7 +6460,7 @@ static bool is_single_device_io(struct btrfs_fs_info *fs_info,
 				const struct btrfs_io_stripe *smap,
 				const struct btrfs_chunk_map *map,
 				int num_alloc_stripes,
-				enum btrfs_map_op op, int mirror_num)
+				struct btrfs_io_geometry *io_geom)
 {
 	if (!smap)
 		return false;
@@ -6370,10 +6468,10 @@ static bool is_single_device_io(struct btrfs_fs_info *fs_info,
 	if (num_alloc_stripes != 1)
 		return false;
 
-	if (btrfs_need_stripe_tree_update(fs_info, map->type) && op != BTRFS_MAP_READ)
+	if (io_geom->use_rst && io_geom->op != BTRFS_MAP_READ)
 		return false;
 
-	if ((map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) && mirror_num > 1)
+	if ((map->type & BTRFS_BLOCK_GROUP_RAID56_MASK) && io_geom->mirror_num > 1)
 		return false;
 
 	return true;
@@ -6579,6 +6677,7 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	io_geom.raid56_full_stripe_start = (u64)-1;
 	max_len = btrfs_max_io_len(map, map_offset, &io_geom);
 	*length = min_t(u64, map->chunk_len - map_offset, max_len);
+	io_geom.use_rst = btrfs_need_stripe_tree_update(fs_info, map->type);
 
 	if (dev_replace->replace_task != current)
 		down_read(&dev_replace->rwsem);
@@ -6647,8 +6746,7 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	 * physical block information on the stack instead of allocating an
 	 * I/O context structure.
 	 */
-	if (is_single_device_io(fs_info, smap, map, num_alloc_stripes, op,
-				io_geom.mirror_num)) {
+	if (is_single_device_io(fs_info, smap, map, num_alloc_stripes, &io_geom)) {
 		ret = set_io_stripe(fs_info, logical, length, smap, map, &io_geom);
 		if (mirror_num_ret)
 			*mirror_num_ret = io_geom.mirror_num;
@@ -6662,6 +6760,7 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 		goto out;
 	}
 	bioc->map_type = map->type;
+	bioc->use_rst = io_geom.use_rst;
 
 	/*
 	 * For RAID56 full map, we need to make sure the stripes[] follows the
@@ -7002,16 +7101,6 @@ static int read_one_chunk(struct btrfs_key *key, struct extent_buffer *leaf,
 	warn_32bit_meta_chunk(fs_info, logical, length, type);
 #endif
 
-	/*
-	 * Only need to verify chunk item if we're reading from sys chunk array,
-	 * as chunk item in tree block is already verified by tree-checker.
-	 */
-	if (leaf->start == BTRFS_SUPER_INFO_OFFSET) {
-		ret = btrfs_check_chunk_valid(leaf, chunk, logical);
-		if (ret)
-			return ret;
-	}
-
 	map = btrfs_find_chunk_map(fs_info, logical, 1);
 
 	/* already mapped? */
@@ -7269,16 +7358,11 @@ int btrfs_read_sys_array(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_super_block *super_copy = fs_info->super_copy;
 	struct extent_buffer *sb;
-	struct btrfs_disk_key *disk_key;
-	struct btrfs_chunk *chunk;
 	u8 *array_ptr;
 	unsigned long sb_array_offset;
 	int ret = 0;
-	u32 num_stripes;
 	u32 array_size;
-	u32 len = 0;
 	u32 cur_offset;
-	u64 type;
 	struct btrfs_key key;
 
 	ASSERT(BTRFS_SUPER_INFO_SIZE <= fs_info->nodesize);
@@ -7301,10 +7385,16 @@ int btrfs_read_sys_array(struct btrfs_fs_info *fs_info)
 	cur_offset = 0;
 
 	while (cur_offset < array_size) {
-		disk_key = (struct btrfs_disk_key *)array_ptr;
-		len = sizeof(*disk_key);
-		if (cur_offset + len > array_size)
-			goto out_short_read;
+		struct btrfs_chunk *chunk;
+		struct btrfs_disk_key *disk_key = (struct btrfs_disk_key *)array_ptr;
+		u32 len = sizeof(*disk_key);
+
+		/*
+		 * The sys_chunk_array is already verified at super block read
+		 * time.
+		 * Only do ASSERT()s for basic checks.
+		 */
+		ASSERT(cur_offset + len <= array_size);
 
 		btrfs_disk_key_to_cpu(&key, disk_key);
 
@@ -7312,44 +7402,14 @@ int btrfs_read_sys_array(struct btrfs_fs_info *fs_info)
 		sb_array_offset += len;
 		cur_offset += len;
 
-		if (key.type != BTRFS_CHUNK_ITEM_KEY) {
-			btrfs_err(fs_info,
-			    "unexpected item type %u in sys_array at offset %u",
-				  (u32)key.type, cur_offset);
-			ret = -EIO;
-			break;
-		}
+		ASSERT(key.type == BTRFS_CHUNK_ITEM_KEY);
 
 		chunk = (struct btrfs_chunk *)sb_array_offset;
-		/*
-		 * At least one btrfs_chunk with one stripe must be present,
-		 * exact stripe count check comes afterwards
-		 */
-		len = btrfs_chunk_item_size(1);
-		if (cur_offset + len > array_size)
-			goto out_short_read;
+		ASSERT(btrfs_chunk_type(sb, chunk) & BTRFS_BLOCK_GROUP_SYSTEM);
 
-		num_stripes = btrfs_chunk_num_stripes(sb, chunk);
-		if (!num_stripes) {
-			btrfs_err(fs_info,
-			"invalid number of stripes %u in sys_array at offset %u",
-				  num_stripes, cur_offset);
-			ret = -EIO;
-			break;
-		}
+		len = btrfs_chunk_item_size(btrfs_chunk_num_stripes(sb, chunk));
 
-		type = btrfs_chunk_type(sb, chunk);
-		if ((type & BTRFS_BLOCK_GROUP_SYSTEM) == 0) {
-			btrfs_err(fs_info,
-			"invalid chunk type %llu in sys_array at offset %u",
-				  type, cur_offset);
-			ret = -EIO;
-			break;
-		}
-
-		len = btrfs_chunk_item_size(num_stripes);
-		if (cur_offset + len > array_size)
-			goto out_short_read;
+		ASSERT(cur_offset + len <= array_size);
 
 		ret = read_one_chunk(&key, sb, chunk);
 		if (ret)
@@ -7362,13 +7422,6 @@ int btrfs_read_sys_array(struct btrfs_fs_info *fs_info)
 	clear_extent_buffer_uptodate(sb);
 	free_extent_buffer_stale(sb);
 	return ret;
-
-out_short_read:
-	btrfs_err(fs_info, "sys_array too short to read %u bytes at offset %u",
-			len, cur_offset);
-	clear_extent_buffer_uptodate(sb);
-	free_extent_buffer_stale(sb);
-	return -EIO;
 }
 
 /*
@@ -7567,8 +7620,6 @@ int btrfs_init_devices_late(struct btrfs_fs_info *fs_info)
 	struct btrfs_fs_devices *fs_devices = fs_info->fs_devices, *seed_devs;
 	struct btrfs_device *device;
 	int ret = 0;
-
-	fs_devices->fs_info = fs_info;
 
 	mutex_lock(&fs_devices->device_list_mutex);
 	list_for_each_entry(device, &fs_devices->devices, dev_list)
@@ -7798,7 +7849,7 @@ void btrfs_dev_stat_inc_and_print(struct btrfs_device *dev, int index)
 
 	if (!dev->dev_stats_valid)
 		return;
-	btrfs_err_rl_in_rcu(dev->fs_info,
+	btrfs_debug_rl_in_rcu(dev->fs_info,
 		"bdev %s errs: wr %u, rd %u, flush %u, corrupt %u, gen %u",
 			   btrfs_dev_name(dev),
 			   btrfs_dev_stat_read(dev, BTRFS_DEV_STAT_WRITE_ERRS),
