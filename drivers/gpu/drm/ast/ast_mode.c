@@ -475,6 +475,12 @@ static void ast_set_dclk_reg(struct ast_device *ast,
 	ast_set_index_reg_mask(ast, AST_IO_VGACRI, 0xbb, 0x0f,
 			       (clk_info->param3 & 0xc0) |
 			       ((clk_info->param3 & 0x3) << 4));
+
+	/* Set SEQ; Half dclk for this timing */
+	if (vbios_mode->enh_table->flags & HalfDCLK)
+		ast_set_index_reg_mask(ast, AST_IO_SEQ_PORT, 0x01, 0xff, 0x08);
+	else
+		ast_set_index_reg_mask(ast, AST_IO_SEQ_PORT, 0x01, 0xf7, 0x00);
 }
 
 static void ast_set_color_reg(struct ast_device *ast,
