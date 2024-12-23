@@ -240,9 +240,10 @@ static struct pv_node *pv_unhash(struct qspinlock *lock)
 	struct pv_node *node;
 
 	for_each_hash_entry(he, offset, hash) {
-		if (READ_ONCE(he->lock) == lock) {
+		struct qspinlock *old = lock;
+
+		if (try_cmpxchg(&he->lock, &old, NULL)) {
 			node = READ_ONCE(he->node);
-			WRITE_ONCE(he->lock, NULL);
 			return node;
 		}
 	}
