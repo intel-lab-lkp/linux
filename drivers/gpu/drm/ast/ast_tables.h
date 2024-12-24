@@ -254,6 +254,13 @@ static const struct ast_vbios_enhtable res_1024x768[] = {
 	 (SyncPP | Charx8Dot), 0xFF, 4, 0x31 },
 };
 
+static const struct ast_vbios_enhtable res_1280x960[] = {
+	{1800, 1280, 96, 112, 1000, 960, 1, 3, VCLK108, /* 60Hz */
+	 (SyncPP | Charx8Dot), 60, 1, 0x3E },
+	{1800, 1280, 96, 112, 1000, 960, 1, 3, VCLK108, /* end */
+	 (SyncPP | Charx8Dot), 0xFF, 1, 0x3E },
+};
+
 static const struct ast_vbios_enhtable res_1280x1024[] = {
 	{1688, 1280, 48, 112, 1066, 1024, 1, 3, VCLK108,	/* 60Hz */
 	 (SyncPP | Charx8Dot), 60, 1, 0x32 },
@@ -280,6 +287,15 @@ static const struct ast_vbios_enhtable res_1152x864[] = {
 };
 
 /* 16:9 */
+static const struct ast_vbios_enhtable res_1280x720[] = {
+	{1650, 1280, 110, 40, 750, 720, 5, 5, VCLK148_5,	/* 60Hz */
+	 (SyncPP | Charx8Dot | LineCompareOff | WideScreenMode | NewModeInfo |
+	  HalfDCLK), 60, 1, 0x3D },
+	{1650, 1280, 110, 40, 750, 720, 5, 5, VCLK148_5,	/* end */
+	 (SyncPP | Charx8Dot | LineCompareOff | WideScreenMode | NewModeInfo |
+	  HalfDCLK), 0xFF, 1, 0x3D },
+};
+
 static const struct ast_vbios_enhtable res_1360x768[] = {
 	{1792, 1360, 64, 112, 795, 768, 3, 6, VCLK85_5,		/* 60Hz */
 	 (SyncPP | Charx8Dot | LineCompareOff | WideScreenMode | NewModeInfo), 60, 1, 0x39 },
@@ -294,6 +310,8 @@ static const struct ast_vbios_enhtable res_1600x900[] = {
 	  AST2500PreCatchCRT), 60, 1, 0x3A },
 	{2112, 1600, 88, 168, 934, 900, 3, 5, VCLK118_25,	/* 60Hz CVT */
 	 (SyncPN | Charx8Dot | LineCompareOff | WideScreenMode | NewModeInfo), 60, 2, 0x3A },
+	{1800, 1600, 24, 80, 1000, 900, 1, 3, VCLK108,		/* 60Hz DMT */
+	 (SyncPP | Charx8Dot | LineCompareOff | WideScreenMode | NewModeInfo), 60, 3, 0x3A },
 	{2112, 1600, 88, 168, 934, 900, 3, 5, VCLK118_25,	/* 60Hz CVT */
 	 (SyncPN | Charx8Dot | LineCompareOff | WideScreenMode | NewModeInfo), 0xFF, 2, 0x3A },
 };

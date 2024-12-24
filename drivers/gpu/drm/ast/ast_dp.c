@@ -255,6 +255,10 @@ static void ast_dp_set_mode(struct drm_crtc *crtc, struct ast_vbios_mode_info *v
 	case 1280:
 		if (crtc->mode.crtc_vdisplay == 800)
 			ModeIdx = (ASTDP_1280x800_60_RB - (u8) ulRefreshRateIndex);
+		else if (crtc->mode.crtc_vdisplay == 720)
+			ModeIdx = ASTDP_1280x720_60;
+		else if (crtc->mode.crtc_vdisplay == 960)
+			ModeIdx = ASTDP_1280x960_60;
 		else		// 1024
 			ModeIdx = (ASTDP_1280x1024_60 + (u8) ulRefreshRateIndex);
 		break;
@@ -267,7 +271,10 @@ static void ast_dp_set_mode(struct drm_crtc *crtc, struct ast_vbios_mode_info *v
 		break;
 	case 1600:
 		if (crtc->mode.crtc_vdisplay == 900)
-			ModeIdx = (ASTDP_1600x900_60_RB - (u8) ulRefreshRateIndex);
+			if (ulRefreshRateIndex == 2)
+				ModeIdx = ASTDP_1600x900_60_DMT;
+			else
+				ModeIdx = (ASTDP_1600x900_60_RB - (u8) ulRefreshRateIndex);
 		else		//1200
 			ModeIdx = ASTDP_1600x1200_60;
 		break;

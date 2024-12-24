@@ -147,6 +147,10 @@ static bool ast_get_vbios_mode_info(const struct drm_format_info *format,
 	case 1280:
 		if (mode->crtc_vdisplay == 800)
 			vbios_mode->enh_table = &res_1280x800[refresh_rate_index];
+		else if (crtc->mode.crtc_vdisplay == 720)
+			vbios_mode->enh_table = &res_1280x720[refresh_rate_index];
+		else if (crtc->mode.crtc_vdisplay == 960)
+			vbios_mode->enh_table = &res_1280x960[refresh_rate_index];
 		else
 			vbios_mode->enh_table = &res_1280x1024[refresh_rate_index];
 		break;
@@ -475,6 +479,12 @@ static void ast_set_dclk_reg(struct ast_device *ast,
 	ast_set_index_reg_mask(ast, AST_IO_VGACRI, 0xbb, 0x0f,
 			       (clk_info->param3 & 0xc0) |
 			       ((clk_info->param3 & 0x3) << 4));
+
+	/* Set SEQ; Half dclk for this timing */
+	if (vbios_mode->enh_table->flags & HalfDCLK)
+		ast_set_index_reg_mask(ast, AST_IO_VGASRI, 0x01, 0xff, 0x08);
+	else
+		ast_set_index_reg_mask(ast, AST_IO_VGASRI, 0x01, 0xf7, 0x00);
 }
 
 static void ast_set_color_reg(struct ast_device *ast,
@@ -1027,7 +1037,11 @@ ast_crtc_helper_mode_valid(struct drm_crtc *crtc, const struct drm_display_mode 
 	if (ast->support_wide_screen) {
 		if ((mode->hdisplay == 1680) && (mode->vdisplay == 1050))
 			return MODE_OK;
+		if ((mode->hdisplay == 1280) && (mode->vdisplay == 960))
+			return MODE_OK;
 		if ((mode->hdisplay == 1280) && (mode->vdisplay == 800))
+			return MODE_OK;
+		if ((mode->hdisplay == 1280) && (mode->vdisplay == 720))
 			return MODE_OK;
 		if ((mode->hdisplay == 1440) && (mode->vdisplay == 900))
 			return MODE_OK;
