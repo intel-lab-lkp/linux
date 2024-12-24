@@ -27,3 +27,12 @@ config LOONGSON2_PM
 	  Disk), ACPI S5 (Soft Shutdown) and supports multiple wake-up methods
 	  (USB, GMAC, PWRBTN, etc.). This driver was to add power management
 	  controller support that base on dts for Loongson-2 series SoCs.
+
+config LOONGSON_SE
+	tristate "Loongson Security Module Interface"
+	depends on LOONGARCH && ACPI
+	help
+	  The Loongson security module provides the control for hardware
+	  encryption acceleration devices. Each device uses at least one
+	  channel to interact with security module, and each channel may
+	  have its own buffer provided by security module.
