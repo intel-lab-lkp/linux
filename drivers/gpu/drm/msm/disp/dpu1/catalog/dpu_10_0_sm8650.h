@@ -431,6 +431,7 @@ const struct dpu_mdss_cfg dpu_sm8650_cfg = {
 	.mdss_ver = &sm8650_mdss_ver,
 	.caps = &sm8650_dpu_caps,
 	.mdp = &sm8650_mdp,
+	.cdm = &dpu_cdm_0,
 	.ctl_count = ARRAY_SIZE(sm8650_ctl),
 	.ctl = sm8650_ctl,
 	.sspp_count = ARRAY_SIZE(sm8650_sspp),
