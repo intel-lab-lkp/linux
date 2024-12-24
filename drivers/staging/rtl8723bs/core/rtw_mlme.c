@@ -481,7 +481,9 @@ void rtw_update_scanned_network(struct adapter *adapter, struct wlan_bssid_ex *t
 		}
 
 		if (rtw_roam_flags(adapter)) {
-			/* TODO: don't select network in the same ess as oldest if it's new enough*/
+			if (is_same_ess(&pnetwork->network, &oldest->network) &&
+				time_after(pnetwork->last_scanned, (unsigned long)msecs_to_jiffies(1000)))
+				continue;
 		}
 
 		if (!oldest || time_after(oldest->last_scanned, pnetwork->last_scanned))
@@ -1000,15 +1002,23 @@ static struct sta_info *rtw_joinbss_update_stainfo(struct adapter *padapter, str
 
 		/* for A-MPDU Rx reordering buffer control for bmc_sta & sta_info */
 		/* if A-MPDU Rx is enabled, resetting  rx_ordering_ctrl wstart_b(indicate_seq) to default value = 0xffff */
-		/* todo: check if AP can send A-MPDU packets */
-		for (i = 0; i < 16 ; i++) {
-			preorder_ctrl = &psta->recvreorder_ctrl[i];
-			preorder_ctrl->enable = false;
-			preorder_ctrl->indicate_seq = 0xffff;
-			preorder_ctrl->wend_b = 0xffff;
-			preorder_ctrl->wsize_b = 64;/* max_ampdu_sz;ex. 32(kbytes) -> wsize_b =32 */
+		if (rtw_check_ap_supports_ampdu(pnetwork)) {
+			for (i = 0; i < 16 ; i++) {
+				preorder_ctrl = &psta->recvreorder_ctrl[i];
+				preorder_ctrl->enable = true; /* Enable A-MPDU reordering */
+				preorder_ctrl->indicate_seq = 0; /* Starting sequence number */
+				preorder_ctrl->wend_b = 0xffff;
+				preorder_ctrl->wsize_b = 64;/* max_ampdu_sz;ex. 32(kbytes) -> wsize_b =32 */
+			}
+		} else {
+			for (i = 0; i < 16; i++) {
+				preorder_ctrl = &psta->recvreorder_ctrl[i];
+				preorder_ctrl->enable = false;
+				preorder_ctrl->indicate_seq = 0xffff;
+				preorder_ctrl->wend_b = 0xffff;
+				preorder_ctrl->wsize_b = 64;  /* max_ampdu_sz; adjust as needed */
+			}
 		}
-
 		bmc_sta = rtw_get_bcmc_stainfo(padapter);
 		if (bmc_sta) {
 			for (i = 0; i < 16 ; i++) {
