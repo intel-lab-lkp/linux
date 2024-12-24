@@ -34,6 +34,7 @@
 #include <linux/util_macros.h>
 
 #include <linux/iio/buffer.h>
+#include <linux/iio/events.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
@@ -110,6 +111,43 @@ struct ad7380_chip_info {
 	unsigned int num_vcm_supplies;
 	const unsigned long *available_scan_masks;
 	const struct ad7380_timing_specs *timing_specs;
+};
+
+static const struct iio_event_spec ad7380_events[] = {
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_RISING,
+		.mask_shared_by_dir = BIT(IIO_EV_INFO_VALUE),
+	},
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_FALLING,
+		.mask_shared_by_dir = BIT(IIO_EV_INFO_VALUE),
+	},
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_EITHER,
+		.mask_shared_by_all = BIT(IIO_EV_INFO_ENABLE),
+	},
+};
+
+static const struct iio_event_spec ad7380_events_irq[] = {
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_RISING,
+		.mask_shared_by_dir = BIT(IIO_EV_INFO_VALUE),
+	},
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_FALLING,
+		.mask_shared_by_dir = BIT(IIO_EV_INFO_VALUE),
+	},
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_EITHER,
+		.mask_shared_by_all = BIT(IIO_EV_INFO_ENABLE) |
+			BIT(IIO_EV_INFO_RESET_TIMEOUT),
+	},
 };
 
 enum {
@@ -214,6 +252,8 @@ static const struct iio_scan_type ad7380_scan_type_16_u[] = {
 	.has_ext_scan_type = 1,							\
 	.ext_scan_type = ad7380_scan_type_##bits##_##sign,			\
 	.num_ext_scan_type = ARRAY_SIZE(ad7380_scan_type_##bits##_##sign),	\
+	.event_spec = ad7380_events,						\
+	.num_event_specs = ARRAY_SIZE(ad7380_events),				\
 }
 
 #define AD7380_CHANNEL(index, bits, diff, sign)		\
@@ -585,6 +625,10 @@ struct ad7380_state {
 	bool resolution_boost_enabled;
 	unsigned int ch;
 	bool seq;
+	struct timer_list alert_timer;
+	unsigned int alert_reset_timeout_ms;
+	atomic_t irq_enabled;
+	bool buffered_read_enabled;
 	unsigned int vref_mv;
 	unsigned int vcm_mv[MAX_NUM_CHANNELS];
 	unsigned int gain_milli[MAX_NUM_CHANNELS];
@@ -689,6 +733,26 @@ static const struct regmap_config ad7380_regmap_config = {
 	.cache_type = REGCACHE_MAPLE,
 };
 
+static void ad7380_enable_irq(struct ad7380_state *st)
+{
+	if (st->spi->irq && !atomic_cmpxchg(&st->irq_enabled, 0, 1))
+		enable_irq(st->spi->irq);
+}
+
+static void ad7380_disable_irq(struct ad7380_state *st)
+{
+	if (st->spi->irq && atomic_cmpxchg(&st->irq_enabled, 1, 0)) {
+		disable_irq(st->spi->irq);
+		synchronize_irq(st->spi->irq);
+	}
+}
+
+static void ad7380_disable_irq_nosync(struct ad7380_state *st)
+{
+	if (st->spi->irq && atomic_cmpxchg(&st->irq_enabled, 1, 0))
+		disable_irq_nosync(st->spi->irq);
+}
+
 static int ad7380_debugfs_reg_access(struct iio_dev *indio_dev, u32 reg,
 				     u32 writeval, u32 *readval)
 {
@@ -727,8 +791,8 @@ static int ad7380_regval_to_osr(int regval)
 
 static int ad7380_get_osr(struct ad7380_state *st, int *val)
 {
-	int tmp;
-	int ret = 0;
+	u32 tmp;
+	int ret;
 
 	ret = regmap_read(st->regmap, AD7380_REG_ADDR_CONFIG1, &tmp);
 	if (ret)
@@ -834,12 +898,25 @@ static int ad7380_update_xfers(struct ad7380_state *st,
 	return 0;
 }
 
+static void ad7380_handle_event_reset_timeout(struct timer_list *t)
+{
+	struct ad7380_state *st = from_timer(st, t, alert_timer);
+
+	ad7380_enable_irq(st);
+}
+
 static int ad7380_triggered_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct ad7380_state *st = iio_priv(indio_dev);
 	const struct iio_scan_type *scan_type;
 	struct spi_message *msg = &st->normal_msg;
 	int ret;
+
+	timer_setup(&st->alert_timer, ad7380_handle_event_reset_timeout, 0);
+
+	ad7380_enable_irq(st);
+
+	st->buffered_read_enabled = true;
 
 	/*
 	 * Currently, we always read all channels at the same time. The scan_type
@@ -894,6 +971,8 @@ static int ad7380_triggered_buffer_postdisable(struct iio_dev *indio_dev)
 	struct spi_message *msg = &st->normal_msg;
 	int ret;
 
+	st->buffered_read_enabled = false;
+
 	if (st->seq) {
 		ret = regmap_update_bits(st->regmap,
 					 AD7380_REG_ADDR_CONFIG1,
@@ -907,6 +986,9 @@ static int ad7380_triggered_buffer_postdisable(struct iio_dev *indio_dev)
 	}
 
 	spi_unoptimize_message(msg);
+
+	ad7380_disable_irq(st);
+	timer_shutdown_sync(&st->alert_timer);
 
 	return 0;
 }
@@ -1002,8 +1084,11 @@ static int ad7380_read_raw(struct iio_dev *indio_dev,
 		if (ret)
 			return ret;
 
-		ret = ad7380_read_direct(st, chan->scan_index,
-					 scan_type, val);
+		ad7380_enable_irq(st);
+
+		ret = ad7380_read_direct(st, chan->scan_index, scan_type, val);
+
+		ad7380_disable_irq(st);
 
 		iio_device_release_direct_mode(indio_dev);
 
@@ -1151,12 +1236,190 @@ static int ad7380_get_current_scan_type(const struct iio_dev *indio_dev,
 					    : AD7380_SCAN_TYPE_NORMAL;
 }
 
+static int ad7380_read_event_config(struct iio_dev *indio_dev,
+				    const struct iio_chan_spec *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir)
+{
+	struct ad7380_state *st = iio_priv(indio_dev);
+	int alert_en, tmp, ret;
+
+	ret = iio_device_claim_direct_mode(indio_dev);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(st->regmap, AD7380_REG_ADDR_CONFIG1, &tmp);
+
+	iio_device_release_direct_mode(indio_dev);
+
+	if (ret)
+		return ret;
+
+	alert_en = FIELD_GET(AD7380_CONFIG1_ALERTEN, tmp);
+
+	return alert_en;
+}
+
+static int ad7380_write_event_config(struct iio_dev *indio_dev,
+				     const struct iio_chan_spec *chan,
+				     enum iio_event_type type,
+				     enum iio_event_direction dir,
+				     bool state)
+{
+	struct ad7380_state *st = iio_priv(indio_dev);
+	int ret;
+
+	ret = iio_device_claim_direct_mode(indio_dev);
+	if (ret)
+		return ret;
+
+	ret = regmap_update_bits(st->regmap,
+				 AD7380_REG_ADDR_CONFIG1,
+				 AD7380_CONFIG1_ALERTEN,
+				 FIELD_PREP(AD7380_CONFIG1_ALERTEN, state));
+
+	iio_device_release_direct_mode(indio_dev);
+
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int ad7380_read_event_value(struct iio_dev *indio_dev,
+				   const struct iio_chan_spec *chan,
+				   enum iio_event_type type,
+				   enum iio_event_direction dir,
+				   enum iio_event_info info,
+				   int *val, int *val2)
+{
+	struct ad7380_state *st = iio_priv(indio_dev);
+	int ret, tmp;
+
+	switch (info) {
+	case IIO_EV_INFO_VALUE:
+		ret = iio_device_claim_direct_mode(indio_dev);
+
+		switch (dir) {
+		case IIO_EV_DIR_RISING:
+			ret = regmap_read(st->regmap,
+					  AD7380_REG_ADDR_ALERT_HIGH_TH,
+					  &tmp);
+			if (ret)
+				return ret;
+
+			*val = FIELD_GET(AD7380_ALERT_HIGH_TH, tmp);
+			ret = IIO_VAL_INT;
+			break;
+		case IIO_EV_DIR_FALLING:
+			ret = regmap_read(st->regmap,
+					  AD7380_REG_ADDR_ALERT_LOW_TH,
+					  &tmp);
+			if (ret)
+				return ret;
+
+			FIELD_GET(AD7380_ALERT_LOW_TH, tmp);
+			ret = IIO_VAL_INT;
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+
+		iio_device_release_direct_mode(indio_dev);
+		return ret;
+	case IIO_EV_INFO_RESET_TIMEOUT:
+		*val = st->alert_reset_timeout_ms;
+		return IIO_VAL_INT;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int ad7380_write_event_value(struct iio_dev *indio_dev,
+				    const struct iio_chan_spec *chan,
+				    enum iio_event_type type,
+				    enum iio_event_direction dir,
+				    enum iio_event_info info,
+				    int val, int val2)
+{
+	struct ad7380_state *st = iio_priv(indio_dev);
+	const struct iio_scan_type *scan_type;
+	int ret;
+	u16 th;
+
+	switch (info) {
+	case IIO_EV_INFO_VALUE:
+		ret = iio_device_claim_direct_mode(indio_dev);
+		if (ret)
+			return ret;
+
+		/*
+		 * According to the datasheet,
+		 * AD7380_REG_ADDR_ALERT_HIGH_TH[11:0] are the 12 MSB of the
+		 * 16-bits internal alert high register. LSB are set to 0xf.
+		 * AD7380_REG_ADDR_ALERT_LOW_TH[11:0] are the 12 MSB of the
+		 * 16 bits internal alert low register. LSB are set to 0x0.
+		 *
+		 * When alert is enabled the conversion from the adc is compared
+		 * immediately to the alert high/low thresholds, before any
+		 * oversampling. This means that the thresholds are the same for
+		 * normal mode and oversampling mode.
+		 */
+
+		/* Extract the 12 MSB of val */
+		scan_type = iio_get_current_scan_type(indio_dev, chan);
+		if (IS_ERR(scan_type))
+			return PTR_ERR(scan_type);
+
+		th = val >> (scan_type->realbits - 12);
+
+		switch (dir) {
+		case IIO_EV_DIR_RISING:
+			ret = regmap_write(st->regmap,
+					   AD7380_REG_ADDR_ALERT_HIGH_TH,
+					   th);
+			if (ret)
+				return ret;
+
+			break;
+		case IIO_EV_DIR_FALLING:
+			ret = regmap_write(st->regmap,
+					   AD7380_REG_ADDR_ALERT_LOW_TH,
+					   th);
+			if (ret)
+				return ret;
+
+			break;
+		default:
+			ret = -EINVAL;
+			break;
+		}
+
+		iio_device_release_direct_mode(indio_dev);
+		return ret;
+	case IIO_EV_INFO_RESET_TIMEOUT:
+		if (val < 0)
+			return -EINVAL;
+		st->alert_reset_timeout_ms = val;
+		timer_reduce(&st->alert_timer, jiffies + msecs_to_jiffies(val));
+
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static const struct iio_info ad7380_info = {
 	.read_raw = &ad7380_read_raw,
 	.read_avail = &ad7380_read_avail,
 	.write_raw = &ad7380_write_raw,
 	.get_current_scan_type = &ad7380_get_current_scan_type,
 	.debugfs_reg_access = &ad7380_debugfs_reg_access,
+	.read_event_config = &ad7380_read_event_config,
+	.write_event_config = &ad7380_write_event_config,
+	.read_event_value = &ad7380_read_event_value,
+	.write_event_value = &ad7380_write_event_value,
 };
 
 static int ad7380_init(struct ad7380_state *st, bool external_ref_en)
@@ -1182,12 +1445,62 @@ static int ad7380_init(struct ad7380_state *st, bool external_ref_en)
 	/* This is the default value after reset. */
 	st->ch = 0;
 	st->seq = false;
+	st->buffered_read_enabled = false;
+
+	/*
+	 * Set a minimum default 1s delay between each alert in buffered reads
+	 */
+	st->alert_reset_timeout_ms = 1000;
 
 	/* SPI 1-wire mode */
 	return regmap_update_bits(st->regmap, AD7380_REG_ADDR_CONFIG2,
 				  AD7380_CONFIG2_SDO,
 				  FIELD_PREP(AD7380_CONFIG2_SDO,
 					     AD7380_NUM_SDO_LINES));
+}
+
+static irqreturn_t ad7380_primary_event_handler(int irq, void *private)
+{
+	struct iio_dev *indio_dev = private;
+	struct ad7380_state *st = iio_priv(indio_dev);
+
+	if (!atomic_read(&st->irq_enabled))
+		return IRQ_NONE;
+
+	ad7380_disable_irq_nosync(st);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t ad7380_event_handler(int irq, void *private)
+{
+	struct iio_dev *indio_dev = private;
+	s64 timestamp = iio_get_time_ns(indio_dev);
+	struct ad7380_state *st = iio_priv(indio_dev);
+	const struct iio_chan_spec *chan = &indio_dev->channels[0];
+	unsigned int i;
+
+	for (i = 0; i < st->chip_info->num_channels - 1; i++) {
+		iio_push_event(indio_dev,
+			       chan->differential ?
+			       IIO_DIFF_EVENT_CODE(IIO_VOLTAGE,
+						   2 * i,
+						   2 * i + 1,
+						   IIO_EV_TYPE_THRESH,
+						   IIO_EV_DIR_EITHER) :
+			       IIO_UNMOD_EVENT_CODE(IIO_VOLTAGE,
+						    i,
+						    IIO_EV_TYPE_THRESH,
+						    IIO_EV_DIR_EITHER),
+			       timestamp);
+	}
+
+	if (st->spi->irq && st->buffered_read_enabled)
+		mod_timer(&st->alert_timer,
+			  jiffies +
+			  msecs_to_jiffies(st->alert_reset_timeout_ms));
+
+	return IRQ_HANDLED;
 }
 
 static int ad7380_probe(struct spi_device *spi)
@@ -1360,6 +1673,39 @@ static int ad7380_probe(struct spi_device *spi)
 	indio_dev->info = &ad7380_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->available_scan_masks = st->chip_info->available_scan_masks;
+
+	if (spi->irq) {
+		struct iio_chan_spec *chans;
+		size_t size;
+		int ret;
+
+		ret = devm_request_threaded_irq(dev, spi->irq,
+						&ad7380_primary_event_handler,
+						&ad7380_event_handler,
+						IRQF_TRIGGER_FALLING | IRQF_ONESHOT
+						| IRQF_NO_AUTOEN,
+						indio_dev->name,
+						indio_dev);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to request irq\n");
+
+		atomic_set(&st->irq_enabled, 0);
+
+		/*
+		 * Copy channels to be able to update the event_spec, since some
+		 * attributes are visible only when irq are configured
+		 */
+		size = indio_dev->num_channels * sizeof(*indio_dev->channels);
+		chans = devm_kzalloc(dev, size, GFP_KERNEL);
+		if (!chans)
+			return -ENOMEM;
+
+		memcpy(chans, indio_dev->channels, size);
+		chans->event_spec = ad7380_events_irq;
+		chans->num_event_specs = ARRAY_SIZE(ad7380_events_irq);
+
+		indio_dev->channels = chans;
+	}
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
 					      iio_pollfunc_store_time,
