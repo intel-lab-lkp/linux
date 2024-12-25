@@ -505,11 +505,6 @@ static int pinctrl_scmi_get_pins(struct scmi_pinctrl *pmx,
 	return 0;
 }
 
-static const char * const scmi_pinctrl_blocklist[] = {
-	"fsl,imx95",
-	NULL
-};
-
 static int scmi_pinctrl_probe(struct scmi_device *sdev)
 {
 	int ret;
@@ -521,7 +516,7 @@ static int scmi_pinctrl_probe(struct scmi_device *sdev)
 	if (!sdev->handle)
 		return -EINVAL;
 
-	if (of_machine_compatible_match(scmi_pinctrl_blocklist))
+	if (!dev->fwnode)
 		return -ENODEV;
 
 	handle = sdev->handle;
