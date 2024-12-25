@@ -442,6 +442,9 @@ int ast_mode_config_init(struct ast_device *ast);
 #define ASTDP_1600x900_60_RB	0x1D
 #define ASTDP_1366x768_60		0x1E
 #define ASTDP_1152x864_75		0x1F
+#define ASTDP_1600x900_60_DMT		0x51
+#define ASTDP_1280x720_60		0x52
+#define ASTDP_1280x960_60		0x53
 
 int ast_mm_init(struct ast_device *ast);
 
