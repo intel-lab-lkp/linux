@@ -345,6 +345,11 @@ static void __scmi_device_destroy(struct scmi_device *scmi_dev)
 	device_unregister(&scmi_dev->dev);
 }
 
+static const char * const scmi_pinctrl_imx_lists[] = {
+	"fsl,imx95",
+	NULL
+};
+
 static int
 __scmi_device_set_node(struct scmi_device *scmi_dev, struct device_node *np,
 		       int protocol, const char *name)
@@ -352,6 +357,15 @@ __scmi_device_set_node(struct scmi_device *scmi_dev, struct device_node *np,
 	/* cpufreq device does not need to be supplier from devlink perspective */
 	if ((protocol == SCMI_PROTOCOL_PERF) && !strcmp(name, "cpufreq"))
 		return 0;
+
+	if (protocol == SCMI_PROTOCOL_PINCTRL) {
+		if (!strcmp(name, "pinctrl") &&
+		    of_machine_compatible_match(scmi_pinctrl_imx_lists))
+			return 0;
+		if (!strcmp(name, "pinctrl-imx") &&
+		    !of_machine_compatible_match(scmi_pinctrl_imx_lists))
+			return 0;
+	}
 
 	device_set_node(&scmi_dev->dev, of_fwnode_handle(np));
 
