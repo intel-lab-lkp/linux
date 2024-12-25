@@ -345,6 +345,19 @@ static void __scmi_device_destroy(struct scmi_device *scmi_dev)
 	device_unregister(&scmi_dev->dev);
 }
 
+static int
+__scmi_device_set_node(struct scmi_device *scmi_dev, struct device_node *np,
+		       int protocol, const char *name)
+{
+	/* cpufreq device does not need to be supplier from devlink perspective */
+	if ((protocol == SCMI_PROTOCOL_PERF) && !strcmp(name, "cpufreq"))
+		return 0;
+
+	device_set_node(&scmi_dev->dev, of_fwnode_handle(np));
+
+	return 0;
+}
+
 static struct scmi_device *
 __scmi_device_create(struct device_node *np, struct device *parent,
 		     int protocol, const char *name)
@@ -397,7 +410,7 @@ __scmi_device_create(struct device_node *np, struct device *parent,
 	scmi_dev->id = id;
 	scmi_dev->protocol_id = protocol;
 	scmi_dev->dev.parent = parent;
-	device_set_node(&scmi_dev->dev, of_fwnode_handle(np));
+	__scmi_device_set_node(scmi_dev, np, protocol, name);
 	scmi_dev->dev.bus = &scmi_bus_type;
 	scmi_dev->dev.release = scmi_device_release;
 	dev_set_name(&scmi_dev->dev, "scmi_dev.%d", id);
