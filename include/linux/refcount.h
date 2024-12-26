@@ -137,13 +137,19 @@ static inline unsigned int refcount_read(const refcount_t *r)
 }
 
 static inline __must_check __signed_wrap
-bool __refcount_add_not_zero(int i, refcount_t *r, int *oldp)
+bool __refcount_add_not_zero_limited(int i, refcount_t *r, int *oldp,
+				     int limit)
 {
 	int old = refcount_read(r);
 
 	do {
 		if (!old)
 			break;
+		if (limit && old + i > limit) {
+			if (oldp)
+				*oldp = old;
+			return false;
+		}
 	} while (!atomic_try_cmpxchg_relaxed(&r->refs, &old, old + i));
 
 	if (oldp)
@@ -153,6 +159,12 @@ bool __refcount_add_not_zero(int i, refcount_t *r, int *oldp)
 		refcount_warn_saturate(r, REFCOUNT_ADD_NOT_ZERO_OVF);
 
 	return old;
+}
+
+static inline __must_check __signed_wrap
+bool __refcount_add_not_zero(int i, refcount_t *r, int *oldp)
+{
+	return __refcount_add_not_zero_limited(i, r, oldp, 0);
 }
 
 /**
@@ -211,6 +223,12 @@ void __refcount_add(int i, refcount_t *r, int *oldp)
 static inline void refcount_add(int i, refcount_t *r)
 {
 	__refcount_add(i, r, NULL);
+}
+
+static inline __must_check bool __refcount_inc_not_zero_limited(refcount_t *r,
+								int *oldp, int limit)
+{
+	return __refcount_add_not_zero_limited(1, r, oldp, limit);
 }
 
 static inline __must_check bool __refcount_inc_not_zero(refcount_t *r, int *oldp)
