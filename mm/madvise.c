@@ -320,12 +320,13 @@ static inline bool can_do_file_pageout(struct vm_area_struct *vma)
 		return false;
 	/*
 	 * paging out pagecache only for non-anonymous mappings that correspond
-	 * to the files the calling process could (if tried) open for writing;
-	 * otherwise we'd be including shared non-exclusive mappings, which
-	 * opens a side channel.
+	 * to the files the calling process could (if tried) open for writing or
+	 * file from read-only super block; otherwise we'd be including
+	 * shared non-exclusive mappings, which opens a side channel.
 	 */
 	return inode_owner_or_capable(&nop_mnt_idmap,
 				      file_inode(vma->vm_file)) ||
+	       sb_rdonly(file_inode(vma->vm_file)->i_sb) ||
 	       file_permission(vma->vm_file, MAY_WRITE) == 0;
 }
 
