@@ -1341,7 +1341,10 @@ return_to_local : bb_return_to_local,
 
 static int __init bb_init_module(void)
 {
-	gpib_register_driver(&bb_interface, THIS_MODULE);
+	int result = gpib_register_driver(&bb_interface, THIS_MODULE);
+
+	if (result)
+		return result;
 
 	dbg_printk(0, "module loaded with pin map \"%s\"%s\n",
 		   pin_map, (sn7516x_used) ? " and SN7516x driver support" : "");
