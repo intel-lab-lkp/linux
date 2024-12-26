@@ -49,6 +49,24 @@ config PINCTRL_AMD
 	  Requires ACPI/FDT device enumeration code to set up a platform
 	  device.
 
+config PINCTRL_AMLOGIC
+	bool "AMLOGIC pincontrol"
+	depends on ARCH_MESON || COMPILE_TEST
+	depends on OF
+	default y
+	select PINMUX
+	select PINCONF
+	select GENERIC_PINCONF
+	select GPIOLIB
+	select OF_GPIO
+	select REGMAP_MMIO
+	help
+	  This is the driver for the pin controller found on Amlogic SoCs.
+
+	  This driver is simplify subsequent support for new amlogic SoCs,
+	  to support new Amlogic SoCs, only need to add the corresponding dts file,
+	  no additional binding header files or C file are added.
+
 config PINCTRL_APPLE_GPIO
 	tristate "Apple SoC GPIO pin controller driver"
 	depends on ARCH_APPLE
