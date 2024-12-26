@@ -180,7 +180,7 @@ static bool smc_tx_should_cork(struct smc_sock *smc, struct msghdr *msg)
  */
 int smc_tx_sendmsg(struct smc_sock *smc, struct msghdr *msg, size_t len)
 {
-	size_t copylen, send_done = 0, send_remaining = len;
+	size_t copylen, sent_bytes = 0, send_remaining = len;
 	size_t chunk_len, chunk_off, chunk_len_sum;
 	struct smc_connection *conn = &smc->conn;
 	union smc_host_cursor prep;
@@ -216,14 +216,12 @@ int smc_tx_sendmsg(struct smc_sock *smc, struct msghdr *msg, size_t len)
 		    conn->killed)
 			return -EPIPE;
 		if (smc_cdc_rxed_any_close(conn))
-			return send_done ?: -ECONNRESET;
+			return sent_bytes ?: -ECONNRESET;
 
 		if (msg->msg_flags & MSG_OOB)
 			conn->local_tx_ctrl.prod_flags.urg_data_pending = 1;
 
 		if (!atomic_read(&conn->sndbuf_space) || conn->urg_tx_pend) {
-			if (send_done)
-				return send_done;
 			rc = smc_tx_wait(smc, msg->msg_flags);
 			if (rc)
 				goto out_err;
@@ -250,11 +248,11 @@ int smc_tx_sendmsg(struct smc_sock *smc, struct msghdr *msg, size_t len)
 					     msg, chunk_len);
 			if (rc) {
 				smc_sndbuf_sync_sg_for_device(conn);
-				if (send_done)
-					return send_done;
+				if (sent_bytes)
+					return sent_bytes;
 				goto out_err;
 			}
-			send_done += chunk_len;
+			sent_bytes += chunk_len;
 			send_remaining -= chunk_len;
 
 			if (chunk_len_sum == copylen)
@@ -287,7 +285,7 @@ int smc_tx_sendmsg(struct smc_sock *smc, struct msghdr *msg, size_t len)
 		trace_smc_tx_sendmsg(smc, copylen);
 	} /* while (msg_data_left(msg)) */
 
-	return send_done;
+	return sent_bytes;
 
 out_err:
 	rc = sk_stream_error(sk, msg->msg_flags, rc);
