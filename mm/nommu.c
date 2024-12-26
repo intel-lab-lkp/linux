@@ -1189,6 +1189,7 @@ share:
 		goto error_just_free;
 
 	setup_vma_to_mm(vma, current->mm);
+	vma_start_write(vma);
 	current->mm->map_count++;
 	/* add the VMA to the tree */
 	vma_iter_store(&vmi, vma, true);
@@ -1356,6 +1357,7 @@ static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	setup_vma_to_mm(vma, mm);
 	setup_vma_to_mm(new, mm);
+	vma_start_write(new);
 	vma_iter_store(vmi, new, true);
 	mm->map_count++;
 	return 0;
