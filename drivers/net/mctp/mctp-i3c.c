@@ -125,6 +125,7 @@ static int mctp_i3c_read(struct mctp_i3c_device *mi)
 
 	xfer.data.in = skb_put(skb, mi->mrl);
 
+	mutex_lock(&mi->lock);
 	rc = i3c_device_do_priv_xfers(mi->i3c, &xfer, 1);
 	if (rc < 0)
 		goto err;
@@ -166,8 +167,10 @@ static int mctp_i3c_read(struct mctp_i3c_device *mi)
 		stats->rx_dropped++;
 	}
 
+	mutex_unlock(&mi->lock);
 	return 0;
 err:
+	mutex_unlock(&mi->lock);
 	kfree_skb(skb);
 	return rc;
 }
