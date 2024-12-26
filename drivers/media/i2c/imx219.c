@@ -74,7 +74,7 @@
 #define IMX219_FLL_MAX			0xffff
 #define IMX219_VBLANK_MIN		32
 #define IMX219_REG_LINE_LENGTH		CCI_REG16(0x0162)
-#define IMX219_LLP_MIN			0x0d78
+#define IMX219_LLP_MIN			0x0de8
 #define IMX219_LLP_MAX			0x7ff0
 
 #define IMX219_REG_X_ADD_STA_A		CCI_REG16(0x0164)
@@ -171,9 +171,9 @@ static const struct cci_reg_sequence imx219_common_regs[] = {
 	{ IMX219_REG_VTSYCK_DIV, 1 },
 	{ IMX219_REG_PREPLLCK_VT_DIV, 3 },	/* 0x03 = AUTO set */
 	{ IMX219_REG_PREPLLCK_OP_DIV, 3 },	/* 0x03 = AUTO set */
-	{ IMX219_REG_PLL_VT_MPY, 57 },
+	{ IMX219_REG_PLL_VT_MPY, 48 },
 	{ IMX219_REG_OPSYCK_DIV, 1 },
-	{ IMX219_REG_PLL_OP_MPY, 114 },
+	{ IMX219_REG_PLL_OP_MPY, 96 },
 
 	/* Undocumented registers */
 	{ CCI_REG8(0x455e), 0x00 },
@@ -287,25 +287,25 @@ static const struct imx219_mode supported_modes[] = {
 		/* 8MPix 15fps mode */
 		.width = 3280,
 		.height = 2464,
-		.vts_def = 3526,
+		.vts_def = 2876,
 	},
 	{
 		/* 1080P 30fps cropped */
 		.width = 1920,
 		.height = 1080,
-		.vts_def = 1763,
+		.vts_def = 1438,
 	},
 	{
 		/* 2x2 binned 30fps mode */
 		.width = 1640,
 		.height = 1232,
-		.vts_def = 1763,
+		.vts_def = 1438,
 	},
 	{
 		/* 640x480 30fps mode */
 		.width = 640,
 		.height = 480,
-		.vts_def = 1763,
+		.vts_def = 1438,
 	},
 };
 
