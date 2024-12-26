@@ -145,7 +145,7 @@ __must_check int vma_shrink(struct vma_iterator *vmi,
 		unsigned long start, unsigned long end, pgoff_t pgoff);
 
 static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
-			struct vm_area_struct *vma, gfp_t gfp)
+			struct vm_area_struct *vma, gfp_t gfp, bool new_vma)
 
 {
 	if (vmi->mas.status != ma_start &&
@@ -157,7 +157,10 @@ static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
 	if (unlikely(mas_is_err(&vmi->mas)))
 		return -ENOMEM;
 
-	vma_mark_attached(vma);
+	if (new_vma)
+		vma_mark_attached(vma);
+	vma_assert_attached(vma);
+
 	return 0;
 }
 
@@ -366,7 +369,7 @@ static inline struct vm_area_struct *vma_iter_load(struct vma_iterator *vmi)
 
 /* Store a VMA with preallocated memory */
 static inline void vma_iter_store(struct vma_iterator *vmi,
-				  struct vm_area_struct *vma)
+				  struct vm_area_struct *vma, bool new_vma)
 {
 
 #if defined(CONFIG_DEBUG_VM_MAPLE_TREE)
@@ -390,7 +393,9 @@ static inline void vma_iter_store(struct vma_iterator *vmi,
 
 	__mas_set_range(&vmi->mas, vma->vm_start, vma->vm_end - 1);
 	mas_store_prealloc(&vmi->mas, vma);
-	vma_mark_attached(vma);
+	if (new_vma)
+		vma_mark_attached(vma);
+	vma_assert_attached(vma);
 }
 
 static inline unsigned long vma_iter_addr(struct vma_iterator *vmi)
