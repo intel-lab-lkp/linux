@@ -781,6 +781,8 @@ struct hv_timer_message_payload {
 	__u64 delivery_time;	/* When the message was delivered */
 } __packed;
 
+#if defined(CONFIG_X86)
+
 struct hv_x64_segment_register {
 	u64 base;
 	u32 limit;
@@ -806,6 +808,8 @@ struct hv_x64_table_register {
 	u16 limit;
 	u64 base;
 } __packed;
+
+#endif
 
 union hv_input_vtl {
 	u8 as_uint8;
@@ -1068,6 +1072,41 @@ union hv_dispatch_suspend_register {
 	} __packed;
 };
 
+#if defined(CONFIG_ARM64)
+
+union hv_arm64_pending_interruption_register {
+	u64 as_uint64;
+	struct {
+		u64 interruption_pending : 1;
+		u64 interruption_type : 1;
+		u64 reserved : 30;
+		u32 error_code;
+	} __packed;
+};
+
+union hv_arm64_interrupt_state_register {
+	u64 as_uint64;
+	struct {
+		u64 interrupt_shadow : 1;
+		u64 reserved : 63;
+	} __packed;
+};
+
+union hv_arm64_pending_synthetic_exception_event {
+	u64 as_uint64[2];
+	struct {
+		u32 event_pending : 1;
+		u32 event_type : 3;
+		u32 reserved : 4;
+		u32 exception_type;
+		u64 context;
+	} __packed;
+};
+
+#endif
+
+#if defined(CONFIG_X86)
+
 union hv_x64_interrupt_state_register {
 	u64 as_uint64;
 	struct {
@@ -1091,6 +1130,8 @@ union hv_x64_pending_interruption_register {
 	} __packed;
 };
 
+#endif
+
 union hv_register_value {
 	struct hv_u128 reg128;
 	u64 reg64;
@@ -1098,13 +1139,26 @@ union hv_register_value {
 	u16 reg16;
 	u8 reg8;
 
-	struct hv_x64_segment_register segment;
-	struct hv_x64_table_register table;
 	union hv_explicit_suspend_register explicit_suspend;
 	union hv_intercept_suspend_register intercept_suspend;
 	union hv_dispatch_suspend_register dispatch_suspend;
+#if defined(CONFIG_X86)
+	struct hv_x64_segment_register segment;
+	struct hv_x64_table_register table;
 	union hv_x64_interrupt_state_register interrupt_state;
 	union hv_x64_pending_interruption_register pending_interruption;
+#elif defined(CONFIG_ARM64)
+	union hv_arm64_pending_interruption_register pending_interruption;
+	union hv_arm64_interrupt_state_register interrupt_state;
+	union hv_arm64_pending_synthetic_exception_event pending_synthetic_exception_event;
+#else
+	#error "This architecture is not supported"
+#endif
+};
+
+/* NOTE: Linux helper struct - NOT from Hyper-V code */
+struct hv_output_get_vp_registers {
+	DECLARE_FLEX_ARRAY(union hv_register_value, values);
 };
 
 #if defined(CONFIG_ARM64)
