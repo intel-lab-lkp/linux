@@ -138,7 +138,21 @@ static inline void psi_enqueue(struct task_struct *p, int flags)
 	if (flags & ENQUEUE_RESTORE)
 		return;
 
-	if (p->se.sched_delayed) {
+	if (p->psi_flags & TSK_ONCPU) {
+		/*
+		 * psi_enqueue() can race with psi_task_switch() where
+		 * TSK_ONCPU will be still set for the task (see the
+		 * comment in psi_task_switch())
+		 *
+		 * Reaching here with TSK_ONCPU is only possible when
+		 * the task is being enqueued on the same CPU. Since
+		 * psi_task_switch() has not had the chance to adjust
+		 * the flags yet, just clear the TSK_ONCPU which yields
+		 * the same result as sleep + wakeup without migration.
+		 */
+		SCHED_WARN_ON(flags & ENQUEUE_MIGRATED);
+		clear = TSK_ONCPU;
+	} else if (p->se.sched_delayed) {
 		/* CPU migration of "sleeping" task */
 		SCHED_WARN_ON(!(flags & ENQUEUE_MIGRATED));
 		if (p->in_memstall)

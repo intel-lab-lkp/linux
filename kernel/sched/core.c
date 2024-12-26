@@ -6717,6 +6717,12 @@ picked:
 	rq->last_seen_need_resched_ns = 0;
 #endif
 
+	/*
+	 * PSI might have to deal with the consequences of newidle balance
+	 * possibly dropping the rq lock and prev being requeued and selected.
+	 */
+	psi_sched_switch(prev, next, block);
+
 	if (likely(prev != next)) {
 		rq->nr_switches++;
 		/*
@@ -6750,7 +6756,6 @@ picked:
 
 		migrate_disable_switch(rq, prev);
 		psi_account_irqtime(rq, prev, next);
-		psi_sched_switch(prev, next, block);
 
 		trace_sched_switch(preempt, prev, next, prev_state);
 

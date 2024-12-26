@@ -917,9 +917,21 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		     bool sleep)
 {
 	struct psi_group *group, *common = NULL;
-	int cpu = task_cpu(prev);
+	int prev_cpu, cpu;
+
+	/* No race between psi_dequeue() and now */
+	if (prev == next && (prev->psi_flags & TSK_ONCPU))
+		return;
+
+	prev_cpu = task_cpu(prev);
+	cpu = smp_processor_id();
 
 	if (next->pid) {
+		/*
+		 * If next == prev but TSK_ONCPU is cleared, the task was
+		 * requeued when newidle balance dropped the rq lock and
+		 * psi_enqueue() cleared the TSK_ONCPU flag.
+		 */
 		psi_flags_change(next, 0, TSK_ONCPU);
 		/*
 		 * Set TSK_ONCPU on @next's cgroups. If @next shares any
@@ -928,8 +940,13 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 		 */
 		group = task_psi_group(next);
 		do {
-			if (per_cpu_ptr(group->pcpu, cpu)->state_mask &
-			    PSI_ONCPU) {
+			/*
+			 * Since newidle balance can drop the rq lock (see the next comment)
+			 * there is a possibility of try_to_wake_up() migrating prev away
+			 * before reaching here. Do not find common if task has migrated.
+			 */
+			if (prev_cpu == cpu &&
+			    (per_cpu_ptr(group->pcpu, cpu)->state_mask & PSI_ONCPU)) {
 				common = group;
 				break;
 			}
@@ -937,6 +954,48 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 			psi_group_change(group, cpu, 0, TSK_ONCPU, true);
 		} while ((group = group->parent));
 	}
+
+	/*
+	 * When a task is blocked, psi_dequeue() leaves the PSI flag
+	 * adjustments to psi_task_switch() however, there is a possibility of
+	 * rq lock being dropped in the interim and the task being woken up
+	 * again before psi_task_switch() is called leading to psi_enqueue()
+	 * seeing the flags for a running task. Specifically, the following
+	 * scenario is possible:
+	 *
+	 * __schedule()
+	 *   rq_lock(rq)
+	 *     try_to_block_task(p)
+	 *       psi_dequeue()
+	 *        [ psi_task_switch() is responsible
+	 *          for adjusting the PSI flags ]
+	 *     put_prev_entity(&p->se)			try_to_wake_up(p)
+	 *     # no runnable task on rq->cfs		  ...
+	 *     sched_balance_newidle()
+	 *	 raw_spin_rq_unlock(rq)			  __task_rq_lock(p)
+	 *	 ...					  psi_enqueue()/psi_ttwu_dequeue() [Woops!]
+	 *						  __task_rq_unlock(p)
+	 *	 raw_spin_rq_lock(rq)
+	 *     ...
+	 *     [ p was re-enqueued or has migrated away ]
+	 *     ...
+	 *     psi_task_switch() [Too late!]
+	 *   raw_spin_rq_unlock(rq)
+	 *
+	 * In the above case, psi_enqueue() can sees the p->psi_flags state
+	 * before it is adjusted to account for dequeue in psi_task_switch(),
+	 * or psi_ttwu_dequeue() can clear the p->psi_flags which
+	 * psi_task_switch() tries to adjust assuming that the entity has just
+	 * finished running.
+	 *
+	 * Since TSK_ONCPU has to be adjusted holding task CPU's rq lock, use
+	 * the combination of TSK_ONCPU and task_cpu(p) to catch the race
+	 * between psi_task_switch() and psi_enqueue() / psi_ttwu_dequeue()
+	 * Since psi_enqueue() / psi_ttwu_dequeue() would have set the correct
+	 * flags already for prev on this CPU, skip adjusting flags.
+	 */
+	if (prev == next || prev_cpu != cpu || !(prev->psi_flags & TSK_ONCPU))
+		return;
 
 	if (prev->pid) {
 		int clear = TSK_ONCPU, set = 0;
