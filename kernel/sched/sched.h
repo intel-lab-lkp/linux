@@ -92,7 +92,16 @@ struct cpuidle_state;
 #include "cpudeadline.h"
 
 #ifdef CONFIG_SCHED_DEBUG
-# define SCHED_WARN_ON(x)      WARN_ONCE(x, #x)
+# define deferred_warn_on(fmt, ...) \
+	printk_deferred_once(KERN_WARNING "WARNING: " fmt, ##__VA_ARGS__)
+# define SCHED_WARN_ON(x) ({\
+	int __ret_warn_on = !!(x); \
+	if (unlikely(__ret_warn_on)) { \
+		deferred_warn_on(CUT_HERE); \
+		deferred_warn_on(#x); \
+	} \
+	unlikely(__ret_warn_on); \
+})
 #else
 # define SCHED_WARN_ON(x)      ({ (void)(x), 0; })
 #endif
