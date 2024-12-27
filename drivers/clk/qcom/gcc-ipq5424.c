@@ -531,7 +531,7 @@ static struct clk_rcg2 gcc_qupv3_i2c1_clk_src = {
 	},
 };
 
-static const struct freq_tbl ftbl_gcc_qupv3_spi0_clk_src[] = {
+static const struct freq_tbl ftbl_gcc_qupv3_spi4_clk_src[] = {
 	F(960000, P_XO, 10, 2, 5),
 	F(4800000, P_XO, 5, 0, 0),
 	F(9600000, P_XO, 2, 4, 5),
@@ -543,14 +543,14 @@ static const struct freq_tbl ftbl_gcc_qupv3_spi0_clk_src[] = {
 	{ }
 };
 
-static struct clk_rcg2 gcc_qupv3_spi0_clk_src = {
+static struct clk_rcg2 gcc_qupv3_spi4_clk_src = {
 	.cmd_rcgr = 0x4004,
 	.mnd_width = 8,
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_0,
-	.freq_tbl = ftbl_gcc_qupv3_spi0_clk_src,
+	.freq_tbl = ftbl_gcc_qupv3_spi4_clk_src,
 	.clkr.hw.init = &(const struct clk_init_data) {
-		.name = "gcc_qupv3_spi0_clk_src",
+		.name = "gcc_qupv3_spi4_clk_src",
 		.parent_data = gcc_parent_data_0,
 		.num_parents = ARRAY_SIZE(gcc_parent_data_0),
 		.ops = &clk_rcg2_ops,
@@ -562,7 +562,7 @@ static struct clk_rcg2 gcc_qupv3_spi1_clk_src = {
 	.mnd_width = 8,
 	.hid_width = 5,
 	.parent_map = gcc_parent_map_0,
-	.freq_tbl = ftbl_gcc_qupv3_spi0_clk_src,
+	.freq_tbl = ftbl_gcc_qupv3_spi4_clk_src,
 	.clkr.hw.init = &(const struct clk_init_data) {
 		.name = "gcc_qupv3_spi1_clk_src",
 		.parent_data = gcc_parent_data_0,
@@ -2072,16 +2072,16 @@ static struct clk_branch gcc_qupv3_i2c1_clk = {
 	},
 };
 
-static struct clk_branch gcc_qupv3_spi0_clk = {
+static struct clk_branch gcc_qupv3_spi4_clk = {
 	.halt_reg = 0x4020,
 	.halt_check = BRANCH_HALT,
 	.clkr = {
 		.enable_reg = 0x4020,
 		.enable_mask = BIT(0),
 		.hw.init = &(const struct clk_init_data) {
-			.name = "gcc_qupv3_spi0_clk",
+			.name = "gcc_qupv3_spi4_clk",
 			.parent_hws = (const struct clk_hw*[]) {
-				&gcc_qupv3_spi0_clk_src.clkr.hw,
+				&gcc_qupv3_spi4_clk_src.clkr.hw,
 			},
 			.num_parents = 1,
 			.flags = CLK_SET_RATE_PARENT,
@@ -2862,8 +2862,8 @@ static struct clk_regmap *gcc_ipq5424_clocks[] = {
 	[GCC_QUPV3_I2C1_CLK] = &gcc_qupv3_i2c1_clk.clkr,
 	[GCC_QUPV3_I2C1_CLK_SRC] = &gcc_qupv3_i2c1_clk_src.clkr,
 	[GCC_QUPV3_I2C1_DIV_CLK_SRC] = &gcc_qupv3_i2c1_div_clk_src.clkr,
-	[GCC_QUPV3_SPI0_CLK] = &gcc_qupv3_spi0_clk.clkr,
-	[GCC_QUPV3_SPI0_CLK_SRC] = &gcc_qupv3_spi0_clk_src.clkr,
+	[GCC_QUPV3_SPI4_CLK] = &gcc_qupv3_spi4_clk.clkr,
+	[GCC_QUPV3_SPI4_CLK_SRC] = &gcc_qupv3_spi4_clk_src.clkr,
 	[GCC_QUPV3_SPI1_CLK] = &gcc_qupv3_spi1_clk.clkr,
 	[GCC_QUPV3_SPI1_CLK_SRC] = &gcc_qupv3_spi1_clk_src.clkr,
 	[GCC_QUPV3_UART0_CLK] = &gcc_qupv3_uart0_clk.clkr,
