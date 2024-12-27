@@ -51,6 +51,7 @@ static const struct enic_stat enic_per_rq_stats[] = {
 	ENIC_PER_RQ_STAT(napi_repoll),
 	ENIC_PER_RQ_STAT(no_skb),
 	ENIC_PER_RQ_STAT(desc_skip),
+	ENIC_PER_RQ_STAT(pp_alloc_error),
 };
 
 #define NUM_ENIC_PER_RQ_STATS   ARRAY_SIZE(enic_per_rq_stats)
