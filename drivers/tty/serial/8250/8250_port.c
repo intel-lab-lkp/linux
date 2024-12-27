@@ -2083,7 +2083,14 @@ static bool wait_for_lsr(struct uart_8250_port *up, int bits)
 {
 	unsigned int status, tmout = 10000;
 
-	/* Wait up to 10ms for the character(s) to be sent. */
+	/*
+	 * Wait for a character to be sent. Fallback to a safe default
+	 * timeout value if @frame_time is not available.
+	 */
+
+	if (up->port.frame_time)
+		tmout = up->port.frame_time * 2 / NSEC_PER_USEC;
+
 	for (;;) {
 		status = serial_lsr_in(up);
 
