@@ -325,7 +325,14 @@ void hp82335_detach(gpib_board_t *board)
 
 static int __init hp82335_init_module(void)
 {
-	gpib_register_driver(&hp82335_interface, THIS_MODULE);
+	int result = gpib_register_driver(&hp82335_interface, THIS_MODULE);
+
+	if (result) {
+		pr_err("hp82335: gpib_register_driver failed!\n");
+		return result;
+	}
+
+	pr_info("hp82335: module init is complete\n");
 	return 0;
 }
 
