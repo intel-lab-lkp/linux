@@ -1422,12 +1422,12 @@ static int __maybe_unused lpi2c_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static int lpi2c_suspend_noirq(struct device *dev)
+static int __maybe_unused lpi2c_suspend_noirq(struct device *dev)
 {
 	return pm_runtime_force_suspend(dev);
 }
 
-static int lpi2c_resume_noirq(struct device *dev)
+static int __maybe_unused lpi2c_resume_noirq(struct device *dev)
 {
 	struct lpi2c_imx_struct *lpi2c_imx = dev_get_drvdata(dev);
 	int ret;
