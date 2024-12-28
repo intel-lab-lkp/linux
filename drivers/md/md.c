@@ -585,6 +585,8 @@ bool md_flush_request(struct mddev *mddev, struct bio *bio)
 		new = bio_alloc_bioset(rdev->bdev, 0,
 				       REQ_OP_WRITE | REQ_PREFLUSH, GFP_NOIO,
 				       &mddev->bio_set);
+		if (!new)
+			continue;
 		new->bi_private = bio;
 		new->bi_end_io = md_end_flush;
 		bio_inc_remaining(bio);
