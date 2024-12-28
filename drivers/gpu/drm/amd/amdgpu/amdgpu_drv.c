@@ -563,12 +563,36 @@ module_param_named(lbpw, amdgpu_lbpw, int, 0444);
 MODULE_PARM_DESC(compute_multipipe, "Force compute queues to be spread across pipes (1 = enable, 0 = disable, -1 = auto)");
 module_param_named(compute_multipipe, amdgpu_compute_multipipe, int, 0444);
 
+static int amdgpu_set_gpu_recovery(const char *buf,
+				   const struct kernel_param *kp)
+{
+	unsigned long val;
+	int ret;
+
+	ret = kstrtol(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val != 1 && val != 0 && val != -1) {
+		pr_err("Invalid value for gpu_recovery: %ld, excepted 0,1,-1\n",
+		       val);
+		return -EINVAL;
+	}
+
+	return param_set_int(buf, kp);
+}
+
+static const struct kernel_param_ops amdgpu_gpu_recovery_ops = {
+	.set = amdgpu_set_gpu_recovery,
+	.get = param_get_int,
+};
+
 /**
  * DOC: gpu_recovery (int)
  * Set to enable GPU recovery mechanism (1 = enable, 0 = disable). The default is -1 (auto, disabled except SRIOV).
  */
 MODULE_PARM_DESC(gpu_recovery, "Enable GPU recovery mechanism, (1 = enable, 0 = disable, -1 = auto)");
-module_param_named(gpu_recovery, amdgpu_gpu_recovery, int, 0444);
+module_param_cb(gpu_recovery, &amdgpu_gpu_recovery_ops, &amdgpu_gpu_recovery, 0644);
 
 /**
  * DOC: emu_mode (int)
