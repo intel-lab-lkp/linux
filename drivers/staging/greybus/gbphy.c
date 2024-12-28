@@ -204,8 +204,10 @@ int gb_gbphy_register_driver(struct gbphy_driver *driver,
 	driver->driver.mod_name = mod_name;
 
 	retval = driver_register(&driver->driver);
-	if (retval)
+	if (retval) {
+		pr_err("failed to register driver %s: %d\n", driver->name, retval);
 		return retval;
+	}
 
 	pr_info("registered new driver %s\n", driver->name);
 	return 0;
