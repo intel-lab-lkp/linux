@@ -784,7 +784,7 @@ static const struct device_type gpio_dev_type = {
 #define gcdev_unregister(gdev)		device_del(&(gdev)->dev)
 #endif
 
-static int gpiochip_setup_dev(struct gpio_device *gdev)
+static int gpiochip_setup_dev(struct gpio_device *gdev, bool locked)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(&gdev->dev);
 	int ret;
@@ -800,7 +800,7 @@ static int gpiochip_setup_dev(struct gpio_device *gdev)
 
 	ret = gcdev_register(gdev, gpio_devt);
 	if (ret)
-		return ret;
+		goto err_put_device;
 
 	ret = gpiochip_sysfs_register(gdev);
 	if (ret)
@@ -813,6 +813,14 @@ static int gpiochip_setup_dev(struct gpio_device *gdev)
 
 err_remove_device:
 	gcdev_unregister(gdev);
+err_put_device:
+	if (locked)
+		list_del_rcu(&gdev->list);
+	else
+		scoped_guard(mutex, &gpio_devices_lock)
+			list_del_rcu(&gdev->list);
+	synchronize_srcu(&gpio_devices_srcu);
+	gpio_device_put(gdev);
 	return ret;
 }
 
@@ -850,17 +858,15 @@ static void machine_gpiochip_add(struct gpio_chip *gc)
 
 static void gpiochip_setup_devs(void)
 {
-	struct gpio_device *gdev;
+	struct gpio_device *gdev, *tmp;
 	int ret;
 
-	guard(srcu)(&gpio_devices_srcu);
-
-	list_for_each_entry_srcu(gdev, &gpio_devices, list,
-				 srcu_read_lock_held(&gpio_devices_srcu)) {
-		ret = gpiochip_setup_dev(gdev);
-		if (ret)
-			dev_err(&gdev->dev,
-				"Failed to initialize gpio device (%d)\n", ret);
+	scoped_guard(mutex, &gpio_devices_lock) {
+		list_for_each_entry_safe(gdev, tmp, &gpio_devices, list) {
+			ret = gpiochip_setup_dev(gdev, true);
+			if (ret)
+				pr_err("Failed to initialize gpio device (%d)\n", ret);
+		}
 	}
 }
 
@@ -921,6 +927,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 			       struct lock_class_key *request_key)
 {
 	struct gpio_device *gdev;
+	bool already_put = false;
 	unsigned int desc_index;
 	int base = 0;
 	int ret = 0;
@@ -1098,9 +1105,11 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 	 * Otherwise, defer until later.
 	 */
 	if (gpiolib_initialized) {
-		ret = gpiochip_setup_dev(gdev);
-		if (ret)
+		ret = gpiochip_setup_dev(gdev, false);
+		if (ret) {
+			already_put = true;
 			goto err_remove_irqchip;
+		}
 	}
 	return 0;
 
@@ -1116,6 +1125,8 @@ err_remove_of_chip:
 	of_gpiochip_remove(gc);
 err_free_valid_mask:
 	gpiochip_free_valid_mask(gc);
+	if (already_put)
+		goto err_print_message;
 err_cleanup_desc_srcu:
 	cleanup_srcu_struct(&gdev->desc_srcu);
 err_cleanup_gdev_srcu:
@@ -1124,11 +1135,6 @@ err_remove_from_list:
 	scoped_guard(mutex, &gpio_devices_lock)
 		list_del_rcu(&gdev->list);
 	synchronize_srcu(&gpio_devices_srcu);
-	if (gdev->dev.release) {
-		/* release() has been registered by gpiochip_setup_dev() */
-		gpio_device_put(gdev);
-		goto err_print_message;
-	}
 err_free_label:
 	kfree_const(gdev->label);
 err_free_descs:
