@@ -54,7 +54,7 @@ In order to support PI-aware pthread_condvar's, the kernel needs to
 be able to requeue tasks to PI futexes.  This support implies that
 upon a successful futex_wait system call, the caller would return to
 user space already holding the PI futex.  The glibc implementation
-would be modified as follows::
+would need to be modified as follows::
 
 
 	/* caller must lock mutex */
@@ -78,10 +78,20 @@ would be modified as follows::
 		futex_requeue_pi(cond->data.__futex, cond->mutex);
 	}
 
-The actual glibc implementation will likely test for PI and make the
-necessary changes inside the existing calls rather than creating new
-calls for the PI cases.  Similar changes are needed for
-pthread_cond_timedwait() and pthread_cond_signal().
+The actual glibc libpthread implementation has not made these changes,
+nor has it made similar changes needed for pthread_cond_timedwait()
+and pthread_cond_signal().  The reason is that POSIX has a strict
+notion of "eligible" waiters on a futex, which means the set of
+waiters created before a given signal is sent.  Because userspace has
+no atomic way to perform lock operations together with the futex
+system call, the implementation must also carefully guard against lost
+wakeups on a multicore system.  These constraints mean that the
+libpthread condition variable would need an ABI break into order to
+support requeueing.  The fundamental underlying difficulty stems from
+the limited size of the futex word, which is 32 bits even on 64-bit
+systems.  See
+https://wiki.linuxfoundation.org/realtime/events/rt-summit2016/pthread-condvars
+for details.
 
 Implementation
 --------------
@@ -130,3 +140,30 @@ either pthread_cond_broadcast() or pthread_cond_signal() acquire the
 mutex prior to making the call. FUTEX_CMP_REQUEUE_PI requires that
 nr_wake=1.  nr_requeue should be INT_MAX for broadcast and 0 for
 signal.
+
+librtpi
+--------------
+
+librtpi (https://gitlab.com/linux-rt/librtpi) implements condition
+variables which closely follow the guidance above.  The librtpi
+implementation adds a new mutex parameter to the waiting and signaling
+functions in order to support the requirement that mutexes with the
+PTHREAD_PRIO_INHERIT attribute always have an owner:
+
+int pi_cond_wait(pi_cond_t *cond, pi_mutex_t *mutex);
+int pi_cond_signal(pi_cond_t *cond, pi_mutex_t *mutex);
+
+Realtime userspace applications which rely on librtpi must therefore
+make code changes.
+
+librtpi works with the kernel scheduler to wake the highest-priority
+waiters on a futex in FIFO order.  The code is much simpler than
+glibc's at the cost of omitting some POSIX-mandated features.  librtpi
+has no notion of POSIX's eligible waiters, and it does not support
+robust, process-private or PTHREAD_PRIO_PROTECT mutexes.
+
+other C libraries
+--------------
+
+Like glibc's NPTL, other prominent threading libraries like musl,
+Thread Building Blocks and Boost do not implement futex requeueing.
