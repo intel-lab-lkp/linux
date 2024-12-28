@@ -1578,7 +1578,7 @@ static void nvme_tcp_set_queue_io_cpu(struct nvme_tcp_queue *queue)
 	if (wq_unbound)
 		queue->io_cpu = WORK_CPU_UNBOUND;
 	else
-		queue->io_cpu = cpumask_next_wrap_old(n - 1, cpu_online_mask, -1, false);
+		queue->io_cpu = cpumask_next_wrap(n - 1, cpu_online_mask);
 }
 
 static void nvme_tcp_tls_done(void *data, int status, key_serial_t pskid)
