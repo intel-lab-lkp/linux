@@ -59,14 +59,12 @@
 
 #endif
 
-#ifdef DEFAULT_SYMBOL_NAMESPACE
-#define _EXPORT_SYMBOL(sym, license)	__EXPORT_SYMBOL(sym, license, DEFAULT_SYMBOL_NAMESPACE)
-#else
-#define _EXPORT_SYMBOL(sym, license)	__EXPORT_SYMBOL(sym, license, "")
+#ifndef DEFAULT_SYMBOL_NAMESPACE
+#define DEFAULT_SYMBOL_NAMESPACE ""
 #endif
 
-#define EXPORT_SYMBOL(sym)		_EXPORT_SYMBOL(sym, "")
-#define EXPORT_SYMBOL_GPL(sym)		_EXPORT_SYMBOL(sym, "GPL")
+#define EXPORT_SYMBOL(sym)		__EXPORT_SYMBOL(sym, "", DEFAULT_SYMBOL_NAMESPACE)
+#define EXPORT_SYMBOL_GPL(sym)		__EXPORT_SYMBOL(sym, "GPL", DEFAULT_SYMBOL_NAMESPACE)
 #define EXPORT_SYMBOL_NS(sym, ns)	__EXPORT_SYMBOL(sym, "", ns)
 #define EXPORT_SYMBOL_NS_GPL(sym, ns)	__EXPORT_SYMBOL(sym, "GPL", ns)
 

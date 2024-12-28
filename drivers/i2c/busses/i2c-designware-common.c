@@ -29,6 +29,7 @@
 #include <linux/types.h>
 #include <linux/units.h>
 
+#undef DEFAULT_SYMBOL_NAMESPACE
 #define DEFAULT_SYMBOL_NAMESPACE	"I2C_DW_COMMON"
 
 #include "i2c-designware-core.h"

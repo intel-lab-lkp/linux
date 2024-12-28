@@ -16,6 +16,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 
+#undef DEFAULT_SYMBOL_NAMESPACE
 #define DEFAULT_SYMBOL_NAMESPACE	"I2C_DW"
 
 #include "i2c-designware-core.h"
