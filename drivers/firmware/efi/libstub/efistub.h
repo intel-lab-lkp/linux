@@ -40,6 +40,8 @@ extern bool efi_nokaslr;
 extern int efi_loglevel;
 extern int efi_mem_encrypt;
 extern bool efi_novamap;
+extern bool efi_enable_apple_set_os;
+extern bool efi_disable_apple_set_os;
 extern const efi_system_table_t *efi_system_table;
 
 typedef union efi_dxe_services_table efi_dxe_services_table_t;

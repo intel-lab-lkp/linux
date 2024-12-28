@@ -20,6 +20,8 @@
 bool efi_nochunk;
 bool efi_nokaslr = !IS_ENABLED(CONFIG_RANDOMIZE_BASE);
 bool efi_novamap;
+bool efi_enable_apple_set_os;
+bool efi_disable_apple_set_os;
 
 static bool efi_noinitrd;
 static bool efi_nosoftreserve;
@@ -95,6 +97,10 @@ efi_status_t efi_parse_options(char const *cmdline)
 				efi_disable_pci_dma = true;
 			if (parse_option_str(val, "no_disable_early_pci_dma"))
 				efi_disable_pci_dma = false;
+			if (parse_option_str(val, "enable_apple_set_os"))
+				efi_enable_apple_set_os = true;
+			if (parse_option_str(val, "disable_apple_set_os"))
+				efi_disable_apple_set_os = true;
 			if (parse_option_str(val, "debug"))
 				efi_loglevel = CONSOLE_LOGLEVEL_DEBUG;
 		} else if (!strcmp(param, "video") &&

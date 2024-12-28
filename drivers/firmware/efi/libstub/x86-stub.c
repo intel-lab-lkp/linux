@@ -265,7 +265,8 @@ static void apple_set_os(void)
 	} *set_os;
 	efi_status_t status;
 
-	if (!efi_is_64bit() || !apple_match_product_name())
+	if (efi_disable_apple_set_os || !efi_is_64bit() ||
+		!efi_enable_apple_set_os && !apple_match_product_name())
 		return;
 
 	status = efi_bs_call(locate_protocol, &APPLE_SET_OS_PROTOCOL_GUID, NULL,
