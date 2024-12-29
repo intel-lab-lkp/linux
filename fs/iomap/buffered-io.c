@@ -325,6 +325,7 @@ struct iomap_readpage_ctx {
 	bool			cur_folio_in_bio;
 	struct bio		*bio;
 	struct readahead_control *rac;
+	int			flags;
 };
 
 /**
@@ -363,7 +364,8 @@ static inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 
 	return srcmap->type != IOMAP_MAPPED ||
 		(srcmap->flags & IOMAP_F_NEW) ||
-		pos >= i_size_read(iter->inode);
+		(pos >= i_size_read(iter->inode) &&
+		 !(srcmap->flags & IOMAP_F_BEYOND_EOF));
 }
 
 static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
@@ -2091,6 +2093,105 @@ iomap_writepages_unbound(struct address_space *mapping, struct writeback_control
 	return iomap_submit_ioend(wpc, error);
 }
 EXPORT_SYMBOL_GPL(iomap_writepages_unbound);
+
+struct folio *
+iomap_read_region(struct ioregion *region)
+{
+	struct inode *inode = region->inode;
+	fgf_t fgp = FGP_CREAT | FGP_LOCK | fgf_set_order(region->length);
+	pgoff_t index = (region->pos | region->offset) >> PAGE_SHIFT;
+	struct folio *folio = __filemap_get_folio(inode->i_mapping, index, fgp,
+				    mapping_gfp_mask(inode->i_mapping));
+	struct iomap_readpage_ctx ctx = {
+		.cur_folio = folio,
+	};
+	struct iomap_iter iter = {
+		.inode = inode,
+		.pos = folio_pos(folio),
+		.len = folio_size(folio),
+	};
+	int ret;
+
+	if (folio_test_uptodate(folio)) {
+		folio_unlock(folio);
+		return folio;
+	}
+
+	while ((ret = iomap_iter(&iter, region->ops)) > 0)
+		iter.processed = iomap_readpage_iter(&iter, &ctx, 0);
+
+	if (ret < 0) {
+		folio_unlock(folio);
+		return ERR_PTR(ret);
+	}
+
+	if (ctx.bio) {
+		submit_bio(ctx.bio);
+		WARN_ON_ONCE(!ctx.cur_folio_in_bio);
+	} else {
+		WARN_ON_ONCE(ctx.cur_folio_in_bio);
+		folio_unlock(folio);
+	}
+
+	return folio;
+}
+EXPORT_SYMBOL_GPL(iomap_read_region);
+
+static loff_t iomap_write_region_iter(struct iomap_iter *iter, const void *buf)
+{
+	loff_t pos = iter->pos;
+	loff_t length = iomap_length(iter);
+	loff_t written = 0;
+
+	do {
+		struct folio *folio;
+		int status;
+		size_t offset;
+		size_t bytes = min_t(u64, SIZE_MAX, length);
+		bool ret;
+
+		status = iomap_write_begin(iter, pos, bytes, &folio);
+		if (status)
+			return status;
+		if (iter->iomap.flags & IOMAP_F_STALE)
+			break;
+
+		offset = offset_in_folio(folio, pos);
+		if (bytes > folio_size(folio) - offset)
+			bytes = folio_size(folio) - offset;
+
+		memcpy_to_folio(folio, offset, buf, bytes);
+
+		ret = iomap_write_end(iter, pos, bytes, bytes, folio);
+		if (WARN_ON_ONCE(!ret))
+			return -EIO;
+
+		__iomap_put_folio(iter, pos, written, folio);
+
+		pos += bytes;
+		length -= bytes;
+		written += bytes;
+	} while (length > 0);
+
+	return written;
+}
+
+int
+iomap_write_region(struct ioregion *region)
+{
+	struct iomap_iter iter = {
+		.inode		= region->inode,
+		.pos		= region->pos | region->offset,
+		.len		= region->length,
+	};
+	ssize_t ret;
+
+	while ((ret = iomap_iter(&iter, region->ops)) > 0)
+		iter.processed = iomap_write_region_iter(&iter, region->buf);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iomap_write_region);
 
 static int __init iomap_buffered_init(void)
 {

@@ -68,6 +68,7 @@ struct vm_fault;
 #endif /* CONFIG_BUFFER_HEAD */
 #define IOMAP_F_XATTR		(1U << 5)
 #define IOMAP_F_BOUNDARY	(1U << 6)
+#define IOMAP_F_BEYOND_EOF	(1U << 7)
 
 /*
  * Flags set by the core iomap code during operations:
@@ -457,5 +458,17 @@ int iomap_swapfile_activate(struct swap_info_struct *sis,
 #else
 # define iomap_swapfile_activate(sis, swapfile, pagespan, ops)	(-EIO)
 #endif /* CONFIG_SWAP */
+
+struct ioregion {
+	struct inode *inode;
+	loff_t pos;				/* IO position */
+	const void *buf;			/* Data to be written (in only) */
+	size_t length;				/* Length of the date */
+	loff_t offset;				/* Region offset in the cache */
+	const struct iomap_ops *ops;
+};
+
+struct folio *iomap_read_region(struct ioregion *region);
+int iomap_write_region(struct ioregion *region);
 
 #endif /* LINUX_IOMAP_H */
