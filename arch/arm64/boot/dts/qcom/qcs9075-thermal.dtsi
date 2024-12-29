@@ -1,0 +1,287 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+#include <dt-bindings/thermal/thermal.h>
+
+&cpu0 {
+	#cooling-cells = <2>;
+};
+
+&cpu1 {
+	#cooling-cells = <2>;
+	cpu1_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+&cpu2 {
+	#cooling-cells = <2>;
+	cpu2_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+&cpu3 {
+	#cooling-cells = <2>;
+	cpu3_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+&cpu4 {
+	#cooling-cells = <2>;
+	cpu4_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+&cpu5 {
+	#cooling-cells = <2>;
+	cpu5_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+&cpu6 {
+	#cooling-cells = <2>;
+	cpu6_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+&cpu7 {
+	#cooling-cells = <2>;
+	cpu7_idle: thermal-idle {
+		#cooling-cells = <2>;
+		duration-us = <800000>;
+		exit-latency-us = <10000>;
+	};
+};
+
+/ {
+	thermal-zones {
+		cpu-0-1-0-thermal {
+			trips {
+				cpu_0_1_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_0_1_0_passive>;
+					cooling-device = <&cpu1_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-0-2-0-thermal {
+			trips {
+				cpu_0_2_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_0_2_0_passive>;
+					cooling-device = <&cpu2_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-0-3-0-thermal {
+			trips {
+				cpu_0_3_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_0_3_0_passive>;
+					cooling-device = <&cpu3_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-0-1-1-thermal {
+			trips {
+				cpu_0_1_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_0_1_1_passive>;
+					cooling-device = <&cpu1_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-0-2-1-thermal {
+			trips {
+				cpu_0_2_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_0_2_1_passive>;
+					cooling-device = <&cpu2_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-0-3-1-thermal {
+			trips {
+				cpu_0_3_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_0_3_1_passive>;
+					cooling-device = <&cpu3_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-0-0-thermal {
+			trips {
+				cpu_1_0_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_0_0_passive>;
+					cooling-device = <&cpu4_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-1-0-thermal {
+			trips {
+				cpu_1_1_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_1_0_passive>;
+					cooling-device = <&cpu5_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-2-0-thermal {
+			trips {
+				cpu_1_2_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_2_0_passive>;
+					cooling-device = <&cpu6_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-3-0-thermal {
+			trips {
+				cpu_1_3_0_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_3_0_passive>;
+					cooling-device = <&cpu7_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-0-1-thermal {
+			trips {
+				cpu_1_0_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_0_1_passive>;
+					cooling-device = <&cpu4_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-1-1-thermal {
+			trips {
+				cpu_1_1_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_1_1_passive>;
+					cooling-device = <&cpu5_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-2-1-thermal {
+			trips {
+				cpu_1_2_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_2_1_passive>;
+					cooling-device = <&cpu6_idle 100 100>;
+				};
+			};
+		};
+
+		cpu-1-3-1-thermal {
+			trips {
+				cpu_1_3_1_passive: trip-point1 {
+					temperature = <116000>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_1_3_1_passive>;
+					cooling-device = <&cpu7_idle 100 100>;
+				};
+			};
+		};
+	};
+};
