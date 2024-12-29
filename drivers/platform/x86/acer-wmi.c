@@ -30,6 +30,7 @@
 #include <linux/input/sparse-keymap.h>
 #include <acpi/video.h>
 #include <linux/hwmon.h>
+#include <linux/unaligned.h>
 #include <linux/units.h>
 #include <linux/bitfield.h>
 
@@ -68,6 +69,7 @@ MODULE_LICENSE("GPL");
 #define ACER_WMID_GET_GAMING_SYS_INFO_METHODID 5
 #define ACER_WMID_SET_GAMING_FAN_BEHAVIOR 14
 #define ACER_WMID_SET_GAMING_MISC_SETTING_METHODID 22
+#define ACER_WMID_GET_GAMING_MISC_SETTING_METHODID 23
 
 #define ACER_PREDATOR_V4_THERMAL_PROFILE_EC_OFFSET 0x54
 
@@ -75,6 +77,10 @@ MODULE_LICENSE("GPL");
 #define ACER_PREDATOR_V4_SENSOR_INDEX_BIT_MASK GENMASK_ULL(15, 8)
 #define ACER_PREDATOR_V4_SENSOR_READING_BIT_MASK GENMASK_ULL(23, 8)
 #define ACER_PREDATOR_V4_SUPPORTED_SENSORS_BIT_MASK GENMASK_ULL(39, 24)
+
+#define ACER_GAMING_MISC_SETTING_STATUS_MASK GENMASK_ULL(7, 0)
+#define ACER_GAMING_MISC_SETTING_INDEX_MASK GENMASK_ULL(7, 0)
+#define ACER_GAMING_MISC_SETTING_VALUE_MASK GENMASK_ULL(15, 8)
 
 /*
  * Acer ACPI method GUIDs
@@ -113,6 +119,12 @@ enum acer_wmi_predator_v4_sensor_id {
 	ACER_WMID_SENSOR_EXTERNAL_TEMPERATURE_2 = 0x03,
 	ACER_WMID_SENSOR_GPU_FAN_SPEED		= 0x06,
 	ACER_WMID_SENSOR_GPU_TEMPERATURE	= 0x0A,
+};
+
+enum acer_wmi_gaming_misc_setting {
+	ACER_WMID_MISC_SETTING_OC_1			= 0x0005,
+	ACER_WMID_MISC_SETTING_OC_2			= 0x0007,
+	ACER_WMID_MISC_SETTING_PLATFORM_PROFILE		= 0x000B,
 };
 
 static const struct key_entry acer_wmi_keymap[] __initconst = {
@@ -1477,6 +1489,45 @@ WMI_gaming_execute_u64(u32 method_id, u64 in, u64 *out)
 	return status;
 }
 
+static int WMI_gaming_execute_u32_u64(u32 method_id, u32 in, u64 *out)
+{
+	struct acpi_buffer result = { ACPI_ALLOCATE_BUFFER, NULL };
+	struct acpi_buffer input = {
+		.length = sizeof(in),
+		.pointer = &in,
+	};
+	union acpi_object *obj;
+	acpi_status status;
+	int ret = 0;
+
+	status = wmi_evaluate_method(WMID_GUID4, 0, method_id, &input, &result);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	obj = result.pointer;
+	if (obj && out) {
+		switch (obj->type) {
+		case ACPI_TYPE_INTEGER:
+			*out = obj->integer.value;
+			break;
+		case ACPI_TYPE_BUFFER:
+			if (obj->buffer.length < sizeof(*out))
+				ret = -ENOMSG;
+			else
+				*out = get_unaligned_le64(obj->buffer.pointer);
+
+			break;
+		default:
+			ret = -ENOMSG;
+			break;
+		}
+	}
+
+	kfree(obj);
+
+	return ret;
+}
+
 static acpi_status WMID_gaming_set_u64(u64 value, u32 cap)
 {
 	u32 method_id = 0;
@@ -1540,6 +1591,48 @@ static int WMID_gaming_get_sys_info(u32 command, u64 *out)
 		return -EIO;
 
 	*out = result;
+
+	return 0;
+}
+
+static int WMID_gaming_set_misc_setting(enum acer_wmi_gaming_misc_setting setting, u8 value)
+{
+	acpi_status status;
+	u64 input = 0;
+	u64 result;
+
+	input |= FIELD_PREP(ACER_GAMING_MISC_SETTING_INDEX_MASK, setting);
+	input |= FIELD_PREP(ACER_GAMING_MISC_SETTING_VALUE_MASK, value);
+
+	status = WMI_gaming_execute_u64(ACER_WMID_SET_GAMING_MISC_SETTING_METHODID, input, &result);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	/* The return status must be zero for the operation to have succeeded */
+	if (FIELD_GET(ACER_GAMING_MISC_SETTING_STATUS_MASK, result))
+		return -EIO;
+
+	return 0;
+}
+
+static int WMID_gaming_get_misc_setting(enum acer_wmi_gaming_misc_setting setting, u8 *value)
+{
+	u64 input = 0;
+	u64 result;
+	int ret;
+
+	input |= FIELD_PREP(ACER_GAMING_MISC_SETTING_INDEX_MASK, setting);
+
+	ret = WMI_gaming_execute_u32_u64(ACER_WMID_GET_GAMING_MISC_SETTING_METHODID, input,
+					 &result);
+	if (ret < 0)
+		return ret;
+
+	/* The return status must be zero for the operation to have succeeded */
+	if (FIELD_GET(ACER_GAMING_MISC_SETTING_STATUS_MASK, result))
+		return -EIO;
+
+	*value = FIELD_GET(ACER_GAMING_MISC_SETTING_VALUE_MASK, result);
 
 	return 0;
 }
