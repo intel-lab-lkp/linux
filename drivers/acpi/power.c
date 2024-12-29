@@ -23,6 +23,7 @@
 
 #define pr_fmt(fmt) "ACPI: PM: " fmt
 
+#include <linux/delay.h>
 #include <linux/dmi.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -991,9 +992,57 @@ struct acpi_device *acpi_add_power_resource(acpi_handle handle)
 }
 
 #ifdef CONFIG_ACPI_SLEEP
+static const struct dmi_system_id dmi_hp_elitebook_gp12pxp_quirk[] = {
+/*
+ * This laptop (and possibly similar models too) has power resource called
+ * "GP12.PXP_" for its WWAN modem.
+ *
+ * For this power resource to turn ON power for the modem it needs certain
+ * internal flag called "ONEN" to be set.
+ * This flag only gets set from this power resource "_OFF" method, while the
+ * actual modem power gets turned off during suspend by "GP12.PTS" method
+ * called from the global "_PTS" (Prepare To Sleep) method.
+ * On the other hand, this power resource "_OFF" method implementation just
+ * sets the aforementioned flag without actually doing anything else (it
+ * doesn't contain any code to actually turn off power).
+ *
+ * The above means that when upon hibernation finish we try to set this
+ * power resource back ON since its "_STA" method returns 0 (while the resource
+ * is still considered in use) its "_ON" method won't do anything since
+ * that "ONEN" flag is not set.
+ * Overall, this means the modem is dead until laptop is rebooted since its
+ * power has been cut by "_PTS" and its PCI configuration was lost and not able
+ * to be restored.
+ *
+ * The easiest way to workaround the issue is to call this power resource
+ * "_OFF" method before calling the "_ON" method to make sure the "ONEN"
+ * flag gets properly set.
+ */
+	{
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
+			DMI_MATCH(DMI_PRODUCT_NAME, "HP EliteBook 855 G7 Notebook PC"),
+		},
+	},
+	{}
+};
+
+static bool resource_is_gp12pxp(acpi_handle handle)
+{
+	const char *path;
+	bool ret;
+
+	path = acpi_handle_path(handle);
+	ret = path && strcmp(path, "\\_SB_.PCI0.GP12.PXP_") == 0;
+	kfree(path);
+
+	return ret;
+}
+
 void acpi_resume_power_resources(void)
 {
 	struct acpi_power_resource *resource;
+	bool hp_eb_gp12pxp_quirk = dmi_check_system(dmi_hp_elitebook_gp12pxp_quirk);
 
 	mutex_lock(&power_resource_list_lock);
 
@@ -1012,8 +1061,34 @@ void acpi_resume_power_resources(void)
 
 		if (state == ACPI_POWER_RESOURCE_STATE_OFF
 		    && resource->ref_count) {
+			bool eb_gp12pxp = hp_eb_gp12pxp_quirk &&
+				resource_is_gp12pxp(resource->device.handle);
+
+			if (eb_gp12pxp) {
+				acpi_handle_notice(resource->device.handle,
+						   "HP EB quirk - turning OFF before ON\n");
+				__acpi_power_off(resource);
+			}
+
 			acpi_handle_debug(resource->device.handle, "Turning ON\n");
 			__acpi_power_on(resource);
+
+			if (eb_gp12pxp) {
+				/*
+				 * Use the same delay as DSDT uses in modem _RST
+				 * method.
+				 *
+				 * Otherwise we get "Unable to change power
+				 * state from unknown to D0, device
+				 * inaccessible" error for the modem PCI device
+				 * after thaw.
+				 *
+				 * This power resource is normally being enabled
+				 * only during thaw (once) so this wait is not
+				 * a performance issue.
+				 */
+				msleep(200);
+			}
 		}
 
 		mutex_unlock(&resource->resource_lock);
