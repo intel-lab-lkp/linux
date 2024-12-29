@@ -403,6 +403,12 @@ struct wmax_u32_args {
 	u8 arg3;
 };
 
+struct awcc_priv {
+	struct wmi_device *wdev;
+	struct platform_profile_handler pp_handler;
+	enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
+};
+
 struct alienfx_priv {
 	struct platform_device *pdev;
 	struct quirk_entry *quirks;
@@ -415,9 +421,6 @@ struct alienfx_priv {
 struct alienfx_platdata {
 	struct wmi_device *wdev;
 };
-
-static struct platform_profile_handler pp_handler;
-static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
 
 static u8 interface;
 
@@ -1051,6 +1054,8 @@ static int thermal_profile_get(struct platform_profile_handler *pprof,
 static int thermal_profile_set(struct platform_profile_handler *pprof,
 			       enum platform_profile_option profile)
 {
+	struct awcc_priv *priv = container_of(pprof, struct awcc_priv, pp_handler);
+
 	if (quirks->gmode) {
 		u32 gmode_status;
 		int ret;
@@ -1071,11 +1076,12 @@ static int thermal_profile_set(struct platform_profile_handler *pprof,
 		}
 	}
 
-	return wmax_thermal_control(supported_thermal_profiles[profile]);
+	return wmax_thermal_control(priv->supported_thermal_profiles[profile]);
 }
 
 static int create_thermal_profile(struct wmi_device *wdev)
 {
+	struct awcc_priv *priv = dev_get_drvdata(&wdev->dev);
 	enum platform_profile_option profile;
 	enum wmax_thermal_mode mode;
 	u8 sys_desc[4];
@@ -1105,33 +1111,55 @@ static int create_thermal_profile(struct wmi_device *wdev)
 
 		mode = out_data & WMAX_THERMAL_MODE_MASK;
 		profile = wmax_mode_to_platform_profile[mode];
-		supported_thermal_profiles[profile] = out_data;
+		priv->supported_thermal_profiles[profile] = out_data;
 
-		set_bit(profile, pp_handler.choices);
+		set_bit(profile, priv->pp_handler.choices);
 	}
 
-	if (bitmap_empty(pp_handler.choices, PLATFORM_PROFILE_LAST))
+	if (bitmap_empty(priv->pp_handler.choices, PLATFORM_PROFILE_LAST))
 		return -ENODEV;
 
 	if (quirks->gmode) {
-		supported_thermal_profiles[PLATFORM_PROFILE_PERFORMANCE] =
+		priv->supported_thermal_profiles[PLATFORM_PROFILE_PERFORMANCE] =
 			WMAX_THERMAL_MODE_GMODE;
 
-		set_bit(PLATFORM_PROFILE_PERFORMANCE, pp_handler.choices);
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, priv->pp_handler.choices);
 	}
 
-	pp_handler.profile_get = thermal_profile_get;
-	pp_handler.profile_set = thermal_profile_set;
-	pp_handler.name = "alienware-wmi";
-	pp_handler.dev = &wdev->dev;
+	priv->pp_handler.profile_get = thermal_profile_get;
+	priv->pp_handler.profile_set = thermal_profile_set;
+	priv->pp_handler.name = "alienware-wmi";
+	priv->pp_handler.dev = &wdev->dev;
 
-	return platform_profile_register(&pp_handler);
+	return platform_profile_register(&priv->pp_handler);
 }
 
-static void remove_thermal_profile(void)
+static int alienware_awcc_setup(struct wmi_device *wdev)
 {
-	if (quirks->thermal)
-		platform_profile_remove(&pp_handler);
+	struct awcc_priv *priv;
+	int ret;
+
+	priv = devm_kzalloc(&wdev->dev, sizeof(*priv), GFP_KERNEL);
+	if (!priv)
+		return -ENOMEM;
+
+	dev_set_drvdata(&wdev->dev, priv);
+	priv->wdev = wdev;
+
+	ret = create_thermal_profile(wdev);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static void alienware_awcc_exit(struct wmi_device *wdev)
+{
+	struct awcc_priv *priv;
+
+	priv = dev_get_drvdata(&wdev->dev);
+
+	platform_profile_remove(&priv->pp_handler);
 }
 
 /*
@@ -1271,7 +1299,7 @@ static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
 	int ret;
 
 	if (quirks->thermal) {
-		ret = create_thermal_profile(wdev);
+		ret = alienware_awcc_setup(wdev);
 	} else {
 		ret = alienware_alienfx_setup(&pdata);
 		if (ret < 0)
@@ -1287,7 +1315,7 @@ static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
 static void wmax_wmi_remove(struct wmi_device *wdev)
 {
 	if (quirks->thermal)
-		remove_thermal_profile();
+		alienware_awcc_exit(wdev);
 	else
 		alienware_alienfx_exit(wdev);
 }
