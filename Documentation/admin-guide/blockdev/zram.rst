@@ -343,7 +343,7 @@ To use the feature, admin should set up backing device via::
 	echo /dev/sda5 > /sys/block/zramX/backing_dev
 
 before disksize setting. It supports only partitions at this moment.
-If admin wants to use incompressible page writeback, they could do it via::
+If admin wants to use huge page writeback, they could do it via::
 
 	echo huge > /sys/block/zramX/writeback
 
