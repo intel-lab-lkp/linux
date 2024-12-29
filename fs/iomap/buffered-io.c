@@ -979,13 +979,13 @@ retry:
 		 * unlock and release the folio.
 		 */
 		old_size = iter->inode->i_size;
-		if (pos + written > old_size) {
+		if (!(iter->flags & IOMAP_NOSIZE) && (pos + written > old_size)) {
 			i_size_write(iter->inode, pos + written);
 			iter->iomap.flags |= IOMAP_F_SIZE_CHANGED;
 		}
 		__iomap_put_folio(iter, pos, written, folio);
 
-		if (old_size < pos)
+		if (!(iter->flags & IOMAP_NOSIZE) && (old_size < pos))
 			pagecache_isize_extended(iter->inode, old_size, pos);
 
 		cond_resched();
@@ -1965,17 +1965,9 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	int error = 0;
 	u32 rlen;
 
-	WARN_ON_ONCE(!folio_test_locked(folio));
-	WARN_ON_ONCE(folio_test_dirty(folio));
-	WARN_ON_ONCE(folio_test_writeback(folio));
+	WARN_ON_ONCE(end_pos <= pos);
 
 	trace_iomap_writepage(inode, pos, folio_size(folio));
-
-	if (!iomap_writepage_handle_eof(folio, inode, &end_pos)) {
-		folio_unlock(folio);
-		return 0;
-	}
-	WARN_ON_ONCE(end_pos <= pos);
 
 	if (i_blocks_per_folio(inode, folio) > 1) {
 		if (!ifs) {
@@ -2040,6 +2032,23 @@ static int iomap_writepage_map(struct iomap_writepage_ctx *wpc,
 	return error;
 }
 
+/* Map pages bound by EOF */
+static int iomap_writepage_map_eof(struct iomap_writepage_ctx *wpc,
+		struct writeback_control *wbc, struct folio *folio)
+{
+	int error;
+	struct inode *inode = folio->mapping->host;
+	u64 end_pos = folio_pos(folio) + folio_size(folio);
+
+	if (!iomap_writepage_handle_eof(folio, inode, &end_pos)) {
+		folio_unlock(folio);
+		return 0;
+	}
+
+	error = iomap_writepage_map(wpc, wbc, folio);
+	return error;
+}
+
 int
 iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 		struct iomap_writepage_ctx *wpc,
@@ -2057,11 +2066,31 @@ iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 		return -EIO;
 
 	wpc->ops = ops;
+	while ((folio = writeback_iter(mapping, wbc, folio, &error))) {
+		WARN_ON_ONCE(!folio_test_locked(folio));
+		WARN_ON_ONCE(folio_test_dirty(folio));
+		WARN_ON_ONCE(folio_test_writeback(folio));
+
+		error = iomap_writepage_map_eof(wpc, wbc, folio);
+	}
+	return iomap_submit_ioend(wpc, error);
+}
+EXPORT_SYMBOL_GPL(iomap_writepages);
+
+int
+iomap_writepages_unbound(struct address_space *mapping, struct writeback_control *wbc,
+		struct iomap_writepage_ctx *wpc,
+		const struct iomap_writeback_ops *ops)
+{
+	struct folio *folio = NULL;
+	int error;
+
+	wpc->ops = ops;
 	while ((folio = writeback_iter(mapping, wbc, folio, &error)))
 		error = iomap_writepage_map(wpc, wbc, folio);
 	return iomap_submit_ioend(wpc, error);
 }
-EXPORT_SYMBOL_GPL(iomap_writepages);
+EXPORT_SYMBOL_GPL(iomap_writepages_unbound);
 
 static int __init iomap_buffered_init(void)
 {
