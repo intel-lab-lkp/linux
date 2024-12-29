@@ -11,6 +11,7 @@
 #include <linux/wait.h>
 #include <linux/rwsem.h>
 #include "volumes.h"
+#include <linux/percpu_counter.h>
 
 struct btrfs_fs_info;
 struct btrfs_block_group;
@@ -112,6 +113,7 @@ struct btrfs_space_info {
 				   current allocations */
 	u64 bytes_may_use;	/* number of bytes that may be used for
 				   delalloc/allocations */
+	struct percpu_counter bytes_may_use_percpu;
 	u64 bytes_readonly;	/* total bytes that are read only */
 	u64 bytes_zone_unusable;	/* total bytes that are unusable until
 					   resetting the device zone */
@@ -228,6 +230,21 @@ static inline bool btrfs_mixed_space_info(const struct btrfs_space_info *space_i
 		(space_info->flags & BTRFS_BLOCK_GROUP_DATA));
 }
 
+static inline void bmu_counter_increment(struct btrfs_space_info *sinfo, s64 bytes)
+{
+	u64 percpu_sum;
+
+	if (percpu_counter_initialized(&sinfo->bytes_may_use_percpu))
+		percpu_counter_init(&sinfo->bytes_may_use_percpu, 0, GFP_KERNEL);
+	percpu_counter_add(&sinfo->bytes_may_use_percpu, bytes);
+	percpu_sum = percpu_counter_sum(&sinfo->bytes_may_use_percpu);
+	if (percpu_sum != sinfo->bytes_may_use) {
+		btrfs_err(sinfo->fs_info,
+		       "btrfs: bytes_may_use counter not equal percpu_counter_sum: %llu regular_sum: %llu",
+		       percpu_sum, sinfo->bytes_may_use);
+	}
+}
+
 /*
  *
  * Declare a helper function to detect underflow of various space info members
@@ -239,6 +256,8 @@ btrfs_space_info_update_##name(struct btrfs_space_info *sinfo,		\
 {									\
 	struct btrfs_fs_info *fs_info = sinfo->fs_info;			\
 	const u64 abs_bytes = (bytes < 0) ? -bytes : bytes;		\
+	char *name = #name;						\
+	char *name2 = "bytes_may_use";					\
 	lockdep_assert_held(&sinfo->lock);				\
 	trace_update_##name(fs_info, sinfo, sinfo->name, bytes);	\
 	trace_btrfs_space_reservation(fs_info, trace_name,		\
@@ -247,10 +266,16 @@ btrfs_space_info_update_##name(struct btrfs_space_info *sinfo,		\
 	if (bytes < 0 && sinfo->name < -bytes) {			\
 		WARN_ON(1);						\
 		sinfo->name = 0;					\
+		if (name == name2) {					\
+			percpu_counter_init(				\
+			&sinfo->bytes_may_use_percpu, 0, GFP_KERNEL);   \
+		}							\
 		return;							\
 	}								\
 	sinfo->name += bytes;						\
-}
+	if (name == name2)						\
+		bmu_counter_increment(sinfo, bytes);			\
+}									\
 
 DECLARE_SPACE_INFO_UPDATE(bytes_may_use, "space_info");
 DECLARE_SPACE_INFO_UPDATE(bytes_pinned, "pinned");
