@@ -1068,6 +1068,35 @@ union hv_dispatch_suspend_register {
 	} __packed;
 };
 
+union hv_arm64_pending_interruption_register {
+	u64 as_uint64;
+	struct {
+		u64 interruption_pending : 1;
+		u64 interruption_type : 1;
+		u64 reserved : 30;
+		u32 error_code;
+	} __packed;
+};
+
+union hv_arm64_interrupt_state_register {
+	u64 as_uint64;
+	struct {
+		u64 interrupt_shadow : 1;
+		u64 reserved : 63;
+	} __packed;
+};
+
+union hv_arm64_pending_synthetic_exception_event {
+	u64 as_uint64[2];
+	struct {
+		u32 event_pending : 1;
+		u32 event_type : 3;
+		u32 reserved : 4;
+		u32 exception_type;
+		u64 context;
+	} __packed;
+};
+
 union hv_x64_interrupt_state_register {
 	u64 as_uint64;
 	struct {
@@ -1103,8 +1132,28 @@ union hv_register_value {
 	union hv_explicit_suspend_register explicit_suspend;
 	union hv_intercept_suspend_register intercept_suspend;
 	union hv_dispatch_suspend_register dispatch_suspend;
+#ifdef CONFIG_ARM64
+	union hv_arm64_interrupt_state_register interrupt_state;
+	union hv_arm64_pending_interruption_register pending_interruption;
+#endif
+#ifdef CONFIG_X86
 	union hv_x64_interrupt_state_register interrupt_state;
 	union hv_x64_pending_interruption_register pending_interruption;
+#endif
+	union hv_arm64_pending_synthetic_exception_event pending_synthetic_exception_event;
+};
+
+/*
+ * NOTE: Linux helper struct - NOT from Hyper-V code.
+ * DECLARE_FLEX_ARRAY() needs to be wrapped into
+ * a structure and have at least one more member besides
+ * DECLARE_FLEX_ARRAY.
+ */
+struct hv_output_get_vp_registers {
+	struct {
+		DECLARE_FLEX_ARRAY(union hv_register_value, values);
+		struct {} values_end;
+	};
 };
 
 #if defined(CONFIG_ARM64)
