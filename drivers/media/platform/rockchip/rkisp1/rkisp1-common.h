@@ -118,6 +118,7 @@ enum rkisp1_isp_pad {
  * @RKISP1_FEATURE_DMA_34BIT: The ISP uses 34-bit DMA addresses
  * @RKISP1_FEATURE_BLS: The ISP has a dedicated BLS block
  * @RKISP1_FEATURE_COMPAND: The ISP has a companding block
+ * @RKISP1_FEATURE_AWB64: The ISP has an AWB64 block
  *
  * The ISP features are stored in a bitmask in &rkisp1_info.features and allow
  * the driver to implement support for features present in some ISP versions
@@ -131,6 +132,7 @@ enum rkisp1_feature {
 	RKISP1_FEATURE_DMA_34BIT = BIT(4),
 	RKISP1_FEATURE_BLS = BIT(5),
 	RKISP1_FEATURE_COMPAND = BIT(6),
+	RKISP1_FEATURE_AWB64 = BIT(7),
 };
 
 #define rkisp1_has_feature(rkisp1, feature) \
@@ -345,6 +347,8 @@ struct rkisp1_stats;
 struct rkisp1_stats_ops {
 	void (*get_awb_meas)(struct rkisp1_stats *stats,
 			     struct rkisp1_stat_buffer *pbuf);
+	void (*get_awb64_meas)(struct rkisp1_stats *stats,
+			       struct rkisp1_stat_buffer *pbuf);
 	void (*get_aec_meas)(struct rkisp1_stats *stats,
 			     struct rkisp1_stat_buffer *pbuf);
 	void (*get_hst_meas)(struct rkisp1_stats *stats,
@@ -381,6 +385,11 @@ struct rkisp1_params_ops {
 	void (*awb_meas_enable)(struct rkisp1_params *params,
 				const struct rkisp1_cif_isp_awb_meas_config *arg,
 				bool en);
+	void (*awb64_meas_config)(struct rkisp1_params *params,
+				  const struct rkisp1_cif_isp_awb64_meas_config *arg);
+	void (*awb64_meas_enable)(struct rkisp1_params *params,
+				  const struct rkisp1_cif_isp_awb64_meas_config *arg,
+				  bool en);
 	void (*awb_gain_config)(struct rkisp1_params *params,
 				const struct rkisp1_cif_isp_awb_gain_config *arg);
 	void (*aec_config)(struct rkisp1_params *params,

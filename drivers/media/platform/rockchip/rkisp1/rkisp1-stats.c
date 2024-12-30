@@ -172,6 +172,31 @@ rkisp1_stats_init_vb2_queue(struct vb2_queue *q, struct rkisp1_stats *stats)
 	return vb2_queue_init(q);
 }
 
+static void rkisp1_stats_get_awb64_meas_v10(struct rkisp1_stats *stats,
+					    struct rkisp1_stat_buffer *pbuf)
+{
+	/* Protect against concurrent access from ISR? */
+	struct rkisp1_device *rkisp1 = stats->rkisp1;
+	unsigned int i;
+	u32 white_cnt;
+
+	pbuf->meas_type |= RKISP1_CIF_ISP_STAT_AWB64;
+
+	for (i = 0; i < RKISP1_CIF_ISP_AWB64_MAX_ELLIPSE; i++) {
+		white_cnt = rkisp1_read(rkisp1,
+					RKISP1_CIF_ISP_AWB64_WHITE_CNT(i));
+		pbuf->params.awb64.count[i].cnt =
+			RKISP1_CIF_ISP_AWB64_GET_PIXEL_CNT(white_cnt);
+
+		pbuf->params.awb64.count[i].accu_cr_or_r =
+			rkisp1_read(rkisp1, RKISP1_CIF_ISP_AWB64_R_ACCU(i));
+		pbuf->params.awb64.count[i].accu_y_or_g =
+			rkisp1_read(rkisp1, RKISP1_CIF_ISP_AWB64_G_ACCU(i));
+		pbuf->params.awb64.count[i].accu_cb_or_b =
+			rkisp1_read(rkisp1, RKISP1_CIF_ISP_AWB64_B_ACCU(i));
+	}
+}
+
 static void rkisp1_stats_get_awb_meas_v10(struct rkisp1_stats *stats,
 					  struct rkisp1_stat_buffer *pbuf)
 {
@@ -325,6 +350,7 @@ static void rkisp1_stats_get_bls_meas(struct rkisp1_stats *stats,
 
 static const struct rkisp1_stats_ops rkisp1_v10_stats_ops = {
 	.get_awb_meas = rkisp1_stats_get_awb_meas_v10,
+	.get_awb64_meas = rkisp1_stats_get_awb64_meas_v10,
 	.get_aec_meas = rkisp1_stats_get_aec_meas_v10,
 	.get_hst_meas = rkisp1_stats_get_hst_meas_v10,
 };
@@ -355,8 +381,11 @@ rkisp1_stats_send_measurement(struct rkisp1_stats *stats, u32 isp_ris)
 
 	cur_stat_buf = (struct rkisp1_stat_buffer *)
 			vb2_plane_vaddr(&cur_buf->vb.vb2_buf, 0);
-	if (isp_ris & RKISP1_CIF_ISP_AWB_DONE)
+	if (isp_ris & RKISP1_CIF_ISP_AWB_DONE) {
 		stats->ops->get_awb_meas(stats, cur_stat_buf);
+		if (stats->ops->get_awb64_meas)
+			stats->ops->get_awb64_meas(stats, cur_stat_buf);
+	}
 
 	if (isp_ris & RKISP1_CIF_ISP_AFM_FIN)
 		rkisp1_stats_get_afc_meas(stats, cur_stat_buf);
