@@ -360,31 +360,6 @@ void drm_sched_entity_destroy(struct drm_sched_entity *entity)
 }
 EXPORT_SYMBOL(drm_sched_entity_destroy);
 
-/* drm_sched_entity_clear_dep - callback to clear the entities dependency */
-static void drm_sched_entity_clear_dep(struct dma_fence *f,
-				       struct dma_fence_cb *cb)
-{
-	struct drm_sched_entity *entity =
-		container_of(cb, struct drm_sched_entity, cb);
-
-	entity->dependency = NULL;
-	dma_fence_put(f);
-}
-
-/*
- * drm_sched_entity_wakeup - callback to clear the entity's dependency and
- * wake up the scheduler
- */
-static void drm_sched_entity_wakeup(struct dma_fence *f,
-				    struct dma_fence_cb *cb)
-{
-	struct drm_sched_entity *entity =
-		container_of(cb, struct drm_sched_entity, cb);
-
-	drm_sched_entity_clear_dep(f, cb);
-	drm_sched_wakeup(entity->rq->sched);
-}
-
 /**
  * drm_sched_entity_set_priority - Sets priority of the entity
  *
@@ -403,40 +378,33 @@ void drm_sched_entity_set_priority(struct drm_sched_entity *entity,
 EXPORT_SYMBOL(drm_sched_entity_set_priority);
 
 /*
+ * drm_sched_entity_wakeup - callback to clear the entity's dependency and
+ * wake up the scheduler
+ */
+static void drm_sched_entity_wakeup(struct dma_fence *f,
+				    struct dma_fence_cb *cb)
+{
+	struct drm_sched_entity *entity =
+		container_of(cb, struct drm_sched_entity, cb);
+
+	entity->dependency = NULL;
+	dma_fence_put(f);
+	drm_sched_wakeup(entity->rq->sched);
+}
+
+/*
  * Add a callback to the current dependency of the entity to wake up the
  * scheduler when the entity becomes available.
  */
 static bool drm_sched_entity_add_dependency_cb(struct drm_sched_entity *entity)
 {
-	struct drm_gpu_scheduler *sched = entity->rq->sched;
 	struct dma_fence *fence = entity->dependency;
-	struct drm_sched_fence *s_fence;
 
-	s_fence = to_drm_sched_fence(fence);
-	if (!fence->error && s_fence && s_fence->sched == sched &&
-	    !test_bit(DRM_SCHED_FENCE_DONT_PIPELINE, &fence->flags)) {
-
-		/*
-		 * Fence is from the same scheduler, only need to wait for
-		 * it to be scheduled
-		 */
-		fence = dma_fence_get(&s_fence->scheduled);
-		dma_fence_put(entity->dependency);
-		entity->dependency = fence;
-		if (!dma_fence_add_callback(fence, &entity->cb,
-					    drm_sched_entity_clear_dep))
-			return true;
-
-		/* Ignore it when it is already scheduled */
-		dma_fence_put(fence);
-		return false;
-	}
-
-	if (!dma_fence_add_callback(entity->dependency, &entity->cb,
+	if (!dma_fence_add_callback(fence, &entity->cb,
 				    drm_sched_entity_wakeup))
 		return true;
 
-	dma_fence_put(entity->dependency);
+	dma_fence_put(fence);
 	return false;
 }
 
@@ -558,19 +526,21 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
 void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 {
 	struct drm_sched_entity *entity = sched_job->entity;
+	ktime_t submit_ts = ktime_get();
 	bool first;
-	ktime_t submit_ts;
 
 	trace_drm_sched_job(sched_job, entity);
 	atomic_inc(entity->rq->sched->score);
 	WRITE_ONCE(entity->last_user, current->group_leader);
+
+	drm_sched_job_prepare_dependecies(sched_job);
 
 	/*
 	 * After the sched_job is pushed into the entity queue, it may be
 	 * completed and freed up at any time. We can no longer access it.
 	 * Make sure to set the submit_ts first, to avoid a race.
 	 */
-	sched_job->submit_ts = submit_ts = ktime_get();
+	sched_job->submit_ts = submit_ts;
 	first = spsc_queue_push(&entity->job_queue, &sched_job->queue_node);
 
 	/* first job wakes up scheduler */

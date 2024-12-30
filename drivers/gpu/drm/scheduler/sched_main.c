@@ -780,6 +780,29 @@ int drm_sched_job_add_implicit_dependencies(struct drm_sched_job *job,
 }
 EXPORT_SYMBOL(drm_sched_job_add_implicit_dependencies);
 
+void drm_sched_job_prepare_dependecies(struct drm_sched_job *job)
+{
+	struct drm_gpu_scheduler *sched = job->sched;
+	struct dma_fence *fence;
+	unsigned long index;
+
+	xa_for_each(&job->dependencies, index, fence) {
+		struct drm_sched_fence *s_fence = to_drm_sched_fence(fence);
+
+		if (fence->error || !s_fence || s_fence->sched != sched ||
+		    test_bit(DRM_SCHED_FENCE_DONT_PIPELINE, &fence->flags))
+			continue;
+
+		/*
+		 * Fence is from the same scheduler, only need to wait for
+		 * it to be scheduled.
+		 */
+		xa_store(&job->dependencies, index,
+			 dma_fence_get(&s_fence->scheduled), GFP_KERNEL);
+		dma_fence_put(fence);
+	}
+}
+
 /**
  * drm_sched_job_cleanup - clean up scheduler job resources
  * @job: scheduler job to clean up
