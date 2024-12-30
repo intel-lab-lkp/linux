@@ -648,6 +648,7 @@ EXPORT_SYMBOL(drm_sched_job_arm);
 int drm_sched_job_add_dependency(struct drm_sched_job *job,
 				 struct dma_fence *fence)
 {
+	struct drm_sched_entity *entity = job->entity;
 	struct dma_fence *entry;
 	unsigned long index;
 	u32 id = 0;
@@ -655,6 +656,17 @@ int drm_sched_job_add_dependency(struct drm_sched_job *job,
 
 	if (!fence)
 		return 0;
+
+	if (fence->context == entity->fence_context ||
+	    fence->context == entity->fence_context + 1) {
+		/*
+		 * Fence is a scheduled/finished fence from a job
+		 * which belongs to the same entity, we can ignore
+		 * fences from ourself
+		 */
+		dma_fence_put(fence);
+		return 0;
+	}
 
 	/* Deduplicate if we already depend on a fence from the same context.
 	 * This lets the size of the array of deps scale with the number of
