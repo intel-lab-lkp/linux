@@ -2481,6 +2481,7 @@ void delayed_work_timer_fn(struct timer_list *t)
 {
 	struct delayed_work *dwork = from_timer(dwork, t, timer);
 
+	clear_bit(WORK_STRUCT_TIMER_PENDING_BIT, work_data_bits(&dwork->work));
 	/* should have been called from irqsafe timer with irq already off */
 	__queue_work(dwork->cpu, dwork->wq, &dwork->work);
 }
@@ -2511,6 +2512,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	dwork->wq = wq;
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
+	set_bit(WORK_STRUCT_TIMER_PENDING_BIT, work_data_bits(work));
 
 	if (housekeeping_enabled(HK_TYPE_TIMER)) {
 		/* If the current cpu is a housekeeping cpu, use it. */

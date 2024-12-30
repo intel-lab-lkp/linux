@@ -27,6 +27,7 @@ enum work_bits {
 	WORK_STRUCT_INACTIVE_BIT,	/* work item is inactive */
 	WORK_STRUCT_PWQ_BIT,		/* data points to pwq */
 	WORK_STRUCT_LINKED_BIT,		/* next work is linked to this one */
+	WORK_STRUCT_TIMER_PENDING_BIT,	/* timer pending for delayed work */
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
 	WORK_STRUCT_STATIC_BIT,		/* static initializer (debugobjects) */
 #endif
