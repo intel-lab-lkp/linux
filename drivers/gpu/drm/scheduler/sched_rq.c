@@ -12,7 +12,7 @@ static __always_inline bool drm_sched_entity_compare_before(struct rb_node *a,
 	return ktime_before(ent_a->oldest_job_waiting, ent_b->oldest_job_waiting);
 }
 
-static void __drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
+static void __drm_sched_rq_remove_tree_locked(struct drm_sched_entity *entity,
 					      struct drm_sched_rq *rq)
 {
 	lockdep_assert_held(&entity->lock);
@@ -22,7 +22,7 @@ static void __drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
 	RB_CLEAR_NODE(&entity->rb_tree_node);
 }
 
-static void __drm_sched_rq_add_fifo_locked(struct drm_sched_entity *entity,
+static void __drm_sched_rq_add_tree_locked(struct drm_sched_entity *entity,
 					   struct drm_sched_rq *rq,
 					   ktime_t ts)
 {
@@ -56,16 +56,6 @@ void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
 	rq->sched = sched;
 }
 
-static ktime_t
-drm_sched_rq_get_rr_deadline(struct drm_sched_rq *rq)
-{
-	lockdep_assert_held(&rq->lock);
-
-	rq->rr_deadline = ktime_add_ns(rq->rr_deadline, 1);
-
-	return rq->rr_deadline;
-}
-
 /**
  * drm_sched_rq_add_entity - add an entity
  *
@@ -97,12 +87,9 @@ drm_sched_rq_add_entity(struct drm_sched_rq *rq,
 	if (!list_empty(&entity->list))
 		list_add_tail(&entity->list, &rq->entities);
 
-	if (drm_sched_policy == DRM_SCHED_POLICY_RR)
-		ts = drm_sched_rq_get_rr_deadline(rq);
-
 	if (!RB_EMPTY_NODE(&entity->rb_tree_node))
-		__drm_sched_rq_remove_fifo_locked(entity, rq);
-	__drm_sched_rq_add_fifo_locked(entity, rq, ts);
+		__drm_sched_rq_remove_tree_locked(entity, rq);
+	__drm_sched_rq_add_tree_locked(entity, rq, ts);
 
 	spin_unlock(&rq->lock);
 	spin_unlock(&entity->lock);
@@ -132,7 +119,7 @@ void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
 	list_del_init(&entity->list);
 
 	if (!RB_EMPTY_NODE(&entity->rb_tree_node))
-		__drm_sched_rq_remove_fifo_locked(entity, rq);
+		__drm_sched_rq_remove_tree_locked(entity, rq);
 
 	spin_unlock(&rq->lock);
 }
@@ -147,20 +134,14 @@ void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
 	spin_lock(&entity->lock);
 	spin_lock(&rq->lock);
 
-	__drm_sched_rq_remove_fifo_locked(entity, rq);
+	__drm_sched_rq_remove_tree_locked(entity, rq);
 
 	if (next_job) {
 		ktime_t ts;
 
-		if (drm_sched_policy == DRM_SCHED_POLICY_DEADLINE)
-			ts = drm_sched_entity_get_job_deadline(entity,
-							       next_job);
-		else if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
-			ts = next_job->submit_ts;
-		else
-			ts = drm_sched_rq_get_rr_deadline(rq);
+		ts = drm_sched_entity_get_job_deadline(entity, next_job);
 
-		__drm_sched_rq_add_fifo_locked(entity, rq, ts);
+		__drm_sched_rq_add_tree_locked(entity, rq, ts);
 	}
 
 	spin_unlock(&rq->lock);

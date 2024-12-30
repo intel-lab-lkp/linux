@@ -71,13 +71,6 @@ enum drm_sched_priority {
 	DRM_SCHED_PRIORITY_COUNT
 };
 
-/* Used to choose between FIFO and RR job-scheduling */
-extern int drm_sched_policy;
-
-#define DRM_SCHED_POLICY_RR	  0
-#define DRM_SCHED_POLICY_FIFO	  1
-#define DRM_SCHED_POLICY_DEADLINE 2
-
 /**
  * struct drm_sched_entity - A wrapper around a job queue (typically
  * attached to the DRM file_priv).
@@ -153,8 +146,6 @@ struct drm_sched_entity {
 	 * @job_queue: the list of jobs of this entity.
 	 */
 	struct spsc_queue		job_queue;
-
-	enum drm_sched_priority         rq_priority;
 
 	/**
 	 * @fence_seq:
@@ -524,9 +515,7 @@ struct drm_gpu_scheduler {
 	atomic_t			credit_count;
 	long				timeout;
 	const char			*name;
-	u32                             num_rqs;
-	u32                             num_user_rqs;
-	struct drm_sched_rq             **sched_rq;
+	struct drm_sched_rq             *rq;
 	wait_queue_head_t		job_scheduled;
 	atomic64_t			job_id_count;
 	struct workqueue_struct		*submit_wq;
