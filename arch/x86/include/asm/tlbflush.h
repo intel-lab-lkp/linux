@@ -65,6 +65,23 @@ static inline void cr4_clear_bits(unsigned long mask)
  */
 #define TLB_NR_DYN_ASIDS	6
 
+#ifdef CONFIG_CPU_SUP_AMD
+#define is_dyn_asid(asid) (asid) < TLB_NR_DYN_ASIDS
+#define is_broadcast_asid(asid) (asid) >= TLB_NR_DYN_ASIDS
+#define in_asid_transition(info) (info->mm && info->mm->context.asid_transition)
+#define mm_broadcast_asid(mm) (mm->context.broadcast_asid)
+#else
+#define is_dyn_asid(asid) true
+#define is_broadcast_asid(asid) false
+#define in_asid_transition(info) false
+#define mm_broadcast_asid(mm) 0
+
+inline bool needs_broadcast_asid_reload(struct mm_struct *next, u16 prev_asid)
+{
+	return false;
+}
+#endif
+
 struct tlb_context {
 	u64 ctx_id;
 	u64 tlb_gen;
