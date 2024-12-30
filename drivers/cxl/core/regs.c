@@ -290,17 +290,19 @@ static bool cxl_decode_regblock(struct pci_dev *pdev, u32 reg_lo, u32 reg_hi,
 }
 
 /**
- * cxl_find_regblock_instance() - Locate a register block by type / index
+ * cxl_find_regblock_instance() - Locate a register block or count instances by type / index
  * @pdev: The CXL PCI device to enumerate.
  * @type: Register Block Indicator id
  * @map: Enumeration output, clobbered on error
  * @index: Index into which particular instance of a regblock wanted in the
  *	   order found in register locator DVSEC.
  *
- * Return: 0 if register block enumerated, negative error code otherwise
+ * Return: 0 if register block enumerated, non-negative if instances counted,
+ * negative error code otherwise
  *
  * A CXL DVSEC may point to one or more register blocks, search for them
  * by @type and @index.
+ * Use CXL_INSTANCES_COUNT for @index if counting instances by @type and @index.
  */
 int cxl_find_regblock_instance(struct pci_dev *pdev, enum cxl_regloc_type type,
 			       struct cxl_register_map *map, int index)
@@ -342,6 +344,9 @@ int cxl_find_regblock_instance(struct pci_dev *pdev, enum cxl_regloc_type type,
 	}
 
 	map->resource = CXL_RESOURCE_NONE;
+	if (index == CXL_INSTANCES_COUNT)
+		return instance;
+
 	return -ENODEV;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_find_regblock_instance, "CXL");
@@ -371,19 +376,13 @@ EXPORT_SYMBOL_NS_GPL(cxl_find_regblock, "CXL");
  *
  * Some regblocks may be repeated. Count how many instances.
  *
- * Return: count of matching regblocks.
+ * Return: non-negative count of matching regblocks, negative error code otherwise.
  */
 int cxl_count_regblock(struct pci_dev *pdev, enum cxl_regloc_type type)
 {
 	struct cxl_register_map map;
-	int rc, count = 0;
 
-	while (1) {
-		rc = cxl_find_regblock_instance(pdev, type, &map, count);
-		if (rc)
-			return count;
-		count++;
-	}
+	return cxl_find_regblock_instance(pdev, type, &map, CXL_INSTANCES_COUNT);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_count_regblock, "CXL");
 
