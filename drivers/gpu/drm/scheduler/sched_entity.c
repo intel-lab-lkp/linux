@@ -21,6 +21,8 @@
  *
  */
 
+#include <linux/dma-fence.h>
+#include <linux/dma-fence-array.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/completion.h>
@@ -92,7 +94,7 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	spsc_queue_init(&entity->job_queue);
 
 	atomic_set(&entity->fence_seq, 0);
-	entity->fence_context = dma_fence_context_alloc(2);
+	entity->fence_context = dma_fence_context_alloc(4);
 
 	return 0;
 }
@@ -183,39 +185,78 @@ static void drm_sched_entity_kill_jobs_cb(struct dma_fence *f,
 {
 	struct drm_sched_job *job = container_of(cb, struct drm_sched_job,
 						 finish_cb);
-	unsigned long index;
 
 	dma_fence_put(f);
 
-	/* Wait for all dependencies to avoid data corruptions */
-	xa_for_each(&job->dependencies, index, f) {
-		struct drm_sched_fence *s_fence = to_drm_sched_fence(f);
+	/* Wait for all dependencies to avoid data corruption */
+	if (!dma_fence_add_callback(job->deps_finished, &job->finish_cb,
+				    drm_sched_entity_kill_jobs_cb))
+		return;
 
-		if (s_fence && f == &s_fence->scheduled) {
-			/* The dependencies array had a reference on the scheduled
-			 * fence, and the finished fence refcount might have
-			 * dropped to zero. Use dma_fence_get_rcu() so we get
-			 * a NULL fence in that case.
+	INIT_WORK(&job->work, drm_sched_entity_kill_jobs_work);
+	schedule_work(&job->work);
+}
+
+static struct dma_fence *job_deps_finished(struct drm_sched_job *job)
+{
+	struct dma_fence_array *array;
+	unsigned int i, j, num_fences;
+	struct dma_fence **fences;
+
+	if (job->deps) {
+		array = to_dma_fence_array(job->deps);
+
+		if (array)
+			num_fences = array->num_fences;
+		else
+			num_fences = 1;
+	} else {
+			num_fences = 0;
+	}
+
+	if (!num_fences)
+		return dma_fence_get_stub();
+
+	fences = kmalloc_array(num_fences, sizeof(*fences), GFP_KERNEL);
+	if (!fences)
+		return NULL;
+
+	if (num_fences == 1)
+		fences[0] = job->deps;
+	else
+		memcpy(fences, array->fences, num_fences * sizeof(*fences));
+
+	for (i = 0, j = 0; i < num_fences; i++) {
+		struct dma_fence *fence = dma_fence_get(fences[i]);
+		struct drm_sched_fence *s_fence;
+
+		s_fence = to_drm_sched_fence(fence);
+		if (s_fence && fence == &s_fence->scheduled) {
+			/*
+			 * The dependencies array had a reference on the
+			 * scheduled fence, and the finished fence refcount
+			 * might have dropped to zero. Use dma_fence_get_rcu()
+			 * so we get a NULL fence in that case.
 			 */
-			f = dma_fence_get_rcu(&s_fence->finished);
+			fence = dma_fence_get_rcu(&s_fence->finished);
 
-			/* Now that we have a reference on the finished fence,
+			/*
+			 * Now that we have a reference on the finished fence,
 			 * we can release the reference the dependencies array
 			 * had on the scheduled fence.
 			 */
 			dma_fence_put(&s_fence->scheduled);
 		}
 
-		xa_erase(&job->dependencies, index);
-		if (f && !dma_fence_add_callback(f, &job->finish_cb,
-						 drm_sched_entity_kill_jobs_cb))
-			return;
-
-		dma_fence_put(f);
+		if (fence)
+			fences[j++] = fence;
 	}
 
-	INIT_WORK(&job->work, drm_sched_entity_kill_jobs_work);
-	schedule_work(&job->work);
+	array = dma_fence_array_create(j, fences,
+				       job->entity->fence_context + 3, 1,
+				       false);
+
+	return array ? &array->base : NULL;
 }
 
 /* Remove the entity from the scheduler and kill all pending jobs */
@@ -242,6 +283,11 @@ static void drm_sched_entity_kill(struct drm_sched_entity *entity)
 		struct drm_sched_fence *s_fence = job->s_fence;
 
 		dma_fence_get(&s_fence->finished);
+
+		job->deps_finished = job_deps_finished(job);
+		if (WARN_ON_ONCE(!job->deps_finished))
+			continue;
+
 		if (!prev || dma_fence_add_callback(prev, &job->finish_cb,
 					   drm_sched_entity_kill_jobs_cb))
 			drm_sched_entity_kill_jobs_cb(NULL, &job->finish_cb);
@@ -435,17 +481,8 @@ static struct dma_fence *
 drm_sched_job_dependency(struct drm_sched_job *job,
 			 struct drm_sched_entity *entity)
 {
-	struct dma_fence *f;
-
-	/* We keep the fence around, so we can iterate over all dependencies
-	 * in drm_sched_entity_kill_jobs_cb() to ensure all deps are signaled
-	 * before killing the job.
-	 */
-	f = xa_load(&job->dependencies, job->last_dependency);
-	if (f) {
-		job->last_dependency++;
-		return dma_fence_get(f);
-	}
+	if (job->deps && !dma_fence_is_signaled(job->deps))
+		return dma_fence_get(job->deps);
 
 	if (job->sched->ops->prepare_job)
 		return job->sched->ops->prepare_job(job, entity);

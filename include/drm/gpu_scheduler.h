@@ -27,7 +27,6 @@
 #include <drm/spsc_queue.h>
 #include <linux/dma-fence.h>
 #include <linux/completion.h>
-#include <linux/xarray.h>
 #include <linux/workqueue.h>
 
 #define MAX_WAIT_SCHED_ENTITY_Q_EMPTY msecs_to_jiffies(1000)
@@ -360,17 +359,10 @@ struct drm_sched_job {
 	enum drm_sched_priority		s_priority;
 	struct drm_sched_entity         *entity;
 	struct dma_fence_cb		cb;
-	/**
-	 * @dependencies:
-	 *
-	 * Contains the dependencies as struct dma_fence for this job, see
-	 * drm_sched_job_add_dependency() and
-	 * drm_sched_job_add_implicit_dependencies().
-	 */
-	struct xarray			dependencies;
 
-	/** @last_dependency: tracks @dependencies as they signal */
-	unsigned long			last_dependency;
+	struct dma_fence                stub_fence;
+	struct dma_fence                *deps;
+	struct dma_fence                *deps_finished;
 
 	/**
 	 * @submit_ts:

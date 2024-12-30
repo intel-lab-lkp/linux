@@ -69,6 +69,8 @@
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/completion.h>
+#include <linux/dma-fence-array.h>
+#include <linux/dma-fence-unwrap.h>
 #include <linux/dma-resv.h>
 #include <uapi/linux/sched/types.h>
 
@@ -564,8 +566,6 @@ int drm_sched_job_init(struct drm_sched_job *job,
 
 	INIT_LIST_HEAD(&job->list);
 
-	xa_init_flags(&job->dependencies, XA_FLAGS_ALLOC);
-
 	return 0;
 }
 EXPORT_SYMBOL(drm_sched_job_init);
@@ -614,46 +614,34 @@ int drm_sched_job_add_dependency(struct drm_sched_job *job,
 				 struct dma_fence *fence)
 {
 	struct drm_sched_entity *entity = job->entity;
-	struct dma_fence *entry;
-	unsigned long index;
-	u32 id = 0;
-	int ret;
+	struct dma_fence *deps;
+	int ret = 0;
 
 	if (!fence)
 		return 0;
 
-	if (fence->context == entity->fence_context ||
-	    fence->context == entity->fence_context + 1) {
+	if (fence->context >= entity->fence_context &&
+	    fence->context <= entity->fence_context + 3) {
 		/*
 		 * Fence is a scheduled/finished fence from a job
 		 * which belongs to the same entity, we can ignore
 		 * fences from ourself
 		 */
-		dma_fence_put(fence);
-		return 0;
+		goto out_put;
 	}
 
-	/* Deduplicate if we already depend on a fence from the same context.
-	 * This lets the size of the array of deps scale with the number of
-	 * engines involved, rather than the number of BOs.
-	 */
-	xa_for_each(&job->dependencies, index, entry) {
-		if (entry->context != fence->context)
-			continue;
-
-		if (dma_fence_is_later(fence, entry)) {
-			dma_fence_put(entry);
-			xa_store(&job->dependencies, index, fence, GFP_KERNEL);
-		} else {
-			dma_fence_put(fence);
-		}
-		return 0;
+	deps = dma_fence_unwrap_merge_context(entity->fence_context + 2,
+					      job->deps, fence);
+	if (!deps) {
+		ret = -ENOMEM;
+		goto out_put;
 	}
 
-	ret = xa_alloc(&job->dependencies, &id, fence, xa_limit_32b, GFP_KERNEL);
-	if (ret != 0)
-		dma_fence_put(fence);
+	dma_fence_put(job->deps);
+	job->deps = deps;
 
+out_put:
+	dma_fence_put(fence);
 	return ret;
 }
 EXPORT_SYMBOL(drm_sched_job_add_dependency);
@@ -745,26 +733,49 @@ int drm_sched_job_add_implicit_dependencies(struct drm_sched_job *job,
 }
 EXPORT_SYMBOL(drm_sched_job_add_implicit_dependencies);
 
+static bool
+can_replace_fence(struct drm_gpu_scheduler *sched,
+		  struct drm_sched_fence *s_fence,
+		  struct dma_fence *fence)
+{
+	if (fence->error || !s_fence || s_fence->sched != sched ||
+	    test_bit(DRM_SCHED_FENCE_DONT_PIPELINE, &fence->flags))
+		return false;
+
+	return true;
+}
+
 void drm_sched_job_prepare_dependecies(struct drm_sched_job *job)
 {
 	struct drm_gpu_scheduler *sched = job->sched;
+	struct drm_sched_fence *s_fence;
+	struct dma_fence_array *array;
 	struct dma_fence *fence;
-	unsigned long index;
 
-	xa_for_each(&job->dependencies, index, fence) {
-		struct drm_sched_fence *s_fence = to_drm_sched_fence(fence);
+	if (!job->deps)
+		return;
 
-		if (fence->error || !s_fence || s_fence->sched != sched ||
-		    test_bit(DRM_SCHED_FENCE_DONT_PIPELINE, &fence->flags))
-			continue;
+	array = to_dma_fence_array(job->deps);
+	if (!array) {
+		fence = job->deps;
+		s_fence = to_drm_sched_fence(fence);
+		if (can_replace_fence(sched, s_fence, fence)) {
+			job->deps = dma_fence_get(&s_fence->scheduled);
+			dma_fence_put(fence);
+		}
+	} else {
+		unsigned i;
 
-		/*
-		 * Fence is from the same scheduler, only need to wait for
-		 * it to be scheduled.
-		 */
-		xa_store(&job->dependencies, index,
-			 dma_fence_get(&s_fence->scheduled), GFP_KERNEL);
-		dma_fence_put(fence);
+		for (i = 0; i < array->num_fences; i++) {
+			fence = array->fences[i];
+			s_fence = to_drm_sched_fence(fence);
+			if (can_replace_fence(sched, s_fence, fence)) {
+				array->fences[i] =
+					dma_fence_get(&s_fence->scheduled);
+				dma_fence_put(fence);
+			}
+		}
+		array->base.seqno = job->s_fence->scheduled.seqno;
 	}
 }
 
@@ -783,24 +794,17 @@ void drm_sched_job_prepare_dependecies(struct drm_sched_job *job)
  */
 void drm_sched_job_cleanup(struct drm_sched_job *job)
 {
-	struct dma_fence *fence;
-	unsigned long index;
-
 	if (kref_read(&job->s_fence->finished.refcount)) {
 		/* drm_sched_job_arm() has been called */
 		dma_fence_put(&job->s_fence->finished);
+		dma_fence_put(job->deps);
+		dma_fence_put(job->deps_finished);
 	} else {
 		/* aborted job before committing to run it */
 		drm_sched_fence_free(job->s_fence);
 	}
 
 	job->s_fence = NULL;
-
-	xa_for_each(&job->dependencies, index, fence) {
-		dma_fence_put(fence);
-	}
-	xa_destroy(&job->dependencies);
-
 }
 EXPORT_SYMBOL(drm_sched_job_cleanup);
 
