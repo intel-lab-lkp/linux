@@ -5967,6 +5967,7 @@ static struct attribute *spr_uncore_cha_formats_attr[] = {
 	&format_attr_inv.attr,
 	&format_attr_thresh8.attr,
 	&format_attr_filter_tid5.attr,
+	&format_attr_ch_mask.attr,
 	NULL,
 };
 static const struct attribute_group spr_uncore_chabox_format_group = {
