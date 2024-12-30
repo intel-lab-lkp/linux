@@ -148,6 +148,22 @@ void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
 	spin_unlock(&entity->lock);
 }
 
+void drm_sched_rq_update_deadline(struct drm_sched_rq *rq,
+				  struct drm_sched_entity *entity,
+				  ktime_t deadline)
+{
+	lockdep_assert_held(&entity->lock);
+
+	if (ktime_before(deadline, entity->oldest_job_waiting)) {
+		spin_lock(&rq->lock);
+		if (!RB_EMPTY_NODE(&entity->rb_tree_node)) {
+			__drm_sched_rq_remove_tree_locked(entity, rq);
+			__drm_sched_rq_add_tree_locked(entity, rq, deadline);
+		}
+		spin_unlock(&rq->lock);
+	}
+}
+
 /**
  * drm_sched_rq_select_entity - Select an entity which provides a job to run
  *

@@ -168,6 +168,8 @@ static void drm_sched_fence_set_deadline_finished(struct dma_fence *f,
 
 	spin_unlock_irqrestore(&fence->lock, flags);
 
+	drm_sched_entity_set_deadline(fence->entity, deadline);
+
 	/*
 	 * smp_load_aquire() to ensure that if we are racing another
 	 * thread calling drm_sched_fence_set_parent(), that we see
@@ -223,6 +225,7 @@ void drm_sched_fence_init(struct drm_sched_fence *fence,
 {
 	unsigned seq;
 
+	fence->entity = entity;
 	fence->sched = entity->rq->sched;
 	seq = atomic_inc_return(&entity->fence_seq);
 	dma_fence_init(&fence->scheduled, &drm_sched_fence_ops_scheduled,

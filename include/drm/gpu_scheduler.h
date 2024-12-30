@@ -291,6 +291,9 @@ struct drm_sched_fence {
          * &drm_sched_fence.finished fence once parent is signalled.
          */
 	struct dma_fence		*parent;
+
+	struct drm_sched_entity		*entity;
+
         /**
          * @sched: the scheduler instance to which the job having this struct
          * belongs to.
@@ -597,6 +600,9 @@ void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
 struct drm_sched_entity *
 drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched,
 			   struct drm_sched_rq *rq);
+void drm_sched_rq_update_deadline(struct drm_sched_rq *rq,
+				  struct drm_sched_entity *entity,
+				  ktime_t deadline);
 
 int drm_sched_entity_init(struct drm_sched_entity *entity,
 			  enum drm_sched_priority priority,
@@ -612,6 +618,8 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job);
 void drm_sched_entity_set_priority(struct drm_sched_entity *entity,
 				   enum drm_sched_priority priority);
 bool drm_sched_entity_is_ready(struct drm_sched_entity *entity);
+void drm_sched_entity_set_deadline(struct drm_sched_entity *entity,
+				   ktime_t deadline);
 int drm_sched_entity_error(struct drm_sched_entity *entity);
 ktime_t drm_sched_entity_get_job_deadline(struct drm_sched_entity *entity,
 					  struct drm_sched_job *job);
