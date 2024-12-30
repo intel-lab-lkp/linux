@@ -47,13 +47,13 @@ static void __drm_sched_rq_add_tree_locked(struct drm_sched_entity *entity,
  *
  * Initializes a scheduler runqueue.
  */
-void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
-		       struct drm_sched_rq *rq)
+void drm_sched_rq_init(struct drm_gpu_scheduler *sched)
 {
+	struct drm_sched_rq *rq = &sched->rq;
+
 	spin_lock_init(&rq->lock);
 	INIT_LIST_HEAD(&rq->entities);
 	rq->rb_tree_root = RB_ROOT_CACHED;
-	rq->sched = sched;
 }
 
 /**
@@ -71,7 +71,7 @@ drm_sched_rq_add_entity(struct drm_sched_rq *rq,
 			struct drm_sched_entity *entity,
 			ktime_t ts)
 {
-	struct drm_gpu_scheduler *sched;
+	struct drm_gpu_scheduler *sched = container_of(rq, typeof(*sched), rq);
 
 	if (entity->stopped) {
 		DRM_ERROR("Trying to push to a killed entity\n");
@@ -81,7 +81,6 @@ drm_sched_rq_add_entity(struct drm_sched_rq *rq,
 	spin_lock(&entity->lock);
 	spin_lock(&rq->lock);
 
-	sched = rq->sched;
 	atomic_inc(sched->score);
 
 	if (!list_empty(&entity->list))
@@ -108,6 +107,8 @@ drm_sched_rq_add_entity(struct drm_sched_rq *rq,
 void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
 				struct drm_sched_entity *entity)
 {
+	struct drm_gpu_scheduler *sched = container_of(rq, typeof(*sched), rq);
+
 	lockdep_assert_held(&entity->lock);
 
 	if (list_empty(&entity->list))
@@ -115,7 +116,7 @@ void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
 
 	spin_lock(&rq->lock);
 
-	atomic_dec(rq->sched->score);
+	atomic_dec(sched->score);
 	list_del_init(&entity->list);
 
 	if (!RB_EMPTY_NODE(&entity->rb_tree_node))
@@ -175,10 +176,10 @@ void drm_sched_rq_update_deadline(struct drm_sched_rq *rq,
  * Return an entity if one is found or NULL if no ready entity was found.
  */
 struct drm_sched_entity *
-drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched,
-			   struct drm_sched_rq *rq)
+drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched)
 {
 	struct drm_sched_entity *entity = NULL;
+	struct drm_sched_rq *rq = &sched->rq;
 	struct rb_node *rb;
 
 	spin_lock(&rq->lock);
