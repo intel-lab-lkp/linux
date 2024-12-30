@@ -688,23 +688,7 @@ fbnic_mac_get_eth_mac_stats(struct fbnic_dev *fbd, bool reset,
 
 static int fbnic_mac_get_sensor_asic(struct fbnic_dev *fbd, int id, long *val)
 {
-	struct fbnic_fw_completion fw_cmpl;
-	s32 *sensor;
-
-	switch (id) {
-	case FBNIC_SENSOR_TEMP:
-		sensor = &fw_cmpl.tsene.millidegrees;
-		break;
-	case FBNIC_SENSOR_VOLTAGE:
-		sensor = &fw_cmpl.tsene.millivolts;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	*val = *sensor;
-
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 static const struct fbnic_mac fbnic_mac_asic = {
