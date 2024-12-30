@@ -41,7 +41,7 @@ TRACE_EVENT_CONDITION(damos_before_apply,
 		__entry->nr_regions = nr_regions;
 	),
 
-	TP_printk("ctx_idx=%u scheme_idx=%u target_idx=%lu nr_regions=%u %lu-%lu: %u %u",
+	TP_printk("ctx_idx=%u scheme_idx=%u target_idx=%lu nr_regions=%u 0x%lx-0x%lx: %u %u",
 			__entry->context_idx, __entry->scheme_idx,
 			__entry->target_idx, __entry->nr_regions,
 			__entry->start, __entry->end,
@@ -73,7 +73,7 @@ TRACE_EVENT(damon_aggregated,
 		__entry->age = r->age;
 	),
 
-	TP_printk("target_id=%lu nr_regions=%u %lu-%lu: %u %u",
+	TP_printk("target_id=%lu nr_regions=%u 0x%lx-0x%lx: %u %u",
 			__entry->target_id, __entry->nr_regions,
 			__entry->start, __entry->end,
 			__entry->nr_accesses, __entry->age)
