@@ -467,6 +467,8 @@ struct ub960_rxport {
 		};
 	} eq;
 
+	/* lock for aliased_addrs and associated registers */
+	struct mutex aliased_addrs_lock;
 	u16 aliased_addrs[UB960_MAX_PORT_ALIASES];
 };
 
@@ -1030,6 +1032,9 @@ static int ub960_atr_attach_client(struct i2c_atr *atr, u32 chan_id,
 	struct ub960_rxport *rxport = priv->rxports[chan_id];
 	struct device *dev = &priv->client->dev;
 	unsigned int reg_idx;
+	int ret = 0;
+
+	mutex_lock(&rxport->aliased_addrs_lock);
 
 	for (reg_idx = 0; reg_idx < UB960_MAX_PORT_ALIASES; reg_idx++) {
 		if (!rxport->aliased_addrs[reg_idx])
@@ -1038,7 +1043,8 @@ static int ub960_atr_attach_client(struct i2c_atr *atr, u32 chan_id,
 
 	if (reg_idx == UB960_MAX_PORT_ALIASES) {
 		dev_err(dev, "rx%u: alias pool exhausted\n", rxport->nport);
-		return -EADDRNOTAVAIL;
+		ret = -EADDRNOTAVAIL;
+		goto out_unlock;
 	}
 
 	rxport->aliased_addrs[reg_idx] = client->addr;
@@ -1051,7 +1057,9 @@ static int ub960_atr_attach_client(struct i2c_atr *atr, u32 chan_id,
 	dev_dbg(dev, "rx%u: client 0x%02x assigned alias 0x%02x at slot %u\n",
 		rxport->nport, client->addr, alias, reg_idx);
 
-	return 0;
+out_unlock:
+	mutex_unlock(&rxport->aliased_addrs_lock);
+	return ret;
 }
 
 static void ub960_atr_detach_client(struct i2c_atr *atr, u32 chan_id,
@@ -1062,6 +1070,8 @@ static void ub960_atr_detach_client(struct i2c_atr *atr, u32 chan_id,
 	struct device *dev = &priv->client->dev;
 	unsigned int reg_idx;
 
+	mutex_lock(&rxport->aliased_addrs_lock);
+
 	for (reg_idx = 0; reg_idx < UB960_MAX_PORT_ALIASES; reg_idx++) {
 		if (rxport->aliased_addrs[reg_idx] == client->addr)
 			break;
@@ -1070,7 +1080,7 @@ static void ub960_atr_detach_client(struct i2c_atr *atr, u32 chan_id,
 	if (reg_idx == UB960_MAX_PORT_ALIASES) {
 		dev_err(dev, "rx%u: client 0x%02x is not mapped!\n",
 			rxport->nport, client->addr);
-		return;
+		goto out_unlock;
 	}
 
 	rxport->aliased_addrs[reg_idx] = 0;
@@ -1079,6 +1089,9 @@ static void ub960_atr_detach_client(struct i2c_atr *atr, u32 chan_id,
 
 	dev_dbg(dev, "rx%u: client 0x%02x released at slot %u\n", rxport->nport,
 		client->addr, reg_idx);
+
+out_unlock:
+	mutex_unlock(&rxport->aliased_addrs_lock);
 }
 
 static const struct i2c_atr_ops ub960_atr_ops = {
@@ -3181,6 +3194,8 @@ static void ub960_rxport_free_ports(struct ub960_data *priv)
 		fwnode_handle_put(rxport->source.ep_fwnode);
 		fwnode_handle_put(rxport->ser.fwnode);
 
+		mutex_destroy(&rxport->aliased_addrs_lock);
+
 		kfree(rxport);
 		priv->rxports[nport] = NULL;
 	}
@@ -3400,6 +3415,8 @@ static int ub960_parse_dt_rxport(struct ub960_data *priv, unsigned int nport,
 	ret = ub960_parse_dt_rxport_ep_properties(priv, ep_fwnode, rxport);
 	if (ret)
 		goto err_put_remote_fwnode;
+
+	mutex_init(&rxport->aliased_addrs_lock);
 
 	return 0;
 
