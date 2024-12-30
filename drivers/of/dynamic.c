@@ -222,8 +222,15 @@ static void __of_attach_node(struct device_node *np)
 	}
 
 	np->child = NULL;
-	np->sibling = np->parent->child;
-	np->parent->child = np;
+	np->sibling = NULL;
+	struct device_node *last_child = np->parent->child;
+	if (!last_child)
+		np->parent->child = np;
+	else {
+		while (last_child->sibling)
+			last_child = last_child->sibling;
+		last_child->sibling = np;
+	}
 	of_node_clear_flag(np, OF_DETACHED);
 	np->fwnode.flags |= FWNODE_FLAG_NOT_DEVICE;
 
