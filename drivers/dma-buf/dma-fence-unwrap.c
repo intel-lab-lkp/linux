@@ -80,7 +80,8 @@ static int fence_cmp(const void *_a, const void *_b)
 }
 
 /* Implementation for the dma_fence_merge() marco, don't use directly */
-struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
+struct dma_fence *__dma_fence_unwrap_merge(u64 context,
+					   unsigned int num_fences,
 					   struct dma_fence **fences,
 					   struct dma_fence_unwrap *iter)
 {
@@ -147,9 +148,8 @@ struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
 	count = ++j;
 
 	if (count > 1) {
-		result = dma_fence_array_create(count, array,
-						dma_fence_context_alloc(1),
-						1, false);
+		result = dma_fence_array_create(count, array, context, 1,
+						false);
 		if (!result) {
 			for (i = 0; i < count; i++)
 				dma_fence_put(array[i]);
