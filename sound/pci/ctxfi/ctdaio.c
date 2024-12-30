@@ -211,52 +211,36 @@ static int dao_set_right_input(struct dao *dao, struct rsc *input)
 	return 0;
 }
 
-static int dao_clear_left_input(struct dao *dao)
+static int dao_clear_input(struct dao *dao, unsigned int start, unsigned int end)
 {
-	struct imapper *entry;
-	struct daio *daio = &dao->daio;
-	int i;
+	struct imapper *to_free = dao->imappers[start];
+	unsigned int i;
 
-	if (!dao->imappers[0])
+	if (!to_free)
 		return 0;
-
-	entry = dao->imappers[0];
-	dao->mgr->imap_delete(dao->mgr, entry);
-	/* Program conjugate resources */
-	for (i = 1; i < daio->rscl.msr; i++) {
-		entry = dao->imappers[i];
-		dao->mgr->imap_delete(dao->mgr, entry);
+	for (i = start; i < end; i++) {
+		dao->mgr->imap_delete(dao->mgr, dao->imappers[i]);
 		dao->imappers[i] = NULL;
 	}
 
-	kfree(dao->imappers[0]);
-	dao->imappers[0] = NULL;
-
+	kfree(to_free);
 	return 0;
+}
+
+
+static int dao_clear_left_input(struct dao *dao)
+{
+	u32 offset = dao->daio.rscl.msr;
+
+	return dao_clear_input(dao, 0, 0 + offset);
 }
 
 static int dao_clear_right_input(struct dao *dao)
 {
-	struct imapper *entry;
-	struct daio *daio = &dao->daio;
-	int i;
+	u32 start = dao->daio.rscl.msr;
+	u32 offset = dao->daio.rscr.msr;
 
-	if (!dao->imappers[daio->rscl.msr])
-		return 0;
-
-	entry = dao->imappers[daio->rscl.msr];
-	dao->mgr->imap_delete(dao->mgr, entry);
-	/* Program conjugate resources */
-	for (i = 1; i < daio->rscr.msr; i++) {
-		entry = dao->imappers[daio->rscl.msr + i];
-		dao->mgr->imap_delete(dao->mgr, entry);
-		dao->imappers[daio->rscl.msr + i] = NULL;
-	}
-
-	kfree(dao->imappers[daio->rscl.msr]);
-	dao->imappers[daio->rscl.msr] = NULL;
-
-	return 0;
+	return dao_clear_input(dao, start, start + offset);
 }
 
 static const struct dao_rsc_ops dao_ops = {
