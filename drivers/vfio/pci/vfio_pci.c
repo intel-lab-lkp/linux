@@ -111,9 +111,11 @@ static int vfio_pci_open_device(struct vfio_device *core_vdev)
 	if (ret)
 		return ret;
 
-	if (vfio_pci_is_vga(pdev) &&
-	    pdev->vendor == PCI_VENDOR_ID_INTEL &&
-	    IS_ENABLED(CONFIG_VFIO_PCI_IGD)) {
+	if (IS_ENABLED(CONFIG_VFIO_PCI_IGD) &&
+	    (pdev->vendor == PCI_VENDOR_ID_INTEL) &&
+	    (((pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA) ||
+	     ((pdev->class >> 8) == PCI_CLASS_DISPLAY_OTHER)) &&
+	    (pci_dev_id(pdev) == PCI_DEVID(0, PCI_DEVFN(2, 0)))) {
 		ret = vfio_pci_igd_init(vdev);
 		if (ret && ret != -ENODEV) {
 			pci_warn(pdev, "Failed to setup Intel IGD regions\n");
