@@ -57,8 +57,8 @@ STATIC void
 xfs_xmi_release(
 	struct xfs_xmi_log_item	*xmi_lip)
 {
-	ASSERT(atomic_read(&xmi_lip->xmi_refcount) > 0);
-	if (atomic_dec_and_test(&xmi_lip->xmi_refcount)) {
+	ASSERT(refcount_read(&xmi_lip->xmi_refcount) > 0);
+	if (refcount_dec_and_test(&xmi_lip->xmi_refcount)) {
 		xfs_trans_ail_delete(&xmi_lip->xmi_item, 0);
 		xfs_xmi_item_free(xmi_lip);
 	}
@@ -138,7 +138,7 @@ xfs_xmi_init(
 
 	xfs_log_item_init(mp, &xmi_lip->xmi_item, XFS_LI_XMI, &xfs_xmi_item_ops);
 	xmi_lip->xmi_format.xmi_id = (uintptr_t)(void *)xmi_lip;
-	atomic_set(&xmi_lip->xmi_refcount, 2);
+	refcount_set(&xmi_lip->xmi_refcount, 2);
 
 	return xmi_lip;
 }

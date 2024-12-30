@@ -38,7 +38,7 @@ struct kmem_cache;
  */
 struct xfs_xmi_log_item {
 	struct xfs_log_item		xmi_item;
-	atomic_t			xmi_refcount;
+	refcount_t			xmi_refcount;
 	struct xfs_xmi_log_format	xmi_format;
 };
 
