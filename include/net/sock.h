@@ -2730,6 +2730,13 @@ static inline bool sk_is_tcp(const struct sock *sk)
 	       sk->sk_protocol == IPPROTO_TCP;
 }
 
+static inline bool sk_is_sctp(const struct sock *sk)
+{
+	return sk_is_inet(sk) &&
+	       sk->sk_type == SOCK_STREAM &&
+	       sk->sk_protocol == IPPROTO_SCTP;
+}
+
 static inline bool sk_is_udp(const struct sock *sk)
 {
 	return sk_is_inet(sk) &&
