@@ -156,9 +156,7 @@ void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
  *
  * Find oldest waiting ready entity.
  *
- * Return an entity if one is found; return an error-pointer (!NULL) if an
- * entity was ready, but the scheduler had insufficient credits to accommodate
- * its job; return NULL, if no ready entity was found.
+ * Return an entity if one is found or NULL if no ready entity was found.
  */
 struct drm_sched_entity *
 drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched,
@@ -170,16 +168,13 @@ drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched,
 	spin_lock(&rq->lock);
 	for (rb = rb_first_cached(&rq->rb_tree_root); rb; rb = rb_next(rb)) {
 		entity = rb_entry(rb, struct drm_sched_entity, rb_tree_node);
-		if (drm_sched_entity_is_ready(entity)) {
-			if (!drm_sched_can_queue(sched, entity)) {
-				entity = ERR_PTR(-ENOSPC);
-				break;
-			}
-
-			reinit_completion(&entity->entity_idle);
-			break;
+		if (!drm_sched_entity_is_ready(entity)) {
+			entity = NULL;
+			continue;
 		}
-		entity = NULL;
+
+		reinit_completion(&entity->entity_idle);
+		break;
 	}
 	spin_unlock(&rq->lock);
 
