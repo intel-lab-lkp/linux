@@ -351,6 +351,7 @@ static int send_io_resp_imm(struct rtrs_srv_con *con, struct rtrs_srv_op *id,
 	enum ib_send_flags flags;
 	u32 imm;
 	int err;
+	struct ib_sge list;
 
 	if (id->dir == READ) {
 		struct rtrs_msg_rdma_read *rd_msg = id->rd_msg;
@@ -401,7 +402,6 @@ static int send_io_resp_imm(struct rtrs_srv_con *con, struct rtrs_srv_op *id,
 	imm = rtrs_to_io_rsp_imm(id->msg_id, errno, need_inval);
 	imm_wr.wr.next = NULL;
 	if (always_invalidate) {
-		struct ib_sge list;
 		struct rtrs_msg_rkey_rsp *msg;
 
 		srv_mr = &srv_path->mrs[id->msg_id];
