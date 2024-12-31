@@ -830,7 +830,7 @@ __xfs_sb_from_disk(
 		to->sb_rsumino = NULLFSINO;
 	} else {
 		to->sb_metadirino = NULLFSINO;
-		to->sb_rgcount = 1;
+		to->sb_rgcount = to->sb_rblocks > 0 ? 1 : 0;
 		to->sb_rgextents = 0;
 	}
 }
