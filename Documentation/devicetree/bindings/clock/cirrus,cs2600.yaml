@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/cirrus,cs2600.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Cirrus Logic Fractional-N Clock Synthesizer & Clock Multiplier
+
+maintainers:
+  - Paul Handrigan <paulha@opensource.cirrus.com>
+  - patches@opensource.cirrus.com>
+
+description:
+  The CS2600 is a system-clocking device that enables frequency synthesis and
+  clock generation from a stable timing reference clock. The device can
+  generate low-jitter clocks from a noisy clock reference at frequencies
+  as low as 50 Hz. The device has two potental clock inputs (xti and clk_in)
+  where xti can either be a crystal or a constant refclk and the clk_in. The
+  device can have either xti, clk_in, or both as a clock input depending on
+  the usecase. It also has three possible outputs CLK_OUT, BCLK_OUT, and
+  FSYNC_OUT.
+
+properties:
+  compatible:
+    enum:
+      - cirrus,cs2600
+
+  reg:
+    maxItems: 1
+
+  clocks:
+    minItems: 1
+    maxItems: 2
+
+  clock-names:
+    items:
+      enum:
+        - xti
+        - clk_in
+    minItems: 1
+    maxItems: 2
+
+  '#clock-cells':
+    const: 1
+
+  vdd-supply:
+    description: Power Supply
+
+  clock-output-names:
+    maxItems: 3
+    description: Names for CLK_OUT, BCLK_OUT and FSYNC_OUT clocks.
+
+  cirrus,aux-output-source:
+    description:
+      Specifies the function of the auxiliary output pin with "phase_unlock"
+      to indicate the input and output clocks are not in phase, "freq_unlock"
+      to indicate the PLL is unlocked, and "no_clkin" to indicate the clock on
+      the clk_in pin is not present.
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - phase_unock
+      - freq_unlock
+      - no_clkin
+
+  cirrus,clock-mode:
+    description:
+      Sets the device into smart mode whith "smart_mode" and sets the device
+      into smart mode that only outputs a clock when clk_in starts with
+      "smart_clkin_only_mode".
+    $ref: /schemas/types.yaml#/definitions/string
+    enum:
+      - smart_mode
+      - smart_clkin_only_mode
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - '#clock-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      clock-controller@2c {
+        compatible = "cirrus,cs2600";
+        reg = <0x2c>;
+        #clock-cells = <1>;
+        clocks = <&xtl_clk>, <&sync_clock>;
+        clock-names = "xti", "clk_in";
+        clock-output-names = "audio_clk_out", "audio_bclk", "audio_lrclk";
+        cirrus,aux-output-source = "freq_unlock";
+        vdd-supply = <&vreg>;
+      };
+    };
