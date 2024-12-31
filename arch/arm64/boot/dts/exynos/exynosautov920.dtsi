@@ -89,6 +89,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x0>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu1: cpu@100 {
@@ -96,6 +103,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x100>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu2: cpu@200 {
@@ -103,6 +117,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x200>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu3: cpu@300 {
@@ -110,6 +131,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x300>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu4: cpu@10000 {
@@ -117,6 +145,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x10000>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu5: cpu@10100 {
@@ -124,6 +159,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x10100>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu6: cpu@10200 {
@@ -131,6 +173,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x10200>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu7: cpu@10300 {
@@ -138,6 +187,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x10300>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu8: cpu@20000 {
@@ -145,6 +201,13 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x20000>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
 		};
 
 		cpu9: cpu@20100 {
@@ -152,6 +215,22 @@
 			compatible = "arm,cortex-a78ae";
 			reg = <0x0 0x20100>;
 			enable-method = "psci";
+			i-cache-size = <0x10000>;
+			i-cache-line-size = <64>;
+			i-cache-sets = <256>;
+			d-cache-size = <0x10000>;
+			d-cache-line-size = <64>;
+			d-cache-sets = <256>;
+			next-level-cache = <&cpu_l2>;
+		};
+
+		cpu_l2: l2-cache0 {
+			compatible = "cache";
+			cache-level = <2>;
+			cache-unified;
+			cache-size = <0x40000>;
+			cache-line-size = <64>;
+			cache-sets = <512>;
 		};
 	};
 
