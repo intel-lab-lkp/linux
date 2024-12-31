@@ -22,6 +22,13 @@
 # Makefile for the 'resource' sub-component of DAL.
 #
 
+ifneq ($(CONFIG_FRAME_WARN),0)
+ifeq ($(filter y,$(CONFIG_KASAN)$(CONFIG_KCSAN)),y)
+frame_warn_flag := -Wframe-larger-than=4096
+else
+frame_warn_flag := -Wframe-larger-than=3072
+endif
+endif
 
 ###############################################################################
 #  DCE
@@ -203,5 +210,6 @@ RESOURCE_DCN401 = dcn401_resource.o
 AMD_DAL_RESOURCE_DCN401 = $(addprefix $(AMDDALPATH)/dc/resource/dcn401/,$(RESOURCE_DCN401))
 
 AMD_DISPLAY_FILES += $(AMD_DAL_RESOURCE_DCN401)
+CFLAGS_$(AMD_DAL_RESOURCE_DCN401) := $(frame_warn_flag)
 
 endif
