@@ -1565,6 +1565,22 @@ int security_sb_mount(const char *dev_name, const struct path *path,
 }
 
 /**
+ * security_sb_bindmount() - Loopback/bind mount specific permission check
+ * @old_path: source of loopback/bind mount
+ * @path: mount point
+ *
+ * This check is performed in addition to security_sb_mount and only if the
+ * mount type is determined to be loopback/bind mount (flags & MS_BIND).  It
+ * surfaces the mount source as a path struct.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_sb_bindmount(const struct path *old_path, const struct path *path)
+{
+	return call_int_hook(sb_bindmount, old_path, path);
+}
+
+/**
  * security_sb_umount() - Check permission for unmounting a filesystem
  * @mnt: mounted filesystem
  * @flags: unmount flags
