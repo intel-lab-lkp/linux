@@ -30,6 +30,7 @@ static inline unsigned long long spl_complete_integer_division_u64(
 	unsigned long long result;
 
 	SPL_ASSERT(divisor);
+	BUG_ON(!divisor);
 
 	result = spl_div64_u64_rem(dividend, divisor, remainder);
 

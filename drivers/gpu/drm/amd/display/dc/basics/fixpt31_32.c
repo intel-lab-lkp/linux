@@ -52,6 +52,7 @@ static inline unsigned long long complete_integer_division_u64(
 	unsigned long long result;
 
 	ASSERT(divisor);
+	BUG_ON(!divisor);
 
 	result = div64_u64_rem(dividend, divisor, remainder);
 
