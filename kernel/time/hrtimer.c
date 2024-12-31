@@ -58,6 +58,8 @@
 #define HRTIMER_ACTIVE_SOFT	(HRTIMER_ACTIVE_HARD << MASK_SHIFT)
 #define HRTIMER_ACTIVE_ALL	(HRTIMER_ACTIVE_SOFT | HRTIMER_ACTIVE_HARD)
 
+static void retrigger_next_event(void *arg);
+
 /*
  * The timer bases:
  *
@@ -111,7 +113,8 @@ DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 			.clockid = CLOCK_TAI,
 			.get_time = &ktime_get_clocktai,
 		},
-	}
+	},
+	.csd = CSD_INIT(retrigger_next_event, NULL)
 };
 
 static const int hrtimer_clock_to_base_table[MAX_CLOCKS] = {
@@ -716,8 +719,6 @@ static inline int hrtimer_is_hres_enabled(void)
 	return hrtimer_hres_enabled;
 }
 
-static void retrigger_next_event(void *arg);
-
 /*
  * Switch to high resolution mode
  */
@@ -1202,10 +1203,49 @@ hrtimer_update_softirq_timer(struct hrtimer_cpu_base *cpu_base, bool reprogram)
 	hrtimer_reprogram(cpu_base->softirq_next_timer, reprogram);
 }
 
+/*
+ * If the current CPU is offline and timers have been already
+ * migrated away, make sure not to enqueue locally and perform
+ * a remote retrigger as a last resort.
+ */
+static void enqueue_hrtimer_offline(struct hrtimer *timer,
+				    struct hrtimer_clock_base *base,
+				    const enum hrtimer_mode mode)
+{
+#ifdef CONFIG_HOTPLUG_CPU
+	struct hrtimer_cpu_base *new_cpu_base, *old_cpu_base, *this_cpu_base;
+	struct hrtimer_clock_base *new_base;
+	int cpu;
+
+	old_cpu_base = base->cpu_base;
+	this_cpu_base = this_cpu_ptr(&hrtimer_bases);
+
+	if (old_cpu_base == this_cpu_base || !old_cpu_base->online) {
+		WARN_ON_ONCE(hrtimer_callback_running(timer));
+		cpu = cpumask_any_and(cpu_online_mask,
+				      housekeeping_cpumask(HK_TYPE_TIMER));
+		new_cpu_base = &per_cpu(hrtimer_bases, cpu);
+		new_base = &new_cpu_base->clock_base[base->index];
+		WRITE_ONCE(timer->base, &migration_base);
+		raw_spin_unlock(&old_cpu_base->lock);
+		raw_spin_lock(&new_cpu_base->lock);
+		WRITE_ONCE(timer->base, new_base);
+	} else {
+		new_base = base;
+		new_cpu_base = new_base->cpu_base;
+		cpu = new_cpu_base->cpu;
+	}
+
+	if (enqueue_hrtimer(timer, new_base, mode))
+		smp_call_function_single_async(cpu, &new_cpu_base->csd);
+#endif
+}
+
 static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 				    u64 delta_ns, const enum hrtimer_mode mode,
 				    struct hrtimer_clock_base *base)
 {
+	struct hrtimer_cpu_base *this_cpu_base = this_cpu_ptr(&hrtimer_bases);
 	struct hrtimer_clock_base *new_base;
 	bool force_local, first;
 
@@ -1217,7 +1257,7 @@ static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 	 * and enforce reprogramming after it is queued no matter whether
 	 * it is the new first expiring timer again or not.
 	 */
-	force_local = base->cpu_base == this_cpu_ptr(&hrtimer_bases);
+	force_local = base->cpu_base == this_cpu_base;
 	force_local &= base->cpu_base->next_timer == timer;
 
 	/*
@@ -1239,6 +1279,11 @@ static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 	tim = hrtimer_update_lowres(timer, tim, mode);
 
 	hrtimer_set_expires_range_ns(timer, tim, delta_ns);
+
+	if (unlikely(!this_cpu_base->online)) {
+		enqueue_hrtimer_offline(timer, base, mode);
+		return 0;
+	}
 
 	/* Switch the timer base, if necessary: */
 	if (!force_local) {
