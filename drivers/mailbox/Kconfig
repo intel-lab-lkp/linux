@@ -306,4 +306,11 @@ config THEAD_TH1520_MBOX
 	  kernel is running, and E902 core used for power management among other
 	  things.
 
+config QCOM_TMEL_QMP_MAILBOX
+	tristate "QCOM Mailbox Protocol(QMP) for TME-L SS"
+	help
+	  Say yes to add support for the QMP Mailbox Protocol driver for TME-L.
+	  QMP is a lightweight communication protocol for sending messages to
+	  TME-L. This protocol fits into the Generic Mailbox Framework.
+	  QMP uses a mailbox registers.
 endif
