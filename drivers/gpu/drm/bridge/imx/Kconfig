@@ -17,6 +17,7 @@ config DRM_IMX8MP_DW_HDMI_BRIDGE
 	tristate "Freescale i.MX8MP HDMI-TX bridge support"
 	depends on OF
 	depends on COMMON_CLK
+	select DRM_DISPLAY_CONNECTOR
 	select DRM_DW_HDMI
 	imply DRM_IMX8MP_HDMI_PVI
 	imply PHY_FSL_SAMSUNG_HDMI_PHY
