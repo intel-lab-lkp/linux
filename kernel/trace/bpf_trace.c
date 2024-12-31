@@ -2245,12 +2245,15 @@ void perf_event_detach_bpf_prog(struct perf_event *event)
 {
 	struct bpf_prog_array *old_array;
 	struct bpf_prog_array *new_array;
+	struct bpf_prog *prog;
 	int ret;
 
 	mutex_lock(&bpf_event_mutex);
 
-	if (!event->prog)
-		goto unlock;
+	if (!event->prog) {
+		mutex_unlock(&bpf_event_mutex);
+		return;
+	}
 
 	old_array = bpf_event_rcu_dereference(event->tp_event->prog_array);
 	if (!old_array)
@@ -2265,6 +2268,11 @@ void perf_event_detach_bpf_prog(struct perf_event *event)
 	}
 
 put:
+	prog = event->prog;
+	event->prog = NULL;
+
+	mutex_unlock(&bpf_event_mutex);
+
 	/*
 	 * It could be that the bpf_prog is not sleepable (and will be freed
 	 * via normal RCU), but is called from a point that supports sleepable
@@ -2272,11 +2280,7 @@ put:
 	 */
 	synchronize_rcu_tasks_trace();
 
-	bpf_prog_put(event->prog);
-	event->prog = NULL;
-
-unlock:
-	mutex_unlock(&bpf_event_mutex);
+	bpf_prog_put(prog);
 }
 
 int perf_event_query_prog_array(struct perf_event *event, void __user *info)
