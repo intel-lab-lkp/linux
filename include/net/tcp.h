@@ -2537,18 +2537,7 @@ static inline void tcp_segs_in(struct tcp_sock *tp, const struct sk_buff *skb)
 		WRITE_ONCE(tp->data_segs_in, tp->data_segs_in + segs_in);
 }
 
-/*
- * TCP listen path runs lockless.
- * We forced "struct sock" to be const qualified to make sure
- * we don't modify one of its field by mistake.
- * Here, we increment sk_drops which is an atomic_t, so we can safely
- * make sock writable again.
- */
-static inline void tcp_listendrop(const struct sock *sk)
-{
-	atomic_inc(&((struct sock *)sk)->sk_drops);
-	__NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENDROPS);
-}
+void tcp_listendrop(const struct sock *sk);
 
 enum hrtimer_restart tcp_pace_kick(struct hrtimer *timer);
 
