@@ -67,6 +67,59 @@ enum {
 	SD_ZERO_WS10_UNMAP,	/* Use WRITE SAME(10) with UNMAP */
 };
 
+struct sd_limits {
+	unsigned int has_features:1;
+	unsigned int has_neg_features:1;
+	unsigned int has_alignment_offset:1;
+	unsigned int has_bs:1;
+	unsigned int has_discard:1;
+	unsigned int has_integrity:1;
+	unsigned int has_aw:1;
+	unsigned int has_ws:1;
+	unsigned int has_io:1;
+	unsigned int has_zone:1;
+
+	blk_features_t		features;
+	blk_features_t		neg_features;
+	unsigned int		alignment_offset;
+	struct blk_integrity	integrity;
+
+	struct {
+		unsigned int logical_block_size;
+		unsigned int physical_block_size;
+	} bs;
+
+	struct {
+		unsigned int		discard_granularity;
+		unsigned int		discard_alignment;
+		unsigned int		max_hw_discard_sectors;
+	} discard;
+
+	struct {
+		unsigned int		max_write_zeroes_sectors;
+	} ws;
+
+	struct {
+		unsigned int		atomic_write_hw_max;
+		unsigned int		atomic_write_hw_boundary;
+		unsigned int		atomic_write_hw_unit_min;
+		unsigned int		atomic_write_hw_unit_max;
+	} aw;
+
+	struct {
+		unsigned int		max_dev_sectors;
+		unsigned int		io_opt;
+		unsigned int		io_min;
+	} io;
+
+	struct {
+		unsigned int		zone_write_granularity;
+		unsigned int		max_open_zones;
+		unsigned int		max_active_zones;
+		unsigned int		chunk_sectors;
+	} zone;
+};
+
 /**
  * struct zoned_disk_info - Specific properties of a ZBC SCSI device.
  * @nr_zones: number of zones.
@@ -228,11 +281,11 @@ static inline sector_t sectors_to_logical(struct scsi_device *sdev, sector_t sec
 	return sector >> (ilog2(sdev->sector_size) - 9);
 }
 
-void sd_dif_config_host(struct scsi_disk *sdkp, struct queue_limits *lim);
+void sd_dif_config_host(struct scsi_disk *sdkp, struct sd_limits *lim);
 
 #ifdef CONFIG_BLK_DEV_ZONED
 
-int sd_zbc_read_zones(struct scsi_disk *sdkp, struct queue_limits *lim,
+int sd_zbc_read_zones(struct scsi_disk *sdkp, struct sd_limits *lim,
 		u8 buf[SD_BUF_SIZE]);
 int sd_zbc_revalidate_zones(struct scsi_disk *sdkp);
 blk_status_t sd_zbc_setup_zone_mgmt_cmnd(struct scsi_cmnd *cmd,
@@ -245,7 +298,7 @@ int sd_zbc_report_zones(struct gendisk *disk, sector_t sector,
 #else /* CONFIG_BLK_DEV_ZONED */
 
 static inline int sd_zbc_read_zones(struct scsi_disk *sdkp,
-		struct queue_limits *lim, u8 buf[SD_BUF_SIZE])
+		struct sd_limits *lim, u8 buf[SD_BUF_SIZE])
 {
 	return 0;
 }

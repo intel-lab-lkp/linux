@@ -588,7 +588,7 @@ int sd_zbc_revalidate_zones(struct scsi_disk *sdkp)
  * also the zoned device information in *sdkp. Called by sd_revalidate_disk()
  * before the gendisk capacity has been set.
  */
-int sd_zbc_read_zones(struct scsi_disk *sdkp, struct queue_limits *lim,
+int sd_zbc_read_zones(struct scsi_disk *sdkp, struct sd_limits *lim,
 		u8 buf[SD_BUF_SIZE])
 {
 	unsigned int nr_zones;
@@ -598,6 +598,7 @@ int sd_zbc_read_zones(struct scsi_disk *sdkp, struct queue_limits *lim,
 	if (sdkp->device->type != TYPE_ZBC)
 		return 0;
 
+	lim->has_features = 1;
 	lim->features |= BLK_FEAT_ZONED;
 
 	/*
@@ -605,7 +606,7 @@ int sd_zbc_read_zones(struct scsi_disk *sdkp, struct queue_limits *lim,
 	 * zones of host-managed devices must be aligned to the device physical
 	 * block size.
 	 */
-	lim->zone_write_granularity = sdkp->physical_block_size;
+	lim->zone.zone_write_granularity = sdkp->physical_block_size;
 
 	/* READ16/WRITE16/SYNC16 is mandatory for ZBC devices */
 	sdkp->device->use_16_for_rw = 1;
@@ -628,11 +629,12 @@ int sd_zbc_read_zones(struct scsi_disk *sdkp, struct queue_limits *lim,
 
 	/* The drive satisfies the kernel restrictions: set it up */
 	if (sdkp->zones_max_open == U32_MAX)
-		lim->max_open_zones = 0;
+		lim->zone.max_open_zones = 0;
 	else
-		lim->max_open_zones = sdkp->zones_max_open;
-	lim->max_active_zones = 0;
-	lim->chunk_sectors = logical_to_sectors(sdkp->device, zone_blocks);
+		lim->zone.max_open_zones = sdkp->zones_max_open;
+	lim->zone.max_active_zones = 0;
+	lim->zone.chunk_sectors = logical_to_sectors(sdkp->device, zone_blocks);
+	lim->has_zone = 1;
 
 	return 0;
 

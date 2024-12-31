@@ -24,13 +24,14 @@
 /*
  * Configure exchange of protection information between OS and HBA.
  */
-void sd_dif_config_host(struct scsi_disk *sdkp, struct queue_limits *lim)
+void sd_dif_config_host(struct scsi_disk *sdkp, struct sd_limits *lim)
 {
 	struct scsi_device *sdp = sdkp->device;
 	u8 type = sdkp->protection_type;
 	struct blk_integrity *bi = &lim->integrity;
 	int dif, dix;
 
+	lim->has_integrity = 1;
 	memset(bi, 0, sizeof(*bi));
 
 	dif = scsi_host_dif_capable(sdp->host, type);
