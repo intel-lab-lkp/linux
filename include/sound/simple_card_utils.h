@@ -267,6 +267,9 @@ static inline void simple_util_debug_info(struct simple_util_priv *priv)
 			dev_dbg(dev, "link name = %s\n", link->name);
 		if (link->dai_fmt)
 			dev_dbg(dev, "link format = %04x\n", link->dai_fmt);
+		if (link->playback_only || link->capture_only)
+			dev_dbg(dev, "link is %s only",
+				link->playback_only ? "PLAYBACK" : "CAPTURE");
 		if (props->adata.convert_rate)
 			dev_dbg(dev, "convert_rate = %d\n", props->adata.convert_rate);
 		if (props->adata.convert_channels)
