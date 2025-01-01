@@ -579,7 +579,6 @@ static void process_request_part(struct ssif_bmc_ctx *ssif_bmc)
 static void process_smbus_cmd(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 {
 	/* SMBUS command can vary (single or multi-part) */
-	ssif_bmc->part_buf.smbus_cmd = *val;
 	ssif_bmc->msg_idx = 1;
 	memset(&ssif_bmc->part_buf.payload[0], 0, MAX_PAYLOAD_PER_TRANSACTION);
 
@@ -596,6 +595,7 @@ static void process_smbus_cmd(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
 		if (ssif_bmc->aborting)
 			ssif_bmc->aborting = false;
 	}
+	ssif_bmc->part_buf.smbus_cmd = *val;
 }
 
 static void on_read_requested_event(struct ssif_bmc_ctx *ssif_bmc, u8 *val)
