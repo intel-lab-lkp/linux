@@ -1299,6 +1299,7 @@ static int open_fs_devices(struct btrfs_fs_devices *fs_devices,
 	struct btrfs_device *device;
 	struct btrfs_device *latest_dev = NULL;
 	struct btrfs_device *tmp_device;
+	s64 __maybe_unused value = 0;
 	int ret = 0;
 
 	/* Initialize the in-memory record of filesystem read count */
@@ -1333,10 +1334,21 @@ static int open_fs_devices(struct btrfs_fs_devices *fs_devices,
 	fs_devices->latest_dev = latest_dev;
 	fs_devices->total_rw_bytes = 0;
 	fs_devices->chunk_alloc_policy = BTRFS_CHUNK_ALLOC_REGULAR;
-	fs_devices->read_policy = BTRFS_READ_POLICY_PID;
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
 	fs_devices->rr_min_contiguous_read = BTRFS_DEFAULT_RR_MIN_CONTIGUOUS_READ;
 	fs_devices->read_devid = latest_dev->devid;
+	fs_devices->read_policy =
+		btrfs_read_policy_to_enum(btrfs_get_raid1_balancing(), &value);
+	if (fs_devices->read_policy == BTRFS_READ_POLICY_RR)
+		fs_devices->fs_stats = true;
+	if (value) {
+		if (fs_devices->read_policy == BTRFS_READ_POLICY_RR)
+			fs_devices->rr_min_contiguous_read = value;
+		if (fs_devices->read_policy == BTRFS_READ_POLICY_DEVID)
+			fs_devices->read_devid = value;
+	}
+#else
+	fs_devices->read_policy = BTRFS_READ_POLICY_PID;
 #endif
 
 	return 0;
