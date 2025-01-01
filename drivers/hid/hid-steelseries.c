@@ -447,6 +447,14 @@ static int steelseries_headset_battery_get_property(struct power_supply *psy,
 	int ret = 0;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_MODEL_NAME:
+		val->strval = sd->hdev->name;
+		while (!strncmp(val->strval, "SteelSeries ", 12))
+			val->strval += 12;
+		break;
+	case POWER_SUPPLY_PROP_MANUFACTURER:
+		val->strval = "SteelSeries";
+		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		val->intval = 1;
 		break;
@@ -490,6 +498,8 @@ steelseries_headset_set_wireless_status(struct hid_device *hdev,
 }
 
 static enum power_supply_property steelseries_headset_battery_props[] = {
+	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_MANUFACTURER,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_SCOPE,
