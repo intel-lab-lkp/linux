@@ -20,5 +20,12 @@ struct ipt_ttl_info {
 	__u8	ttl;
 };
 
+enum {
+	IPT_TTL_SET = 0,
+	IPT_TTL_INC,
+	IPT_TTL_DEC
+};
 
-#endif
+#define IPT_TTL_MAXMODE	IPT_TTL_DEC
+
+#endif /* _IPT_TTL_H */

@@ -882,6 +882,7 @@ config NETFILTER_XT_TARGET_DSCP
 	tristate '"DSCP" and "TOS" target support'
 	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_DSCP
 	help
 	  This option adds a `DSCP' target, which allows you to manipulate
 	  the IPv4/IPv6 header DSCP field (differentiated services codepoint).
@@ -898,6 +899,7 @@ config NETFILTER_XT_TARGET_HL
 	tristate '"HL" hoplimit target support'
 	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_HL
 	help
 	This option adds the "HL" (for IPv6) and "TTL" (for IPv4)
 	targets, which enable the user to change the
@@ -1029,6 +1031,7 @@ config NETFILTER_XT_TARGET_NOTRACK
 config NETFILTER_XT_TARGET_RATEEST
 	tristate '"RATEEST" target support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_RATEEST
 	help
 	  This option adds a `RATEEST' target, which allows to measure
 	  rates similar to TC estimators. The `rateest' match can be
@@ -1122,6 +1125,7 @@ config NETFILTER_XT_TARGET_TCPMSS
 	tristate '"TCPMSS" target support'
 	depends on IPV6 || IPV6=n
 	default m if NETFILTER_ADVANCED=n
+	select NETFILTER_XT_TCPMSS
 	help
 	  This option adds a `TCPMSS' target, which allows you to alter the
 	  MSS value of TCP SYN packets, to control the maximum size for that
@@ -1301,6 +1305,7 @@ config NETFILTER_XT_MATCH_DEVGROUP
 config NETFILTER_XT_MATCH_DSCP
 	tristate '"dscp" and "tos" match support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_DSCP
 	help
 	  This option adds a `DSCP' match, which allows you to match against
 	  the IPv4/IPv6 header DSCP field (differentiated services codepoint).
@@ -1359,6 +1364,7 @@ config NETFILTER_XT_MATCH_HELPER
 config NETFILTER_XT_MATCH_HL
 	tristate '"hl" hoplimit/TTL match support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_HL
 	help
 	HL matching allows you to match packets based on the hoplimit
 	in the IPv6 header, or the time-to-live field in the IPv4
@@ -1625,6 +1631,7 @@ config NETFILTER_XT_MATCH_STRING
 config NETFILTER_XT_MATCH_TCPMSS
 	tristate '"tcpmss" match support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_TCPMSS
 	help
 	  This option adds a `tcpmss' match, which allows you to examine the
 	  MSS value of TCP SYN packets, which control the maximum packet size

@@ -2,8 +2,18 @@
 #ifndef _IPT_ECN_H
 #define _IPT_ECN_H
 
+#include <linux/types.h>
+#include <linux/netfilter/xt_dscp.h>
 #include <linux/netfilter/xt_ecn.h>
+
 #define ipt_ecn_info xt_ecn_info
+
+#define IPT_ECN_IP_MASK	(~XT_DSCP_MASK)
+
+#define IPT_ECN_OP_SET_IP	0x01	/* set ECN bits of IPv4 header */
+#define IPT_ECN_OP_SET_ECE	0x10	/* set ECE bit of TCP header */
+#define IPT_ECN_OP_SET_CWR	0x20	/* set CWR bit of TCP header */
+#define IPT_ECN_OP_MASK		0xce
 
 enum {
 	IPT_ECN_IP_MASK       = XT_ECN_IP_MASK,
@@ -11,6 +21,16 @@ enum {
 	IPT_ECN_OP_MATCH_ECE  = XT_ECN_OP_MATCH_ECE,
 	IPT_ECN_OP_MATCH_CWR  = XT_ECN_OP_MATCH_CWR,
 	IPT_ECN_OP_MATCH_MASK = XT_ECN_OP_MATCH_MASK,
+};
+
+struct ipt_ECN_info {
+	__u8 operation;	/* bitset of operations */
+	__u8 ip_ect;	/* ECT codepoint of IPv4 header, pre-shifted */
+	union {
+		struct {
+			__u8 ece:1, cwr:1; /* TCP ECT bits */
+		} tcp;
+	} proto;
 };
 
 #endif /* IPT_ECN_H */

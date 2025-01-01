@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
-#ifndef _XT_MARK_H
-#define _XT_MARK_H
+#ifndef _UAPI_XT_MARK_H
+#define _UAPI_XT_MARK_H
 
 #include <linux/types.h>
 
@@ -13,4 +13,4 @@ struct xt_mark_mtinfo1 {
 	__u8 invert;
 };
 
-#endif /*_XT_MARK_H*/
+#endif /* _UAPI_XT_MARK_H */
