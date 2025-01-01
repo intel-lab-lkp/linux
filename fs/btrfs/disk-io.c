@@ -3481,6 +3481,9 @@ int __cold open_ctree(struct super_block *sb, struct btrfs_fs_devices *fs_device
 		goto fail_sysfs;
 	}
 
+	/* Disable filesystem stats tracking unless required by a feature. */
+	fs_devices->fs_stats = false;
+
 	ret = btrfs_read_block_groups(fs_info);
 	if (ret) {
 		btrfs_err(fs_info, "failed to read block groups: %d", ret);

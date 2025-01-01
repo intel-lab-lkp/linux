@@ -185,7 +185,7 @@ struct btrfs_device {
 	 * enum btrfs_dev_stat_values in ioctl.h */
 	int dev_stats_valid;
 
-	/* Counter to record the change of device stats */
+	/* Counter to record of the change of device stats */
 	atomic_t dev_stats_ccnt;
 	atomic_t dev_stat_values[BTRFS_DEV_STAT_VALUES_MAX];
 
@@ -417,6 +417,8 @@ struct btrfs_fs_devices {
 	bool seeding;
 	/* The mount needs to use a randomly generated fsid. */
 	bool temp_fsid;
+	/* Enable/disable the filesystem stats tracking */
+	bool fs_stats;
 
 	struct btrfs_fs_info *fs_info;
 	/* sysfs kobjects */
@@ -426,6 +428,9 @@ struct btrfs_fs_devices {
 	struct completion kobj_unregister;
 
 	enum btrfs_chunk_allocation_policy chunk_alloc_policy;
+
+	/* Tracks the number of blocks (sectors) read from the filesystem. */
+	struct percpu_counter read_cnt_blocks;
 
 	/* Policy used to read the mirrored stripes. */
 	enum btrfs_read_policy read_policy;
