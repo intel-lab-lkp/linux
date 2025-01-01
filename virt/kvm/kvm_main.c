@@ -2989,10 +2989,11 @@ kvm_pfn_t __kvm_faultin_pfn(const struct kvm_memory_slot *slot, gfn_t gfn,
 		.refcounted_page = refcounted_page,
 	};
 
-	if (WARN_ON_ONCE(!writable || !refcounted_page))
+	if (WARN_ON_ONCE(!refcounted_page))
 		return KVM_PFN_ERR_FAULT;
 
-	*writable = false;
+	if (writable)
+		*writable = false;
 	*refcounted_page = NULL;
 
 	return kvm_follow_pfn(&kfp);
