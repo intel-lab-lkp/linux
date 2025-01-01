@@ -70,6 +70,7 @@ struct ipvl_dev {
 	netdev_features_t	sfeatures;
 	u32			msg_enable;
 	spinlock_t		addrs_lock;
+	netdevice_tracker	dev_tracker;
 };
 
 struct ipvl_addr {
