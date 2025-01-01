@@ -26,10 +26,38 @@ enum {
 	SW_CAMERA_ON	= 1,
 };
 
+static int camera_shutter_input_setup(struct wmi_device *wdev, u8 camera_mode)
+{
+	struct lenovo_wmi_priv *priv = dev_get_drvdata(&wdev->dev);
+	int err;
+
+	priv->idev = input_allocate_device();
+	if (!priv->idev)
+		return -ENOMEM;
+
+	priv->idev->name = "Lenovo WMI Camera Button";
+	priv->idev->phys = "wmi/input0";
+	priv->idev->id.bustype = BUS_HOST;
+	priv->idev->dev.parent = &wdev->dev;
+
+	input_set_capability(priv->idev, EV_SW, SW_CAMERA_LENS_COVER);
+
+	input_report_switch(priv->idev, SW_CAMERA_LENS_COVER,
+			    camera_mode == SW_CAMERA_ON ? 0 : 1);
+	input_sync(priv->idev);
+
+	err = input_register_device(priv->idev);
+	if (err) {
+		input_free_device(priv->idev);
+		priv->idev = NULL;
+	}
+
+	return err;
+}
+
 static void lenovo_wmi_notify(struct wmi_device *wdev, union acpi_object *obj)
 {
 	struct lenovo_wmi_priv *priv = dev_get_drvdata(&wdev->dev);
-	unsigned int keycode;
 	u8 camera_mode;
 
 	if (obj->type != ACPI_TYPE_BUFFER) {
@@ -55,11 +83,18 @@ static void lenovo_wmi_notify(struct wmi_device *wdev, union acpi_object *obj)
 
 	mutex_lock(&priv->notify_lock);
 
-	keycode = camera_mode == SW_CAMERA_ON ?
-		   KEY_CAMERA_ACCESS_ENABLE : KEY_CAMERA_ACCESS_DISABLE;
-	input_report_key(priv->idev, keycode, 1);
-	input_sync(priv->idev);
-	input_report_key(priv->idev, keycode, 0);
+	if (!priv->idev) {
+		if (camera_shutter_input_setup(wdev, camera_mode))
+			dev_warn(&wdev->dev, "Failed to register input device\n");
+
+		mutex_unlock(&priv->notify_lock);
+		return;
+	}
+
+	if (camera_mode == SW_CAMERA_ON)
+		input_report_switch(priv->idev, SW_CAMERA_LENS_COVER, 0);
+	else
+		input_report_switch(priv->idev, SW_CAMERA_LENS_COVER, 1);
 	input_sync(priv->idev);
 
 	mutex_unlock(&priv->notify_lock);
@@ -68,29 +103,12 @@ static void lenovo_wmi_notify(struct wmi_device *wdev, union acpi_object *obj)
 static int lenovo_wmi_probe(struct wmi_device *wdev, const void *context)
 {
 	struct lenovo_wmi_priv *priv;
-	int ret;
 
 	priv = devm_kzalloc(&wdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
 	dev_set_drvdata(&wdev->dev, priv);
-
-	priv->idev = devm_input_allocate_device(&wdev->dev);
-	if (!priv->idev)
-		return -ENOMEM;
-
-	priv->idev->name = "Lenovo WMI Camera Button";
-	priv->idev->phys = "wmi/input0";
-	priv->idev->id.bustype = BUS_HOST;
-	priv->idev->dev.parent = &wdev->dev;
-	input_set_capability(priv->idev, EV_KEY, KEY_CAMERA_ACCESS_ENABLE);
-	input_set_capability(priv->idev, EV_KEY, KEY_CAMERA_ACCESS_DISABLE);
-
-	ret = input_register_device(priv->idev);
-	if (ret)
-		return ret;
-
 	mutex_init(&priv->notify_lock);
 
 	return 0;
@@ -99,6 +117,9 @@ static int lenovo_wmi_probe(struct wmi_device *wdev, const void *context)
 static void lenovo_wmi_remove(struct wmi_device *wdev)
 {
 	struct lenovo_wmi_priv *priv = dev_get_drvdata(&wdev->dev);
+
+	if (priv->idev)
+		input_unregister_device(priv->idev);
 
 	mutex_destroy(&priv->notify_lock);
 }
