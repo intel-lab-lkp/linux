@@ -68,7 +68,13 @@ static struct class mtd_class = {
 	.pm = MTD_CLS_PM_OPS,
 };
 
+static struct class mtd_master_class = {
+	.name = "mtd_master",
+	.pm = MTD_CLS_PM_OPS,
+};
+
 static DEFINE_IDR(mtd_idr);
+static DEFINE_IDR(mtd_master_idr);
 
 /* These are exported solely for the purpose of mtd_blkdevs.c. You
    should not use them for _anything_ else */
@@ -83,8 +89,9 @@ EXPORT_SYMBOL_GPL(__mtd_next_device);
 
 static LIST_HEAD(mtd_notifiers);
 
-
+#define MTD_MASTER_DEVS 255
 #define MTD_DEVT(index) MKDEV(MTD_CHAR_MAJOR, (index)*2)
+static dev_t mtd_master_devt;
 
 /* REVISIT once MTD uses the driver model better, whoever allocates
  * the mtd_info will probably want to use the release() hook...
@@ -102,6 +109,17 @@ static void mtd_release(struct device *dev)
 
 	/* remove /dev/mtdXro node */
 	device_destroy(&mtd_class, index + 1);
+}
+
+static void mtd_master_release(struct device *dev)
+{
+	struct mtd_info *mtd = dev_get_drvdata(dev);
+
+	idr_remove(&mtd_master_idr, mtd->index);
+	of_node_put(mtd_get_of_node(mtd));
+
+	if (mtd_is_partition(mtd))
+		release_mtd_partition(mtd);
 }
 
 static void mtd_device_release(struct kref *kref)
@@ -365,6 +383,11 @@ static const struct device_type mtd_devtype = {
 	.name		= "mtd",
 	.groups		= mtd_groups,
 	.release	= mtd_release,
+};
+
+static const struct device_type mtd_master_devtype = {
+	.name		= "mtd_master",
+	.release	= mtd_master_release,
 };
 
 static bool mtd_expert_analysis_mode;
@@ -639,12 +662,12 @@ exit_parent:
  *	notify each currently active MTD 'user' of its arrival. Returns
  *	zero on success or non-zero on failure.
  */
-
 int add_mtd_device(struct mtd_info *mtd)
 {
 	struct device_node *np = mtd_get_of_node(mtd);
 	struct mtd_info *master = mtd_get_master(mtd);
 	struct mtd_notifier *not;
+	bool partitioned = true;
 	int i, error, ofidx;
 
 	/*
@@ -654,6 +677,11 @@ int add_mtd_device(struct mtd_info *mtd)
 	 */
 	if (WARN_ONCE(mtd->dev.type, "MTD already registered\n"))
 		return -EEXIST;
+
+	if ((master == mtd) && !IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER)) {
+		partitioned = false;
+		pr_debug("mtd: unpartitioned master %s\n", mtd->name);
+	}
 
 	BUG_ON(mtd->writesize == 0);
 
@@ -687,10 +715,17 @@ int add_mtd_device(struct mtd_info *mtd)
 	ofidx = -1;
 	if (np)
 		ofidx = of_alias_get_id(np, "mtd");
-	if (ofidx >= 0)
-		i = idr_alloc(&mtd_idr, mtd, ofidx, ofidx + 1, GFP_KERNEL);
-	else
-		i = idr_alloc(&mtd_idr, mtd, 0, 0, GFP_KERNEL);
+	if (partitioned) {
+		if (ofidx >= 0)
+			i = idr_alloc(&mtd_idr, mtd, ofidx, ofidx + 1, GFP_KERNEL);
+		else
+			i = idr_alloc(&mtd_idr, mtd, 0, 0, GFP_KERNEL);
+	} else {
+		if (ofidx >= 0)
+			i = idr_alloc(&mtd_master_idr, mtd, ofidx, ofidx + 1, GFP_KERNEL);
+		else
+			i = idr_alloc(&mtd_master_idr, mtd, 0, 0, GFP_KERNEL);
+	}
 	if (i < 0) {
 		error = i;
 		goto fail_locked;
@@ -738,15 +773,23 @@ int add_mtd_device(struct mtd_info *mtd)
 	/* Caller should have set dev.parent to match the
 	 * physical device, if appropriate.
 	 */
-	mtd->dev.type = &mtd_devtype;
-	mtd->dev.class = &mtd_class;
-	mtd->dev.devt = MTD_DEVT(i);
-	dev_set_name(&mtd->dev, "mtd%d", i);
+	if (partitioned) {
+		mtd->dev.type = &mtd_devtype;
+		mtd->dev.class = &mtd_class;
+		mtd->dev.devt = MTD_DEVT(i);
+		dev_set_name(&mtd->dev, "mtd%d", i);
+	} else {
+		mtd->dev.type = &mtd_master_devtype;
+		mtd->dev.class = &mtd_master_class;
+		mtd->dev.devt = MKDEV(MAJOR(mtd_master_devt), i);
+		dev_set_name(&mtd->dev, "mtd_master%d", i);
+	}
 	dev_set_drvdata(&mtd->dev, mtd);
 	mtd_check_of_node(mtd);
 	of_node_get(mtd_get_of_node(mtd));
 	error = device_register(&mtd->dev);
 	if (error) {
+		pr_err("mtd: %s device_register fail %d\n", mtd->name, error);
 		put_device(&mtd->dev);
 		goto fail_added;
 	}
@@ -758,8 +801,10 @@ int add_mtd_device(struct mtd_info *mtd)
 
 	mtd_debugfs_populate(mtd);
 
-	device_create(&mtd_class, mtd->dev.parent, MTD_DEVT(i) + 1, NULL,
-		      "mtd%dro", i);
+	if (partitioned) {
+		device_create(&mtd_class, mtd->dev.parent, MTD_DEVT(i) + 1, NULL,
+			      "mtd%dro", i);
+	}
 
 	pr_debug("mtd: Giving out device %d to %s\n", i, mtd->name);
 	/* No need to get a refcount on the module containing
@@ -769,13 +814,16 @@ int add_mtd_device(struct mtd_info *mtd)
 
 	mutex_unlock(&mtd_table_mutex);
 
-	if (of_property_read_bool(mtd_get_of_node(mtd), "linux,rootfs")) {
-		if (IS_BUILTIN(CONFIG_MTD)) {
-			pr_info("mtd: setting mtd%d (%s) as root device\n", mtd->index, mtd->name);
-			ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
-		} else {
-			pr_warn("mtd: can't set mtd%d (%s) as root device - mtd must be builtin\n",
-				mtd->index, mtd->name);
+	if (partitioned) {
+		if (of_property_read_bool(mtd_get_of_node(mtd), "linux,rootfs")) {
+			if (IS_BUILTIN(CONFIG_MTD)) {
+				pr_info("mtd: setting mtd%d (%s) as root device\n",
+					mtd->index, mtd->name);
+				ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
+			} else {
+				pr_warn("mtd: can't set mtd%d (%s) as root device - mtd must be builtin\n",
+					mtd->index, mtd->name);
+			}
 		}
 	}
 
@@ -790,7 +838,10 @@ fail_nvmem_add:
 	device_unregister(&mtd->dev);
 fail_added:
 	of_node_put(mtd_get_of_node(mtd));
-	idr_remove(&mtd_idr, i);
+	if (partitioned)
+		idr_remove(&mtd_idr, i);
+	else
+		idr_remove(&mtd_master_idr, i);
 fail_locked:
 	mutex_unlock(&mtd_table_mutex);
 	return error;
@@ -1061,11 +1112,10 @@ int mtd_device_parse_register(struct mtd_info *mtd, const char * const *types,
 	if (ret)
 		goto out;
 
-	if (IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER)) {
-		ret = add_mtd_device(mtd);
-		if (ret)
-			goto out;
-	}
+	/* Master device */
+	ret = add_mtd_device(mtd);
+	if (ret)
+		goto out;
 
 	/* Prefer parsed partitions over driver-provided fallback */
 	ret = parse_mtd_partitions(mtd, types, parser_data);
@@ -1261,8 +1311,7 @@ int __get_mtd_device(struct mtd_info *mtd)
 		mtd = mtd->parent;
 	}
 
-	if (IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER))
-		kref_get(&master->refcnt);
+	kref_get(&master->refcnt);
 
 	return 0;
 }
@@ -1356,8 +1405,7 @@ void __put_mtd_device(struct mtd_info *mtd)
 		mtd = parent;
 	}
 
-	if (IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER))
-		kref_put(&master->refcnt, mtd_device_release);
+	kref_put(&master->refcnt, mtd_device_release);
 
 	module_put(master->owner);
 
@@ -2524,6 +2572,16 @@ static int __init init_mtd(void)
 	if (ret)
 		goto err_reg;
 
+	ret = class_register(&mtd_master_class);
+	if (ret)
+		goto err_reg2;
+
+	ret = alloc_chrdev_region(&mtd_master_devt, 0, MTD_MASTER_DEVS, "mtd_master");
+	if (ret < 0) {
+		pr_err("unable to allocate char dev region\n");
+		goto err_chrdev;
+	}
+
 	mtd_bdi = mtd_bdi_init("mtd");
 	if (IS_ERR(mtd_bdi)) {
 		ret = PTR_ERR(mtd_bdi);
@@ -2548,6 +2606,10 @@ out_procfs:
 	bdi_unregister(mtd_bdi);
 	bdi_put(mtd_bdi);
 err_bdi:
+	unregister_chrdev_region(mtd_master_devt, MTD_MASTER_DEVS);
+err_chrdev:
+	class_unregister(&mtd_master_class);
+err_reg2:
 	class_unregister(&mtd_class);
 err_reg:
 	pr_err("Error registering mtd class or bdi: %d\n", ret);
@@ -2561,9 +2623,12 @@ static void __exit cleanup_mtd(void)
 	if (proc_mtd)
 		remove_proc_entry("mtd", NULL);
 	class_unregister(&mtd_class);
+	class_unregister(&mtd_master_class);
+	unregister_chrdev_region(mtd_master_devt, MTD_MASTER_DEVS);
 	bdi_unregister(mtd_bdi);
 	bdi_put(mtd_bdi);
 	idr_destroy(&mtd_idr);
+	idr_destroy(&mtd_master_idr);
 }
 
 module_init(init_mtd);
