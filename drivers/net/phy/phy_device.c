@@ -44,6 +44,14 @@ MODULE_DESCRIPTION("PHY library");
 MODULE_AUTHOR("Andy Fleming");
 MODULE_LICENSE("GPL");
 
+struct phy_drv_node {
+	const struct phy_driver *drv;
+	struct list_head list;
+};
+
+static LIST_HEAD(phy_drv_list);
+static DECLARE_RWSEM(phy_drv_list_sem);
+
 __ETHTOOL_DECLARE_LINK_MODE_MASK(phy_basic_features) __ro_after_init;
 EXPORT_SYMBOL_GPL(phy_basic_features);
 
@@ -658,6 +666,23 @@ static int phy_request_driver_module(struct phy_device *dev, u32 phy_id)
 	return 0;
 }
 
+static bool phy_driver_exists(u32 phy_id)
+{
+	bool found = false;
+	struct phy_drv_node *node;
+
+	down_read(&phy_drv_list_sem);
+	list_for_each_entry(node, &phy_drv_list, list) {
+		if (phy_id_compare(phy_id, node->drv->phy_id, node->drv->phy_id_mask)) {
+			found = true;
+			break;
+		}
+	}
+	up_read(&phy_drv_list_sem);
+
+	return found;
+}
+
 struct phy_device *phy_device_create(struct mii_bus *bus, int addr, u32 phy_id,
 				     bool is_c45,
 				     struct phy_c45_device_ids *c45_ids)
@@ -709,11 +734,7 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, u32 phy_id,
 	mutex_init(&dev->lock);
 	INIT_DELAYED_WORK(&dev->state_queue, phy_state_machine);
 
-	/* Request the appropriate module unconditionally; don't
-	 * bother trying to do so only if it isn't already loaded,
-	 * because that gets complicated. A hotplug event would have
-	 * done an unconditional modprobe anyway.
-	 * We don't do normal hotplug because it won't work for MDIO
+	/* We don't do normal hotplug because it won't work for MDIO
 	 * -- because it relies on the device staying around for long
 	 * enough for the driver to get loaded. With MDIO, the NIC
 	 * driver will get bored and give up as soon as it finds that
@@ -724,7 +745,8 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, u32 phy_id,
 		int i;
 
 		for (i = 1; i < num_ids; i++) {
-			if (c45_ids->device_ids[i] == 0xffffffff)
+			if (c45_ids->device_ids[i] == 0xffffffff ||
+			    phy_driver_exists(c45_ids->device_ids[i]))
 				continue;
 
 			ret = phy_request_driver_module(dev,
@@ -732,7 +754,7 @@ struct phy_device *phy_device_create(struct mii_bus *bus, int addr, u32 phy_id,
 			if (ret)
 				break;
 		}
-	} else {
+	} else if (!phy_driver_exists(phy_id)) {
 		ret = phy_request_driver_module(dev, phy_id);
 	}
 
@@ -3674,6 +3696,7 @@ static int phy_remove(struct device *dev)
  */
 int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 {
+	struct phy_drv_node *node;
 	int retval;
 
 	/* Either the features are hard coded, or dynamically
@@ -3695,6 +3718,10 @@ int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 		 new_driver->name))
 		return -EINVAL;
 
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	if (!node)
+		return -ENOMEM;
+
 	new_driver->mdiodrv.flags |= MDIO_DEVICE_IS_PHY;
 	new_driver->mdiodrv.driver.name = new_driver->name;
 	new_driver->mdiodrv.driver.bus = &mdio_bus_type;
@@ -3707,9 +3734,14 @@ int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 	if (retval) {
 		pr_err("%s: Error %d in registering driver\n",
 		       new_driver->name, retval);
-
+		kfree(node);
 		return retval;
 	}
+
+	down_write(&phy_drv_list_sem);
+	node->drv = new_driver;
+	list_add(&node->list, &phy_drv_list);
+	up_write(&phy_drv_list_sem);
 
 	pr_debug("%s: Registered new driver\n", new_driver->name);
 
@@ -3736,6 +3768,19 @@ EXPORT_SYMBOL(phy_drivers_register);
 
 void phy_driver_unregister(struct phy_driver *drv)
 {
+	struct phy_drv_node *node;
+
+	down_write(&phy_drv_list_sem);
+	list_for_each_entry(node, &phy_drv_list, list) {
+		if (phy_id_compare(drv->phy_id,
+				   node->drv->phy_id, node->drv->phy_id_mask)) {
+			list_del(&node->list);
+			kfree(node);
+			break;
+		}
+	}
+	up_write(&phy_drv_list_sem);
+
 	driver_unregister(&drv->mdiodrv.driver);
 }
 EXPORT_SYMBOL(phy_driver_unregister);
