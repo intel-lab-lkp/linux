@@ -168,8 +168,10 @@ static void free_resource(struct resource *res)
 	 * buddy and trying to be smart and reusing them eventually in
 	 * alloc_resource() overcomplicates resource handling.
 	 */
-	if (res && PageSlab(virt_to_head_page(res)))
+	if (res && PageSlab(virt_to_head_page(res))) {
+		kfree_const(res->name);
 		kfree(res);
+	}
 }
 
 static struct resource *alloc_resource(gfp_t flags)
@@ -1098,7 +1100,7 @@ __reserve_region_with_split(struct resource *root, resource_size_t start,
 	if (!res)
 		return;
 
-	res->name = name;
+	res->name = kstrdup_const(name, GFP_ATOMIC);
 	res->start = start;
 	res->end = end;
 	res->flags = type | IORESOURCE_BUSY;
@@ -1133,7 +1135,7 @@ __reserve_region_with_split(struct resource *root, resource_size_t start,
 					free_resource(res);
 					break;
 				}
-				next_res->name = name;
+				next_res->name = kstrdup_const(name, GFP_ATOMIC);
 				next_res->start = conflict->end + 1;
 				next_res->end = end;
 				next_res->flags = type | IORESOURCE_BUSY;
@@ -1261,7 +1263,7 @@ static int __request_region_locked(struct resource *res, struct resource *parent
 {
 	DECLARE_WAITQUEUE(wait, current);
 
-	res->name = name;
+	res->name = kstrdup_const(name, GFP_KERNEL);
 	res->start = start;
 	res->end = start + n - 1;
 
@@ -1474,7 +1476,7 @@ retry:
 					goto retry;
 				}
 			}
-			new_res->name = res->name;
+			new_res->name = kstrdup_const(res->name, GFP_ATOMIC);
 			new_res->start = end + 1;
 			new_res->end = res->end;
 			new_res->flags = res->flags;
@@ -1977,7 +1979,7 @@ get_free_mem_region(struct device *dev, struct resource *base,
 		} else {
 			res->start = addr;
 			res->end = addr + size - 1;
-			res->name = name;
+			res->name = kstrdup_const(name, GFP_KERNEL);
 			res->desc = desc;
 			res->flags = IORESOURCE_MEM;
 
