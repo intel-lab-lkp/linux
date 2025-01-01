@@ -831,8 +831,21 @@ static bool is_same_device(struct btrfs_device *device, const char *new_path)
 	ret = kern_path(new_path, LOOKUP_FOLLOW, &new);
 	if (ret)
 		goto out;
-	if (path_equal(&old, &new))
+	if (path_equal(&old, &new)) {
 		is_same = true;
+		/*
+		 * Special case for device mapper with its soft links.
+		 *
+		 * We can have the old path as "/dev/dm-3", but udev triggered
+		 * rescan on the soft link "/dev/mapper/test".
+		 * In that case we want to rename to that mapper link, to avoid
+		 * a bug in libblkid where it can not handle multiple mount
+		 * points if the device is "/dev/dm-3".
+		 */
+		if (strncmp(old_path, "/dev/mapper/", strlen("/dev/mapper")) &&
+		    !strncmp(new_path, "/dev/mapper/", strlen("/dev/mapper")))
+			is_same = false;
+	}
 out:
 	kfree(old_path);
 	path_put(&old);
