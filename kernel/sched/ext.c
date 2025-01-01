@@ -6018,6 +6018,19 @@ static bool can_skip_idle_kick(struct rq *rq)
 	return !is_idle_task(rq->curr) && !(rq->scx.flags & SCX_RQ_IN_BALANCE);
 }
 
+static void refresh_idle_state_on_kick(struct rq *rq)
+{
+	lockdep_assert_rq_held(rq);
+
+	/*
+	 * If the CPU is idle and the local DSQ has no queued tasks, update
+	 * its idle state to prevent the CPU from staying busy even if it
+	 * returns back to idle without executing any task.
+	 */
+	if (is_idle_task(rq->curr) && !rq->scx.local_dsq.nr)
+		__scx_update_idle(rq, true);
+}
+
 static bool kick_one_cpu(s32 cpu, struct rq *this_rq, unsigned long *pseqs)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -6043,6 +6056,7 @@ static bool kick_one_cpu(s32 cpu, struct rq *this_rq, unsigned long *pseqs)
 			should_wait = true;
 		}
 
+		refresh_idle_state_on_kick(rq);
 		resched_curr(rq);
 	} else {
 		cpumask_clear_cpu(cpu, this_scx->cpus_to_preempt);
@@ -6062,8 +6076,10 @@ static void kick_one_cpu_if_idle(s32 cpu, struct rq *this_rq)
 	raw_spin_rq_lock_irqsave(rq, flags);
 
 	if (!can_skip_idle_kick(rq) &&
-	    (cpu_online(cpu) || cpu == cpu_of(this_rq)))
+	    (cpu_online(cpu) || cpu == cpu_of(this_rq))) {
+		refresh_idle_state_on_kick(rq);
 		resched_curr(rq);
+	}
 
 	raw_spin_rq_unlock_irqrestore(rq, flags);
 }
