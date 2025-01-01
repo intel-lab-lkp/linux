@@ -23,7 +23,7 @@ enum {
 /* UFSHCI Registers */
 enum {
 	REG_CONTROLLER_CAPABILITIES		= 0x00,
-	REG_MCQCAP				= 0x04,
+	REG_MCQCAP                              = 0x04,
 	REG_UFS_VERSION				= 0x08,
 	REG_EXT_CONTROLLER_CAPABILITIES		= 0x0C,
 	REG_CONTROLLER_PID			= 0x10,
@@ -80,11 +80,6 @@ enum {
 	MASK_CRYPTO_SUPPORT			= 0x10000000,
 	MASK_LSDB_SUPPORT			= 0x20000000,
 	MASK_MCQ_SUPPORT			= 0x40000000,
-};
-
-/* MCQ capability mask */
-enum {
-	MASK_EXT_IID_SUPPORT = 0x00000400,
 };
 
 enum {
