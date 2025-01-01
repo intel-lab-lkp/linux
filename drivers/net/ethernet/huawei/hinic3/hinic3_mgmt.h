@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved. */
+
+#ifndef HINIC3_MGMT_H
+#define HINIC3_MGMT_H
+
+#include <linux/types.h>
+
+struct hinic3_hwdev;
+
+void hinic3_flush_mgmt_workq(struct hinic3_hwdev *hwdev);
+
+#endif
