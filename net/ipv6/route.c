@@ -1214,6 +1214,40 @@ fallback:
 	return nrt;
 }
 
+struct rt6_info *ip6_create_rt_oif_rcu(struct net *net, const struct sock *sk,
+				       struct flowi6 *fl6, int flags)
+{
+	struct rt6_info *rt;
+	unsigned int prefs;
+	int err;
+	struct net_device *dev = dev_get_by_index_rcu(net, fl6->flowi6_oif);
+
+	if (!dev)
+		return NULL;
+	rt = ip6_dst_alloc(dev_net(dev), dev, flags);
+
+	if (!rt)
+		return NULL;
+	rt->dst.error = 0;
+	rt->dst.output = ip6_output;
+	rt->dst.lastuse = jiffies;
+	prefs = sk ? inet6_sk(sk)->srcprefs : 0;
+	err = ipv6_dev_get_saddr(net, dev, &fl6->daddr, prefs, &fl6->saddr);
+
+	if (err) {
+		dst_release(&rt->dst);
+		return NULL;
+	}
+	rt->rt6i_dst.addr = fl6->daddr;
+	rt->rt6i_dst.plen = 128;
+	rt->rt6i_src.addr = fl6->saddr;
+	rt->rt6i_dst.plen = 128;
+	rt->rt6i_idev = in6_dev_get(dev);
+	rt->rt6i_flags = flags;
+	return rt;
+}
+EXPORT_SYMBOL_GPL(ip6_create_rt_oif_rcu);
+
 INDIRECT_CALLABLE_SCOPE struct rt6_info *ip6_pol_route_lookup(struct net *net,
 					     struct fib6_table *table,
 					     struct flowi6 *fl6,

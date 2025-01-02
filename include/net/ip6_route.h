@@ -214,6 +214,8 @@ void rt6_multipath_rebalance(struct fib6_info *f6i);
 
 void rt6_uncached_list_add(struct rt6_info *rt);
 void rt6_uncached_list_del(struct rt6_info *rt);
+struct rt6_info *ip6_create_rt_oif_rcu(struct net *net, const struct sock *sk,
+		struct flowi6 *fl6, int flags);
 
 static inline const struct rt6_info *skb_rt6_info(const struct sk_buff *skb)
 {
