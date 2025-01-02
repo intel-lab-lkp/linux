@@ -23,6 +23,9 @@
 #include <linux/cdrom.h>
 #include <linux/sched.h>
 #include <linux/async.h>
+#ifdef CONFIG_PCI
+#include <linux/pci_regs.h> /* for PCI_STD_NUM_BARS */
+#endif /* CONFIG_PCI */
 
 /*
  * Define if arch has non-standard setup.  This is a _PCI_ standard
@@ -615,7 +618,9 @@ struct ata_ioports {
 struct ata_host {
 	spinlock_t		lock;
 	struct device 		*dev;
-	void __iomem * const	*iomap;
+#ifdef CONFIG_PCI
+	void __iomem		*iomap[PCI_STD_NUM_BARS];
+#endif /* CONFIG_PCI */
 	unsigned int		n_ports;
 	unsigned int		n_tags;			/* nr of NCQ tags */
 	void			*private_data;

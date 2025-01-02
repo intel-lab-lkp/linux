@@ -4083,7 +4083,6 @@ static int mv_platform_probe(struct platform_device *pdev)
 	host->private_data = hpriv;
 	hpriv->board_idx = chip_soc;
 
-	host->iomap = NULL;
 	hpriv->base = devm_ioremap(&pdev->dev, res->start,
 				   resource_size(res));
 	if (!hpriv->base)
@@ -4392,13 +4391,13 @@ static int mv_pci_init_one(struct pci_dev *pdev,
 	if (rc)
 		return rc;
 
-	rc = pcim_iomap_regions(pdev, 1 << MV_PRIMARY_BAR, DRV_NAME);
+	hpriv->base = pcim_iomap_region(pdev, MV_PRIMARY_BAR, DRV_NAME);
+	rc = PTR_ERR_OR_ZERO(hpriv->base);
 	if (rc == -EBUSY)
 		pcim_pin_device(pdev);
 	if (rc)
 		return rc;
-	host->iomap = pcim_iomap_table(pdev);
-	hpriv->base = host->iomap[MV_PRIMARY_BAR];
+	host->iomap[MV_PRIMARY_BAR] = hpriv->base;
 
 	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (rc) {

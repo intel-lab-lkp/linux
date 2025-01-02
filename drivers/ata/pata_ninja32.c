@@ -116,13 +116,14 @@ static int ninja32_init_one(struct pci_dev *dev, const struct pci_device_id *id)
 	rc = pcim_enable_device(dev);
 	if (rc)
 		return rc;
-	rc = pcim_iomap_regions(dev, 1 << 0, DRV_NAME);
+
+	base = pcim_iomap_region(dev, 0, DRV_NAME);
+	rc = PTR_ERR_OR_ZERO(base);
 	if (rc == -EBUSY)
 		pcim_pin_device(dev);
 	if (rc)
 		return rc;
 
-	host->iomap = pcim_iomap_table(dev);
 	rc = dma_set_mask_and_coherent(&dev->dev, ATA_DMA_MASK);
 	if (rc)
 		return rc;
@@ -130,9 +131,7 @@ static int ninja32_init_one(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/* Set up the register mappings. We use the I/O mapping as only the
 	   older chips also have MMIO on BAR 1 */
-	base = host->iomap[0];
-	if (!base)
-		return -ENOMEM;
+	host->iomap[0] = base;
 	ap->ops = &ninja32_port_ops;
 	ap->pio_mask = ATA_PIO4;
 	ap->flags |= ATA_FLAG_SLAVE_POSS;

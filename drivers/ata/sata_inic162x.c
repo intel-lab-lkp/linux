@@ -817,7 +817,6 @@ static int inic_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	const struct ata_port_info *ppi[] = { &inic_port_info, NULL };
 	struct ata_host *host;
 	struct inic_host_priv *hpriv;
-	void __iomem * const *iomap;
 	int mmio_bar;
 	int i, rc;
 
@@ -845,11 +844,10 @@ static int inic_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	else
 		mmio_bar = MMIO_BAR_CARDBUS;
 
-	rc = pcim_iomap_regions(pdev, 1 << mmio_bar, DRV_NAME);
-	if (rc)
-		return rc;
-	host->iomap = iomap = pcim_iomap_table(pdev);
-	hpriv->mmio_base = iomap[mmio_bar];
+	hpriv->mmio_base = pcim_iomap_region(pdev, mmio_bar, DRV_NAME);
+	if (IS_ERR(hpriv->mmio_base))
+		return PTR_ERR(hpriv->mmio_base);
+	host->iomap[mmio_bar] = hpriv->mmio_base;
 	hpriv->cached_hctl = readw(hpriv->mmio_base + HOST_CTL);
 
 	for (i = 0; i < NR_PORTS; i++) {

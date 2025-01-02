@@ -1163,12 +1163,12 @@ static int pdc_ata_init_one(struct pci_dev *pdev,
 	if (rc)
 		return rc;
 
-	rc = pcim_iomap_regions(pdev, 1 << PDC_MMIO_BAR, DRV_NAME);
+	host_mmio = pcim_iomap_region(pdev, PDC_MMIO_BAR, DRV_NAME);
+	rc = PTR_ERR_OR_ZERO(host_mmio);
 	if (rc == -EBUSY)
 		pcim_pin_device(pdev);
 	if (rc)
 		return rc;
-	host_mmio = pcim_iomap_table(pdev)[PDC_MMIO_BAR];
 
 	/* determine port configuration and setup host */
 	n_ports = 2;
@@ -1193,7 +1193,7 @@ static int pdc_ata_init_one(struct pci_dev *pdev,
 		return -ENOMEM;
 	spin_lock_init(&hpriv->hard_reset_lock);
 	host->private_data = hpriv;
-	host->iomap = pcim_iomap_table(pdev);
+	host->iomap[PDC_MMIO_BAR] = host_mmio;
 
 	is_sataii_tx4 = pdc_is_sataii_tx4(pi->flags);
 	for (i = 0; i < host->n_ports; i++) {

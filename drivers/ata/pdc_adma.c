@@ -568,11 +568,10 @@ static int adma_ata_init_one(struct pci_dev *pdev,
 	if ((pci_resource_flags(pdev, 4) & IORESOURCE_MEM) == 0)
 		return -ENODEV;
 
-	rc = pcim_iomap_regions(pdev, 1 << ADMA_MMIO_BAR, DRV_NAME);
-	if (rc)
-		return rc;
-	host->iomap = pcim_iomap_table(pdev);
-	mmio_base = host->iomap[ADMA_MMIO_BAR];
+	mmio_base = pcim_iomap_region(pdev, ADMA_MMIO_BAR, DRV_NAME);
+	if (IS_ERR(mmio_base))
+		return PTR_ERR(mmio_base);
+	host->iomap[ADMA_MMIO_BAR] = mmio_base;
 
 	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 	if (rc) {

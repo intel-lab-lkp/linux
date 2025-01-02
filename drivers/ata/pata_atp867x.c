@@ -405,17 +405,20 @@ static int atp867x_ata_pci_sff_init_host(struct ata_host *host)
 	struct device *gdev = host->dev;
 	struct pci_dev *pdev = to_pci_dev(gdev);
 	unsigned int mask = 0;
+	void __iomem *iomem;
 	int i, rc;
 
 	/*
 	 * do not map rombase
 	 */
-	rc = pcim_iomap_regions(pdev, 1 << ATP867X_BAR_IOBASE, DRV_NAME);
-	if (rc == -EBUSY)
-		pcim_pin_device(pdev);
-	if (rc)
+	iomem = pcim_iomap_region(pdev, ATP867X_BAR_IOBASE, DRV_NAME);
+	if (IS_ERR(iomem)) {
+		rc = PTR_ERR(iomem);
+		if (rc == -EBUSY)
+			pcim_pin_device(pdev);
 		return rc;
-	host->iomap = pcim_iomap_table(pdev);
+	}
+	host->iomap[ATP867X_BAR_IOBASE] = iomem;
 
 	atp867x_check_res(pdev);
 

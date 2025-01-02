@@ -451,14 +451,14 @@ static int k2_sata_init_one(struct pci_dev *pdev, const struct pci_device_id *en
 		return -ENODEV;
 	}
 
-	/* Request and iomap PCI regions */
-	rc = pcim_iomap_regions(pdev, 1 << bar_pos, DRV_NAME);
+	/* Request and iomap PCI region */
+	mmio_base = pcim_iomap_region(pdev, bar_pos, DRV_NAME);
+	rc = PTR_ERR_OR_ZERO(mmio_base);
 	if (rc == -EBUSY)
 		pcim_pin_device(pdev);
 	if (rc)
 		return rc;
-	host->iomap = pcim_iomap_table(pdev);
-	mmio_base = host->iomap[bar_pos];
+	host->iomap[bar_pos] = mmio_base;
 
 	/* different controllers have different number of ports - currently 4 or 8 */
 	/* All ports are on the same function. Multi-function device is no

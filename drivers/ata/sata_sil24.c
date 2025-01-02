@@ -1261,7 +1261,7 @@ static int sil24_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	extern int __MARKER__sil24_cmd_block_is_sized_wrongly;
 	struct ata_port_info pi = sil24_port_info[ent->driver_data];
 	const struct ata_port_info *ppi[] = { &pi, NULL };
-	void __iomem * const *iomap;
+	void __iomem *host_iomem, *port_iomem;
 	struct ata_host *host;
 	int rc;
 	u32 tmp;
@@ -1277,16 +1277,17 @@ static int sil24_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (rc)
 		return rc;
 
-	rc = pcim_iomap_regions(pdev,
-				(1 << SIL24_HOST_BAR) | (1 << SIL24_PORT_BAR),
-				DRV_NAME);
-	if (rc)
-		return rc;
-	iomap = pcim_iomap_table(pdev);
+	host_iomem = pcim_iomap_region(pdev, SIL24_HOST_BAR, DRV_NAME);
+	if (IS_ERR(host_iomem))
+		return PTR_ERR(host_iomem);
+
+	port_iomem = pcim_iomap_region(pdev, SIL24_PORT_BAR, DRV_NAME);
+	if (IS_ERR(port_iomem))
+		return PTR_ERR(port_iomem);
 
 	/* apply workaround for completion IRQ loss on PCI-X errata */
 	if (pi.flags & SIL24_FLAG_PCIX_IRQ_WOC) {
-		tmp = readl(iomap[SIL24_HOST_BAR] + HOST_CTRL);
+		tmp = readl(host_iomem + HOST_CTRL);
 		if (tmp & (HOST_CTRL_TRDY | HOST_CTRL_STOP | HOST_CTRL_DEVSEL))
 			dev_info(&pdev->dev,
 				 "Applying completion IRQ loss on PCI-X errata fix\n");
@@ -1299,7 +1300,8 @@ static int sil24_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 				    SIL24_FLAG2NPORTS(ppi[0]->flags));
 	if (!host)
 		return -ENOMEM;
-	host->iomap = iomap;
+	host->iomap[SIL24_HOST_BAR] = host_iomem;
+	host->iomap[SIL24_PORT_BAR] = port_iomem;
 
 	/* configure and activate the device */
 	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));

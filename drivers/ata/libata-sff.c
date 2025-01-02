@@ -2127,6 +2127,76 @@ static bool ata_resources_present(struct pci_dev *pdev, int port)
 	return true;
 }
 
+static void ata_pci_sff_set_port_data(struct ata_port *ap, struct ata_host *host,
+					struct pci_dev *pdev, unsigned short base)
+{
+	void __iomem *ctl_addr;
+
+	ctl_addr = host->iomap[base + 1];
+	ctl_addr = (void __iomem *)((unsigned long)ctl_addr | ATA_PCI_CTL_OFS);
+
+	ap->ioaddr.cmd_addr = host->iomap[base];
+	ap->ioaddr.altstatus_addr = ctl_addr;
+	ap->ioaddr.ctl_addr = ctl_addr;
+
+	ata_sff_std_ports(&ap->ioaddr);
+
+	ata_port_desc(ap, "cmd 0x%llx ctl 0x%llx",
+		(unsigned long long)pci_resource_start(pdev, base),
+		(unsigned long long)pci_resource_start(pdev, base + 1));
+}
+
+/**
+ * ata_pci_sff_obtain_bars - obtain the PCI BARs associated with an ATA port
+ * @pdev: the PCI device
+ * @host: the ATA host
+ * @ap: the ATA port
+ * @port: @ap's port index in @host
+ *
+ * Returns: Number of successfully ioremaped BARs, a negative code on failure
+ */
+static int ata_pci_sff_obtain_bars(struct pci_dev *pdev, struct ata_host *host,
+					struct ata_port *ap, unsigned short port)
+{
+	int ret = 0, bars_mapped = 0;
+	unsigned short i, base, bar_index;
+	void __iomem *iomem;
+	const char *name = dev_driver_string(&pdev->dev);
+
+	/*
+	 * Port can be 0 or 1.
+	 * Port 0 corresponds to PCI BARs 0 and 1, port 1 to BARs 2 and 3.
+	 */
+	base = port * 2;
+
+	/*
+	 * Discard disabled ports. Some controllers show their unused channels
+	 * this way. Disabled ports are made dummy.
+	 */
+	if (!ata_resources_present(pdev, port))
+		goto try_next;
+
+	for (i = 0; i < 2; i++) {
+		bar_index = base + i;
+
+		iomem = pcim_iomap_region(pdev, bar_index, name);
+		ret = PTR_ERR_OR_ZERO(iomem);
+		if (ret)
+			goto try_next;
+
+		host->iomap[bar_index] = iomem;
+		bars_mapped++;
+	}
+
+	ata_pci_sff_set_port_data(ap, host, pdev, base);
+
+	return bars_mapped;
+
+try_next:
+	ap->ops = &ata_dummy_port_ops;
+	return ret;
+}
+
 /**
  *	ata_pci_sff_init_host - acquire native PCI ATA resources and init host
  *	@host: target ATA host
@@ -2148,59 +2218,31 @@ static bool ata_resources_present(struct pci_dev *pdev, int port)
  */
 int ata_pci_sff_init_host(struct ata_host *host)
 {
-	struct device *gdev = host->dev;
-	struct pci_dev *pdev = to_pci_dev(gdev);
-	unsigned int mask = 0;
-	int i, rc;
+	int ret;
+	unsigned short port_nr, operational_ports = 0;
+	struct device *dev = host->dev;
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct ata_port *ap;
 
-	/* request, iomap BARs and init port addresses accordingly */
-	for (i = 0; i < 2; i++) {
-		struct ata_port *ap = host->ports[i];
-		int base = i * 2;
-		void __iomem * const *iomap;
-
+	for (port_nr = 0; port_nr < 2; port_nr++) {
+		ap = host->ports[port_nr];
 		if (ata_port_is_dummy(ap))
 			continue;
 
-		/* Discard disabled ports.  Some controllers show
-		 * their unused channels this way.  Disabled ports are
-		 * made dummy.
-		 */
-		if (!ata_resources_present(pdev, i)) {
-			ap->ops = &ata_dummy_port_ops;
-			continue;
-		}
-
-		rc = pcim_iomap_regions(pdev, 0x3 << base,
-					dev_driver_string(gdev));
-		if (rc) {
-			dev_warn(gdev,
+		ret = ata_pci_sff_obtain_bars(pdev, host, ap, port_nr);
+		if (ret > 0) {
+			operational_ports += ret;
+		} else if (ret < 0) {
+			dev_warn(dev,
 				 "failed to request/iomap BARs for port %d (errno=%d)\n",
-				 i, rc);
-			if (rc == -EBUSY)
+				 port_nr, ret);
+			if (ret == -EBUSY)
 				pcim_pin_device(pdev);
-			ap->ops = &ata_dummy_port_ops;
-			continue;
 		}
-		host->iomap = iomap = pcim_iomap_table(pdev);
-
-		ap->ioaddr.cmd_addr = iomap[base];
-		ap->ioaddr.altstatus_addr =
-		ap->ioaddr.ctl_addr = (void __iomem *)
-			((unsigned long)iomap[base + 1] | ATA_PCI_CTL_OFS);
-		ata_sff_std_ports(&ap->ioaddr);
-
-		ata_port_desc(ap, "cmd 0x%llx ctl 0x%llx",
-			(unsigned long long)pci_resource_start(pdev, base),
-			(unsigned long long)pci_resource_start(pdev, base + 1));
-
-		mask |= 1 << i;
 	}
 
-	if (!mask) {
-		dev_err(gdev, "no available native port\n");
+	if (!operational_ports)
 		return -ENODEV;
-	}
 
 	return 0;
 }
@@ -3094,12 +3136,11 @@ void ata_pci_bmdma_init(struct ata_host *host)
 		ata_bmdma_nodma(host, "failed to set dma mask");
 
 	/* request and iomap DMA region */
-	rc = pcim_iomap_regions(pdev, 1 << 4, dev_driver_string(gdev));
-	if (rc) {
+	host->iomap[4] = pcim_iomap_region(pdev, 4, dev_driver_string(gdev));
+	if (IS_ERR(host->iomap[4])) {
 		ata_bmdma_nodma(host, "failed to request/iomap BAR4");
 		return;
 	}
-	host->iomap = pcim_iomap_table(pdev);
 
 	for (i = 0; i < 2; i++) {
 		struct ata_port *ap = host->ports[i];

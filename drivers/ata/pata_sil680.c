@@ -360,15 +360,16 @@ static int sil680_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	/* Try to acquire MMIO resources and fallback to PIO if
 	 * that fails
 	 */
-	rc = pcim_iomap_regions(pdev, 1 << SIL680_MMIO_BAR, DRV_NAME);
-	if (rc)
+	mmio_base = pcim_iomap_region(pdev, SIL680_MMIO_BAR, DRV_NAME);
+	if (IS_ERR(mmio_base)) {
+		rc = PTR_ERR(mmio_base);
 		goto use_ioports;
+	}
 
 	/* Allocate host and set it up */
 	host = ata_host_alloc_pinfo(&pdev->dev, ppi, 2);
 	if (!host)
 		return -ENOMEM;
-	host->iomap = pcim_iomap_table(pdev);
 
 	/* Setup DMA masks */
 	rc = dma_set_mask_and_coherent(&pdev->dev, ATA_DMA_MASK);
@@ -376,8 +377,8 @@ static int sil680_init_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		return rc;
 	pci_set_master(pdev);
 
-	/* Get MMIO base and initialize port addresses */
-	mmio_base = host->iomap[SIL680_MMIO_BAR];
+	/* Set MMIO base in table and initialize port addresses */
+	host->iomap[SIL680_MMIO_BAR] = mmio_base;
 	host->ports[0]->ioaddr.bmdma_addr = mmio_base + 0x00;
 	host->ports[0]->ioaddr.cmd_addr = mmio_base + 0x80;
 	host->ports[0]->ioaddr.ctl_addr = mmio_base + 0x8a;
