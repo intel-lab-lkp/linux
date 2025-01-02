@@ -626,7 +626,7 @@ static int modify_napi_threaded(struct net_device *dev, unsigned long val)
 	if (list_empty(&dev->napi_list))
 		return -EOPNOTSUPP;
 
-	if (val != 0 && val != 1)
+	if (val > NAPI_THREADED_MAX)
 		return -EOPNOTSUPP;
 
 	ret = dev_set_threaded(dev, val);

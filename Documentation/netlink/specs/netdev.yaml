@@ -272,10 +272,11 @@ attribute-sets:
         name: threaded
         doc: Whether the napi is configured to operate in threaded polling
              mode. If this is set to `1` then the NAPI context operates
-             in threaded polling mode.
+             in threaded polling mode. If this is set to `2` then the NAPI
+             kthread also does busypolling.
         type: u32
         checks:
-          max: 1
+          max: 2
   -
     name: queue
     attributes:
