@@ -2070,7 +2070,7 @@ static int f2fs_issue_discard(struct f2fs_sb_info *sbi,
 }
 
 static bool add_discard_addrs(struct f2fs_sb_info *sbi, struct cp_control *cpc,
-							bool check_only)
+					bool synced, bool check_only)
 {
 	int entries = SIT_VBLOCK_MAP_SIZE / sizeof(unsigned long);
 	struct seg_entry *se = get_seg_entry(sbi, cpc->trim_start);
@@ -2098,7 +2098,7 @@ static bool add_discard_addrs(struct f2fs_sb_info *sbi, struct cp_control *cpc,
 
 	/* SIT_VBLOCK_MAP_SIZE should be multiple of sizeof(unsigned long) */
 	for (i = 0; i < entries; i++)
-		dmap[i] = force ? ~ckpt_map[i] & ~discard_map[i] :
+		dmap[i] = synced ? ~ckpt_map[i] & ~discard_map[i] :
 				(cur_map[i] ^ ckpt_map[i]) & ckpt_map[i];
 
 	while (force || SM_I(sbi)->dcc_info->nr_discards <=
@@ -3275,7 +3275,7 @@ bool f2fs_exist_trim_candidates(struct f2fs_sb_info *sbi,
 
 	down_write(&SIT_I(sbi)->sentry_lock);
 	for (; cpc->trim_start <= cpc->trim_end; cpc->trim_start++) {
-		if (add_discard_addrs(sbi, cpc, true)) {
+		if (add_discard_addrs(sbi, cpc, false, true)) {
 			has_candidate = true;
 			break;
 		}
@@ -4611,7 +4611,7 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 			/* add discard candidates */
 			if (!(cpc->reason & CP_DISCARD)) {
 				cpc->trim_start = segno;
-				add_discard_addrs(sbi, cpc, false);
+				add_discard_addrs(sbi, cpc, false, false);
 			}
 
 			if (to_journal) {
@@ -4653,7 +4653,7 @@ out:
 		__u64 trim_start = cpc->trim_start;
 
 		for (; cpc->trim_start <= cpc->trim_end; cpc->trim_start++)
-			add_discard_addrs(sbi, cpc, false);
+			add_discard_addrs(sbi, cpc, true, false);
 
 		cpc->trim_start = trim_start;
 	}
