@@ -275,4 +275,6 @@ const struct rzv2h_cpg_info r9a09g057_cpg_info __initconst = {
 	/* Resets */
 	.resets = r9a09g057_resets,
 	.num_resets = ARRAY_SIZE(r9a09g057_resets),
+
+	.num_mstop_bits = 192,
 };

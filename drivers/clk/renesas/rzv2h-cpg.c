@@ -68,6 +68,7 @@
  * @resets: Array of resets
  * @num_resets: Number of Module Resets in info->resets[]
  * @last_dt_core_clk: ID of the last Core Clock exported to DT
+ * @mstop_count: Array of mstop values
  * @rcdev: Reset controller entity
  */
 struct rzv2h_cpg_priv {
@@ -82,16 +83,12 @@ struct rzv2h_cpg_priv {
 	unsigned int num_resets;
 	unsigned int last_dt_core_clk;
 
+	atomic_t *mstop_count;
+
 	struct reset_controller_dev rcdev;
 };
 
 #define rcdev_to_priv(x)	container_of(x, struct rzv2h_cpg_priv, rcdev)
-
-struct rzv2h_mstop {
-	u16 idx;
-	u16 mask;
-	refcount_t ref_cnt;
-};
 
 struct pll_clk {
 	struct rzv2h_cpg_priv *priv;
@@ -107,7 +104,7 @@ struct pll_clk {
  * struct mod_clock - Module clock
  *
  * @priv: CPG private data
- * @mstop: handle to cpg bus mstop data
+ * @mstop_data: mstop data relating to module clock
  * @hw: handle between common and hardware-specific interfaces
  * @no_pm: flag to indicate PM is not supported
  * @on_index: register offset
@@ -117,7 +114,7 @@ struct pll_clk {
  */
 struct mod_clock {
 	struct rzv2h_cpg_priv *priv;
-	struct rzv2h_mstop *mstop;
+	unsigned int mstop_data;
 	struct clk_hw hw;
 	bool no_pm;
 	u8 on_index;
@@ -446,38 +443,70 @@ fail:
 }
 
 static void rzv2h_mod_clock_mstop_enable(struct rzv2h_cpg_priv *priv,
-					 struct mod_clock *clock)
+					 u32 mstop_data)
 {
+	unsigned long mstop_mask = FIELD_GET(BUS_MSTOP_BITS_MASK, mstop_data);
+	u16 mstop_index = FIELD_GET(BUS_MSTOP_IDX_MASK, mstop_data);
+	unsigned int index = (mstop_index - 1) * 16;
+	atomic_t *mstop = &priv->mstop_count[index];
 	unsigned long flags;
-	u32 val;
+	unsigned int i;
+	u32 val = 0;
 
 	spin_lock_irqsave(&priv->rmw_lock, flags);
-	if (!refcount_read(&clock->mstop->ref_cnt)) {
-		val = clock->mstop->mask << 16;
-		writel(val, priv->base + CPG_BUS_MSTOP(clock->mstop->idx));
-		refcount_set(&clock->mstop->ref_cnt, 1);
-	} else {
-		refcount_inc(&clock->mstop->ref_cnt);
+	for_each_set_bit(i, &mstop_mask, 16) {
+		if (!atomic_read(&mstop[i]))
+			val |= BIT(i) << 16;
+		atomic_inc(&mstop[i]);
 	}
+	if (val)
+		writel(val, priv->base + CPG_BUS_MSTOP(mstop_index));
 	spin_unlock_irqrestore(&priv->rmw_lock, flags);
 }
 
 static void rzv2h_mod_clock_mstop_disable(struct rzv2h_cpg_priv *priv,
-					  struct mod_clock *clock)
+					  u32 mstop_data)
 {
+	unsigned long mstop_mask = FIELD_GET(BUS_MSTOP_BITS_MASK, mstop_data);
+	u16 mstop_index = FIELD_GET(BUS_MSTOP_IDX_MASK, mstop_data);
+	unsigned int index = (mstop_index - 1) * 16;
+	atomic_t *mstop = &priv->mstop_count[index];
 	unsigned long flags;
-	u32 val;
+	unsigned int i;
+	u32 val = 0;
 
 	spin_lock_irqsave(&priv->rmw_lock, flags);
-	if (refcount_dec_and_test(&clock->mstop->ref_cnt)) {
-		val = clock->mstop->mask << 16 | clock->mstop->mask;
-		writel(val, priv->base + CPG_BUS_MSTOP(clock->mstop->idx));
+	for_each_set_bit(i, &mstop_mask, 16) {
+		if (!atomic_read(&mstop[i]) ||
+		    atomic_dec_and_test(&mstop[i]))
+			val |= BIT(i) << 16 | BIT(i);
 	}
+	if (val)
+		writel(val, priv->base + CPG_BUS_MSTOP(mstop_index));
 	spin_unlock_irqrestore(&priv->rmw_lock, flags);
+}
+
+static int rzv2h_mod_clock_is_enabled(struct clk_hw *hw)
+{
+	struct mod_clock *clock = to_mod_clock(hw);
+	struct rzv2h_cpg_priv *priv = clock->priv;
+	u32 bitmask;
+	u32 offset;
+
+	if (clock->mon_index >= 0) {
+		offset = GET_CLK_MON_OFFSET(clock->mon_index);
+		bitmask = BIT(clock->mon_bit);
+	} else {
+		offset = GET_CLK_ON_OFFSET(clock->on_index);
+		bitmask = BIT(clock->on_bit);
+	}
+
+	return readl(priv->base + offset) & bitmask;
 }
 
 static int rzv2h_mod_clock_endisable(struct clk_hw *hw, bool enable)
 {
+	bool enabled = rzv2h_mod_clock_is_enabled(hw);
 	struct mod_clock *clock = to_mod_clock(hw);
 	unsigned int reg = GET_CLK_ON_OFFSET(clock->on_index);
 	struct rzv2h_cpg_priv *priv = clock->priv;
@@ -489,15 +518,18 @@ static int rzv2h_mod_clock_endisable(struct clk_hw *hw, bool enable)
 	dev_dbg(dev, "CLK_ON 0x%x/%pC %s\n", reg, hw->clk,
 		enable ? "ON" : "OFF");
 
+	if (enabled == enable)
+		return 0;
+
 	value = bitmask << 16;
 	if (enable) {
 		value |= bitmask;
 		writel(value, priv->base + reg);
-		if (clock->mstop)
-			rzv2h_mod_clock_mstop_enable(priv, clock);
+		if (clock->mstop_data != BUS_MSTOP_NONE)
+			rzv2h_mod_clock_mstop_enable(priv, clock->mstop_data);
 	} else {
-		if (clock->mstop)
-			rzv2h_mod_clock_mstop_disable(priv, clock);
+		if (clock->mstop_data != BUS_MSTOP_NONE)
+			rzv2h_mod_clock_mstop_disable(priv, clock->mstop_data);
 		writel(value, priv->base + reg);
 	}
 
@@ -525,72 +557,11 @@ static void rzv2h_mod_clock_disable(struct clk_hw *hw)
 	rzv2h_mod_clock_endisable(hw, false);
 }
 
-static int rzv2h_mod_clock_is_enabled(struct clk_hw *hw)
-{
-	struct mod_clock *clock = to_mod_clock(hw);
-	struct rzv2h_cpg_priv *priv = clock->priv;
-	u32 bitmask;
-	u32 offset;
-
-	if (clock->mon_index >= 0) {
-		offset = GET_CLK_MON_OFFSET(clock->mon_index);
-		bitmask = BIT(clock->mon_bit);
-	} else {
-		offset = GET_CLK_ON_OFFSET(clock->on_index);
-		bitmask = BIT(clock->on_bit);
-	}
-
-	return readl(priv->base + offset) & bitmask;
-}
-
 static const struct clk_ops rzv2h_mod_clock_ops = {
 	.enable = rzv2h_mod_clock_enable,
 	.disable = rzv2h_mod_clock_disable,
 	.is_enabled = rzv2h_mod_clock_is_enabled,
 };
-
-static struct rzv2h_mstop
-*rzv2h_cpg_get_mstop(struct rzv2h_cpg_priv *priv, struct mod_clock *clock, u32 mstop_data)
-{
-	struct rzv2h_mstop *mstop;
-	unsigned int i;
-
-	for (i = 0; i < priv->num_mod_clks; i++) {
-		struct mod_clock *clk;
-		struct clk_hw *hw;
-
-		if (priv->clks[priv->num_core_clks + i] == ERR_PTR(-ENOENT))
-			continue;
-
-		hw = __clk_get_hw(priv->clks[priv->num_core_clks + i]);
-		clk = to_mod_clock(hw);
-		if (!clk->mstop)
-			continue;
-
-		if (BUS_MSTOP(clk->mstop->idx, clk->mstop->mask) == mstop_data) {
-			if (rzv2h_mod_clock_is_enabled(&clock->hw)) {
-				if (refcount_read(&clk->mstop->ref_cnt))
-					refcount_inc(&clk->mstop->ref_cnt);
-				else
-					refcount_set(&clk->mstop->ref_cnt, 1);
-			}
-			return clk->mstop;
-		}
-	}
-
-	mstop = devm_kzalloc(priv->dev, sizeof(*mstop), GFP_KERNEL);
-	if (!mstop)
-		return NULL;
-
-	mstop->idx = FIELD_GET(BUS_MSTOP_IDX_MASK, mstop_data);
-	mstop->mask = FIELD_GET(BUS_MSTOP_BITS_MASK, mstop_data);
-	if (rzv2h_mod_clock_is_enabled(&clock->hw))
-		refcount_set(&mstop->ref_cnt, 1);
-	else
-		refcount_set(&mstop->ref_cnt, 0);
-
-	return mstop;
-}
 
 static void __init
 rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
@@ -638,6 +609,7 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 	clock->no_pm = mod->no_pm;
 	clock->priv = priv;
 	clock->hw.init = &init;
+	clock->mstop_data = mod->mstop_data;
 
 	ret = devm_clk_hw_register(dev, &clock->hw);
 	if (ret) {
@@ -647,12 +619,39 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 
 	priv->clks[id] = clock->hw.clk;
 
-	if (mod->mstop_data != BUS_MSTOP_NONE) {
-		clock->mstop = rzv2h_cpg_get_mstop(priv, clock, mod->mstop_data);
-		if (!clock->mstop) {
-			clk = ERR_PTR(-ENOMEM);
-			goto fail;
+	/*
+	 * Ensure the module clocks and MSTOP bits are synchronized when they are
+	 * turned ON by the bootloader. Enable MSTOP bits for module clocks that were
+	 * turned ON in an earlier boot stage.
+	 */
+	if (clock->mstop_data != BUS_MSTOP_NONE &&
+	    !mod->critical && rzv2h_mod_clock_is_enabled(&clock->hw)) {
+		rzv2h_mod_clock_mstop_enable(priv, clock->mstop_data);
+	} else if (clock->mstop_data != BUS_MSTOP_NONE && mod->critical) {
+		unsigned long mstop_mask = FIELD_GET(BUS_MSTOP_BITS_MASK, clock->mstop_data);
+		u16 mstop_index = FIELD_GET(BUS_MSTOP_IDX_MASK, clock->mstop_data);
+		unsigned int index = (mstop_index - 1) * 16;
+		atomic_t *mstop = &priv->mstop_count[index];
+		unsigned long flags;
+		unsigned int i;
+		u32 val = 0;
+
+		/*
+		 * Critical clocks are turned ON immediately upon registration, and the
+		 * MSTOP counter is updated through the rzv2h_mod_clock_enable() path.
+		 * However, if the critical clocks were already turned ON by the initial
+		 * bootloader, synchronize the atomic counter here and clear the MSTOP bit.
+		 */
+		spin_lock_irqsave(&priv->rmw_lock, flags);
+		for_each_set_bit(i, &mstop_mask, 16) {
+			if (atomic_read(&mstop[i]))
+				continue;
+			val |= BIT(i) << 16;
+			atomic_inc(&mstop[i]);
 		}
+		if (val)
+			writel(val, priv->base + CPG_BUS_MSTOP(mstop_index));
+		spin_unlock_irqrestore(&priv->rmw_lock, flags);
 	}
 
 	return;
@@ -920,6 +919,11 @@ static int __init rzv2h_cpg_probe(struct platform_device *pdev)
 	nclks = info->num_total_core_clks + info->num_hw_mod_clks;
 	clks = devm_kmalloc_array(dev, nclks, sizeof(*clks), GFP_KERNEL);
 	if (!clks)
+		return -ENOMEM;
+
+	priv->mstop_count = devm_kcalloc(dev, info->num_mstop_bits,
+					 sizeof(*priv->mstop_count), GFP_KERNEL);
+	if (!priv->mstop_count)
 		return -ENOMEM;
 
 	priv->resets = devm_kmemdup(dev, info->resets, sizeof(*info->resets) *

@@ -193,6 +193,9 @@ struct rzv2h_reset {
  *
  * @resets: Array of Module Reset definitions
  * @num_resets: Number of entries in resets[]
+ *
+ * @num_mstop_bits: Maximum number of MSTOP bits supported, equivalent to the
+ *		    number of CPG_BUS_m_MSTOP registers multiplied by 16.
  */
 struct rzv2h_cpg_info {
 	/* Core Clocks */
@@ -209,6 +212,8 @@ struct rzv2h_cpg_info {
 	/* Resets */
 	const struct rzv2h_reset *resets;
 	unsigned int num_resets;
+
+	unsigned int num_mstop_bits;
 };
 
 extern const struct rzv2h_cpg_info r9a09g047_cpg_info;
