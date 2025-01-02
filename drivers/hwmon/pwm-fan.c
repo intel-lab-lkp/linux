@@ -499,6 +499,7 @@ static int pwm_fan_probe(struct platform_device *pdev)
 	const struct hwmon_channel_info **channels;
 	u32 pwm_min_from_stopped = 0;
 	u32 *fan_channel_config;
+	u32 default_pwm;
 	int channel_count = 1;	/* We always have a PWM channel. */
 	int i;
 
@@ -545,11 +546,15 @@ static int pwm_fan_probe(struct platform_device *pdev)
 
 	ctx->enable_mode = pwm_disable_reg_enable;
 
+	ret = device_property_read_u32(dev, "default-pwm", &default_pwm);
+	if (ret)
+		default_pwm = MAX_PWM;
+
 	/*
-	 * Set duty cycle to maximum allowed and enable PWM output as well as
+	 * Set duty cycle to default and enable PWM output as well as
 	 * the regulator. In case of error nothing is changed
 	 */
-	ret = set_pwm(ctx, MAX_PWM);
+	ret = set_pwm(ctx, default_pwm);
 	if (ret) {
 		dev_err(dev, "Failed to configure PWM: %d\n", ret);
 		return ret;
