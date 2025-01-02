@@ -23,9 +23,11 @@
  * IFS Image
  * ---------
  *
- * Intel provides a firmware file containing the scan tests via
- * github [#f1]_.  Similar to microcode there is a separate file for each
- * family-model-stepping. IFS Images are not applicable for some test types.
+ * As of early 2025, Intel provides the firmware files containing the scan tests
+ * to select customers [#f1]_. When this driver was merged in 2022, it was
+ * announced that firmware files would be available via github [#f2]_. Similar
+ * to microcode there is a separate file for each family-model-stepping. IFS
+ * Images are not applicable for some test types.
  * Wherever applicable the sysfs directory would provide a "current_batch" file
  * (see below) for loading the image.
  *
@@ -125,7 +127,8 @@
  * 2) Hardware allows for some number of cores to be tested in parallel.
  * The driver does not make use of this, it only tests one core at a time.
  *
- * .. [#f1] https://github.com/intel/TBD
+ * .. [#f1] https://www.intel.com/content/www/us/en/support/articles/000099537/processors/intel-xeon-processors.html
+ * .. [#f2] https://github.com/intel/TBD
  *
  *
  * Structural Based Functional Test at Field (SBAF):
