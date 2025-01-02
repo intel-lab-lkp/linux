@@ -582,8 +582,8 @@ static struct rzv2h_mstop
 	if (!mstop)
 		return NULL;
 
-	mstop->idx = (mstop_data >> 16) & 0xffff;
-	mstop->mask = mstop_data & 0xffff;
+	mstop->idx = FIELD_GET(BUS_MSTOP_IDX_MASK, mstop_data);
+	mstop->mask = FIELD_GET(BUS_MSTOP_BITS_MASK, mstop_data);
 	if (rzv2h_mod_clock_is_enabled(&clock->hw))
 		refcount_set(&mstop->ref_cnt, 1);
 	else
