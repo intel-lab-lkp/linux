@@ -13040,6 +13040,7 @@ L:	platform-driver-x86@vger.kernel.org
 S:	Maintained
 F:	drivers/platform/x86/lenovo-wmi-capdata01.c
 F:	drivers/platform/x86/lenovo-wmi-gamezone.c
+F:	drivers/platform/x86/lenovo-wmi-other.c
 F:	drivers/platform/x86/lenovo-wmi.h
 
 LETSKETCH HID TABLET DRIVER
