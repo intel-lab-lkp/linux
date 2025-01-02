@@ -786,6 +786,10 @@ static void octep_vf_get_stats64(struct net_device *netdev,
 	tx_bytes = 0;
 	rx_packets = 0;
 	rx_bytes = 0;
+
+	if (!netif_running(netdev))
+		return;
+
 	for (q = 0; q < oct->num_oqs; q++) {
 		struct octep_vf_iq *iq = oct->iq[q];
 		struct octep_vf_oq *oq = oct->oq[q];
