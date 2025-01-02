@@ -35,5 +35,6 @@ netdev_features_t wx_fix_features(struct net_device *netdev,
 				  netdev_features_t features);
 void wx_set_ring(struct wx *wx, u32 new_tx_count,
 		 u32 new_rx_count, struct wx_ring *temp_ring);
+int wx_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd);
 
 #endif /* _NGBE_LIB_H_ */
