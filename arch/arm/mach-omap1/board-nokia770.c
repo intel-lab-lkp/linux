@@ -287,7 +287,7 @@ static struct gpiod_lookup_table nokia770_irq_gpio_table = {
 	.table = {
 		/* GPIO used by SPI device 1 */
 		GPIO_LOOKUP("gpio-0-15", 15, "ads7846_irq",
-			    GPIO_ACTIVE_HIGH),
+			    GPIO_ACTIVE_LOW),
 		/* GPIO used for retu IRQ */
 		GPIO_LOOKUP("gpio-48-63", 15, "retu_irq",
 			    GPIO_ACTIVE_HIGH),
