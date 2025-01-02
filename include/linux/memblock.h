@@ -375,7 +375,13 @@ static inline int memblock_get_region_node(const struct memblock_region *r)
 }
 #endif /* CONFIG_NUMA */
 
-/* Flags for memblock allocation APIs */
+/*
+ * Flags for memblock allocation APIs
+ * MEMBLOCK_ALLOC_ANYWHERE and MEMBLOCK_ALLOC_ACCESSIBLE
+ * indicates wheather the allocation is limited by memblock.current_limit.
+ * MEMBLOCK_ALLOC_NOLEAKTRACE not only indicates that it does not need to
+ * be scanned by kmemleak, but also implies MEMBLOCK_ALLOC_ACCESSIBLE
+ */
 #define MEMBLOCK_ALLOC_ANYWHERE	(~(phys_addr_t)0)
 #define MEMBLOCK_ALLOC_ACCESSIBLE	0
 #define MEMBLOCK_ALLOC_NOLEAKTRACE	1
