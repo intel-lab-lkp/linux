@@ -437,8 +437,8 @@ int drm_syncobj_find_fence(struct drm_file *file_private,
 			   struct dma_fence **fence)
 {
 	struct drm_syncobj *syncobj = drm_syncobj_find(file_private, handle);
-	struct syncobj_wait_entry wait;
 	u64 timeout = nsecs_to_jiffies64(DRM_SYNCOBJ_WAIT_FOR_SUBMIT_TIMEOUT);
+	struct syncobj_wait_entry wait = { };
 	int ret;
 
 	if (flags & ~DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT)
@@ -479,7 +479,6 @@ int drm_syncobj_find_fence(struct drm_file *file_private,
 	if (!(flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT))
 		goto out;
 
-	memset(&wait, 0, sizeof(wait));
 	wait.task = current;
 	wait.point = point;
 	drm_syncobj_fence_add_wait(syncobj, &wait);
