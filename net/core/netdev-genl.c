@@ -186,6 +186,9 @@ netdev_nl_napi_fill_one(struct sk_buff *rsp, struct napi_struct *napi,
 	if (napi->irq >= 0 && nla_put_u32(rsp, NETDEV_A_NAPI_IRQ, napi->irq))
 		goto nla_put_failure;
 
+	if (nla_put_u32(rsp, NETDEV_A_NAPI_THREADED, !!napi->thread))
+		goto nla_put_failure;
+
 	if (napi->thread) {
 		pid = task_pid_nr(napi->thread);
 		if (nla_put_u32(rsp, NETDEV_A_NAPI_PID, pid))
@@ -308,6 +311,40 @@ int netdev_nl_napi_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	}
 	rtnl_unlock();
 
+	return err;
+}
+
+int netdev_nl_napi_set_threaded_doit(struct sk_buff *skb,
+				     struct genl_info *info)
+{
+	struct napi_struct *napi;
+	u32 napi_threaded;
+	u32 napi_id;
+	int err = 0;
+
+	if (GENL_REQ_ATTR_CHECK(info, NETDEV_A_NAPI_ID) ||
+	    GENL_REQ_ATTR_CHECK(info, NETDEV_A_NAPI_THREADED))
+		return -EINVAL;
+
+	napi_id = nla_get_u32(info->attrs[NETDEV_A_NAPI_ID]);
+	napi_threaded = nla_get_u32(info->attrs[NETDEV_A_NAPI_THREADED]);
+
+	rtnl_lock();
+
+	napi = napi_by_id(napi_id);
+	if (!napi) {
+		NL_SET_BAD_ATTR(info->extack, info->attrs[NETDEV_A_NAPI_ID]);
+		err = -ENOENT;
+		goto napi_set_threaded_failure;
+	}
+
+	err = napi_set_threaded(napi, napi_threaded);
+	if (err)
+		NL_SET_ERR_MSG(info->extack,
+			       "unable to set threaded state of napi");
+
+napi_set_threaded_failure:
+	rtnl_unlock();
 	return err;
 }
 
