@@ -32,13 +32,13 @@ AArch64 Linux memory layout with 4KB pages + 4 levels (48-bit)::
   ffff000000000000	ffff7fffffffffff	 128TB		kernel logical memory map
  [ffff600000000000	ffff7fffffffffff]	  32TB		[kasan shadow region]
   ffff800000000000	ffff80007fffffff	   2GB		modules
-  ffff800080000000	fffffbffefffffff	 124TB		vmalloc
-  fffffbfff0000000	fffffbfffdffffff	 224MB		fixed mappings (top down)
-  fffffbfffe000000	fffffbfffe7fffff	   8MB		[guard region]
-  fffffbfffe800000	fffffbffff7fffff	  16MB		PCI I/O space
-  fffffbffff800000	fffffbffffffffff	   8MB		[guard region]
-  fffffc0000000000	fffffdffffffffff	   2TB		vmemmap
-  fffffe0000000000	ffffffffffffffff	   2TB		[guard region]
+  ffff800080000000	fffffdffbf7fffff	 126TB		vmalloc
+  fffffdffbf800000	fffffdffbfffffff	   8MB		[guard region]
+  fffffdffc0000000	ffffffffbfffffff	   2TB		vmemmap
+  ffffffffc0000000	ffffffffc07fffff	   8MB		[guard region]
+  ffffffffc0800000	ffffffffc17fffff	  16MB		PCI I/O	space
+  ffffffffc1800000	ffffffffff7fffff	 992MB		fixed mappings (top down)
+  ffffffffff800000	ffffffffffffffff	   8MB		[guard region]
 
 
 AArch64 Linux memory layout with 64KB pages + 3 levels (52-bit with HW support)::
@@ -49,13 +49,13 @@ AArch64 Linux memory layout with 64KB pages + 3 levels (52-bit with HW support):
   fff0000000000000	ffff7fffffffffff	  ~4PB		kernel logical memory map
  [fffd800000000000	ffff7fffffffffff]	 512TB		[kasan shadow region]
   ffff800000000000	ffff80007fffffff	   2GB		modules
-  ffff800080000000	fffffbffefffffff	 124TB		vmalloc
-  fffffbfff0000000	fffffbfffdffffff	 224MB		fixed mappings (top down)
-  fffffbfffe000000	fffffbfffe7fffff	   8MB		[guard region]
-  fffffbfffe800000	fffffbffff7fffff	  16MB		PCI I/O space
-  fffffbffff800000	fffffbffffffffff	   8MB		[guard region]
-  fffffc0000000000	ffffffdfffffffff	  ~4TB		vmemmap
-  ffffffe000000000	ffffffffffffffff	 128GB		[guard region]
+  ffff800080000000	fffffc1fbf7fffff	 124TB		vmalloc
+  fffffc1fbf800000	fffffc1fbfffffff	   8MB		[guard region]
+  fffffc1fc0000000	ffffffffbfffffff	  ~4TB		vmemmap
+  ffffffffc0000000	ffffffffc07fffff	   8MB		[guard region]
+  ffffffffc0800000	ffffffffc17fffff	  16MB		PCI I/O space
+  ffffffffc1800000	ffffffffff7fffff	 992MB		fixed mappings (top down)
+  ffffffffff800000	ffffffffffffffff	   8MB		[guard region]
 
 
 Translation table lookup with 4KB pages::
