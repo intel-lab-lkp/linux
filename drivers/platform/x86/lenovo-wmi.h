@@ -36,6 +36,22 @@ struct wmi_method_args {
 	u32 arg1;
 };
 
+struct lenovo_wmi_attr_id {
+	u32 mode_id : 16; /* Fan profile */
+	u32 feature_id : 8; /* Attribute (SPL/SPPT/...) */
+	u32 device_id : 8; /* CPU/GPU/... */
+} __packed;
+
+/* Data struct for LENOVO_CAPABILITY_DATA_01 */
+struct capability_data_01 {
+	u32 id;
+	u32 supported;
+	u32 default_value;
+	u32 step;
+	u32 min_value;
+	u32 max_value;
+};
+
 /* General Use functions */
 static int lenovo_wmidev_evaluate_method(struct wmi_device *wdev, u8 instance,
 					 u32 method_id, struct acpi_buffer *in,
@@ -101,5 +117,9 @@ int lenovo_wmidev_evaluate_method_1(struct wmi_device *wdev, u8 instance,
 	return lenovo_wmidev_evaluate_method_2(wdev, instance, method_id, arg0,
 					       0, retval);
 }
+
+/* LENOVO_CAPABILITY_DATA_01 exported functions */
+int lenovo_wmi_capdata01_get(struct lenovo_wmi_attr_id attr_id,
+			     struct capability_data_01 *cap_data);
 
 #endif /* !_LENOVO_WMI_H_ */

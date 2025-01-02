@@ -470,6 +470,17 @@ config LENOVO_WMI_GAMEZONE
 	  To compile this driver as a module, choose M here: the module will
 	  be called lenovo_wmi_gamezone.
 
+config LENOVO_WMI_DATA01
+	tristate "Lenovo Legion WMI capability Data 01 Driver"
+	depends on ACPI_WMI
+	help
+	  Say Y here if you have a WMI aware Lenovo Legion device in the "Gaming Series"
+	  line of hardware. This interface is a dependency for exposing tunable power
+	  settings.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called lenovo_wmi_capdata01.
+
 config IDEAPAD_LAPTOP
 	tristate "Lenovo IdeaPad Laptop Extras"
 	depends on ACPI
