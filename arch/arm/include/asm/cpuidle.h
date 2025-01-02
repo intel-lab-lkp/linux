@@ -55,4 +55,6 @@ struct arm_cpuidle_irq_context { };
 #define arm_cpuidle_save_irq_context(c)		(void)c
 #define arm_cpuidle_restore_irq_context(c)	(void)c
 
+#include <asm-generic/cpuidle.h>
+
 #endif

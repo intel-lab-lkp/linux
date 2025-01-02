@@ -102,4 +102,8 @@ static inline void report_invalid_psscr_val(u64 psscr_val, int err)
 
 #endif
 
+#ifndef __ASSEMBLY__
+#include <asm-generic/cpuidle.h>
+#endif
+
 #endif

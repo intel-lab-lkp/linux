@@ -23,6 +23,7 @@
 #include <linux/perf_event.h>
 #include <acpi/processor.h>
 #include <linux/context_tracking.h>
+#include <asm/cpuidle.h>
 
 /*
  * Include the apic definitions for x86 to have the APIC timer related defines
@@ -806,7 +807,8 @@ static int acpi_processor_setup_cstates(struct acpi_processor *pr)
 		if (cx->type == ACPI_STATE_C1 || cx->type == ACPI_STATE_C2)
 			drv->safe_state_index = count;
 
-		if (cx->entry_method == ACPI_CSTATE_FFH)
+		if (cx->entry_method == ACPI_CSTATE_FFH &&
+		    !arch_cpuidle_mwait_needs_ipi())
 			state->flags |= CPUIDLE_FLAG_MWAIT;
 
 		/*

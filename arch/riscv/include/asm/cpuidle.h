@@ -21,4 +21,6 @@ static inline void cpu_do_idle(void)
 	wait_for_interrupt();
 }
 
+#include <asm-generic/cpuidle.h>
+
 #endif

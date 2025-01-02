@@ -56,6 +56,7 @@
 #include <asm/mwait.h>
 #include <asm/spec-ctrl.h>
 #include <asm/fpu/api.h>
+#include <asm/cpuidle.h>
 
 #define INTEL_IDLE_VERSION "0.5.1"
 
@@ -1788,7 +1789,10 @@ static void __init intel_idle_init_cstates_acpi(struct cpuidle_driver *drv)
 		if (cx->type > ACPI_STATE_C1)
 			state->target_residency *= 3;
 
-		state->flags = MWAIT2flg(cx->address) | CPUIDLE_FLAG_MWAIT;
+		state->flags = MWAIT2flg(cx->address);
+
+		if (!arch_cpuidle_mwait_needs_ipi())
+			state->flags |= CPUIDLE_FLAG_MWAIT;
 
 		if (cx->type > ACPI_STATE_C2)
 			state->flags |= CPUIDLE_FLAG_TLB_FLUSHED;
@@ -2074,7 +2078,8 @@ static bool __init intel_idle_verify_cstate(unsigned int mwait_hint)
 
 static void state_update_enter_method(struct cpuidle_state *state, int cstate)
 {
-	state->flags |= CPUIDLE_FLAG_MWAIT;
+	if (!arch_cpuidle_mwait_needs_ipi())
+		state->flags |= CPUIDLE_FLAG_MWAIT;
 
 	if (state->flags & CPUIDLE_FLAG_INIT_XSTATE) {
 		/*
