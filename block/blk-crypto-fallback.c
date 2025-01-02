@@ -514,6 +514,12 @@ bool blk_crypto_fallback_bio_prep(struct bio **bio_ptr)
 	 * bi_end_io appropriately to trigger decryption when the bio is ended.
 	 */
 	f_ctx = mempool_alloc(bio_fallback_crypt_ctx_pool, GFP_NOIO);
+
+	if (!f_ctx) {
+		bio->bi_status = BLK_STS_RESOURCE;
+		return false;
+	}
+
 	f_ctx->crypt_ctx = *bc;
 	f_ctx->crypt_iter = bio->bi_iter;
 	f_ctx->bi_private_orig = bio->bi_private;
