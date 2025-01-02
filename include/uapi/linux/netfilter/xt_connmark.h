@@ -3,8 +3,8 @@
  * by Henrik Nordstrom <hno@marasystems.com>
  */
 
-#ifndef _XT_CONNMARK_H
-#define _XT_CONNMARK_H
+#ifndef _UAPI_XT_CONNMARK_H
+#define _UAPI_XT_CONNMARK_H
 
 #include <linux/types.h>
 
@@ -34,4 +34,4 @@ struct xt_connmark_mtinfo1 {
 	__u8 invert;
 };
 
-#endif /*_XT_CONNMARK_H*/
+#endif /* _UAPI_XT_CONNMARK_H */
