@@ -19,10 +19,13 @@ while read name size unit; do
         fi
 done < /proc/meminfo
 
+if [ -z "$freepgs" ]; then
+	echo "hugetlbfs not supported, test skipped."
+	exit $ksft_skip
 #
 # If not enough free huge pages for test, attempt to increase
 #
-if [ -n "$freepgs" ] && [ $freepgs -lt $hpages_test ]; then
+elif [ -n "$freepgs" ] && [ $freepgs -lt $hpages_test ]; then
 	nr_hugepgs=`cat /proc/sys/vm/nr_hugepages`
 	hpages_needed=`expr $hpages_test - $freepgs`
 
