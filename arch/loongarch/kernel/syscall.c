@@ -34,9 +34,30 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len, unsigned long,
 	return ksys_mmap_pgoff(addr, len, prot, flags, fd, offset >> PAGE_SHIFT);
 }
 
+#ifdef CONFIG_32BIT
+SYSCALL_DEFINE6(mmap2, unsigned long, addr, unsigned long, len, unsigned long,
+		prot, unsigned long, flags, unsigned long, fd, unsigned long, offset)
+{
+	/*
+	 * Note that the shift for mmap2 is constant (12),
+	 * regardless of PAGE_SIZE
+	 */
+
+	if (offset & (~PAGE_MASK >> 12))
+		return -EINVAL;
+
+	return ksys_mmap_pgoff(addr, len, prot, flags, fd,
+			       offset >> (PAGE_SHIFT - 12));
+}
+#endif
+
 void *sys_call_table[__NR_syscalls] = {
 	[0 ... __NR_syscalls - 1] = sys_ni_syscall,
+#ifdef CONFIG_64BIT
 #include <asm/syscall_table_64.h>
+#else
+#include <asm/syscall_table_32.h>
+#endif
 };
 
 typedef long (*sys_call_fn)(unsigned long, unsigned long,
