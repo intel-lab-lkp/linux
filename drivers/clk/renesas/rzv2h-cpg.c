@@ -565,8 +565,12 @@ static struct rzv2h_mstop
 			continue;
 
 		if (BUS_MSTOP(clk->mstop->idx, clk->mstop->mask) == mstop_data) {
-			if (rzv2h_mod_clock_is_enabled(&clock->hw))
-				refcount_inc(&clk->mstop->ref_cnt);
+			if (rzv2h_mod_clock_is_enabled(&clock->hw)) {
+				if (refcount_read(&clk->mstop->ref_cnt))
+					refcount_inc(&clk->mstop->ref_cnt);
+				else
+					refcount_set(&clk->mstop->ref_cnt, 1);
+			}
 			return clk->mstop;
 		}
 	}
