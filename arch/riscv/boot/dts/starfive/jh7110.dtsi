@@ -37,6 +37,7 @@
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
 				#interrupt-cells = <1>;
+				bootph-pre-ram;
 			};
 		};
 
@@ -70,6 +71,7 @@
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
 				#interrupt-cells = <1>;
+				bootph-pre-ram;
 			};
 		};
 
@@ -103,6 +105,7 @@
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
 				#interrupt-cells = <1>;
+				bootph-pre-ram;
 			};
 		};
 
@@ -136,6 +139,7 @@
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
 				#interrupt-cells = <1>;
+				bootph-pre-ram;
 			};
 		};
 
@@ -169,6 +173,7 @@
 				compatible = "riscv,cpu-intc";
 				interrupt-controller;
 				#interrupt-cells = <1>;
+				bootph-pre-ram;
 			};
 		};
 
@@ -323,6 +328,7 @@
 		compatible = "fixed-clock";
 		clock-output-names = "osc";
 		#clock-cells = <0>;
+		bootph-pre-ram;
 	};
 
 	rtc_osc: rtc-oscillator {
@@ -368,6 +374,7 @@
 					      <&cpu2_intc 3>, <&cpu2_intc 7>,
 					      <&cpu3_intc 3>, <&cpu3_intc 7>,
 					      <&cpu4_intc 3>, <&cpu4_intc 7>;
+			bootph-pre-ram;
 		};
 
 		ccache: cache-controller@2010000 {
@@ -382,6 +389,7 @@
 		};
 
 		dmc: dmc@15700000 {
+			bootph-pre-ram;
 			compatible = "starfive,jh7110-dmc";
 			reg = <0x0 0x15700000 0x0 0x10000>,
 			      <0x0 0x13000000 0x0 0x10000>;
@@ -916,6 +924,7 @@
 				      "pll0_out", "pll1_out", "pll2_out";
 			#clock-cells = <1>;
 			#reset-cells = <1>;
+			bootph-pre-ram;
 		};
 
 		sys_syscon: syscon@13030000 {
@@ -1098,6 +1107,7 @@
 			snps,block-size = <65536 65536 65536 65536>;
 			snps,priority = <0 1 2 3>;
 			snps,axi-max-burst-len = <16>;
+			bootph-pre-ram;
 		};
 
 		aoncrg: clock-controller@17000000 {
@@ -1115,6 +1125,7 @@
 				      "rtc_osc";
 			#clock-cells = <1>;
 			#reset-cells = <1>;
+			bootph-pre-ram;
 		};
 
 		aon_syscon: syscon@17010000 {
