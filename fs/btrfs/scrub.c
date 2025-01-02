@@ -1306,10 +1306,14 @@ static int find_first_extent_item(struct btrfs_root *extent_root,
 				  struct btrfs_path *path,
 				  u64 search_start, u64 search_len)
 {
-	struct btrfs_fs_info *fs_info = extent_root->fs_info;
+	struct btrfs_fs_info *fs_info;
 	struct btrfs_key key;
 	int ret;
 
+	if (!extent_root)
+		return -ENOENT;
+
+	fs_info = extent_root->fs_info;
 	/* Continue using the existing path */
 	if (path->nodes[0])
 		goto search_forward;
