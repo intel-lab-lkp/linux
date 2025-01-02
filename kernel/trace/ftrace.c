@@ -7077,6 +7077,20 @@ static int ftrace_process_locs(struct module *mod,
 			continue;
 		}
 
+		/*
+		 * At build time, a check is made against: nm -S vmlinux
+		 * to make sure all functions are found within the
+		 * size range of symbols listed by nm. If not, it's likely
+		 * a weak function that was overridden. We do not want those.
+		 * The script will zero them out, but kaslr will still
+		 * update them. If the address is the same as the kaslr_offset()
+		 * then skip the record.
+		 */
+		if (addr == kaslr_offset()) {
+			skipped++;
+			continue;
+		}
+
 		end_offset = (pg->index+1) * sizeof(pg->records[0]);
 		if (end_offset > PAGE_SIZE << pg->order) {
 			/* We should have allocated enough */
