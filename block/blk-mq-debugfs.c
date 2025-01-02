@@ -179,7 +179,7 @@ static const char *const alloc_policy_name[] = {
 };
 #undef BLK_TAG_ALLOC_NAME
 
-#define HCTX_FLAG_NAME(name) [ilog2(BLK_MQ_F_##name)] = #name
+#define HCTX_FLAG_NAME(name) [BLK_MQ_B_##name] = #name
 static const char *const hctx_flag_name[] = {
 	HCTX_FLAG_NAME(TAG_QUEUE_SHARED),
 	HCTX_FLAG_NAME(STACKING),
@@ -196,7 +196,7 @@ static int hctx_flags_show(void *data, struct seq_file *m)
 	const int alloc_policy = BLK_MQ_FLAG_TO_ALLOC_POLICY(hctx->flags);
 
 	BUILD_BUG_ON(ARRAY_SIZE(hctx_flag_name) !=
-			BLK_MQ_F_ALLOC_POLICY_START_BIT);
+			BLK_MQ_B_ALLOC_POLICY_START_BIT);
 	BUILD_BUG_ON(ARRAY_SIZE(alloc_policy_name) != BLK_TAG_ALLOC_MAX);
 
 	seq_puts(m, "alloc_policy=");
