@@ -7747,10 +7747,14 @@ int __init __weak ftrace_dyn_arch_init(void)
 	return 0;
 }
 
+/* This is set in scripts/sorttable.c */
+int ftrace_mcount_skip __initdata;
+
 void __init ftrace_init(void)
 {
 	extern unsigned long __start_mcount_loc[];
 	extern unsigned long __stop_mcount_loc[];
+	unsigned long *start_addr = __start_mcount_loc;
 	unsigned long count, flags;
 	int ret;
 
@@ -7761,6 +7765,14 @@ void __init ftrace_init(void)
 		goto failed;
 
 	count = __stop_mcount_loc - __start_mcount_loc;
+
+	/*
+	 * scripts/sorttable.c will set ftrace_mcount_skip to state
+	 * how many functions to skip in the __mcount_loc section.
+	 * These would have been weak functions.
+	 */
+	count -= ftrace_mcount_skip;
+	start_addr += ftrace_mcount_skip;
 	if (!count) {
 		pr_info("ftrace: No functions to be traced?\n");
 		goto failed;
@@ -7769,9 +7781,7 @@ void __init ftrace_init(void)
 	pr_info("ftrace: allocating %ld entries in %ld pages\n",
 		count, DIV_ROUND_UP(count, ENTRIES_PER_PAGE));
 
-	ret = ftrace_process_locs(NULL,
-				  __start_mcount_loc,
-				  __stop_mcount_loc);
+	ret = ftrace_process_locs(NULL, start_addr, __stop_mcount_loc);
 	if (ret) {
 		pr_warn("ftrace: failed to allocate entries for functions\n");
 		goto failed;

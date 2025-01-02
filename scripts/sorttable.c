@@ -543,6 +543,7 @@ static pthread_t mcount_sort_thread;
 struct elf_mcount_loc {
 	Elf_Ehdr *ehdr;
 	Elf_Shdr *init_data_sec;
+	Elf_Sym *ftrace_skip_sym;
 	uint64_t start_mcount_loc;
 	uint64_t stop_mcount_loc;
 };
@@ -554,8 +555,16 @@ static void *sort_mcount_loc(void *arg)
 	uint64_t offset = emloc->start_mcount_loc - shdr_addr(emloc->init_data_sec)
 					+ shdr_offset(emloc->init_data_sec);
 	uint64_t count = emloc->stop_mcount_loc - emloc->start_mcount_loc;
+	uint32_t *skip_addr = NULL;
 	unsigned char *start_loc = (void *)emloc->ehdr + offset;
 	void *end_loc = start_loc + count;
+
+	if (emloc->ftrace_skip_sym) {
+		offset = sym_value(emloc->ftrace_skip_sym) -
+			shdr_addr(emloc->init_data_sec) +
+			shdr_offset(emloc->init_data_sec);
+		skip_addr = (void *)emloc->ehdr + offset;
+	}
 
 	/* zero out any locations not found by function list */
 	if (function_list_size) {
@@ -573,6 +582,25 @@ static void *sort_mcount_loc(void *arg)
 	}
 
 	qsort(start_loc, count/long_size, long_size, compare_extable);
+
+	/* Now set how many functions need to be skipped */
+	for (void *ptr = start_loc; skip_addr && ptr < end_loc; ptr += long_size) {
+		uint64_t val;
+
+		if (long_size == 4)
+			val = *(uint32_t *)ptr;
+		else
+			val = *(uint64_t *)ptr;
+		if (val) {
+			uint32_t skip;
+
+			/* Update the ftrace_mcount_skip to skip these functions */
+			val = ptr - (void *)start_loc;
+			skip = val / long_size;
+			w(r(&skip), skip_addr);
+			break;
+		}
+	}
 	return NULL;
 }
 
@@ -590,11 +618,15 @@ static void get_mcount_loc(struct elf_mcount_loc *emloc, Elf_Shdr *symtab_sec,
 	while (sym < end_sym) {
 		if (!strcmp(strtab + sym_name(sym), "__start_mcount_loc")) {
 			emloc->start_mcount_loc = sym_value(sym);
-			if (++found == 2)
+			if (++found == 3)
 				break;
 		} else if (!strcmp(strtab + sym_name(sym), "__stop_mcount_loc")) {
 			emloc->stop_mcount_loc = sym_value(sym);
-			if (++found == 2)
+			if (++found == 3)
+				break;
+		} else if (!strcmp(strtab + sym_name(sym), "ftrace_mcount_skip")) {
+			emloc->ftrace_skip_sym = sym;
+			if (++found == 3)
 				break;
 		}
 		sym = (void *)sym + symentsize;
