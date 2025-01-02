@@ -12,7 +12,9 @@
 
 enum fixed_addresses {
 	FIX_HOLE,
+#ifdef CONFIG_FIX_EARLYCON_MEM
 	FIX_EARLYCON_MEM_BASE,
+#endif
 	__end_of_fixed_addresses
 };
 
