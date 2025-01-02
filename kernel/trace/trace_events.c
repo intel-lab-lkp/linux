@@ -1813,6 +1813,36 @@ static int trace_format_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+/**
+ *      trace_format_read - read() method for format file.
+ *      @file: the file to read from
+ *      @buf: the buffer to read to
+ *      @size: the maximum number of bytes to read
+ *      @ppos: the current position in the file
+ *
+ *  * Return:
+ *  * %0  - No bytes copied (EOF).
+ *  * %>0 - Number of bytes copied.
+ *  * %<0 - Error code.
+ */
+static ssize_t trace_format_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+{
+	ssize_t copied = 0;
+	ssize_t ret;
+
+	do {
+		ret = seq_read(file, buf + copied, size - copied, ppos);
+		if (ret < 0)
+			return ret;
+
+		copied += ret;
+		if (copied >= size)
+			break;
+	} while (ret);
+
+	return copied;
+}
+
 #ifdef CONFIG_PERF_EVENTS
 static ssize_t
 event_id_read(struct file *filp, char __user *ubuf, size_t cnt, loff_t *ppos)
@@ -2296,7 +2326,7 @@ static const struct file_operations ftrace_enable_fops = {
 
 static const struct file_operations ftrace_event_format_fops = {
 	.open = trace_format_open,
-	.read = seq_read,
+	.read = trace_format_read,
 	.llseek = seq_lseek,
 	.release = seq_release,
 };
