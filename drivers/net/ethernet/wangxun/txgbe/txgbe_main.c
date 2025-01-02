@@ -100,6 +100,7 @@ static void txgbe_up_complete(struct wx *wx)
 
 	/* enable transmits */
 	netif_tx_start_all_queues(netdev);
+	mod_timer(&wx->service_timer, jiffies);
 }
 
 static void txgbe_reset(struct wx *wx)
@@ -141,6 +142,8 @@ static void txgbe_disable_device(struct wx *wx)
 
 	wx_irq_disable(wx);
 	wx_napi_disable_all(wx);
+
+	del_timer_sync(&wx->service_timer);
 
 	if (wx->bus.func < 2)
 		wr32m(wx, TXGBE_MIS_PRB_CTL, TXGBE_MIS_PRB_CTL_LAN_UP(wx->bus.func), 0);
@@ -631,6 +634,8 @@ static int txgbe_probe(struct pci_dev *pdev,
 	eth_hw_addr_set(netdev, wx->mac.perm_addr);
 	wx_mac_set_default_filter(wx, wx->mac.perm_addr);
 
+	wx_init_service(wx);
+
 	err = wx_init_interrupt_scheme(wx);
 	if (err)
 		goto err_free_mac_table;
@@ -750,6 +755,8 @@ static void txgbe_remove(struct pci_dev *pdev)
 	struct wx *wx = pci_get_drvdata(pdev);
 	struct txgbe *txgbe = wx->priv;
 	struct net_device *netdev;
+
+	cancel_work_sync(&wx->service_task);
 
 	netdev = wx->netdev;
 	unregister_netdev(netdev);

@@ -2,6 +2,7 @@
 /* Copyright (c) 2019 - 2022 Beijing WangXun Technology Co., Ltd. */
 
 #include <linux/etherdevice.h>
+#include <linux/workqueue.h>
 #include <net/ip6_checksum.h>
 #include <net/page_pool/helpers.h>
 #include <net/inet_ecn.h>
@@ -2908,6 +2909,62 @@ void wx_set_ring(struct wx *wx, u32 new_tx_count,
 	}
 }
 EXPORT_SYMBOL(wx_set_ring);
+
+void wx_service_event_schedule(struct wx *wx)
+{
+	if (netif_carrier_ok(wx->netdev) &&
+	    !test_and_set_bit(WX_STATE_SERVICE_SCHED, wx->state))
+		queue_work(system_power_efficient_wq, &wx->service_task);
+}
+EXPORT_SYMBOL(wx_service_event_schedule);
+
+static void wx_service_event_complete(struct wx *wx)
+{
+	if (WARN_ON(!test_bit(WX_STATE_SERVICE_SCHED, wx->state)))
+		return;
+
+	/* flush memory to make sure state is correct before next watchdog */
+	smp_mb__before_atomic();
+	clear_bit(WX_STATE_SERVICE_SCHED, wx->state);
+}
+
+static void wx_service_timer(struct timer_list *t)
+{
+	struct wx *wx = from_timer(wx, t, service_timer);
+	unsigned long next_event_offset = HZ * 2;
+
+	/* Reset the timer */
+	mod_timer(&wx->service_timer, next_event_offset + jiffies);
+
+	wx_service_event_schedule(wx);
+}
+
+/**
+ * wx_service_task - manages and runs subtasks
+ * @work: pointer to work_struct containing our data
+ **/
+static void wx_service_task(struct work_struct *work)
+{
+	struct wx *wx = container_of(work, struct wx, service_task);
+
+	if (test_bit(WX_STATE_PTP_RUNNING, wx->state)) {
+		wx_ptp_overflow_check(wx);
+		if (unlikely(test_bit(WX_FLAG_RX_HWTSTAMP_IN_REGISTER,
+				      wx->flags)))
+			wx_ptp_rx_hang(wx);
+		wx_ptp_tx_hang(wx);
+	}
+
+	wx_service_event_complete(wx);
+}
+
+void wx_init_service(struct wx *wx)
+{
+	timer_setup(&wx->service_timer, wx_service_timer, 0);
+	INIT_WORK(&wx->service_task, wx_service_task);
+	clear_bit(WX_STATE_SERVICE_SCHED, wx->state);
+}
+EXPORT_SYMBOL(wx_init_service);
 
 int wx_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {

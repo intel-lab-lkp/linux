@@ -304,6 +304,9 @@ static void ngbe_disable_device(struct wx *wx)
 	if (wx->gpio_ctrl)
 		ngbe_sfp_modules_txrx_powerctl(wx, false);
 	wx_irq_disable(wx);
+
+	del_timer_sync(&wx->service_timer);
+
 	/* disable transmits in the hardware now that interrupts are off */
 	for (i = 0; i < wx->num_tx_queues; i++) {
 		u8 reg_idx = wx->tx_ring[i]->reg_idx;
@@ -342,6 +345,7 @@ void ngbe_up(struct wx *wx)
 		ngbe_sfp_modules_txrx_powerctl(wx, true);
 
 	phylink_start(wx->phylink);
+	mod_timer(&wx->service_timer, jiffies);
 }
 
 /**
@@ -685,6 +689,8 @@ static int ngbe_probe(struct pci_dev *pdev,
 	eth_hw_addr_set(netdev, wx->mac.perm_addr);
 	wx_mac_set_default_filter(wx, wx->mac.perm_addr);
 
+	wx_init_service(wx);
+
 	err = wx_init_interrupt_scheme(wx);
 	if (err)
 		goto err_free_mac_table;
@@ -730,6 +736,8 @@ static void ngbe_remove(struct pci_dev *pdev)
 {
 	struct wx *wx = pci_get_drvdata(pdev);
 	struct net_device *netdev;
+
+	cancel_work_sync(&wx->service_task);
 
 	netdev = wx->netdev;
 	unregister_netdev(netdev);

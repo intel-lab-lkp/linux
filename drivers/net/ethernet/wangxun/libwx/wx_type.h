@@ -1057,6 +1057,7 @@ struct wx_hw_stats {
 
 enum wx_state {
 	WX_STATE_RESETTING,
+	WX_STATE_SERVICE_SCHED,
 	WX_STATE_PTP_RUNNING,
 	WX_STATE_PTP_TX_IN_PROGRESS,
 	WX_STATE_NBITS,		/* must be last */
@@ -1169,10 +1170,15 @@ struct wx {
 	void (*configure_fdir)(struct wx *wx);
 	void (*do_reset)(struct net_device *netdev);
 
+	struct timer_list service_timer;
+	struct work_struct service_task;
+
 	u32 base_incval;
 	u32 tx_hwtstamp_timeouts;
 	u32 tx_hwtstamp_skipped;
 	u32 rx_hwtstamp_cleared;
+	unsigned long last_overflow_check;
+	unsigned long last_rx_ptp_check;
 	unsigned long ptp_tx_start;
 	spinlock_t tmreg_lock; /* spinlock for ptp */
 	struct cyclecounter hw_cc;
