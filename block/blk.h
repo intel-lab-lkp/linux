@@ -357,7 +357,7 @@ static inline bool bio_may_need_split(struct bio *bio,
 		const struct queue_limits *lim)
 {
 	return lim->chunk_sectors || bio->bi_vcnt != 1 ||
-		bio->bi_io_vec->bv_len + bio->bi_io_vec->bv_offset > PAGE_SIZE;
+		bio->bi_io_vec->bv_len + bio->bi_io_vec->bv_offset > SZ_4K;
 }
 
 /**
