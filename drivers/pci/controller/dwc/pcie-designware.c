@@ -986,7 +986,7 @@ static int dw_pcie_edma_irq_verify(struct dw_pcie *pci)
 	}
 
 	for (; pci->edma.nr_irqs < ch_cnt; pci->edma.nr_irqs++) {
-		snprintf(name, sizeof(name), "dma%d", pci->edma.nr_irqs);
+		snprintf(name, sizeof(name), "dma%u", pci->edma.nr_irqs);
 
 		ret = platform_get_irq_byname_optional(pdev, name);
 		if (ret <= 0)
