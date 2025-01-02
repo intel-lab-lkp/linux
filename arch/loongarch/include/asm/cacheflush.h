@@ -80,6 +80,12 @@ static inline void flush_cache_line(int leaf, unsigned long addr)
 	}
 }
 
+/*
+ * Bits in sys_loongarch_flush_icache()'s flags argument.
+ */
+#define SYS_LOONGARCH_FLUSH_ICACHE_LOCAL 1UL
+#define SYS_LOONGARCH_FLUSH_ICACHE_ALL   (SYS_LOONGARCH_FLUSH_ICACHE_LOCAL)
+
 #include <asm-generic/cacheflush.h>
 
 #endif /* _ASM_CACHEFLUSH_H */

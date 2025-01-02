@@ -15,6 +15,7 @@
 #include <linux/unistd.h>
 
 #include <asm/asm.h>
+#include <asm/cacheflush.h>
 #include <asm/exception.h>
 #include <asm/loongarch.h>
 #include <asm/signal.h>
@@ -50,6 +51,33 @@ SYSCALL_DEFINE6(mmap2, unsigned long, addr, unsigned long, len, unsigned long,
 			       offset >> (PAGE_SHIFT - 12));
 }
 #endif
+
+/*
+ * On LoongArch CPUs with ICACHET, writes automatically sync to both local and
+ * remote instruction caches. CPUs without this feature lack userspace cache
+ * flush instructions, requiring a syscall to maintain I/D cache coherence and
+ * propagate to remote caches.
+ *
+ * sys_loongarch_flush_icache() is defined to flush the instruction cache
+ * over an address range, with the flush applying to either all threads or
+ * just the caller.
+ */
+SYSCALL_DEFINE3(loongarch_flush_icache, uintptr_t, start, uintptr_t, end,
+	uintptr_t, flags)
+{
+	/* Check the reserved flags. */
+	if (unlikely(flags & ~SYS_LOONGARCH_FLUSH_ICACHE_ALL))
+		return -EINVAL;
+
+	/*
+	 * SYS_LOONGARCH_FLUSH_ICACHE_LOCAL is not handled so far, needs
+	 * to be realized when non-ICACHET CPUs are supported.
+	 */
+
+	flush_icache_user_range(start, end);
+
+	return 0;
+}
 
 void *sys_call_table[__NR_syscalls] = {
 	[0 ... __NR_syscalls - 1] = sys_ni_syscall,
