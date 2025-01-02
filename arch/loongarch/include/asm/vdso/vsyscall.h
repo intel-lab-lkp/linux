@@ -8,6 +8,7 @@
 
 extern struct vdso_data *vdso_data;
 extern struct vdso_rng_data *vdso_rng_data;
+extern struct vdso_icache_flush_data *vdso_icache_flush_data;
 
 static __always_inline
 struct vdso_data *__loongarch_get_k_vdso_data(void)

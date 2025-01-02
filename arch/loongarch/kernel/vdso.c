@@ -36,6 +36,8 @@ static union {
 struct vdso_data *vdso_data = generic_vdso_data.data;
 struct vdso_pcpu_data *vdso_pdata = loongarch_vdso_data.vdata.pdata;
 struct vdso_rng_data *vdso_rng_data = &loongarch_vdso_data.vdata.rng_data;
+struct vdso_icache_flush_data *vdso_icache_flush_data =
+				&loongarch_vdso_data.vdata.icache_flush_data;
 
 static int vdso_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
 {

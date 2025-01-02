@@ -13,6 +13,15 @@
 #include <asm/page.h>
 #include <asm/vdso.h>
 
+enum vdso_icacle_flush_mode {
+	VDSO_ICACLE_FLUSH_IBAR,
+	VDSO_ICACLE_FLUSH_FALLBACK,
+};
+
+struct vdso_icache_flush_data {
+	enum vdso_icacle_flush_mode mode;
+};
+
 struct vdso_pcpu_data {
 	u32 node;
 } ____cacheline_aligned_in_smp;
@@ -20,6 +29,7 @@ struct vdso_pcpu_data {
 struct loongarch_vdso_data {
 	struct vdso_pcpu_data pdata[NR_CPUS];
 	struct vdso_rng_data rng_data;
+	struct vdso_icache_flush_data icache_flush_data;
 };
 
 /*

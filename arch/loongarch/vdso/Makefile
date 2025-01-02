@@ -4,7 +4,7 @@
 # Include the generic Makefile to check the built vdso.
 include $(srctree)/lib/vdso/Makefile
 
-obj-vdso-y := elf.o vgetcpu.o vgettimeofday.o vgetrandom.o \
+obj-vdso-y := elf.o flush_icache.o vgetcpu.o vgettimeofday.o vgetrandom.o \
               vgetrandom-chacha.o sigreturn.o
 
 # Common compiler flags between ABIs.

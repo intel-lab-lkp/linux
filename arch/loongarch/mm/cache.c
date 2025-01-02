@@ -24,6 +24,7 @@
 #include <asm/numa.h>
 #include <asm/processor.h>
 #include <asm/setup.h>
+#include <asm/vdso/vsyscall.h>
 
 void cache_error_setup(void)
 {
@@ -156,6 +157,8 @@ void cpu_cache_init(void)
 
 	current_cpu_data.cache_leaves_present = leaf;
 	current_cpu_data.options |= LOONGARCH_CPU_PREFETCH;
+
+	vdso_icache_flush_data->mode = VDSO_ICACLE_FLUSH_IBAR;
 }
 
 static const pgprot_t protection_map[16] = {

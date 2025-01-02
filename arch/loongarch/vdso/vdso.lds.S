@@ -72,6 +72,11 @@ VERSION
 		__vdso_rt_sigreturn;
 	local: *;
 	};
+	LINUX_6.14 {
+	global:
+		__vdso_flush_icache;
+	local: *;
+	};
 }
 
 /*
