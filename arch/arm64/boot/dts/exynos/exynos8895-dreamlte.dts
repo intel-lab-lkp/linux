@@ -16,6 +16,10 @@
 	compatible = "samsung,dreamlte", "samsung,exynos8895";
 	chassis-type = "handset";
 
+	aliases {
+		mmc0 = &mmc;
+	};
+
 	chosen {
 		#address-cells = <2>;
 		#size-cells = <1>;
@@ -89,10 +93,45 @@
 			wakeup-source;
 		};
 	};
+
+	reg_sd_vmmc: regulator-1 {
+		compatible = "regulator-fixed";
+		gpio = <&gpb1 1 GPIO_ACTIVE_HIGH>;
+		regulator-name = "sdcard-vmmc";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator-boot-on;
+		enable-active-high;
+	};
 };
 
 &oscclk {
 	clock-frequency = <26000000>;
+};
+
+&mmc {
+	assigned-clocks = <&cmu_top CLK_MOUT_CMU_FSYS1_MMC_CARD>;
+	assigned-clock-parents = <&cmu_top CLK_FOUT_SHARED4_PLL>;
+
+	pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_bus1 &sd2_bus4>;
+	pinctrl-names = "default";
+
+	bus-width = <4>;
+	card-detect-delay = <200>;
+	cd-gpios = <&gpa1 5 GPIO_ACTIVE_LOW>;
+	clock-frequency = <50000000>;
+	disable-wp;
+	sd-uhs-sdr50;
+	sd-uhs-sdr104;
+
+	/* TODO: Update once PMIC is implemented */
+	vmmc-supply = <&reg_sd_vmmc>;
+
+	samsung,dw-mshc-ciu-div = <3>;
+	samsung,dw-mshc-ddr-timing = <1 2>;
+	samsung,dw-mshc-sdr-timing = <0 3>;
+
+	status = "okay";
 };
 
 &pinctrl_alive {
