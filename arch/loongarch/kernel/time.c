@@ -126,15 +126,20 @@ void sync_counter(void)
 
 int constant_clockevent_init(void)
 {
+	uint32_t tmrbits;
 	unsigned int cpu = smp_processor_id();
 #ifdef CONFIG_PREEMPT_RT
 	unsigned long min_delta = 100;
 #else
 	unsigned long min_delta = 1000;
 #endif
-	unsigned long max_delta = (1UL << 48) - 1;
+	unsigned long max_delta;
 	struct clock_event_device *cd;
 	static int irq = 0, timer_irq_installed = 0;
+
+	tmrbits = read_csr_prcfg1() & CSR_CONF1_TMRBITS;
+	tmrbits = tmrbits >> CSR_CONF1_TMRBITS_SHIFT;
+	max_delta = CLOCKSOURCE_MASK(tmrbits + 1);
 
 	if (!timer_irq_installed) {
 		irq = get_percpu_irq(INT_TI);
