@@ -6325,6 +6325,17 @@ static void skb_defer_free_flush(struct softnet_data *sd)
 	}
 }
 
+static void __napi_gro_flush_helper(struct napi_struct *napi)
+{
+	if (napi->gro_bitmask) {
+		/* flush too old packets
+		 * If HZ < 1000, flush all packets.
+		 */
+		napi_gro_flush(napi, HZ >= 1000);
+	}
+	gro_normal_list(napi);
+}
+
 #if defined(CONFIG_NET_RX_BUSY_POLL)
 
 static void __busy_poll_stop(struct napi_struct *napi, bool skip_schedule)
@@ -6335,14 +6346,8 @@ static void __busy_poll_stop(struct napi_struct *napi, bool skip_schedule)
 		return;
 	}
 
-	if (napi->gro_bitmask) {
-		/* flush too old packets
-		 * If HZ < 1000, flush all packets.
-		 */
-		napi_gro_flush(napi, HZ >= 1000);
-	}
+	__napi_gro_flush_helper(napi);
 
-	gro_normal_list(napi);
 	clear_bit(NAPI_STATE_SCHED, &napi->state);
 }
 
@@ -6942,14 +6947,7 @@ static int __napi_poll(struct napi_struct *n, bool *repoll)
 		return work;
 	}
 
-	if (n->gro_bitmask) {
-		/* flush too old packets
-		 * If HZ < 1000, flush all packets.
-		 */
-		napi_gro_flush(n, HZ >= 1000);
-	}
-
-	gro_normal_list(n);
+	__napi_gro_flush_helper(n);
 
 	/* Some drivers may have called napi_schedule
 	 * prior to exhausting their budget.
