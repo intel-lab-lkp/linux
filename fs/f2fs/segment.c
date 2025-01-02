@@ -4552,6 +4552,8 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	struct list_head *head = &SM_I(sbi)->sit_entry_set;
 	bool to_journal = !is_sbi_flag_set(sbi, SBI_IS_RESIZEFS);
 	struct seg_entry *se;
+	bool force = (cpc->reason & CP_DISCARD);
+	__u64 trim_start = cpc->trim_start;
 
 	down_write(&sit_i->sentry_lock);
 
@@ -4609,7 +4611,9 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 #endif
 
 			/* add discard candidates */
-			if (!(cpc->reason & CP_DISCARD)) {
+			if (!force || (force &&
+					(segno < trim_start ||
+					 segno > cpc->trim_end))) {
 				cpc->trim_start = segno;
 				add_discard_addrs(sbi, cpc, false, false);
 			}
@@ -4649,8 +4653,8 @@ void f2fs_flush_sit_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	f2fs_bug_on(sbi, !list_empty(head));
 	f2fs_bug_on(sbi, sit_i->dirty_sentries);
 out:
-	if (cpc->reason & CP_DISCARD) {
-		__u64 trim_start = cpc->trim_start;
+	if (force) {
+		cpc->trim_start = trim_start;
 
 		for (; cpc->trim_start <= cpc->trim_end; cpc->trim_start++)
 			add_discard_addrs(sbi, cpc, true, false);
