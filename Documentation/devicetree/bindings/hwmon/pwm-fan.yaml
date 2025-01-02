@@ -20,6 +20,12 @@ properties:
     items:
       maximum: 255
 
+  default-pwm:
+    description: Default PWM duty cycle value to use at startup
+    minimum: 0
+    maximum: 255
+    default: 255
+
   fan-supply:
     description: Phandle to the regulator that provides power to the fan.
 
@@ -100,6 +106,7 @@ examples:
     pwm-fan {
       compatible = "pwm-fan";
       pwms = <&pwm 0 40000 0>;
+      default-pwm = 75;
       fan-supply = <&reg_fan>;
       interrupt-parent = <&gpio5>;
       interrupts = <1 IRQ_TYPE_EDGE_FALLING>;
