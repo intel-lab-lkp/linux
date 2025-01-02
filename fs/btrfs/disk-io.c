@@ -2167,7 +2167,8 @@ static int load_global_roots_objectid(struct btrfs_root *tree_root,
 		found = true;
 		root = read_tree_root_path(tree_root, path, &key);
 		if (IS_ERR(root)) {
-			if (!btrfs_test_opt(fs_info, IGNOREBADROOTS))
+			if (!btrfs_test_opt(fs_info, IGNOREBADROOTS) ||
+			   objectid == BTRFS_EXTENT_TREE_OBJECTID)
 				ret = PTR_ERR(root);
 			break;
 		}
@@ -2188,7 +2189,8 @@ static int load_global_roots_objectid(struct btrfs_root *tree_root,
 		if (objectid == BTRFS_CSUM_TREE_OBJECTID)
 			set_bit(BTRFS_FS_STATE_NO_DATA_CSUMS, &fs_info->fs_state);
 
-		if (!btrfs_test_opt(fs_info, IGNOREBADROOTS))
+		if (!btrfs_test_opt(fs_info, IGNOREBADROOTS) ||
+		   (ret && objectid == BTRFS_EXTENT_TREE_OBJECTID))
 			ret = ret ? ret : -ENOENT;
 		else
 			ret = 0;
