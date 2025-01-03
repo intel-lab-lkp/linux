@@ -2486,7 +2486,7 @@ static void task_numa_find_cpu(struct task_numa_env *env,
 	}
 }
 
-static int task_numa_migrate(struct task_struct *p)
+static void task_numa_migrate(struct task_struct *p)
 {
 	struct task_numa_env env = {
 		.p = p,
@@ -2531,7 +2531,7 @@ static int task_numa_migrate(struct task_struct *p)
 	 */
 	if (unlikely(!sd)) {
 		sched_setnuma(p, task_node(p));
-		return -EINVAL;
+		return;
 	}
 
 	env.dst_nid = p->numa_preferred_nid;
@@ -2600,7 +2600,7 @@ static int task_numa_migrate(struct task_struct *p)
 	/* No better CPU than the current one was found. */
 	if (env.best_cpu == -1) {
 		trace_sched_stick_numa(p, env.src_cpu, NULL, -1);
-		return -EAGAIN;
+		return;
 	}
 
 	best_rq = cpu_rq(env.best_cpu);
@@ -2609,7 +2609,7 @@ static int task_numa_migrate(struct task_struct *p)
 		WRITE_ONCE(best_rq->numa_migrate_on, 0);
 		if (ret != 0)
 			trace_sched_stick_numa(p, env.src_cpu, NULL, env.best_cpu);
-		return ret;
+		return;
 	}
 
 	ret = migrate_swap(p, env.best_task, env.best_cpu, env.src_cpu);
@@ -2618,7 +2618,6 @@ static int task_numa_migrate(struct task_struct *p)
 	if (ret != 0)
 		trace_sched_stick_numa(p, env.src_cpu, env.best_task, env.best_cpu);
 	put_task_struct(env.best_task);
-	return ret;
 }
 
 /* Attempt to migrate a task to a CPU on the preferred node. */
