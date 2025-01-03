@@ -2933,7 +2933,7 @@ static void * __init pcpu_fc_alloc(unsigned int cpu, size_t size, size_t align,
 		node = cpu_to_nd_fn(cpu);
 
 	if (node == NUMA_NO_NODE || !node_online(node) || !NODE_DATA(node)) {
-		ptr = memblock_alloc_from(size, align, goal);
+		ptr = memblock_alloc_from_no_panic(size, align, goal);
 		pr_info("cpu %d has no node %d or node-local memory\n",
 			cpu, node);
 		pr_debug("per cpu data for cpu%d %zu bytes at 0x%llx\n",
@@ -2948,7 +2948,7 @@ static void * __init pcpu_fc_alloc(unsigned int cpu, size_t size, size_t align,
 	}
 	return ptr;
 #else
-	return memblock_alloc_from(size, align, goal);
+	return memblock_alloc_from_no_panic(size, align, goal);
 #endif
 }
 
@@ -3318,7 +3318,7 @@ void __init setup_per_cpu_areas(void)
 
 	ai = pcpu_alloc_alloc_info(1, 1);
 	fc = memblock_alloc_from(unit_size, PAGE_SIZE, __pa(MAX_DMA_ADDRESS));
-	if (!ai || !fc)
+	if (!ai)
 		panic("Failed to allocate memory for percpu areas.");
 	/* kmemleak tracks the percpu allocations separately */
 	kmemleak_ignore_phys(__pa(fc));

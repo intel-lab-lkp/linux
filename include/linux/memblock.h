@@ -430,20 +430,22 @@ void *__memblock_alloc_panic(phys_addr_t size, phys_addr_t align,
 #define memblock_alloc_raw_no_panic(size, align)    \
 	 __memblock_alloc_panic(size, align, __func__, false, true)
 
-static inline void *memblock_alloc_from(phys_addr_t size,
-						phys_addr_t align,
-						phys_addr_t min_addr)
-{
-	return memblock_alloc_try_nid(size, align, min_addr,
-				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
-}
+void *__memblock_alloc_from_panic(phys_addr_t size, phys_addr_t align,
+				  phys_addr_t min_addr,const char *func,
+				  bool should_panic);
 
-static inline void *memblock_alloc_low(phys_addr_t size,
-					       phys_addr_t align)
-{
-	return memblock_alloc_try_nid(size, align, MEMBLOCK_LOW_LIMIT,
-				      ARCH_LOW_ADDRESS_LIMIT, NUMA_NO_NODE);
-}
+#define memblock_alloc_from(size, align, min_addr)    \
+	 __memblock_alloc_from_panic(size, align, min_addr,  __func__, true)
+#define memblock_alloc_from_no_panic(size, align, min_addr)    \
+	 __memblock_alloc_from_panic(size, align, min_addr, __func__, false)
+
+void *__memblock_alloc_low_panic(phys_addr_t size, phys_addr_t align,
+				 const char *func, bool should_panic);
+
+#define memblock_alloc_low(size, align)    \
+	 __memblock_alloc_low_panic(size, align, __func__, true)
+#define memblock_alloc_low_no_panic(size, align)    \
+	 __memblock_alloc_low_panic(size, align, __func__, false)
 
 static inline void *memblock_alloc_node(phys_addr_t size,
 						phys_addr_t align, int nid)

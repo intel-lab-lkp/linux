@@ -11,7 +11,7 @@
 #define dmi_unmap(x)			iounmap(x)
 
 /* MIPS initialize DMI scan before SLAB is ready, so we use memblock here */
-#define dmi_alloc(l)			memblock_alloc_low(l, PAGE_SIZE)
+#define dmi_alloc(l)			memblock_alloc_low_no_panic(l, PAGE_SIZE)
 
 #if defined(CONFIG_MACH_LOONGSON64)
 #define SMBIOS_ENTRY_POINT_SCAN_START	0xFFFE000
