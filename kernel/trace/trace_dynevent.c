@@ -73,24 +73,20 @@ int dyn_event_release(const char *raw_command, struct dyn_event_operations *type
 	struct dyn_event *pos, *n;
 	char *system = NULL, *event, *p;
 	int argc, ret = -ENOENT;
-	char **argv;
+	char **argv __free(argv) = NULL;
 
 	argv = argv_split(GFP_KERNEL, raw_command, &argc);
 	if (!argv)
 		return -ENOMEM;
 
 	if (argv[0][0] == '-') {
-		if (argv[0][1] != ':') {
-			ret = -EINVAL;
-			goto out;
-		}
+		if (argv[0][1] != ':')
+			return -EINVAL;
 		event = &argv[0][2];
 	} else {
 		event = strchr(argv[0], ':');
-		if (!event) {
-			ret = -EINVAL;
-			goto out;
-		}
+		if (!event)
+			return -EINVAL;
 		event++;
 	}
 
@@ -100,27 +96,22 @@ int dyn_event_release(const char *raw_command, struct dyn_event_operations *type
 		event = p + 1;
 		*p = '\0';
 	}
-	if (!system && event[0] == '\0') {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (!system && event[0] == '\0')
+		return -EINVAL;
 
-	scoped_guard(mutex, &event_mutex) {
-		for_each_dyn_event_safe(pos, n) {
-			if (type && type != pos->ops)
-				continue;
-			if (!pos->ops->match(system, event,
-					argc - 1, (const char **)argv + 1, pos))
-				continue;
+	guard(mutex)(&event_mutex);
+	for_each_dyn_event_safe(pos, n) {
+		if (type && type != pos->ops)
+			continue;
+		if (!pos->ops->match(system, event,
+				argc - 1, (const char **)argv + 1, pos))
+			continue;
 
-			ret = pos->ops->free(pos);
-			if (ret)
-				break;
-		}
-		tracing_reset_all_online_cpus();
+		ret = pos->ops->free(pos);
+		if (ret)
+			break;
 	}
-out:
-	argv_free(argv);
+	tracing_reset_all_online_cpus();
 	return ret;
 }
 
