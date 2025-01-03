@@ -1156,8 +1156,13 @@ static int ip6_dst_lookup_tail(struct net *net, const struct sock *sk,
 		*dst = ip6_route_output_flags(net, sk, fl6, flags);
 
 	err = (*dst)->error;
-	if (err)
+	if (err && (flags & RT6_LOOKUP_F_IFACE)) {
+		*dst = (struct dst_entry *)ip6_create_rt_oif_rcu(net, sk, fl6, flags);
+		if (!*dst)
+			goto out_err_release;
+	} else if (err) {
 		goto out_err_release;
+	}
 
 #ifdef CONFIG_IPV6_OPTIMISTIC_DAD
 	/*
