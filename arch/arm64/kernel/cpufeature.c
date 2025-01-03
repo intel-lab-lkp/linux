@@ -1888,6 +1888,11 @@ static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope)
 }
 #endif
 
+static bool has_bbmlv2(const struct arm64_cpu_capabilities *entry, int scope)
+{
+	return bbmlv2_available();
+}
+
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 #define KPTI_NG_TEMP_VA		(-(1UL << PMD_SHIFT))
 
@@ -2989,6 +2994,12 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		ARM64_CPUID_FIELDS(ID_AA64PFR1_EL1, GCS, IMP)
 	},
 #endif
+	{
+		.desc = "BBM Level 2",
+		.capability = ARM64_HAS_BBMLV2,
+		.type = ARM64_CPUCAP_BOOT_CPU_FEATURE,
+		.matches = has_bbmlv2,
+	},
 	{},
 };
 

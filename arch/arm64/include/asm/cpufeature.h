@@ -865,6 +865,25 @@ static __always_inline bool system_supports_mpam_hcr(void)
 	return alternative_has_cap_unlikely(ARM64_MPAM_HCR);
 }
 
+static inline bool system_supports_bbmlv2(void)
+{
+	return cpus_have_final_boot_cap(ARM64_HAS_BBMLV2);
+}
+
+static inline bool bbmlv2_available(void)
+{
+	static const struct midr_range support_bbmlv2[] = {
+		MIDR_ALL_VERSIONS(MIDR_AMPERE1),
+		MIDR_ALL_VERSIONS(MIDR_AMPERE1A),
+		{}
+	};
+
+	if (is_midr_in_range_list(read_cpuid_id(), support_bbmlv2))
+		return true;
+
+	return false;
+}
+
 int do_emulate_mrs(struct pt_regs *regs, u32 sys_reg, u32 rt);
 bool try_emulate_mrs(struct pt_regs *regs, u32 isn);
 
