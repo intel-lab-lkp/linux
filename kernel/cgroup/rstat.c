@@ -201,8 +201,10 @@ next_level:
  * within the children list and terminated by the parent cgroup. An exception
  * here is the cgroup root whose updated_next can be self terminated.
  */
-static struct cgroup *cgroup_rstat_updated_list(struct cgroup *root, int cpu)
+static struct cgroup *cgroup_rstat_updated_list(struct cgroup_subsys_state *root_css,
+				int cpu)
 {
+	struct cgroup *root = root_css->cgroup;
 	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
 	struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(root, cpu);
 	struct cgroup *head = NULL, *parent, *child;
@@ -280,9 +282,11 @@ __bpf_hook_end();
  * value -1 is used when obtaining the main lock else this is the CPU
  * number processed last.
  */
-static inline void __cgroup_rstat_lock(struct cgroup *cgrp, int cpu_in_loop)
+static inline void __cgroup_rstat_lock(struct cgroup_subsys_state *css,
+				int cpu_in_loop)
 	__acquires(&cgroup_rstat_lock)
 {
+	struct cgroup *cgrp = css->cgroup;
 	bool contended;
 
 	contended = !spin_trylock_irq(&cgroup_rstat_lock);
@@ -293,15 +297,18 @@ static inline void __cgroup_rstat_lock(struct cgroup *cgrp, int cpu_in_loop)
 	trace_cgroup_rstat_locked(cgrp, cpu_in_loop, contended);
 }
 
-static inline void __cgroup_rstat_unlock(struct cgroup *cgrp, int cpu_in_loop)
+static inline void __cgroup_rstat_unlock(struct cgroup_subsys_state *css,
+				int cpu_in_loop)
 	__releases(&cgroup_rstat_lock)
 {
+	struct cgroup *cgrp = css->cgroup;
+
 	trace_cgroup_rstat_unlock(cgrp, cpu_in_loop, false);
 	spin_unlock_irq(&cgroup_rstat_lock);
 }
 
 /* see cgroup_rstat_flush() */
-static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
+static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
 	__releases(&cgroup_rstat_lock) __acquires(&cgroup_rstat_lock)
 {
 	int cpu;
@@ -309,27 +316,27 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 	lockdep_assert_held(&cgroup_rstat_lock);
 
 	for_each_possible_cpu(cpu) {
-		struct cgroup *pos = cgroup_rstat_updated_list(cgrp, cpu);
+		struct cgroup *pos = cgroup_rstat_updated_list(css, cpu);
 
 		for (; pos; pos = pos->rstat_flush_next) {
-			struct cgroup_subsys_state *css;
+			struct cgroup_subsys_state *css_iter;
 
 			cgroup_base_stat_flush(pos, cpu);
 			bpf_rstat_flush(pos, cgroup_parent(pos), cpu);
 
 			rcu_read_lock();
-			list_for_each_entry_rcu(css, &pos->rstat_css_list,
+			list_for_each_entry_rcu(css_iter, &pos->rstat_css_list,
 						rstat_css_node)
-				css->ss->css_rstat_flush(css, cpu);
+				css_iter->ss->css_rstat_flush(css_iter, cpu);
 			rcu_read_unlock();
 		}
 
 		/* play nice and yield if necessary */
 		if (need_resched() || spin_needbreak(&cgroup_rstat_lock)) {
-			__cgroup_rstat_unlock(cgrp, cpu);
+			__cgroup_rstat_unlock(css, cpu);
 			if (!cond_resched())
 				cpu_relax();
-			__cgroup_rstat_lock(cgrp, cpu);
+			__cgroup_rstat_lock(css, cpu);
 		}
 	}
 }
@@ -349,13 +356,11 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
  */
 __bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 {
-	struct cgroup *cgrp = css->cgroup;
-
 	might_sleep();
 
-	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
-	__cgroup_rstat_unlock(cgrp, -1);
+	__cgroup_rstat_lock(css, -1);
+	cgroup_rstat_flush_locked(css);
+	__cgroup_rstat_unlock(css, -1);
 }
 
 /**
@@ -370,11 +375,9 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
 	__acquires(&cgroup_rstat_lock)
 {
-	struct cgroup *cgrp = css->cgroup;
-
 	might_sleep();
-	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
+	__cgroup_rstat_lock(css, -1);
+	cgroup_rstat_flush_locked(css);
 }
 
 /**
@@ -384,9 +387,7 @@ void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
 void cgroup_rstat_flush_release(struct cgroup_subsys_state *css)
 	__releases(&cgroup_rstat_lock)
 {
-	struct cgroup *cgrp = css->cgroup;
-
-	__cgroup_rstat_unlock(cgrp, -1);
+	__cgroup_rstat_unlock(css, -1);
 }
 
 int cgroup_rstat_init(struct cgroup *cgrp)
