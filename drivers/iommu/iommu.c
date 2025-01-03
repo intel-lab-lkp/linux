@@ -586,6 +586,9 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 
 	mutex_unlock(&group->mutex);
 
+	trace_add_device_to_group(group->id, dev);
+	dev_info(dev, "Adding to iommu group %d\n", group->id);
+
 	return 0;
 
 err_remove_gdev:
@@ -594,6 +597,7 @@ err_remove_gdev:
 err_put_group:
 	iommu_deinit_device(dev);
 	mutex_unlock(&group->mutex);
+	dev_err(dev, "Failed to add to iommu group %d: %d\n", group->id, ret);
 	iommu_group_put(group);
 
 	return ret;
@@ -1192,10 +1196,6 @@ rename:
 		goto err_free_name;
 	}
 
-	trace_add_device_to_group(group->id, dev);
-
-	dev_info(dev, "Adding to iommu group %d\n", group->id);
-
 	return device;
 
 err_free_name:
@@ -1204,7 +1204,6 @@ err_remove_link:
 	sysfs_remove_link(&dev->kobj, "iommu_group");
 err_free_device:
 	kfree(device);
-	dev_err(dev, "Failed to add to iommu group %d: %d\n", group->id, ret);
 	return ERR_PTR(ret);
 }
 
@@ -1230,6 +1229,10 @@ int iommu_group_add_device(struct iommu_group *group, struct device *dev)
 	mutex_lock(&group->mutex);
 	list_add_tail(&gdev->list, &group->devices);
 	mutex_unlock(&group->mutex);
+
+	trace_add_device_to_group(group->id, dev);
+	dev_info(dev, "Adding to iommu group %d\n", group->id);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(iommu_group_add_device);
