@@ -39,6 +39,11 @@ enum scsi_timeout_action {
 	SCSI_EH_NOT_HANDLED,
 };
 
+enum scsi_tag_alloc_policy {
+	SCSI_TAG_ALLOC_FIFO,	/* allocate starting from 0 */
+	SCSI_TAG_ALLOC_RR,	/* allocate starting from last allocated tag */
+};
+
 struct scsi_host_template {
 	/*
 	 * Put fields referenced in IO submission path together in
@@ -439,7 +444,7 @@ struct scsi_host_template {
 	short cmd_per_lun;
 
 	/* If use block layer to manage tags, this is tag allocation policy */
-	int tag_alloc_policy;
+	enum scsi_tag_alloc_policy tag_alloc_policy;
 
 	/*
 	 * Track QUEUE_FULL events and reduce queue depth on demand.
