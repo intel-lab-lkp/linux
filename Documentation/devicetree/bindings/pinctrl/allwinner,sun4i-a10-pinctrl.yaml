@@ -83,6 +83,11 @@ properties:
 
   gpio-controller: true
   interrupt-controller: true
+
+  gpio-reserved-ranges:
+    minItems: 1
+    maxItems: 90
+
   gpio-line-names: true
 
   input-debounce:
