@@ -164,7 +164,7 @@ static struct static_key_true *cgroup_subsys_on_dfl_key[] = {
 static DEFINE_PER_CPU(struct cgroup_rstat_cpu, cgrp_dfl_root_rstat_cpu);
 
 /* the default hierarchy */
-struct cgroup_root cgrp_dfl_root = { .cgrp.rstat_cpu = &cgrp_dfl_root_rstat_cpu };
+struct cgroup_root cgrp_dfl_root = { .cgrp.self.rstat_cpu = &cgrp_dfl_root_rstat_cpu };
 EXPORT_SYMBOL_GPL(cgrp_dfl_root);
 
 /*
@@ -1826,6 +1826,7 @@ int rebind_subsystems(struct cgroup_root *dst_root, u16 ss_mask)
 		struct cgroup_root *src_root = ss->root;
 		struct cgroup *scgrp = &src_root->cgrp;
 		struct cgroup_subsys_state *css = cgroup_css(scgrp, ss);
+		struct cgroup_subsys_state *dcss = cgroup_css(dcgrp, ss);
 		struct css_set *cset, *cset_pos;
 		struct css_task_iter *it;
 
@@ -1867,7 +1868,7 @@ int rebind_subsystems(struct cgroup_root *dst_root, u16 ss_mask)
 			list_del_rcu(&css->rstat_css_node);
 			synchronize_rcu();
 			list_add_rcu(&css->rstat_css_node,
-				     &dcgrp->rstat_css_list);
+				     &dcss->rstat_css_list);
 		}
 
 		/* default hierarchy doesn't enable controllers by default */
@@ -2052,7 +2053,6 @@ static void init_cgroup_housekeeping(struct cgroup *cgrp)
 	cgrp->dom_cgrp = cgrp;
 	cgrp->max_descendants = INT_MAX;
 	cgrp->max_depth = INT_MAX;
-	INIT_LIST_HEAD(&cgrp->rstat_css_list);
 	prev_cputime_init(&cgrp->prev_cputime);
 
 	for_each_subsys(ss, ssid)
@@ -2088,7 +2088,8 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	struct cgroup *root_cgrp = &root->cgrp;
 	struct kernfs_syscall_ops *kf_sops;
 	struct css_set *cset;
-	int i, ret;
+	struct cgroup_subsys *ss;
+	int i, ret, ssid;
 
 	lockdep_assert_held(&cgroup_mutex);
 
@@ -2132,10 +2133,6 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	if (ret)
 		goto destroy_root;
 
-	ret = cgroup_rstat_init(&root_cgrp->self);
-	if (ret)
-		goto destroy_root;
-
 	ret = rebind_subsystems(root, ss_mask);
 	if (ret)
 		goto exit_stats;
@@ -2174,7 +2171,10 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	goto out;
 
 exit_stats:
-	cgroup_rstat_exit(&root_cgrp->self);
+	for_each_subsys(ss, ssid) {
+		struct cgroup_subsys_state *css = init_css_set.subsys[ssid];
+		cgroup_rstat_exit(css);
+	}
 destroy_root:
 	kernfs_destroy_root(root->kf_root);
 	root->kf_root = NULL;
@@ -3229,6 +3229,10 @@ static int cgroup_apply_control_enable(struct cgroup *cgrp)
 	int ssid, ret;
 
 	cgroup_for_each_live_descendant_pre(dsct, d_css, cgrp) {
+		ret = cgroup_rstat_init(&dsct->self);
+		if (ret)
+			return ret;
+
 		for_each_subsys(ss, ssid) {
 			struct cgroup_subsys_state *css = cgroup_css(dsct, ss);
 
@@ -3239,6 +3243,10 @@ static int cgroup_apply_control_enable(struct cgroup *cgrp)
 				css = css_create(dsct, ss);
 				if (IS_ERR(css))
 					return PTR_ERR(css);
+
+				ret = cgroup_rstat_init(css);
+				if (ret)
+					goto err_free_css;
 			}
 
 			WARN_ON_ONCE(percpu_ref_is_dying(&css->refcnt));
@@ -3252,6 +3260,20 @@ static int cgroup_apply_control_enable(struct cgroup *cgrp)
 	}
 
 	return 0;
+
+err_free_css:
+	cgroup_for_each_live_descendant_pre(dsct, d_css, cgrp) {
+		cgroup_rstat_exit(&dsct->self);
+
+		for_each_subsys(ss, ssid) {
+			struct cgroup_subsys_state *css = cgroup_css(dsct, ss);
+
+			if (css != &dsct->self)
+				cgroup_rstat_exit(css);
+		}
+	}
+
+	return ret;
 }
 
 /**
@@ -5403,6 +5425,7 @@ static void css_free_rwork_fn(struct work_struct *work)
 				struct cgroup_subsys_state, destroy_rwork);
 	struct cgroup_subsys *ss = css->ss;
 	struct cgroup *cgrp = css->cgroup;
+	int ssid;
 
 	percpu_ref_exit(&css->refcnt);
 
@@ -5435,7 +5458,12 @@ static void css_free_rwork_fn(struct work_struct *work)
 			cgroup_put(cgroup_parent(cgrp));
 			kernfs_put(cgrp->kn);
 			psi_cgroup_free(cgrp);
-			cgroup_rstat_exit(css);
+			for_each_subsys(ss, ssid) {
+				struct cgroup_subsys_state *css = cgrp->subsys[ssid];
+
+				if (css)
+					cgroup_rstat_exit(css);
+			}
 			kfree(cgrp);
 		} else {
 			/*
@@ -5541,6 +5569,7 @@ static void init_and_link_css(struct cgroup_subsys_state *css,
 	css->id = -1;
 	INIT_LIST_HEAD(&css->sibling);
 	INIT_LIST_HEAD(&css->children);
+	INIT_LIST_HEAD(&css->rstat_css_list);
 	INIT_LIST_HEAD(&css->rstat_css_node);
 	css->serial_nr = css_serial_nr_next++;
 	atomic_set(&css->online_cnt, 0);
@@ -5551,7 +5580,7 @@ static void init_and_link_css(struct cgroup_subsys_state *css,
 	}
 
 	if (ss->css_rstat_flush)
-		list_add_rcu(&css->rstat_css_node, &cgrp->rstat_css_list);
+		list_add_rcu(&css->rstat_css_node, &css->rstat_css_list);
 
 	BUG_ON(cgroup_css(cgrp, ss));
 }
@@ -5686,14 +5715,6 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 	if (ret)
 		goto out_free_cgrp;
 
-	/* init self cgroup early so css->cgroup is valid within cgroup_rstat_init()
-	 * note that this will go away in a subsequent patch in this series
-	 */
-	cgrp->self.cgroup = cgrp;
-	ret = cgroup_rstat_init(&cgrp->self);
-	if (ret)
-		goto out_cancel_ref;
-
 	/* create the directory */
 	kn = kernfs_create_dir_ns(parent->kn, name, mode,
 				  current_fsuid(), current_fsgid(),
@@ -5784,7 +5805,6 @@ out_kernfs_remove:
 	kernfs_remove(cgrp->kn);
 out_stat_exit:
 	cgroup_rstat_exit(&cgrp->self);
-out_cancel_ref:
 	percpu_ref_exit(&cgrp->self.refcnt);
 out_free_cgrp:
 	kfree(cgrp);
@@ -6189,6 +6209,8 @@ int __init cgroup_init(void)
 	cgroup_unlock();
 
 	for_each_subsys(ss, ssid) {
+		struct cgroup_subsys_state *css;
+
 		if (ss->early_init) {
 			struct cgroup_subsys_state *css =
 				init_css_set.subsys[ss->id];
@@ -6199,6 +6221,9 @@ int __init cgroup_init(void)
 		} else {
 			cgroup_init_subsys(ss, false);
 		}
+
+		css = init_css_set.subsys[ss->id];
+		BUG_ON(cgroup_rstat_init(css));
 
 		list_add_tail(&init_css_set.e_cset_node[ssid],
 			      &cgrp_dfl_root.cgrp.e_csets[ssid]);
