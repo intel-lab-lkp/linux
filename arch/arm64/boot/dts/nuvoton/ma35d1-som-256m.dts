@@ -18,6 +18,8 @@
 		serial12 = &uart12;
 		serial14 = &uart14;
 		serial16 = &uart16;
+		ethernet0 = &gmac0;
+		ethernet1 = &gmac1;
 	};
 
 	chosen {
@@ -127,5 +129,13 @@
 &uart16 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_uart16>;
+	status = "okay";
+};
+
+&gmac0 {
+	status = "okay";
+};
+
+&gmac1 {
 	status = "okay";
 };
