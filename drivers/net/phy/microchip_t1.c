@@ -273,6 +273,11 @@
 /* End offset of samples */
 #define SQI_INLIERS_END (SQI_INLIERS_START + SQI_INLIERS_NUM)
 
+#define LAN887X_MX_CHIP_TOP_REG_CONTROL1		(0xF002)
+#define LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN		BIT(8)
+#define LAN887X_MX_CHIP_TOP_REG_CONTROL1_REF_CLK	BIT(9)
+#define LAN887X_MX_CHIP_TOP_REG_CONTROL1_GPIO2_EN	BIT(5)
+
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x/LAN887x T1 PHY driver"
 
@@ -1285,6 +1290,19 @@ static int lan887x_phy_init(struct phy_device *phydev)
 						 MCHP_RDS_PTP_PORT_BASE_ADDR);
 		if (IS_ERR(priv->clock))
 			return PTR_ERR(priv->clock);
+
+		/* Enable pin mux for GPIO 2(EVT B) as ref clk */
+		/* Enable pin mux for EVT A */
+		phy_modify_mmd(phydev, MDIO_MMD_VEND1,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_REF_CLK |
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_REF_CLK |
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN);
+
+		 /* Initialize pin numbers specific to PEROUT */
+		priv->clock->gpio_event_a = 3;
+		priv->clock->gpio_event_b = 1;
 
 		priv->init_done = true;
 	}
