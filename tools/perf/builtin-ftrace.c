@@ -43,6 +43,8 @@
 static volatile sig_atomic_t workload_exec_errno;
 static volatile sig_atomic_t done;
 
+static struct stats latency_stats;  /* for tracepoints */
+
 static void sig_handler(int sig __maybe_unused)
 {
 	done = true;
@@ -801,6 +803,13 @@ static void make_histogram(struct perf_ftrace *ftrace, int buckets[],
 do_inc:
 		buckets[i]++;
 
+		if (ftrace->stats) {
+			if (num >= min_latency)
+				num += min_latency;
+
+			update_stats(&latency_stats, num);
+		}
+
 next:
 		/* empty the line buffer for the next output  */
 		linebuf[0] = '\0';
@@ -894,6 +903,14 @@ print_bucket_info:
 	printf(" | %10d | %.*s%*s |\n", buckets[NUM_BUCKET - 1],
 	       bar_len, bar, bar_total - bar_len, "");
 
+	if (ftrace->stats) {
+		printf("\n# statistics  (in %s)\n", ftrace->use_nsec ? "nsec" : "usec");
+		printf("  total time: %20.0f\n", latency_stats.mean * latency_stats.n);
+		printf("    avg time: %20.0f\n", latency_stats.mean);
+		printf("    max time: %20"PRIu64"\n", latency_stats.max);
+		printf("    min time: %20"PRIu64"\n", latency_stats.min);
+		printf("       count: %20.0f\n", latency_stats.n);
+	}
 }
 
 static int prepare_func_latency(struct perf_ftrace *ftrace)
@@ -932,6 +949,9 @@ static int prepare_func_latency(struct perf_ftrace *ftrace)
 	if (fd < 0)
 		pr_err("failed to open trace_pipe\n");
 
+	if (ftrace->stats)
+		init_stats(&latency_stats);
+
 	put_tracing_file(trace_file);
 	return fd;
 }
@@ -961,7 +981,7 @@ static int stop_func_latency(struct perf_ftrace *ftrace)
 static int read_func_latency(struct perf_ftrace *ftrace, int buckets[])
 {
 	if (ftrace->target.use_bpf)
-		return perf_ftrace__latency_read_bpf(ftrace, buckets);
+		return perf_ftrace__latency_read_bpf(ftrace, buckets, &latency_stats);
 
 	return 0;
 }
@@ -1620,6 +1640,8 @@ int cmd_ftrace(int argc, const char **argv)
 		    "Minimum latency (1st bucket). Works only with --bucket-range."),
 	OPT_UINTEGER(0, "max-latency", &ftrace.max_latency,
 		    "Maximum latency (last bucket). Works only with --bucket-range and total buckets less than 22."),
+	OPT_BOOLEAN(0, "stats", &ftrace.stats,
+		    "Collect function latency stats too"),
 	OPT_PARENT(common_options),
 	};
 	const struct option profile_options[] = {

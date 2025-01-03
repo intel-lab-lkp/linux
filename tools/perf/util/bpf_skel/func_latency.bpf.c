@@ -38,12 +38,19 @@ struct {
 
 int enabled = 0;
 
+// stats
+__s64 total;
+__s64 count;
+__s64 max;
+__s64 min;
+
 const volatile int has_cpu = 0;
 const volatile int has_task = 0;
 const volatile int use_nsec = 0;
 const volatile unsigned int bucket_range;
 const volatile unsigned int min_latency;
 const volatile unsigned int max_latency;
+const volatile int stats = 0;
 
 SEC("kprobe/func")
 int BPF_PROG(func_begin)
@@ -136,6 +143,18 @@ do_lookup:
 			return 0;
 
 		*hist += 1;
+
+		if (stats) {
+			delta /= cmp_base;
+
+			__sync_fetch_and_add(&total, delta);
+			__sync_fetch_and_add(&count, 1);
+
+			if (delta > max)
+				max = delta;
+			if (delta < min)
+				min = delta;
+		}
 	}
 
 	return 0;

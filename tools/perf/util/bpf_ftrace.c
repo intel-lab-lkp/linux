@@ -11,6 +11,7 @@
 #include "util/debug.h"
 #include "util/evlist.h"
 #include "util/bpf_counter.h"
+#include "util/stat.h"
 
 #include "util/bpf_skel/func_latency.skel.h"
 
@@ -53,6 +54,7 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace)
 	}
 
 	skel->rodata->use_nsec = ftrace->use_nsec;
+	skel->rodata->stats = ftrace->stats;
 
 	set_max_rlimit();
 
@@ -85,6 +87,9 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace)
 			bpf_map_update_elem(fd, &pid, &val, BPF_ANY);
 		}
 	}
+
+	if (ftrace->stats)
+		skel->bss->min = INT64_MAX;
 
 	skel->links.func_begin = bpf_program__attach_kprobe(skel->progs.func_begin,
 							    false, func->name);
@@ -121,8 +126,8 @@ int perf_ftrace__latency_stop_bpf(struct perf_ftrace *ftrace __maybe_unused)
 	return 0;
 }
 
-int perf_ftrace__latency_read_bpf(struct perf_ftrace *ftrace __maybe_unused,
-				  int buckets[])
+int perf_ftrace__latency_read_bpf(struct perf_ftrace *ftrace,
+				  int buckets[], struct stats *stats)
 {
 	int i, fd, err;
 	u32 idx;
@@ -144,6 +149,13 @@ int perf_ftrace__latency_read_bpf(struct perf_ftrace *ftrace __maybe_unused,
 
 		for (i = 0; i < ncpus; i++)
 			buckets[idx] += hist[i];
+	}
+
+	if (ftrace->stats && skel->bss->count) {
+		stats->mean = skel->bss->total / skel->bss->count;
+		stats->n = skel->bss->count;
+		stats->max = skel->bss->max;
+		stats->min = skel->bss->min;
 	}
 
 	free(hist);

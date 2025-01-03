@@ -7,6 +7,7 @@
 
 struct evlist;
 struct hashamp;
+struct stats;
 
 struct perf_ftrace {
 	struct evlist		*evlist;
@@ -23,6 +24,7 @@ struct perf_ftrace {
 	unsigned int		bucket_range;
 	unsigned int		min_latency;
 	unsigned int		max_latency;
+	bool			stats;
 	int			graph_depth;
 	int			func_stack_trace;
 	int			func_irq_info;
@@ -46,7 +48,7 @@ int perf_ftrace__latency_prepare_bpf(struct perf_ftrace *ftrace);
 int perf_ftrace__latency_start_bpf(struct perf_ftrace *ftrace);
 int perf_ftrace__latency_stop_bpf(struct perf_ftrace *ftrace);
 int perf_ftrace__latency_read_bpf(struct perf_ftrace *ftrace,
-				  int buckets[]);
+				  int buckets[], struct stats *stats);
 int perf_ftrace__latency_cleanup_bpf(struct perf_ftrace *ftrace);
 
 #else  /* !HAVE_BPF_SKEL */

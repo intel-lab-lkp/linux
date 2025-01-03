@@ -160,6 +160,10 @@ OPTIONS for 'perf ftrace latency'
 	-n/--use-nsec). The setting is ignored if the value results in more than
 	22 buckets.
 
+--stats::
+	Display latency statistics at the end.
+
+
 OPTIONS for 'perf ftrace profile'
 ---------------------------------
 
