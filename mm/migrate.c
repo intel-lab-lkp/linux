@@ -51,6 +51,7 @@
 
 #include "internal.h"
 
+
 bool isolate_movable_page(struct page *page, isolate_mode_t mode)
 {
 	struct folio *folio = folio_get_nontail_page(page);
@@ -752,14 +753,19 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 			   enum migrate_mode mode)
 {
 	int rc, expected_count = folio_expected_refs(mapping, src);
+	unsigned long dst_private = (unsigned long)dst->private;
 
 	/* Check whether src does not have extra refs before we do more work */
 	if (folio_ref_count(src) != expected_count)
 		return -EAGAIN;
 
-	rc = folio_mc_copy(dst, src);
-	if (unlikely(rc))
-		return rc;
+	if (mode == MIGRATE_NO_COPY)
+		dst->private = NULL;
+	else {
+		rc = folio_mc_copy(dst, src);
+		if (unlikely(rc))
+			return rc;
+	}
 
 	rc = __folio_migrate_mapping(mapping, dst, src, expected_count);
 	if (rc != MIGRATEPAGE_SUCCESS)
@@ -769,6 +775,10 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 		folio_attach_private(dst, folio_detach_private(src));
 
 	folio_migrate_flags(dst, src);
+
+	if (mode == MIGRATE_NO_COPY)
+		src->private = (void *)dst_private;
+
 	return MIGRATEPAGE_SUCCESS;
 }
 
@@ -1042,7 +1052,7 @@ static int _move_to_new_folio_prep(struct folio *dst, struct folio *src,
 								mode);
 		else
 			rc = fallback_migrate_folio(mapping, dst, src, mode);
-	} else {
+	} else if (mode != MIGRATE_NO_COPY) {
 		const struct movable_operations *mops;
 
 		/*
@@ -1060,7 +1070,8 @@ static int _move_to_new_folio_prep(struct folio *dst, struct folio *src,
 		rc = mops->migrate_page(&dst->page, &src->page, mode);
 		WARN_ON_ONCE(rc == MIGRATEPAGE_SUCCESS &&
 				!folio_test_isolated(src));
-	}
+	} else
+		rc = -EAGAIN;
 out:
 	return rc;
 }
@@ -1138,7 +1149,7 @@ static void __migrate_folio_record(struct folio *dst,
 	dst->private = (void *)anon_vma + old_page_state;
 }
 
-static void __migrate_folio_extract(struct folio *dst,
+static void __migrate_folio_read(struct folio *dst,
 				   int *old_page_state,
 				   struct anon_vma **anon_vmap)
 {
@@ -1146,6 +1157,13 @@ static void __migrate_folio_extract(struct folio *dst,
 
 	*anon_vmap = (struct anon_vma *)(private & ~PAGE_OLD_STATES);
 	*old_page_state = private & PAGE_OLD_STATES;
+}
+
+static void __migrate_folio_extract(struct folio *dst,
+				   int *old_page_state,
+				   struct anon_vma **anon_vmap)
+{
+	__migrate_folio_read(dst, old_page_state, anon_vmap);
 	dst->private = NULL;
 }
 
@@ -1771,6 +1789,174 @@ static void migrate_folios_move(struct list_head *src_folios,
 	}
 }
 
+static void migrate_folios_batch_move(struct list_head *src_folios,
+		struct list_head *dst_folios,
+		free_folio_t put_new_folio, unsigned long private,
+		enum migrate_mode mode, int reason,
+		struct list_head *ret_folios,
+		struct migrate_pages_stats *stats,
+		int *retry, int *thp_retry, int *nr_failed,
+		int *nr_retry_pages)
+{
+	struct folio *folio, *folio2, *dst, *dst2;
+	int rc, nr_pages = 0, nr_mig_folios = 0;
+	int old_page_state = 0;
+	struct anon_vma *anon_vma = NULL;
+	bool is_lru;
+	int is_thp = 0;
+	LIST_HEAD(err_src);
+	LIST_HEAD(err_dst);
+
+	if (mode != MIGRATE_ASYNC) {
+		*retry += 1;
+		return;
+	}
+
+	/*
+	 * Iterate over the list of locked src/dst folios to copy the metadata
+	 */
+	dst = list_first_entry(dst_folios, struct folio, lru);
+	dst2 = list_next_entry(dst, lru);
+	list_for_each_entry_safe(folio, folio2, src_folios, lru) {
+		is_thp = folio_test_large(folio) && folio_test_pmd_mappable(folio);
+		nr_pages = folio_nr_pages(folio);
+		is_lru = !__folio_test_movable(folio);
+
+		/*
+		 * dst->private is not cleared here. It is cleared and moved to
+		 * src->private in __migrate_folio().
+		 */
+		__migrate_folio_read(dst, &old_page_state, &anon_vma);
+
+		/*
+		 * Use MIGRATE_NO_COPY mode in migrate_folio family functions
+		 * to copy the flags, mapping and some other ancillary information.
+		 * This does everything except the page copy. The actual page copy
+		 * is handled later in a batch manner.
+		 */
+		rc = _move_to_new_folio_prep(dst, folio, MIGRATE_NO_COPY);
+
+		/*
+		 * -EAGAIN: Move src/dst folios to tmp lists for retry
+		 * Other Errno: Put src folio on ret_folios list, remove the dst folio
+		 * Success: Copy the folio bytes, restoring working pte, unlock and
+		 *	    decrement refcounter
+		 */
+		if (rc == -EAGAIN) {
+			*retry += 1;
+			*thp_retry += is_thp;
+			*nr_retry_pages += nr_pages;
+
+			list_move_tail(&folio->lru, &err_src);
+			list_move_tail(&dst->lru, &err_dst);
+			__migrate_folio_record(dst, old_page_state, anon_vma);
+		} else if (rc != MIGRATEPAGE_SUCCESS) {
+			*nr_failed += 1;
+			stats->nr_thp_failed += is_thp;
+			stats->nr_failed_pages += nr_pages;
+
+			list_del(&dst->lru);
+			migrate_folio_undo_src(folio, old_page_state & PAGE_WAS_MAPPED,
+					anon_vma, true, ret_folios);
+			migrate_folio_undo_dst(dst, true, put_new_folio, private);
+		} else /* MIGRATEPAGE_SUCCESS */
+			nr_mig_folios++;
+
+		dst = dst2;
+		dst2 = list_next_entry(dst, lru);
+	}
+
+	/* Exit if folio list for batch migration is empty */
+	if (!nr_mig_folios)
+		goto out;
+
+	/* Batch copy the folios */
+	{
+		dst = list_first_entry(dst_folios, struct folio, lru);
+		dst2 = list_next_entry(dst, lru);
+		list_for_each_entry_safe(folio, folio2, src_folios, lru) {
+			is_thp = folio_test_large(folio) &&
+				 folio_test_pmd_mappable(folio);
+			nr_pages = folio_nr_pages(folio);
+			rc = folio_mc_copy(dst, folio);
+
+			if (rc) {
+				int old_page_state = 0;
+				struct anon_vma *anon_vma = NULL;
+
+				/*
+				 * dst->private is moved to src->private in
+				 * __migrate_folio(), so page state and anon_vma
+				 * values can be extracted from (src) folio.
+				 */
+				__migrate_folio_extract(folio, &old_page_state,
+						&anon_vma);
+				migrate_folio_undo_src(folio,
+						old_page_state & PAGE_WAS_MAPPED,
+						anon_vma, true, ret_folios);
+				list_del(&dst->lru);
+				migrate_folio_undo_dst(dst, true, put_new_folio,
+						private);
+			}
+
+			switch (rc) {
+			case MIGRATEPAGE_SUCCESS:
+				stats->nr_succeeded += nr_pages;
+				stats->nr_thp_succeeded += is_thp;
+				break;
+			default:
+				*nr_failed += 1;
+				stats->nr_thp_failed += is_thp;
+				stats->nr_failed_pages += nr_pages;
+				break;
+			}
+
+			dst = dst2;
+			dst2 = list_next_entry(dst, lru);
+		}
+	}
+
+	/*
+	 * Iterate the folio lists to remove migration pte and restore them
+	 * as working pte. Unlock the folios, add/remove them to LRU lists (if
+	 * applicable) and release the src folios.
+	 */
+	dst = list_first_entry(dst_folios, struct folio, lru);
+	dst2 = list_next_entry(dst, lru);
+	list_for_each_entry_safe(folio, folio2, src_folios, lru) {
+		is_thp = folio_test_large(folio) && folio_test_pmd_mappable(folio);
+		nr_pages = folio_nr_pages(folio);
+		/*
+		 * dst->private is moved to src->private in __migrate_folio(),
+		 * so page state and anon_vma values can be extracted from
+		 * (src) folio.
+		 */
+		__migrate_folio_extract(folio, &old_page_state, &anon_vma);
+		list_del(&dst->lru);
+
+		_move_to_new_folio_finalize(dst, folio, MIGRATEPAGE_SUCCESS);
+
+		/*
+		 * Below few steps are only applicable for lru pages which is
+		 * ensured as we have removed the non-lru pages from our list.
+		 */
+		_migrate_folio_move_finalize1(folio, dst, old_page_state);
+
+		_migrate_folio_move_finalize2(folio, dst, reason, anon_vma);
+
+		/* Page migration successful, increase stat counter */
+		stats->nr_succeeded += nr_pages;
+		stats->nr_thp_succeeded += is_thp;
+
+		dst = dst2;
+		dst2 = list_next_entry(dst, lru);
+	}
+out:
+	/* Add tmp folios back to the list to let CPU re-attempt migration. */
+	list_splice(&err_src, src_folios);
+	list_splice(&err_dst, dst_folios);
+}
+
 static void migrate_folios_undo(struct list_head *src_folios,
 		struct list_head *dst_folios,
 		free_folio_t put_new_folio, unsigned long private,
@@ -1981,13 +2167,18 @@ move:
 	/* Flush TLBs for all unmapped folios */
 	try_to_unmap_flush();
 
-	retry = 1;
+	retry = 0;
+	/* Batch move the unmapped folios */
+	migrate_folios_batch_move(&unmap_folios, &dst_folios, put_new_folio,
+			private, mode, reason, ret_folios, stats, &retry,
+			&thp_retry, &nr_failed, &nr_retry_pages);
+
 	for (pass = 0; pass < nr_pass && retry; pass++) {
 		retry = 0;
 		thp_retry = 0;
 		nr_retry_pages = 0;
 
-		/* Move the unmapped folios */
+		/* Move the remaining unmapped folios */
 		migrate_folios_move(&unmap_folios, &dst_folios,
 				put_new_folio, private, mode, reason,
 				ret_folios, stats, &retry, &thp_retry,
