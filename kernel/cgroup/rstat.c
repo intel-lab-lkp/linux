@@ -346,10 +346,8 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
 	for_each_possible_cpu(cpu) {
 		struct cgroup_subsys_state *pos = cgroup_rstat_updated_list(css, cpu);
 
-		for (; pos; pos = pos->rstat_flush_next) {
-			bpf_rstat_flush(pos->cgroup, cgroup_parent(pos->cgroup), cpu);
+		for (; pos; pos = pos->rstat_flush_next)
 			pos->ss->css_rstat_flush(pos, cpu);
-		}
 
 		/* play nice and yield if necessary */
 		if (need_resched() || spin_needbreak(lock)) {
