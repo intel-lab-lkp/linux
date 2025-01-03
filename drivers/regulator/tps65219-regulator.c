@@ -409,54 +409,47 @@ static int tps65219_request_irqs(struct tps65219_regulator_irq_type *irq_types,
 static int tps65219_regulator_probe(struct platform_device *pdev)
 {
 	struct tps65219 *tps = dev_get_drvdata(pdev->dev.parent);
-	struct regulator_dev *rdev;
 	struct regulator_config config = { };
-	int i;
 	int error;
-	int irq;
 	struct tps65219_regulator_irq_data *irq_data;
-	struct tps65219_regulator_irq_type *irq_type;
+	struct tps65219_chip_data *pmic;
+
+
+	enum pmic_id chip = platform_get_device_id(pdev)->driver_data;
+
+	pmic = &chip_info_table[chip];
 
 	config.dev = tps->dev;
 	config.driver_data = tps;
 	config.regmap = tps->regmap;
 
-	for (i = 0; i < ARRAY_SIZE(regulators); i++) {
-		rdev = devm_regulator_register(&pdev->dev, &regulators[i],
-					       &config);
-		if (IS_ERR(rdev))
-			return dev_err_probe(tps->dev, PTR_ERR(rdev),
-					"Failed to register %s regulator\n",
-					regulators[i].name);
-	}
+	error = tps65219_register_regulators(pmic->common_rdesc, tps,
+						&pdev->dev, config, pmic->common_rdesc_size);
+	if (error)
+		return error;
 
-	irq_data = devm_kmalloc(tps->dev,
-				ARRAY_SIZE(tps65219_regulator_irq_types) *
-				sizeof(struct tps65219_regulator_irq_data),
-				GFP_KERNEL);
+	error = tps65219_register_regulators(pmic->rdesc, tps, &pdev->dev,
+						config, pmic->rdesc_size);
+	if (error)
+		return error;
+
+	irq_data = devm_kmalloc(tps->dev, pmic->common_irq_size, GFP_KERNEL);
 	if (!irq_data)
 		return -ENOMEM;
 
-	for (i = 0; i < ARRAY_SIZE(tps65219_regulator_irq_types); ++i) {
-		irq_type = &tps65219_regulator_irq_types[i];
+	error = tps65219_request_irqs(pmic->common_irq_types, tps, pdev,
+					irq_data, pmic->common_irq_size);
+	if (error)
+		return error;
 
-		irq = platform_get_irq_byname(pdev, irq_type->irq_name);
-		if (irq < 0)
-			return -EINVAL;
-
-		irq_data[i].dev = tps->dev;
-		irq_data[i].type = irq_type;
-
-		error = devm_request_threaded_irq(tps->dev, irq, NULL,
-						  tps65219_regulator_irq_handler,
-						  IRQF_ONESHOT,
-						  irq_type->irq_name,
-						  &irq_data[i]);
-		if (error) {
-			dev_err(tps->dev, "failed to request %s IRQ %d: %d\n",
-				irq_type->irq_name, irq, error);
+	if (chip == TPS65219) {
+		irq_data = devm_kmalloc(tps->dev, pmic->dev_irq_size, GFP_KERNEL);
+		if (!irq_data)
+			return -ENOMEM;
+		error = tps65219_request_irqs(pmic->irq_types, tps, pdev,
+						irq_data, pmic->dev_irq_size);
+		if (error)
 			return error;
-		}
 	}
 
 	return 0;
