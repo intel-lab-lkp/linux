@@ -1487,10 +1487,8 @@ gpio_virtuser_device_activate(struct gpio_virtuser_device *dev)
 	pdevinfo.fwnode = swnode;
 
 	ret = gpio_virtuser_make_lookup_table(dev);
-	if (ret) {
-		fwnode_remove_software_node(swnode);
-		return ret;
-	}
+	if (ret)
+		goto err_remove_swnode;
 
 	reinit_completion(&dev->probe_completion);
 	dev->driver_bound = false;
@@ -1498,23 +1496,32 @@ gpio_virtuser_device_activate(struct gpio_virtuser_device *dev)
 
 	pdev = platform_device_register_full(&pdevinfo);
 	if (IS_ERR(pdev)) {
+		ret = PTR_ERR(pdev);
 		bus_unregister_notifier(&platform_bus_type, &dev->bus_notifier);
-		fwnode_remove_software_node(swnode);
-		return PTR_ERR(pdev);
+		goto err_remove_lookup_table;
 	}
 
 	wait_for_completion(&dev->probe_completion);
 	bus_unregister_notifier(&platform_bus_type, &dev->bus_notifier);
 
 	if (!dev->driver_bound) {
-		platform_device_unregister(pdev);
-		fwnode_remove_software_node(swnode);
-		return -ENXIO;
+		ret = -ENXIO;
+		goto err_unregister_pdev;
 	}
 
 	dev->pdev = pdev;
 
 	return 0;
+
+err_unregister_pdev:
+	platform_device_unregister(pdev);
+err_remove_lookup_table:
+	gpiod_remove_lookup_table(dev->lookup_table);
+	kfree(dev->lookup_table);
+err_remove_swnode:
+	fwnode_remove_software_node(swnode);
+
+	return ret;
 }
 
 static void
