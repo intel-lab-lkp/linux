@@ -1697,15 +1697,24 @@ void * __init memblock_alloc_try_nid(
  * @align: alignment of the region and block's size
  * @func: caller func name
  * @should_panic: whether failed panic
+ * @raw: whether zeroing mem
  *
  * In case of failure, it calls panic with the formatted message.
  * This function should not be used directly, please use the macro
  * memblock_alloc and memblock_alloc_no_panic.
+ * memblock_alloc_raw and memblock_alloc_raw_no_panic.
  */
 void *__init __memblock_alloc_panic(phys_addr_t size, phys_addr_t align,
-				    const char *func, bool should_panic)
+				    const char *func, bool should_panic,
+				    bool raw)
 {
-	void *addr = memblock_alloc_try_nid(size, align, MEMBLOCK_LOW_LIMIT,
+	void *addr;
+
+	if (unlikely(raw))
+		addr = memblock_alloc_try_nid_raw(size, align, MEMBLOCK_LOW_LIMIT,
+				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
+	else
+		addr = memblock_alloc_try_nid(size, align, MEMBLOCK_LOW_LIMIT,
 				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
 
 	if (unlikely(!addr && should_panic))

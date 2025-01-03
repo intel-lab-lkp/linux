@@ -671,7 +671,7 @@ void __init plpks_early_init_devtree(void)
 		return;
 	}
 
-	ospassword = memblock_alloc_raw(len, SMP_CACHE_BYTES);
+	ospassword = memblock_alloc_raw_no_panic(len, SMP_CACHE_BYTES);
 	if (!ospassword) {
 		pr_err("Error allocating memory for password.\n");
 		goto out;

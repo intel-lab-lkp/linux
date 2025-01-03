@@ -418,20 +418,17 @@ static __always_inline void *memblock_alloc(phys_addr_t size, phys_addr_t align)
 }
 
 void *__memblock_alloc_panic(phys_addr_t size, phys_addr_t align,
-				const char *func, bool should_panic);
+			     const char *func, bool should_panic, bool raw);
 
 #define memblock_alloc(size, align)    \
-	 __memblock_alloc_panic(size, align, __func__, true)
+	 __memblock_alloc_panic(size, align, __func__, true, false)
 #define memblock_alloc_no_panic(size, align)    \
-	 __memblock_alloc_panic(size, align, __func__, false)
+	 __memblock_alloc_panic(size, align, __func__, false, false)
 
-static inline void *memblock_alloc_raw(phys_addr_t size,
-					       phys_addr_t align)
-{
-	return memblock_alloc_try_nid_raw(size, align, MEMBLOCK_LOW_LIMIT,
-					  MEMBLOCK_ALLOC_ACCESSIBLE,
-					  NUMA_NO_NODE);
-}
+#define memblock_alloc_raw(size, align)    \
+	 __memblock_alloc_panic(size, align, __func__, true, true)
+#define memblock_alloc_raw_no_panic(size, align)    \
+	 __memblock_alloc_panic(size, align, __func__, false, true)
 
 static inline void *memblock_alloc_from(phys_addr_t size,
 						phys_addr_t align,
