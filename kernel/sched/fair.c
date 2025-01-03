@@ -2081,6 +2081,12 @@ numa_type numa_classify(unsigned int imbalance_pct,
 	return node_fully_busy;
 }
 
+static inline bool numa_migrate_test_cpu(struct task_struct *p, int cpu)
+{
+	return cpumask_test_cpu(cpu, p->cpus_ptr) &&
+			housekeeping_cpu(cpu, HK_TYPE_DOMAIN);
+}
+
 #ifdef CONFIG_SCHED_SMT
 /* Forward declarations of select_idle_sibling helpers */
 static inline bool test_idle_cores(int cpu);
@@ -2168,7 +2174,7 @@ static void task_numa_assign(struct task_numa_env *env,
 		/* Find alternative idle CPU. */
 		for_each_cpu_wrap(cpu, cpumask_of_node(env->dst_nid), start + 1) {
 			if (cpu == env->best_cpu || !idle_cpu(cpu) ||
-			    !cpumask_test_cpu(cpu, env->p->cpus_ptr)) {
+			    !numa_migrate_test_cpu(env->p, cpu)) {
 				continue;
 			}
 
@@ -2480,7 +2486,7 @@ static void task_numa_find_cpu(struct task_numa_env *env,
 
 	for_each_cpu(cpu, cpumask_of_node(env->dst_nid)) {
 		/* Skip this CPU if the source task cannot migrate */
-		if (!cpumask_test_cpu(cpu, env->p->cpus_ptr))
+		if (!numa_migrate_test_cpu(env->p, cpu))
 			continue;
 
 		env->dst_cpu = cpu;
