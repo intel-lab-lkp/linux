@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/msi.h>
+#include <linux/of_address.h>
 #include <linux/of_device.h>
 #include <linux/of_pci.h>
 #include <linux/pci.h>
@@ -123,6 +124,17 @@
 #define PCIE_ATR_TLP_TYPE_MEM		PCIE_ATR_TLP_TYPE(0)
 #define PCIE_ATR_TLP_TYPE_IO		PCIE_ATR_TLP_TYPE(2)
 
+#define PCIE_RESOURCE_CTRL_REG		0xd2c
+#define PCIE_SYS_CLK_RDY_TIME_MASK	GENMASK(7, 0)
+#define PCIE_SYS_CLK_RDY_TIME_TO_10US	0xa
+
+/* PEXTPCFG Registers */
+#define PEXTP_CLOCK_CON_REG		0x20
+#define PEXTP_P0P1_LOWPOWER_CK_SEL	BIT(0)
+#define PEXTP_REQ_CTRL_0_REG		0x7c
+#define PEXTP_26M_REQ_FORCE_ON		BIT(0)
+#define PEXTP_PCIE26M_BYPASS		BIT(4)
+
 #define MAX_NUM_PHY_RESETS		3
 
 /* Time in ms needed to complete PCIe reset on EN7581 SoC */
@@ -136,10 +148,14 @@ struct mtk_gen3_pcie;
 /**
  * struct mtk_gen3_pcie_pdata - differentiate between host generations
  * @power_up: pcie power_up callback
+ * @pre_init: initialize settings before link up
+ * @cleanup: cleanup when PCIe power down
  * @phy_resets: phy reset lines SoC data.
  */
 struct mtk_gen3_pcie_pdata {
 	int (*power_up)(struct mtk_gen3_pcie *pcie);
+	int (*pre_init)(struct mtk_gen3_pcie *pcie);
+	void (*cleanup)(struct mtk_gen3_pcie *pcie);
 	struct {
 		const char *id[MAX_NUM_PHY_RESETS];
 		int num_resets;
@@ -162,6 +178,7 @@ struct mtk_msi_set {
  * struct mtk_gen3_pcie - PCIe port information
  * @dev: pointer to PCIe device
  * @base: IO mapped register base
+ * @pextpcfg: pextpcfg_ao IO mapped register base
  * @reg_base: physical register base
  * @mac_reset: MAC reset control
  * @phy_resets: PHY reset controllers
@@ -184,6 +201,7 @@ struct mtk_msi_set {
 struct mtk_gen3_pcie {
 	struct device *dev;
 	void __iomem *base;
+	void __iomem *pextpcfg;
 	phys_addr_t reg_base;
 	struct reset_control *mac_reset;
 	struct reset_control_bulk_data phy_resets[MAX_NUM_PHY_RESETS];
@@ -421,6 +439,13 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 		val |= FIELD_PREP(PCIE_CONF_LINK2_LCR2_LINK_SPEED, pcie->max_link_speed);
 		writel_relaxed(val, pcie->base + PCIE_CONF_LINK2_CTL_STS);
 	}
+
+	/*
+	 * The values of some registers are different in RC and EP mode. Therefore,
+	 * call soc->pre_init after the mode change in case it depends on these registers.
+	 */
+	if (pcie->soc && pcie->soc->pre_init)
+		pcie->soc->pre_init(pcie);
 
 	/* Set class code */
 	val = readl_relaxed(pcie->base + PCIE_PCI_IDS_1);
@@ -848,6 +873,7 @@ static int mtk_pcie_parse_port(struct mtk_gen3_pcie *pcie)
 	int i, ret, num_resets = pcie->soc->phy_resets.num_resets;
 	struct device *dev = pcie->dev;
 	struct platform_device *pdev = to_platform_device(dev);
+	struct device_node *node;
 	struct resource *regs;
 	u32 num_lanes;
 
@@ -902,6 +928,18 @@ static int mtk_pcie_parse_port(struct mtk_gen3_pcie *pcie)
 	       else
 			pcie->num_lanes = num_lanes;
        }
+
+	node = of_parse_phandle(dev->of_node, "pextpcfg", 0);
+	if (node) {
+		pcie->pextpcfg = of_iomap(node, 0);
+		of_node_put(node);
+		if (IS_ERR(pcie->pextpcfg)) {
+			dev_err(dev, "failed to get pextpcfg\n");
+			ret = PTR_ERR(pcie->pextpcfg);
+			pcie->pextpcfg = NULL;
+			return ret;
+		}
+	}
 
 	return 0;
 }
@@ -1047,6 +1085,12 @@ static void mtk_pcie_power_down(struct mtk_gen3_pcie *pcie)
 	phy_power_off(pcie->phy);
 	phy_exit(pcie->phy);
 	reset_control_bulk_assert(pcie->soc->phy_resets.num_resets, pcie->phy_resets);
+
+	if (pcie->soc && pcie->soc->cleanup)
+		pcie->soc->cleanup(pcie);
+
+	if (pcie->pextpcfg)
+		iounmap(pcie->pextpcfg);
 }
 
 static int mtk_pcie_get_controller_max_link_speed(struct mtk_gen3_pcie *pcie)
@@ -1277,6 +1321,49 @@ static const struct mtk_gen3_pcie_pdata mtk_pcie_soc_mt8192 = {
 	},
 };
 
+static int mtk_pcie_mt8196_pre_init(struct mtk_gen3_pcie *pcie)
+{
+	u32 val;
+
+	/* Adjust SYS_CLK_RDY_TIME ot 10us to avoid glitch */
+	val = readl_relaxed(pcie->base + PCIE_RESOURCE_CTRL_REG);
+	val &= ~PCIE_SYS_CLK_RDY_TIME_MASK;
+	val |= PCIE_SYS_CLK_RDY_TIME_TO_10US;
+	writel_relaxed(val, pcie->base + PCIE_RESOURCE_CTRL_REG);
+
+	/* Switch to normal clock */
+	val = readl_relaxed(pcie->pextpcfg + PEXTP_CLOCK_CON_REG);
+	val &= ~PEXTP_P0P1_LOWPOWER_CK_SEL;
+	writel_relaxed(val, pcie->pextpcfg + PEXTP_CLOCK_CON_REG);
+
+	/* Force pcie_26m_req and bypass pcie_26m_ack signal */
+	val = readl_relaxed(pcie->pextpcfg + PEXTP_REQ_CTRL_0_REG);
+	val |= (PEXTP_26M_REQ_FORCE_ON | PEXTP_PCIE26M_BYPASS);
+	writel_relaxed(val, pcie->pextpcfg + PEXTP_REQ_CTRL_0_REG);
+
+	return 0;
+}
+
+static void mtk_pcie_mt8196_cleanup(struct mtk_gen3_pcie *pcie)
+{
+	u32 val;
+
+	/* Release pcie_26m_req and pcie_26m_ack signal */
+	val = readl_relaxed(pcie->pextpcfg + PEXTP_REQ_CTRL_0_REG);
+	val &= ~(PEXTP_26M_REQ_FORCE_ON | PEXTP_PCIE26M_BYPASS);
+	writel_relaxed(val, pcie->pextpcfg + PEXTP_REQ_CTRL_0_REG);
+}
+
+static const struct mtk_gen3_pcie_pdata mtk_pcie_soc_mt8196 = {
+	.power_up = mtk_pcie_power_up,
+	.pre_init = mtk_pcie_mt8196_pre_init,
+	.cleanup = mtk_pcie_mt8196_cleanup,
+	.phy_resets = {
+		.id[0] = "phy",
+		.num_resets = 1,
+	},
+};
+
 static const struct mtk_gen3_pcie_pdata mtk_pcie_soc_en7581 = {
 	.power_up = mtk_pcie_en7581_power_up,
 	.phy_resets = {
@@ -1290,6 +1377,7 @@ static const struct mtk_gen3_pcie_pdata mtk_pcie_soc_en7581 = {
 static const struct of_device_id mtk_pcie_of_match[] = {
 	{ .compatible = "airoha,en7581-pcie", .data = &mtk_pcie_soc_en7581 },
 	{ .compatible = "mediatek,mt8192-pcie", .data = &mtk_pcie_soc_mt8192 },
+	{ .compatible = "mediatek,mt8196-pcie", .data = &mtk_pcie_soc_mt8196 },
 	{},
 };
 MODULE_DEVICE_TABLE(of, mtk_pcie_of_match);
