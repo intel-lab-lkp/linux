@@ -1799,18 +1799,13 @@ static void migrate_folios_batch_move(struct list_head *src_folios,
 		int *nr_retry_pages)
 {
 	struct folio *folio, *folio2, *dst, *dst2;
-	int rc, nr_pages = 0, nr_mig_folios = 0;
+	int rc, nr_pages = 0, total_nr_pages = 0, total_nr_folios = 0;
 	int old_page_state = 0;
 	struct anon_vma *anon_vma = NULL;
 	bool is_lru;
 	int is_thp = 0;
 	LIST_HEAD(err_src);
 	LIST_HEAD(err_dst);
-
-	if (mode != MIGRATE_ASYNC) {
-		*retry += 1;
-		return;
-	}
 
 	/*
 	 * Iterate over the list of locked src/dst folios to copy the metadata
@@ -1859,19 +1854,23 @@ static void migrate_folios_batch_move(struct list_head *src_folios,
 			migrate_folio_undo_src(folio, old_page_state & PAGE_WAS_MAPPED,
 					anon_vma, true, ret_folios);
 			migrate_folio_undo_dst(dst, true, put_new_folio, private);
-		} else /* MIGRATEPAGE_SUCCESS */
-			nr_mig_folios++;
+		} else { /* MIGRATEPAGE_SUCCESS */
+			total_nr_pages += nr_pages;
+			total_nr_folios++;
+		}
 
 		dst = dst2;
 		dst2 = list_next_entry(dst, lru);
 	}
 
 	/* Exit if folio list for batch migration is empty */
-	if (!nr_mig_folios)
+	if (!total_nr_pages)
 		goto out;
 
 	/* Batch copy the folios */
-	{
+	if (total_nr_pages > 32) {
+		copy_page_lists_mt(dst_folios, src_folios, total_nr_folios);
+	} else {
 		dst = list_first_entry(dst_folios, struct folio, lru);
 		dst2 = list_next_entry(dst, lru);
 		list_for_each_entry_safe(folio, folio2, src_folios, lru) {

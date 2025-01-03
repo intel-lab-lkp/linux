@@ -80,6 +80,9 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio);
 int folio_migrate_mapping(struct address_space *mapping,
 		struct folio *newfolio, struct folio *folio, int extra_count);
 
+int copy_page_lists_mt(struct list_head *dst_folios,
+		struct list_head *src_folios, int nr_items);
+
 #else
 
 static inline void putback_movable_pages(struct list_head *l) {}
