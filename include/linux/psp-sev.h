@@ -794,13 +794,9 @@ struct sev_data_snp_shutdown_ex {
  * struct sev_platform_init_args
  *
  * @error: SEV firmware error code
- * @probe: True if this is being called as part of CCP module probe, which
- *  will defer SEV_INIT/SEV_INIT_EX firmware initialization until needed
- *  unless psp_init_on_probe module param is set
  */
 struct sev_platform_init_args {
 	int error;
-	bool probe;
 };
 
 /**
