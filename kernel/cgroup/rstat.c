@@ -423,6 +423,9 @@ int cgroup_rstat_init(struct cgroup_subsys_state *css)
 {
 	int cpu;
 
+	if (css->ss && !css->ss->css_rstat_flush)
+		return 0;
+
 	/* the root cgrp css has rstat_cpu preallocated */
 	if (!css->rstat_cpu) {
 		css->rstat_cpu = alloc_percpu(struct cgroup_rstat_cpu);
@@ -444,6 +447,9 @@ int cgroup_rstat_init(struct cgroup_subsys_state *css)
 void cgroup_rstat_exit(struct cgroup_subsys_state *css)
 {
 	int cpu;
+
+	if (css->ss && !css->ss->css_rstat_flush)
+		return;
 
 	cgroup_rstat_flush(css);
 
