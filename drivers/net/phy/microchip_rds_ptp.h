@@ -130,6 +130,41 @@
 #define MCHP_RDS_PTP_TSU_HARD_RESET		0xc1
 #define MCHP_RDS_PTP_TSU_HARDRESET		BIT(0)
 
+/* PTP GPIO Registers */
+#define MCHP_RDS_PTP_CLK_TRGT_SEC_HI_X(evt)	(evt ? 0x1f : 0x15)
+#define MCHP_RDS_PTP_CLK_TRGT_SEC_LO_X(evt)	(evt ? 0x20 : 0x16)
+#define MCHP_RDS_PTP_CLK_TRGT_NS_HI_X(evt)	(evt ? 0x21 : 0x17)
+#define MCHP_RDS_PTP_CLK_TRGT_NS_LO_X(evt)	(evt ? 0x22 : 0x18)
+
+#define MCHP_RDS_PTP_CLK_TRGT_RELOAD_SEC_HI_X(evt)	(evt ? 0x23 : 0x19)
+#define MCHP_RDS_PTP_CLK_TRGT_RELOAD_SEC_LO_X(evt)	(evt ? 0x24 : 0x1a)
+#define MCHP_RDS_PTP_CLK_TRGT_RELOAD_NS_HI_X(evt)	(evt ? 0x25 : 0x1b)
+#define MCHP_RDS_PTP_CLK_TRGT_RELOAD_NS_LO_X(evt)	(evt ? 0x26 : 0x1c)
+
+#define MCHP_RDS_PTP_GEN_CFG			0x01
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_X_MASK_(evt)	\
+					((evt) ? GENMASK(11, 8) : GENMASK(7, 4))
+
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_X_SET_(evt, value) \
+					(((value) & 0xF) << (4 + ((evt) << 2)))
+#define MCHP_RDS_PTP_GEN_CFG_RELOAD_ADD_X_(evt)	((evt) ? BIT(2) : BIT(0))
+#define MCHP_RDS_PTP_GEN_CFG_POLARITY_X_(evt)	((evt) ? BIT(3) : BIT(1))
+
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_200MS_	13
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_100MS_	12
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_50MS_	11
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_10MS_	10
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_5MS_	9
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_1MS_	8
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_500US_	7
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_100US_	6
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_50US_	5
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_10US_	4
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_5US_	3
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_1US_	2
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_500NS_	1
+#define MCHP_RDS_PTP_GEN_CFG_LTC_EVT_100NS_	0
+
 /* Represents 1ppm adjustment in 2^32 format with
  * each nsec contains 4 clock cycles in 250MHz.
  * The value is calculated as following: (1/1000000)/((2^-32)/4)
@@ -137,6 +172,13 @@
 #define MCHP_RDS_PTP_1PPM_FORMAT		17179
 #define MCHP_RDS_PTP_FIFO_SIZE			8
 #define MCHP_RDS_PTP_MAX_ADJ			31249999
+
+#define MCHP_RDS_PTP_EVT_A			0
+#define MCHP_RDS_PTP_EVT_B			1
+#define MCHP_RDS_PTP_BUFFER_TIME		2
+
+#define MCHP_RDS_PTP_N_GPIO			4
+#define MCHP_RDS_PTP_N_PEROUT			2
 
 #define BASE_CLK(p)				((p)->clk_base_addr)
 #define BASE_PORT(p)				((p)->port_base_addr)
@@ -176,6 +218,11 @@ struct mchp_rds_ptp_clock {
 	/* Lock for phc */
 	struct mutex ptp_lock;
 	u8 mmd;
+	int mchp_rds_ptp_event_a;
+	int mchp_rds_ptp_event_b;
+	int gpio_event_a;
+	int gpio_event_b;
+	struct ptp_pin_desc *pin_config;
 };
 
 struct mchp_rds_ptp_rx_ts {
