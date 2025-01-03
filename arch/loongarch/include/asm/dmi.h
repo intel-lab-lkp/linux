@@ -10,7 +10,7 @@
 
 #define dmi_early_remap(x, l)	dmi_remap(x, l)
 #define dmi_early_unmap(x, l)	dmi_unmap(x)
-#define dmi_alloc(l)		memblock_alloc(l, PAGE_SIZE)
+#define dmi_alloc(l)		memblock_alloc_no_panic(l, PAGE_SIZE)
 
 static inline void *dmi_remap(u64 phys_addr, unsigned long size)
 {

@@ -178,7 +178,7 @@ static void p2m_init_identity(unsigned long *p2m, unsigned long pfn)
 static void * __ref alloc_p2m_page(void)
 {
 	if (unlikely(!slab_is_available())) {
-		return memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
+		return memblock_alloc(PAGE_SIZE, PAGE_SIZE);
 	}
 
 	return (void *)__get_free_page(GFP_KERNEL);

@@ -2503,7 +2503,7 @@ static struct resource * __init ioapic_setup_resources(void)
 	n = IOAPIC_RESOURCE_NAME_SIZE + sizeof(struct resource);
 	n *= nr_ioapics;
 
-	mem = memblock_alloc_or_panic(n, SMP_CACHE_BYTES);
+	mem = memblock_alloc(n, SMP_CACHE_BYTES);
 	res = (void *)mem;
 
 	mem += sizeof(struct resource) * nr_ioapics;
@@ -2562,7 +2562,7 @@ void __init io_apic_init_mappings(void)
 #ifdef CONFIG_X86_32
 fake_ioapic_page:
 #endif
-			ioapic_phys = (unsigned long)memblock_alloc_or_panic(PAGE_SIZE,
+			ioapic_phys = (unsigned long)memblock_alloc(PAGE_SIZE,
 								    PAGE_SIZE);
 			ioapic_phys = __pa(ioapic_phys);
 		}

@@ -379,7 +379,7 @@ static char * __init xbc_make_cmdline(const char *key)
 	if (len <= 0)
 		return NULL;
 
-	new_cmdline = memblock_alloc(len + 1, SMP_CACHE_BYTES);
+	new_cmdline = memblock_alloc_no_panic(len + 1, SMP_CACHE_BYTES);
 	if (!new_cmdline) {
 		pr_err("Failed to allocate memory for extra kernel cmdline.\n");
 		return NULL;
@@ -640,11 +640,11 @@ static void __init setup_command_line(char *command_line)
 
 	len = xlen + strlen(boot_command_line) + ilen + 1;
 
-	saved_command_line = memblock_alloc_or_panic(len, SMP_CACHE_BYTES);
+	saved_command_line = memblock_alloc(len, SMP_CACHE_BYTES);
 
 	len = xlen + strlen(command_line) + 1;
 
-	static_command_line = memblock_alloc_or_panic(len, SMP_CACHE_BYTES);
+	static_command_line = memblock_alloc(len, SMP_CACHE_BYTES);
 
 	if (xlen) {
 		/*
@@ -860,7 +860,7 @@ static void __init print_unknown_bootoptions(void)
 		len += strlen(*p);
 	}
 
-	unknown_options = memblock_alloc(len, SMP_CACHE_BYTES);
+	unknown_options = memblock_alloc_no_panic(len, SMP_CACHE_BYTES);
 	if (!unknown_options) {
 		pr_err("%s: Failed to allocate %zu bytes\n",
 			__func__, len);
@@ -1141,9 +1141,9 @@ static int __init initcall_blacklist(char *str)
 		str_entry = strsep(&str, ",");
 		if (str_entry) {
 			pr_debug("blacklisting initcall %s\n", str_entry);
-			entry = memblock_alloc_or_panic(sizeof(*entry),
+			entry = memblock_alloc(sizeof(*entry),
 					       SMP_CACHE_BYTES);
-			entry->buf = memblock_alloc_or_panic(strlen(str_entry) + 1,
+			entry->buf = memblock_alloc(strlen(str_entry) + 1,
 						    SMP_CACHE_BYTES);
 			strcpy(entry->buf, str_entry);
 			list_add(&entry->next, &blacklisted_initcalls);

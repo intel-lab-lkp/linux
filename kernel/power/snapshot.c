@@ -1011,7 +1011,7 @@ void __init register_nosave_region(unsigned long start_pfn, unsigned long end_pf
 		}
 	}
 	/* This allocation cannot fail */
-	region = memblock_alloc_or_panic(sizeof(struct nosave_region),
+	region = memblock_alloc(sizeof(struct nosave_region),
 				SMP_CACHE_BYTES);
 	region->start_pfn = start_pfn;
 	region->end_pfn = end_pfn;

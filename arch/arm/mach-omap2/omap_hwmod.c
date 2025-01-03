@@ -709,7 +709,7 @@ static int __init _setup_clkctrl_provider(struct device_node *np)
 	struct clkctrl_provider *provider;
 	int i;
 
-	provider = memblock_alloc(sizeof(*provider), SMP_CACHE_BYTES);
+	provider = memblock_alloc_no_panic(sizeof(*provider), SMP_CACHE_BYTES);
 	if (!provider)
 		return -ENOMEM;
 
@@ -718,16 +718,16 @@ static int __init _setup_clkctrl_provider(struct device_node *np)
 	provider->num_addrs = of_address_count(np);
 
 	provider->addr =
-		memblock_alloc(sizeof(void *) * provider->num_addrs,
+		memblock_alloc_no_panic(sizeof(void *) * provider->num_addrs,
 			       SMP_CACHE_BYTES);
 	if (!provider->addr)
-		return -ENOMEM;
+		goto err_free_provider;
 
 	provider->size =
-		memblock_alloc(sizeof(u32) * provider->num_addrs,
+		memblock_alloc_no_panic(sizeof(u32) * provider->num_addrs,
 			       SMP_CACHE_BYTES);
 	if (!provider->size)
-		return -ENOMEM;
+		goto err_free_addr;
 
 	for (i = 0; i < provider->num_addrs; i++) {
 		struct resource res;
@@ -740,6 +740,12 @@ static int __init _setup_clkctrl_provider(struct device_node *np)
 	list_add(&provider->link, &clkctrl_providers);
 
 	return 0;
+
+err_free_addr:
+	memblock_free(provider->addr, sizeof(void *));
+err_free_provider:
+	memblock_free(provider, sizeof(*provider));
+	return -ENOMEM;
 }
 
 static int __init _init_clkctrl_providers(void)

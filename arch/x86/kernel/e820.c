@@ -1146,7 +1146,7 @@ void __init e820__reserve_resources(void)
 	struct resource *res;
 	u64 end;
 
-	res = memblock_alloc_or_panic(sizeof(*res) * e820_table->nr_entries,
+	res = memblock_alloc(sizeof(*res) * e820_table->nr_entries,
 			     SMP_CACHE_BYTES);
 	e820_res = res;
 

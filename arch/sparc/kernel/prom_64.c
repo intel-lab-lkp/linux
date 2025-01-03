@@ -30,7 +30,7 @@
 
 void * __init prom_early_alloc(unsigned long size)
 {
-	void *ret = memblock_alloc(size, SMP_CACHE_BYTES);
+	void *ret = memblock_alloc_no_panic(size, SMP_CACHE_BYTES);
 
 	if (!ret) {
 		prom_printf("prom_early_alloc(%lu) failed\n", size);

@@ -62,7 +62,7 @@ static void acpi_mp_cpu_die(unsigned int cpu)
 /* The argument is required to match type of x86_mapping_info::alloc_pgt_page */
 static void __init *alloc_pgt_page(void *dummy)
 {
-	return memblock_alloc(PAGE_SIZE, PAGE_SIZE);
+	return memblock_alloc_no_panic(PAGE_SIZE, PAGE_SIZE);
 }
 
 static void __init free_pgt_page(void *pgt, void *dummy)

@@ -61,7 +61,7 @@ static int __init numa_alloc_distance(void)
 	cnt++;
 	size = cnt * cnt * sizeof(numa_distance[0]);
 
-	numa_distance = memblock_alloc(size, PAGE_SIZE);
+	numa_distance = memblock_alloc_no_panic(size, PAGE_SIZE);
 	if (!numa_distance) {
 		pr_warn("Warning: can't allocate distance table!\n");
 		/* don't retry until explicitly reset */

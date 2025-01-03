@@ -71,8 +71,8 @@ iommu_arena_new_node(int nid, struct pci_controller *hose, dma_addr_t base,
 	if (align < mem_size)
 		align = mem_size;
 
-	arena = memblock_alloc_or_panic(sizeof(*arena), SMP_CACHE_BYTES);
-	arena->ptes = memblock_alloc_or_panic(mem_size, align);
+	arena = memblock_alloc(sizeof(*arena), SMP_CACHE_BYTES);
+	arena->ptes = memblock_alloc(mem_size, align);
 
 	spin_lock_init(&arena->lock);
 	arena->hose = hose;

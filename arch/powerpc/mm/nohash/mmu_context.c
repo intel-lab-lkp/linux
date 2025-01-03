@@ -385,11 +385,11 @@ void __init mmu_context_init(void)
 	/*
 	 * Allocate the maps used by context management
 	 */
-	context_map = memblock_alloc_or_panic(CTX_MAP_SIZE, SMP_CACHE_BYTES);
-	context_mm = memblock_alloc_or_panic(sizeof(void *) * (LAST_CONTEXT + 1),
+	context_map = memblock_alloc(CTX_MAP_SIZE, SMP_CACHE_BYTES);
+	context_mm = memblock_alloc(sizeof(void *) * (LAST_CONTEXT + 1),
 				    SMP_CACHE_BYTES);
 	if (IS_ENABLED(CONFIG_SMP)) {
-		stale_map[boot_cpuid] = memblock_alloc_or_panic(CTX_MAP_SIZE, SMP_CACHE_BYTES);
+		stale_map[boot_cpuid] = memblock_alloc(CTX_MAP_SIZE, SMP_CACHE_BYTES);
 		cpuhp_setup_state_nocalls(CPUHP_POWERPC_MMU_CTX_PREPARE,
 					  "powerpc/mmu/ctx:prepare",
 					  mmu_ctx_cpu_prepare, mmu_ctx_cpu_dead);

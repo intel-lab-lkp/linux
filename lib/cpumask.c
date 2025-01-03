@@ -83,7 +83,7 @@ EXPORT_SYMBOL(alloc_cpumask_var_node);
  */
 void __init alloc_bootmem_cpumask_var(cpumask_var_t *mask)
 {
-	*mask = memblock_alloc_or_panic(cpumask_size(), SMP_CACHE_BYTES);
+	*mask = memblock_alloc(cpumask_size(), SMP_CACHE_BYTES);
 }
 
 /**

@@ -1088,7 +1088,7 @@ static int __init dt_cpu_ftrs_scan_callback(unsigned long node, const char
 	of_scan_flat_dt_subnodes(node, count_cpufeatures_subnodes,
 						&nr_dt_cpu_features);
 	dt_cpu_features =
-		memblock_alloc_or_panic(
+		memblock_alloc(
 			sizeof(struct dt_cpu_feature) * nr_dt_cpu_features,
 			PAGE_SIZE);
 

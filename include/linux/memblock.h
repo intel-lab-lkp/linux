@@ -417,11 +417,13 @@ static __always_inline void *memblock_alloc(phys_addr_t size, phys_addr_t align)
 				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
 }
 
-void *__memblock_alloc_or_panic(phys_addr_t size, phys_addr_t align,
-				const char *func);
+void *__memblock_alloc_panic(phys_addr_t size, phys_addr_t align,
+				const char *func, bool should_panic);
 
-#define memblock_alloc_or_panic(size, align)    \
-	 __memblock_alloc_or_panic(size, align, __func__)
+#define memblock_alloc(size, align)    \
+	 __memblock_alloc_panic(size, align, __func__, true)
+#define memblock_alloc_no_panic(size, align)    \
+	 __memblock_alloc_panic(size, align, __func__, false)
 
 static inline void *memblock_alloc_raw(phys_addr_t size,
 					       phys_addr_t align)

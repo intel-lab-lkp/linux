@@ -447,7 +447,7 @@ void __init numa_emulation(struct numa_meminfo *numa_meminfo, int numa_dist_cnt)
 
 	/* copy the physical distance table */
 	if (numa_dist_cnt) {
-		phys_dist = memblock_alloc(phys_size, PAGE_SIZE);
+		phys_dist = memblock_alloc_no_panic(phys_size, PAGE_SIZE);
 		if (!phys_dist) {
 			pr_warn("NUMA: Warning: can't allocate copy of distance table, disabling emulation\n");
 			goto no_emu;

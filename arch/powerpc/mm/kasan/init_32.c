@@ -42,10 +42,10 @@ int __init kasan_init_shadow_page_tables(unsigned long k_start, unsigned long k_
 		if ((void *)pmd_page_vaddr(*pmd) != kasan_early_shadow_pte)
 			continue;
 
-		new = memblock_alloc(PTE_FRAG_SIZE, PTE_FRAG_SIZE);
-
+		new = memblock_alloc_no_panic(PTE_FRAG_SIZE, PTE_FRAG_SIZE);
 		if (!new)
 			return -ENOMEM;
+
 		kasan_populate_pte(new, PAGE_KERNEL);
 		pmd_populate_kernel(&init_mm, pmd, new);
 	}
@@ -65,7 +65,7 @@ int __init __weak kasan_init_region(void *start, size_t size)
 		return ret;
 
 	k_start = k_start & PAGE_MASK;
-	block = memblock_alloc(k_end - k_start, PAGE_SIZE);
+	block = memblock_alloc_no_panic(k_end - k_start, PAGE_SIZE);
 	if (!block)
 		return -ENOMEM;
 
@@ -129,7 +129,6 @@ void __init kasan_mmu_init(void)
 
 	if (early_mmu_has_feature(MMU_FTR_HPTE_TABLE)) {
 		ret = kasan_init_shadow_page_tables(KASAN_SHADOW_START, KASAN_SHADOW_END);
-
 		if (ret)
 			panic("kasan: kasan_init_shadow_page_tables() failed");
 	}

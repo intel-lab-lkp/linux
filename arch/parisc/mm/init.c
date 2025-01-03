@@ -377,7 +377,7 @@ static void __ref map_pages(unsigned long start_vaddr,
 
 #if CONFIG_PGTABLE_LEVELS == 3
 		if (pud_none(*pud)) {
-			pmd = memblock_alloc_or_panic(PAGE_SIZE << PMD_TABLE_ORDER,
+			pmd = memblock_alloc(PAGE_SIZE << PMD_TABLE_ORDER,
 					     PAGE_SIZE << PMD_TABLE_ORDER);
 			pud_populate(NULL, pud, pmd);
 		}
@@ -386,7 +386,7 @@ static void __ref map_pages(unsigned long start_vaddr,
 		pmd = pmd_offset(pud, vaddr);
 		for (tmp1 = start_pmd; tmp1 < PTRS_PER_PMD; tmp1++, pmd++) {
 			if (pmd_none(*pmd)) {
-				pg_table = memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
+				pg_table = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
 				pmd_populate_kernel(NULL, pmd, pg_table);
 			}
 
@@ -644,7 +644,7 @@ static void __init pagetable_init(void)
 	}
 #endif
 
-	empty_zero_page = memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
+	empty_zero_page = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
 
 }
 
@@ -681,7 +681,7 @@ static void __init fixmap_init(void)
 
 #if CONFIG_PGTABLE_LEVELS == 3
 	if (pud_none(*pud)) {
-		pmd = memblock_alloc_or_panic(PAGE_SIZE << PMD_TABLE_ORDER,
+		pmd = memblock_alloc(PAGE_SIZE << PMD_TABLE_ORDER,
 				     PAGE_SIZE << PMD_TABLE_ORDER);
 		pud_populate(NULL, pud, pmd);
 	}
@@ -689,7 +689,7 @@ static void __init fixmap_init(void)
 
 	pmd = pmd_offset(pud, addr);
 	do {
-		pte_t *pte = memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
+		pte_t *pte = memblock_alloc(PAGE_SIZE, PAGE_SIZE);
 
 		pmd_populate_kernel(&init_mm, pmd, pte);
 

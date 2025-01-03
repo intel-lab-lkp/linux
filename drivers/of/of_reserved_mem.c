@@ -79,7 +79,7 @@ static void __init alloc_reserved_mem_array(void)
 		return;
 	}
 
-	new_array = memblock_alloc(alloc_size, SMP_CACHE_BYTES);
+	new_array = memblock_alloc_no_panic(alloc_size, SMP_CACHE_BYTES);
 	if (!new_array) {
 		pr_err("Failed to allocate memory for reserved_mem array with err: %d", -ENOMEM);
 		return;

@@ -86,7 +86,7 @@ void __init kasan_init_tags(void)
 	if (kasan_stack_collection_enabled()) {
 		if (!stack_ring.size)
 			stack_ring.size = KASAN_STACK_RING_SIZE_DEFAULT;
-		stack_ring.entries = memblock_alloc(
+		stack_ring.entries = memblock_alloc_no_panic(
 			sizeof(stack_ring.entries[0]) * stack_ring.size,
 			SMP_CACHE_BYTES);
 		if (WARN_ON(!stack_ring.entries))

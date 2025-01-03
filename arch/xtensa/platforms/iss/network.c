@@ -604,7 +604,7 @@ static int __init iss_net_setup(char *str)
 		return 1;
 	}
 
-	new = memblock_alloc(sizeof(*new), SMP_CACHE_BYTES);
+	new = memblock_alloc_no_panic(sizeof(*new), SMP_CACHE_BYTES);
 	if (new == NULL) {
 		pr_err("Alloc_bootmem failed\n");
 		return 1;

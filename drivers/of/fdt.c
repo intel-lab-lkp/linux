@@ -1126,7 +1126,7 @@ void __init __weak early_init_dt_add_memory_arch(u64 base, u64 size)
 
 static void * __init early_init_dt_alloc_memory_arch(u64 size, u64 align)
 {
-	return memblock_alloc_or_panic(size, align);
+	return memblock_alloc(size, align);
 }
 
 bool __init early_init_dt_verify(void *dt_virt, phys_addr_t dt_phys)

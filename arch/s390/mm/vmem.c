@@ -33,7 +33,7 @@ static void __ref *vmem_alloc_pages(unsigned int order)
 
 	if (slab_is_available())
 		return (void *)__get_free_pages(GFP_KERNEL, order);
-	return memblock_alloc(size, size);
+	return memblock_alloc_no_panic(size, size);
 }
 
 static void vmem_free_pages(unsigned long addr, int order, struct vmem_altmap *altmap)
@@ -69,7 +69,7 @@ pte_t __ref *vmem_pte_alloc(void)
 	if (slab_is_available())
 		pte = (pte_t *) page_table_alloc(&init_mm);
 	else
-		pte = (pte_t *) memblock_alloc(size, size);
+		pte = (pte_t *) memblock_alloc_no_panic(size, size);
 	if (!pte)
 		return NULL;
 	memset64((u64 *)pte, _PAGE_INVALID, PTRS_PER_PTE);

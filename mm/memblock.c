@@ -1692,21 +1692,23 @@ void * __init memblock_alloc_try_nid(
 }
 
 /**
- * __memblock_alloc_or_panic - Try to allocate memory and panic on failure
+ * __memblock_alloc_panic - Try to allocate memory and panic on failure
  * @size: size of memory block to be allocated in bytes
  * @align: alignment of the region and block's size
  * @func: caller func name
+ * @should_panic: whether failed panic
  *
- * This function attempts to allocate memory using memblock_alloc,
- * and in case of failure, it calls panic with the formatted message.
- * This function should not be used directly, please use the macro memblock_alloc_or_panic.
+ * In case of failure, it calls panic with the formatted message.
+ * This function should not be used directly, please use the macro
+ * memblock_alloc and memblock_alloc_no_panic.
  */
-void *__init __memblock_alloc_or_panic(phys_addr_t size, phys_addr_t align,
-				       const char *func)
+void *__init __memblock_alloc_panic(phys_addr_t size, phys_addr_t align,
+				    const char *func, bool should_panic)
 {
-	void *addr = memblock_alloc(size, align);
+	void *addr = memblock_alloc_try_nid(size, align, MEMBLOCK_LOW_LIMIT,
+				      MEMBLOCK_ALLOC_ACCESSIBLE, NUMA_NO_NODE);
 
-	if (unlikely(!addr))
+	if (unlikely(!addr && should_panic))
 		panic("%s: Failed to allocate %pap bytes\n", func, &size);
 	return addr;
 }

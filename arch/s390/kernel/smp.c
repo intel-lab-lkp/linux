@@ -613,7 +613,7 @@ void __init smp_save_dump_ipl_cpu(void)
 	sa = save_area_alloc(true);
 	if (!sa)
 		panic("could not allocate memory for boot CPU save area\n");
-	regs = memblock_alloc_or_panic(512, 8);
+	regs = memblock_alloc(512, 8);
 	copy_oldmem_kernel(regs, __LC_FPREGS_SAVE_AREA, 512);
 	save_area_add_regs(sa, regs);
 	memblock_free(regs, 512);
@@ -792,7 +792,7 @@ void __init smp_detect_cpus(void)
 	u16 address;
 
 	/* Get CPU information */
-	info = memblock_alloc_or_panic(sizeof(*info), 8);
+	info = memblock_alloc(sizeof(*info), 8);
 	smp_get_core_info(info, 1);
 	/* Find boot CPU type */
 	if (sclp.has_core_type) {

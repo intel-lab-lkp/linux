@@ -28,7 +28,7 @@ void * __init prom_early_alloc(unsigned long size)
 {
 	void *ret;
 
-	ret = memblock_alloc_or_panic(size, SMP_CACHE_BYTES);
+	ret = memblock_alloc(size, SMP_CACHE_BYTES);
 
 	prom_early_allocated += size;
 

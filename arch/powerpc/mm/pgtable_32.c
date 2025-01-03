@@ -50,7 +50,7 @@ notrace void __init early_ioremap_init(void)
 
 void __init *early_alloc_pgtable(unsigned long size)
 {
-	return memblock_alloc_or_panic(size, size);
+	return memblock_alloc(size, size);
 
 }
 

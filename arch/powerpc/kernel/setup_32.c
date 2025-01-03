@@ -140,7 +140,7 @@ arch_initcall(ppc_init);
 
 static void *__init alloc_stack(void)
 {
-	return memblock_alloc_or_panic(THREAD_SIZE, THREAD_ALIGN);
+	return memblock_alloc(THREAD_SIZE, THREAD_ALIGN);
 }
 
 void __init irqstack_early_init(void)

@@ -22,10 +22,9 @@ kasan_init_shadow_8M(unsigned long k_start, unsigned long k_end, void *block)
 		if ((void *)pmd_page_vaddr(*pmd) != kasan_early_shadow_pte)
 			continue;
 
-		ptep = memblock_alloc(PTE_FRAG_SIZE, PTE_FRAG_SIZE);
+		ptep = memblock_alloc_no_panic(PTE_FRAG_SIZE, PTE_FRAG_SIZE);
 		if (!ptep)
 			return -ENOMEM;
-
 		for (i = 0; i < PTRS_PER_PTE; i++) {
 			pte_t pte = pte_mkhuge(pfn_pte(PHYS_PFN(__pa(block + i * PAGE_SIZE)), PAGE_KERNEL));
 
@@ -45,7 +44,7 @@ int __init kasan_init_region(void *start, size_t size)
 	int ret;
 	void *block;
 
-	block = memblock_alloc(k_end - k_start, SZ_8M);
+	block = memblock_alloc_no_panic(k_end - k_start, SZ_8M);
 	if (!block)
 		return -ENOMEM;
 

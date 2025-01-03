@@ -213,7 +213,7 @@ pci_create_OF_bus_map(void)
 	struct property* of_prop;
 	struct device_node *dn;
 
-	of_prop = memblock_alloc_or_panic(sizeof(struct property) + 256,
+	of_prop = memblock_alloc(sizeof(struct property) + 256,
 				 SMP_CACHE_BYTES);
 	dn = of_find_node_by_path("/");
 	if (dn) {

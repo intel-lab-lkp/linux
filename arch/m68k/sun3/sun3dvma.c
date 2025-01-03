@@ -252,7 +252,7 @@ void __init dvma_init(void)
 
 	list_add(&(hole->list), &hole_list);
 
-	iommu_use = memblock_alloc_or_panic(IOMMU_TOTAL_ENTRIES * sizeof(unsigned long),
+	iommu_use = memblock_alloc(IOMMU_TOTAL_ENTRIES * sizeof(unsigned long),
 				   SMP_CACHE_BYTES);
 	dvma_unmap_iommu(DVMA_START, DVMA_SIZE);
 

@@ -869,7 +869,7 @@ void __init kfence_alloc_pool_and_metadata(void)
 	 * re-allocate the memory pool.
 	 */
 	if (!__kfence_pool)
-		__kfence_pool = memblock_alloc(KFENCE_POOL_SIZE, PAGE_SIZE);
+		__kfence_pool = memblock_alloc_no_panic(KFENCE_POOL_SIZE, PAGE_SIZE);
 
 	if (!__kfence_pool) {
 		pr_err("failed to allocate pool\n");
@@ -877,7 +877,7 @@ void __init kfence_alloc_pool_and_metadata(void)
 	}
 
 	/* The memory allocated by memblock has been zeroed out. */
-	kfence_metadata_init = memblock_alloc(KFENCE_METADATA_SIZE, PAGE_SIZE);
+	kfence_metadata_init = memblock_alloc_no_panic(KFENCE_METADATA_SIZE, PAGE_SIZE);
 	if (!kfence_metadata_init) {
 		pr_err("failed to allocate metadata\n");
 		memblock_free(__kfence_pool, KFENCE_POOL_SIZE);

@@ -328,7 +328,7 @@ static void __init *swiotlb_memblock_alloc(unsigned long nslabs,
 	 * memory encryption.
 	 */
 	if (flags & SWIOTLB_ANY)
-		tlb = memblock_alloc(bytes, PAGE_SIZE);
+		tlb = memblock_alloc_no_panic(bytes, PAGE_SIZE);
 	else
 		tlb = memblock_alloc_low(bytes, PAGE_SIZE);
 
@@ -396,14 +396,14 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 	}
 
 	alloc_size = PAGE_ALIGN(array_size(sizeof(*mem->slots), nslabs));
-	mem->slots = memblock_alloc(alloc_size, PAGE_SIZE);
+	mem->slots = memblock_alloc_no_panic(alloc_size, PAGE_SIZE);
 	if (!mem->slots) {
 		pr_warn("%s: Failed to allocate %zu bytes align=0x%lx\n",
 			__func__, alloc_size, PAGE_SIZE);
 		return;
 	}
 
-	mem->areas = memblock_alloc(array_size(sizeof(struct io_tlb_area),
+	mem->areas = memblock_alloc_no_panic(array_size(sizeof(struct io_tlb_area),
 		nareas), SMP_CACHE_BYTES);
 	if (!mem->areas) {
 		pr_warn("%s: Failed to allocate mem->areas.\n", __func__);
