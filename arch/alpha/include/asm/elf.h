@@ -138,8 +138,8 @@ extern int dump_elf_task(elf_greg_t *dest, struct task_struct *task);
 })
 
 #define SET_PERSONALITY(EX)					\
-	set_personality(((EX).e_flags & EF_ALPHA_32BIT)		\
-	   ? PER_LINUX_32BIT : PER_LINUX)
+	set_personality((((EX).e_flags & EF_ALPHA_32BIT)	\
+	   ? PER_LINUX_32BIT : PER_LINUX) | (current->personality & (~PER_MASK)))
 
 extern int alpha_l1i_cacheshape;
 extern int alpha_l1d_cacheshape;
