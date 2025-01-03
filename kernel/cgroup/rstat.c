@@ -320,6 +320,14 @@ static inline void __cgroup_rstat_unlock(struct cgroup_subsys_state *css,
 	spin_unlock_irq(lock);
 }
 
+static void cgroup_rstat_base_flush_locked(struct cgroup *cgrp)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		cgroup_base_stat_flush(cgrp, cpu);
+}
+
 /* see cgroup_rstat_flush() */
 static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
 	__releases(&css->ss->rstat_lock) __acquires(&css->ss->rstat_lock)
@@ -341,7 +349,6 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
 		for (; pos; pos = pos->rstat_flush_next) {
 			struct cgroup_subsys_state *css_iter;
 
-			cgroup_base_stat_flush(pos->cgroup, cpu);
 			bpf_rstat_flush(pos->cgroup, cgroup_parent(pos->cgroup), cpu);
 
 			rcu_read_lock();
@@ -408,7 +415,7 @@ static void cgroup_rstat_base_flush_hold(struct cgroup_subsys_state *css)
 {
 	might_sleep();
 	__cgroup_rstat_lock(css, &cgroup_rstat_base_lock, -1);
-	cgroup_rstat_flush_locked(css);
+	cgroup_rstat_base_flush_locked(css->cgroup);
 }
 
 /**
