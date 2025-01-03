@@ -2125,6 +2125,11 @@ static void update_numa_stats(struct task_numa_env *env,
 	for_each_cpu(cpu, cpumask_of_node(nid)) {
 		struct rq *rq = cpu_rq(cpu);
 
+		/* skip isolated cpus' load */
+		if (!rcu_dereference(rq->sd))
+			continue;
+
+		ns->weight++;
 		ns->load += cpu_load(rq);
 		ns->runnable += cpu_runnable(rq);
 		ns->util += cpu_util_cfs(cpu);
@@ -2143,8 +2148,6 @@ static void update_numa_stats(struct task_numa_env *env,
 		}
 	}
 	rcu_read_unlock();
-
-	ns->weight = cpumask_weight(cpumask_of_node(nid));
 
 	ns->node_type = numa_classify(env->imbalance_pct, ns);
 
