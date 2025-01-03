@@ -87,6 +87,9 @@
 #define PCIE_LOW_POWER_CTRL_REG		0x194
 #define PCIE_FORCE_DIS_L0S		BIT(8)
 
+#define PCIE_AXI_IF_CTRL_REG		0x1a8
+#define PCIE_AXI0_SLV_RESP_MASK		BIT(12)
+
 #define PCIE_PIPE4_PIE8_REG		0x338
 #define PCIE_K_FINETUNE_MAX		GENMASK(5, 0)
 #define PCIE_K_FINETUNE_ERR		GENMASK(7, 6)
@@ -468,6 +471,15 @@ static int mtk_pcie_startup_port(struct mtk_gen3_pcie *pcie)
 	val = readl_relaxed(pcie->base + PCIE_LOW_POWER_CTRL_REG);
 	val |= PCIE_FORCE_DIS_L0S;
 	writel_relaxed(val, pcie->base + PCIE_LOW_POWER_CTRL_REG);
+
+	/*
+	 * Prevent PCIe AXI0 from replying a slave error, as it will cause kernel panic
+	 * and prevent us from getting useful information.
+	 * Keep the kernel alive and debug using the information from AER.
+	 */
+	val = readl_relaxed(pcie->base + PCIE_AXI_IF_CTRL_REG);
+	val |= PCIE_AXI0_SLV_RESP_MASK;
+	writel_relaxed(val, pcie->base + PCIE_AXI_IF_CTRL_REG);
 
 	/* Disable DVFSRC voltage request */
 	val = readl_relaxed(pcie->base + PCIE_MISC_CTRL_REG);
