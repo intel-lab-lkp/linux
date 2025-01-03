@@ -1285,7 +1285,7 @@ static int ext4_mb_init_cache(struct folio *folio, char *incore, gfp_t gfp)
 	ext4_group_t first_group, group;
 	int first_block;
 	struct super_block *sb;
-	struct buffer_head *bhs;
+	struct buffer_head *bhs = NULL;
 	struct buffer_head **bh = NULL;
 	struct inode *inode;
 	char *data;
