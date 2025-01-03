@@ -790,6 +790,8 @@ struct cgroup_subsys {
 	 * specifies the mask of subsystems that this one depends on.
 	 */
 	unsigned int depends_on;
+
+	spinlock_t rstat_lock;
 };
 
 extern struct percpu_rw_semaphore cgroup_threadgroup_rwsem;

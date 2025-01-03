@@ -9,8 +9,9 @@
 
 #include <trace/events/cgroup.h>
 
-static DEFINE_SPINLOCK(cgroup_rstat_lock);
-static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
+static DEFINE_SPINLOCK(cgroup_rstat_base_lock);
+static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_base_cpu_lock);
+static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock[CGROUP_SUBSYS_COUNT]);
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
@@ -86,7 +87,7 @@ void _cgroup_rstat_cpu_unlock(raw_spinlock_t *cpu_lock, int cpu,
 __bpf_kfunc void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 {
 	struct cgroup *cgrp = css->cgroup;
-	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
+	raw_spinlock_t *cpu_lock;
 	unsigned long flags;
 
 	/*
@@ -99,6 +100,11 @@ __bpf_kfunc void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 	 */
 	if (data_race(css_rstat_cpu(css, cpu)->updated_next))
 		return;
+
+	if (css->ss)
+		cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock[css->ss->id], cpu);
+	else
+		cpu_lock = per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu);
 
 	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, true);
 
@@ -207,10 +213,15 @@ next_level:
 static struct cgroup_subsys_state *cgroup_rstat_updated_list(
 				struct cgroup_subsys_state *root, int cpu)
 {
-	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
 	struct cgroup_rstat_cpu *rstatc = css_rstat_cpu(root, cpu);
 	struct cgroup_subsys_state *head = NULL, *parent, *child;
+	raw_spinlock_t *cpu_lock;
 	unsigned long flags;
+
+	if (root->ss)
+		cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock[root->ss->id], cpu);
+	else
+		cpu_lock = per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu);
 
 	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, root->cgroup, false);
 
@@ -285,37 +296,44 @@ __bpf_hook_end();
  * number processed last.
  */
 static inline void __cgroup_rstat_lock(struct cgroup_subsys_state *css,
-				int cpu_in_loop)
-	__acquires(&cgroup_rstat_lock)
+				spinlock_t *lock, int cpu_in_loop)
+	__acquires(lock)
 {
 	struct cgroup *cgrp = css->cgroup;
 	bool contended;
 
-	contended = !spin_trylock_irq(&cgroup_rstat_lock);
+	contended = !spin_trylock_irq(lock);
 	if (contended) {
 		trace_cgroup_rstat_lock_contended(cgrp, cpu_in_loop, contended);
-		spin_lock_irq(&cgroup_rstat_lock);
+		spin_lock_irq(lock);
 	}
 	trace_cgroup_rstat_locked(cgrp, cpu_in_loop, contended);
 }
 
 static inline void __cgroup_rstat_unlock(struct cgroup_subsys_state *css,
-				int cpu_in_loop)
-	__releases(&cgroup_rstat_lock)
+				spinlock_t *lock, int cpu_in_loop)
+	__releases(lock)
 {
 	struct cgroup *cgrp = css->cgroup;
 
 	trace_cgroup_rstat_unlock(cgrp, cpu_in_loop, false);
-	spin_unlock_irq(&cgroup_rstat_lock);
+	spin_unlock_irq(lock);
 }
 
 /* see cgroup_rstat_flush() */
 static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
-	__releases(&cgroup_rstat_lock) __acquires(&cgroup_rstat_lock)
+	__releases(&css->ss->rstat_lock) __acquires(&css->ss->rstat_lock)
 {
+	spinlock_t *lock;
 	int cpu;
 
-	lockdep_assert_held(&cgroup_rstat_lock);
+	if (!css->ss) {
+		pr_warn("cannot use generic flush on base subsystem\n");
+		return;
+	}
+
+	lock = &css->ss->rstat_lock;
+	lockdep_assert_held(lock);
 
 	for_each_possible_cpu(cpu) {
 		struct cgroup_subsys_state *pos = cgroup_rstat_updated_list(css, cpu);
@@ -334,11 +352,11 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
 		}
 
 		/* play nice and yield if necessary */
-		if (need_resched() || spin_needbreak(&cgroup_rstat_lock)) {
-			__cgroup_rstat_unlock(css, cpu);
+		if (need_resched() || spin_needbreak(lock)) {
+			__cgroup_rstat_unlock(css, lock, cpu);
 			if (!cond_resched())
 				cpu_relax();
-			__cgroup_rstat_lock(css, cpu);
+			__cgroup_rstat_lock(css, lock, cpu);
 		}
 	}
 }
@@ -358,11 +376,22 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
  */
 __bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 {
+	spinlock_t *lock;
+
+	if (!css->ss) {
+		int cpu;
+
+		for_each_possible_cpu(cpu)
+			cgroup_base_stat_flush(css->cgroup, cpu);
+		return;
+	}
+
 	might_sleep();
 
-	__cgroup_rstat_lock(css, -1);
+	lock = &css->ss->rstat_lock;
+	__cgroup_rstat_lock(css, lock, -1);
 	cgroup_rstat_flush_locked(css);
-	__cgroup_rstat_unlock(css, -1);
+	__cgroup_rstat_unlock(css, lock, -1);
 }
 
 /**
@@ -374,11 +403,11 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
  *
  * This function may block.
  */
-void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
-	__acquires(&cgroup_rstat_lock)
+static void cgroup_rstat_base_flush_hold(struct cgroup_subsys_state *css)
+	__acquires(&cgroup_rstat_base_lock)
 {
 	might_sleep();
-	__cgroup_rstat_lock(css, -1);
+	__cgroup_rstat_lock(css, &cgroup_rstat_base_lock, -1);
 	cgroup_rstat_flush_locked(css);
 }
 
@@ -386,10 +415,10 @@ void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
  * cgroup_rstat_flush_release - release cgroup_rstat_flush_hold()
  * @cgrp: cgroup used by tracepoint
  */
-void cgroup_rstat_flush_release(struct cgroup_subsys_state *css)
-	__releases(&cgroup_rstat_lock)
+static void cgroup_rstat_base_flush_release(struct cgroup_subsys_state *css)
+	__releases(&cgroup_rstat_base_lock)
 {
-	__cgroup_rstat_unlock(css, -1);
+	__cgroup_rstat_unlock(css, &cgroup_rstat_base_lock, -1);
 }
 
 int cgroup_rstat_init(struct cgroup_subsys_state *css)
@@ -435,10 +464,15 @@ void cgroup_rstat_exit(struct cgroup_subsys_state *css)
 
 void __init cgroup_rstat_boot(void)
 {
-	int cpu;
+	struct cgroup_subsys *ss;
+	int cpu, ssid;
 
-	for_each_possible_cpu(cpu)
-		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu));
+	for_each_possible_cpu(cpu) {
+		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu));
+
+		for_each_subsys(ss, ssid)
+			raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_cpu_lock[ssid], cpu));
+	}
 }
 
 /*
@@ -629,12 +663,12 @@ void cgroup_base_stat_cputime_show(struct seq_file *seq)
 	u64 usage, utime, stime, ntime;
 
 	if (cgroup_parent(cgrp)) {
-		cgroup_rstat_flush_hold(css);
+		cgroup_rstat_base_flush_hold(css);
 		usage = cgrp->bstat.cputime.sum_exec_runtime;
 		cputime_adjust(&cgrp->bstat.cputime, &cgrp->prev_cputime,
 			       &utime, &stime);
 		ntime = cgrp->bstat.ntime;
-		cgroup_rstat_flush_release(css);
+		cgroup_rstat_base_flush_release(css);
 	} else {
 		/* cgrp->bstat of root is not actually used, reuse it */
 		root_cgroup_cputime(&cgrp->bstat);
