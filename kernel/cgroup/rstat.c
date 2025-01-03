@@ -390,8 +390,9 @@ void cgroup_rstat_flush_release(struct cgroup_subsys_state *css)
 	__cgroup_rstat_unlock(css, -1);
 }
 
-int cgroup_rstat_init(struct cgroup *cgrp)
+int cgroup_rstat_init(struct cgroup_subsys_state *css)
 {
+	struct cgroup *cgrp = css->cgroup;
 	int cpu;
 
 	/* the root cgrp has rstat_cpu preallocated */
@@ -412,8 +413,9 @@ int cgroup_rstat_init(struct cgroup *cgrp)
 	return 0;
 }
 
-void cgroup_rstat_exit(struct cgroup *cgrp)
+void cgroup_rstat_exit(struct cgroup_subsys_state *css)
 {
+	struct cgroup *cgrp = css->cgroup;
 	int cpu;
 
 	cgroup_rstat_flush(&cgrp->self);
