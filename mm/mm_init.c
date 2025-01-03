@@ -1580,6 +1580,10 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 	}
 }
 
+/*
+ * Kmemleak will explicitly scan mem_map by traversing all valid `struct *page`,
+ * so memblock does not need to be added to the scan list.
+ */
 void __init *memmap_alloc(phys_addr_t size, phys_addr_t align,
 			  phys_addr_t min_addr, int nid, bool exact_nid)
 {
@@ -1587,11 +1591,11 @@ void __init *memmap_alloc(phys_addr_t size, phys_addr_t align,
 
 	if (exact_nid)
 		ptr = memblock_alloc_exact_nid_raw(size, align, min_addr,
-						   MEMBLOCK_ALLOC_ACCESSIBLE,
+						   MEMBLOCK_ALLOC_NOLEAKTRACE,
 						   nid);
 	else
 		ptr = memblock_alloc_try_nid_raw(size, align, min_addr,
-						 MEMBLOCK_ALLOC_ACCESSIBLE,
+						 MEMBLOCK_ALLOC_NOLEAKTRACE,
 						 nid);
 
 	if (ptr && size > 0)

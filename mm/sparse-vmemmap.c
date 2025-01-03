@@ -27,7 +27,7 @@
 #include <linux/spinlock.h>
 #include <linux/vmalloc.h>
 #include <linux/sched.h>
-
+#include "internal.h"
 #include <asm/dma.h>
 #include <asm/pgalloc.h>
 
@@ -42,8 +42,7 @@ static void * __ref __earlyonly_bootmem_alloc(int node,
 				unsigned long align,
 				unsigned long goal)
 {
-	return memblock_alloc_try_nid_raw(size, align, goal,
-					       MEMBLOCK_ALLOC_ACCESSIBLE, node);
+	return memmap_alloc(size, align, goal, node, false);
 }
 
 void * __meminit vmemmap_alloc_block(unsigned long size, int node)
