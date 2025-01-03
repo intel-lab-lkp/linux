@@ -1735,7 +1735,8 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 	if (run->exit_reason == KVM_EXIT_LOONGARCH_IOCSR) {
 		if (!run->iocsr_io.is_write)
 			kvm_complete_iocsr_read(vcpu, run);
-	}
+	} else if (run->exit_reason == KVM_EXIT_HYPERCALL)
+		kvm_complete_user_service(vcpu, run);
 
 	if (!vcpu->wants_to_run)
 		return r;

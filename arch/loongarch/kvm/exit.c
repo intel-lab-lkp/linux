@@ -538,6 +538,13 @@ int kvm_complete_mmio_read(struct kvm_vcpu *vcpu, struct kvm_run *run)
 	return er;
 }
 
+int kvm_complete_user_service(struct kvm_vcpu *vcpu, struct kvm_run *run)
+{
+	update_pc(&vcpu->arch);
+	kvm_write_reg(vcpu, LOONGARCH_GPR_A0, run->hypercall.ret);
+	return 0;
+}
+
 int kvm_emu_mmio_write(struct kvm_vcpu *vcpu, larch_inst inst)
 {
 	int idx, ret;
@@ -872,6 +879,29 @@ static int kvm_handle_hypercall(struct kvm_vcpu *vcpu)
 	case KVM_HCALL_SERVICE:
 		vcpu->stat.hypercall_exits++;
 		kvm_handle_service(vcpu);
+		break;
+	case KVM_HCALL_USER_SERVICE:
+		if (!kvm_guest_has_pv_feature(vcpu, KVM_FEATURE_USER_HCALL)) {
+			kvm_write_reg(vcpu, LOONGARCH_GPR_A0, KVM_HCALL_INVALID_CODE);
+			break;
+		}
+
+		vcpu->stat.hypercall_exits++;
+		vcpu->run->exit_reason = KVM_EXIT_HYPERCALL;
+		vcpu->run->hypercall.nr = KVM_HCALL_USER_SERVICE;
+		vcpu->run->hypercall.args[0] = kvm_read_reg(vcpu, LOONGARCH_GPR_A0);
+		vcpu->run->hypercall.args[1] = kvm_read_reg(vcpu, LOONGARCH_GPR_A1);
+		vcpu->run->hypercall.args[2] = kvm_read_reg(vcpu, LOONGARCH_GPR_A2);
+		vcpu->run->hypercall.args[3] = kvm_read_reg(vcpu, LOONGARCH_GPR_A3);
+		vcpu->run->hypercall.args[4] = kvm_read_reg(vcpu, LOONGARCH_GPR_A4);
+		vcpu->run->hypercall.args[5] = kvm_read_reg(vcpu, LOONGARCH_GPR_A5);
+		vcpu->run->hypercall.flags = 0;
+		/*
+		 * Set invalid return value by default
+		 * Need user-mode VMM modify it
+		 */
+		vcpu->run->hypercall.ret = KVM_HCALL_INVALID_CODE;
+		ret = RESUME_HOST;
 		break;
 	case KVM_HCALL_SWDBG:
 		/* KVM_HCALL_SWDBG only in effective when SW_BP is enabled */
