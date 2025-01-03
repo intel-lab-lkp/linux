@@ -1430,12 +1430,11 @@ static int ext4_mb_init_cache(struct folio *folio, char *incore, gfp_t gfp)
 	folio_mark_uptodate(folio);
 
 out:
-	if (bh) {
-		for (i = 0; i < groups_per_page; i++)
-			brelse(bh[i]);
-		if (bh != &bhs)
-			kfree(bh);
-	}
+	for (i = 0; i < groups_per_page; i++)
+		brelse(bh[i]);
+	if (bh != &bhs)
+		kfree(bh);
+
 	return err;
 }
 
