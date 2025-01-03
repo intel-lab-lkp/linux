@@ -347,15 +347,8 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css)
 		struct cgroup_subsys_state *pos = cgroup_rstat_updated_list(css, cpu);
 
 		for (; pos; pos = pos->rstat_flush_next) {
-			struct cgroup_subsys_state *css_iter;
-
 			bpf_rstat_flush(pos->cgroup, cgroup_parent(pos->cgroup), cpu);
-
-			rcu_read_lock();
-			list_for_each_entry_rcu(css_iter, &pos->rstat_css_list,
-						rstat_css_node)
-				css_iter->ss->css_rstat_flush(css_iter, cpu);
-			rcu_read_unlock();
+			pos->ss->css_rstat_flush(pos, cpu);
 		}
 
 		/* play nice and yield if necessary */
