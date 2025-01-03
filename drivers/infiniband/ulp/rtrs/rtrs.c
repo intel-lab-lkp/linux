@@ -580,6 +580,9 @@ static void dev_free(struct kref *ref)
 	dev = container_of(ref, typeof(*dev), ref);
 	pool = dev->pool;
 
+	if (pool->ops && pool->ops->deinit)
+		pool->ops->deinit(dev);
+
 	mutex_lock(&pool->mutex);
 	list_del(&dev->entry);
 	mutex_unlock(&pool->mutex);
