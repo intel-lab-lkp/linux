@@ -355,7 +355,7 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 {
 	union reg_data val;
 	unsigned long epc = regs->epc;
-	unsigned long insn;
+	unsigned long insn, copy_len;
 	unsigned long addr = regs->badaddr;
 	int fp = 0, shift = 0, len = 0;
 
@@ -441,7 +441,16 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 
 	val.data_u64 = 0;
 	if (user_mode(regs)) {
-		if (copy_from_user(&val, (u8 __user *)addr, len))
+		/*
+		 * We can not sleep in exception context. Disable pagefault to
+		 * avoid a potential sleep while accessing user memory. Side
+		 * effect is that if it would have sleep, then the copy will
+		 * fail.
+		 */
+		pagefault_disable();
+		copy_len = copy_from_user(&val, (u8 __user *)addr, len);
+		pagefault_enable();
+		if (copy_len)
 			return -1;
 	} else {
 		memcpy(&val, (u8 *)addr, len);
@@ -463,7 +472,7 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 {
 	union reg_data val;
 	unsigned long epc = regs->epc;
-	unsigned long insn;
+	unsigned long insn, copy_len;
 	unsigned long addr = regs->badaddr;
 	int len = 0, fp = 0;
 
@@ -539,7 +548,16 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 		return -EOPNOTSUPP;
 
 	if (user_mode(regs)) {
-		if (copy_to_user((u8 __user *)addr, &val, len))
+		/*
+		 * We can not sleep in exception context. Disable pagefault to
+		 * avoid a potential sleep while accessing user memory. Side
+		 * effect is that if it would have sleep, then the copy will
+		 * fail.
+		 */
+		pagefault_disable();
+		copy_len = copy_to_user((u8 __user *)addr, &val, len);
+		pagefault_enable();
+		if (copy_len)
 			return -1;
 	} else {
 		memcpy((u8 *)addr, &val, len);
