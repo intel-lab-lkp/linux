@@ -141,35 +141,45 @@ static struct irq_chip imsic_irq_base_chip = {
 				  IRQCHIP_MASK_ON_SUSPEND,
 };
 
+static void imsic_irq_domain_free(struct irq_domain *domain, unsigned int virq,
+				  unsigned int nr_irqs)
+{
+	struct irq_data *d;
+	int i;
+
+	for (i = 0; i < nr_irqs; i++) {
+		d = irq_domain_get_irq_data(domain, virq + i);
+		imsic_vector_free(irq_data_get_irq_chip_data(d));
+	}
+	irq_domain_free_irqs_top(domain, virq, nr_irqs);
+}
+
 static int imsic_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 				  unsigned int nr_irqs, void *args)
 {
 	struct imsic_vector *vec;
+	int i, err;
 
-	/* Multi-MSI is not supported yet. */
-	if (nr_irqs > 1)
-		return -EOPNOTSUPP;
+	for (i = 0; i < nr_irqs; i++) {
+		vec = imsic_vector_alloc(virq + i, cpu_online_mask);
+		if (!vec) {
+			err = -ENOSPC;
+			goto error;
+		}
 
-	vec = imsic_vector_alloc(virq, cpu_online_mask);
-	if (!vec)
-		return -ENOSPC;
-
-	irq_domain_set_info(domain, virq, virq, &imsic_irq_base_chip, vec,
-			    handle_simple_irq, NULL, NULL);
-	irq_set_noprobe(virq);
-	irq_set_affinity(virq, cpu_online_mask);
-	irq_data_update_effective_affinity(irq_get_irq_data(virq), cpumask_of(vec->cpu));
+		irq_domain_set_info(domain, virq + i, virq + i, &imsic_irq_base_chip,
+				    vec, handle_simple_irq, NULL, NULL);
+		irq_set_noprobe(virq + i);
+		irq_set_affinity(virq + i, cpu_online_mask);
+		irq_data_update_effective_affinity(irq_get_irq_data(virq + i),
+						   cpumask_of(vec->cpu));
+	}
 
 	return 0;
-}
 
-static void imsic_irq_domain_free(struct irq_domain *domain, unsigned int virq,
-				  unsigned int nr_irqs)
-{
-	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
-
-	imsic_vector_free(irq_data_get_irq_chip_data(d));
-	irq_domain_free_irqs_parent(domain, virq, nr_irqs);
+error:
+	imsic_irq_domain_free(domain, virq, i);
+	return err;
 }
 
 static int imsic_irq_domain_select(struct irq_domain *domain, struct irq_fwspec *fwspec,
