@@ -418,12 +418,11 @@ static int titsc_probe(struct platform_device *pdev)
 	int err;
 
 	/* Allocate memory for device */
-	ts_dev = kzalloc(sizeof(*ts_dev), GFP_KERNEL);
-	input_dev = input_allocate_device();
+	ts_dev = devm_kzalloc(&pdev->dev, sizeof(*ts_dev), GFP_KERNEL);
+	input_dev = devm_input_allocate_device(&pdev->dev);
 	if (!ts_dev || !input_dev) {
 		dev_err(&pdev->dev, "failed to allocate memory.\n");
-		err = -ENOMEM;
-		goto err_free_mem;
+		return -ENOMEM;
 	}
 
 	tscadc_dev->tsc = ts_dev;
@@ -435,18 +434,21 @@ static int titsc_probe(struct platform_device *pdev)
 	err = titsc_parse_dt(pdev, ts_dev);
 	if (err) {
 		dev_err(&pdev->dev, "Could not find valid DT data.\n");
-		goto err_free_mem;
+		return err;
 	}
 
-	err = request_irq(ts_dev->irq, titsc_irq,
-			  IRQF_SHARED, pdev->dev.driver->name, ts_dev);
+	err = devm_request_irq(&pdev->dev, ts_dev->irq, titsc_irq, IRQF_SHARED,
+			       pdev->dev.driver->name, ts_dev);
 	if (err) {
 		dev_err(&pdev->dev, "failed to allocate irq.\n");
-		goto err_free_mem;
+		return err;
 	}
 
-	device_init_wakeup(&pdev->dev, true);
-	err = dev_pm_set_wake_irq(&pdev->dev, ts_dev->irq);
+	err = devm_device_init_wakeup(&pdev->dev);
+	if (err)
+		dev_err(&pdev->dev, "device init wakeup failed.\n");
+
+	err = devm_pm_set_wake_irq(&pdev->dev, ts_dev->irq);
 	if (err)
 		dev_err(&pdev->dev, "irq wake enable failed.\n");
 
@@ -456,7 +458,7 @@ static int titsc_probe(struct platform_device *pdev)
 	err = titsc_config_wires(ts_dev);
 	if (err) {
 		dev_err(&pdev->dev, "wrong i/p wire configuration\n");
-		goto err_free_irq;
+		return err;
 	}
 	titsc_step_config(ts_dev);
 	titsc_writel(ts_dev, REG_FIFO0THR,
@@ -475,19 +477,10 @@ static int titsc_probe(struct platform_device *pdev)
 	/* register to the input system */
 	err = input_register_device(input_dev);
 	if (err)
-		goto err_free_irq;
+		return err;
 
 	platform_set_drvdata(pdev, ts_dev);
 	return 0;
-
-err_free_irq:
-	dev_pm_clear_wake_irq(&pdev->dev);
-	device_init_wakeup(&pdev->dev, false);
-	free_irq(ts_dev->irq, ts_dev);
-err_free_mem:
-	input_free_device(input_dev);
-	kfree(ts_dev);
-	return err;
 }
 
 static void titsc_remove(struct platform_device *pdev)
@@ -495,18 +488,10 @@ static void titsc_remove(struct platform_device *pdev)
 	struct titsc *ts_dev = platform_get_drvdata(pdev);
 	u32 steps;
 
-	dev_pm_clear_wake_irq(&pdev->dev);
-	device_init_wakeup(&pdev->dev, false);
-	free_irq(ts_dev->irq, ts_dev);
-
 	/* total steps followed by the enable mask */
 	steps = 2 * ts_dev->coordinate_readouts + 2;
 	steps = (1 << steps) - 1;
 	am335x_tsc_se_clr(ts_dev->mfd_tscadc, steps);
-
-	input_unregister_device(ts_dev->input);
-
-	kfree(ts_dev);
 }
 
 static int titsc_suspend(struct device *dev)
