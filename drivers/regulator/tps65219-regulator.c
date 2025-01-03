@@ -347,6 +347,65 @@ static struct tps65219_chip_data chip_info_table[] = {
 	},
 };
 
+static int tps65219_register_regulators(const struct regulator_desc *regulators,
+					struct tps65219 *tps,
+					struct device *dev,
+					struct regulator_config config,
+					unsigned int arr_size)
+{
+	int i;
+	struct regulator_dev *rdev;
+
+	config.driver_data = tps;
+	config.dev = tps->dev;
+	config.regmap = tps->regmap;
+
+	for (i = 0; i < arr_size; i++) {
+		rdev = devm_regulator_register(dev, &regulators[i],
+						&config);
+		if (IS_ERR(rdev))
+			return dev_err_probe(tps->dev, PTR_ERR(rdev),
+				"Failed to register %s regulator\n",
+				regulators[i].name);
+	}
+
+	return 0;
+}
+
+static int tps65219_request_irqs(struct tps65219_regulator_irq_type *irq_types,
+				 struct tps65219 *tps, struct platform_device *pdev,
+				 struct tps65219_regulator_irq_data *irq_data,
+				 unsigned int arr_size)
+{
+	int i;
+	int irq;
+	int error;
+	struct tps65219_regulator_irq_type *irq_type;
+
+	for (i = 0; i < arr_size; ++i) {
+		irq_type = &irq_types[i];
+
+		irq = platform_get_irq_byname(pdev, irq_type->irq_name);
+		if (irq < 0)
+			return -EINVAL;
+
+		irq_data[i].dev = tps->dev;
+		irq_data[i].type = irq_type;
+
+		error = devm_request_threaded_irq(tps->dev, irq, NULL,
+						  tps65219_regulator_irq_handler,
+						  IRQF_ONESHOT,
+						  irq_type->irq_name,
+						  &irq_data[i]);
+		if (error)
+			return dev_err_probe(tps->dev, error,
+				"Failed to request %s IRQ %d\n",
+				irq_type->irq_name, irq);
+	}
+
+	return 0;
+}
+
 static int tps65219_regulator_probe(struct platform_device *pdev)
 {
 	struct tps65219 *tps = dev_get_drvdata(pdev->dev.parent);
