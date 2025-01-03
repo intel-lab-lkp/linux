@@ -6,6 +6,7 @@
 #ifndef __INTEL_DE_H__
 #define __INTEL_DE_H__
 
+#include "i915_irq.h"
 #include "intel_display_conversion.h"
 #include "intel_display_core.h"
 #include "intel_dmc_wl.h"
@@ -244,6 +245,48 @@ intel_de_write_dsb(struct intel_display *display, struct intel_dsb *dsb,
 		intel_dsb_reg_write(dsb, reg, val);
 	else
 		intel_de_write_fw(display, reg, val);
+}
+
+/*
+ * Functions to handle IRQ registers (intel_de_irq_*).
+ */
+static inline void
+intel_de_irq_init(struct intel_display *display, struct i915_irq_regs regs,
+		  u32 imr_val, u32 ier_val)
+{
+	intel_dmc_wl_get(display, regs.imr);
+	intel_dmc_wl_get(display, regs.ier);
+	intel_dmc_wl_get(display, regs.iir);
+
+	gen2_irq_init(__to_uncore(display), regs, imr_val, ier_val);
+
+	intel_dmc_wl_put(display, regs.iir);
+	intel_dmc_wl_put(display, regs.ier);
+	intel_dmc_wl_put(display, regs.imr);
+}
+
+static inline void
+intel_de_irq_reset(struct intel_display *display, struct i915_irq_regs regs)
+{
+	intel_dmc_wl_get(display, regs.imr);
+	intel_dmc_wl_get(display, regs.ier);
+	intel_dmc_wl_get(display, regs.iir);
+
+	gen2_irq_reset(__to_uncore(display), regs);
+
+	intel_dmc_wl_put(display, regs.iir);
+	intel_dmc_wl_put(display, regs.ier);
+	intel_dmc_wl_put(display, regs.imr);
+}
+
+static inline void
+intel_de_irq_assert_irr_is_zero(struct intel_display *display, i915_reg_t reg)
+{
+	intel_dmc_wl_get(display, reg);
+
+	gen2_assert_iir_is_zero(__to_uncore(display), reg);
+
+	intel_dmc_wl_put(display, reg);
 }
 
 #endif /* __INTEL_DE_H__ */
