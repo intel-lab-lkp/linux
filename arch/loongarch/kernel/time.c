@@ -132,7 +132,7 @@ int constant_clockevent_init(void)
 #else
 	unsigned long min_delta = 1000;
 #endif
-	unsigned long max_delta = (1UL << 48) - 1;
+	unsigned long max_delta = CLOCKSOURCE_MASK(current_cpu_data.timerbits);
 	struct clock_event_device *cd;
 	static int irq = 0, timer_irq_installed = 0;
 

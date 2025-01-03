@@ -192,6 +192,8 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	config = read_csr_prcfg1();
 	c->ksave_mask = GENMASK((config & CSR_CONF1_KSNUM) - 1, 0);
 	c->ksave_mask &= ~(EXC_KSAVE_MASK | PERCPU_KSAVE_MASK | KVM_KSAVE_MASK);
+	c->timerbits = (config & CSR_CONF1_TMRBITS) >> CSR_CONF1_TMRBITS_SHIFT;
+	c->timerbits += 1;
 
 	config = read_csr_prcfg3();
 	switch (config & CSR_CONF3_TLBTYPE) {
