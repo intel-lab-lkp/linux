@@ -802,6 +802,53 @@ config NETFILTER_XT_SET
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
+config NETFILTER_XT_DSCP
+	tristate '"DSCP" and "TOS" target and match support'
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
+	depends on NETFILTER_ADVANCED
+	help
+	  This option adds the "DSCP" target and "dscp" match.
+
+	  Netfilter dscp matching which allows you to match against the
+	  IPv4/IPv6 header DSCP field (differentiated services codepoint).
+	  The target allows you to manipulate the IPv4/IPv6
+	  header DSCP field (differentiated services codepoint).
+
+config NETFILTER_XT_HL
+	tristate '"HL" hoplimit target and match support'
+	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
+	depends on NETFILTER_ADVANCED
+	help
+	  This option adds the "HL" target and "hl" match.
+
+	  Netfilter hl matching allows you to match packets based on
+	  the hoplimit in the IPv6 header, or the time-to-live field in
+	  the IPv4 header of the packet.
+	  The target allows you to change the hoplimit/time-to-live
+	  value of the IP header.
+
+config NETFILTER_XT_RATEEST
+	tristate '"RATEEST" target and match support'
+	depends on NETFILTER_ADVANCED
+	help
+	  This option adds the "RATEEST" target and "rateest" match.
+
+	  Netfilter rateest matching allows you to match on the rate
+	  estimated by the RATEEST target.
+	  The target allows you to measure rates similar to TC estimators.
+
+config NETFILTER_XT_TCPMSS
+	tristate '"TCPMSS" target and match support'
+	depends on IPV6 || IPV6=n
+	default m if NETFILTER_ADVANCED=n
+	help
+	  This option adds the "TCPMSS" target and "tcpmss" match.
+
+	  Netfilter tcpmss matching allows you to examine the MSS value of
+	  TCP SYN packets, which control the maximum packet size for that connection.
+	  The target allows you to alter the MSS value of TCP SYN packets,
+	  to control the maximum size for that connection.
+
 # alphabetically ordered list of targets
 
 comment "Xtables targets"
@@ -882,6 +929,7 @@ config NETFILTER_XT_TARGET_DSCP
 	tristate '"DSCP" and "TOS" target support'
 	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_DSCP
 	help
 	  This option adds a `DSCP' target, which allows you to manipulate
 	  the IPv4/IPv6 header DSCP field (differentiated services codepoint).
@@ -892,12 +940,17 @@ config NETFILTER_XT_TARGET_DSCP
 	  the "mangle" table which alter the Type Of Service field of an IPv4
 	  or the Priority field of an IPv6 packet, prior to routing.
 
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects
+	  CONFIG_NETFILTER_XT_DSCP (combined dscp/DSCP module).
+
 	  To compile it as a module, choose M here.  If unsure, say N.
 
 config NETFILTER_XT_TARGET_HL
 	tristate '"HL" hoplimit target support'
 	depends on IP_NF_MANGLE || IP6_NF_MANGLE || NFT_COMPAT
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_HL
 	help
 	This option adds the "HL" (for IPv6) and "TTL" (for IPv4)
 	targets, which enable the user to change the
@@ -908,6 +961,10 @@ config NETFILTER_XT_TARGET_HL
 	the header to arbitrary values. This is EXTREMELY DANGEROUS
 	since you can easily create immortal packets that loop
 	forever on the network.
+
+	This is a backwards-compat option for the user's convenience
+	(e.g. when running oldconfig). It selects
+	CONFIG_NETFILTER_XT_HL (combined hl/HL module).
 
 config NETFILTER_XT_TARGET_HMARK
 	tristate '"HMARK" target support'
@@ -1029,10 +1086,15 @@ config NETFILTER_XT_TARGET_NOTRACK
 config NETFILTER_XT_TARGET_RATEEST
 	tristate '"RATEEST" target support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_RATEEST
 	help
 	  This option adds a `RATEEST' target, which allows to measure
 	  rates similar to TC estimators. The `rateest' match can be
 	  used to match on the measured rates.
+
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects
+	  CONFIG_NETFILTER_XT_RATEEST (combined rateest/RATEEST module).
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
@@ -1122,6 +1184,7 @@ config NETFILTER_XT_TARGET_TCPMSS
 	tristate '"TCPMSS" target support'
 	depends on IPV6 || IPV6=n
 	default m if NETFILTER_ADVANCED=n
+	select NETFILTER_XT_TCPMSS
 	help
 	  This option adds a `TCPMSS' target, which allows you to alter the
 	  MSS value of TCP SYN packets, to control the maximum size for that
@@ -1142,6 +1205,10 @@ config NETFILTER_XT_TARGET_TCPMSS
 
 	  iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN \
 	                 -j TCPMSS --clamp-mss-to-pmtu
+
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects
+	  CONFIG_NETFILTER_XT_TCPMSS (combined tcpmss/TCPMSS module).
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
@@ -1301,6 +1368,7 @@ config NETFILTER_XT_MATCH_DEVGROUP
 config NETFILTER_XT_MATCH_DSCP
 	tristate '"dscp" and "tos" match support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_DSCP
 	help
 	  This option adds a `DSCP' match, which allows you to match against
 	  the IPv4/IPv6 header DSCP field (differentiated services codepoint).
@@ -1310,6 +1378,10 @@ config NETFILTER_XT_MATCH_DSCP
 	  It will also add a "tos" match, which allows you to match packets
 	  based on the Type Of Service fields of the IPv4 packet (which share
 	  the same bits as DSCP).
+
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects
+	  CONFIG_NETFILTER_XT_DSCP (combined dscp/DSCP module).
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
@@ -1359,10 +1431,15 @@ config NETFILTER_XT_MATCH_HELPER
 config NETFILTER_XT_MATCH_HL
 	tristate '"hl" hoplimit/TTL match support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_HL
 	help
 	HL matching allows you to match packets based on the hoplimit
 	in the IPv6 header, or the time-to-live field in the IPv4
 	header of the packet.
+
+	This is a backwards-compat option for the user's convenience
+	(e.g. when running oldconfig). It selects
+	CONFIG_NETFILTER_XT_HL (combined hl/HL module).
 
 config NETFILTER_XT_MATCH_IPCOMP
 	tristate '"ipcomp" match support'
@@ -1533,6 +1610,10 @@ config NETFILTER_XT_MATCH_RATEEST
 	  This option adds a `rateest' match, which allows to match on the
 	  rate estimated by the RATEEST target.
 
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects
+	  CONFIG_NETFILTER_XT_RATEEST (combined rateest/RATEEST module).
+
 	  To compile it as a module, choose M here.  If unsure, say N.
 
 config NETFILTER_XT_MATCH_REALM
@@ -1625,10 +1706,15 @@ config NETFILTER_XT_MATCH_STRING
 config NETFILTER_XT_MATCH_TCPMSS
 	tristate '"tcpmss" match support'
 	depends on NETFILTER_ADVANCED
+	select NETFILTER_XT_TCPMSS
 	help
 	  This option adds a `tcpmss' match, which allows you to examine the
 	  MSS value of TCP SYN packets, which control the maximum packet size
 	  for that connection.
+
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects
+	  CONFIG_NETFILTER_XT_TCPMSS (combined tcpmss/TCPMSS module).
 
 	  To compile it as a module, choose M here.  If unsure, say N.
 
