@@ -1286,7 +1286,7 @@ static int ext4_mb_init_cache(struct folio *folio, char *incore, gfp_t gfp)
 	int first_block;
 	struct super_block *sb;
 	struct buffer_head *bhs = NULL;
-	struct buffer_head **bh = NULL;
+	struct buffer_head **bh;
 	struct inode *inode;
 	char *data;
 	char *bitmap;
@@ -1330,10 +1330,9 @@ static int ext4_mb_init_cache(struct folio *folio, char *incore, gfp_t gfp)
 		 * which may be currently in use by an allocating task.
 		 */
 		if (folio_test_uptodate(folio) &&
-				!EXT4_MB_GRP_NEED_INIT(grinfo)) {
-			bh[i] = NULL;
+				!EXT4_MB_GRP_NEED_INIT(grinfo))
 			continue;
-		}
+
 		bh[i] = ext4_read_block_bitmap_nowait(sb, group, false);
 		if (IS_ERR(bh[i])) {
 			err = PTR_ERR(bh[i]);
