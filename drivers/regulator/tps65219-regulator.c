@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
+
 //
 // Regulator driver for TPS65215/TPS65219 PMIC
 //
@@ -313,6 +314,38 @@ static irqreturn_t tps65219_regulator_irq_handler(int irq, void *data)
 		irq_data->type->event_name, irq_data->type->regulator_name);
 	return IRQ_HANDLED;
 }
+
+struct tps65219_chip_data {
+	size_t common_irq_size;
+	size_t rdesc_size;
+	size_t common_rdesc_size;
+	size_t dev_irq_size;
+	const struct regulator_desc *rdesc;
+	const struct regulator_desc *common_rdesc;
+	struct tps65219_regulator_irq_type *irq_types;
+	struct tps65219_regulator_irq_type *common_irq_types;
+};
+
+static struct tps65219_chip_data chip_info_table[] = {
+	[TPS65215] = {
+		.rdesc = tps65215_regs,
+		.rdesc_size = ARRAY_SIZE(tps65215_regs),
+		.common_rdesc = common_regs,
+		.common_rdesc_size = ARRAY_SIZE(common_regs),
+		.common_irq_types = common_regulator_irq_types,
+		.common_irq_size = ARRAY_SIZE(common_regulator_irq_types),
+	},
+	[TPS65219] = {
+		.rdesc = tps65219_regs,
+		.rdesc_size = ARRAY_SIZE(tps65219_regs),
+		.common_rdesc = common_regs,
+		.common_rdesc_size = ARRAY_SIZE(common_regs),
+		.common_irq_types = common_regulator_irq_types,
+		.common_irq_size = ARRAY_SIZE(common_regulator_irq_types),
+		.irq_types = tps65219_regulator_irq_types,
+		.dev_irq_size = ARRAY_SIZE(tps65219_regulator_irq_types),
+	},
+};
 
 static int tps65219_regulator_probe(struct platform_device *pdev)
 {
