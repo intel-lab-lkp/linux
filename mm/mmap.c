@@ -289,8 +289,6 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	struct mm_struct *mm = current->mm;
 	int pkey = 0;
 
-	*populate = 0;
-
 	if (!len)
 		return -EINVAL;
 

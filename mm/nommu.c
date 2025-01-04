@@ -1016,8 +1016,6 @@ unsigned long do_mmap(struct file *file,
 	int ret;
 	VMA_ITERATOR(vmi, current->mm, 0);
 
-	*populate = 0;
-
 	/* decide whether we should attempt the mapping, and if so what sort of
 	 * mapping */
 	ret = validate_mmap_request(file, addr, len, prot, flags, pgoff,

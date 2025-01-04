@@ -570,7 +570,7 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 {
 	unsigned long ret;
 	struct mm_struct *mm = current->mm;
-	unsigned long populate;
+	unsigned long populate = 0;
 	LIST_HEAD(uf);
 
 	ret = security_mmap_file(file, prot, flag);
