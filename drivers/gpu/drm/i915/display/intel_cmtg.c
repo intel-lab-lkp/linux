@@ -161,45 +161,6 @@ void intel_cmtg_readout_hw_state(struct intel_display *display)
 	intel_cmtg_dump_state(display, cmtg_state);
 }
 
-static struct intel_cmtg_state *
-intel_atomic_get_cmtg_state(struct intel_atomic_state *state)
-{
-	struct intel_display *display = to_intel_display(state);
-	struct intel_global_state *obj_state =
-		intel_atomic_get_global_obj_state(state, &display->cmtg.obj);
-
-	if (IS_ERR(obj_state))
-		return ERR_CAST(obj_state);
-
-	return to_intel_cmtg_state(obj_state);
-}
-
-static struct intel_cmtg_state *
-intel_atomic_get_old_cmtg_state(struct intel_atomic_state *state)
-{
-	struct intel_display *display = to_intel_display(state);
-	struct intel_global_state *obj_state =
-		intel_atomic_get_old_global_obj_state(state, &display->cmtg.obj);
-
-	if (!obj_state)
-		return NULL;
-
-	return to_intel_cmtg_state(obj_state);
-}
-
-static struct intel_cmtg_state *
-intel_atomic_get_new_cmtg_state(struct intel_atomic_state *state)
-{
-	struct intel_display *display = to_intel_display(state);
-	struct intel_global_state *obj_state =
-		intel_atomic_get_new_global_obj_state(state, &display->cmtg.obj);
-
-	if (!obj_state)
-		return NULL;
-
-	return to_intel_cmtg_state(obj_state);
-}
-
 static bool intel_cmtg_state_changed(struct intel_cmtg_state *old_cmtg_state,
 				     struct intel_cmtg_state *new_cmtg_state)
 {
@@ -212,89 +173,18 @@ static bool intel_cmtg_state_changed(struct intel_cmtg_state *old_cmtg_state,
 		old_cmtg_state->trans_b_secondary != new_cmtg_state->trans_b_secondary;
 }
 
-static int intel_cmtg_check_modeset(struct intel_atomic_state *state,
-				    struct intel_cmtg_state *old_cmtg_state,
-				    struct intel_cmtg_state *new_cmtg_state)
+static void intel_cmtg_state_set_disabled(struct intel_cmtg_state *cmtg_state)
 {
-	struct intel_display *display = to_intel_display(state);
-	u8 pipe_mask;
-
-	if (!intel_cmtg_requires_modeset(display))
-		return 0;
-
-	pipe_mask = 0;
-
-	if (old_cmtg_state->trans_a_secondary != new_cmtg_state->trans_a_secondary)
-		pipe_mask |= BIT(PIPE_A);
-
-	if (old_cmtg_state->trans_b_secondary != new_cmtg_state->trans_b_secondary)
-		pipe_mask |= BIT(PIPE_B);
-
-	if (!pipe_mask)
-		return 0;
-
-	return intel_modeset_pipes_in_mask_early(state, "updating CMTG config", pipe_mask);
+	cmtg_state->cmtg_a_enable = false;
+	cmtg_state->cmtg_b_enable = false;
+	cmtg_state->trans_a_secondary = false;
+	cmtg_state->trans_b_secondary = false;
 }
 
-int intel_cmtg_force_disabled(struct intel_atomic_state *state)
+static void intel_cmtg_disable(struct intel_display *display,
+			       struct intel_cmtg_state *old_cmtg_state,
+			       struct intel_cmtg_state *new_cmtg_state)
 {
-	struct intel_display *display = to_intel_display(state);
-	struct intel_cmtg_state *new_cmtg_state;
-
-	if (!HAS_CMTG(display))
-		return 0;
-
-	new_cmtg_state = intel_atomic_get_cmtg_state(state);
-	if (IS_ERR(new_cmtg_state))
-		return PTR_ERR(new_cmtg_state);
-
-	new_cmtg_state->cmtg_a_enable = false;
-	new_cmtg_state->cmtg_b_enable = false;
-	new_cmtg_state->trans_a_secondary = false;
-	new_cmtg_state->trans_b_secondary = false;
-
-	return 0;
-}
-
-int intel_cmtg_atomic_check(struct intel_atomic_state *state)
-{
-	struct intel_display *display = to_intel_display(state);
-	struct intel_cmtg_state *old_cmtg_state;
-	struct intel_cmtg_state *new_cmtg_state;
-	int ret;
-
-	if (!HAS_CMTG(display))
-		return 0;
-
-	old_cmtg_state = intel_atomic_get_old_cmtg_state(state);
-	new_cmtg_state = intel_atomic_get_new_cmtg_state(state);
-	if (!intel_cmtg_state_changed(old_cmtg_state, new_cmtg_state))
-		return 0;
-
-	ret = intel_cmtg_check_modeset(state, old_cmtg_state, new_cmtg_state);
-	if (ret)
-		return ret;
-
-	return intel_atomic_serialize_global_state(&new_cmtg_state->base);
-}
-
-/*
- * Access to CMTG registers require the PHY PLL that provides its clock to be
- * running (which is configured via CMTG_CLK_SEL). As such, this function needs
- * to be called before intel_commit_modeset_disables() to ensure that the PHY
- * PLL is still enabled when doing this.
- */
-void intel_cmtg_disable(struct intel_atomic_state *state)
-{
-	struct intel_display *display = to_intel_display(state);
-	struct intel_cmtg_state *old_cmtg_state;
-	struct intel_cmtg_state *new_cmtg_state;
-
-	if (!HAS_CMTG(display))
-		return;
-
-	old_cmtg_state = intel_atomic_get_old_cmtg_state(state);
-	new_cmtg_state = intel_atomic_get_new_cmtg_state(state);
 	if (!intel_cmtg_state_changed(old_cmtg_state, new_cmtg_state))
 		return;
 
@@ -319,4 +209,43 @@ void intel_cmtg_disable(struct intel_atomic_state *state)
 
 		intel_de_rmw(display, CMTG_CLK_SEL, clk_sel_clr, clk_sel_set);
 	}
+}
+
+static u32 intel_cmtg_modeset_crtc_mask(struct intel_display *display,
+					struct intel_cmtg_state *old_cmtg_state,
+					struct intel_cmtg_state *new_cmtg_state)
+{
+	u32 crtc_mask;
+
+	if (intel_cmtg_requires_modeset(display))
+		return 0;
+
+	crtc_mask = 0;
+
+	if (old_cmtg_state->trans_a_secondary != new_cmtg_state->trans_a_secondary)
+		crtc_mask |= drm_crtc_mask(&intel_crtc_for_pipe(display, PIPE_A)->base);
+
+	if (old_cmtg_state->trans_b_secondary != new_cmtg_state->trans_b_secondary)
+		crtc_mask |= drm_crtc_mask(&intel_crtc_for_pipe(display, PIPE_B)->base);
+
+	return crtc_mask;
+}
+
+/*
+ * Disable CMTG if enabled and return a mask of pipes that need to be disabled
+ * (for platforms where disabling the CMTG requires a modeset).
+ */
+u32 intel_cmtg_sanitize_state(struct intel_display *display)
+{
+	struct intel_cmtg_state *cmtg_state = to_intel_cmtg_state(display->cmtg.obj.state);
+	struct intel_cmtg_state old_cmtg_state;
+
+	if (!HAS_CMTG(display))
+		return 0;
+
+	old_cmtg_state = *cmtg_state;
+	intel_cmtg_state_set_disabled(cmtg_state);
+	intel_cmtg_disable(display, &old_cmtg_state, cmtg_state);
+
+	return intel_cmtg_modeset_crtc_mask(display, &old_cmtg_state, cmtg_state);
 }

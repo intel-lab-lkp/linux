@@ -6,14 +6,13 @@
 #ifndef __INTEL_CMTG_H__
 #define __INTEL_CMTG_H__
 
-struct intel_atomic_state;
+#include <linux/types.h>
+
 struct intel_display;
 struct intel_global_state;
 
 int intel_cmtg_init(struct intel_display *display);
 void intel_cmtg_readout_hw_state(struct intel_display *display);
-int intel_cmtg_force_disabled(struct intel_atomic_state *state);
-int intel_cmtg_atomic_check(struct intel_atomic_state *state);
-void intel_cmtg_disable(struct intel_atomic_state *state);
+u32 intel_cmtg_sanitize_state(struct intel_display *display);
 
 #endif /* __INTEL_CMTG_H__ */

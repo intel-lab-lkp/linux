@@ -474,10 +474,12 @@ static void intel_sanitize_fifo_underrun_reporting(const struct intel_crtc_state
 }
 
 static bool intel_sanitize_crtc(struct intel_crtc *crtc,
-				struct drm_modeset_acquire_ctx *ctx)
+				struct drm_modeset_acquire_ctx *ctx,
+				u32 force_off_crtc_mask)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 	struct intel_crtc_state *crtc_state = to_intel_crtc_state(crtc->base.state);
+	u32 crtc_mask = drm_crtc_mask(&crtc->base);
 	bool needs_link_reset;
 
 	if (crtc_state->hw.active) {
@@ -508,7 +510,8 @@ static bool intel_sanitize_crtc(struct intel_crtc *crtc,
 	 * Adjust the state of the output pipe according to whether we have
 	 * active connectors/encoders.
 	 */
-	if (!needs_link_reset && intel_crtc_has_encoders(crtc))
+	if (!(crtc_mask & force_off_crtc_mask) &&
+	    !needs_link_reset && intel_crtc_has_encoders(crtc))
 		return false;
 
 	intel_crtc_disable_noatomic(crtc, ctx);
@@ -526,7 +529,8 @@ static bool intel_sanitize_crtc(struct intel_crtc *crtc,
 }
 
 static void intel_sanitize_all_crtcs(struct drm_i915_private *i915,
-				     struct drm_modeset_acquire_ctx *ctx)
+				     struct drm_modeset_acquire_ctx *ctx,
+				     u32 force_off_crtc_mask)
 {
 	struct intel_crtc *crtc;
 	u32 crtcs_forced_off = 0;
@@ -546,7 +550,7 @@ static void intel_sanitize_all_crtcs(struct drm_i915_private *i915,
 			if (crtcs_forced_off & crtc_mask)
 				continue;
 
-			if (intel_sanitize_crtc(crtc, ctx))
+			if (intel_sanitize_crtc(crtc, ctx, force_off_crtc_mask))
 				crtcs_forced_off |= crtc_mask;
 		}
 		if (crtcs_forced_off == old_mask)
@@ -967,6 +971,7 @@ void intel_modeset_setup_hw_state(struct drm_i915_private *i915,
 	struct intel_encoder *encoder;
 	struct intel_crtc *crtc;
 	intel_wakeref_t wakeref;
+	u32 force_off_crtc_mask;
 
 	wakeref = intel_display_power_get(i915, POWER_DOMAIN_INIT);
 
@@ -1009,7 +1014,9 @@ void intel_modeset_setup_hw_state(struct drm_i915_private *i915,
 	 */
 	intel_modeset_update_connector_atomic_state(i915);
 
-	intel_sanitize_all_crtcs(i915, ctx);
+	force_off_crtc_mask = intel_cmtg_sanitize_state(display);
+
+	intel_sanitize_all_crtcs(i915, ctx, force_off_crtc_mask);
 
 	intel_dpll_sanitize_state(i915);
 
