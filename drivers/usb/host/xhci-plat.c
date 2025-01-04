@@ -328,6 +328,9 @@ int xhci_plat_probe(struct platform_device *pdev, struct device *sysdev, const s
 	if (usb3_hcd && HCC_MAX_PSA(xhci->hcc_params) >= 4)
 		usb3_hcd->can_do_streams = 1;
 
+	xhci->shared_hcd->rsrc_start = hcd->rsrc_start;
+	xhci->shared_hcd->rsrc_len = hcd->rsrc_len;
+
 	if (xhci->shared_hcd) {
 		ret = usb_add_hcd(xhci->shared_hcd, irq, IRQF_SHARED);
 		if (ret)
