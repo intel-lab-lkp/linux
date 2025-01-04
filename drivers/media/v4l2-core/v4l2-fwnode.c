@@ -121,6 +121,70 @@ v4l2_fwnode_mbus_type_to_string(enum v4l2_mbus_type type)
 	return conv ? conv->name : "not found";
 }
 
+static const struct v4l2_fwnode_csi2_cphy_line_orders_conv {
+	enum v4l2_fwnode_csi2_cphy_line_orders_type fwnode_order;
+	enum v4l2_mbus_csi2_cphy_line_orders_type mbus_order;
+	const char *name;
+} csi2_cphy_line_orders[] = {
+	{
+		V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_ABC,
+		V4L2_MBUS_CSI2_CPHY_LINE_ORDER_ABC,
+		"ABC",
+	}, {
+		V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_ACB,
+		V4L2_MBUS_CSI2_CPHY_LINE_ORDER_ACB,
+		"ACB",
+	}, {
+		V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_BAC,
+		V4L2_MBUS_CSI2_CPHY_LINE_ORDER_BAC,
+		"BAC",
+	}, {
+		V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_BCA,
+		V4L2_MBUS_CSI2_CPHY_LINE_ORDER_BCA,
+		"BCA",
+	}, {
+		V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_CAB,
+		V4L2_MBUS_CSI2_CPHY_LINE_ORDER_CAB,
+		"CAB",
+	}, {
+		V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_CBA,
+		V4L2_MBUS_CSI2_CPHY_LINE_ORDER_CBA,
+		"CBA",
+	}
+};
+
+static const struct v4l2_fwnode_csi2_cphy_line_orders_conv *
+get_v4l2_fwnode_line_order_conv_by_fwnode_order(enum v4l2_fwnode_csi2_cphy_line_orders_type order)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(csi2_cphy_line_orders); i++)
+		if (csi2_cphy_line_orders[i].fwnode_order == order)
+			return &csi2_cphy_line_orders[i];
+
+	/* The default line order is ABC */
+	pr_warn("invalid line-order assuming ABC (got %u)\n", order);
+	return &csi2_cphy_line_orders[0];
+}
+
+static enum v4l2_mbus_csi2_cphy_line_orders_type
+v4l2_fwnode_line_order_to_mbus(enum v4l2_fwnode_csi2_cphy_line_orders_type order)
+{
+	const struct v4l2_fwnode_csi2_cphy_line_orders_conv *conv =
+		get_v4l2_fwnode_line_order_conv_by_fwnode_order(order);
+
+	return conv->mbus_order;
+}
+
+static const char *
+v4l2_fwnode_line_order_to_string(enum v4l2_fwnode_csi2_cphy_line_orders_type order)
+{
+	const struct v4l2_fwnode_csi2_cphy_line_orders_conv *conv =
+		get_v4l2_fwnode_line_order_conv_by_fwnode_order(order);
+
+	return conv->name;
+}
+
 static int v4l2_fwnode_endpoint_parse_csi2_bus(struct fwnode_handle *fwnode,
 					       struct v4l2_fwnode_endpoint *vep,
 					       enum v4l2_mbus_type bus_type)
@@ -268,21 +332,9 @@ static int v4l2_fwnode_endpoint_parse_csi2_bus(struct fwnode_handle *fwnode,
 						       num_data_lanes);
 
 			for (i = 0; i < num_data_lanes; i++) {
-				static const char * const orders[] = {
-					"ABC", "ACB", "BAC", "BCA", "CAB", "CBA"
-				};
-
-				if (array[i] >= ARRAY_SIZE(orders)) {
-					pr_warn("lane %u invalid line-order assuming ABC (got %u)\n",
-						i, array[i]);
-					bus->line_orders[i] =
-						V4L2_MBUS_CSI2_CPHY_LINE_ORDER_ABC;
-					continue;
-				}
-
-				bus->line_orders[i] = array[i];
+				bus->line_orders[i] = v4l2_fwnode_line_order_to_mbus(array[i]);
 				pr_debug("lane %u line order %s", i,
-					 orders[array[i]]);
+					 v4l2_fwnode_line_order_to_string(array[i]));
 			}
 		} else {
 			for (i = 0; i < num_data_lanes; i++)
