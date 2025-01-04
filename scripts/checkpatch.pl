@@ -6685,11 +6685,17 @@ sub process {
 			     "__smp memory barriers shouldn't be used outside barrier.h and asm-generic\n" . $herecurr);
 		}
 
-# check for waitqueue_active without a comment.
-		if ($line =~ /\bwaitqueue_active\s*\(/) {
+# check for functions that are only safe with memory barriers without a comment.
+		my $need_barriers = qr{
+			waitqueue_active|
+			wq_has_sleeper|
+			spin_is_locked
+		}x;
+
+		if ($line =~ /\b(?:$need_barriers)\s*\(/) {
 			if (!ctx_has_comment($first_line, $linenr)) {
-				WARN("WAITQUEUE_ACTIVE",
-				     "waitqueue_active without comment\n" . $herecurr);
+				WARN("NEED_MEMORY_BARRIERS",
+				     "function that usually depend on manual memory barriers without comment\n" . $herecurr);
 			}
 		}
 
