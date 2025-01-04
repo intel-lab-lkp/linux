@@ -1553,12 +1553,16 @@ static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
 	return 0;
 }
 
-static int br_dev_newlink(struct net *src_net, struct net_device *dev,
-			  struct nlattr *tb[], struct nlattr *data[],
-			  struct netlink_ext_ack *extack)
+static int br_dev_newlink(struct rtnl_newlink_params *params)
 {
-	struct net_bridge *br = netdev_priv(dev);
+	struct netlink_ext_ack *extack = params->extack;
+	struct net_device *dev = params->dev;
+	struct nlattr **data = params->data;
+	struct nlattr **tb = params->tb;
+	struct net_bridge *br;
 	int err;
+
+	br = netdev_priv(dev);
 
 	err = register_netdevice(dev);
 	if (err)
