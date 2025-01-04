@@ -20,6 +20,7 @@
  */
 
 #include <linux/usb.h>
+#include <linux/usb/audio-v3.h>
 #include <linux/usb/hcd.h>
 #include <uapi/linux/usb/audio.h>
 #include "usb.h"
@@ -48,9 +49,11 @@ static bool is_audio(struct usb_interface_descriptor *desc)
 	return desc->bInterfaceClass == USB_CLASS_AUDIO;
 }
 
-static bool is_uac3_config(struct usb_interface_descriptor *desc)
+static bool is_full_uac3(struct usb_interface_assoc_descriptor *assoc)
 {
-	return desc->bInterfaceProtocol == UAC_VERSION_3;
+	return assoc->bFunctionClass == USB_CLASS_AUDIO
+		&& assoc->bFunctionSubClass == UAC3_FUNCTION_SUBCLASS_FULL_ADC_3_0
+		&& assoc->bFunctionProtocol == UAC_VERSION_3;
 }
 
 int usb_choose_configuration(struct usb_device *udev)
@@ -84,6 +87,8 @@ int usb_choose_configuration(struct usb_device *udev)
 	num_configs = udev->descriptor.bNumConfigurations;
 	for (i = 0; i < num_configs; (i++, c++)) {
 		struct usb_interface_descriptor	*desc = NULL;
+		/* first IAD if present, else NULL */
+		struct usb_interface_assoc_descriptor *assoc = c->intf_assoc[0];
 
 		/* It's possible that a config has no interfaces! */
 		if (c->desc.bNumInterfaces > 0)
@@ -137,17 +142,21 @@ int usb_choose_configuration(struct usb_device *udev)
 		/*
 		 * Select first configuration as default for audio so that
 		 * devices that don't comply with UAC3 protocol are supported.
-		 * But, still iterate through other configurations and
-		 * select UAC3 compliant config if present.
+		 * But, still iterate through other configurations and select
+		 * full UAC3 compliant config if present. (If the only UAC3
+		 * config is a BADD, we will instead select the first config,
+		 * which should be UAC1/2.)
 		 */
 		if (desc && is_audio(desc)) {
-			/* Always prefer the first found UAC3 config */
-			if (is_uac3_config(desc)) {
+			/* Always prefer the first found full UAC3 config */
+			if (assoc != NULL && is_full_uac3(assoc)) {
 				best = c;
 				break;
 			}
-
-			/* If there is no UAC3 config, prefer the first config */
+			/*
+			 * If there is no full UAC3 config, prefer the first
+			 * config.
+			 */
 			else if (i == 0)
 				best = c;
 
