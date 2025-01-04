@@ -25,6 +25,7 @@
 #include "intel_bios.h"
 #include "intel_bw.h"
 #include "intel_cdclk.h"
+#include "intel_cmtg.h"
 #include "intel_color.h"
 #include "intel_crtc.h"
 #include "intel_display_debugfs.h"
@@ -266,6 +267,10 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 		goto cleanup_vga_client_pw_domain_dmc;
 
 	ret = intel_pmdemand_init(i915);
+	if (ret)
+		goto cleanup_vga_client_pw_domain_dmc;
+
+	ret = intel_cmtg_init(display);
 	if (ret)
 		goto cleanup_vga_client_pw_domain_dmc;
 

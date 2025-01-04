@@ -62,6 +62,7 @@
 #include "intel_bw.h"
 #include "intel_cdclk.h"
 #include "intel_clock_gating.h"
+#include "intel_cmtg.h"
 #include "intel_color.h"
 #include "intel_crt.h"
 #include "intel_crtc.h"
@@ -6828,6 +6829,10 @@ int intel_atomic_check(struct drm_device *dev,
 	if (ret)
 		goto fail;
 
+	ret = intel_cmtg_atomic_check(state);
+	if (ret)
+		goto fail;
+
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
 		if (!intel_crtc_needs_modeset(new_crtc_state))
 			continue;
@@ -7757,6 +7762,8 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 			intel_modeset_get_crtc_power_domains(new_crtc_state, &put_domains[crtc->pipe]);
 	}
 
+	intel_cmtg_disable(state);
+
 	intel_commit_modeset_disables(state);
 
 	intel_dp_tunnel_atomic_alloc_bw(state);
@@ -8581,6 +8588,10 @@ retry:
 			}
 		}
 	}
+
+	ret = intel_cmtg_force_disabled(to_intel_atomic_state(state));
+	if (ret)
+		goto out;
 
 	ret = drm_atomic_commit(state);
 

@@ -15,6 +15,7 @@
 #include "i9xx_wm.h"
 #include "intel_atomic.h"
 #include "intel_bw.h"
+#include "intel_cmtg.h"
 #include "intel_color.h"
 #include "intel_crtc.h"
 #include "intel_crtc_state_dump.h"
@@ -906,6 +907,8 @@ static void intel_modeset_readout_hw_state(struct drm_i915_private *i915)
 	}
 
 	intel_pmdemand_init_pmdemand_params(i915, pmdemand_state);
+
+	intel_cmtg_readout_hw_state(display);
 }
 
 static void
