@@ -444,7 +444,7 @@ static void unlist_netdevice(struct net_device *dev)
  *	Our notifier list
  */
 
-static RAW_NOTIFIER_HEAD(netdev_chain);
+static BLOCKING_NOTIFIER_HEAD(netdev_chain);
 
 /*
  *	Device drivers call our routines to queue packets here. We empty the
@@ -1770,7 +1770,7 @@ int register_netdevice_notifier(struct notifier_block *nb)
 	/* Close race with setup_net() and cleanup_net() */
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock();
-	err = raw_notifier_chain_register(&netdev_chain, nb);
+	err = blocking_notifier_chain_register(&netdev_chain, nb);
 	if (err)
 		goto unlock;
 	if (dev_boot_phase)
@@ -1790,7 +1790,7 @@ rollback:
 	for_each_net_continue_reverse(net)
 		call_netdevice_unregister_net_notifiers(nb, net);
 
-	raw_notifier_chain_unregister(&netdev_chain, nb);
+	blocking_notifier_chain_unregister(&netdev_chain, nb);
 	goto unlock;
 }
 EXPORT_SYMBOL(register_netdevice_notifier);
@@ -1817,7 +1817,7 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 	/* Close race with setup_net() and cleanup_net() */
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock();
-	err = raw_notifier_chain_unregister(&netdev_chain, nb);
+	err = blocking_notifier_chain_unregister(&netdev_chain, nb);
 	if (err)
 		goto unlock;
 
@@ -1993,7 +1993,7 @@ int call_netdevice_notifiers_info(unsigned long val,
 	ret = raw_notifier_call_chain(&net->netdev_chain, val, info);
 	if (ret & NOTIFY_STOP_MASK)
 		return ret;
-	return raw_notifier_call_chain(&netdev_chain, val, info);
+	return blocking_notifier_call_chain(&netdev_chain, val, info);
 }
 
 /**
