@@ -623,7 +623,46 @@ static struct device_node *__of_get_next_child(const struct device_node *node,
 	     child = __of_get_next_child(parent, child))
 
 /**
- * of_get_next_child - Iterate a node childs
+ * of_get_next_child_by_id - Iterate a node's children in order of id
+ * @node:	parent node
+ * @prev:	previous child of the parent node, or NULL to get first
+ *
+ * Return: A node pointer with refcount incremented, use of_node_put() on
+ * it when done. Returns NULL when prev is the last child. Decrements the
+ * refcount of prev.
+ */
+struct device_node *of_get_next_child_by_id(const struct device_node *node,
+						struct device_node *prev)
+{
+	struct device_node *next = NULL;
+	u32 next_id = U32_MAX;
+	u32 prev_id, this_id;
+	unsigned long flags;
+
+	if (!node || !(node->child))
+		return NULL;
+
+	if (prev)
+		of_property_read_u32(prev, "reg", &prev_id);
+
+	for_each_child_of_node_scoped(node, child) {
+		of_property_read_u32(child, "reg", &this_id);
+		if ((!prev || (this_id > prev_id)) && this_id < next_id) {
+			next = child;
+			next_id = this_id;
+		}
+	}
+
+	raw_spin_lock_irqsave(&devtree_lock, flags);
+	of_node_get(next);
+	of_node_put(prev);
+	raw_spin_unlock_irqrestore(&devtree_lock, flags);
+	return next;
+}
+EXPORT_SYMBOL(of_get_next_child_by_id);
+
+/**
+ * of_get_next_child - Iterate a node's children
  * @node:	parent node
  * @prev:	previous child of the parent node, or NULL to get first
  *

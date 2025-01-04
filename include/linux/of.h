@@ -289,6 +289,8 @@ extern struct device_node *of_get_parent(const struct device_node *node);
 extern struct device_node *of_get_next_parent(struct device_node *node);
 extern struct device_node *of_get_next_child(const struct device_node *node,
 					     struct device_node *prev);
+extern struct device_node *of_get_next_child_by_id(const struct device_node *node,
+					     struct device_node *prev);
 extern struct device_node *of_get_next_child_with_prefix(const struct device_node *node,
 							 struct device_node *prev,
 							 const char *prefix);
@@ -540,6 +542,12 @@ static inline struct device_node *of_get_next_parent(struct device_node *node)
 }
 
 static inline struct device_node *of_get_next_child(
+	const struct device_node *node, struct device_node *prev)
+{
+	return NULL;
+}
+
+static inline struct device_node *of_get_next_child_by_id(
 	const struct device_node *node, struct device_node *prev)
 {
 	return NULL;
@@ -1470,6 +1478,10 @@ static inline int of_property_read_s32(const struct device_node *np,
 	     of_get_next_child(parent, NULL);				\
 	     child != NULL;						\
 	     child = of_get_next_child(parent, child))
+
+#define for_each_child_of_node_by_id(parent, child) \
+	for (child = of_get_next_child_by_id(parent, NULL); child != NULL; \
+	     child = of_get_next_child_by_id(parent, child))
 
 #define for_each_child_of_node_with_prefix(parent, child, prefix)	\
 	for (struct device_node *child __free(device_node) =		\
