@@ -103,6 +103,15 @@ progs/btf_dump_test_case_packing.c-bpf_gcc-CFLAGS := -Wno-error
 progs/btf_dump_test_case_padding.c-bpf_gcc-CFLAGS := -Wno-error
 progs/btf_dump_test_case_syntax.c-bpf_gcc-CFLAGS := -Wno-error
 
+# Uninitialized variable warning on BPF_RAW_INSN
+progs/verifier_bpf_fastcall.c-CFLAGS := -Wno-error
+progs/verifier_search_pruning.c-CFLAGS := -Wno-error
+
+# int64_t declaration collision
+progs/test_cls_redirect.c-CFLAGS := -nostdinc
+progs/test_cls_redirect_dynptr.c-CFLAGS := -nostdinc
+progs/test_cls_redirect_subprogs.c-CFLAGS := -nostdinc
+
 # The following tests do type-punning, via the __imm_insn macro, from
 # `struct bpf_insn' to long and then uses the value.  This triggers an
 # "is used uninitialized" warning in GCC due to strict-aliasing
@@ -507,7 +516,7 @@ endef
 # Build BPF object using GCC
 define GCC_BPF_BUILD_RULE
 	$(call msg,GCC-BPF,$4,$2)
-	$(Q)$(BPF_GCC) $3 -DBPF_NO_PRESERVE_ACCESS_INDEX -Wno-attributes -O2 -c $1 -o $2
+	$(Q)$(BPF_GCC) $3 -DBPF_NO_PRESERVE_ACCESS_INDEX -Wno-attributes -O2 -std=gnu17 -c $1 -o $2
 endef
 
 SKEL_BLACKLIST := btf__% test_pinning_invalid.c test_sk_assign.c
