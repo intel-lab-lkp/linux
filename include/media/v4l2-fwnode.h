@@ -181,6 +181,24 @@ enum v4l2_fwnode_bus_type {
 };
 
 /**
+ * enum v4l2_fwnode_csi2_cphy_line_orders_type - CSI-2 C-PHY line order
+ * @V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_ABC: C-PHY line order ABC
+ * @V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_ACB: C-PHY line order ACB
+ * @V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_BAC: C-PHY line order BAC
+ * @V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_BCA: C-PHY line order BCA
+ * @V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_CAB: C-PHY line order CAB
+ * @V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_CBA: C-PHY line order CBA
+ */
+enum v4l2_fwnode_csi2_cphy_line_orders_type {
+	V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_ABC = 0,
+	V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_ACB,
+	V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_BAC,
+	V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_BCA,
+	V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_CAB,
+	V4L2_FWNODE_CSI2_CPHY_LINE_ORDER_CBA
+};
+
+/**
  * v4l2_fwnode_endpoint_parse() - parse all fwnode node properties
  * @fwnode: pointer to the endpoint's fwnode handle
  * @vep: pointer to the V4L2 fwnode data structure
