@@ -658,7 +658,7 @@ struct device_node *of_graph_get_next_port(const struct device_node *parent,
 	}
 
 	do {
-		prev = of_get_next_child(parent, prev);
+		prev = of_get_next_child_by_id(parent, prev);
 		if (!prev)
 			break;
 	} while (!of_node_name_eq(prev, "port"));
@@ -680,7 +680,7 @@ struct device_node *of_graph_get_next_port_endpoint(const struct device_node *po
 						    struct device_node *prev)
 {
 	while (1) {
-		prev = of_get_next_child(port, prev);
+		prev = of_get_next_child_by_id(port, prev);
 		if (!prev)
 			break;
 		if (WARN(!of_node_name_eq(prev, "endpoint"),
