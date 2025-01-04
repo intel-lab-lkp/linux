@@ -19,7 +19,7 @@
 
 / {
 	model = "NXP i.MX95 19X19 board";
-	compatible = "fsl,imx95-19x19-evk", "fsl,imx95";
+	compatible = "fsl,imx95-19x19-evk", "fsl,imx95", "fsl,imx-sm";
 
 	aliases {
 		gpio0 = &gpio1;
