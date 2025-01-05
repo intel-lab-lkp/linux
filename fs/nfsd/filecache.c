@@ -543,11 +543,18 @@ nfsd_file_gc(void)
 {
 	LIST_HEAD(dispose);
 	unsigned long ret;
+	unsigned long cnt = list_lru_count(&nfsd_file_lru);
 
-	ret = list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb,
-			    &dispose, list_lru_count(&nfsd_file_lru));
-	trace_nfsd_file_gc_removed(ret, list_lru_count(&nfsd_file_lru));
-	nfsd_file_dispose_list_delayed(&dispose);
+	while (cnt > 0) {
+		unsigned long num_to_scan = min(cnt, 1024UL);
+		ret = list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb,
+				    &dispose, num_to_scan);
+		trace_nfsd_file_gc_removed(ret, list_lru_count(&nfsd_file_lru));
+		nfsd_file_dispose_list_delayed(&dispose);
+		cnt -= num_to_scan;
+		if (cnt)
+			cond_resched();
+	}
 }
 
 static void
