@@ -255,6 +255,7 @@ locomo_init_one_child(struct locomo *lchip, struct locomo_dev_info *info)
 
 	ret = device_register(&dev->dev);
 	if (ret) {
+		put_device(&dev->dev);
  out:
 		kfree(dev);
 	}
