@@ -342,6 +342,10 @@ static const struct {
 		.name = "MIPC",
 		.devsuf = "mipc",
 	},
+	[WWAN_PORT_NMEA] = {
+		.name = "NMEA",
+		.devsuf = "nmea",
+	},
 };
 
 static ssize_t type_show(struct device *dev, struct device_attribute *attr,
