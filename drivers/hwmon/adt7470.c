@@ -54,6 +54,7 @@ static const unsigned short normal_i2c[] = { 0x2C, 0x2E, 0x2F, I2C_CLIENT_END };
 #define		ADT7470_R8T_ALARM		0x01
 #define		ADT7470_R9T_ALARM		0x02
 #define		ADT7470_R10T_ALARM		0x04
+#define		ADT7470_NORM_ALARM		0x08
 #define		ADT7470_FAN1_ALARM		0x10
 #define		ADT7470_FAN2_ALARM		0x20
 #define		ADT7470_FAN3_ALARM		0x40
@@ -531,6 +532,18 @@ static ssize_t num_temp_sensors_store(struct device *dev,
 	mutex_unlock(&data->lock);
 
 	return count;
+}
+
+static ssize_t temp_fan_norm_alarm_show(struct device *dev,
+				     struct device_attribute *devattr,
+				     char *buf)
+{
+	struct adt7470_data *data = adt7470_update_device(dev);
+
+	if (IS_ERR(data))
+		return PTR_ERR(data);
+
+	return sprintf(buf, "%d\n", !!(data->alarm & (ADT7470_NORM_ALARM << 8)));
 }
 
 static int adt7470_temp_read(struct device *dev, u32 attr, int channel, long *val)
@@ -1080,6 +1093,7 @@ static ssize_t pwm_auto_temp_store(struct device *dev,
 static DEVICE_ATTR_RW(alarm_mask);
 static DEVICE_ATTR_RW(num_temp_sensors);
 static DEVICE_ATTR_RW(auto_update_interval);
+static DEVICE_ATTR_RO(temp_fan_norm_alarm);
 
 static SENSOR_DEVICE_ATTR_RW(force_pwm_max, force_pwm_max, 0);
 
@@ -1112,6 +1126,7 @@ static struct attribute *adt7470_attrs[] = {
 	&dev_attr_alarm_mask.attr,
 	&dev_attr_num_temp_sensors.attr,
 	&dev_attr_auto_update_interval.attr,
+	&dev_attr_temp_fan_norm_alarm.attr,
 	&sensor_dev_attr_force_pwm_max.dev_attr.attr,
 	&sensor_dev_attr_pwm1_auto_point1_pwm.dev_attr.attr,
 	&sensor_dev_attr_pwm2_auto_point1_pwm.dev_attr.attr,
