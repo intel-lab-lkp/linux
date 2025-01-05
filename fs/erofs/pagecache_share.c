@@ -22,6 +22,7 @@ struct erofs_pcshr_counter {
 
 struct erofs_pcshr_private {
 	char fprt[PCSHR_FPRT_MAXLEN];
+	struct mutex mutex;
 };
 
 static struct erofs_pcshr_counter mnt_counter = {
@@ -84,6 +85,7 @@ static int erofs_fprt_set(struct inode *inode, void *data)
 	if (!ano_private)
 		return -ENOMEM;
 	memcpy(ano_private, data, sizeof(size_t) + *(size_t *)data);
+	mutex_init(&ano_private->mutex);
 	inode->i_private = ano_private;
 	return 0;
 }
@@ -226,3 +228,64 @@ const struct file_operations erofs_pcshr_fops = {
 	.get_unmapped_area = thp_get_unmapped_area,
 	.splice_read	= filemap_splice_read,
 };
+
+int erofs_pcshr_read_begin(struct file *file, struct folio *folio)
+{
+	struct erofs_inode *vi;
+	struct erofs_pcshr_private *ano_private;
+
+	if (!(file && file->private_data))
+		return 0;
+
+	vi = file->private_data;
+	if (vi->ano_inode != file_inode(file))
+		return 0;
+
+	ano_private = vi->ano_inode->i_private;
+	mutex_lock(&ano_private->mutex);
+	folio->mapping->host = &vi->vfs_inode;
+	return 1;
+}
+
+void erofs_pcshr_read_end(struct file *file, struct folio *folio, int pcshr)
+{
+	struct erofs_pcshr_private *ano_private;
+
+	if (pcshr == 0)
+		return;
+
+	ano_private = file_inode(file)->i_private;
+	folio->mapping->host = file_inode(file);
+	mutex_unlock(&ano_private->mutex);
+}
+
+int erofs_pcshr_readahead_begin(struct readahead_control *rac)
+{
+	struct erofs_inode *vi;
+	struct file *file = rac->file;
+	struct erofs_pcshr_private *ano_private;
+
+	if (!(file && file->private_data))
+		return 0;
+
+	vi = file->private_data;
+	if (vi->ano_inode != file_inode(file))
+		return 0;
+
+	ano_private = file_inode(file)->i_private;
+	mutex_lock(&ano_private->mutex);
+	rac->mapping->host = &vi->vfs_inode;
+	return 1;
+}
+
+void erofs_pcshr_readahead_end(struct readahead_control *rac, int pcshr)
+{
+	struct erofs_pcshr_private *ano_private;
+
+	if (pcshr == 0)
+		return;
+
+	ano_private = file_inode(rac->file)->i_private;
+	rac->mapping->host = file_inode(rac->file);
+	mutex_unlock(&ano_private->mutex);
+}

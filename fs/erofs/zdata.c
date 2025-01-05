@@ -5,6 +5,7 @@
  * Copyright (C) 2022 Alibaba Cloud
  */
 #include "compress.h"
+#include "pagecache_share.h"
 #include <linux/psi.h>
 #include <linux/cpuhotplug.h>
 #include <trace/events/erofs.h>
@@ -1891,9 +1892,10 @@ static int z_erofs_read_folio(struct file *file, struct folio *folio)
 {
 	struct inode *const inode = folio->mapping->host;
 	struct z_erofs_decompress_frontend f = DECOMPRESS_FRONTEND_INIT(inode);
-	int err;
+	int err, pcshr;
 
 	trace_erofs_read_folio(folio, false);
+	pcshr = erofs_pcshr_read_begin(file, folio);
 	f.headoffset = (erofs_off_t)folio->index << PAGE_SHIFT;
 
 	z_erofs_pcluster_readmore(&f, NULL, true);
@@ -1909,6 +1911,7 @@ static int z_erofs_read_folio(struct file *file, struct folio *folio)
 
 	erofs_put_metabuf(&f.map.buf);
 	erofs_release_pages(&f.pagepool);
+	erofs_pcshr_read_end(file, folio, pcshr);
 	return err;
 }
 
@@ -1918,8 +1921,9 @@ static void z_erofs_readahead(struct readahead_control *rac)
 	struct z_erofs_decompress_frontend f = DECOMPRESS_FRONTEND_INIT(inode);
 	struct folio *head = NULL, *folio;
 	unsigned int nr_folios;
-	int err;
+	int err, pcshr;
 
+	pcshr = erofs_pcshr_readahead_begin(rac);
 	f.headoffset = readahead_pos(rac);
 
 	z_erofs_pcluster_readmore(&f, rac, true);
@@ -1947,6 +1951,7 @@ static void z_erofs_readahead(struct readahead_control *rac)
 	(void)z_erofs_runqueue(&f, nr_folios);
 	erofs_put_metabuf(&f.map.buf);
 	erofs_release_pages(&f.pagepool);
+	erofs_pcshr_readahead_end(rac, pcshr);
 }
 
 const struct address_space_operations z_erofs_aops = {

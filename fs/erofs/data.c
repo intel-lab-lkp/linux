@@ -5,6 +5,7 @@
  * Copyright (C) 2021, Alibaba Cloud
  */
 #include "internal.h"
+#include "pagecache_share.h"
 #include <linux/sched/mm.h>
 #include <trace/events/erofs.h>
 
@@ -370,12 +371,21 @@ int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
  */
 static int erofs_read_folio(struct file *file, struct folio *folio)
 {
-	return iomap_read_folio(folio, &erofs_iomap_ops);
+	int ret, pcshr;
+
+	pcshr = erofs_pcshr_read_begin(file, folio);
+	ret = iomap_read_folio(folio, &erofs_iomap_ops);
+	erofs_pcshr_read_end(file, folio, pcshr);
+	return ret;
 }
 
 static void erofs_readahead(struct readahead_control *rac)
 {
-	return iomap_readahead(rac, &erofs_iomap_ops);
+	int pcshr;
+
+	pcshr = erofs_pcshr_readahead_begin(rac);
+	iomap_readahead(rac, &erofs_iomap_ops);
+	erofs_pcshr_readahead_end(rac, pcshr);
 }
 
 static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
