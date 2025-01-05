@@ -16,10 +16,10 @@
 
 #define ipt_ecn_info xt_ecn_info
 
-#define IPT_ECN_OP_SET_IP	0x01	/* set ECN bits of IPv4 header */
-#define IPT_ECN_OP_SET_ECE	0x10	/* set ECE bit of TCP header */
-#define IPT_ECN_OP_SET_CWR	0x20	/* set CWR bit of TCP header */
-#define IPT_ECN_OP_MASK		0xce
+#define IPT_ECN_OP_SET_IP	(0x01)	/* set ECN bits of IPv4 header */
+#define IPT_ECN_OP_SET_ECE	(0x10)	/* set ECE bit of TCP header */
+#define IPT_ECN_OP_SET_CWR	(0x20)	/* set CWR bit of TCP header */
+#define IPT_ECN_OP_MASK		(0xce)
 
 enum {
 	IPT_ECN_IP_MASK       = XT_ECN_IP_MASK,
