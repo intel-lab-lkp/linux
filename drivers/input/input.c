@@ -2395,8 +2395,10 @@ int input_register_device(struct input_dev *dev)
 		input_dev_poller_finalize(dev->poller);
 
 	error = device_add(&dev->dev);
-	if (error)
+	if (error) {
+		put_device(&dev->dev);
 		goto err_devres_free;
+	}
 
 	path = kobject_get_path(&dev->dev.kobj, GFP_KERNEL);
 	pr_info("%s as %s\n",
