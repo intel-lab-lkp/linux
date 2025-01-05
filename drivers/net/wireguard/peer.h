@@ -7,6 +7,7 @@
 #define _WG_PEER_H
 
 #include "device.h"
+#include "linux/siphash.h"
 #include "noise.h"
 #include "cookie.h"
 
@@ -15,6 +16,7 @@
 #include <linux/spinlock.h>
 #include <linux/kref.h>
 #include <net/dst_cache.h>
+#include <linux/rhashtable.h>
 
 struct wg_device;
 
@@ -48,7 +50,7 @@ struct wg_peer {
 	atomic64_t last_sent_handshake;
 	struct work_struct transmit_handshake_work, clear_peer_work, transmit_packet_work;
 	struct cookie latest_cookie;
-	struct hlist_node pubkey_hash;
+	struct rhash_head pubkey_hash;
 	u64 rx_bytes, tx_bytes;
 	struct timer_list timer_retransmit_handshake, timer_send_keepalive;
 	struct timer_list timer_new_handshake, timer_zero_key_material;

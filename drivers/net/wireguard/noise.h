@@ -5,6 +5,7 @@
 #ifndef _WG_NOISE_H
 #define _WG_NOISE_H
 
+#include "linux/siphash.h"
 #include "messages.h"
 #include "peerlookup.h"
 
@@ -74,7 +75,6 @@ struct noise_handshake {
 	u8 remote_static[NOISE_PUBLIC_KEY_LEN];
 	u8 remote_ephemeral[NOISE_PUBLIC_KEY_LEN];
 	u8 precomputed_static_static[NOISE_PUBLIC_KEY_LEN];
-
 	u8 preshared_key[NOISE_SYMMETRIC_KEY_LEN];
 
 	u8 hash[NOISE_HASH_LEN];
@@ -82,6 +82,8 @@ struct noise_handshake {
 
 	u8 latest_timestamp[NOISE_TIMESTAMP_LEN];
 	__le32 remote_index;
+
+	siphash_key_t hash_seed;
 
 	/* Protects all members except the immutable (after noise_handshake_
 	 * init): remote_static, precomputed_static_static, static_identity.

@@ -3,6 +3,8 @@
  * Copyright (C) 2015-2019 Jason A. Donenfeld <Jason@zx2c4.com>. All Rights Reserved.
  */
 
+#include "linux/rhashtable-types.h"
+#include "linux/rhashtable.h"
 #include "queueing.h"
 #include "socket.h"
 #include "timers.h"
@@ -261,6 +263,8 @@ static void wg_destruct(struct net_device *dev)
 	rcu_barrier(); /* Wait for all the peers to be actually freed. */
 	wg_ratelimiter_uninit();
 	memzero_explicit(&wg->static_identity, sizeof(wg->static_identity));
+	rhashtable_destroy(&wg->index_hashtable->rhashtable);
+	rhashtable_destroy(&wg->peer_hashtable->rhashtable);
 	kvfree(wg->index_hashtable);
 	kvfree(wg->peer_hashtable);
 	mutex_unlock(&wg->device_update_lock);
