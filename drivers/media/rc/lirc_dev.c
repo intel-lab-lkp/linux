@@ -765,6 +765,7 @@ int lirc_register(struct rc_dev *dev)
 	return 0;
 
 out_ida:
+	put_device(&dev->lirc_dev);
 	ida_free(&lirc_ida, minor);
 	return err;
 }
