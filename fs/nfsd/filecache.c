@@ -541,13 +541,19 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 static void
 nfsd_file_gc(void)
 {
+	unsigned long remaining = list_lru_count(&nfsd_file_lru);
 	LIST_HEAD(dispose);
 	unsigned long ret;
 
-	ret = list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb,
-			    &dispose, list_lru_count(&nfsd_file_lru));
-	trace_nfsd_file_gc_removed(ret, list_lru_count(&nfsd_file_lru));
-	nfsd_file_dispose_list_delayed(&dispose);
+	while (remaining > 0) {
+		unsigned long num_to_scan = min(remaining, NFSD_FILE_GC_BATCH);
+
+		ret = list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb,
+				    &dispose, num_to_scan);
+		trace_nfsd_file_gc_removed(ret, list_lru_count(&nfsd_file_lru));
+		nfsd_file_dispose_list_delayed(&dispose);
+		remaining -= num_to_scan;
+	}
 }
 
 static void
