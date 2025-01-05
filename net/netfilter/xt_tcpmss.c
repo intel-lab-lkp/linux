@@ -41,7 +41,7 @@ tcpmss_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct tcphdr *th;
 	struct tcphdr _tcph;
 	/* tcp.doff is only 4 bits, ie. max 15 * 4 bytes */
-	const u_int8_t *op;
+	const u8 *op;
 	u8 _opt[15 * 4 - sizeof(_tcph)];
 	unsigned int i, optlen;
 
@@ -116,9 +116,7 @@ optlen(const u8 *opt, unsigned int offset)
 		return opt[offset + 1];
 }
 
-static u_int32_t tcpmss_reverse_mtu(struct net *net,
-				    const struct sk_buff *skb,
-				    unsigned int family)
+static u32 tcpmss_reverse_mtu(struct net *net, const struct sk_buff *skb, unsigned int family)
 {
 	struct flowi fl;
 	struct rtable *rt = NULL;
@@ -191,7 +189,7 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 		newmss = info->mss;
 	}
 
-	opt = (u_int8_t *)tcph;
+	opt = (u8 *)tcph;
 	for (i = sizeof(struct tcphdr); i <= tcp_hdrlen - TCPOLEN_MSS; i += optlen(opt, i)) {
 		if (opt[i] == TCPOPT_MSS && opt[i + 1] == TCPOLEN_MSS) {
 			u16 oldmss;
@@ -251,7 +249,7 @@ tcpmss_mangle_packet(struct sk_buff *skb,
 	else
 		newmss = min(newmss, (u16)1220);
 
-	opt = (u_int8_t *)tcph + sizeof(struct tcphdr);
+	opt = (u8 *)tcph + sizeof(struct tcphdr);
 	memmove(opt + TCPOLEN_MSS, opt, len - sizeof(struct tcphdr));
 
 	inet_proto_csum_replace2(&tcph->check, skb,
