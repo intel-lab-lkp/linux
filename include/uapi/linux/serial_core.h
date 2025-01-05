@@ -231,6 +231,12 @@
 /* Sunplus UART */
 #define PORT_SUNPLUS	123
 
+/* Airoha UART */
+#define PORT_AIROHA	124
+
+/* Airoha HSUART */
+#define PORT_AIROHA_HS	125
+
 /* Generic type identifier for ports which type is not important to userspace. */
 #define PORT_GENERIC	(-1)
 

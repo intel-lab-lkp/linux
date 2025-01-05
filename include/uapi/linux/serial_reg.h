@@ -383,5 +383,14 @@
 #define UART_ALTR_EN_TXFIFO_LW	0x01	/* Enable the TX FIFO Low Watermark */
 #define UART_ALTR_TX_LOW	0x41	/* Tx FIFO Low Watermark */
 
+/*
+ * These are definitions for the Airoha UART
+ * Normalized because of 32 bit registers.
+ */
+#define UART_BRDL		0
+#define UART_BRDH		1
+#define UART_XINCLKDR		10
+#define UART_XYD		11
+
 #endif /* _LINUX_SERIAL_REG_H */
 
