@@ -5241,9 +5241,9 @@ int inet6_fill_ifmcaddr(struct sk_buff *skb,
 }
 EXPORT_SYMBOL(inet6_fill_ifmcaddr);
 
-static int inet6_fill_ifacaddr(struct sk_buff *skb,
-			       const struct ifacaddr6 *ifaca,
-			       struct inet6_fill_args *args)
+int inet6_fill_ifacaddr(struct sk_buff *skb,
+			const struct ifacaddr6 *ifaca,
+			struct inet6_fill_args *args)
 {
 	struct net_device *dev = fib6_info_nh_dev(ifaca->aca_rt);
 	int ifindex = dev ? dev->ifindex : 1;
