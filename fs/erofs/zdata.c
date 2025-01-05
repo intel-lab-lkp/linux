@@ -1921,9 +1921,10 @@ static void z_erofs_readahead(struct readahead_control *rac)
 	struct z_erofs_decompress_frontend f = DECOMPRESS_FRONTEND_INIT(inode);
 	struct folio *head = NULL, *folio;
 	unsigned int nr_folios;
+	unsigned long start;
 	int err, pcshr;
 
-	pcshr = erofs_pcshr_readahead_begin(rac);
+	pcshr = erofs_pcshr_readahead_begin(rac, &start);
 	f.headoffset = readahead_pos(rac);
 
 	z_erofs_pcluster_readmore(&f, rac, true);
@@ -1951,7 +1952,7 @@ static void z_erofs_readahead(struct readahead_control *rac)
 	(void)z_erofs_runqueue(&f, nr_folios);
 	erofs_put_metabuf(&f.map.buf);
 	erofs_release_pages(&f.pagepool);
-	erofs_pcshr_readahead_end(rac, pcshr);
+	erofs_pcshr_readahead_end(rac, pcshr, start);
 }
 
 const struct address_space_operations z_erofs_aops = {

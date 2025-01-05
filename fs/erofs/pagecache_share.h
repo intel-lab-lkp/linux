@@ -17,8 +17,10 @@ void erofs_pcshr_free_inode(struct inode *inode);
 /* switch between the anonymous inode and the real inode */
 int erofs_pcshr_read_begin(struct file *file, struct folio *folio);
 void erofs_pcshr_read_end(struct file *file, struct folio *folio, int pcshr);
-int erofs_pcshr_readahead_begin(struct readahead_control *rac);
-void erofs_pcshr_readahead_end(struct readahead_control *rac, int pcshr);
+int erofs_pcshr_readahead_begin(struct readahead_control *rac,
+                                unsigned long *start);
+void erofs_pcshr_readahead_end(struct readahead_control *rac, int pcshr,
+                               unsigned long start);
 
 #else
 
@@ -29,8 +31,8 @@ static inline void erofs_pcshr_free_inode(struct inode *inode) {}
 
 static inline int erofs_pcshr_read_begin(struct file *file, struct folio *folio) { return 0; }
 static inline void erofs_pcshr_read_end(struct file *file, struct folio *folio, int pcshr) {}
-static inline int erofs_pcshr_readahead_begin(struct readahead_control *rac) { return 0; }
-static inline void erofs_pcshr_readahead_end(struct readahead_control *rac, int pcshr) {}
+static inline int erofs_pcshr_readahead_begin(struct readahead_control *rac, unsigned long *start) { return 0; }
+static inline void erofs_pcshr_readahead_end(struct readahead_control *rac, int pcshr, unsigned long start) {}
 
 #endif // CONFIG_EROFS_FS_PAGE_CACHE_SHARE
 

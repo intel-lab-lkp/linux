@@ -382,10 +382,11 @@ static int erofs_read_folio(struct file *file, struct folio *folio)
 static void erofs_readahead(struct readahead_control *rac)
 {
 	int pcshr;
+	unsigned long start;
 
-	pcshr = erofs_pcshr_readahead_begin(rac);
+	pcshr = erofs_pcshr_readahead_begin(rac, &start);
 	iomap_readahead(rac, &erofs_iomap_ops);
-	erofs_pcshr_readahead_end(rac, pcshr);
+	erofs_pcshr_readahead_end(rac, pcshr, start);
 }
 
 static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
