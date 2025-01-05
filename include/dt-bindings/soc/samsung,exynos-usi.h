@@ -13,5 +13,8 @@
 #define USI_MODE_UART		1
 #define USI_MODE_SPI		2
 #define USI_MODE_I2C		3
+#define USI_MODE_I2C1		4
+#define USI_MODE_I2C0_1		5
+#define USI_MODE_UART_I2C1	6
 
 #endif /* __DT_BINDINGS_SAMSUNG_EXYNOS_USI_H */
