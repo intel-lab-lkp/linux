@@ -869,6 +869,7 @@ int __ethtool_get_ts_info(struct net_device *dev,
 			  struct kernel_ethtool_ts_info *info)
 {
 	struct hwtstamp_provider *hwprov;
+	int ret;
 
 	rcu_read_lock();
 	hwprov = rcu_dereference(dev->hwprov);
@@ -892,8 +893,9 @@ int __ethtool_get_ts_info(struct net_device *dev,
 		return err;
 	}
 
+	ret = ethtool_get_ts_info_by_phc(dev, info, &hwprov->desc);
 	rcu_read_unlock();
-	return ethtool_get_ts_info_by_phc(dev, info, &hwprov->desc);
+	return ret;
 }
 
 bool net_support_hwtstamp_qualifier(struct net_device *dev,
