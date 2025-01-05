@@ -551,7 +551,40 @@ static int adt7470_temp_read(struct device *dev, u32 attr, int channel, long *va
 		*val = 1000 * data->temp_max[channel];
 		break;
 	case hwmon_temp_alarm:
-		*val = !!(data->alarm & channel);
+		switch (channel) {
+		case 0:
+			*val = !!(data->alarm & ADT7470_R1T_ALARM);
+			break;
+		case 1:
+			*val = !!(data->alarm & ADT7470_R2T_ALARM);
+			break;
+		case 2:
+			*val = !!(data->alarm & ADT7470_R3T_ALARM);
+			break;
+		case 3:
+			*val = !!(data->alarm & ADT7470_R4T_ALARM);
+			break;
+		case 4:
+			*val = !!(data->alarm & ADT7470_R5T_ALARM);
+			break;
+		case 5:
+			*val = !!(data->alarm & ADT7470_R6T_ALARM);
+			break;
+		case 6:
+			*val = !!(data->alarm & ADT7470_R7T_ALARM);
+			break;
+		case 7:
+			*val = !!(data->alarm & (ADT7470_R8T_ALARM << 8));
+			break;
+		case 8:
+			*val = !!(data->alarm & (ADT7470_R9T_ALARM << 8));
+			break;
+		case 9:
+			*val = !!(data->alarm & (ADT7470_R10T_ALARM << 8));
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
 		break;
 	default:
 		return -EOPNOTSUPP;
@@ -648,7 +681,22 @@ static int adt7470_fan_read(struct device *dev, u32 attr, int channel, long *val
 			*val = 0;
 		break;
 	case hwmon_fan_alarm:
-		*val = !!(data->alarm & (1 << (12 + channel)));
+		switch (channel) {
+		case 0:
+			*val = !!(data->alarm & (ADT7470_FAN1_ALARM << 8));
+			break;
+		case 1:
+			*val = !!(data->alarm & (ADT7470_FAN2_ALARM << 8));
+			break;
+		case 2:
+			*val = !!(data->alarm & (ADT7470_FAN3_ALARM << 8));
+			break;
+		case 3:
+			*val = !!(data->alarm & (ADT7470_FAN4_ALARM << 8));
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
 		break;
 	default:
 		return -EOPNOTSUPP;
