@@ -274,10 +274,29 @@ bool using_native_sched_clock(void)
 {
 	return static_call_query(pv_sched_clock) == native_sched_clock;
 }
+
+/*
+ * Upgrade the clock rating for TSC early and regular clocksource when the
+ * underlying platform provides non-stop, invariant, and stable TSC. TSC
+ * early/regular clocksource will be preferred over other PV clock sources.
+ */
+static void __init upgrade_clock_rating(struct clocksource *tsc_early,
+					struct clocksource *tsc)
+{
+	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR) &&
+	    cpu_feature_enabled(X86_FEATURE_CONSTANT_TSC) &&
+	    cpu_feature_enabled(X86_FEATURE_NONSTOP_TSC) &&
+	    !tsc_unstable) {
+		tsc_early->rating = 449;
+		tsc->rating = 450;
+	}
+}
 #else
 u64 sched_clock_noinstr(void) __attribute__((alias("native_sched_clock")));
 
 bool using_native_sched_clock(void) { return true; }
+
+static void __init upgrade_clock_rating(struct clocksource *tsc_early, struct clocksource *tsc) { }
 #endif
 
 notrace u64 sched_clock(void)
@@ -1563,6 +1582,8 @@ void __init tsc_init(void)
 
 	if (tsc_clocksource_reliable || no_tsc_watchdog)
 		tsc_disable_clocksource_watchdog();
+
+	upgrade_clock_rating(&clocksource_tsc_early, &clocksource_tsc);
 
 	clocksource_register_khz(&clocksource_tsc_early, tsc_khz);
 	detect_art();
