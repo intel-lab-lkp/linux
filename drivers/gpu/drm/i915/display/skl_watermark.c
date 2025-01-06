@@ -2293,6 +2293,30 @@ static int icl_build_plane_wm(struct intel_crtc_state *crtc_state,
 }
 
 static int
+dsc_prefill_latency(const struct intel_crtc_state *crtc_state)
+{
+	const struct intel_crtc_scaler_state *scaler_state =
+					&crtc_state->scaler_state;
+	int hscale = scaler_state->scalers[0].hscale;
+	int vscale = scaler_state->scalers[0].vscale;
+
+	if (!crtc_state->dsc.compression_enable)
+		return 0;
+	/*
+	 * FIXME: CDCLK Prefill adjustment to add
+	 */
+	if (scaler_state->scaler_users) {
+		int chroma_downscaling_factor =
+			crtc_state->output_format == INTEL_OUTPUT_FORMAT_YCBCR444 ? 2 : 1;
+
+		return DIV_ROUND_UP(15 * crtc_state->linetime * hscale * vscale *
+				    chroma_downscaling_factor, 10);
+	}
+
+	return 0;
+}
+
+static int
 scaler_prefill_latency(const struct intel_crtc_state *crtc_state)
 {
 	const struct intel_crtc_scaler_state *scaler_state =
@@ -2333,6 +2357,7 @@ skl_is_vblank_too_short(const struct intel_crtc_state *crtc_state,
 	return crtc_state->framestart_delay +
 		intel_usecs_to_scanlines(adjusted_mode, latency) +
 		scaler_prefill_latency(crtc_state) +
+		dsc_prefill_latency(crtc_state) +
 		wm0_lines >
 		adjusted_mode->crtc_vtotal - adjusted_mode->crtc_vblank_start;
 }
