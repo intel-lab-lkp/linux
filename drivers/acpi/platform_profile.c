@@ -459,6 +459,29 @@ int platform_profile_cycle(void)
 }
 EXPORT_SYMBOL_GPL(platform_profile_cycle);
 
+int platform_profile_refresh_choices(struct platform_profile_handler *pprof)
+{
+	unsigned long backup[BITS_TO_LONGS(PLATFORM_PROFILE_LAST)];
+	int err;
+
+	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
+		bitmap_copy(backup, pprof->choices, PLATFORM_PROFILE_LAST);
+
+		err = pprof->ops->choices(pprof);
+		if (err) {
+			bitmap_copy(pprof->choices, backup, PLATFORM_PROFILE_LAST);
+			return err;
+		}
+
+		_notify_class_profile(pprof->class_dev, NULL);
+	}
+
+	sysfs_notify(acpi_kobj, NULL, "platform_profile");
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(platform_profile_refresh_choices);
+
 int platform_profile_register(struct platform_profile_handler *pprof)
 {
 	int err;

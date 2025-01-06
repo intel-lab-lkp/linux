@@ -50,6 +50,7 @@ int platform_profile_register(struct platform_profile_handler *pprof);
 int platform_profile_remove(struct platform_profile_handler *pprof);
 int devm_platform_profile_register(struct platform_profile_handler *pprof);
 int platform_profile_cycle(void);
+int platform_profile_refresh_choices(struct platform_profile_handler *pprof);
 void platform_profile_notify(struct platform_profile_handler *pprof);
 
 #endif  /*_PLATFORM_PROFILE_H_*/
