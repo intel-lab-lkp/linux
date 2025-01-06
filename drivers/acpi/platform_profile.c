@@ -464,13 +464,21 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	int err;
 
 	/* Sanity check the profile handler */
-	if (!pprof || bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST) ||
-	    !pprof->ops->set || !pprof->ops->get) {
+	if (!pprof || !pprof->ops->set || !pprof->ops->get || !pprof->ops->choices) {
 		pr_err("platform_profile: handler is invalid\n");
 		return -EINVAL;
 	}
 
 	guard(mutex)(&profile_lock);
+
+	err = pprof->ops->choices(pprof);
+	if (err < 0)
+		return err;
+
+	if (bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST)) {
+		pr_err("platform_profile: no available profiles\n");
+		return -EINVAL;
+	}
 
 	/* create class interface for individual handler */
 	pprof->minor = ida_alloc(&platform_profile_ida, GFP_KERNEL);
