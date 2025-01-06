@@ -41,6 +41,8 @@
 #define UVC_EXT_GPIO_UNIT		0x7ffe
 #define UVC_EXT_GPIO_UNIT_ID		0x100
 
+#define UVC_FIVAL_DENOM			10000000
+
 /* ------------------------------------------------------------------------
  * Driver specific constants.
  */

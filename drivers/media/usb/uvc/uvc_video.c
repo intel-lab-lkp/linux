@@ -231,7 +231,7 @@ static void uvc_fixup_video_ctrl(struct uvc_streaming *stream,
 		u32 interval;
 		u32 bandwidth;
 
-		interval = (ctrl->dwFrameInterval > 100000)
+		interval = (ctrl->dwFrameInterval > (UVC_FIVAL_DENOM / 100))
 			 ? ctrl->dwFrameInterval
 			 : frame->dwFrameInterval[0];
 
@@ -243,7 +243,7 @@ static void uvc_fixup_video_ctrl(struct uvc_streaming *stream,
 		 * header size (assumed to be 12 bytes long).
 		 */
 		bandwidth = frame->wWidth * frame->wHeight / 8 * format->bpp;
-		bandwidth *= 10000000 / interval + 1;
+		bandwidth *= UVC_FIVAL_DENOM / interval + 1;
 		bandwidth /= 1000;
 		if (stream->dev->udev->speed >= USB_SPEED_HIGH)
 			bandwidth /= 8;

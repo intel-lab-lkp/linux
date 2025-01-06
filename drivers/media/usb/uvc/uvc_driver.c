@@ -320,8 +320,8 @@ static int uvc_parse_frame(struct uvc_device *dev,
 
 	uvc_dbg(dev, DESCR, "- %ux%u (%u.%u fps)\n",
 		frame->wWidth, frame->wHeight,
-		10000000 / frame->dwDefaultFrameInterval,
-		(100000000 / frame->dwDefaultFrameInterval) % 10);
+		UVC_FIVAL_DENOM / frame->dwDefaultFrameInterval,
+		((UVC_FIVAL_DENOM * 10) / frame->dwDefaultFrameInterval) % 10);
 
 	*intervals += n;
 
