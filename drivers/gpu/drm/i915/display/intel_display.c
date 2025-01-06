@@ -55,6 +55,7 @@
 #include "i9xx_plane.h"
 #include "i9xx_plane_regs.h"
 #include "i9xx_wm.h"
+#include "intel_alpm.h"
 #include "intel_atomic.h"
 #include "intel_atomic_plane.h"
 #include "intel_audio.h"
@@ -1189,6 +1190,8 @@ static void intel_post_plane_update(struct intel_atomic_state *state,
 	enum pipe pipe = crtc->pipe;
 
 	intel_psr_post_plane_update(state, crtc);
+
+	intel_alpm_post_plane_update(state, crtc);
 
 	intel_frontbuffer_flip(dev_priv, new_crtc_state->fb_bits);
 
