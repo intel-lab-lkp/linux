@@ -695,10 +695,16 @@ static char *error_string(char *buf, char *end, const char *s,
  */
 static const char *check_pointer_msg(const void *ptr)
 {
+	char ch;
+
 	if (!ptr)
 		return "(null)";
 
 	if ((unsigned long)ptr < PAGE_SIZE || IS_ERR_VALUE(ptr))
+		return "(efault)";
+
+	/* Just test a single byte */
+	if (copy_from_kernel_nofault(&ch, ptr, 1) < 0)
 		return "(efault)";
 
 	return NULL;
