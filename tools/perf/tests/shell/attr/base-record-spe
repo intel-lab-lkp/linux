@@ -39,3 +39,4 @@ branch_sample_type=*
 sample_regs_user=*
 sample_stack_user=*
 alt_sample_period=0
+jitter_alt_period=0
