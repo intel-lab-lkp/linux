@@ -5357,6 +5357,11 @@ static int r8169_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 		raw = phy_read_paged(tp->phydev, 0xbd8, 0x12) & 0x3ff;
 		*val = r8169_hwmon_get_temp(raw);
 		break;
+	case hwmon_temp_max:
+		/* Chip reduces speed to 1G if threshold is exceeded */
+		raw = phy_read_paged(tp->phydev, 0xb54, 0x16) >> 6;
+		*val = r8169_hwmon_get_temp(raw);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -5370,7 +5375,7 @@ static const struct hwmon_ops r8169_hwmon_ops = {
 };
 
 static const struct hwmon_channel_info * const r8169_hwmon_info[] = {
-	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT),
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT | HWMON_T_MAX),
 	NULL
 };
 
