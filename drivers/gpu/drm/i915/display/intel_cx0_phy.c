@@ -2031,21 +2031,27 @@ intel_c10pll_tables_get(struct intel_crtc_state *crtc_state,
 	return NULL;
 }
 
+static void intel_cx0pll_update_ssc(struct intel_crtc_state *crtc_state,
+				    struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct intel_cx0pll_state *pll_state = &crtc_state->dpll_hw_state.cx0pll;
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		if (intel_panel_use_ssc(display)) {
+			struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+			pll_state->ssc_enabled =
+				(intel_dp->dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
+		}
+	}
+}
+
 static void intel_c10pll_update_pll(struct intel_crtc_state *crtc_state,
 				    struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
 	struct intel_cx0pll_state *pll_state = &crtc_state->dpll_hw_state.cx0pll;
 	int i;
-
-	if (intel_crtc_has_dp_encoder(crtc_state)) {
-		if (intel_panel_use_ssc(display)) {
-			struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
-
-			pll_state->ssc_enabled =
-				(intel_dp->dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
-		}
-	}
 
 	if (pll_state->ssc_enabled)
 		return;
@@ -2064,6 +2070,8 @@ static int intel_c10pll_calc_state(struct intel_crtc_state *crtc_state,
 	tables = intel_c10pll_tables_get(crtc_state, encoder);
 	if (!tables)
 		return -EINVAL;
+
+	intel_cx0pll_update_ssc(crtc_state, encoder);
 
 	for (i = 0; tables[i]; i++) {
 		if (crtc_state->port_clock == tables[i]->clock) {
@@ -2316,6 +2324,8 @@ static int intel_c20pll_calc_state(struct intel_crtc_state *crtc_state,
 	tables = intel_c20_pll_tables_get(crtc_state, encoder);
 	if (!tables)
 		return -EINVAL;
+
+	intel_cx0pll_update_ssc(crtc_state, encoder);
 
 	for (i = 0; tables[i]; i++) {
 		if (crtc_state->port_clock == tables[i]->clock) {
