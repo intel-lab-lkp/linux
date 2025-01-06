@@ -13,7 +13,9 @@
 #include "internal.h"
 #include <api/fs/fs.h>
 
+#ifndef MAX_NR_CPUS
 #define MAX_NR_CPUS 4096
+#endif
 
 void perf_cpu_map__set_nr(struct perf_cpu_map *map, int nr_cpus)
 {
