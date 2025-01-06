@@ -71,6 +71,10 @@ let barrier = fencerel(Barrier | Rmb | Wmb | Mb | Sync-rcu | Sync-srcu |
 		Rcu-lock | Rcu-unlock | Srcu-lock | Srcu-unlock) |
 	(po ; [Release]) | ([Acquire] ; po)
 
+let w_barrier = po? ; [F | Marked] ; po?
+let rmb-plain = [R4rmb] ; po ; [Rmb] ; (po \ (po ; [W] ; (po-loc \ w_barrier))) ; [R4rmb & Plain]
+let plain-wmb = [W & Plain] ; (po \ ((po-loc \ w_barrier) ; po ; [W] ; po)) ; [Wmb] ; po ; [W]
+
 (**********************************)
 (* Fundamental coherence ordering *)
 (**********************************)
@@ -90,7 +94,7 @@ empty rmw & (fre ; coe) as atomic
 let dep = addr | data
 let rwdep = (dep | ctrl) ; [W]
 let overwrite = co | fr
-let to-w = rwdep | (overwrite & int) | (addr ; [Plain] ; wmb)
+let to-w = ((addr | rmb-plain)? ; rwdep ; plain-wmb?) | (overwrite & int) | addr ; [Plain] ; wmb
 let to-r = (addr ; [R]) | (dep ; [Marked] ; rfi)
 let ppo = to-r | to-w | (fence & int) | (po-unlock-lock-po & int)
 
