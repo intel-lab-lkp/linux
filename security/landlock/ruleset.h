@@ -31,7 +31,7 @@
 	LANDLOCK_ACCESS_FS_REFER)
 /* clang-format on */
 
-typedef u16 access_mask_t;
+typedef u32 access_mask_t;
 /* Makes sure all filesystem access rights can be stored. */
 static_assert(BITS_PER_TYPE(access_mask_t) >= LANDLOCK_NUM_ACCESS_FS);
 /* Makes sure all network access rights can be stored. */
@@ -50,11 +50,11 @@ struct access_masks {
 
 union access_masks_all {
 	struct access_masks masks;
-	u32 all;
+	u64 all;
 };
 
 /* Makes sure all fields are covered. */
-static_assert(sizeof(typeof_member(union access_masks_all, masks)) ==
+static_assert(sizeof(typeof_member(union access_masks_all, masks)) <=
 	      sizeof(typeof_member(union access_masks_all, all)));
 
 typedef u16 layer_mask_t;
