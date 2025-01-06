@@ -10538,10 +10538,14 @@ unlock:
 	return err;
 }
 
+static const struct platform_profile_ops dytc_profile_ops = {
+	.get = dytc_profile_get,
+	.set = dytc_profile_set,
+};
+
 static struct platform_profile_handler dytc_profile = {
 	.name = "thinkpad-acpi",
-	.profile_get = dytc_profile_get,
-	.profile_set = dytc_profile_set,
+	.ops = &dytc_profile_ops,
 };
 
 static void dytc_profile_refresh(void)
