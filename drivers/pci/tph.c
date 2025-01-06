@@ -53,6 +53,36 @@ union st_info {
 	u64 value;
 };
 
+/*
+ * The tph_genl_dsm_info struct defines both the input and the return container
+ * for Generic Netlink interface of the TPH _DSM of PCIe root ports.
+ */
+struct tph_genl_dsm_info {
+	/* _DSM method identfier {GUID, REV, FUNCTION-INDEX}*/
+	struct acpi_genl_dsm_id id;
+	union {
+		struct {
+			/* bus, dev, devfn of the PCIe device */
+			int bus;
+			u32 dev;
+			u32 devfn;
+			/*
+			 * args for the TPH _DSM of the PCIe root-port of
+			 * the specified device.
+			 */
+			u32 pkg_arg0;
+			u32 pkg_arg1;
+			u64 pkg_arg2;
+		} arg;
+		struct {
+			/* return status */
+			int status;
+			/* st_info returned by the PCIe root-port TPH _DSM */
+			union st_info st;
+		} ret;
+	} info;
+};
+
 static u16 tph_extract_tag(enum tph_mem_type mem_type, u8 req_type,
 			   union st_info *info)
 {
@@ -130,6 +160,95 @@ static acpi_status tph_invoke_dsm(acpi_handle handle, u32 cpu_uid,
 
 	return AE_OK;
 }
+
+static int tph_invoke_dsm_genl_cb(struct acpi_genl_dsm_id *in,
+				  struct acpi_genl_dsm_id *out)
+{
+	struct pci_dev *pdev, *pdev_rp;
+	acpi_handle handle;
+	u32 cpu_uid;
+	int status = 0;
+
+	struct tph_genl_dsm_info *arg = (struct tph_genl_dsm_info *)in;
+	struct tph_genl_dsm_info *ret = (struct tph_genl_dsm_info *)out;
+
+	/* Honor  notph and acpi kernel parameters */
+	if (acpi_disabled || acpi_pci_disabled || pci_tph_disabled) {
+		status = -EINVAL;
+		goto out;
+	}
+
+	/*
+	 * pkg_arg1 contains the kernel logical CPU id provided by the user,
+	 * make sure it's a valid CPU id before passing it to down to firmware.
+	 * pkg_arg2 is not use by tph_invoke_dsm, hence no validation is
+	 * required.
+	 */
+	if (!(arg->info.arg.pkg_arg1 < nr_cpu_ids &&
+	    cpu_present(arg->info.arg.pkg_arg1))) {
+		status = -EINVAL;
+		goto out;
+	}
+
+	cpu_uid = topology_core_id(arg->info.arg.pkg_arg1);
+
+	ret->id.guid = pci_acpi_dsm_guid;
+	ret->id.rev = 7;
+	ret->id.func = TPH_ST_DSM_FUNC_INDEX;
+
+	pdev = pci_get_domain_bus_and_slot(arg->info.arg.bus, arg->info.arg.dev,
+					   arg->info.arg.devfn);
+	if (!pdev) {
+		status = -ENODEV;
+		goto out;
+	}
+
+	pdev_rp = pcie_find_root_port(pdev);
+	if (!pdev_rp || !pdev_rp->bus || !pdev_rp->bus->bridge) {
+		status = -ENODEV;
+		goto out;
+	}
+
+	handle = ACPI_HANDLE(pdev_rp->bus->bridge);
+
+	if (tph_invoke_dsm(handle, arg->info.arg.pkg_arg1, &ret->info.ret.st) !=
+			   AE_OK) {
+		status = -EOPNOTSUPP;
+		goto out;
+	}
+out:
+	ret->info.ret.status = status;
+	return 0;
+}
+
+static int tph_register_genl_cb(void)
+{
+	int err = 0;
+	struct acpi_genl_dsm_handle *handle =
+		kzalloc(sizeof(struct acpi_genl_dsm_handle), GFP_ATOMIC);
+	if (!handle) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	handle->id.guid = pci_acpi_dsm_guid;
+	handle->id.rev  = 7;
+	handle->id.func = TPH_ST_DSM_FUNC_INDEX;
+	handle->arg_len = sizeof(struct tph_genl_dsm_info);
+	handle->ret_len = sizeof(struct tph_genl_dsm_info);
+	handle->dsm_cb  = tph_invoke_dsm_genl_cb;
+	handle->cap     = CAP_SYS_ADMIN;
+
+	err = acpi_genl_dsm_add_handle(handle);
+	if (err) {
+		kfree(handle);
+		goto out;
+	}
+out:
+	return err;
+}
+
+late_initcall(tph_register_genl_cb);
 #endif
 
 /* Update the TPH Requester Enable field of TPH Control Register */
