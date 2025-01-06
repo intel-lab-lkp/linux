@@ -38,6 +38,7 @@ struct irq_domain_ops;
 #include <acpi/acpi_drivers.h>
 #include <acpi/acpi_io.h>
 #include <asm/acpi.h>
+#include <acpi/acpi_genl.h>
 
 #ifdef CONFIG_ACPI_TABLE_LIB
 #define EXPORT_SYMBOL_ACPI_LIB(x) EXPORT_SYMBOL_NS_GPL(x, "ACPI")
