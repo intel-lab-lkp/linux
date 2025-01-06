@@ -52,14 +52,8 @@ struct kmem_cache *xfs_buf_cache;
  *	  b_lock (trylock due to inversion)
  */
 
-static int __xfs_buf_submit(struct xfs_buf *bp, bool wait);
-
-static inline int
-xfs_buf_submit(
-	struct xfs_buf		*bp)
-{
-	return __xfs_buf_submit(bp, !(bp->b_flags & XBF_ASYNC));
-}
+static int xfs_buf_submit(struct xfs_buf *bp);
+static int xfs_buf_iowait(struct xfs_buf *bp);
 
 static inline bool xfs_buf_is_uncached(struct xfs_buf *bp)
 {
@@ -797,13 +791,18 @@ _xfs_buf_read(
 	struct xfs_buf		*bp,
 	xfs_buf_flags_t		flags)
 {
+	int			error;
+
 	ASSERT(!(flags & XBF_WRITE));
 	ASSERT(bp->b_maps[0].bm_bn != XFS_BUF_DADDR_NULL);
 
 	bp->b_flags &= ~(XBF_WRITE | XBF_ASYNC | XBF_READ_AHEAD | XBF_DONE);
 	bp->b_flags |= flags & (XBF_READ | XBF_ASYNC | XBF_READ_AHEAD);
 
-	return xfs_buf_submit(bp);
+	error = xfs_buf_submit(bp);
+	if (!error && !(flags & XBF_ASYNC))
+		error = xfs_buf_iowait(bp);
+	return error;
 }
 
 /*
@@ -978,9 +977,10 @@ xfs_buf_read_uncached(
 	bp->b_flags |= XBF_READ;
 	bp->b_ops = ops;
 
-	xfs_buf_submit(bp);
-	if (bp->b_error) {
-		error = bp->b_error;
+	error = xfs_buf_submit(bp);
+	if (!error)
+		error = xfs_buf_iowait(bp);
+	if (error) {
 		xfs_buf_relse(bp);
 		return error;
 	}
@@ -1483,6 +1483,8 @@ xfs_bwrite(
 			 XBF_DONE);
 
 	error = xfs_buf_submit(bp);
+	if (!error)
+		error = xfs_buf_iowait(bp);
 	if (error)
 		xfs_force_shutdown(bp->b_mount, SHUTDOWN_META_IO_ERROR);
 	return error;
@@ -1698,9 +1700,8 @@ xfs_buf_iowait(
  * holds an additional reference itself.
  */
 static int
-__xfs_buf_submit(
-	struct xfs_buf	*bp,
-	bool		wait)
+xfs_buf_submit(
+	struct xfs_buf	*bp)
 {
 	int		error = 0;
 
@@ -1763,9 +1764,6 @@ __xfs_buf_submit(
 		else
 			xfs_buf_ioend_async(bp);
 	}
-
-	if (wait)
-		error = xfs_buf_iowait(bp);
 
 	/*
 	 * Release the hold that keeps the buffer referenced for the entire
@@ -2322,7 +2320,7 @@ xfs_buf_delwri_submit_buffers(
 			bp->b_flags |= XBF_ASYNC;
 			xfs_buf_list_del(bp);
 		}
-		__xfs_buf_submit(bp, false);
+		xfs_buf_submit(bp);
 	}
 	blk_finish_plug(&plug);
 
