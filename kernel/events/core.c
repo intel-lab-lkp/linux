@@ -4178,6 +4178,8 @@ static void perf_adjust_period(struct perf_event *event, u64 nsec, u64 count, bo
 	s64 period, sample_period;
 	s64 delta;
 
+	WARN_ON_ONCE(hwc->using_alt_sample_period);
+
 	period = perf_calculate_period(event, nsec, count);
 
 	delta = (s64)(period - hwc->sample_period);
@@ -9850,6 +9852,7 @@ static int __perf_event_overflow(struct perf_event *event,
 				 int throttle, struct perf_sample_data *data,
 				 struct pt_regs *regs)
 {
+	struct hw_perf_event *hwc = &event->hw;
 	int events = atomic_read(&event->event_limit);
 	int ret = 0;
 
@@ -9868,6 +9871,18 @@ static int __perf_event_overflow(struct perf_event *event,
 	if (event->prog && event->prog->type == BPF_PROG_TYPE_PERF_EVENT &&
 	    !bpf_overflow_handler(event, data, regs))
 		goto out;
+
+	/*
+	 * Swap the sample period to the alternative period
+	 */
+	if (event->attr.alt_sample_period) {
+		bool using_alt = hwc->using_alt_sample_period;
+		u64 sample_period = (using_alt ? event->attr.sample_period
+					       : event->attr.alt_sample_period);
+
+		hwc->sample_period = sample_period;
+		hwc->using_alt_sample_period = !using_alt;
+	}
 
 	/*
 	 * XXX event_limit might not quite work as expected on inherited
@@ -12291,8 +12306,18 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (attr->freq && attr->sample_freq)
 		hwc->sample_period = 1;
 	hwc->last_period = hwc->sample_period;
-
 	local64_set(&hwc->period_left, hwc->sample_period);
+
+	if (attr->alt_sample_period) {
+		hwc->sample_period = attr->alt_sample_period;
+		hwc->using_alt_sample_period = true;
+	}
+
+	/*
+	 * alt_sample_period cannot be used with freq
+	 */
+	if (attr->freq && attr->alt_sample_period)
+		goto err_ns;
 
 	/*
 	 * We do not support PERF_SAMPLE_READ on inherited events unless
@@ -12763,9 +12788,19 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (attr.freq) {
 		if (attr.sample_freq > sysctl_perf_event_sample_rate)
 			return -EINVAL;
+		if (attr.alt_sample_period)
+			return -EINVAL;
 	} else {
 		if (attr.sample_period & (1ULL << 63))
 			return -EINVAL;
+		if (attr.alt_sample_period) {
+			if (!attr.sample_period)
+				return -EINVAL;
+			if (attr.alt_sample_period & (1ULL << 63))
+				return -EINVAL;
+			if (attr.alt_sample_period == attr.sample_period)
+				attr.alt_sample_period = 0;
+		}
 	}
 
 	/* Only privileged users can get physical addresses */
