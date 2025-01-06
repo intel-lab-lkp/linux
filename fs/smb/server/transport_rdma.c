@@ -1640,7 +1640,7 @@ static int smb_direct_accept_client(struct smb_direct_transport *t)
 	int ret;
 
 	memset(&conn_param, 0, sizeof(conn_param));
-	conn_param.initiator_depth = min_t(u8, t->cm_id->device->attrs.max_qp_rd_atom,
+	conn_param.initiator_depth = min_t(u8, t->cm_id->device->attrs.max_qp_init_rd_atom,
 					   SMB_DIRECT_CM_INITIATOR_DEPTH);
 	conn_param.responder_resources = 0;
 
