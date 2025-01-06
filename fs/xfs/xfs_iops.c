@@ -580,9 +580,27 @@ xfs_report_dioalign(
 	struct xfs_buftarg	*target = xfs_inode_buftarg(ip);
 	struct block_device	*bdev = target->bt_bdev;
 
-	stat->result_mask |= STATX_DIOALIGN;
+	stat->result_mask |= STATX_DIOALIGN | STATX_DIO_READ_ALIGN;
 	stat->dio_mem_align = bdev_dma_alignment(bdev) + 1;
-	stat->dio_offset_align = bdev_logical_block_size(bdev);
+	stat->dio_read_offset_align = bdev_logical_block_size(bdev);
+
+	/*
+	 * On COW inodes we are forced to always rewrite an entire file system
+	 * block or RT extent.
+	 *
+	 * Because applications assume they can do sector sized direct writes
+	 * on XFS we fall back to buffered I/O for sub-block direct I/O in that
+	 * case.  Because that needs to copy the entire block into the buffer
+	 * cache it is highly inefficient and can easily lead to page cache
+	 * invalidation races.
+	 *
+	 * Tell applications to avoid this case by reporting the natively
+	 * supported direct I/O read alignment.
+	 */
+	if (xfs_is_cow_inode(ip))
+		stat->dio_offset_align = xfs_inode_alloc_unitsize(ip);
+	else
+		stat->dio_offset_align = stat->dio_read_offset_align;
 }
 
 static void
@@ -658,7 +676,7 @@ xfs_vn_getattr(
 		stat->rdev = inode->i_rdev;
 		break;
 	case S_IFREG:
-		if (request_mask & STATX_DIOALIGN)
+		if (request_mask & (STATX_DIOALIGN | STATX_DIO_READ_ALIGN))
 			xfs_report_dioalign(ip, stat);
 		if (request_mask & STATX_WRITE_ATOMIC)
 			xfs_report_atomic_write(ip, stat);
