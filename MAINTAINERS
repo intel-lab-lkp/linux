@@ -15001,6 +15001,7 @@ F:	Documentation/mm/allocation-profiling.rst
 F:	include/linux/alloc_tag.h
 F:	include/linux/pgalloc_tag.h
 F:	lib/alloc_tag.c
+F:	tools/mm/allocinfo_tool.c
 
 MEMORY CONTROLLER DRIVERS
 M:	Krzysztof Kozlowski <krzk@kernel.org>
