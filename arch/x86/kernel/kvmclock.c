@@ -21,6 +21,7 @@
 #include <asm/hypervisor.h>
 #include <asm/x86_init.h>
 #include <asm/kvmclock.h>
+#include <asm/sev.h>
 
 static int kvmclock __initdata = 1;
 static int kvmclock_vsyscall __initdata = 1;
@@ -150,6 +151,16 @@ bool kvm_check_and_clear_guest_paused(void)
 
 static int kvm_cs_enable(struct clocksource *cs)
 {
+	/*
+	 * TSC clocksource should be used for a guest with Secure TSC enabled,
+	 * taint the kernel and warn when the user changes the clocksource to
+	 * kvm-clock.
+	 */
+	if (cc_platform_has(CC_ATTR_GUEST_SNP_SECURE_TSC)) {
+		add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
+		WARN_ONCE(1, "For Secure TSC guest, changing the clocksource is not allowed!\n");
+	}
+
 	vclocks_set_used(VDSO_CLOCKMODE_PVCLOCK);
 	return 0;
 }
