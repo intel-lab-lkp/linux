@@ -79,6 +79,8 @@ static int scmi_protocol_device_request(const struct scmi_device_id *id_table)
 			if (rdev->id_table->protocol_id ==
 			    id_table->protocol_id)
 				phead = head;
+			else
+				continue;
 		}
 		list_for_each_entry(rdev, head, node) {
 			if (!strcmp(rdev->id_table->name, id_table->name)) {
@@ -89,6 +91,7 @@ static int scmi_protocol_device_request(const struct scmi_device_id *id_table)
 				goto out;
 			}
 		}
+		break;
 	}
 
 	/*
