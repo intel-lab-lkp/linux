@@ -19868,6 +19868,7 @@ F:	Documentation/devicetree/bindings/sound/renesas,idt821034.yaml
 F:	sound/soc/codecs/idt821034.c
 
 RENESAS R-CAR & FSI AUDIO (ASoC) DRIVERS
+M:	Mark Brown <broonie@kernel.org>
 M:	Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 L:	linux-sound@vger.kernel.org
 L:	linux-renesas-soc@vger.kernel.org
@@ -21993,6 +21994,7 @@ W:	https://github.com/thesofproject/linux/
 F:	sound/soc/sof/
 
 SOUND - GENERIC SOUND CARD (Simple-Audio-Card, Audio-Graph-Card)
+M:	Mark Brown <broonie@kernel.org>
 M:	Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
 S:	Supported
 L:	linux-sound@vger.kernel.org
