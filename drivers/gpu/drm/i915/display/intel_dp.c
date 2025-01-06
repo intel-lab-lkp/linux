@@ -5363,6 +5363,8 @@ intel_dp_short_pulse(struct intel_dp *intel_dp)
 
 	intel_psr_short_pulse(intel_dp);
 
+	intel_alpm_short_pulse(intel_dp);
+
 	if (intel_dp_test_short_pulse(intel_dp))
 		reprobe_needed = true;
 

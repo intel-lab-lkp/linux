@@ -1806,6 +1806,7 @@ struct intel_dp {
 #define I915_LOBF_DEBUG_DISABLE			0x01
 #define I915_LOBF_DEBUG_FORCE_EN		0x02
 		bool lobf_debug;
+		enum transcoder transcoder;
 	} alpm_parameters;
 
 	u8 alpm_dpcd;
