@@ -490,7 +490,7 @@ static void vas_mmap_close(struct vm_area_struct *vma)
 	 * address. So it has to be the same VMA that is getting freed.
 	 */
 	if (WARN_ON(txwin->task_ref.vma != vma)) {
-		pr_err("Invalid paste address mmaping\n");
+		pr_err("Invalid paste address mmapping\n");
 		return;
 	}
 
