@@ -1670,10 +1670,7 @@ xfs_buf_submit(
 	xfs_buf_submit_bio(bp);
 	return 0;
 done:
-	if (bp->b_error || !(bp->b_flags & XBF_ASYNC))
-		xfs_buf_ioend(bp);
-	else
-		xfs_buf_ioend_async(bp);
+	xfs_buf_ioend(bp);
 	return 0;
 }
 
