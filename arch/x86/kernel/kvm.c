@@ -668,7 +668,8 @@ static void kvm_flush_tlb_multi(const struct cpumask *cpumask,
 		 */
 		src = &per_cpu(steal_time, cpu);
 		state = READ_ONCE(src->preempted);
-		if ((state & KVM_VCPU_PREEMPTED)) {
+		if ((state & KVM_VCPU_PREEMPTED) ||
+		    (state & KVM_VCPU_IN_PVWAIT)) {
 			if (try_cmpxchg(&src->preempted, &state,
 					state | KVM_VCPU_FLUSH_TLB))
 				__cpumask_clear_cpu(cpu, flushmask);
@@ -1045,6 +1046,9 @@ static void kvm_kick_cpu(int cpu)
 
 static void kvm_wait(u8 *ptr, u8 val)
 {
+	u8 state;
+	struct kvm_steal_time *src;
+
 	if (in_nmi())
 		return;
 
@@ -1054,8 +1058,13 @@ static void kvm_wait(u8 *ptr, u8 val)
 	 * in irq spinlock slowpath and no spurious interrupt occur to save us.
 	 */
 	if (irqs_disabled()) {
-		if (READ_ONCE(*ptr) == val)
+		if (READ_ONCE(*ptr) == val) {
+			src = this_cpu_ptr(&steal_time);
+			state = READ_ONCE(src->preempted);
+			try_cmpxchg(&src->preempted, &state,
+				    state | KVM_VCPU_IN_PVWAIT);
 			halt();
+		}
 	} else {
 		local_irq_disable();
 
