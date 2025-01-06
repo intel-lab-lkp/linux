@@ -153,7 +153,7 @@ static int pwm_beeper_probe(struct platform_device *pdev)
 	INIT_WORK(&beeper->work, pwm_beeper_work);
 
 	error = device_property_read_u32(dev, "beeper-hz", &bell_frequency);
-	if (error) {
+	if (error || (bell_frequency < 10) || (bell_frequency > 10000)) {
 		bell_frequency = 1000;
 		dev_dbg(dev,
 			"failed to parse 'beeper-hz' property, using default: %uHz\n",
