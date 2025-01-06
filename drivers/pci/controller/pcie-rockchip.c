@@ -99,7 +99,8 @@ int rockchip_pcie_parse_dt(struct rockchip_pcie *rockchip)
 
 	rockchip->num_clks = devm_clk_bulk_get_all(dev, &rockchip->clks);
 	if (rockchip->num_clks < 0)
-		return dev_err_probe(dev, err, "failed to get clocks\n");
+		return dev_err_probe(dev, rockchip->num_clks,
+				     "failed to get clocks\n");
 
 	return 0;
 }
