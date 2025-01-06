@@ -2765,6 +2765,10 @@ static int do_loopback(struct path *path, const char *old_name,
 	if (err)
 		return err;
 
+	err = security_sb_bindmount(&old_path, path, recurse ? true : false);
+	if (err)
+		goto out;
+
 	err = -EINVAL;
 	if (mnt_ns_loop(old_path.dentry))
 		goto out;
