@@ -5338,17 +5338,28 @@ static bool rtl_aspm_is_safe(struct rtl8169_private *tp)
 	return false;
 }
 
+static int r8169_hwmon_get_temp(int raw)
+{
+	if (raw >= 512)
+		raw -= 1024;
+
+	return 1000 * raw / 2;
+}
+
 static int r8169_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			    u32 attr, int channel, long *val)
 {
 	struct rtl8169_private *tp = dev_get_drvdata(dev);
-	int val_raw;
+	int raw;
 
-	val_raw = phy_read_paged(tp->phydev, 0xbd8, 0x12) & 0x3ff;
-	if (val_raw >= 512)
-		val_raw -= 1024;
-
-	*val = 1000 * val_raw / 2;
+	switch (attr) {
+	case hwmon_temp_input:
+		raw = phy_read_paged(tp->phydev, 0xbd8, 0x12) & 0x3ff;
+		*val = r8169_hwmon_get_temp(raw);
+		break;
+	default:
+		return -EINVAL;
+	}
 
 	return 0;
 }
