@@ -1013,7 +1013,7 @@ static void intel_async_flip_vtd_wa(struct drm_i915_private *i915,
 {
 	if (DISPLAY_VER(i915) == 9) {
 		/*
-		 * "Plane N strech max must be programmed to 11b (x1)
+		 * "Plane N stretch max must be programmed to 11b (x1)
 		 *  when Async flips are enabled on that plane."
 		 */
 		intel_de_rmw(i915, CHICKEN_PIPESL_1(pipe),
@@ -3529,7 +3529,7 @@ static void ilk_get_pfit_config(struct intel_crtc_state *crtc_state)
 		      REG_FIELD_GET(PF_WIN_YSIZE_MASK, size));
 
 	/*
-	 * We currently do not free assignements of panel fitters on
+	 * We currently do not free assignments of panel fitters on
 	 * ivb/hsw (since we don't use the higher upscaling modes which
 	 * differentiates them) so just WARN about this case for now.
 	 */
@@ -4229,7 +4229,7 @@ int intel_dotclock_calculate(int link_freq,
 	/*
 	 * The calculation for the data clock -> pixel clock is:
 	 * pixel_clock = ((m/n)*(link_clock * nr_lanes))/bpp
-	 * But we want to avoid losing precison if possible, so:
+	 * But we want to avoid losing precision if possible, so:
 	 * pixel_clock = ((m * link_clock * nr_lanes)/(n*bpp))
 	 *
 	 * and for link freq (10kbs units) -> pixel clock it is:
@@ -6359,7 +6359,7 @@ static void kill_joiner_secondaries(struct intel_atomic_state *state,
  * the intel_crtc_enable_flip_done() function.
  *
  * As soon as the surface address register is written, flip done interrupt is
- * generated and the requested events are sent to the usersapce in the interrupt
+ * generated and the requested events are sent to the userspace in the interrupt
  * handler itself. The timestamp and sequence sent during the flip done event
  * correspond to the last vblank and have no relation to the actual time when
  * the flip done event was sent.
@@ -8440,7 +8440,7 @@ intel_mode_valid_max_plane_size(struct drm_i915_private *dev_priv,
 
 	/*
 	 * Most people will probably want a fullscreen
-	 * plane so let's not advertize modes that are
+	 * plane so let's not advertise modes that are
 	 * too big for that.
 	 */
 	if (DISPLAY_VER(dev_priv) >= 30) {

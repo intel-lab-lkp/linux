@@ -1075,7 +1075,7 @@ static bool source_can_output(struct intel_dp *intel_dp,
 		/*
 		 * No YCbCr output support on gmch platforms.
 		 * Also, ILK doesn't seem capable of DP YCbCr output.
-		 * The displayed image is severly corrupted. SNB+ is fine.
+		 * The displayed image is severely corrupted. SNB+ is fine.
 		 */
 		return !HAS_GMCH(display) && !display->platform.ironlake;
 
@@ -2552,7 +2552,7 @@ intel_dp_compute_config_limits(struct intel_dp *intel_dp,
 		 * seem to suggest we should do otherwise.
 		 *
 		 * Use the maximum clock and number of lanes the eDP panel
-		 * advertizes being capable of in case the initial fast
+		 * advertises being capable of in case the initial fast
 		 * optimal params failed us. The panels are generally
 		 * designed to support only a single clock and lane
 		 * configuration, and typically on older panels these

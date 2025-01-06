@@ -2123,7 +2123,7 @@ static void chv_prepare_pll(const struct intel_crtc_state *crtc_state)
 	tmp |= DPIO_CHV_TDC_TARGET_CNT(tribuf_calcntr);
 	vlv_dpio_write(dev_priv, phy, CHV_PLL_DW8(ch), tmp);
 
-	/* AFC Recal */
+	/* AFC Recall */
 	vlv_dpio_write(dev_priv, phy, CHV_CMN_DW14(ch),
 		       vlv_dpio_read(dev_priv, phy, CHV_CMN_DW14(ch)) |
 		       DPIO_AFC_RECAL);

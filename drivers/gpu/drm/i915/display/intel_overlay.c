@@ -43,10 +43,12 @@
 #include "intel_overlay.h"
 #include "intel_pci_config.h"
 
-/* Limits for overlay size. According to intel doc, the real limits are:
+/*
+ * Limits for overlay size. According to intel doc, the real limits are:
  * Y width: 4095, UV width (planar): 2047, Y height: 2047,
  * UV width (planar): * 1023. But the xorg thinks 2048 for height and width. Use
- * the mininum of both.  */
+ * the minimum of both.
+ */
 #define IMAGE_MAX_WIDTH		2048
 #define IMAGE_MAX_HEIGHT	2046 /* 2 * 1023 */
 /* on 830 and 845 these large limits result in the card hanging */
@@ -442,8 +444,10 @@ static int intel_overlay_off(struct intel_overlay *overlay)
 	return i915_active_wait(&overlay->last_flip);
 }
 
-/* recover from an interruption due to a signal
- * We have to be careful not to repeat work forever an make forward progess. */
+/*
+ * recover from an interruption due to a signal
+ * We have to be careful not to repeat work forever an make forward progress.
+ */
 static int intel_overlay_recover_from_interrupt(struct intel_overlay *overlay)
 {
 	return i915_active_wait(&overlay->last_flip);
