@@ -1593,6 +1593,7 @@ int dm_calculate_queue_limits(struct dm_table *t,
 	struct queue_limits ti_limits;
 	unsigned int zone_sectors = 0;
 	bool zoned = false;
+	bool atomic_writes = true;
 
 	dm_set_stacking_limits(limits);
 
@@ -1602,8 +1603,12 @@ int dm_calculate_queue_limits(struct dm_table *t,
 
 		if (!dm_target_passes_integrity(ti->type))
 			t->integrity_supported = false;
+		if (!dm_target_supports_atomic_writes(ti->type))
+			atomic_writes = false;
 	}
 
+	if (atomic_writes)
+		limits->features |= BLK_FEAT_ATOMIC_WRITES_STACKED;
 	for (unsigned int i = 0; i < t->num_targets; i++) {
 		struct dm_target *ti = dm_table_get_target(t, i);
 
@@ -1616,6 +1621,13 @@ int dm_calculate_queue_limits(struct dm_table *t,
 			goto combine_limits;
 		}
 
+		/*
+		 * dm_set_device_limits() -> blk_stack_limits() considers
+		 * ti_limits as 'top', so set BLK_FEAT_ATOMIC_WRITES_STACKED
+		 * here also.
+		 */
+		if (atomic_writes)
+			ti_limits.features |= BLK_FEAT_ATOMIC_WRITES_STACKED;
 		/*
 		 * Combine queue limits of all the devices this target uses.
 		 */
