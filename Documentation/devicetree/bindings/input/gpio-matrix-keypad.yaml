@@ -38,6 +38,9 @@ properties:
     type: boolean
     description: Do not enable autorepeat feature.
 
+  gpio-activelow:
+    type: boolean
+    description: The GPIOs are low active.
 
   debounce-delay-ms:
     description: Debounce interval in milliseconds.
