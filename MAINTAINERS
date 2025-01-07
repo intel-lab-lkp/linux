@@ -5778,6 +5778,13 @@ F:	include/cxl/
 F:	include/uapi/linux/cxl_mem.h
 F:	tools/testing/cxl/
 
+COMPUTE EXPRESS LINK - AMD (CXL_AMD)
+M:	Robert Richter <rrichter@amd.com>
+M:	Terry Bowman <terry.bowman@amd.com>
+L:	linux-cxl@vger.kernel.org
+S:	Maintained
+F:	drivers/cxl/core/amd.c
+
 COMPUTE EXPRESS LINK PMU (CPMU)
 M:	Jonathan Cameron <jonathan.cameron@huawei.com>
 L:	linux-cxl@vger.kernel.org
