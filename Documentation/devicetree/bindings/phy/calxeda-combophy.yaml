@@ -43,8 +43,8 @@ additionalProperties: false
 examples:
   - |
     combophy5: combo-phy@fff5d000 {
-                   compatible = "calxeda,hb-combophy";
-                   #phy-cells = <1>;
-                   reg = <0xfff5d000 0x1000>;
-                   phydev = <31>;
-               };
+        compatible = "calxeda,hb-combophy";
+        #phy-cells = <1>;
+        reg = <0xfff5d000 0x1000>;
+        phydev = <31>;
+    };

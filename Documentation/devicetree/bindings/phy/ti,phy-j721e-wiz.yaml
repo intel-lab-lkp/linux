@@ -201,59 +201,59 @@ examples:
     #include <dt-bindings/soc/ti,sci_pm_domain.h>
 
     wiz@5000000 {
-           compatible = "ti,j721e-wiz-16g";
-           #address-cells = <1>;
-           #size-cells = <1>;
-           power-domains = <&k3_pds 292 TI_SCI_PD_EXCLUSIVE>;
-           clocks = <&k3_clks 292 5>, <&k3_clks 292 11>, <&dummy_cmn_refclk>;
-           clock-names = "fck", "core_ref_clk", "ext_ref_clk";
-           assigned-clocks = <&k3_clks 292 11>, <&k3_clks 292 0>;
-           assigned-clock-parents = <&k3_clks 292 15>, <&k3_clks 292 4>;
-           num-lanes = <2>;
-           #reset-cells = <1>;
-           ranges = <0x5000000 0x5000000 0x10000>;
+        compatible = "ti,j721e-wiz-16g";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        power-domains = <&k3_pds 292 TI_SCI_PD_EXCLUSIVE>;
+        clocks = <&k3_clks 292 5>, <&k3_clks 292 11>, <&dummy_cmn_refclk>;
+        clock-names = "fck", "core_ref_clk", "ext_ref_clk";
+        assigned-clocks = <&k3_clks 292 11>, <&k3_clks 292 0>;
+        assigned-clock-parents = <&k3_clks 292 15>, <&k3_clks 292 4>;
+        num-lanes = <2>;
+        #reset-cells = <1>;
+        ranges = <0x5000000 0x5000000 0x10000>;
 
-           pll0-refclk {
-                  clocks = <&k3_clks 293 13>, <&dummy_cmn_refclk>;
-                  #clock-cells = <0>;
-                  assigned-clocks = <&wiz1_pll0_refclk>;
-                  assigned-clock-parents = <&k3_clks 293 13>;
-           };
+        pll0-refclk {
+            clocks = <&k3_clks 293 13>, <&dummy_cmn_refclk>;
+            #clock-cells = <0>;
+            assigned-clocks = <&wiz1_pll0_refclk>;
+            assigned-clock-parents = <&k3_clks 293 13>;
+        };
 
-           pll1-refclk {
-                  clocks = <&k3_clks 293 0>, <&dummy_cmn_refclk1>;
-                  #clock-cells = <0>;
-                  assigned-clocks = <&wiz1_pll1_refclk>;
-                  assigned-clock-parents = <&k3_clks 293 0>;
-           };
+        pll1-refclk {
+            clocks = <&k3_clks 293 0>, <&dummy_cmn_refclk1>;
+            #clock-cells = <0>;
+            assigned-clocks = <&wiz1_pll1_refclk>;
+            assigned-clock-parents = <&k3_clks 293 0>;
+        };
 
-           cmn-refclk-dig-div {
-                  clocks = <&wiz1_refclk_dig>;
-                  #clock-cells = <0>;
-           };
+        cmn-refclk-dig-div {
+            clocks = <&wiz1_refclk_dig>;
+            #clock-cells = <0>;
+        };
 
-           cmn-refclk1-dig-div {
-                  clocks = <&wiz1_pll1_refclk>;
-                  #clock-cells = <0>;
-           };
+        cmn-refclk1-dig-div {
+            clocks = <&wiz1_pll1_refclk>;
+            #clock-cells = <0>;
+        };
 
-           refclk-dig {
-                  clocks = <&k3_clks 292 11>, <&k3_clks 292 0>,
-                          <&dummy_cmn_refclk>, <&dummy_cmn_refclk1>;
-                  #clock-cells = <0>;
-                  assigned-clocks = <&wiz0_refclk_dig>;
-                  assigned-clock-parents = <&k3_clks 292 11>;
-           };
+        refclk-dig {
+            clocks = <&k3_clks 292 11>, <&k3_clks 292 0>,
+                     <&dummy_cmn_refclk>, <&dummy_cmn_refclk1>;
+            #clock-cells = <0>;
+            assigned-clocks = <&wiz0_refclk_dig>;
+            assigned-clock-parents = <&k3_clks 292 11>;
+        };
 
-           serdes@5000000 {
-                  compatible = "ti,sierra-phy-t0";
-                  reg-names = "serdes";
-                  reg = <0x5000000 0x10000>;
-                  #address-cells = <1>;
-                  #size-cells = <0>;
-                  resets = <&serdes_wiz0 0>;
-                  reset-names = "sierra_reset";
-                  clocks = <&wiz0_cmn_refclk_dig_div>, <&wiz0_cmn_refclk1_dig_div>;
-                  clock-names = "cmn_refclk_dig_div", "cmn_refclk1_dig_div";
-           };
+        serdes@5000000 {
+            compatible = "ti,sierra-phy-t0";
+            reg-names = "serdes";
+            reg = <0x5000000 0x10000>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            resets = <&serdes_wiz0 0>;
+            reset-names = "sierra_reset";
+            clocks = <&wiz0_cmn_refclk_dig_div>, <&wiz0_cmn_refclk1_dig_div>;
+            clock-names = "cmn_refclk_dig_div", "cmn_refclk1_dig_div";
+        };
     };
