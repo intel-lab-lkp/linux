@@ -596,6 +596,12 @@ struct cxl_port *to_cxl_port(const struct device *dev)
 }
 EXPORT_SYMBOL_NS_GPL(to_cxl_port, "CXL");
 
+static void cxl_register_map_reset(struct cxl_register_map *map)
+{
+	*map = (struct cxl_register_map){ 0 };
+	map->resource = CXL_RESOURCE_NONE;
+}
+
 static void unregister_port(void *_port)
 {
 	struct cxl_port *port = _port;
@@ -735,6 +741,7 @@ static struct cxl_port *cxl_port_alloc(struct device *uport_dev,
 	ida_init(&port->decoder_ida);
 	port->hdm_end = -1;
 	port->commit_end = -1;
+	cxl_register_map_reset(&port->reg_map);
 	xa_init(&port->dports);
 	xa_init(&port->endpoints);
 	xa_init(&port->regions);
@@ -766,14 +773,52 @@ static int cxl_setup_comp_regs(struct device *host, struct cxl_register_map *map
 	return cxl_setup_regs(map);
 }
 
-static int cxl_port_setup_regs(struct cxl_port *port,
-			resource_size_t component_reg_phys)
+static resource_size_t find_component_registers(struct device *dev)
 {
+	struct cxl_register_map map;
+	struct pci_dev *pdev;
+
+	/*
+	 * Theoretically, CXL component registers can be hosted on a
+	 * non-PCI device, in practice, only cxl_test hits this case.
+	 */
+	if (!dev_is_pci(dev))
+		return CXL_RESOURCE_NONE;
+
+	pdev = to_pci_dev(dev);
+
+	cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
+	return map.resource;
+}
+
+/**
+ * cxl_port_setup_regs - probe all component registers of a cxl port
+ * @port: target cxl port
+ */
+int cxl_port_setup_regs(struct cxl_port *port)
+{
+	resource_size_t component_reg_phys;
+
 	if (dev_is_platform(port->uport_dev))
 		return 0;
+	/* component registers have been set up */
+	if (port->reg_map.resource != CXL_RESOURCE_NONE)
+		return 0;
+
+	if (is_cxl_root(to_cxl_port(port->dev.parent)))
+		component_reg_phys = port->chbcr;
+	else
+		component_reg_phys = find_component_registers(port->uport_dev);
+
+	if (component_reg_phys == CXL_RESOURCE_NONE) {
+		dev_warn(&port->dev, "Invalid Component Registers");
+		return -ENXIO;
+	}
+
 	return cxl_setup_comp_regs(&port->dev, &port->reg_map,
 				   component_reg_phys);
 }
+EXPORT_SYMBOL_NS_GPL(cxl_port_setup_regs, "CXL");
 
 static int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
 				resource_size_t component_reg_phys)
@@ -856,9 +901,8 @@ static int cxl_port_add(struct cxl_port *port,
 		if (rc)
 			return rc;
 
-		rc = cxl_port_setup_regs(port, component_reg_phys);
-		if (rc)
-			return rc;
+		if (is_cxl_root(parent_dport->port))
+			port->chbcr = component_reg_phys;
 	} else {
 		rc = dev_set_name(dev, "root%d", port->id);
 		if (rc)
@@ -1499,16 +1543,26 @@ static void cxl_detach_ep(void *data)
 		dev_dbg(&cxlmd->dev, "disconnect %s from %s\n",
 			ep ? dev_name(ep->ep) : "", dev_name(&port->dev));
 		cxl_ep_remove(port, ep);
-		if (ep && !port->dead && xa_empty(&port->endpoints) &&
-		    !is_cxl_root(parent_port) && parent_port->dev.driver) {
+		if (ep && xa_empty(&port->endpoints)) {
 			/*
-			 * This was the last ep attached to a dynamically
-			 * enumerated port. Block new cxl_add_ep() and garbage
-			 * collect the port.
+			 * Reset component registers information on the port
+			 * during the last ep detaching. So that the next ep
+			 * attaching can trigger component registers probing
+			 * again.
 			 */
-			died = true;
-			port->dead = true;
-			reap_dports(port);
+			cxl_register_map_reset(&port->reg_map);
+
+			if (!port->dead && !is_cxl_root(parent_port) &&
+			    parent_port->dev.driver) {
+				/*
+				 * This was the last ep attached to a dynamically
+				 * enumerated port. Block new cxl_add_ep() and garbage
+				 * collect the port.
+				 */
+				died = true;
+				port->dead = true;
+				reap_dports(port);
+			}
 		}
 		device_unlock(&port->dev);
 
@@ -1521,31 +1575,12 @@ static void cxl_detach_ep(void *data)
 	}
 }
 
-static resource_size_t find_component_registers(struct device *dev)
-{
-	struct cxl_register_map map;
-	struct pci_dev *pdev;
-
-	/*
-	 * Theoretically, CXL component registers can be hosted on a
-	 * non-PCI device, in practice, only cxl_test hits this case.
-	 */
-	if (!dev_is_pci(dev))
-		return CXL_RESOURCE_NONE;
-
-	pdev = to_pci_dev(dev);
-
-	cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
-	return map.resource;
-}
-
 static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 			      struct device *uport_dev,
 			      struct device *dport_dev)
 {
 	struct device *dparent = grandparent(dport_dev);
 	struct cxl_dport *dport, *parent_dport;
-	resource_size_t component_reg_phys;
 	int rc;
 
 	if (!dparent) {
@@ -1581,9 +1616,8 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 
 		port = find_cxl_port_at(parent_port, dport_dev, &dport);
 		if (!port) {
-			component_reg_phys = find_component_registers(uport_dev);
 			port = devm_cxl_add_port(&parent_port->dev, uport_dev,
-						 component_reg_phys, parent_dport);
+						 CXL_RESOURCE_NONE, parent_dport);
 			if (IS_ERR(port))
 				return PTR_ERR(port);
 

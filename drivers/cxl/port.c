@@ -91,12 +91,31 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 
 static int cxl_endpoint_port_probe(struct cxl_port *port)
 {
+	struct cxl_port *iter, *parent_port = to_cxl_port(port->dev.parent);
 	struct cxl_endpoint_dvsec_info info = { .port = port };
 	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_hdm *cxlhdm;
 	struct cxl_port *root;
 	int rc;
+
+	for (iter = parent_port; !is_cxl_root(iter);
+	     iter = to_cxl_port(iter->dev.parent)) {
+		/*
+		 * The parent port of endpoint has been locked
+		 * during endpoint port attaching.
+		 * Holding the device lock of port to make sure
+		 * the setup not invoked in parallel.
+		 */
+		if (iter != parent_port) {
+			guard(device)(&iter->dev);
+			rc = cxl_port_setup_regs(iter);
+		} else {
+			rc = cxl_port_setup_regs(iter);
+		}
+		if (rc)
+			return rc;
+	}
 
 	rc = cxl_dvsec_rr_decode(cxlds->dev, port, &info);
 	if (rc < 0)
