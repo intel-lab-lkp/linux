@@ -79,6 +79,8 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 		return -ENXIO;
 	}
 
+	cxl_dport_init_ras_reporting(parent_dport, &cxlmd->dev);
+
 	return 0;
 }
 
@@ -164,8 +166,6 @@ static int cxl_mem_probe(struct device *dev)
 		endpoint_parent = parent_port->uport_dev;
 	else
 		endpoint_parent = &parent_port->dev;
-
-	cxl_dport_init_ras_reporting(dport, dev);
 
 	scoped_guard(device, endpoint_parent) {
 		if (!endpoint_parent->driver) {
