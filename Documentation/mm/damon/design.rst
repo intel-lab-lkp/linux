@@ -504,9 +504,35 @@ have a list of latency-critical processes.
 
 To let users optimize DAMOS schemes with such special knowledge, DAMOS provides
 a feature called DAMOS filters.  The feature allows users to set an arbitrary
-number of filters for each scheme.  Each filter specifies the type of target
-memory, and whether it should exclude the memory of the type (filter-out), or
-all except the memory of the type (filter-in).
+number of filters for each scheme.  Each filter specifies
+
+- a type of memory (``type``),
+- whether it is for the memory of the type or all except the type
+  (``matching``), and
+- whether it is to allow (pass through the filter) or reject (block) applying
+  the scheme's action to the memory (``pass``).
+
+When multiple filters are installed, each filter is evaluated in the installed
+order.  If a part of memory is matched to one of the filter, next filters are
+ignored.  If a part of memory is not matched to any of the filters, the default
+behavior is applied.  That is, as long as it fulfills other conditions of the
+scheme including the access pattern and quotas, the action will be applied to
+the part of the memory.
+
+For example, let's assume 1) a filter for passing anonymous pages and 2)
+another filter for blocking young pages are installed in the order.  If a page
+of a region that eligible to apply the scheme's action is an anonymous page,
+the scheme's action will be applied to the page regardless of whether it is
+young or not, since it matches with the first filter.  If the page is not
+anonymous but young, the scheme's action will not be applied, since the second
+filter blocks it.  If the page is neither anonymous nor young, no filter is
+involved, so the action will be applied to the page.
+
+The fact that the action can be applied to any memory as long as no block
+filter explicitly excluded it means that installing pass filters without any
+block filter after those is same to not installing the pass filters, in terms
+of the ``action`` applying.  Statistics for DAMOS filters will still be
+accounted, though.  It is therefore still useful for monitoring purpose.
 
 For efficient handling of filters, some types of filters are handled by the
 core layer, while others are handled by operations set.  In the latter case,
@@ -516,7 +542,7 @@ filter are not counted as the scheme has tried to the region.  In contrast, if
 a memory regions is filtered by an operations set layer-handled filter, it is
 counted as the scheme has tried.  This difference affects the statistics.
 
-Below types of filters are currently supported.
+Below ``type`` of filters are currently supported.
 
 - anonymous page
     - Applied to pages that containing data that not stored in files.
