@@ -95,12 +95,16 @@ struct ib_mad_agent_private {
 
 	spinlock_t lock;
 	struct list_head send_list;
+	unsigned int sol_fc_send_count;
 	struct list_head wait_list;
+	unsigned int sol_fc_wait_count;
 	struct delayed_work timed_work;
 	unsigned long timeout;
 	struct list_head local_list;
 	struct work_struct local_work;
 	struct list_head rmpp_list;
+	unsigned int sol_fc_max;
+	struct list_head backlog_list;
 
 	refcount_t refcount;
 	union {
@@ -118,11 +122,13 @@ struct ib_mad_snoop_private {
 };
 
 enum ib_mad_state {
+	/* MAD is in backlog list */
+	IB_MAD_STATE_QUEUED = 1,
 	/*
 	 * MAD was sent to the QP and is waiting for completion
 	 * notification in send list.
 	 */
-	IB_MAD_STATE_SEND_START = 1,
+	IB_MAD_STATE_SEND_START,
 	/*
 	 * MAD send completed successfully, waiting for a response
 	 * in wait list.
@@ -143,6 +149,12 @@ enum ib_mad_state {
 	{                                                              \
 		if (IS_ENABLED(CONFIG_LOCKDEP))                        \
 			WARN_ON(mad_send_wr->state != expected_state); \
+	}
+#define EXPECT_MAD_STATE2(mad_send_wr, expected_state1, expected_state2) \
+	{                                                                \
+		if (IS_ENABLED(CONFIG_LOCKDEP))                          \
+			WARN_ON(mad_send_wr->state != expected_state1 && \
+				mad_send_wr->state != expected_state2);  \
 	}
 #define EXPECT_MAD_STATE3(mad_send_wr, expected_state1, expected_state2, \
 			  expected_state3)                               \
@@ -183,6 +195,9 @@ struct ib_mad_send_wr_private {
 	int pad;
 
 	enum ib_mad_state state;
+
+	/* Solicited MAD flow control */
+	bool is_solicited_fc;
 };
 
 struct ib_mad_local_private {

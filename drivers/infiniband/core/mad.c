@@ -210,6 +210,29 @@ int ib_response_mad(const struct ib_mad_hdr *hdr)
 }
 EXPORT_SYMBOL(ib_response_mad);
 
+#define SOL_FC_MAX_DEFAULT_FRAC 4
+#define SOL_FC_MAX_SA_FRAC 32
+
+static int get_sol_fc_max_outstanding(struct ib_mad_reg_req *mad_reg_req)
+{
+	if (!mad_reg_req)
+		/* Send only agent */
+		return mad_recvq_size / SOL_FC_MAX_DEFAULT_FRAC;
+
+	switch (mad_reg_req->mgmt_class) {
+	case IB_MGMT_CLASS_CM:
+		return mad_recvq_size / SOL_FC_MAX_DEFAULT_FRAC;
+	case IB_MGMT_CLASS_SUBN_ADM:
+		return mad_recvq_size / SOL_FC_MAX_SA_FRAC;
+	case IB_MGMT_CLASS_SUBN_LID_ROUTED:
+	case IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE:
+		return min(mad_recvq_size, IB_MAD_QP_RECV_SIZE) /
+		       SOL_FC_MAX_DEFAULT_FRAC;
+	default:
+		return 0;
+	}
+}
+
 /*
  * ib_register_mad_agent - Register to send/receive MADs
  *
@@ -392,12 +415,16 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	INIT_LIST_HEAD(&mad_agent_priv->send_list);
 	INIT_LIST_HEAD(&mad_agent_priv->wait_list);
 	INIT_LIST_HEAD(&mad_agent_priv->rmpp_list);
+	INIT_LIST_HEAD(&mad_agent_priv->backlog_list);
 	INIT_DELAYED_WORK(&mad_agent_priv->timed_work, timeout_sends);
 	INIT_LIST_HEAD(&mad_agent_priv->local_list);
 	INIT_WORK(&mad_agent_priv->local_work, local_completions);
 	refcount_set(&mad_agent_priv->refcount, 1);
 	init_completion(&mad_agent_priv->comp);
-
+	mad_agent_priv->sol_fc_send_count = 0;
+	mad_agent_priv->sol_fc_wait_count = 0;
+	mad_agent_priv->sol_fc_max =
+		get_sol_fc_max_outstanding(mad_reg_req);
 	ret2 = ib_mad_agent_security_setup(&mad_agent_priv->agent, qp_type);
 	if (ret2) {
 		ret = ERR_PTR(ret2);
@@ -1054,6 +1081,13 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	return ret;
 }
 
+static void handle_queued_state(struct ib_mad_send_wr_private *mad_send_wr,
+		       struct ib_mad_agent_private *mad_agent_priv)
+{
+	NOT_EXPECT_MAD_STATE(mad_send_wr, 0);
+	list_add_tail(&mad_send_wr->agent_list, &mad_agent_priv->backlog_list);
+}
+
 static void handle_send_state(struct ib_mad_send_wr_private *mad_send_wr,
 		       struct ib_mad_agent_private *mad_agent_priv)
 {
@@ -1061,9 +1095,16 @@ static void handle_send_state(struct ib_mad_send_wr_private *mad_send_wr,
 		list_add_tail(&mad_send_wr->agent_list,
 			      &mad_agent_priv->send_list);
 	} else {
-		EXPECT_MAD_STATE(mad_send_wr, IB_MAD_STATE_WAIT_RESP);
+		EXPECT_MAD_STATE2(mad_send_wr, IB_MAD_STATE_QUEUED,
+				  IB_MAD_STATE_WAIT_RESP);
 		list_move_tail(&mad_send_wr->agent_list,
 			       &mad_agent_priv->send_list);
+	}
+
+	if (mad_send_wr->is_solicited_fc) {
+		if (mad_send_wr->state == IB_MAD_STATE_WAIT_RESP)
+			mad_agent_priv->sol_fc_wait_count--;
+		mad_agent_priv->sol_fc_send_count++;
 	}
 }
 
@@ -1076,8 +1117,13 @@ static void handle_wait_state(struct ib_mad_send_wr_private *mad_send_wr,
 
 	EXPECT_MAD_STATE3(mad_send_wr, IB_MAD_STATE_SEND_START,
 			  IB_MAD_STATE_WAIT_RESP, IB_MAD_STATE_CANCELED);
-	list_del_init(&mad_send_wr->agent_list);
+	if (mad_send_wr->state == IB_MAD_STATE_SEND_START &&
+	    mad_send_wr->is_solicited_fc) {
+		mad_agent_priv->sol_fc_send_count--;
+		mad_agent_priv->sol_fc_wait_count++;
+	}
 
+	list_del_init(&mad_send_wr->agent_list);
 	delay = mad_send_wr->timeout;
 	mad_send_wr->timeout += jiffies;
 
@@ -1103,17 +1149,32 @@ static void handle_early_resp_state(struct ib_mad_send_wr_private *mad_send_wr,
 			    struct ib_mad_agent_private *mad_agent_priv)
 {
 	EXPECT_MAD_STATE(mad_send_wr, IB_MAD_STATE_SEND_START);
+	mad_agent_priv->sol_fc_send_count -= mad_send_wr->is_solicited_fc;
 }
 
 static void handle_canceled_state(struct ib_mad_send_wr_private *mad_send_wr,
 			 struct ib_mad_agent_private *mad_agent_priv)
 {
 	NOT_EXPECT_MAD_STATE(mad_send_wr, IB_MAD_STATE_DONE);
+	if (mad_send_wr->is_solicited_fc) {
+		if (mad_send_wr->state == IB_MAD_STATE_SEND_START)
+			mad_agent_priv->sol_fc_send_count--;
+		else if (mad_send_wr->state == IB_MAD_STATE_WAIT_RESP)
+			mad_agent_priv->sol_fc_wait_count--;
+	}
 }
 
 static void handle_done_state(struct ib_mad_send_wr_private *mad_send_wr,
 		       struct ib_mad_agent_private *mad_agent_priv)
 {
+	NOT_EXPECT_MAD_STATE(mad_send_wr, IB_MAD_STATE_QUEUED);
+	if (mad_send_wr->is_solicited_fc) {
+		if (mad_send_wr->state == IB_MAD_STATE_SEND_START)
+			mad_agent_priv->sol_fc_send_count--;
+		else if (mad_send_wr->state == IB_MAD_STATE_WAIT_RESP)
+			mad_agent_priv->sol_fc_wait_count--;
+	}
+
 	list_del_init(&mad_send_wr->agent_list);
 }
 
@@ -1124,6 +1185,9 @@ void change_mad_state(struct ib_mad_send_wr_private *mad_send_wr,
 		mad_send_wr->mad_agent_priv;
 
 	switch (new_state) {
+	case IB_MAD_STATE_QUEUED:
+		handle_queued_state(mad_send_wr, mad_agent_priv);
+		break;
 	case IB_MAD_STATE_SEND_START:
 		handle_send_state(mad_send_wr, mad_agent_priv);
 		break;
@@ -1144,6 +1208,43 @@ void change_mad_state(struct ib_mad_send_wr_private *mad_send_wr,
 	}
 
 	mad_send_wr->state = new_state;
+}
+
+static bool is_solicited_fc_mad(struct ib_mad_send_wr_private *mad_send_wr)
+{
+	struct ib_rmpp_mad *rmpp_mad;
+	u8 mgmt_class;
+
+	if (!mad_send_wr->timeout)
+		return 0;
+
+	rmpp_mad = mad_send_wr->send_buf.mad;
+	if (mad_send_wr->mad_agent_priv->agent.rmpp_version &&
+	    (ib_get_rmpp_flags(&rmpp_mad->rmpp_hdr) & IB_MGMT_RMPP_FLAG_ACTIVE))
+		return 0;
+
+	mgmt_class =
+		((struct ib_mad_hdr *)mad_send_wr->send_buf.mad)->mgmt_class;
+	return mgmt_class == IB_MGMT_CLASS_CM ||
+	       mgmt_class == IB_MGMT_CLASS_SUBN_ADM ||
+	       mgmt_class == IB_MGMT_CLASS_SUBN_LID_ROUTED ||
+	       mgmt_class == IB_MGMT_CLASS_SUBN_DIRECTED_ROUTE;
+}
+
+static bool mad_is_for_backlog(struct ib_mad_send_wr_private *mad_send_wr)
+{
+	struct ib_mad_agent_private *mad_agent_priv =
+		mad_send_wr->mad_agent_priv;
+
+	if (!mad_send_wr->is_solicited_fc || !mad_agent_priv->sol_fc_max)
+		return false;
+
+	if (!list_empty(&mad_agent_priv->backlog_list))
+		return true;
+
+	return mad_agent_priv->sol_fc_send_count +
+		       mad_agent_priv->sol_fc_wait_count >=
+	       mad_agent_priv->sol_fc_max;
 }
 
 /*
@@ -1214,6 +1315,13 @@ int ib_post_send_mad(struct ib_mad_send_buf *send_buf,
 		/* Reference MAD agent until send completes */
 		refcount_inc(&mad_agent_priv->refcount);
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
+		mad_send_wr->is_solicited_fc = is_solicited_fc_mad(mad_send_wr);
+		if (mad_is_for_backlog(mad_send_wr)) {
+			change_mad_state(mad_send_wr, IB_MAD_STATE_QUEUED);
+			spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
+			return 0;
+		}
+
 		change_mad_state(mad_send_wr, IB_MAD_STATE_SEND_START);
 		spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 
@@ -1858,6 +1966,42 @@ ib_find_send_mad(const struct ib_mad_agent_private *mad_agent_priv,
 	return NULL;
 }
 
+static void
+process_mad_from_backlog(struct ib_mad_agent_private *mad_agent_priv)
+{
+	struct ib_mad_send_wr_private *mad_send_wr;
+	struct ib_mad_send_wc mad_send_wc = {};
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&mad_agent_priv->lock, flags);
+	while (!list_empty(&mad_agent_priv->backlog_list) &&
+	       (mad_agent_priv->sol_fc_send_count +
+			mad_agent_priv->sol_fc_wait_count <
+		mad_agent_priv->sol_fc_max)) {
+		mad_send_wr = list_entry(mad_agent_priv->backlog_list.next,
+					 struct ib_mad_send_wr_private,
+					 agent_list);
+		change_mad_state(mad_send_wr, IB_MAD_STATE_SEND_START);
+		spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
+		ret = ib_send_mad(mad_send_wr);
+		if (!ret)
+			return;
+
+		spin_lock_irqsave(&mad_agent_priv->lock, flags);
+		deref_mad_agent(mad_agent_priv);
+		change_mad_state(mad_send_wr, IB_MAD_STATE_DONE);
+		spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
+		mad_send_wc.send_buf = &mad_send_wr->send_buf;
+		mad_send_wc.status = IB_WC_LOC_QP_OP_ERR;
+		mad_agent_priv->agent.send_handler(&mad_agent_priv->agent,
+						   &mad_send_wc);
+		spin_lock_irqsave(&mad_agent_priv->lock, flags);
+	}
+
+	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
+}
+
 void ib_mark_mad_done(struct ib_mad_send_wr_private *mad_send_wr)
 {
 	mad_send_wr->timeout = 0;
@@ -2318,11 +2462,14 @@ void ib_mad_complete_send_wr(struct ib_mad_send_wr_private *mad_send_wr,
 	adjust_timeout(mad_agent_priv);
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 
-	if (ret == IB_RMPP_RESULT_INTERNAL)
+	if (ret == IB_RMPP_RESULT_INTERNAL) {
 		ib_rmpp_send_handler(mad_send_wc);
-	else
+	} else {
+		if (mad_send_wr->is_solicited_fc)
+			process_mad_from_backlog(mad_agent_priv);
 		mad_agent_priv->agent.send_handler(&mad_agent_priv->agent,
 						   mad_send_wc);
+	}
 
 	/* Release reference on agent taken when sending */
 	deref_mad_agent(mad_agent_priv);
@@ -2480,6 +2627,8 @@ static void cancel_mads(struct ib_mad_agent_private *mad_agent_priv)
 
 	/* Empty wait list to prevent receives from finding a request */
 	list_splice_init(&mad_agent_priv->wait_list, &cancel_list);
+	mad_agent_priv->sol_fc_wait_count = 0;
+	list_splice_tail_init(&mad_agent_priv->backlog_list, &cancel_list);
 	spin_unlock_irqrestore(&mad_agent_priv->lock, flags);
 
 	/* Report all cancelled requests */
@@ -2515,6 +2664,13 @@ find_send_wr(struct ib_mad_agent_private *mad_agent_priv,
 		    &mad_send_wr->send_buf == send_buf)
 			return mad_send_wr;
 	}
+
+	list_for_each_entry(mad_send_wr, &mad_agent_priv->backlog_list,
+			    agent_list) {
+		if (&mad_send_wr->send_buf == send_buf)
+			return mad_send_wr;
+	}
+
 	return NULL;
 }
 
@@ -2537,8 +2693,9 @@ int ib_modify_mad(struct ib_mad_send_buf *send_buf, u32 timeout_ms)
 		return -EINVAL;
 	}
 
-	active = (mad_send_wr->state == IB_MAD_STATE_SEND_START ||
-		  mad_send_wr->state == IB_MAD_STATE_EARLY_RESP);
+	active = ((mad_send_wr->state == IB_MAD_STATE_SEND_START) ||
+		  (mad_send_wr->state == IB_MAD_STATE_EARLY_RESP) ||
+		  (mad_send_wr->state == IB_MAD_STATE_QUEUED && timeout_ms));
 	if (!timeout_ms)
 		change_mad_state(mad_send_wr, IB_MAD_STATE_CANCELED);
 
@@ -2687,6 +2844,8 @@ static void clear_mad_error_list(struct list_head *list,
 
 	list_for_each_entry_safe(mad_send_wr, n, list, agent_list) {
 		mad_send_wc.send_buf = &mad_send_wr->send_buf;
+		if (mad_send_wr->is_solicited_fc)
+			process_mad_from_backlog(mad_agent_priv);
 		mad_agent_priv->agent.send_handler(&mad_agent_priv->agent,
 						   &mad_send_wc);
 		deref_mad_agent(mad_agent_priv);
