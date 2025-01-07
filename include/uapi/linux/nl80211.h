@@ -2871,6 +2871,17 @@ enum nl80211_commands {
  * @NL80211_ATTR_VIF_RADIO_MASK: Bitmask of allowed radios (u32).
  *	A value of 0 means all radios.
  *
+ * @NL80211_ATTR_WIPHY_RADIO_INDEX: Integer attribute denoting the index of
+ *	the radio in interest. Internally a value of 0xff is used to indicate
+ *	this attribute is not present, and hence any associated attributes are
+ *	deemed to be applicable to all radios
+ *
+ * *RFC NOTE:* Rather than having a radio index we could have a radio mask like we
+ *	do for vif. If having a mask is preferred then we can rename
+ *	NL80211_ATTR_VIF_RADIO_MASK => NL80211_ATTR_RADIO_MASK and define
+ *	NL80211_ATTR_VIF_RADIO_MASK to be equal to NL80211_ATTR_RADIO_MASK,
+ *	either via a macro or as an additional enum.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3421,6 +3432,8 @@ enum nl80211_attrs {
 
 	NL80211_ATTR_VIF_RADIO_MASK,
 
+	NL80211_ATTR_WIPHY_RADIO_INDEX,
+
 	/* add attributes here, update the policy in nl80211.c */
 
 	__NL80211_ATTR_AFTER_LAST,
@@ -3463,6 +3476,7 @@ enum nl80211_attrs {
 #define NL80211_ATTR_FEATURE_FLAGS NL80211_ATTR_FEATURE_FLAGS
 
 #define NL80211_WIPHY_NAME_MAXLEN		64
+#define NL80211_WIPHY_RADIO_ID_MAX		0xff
 
 #define NL80211_MAX_SUPP_RATES			32
 #define NL80211_MAX_SUPP_HT_RATES		77

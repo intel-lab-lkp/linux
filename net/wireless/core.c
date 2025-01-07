@@ -1077,6 +1077,23 @@ int wiphy_register(struct wiphy *wiphy)
 		return res;
 	}
 
+	/* Allocate radio configuration space for multi-radio wiphy.
+	 */
+	if (wiphy->n_radio) {
+		int idx;
+
+		wiphy->radio_cfg = kcalloc(wiphy->n_radio, sizeof(*wiphy->radio_cfg),
+					   GFP_KERNEL);
+		if (!wiphy->radio_cfg)
+			return -ENOMEM;
+		/*
+		 * Initialize wiphy radio parameters to IEEE 802.11 MIB default values.
+		 * RTS threshold is disabled by default with the special -1 value.
+		 */
+		for (idx = 0; idx < wiphy->n_radio; idx++)
+			wiphy->radio_cfg[idx].rts_threshold = (u32)-1;
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(wiphy_register);
@@ -1187,6 +1204,7 @@ void wiphy_unregister(struct wiphy *wiphy)
 	cfg80211_rdev_free_wowlan(rdev);
 	cfg80211_free_coalesce(rdev->coalesce);
 	rdev->coalesce = NULL;
+	kfree(wiphy->radio_cfg);
 }
 EXPORT_SYMBOL(wiphy_unregister);
 
