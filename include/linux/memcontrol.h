@@ -1833,7 +1833,7 @@ bool mem_cgroup_oom_synchronize(bool wait);
 
 static inline bool task_in_memcg_oom(struct task_struct *p)
 {
-	return p->memcg_in_oom;
+	return !!p->memcg_in_oom;
 }
 
 static inline void mem_cgroup_enter_user_fault(void)
