@@ -333,12 +333,9 @@ static int imx8qxp_pixel_link_bridge_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	ret = imx_scu_get_handle(&pl->ipc_handle);
-	if (ret) {
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev, "failed to get SCU ipc handle: %d\n",
-				      ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "failed to get SCU ipc handle\n");
 
 	ret = of_property_read_u8(np, "fsl,dc-id", &pl->dc_id);
 	if (ret) {
@@ -374,13 +371,9 @@ static int imx8qxp_pixel_link_bridge_probe(struct platform_device *pdev)
 		return ret;
 
 	pl->next_bridge = imx8qxp_pixel_link_find_next_bridge(pl);
-	if (IS_ERR(pl->next_bridge)) {
-		ret = PTR_ERR(pl->next_bridge);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev, "failed to find next bridge: %d\n",
-				      ret);
-		return ret;
-	}
+	if (IS_ERR(pl->next_bridge))
+		return dev_err_probe(dev, PTR_ERR(pl->next_bridge),
+				     "failed to find next bridge\n");
 
 	platform_set_drvdata(pdev, pl);
 
