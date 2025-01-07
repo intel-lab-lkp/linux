@@ -486,6 +486,29 @@ int perf_evsel__disable(struct perf_evsel *evsel)
 	return err;
 }
 
+static int perf_evsel__get_id(struct perf_evsel *evsel, int cpu_map_idx, int thread, u64 *id)
+{
+	return perf_evsel__ioctl(evsel, PERF_EVENT_IOC_ID, id, cpu_map_idx, thread);
+}
+
+int perf_evsel__id(struct perf_evsel *evsel, u64 *ids[])
+{
+	struct perf_thread_map *threads = perf_evsel__threads(evsel);
+	struct perf_cpu_map *cpus = perf_evsel__cpus(evsel);
+	int x, y, err;
+
+	for (x = 0; x < perf_cpu_map__nr(cpus); x++) {
+		for (y = 0; y < perf_thread_map__nr(threads); y++) {
+			err = perf_evsel__get_id(evsel, x, y, &ids[x][y]);
+
+			if (err)
+				return err;
+		}
+	}
+
+	return 0;
+}
+
 int perf_evsel__apply_filter(struct perf_evsel *evsel, const char *filter)
 {
 	int err = 0, i;
