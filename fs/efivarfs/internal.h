@@ -26,6 +26,7 @@ struct efi_variable {
 
 struct efivar_entry {
 	struct efi_variable var;
+	unsigned long open_count;
 };
 
 int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
