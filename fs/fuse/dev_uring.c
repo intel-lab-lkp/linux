@@ -956,6 +956,7 @@ static void fuse_uring_do_register(struct fuse_ring_ent *ring_ent,
 		if (ready) {
 			WRITE_ONCE(ring->ready, true);
 			fiq->ops = &fuse_io_uring_ops;
+			wake_up_all(&fc->blocked_waitq);
 		}
 	}
 }
