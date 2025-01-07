@@ -2837,10 +2837,15 @@ no_tasks:
 	/*
 	 * Didn't find another task to run. Keep running @prev unless
 	 * %SCX_OPS_ENQ_LAST is in effect.
+	 *
+	 * If %SCX_OPS_ENQ_LAST is set and prev->scx.slice != 0 (configured in ops.dispatch()),
+	 * @prev would be dispatched into the local DSQ in put_prev_task_scx()
+	 * (excuted after pick_task_scx()). Set %SCX_RQ_BAL_KEEP to ensure that @prev
+	 * would be picked in pick_task_scx()
 	 */
 	if ((prev->scx.flags & SCX_TASK_QUEUED) &&
 	    (!static_branch_unlikely(&scx_ops_enq_last) ||
-	     scx_rq_bypassing(rq))) {
+	     scx_rq_bypassing(rq) || prev->scx.slice)) {
 		rq->scx.flags |= SCX_RQ_BAL_KEEP;
 		goto has_tasks;
 	}
