@@ -18,5 +18,5 @@
 ENTRY(legacy_pabort)
 	mov	r0, r4
 	mov	r1, #5
-	b	do_PrefetchAbort
+	b	arm_pabt_handler
 ENDPROC(legacy_pabort)
