@@ -1516,22 +1516,26 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		if (cxld->interleave_ways != iw ||
 		    cxld->interleave_granularity != ig ||
-		    cxld->hpa_range.start != p->res->start ||
-		    cxld->hpa_range.end != p->res->end ||
+		    cxled->spa_range.start != p->res->start ||
+		    cxled->spa_range.end != p->res->end ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
 				"%s:%s %s expected iw: %d ig: %d %pr\n",
 				dev_name(port->uport_dev), dev_name(&port->dev),
 				__func__, iw, ig, p->res);
 			dev_err(&cxlr->dev,
-				"%s:%s %s got iw: %d ig: %d state: %s %#llx:%#llx\n",
+				"%s:%s %s got iw: %d ig: %d state: %s %#llx-%#llx:%#llx-%#llx(%s):%#llx-%#llx(%s)\n",
 				dev_name(port->uport_dev), dev_name(&port->dev),
 				__func__, cxld->interleave_ways,
 				cxld->interleave_granularity,
 				(cxld->flags & CXL_DECODER_F_ENABLE) ?
 					"enabled" :
 					"disabled",
-				cxld->hpa_range.start, cxld->hpa_range.end);
+				p->res->start, p->res->end,
+				cxled->spa_range.start, cxled->spa_range.end,
+				dev_name(&cxled->cxld.dev),
+				cxld->hpa_range.start, cxld->hpa_range.end,
+				dev_name(&cxld->dev));
 			return -ENXIO;
 		}
 	} else {
@@ -2051,13 +2055,12 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 		return -ENXIO;
 	}
 
-	if (resource_size(cxled->dpa_res) * p->interleave_ways !=
-	    resource_size(p->res)) {
+	if (range_len(&cxled->spa_range) != resource_size(p->res)) {
 		dev_dbg(&cxlr->dev,
-			"%s:%s: decoder-size-%#llx * ways-%d != region-size-%#llx\n",
+			"%s:%s: SPA size mismatch: %#llx-%#llx:%#llx-%#llx\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
-			(u64)resource_size(cxled->dpa_res), p->interleave_ways,
-			(u64)resource_size(p->res));
+			p->res->start, p->res->end,
+			cxled->spa_range.start, cxled->spa_range.end);
 		return -EINVAL;
 	}
 
