@@ -944,14 +944,28 @@ static void dec_elem_count(struct bpf_htab *htab)
 		atomic_dec(&htab->count);
 }
 
-
-static void free_htab_elem(struct bpf_htab *htab, struct htab_elem *l)
+static void free_htab_elem(struct bpf_htab *htab, struct htab_elem *l, bool refill_extra)
 {
 	htab_put_fd_value(htab, l);
 
 	if (htab_is_prealloc(htab)) {
-		bpf_map_dec_elem_count(&htab->map);
 		check_and_free_fields(htab, l);
+
+		if (refill_extra) {
+			struct htab_elem **extra;
+
+			/* Use cmpxchg_release() to ensure the freeing of ptrs
+			 * or special fields in map value is completed when the
+			 * update procedure reuses the extra element. It will
+			 * pair with smp_load_acquire() when reading extra_elems
+			 * pointer.
+			 */
+			extra = this_cpu_ptr(htab->extra_elems);
+			if (cmpxchg_release(extra, NULL, l) == NULL)
+				return;
+		}
+
+		bpf_map_dec_elem_count(&htab->map);
 		pcpu_freelist_push(&htab->freelist, &l->fnode);
 	} else {
 		dec_elem_count(htab);
@@ -1205,7 +1219,7 @@ static long htab_map_update_elem(struct bpf_map *map, void *key, void *value,
 		if (old_map_ptr)
 			map->ops->map_fd_put_ptr(map, old_map_ptr, true);
 		if (!htab_is_prealloc(htab))
-			free_htab_elem(htab, l_old);
+			free_htab_elem(htab, l_old, false);
 	}
 	return 0;
 err:
@@ -1459,7 +1473,7 @@ static long htab_map_delete_elem(struct bpf_map *map, void *key)
 	htab_unlock_bucket(htab, b, hash, flags);
 
 	if (l)
-		free_htab_elem(htab, l);
+		free_htab_elem(htab, l, false);
 	return ret;
 }
 
@@ -1675,7 +1689,7 @@ out_unlock:
 		if (is_lru_map)
 			htab_lru_push_free(htab, l);
 		else
-			free_htab_elem(htab, l);
+			free_htab_elem(htab, l, false);
 	}
 
 	return ret;
@@ -1897,7 +1911,7 @@ again_nocopy:
 		if (is_lru_map)
 			htab_lru_push_free(htab, l);
 		else
-			free_htab_elem(htab, l);
+			free_htab_elem(htab, l, false);
 	}
 
 next_batch:
