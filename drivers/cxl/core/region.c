@@ -861,9 +861,8 @@ static int cxl_port_calc_hpa(struct cxl_port *port, struct cxl_decoder *cxld,
 
 static int match_auto_decoder(struct device *dev, void *data)
 {
-	struct cxl_region_params *p = data;
+	struct range *r, *hpa = data;
 	struct cxl_decoder *cxld;
-	struct range *r;
 
 	if (!is_switch_decoder(dev))
 		return 0;
@@ -871,7 +870,7 @@ static int match_auto_decoder(struct device *dev, void *data)
 	cxld = to_cxl_decoder(dev);
 	r = &cxld->hpa_range;
 
-	if (p->res && p->res->start == r->start && p->res->end == r->end)
+	if (hpa && hpa->start == r->start && hpa->end == r->end)
 		return 1;
 
 	return 0;
@@ -888,7 +887,7 @@ cxl_find_decoder_early(struct cxl_port *port,
 		return &cxled->cxld;
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags))
-		dev = device_find_child(&port->dev, &cxlr->params,
+		dev = device_find_child(&port->dev, &cxled->cxld.hpa_range,
 					match_auto_decoder);
 	else
 		dev = device_find_child(&port->dev, NULL, match_free_decoder);
