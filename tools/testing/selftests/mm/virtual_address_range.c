@@ -103,10 +103,9 @@ static int validate_complete_va_space(void)
 	FILE *file;
 	int fd;
 
-	fd = open("va_dump", O_CREAT | O_WRONLY, 0600);
-	unlink("va_dump");
+	fd = open("/dev/null", O_WRONLY);
 	if (fd < 0) {
-		ksft_test_result_skip("cannot create or open dump file\n");
+		ksft_test_result_skip("cannot create or open /dev/null\n");
 		ksft_finished();
 	}
 
@@ -152,7 +151,6 @@ static int validate_complete_va_space(void)
 		while (start_addr + hop < end_addr) {
 			if (write(fd, (void *)(start_addr + hop), 1) != 1)
 				return 1;
-			lseek(fd, 0, SEEK_SET);
 
 			hop += MAP_CHUNK_SIZE;
 		}
