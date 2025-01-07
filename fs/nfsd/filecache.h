@@ -36,15 +36,13 @@ struct nfsd_file {
 	struct net		*nf_net;
 #define NFSD_FILE_HASHED	(0)
 #define NFSD_FILE_PENDING	(1)
-#define NFSD_FILE_REFERENCED	(2)
-#define NFSD_FILE_GC		(3)
+#define NFSD_FILE_GC		(2)
 	unsigned long		nf_flags;
 	refcount_t		nf_ref;
 	unsigned char		nf_may;
 
 	struct nfsd_file_mark	*nf_mark;
 	struct list_head	nf_lru;
-	struct list_head	nf_gc;
 	struct rcu_head		nf_rcu;
 	ktime_t			nf_birthtime;
 };
