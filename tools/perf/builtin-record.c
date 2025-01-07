@@ -161,6 +161,7 @@ struct record {
 	struct evlist		*sb_evlist;
 	pthread_t		thread_id;
 	int			realtime_prio;
+	int			num_parsed_dummy_events;
 	bool			switch_output_event_set;
 	bool			no_buildid;
 	bool			no_buildid_set;
@@ -961,7 +962,6 @@ static int record__config_tracking_events(struct record *rec)
 	 */
 	if (opts->target.initial_delay || target__has_cpu(&opts->target) ||
 	    perf_pmus__num_core_pmus() > 1) {
-
 		/*
 		 * User space tasks can migrate between CPUs, so when tracing
 		 * selected CPUs, sideband for all CPUs is still needed.
@@ -1366,6 +1366,7 @@ static int record__open(struct record *rec)
 	struct perf_session *session = rec->session;
 	struct record_opts *opts = &rec->opts;
 	int rc = 0;
+	bool skipped = false;
 
 	evlist__for_each_entry(evlist, pos) {
 try_again:
@@ -1381,15 +1382,50 @@ try_again:
 			        pos = evlist__reset_weak_group(evlist, pos, true);
 				goto try_again;
 			}
-			rc = -errno;
 			evsel__open_strerror(pos, &opts->target, errno, msg, sizeof(msg));
-			ui__error("%s\n", msg);
-			goto out;
+			ui__error("Failure to open event '%s' on PMU '%s' which will be removed.\n%s\n",
+				  evsel__name(pos), evsel__pmu_name(pos), msg);
+			pos->skippable = true;
+			skipped = true;
+		} else {
+			pos->supported = true;
 		}
-
-		pos->supported = true;
 	}
 
+	if (skipped) {
+		struct evsel *tmp;
+		int idx = 0, num_dummy = 0, num_non_dummy = 0,
+		    removed_dummy = 0, removed_non_dummy = 0;
+
+		/* Remove evsels that failed to open and update indices. */
+		evlist__for_each_entry_safe(evlist, tmp, pos) {
+			if (evsel__is_dummy_event(pos))
+				num_dummy++;
+			else
+				num_non_dummy++;
+
+			if (!pos->skippable)
+				continue;
+
+			if (evsel__is_dummy_event(pos))
+				removed_dummy++;
+			else
+				removed_non_dummy++;
+
+			evlist__remove(evlist, pos);
+		}
+		evlist__for_each_entry(evlist, pos) {
+			pos->core.idx = idx++;
+		}
+		/* If list is empty except implicitly added dummy events then fail. */
+		if ((num_non_dummy == removed_non_dummy) &&
+		    ((rec->num_parsed_dummy_events == 0) ||
+		     (removed_dummy >= (num_dummy - rec->num_parsed_dummy_events)))) {
+			ui__error("Failure to open any events for recording.\n");
+			rc = -1;
+			goto out;
+		}
+	}
 	if (symbol_conf.kptr_restrict && !evlist__exclude_kernel(evlist)) {
 		pr_warning(
 "WARNING: Kernel address maps (/proc/{kallsyms,modules}) are restricted,\n"
@@ -3975,6 +4011,7 @@ int cmd_record(int argc, const char **argv)
 	int err;
 	struct record *rec = &record;
 	char errbuf[BUFSIZ];
+	struct evsel *evsel;
 
 	setlocale(LC_ALL, "");
 
@@ -4000,6 +4037,11 @@ int cmd_record(int argc, const char **argv)
 			    PARSE_OPT_STOP_AT_NON_OPTION);
 	if (quiet)
 		perf_quiet_option();
+
+	evlist__for_each_entry(rec->evlist, evsel) {
+		if (evsel__is_dummy_event(evsel))
+			rec->num_parsed_dummy_events++;
+	}
 
 	err = symbol__validate_sym_arguments();
 	if (err)
