@@ -41,6 +41,12 @@ static int efivarfs_ops_notifier(struct notifier_block *nb, unsigned long event,
 
 static void efivarfs_evict_inode(struct inode *inode)
 {
+	struct efivar_entry *entry = inode->i_private;
+
+	if (entry)  {
+		list_del(&entry->list);
+		kfree(entry);
+	}
 	clear_inode(inode);
 }
 
@@ -278,13 +284,6 @@ fail:
 	return err;
 }
 
-static int efivarfs_destroy(struct efivar_entry *entry, void *data)
-{
-	efivar_entry_remove(entry);
-	kfree(entry);
-	return 0;
-}
-
 enum {
 	Opt_uid, Opt_gid,
 };
@@ -407,7 +406,7 @@ static void efivarfs_kill_sb(struct super_block *sb)
 	kill_litter_super(sb);
 
 	/* Remove all entries and destroy */
-	efivar_entry_iter(efivarfs_destroy, &sfi->efivarfs_list, NULL);
+	WARN_ON(!list_empty(&sfi->efivarfs_list));
 	kfree(sfi);
 }
 
