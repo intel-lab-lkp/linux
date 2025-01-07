@@ -178,6 +178,12 @@ int main(int argc, char *argv[])
 		validate_addr(ptr[i], 0);
 	}
 	lchunks = i;
+
+	if (!lchunks) {
+		ksft_test_result_skip("Not enough memory for a single chunk\n");
+		ksft_finished();
+	}
+
 	hptr = (char **) calloc(NR_CHUNKS_HIGH, sizeof(char *));
 	if (hptr == NULL) {
 		ksft_test_result_skip("Memory constraint not fulfilled\n");
