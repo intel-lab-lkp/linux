@@ -864,12 +864,22 @@ acomp_fail:
 	return ret;
 }
 
+DEFINE_STATIC_SRCU(acomp_srcu);
+
 static int zswap_cpu_comp_dead(unsigned int cpu, struct hlist_node *node)
 {
 	struct zswap_pool *pool = hlist_entry(node, struct zswap_pool, node);
 	struct crypto_acomp_ctx *acomp_ctx = per_cpu_ptr(pool->acomp_ctx, cpu);
 
 	if (!IS_ERR_OR_NULL(acomp_ctx)) {
+		/*
+		 * Even though the acomp_ctx should not be currently in use on
+		 * @cpu, it may still be used by compress/decompress operations
+		 * that started on @cpu and migrated to a different CPU. Wait
+		 * for such usages to complete, any news usages would be a bug.
+		 */
+		synchronize_srcu(&acomp_srcu);
+
 		if (!IS_ERR_OR_NULL(acomp_ctx->req))
 			acomp_request_free(acomp_ctx->req);
 		if (!IS_ERR_OR_NULL(acomp_ctx->acomp))
@@ -878,6 +888,18 @@ static int zswap_cpu_comp_dead(unsigned int cpu, struct hlist_node *node)
 	}
 
 	return 0;
+}
+
+static struct crypto_acomp_ctx *acomp_ctx_get_cpu(struct crypto_acomp_ctx __percpu *acomp_ctx,
+						  int *srcu_idx)
+{
+	*srcu_idx = srcu_read_lock(&acomp_srcu);
+	return raw_cpu_ptr(acomp_ctx);
+}
+
+static void acomp_ctx_put_cpu(int srcu_idx)
+{
+	srcu_read_unlock(&acomp_srcu, srcu_idx);
 }
 
 static bool zswap_compress(struct page *page, struct zswap_entry *entry,
@@ -889,12 +911,12 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 	unsigned int dlen = PAGE_SIZE;
 	unsigned long handle;
 	struct zpool *zpool;
+	int srcu_idx;
 	char *buf;
 	gfp_t gfp;
 	u8 *dst;
 
-	acomp_ctx = raw_cpu_ptr(pool->acomp_ctx);
-
+	acomp_ctx = acomp_ctx_get_cpu(pool->acomp_ctx, &srcu_idx);
 	mutex_lock(&acomp_ctx->mutex);
 
 	dst = acomp_ctx->buffer;
@@ -950,6 +972,7 @@ unlock:
 		zswap_reject_alloc_fail++;
 
 	mutex_unlock(&acomp_ctx->mutex);
+	acomp_ctx_put_cpu(srcu_idx);
 	return comp_ret == 0 && alloc_ret == 0;
 }
 
@@ -958,9 +981,10 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	struct zpool *zpool = entry->pool->zpool;
 	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
+	int srcu_idx;
 	u8 *src;
 
-	acomp_ctx = raw_cpu_ptr(entry->pool->acomp_ctx);
+	acomp_ctx = acomp_ctx_get_cpu(entry->pool->acomp_ctx, &srcu_idx);
 	mutex_lock(&acomp_ctx->mutex);
 
 	src = zpool_map_handle(zpool, entry->handle, ZPOOL_MM_RO);
@@ -990,6 +1014,7 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 
 	if (src != acomp_ctx->buffer)
 		zpool_unmap_handle(zpool, entry->handle);
+	acomp_ctx_put_cpu(srcu_idx);
 }
 
 /*********************************
