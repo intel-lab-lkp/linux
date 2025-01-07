@@ -722,6 +722,10 @@ static int otx2vf_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (err)
 		goto err_shutdown_tc;
 
+	vf->af_xdp_zc_qidx = bitmap_zalloc(qcount, GFP_KERNEL);
+	if (!vf->af_xdp_zc_qidx)
+		goto err_shutdown_tc;
+
 #ifdef CONFIG_DCB
 	err = otx2_dcbnl_set_ops(netdev);
 	if (err)
