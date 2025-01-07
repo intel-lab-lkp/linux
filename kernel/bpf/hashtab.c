@@ -1032,9 +1032,16 @@ static struct htab_elem *alloc_preallocated_htab_elem(struct bpf_htab *htab,
 		 * use per-cpu extra elems to avoid freelist_pop/push
 		 */
 		pl_new = this_cpu_ptr(htab->extra_elems);
-		l_new = *pl_new;
-		*pl_new = old_elem;
-		return l_new;
+		/* Paired with cmpxchg_release() in free_htab_elem() */
+		l_new = smp_load_acquire(pl_new);
+		/* extra_elems can be NULL if the current update operation
+		 * preempts another update operation that hasn't yet refilled
+		 * the per-cpu extra_elems.
+		 */
+		if (l_new) {
+			WRITE_ONCE(*pl_new, NULL);
+			return l_new;
+		}
 	}
 
 	l = __pcpu_freelist_pop(&htab->freelist);
@@ -1137,7 +1144,6 @@ static long htab_map_update_elem(struct bpf_map *map, void *key, void *value,
 	struct htab_elem *l_new = NULL, *l_old;
 	struct hlist_nulls_head *head;
 	unsigned long flags;
-	void *old_map_ptr;
 	struct bucket *b;
 	u32 key_size, hash;
 	int ret;
@@ -1198,7 +1204,8 @@ static long htab_map_update_elem(struct bpf_map *map, void *key, void *value,
 		copy_map_value_locked(map,
 				      l_old->key + round_up(key_size, 8),
 				      value, false);
-		ret = 0;
+		/* don't free the reused old element */
+		l_old = NULL;
 		goto err;
 	}
 
@@ -1214,31 +1221,13 @@ static long htab_map_update_elem(struct bpf_map *map, void *key, void *value,
 	 * concurrent search will find it before old elem
 	 */
 	hlist_nulls_add_head_rcu(&l_new->hash_node, head);
-	if (l_old) {
+	if (l_old)
 		hlist_nulls_del_rcu(&l_old->hash_node);
-
-		/* l_old has already been stashed in htab->extra_elems, free
-		 * its special fields before it is available for reuse. Also
-		 * save the old map pointer in htab of maps before unlock
-		 * and release it after unlock.
-		 */
-		old_map_ptr = NULL;
-		if (htab_is_prealloc(htab)) {
-			if (map->ops->map_fd_put_ptr)
-				old_map_ptr = fd_htab_map_get_ptr(map, l_old);
-			check_and_free_fields(htab, l_old);
-		}
-	}
-	htab_unlock_bucket(htab, b, hash, flags);
-	if (l_old) {
-		if (old_map_ptr)
-			map->ops->map_fd_put_ptr(map, old_map_ptr, true);
-		if (!htab_is_prealloc(htab))
-			free_htab_elem(htab, l_old, false);
-	}
-	return 0;
 err:
 	htab_unlock_bucket(htab, b, hash, flags);
+	/* refill per-cpu extra_elems for preallocated htab */
+	if (!ret && l_old)
+		free_htab_elem(htab, l_old, true);
 	return ret;
 }
 
