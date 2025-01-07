@@ -3353,6 +3353,17 @@ static int cxl_endpoint_initialize(struct cxl_endpoint_decoder *cxled)
 		if (cxl_port_calc_hpa(parent, cxld, &hpa))
 			return -ENXIO;
 
+		/*
+		 * There is only support to translate from the endpoint to its
+		 * parent port, but not in the opposite direction from the
+		 * parent to the endpoint. Thus, the endpoint address range
+		 * cannot be determined and setup manually. If the parent
+		 * implements the ->to_hpa() callback and needs address
+		 * translation, forbit reprogramming of the decoders and lock
+		 * them.
+		 */
+		cxld->flags |= CXL_DECODER_F_LOCK;
+
 		/* Iterate from endpoint to root_port refining the position */
 		pos = cxl_port_calc_pos(iter, &hpa, pos);
 		if (pos < 0)
