@@ -55,6 +55,12 @@ static int pidfd_open(pid_t pid, unsigned int flags)
 	return syscall(SYS_pidfd_open, pid, flags);
 }
 
+static ssize_t sys_process_madvise(int pidfd, const struct iovec *iovec,
+				   size_t n, int advice, unsigned int flags)
+{
+	return syscall(__NR_process_madvise, pidfd, iovec, n, advice, flags);
+}
+
 /*
  * Enable our signal catcher and try to read/write the specified buffer. The
  * return value indicates whether the read/write succeeds without a fatal
@@ -419,7 +425,7 @@ TEST_F(guard_pages, process_madvise)
 	ASSERT_EQ(munmap(&ptr_region[99 * page_size], page_size), 0);
 
 	/* Now guard in one step. */
-	count = process_madvise(pidfd, vec, 6, MADV_GUARD_INSTALL, 0);
+	count = sys_process_madvise(pidfd, vec, 6, MADV_GUARD_INSTALL, 0);
 
 	/* OK we don't have permission to do this, skip. */
 	if (count == -1 && errno == EPERM)
@@ -440,7 +446,7 @@ TEST_F(guard_pages, process_madvise)
 	ASSERT_FALSE(try_read_write_buf(&ptr3[19 * page_size]));
 
 	/* Now do the same with unguard... */
-	count = process_madvise(pidfd, vec, 6, MADV_GUARD_REMOVE, 0);
+	count = sys_process_madvise(pidfd, vec, 6, MADV_GUARD_REMOVE, 0);
 
 	/* ...and everything should now succeed. */
 
