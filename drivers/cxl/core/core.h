@@ -115,4 +115,10 @@ bool cxl_need_node_perf_attrs_update(int nid);
 int cxl_port_get_switch_dport_bandwidth(struct cxl_port *port,
 					struct access_coordinate *c);
 
+#ifdef CONFIG_CXL_AMD
+void cxl_port_setup_amd(struct cxl_port *port);
+#else
+static inline void cxl_port_setup_amd(struct cxl_port *port) {};
+#endif
+
 #endif /* __CXL_CORE_H__ */

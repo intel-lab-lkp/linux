@@ -831,6 +831,11 @@ static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 			    &cxl_einj_inject_fops);
 }
 
+static void cxl_port_platform_setup(struct cxl_port *port)
+{
+	cxl_port_setup_amd(port);
+}
+
 static int cxl_port_add(struct cxl_port *port,
 			resource_size_t component_reg_phys,
 			struct cxl_dport *parent_dport)
@@ -867,6 +872,8 @@ static int cxl_port_add(struct cxl_port *port,
 		if (rc)
 			return rc;
 	}
+
+	cxl_port_platform_setup(port);
 
 	rc = device_add(dev);
 	if (rc)
