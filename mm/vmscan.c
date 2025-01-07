@@ -3366,7 +3366,7 @@ static unsigned long get_pte_pfn(pte_t pte, struct vm_area_struct *vma, unsigned
 	if (!pte_present(pte) || is_zero_pfn(pfn))
 		return -1;
 
-	if (WARN_ON_ONCE(pte_devmap(pte) || pte_special(pte)))
+	if (WARN_ON_ONCE(pte_special(pte)))
 		return -1;
 
 	if (!pte_young(pte) && !mm_has_notifiers(vma->vm_mm))
@@ -3389,9 +3389,6 @@ static unsigned long get_pmd_pfn(pmd_t pmd, struct vm_area_struct *vma, unsigned
 	VM_WARN_ON_ONCE(addr < vma->vm_start || addr >= vma->vm_end);
 
 	if (!pmd_present(pmd) || is_huge_zero_pmd(pmd))
-		return -1;
-
-	if (WARN_ON_ONCE(pmd_devmap(pmd)))
 		return -1;
 
 	if (!pmd_young(pmd) && !mm_has_notifiers(vma->vm_mm))
