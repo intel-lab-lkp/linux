@@ -59,7 +59,6 @@ static int discover_region(struct device *dev, void *root)
 
 static int cxl_switch_port_probe(struct cxl_port *port)
 {
-	struct cxl_hdm *cxlhdm;
 	int rc;
 
 	/* Cache the data early to ensure is_visible() works */
@@ -70,6 +69,18 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 		return rc;
 
 	cxl_switch_parse_cdat(port);
+
+	return 0;
+}
+
+static int cxl_switch_port_setup_hdm(struct cxl_port *port)
+{
+	struct cxl_hdm *cxlhdm;
+	int rc;
+
+	/* Skip hdm setup if there is a cxlhdm on the port */
+	if (dev_get_drvdata(&port->dev))
+		return 0;
 
 	cxlhdm = devm_cxl_setup_hdm(port, NULL);
 	if (!IS_ERR(cxlhdm))
@@ -87,6 +98,17 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 
 	dev_err(&port->dev, "HDM decoder capability not found\n");
 	return -ENXIO;
+}
+
+static int cxl_switch_port_setup(struct cxl_port *port)
+{
+	int rc;
+
+	rc = cxl_port_setup_regs(port);
+	if (rc)
+		return rc;
+
+	return cxl_switch_port_setup_hdm(port);
 }
 
 static int cxl_endpoint_port_probe(struct cxl_port *port)
@@ -109,9 +131,9 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 		 */
 		if (iter != parent_port) {
 			guard(device)(&iter->dev);
-			rc = cxl_port_setup_regs(iter);
+			rc = cxl_switch_port_setup(iter);
 		} else {
-			rc = cxl_port_setup_regs(iter);
+			rc = cxl_switch_port_setup(iter);
 		}
 		if (rc)
 			return rc;
