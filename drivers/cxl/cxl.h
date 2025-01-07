@@ -443,8 +443,7 @@ struct cxl_switch_decoder {
 	struct cxl_dport *target[];
 };
 
-struct cxl_root_decoder;
-typedef u64 (*cxl_hpa_to_spa_fn)(struct cxl_root_decoder *cxlrd, u64 hpa);
+typedef u64 (*cxl_to_hpa_fn)(struct cxl_decoder *cxld, u64 hpa);
 
 /**
  * struct cxl_root_decoder - Static platform CXL address decoder
@@ -459,7 +458,7 @@ typedef u64 (*cxl_hpa_to_spa_fn)(struct cxl_root_decoder *cxlrd, u64 hpa);
 struct cxl_root_decoder {
 	struct resource *res;
 	atomic_t region_id;
-	cxl_hpa_to_spa_fn hpa_to_spa;
+	cxl_to_hpa_fn hpa_to_spa;
 	void *platform_data;
 	struct mutex range_lock;
 	int qos_class;

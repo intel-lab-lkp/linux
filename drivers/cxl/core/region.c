@@ -2925,7 +2925,7 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 
 	/* Root decoder translation overrides typical modulo decode */
 	if (cxlrd->hpa_to_spa)
-		hpa = cxlrd->hpa_to_spa(cxlrd, hpa);
+		hpa = cxlrd->hpa_to_spa(&cxlrd->cxlsd.cxld, hpa);
 
 	if (hpa < p->res->start || hpa > p->res->end) {
 		dev_dbg(&cxlr->dev,
