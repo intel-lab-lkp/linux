@@ -32,4 +32,15 @@ config HISI_SOC_CACHE
 	  If either HiSilicon L3 cache driver or HiSilicon Hydra Home
 	  Agent driver is needed, say yes.
 
+config HISI_SOC_L3C
+	tristate "HiSilicon L3 Cache device driver"
+	depends on ARM64 && ACPI || COMPILE_TEST
+	depends on HISI_SOC_CACHE
+	help
+	  This driver provides the functions to lock L3 cache entries from
+	  being evicted for better performance.
+
+	  This driver can be built as a module. If so, the module will be
+	  called hisi_soc_l3c.
+
 endmenu
