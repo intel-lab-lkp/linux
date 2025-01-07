@@ -659,7 +659,10 @@ static inline void ip_tunnel_info_opts_set(struct ip_tunnel_info *info,
 {
 	info->options_len = len;
 	if (len > 0) {
-		memcpy(ip_tunnel_info_opts(info), from, len);
+		unsafe_memcpy(ip_tunnel_info_opts(info), from, len,
+			      /* metadata_dst_alloc() reserves room (md_size bytes)
+			       * for options right after the ip_tunnel_info struct.
+			       */);
 		ip_tunnel_flags_or(info->key.tun_flags, info->key.tun_flags,
 				   flags);
 	}
