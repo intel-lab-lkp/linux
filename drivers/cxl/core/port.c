@@ -1517,6 +1517,49 @@ static int port_has_memdev(struct device *dev, const void *data)
 	return !!cxl_ep_load(port, ctx->cxlmd);
 }
 
+static void cxld_unregister(void *dev)
+{
+	struct cxl_endpoint_decoder *cxled;
+
+	if (is_endpoint_decoder(dev)) {
+		cxled = to_cxl_endpoint_decoder(dev);
+		cxl_decoder_kill_region(cxled);
+	}
+
+	device_unregister(dev);
+}
+
+static int cxl_decoder_remove(struct device *dev, void *data)
+{
+	struct cxl_port *port = (struct cxl_port *)data;
+
+	if (!is_switch_decoder(dev) && !is_endpoint_decoder(dev))
+		return 0;
+
+	devm_release_action(&port->dev, cxld_unregister, dev);
+	return 0;
+}
+
+static void cxl_port_remove_hdm(struct cxl_port *port)
+{
+	const struct cxl_reg_map *rmap = &port->reg_map.component_map.hdm_decoder;
+	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
+	resource_size_t addr, length;
+
+	if (!cxlhdm)
+		return;
+
+	device_for_each_child(&port->dev, port, cxl_decoder_remove);
+	if (cxlhdm->regs.hdm_decoder) {
+		devm_iounmap(&port->dev, cxlhdm->regs.hdm_decoder);
+		addr = port->reg_map.resource + rmap->offset;
+		length = rmap->size;
+		devm_release_mem_region(&port->dev, addr, length);
+	}
+	devm_kfree(&port->dev, cxlhdm);
+	dev_set_drvdata(&port->dev, NULL);
+}
+
 static void cxl_detach_ep(void *data)
 {
 	struct cxl_memdev *cxlmd = data;
@@ -1545,11 +1588,12 @@ static void cxl_detach_ep(void *data)
 		cxl_ep_remove(port, ep);
 		if (ep && xa_empty(&port->endpoints)) {
 			/*
-			 * Reset component registers information on the port
+			 * Reset HDM and component registers information on the port
 			 * during the last ep detaching. So that the next ep
 			 * attaching can trigger component registers probing
-			 * again.
+			 * and HDM setup again.
 			 */
+			cxl_port_remove_hdm(port);
 			cxl_register_map_reset(&port->reg_map);
 
 			if (!port->dead && !is_cxl_root(parent_port) &&
@@ -2030,18 +2074,6 @@ int cxl_decoder_add(struct cxl_decoder *cxld, int *target_map)
 	return cxl_decoder_add_locked(cxld, target_map);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_decoder_add, "CXL");
-
-static void cxld_unregister(void *dev)
-{
-	struct cxl_endpoint_decoder *cxled;
-
-	if (is_endpoint_decoder(dev)) {
-		cxled = to_cxl_endpoint_decoder(dev);
-		cxl_decoder_kill_region(cxled);
-	}
-
-	device_unregister(dev);
-}
 
 int cxl_decoder_autoremove(struct device *host, struct cxl_decoder *cxld)
 {

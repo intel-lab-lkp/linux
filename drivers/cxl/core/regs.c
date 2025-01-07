@@ -194,8 +194,15 @@ void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
 	}
 
 	ret_val = devm_ioremap(dev, addr, length);
-	if (!ret_val)
+	if (!ret_val) {
 		dev_err(dev, "Failed to map region %pr\n", res);
+		/*
+		 * Explicitly release mem region in failure case
+		 * so that no need to consider the case of devm_request_mem_region()
+		 * success but devm_ioremap() failure in cxl_port_remove_hdm().
+		 */
+		devm_release_mem_region(dev, addr, length);
+	}
 
 	return ret_val;
 }
