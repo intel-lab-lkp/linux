@@ -72,14 +72,11 @@ static int scmi_protocol_device_request(const struct scmi_device_id *id_table)
 	 */
 	mutex_lock(&scmi_requested_devices_mtx);
 	idr_for_each_entry(&scmi_requested_devices, head, id) {
-		if (!phead) {
-			/* A list found registered in the IDR is never empty */
-			rdev = list_first_entry(head, struct scmi_requested_dev,
-						node);
-			if (rdev->id_table->protocol_id ==
-			    id_table->protocol_id)
-				phead = head;
-		}
+		/* A list found registered in the IDR is never empty */
+		rdev = list_first_entry(head, struct scmi_requested_dev, node);
+		if (rdev->id_table->protocol_id != id_table->protocol_id)
+			continue;
+
 		list_for_each_entry(rdev, head, node) {
 			if (!strcmp(rdev->id_table->name, id_table->name)) {
 				pr_err("Ignoring duplicate request [%d] %s\n",
@@ -89,6 +86,8 @@ static int scmi_protocol_device_request(const struct scmi_device_id *id_table)
 				goto out;
 			}
 		}
+		phead = head;
+		break;
 	}
 
 	/*
