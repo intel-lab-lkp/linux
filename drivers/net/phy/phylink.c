@@ -3435,6 +3435,9 @@ static void phylink_sfp_set_config(struct phylink *pl,
 			     phy_modes(state->interface));
 	}
 
+	if (pl->phydev)
+		changed = true;
+
 	if (changed && !test_bit(PHYLINK_DISABLE_STOPPED,
 				 &pl->phylink_disable_state))
 		phylink_mac_initial_config(pl, false);
