@@ -557,10 +557,8 @@ static int imx8qxp_ldb_parse_dt_companion(struct imx8qxp_ldb *imx8qxp_ldb)
 
 	imx8qxp_ldb->companion = of_drm_find_bridge(companion_port);
 	if (!imx8qxp_ldb->companion) {
-		ret = -EPROBE_DEFER;
-		DRM_DEV_DEBUG_DRIVER(dev,
-				     "failed to find bridge for companion bridge: %d\n",
-				     ret);
+		ret = dev_err_probe(dev, -EPROBE_DEFER,
+				    "failed to find bridge for companion bridge\n");
 		goto out;
 	}
 
@@ -590,22 +588,14 @@ static int imx8qxp_ldb_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	imx8qxp_ldb->clk_pixel = devm_clk_get(dev, "pixel");
-	if (IS_ERR(imx8qxp_ldb->clk_pixel)) {
-		ret = PTR_ERR(imx8qxp_ldb->clk_pixel);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev,
-				      "failed to get pixel clock: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(imx8qxp_ldb->clk_pixel))
+		return dev_err_probe(dev, PTR_ERR(imx8qxp_ldb->clk_pixel),
+				     "failed to get pixel clock\n");
 
 	imx8qxp_ldb->clk_bypass = devm_clk_get(dev, "bypass");
-	if (IS_ERR(imx8qxp_ldb->clk_bypass)) {
-		ret = PTR_ERR(imx8qxp_ldb->clk_bypass);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev,
-				      "failed to get bypass clock: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(imx8qxp_ldb->clk_bypass))
+		return dev_err_probe(dev, PTR_ERR(imx8qxp_ldb->clk_bypass),
+				     "failed to get bypass clock\n");
 
 	imx8qxp_ldb->dev = dev;
 
@@ -640,13 +630,10 @@ static int imx8qxp_ldb_probe(struct platform_device *pdev)
 	}
 
 	imx8qxp_ldb_ch->phy = devm_of_phy_get(dev, ldb_ch->np, "lvds_phy");
-	if (IS_ERR(imx8qxp_ldb_ch->phy)) {
-		ret = PTR_ERR(imx8qxp_ldb_ch->phy);
-		if (ret != -EPROBE_DEFER)
-			DRM_DEV_ERROR(dev, "failed to get channel%d PHY: %d\n",
-				      imx8qxp_ldb->active_chno, ret);
-		return ret;
-	}
+	if (IS_ERR(imx8qxp_ldb_ch->phy))
+		return dev_err_probe(dev, PTR_ERR(imx8qxp_ldb_ch->phy),
+				     "failed to get channel%d PHY\n",
+				     imx8qxp_ldb->active_chno);
 
 	ret = ldb_find_next_bridge_helper(ldb);
 	if (ret)
