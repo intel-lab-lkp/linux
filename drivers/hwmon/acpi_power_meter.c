@@ -85,7 +85,6 @@ struct acpi_power_meter_resource {
 	u64		cap;
 	u64		avg_interval;
 	bool		power_alarm;
-	int			sensors_valid;
 	unsigned long		sensors_last_updated;
 	struct sensor_device_attribute	sensors[NUM_SENSORS];
 	int			num_sensors;
@@ -316,15 +315,14 @@ static ssize_t set_trip(struct device *dev, struct device_attribute *devattr,
 }
 
 /* Power meter */
-static int update_meter(struct acpi_power_meter_resource *resource)
+static int update_meter(struct acpi_power_meter_resource *resource, bool check)
 {
 	unsigned long long data;
 	acpi_status status;
 	unsigned long local_jiffies = jiffies;
 
-	if (time_before(local_jiffies, resource->sensors_last_updated +
-			msecs_to_jiffies(resource->caps.sampling_time)) &&
-			resource->sensors_valid)
+	if (check && time_before(local_jiffies, resource->sensors_last_updated +
+			msecs_to_jiffies(resource->caps.sampling_time)))
 		return 0;
 
 	status = acpi_evaluate_integer(resource->acpi_dev->handle, "_PMM",
@@ -336,7 +334,6 @@ static int update_meter(struct acpi_power_meter_resource *resource)
 	}
 
 	resource->power = data;
-	resource->sensors_valid = 1;
 	resource->sensors_last_updated = jiffies;
 	return 0;
 }
@@ -349,7 +346,7 @@ static ssize_t show_power(struct device *dev,
 	struct acpi_power_meter_resource *resource = acpi_dev->driver_data;
 
 	mutex_lock(&resource->lock);
-	update_meter(resource);
+	update_meter(resource, true);
 	mutex_unlock(&resource->lock);
 
 	if (resource->power == UNKNOWN_POWER)
@@ -429,7 +426,7 @@ static ssize_t show_val(struct device *dev,
 			val = 0;
 		break;
 	case 6:
-		ret = update_meter(resource);
+		ret = update_meter(resource, true);
 		if (ret)
 			return ret;
 		/* need to update cap if not to support the notification. */
@@ -699,6 +696,10 @@ static int setup_attrs(struct acpi_power_meter_resource *resource)
 		return res;
 
 	if (resource->caps.flags & POWER_METER_CAN_MEASURE) {
+		res = update_meter(resource, false);
+		if (res)
+			goto error;
+
 		res = register_attrs(resource, meter_attrs);
 		if (res)
 			goto error;
@@ -898,7 +899,6 @@ static int acpi_power_meter_add(struct acpi_device *device)
 	if (!resource)
 		return -ENOMEM;
 
-	resource->sensors_valid = 0;
 	resource->acpi_dev = device;
 	mutex_init(&resource->lock);
 	strcpy(acpi_device_name(device), ACPI_POWER_METER_DEVICE_NAME);
