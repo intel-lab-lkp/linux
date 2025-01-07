@@ -894,12 +894,38 @@ static int kvm_init_mmu_notifier(struct kvm *kvm)
 
 #endif /* CONFIG_KVM_GENERIC_MMU_NOTIFIER */
 
+static u64 last_suspend;
+static u64 total_suspend_ns;
+
+u64 kvm_total_suspend_ns(void)
+{
+	return total_suspend_ns;
+}
+
+
 #ifdef CONFIG_HAVE_KVM_PM_NOTIFIER
+static int kvm_pm_notifier(struct kvm *kvm, unsigned long state)
+{
+	switch (state) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		last_suspend = ktime_get_boottime_ns();
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		total_suspend_ns += ktime_get_boottime_ns() - last_suspend;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int kvm_pm_notifier_call(struct notifier_block *bl,
 				unsigned long state,
 				void *unused)
 {
 	struct kvm *kvm = container_of(bl, struct kvm, pm_notifier);
+
+	if (kvm_pm_notifier(kvm, state) != NOTIFY_DONE)
+		return NOTIFY_BAD;
 
 	return kvm_arch_pm_notifier(kvm, state);
 }
