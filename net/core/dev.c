@@ -11526,8 +11526,10 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		unlist_netdevice(dev);
 		WRITE_ONCE(dev->reg_state, NETREG_UNREGISTERING);
 	}
-	flush_all_backlogs();
 
+	__rtnl_unlock();
+	flush_all_backlogs();
+	rtnl_lock();
 	synchronize_net();
 
 	list_for_each_entry(dev, head, unreg_list) {
