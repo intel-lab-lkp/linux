@@ -39,11 +39,15 @@ static u64 __iomem *clint_timer_cmp;
 static u64 __iomem *clint_timer_val;
 static unsigned long clint_timer_freq;
 static unsigned int clint_timer_irq;
+static bool is_c900_clint;
 
 #ifdef CONFIG_RISCV_M_MODE
 u64 __iomem *clint_time_val;
 EXPORT_SYMBOL(clint_time_val);
 #endif
+
+DEFINE_STATIC_KEY_FALSE(riscv_csr_time_available);
+EXPORT_SYMBOL(riscv_csr_time_available);
 
 #ifdef CONFIG_SMP
 static void clint_send_ipi(unsigned int cpu)
@@ -79,6 +83,9 @@ static void clint_ipi_interrupt(struct irq_desc *desc)
 #ifdef CONFIG_64BIT
 static u64 notrace clint_get_cycles64(void)
 {
+	if (static_branch_unlikely(&riscv_csr_time_available))
+		return csr_read(CSR_TIME);
+
 	return clint_get_cycles();
 }
 #else /* CONFIG_64BIT */
@@ -86,10 +93,17 @@ static u64 notrace clint_get_cycles64(void)
 {
 	u32 hi, lo;
 
-	do {
-		hi = clint_get_cycles_hi();
-		lo = clint_get_cycles();
-	} while (hi != clint_get_cycles_hi());
+	if (static_branch_unlikely(&riscv_csr_time_available)) {
+		do {
+			hi = csr_read(CSR_TIMEH);
+			lo = csr_read(CSR_TIME);
+		} while (hi != csr_read(CSR_TIMEH));
+	} else {
+		do {
+			hi = clint_get_cycles_hi();
+			lo = clint_get_cycles();
+		} while (hi != clint_get_cycles_hi());
+	}
 
 	return ((u64)hi << 32) | lo;
 }
@@ -119,6 +133,19 @@ static int clint_clock_next_event(unsigned long delta,
 	return 0;
 }
 
+static int c900_clint_clock_next_event(unsigned long delta,
+				       struct clock_event_device *ce)
+{
+	void __iomem *r = clint_timer_cmp +
+			  cpuid_to_hartid_map(smp_processor_id());
+	u64 val = clint_get_cycles64() + delta;
+
+	csr_set(CSR_IE, IE_TIE);
+	writel_relaxed(val, r);
+	writel_relaxed(val >> 32, r + 4);
+	return 0;
+}
+
 static DEFINE_PER_CPU(struct clock_event_device, clint_clock_event) = {
 	.name		= "clint_clockevent",
 	.features	= CLOCK_EVT_FEAT_ONESHOT,
@@ -129,6 +156,9 @@ static DEFINE_PER_CPU(struct clock_event_device, clint_clock_event) = {
 static int clint_timer_starting_cpu(unsigned int cpu)
 {
 	struct clock_event_device *ce = per_cpu_ptr(&clint_clock_event, cpu);
+
+	if (is_c900_clint)
+		ce->set_next_event = c900_clint_clock_next_event;
 
 	ce->cpumask = cpumask_of(cpu);
 	clockevents_config_and_register(ce, clint_timer_freq, 100, ULONG_MAX);
@@ -161,7 +191,7 @@ static irqreturn_t clint_timer_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int __init clint_timer_init_dt(struct device_node *np)
+static int __init clint_timer_init(struct device_node *np)
 {
 	int rc;
 	u32 i, nr_irqs;
@@ -273,5 +303,29 @@ fail_iounmap:
 	return rc;
 }
 
+static int __init clint_timer_init_dt(struct device_node *np)
+{
+	is_c900_clint = false;
+	return clint_timer_init(np);
+}
+
+static int __init c900_clint_timer_init_dt(struct device_node *np)
+{
+	is_c900_clint = true;
+	static_branch_enable(&riscv_csr_time_available);
+
+	return clint_timer_init(np);
+}
+
+static int __init csr_clint_timer_init_dt(struct device_node *np)
+{
+	is_c900_clint = false;
+	static_branch_enable(&riscv_csr_time_available);
+
+	return clint_timer_init(np);
+}
+
 TIMER_OF_DECLARE(clint_timer, "riscv,clint0", clint_timer_init_dt);
 TIMER_OF_DECLARE(clint_timer1, "sifive,clint0", clint_timer_init_dt);
+TIMER_OF_DECLARE(clint_timer2, "thead,c900-clint", c900_clint_timer_init_dt);
+TIMER_OF_DECLARE(clint_timer3, "riscv,csr-clint", csr_clint_timer_init_dt);

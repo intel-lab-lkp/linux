@@ -8,6 +8,7 @@
 
 #include <linux/types.h>
 #include <asm/mmio.h>
+#include <linux/jump_label.h>
 
 #ifdef CONFIG_RISCV_M_MODE
 /*
@@ -23,4 +24,5 @@
 extern u64 __iomem *clint_time_val;
 #endif
 
+DECLARE_STATIC_KEY_FALSE(riscv_csr_time_available);
 #endif
