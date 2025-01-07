@@ -90,6 +90,37 @@ static inline void mips_get_syscall_arg(unsigned long *arg,
 	unreachable();
 }
 
+static inline void mips_set_syscall_arg(unsigned long *arg,
+	struct task_struct *task, struct pt_regs *regs, unsigned int n)
+{
+	unsigned long usp __maybe_unused = regs->regs[29];
+
+	switch (n) {
+	case 0: case 1: case 2: case 3:
+		regs->regs[4 + n] = *arg;
+
+		return;
+
+#ifdef CONFIG_32BIT
+	case 4: case 5: case 6: case 7:
+		put_user(*arg, (int *)usp + n);
+		return;
+#endif
+
+#ifdef CONFIG_64BIT
+	case 4: case 5: case 6: case 7:
+#ifdef CONFIG_MIPS32_O32
+		if (test_tsk_thread_flag(task, TIF_32BIT_REGS))
+			put_user(*arg, (int *)usp + n);
+		else
+#endif
+			regs->regs[4 + n] = *arg;
+
+		return;
+#endif
+	}
+}
+
 static inline long syscall_get_error(struct task_struct *task,
 				     struct pt_regs *regs)
 {
@@ -134,6 +165,21 @@ static inline void syscall_get_arguments(struct task_struct *task,
 
 	while (n--)
 		mips_get_syscall_arg(args++, task, regs, i++);
+}
+
+static inline void syscall_set_arguments(struct task_struct *task,
+					 struct pt_regs *regs,
+					 unsigned long *args)
+{
+	unsigned int i = 0;
+	unsigned int n = 6;
+
+	/* O32 ABI syscall() */
+	if (mips_syscall_is_indirect(task, regs))
+		i++;
+
+	while (n--)
+		mips_set_syscall_arg(args++, task, regs, i++);
 }
 
 extern const unsigned long sys_call_table[];
