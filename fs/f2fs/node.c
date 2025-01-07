@@ -1274,6 +1274,12 @@ int f2fs_remove_inode_page(struct inode *inode)
 		return err;
 	}
 
+	/* The aliase file must be truncated successfully. */
+	if (unlikely(IS_DEVICE_ALIASING(inode))) {
+		f2fs_put_dnode(&dn);
+		return 0;
+	}
+
 	/* remove potential inline_data blocks */
 	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 				S_ISLNK(inode->i_mode))
