@@ -6,10 +6,12 @@
  * Copyright (C) 2016 Jonas Gorski <jonas.gorski@gmail.com>
  */
 
+#include <linux/gpio/driver.h>
 #include <linux/gpio/regmap.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mod_devicetable.h>
 #include <linux/of.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/platform_device.h>
 
 #include "pinctrl-bcm63xx.h"
@@ -30,6 +32,16 @@ static int bcm63xx_reg_mask_xlate(struct gpio_regmap *gpio,
 	*mask = BIT(line);
 
 	return 0;
+}
+
+static int bcm63xx_request(struct gpio_chip *chip, unsigned int offset)
+{
+	return pinctrl_gpio_request(chip, offset);
+}
+
+static void bcm63xx_free(struct gpio_chip *chip, unsigned int offset)
+{
+	pinctrl_gpio_free(chip, offset);
 }
 
 static const struct of_device_id bcm63xx_gpio_of_match[] = {
@@ -57,6 +69,8 @@ static int bcm63xx_gpio_probe(struct device *dev, struct device_node *node,
 	grc.reg_dir_out_base = BCM63XX_DIROUT_REG;
 	grc.reg_set_base = BCM63XX_DATA_REG;
 	grc.reg_mask_xlate = bcm63xx_reg_mask_xlate;
+	grc.request = bcm63xx_request;
+	grc.free = bcm63xx_free;
 
 	return PTR_ERR_OR_ZERO(devm_gpio_regmap_register(dev, &grc));
 }
