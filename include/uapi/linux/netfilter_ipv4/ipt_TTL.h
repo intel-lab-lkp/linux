@@ -4,4 +4,6 @@
 
 #include <linux/netfilter_ipv4/ipt_ttl.h>
 
+#pragma message("ipt_TTL.h header is deprecated. Use ipt_ttl.h instead.")
+
 #endif /* _IPT_TTL_TARGET_H */

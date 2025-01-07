@@ -4,4 +4,6 @@
 
 #include <linux/netfilter_ipv4/ipt_ecn.h>
 
+#pragma message("ipt_ECN.h header is deprecated. Use ipt_ecn.h instead.")
+
 #endif /* _IPT_ECN_TARGET_H */

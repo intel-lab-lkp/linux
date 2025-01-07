@@ -4,4 +4,6 @@
 
 #include <linux/netfilter/xt_mark.h>
 
+#pragma message("xt_MARK.h header is deprecated. Use xt_mark.h instead.")
+
 #endif /* _XT_MARK_H_TARGET_H */

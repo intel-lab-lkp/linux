@@ -4,4 +4,6 @@
 
 #include <linux/netfilter_ipv6/ip6t_hl.h>
 
+#pragma message("ip6t_HL.h header is deprecated. Use ip6t_hl.h instead.")
+
 #endif /* _IP6T_HL_TARGET_H */

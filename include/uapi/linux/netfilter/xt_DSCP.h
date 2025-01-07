@@ -4,4 +4,6 @@
 
 #include <linux/netfilter/xt_dscp.h>
 
+#pragma message("xt_DSCP.h header is deprecated. Use xt_dscp.h instead.")
+
 #endif /* _XT_DSCP_TARGET_H */

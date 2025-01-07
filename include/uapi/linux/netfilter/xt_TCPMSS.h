@@ -4,4 +4,6 @@
 
 #include <linux/netfilter/xt_tcpmss.h>
 
+#pragma message("xt_TCPMSS.h header is deprecated. Use xt_tcpmss.h instead.")
+
 #endif /* _XT_TCPMSS_TARGET_H */
