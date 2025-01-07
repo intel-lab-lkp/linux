@@ -780,8 +780,12 @@ out:
 
 static int check_commit_order(struct device *dev, const void *data)
 {
-	struct cxl_decoder *cxld = to_cxl_decoder(dev);
+	struct cxl_decoder *cxld;
 
+	if (!is_switch_decoder(dev))
+		return 1;
+
+	cxld = to_cxl_decoder(dev);
 	/*
 	 * if port->commit_end is not the only free decoder, then out of
 	 * order shutdown has occurred, block further allocations until
@@ -815,7 +819,7 @@ static int match_free_decoder(struct device *dev, void *data)
 
 	rc = device_for_each_child_reverse_from(dev->parent, dev, NULL,
 						check_commit_order);
-	if (rc) {
+	if (rc < 0) {
 		dev_dbg(dev->parent,
 			"unable to allocate %s due to out of order shutdown\n",
 			dev_name(dev));
