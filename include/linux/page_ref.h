@@ -233,8 +233,12 @@ static inline bool page_ref_add_unless(struct page *page, int nr, int u)
 	bool ret = false;
 
 	rcu_read_lock();
-	/* avoid writing to the vmemmap area being remapped */
-	if (!page_is_fake_head(page) && page_ref_count(page) != u)
+	/*
+	 * To avoid writing to the vmemmap area remapped into r/o in parallel,
+	 * the page_ref_count() test must precede the page_is_fake_head() test
+	 * so that test_bit_acquire() in the latter is ordered after the former.
+	 */
+	if (page_ref_count(page) != u && !page_is_fake_head(page))
 		ret = atomic_add_unless(&page->_refcount, nr, u);
 	rcu_read_unlock();
 

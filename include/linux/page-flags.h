@@ -212,7 +212,7 @@ static __always_inline const struct page *page_fixed_fake_head(const struct page
 	 * cold cacheline in some cases.
 	 */
 	if (IS_ALIGNED((unsigned long)page, PAGE_SIZE) &&
-	    test_bit(PG_head, &page->flags)) {
+	    test_bit_acquire(PG_head, &page->flags)) {
 		/*
 		 * We can safely access the field of the @page[1] with PG_head
 		 * because the @page is a compound page composed with at least
