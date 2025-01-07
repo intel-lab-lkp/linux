@@ -1019,6 +1019,34 @@ static bool fd_htab_map_needs_adjust(const struct bpf_htab *htab)
 	       BITS_PER_LONG == 64;
 }
 
+static struct htab_elem *alloc_preallocated_htab_elem(struct bpf_htab *htab,
+						      struct htab_elem *old_elem)
+{
+	struct pcpu_freelist_node *l;
+	struct htab_elem *l_new;
+
+	if (old_elem) {
+		struct htab_elem **pl_new;
+
+		/* if we're updating the existing element,
+		 * use per-cpu extra elems to avoid freelist_pop/push
+		 */
+		pl_new = this_cpu_ptr(htab->extra_elems);
+		l_new = *pl_new;
+		*pl_new = old_elem;
+		return l_new;
+	}
+
+	l = __pcpu_freelist_pop(&htab->freelist);
+	if (!l)
+		return ERR_PTR(-E2BIG);
+
+	l_new = container_of(l, struct htab_elem, fnode);
+	bpf_map_inc_elem_count(&htab->map);
+
+	return l_new;
+}
+
 static struct htab_elem *alloc_htab_elem(struct bpf_htab *htab, void *key,
 					 void *value, u32 key_size, u32 hash,
 					 bool percpu, bool onallcpus,
@@ -1026,26 +1054,13 @@ static struct htab_elem *alloc_htab_elem(struct bpf_htab *htab, void *key,
 {
 	u32 size = htab->map.value_size;
 	bool prealloc = htab_is_prealloc(htab);
-	struct htab_elem *l_new, **pl_new;
+	struct htab_elem *l_new;
 	void __percpu *pptr;
 
 	if (prealloc) {
-		if (old_elem) {
-			/* if we're updating the existing element,
-			 * use per-cpu extra elems to avoid freelist_pop/push
-			 */
-			pl_new = this_cpu_ptr(htab->extra_elems);
-			l_new = *pl_new;
-			*pl_new = old_elem;
-		} else {
-			struct pcpu_freelist_node *l;
-
-			l = __pcpu_freelist_pop(&htab->freelist);
-			if (!l)
-				return ERR_PTR(-E2BIG);
-			l_new = container_of(l, struct htab_elem, fnode);
-			bpf_map_inc_elem_count(&htab->map);
-		}
+		l_new = alloc_preallocated_htab_elem(htab, old_elem);
+		if (IS_ERR(l_new))
+			return l_new;
 	} else {
 		if (is_map_full(htab))
 			if (!old_elem)
