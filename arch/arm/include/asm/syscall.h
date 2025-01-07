@@ -31,6 +31,18 @@ static inline int syscall_get_nr(struct task_struct *task,
 	return task_thread_info(task)->abi_syscall & __NR_SYSCALL_MASK;
 }
 
+static inline void syscall_set_nr(struct task_struct *task,
+				  struct pt_regs *regs,
+				  int nr)
+{
+	if (!IS_ENABLED(CONFIG_AEABI) || IS_ENABLED(CONFIG_OABI_COMPAT)) {
+		if (nr != -1)
+			nr &= __NR_SYSCALL_MASK;
+	}
+
+	task_thread_info(task)->abi_syscall = nr;
+}
+
 static inline bool __in_oabi_syscall(struct task_struct *task)
 {
 	return IS_ENABLED(CONFIG_OABI_COMPAT) &&
