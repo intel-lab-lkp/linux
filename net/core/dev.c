@@ -11529,8 +11529,8 @@ void unregister_netdevice_many_notify(struct list_head *head,
 
 	__rtnl_unlock();
 	flush_all_backlogs();
-	rtnl_lock();
 	synchronize_net();
+	rtnl_lock();
 
 	list_for_each_entry(dev, head, unreg_list) {
 		struct sk_buff *skb = NULL;
@@ -11590,7 +11590,9 @@ void unregister_netdevice_many_notify(struct list_head *head,
 #endif
 	}
 
+	__rtnl_unlock();
 	synchronize_net();
+	rtnl_lock();
 
 	list_for_each_entry(dev, head, unreg_list) {
 		netdev_put(dev, &dev->dev_registered_tracker);
