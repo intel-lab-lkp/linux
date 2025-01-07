@@ -419,6 +419,7 @@ struct cxl_endpoint_decoder {
 	struct cxl_decoder cxld;
 	struct cxl_root_decoder *cxlrd;
 	struct resource *dpa_res;
+	struct range spa_range;
 	resource_size_t skip;
 	enum cxl_decoder_mode mode;
 	enum cxl_decoder_state state;

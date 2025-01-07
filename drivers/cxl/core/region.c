@@ -824,6 +824,41 @@ static int match_free_decoder(struct device *dev, void *data)
 	return 1;
 }
 
+static int cxl_port_calc_hpa(struct cxl_port *port, struct cxl_decoder *cxld,
+			     struct range *hpa_range)
+{
+	struct range hpa = *hpa_range;
+	u64 len = range_len(&hpa);
+
+	if (!port->to_hpa)
+		return 0;
+
+	/* Translate HPA to the next upper domain. */
+	hpa.start = port->to_hpa(cxld, hpa.start);
+	hpa.end = port->to_hpa(cxld, hpa.end);
+
+	if (!hpa.start || !hpa.end ||
+	    hpa.start == ULLONG_MAX || hpa.end == ULLONG_MAX) {
+		dev_warn(&port->dev,
+			"CXL address translation: HPA range invalid: %#llx-%#llx:%#llx-%#llx(%s)\n",
+			hpa.start, hpa.end, hpa_range->start,
+			hpa_range->end, dev_name(&cxld->dev));
+		return -ENXIO;
+	}
+
+	if (range_len(&hpa) != len * cxld->interleave_ways) {
+		dev_warn(&port->dev,
+			"CXL address translation: HPA range not contiguous: %#llx-%#llx:%#llx-%#llx(%s)\n",
+			hpa.start, hpa.end, hpa_range->start,
+			hpa_range->end, dev_name(&cxld->dev));
+		return -ENXIO;
+	}
+
+	*hpa_range = hpa;
+
+	return 0;
+}
+
 static int match_auto_decoder(struct device *dev, void *data)
 {
 	struct cxl_region_params *p = data;
@@ -3214,26 +3249,47 @@ cxl_port_find_switch_decoder(struct cxl_port *port, struct range *hpa)
 static int cxl_endpoint_initialize(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_port *iter = cxled_to_port(cxled);
-	struct range *hpa = &cxled->cxld.hpa_range;
+	struct cxl_port *parent, *iter = cxled_to_port(cxled);
+	struct range hpa = cxled->cxld.hpa_range;
 	struct cxl_decoder *cxld = &cxled->cxld;
 
-	while (iter && !is_cxl_root(iter))
-		iter = to_cxl_port(iter->dev.parent);
-
-	if (!iter)
+	if (!iter || is_cxl_root(iter))
 		return -ENXIO;
 
-	cxld = cxl_port_find_switch_decoder(iter, hpa);
-	if (!cxld) {
-		dev_err(cxlmd->dev.parent,
-			"%s:%s no CXL window for range %#llx:%#llx\n",
-			dev_name(&cxlmd->dev), dev_name(&cxld->dev),
-			cxld->hpa_range.start, cxld->hpa_range.end);
-		return -ENXIO;
+	while (1) {
+		parent = parent_port_of(iter);
+
+		if (is_cxl_endpoint(iter))
+			cxld = &cxled->cxld;
+		else if (!parent || parent->to_hpa)
+			cxld = cxl_port_find_switch_decoder(iter, &hpa);
+
+		if (!cxld) {
+			dev_err(cxlmd->dev.parent,
+				"%s:%s no CXL window for range %#llx:%#llx\n",
+				dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
+				hpa.start, hpa.end);
+			return -ENXIO;
+		}
+
+		/* No parent means the root port was found. */
+		if (!parent)
+			break;
+
+		/* Translate HPA to the next upper memory domain. */
+		if (cxl_port_calc_hpa(parent, cxld, &hpa))
+			return -ENXIO;
+
+		iter = parent;
 	}
 
+	dev_dbg(cxld->dev.parent,
+		"%s:%s: range:%#llx-%#llx\n",
+		dev_name(&cxled->cxld.dev), dev_name(&cxld->dev),
+		hpa.start, hpa.end);
+
 	cxled->cxlrd = to_cxl_root_decoder(&cxld->dev);
+	cxled->spa_range = hpa;
 
 	return 0;
 }
@@ -3358,7 +3414,6 @@ err:
 
 static int cxl_endpoint_add(struct cxl_endpoint_decoder *cxled)
 {
-	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_root_decoder *cxlrd = cxled->cxlrd;
 	struct cxl_region_params *p;
 	struct cxl_region *cxlr;
@@ -3370,7 +3425,7 @@ static int cxl_endpoint_add(struct cxl_endpoint_decoder *cxled)
 	 * one does the construction and the others add to that.
 	 */
 	mutex_lock(&cxlrd->range_lock);
-	cxlr = cxl_find_region_by_range(cxlrd, hpa);
+	cxlr = cxl_find_region_by_range(cxlrd, &cxled->spa_range);
 	if (!cxlr)
 		cxlr = construct_region(cxlrd, cxled);
 	mutex_unlock(&cxlrd->range_lock);
