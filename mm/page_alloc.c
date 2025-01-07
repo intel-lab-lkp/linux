@@ -3038,10 +3038,10 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 
 	/*
 	 * On allocation, reduce the number of pages that are batch freed.
-	 * See nr_pcp_free() where free_factor is increased for subsequent
+	 * See free_unref_page_commit() where free_count is increased for subsequent
 	 * frees.
 	 */
-	pcp->free_count >>= 1;
+	pcp->free_count -= (1 << order);
 	list = &pcp->lists[order_to_pindex(migratetype, order)];
 	page = __rmqueue_pcplist(zone, order, migratetype, alloc_flags, pcp, list);
 	pcp_spin_unlock(pcp);
