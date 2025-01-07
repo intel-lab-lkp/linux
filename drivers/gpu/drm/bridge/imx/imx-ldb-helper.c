@@ -167,7 +167,7 @@ int ldb_find_next_bridge_helper(struct ldb *ldb)
 {
 	struct device *dev = ldb->dev;
 	struct ldb_channel *ldb_ch;
-	int ret, i;
+	int i;
 
 	for (i = 0; i < MAX_LDB_CHAN_NUM; i++) {
 		ldb_ch = ldb->channel[i];
@@ -177,14 +177,9 @@ int ldb_find_next_bridge_helper(struct ldb *ldb)
 
 		ldb_ch->next_bridge = devm_drm_of_get_bridge(dev, ldb_ch->np,
 							     1, 0);
-		if (IS_ERR(ldb_ch->next_bridge)) {
-			ret = PTR_ERR(ldb_ch->next_bridge);
-			if (ret != -EPROBE_DEFER)
-				DRM_DEV_ERROR(dev,
-					      "failed to get next bridge: %d\n",
-					      ret);
-			return ret;
-		}
+		if (IS_ERR(ldb_ch->next_bridge))
+			return dev_err_probe(dev, PTR_ERR(ldb_ch->next_bridge),
+					     "failed to find next bridge\n");
 	}
 
 	return 0;
