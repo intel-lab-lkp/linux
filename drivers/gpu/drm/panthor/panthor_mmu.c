@@ -533,15 +533,20 @@ static int write_cmd(struct panthor_device *ptdev, u32 as_nr, u32 cmd)
 	return status;
 }
 
-static void lock_region(struct panthor_device *ptdev, u32 as_nr,
-			u64 region_start, u64 size)
+static int lock_region(struct panthor_device *ptdev, u32 as_nr,
+		       u64 region_start, u64 size)
 {
+	u32 va_bits = GPU_MMU_FEATURES_VA_BITS(ptdev->gpu_info.mmu_features);
+	u64 full_va_range = 1ull << va_bits;
 	u8 region_width;
 	u64 region;
 	u64 region_end = region_start + size;
 
 	if (!size)
-		return;
+		return 0;
+
+	if (drm_WARN_ON(&ptdev->base, region_end > full_va_range))
+		return -EFAULT;
 
 	/*
 	 * The locked region is a naturally aligned power of 2 block encoded as
@@ -552,7 +557,8 @@ static void lock_region(struct panthor_device *ptdev, u32 as_nr,
 	 * zeroed and ends with the bit (and subsequent bits) set to one.
 	 */
 	region_width = max(fls64(region_start ^ (region_end - 1)),
-			   const_ilog2(AS_LOCK_REGION_MIN_SIZE)) - 1;
+			   const_ilog2(AS_LOCK_REGION_MIN_SIZE));
+
 
 	/*
 	 * Mask off the low bits of region_start (which would be ignored by
@@ -560,21 +566,25 @@ static void lock_region(struct panthor_device *ptdev, u32 as_nr,
 	 */
 	region_start &= GENMASK_ULL(63, region_width);
 
-	region = region_width | region_start;
+	region = (region_width - 1) | region_start;
 
 	/* Lock the region that needs to be updated */
 	gpu_write(ptdev, AS_LOCKADDR_LO(as_nr), lower_32_bits(region));
 	gpu_write(ptdev, AS_LOCKADDR_HI(as_nr), upper_32_bits(region));
 	write_cmd(ptdev, as_nr, AS_COMMAND_LOCK);
+
+	return 0;
 }
 
 static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 				      u64 iova, u64 size, u32 op)
 {
+	int ret = 0;
+
 	lockdep_assert_held(&ptdev->mmu->as.slots_lock);
 
 	if (as_nr < 0)
-		return 0;
+		return ret;
 
 	/*
 	 * If the AS number is greater than zero, then we can be sure
@@ -583,7 +593,10 @@ static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 	 */
 
 	if (op != AS_COMMAND_UNLOCK)
-		lock_region(ptdev, as_nr, iova, size);
+		ret = lock_region(ptdev, as_nr, iova, size);
+
+	if (ret)
+		return ret;
 
 	/* Run the MMU operation */
 	write_cmd(ptdev, as_nr, op);
@@ -608,9 +621,12 @@ static int mmu_hw_do_operation(struct panthor_vm *vm,
 static int panthor_mmu_as_enable(struct panthor_device *ptdev, u32 as_nr,
 				 u64 transtab, u64 transcfg, u64 memattr)
 {
+	u32 va_bits = GPU_MMU_FEATURES_VA_BITS(ptdev->gpu_info.mmu_features);
+	u64 full_va_range = 1ull << va_bits;
 	int ret;
 
-	ret = mmu_hw_do_operation_locked(ptdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
+	ret = mmu_hw_do_operation_locked(ptdev, as_nr, 0,
+					 full_va_range, AS_COMMAND_FLUSH_MEM);
 	if (ret)
 		return ret;
 
@@ -628,9 +644,12 @@ static int panthor_mmu_as_enable(struct panthor_device *ptdev, u32 as_nr,
 
 static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr)
 {
+	u32 va_bits = GPU_MMU_FEATURES_VA_BITS(ptdev->gpu_info.mmu_features);
+	u64 full_va_range = 1ull << va_bits;
 	int ret;
 
-	ret = mmu_hw_do_operation_locked(ptdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
+	ret = mmu_hw_do_operation_locked(ptdev, as_nr, 0,
+					 full_va_range, AS_COMMAND_FLUSH_MEM);
 	if (ret)
 		return ret;
 
