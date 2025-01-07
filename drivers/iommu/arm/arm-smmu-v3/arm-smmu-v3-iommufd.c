@@ -389,9 +389,15 @@ out:
 	return ret;
 }
 
+static bool arm_vsmmu_supports_veventq(unsigned int type)
+{
+	return type == IOMMU_VEVENTQ_TYPE_ARM_SMMUV3;
+}
+
 static const struct iommufd_viommu_ops arm_vsmmu_ops = {
 	.alloc_domain_nested = arm_vsmmu_alloc_domain_nested,
 	.cache_invalidate = arm_vsmmu_cache_invalidate,
+	.supports_veventq = arm_vsmmu_supports_veventq,
 };
 
 struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
@@ -445,6 +451,22 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	vsmmu->vmid = s2_parent->s2_cfg.vmid;
 
 	return &vsmmu->core;
+}
+
+int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster, u64 *evt)
+{
+	struct iommu_vevent_arm_smmuv3 vevt =
+		*(struct iommu_vevent_arm_smmuv3 *)evt;
+
+	vevt.evt[0] &= ~EVTQ_0_SID;
+	vevt.evt[0] |= FIELD_PREP(EVTQ_0_SID, vmaster->vsid);
+
+	vevt.evt[0] = cpu_to_le64(vevt.evt[0]);
+	vevt.evt[1] = cpu_to_le64(vevt.evt[1]);
+
+	return iommufd_viommu_report_event(&vmaster->vsmmu->core,
+					   IOMMU_VEVENTQ_TYPE_ARM_SMMUV3, &vevt,
+					   sizeof(vevt));
 }
 
 MODULE_IMPORT_NS("IOMMUFD");

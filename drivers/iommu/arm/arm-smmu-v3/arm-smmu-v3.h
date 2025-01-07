@@ -1066,6 +1066,7 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 int arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
 				    struct iommu_domain *domain);
 void arm_smmu_attach_commit_vmaster(struct arm_smmu_attach_state *state);
+int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster, u64 *evt);
 #else
 #define arm_smmu_hw_info NULL
 #define arm_vsmmu_alloc NULL
@@ -1080,6 +1081,12 @@ arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
 static inline void
 arm_smmu_attach_commit_vmaster(struct arm_smmu_attach_state *state)
 {
+}
+
+static inline int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster,
+					   u64 *evt)
+{
+	return -EOPNOTSUPP;
 }
 #endif /* CONFIG_ARM_SMMU_V3_IOMMUFD */
 
