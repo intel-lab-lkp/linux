@@ -378,14 +378,10 @@ static void virtio_commit_rqs(struct blk_mq_hw_ctx *hctx)
 {
 	struct virtio_blk *vblk = hctx->queue->queuedata;
 	struct virtio_blk_vq *vq = &vblk->vqs[hctx->queue_num];
-	bool kick;
 
 	spin_lock_irq(&vq->lock);
-	kick = virtqueue_kick_prepare(vq->vq);
+	virtqueue_kick(vq->vq);
 	spin_unlock_irq(&vq->lock);
-
-	if (kick)
-		virtqueue_notify(vq->vq);
 }
 
 static blk_status_t virtblk_fail_to_queue(struct request *req, int rc)
@@ -431,7 +427,6 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
 	unsigned long flags;
 	int qid = hctx->queue_num;
-	bool notify = false;
 	blk_status_t status;
 	int err;
 
@@ -453,12 +448,10 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 		return virtblk_fail_to_queue(req, err);
 	}
 
-	if (bd->last && virtqueue_kick_prepare(vblk->vqs[qid].vq))
-		notify = true;
+	if (bd->last)
+		virtqueue_kick(vblk->vqs[qid].vq);
 	spin_unlock_irqrestore(&vblk->vqs[qid].lock, flags);
 
-	if (notify)
-		virtqueue_notify(vblk->vqs[qid].vq);
 	return BLK_STS_OK;
 }
 
@@ -475,7 +468,6 @@ static void virtblk_add_req_batch(struct virtio_blk_vq *vq,
 {
 	struct request *req;
 	unsigned long flags;
-	bool kick;
 
 	spin_lock_irqsave(&vq->lock, flags);
 
@@ -491,11 +483,8 @@ static void virtblk_add_req_batch(struct virtio_blk_vq *vq,
 		}
 	}
 
-	kick = virtqueue_kick_prepare(vq->vq);
+	virtqueue_kick(vq->vq);
 	spin_unlock_irqrestore(&vq->lock, flags);
-
-	if (kick)
-		virtqueue_notify(vq->vq);
 }
 
 static void virtio_queue_rqs(struct rq_list *rqlist)
