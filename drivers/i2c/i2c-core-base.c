@@ -2514,12 +2514,10 @@ i2c_new_scanned_device(struct i2c_adapter *adap,
 		       unsigned short const *addr_list,
 		       int (*probe)(struct i2c_adapter *adap, unsigned short addr))
 {
-	int i;
-
 	if (!probe)
 		probe = i2c_default_probe;
 
-	for (i = 0; addr_list[i] != I2C_CLIENT_END; i++) {
+	for (int i = 0; addr_list[i] != I2C_CLIENT_END; i++) {
 		/* Check address validity */
 		if (i2c_check_7bit_addr_validity_strict(addr_list[i]) < 0) {
 			dev_warn(&adap->dev, "Invalid 7-bit address 0x%02x\n",
@@ -2536,17 +2534,15 @@ i2c_new_scanned_device(struct i2c_adapter *adap,
 		}
 
 		/* Test address responsiveness */
-		if (probe(adap, addr_list[i]))
-			break;
+		if ((probe(adap, addr_list[i]))) {
+			info->addr = addr_list[i];
+			return i2c_new_client_device(adap, info);
+		}
 	}
 
-	if (addr_list[i] == I2C_CLIENT_END) {
-		dev_dbg(&adap->dev, "Probing failed, no device found\n");
-		return ERR_PTR(-ENODEV);
-	}
+	dev_dbg(&adap->dev, "Probing failed, no device found\n");
 
-	info->addr = addr_list[i];
-	return i2c_new_client_device(adap, info);
+	return ERR_PTR(-ENODEV);
 }
 EXPORT_SYMBOL_GPL(i2c_new_scanned_device);
 
