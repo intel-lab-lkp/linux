@@ -565,4 +565,6 @@ void net_ns_init(void);
 static inline void net_ns_init(void) {}
 #endif
 
+extern struct task_struct *cleanup_net_task;
+
 #endif /* __NET_NET_NAMESPACE_H */

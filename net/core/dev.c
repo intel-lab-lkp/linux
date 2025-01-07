@@ -11423,7 +11423,7 @@ EXPORT_SYMBOL_GPL(alloc_netdev_dummy);
 void synchronize_net(void)
 {
 	might_sleep();
-	if (rtnl_is_locked())
+	if (current == cleanup_net_task || rtnl_is_locked())
 		synchronize_rcu_expedited();
 	else
 		synchronize_rcu();
