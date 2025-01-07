@@ -747,7 +747,11 @@ static inline bool vma_start_read(struct mm_struct *mm, struct vm_area_struct *v
 
 
 	rwsem_acquire_read(&vma->vmlock_dep_map, 0, 0, _RET_IP_);
-	/* Limit at VMA_REF_LIMIT to leave one count for a writer */
+	/*
+	 * Limit at VMA_REF_LIMIT to leave one count for a writer.
+	 * If VMA_LOCK_OFFSET is set, __refcount_inc_not_zero_limited() will fail
+	 * because VMA_REF_LIMIT is less than VMA_LOCK_OFFSET.
+	 */
 	if (unlikely(!__refcount_inc_not_zero_limited(&vma->vm_refcnt, &oldcnt,
 						      VMA_REF_LIMIT))) {
 		rwsem_release(&vma->vmlock_dep_map, _RET_IP_);
@@ -766,8 +770,7 @@ static inline bool vma_start_read(struct mm_struct *mm, struct vm_area_struct *v
 	 * after it has been unlocked.
 	 * This pairs with RELEASE semantics in vma_end_write_all().
 	 */
-	if (unlikely(oldcnt & VMA_LOCK_OFFSET ||
-		     vma->vm_lock_seq == raw_read_seqcount(&mm->mm_lock_seq))) {
+	if (unlikely(vma->vm_lock_seq == raw_read_seqcount(&mm->mm_lock_seq))) {
 		vma_refcount_put(vma);
 		return false;
 	}
