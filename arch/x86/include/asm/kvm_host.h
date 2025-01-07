@@ -905,6 +905,7 @@ struct kvm_vcpu_arch {
 		u8 preempted;
 		u64 msr_val;
 		u64 last_steal;
+		u64 last_suspend_ns;
 		struct gfn_to_hva_cache cache;
 	} st;
 

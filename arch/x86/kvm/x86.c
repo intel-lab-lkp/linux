@@ -3650,7 +3650,7 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	struct kvm_steal_time __user *st;
 	struct kvm_memslots *slots;
 	gpa_t gpa = vcpu->arch.st.msr_val & KVM_STEAL_VALID_BITS;
-	u64 steal;
+	u64 steal, suspend_ns;
 	u32 version;
 
 	if (kvm_xen_msr_enabled(vcpu->kvm)) {
@@ -3677,6 +3677,7 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 			return;
 	}
 
+	suspend_ns = kvm_total_suspend_ns();
 	st = (struct kvm_steal_time __user *)ghc->hva;
 	/*
 	 * Doing a TLB flush here, on the guest's behalf, can avoid
@@ -3731,6 +3732,13 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	steal += current->sched_info.run_delay -
 		vcpu->arch.st.last_steal;
 	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+	/*
+	 * Include the time that the host was suspended in steal time.
+	 * Note that the case of a suspend happening during a VM migration
+	 * might not be accounted.
+	 */
+	steal += suspend_ns - vcpu->arch.st.last_suspend_ns;
+	vcpu->arch.st.last_suspend_ns = suspend_ns;
 	unsafe_put_user(steal, &st->steal, out);
 
 	version += 1;
@@ -12289,6 +12297,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	if (r)
 		goto free_guest_fpu;
 
+	vcpu->arch.st.last_suspend_ns = kvm_total_suspend_ns();
 	kvm_xen_init_vcpu(vcpu);
 	vcpu_load(vcpu);
 	kvm_set_tsc_khz(vcpu, vcpu->kvm->arch.default_tsc_khz);
