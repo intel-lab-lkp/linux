@@ -3218,8 +3218,7 @@ cxl_port_find_switch_decoder(struct cxl_port *port, struct range *hpa)
 	return cxld_dev ? to_cxl_decoder(cxld_dev) : NULL;
 }
 
-static struct cxl_root_decoder *
-cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
+static int cxl_endpoint_initialize(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_port *iter = cxled_to_port(cxled);
@@ -3230,7 +3229,7 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 		iter = to_cxl_port(iter->dev.parent);
 
 	if (!iter)
-		return NULL;
+		return -ENXIO;
 
 	cxld = cxl_port_find_switch_decoder(iter, hpa);
 	if (!cxld) {
@@ -3238,12 +3237,12 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 			"%s:%s no CXL window for range %#llx:%#llx\n",
 			dev_name(&cxlmd->dev), dev_name(&cxld->dev),
 			cxld->hpa_range.start, cxld->hpa_range.end);
-		return NULL;
+		return -ENXIO;
 	}
 
+	cxled->cxlrd = to_cxl_root_decoder(&cxld->dev);
 
-
-	return to_cxl_root_decoder(&cxld->dev);
+	return 0;
 }
 
 static int match_region_by_range(struct device *dev, void *data)
@@ -3362,19 +3361,6 @@ err:
 	up_write(&cxl_region_rwsem);
 	devm_release_action(port->uport_dev, unregister_region, cxlr);
 	return ERR_PTR(rc);
-}
-
-static int cxl_endpoint_initialize(struct cxl_endpoint_decoder *cxled)
-{
-	struct cxl_root_decoder *cxlrd;
-
-	cxlrd = cxl_find_root_decoder(cxled);
-	if (!cxlrd)
-		return -ENXIO;
-
-	cxled->cxlrd = cxlrd;
-
-	return 0;
 }
 
 static int cxl_endpoint_add(struct cxl_endpoint_decoder *cxled)
