@@ -389,6 +389,7 @@ ENDPROC(__fiq_abt)
 
 	.align	5
 __dabt_usr:
+	disable_irq_notrace
 	usr_entry uaccess=0
 	kuser_cmpxchg_check
 	mov	r2, sp
@@ -416,11 +417,6 @@ ENDPROC(__irq_usr)
 __und_usr:
 	usr_entry uaccess=0
 
-	@ IRQs must be enabled before attempting to read the instruction from
-	@ user space since that could cause a page/translation fault if the
-	@ page table was modified by another CPU.
-	enable_irq
-
 	tst	r5, #PSR_T_BIT			@ Thumb mode?
 	mov	r1, #2				@ set insn size to 2 for Thumb
 	bne	0f				@ handle as Thumb undef exception
@@ -438,6 +434,7 @@ ENDPROC(__und_usr)
 
 	.align	5
 __pabt_usr:
+	disable_irq_notrace
 	usr_entry
 	mov	r2, sp				@ regs
 	pabt_helper

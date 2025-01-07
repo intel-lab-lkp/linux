@@ -16,7 +16,17 @@ noinstr asmlinkage void arm_und_handler(struct pt_regs *regs)
 {
 	irqentry_state_t state = irqentry_enter(regs);
 
+	/*
+	 * IRQs must be enabled before attempting to read the instruction from
+	 * user space since that could cause a page/translation fault if the
+	 * page table was modified by another CPU.
+	 */
+
+	local_irq_enable();
+
 	do_undefinstr(regs);
+
+	local_irq_disable();
 
 	irqentry_exit(regs, state);
 }
@@ -25,7 +35,11 @@ noinstr asmlinkage void arm_dabt_handler(unsigned long addr, unsigned int fsr, s
 {
 	irqentry_state_t state = irqentry_enter(regs);
 
+	local_irq_enable();
+
 	do_DataAbort(addr, fsr, regs);
+
+	local_irq_disable();
 
 	irqentry_exit(regs, state);
 }
@@ -34,7 +48,11 @@ noinstr asmlinkage void arm_pabt_handler(unsigned long addr, unsigned int ifsr, 
 {
 	irqentry_state_t state = irqentry_enter(regs);
 
+	local_irq_enable();
+
 	do_PrefetchAbort(addr, ifsr, regs);
+
+	local_irq_disable();
 
 	irqentry_exit(regs, state);
 }
