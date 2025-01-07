@@ -249,6 +249,72 @@ impl From<core::convert::Infallible> for Error {
 /// Note that even if a function does not return anything when it succeeds,
 /// it should still be modeled as returning a `Result` rather than
 /// just an [`Error`].
+///
+/// Calling a function that returns [`Result`] needs the caller to handle
+/// the returned [`Result`].
+///
+/// This can be done "manually" by using [`match`](https://doc.rust-lang.org/reference/expressions/match-expr.html)
+/// Using [`match`](https://doc.rust-lang.org/reference/expressions/match-expr.html) to decode
+/// the [`Result`] is similar to C where all the return value decoding and the
+/// error handling is done explicitly by writing handling code for each
+/// error to cover. Using [`match`](https://doc.rust-lang.org/reference/expressions/match-expr.html)
+/// the error and success handling can be implemented in all detail as required.
+/// For example (inspired by [samples/rust/rust_minimal.rs](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/samples/rust/rust_minimal.rs)):
+/// ```
+/// fn example () -> Result {
+///     let mut numbers = KVec::new();
+///     match numbers.push(72, GFP_KERNEL) {
+///         Err(e) => {pr_err!("Error pushing 72: {:?}", e); return Err(e.into());},
+///         Ok(()) => (), // Do nothing, continue
+///     }
+///     match numbers.push(108, GFP_KERNEL){
+///         Err(e) => {pr_err!("Error pushing 108: {:?}", e); return Err(e.into());},
+///         Ok(()) => (), // Do nothing, continue
+///     }
+///     match numbers.push(200, GFP_KERNEL){
+///         Err(e) => {pr_err!("Error pushing 200: {:?}", e); return Err(e.into());},
+///         Ok(()) => (), // Do nothing, continue
+///     }
+///     Ok(())
+/// }
+/// ```
+/// Instead of the verbose [`match`](https://doc.rust-lang.org/reference/expressions/match-expr.html)
+/// the [`?`](https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator)-operator
+/// or [`unwrap()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap)/
+/// [`expect()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.expect)
+/// can be used to handle the [`Result`] "automatically". However, in the kernel
+/// context, the usage of [`unwrap()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap) or
+/// [`expect()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.expect) has a side effect which is often
+/// not wanted: The [`panic`](https://docs.kernel.org/driver-api/basics.html#c.panic) called when using
+/// [`unwrap()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap) or
+/// [`expect()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.expect). While the
+/// console output from [`panic`](https://docs.kernel.org/driver-api/basics.html#c.panic) is
+/// nice and quite helpful for debugging the error, stopping the whole Linux system due to the kernel
+/// panic is often **not** desired:
+/// ```
+/// fn example () -> Result {
+///     let mut numbers = KVec::new();
+///     numbers.push(72, GFP_KERNEL).expect("Error pushing 72"); // Panics the system in case of an error
+///     numbers.push(108, GFP_KERNEL).expect("Error pushing 108"); // Panics the system in case of an error
+///     numbers.push(200, GFP_KERNEL).expect("Error pushing 200"); // Panics the system in case of an error
+///     Ok(())
+/// }
+/// ```
+/// Instead [`unwrap_or()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap_or),
+/// [`unwrap_or_else()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap_or_else) or
+/// [`unwrap_or_default()`](https://doc.rust-lang.org/std/result/enum.Result.html#method.unwrap_or_default)
+/// can be used. But in consequence, using the [`?`](https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator)-operator
+/// is often the best choice to handle [`Result`] in a non-verbose way as done in
+/// [samples/rust/rust_minimal.rs](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/samples/rust/rust_minimal.rs)):
+/// ```
+/// fn example () -> Result {
+///     let mut numbers = KVec::new();
+///     numbers.push(72, GFP_KERNEL)?;
+///     numbers.push(108, GFP_KERNEL)?;
+///     numbers.push(200, GFP_KERNEL)?;
+///     Ok(())
+/// }
+/// ```
 pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
 /// Converts an integer as returned by a C kernel function to an error if it's negative, and
