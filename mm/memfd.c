@@ -394,26 +394,18 @@ static char *memfd_create_name(const char __user *uname)
 	char *name;
 	long len;
 
-	/* length includes terminating zero */
-	len = strnlen_user(uname, MFD_NAME_MAX_LEN + 1);
-	if (len <= 0)
-		return ERR_PTR(-EFAULT);
-	if (len > MFD_NAME_MAX_LEN + 1)
-		return ERR_PTR(-EINVAL);
-
-	name = kmalloc(len + MFD_NAME_PREFIX_LEN, GFP_KERNEL);
+	name = kmalloc(MFD_NAME_PREFIX_LEN + MFD_NAME_MAX_LEN + 1, GFP_KERNEL);
 	if (!name)
 		return ERR_PTR(-ENOMEM);
 
 	strcpy(name, MFD_NAME_PREFIX);
-	if (copy_from_user(&name[MFD_NAME_PREFIX_LEN], uname, len)) {
+	/* length does not include terminating zero */
+	len = strncpy_from_user(name + MFD_NAME_PREFIX_LEN, uname, MFD_NAME_MAX_LEN + 1);
+	if (len < 0) {
 		error = -EFAULT;
 		goto err_name;
-	}
-
-	/* terminating-zero may have changed after strnlen_user() returned */
-	if (name[len + MFD_NAME_PREFIX_LEN - 1]) {
-		error = -EFAULT;
+	} else if (len > MFD_NAME_MAX_LEN) {
+		error = -EINVAL;
 		goto err_name;
 	}
 
