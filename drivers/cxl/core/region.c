@@ -3189,17 +3189,33 @@ err:
 	return rc;
 }
 
-static int match_root_decoder_by_range(struct device *dev, void *data)
+static int match_decoder_by_range(struct device *dev, void *data)
 {
 	struct range *r1, *r2 = data;
-	struct cxl_root_decoder *cxlrd;
+	struct cxl_decoder *cxld;
 
-	if (!is_root_decoder(dev))
+	if (!is_switch_decoder(dev))
 		return 0;
 
-	cxlrd = to_cxl_root_decoder(dev);
-	r1 = &cxlrd->cxlsd.cxld.hpa_range;
+	cxld = to_cxl_decoder(dev);
+	r1 = &cxld->hpa_range;
 	return range_contains(r1, r2);
+}
+
+static struct cxl_decoder *
+cxl_port_find_switch_decoder(struct cxl_port *port, struct range *hpa)
+{
+	/*
+	 * device_find_child() creates a reference to the root
+	 * decoder. Since the root decoder exists as long as the root
+	 * port exists and the endpoint already holds a reference to
+	 * the root port, this additional reference is not needed.
+	 * Free it here.
+	 */
+	struct device *cxld_dev __free(put_device) =
+		device_find_child(&port->dev, hpa, match_decoder_by_range);
+
+	return cxld_dev ? to_cxl_decoder(cxld_dev) : NULL;
 }
 
 static struct cxl_root_decoder *
@@ -3209,7 +3225,6 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 	struct cxl_port *iter = cxled_to_port(cxled);
 	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_decoder *cxld = &cxled->cxld;
-	struct device *cxlrd_dev;
 
 	while (iter && !is_cxl_root(iter))
 		iter = to_cxl_port(iter->dev.parent);
@@ -3217,9 +3232,8 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 	if (!iter)
 		return NULL;
 
-	cxlrd_dev = device_find_child(&iter->dev, hpa,
-				      match_root_decoder_by_range);
-	if (!cxlrd_dev) {
+	cxld = cxl_port_find_switch_decoder(iter, hpa);
+	if (!cxld) {
 		dev_err(cxlmd->dev.parent,
 			"%s:%s no CXL window for range %#llx:%#llx\n",
 			dev_name(&cxlmd->dev), dev_name(&cxld->dev),
@@ -3227,16 +3241,9 @@ cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 		return NULL;
 	}
 
-	/*
-	 * device_find_child() created a reference to the root
-	 * decoder. Since the root decoder exists as long as the root
-	 * port exists and the endpoint already holds a reference to
-	 * the root port, this additional reference is not needed.
-	 * Free it here.
-	 */
-	put_device(cxlrd_dev);
 
-	return to_cxl_root_decoder(cxlrd_dev);
+
+	return to_cxl_root_decoder(&cxld->dev);
 }
 
 static int match_region_by_range(struct device *dev, void *data)
