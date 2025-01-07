@@ -932,7 +932,9 @@ reflected by corresponding queries):
 
 * the minimum number of buffers needed for decoding,
 
-* bit-depth of the bitstream has been changed.
+* bit-depth of the bitstream has been changed,
+
+* colorspace of the bitstream has been changed.
 
 Whenever that happens, the decoder must proceed as follows:
 
