@@ -599,8 +599,10 @@ static int fuse_request_queue_background(struct fuse_req *req)
 	}
 	__set_bit(FR_ISREPLY, &req->flags);
 
+#ifdef CONFIG_FUSE_IO_URING
 	if (fuse_uring_ready(fc))
 		return fuse_request_queue_background_uring(fc, req);
+#endif
 
 	spin_lock(&fc->bg_lock);
 	if (likely(fc->connected)) {
