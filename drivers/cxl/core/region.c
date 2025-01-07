@@ -3477,8 +3477,8 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	}
 
 	p->res = res;
-	p->interleave_ways = cxled->cxld.interleave_ways;
-	p->interleave_granularity = cxled->cxld.interleave_granularity;
+	p->interleave_ways = cxlrd->cxlsd.cxld.interleave_ways;
+	p->interleave_granularity = cxlrd->cxlsd.cxld.interleave_granularity;
 	p->state = CXL_CONFIG_INTERLEAVE_ACTIVE;
 
 	rc = sysfs_update_group(&cxlr->dev.kobj, get_cxl_region_target_group());
