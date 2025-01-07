@@ -26,6 +26,7 @@ properties:
       - const: rockchip,rk3568-pcie
       - items:
           - enum:
+              - rockchip,rk3576-pcie
               - rockchip,rk3588-pcie
           - const: rockchip,rk3568-pcie
 
@@ -70,9 +71,6 @@ properties:
     maxItems: 3
 
   vpcie3v3-supply: true
-
-required:
-  - msi-map
 
 unevaluatedProperties: false
 
