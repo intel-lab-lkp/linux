@@ -6079,7 +6079,7 @@ int tracing_set_tracer(struct trace_array *tr, const char *buf)
 #ifdef CONFIG_TRACER_MAX_TRACE
 	bool had_max_tr;
 #endif
-	int ret;
+	int ret = 0;
 
 	guard(mutex)(&trace_types_lock);
 
