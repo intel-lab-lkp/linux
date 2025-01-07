@@ -116,10 +116,11 @@ static int validate_complete_va_space(void)
 
 	prev_end_addr = 0;
 	while (fgets(line, sizeof(line), file)) {
+		int path_offset = 0;
 		unsigned long hop;
 
-		if (sscanf(line, "%lx-%lx %s[rwxp-]",
-			   &start_addr, &end_addr, prot) != 3)
+		if (sscanf(line, "%lx-%lx %4s %*s %*s %*s %n",
+			   &start_addr, &end_addr, prot, &path_offset) != 3)
 			ksft_exit_fail_msg("cannot parse /proc/self/maps\n");
 
 		/* end of userspace mappings; ignore vsyscall mapping */
@@ -133,6 +134,10 @@ static int validate_complete_va_space(void)
 		prev_end_addr = end_addr;
 
 		if (prot[0] != 'r')
+			continue;
+
+		/* Only the VDSO can know if a VVAR mapping is really readable */
+		if (path_offset && !strncmp(line + path_offset, "[vvar", 5))
 			continue;
 
 		/*
