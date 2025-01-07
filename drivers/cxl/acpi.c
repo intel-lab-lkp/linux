@@ -596,8 +596,7 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 		dport = devm_cxl_add_rch_dport(root_port, bridge, ctx.uid,
 					       ctx.base);
 	} else {
-		dport = devm_cxl_add_dport(root_port, bridge, ctx.uid,
-					   CXL_RESOURCE_NONE);
+		dport = devm_cxl_add_dport(root_port, bridge, ctx.uid);
 	}
 
 	if (IS_ERR(dport))

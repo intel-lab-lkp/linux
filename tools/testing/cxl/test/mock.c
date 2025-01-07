@@ -254,8 +254,7 @@ struct cxl_dport *__wrap_devm_cxl_add_rch_dport(struct cxl_port *port,
 	struct cxl_mock_ops *ops = get_cxl_mock_ops(&index);
 
 	if (ops && ops->is_mock_port(dport_dev)) {
-		dport = devm_cxl_add_dport(port, dport_dev, port_id,
-					   CXL_RESOURCE_NONE);
+		dport = devm_cxl_add_dport(port, dport_dev, port_id);
 		if (!IS_ERR(dport)) {
 			dport->rcrb.base = rcrb;
 			dport->rch = true;

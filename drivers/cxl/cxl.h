@@ -766,8 +766,8 @@ struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 bool schedule_cxl_memdev_detach(struct cxl_memdev *cxlmd);
 
 struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
-				     struct device *dport, int port_id,
-				     resource_size_t component_reg_phys);
+				     struct device *dport,
+				     int port_id);
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 					 struct device *dport_dev, int port_id,
 					 resource_size_t rcrb);

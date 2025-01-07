@@ -51,7 +51,7 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 		return 0;
 
 	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
-	dport = devm_cxl_add_dport(port, &pdev->dev, port_num, CXL_RESOURCE_NONE);
+	dport = devm_cxl_add_dport(port, &pdev->dev, port_num);
 	if (IS_ERR(dport)) {
 		ctx->error = PTR_ERR(dport);
 		return PTR_ERR(dport);

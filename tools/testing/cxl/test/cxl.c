@@ -968,9 +968,7 @@ static int mock_cxl_port_enumerate_dports(struct cxl_port *port)
 			continue;
 		}
 
-		dport = devm_cxl_add_dport(port, &pdev->dev, pdev->id,
-					   CXL_RESOURCE_NONE);
-
+		dport = devm_cxl_add_dport(port, &pdev->dev, pdev->id);
 		if (IS_ERR(dport))
 			return PTR_ERR(dport);
 	}
