@@ -1455,10 +1455,12 @@ struct nvmem_cell *of_nvmem_cell_get(struct device_node *np, const char *id)
 	if (ret)
 		return ERR_PTR(-ENOENT);
 
-	if (cell_spec.args_count > 1)
-		return ERR_PTR(-EINVAL);
-
 	cell_np = cell_spec.np;
+	if (cell_spec.args_count > 1) {
+		of_node_put(cell_np);
+		return ERR_PTR(-EINVAL);
+	}
+
 	if (cell_spec.args_count)
 		cell_index = cell_spec.args[0];
 
