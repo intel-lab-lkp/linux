@@ -626,6 +626,8 @@ static void unregister_port(void *_port)
 		lock_dev = &parent->dev;
 
 	device_lock_assert(lock_dev);
+	if (port->parent_dport && !port->parent_dport->rch)
+		cxl_register_map_reset(&port->parent_dport->reg_map);
 	port->dead = true;
 	device_unregister(&port->dev);
 }
@@ -820,13 +822,39 @@ int cxl_port_setup_regs(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_port_setup_regs, "CXL");
 
-static int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
-				resource_size_t component_reg_phys)
+/**
+ * cxl_dport_setup_regs - probe all component registers of a cxl dport
+ * @dport: target cxl dport
+ */
+int cxl_dport_setup_regs(struct cxl_dport *dport)
 {
+	resource_size_t component_reg_phys;
+	struct device *host;
 	int rc;
 
 	if (dev_is_platform(dport->dport_dev))
 		return 0;
+	/* component registers have been set up */
+	if (dport->reg_map.resource != CXL_RESOURCE_NONE)
+		return 0;
+
+	if (dport->rcrb.base) {
+		component_reg_phys = __rcrb_to_component(dport->dport_dev, &dport->rcrb,
+							 CXL_RCRB_DOWNSTREAM);
+		host = NULL;
+	} else {
+		component_reg_phys = find_component_registers(dport->dport_dev);
+		host = &dport->port->dev;
+	}
+
+	if (component_reg_phys == CXL_RESOURCE_NONE) {
+		dev_warn(dport->dport_dev, "Invalid Component Registers%s",
+			 dport->rcrb.base ? " in RCRB" : "");
+		return -ENXIO;
+	}
+
+	dev_dbg(dport->dport_dev, "Component Registers found for dport: %pa\n",
+		&component_reg_phys);
 
 	/*
 	 * use @dport->dport_dev for the context for error messages during
@@ -838,6 +866,7 @@ static int cxl_dport_setup_regs(struct device *host, struct cxl_dport *dport,
 	dport->reg_map.host = host;
 	return rc;
 }
+EXPORT_SYMBOL_NS_GPL(cxl_dport_setup_regs, "CXL");
 
 DEFINE_SHOW_ATTRIBUTE(einj_cxl_available_error_type);
 
@@ -1176,38 +1205,24 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	if (!dport)
 		return ERR_PTR(-ENOMEM);
 
+	cxl_register_map_reset(&dport->reg_map);
 	dport->dport_dev = dport_dev;
 	dport->port_id = port_id;
 	dport->port = port;
 
-	if (rcrb == CXL_RESOURCE_NONE) {
-		rc = cxl_dport_setup_regs(&port->dev, dport,
-					  component_reg_phys);
-		if (rc)
-			return ERR_PTR(rc);
-	} else {
+	if (rcrb != CXL_RESOURCE_NONE) {
 		dport->rcrb.base = rcrb;
-		component_reg_phys = __rcrb_to_component(dport_dev, &dport->rcrb,
-							 CXL_RCRB_DOWNSTREAM);
-		if (component_reg_phys == CXL_RESOURCE_NONE) {
-			dev_warn(dport_dev, "Invalid Component Registers in RCRB");
-			return ERR_PTR(-ENXIO);
-		}
 
 		/*
 		 * RCH @dport is not ready to map until associated with its
 		 * memdev
 		 */
-		rc = cxl_dport_setup_regs(NULL, dport, component_reg_phys);
+		rc = cxl_dport_setup_regs(dport);
 		if (rc)
 			return ERR_PTR(rc);
 
 		dport->rch = true;
 	}
-
-	if (component_reg_phys != CXL_RESOURCE_NONE)
-		dev_dbg(dport_dev, "Component Registers found for dport: %pa\n",
-			&component_reg_phys);
 
 	cond_cxl_root_lock(port);
 	rc = add_dport(port, dport);

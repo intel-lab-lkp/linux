@@ -100,7 +100,7 @@ static int cxl_switch_port_setup_hdm(struct cxl_port *port)
 	return -ENXIO;
 }
 
-static int cxl_switch_port_setup(struct cxl_port *port)
+static int cxl_switch_port_setup(struct cxl_port *port, struct cxl_dport *dport)
 {
 	int rc;
 
@@ -108,12 +108,16 @@ static int cxl_switch_port_setup(struct cxl_port *port)
 	if (rc)
 		return rc;
 
-	return cxl_switch_port_setup_hdm(port);
+	rc = cxl_switch_port_setup_hdm(port);
+	if (rc)
+		return rc;
+
+	return cxl_dport_setup_regs(dport);
 }
 
 static int cxl_endpoint_port_probe(struct cxl_port *port)
 {
-	struct cxl_port *iter, *parent_port = to_cxl_port(port->dev.parent);
+	struct cxl_port *iter, *prev, *parent_port = to_cxl_port(port->dev.parent);
 	struct cxl_endpoint_dvsec_info info = { .port = port };
 	struct cxl_memdev *cxlmd = to_cxl_memdev(port->uport_dev);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
@@ -121,8 +125,10 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	struct cxl_port *root;
 	int rc;
 
-	for (iter = parent_port; !is_cxl_root(iter);
-	     iter = to_cxl_port(iter->dev.parent)) {
+	for (iter = parent_port, prev = NULL; !is_cxl_root(iter);
+	     prev = iter, iter = to_cxl_port(iter->dev.parent)) {
+		struct cxl_dport *dport = prev ? prev->parent_dport :
+					port->parent_dport;
 		/*
 		 * The parent port of endpoint has been locked
 		 * during endpoint port attaching.
@@ -131,9 +137,9 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 		 */
 		if (iter != parent_port) {
 			guard(device)(&iter->dev);
-			rc = cxl_switch_port_setup(iter);
+			rc = cxl_switch_port_setup(iter, dport);
 		} else {
-			rc = cxl_switch_port_setup(iter);
+			rc = cxl_switch_port_setup(iter, dport);
 		}
 		if (rc)
 			return rc;
