@@ -48,9 +48,6 @@ struct fuse_ring_ent {
 	enum fuse_ring_req_state state;
 
 	struct fuse_req *fuse_req;
-
-	/* commit id to identify the server reply */
-	uint64_t commit_id;
 };
 
 struct fuse_ring_queue {
@@ -120,6 +117,8 @@ struct fuse_ring {
 	unsigned long teardown_time;
 
 	atomic_t queue_refs;
+
+	bool ready;
 };
 
 bool fuse_uring_enabled(void);
@@ -127,6 +126,7 @@ void fuse_uring_destruct(struct fuse_conn *fc);
 void fuse_uring_stop_queues(struct fuse_ring *ring);
 void fuse_uring_abort_end_requests(struct fuse_ring *ring);
 int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
+void fuse_uring_queue_fuse_req(struct fuse_iqueue *fiq, struct fuse_req *req);
 
 static inline void fuse_uring_abort(struct fuse_conn *fc)
 {
@@ -148,6 +148,11 @@ static inline void fuse_uring_wait_stopped_queues(struct fuse_conn *fc)
 	if (ring)
 		wait_event(ring->stop_waitq,
 			   atomic_read(&ring->queue_refs) == 0);
+}
+
+static inline bool fuse_uring_ready(struct fuse_conn *fc)
+{
+	return fc->ring && fc->ring->ready;
 }
 
 #else /* CONFIG_FUSE_IO_URING */
