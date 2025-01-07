@@ -1813,26 +1813,29 @@ static int find_pos_and_ways(struct cxl_port *port, struct range *range,
 }
 
 /**
- * cxl_calc_interleave_pos() - calculate an endpoint position in a region
- * @cxled: endpoint decoder member of given region
+ * cxl_port_calc_pos() - calculate an endpoint position for @port
+ * @port: Port the new position is calculated for.
+ * @range: The HPA address range for the port.
+ * @pos: Current position in the topology.
  *
- * The endpoint position is calculated by traversing the topology from
- * the endpoint to the root decoder and iteratively applying this
- * calculation:
+ * The endpoint position for the next port is calculated by applying
+ * this calculation:
  *
  *    position = position * parent_ways + parent_pos;
  *
  * ...where @position is inferred from switch and root decoder target lists.
  *
+ * The endpoint position of region can be calculated by traversing the
+ * topology from the endpoint to the root decoder and iteratively
+ * applying the function for each port.
+ *
  * Return: position >= 0 on success
  *	   -ENXIO on failure
  */
-static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
+static int cxl_port_calc_pos(struct cxl_port *port, struct range *range,
+			     int pos)
 {
-	struct cxl_port *iter, *port = cxled_to_port(cxled);
-	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct range *range = &cxled->cxld.hpa_range;
-	int parent_ways = 0, parent_pos = 0, pos = 0;
+	int parent_ways = 0, parent_pos = 0;
 	int rc;
 
 	/*
@@ -1864,17 +1867,30 @@ static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
 	 * complex topologies, including those with switches.
 	 */
 
-	/* Iterate from endpoint to root_port refining the position */
-	for (iter = port; iter; iter = parent_port_of(iter)) {
-		if (is_cxl_root(iter))
-			break;
+	if (is_cxl_root(port))
+		return pos;
 
-		rc = find_pos_and_ways(iter, range, &parent_pos, &parent_ways);
-		if (rc)
-			return rc;
+	rc = find_pos_and_ways(port, range, &parent_pos, &parent_ways);
+	if (rc)
+		return rc;
 
-		pos = pos * parent_ways + parent_pos;
-	}
+	return pos * parent_ways + parent_pos;
+}
+
+static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
+{
+	struct cxl_port *iter, *port = cxled_to_port(cxled);
+	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
+	struct range *range = &cxled->cxld.hpa_range;
+	int pos = 0;
+
+	/*
+	 * Address translation is only supported for auto-discovery of
+	 * decoders. There is no need to support address translation
+	 * here.
+	 */
+	for (iter = cxled_to_port(cxled); iter; iter = parent_port_of(iter))
+		pos = cxl_port_calc_pos(iter, range, pos);
 
 	dev_dbg(&cxlmd->dev,
 		"decoder:%s parent:%s port:%s range:%#llx-%#llx pos:%d\n",
@@ -1892,7 +1908,6 @@ static int cxl_region_sort_targets(struct cxl_region *cxlr)
 	for (i = 0; i < p->nr_targets; i++) {
 		struct cxl_endpoint_decoder *cxled = p->targets[i];
 
-		cxled->pos = cxl_calc_interleave_pos(cxled);
 		/*
 		 * Record that sorting failed, but still continue to calc
 		 * cxled->pos so that follow-on code paths can reliably
@@ -3252,6 +3267,7 @@ static int cxl_endpoint_initialize(struct cxl_endpoint_decoder *cxled)
 	struct cxl_port *parent, *iter = cxled_to_port(cxled);
 	struct range hpa = cxled->cxld.hpa_range;
 	struct cxl_decoder *cxld = &cxled->cxld;
+	int pos = 0;
 
 	if (!iter || is_cxl_root(iter))
 		return -ENXIO;
@@ -3280,16 +3296,22 @@ static int cxl_endpoint_initialize(struct cxl_endpoint_decoder *cxled)
 		if (cxl_port_calc_hpa(parent, cxld, &hpa))
 			return -ENXIO;
 
+		/* Iterate from endpoint to root_port refining the position */
+		pos = cxl_port_calc_pos(iter, &hpa, pos);
+		if (pos < 0)
+			return pos;
+
 		iter = parent;
 	}
 
 	dev_dbg(cxld->dev.parent,
-		"%s:%s: range:%#llx-%#llx\n",
+		"%s:%s: range:%#llx-%#llx pos:%d\n",
 		dev_name(&cxled->cxld.dev), dev_name(&cxld->dev),
-		hpa.start, hpa.end);
+		hpa.start, hpa.end, pos);
 
 	cxled->cxlrd = to_cxl_root_decoder(&cxld->dev);
 	cxled->spa_range = hpa;
+	cxled->pos = pos;
 
 	return 0;
 }
