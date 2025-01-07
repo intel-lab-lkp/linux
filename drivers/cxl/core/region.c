@@ -876,6 +876,66 @@ static int match_auto_decoder(struct device *dev, void *data)
 	return 0;
 }
 
+static struct device *
+cxl_find_auto_decoder(struct cxl_port *port, struct cxl_endpoint_decoder *cxled,
+		      struct cxl_region *cxlr)
+{
+	struct cxl_port *parent, *iter = cxled_to_port(cxled);
+	struct cxl_decoder *cxld = &cxled->cxld;
+	struct range hpa = cxld->hpa_range;
+	struct cxl_region_ref *rr;
+
+	while (1) {
+		parent = parent_port_of(iter);
+		if (!parent) {
+			dev_warn(&port->dev,
+				"port not a parent of endpoint decoder %s\n",
+				dev_name(&cxled->cxld.dev));
+			return NULL;
+		}
+
+		if (!parent->to_hpa) {
+			iter = parent;
+			continue;
+		}
+
+		/* Lower domain decoders are already attached. */
+		rr = cxl_rr_load(iter, cxlr);
+		cxld = rr ? rr->decoder : NULL;
+		if (!cxld) {
+			dev_warn(&iter->dev,
+				"no decoder found for region %s\n",
+				dev_name(&cxlr->dev));
+			return NULL;
+		}
+
+		/* Check switch decoder range. */
+		if (cxld != &cxled->cxld &&
+		    !match_auto_decoder(&cxld->dev, &hpa)) {
+			dev_warn(&iter->dev,
+				"decoder %s out of range %#llx-%#llx:%#llx-%#llx(%s)\n",
+				dev_name(&cxld->dev), cxld->hpa_range.start,
+				cxld->hpa_range.end, hpa.start, hpa.end,
+				dev_name(&cxled->cxld.dev));
+			return NULL;
+		}
+
+		if (cxl_port_calc_hpa(parent, cxld, &hpa))
+			return NULL;
+
+		if (parent == port)
+			break;
+
+		iter = parent;
+	}
+
+	dev_dbg(cxld->dev.parent, "%s: range: %#llx-%#llx iw: %d ig: %d\n",
+		dev_name(&cxld->dev), hpa.start, hpa.end,
+		cxld->interleave_ways, cxld->interleave_granularity);
+
+	return device_find_child(&port->dev, &hpa, match_auto_decoder);
+}
+
 static struct cxl_decoder *
 cxl_find_decoder_early(struct cxl_port *port,
 		       struct cxl_endpoint_decoder *cxled,
@@ -887,8 +947,7 @@ cxl_find_decoder_early(struct cxl_port *port,
 		return &cxled->cxld;
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags))
-		dev = device_find_child(&port->dev, &cxled->cxld.hpa_range,
-					match_auto_decoder);
+		dev = cxl_find_auto_decoder(port, cxled, cxlr);
 	else
 		dev = device_find_child(&port->dev, NULL, match_free_decoder);
 	if (!dev)
