@@ -5,6 +5,7 @@
 
 struct device;
 struct fwnode_handle;
+struct gpio_chip;
 struct gpio_regmap;
 struct irq_domain;
 struct regmap;
@@ -81,6 +82,9 @@ struct gpio_regmap_config {
 	int (*reg_mask_xlate)(struct gpio_regmap *gpio, unsigned int base,
 			      unsigned int offset, unsigned int *reg,
 			      unsigned int *mask);
+
+	int (*request)(struct gpio_chip *chip, unsigned int offset);
+	void (*free)(struct gpio_chip *chip, unsigned int offset);
 
 	void *drvdata;
 };
