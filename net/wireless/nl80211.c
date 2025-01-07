@@ -2505,7 +2505,8 @@ struct nl80211_dump_wiphy_state {
 static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 			      enum nl80211_commands cmd,
 			      struct sk_buff *msg, u32 portid, u32 seq,
-			      int flags, struct nl80211_dump_wiphy_state *state)
+			      int flags, u8 radio_id,
+			      struct nl80211_dump_wiphy_state *state)
 {
 	void *hdr;
 	struct nlattr *nl_bands, *nl_band;
@@ -2516,7 +2517,7 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 	int i;
 	const struct ieee80211_txrx_stypes *mgmt_stypes =
 				rdev->wiphy.mgmt_stypes;
-	u32 features;
+	u32 features, rts_threshold;
 
 	hdr = nl80211hdr_put(msg, portid, seq, flags, cmd);
 	if (!hdr)
@@ -2537,6 +2538,11 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 
 	switch (state->split_start) {
 	case 0:
+		if (radio_id >= rdev->wiphy.n_radio)
+			rts_threshold = rdev->wiphy.rts_threshold;
+		else
+			rts_threshold = rdev->wiphy.radio_cfg[radio_id].rts_threshold;
+
 		if (nla_put_u8(msg, NL80211_ATTR_WIPHY_RETRY_SHORT,
 			       rdev->wiphy.retry_short) ||
 		    nla_put_u8(msg, NL80211_ATTR_WIPHY_RETRY_LONG,
@@ -2544,7 +2550,7 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 		    nla_put_u32(msg, NL80211_ATTR_WIPHY_FRAG_THRESHOLD,
 				rdev->wiphy.frag_threshold) ||
 		    nla_put_u32(msg, NL80211_ATTR_WIPHY_RTS_THRESHOLD,
-				rdev->wiphy.rts_threshold) ||
+				rts_threshold) ||
 		    nla_put_u8(msg, NL80211_ATTR_WIPHY_COVERAGE_CLASS,
 			       rdev->wiphy.coverage_class) ||
 		    nla_put_u8(msg, NL80211_ATTR_MAX_NUM_SCAN_SSIDS,
@@ -3211,7 +3217,9 @@ static int nl80211_dump_wiphy(struct sk_buff *skb, struct netlink_callback *cb)
 						 skb,
 						 NETLINK_CB(cb->skb).portid,
 						 cb->nlh->nlmsg_seq,
-						 NLM_F_MULTI, state);
+						 NLM_F_MULTI,
+						 NL80211_WIPHY_RADIO_ID_MAX,
+						 state);
 			if (ret < 0) {
 				/*
 				 * If sending the wiphy data didn't fit (ENOBUFS
@@ -3260,13 +3268,21 @@ static int nl80211_get_wiphy(struct sk_buff *skb, struct genl_info *info)
 	struct sk_buff *msg;
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct nl80211_dump_wiphy_state state = {};
+	u8 radio_id = NL80211_WIPHY_RADIO_ID_MAX;
 
 	msg = nlmsg_new(4096, GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
+	if (info->attrs[NL80211_ATTR_WIPHY_RADIO_INDEX]) {
+		radio_id = nla_get_u8(info->attrs[NL80211_ATTR_WIPHY_RADIO_INDEX]);
+
+		if (radio_id >= rdev->wiphy.n_radio)
+			return -EINVAL;
+	}
+
 	if (nl80211_send_wiphy(rdev, NL80211_CMD_NEW_WIPHY, msg,
-			       info->snd_portid, info->snd_seq, 0,
+			       info->snd_portid, info->snd_seq, 0, radio_id,
 			       &state) < 0) {
 		nlmsg_free(msg);
 		return -ENOBUFS;
@@ -17693,7 +17709,8 @@ void nl80211_notify_wiphy(struct cfg80211_registered_device *rdev,
 	if (!msg)
 		return;
 
-	if (nl80211_send_wiphy(rdev, cmd, msg, 0, 0, 0, &state) < 0) {
+	if (nl80211_send_wiphy(rdev, cmd, msg, 0, 0, 0, NL80211_WIPHY_RADIO_ID_MAX,
+			       &state) < 0) {
 		nlmsg_free(msg);
 		return;
 	}
