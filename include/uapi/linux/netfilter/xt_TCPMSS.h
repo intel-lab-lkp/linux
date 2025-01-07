@@ -1,13 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
-#ifndef _XT_TCPMSS_H
-#define _XT_TCPMSS_H
+#ifndef _XT_TCPMSS_TARGET_H
+#define _XT_TCPMSS_TARGET_H
 
-#include <linux/types.h>
+#include <linux/netfilter/xt_tcpmss.h>
 
-struct xt_tcpmss_info {
-	__u16 mss;
-};
-
-#define XT_TCPMSS_CLAMP_PMTU 0xffff
-
-#endif /* _XT_TCPMSS_H */
+#endif /* _XT_TCPMSS_TARGET_H */
