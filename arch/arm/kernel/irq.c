@@ -43,6 +43,7 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
 
+#include "irq.h"
 #include "reboot.h"
 
 unsigned long irq_err_count;
@@ -69,6 +70,36 @@ static void __init init_irq_stacks(void)
 			break;
 		per_cpu(irq_stack_ptr, cpu) = &stack[THREAD_SIZE];
 	}
+}
+
+/*
+ * on_irq_stack() - check if a regs context is using the IRQ stack
+ * @regs: the context to check
+ * Returns true if regs is using the IRQ stack
+ */
+bool on_irq_stack(struct pt_regs *regs)
+{
+	u8 *high = __this_cpu_read(irq_stack_ptr);
+	u8 *low = high - THREAD_SIZE;
+	u8 *sp = (u8 *)regs->ARM_sp;
+	bool on_stack;
+
+	on_stack = (low <= sp && sp <= high);
+
+	if (on_stack && IS_ENABLED(CONFIG_VMAP_STACK))
+		/*
+		 * Also check that SP is inside the linear kernel memory
+		 * if using VMAP:ed stacks.
+		 * TODO: Ask Ard to explain why we need to do this
+		 */
+		on_stack = (sp > (u8 *)high_memory);
+
+	return on_stack;
+}
+
+void call_on_irq_stack(void (*fn)(void *), void *arg)
+{
+	call_with_stack(fn, arg, __this_cpu_read(irq_stack_ptr));
 }
 
 #ifdef CONFIG_SOFTIRQ_ON_OWN_STACK
