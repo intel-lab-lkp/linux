@@ -748,7 +748,6 @@ int devm_cxl_register_pci_bus(struct device *host, struct device *uport_dev,
 struct pci_bus *cxl_port_to_pci_bus(struct cxl_port *port);
 struct cxl_port *devm_cxl_add_port(struct device *host,
 				   struct device *uport_dev,
-				   resource_size_t component_reg_phys,
 				   struct cxl_dport *parent_dport);
 struct cxl_root *devm_cxl_add_root(struct device *host,
 				   const struct cxl_root_ops *ops);

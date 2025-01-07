@@ -873,9 +873,7 @@ static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 			    &cxl_einj_inject_fops);
 }
 
-static int cxl_port_add(struct cxl_port *port,
-			resource_size_t component_reg_phys,
-			struct cxl_dport *parent_dport)
+static int cxl_port_add(struct cxl_port *port, struct cxl_dport *parent_dport)
 {
 	struct device *dev __free(put_device) = &port->dev;
 	int rc;
@@ -900,9 +898,6 @@ static int cxl_port_add(struct cxl_port *port,
 		rc = dev_set_name(dev, "port%d", port->id);
 		if (rc)
 			return rc;
-
-		if (is_cxl_root(parent_dport->port))
-			port->chbcr = component_reg_phys;
 	} else {
 		rc = dev_set_name(dev, "root%d", port->id);
 		if (rc)
@@ -920,7 +915,6 @@ static int cxl_port_add(struct cxl_port *port,
 
 static struct cxl_port *__devm_cxl_add_port(struct device *host,
 					    struct device *uport_dev,
-					    resource_size_t component_reg_phys,
 					    struct cxl_dport *parent_dport)
 {
 	struct cxl_port *port;
@@ -930,7 +924,7 @@ static struct cxl_port *__devm_cxl_add_port(struct device *host,
 	if (IS_ERR(port))
 		return port;
 
-	rc = cxl_port_add(port, component_reg_phys, parent_dport);
+	rc = cxl_port_add(port, parent_dport);
 	if (rc)
 		return ERR_PTR(rc);
 
@@ -956,18 +950,15 @@ static struct cxl_port *__devm_cxl_add_port(struct device *host,
  * devm_cxl_add_port - register a cxl_port in CXL memory decode hierarchy
  * @host: host device for devm operations
  * @uport_dev: "physical" device implementing this upstream port
- * @component_reg_phys: (optional) for configurable cxl_port instances
  * @parent_dport: next hop up in the CXL memory decode hierarchy
  */
 struct cxl_port *devm_cxl_add_port(struct device *host,
 				   struct device *uport_dev,
-				   resource_size_t component_reg_phys,
 				   struct cxl_dport *parent_dport)
 {
 	struct cxl_port *port, *parent_port;
 
-	port = __devm_cxl_add_port(host, uport_dev, component_reg_phys,
-				   parent_dport);
+	port = __devm_cxl_add_port(host, uport_dev, parent_dport);
 
 	parent_port = parent_dport ? parent_dport->port : NULL;
 	if (IS_ERR(port)) {
@@ -994,7 +985,7 @@ struct cxl_root *devm_cxl_add_root(struct device *host,
 	struct cxl_root *cxl_root;
 	struct cxl_port *port;
 
-	port = devm_cxl_add_port(host, host, CXL_RESOURCE_NONE, NULL);
+	port = devm_cxl_add_port(host, host, NULL);
 	if (IS_ERR(port))
 		return ERR_CAST(port);
 
@@ -1661,7 +1652,7 @@ static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 		port = find_cxl_port_at(parent_port, dport_dev, &dport);
 		if (!port) {
 			port = devm_cxl_add_port(&parent_port->dev, uport_dev,
-						 CXL_RESOURCE_NONE, parent_dport);
+						 parent_dport);
 			if (IS_ERR(port))
 				return PTR_ERR(port);
 

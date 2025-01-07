@@ -662,9 +662,10 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 	if (rc)
 		return rc;
 
-	port = devm_cxl_add_port(host, bridge, component_reg_phys, dport);
+	port = devm_cxl_add_port(host, bridge, dport);
 	if (IS_ERR(port))
 		return PTR_ERR(port);
+	port->chbcr = component_reg_phys;
 
 	dev_info(bridge, "host supports CXL\n");
 

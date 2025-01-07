@@ -65,8 +65,7 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 	}
 
 	/* Note: endpoint port component registers are derived from @cxlds */
-	endpoint = devm_cxl_add_port(host, &cxlmd->dev, CXL_RESOURCE_NONE,
-				     parent_dport);
+	endpoint = devm_cxl_add_port(host, &cxlmd->dev, parent_dport);
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
 
