@@ -3424,7 +3424,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_port *port = cxlrd_to_port(cxlrd);
-	struct range *hpa = &cxled->cxld.hpa_range;
+	struct range *spa = &cxled->spa_range;
 	struct cxl_region_params *p;
 	struct cxl_region *cxlr;
 	struct resource *res;
@@ -3462,7 +3462,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 		goto err;
 	}
 
-	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
+	*res = DEFINE_RES_MEM_NAMED(spa->start, range_len(spa),
 				    dev_name(&cxlr->dev));
 	rc = insert_resource(cxlrd->res, res);
 	if (rc) {
