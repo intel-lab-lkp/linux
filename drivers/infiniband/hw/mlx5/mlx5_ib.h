@@ -683,6 +683,8 @@ struct mlx5_ib_mr {
 	/* The mr is data direct related */
 	u8 data_direct :1;
 
+	u8 implicit_destroy_queued :1;
+
 	union {
 		/* Used only by kernel MRs (umem == NULL) */
 		struct {

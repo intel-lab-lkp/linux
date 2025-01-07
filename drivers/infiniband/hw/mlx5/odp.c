@@ -228,6 +228,9 @@ static void destroy_unused_implicit_child_mr(struct mlx5_ib_mr *mr)
 	unsigned long idx = ib_umem_start(odp) >> MLX5_IMR_MTT_SHIFT;
 	struct mlx5_ib_mr *imr = mr->parent;
 
+	if (mr->implicit_destroy_queued)
+		return;
+
 	if (!refcount_inc_not_zero(&imr->mmkey.usecount))
 		return;
 
@@ -236,6 +239,7 @@ static void destroy_unused_implicit_child_mr(struct mlx5_ib_mr *mr)
 		xa_erase(&mr_to_mdev(mr)->odp_mkeys,
 			 mlx5_base_mkey(mr->mmkey.key));
 
+	mr->implicit_destroy_queued = 1;
 	/* Freeing a MR is a sleeping operation, so bounce to a work queue */
 	INIT_WORK(&mr->odp_destroy.work, free_implicit_child_mr_work);
 	queue_work(system_unbound_wq, &mr->odp_destroy.work);
