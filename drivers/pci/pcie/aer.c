@@ -40,7 +40,9 @@
 #define AER_MAX_TYPEOF_COR_ERRS		16	/* as per PCI_ERR_COR_STATUS */
 #define AER_MAX_TYPEOF_UNCOR_ERRS	27	/* as per PCI_ERR_UNCOR_STATUS*/
 
+#define AER_COR_ERR_THRESHOLD		1000
 #define AER_COR_ERR_INTERVAL		(2 * HZ)
+#define AER_COR_ERR_LONG_INTERVAL	(30 * HZ)
 
 struct aer_err_source {
 	u32 status;			/* PCI_ERR_ROOT_STATUS */
@@ -668,6 +670,24 @@ static void pci_rootport_aer_stats_incr(struct pci_dev *pdev,
 		else
 			aer_stats->rootport_total_nonfatal_errs++;
 	}
+}
+
+static bool report_aer_cor_err(struct pci_dev *pdev)
+{
+	struct ratelimit_state *rs = &pdev->cor_rs;
+	struct aer_stats *aer_stats = pdev->aer_stats;
+	unsigned int total_cor_errs = aer_stats->rootport_total_cor_errs;
+
+	/* A significant number of errors reported, increase the rate limit */
+	if (total_cor_errs > AER_COR_ERR_THRESHOLD && !pdev->cor_err_throttled) {
+		pci_warn(pdev,
+			 "Over %d Correctable Errors reported, increasing the rate limit",
+			 AER_COR_ERR_THRESHOLD);
+		rs->interval = AER_COR_ERR_LONG_INTERVAL;
+		pdev->cor_err_throttled = 1;
+	}
+
+	return __ratelimit(&pdev->cor_rs);
 }
 
 static void __print_tlp_header(struct pci_dev *dev, struct pcie_tlp_log *t)
@@ -1311,7 +1331,7 @@ static void aer_isr_one_error(struct aer_rpc *rpc,
 		else
 			e_info.multi_error_valid = 0;
 
-		no_ratelimit = __ratelimit(&pdev->cor_rs);
+		no_ratelimit = report_aer_cor_err(pdev);
 
 		if (no_ratelimit)
 			aer_print_port_info(pdev, &e_info, level);
