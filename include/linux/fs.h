@@ -47,6 +47,8 @@
 #include <linux/rw_hint.h>
 #include <linux/file_ref.h>
 #include <linux/unicode.h>
+#include <linux/cleanup.h>
+#include <linux/err.h>
 
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
@@ -2698,6 +2700,8 @@ extern void iput(struct inode *);
 int inode_update_timestamps(struct inode *inode, int flags);
 int generic_update_time(struct inode *, int);
 
+DEFINE_FREE(iput, struct inode *, if (!IS_ERR_OR_NULL(_T)) iput(_T))
+
 /* /sys/fs */
 extern struct kobject *fs_kobj;
 
@@ -3107,8 +3111,6 @@ static inline bool is_dot_dotdot(const char *name, size_t len)
 	return len && unlikely(name[0] == '.') &&
 		(len == 1 || (len == 2 && name[1] == '.'));
 }
-
-#include <linux/err.h>
 
 /* needed for stackable file system support */
 extern loff_t default_llseek(struct file *file, loff_t offset, int whence);
