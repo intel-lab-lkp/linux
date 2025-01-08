@@ -4795,8 +4795,17 @@ static void kvm_s390_assert_primary_as(struct kvm_vcpu *vcpu)
 		current->thread.gmap_int_code, current->thread.gmap_teid.val);
 }
 
-static int kvm_s390_handle_dat_fault(struct kvm_vcpu *vcpu, gfn_t gfn, gpa_t gaddr,
-				     unsigned int flags)
+/*
+ * __kvm_s390_handle_dat_fault() - handle a dat fault for the gmap of a vcpu
+ * @vcpu: the vCPU whose gmap is to be fixed up
+ * @gfn: the guest frame number used for memslots (including fake memslots)
+ * @gaddr: the gmap address, does not have to match @gfn for ucontrol gmaps
+ * @flags: FOLL_* flags
+ *
+ * Return: 0 on success, < 0 in case or error.
+ * Context: The mm lock must not be held before calling.
+ */
+int __kvm_s390_handle_dat_fault(struct kvm_vcpu *vcpu, gfn_t gfn, gpa_t gaddr, unsigned int flags)
 {
 	struct kvm_memory_slot *slot;
 	unsigned int fault_flags;
@@ -4925,7 +4934,7 @@ static int vcpu_post_run_handle_fault(struct kvm_vcpu *vcpu)
 			}
 			gfn = gpa_to_gfn(gaddr_tmp);
 		}
-		return kvm_s390_handle_dat_fault(vcpu, gfn, gaddr, flags);
+		return __kvm_s390_handle_dat_fault(vcpu, gfn, gaddr, flags);
 		break;
 	default:
 		KVM_BUG(1, vcpu->kvm, "Unexpected program interrupt 0x%x, TEID 0x%016lx",
@@ -5818,7 +5827,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 	}
 #endif
 	case KVM_S390_VCPU_FAULT: {
-		r = gmap_fault(vcpu->arch.gmap, arg, 0);
+		r = kvm_s390_handle_dat_fault(vcpu, arg, 0);
 		break;
 	}
 	case KVM_ENABLE_CAP:
