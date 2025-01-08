@@ -3,8 +3,13 @@
  * Copyright © 2023 Intel Corporation
  */
 
+#include <linux/moduleparam.h>
+#include <linux/slab.h>
+#include <linux/string_choices.h>
+
+#include <drm/drm_print.h>
+
 #include "intel_display_params.h"
-#include "i915_drv.h"
 
 #define intel_display_param_named(name, T, perm, desc) \
 	module_param_named(name, intel_display_modparams.name, T, perm); \
@@ -125,7 +130,7 @@ intel_display_param_named_unsafe(enable_psr2_sel_fetch, bool, 0400,
 
 intel_display_param_named_unsafe(enable_dmc_wl, int, 0400,
 	"Enable DMC wakelock "
-	"(-1=use per-chip default, 0=disabled, 1=enabled) "
+	"(-1=use per-chip default, 0=disabled, 1=enabled, 2=match any register, 3=always locked) "
 	"Default: -1");
 
 __maybe_unused
