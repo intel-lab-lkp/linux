@@ -2383,7 +2383,27 @@ static bool __compaction_suitable(struct zone *zone, int order,
 				  int highest_zoneidx,
 				  unsigned long wmark_target)
 {
+	pg_data_t __maybe_unused *pgdat = zone->zone_pgdat;
+	unsigned long sum, nr_pinned;
 	unsigned long watermark;
+
+	sum = node_page_state(pgdat, NR_INACTIVE_FILE) +
+		node_page_state(pgdat, NR_INACTIVE_ANON) +
+		node_page_state(pgdat, NR_ACTIVE_FILE) +
+		node_page_state(pgdat, NR_ACTIVE_ANON) +
+		node_page_state(pgdat, NR_UNEVICTABLE);
+
+	nr_pinned = node_page_state(pgdat, NR_FOLL_PIN_ACQUIRED) -
+		node_page_state(pgdat, NR_FOLL_PIN_RELEASED);
+
+	/*
+	 * Gup-pinned pages are non-migratable. After subtracting these pages,
+	 * we need to check if the remaining pages are sufficient for memory
+	 * compaction.
+	 */
+	if ((sum - nr_pinned) < (1 << order))
+		return false;
+
 	/*
 	 * Watermarks for order-0 must be met for compaction to be able to
 	 * isolate free pages for migration targets. This means that the
