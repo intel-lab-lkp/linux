@@ -589,6 +589,7 @@ int truncate_bdev_range(struct block_device *bdev, blk_mode_t mode,
 long blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg);
 int blkdev_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
 long compat_blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg);
+bool bdev_can_poll(struct block_device *bdev);
 
 extern const struct address_space_operations def_blk_aops;
 

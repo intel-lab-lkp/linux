@@ -245,9 +245,13 @@ static ssize_t queue_##_name##_show(struct gendisk *disk, char *page)	\
 		!!(disk->queue->limits.features & _feature));		\
 }
 
-QUEUE_SYSFS_FEATURE_SHOW(poll, BLK_FEAT_POLL);
 QUEUE_SYSFS_FEATURE_SHOW(fua, BLK_FEAT_FUA);
 QUEUE_SYSFS_FEATURE_SHOW(dax, BLK_FEAT_DAX);
+
+static ssize_t queue_poll_show(struct gendisk *disk, char *page)
+{
+	return sysfs_emit(page, "%u\n", bdev_can_poll(disk->part0));
+}
 
 static ssize_t queue_zoned_show(struct gendisk *disk, char *page)
 {
