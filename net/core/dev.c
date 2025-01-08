@@ -11436,6 +11436,18 @@ static bool from_cleanup_net(void)
 	return current == cleanup_net_task;
 }
 
+static void rtnl_drop_if_cleanup_net(void)
+{
+	if (from_cleanup_net())
+		__rtnl_unlock();
+}
+
+static void rtnl_acquire_if_cleanup_net(void)
+{
+	if (from_cleanup_net())
+		rtnl_lock();
+}
+
 /**
  *	synchronize_net -  Synchronize with packet receive processing
  *
@@ -11548,8 +11560,10 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		unlist_netdevice(dev);
 		WRITE_ONCE(dev->reg_state, NETREG_UNREGISTERING);
 	}
-	flush_all_backlogs();
 
+	rtnl_drop_if_cleanup_net();
+	flush_all_backlogs();
+	rtnl_acquire_if_cleanup_net();
 	synchronize_net();
 
 	list_for_each_entry(dev, head, unreg_list) {
