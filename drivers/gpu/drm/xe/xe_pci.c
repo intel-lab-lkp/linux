@@ -241,6 +241,7 @@ static const struct xe_device_desc adl_s_desc = {
 	PLATFORM(ALDERLAKE_S),
 	.has_display = true,
 	.has_llc = true,
+	.has_sriov = IS_ENABLED(CONFIG_DRM_XE_DEBUG),
 	.require_force_probe = true,
 	.subplatforms = (const struct xe_subplatform_desc[]) {
 		{ XE_SUBPLATFORM_ALDERLAKE_S_RPLS, "RPLS", adls_rpls_ids },
@@ -256,6 +257,7 @@ static const struct xe_device_desc adl_p_desc = {
 	PLATFORM(ALDERLAKE_P),
 	.has_display = true,
 	.has_llc = true,
+	.has_sriov = IS_ENABLED(CONFIG_DRM_XE_DEBUG),
 	.require_force_probe = true,
 	.subplatforms = (const struct xe_subplatform_desc[]) {
 		{ XE_SUBPLATFORM_ALDERLAKE_P_RPLU, "RPLU", adlp_rplu_ids },
@@ -269,6 +271,7 @@ static const struct xe_device_desc adl_n_desc = {
 	PLATFORM(ALDERLAKE_N),
 	.has_display = true,
 	.has_llc = true,
+	.has_sriov = IS_ENABLED(CONFIG_DRM_XE_DEBUG),
 	.require_force_probe = true,
 };
 
@@ -307,6 +310,7 @@ static const struct xe_device_desc ats_m_desc = {
 
 	DG2_FEATURES,
 	.has_display = false,
+	.has_sriov = IS_ENABLED(CONFIG_DRM_XE_DEBUG),
 };
 
 static const struct xe_device_desc dg2_desc = {
@@ -318,7 +322,7 @@ static const struct xe_device_desc dg2_desc = {
 	.has_display = true,
 };
 
-static const __maybe_unused struct xe_device_desc pvc_desc = {
+static const struct xe_device_desc pvc_desc = {
 	.graphics = &graphics_xehpc,
 	DGFX_FEATURES,
 	PLATFORM(PVC),
@@ -393,6 +397,7 @@ static const struct pci_device_id pciidlist[] = {
 	INTEL_ATS_M_IDS(INTEL_VGA_DEVICE, &ats_m_desc),
 	INTEL_ARL_IDS(INTEL_VGA_DEVICE, &mtl_desc),
 	INTEL_DG2_IDS(INTEL_VGA_DEVICE, &dg2_desc),
+	INTEL_PVC_IDS(INTEL_VGA_DEVICE, &pvc_desc),
 	INTEL_MTL_IDS(INTEL_VGA_DEVICE, &mtl_desc),
 	INTEL_LNL_IDS(INTEL_VGA_DEVICE, &lnl_desc),
 	INTEL_BMG_IDS(INTEL_VGA_DEVICE, &bmg_desc),
