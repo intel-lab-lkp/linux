@@ -572,8 +572,12 @@ static void __init taa_select_mitigation(void)
 		return;
 
 	/* Microcode will be checked in taa_update_mitigation(). */
-	if (taa_mitigation == TAA_MITIGATION_AUTO)
-		taa_mitigation = TAA_MITIGATION_VERW;
+	if (taa_mitigation == TAA_MITIGATION_AUTO) {
+		if (should_mitigate_vuln(X86_BUG_TAA))
+			taa_mitigation = TAA_MITIGATION_VERW;
+		else
+			taa_mitigation = TAA_MITIGATION_OFF;
+	}
 
 }
 
@@ -620,7 +624,8 @@ static void __init taa_apply_mitigation(void)
 		 */
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
 
-		if (taa_nosmt || cpu_mitigations_auto_nosmt())
+		if (taa_nosmt || cpu_mitigations_auto_nosmt() ||
+		    cpu_mitigate_attack_vector(CPU_MITIGATE_CROSS_THREAD))
 			cpu_smt_disable(false);
 	}
 
