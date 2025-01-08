@@ -71,6 +71,10 @@ extern int of_platform_bus_probe(struct device_node *root,
 
 #ifdef CONFIG_OF_ADDRESS
 /* Platform devices and busses creation */
+extern struct platform_device *of_platform_device_alloc(struct device_node *np,
+							const char *bus_id,
+							struct device *parent);
+extern int of_platform_device_add(struct platform_device *ofdev);
 extern struct platform_device *of_platform_device_create(struct device_node *np,
 						   const char *bus_id,
 						   struct device *parent);
@@ -91,6 +95,16 @@ extern int devm_of_platform_populate(struct device *dev);
 extern void devm_of_platform_depopulate(struct device *dev);
 #else
 /* Platform devices and busses creation */
+static inline struct platform_device *of_platform_device_alloc(struct device_node *np,
+							       const char *bus_id,
+							       struct device *parent)
+{
+	return NULL;
+}
+static inline int of_platform_device_add(struct platform_device *ofdev)
+{
+	return -ENODEV;
+}
 static inline struct platform_device *of_platform_device_create(struct device_node *np,
 								const char *bus_id,
 								struct device *parent)

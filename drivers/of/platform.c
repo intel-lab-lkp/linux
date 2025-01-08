@@ -139,6 +139,66 @@ struct platform_device *of_device_alloc(struct device_node *np,
 EXPORT_SYMBOL(of_device_alloc);
 
 /**
+ * of_platform_device_alloc - Alloc and initialize an of_device
+ * @np: pointer to node to create device for
+ * @bus_id: name to assign device
+ * @parent: Linux device model parent device.
+ *
+ * Return: Pointer to created platform device, or NULL if a device was not
+ * allocated.  Unavailable devices will not get allocated.
+ */
+struct platform_device *
+of_platform_device_alloc(struct device_node *np, const char *bus_id,
+			  struct device *parent)
+{
+	struct platform_device *ofdev;
+
+	pr_debug("alloc platform device: %pOF\n", np);
+
+	if (!of_device_is_available(np) ||
+	    of_node_test_and_set_flag(np, OF_POPULATED))
+		return NULL;
+
+	ofdev = of_device_alloc(np, bus_id, parent);
+	if (!ofdev) {
+		of_node_clear_flag(np, OF_POPULATED);
+		return ofdev;
+	}
+
+	ofdev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
+	if (!ofdev->dev.dma_mask)
+		ofdev->dev.dma_mask = &ofdev->dev.coherent_dma_mask;
+	ofdev->dev.bus = &platform_bus_type;
+	of_msi_configure(&ofdev->dev, ofdev->dev.of_node);
+
+	return ofdev;
+}
+EXPORT_SYMBOL(of_platform_device_alloc);
+
+/**
+ * of_platform_device_add - Add an of_device to the platform bus
+ * @ofdev: of_device to add
+ *
+ * Return: 0 on success, negative errno on failure.
+ */
+int of_platform_device_add(struct platform_device *ofdev)
+{
+	struct device_node *np = ofdev->dev.of_node;
+	int ret;
+
+	pr_debug("adding platform device: %pOF\n", np);
+
+	ret = of_device_add(ofdev);
+	if (ret) {
+		platform_device_put(ofdev);
+		of_node_clear_flag(np, OF_POPULATED);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(of_platform_device_add);
+
+/**
  * of_platform_device_create_pdata - Alloc, initialize and register an of_device
  * @np: pointer to node to create device for
  * @bus_id: name to assign device
@@ -154,29 +214,19 @@ static struct platform_device *of_platform_device_create_pdata(
 					void *platform_data,
 					struct device *parent)
 {
+	int ret;
 	struct platform_device *dev;
 
 	pr_debug("create platform device: %pOF\n", np);
 
-	if (!of_device_is_available(np) ||
-	    of_node_test_and_set_flag(np, OF_POPULATED))
+	dev = of_platform_device_alloc(np, bus_id, parent);
+	if (!dev)
 		return NULL;
 
-	dev = of_device_alloc(np, bus_id, parent);
-	if (!dev)
-		goto err_clear_flag;
-
-	dev->dev.coherent_dma_mask = DMA_BIT_MASK(32);
-	if (!dev->dev.dma_mask)
-		dev->dev.dma_mask = &dev->dev.coherent_dma_mask;
-	dev->dev.bus = &platform_bus_type;
 	dev->dev.platform_data = platform_data;
-	of_msi_configure(&dev->dev, dev->dev.of_node);
-
-	if (of_device_add(dev) != 0) {
-		platform_device_put(dev);
+	ret = of_platform_device_add(dev);
+	if (ret)
 		goto err_clear_flag;
-	}
 
 	return dev;
 
