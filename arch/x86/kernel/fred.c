@@ -50,7 +50,18 @@ void cpu_init_fred_exceptions(void)
 	       FRED_CONFIG_ENTRYPOINT(asm_fred_entrypoint_user));
 
 	wrmsrl(MSR_IA32_FRED_STKLVLS, 0);
-	wrmsrl(MSR_IA32_FRED_RSP0, 0);
+
+	/*
+	 * Resynchronize the FRED RSP0 MSR with its per CPU cache value.
+	 *
+	 * Another option is to leave the FRED RSP0 MSR as-is, because the RESET
+	 * state of FRED MSRs is zero and INIT does not change the value of the
+	 * FRED MSRs in a CPU offline/online cycle.  But it doesn't seem safe to
+	 * depend on the properties of INIT as that's way too many things that
+	 * could cause bugs.
+	 */
+	wrmsrl(MSR_IA32_FRED_RSP0, __this_cpu_read(fred_rsp0));
+
 	wrmsrl(MSR_IA32_FRED_RSP1, 0);
 	wrmsrl(MSR_IA32_FRED_RSP2, 0);
 	wrmsrl(MSR_IA32_FRED_RSP3, 0);
