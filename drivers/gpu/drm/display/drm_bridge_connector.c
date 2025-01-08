@@ -343,6 +343,11 @@ static int drm_bridge_connector_atomic_check(struct drm_connector *connector,
 {
 	struct drm_bridge_connector *bridge_connector =
 		to_drm_bridge_connector(connector);
+	struct drm_connector_state *new_conn_state =
+		drm_atomic_get_new_connector_state(state, connector);
+
+	if (!new_conn_state->crtc || !new_conn_state->best_encoder)
+		return 0;
 
 	if (bridge_connector->bridge_hdmi)
 		return drm_atomic_helper_connector_hdmi_check(connector, state);
