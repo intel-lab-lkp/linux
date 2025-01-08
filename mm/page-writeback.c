@@ -692,6 +692,8 @@ static unsigned long bdi_ratio_from_pages(unsigned long pages)
 	unsigned long ratio;
 
 	global_dirty_limits(&background_thresh, &dirty_thresh);
+	if (!dirty_thresh)
+		return -EINVAL;
 	ratio = div64_u64(pages * 100ULL * BDI_RATIO_SCALE, dirty_thresh);
 
 	return ratio;
@@ -797,6 +799,8 @@ int bdi_set_min_bytes(struct backing_dev_info *bdi, u64 min_bytes)
 		return ret;
 
 	min_ratio = bdi_ratio_from_pages(pages);
+	if (min_ratio == -EINVAL)
+		return -EINVAL;
 	return __bdi_set_min_ratio(bdi, min_ratio);
 }
 
@@ -816,6 +820,8 @@ int bdi_set_max_bytes(struct backing_dev_info *bdi, u64 max_bytes)
 		return ret;
 
 	max_ratio = bdi_ratio_from_pages(pages);
+	if (max_ratio == -EINVAL)
+		return -EINVAL;
 	return __bdi_set_max_ratio(bdi, max_ratio);
 }
 
