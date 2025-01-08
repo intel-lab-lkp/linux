@@ -61,6 +61,7 @@
 #include <linux/string.h>
 #include <linux/uaccess.h>
 #include <linux/fsnotify_backend.h>
+#include <linux/landlock.h>
 #include <uapi/linux/limits.h>
 #include <uapi/linux/netfilter/nf_tables.h>
 #include <uapi/linux/openat2.h> // struct open_how
@@ -500,6 +501,20 @@ static int audit_filter_rules(struct task_struct *tsk,
 			result = audit_exe_compare(tsk, rule->exe);
 			if (f->op == Audit_not_equal)
 				result = !result;
+			break;
+		case AUDIT_EXE_LANDLOCK_DENY:
+			if (ctx && ctx->landlock_hierarchy) {
+				ino_t ino = 0;
+				dev_t dev = 0;
+
+				result =
+					landlock_read_domain_exe(
+						ctx->landlock_hierarchy, &ino,
+						&dev) &&
+					audit_mark_compare(rule->exe, ino, dev);
+				if (f->op == Audit_not_equal)
+					result = !result;
+			}
 			break;
 		case AUDIT_UID:
 			result = audit_uid_comparator(cred->uid, f->op, f->uid);
@@ -1025,6 +1040,10 @@ static void audit_reset_context(struct audit_context *ctx)
 	WARN_ON(!list_empty(&ctx->killed_trees));
 	audit_free_module(ctx);
 	ctx->fds[0] = -1;
+	if (ctx->landlock_hierarchy) {
+		landlock_put_hierarchy(ctx->landlock_hierarchy);
+		ctx->landlock_hierarchy = NULL;
+	}
 	ctx->type = 0; /* reset last for audit_free_*() */
 }
 
@@ -2079,6 +2098,18 @@ void __audit_syscall_exit(int success, long return_code)
 
 out:
 	audit_reset_context(context);
+}
+
+/**
+ * __audit_set_landlock_hierarchy - record Landlock domain denying the syscall
+ * @hierarchy: Landlock domain's hierarchy
+ */
+void __audit_set_landlock_hierarchy(struct landlock_hierarchy *hierarchy)
+{
+	struct audit_context *context = audit_context();
+
+	landlock_get_hierarchy(hierarchy);
+	context->landlock_hierarchy = hierarchy;
 }
 
 static inline void handle_one(const struct inode *inode)

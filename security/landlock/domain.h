@@ -19,6 +19,7 @@
 #include <linux/time64.h>
 
 #include "access.h"
+#include "object.h"
 
 enum landlock_log_status {
 	LANDLOCK_LOG_PENDING = 0,
@@ -53,6 +54,25 @@ struct landlock_details {
 	 * identifies the same task.
 	 */
 	struct pid *pid;
+	/**
+	 * @exe_object: Landlock object tracking the executable binary that
+	 * restricted itself, for its whole lifetime.
+	 */
+	struct landlock_object *exe_object;
+	/**
+	 * @exe_ino: Inode number cache of the executable binary.  This should
+	 * only be read if @exe_object is not NULL, while holding the related
+	 * inode.  This is useful to avoid locking @exe_object or the
+	 * underlying inode.
+	 */
+	ino_t exe_ino;
+	/**
+	 * @exe_dev: Device number cache of the executable binary.  This should
+	 * only be read if @exe_object is not NULL, while holding the related
+	 * inode.  This is useful to avoid locking @exe_object or the
+	 * underlying inode.
+	 */
+	dev_t exe_dev;
 	/**
 	 * @comm: Command line of the task that initially restricted itself, at
 	 * creation time.  Always NULL terminated.

@@ -16,6 +16,9 @@ void landlock_get_hierarchy(struct landlock_hierarchy *hierarchy);
 
 void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy);
 
+bool landlock_read_domain_exe(const struct landlock_hierarchy *const hierarchy,
+			      ino_t *ino, dev_t *dev);
+
 #else /* CONFIG_SECURITY_LANDLOCK */
 
 static inline void landlock_get_hierarchy(struct landlock_hierarchy *hierarchy)
@@ -24,6 +27,13 @@ static inline void landlock_get_hierarchy(struct landlock_hierarchy *hierarchy)
 
 static inline void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy)
 {
+}
+
+static inline bool
+landlock_read_domain_exe(const struct landlock_hierarchy *const hierarchy,
+			 ino_t *ino, dev_t *dev)
+{
+	return false;
 }
 
 #endif /* CONFIG_SECURITY_LANDLOCK */

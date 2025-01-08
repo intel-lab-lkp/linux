@@ -12,6 +12,7 @@
 #include <linux/sched.h>
 #include <linux/ptrace.h>
 #include <linux/audit_arch.h>
+#include <linux/landlock.h>
 #include <uapi/linux/audit.h>
 #include <uapi/linux/netfilter/nf_tables.h>
 #include <uapi/linux/fanotify.h>
@@ -305,6 +306,7 @@ extern void audit_seccomp(unsigned long syscall, long signr, int code);
 extern void audit_seccomp_actions_logged(const char *names,
 					 const char *old_names, int res);
 extern void __audit_ptrace(struct task_struct *t);
+extern void __audit_set_landlock_hierarchy(struct landlock_hierarchy *hierarchy);
 
 static inline void audit_set_context(struct task_struct *task, struct audit_context *ctx)
 {
@@ -356,6 +358,12 @@ static inline void audit_syscall_exit(void *pt_regs)
 
 		__audit_syscall_exit(success, return_code);
 	}
+}
+static inline void
+audit_set_landlock_hierarchy(struct landlock_hierarchy *hierarchy)
+{
+	if (unlikely(audit_context() && audit_enabled))
+		__audit_set_landlock_hierarchy(hierarchy);
 }
 static inline struct filename *audit_reusename(const __user char *name)
 {
@@ -590,6 +598,9 @@ static inline void audit_syscall_entry(int major, unsigned long a0,
 				       unsigned long a3)
 { }
 static inline void audit_syscall_exit(void *pt_regs)
+{ }
+static inline void
+audit_set_landlock_hierarchy(struct landlock_hierarchy *hierarchy)
 { }
 static inline bool audit_dummy_context(void)
 {

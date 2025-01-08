@@ -13,6 +13,7 @@
 #include <linux/audit.h>
 #include <linux/security.h>
 #include <linux/skbuff.h>
+#include <linux/landlock.h>
 #include <uapi/linux/mqueue.h>
 #include <linux/tty.h>
 #include <uapi/linux/openat2.h> // struct open_how
@@ -209,6 +210,7 @@ struct audit_context {
 	};
 	int fds[2];
 	struct audit_proctitle proctitle;
+	struct landlock_hierarchy *landlock_hierarchy;
 };
 
 extern bool audit_ever_enabled;
@@ -340,7 +342,8 @@ static inline int audit_signal_info_syscall(struct task_struct *t)
 
 extern char *audit_unpack_string(void **bufp, size_t *remain, size_t len);
 
-extern int audit_filter(int msgtype, unsigned int listtype);
+extern int audit_filter(int msgtype, unsigned int listtype,
+			const struct audit_context *ctx);
 
 extern void audit_ctl_lock(void);
 extern void audit_ctl_unlock(void);

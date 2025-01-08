@@ -39,6 +39,7 @@ void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy)
 #ifdef CONFIG_AUDIT
 		put_cred(hierarchy->details->cred);
 		put_pid(hierarchy->details->pid);
+		landlock_put_object(hierarchy->details->exe_object);
 		kfree(hierarchy->details);
 #endif /* CONFIG_AUDIT */
 
@@ -56,11 +57,13 @@ void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy)
  *            returned buffer, if any.
  * @path_size: Returned size of the @path string (including the trailing null
  *             character), if any.
+ * @inode: Returned inode of the executable, if any.
  *
  * Returns: A pointer to an allocated buffer where @path point to, %NULL if
  * there is no executable path, or an error otherwise.
  */
-static const void *get_current_exe(const char **path_str, size_t *path_size)
+static const void *get_current_exe(const char **path_str, size_t *path_size,
+				   struct inode **inode)
 {
 	struct mm_struct *mm = current->mm;
 	struct file *file __free(fput) = NULL;
@@ -93,6 +96,8 @@ static const void *get_current_exe(const char **path_str, size_t *path_size)
 
 	*path_size = size;
 	*path_str = path;
+	ihold(file_inode(file));
+	*inode = file_inode(file);
 	return no_free_ptr(buffer);
 }
 
@@ -108,8 +113,9 @@ static struct landlock_details *get_current_details(void)
 	size_t path_size = sizeof(null_path);
 	struct landlock_details *details;
 	const void *buffer __free(kfree) = NULL;
+	struct inode *inode __free(iput) = NULL;
 
-	buffer = get_current_exe(&path_str, &path_size);
+	buffer = get_current_exe(&path_str, &path_size, &inode);
 	if (IS_ERR(buffer))
 		return ERR_CAST(buffer);
 
@@ -125,6 +131,11 @@ static struct landlock_details *get_current_details(void)
 
 	memcpy(details->exe_path, path_str, path_size);
 	ktime_get_coarse_real_ts64(&details->creation);
+	if (inode) {
+		details->exe_object = landlock_get_inode_object(inode);
+		details->exe_ino = inode->i_ino;
+		details->exe_dev = inode->i_sb->s_dev;
+	}
 
 	WARN_ON_ONCE(current_cred() != current_real_cred());
 	details->cred = get_current_cred();
@@ -266,6 +277,45 @@ static void test_landlock_get_deny_masks(struct kunit *const test)
 }
 
 #endif /* CONFIG_SECURITY_LANDLOCK_KUNIT_TEST */
+
+/**
+ * landlock_read_domain_exe - Read the domain creator's exe information
+ *
+ * @ino: Returned inode number, only set if the returned value is true.
+ * @dev: Returned device number, only set if the returned value is true.
+ *
+ * Returns: True if the underlying exe's inode is still alive (i.e. its
+ * superblock was not unmounted).
+ *
+ * To avoid a race condition, the caller must make sure that the compared
+ * object could not be changed in the check window.  audit_filter() and
+ * audit_filter_rules() dereference the compared audit entry in an RCU
+ * read-side critical section, which means that the related checked ino/dev
+ * stays consistent (see audit_update_watch()).
+ */
+bool landlock_read_domain_exe(const struct landlock_hierarchy *const hierarchy,
+			      ino_t *const ino, dev_t *const dev)
+{
+	if (!hierarchy || WARN_ON_ONCE(!ino || !dev))
+		return false;
+
+	/*
+	 * If the underlying inode does not exist, this means that the inode's
+	 * superblock was unmounted, and @ino and @dev do not identify the same
+	 * file.  Similarly, a removed inode leads to the related audit rule
+	 * removal, see audit_watch_handle_event()'s handling of
+	 * FS_DELETE_SELF|FS_UNMOUNT|FS_MOVE_SELF.
+	 *
+	 * If the underlying inode exists, this means that the returned @ino
+	 * and @dev may match an audit rule.
+	 */
+	if (!READ_ONCE(hierarchy->details->exe_object->underobj))
+		return false;
+
+	*ino = hierarchy->details->exe_ino;
+	*dev = hierarchy->details->exe_dev;
+	return true;
+}
 
 #ifdef CONFIG_SECURITY_LANDLOCK_KUNIT_TEST
 

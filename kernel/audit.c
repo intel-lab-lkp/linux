@@ -1381,7 +1381,7 @@ static int audit_receive_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		if (data_len < 2)
 			return -EINVAL;
 
-		err = audit_filter(msg_type, AUDIT_FILTER_USER);
+		err = audit_filter(msg_type, AUDIT_FILTER_USER, NULL);
 		if (err == 1) { /* match or error */
 			char *str = data;
 
@@ -1866,7 +1866,7 @@ struct audit_buffer *audit_log_start(struct audit_context *ctx, gfp_t gfp_mask,
 	if (audit_initialized != AUDIT_INITIALIZED)
 		return NULL;
 
-	if (unlikely(!audit_filter(type, AUDIT_FILTER_EXCLUDE)))
+	if (unlikely(!audit_filter(type, AUDIT_FILTER_EXCLUDE, ctx)))
 		return NULL;
 
 	/* NOTE: don't ever fail/sleep on these two conditions:

@@ -13,6 +13,7 @@
 #include <linux/kthread.h>
 #include <linux/mutex.h>
 #include <linux/fs.h>
+#include <linux/landlock.h>
 #include <linux/namei.h>
 #include <linux/netlink.h>
 #include <linux/sched.h>
@@ -340,6 +341,12 @@ static int audit_field_valid(struct audit_entry *entry, struct audit_field *f)
 		if (entry->rule.listnr == AUDIT_FILTER_URING_EXIT)
 			return -EINVAL;
 		break;
+	case AUDIT_EXE_LANDLOCK_DENY:
+		if (entry->rule.listnr != AUDIT_FILTER_EXCLUDE &&
+		    entry->rule.listnr != AUDIT_FILTER_EXIT &&
+		    entry->rule.listnr != AUDIT_FILTER_URING_EXIT)
+			return -EINVAL;
+		break;
 	}
 
 	switch (entry->rule.listnr) {
@@ -407,6 +414,7 @@ static int audit_field_valid(struct audit_entry *entry, struct audit_field *f)
 	case AUDIT_FILETYPE:
 	case AUDIT_FIELD_COMPARE:
 	case AUDIT_EXE:
+	case AUDIT_EXE_LANDLOCK_DENY:
 		/* only equal and not equal valid ops */
 		if (f->op != Audit_not_equal && f->op != Audit_equal)
 			return -EINVAL;
@@ -583,6 +591,7 @@ static struct audit_entry *audit_data_to_entry(struct audit_rule_data *data,
 			entry->rule.filterkey = str;
 			break;
 		case AUDIT_EXE:
+		case AUDIT_EXE_LANDLOCK_DENY:
 			if (entry->rule.exe || f_val > PATH_MAX)
 				goto exit_free;
 			str = audit_unpack_string(&bufp, &remain, f_val);
@@ -681,6 +690,7 @@ static struct audit_rule_data *audit_krule_to_data(struct audit_krule *krule)
 				audit_pack_string(&bufp, krule->filterkey);
 			break;
 		case AUDIT_EXE:
+		case AUDIT_EXE_LANDLOCK_DENY:
 			data->buflen += data->values[i] =
 				audit_pack_string(&bufp, audit_mark_path(krule->exe));
 			break;
@@ -749,6 +759,7 @@ static int audit_compare_rule(struct audit_krule *a, struct audit_krule *b)
 				return 1;
 			break;
 		case AUDIT_EXE:
+		case AUDIT_EXE_LANDLOCK_DENY:
 			/* both paths exist based on above type compare */
 			if (strcmp(audit_mark_path(a->exe),
 				   audit_mark_path(b->exe)))
@@ -877,6 +888,7 @@ struct audit_entry *audit_dupe_rule(struct audit_krule *old)
 				new->filterkey = fk;
 			break;
 		case AUDIT_EXE:
+		case AUDIT_EXE_LANDLOCK_DENY:
 			err = audit_dupe_exe(new, old);
 			break;
 		}
@@ -1328,7 +1340,8 @@ int audit_compare_dname_path(const struct qstr *dname, const char *path, int par
 	return strncmp(p, dname->name, dlen);
 }
 
-int audit_filter(int msgtype, unsigned int listtype)
+int audit_filter(int msgtype, unsigned int listtype,
+		 const struct audit_context *ctx)
 {
 	struct audit_entry *e;
 	int ret = 1; /* Audit by default */
@@ -1380,6 +1393,21 @@ int audit_filter(int msgtype, unsigned int listtype)
 				result = audit_exe_compare(current, e->rule.exe);
 				if (f->op == Audit_not_equal)
 					result = !result;
+				break;
+			case AUDIT_EXE_LANDLOCK_DENY:
+				if (ctx && ctx->landlock_hierarchy) {
+					ino_t ino = 0;
+					dev_t dev = 0;
+
+					result =
+						landlock_read_domain_exe(
+							ctx->landlock_hierarchy,
+							&ino, &dev) &&
+						audit_mark_compare(e->rule.exe,
+								   ino, dev);
+					if (f->op == Audit_not_equal)
+						result = !result;
+				}
 				break;
 			default:
 				goto unlock_and_return;

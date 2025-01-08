@@ -57,7 +57,9 @@ struct landlock_object {
 	/**
 	 * @underobj: Used when cleaning up an object and to mark an object as
 	 * tied to its underlying kernel structure.  This pointer is protected
-	 * by @lock.  Cf. landlock_release_inodes() and release_inode().
+	 * by @lock, but it may concurrently be checked (but not dereferenced).
+	 * Cf. landlock_release_inodes(), release_inode(), and
+	 * landlock_read_domain_exe().
 	 */
 	void *underobj;
 	union {

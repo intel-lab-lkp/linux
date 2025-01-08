@@ -8,6 +8,7 @@
 #include <kunit/test.h>
 #include <linux/audit.h>
 #include <linux/bitops.h>
+#include <linux/landlock.h>
 #include <linux/lsm_audit.h>
 #include <linux/pid.h>
 #include <linux/uidgid.h>
@@ -422,6 +423,7 @@ void landlock_log_denial(const struct landlock_ruleset *const domain,
 			get_hierarchy(domain, request->layer_plus_one - 1);
 	}
 
+	/* Static filtering. */
 	if (READ_ONCE(youngest_denied->log_status) == LANDLOCK_LOG_DISABLED)
 		return;
 
@@ -435,6 +437,8 @@ void landlock_log_denial(const struct landlock_ruleset *const domain,
 	if (!unlikely(audit_context() && audit_enabled))
 		return;
 
+	/* Dynamic filtering according to the domain's creator. */
+	audit_set_landlock_hierarchy(youngest_denied);
 	ab = audit_log_start(audit_context(), GFP_ATOMIC | __GFP_NOWARN,
 			     AUDIT_LANDLOCK_DENY);
 	if (!ab)

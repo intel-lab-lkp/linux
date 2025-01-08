@@ -64,7 +64,7 @@ static void release_inode(struct landlock_object *const object)
 	 * Protects against concurrent use by hook_sb_delete() of the reference
 	 * to the underlying inode.
 	 */
-	object->underobj = NULL;
+	WRITE_ONCE(object->underobj, NULL);
 	/*
 	 * Makes sure that if the filesystem is concurrently unmounted,
 	 * hook_sb_delete() will wait for us to finish iput().
@@ -1323,7 +1323,7 @@ static void hook_sb_delete(struct super_block *const sb)
 		 */
 		spin_lock(&object->lock);
 		if (object->underobj == inode) {
-			object->underobj = NULL;
+			WRITE_ONCE(object->underobj, NULL);
 			spin_unlock(&object->lock);
 			rcu_read_unlock();
 
