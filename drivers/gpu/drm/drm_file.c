@@ -830,8 +830,7 @@ void drm_send_event(struct drm_device *dev, struct drm_pending_event *e)
 }
 EXPORT_SYMBOL(drm_send_event);
 
-static void print_size(struct drm_printer *p, const char *stat,
-		       const char *region, u64 sz)
+static void print_size(struct drm_printer *p, const char *key, u64 sz)
 {
 	const char *units[] = {"", " KiB", " MiB"};
 	unsigned u;
@@ -842,8 +841,53 @@ static void print_size(struct drm_printer *p, const char *stat,
 		sz = div_u64(sz, SZ_1K);
 	}
 
-	drm_printf(p, "drm-%s-%s:\t%llu%s\n", stat, region, sz, units[u]);
+	drm_printf(p, "%s:\t%llu%s\n", key, sz, units[u]);
 }
+
+#define KEY_LEN 1024
+#define DRM_PREFIX "drm"
+
+static void
+print_size_region(struct drm_printer *p, const char *stat,
+		  const char *region, u64 sz)
+{
+	char key[KEY_LEN+1] = {0};
+
+	if (strnlen(stat, KEY_LEN) + strnlen(region, KEY_LEN) +
+	    strlen(DRM_PREFIX) + 2 > KEY_LEN)
+		return;
+
+	snprintf(key, sizeof(key), "%s-%s-%s", DRM_PREFIX, stat, region);
+	print_size(p, key, sz);
+}
+
+/**
+ * drm_driver_print_size - A helper to print driver-specific k:v pairs
+ * @p: The printer to print output to
+ * @file: DRM file private data
+ * @subkey: Name of the key minus the driver name
+ * @sz: Size value expressed in bytes
+ *
+ * Helper to display key:value pairs where the value is a numerical
+ * size expressed in bytes. It's useful for driver-internal memory
+ * whose objects aren't exposed to UM through a DRM handle.
+ */
+void drm_driver_print_size(struct drm_printer *p, struct drm_file *file,
+			   const char *subkey, u64 sz)
+{
+	char key[KEY_LEN+1] = {0};
+	char *drv_name = file->minor->dev->driver->name;
+
+	if (strnlen(subkey, KEY_LEN) + strlen(drv_name) + 1 > KEY_LEN)
+		return;
+
+	snprintf(key, sizeof(key), "%s-%s", drv_name, subkey);
+	print_size(p, key, sz);
+}
+EXPORT_SYMBOL(drm_driver_print_size);
+
+#undef DRM_PREFIX
+#undef KEY_LEN
 
 /**
  * drm_print_memory_stats - A helper to print memory stats
@@ -858,15 +902,15 @@ void drm_print_memory_stats(struct drm_printer *p,
 			    enum drm_gem_object_status supported_status,
 			    const char *region)
 {
-	print_size(p, "total", region, stats->private + stats->shared);
-	print_size(p, "shared", region, stats->shared);
-	print_size(p, "active", region, stats->active);
+	print_size_region(p, "total", region, stats->private + stats->shared);
+	print_size_region(p, "shared", region, stats->shared);
+	print_size_region(p, "active", region, stats->active);
 
 	if (supported_status & DRM_GEM_OBJECT_RESIDENT)
-		print_size(p, "resident", region, stats->resident);
+		print_size_region(p, "resident", region, stats->resident);
 
 	if (supported_status & DRM_GEM_OBJECT_PURGEABLE)
-		print_size(p, "purgeable", region, stats->purgeable);
+		print_size_region(p, "purgeable", region, stats->purgeable);
 }
 EXPORT_SYMBOL(drm_print_memory_stats);
 

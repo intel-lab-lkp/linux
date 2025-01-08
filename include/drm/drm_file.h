@@ -494,6 +494,8 @@ struct drm_memory_stats {
 
 enum drm_gem_object_status;
 
+void drm_driver_print_size(struct drm_printer *p, struct drm_file *file,
+			   const char *subkey, u64 sz);
 void drm_print_memory_stats(struct drm_printer *p,
 			    const struct drm_memory_stats *stats,
 			    enum drm_gem_object_status supported_status,
