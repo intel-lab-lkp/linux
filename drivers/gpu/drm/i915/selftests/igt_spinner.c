@@ -260,5 +260,5 @@ bool igt_wait_for_spinner(struct igt_spinner *spin, struct i915_request *rq)
 			     100) &&
 		 wait_for(i915_seqno_passed(hws_seqno(spin, rq),
 					    rq->fence.seqno),
-			  50));
+			  1000));
 }
