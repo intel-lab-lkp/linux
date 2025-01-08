@@ -10,8 +10,57 @@
 #ifndef _SECURITY_LANDLOCK_DOMAIN_H
 #define _SECURITY_LANDLOCK_DOMAIN_H
 
+#include <linux/cred.h>
 #include <linux/landlock.h>
+#include <linux/path.h>
+#include <linux/pid.h>
 #include <linux/refcount.h>
+#include <linux/sched.h>
+#include <linux/time64.h>
+
+enum landlock_log_status {
+	LANDLOCK_LOG_PENDING = 0,
+	LANDLOCK_LOG_RECORDED,
+};
+
+/**
+ * struct landlock_details - Dommain's creation information
+ *
+ * Rarely accessed, mainly when logging the first domain's denial.
+ *
+ * The contained pointers are initialized at the domain creation time and never
+ * changed again.  Contrary to most other Landlock object types, this one is
+ * not allocated with GFP_KERNEL_ACCOUNT because its size may not be under the
+ * caller's control (e.g. unknown exe_path) and the data is not explicitly
+ * requested nor used by tasks.
+ */
+struct landlock_details {
+	/**
+	 * @creation: Time of the domain creation (i.e. syscall entry as used
+	 * in audit context if available).
+	 */
+	struct timespec64 creation;
+	/**
+	 * @cred: Credential of the task that initially restricted itself, at
+	 * creation time.
+	 */
+	const struct cred *cred;
+	/**
+	 * @pid: PID of the task that initially restricted itself.  It still
+	 * identifies the same task.
+	 */
+	struct pid *pid;
+	/**
+	 * @comm: Command line of the task that initially restricted itself, at
+	 * creation time.  Always NULL terminated.
+	 */
+	char comm[TASK_COMM_LEN];
+	/**
+	 * @exe_path: Executable path of the task that initially restricted
+	 * itself, at creation time.  Always NULL terminated.
+	 */
+	char exe_path[];
+};
 
 /**
  * struct landlock_hierarchy - Node in a domain hierarchy
@@ -30,9 +79,23 @@ struct landlock_hierarchy {
 
 #ifdef CONFIG_AUDIT
 	/**
+	 * @log_status: Whether this domain should be logged or not.  Because
+	 * concurrent log entries may be created at the same time, it is still
+	 * possible to have several domain records of the same domain.
+	 */
+	enum landlock_log_status log_status;
+	/**
+	 * @num_denials: Number of access requests denied by this domain.
+	 */
+	atomic64_t num_denials;
+	/**
 	 * @id: Landlock domain ID, sets once at domain creation time.
 	 */
 	u64 id;
+	/**
+	 * @details: Information about the related domain.
+	 */
+	const struct landlock_details *details;
 #endif /* CONFIG_AUDIT */
 };
 

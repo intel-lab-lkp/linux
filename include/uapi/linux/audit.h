@@ -147,6 +147,8 @@
 #define AUDIT_IPE_CONFIG_CHANGE	1421	/* IPE config change */
 #define AUDIT_IPE_POLICY_LOAD	1422	/* IPE policy load */
 #define AUDIT_LANDLOCK_DENY	1423	/* Landlock denial */
+#define AUDIT_LANDLOCK_DOM_INFO	1424	/* Landlock domain properties */
+#define AUDIT_LANDLOCK_DOM_DROP	1425	/* Landlock domain release */
 
 #define AUDIT_FIRST_KERN_ANOM_MSG   1700
 #define AUDIT_LAST_KERN_ANOM_MSG    1799

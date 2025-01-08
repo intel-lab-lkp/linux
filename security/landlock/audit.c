@@ -8,6 +8,8 @@
 #include <kunit/test.h>
 #include <linux/audit.h>
 #include <linux/lsm_audit.h>
+#include <linux/pid.h>
+#include <linux/uidgid.h>
 
 #include "audit.h"
 #include "domain.h"
@@ -28,6 +30,43 @@ static void log_blockers(struct audit_buffer *const ab,
 			 const enum landlock_request_type type)
 {
 	audit_log_format(ab, "%s", get_blocker(type));
+}
+
+static void log_node(struct landlock_hierarchy *const node)
+{
+	struct audit_buffer *ab;
+
+	if (WARN_ON_ONCE(!node))
+		return;
+
+	/* Ignores already logged domains.  */
+	if (READ_ONCE(node->log_status) == LANDLOCK_LOG_RECORDED)
+		return;
+
+	ab = audit_log_start(audit_context(), GFP_ATOMIC,
+			     AUDIT_LANDLOCK_DOM_INFO);
+	if (!ab)
+		return;
+
+	WARN_ON_ONCE(node->id == 0);
+	audit_log_format(
+		ab,
+		"domain=%llx creation=%llu.%03lu pid=%d uid=%u exe=", node->id,
+		/* See audit_log_start() */
+		(unsigned long long)node->details->creation.tv_sec,
+		node->details->creation.tv_nsec / 1000000,
+		pid_nr(node->details->pid),
+		from_kuid(&init_user_ns, node->details->cred->uid));
+	audit_log_untrustedstring(ab, node->details->exe_path);
+	audit_log_format(ab, " comm=");
+	audit_log_untrustedstring(ab, node->details->comm);
+	audit_log_end(ab);
+
+	/*
+	 * There may be race condition leading to logging of the same domain
+	 * several times but that is OK.
+	 */
+	WRITE_ONCE(node->log_status, LANDLOCK_LOG_RECORDED);
 }
 
 static struct landlock_hierarchy *
@@ -103,6 +142,15 @@ void landlock_log_denial(const struct landlock_ruleset *const domain,
 	if (!is_valid_request(request))
 		return;
 
+	youngest_denied = get_hierarchy(domain, request->layer_plus_one - 1);
+
+	/*
+	 * Consistently keeps track of the number of denied access requests
+	 * even if audit is currently disabled or if audit rules currently
+	 * exclude this record type.
+	 */
+	atomic64_inc(&youngest_denied->num_denials);
+
 	if (!unlikely(audit_context() && audit_enabled))
 		return;
 
@@ -111,10 +159,48 @@ void landlock_log_denial(const struct landlock_ruleset *const domain,
 	if (!ab)
 		return;
 
-	youngest_denied = get_hierarchy(domain, request->layer_plus_one - 1);
 	audit_log_format(ab, "domain=%llx blockers=", youngest_denied->id);
 	log_blockers(ab, request->type);
 	audit_log_lsm_data(ab, &request->audit);
+	audit_log_end(ab);
+
+	/* Logs this domain if it is the first time. */
+	log_node(youngest_denied);
+}
+
+/**
+ * landlock_log_drop_domain - Create an audit record when a domain is deleted
+ *
+ * @domain: The domain being deleted.
+ *
+ * Only domains which previously appeared in the audit logs are logged again.
+ * This is useful to know when a domain will never show again in the audit log.
+ *
+ * This record is not directly tied to a syscall entry.
+ *
+ * Called by the cred_free() hook, in an uninterruptible context.
+ */
+void landlock_log_drop_domain(const struct landlock_ruleset *const domain)
+{
+	struct audit_buffer *ab;
+
+	if (WARN_ON_ONCE(!domain->hierarchy))
+		return;
+
+	if (!audit_enabled)
+		return;
+
+	/* Ignores domains that were not logged.  */
+	if (READ_ONCE(domain->hierarchy->log_status) != LANDLOCK_LOG_RECORDED)
+		return;
+
+	ab = audit_log_start(audit_context(), GFP_ATOMIC,
+			     AUDIT_LANDLOCK_DOM_DROP);
+	if (!ab)
+		return;
+
+	audit_log_format(ab, "domain=%llx denials=%llu", domain->hierarchy->id,
+			 atomic64_read(&domain->hierarchy->num_denials));
 	audit_log_end(ab);
 }
 
