@@ -554,6 +554,37 @@ TRACE_EVENT(amdgpu_reset_reg_dumps,
 		      __entry->value)
 );
 
+TRACE_EVENT(amdgpu_mca_bank_dumps,
+	   TP_PROTO(uint64_t event_id, int idx, struct mca_bank_entry *e),
+	   TP_ARGS(event_id, idx, e),
+	   TP_STRUCT__entry(
+			    __field(uint64_t, event_id)
+			    __field(int, idx)
+			    __field(uint64_t, status)
+			    __field(uint64_t, addr)
+			    __field(uint64_t, misc0)
+			    __field(uint64_t, ipid)
+			    __field(uint64_t, synd)
+			    ),
+	   TP_fast_assign(
+			  __entry->event_id = event_id;
+			  __entry->idx = idx;
+			  __entry->status = e->regs[MCA_REG_IDX_STATUS];
+			  __entry->addr = e->regs[MCA_REG_IDX_ADDR];
+			  __entry->misc0 = e->regs[MCA_REG_IDX_MISC0];
+			  __entry->ipid = e->regs[MCA_REG_IDX_IPID];
+			  __entry->synd = e->regs[MCA_REG_IDX_SYND];
+			  ),
+	   TP_printk("amdgpu mca bank dump: event_id: %lld, idx: %d, STATUS: %016llx, ADDR: %016llx, MISC0: %016llx, IPID: %016llx, SYND: %016llx",
+		     __entry->event_id,
+		     __entry->idx,
+		     __entry->status,
+		     __entry->addr,
+		     __entry->misc0,
+		     __entry->ipid,
+		     __entry->synd)
+);
+
 #undef AMDGPU_JOB_GET_TIMELINE_NAME
 #endif
 

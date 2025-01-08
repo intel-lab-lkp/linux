@@ -23,6 +23,7 @@
 #include "amdgpu_ras.h"
 #include "amdgpu.h"
 #include "amdgpu_mca.h"
+#include "amdgpu_trace.h"
 
 #include "umc/umc_6_7_0_offset.h"
 #include "umc/umc_6_7_0_sh_mask.h"
@@ -287,6 +288,8 @@ static void amdgpu_mca_smu_mca_bank_dump(struct amdgpu_device *adev, int idx, st
 		      idx, entry->regs[MCA_REG_IDX_IPID]);
 	RAS_EVENT_LOG(adev, event_id, HW_ERR "aca entry[%02d].SYND=0x%016llx\n",
 		      idx, entry->regs[MCA_REG_IDX_SYND]);
+
+	trace_amdgpu_mca_bank_dumps(event_id, idx, entry);
 }
 
 static int amdgpu_mca_smu_get_valid_mca_count(struct amdgpu_device *adev, enum amdgpu_mca_error_type type, uint32_t *count)
