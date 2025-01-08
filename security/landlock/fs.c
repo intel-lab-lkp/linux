@@ -74,13 +74,14 @@ static void release_inode(struct landlock_object *const object)
 	spin_unlock(&object->lock);
 	/*
 	 * Because object->underobj was not NULL, hook_sb_delete() and
-	 * get_inode_object() guarantee that it is safe to reset
+	 * landlock_get_inode_object() guarantee that it is safe to reset
 	 * landlock_inode(inode)->object while it is not NULL.  It is therefore
 	 * not necessary to lock inode->i_lock.
 	 */
 	rcu_assign_pointer(landlock_inode(inode)->object, NULL);
 	/*
-	 * Now, new rules can safely be tied to @inode with get_inode_object().
+	 * Now, new rules can safely be tied to @inode with
+	 * landlock_get_inode_object().
 	 */
 
 	iput(inode);
@@ -259,7 +260,7 @@ update_request(struct landlock_request *const request,
 
 /* Ruleset management */
 
-static struct landlock_object *get_inode_object(struct inode *const inode)
+struct landlock_object *landlock_get_inode_object(struct inode *const inode)
 {
 	struct landlock_object *object, *new_object;
 	struct landlock_inode_security *inode_sec = landlock_inode(inode);
@@ -291,7 +292,7 @@ retry:
 		return new_object;
 
 	/*
-	 * Protects against concurrent calls to get_inode_object() or
+	 * Protects against concurrent calls to landlock_get_inode_object() or
 	 * hook_sb_delete().
 	 */
 	spin_lock(&inode->i_lock);
@@ -347,7 +348,8 @@ int landlock_append_fs_rule(struct landlock_ruleset *const ruleset,
 	/* Transforms relative access rights to absolute ones. */
 	access_rights |= LANDLOCK_MASK_ACCESS_FS &
 			 ~landlock_get_fs_access_mask(ruleset, 0);
-	id.key.object = get_inode_object(d_backing_inode(path->dentry));
+	id.key.object =
+		landlock_get_inode_object(d_backing_inode(path->dentry));
 	if (IS_ERR(id.key.object))
 		return PTR_ERR(id.key.object);
 	mutex_lock(&ruleset->lock);
@@ -1288,7 +1290,7 @@ static void hook_sb_delete(struct super_block *const sb)
 
 		/*
 		 * Protects against concurrent modification of inode (e.g.
-		 * from get_inode_object()).
+		 * from landlock_get_inode_object()).
 		 */
 		spin_lock(&inode->i_lock);
 		/*
@@ -1327,16 +1329,16 @@ static void hook_sb_delete(struct super_block *const sb)
 
 			/*
 			 * Because object->underobj was not NULL,
-			 * release_inode() and get_inode_object() guarantee
-			 * that it is safe to reset
+			 * release_inode() and landlock_get_inode_object()
+			 * guarantee that it is safe to reset
 			 * landlock_inode(inode)->object while it is not NULL.
 			 * It is therefore not necessary to lock inode->i_lock.
 			 */
 			rcu_assign_pointer(landlock_inode(inode)->object, NULL);
 			/*
 			 * At this point, we own the ihold() reference that was
-			 * originally set up by get_inode_object() and the
-			 * __iget() reference that we just set in this loop
+			 * originally set up by landlock_get_inode_object() and
+			 * the __iget() reference that we just set in this loop
 			 * walk.  Therefore the following call to iput() will
 			 * not sleep nor drop the inode because there is now at
 			 * least two references to it.

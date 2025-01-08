@@ -109,4 +109,6 @@ int landlock_append_fs_rule(struct landlock_ruleset *const ruleset,
 			    const struct path *const path,
 			    access_mask_t access_hierarchy);
 
+struct landlock_object *landlock_get_inode_object(struct inode *const inode);
+
 #endif /* _SECURITY_LANDLOCK_FS_H */
