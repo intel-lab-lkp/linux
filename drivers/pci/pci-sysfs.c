@@ -186,6 +186,47 @@ static ssize_t resource_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(resource);
 
+static ssize_t cor_err_reporting_enable_show(struct device *dev,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	u16 reg;
+	int err;
+
+	err = pcie_capability_read_word(pdev, PCI_EXP_DEVCTL, &reg);
+
+	if (err)
+		return pcibios_err_to_errno(err);
+
+	return sysfs_emit(buf, "%u\n", reg & PCI_EXP_DEVCTL_CERE);
+}
+
+static ssize_t cor_err_reporting_enable_store(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t count)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	u16 reg;
+	u8 val;
+	int err;
+
+	if (kstrtou8(buf, 0, &val) < 0)
+		return -EINVAL;
+
+	pcie_capability_read_word(pdev, PCI_EXP_DEVCTL, &reg);
+
+	reg &= ~PCI_EXP_DEVCTL_CERE;
+	reg |= val;
+	err = pcie_capability_write_word(pdev, PCI_EXP_DEVCTL, reg);
+
+	if (err)
+		return pcibios_err_to_errno(err);
+
+	return count;
+}
+static DEVICE_ATTR_RW(cor_err_reporting_enable);
+
 static ssize_t max_link_speed_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -659,6 +700,7 @@ static struct attribute *pcie_dev_attrs[] = {
 	&dev_attr_current_link_width.attr,
 	&dev_attr_max_link_width.attr,
 	&dev_attr_max_link_speed.attr,
+	&dev_attr_cor_err_reporting_enable.attr,
 	NULL,
 };
 

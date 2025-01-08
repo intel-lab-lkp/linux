@@ -479,6 +479,13 @@ Description:
 		The file is writable if the PF is bound to a driver that
 		implements ->sriov_set_msix_vec_count().
 
+What:		/sys/bus/pci/devices/.../cor_err_reporting_enable
+Date:		December 2024
+Contact:	Linux PCI developers <linux-pci@vger.kernel.org>
+Description:
+		This file exposes a bit to control sending of Correctable Error
+		Messages. The value comes from the Device Control register.
+
 What:		/sys/bus/pci/devices/.../resourceN_resize
 Date:		September 2022
 Contact:	Alex Williamson <alex.williamson@redhat.com>
