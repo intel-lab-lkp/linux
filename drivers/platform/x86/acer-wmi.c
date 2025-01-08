@@ -33,6 +33,7 @@
 #include <linux/units.h>
 #include <linux/unaligned.h>
 #include <linux/bitfield.h>
+#include <linux/bitmap.h>
 
 MODULE_AUTHOR("Carlos Corbacho");
 MODULE_DESCRIPTION("Acer Laptop WMI Extras Driver");
@@ -127,6 +128,7 @@ enum acer_wmi_predator_v4_oc {
 enum acer_wmi_gaming_misc_setting {
 	ACER_WMID_MISC_SETTING_OC_1			= 0x0005,
 	ACER_WMID_MISC_SETTING_OC_2			= 0x0007,
+	ACER_WMID_MISC_SETTING_SUPPORTED_PROFILES	= 0x000A,
 	ACER_WMID_MISC_SETTING_PLATFORM_PROFILE		= 0x000B,
 };
 
@@ -1957,7 +1959,7 @@ static int
 acer_predator_v4_platform_profile_set(struct platform_profile_handler *pprof,
 				      enum platform_profile_option profile)
 {
-	int err, tp;
+	int max_perf, err, tp;
 
 	switch (profile) {
 	case PLATFORM_PROFILE_PERFORMANCE:
@@ -1983,7 +1985,10 @@ acer_predator_v4_platform_profile_set(struct platform_profile_handler *pprof,
 	if (err)
 		return err;
 
-	if (tp != ACER_PREDATOR_V4_THERMAL_PROFILE_TURBO)
+	max_perf = find_last_bit(platform_profile_handler.choices,
+				 PLATFORM_PROFILE_LAST);
+
+	if (tp != max_perf)
 		last_non_turbo_profile = tp;
 
 	return 0;
@@ -1992,6 +1997,7 @@ acer_predator_v4_platform_profile_set(struct platform_profile_handler *pprof,
 static int acer_platform_profile_setup(struct platform_device *device)
 {
 	if (quirks->predator_v4) {
+		unsigned long supported_profiles;
 		int err;
 
 		platform_profile_handler.name = "acer-wmi";
@@ -2001,16 +2007,30 @@ static int acer_platform_profile_setup(struct platform_device *device)
 		platform_profile_handler.profile_set =
 			acer_predator_v4_platform_profile_set;
 
-		set_bit(PLATFORM_PROFILE_PERFORMANCE,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_BALANCED,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_QUIET,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_LOW_POWER,
-			platform_profile_handler.choices);
+		err = WMID_gaming_get_misc_setting(ACER_WMID_MISC_SETTING_SUPPORTED_PROFILES,
+						   (u8 *)&supported_profiles);
+		if (err)
+			return err;
+
+		if (test_bit(ACER_PREDATOR_V4_THERMAL_PROFILE_QUIET, &supported_profiles))
+			set_bit(PLATFORM_PROFILE_QUIET,
+				platform_profile_handler.choices);
+
+		if (test_bit(ACER_PREDATOR_V4_THERMAL_PROFILE_BALANCED, &supported_profiles))
+			set_bit(PLATFORM_PROFILE_BALANCED,
+				platform_profile_handler.choices);
+
+		if (test_bit(ACER_PREDATOR_V4_THERMAL_PROFILE_PERFORMANCE, &supported_profiles))
+			set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE,
+				platform_profile_handler.choices);
+
+		if (test_bit(ACER_PREDATOR_V4_THERMAL_PROFILE_TURBO, &supported_profiles))
+			set_bit(PLATFORM_PROFILE_PERFORMANCE,
+				platform_profile_handler.choices);
+
+		if (test_bit(ACER_PREDATOR_V4_THERMAL_PROFILE_ECO, &supported_profiles))
+			set_bit(PLATFORM_PROFILE_LOW_POWER,
+				platform_profile_handler.choices);
 
 		err = platform_profile_register(&platform_profile_handler);
 		if (err)
@@ -2028,11 +2048,11 @@ static int acer_platform_profile_setup(struct platform_device *device)
 static int acer_thermal_profile_change(void)
 {
 	/*
-	 * This mode key will either cycle through each mode or toggle the turbo profile.
+	 * This mode key will either cycle through each mode or toggle the most performant profile.
 	 */
 	if (quirks->predator_v4) {
 		u8 current_tp;
-		int err, tp;
+		int max_perf, err, tp;
 
 		if (cycle_gaming_thermal_profile) {
 			platform_profile_cycle();
@@ -2042,11 +2062,14 @@ static int acer_thermal_profile_change(void)
 			if (err)
 				return err;
 
-			if (current_tp == ACER_PREDATOR_V4_THERMAL_PROFILE_TURBO) {
+			max_perf = find_last_bit(platform_profile_handler.choices,
+						 PLATFORM_PROFILE_LAST);
+
+			if (current_tp == max_perf) {
 				tp = last_non_turbo_profile;
 			} else {
 				last_non_turbo_profile = current_tp;
-				tp = ACER_PREDATOR_V4_THERMAL_PROFILE_TURBO;
+				tp = max_perf;
 			}
 
 			err = WMID_gaming_set_misc_setting(
