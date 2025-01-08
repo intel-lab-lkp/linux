@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _LINUX_KHUGEPAGED_H
 #define _LINUX_KHUGEPAGED_H
-
+#define MIN_MTHP_ORDER	3
+#define MIN_MTHP_NR	(1<<MIN_MTHP_ORDER)
+#define MTHP_BITMAP_SIZE  (1<<(HPAGE_PMD_ORDER - MIN_MTHP_ORDER))
 extern unsigned int khugepaged_max_ptes_none __read_mostly;
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 extern struct attribute_group khugepaged_attr_group;

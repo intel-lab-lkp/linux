@@ -94,6 +94,11 @@ static DEFINE_READ_MOSTLY_HASHTABLE(mm_slots_hash, MM_SLOTS_HASH_BITS);
 
 static struct kmem_cache *mm_slot_cache __ro_after_init;
 
+struct scan_bit_state {
+	u8 order;
+	u8 offset;
+};
+
 struct collapse_control {
 	bool is_khugepaged;
 
@@ -102,6 +107,15 @@ struct collapse_control {
 
 	/* nodemask for allocation fallback */
 	nodemask_t alloc_nmask;
+
+	/* bitmap used to collapse mTHP sizes. 1bit = order MIN_MTHP_ORDER mTHP */
+	unsigned long *mthp_bitmap;
+	unsigned long *mthp_bitmap_temp;
+	struct scan_bit_state *mthp_bitmap_stack;
+};
+
+struct collapse_control khugepaged_collapse_control = {
+	.is_khugepaged = true,
 };
 
 /**
@@ -389,6 +403,25 @@ int __init khugepaged_init(void)
 	if (!mm_slot_cache)
 		return -ENOMEM;
 
+	/*
+	 * allocate the bitmaps dynamically since MTHP_BITMAP_SIZE is not known at
+	 * compile time for some architectures.
+	 */
+	khugepaged_collapse_control.mthp_bitmap = kmalloc_array(
+		BITS_TO_LONGS(MTHP_BITMAP_SIZE), sizeof(unsigned long), GFP_KERNEL);
+	if (!khugepaged_collapse_control.mthp_bitmap)
+		return -ENOMEM;
+
+	khugepaged_collapse_control.mthp_bitmap_temp = kmalloc_array(
+		BITS_TO_LONGS(MTHP_BITMAP_SIZE), sizeof(unsigned long), GFP_KERNEL);
+	if (!khugepaged_collapse_control.mthp_bitmap_temp)
+		return -ENOMEM;
+
+	khugepaged_collapse_control.mthp_bitmap_stack = kmalloc_array(
+		MTHP_BITMAP_SIZE, sizeof(struct scan_bit_state), GFP_KERNEL);
+	if (!khugepaged_collapse_control.mthp_bitmap_stack)
+		return -ENOMEM;
+
 	khugepaged_pages_to_scan = HPAGE_PMD_NR * 8;
 	khugepaged_max_ptes_none = HPAGE_PMD_NR - 1;
 	khugepaged_max_ptes_swap = HPAGE_PMD_NR / 8;
@@ -400,6 +433,9 @@ int __init khugepaged_init(void)
 void __init khugepaged_destroy(void)
 {
 	kmem_cache_destroy(mm_slot_cache);
+	kfree(khugepaged_collapse_control.mthp_bitmap);
+	kfree(khugepaged_collapse_control.mthp_bitmap_temp);
+	kfree(khugepaged_collapse_control.mthp_bitmap_stack);
 }
 
 static inline int khugepaged_test_exit(struct mm_struct *mm)
@@ -850,10 +886,6 @@ static void khugepaged_alloc_sleep(void)
 	remove_wait_queue(&khugepaged_wait, &wait);
 }
 
-struct collapse_control khugepaged_collapse_control = {
-	.is_khugepaged = true,
-};
-
 static bool khugepaged_scan_abort(int nid, struct collapse_control *cc)
 {
 	int i;
@@ -1104,7 +1136,8 @@ static int alloc_charge_folio(struct folio **foliop, struct mm_struct *mm,
 
 static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 			      int referenced, int unmapped,
-			      struct collapse_control *cc)
+			      struct collapse_control *cc, bool *mmap_locked,
+				  int order, int offset)
 {
 	LIST_HEAD(compound_pagelist);
 	pmd_t *pmd, _pmd;
@@ -1117,6 +1150,11 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	struct mmu_notifier_range range;
 	VM_BUG_ON(address & ~HPAGE_PMD_MASK);
 
+	/* if collapsing mTHPs we may have already released the read_lock, and
+	 * need to reaquire it to keep the proper locking order.
+	 */
+	if (!*mmap_locked)
+		mmap_read_lock(mm);
 	/*
 	 * Before allocating the hugepage, release the mmap_lock read lock.
 	 * The allocation can take potentially a long time if it involves
@@ -1124,6 +1162,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	 * that. We will recheck the vma after taking it again in write mode.
 	 */
 	mmap_read_unlock(mm);
+	*mmap_locked = false;
 
 	result = alloc_charge_folio(&folio, mm, cc, HPAGE_PMD_ORDER);
 	if (result != SCAN_SUCCEED)
@@ -1258,10 +1297,69 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 out_up_write:
 	mmap_write_unlock(mm);
 out_nolock:
+	*mmap_locked = false;
 	if (folio)
 		folio_put(folio);
 	trace_mm_collapse_huge_page(mm, result == SCAN_SUCCEED, result);
 	return result;
+}
+
+// Recursive function to consume the bitmap
+static int khugepaged_scan_bitmap(struct mm_struct *mm, unsigned long address,
+			int referenced, int unmapped, struct collapse_control *cc,
+			bool *mmap_locked, unsigned long enabled_orders)
+{
+	u8 order, offset;
+	int num_chunks;
+	int bits_set, max_percent, threshold_bits;
+	int next_order, mid_offset;
+	int top = -1;
+	int collapsed = 0;
+	int ret;
+	struct scan_bit_state state;
+
+	cc->mthp_bitmap_stack[++top] = (struct scan_bit_state)
+		{ HPAGE_PMD_ORDER - MIN_MTHP_ORDER, 0 };
+
+	while (top >= 0) {
+		state = cc->mthp_bitmap_stack[top--];
+		order = state.order;
+		offset = state.offset;
+		num_chunks = 1 << order;
+		// Skip mTHP orders that are not enabled
+		if (!(enabled_orders >> (order +  MIN_MTHP_ORDER)) & 1)
+			goto next;
+
+		// copy the relavant section to a new bitmap
+		bitmap_shift_right(cc->mthp_bitmap_temp, cc->mthp_bitmap, offset,
+				  MTHP_BITMAP_SIZE);
+
+		bits_set = bitmap_weight(cc->mthp_bitmap_temp, num_chunks);
+
+		// Check if the region is "almost full" based on the threshold
+		max_percent = ((HPAGE_PMD_NR - khugepaged_max_ptes_none - 1) * 100)
+						/ (HPAGE_PMD_NR - 1);
+		threshold_bits = (max_percent * num_chunks) / 100;
+
+		if (bits_set >= threshold_bits) {
+			ret = collapse_huge_page(mm, address, referenced, unmapped, cc,
+					mmap_locked, order + MIN_MTHP_ORDER, offset * MIN_MTHP_NR);
+			if (ret == SCAN_SUCCEED)
+				collapsed += (1 << (order + MIN_MTHP_ORDER));
+			continue;
+		}
+
+next:
+		if (order > 0) {
+			next_order = order - 1;
+			mid_offset = offset + (num_chunks / 2);
+			cc->mthp_bitmap_stack[++top] = (struct scan_bit_state)
+				{ next_order, mid_offset };
+			cc->mthp_bitmap_stack[++top] = (struct scan_bit_state)
+				{ next_order, offset };
+			}
+	}
+	return collapsed;
 }
 
 static int khugepaged_scan_pmd(struct mm_struct *mm,
@@ -1432,7 +1530,7 @@ out_unmap:
 	pte_unmap_unlock(pte, ptl);
 	if (result == SCAN_SUCCEED) {
 		result = collapse_huge_page(mm, address, referenced,
-					    unmapped, cc);
+					    unmapped, cc, mmap_locked, HPAGE_PMD_ORDER, 0);
 		/* collapse_huge_page will return with the mmap_lock released */
 		*mmap_locked = false;
 	}
@@ -2782,6 +2880,21 @@ int madvise_collapse(struct vm_area_struct *vma, struct vm_area_struct **prev,
 		return -ENOMEM;
 	cc->is_khugepaged = false;
 
+	cc->mthp_bitmap = kmalloc_array(
+		BITS_TO_LONGS(MTHP_BITMAP_SIZE), sizeof(unsigned long), GFP_KERNEL);
+	if (!cc->mthp_bitmap)
+		return -ENOMEM;
+
+	cc->mthp_bitmap_temp = kmalloc_array(
+		BITS_TO_LONGS(MTHP_BITMAP_SIZE), sizeof(unsigned long), GFP_KERNEL);
+	if (!cc->mthp_bitmap_temp)
+		return -ENOMEM;
+
+	cc->mthp_bitmap_stack = kmalloc_array(
+		MTHP_BITMAP_SIZE, sizeof(struct scan_bit_state), GFP_KERNEL);
+	if (!cc->mthp_bitmap_stack)
+		return -ENOMEM;
+
 	mmgrab(mm);
 	lru_add_drain_all();
 
@@ -2846,7 +2959,11 @@ out_maybelock:
 out_nolock:
 	mmap_assert_locked(mm);
 	mmdrop(mm);
+	kfree(cc->mthp_bitmap);
+	kfree(cc->mthp_bitmap_temp);
+	kfree(cc->mthp_bitmap_stack);
 	kfree(cc);
+
 
 	return thps == ((hend - hstart) >> HPAGE_PMD_SHIFT) ? 0
 			: madvise_collapse_errno(last_fail);
