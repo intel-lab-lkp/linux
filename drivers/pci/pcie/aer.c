@@ -40,6 +40,8 @@
 #define AER_MAX_TYPEOF_COR_ERRS		16	/* as per PCI_ERR_COR_STATUS */
 #define AER_MAX_TYPEOF_UNCOR_ERRS	27	/* as per PCI_ERR_UNCOR_STATUS*/
 
+#define AER_COR_ERR_INTERVAL		(2 * HZ)
+
 struct aer_err_source {
 	u32 status;			/* PCI_ERR_ROOT_STATUS */
 	u32 id;				/* PCI_ERR_ROOT_ERR_SRC */
@@ -374,6 +376,9 @@ void pci_aer_init(struct pci_dev *dev)
 		return;
 
 	dev->aer_stats = kzalloc(sizeof(struct aer_stats), GFP_KERNEL);
+
+	/* Allow Root Port to report a Correctable Error message every 2 seconds */
+	ratelimit_state_init(&dev->cor_rs, AER_COR_ERR_INTERVAL, 1);
 
 	/*
 	 * We save/restore PCI_ERR_UNCOR_MASK, PCI_ERR_UNCOR_SEVER,
@@ -766,11 +771,13 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	u32 status, mask;
 	const char *level;
 	struct aer_err_info info;
+	bool no_ratelimit = true;
 
 	if (aer_severity == AER_CORRECTABLE) {
 		status = aer->cor_status;
 		mask = aer->cor_mask;
 		level = KERN_WARNING;
+		no_ratelimit = __ratelimit(&dev->cor_rs);
 	} else {
 		status = aer->uncor_status;
 		mask = aer->uncor_mask;
@@ -787,17 +794,20 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	info.mask = mask;
 	info.first_error = PCI_ERR_CAP_FEP(aer->cap_control);
 
-	pci_printk(level, dev, "aer_status: 0x%08x, aer_mask: 0x%08x\n", status, mask);
-	__aer_print_error(dev, &info, level);
-	pci_printk(level, dev, "aer_layer=%s, aer_agent=%s\n",
-		   aer_error_layer[layer], aer_agent_string[agent]);
+	if (no_ratelimit) {
+		pci_printk(level, dev, "aer_status: 0x%08x, aer_mask: 0x%08x\n",
+			   status, mask);
+		__aer_print_error(dev, &info, level);
+		pci_printk(level, dev, "aer_layer=%s, aer_agent=%s\n",
+			   aer_error_layer[layer], aer_agent_string[agent]);
 
-	if (aer_severity != AER_CORRECTABLE)
-		pci_printk(level, dev, "aer_uncor_severity: 0x%08x\n",
-			   aer->uncor_severity);
+		if (aer_severity != AER_CORRECTABLE)
+			pci_printk(level, dev, "aer_uncor_severity: 0x%08x\n",
+				   aer->uncor_severity);
 
-	if (tlp_header_valid)
-		__print_tlp_header(dev, &aer->header_log);
+		if (tlp_header_valid)
+			__print_tlp_header(dev, &aer->header_log);
+	}
 
 	trace_aer_event(dev_name(&dev->dev), (status & ~mask),
 			aer_severity, tlp_header_valid, &aer->header_log);
@@ -1256,13 +1266,14 @@ int aer_get_device_error_info(struct pci_dev *dev, struct aer_err_info *info)
 }
 
 static inline void aer_process_err_devices(struct aer_err_info *e_info,
-					   const char *level)
+					   const char *level,
+					   bool no_ratelimit)
 {
 	int i;
 
 	/* Report all before handle them, not to lost records by reset etc. */
 	for (i = 0; i < e_info->error_dev_num && e_info->dev[i]; i++) {
-		if (aer_get_device_error_info(e_info->dev[i], e_info))
+		if (aer_get_device_error_info(e_info->dev[i], e_info) && no_ratelimit)
 			aer_print_error(e_info->dev[i], e_info, level);
 	}
 	for (i = 0; i < e_info->error_dev_num && e_info->dev[i]; i++) {
@@ -1282,6 +1293,7 @@ static void aer_isr_one_error(struct aer_rpc *rpc,
 	struct pci_dev *pdev = rpc->rpd;
 	struct aer_err_info e_info;
 	const char *level;
+	bool no_ratelimit = true;
 
 	pci_rootport_aer_stats_incr(pdev, e_src);
 
@@ -1298,10 +1310,14 @@ static void aer_isr_one_error(struct aer_rpc *rpc,
 			e_info.multi_error_valid = 1;
 		else
 			e_info.multi_error_valid = 0;
-		aer_print_port_info(pdev, &e_info, level);
+
+		no_ratelimit = __ratelimit(&pdev->cor_rs);
+
+		if (no_ratelimit)
+			aer_print_port_info(pdev, &e_info, level);
 
 		if (find_source_device(pdev, &e_info))
-			aer_process_err_devices(&e_info, level);
+			aer_process_err_devices(&e_info, level, no_ratelimit);
 	}
 
 	if (e_src->status & PCI_ERR_ROOT_UNCOR_RCV) {
@@ -1321,7 +1337,7 @@ static void aer_isr_one_error(struct aer_rpc *rpc,
 		aer_print_port_info(pdev, &e_info, level);
 
 		if (find_source_device(pdev, &e_info))
-			aer_process_err_devices(&e_info, level);
+			aer_process_err_devices(&e_info, level, no_ratelimit);
 	}
 }
 
