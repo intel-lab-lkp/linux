@@ -23,6 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/limits.h>
 #include <linux/list.h>
+#include <linux/lsm_audit.h>
 #include <linux/lsm_hooks.h>
 #include <linux/mount.h>
 #include <linux/namei.h>
@@ -37,6 +38,7 @@
 #include <uapi/linux/landlock.h>
 
 #include "access.h"
+#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "fs.h"
@@ -1301,6 +1303,38 @@ static void hook_sb_delete(struct super_block *const sb)
 		       !atomic_long_read(&landlock_superblock(sb)->inode_refs));
 }
 
+static void
+log_fs_change_layout_path(const struct landlock_ruleset *const domain,
+			  const struct path *const path)
+{
+	const struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_FS_CHANGE_LAYOUT,
+		.audit = {
+			.type = LSM_AUDIT_DATA_PATH,
+			.u.path = *path,
+		},
+		.layer_plus_one = landlock_match_layer_level(domain, any_fs) + 1,
+	};
+
+	landlock_log_denial(domain, &request);
+}
+
+static void
+log_fs_change_layout_dentry(const struct landlock_ruleset *const domain,
+			    struct dentry *const dentry)
+{
+	const struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_FS_CHANGE_LAYOUT,
+		.audit = {
+			.type = LSM_AUDIT_DATA_DENTRY,
+			.u.dentry = dentry,
+		},
+		.layer_plus_one = landlock_match_layer_level(domain, any_fs) + 1,
+	};
+
+	landlock_log_denial(domain, &request);
+}
+
 /*
  * Because a Landlock security policy is defined according to the filesystem
  * topology (i.e. the mount namespace), changing it may grant access to files
@@ -1323,16 +1357,24 @@ static int hook_sb_mount(const char *const dev_name,
 			 const struct path *const path, const char *const type,
 			 const unsigned long flags, void *const data)
 {
-	if (!get_current_fs_domain())
+	const struct landlock_ruleset *const dom = get_current_fs_domain();
+
+	if (!dom)
 		return 0;
+
+	log_fs_change_layout_path(dom, path);
 	return -EPERM;
 }
 
 static int hook_move_mount(const struct path *const from_path,
 			   const struct path *const to_path)
 {
-	if (!get_current_fs_domain())
+	const struct landlock_ruleset *const dom = get_current_fs_domain();
+
+	if (!dom)
 		return 0;
+
+	log_fs_change_layout_path(dom, to_path);
 	return -EPERM;
 }
 
@@ -1342,15 +1384,23 @@ static int hook_move_mount(const struct path *const from_path,
  */
 static int hook_sb_umount(struct vfsmount *const mnt, const int flags)
 {
-	if (!get_current_fs_domain())
+	const struct landlock_ruleset *const dom = get_current_fs_domain();
+
+	if (!dom)
 		return 0;
+
+	log_fs_change_layout_dentry(dom, mnt->mnt_root);
 	return -EPERM;
 }
 
 static int hook_sb_remount(struct super_block *const sb, void *const mnt_opts)
 {
-	if (!get_current_fs_domain())
+	const struct landlock_ruleset *const dom = get_current_fs_domain();
+
+	if (!dom)
 		return 0;
+
+	log_fs_change_layout_dentry(dom, sb->s_root);
 	return -EPERM;
 }
 
@@ -1365,8 +1415,12 @@ static int hook_sb_remount(struct super_block *const sb, void *const mnt_opts)
 static int hook_sb_pivotroot(const struct path *const old_path,
 			     const struct path *const new_path)
 {
-	if (!get_current_fs_domain())
+	const struct landlock_ruleset *const dom = get_current_fs_domain();
+
+	if (!dom)
 		return 0;
+
+	log_fs_change_layout_path(dom, new_path);
 	return -EPERM;
 }
 

@@ -267,6 +267,37 @@ landlock_get_applicable_domain(const struct landlock_ruleset *const domain,
 	return NULL;
 }
 
+/**
+ * landlock_match_layer_level - Return the layer level restricting @masks
+ *
+ * @domain: Landlock ruleset (used as a domain)
+ * @masks: access masks
+ *
+ * Returns: the number of the layer restricting/handling any right of @access,
+ * or return 0 (i.e. first layer) otherwise.
+ */
+static inline size_t
+landlock_match_layer_level(const struct landlock_ruleset *const domain,
+			   const struct access_masks masks)
+{
+	const union access_masks_all masks_all = {
+		.masks = masks,
+	};
+	ssize_t layer_level;
+
+	for (layer_level = domain->num_layers; layer_level >= 0;
+	     layer_level--) {
+		union access_masks_all layer = {
+			.masks = domain->access_masks[layer_level],
+		};
+
+		if (masks_all.all & layer.all)
+			return layer_level;
+	}
+
+	return 0;
+}
+
 static inline void
 landlock_add_fs_access_mask(struct landlock_ruleset *const ruleset,
 			    const access_mask_t fs_access_mask,
