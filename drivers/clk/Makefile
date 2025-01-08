@@ -2,6 +2,7 @@
 # common clock types
 obj-$(CONFIG_HAVE_CLK)		+= clk-devres.o clk-bulk.o clkdev.o
 obj-$(CONFIG_COMMON_CLK)	+= clk.o
+obj-$(CONFIG_COMMON_CLK_DEBUG)	+= clk-debug.o
 obj-$(CONFIG_CLK_KUNIT_TEST)	+= clk-test.o
 clk-test-y			:= clk_test.o \
 				   kunit_clk_assigned_rates_u64_one.dtbo.o \
