@@ -261,6 +261,29 @@ config DA8XX_MSTPRI
 	  configuration. Allows to adjust the priorities of all master
 	  peripherals.
 
+config ALLOW_SIMPLE_BUS_OVERRIDE
+	bool "Allow simple-bus compatible OF nodes to match other drivers"
+	depends on OF
+	help
+	  Allow nodes with the "simple-bus" compatible to use a more specific
+	  driver which populates child devices itself.
+
+config OF_SIMPLE_BUS
+	tristate "OF Simple Bus Driver"
+	depends on ALLOW_SIMPLE_BUS_OVERRIDE || COMPILE_TEST
+	default ALLOW_SIMPLE_BUS_OVERRIDE
+	help
+	  Driver for the "simple-bus" compatible nodes in DeviceTree. Child
+	  nodes are usually automatically populated on the platform bus when a
+	  node is compatible with "simple-bus". This driver maintains that
+	  feature but it fails probe to allow other drivers to try to probe
+	  with a more specific compatible if possible.
+
+	  Those other drivers depend on this kconfig symbol so that they match
+	  the builtin or modular status of this driver. Don't disable this
+	  symbol if ALLOW_SIMPLE_BUS_OVERRIDE is set and there isn't another
+	  driver for the simple-bus compatible.
+
 source "drivers/bus/fsl-mc/Kconfig"
 source "drivers/bus/mhi/Kconfig"
 

@@ -312,6 +312,54 @@ static const struct of_dev_auxdata *of_dev_lookup(const struct of_dev_auxdata *l
 }
 
 /**
+ * of_platform_should_populate_children() - Should child nodes be populated for a bus
+ * @bus: device node of the bus to populate children for
+ * @matches: match table for bus nodes
+ *
+ * This function is used to determine if child nodes should be populated as
+ * devices for a bus. That is usually the case, unless
+ * CONFIG_ALLOW_SIMPLE_BUS_OVERRIDE=y, in which case the simple-bus driver
+ * (CONFIG_OF_SIMPLE_BUS) will populate them.
+ *
+ * Return: True if child nodes should be populated as devices, false otherwise.
+ */
+static bool of_platform_should_populate_children(const struct of_device_id *matches,
+						 struct device_node *bus)
+{
+	/* Not configured to allow simple-bus to be overridden. Skip. */
+	if (!IS_ENABLED(CONFIG_ALLOW_SIMPLE_BUS_OVERRIDE))
+		return true;
+
+	/* The simple-bus driver will handle it. */
+	if (IS_ENABLED(CONFIG_OF_SIMPLE_BUS))
+		return false;
+
+	if (!matches)
+		return true;
+
+	/*
+	 * Always populate if the matches aren't populating a "simple-bus"
+	 * compatible node.
+	 */
+	for (; matches->name[0] || matches->type[0] || matches->compatible[0]; matches++) {
+		if (!strncmp(matches->compatible, "simple-bus",
+			     ARRAY_SIZE(matches->compatible))) {
+			/*
+			 * Always populate if "simple-bus" is the first
+			 * compatible, so that CONFIG_OF_SIMPLE_BUS can be
+			 * disabled while CONFIG_ALLOW_SIMPLE_BUS_OVERRIDE can
+			 * be enabled.
+			 */
+			if (of_property_match_string(bus, "compatible", "simple-bus") != 0)
+				return false;
+			break;
+		}
+	}
+
+	return true;
+}
+
+/**
  * of_platform_bus_create() - Create a device for a node and its children.
  * @bus: device node of the bus to instantiate
  * @matches: match table for bus nodes
@@ -369,6 +417,8 @@ static int of_platform_bus_create(struct device_node *bus,
 
 	dev = of_platform_device_create_pdata(bus, bus_id, platform_data, parent);
 	if (!dev || !of_match_node(matches, bus))
+		return 0;
+	if (!of_platform_should_populate_children(matches, bus))
 		return 0;
 
 	for_each_child_of_node_scoped(bus, child) {
