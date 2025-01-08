@@ -1220,7 +1220,7 @@ static void m_can_coalescing_update(struct m_can_classdev *cdev, u32 ir)
 static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 {
 	struct net_device *dev = cdev->net;
-	u32 ir = 0, ir_read;
+	u32 ir = 0, ir_read, new_interrupts;
 	int ret;
 
 	if (pm_runtime_suspended(cdev->dev))
@@ -1283,6 +1283,9 @@ static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 			ret = m_can_echo_tx_event(dev);
 			if (ret != 0)
 				return ret;
+
+			new_interrupts = cdev->active_interrupts & ~(IR_TEFN);
+			m_can_interrupt_enable(cdev, new_interrupts);
 		}
 	}
 
@@ -1989,6 +1992,7 @@ static netdev_tx_t m_can_start_xmit(struct sk_buff *skb,
 	struct m_can_classdev *cdev = netdev_priv(dev);
 	unsigned int frame_len;
 	netdev_tx_t ret;
+	u32 new_interrupts;
 
 	if (can_dev_dropped_skb(dev, skb))
 		return NETDEV_TX_OK;
@@ -2008,8 +2012,11 @@ static netdev_tx_t m_can_start_xmit(struct sk_buff *skb,
 
 	if (cdev->is_peripheral)
 		ret = m_can_start_peripheral_xmit(cdev, skb);
-	else
+	else {
+		new_interrupts = cdev->active_interrupts | IR_TEFN;
+		m_can_interrupt_enable(cdev, new_interrupts);
 		ret = m_can_tx_handler(cdev, skb);
+	}
 
 	if (ret != NETDEV_TX_OK)
 		netdev_completed_queue(dev, 1, frame_len);
