@@ -325,29 +325,32 @@ static struct drm_sched_entity *
 drm_sched_rq_select_entity_fifo(struct drm_gpu_scheduler *sched,
 				struct drm_sched_rq *rq)
 {
+	struct drm_sched_entity *entity = NULL;
 	struct rb_node *rb;
 
 	spin_lock(&rq->lock);
 	for (rb = rb_first_cached(&rq->rb_tree_root); rb; rb = rb_next(rb)) {
-		struct drm_sched_entity *entity;
-
 		entity = rb_entry(rb, struct drm_sched_entity, rb_tree_node);
-		if (drm_sched_entity_is_ready(entity)) {
-			/* If we can't queue yet, preserve the current entity in
-			 * terms of fairness.
-			 */
-			if (!drm_sched_can_queue(sched, entity)) {
-				spin_unlock(&rq->lock);
-				return ERR_PTR(-ENOSPC);
-			}
-
-			reinit_completion(&entity->entity_idle);
+		if (drm_sched_entity_is_ready(entity))
 			break;
-		}
+		else
+			entity = NULL;
 	}
 	spin_unlock(&rq->lock);
 
-	return rb ? rb_entry(rb, struct drm_sched_entity, rb_tree_node) : NULL;
+	if (!entity)
+		return NULL;
+
+	/*
+	 * If scheduler cannot take more jobs signal the caller to not consider
+	 * lower priority queues.
+	 */
+	if (!drm_sched_can_queue(sched, entity))
+		return ERR_PTR(-ENOSPC);
+
+	reinit_completion(&entity->entity_idle);
+
+	return entity;
 }
 
 /**
