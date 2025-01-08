@@ -512,19 +512,20 @@ struct drm_sched_job *drm_sched_entity_pop_job(struct drm_sched_entity *entity)
 	 */
 	if (drm_sched_policy == DRM_SCHED_POLICY_FIFO) {
 		struct drm_sched_job *next;
+		struct drm_sched_rq *rq;
 
+		spin_lock(&entity->lock);
+		rq = entity->rq;
+		spin_lock(&rq->lock);
 		next = to_drm_sched_job(spsc_queue_peek(&entity->job_queue));
 		if (next) {
-			struct drm_sched_rq *rq;
-
-			spin_lock(&entity->lock);
-			rq = entity->rq;
-			spin_lock(&rq->lock);
 			drm_sched_rq_update_fifo_locked(entity, rq,
 							next->submit_ts);
-			spin_unlock(&rq->lock);
-			spin_unlock(&entity->lock);
+		} else {
+			drm_sched_rq_remove_fifo_locked(entity, rq);
 		}
+		spin_unlock(&rq->lock);
+		spin_unlock(&entity->lock);
 	}
 
 	/* Jobs and entities might have different lifecycles. Since we're
