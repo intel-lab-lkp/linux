@@ -39,6 +39,19 @@ format set on a source pad at the end of the device's internal pipeline.
 
 Most sensor drivers are implemented this way.
 
+V4L2_CID_CFA_PATTERN, raw mbus formats, flipping and cropping
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+For raw image data originating from camera sensors, specific :ref:`raw mbus
+codes MEDIA_BUS_FMT_RAW_x (where 'x' is the bit depth)
+<v4l2-mbus-pixelcode-generic-raw>` are used as Color Filter Array (CFA) agnostic
+raw formats. The :ref:`V4L2_CID_CFA_PATTERN <image-source-control-cfa-pattern>`
+control in the same sub-device defines the native CFA pattern of the
+device. Flipping may further affect the readout pattern as indicated by the
+:ref:`V4L2_CID_CFA_PATTERN_FLIP <image-source-control-cfa-pattern-flip>`
+control. Further on, cropping also has an effect on the pattern if cropped
+amount is not divisible by the size of the pattern, horizontally and vertically.
+
 Frame interval configuration
 ----------------------------
 
