@@ -263,13 +263,27 @@ static int hook_unix_stream_connect(struct sock *const sock,
 	const struct landlock_ruleset *const dom =
 		landlock_get_applicable_domain(landlock_get_current_domain(),
 					       unix_scope);
+	struct lsm_network_audit audit_net = {
+		.sk = other,
+	};
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_SCOPE_ABSTRACT_UNIX_SOCKET,
+		.audit = {
+			.type = LSM_AUDIT_DATA_NET,
+			.u.net = &audit_net,
+		},
+	};
 
 	/* Quick return for non-landlocked tasks. */
 	if (!dom)
 		return 0;
 
-	if (is_abstract_socket(other) && sock_is_scoped(other, dom))
+	if (is_abstract_socket(other) && sock_is_scoped(other, dom)) {
+		request.layer_plus_one =
+			landlock_match_layer_level(dom, unix_scope) + 1;
+		landlock_log_denial(dom, &request);
 		return -EPERM;
+	}
 
 	return 0;
 }
@@ -280,6 +294,16 @@ static int hook_unix_may_send(struct socket *const sock,
 	const struct landlock_ruleset *const dom =
 		landlock_get_applicable_domain(landlock_get_current_domain(),
 					       unix_scope);
+	struct lsm_network_audit audit_net = {
+		.sk = other->sk,
+	};
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_SCOPE_ABSTRACT_UNIX_SOCKET,
+		.audit = {
+			.type = LSM_AUDIT_DATA_NET,
+			.u.net = &audit_net,
+		},
+	};
 
 	if (!dom)
 		return 0;
@@ -291,8 +315,12 @@ static int hook_unix_may_send(struct socket *const sock,
 	if (unix_peer(sock->sk) == other->sk)
 		return 0;
 
-	if (is_abstract_socket(other->sk) && sock_is_scoped(other->sk, dom))
+	if (is_abstract_socket(other->sk) && sock_is_scoped(other->sk, dom)) {
+		request.layer_plus_one =
+			landlock_match_layer_level(dom, unix_scope) + 1;
+		landlock_log_denial(dom, &request);
 		return -EPERM;
+	}
 
 	return 0;
 }
@@ -307,6 +335,13 @@ static int hook_task_kill(struct task_struct *const p,
 {
 	bool is_scoped;
 	const struct landlock_ruleset *dom;
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_SCOPE_SIGNAL,
+		.audit = {
+			.type = LSM_AUDIT_DATA_TASK,
+			.u.tsk = p,
+		},
+	};
 
 	if (cred) {
 		/* Dealing with USB IO. */
@@ -324,8 +359,12 @@ static int hook_task_kill(struct task_struct *const p,
 	is_scoped = domain_is_scoped(dom, landlock_get_task_domain(p),
 				     LANDLOCK_SCOPE_SIGNAL);
 	rcu_read_unlock();
-	if (is_scoped)
+	if (is_scoped) {
+		request.layer_plus_one =
+			landlock_match_layer_level(dom, signal_scope) + 1;
+		landlock_log_denial(dom, &request);
 		return -EPERM;
+	}
 
 	return 0;
 }
@@ -334,6 +373,13 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 				    struct fown_struct *fown, int signum)
 {
 	const struct landlock_ruleset *dom;
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_SCOPE_SIGNAL,
+		.audit = {
+			.type = LSM_AUDIT_DATA_TASK,
+			.u.tsk = tsk,
+		},
+	};
 	bool is_scoped = false;
 
 	/* Lock already held by send_sigio() and send_sigurg(). */
@@ -349,8 +395,12 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 	is_scoped = domain_is_scoped(dom, landlock_get_task_domain(tsk),
 				     LANDLOCK_SCOPE_SIGNAL);
 	rcu_read_unlock();
-	if (is_scoped)
+	if (is_scoped) {
+		request.layer_plus_one =
+			landlock_match_layer_level(dom, signal_scope) + 1;
+		landlock_log_denial(dom, &request);
 		return -EPERM;
+	}
 
 	return 0;
 }
