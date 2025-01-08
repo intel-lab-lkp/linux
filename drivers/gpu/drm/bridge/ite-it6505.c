@@ -2254,9 +2254,12 @@ static bool it6505_hdcp_part2_ksvlist_check(struct it6505 *it6505)
 			if (bv[i][3] != av[i][0] || bv[i][2] != av[i][1] ||
 			    av[i][1] != av[i][2] || bv[i][0] != av[i][3])
 				break;
-
-			DRM_DEV_DEBUG_DRIVER(dev, "V' all match!! %d, %d", retry, i);
-			return true;
+			if (i == 4) {
+				DRM_DEV_DEBUG_DRIVER(dev,
+						     "V' all match!! %d",
+						     retry);
+				return true;
+			}
 		}
 	}
 
