@@ -438,9 +438,6 @@ struct btrfs_fs_devices {
 
 	enum btrfs_chunk_allocation_policy chunk_alloc_policy;
 
-	/* Track the number of blocks (sectors) read by the filesystem. */
-	struct percpu_counter stats_read_blocks;
-
 	/* Policy used to read the mirrored stripes. */
 	enum btrfs_read_policy read_policy;
 

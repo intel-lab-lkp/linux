@@ -1255,7 +1255,6 @@ static void close_fs_devices(struct btrfs_fs_devices *fs_devices)
 	list_for_each_entry_safe(device, tmp, &fs_devices->devices, dev_list)
 		btrfs_close_one_device(device);
 
-	percpu_counter_destroy(&fs_devices->stats_read_blocks);
 	WARN_ON(fs_devices->open_devices);
 	WARN_ON(fs_devices->rw_devices);
 	fs_devices->opened = 0;
@@ -1302,11 +1301,6 @@ static int open_fs_devices(struct btrfs_fs_devices *fs_devices,
 	struct btrfs_device *tmp_device;
 	s64 __maybe_unused value = 0;
 	int ret = 0;
-
-	/* Initialize the in-memory record of filesystem read count. */
-	ret = percpu_counter_init(&fs_devices->stats_read_blocks, 0, GFP_KERNEL);
-	if (ret)
-		return ret;
 
 	list_for_each_entry_safe(device, tmp_device, &fs_devices->devices,
 				 dev_list) {

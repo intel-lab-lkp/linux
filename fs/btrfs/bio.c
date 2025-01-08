@@ -458,7 +458,7 @@ static void btrfs_submit_dev_bio(struct btrfs_device *dev, struct bio *bio)
 	 * filesystem is fully initialized.
 	 */
 	if (dev->fs_devices->collect_fs_stats && bio_op(bio) == REQ_OP_READ && dev->fs_info)
-		percpu_counter_add(&dev->fs_devices->stats_read_blocks,
+		percpu_counter_add(&dev->fs_info->stats_read_blocks,
 				   bio->bi_iter.bi_size >> dev->fs_info->sectorsize_bits);
 
 	if (bio->bi_opf & REQ_BTRFS_CGROUP_PUNT)
