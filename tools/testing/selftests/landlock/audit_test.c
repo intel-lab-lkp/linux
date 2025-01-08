@@ -308,4 +308,82 @@ TEST_F(audit_rule, exe_landlock_deny)
 	ASSERT_EQ(0, WEXITSTATUS(status));
 }
 
+FIXTURE(compatibility)
+{
+	struct audit_filter filter_self;
+	int audit_fd;
+};
+
+FIXTURE_SETUP(compatibility)
+{
+	disable_caps(_metadata);
+	set_cap(_metadata, CAP_AUDIT_CONTROL);
+	self->audit_fd = audit_init_with_exe_filter(&self->filter_self);
+	EXPECT_LE(0, self->audit_fd)
+	{
+		const char *error_msg;
+
+		/* kill "$(auditctl -s | sed -ne 's/^pid \([0-9]\+\)$/\1/p')" */
+		if (self->audit_fd == -EEXIST)
+			error_msg = "socket already in use (e.g. auditd)";
+		else
+			error_msg = strerror(-self->audit_fd);
+		TH_LOG("Failed to initialize audit: %s", error_msg);
+	}
+	clear_cap(_metadata, CAP_AUDIT_CONTROL);
+}
+
+FIXTURE_TEARDOWN(compatibility)
+{
+	set_cap(_metadata, CAP_AUDIT_CONTROL);
+	EXPECT_EQ(0, audit_cleanup(self->audit_fd, &self->filter_self));
+	clear_cap(_metadata, CAP_AUDIT_CONTROL);
+}
+
+TEST_F(compatibility, lists)
+{
+	struct audit_filter filter_test;
+	size_t num_ok = 0;
+	__u32 list;
+
+	EXPECT_EQ(0, audit_init_filter_exe(AUDIT_EXE_LANDLOCK_DENY,
+					   &filter_test, NULL));
+	set_cap(_metadata, CAP_AUDIT_CONTROL);
+
+	for (list = 0; list < AUDIT_NR_FILTERS; list++) {
+		int err;
+
+		switch (list) {
+		case AUDIT_FILTER_EXIT:
+		case AUDIT_FILTER_EXCLUDE:
+		case AUDIT_FILTER_URING_EXIT:
+			num_ok++;
+			err = 0;
+			break;
+		default:
+			err = -EINVAL;
+			break;
+		}
+
+		/*
+		 * Testing AUDIT_FILTER_ENTRY prints "auditfilter:
+		 * AUDIT_FILTER_ENTRY is deprecated" in kernel logs.
+		 */
+		EXPECT_EQ(err, audit_filter_exe(self->audit_fd, &filter_test,
+						AUDIT_ADD_RULE, list))
+		{
+			TH_LOG("Unexpected result for list %u", list);
+		}
+		EXPECT_EQ(err, audit_filter_exe(self->audit_fd, &filter_test,
+						AUDIT_DEL_RULE, list))
+		{
+			TH_LOG("Unexpected result for list %u", list);
+		}
+	}
+
+	/* Makes sure the three accepted lists are checked. */
+	EXPECT_EQ(3, num_ok);
+	clear_cap(_metadata, CAP_AUDIT_CONTROL);
+}
+
 TEST_HARNESS_MAIN
