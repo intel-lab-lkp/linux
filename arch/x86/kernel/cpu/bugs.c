@@ -169,6 +169,66 @@ DEFINE_STATIC_KEY_FALSE(switch_mm_cond_l1d_flush);
 DEFINE_STATIC_KEY_FALSE(mmio_stale_data_clear);
 EXPORT_SYMBOL_GPL(mmio_stale_data_clear);
 
+#ifdef CONFIG_CPU_MITIGATIONS
+/*
+ * All except the cross-thread attack vector are mitigated by default.
+ * Cross-thread mitigation often requires disabling SMT which is too expensive
+ * to be enabled by default.
+ *
+ * Guest-to-Host and Guest-to-Guest vectors are only needed if KVM support is
+ * present.
+ */
+static bool cpu_mitigate_attack_vectors[NR_CPU_ATTACK_VECTORS] __ro_after_init = {
+	[CPU_MITIGATE_USER_KERNEL] = true,
+	[CPU_MITIGATE_USER_USER] = true,
+	[CPU_MITIGATE_GUEST_HOST] = IS_ENABLED(CONFIG_KVM),
+	[CPU_MITIGATE_GUEST_GUEST] = IS_ENABLED(CONFIG_KVM),
+	[CPU_MITIGATE_CROSS_THREAD] = false
+};
+
+#define DEFINE_ATTACK_VECTOR(opt, v) \
+	static int __init v##_parse_cmdline(char *arg) \
+{ \
+	if (!strcmp(arg, "off")) \
+		cpu_mitigate_attack_vectors[v] = false; \
+	else if (!strcmp(arg, "on")) \
+		cpu_mitigate_attack_vectors[v] = true; \
+	else \
+		pr_warn("Unsupported " opt "=%s\n", arg); \
+	return 0; \
+} \
+early_param(opt, v##_parse_cmdline)
+
+bool cpu_mitigate_attack_vector(enum cpu_attack_vectors v)
+{
+	if (v < NR_CPU_ATTACK_VECTORS)
+		return cpu_mitigate_attack_vectors[v];
+
+	WARN_ON_ONCE(v >= NR_CPU_ATTACK_VECTORS);
+	return false;
+}
+
+#else
+#define DEFINE_ATTACK_VECTOR(opt, v) \
+static int __init v##_parse_cmdline(char *arg) \
+{ \
+	pr_crit("Kernel compiled without mitigations, ignoring %s; system may still be vulnerable\n", opt); \
+	return 0; \
+} \
+early_param(opt, v##_parse_cmdline)
+
+bool cpu_mitigate_attack_vector(enum cpu_attack_vectors v)
+{
+	return false;
+}
+#endif
+
+DEFINE_ATTACK_VECTOR("mitigate_user_kernel", CPU_MITIGATE_USER_KERNEL);
+DEFINE_ATTACK_VECTOR("mitigate_user_user", CPU_MITIGATE_USER_USER);
+DEFINE_ATTACK_VECTOR("mitigate_guest_host", CPU_MITIGATE_GUEST_HOST);
+DEFINE_ATTACK_VECTOR("mitigate_guest_guest", CPU_MITIGATE_GUEST_GUEST);
+DEFINE_ATTACK_VECTOR("mitigate_cross_thread", CPU_MITIGATE_CROSS_THREAD);
+
 void __init cpu_select_mitigations(void)
 {
 	/*
