@@ -476,8 +476,12 @@ static void __init mds_select_mitigation(void)
 	if (!boot_cpu_has_bug(X86_BUG_MDS) || cpu_mitigations_off())
 		mds_mitigation = MDS_MITIGATION_OFF;
 
-	if (mds_mitigation == MDS_MITIGATION_AUTO)
-		mds_mitigation = MDS_MITIGATION_FULL;
+	if (mds_mitigation == MDS_MITIGATION_AUTO) {
+		if (should_mitigate_vuln(X86_BUG_MDS))
+			mds_mitigation = MDS_MITIGATION_FULL;
+		else
+			mds_mitigation = MDS_MITIGATION_OFF;
+	}
 
 	if (mds_mitigation == MDS_MITIGATION_FULL) {
 		if (!boot_cpu_has(X86_FEATURE_MD_CLEAR))
@@ -506,7 +510,8 @@ static void __init mds_apply_mitigation(void)
 	if (mds_mitigation == MDS_MITIGATION_FULL) {
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
 		if (!boot_cpu_has(X86_BUG_MSBDS_ONLY) &&
-		    (mds_nosmt || cpu_mitigations_auto_nosmt()))
+		    (mds_nosmt || cpu_mitigations_auto_nosmt() ||
+		     cpu_mitigate_attack_vector(CPU_MITIGATE_CROSS_THREAD)))
 			cpu_smt_disable(false);
 	}
 }
