@@ -4,7 +4,6 @@
 
 #include <linux/bitfield.h>
 #include <linux/bug.h>
-#include <linux/const.h>
 #include <linux/limits.h>
 
 #define __FORTIFY_INLINE extern __always_inline __gnu_inline __overloadable
@@ -241,22 +240,6 @@ __FORTIFY_INLINE __kernel_size_t strnlen(const char * const POS p, __kernel_size
  * possible for strlen() to be used on compile-time strings for use in
  * static initializers (i.e. as a constant expression).
  */
-/**
- * strlen - Return count of characters in a NUL-terminated string
- *
- * @p: pointer to NUL-terminated string to count.
- *
- * Do not use this function unless the string length is known at
- * compile-time. When @p is unterminated, this function may crash
- * or return unexpected counts that could lead to memory content
- * exposures. Prefer strnlen().
- *
- * Returns number of characters in @p (NOT including the final NUL).
- *
- */
-#define strlen(p)							\
-	__builtin_choose_expr(__is_constexpr(__builtin_strlen(p)),	\
-		__builtin_strlen(p), __fortify_strlen(p))
 __FORTIFY_INLINE __diagnose_as(__builtin_strlen, 1)
 __kernel_size_t __fortify_strlen(const char * const POS p)
 {
@@ -270,6 +253,27 @@ __kernel_size_t __fortify_strlen(const char * const POS p)
 	if (p_size <= ret)
 		fortify_panic(FORTIFY_FUNC_strlen, FORTIFY_READ, p_size, ret + 1, ret);
 	return ret;
+}
+
+/**
+ * strlen - Return count of characters in a NUL-terminated string
+ *
+ * @p: pointer to NUL-terminated string to count.
+ *
+ * Do not use this function unless the string length is known at
+ * compile-time. When @p is unterminated, this function may crash
+ * or return unexpected counts that could lead to memory content
+ * exposures. Prefer strnlen().
+ *
+ * Returns number of characters in @p (NOT including the final NUL).
+ *
+ */
+__FORTIFY_INLINE __diagnose_as(__builtin_strlen, 1)
+__kernel_size_t strlen(const char *p)
+{
+	if (__builtin_constant_p(__builtin_strlen(p)))
+		return __builtin_strlen(p);
+	return __fortify_strlen(p);
 }
 
 /* Defined after fortified strnlen() to reuse it. */
