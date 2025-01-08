@@ -409,7 +409,7 @@ void squashfs_copy_cache(struct folio *folio,
 					FGP_LOCK|FGP_CREAT|FGP_NOFS|FGP_NOWAIT,
 					mapping_gfp_mask(mapping));
 
-		if (!push_folio)
+		if (IS_ERR(push_folio))
 			continue;
 
 		if (folio_test_uptodate(push_folio))
