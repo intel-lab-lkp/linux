@@ -10,12 +10,14 @@
 #include <linux/cred.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/lsm_audit.h>
 #include <linux/lsm_hooks.h>
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #include <net/af_unix.h>
 #include <net/sock.h>
 
+#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "domain.h"
@@ -38,41 +40,29 @@ static bool domain_scope_le(const struct landlock_ruleset *const parent,
 {
 	const struct landlock_hierarchy *walker;
 
+	/* Quick return for non-landlocked tasks. */
 	if (!parent)
 		return true;
+
 	if (!child)
 		return false;
+
 	for (walker = child->hierarchy; walker; walker = walker->parent) {
 		if (walker == parent->hierarchy)
 			/* @parent is in the scoped hierarchy of @child. */
 			return true;
 	}
+
 	/* There is no relationship between @parent and @child. */
 	return false;
 }
 
-static bool task_is_scoped(const struct task_struct *const parent,
-			   const struct task_struct *const child)
+static int domain_ptrace(const struct landlock_ruleset *const parent,
+			 const struct landlock_ruleset *const child)
 {
-	bool is_scoped;
-	const struct landlock_ruleset *dom_parent, *dom_child;
-
-	rcu_read_lock();
-	dom_parent = landlock_get_task_domain(parent);
-	dom_child = landlock_get_task_domain(child);
-	is_scoped = domain_scope_le(dom_parent, dom_child);
-	rcu_read_unlock();
-	return is_scoped;
-}
-
-static int task_ptrace(const struct task_struct *const parent,
-		       const struct task_struct *const child)
-{
-	/* Quick return for non-landlocked tasks. */
-	if (!landlocked(parent))
+	if (domain_scope_le(parent, child))
 		return 0;
-	if (task_is_scoped(parent, child))
-		return 0;
+
 	return -EPERM;
 }
 
@@ -92,7 +82,36 @@ static int task_ptrace(const struct task_struct *const parent,
 static int hook_ptrace_access_check(struct task_struct *const child,
 				    const unsigned int mode)
 {
-	return task_ptrace(current, child);
+	const struct landlock_ruleset *parent_dom, *child_dom;
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_PTRACE,
+		.audit = {
+			.type = LSM_AUDIT_DATA_TASK,
+			.u.tsk = child,
+		},
+	};
+	int err;
+
+	/* Quick return for non-landlocked tasks. */
+	parent_dom = landlock_get_current_domain();
+	if (!parent_dom)
+		return 0;
+
+	rcu_read_lock();
+	child_dom = landlock_get_task_domain(child);
+	err = domain_ptrace(parent_dom, child_dom);
+	rcu_read_unlock();
+
+	/*
+	 * For the ptrace_access_check case, we log the current/parent domain
+	 * and the child task.
+	 */
+	if (err && !(mode & PTRACE_MODE_NOAUDIT)) {
+		request.layer_plus_one = parent_dom->num_layers;
+		landlock_log_denial(parent_dom, &request);
+	}
+
+	return err;
 }
 
 /**
@@ -109,7 +128,35 @@ static int hook_ptrace_access_check(struct task_struct *const child,
  */
 static int hook_ptrace_traceme(struct task_struct *const parent)
 {
-	return task_ptrace(parent, current);
+	const struct landlock_ruleset *parent_dom, *child_dom;
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_PTRACE,
+		.audit = {
+			.type = LSM_AUDIT_DATA_TASK,
+			.u.tsk = parent,
+		},
+	};
+	int err;
+
+	child_dom = landlock_get_current_domain();
+	rcu_read_lock();
+	parent_dom = landlock_get_task_domain(parent);
+	err = domain_ptrace(parent_dom, child_dom);
+
+	/*
+	 * For the ptrace_traceme case, we log the domain which is the cause of
+	 * the denial, which means the parent domain instead of the current
+	 * domain.  This may look weird because the ptrace_traceme action is a
+	 * request to be traced, but the semantic is consistent with
+	 * hook_ptrace_access_check().
+	 */
+	if (err) {
+		request.layer_plus_one = parent_dom->num_layers;
+		landlock_log_denial(parent_dom, &request);
+	}
+
+	rcu_read_unlock();
+	return err;
 }
 
 /**
@@ -128,7 +175,7 @@ static bool domain_is_scoped(const struct landlock_ruleset *const client,
 			     access_mask_t scope)
 {
 	int client_layer, server_layer;
-	struct landlock_hierarchy *client_walker, *server_walker;
+	const struct landlock_hierarchy *client_walker, *server_walker;
 
 	/* Quick return if client has no domain */
 	if (WARN_ON_ONCE(!client))

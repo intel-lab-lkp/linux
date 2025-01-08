@@ -11,6 +11,7 @@
 #include <linux/mm.h>
 
 #include "domain.h"
+#include "id.h"
 
 void landlock_get_hierarchy(struct landlock_hierarchy *const hierarchy)
 {
@@ -27,3 +28,20 @@ void landlock_put_hierarchy(struct landlock_hierarchy *hierarchy)
 		kfree(freeme);
 	}
 }
+
+#ifdef CONFIG_AUDIT
+
+/**
+ * landlock_init_current_hierarchy - Partially initialize landlock_hierarchy
+ *
+ * @hierarchy: The hierarchy to initialize.
+ *
+ * @hierarchy->parent and @hierarchy->usage should already be set.
+ */
+int landlock_init_current_hierarchy(struct landlock_hierarchy *const hierarchy)
+{
+	hierarchy->id = landlock_get_id_range(1);
+	return 0;
+}
+
+#endif /* CONFIG_AUDIT */
