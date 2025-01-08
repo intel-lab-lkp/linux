@@ -10,7 +10,7 @@ maintainers:
   - Michal Simek <michal.simek@amd.com>
 
 description: |
-  Xilinx boards with Zynq-7000 SOC or Zynq UltraScale+ MPSoC
+  Xilinx boards with Zynq-7000 SOC or Zynq UltraScale+ MPSoC or Versal Adaptive SoCs
 
 properties:
   $nodename:
@@ -186,6 +186,10 @@ properties:
         items:
           - const: qemu,mbv
           - const: amd,mbv
+
+      - description: Xilinx Versal NET
+        items:
+          - const: xlnx,versal-net
 
 additionalProperties: true
 
