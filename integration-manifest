@@ -1,0 +1,28 @@
+drm drm-fixes 9d89551994a430b50c4fffcb1e617a057fa76e20
+	Linux 6.13-rc6
+drm-misc drm-misc-fixes 35243fc777566ccb3370e175cf591fea0f81f68c
+	drm/nouveau/disp: Fix missing backlight control on Macbook 5,1
+drm-intel drm-intel-fixes 77bf21a03a2ad45cf66f73f13154b1669d9cf52a
+	Revert "drm/i915/hdcp: Don't enable HDCP1.4 directly from check_link"
+drm-xe drm-xe-fixes f0ed39830e6064d62f9c5393505677a26569bb56
+	xe/oa: Fix query mode of operation for OAR/OAC
+drm drm-next 9cc06dbaf437010fba67fc8adb371d39197e75d7
+	Merge tag 'drm-intel-next-2024-12-11' of https://gitlab.freedesktop.org/drm/i915/kernel into drm-next
+drm-misc drm-misc-next-fixes 34d813e45ecb8e84f7154509b1acf7dda57ef09f
+	drm/display: hdmi-state-helper: add drm_display_mode declaration
+drm-intel drm-intel-next-fixes 40384c840ea1944d7c5a392e8975ed088ecf0b37
+	Linux 6.13-rc1
+drm-xe drm-xe-next-fixes aef0b4a07277f715bfc2a0d76a16da2bc4e89205
+	drm/xe: Take PM ref in delayed snapshot capture worker
+drm-misc drm-misc-next 5d40d4fae6f2fb789f48207a9d4772bbee970b5c
+	drm/ssd130x: Set SPI .id_table to prevent an SPI core warning
+drm-intel drm-intel-next e995bb4adc728345d6c988efff36f4933e662703
+	drm/i915/gvt: store virtual_dp_monitor_edid in rodata
+drm-intel drm-intel-gt-next d6b24cc3e267c11c3965a052bf07dd24a8ee07af
+	drm/i915/gt: Prevent uninitialized pointer reads
+drm-xe drm-xe-next 70b8e6e3226fe2ae514a324ff0c64f074f6f419b
+	drm/xe/vf: Don't apply Wa_22019338487 for VF
+drm-intel topic/core-for-CI e7c80039497d6695f3401d1916a89600821d5cc6
+	Revert "vmstat: disable vmstat_work on vmstat_cpu_down_prep()"
+drm-xe topic/xe-for-CI cb9432e080034e6d10612df6905b64ee8124e981
+	drm/xe/ptl: Define HuC FW version for PTL
