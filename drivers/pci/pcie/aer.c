@@ -698,6 +698,7 @@ static void __aer_print_error(struct pci_dev *dev,
 	pci_dev_aer_stats_incr(dev, info);
 }
 
+unsigned int aer_print_skip_mask __read_mostly;
 void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 {
 	int layer, agent;
@@ -709,6 +710,9 @@ void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 			aer_error_severity_string[info->severity]);
 		goto out;
 	}
+
+	if ((1 << info->severity) & aer_print_skip_mask)
+		goto out;
 
 	layer = AER_GET_LAYER_ERROR(info->severity, info->status);
 	agent = AER_GET_AGENT(info->severity, info->status);
@@ -1596,3 +1600,22 @@ int __init pcie_aer_init(void)
 		return -ENXIO;
 	return pcie_port_service_register(&aerdriver);
 }
+
+static const struct ctl_table aer_print_skip_mask_sysctls[] = {
+	{
+		.procname       = "aer_print_skip_mask",
+		.data           = &aer_print_skip_mask,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = &proc_douintvec,
+	},
+	{}
+};
+
+static int __init aer_print_skip_mask_sysctl_init(void)
+{
+	register_sysctl_init("kernel", aer_print_skip_mask_sysctls);
+	return 0;
+}
+
+late_initcall(aer_print_skip_mask_sysctl_init);
