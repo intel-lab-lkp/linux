@@ -76,17 +76,6 @@ static void slpc_mem_set_enabled(struct slpc_shared_data *data,
 	slpc_mem_set_param(data, disable_id, 0);
 }
 
-static void slpc_mem_set_disabled(struct slpc_shared_data *data,
-				  u8 enable_id, u8 disable_id)
-{
-	/*
-	 * Disabling a param involves setting the enable_id
-	 * to 0 and disable_id to 1.
-	 */
-	slpc_mem_set_param(data, disable_id, 1);
-	slpc_mem_set_param(data, enable_id, 0);
-}
-
 static u32 slpc_get_state(struct intel_guc_slpc *slpc)
 {
 	struct slpc_shared_data *data;
@@ -366,12 +355,6 @@ static void slpc_shared_data_reset(struct slpc_shared_data *data)
 	/* Enable only GTPERF task, disable others */
 	slpc_mem_set_enabled(data, SLPC_PARAM_TASK_ENABLE_GTPERF,
 			     SLPC_PARAM_TASK_DISABLE_GTPERF);
-
-	slpc_mem_set_disabled(data, SLPC_PARAM_TASK_ENABLE_BALANCER,
-			      SLPC_PARAM_TASK_DISABLE_BALANCER);
-
-	slpc_mem_set_disabled(data, SLPC_PARAM_TASK_ENABLE_DCC,
-			      SLPC_PARAM_TASK_DISABLE_DCC);
 }
 
 /**
