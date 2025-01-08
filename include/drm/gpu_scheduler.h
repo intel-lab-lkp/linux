@@ -147,6 +147,8 @@ struct drm_sched_entity {
 	 */
 	struct spsc_queue		job_queue;
 
+	atomic_t			qd;
+
 	/**
 	 * @fence_seq:
 	 *

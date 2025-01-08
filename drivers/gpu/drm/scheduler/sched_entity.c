@@ -391,14 +391,24 @@ static ktime_t
 __drm_sched_entity_get_job_deadline(struct drm_sched_entity *entity,
 				    ktime_t submit_ts)
 {
-	static const unsigned int d_us[] = {
-		[DRM_SCHED_PRIORITY_KERNEL] =    100,
-		[DRM_SCHED_PRIORITY_HIGH]   =   1000,
-		[DRM_SCHED_PRIORITY_NORMAL] =   5000,
-		[DRM_SCHED_PRIORITY_LOW]    = 100000,
+	static const long d_us[] = {
+		[DRM_SCHED_PRIORITY_KERNEL] = -1000,
+		[DRM_SCHED_PRIORITY_HIGH]   =   334,
+		[DRM_SCHED_PRIORITY_NORMAL] =  1000,
+		[DRM_SCHED_PRIORITY_LOW]    =  6667,
 	};
+	static const unsigned int shift[] = {
+		[DRM_SCHED_PRIORITY_KERNEL] = 4,
+		[DRM_SCHED_PRIORITY_HIGH]   = 1,
+		[DRM_SCHED_PRIORITY_NORMAL] = 2,
+		[DRM_SCHED_PRIORITY_LOW]    = 3,
+	};
+	const unsigned int prio = entity->priority;
+	long d;
 
-	return ktime_add_us(submit_ts, d_us[entity->priority]);
+	d = d_us[prio] * (atomic_read(&entity->qd) << shift[prio]);
+
+	return ktime_add_us(submit_ts, d);
 }
 
 ktime_t
@@ -520,6 +530,7 @@ struct drm_sched_job *drm_sched_entity_pop_job(struct drm_sched_entity *entity)
 	 */
 	smp_wmb();
 
+	atomic_dec(&entity->qd);
 	spsc_queue_pop(&entity->job_queue);
 	drm_sched_rq_pop_entity(entity->rq, entity);
 
@@ -608,6 +619,7 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 	else
 		fence_deadline = KTIME_MAX;
 
+	atomic_inc(&entity->qd);
 	first = spsc_queue_push(&entity->job_queue, &sched_job->queue_node);
 
 	/* first job wakes up scheduler */
