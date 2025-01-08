@@ -3904,7 +3904,7 @@ fdls_process_abts_req(struct fnic_iport_s *iport, struct fc_frame_header *fchdr)
 	uint8_t *frame;
 	struct fc_std_abts_ba_acc *pba_acc;
 	uint32_t nport_id;
-	uint16_t oxid;
+	uint16_t oxid = 0;
 	struct fnic_tport_s *tport;
 	struct fnic *fnic = iport->fnic;
 	uint16_t frame_size = FNIC_ETH_FCOE_HDRS_OFFSET +
