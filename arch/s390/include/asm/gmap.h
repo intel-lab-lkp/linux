@@ -177,4 +177,5 @@ static inline int s390_uv_destroy_range_interruptible(struct mm_struct *mm, unsi
 {
 	return __s390_uv_destroy_range(mm, start, end, true);
 }
+
 #endif /* _ASM_S390_GMAP_H */
