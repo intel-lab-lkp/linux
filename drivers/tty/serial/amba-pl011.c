@@ -41,6 +41,7 @@
 #include <linux/sizes.h>
 #include <linux/io.h>
 #include <linux/acpi.h>
+#include <linux/moduleparam.h>
 
 #define UART_NR			14
 
@@ -263,6 +264,7 @@ struct uart_amba_port {
 	char			type[12];
 	bool			rs485_tx_started;
 	unsigned int		rs485_tx_drain_interval; /* usecs */
+	bool			console_line_ended;
 #ifdef CONFIG_DMA_ENGINE
 	/* DMA stuff */
 	unsigned int		dmacr;		/* dma control reg */
@@ -273,6 +275,10 @@ struct uart_amba_port {
 	bool			dma_probed;
 #endif
 };
+
+/* if non-zero, the console is nbcon. */
+static int use_nbcon;
+module_param(use_nbcon, int, 0444);
 
 static unsigned int pl011_tx_empty(struct uart_port *port);
 
@@ -2305,6 +2311,7 @@ static void pl011_console_putchar(struct uart_port *port, unsigned char ch)
 	while (pl011_read(uap, REG_FR) & UART01x_FR_TXFF)
 		cpu_relax();
 	pl011_write(ch, uap, REG_DR);
+	uap->console_line_ended = (ch == '\n');
 }
 
 static void
@@ -2411,6 +2418,8 @@ static int pl011_console_setup(struct console *co, char *options)
 	if (ret)
 		return ret;
 
+	uap->console_line_ended = true;
+
 	if (dev_get_platdata(uap->port.dev)) {
 		struct amba_pl011_data *plat;
 
@@ -2492,6 +2501,106 @@ static int pl011_console_match(struct console *co, char *name, int idx,
 	}
 
 	return -ENODEV;
+}
+
+static void
+pl011_console_write_atomic(struct console *co, struct nbcon_write_context *wctxt)
+{
+	struct uart_amba_port *uap = amba_ports[co->index];
+	unsigned int old_cr = 0;
+
+	if (!nbcon_enter_unsafe(wctxt))
+		return;
+
+	clk_enable(uap->clk);
+
+	if (!uap->vendor->always_enabled) {
+		old_cr = pl011_read(uap, REG_CR);
+		pl011_write((old_cr & ~UART011_CR_CTSEN) | (UART01x_CR_UARTEN | UART011_CR_TXE),
+				uap, REG_CR);
+	}
+
+	if (!uap->console_line_ended)
+		uart_console_write(&uap->port, "\n", 1, pl011_console_putchar);
+	uart_console_write(&uap->port, wctxt->outbuf, wctxt->len, pl011_console_putchar);
+
+	while ((pl011_read(uap, REG_FR) ^ uap->vendor->inv_fr) & uap->vendor->fr_busy)
+		cpu_relax();
+
+	if (!uap->vendor->always_enabled)
+		pl011_write(old_cr, uap, REG_CR);
+
+	clk_disable(uap->clk);
+
+	nbcon_exit_unsafe(wctxt);
+}
+
+static void
+pl011_console_write_thread(struct console *co, struct nbcon_write_context *wctxt)
+{
+	struct uart_amba_port *uap = amba_ports[co->index];
+	unsigned int old_cr = 0;
+
+	if (!nbcon_enter_unsafe(wctxt))
+		return;
+
+	clk_enable(uap->clk);
+
+	if (!uap->vendor->always_enabled) {
+		old_cr = pl011_read(uap, REG_CR);
+		pl011_write((old_cr & ~UART011_CR_CTSEN) | (UART01x_CR_UARTEN | UART011_CR_TXE),
+				uap, REG_CR);
+	}
+
+	if (nbcon_exit_unsafe(wctxt)) {
+		int i;
+		unsigned int len = READ_ONCE(wctxt->len);
+
+		for (i = 0; i < len; i++) {
+			if (!nbcon_enter_unsafe(wctxt))
+				break;
+			uart_console_write(&uap->port, wctxt->outbuf + i, 1, pl011_console_putchar);
+			if (!nbcon_exit_unsafe(wctxt))
+				break;
+		}
+	}
+
+	while (!nbcon_enter_unsafe(wctxt))
+		nbcon_reacquire_nobuf(wctxt);
+
+	while ((pl011_read(uap, REG_FR) ^ uap->vendor->inv_fr) & uap->vendor->fr_busy)
+		cpu_relax();
+
+	if (!uap->vendor->always_enabled)
+		pl011_write(old_cr, uap, REG_CR);
+
+	clk_disable(uap->clk);
+
+	nbcon_exit_unsafe(wctxt);
+}
+
+static void
+pl011_console_device_lock(struct console *co, unsigned long *flags)
+{
+	__uart_port_lock_irqsave(&amba_ports[co->index]->port, flags);
+}
+
+static void
+pl011_console_device_unlock(struct console *co, unsigned long flags)
+{
+	__uart_port_unlock_irqrestore(&amba_ports[co->index]->port, flags);
+}
+
+static void
+pl011_console_switch_to_nbcon(struct console *co)
+{
+	co->write = NULL;
+	co->write_atomic = pl011_console_write_atomic;
+	co->write_thread = pl011_console_write_thread;
+	co->device_lock = pl011_console_device_lock;
+	co->device_unlock = pl011_console_device_unlock;
+	co->flags = CON_PRINTBUFFER | CON_ANYTIME | CON_NBCON;
+	pr_info("Serial: switched to nbcon\n");
 }
 
 static struct uart_driver amba_reg;
@@ -2737,6 +2846,10 @@ static int pl011_register_port(struct uart_amba_port *uap)
 	pl011_write(0xffff, uap, REG_ICR);
 
 	if (!amba_reg.state) {
+		/* Replaces the console descriptor if NBCON is selected. */
+		if (amba_reg.cons && use_nbcon)
+			pl011_console_switch_to_nbcon(amba_reg.cons);
+
 		ret = uart_register_driver(&amba_reg);
 		if (ret < 0) {
 			dev_err(uap->port.dev,
