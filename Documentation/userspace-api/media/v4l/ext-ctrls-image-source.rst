@@ -141,3 +141,15 @@ Image Source Control IDs
     * - V4L2_CFA_PATTERN_MONO
       - Monochromatic sensor, no CFA pattern.
       - 0x00010000
+
+``V4L2_CID_CFA_PATTERN_FLIP (bitmask)``
+    This control determines whether the horizontal or vertical flipping controls
+    (V4L2_CID_HFLIP and V4L2_CID_VFLIP) have an effect on the pixel order of the
+    output color pattern. Macros ``V4L2_CFA_PATTERN_FLIP_HORIZONTAL`` and
+    ``V4L2_CFA_PATTERN_FLIP_VERTICAL`` define bitmasks for both bits. If either
+    horizontal or vertical bit is set, the readout pattern order is that of the
+    reversed readout. ``V4L2_CFA_PATTERN_FLIP_BOTH`` for setting both
+    ``V4L2_CFA_PATTERN_FLIP_HORIZONTAL`` and ``V4L2_CFA_PATTERN_FLIP_VERTICAL``
+    is provided as well.
+
+    This is a read-only control.
