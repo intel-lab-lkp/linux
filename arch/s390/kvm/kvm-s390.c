@@ -4925,7 +4925,9 @@ static int vcpu_post_run_handle_fault(struct kvm_vcpu *vcpu)
 			 * This allows ucontrol VMs to use the normal fault
 			 * resolution path, like normal VMs.
 			 */
-			gaddr_tmp = gmap_translate(vcpu->arch.gmap, gaddr);
+			mmap_read_lock(vcpu->arch.gmap->mm);
+			gaddr_tmp = __gmap_translate(vcpu->arch.gmap, gaddr);
+			mmap_read_unlock(vcpu->arch.gmap->mm);
 			if (gaddr_tmp == -EFAULT) {
 				vcpu->run->exit_reason = KVM_EXIT_S390_UCONTROL;
 				vcpu->run->s390_ucontrol.trans_exc_code = gaddr;
