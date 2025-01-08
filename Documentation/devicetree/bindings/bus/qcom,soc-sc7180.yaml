@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bus/qcom,soc-sc7180.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm SC7180 SoC
+
+maintainers:
+  - Bjorn Andersson <andersson@kernel.org>
+  - Konrad Dybcio <konradybcio@kernel.org>
+
+description:
+  Qualcomm's SC7180 System on a Chip (SoC).
+
+properties:
+  compatible:
+    items:
+      - const: qcom,soc-sc7180
+      - const: simple-bus
+
+  '#address-cells':
+    const: 2
+
+  '#size-cells':
+    const: 2
+
+  clock-controller@100000:
+    $ref: /schemas/clock/qcom,gcc-sc7180.yaml#
+
+  watchdog@17c10000:
+    $ref: /schemas/watchdog/qcom-wdt.yaml#
+
+required:
+  - compatible
+  - '#address-cells'
+  - '#size-cells'
+  - clock-controller@100000
+  - watchdog@17c10000
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        compatible = "qcom,soc-sc7180", "simple-bus";
+
+        // TODO: Is it possible to ignore the details?
+        clock-controller@100000 {
+          compatible = "qcom,gcc-sc7180";
+          reg = <0 0x00100000 0 0x1f0000>;
+          clocks = <&rpmhcc_RPMH_CXO_CLK>,
+                   <&rpmhcc_RPMH_CXO_CLK_A>,
+                   <&sleep_clk>;
+          clock-names = "bi_tcxo", "bi_tcxo_ao", "sleep_clk";
+          #clock-cells = <1>;
+          #reset-cells = <1>;
+          #power-domain-cells = <1>;
+          power-domains = <&rpmhpd_SC7180_CX>;
+        };
+
+        watchdog@17c10000 {
+          compatible = "qcom,apss-wdt-sc7180", "qcom,kpss-wdt";
+          reg = <0 0x17c10000 0 0x1000>;
+          clocks = <&sleep_clk>;
+          interrupts = <GIC_SPI 0 IRQ_TYPE_EDGE_RISING>;
+        };
+    };
+
+...
