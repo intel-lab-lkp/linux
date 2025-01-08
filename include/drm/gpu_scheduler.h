@@ -386,6 +386,9 @@ struct drm_sched_job {
 	ktime_t                         submit_ts;
 };
 
+#define to_drm_sched_job(sched_job)		\
+		container_of((sched_job), struct drm_sched_job, queue_node)
+
 static inline bool drm_sched_invalidate_job(struct drm_sched_job *s_job,
 					    int threshold)
 {
@@ -547,6 +550,9 @@ int drm_sched_init(struct drm_gpu_scheduler *sched,
 		   atomic_t *score, const char *name, struct device *dev);
 
 void drm_sched_fini(struct drm_gpu_scheduler *sched);
+bool drm_sched_can_queue(struct drm_gpu_scheduler *sched,
+			 struct drm_sched_entity *entity);
+
 int drm_sched_job_init(struct drm_sched_job *job,
 		       struct drm_sched_entity *entity,
 		       u32 credits, void *owner);
@@ -586,6 +592,9 @@ bool drm_sched_dependency_optimized(struct dma_fence* fence,
 				    struct drm_sched_entity *entity);
 void drm_sched_fault(struct drm_gpu_scheduler *sched);
 
+void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
+		       struct drm_sched_rq *rq);
+
 struct drm_gpu_scheduler *
 drm_sched_rq_add_entity(struct drm_sched_rq *rq,
 			struct drm_sched_entity *entity,
@@ -595,6 +604,9 @@ void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
 
 void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
 			     struct drm_sched_entity *entity);
+struct drm_sched_entity *
+drm_sched_rq_select_entity(struct drm_gpu_scheduler *sched,
+			   struct drm_sched_rq *rq);
 
 int drm_sched_entity_init(struct drm_sched_entity *entity,
 			  enum drm_sched_priority priority,
