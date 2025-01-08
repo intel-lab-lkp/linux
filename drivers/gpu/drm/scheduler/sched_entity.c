@@ -71,6 +71,8 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 	entity->guilty = guilty;
 	entity->num_sched_list = num_sched_list;
 	entity->priority = priority;
+	entity->rq_priority = drm_sched_policy == DRM_SCHED_POLICY_DEADLINE ?
+			      DRM_SCHED_PRIORITY_KERNEL : priority;
 	/*
 	 * It's perfectly valid to initialize an entity without having a valid
 	 * scheduler attached. It's just not valid to use the scheduler before it
@@ -87,17 +89,23 @@ int drm_sched_entity_init(struct drm_sched_entity *entity,
 		 */
 		pr_warn("%s: called with uninitialized scheduler\n", __func__);
 	} else if (num_sched_list) {
-		/* The "priority" of an entity cannot exceed the number of run-queues of a
-		 * scheduler. Protect against num_rqs being 0, by converting to signed. Choose
-		 * the lowest priority available.
+		enum drm_sched_priority p = entity->priority;
+
+		/*
+		 * The "priority" of an entity cannot exceed the number of
+		 * run-queues of a scheduler. Protect against num_rqs being 0,
+		 * by converting to signed. Choose the lowest priority
+		 * available.
 		 */
-		if (entity->priority >= sched_list[0]->num_rqs) {
-			drm_err(sched_list[0], "entity with out-of-bounds priority:%u num_rqs:%u\n",
-				entity->priority, sched_list[0]->num_rqs);
-			entity->priority = max_t(s32, (s32) sched_list[0]->num_rqs - 1,
-						 (s32) DRM_SCHED_PRIORITY_KERNEL);
+		if (p >= sched_list[0]->num_user_rqs) {
+			drm_err(sched_list[0], "entity with out-of-bounds priority:%u num_user_rqs:%u\n",
+				p, sched_list[0]->num_user_rqs);
+			p = max_t(s32,
+				 (s32)sched_list[0]->num_user_rqs - 1,
+				 (s32)DRM_SCHED_PRIORITY_KERNEL);
+			entity->priority = p;
 		}
-		entity->rq = sched_list[0]->sched_rq[entity->priority];
+		entity->rq = sched_list[0]->sched_rq[entity->rq_priority];
 	}
 
 	init_completion(&entity->entity_idle);
@@ -402,6 +410,27 @@ void drm_sched_entity_set_priority(struct drm_sched_entity *entity,
 }
 EXPORT_SYMBOL(drm_sched_entity_set_priority);
 
+static ktime_t
+__drm_sched_entity_get_job_deadline(struct drm_sched_entity *entity,
+				    ktime_t submit_ts)
+{
+	static const unsigned int d_us[] = {
+		[DRM_SCHED_PRIORITY_KERNEL] =    100,
+		[DRM_SCHED_PRIORITY_HIGH]   =   1000,
+		[DRM_SCHED_PRIORITY_NORMAL] =   5000,
+		[DRM_SCHED_PRIORITY_LOW]    = 100000,
+	};
+
+	return ktime_add_us(submit_ts, d_us[entity->priority]);
+}
+
+ktime_t
+drm_sched_entity_get_job_deadline(struct drm_sched_entity *entity,
+				  struct drm_sched_job *job)
+{
+	return __drm_sched_entity_get_job_deadline(entity, job->submit_ts);
+}
+
 /*
  * Add a callback to the current dependency of the entity to wake up the
  * scheduler when the entity becomes available.
@@ -546,7 +575,7 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
 
 	spin_lock(&entity->lock);
 	sched = drm_sched_pick_best(entity->sched_list, entity->num_sched_list);
-	rq = sched ? sched->sched_rq[entity->priority] : NULL;
+	rq = sched ? sched->sched_rq[entity->rq_priority] : NULL;
 	if (rq != entity->rq) {
 		drm_sched_rq_remove_entity(entity->rq, entity);
 		entity->rq = rq;
@@ -587,6 +616,10 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 	/* first job wakes up scheduler */
 	if (first) {
 		struct drm_gpu_scheduler *sched;
+
+		if (drm_sched_policy == DRM_SCHED_POLICY_DEADLINE)
+			submit_ts = __drm_sched_entity_get_job_deadline(entity,
+									submit_ts);
 
 		sched = drm_sched_rq_add_entity(entity->rq, entity, submit_ts);
 		if (sched)

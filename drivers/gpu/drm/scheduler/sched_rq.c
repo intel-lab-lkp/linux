@@ -151,7 +151,10 @@ void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
 	if (next_job) {
 		ktime_t ts;
 
-		if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
+		if (drm_sched_policy == DRM_SCHED_POLICY_DEADLINE)
+			ts = drm_sched_entity_get_job_deadline(entity,
+							       next_job);
+		else if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
 			ts = next_job->submit_ts;
 		else
 			ts = drm_sched_rq_get_rr_deadline(rq);
