@@ -59,6 +59,7 @@
 #define LOCAL_IRQS 32
 #define VCPU_IRQS_MAX_BUF (sizeof(struct kvm_s390_irq) * \
 			   (KVM_MAX_VCPUS + LOCAL_IRQS))
+#define UCONTROL_SLOT_SIZE SZ_4T
 
 const struct _kvm_stats_desc kvm_vm_stats_desc[] = {
 	KVM_GENERIC_VM_STATS(),
@@ -3326,6 +3327,23 @@ void kvm_arch_free_vm(struct kvm *kvm)
 	__kvm_arch_free_vm(kvm);
 }
 
+static void kvm_s390_ucontrol_ensure_memslot(struct kvm *kvm, unsigned long addr)
+{
+	struct kvm_userspace_memory_region2 region = {
+		.slot = addr / UCONTROL_SLOT_SIZE,
+		.memory_size = UCONTROL_SLOT_SIZE,
+		.guest_phys_addr = ALIGN_DOWN(addr, UCONTROL_SLOT_SIZE),
+		.userspace_addr = ALIGN_DOWN(addr, UCONTROL_SLOT_SIZE),
+	};
+	struct kvm_memory_slot *slot;
+
+	mutex_lock(&kvm->slots_lock);
+	slot = gfn_to_memslot(kvm, addr);
+	if (!slot)
+		__kvm_set_memory_region(kvm, &region);
+	mutex_unlock(&kvm->slots_lock);
+}
+
 int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 {
 	gfp_t alloc_flags = GFP_KERNEL_ACCOUNT;
@@ -3430,6 +3448,9 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 	if (type & KVM_VM_S390_UCONTROL) {
 		kvm->arch.gmap = NULL;
 		kvm->arch.mem_limit = KVM_S390_NO_MEM_LIMIT;
+		/* pre-initialize a bunch of memslots; the amount is arbitrary */
+		for (i = 0; i < 32; i++)
+			kvm_s390_ucontrol_ensure_memslot(kvm, i * UCONTROL_SLOT_SIZE);
 	} else {
 		if (sclp.hamax == U64_MAX)
 			kvm->arch.mem_limit = TASK_SIZE_MAX;
@@ -5704,6 +5725,7 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 #ifdef CONFIG_KVM_S390_UCONTROL
 	case KVM_S390_UCAS_MAP: {
 		struct kvm_s390_ucas_mapping ucasmap;
+		unsigned long a;
 
 		if (copy_from_user(&ucasmap, argp, sizeof(ucasmap))) {
 			r = -EFAULT;
@@ -5715,6 +5737,11 @@ long kvm_arch_vcpu_ioctl(struct file *filp,
 			break;
 		}
 
+		a = ALIGN_DOWN(ucasmap.user_addr, UCONTROL_SLOT_SIZE);
+		while (a < ucasmap.user_addr + ucasmap.length) {
+			kvm_s390_ucontrol_ensure_memslot(vcpu->kvm, a);
+			a += UCONTROL_SLOT_SIZE;
+		}
 		r = gmap_map_segment(vcpu->arch.gmap, ucasmap.user_addr,
 				     ucasmap.vcpu_addr, ucasmap.length);
 		break;
@@ -5852,10 +5879,18 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 				   struct kvm_memory_slot *new,
 				   enum kvm_mr_change change)
 {
-	gpa_t size;
+	gpa_t size = new->npages * PAGE_SIZE;
 
-	if (kvm_is_ucontrol(kvm))
-		return -EINVAL;
+	if (kvm_is_ucontrol(kvm)) {
+		if (change != KVM_MR_CREATE || new->flags)
+			return -EINVAL;
+		if (new->userspace_addr != new->base_gfn * PAGE_SIZE)
+			return -EINVAL;
+		if (!IS_ALIGNED(new->userspace_addr | size, UCONTROL_SLOT_SIZE))
+			return -EINVAL;
+		if (new->id != new->userspace_addr / UCONTROL_SLOT_SIZE)
+			return -EINVAL;
+	}
 
 	/* When we are protected, we should not change the memory slots */
 	if (kvm_s390_pv_get_handle(kvm))
@@ -5872,7 +5907,6 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 		if (new->userspace_addr & 0xffffful)
 			return -EINVAL;
 
-		size = new->npages * PAGE_SIZE;
 		if (size & 0xffffful)
 			return -EINVAL;
 
