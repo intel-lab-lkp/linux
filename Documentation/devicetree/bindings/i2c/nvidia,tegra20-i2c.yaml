@@ -80,6 +80,12 @@ properties:
           support for 64 KiB transactions whereas earlier chips supported no
           more than 4 KiB per transactions.
         const: nvidia,tegra194-i2c
+      - description: |
+          Tegra264 has 17 generic I2C controllers, two of which are in the AON
+          (always-on) partition of the SoC. In addition to the features from
+          T194, a MUTEX register is added to support use of the same I2C
+          instance across multiple firmware.
+        const: nvidia,tegra264-i2c
 
   reg:
     maxItems: 1
