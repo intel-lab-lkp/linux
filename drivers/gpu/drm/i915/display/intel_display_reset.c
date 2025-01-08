@@ -15,9 +15,7 @@
 
 bool intel_display_gpu_reset_clobbers_display(struct intel_display *display)
 {
-	struct drm_i915_private *i915 = to_i915(display->drm);
-
-	return INTEL_INFO(i915)->gpu_reset_clobbers_display;
+	return DISPLAY_INFO(display)->gpu_reset_clobbers_display;
 }
 
 static bool gpu_reset_clobbers_display(struct intel_display *display)

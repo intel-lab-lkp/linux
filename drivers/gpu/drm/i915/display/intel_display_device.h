@@ -124,6 +124,7 @@ struct intel_display_platforms {
 #define DEV_INFO_DISPLAY_FOR_EACH_FLAG(func) \
 	/* Keep in alphabetical order */ \
 	func(cursor_needs_physical); \
+	func(gpu_reset_clobbers_display); \
 	func(has_cdclk_crawl); \
 	func(has_cdclk_squash); \
 	func(has_ddi); \
