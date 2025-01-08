@@ -2363,6 +2363,52 @@ static int hpage_collapse_scan_file(struct mm_struct *mm, unsigned long addr,
 }
 #endif
 
+/*
+ * Try to collapse a single PMD starting at a PMD aligned addr, and return
+ * the results.
+ */
+static int khugepaged_collapse_single_pmd(unsigned long addr, struct mm_struct *mm,
+				   struct vm_area_struct *vma, bool *mmap_locked,
+				   struct collapse_control *cc)
+{
+	int result = SCAN_FAIL;
+	unsigned long tva_flags = cc->is_khugepaged ? TVA_ENFORCE_SYSFS : 0;
+
+	if (!*mmap_locked) {
+		mmap_read_lock(mm);
+		*mmap_locked = true;
+	}
+
+	if (thp_vma_allowable_order(vma, vma->vm_flags,
+					tva_flags, PMD_ORDER)) {
+		if (IS_ENABLED(CONFIG_SHMEM) && vma->vm_file) {
+			struct file *file = get_file(vma->vm_file);
+			pgoff_t pgoff = linear_page_index(vma, addr);
+
+			mmap_read_unlock(mm);
+			*mmap_locked = false;
+			result = hpage_collapse_scan_file(mm, addr, file, pgoff,
+							  cc);
+			fput(file);
+			if (result == SCAN_PTE_MAPPED_HUGEPAGE) {
+				mmap_read_lock(mm);
+				if (hpage_collapse_test_exit_or_disable(mm))
+					goto end;
+				result = collapse_pte_mapped_thp(mm, addr,
+								 !cc->is_khugepaged);
+				mmap_read_unlock(mm);
+			}
+		} else {
+			result = hpage_collapse_scan_pmd(mm, vma, addr,
+							 mmap_locked, cc);
+		}
+		if (result == SCAN_SUCCEED || result == SCAN_PMD_MAPPED)
+			++khugepaged_pages_collapsed;
+	}
+end:
+	return result;
+}
+
 static unsigned int khugepaged_scan_mm_slot(unsigned int pages, int *result,
 					    struct collapse_control *cc)
 	__releases(&khugepaged_mm_lock)
