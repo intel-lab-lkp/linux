@@ -6018,21 +6018,22 @@ static int btrfs_read_rr(const struct btrfs_chunk_map *map, int first, int num_s
 {
 	struct stripe_mirror stripes[BTRFS_RAID1_MAX_MIRRORS] = { 0 };
 	struct btrfs_device *device  = map->stripes[first].dev;
-	struct btrfs_fs_devices *fs_devices = device->fs_devices;
+	struct btrfs_fs_info *fs_info = device->fs_devices->fs_info;
 	unsigned int read_cycle;
 	unsigned int total_reads;
 	unsigned int min_reads_per_dev;
 
-	total_reads = percpu_counter_sum(&fs_devices->stats_read_blocks);
-	min_reads_per_dev = READ_ONCE(fs_devices->rr_min_contig_read) >>
-			    fs_devices->fs_info->sectorsize_bits;
+	total_reads = percpu_counter_sum(&fs_info->stats_read_blocks);
+	min_reads_per_dev = READ_ONCE(fs_info->fs_devices->rr_min_contig_read) >>
+						       fs_info->sectorsize_bits;
 
 	for (int index = 0, i = first; i < first + num_stripes; i++) {
 		stripes[index].devid = map->stripes[i].dev->devid;
 		stripes[index].num = i;
 		index++;
 	}
-	sort(stripes, num_stripes, sizeof(struct stripe_mirror), btrfs_cmp_devid, NULL);
+	sort(stripes, num_stripes, sizeof(struct stripe_mirror),
+	     btrfs_cmp_devid, NULL);
 
 	read_cycle = total_reads / min_reads_per_dev;
 	return stripes[read_cycle % num_stripes].num;
