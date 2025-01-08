@@ -3705,14 +3705,11 @@ static int clk_max_rate_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(clk_max_rate);
 
-static void clk_debug_create_one(struct clk_core *core, struct dentry *pdentry)
+static struct dentry *clk_debug_create_one(struct clk_core *core)
 {
 	struct dentry *root;
 
-	if (!core || !pdentry)
-		return;
-
-	root = debugfs_create_dir(core->name, pdentry);
+	root = debugfs_create_dir(core->name, rootdir);
 	core->dentry = root;
 
 	debugfs_create_file("clk_rate", clk_rate_mode, root, core,
@@ -3746,8 +3743,19 @@ static void clk_debug_create_one(struct clk_core *core, struct dentry *pdentry)
 		debugfs_create_file("clk_possible_parents", 0444, root, core,
 				    &possible_parents_fops);
 
+	return root;
+}
+
+static void clk_core_debug_create_one(struct clk_core *core)
+{
+	struct clk_hw *hw = core->hw;
+
+	if (!inited)
+		return;
+
+	core->dentry = clk_debug_create_one(core);
 	if (core->ops->debug_init)
-		core->ops->debug_init(core->hw, core->dentry);
+		core->ops->debug_init(hw, core->dentry);
 }
 
 /**
@@ -3762,8 +3770,7 @@ static void clk_debug_register(struct clk_core *core)
 {
 	mutex_lock(&clk_debug_lock);
 	hlist_add_head(&core->debug_node, &clk_debug_list);
-	if (inited)
-		clk_debug_create_one(core, rootdir);
+	clk_core_debug_create_one(core);
 	mutex_unlock(&clk_debug_lock);
 }
 
@@ -3827,10 +3834,9 @@ static int __init clk_debug_init(void)
 			    &clk_dump_fops);
 
 	mutex_lock(&clk_debug_lock);
-	hlist_for_each_entry(core, &clk_debug_list, debug_node)
-		clk_debug_create_one(core, rootdir);
-
 	inited = 1;
+	hlist_for_each_entry(core, &clk_debug_list, debug_node)
+		clk_core_debug_create_one(core);
 	mutex_unlock(&clk_debug_lock);
 
 	return 0;
