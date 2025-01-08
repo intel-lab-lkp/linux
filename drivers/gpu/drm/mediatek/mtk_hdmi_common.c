@@ -294,9 +294,19 @@ static int mtk_hdmi_dt_parse_pdata(struct mtk_hdmi *hdmi, struct platform_device
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to get clocks\n");
 
+
+	hdmi->irq = platform_get_irq(pdev, 0);
+	if (!hdmi->irq)
+		return hdmi->irq;
+
 	hdmi->regs = device_node_to_regmap(dev->of_node);
 	if (IS_ERR(hdmi->regs))
 		return PTR_ERR(hdmi->regs);
+
+	/* Populate HDMI sub-devices if present */
+	ret = devm_of_platform_populate(&pdev->dev);
+	if (ret)
+		return ret;
 
 	remote = of_graph_get_remote_node(np, 1, 0);
 	if (!remote)
