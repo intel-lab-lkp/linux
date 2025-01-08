@@ -140,6 +140,7 @@ static int audit_filter_exe(const int audit_fd,
 
 	switch (filter->record_type) {
 	case AUDIT_EXE:
+	case AUDIT_EXE_LANDLOCK_DENY:
 		break;
 	default:
 		return -EINVAL;
