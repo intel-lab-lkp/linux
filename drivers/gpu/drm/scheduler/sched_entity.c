@@ -410,7 +410,16 @@ ktime_t
 drm_sched_entity_get_job_deadline(struct drm_sched_entity *entity,
 				  struct drm_sched_job *job)
 {
-	return __drm_sched_entity_get_job_deadline(entity, job->submit_ts);
+	struct drm_sched_fence *s_fence = job->s_fence;
+	struct dma_fence *fence = &s_fence->finished;
+	ktime_t deadline;
+
+	deadline = __drm_sched_entity_get_job_deadline(entity, job->submit_ts);
+	if (test_bit(DRM_SCHED_FENCE_FLAG_HAS_DEADLINE_BIT, &fence->flags) &&
+	    ktime_before(s_fence->deadline, deadline))
+		deadline = s_fence->deadline;
+
+	return deadline;
 }
 
 /*
@@ -579,9 +588,12 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
  */
 void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 {
+	struct drm_sched_fence *s_fence = sched_job->s_fence;
 	struct drm_sched_entity *entity = sched_job->entity;
-	bool first;
+	struct dma_fence *fence = &s_fence->finished;
+	ktime_t fence_deadline;
 	ktime_t submit_ts;
+	bool first;
 
 	trace_drm_sched_job(sched_job, entity);
 	atomic_inc(entity->rq->sched->score);
@@ -593,6 +605,11 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 	 * Make sure to set the submit_ts first, to avoid a race.
 	 */
 	sched_job->submit_ts = submit_ts = ktime_get();
+	if (test_bit(DRM_SCHED_FENCE_FLAG_HAS_DEADLINE_BIT, &fence->flags))
+		fence_deadline = s_fence->deadline;
+	else
+		fence_deadline = KTIME_MAX;
+
 	first = spsc_queue_push(&entity->job_queue, &sched_job->queue_node);
 
 	/* first job wakes up scheduler */
@@ -601,6 +618,9 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 
 		submit_ts = __drm_sched_entity_get_job_deadline(entity,
 								submit_ts);
+		if (ktime_before(fence_deadline, submit_ts))
+			submit_ts = fence_deadline;
+
 		sched = drm_sched_rq_add_entity(entity->rq, entity, submit_ts);
 		if (sched)
 			drm_sched_wakeup(sched);
