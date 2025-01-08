@@ -40,21 +40,17 @@ int __init efi_memattr_init(void)
 		goto unmap;
 	}
 
-
 	/*
-	 * Sanity check: the Memory Attributes Table contains up to 3 entries
-	 * for each entry of type EfiRuntimeServicesCode in the EFI memory map.
-	 * So if the size of the table exceeds 3x the size of the entire EFI
-	 * memory map, there is clearly something wrong, and the table should
-	 * just be ignored altogether.
+	 * Sanity check: the Memory Attributes Table desc_size and
+	 * efi.memmap.desc_size should match.
 	 */
-	size = tbl->num_entries * tbl->desc_size;
-	if (size > 3 * efi.memmap.nr_map * efi.memmap.desc_size) {
-		pr_warn(FW_BUG "Corrupted EFI Memory Attributes Table detected! (version == %u, desc_size == %u, num_entries == %u)\n",
-			tbl->version, tbl->desc_size, tbl->num_entries);
+	if (efi.memmap.desc_size != tbl->desc_size) {
+		pr_warn(FW_BUG "Corrupted EFI Memory Attributes Table detected! (version == %u, table desc_size == %u, efi.memmap.desc_size == %lu, table num_entries == %u)\n",
+			tbl->version, tbl->desc_size, efi.memmap.desc_size, tbl->num_entries);
 		goto unmap;
 	}
 
+	size = tbl->num_entries * tbl->desc_size;
 	tbl_size = sizeof(*tbl) + size;
 	memblock_reserve(efi_mem_attr_table, tbl_size);
 	set_bit(EFI_MEM_ATTR, &efi.flags);
