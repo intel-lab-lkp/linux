@@ -215,6 +215,8 @@ static int symbol_valid(const struct sym_entry *s)
 		if (string_starts_with(name, "__start_") ||
 		    string_starts_with(name, "__stop_"))
 			return 1;
+		if (!strcmp(name, "_edata"))
+			return 1;
 
 		if (symbol_in_range(s, text_ranges,
 				    ARRAY_SIZE(text_ranges)) == 0)
