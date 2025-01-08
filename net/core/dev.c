@@ -11415,6 +11415,11 @@ struct net_device *alloc_netdev_dummy(int sizeof_priv)
 }
 EXPORT_SYMBOL_GPL(alloc_netdev_dummy);
 
+static bool from_cleanup_net(void)
+{
+	return current == cleanup_net_task;
+}
+
 /**
  *	synchronize_net -  Synchronize with packet receive processing
  *
@@ -11424,7 +11429,7 @@ EXPORT_SYMBOL_GPL(alloc_netdev_dummy);
 void synchronize_net(void)
 {
 	might_sleep();
-	if (rtnl_is_locked())
+	if (from_cleanup_net() || rtnl_is_locked())
 		synchronize_rcu_expedited();
 	else
 		synchronize_rcu();
