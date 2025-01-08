@@ -414,8 +414,8 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 
 	xe_irq_suspend(xe);
 
-	if (xe->d3cold.allowed)
-		xe_display_pm_suspend_late(xe);
+	xe_display_pm_runtime_suspend_late(xe);
+
 out:
 	if (err)
 		xe_display_pm_runtime_resume(xe);
@@ -738,9 +738,6 @@ void xe_pm_d3cold_allowed_toggle(struct xe_device *xe)
 		xe->d3cold.allowed = false;
 
 	mutex_unlock(&xe->d3cold.lock);
-
-	drm_dbg(&xe->drm,
-		"d3cold: allowed=%s\n", str_yes_no(xe->d3cold.allowed));
 }
 
 /**
