@@ -146,18 +146,19 @@ static __always_inline bool drm_sched_entity_compare_before(struct rb_node *a,
 	return ktime_before(ent_a->oldest_job_waiting, ent_b->oldest_job_waiting);
 }
 
-void drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
-				     struct drm_sched_rq *rq)
+static void __drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
+					      struct drm_sched_rq *rq)
 {
-	if (!RB_EMPTY_NODE(&entity->rb_tree_node)) {
-		rb_erase_cached(&entity->rb_tree_node, &rq->rb_tree_root);
-		RB_CLEAR_NODE(&entity->rb_tree_node);
-	}
+	lockdep_assert_held(&entity->lock);
+	lockdep_assert_held(&rq->lock);
+
+	rb_erase_cached(&entity->rb_tree_node, &rq->rb_tree_root);
+	RB_CLEAR_NODE(&entity->rb_tree_node);
 }
 
-void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
-				     struct drm_sched_rq *rq,
-				     ktime_t ts)
+static void __drm_sched_rq_add_fifo_locked(struct drm_sched_entity *entity,
+					   struct drm_sched_rq *rq,
+					   ktime_t ts)
 {
 	/*
 	 * Both locks need to be grabbed, one to protect from entity->rq change
@@ -166,8 +167,6 @@ void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
 	 */
 	lockdep_assert_held(&entity->lock);
 	lockdep_assert_held(&rq->lock);
-
-	drm_sched_rq_remove_fifo_locked(entity, rq);
 
 	entity->oldest_job_waiting = ts;
 
@@ -192,6 +191,16 @@ static void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
 	rq->sched = sched;
 }
 
+static ktime_t
+drm_sched_rq_get_rr_deadline(struct drm_sched_rq *rq)
+{
+	lockdep_assert_held(&rq->lock);
+
+	rq->rr_deadline = ktime_add_ns(rq->rr_deadline, 1);
+
+	return rq->rr_deadline;
+}
+
 /**
  * drm_sched_rq_add_entity - add an entity
  *
@@ -199,18 +208,42 @@ static void drm_sched_rq_init(struct drm_gpu_scheduler *sched,
  * @entity: scheduler entity
  *
  * Adds a scheduler entity to the run queue.
+ *
+ * Returns a DRM scheduler pre-selected to handle this entity.
  */
-void drm_sched_rq_add_entity(struct drm_sched_rq *rq,
-			     struct drm_sched_entity *entity)
+struct drm_gpu_scheduler *
+drm_sched_rq_add_entity(struct drm_sched_rq *rq,
+			struct drm_sched_entity *entity,
+			ktime_t ts)
 {
-	lockdep_assert_held(&entity->lock);
-	lockdep_assert_held(&rq->lock);
+	struct drm_gpu_scheduler *sched;
 
-	if (!list_empty(&entity->list))
-		return;
+	if (entity->stopped) {
+		DRM_ERROR("Trying to push to a killed entity\n");
+		return NULL;
+	}
 
-	atomic_inc(rq->sched->score);
-	list_add_tail(&entity->list, &rq->entities);
+	spin_lock(&entity->lock);
+	spin_lock(&rq->lock);
+
+	sched = rq->sched;
+
+	if (!list_empty(&entity->list)) {
+		atomic_inc(sched->score);
+		list_add_tail(&entity->list, &rq->entities);
+	}
+
+	if (drm_sched_policy == DRM_SCHED_POLICY_RR)
+		ts = drm_sched_rq_get_rr_deadline(rq);
+
+	if (!RB_EMPTY_NODE(&entity->rb_tree_node))
+		__drm_sched_rq_remove_fifo_locked(entity, rq);
+	__drm_sched_rq_add_fifo_locked(entity, rq, ts);
+
+	spin_unlock(&rq->lock);
+	spin_unlock(&entity->lock);
+
+	return sched;
 }
 
 /**
@@ -234,9 +267,33 @@ void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
 	atomic_dec(rq->sched->score);
 	list_del_init(&entity->list);
 
-	drm_sched_rq_remove_fifo_locked(entity, rq);
+	if (!RB_EMPTY_NODE(&entity->rb_tree_node))
+		__drm_sched_rq_remove_fifo_locked(entity, rq);
 
 	spin_unlock(&rq->lock);
+}
+
+void drm_sched_rq_pop_entity(struct drm_sched_rq *rq,
+			     struct drm_sched_entity *entity)
+{
+	struct drm_sched_job *next_job;
+
+	spin_lock(&entity->lock);
+	spin_lock(&rq->lock);
+	__drm_sched_rq_remove_fifo_locked(entity, rq);
+	next_job = to_drm_sched_job(spsc_queue_peek(&entity->job_queue));
+	if (next_job) {
+		ktime_t ts;
+
+		if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
+			ts = next_job->submit_ts;
+		else
+			ts = drm_sched_rq_get_rr_deadline(rq);
+
+		__drm_sched_rq_add_fifo_locked(entity, rq, ts);
+	}
+	spin_unlock(&rq->lock);
+	spin_unlock(&entity->lock);
 }
 
 /**
