@@ -40,6 +40,9 @@ obj-$(CONFIG_VEXPRESS_CONFIG)	+= vexpress-config.o
 
 obj-$(CONFIG_DA8XX_MSTPRI)	+= da8xx-mstpri.o
 
+# SoC specific drivers
+obj-y				+= qcom/
+
 # Must be last for driver registration ordering
 obj-$(CONFIG_OF_SIMPLE_BUS)	+= simple-bus.o
 

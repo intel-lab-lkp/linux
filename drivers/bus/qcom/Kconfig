@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menuconfig QCOM_SOC_BUS
+	tristate "Qualcomm SoC Bus Drivers"
+	depends on ARCH_QCOM || COMPILE_TEST
+
+if QCOM_SOC_BUS
+
+config QCOM_SOC_BUS_SC7180
+	tristate "Qualcomm SC7180 SoC Bus"
+	depends on ALLOW_SIMPLE_BUS_OVERRIDE
+	depends on OF_SIMPLE_BUS || !OF_SIMPLE_BUS
+	help
+	  Support for the Qualcomm SC7180 SoC bus.
+
+endif

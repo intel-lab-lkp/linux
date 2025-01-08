@@ -284,6 +284,9 @@ config OF_SIMPLE_BUS
 	  symbol if ALLOW_SIMPLE_BUS_OVERRIDE is set and there isn't another
 	  driver for the simple-bus compatible.
 
+# SoC specific drivers
+source "drivers/bus/qcom/Kconfig"
+
 source "drivers/bus/fsl-mc/Kconfig"
 source "drivers/bus/mhi/Kconfig"
 
