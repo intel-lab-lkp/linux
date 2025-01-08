@@ -1040,8 +1040,13 @@ static void vgic_v3_queue_sgi(struct kvm_vcpu *vcpu, u32 sgi, bool allow_group1)
 			irq->pending_latch = true;
 			vgic_queue_irq_unlock(vcpu->kvm, irq, flags);
 		} else {
-			/* HW SGI? Ask the GIC to inject it */
 			int err;
+
+			/*
+                        * With GICv4.1, vSGI can be directly injected.
+                        * So let's pretend that they are HW interrupts,
+                        * tied to a host IRQ.
+                        */
 			err = irq_set_irqchip_state(irq->host_irq,
 						    IRQCHIP_STATE_PENDING,
 						    true);
