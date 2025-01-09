@@ -688,6 +688,8 @@ static struct resource early_bus_ranges[] = {
 	{ .start = 0x4a300000, .end = 0x4a300000 + 0x30000,  },
 	/* omap5 and dra7 l4_wkup without dra7 dcan segment */
 	{ .start = 0x4ae00000, .end = 0x4ae00000 + 0x30000,  },
+	/* am62 wkup_uart0 */
+	{ .start = 0x2b300000, .end = 0x2b300000 + 0x100000, },
 };
 
 static atomic_t sysc_defer = ATOMIC_INIT(10);
