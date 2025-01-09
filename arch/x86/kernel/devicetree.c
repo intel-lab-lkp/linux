@@ -47,6 +47,15 @@ static struct of_device_id __initdata ce4100_ids[] = {
 	{},
 };
 
+static bool falconfalls_compatible(void)
+{
+	if (!of_have_populated_dt())
+		return false;
+
+	return of_flat_dt_is_compatible(
+			of_get_flat_dt_root(), "intel,falconfalls");
+}
+
 static int __init add_bus_probe(void)
 {
 	if (!of_have_populated_dt())
@@ -259,12 +268,20 @@ static void __init dtb_ioapic_setup(void)
 
 	for_each_compatible_node(dn, NULL, "intel,ce4100-ioapic")
 		dtb_add_ioapic(dn);
+	if (!nr_ioapics && falconfalls_compatible())
+		pr_err("Error: No information about IO-APIC in OF.\n");
 
-	if (nr_ioapics) {
+	if (nr_ioapics)
 		of_ioapic = 1;
-		return;
-	}
-	pr_err("Error: No information about IO-APIC in OF.\n");
+
+	/*
+	 * At this point, it might so happen that no IO-APIC has been discovered.
+	 *
+	 * A general assumption would be that most x86 boards have IO-APIC,
+	 * yet that is not something the kernel should report as a firmware
+	 * bug unconditionally as there are setups (VMs would be an easy example)
+	 * that are able to employ other means of interrupt routing.
+	 */
 }
 #else
 static void __init dtb_ioapic_setup(void) {}
