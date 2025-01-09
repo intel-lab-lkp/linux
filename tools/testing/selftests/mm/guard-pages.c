@@ -142,7 +142,7 @@ TEST_F(guard_pages, basic)
 	const unsigned long NUM_PAGES = 10;
 	const unsigned long page_size = self->page_size;
 	char *ptr;
-	int i;
+	unsigned int i;
 
 	ptr = mmap(NULL, NUM_PAGES * page_size, PROT_READ | PROT_WRITE,
 		   MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -1044,7 +1044,7 @@ TEST_F(guard_pages, fork_cow)
 	const unsigned long page_size = self->page_size;
 	char *ptr;
 	pid_t pid;
-	int i;
+	unsigned int i;
 
 	/* Map 10 pages. */
 	ptr = mmap(NULL, 10 * page_size, PROT_READ | PROT_WRITE,
