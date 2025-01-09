@@ -349,6 +349,11 @@ static inline int kvmppc_e500_shadow_map(struct kvmppc_vcpu_e500 *vcpu_e500,
 	 * pointer through from the first lookup.
 	 */
 	slot = gfn_to_memslot(vcpu_e500->vcpu.kvm, gfn);
+	if (!slot) {
+		ret = -EAGAIN;
+		goto out;
+	}
+
 	hva = gfn_to_hva_memslot(slot, gfn);
 
 	if (tlbsel == 1) {
