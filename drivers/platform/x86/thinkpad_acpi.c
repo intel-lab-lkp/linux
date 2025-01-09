@@ -10538,9 +10538,19 @@ unlock:
 	return err;
 }
 
+static int dytc_profile_choices(struct platform_profile_handler *pprof)
+{
+	set_bit(PLATFORM_PROFILE_LOW_POWER, pprof->choices);
+	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+
+	return 0;
+}
+
 static const struct platform_profile_ops dytc_profile_ops = {
 	.profile_get = dytc_profile_get,
 	.profile_set = dytc_profile_set,
+	.choices = dytc_profile_choices,
 };
 
 static struct platform_profile_handler dytc_profile = {
@@ -10583,11 +10593,6 @@ static void dytc_profile_refresh(void)
 static int tpacpi_dytc_profile_init(struct ibm_init_struct *iibm)
 {
 	int err, output;
-
-	/* Setup supported modes */
-	set_bit(PLATFORM_PROFILE_LOW_POWER, dytc_profile.choices);
-	set_bit(PLATFORM_PROFILE_BALANCED, dytc_profile.choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, dytc_profile.choices);
 
 	err = dytc_command(DYTC_CMD_QUERY, &output);
 	if (err)

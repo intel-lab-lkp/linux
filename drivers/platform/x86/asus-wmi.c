@@ -3852,9 +3852,19 @@ static int asus_wmi_platform_profile_set(struct platform_profile_handler *pprof,
 	return throttle_thermal_policy_write(asus);
 }
 
+static int asus_wmi_platform_profile_choices(struct platform_profile_handler *pprof)
+{
+	set_bit(PLATFORM_PROFILE_QUIET, pprof->choices);
+	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+
+	return 0;
+}
+
 static const struct platform_profile_ops asus_wmi_platform_profile_ops = {
 	.profile_get = asus_wmi_platform_profile_get,
 	.profile_set = asus_wmi_platform_profile_set,
+	.choices = asus_wmi_platform_profile_choices,
 };
 
 static int platform_profile_setup(struct asus_wmi *asus)
@@ -3884,12 +3894,6 @@ static int platform_profile_setup(struct asus_wmi *asus)
 	asus->platform_profile_handler.name = "asus-wmi";
 	asus->platform_profile_handler.dev = dev;
 	asus->platform_profile_handler.ops = &asus_wmi_platform_profile_ops;
-
-	set_bit(PLATFORM_PROFILE_QUIET, asus->platform_profile_handler.choices);
-	set_bit(PLATFORM_PROFILE_BALANCED,
-		asus->platform_profile_handler.choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE,
-		asus->platform_profile_handler.choices);
 
 	err = platform_profile_register(&asus->platform_profile_handler);
 	if (err == -EEXIST) {

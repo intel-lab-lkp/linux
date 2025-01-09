@@ -464,9 +464,18 @@ int platform_profile_register(struct platform_profile_handler *pprof)
 	int err;
 
 	/* Sanity check the profile handler */
-	if (!pprof || bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST) ||
-	    !pprof->ops->profile_set || !pprof->ops->profile_get) {
+	if (!pprof || !pprof->ops->profile_set || !pprof->ops->profile_get ||
+	    !pprof->ops->choices) {
 		pr_err("platform_profile: handler is invalid\n");
+		return -EINVAL;
+	}
+
+	err = pprof->ops->choices(pprof);
+	if (err < 0)
+		return err;
+
+	if (bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST)) {
+		pr_err("platform_profile: no available profiles\n");
 		return -EINVAL;
 	}
 

@@ -34,6 +34,7 @@ struct platform_profile_ops {
 				enum platform_profile_option *profile);
 	int (*profile_set)(struct platform_profile_handler *pprof,
 				enum platform_profile_option profile);
+	int (*choices)(struct platform_profile_handler *pprof);
 };
 
 struct platform_profile_handler {

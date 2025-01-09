@@ -1900,9 +1900,22 @@ acer_predator_v4_platform_profile_set(struct platform_profile_handler *pprof,
 	return 0;
 }
 
+static int
+acer_predator_v4_platform_profile_choices(struct platform_profile_handler *pprof)
+{
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, pprof->choices);
+	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
+	set_bit(PLATFORM_PROFILE_QUIET, pprof->choices);
+	set_bit(PLATFORM_PROFILE_LOW_POWER, pprof->choices);
+
+	return 0;
+}
+
 static const struct platform_profile_ops acer_predator_v4_platform_profile_ops = {
 	.profile_get = acer_predator_v4_platform_profile_get,
 	.profile_set = acer_predator_v4_platform_profile_set,
+	.choices = acer_predator_v4_platform_profile_choices,
 };
 
 static int acer_platform_profile_setup(struct platform_device *device)
@@ -1914,17 +1927,6 @@ static int acer_platform_profile_setup(struct platform_device *device)
 		platform_profile_handler.dev = &device->dev;
 		platform_profile_handler.ops =
 			&acer_predator_v4_platform_profile_ops;
-
-		set_bit(PLATFORM_PROFILE_PERFORMANCE,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_BALANCED,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_QUIET,
-			platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_LOW_POWER,
-			platform_profile_handler.choices);
 
 		err = platform_profile_register(&platform_profile_handler);
 		if (err)

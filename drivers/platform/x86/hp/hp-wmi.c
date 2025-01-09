@@ -1488,6 +1488,23 @@ static int platform_profile_victus_set(struct platform_profile_handler *pprof,
 	return 0;
 }
 
+static int hp_wmi_platform_profile_choices(struct platform_profile_handler *pprof)
+{
+	if (is_omen_thermal_profile()) {
+		set_bit(PLATFORM_PROFILE_COOL, pprof->choices);
+	} else if (is_victus_thermal_profile()) {
+		set_bit(PLATFORM_PROFILE_QUIET, pprof->choices);
+	} else {
+		set_bit(PLATFORM_PROFILE_QUIET, pprof->choices);
+		set_bit(PLATFORM_PROFILE_COOL, pprof->choices);
+	}
+
+	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+
+	return 0;
+}
+
 static int omen_powersource_event(struct notifier_block *nb,
 				  unsigned long value,
 				  void *data)
@@ -1568,16 +1585,19 @@ static inline void omen_unregister_powersource_event_handler(void)
 static const struct platform_profile_ops platform_profile_omen_ops = {
 	.profile_get = platform_profile_omen_get,
 	.profile_set = platform_profile_omen_set,
+	.choices = hp_wmi_platform_profile_choices,
 };
 
 static const struct platform_profile_ops platform_profile_victus_ops = {
 	.profile_get = platform_profile_victus_get,
 	.profile_set = platform_profile_victus_set,
+	.choices = hp_wmi_platform_profile_choices,
 };
 
 static const struct platform_profile_ops hp_wmi_platform_profile_ops = {
 	.profile_get = hp_wmi_platform_profile_get,
 	.profile_set = hp_wmi_platform_profile_set,
+	.choices = hp_wmi_platform_profile_choices,
 };
 
 static int thermal_profile_setup(struct platform_device *device)
@@ -1598,8 +1618,6 @@ static int thermal_profile_setup(struct platform_device *device)
 			return err;
 
 		platform_profile_handler.ops = &platform_profile_omen_ops;
-
-		set_bit(PLATFORM_PROFILE_COOL, platform_profile_handler.choices);
 	} else if (is_victus_thermal_profile()) {
 		err = platform_profile_victus_get_ec(&active_platform_profile);
 		if (err < 0)
@@ -1614,8 +1632,6 @@ static int thermal_profile_setup(struct platform_device *device)
 			return err;
 
 		platform_profile_handler.ops = &platform_profile_victus_ops;
-
-		set_bit(PLATFORM_PROFILE_QUIET, platform_profile_handler.choices);
 	} else {
 		tp = thermal_profile_get();
 
@@ -1631,15 +1647,10 @@ static int thermal_profile_setup(struct platform_device *device)
 			return err;
 
 		platform_profile_handler.ops = &hp_wmi_platform_profile_ops;
-
-		set_bit(PLATFORM_PROFILE_QUIET, platform_profile_handler.choices);
-		set_bit(PLATFORM_PROFILE_COOL, platform_profile_handler.choices);
 	}
 
 	platform_profile_handler.name = "hp-wmi";
 	platform_profile_handler.dev = &device->dev;
-	set_bit(PLATFORM_PROFILE_BALANCED, platform_profile_handler.choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, platform_profile_handler.choices);
 
 	err = platform_profile_register(&platform_profile_handler);
 	if (err)

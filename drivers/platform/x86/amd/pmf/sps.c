@@ -387,9 +387,19 @@ static int amd_pmf_profile_set(struct platform_profile_handler *pprof,
 	return 0;
 }
 
+static int amd_pmf_profile_choices(struct platform_profile_handler *pprof)
+{
+	set_bit(PLATFORM_PROFILE_LOW_POWER, pprof->choices);
+	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+
+	return 0;
+}
+
 static const struct platform_profile_ops amd_pmf_profile_ops = {
 	.profile_get = amd_pmf_profile_get,
 	.profile_set = amd_pmf_profile_set,
+	.choices = amd_pmf_profile_choices,
 };
 
 int amd_pmf_init_sps(struct amd_pmf_dev *dev)
@@ -413,11 +423,6 @@ int amd_pmf_init_sps(struct amd_pmf_dev *dev)
 	dev->pprof.name = "amd-pmf";
 	dev->pprof.dev = dev->dev;
 	dev->pprof.ops = &amd_pmf_profile_ops;
-
-	/* Setup supported modes */
-	set_bit(PLATFORM_PROFILE_LOW_POWER, dev->pprof.choices);
-	set_bit(PLATFORM_PROFILE_BALANCED, dev->pprof.choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, dev->pprof.choices);
 
 	/* Create platform_profile structure and register */
 	err = platform_profile_register(&dev->pprof);
