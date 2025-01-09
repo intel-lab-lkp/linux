@@ -33,7 +33,14 @@ OPTIONS
 
 -S::
 --sequential::
-	Run tests one after the other, this is the default mode.
+	Run all tests one after the other. By default "exclusive"
+	tests are run sequentially, but other tests are run in
+	parallel to speed execution.
+
+-r::
+--runs-per-test::
+	Run each test the given number of times, by default once. This
+	option can be useful to determine if a test is flaky.
 
 -F::
 --dont-fork::
