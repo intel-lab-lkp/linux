@@ -273,6 +273,9 @@
 /* End offset of samples */
 #define SQI_INLIERS_END (SQI_INLIERS_START + SQI_INLIERS_NUM)
 
+#define LAN887X_MX_CHIP_TOP_REG_CONTROL1		0xF002
+#define LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN		BIT(8)
+
 #define DRIVER_AUTHOR	"Nisar Sayed <nisar.sayed@microchip.com>"
 #define DRIVER_DESC	"Microchip LAN87XX/LAN937x/LAN887x T1 PHY driver"
 
@@ -1285,6 +1288,15 @@ static int lan887x_phy_init(struct phy_device *phydev)
 						 MCHP_RDS_PTP_PORT_BASE_ADDR);
 		if (IS_ERR(priv->clock))
 			return PTR_ERR(priv->clock);
+
+		/* Enable pin mux for EVT */
+		phy_modify_mmd(phydev, MDIO_MMD_VEND1,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN);
+
+		 /* Initialize pin numbers specific to PEROUT */
+		priv->clock->event_pin = 3;
 
 		priv->init_done = true;
 	}
