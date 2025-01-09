@@ -28,7 +28,7 @@ static void signal_handler(int signal)
 }
 
 /* Touch the memory while it is being madvised() */
-void *touch(void *unused)
+void *touch(void __attribute__((unused)) *unused)
 {
 	char *ptr = (char *)huge_ptr;
 
@@ -41,7 +41,7 @@ void *touch(void *unused)
 	return NULL;
 }
 
-void *madv(void *unused)
+void *madv(void __attribute__((unused)) *unused)
 {
 	usleep(rand() % 10);
 

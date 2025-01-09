@@ -244,7 +244,7 @@ static void *fork_event_consumer(void *data)
 	ready_for_fork = true;
 
 	/* Read until a full msg received */
-	while (uffd_read_msg(args->parent_uffd, &msg));
+	while (uffd_read_msg(&msg));
 
 	if (msg.event != UFFD_EVENT_FORK)
 		err("wrong message: %u\n", msg.event);
@@ -357,7 +357,7 @@ static int pagemap_test_fork(int uffd, bool with_event, bool test_pin)
 	return result;
 }
 
-static void uffd_wp_unpopulated_test(uffd_test_args_t *args)
+static void uffd_wp_unpopulated_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uint64_t value;
 	int pagemap_fd;
@@ -483,8 +483,7 @@ static void uffd_wp_fork_with_event_test(uffd_test_args_t *args)
 	uffd_wp_fork_test_common(args, true);
 }
 
-static void uffd_wp_fork_pin_test_common(uffd_test_args_t *args,
-					 bool with_event)
+static void uffd_wp_fork_pin_test_common(bool with_event)
 {
 	int pagemap_fd;
 	pin_args pin_args = {};
@@ -535,14 +534,14 @@ out:
 	close(pagemap_fd);
 }
 
-static void uffd_wp_fork_pin_test(uffd_test_args_t *args)
+static void uffd_wp_fork_pin_test(uffd_test_args_t __attribute__((unused)) *args)
 {
-	uffd_wp_fork_pin_test_common(args, false);
+	uffd_wp_fork_pin_test_common(false);
 }
 
-static void uffd_wp_fork_pin_with_event_test(uffd_test_args_t *args)
+static void uffd_wp_fork_pin_with_event_test(uffd_test_args_t __attribute__((unused)) *args)
 {
-	uffd_wp_fork_pin_test_common(args, true);
+	uffd_wp_fork_pin_test_common(true);
 }
 
 static void check_memory_contents(char *p)
@@ -627,24 +626,25 @@ static void uffd_minor_test_common(bool test_collapse, bool test_wp)
 		uffd_test_pass();
 }
 
-void uffd_minor_test(uffd_test_args_t *args)
+void uffd_minor_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_minor_test_common(false, false);
 }
 
-void uffd_minor_wp_test(uffd_test_args_t *args)
+void uffd_minor_wp_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_minor_test_common(false, true);
 }
 
-void uffd_minor_collapse_test(uffd_test_args_t *args)
+void uffd_minor_collapse_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_minor_test_common(true, false);
 }
 
 static sigjmp_buf jbuf, *sigbuf;
 
-static void sighndl(int sig, siginfo_t *siginfo, void *ptr)
+static void sighndl(int sig, siginfo_t __attribute__((unused)) *siginfo,
+		    void __attribute__((unused)) *ptr)
 {
 	if (sig == SIGBUS) {
 		if (sigbuf)
@@ -820,12 +820,12 @@ static void uffd_sigbus_test_common(bool wp)
 		uffd_test_pass();
 }
 
-static void uffd_sigbus_test(uffd_test_args_t *args)
+static void uffd_sigbus_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_sigbus_test_common(false);
 }
 
-static void uffd_sigbus_wp_test(uffd_test_args_t *args)
+static void uffd_sigbus_wp_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_sigbus_test_common(true);
 }
@@ -873,12 +873,12 @@ static void uffd_events_test_common(bool wp)
 		uffd_test_pass();
 }
 
-static void uffd_events_test(uffd_test_args_t *args)
+static void uffd_events_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_events_test_common(false);
 }
 
-static void uffd_events_wp_test(uffd_test_args_t *args)
+static void uffd_events_wp_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	uffd_events_test_common(true);
 }
@@ -946,7 +946,7 @@ uffd_register_detect_zeropage(int uffd, void *addr, uint64_t len)
 }
 
 /* exercise UFFDIO_ZEROPAGE */
-static void uffd_zeropage_test(uffd_test_args_t *args)
+static void uffd_zeropage_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	bool has_zeropage;
 	int i;
@@ -1002,7 +1002,7 @@ static void do_uffdio_poison(int uffd, unsigned long offset)
 }
 
 static void uffd_poison_handle_fault(
-	struct uffd_msg *msg, struct uffd_args *args)
+	struct uffd_msg *msg, struct uffd_args __attribute__((unused)) *args)
 {
 	unsigned long offset;
 
@@ -1023,7 +1023,7 @@ static void uffd_poison_handle_fault(
 		do_uffdio_poison(uffd, offset);
 }
 
-static void uffd_poison_test(uffd_test_args_t *targs)
+static void uffd_poison_test(uffd_test_args_t __attribute__((unused)) *targs)
 {
 	pthread_t uffd_mon;
 	char c;
@@ -1114,7 +1114,7 @@ static void uffd_move_pmd_handle_fault(struct uffd_msg *msg,
 }
 
 static void
-uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
+uffd_move_test_common(unsigned long chunk_size,
 		      void (*handle_fault)(struct uffd_msg *msg, struct uffd_args *args))
 {
 	unsigned long nr;
@@ -1206,24 +1206,24 @@ uffd_move_test_common(uffd_test_args_t *targs, unsigned long chunk_size,
 		uffd_test_pass();
 }
 
-static void uffd_move_test(uffd_test_args_t *targs)
+static void uffd_move_test(uffd_test_args_t __attribute__((unused)) *targs)
 {
-	uffd_move_test_common(targs, page_size, uffd_move_handle_fault);
+	uffd_move_test_common(page_size, uffd_move_handle_fault);
 }
 
-static void uffd_move_pmd_test(uffd_test_args_t *targs)
+static void uffd_move_pmd_test(uffd_test_args_t __attribute__((unused)) *targs)
 {
 	if (madvise(area_dst, nr_pages * page_size, MADV_HUGEPAGE))
 		err("madvise(MADV_HUGEPAGE) failure");
-	uffd_move_test_common(targs, read_pmd_pagesize(),
+	uffd_move_test_common(read_pmd_pagesize(),
 			      uffd_move_pmd_handle_fault);
 }
 
-static void uffd_move_pmd_split_test(uffd_test_args_t *targs)
+static void uffd_move_pmd_split_test(uffd_test_args_t __attribute__((unused)) *targs)
 {
 	if (madvise(area_dst, nr_pages * page_size, MADV_NOHUGEPAGE))
 		err("madvise(MADV_NOHUGEPAGE) failure");
-	uffd_move_test_common(targs, read_pmd_pagesize(),
+	uffd_move_test_common(read_pmd_pagesize(),
 			      uffd_move_pmd_handle_fault);
 }
 
