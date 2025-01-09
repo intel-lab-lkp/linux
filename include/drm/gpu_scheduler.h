@@ -445,43 +445,64 @@ struct drm_sched_backend_ops {
 	 * @timedout_job: Called when a job has taken too long to execute,
 	 * to trigger GPU recovery.
 	 *
-	 * This method is called in a workqueue context.
+	 * @sched_job: The job that has timed out
 	 *
-	 * Drivers typically issue a reset to recover from GPU hangs, and this
-	 * procedure usually follows the following workflow:
+	 * Returns:
+	 * - DRM_GPU_SCHED_STAT_NOMINAL, on success, i.e., if the underlying
+	 *   driver has started or completed recovery.
+	 * - DRM_GPU_SCHED_STAT_ENODEV, if the device is no longer
+	 *   available, i.e., has been unplugged.
 	 *
-	 * 1. Stop the scheduler using drm_sched_stop(). This will park the
-	 *    scheduler thread and cancel the timeout work, guaranteeing that
-	 *    nothing is queued while we reset the hardware queue
-	 * 2. Try to gracefully stop non-faulty jobs (optional)
-	 * 3. Issue a GPU reset (driver-specific)
-	 * 4. Re-submit jobs using drm_sched_resubmit_jobs()
+	 * Drivers typically issue a reset to recover from GPU hangs.
+	 * This procedure looks very different depending on whether a firmware
+	 * or a hardware scheduler is being used.
+	 *
+	 * For a FIRMWARE SCHEDULER, each (pseudo-)ring has one scheduler, and
+	 * each scheduler (typically) has one entity. Hence, you typically
+	 * follow those steps:
+	 *
+	 * 1. Stop the scheduler using drm_sched_stop(). This will pause the
+	 *    scheduler workqueues and cancel the timeout work, guaranteeing
+	 *    that nothing is queued while we reset the hardware queue.
+	 * 2. Try to gracefully stop non-faulty jobs (optional).
+	 * TODO: RFC ^ Folks, should we remove this step? What does it even mean
+	 * precisely to "stop" those jobs? Is that even helpful to userspace in
+	 * any way?
+	 * 3. Issue a GPU reset (driver-specific).
+	 * 4. Kill the entity the faulted job stems from, and the associated
+	 *    scheduler.
 	 * 5. Restart the scheduler using drm_sched_start(). At that point, new
-	 *    jobs can be queued, and the scheduler thread is unblocked
+	 *    jobs can be queued, and the scheduler workqueues awake again.
+	 *
+	 * For a HARDWARE SCHEDULER, each ring also has one scheduler, but each
+	 * scheduler typically has many attached entities. This implies that you
+	 * cannot tear down all entities associated with the affected scheduler,
+	 * because this would effectively also kill innocent userspace processes
+	 * which did not submit faulty jobs (for example).
+	 *
+	 * Consequently, the procedure to recover with a hardware scheduler
+	 * should look like this:
+	 *
+	 * 1. Stop all schedulers impacted by the reset using drm_sched_stop().
+	 * 2. Figure out to which entity the faulted job belongs.
+	 * 3. Try to gracefully stop non-faulty jobs (optional).
+	 * TODO: RFC ^ Folks, should we remove this step? What does it even mean
+	 * precisely to "stop" those jobs? Is that even helpful to userspace in
+	 * any way?
+	 * 4. Kill that entity.
+	 * 5. Issue a GPU reset on all faulty rings (driver-specific).
+	 * 6. Re-submit jobs on all schedulers impacted by re-submitting them to
+	 *    the entities which are still alive.
+	 * 7. Restart all schedulers that were stopped in step #1 using
+	 *    drm_sched_start().
 	 *
 	 * Note that some GPUs have distinct hardware queues but need to reset
 	 * the GPU globally, which requires extra synchronization between the
-	 * timeout handler of the different &drm_gpu_scheduler. One way to
-	 * achieve this synchronization is to create an ordered workqueue
-	 * (using alloc_ordered_workqueue()) at the driver level, and pass this
-	 * queue to drm_sched_init(), to guarantee that timeout handlers are
-	 * executed sequentially. The above workflow needs to be slightly
-	 * adjusted in that case:
-	 *
-	 * 1. Stop all schedulers impacted by the reset using drm_sched_stop()
-	 * 2. Try to gracefully stop non-faulty jobs on all queues impacted by
-	 *    the reset (optional)
-	 * 3. Issue a GPU reset on all faulty queues (driver-specific)
-	 * 4. Re-submit jobs on all schedulers impacted by the reset using
-	 *    drm_sched_resubmit_jobs()
-	 * 5. Restart all schedulers that were stopped in step #1 using
-	 *    drm_sched_start()
-	 *
-	 * Return DRM_GPU_SCHED_STAT_NOMINAL, when all is normal,
-	 * and the underlying driver has started or completed recovery.
-	 *
-	 * Return DRM_GPU_SCHED_STAT_ENODEV, if the device is no longer
-	 * available, i.e. has been unplugged.
+	 * timeout handlers of different schedulers. One way to achieve this
+	 * synchronization is to create an ordered workqueue (using
+	 * alloc_ordered_workqueue()) at the driver level, and pass this queue
+	 * as drm_sched_init()'s @timeout_wq parameter. This will guarantee
+	 * that timeout handlers are executed sequentially.
 	 */
 	enum drm_gpu_sched_stat (*timedout_job)(struct drm_sched_job *sched_job);
 
