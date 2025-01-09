@@ -2472,6 +2472,9 @@ static void __mptcp_close_subflow(struct sock *sk)
 			continue;
 
 		mptcp_close_ssk(sk, ssk, subflow);
+
+		if (mptcp_pm_is_kernel(msk))
+			mptcp_pm_subflow_closed_external(msk, subflow);
 	}
 
 }

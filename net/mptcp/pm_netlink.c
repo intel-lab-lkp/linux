@@ -960,6 +960,31 @@ void mptcp_pm_nl_work(struct mptcp_sock *msk)
 	spin_unlock_bh(&msk->pm.lock);
 }
 
+void mptcp_pm_subflow_closed_external(struct mptcp_sock *msk,
+				      struct mptcp_subflow_context *subflow)
+{
+	u8 remote_id = READ_ONCE(subflow->remote_id);
+	s16 local_id = READ_ONCE(subflow->local_id);
+	struct mptcp_subflow_context *iter;
+
+	if (!subflow->request_join || !remote_id)
+		return;
+
+	mptcp_for_each_subflow(msk, iter) {
+		u8 iter_rmtid = READ_ONCE(iter->remote_id);
+		s16 iter_locid = READ_ONCE(iter->local_id);
+
+		if (remote_id == iter_rmtid && iter->request_join &&
+		    local_id != iter_locid)
+			return;
+	}
+
+	spin_lock_bh(&msk->pm.lock);
+	if (--msk->pm.add_addr_accepted < mptcp_pm_get_add_addr_accept_max(msk))
+		WRITE_ONCE(msk->pm.accept_addr, true);
+	spin_unlock_bh(&msk->pm.lock);
+}
+
 static bool address_use_port(struct mptcp_pm_addr_entry *entry)
 {
 	return (entry->flags &
