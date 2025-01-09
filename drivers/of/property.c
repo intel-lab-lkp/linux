@@ -966,7 +966,7 @@ of_fwnode_device_get_dma_attr(const struct fwnode_handle *fwnode)
 static bool of_fwnode_property_present(const struct fwnode_handle *fwnode,
 				       const char *propname)
 {
-	return of_property_read_bool(to_of_node(fwnode), propname);
+	return of_property_present(to_of_node(fwnode), propname);
 }
 
 static int of_fwnode_property_read_int_array(const struct fwnode_handle *fwnode,
