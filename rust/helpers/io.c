@@ -106,3 +106,13 @@ resource_size_t rust_helper_resource_size(struct resource *res)
 	return resource_size(res);
 }
 
+struct resource *rust_helper_request_mem_region(resource_size_t start, resource_size_t n,
+				    const char *name)
+{
+	return request_mem_region(start, n, name);
+}
+
+void rust_helper_release_mem_region(resource_size_t start, resource_size_t n)
+{
+	release_mem_region(start, n);
+}
