@@ -828,6 +828,12 @@ static void tcp_keepalive_timer (struct timer_list *t)
 		}
 		if (tcp_write_wakeup(sk, LINUX_MIB_TCPKEEPALIVE) <= 0) {
 			icsk->icsk_probes_out++;
+			if (icsk->icsk_probes_out >= keepalive_probes(tp)) {
+				tcp_send_active_reset(sk, GFP_ATOMIC,
+						SK_RST_REASON_TCP_KEEPALIVE_TIMEOUT);
+				tcp_write_err(sk);
+				goto out;
+			}
 			elapsed = keepalive_intvl_when(tp);
 		} else {
 			/* If keepalive was lost due to local congestion,
