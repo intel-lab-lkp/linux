@@ -637,9 +637,8 @@ static void native_machine_emergency_restart(void)
 
 	tboot_shutdown(TB_SHUTDOWN_REBOOT);
 
-	/* Tell the BIOS if we want cold or warm reboot */
+	/* Tell the firmware if we want cold or warm reboot */
 	mode = reboot_mode == REBOOT_WARM ? 0x1234 : 0;
-	*((unsigned short *)__va(0x472)) = mode;
 
 	/*
 	 * If an EFI capsule has been registered with the firmware then
@@ -681,6 +680,7 @@ static void native_machine_emergency_restart(void)
 			break;
 
 		case BOOT_BIOS:
+			*((unsigned short *)__va(0x472)) = mode;
 			machine_real_restart(MRR_BIOS);
 
 			/* We're probably dead after this, but... */
