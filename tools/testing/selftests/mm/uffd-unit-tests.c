@@ -917,7 +917,7 @@ static bool do_uffdio_zeropage(int ufd, bool has_zeropage)
 		else if (res != -EINVAL)
 			err("UFFDIO_ZEROPAGE not -EINVAL");
 	} else if (has_zeropage) {
-		if (res != page_size)
+		if (res != (signed long)page_size)
 			err("UFFDIO_ZEROPAGE unexpected size");
 		else
 			retry_uffdio_zeropage(ufd, &uffdio_zeropage);
@@ -949,7 +949,7 @@ uffd_register_detect_zeropage(int uffd, void *addr, uint64_t len)
 static void uffd_zeropage_test(uffd_test_args_t __attribute__((unused)) *args)
 {
 	bool has_zeropage;
-	int i;
+	unsigned int i;
 
 	has_zeropage = uffd_register_detect_zeropage(uffd, area_dst, page_size);
 	if (area_dst_alias)
@@ -997,7 +997,7 @@ static void do_uffdio_poison(int uffd, unsigned long offset)
 
 	if (ret)
 		err("UFFDIO_POISON error: %"PRId64, (int64_t)res);
-	else if (res != page_size)
+	else if (res != (signed long)page_size)
 		err("UFFDIO_POISON unexpected size: %"PRId64, (int64_t)res);
 }
 

@@ -77,7 +77,7 @@ static void usage(void)
 
 static void uffd_stats_reset(struct uffd_args *args, unsigned long n_cpus)
 {
-	int i;
+	unsigned int i;
 
 	for (i = 0; i < n_cpus; i++) {
 		args[i].cpu = i;

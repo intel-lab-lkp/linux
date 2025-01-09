@@ -450,7 +450,7 @@ void uffd_handle_page_fault(struct uffd_msg *msg, struct uffd_args *args)
 		args->wp_faults++;
 	} else if (msg->arg.pagefault.flags & UFFD_PAGEFAULT_FLAG_MINOR) {
 		uint8_t *area;
-		int b;
+		unsigned int b;
 
 		/*
 		 * Minor page faults
@@ -621,7 +621,7 @@ int __copy_page(int ufd, unsigned long offset, bool retry, bool wp)
 			err("UFFDIO_COPY error: %"PRId64,
 			    (int64_t)uffdio_copy.copy);
 		wake_range(ufd, uffdio_copy.dst, page_size);
-	} else if (uffdio_copy.copy != page_size) {
+	} else if (uffdio_copy.copy != (signed long)page_size) {
 		err("UFFDIO_COPY error: %"PRId64, (int64_t)uffdio_copy.copy);
 	} else {
 		if (test_uffdio_copy_eexist && retry) {
@@ -655,7 +655,7 @@ int move_page(int ufd, unsigned long offset, unsigned long len)
 			err("UFFDIO_MOVE error: %"PRId64,
 			    (int64_t)uffdio_move.move);
 		wake_range(ufd, uffdio_move.dst, len);
-	} else if (uffdio_move.move != len) {
+	} else if (uffdio_move.move != (signed long)len) {
 		err("UFFDIO_MOVE error: %"PRId64, (int64_t)uffdio_move.move);
 	} else
 		return 1;
