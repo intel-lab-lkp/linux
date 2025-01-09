@@ -72,7 +72,7 @@ static bool seek_read_hugepage_filemap(int fd, size_t len, size_t wr_chunk_size,
 {
 	char buf[MAX_WRITE_READ_CHUNK_SIZE];
 	ssize_t ret_count = 0;
-	ssize_t total_ret_count = 0;
+	size_t total_ret_count = 0;
 	char val = offset / wr_chunk_size + offset % wr_chunk_size;
 
 	printf(PREFIX PREFIX "init val=%u with offset=0x%lx\n", val, offset);
@@ -83,7 +83,7 @@ static bool seek_read_hugepage_filemap(int fd, size_t len, size_t wr_chunk_size,
 		return false;
 	}
 
-	while (offset + total_ret_count < len) {
+	while ((unsigned long)offset + total_ret_count < len) {
 		ret_count = read(fd, buf, wr_chunk_size);
 		if (ret_count == 0) {
 			printf(PREFIX PREFIX "read reach end of the file\n");
@@ -109,7 +109,7 @@ static bool read_hugepage_filemap(int fd, size_t len,
 {
 	char buf[MAX_WRITE_READ_CHUNK_SIZE];
 	ssize_t ret_count = 0;
-	ssize_t total_ret_count = 0;
+	size_t total_ret_count = 0;
 	char val = 0;
 
 	printf(PREFIX PREFIX "expect to read 0x%lx bytes of data in total\n",
