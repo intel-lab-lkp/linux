@@ -251,6 +251,8 @@ static int bfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 
 end_rename:
 	mutex_unlock(&info->bfs_lock);
+	if (new_inode && !new_inode->i_nlink)
+		iput(new_inode);
 	brelse(old_bh);
 	brelse(new_bh);
 	return error;
