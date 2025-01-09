@@ -183,7 +183,7 @@ static bool sparx5_fdma_rx_get_frame(struct sparx5 *sparx5, struct sparx5_rx *rx
 	return true;
 }
 
-static int sparx5_fdma_napi_callback(struct napi_struct *napi, int weight)
+int sparx5_fdma_napi_callback(struct napi_struct *napi, int weight)
 {
 	struct sparx5_rx *rx = container_of(napi, struct sparx5_rx, napi);
 	struct sparx5 *sparx5 = container_of(rx, struct sparx5, rx);
@@ -452,12 +452,13 @@ static u32 sparx5_fdma_port_ctrl(struct sparx5 *sparx5)
 
 int sparx5_fdma_start(struct sparx5 *sparx5)
 {
+	const struct sparx5_ops *ops = sparx5->data->ops;
 	struct sparx5_rx *rx = &sparx5->rx;
 	struct sparx5_tx *tx = &sparx5->tx;
 
 	netif_napi_add_weight(rx->ndev,
 			      &rx->napi,
-			      sparx5_fdma_napi_callback,
+			      ops->fdma_poll,
 			      FDMA_WEIGHT);
 
 	napi_enable(&rx->napi);
