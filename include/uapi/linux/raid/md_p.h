@@ -76,10 +76,10 @@
 #define MD_DISK_SYNC		2 /* disk is in sync with the raid set */
 #define MD_DISK_REMOVED		3 /* disk is in sync with the raid set */
 #define MD_DISK_CLUSTER_ADD     4 /* Initiate a disk add across the cluster
-				   * For clustered enviroments only.
+				   * For clustered environments only.
 				   */
 #define MD_DISK_CANDIDATE	5 /* disk is added as spare (local) until confirmed
-				   * For clustered enviroments only.
+				   * For clustered environments only.
 				   */
 #define MD_DISK_FAILFAST	10 /* Send REQ_FAILFAST if there are multiple
 				    * devices available - and don't try to
