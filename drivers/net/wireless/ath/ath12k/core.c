@@ -1630,10 +1630,9 @@ static struct ath12k_hw_group *ath12k_core_hw_group_assign(struct ath12k_base *a
 			return NULL;
 		}
 
-		if (ath12k_core_get_wsi_info(ag, ab) ||
+		if (ath12k_ftm_mode || ath12k_core_get_wsi_info(ag, ab) ||
 		    ath12k_core_get_wsi_index(ag, ab)) {
-			ath12k_dbg(ab, ATH12K_DBG_BOOT,
-				   "unable to get wsi info from dt, grouping single device");
+			ath12k_dbg(ab, ATH12K_DBG_BOOT, "grouping single device");
 			ag->id = ATH12K_INVALID_GROUP_ID;
 			ag->num_devices = 1;
 			memset(ag->wsi_node, 0, sizeof(ag->wsi_node));
