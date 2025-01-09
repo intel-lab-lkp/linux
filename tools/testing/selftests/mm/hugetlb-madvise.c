@@ -26,7 +26,7 @@
 
 #define validate_free_pages(exp_free)					\
 	do {								\
-		int fhp = get_free_hugepages();				\
+		unsigned int fhp = get_free_hugepages();		\
 		if (fhp != (exp_free)) {				\
 			printf("Unexpected number of free huge "	\
 				"pages line %d\n", __LINE__);		\
