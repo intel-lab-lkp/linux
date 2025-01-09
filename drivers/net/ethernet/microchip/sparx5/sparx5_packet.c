@@ -272,7 +272,6 @@ netdev_tx_t sparx5_port_xmit_impl(struct sk_buff *skb, struct net_device *dev)
 	    SPARX5_SKB_CB(skb)->rew_op == IFH_REW_OP_TWO_STEP_PTP)
 		return NETDEV_TX_OK;
 
-	dev_consume_skb_any(skb);
 	return NETDEV_TX_OK;
 drop:
 	stats->tx_dropped++;
