@@ -414,7 +414,6 @@ static struct platform_device *platform_device;
 static struct device_attribute *zone_dev_attrs;
 static struct attribute **zone_attrs;
 static struct platform_zone *zone_data;
-static struct platform_profile_handler pp_handler;
 static enum wmax_thermal_mode supported_thermal_profiles[PLATFORM_PROFILE_LAST];
 
 static struct platform_driver platform_driver = {
@@ -1165,11 +1164,12 @@ static const struct platform_profile_ops awcc_platform_profile_ops = {
 
 static int create_thermal_profile(struct platform_device *platform_device)
 {
-	pp_handler.name = "alienware-wmi";
-	pp_handler.dev = &platform_device->dev;
-	pp_handler.ops = &awcc_platform_profile_ops;
+	struct device *ppdev;
 
-	return devm_platform_profile_register(&pp_handler, NULL);
+	ppdev = devm_platform_profile_register(
+		&platform_device->dev, "alienware-wmi", NULL, &awcc_platform_profile_ops);
+
+	return PTR_ERR_OR_ZERO(ppdev);
 }
 
 static int __init alienware_wmi_init(void)

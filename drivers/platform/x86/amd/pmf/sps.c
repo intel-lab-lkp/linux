@@ -420,15 +420,16 @@ int amd_pmf_init_sps(struct amd_pmf_dev *dev)
 		amd_pmf_set_sps_power_limits(dev);
 	}
 
-	dev->pprof.name = "amd-pmf";
-	dev->pprof.dev = dev->dev;
-	dev->pprof.ops = &amd_pmf_profile_ops;
-
 	/* Create platform_profile structure and register */
-	err = devm_platform_profile_register(&dev->pprof, dev);
-	if (err)
+	dev->ppdev = devm_platform_profile_register(
+		dev->dev, "amd-pmf", dev, &amd_pmf_profile_ops);
+	if (IS_ERR(dev->ppdev)) {
+		err = PTR_ERR(dev->ppdev);
 		dev_err(dev->dev, "Failed to register SPS support, this is most likely an SBIOS bug: %d\n",
 			err);
 
-	return err;
+		return err;
+	}
+
+	return 0;
 }
