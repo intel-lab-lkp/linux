@@ -452,19 +452,33 @@ static void wakeup_preempt_idle(struct rq *rq, struct task_struct *p, int flags)
 static void put_prev_task_idle(struct rq *rq, struct task_struct *prev, struct task_struct *next)
 {
 	dl_server_update_idle_time(rq, prev);
-	scx_update_idle(rq, false);
+	scx_update_idle(rq, false, true);
 }
 
 static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool first)
 {
 	update_idle_core(rq);
-	scx_update_idle(rq, true);
+	scx_update_idle(rq, true, true);
 	schedstat_inc(rq->sched_goidle);
 	next->se.exec_start = rq_clock_task(rq);
 }
 
 struct task_struct *pick_task_idle(struct rq *rq)
 {
+	/*
+	 * The scx idle state is updated only when the CPU transitions
+	 * in/out of SCHED_IDLE, see put_prev_task_idle() and
+	 * set_next_task_idle().
+	 *
+	 * However, the CPU may also exit/enter the idle state while
+	 * running the idle task, for example waking up the CPU via
+	 * scx_bpf_kick_cpu() without dispatching a task on it.
+	 *
+	 * In this case we still need to trigger scx_update_idle() to
+	 * ensure a proper management of the scx idle state.
+	 */
+	if (rq->curr == rq->idle)
+		scx_update_idle(rq, true, false);
 	return rq->idle;
 }
 
