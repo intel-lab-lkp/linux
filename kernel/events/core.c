@@ -13337,6 +13337,7 @@ static void sync_child_event(struct perf_event *child_event)
 	}
 
 	child_val = perf_event_count(child_event, false);
+	perf_event_update_time(child_event);
 
 	/*
 	 * Add back the child's count to the parent's count:
