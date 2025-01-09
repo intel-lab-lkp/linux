@@ -138,7 +138,7 @@ static void test_mlock_within_limit(char *p, int alloc_size)
 	int page_size = 0;
 
 	getrlimit(RLIMIT_MEMLOCK, &cur);
-	if (cur.rlim_cur < alloc_size)
+	if (cur.rlim_cur < (unsigned int)alloc_size)
 		ksft_exit_fail_msg("alloc_size[%d] < %u rlimit,lead to mlock failure\n",
 				   alloc_size, (unsigned int)cur.rlim_cur);
 
@@ -204,7 +204,7 @@ static void test_mlock_outof_limit(char *p, int alloc_size)
 	struct rlimit cur;
 
 	getrlimit(RLIMIT_MEMLOCK, &cur);
-	if (cur.rlim_cur >= alloc_size)
+	if (cur.rlim_cur >= (unsigned int)alloc_size)
 		ksft_exit_fail_msg("alloc_size[%d] >%u rlimit, violates test condition\n",
 				   alloc_size, (unsigned int)cur.rlim_cur);
 

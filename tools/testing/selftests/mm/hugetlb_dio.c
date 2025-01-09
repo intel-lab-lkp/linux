@@ -63,7 +63,7 @@ void run_dio_using_hugetlb(unsigned int start_off, unsigned int end_off)
 	memset(buffer, 'A', writesize);
 
 	/* Write the buffer to the file */
-	if (write(fd, buffer, writesize) != (writesize)) {
+	if (write(fd, buffer, writesize) != (signed int)writesize) {
 		munmap(orig_buffer, h_pagesize);
 		close(fd);
 		ksft_exit_fail_perror("Error writing to file\n");

@@ -446,7 +446,8 @@ static int tests_per_test_case(void)
 
 int main(void)
 {
-	int i, err;
+	unsigned int i;
+	int err;
 
 	pagesize = getpagesize();
 	nr_hugetlbsizes = detect_hugetlb_page_sizes(hugetlbsizes,

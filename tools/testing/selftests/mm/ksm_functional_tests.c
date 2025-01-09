@@ -306,7 +306,7 @@ static void test_unmerge_zero_pages(void)
 
 	/* Check if ksm_zero_pages is updated correctly after KSM merging */
 	pages_expected = size / pagesize;
-	if (pages_expected != get_my_ksm_zero_pages()) {
+	if ((signed long)pages_expected != get_my_ksm_zero_pages()) {
 		ksft_test_result_fail("'ksm_zero_pages' updated after merging\n");
 		goto unmap;
 	}
@@ -319,7 +319,7 @@ static void test_unmerge_zero_pages(void)
 
 	/* Check if ksm_zero_pages is updated correctly after unmerging */
 	pages_expected /= 2;
-	if (pages_expected != get_my_ksm_zero_pages()) {
+	if ((signed long)pages_expected != get_my_ksm_zero_pages()) {
 		ksft_test_result_fail("'ksm_zero_pages' updated after unmerging\n");
 		goto unmap;
 	}
@@ -625,7 +625,7 @@ static void test_prot_none(void)
 {
 	const unsigned int size = 2 * MiB;
 	char *map;
-	int i;
+	unsigned int i;
 
 	ksft_print_msg("[RUN] %s\n", __func__);
 

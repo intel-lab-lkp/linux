@@ -535,7 +535,7 @@ static void (*pkey_tests[])(void) = {
 
 int main(void)
 {
-	int i;
+	unsigned int i;
 
 	ksft_print_header();
 	ksft_set_plan(ARRAY_SIZE(pkey_tests));

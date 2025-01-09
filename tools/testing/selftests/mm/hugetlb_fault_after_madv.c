@@ -88,7 +88,7 @@ int main(void)
 				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
 				-1, 0);
 
-		if ((unsigned long)huge_ptr == -1)
+		if (huge_ptr == MAP_FAILED)
 			ksft_exit_skip("Failed to allocated huge page\n");
 
 		pthread_create(&thread1, NULL, madv, NULL);

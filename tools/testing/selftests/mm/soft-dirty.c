@@ -77,7 +77,7 @@ static void test_vma_reuse(int pagemap_fd, int pagesize)
 static void test_hugepage(int pagemap_fd)
 {
 	char *map;
-	int i, ret;
+	unsigned int i, ret;
 	size_t hpage_len = read_pmd_pagesize();
 
 	if (!hpage_len)

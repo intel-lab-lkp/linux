@@ -100,7 +100,7 @@ int main(void)
 				MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
 				-1, 0);
 
-		if ((unsigned long)huge_ptr == -1) {
+		if (huge_ptr == MAP_FAILED) {
 			ksft_test_result_fail("Failed to allocate huge page\n");
 			return KSFT_FAIL;
 		}
