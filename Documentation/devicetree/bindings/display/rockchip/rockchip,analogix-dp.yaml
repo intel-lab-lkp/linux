@@ -15,6 +15,7 @@ properties:
     enum:
       - rockchip,rk3288-dp
       - rockchip,rk3399-edp
+      - rockchip,rk3588-edp
 
   clocks:
     minItems: 2
@@ -29,12 +30,6 @@ properties:
 
   power-domains:
     maxItems: 1
-
-  resets:
-    maxItems: 1
-
-  reset-names:
-    const: dp
 
   rockchip,grf:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -54,6 +49,36 @@ required:
 
 allOf:
   - $ref: /schemas/display/bridge/analogix,dp.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - rockchip,rk3288-dp
+              - rockchip,rk3399-edp
+    then:
+      properties:
+        resets:
+          maxItems: 1
+        reset-names:
+          const: dp
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - rockchip,rk3588-edp
+    then:
+      properties:
+        resets:
+          minItems: 2
+          maxItems: 2
+        reset-names:
+          items:
+            - const: dp
+            - const: apb
 
 unevaluatedProperties: false
 
