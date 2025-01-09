@@ -1072,6 +1072,11 @@ of_fwnode_get_reference_args(const struct fwnode_handle *fwnode,
 	}
 
 	args->nargs = of_args.args_count;
+	if (args->nargs > NR_FWNODE_REFERENCE_ARGS) {
+		pr_warn("%s: Truncate arg count %d for property '%s' phandle index %d\n",
+			__func__, of_args.args_count, prop, index);
+		args->nargs = NR_FWNODE_REFERENCE_ARGS;
+	}
 	args->fwnode = of_fwnode_handle(of_args.np);
 
 	for (i = 0; i < NR_FWNODE_REFERENCE_ARGS; i++)
