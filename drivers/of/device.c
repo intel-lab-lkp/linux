@@ -257,6 +257,7 @@ EXPORT_SYMBOL_GPL(of_device_uevent);
 int of_device_uevent_modalias(const struct device *dev, struct kobj_uevent_env *env)
 {
 	int sl;
+	int pos;
 
 	if ((!dev) || (!dev->of_node) || dev->of_node_reused)
 		return -ENODEV;
@@ -265,13 +266,18 @@ int of_device_uevent_modalias(const struct device *dev, struct kobj_uevent_env *
 	if (add_uevent_var(env, "MODALIAS="))
 		return -ENOMEM;
 
-	sl = of_modalias(dev->of_node, &env->buf[env->buflen-1],
-			 sizeof(env->buf) - env->buflen);
+	/*
+	 * @env->buflen is pointing to the char after '\0' now
+	 * override the '\0' to save MODALIAS value.
+	 */
+	pos = env->buflen - 1;
+	sl = of_modalias(dev->of_node, &env->buf[pos],
+			 sizeof(env->buf) - pos);
 	if (sl < 0)
 		return sl;
-	if (sl >= (sizeof(env->buf) - env->buflen))
+	if (sl >= (sizeof(env->buf) - pos))
 		return -ENOMEM;
-	env->buflen += sl;
+	env->buflen = pos + sl + 1;
 
 	return 0;
 }
