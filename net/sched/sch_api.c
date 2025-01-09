@@ -1612,7 +1612,7 @@ static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 	struct nlattr *tca[TCA_MAX + 1];
 	struct net_device *dev;
 	u32 clid;
-	struct Qdisc *q, *p;
+	struct Qdisc *leaf_q, *q, *p;
 	int err;
 
 replay:
@@ -1640,6 +1640,7 @@ replay:
 					return -ENOENT;
 				}
 				q = qdisc_leaf(p, clid);
+				leaf_q = q;
 			} else if (dev_ingress_queue_create(dev)) {
 				q = rtnl_dereference(dev_ingress_queue(dev)->qdisc_sleeping);
 			}
@@ -1673,6 +1674,11 @@ replay:
 					NL_SET_ERR_MSG(extack, "Invalid qdisc name");
 					return -EINVAL;
 				}
+				if (leaf_q && leaf_q->parent != q->parent) {
+					NL_SET_ERR_MSG(extack, "Invalid Parent for operation");
+					return -EINVAL;
+				}
+
 				if (q->flags & TCQ_F_INGRESS) {
 					NL_SET_ERR_MSG(extack,
 						       "Cannot regraft ingress or clsact Qdiscs");
