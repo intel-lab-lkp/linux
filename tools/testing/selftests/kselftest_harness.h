@@ -174,7 +174,7 @@
 	static void test_name(struct __test_metadata *_metadata); \
 	static inline void wrapper_##test_name( \
 		struct __test_metadata *_metadata, \
-		struct __fixture_variant_metadata *variant) \
+		struct __fixture_variant_metadata __attribute__((unused)) *variant) \
 	{ \
 		_metadata->setup_completed = true; \
 		if (setjmp(_metadata->env) == 0) \
@@ -756,7 +756,7 @@
 	/* Avoid multiple evaluation of the cases */ \
 	__typeof__(_expected) __exp = (_expected); \
 	__typeof__(_seen) __seen = (_seen); \
-	if (!(__exp _t __seen)) { \
+	if (!(__exp _t (__typeof__(_expected)) __seen)) { \
 		/* Report with actual signedness to avoid weird output. */ \
 		switch (is_signed_type(__exp) * 2 + is_signed_type(__seen)) { \
 		case 0: { \
@@ -965,7 +965,7 @@ static inline void __test_check_assert(struct __test_metadata *t)
 }
 
 struct __test_metadata *__active_test;
-static void __timeout_handler(int sig, siginfo_t *info, void *ucontext)
+static void __timeout_handler(int sig, siginfo_t *info, void __attribute__((unused)) *ucontext)
 {
 	struct __test_metadata *t = __active_test;
 
