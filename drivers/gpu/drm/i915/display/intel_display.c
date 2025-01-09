@@ -7647,7 +7647,8 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		!new_crtc_state->scaler_state.scaler_users &&
 		!old_crtc_state->scaler_state.scaler_users &&
 		!intel_crtc_needs_modeset(new_crtc_state) &&
-		!intel_crtc_needs_fastset(new_crtc_state);
+		!intel_crtc_needs_fastset(new_crtc_state) &&
+		!intel_psr_is_psr_mode_changing(old_crtc_state, new_crtc_state);
 
 	if (!new_crtc_state->use_dsb && !new_crtc_state->dsb_color_vblank)
 		return;
