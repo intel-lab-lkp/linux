@@ -1757,7 +1757,9 @@ static void ath12k_core_hw_group_destroy(struct ath12k_hw_group *ag)
 		if (!ab)
 			continue;
 
+		mutex_lock(&ab->core_lock);
 		ath12k_core_soc_destroy(ab);
+		mutex_unlock(&ab->core_lock);
 	}
 	mutex_unlock(&ag->mutex);
 }

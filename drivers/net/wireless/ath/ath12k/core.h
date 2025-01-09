@@ -961,6 +961,7 @@ struct ath12k_base {
 	 * This may or may not be used during the runtime
 	 */
 	struct ieee80211_regdomain *new_regd[MAX_RADIOS];
+	bool regd_freed;
 
 	/* Current DFS Regulatory */
 	enum ath12k_dfs_region dfs_region;
