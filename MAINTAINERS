@@ -23923,6 +23923,12 @@ T:	git git://git.kernel.org/pub/scm/linux/kernel/git/lenb/linux.git turbostat
 F:	tools/power/x86/turbostat/
 F:	tools/testing/selftests/turbostat/
 
+TUXEDO SIRIUS 15 GEN1 AND GEN2 BPF KEYBOARD FIX
+M:	Werner Sembach <wse@tuxedocomputers.com>
+L:	linux-input@vger.kernel.org
+S:	Supported
+F:	drivers/hid/bpf/progs/TUXEDO__Sirius-15-Gen1-and-Gen2.bpf.c
+
 TW5864 VIDEO4LINUX DRIVER
 M:	Bluecherry Maintainers <maintainers@bluecherrydvr.com>
 M:	Andrey Utkin <andrey.utkin@corp.bluecherry.net>
