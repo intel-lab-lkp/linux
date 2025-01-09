@@ -136,6 +136,12 @@ static const struct regmap_test_param real_cache_types_list[] = {
 KUNIT_ARRAY_PARAM(real_cache_types, real_cache_types_list, param_to_desc);
 
 static const struct regmap_test_param sparse_cache_types_list[] = {
+	{ .cache = REGCACHE_FLAT,   .from_reg = 0 },
+	{ .cache = REGCACHE_FLAT,   .from_reg = 0, .fast_io = true },
+	{ .cache = REGCACHE_FLAT,   .from_reg = 0x2001 },
+	{ .cache = REGCACHE_FLAT,   .from_reg = 0x2002 },
+	{ .cache = REGCACHE_FLAT,   .from_reg = 0x2003 },
+	{ .cache = REGCACHE_FLAT,   .from_reg = 0x2004 },
 	{ .cache = REGCACHE_RBTREE, .from_reg = 0 },
 	{ .cache = REGCACHE_RBTREE, .from_reg = 0, .fast_io = true },
 	{ .cache = REGCACHE_RBTREE, .from_reg = 0x2001 },
@@ -567,18 +573,9 @@ static void read_writeonly(struct kunit *test)
 	for (i = 0; i < BLOCK_TEST_SIZE; i++)
 		data->read[i] = false;
 
-	/*
-	 * Try to read all the registers, the writeonly one should
-	 * fail if we aren't using the flat cache.
-	 */
-	for (i = 0; i < BLOCK_TEST_SIZE; i++) {
-		if (config.cache_type != REGCACHE_FLAT) {
-			KUNIT_EXPECT_EQ(test, i != 5,
-					regmap_read(map, i, &val) == 0);
-		} else {
-			KUNIT_EXPECT_EQ(test, 0, regmap_read(map, i, &val));
-		}
-	}
+	/* Try to read all the registers, the writeonly one should fail */
+	for (i = 0; i < BLOCK_TEST_SIZE; i++)
+		KUNIT_EXPECT_EQ(test, i != 5, regmap_read(map, i, &val) == 0);
 
 	/* Did we trigger a hardware access? */
 	KUNIT_EXPECT_FALSE(test, data->read[5]);
