@@ -9,6 +9,7 @@
 #ifndef _PLATFORM_PROFILE_H_
 #define _PLATFORM_PROFILE_H_
 
+#include <linux/device.h>
 #include <linux/bitops.h>
 
 /*
@@ -40,7 +41,7 @@ struct platform_profile_ops {
 struct platform_profile_handler {
 	const char *name;
 	struct device *dev;
-	struct device *class_dev;
+	struct device class_dev;
 	int minor;
 	unsigned long choices[BITS_TO_LONGS(PLATFORM_PROFILE_LAST)];
 	const struct platform_profile_ops *ops;
