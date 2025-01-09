@@ -225,6 +225,26 @@ bool intel_psr_needs_aux_io_power(struct intel_encoder *encoder,
 	       intel_encoder_can_psr(encoder);
 }
 
+/**
+ * intel_psr_is_psr_mode_changing - Check if PSR/PR mode is changing
+ * @old_crtc_state: pointer to old intel_crtc_state
+ * @new_crtc_state: pointer to new intel_crtc_state
+ *
+ * This can be used to figure out if PSR/PR mode is changing between old and new
+ * crtc state.
+ *
+ * Returns true if mode is changing, false if mode is not changing.
+ */
+bool intel_psr_is_psr_mode_changing(const struct intel_crtc_state *old_crtc_state,
+				    const struct intel_crtc_state *new_crtc_state)
+{
+	return old_crtc_state->has_psr != new_crtc_state->has_psr ||
+		old_crtc_state->has_sel_update != new_crtc_state->has_sel_update ||
+		old_crtc_state->has_panel_replay != new_crtc_state->has_panel_replay ||
+		old_crtc_state->enable_psr2_su_region_et !=
+		new_crtc_state->enable_psr2_su_region_et;
+}
+
 static bool psr_global_enabled(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
