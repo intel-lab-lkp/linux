@@ -84,7 +84,7 @@ static void detect_huge_zeropage(void)
 		return;
 
 	ret = pread(fd, buf, sizeof(buf), 0);
-	if (ret > 0 && ret < sizeof(buf)) {
+	if (ret > 0 && (unsigned int)ret < sizeof(buf)) {
 		buf[ret] = 0;
 
 		enabled = strtoul(buf, NULL, 10);
@@ -263,12 +263,14 @@ close_comm_pipes:
 	close_comm_pipes(&comm_pipes);
 }
 
-static void test_cow_in_parent(char *mem, size_t size, bool is_hugetlb)
+static void test_cow_in_parent(char *mem, size_t size,
+			       bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_cow_in_parent(mem, size, false, child_memcmp_fn, false);
 }
 
-static void test_cow_in_parent_mprotect(char *mem, size_t size, bool is_hugetlb)
+static void test_cow_in_parent_mprotect(char *mem, size_t size,
+					bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_cow_in_parent(mem, size, true, child_memcmp_fn, false);
 }
@@ -408,10 +410,11 @@ static void do_test_iouring(char *mem, size_t size, bool use_fork)
 	struct io_uring_cqe *cqe;
 	struct io_uring_sqe *sqe;
 	struct io_uring ring;
-	ssize_t cur, total;
 	struct iovec iov;
 	char *buf, *tmp;
+	size_t total;
 	int ret, fd;
+	ssize_t cur;
 	FILE *file;
 
 	ret = setup_comm_pipes(&comm_pipes);
@@ -515,7 +518,7 @@ static void do_test_iouring(char *mem, size_t size, bool use_fork)
 		goto quit_child;
 	}
 
-	if (cqe->res != size) {
+	if ((unsigned int) cqe->res != size) {
 		ksft_test_result_fail("write_fixed failed\n");
 		goto quit_child;
 	}
@@ -529,7 +532,7 @@ static void do_test_iouring(char *mem, size_t size, bool use_fork)
 			ksft_test_result_fail("pread() failed\n");
 			goto quit_child;
 		}
-		total += cur;
+		total += (size_t)cur;
 	}
 
 	/* Finally, check if we read what we expected. */
@@ -553,12 +556,14 @@ close_comm_pipes:
 	close_comm_pipes(&comm_pipes);
 }
 
-static void test_iouring_ro(char *mem, size_t size, bool is_hugetlb)
+static void test_iouring_ro(char *mem, size_t size,
+			    bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_iouring(mem, size, false);
 }
 
-static void test_iouring_fork(char *mem, size_t size, bool is_hugetlb)
+static void test_iouring_fork(char *mem, size_t size,
+			      bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_iouring(mem, size, true);
 }
@@ -702,36 +707,38 @@ free_tmp:
 	free(tmp);
 }
 
-static void test_ro_pin_on_shared(char *mem, size_t size, bool is_hugetlb)
+static void test_ro_pin_on_shared(char *mem, size_t size,
+				  bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST_SHARED, false);
 }
 
-static void test_ro_fast_pin_on_shared(char *mem, size_t size, bool is_hugetlb)
+static void test_ro_fast_pin_on_shared(char *mem, size_t size,
+				       bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST_SHARED, true);
 }
 
 static void test_ro_pin_on_ro_previously_shared(char *mem, size_t size,
-		bool is_hugetlb)
+						bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST_PREVIOUSLY_SHARED, false);
 }
 
 static void test_ro_fast_pin_on_ro_previously_shared(char *mem, size_t size,
-		bool is_hugetlb)
+						     bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST_PREVIOUSLY_SHARED, true);
 }
 
 static void test_ro_pin_on_ro_exclusive(char *mem, size_t size,
-		bool is_hugetlb)
+					bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST_RO_EXCLUSIVE, false);
 }
 
 static void test_ro_fast_pin_on_ro_exclusive(char *mem, size_t size,
-		bool is_hugetlb)
+					     bool __attribute__((unused)) is_hugetlb)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST_RO_EXCLUSIVE, true);
 }
@@ -1192,7 +1199,7 @@ static void run_anon_test_case(struct test_case const *test_case)
 
 static void run_anon_test_cases(void)
 {
-	int i;
+	unsigned int i;
 
 	ksft_print_msg("[INFO] Anonymous memory tests in private mappings\n");
 
@@ -1420,7 +1427,7 @@ static const struct test_case anon_thp_test_cases[] = {
 
 static void run_anon_thp_test_cases(void)
 {
-	int i;
+	unsigned int i;
 
 	if (!pmdsize)
 		return;
@@ -1457,13 +1464,14 @@ static void test_cow(char *mem, const char *smem, size_t size)
 			 "Other mapping not modified\n");
 	free(old);
 }
+//typedef void (*non_anon_test_fn)(char *mem, const char *smem, size_t size);
 
-static void test_ro_pin(char *mem, const char *smem, size_t size)
+static void test_ro_pin(char *mem, const char __attribute__((unused)) *smem, size_t size)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST, false);
 }
 
-static void test_ro_fast_pin(char *mem, const char *smem, size_t size)
+static void test_ro_fast_pin(char *mem, const char __attribute__((unused)) *smem, size_t size)
 {
 	do_test_ro_pin(mem, size, RO_PIN_TEST, true);
 }
@@ -1752,7 +1760,7 @@ static void run_non_anon_test_case(struct non_anon_test_case const *test_case)
 
 static void run_non_anon_test_cases(void)
 {
-	int i;
+	unsigned int i;
 
 	ksft_print_msg("[RUN] Non-anonymous memory tests in private mappings\n");
 
