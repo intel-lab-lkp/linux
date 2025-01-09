@@ -796,7 +796,7 @@ TEST_F(hmm, anon_write_hugetlbfs)
 	int ret;
 
 	default_hsize = file_read_ulong("/proc/meminfo", "Hugepagesize:");
-	if (default_hsize < 0 || default_hsize*1024 < default_hsize)
+	if (default_hsize*1024 < default_hsize)
 		SKIP(return, "Huge page size could not be determined");
 	default_hsize = default_hsize*1024; /* KB to B */
 
@@ -1579,7 +1579,7 @@ TEST_F(hmm, compound)
 	/* Skip test if we can't allocate a hugetlbfs page. */
 
 	default_hsize = file_read_ulong("/proc/meminfo", "Hugepagesize:");
-	if (default_hsize < 0 || default_hsize*1024 < default_hsize)
+	if (default_hsize*1024 < default_hsize)
 		SKIP(return, "Huge page size could not be determined");
 	default_hsize = default_hsize*1024; /* KB to B */
 
