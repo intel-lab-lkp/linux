@@ -42,7 +42,8 @@ static siginfo_t siginfo = {0};
  * which is protected by MPK 0 which we don't have access to.
  */
 static inline __always_inline
-long syscall_raw(long n, long a1, long a2, long a3, long a4, long a5, long a6)
+long syscall_raw(long n, long a1, long a2, long a3, long a4, long a5,
+		 long __attribute__((unused)) a6)
 {
 	unsigned long ret;
 #ifdef __x86_64__
@@ -110,7 +111,8 @@ static inline u64 pkey_reg_restrictive_default(void)
 	return set_pkey_bits(PKEY_REG_ALLOW_NONE, 0, PKEY_DISABLE_ACCESS);
 }
 
-static void sigsegv_handler(int signo, siginfo_t *info, void *ucontext)
+static void sigsegv_handler(int __attribute__((unused)) signo, siginfo_t *info,
+			    void __attribute__((unused)) *ucontext)
 {
 	pthread_mutex_lock(&mutex);
 
@@ -122,7 +124,8 @@ static void sigsegv_handler(int signo, siginfo_t *info, void *ucontext)
 	syscall_raw(SYS_exit, 0, 0, 0, 0, 0, 0);
 }
 
-static void sigusr1_handler(int signo, siginfo_t *info, void *ucontext)
+static void sigusr1_handler(int __attribute__((unused)) signo, siginfo_t *info,
+			    void __attribute__((unused)) *ucontext)
 {
 	pthread_mutex_lock(&mutex);
 
@@ -132,7 +135,9 @@ static void sigusr1_handler(int signo, siginfo_t *info, void *ucontext)
 	pthread_mutex_unlock(&mutex);
 }
 
-static void sigusr2_handler(int signo, siginfo_t *info, void *ucontext)
+static void sigusr2_handler(int __attribute__((unused)) signo,
+			    siginfo_t __attribute__((unused)) *info,
+			    void __attribute__((unused)) *ucontext)
 {
 	/*
 	 * pkru should be the init_pkru value which enabled MPK 0 so
@@ -155,7 +160,7 @@ static void raise_sigusr2(void)
 	 */
 }
 
-static void *thread_segv_with_pkey0_disabled(void *ptr)
+static void *thread_segv_with_pkey0_disabled(void __attribute__((unused)) *ptr)
 {
 	/* Disable MPK 0 (and all others too) */
 	__write_pkey_reg(pkey_reg_restrictive_default());
@@ -165,7 +170,7 @@ static void *thread_segv_with_pkey0_disabled(void *ptr)
 	return NULL;
 }
 
-static void *thread_segv_pkuerr_stack(void *ptr)
+static void *thread_segv_pkuerr_stack(void __attribute__((unused)) *ptr)
 {
 	/* Disable MPK 0 (and all others too) */
 	__write_pkey_reg(pkey_reg_restrictive_default());
