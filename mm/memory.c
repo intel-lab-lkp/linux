@@ -5578,6 +5578,7 @@ int numa_migrate_check(struct folio *folio, struct vm_fault *vmf,
 	if (folio_nid(folio) == numa_node_id()) {
 		count_vm_numa_event(NUMA_HINT_FAULTS_LOCAL);
 		*flags |= TNF_FAULT_LOCAL;
+		return NUMA_NO_NODE;
 	}
 
 	return mpol_misplaced(folio, vmf, addr);
