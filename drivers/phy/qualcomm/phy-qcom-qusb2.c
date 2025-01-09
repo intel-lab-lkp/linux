@@ -1025,6 +1025,8 @@ static int qusb2_phy_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	or = &qphy->overrides;
 
+	dev_set_drvdata(dev, qphy);
+
 	qphy->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(qphy->base))
 		return PTR_ERR(qphy->base);
@@ -1135,7 +1137,6 @@ static int qusb2_phy_probe(struct platform_device *pdev)
 	}
 	qphy->phy = generic_phy;
 
-	dev_set_drvdata(dev, qphy);
 	phy_set_drvdata(generic_phy, qphy);
 
 	phy_provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
