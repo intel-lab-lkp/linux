@@ -20,11 +20,20 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 	if (unlikely(!(dev->flags & IFF_UP)))
 		goto drop;
 
-	if (!gcells->cells || skb_cloned(skb) || netif_elide_gro(dev)) {
+	if (!gcells->cells || netif_elide_gro(dev)) {
+netif_rx:
 		res = netif_rx(skb);
 		goto unlock;
 	}
+	if (skb_cloned(skb)) {
+		struct sk_buff *n;
 
+		n = skb_copy(skb, GFP_KERNEL);
+		if (!n)
+			goto netif_rx;
+		kfree_skb(skb);
+		skb = n;
+	}
 	cell = this_cpu_ptr(gcells->cells);
 
 	if (skb_queue_len(&cell->napi_skbs) > READ_ONCE(net_hotdata.max_backlog)) {
