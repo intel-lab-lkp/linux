@@ -10660,6 +10660,12 @@ out:
 	return ret;
 }
 
+/* Used to set module cached ftrace filtering at boot up */
+__init struct trace_array *trace_get_global_array(void)
+{
+	return &global_trace;
+}
+
 void __init ftrace_boot_snapshot(void)
 {
 #ifdef CONFIG_TRACER_MAX_TRACE
