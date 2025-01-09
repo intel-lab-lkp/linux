@@ -1361,13 +1361,20 @@ chk_join_tx_nr()
 	local create=${join_create_err:-0}
 	local bind=${join_bind_err:-0}
 	local connect=${join_connect_err:-0}
+	local allow_multi_syn_tx=0
 	local rc=${KSFT_PASS}
 	local count
+
+	if [[ "${join_syn_tx}" = "+"* ]]; then
+                allow_multi_syn_tx=1
+                syn_tx=${join_syn_tx:1}
+        fi
 
 	count=$(mptcp_lib_get_counter ${ns2} "MPTcpExtMPJoinSynTx")
 	if [ -z "$count" ]; then
 		rc=${KSFT_SKIP}
-	elif [ "$count" != "$syn_tx" ]; then
+	elif { [ "$count" != $syn_tx ] && [ $allow_multi_syn_tx -eq 0 ]; } ||
+             { [ "$count" -lt $syn_tx ] && [ $allow_multi_syn_tx -eq 1 ]; }; then
 		rc=${KSFT_FAIL}
 		print_check "syn tx"
 		fail_test "got $count JOIN[s] syn tx expected $syn_tx"
