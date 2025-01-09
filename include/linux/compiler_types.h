@@ -54,6 +54,7 @@ static inline void __chk_io_ptr(const volatile void __iomem *ptr) { }
 # ifdef STRUCTLEAK_PLUGIN
 #  define __user	__attribute__((user))
 # else
+#  undef __user
 #  define __user	BTF_TYPE_TAG(user)
 # endif
 # define __iomem
