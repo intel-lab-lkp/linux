@@ -282,10 +282,10 @@ bool is_pprof_balanced(struct amd_pmf_dev *pmf)
 	return (pmf->current_profile == PLATFORM_PROFILE_BALANCED) ? true : false;
 }
 
-static int amd_pmf_profile_get(struct platform_profile_handler *pprof,
+static int amd_pmf_profile_get(struct device *dev,
 			       enum platform_profile_option *profile)
 {
-	struct amd_pmf_dev *pmf = dev_get_drvdata(&pprof->class_dev);
+	struct amd_pmf_dev *pmf = dev_get_drvdata(dev);
 
 	*profile = pmf->current_profile;
 	return 0;
@@ -363,10 +363,10 @@ int amd_pmf_power_slider_update_event(struct amd_pmf_dev *dev)
 	return 0;
 }
 
-static int amd_pmf_profile_set(struct platform_profile_handler *pprof,
+static int amd_pmf_profile_set(struct device *dev,
 			       enum platform_profile_option profile)
 {
-	struct amd_pmf_dev *pmf = dev_get_drvdata(&pprof->class_dev);
+	struct amd_pmf_dev *pmf = dev_get_drvdata(dev);
 	int ret = 0;
 
 	pmf->current_profile = profile;
@@ -387,11 +387,11 @@ static int amd_pmf_profile_set(struct platform_profile_handler *pprof,
 	return 0;
 }
 
-static int amd_pmf_profile_choices(struct platform_profile_handler *pprof)
+static int amd_pmf_profile_choices(void *drvdata, unsigned long *choices)
 {
-	set_bit(PLATFORM_PROFILE_LOW_POWER, pprof->choices);
-	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+	set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
+	set_bit(PLATFORM_PROFILE_BALANCED, choices);
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
 
 	return 0;
 }

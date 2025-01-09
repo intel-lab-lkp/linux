@@ -1055,7 +1055,7 @@ static int wmax_game_shift_status(u8 operation, u32 *out_data)
 	return 0;
 }
 
-static int thermal_profile_get(struct platform_profile_handler *pprof,
+static int thermal_profile_get(struct device *dev,
 			       enum platform_profile_option *profile)
 {
 	u32 out_data;
@@ -1081,7 +1081,7 @@ static int thermal_profile_get(struct platform_profile_handler *pprof,
 	return 0;
 }
 
-static int thermal_profile_set(struct platform_profile_handler *pprof,
+static int thermal_profile_set(struct device *dev,
 			       enum platform_profile_option profile)
 {
 	if (quirks->gmode) {
@@ -1107,7 +1107,7 @@ static int thermal_profile_set(struct platform_profile_handler *pprof,
 	return wmax_thermal_control(supported_thermal_profiles[profile]);
 }
 
-static int thermal_profile_choices(struct platform_profile_handler *pprof)
+static int thermal_profile_choices(void *drvdata, unsigned long *choices)
 {
 	u32 out_data;
 	u8 sys_desc[4];
@@ -1140,17 +1140,17 @@ static int thermal_profile_choices(struct platform_profile_handler *pprof)
 		profile = wmax_mode_to_platform_profile[mode];
 		supported_thermal_profiles[profile] = out_data;
 
-		set_bit(profile, pprof->choices);
+		set_bit(profile, choices);
 	}
 
-	if (bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST))
+	if (bitmap_empty(choices, PLATFORM_PROFILE_LAST))
 		return -ENODEV;
 
 	if (quirks->gmode) {
 		supported_thermal_profiles[PLATFORM_PROFILE_PERFORMANCE] =
 			WMAX_THERMAL_MODE_GMODE;
 
-		set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
+		set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
 	}
 
 	return 0;

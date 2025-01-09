@@ -1827,7 +1827,7 @@ static int acer_toggle_turbo(void)
 }
 
 static int
-acer_predator_v4_platform_profile_get(struct platform_profile_handler *pprof,
+acer_predator_v4_platform_profile_get(struct device *dev,
 				      enum platform_profile_option *profile)
 {
 	u8 tp;
@@ -1862,7 +1862,7 @@ acer_predator_v4_platform_profile_get(struct platform_profile_handler *pprof,
 }
 
 static int
-acer_predator_v4_platform_profile_set(struct platform_profile_handler *pprof,
+acer_predator_v4_platform_profile_set(struct device *dev,
 				      enum platform_profile_option profile)
 {
 	int tp;
@@ -1901,13 +1901,13 @@ acer_predator_v4_platform_profile_set(struct platform_profile_handler *pprof,
 }
 
 static int
-acer_predator_v4_platform_profile_choices(struct platform_profile_handler *pprof)
+acer_predator_v4_platform_profile_choices(void *drvdata, unsigned long *choices)
 {
-	set_bit(PLATFORM_PROFILE_PERFORMANCE, pprof->choices);
-	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, pprof->choices);
-	set_bit(PLATFORM_PROFILE_BALANCED, pprof->choices);
-	set_bit(PLATFORM_PROFILE_QUIET, pprof->choices);
-	set_bit(PLATFORM_PROFILE_LOW_POWER, pprof->choices);
+	set_bit(PLATFORM_PROFILE_PERFORMANCE, choices);
+	set_bit(PLATFORM_PROFILE_BALANCED_PERFORMANCE, choices);
+	set_bit(PLATFORM_PROFILE_BALANCED, choices);
+	set_bit(PLATFORM_PROFILE_QUIET, choices);
+	set_bit(PLATFORM_PROFILE_LOW_POWER, choices);
 
 	return 0;
 }

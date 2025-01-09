@@ -31,11 +31,9 @@ enum platform_profile_option {
 struct platform_profile_handler;
 
 struct platform_profile_ops {
-	int (*profile_get)(struct platform_profile_handler *pprof,
-				enum platform_profile_option *profile);
-	int (*profile_set)(struct platform_profile_handler *pprof,
-				enum platform_profile_option profile);
-	int (*choices)(struct platform_profile_handler *pprof);
+	int (*profile_get)(struct device *dev, enum platform_profile_option *profile);
+	int (*profile_set)(struct device *dev, enum platform_profile_option profile);
+	int (*choices)(void *drvdata, unsigned long *choices);
 };
 
 struct platform_profile_handler {

@@ -67,7 +67,7 @@ static int _store_class_profile(struct device *dev, void *data)
 	if (!test_bit(*bit, handler->choices))
 		return -EOPNOTSUPP;
 
-	return handler->ops->profile_set(handler, *bit);
+	return handler->ops->profile_set(dev, *bit);
 }
 
 /**
@@ -104,7 +104,7 @@ static int get_class_profile(struct device *dev,
 
 	lockdep_assert_held(&profile_lock);
 	handler = to_pprof_handler(dev);
-	err = handler->ops->profile_get(handler, &val);
+	err = handler->ops->profile_get(dev, &val);
 	if (err) {
 		pr_err("Failed to get profile for handler %s\n", handler->name);
 		return err;
@@ -490,7 +490,7 @@ struct device *platform_profile_register(struct device *dev, const char *name,
 	if (!pprof)
 		return ERR_PTR(-ENOMEM);
 
-	err = ops->choices(pprof);
+	err = ops->choices(drvdata, pprof->choices);
 	if (err < 0)
 		return ERR_PTR(err);
 
