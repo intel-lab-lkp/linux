@@ -2226,21 +2226,11 @@ static int gpmc_probe_generic_child(struct platform_device *pdev,
 		goto err;
 	}
 
-	if (of_node_name_eq(child, "nand")) {
+	if (of_node_name_eq(child, "nand") || of_node_name_eq(child, "onenand")) {
 		/* Warn about older DT blobs with no compatible property */
-		if (!of_property_read_bool(child, "compatible")) {
+		if (!of_property_present(child, "compatible")) {
 			dev_warn(&pdev->dev,
-				 "Incompatible NAND node: missing compatible");
-			ret = -EINVAL;
-			goto err;
-		}
-	}
-
-	if (of_node_name_eq(child, "onenand")) {
-		/* Warn about older DT blobs with no compatible property */
-		if (!of_property_read_bool(child, "compatible")) {
-			dev_warn(&pdev->dev,
-				 "Incompatible OneNAND node: missing compatible");
+				 "Incompatible '%pOFn' node: missing compatible", child);
 			ret = -EINVAL;
 			goto err;
 		}
