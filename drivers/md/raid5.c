@@ -63,6 +63,13 @@
 
 #define RAID5_MAX_REQ_STRIPES 256
 
+enum reshape_loc {
+	LOC_NO_RESHAPE,
+	LOC_AHEAD_OF_RESHAPE,
+	LOC_INSIDE_RESHAPE,
+	LOC_BEHIND_RESHAPE,
+};
+
 static bool devices_handle_discard_safely = false;
 module_param(devices_handle_discard_safely, bool, 0644);
 MODULE_PARM_DESC(devices_handle_discard_safely,
@@ -2947,6 +2954,94 @@ static void raid5_error(struct mddev *mddev, struct md_rdev *rdev)
 	r5c_update_on_rdev_error(mddev, rdev);
 }
 
+static bool ahead_of_reshape(struct mddev *mddev, sector_t sector,
+			     sector_t reshape_sector)
+{
+	return mddev->reshape_backwards ? sector < reshape_sector :
+					  sector >= reshape_sector;
+}
+
+static bool range_ahead_of_reshape(struct mddev *mddev, sector_t min,
+				   sector_t max, sector_t reshape_sector)
+{
+	return mddev->reshape_backwards ? max < reshape_sector :
+					  min >= reshape_sector;
+}
+
+static enum reshape_loc get_reshape_loc(struct mddev *mddev,
+		struct r5conf *conf, sector_t logical_sector)
+{
+	sector_t reshape_progress, reshape_safe;
+	/*
+	 * Spinlock is needed as reshape_progress may be
+	 * 64bit on a 32bit platform, and so it might be
+	 * possible to see a half-updated value
+	 * Of course reshape_progress could change after
+	 * the lock is dropped, so once we get a reference
+	 * to the stripe that we think it is, we will have
+	 * to check again.
+	 */
+	spin_lock_irq(&conf->device_lock);
+	reshape_progress = conf->reshape_progress;
+	reshape_safe = conf->reshape_safe;
+	spin_unlock_irq(&conf->device_lock);
+	if (reshape_progress == MaxSector)
+		return LOC_NO_RESHAPE;
+	if (ahead_of_reshape(mddev, logical_sector, reshape_progress))
+		return LOC_AHEAD_OF_RESHAPE;
+	if (ahead_of_reshape(mddev, logical_sector, reshape_safe))
+		return LOC_INSIDE_RESHAPE;
+	return LOC_BEHIND_RESHAPE;
+}
+
+static void raid5_bitmap_sector(struct mddev *mddev, sector_t *offset,
+				unsigned long *sectors)
+{
+	struct r5conf *conf = mddev->private;
+	sector_t start = *offset;
+	sector_t end = start + *sectors;
+	sector_t prev_start = start;
+	sector_t prev_end = end;
+	int sectors_per_chunk;
+	enum reshape_loc loc;
+	int dd_idx;
+
+	sectors_per_chunk = conf->chunk_sectors *
+		(conf->raid_disks - conf->max_degraded);
+	start = round_down(start, sectors_per_chunk);
+	end = round_up(end, sectors_per_chunk);
+
+	start = raid5_compute_sector(conf, start, 0, &dd_idx, NULL);
+	end = raid5_compute_sector(conf, end, 0, &dd_idx, NULL);
+
+	/*
+	 * For LOC_INSIDE_RESHAPE, this IO will wait for reshape to make
+	 * progress, hence it's the same as LOC_BEHIND_RESHAPE.
+	 */
+	loc = get_reshape_loc(mddev, conf, prev_start);
+	if (likely(loc != LOC_AHEAD_OF_RESHAPE)) {
+		*offset = start;
+		*sectors = end - start;
+		return;
+	}
+
+	sectors_per_chunk = conf->prev_chunk_sectors *
+		(conf->previous_raid_disks - conf->max_degraded);
+	prev_start = round_down(prev_start, sectors_per_chunk);
+	prev_end = round_down(prev_end, sectors_per_chunk);
+
+	prev_start = raid5_compute_sector(conf, prev_start, 1, &dd_idx, NULL);
+	prev_end = raid5_compute_sector(conf, prev_end, 1, &dd_idx, NULL);
+
+	/*
+	 * for LOC_AHEAD_OF_RESHAPE, reshape can make progress before this IO
+	 * is handled in make_stripe_request(), we can't know this here hence
+	 * we set bits for both.
+	 */
+	*offset = min(start, prev_start);
+	*sectors = max(end, prev_end) - *offset;
+}
+
 /*
  * Input: a 'big' sector number,
  * Output: index of the data and parity disk, and the sector # in them.
@@ -5792,20 +5887,6 @@ static void make_discard_request(struct mddev *mddev, struct bio *bi)
 	bio_endio(bi);
 }
 
-static bool ahead_of_reshape(struct mddev *mddev, sector_t sector,
-			     sector_t reshape_sector)
-{
-	return mddev->reshape_backwards ? sector < reshape_sector :
-					  sector >= reshape_sector;
-}
-
-static bool range_ahead_of_reshape(struct mddev *mddev, sector_t min,
-				   sector_t max, sector_t reshape_sector)
-{
-	return mddev->reshape_backwards ? max < reshape_sector :
-					  min >= reshape_sector;
-}
-
 static bool stripe_ahead_of_reshape(struct mddev *mddev, struct r5conf *conf,
 				    struct stripe_head *sh)
 {
@@ -5883,39 +5964,6 @@ static int add_all_stripe_bios(struct r5conf *conf,
 
 	spin_unlock_irq(&sh->stripe_lock);
 	return 1;
-}
-
-enum reshape_loc {
-	LOC_NO_RESHAPE,
-	LOC_AHEAD_OF_RESHAPE,
-	LOC_INSIDE_RESHAPE,
-	LOC_BEHIND_RESHAPE,
-};
-
-static enum reshape_loc get_reshape_loc(struct mddev *mddev,
-		struct r5conf *conf, sector_t logical_sector)
-{
-	sector_t reshape_progress, reshape_safe;
-	/*
-	 * Spinlock is needed as reshape_progress may be
-	 * 64bit on a 32bit platform, and so it might be
-	 * possible to see a half-updated value
-	 * Of course reshape_progress could change after
-	 * the lock is dropped, so once we get a reference
-	 * to the stripe that we think it is, we will have
-	 * to check again.
-	 */
-	spin_lock_irq(&conf->device_lock);
-	reshape_progress = conf->reshape_progress;
-	reshape_safe = conf->reshape_safe;
-	spin_unlock_irq(&conf->device_lock);
-	if (reshape_progress == MaxSector)
-		return LOC_NO_RESHAPE;
-	if (ahead_of_reshape(mddev, logical_sector, reshape_progress))
-		return LOC_AHEAD_OF_RESHAPE;
-	if (ahead_of_reshape(mddev, logical_sector, reshape_safe))
-		return LOC_INSIDE_RESHAPE;
-	return LOC_BEHIND_RESHAPE;
 }
 
 static enum stripe_result make_stripe_request(struct mddev *mddev,
@@ -8966,6 +9014,7 @@ static struct md_personality raid6_personality =
 	.takeover	= raid6_takeover,
 	.change_consistency_policy = raid5_change_consistency_policy,
 	.prepare_suspend = raid5_prepare_suspend,
+	.bitmap_sector	= raid5_bitmap_sector,
 };
 static struct md_personality raid5_personality =
 {
@@ -8991,6 +9040,7 @@ static struct md_personality raid5_personality =
 	.takeover	= raid5_takeover,
 	.change_consistency_policy = raid5_change_consistency_policy,
 	.prepare_suspend = raid5_prepare_suspend,
+	.bitmap_sector	= raid5_bitmap_sector,
 };
 
 static struct md_personality raid4_personality =
@@ -9017,6 +9067,7 @@ static struct md_personality raid4_personality =
 	.takeover	= raid4_takeover,
 	.change_consistency_policy = raid5_change_consistency_policy,
 	.prepare_suspend = raid5_prepare_suspend,
+	.bitmap_sector	= raid5_bitmap_sector,
 };
 
 static int __init raid5_init(void)
