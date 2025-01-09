@@ -4280,12 +4280,17 @@ static inline u8 kvm_max_level_for_order(int order)
 	return PG_LEVEL_4K;
 }
 
-static u8 kvm_max_private_mapping_level(struct kvm *kvm, kvm_pfn_t pfn,
-					u8 max_level, int gmem_order)
+static u8 kvm_max_private_mapping_level(struct kvm *kvm,
+					struct kvm_memory_slot *slot,
+					kvm_pfn_t pfn, u8 max_level,
+					int gmem_order)
 {
 	u8 req_max_level;
 
 	if (max_level == PG_LEVEL_4K)
+		return PG_LEVEL_4K;
+
+	if (kvm_memslot_userfault(slot))
 		return PG_LEVEL_4K;
 
 	max_level = min(kvm_max_level_for_order(gmem_order), max_level);
@@ -4324,8 +4329,10 @@ static int kvm_mmu_faultin_pfn_private(struct kvm_vcpu *vcpu,
 	}
 
 	fault->map_writable = !(fault->slot->flags & KVM_MEM_READONLY);
-	fault->max_level = kvm_max_private_mapping_level(vcpu->kvm, fault->pfn,
-							 fault->max_level, max_order);
+	fault->max_level = kvm_max_private_mapping_level(vcpu->kvm, fault->slot,
+							 fault->pfn,
+							 fault->max_level,
+							 max_order);
 
 	return RET_PF_CONTINUE;
 }
@@ -4334,6 +4341,18 @@ static int __kvm_mmu_faultin_pfn(struct kvm_vcpu *vcpu,
 				 struct kvm_page_fault *fault)
 {
 	unsigned int foll = fault->write ? FOLL_WRITE : 0;
+	int userfault;
+
+	userfault = kvm_gfn_userfault(vcpu->kvm, fault->slot, fault->gfn);
+	if (userfault < 0)
+		return userfault;
+	if (userfault) {
+		kvm_mmu_prepare_userfault_exit(vcpu, fault);
+		return -EFAULT;
+	}
+
+	if (kvm_memslot_userfault(fault->slot))
+		fault->max_level = PG_LEVEL_4K;
 
 	if (fault->is_private)
 		return kvm_mmu_faultin_pfn_private(vcpu, fault);
