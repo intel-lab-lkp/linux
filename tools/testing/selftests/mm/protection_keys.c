@@ -78,7 +78,7 @@ static void cat_into_file(char *str, char *file)
 	}
 
 	ret = write(fd, str, strlen(str));
-	if (ret != strlen(str)) {
+	if (ret != (signed int)strlen(str)) {
 		perror("write to file failed");
 		fprintf(stderr, "filename: '%s' str: '%s'\n", file, str);
 		exit(__LINE__);
@@ -597,10 +597,10 @@ struct pkey_malloc_record *pkey_last_malloc_record;
 static long nr_pkey_malloc_records;
 void record_pkey_malloc(void *ptr, long size, int prot)
 {
-	long i;
+	unsigned long i;
 	struct pkey_malloc_record *rec = NULL;
 
-	for (i = 0; i < nr_pkey_malloc_records; i++) {
+	for (i = 0; i < (unsigned long)nr_pkey_malloc_records; i++) {
 		rec = &pkey_malloc_records[i];
 		/* find a free record */
 		if (rec)
@@ -866,7 +866,7 @@ static int nr_test_fds;
 static void __save_test_fd(int fd)
 {
 	pkey_assert(fd >= 0);
-	pkey_assert(nr_test_fds < ARRAY_SIZE(test_fds));
+	pkey_assert(nr_test_fds < (signed int)ARRAY_SIZE(test_fds));
 	test_fds[nr_test_fds] = fd;
 	nr_test_fds++;
 }
@@ -897,7 +897,7 @@ static void test_pkey_alloc_free_attach_pkey0(int *ptr, u16 __attribute__((unuse
 	int max_nr_pkey_allocs;
 	int alloced_pkeys[NR_PKEYS];
 	int nr_alloced = 0;
-	long size;
+	unsigned long size;
 
 	pkey_assert(pkey_last_malloc_record);
 	size = pkey_last_malloc_record->size;
@@ -1280,7 +1280,7 @@ static void test_pkey_init_state(int __attribute__((unused)) *ptr, u16 __attribu
  */
 static void test_mprotect_with_pkey_0(int *ptr, u16 pkey)
 {
-	long size;
+	unsigned long size;
 	int prot;
 
 	assert(pkey_last_malloc_record);
@@ -1530,7 +1530,7 @@ static void test_ptrace_modifies_pkru(int __attribute__((unused)) *ptr,
 	pkey_assert(WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP);
 
 	xsave = (void *)malloc(xsave_size);
-	pkey_assert(xsave > 0);
+	pkey_assert(xsave != NULL);
 
 	/* Modify the PKRU register directly */
 	iov.iov_base = xsave;
@@ -1727,7 +1727,7 @@ static void run_tests_once(void)
 	int *ptr;
 	int prot = PROT_READ|PROT_WRITE;
 
-	for (test_nr = 0; test_nr < ARRAY_SIZE(pkey_tests); test_nr++) {
+	for (test_nr = 0; test_nr < (signed int)ARRAY_SIZE(pkey_tests); test_nr++) {
 		int pkey;
 		int orig_pkey_faults = pkey_faults;
 
