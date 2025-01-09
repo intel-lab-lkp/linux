@@ -2318,6 +2318,20 @@ add_addr_timeout_tests()
 			chk_join_nr 1 1 1
 		chk_add_nr 8 0
 	fi
+
+	# signal invalid LAN addresses, which will cause an error at TCP level
+	if reset_with_add_addr_timeout "invalid LAN address, ADD_ADDR timeout"; then
+		pm_nl_set_limits $ns1 2 2
+		pm_nl_add_endpoint $ns1 10.0.1.3 flags signal
+		pm_nl_add_endpoint $ns1 10.0.3.1 flags signal
+		pm_nl_set_limits $ns2 2 2
+
+		speed=10 \
+			run_tests $ns1 $ns2 10.0.1.1
+		join_syn_tx=+2 \
+			chk_join_nr 1 1 1
+		chk_add_nr 8 0
+	fi
 }
 
 remove_tests()
