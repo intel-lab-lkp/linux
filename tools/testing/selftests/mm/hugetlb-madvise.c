@@ -58,7 +58,7 @@ void read_fault_pages(void *addr, unsigned long nr_pages)
 	}
 }
 
-int main(int argc, char **argv)
+int main(int __attribute__((unused)) argc, char **argv)
 {
 	unsigned long free_hugepages;
 	void *addr, *addr2;
