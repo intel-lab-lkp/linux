@@ -1734,6 +1734,31 @@ static const struct panel_desc dataimage_fg040346dsswbg04 = {
 	.connector_type = DRM_MODE_CONNECTOR_DPI,
 };
 
+static const struct display_timing dataimage_fg080016dncwag03_timing = {
+	.pixelclock = { 24000000, 25000000, 32500000 },
+	.hactive = { 640, 640, 640 },
+	.hfront_porch = { 64, 70, 115 },
+	.hback_porch =  { 64, 70, 115 },
+	.hsync_len = { 20, 20, 20 },
+	.vactive = { 480, 480, 480 },
+	.vfront_porch = { 8, 12, 30 },
+	.vback_porch =  { 8, 13, 31 },
+	.vsync_len = { 20, 20, 20 },
+};
+
+static const struct panel_desc dataimage_fg080016dncwag03 = {
+	.timings = &dataimage_fg080016dncwag03_timing,
+	.num_timings = 1,
+	.bpc = 6,
+	.size = {
+		.width = 217,
+		.height = 136,
+	},
+	.bus_format = MEDIA_BUS_FMT_RGB666_1X18,
+	.bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE,
+	.connector_type = DRM_MODE_CONNECTOR_DPI,
+};
+
 static const struct display_timing dataimage_fg1001l0dsswmg01_timing = {
 	.pixelclock = { 68900000, 71110000, 73400000 },
 	.hactive = { 1280, 1280, 1280 },
@@ -4731,6 +4756,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "dataimage,fg040346dsswbg04",
 		.data = &dataimage_fg040346dsswbg04,
+	}, {
+		.compatible = "dataimage,fg080016dncwag03",
+		.data = &dataimage_fg080016dncwag03,
 	}, {
 		.compatible = "dataimage,fg1001l0dsswmg01",
 		.data = &dataimage_fg1001l0dsswmg01,
