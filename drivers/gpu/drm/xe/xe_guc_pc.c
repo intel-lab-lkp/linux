@@ -992,6 +992,19 @@ out:
 	return ret;
 }
 
+static int xe_guc_pc_set_strategy(struct xe_guc_pc *pc, u32 val)
+{
+	int ret = 0;
+
+	xe_pm_runtime_get(pc_to_xe(pc));
+	ret = pc_action_set_param(pc,
+				  SLPC_PARAM_STRATEGIES,
+				  val);
+	xe_pm_runtime_put(pc_to_xe(pc));
+
+	return ret;
+}
+
 /**
  * xe_guc_pc_start - Start GuC's Power Conservation component
  * @pc: Xe_GuC_PC instance
@@ -1051,6 +1064,9 @@ int xe_guc_pc_start(struct xe_guc_pc *pc)
 	}
 
 	ret = pc_action_setup_gucrc(pc, GUCRC_FIRMWARE_CONTROL);
+
+	/* Enable SLPC Optimized Strategy for compute */
+	xe_guc_pc_set_strategy(pc, SLPC_OPTIMIZED_STRATEGY_COMPUTE);
 
 out:
 	xe_force_wake_put(gt_to_fw(gt), fw_ref);
