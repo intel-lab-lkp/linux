@@ -1928,7 +1928,7 @@ static int acer_platform_profile_setup(struct platform_device *device)
 		platform_profile_handler.ops =
 			&acer_predator_v4_platform_profile_ops;
 
-		err = platform_profile_register(&platform_profile_handler);
+		err = platform_profile_register(&platform_profile_handler, NULL);
 		if (err)
 			return err;
 

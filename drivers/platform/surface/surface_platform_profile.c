@@ -234,7 +234,7 @@ static int surface_platform_profile_probe(struct ssam_device *sdev)
 
 	tpd->has_fan = device_property_read_bool(&sdev->dev, "has_fan");
 
-	return platform_profile_register(&tpd->handler);
+	return platform_profile_register(&tpd->handler, NULL);
 }
 
 static void surface_platform_profile_remove(struct ssam_device *sdev)

@@ -1169,7 +1169,7 @@ static int create_thermal_profile(struct platform_device *platform_device)
 	pp_handler.dev = &platform_device->dev;
 	pp_handler.ops = &awcc_platform_profile_ops;
 
-	return devm_platform_profile_register(&pp_handler);
+	return devm_platform_profile_register(&pp_handler, NULL);
 }
 
 static int __init alienware_wmi_init(void)

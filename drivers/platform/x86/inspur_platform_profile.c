@@ -196,7 +196,7 @@ static int inspur_wmi_probe(struct wmi_device *wdev, const void *context)
 	priv->handler.dev = &wdev->dev;
 	priv->handler.ops = &inspur_platform_profile_ops;
 
-	return platform_profile_register(&priv->handler);
+	return platform_profile_register(&priv->handler, NULL);
 }
 
 static void inspur_wmi_remove(struct wmi_device *wdev)

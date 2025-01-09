@@ -1123,7 +1123,7 @@ static int ideapad_dytc_profile_init(struct ideapad_private *priv)
 	priv->dytc->pprof.ops = &dytc_profile_ops;
 
 	/* Create platform_profile structure and register */
-	err = platform_profile_register(&priv->dytc->pprof);
+	err = platform_profile_register(&priv->dytc->pprof, NULL);
 	if (err)
 		goto pp_reg_failed;
 
