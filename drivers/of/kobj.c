@@ -62,10 +62,11 @@ static const char *safe_name(const struct kobject *kobj, const char *orig_name)
 
 int __of_add_property_sysfs(struct device_node *np, struct property *pp)
 {
+	const char *security_prefix = "security-";
 	int rc;
 
 	/* Important: Don't leak passwords */
-	bool secure = strncmp(pp->name, "security-", 9) == 0;
+	bool secure = strncmp(pp->name, security_prefix, strlen(security_prefix)) == 0;
 
 	if (!IS_ENABLED(CONFIG_SYSFS))
 		return 0;
