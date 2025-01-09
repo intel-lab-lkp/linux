@@ -140,7 +140,7 @@ static void get_finfo(const char *dir)
 		exit(EXIT_FAILURE);
 	}
 	if (snprintf(finfo.path, sizeof(finfo.path), "%s/" TEST_FILE,
-		     finfo.dir) >= sizeof(finfo.path)) {
+		     finfo.dir) >= (signed int)sizeof(finfo.path)) {
 		printf("%s: Pathname is too long\n", __func__);
 		exit(EXIT_FAILURE);
 	}
@@ -155,7 +155,7 @@ static void get_finfo(const char *dir)
 	/* Find owning device's queue/read_ahead_kb control */
 	if (snprintf(path, sizeof(path), "/sys/dev/block/%d:%d/uevent",
 		     major(path_stat.st_dev), minor(path_stat.st_dev))
-	    >= sizeof(path)) {
+	    >= (signed int)sizeof(path)) {
 		printf("%s: Pathname is too long\n", __func__);
 		exit(EXIT_FAILURE);
 	}
@@ -169,7 +169,7 @@ static void get_finfo(const char *dir)
 			     sizeof(finfo.dev_queue_read_ahead_path),
 			     "/sys/dev/block/%d:%d/queue/read_ahead_kb",
 			     major(path_stat.st_dev), minor(path_stat.st_dev))
-		    >= sizeof(finfo.dev_queue_read_ahead_path)) {
+		    >= (signed int)sizeof(finfo.dev_queue_read_ahead_path)) {
 			printf("%s: Pathname is too long\n", __func__);
 			exit(EXIT_FAILURE);
 		}
@@ -197,7 +197,7 @@ static void get_finfo(const char *dir)
 			if (snprintf(finfo.dev_queue_read_ahead_path,
 				     sizeof(finfo.dev_queue_read_ahead_path),
 				     "/sys/block/%s/queue/read_ahead_kb",
-				     str) >= sizeof(finfo.dev_queue_read_ahead_path)) {
+				     str) >= (signed int)sizeof(finfo.dev_queue_read_ahead_path)) {
 				printf("%s: Pathname is too long\n", __func__);
 				exit(EXIT_FAILURE);
 			}
@@ -271,7 +271,7 @@ static void *alloc_mapping(int nr)
 
 static void fill_memory(int *p, unsigned long start, unsigned long end)
 {
-	int i;
+	unsigned int i;
 
 	for (i = start / page_size; i < end / page_size; i++)
 		p[i * page_size / sizeof(*p)] = i + 0xdead0000;
@@ -333,10 +333,10 @@ static void *alloc_hpage(struct mem_ops *ops)
 
 static void validate_memory(int *p, unsigned long start, unsigned long end)
 {
-	int i;
+	unsigned int i;
 
 	for (i = start / page_size; i < end / page_size; i++) {
-		if (p[i * page_size / sizeof(*p)] != i + 0xdead0000) {
+		if ((unsigned int)p[i * page_size / sizeof(*p)] != i + 0xdead0000) {
 			printf("Page %d is corrupted: %#x\n",
 					i, p[i * page_size / sizeof(*p)]);
 			exit(EXIT_FAILURE);
@@ -537,7 +537,7 @@ static void madvise_collapse(const char *msg, char *p, int nr_hpages,
 static bool wait_for_scan(const char *msg, char *p, int nr_hpages,
 			  struct mem_ops *ops)
 {
-	int full_scans;
+	unsigned int full_scans;
 	int timeout = 6; /* 3 seconds */
 
 	/* Sanity check */
