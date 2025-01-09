@@ -1394,12 +1394,22 @@ static void ath12k_core_restart(struct work_struct *work)
 			ath12k_dbg(ab, ATH12K_DBG_BOOT, "reset success\n");
 		}
 
+		mutex_lock(&ab->ag->mutex);
+
+		if (!ath12k_core_hw_group_start_ready(ab->ag)) {
+			mutex_unlock(&ab->ag->mutex);
+			goto exit_restart;
+		}
+
 		for (i = 0; i < ath12k_get_num_hw(ab); i++) {
 			ah = ath12k_ab_to_ah(ab, i);
 			ieee80211_restart_hw(ah->hw);
 		}
+
+		mutex_unlock(&ab->ag->mutex);
 	}
 
+exit_restart:
 	complete(&ab->restart_completed);
 }
 
