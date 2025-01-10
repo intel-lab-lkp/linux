@@ -94,6 +94,7 @@
 #define PINCTRL_SUN8I_V3S	BIT(10)
 /* Variants below here have an updated register layout. */
 #define PINCTRL_SUN20I_D1	BIT(11)
+#define PINCTRL_SUN8I_V853	BIT(12)
 
 #define PIO_POW_MOD_SEL_REG	0x340
 #define PIO_POW_MOD_CTL_REG	0x344
