@@ -86,6 +86,8 @@ struct kvm_s2_trans {
 	bool writable;
 	bool readable;
 	int level;
+	int s2_fwb;
+	int mem_attr;
 	u32 esr;
 	u64 desc;
 };
@@ -120,10 +122,18 @@ static inline bool kvm_s2_trans_executable(struct kvm_s2_trans *trans)
 	return !(trans->desc & BIT(54));
 }
 
+static inline bool kvm_s2_trans_tagaccess(struct kvm_s2_trans *trans)
+{
+	if (trans->s2_fwb)
+		return (trans->mem_attr & MT_S2_FWB_NORMAL_NOTAGACCESS) != MT_S2_FWB_NORMAL_NOTAGACCESS;
+	return (trans->mem_attr & MT_S2_NORMAL_NOTAGACCESS) != MT_S2_NORMAL_NOTAGACCESS;
+}
+
 extern int kvm_walk_nested_s2(struct kvm_vcpu *vcpu, phys_addr_t gipa,
 			      struct kvm_s2_trans *result);
 extern int kvm_s2_handle_perm_fault(struct kvm_vcpu *vcpu,
 				    struct kvm_s2_trans *trans);
+int kvm_s2_handle_notagaccess_fault(struct kvm_vcpu *vcpu, struct kvm_s2_trans *trans);
 extern int kvm_inject_s2_fault(struct kvm_vcpu *vcpu, u64 esr_el2);
 extern void kvm_nested_s2_wp(struct kvm *kvm);
 extern void kvm_nested_s2_unmap(struct kvm *kvm, bool may_block);

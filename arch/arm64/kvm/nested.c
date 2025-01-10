@@ -290,6 +290,7 @@ static int walk_nested_s2_pgd(phys_addr_t ipa,
 	out->writable = desc & (0b10 << 6);
 	out->level = level;
 	out->desc = desc;
+	out->mem_attr = desc & KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR;
 	return 0;
 }
 
@@ -340,6 +341,7 @@ int kvm_walk_nested_s2(struct kvm_vcpu *vcpu, phys_addr_t gipa,
 
 	wi.be = vcpu_read_sys_reg(vcpu, SCTLR_EL2) & SCTLR_ELx_EE;
 
+	result->s2_fwb = !!(*vcpu_hcr(vcpu) & HCR_FWB);
 	ret = walk_nested_s2_pgd(gipa, &wi, result);
 	if (ret)
 		result->esr |= (kvm_vcpu_get_esr(vcpu) & ~ESR_ELx_FSC);
@@ -733,6 +735,27 @@ int kvm_s2_handle_perm_fault(struct kvm_vcpu *vcpu, struct kvm_s2_trans *trans)
 	return forward_fault;
 }
 
+int kvm_s2_handle_notagaccess_fault(struct kvm_vcpu *vcpu, struct kvm_s2_trans *trans)
+{
+	bool forward_fault = false;
+
+	trans->esr = 0;
+
+	if (!kvm_vcpu_trap_is_tagaccess(vcpu))
+		return 0;
+
+	if (!kvm_s2_trans_tagaccess(trans))
+		forward_fault = true;
+	else
+		forward_fault = false;
+
+	/* forward it as a permission fault with tag access set in ISS2 */
+	if (forward_fault)
+		trans->esr = esr_s2_fault(vcpu, trans->level, ESR_ELx_FSC_PERM);
+
+	return forward_fault;
+}
+
 int kvm_inject_s2_fault(struct kvm_vcpu *vcpu, u64 esr_el2)
 {
 	vcpu_write_sys_reg(vcpu, vcpu->arch.fault.far_el2, FAR_EL2);
@@ -843,6 +866,11 @@ static void limit_nv_id_regs(struct kvm *kvm)
 		NV_FTR(PFR1, SSBS)	|
 		NV_FTR(PFR1, CSV2_frac));
 	kvm_set_vm_id_reg(kvm, SYS_ID_AA64PFR1_EL1, val);
+
+	/* For now no MTE_PERM support because MTE is disabled above */
+	val = kvm_read_vm_id_reg(kvm, SYS_ID_AA64PFR2_EL1);
+	val &= ~NV_FTR(PFR2, MTEPERM);
+	kvm_set_vm_id_reg(kvm, SYS_ID_AA64PFR2_EL1, val);
 
 	/* Hide ECV, ExS, Secure Memory */
 	val = kvm_read_vm_id_reg(kvm, SYS_ID_AA64MMFR0_EL1);

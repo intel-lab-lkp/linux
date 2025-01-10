@@ -1640,6 +1640,9 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		goto out_unlock;
 	}
 
+	if (nested && !kvm_s2_trans_tagaccess(nested))
+		mte_allowed = false;
+
 	/*
 	 * If we are not forced to use page mapping, check if we are
 	 * backed by a THP and thus use block mapping if possible.
@@ -1830,6 +1833,13 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 		}
 
 		ret = kvm_s2_handle_perm_fault(vcpu, &nested_trans);
+		if (ret) {
+			esr = kvm_s2_trans_esr(&nested_trans);
+			kvm_inject_s2_fault(vcpu, esr);
+			goto out_unlock;
+		}
+
+		ret = kvm_s2_handle_notagaccess_fault(vcpu, &nested_trans);
 		if (ret) {
 			esr = kvm_s2_trans_esr(&nested_trans);
 			kvm_inject_s2_fault(vcpu, esr);
