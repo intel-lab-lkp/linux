@@ -214,6 +214,38 @@ static void rkisp1_stats_get_awb_meas_v12(struct rkisp1_stats *stats,
 				RKISP1_CIF_ISP_AWB_GET_MEAN_Y_G(reg_val);
 }
 
+static void rkisp1_stats_get_awb64_meas_imx8mp(struct rkisp1_stats *stats,
+					       struct rkisp1_stat_buffer *pbuf)
+{
+	struct rkisp1_device *rkisp1 = stats->rkisp1;
+	u32 white_cnt;
+
+	pbuf->meas_type |= RKISP1_CIF_ISP_STAT_AWB64;
+
+	for (unsigned int i = 0; i < RKISP1_CIF_ISP_AWB64_MAX_ELLIPSE; i++) {
+		struct rkisp1_cif_isp_awb64_meas *count =
+			&pbuf->params.awb64.count[i];
+
+		white_cnt = rkisp1_read(rkisp1,
+					RKISP1_CIF_ISP_AWB64_WHITE_CNT(i));
+		count->cnt = RKISP1_CIF_ISP_AWB64_GET_PIXEL_CNT(white_cnt);
+
+		count->accu_r =
+			rkisp1_read(rkisp1, RKISP1_CIF_ISP_AWB64_R_ACCU(i));
+		count->accu_g =
+			rkisp1_read(rkisp1, RKISP1_CIF_ISP_AWB64_G_ACCU(i));
+		count->accu_b =
+			rkisp1_read(rkisp1, RKISP1_CIF_ISP_AWB64_B_ACCU(i));
+	}
+}
+
+static void rkisp1_stats_get_awb_meas_imx8mp(struct rkisp1_stats *stats,
+					     struct rkisp1_stat_buffer *pbuf)
+{
+	rkisp1_stats_get_awb_meas_v10(stats, pbuf);
+	rkisp1_stats_get_awb64_meas_imx8mp(stats, pbuf);
+}
+
 static void rkisp1_stats_get_aec_meas_v10(struct rkisp1_stats *stats,
 					  struct rkisp1_stat_buffer *pbuf)
 {
@@ -335,6 +367,12 @@ static struct rkisp1_stats_ops rkisp1_v12_stats_ops = {
 	.get_hst_meas = rkisp1_stats_get_hst_meas_v12,
 };
 
+static const struct rkisp1_stats_ops rkisp1_imx8mp_stats_ops = {
+	.get_awb_meas = rkisp1_stats_get_awb_meas_imx8mp,
+	.get_aec_meas = rkisp1_stats_get_aec_meas_v10,
+	.get_hst_meas = rkisp1_stats_get_hst_meas_v10,
+};
+
 static void
 rkisp1_stats_send_measurement(struct rkisp1_stats *stats, u32 isp_ris)
 {
@@ -404,6 +442,8 @@ static void rkisp1_init_stats(struct rkisp1_stats *stats)
 
 	if (stats->rkisp1->info->isp_ver == RKISP1_V12)
 		stats->ops = &rkisp1_v12_stats_ops;
+	else if (stats->rkisp1->info->isp_ver == RKISP1_V_IMX8MP)
+		stats->ops = &rkisp1_imx8mp_stats_ops;
 	else
 		stats->ops = &rkisp1_v10_stats_ops;
 }
