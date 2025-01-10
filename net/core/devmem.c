@@ -380,7 +380,7 @@ bool mp_dmabuf_devmem_release_page(struct page_pool *pool, netmem_ref netmem)
 	if (WARN_ON_ONCE(refcount != 1))
 		return false;
 
-	page_pool_clear_pp_info(pool, netmem);
+	page_pool_clear_pp_info(pool, netmem, false);
 
 	net_devmem_free_dmabuf(netmem_to_net_iov(netmem));
 

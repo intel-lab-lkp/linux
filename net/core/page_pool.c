@@ -62,6 +62,7 @@ static const char pp_stats[][ETH_GSTRING_LEN] = {
 	"rx_pp_alloc_refill",
 	"rx_pp_alloc_waive",
 	"rx_pp_alloc_item_fast_empty",
+	"rx_pp_alloc_item_slow_failed",
 	"rx_pp_recycle_cached",
 	"rx_pp_recycle_cache_full",
 	"rx_pp_recycle_ring",
@@ -96,6 +97,7 @@ bool page_pool_get_stats(const struct page_pool *pool,
 	stats->alloc_stats.refill += pool->alloc_stats.refill;
 	stats->alloc_stats.waive += pool->alloc_stats.waive;
 	stats->alloc_stats.item_fast_empty += pool->alloc_stats.item_fast_empty;
+	stats->alloc_stats.item_slow_failed += pool->alloc_stats.item_slow_failed;
 
 	for_each_possible_cpu(cpu) {
 		const struct page_pool_recycle_stats *pcpu =
@@ -142,6 +144,7 @@ u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 	*data++ = pool_stats->alloc_stats.refill;
 	*data++ = pool_stats->alloc_stats.waive;
 	*data++ = pool_stats->alloc_stats.item_fast_empty;
+	*data++ = pool_stats->alloc_stats.item_slow_failed;
 	*data++ = pool_stats->recycle_stats.cached;
 	*data++ = pool_stats->recycle_stats.cache_full;
 	*data++ = pool_stats->recycle_stats.ring;
@@ -407,6 +410,8 @@ static void __page_pool_item_init(struct page_pool *pool, struct page *page)
 
 	list_add(&block->list, &pool->item_blocks);
 	block->pp = pool;
+	block->flags = 0;
+	refcount_set(&block->ref, 0);
 
 	for (i = 0; i < ITEMS_PER_PAGE; i++) {
 		page_pool_item_init_state(&items[i]);
@@ -484,8 +489,81 @@ static void page_pool_item_uninit(struct page_pool *pool)
 					 struct page_pool_item_block,
 					 list);
 		list_del(&block->list);
+		WARN_ON(refcount_read(&block->ref));
 		put_page(virt_to_page(block));
 	}
+}
+
+#define PAGE_POOL_ITEM_BLK_DYNAMIC_BIT			BIT(0)
+
+static bool page_pool_item_blk_add(struct page_pool *pool, netmem_ref netmem)
+{
+	struct page_pool_item *item;
+
+	if (unlikely(!pool->item_blk || pool->item_blk_idx >= ITEMS_PER_PAGE)) {
+		struct page_pool_item_block *block;
+		struct page *page;
+
+		page = alloc_pages_node(pool->p.nid, GFP_ATOMIC | __GFP_NOWARN |
+					__GFP_ZERO, 0);
+		if (!page) {
+			alloc_stat_inc(pool, item_slow_failed);
+			return false;
+		}
+
+		block = page_address(page);
+		spin_lock_bh(&pool->item_lock);
+		list_add(&block->list, &pool->item_blocks);
+		spin_unlock_bh(&pool->item_lock);
+
+		block->pp = pool;
+		block->flags |= PAGE_POOL_ITEM_BLK_DYNAMIC_BIT;
+		refcount_set(&block->ref, ITEMS_PER_PAGE);
+		pool->item_blk = block;
+		pool->item_blk_idx = 0;
+	}
+
+	item = &pool->item_blk->items[pool->item_blk_idx++];
+	item->pp_netmem = netmem;
+	page_pool_item_set_used(item);
+	netmem_set_pp_item(netmem, item);
+	return true;
+}
+
+static void __page_pool_item_blk_del(struct page_pool *pool,
+				     struct page_pool_item_block *block)
+{
+	spin_lock_bh(&pool->item_lock);
+	list_del(&block->list);
+	spin_unlock_bh(&pool->item_lock);
+
+	put_page(virt_to_page(block));
+}
+
+static void page_pool_item_blk_free(struct page_pool *pool)
+{
+	struct page_pool_item_block *block = pool->item_blk;
+
+	if (!block || pool->item_blk_idx >= ITEMS_PER_PAGE)
+		return;
+
+	if (refcount_sub_and_test(ITEMS_PER_PAGE - pool->item_blk_idx,
+				  &block->ref))
+		__page_pool_item_blk_del(pool, block);
+}
+
+static void page_pool_item_blk_del(struct page_pool *pool,
+				   struct page_pool_item_block *block,
+				   bool destroyed)
+{
+	/* Only call __page_pool_item_blk_del() when page_pool_destroy()
+	 * is not called yet as alloc API is not allowed to be called at
+	 * this point and pool->item_lock is reused to avoid concurrent
+	 * dma unmapping when page_pool_destroy() is called, taking the
+	 * lock in __page_pool_item_blk_del() causes deadlock.
+	 */
+	if (refcount_dec_and_test(&block->ref) && !destroyed)
+		__page_pool_item_blk_del(pool, block);
 }
 
 static bool page_pool_item_add(struct page_pool *pool, netmem_ref netmem)
@@ -498,7 +576,7 @@ static bool page_pool_item_add(struct page_pool *pool, netmem_ref netmem)
 
 		if (unlikely(llist_empty(&pool->hold_items))) {
 			alloc_stat_inc(pool, item_fast_empty);
-			return false;
+			return page_pool_item_blk_add(pool, netmem);
 		}
 	}
 
@@ -511,16 +589,26 @@ static bool page_pool_item_add(struct page_pool *pool, netmem_ref netmem)
 	return true;
 }
 
-static void page_pool_item_del(struct page_pool *pool, netmem_ref netmem)
+static void page_pool_item_del(struct page_pool *pool, netmem_ref netmem,
+			       bool destroyed)
 {
 	struct page_pool_item *item = netmem_get_pp_item(netmem);
+	struct page_pool_item_block *block;
 
 	DEBUG_NET_WARN_ON_ONCE(item->pp_netmem != netmem);
 	DEBUG_NET_WARN_ON_ONCE(page_pool_item_is_mapped(item));
 	DEBUG_NET_WARN_ON_ONCE(!page_pool_item_is_used(item));
 	page_pool_item_clear_used(item);
 	netmem_set_pp_item(netmem, NULL);
-	llist_add(&item->lentry, &pool->release_items);
+
+	block = page_pool_item_to_block(item);
+	if (likely(!(block->flags & PAGE_POOL_ITEM_BLK_DYNAMIC_BIT))) {
+		DEBUG_NET_WARN_ON_ONCE(refcount_read(&block->ref));
+		llist_add(&item->lentry, &pool->release_items);
+		return;
+	}
+
+	page_pool_item_blk_del(pool, block, destroyed);
 }
 
 /**
@@ -726,7 +814,7 @@ static struct page *__page_pool_alloc_page_order(struct page_pool *pool,
 				   pool->pages_state_hold_cnt);
 	return page;
 err_set_info:
-	page_pool_clear_pp_info(pool, page_to_netmem(page));
+	page_pool_clear_pp_info(pool, page_to_netmem(page), false);
 err_alloc:
 	put_page(page);
 	return NULL;
@@ -771,7 +859,7 @@ static noinline netmem_ref __page_pool_alloc_pages_slow(struct page_pool *pool,
 		}
 
 		if (dma_map && unlikely(!page_pool_dma_map(pool, netmem))) {
-			page_pool_clear_pp_info(pool, netmem);
+			page_pool_clear_pp_info(pool, netmem, false);
 			put_page(netmem_to_page(netmem));
 			continue;
 		}
@@ -867,10 +955,11 @@ bool page_pool_set_pp_info(struct page_pool *pool, netmem_ref netmem)
 	return true;
 }
 
-void page_pool_clear_pp_info(struct page_pool *pool, netmem_ref netmem)
+void page_pool_clear_pp_info(struct page_pool *pool, netmem_ref netmem,
+			     bool destroyed)
 {
 	netmem_clear_pp_magic(netmem);
-	page_pool_item_del(pool, netmem);
+	page_pool_item_del(pool, netmem, destroyed);
 }
 
 /* Disconnects a page (from a page_pool).  API users can have a need
@@ -897,7 +986,7 @@ void __page_pool_return_page(struct page_pool *pool, netmem_ref netmem,
 	trace_page_pool_state_release(pool, netmem, count);
 
 	if (put) {
-		page_pool_clear_pp_info(pool, netmem);
+		page_pool_clear_pp_info(pool, netmem, destroyed);
 		put_page(netmem_to_page(netmem));
 	}
 	/* An optimization would be to call __free_pages(page, pool->p.order)
@@ -1395,6 +1484,7 @@ void page_pool_destroy(struct page_pool *pool)
 
 	page_pool_disable_direct_recycling(pool);
 	page_pool_free_frag(pool);
+	page_pool_item_blk_free(pool);
 
 	if (!page_pool_release(pool))
 		return;

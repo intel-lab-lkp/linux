@@ -103,6 +103,7 @@ struct page_pool_params {
  * @waive:	pages obtained from the ptr ring that cannot be added to
  *		the cache due to a NUMA mismatch
  * @item_fast_empty: pre-allocated item cache is empty
+ * @item_slow_failed: failed to allocate memory for item_block
  */
 struct page_pool_alloc_stats {
 	u64 fast;
@@ -112,6 +113,7 @@ struct page_pool_alloc_stats {
 	u64 refill;
 	u64 waive;
 	u64 item_fast_empty;
+	u64 item_slow_failed;
 };
 
 /**
@@ -159,6 +161,8 @@ struct page_pool_item {
 struct page_pool_item_block {
 	struct page_pool *pp;
 	struct list_head list;
+	unsigned int flags;
+	refcount_t ref;
 	struct page_pool_item items[];
 };
 
@@ -188,6 +192,8 @@ struct page_pool {
 	int cpuid;
 	u32 pages_state_hold_cnt;
 	struct llist_head hold_items;
+	struct page_pool_item_block *item_blk;
+	unsigned int item_blk_idx;
 
 	bool has_init_callback:1;	/* slow::init_callback is set */
 	bool dma_map:1;			/* Perform DMA mapping */
@@ -250,8 +256,10 @@ struct page_pool {
 #endif
 	atomic_t pages_state_release_cnt;
 
-	/* Synchronizate dma unmapping operation in page_pool_return_page() with
-	 * page_pool_destory() when destroy_cnt is non-zero.
+	/* 1. Synchronizate dma unmapping operation in page_pool_return_page()
+	 *    with page_pool_destory() when destroy_cnt is non-zero.
+	 * 2. Protect item_blocks list when allocating and freeing item_block
+	 *    memory dynamically when destroy_cnt is zero.
 	 */
 	spinlock_t item_lock;
 	struct list_head item_blocks;
