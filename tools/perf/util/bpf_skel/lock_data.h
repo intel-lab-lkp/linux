@@ -3,6 +3,12 @@
 #ifndef UTIL_BPF_SKEL_LOCK_DATA_H
 #define UTIL_BPF_SKEL_LOCK_DATA_H
 
+typedef struct contention_owner_tracing_data {
+	u32 pid; // Who has the lock.
+	u64 timestamp; // The time while the owner acquires lock and contention is going on.
+	u32 count; // How many waiters for this lock.
+} cotd;
+
 struct tstamp_data {
 	u64 timestamp;
 	u64 lock;
