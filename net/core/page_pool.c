@@ -386,6 +386,27 @@ static netmem_ref page_pool_consume_ring(struct page_pool *pool)
 	return list->pp_netmem;
 }
 
+static netmem_ref __page_pool_consume_alloc(struct page_pool *pool)
+{
+	struct page_pool_item *item = pool->alloc.list;
+
+	pool->alloc.list = page_pool_item_get_next(item);
+	pool->alloc.count--;
+
+	return item->pp_netmem;
+}
+
+static void __page_pool_recycle_in_alloc(struct page_pool *pool,
+					 netmem_ref netmem)
+{
+	struct page_pool_item *item;
+
+	item = netmem_get_pp_item(netmem);
+	page_pool_item_set_next(item, pool->alloc.list);
+	pool->alloc.list = item;
+	pool->alloc.count++;
+}
+
 static __always_inline void __page_pool_release_page_dma(struct page_pool *pool,
 							 netmem_ref netmem,
 							 bool destroyed)
@@ -681,9 +702,11 @@ static void __page_pool_return_page(struct page_pool *pool, netmem_ref netmem,
 
 static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 {
-	struct page_pool_item *refill;
+	struct page_pool_item *refill, *alloc, *curr;
 	netmem_ref netmem;
 	int pref_nid; /* preferred NUMA node */
+
+	DEBUG_NET_WARN_ON_ONCE(pool->alloc.count || pool->alloc.list);
 
 	/* Quicker fallback, avoid locks when ring is empty */
 	refill = pool->alloc.refill;
@@ -702,6 +725,7 @@ static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 	pref_nid = numa_mem_id(); /* will be zero like page_to_nid() */
 #endif
 
+	alloc = NULL;
 	/* Refill alloc array, but only if NUMA match */
 	do {
 		if (unlikely(!refill)) {
@@ -710,10 +734,13 @@ static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 				break;
 		}
 
+		curr = refill;
 		netmem = refill->pp_netmem;
 		refill = page_pool_item_get_next(refill);
 		if (likely(netmem_is_pref_nid(netmem, pref_nid))) {
-			pool->alloc.cache[pool->alloc.count++] = netmem;
+			page_pool_item_set_next(curr, alloc);
+			pool->alloc.count++;
+			alloc = curr;
 		} else {
 			/* NUMA mismatch;
 			 * (1) release 1 page to page-allocator and
@@ -733,7 +760,9 @@ static noinline netmem_ref page_pool_refill_alloc_cache(struct page_pool *pool)
 	/* Return last page */
 	if (likely(pool->alloc.count > 0)) {
 		atomic_sub(pool->alloc.count, &pool->ring.count);
-		netmem = pool->alloc.cache[--pool->alloc.count];
+		netmem = alloc->pp_netmem;
+		pool->alloc.list = page_pool_item_get_next(alloc);
+		pool->alloc.count--;
 		alloc_stat_inc(pool, refill);
 	}
 
@@ -748,7 +777,7 @@ static netmem_ref __page_pool_get_cached(struct page_pool *pool)
 	/* Caller MUST guarantee safe non-concurrent access, e.g. softirq */
 	if (likely(pool->alloc.count)) {
 		/* Fast-path */
-		netmem = pool->alloc.cache[--pool->alloc.count];
+		netmem = __page_pool_consume_alloc(pool);
 		alloc_stat_inc(pool, fast);
 	} else {
 		netmem = page_pool_refill_alloc_cache(pool);
@@ -867,6 +896,7 @@ err_alloc:
 static noinline netmem_ref __page_pool_alloc_pages_slow(struct page_pool *pool,
 							gfp_t gfp)
 {
+	struct page_pool_item *curr, *alloc = NULL;
 	const int bulk = PP_ALLOC_CACHE_REFILL;
 	unsigned int pp_order = pool->p.order;
 	bool dma_map = pool->dma_map;
@@ -877,9 +907,8 @@ static noinline netmem_ref __page_pool_alloc_pages_slow(struct page_pool *pool,
 	if (unlikely(pp_order))
 		return page_to_netmem(__page_pool_alloc_page_order(pool, gfp));
 
-	/* Unnecessary as alloc cache is empty, but guarantees zero count */
-	if (unlikely(pool->alloc.count > 0))
-		return pool->alloc.cache[--pool->alloc.count];
+	/* alloc cache should be empty */
+	DEBUG_NET_WARN_ON_ONCE(pool->alloc.count || pool->alloc.list);
 
 	/* Mark empty alloc.cache slots "empty" for alloc_pages_bulk_array */
 	memset(&pool->alloc.cache, 0, sizeof(void *) * bulk);
@@ -907,7 +936,11 @@ static noinline netmem_ref __page_pool_alloc_pages_slow(struct page_pool *pool,
 			continue;
 		}
 
-		pool->alloc.cache[pool->alloc.count++] = netmem;
+		curr = netmem_get_pp_item(netmem);
+		page_pool_item_set_next(curr, alloc);
+		pool->alloc.count++;
+		alloc = curr;
+
 		/* Track how many pages are held 'in-flight' */
 		pool->pages_state_hold_cnt++;
 		trace_page_pool_state_hold(pool, netmem,
@@ -916,7 +949,9 @@ static noinline netmem_ref __page_pool_alloc_pages_slow(struct page_pool *pool,
 
 	/* Return last page */
 	if (likely(pool->alloc.count > 0)) {
-		netmem = pool->alloc.cache[--pool->alloc.count];
+		netmem = alloc->pp_netmem;
+		pool->alloc.list = page_pool_item_get_next(alloc);
+		pool->alloc.count--;
 		alloc_stat_inc(pool, slow);
 	} else {
 		netmem = 0;
@@ -1086,7 +1121,7 @@ static bool page_pool_recycle_in_cache(netmem_ref netmem,
 	}
 
 	/* Caller MUST have verified/know (page_ref_count(page) == 1) */
-	pool->alloc.cache[pool->alloc.count++] = netmem;
+	__page_pool_recycle_in_alloc(pool, netmem);
 	recycle_stat_inc(pool, cached);
 	return true;
 }
@@ -1431,7 +1466,7 @@ static void page_pool_empty_alloc_cache_once(struct page_pool *pool)
 	 * call concurrently.
 	 */
 	while (pool->alloc.count) {
-		netmem = pool->alloc.cache[--pool->alloc.count];
+		netmem = __page_pool_consume_alloc(pool);
 		page_pool_return_page(pool, netmem);
 	}
 
@@ -1571,7 +1606,7 @@ void page_pool_update_nid(struct page_pool *pool, int new_nid)
 
 	/* Flush pool alloc cache, as refill will check NUMA node */
 	while (pool->alloc.count) {
-		netmem = pool->alloc.cache[--pool->alloc.count];
+		netmem = __page_pool_consume_alloc(pool);
 		__page_pool_return_page(pool, netmem, false);
 	}
 }
