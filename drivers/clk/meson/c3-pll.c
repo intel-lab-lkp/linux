@@ -286,6 +286,8 @@ static struct clk_regmap gp0_pll_dco = {
 			.fw_name = "top",
 		},
 		.num_parents = 1,
+		.min_rate = 3000000000,
+		.max_rate = 6000000000,
 	},
 };
 
@@ -370,6 +372,8 @@ static struct clk_regmap hifi_pll_dco = {
 			.fw_name = "top",
 		},
 		.num_parents = 1,
+		.min_rate = 3000000000,
+		.max_rate = 6000000000,
 	},
 };
 

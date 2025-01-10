@@ -568,6 +568,7 @@ static const struct clk_parent_data pwm_parent_data[] = {
 		.ops = &clk_regmap_gate_ops,			\
 		.parent_names = (const char *[]) { #_name "_div" },\
 		.num_parents = 1,				\
+		.max_rate = 200000000,				\
 		.flags = CLK_SET_RATE_PARENT,			\
 	},							\
 }
@@ -724,6 +725,7 @@ static struct clk_regmap spicc_a = {
 			&spicc_a_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 500000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -771,6 +773,7 @@ static struct clk_regmap spicc_b = {
 			&spicc_b_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 500000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -829,6 +832,7 @@ static struct clk_regmap spifc = {
 			&spifc_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 167000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -887,6 +891,7 @@ static struct clk_regmap sd_emmc_a = {
 			&sd_emmc_a_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 250000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -934,6 +939,7 @@ static struct clk_regmap sd_emmc_b = {
 			&sd_emmc_b_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 250000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -981,6 +987,7 @@ static struct clk_regmap sd_emmc_c = {
 			&sd_emmc_c_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 1200000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1074,6 +1081,7 @@ static struct clk_regmap eth_rmii = {
 			&eth_rmii_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 50000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1132,6 +1140,7 @@ static struct clk_regmap mipi_dsi_meas = {
 			&mipi_dsi_meas_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 200000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1190,6 +1199,7 @@ static struct clk_regmap dsi_phy = {
 			&dsi_phy_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 1500000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1248,6 +1258,7 @@ static struct clk_regmap vout_mclk = {
 			&vout_mclk_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 334000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1306,6 +1317,7 @@ static struct clk_regmap vout_enc = {
 			&vout_enc_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 200000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1431,6 +1443,7 @@ static struct clk_regmap hcodec = {
 		.ops = &clk_regmap_mux_ops,
 		.parent_data = hcodec_parent_data,
 		.num_parents = ARRAY_SIZE(hcodec_parent_data),
+		.max_rate = 667000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1489,6 +1502,7 @@ static struct clk_regmap vc9000e_aclk = {
 			&vc9000e_aclk_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 667000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1536,6 +1550,7 @@ static struct clk_regmap vc9000e_core = {
 			&vc9000e_core_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 400000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1594,6 +1609,7 @@ static struct clk_regmap csi_phy0 = {
 			&csi_phy0_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 200000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1652,6 +1668,7 @@ static struct clk_regmap dewarpa = {
 			&dewarpa_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 800000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1710,6 +1727,7 @@ static struct clk_regmap isp0 = {
 			&isp0_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 400000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1768,6 +1786,7 @@ static struct clk_regmap nna_core = {
 			&nna_core_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 800000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1826,6 +1845,7 @@ static struct clk_regmap ge2d = {
 			&ge2d_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 667000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
@@ -1884,6 +1904,7 @@ static struct clk_regmap vapb = {
 			&vapb_div.hw
 		},
 		.num_parents = 1,
+		.max_rate = 400000000,
 		.flags = CLK_SET_RATE_PARENT,
 	},
 };
