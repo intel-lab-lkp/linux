@@ -294,6 +294,8 @@ struct clk_parent_data {
  * @parent_hws: array of pointers to all possible parents (when all parents
  *              are internal to the clk controller)
  * @num_parents: number of possible parents
+ * @min_rate: min rate provided by the clk provider
+ * @max_rate: max rate provided by the clk provider
  * @flags: framework-level hints and quirks
  */
 struct clk_init_data {
@@ -304,6 +306,8 @@ struct clk_init_data {
 	const struct clk_parent_data	*parent_data;
 	const struct clk_hw		**parent_hws;
 	u8			num_parents;
+	unsigned long		min_rate;
+	unsigned long		max_rate;
 	unsigned long		flags;
 };
 

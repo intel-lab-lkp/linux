@@ -4359,8 +4359,8 @@ __clk_register(struct device *dev, struct device_node *np, struct clk_hw *hw)
 	core->hw = hw;
 	core->flags = init->flags;
 	core->num_parents = init->num_parents;
-	core->min_rate = 0;
-	core->max_rate = ULONG_MAX;
+	core->min_rate = init->min_rate ? init->min_rate : 0;
+	core->max_rate = init->max_rate ? init->max_rate : ULONG_MAX;
 
 	ret = clk_core_populate_parent_map(core, init);
 	if (ret)
