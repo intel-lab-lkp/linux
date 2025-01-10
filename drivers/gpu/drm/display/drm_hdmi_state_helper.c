@@ -786,8 +786,10 @@ drm_atomic_helper_connector_hdmi_update(struct drm_connector *connector,
 	const struct drm_edid *drm_edid;
 
 	if (status == connector_status_disconnected) {
+		drm_edid_connector_update(connector, NULL);
 		// TODO: also handle CEC and scramber, HDMI sink disconnected.
 		drm_connector_hdmi_audio_plugged_notify(connector, false);
+		return;
 	}
 
 	if (connector->hdmi.funcs->read_edid)
