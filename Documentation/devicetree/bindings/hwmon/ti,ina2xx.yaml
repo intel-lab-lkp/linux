@@ -27,6 +27,7 @@ properties:
       - ti,ina226
       - ti,ina230
       - ti,ina231
+      - ti,ina233
       - ti,ina237
       - ti,ina238
       - ti,ina260
@@ -74,6 +75,22 @@ properties:
       (1 which maps to active-high open collector). Specify this property to set
       the alert polarity to active-high.
     $ref: /schemas/types.yaml#/definitions/flag
+
+  ti,current-lsb:
+    description:
+      This value depends on the maximum current that can be expected to be
+      measured by ina233 in your circuit, divide Maximum Expected Current
+      by 2^15 and express it in microamps.
+
+      This value will be used to calculate the current/power coefficient for
+      the pmbus and to calibrate the IC.
+
+      For device INA233.
+
+      e.g. Calculate the Maximum Expected Current(A) / 2^15 in micro ampere (uA).
+      30A / 2^15 = 915 uA
+      If value is close to 1000 uA, can use 1000 uA to minimize rounding errors.
+    $ref: /schemas/types.yaml#/definitions/uint16
 
 required:
   - compatible
