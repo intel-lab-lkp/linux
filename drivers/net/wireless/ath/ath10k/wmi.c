@@ -4618,7 +4618,7 @@ void ath10k_wmi_event_debug_print(struct ath10k *ar, struct sk_buff *skb)
 		ath10k_warn(ar, "wmi debug print truncated: %d\n", skb->len);
 
 	/* for some reason the debug prints end with \n, remove that */
-	if (skb->data[i - 1] == '\n')
+	if (i && skb->data[i - 1] == '\n')
 		i--;
 
 	/* the last byte is always reserved for the null character */
