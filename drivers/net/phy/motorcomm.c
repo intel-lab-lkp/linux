@@ -1487,6 +1487,7 @@ static int yt8521_read_status(struct phy_device *phydev)
 		}
 
 		phydev->link = 0;
+		phydev->speed = SPEED_UNKNOWN;
 	}
 
 	return 0;
