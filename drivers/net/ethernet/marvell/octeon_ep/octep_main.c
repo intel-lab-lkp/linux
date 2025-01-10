@@ -822,7 +822,7 @@ static inline int octep_iq_full_check(struct octep_iq *iq)
 	if (unlikely(IQ_INSTR_SPACE(iq) >
 		     OCTEP_WAKE_QUEUE_THRESHOLD)) {
 		netif_start_subqueue(iq->netdev, iq->q_no);
-		iq->stats.restart_cnt++;
+		iq->stats->restart_cnt++;
 		return 0;
 	}
 
@@ -960,7 +960,7 @@ static netdev_tx_t octep_start_xmit(struct sk_buff *skb,
 	wmb();
 	/* Ring Doorbell to notify the NIC of new packets */
 	writel(iq->fill_cnt, iq->doorbell_reg);
-	iq->stats.instr_posted += iq->fill_cnt;
+	iq->stats->instr_posted += iq->fill_cnt;
 	iq->fill_cnt = 0;
 	return NETDEV_TX_OK;
 
@@ -991,9 +991,19 @@ dma_map_err:
 static void octep_get_stats64(struct net_device *netdev,
 			      struct rtnl_link_stats64 *stats)
 {
-	u64 tx_packets, tx_bytes, rx_packets, rx_bytes;
 	struct octep_device *oct = netdev_priv(netdev);
 	int q;
+
+	oct->iface_tx_stats.pkts = 0;
+	oct->iface_tx_stats.octs = 0;
+	oct->iface_rx_stats.pkts = 0;
+	oct->iface_rx_stats.octets = 0;
+	for (q = 0; q < oct->num_ioq_stats; q++) {
+		oct->iface_tx_stats.pkts += oct->stats_iq[q].instr_completed;
+		oct->iface_tx_stats.octs += oct->stats_iq[q].bytes_sent;
+		oct->iface_rx_stats.pkts += oct->stats_oq[q].packets;
+		oct->iface_rx_stats.octets += oct->stats_oq[q].bytes;
+	}
 
 	if (netif_running(netdev))
 		octep_ctrl_net_get_if_stats(oct,
@@ -1001,23 +1011,10 @@ static void octep_get_stats64(struct net_device *netdev,
 					    &oct->iface_rx_stats,
 					    &oct->iface_tx_stats);
 
-	tx_packets = 0;
-	tx_bytes = 0;
-	rx_packets = 0;
-	rx_bytes = 0;
-	for (q = 0; q < oct->num_oqs; q++) {
-		struct octep_iq *iq = oct->iq[q];
-		struct octep_oq *oq = oct->oq[q];
-
-		tx_packets += iq->stats.instr_completed;
-		tx_bytes += iq->stats.bytes_sent;
-		rx_packets += oq->stats.packets;
-		rx_bytes += oq->stats.bytes;
-	}
-	stats->tx_packets = tx_packets;
-	stats->tx_bytes = tx_bytes;
-	stats->rx_packets = rx_packets;
-	stats->rx_bytes = rx_bytes;
+	stats->tx_packets = oct->iface_tx_stats.pkts;
+	stats->tx_bytes = oct->iface_tx_stats.octs;
+	stats->rx_packets = oct->iface_rx_stats.pkts;
+	stats->rx_bytes = oct->iface_rx_stats.octets;
 	stats->multicast = oct->iface_rx_stats.mcast_pkts;
 	stats->rx_errors = oct->iface_rx_stats.err_pkts;
 	stats->collisions = oct->iface_tx_stats.xscol;
