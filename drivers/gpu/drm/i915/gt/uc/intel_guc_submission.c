@@ -4292,10 +4292,11 @@ exit:
 static void guc_retire_inflight_request_prio(struct i915_request *rq)
 {
 	struct intel_context *ce = request_to_scheduling_context(rq);
+	unsigned long flags;
 
-	spin_lock(&ce->guc_state.lock);
+	spin_lock_irqsave(&ce->guc_state.lock, flags);
 	guc_prio_fini(rq, ce);
-	spin_unlock(&ce->guc_state.lock);
+	spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 }
 
 static void sanitize_hwsp(struct intel_engine_cs *engine)
