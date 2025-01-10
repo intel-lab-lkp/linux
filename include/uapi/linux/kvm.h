@@ -442,6 +442,7 @@ struct kvm_run {
 		/* KVM_EXIT_MEMORY_FAULT */
 		struct {
 #define KVM_MEMORY_EXIT_FLAG_PRIVATE	(1ULL << 3)
+#define KVM_MEMORY_EXIT_FLAG_NOTAGACCESS (1ULL << 4)
 			__u64 flags;
 			__u64 gpa;
 			__u64 size;

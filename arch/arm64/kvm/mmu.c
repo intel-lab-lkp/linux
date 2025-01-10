@@ -1660,9 +1660,11 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 
 	if (!fault_is_perm && !device && kvm_has_mte(kvm)) {
 		/* Check the VMM hasn't introduced a new disallowed VMA */
-		if (mte_allowed) {
+		if (mte_allowed)
 			sanitise_mte_tags(kvm, pfn, vma_pagesize);
-		} else {
+		else if (kvm_has_mte_perm(kvm))
+			prot |= KVM_PGTABLE_PROT_NORMAL_NOTAGACCESS;
+		else {
 			ret = -EFAULT;
 			goto out_unlock;
 		}
@@ -1840,6 +1842,14 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 
 	gfn = ipa >> PAGE_SHIFT;
 	memslot = gfn_to_memslot(vcpu->kvm, gfn);
+
+	if (kvm_vcpu_trap_is_tagaccess(vcpu)) {
+		/* exit to host and handle the error */
+		kvm_prepare_notagaccess_exit(vcpu, gfn << PAGE_SHIFT, PAGE_SIZE);
+		ret = 0;
+		goto out;
+	}
+
 	hva = gfn_to_hva_memslot_prot(memslot, gfn, &writable);
 	write_fault = kvm_is_write_fault(vcpu);
 	if (kvm_is_error_hva(hva) || (write_fault && !writable)) {
@@ -2152,7 +2162,8 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 		if (!vma)
 			break;
 
-		if (kvm_has_mte(kvm) && !kvm_vma_mte_allowed(vma)) {
+		if (kvm_has_mte(kvm) &&
+		    !kvm_has_mte_perm(kvm) && !kvm_vma_mte_allowed(vma)) {
 			ret = -EINVAL;
 			break;
 		}

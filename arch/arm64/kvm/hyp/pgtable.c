@@ -677,9 +677,11 @@ static int stage2_set_prot_attr(struct kvm_pgtable *pgt, enum kvm_pgtable_prot p
 {
 	kvm_pte_t attr;
 	u32 sh = KVM_PTE_LEAF_ATTR_LO_S2_SH_IS;
+	unsigned long prot_mask = KVM_PGTABLE_PROT_DEVICE |
+				  KVM_PGTABLE_PROT_NORMAL_NC |
+				  KVM_PGTABLE_PROT_NORMAL_NOTAGACCESS;
 
-	switch (prot & (KVM_PGTABLE_PROT_DEVICE |
-			KVM_PGTABLE_PROT_NORMAL_NC)) {
+	switch (prot & prot_mask) {
 	case KVM_PGTABLE_PROT_DEVICE | KVM_PGTABLE_PROT_NORMAL_NC:
 		return -EINVAL;
 	case KVM_PGTABLE_PROT_DEVICE:
@@ -691,6 +693,12 @@ static int stage2_set_prot_attr(struct kvm_pgtable *pgt, enum kvm_pgtable_prot p
 		if (prot & KVM_PGTABLE_PROT_X)
 			return -EINVAL;
 		attr = KVM_S2_MEMATTR(pgt, NORMAL_NC);
+		break;
+	case KVM_PGTABLE_PROT_NORMAL_NOTAGACCESS:
+		if (system_supports_notagaccess())
+			attr = KVM_S2_MEMATTR(pgt, NORMAL_NOTAGACCESS);
+		else
+			return -EINVAL;
 		break;
 	default:
 		attr = KVM_S2_MEMATTR(pgt, NORMAL);
@@ -872,7 +880,9 @@ static void stage2_unmap_put_pte(const struct kvm_pgtable_visit_ctx *ctx,
 static bool stage2_pte_cacheable(struct kvm_pgtable *pgt, kvm_pte_t pte)
 {
 	u64 memattr = pte & KVM_PTE_LEAF_ATTR_LO_S2_MEMATTR;
-	return kvm_pte_valid(pte) && memattr == KVM_S2_MEMATTR(pgt, NORMAL);
+	return kvm_pte_valid(pte) &&
+	       ((memattr == KVM_S2_MEMATTR(pgt, NORMAL)) ||
+		(memattr == KVM_S2_MEMATTR(pgt, NORMAL_NOTAGACCESS)));
 }
 
 static bool stage2_pte_executable(kvm_pte_t pte)
