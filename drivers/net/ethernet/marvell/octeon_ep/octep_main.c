@@ -1005,20 +1005,10 @@ static void octep_get_stats64(struct net_device *netdev,
 		oct->iface_rx_stats.octets += oct->stats_oq[q].bytes;
 	}
 
-	if (netif_running(netdev))
-		octep_ctrl_net_get_if_stats(oct,
-					    OCTEP_CTRL_NET_INVALID_VFID,
-					    &oct->iface_rx_stats,
-					    &oct->iface_tx_stats);
-
 	stats->tx_packets = oct->iface_tx_stats.pkts;
 	stats->tx_bytes = oct->iface_tx_stats.octs;
 	stats->rx_packets = oct->iface_rx_stats.pkts;
 	stats->rx_bytes = oct->iface_rx_stats.octets;
-	stats->multicast = oct->iface_rx_stats.mcast_pkts;
-	stats->rx_errors = oct->iface_rx_stats.err_pkts;
-	stats->collisions = oct->iface_tx_stats.xscol;
-	stats->tx_fifo_errors = oct->iface_tx_stats.undflw;
 }
 
 /**
