@@ -681,6 +681,31 @@ static int rv8803_nvram_read(void *priv, unsigned int offset,
 	return 0;
 }
 
+static int cfg2val(const struct cfg_val_txt *cfg, const char *text, u8 *value)
+{
+	if (!value)
+		return -EINVAL;
+
+	do {
+		if (strcasecmp(cfg->txt, text) == 0) {
+			*value = cfg->val;
+			return 0;
+		}
+	} while (++cfg && cfg->txt);
+
+	return -EINVAL;
+}
+
+static char *cfg2txt(const struct cfg_val_txt *cfg, u8 value)
+{
+	do {
+		if (cfg->val == value)
+			return cfg->txt;
+	} while (++cfg && cfg->txt);
+
+	return NULL;
+}
+
 static int rv8803_ts_event_write_evin(int evin, struct rv8803_data *rv8803, int pullup_down,
 				      int trigger, int filter)
 {
@@ -715,6 +740,31 @@ static int rv8803_ts_event_write_evin(int evin, struct rv8803_data *rv8803, int 
 		if (ret < 0)
 			return ret;
 	}
+
+	return 0;
+}
+
+static int rv8803_ts_event_read_evin(int evin, struct rv8803_data *rv8803,
+				     int *pullup_down, int *trigger, int *filter)
+
+{
+	int ret;
+	struct i2c_client *client = rv8803->client;
+
+	/* get EVENTx pull-up edge trigger */
+	ret = rv8803_read_reg(client, evin_cfg_reg[evin]);
+	if (ret < 0)
+		return ret;
+
+	*pullup_down = FIELD_GET(RX8901_EVENTx_CFG_PUPD, ret);
+	*trigger = FIELD_GET(RX8901_EVENTx_CFG_POL, ret);
+
+	/* get EVENTx noise filter */
+	ret = rv8803_read_reg(client, evin_flt_reg[evin]);
+	if (ret < 0)
+		return ret;
+
+	*filter = ret;
 
 	return 0;
 }
@@ -968,14 +1018,226 @@ static ssize_t trigger_store(struct device *dev, struct device_attribute *attr, 
 	return count;
 }
 
+static ssize_t cfg_evin_available_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int i;
+	int offset = 0;
+
+	offset += sprintf(buf + offset, "pull-resistor:\n");
+
+	for (i = 0; pull_resistor_txt[i].txt; ++i)
+		if (!pull_resistor_txt[i].hide)
+			offset += sprintf(buf + offset, "  %s\n", cfg2txt(pull_resistor_txt, i));
+	offset += sprintf(buf + offset, "\n");
+
+	offset += sprintf(buf + offset, "trigger:\n");
+	for (i = 0; trigger_txt[i].txt; ++i)
+		if (!trigger_txt[i].hide)
+			offset += sprintf(buf + offset, "  %s\n", cfg2txt(trigger_txt, i));
+	offset += sprintf(buf + offset, "\n");
+
+	offset += sprintf(buf + offset, "filter [ms]:\n");
+	for (i = 0; i <= EVIN_FILTER_MAX; ++i)
+		if (i != 1)
+			offset += sprintf(buf + offset, "  %d\n", EVIN_FILTER_FACTOR * i);
+
+	return offset;
+}
+
+static ssize_t cfg_evin_show(struct device *dev, int event, char *buf)
+{
+	int err;
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+
+	int pullup_down;
+	int trigger;
+	int filter;
+
+	--event;
+	if (event >= NO_OF_EVIN)
+		return -ENOENT;
+
+	guard(mutex)(&rv8803->flags_lock);
+	err = rv8803_ts_event_read_evin(event, rv8803,
+					&pullup_down, &trigger, &filter);
+	if (err)
+		return err;
+
+	return sprintf(buf, "pull-resistor=%s, trigger=%s, filter=%dms\n",
+		       cfg2txt(pull_resistor_txt, pullup_down),
+		       cfg2txt(trigger_txt, trigger),
+		       EVIN_FILTER_FACTOR * filter);
+}
+
+static ssize_t cfg_evin1_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return cfg_evin_show(dev, 1, buf);
+}
+
+static ssize_t cfg_evin2_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return cfg_evin_show(dev, 2, buf);
+}
+
+static ssize_t cfg_evin3_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return cfg_evin_show(dev, 3, buf);
+}
+
+static ssize_t cfg_evin_store(struct device *dev, int event, const char *buf, size_t count)
+{
+	int err;
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+
+	char *buf_cpy;
+	char *token;
+	const char *startptr;
+	int pullup_down = -1;
+	int trigger = -1;
+	int filter = -1;
+	u8 v;
+
+	--event;
+	if (event >= NO_OF_EVIN)
+		return -ENOENT;
+
+	buf_cpy = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf_cpy)
+		return -ENOMEM;
+
+	strscpy(buf_cpy, buf, count);
+	token = buf_cpy;
+	while ((startptr = strsep(&token, " ,\n"))) {
+		if (strstr(startptr, "pull-resistor=") == startptr)
+			if (cfg2val(pull_resistor_txt, strchr(startptr, '=') + 1, &v) == 0)
+				pullup_down = v;
+		if (strstr(startptr, "trigger=") == startptr)
+			if (cfg2val(trigger_txt, strchr(startptr, '=') + 1, &v) == 0)
+				trigger = v;
+		if (strstr(startptr, "filter=") == startptr)
+			filter = strtoul(strchr(startptr, '=') + 1, NULL, 0) / EVIN_FILTER_FACTOR;
+	}
+
+	kfree(buf_cpy);
+
+	guard(mutex)(&rv8803->flags_lock);
+	err = rv8803_ts_event_write_evin(event, rv8803, pullup_down, trigger, filter);
+	if (err)
+		return err;
+
+	return count;
+}
+
+static ssize_t cfg_evin1_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	return cfg_evin_store(dev, 1, buf, count);
+}
+
+static ssize_t cfg_evin2_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	return cfg_evin_store(dev, 2, buf, count);
+}
+
+static ssize_t cfg_evin3_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	return cfg_evin_store(dev, 3, buf, count);
+}
+
+static ssize_t cfg_buf_available_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int i;
+	int offset = 0;
+
+	offset += sprintf(buf + offset, "mode:\n");
+	for (i = 0; buffer_mode_txt[i].txt; ++i)
+		if (!buffer_mode_txt[i].hide)
+			offset += sprintf(buf + offset, "  %s\n", cfg2txt(buffer_mode_txt, i));
+
+	return offset;
+}
+
+static ssize_t cfg_buf_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret;
+	struct i2c_client *client = to_i2c_client(dev->parent);
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+
+	guard(mutex)(&rv8803->flags_lock);
+
+	ret = rv8803_read_reg(client, RX8901_BUF1_CFG1);
+	if (ret < 0)
+		return ret;
+
+	return sprintf(buf, "mode:%s\n",
+		       cfg2txt(buffer_mode_txt, FIELD_GET(BIT(6), ret)));
+}
+
+static ssize_t cfg_buf_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			     size_t count)
+{
+	int ret;
+	char *buf_cpy;
+	char *token;
+	char *startptr;
+	int mode = -1;
+	u8 v;
+
+	struct i2c_client *client = to_i2c_client(dev->parent);
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+
+	buf_cpy = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf_cpy)
+		return -ENOMEM;
+
+	strscpy(buf_cpy, buf, count);
+	token = buf_cpy;
+	while ((startptr = strsep(&token, " ,\n"))) {
+		if (strstr(startptr, "mode:") == startptr)
+			if (cfg2val(buffer_mode_txt, strchr(startptr, ':') + 1, &v) == 0)
+				mode = v;
+	}
+
+	kfree(buf_cpy);
+
+	if (mode != -1) {
+		guard(mutex)(&rv8803->flags_lock);
+
+		ret = rv8803_read_reg(client, RX8901_BUF1_CFG1);
+		if (ret < 0)
+			return ret;
+
+		ret &= ~BIT(6);
+		ret |= FIELD_PREP(BIT(6), mode);
+		ret = rv8803_write_reg(client, RX8901_BUF1_CFG1, ret);
+		if (ret < 0)
+			return ret;
+	}
+	return count;
+}
+
 static DEVICE_ATTR_WO(enable);
 static DEVICE_ATTR_RO(read);
 static DEVICE_ATTR_WO(trigger);
+static DEVICE_ATTR_RO(cfg_evin_available);
+static DEVICE_ATTR_RO(cfg_buf_available);
+static DEVICE_ATTR_RW(cfg_evin1);
+static DEVICE_ATTR_RW(cfg_evin2);
+static DEVICE_ATTR_RW(cfg_evin3);
+static DEVICE_ATTR_RW(cfg_buf);
 
 static struct attribute *rv8803_rtc_event_attrs[] = {
 	&dev_attr_enable.attr,
 	&dev_attr_read.attr,
 	&dev_attr_trigger.attr,
+	&dev_attr_cfg_evin_available.attr,
+	&dev_attr_cfg_buf_available.attr,
+	&dev_attr_cfg_evin1.attr,
+	&dev_attr_cfg_evin2.attr,
+	&dev_attr_cfg_evin3.attr,
+	&dev_attr_cfg_buf.attr,
 	NULL
 };
 
