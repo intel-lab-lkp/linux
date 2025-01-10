@@ -58,12 +58,134 @@
 #define RX8900_FLAG_SWOFF		BIT(2)
 #define RX8900_FLAG_VDETOFF		BIT(3)
 
+#define RX8901_EVIN_EN			0x20
+#define RX8901_EVIN1_CFG		0x21
+#define RX8901_EVIN2_CFG		0x23
+#define RX8901_EVIN3_CFG		0x25
+#define RX8901_EVENTx_CFG_POL		GENMASK(1, 0)
+#define RX8901_EVENTx_CFG_PUPD		GENMASK(4, 2)
+
+#define RX8901_EVIN1_FLT		0x22
+#define RX8901_EVIN2_FLT		0x24
+#define RX8901_EVIN3_FLT		0x26
+
+#define RX8901_BUF1_CFG1		0x27
+#define RX8901_BUF2_CFG1		0x2A
+#define RX8901_BUF3_CFG1		0x2D
+
+#define RX8901_BUF1_STAT		0x28
+#define RX8901_BUF2_STAT		0x2B
+#define RX8901_BUF3_STAT		0x2E
+#define RX8901_BUFx_STAT_PTR		GENMASK(5, 0)
+#define RX8901_BUFx_STAT_EMPTF		BIT(6)
+#define RX8901_BUFx_STAT_FULLF		BIT(7)
+
+#define RX8901_BUF1_CFG2		0x29
+#define RX8901_BUF2_CFG2		0x2C
+#define RX8901_BUF3_CFG2		0x2F
+
+#define RX8901_WRCMD_CFG		0x41
+#define RX8901_WRCMD_TRG		0x42
+
+#define RX8901_EVNT_INTE		0x43
+#define RX8901_CAP_EN			0x44
+
+#define RX8901_BUF_INTF			0x46
+#define RX8901_BUF_INTF_BUF1F		BIT(5)
+
+#define RX8901_EVNT_INTF		0x47
+#define RX8901_EVNT_INTF_VBATLEVF	BIT(3)
+#define RX8901_EVNT_INTF_EVIN1F		BIT(5)
+
+#define RX8901_BUF_OVWF			0x4F
+
+#define NO_OF_EVIN			3
+
+#define EVIN_FILTER_FACTOR		125
+#define EVIN_FILTER_MAX			40
+#define EV_READ_MAX_LINE_SIZE		96
+
 enum rv8803_type {
 	rv_8803,
 	rx_8803,
 	rx_8804,
 	rx_8900,
 	rx_8901,
+};
+
+enum evin_pull_resistor {
+	no = 0b000,
+	pull_up_500k = 0b001,
+	pull_up_1M = 0b010,
+	pull_up_10M = 0b011,
+	pull_down_500k = 0b100,
+};
+
+enum evin_trigger {
+	falling_edge = 0b00,
+	rising_edge = 0b01,
+	both_edges = 0b10,
+};
+
+enum evin_buffer_mode {
+	inhibit = 0,
+	overwrite = 1,
+};
+
+struct cfg_val_txt {
+	char *txt;
+	u8 val;
+	bool hide;
+};
+
+const struct cfg_val_txt pull_resistor_txt[] = {
+	{ "no", no },
+	{ "PU/500k", pull_up_500k },
+	{ "PU/1M", pull_up_1M },
+	{ "PU/10M", pull_up_10M },
+	{ "PD/500k", pull_down_500k },
+	{ "no", 0b101, 1 },
+	{ "no", 0b110, 1 },
+	{ "no", 0b111, 1 },
+	{ NULL }
+};
+
+const struct cfg_val_txt trigger_txt[] = {
+	{ "falling", falling_edge },
+	{ "rising", rising_edge },
+	{ "both", both_edges },
+	{ "both", 0b11, 1 },
+	{ NULL }
+};
+
+const struct cfg_val_txt buffer_mode_txt[] = {
+	{ "inhibit", inhibit },
+	{ "overwrite", overwrite },
+	{ NULL }
+};
+
+const struct cfg_val_txt trg_status_txt[] = {
+	{ "EVIN1", BIT(5) },
+	{ "EVIN2", BIT(6) },
+	{ "EVIN3", BIT(7) },
+	{ "CMD", BIT(4) },
+	{ "VBATL", BIT(3) },
+	{ "VTMPL", BIT(2) },
+	{ "VDDL", BIT(1) },
+	{ "OSCSTP", BIT(0) },
+	{ NULL }
+};
+
+static const u8 evin_cfg_reg[] = {
+	RX8901_EVIN1_CFG,
+	RX8901_EVIN2_CFG,
+	RX8901_EVIN3_CFG
+};
+
+static const u8 evin_flt_reg[] = {
+	RX8901_EVIN1_FLT,
+	RX8901_EVIN2_FLT,
+	RX8901_EVIN3_FLT
 };
 
 struct rv8803_data {
