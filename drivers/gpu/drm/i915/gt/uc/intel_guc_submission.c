@@ -618,7 +618,8 @@ static int guc_submission_send_busy_loop(struct intel_guc *guc,
 					 const u32 *action,
 					 u32 len,
 					 u32 g2h_len_dw,
-					 bool loop)
+					 bool loop,
+					 bool locked)
 {
 	int ret;
 
@@ -632,7 +633,7 @@ static int guc_submission_send_busy_loop(struct intel_guc *guc,
 	if (g2h_len_dw)
 		atomic_inc(&guc->outstanding_submission_g2h);
 
-	ret = intel_guc_send_busy_loop(guc, action, len, g2h_len_dw, loop);
+	ret = intel_guc_send_busy_loop(guc, action, len, g2h_len_dw, loop, locked);
 	if (ret)
 		atomic_dec(&guc->outstanding_submission_g2h);
 
@@ -690,8 +691,8 @@ int intel_guc_wait_for_idle(struct intel_guc *guc, long timeout)
 					      true, timeout);
 }
 
-static int guc_context_policy_init_v70(struct intel_context *ce, bool loop);
-static int try_context_registration(struct intel_context *ce, bool loop);
+static int guc_context_policy_init_v70(struct intel_context *ce, bool loop, bool locked);
+static int try_context_registration(struct intel_context *ce, bool loop, bool locked);
 
 static int __guc_add_request(struct intel_guc *guc, struct i915_request *rq)
 {
@@ -718,7 +719,7 @@ static int __guc_add_request(struct intel_guc *guc, struct i915_request *rq)
 	GEM_BUG_ON(context_guc_id_invalid(ce));
 
 	if (context_policy_required(ce)) {
-		err = guc_context_policy_init_v70(ce, false);
+		err = guc_context_policy_init_v70(ce, false, true);
 		if (err)
 			return err;
 	}
@@ -991,7 +992,7 @@ register_context:
 
 		if (unlikely(!ctx_id_mapped(guc, ce->guc_id.id) &&
 			     intel_context_is_schedulable(ce))) {
-			ret = try_context_registration(ce, false);
+			ret = try_context_registration(ce, false, true);
 			if (unlikely(ret == -EPIPE)) {
 				goto deadlk;
 			} else if (ret == -EBUSY) {
@@ -2399,7 +2400,8 @@ static int __guc_action_register_multi_lrc_v69(struct intel_guc *guc,
 					       struct intel_context *ce,
 					       u32 guc_id,
 					       u32 offset,
-					       bool loop)
+					       bool loop,
+					       bool locked)
 {
 	struct intel_context *child;
 	u32 action[4 + MAX_ENGINE_INSTANCE];
@@ -2416,13 +2418,14 @@ static int __guc_action_register_multi_lrc_v69(struct intel_guc *guc,
 		action[len++] = offset;
 	}
 
-	return guc_submission_send_busy_loop(guc, action, len, 0, loop);
+	return guc_submission_send_busy_loop(guc, action, len, 0, loop, locked);
 }
 
 static int __guc_action_register_multi_lrc_v70(struct intel_guc *guc,
 					       struct intel_context *ce,
 					       struct guc_ctxt_registration_info *info,
-					       bool loop)
+					       bool loop,
+					       bool locked)
 {
 	struct intel_context *child;
 	u32 action[13 + (MAX_ENGINE_INSTANCE * 2)];
@@ -2459,13 +2462,14 @@ static int __guc_action_register_multi_lrc_v70(struct intel_guc *guc,
 
 	GEM_BUG_ON(len > ARRAY_SIZE(action));
 
-	return guc_submission_send_busy_loop(guc, action, len, 0, loop);
+	return guc_submission_send_busy_loop(guc, action, len, 0, loop, locked);
 }
 
 static int __guc_action_register_context_v69(struct intel_guc *guc,
 					     u32 guc_id,
 					     u32 offset,
-					     bool loop)
+					     bool loop,
+					     bool locked)
 {
 	u32 action[] = {
 		INTEL_GUC_ACTION_REGISTER_CONTEXT,
@@ -2474,12 +2478,13 @@ static int __guc_action_register_context_v69(struct intel_guc *guc,
 	};
 
 	return guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action),
-					     0, loop);
+					     0, loop, locked);
 }
 
 static int __guc_action_register_context_v70(struct intel_guc *guc,
 					     struct guc_ctxt_registration_info *info,
-					     bool loop)
+					     bool loop,
+					     bool locked)
 {
 	u32 action[] = {
 		INTEL_GUC_ACTION_REGISTER_CONTEXT,
@@ -2497,7 +2502,7 @@ static int __guc_action_register_context_v70(struct intel_guc *guc,
 	};
 
 	return guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action),
-					     0, loop);
+					     0, loop, locked);
 }
 
 static void prepare_context_registration_info_v69(struct intel_context *ce);
@@ -2505,7 +2510,7 @@ static void prepare_context_registration_info_v70(struct intel_context *ce,
 						  struct guc_ctxt_registration_info *info);
 
 static int
-register_context_v69(struct intel_guc *guc, struct intel_context *ce, bool loop)
+register_context_v69(struct intel_guc *guc, struct intel_context *ce, bool loop, bool locked)
 {
 	u32 offset = intel_guc_ggtt_offset(guc, guc->lrc_desc_pool_v69) +
 		ce->guc_id.id * sizeof(struct guc_lrc_desc_v69);
@@ -2514,26 +2519,26 @@ register_context_v69(struct intel_guc *guc, struct intel_context *ce, bool loop)
 
 	if (intel_context_is_parent(ce))
 		return __guc_action_register_multi_lrc_v69(guc, ce, ce->guc_id.id,
-							   offset, loop);
+							   offset, loop, locked);
 	else
 		return __guc_action_register_context_v69(guc, ce->guc_id.id,
-							 offset, loop);
+							 offset, loop, locked);
 }
 
 static int
-register_context_v70(struct intel_guc *guc, struct intel_context *ce, bool loop)
+register_context_v70(struct intel_guc *guc, struct intel_context *ce, bool loop, bool locked)
 {
 	struct guc_ctxt_registration_info info;
 
 	prepare_context_registration_info_v70(ce, &info);
 
 	if (intel_context_is_parent(ce))
-		return __guc_action_register_multi_lrc_v70(guc, ce, &info, loop);
+		return __guc_action_register_multi_lrc_v70(guc, ce, &info, loop, locked);
 	else
-		return __guc_action_register_context_v70(guc, &info, loop);
+		return __guc_action_register_context_v70(guc, &info, loop, locked);
 }
 
-static int register_context(struct intel_context *ce, bool loop)
+static int register_context(struct intel_context *ce, bool loop, bool locked)
 {
 	struct intel_guc *guc = ce_to_guc(ce);
 	int ret;
@@ -2542,9 +2547,9 @@ static int register_context(struct intel_context *ce, bool loop)
 	trace_intel_context_register(ce);
 
 	if (GUC_SUBMIT_VER(guc) >= MAKE_GUC_VER(1, 0, 0))
-		ret = register_context_v70(guc, ce, loop);
+		ret = register_context_v70(guc, ce, loop, locked);
 	else
-		ret = register_context_v69(guc, ce, loop);
+		ret = register_context_v69(guc, ce, loop, locked);
 
 	if (likely(!ret)) {
 		unsigned long flags;
@@ -2554,14 +2559,15 @@ static int register_context(struct intel_context *ce, bool loop)
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 
 		if (GUC_SUBMIT_VER(guc) >= MAKE_GUC_VER(1, 0, 0))
-			guc_context_policy_init_v70(ce, loop);
+			guc_context_policy_init_v70(ce, loop, locked);
 	}
 
 	return ret;
 }
 
 static int __guc_action_deregister_context(struct intel_guc *guc,
-					   u32 guc_id)
+					   u32 guc_id,
+					   bool locked)
 {
 	u32 action[] = {
 		INTEL_GUC_ACTION_DEREGISTER_CONTEXT,
@@ -2570,17 +2576,17 @@ static int __guc_action_deregister_context(struct intel_guc *guc,
 
 	return guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action),
 					     G2H_LEN_DW_DEREGISTER_CONTEXT,
-					     true);
+					     true, locked);
 }
 
-static int deregister_context(struct intel_context *ce, u32 guc_id)
+static int deregister_context(struct intel_context *ce, u32 guc_id, bool locked)
 {
 	struct intel_guc *guc = ce_to_guc(ce);
 
 	GEM_BUG_ON(intel_context_is_child(ce));
 	trace_intel_context_deregister(ce);
 
-	return __guc_action_deregister_context(guc, guc_id);
+	return __guc_action_deregister_context(guc, guc_id, locked);
 }
 
 static inline void clear_children_join_go_memory(struct intel_context *ce)
@@ -2645,14 +2651,15 @@ MAKE_CONTEXT_POLICY_ADD(slpc_ctx_freq_req, SLPM_GT_FREQUENCY)
 
 static int __guc_context_set_context_policies(struct intel_guc *guc,
 					      struct context_policy *policy,
-					      bool loop)
+					      bool loop,
+					      bool locked)
 {
 	return guc_submission_send_busy_loop(guc, (u32 *)&policy->h2g,
 					__guc_context_policy_action_size(policy),
-					0, loop);
+					0, loop, locked);
 }
 
-static int guc_context_policy_init_v70(struct intel_context *ce, bool loop)
+static int guc_context_policy_init_v70(struct intel_context *ce, bool loop, bool locked)
 {
 	struct intel_engine_cs *engine = ce->engine;
 	struct intel_guc *guc = gt_to_guc(engine->gt);
@@ -2684,7 +2691,7 @@ static int guc_context_policy_init_v70(struct intel_context *ce, bool loop)
 	if (engine->flags & I915_ENGINE_WANT_FORCED_PREEMPTION)
 		__guc_context_policy_add_preempt_to_idle(&policy, 1);
 
-	ret = __guc_context_set_context_policies(guc, &policy, loop);
+	ret = __guc_context_set_context_policies(guc, &policy, loop, locked);
 
 	spin_lock_irqsave(&ce->guc_state.lock, flags);
 	if (ret != 0)
@@ -2864,7 +2871,7 @@ static void prepare_context_registration_info_v70(struct intel_context *ce,
 	}
 }
 
-static int try_context_registration(struct intel_context *ce, bool loop)
+static int try_context_registration(struct intel_context *ce, bool loop, bool locked)
 {
 	struct intel_engine_cs *engine = ce->engine;
 	struct intel_runtime_pm *runtime_pm = engine->uncore->rpm;
@@ -2914,12 +2921,12 @@ static int try_context_registration(struct intel_context *ce, bool loop)
 		 * context whose guc_id was stolen.
 		 */
 		with_intel_runtime_pm(runtime_pm, wakeref)
-			ret = deregister_context(ce, ce->guc_id.id);
+			ret = deregister_context(ce, ce->guc_id.id, locked);
 		if (unlikely(ret == -ENODEV))
 			ret = 0;	/* Will get registered later */
 	} else {
 		with_intel_runtime_pm(runtime_pm, wakeref)
-			ret = register_context(ce, loop);
+			ret = register_context(ce, loop, locked);
 		if (unlikely(ret == -EBUSY)) {
 			clr_ctx_id_mapping(guc, ctx_id);
 		} else if (unlikely(ret == -ENODEV)) {
@@ -2990,7 +2997,8 @@ static void guc_context_post_unpin(struct intel_context *ce)
 }
 
 static void __guc_context_sched_enable(struct intel_guc *guc,
-				       struct intel_context *ce)
+				       struct intel_context *ce,
+				       bool locked)
 {
 	u32 action[] = {
 		INTEL_GUC_ACTION_SCHED_CONTEXT_MODE_SET,
@@ -3001,12 +3009,13 @@ static void __guc_context_sched_enable(struct intel_guc *guc,
 	trace_intel_context_sched_enable(ce);
 
 	guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action),
-				      G2H_LEN_DW_SCHED_CONTEXT_MODE_SET, true);
+				      G2H_LEN_DW_SCHED_CONTEXT_MODE_SET, true, locked);
 }
 
 static void __guc_context_sched_disable(struct intel_guc *guc,
 					struct intel_context *ce,
-					u16 guc_id)
+					u16 guc_id,
+					bool locked)
 {
 	u32 action[] = {
 		INTEL_GUC_ACTION_SCHED_CONTEXT_MODE_SET,
@@ -3020,7 +3029,7 @@ static void __guc_context_sched_disable(struct intel_guc *guc,
 	trace_intel_context_sched_disable(ce);
 
 	guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action),
-				      G2H_LEN_DW_SCHED_CONTEXT_MODE_SET, true);
+				      G2H_LEN_DW_SCHED_CONTEXT_MODE_SET, true, locked);
 }
 
 static void guc_blocked_fence_complete(struct intel_context *ce)
@@ -3093,7 +3102,7 @@ static struct i915_sw_fence *guc_context_block(struct intel_context *ce)
 	spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 
 	with_intel_runtime_pm(runtime_pm, wakeref)
-		__guc_context_sched_disable(guc, ce, guc_id);
+		__guc_context_sched_disable(guc, ce, guc_id, false);
 
 	return &ce->guc_state.blocked;
 }
@@ -3144,7 +3153,7 @@ static void guc_context_unblock(struct intel_context *ce)
 
 	if (enable) {
 		with_intel_runtime_pm(runtime_pm, wakeref)
-			__guc_context_sched_enable(guc, ce);
+			__guc_context_sched_enable(guc, ce, false);
 	}
 }
 
@@ -3173,14 +3182,15 @@ static void guc_context_cancel_request(struct intel_context *ce,
 
 static void __guc_context_set_preemption_timeout(struct intel_guc *guc,
 						 u16 guc_id,
-						 u32 preemption_timeout)
+						 u32 preemption_timeout,
+						 bool locked)
 {
 	if (GUC_SUBMIT_VER(guc) >= MAKE_GUC_VER(1, 0, 0)) {
 		struct context_policy policy;
 
 		__guc_context_policy_start_klv(&policy, guc_id);
 		__guc_context_policy_add_preemption_timeout(&policy, preemption_timeout);
-		__guc_context_set_context_policies(guc, &policy, true);
+		__guc_context_set_context_policies(guc, &policy, true, locked);
 	} else {
 		u32 action[] = {
 			INTEL_GUC_ACTION_V69_SET_CONTEXT_PREEMPTION_TIMEOUT,
@@ -3188,7 +3198,7 @@ static void __guc_context_set_preemption_timeout(struct intel_guc *guc,
 			preemption_timeout
 		};
 
-		intel_guc_send_busy_loop(guc, action, ARRAY_SIZE(action), 0, true);
+		intel_guc_send_busy_loop(guc, action, ARRAY_SIZE(action), 0, true, locked);
 	}
 }
 
@@ -3234,15 +3244,17 @@ guc_context_revoke(struct intel_context *ce, struct i915_request *rq,
 		 */
 		with_intel_runtime_pm(runtime_pm, wakeref) {
 			__guc_context_set_preemption_timeout(guc, guc_id,
-							     preempt_timeout_ms);
-			__guc_context_sched_disable(guc, ce, guc_id);
+							     preempt_timeout_ms,
+							     false);
+			__guc_context_sched_disable(guc, ce, guc_id, false);
 		}
 	} else {
 		if (!context_guc_id_invalid(ce))
 			with_intel_runtime_pm(runtime_pm, wakeref)
 				__guc_context_set_preemption_timeout(guc,
 								     ce->guc_id.id,
-								     preempt_timeout_ms);
+								     preempt_timeout_ms,
+								     true);
 		spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 	}
 }
@@ -3261,7 +3273,7 @@ static void do_sched_disable(struct intel_guc *guc, struct intel_context *ce,
 	spin_unlock_irqrestore(&ce->guc_state.lock, flags);
 
 	with_intel_runtime_pm(runtime_pm, wakeref)
-		__guc_context_sched_disable(guc, ce, guc_id);
+		__guc_context_sched_disable(guc, ce, guc_id, false);
 }
 
 static bool bypass_sched_disable(struct intel_guc *guc,
@@ -3385,7 +3397,7 @@ static inline int guc_lrc_desc_unpin(struct intel_context *ce)
 	 * with suspend, so we undo everything if the H2G fails in deregister_context so
 	 * that GuC reset will find this context during clean up.
 	 */
-	ret = deregister_context(ce, ce->guc_id.id);
+	ret = deregister_context(ce, ce->guc_id.id, false);
 	if (ret) {
 		spin_lock(&ce->guc_state.lock);
 		set_context_registered(ce);
@@ -3550,14 +3562,15 @@ static int guc_context_alloc(struct intel_context *ce)
 }
 
 static void __guc_context_set_prio(struct intel_guc *guc,
-				   struct intel_context *ce)
+				   struct intel_context *ce,
+				   bool locked)
 {
 	if (GUC_SUBMIT_VER(guc) >= MAKE_GUC_VER(1, 0, 0)) {
 		struct context_policy policy;
 
 		__guc_context_policy_start_klv(&policy, ce->guc_id.id);
 		__guc_context_policy_add_priority(&policy, ce->guc_state.prio);
-		__guc_context_set_context_policies(guc, &policy, true);
+		__guc_context_set_context_policies(guc, &policy, true, locked);
 	} else {
 		u32 action[] = {
 			INTEL_GUC_ACTION_V69_SET_CONTEXT_PRIORITY,
@@ -3565,7 +3578,7 @@ static void __guc_context_set_prio(struct intel_guc *guc,
 			ce->guc_state.prio,
 		};
 
-		guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action), 0, true);
+		guc_submission_send_busy_loop(guc, action, ARRAY_SIZE(action), 0, true, locked);
 	}
 }
 
@@ -3584,7 +3597,7 @@ static void guc_context_set_prio(struct intel_guc *guc,
 	}
 
 	ce->guc_state.prio = prio;
-	__guc_context_set_prio(guc, ce);
+	__guc_context_set_prio(guc, ce, true);
 
 	trace_intel_context_set_prio(ce);
 }
@@ -3881,7 +3894,7 @@ static int guc_request_alloc(struct i915_request *rq)
 	if (unlikely(ret < 0))
 		return ret;
 	if (context_needs_register(ce, !!ret)) {
-		ret = try_context_registration(ce, true);
+		ret = try_context_registration(ce, true, false);
 		if (unlikely(ret)) {	/* unwind */
 			if (ret == -EPIPE) {
 				disable_submission(guc);
@@ -4401,7 +4414,7 @@ static inline int guc_kernel_context_pin(struct intel_guc *guc,
 	if (!test_bit(CONTEXT_GUC_INIT, &ce->flags))
 		guc_context_init(ce);
 
-	ret = try_context_registration(ce, true);
+	ret = try_context_registration(ce, true, false);
 	if (ret)
 		unpin_guc_id(guc, ce);
 
@@ -4944,7 +4957,7 @@ static int guc_send_invalidate_tlb(struct intel_guc *guc,
 	add_wait_queue(&wq->wq, &wait);
 
 	/* This is a critical reclaim path and thus we must loop here. */
-	err = intel_guc_send_busy_loop(guc, action, size, G2H_LEN_DW_INVALIDATE_TLB, true);
+	err = intel_guc_send_busy_loop(guc, action, size, G2H_LEN_DW_INVALIDATE_TLB, true, false);
 	if (err)
 		goto out;
 
@@ -5016,7 +5029,7 @@ int intel_guc_deregister_done_process_msg(struct intel_guc *guc,
 		 * register this context.
 		 */
 		with_intel_runtime_pm(runtime_pm, wakeref)
-			register_context(ce, true);
+			register_context(ce, true, false);
 		guc_signal_context_fence(ce);
 		intel_context_put(ce);
 	} else if (context_destroyed(ce)) {

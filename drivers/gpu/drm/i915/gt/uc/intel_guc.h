@@ -358,18 +358,12 @@ static inline int intel_guc_send_busy_loop(struct intel_guc *guc,
 					   const u32 *action,
 					   u32 len,
 					   u32 g2h_len_dw,
-					   bool loop)
+					   bool loop,
+					   bool locked)
 {
 	int err;
 	unsigned int sleep_period_ms = 1;
-	bool not_atomic = !in_atomic() && !irqs_disabled();
-
-	/*
-	 * FIXME: Have caller pass in if we are in an atomic context to avoid
-	 * using in_atomic(). It is likely safe here as we check for irqs
-	 * disabled which basically all the spin locks in the i915 do but
-	 * regardless this should be cleaned up.
-	 */
+	bool not_atomic = !locked && !irqs_disabled();
 
 	/* No sleeping with spin locks, just busy loop */
 	might_sleep_if(loop && not_atomic);

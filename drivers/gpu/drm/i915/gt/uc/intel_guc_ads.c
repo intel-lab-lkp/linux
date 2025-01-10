@@ -198,7 +198,7 @@ static int guc_action_policies_update(struct intel_guc *guc, u32 policy_offset)
 		policy_offset
 	};
 
-	return intel_guc_send_busy_loop(guc, action, ARRAY_SIZE(action), 0, true);
+	return intel_guc_send_busy_loop(guc, action, ARRAY_SIZE(action), 0, true, false);
 }
 
 int intel_guc_global_policies_update(struct intel_guc *guc)
