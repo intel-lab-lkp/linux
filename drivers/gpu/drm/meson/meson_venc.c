@@ -878,7 +878,7 @@ meson_venc_hdmi_supported_mode(const struct drm_display_mode *mode)
 }
 EXPORT_SYMBOL_GPL(meson_venc_hdmi_supported_mode);
 
-bool meson_venc_hdmi_supported_vic(int vic)
+bool meson_venc_hdmi_supported_vic(struct meson_drm *priv, int vic)
 {
 	struct meson_hdmi_venc_vic_mode *vmode = meson_hdmi_venc_vic_modes;
 
@@ -917,7 +917,7 @@ static void meson_venc_hdmi_get_dmt_vmode(const struct drm_display_mode *mode,
 	dmt_mode->encp.max_lncnt = mode->vtotal - 1;
 }
 
-static union meson_hdmi_venc_mode *meson_venc_hdmi_get_vic_vmode(int vic)
+static union meson_hdmi_venc_mode *meson_venc_hdmi_get_vic_vmode(struct meson_drm *priv, int vic)
 {
 	struct meson_hdmi_venc_vic_mode *vmode = meson_hdmi_venc_vic_modes;
 
@@ -930,7 +930,7 @@ static union meson_hdmi_venc_mode *meson_venc_hdmi_get_vic_vmode(int vic)
 	return NULL;
 }
 
-bool meson_venc_hdmi_venc_repeat(int vic)
+bool meson_venc_hdmi_venc_repeat(struct meson_drm *priv, int vic)
 {
 	/* Repeat VENC pixels for 480/576i/p, 720p50/60 and 1080p50/60 */
 	if (vic == 6 || vic == 7 || /* 480i */
@@ -989,8 +989,8 @@ void meson_venc_hdmi_mode_set(struct meson_drm *priv, int vic,
 		venc_hdmi_latency = 1;
 	}
 
-	if (meson_venc_hdmi_supported_vic(vic)) {
-		vmode = meson_venc_hdmi_get_vic_vmode(vic);
+	if (meson_venc_hdmi_supported_vic(priv, vic)) {
+		vmode = meson_venc_hdmi_get_vic_vmode(priv, vic);
 		if (!vmode) {
 			dev_err(priv->dev, "%s: Fatal Error, unsupported mode "
 				DRM_MODE_FMT "\n", __func__,
@@ -1004,7 +1004,7 @@ void meson_venc_hdmi_mode_set(struct meson_drm *priv, int vic,
 	}
 
 	/* Repeat VENC pixels for 480/576i/p, 720p50/60 and 1080p50/60 */
-	if (meson_venc_hdmi_venc_repeat(vic))
+	if (meson_venc_hdmi_venc_repeat(priv, vic))
 		venc_repeat = true;
 
 	eof_lines = mode->vsync_start - mode->vdisplay;
