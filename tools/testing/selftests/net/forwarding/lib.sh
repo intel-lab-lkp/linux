@@ -784,6 +784,7 @@ team_destroy()
 {
 	local if_name=$1; shift
 
+	require_command $TEAMD
 	$TEAMD -t $if_name -k
 }
 
