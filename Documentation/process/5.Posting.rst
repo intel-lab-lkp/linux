@@ -199,7 +199,7 @@ document; what follows here is a brief summary.
 One tag is used to refer to earlier commits which introduced problems fixed by
 the patch::
 
-	Fixes: 1f2e3d4c5b6a ("The first line of the commit specified by the first 12 characters of its SHA-1 ID")
+	Fixes: 1f2e3d4c5b6a ("The first line of the commit specified by the first 12 characters of its SHA-1 ID", 2024-12-31)
 
 Another tag is used for linking web pages with additional backgrounds or
 details, for example an earlier discussion which leads to the patch or a

@@ -148,7 +148,7 @@ the SHA-1 ID, and the one line summary.  Do not split the tag across multiple
 lines, tags are exempt from the "wrap at 75 columns" rule in order to simplify
 parsing scripts.  For example::
 
-	Fixes: 54a4f0239f2e ("KVM: MMU: make kvm_mmu_zap_page() return the number of pages it actually freed")
+	Fixes: 6a451e2c5c03 ("ALSA: hda/tas2781: Ignore SUBSYS_ID not found for tas2563 projects", 2024-12-30)
 
 The following ``git config`` settings can be used to add a pretty format for
 outputting the above style in the ``git log`` or ``git show`` commands::
@@ -156,12 +156,12 @@ outputting the above style in the ``git log`` or ``git show`` commands::
 	[core]
 		abbrev = 12
 	[pretty]
-		fixes = Fixes: %h (\"%s\")
+		fixes = Fixes: %h (\"%s\", %as)
 
 An example call::
 
-	$ git log -1 --pretty=fixes 54a4f0239f2e
-	Fixes: 54a4f0239f2e ("KVM: MMU: make kvm_mmu_zap_page() return the number of pages it actually freed")
+	$ git log -1 --pretty=fixes 6a451e2c5c03
+	Fixes: 6a451e2c5c03 ("ALSA: hda/tas2781: Ignore SUBSYS_ID not found for tas2563 projects", 2024-12-30)
 
 .. _split_changes:
 

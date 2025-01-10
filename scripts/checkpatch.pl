@@ -1228,15 +1228,15 @@ sub git_is_single_file {
 }
 
 sub git_commit_info {
-	my ($commit, $id, $desc) = @_;
+	my ($commit, $id, $desc, $date) = @_;
 
-	return ($id, $desc) if ((which("git") eq "") || !(-e "$gitroot"));
+	return ($id, $desc, $date) if ((which("git") eq "") || !(-e "$gitroot"));
 
-	my $output = `${git_command} log --no-color --format='%H %s' -1 $commit 2>&1`;
+	my $output = `${git_command} log --no-color --format='%H %s %as' -1 $commit 2>&1`;
 	$output =~ s/^\s*//gm;
 	my @lines = split("\n", $output);
 
-	return ($id, $desc) if ($#lines < 0);
+	return ($id, $desc, $date) if ($#lines < 0);
 
 	if ($lines[0] =~ /^error: short SHA1 $commit is ambiguous/) {
 # Maybe one day convert this block of bash into something that returns
@@ -1253,10 +1253,11 @@ sub git_commit_info {
 		$id = undef;
 	} else {
 		$id = substr($lines[0], 0, 12);
-		$desc = substr($lines[0], 41);
+		$desc = substr($lines[0], 41, -11);
+		$date = substr($lines[0], -10);
 	}
 
-	return ($id, $desc);
+	return ($id, $desc, $date);
 }
 
 $chk_signoff = 0 if ($file);
@@ -3214,16 +3215,19 @@ sub process {
 			my $orig_commit = $2;
 			my $title;
 			my $title_has_quotes = 0;
+			my $date;
 			$fixes_tag = 1;
 			if (defined $3) {
+				$date = substr($3, -11, 10);
 				# Always strip leading/trailing parens then double quotes if existing
-				$title = substr($3, 1, -1);
+				$title = substr($3, 1, -13);
 				if ($title =~ /^".*"$/) {
 					$title = substr($title, 1, -1);
 					$title_has_quotes = 1;
 				}
 			} else {
-				$title = "commit title"
+				$title = "commit title";
+				$date = "YYYY-MM-DD";
 			}
 
 
@@ -3234,15 +3238,15 @@ sub process {
 			my $id_case = not ($orig_commit !~ /[A-F]/);
 
 			my $id = "0123456789ab";
-			my ($cid, $ctitle) = git_commit_info($orig_commit, $id,
-							     $title);
+			my ($cid, $ctitle, $cdate) = git_commit_info($orig_commit, $id,
+							     $title, $date);
 
-			if ($ctitle ne $title || $tag_case || $tag_space ||
+			if ($ctitle ne $title || $cdate ne $date || $tag_case || $tag_space ||
 			    $id_length || $id_case || !$title_has_quotes) {
 				if (WARN("BAD_FIXES_TAG",
-				     "Please use correct Fixes: style 'Fixes: <12 chars of sha1> (\"<title line>\")' - ie: 'Fixes: $cid (\"$ctitle\")'\n" . $herecurr) &&
+				     "Please use correct Fixes: style 'Fixes: <12 chars of sha1> (\"<title line>\", YYYY-MM-DD)' - ie: 'Fixes: $cid (\"$ctitle\", $cdate)'\n" . $herecurr) &&
 				    $fix) {
-					$fixed[$fixlinenr] = "Fixes: $cid (\"$ctitle\")";
+					$fixed[$fixlinenr] = "Fixes: $cid (\"$ctitle\", $cdate)";
 				}
 			}
 		}

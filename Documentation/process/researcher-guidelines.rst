@@ -149,7 +149,7 @@ For example::
   [1] https://url/to/leakmagic/details
 
   Reported-by: Researcher <researcher@email>
-  Fixes: aaaabbbbccccdddd ("Introduce support for FooBar")
+  Fixes: aaaabbbbccccdddd ("Introduce support for FooBar", 2024-12-31)
   Signed-off-by: Author <author@email>
   Reviewed-by: Reviewer <reviewer@email>
 
