@@ -52,6 +52,10 @@
 #include <media/v4l2-fwnode.h>
 #include <media/v4l2-subdev.h>
 
+static bool ub960_enable_sscg;
+module_param_named(enable_sscg, ub960_enable_sscg, bool, 0644);
+MODULE_PARM_DESC(enable_sscg, "Enable SSCG (if available)");
+
 #define MHZ(v) ((u32)((v) * HZ_PER_MHZ))
 
 /*
@@ -359,6 +363,7 @@
 /* Indirect register blocks */
 #define UB960_IND_TARGET_PAT_GEN		0x00
 #define UB960_IND_TARGET_RX_ANA(n)		(0x01 + (n))
+#define UB960_IND_TARGET_PLL_CTRL		0x05
 #define UB960_IND_TARGET_CSI_ANA		0x07
 
 /* UB960_IR_PGEN_*: Indirect Registers for Test Pattern Generator */
@@ -381,6 +386,22 @@
 #define UB960_IR_PGEN_VBP			0x0e
 #define UB960_IR_PGEN_VFP			0x0f
 #define UB960_IR_PGEN_COLOR(n)			(0x10 + (n)) /* n < 15 */
+
+#define UB960_IR_PLL_DEN_MASH2			0x80
+#define UB960_IR_PLL_DEN_MASH1			0x81
+#define UB960_IR_PLL_DEN_MASH0			0x82
+#define UB960_IR_PLL_NUM_MASH2			0x83
+#define UB960_IR_PLL_NUM_MASH1			0x84
+#define UB960_IR_PLL_NUM_MASH0			0x85
+#define UB960_IR_PLL_NCOUNT1			0x86
+#define UB960_IR_PLL_NCOUNT0			0x87
+#define UB960_IR_PLL_SSCG_CTRL1			0x88
+#define UB960_IR_PLL_MASH_ORDER			0x8a
+#define UB960_IR_PLL_SSCG_CTRL2			0x8b
+#define UB960_IR_PLL_SSCG_CTRL3			0x8c
+#define UB960_IR_PLL_SSCG_CTRL4			0x8d
+#define UB960_IR_PLL_SSCG_CTRL5			0x8e
+#define UB960_IR_PLL_SSCG_MASH_CTRL		0x8f
 
 #define UB960_IR_RX_ANA_STROBE_SET_CLK		0x08
 #define UB960_IR_RX_ANA_STROBE_SET_CLK_NO_EXTRA_DELAY	BIT(3)
@@ -2837,6 +2858,81 @@ static int ub960_enable_dfe_lms_ub9702(struct ub960_data *priv,
 	return 0;
 }
 
+/*
+ * Configures back-channel spread-spectrum clocking with 0.5% center-spread at
+ * 33kHz modulation rate. See datasheet if different configuration is required.
+ */
+static int ub960_enable_sscg_ub9702(struct ub960_data *priv)
+{
+	struct device *dev = &priv->client->dev;
+	int ret = 0;
+
+	/*
+	 * The configuration is hard-coded with FPD4 and BC frequency
+	 * 47.1875Mbps, so make sure all RX ports are configured with
+	 * synchronous clocking mode.
+	 */
+	for_each_active_rxport(priv) {
+		if (it.rxport->cdr_mode != RXPORT_CDR_FPD4 ||
+		    it.rxport->rx_mode != RXPORT_MODE_CSI2_SYNC) {
+			dev_warn(dev,
+				 "rx%u: Not in FPD4 SYNC mode, skipping SSCG\n",
+				 it.nport);
+			return 0;
+		}
+	}
+
+	/* Disable MASH */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL,
+			UB960_IR_PLL_SSCG_MASH_CTRL, 0x40, &ret);
+
+	/* Set MASH denominator */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_DEN_MASH2,
+			0x7f, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_DEN_MASH1,
+			0xff, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_DEN_MASH0,
+			0xf8, &ret);
+
+	/* Set MASH numerator */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_NUM_MASH2,
+			0x7f, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_NUM_MASH1,
+			0xff, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_NUM_MASH0,
+			0xf8, &ret);
+
+	/* Set NCOUNT */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_NCOUNT1,
+			0x00, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL, UB960_IR_PLL_NCOUNT0,
+			0x96, &ret);
+
+	/* Set MASH order */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL,
+			UB960_IR_PLL_MASH_ORDER, 0x20, &ret);
+
+	/* Set rampx increment and stop */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL,
+			UB960_IR_PLL_SSCG_CTRL2, 0xbd, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL,
+			UB960_IR_PLL_SSCG_CTRL4, 0x73, &ret);
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL,
+			UB960_IR_PLL_SSCG_CTRL5, 0x41, &ret);
+
+	/* Enable SSCG */
+	ub960_ind_update_bits(priv, UB960_IND_TARGET_PLL_CTRL,
+			      UB960_IR_PLL_SSCG_CTRL1, BIT(7), BIT(7), &ret);
+
+	/* Enable MASH */
+	ub960_write_ind(priv, UB960_IND_TARGET_PLL_CTRL,
+			UB960_IR_PLL_SSCG_MASH_CTRL, 0x0, &ret);
+
+	dev_dbg(dev, "SSCG enabled\n");
+
+	return ret;
+}
+
 static int ub960_init_rx_ports_ub9702(struct ub960_data *priv)
 {
 	struct device *dev = &priv->client->dev;
@@ -2859,6 +2955,12 @@ static int ub960_init_rx_ports_ub9702(struct ub960_data *priv)
 	ret = ub960_write(priv, UB9702_SR_CSI_EXCLUSIVE_FWD2, 0x0f, NULL);
 	if (ret)
 		return ret;
+
+	if (ub960_enable_sscg) {
+		ret = ub960_enable_sscg_ub9702(priv);
+		if (ret)
+			return ret;
+	}
 
 	for_each_active_rxport_fpd4(priv) {
 		/* Hold state machine in reset */
