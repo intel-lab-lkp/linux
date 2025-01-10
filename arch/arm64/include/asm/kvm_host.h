@@ -331,6 +331,9 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		7
 	/* Fine-Grained UNDEF initialised */
 #define KVM_ARCH_FLAG_FGU_INITIALIZED			8
+	/* Memory Tagging Extension NoTagAccess check enabled for the guest */
+#define KVM_ARCH_FLAG_MTE_PERM_ENABLED			9
+
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
@@ -1416,6 +1419,10 @@ bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu);
 
 #define kvm_vm_has_ran_once(kvm)					\
 	(test_bit(KVM_ARCH_FLAG_HAS_RAN_ONCE, &(kvm)->arch.flags))
+
+#define kvm_has_mte_perm(kvm)					\
+	(system_supports_notagaccess() &&				\
+	 test_bit(KVM_ARCH_FLAG_MTE_PERM_ENABLED, &(kvm)->arch.flags))
 
 static inline bool __vcpu_has_feature(const struct kvm_arch *ka, int feature)
 {

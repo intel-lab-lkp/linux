@@ -9017,6 +9017,20 @@ Do not use KVM_X86_SW_PROTECTED_VM for "real" VMs, and especially not in
 production.  The behavior and effective ABI for software-protected VMs is
 unstable.
 
+8.42 KVM_CAP_ARM_MTE_PERM
+------------------------
+
+:Capability: KVM_CAP_ARM_MTE_PERM
+:Architectures: arm64
+:Type: vm
+
+This capability, if KVM_CHECK_EXTENSION indicates that it is available, means
+that the kernel has support for mapping memory regions not supporting
+allocations tags into a guest which enables KVM_CAP_ARM_MTE capability.
+
+In order to use this, it has to be activated by setting this capability via
+KVM_ENABLE_CAP ioctl on the VM fd.
+
 9. Known KVM API problems
 =========================
 

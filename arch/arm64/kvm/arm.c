@@ -150,6 +150,14 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 		}
 		mutex_unlock(&kvm->slots_lock);
 		break;
+	case KVM_CAP_ARM_MTE_PERM:
+		mutex_lock(&kvm->lock);
+		if (system_supports_notagaccess() && !kvm->created_vcpus) {
+			r = 0;
+			set_bit(KVM_ARCH_FLAG_MTE_PERM_ENABLED, &kvm->arch.flags);
+		}
+		mutex_unlock(&kvm->lock);
+		break;
 	default:
 		break;
 	}
@@ -417,6 +425,9 @@ int kvm_vm_ioctl_check_extension(struct kvm *kvm, long ext)
 		break;
 	case KVM_CAP_ARM_SUPPORTED_REG_MASK_RANGES:
 		r = BIT(0);
+		break;
+	case KVM_CAP_ARM_MTE_PERM:
+		r = system_supports_notagaccess();
 		break;
 	default:
 		r = 0;
