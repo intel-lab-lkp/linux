@@ -1704,14 +1704,8 @@ static int ugeth_82xx_filtering_clear_addr_in_paddr(struct ucc_geth_private *uge
 
 static void ucc_geth_free_rx(struct ucc_geth_private *ugeth)
 {
-	struct ucc_geth_info *ug_info;
-	struct ucc_fast_info *uf_info;
-	u16 i, j;
 	u8 __iomem *bd;
-
-
-	ug_info = ugeth->ug_info;
-	uf_info = &ug_info->uf_info;
+	u16 i, j;
 
 	for (i = 0; i < ucc_geth_rx_queues(ugeth->ug_info); i++) {
 		if (ugeth->p_rx_bd_ring[i]) {
@@ -1743,15 +1737,10 @@ static void ucc_geth_free_rx(struct ucc_geth_private *ugeth)
 
 static void ucc_geth_free_tx(struct ucc_geth_private *ugeth)
 {
-	struct ucc_geth_info *ug_info;
-	struct ucc_fast_info *uf_info;
-	u16 i, j;
 	u8 __iomem *bd;
+	u16 i, j;
 
 	netdev_reset_queue(ugeth->ndev);
-
-	ug_info = ugeth->ug_info;
-	uf_info = &ug_info->uf_info;
 
 	for (i = 0; i < ucc_geth_tx_queues(ugeth->ug_info); i++) {
 		bd = ugeth->p_tx_bd_ring[i];
@@ -2036,13 +2025,11 @@ static int ucc_struct_init(struct ucc_geth_private *ugeth)
 static int ucc_geth_alloc_tx(struct ucc_geth_private *ugeth)
 {
 	struct ucc_geth_info *ug_info;
-	struct ucc_fast_info *uf_info;
+	u8 __iomem *bd;
 	int length;
 	u16 i, j;
-	u8 __iomem *bd;
 
 	ug_info = ugeth->ug_info;
-	uf_info = &ug_info->uf_info;
 
 	/* Allocate Tx bds */
 	for (j = 0; j < ucc_geth_tx_queues(ug_info); j++) {
@@ -2098,13 +2085,11 @@ static int ucc_geth_alloc_tx(struct ucc_geth_private *ugeth)
 static int ucc_geth_alloc_rx(struct ucc_geth_private *ugeth)
 {
 	struct ucc_geth_info *ug_info;
-	struct ucc_fast_info *uf_info;
+	u8 __iomem *bd;
 	int length;
 	u16 i, j;
-	u8 __iomem *bd;
 
 	ug_info = ugeth->ug_info;
-	uf_info = &ug_info->uf_info;
 
 	/* Allocate Rx bds */
 	for (j = 0; j < ucc_geth_rx_queues(ug_info); j++) {
@@ -2155,7 +2140,6 @@ static int ucc_geth_alloc_rx(struct ucc_geth_private *ugeth)
 
 static int ucc_geth_startup(struct ucc_geth_private *ugeth)
 {
-	struct ucc_geth_82xx_address_filtering_pram __iomem *p_82xx_addr_filt;
 	struct ucc_geth_init_pram __iomem *p_init_enet_pram;
 	struct ucc_fast_private *uccf;
 	struct ucc_geth_info *ug_info;
@@ -2165,8 +2149,8 @@ static int ucc_geth_startup(struct ucc_geth_private *ugeth)
 	int ret_val = -EINVAL;
 	u32 remoder = UCC_GETH_REMODER_INIT;
 	u32 init_enet_pram_offset, cecr_subblock, command;
-	u32 ifstat, i, j, size, l2qt, l3qt;
 	u16 temoder = UCC_GETH_TEMODER_INIT;
+	u32 i, j, size, l2qt, l3qt;
 	u8 function_code = 0;
 	u8 __iomem *endOfRing;
 	u8 numThreadsRxNumerical, numThreadsTxNumerical;
@@ -2260,7 +2244,7 @@ static int ucc_geth_startup(struct ucc_geth_private *ugeth)
 	/*                    Set IFSTAT                     */
 	/* For more details see the hardware spec.           */
 	/* Read only - resets upon read                      */
-	ifstat = in_be32(&ug_regs->ifstat);
+	in_be32(&ug_regs->ifstat);
 
 	/*                    Clear UEMPR                    */
 	/* For more details see the hardware spec.           */
@@ -2651,10 +2635,6 @@ static int ucc_geth_startup(struct ucc_geth_private *ugeth)
 		for (j = 0; j < NUM_OF_PADDRS; j++)
 			ugeth_82xx_filtering_clear_addr_in_paddr(ugeth, (u8) j);
 
-		p_82xx_addr_filt =
-		    (struct ucc_geth_82xx_address_filtering_pram __iomem *) ugeth->
-		    p_rx_glbl_pram->addressfiltering;
-
 		ugeth_82xx_filtering_clear_all_addr_in_hash(ugeth,
 			ENET_ADDR_TYPE_GROUP);
 		ugeth_82xx_filtering_clear_all_addr_in_hash(ugeth,
@@ -2889,9 +2869,8 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 	struct sk_buff *skb;
 	u8 __iomem *bd;
 	u16 length, howmany = 0;
-	u32 bd_status;
-	u8 *bdBuffer;
 	struct net_device *dev;
+	u32 bd_status;
 
 	ugeth_vdbg("%s: IN", __func__);
 
@@ -2904,7 +2883,7 @@ static int ucc_geth_rx(struct ucc_geth_private *ugeth, u8 rxQ, int rx_work_limit
 
 	/* while there are received buffers and BD is full (~R_E) */
 	while (!((bd_status & (R_E)) || (--rx_work_limit < 0))) {
-		bdBuffer = (u8 *) in_be32(&((struct qe_bd __iomem *)bd)->buf);
+		in_be32(&((struct qe_bd __iomem *)bd)->buf);
 		length = (u16) ((bd_status & BD_LENGTH_MASK) - 4);
 		skb = ugeth->rx_skbuff[rxQ][ugeth->skb_currx[rxQ]];
 
@@ -3043,14 +3022,12 @@ static irqreturn_t ucc_geth_irq_handler(int irq, void *info)
 	struct net_device *dev = info;
 	struct ucc_geth_private *ugeth = netdev_priv(dev);
 	struct ucc_fast_private *uccf;
-	struct ucc_geth_info *ug_info;
 	register u32 ucce;
 	register u32 uccm;
 
 	ugeth_vdbg("%s: IN", __func__);
 
 	uccf = ugeth->uccf;
-	ug_info = ugeth->ug_info;
 
 	/* read and clear events */
 	ucce = (u32) in_be32(uccf->p_ucce);
