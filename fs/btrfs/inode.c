@@ -1273,10 +1273,10 @@ u64 btrfs_get_extent_allocation_hint(struct btrfs_inode *inode, u64 start,
  * - Else all pages except for @locked_folio are unlocked.
  *
  * When a failure happens in the second or later iteration of the
- * while-loop, the ordered extents created in previous iterations are kept
- * intact. So, the caller must clean them up by calling
- * btrfs_cleanup_ordered_extents(). See btrfs_run_delalloc_range() for
- * example.
+ * while-loop, the ordered extents created in previous iterations will be
+ * cleaned up.
+ * So if cow_file_range() returned error, there will be no ordered extents
+ * created.
  */
 static noinline int cow_file_range(struct btrfs_inode *inode,
 				   struct folio *locked_folio, u64 start,
@@ -1489,9 +1489,7 @@ out_unlock:
 
 	/*
 	 * For the range (1). We have already instantiated the ordered extents
-	 * for this region. They are cleaned up by
-	 * btrfs_cleanup_ordered_extents() in e.g,
-	 * btrfs_run_delalloc_range().
+	 * for this region, and need to be cleaned up.
 	 * EXTENT_DELALLOC_NEW | EXTENT_DEFRAG | EXTENT_CLEAR_META_RESV
 	 * are also handled by the cleanup function.
 	 *
@@ -1505,6 +1503,8 @@ out_unlock:
 
 		if (!locked_folio)
 			mapping_set_error(inode->vfs_inode.i_mapping, ret);
+
+		btrfs_cleanup_ordered_extents(inode, orig_start, start - orig_start);
 		extent_clear_unlock_delalloc(inode, orig_start, start - 1,
 					     locked_folio, NULL, clear_bits, page_ops);
 	}
@@ -1984,6 +1984,9 @@ static void cleanup_dirty_folios(struct btrfs_inode *inode,
  *
  * If no cow copies or snapshots exist, we write directly to the existing
  * blocks on disk
+ *
+ * If error is hit, any ordered extent created inside the range will be
+ * properly cleaned up.
  */
 static noinline int run_delalloc_nocow(struct btrfs_inode *inode,
 				       struct folio *locked_folio,
@@ -2253,9 +2256,8 @@ error:
 	 *
 	 *    For range [start, cur_offset) the folios are already unlocked (except
 	 *    @locked_folio), EXTENT_DELALLOC already removed.
-	 *    Only need to clear the dirty flag as they will never be submitted.
-	 *    Ordered extent and extent maps are handled by
-	 *    btrfs_mark_ordered_io_finished() inside run_delalloc_range().
+	 *    Need to finish the ordered extents and their extent maps, then
+	 *    clear the dirty flag as they will never to submitted.
 	 *
 	 * 2) Failed with error from fallback_to_cow()
 	 *    start         cur_offset  cow_end    end
@@ -2268,10 +2270,13 @@ error:
 	 *    Thus we should not call extent_clear_unlock_delalloc() on range
 	 *    [cur_offset, cow_end), as the folios are already unlocked.
 	 *
-	 * So clear the folio dirty flags for [start, cur_offset) first.
+	 * So clear the folio dirty flags for [start, cur_offset) and finish
+	 * the ordered extents.
 	 */
-	if (cur_offset > start)
+	if (cur_offset > start) {
+		btrfs_cleanup_ordered_extents(inode, start, cur_offset - start);
 		cleanup_dirty_folios(inode, locked_folio, start, cur_offset - 1, ret);
+	}
 
 	/*
 	 * If an error happened while a COW region is outstanding, cur_offset
@@ -2336,7 +2341,7 @@ int btrfs_run_delalloc_range(struct btrfs_inode *inode, struct folio *locked_fol
 
 	if (should_nocow(inode, start, end)) {
 		ret = run_delalloc_nocow(inode, locked_folio, start, end);
-		goto out;
+		return ret;
 	}
 
 	if (btrfs_inode_can_compress(inode) &&
@@ -2350,10 +2355,6 @@ int btrfs_run_delalloc_range(struct btrfs_inode *inode, struct folio *locked_fol
 	else
 		ret = cow_file_range(inode, locked_folio, start, end, NULL,
 				     false, false);
-
-out:
-	if (ret < 0)
-		btrfs_cleanup_ordered_extents(inode, start, end - start + 1);
 	return ret;
 }
 
