@@ -100,6 +100,13 @@ static int ncsi_rsp_handler_cis(struct ncsi_request *nr)
 		if (ndp->flags & NCSI_DEV_PROBED)
 			return -ENXIO;
 
+		if (!np) {
+			id = NCSI_PACKAGE_INDEX(rsp->rsp.common.channel);
+			np = ncsi_add_package(ndp, id);
+			if (!np)
+				return -ENODEV;
+		}
+
 		id = NCSI_CHANNEL_INDEX(rsp->rsp.common.channel);
 		nc = ncsi_add_channel(np, id);
 	}
