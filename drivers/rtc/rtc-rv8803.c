@@ -937,12 +937,45 @@ static ssize_t read_show(struct device *dev, struct device_attribute *attr, char
 	return offset;
 }
 
+static ssize_t trigger_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			     size_t count)
+{
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+	struct i2c_client *client = rv8803->client;
+	int ret;
+	unsigned long tmo;
+
+	guard(mutex)(&rv8803->flags_lock);
+
+	/* CMDTRGEN */
+	ret = rv8803_write_reg(client, RX8901_WRCMD_CFG, BIT(0));
+	if (ret < 0)
+		return ret;
+	ret = rv8803_write_reg(client, RX8901_WRCMD_TRG, 0xFF);
+	if (ret < 0)
+		return ret;
+
+	tmo = jiffies + msecs_to_jiffies(100); /* timeout 100ms */
+	do {
+		usleep_range(10, 2000);
+		ret = rv8803_read_reg(client, RX8901_WRCMD_TRG);
+		if (ret < 0)
+			return ret;
+		if (time_after(jiffies, tmo))
+			return -EBUSY;
+	} while (ret);
+
+	return count;
+}
+
 static DEVICE_ATTR_WO(enable);
 static DEVICE_ATTR_RO(read);
+static DEVICE_ATTR_WO(trigger);
 
 static struct attribute *rv8803_rtc_event_attrs[] = {
 	&dev_attr_enable.attr,
 	&dev_attr_read.attr,
+	&dev_attr_trigger.attr,
 	NULL
 };
 
