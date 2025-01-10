@@ -7,6 +7,7 @@
 #include <asm-generic/errno-base.h>
 
 #include "lock_data.h"
+#include <time.h>
 
 /* for collect_lock_syms().  4096 was rejected by the verifier */
 #define MAX_CPUS  1024
@@ -177,6 +178,9 @@ int data_fail;
 
 int task_map_full;
 int data_map_full;
+
+struct task_struct *bpf_task_from_pid(s32 pid) __ksym;
+void bpf_task_release(struct task_struct *p) __ksym;
 
 static inline __u64 get_current_cgroup_id(void)
 {
@@ -407,6 +411,60 @@ int contention_begin(u64 *ctx)
 	pelem->flags = (__u32)ctx[1];
 
 	if (needs_callstack) {
+		u32 i = 0;
+		int owner_pid;
+		unsigned long *entries;
+		struct task_struct *task;
+		cotd *data;
+
+		if (!lock_owner)
+			goto contention_begin_skip_owner_callstack;
+
+		task = get_lock_owner(pelem->lock, pelem->flags);
+		if (!task)
+			goto contention_begin_skip_owner_callstack;
+
+		owner_pid = BPF_CORE_READ(task, pid);
+
+		entries = bpf_map_lookup_elem(&owner_stacks_entries, &i);
+		if (!entries)
+			goto contention_begin_skip_owner_callstack;
+		for (i = 0; i < max_stack; i++)
+			entries[i] = 0x0;
+
+		task = bpf_task_from_pid(owner_pid);
+		if (task) {
+			bpf_get_task_stack(task, entries,
+					   max_stack * sizeof(unsigned long),
+					   0);
+			bpf_task_release(task);
+		}
+
+		data = bpf_map_lookup_elem(&contention_owner_tracing,
+					   &(pelem->lock));
+
+		// Contention just happens, or corner case `lock` is owned by
+		// process not `owner_pid`.
+		if (!data || data->pid != owner_pid) {
+			cotd first = {
+				.pid = owner_pid,
+				.timestamp = pelem->timestamp,
+				.count = 1,
+			};
+			bpf_map_update_elem(&contention_owner_tracing,
+					    &(pelem->lock), &first, BPF_ANY);
+			bpf_map_update_elem(&contention_owner_stacks,
+					    &(pelem->lock), entries, BPF_ANY);
+		}
+		// Contention is going on and new waiter joins.
+		else {
+			__sync_fetch_and_add(&data->count, 1);
+			// TODO: Since for owner the callstack would change at
+			// different time, We should check and report if the
+			// callstack is different with the recorded one in
+			// `contention_owner_stacks`.
+		}
+contention_begin_skip_owner_callstack:
 		pelem->stack_id = bpf_get_stackid(ctx, &stacks,
 						  BPF_F_FAST_STACK_CMP | stack_skip);
 		if (pelem->stack_id < 0)
@@ -443,6 +501,7 @@ int contention_end(u64 *ctx)
 	struct tstamp_data *pelem;
 	struct contention_key key = {};
 	struct contention_data *data;
+	__u64 timestamp;
 	__u64 duration;
 	bool need_delete = false;
 
@@ -469,11 +528,99 @@ int contention_end(u64 *ctx)
 			return 0;
 		need_delete = true;
 	}
-	duration = bpf_ktime_get_ns() - pelem->timestamp;
+	timestamp = bpf_ktime_get_ns();
+	duration = timestamp - pelem->timestamp;
 	if ((__s64)duration < 0) {
 		__sync_fetch_and_add(&time_fail, 1);
 		goto out;
 	}
+
+	if (needs_callstack && lock_owner) {
+		u64 owner_contention_time;
+		unsigned long *owner_stack;
+		struct contention_data *cdata;
+		cotd *otdata;
+
+		otdata = bpf_map_lookup_elem(&contention_owner_tracing,
+					     &(pelem->lock));
+		owner_stack = bpf_map_lookup_elem(&contention_owner_stacks,
+						  &(pelem->lock));
+		if (!otdata || !owner_stack)
+			goto contention_end_skip_owner_callstack;
+
+		owner_contention_time = timestamp - otdata->timestamp;
+
+		// Update `owner_lock_stat` if `owner_stack` is
+		// available.
+		if (owner_stack[0] != 0x0) {
+			cdata = bpf_map_lookup_elem(&owner_lock_stat,
+						    owner_stack);
+			if (!cdata) {
+				struct contention_data first = {
+					.total_time = owner_contention_time,
+					.max_time = owner_contention_time,
+					.min_time = owner_contention_time,
+					.count = 1,
+					.flags = pelem->flags,
+				};
+				bpf_map_update_elem(&owner_lock_stat,
+						    owner_stack, &first,
+						    BPF_ANY);
+			} else {
+				__sync_fetch_and_add(&cdata->total_time,
+						     owner_contention_time);
+				__sync_fetch_and_add(&cdata->count, 1);
+
+				/* FIXME: need atomic operations */
+				if (cdata->max_time < owner_contention_time)
+					cdata->max_time = owner_contention_time;
+				if (cdata->min_time > owner_contention_time)
+					cdata->min_time = owner_contention_time;
+			}
+		}
+
+		// `pid` in `otdata` is not lock owner anymore, delete
+		// this entry.
+		bpf_map_delete_elem(&contention_owner_stacks, &(otdata->pid));
+
+		//  No contention is going on, delete `lock` in
+		//  `contention_owner_tracing` and
+		//  `contention_owner_stacks`
+		if (otdata->count <= 1) {
+			bpf_map_delete_elem(&contention_owner_tracing,
+					    &(pelem->lock));
+			bpf_map_delete_elem(&contention_owner_stacks,
+					    &(pelem->lock));
+		}
+		// Contention is still going on, with a new owner
+		// (current task). `otdata` should be updated accordingly.
+		// If ctx[1] is not 0, the current task terminate lock waiting
+		// without acquiring it.
+		else if (ctx[1] == 0) {
+			unsigned long *entries;
+			u32 i = 0;
+
+			otdata->pid = pid;
+			otdata->timestamp = timestamp;
+			(otdata->count)--;
+			bpf_map_update_elem(&contention_owner_tracing,
+					    &(pelem->lock), otdata, BPF_ANY);
+
+			entries =
+				bpf_map_lookup_elem(&owner_stacks_entries, &i);
+			if (!entries)
+				goto contention_end_skip_owner_callstack;
+			for (i = 0; i < (u32)max_stack; i++)
+				entries[i] = 0x0;
+
+			bpf_get_task_stack(bpf_get_current_task_btf(), entries,
+					   max_stack * sizeof(unsigned long),
+					   0);
+			bpf_map_update_elem(&contention_owner_stacks,
+					    &(pelem->lock), entries, BPF_ANY);
+		}
+	}
+contention_end_skip_owner_callstack:
 
 	switch (aggr_mode) {
 	case LOCK_AGGR_CALLER:
