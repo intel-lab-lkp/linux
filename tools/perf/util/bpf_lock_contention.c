@@ -414,6 +414,47 @@ static const char *lock_contention_get_name(struct lock_contention *con,
 	return name_buf;
 }
 
+struct lock_stat *pop_owner_stack_trace(struct lock_contention *con)
+{
+	int fd;
+	u64 *stack_trace;
+	struct contention_data data = {};
+	size_t stack_size = con->max_stack * sizeof(*stack_trace);
+	struct lock_stat *st;
+	char name[KSYM_NAME_LEN];
+
+	fd = bpf_map__fd(skel->maps.owner_lock_stat);
+
+	stack_trace = zalloc(stack_size);
+	if (stack_trace == NULL)
+		return NULL;
+
+	if (bpf_map_get_next_key(fd, NULL, stack_trace))
+		return NULL;
+
+	bpf_map_lookup_elem(fd, stack_trace, &data);
+	st = zalloc(sizeof(struct lock_stat));
+
+	strcpy(name, stack_trace[0] ? lock_contention_get_name(con, NULL,
+							       stack_trace, 0) :
+				      "unknown");
+
+	st->name = strdup(name);
+	st->flags = data.flags;
+	st->nr_contended = data.count;
+	st->wait_time_total = data.total_time;
+	st->wait_time_max = data.max_time;
+	st->wait_time_min = data.min_time;
+	st->callstack = memdup(stack_trace, stack_size);
+
+	if (data.count)
+		st->avg_wait_time = data.total_time / data.count;
+
+	bpf_map_delete_elem(fd, stack_trace);
+	free(stack_trace);
+
+	return st;
+}
 int lock_contention_read(struct lock_contention *con)
 {
 	int fd, stack, err = 0;
