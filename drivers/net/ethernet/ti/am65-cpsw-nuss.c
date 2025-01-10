@@ -32,6 +32,7 @@
 #include <linux/dma/ti-cppi5.h>
 #include <linux/dma/k3-udma-glue.h>
 #include <net/page_pool/helpers.h>
+#include <net/dsa.h>
 #include <net/switchdev.h>
 
 #include "cpsw_ale.h"
@@ -724,13 +725,22 @@ static int am65_cpsw_nuss_common_open(struct am65_cpsw_common *common)
 	u32 val, port_mask;
 	struct page *page;
 
+	/* Control register */
+	val = AM65_CPSW_CTL_P0_ENABLE | AM65_CPSW_CTL_P0_TX_CRC_REMOVE |
+	      AM65_CPSW_CTL_VLAN_AWARE | AM65_CPSW_CTL_P0_RX_PAD;
+	/* VLAN aware CPSW mode is incompatible with some DSA tagging schemes.
+	 * Therefore disable VLAN_AWARE mode if any of the ports is a DSA Port.
+	 */
+	for (port_idx = 0; port_idx < common->port_num; port_idx++)
+		if (netdev_uses_dsa(common->ports[port_idx].ndev)) {
+			val &= ~AM65_CPSW_CTL_VLAN_AWARE;
+			break;
+		}
+	writel(val, common->cpsw_base + AM65_CPSW_REG_CTL);
+
 	if (common->usage_count)
 		return 0;
 
-	/* Control register */
-	writel(AM65_CPSW_CTL_P0_ENABLE | AM65_CPSW_CTL_P0_TX_CRC_REMOVE |
-	       AM65_CPSW_CTL_VLAN_AWARE | AM65_CPSW_CTL_P0_RX_PAD,
-	       common->cpsw_base + AM65_CPSW_REG_CTL);
 	/* Max length register */
 	writel(AM65_CPSW_MAX_PACKET_SIZE,
 	       host_p->port_base + AM65_CPSW_PORT_REG_RX_MAXLEN);
