@@ -10,6 +10,7 @@
 #include <linux/bcd.h>
 #include <linux/bitops.h>
 #include <linux/bitfield.h>
+#include <linux/delay.h>
 #include <linux/log2.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -680,6 +681,276 @@ static int rv8803_nvram_read(void *priv, unsigned int offset,
 	return 0;
 }
 
+static int rv8803_ts_event_write_evin(int evin, struct rv8803_data *rv8803, int pullup_down,
+				      int trigger, int filter)
+{
+	int ret;
+	u8 reg_mask;
+	struct i2c_client *client = rv8803->client;
+
+	/* according to data-sheet, "1" is not valid for filter */
+	if (evin >= NO_OF_EVIN || filter == 1 || filter > EVIN_FILTER_MAX)
+		return -EINVAL;
+
+	/* set EVENTx pull-up edge trigger */
+	ret = rv8803_read_reg(client, evin_cfg_reg[evin]);
+	if (ret < 0)
+		return ret;
+	reg_mask = ret;
+	if (pullup_down != -1) {
+		reg_mask &= ~RX8901_EVENTx_CFG_PUPD;
+		reg_mask |= FIELD_PREP(RX8901_EVENTx_CFG_PUPD, pullup_down);
+	}
+	if (trigger != -1) {
+		reg_mask &= ~RX8901_EVENTx_CFG_POL;
+		reg_mask |= FIELD_PREP(RX8901_EVENTx_CFG_POL, trigger);
+	}
+	ret = rv8803_write_reg(client, evin_cfg_reg[evin], reg_mask);
+	if (ret < 0)
+		return ret;
+
+	/* set EVENTx noise filter */
+	if (filter != -1) {
+		ret = rv8803_write_reg(client, evin_flt_reg[evin], filter);
+		if (ret < 0)
+			return ret;
+	}
+
+	return 0;
+}
+
+static ssize_t enable_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			    size_t count)
+{
+	int ret;
+	int i;
+	unsigned long tmo;
+	u8 reg;
+	u8 reg_mask;
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+	struct i2c_client *client = rv8803->client;
+
+	/* EVINxCPEN | EVINxEN */;
+	const u8 reg_mask_evin_en = GENMASK(5, 3) | GENMASK(2, 0);
+
+	bool enable = (strstr(buf, "1") == buf) ? true : false;
+
+	guard(mutex)(&rv8803->flags_lock);
+
+	/* check if event detection status match requested mode */
+	ret = rv8803_read_reg(client, RX8901_EVIN_EN);
+	if (ret < 0)
+		return ret;
+
+	/* requested mode match current state -> nothing to do */
+	if (ret == (enable ? reg_mask_evin_en : 0))
+		return count;
+
+	dev_info(&client->dev, "%s time-stamp event detection\n",
+		 (enable) ? "configure" : "disable");
+
+	/* 1. disable event detection interrupt */
+	ret = rv8803_read_reg(rv8803->client, RV8803_CTRL);
+	if (ret < 0)
+		return ret;
+	ret = rv8803_write_reg(rv8803->client, RV8803_CTRL, ret & ~RV8803_CTRL_EIE);
+	if (ret)
+		return ret;
+
+	/* 2. disable events for configuration */
+	ret = rv8803_write_reg(client, RX8901_EVIN_EN, 0);
+	if (ret < 0)
+		return ret;
+
+	/* for disable no configuration is needed */
+	if (!enable)
+		return count;
+
+	/* 3. set EVENTx pull-up edge trigger and noise filter */
+	for (i = 0; i < NO_OF_EVIN; ++i) {
+		ret = rv8803_ts_event_write_evin(i, rv8803, pull_up_1M, falling_edge, 0);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* 4. enable EVENTx interrupt and VBATL,VDDL */
+	ret = rv8803_read_reg(client, RX8901_EVNT_INTE);
+	if (ret < 0)
+		return ret;
+	reg_mask = BIT(5) | BIT(6) | BIT(7); /* EVINxIEN 1-3 */
+	reg_mask |= BIT(3) | BIT(1); /* VBATLIEN | VDDLIEN */
+	reg = (ret & ~reg_mask) | reg_mask;
+	ret = rv8803_write_reg(client, RX8901_EVNT_INTE, reg);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * 5. set BUF1 inhibit and interrupt every 1 event
+	 *    NOTE: BUF2-3 are not used in FIFO-mode
+	 */
+	ret = rv8803_write_reg(client, RX8901_BUF1_CFG1, 0x01);
+	if (ret < 0)
+		return ret;
+
+	/* 6. clean and init for BUFx and event counter 1-3 and trigger cmd */
+	reg = BIT(7) | GENMASK(6, 4);
+	reg |= BIT(0); /* CMDTRGEN */
+	ret = rv8803_write_reg(client, RX8901_WRCMD_CFG, reg);
+	if (ret < 0)
+		return ret;
+	ret = rv8803_write_reg(client, RX8901_WRCMD_TRG, 0xFF);
+	if (ret < 0)
+		return ret;
+	tmo = jiffies + msecs_to_jiffies(100); /* timeout 100ms */
+	do {
+		usleep_range(10, 2000);
+		ret = rv8803_read_reg(client, RX8901_WRCMD_TRG);
+		if (ret < 0)
+			return ret;
+		if (time_after(jiffies, tmo))
+			return -EBUSY;
+	} while (ret);
+
+	/* 7. enable event detection interrupt */
+	ret = rv8803_read_reg(rv8803->client, RV8803_CTRL);
+	if (ret < 0)
+		return ret;
+	ret = rv8803_write_reg(rv8803->client, RV8803_CTRL, ret | RV8803_CTRL_EIE);
+	if (ret)
+		return ret;
+
+	/* 8. / 10. enable events for configuration in FIFO mode */
+	ret = rv8803_write_reg(client, RX8901_EVIN_EN, reg_mask_evin_en);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t read_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	int ret;
+	int ev_idx;
+	int num_events;
+	unsigned long long time_s;
+	int time_ms;
+	int offset = 0;
+	u8 reg_mask;
+	u8 data[10];
+	struct rtc_time tm;
+
+	struct i2c_client *client = to_i2c_client(dev->parent);
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+
+	guard(mutex)(&rv8803->flags_lock);
+
+	/*
+	 * For detailed description see datasheet:
+	 *  - Reading Time Stamp Data (FIFO mode)
+	 */
+
+	/* check interrupt source is from event 1-3 */
+	ret = rv8803_read_reg(client, RX8901_EVNT_INTF);
+	if (ret < 0)
+		return ret;
+
+	/* CHECK for EVF bit */
+	if (ret & BIT(2)) {
+		/* clear EVINxF 1-3 */
+		reg_mask = BIT(5) | BIT(6) | BIT(7);
+		ret = rv8803_write_reg(client, RX8901_EVNT_INTF, ret & ~reg_mask);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* check interrupt source is from event 1-3 */
+	ret = rv8803_read_reg(client, RX8901_BUF_INTF);
+	if (ret < 0)
+		return ret;
+	if (ret & RX8901_BUF_INTF_BUF1F) {
+		/* disable interrupts */
+		ret = rv8803_read_reg(client, RV8803_CTRL);
+		if (ret < 0)
+			return ret;
+		ret = rv8803_write_reg(client, RV8803_CTRL, ret & ~RV8803_CTRL_EIE);
+		if (ret < 0)
+			return ret;
+
+		/* clear interrupt flag */
+		ret = rv8803_read_reg(client, RX8901_BUF_INTF);
+		if (ret < 0)
+			return ret;
+		ret = rv8803_write_reg(client, RX8901_BUF_INTF, ret & ~RX8901_BUF_INTF_BUF1F);
+		if (ret < 0)
+			return ret;
+	}
+
+	/* test if there are events available */
+	ret = rv8803_read_reg(client, RX8901_BUF1_STAT);
+	if (ret < 0)
+		return ret;
+	num_events = ret & RX8901_BUFx_STAT_PTR;
+
+	if (num_events) {
+		ret = rv8803_read_regs(client, 0x60, ARRAY_SIZE(data), data);
+		if (ret < 0)
+			return ret;
+
+		tm.tm_sec = bcd2bin(data[2]);
+		tm.tm_min = bcd2bin(data[3]);
+		tm.tm_hour = bcd2bin(data[4]);
+		tm.tm_mday = bcd2bin(data[5]);
+		tm.tm_mon = bcd2bin(data[6]) - 1;
+		tm.tm_year = bcd2bin(data[7]) + 100;
+		tm.tm_wday = -1;
+		tm.tm_yday = -1;
+		tm.tm_isdst = -1;
+
+		ret = rtc_valid_tm(&tm);
+		if (ret)
+			return ret;
+
+		/* calculate 1/1024 -> ms */
+		time_ms = (1000 * ((data[1] << 2) | (data[0] >> 6))) / 1024;
+		time_s = rtc_tm_to_time64(&tm);
+
+		offset += snprintf(buf + offset, PAGE_SIZE - offset, "%llu.%03d", time_s, time_ms);
+		for (ev_idx = 0; trg_status_txt[ev_idx].txt; ++ev_idx)
+			if (data[9] & trg_status_txt[ev_idx].val)
+				offset += snprintf(buf + offset, PAGE_SIZE - offset, " %s=%d",
+						   trg_status_txt[ev_idx].txt,
+						   !!(trg_status_txt[ev_idx].val & data[8]));
+		offset += snprintf(buf + offset, PAGE_SIZE - offset, "\n");
+
+		/* according to the datasheet we have to wait for 1ms */
+		usleep_range(1000, 2000);
+	}
+
+	/* re-enable interrupts */
+	ret = rv8803_read_reg(client, RV8803_CTRL);
+	if (ret < 0)
+		return ret;
+	ret = rv8803_write_reg(client, RV8803_CTRL, ret | RV8803_CTRL_EIE);
+	if (ret < 0)
+		return ret;
+
+	return offset;
+}
+
+static DEVICE_ATTR_WO(enable);
+static DEVICE_ATTR_RO(read);
+
+static struct attribute *rv8803_rtc_event_attrs[] = {
+	&dev_attr_enable.attr,
+	&dev_attr_read.attr,
+	NULL
+};
+
+static const struct attribute_group rv8803_rtc_sysfs_event_files = {
+	.name = "tamper",
+	.attrs	= rv8803_rtc_event_attrs,
+};
+
 static const struct rtc_class_ops rv8803_rtc_ops = {
 	.read_time = rv8803_get_time,
 	.set_time = rv8803_set_time,
@@ -853,6 +1124,12 @@ static int rv8803_probe(struct i2c_client *client)
 	err = rv8803_regs_configure(rv8803);
 	if (err)
 		return err;
+
+	if (rv8803->type == rx_8901) {
+		err = rtc_add_group(rv8803->rtc, &rv8803_rtc_sysfs_event_files);
+		if (err)
+			return err;
+	}
 
 	rv8803->rtc->ops = &rv8803_rtc_ops;
 	rv8803->rtc->range_min = RTC_TIMESTAMP_BEGIN_2000;
