@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef ATH12K_CORE_H
@@ -235,6 +235,7 @@ enum ath12k_dev_flags {
 	ATH12K_FLAG_CE_IRQ_ENABLED,
 	ATH12K_FLAG_EXT_IRQ_ENABLED,
 	ATH12K_FLAG_QMI_FW_READY_COMPLETE,
+	ATH12K_FLAG_FTM_SEGMENTED,
 };
 
 struct ath12k_tx_conf {
@@ -534,11 +535,18 @@ enum ath12k_hw_state {
 	ATH12K_HW_STATE_RESTARTING,
 	ATH12K_HW_STATE_RESTARTED,
 	ATH12K_HW_STATE_WEDGED,
+	ATH12K_HW_STATE_TM,
 	/* Add other states as required */
 };
 
 /* Antenna noise floor */
 #define ATH12K_DEFAULT_NOISE_FLOOR -95
+
+struct ath12k_ftm_event_obj {
+	u32 data_pos;
+	u32 expected_seq;
+	u8 *eventdata;
+};
 
 struct ath12k_fw_stats {
 	u32 pdev_id;
@@ -714,6 +722,7 @@ struct ath12k {
 
 	struct completion mlo_setup_done;
 	u32 mlo_setup_status;
+	u8 ftm_msgref;
 };
 
 struct ath12k_hw {
@@ -873,6 +882,7 @@ struct ath12k_wsi_info {
 /* Master structure to hold the hw data which may be used in core module */
 struct ath12k_base {
 	enum ath12k_hw_rev hw_rev;
+	enum ath12k_firmware_mode fw_mode;
 	struct platform_device *pdev;
 	struct device *dev;
 	struct ath12k_qmi qmi;
@@ -986,6 +996,7 @@ struct ath12k_base {
 		/* protected by data_lock */
 		u32 fw_crash_counter;
 	} stats;
+	struct ath12k_ftm_event_obj ftm_event_obj;
 	u32 pktlog_defs_checksum;
 
 	struct ath12k_dbring_cap *db_caps;
