@@ -1427,7 +1427,7 @@ The following nested keys are defined.
 	types of memory, type-specific details, and other information
 	on the state and past events of the memory management system.
 
-	All memory amounts are in bytes.
+	All memory amounts are in bytes or bytes.
 
 	The entries are ordered to be human readable, and new entries
 	can show up in the middle. Don't rely on items remaining in a
@@ -1673,11 +1673,12 @@ The following nested keys are defined.
 	application performance by combining this information with the
 	application's CPU allocation.
 
-	All memory amounts are in bytes.
-
 	The output format of memory.numa_stat is::
 
-	  type N0=<bytes in node 0> N1=<bytes in node 1> ...
+	  type N0=<value for node 0> N1=<value for node 1> ...
+
+        The 'value' can be in bytes or pages, depending on the specific
+        type of memory. To determine the unit, refer to the memory.stat.
 
 	The entries are ordered to be human readable, and new entries
 	can show up in the middle. Don't rely on items remaining in a
