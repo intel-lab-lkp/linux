@@ -35,6 +35,7 @@
 #include <linux/workqueue.h>
 #include <uapi/linux/fiemap.h>
 #include <uapi/linux/landlock.h>
+#include <uapi/linux/mount.h>
 
 #include "common.h"
 #include "cred.h"
@@ -1033,34 +1034,36 @@ static bool collect_domain_accesses(
 }
 
 /**
- * current_check_refer_path - Check if a rename or link action is allowed
+ * current_check_reparent_path - Check if a reparent action is allowed
  *
- * @old_dentry: File or directory requested to be moved or linked.
- * @new_dir: Destination parent directory.
+ * @old_dentry: Source file or directory for move, link or bind mount.
+ * @new_dir: Destination parent directory for move and link, or destination
+ *     directory itself for bind mount (mount point).
  * @new_dentry: Destination file or directory.
  * @removable: Sets to true if it is a rename operation.
  * @exchange: Sets to true if it is a rename operation with RENAME_EXCHANGE.
+ * @bind_mount: Sets to true if it is a bind mount operation.
  *
  * Because of its unprivileged constraints, Landlock relies on file hierarchies
- * (and not only inodes) to tie access rights to files.  Being able to link or
- * rename a file hierarchy brings some challenges.  Indeed, moving or linking a
- * file (i.e. creating a new reference to an inode) can have an impact on the
- * actions allowed for a set of files if it would change its parent directory
- * (i.e. reparenting).
+ * (and not only inodes) to tie access rights to files.  Being able to link,
+ * rename or bind mount a file hierarchy brings some challenges.  Indeed, these
+ * operations create a new reference to an inode, which can have an impact on
+ * the actions allowed for a set of files if it would change its parent
+ * directory (i.e. reparenting).
  *
  * To avoid trivial access right bypasses, Landlock first checks if the file or
  * directory requested to be moved would gain new access rights inherited from
  * its new hierarchy.  Before returning any error, Landlock then checks that
  * the parent source hierarchy and the destination hierarchy would allow the
- * link or rename action.  If it is not the case, an error with EACCES is
- * returned to inform user space that there is no way to remove or create the
- * requested source file type.  If it should be allowed but the new inherited
- * access rights would be greater than the source access rights, then the
- * kernel returns an error with EXDEV.  Prioritizing EACCES over EXDEV enables
+ * link, rename or bind mount action.  If it is not the case, an error with
+ * EACCES is returned to inform user space that there is no way to remove or
+ * create the requested source file type.  If it should be allowed but the new
+ * inherited access rights would be greater than the source access rights, then
+ * the kernel returns an error with EXDEV or EPERM.  Prioritizing EACCES enables
  * user space to abort the whole operation if there is no way to do it, or to
  * manually copy the source to the destination if this remains allowed, e.g.
  * because file creation is allowed on the destination directory but not direct
- * linking.
+ * linking, or bind mounting.
  *
  * To achieve this goal, the kernel needs to compare two file hierarchies: the
  * one identifying the source file or directory (including itself), and the
@@ -1082,13 +1085,18 @@ static bool collect_domain_accesses(
  *
  * Returns:
  * - 0 if access is allowed;
- * - -EXDEV if @old_dentry would inherit new access rights from @new_dir;
+ * - -EXDEV if @old_dentry would inherit new access rights from @new_dir through
+ *       link or rename.
+ * - -EPERM if @old_dentry would inherit new access rights from @new_dir through
+ *       bind mount.
  * - -EACCES if file removal or creation is denied.
  */
-static int current_check_refer_path(struct dentry *const old_dentry,
-				    const struct path *const new_dir,
-				    struct dentry *const new_dentry,
-				    const bool removable, const bool exchange)
+static int current_check_reparent_path(struct dentry *const old_dentry,
+				       const struct path *const new_dir,
+				       struct dentry *const new_dentry,
+				       const bool removable,
+				       const bool exchange,
+				       const bool bind_mount)
 {
 	const struct landlock_ruleset *const dom = get_current_fs_domain();
 	bool allow_parent1, allow_parent2;
@@ -1120,7 +1128,8 @@ static int current_check_refer_path(struct dentry *const old_dentry,
 	}
 
 	/* The mount points are the same for old and new paths, cf. EXDEV. */
-	if (old_dentry->d_parent == new_dir->dentry) {
+	if ((bind_mount && old_dentry == new_dentry) ||
+	    (!bind_mount && old_dentry->d_parent == new_dentry->d_parent)) {
 		/*
 		 * The LANDLOCK_ACCESS_FS_REFER access right is not required
 		 * for same-directory referer (i.e. no reparenting).
@@ -1160,6 +1169,14 @@ static int current_check_refer_path(struct dentry *const old_dentry,
 	if (allow_parent1 && allow_parent2)
 		return 0;
 
+	if (bind_mount) {
+		if (!is_access_to_paths_allowed(
+			    dom, new_dir, LANDLOCK_ACCESS_FS_MOUNT,
+			    &layer_masks_parent2, NULL, 0, NULL, NULL)) {
+			return -EPERM;
+		}
+	}
+
 	/*
 	 * To be able to compare source and destination domain access rights,
 	 * take into account the @old_dentry access rights aggregated with its
@@ -1173,7 +1190,7 @@ static int current_check_refer_path(struct dentry *const old_dentry,
 		return 0;
 
 	/*
-	 * This prioritizes EACCES over EXDEV for all actions, including
+	 * This prioritizes EACCES over EXDEV/EPERM for all actions, including
 	 * renames with RENAME_EXCHANGE.
 	 */
 	if (likely(is_eacces(&layer_masks_parent1, access_request_parent1) ||
@@ -1186,6 +1203,8 @@ static int current_check_refer_path(struct dentry *const old_dentry,
 	 * hierarchy, or if LANDLOCK_ACCESS_FS_REFER is not allowed by the
 	 * source or the destination.
 	 */
+	if (bind_mount)
+		return -EPERM;
 	return -EXDEV;
 }
 
@@ -1319,9 +1338,11 @@ static void hook_sb_delete(struct super_block *const sb)
  * topology (i.e. the mount namespace), changing it may grant access to files
  * not previously allowed.
  *
- * To make it simple, deny any filesystem topology modification by landlocked
- * processes.  Non-landlocked processes may still change the namespace of a
- * landlocked process, but this kind of threat must be handled by a system-wide
+ * Currently, we can safely handle private bind mounts, as the source and
+ * destination restrictions can be compared, however all other types of mount
+ * system calls are blocked, including shared bind mounts and device mounts.
+ * Non-landlocked processes may still change the namespace of a landlocked
+ * process, but this kind of threat must be handled by a system-wide
  * access-control security policy.
  *
  * This could be lifted in the future if Landlock can safely handle mount
@@ -1338,22 +1359,26 @@ static int hook_sb_mount(const char *const dev_name,
 {
 	if (!get_current_fs_domain())
 		return 0;
-	return -EPERM;
-}
 
-static int hook_move_mount(const struct path *const from_path,
-			   const struct path *const to_path)
-{
-	if (!get_current_fs_domain())
+	/*
+	 * Allow bind mount and make-private requests to proceed, including requests
+	 * with the MS_REC flag.  For bind mount requests, further security checks
+	 * are performed in the bind mount specific hook.
+	 */
+	if (flags && ((MS_BIND | MS_PRIVATE) & flags))
 		return 0;
 	return -EPERM;
 }
 
-/*
- * Removing a mount point may reveal a previously hidden file hierarchy, which
- * may then grant access to files, which may have previously been forbidden.
- */
-static int hook_sb_umount(struct vfsmount *const mnt, const int flags)
+static int hook_sb_bindmount(const struct path *const old_path,
+			     const struct path *const path, bool recurse)
+{
+	return current_check_reparent_path(old_path->dentry, path, path->dentry,
+					   false, false, true);
+}
+
+static int hook_move_mount(const struct path *const from_path,
+			   const struct path *const to_path)
 {
 	if (!get_current_fs_domain())
 		return 0;
@@ -1389,8 +1414,8 @@ static int hook_path_link(struct dentry *const old_dentry,
 			  const struct path *const new_dir,
 			  struct dentry *const new_dentry)
 {
-	return current_check_refer_path(old_dentry, new_dir, new_dentry, false,
-					false);
+	return current_check_reparent_path(old_dentry, new_dir, new_dentry,
+					   false, false, false);
 }
 
 static int hook_path_rename(const struct path *const old_dir,
@@ -1400,8 +1425,9 @@ static int hook_path_rename(const struct path *const old_dir,
 			    const unsigned int flags)
 {
 	/* old_dir refers to old_dentry->d_parent and new_dir->mnt */
-	return current_check_refer_path(old_dentry, new_dir, new_dentry, true,
-					!!(flags & RENAME_EXCHANGE));
+	return current_check_reparent_path(old_dentry, new_dir, new_dentry,
+					   true, !!(flags & RENAME_EXCHANGE),
+					   false);
 }
 
 static int hook_path_mkdir(const struct path *const dir,
@@ -1652,8 +1678,8 @@ static struct security_hook_list landlock_hooks[] __ro_after_init = {
 
 	LSM_HOOK_INIT(sb_delete, hook_sb_delete),
 	LSM_HOOK_INIT(sb_mount, hook_sb_mount),
+	LSM_HOOK_INIT(sb_bindmount, hook_sb_bindmount),
 	LSM_HOOK_INIT(move_mount, hook_move_mount),
-	LSM_HOOK_INIT(sb_umount, hook_sb_umount),
 	LSM_HOOK_INIT(sb_remount, hook_sb_remount),
 	LSM_HOOK_INIT(sb_pivotroot, hook_sb_pivotroot),
 

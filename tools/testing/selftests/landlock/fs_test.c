@@ -274,6 +274,11 @@ static int mount_opt(const struct mnt_opt *const mnt, const char *const target)
 		     mnt->data);
 }
 
+static int bindmount(const char *const source, const char *const target)
+{
+	return mount(source, target, NULL, MS_BIND, NULL);
+}
+
 static void prepare_layout_opt(struct __test_metadata *const _metadata,
 			       const struct mnt_opt *const mnt)
 {
@@ -558,7 +563,7 @@ TEST_F_FORK(layout1, inval)
 	LANDLOCK_ACCESS_FS_TRUNCATE | \
 	LANDLOCK_ACCESS_FS_IOCTL_DEV)
 
-#define ACCESS_LAST LANDLOCK_ACCESS_FS_IOCTL_DEV
+#define ACCESS_LAST LANDLOCK_ACCESS_FS_MOUNT
 
 #define ACCESS_ALL ( \
 	ACCESS_FILE | \
@@ -572,7 +577,8 @@ TEST_F_FORK(layout1, inval)
 	LANDLOCK_ACCESS_FS_MAKE_FIFO | \
 	LANDLOCK_ACCESS_FS_MAKE_BLOCK | \
 	LANDLOCK_ACCESS_FS_MAKE_SYM | \
-	LANDLOCK_ACCESS_FS_REFER)
+	LANDLOCK_ACCESS_FS_REFER | \
+	LANDLOCK_ACCESS_FS_MOUNT)
 
 /* clang-format on */
 
@@ -1735,14 +1741,14 @@ TEST_F_FORK(layout1, topology_changes_with_net_only)
 	enforce_ruleset(_metadata, ruleset_fd);
 	ASSERT_EQ(0, close(ruleset_fd));
 
-	/* Mount, remount, move_mount, umount, and pivot_root checks. */
+	/* Mount, remount, move_mount, pivot_root and umount checks. */
 	set_cap(_metadata, CAP_SYS_ADMIN);
 	ASSERT_EQ(0, mount_opt(&mnt_tmp, dir_s1d2));
 	ASSERT_EQ(0, mount(NULL, dir_s1d2, NULL, MS_PRIVATE | MS_REC, NULL));
 	ASSERT_EQ(0, syscall(__NR_move_mount, AT_FDCWD, dir_s1d2, AT_FDCWD,
 			     dir_s2d2, 0));
-	ASSERT_EQ(0, umount(dir_s2d2));
 	ASSERT_EQ(0, syscall(__NR_pivot_root, dir_s3d2, dir_s3d3));
+	ASSERT_EQ(0, umount(dir_s2d2));
 	ASSERT_EQ(0, chdir("/"));
 	clear_cap(_metadata, CAP_SYS_ADMIN);
 }
@@ -1763,19 +1769,17 @@ TEST_F_FORK(layout1, topology_changes_with_net_and_fs)
 	enforce_ruleset(_metadata, ruleset_fd);
 	ASSERT_EQ(0, close(ruleset_fd));
 
-	/* Mount, remount, move_mount, umount, and pivot_root checks. */
+	/* Mount, remount, move_mount, pivot_root and umount checks. */
 	set_cap(_metadata, CAP_SYS_ADMIN);
 	ASSERT_EQ(-1, mount_opt(&mnt_tmp, dir_s1d2));
-	ASSERT_EQ(EPERM, errno);
-	ASSERT_EQ(-1, mount(NULL, dir_s3d2, NULL, MS_PRIVATE | MS_REC, NULL));
 	ASSERT_EQ(EPERM, errno);
 	ASSERT_EQ(-1, syscall(__NR_move_mount, AT_FDCWD, dir_s3d2, AT_FDCWD,
 			      dir_s2d2, 0));
 	ASSERT_EQ(EPERM, errno);
-	ASSERT_EQ(-1, umount(dir_s3d2));
-	ASSERT_EQ(EPERM, errno);
 	ASSERT_EQ(-1, syscall(__NR_pivot_root, dir_s3d2, dir_s3d3));
 	ASSERT_EQ(EPERM, errno);
+	ASSERT_EQ(0, mount(NULL, dir_s3d2, NULL, MS_PRIVATE | MS_REC, NULL));
+	ASSERT_EQ(0, umount(dir_s3d2));
 	clear_cap(_metadata, CAP_SYS_ADMIN);
 }
 
@@ -3027,6 +3031,98 @@ TEST_F_FORK(layout1, reparent_remove)
 	ASSERT_EQ(-1, renameat2(AT_FDCWD, file1_s2d2, AT_FDCWD, dir_s1d3,
 				RENAME_EXCHANGE));
 	ASSERT_EQ(EACCES, errno);
+}
+
+TEST_F_FORK(layout1, reparent_bindmount_deny)
+{
+	const struct rule layer1[] = {
+		{
+			.path = dir_s1d1,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_MOUNT |
+				  LANDLOCK_ACCESS_FS_READ_DIR,
+		},
+		{
+			.path = dir_s2d1,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_MOUNT |
+				  LANDLOCK_ACCESS_FS_READ_DIR |
+				  LANDLOCK_ACCESS_FS_MAKE_DIR,
+		},
+		{
+			.path = dir_s3d1,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_READ_DIR |
+				  LANDLOCK_ACCESS_FS_MAKE_DIR,
+		},
+		{},
+	};
+	const int ruleset_fd =
+		create_ruleset(_metadata, layer1[1].access, layer1);
+
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+
+	/* Privilege escalation (FS_MAKE_DIR). */
+	ASSERT_EQ(-1, bindmount(dir_s1d2, dir_s2d2));
+	ASSERT_EQ(EPERM, errno);
+
+	/* Mount point missing FS_MOUNT. */
+	ASSERT_EQ(-1, bindmount(dir_s2d2, dir_s3d2));
+	ASSERT_EQ(EPERM, errno);
+
+	/* Mount point missing permissions other than FS_MOUNT. */
+	ASSERT_EQ(-1, bindmount(dir_s2d2, dir_s1d2));
+	ASSERT_EQ(EACCES, errno);
+
+	/* Missing permissions other than FS_MOUNT, for a self bind mount. */
+	ASSERT_EQ(-1, bindmount(dir_s1d2, dir_s1d2));
+	ASSERT_EQ(EACCES, errno);
+
+	clear_cap(_metadata, CAP_SYS_ADMIN);
+}
+
+TEST_F_FORK(layout1, reparent_bindmount_allow)
+{
+	const struct rule layer1[] = {
+		{
+			.path = dir_s1d1,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_MOUNT,
+		},
+		{
+			.path = dir_s2d1,
+			.access = LANDLOCK_ACCESS_FS_REFER |
+				  LANDLOCK_ACCESS_FS_MOUNT |
+				  LANDLOCK_ACCESS_FS_EXECUTE,
+		},
+		{
+			.path = dir_s3d1,
+			.access = LANDLOCK_ACCESS_FS_EXECUTE,
+		},
+		{},
+	};
+	const int ruleset_fd =
+		create_ruleset(_metadata, layer1[1].access, layer1);
+
+	ASSERT_LE(0, ruleset_fd);
+	enforce_ruleset(_metadata, ruleset_fd);
+	ASSERT_EQ(0, close(ruleset_fd));
+
+	set_cap(_metadata, CAP_SYS_ADMIN);
+
+	/* Mount point has more restrictions than the source. */
+	ASSERT_EQ(0, bindmount(dir_s2d2, dir_s1d2));
+	ASSERT_EQ(0, umount(dir_s1d2));
+
+	/* Bind mounting a directory on itself with no FS_MOUNT. */
+	ASSERT_EQ(0, bindmount(dir_s3d2, dir_s3d2));
+	ASSERT_EQ(0, umount(dir_s3d2));
+
+	clear_cap(_metadata, CAP_SYS_ADMIN);
 }
 
 TEST_F_FORK(layout1, reparent_dom_superset)
