@@ -543,13 +543,13 @@ void brcmf_txfinalize(struct brcmf_if *ifp, struct sk_buff *txp, bool success)
 	eh = (struct ethhdr *)(txp->data);
 	type = ntohs(eh->h_proto);
 
-	if (type == ETH_P_PAE) {
+	if (type == ETH_P_PAE && ifp) {
 		atomic_dec(&ifp->pend_8021x_cnt);
 		if (waitqueue_active(&ifp->pend_8021x_wait))
 			wake_up(&ifp->pend_8021x_wait);
 	}
 
-	if (!success)
+	if (!success && ifp)
 		ifp->ndev->stats.tx_errors++;
 
 	brcmu_pkt_buf_free_skb(txp);
