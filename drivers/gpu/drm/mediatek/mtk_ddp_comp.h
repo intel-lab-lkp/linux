@@ -40,6 +40,7 @@ enum mtk_ddp_comp_type {
 	MTK_DISP_PWM,
 	MTK_DISP_RDMA,
 	MTK_DISP_UFOE,
+	MTK_DISP_VIRTUAL,
 	MTK_DISP_WDMA,
 	MTK_DPI,
 	MTK_DP_INTF,
@@ -47,6 +48,7 @@ enum mtk_ddp_comp_type {
 	MTK_OVL_BLENDER,
 	MTK_OVL_EXDMA,
 	MTK_OVL_OUTPROC,
+	MTK_VDISP_AO,
 	MTK_DDP_COMP_TYPE_MAX,
 };
 
