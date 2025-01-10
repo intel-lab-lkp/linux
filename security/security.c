@@ -1565,6 +1565,24 @@ int security_sb_mount(const char *dev_name, const struct path *path,
 }
 
 /**
+ * security_sb_bindmount() - Loopback/bind mount permission check
+ * @old_path: source of loopback/bind mount
+ * @path: mount point
+ * @recurse: true if recursive (MS_REC)
+ *
+ * Beyond any general mounting hooks, this check is performed on an initial
+ * loopback/bind mount (MS_BIND) with the mount source presented as a path
+ * struct in @old_path.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_sb_bindmount(const struct path *old_path, const struct path *path,
+			  bool recurse)
+{
+	return call_int_hook(sb_bindmount, old_path, path, recurse);
+}
+
+/**
  * security_sb_umount() - Check permission for unmounting a filesystem
  * @mnt: mounted filesystem
  * @flags: unmount flags
