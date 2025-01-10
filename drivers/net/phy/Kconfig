@@ -355,6 +355,12 @@ config REALTEK_PHY
 	help
 	  Supports the Realtek 821x PHY.
 
+config REALTEK_PHY_HWMON
+	def_bool REALTEK_PHY && HWMON
+	depends on !(REALTEK_PHY=y && HWMON=m)
+	help
+	  Optional hwmon support for the temperature sensor
+
 config RENESAS_PHY
 	tristate "Renesas PHYs"
 	help
