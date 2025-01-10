@@ -445,10 +445,14 @@ static void bam_reset(struct bam_device *bdev)
 	writel_relaxed(val, bam_addr(bdev, 0, BAM_CTRL));
 
 	/* set descriptor threshold, start with 4 bytes */
-	if (in_range(bdev->bam_revision, BAM_NDP_REVISION_START,
-		     BAM_NDP_REVISION_END))
+	if (!bdev->num_ees && in_range(bdev->bam_revision, BAM_NDP_REVISION_START,
+				       BAM_NDP_REVISION_END))
 		writel_relaxed(DEFAULT_CNT_THRSHLD,
 			       bam_addr(bdev, 0, BAM_DESC_CNT_TRSHLD));
+
+	if (bdev->num_ees && !bdev->bam_revision)
+		writel_relaxed(DEFAULT_CNT_THRSHLD, bam_addr(bdev, 0,
+							     BAM_DESC_CNT_TRSHLD));
 
 	/* Enable default set of h/w workarounds, ie all except BAM_FULL_PIPE */
 	writel_relaxed(BAM_CNFG_BITS_DEFAULT, bam_addr(bdev, 0, BAM_CNFG_BITS));
@@ -1006,10 +1010,14 @@ static void bam_apply_new_config(struct bam_chan *bchan,
 			maxburst = bchan->slave.src_maxburst;
 		else
 			maxburst = bchan->slave.dst_maxburst;
-		if (in_range(bdev->bam_revision, BAM_NDP_REVISION_START,
-			     BAM_NDP_REVISION_END))
+		if (!bdev->num_ees && in_range(bdev->bam_revision, BAM_NDP_REVISION_START,
+					       BAM_NDP_REVISION_END))
 			writel_relaxed(maxburst,
 				       bam_addr(bdev, 0, BAM_DESC_CNT_TRSHLD));
+
+		if (bdev->num_ees && !bdev->bam_revision)
+			writel_relaxed(DEFAULT_CNT_THRSHLD, bam_addr(bdev, 0,
+								     BAM_DESC_CNT_TRSHLD));
 	}
 
 	bchan->reconfigure = 0;
@@ -1196,12 +1204,13 @@ static struct dma_chan *bam_dma_xlate(struct of_phandle_args *dma_spec,
  */
 static int bam_init(struct bam_device *bdev)
 {
-	u32 val;
+	u32 val = 0;
 
 	/* read revision and configuration information */
-	val = readl_relaxed(bam_addr(bdev, 0, BAM_REVISION));
-	if (!bdev->num_ees)
+	if (!bdev->num_ees) {
+		val = readl_relaxed(bam_addr(bdev, 0, BAM_REVISION));
 		bdev->num_ees = (val >> NUM_EES_SHIFT) & NUM_EES_MASK;
+	}
 
 	bdev->bam_revision = val & REVISION_MASK;
 
