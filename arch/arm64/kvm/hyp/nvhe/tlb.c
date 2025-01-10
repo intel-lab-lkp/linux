@@ -261,10 +261,15 @@ void __kvm_flush_cpu_context(struct kvm_s2_mmu *mmu)
 	exit_vmid_context(&cxt);
 }
 
-void __kvm_flush_vm_context(void)
+void __kvm_flush_vm_context(bool cpu_local)
 {
 	/* Same remark as in enter_vmid_context() */
 	dsb(ish);
-	__tlbi(alle1is);
+
+	if (cpu_local)
+		__tlbi(alle1);
+	else
+		__tlbi(alle1is);
+
 	dsb(ish);
 }

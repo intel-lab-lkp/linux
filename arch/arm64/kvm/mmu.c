@@ -1787,6 +1787,19 @@ int kvm_handle_guest_abort(struct kvm_vcpu *vcpu)
 	ipa = fault_ipa = kvm_vcpu_get_fault_ipa(vcpu);
 	is_iabt = kvm_vcpu_trap_is_iabt(vcpu);
 
+	if (esr_fsc_is_tlb_conflict_abort(esr)) {
+
+		/* Architecturely, at this stage 2 tlb conflict abort, we must
+		 * either perform a `tlbi vmalls12e1`, or a `tlbi alle1`. Due
+		 * to nesting of VMs, we would have to iterate all flattened
+		 * VMIDs to clean out a single guest, so we perform a `tlbi alle1`
+		 * instead to save time.
+		 */
+		__kvm_flush_vm_context(true);
+
+		return 1;
+	}
+
 	if (esr_fsc_is_translation_fault(esr)) {
 		/* Beyond sanitised PARange (which is the IPA limit) */
 		if (fault_ipa >= BIT_ULL(get_kvm_ipa_limit())) {

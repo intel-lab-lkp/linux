@@ -347,7 +347,7 @@ static void handle___kvm_adjust_pc(struct kvm_cpu_context *host_ctxt)
 
 static void handle___kvm_flush_vm_context(struct kvm_cpu_context *host_ctxt)
 {
-	__kvm_flush_vm_context();
+	__kvm_flush_vm_context(false);
 }
 
 static void handle___kvm_tlb_flush_vmid_ipa(struct kvm_cpu_context *host_ctxt)
