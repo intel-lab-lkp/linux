@@ -75,6 +75,13 @@ properties:
               address on the I2C bus where the deserializer resides are
               forwarded to the serializer.
 
+          i2c-addr:
+            $ref: /schemas/types.yaml#/definitions/uint32
+            description:
+              The strap I2C address of the serializer. This is used by the
+              deserializer to internally communicate to the serializer over the
+              FPD-Link back-channel.
+
           ti,rx-mode:
             $ref: /schemas/types.yaml#/definitions/uint32
             enum:
