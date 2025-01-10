@@ -49,6 +49,12 @@ properties:
       Indicates that the output is a BT.656-4 compatible stream.
     type: boolean
 
+  interrupts:
+    description:
+      The ADV7180 chips can generate interrupt in the INTRQ pin.
+    items:
+      - description: INTRQ pin interrupt.
+
   port:
     $ref: /schemas/graph.yaml#/$defs/port-base
     unevaluatedProperties: false
