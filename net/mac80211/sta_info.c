@@ -2858,6 +2858,33 @@ static void sta_set_link_sinfo(struct sta_info *sta, struct link_station_info *l
 	}
 }
 
+static void sta_set_mld_rate_info(struct rate_info *sinfo_rate,
+				  struct rate_info *link_sinfo_rate)
+{
+	if (link_sinfo_rate->flags)
+		sinfo_rate->flags = link_sinfo_rate->flags;
+	if (link_sinfo_rate->legacy)
+		sinfo_rate->legacy = link_sinfo_rate->legacy;
+	if (link_sinfo_rate->mcs)
+		sinfo_rate->mcs = link_sinfo_rate->mcs;
+	if (link_sinfo_rate->nss)
+		sinfo_rate->nss = link_sinfo_rate->nss;
+	if (link_sinfo_rate->bw)
+		sinfo_rate->bw = link_sinfo_rate->bw;
+	if (link_sinfo_rate->he_gi)
+		sinfo_rate->he_gi = link_sinfo_rate->he_gi;
+	if (link_sinfo_rate->he_dcm)
+		sinfo_rate->he_dcm = link_sinfo_rate->he_dcm;
+	if (link_sinfo_rate->he_ru_alloc)
+		sinfo_rate->he_ru_alloc = link_sinfo_rate->he_ru_alloc;
+	if (link_sinfo_rate->n_bonded_ch)
+		sinfo_rate->n_bonded_ch = link_sinfo_rate->n_bonded_ch;
+	if (link_sinfo_rate->eht_gi)
+		sinfo_rate->eht_gi = link_sinfo_rate->eht_gi;
+	if (link_sinfo_rate->eht_ru_alloc)
+		sinfo_rate->eht_ru_alloc = link_sinfo_rate->eht_ru_alloc;
+}
+
 static void sta_set_mld_sinfo(struct station_info *sinfo, struct sta_info *sta)
 {
 	struct link_station_info *link_sinfo;
@@ -2913,6 +2940,23 @@ static void sta_set_mld_sinfo(struct station_info *sinfo, struct sta_info *sta)
 	sinfo->rx_bytes += sta->rem_link_stats.rx_bytes;
 	sinfo->tx_retries += sta->rem_link_stats.tx_retries;
 	sinfo->tx_failed += sta->rem_link_stats.tx_failed;
+
+	/*TODO: set mld stats for signal based on best values and signal
+	 * for last updated, currently using one of the link to fill stats
+	 */
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_SIGNAL)) {
+		sinfo->signal = link_sinfo->signal;
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+	}
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_TX_BITRATE)) {
+		sta_set_mld_rate_info(&sinfo->txrate, &link_sinfo->txrate);
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
+	}
+
+	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_RX_BITRATE)) {
+		sta_set_mld_rate_info(&sinfo->rxrate, &link_sinfo->rxrate);
+		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BITRATE);
+	}
 }
 
 void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,

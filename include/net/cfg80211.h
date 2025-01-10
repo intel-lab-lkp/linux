@@ -2180,6 +2180,10 @@ struct link_station_info {
  * @tx_bytes: bytes (size of MPDUs) transmitted to this station
  * @tx_retries: cumulative retry counts (MPDUs)
  * @tx_failed: number of failed transmissions (MPDUs) (retries exceeded, no ACK)
+ * @signal: The signal strength, type depends on the wiphy's signal_type.
+ *	For CFG80211_SIGNAL_TYPE_MBM, value is expressed in _dBm_.
+ * @txrate: last updated unicast bitrate from this station
+ * @rxrate: last updated unicast bitrate to this station
  * @deflink: This holds the default link STA information, for non MLO STA
  *	all link specific STA information is accessed through @deflink.
  * @links: reference to Link sta entries for MLO.
@@ -2218,6 +2222,9 @@ struct station_info {
 	u64 tx_bytes;
 	u32 tx_retries;
 	u32 tx_failed;
+	s8 signal;
+	struct rate_info txrate;
+	struct rate_info rxrate;
 
 	struct link_station_info deflink;
 	/* TODO: Need to check and add protection access to links memory */
