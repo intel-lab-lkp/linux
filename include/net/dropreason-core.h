@@ -13,6 +13,7 @@
 	FN(SOCKET_RCV_SHUTDOWN)		\
 	FN(UNIX_DISCONNECT)		\
 	FN(UNIX_INFLIGHT_FD_LIMIT)	\
+	FN(UNIX_NO_PERM)		\
 	FN(UNIX_SKIP_OOB)		\
 	FN(PKT_TOO_SMALL)		\
 	FN(TCP_CSUM)			\
@@ -164,6 +165,11 @@ enum skb_drop_reason {
 	 * are passed via SCM_RIGHTS but not yet received, reaching RLIMIT_NOFILE.
 	 */
 	SKB_DROP_REASON_UNIX_INFLIGHT_FD_LIMIT,
+	/**
+	 * @SKB_DROP_REASON_UNIX_NO_PERM: the peer socket is already connect()ed
+	 * to another SOCK_DGRAM/SOCK_SEQPACKET socket.
+	 */
+	SKB_DROP_REASON_UNIX_NO_PERM,
 	/**
 	 * @SKB_DROP_REASON_UNIX_SKIP_OOB: Out-Of-Band data is skipped by
 	 * recv() without MSG_OOB so dropped.
