@@ -449,6 +449,28 @@ static bool mtk_drm_find_mmsys_comp(struct mtk_drm_private *private, int comp_id
 	return false;
 }
 
+static int mtk_drm_mmsys_comp_in_path(struct mtk_drm_private *private, int comp_id)
+{
+	const struct mtk_mmsys_driver_data *drv_data = private->data;
+	int i;
+
+	if (drv_data->main_path)
+		for (i = 0; i < drv_data->main_len; i++)
+			if (drv_data->main_path[i] == comp_id)
+				return 0;
+
+	if (drv_data->ext_path)
+		for (i = 0; i < drv_data->ext_len; i++)
+			if (drv_data->ext_path[i] == comp_id)
+				return 1;
+	if (drv_data->third_path)
+		for (i = 0; i < drv_data->third_len; i++)
+			if (drv_data->third_path[i] == comp_id)
+				return 2;
+
+	return -1;
+}
+
 static int mtk_drm_kms_init(struct drm_device *drm)
 {
 	struct mtk_drm_private *private = drm->dev_private;
@@ -464,8 +486,8 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	if (ret)
 		goto put_mutex_dev;
 
-	drm->mode_config.min_width = 64;
-	drm->mode_config.min_height = 64;
+	drm->mode_config.min_width = 1;
+	drm->mode_config.min_height = 1;
 
 	/*
 	 * set max width and height as default value(4096x4096).
@@ -1109,6 +1131,40 @@ static int mtk_drm_probe(struct platform_device *pdev)
 		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
 	}
 
+	if (mtk_drm_find_mmsys_comp(private, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0)) {
+		struct mtk_drm_ovlsys_private ovlsys_priv;
+
+		ovlsys_priv.mmsys_dev = private->mmsys_dev;
+		ovlsys_priv.use_path =
+		mtk_drm_mmsys_comp_in_path(private, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0);
+		ovl_adaptor =
+			platform_device_register_data(dev, "mediatek-disp-ovlsys-adaptor",
+						      PLATFORM_DEVID_AUTO,
+						      (void *)&ovlsys_priv,
+						      sizeof(struct mtk_drm_ovlsys_private));
+		private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0].dev = &ovl_adaptor->dev;
+		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0],
+				  DDP_COMPONENT_DRM_OVLSYS_ADAPTOR0);
+		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
+	}
+
+	if (mtk_drm_find_mmsys_comp(private, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1)) {
+		struct mtk_drm_ovlsys_private ovlsys_priv;
+
+		ovlsys_priv.mmsys_dev = private->mmsys_dev;
+		ovlsys_priv.use_path =
+		mtk_drm_mmsys_comp_in_path(private, DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1);
+		ovl_adaptor =
+			platform_device_register_data(dev, "mediatek-disp-ovlsys-adaptor",
+						      PLATFORM_DEVID_AUTO,
+						      (void *)&ovlsys_priv,
+						      sizeof(struct mtk_drm_ovlsys_private));
+		private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1].dev = &ovl_adaptor->dev;
+		mtk_ddp_comp_init(NULL, &private->ddp_comp[DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1],
+				  DDP_COMPONENT_DRM_OVLSYS_ADAPTOR1);
+		component_match_add(dev, &match, compare_dev, &ovl_adaptor->dev);
+	}
+
 	/* Iterate over sibling DISP function blocks */
 	for_each_child_of_node(phandle->parent, node) {
 		enum mtk_ddp_comp_type comp_type;
@@ -1270,6 +1326,7 @@ static struct platform_driver * const mtk_drm_drivers[] = {
 	&mtk_disp_outproc_driver,
 	&mtk_disp_ovl_adaptor_driver,
 	&mtk_disp_ovl_driver,
+	&mtk_disp_ovlsys_adaptor_driver,
 	&mtk_disp_rdma_driver,
 	&mtk_dpi_driver,
 	&mtk_drm_platform_driver,
