@@ -28,10 +28,12 @@ maintainers:
 
 properties:
   compatible:
-    enum:
-      - fairchild,74hc595
-      - nxp,74lvc594
-      - onnn,74hc595a
+    oneOf:
+      - const: fairchild,74hc595
+      - const: nxp,74lvc594
+      - items:
+          - const: onnn,74hc595a
+          - const: fairchild,74hc595
 
   reg:
     maxItems: 1
