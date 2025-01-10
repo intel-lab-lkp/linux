@@ -673,35 +673,34 @@ void kvm_tlb_flush_vmid_range(struct kvm_s2_mmu *mmu,
 #define KVM_S2_MEMATTR(pgt, attr) PAGE_S2_MEMATTR(attr, stage2_has_fwb(pgt))
 
 static int stage2_set_prot_attr(struct kvm_pgtable *pgt, enum kvm_pgtable_prot prot,
-				kvm_pte_t *ptep)
+				int mem_attr, kvm_pte_t *ptep)
 {
 	kvm_pte_t attr;
 	u32 sh = KVM_PTE_LEAF_ATTR_LO_S2_SH_IS;
-	unsigned long prot_mask = KVM_PGTABLE_PROT_DEVICE |
-				  KVM_PGTABLE_PROT_NORMAL_NC |
-				  KVM_PGTABLE_PROT_NORMAL_NOTAGACCESS;
+	bool device = prot & KVM_PGTABLE_PROT_DEVICE;
 
-	switch (prot & prot_mask) {
-	case KVM_PGTABLE_PROT_DEVICE | KVM_PGTABLE_PROT_NORMAL_NC:
-		return -EINVAL;
-	case KVM_PGTABLE_PROT_DEVICE:
+	if (device) {
 		if (prot & KVM_PGTABLE_PROT_X)
 			return -EINVAL;
 		attr = KVM_S2_MEMATTR(pgt, DEVICE_nGnRE);
-		break;
-	case KVM_PGTABLE_PROT_NORMAL_NC:
-		if (prot & KVM_PGTABLE_PROT_X)
+		if (!mem_attr)
 			return -EINVAL;
-		attr = KVM_S2_MEMATTR(pgt, NORMAL_NC);
-		break;
-	case KVM_PGTABLE_PROT_NORMAL_NOTAGACCESS:
-		if (system_supports_notagaccess())
-			attr = KVM_S2_MEMATTR(pgt, NORMAL_NOTAGACCESS);
-		else
-			return -EINVAL;
-		break;
-	default:
-		attr = KVM_S2_MEMATTR(pgt, NORMAL);
+	} else {
+		switch (mem_attr) {
+		case KVM_PGTABLE_ATTR_NORMAL_NC:
+			if (prot & KVM_PGTABLE_PROT_X)
+				return -EINVAL;
+			attr = KVM_S2_MEMATTR(pgt, NORMAL_NC);
+			break;
+		case KVM_PGTABLE_ATTR_NORMAL_NOTAGACCESS:
+			if (system_supports_notagaccess())
+				attr = KVM_S2_MEMATTR(pgt, NORMAL_NOTAGACCESS);
+			else
+				return -EINVAL;
+			break;
+		default:
+			attr = KVM_S2_MEMATTR(pgt, NORMAL);
+		}
 	}
 
 	if (!(prot & KVM_PGTABLE_PROT_X))
@@ -1060,7 +1059,7 @@ static int stage2_map_walker(const struct kvm_pgtable_visit_ctx *ctx,
 }
 
 int kvm_pgtable_stage2_map(struct kvm_pgtable *pgt, u64 addr, u64 size,
-			   u64 phys, enum kvm_pgtable_prot prot,
+			   u64 phys, enum kvm_pgtable_prot prot, int mem_attr,
 			   void *mc, enum kvm_pgtable_walk_flags flags)
 {
 	int ret;
@@ -1081,7 +1080,7 @@ int kvm_pgtable_stage2_map(struct kvm_pgtable *pgt, u64 addr, u64 size,
 	if (WARN_ON((pgt->flags & KVM_PGTABLE_S2_IDMAP) && (addr != phys)))
 		return -EINVAL;
 
-	ret = stage2_set_prot_attr(pgt, prot, &map_data.attr);
+	ret = stage2_set_prot_attr(pgt, prot, mem_attr, &map_data.attr);
 	if (ret)
 		return ret;
 
@@ -1408,7 +1407,7 @@ kvm_pte_t *kvm_pgtable_stage2_create_unlinked(struct kvm_pgtable *pgt,
 	if (!IS_ALIGNED(phys, kvm_granule_size(level)))
 		return ERR_PTR(-EINVAL);
 
-	ret = stage2_set_prot_attr(pgt, prot, &map_data.attr);
+	ret = stage2_set_prot_attr(pgt, prot, 0, &map_data.attr);
 	if (ret)
 		return ERR_PTR(ret);
 
