@@ -2804,14 +2804,28 @@ static void virtnet_napi_do_enable(struct virtqueue *vq,
 }
 
 static void virtnet_napi_enable_lock(struct virtqueue *vq,
-				     struct napi_struct *napi)
+				     struct napi_struct *napi,
+				     bool need_rtnl)
 {
+	struct virtnet_info *vi = vq->vdev->priv;
+	int q = vq2rxq(vq);
+
 	virtnet_napi_do_enable(vq, napi);
+
+	if (q < vi->curr_queue_pairs) {
+		if (need_rtnl)
+			rtnl_lock();
+
+		netif_queue_set_napi(vi->dev, q, NETDEV_QUEUE_TYPE_RX, napi);
+
+		if (need_rtnl)
+			rtnl_unlock();
+	}
 }
 
 static void virtnet_napi_enable(struct virtqueue *vq, struct napi_struct *napi)
 {
-	virtnet_napi_enable_lock(vq, napi);
+	virtnet_napi_enable_lock(vq, napi, false);
 }
 
 static void virtnet_napi_tx_enable(struct virtnet_info *vi,
@@ -2848,9 +2862,13 @@ static void refill_work(struct work_struct *work)
 	for (i = 0; i < vi->curr_queue_pairs; i++) {
 		struct receive_queue *rq = &vi->rq[i];
 
+		rtnl_lock();
+		netif_queue_set_napi(vi->dev, i, NETDEV_QUEUE_TYPE_RX, NULL);
+		rtnl_unlock();
 		napi_disable(&rq->napi);
+
 		still_empty = !try_fill_recv(vi, rq, GFP_KERNEL);
-		virtnet_napi_enable_lock(rq->vq, &rq->napi);
+		virtnet_napi_enable_lock(rq->vq, &rq->napi, true);
 
 		/* In theory, this can happen: if we don't get any buffers in
 		 * we will *never* try to fill again.
@@ -3048,6 +3066,7 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 static void virtnet_disable_queue_pair(struct virtnet_info *vi, int qp_index)
 {
 	virtnet_napi_tx_disable(&vi->sq[qp_index].napi);
+	netif_queue_set_napi(vi->dev, qp_index, NETDEV_QUEUE_TYPE_RX, NULL);
 	napi_disable(&vi->rq[qp_index].napi);
 	xdp_rxq_info_unreg(&vi->rq[qp_index].xdp_rxq);
 }
@@ -3317,8 +3336,10 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 static void virtnet_rx_pause(struct virtnet_info *vi, struct receive_queue *rq)
 {
 	bool running = netif_running(vi->dev);
+	int q = vq2rxq(rq->vq);
 
 	if (running) {
+		netif_queue_set_napi(vi->dev, q, NETDEV_QUEUE_TYPE_RX, NULL);
 		napi_disable(&rq->napi);
 		virtnet_cancel_dim(vi, &rq->dim);
 	}
@@ -5943,6 +5964,8 @@ static int virtnet_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 	/* Make sure NAPI is not using any XDP TX queues for RX. */
 	if (netif_running(dev)) {
 		for (i = 0; i < vi->max_queue_pairs; i++) {
+			netif_queue_set_napi(vi->dev, i, NETDEV_QUEUE_TYPE_RX,
+					     NULL);
 			napi_disable(&vi->rq[i].napi);
 			virtnet_napi_tx_disable(&vi->sq[i].napi);
 		}
