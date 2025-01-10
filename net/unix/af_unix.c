@@ -1534,6 +1534,7 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	struct sock *sk = sock->sk, *newsk = NULL, *other = NULL;
 	struct unix_sock *u = unix_sk(sk), *newu, *otheru;
 	struct net *net = sock_net(sk);
+	enum skb_drop_reason reason;
 	struct sk_buff *skb = NULL;
 	unsigned char state;
 	long timeo;
@@ -1581,6 +1582,7 @@ restart:
 	other = unix_find_other(net, sunaddr, addr_len, sk->sk_type);
 	if (IS_ERR(other)) {
 		err = PTR_ERR(other);
+		reason = SKB_DROP_REASON_NO_SOCKET;
 		goto out_free_skb;
 	}
 
@@ -1593,15 +1595,22 @@ restart:
 		goto restart;
 	}
 
-	if (other->sk_state != TCP_LISTEN ||
-	    other->sk_shutdown & RCV_SHUTDOWN) {
+	if (other->sk_state != TCP_LISTEN) {
 		err = -ECONNREFUSED;
+		reason = SKB_DROP_REASON_NO_SOCKET;
+		goto out_unlock;
+	}
+
+	if (other->sk_shutdown & RCV_SHUTDOWN) {
+		err = -ECONNREFUSED;
+		reason = SKB_DROP_REASON_SOCKET_RCV_SHUTDOWN;
 		goto out_unlock;
 	}
 
 	if (unix_recvq_full_lockless(other)) {
 		if (!timeo) {
 			err = -EAGAIN;
+			reason = SKB_DROP_REASON_SOCKET_RCVBUFF;
 			goto out_unlock;
 		}
 
@@ -1609,8 +1618,10 @@ restart:
 		sock_put(other);
 
 		err = sock_intr_errno(timeo);
-		if (signal_pending(current))
+		if (signal_pending(current)) {
+			reason = SKB_DROP_REASON_SOCKET_RCVBUFF;
 			goto out_free_skb;
+		}
 
 		goto restart;
 	}
@@ -1621,6 +1632,7 @@ restart:
 	state = READ_ONCE(sk->sk_state);
 	if (unlikely(state != TCP_CLOSE)) {
 		err = state == TCP_ESTABLISHED ? -EISCONN : -EINVAL;
+		reason = SKB_DROP_REASON_SOCKET_INVALID_STATE;
 		goto out_unlock;
 	}
 
@@ -1629,12 +1641,14 @@ restart:
 	if (unlikely(sk->sk_state != TCP_CLOSE)) {
 		err = sk->sk_state == TCP_ESTABLISHED ? -EISCONN : -EINVAL;
 		unix_state_unlock(sk);
+		reason = SKB_DROP_REASON_SOCKET_INVALID_STATE;
 		goto out_unlock;
 	}
 
 	err = security_unix_stream_connect(sk, other, newsk);
 	if (err) {
 		unix_state_unlock(sk);
+		reason = SKB_DROP_REASON_SECURITY_HOOK;
 		goto out_unlock;
 	}
 
@@ -1699,7 +1713,7 @@ out_unlock:
 	unix_state_unlock(other);
 	sock_put(other);
 out_free_skb:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 out_free_sk:
 	unix_release_sock(newsk, 0);
 out:
