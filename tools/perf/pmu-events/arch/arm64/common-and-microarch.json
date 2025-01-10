@@ -228,6 +228,18 @@
         "BriefDescription": "Attributable Level 1 instruction TLB access"
     },
     {
+        "PublicDescription": "Counts accesses to the level 2 cache due to instruction accesses. Level 2 cache is a unified cache for data and instruction accesses. Accesses are for misses in the first level instruction cache.",
+        "EventCode": "0x27",
+        "EventName": "L2I_CACHE",
+        "BriefDescription": "Counts accesses to the level 2 cache due to instruction accesses. Level 2 cache is a unified cache for data and instruction accesses. Accesses are for misses in the first level instruction cache."
+    },
+    {
+        "PublicDescription": "Counts cache line refills into the level 2 cache. Level 2 cache is a unified cache for data and instruction accesses. Accesses are for misses in the level 1 instruction cache.",
+        "EventCode": "0x28",
+        "EventName": "L2I_CACHE_REFILL",
+        "BriefDescription": "Counts cache line refills into the level 2 cache. Level 2 cache is a unified cache for data and instruction accesses. Accesses are for misses in the level 1 instruction cache."
+    },
+    {
         "PublicDescription": "Attributable Level 3 data cache allocation without refill",
         "EventCode": "0x29",
         "EventName": "L3D_CACHE_ALLOCATE",
@@ -274,6 +286,18 @@
         "EventCode": "0x31",
         "EventName": "REMOTE_ACCESS",
         "BriefDescription": "Access to another socket in a multi-socket system"
+    },
+    {
+        "PublicDescription": "Counts transactions that were returned from outside the core cluster. This event counts transactions for external last level cache when the system register CPUECTLR.EXTLLC bit is set, otherwise it counts transactions for L3 cache.",
+        "EventCode": "0x32",
+        "EventName": "LL_CACHE",
+        "BriefDescription": "Counts transactions that were returned from outside the core cluster. This event counts transactions for external last level cache when the system register CPUECTLR.EXTLLC bit is set, otherwise it counts transactions for L3 cache."
+    },
+    {
+        "PublicDescription": "Counts transactions that were returned from outside the core cluster and missed in the last level cache",
+        "EventCode": "0x33",
+        "EventName": "LL_CACHE_MISS",
+        "BriefDescription": "Counts transactions that were returned from outside the core cluster and missed in the last level cache"
     },
     {
         "PublicDescription": "Access to data TLB causes a translation table walk",
@@ -394,6 +418,12 @@
         "EventCode": "0x4009",
         "EventName": "L2D_CACHE_LMISS_RD",
         "BriefDescription": "Level 2 data cache long-latency read miss"
+    },
+    {
+        "PublicDescription": "Counts cache line refills into the level 2 unified cache from any instruction read operations that incurred additional latency.",
+        "EventCode": "0x400A",
+        "EventName": "L2I_CACHE_LMISS",
+        "BriefDescription": "Counts cache line refills into the level 2 unified cache from any instruction read operations that incurred additional latency."
     },
     {
         "PublicDescription": "Level 3 data cache long-latency read miss.  The counter counts each memory read access counted by L3D_CACHE that incurs additional latency because it returns data from outside the Level 3 data or unified cache of this processing element.  The event indicates to software that the access missed in the Level 3 data or unified cache and might have a significant performance impact compared to the latency of an access that hits in the Level 3 data or unified cache.",
@@ -808,5 +838,347 @@
         "EventCode": "0x80EF",
         "EventName": "ASE_SVE_INT64_SPEC",
         "BriefDescription": "Advanced SIMD and SVE 64-bit integer operations speculatively executed"
+    },
+    {
+        "PublicDescription": "Counts architecturally executed direct branches that were taken.",
+        "EventCode": "0x8108",
+        "EventName": "BR_IMMED_TAKEN_RETIRED",
+        "BriefDescription": "Counts architecturally executed direct branches that were taken."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed indirect branches excluding procedure returns that were taken.",
+        "EventCode": "0x810C",
+        "EventName": "BR_INDNR_TAKEN_RETIRED",
+        "BriefDescription": "Counts architecturally executed indirect branches excluding procedure returns that were taken."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed direct branches that were correctly predicted.",
+        "EventCode": "0x8110",
+        "EventName": "BR_IMMED_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed direct branches that were correctly predicted."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed direct branches that were mispredicted and caused a pipeline flush.",
+        "EventCode": "0x8111",
+        "EventName": "BR_IMMED_MIS_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed direct branches that were mispredicted and caused a pipeline flush."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed indirect branches including procedure returns that were correctly predicted.",
+        "EventCode": "0x8112",
+        "EventName": "BR_IND_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed indirect branches including procedure returns that were correctly predicted."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed indirect branches including procedure returns that were mispredicted and caused a pipeline flush.",
+        "EventCode": "0x8113",
+        "EventName": "BR_IND_MIS_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed indirect branches including procedure returns that were mispredicted and caused a pipeline flush."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed procedure returns that were correctly predicted.",
+        "EventCode": "0x8114",
+        "EventName": "BR_RETURN_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed procedure returns that were correctly predicted."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed procedure returns that were mispredicted and caused a pipeline flush.",
+        "EventCode": "0x8115",
+        "EventName": "BR_RETURN_MIS_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed procedure returns that were mispredicted and caused a pipeline flush."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed indirect branches excluding procedure returns that were correctly predicted.",
+        "EventCode": "0x8116",
+        "EventName": "BR_INDNR_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed indirect branches excluding procedure returns that were correctly predicted."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed indirect branches excluding procedure returns that were mispredicted and caused a pipeline flush.",
+        "EventCode": "0x8117",
+        "EventName": "BR_INDNR_MIS_PRED_RETIRED",
+        "BriefDescription": "Counts architecturally executed indirect branches excluding procedure returns that were mispredicted and caused a pipeline flush."
+    },
+    {
+        "PublicDescription": "Counts branch instructions counted by BR_RETIRED which were correctly predicted.",
+        "EventCode": "0x811C",
+        "EventName": "BR_PRED_RETIRED",
+        "BriefDescription": "Counts branch instructions counted by BR_RETIRED which were correctly predicted."
+    },
+    {
+        "PublicDescription": "Counts architecturally executed indirect branches including procedure returns.",
+        "EventCode": "0x811D",
+        "EventName": "BR_IND_RETIRED",
+        "BriefDescription": "Counts architecturally executed indirect branches including procedure returns."
+    },
+    {
+        "PublicDescription": "Counts number of instruction fetches outstanding per cycle, which will provide an average latency of instruction fetch.",
+        "EventCode": "0x8120",
+        "EventName": "INST_FETCH_PERCYC",
+        "BriefDescription": "Counts number of instruction fetches outstanding per cycle, which will provide an average latency of instruction fetch."
+    },
+    {
+        "PublicDescription": "Counts the number of outstanding loads or memory read accesses per cycle.",
+        "EventCode": "0x8121",
+        "EventName": "MEM_ACCESS_RD_PERCYC",
+        "BriefDescription": "Counts the number of outstanding loads or memory read accesses per cycle."
+    },
+    {
+        "PublicDescription": "Counts Instruction memory accesses that the PE makes.",
+        "EventCode": "0x8124",
+        "EventName": "INST_FETCH",
+        "BriefDescription": "Counts Instruction memory accesses that the PE makes."
+    },
+    {
+        "PublicDescription": "Counts the number of data translation table walks in progress per cycle.",
+        "EventCode": "0x8128",
+        "EventName": "DTLB_WALK_PERCYC",
+        "BriefDescription": "Counts the number of data translation table walks in progress per cycle."
+    },
+    {
+        "PublicDescription": "Counts the number of instruction translation table walks in progress per cycle.",
+        "EventCode": "0x8129",
+        "EventName": "ITLB_WALK_PERCYC",
+        "BriefDescription": "Counts the number of instruction translation table walks in progress per cycle."
+    },
+    {
+        "PublicDescription": "Counts statistical profiling samples taken which are branches.",
+        "EventCode": "0x812A",
+        "EventName": "SAMPLE_FEED_BR",
+        "BriefDescription": "Counts statistical profiling samples taken which are branches."
+    },
+    {
+        "PublicDescription": "Counts statistical profiling samples taken which are loads or load atomic operations.",
+        "EventCode": "0x812B",
+        "EventName": "SAMPLE_FEED_LD",
+        "BriefDescription": "Counts statistical profiling samples taken which are loads or load atomic operations."
+    },
+    {
+        "PublicDescription": "Counts statistical profiling samples taken which are stores or store atomic operations.",
+        "EventCode": "0x812C",
+        "EventName": "SAMPLE_FEED_ST",
+        "BriefDescription": "Counts statistical profiling samples taken which are stores or store atomic operations."
+    },
+    {
+        "PublicDescription": "Counts statistical profiling samples taken which are matching any operation type filters supported.",
+        "EventCode": "0x812D",
+        "EventName": "SAMPLE_FEED_OP",
+        "BriefDescription": "Counts statistical profiling samples taken which are matching any operation type filters supported."
+    },
+    {
+        "PublicDescription": "Counts statistical profiling samples taken which are matching event packet filter constraints.",
+        "EventCode": "0x812E",
+        "EventName": "SAMPLE_FEED_EVENT",
+        "BriefDescription": "Counts statistical profiling samples taken which are matching event packet filter constraints."
+    },
+    {
+        "PublicDescription": "Counts statistical profiling samples taken which are exceeding minimum latency set by operation latency filter constraints.",
+        "EventCode": "0x812F",
+        "EventName": "SAMPLE_FEED_LAT",
+        "BriefDescription": "Counts statistical profiling samples taken which are exceeding minimum latency set by operation latency filter constraints."
+    },
+    {
+        "PublicDescription": "Counts number of memory accesses triggered by a data translation table walk and performing an update of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD. Note that this event counts accesses triggered by software preloads, but not accesses triggered by hardware prefetchers.",
+        "EventCode": "0x8134",
+        "EventName": "DTLB_HWUPD",
+        "BriefDescription": "Counts number of memory accesses triggered by a data translation table walk and performing an update of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD. Note that this event counts accesses triggered by software preloads, but not accesses triggered by hardware prefetchers."
+    },
+    {
+        "PublicDescription": "Counts number of memory accesses triggered by an instruction translation table walk and performing an update of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD.",
+        "EventCode": "0x8135",
+        "EventName": "ITLB_HWUPD",
+        "BriefDescription": "Counts number of memory accesses triggered by an instruction translation table walk and performing an update of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD."
+    },
+    {
+        "PublicDescription": "Counts number of memory accesses triggered by a demand data translation table walk and performing a read of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD. Note that this event counts accesses triggered by software preloads, but not accesses triggered by hardware prefetchers.",
+        "EventCode": "0x8136",
+        "EventName": "DTLB_STEP",
+        "BriefDescription": "Counts number of memory accesses triggered by a demand data translation table walk and performing a read of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD. Note that this event counts accesses triggered by software preloads, but not accesses triggered by hardware prefetchers."
+    },
+    {
+        "PublicDescription": "Counts number of memory accesses triggered by an instruction translation table walk and performing a read of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD.",
+        "EventCode": "0x8137",
+        "EventName": "ITLB_STEP",
+        "BriefDescription": "Counts number of memory accesses triggered by an instruction translation table walk and performing a read of a translation table entry. Memory accesses are counted even if the translation ended up taking a translation fault for reasons different than EPD, E0PD and NFD."
+    },
+    {
+        "PublicDescription": "Counts number of demand data translation table walks caused by a miss in the L2 TLB and yielding a large page. The set of large pages is defined as all pages with a final size higher than or equal to 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. If DTLB_WALK_BLOCK is implemented, then it is an alias for this event in this family. Note that partial translations that cause a translation table walk are also counted. Also note that this event counts walks triggered by software preloads, but not walks triggered by hardware prefetchers, and that this event does not count walks triggered by TLB maintenance operations.",
+        "EventCode": "0x8138",
+        "EventName": "DTLB_WALK_LARGE",
+        "BriefDescription": "Counts number of demand data translation table walks caused by a miss in the L2 TLB and yielding a large page. The set of large pages is defined as all pages with a final size higher than or equal to 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. If DTLB_WALK_BLOCK is implemented, then it is an alias for this event in this family. Note that partial translations that cause a translation table walk are also counted. Also note that this event counts walks triggered by software preloads, but not walks triggered by hardware prefetchers, and that this event does not count walks triggered by TLB maintenance operations."
+    },
+    {
+        "PublicDescription": "Counts number of instruction translation table walks caused by a miss in the L2 TLB and yielding a large page. The set of large pages is defined as all pages with a final size higher than or equal to 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. In this family, this is equal to ITLB_WALK_BLOCK event. Note that partial translations that cause a translation table walk are also counted. Also note that this event does not count walks triggered by TLB maintenance operations.",
+        "EventCode": "0x8139",
+        "EventName": "ITLB_WALK_LARGE",
+        "BriefDescription": "Counts number of instruction translation table walks caused by a miss in the L2 TLB and yielding a large page. The set of large pages is defined as all pages with a final size higher than or equal to 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. In this family, this is equal to ITLB_WALK_BLOCK event. Note that partial translations that cause a translation table walk are also counted. Also note that this event does not count walks triggered by TLB maintenance operations."
+    },
+    {
+        "PublicDescription": "Counts number of data translation table walks caused by a miss in the L2 TLB and yielding a small page. The set of small pages is defined as all pages with a final size lower than 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. If DTLB_WALK_PAGE event is implemented, then it is an alias for this event in this family. Note that partial translations that cause a translation table walk are also counted. Also note that this event counts walks triggered by software preloads, but not walks triggered by hardware prefetchers, and that this event does not count walks triggered by TLB maintenance operations.",
+        "EventCode": "0x813A",
+        "EventName": "DTLB_WALK_SMALL",
+        "BriefDescription": "Counts number of data translation table walks caused by a miss in the L2 TLB and yielding a small page. The set of small pages is defined as all pages with a final size lower than 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. If DTLB_WALK_PAGE event is implemented, then it is an alias for this event in this family. Note that partial translations that cause a translation table walk are also counted. Also note that this event counts walks triggered by software preloads, but not walks triggered by hardware prefetchers, and that this event does not count walks triggered by TLB maintenance operations."
+    },
+    {
+        "PublicDescription": "Counts number of instruction translation table walks caused by a miss in the L2 TLB and yielding a small page. The set of small pages is defined as all pages with a final size lower than 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. In this family, this is equal to ITLB_WALK_PAGE event. Note that partial translations that cause a translation table walk are also counted. Also note that this event does not count walks triggered by TLB maintenance operations.",
+        "EventCode": "0x813B",
+        "EventName": "ITLB_WALK_SMALL",
+        "BriefDescription": "Counts number of instruction translation table walks caused by a miss in the L2 TLB and yielding a small page. The set of small pages is defined as all pages with a final size lower than 2MB. Translation table walks that end up taking a translation fault are not counted, as the page size would be undefined in that case. In this family, this is equal to ITLB_WALK_PAGE event. Note that partial translations that cause a translation table walk are also counted. Also note that this event does not count walks triggered by TLB maintenance operations."
+    },
+    {
+        "PublicDescription": "Counts level 1 data demand cache accesses from any load or store operation. Near atomic operations that resolve in the CPUs caches counts as both a write access and read access.",
+        "EventCode": "0x8140",
+        "EventName": "L1D_CACHE_RW",
+        "BriefDescription": "Counts level 1 data demand cache accesses from any load or store operation. Near atomic operations that resolve in the CPUs caches counts as both a write access and read access."
+    },
+    {
+        "PublicDescription": "Counts level 2 cache demand accesses from any load/store operations. Level 2 cache is a unified cache for data and instruction accesses, accesses are for misses in the level 1 data cache or translation resolutions due to accesses.",
+        "EventCode": "0x8148",
+        "EventName": "L2D_CACHE_RW",
+        "BriefDescription": "Counts level 2 cache demand accesses from any load/store operations. Level 2 cache is a unified cache for data and instruction accesses, accesses are for misses in the level 1 data cache or translation resolutions due to accesses."
+    },
+    {
+        "PublicDescription": "Counts level 2 cache accesses that are due to a demand instruction cache access.",
+        "EventCode": "0x8149",
+        "EventName": "L2I_CACHE_RD",
+        "BriefDescription": "Counts level 2 cache accesses that are due to a demand instruction cache access."
+    },
+    {
+        "PublicDescription": "Counts level 3 cache accesses that missed in the level 3 cache.",
+        "EventCode": "0x8152",
+        "EventName": "L3D_CACHE_MISS",
+        "BriefDescription": "Counts level 3 cache accesses that missed in the level 3 cache."
+    },
+    {
+        "PublicDescription": "Counts level 1 data cache accesses from any load/store operations generated by the hardware prefetcher.",
+        "EventCode": "0x8154",
+        "EventName": "L1D_CACHE_HWPRF",
+        "BriefDescription": "Counts level 1 data cache accesses from any load/store operations generated by the hardware prefetcher."
+    },
+    {
+        "PublicDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage due to resource constraints in the memory resources.",
+        "EventCode": "0x8158",
+        "EventName": "STALL_FRONTEND_MEMBOUND",
+        "BriefDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage due to resource constraints in the memory resources."
+    },
+    {
+        "PublicDescription": "Counts cycles when the frontend is stalled because there is an instruction fetch request pending in the level 1 instruction cache.",
+        "EventCode": "0x8159",
+        "EventName": "STALL_FRONTEND_L1I",
+        "BriefDescription": "Counts cycles when the frontend is stalled because there is an instruction fetch request pending in the level 1 instruction cache."
+    },
+    {
+        "PublicDescription": "Counts cycles when the frontend is stalled because there is an instruction fetch request pending in the last level core cache.",
+        "EventCode": "0x815B",
+        "EventName": "STALL_FRONTEND_MEM",
+        "BriefDescription": "Counts cycles when the frontend is stalled because there is an instruction fetch request pending in the last level core cache."
+    },
+    {
+        "PublicDescription": "Counts when the frontend is stalled on any TLB misses being handled. This event also counts the TLB accesses made by hardware prefetches.",
+        "EventCode": "0x815C",
+        "EventName": "STALL_FRONTEND_TLB",
+        "BriefDescription": "Counts when the frontend is stalled on any TLB misses being handled. This event also counts the TLB accesses made by hardware prefetches."
+    },
+    {
+        "PublicDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage due to resource constraints in the CPU resources excluding memory resources.",
+        "EventCode": "0x8160",
+        "EventName": "STALL_FRONTEND_CPUBOUND",
+        "BriefDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage due to resource constraints in the CPU resources excluding memory resources."
+    },
+    {
+        "PublicDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage due to resource constraints in the branch prediction unit.",
+        "EventCode": "0x8161",
+        "EventName": "STALL_FRONTEND_FLOW",
+        "BriefDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage due to resource constraints in the branch prediction unit."
+    },
+    {
+        "PublicDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage as the frontend is recovering from a machine flush or resteer. Example scenarios that cause a flush include branch mispredictions, taken exceptions, micro-architectural flush etc.",
+        "EventCode": "0x8162",
+        "EventName": "STALL_FRONTEND_FLUSH",
+        "BriefDescription": "Counts cycles when the frontend could not send any micro-operations to the rename stage as the frontend is recovering from a machine flush or resteer. Example scenarios that cause a flush include branch mispredictions, taken exceptions, micro-architectural flush etc."
+    },
+    {
+        "PublicDescription": "Counts cycles when the backend could not accept any micro-operations due to resource constraints in the memory resources.",
+        "EventCode": "0x8164",
+        "EventName": "STALL_BACKEND_MEMBOUND",
+        "BriefDescription": "Counts cycles when the backend could not accept any micro-operations due to resource constraints in the memory resources."
+    },
+    {
+        "PublicDescription": "Counts cycles when the backend is stalled because there is a pending demand load request in progress in the level 1 data cache.",
+        "EventCode": "0x8165",
+        "EventName": "STALL_BACKEND_L1D",
+        "BriefDescription": "Counts cycles when the backend is stalled because there is a pending demand load request in progress in the level 1 data cache."
+    },
+    {
+        "PublicDescription": "Counts cycles when the backend is stalled on any demand TLB misses being handled.",
+        "EventCode": "0x8167",
+        "EventName": "STALL_BACKEND_TLB",
+        "BriefDescription": "Counts cycles when the backend is stalled on any demand TLB misses being handled."
+    },
+    {
+        "PublicDescription": "Counts cycles when the backend is stalled and there is a store that has not reached the pre-commit stage.",
+        "EventCode": "0x8168",
+        "EventName": "STALL_BACKEND_ST",
+        "BriefDescription": "Counts cycles when the backend is stalled and there is a store that has not reached the pre-commit stage."
+    },
+    {
+        "PublicDescription": "Counts cycles when the backend could not accept any micro-operations due to any resource constraints in the CPU excluding memory resources.",
+        "EventCode": "0x816A",
+        "EventName": "STALL_BACKEND_CPUBOUND",
+        "BriefDescription": "Counts cycles when the backend could not accept any micro-operations due to any resource constraints in the CPU excluding memory resources."
+    },
+    {
+        "PublicDescription": "Counts cycles when the backend could not accept any micro-operations because the issue queues are full to take any operations for execution.",
+        "EventCode": "0x816B",
+        "EventName": "STALL_BACKEND_BUSY",
+        "BriefDescription": "Counts cycles when the backend could not accept any micro-operations because the issue queues are full to take any operations for execution."
+    },
+    {
+        "PublicDescription": "Counts cycles when backend is stalled even when operations are available from the frontend but at least one is not ready to be sent to the backend because no rename register is available.",
+        "EventCode": "0x816D",
+        "EventName": "STALL_BACKEND_RENAME",
+        "BriefDescription": "Counts cycles when backend is stalled even when operations are available from the frontend but at least one is not ready to be sent to the backend because no rename register is available."
+    },
+    {
+        "PublicDescription": "Counts compare and swap instructions that executed locally to the PE and updated the location accessed.",
+        "EventCode": "0x8171",
+        "EventName": "CAS_NEAR_PASS",
+        "BriefDescription": "Counts compare and swap instructions that executed locally to the PE and updated the location accessed."
+    },
+    {
+        "PublicDescription": "Counts compare and swap instructions that executed locally to the PE.",
+        "EventCode": "0x8172",
+        "EventName": "CAS_NEAR_SPEC",
+        "BriefDescription": "Counts compare and swap instructions that executed locally to the PE."
+    },
+    {
+        "PublicDescription": "Counts compare and swap instructions that did not execute locally to the PE.",
+        "EventCode": "0x8173",
+        "EventName": "CAS_FAR_SPEC",
+        "BriefDescription": "Counts compare and swap instructions that did not execute locally to the PE."
+    },
+    {
+        "PublicDescription": "Counts level 1 data cache refills where the cache line is requested by a hardware prefetcher.",
+        "EventCode": "0x81BC",
+        "EventName": "L1D_CACHE_REFILL_HWPRF",
+        "BriefDescription": "Counts level 1 data cache refills where the cache line is requested by a hardware prefetcher."
+    },
+    {
+        "PublicDescription": "Counts level 2 data cache accesses from software preload or prefetch instructions or hardware prefetcher.",
+        "EventCode": "0x8285",
+        "EventName": "L2D_CACHE_PRF",
+        "BriefDescription": "Counts level 2 data cache accesses from software preload or prefetch instructions or hardware prefetcher."
+    },
+    {
+        "PublicDescription": "Counts refills due to accesses generated as a result of prefetches.",
+        "EventCode": "0x828D",
+        "EventName": "L2D_CACHE_REFILL_PRF",
+        "BriefDescription": "Counts refills due to accesses generated as a result of prefetches."
+    },
+    {
+        "PublicDescription": "Counts last level accesses that receive data from outside the last level cache.",
+        "EventCode": "0x829A",
+        "EventName": "LL_CACHE_REFILL",
+        "BriefDescription": "Counts last level accesses that receive data from outside the last level cache."
     }
 ]
