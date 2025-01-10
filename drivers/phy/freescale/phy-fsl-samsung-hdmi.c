@@ -332,14 +332,15 @@ fsl_samsung_hdmi_phy_configure_pll_lock_det(struct fsl_samsung_hdmi_phy *phy,
 	u32 pclk = cfg->pixclk;
 	u32 fld_tg_code;
 	u32 int_pllclk;
-	u8 div;
+	u8 div = 0;
 
 	/* Find int_pllclk speed */
-	for (div = 0; div < 4; div++) {
+	do {
 		int_pllclk = pclk / (1 << div);
-		if (int_pllclk < (50 * MHZ))
+		if (int_pllclk < (50 * MHZ) || div >= 3)
 			break;
-	}
+		div++;
+	} while (1);
 
 	writeb(FIELD_PREP(REG12_CK_DIV_MASK, div), phy->regs + PHY_REG(12));
 
