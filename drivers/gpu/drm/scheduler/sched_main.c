@@ -1188,7 +1188,6 @@ static void drm_sched_run_job_work(struct work_struct *w)
 		container_of(w, struct drm_gpu_scheduler, work_run_job);
 	struct drm_sched_entity *entity;
 	struct dma_fence *fence;
-	struct drm_sched_fence *s_fence;
 	struct drm_sched_job *sched_job;
 	int r;
 
@@ -1207,15 +1206,12 @@ static void drm_sched_run_job_work(struct work_struct *w)
 		return;
 	}
 
-	s_fence = sched_job->s_fence;
-
 	atomic_add(sched_job->credits, &sched->credit_count);
 	drm_sched_job_begin(sched_job);
 
 	trace_drm_run_job(sched_job, entity);
 	fence = sched->ops->run_job(sched_job);
-	complete_all(&entity->entity_idle);
-	drm_sched_fence_scheduled(s_fence, fence);
+	drm_sched_fence_scheduled(sched_job->s_fence, fence);
 
 	if (!IS_ERR_OR_NULL(fence)) {
 		/* Drop for original kref_init of the fence */
@@ -1232,6 +1228,7 @@ static void drm_sched_run_job_work(struct work_struct *w)
 				   PTR_ERR(fence) : 0);
 	}
 
+	complete_all(&entity->entity_idle);
 	wake_up(&sched->job_scheduled);
 	drm_sched_run_job_queue(sched);
 }
