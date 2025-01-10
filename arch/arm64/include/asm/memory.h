@@ -179,6 +179,7 @@
  * Memory types for Stage-2 translation
  */
 #define MT_S2_NORMAL			0b1111
+#define MT_S2_NORMAL_NOTAGACCESS	0b0100
 #define MT_S2_NORMAL_NC			0b0101
 #define MT_S2_DEVICE_nGnRE		0b0001
 
@@ -187,6 +188,7 @@
  * Stage-2 enforces Normal-WB and Device-nGnRE
  */
 #define MT_S2_FWB_NORMAL		0b0110
+#define MT_S2_FWB_NORMAL_NOTAGACCESS	0b1110
 #define MT_S2_FWB_NORMAL_NC		0b0101
 #define MT_S2_FWB_DEVICE_nGnRE		0b0001
 
