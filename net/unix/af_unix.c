@@ -1907,6 +1907,22 @@ static int unix_scm_to_skb(struct scm_cookie *scm, struct sk_buff *skb, bool sen
 	return err;
 }
 
+static enum skb_drop_reason unix_scm_err_to_reason(int err)
+{
+	switch (err) {
+	case -ENOMEM:
+		return SKB_DROP_REASON_NOMEM;
+	case -ETOOMANYREFS:
+		return SKB_DROP_REASON_UNIX_INFLIGHT_FD_LIMIT;
+	}
+
+	DEBUG_NET_WARN_ONCE(1,
+			    "Define a drop reason for %d in unix_scm_to_skb().",
+			    err);
+
+	return SKB_DROP_REASON_NOT_SPECIFIED;
+}
+
 static bool unix_passcred_enabled(const struct socket *sock,
 				  const struct sock *other)
 {
@@ -2249,6 +2265,7 @@ static int queue_oob(struct socket *sock, struct msghdr *msg, struct sock *other
 static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 			       size_t len)
 {
+	enum skb_drop_reason reason;
 	struct sock *sk = sock->sk;
 	struct sk_buff *skb = NULL;
 	struct sock *other = NULL;
@@ -2314,8 +2331,10 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 
 		/* Only send the fds in the first buffer */
 		err = unix_scm_to_skb(&scm, skb, !fds_sent);
-		if (err < 0)
+		if (err < 0) {
+			reason = unix_scm_err_to_reason(err);
 			goto out_free;
+		}
 
 		fds_sent = true;
 
@@ -2323,8 +2342,10 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			err = skb_splice_from_iter(skb, &msg->msg_iter, size,
 						   sk->sk_allocation);
-			if (err < 0)
+			if (err < 0) {
+				reason = SKB_DROP_REASON_SKB_UCOPY_FAULT;
 				goto out_free;
+			}
 
 			size = err;
 			refcount_add(size, &sk->sk_wmem_alloc);
@@ -2333,15 +2354,23 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg,
 			skb->data_len = data_len;
 			skb->len = size;
 			err = skb_copy_datagram_from_iter(skb, 0, &msg->msg_iter, size);
-			if (err)
+			if (err) {
+				reason = SKB_DROP_REASON_SKB_UCOPY_FAULT;
 				goto out_free;
+			}
 		}
 
 		unix_state_lock(other);
 
-		if (sock_flag(other, SOCK_DEAD) ||
-		    (other->sk_shutdown & RCV_SHUTDOWN))
+		if (sock_flag(other, SOCK_DEAD)) {
+			reason = SKB_DROP_REASON_SOCKET_CLOSE;
 			goto out_pipe_unlock;
+		}
+
+		if (other->sk_shutdown & RCV_SHUTDOWN) {
+			reason = SKB_DROP_REASON_SOCKET_RCV_SHUTDOWN;
+			goto out_pipe_unlock;
+		}
 
 		maybe_add_creds(skb, sock, other);
 		scm_stat_add(other, skb);
@@ -2371,7 +2400,7 @@ out_pipe:
 		send_sig(SIGPIPE, current, 0);
 	err = -EPIPE;
 out_free:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 out_err:
 	scm_destroy(&scm);
 	return sent ? : err;
