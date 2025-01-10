@@ -1018,7 +1018,7 @@ static inline void hlist_del_init(struct hlist_node *n)
  * Insert a new entry after the specified head.
  * This is good for implementing stacks.
  */
-static inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)
+static __no_sanitize_coverage inline void hlist_add_head(struct hlist_node *n, struct hlist_head *h)
 {
 	struct hlist_node *first = h->first;
 	WRITE_ONCE(n->next, first);

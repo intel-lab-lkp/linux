@@ -90,7 +90,7 @@ static __always_inline unsigned long __pmr_local_save_flags(void)
 /*
  * Save the current interrupt enable state.
  */
-static inline unsigned long arch_local_save_flags(void)
+static __no_sanitize_coverage inline unsigned long arch_local_save_flags(void)
 {
 	if (system_uses_irq_prio_masking()) {
 		return __pmr_local_save_flags();
@@ -99,17 +99,17 @@ static inline unsigned long arch_local_save_flags(void)
 	}
 }
 
-static __always_inline bool __daif_irqs_disabled_flags(unsigned long flags)
+static __no_sanitize_coverage __always_inline bool __daif_irqs_disabled_flags(unsigned long flags)
 {
 	return flags & PSR_I_BIT;
 }
 
-static __always_inline bool __pmr_irqs_disabled_flags(unsigned long flags)
+static __no_sanitize_coverage __always_inline bool __pmr_irqs_disabled_flags(unsigned long flags)
 {
 	return flags != GIC_PRIO_IRQON;
 }
 
-static inline bool arch_irqs_disabled_flags(unsigned long flags)
+static __no_sanitize_coverage inline bool arch_irqs_disabled_flags(unsigned long flags)
 {
 	if (system_uses_irq_prio_masking()) {
 		return __pmr_irqs_disabled_flags(flags);
