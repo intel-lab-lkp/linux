@@ -970,6 +970,15 @@ static int vmd_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	struct vmd_dev *vmd;
 	int err;
 
+	if (xen_domain())
+		/*
+		 * Xen doesn't have knowledge about devices in the VMD bus.
+		 * Bypass of MSI remapping won't work in that case as direct
+		 * write to the MSI entries won't result in functional
+		 * interrupts.
+		 */
+		features &= ~VMD_FEAT_CAN_BYPASS_MSI_REMAP;
+
 	if (resource_size(&dev->resource[VMD_CFGBAR]) < (1 << 20))
 		return -ENOMEM;
 
