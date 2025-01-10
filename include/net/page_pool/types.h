@@ -4,7 +4,6 @@
 #define _NET_PAGE_POOL_TYPES_H
 
 #include <linux/dma-direction.h>
-#include <linux/ptr_ring.h>
 #include <linux/types.h>
 #include <net/netmem.h>
 
@@ -147,12 +146,20 @@ struct page_pool_stats {
 #endif
 
 struct page_pool_item {
-	unsigned long state;
+	/* An 'encoded_next' is a pointer to next item, lower 2 bits is used to
+	 * indicate the state of current item.
+	 */
+	unsigned long encoded_next;
 
 	union {
 		netmem_ref pp_netmem;
 		struct llist_node lentry;
 	};
+};
+
+struct pp_ring_cache {
+	struct page_pool_item *list;
+	atomic_t count;
 };
 
 /* The size of item_block is always PAGE_SIZE, so that the address of item_block
@@ -241,12 +248,9 @@ struct page_pool {
 	 * wise, because free's can happen on remote CPUs, with no
 	 * association with allocation resource.
 	 *
-	 * Use ptr_ring, as it separates consumer and producer
-	 * efficiently, it a way that doesn't bounce cache-lines.
-	 *
 	 * TODO: Implement bulk return pages into this structure.
 	 */
-	struct ptr_ring ring;
+	struct pp_ring_cache ring ____cacheline_aligned_in_smp;
 
 	void *mp_priv;
 
