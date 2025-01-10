@@ -86,6 +86,10 @@ struct stm32_combophy {
 	struct clk_bulk_data clks[ARRAY_SIZE(combophy_clks)];
 	int num_clks;
 	bool have_pad_clk;
+	bool have_ssc;
+	int rx_eq;
+	u32 microohm;
+	u32 microvolt;
 	unsigned int type;
 	bool is_init;
 	int irq_wakeup;
@@ -112,27 +116,15 @@ static const struct clk_impedance imp_lookup[] = {
 	{ 3999000, { 571000, 648000, 726000, 803000 } }
 };
 
-static int stm32_impedance_tune(struct stm32_combophy *combophy)
+static void stm32_impedance_tune(struct stm32_combophy *combophy)
 {
-	u8 imp_size = ARRAY_SIZE(imp_lookup);
-	u8 vswing_size = ARRAY_SIZE(imp_lookup[0].vswing);
 	u8 imp_of, vswing_of;
-	u32 max_imp = imp_lookup[0].microohm;
-	u32 min_imp = imp_lookup[imp_size - 1].microohm;
-	u32 max_vswing = imp_lookup[imp_size - 1].vswing[vswing_size - 1];
-	u32 min_vswing = imp_lookup[0].vswing[0];
-	u32 val;
 	u32 regval;
 
-	if (!of_property_read_u32(combophy->dev->of_node, "st,output-micro-ohms", &val)) {
-		if (val < min_imp || val > max_imp) {
-			dev_err(combophy->dev, "Invalid value %u for output ohm\n", val);
-			return -EINVAL;
-		}
-
+	if (combophy->microohm) {
 		regval = 0;
 		for (imp_of = 0; imp_of < ARRAY_SIZE(imp_lookup); imp_of++) {
-			if (imp_lookup[imp_of].microohm <= val) {
+			if (imp_lookup[imp_of].microohm <= combophy->microohm) {
 				regval = FIELD_PREP(STM32MP25_PCIEPRG_IMPCTRL_OHM, imp_of);
 				break;
 			}
@@ -145,19 +137,14 @@ static int stm32_impedance_tune(struct stm32_combophy *combophy)
 				   STM32MP25_PCIEPRG_IMPCTRL_OHM,
 				   regval);
 	} else {
-		regmap_read(combophy->regmap, SYSCFG_PCIEPRGCR, &val);
-		imp_of = FIELD_GET(STM32MP25_PCIEPRG_IMPCTRL_OHM, val);
+		/* default is 50 ohm */
+		imp_of = 3;
 	}
 
-	if (!of_property_read_u32(combophy->dev->of_node, "st,output-vswing-microvolt", &val)) {
-		if (val < min_vswing || val > max_vswing) {
-			dev_err(combophy->dev, "Invalid value %u for output vswing\n", val);
-			return -EINVAL;
-		}
-
+	if (combophy->microvolt) {
 		regval = 0;
 		for (vswing_of = 0; vswing_of < ARRAY_SIZE(imp_lookup[imp_of].vswing); vswing_of++) {
-			if (imp_lookup[imp_of].vswing[vswing_of] >= val) {
+			if (imp_lookup[imp_of].vswing[vswing_of] >= combophy->microvolt) {
 				regval = FIELD_PREP(STM32MP25_PCIEPRG_IMPCTRL_VSWING, vswing_of);
 				break;
 			}
@@ -170,8 +157,6 @@ static int stm32_impedance_tune(struct stm32_combophy *combophy)
 				   STM32MP25_PCIEPRG_IMPCTRL_VSWING,
 				   regval);
 	}
-
-	return 0;
 }
 
 static int stm32_combophy_pll_init(struct stm32_combophy *combophy)
@@ -197,7 +182,7 @@ static int stm32_combophy_pll_init(struct stm32_combophy *combophy)
 		cr1_val |= SYSCFG_COMBOPHY_CR1_REFSSPEN;
 	}
 
-	if (of_property_present(combophy->dev->of_node, "st,ssc-on")) {
+	if (combophy->have_ssc) {
 		dev_dbg(combophy->dev, "Enabling clock with SSC\n");
 		cr1_mask |= SYSCFG_COMBOPHY_CR1_SSCEN;
 		cr1_val |= SYSCFG_COMBOPHY_CR1_SSCEN;
@@ -253,22 +238,14 @@ static int stm32_combophy_pll_init(struct stm32_combophy *combophy)
 	reset_control_assert(combophy->phy_reset);
 
 	if (combophy->type == PHY_TYPE_PCIE) {
-		ret = stm32_impedance_tune(combophy);
-		if (ret)
-			goto out_iso;
+		stm32_impedance_tune(combophy);
 
 		cr1_mask |= SYSCFG_COMBOPHY_CR1_REFUSEPAD;
 		cr1_val |= combophy->have_pad_clk ? SYSCFG_COMBOPHY_CR1_REFUSEPAD : 0;
 	}
 
-	if (!of_property_read_u32(combophy->dev->of_node, "st,rx-equalizer", &val)) {
-		dev_dbg(combophy->dev, "Set RX equalizer %u\n", val);
-		if (val > SYSCFG_COMBOPHY_CR4_RX0_EQ) {
-			dev_err(combophy->dev, "Invalid value %u for rx0 equalizer\n", val);
-			ret = -EINVAL;
-			goto out_iso;
-		}
-
+	if (combophy->rx_eq != -1) {
+		dev_dbg(combophy->dev, "Set RX equalizer %u\n", combophy->rx_eq);
 		regmap_update_bits(combophy->regmap, SYSCFG_COMBOPHY_CR4,
 			   SYSCFG_COMBOPHY_CR4_RX0_EQ, val);
 	}
@@ -313,9 +290,6 @@ static int stm32_combophy_pll_init(struct stm32_combophy *combophy)
 	}
 
 	return 0;
-
-out_iso:
-	reset_control_deassert(combophy->phy_reset);
 
 out:
 	regmap_update_bits(combophy->regmap, SYSCFG_COMBOPHY_CR2,
@@ -522,6 +496,12 @@ static int stm32_combophy_probe(struct platform_device *pdev)
 	struct stm32_combophy *combophy;
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
+	u8 imp_size = ARRAY_SIZE(imp_lookup);
+	u8 vswing_size = ARRAY_SIZE(imp_lookup[0].vswing);
+	u32 max_imp = imp_lookup[0].microohm;
+	u32 min_imp = imp_lookup[imp_size - 1].microohm;
+	u32 max_vswing = imp_lookup[imp_size - 1].vswing[vswing_size - 1];
+	u32 min_vswing = imp_lookup[0].vswing[0];
 	int ret, irq;
 
 	combophy = devm_kzalloc(dev, sizeof(*combophy), GFP_KERNEL);
@@ -568,6 +548,26 @@ static int stm32_combophy_probe(struct platform_device *pdev)
 			return dev_err_probe(dev, ret, "unable to request wake IRQ %d\n",
 						 combophy->irq_wakeup);
 	}
+
+	if (of_property_present(dev->of_node, "st,ssc-on"))
+		combophy->have_ssc = true;
+
+	if (!of_property_read_u32(dev->of_node, "st,rx-equalizer", &combophy->rx_eq)) {
+		if (combophy->rx_eq > SYSCFG_COMBOPHY_CR4_RX0_EQ)
+			return dev_err_probe(dev, combophy->rx_eq,
+					     "Invalid value for rx0 equalizer\n");
+	} else
+		combophy->rx_eq = -1;
+
+	if (!of_property_read_u32(dev->of_node, "st,output-micro-ohms", &combophy->microohm))
+		if (combophy->microohm < min_imp || combophy->microohm > max_imp)
+			return dev_err_probe(dev, combophy->microohm,
+					     "Invalid value for output ohm\n");
+
+	if (!of_property_read_u32(dev->of_node, "st,output-vswing-microvolt", &combophy->microvolt))
+		if (combophy->microvolt < min_vswing || combophy->microvolt > max_vswing)
+			return dev_err_probe(dev, combophy->microvolt,
+					     "Invalid value for output vswing\n");
 
 	ret = devm_pm_runtime_enable(dev);
 	if (ret)
