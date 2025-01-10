@@ -574,7 +574,7 @@ static int octep_vf_iq_full_check(struct octep_vf_iq *iq)
 		  * caused queues to get re-enabled after
 		  * being stopped
 		  */
-		iq->stats.restart_cnt++;
+		iq->stats->restart_cnt++;
 		fallthrough;
 	case 1: /* Queue left enabled, since IQ is not yet full*/
 		return 0;
@@ -731,7 +731,7 @@ ring_dbell:
 	/* Flush the hw descriptors before writing to doorbell */
 	smp_wmb();
 	writel(iq->fill_cnt, iq->doorbell_reg);
-	iq->stats.instr_posted += iq->fill_cnt;
+	iq->stats->instr_posted += iq->fill_cnt;
 	iq->fill_cnt = 0;
 	return NETDEV_TX_OK;
 }
@@ -779,26 +779,22 @@ static void octep_vf_get_stats64(struct net_device *netdev,
 				 struct rtnl_link_stats64 *stats)
 {
 	struct octep_vf_device *oct = netdev_priv(netdev);
-	u64 tx_packets, tx_bytes, rx_packets, rx_bytes;
 	int q;
 
-	tx_packets = 0;
-	tx_bytes = 0;
-	rx_packets = 0;
-	rx_bytes = 0;
-	for (q = 0; q < oct->num_oqs; q++) {
-		struct octep_vf_iq *iq = oct->iq[q];
-		struct octep_vf_oq *oq = oct->oq[q];
-
-		tx_packets += iq->stats.instr_completed;
-		tx_bytes += iq->stats.bytes_sent;
-		rx_packets += oq->stats.packets;
-		rx_bytes += oq->stats.bytes;
+	oct->iface_tx_stats.pkts = 0;
+	oct->iface_tx_stats.octs = 0;
+	oct->iface_rx_stats.pkts = 0;
+	oct->iface_rx_stats.octets = 0;
+	for (q = 0; q < oct->num_ioq_stats; q++) {
+		oct->iface_tx_stats.pkts += oct->stats_iq[q].instr_completed;
+		oct->iface_tx_stats.octs += oct->stats_iq[q].bytes_sent;
+		oct->iface_rx_stats.pkts += oct->stats_oq[q].packets;
+		oct->iface_rx_stats.octets += oct->stats_oq[q].bytes;
 	}
-	stats->tx_packets = tx_packets;
-	stats->tx_bytes = tx_bytes;
-	stats->rx_packets = rx_packets;
-	stats->rx_bytes = rx_bytes;
+	stats->tx_packets = oct->iface_tx_stats.pkts;
+	stats->tx_bytes = oct->iface_tx_stats.octs;
+	stats->rx_packets = oct->iface_rx_stats.pkts;
+	stats->rx_bytes = oct->iface_rx_stats.octets;
 	if (!octep_vf_get_if_stats(oct)) {
 		stats->multicast = oct->iface_rx_stats.mcast_pkts;
 		stats->rx_errors = oct->iface_rx_stats.err_pkts;
