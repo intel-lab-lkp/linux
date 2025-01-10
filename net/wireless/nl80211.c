@@ -6844,10 +6844,10 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 				struct net_device *dev,
 				const u8 *mac_addr, struct station_info *sinfo)
 {
-	struct nlattr *sinfoattr;
+	struct nlattr *sinfoattr, *link_sinfoattr, *links, *link;
 	void *hdr;
-	struct link_station_info *link_sinfo = &sinfo->deflink;
-	int ret = -1;
+	struct link_station_info *link_sinfo;
+	int ret = -1, link_id;
 
 	hdr = nl80211hdr_put(msg, portid, seq, flags, cmd);
 	if (!hdr) {
@@ -6859,17 +6859,6 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, mac_addr) ||
 	    nla_put_u32(msg, NL80211_ATTR_GENERATION, sinfo->generation))
 		goto nla_put_failure;
-
-	if (sinfo->mlo_params_valid) {
-		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
-			       sinfo->assoc_link_id))
-			goto nla_put_failure;
-
-		if (!is_zero_ether_addr(sinfo->mld_addr) &&
-		    nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN,
-			    sinfo->mld_addr))
-			goto nla_put_failure;
-	}
 
 	if (sinfo->assoc_req_ies_len &&
 	    nla_put(msg, NL80211_ATTR_IE, sinfo->assoc_req_ies_len,
@@ -6922,11 +6911,64 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 #undef PUT_SINFO
 #undef PUT_SINFO_U64
 
-	ret = nl80211_fill_link_station(msg, rdev, link_sinfo);
-	if (ret)
-		goto nla_put_failure;
+	if (sinfo->valid_links) {
+		/* TODO: Add accumulated stats for packets, bytes for
+		 *	 better representation at MLO level.
+		 */
 
-	nla_nest_end(msg, sinfoattr);
+		/* Closing nested STA_INFO as MLO links ATTR should not
+		 * be in nested STA_INFO
+		 */
+		nla_nest_end(msg, sinfoattr);
+
+		if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+			       sinfo->assoc_link_id))
+			goto nla_put_failure;
+
+		if (!is_zero_ether_addr(sinfo->mld_addr) &&
+		    nla_put(msg, NL80211_ATTR_MLD_ADDR, ETH_ALEN,
+			    sinfo->mld_addr))
+			goto nla_put_failure;
+
+		links = nla_nest_start(msg, NL80211_ATTR_MLO_LINKS);
+		if (!links)
+			goto nla_put_failure;
+
+		for_each_valid_link(sinfo, link_id) {
+			link_sinfo = sinfo->links[link_id];
+			link = nla_nest_start(msg, link_id + 1);
+			if (!link)
+				goto nla_put_failure;
+
+			if (nla_put_u8(msg, NL80211_ATTR_MLO_LINK_ID,
+				       link_id))
+				goto nla_put_failure;
+
+			if (!is_zero_ether_addr(link_sinfo->addr) &&
+			    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN,
+				    link_sinfo->addr))
+				goto nla_put_failure;
+
+			link_sinfoattr = nla_nest_start_noflag(msg, NL80211_ATTR_STA_INFO);
+			if (!link_sinfoattr)
+				goto nla_put_failure;
+
+			ret = nl80211_fill_link_station(msg, rdev, link_sinfo);
+			if (ret)
+				goto nla_put_failure;
+
+			nla_nest_end(msg, link_sinfoattr);
+			nla_nest_end(msg, link);
+		}
+		nla_nest_end(msg, links);
+	} else {
+		link_sinfo = &sinfo->deflink;
+		ret = nl80211_fill_link_station(msg, rdev, link_sinfo);
+		if (ret)
+			goto nla_put_failure;
+
+		nla_nest_end(msg, sinfoattr);
+	}
 
 	cfg80211_sinfo_release_content(sinfo);
 	genlmsg_end(msg, hdr);
