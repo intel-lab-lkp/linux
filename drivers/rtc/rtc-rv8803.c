@@ -1218,6 +1218,77 @@ static ssize_t cfg_buf_store(struct device *dev, struct device_attribute *attr, 
 	return count;
 }
 
+static ssize_t status_show(struct device *dev, struct device_attribute *attr,
+			   char *buf)
+{
+	int evin_en, evin_cfg, evin_flt, buf1_cfg, buf1_stat, buf_ovwf;
+	int i;
+	int offset = 0;
+	u8 ev_pullupdown[NO_OF_EVIN];
+	u8 ev_trigger[NO_OF_EVIN];
+	int ev_filter[NO_OF_EVIN];
+
+	struct i2c_client *client = to_i2c_client(dev->parent);
+	struct rv8803_data *rv8803 = dev_get_drvdata(dev->parent);
+
+	guard(mutex)(&rv8803->flags_lock);
+
+	evin_en = rv8803_read_reg(client, RX8901_EVIN_EN);
+	if (evin_en < 0)
+		return evin_en;
+
+	for (i = 0; i < NO_OF_EVIN; ++i) {
+		evin_cfg = rv8803_read_reg(client, evin_cfg_reg[i]);
+		evin_flt = rv8803_read_reg(client, evin_flt_reg[i]);
+		if (evin_cfg < 0 || evin_flt < 0)
+			return -EIO;
+
+		ev_pullupdown[i] = FIELD_GET(RX8901_EVENTx_CFG_PUPD, evin_cfg);
+		ev_trigger[i] = FIELD_GET(RX8901_EVENTx_CFG_POL, evin_cfg);
+		ev_filter[i] = EVIN_FILTER_FACTOR * evin_flt;
+	}
+
+	offset += sprintf(buf + offset, "Mode: %s\n\n",
+			  FIELD_GET(BIT(6), evin_en) ? "direct" : "fifo");
+	offset += sprintf(buf + offset, "Event config:\n");
+	offset += sprintf(buf + offset, "  %-13s  %-7s %-7s %-7s\n", "", "EVIN1", "EVIN2", "EVIN3");
+	offset += sprintf(buf + offset, "  %-13s  %-7ld %-7ld %-7ld\n", "Enable",
+			  FIELD_GET(BIT(0), evin_en), FIELD_GET(BIT(1), evin_en),
+			  FIELD_GET(BIT(2), evin_en));
+	offset += sprintf(buf + offset, "  %-13s  %-7ld %-7ld %-7ld\n", "Capture",
+			  FIELD_GET(BIT(3), evin_en), FIELD_GET(BIT(4), evin_en),
+			  FIELD_GET(BIT(5), evin_en));
+
+	offset += sprintf(buf + offset, "  %-13s  %-7s %-7s %-7s\n", "Pull-resistor",
+			  cfg2txt(pull_resistor_txt, ev_pullupdown[0]),
+			  cfg2txt(pull_resistor_txt, ev_pullupdown[1]),
+			  cfg2txt(pull_resistor_txt, ev_pullupdown[2]));
+	offset += sprintf(buf + offset, "  %-13s  %-7s %-7s %-7s\n", "Edge",
+			  cfg2txt(trigger_txt, ev_trigger[0]),
+			  cfg2txt(trigger_txt, ev_trigger[1]),
+			  cfg2txt(trigger_txt, ev_trigger[2]));
+	offset += sprintf(buf + offset, "  %-13s  %-7d %-7d %-7d\n\n", "Filter [ms]",
+			  ev_filter[0], ev_filter[1], ev_filter[2]);
+
+	buf1_cfg = rv8803_read_reg(client, RX8901_BUF1_CFG1);
+	buf1_stat = rv8803_read_reg(client, RX8901_BUF1_STAT);
+	buf_ovwf = rv8803_read_reg(client, RX8901_BUF_OVWF);
+	if (buf1_stat < 0 || buf1_stat < 0 || buf_ovwf < 0)
+		return -EIO;
+
+	offset += sprintf(buf + offset, "Buffer config:\n");
+	offset += sprintf(buf + offset, "  %-13s  %-10s\n", "Mode",
+			  (FIELD_GET(BIT(6), buf1_cfg) ? "overwrite" : "inhibit"));
+	offset += sprintf(buf + offset, "  %-13s  %-10s\n", "Status",
+			  (FIELD_GET(BIT(7), buf1_stat) ? "full" : "free"));
+	offset += sprintf(buf + offset,  "  %-13s  %-10ld\n", "Overrun",
+			  (FIELD_GET(BIT(4), buf_ovwf)));
+	offset += sprintf(buf + offset,  "  %-13s  %-10ld\n", "No of data",
+			  (FIELD_GET(GENMASK(5, 0), buf1_stat)));
+
+	return offset;
+}
+
 static DEVICE_ATTR_WO(enable);
 static DEVICE_ATTR_RO(read);
 static DEVICE_ATTR_WO(trigger);
@@ -1227,6 +1298,7 @@ static DEVICE_ATTR_RW(cfg_evin1);
 static DEVICE_ATTR_RW(cfg_evin2);
 static DEVICE_ATTR_RW(cfg_evin3);
 static DEVICE_ATTR_RW(cfg_buf);
+static DEVICE_ATTR_RO(status);
 
 static struct attribute *rv8803_rtc_event_attrs[] = {
 	&dev_attr_enable.attr,
@@ -1238,6 +1310,7 @@ static struct attribute *rv8803_rtc_event_attrs[] = {
 	&dev_attr_cfg_evin2.attr,
 	&dev_attr_cfg_evin3.attr,
 	&dev_attr_cfg_buf.attr,
+	&dev_attr_status.attr,
 	NULL
 };
 
