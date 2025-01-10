@@ -195,7 +195,8 @@ void cpudl_clear(struct cpudl *cp, int cpu)
 		cp->elements[cpu].idx = IDX_INVALID;
 		cpudl_heapify(cp, old_idx);
 
-		cpumask_set_cpu(cpu, cp->free_cpus);
+		if (cpu_active(cpu))
+			cpumask_set_cpu(cpu, cp->free_cpus);
 	}
 	raw_spin_unlock_irqrestore(&cp->lock, flags);
 }
