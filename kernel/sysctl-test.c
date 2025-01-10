@@ -35,6 +35,7 @@ static void sysctl_test_api_dointvec_null_tbl_data(struct kunit *test)
 	 */
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	size_t len;
 	loff_t pos;
 
@@ -81,6 +82,7 @@ static void sysctl_test_api_dointvec_table_maxlen_unset(struct kunit *test)
 	};
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	size_t len;
 	loff_t pos;
 
@@ -124,6 +126,7 @@ static void sysctl_test_api_dointvec_table_len_is_zero(struct kunit *test)
 	};
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	/*
 	 * However, now our read/write buffer has zero length.
 	 */
@@ -158,6 +161,7 @@ static void sysctl_test_api_dointvec_table_read_but_position_set(
 	};
 	void __user *buffer = (void __user *)kunit_kzalloc(test, sizeof(int),
 							   GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	/*
 	 * We don't care about our buffer length because we start off with a
 	 * non-zero file position.
@@ -194,6 +198,7 @@ static void sysctl_test_dointvec_read_happy_single_positive(struct kunit *test)
 	size_t len = 4;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, len, GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	char __user *user_buffer = (char __user *)buffer;
 	/* Store 13 in the data field. */
 	*((int *)table.data) = 13;
@@ -225,6 +230,7 @@ static void sysctl_test_dointvec_read_happy_single_negative(struct kunit *test)
 	size_t len = 5;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, len, GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	char __user *user_buffer = (char __user *)buffer;
 	*((int *)table.data) = -16;
 
@@ -255,6 +261,7 @@ static void sysctl_test_dointvec_write_happy_single_positive(struct kunit *test)
 	size_t len = sizeof(input) - 1;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, len, GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	char __user *user_buffer = (char __user *)buffer;
 
 	memcpy(buffer, input, len);
@@ -285,6 +292,7 @@ static void sysctl_test_dointvec_write_happy_single_negative(struct kunit *test)
 	size_t len = sizeof(input) - 1;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, len, GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	char __user *user_buffer = (char __user *)buffer;
 
 	memcpy(buffer, input, len);
@@ -316,6 +324,7 @@ static void sysctl_test_api_dointvec_write_single_less_int_min(
 	size_t max_len = 32, len = max_len;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, max_len, GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	char __user *user_buffer = (char __user *)buffer;
 	unsigned long abs_of_less_than_min = (unsigned long)INT_MAX
 					     - (INT_MAX + INT_MIN) + 1;
@@ -354,6 +363,7 @@ static void sysctl_test_api_dointvec_write_single_greater_int_max(
 	size_t max_len = 32, len = max_len;
 	loff_t pos = 0;
 	char *buffer = kunit_kzalloc(test, max_len, GFP_USER);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, buffer);
 	char __user *user_buffer = (char __user *)buffer;
 	unsigned long greater_than_max = (unsigned long)INT_MAX + 1;
 
