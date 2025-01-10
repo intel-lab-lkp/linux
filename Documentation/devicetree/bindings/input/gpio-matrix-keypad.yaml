@@ -40,6 +40,12 @@ properties:
     type: boolean
     description: Do not enable autorepeat feature.
 
+  gpio-activelow:
+    type: boolean
+    deprecated: true
+    description:
+      The GPIOs are low active (deprecated).
+      Use the GPIO-flags in gpio controller instead of this property.
 
   debounce-delay-ms:
     description: Debounce interval in milliseconds.
