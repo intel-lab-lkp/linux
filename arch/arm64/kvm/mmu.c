@@ -1391,11 +1391,11 @@ static int get_vma_page_shift(struct vm_area_struct *vma, unsigned long hva)
  * able to see the page's tags and therefore they must be initialised first. If
  * PG_mte_tagged is set, tags have already been initialised.
  *
- * The race in the test/set of the PG_mte_tagged flag is handled by:
- * - preventing VM_SHARED mappings in a memslot with MTE preventing two VMs
- *   racing to santise the same page
- * - mmap_lock protects between a VM faulting a page in and the VMM performing
- *   an mprotect() to add VM_MTE
+ * The race in the test/set of the PG_mte_tagged flag is handled by using
+ * PG_mte_lock and PG_mte_tagged together. if PG_mte_lock is found unset, we can
+ * go ahead and clear the page tags. if PG_mte_lock is found set, then the page
+ * tags are already cleared or there is a parallel tag clearing is going on. We
+ * wait for the parallel tag clear to finish by waiting on PG_mte_tagged bit.
  */
 static void sanitise_mte_tags(struct kvm *kvm, kvm_pfn_t pfn,
 			      unsigned long size)
