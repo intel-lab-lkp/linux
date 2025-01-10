@@ -23,7 +23,7 @@ DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
 struct net_iov {
 	unsigned long __unused_padding;
 	unsigned long pp_magic;
-	struct page_pool *pp;
+	struct page_pool_item *pp_item;
 	struct dmabuf_genpool_chunk_owner *owner;
 	unsigned long dma_addr;
 	atomic_long_t pp_ref_count;
@@ -33,7 +33,7 @@ struct net_iov {
  *
  *        struct {
  *                unsigned long pp_magic;
- *                struct page_pool *pp;
+ *                struct page_pool_item *pp_item;
  *                unsigned long _pp_mapping_pad;
  *                unsigned long dma_addr;
  *                atomic_long_t pp_ref_count;
@@ -49,7 +49,7 @@ struct net_iov {
 	static_assert(offsetof(struct page, pg) == \
 		      offsetof(struct net_iov, iov))
 NET_IOV_ASSERT_OFFSET(pp_magic, pp_magic);
-NET_IOV_ASSERT_OFFSET(pp, pp);
+NET_IOV_ASSERT_OFFSET(pp_item, pp_item);
 NET_IOV_ASSERT_OFFSET(dma_addr, dma_addr);
 NET_IOV_ASSERT_OFFSET(pp_ref_count, pp_ref_count);
 #undef NET_IOV_ASSERT_OFFSET
@@ -66,6 +66,11 @@ NET_IOV_ASSERT_OFFSET(pp_ref_count, pp_ref_count);
  * Use the supplied helpers to obtain the underlying memory pointer and fields.
  */
 typedef unsigned long __bitwise netmem_ref;
+
+/* Mirror page_pool_item_block, see include/net/page_pool/types.h */
+struct netmem_item_block {
+	struct page_pool *pp;
+};
 
 static inline bool netmem_is_net_iov(const netmem_ref netmem)
 {
@@ -154,6 +159,11 @@ static inline struct net_iov *__netmem_clear_lsb(netmem_ref netmem)
 	return (struct net_iov *)((__force unsigned long)netmem & ~NET_IOV);
 }
 
+static inline struct page_pool_item *netmem_get_pp_item(netmem_ref netmem)
+{
+	return __netmem_clear_lsb(netmem)->pp_item;
+}
+
 /**
  * __netmem_get_pp - unsafely get pointer to the &page_pool backing @netmem
  * @netmem: netmem reference to get the pointer from
@@ -167,12 +177,16 @@ static inline struct net_iov *__netmem_clear_lsb(netmem_ref netmem)
  */
 static inline struct page_pool *__netmem_get_pp(netmem_ref netmem)
 {
-	return __netmem_to_page(netmem)->pp;
+	struct page_pool_item *item = __netmem_to_page(netmem)->pp_item;
+	struct netmem_item_block *block;
+
+	block = (struct netmem_item_block *)((unsigned long)item & PAGE_MASK);
+	return block->pp;
 }
 
 static inline struct page_pool *netmem_get_pp(netmem_ref netmem)
 {
-	return __netmem_clear_lsb(netmem)->pp;
+	return __netmem_get_pp((__force netmem_ref)__netmem_clear_lsb(netmem));
 }
 
 static inline atomic_long_t *netmem_get_pp_ref_count_ref(netmem_ref netmem)

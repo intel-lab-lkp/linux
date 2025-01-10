@@ -83,9 +83,15 @@ static inline u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 }
 #endif
 
+static inline struct page_pool_item_block *
+page_pool_item_to_block(struct page_pool_item *item)
+{
+	return (struct page_pool_item_block *)((unsigned long)item & PAGE_MASK);
+}
+
 static inline struct page_pool *page_pool_get_pp(struct page *page)
 {
-	return page->pp;
+	return page_pool_item_to_block(page->pp_item)->pp;
 }
 
 /**
