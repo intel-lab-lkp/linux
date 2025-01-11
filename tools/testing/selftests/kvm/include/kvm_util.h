@@ -631,7 +631,14 @@ static inline int __vcpu_run(struct kvm_vcpu *vcpu)
 	return __vcpu_ioctl(vcpu, KVM_RUN, NULL);
 }
 
-void vcpu_run_complete_io(struct kvm_vcpu *vcpu);
+
+void vcpu_run_immediate_exit(struct kvm_vcpu *vcpu);
+
+static inline void vcpu_run_complete_io(struct kvm_vcpu *vcpu)
+{
+	vcpu_run_immediate_exit(vcpu);
+}
+
 struct kvm_reg_list *vcpu_get_reg_list(struct kvm_vcpu *vcpu);
 
 static inline void vcpu_enable_cap(struct kvm_vcpu *vcpu, uint32_t cap,

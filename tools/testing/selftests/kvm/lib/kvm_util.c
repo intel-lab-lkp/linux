@@ -1665,7 +1665,7 @@ void vcpu_run(struct kvm_vcpu *vcpu)
 	TEST_ASSERT(!ret, KVM_IOCTL_ERROR(KVM_RUN, ret));
 }
 
-void vcpu_run_complete_io(struct kvm_vcpu *vcpu)
+void vcpu_run_immediate_exit(struct kvm_vcpu *vcpu)
 {
 	int ret;
 
