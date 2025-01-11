@@ -1764,7 +1764,7 @@ static int intel_pt_synth_branch_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct dummy_branch_stack {
 		u64			nr;
 		u64			hw_idx;
@@ -1835,7 +1835,7 @@ static int intel_pt_synth_instruction_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 
 	if (intel_pt_skip_event(pt))
 		return 0;
@@ -1867,7 +1867,7 @@ static int intel_pt_synth_cycle_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	u64 period = 0;
 
 	if (ptq->sample_ipc)
@@ -1894,7 +1894,7 @@ static int intel_pt_synth_transaction_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 
 	if (intel_pt_skip_event(pt))
 		return 0;
@@ -1927,7 +1927,7 @@ static int intel_pt_synth_ptwrite_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_ptwrite raw;
 
 	if (intel_pt_skip_event(pt))
@@ -1953,7 +1953,7 @@ static int intel_pt_synth_cbr_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_cbr raw;
 	u32 flags;
 
@@ -1983,7 +1983,7 @@ static int intel_pt_synth_psb_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_psb raw;
 
 	if (intel_pt_skip_event(pt))
@@ -2009,7 +2009,7 @@ static int intel_pt_synth_mwait_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_mwait raw;
 
 	if (intel_pt_skip_event(pt))
@@ -2034,7 +2034,7 @@ static int intel_pt_synth_pwre_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_pwre raw;
 
 	if (intel_pt_skip_event(pt))
@@ -2059,7 +2059,7 @@ static int intel_pt_synth_exstop_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_exstop raw;
 
 	if (intel_pt_skip_event(pt))
@@ -2084,7 +2084,7 @@ static int intel_pt_synth_pwrx_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_pwrx raw;
 
 	if (intel_pt_skip_event(pt))
@@ -2235,7 +2235,7 @@ static void intel_pt_add_lbrs(struct branch_stack *br_stack,
 static int intel_pt_do_synth_pebs_sample(struct intel_pt_queue *ptq, struct evsel *evsel, u64 id)
 {
 	const struct intel_pt_blk_items *items = &ptq->state->items;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	union perf_event *event = ptq->event_buf;
 	struct intel_pt *pt = ptq->pt;
 	u64 sample_type = evsel->core.attr.sample_type;
@@ -2407,7 +2407,7 @@ static int intel_pt_synth_events_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct {
 		struct perf_synth_intel_evt cfe;
 		struct perf_synth_intel_evd evd[INTEL_PT_MAX_EVDS];
@@ -2446,7 +2446,7 @@ static int intel_pt_synth_iflag_chg_sample(struct intel_pt_queue *ptq)
 {
 	struct intel_pt *pt = ptq->pt;
 	union perf_event *event = ptq->event_buf;
-	struct perf_sample sample = { .ip = 0, };
+	struct perf_sample sample;
 	struct perf_synth_intel_iflag_chg raw;
 
 	if (intel_pt_skip_event(pt))
