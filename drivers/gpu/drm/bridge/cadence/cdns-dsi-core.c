@@ -669,12 +669,27 @@ cdns_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
-static void cdns_dsi_bridge_atomic_disable(struct drm_bridge *bridge,
-					   struct drm_bridge_state *old_bridge_state)
+static void cdns_dsi_bridge_atomic_post_disable(struct drm_bridge *bridge,
+						struct drm_bridge_state *old_bridge_state)
 {
 	struct cdns_dsi_input *input = bridge_to_cdns_dsi_input(bridge);
 	struct cdns_dsi *dsi = input_to_dsi(input);
 	u32 val;
+
+	/*
+	 * The cdns-dsi controller needs to be disabled after it's DPI source
+	 * has stopped streaming. If this is not followed, there is a brief
+	 * window before DPI source is disabled and after cdns-dsi controller
+	 * has been disabled where the DPI stream is still on, but the cdns-dsi
+	 * controller is not ready anymore to accept the incoming signals. This
+	 * is one of the reasons why a shift in pixel colors is observed on
+	 * displays that have cdns-dsi as one of the bridges.
+	 *
+	 * To mitigate this, disable this bridge from the bridge post_disable()
+	 * hook, instead of the bridge _disable() hook. The bridge post_disable()
+	 * hook gets called after the CRTC disable, where often many DPI sources
+	 * disable their streams.
+	 */
 
 	val = readl(dsi->regs + MCTL_MAIN_DATA_CTL);
 	val &= ~(IF_VID_SELECT_MASK | IF_VID_MODE | VID_EN | HOST_EOT_GEN |
@@ -690,15 +705,6 @@ static void cdns_dsi_bridge_atomic_disable(struct drm_bridge *bridge,
 	phy_power_off(dsi->dphy);
 	dsi->link_initialized = false;
 	dsi->phy_initialized = false;
-
-	pm_runtime_put(dsi->base.dev);
-}
-
-static void cdns_dsi_bridge_atomic_post_disable(struct drm_bridge *bridge,
-						struct drm_bridge_state *old_bridge_state)
-{
-	struct cdns_dsi_input *input = bridge_to_cdns_dsi_input(bridge);
-	struct cdns_dsi *dsi = input_to_dsi(input);
 
 	pm_runtime_put(dsi->base.dev);
 }
@@ -771,8 +777,8 @@ static void cdns_dsi_init_link(struct cdns_dsi *dsi)
 	dsi->link_initialized = true;
 }
 
-static void cdns_dsi_bridge_atomic_enable(struct drm_bridge *bridge,
-					  struct drm_bridge_state *old_bridge_state)
+static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
+					      struct drm_bridge_state *old_bridge_state)
 {
 	struct cdns_dsi_input *input = bridge_to_cdns_dsi_input(bridge);
 	struct cdns_dsi *dsi = input_to_dsi(input);
@@ -786,6 +792,21 @@ static void cdns_dsi_bridge_atomic_enable(struct drm_bridge *bridge,
 	struct cdns_dsi_cfg dsi_cfg;
 	u32 tmp, reg_wakeup, div, status;
 	int nlanes;
+
+	/*
+	 * The cdns-dsi controller needs to be enabled before it's DPI source
+	 * has begun streaming. If this is not followed, there is a brief window
+	 * after DPI source enable and before cdns-dsi controller enable where
+	 * the DPI stream is on, but the cdns-dsi controller is not ready to
+	 * accept the incoming signals. This is one of the reasons why a shift
+	 * in pixel colors is observed on displays that have cdns-dsi as one of
+	 * the bridges.
+	 *
+	 * To mitigate this, enable this bridge from the bridge pre_enable()
+	 * hook, instead of the bridge _enable() hook. The bridge pre_enable()
+	 * hook gets called before the CRTC enable, where often many DPI sources
+	 * enable their streams.
+	 */
 
 	if (WARN_ON(pm_runtime_get_sync(dsi->base.dev) < 0))
 		return;
@@ -933,19 +954,6 @@ static void cdns_dsi_bridge_atomic_enable(struct drm_bridge *bridge,
 	writel(tmp, dsi->regs + MCTL_MAIN_EN);
 }
 
-static void cdns_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
-					      struct drm_bridge_state *old_bridge_state)
-{
-	struct cdns_dsi_input *input = bridge_to_cdns_dsi_input(bridge);
-	struct cdns_dsi *dsi = input_to_dsi(input);
-
-	if (WARN_ON(pm_runtime_get_sync(dsi->base.dev) < 0))
-		return;
-
-	cdns_dsi_init_link(dsi);
-	cdns_dsi_hs_init(dsi);
-}
-
 static u32 *cdns_dsi_bridge_get_input_bus_fmts(struct drm_bridge *bridge,
 					       struct drm_bridge_state *bridge_state,
 					       struct drm_crtc_state *crtc_state,
@@ -1033,9 +1041,7 @@ cdns_dsi_bridge_atomic_reset(struct drm_bridge *bridge)
 static const struct drm_bridge_funcs cdns_dsi_bridge_funcs = {
 	.attach = cdns_dsi_bridge_attach,
 	.mode_valid = cdns_dsi_bridge_mode_valid,
-	.atomic_disable = cdns_dsi_bridge_atomic_disable,
 	.atomic_pre_enable = cdns_dsi_bridge_atomic_pre_enable,
-	.atomic_enable = cdns_dsi_bridge_atomic_enable,
 	.atomic_post_disable = cdns_dsi_bridge_atomic_post_disable,
 	.atomic_check = cdns_dsi_bridge_atomic_check,
 	.atomic_duplicate_state = cdns_dsi_bridge_atomic_duplicate_state,
