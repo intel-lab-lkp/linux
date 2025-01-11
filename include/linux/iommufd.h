@@ -58,6 +58,12 @@ void iommufd_device_detach(struct iommufd_device *idev);
 
 struct iommufd_ctx *iommufd_device_to_ictx(struct iommufd_device *idev);
 u32 iommufd_device_to_id(struct iommufd_device *idev);
+int iommufd_device_set_num_msi_iovas(struct iommufd_device *idev,
+				     unsigned int num);
+int iommufd_device_set_msi_iova(struct iommufd_device *idev, unsigned int index,
+				dma_addr_t iova);
+void iommufd_device_unset_msi_iova(struct iommufd_device *idev,
+				   unsigned int index);
 
 struct iommufd_access_ops {
 	u8 needs_pin_pages : 1;

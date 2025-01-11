@@ -137,6 +137,8 @@ void iommufd_device_destroy(struct iommufd_object *obj)
 	struct iommufd_device *idev =
 		container_of(obj, struct iommufd_device, obj);
 
+	if (idev->num_msi_iovas)
+		kfree(idev->msi_iovas);
 	iommu_device_release_dma_owner(idev->dev);
 	iommufd_put_group(idev->igroup);
 	if (!iommufd_selftest_is_mock_dev(idev->dev))
@@ -294,6 +296,45 @@ u32 iommufd_device_to_id(struct iommufd_device *idev)
 }
 EXPORT_SYMBOL_NS_GPL(iommufd_device_to_id, "IOMMUFD");
 
+int iommufd_device_set_num_msi_iovas(struct iommufd_device *idev,
+				     unsigned int num)
+{
+	dma_addr_t *msi_iovas;
+	int i;
+
+	msi_iovas = krealloc(idev->msi_iovas, sizeof(*idev->msi_iovas) * num,
+			     GFP_KERNEL);
+	if (!msi_iovas)
+		return -ENOMEM;
+
+	for (i = idev->num_msi_iovas; i < num; i++)
+		msi_iovas[i] = PHYS_ADDR_MAX;
+
+	idev->msi_iovas = msi_iovas;
+	idev->num_msi_iovas = num;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(iommufd_device_set_num_msi_iovas, "IOMMUFD");
+
+int iommufd_device_set_msi_iova(struct iommufd_device *idev, unsigned int index,
+				dma_addr_t iova)
+{
+	if (index >= idev->num_msi_iovas)
+		return -EINVAL;
+	idev->msi_iovas[index] = iova;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(iommufd_device_set_msi_iova, "IOMMUFD");
+
+void iommufd_device_unset_msi_iova(struct iommufd_device *idev,
+				   unsigned int index)
+{
+	if (index >= idev->num_msi_iovas)
+		return;
+	idev->msi_iovas[index] = PHYS_ADDR_MAX;
+}
+EXPORT_SYMBOL_NS_GPL(iommufd_device_unset_msi_iova, "IOMMUFD");
+
 /*
  * Get a iommufd_sw_msi_map for the msi physical address requested by the irq
  * layer. The mapping to IOVA is global to the iommufd file descriptor, every
@@ -403,7 +444,11 @@ int iommufd_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
 		return rc;
 	set_bit(msi_map->id, handle->idev->igroup->required_sw_msi.bitmap);
 
-	iova = msi_map->sw_msi_start + msi_map->pgoff * PAGE_SIZE;
+	if (desc->msi_index < handle->idev->num_msi_iovas &&
+	    handle->idev->msi_iovas[desc->msi_index] != PHYS_ADDR_MAX)
+		iova = handle->idev->msi_iovas[desc->msi_index];
+	else
+		iova = msi_map->sw_msi_start + msi_map->pgoff * PAGE_SIZE;
 	msi_desc_set_iommu_msi_iova(desc, iova, PAGE_SHIFT);
 	return 0;
 }
