@@ -1559,6 +1559,11 @@ int genphy_c45_ethtool_set_eee(struct phy_device *phydev,
 				phydev_warn(phydev, "At least some EEE link modes are not supported.\n");
 				return -EINVAL;
 			}
+			linkmode_and(tmp, adv, phydev->eee_disabled_modes);
+			if (!linkmode_empty(tmp)) {
+				phydev_warn(phydev, "At least some EEE link modes are disabled.\n");
+				return -EINVAL;
+			}
 			linkmode_copy(phydev->advertising_eee, adv);
 		} else if (linkmode_empty(phydev->advertising_eee)) {
 			phy_advertise_eee_all(phydev);
