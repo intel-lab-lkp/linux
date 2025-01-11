@@ -10782,7 +10782,6 @@ void init_dummy_netdev(struct net_device *dev)
 	memset(dev, 0, sizeof(struct net_device));
 	init_dummy_netdev_core(dev);
 }
-EXPORT_SYMBOL_GPL(init_dummy_netdev);
 
 /**
  *	register_netdev	- register a network device
