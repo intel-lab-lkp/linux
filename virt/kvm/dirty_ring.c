@@ -55,9 +55,6 @@ static void kvm_reset_dirty_gfn(struct kvm *kvm, u32 slot, u64 offset, u64 mask)
 	struct kvm_memory_slot *memslot;
 	int as_id, id;
 
-	if (!mask)
-		return;
-
 	as_id = slot >> 16;
 	id = (u16)slot;
 
@@ -109,12 +106,9 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 {
 	u32 cur_slot, next_slot;
 	u64 cur_offset, next_offset;
-	unsigned long mask;
+	unsigned long mask = 0;
 	struct kvm_dirty_gfn *entry;
 	bool first_round = true;
-
-	/* This is only needed to make compilers happy */
-	cur_slot = cur_offset = mask = 0;
 
 	while (likely((*nr_entries_reset) < INT_MAX)) {
 		if (signal_pending(current))
@@ -163,14 +157,31 @@ int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
 				continue;
 			}
 		}
-		kvm_reset_dirty_gfn(kvm, cur_slot, cur_offset, mask);
+
+		/*
+		 * Reset the slot for all the harvested entries that have been
+		 * gathered, but not yet fully processed.
+		 */
+		if (mask)
+			kvm_reset_dirty_gfn(kvm, cur_slot, cur_offset, mask);
+
+		/*
+		 * The current slot was reset or this is the first harvested
+		 * entry, (re)initialize the metadata.
+		 */
 		cur_slot = next_slot;
 		cur_offset = next_offset;
 		mask = 1;
 		first_round = false;
 	}
 
-	kvm_reset_dirty_gfn(kvm, cur_slot, cur_offset, mask);
+	/*
+	 * Perform a final reset if there are harvested entries that haven't
+	 * been processed. The loop only performs a reset when an entry can't
+	 * be coalesced, i.e. always leaves at least one entry pending.
+	 */
+	if (mask)
+		kvm_reset_dirty_gfn(kvm, cur_slot, cur_offset, mask);
 
 	/*
 	 * The request KVM_REQ_DIRTY_RING_SOFT_FULL will be cleared
