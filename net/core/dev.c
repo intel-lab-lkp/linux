@@ -10756,6 +10756,8 @@ static void init_dummy_netdev_core(struct net_device *dev)
 	/* napi_busy_loop stats accounting wants this */
 	dev_net_set(dev, &init_net);
 
+	mutex_init(&dev->lock);
+
 	/* Note : We dont allocate pcpu_refcnt for dummy devices,
 	 * because users of this 'device' dont need to change
 	 * its refcount.
