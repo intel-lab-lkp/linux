@@ -2495,6 +2495,9 @@ bool kernel_page_present(struct page *page)
 		return false;
 
 	pte = lookup_address((unsigned long)page_address(page), &level);
+	if (WARN_ON_ONCE(!pte))
+		return false;
+
 	return (pte_val(*pte) & _PAGE_PRESENT);
 }
 
