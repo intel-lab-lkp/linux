@@ -40,7 +40,7 @@ static bool __kprobes aarch64_insn_is_steppable(u32 insn)
 		 */
 		if (aarch64_insn_is_mrs(insn))
 			return aarch64_insn_extract_system_reg(insn)
-			     != AARCH64_INSN_SPCLREG_DAIF;
+			     == AARCH64_INSN_SPCLREG_DAIF;
 
 		/*
 		 * The HINT instruction is steppable only if it is in whitelist
