@@ -548,6 +548,7 @@ properties:
         items:
           - enum:
               - renesas,rzv2h-evk # RZ/V2H EVK
+              - yuridenki,kakip # Yuridenki-Shokai RZ/V2H Kakip board
           - enum:
               - renesas,r9a09g057h41 # RZ/V2H
               - renesas,r9a09g057h42 # RZ/V2H with Mali-G31 support
