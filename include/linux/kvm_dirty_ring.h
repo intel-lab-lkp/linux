@@ -49,9 +49,10 @@ static inline int kvm_dirty_ring_alloc(struct kvm_dirty_ring *ring,
 }
 
 static inline int kvm_dirty_ring_reset(struct kvm *kvm,
-				       struct kvm_dirty_ring *ring)
+				       struct kvm_dirty_ring *ring,
+				       int *nr_entries_reset)
 {
-	return 0;
+	return -ENOENT;
 }
 
 static inline void kvm_dirty_ring_push(struct kvm_vcpu *vcpu,
@@ -81,7 +82,8 @@ int kvm_dirty_ring_alloc(struct kvm_dirty_ring *ring, int index, u32 size);
  * called with kvm->slots_lock held, returns the number of
  * processed pages.
  */
-int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring);
+int kvm_dirty_ring_reset(struct kvm *kvm, struct kvm_dirty_ring *ring,
+			 int *nr_entries_reset);
 
 /*
  * returns =0: successfully pushed
