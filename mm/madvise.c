@@ -1637,7 +1637,8 @@ int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
  *  -EAGAIN - a kernel resource was temporarily unavailable.
  *  -EPERM  - memory is sealed.
  */
-int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int behavior)
+int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in,
+		int behavior, bool lock_held)
 {
 	unsigned long end;
 	int error;
@@ -1668,12 +1669,14 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 		return madvise_inject_error(behavior, start, start + len_in);
 #endif
 
-	write = madvise_need_mmap_write(behavior);
-	if (write) {
-		if (mmap_write_lock_killable(mm))
-			return -EINTR;
-	} else {
-		mmap_read_lock(mm);
+	if (!lock_held) {
+		write = madvise_need_mmap_write(behavior);
+		if (write) {
+			if (mmap_write_lock_killable(mm))
+				return -EINTR;
+		} else {
+			mmap_read_lock(mm);
+		}
 	}
 
 	start = untagged_addr_remote(mm, start);
@@ -1692,17 +1695,19 @@ int do_madvise(struct mm_struct *mm, unsigned long start, size_t len_in, int beh
 	}
 	blk_finish_plug(&plug);
 
-	if (write)
-		mmap_write_unlock(mm);
-	else
-		mmap_read_unlock(mm);
+	if (!lock_held) {
+		if (write)
+			mmap_write_unlock(mm);
+		else
+			mmap_read_unlock(mm);
+	}
 
 	return error;
 }
 
 SYSCALL_DEFINE3(madvise, unsigned long, start, size_t, len_in, int, behavior)
 {
-	return do_madvise(current->mm, start, len_in, behavior);
+	return do_madvise(current->mm, start, len_in, behavior, false);
 }
 
 /* Perform an madvise operation over a vector of addresses and lengths. */
@@ -1711,12 +1716,28 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 {
 	ssize_t ret = 0;
 	size_t total_len;
+	bool hold_lock = true;
+	int write;
 
 	total_len = iov_iter_count(iter);
 
+#ifdef CONFIG_MEMORY_FAILURE
+	if (behavior == MADV_HWPOISON || behavior == MADV_SOFT_OFFLINE)
+		hold_lock = false;
+#endif
+	if (hold_lock) {
+		write = madvise_need_mmap_write(behavior);
+		if (write) {
+			if (mmap_write_lock_killable(mm))
+				return -EINTR;
+		} else {
+			mmap_read_lock(mm);
+		}
+	}
+
 	while (iov_iter_count(iter)) {
 		ret = do_madvise(mm, (unsigned long)iter_iov_addr(iter),
-				 iter_iov_len(iter), behavior);
+				 iter_iov_len(iter), behavior, hold_lock);
 		/*
 		 * An madvise operation is attempting to restart the syscall,
 		 * but we cannot proceed as it would not be correct to repeat
@@ -1737,6 +1758,13 @@ static ssize_t vector_madvise(struct mm_struct *mm, struct iov_iter *iter,
 		if (ret < 0)
 			break;
 		iov_iter_advance(iter, iter_iov_len(iter));
+	}
+
+	if (hold_lock) {
+		if (write)
+			mmap_write_unlock(mm);
+		else
+			mmap_read_unlock(mm);
 	}
 
 	ret = (total_len - iov_iter_count(iter)) ? : ret;
