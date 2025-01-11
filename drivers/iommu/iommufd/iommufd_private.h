@@ -45,6 +45,9 @@ struct iommufd_ctx {
 	struct mutex sw_msi_lock;
 	struct list_head sw_msi_list;
 	unsigned int sw_msi_id;
+	/* User-programmed SW_MSI region, to override igroup->sw_msi_start */
+	phys_addr_t sw_msi_start;
+	size_t sw_msi_size;
 
 	u8 account_mode;
 	/* Compatibility with VFIO no iommu */
@@ -281,6 +284,7 @@ int iommufd_ioas_unmap(struct iommufd_ucmd *ucmd);
 int iommufd_ioas_option(struct iommufd_ucmd *ucmd);
 int iommufd_option_rlimit_mode(struct iommu_option *cmd,
 			       struct iommufd_ctx *ictx);
+int iommufd_option_sw_msi(struct iommu_option *cmd, struct iommufd_ctx *ictx);
 
 int iommufd_vfio_ioas(struct iommufd_ucmd *ucmd);
 int iommufd_check_iova_range(struct io_pagetable *iopt,

@@ -620,6 +620,40 @@ int iommufd_option_rlimit_mode(struct iommu_option *cmd,
 	return -EOPNOTSUPP;
 }
 
+int iommufd_option_sw_msi(struct iommu_option *cmd, struct iommufd_ctx *ictx)
+{
+	if (cmd->object_id)
+		return -EOPNOTSUPP;
+
+	if (cmd->op == IOMMU_OPTION_OP_GET) {
+		switch (cmd->option_id) {
+		case IOMMU_OPTION_SW_MSI_START:
+			cmd->val64 = (u64)ictx->sw_msi_start;
+			break;
+		case IOMMU_OPTION_SW_MSI_SIZE:
+			cmd->val64 = (u64)ictx->sw_msi_size;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		return 0;
+	}
+	if (cmd->op == IOMMU_OPTION_OP_SET) {
+		switch (cmd->option_id) {
+		case IOMMU_OPTION_SW_MSI_START:
+			ictx->sw_msi_start = (phys_addr_t)cmd->val64;
+			break;
+		case IOMMU_OPTION_SW_MSI_SIZE:
+			ictx->sw_msi_size = (size_t)cmd->val64;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		return 0;
+	}
+	return -EOPNOTSUPP;
+}
+
 static int iommufd_ioas_option_huge_pages(struct iommu_option *cmd,
 					  struct iommufd_ioas *ioas)
 {

@@ -294,7 +294,9 @@ struct iommu_ioas_unmap {
 
 /**
  * enum iommufd_option - ioctl(IOMMU_OPTION_RLIMIT_MODE) and
- *                       ioctl(IOMMU_OPTION_HUGE_PAGES)
+ *                       ioctl(IOMMU_OPTION_HUGE_PAGES) and
+ *                       ioctl(IOMMU_OPTION_SW_MSI_START) and
+ *                       ioctl(IOMMU_OPTION_SW_MSI_SIZE)
  * @IOMMU_OPTION_RLIMIT_MODE:
  *    Change how RLIMIT_MEMLOCK accounting works. The caller must have privilege
  *    to invoke this. Value 0 (default) is user based accounting, 1 uses process
@@ -304,10 +306,24 @@ struct iommu_ioas_unmap {
  *    iommu mappings. Value 0 disables combining, everything is mapped to
  *    PAGE_SIZE. This can be useful for benchmarking.  This is a per-IOAS
  *    option, the object_id must be the IOAS ID.
+ * @IOMMU_OPTION_SW_MSI_START:
+ *    Change the base address of the IOMMU mapping region for MSI doorbell(s).
+ *    It must be set this before attaching a device to an IOAS/HWPT, otherwise
+ *    this option will be not effective on that IOAS/HWPT. User can choose to
+ *    let kernel pick a base address, by simply ignoring this option or setting
+ *    a value 0 to IOMMU_OPTION_SW_MSI_SIZE. Global option, object_id must be 0
+ * @IOMMU_OPTION_SW_MSI_SIZE:
+ *    Change the size of the IOMMU mapping region for MSI doorbell(s). It must
+ *    be set this before attaching a device to an IOAS/HWPT, otherwise it won't
+ *    be effective on that IOAS/HWPT. The value is in MB, and the minimum value
+ *    is 1 MB. A value 0 (default) will invalidate the MSI doorbell base address
+ *    value set to IOMMU_OPTION_SW_MSI_START. Global option, object_id must be 0
  */
 enum iommufd_option {
 	IOMMU_OPTION_RLIMIT_MODE = 0,
 	IOMMU_OPTION_HUGE_PAGES = 1,
+	IOMMU_OPTION_SW_MSI_START = 2,
+	IOMMU_OPTION_SW_MSI_SIZE = 3,
 };
 
 /**

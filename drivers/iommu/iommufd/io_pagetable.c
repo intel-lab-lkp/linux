@@ -1446,7 +1446,9 @@ int iopt_table_enforce_dev_resv_regions(struct io_pagetable *iopt,
 		if (sw_msi_start && resv->type == IOMMU_RESV_MSI)
 			num_hw_msi++;
 		if (sw_msi_start && resv->type == IOMMU_RESV_SW_MSI) {
-			*sw_msi_start = resv->start;
+			/* Bypass the driver-defined SW_MSI region, if preset */
+			if (*sw_msi_start == PHYS_ADDR_MAX)
+				*sw_msi_start = resv->start;
 			num_sw_msi++;
 		}
 

@@ -445,10 +445,14 @@ static int
 iommufd_device_attach_reserved_iova(struct iommufd_device *idev,
 				    struct iommufd_hwpt_paging *hwpt_paging)
 {
+	struct iommufd_ctx *ictx = idev->ictx;
 	int rc;
 
 	lockdep_assert_held(&idev->igroup->lock);
 
+	/* Override it with a user-programmed SW_MSI region */
+	if (ictx->sw_msi_size && ictx->sw_msi_start != PHYS_ADDR_MAX)
+		idev->igroup->sw_msi_start = ictx->sw_msi_start;
 	rc = iopt_table_enforce_dev_resv_regions(&hwpt_paging->ioas->iopt,
 						 idev->dev,
 						 &idev->igroup->sw_msi_start);

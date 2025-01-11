@@ -229,6 +229,8 @@ static int iommufd_fops_open(struct inode *inode, struct file *filp)
 	init_waitqueue_head(&ictx->destroy_wait);
 	mutex_init(&ictx->sw_msi_lock);
 	INIT_LIST_HEAD(&ictx->sw_msi_list);
+	ictx->sw_msi_start = PHYS_ADDR_MAX;
+	ictx->sw_msi_size = 0;
 	filp->private_data = ictx;
 	return 0;
 }
@@ -286,6 +288,10 @@ static int iommufd_option(struct iommufd_ucmd *ucmd)
 	switch (cmd->option_id) {
 	case IOMMU_OPTION_RLIMIT_MODE:
 		rc = iommufd_option_rlimit_mode(cmd, ucmd->ictx);
+		break;
+	case IOMMU_OPTION_SW_MSI_START:
+	case IOMMU_OPTION_SW_MSI_SIZE:
+		rc = iommufd_option_sw_msi(cmd, ucmd->ictx);
 		break;
 	case IOMMU_OPTION_HUGE_PAGES:
 		rc = iommufd_ioas_option(ucmd);
