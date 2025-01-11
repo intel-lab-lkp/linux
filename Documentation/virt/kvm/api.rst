@@ -6615,22 +6615,11 @@ The 'data' member contains, in its first 'len' bytes, the value as it would
 appear if the VCPU performed a load or store of the appropriate width directly
 to the byte array.
 
-.. note::
+It is strongly recommended that userspace use ``KVM_EXIT_IO`` (x86) or
+``KVM_EXIT_MMIO`` (all except s390) to implement functionality that
+requires a guest to interact with host userspace.
 
-      For KVM_EXIT_IO, KVM_EXIT_MMIO, KVM_EXIT_OSI, KVM_EXIT_PAPR, KVM_EXIT_XEN,
-      KVM_EXIT_EPR, KVM_EXIT_X86_RDMSR and KVM_EXIT_X86_WRMSR the corresponding
-      operations are complete (and guest state is consistent) only after userspace
-      has re-entered the kernel with KVM_RUN.  The kernel side will first finish
-      incomplete operations and then check for pending signals.
-
-      The pending state of the operation is not preserved in state which is
-      visible to userspace, thus userspace should ensure that the operation is
-      completed before performing a live migration.  Userspace can re-enter the
-      guest with an unmasked signal pending or with the immediate_exit field set
-      to complete pending operations without allowing any further instructions
-      to be executed.
-
-::
+.. note:: KVM_EXIT_IO is significantly faster than KVM_EXIT_MMIO.
 
 		/* KVM_EXIT_HYPERCALL */
 		struct {
@@ -6641,11 +6630,23 @@ to the byte array.
 		} hypercall;
 
 
-It is strongly recommended that userspace use ``KVM_EXIT_IO`` (x86) or
-``KVM_EXIT_MMIO`` (all except s390) to implement functionality that
-requires a guest to interact with host userspace.
+.. note::
 
-.. note:: KVM_EXIT_IO is significantly faster than KVM_EXIT_MMIO.
+      For KVM_EXIT_IO, KVM_EXIT_MMIO, KVM_EXIT_OSI, KVM_EXIT_PAPR, KVM_EXIT_XEN,
+      KVM_EXIT_EPR, KVM_EXIT_X86_RDMSR, KVM_EXIT_X86_WRMSR, and KVM_EXIT_HYPERCALL
+      the corresponding operations are complete (and guest state is consistent)
+      only after userspace has re-entered the kernel with KVM_RUN.  The kernel
+      side will first finish incomplete operations and then check for pending
+      signals.
+
+      The pending state of the operation is not preserved in state which is
+      visible to userspace, thus userspace should ensure that the operation is
+      completed before performing a live migration.  Userspace can re-enter the
+      guest with an unmasked signal pending or with the immediate_exit field set
+      to complete pending operations without allowing any further instructions
+      to be executed.
+
+::
 
 For arm64:
 ----------
