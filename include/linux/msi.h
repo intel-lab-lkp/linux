@@ -296,13 +296,8 @@ static inline void msi_desc_set_iommu_msi_iova(struct msi_desc *desc,
 #endif
 }
 
-/**
- * iommu_dma_compose_msi_msg() - Apply translation to an MSI message
- * @desc: MSI descriptor prepared by iommu_dma_prepare_msi()
- * @msg: MSI message containing target physical address
- */
-static inline void iommu_dma_compose_msi_msg(struct msi_desc *desc,
-					     struct msi_msg *msg)
+static inline void msi_msg_set_msi_addr(struct msi_desc *desc,
+					struct msi_msg *msg, u64 msi_addr)
 {
 #ifdef CONFIG_IRQ_MSI_IOMMU
 	if (desc->iommu_msi_page_shift) {
@@ -310,11 +305,14 @@ static inline void iommu_dma_compose_msi_msg(struct msi_desc *desc,
 			       << desc->iommu_msi_page_shift;
 
 		msg->address_hi = upper_32_bits(msi_iova);
-		msg->address_lo = lower_32_bits(msi_iova) |
-				  (msg->address_lo &
-				   ((1 << desc->iommu_msi_page_shift) - 1));
+		msg->address_lo =
+			lower_32_bits(msi_iova) |
+			(msi_addr & ((1 << desc->iommu_msi_page_shift) - 1));
+		return;
 	}
 #endif
+	msg->address_hi = upper_32_bits(msi_addr);
+	msg->address_lo = lower_32_bits(msi_addr);
 }
 
 int msi_domain_insert_msi_desc(struct device *dev, unsigned int domid,
