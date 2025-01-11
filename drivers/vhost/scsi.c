@@ -1726,7 +1726,7 @@ vhost_scsi_set_endpoint(struct vhost_scsi *vs,
 				mutex_unlock(&tpg->tv_tpg_mutex);
 				mutex_unlock(&vhost_scsi_mutex);
 				ret = -EEXIST;
-				goto undepend;
+				goto free_vs_tpg;
 			}
 			/*
 			 * In order to ensure individual vhost-scsi configfs
@@ -1802,6 +1802,7 @@ undepend:
 			target_undepend_item(&tpg->se_tpg.tpg_group.cg_item);
 		}
 	}
+free_vs_tpg:
 	kfree(vs_tpg);
 out:
 	mutex_unlock(&vs->dev.mutex);
