@@ -91,6 +91,8 @@ ets_class_from_arg(struct Qdisc *sch, unsigned long arg)
 {
 	struct ets_sched *q = qdisc_priv(sch);
 
+	if (arg == 0 || arg >= TCQ_ETS_MAX_BANDS)
+		return NULL;
 	return &q->classes[arg - 1];
 }
 
