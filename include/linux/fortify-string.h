@@ -4,7 +4,6 @@
 
 #include <linux/bitfield.h>
 #include <linux/bug.h>
-#include <linux/const.h>
 #include <linux/limits.h>
 
 #define __FORTIFY_INLINE extern __always_inline __gnu_inline __overloadable
@@ -255,8 +254,8 @@ __FORTIFY_INLINE __kernel_size_t strnlen(const char * const POS p, __kernel_size
  *
  */
 #define strlen(p)							\
-	__builtin_choose_expr(__is_constexpr(__builtin_strlen(p)),	\
-		__builtin_strlen(p), __fortify_strlen(p))
+	(__builtin_constant_p(__builtin_strlen(p)) ?			\
+		__builtin_strlen(p) : __fortify_strlen(p))
 __FORTIFY_INLINE __diagnose_as(__builtin_strlen, 1)
 __kernel_size_t __fortify_strlen(const char * const POS p)
 {
