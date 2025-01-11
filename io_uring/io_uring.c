@@ -3093,9 +3093,18 @@ static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 		ret |= (cret != IO_WQ_CANCEL_NOTFOUND);
 	}
 
-	/* SQPOLL thread does its own polling */
+	/*
+	 * SQPOLL thread does its own polling
+	 *
+	 * We expect ctx->sq_data->thread == current to be false when
+	 * this function is called on a task other than the sq thread.
+	 * In that case, the sq_data->thread read can race with the
+	 * NULL write in the sq thread termination. However, the race
+	 * will still make ctx->sq_data->thread == current be false,
+	 * so we can safely ignore the data race here.
+	 */
 	if ((!(ctx->flags & IORING_SETUP_SQPOLL) && cancel_all) ||
-	    (ctx->sq_data && ctx->sq_data->thread == current)) {
+	    (ctx->sq_data && data_race(ctx->sq_data->thread) == current)) {
 		while (!wq_list_empty(&ctx->iopoll_list)) {
 			io_iopoll_try_reap_events(ctx);
 			ret = true;
@@ -3141,7 +3150,7 @@ __cold void io_uring_cancel_generic(bool cancel_all, struct io_sq_data *sqd)
 	s64 inflight;
 	DEFINE_WAIT(wait);
 
-	WARN_ON_ONCE(sqd && sqd->thread != current);
+	WARN_ON_ONCE(sqd && data_race(sqd->thread) != current);
 
 	if (!current->io_uring)
 		return;
