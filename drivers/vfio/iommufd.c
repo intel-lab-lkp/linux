@@ -69,6 +69,33 @@ struct iommufd_ctx *vfio_iommufd_device_ictx(struct vfio_device *vdev)
 }
 EXPORT_SYMBOL_GPL(vfio_iommufd_device_ictx);
 
+int vfio_iommufd_device_set_num_msi_iovas(struct vfio_device *vdev,
+					  unsigned int num)
+{
+	if (!vdev->iommufd_device)
+		return -ENODEV;
+	return iommufd_device_set_num_msi_iovas(vdev->iommufd_device, num);
+}
+EXPORT_SYMBOL_GPL(vfio_iommufd_device_set_num_msi_iovas);
+
+int vfio_iommufd_device_set_msi_iova(struct vfio_device *vdev,
+				     unsigned int index, dma_addr_t iova)
+{
+	if (!vdev->iommufd_device)
+		return -ENODEV;
+	return iommufd_device_set_msi_iova(vdev->iommufd_device, index, iova);
+}
+EXPORT_SYMBOL_GPL(vfio_iommufd_device_set_msi_iova);
+
+void vfio_iommufd_device_unset_msi_iova(struct vfio_device *vdev,
+					unsigned int index)
+{
+	if (!vdev->iommufd_device)
+		return;
+	iommufd_device_unset_msi_iova(vdev->iommufd_device, index);
+}
+EXPORT_SYMBOL_GPL(vfio_iommufd_device_unset_msi_iova);
+
 static int vfio_iommufd_device_id(struct vfio_device *vdev)
 {
 	if (vdev->iommufd_device)

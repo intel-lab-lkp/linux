@@ -133,6 +133,12 @@ struct vfio_device_ops {
 
 #if IS_ENABLED(CONFIG_IOMMUFD)
 struct iommufd_ctx *vfio_iommufd_device_ictx(struct vfio_device *vdev);
+int vfio_iommufd_device_set_num_msi_iovas(struct vfio_device *vdev,
+					  unsigned int num);
+int vfio_iommufd_device_set_msi_iova(struct vfio_device *vdev,
+				     unsigned int index, dma_addr_t iova);
+void vfio_iommufd_device_unset_msi_iova(struct vfio_device *vdev,
+					unsigned int index);
 int vfio_iommufd_get_dev_id(struct vfio_device *vdev, struct iommufd_ctx *ictx);
 int vfio_iommufd_physical_bind(struct vfio_device *vdev,
 			       struct iommufd_ctx *ictx, u32 *out_device_id);
@@ -149,6 +155,25 @@ static inline struct iommufd_ctx *
 vfio_iommufd_device_ictx(struct vfio_device *vdev)
 {
 	return NULL;
+}
+
+static inline int
+vfio_iommufd_device_set_num_msi_iovas(struct vfio_device *vdev,
+				      unsigned int num)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int vfio_iommufd_device_set_msi_iova(struct vfio_device *vdev,
+						   unsigned int index,
+						   dma_addr_t iova)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void vfio_iommufd_device_unset_msi_iova(struct vfio_device *vdev,
+						      unsigned int index)
+{
 }
 
 static inline int
