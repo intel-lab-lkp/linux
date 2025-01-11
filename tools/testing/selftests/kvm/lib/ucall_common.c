@@ -154,7 +154,7 @@ uint64_t get_ucall(struct kvm_vcpu *vcpu, struct ucall *uc)
 			    "Guest failed to allocate ucall struct");
 
 		memcpy(uc, addr, sizeof(*uc));
-		vcpu_run_complete_io(vcpu);
+		vcpu_run_complete_exit(vcpu);
 	} else {
 		memset(uc, 0, sizeof(*uc));
 	}

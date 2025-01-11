@@ -1077,13 +1077,7 @@ struct kvm_x86_state *vcpu_save_state(struct kvm_vcpu *vcpu)
 			    nested_size, sizeof(state->nested_));
 	}
 
-	/*
-	 * When KVM exits to userspace with KVM_EXIT_IO, KVM guarantees
-	 * guest state is consistent only after userspace re-enters the
-	 * kernel with KVM_RUN.  Complete IO prior to migrating state
-	 * to a new VM.
-	 */
-	vcpu_run_complete_io(vcpu);
+	vcpu_run_complete_exit(vcpu);
 
 	state = malloc(sizeof(*state) + msr_list->nmsrs * sizeof(state->msrs.entries[0]));
 	TEST_ASSERT(state, "-ENOMEM when allocating kvm state");

@@ -29,6 +29,8 @@
 
 #define NSEC_PER_SEC 1000000000L
 
+extern bool kvm_has_needs_completion;
+
 struct userspace_mem_region {
 	struct kvm_userspace_memory_region2 region;
 	struct sparsebit *unused_phy_pages;
@@ -634,9 +636,11 @@ static inline int __vcpu_run(struct kvm_vcpu *vcpu)
 
 void vcpu_run_immediate_exit(struct kvm_vcpu *vcpu);
 
-static inline void vcpu_run_complete_io(struct kvm_vcpu *vcpu)
+static inline void vcpu_run_complete_exit(struct kvm_vcpu *vcpu)
 {
-	vcpu_run_immediate_exit(vcpu);
+	if (!kvm_has_needs_completion ||
+	    (vcpu->run->flags & KVM_RUN_NEEDS_COMPLETION))
+		vcpu_run_immediate_exit(vcpu);
 }
 
 struct kvm_reg_list *vcpu_get_reg_list(struct kvm_vcpu *vcpu);
