@@ -62,6 +62,9 @@ function push_config() {
 			awk -F'[: ]' '{print "file " $1 " line " $2 " " $4}')
 	FTRACE_ENABLED=$(sysctl --values kernel.ftrace_enabled)
 	KPROBE_ENABLED=$(cat "$SYSFS_KPROBES_DIR/enabled")
+	TRACING_ON=$(cat "$SYSFS_DEBUG_DIR/tracing/tracing_on")
+	CURRENT_TRACER=$(cat "$SYSFS_DEBUG_DIR/tracing/current_tracer")
+	FTRACE_FILTER=$(cat "$SYSFS_DEBUG_DIR/tracing/set_ftrace_filter")
 }
 
 function pop_config() {
@@ -73,6 +76,17 @@ function pop_config() {
 	fi
 	if [[ -n "$KPROBE_ENABLED" ]]; then
 		echo "$KPROBE_ENABLED" > "$SYSFS_KPROBES_DIR/enabled"
+	fi
+	if [[ -n "$TRACING_ON" ]]; then
+		echo "$TRACING_ON" > "$SYSFS_DEBUG_DIR/tracing/tracing_on"
+	fi
+	if [[ -n "$CURRENT_TRACER" ]]; then
+		echo "$CURRENT_TRACER" > "$SYSFS_DEBUG_DIR/tracing/current_tracer"
+	fi
+	if [[ "$FTRACE_FILTER" == *"#"* ]]; then
+		echo > "$SYSFS_DEBUG_DIR/tracing/set_ftrace_filter"
+	elif [[ -n "$FTRACE_FILTER" ]]; then
+		echo "$FTRACE_FILTER" > "$SYSFS_DEBUG_DIR/tracing/set_ftrace_filter"
 	fi
 }
 

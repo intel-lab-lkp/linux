@@ -61,4 +61,37 @@ livepatch: '$MOD_LIVEPATCH': unpatching complete
 % rmmod $MOD_LIVEPATCH"
 
 
+# - verify livepatch can load
+# - check if traces have a patched function
+# - unload livepatch and reset trace
+
+start_test "trace livepatched function and check that the live patch remains in effect"
+
+TRACE_FILE="$SYSFS_DEBUG_DIR/tracing/trace"
+FUNCTION_NAME="livepatch_cmdline_proc_show"
+
+load_lp $MOD_LIVEPATCH
+
+echo 1 > "$SYSFS_DEBUG_DIR/tracing/tracing_on"
+echo $FUNCTION_NAME > "$SYSFS_DEBUG_DIR/tracing/set_ftrace_filter"
+echo "function" > "$SYSFS_DEBUG_DIR/tracing/current_tracer"
+echo "" > "$TRACE_FILE"
+
+if [[ "$(cat /proc/cmdline)" != "$MOD_LIVEPATCH: this has been live patched" ]] ; then
+	echo -e "FAIL\n\n"
+	die "livepatch kselftest(s) failed"
+fi
+
+grep -q $FUNCTION_NAME "$TRACE_FILE"
+FOUND=$?
+
+disable_lp $MOD_LIVEPATCH
+unload_lp $MOD_LIVEPATCH
+
+if [ "$FOUND" -eq 1 ]; then
+	echo -e "FAIL\n\n"
+	die "livepatch kselftest(s) failed"
+fi
+
+
 exit 0
