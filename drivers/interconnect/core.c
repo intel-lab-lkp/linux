@@ -859,6 +859,38 @@ struct icc_node *icc_node_create(int id)
 EXPORT_SYMBOL_GPL(icc_node_create);
 
 /**
+ * icc_node_create_alloc_id() - create node and dynamically allocate id
+ * @start_id: min id to be allocated
+ *
+ * Return: icc_node pointer on success, or ERR_PTR() on error
+ */
+struct icc_node *icc_node_create_alloc_id(int start_id)
+{
+	struct icc_node *node;
+	int id;
+
+	mutex_lock(&icc_lock);
+
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
+	if (!node)
+		return ERR_PTR(-ENOMEM);
+
+	id = idr_alloc(&icc_idr, node, start_id, 0, GFP_KERNEL);
+	if (id < 0) {
+		WARN(1, "%s: couldn't get idr\n", __func__);
+		kfree(node);
+		node = ERR_PTR(id);
+		goto out;
+	}
+	node->id = id;
+out:
+	mutex_unlock(&icc_lock);
+
+	return node;
+}
+EXPORT_SYMBOL_GPL(icc_node_create_alloc_id);
+
+/**
  * icc_node_destroy() - destroy a node
  * @id: node id
  */
