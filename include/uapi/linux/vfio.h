@@ -590,6 +590,8 @@ struct vfio_irq_set {
 #define VFIO_IRQ_SET_ACTION_MASK	(1 << 3) /* Mask interrupt */
 #define VFIO_IRQ_SET_ACTION_UNMASK	(1 << 4) /* Unmask interrupt */
 #define VFIO_IRQ_SET_ACTION_TRIGGER	(1 << 5) /* Trigger interrupt */
+#define VFIO_IRQ_SET_DATA_MSI_IOVA	(1 << 6) /* Data is MSI IOVA (u64) */
+#define VFIO_IRQ_SET_ACTION_PREPARE	(1 << 7) /* Prepare interrupt */
 	__u32	index;
 	__u32	start;
 	__u32	count;
@@ -599,10 +601,12 @@ struct vfio_irq_set {
 
 #define VFIO_IRQ_SET_DATA_TYPE_MASK	(VFIO_IRQ_SET_DATA_NONE | \
 					 VFIO_IRQ_SET_DATA_BOOL | \
-					 VFIO_IRQ_SET_DATA_EVENTFD)
+					 VFIO_IRQ_SET_DATA_EVENTFD | \
+					 VFIO_IRQ_SET_DATA_MSI_IOVA)
 #define VFIO_IRQ_SET_ACTION_TYPE_MASK	(VFIO_IRQ_SET_ACTION_MASK | \
 					 VFIO_IRQ_SET_ACTION_UNMASK | \
-					 VFIO_IRQ_SET_ACTION_TRIGGER)
+					 VFIO_IRQ_SET_ACTION_TRIGGER | \
+					 VFIO_IRQ_SET_ACTION_PREPARE)
 /**
  * VFIO_DEVICE_RESET - _IO(VFIO_TYPE, VFIO_BASE + 11)
  *

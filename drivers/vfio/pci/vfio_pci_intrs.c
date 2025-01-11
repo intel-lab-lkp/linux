@@ -685,6 +685,8 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 
 	if (irq_is(vdev, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
 		vfio_msi_disable(vdev, msix);
+		for (i = start; i < start + count; i++)
+			vfio_iommufd_device_unset_msi_iova(&vdev->vdev, i);
 		return 0;
 	}
 
@@ -725,6 +727,47 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 				eventfd_signal(ctx->trigger);
 		}
 	}
+	return 0;
+}
+
+static int vfio_pci_set_msi_prepare(struct vfio_pci_core_device *vdev,
+				    unsigned int index, unsigned int start,
+				    unsigned int count, uint32_t flags,
+				    void *data)
+{
+	struct vfio_device *core = &vdev->vdev;
+	uint64_t *iovas = data;
+	unsigned int i;
+	int ret;
+
+	if (!vfio_iommufd_device_ictx(core))
+		return -EOPNOTSUPP;
+	if (!(irq_is(vdev, index) || is_irq_none(vdev)))
+		return -EINVAL;
+
+	if (flags & VFIO_IRQ_SET_DATA_NONE) {
+		if (!count)
+			return -EINVAL;
+		for (i = start; i < start + count; i++)
+			vfio_iommufd_device_unset_msi_iova(core, i);
+		return 0;
+	}
+
+	if (!(flags & VFIO_IRQ_SET_DATA_MSI_IOVA))
+		return -EOPNOTSUPP;
+	if (!IS_ENABLED(CONFIG_IRQ_MSI_IOMMU))
+		return -EOPNOTSUPP;
+
+	ret = vfio_iommufd_device_set_num_msi_iovas(core, start + count);
+	if (ret)
+		return ret;
+
+	for (i = start; i < start + count; i++) {
+		ret = vfio_iommufd_device_set_msi_iova(core, i, iovas[i]);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -836,6 +879,9 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 			break;
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
 			func = vfio_pci_set_msi_trigger;
+			break;
+		case VFIO_IRQ_SET_ACTION_PREPARE:
+			func = vfio_pci_set_msi_prepare;
 			break;
 		}
 		break;

@@ -1554,6 +1554,9 @@ int vfio_set_irqs_validate_and_prepare(struct vfio_irq_set *hdr, int num_irqs,
 	case VFIO_IRQ_SET_DATA_EVENTFD:
 		size = sizeof(int32_t);
 		break;
+	case VFIO_IRQ_SET_DATA_MSI_IOVA:
+		size = sizeof(uint64_t);
+		break;
 	default:
 		return -EINVAL;
 	}
