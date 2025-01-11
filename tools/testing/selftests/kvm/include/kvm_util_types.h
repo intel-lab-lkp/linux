@@ -17,4 +17,10 @@
 typedef uint64_t vm_paddr_t; /* Virtual Machine (Guest) physical address */
 typedef uint64_t vm_vaddr_t; /* Virtual Machine (Guest) virtual address */
 
+#define VM_STAT_MAGIC_NUMBER   1
+#define VM_STAT(stat)  VM_STAT_##stat = VM_STAT_MAGIC_NUMBER
+
+#define VCPU_STAT_MAGIC_NUMBER   2
+#define VCPU_STAT(stat) VCPU_STAT_##stat = VCPU_STAT_MAGIC_NUMBER
+
 #endif /* SELFTEST_KVM_UTIL_TYPES_H */

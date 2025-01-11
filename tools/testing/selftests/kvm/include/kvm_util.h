@@ -535,19 +535,37 @@ void read_stat_data(int stats_fd, struct kvm_stats_header *header,
 		    struct kvm_stats_desc *desc, uint64_t *data,
 		    size_t max_elements);
 
+enum kvm_common_stats {
+	VM_STAT(remote_tlb_flush),
+	VM_STAT(remote_tlb_flush_requests),
+
+	VCPU_STAT(halt_successfull_poll),
+	VCPU_STAT(halt_attempted_poll),
+	VCPU_STAT(halt_poll_invalid),
+	VCPU_STAT(halt_wakeup),
+	VCPU_STAT(halt_poll_success_ns),
+	VCPU_STAT(halt_poll_fail_ns),
+	VCPU_STAT(halt_wait_ns),
+	VCPU_STAT(halt_poll_success_hist),
+	VCPU_STAT(halt_poll_fail_hist),
+	VCPU_STAT(halt_wait_hist),
+	VCPU_STAT(blocking),
+};
+
 void kvm_get_stat(struct kvm_binary_stats *stats, const char *name,
 		  uint64_t *data, size_t max_elements);
 
-#define __get_stat(stats, stat)							\
+#define __get_stat(type, stats, stat)						\
 ({										\
 	uint64_t data;								\
 										\
+	kvm_static_assert(type##_STAT_##stat == type##_STAT_MAGIC_NUMBER);	\
 	kvm_get_stat(stats, #stat, &data, 1);					\
 	data;									\
 })
 
-#define vm_get_stat(vm, stat) __get_stat(&(vm)->stats, stat)
-#define vcpu_get_stat(vcpu, stat) __get_stat(&(vcpu)->stats, stat)
+#define vm_get_stat(vm, stat) __get_stat(VM, &(vm)->stats, stat)
+#define vcpu_get_stat(vcpu, stat) __get_stat(VCPU, &(vcpu)->stats, stat)
 
 void vm_create_irqchip(struct kvm_vm *vm);
 
