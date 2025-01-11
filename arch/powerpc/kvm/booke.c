@@ -751,6 +751,7 @@ int kvmppc_core_check_requests(struct kvm_vcpu *vcpu)
 		vcpu->run->epr.epr = 0;
 		vcpu->arch.epr_needed = true;
 		vcpu->run->exit_reason = KVM_EXIT_EPR;
+		vcpu->run->flags |= KVM_RUN_NEEDS_COMPLETION;
 		r = 0;
 	}
 

@@ -1310,6 +1310,7 @@ int kvmppc_handle_exit_pr(struct kvm_vcpu *vcpu, unsigned int exit_nr)
 				run->papr_hcall.args[i] = gpr;
 			}
 			run->exit_reason = KVM_EXIT_PAPR_HCALL;
+			run->flags |= KVM_RUN_NEEDS_COMPLETION;
 			vcpu->arch.hcall_needed = 1;
 			r = RESUME_HOST;
 		} else if (vcpu->arch.osi_enabled &&
@@ -1320,6 +1321,7 @@ int kvmppc_handle_exit_pr(struct kvm_vcpu *vcpu, unsigned int exit_nr)
 			int i;
 
 			run->exit_reason = KVM_EXIT_OSI;
+			run->flags |= KVM_RUN_NEEDS_COMPLETION;
 			for (i = 0; i < 32; i++)
 				gprs[i] = kvmppc_get_gpr(vcpu, i);
 			vcpu->arch.osi_needed = 1;

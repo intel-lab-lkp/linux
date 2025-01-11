@@ -1767,6 +1767,7 @@ static int kvmppc_handle_exit_hv(struct kvm_vcpu *vcpu,
 		for (i = 0; i < 9; ++i)
 			run->papr_hcall.args[i] = kvmppc_get_gpr(vcpu, 4 + i);
 		run->exit_reason = KVM_EXIT_PAPR_HCALL;
+		run->flags |= KVM_RUN_NEEDS_COMPLETION;
 		vcpu->arch.hcall_needed = 1;
 		r = RESUME_HOST;
 		break;

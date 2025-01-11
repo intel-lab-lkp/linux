@@ -374,6 +374,7 @@ int kvmppc_core_emulate_op_pr(struct kvm_vcpu *vcpu,
 			}
 
 			vcpu->run->exit_reason = KVM_EXIT_PAPR_HCALL;
+			vcpu->run->flags |= KVM_RUN_NEEDS_COMPLETION;
 			vcpu->arch.hcall_needed = 1;
 			emulated = EMULATE_EXIT_USER;
 			break;

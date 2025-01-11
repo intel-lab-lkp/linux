@@ -10154,6 +10154,8 @@ static void post_kvm_run_save(struct kvm_vcpu *vcpu)
 		kvm_run->flags |= KVM_RUN_X86_SMM;
 	if (is_guest_mode(vcpu))
 		kvm_run->flags |= KVM_RUN_X86_GUEST_MODE;
+	if (vcpu->arch.complete_userspace_io)
+		kvm_run->flags |= KVM_RUN_NEEDS_COMPLETION;
 }
 
 static void update_cr8_intercept(struct kvm_vcpu *vcpu)

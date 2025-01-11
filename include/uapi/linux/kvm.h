@@ -192,6 +192,8 @@ struct kvm_xen_exit {
 /* Flags that describe what fields in emulation_failure hold valid data. */
 #define KVM_INTERNAL_ERROR_EMULATION_FLAG_INSTRUCTION_BYTES (1ULL << 0)
 
+#define KVM_RUN_NEEDS_COMPLETION	(1 << 15)
+
 /*
  * struct kvm_run can be modified by userspace at any time, so KVM must be
  * careful to avoid TOCTOU bugs. In order to protect KVM, HINT_UNSAFE_IN_KVM()
@@ -933,6 +935,7 @@ struct kvm_enable_cap {
 #define KVM_CAP_PRE_FAULT_MEMORY 236
 #define KVM_CAP_X86_APIC_BUS_CYCLES_NS 237
 #define KVM_CAP_X86_GUEST_MODE 238
+#define KVM_CAP_NEEDS_COMPLETION 239
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;

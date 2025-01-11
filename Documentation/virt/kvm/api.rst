@@ -6505,7 +6505,7 @@ local APIC is not used.
 
 	__u16 flags;
 
-More architecture-specific flags detailing state of the VCPU that may
+Common and architecture-specific flags detailing state of the VCPU that may
 affect the device's behavior. Current defined flags::
 
   /* x86, set if the VCPU is in system management mode */
@@ -6518,6 +6518,8 @@ affect the device's behavior. Current defined flags::
   /* arm64, set for KVM_EXIT_DEBUG */
   #define KVM_DEBUG_ARCH_HSR_HIGH_VALID  (1 << 0)
 
+  /* all architectures, set when the exit needs completion (via KVM_RUN) */
+  #define KVM_RUN_NEEDS_COMPLETION  (1 << 15)
 ::
 
 	/* in (pre_kvm_run), out (post_kvm_run) */
@@ -6632,19 +6634,10 @@ requires a guest to interact with host userspace.
 
 .. note::
 
-      For KVM_EXIT_IO, KVM_EXIT_MMIO, KVM_EXIT_OSI, KVM_EXIT_PAPR, KVM_EXIT_XEN,
-      KVM_EXIT_EPR, KVM_EXIT_X86_RDMSR, KVM_EXIT_X86_WRMSR, and KVM_EXIT_HYPERCALL
-      the corresponding operations are complete (and guest state is consistent)
-      only after userspace has re-entered the kernel with KVM_RUN.  The kernel
-      side will first finish incomplete operations and then check for pending
-      signals.
+      For some exits, userspace must re-enter the kernel with KVM_RUN to
+      complete the exit and ensure guest state is consistent.
 
-      The pending state of the operation is not preserved in state which is
-      visible to userspace, thus userspace should ensure that the operation is
-      completed before performing a live migration.  Userspace can re-enter the
-      guest with an unmasked signal pending or with the immediate_exit field set
-      to complete pending operations without allowing any further instructions
-      to be executed.
+      See KVM_CAP_NEEDS_COMPLETION for details.
 
 ::
 
@@ -8239,7 +8232,7 @@ Note: Userspace is responsible for correctly configuring CPUID 0x15, a.k.a. the
 core crystal clock frequency, if a non-zero CPUID 0x15 is exposed to the guest.
 
 7.36 KVM_CAP_X86_GUEST_MODE
-------------------------------
+---------------------------
 
 :Architectures: x86
 :Returns: Informational only, -EINVAL on direct KVM_ENABLE_CAP.
@@ -8251,6 +8244,33 @@ vCPU was executing nested guest code when it exited.
 KVM exits with the register state of either the L1 or L2 guest
 depending on which executed at the time of an exit. Userspace must
 take care to differentiate between these cases.
+
+7.37 KVM_CAP_NEEDS_COMPLETION
+-----------------------------
+
+:Architectures: all
+:Returns: Informational only, -EINVAL on direct KVM_ENABLE_CAP.
+
+The presence of this capability indicates that KVM_RUN will set
+KVM_RUN_NEEDS_COMPLETION in kvm_run.flags if KVM requires userspace to re-enter
+the kernel KVM_RUN to complete the exit.
+
+For select exits, userspace must re-enter the kernel with KVM_RUN to complete
+the corresponding operation, only after which is guest state guaranteed to be
+consistent.  On such a KVM_RUN, the kernel side will first finish incomplete
+operations and then check for pending signals.
+
+The pending state of the operation for such exits is not preserved in state
+which is visible to userspace, thus userspace should ensure that the operation
+is completed before performing state save/restore, e.g. for live migration.
+Userspace can re-enter the guest with an unmasked signal pending or with the
+immediate_exit field set to complete pending operations without allowing any
+further instructions to be executed.
+
+Without KVM_CAP_NEEDS_COMPLETION, KVM_RUN_NEEDS_COMPLETION will never be set
+and userspace must assume that exits of type KVM_EXIT_IO, KVM_EXIT_MMIO,
+KVM_EXIT_OSI, KVM_EXIT_PAPR, KVM_EXIT_XEN, KVM_EXIT_EPR, KVM_EXIT_X86_RDMSR,
+KVM_EXIT_X86_WRMSR, and KVM_EXIT_HYPERCALL require completion.
 
 8. Other capabilities.
 ======================
