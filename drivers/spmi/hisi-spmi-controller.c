@@ -267,7 +267,9 @@ static int spmi_controller_probe(struct platform_device *pdev)
 	struct resource *iores;
 	int ret;
 
-	ctrl = devm_spmi_controller_alloc(&pdev->dev, sizeof(*spmi_controller));
+	ctrl = devm_spmi_controller_alloc(&pdev->dev,
+					  pdev->dev.of_node
+					  sizeof(*spmi_controller));
 	if (IS_ERR(ctrl)) {
 		dev_err(&pdev->dev, "can not allocate spmi_controller data\n");
 		return PTR_ERR(ctrl);

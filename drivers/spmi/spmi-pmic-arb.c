@@ -1674,7 +1674,7 @@ static int spmi_pmic_arb_bus_init(struct platform_device *pdev,
 	int index, ret;
 	int irq;
 
-	ctrl = devm_spmi_controller_alloc(dev, sizeof(*bus));
+	ctrl = devm_spmi_controller_alloc(dev, node, sizeof(*bus));
 	if (IS_ERR(ctrl))
 		return PTR_ERR(ctrl);
 

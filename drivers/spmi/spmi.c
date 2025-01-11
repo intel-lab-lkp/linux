@@ -435,6 +435,7 @@ EXPORT_SYMBOL_GPL(spmi_device_alloc);
 /**
  * spmi_controller_alloc() - Allocate a new SPMI controller
  * @parent:	parent device
+ * @node:	device node to associate with the controller (usually parent->of_node)
  * @size:	size of private data
  *
  * Caller is responsible for either calling spmi_controller_add() to add the
@@ -443,6 +444,7 @@ EXPORT_SYMBOL_GPL(spmi_device_alloc);
  * spmi_controller_get_drvdata()
  */
 struct spmi_controller *spmi_controller_alloc(struct device *parent,
+					      struct device_node *node,
 					      size_t size)
 {
 	struct spmi_controller *ctrl;
@@ -459,7 +461,7 @@ struct spmi_controller *spmi_controller_alloc(struct device *parent,
 	ctrl->dev.type = &spmi_ctrl_type;
 	ctrl->dev.bus = &spmi_bus_type;
 	ctrl->dev.parent = parent;
-	device_set_node(&ctrl->dev, of_fwnode_handle(of_node_get(parent->of_node)));
+	device_set_node(&ctrl->dev, of_fwnode_handle(of_node_get(node)));
 	spmi_controller_set_drvdata(ctrl, &ctrl[1]);
 
 	id = ida_alloc(&ctrl_ida, GFP_KERNEL);

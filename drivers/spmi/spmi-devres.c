@@ -11,7 +11,9 @@ static void devm_spmi_controller_release(struct device *parent, void *res)
 	spmi_controller_put(*(struct spmi_controller **)res);
 }
 
-struct spmi_controller *devm_spmi_controller_alloc(struct device *parent, size_t size)
+struct spmi_controller *devm_spmi_controller_alloc(struct device *parent,
+						   struct device_node *node,
+						   size_t size)
 {
 	struct spmi_controller **ptr, *ctrl;
 
@@ -19,7 +21,7 @@ struct spmi_controller *devm_spmi_controller_alloc(struct device *parent, size_t
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
-	ctrl = spmi_controller_alloc(parent, size);
+	ctrl = spmi_controller_alloc(parent, node, size);
 	if (IS_ERR(ctrl)) {
 		devres_free(ptr);
 		return ctrl;
