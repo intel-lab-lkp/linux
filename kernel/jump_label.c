@@ -363,15 +363,6 @@ void __static_key_deferred_flush(void *key, struct delayed_work *work)
 }
 EXPORT_SYMBOL_GPL(__static_key_deferred_flush);
 
-void jump_label_rate_limit(struct static_key_deferred *key,
-		unsigned long rl)
-{
-	STATIC_KEY_CHECK_USE(key);
-	key->timeout = rl;
-	INIT_DELAYED_WORK(&key->work, jump_label_update_timeout);
-}
-EXPORT_SYMBOL_GPL(jump_label_rate_limit);
-
 static int addr_conflict(struct jump_entry *entry, void *start, void *end)
 {
 	if (jump_entry_code(entry) <= (unsigned long)end &&
