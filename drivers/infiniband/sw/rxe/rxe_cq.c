@@ -88,7 +88,7 @@ int rxe_cq_resize_queue(struct rxe_cq *cq, int cqe,
 int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 {
 	struct ib_event ev;
-	int full;
+	bool full;
 	void *addr;
 	unsigned long flags;
 

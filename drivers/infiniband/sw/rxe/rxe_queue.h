@@ -151,7 +151,7 @@ static inline u32 queue_get_consumer(const struct rxe_queue *q,
 	return cons;
 }
 
-static inline int queue_empty(struct rxe_queue *q, enum queue_type type)
+static inline bool queue_empty(struct rxe_queue *q, enum queue_type type)
 {
 	u32 prod = queue_get_producer(q, type);
 	u32 cons = queue_get_consumer(q, type);
@@ -159,7 +159,7 @@ static inline int queue_empty(struct rxe_queue *q, enum queue_type type)
 	return ((prod - cons) & q->index_mask) == 0;
 }
 
-static inline int queue_full(struct rxe_queue *q, enum queue_type type)
+static inline bool queue_full(struct rxe_queue *q, enum queue_type type)
 {
 	u32 prod = queue_get_producer(q, type);
 	u32 cons = queue_get_consumer(q, type);

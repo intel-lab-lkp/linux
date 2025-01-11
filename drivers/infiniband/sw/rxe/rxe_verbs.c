@@ -863,7 +863,7 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr)
 	struct rxe_send_wqe *send_wqe;
 	unsigned int mask;
 	unsigned int length;
-	int full;
+	bool full;
 
 	err = validate_send_wr(qp, ibwr, &mask, &length);
 	if (err)
@@ -953,7 +953,7 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	unsigned long length;
 	struct rxe_recv_wqe *recv_wqe;
 	int num_sge = ibwr->num_sge;
-	int full;
+	bool full;
 	int err;
 
 	full = queue_full(rq->queue, QUEUE_TYPE_FROM_ULP);
@@ -1177,7 +1177,7 @@ static int rxe_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 {
 	struct rxe_cq *cq = to_rcq(ibcq);
 	int ret = 0;
-	int empty;
+	bool empty;
 	unsigned long irq_flags;
 
 	spin_lock_irqsave(&cq->cq_lock, irq_flags);
