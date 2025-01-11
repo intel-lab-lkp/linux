@@ -77,6 +77,7 @@ struct cdns_dsi {
 	bool link_initialized;
 	bool phy_initialized;
 	struct phy *dphy;
+	struct cdns_dsi_cfg dsi_cfg;
 };
 
 #endif /* !__CDNS_DSI_H__ */
