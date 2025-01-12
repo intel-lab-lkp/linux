@@ -514,60 +514,6 @@ u64 ktime_get_real_fast_ns(void)
 EXPORT_SYMBOL_GPL(ktime_get_real_fast_ns);
 
 /**
- * ktime_get_fast_timestamps: - NMI safe timestamps
- * @snapshot:	Pointer to timestamp storage
- *
- * Stores clock monotonic, boottime and realtime timestamps.
- *
- * Boot time is a racy access on 32bit systems if the sleep time injection
- * happens late during resume and not in timekeeping_resume(). That could
- * be avoided by expanding struct tk_read_base with boot offset for 32bit
- * and adding more overhead to the update. As this is a hard to observe
- * once per resume event which can be filtered with reasonable effort using
- * the accurate mono/real timestamps, it's probably not worth the trouble.
- *
- * Aside of that it might be possible on 32 and 64 bit to observe the
- * following when the sleep time injection happens late:
- *
- * CPU 0				CPU 1
- * timekeeping_resume()
- * ktime_get_fast_timestamps()
- *	mono, real = __ktime_get_real_fast()
- *					inject_sleep_time()
- *					   update boot offset
- *	boot = mono + bootoffset;
- *
- * That means that boot time already has the sleep time adjustment, but
- * real time does not. On the next readout both are in sync again.
- *
- * Preventing this for 64bit is not really feasible without destroying the
- * careful cache layout of the timekeeper because the sequence count and
- * struct tk_read_base would then need two cache lines instead of one.
- *
- * Access to the time keeper clock source is disabled across the innermost
- * steps of suspend/resume. The accessors still work, but the timestamps
- * are frozen until time keeping is resumed which happens very early.
- *
- * For regular suspend/resume there is no observable difference vs. sched
- * clock, but it might affect some of the nasty low level debug printks.
- *
- * OTOH, access to sched clock is not guaranteed across suspend/resume on
- * all systems either so it depends on the hardware in use.
- *
- * If that turns out to be a real problem then this could be mitigated by
- * using sched clock in a similar way as during early boot. But it's not as
- * trivial as on early boot because it needs some careful protection
- * against the clock monotonic timestamp jumping backwards on resume.
- */
-void ktime_get_fast_timestamps(struct ktime_timestamps *snapshot)
-{
-	struct timekeeper *tk = &tk_core.timekeeper;
-
-	snapshot->real = __ktime_get_real_fast(&tk_fast_mono, &snapshot->mono);
-	snapshot->boot = snapshot->mono + ktime_to_ns(data_race(tk->offs_boot));
-}
-
-/**
  * halt_fast_timekeeper - Prevent fast timekeeper from accessing clocksource.
  * @tk: Timekeeper to snapshot.
  *
