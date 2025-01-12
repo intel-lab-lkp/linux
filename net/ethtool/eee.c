@@ -129,7 +129,7 @@ ethnl_set_eee(struct ethnl_req_info *req_info, struct genl_info *info)
 {
 	struct net_device *dev = req_info->dev;
 	struct nlattr **tb = info->attrs;
-	struct ethtool_keee eee = {};
+	struct ethtool_keee eee = { .extack = info->extack };
 	bool mod = false;
 	int ret;
 
