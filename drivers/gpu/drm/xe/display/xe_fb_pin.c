@@ -62,6 +62,47 @@ static void write_dpt(struct xe_bo *bo, struct iosys_map *map, u32 *dpt_ofs,
 	*dpt_ofs = ALIGN(*dpt_ofs, 4096);
 }
 
+static struct xe_bo *xe_alloc_dpt_bo(struct xe_device *xe,
+				     struct xe_tile *tile0, u64 size,
+				     u64 physical_alignment)
+{
+	struct xe_bo *dpt;
+
+	/*
+	 * If DGFX: try VRAM0 only
+	 */
+	if (IS_DGFX(xe)) {
+		dpt = xe_bo_create_pin_map_at_aligned(xe, tile0, NULL,
+						      size, ~0ull,
+						      ttm_bo_type_kernel,
+						      XE_BO_FLAG_VRAM0 |
+						      XE_BO_FLAG_GGTT |
+						      XE_BO_FLAG_PAGETABLE,
+						      physical_alignment);
+	} else {
+		/*
+		 * For IGFX: first try STOLEN. on fail try SYSTEM.
+		 */
+		dpt = xe_bo_create_pin_map_at_aligned(xe, tile0, NULL,
+						      size, ~0ull,
+						      ttm_bo_type_kernel,
+						      XE_BO_FLAG_STOLEN |
+						      XE_BO_FLAG_GGTT |
+						      XE_BO_FLAG_PAGETABLE,
+						      physical_alignment);
+		if (IS_ERR(dpt)) {
+			dpt = xe_bo_create_pin_map_at_aligned(xe, tile0, NULL,
+							      size, ~0ull,
+							      ttm_bo_type_kernel,
+							      XE_BO_FLAG_SYSTEM |
+							      XE_BO_FLAG_GGTT |
+							      XE_BO_FLAG_PAGETABLE,
+							      physical_alignment);
+		}
+	}
+	return dpt;
+}
+
 static int __xe_pin_fb_vma_dpt(const struct intel_framebuffer *fb,
 			       const struct i915_gtt_view *view,
 			       struct i915_vma *vma,
@@ -98,30 +139,8 @@ static int __xe_pin_fb_vma_dpt(const struct intel_framebuffer *fb,
 		plane_count = ARRAY_SIZE(view->rotated.plane);
 	}
 
-	if (IS_DGFX(xe))
-		dpt = xe_bo_create_pin_map_at_aligned(xe, tile0, NULL,
-						      dpt_size, ~0ull,
-						      ttm_bo_type_kernel,
-						      XE_BO_FLAG_VRAM0 |
-						      XE_BO_FLAG_GGTT |
-						      XE_BO_FLAG_PAGETABLE,
-						      physical_alignment);
-	else
-		dpt = xe_bo_create_pin_map_at_aligned(xe, tile0, NULL,
-						      dpt_size,  ~0ull,
-						      ttm_bo_type_kernel,
-						      XE_BO_FLAG_STOLEN |
-						      XE_BO_FLAG_GGTT |
-						      XE_BO_FLAG_PAGETABLE,
-						      physical_alignment);
-	if (IS_ERR(dpt))
-		dpt = xe_bo_create_pin_map_at_aligned(xe, tile0, NULL,
-						      dpt_size,  ~0ull,
-						      ttm_bo_type_kernel,
-						      XE_BO_FLAG_SYSTEM |
-						      XE_BO_FLAG_GGTT |
-						      XE_BO_FLAG_PAGETABLE,
-						      physical_alignment);
+	dpt = xe_alloc_dpt_bo(xe, tile0, dpt_size, physical_alignment);
+
 	if (IS_ERR(dpt))
 		return PTR_ERR(dpt);
 
