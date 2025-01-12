@@ -11,6 +11,7 @@
 	FN(SOCKET_INVALID_STATE)	\
 	FN(SOCKET_RCVBUFF)		\
 	FN(SOCKET_RCV_SHUTDOWN)		\
+	FN(UNIX_DISCONNECT)		\
 	FN(UNIX_INFLIGHT_FD_LIMIT)	\
 	FN(UNIX_SKIP_OOB)		\
 	FN(PKT_TOO_SMALL)		\
@@ -152,6 +153,12 @@ enum skb_drop_reason {
 	SKB_DROP_REASON_SOCKET_RCVBUFF,
 	/** @SKB_DROP_REASON_SOCKET_RCV_SHUTDOWN: socket is shutdown(SHUT_RD) */
 	SKB_DROP_REASON_SOCKET_RCV_SHUTDOWN,
+	/**
+	 * @SKB_DROP_REASON_UNIX_DISCONNECT: recv queue is purged when SOCK_DGRAM
+	 * or SOCK_SEQPACKET socket re-connect()s to another socket or notices
+	 * during send() that the peer has been close()d.
+	 */
+	SKB_DROP_REASON_UNIX_DISCONNECT,
 	/**
 	 * @SKB_DROP_REASON_UNIX_INFLIGHT_FD_LIMIT: too many file descriptors
 	 * are passed via SCM_RIGHTS but not yet received, reaching RLIMIT_NOFILE.
