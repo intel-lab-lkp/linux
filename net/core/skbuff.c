@@ -5539,16 +5539,47 @@ err:
 }
 EXPORT_SYMBOL_GPL(skb_complete_tx_timestamp);
 
+static bool skb_enable_app_tstamp(struct sk_buff *skb, int tstype, bool sw)
+{
+	int flag;
+
+	switch (tstype) {
+	case SCM_TSTAMP_SCHED:
+		flag = SKBTX_SCHED_TSTAMP;
+		break;
+	case SCM_TSTAMP_SND:
+		if (sw)
+			flag = SKBTX_SW_TSTAMP;
+		else
+			flag = SKBTX_HW_TSTAMP;
+		break;
+	case SCM_TSTAMP_ACK:
+		if (TCP_SKB_CB(skb)->txstamp_ack)
+			return true;
+		fallthrough;
+	default:
+		return false;
+	}
+
+	if (skb_shinfo(skb)->tx_flags & flag)
+		return true;
+
+	return false;
+}
+
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     const struct sk_buff *ack_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
-		     struct sock *sk, int tstype)
+		     struct sock *sk, bool sw, int tstype)
 {
 	struct sk_buff *skb;
 	bool tsonly, opt_stats = false;
 	u32 tsflags;
 
 	if (!sk)
+		return;
+
+	if (!skb_enable_app_tstamp(orig_skb, tstype, sw))
 		return;
 
 	tsflags = READ_ONCE(sk->sk_tsflags);
@@ -5596,10 +5627,17 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 }
 EXPORT_SYMBOL_GPL(__skb_tstamp_tx);
 
+void skb_sw_tstamp_tx(struct sk_buff *orig_skb)
+{
+	return __skb_tstamp_tx(orig_skb, NULL, NULL, orig_skb->sk, true,
+			       SCM_TSTAMP_SND);
+}
+EXPORT_SYMBOL_GPL(skb_sw_tstamp_tx);
+
 void skb_tstamp_tx(struct sk_buff *orig_skb,
 		   struct skb_shared_hwtstamps *hwtstamps)
 {
-	return __skb_tstamp_tx(orig_skb, NULL, hwtstamps, orig_skb->sk,
+	return __skb_tstamp_tx(orig_skb, NULL, hwtstamps, orig_skb->sk, false,
 			       SCM_TSTAMP_SND);
 }
 EXPORT_SYMBOL_GPL(skb_tstamp_tx);
