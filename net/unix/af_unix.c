@@ -2216,34 +2216,37 @@ static int queue_oob(struct socket *sock, struct msghdr *msg, struct sock *other
 		     struct scm_cookie *scm, bool fds_sent)
 {
 	struct unix_sock *ousk = unix_sk(other);
+	enum skb_drop_reason reason;
 	struct sk_buff *skb;
-	int err = 0;
+	int err;
 
 	skb = sock_alloc_send_skb(sock->sk, 1, msg->msg_flags & MSG_DONTWAIT, &err);
-
 	if (!skb)
-		return err;
+		goto out;
 
 	err = unix_scm_to_skb(scm, skb, !fds_sent);
 	if (err < 0) {
-		kfree_skb(skb);
-		return err;
+		reason = unix_scm_err_to_reason(err);
+		goto out_free;
 	}
+
 	skb_put(skb, 1);
 	err = skb_copy_datagram_from_iter(skb, 0, &msg->msg_iter, 1);
-
 	if (err) {
-		kfree_skb(skb);
-		return err;
+		reason = SKB_DROP_REASON_SKB_UCOPY_FAULT;
+		goto out_free;
 	}
 
 	unix_state_lock(other);
 
-	if (sock_flag(other, SOCK_DEAD) ||
-	    (other->sk_shutdown & RCV_SHUTDOWN)) {
-		unix_state_unlock(other);
-		kfree_skb(skb);
-		return -EPIPE;
+	if (sock_flag(other, SOCK_DEAD)) {
+		reason = SKB_DROP_REASON_SOCKET_CLOSE;
+		goto out_unlock;
+	}
+
+	if (other->sk_shutdown & RCV_SHUTDOWN) {
+		reason = SKB_DROP_REASON_SOCKET_RCV_SHUTDOWN;
+		goto out_unlock;
 	}
 
 	maybe_add_creds(skb, sock, other);
@@ -2258,6 +2261,14 @@ static int queue_oob(struct socket *sock, struct msghdr *msg, struct sock *other
 	unix_state_unlock(other);
 	other->sk_data_ready(other);
 
+	return 0;
+
+out_unlock:
+	unix_state_unlock(other);
+	err = -EPIPE;
+out_free:
+	kfree_skb_reason(skb, reason);
+out:
 	return err;
 }
 #endif
