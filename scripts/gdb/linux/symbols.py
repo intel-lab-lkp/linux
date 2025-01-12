@@ -89,16 +89,26 @@ lx-symbols command."""
                 return name
         return None
 
+    def _iter_bin_attrs(self, bin_attrs):
+        while True:
+            try:
+                bin_attr = bin_attrs.dereference()
+            except gdb.MemoryError:
+                break
+            if bin_attr == 0:
+                break
+            yield bin_attr
+            bin_attrs += 1
+
     def _section_arguments(self, module, module_addr):
         try:
             sect_attrs = module['sect_attrs'].dereference()
         except gdb.error:
             return str(module_addr)
 
-        attrs = sect_attrs['attrs']
         section_name_to_address = {
-            attrs[n]['battr']['attr']['name'].string(): attrs[n]['address']
-            for n in range(int(sect_attrs['nsections']))}
+            bin_attr['attr']['name'].string(): bin_attr['private']
+            for bin_attr in self._iter_bin_attrs(sect_attrs['grp']['bin_attrs'])}
 
         textaddr = section_name_to_address.get(".text", module_addr)
         args = []
