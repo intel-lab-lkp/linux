@@ -5507,12 +5507,9 @@ static int sol_ipv6_sockopt(struct sock *sk, int optname,
 					      KERNEL_SOCKPTR(optval), *optlen);
 }
 
-static int __bpf_setsockopt(struct sock *sk, int level, int optname,
-			    char *optval, int optlen)
+static int ___bpf_setsockopt(struct sock *sk, int level, int optname,
+			     char *optval, int optlen)
 {
-	if (!sk_fullsock(sk))
-		return -EINVAL;
-
 	if (level == SOL_SOCKET)
 		return sol_socket_sockopt(sk, optname, optval, &optlen, false);
 	else if (IS_ENABLED(CONFIG_INET) && level == SOL_IP)
@@ -5523,6 +5520,15 @@ static int __bpf_setsockopt(struct sock *sk, int level, int optname,
 		return sol_tcp_sockopt(sk, optname, optval, &optlen, false);
 
 	return -EINVAL;
+}
+
+static int __bpf_setsockopt(struct sock *sk, int level, int optname,
+			    char *optval, int optlen)
+{
+	if (!sk_fullsock(sk))
+		return -EINVAL;
+
+	return ___bpf_setsockopt(sk, level, optname, optval, optlen);
 }
 
 static int _bpf_setsockopt(struct sock *sk, int level, int optname,
@@ -5675,7 +5681,16 @@ static const struct bpf_func_proto bpf_sock_addr_getsockopt_proto = {
 BPF_CALL_5(bpf_sock_ops_setsockopt, struct bpf_sock_ops_kern *, bpf_sock,
 	   int, level, int, optname, char *, optval, int, optlen)
 {
-	return _bpf_setsockopt(bpf_sock->sk, level, optname, optval, optlen);
+	struct sock *sk = bpf_sock->sk;
+
+	if (optname != SK_BPF_CB_FLAGS) {
+		if (sk_fullsock(sk))
+			sock_owned_by_me(sk);
+		else if (optname != SK_BPF_CB_FLAGS)
+			return -EINVAL;
+	}
+
+	return ___bpf_setsockopt(sk, level, optname, optval, optlen);
 }
 
 static const struct bpf_func_proto bpf_sock_ops_setsockopt_proto = {
