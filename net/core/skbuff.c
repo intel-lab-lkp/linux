@@ -5602,7 +5602,9 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 
 	if (!sk)
 		return;
-	if (skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
+
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&
+	    skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
 		__skb_tstamp_tx_bpf(orig_skb, sk, tstype);
 
 	if (!skb_enable_app_tstamp(orig_skb, tstype, sw))

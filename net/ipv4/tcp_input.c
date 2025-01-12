@@ -3324,7 +3324,8 @@ static void tcp_ack_tstamp(struct sock *sk, struct sk_buff *skb,
 
 	/* Avoid cache line misses to get skb_shinfo() and shinfo->tx_flags */
 	if (likely(!TCP_SKB_CB(skb)->txstamp_ack &&
-		   !TCP_SKB_CB(skb)->txstamp_ack_bpf))
+		   !(cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&
+		     TCP_SKB_CB(skb)->txstamp_ack_bpf)))
 		return;
 
 	shinfo = skb_shinfo(skb);
