@@ -1328,6 +1328,7 @@ int btmtk_usb_setup(struct hci_dev *hdev)
 	case 0x7668:
 		fwname = FIRMWARE_MT7668;
 		break;
+	case 0x7902:
 	case 0x7922:
 	case 0x7961:
 	case 0x7925:
