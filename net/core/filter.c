@@ -5571,7 +5571,7 @@ done:
 static int _bpf_getsockopt(struct sock *sk, int level, int optname,
 			   char *optval, int optlen)
 {
-	if (sk_fullsock(sk))
+	if (sk_fullsock(sk) && optname != SK_BPF_CB_FLAGS)
 		sock_owned_by_me(sk);
 	return __bpf_getsockopt(sk, level, optname, optval, optlen);
 }
@@ -5776,6 +5776,7 @@ BPF_CALL_5(bpf_sock_ops_getsockopt, struct bpf_sock_ops_kern *, bpf_sock,
 	   int, level, int, optname, char *, optval, int, optlen)
 {
 	if (IS_ENABLED(CONFIG_INET) && level == SOL_TCP &&
+	    bpf_sock->sk->sk_protocol == IPPROTO_TCP &&
 	    optname >= TCP_BPF_SYN && optname <= TCP_BPF_SYN_MAC) {
 		int ret, copy_len = 0;
 		const u8 *start;
@@ -5817,7 +5818,8 @@ BPF_CALL_2(bpf_sock_ops_cb_flags_set, struct bpf_sock_ops_kern *, bpf_sock,
 	struct sock *sk = bpf_sock->sk;
 	int val = argval & BPF_SOCK_OPS_ALL_CB_FLAGS;
 
-	if (!IS_ENABLED(CONFIG_INET) || !sk_fullsock(sk))
+	if (!IS_ENABLED(CONFIG_INET) || !sk_fullsock(sk) ||
+	    sk->sk_protocol != IPPROTO_TCP)
 		return -EINVAL;
 
 	tcp_sk(sk)->bpf_sock_ops_cb_flags = val;
@@ -7625,6 +7627,9 @@ BPF_CALL_4(bpf_sock_ops_load_hdr_opt, struct bpf_sock_ops_kern *, bpf_sock,
 	const u8 *op, *opend, *magic, *search = search_res;
 	u8 search_kind, search_len, copy_len, magic_len;
 	int ret;
+
+	if (bpf_sock->op != SK_BPF_CB_FLAGS)
+		return -EINVAL;
 
 	/* 2 byte is the minimal option len except TCPOPT_NOP and
 	 * TCPOPT_EOL which are useless for the bpf prog to learn
