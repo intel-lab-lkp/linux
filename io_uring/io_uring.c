@@ -143,7 +143,8 @@ struct io_defer_entry {
 
 static bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 					 struct io_uring_task *tctx,
-					 bool cancel_all);
+					 bool cancel_all,
+					 bool force_iopoll);
 
 static void io_queue_sqe(struct io_kiocb *req);
 
@@ -2894,7 +2895,12 @@ static __cold void io_ring_exit_work(struct work_struct *work)
 		if (ctx->flags & IORING_SETUP_DEFER_TASKRUN)
 			io_move_task_work_from_local(ctx);
 
-		while (io_uring_try_cancel_requests(ctx, NULL, true))
+		/*
+		 * Even if SQPOLL thread reaches this path, don't force
+		 * iopoll here, let the io_uring_cancel_generic handle
+		 * it.
+		 */
+		while (io_uring_try_cancel_requests(ctx, NULL, true, false))
 			cond_resched();
 
 		if (ctx->sq_data) {
@@ -3062,7 +3068,8 @@ static __cold bool io_uring_try_cancel_iowq(struct io_ring_ctx *ctx)
 
 static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 						struct io_uring_task *tctx,
-						bool cancel_all)
+						bool cancel_all,
+						bool force_iopoll)
 {
 	struct io_task_cancel cancel = { .tctx = tctx, .all = cancel_all, };
 	enum io_wq_cancel cret;
@@ -3092,7 +3099,7 @@ static __cold bool io_uring_try_cancel_requests(struct io_ring_ctx *ctx,
 
 	/* SQPOLL thread does its own polling */
 	if ((!(ctx->flags & IORING_SETUP_SQPOLL) && cancel_all) ||
-	    (ctx->sq_data && ctx->sq_data->thread == current)) {
+	    force_iopoll) {
 		while (!wq_list_empty(&ctx->iopoll_list)) {
 			io_iopoll_try_reap_events(ctx);
 			ret = true;
@@ -3165,13 +3172,15 @@ __cold void io_uring_cancel_generic(bool cancel_all, struct io_sq_data *sqd)
 					continue;
 				loop |= io_uring_try_cancel_requests(node->ctx,
 							current->io_uring,
-							cancel_all);
+							cancel_all,
+							false);
 			}
 		} else {
 			list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
 				loop |= io_uring_try_cancel_requests(ctx,
 								     current->io_uring,
-								     cancel_all);
+								     cancel_all,
+								     true);
 		}
 
 		if (loop) {
