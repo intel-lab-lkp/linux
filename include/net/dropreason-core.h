@@ -12,6 +12,7 @@
 	FN(SOCKET_RCVBUFF)		\
 	FN(SOCKET_RCV_SHUTDOWN)		\
 	FN(UNIX_INFLIGHT_FD_LIMIT)	\
+	FN(UNIX_SKIP_OOB)		\
 	FN(PKT_TOO_SMALL)		\
 	FN(TCP_CSUM)			\
 	FN(UDP_CSUM)			\
@@ -156,6 +157,11 @@ enum skb_drop_reason {
 	 * are passed via SCM_RIGHTS but not yet received, reaching RLIMIT_NOFILE.
 	 */
 	SKB_DROP_REASON_UNIX_INFLIGHT_FD_LIMIT,
+	/**
+	 * @SKB_DROP_REASON_UNIX_SKIP_OOB: Out-Of-Band data is skipped by
+	 * recv() without MSG_OOB so dropped.
+	 */
+	SKB_DROP_REASON_UNIX_SKIP_OOB,
 	/** @SKB_DROP_REASON_PKT_TOO_SMALL: packet size is too small */
 	SKB_DROP_REASON_PKT_TOO_SMALL,
 	/** @SKB_DROP_REASON_TCP_CSUM: TCP checksum error */
