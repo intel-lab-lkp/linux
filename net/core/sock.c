@@ -958,6 +958,7 @@ void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op)
 	if (sk_is_tcp(sk) && sk_fullsock(sk))
 		sock_ops.is_fullsock = 1;
 	sock_ops.sk = sk;
+	sock_ops.timestamp_used = 1;
 	__cgroup_bpf_run_filter_sock_ops(sk, &sock_ops, CGROUP_SOCK_OPS);
 }
 #endif
