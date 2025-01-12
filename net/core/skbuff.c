@@ -5551,7 +5551,7 @@ static bool skb_enable_app_tstamp(struct sk_buff *skb, int tstype, bool sw)
 		if (sw)
 			flag = SKBTX_SW_TSTAMP;
 		else
-			flag = SKBTX_HW_TSTAMP;
+			flag = __SKBTX_HW_TSTAMP;
 		break;
 	case SCM_TSTAMP_ACK:
 		if (TCP_SKB_CB(skb)->txstamp_ack)
