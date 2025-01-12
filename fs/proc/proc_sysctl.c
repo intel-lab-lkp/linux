@@ -1137,11 +1137,12 @@ static int sysctl_check_table_array(const char *path, const struct ctl_table *ta
 	return err;
 }
 
-static int sysctl_check_table(const char *path, struct ctl_table_header *header)
+static int sysctl_check_table(const char *path, const struct ctl_table *table,
+			      size_t table_size)
 {
-	const struct ctl_table *entry;
+	const struct ctl_table *entry = table;
 	int err = 0;
-	list_for_each_table_entry(entry, header) {
+	for (size_t i = 0 ; i < table_size; ++i, entry++) {
 		if (!entry->procname)
 			err |= sysctl_err(path, entry, "procname is null");
 		if ((entry->proc_handler == proc_dostring) ||
@@ -1172,6 +1173,16 @@ static int sysctl_check_table(const char *path, struct ctl_table_header *header)
 	}
 	return err;
 }
+
+#ifdef CONFIG_KUNIT
+int sysctl_check_table_test_helper_sz(const char *path,
+				      const struct ctl_table *table,
+				      size_t table_size)
+{
+	return sysctl_check_table(path, table, table_size);
+}
+EXPORT_SYMBOL(sysctl_check_table_test_helper_sz);
+#endif /* CONFIG_KUNIT */
 
 static struct ctl_table_header *new_links(struct ctl_dir *dir, struct ctl_table_header *head)
 {
@@ -1372,6 +1383,9 @@ struct ctl_table_header *__register_sysctl_table(
 	struct ctl_dir *dir;
 	struct ctl_node *node;
 
+	if (sysctl_check_table(path, table, table_size))
+		return NULL;
+
 	header = kzalloc(sizeof(struct ctl_table_header) +
 			 sizeof(struct ctl_node)*table_size, GFP_KERNEL_ACCOUNT);
 	if (!header)
@@ -1379,8 +1393,6 @@ struct ctl_table_header *__register_sysctl_table(
 
 	node = (struct ctl_node *)(header + 1);
 	init_header(header, root, set, node, table, table_size);
-	if (sysctl_check_table(path, header))
-		goto fail;
 
 	spin_lock(&sysctl_lock);
 	dir = &set->dir;

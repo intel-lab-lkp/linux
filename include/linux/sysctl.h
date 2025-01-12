@@ -247,6 +247,14 @@ extern int unaligned_enabled;
 extern int unaligned_dump_stack;
 extern int no_unaligned_warning;
 
+#ifdef CONFIG_KUNIT
+int sysctl_check_table_test_helper_sz(const char *path,
+				      const struct ctl_table *table,
+				      size_t table_size);
+#define sysctl_check_table_test_helper(path, table)	\
+	sysctl_check_table_test_helper_sz(path, table, ARRAY_SIZE(table))
+#endif /* CONFIG_KUNIT */
+
 #else /* CONFIG_SYSCTL */
 
 static inline void register_sysctl_init(const char *path, const struct ctl_table *table)
