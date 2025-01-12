@@ -477,7 +477,7 @@ void tcp_init_sock(struct sock *sk)
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
-static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
+static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc, u32 first_write_seq)
 {
 	struct sk_buff *skb = tcp_write_queue_tail(sk);
 	u32 tsflags = sockc->tsflags;
@@ -500,6 +500,7 @@ static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 		tcb->txstamp_ack_bpf = 1;
 		shinfo->tx_flags |= SKBTX_BPF;
 		shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
+		shinfo->tskey_bpf = first_write_seq;
 	}
 }
 
@@ -1067,10 +1068,15 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 	int flags, err, copied = 0;
 	int mss_now = 0, size_goal, copied_syn = 0;
 	int process_backlog = 0;
+	u32 first_write_seq = 0;
 	int zc = 0;
 	long timeo;
 
 	flags = msg->msg_flags;
+	if (SK_BPF_CB_FLAG_TEST(sk, SK_BPF_CB_TX_TIMESTAMPING)) {
+		first_write_seq = tp->write_seq;
+		bpf_skops_tx_timestamping(sk, NULL, BPF_SOCK_OPS_TS_TCP_SND_CB);
+	}
 
 	if ((flags & MSG_ZEROCOPY) && size) {
 		if (msg->msg_ubuf) {
@@ -1331,7 +1337,7 @@ wait_for_space:
 
 out:
 	if (copied) {
-		tcp_tx_timestamp(sk, &sockc);
+		tcp_tx_timestamp(sk, &sockc, first_write_seq);
 		tcp_push(sk, flags, mss_now, tp->nonagle, size_goal);
 	}
 out_nopush:

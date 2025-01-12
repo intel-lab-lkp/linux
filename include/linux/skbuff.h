@@ -609,6 +609,8 @@ struct skb_shared_info {
 	};
 	unsigned int	gso_type;
 	u32		tskey;
+	/* For TCP, it records the initial write_seq when sendmsg is called */
+	u32		tskey_bpf;
 
 	/*
 	 * Warning : all fields before dataref are cleared in __alloc_skb()
