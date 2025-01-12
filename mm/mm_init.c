@@ -1567,8 +1567,9 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 		unsigned long size = zone->spanned_pages;
 
 		/*
-		 * Initialize zone->managed_pages as 0 , it will be reset
-		 * when memblock allocator frees pages into buddy system.
+		 * Initialize zone->managed_pages to zone->present_pages as a first rough
+		 * estimate. memblock_free_all() will reset zone->managed_pages to 0, and
+		 * calculate the actual managed pages as they are freed to the buddy.
 		 */
 		zone_init_internals(zone, j, nid, zone->present_pages);
 
