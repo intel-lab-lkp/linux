@@ -492,7 +492,7 @@ static int efivarfs_pm_notify(struct notifier_block *nb, unsigned long action,
 	/* O_NOATIME is required to prevent oops on NULL mnt */
 	file = kernel_file_open(&path, O_RDONLY | O_DIRECTORY | O_NOATIME,
 				current_cred());
-	if (!file)
+	if (IS_ERR(file))
 		return NOTIFY_DONE;
 
 	rescan_done = true;
