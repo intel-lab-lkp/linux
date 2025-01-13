@@ -917,6 +917,15 @@ static ssize_t bypass_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(bypass);
 
+static ssize_t power_budget_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct regulator_dev *rdev = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d\n", rdev->pw_available_mW);
+}
+static DEVICE_ATTR_RO(power_budget);
+
 #define REGULATOR_ERROR_ATTR(name, bit)							\
 	static ssize_t name##_show(struct device *dev, struct device_attribute *attr,	\
 				   char *buf)						\
@@ -1148,6 +1157,10 @@ static void print_constraints_debug(struct regulator_dev *rdev)
 		count += scnprintf(buf + count, len - count, "idle ");
 	if (constraints->valid_modes_mask & REGULATOR_MODE_STANDBY)
 		count += scnprintf(buf + count, len - count, "standby ");
+
+	if (constraints->pw_budget_mW)
+		count += scnprintf(buf + count, len - count, "%d mW budget",
+				   constraints->pw_budget_mW);
 
 	if (!count)
 		count = scnprintf(buf, len, "no parameters");
@@ -1626,6 +1639,13 @@ static int set_machine_constraints(struct regulator_dev *rdev)
 	} else if (rdev->desc->off_on_delay) {
 		rdev->last_off = ktime_get();
 	}
+
+	if (rdev->constraints->pw_budget_mW)
+		rdev->pw_available_mW = rdev->constraints->pw_budget_mW;
+	else if (rdev->supply)
+		rdev->pw_available_mW = regulator_get_power_budget(rdev->supply);
+	else
+		rdev->pw_available_mW = INT_MAX;
 
 	print_constraints(rdev);
 	return 0;
@@ -4602,6 +4622,71 @@ int regulator_get_current_limit(struct regulator *regulator)
 EXPORT_SYMBOL_GPL(regulator_get_current_limit);
 
 /**
+ * regulator_get_power_budget - get regulator total power budget
+ * @regulator: regulator source
+ *
+ * Return: Power budget of the regulator in mW.
+ */
+int regulator_get_power_budget(struct regulator *regulator)
+{
+	return regulator->rdev->pw_available_mW;
+}
+EXPORT_SYMBOL_GPL(regulator_get_power_budget);
+
+/**
+ * regulator_request_power_budget - request power budget on a regulator
+ * @regulator: regulator source
+ * @pw_req: Power requested
+ *
+ * Return: 0 on success or a negative error number on failure.
+ */
+int regulator_request_power_budget(struct regulator *regulator,
+				   unsigned int pw_req)
+{
+	struct regulator_dev *rdev = regulator->rdev;
+	int ret = 0;
+
+	regulator_lock(rdev);
+	if (rdev->supply) {
+		ret = regulator_request_power_budget(rdev->supply, pw_req);
+		if (ret < 0)
+			goto out;
+	}
+	if (pw_req > rdev->pw_available_mW) {
+		rdev_dbg(rdev, "power requested %d mW out of budget %d mW",
+			 pw_req, rdev->pw_available_mW);
+		ret = -ERANGE;
+		goto out;
+	}
+
+	rdev->pw_available_mW -= pw_req;
+out:
+	regulator_unlock(rdev);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(regulator_request_power_budget);
+
+/**
+ * regulator_free_power_budget - free power budget on a regulator
+ * @regulator: regulator source
+ * @pw: Power to be released.
+ *
+ * Return: Power budget of the regulator in mW.
+ */
+void regulator_free_power_budget(struct regulator *regulator,
+				 unsigned int pw)
+{
+	struct regulator_dev *rdev = regulator->rdev;
+
+	regulator_lock(rdev);
+	if (rdev->supply)
+		regulator_free_power_budget(rdev->supply, pw);
+	rdev->pw_available_mW += pw;
+	regulator_unlock(rdev);
+}
+EXPORT_SYMBOL_GPL(regulator_free_power_budget);
+
+/**
  * regulator_set_mode - set regulator operating mode
  * @regulator: regulator source
  * @mode: operating mode - one of the REGULATOR_MODE constants
@@ -5239,6 +5324,7 @@ static struct attribute *regulator_dev_attrs[] = {
 	&dev_attr_suspend_standby_mode.attr,
 	&dev_attr_suspend_mem_mode.attr,
 	&dev_attr_suspend_disk_mode.attr,
+	&dev_attr_power_budget.attr,
 	NULL
 };
 
@@ -5319,6 +5405,9 @@ static umode_t regulator_attr_is_visible(struct kobject *kobj,
 	    attr == &dev_attr_suspend_mem_mode.attr ||
 	    attr == &dev_attr_suspend_disk_mode.attr)
 		return ops->set_suspend_mode ? mode : 0;
+
+	if (attr == &dev_attr_power_budget.attr)
+		return rdev->pw_available_mW != INT_MAX ? mode : 0;
 
 	return mode;
 }
