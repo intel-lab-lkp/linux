@@ -355,6 +355,10 @@ struct intel_display {
 	} cdclk;
 
 	struct {
+		struct intel_global_obj obj;
+	} cmtg;
+
+	struct {
 		struct drm_property_blob *glk_linear_degamma_lut;
 	} color;
 
