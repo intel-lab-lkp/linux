@@ -1448,6 +1448,9 @@ unsigned int sysctl_numa_balancing_scan_delay = 1000;
 /* The page with hint page fault latency < threshold in ms is considered hot */
 unsigned int sysctl_numa_balancing_hot_threshold = MSEC_PER_SEC;
 
+/* Working cpumask for task_numa_migrate() */
+static DEFINE_PER_CPU(cpumask_var_t, numa_balance_mask);
+
 struct numa_group {
 	refcount_t refcount;
 
@@ -2047,6 +2050,7 @@ struct numa_stats {
 struct task_numa_env {
 	struct task_struct *p;
 
+	struct cpumask *cpus;
 	int src_cpu, src_nid;
 	int dst_cpu, dst_nid;
 	int imb_numa_nr;
@@ -2121,8 +2125,10 @@ static void update_numa_stats(struct task_numa_env *env,
 	memset(ns, 0, sizeof(*ns));
 	ns->idle_cpu = -1;
 
+	cpumask_copy(env->cpus, cpumask_of_node(nid));
+
 	rcu_read_lock();
-	for_each_cpu(cpu, cpumask_of_node(nid)) {
+	for_each_cpu(cpu, env->cpus) {
 		struct rq *rq = cpu_rq(cpu);
 
 		ns->load += cpu_load(rq);
@@ -2144,7 +2150,7 @@ static void update_numa_stats(struct task_numa_env *env,
 	}
 	rcu_read_unlock();
 
-	ns->weight = cpumask_weight(cpumask_of_node(nid));
+	ns->weight = cpumask_weight(env->cpus);
 
 	ns->node_type = numa_classify(env->imbalance_pct, ns);
 
@@ -2163,11 +2169,9 @@ static void task_numa_assign(struct task_numa_env *env,
 		int start = env->dst_cpu;
 
 		/* Find alternative idle CPU. */
-		for_each_cpu_wrap(cpu, cpumask_of_node(env->dst_nid), start + 1) {
-			if (cpu == env->best_cpu || !idle_cpu(cpu) ||
-			    !cpumask_test_cpu(cpu, env->p->cpus_ptr)) {
+		for_each_cpu_wrap(cpu, env->cpus, start + 1) {
+			if (cpu == env->best_cpu || !idle_cpu(cpu))
 				continue;
-			}
 
 			env->dst_cpu = cpu;
 			rq = cpu_rq(env->dst_cpu);
@@ -2434,6 +2438,8 @@ static void task_numa_find_cpu(struct task_numa_env *env,
 	bool maymove = false;
 	int cpu;
 
+	cpumask_and(env->cpus, cpumask_of_node(env->dst_nid), env->p->cpus_ptr);
+
 	/*
 	 * If dst node has spare capacity, then check if there is an
 	 * imbalance that would be overruled by the load balancer.
@@ -2475,11 +2481,7 @@ static void task_numa_find_cpu(struct task_numa_env *env,
 		maymove = !load_too_imbalanced(src_load, dst_load, env);
 	}
 
-	for_each_cpu(cpu, cpumask_of_node(env->dst_nid)) {
-		/* Skip this CPU if the source task cannot migrate */
-		if (!cpumask_test_cpu(cpu, env->p->cpus_ptr))
-			continue;
-
+	for_each_cpu(cpu, env->cpus) {
 		env->dst_cpu = cpu;
 		if (task_numa_compare(env, taskimp, groupimp, maymove))
 			break;
@@ -2534,6 +2536,12 @@ static void task_numa_migrate(struct task_struct *p)
 		return;
 	}
 
+	/*
+	 * per-cpu numa_balance_mask and rq->rd->span usage
+	 */
+	preempt_disable();
+
+	env.cpus = this_cpu_cpumask_var_ptr(numa_balance_mask);
 	env.dst_nid = p->numa_preferred_nid;
 	dist = env.dist = node_distance(env.src_nid, env.dst_nid);
 	taskweight = task_weight(p, env.src_nid, dist);
@@ -2578,6 +2586,8 @@ static void task_numa_migrate(struct task_struct *p)
 			task_numa_find_cpu(&env, taskimp, groupimp);
 		}
 	}
+
+	preempt_enable();
 
 	/*
 	 * If the task is part of a workload that spans multiple NUMA nodes,
@@ -13707,6 +13717,10 @@ __init void init_sched_fair_class(void)
 		zalloc_cpumask_var_node(&per_cpu(select_rq_mask,    i), GFP_KERNEL, cpu_to_node(i));
 		zalloc_cpumask_var_node(&per_cpu(should_we_balance_tmpmask, i),
 					GFP_KERNEL, cpu_to_node(i));
+
+#ifdef CONFIG_NUMA_BALANCING
+		zalloc_cpumask_var_node(&per_cpu(numa_balance_mask, i), GFP_KERNEL, cpu_to_node(i));
+#endif
 
 #ifdef CONFIG_CFS_BANDWIDTH
 		INIT_CSD(&cpu_rq(i)->cfsb_csd, __cfsb_csd_unthrottle, cpu_rq(i));
