@@ -17,6 +17,9 @@ struct syscall_info {
 	struct seccomp_data	data;
 };
 
+/* sizeof() the first published struct ptrace_syscall_info */
+#define PTRACE_SYSCALL_INFO_SIZE_VER0	84
+
 extern int ptrace_access_vm(struct task_struct *tsk, unsigned long addr,
 			    void *buf, int len, unsigned int gup_flags);
 
