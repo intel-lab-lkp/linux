@@ -24,7 +24,10 @@ snd-soc-meson-codec-glue-y := meson-codec-glue.o
 snd-soc-meson-gx-sound-card-y := gx-card.o
 snd-soc-meson-g12a-toacodec-y := g12a-toacodec.o
 snd-soc-meson-g12a-tohdmitx-y := g12a-tohdmitx.o
+snd-soc-meson-s4-padout-objs := s4-pad-out-control.o
+snd-soc-meson-s4-tocodec-control-objs := s4-tocodec-control.o
 snd-soc-meson-t9015-y := t9015.o
+
 
 obj-$(CONFIG_SND_MESON_AIU) += snd-soc-meson-aiu.o
 obj-$(CONFIG_SND_MESON_AXG_FIFO) += snd-soc-meson-axg-fifo.o
@@ -43,4 +46,7 @@ obj-$(CONFIG_SND_MESON_CODEC_GLUE) += snd-soc-meson-codec-glue.o
 obj-$(CONFIG_SND_MESON_GX_SOUND_CARD) += snd-soc-meson-gx-sound-card.o
 obj-$(CONFIG_SND_MESON_G12A_TOACODEC) += snd-soc-meson-g12a-toacodec.o
 obj-$(CONFIG_SND_MESON_G12A_TOHDMITX) += snd-soc-meson-g12a-tohdmitx.o
+obj-$(CONFIG_SND_SOC_MESON_PAD_OUT) += snd-soc-meson-s4-padout.o
+obj-$(CONFIG_SND_SOC_MESON_TOCODEC_CONTROL) += snd-soc-meson-s4-tocodec-control.o
 obj-$(CONFIG_SND_SOC_MESON_T9015) += snd-soc-meson-t9015.o
+

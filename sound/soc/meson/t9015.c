@@ -89,10 +89,7 @@ static struct snd_soc_dai_driver t9015_dai = {
 		.channels_min = 1,
 		.channels_max = 2,
 		.rates = SNDRV_PCM_RATE_8000_96000,
-		.formats = (SNDRV_PCM_FMTBIT_S8 |
-			    SNDRV_PCM_FMTBIT_S16_LE |
-			    SNDRV_PCM_FMTBIT_S20_LE |
-			    SNDRV_PCM_FMTBIT_S24_LE),
+		.formats = (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S32_LE),
 	},
 	.ops = &t9015_dai_ops,
 };
