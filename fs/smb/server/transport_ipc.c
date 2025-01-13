@@ -242,7 +242,7 @@ static void ipc_update_last_active(void)
 static struct ksmbd_ipc_msg *ipc_msg_alloc(size_t sz)
 {
 	struct ksmbd_ipc_msg *msg;
-	size_t msg_sz = sz + sizeof(struct ksmbd_ipc_msg);
+	size_t msg_sz = size_add(sz, sizeof(struct ksmbd_ipc_msg));
 
 	msg = kvzalloc(msg_sz, KSMBD_DEFAULT_GFP);
 	if (msg)
@@ -626,8 +626,8 @@ ksmbd_ipc_spnego_authen_request(const char *spnego_blob, int blob_len)
 	struct ksmbd_spnego_authen_request *req;
 	struct ksmbd_spnego_authen_response *resp;
 
-	msg = ipc_msg_alloc(sizeof(struct ksmbd_spnego_authen_request) +
-			blob_len + 1);
+	msg = ipc_msg_alloc(size_add(sizeof(struct ksmbd_spnego_authen_request) + 1,
+				     blob_len));
 	if (!msg)
 		return NULL;
 
@@ -805,7 +805,8 @@ struct ksmbd_rpc_command *ksmbd_rpc_write(struct ksmbd_session *sess, int handle
 	struct ksmbd_rpc_command *req;
 	struct ksmbd_rpc_command *resp;
 
-	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz + 1);
+	msg = ipc_msg_alloc(size_add(sizeof(struct ksmbd_rpc_command) + 1,
+				     payload_sz));
 	if (!msg)
 		return NULL;
 
@@ -853,7 +854,7 @@ struct ksmbd_rpc_command *ksmbd_rpc_ioctl(struct ksmbd_session *sess, int handle
 	struct ksmbd_rpc_command *req;
 	struct ksmbd_rpc_command *resp;
 
-	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz + 1);
+	msg = ipc_msg_alloc(size_add(sizeof(struct ksmbd_rpc_command) + 1, payload_sz));
 	if (!msg)
 		return NULL;
 
@@ -878,7 +879,7 @@ struct ksmbd_rpc_command *ksmbd_rpc_rap(struct ksmbd_session *sess, void *payloa
 	struct ksmbd_rpc_command *req;
 	struct ksmbd_rpc_command *resp;
 
-	msg = ipc_msg_alloc(sizeof(struct ksmbd_rpc_command) + payload_sz + 1);
+	msg = ipc_msg_alloc(size_add(sizeof(struct ksmbd_rpc_command) + 1, payload_sz));
 	if (!msg)
 		return NULL;
 
