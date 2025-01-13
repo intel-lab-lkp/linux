@@ -2487,7 +2487,8 @@ void delayed_work_timer_fn(struct timer_list *t)
 EXPORT_SYMBOL(delayed_work_timer_fn);
 
 static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
-				struct delayed_work *dwork, unsigned long delay)
+				struct delayed_work *dwork, unsigned long delay,
+				bool offline_safe)
 {
 	struct timer_list *timer = &dwork->timer;
 	struct work_struct *work = &dwork->work;
@@ -2521,8 +2522,22 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	} else {
 		if (likely(cpu == WORK_CPU_UNBOUND))
 			add_timer_global(timer);
-		else
+		else if (likely(!offline_safe))
 			add_timer_on(timer, cpu);
+		else {	/* offline_safe */
+			if (unlikely(!cpu_online(cpu)))
+				/* cpu is already offline*/
+				add_timer_global(timer);
+			else if (cpus_read_trylock()) {
+				if (likely(cpu_online(cpu)))
+					add_timer_on(timer, cpu);
+				else
+					add_timer_global(timer);
+				cpus_read_unlock();
+			} else
+				/* could not get hotplug lock*/
+				add_timer_global(timer);
+		}
 	}
 }
 
@@ -2549,7 +2564,7 @@ bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work)) &&
 	    !clear_pending_if_disabled(work)) {
-		__queue_delayed_work(cpu, wq, dwork, delay);
+		__queue_delayed_work(cpu, wq, dwork, delay, false);
 		ret = true;
 	}
 
@@ -2557,6 +2572,50 @@ bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 	return ret;
 }
 EXPORT_SYMBOL(queue_delayed_work_on);
+
+/**
+ * queue_delayed_work_on_offline_safe - queue work on specific online CPU after
+ *					delay,
+ *
+ * @cpu: CPU number to execute work on
+ * @wq: workqueue to use
+ * @dwork: work to queue
+ * @delay: number of jiffies to wait before queueing
+ *
+ * same as queue_delayed_work_on, but checks and ensures that specified @cpu
+ * is online. If @cpu is found to be offline or if its online status can't
+ * be confirmed queue @dwork on any CPU.
+ * cpus_read_trylock is used to ensure @cpu remains online, but we don't block
+ * if hptplug lock can't be taken. So there is good chance that even when
+ * specified @cpu was online, we queued @dwork to some other CPU, because
+ * cpu_read_trylock returned failure. On the plus side this interface
+ * makes sure that we don't endup putting @dwork on offlined @cpu and
+ * thus possibly losing it forever.
+ *
+ * Return: %false if @work was already on a queue, %true otherwise.  If
+ * @delay is zero and @dwork is idle, it will be scheduled for immediate
+ * execution.
+ */
+bool queue_delayed_work_on_offline_safe(int cpu, struct workqueue_struct *wq,
+			   struct delayed_work *dwork, unsigned long delay)
+{
+	struct work_struct *work = &dwork->work;
+	bool ret = false;
+	unsigned long irq_flags;
+
+	/* read the comment in __queue_work() */
+	local_irq_save(irq_flags);
+
+	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work)) &&
+	    !clear_pending_if_disabled(work)) {
+		__queue_delayed_work(cpu, wq, dwork, delay, true);
+		ret = true;
+	}
+
+	local_irq_restore(irq_flags);
+	return ret;
+}
+EXPORT_SYMBOL(queue_delayed_work_on_offline_safe);
 
 /**
  * mod_delayed_work_on - modify delay of or queue a delayed work on specific CPU
@@ -2585,7 +2644,7 @@ bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 	ret = work_grab_pending(&dwork->work, WORK_CANCEL_DELAYED, &irq_flags);
 
 	if (!clear_pending_if_disabled(&dwork->work))
-		__queue_delayed_work(cpu, wq, dwork, delay);
+		__queue_delayed_work(cpu, wq, dwork, delay, false);
 
 	local_irq_restore(irq_flags);
 	return ret;
