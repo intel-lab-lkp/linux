@@ -1271,8 +1271,13 @@ again:
 	}
 
 	ret = copyfd_io(fd_in, fd, 1, 0, &winfo);
-	if (ret)
+	if (ret) {
+		close(fd);
+		if (cfg_input)
+			close(fd_in);
+		freeaddrinfo(peer);
 		return ret;
+	}
 
 	if (cfg_truncate > 0) {
 		xdisconnect(fd, peer->ai_addrlen);
@@ -1291,6 +1296,7 @@ again:
 		goto again;
 	} else {
 		close(fd);
+		freeaddrinfo(peer);
 	}
 
 	return 0;
