@@ -1279,6 +1279,20 @@ static int cppc_set_reg_val(int cpu, enum cppc_regs reg_idx, u64 val)
 	return cpc_write(cpu, reg, val);
 }
 
+#define CPPC_REG_VAL_READ(reg_name, reg_idx)		\
+int cppc_get_##reg_name(int cpu, u64 *val)		\
+{							\
+	return cppc_get_reg_val(cpu, reg_idx, val);	\
+}							\
+EXPORT_SYMBOL_GPL(cppc_get_##reg_name)
+
+#define CPPC_REG_VAL_WRITE(reg_name, reg_idx)		\
+int cppc_set_##reg_name(int cpu, u64 val)		\
+{							\
+	return cppc_set_reg_val(cpu, reg_idx, val);	\
+}							\
+EXPORT_SYMBOL_GPL(cppc_set_##reg_name)
+
 /**
  * cppc_get_desired_perf - Get the desired performance register value.
  * @cpunum: CPU from which to get desired performance.
