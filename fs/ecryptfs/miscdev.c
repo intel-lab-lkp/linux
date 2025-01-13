@@ -325,7 +325,7 @@ static int ecryptfs_miscdev_response(struct ecryptfs_daemon *daemon, char *data,
 	struct ecryptfs_message *msg = (struct ecryptfs_message *)data;
 	int rc;
 
-	if ((sizeof(*msg) + msg->data_len) != data_size) {
+	if (struct_size(msg, data, msg->data_len) != data_size) {
 		printk(KERN_WARNING "%s: (sizeof(*msg) + msg->data_len) = "
 		       "[%zd]; data_size = [%zd]. Invalid packet.\n", __func__,
 		       (sizeof(*msg) + msg->data_len), data_size);
