@@ -1292,6 +1292,7 @@ static const struct mtk_hdmi_ver_conf mtk_hdmi_conf_v2 = {
 	.codec_ops = &mtk_hdmi_v2_audio_codec_ops,
 	.mtk_hdmi_clock_names = mtk_hdmi_v2_clk_names,
 	.num_clocks = MTK_HDMI_V2_CLK_COUNT,
+	.interlace_allowed = true,
 };
 
 static const struct mtk_hdmi_conf mtk_hdmi_conf_mt8188 = {
