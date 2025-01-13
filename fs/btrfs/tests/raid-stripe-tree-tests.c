@@ -315,7 +315,7 @@ static int test_delete_two_extents(struct btrfs_trans_handle *trans)
 	ret = btrfs_get_raid_extent_offset(fs_info, logical1, &len1, map_type,
 					   0, &io_stripe);
 	if (ret != -ENODATA) {
-		test_err("lookup of RAID extent [%llu, %llu] suceeded, should fail\n",
+		test_err("lookup of RAID extent [%llu, %llu] succeeded, should fail\n",
 			 logical1, len1);
 		goto out;
 	}
@@ -323,7 +323,7 @@ static int test_delete_two_extents(struct btrfs_trans_handle *trans)
 	ret = btrfs_get_raid_extent_offset(fs_info, logical2, &len2, map_type,
 					   0, &io_stripe);
 	if (ret != -ENODATA) {
-		test_err("lookup of RAID extent [%llu, %llu] suceeded, should fail\n",
+		test_err("lookup of RAID extent [%llu, %llu] succeeded, should fail\n",
 			 logical2, len2);
 		goto out;
 	}
