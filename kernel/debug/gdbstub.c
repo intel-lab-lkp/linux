@@ -39,15 +39,14 @@
 #define KGDB_MAX_THREAD_QUERY 17
 
 /* Our I/O buffers. */
-static char			remcom_in_buffer[BUFMAX];
-static char			remcom_out_buffer[BUFMAX];
-static int			gdbstub_use_prev_in_buf;
-static int			gdbstub_prev_in_buf_pos;
+static char remcom_in_buffer[BUFMAX];
+static char remcom_out_buffer[BUFMAX];
+static int gdbstub_use_prev_in_buf;
+static int gdbstub_prev_in_buf_pos;
 
 /* Storage for the registers, in GDB format. */
-static unsigned long		gdb_regs[(NUMREGBYTES +
-					sizeof(unsigned long) - 1) /
-					sizeof(unsigned long)];
+static unsigned long gdb_regs[(NUMREGBYTES + sizeof(unsigned long) - 1) /
+			      sizeof(unsigned long)];
 
 /*
  * GDB remote protocol parser:
@@ -257,6 +256,49 @@ char *kgdb_mem2hex(char *mem, char *buf, int count)
 	return buf;
 }
 
+/**
+ * Convert memory to binary format for GDB remote protocol transmission,
+ * escaping special characters ($, #, *, and }) using the `}` character as an escape.
+ *
+ * The `$` (seven repeats), `#`(six repeats), `*`(three run-length), and `}`
+ * characters are considered special because they have
+ * specific meanings in the GDB remote protocol. To avoid conflicts, these
+ * characters are escaped by prefixing them with the `}` character and then XORing
+ * the original character with 0x20.
+ *
+ * Examples:
+ *   - `0x7d` (ASCII '}') is transmitted as `0x7d 0x5d`
+ *   - `0x23` (ASCII '#') is transmitted as `0x7d 0x43`
+ */
+char *kgdb_mem2ebin(char *mem, char *buf, int count)
+{
+	char *tmp;
+	int err;
+
+	/* We use the upper half of buf as an intermediate buffer
+	 *	for the raw memory copy.
+	 */
+	tmp = buf + count;
+
+	err = copy_from_kernel_nofault(tmp, mem, count);
+	if (err)
+		return NULL;
+	while (count > 0) {
+		unsigned char c = *tmp;
+
+		if (c == '}' || c == '#' || c == '*' || c == '#') {
+			*buf++ = '}';
+			*buf++ = c ^ 0x20;
+		} else {
+			*buf++ = c;
+		}
+		count -= 1;
+		tmp += 1;
+	}
+
+	return buf;
+}
+
 /*
  * Convert the hex array pointed to by buf into binary to be placed in
  * mem.  Return a pointer to the character AFTER the last byte
@@ -400,7 +442,7 @@ static void error_packet(char *pkt, int error)
  * remapped to negative TIDs.
  */
 
-#define BUF_THREAD_ID_SIZE	8
+#define BUF_THREAD_ID_SIZE 8
 
 static char *pack_threadid(char *pkt, unsigned char *id)
 {
@@ -453,7 +495,6 @@ static struct task_struct *getthread(struct pt_regs *regs, int tid)
 	 */
 	return find_task_by_pid_ns(tid, &init_pid_ns);
 }
-
 
 /*
  * Remap normal tasks to their real PID,
@@ -560,7 +601,7 @@ static void gdb_cmd_memread(struct kgdb_state *ks)
 	char *err;
 
 	if (kgdb_hex2long(&ptr, &addr) > 0 && *ptr++ == ',' &&
-					kgdb_hex2long(&ptr, &length) > 0) {
+	    kgdb_hex2long(&ptr, &length) > 0) {
 		err = kgdb_mem2hex((char *)addr, remcom_out_buffer, length);
 		if (!err)
 			error_packet(remcom_out_buffer, -EINVAL);
@@ -615,8 +656,7 @@ static void gdb_cmd_reg_set(struct kgdb_state *ks)
 	int i = 0;
 
 	kgdb_hex2long(&ptr, &regnum);
-	if (*ptr++ != '=' ||
-	    !(!kgdb_usethread || kgdb_usethread == current) ||
+	if (*ptr++ != '=' || !(!kgdb_usethread || kgdb_usethread == current) ||
 	    !dbg_get_reg(regnum, gdb_regs, ks->linux_regs)) {
 		error_packet(remcom_out_buffer, -EINVAL);
 		return;
@@ -756,14 +796,14 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 			break;
 		}
 		if ((int)ks->threadid > 0) {
-			kgdb_mem2hex(getthread(ks->linux_regs,
-					ks->threadid)->comm,
-					remcom_out_buffer, 16);
+			kgdb_mem2hex(
+				getthread(ks->linux_regs, ks->threadid)->comm,
+				remcom_out_buffer, 16);
 		} else {
 			static char tmpstr[23 + BUF_THREAD_ID_SIZE];
 
 			sprintf(tmpstr, "shadowCPU%d",
-					(int)(-ks->threadid - 2));
+				(int)(-ks->threadid - 2));
 			kgdb_mem2hex(tmpstr, remcom_out_buffer, strlen(tmpstr));
 		}
 		break;
@@ -776,8 +816,8 @@ static void gdb_cmd_query(struct kgdb_state *ks)
 				strcpy(remcom_out_buffer, "E01");
 				break;
 			}
-			kgdb_hex2mem(remcom_in_buffer + 6,
-				     remcom_out_buffer, len);
+			kgdb_hex2mem(remcom_in_buffer + 6, remcom_out_buffer,
+				     len);
 			len = len / 2;
 			remcom_out_buffer[len++] = 0;
 
@@ -895,8 +935,7 @@ static void gdb_cmd_break(struct kgdb_state *ks)
 		error_packet(remcom_out_buffer, -EINVAL);
 		return;
 	}
-	if (*(ptr++) != ',' ||
-		!kgdb_hex2long(&ptr, &length)) {
+	if (*(ptr++) != ',' || !kgdb_hex2long(&ptr, &length)) {
 		error_packet(remcom_out_buffer, -EINVAL);
 		return;
 	}
@@ -906,11 +945,11 @@ static void gdb_cmd_break(struct kgdb_state *ks)
 	else if (remcom_in_buffer[0] == 'z' && *bpt_type == '0')
 		error = dbg_remove_sw_break(addr);
 	else if (remcom_in_buffer[0] == 'Z')
-		error = arch_kgdb_ops.set_hw_breakpoint(addr,
-			(int)length, *bpt_type - '0');
+		error = arch_kgdb_ops.set_hw_breakpoint(addr, (int)length,
+							*bpt_type - '0');
 	else if (remcom_in_buffer[0] == 'z')
-		error = arch_kgdb_ops.remove_hw_breakpoint(addr,
-			(int) length, *bpt_type - '0');
+		error = arch_kgdb_ops.remove_hw_breakpoint(addr, (int)length,
+							   *bpt_type - '0');
 
 	if (error == 0)
 		strcpy(remcom_out_buffer, "OK");
@@ -925,12 +964,10 @@ static int gdb_cmd_exception_pass(struct kgdb_state *ks)
 	 * C15 == detach kgdb, pass exception
 	 */
 	if (remcom_in_buffer[1] == '0' && remcom_in_buffer[2] == '9') {
-
 		ks->pass_exception = 1;
 		remcom_in_buffer[0] = 'c';
 
 	} else if (remcom_in_buffer[1] == '1' && remcom_in_buffer[2] == '5') {
-
 		ks->pass_exception = 1;
 		remcom_in_buffer[0] = 'D';
 		dbg_remove_all_break();
@@ -938,9 +975,11 @@ static int gdb_cmd_exception_pass(struct kgdb_state *ks)
 		return 1;
 
 	} else {
-		gdbstub_msg_write("KGDB only knows signal 9 (pass)"
+		gdbstub_msg_write(
+			"KGDB only knows signal 9 (pass)"
 			" and 15 (pass and disconnect)\n"
-			"Executing a continue without signal passing\n", 0);
+			"Executing a continue without signal passing\n",
+			0);
 		remcom_in_buffer[0] = 'c';
 	}
 
@@ -1050,7 +1089,7 @@ int gdb_serial_stub(struct kgdb_state *ks)
 				goto default_handle;
 			if (tmp == 0)
 				break;
-			fallthrough;	/* on tmp < 0 */
+			fallthrough; /* on tmp < 0 */
 		case 'c': /* Continue packet */
 		case 's': /* Single step packet */
 			if (kgdb_contthread && kgdb_contthread != current) {
@@ -1058,15 +1097,13 @@ int gdb_serial_stub(struct kgdb_state *ks)
 				error_packet(remcom_out_buffer, -EINVAL);
 				break;
 			}
-			fallthrough;	/* to default processing */
+			fallthrough; /* to default processing */
 		default:
 default_handle:
-			error = kgdb_arch_handle_exception(ks->ex_vector,
-						ks->signo,
-						ks->err_code,
-						remcom_in_buffer,
-						remcom_out_buffer,
-						ks->linux_regs);
+			error = kgdb_arch_handle_exception(
+				ks->ex_vector, ks->signo, ks->err_code,
+				remcom_in_buffer, remcom_out_buffer,
+				ks->linux_regs);
 			/*
 			 * Leave cmd processing on error, detach,
 			 * kill, continue, or single step.
@@ -1076,7 +1113,6 @@ default_handle:
 				error = 0;
 				goto kgdb_exit;
 			}
-
 		}
 
 		/* reply to the request */
@@ -1095,12 +1131,9 @@ int gdbstub_state(struct kgdb_state *ks, char *cmd)
 
 	switch (cmd[0]) {
 	case 'e':
-		error = kgdb_arch_handle_exception(ks->ex_vector,
-						   ks->signo,
-						   ks->err_code,
-						   remcom_in_buffer,
-						   remcom_out_buffer,
-						   ks->linux_regs);
+		error = kgdb_arch_handle_exception(
+			ks->ex_vector, ks->signo, ks->err_code,
+			remcom_in_buffer, remcom_out_buffer, ks->linux_regs);
 		return error;
 	case 's':
 	case 'c':
