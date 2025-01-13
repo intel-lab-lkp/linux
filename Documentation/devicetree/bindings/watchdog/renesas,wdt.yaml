@@ -112,6 +112,19 @@ properties:
 
   timeout-sec: true
 
+  renesas,syscon-cpg-error-rst:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      The first cell is a phandle to the SYSCON entry required to obtain
+      the current boot status. The second cell specifies the CPG_ERROR_RSTm
+      register offset within the SYSCON, and the third cell indicates the
+      bit within the CPG_ERROR_RSTm register.
+    items:
+      - items:
+          - description: Phandle to the CPG node
+          - description: The CPG_ERROR_RSTm register offset
+          - description: The bit within CPG_ERROR_RSTm register of interest
+
 required:
   - compatible
   - reg
@@ -182,7 +195,11 @@ allOf:
       properties:
         interrupts: false
         interrupt-names: false
+      required:
+        - renesas,syscon-cpg-error-rst
     else:
+      properties:
+        renesas,syscon-cpg-error-rst: false
       required:
         - interrupts
 
