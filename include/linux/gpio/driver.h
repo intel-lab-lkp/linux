@@ -382,6 +382,10 @@ struct gpio_irq_chip {
  *	implies that if the chip supports IRQs, these IRQs need to be threaded
  *	as the chip access may sleep when e.g. reading out the IRQ status
  *	registers.
+ * @legacy_static_base: set for some existing drivers, where @base is non-negative
+ *	and changing that would induce so much breakage that they were
+ *	grandfathered in until GPIO sysfs support is removed altogether.
+ *	Do not set this for any new drivers.
  * @read_reg: reader function for generic GPIO
  * @write_reg: writer function for generic GPIO
  * @be_bits: if the generic GPIO has big endian bit order (bit 31 is representing
@@ -467,6 +471,7 @@ struct gpio_chip {
 	u16			offset;
 	const char		*const *names;
 	bool			can_sleep;
+	bool			legacy_static_base;
 
 #if IS_ENABLED(CONFIG_GPIO_GENERIC)
 	unsigned long (*read_reg)(void __iomem *reg);

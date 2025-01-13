@@ -1011,7 +1011,7 @@ int gpiochip_add_data_with_key(struct gpio_chip *gc, void *data,
 			 * drop this and assign a poison instead.
 			 */
 			gc->base = base;
-		} else {
+		} else if (!gc->legacy_static_base) {
 			dev_warn(&gdev->dev,
 				 "Static allocation of GPIO base is deprecated, use dynamic allocation.\n");
 		}
