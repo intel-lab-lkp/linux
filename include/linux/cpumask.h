@@ -401,12 +401,18 @@ unsigned int __pure cpumask_next_wrap(int n, const struct cpumask *mask, int sta
 static __always_inline
 unsigned int cpumask_any_but(const struct cpumask *mask, unsigned int cpu)
 {
-	unsigned int i;
+	unsigned int i, n, weight;
 
 	cpumask_check(cpu);
-	for_each_cpu(i, mask)
-		if (i != cpu)
-			break;
+	weight = cpumask_weight(mask);
+	n = get_random_u32() % weight;
+
+	/* If we accidentally pick "n" equal to "cpu",
+	 * then simply choose "n + 1"th cpu.
+	 */
+	if (n == cpu)
+		n = (n + 1) % weight;
+	i = cpumask_nth(n, mask);
 	return i;
 }
 
