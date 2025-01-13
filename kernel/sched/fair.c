@@ -2120,12 +2120,13 @@ static void update_numa_stats(struct task_numa_env *env,
 			      struct numa_stats *ns, int nid,
 			      bool find_idle)
 {
+	cpumask_t *span = cpu_rq(env->src_cpu)->rd->span;
 	int cpu, idle_core = -1;
 
 	memset(ns, 0, sizeof(*ns));
 	ns->idle_cpu = -1;
 
-	cpumask_copy(env->cpus, cpumask_of_node(nid));
+	cpumask_and(env->cpus, span, cpumask_of_node(nid));
 
 	rcu_read_lock();
 	for_each_cpu(cpu, env->cpus) {
@@ -2435,10 +2436,12 @@ unlock:
 static void task_numa_find_cpu(struct task_numa_env *env,
 				long taskimp, long groupimp)
 {
+	cpumask_t *span = cpu_rq(env->src_cpu)->rd->span;
 	bool maymove = false;
 	int cpu;
 
 	cpumask_and(env->cpus, cpumask_of_node(env->dst_nid), env->p->cpus_ptr);
+	cpumask_and(env->cpus, env->cpus, span);
 
 	/*
 	 * If dst node has spare capacity, then check if there is an
@@ -2503,10 +2506,10 @@ static void task_numa_migrate(struct task_struct *p)
 		.best_cpu = -1,
 	};
 	unsigned long taskweight, groupweight;
+	struct rq *best_rq, *src_rq;
 	struct sched_domain *sd;
 	long taskimp, groupimp;
 	struct numa_group *ng;
-	struct rq *best_rq;
 	int nid, ret, dist;
 
 	/*
@@ -2530,6 +2533,9 @@ static void task_numa_migrate(struct task_struct *p)
 	 * balance domains, some of which do not cross NUMA boundaries.
 	 * Tasks that are "trapped" in such domains cannot be migrated
 	 * elsewhere, so there is no point in (re)trying.
+	 *
+	 * Another situation is that src_cpu is in the isolated domain,
+	 * if so, bail out early.
 	 */
 	if (unlikely(!sd)) {
 		sched_setnuma(p, task_node(p));
@@ -2541,6 +2547,7 @@ static void task_numa_migrate(struct task_struct *p)
 	 */
 	preempt_disable();
 
+	src_rq = cpu_rq(env.src_cpu);
 	env.cpus = this_cpu_cpumask_var_ptr(numa_balance_mask);
 	env.dst_nid = p->numa_preferred_nid;
 	dist = env.dist = node_distance(env.src_nid, env.dst_nid);
@@ -2565,6 +2572,10 @@ static void task_numa_migrate(struct task_struct *p)
 	if (env.best_cpu == -1 || (ng && ng->active_nodes > 1)) {
 		for_each_node_state(nid, N_CPU) {
 			if (nid == env.src_nid || nid == p->numa_preferred_nid)
+				continue;
+
+			if (unlikely(!cpumask_intersects(src_rq->rd->span,
+						cpumask_of_node(nid))))
 				continue;
 
 			dist = node_distance(env.src_nid, env.dst_nid);
