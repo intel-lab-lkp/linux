@@ -322,11 +322,14 @@ err_disable_pclk:
 
 static void csi2rx_stop(struct csi2rx_priv *csi2rx)
 {
+	int ret, ret_clk;
 	unsigned int i;
 	u32 val;
-	int ret;
 
-	clk_prepare_enable(csi2rx->p_clk);
+	ret_clk = clk_prepare_enable(csi2rx->p_clk);
+	if (ret_clk)
+		dev_warn(csi2rx->dev,
+			 "Couldn't prepare and enable P clock\n");
 	reset_control_assert(csi2rx->sys_rst);
 	clk_disable_unprepare(csi2rx->sys_clk);
 
@@ -348,7 +351,8 @@ static void csi2rx_stop(struct csi2rx_priv *csi2rx)
 	}
 
 	reset_control_assert(csi2rx->p_rst);
-	clk_disable_unprepare(csi2rx->p_clk);
+	if (!ret_clk)
+		clk_disable_unprepare(csi2rx->p_clk);
 
 	if (v4l2_subdev_call(csi2rx->source_subdev, video, s_stream, false))
 		dev_warn(csi2rx->dev, "Couldn't disable our subdev\n");
