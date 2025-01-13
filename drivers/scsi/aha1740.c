@@ -114,9 +114,9 @@ static int aha1740_show_info(struct seq_file *m, struct Scsi_Host *shpnt)
 {
 	struct aha1740_hostdata *host = HOSTDATA(shpnt);
 	seq_printf(m, "aha174x at IO:%lx, IRQ %d, SLOT %d.\n"
-		      "Extended translation %sabled.\n",
+		      "Extended translation %s.\n",
 		      shpnt->io_port, shpnt->irq, host->edev->slot,
-		      host->translation ? "en" : "dis");
+		      str_enabled_disabled(host->translation));
 	return 0;
 }
 
@@ -578,10 +578,10 @@ static int aha1740_probe (struct device *dev)
 		outb(G2CNTRL_HRST, G2CNTRL(slotbase));
 		outb(0, G2CNTRL(slotbase));
 	}
-	printk(KERN_INFO "Configuring slot %d at IO:%x, IRQ %u (%s)\n",
-	       edev->slot, slotbase, irq_level, irq_type ? "edge" : "level");
-	printk(KERN_INFO "aha174x: Extended translation %sabled.\n",
-	       translation ? "en" : "dis");
+	pr_info("Configuring slot %d at IO:%x, IRQ %u (%s)\n",
+		edev->slot, slotbase, irq_level, irq_type ? "edge" : "level");
+	pr_info("aha174x: Extended translation %s.\n",
+		str_enabled_disabled(translation));
 	shpnt = scsi_host_alloc(&aha1740_template,
 			      sizeof(struct aha1740_hostdata));
 	if(shpnt == NULL)
