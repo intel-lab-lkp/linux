@@ -22,6 +22,7 @@
 
 #ifdef CONFIG_PPC64
 #include "internal.h"
+#include "isa207-common.h"
 #endif
 
 #define BHRB_MAX_ENTRIES	32
@@ -2289,6 +2290,22 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 	    (event->attr.sample_type & PERF_SAMPLE_IP) &&
 	    is_kernel_addr(mfspr(SPRN_SIAR)))
 		record = 0;
+
+	/*
+	 * SIER[46-48] presents instruction type of the sampled instruction.
+	 * In ISA v3.0 and before values "0" and "7" are considered reserved.
+	 * In ISA v3.1, value "7" has been used to indicate "larx/stcx".
+	 * Drop the sample if "type" has reserved values for this field with a
+	 * ISA version check.
+	 */
+	if (event->attr.sample_type & PERF_SAMPLE_DATA_SRC &&
+			ppmu->get_mem_data_src) {
+		val = (regs->dar & ISA207_SIER_TYPE_MASK) >> ISA207_SIER_TYPE_SHIFT;
+		if (val == 0 || (val == 7 && !cpu_has_feature(CPU_FTR_ARCH_31))) {
+			record = 0;
+			atomic64_inc(&event->lost_samples);
+		}
+	}
 
 	/*
 	 * Finally record data if requested.
