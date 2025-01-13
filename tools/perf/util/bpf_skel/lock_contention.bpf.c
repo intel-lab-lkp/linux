@@ -19,13 +19,37 @@
 #define LCB_F_PERCPU	(1U << 4)
 #define LCB_F_MUTEX	(1U << 5)
 
-/* callstack storage  */
+ /* tmp buffer for owner callstack */
 struct {
-	__uint(type, BPF_MAP_TYPE_STACK_TRACE);
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(key_size, sizeof(__u32));
 	__uint(value_size, sizeof(__u64));
+	__uint(max_entries, 1);
+} owner_stacks_entries SEC(".maps");
+
+/* a map for tracing lock address to owner data */
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(__u64)); // lock address
+	__uint(value_size, sizeof(cotd));
 	__uint(max_entries, MAX_ENTRIES);
-} stacks SEC(".maps");
+} contention_owner_tracing SEC(".maps");
+
+/* a map for tracing lock address to owner stacktrace */
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(__u64)); // lock address
+	__uint(value_size, sizeof(__u64)); // straktrace
+	__uint(max_entries, MAX_ENTRIES);
+} contention_owner_stacks SEC(".maps");
+
+/* owner callstack to contention data storage */
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(key_size, sizeof(__u64));
+	__uint(value_size, sizeof(struct contention_data));
+	__uint(max_entries, MAX_ENTRIES);
+} owner_lock_stat SEC(".maps");
 
 /* maintain timestamp at the beginning of contention */
 struct {
@@ -42,6 +66,14 @@ struct {
 	__uint(value_size, sizeof(struct tstamp_data));
 	__uint(max_entries, 1);
 } tstamp_cpu SEC(".maps");
+
+/* callstack storage  */
+struct {
+	__uint(type, BPF_MAP_TYPE_STACK_TRACE);
+	__uint(key_size, sizeof(__u32));
+	__uint(value_size, sizeof(__u64));
+	__uint(max_entries, MAX_ENTRIES);
+} stacks SEC(".maps");
 
 /* actual lock contention statistics */
 struct {
@@ -126,6 +158,7 @@ const volatile int needs_callstack;
 const volatile int stack_skip;
 const volatile int lock_owner;
 const volatile int use_cgroup_v2;
+const volatile int max_stack;
 
 /* determine the key of lock stat */
 const volatile int aggr_mode;
@@ -436,7 +469,6 @@ int contention_end(u64 *ctx)
 			return 0;
 		need_delete = true;
 	}
-
 	duration = bpf_ktime_get_ns() - pelem->timestamp;
 	if ((__s64)duration < 0) {
 		__sync_fetch_and_add(&time_fail, 1);
