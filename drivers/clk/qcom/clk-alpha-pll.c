@@ -1750,6 +1750,26 @@ static int alpha_pll_lucid_prepare(struct clk_hw *hw)
 	return __alpha_pll_trion_prepare(hw, LUCID_PCAL_DONE);
 }
 
+#define GET_PLL_TYPE(pll)    ((pll->regs - clk_alpha_pll_regs[0]) / PLL_OFF_MAX_REGS)
+static void clk_alpha_pll_reconfigure(struct clk_alpha_pll *pll)
+{
+	if (!pll->config || !pll->regs)
+		return;
+
+	pr_debug("configuring the PLL again!\n");
+
+	switch (GET_PLL_TYPE(pll)) {
+	case CLK_ALPHA_PLL_TYPE_LUCID_OLE:
+		clk_lucid_ole_pll_configure(pll, pll->clkr.regmap, pll->config);
+		break;
+	case CLK_ALPHA_PLL_TYPE_LUCID_EVO:
+		clk_lucid_evo_pll_configure(pll, pll->clkr.regmap, pll->config);
+		break;
+	default:
+		break;
+	}
+}
+
 static int __alpha_pll_trion_set_rate(struct clk_hw *hw, unsigned long rate,
 				      unsigned long prate, u32 latch_bit, u32 latch_ack)
 {
@@ -1764,6 +1784,11 @@ static int __alpha_pll_trion_set_rate(struct clk_hw *hw, unsigned long rate,
 	ret = alpha_pll_check_rate_margin(hw, rrate, rate);
 	if (ret < 0)
 		return ret;
+
+	regmap_read(pll->clkr.regmap, PLL_L_VAL(pll), &val);
+	/* Check if the PLL is in good state to accept set rate requests. */
+	if (!(val & LUCID_EVO_PLL_L_VAL_MASK))
+		clk_alpha_pll_reconfigure(pll);
 
 	regmap_update_bits(pll->clkr.regmap, PLL_L_VAL(pll), LUCID_EVO_PLL_L_VAL_MASK,  l);
 	regmap_write(pll->clkr.regmap, PLL_ALPHA_VAL(pll), a);
@@ -2371,6 +2396,11 @@ static int alpha_pll_lucid_evo_enable(struct clk_hw *hw)
 	/* Check if PLL is already enabled */
 	if (trion_pll_is_enabled(pll, regmap))
 		return 0;
+
+	regmap_read(pll->clkr.regmap, PLL_L_VAL(pll), &val);
+	/* Check if the PLL is in good state to accept enable requests */
+	if (!(val & LUCID_EVO_PLL_L_VAL_MASK))
+		clk_alpha_pll_reconfigure(pll);
 
 	ret = regmap_update_bits(regmap, PLL_MODE(pll), PLL_RESET_N, PLL_RESET_N);
 	if (ret)
