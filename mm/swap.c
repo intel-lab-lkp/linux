@@ -562,14 +562,8 @@ static void lru_deactivate_file(struct lruvec *lruvec, struct folio *folio)
 	folio_clear_referenced(folio);
 
 	if (folio_test_writeback(folio) || folio_test_dirty(folio)) {
-		/*
-		 * Setting the reclaim flag could race with
-		 * folio_end_writeback() and confuse readahead.  But the
-		 * race window is _really_ small and  it's not a critical
-		 * problem.
-		 */
 		lruvec_add_folio(lruvec, folio);
-		folio_set_reclaim(folio);
+		folio_set_dropbehind(folio);
 	} else {
 		/*
 		 * The folio's writeback ended while it was in the batch.
