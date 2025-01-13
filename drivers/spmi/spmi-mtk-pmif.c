@@ -453,7 +453,9 @@ static int mtk_spmi_probe(struct platform_device *pdev)
 	int err, i;
 	u32 chan_offset;
 
-	ctrl = devm_spmi_controller_alloc(&pdev->dev, sizeof(*arb));
+	ctrl = devm_spmi_controller_alloc(&pdev->dev,
+					  pdev->dev.of_node,
+					  sizeof(*arb));
 	if (IS_ERR(ctrl))
 		return PTR_ERR(ctrl);
 

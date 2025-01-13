@@ -105,6 +105,7 @@ static inline void spmi_controller_set_drvdata(struct spmi_controller *ctrl,
 }
 
 struct spmi_controller *spmi_controller_alloc(struct device *parent,
+					      struct device_node *node,
 					      size_t size);
 
 /**
@@ -120,7 +121,9 @@ static inline void spmi_controller_put(struct spmi_controller *ctrl)
 int spmi_controller_add(struct spmi_controller *ctrl);
 void spmi_controller_remove(struct spmi_controller *ctrl);
 
-struct spmi_controller *devm_spmi_controller_alloc(struct device *parent, size_t size);
+struct spmi_controller *devm_spmi_controller_alloc(struct device *parent,
+						   struct device_node *node,
+						   size_t size);
 int devm_spmi_controller_add(struct device *parent, struct spmi_controller *ctrl);
 
 /**
