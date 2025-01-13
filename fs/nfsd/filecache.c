@@ -372,18 +372,10 @@ nfsd_file_put(struct nfsd_file *nf)
 		/* Try to add it to the LRU.  If that fails, decrement. */
 		if (nfsd_file_lru_add(nf)) {
 			/* If it's still hashed, we're done */
-			if (test_bit(NFSD_FILE_HASHED, &nf->nf_flags)) {
+			if (list_lru_count(&nfsd_file_lru))
 				nfsd_file_schedule_laundrette();
-				return;
-			}
 
-			/*
-			 * We're racing with unhashing, so try to remove it from
-			 * the LRU. If removal fails, then someone else already
-			 * has our reference.
-			 */
-			if (!nfsd_file_lru_remove(nf))
-				return;
+			return;
 		}
 	}
 	if (refcount_dec_and_test(&nf->nf_ref))
