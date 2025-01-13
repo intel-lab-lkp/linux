@@ -20,6 +20,8 @@
 
 #include "irq-riscv-imsic-state.h"
 
+#define IMSIC_HANDLE_THRESHOLD		20
+
 static int imsic_parent_irq;
 
 #ifdef CONFIG_SMP
@@ -76,6 +78,7 @@ static void imsic_handle_irq(struct irq_desc *desc)
 	int err, cpu = smp_processor_id();
 	struct imsic_vector *vec;
 	unsigned long local_id;
+	unsigned int handled = 0;
 
 	chained_irq_enter(chip, desc);
 
@@ -85,21 +88,23 @@ static void imsic_handle_irq(struct irq_desc *desc)
 		if (local_id == IMSIC_IPI_ID) {
 			if (IS_ENABLED(CONFIG_SMP))
 				ipi_mux_process();
-			continue;
+		} else if (likely(imsic->base_domain)) {
+			vec = imsic_vector_from_local_id(cpu, local_id);
+
+			if (unlikely(!vec))
+				pr_warn_ratelimited("vector not found for local ID 0x%lx\n",
+						    local_id);
+			else {
+				err = generic_handle_domain_irq(imsic->base_domain, vec->hwirq);
+
+				if (unlikely(err))
+					pr_warn_ratelimited("hwirq 0x%x mapping not found\n",
+							    vec->hwirq);
+			}
 		}
 
-		if (unlikely(!imsic->base_domain))
-			continue;
-
-		vec = imsic_vector_from_local_id(cpu, local_id);
-		if (!vec) {
-			pr_warn_ratelimited("vector not found for local ID 0x%lx\n", local_id);
-			continue;
-		}
-
-		err = generic_handle_domain_irq(imsic->base_domain, vec->hwirq);
-		if (unlikely(err))
-			pr_warn_ratelimited("hwirq 0x%x mapping not found\n", vec->hwirq);
+		if (handled++ >= IMSIC_HANDLE_THRESHOLD)
+			break;
 	}
 
 	chained_irq_exit(chip, desc);
