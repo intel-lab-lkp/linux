@@ -504,7 +504,8 @@ static unsigned long damon_pa_stat(struct damon_region *r, struct damos *s,
 	if (!damon_pa_scheme_has_filter(s))
 		return 0;
 
-	for (addr = r->ar.start; addr < r->ar.end; addr += PAGE_SIZE) {
+	addr = r->ar.start;
+	while (addr < r->ar.end) {
 		struct folio *folio = damon_get_folio(PHYS_PFN(addr));
 
 		if (!folio)
@@ -515,6 +516,7 @@ static unsigned long damon_pa_stat(struct damon_region *r, struct damos *s,
 		else
 			*sz_filter_passed += folio_size(folio);
 put_folio:
+		addr += folio_size(folio);
 		folio_put(folio);
 	}
 	return 0;
