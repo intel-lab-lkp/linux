@@ -29,6 +29,12 @@ static void imsic_ipi_send(unsigned int cpu)
 {
 	struct imsic_local_config *local = per_cpu_ptr(imsic->global.local, cpu);
 
+	/*
+	 * Ensure that stores to normal memory are visible to the other CPUs
+	 * before issuing IPI.
+	 */
+	wmb();
+
 	writel_relaxed(IMSIC_IPI_ID, local->msi_va);
 }
 
