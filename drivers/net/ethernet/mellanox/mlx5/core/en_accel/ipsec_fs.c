@@ -1150,9 +1150,20 @@ static void tx_ft_put_policy(struct mlx5e_ipsec *ipsec, u32 prio, int type)
 	mutex_unlock(&tx->ft.mutex);
 }
 
+static void addr4_to_mask(__be32 *addr, __be32 *mask)
+{
+	int i;
+
+	*mask = 0;
+	for (i = 0; i < 4; i++)
+		*mask |= ((*addr >> 8 * i) & 0xFF) ? (0xFF << 8 * i) : 0;
+}
+
 static void setup_fte_addr4(struct mlx5_flow_spec *spec, __be32 *saddr,
 			    __be32 *daddr)
 {
+	__be32 mask;
+
 	if (!*saddr && !*daddr)
 		return;
 
@@ -1164,21 +1175,33 @@ static void setup_fte_addr4(struct mlx5_flow_spec *spec, __be32 *saddr,
 	if (*saddr) {
 		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				    outer_headers.src_ipv4_src_ipv6.ipv4_layout.ipv4), saddr, 4);
-		MLX5_SET_TO_ONES(fte_match_param, spec->match_criteria,
-				 outer_headers.src_ipv4_src_ipv6.ipv4_layout.ipv4);
+		addr4_to_mask(saddr, &mask);
+		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
+				    outer_headers.src_ipv4_src_ipv6.ipv4_layout.ipv4), &mask, 4);
 	}
 
 	if (*daddr) {
 		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				    outer_headers.dst_ipv4_dst_ipv6.ipv4_layout.ipv4), daddr, 4);
-		MLX5_SET_TO_ONES(fte_match_param, spec->match_criteria,
-				 outer_headers.dst_ipv4_dst_ipv6.ipv4_layout.ipv4);
+		addr4_to_mask(daddr, &mask);
+		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
+				    outer_headers.dst_ipv4_dst_ipv6.ipv4_layout.ipv4), &mask, 4);
 	}
+}
+
+static void addr6_to_mask(__be32 *addr, __be32 *mask)
+{
+	int i;
+
+	for (i = 0; i < 4; i++)
+		addr4_to_mask(&addr[i], &mask[i]);
 }
 
 static void setup_fte_addr6(struct mlx5_flow_spec *spec, __be32 *saddr,
 			    __be32 *daddr)
 {
+	__be32 mask[4];
+
 	if (addr6_all_zero(saddr) && addr6_all_zero(daddr))
 		return;
 
@@ -1190,15 +1213,17 @@ static void setup_fte_addr6(struct mlx5_flow_spec *spec, __be32 *saddr,
 	if (!addr6_all_zero(saddr)) {
 		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				    outer_headers.src_ipv4_src_ipv6.ipv6_layout.ipv6), saddr, 16);
-		memset(MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
-				    outer_headers.src_ipv4_src_ipv6.ipv6_layout.ipv6), 0xff, 16);
+		addr6_to_mask(saddr, mask);
+		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
+				    outer_headers.src_ipv4_src_ipv6.ipv6_layout.ipv6), mask, 16);
 	}
 
 	if (!addr6_all_zero(daddr)) {
 		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				    outer_headers.dst_ipv4_dst_ipv6.ipv6_layout.ipv6), daddr, 16);
-		memset(MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
-				    outer_headers.dst_ipv4_dst_ipv6.ipv6_layout.ipv6), 0xff, 16);
+		addr6_to_mask(daddr, mask);
+		memcpy(MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
+				    outer_headers.dst_ipv4_dst_ipv6.ipv6_layout.ipv6), mask, 16);
 	}
 }
 
