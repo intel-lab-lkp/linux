@@ -527,6 +527,10 @@ static int mmap_zero(struct file *file, struct vm_area_struct *vma)
 	if (vma->vm_flags & VM_SHARED)
 		return shmem_zero_setup(vma);
 	vma_set_anonymous(vma);
+	fput(vma->vm_file);
+	vma->vm_file = NULL;
+	vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
+
 	return 0;
 }
 
