@@ -26,20 +26,40 @@ static unsigned int riscv_intc_nr_irqs __ro_after_init = BITS_PER_LONG;
 static unsigned int riscv_intc_custom_base __ro_after_init = BITS_PER_LONG;
 static unsigned int riscv_intc_custom_nr_irqs __ro_after_init;
 
+static unsigned int riscv_prio_irqs[] = {
+#ifdef CONFIG_RISCV_M_MODE
+	IRQ_M_EXT, IRQ_M_SOFT, IRQ_M_TIMER,
+#endif
+	IRQ_S_EXT, IRQ_S_SOFT, IRQ_S_TIMER, IRQ_S_GEXT,
+	IRQ_VS_EXT, IRQ_VS_SOFT, IRQ_VS_TIMER,
+	IRQ_PMU_OVF,
+};
+
 static void riscv_intc_irq(struct pt_regs *regs)
 {
-	unsigned long cause = regs->cause & ~CAUSE_IRQ_FLAG;
+	unsigned long pending = csr_read(CSR_IP) & csr_read(CSR_IE);
+	unsigned int i;
 
-	if (generic_handle_domain_irq(intc_domain, cause))
-		pr_warn_ratelimited("Failed to handle interrupt (cause: %ld)\n", cause);
+	for (i = 0; i < ARRAY_SIZE(riscv_prio_irqs); i++)
+		if (pending & (1UL << riscv_prio_irqs[i]))
+			if (generic_handle_domain_irq(intc_domain, riscv_prio_irqs[i]))
+				pr_warn_ratelimited("Failed to handle interrupt (cause: %u)\n",
+						    riscv_prio_irqs[i]);
 }
 
 static void riscv_intc_aia_irq(struct pt_regs *regs)
 {
 	unsigned long topi;
+	unsigned long pending;
+	unsigned int i;
 
-	while ((topi = csr_read(CSR_TOPI)))
-		generic_handle_domain_irq(intc_domain, topi >> TOPI_IID_SHIFT);
+	while ((topi = csr_read(CSR_TOPI))) {
+		pending = csr_read(CSR_IP) & csr_read(CSR_IE);
+
+		for (i = 0; i < ARRAY_SIZE(riscv_prio_irqs); i++)
+			if (pending & (1UL << riscv_prio_irqs[i]))
+				generic_handle_domain_irq(intc_domain, riscv_prio_irqs[i]);
+	}
 }
 
 /*
