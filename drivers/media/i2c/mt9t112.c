@@ -1034,7 +1034,11 @@ static int mt9t112_camera_probe(struct i2c_client *client)
 		return ret;
 
 	/* Check and show chip ID. */
-	mt9t112_reg_read(chipid, client, 0x0000);
+	chipid = __mt9t112_reg_read(client, 0x0000);
+	if (chipid < 0) {
+		ret = chipid;
+		goto done;
+	}
 
 	switch (chipid) {
 	case 0x2680:
