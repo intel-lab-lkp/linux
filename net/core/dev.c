@@ -10931,6 +10931,8 @@ void netdev_run_todo(void)
 		WARN_ON(rcu_access_pointer(dev->ip_ptr));
 		WARN_ON(rcu_access_pointer(dev->ip6_ptr));
 
+		mutex_destroy(&dev->ethtool->rss_lock);
+
 		netdev_do_free_pcpu_stats(dev);
 		if (dev->priv_destructor)
 			dev->priv_destructor(dev);
@@ -11565,8 +11567,6 @@ void unregister_netdevice_many_notify(struct list_head *head,
 
 		if (dev->netdev_ops->ndo_uninit)
 			dev->netdev_ops->ndo_uninit(dev);
-
-		mutex_destroy(&dev->ethtool->rss_lock);
 
 		net_shaper_flush_netdev(dev);
 
