@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright (C) 2024 Amlogic, Inc. All rights reserved
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/amlogic,s4-tocodec.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic S4 Audio Tocodec Control
+
+maintainers:
+  - Jiebing Chen <jiebing.chen@amlogic.com>
+
+allOf:
+  - $ref: dai-common.yaml#
+
+properties:
+  compatible:
+    items:
+      - const: amlogic,s4-tocodec
+
+  reg:
+    maxItems: 1
+
+  resets:
+    maxItems: 1
+
+  sound-name-prefix: true
+
+required:
+  - compatible
+  - reg
+  - resets
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/reset/amlogic,meson-g12a-reset.h>
+    audio-controller@740 {
+        compatible = "amlogic,s4-tocodec";
+        reg = <0x0 0x740 0x0 0x4>;
+        sound-name-prefix = "TOACODEC";
+        resets = <&clkc_audio AUD_RESET_TOACODEC>;
+    };
