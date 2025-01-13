@@ -434,6 +434,7 @@ struct kszphy_priv {
 	const struct kszphy_type *type;
 	struct clk *clk;
 	int led_mode;
+	unsigned long led_rules[2];
 	u16 vct_ctrl1000;
 	bool rmii_ref_clk_sel;
 	bool rmii_ref_clk_sel_val;
@@ -889,6 +890,112 @@ static int ksz8061_config_init(struct phy_device *phydev)
 static int ksz8795_match_phy_device(struct phy_device *phydev)
 {
 	return ksz8051_ksz8795_match_phy_device(phydev, false);
+}
+
+#define KSZ8795_LED_COUNT	2
+
+static const unsigned long ksz8795_led_rules_map[4][2] = {
+	{
+		/* Control Bits = 2'b00 => LEDx_0=Link/ACT LEDx_1=Speed */
+		BIT(TRIGGER_NETDEV_LINK) | BIT(TRIGGER_NETDEV_RX) |
+		BIT(TRIGGER_NETDEV_TX),
+		BIT(TRIGGER_NETDEV_LINK_100)
+	}, {
+		/* Control Bits = 2'b01 => LEDx_0=Link     LEDx_1=ACT */
+		BIT(TRIGGER_NETDEV_LINK),
+		BIT(TRIGGER_NETDEV_RX) | BIT(TRIGGER_NETDEV_TX)
+	}, {
+		/* Control Bits = 2'b10 => LEDx_0=Link/ACT LEDx_1=Duplex */
+		BIT(TRIGGER_NETDEV_LINK) | BIT(TRIGGER_NETDEV_RX) |
+		BIT(TRIGGER_NETDEV_TX),
+		BIT(TRIGGER_NETDEV_FULL_DUPLEX)
+	}, {
+		/* Control Bits = 2'b11 => LEDx_0=Link     LEDx_1=Duplex */
+		BIT(TRIGGER_NETDEV_LINK),
+		BIT(TRIGGER_NETDEV_FULL_DUPLEX)
+	}
+};
+
+static int ksz8795_led_brightness_set(struct phy_device *phydev, u8 index,
+				      enum led_brightness value)
+{
+	/* Turn all LEDs on this port on or off */
+	/* Emulated rmw of Register 29/45/61 (0x1D/0x2D/0x3D): Port 1/2/3 Control 10 */
+	return phy_modify(phydev, 0x0d00, BIT(7), (value == LED_OFF) ? BIT(7) : 0);
+}
+
+static int ksz8795_led_hw_is_supported(struct phy_device *phydev, u8 index,
+				       unsigned long rules)
+{
+	const unsigned long mask[2] = {
+		BIT(TRIGGER_NETDEV_LINK) | BIT(TRIGGER_NETDEV_RX) |
+		BIT(TRIGGER_NETDEV_TX),
+		BIT(TRIGGER_NETDEV_LINK_100) | BIT(TRIGGER_NETDEV_RX) |
+		BIT(TRIGGER_NETDEV_TX) | BIT(TRIGGER_NETDEV_FULL_DUPLEX)
+	};
+
+	if (index >= KSZ8795_LED_COUNT)
+		return -EINVAL;
+
+	/* Filter out any other unsupported triggers. */
+	if (rules & ~mask[index])
+		return -EOPNOTSUPP;
+
+	/* RX and TX are not differentiated, either both are set or not set. */
+	if (!(rules & BIT(TRIGGER_NETDEV_RX)) ^ !(rules & BIT(TRIGGER_NETDEV_TX)))
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
+static int ksz8795_led_hw_control_get(struct phy_device *phydev, u8 index,
+				      unsigned long *rules)
+{
+	int val;
+
+	if (index >= KSZ8795_LED_COUNT)
+		return -EINVAL;
+
+	/* Emulated read of Register 11 (0x0B): Global Control 9 */
+	val = phy_read(phydev, 0x0b00);
+	if (val < 0)
+		return val;
+
+	/* Extract bits [5:4] and look up matching LED configuration */
+	*rules = ksz8795_led_rules_map[(val >> 4) & 0x3][index];
+
+	return 0;
+}
+
+static int ksz8795_led_hw_control_set(struct phy_device *phydev, u8 index,
+				      unsigned long rules)
+{
+	struct kszphy_priv *priv = phydev->priv;
+	unsigned long other_rules;
+	int i;
+
+	if (index >= KSZ8795_LED_COUNT)
+		return -EINVAL;
+
+	/*
+	 * Cache the rules for this LED for future use when setting up the
+	 * other LED and looking up compatible configuration of the global
+	 * control 9 register bitfield [5:4].
+	 */
+	priv->led_rules[index] = rules;
+
+	/* Use cached configuration of the other LED. */
+	other_rules = priv->led_rules[!index];
+
+	/* Update this LED configuration if compatible with the other LED */
+	for (i = 0; i < 4; i++) {
+		if (ksz8795_led_rules_map[i][index] == rules &&
+		    ksz8795_led_rules_map[i][!index] == other_rules) {
+			return phy_modify(phydev, 0x0b00, 0x30, i << 4);
+		}
+	}
+
+	return -EINVAL;
 }
 
 static int ksz9021_load_values_from_of(struct phy_device *phydev,
@@ -5666,10 +5773,15 @@ static struct phy_driver ksphy_driver[] = {
 }, {
 	.name		= "Micrel KSZ87XX Switch",
 	/* PHY_BASIC_FEATURES */
+	.probe		= kszphy_probe,
 	.config_init	= kszphy_config_init,
 	.match_phy_device = ksz8795_match_phy_device,
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
+	.led_brightness_set = ksz8795_led_brightness_set,
+	.led_hw_is_supported = ksz8795_led_hw_is_supported,
+	.led_hw_control_get = ksz8795_led_hw_control_get,
+	.led_hw_control_set = ksz8795_led_hw_control_set,
 }, {
 	.phy_id		= PHY_ID_KSZ9477,
 	.phy_id_mask	= MICREL_PHY_ID_MASK,
