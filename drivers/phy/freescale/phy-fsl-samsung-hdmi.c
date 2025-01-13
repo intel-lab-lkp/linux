@@ -666,7 +666,7 @@ static int fsl_samsung_hdmi_phy_probe(struct platform_device *pdev)
 	if (IS_ERR(phy->regs))
 		return PTR_ERR(phy->regs);
 
-	phy->apbclk = devm_clk_get(phy->dev, "apb");
+	phy->apbclk = devm_clk_get_enabled(phy->dev, "apb");
 	if (IS_ERR(phy->apbclk))
 		return dev_err_probe(phy->dev, PTR_ERR(phy->apbclk),
 				     "failed to get apb clk\n");
@@ -676,28 +676,15 @@ static int fsl_samsung_hdmi_phy_probe(struct platform_device *pdev)
 		return dev_err_probe(phy->dev, PTR_ERR(phy->refclk),
 				     "failed to get ref clk\n");
 
-	ret = clk_prepare_enable(phy->apbclk);
-	if (ret) {
-		dev_err(phy->dev, "failed to enable apbclk\n");
-		return ret;
-	}
-
 	pm_runtime_get_noresume(phy->dev);
 	pm_runtime_set_active(phy->dev);
 	pm_runtime_enable(phy->dev);
 
 	ret = phy_clk_register(phy);
-	if (ret) {
+	if (ret)
 		dev_err(&pdev->dev, "register clk failed\n");
-		goto register_clk_failed;
-	}
 
 	pm_runtime_put(phy->dev);
-
-	return 0;
-
-register_clk_failed:
-	clk_disable_unprepare(phy->apbclk);
 
 	return ret;
 }
