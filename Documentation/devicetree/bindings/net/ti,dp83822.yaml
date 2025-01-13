@@ -122,6 +122,16 @@ properties:
       - free-running
       - recovered
 
+  ti,tx-amplitude-100base-tx-millivolt:
+    description: |
+       DP83822 PHY only.
+       Transmit amplitude voltage for 100BASE-TX in millivolt. When omitted,
+       the PHY's default will be left as is.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1600, 1633, 1667, 1700, 1733, 1767, 1800, 1833,
+           1867, 1900, 1933, 1967, 2000, 2033, 2067, 2100]
+    default: 2000
+
 required:
   - reg
 
@@ -137,6 +147,7 @@ examples:
         rx-internal-delay-ps = <1>;
         tx-internal-delay-ps = <1>;
         ti,gpio2-clk-out = "xi";
+        ti,tx-amplitude-100base-tx-millivolt = <2100>;
       };
     };
 
