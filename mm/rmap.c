@@ -1671,7 +1671,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, address, 0);
 	pte_t pteval;
 	struct page *subpage;
-	bool anon_exclusive, ret = true;
+	bool anon_exclusive, lazyfree, ret = true;
 	struct mmu_notifier_range range;
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
 	int nr_pages = 1;
@@ -1724,9 +1724,18 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 		}
 
 		if (!pvmw.pte) {
+			lazyfree = folio_test_anon(folio) && !folio_test_swapbacked(folio);
+
 			if (unmap_huge_pmd_locked(vma, pvmw.address, pvmw.pmd,
 						  folio))
 				goto walk_done;
+			/*
+			 * unmap_huge_pmd_locked has either already marked
+			 * the folio as swap-backed or decided to retain it
+			 * due to GUP or speculative references.
+			 */
+			if (lazyfree)
+				goto walk_abort;
 
 			if (flags & TTU_SPLIT_HUGE_PMD) {
 				/*
