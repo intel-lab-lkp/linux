@@ -364,7 +364,7 @@ static void ssd130x_reset(struct ssd130x_device *ssd130x)
 
 	/* Reset the screen */
 	gpiod_set_value_cansleep(ssd130x->reset, 1);
-	udelay(4);
+	usleep_range(100, 1000);
 	gpiod_set_value_cansleep(ssd130x->reset, 0);
 	udelay(4);
 }
