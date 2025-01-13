@@ -4,14 +4,17 @@
  *
  * Copyright (C) 2024 Renesas Electronics Corporation.
  */
+#include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/units.h>
 #include <linux/watchdog.h>
@@ -39,6 +42,9 @@
 #define CLOCK_DIV_BY_256	256
 
 #define WDT_DEFAULT_TIMEOUT	60U
+
+#define CPG_ERROR_RST2(x)	BIT(x)
+#define CPG_ERROR_RST2_WEN(x)	BIT((x) + 16)
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
@@ -206,8 +212,36 @@ static const struct watchdog_ops rzv2h_wdt_ops = {
 static int rzv2h_wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
 	struct rzv2h_wdt_priv *priv;
+	unsigned int bootstatus = 0;
+	struct regmap *syscon;
 	int ret;
+
+	/* Do not error out to maintain old DT compatibility */
+	syscon = syscon_regmap_lookup_by_phandle(np, "renesas,syscon-cpg-error-rst");
+	if (!IS_ERR(syscon)) {
+		struct of_phandle_args args;
+		u32 reg;
+
+		ret = of_parse_phandle_with_fixed_args(np, "renesas,syscon-cpg-error-rst",
+						       2, 0, &args);
+		if (ret)
+			return ret;
+
+		ret = regmap_read(syscon, args.args[0], &reg);
+		if (ret)
+			return ret;
+
+		if (reg & CPG_ERROR_RST2(args.args[1])) {
+			ret = regmap_write(syscon, args.args[0],
+					   CPG_ERROR_RST2(args.args[1]) |
+					   CPG_ERROR_RST2_WEN(args.args[1]));
+			if (ret)
+				return ret;
+		}
+		bootstatus = reg & CPG_ERROR_RST2(args.args[1]) ? WDIOF_CARDRESET : 0;
+	}
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -243,6 +277,7 @@ static int rzv2h_wdt_probe(struct platform_device *pdev)
 	priv->wdev.info = &rzv2h_wdt_ident;
 	priv->wdev.ops = &rzv2h_wdt_ops;
 	priv->wdev.parent = dev;
+	priv->wdev.bootstatus = bootstatus;
 	watchdog_set_drvdata(&priv->wdev, priv);
 	watchdog_set_nowayout(&priv->wdev, nowayout);
 	watchdog_stop_on_unregister(&priv->wdev);
