@@ -45,6 +45,11 @@ struct mxc_gpio_hwdata {
 	unsigned high_level;
 	unsigned rise_edge;
 	unsigned fall_edge;
+	/*
+	 * Static allocation of GPIO base is deprecated.
+	 * Set this to false for future SoCs.
+	 */
+	bool gpio_base_static_alloc;
 };
 
 struct mxc_gpio_reg_saved {
@@ -88,6 +93,7 @@ static struct mxc_gpio_hwdata imx1_imx21_gpio_hwdata = {
 	.high_level	= 0x02,
 	.rise_edge	= 0x00,
 	.fall_edge	= 0x01,
+	.gpio_base_static_alloc = true,
 };
 
 static struct mxc_gpio_hwdata imx31_gpio_hwdata = {
@@ -103,6 +109,7 @@ static struct mxc_gpio_hwdata imx31_gpio_hwdata = {
 	.high_level	= 0x01,
 	.rise_edge	= 0x02,
 	.fall_edge	= 0x03,
+	.gpio_base_static_alloc = true,
 };
 
 static struct mxc_gpio_hwdata imx35_gpio_hwdata = {
@@ -118,6 +125,7 @@ static struct mxc_gpio_hwdata imx35_gpio_hwdata = {
 	.high_level	= 0x01,
 	.rise_edge	= 0x02,
 	.fall_edge	= 0x03,
+	.gpio_base_static_alloc = true,
 };
 
 #define GPIO_DR			(port->hwdata->dr_reg)
@@ -490,7 +498,19 @@ static int mxc_gpio_probe(struct platform_device *pdev)
 	port->gc.request = mxc_gpio_request;
 	port->gc.free = mxc_gpio_free;
 	port->gc.to_irq = mxc_gpio_to_irq;
-	port->gc.base = of_alias_get_id(np, "gpio") * 32;
+	port->gc.base = -1;
+
+	if (port->hwdata->gpio_base_static_alloc) {
+		/*
+		 * GPIO indices have been fixed for the i.MX GPIO controllers
+		 * for many years and changing that now will induce a lot of
+		 * breakage at runtime. Setting this member buys users some time
+		 * until they are forced to migrate when sysfs GPIO support is
+		 * removed completely.
+		 */
+		port->gc.legacy_static_base = true;
+		port->gc.base = of_alias_get_id(np, "gpio") * 32;
+	}
 
 	err = devm_gpiochip_add_data(&pdev->dev, &port->gc, port);
 	if (err)
