@@ -1924,7 +1924,7 @@ static int perform_bb_shadow(struct parser_exec_state *s)
 	/* the start_offset stores the batch buffer's start gma's
 	 * offset relative to page boundary. so for non-privileged batch
 	 * buffer, the shadowed gem object holds exactly the same page
-	 * layout as original gem object. This is for the convience of
+	 * layout as original gem object. This is for the convenience of
 	 * replacing the whole non-privilged batch buffer page to this
 	 * shadowed one in PPGTT at the same gma address. (this replacing
 	 * action is not implemented yet now, but may be necessary in
@@ -1976,7 +1976,7 @@ static int perform_bb_shadow(struct parser_exec_state *s)
 	/*
 	 * ip_va saves the virtual address of the shadow batch buffer, while
 	 * ip_gma saves the graphics address of the original batch buffer.
-	 * As the shadow batch buffer is just a copy from the originial one,
+	 * As the shadow batch buffer is just a copy from the original one,
 	 * it should be right to use shadow batch buffer'va and original batch
 	 * buffer's gma in pair. After all, we don't want to pin the shadow
 	 * buffer here (too early).
