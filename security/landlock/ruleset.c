@@ -367,7 +367,7 @@ static int merge_tree(struct landlock_ruleset *const dst,
 static int merge_ruleset(struct landlock_ruleset *const dst,
 			 struct landlock_ruleset *const src)
 {
-	int err = 0;
+	int err;
 
 	might_sleep();
 	/* Should already be checked by landlock_merge_ruleset() */
@@ -378,32 +378,28 @@ static int merge_ruleset(struct landlock_ruleset *const dst,
 		return -EINVAL;
 
 	/* Locks @dst first because we are its only owner. */
-	mutex_lock(&dst->lock);
-	mutex_lock_nested(&src->lock, SINGLE_DEPTH_NESTING);
+	guard(mutex)(&dst->lock);
+	guard(mutex_nest_1)(&src->lock);
 
 	/* Stacks the new layer. */
-	if (WARN_ON_ONCE(src->num_layers != 1 || dst->num_layers < 1)) {
-		err = -EINVAL;
-		goto out_unlock;
-	}
+	if (WARN_ON_ONCE(src->num_layers != 1 || dst->num_layers < 1))
+		return -EINVAL;
+
 	dst->access_masks[dst->num_layers - 1] = src->access_masks[0];
 
 	/* Merges the @src inode tree. */
 	err = merge_tree(dst, src, LANDLOCK_KEY_INODE);
 	if (err)
-		goto out_unlock;
+		return err;
 
 #if IS_ENABLED(CONFIG_INET)
 	/* Merges the @src network port tree. */
 	err = merge_tree(dst, src, LANDLOCK_KEY_NET_PORT);
 	if (err)
-		goto out_unlock;
+		return err;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
-out_unlock:
-	mutex_unlock(&src->lock);
-	mutex_unlock(&dst->lock);
-	return err;
+	return 0;
 }
 
 static int inherit_tree(struct landlock_ruleset *const parent,
@@ -441,47 +437,41 @@ static int inherit_tree(struct landlock_ruleset *const parent,
 static int inherit_ruleset(struct landlock_ruleset *const parent,
 			   struct landlock_ruleset *const child)
 {
-	int err = 0;
+	int err;
 
 	might_sleep();
 	if (!parent)
 		return 0;
 
 	/* Locks @child first because we are its only owner. */
-	mutex_lock(&child->lock);
-	mutex_lock_nested(&parent->lock, SINGLE_DEPTH_NESTING);
+	guard(mutex)(&child->lock);
+	guard(mutex_nest_1)(&parent->lock);
 
 	/* Copies the @parent inode tree. */
 	err = inherit_tree(parent, child, LANDLOCK_KEY_INODE);
 	if (err)
-		goto out_unlock;
+		return err;
 
 #if IS_ENABLED(CONFIG_INET)
 	/* Copies the @parent network port tree. */
 	err = inherit_tree(parent, child, LANDLOCK_KEY_NET_PORT);
 	if (err)
-		goto out_unlock;
+		return err;
 #endif /* IS_ENABLED(CONFIG_INET) */
 
-	if (WARN_ON_ONCE(child->num_layers <= parent->num_layers)) {
-		err = -EINVAL;
-		goto out_unlock;
-	}
+	if (WARN_ON_ONCE(child->num_layers <= parent->num_layers))
+		return -EINVAL;
+
 	/* Copies the parent layer stack and leaves a space for the new layer. */
 	memcpy(child->access_masks, parent->access_masks,
 	       flex_array_size(parent, access_masks, parent->num_layers));
 
-	if (WARN_ON_ONCE(!parent->hierarchy)) {
-		err = -EINVAL;
-		goto out_unlock;
-	}
+	if (WARN_ON_ONCE(!parent->hierarchy))
+		return -EINVAL;
+
 	get_hierarchy(parent->hierarchy);
 	child->hierarchy->parent = parent->hierarchy;
-
-out_unlock:
-	mutex_unlock(&parent->lock);
-	mutex_unlock(&child->lock);
-	return err;
+	return 0;
 }
 
 static void free_ruleset(struct landlock_ruleset *const ruleset)
