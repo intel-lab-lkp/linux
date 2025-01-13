@@ -43,6 +43,16 @@ properties:
       ID in its "clocks" phandle cell. See include/dt-bindings/clock/imx8m-clock.h
       for the full list of i.MX8M clock IDs.
 
+  fsl,operating-mode:
+    $ref: /schemas/types.yaml#/definitions/string
+    description:
+      The operating mode of the SoC. This affects the maximum clock rates that
+      can safely be configured by the clock controller.
+    oneOf:
+      - enum:
+          - nominal
+          - overdrive
+
 required:
   - compatible
   - reg
@@ -109,6 +119,7 @@ examples:
                  <&clk_ext3>, <&clk_ext4>;
         clock-names = "osc_32k", "osc_24m", "clk_ext1", "clk_ext2",
                       "clk_ext3", "clk_ext4";
+        fsl,operating-mode = "nominal";
     };
 
   - |
