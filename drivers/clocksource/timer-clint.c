@@ -48,6 +48,12 @@ EXPORT_SYMBOL(clint_time_val);
 #ifdef CONFIG_SMP
 static void clint_send_ipi(unsigned int cpu)
 {
+	/*
+	 * Ensure that stores to normal memory are visible to the other CPUs
+	 * before issuing IPI.
+	 */
+	wmb();
+
 	writel(1, clint_ipi_base + cpuid_to_hartid_map(cpu));
 }
 
