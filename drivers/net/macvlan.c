@@ -1569,8 +1569,8 @@ static int macvlan_newlink(struct net_device *dev,
 			   struct rtnl_newlink_params *params,
 			   struct netlink_ext_ack *extack)
 {
-	return macvlan_common_newlink(params->net, dev, params->tb,
-				      params->data, extack);
+	return macvlan_common_newlink(rtnl_newlink_link_net(params), dev,
+				      params->tb, params->data, extack);
 }
 
 void macvlan_dellink(struct net_device *dev, struct list_head *head)
