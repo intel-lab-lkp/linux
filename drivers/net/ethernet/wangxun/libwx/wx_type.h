@@ -1051,6 +1051,7 @@ enum wx_pf_flags {
 	WX_FLAG_FDIR_CAPABLE,
 	WX_FLAG_FDIR_HASH,
 	WX_FLAG_FDIR_PERFECT,
+	WX_FLAG_RSC_CAPABLE,
 	WX_PF_FLAGS_NBITS               /* must be last */
 };
 
