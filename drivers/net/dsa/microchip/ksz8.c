@@ -1044,6 +1044,22 @@ int ksz8_r_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 *val)
 			return ret;
 
 		break;
+	/* Emulated access to Register 11 (0x0B): Global Control 9 */
+	case (REG_SW_CTRL_9 << 8):
+		ret = ksz_read8(dev, REG_SW_CTRL_9, &val1);
+		if (ret)
+			return ret;
+
+		data = val1 & 0x30;	/* LED Mode */
+		break;
+	/* Emulated access to Register 29/45/61 (0x1D/0x2D/0x3D): Port 1/2/3 Control 10 */
+	case (REG_PORT_CTRL_10 << 8):
+		ret = ksz_pread8(dev, p, REG_PORT_CTRL_10, &val1);
+		if (ret)
+			return ret;
+
+		data = val1 & BIT(7);	/* LED Off */
+		break;
 	default:
 		processed = false;
 		break;
@@ -1256,6 +1272,37 @@ int ksz8_w_phy(struct ksz_device *dev, u16 phy, u16 reg, u16 val)
 		if (ret)
 			return ret;
 		break;
+
+	/* Emulated access to Register 11 (0x0B): Global Control 9 */
+	case (REG_SW_CTRL_9 << 8):
+		ret = ksz_read8(dev, REG_SW_CTRL_9, &data);
+		if (ret)
+			return ret;
+
+		/* Only ever allow LED Mode update */
+		data &= ~0x30;
+		data |= val & 0x30;
+
+		ret = ksz_write8(dev, REG_SW_CTRL_9, data);
+		if (ret)
+			return ret;
+		break;
+
+	/* Emulated access to Register 29/45/61 (0x1D/0x2D/0x3D): Port 1/2/3 Control 10 */
+	case (REG_PORT_CTRL_10 << 8):
+		ret = ksz_pread8(dev, p, REG_PORT_CTRL_10, &data);
+		if (ret)
+			return ret;
+
+		/* Only ever allow LED Off update */
+		data &= ~BIT(7);
+		data |= val & BIT(7);
+
+		ret = ksz_pwrite8(dev, p, REG_PORT_CTRL_10, data);
+		if (ret)
+			return ret;
+		break;
+
 	default:
 		break;
 	}
