@@ -545,6 +545,16 @@ config FRAME_POINTER
 config OBJTOOL
 	bool
 
+config OBJTOOL_WERROR
+	bool "Run objtool with warnings as errors"
+	default n
+	depends on OBJTOOL
+	help
+	  Fail the build when objtool produces warnings.
+
+	  By default, objtool just prints warnings to the terminal without
+	  causing a build failure. This config changes that.
+
 config STACK_VALIDATION
 	bool "Compile-time stack metadata validation"
 	depends on HAVE_STACK_VALIDATION && UNWINDER_FRAME_POINTER
