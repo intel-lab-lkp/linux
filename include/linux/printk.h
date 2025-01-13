@@ -755,6 +755,27 @@ enum {
 extern int hex_dump_to_buffer(const void *buf, size_t len, int rowsize,
 			      int groupsize, char *linebuf, size_t linebuflen,
 			      bool ascii);
+/**
+ * for_each_line_in_hex_dump - iterate over buffer, converting into hex ASCII
+ * @i - offset in @buff
+ * @rowsize: number of bytes to print per line; must be 16 or 32
+ * @linebuf: where to put the converted data
+ * @linebuflen: total size of @linebuf, including space for terminating NUL
+ *		IOW >= (@rowsize * 2) + ((@rowsize - 1 / @groupsize)) + 1
+ * @groupsize: number of bytes to print at a time (1, 2, 4, 8; default = 1)
+ * @buf: data blob to dump
+ * @len: number of bytes in the @buf
+ */
+ #define for_each_line_in_hex_dump(i, rowsize, linebuf, linebuflen, groupsize, \
+				   buf, len) \
+	for ((i) = 0;							\
+	     (i) < (len) &&						\
+	     hex_dump_to_buffer((unsigned char *)(buf) + (i),		\
+				min((len) - (i), rowsize),		\
+				(rowsize), (groupsize), (linebuf),	\
+				(linebuflen), false);			\
+	     (i) += (rowsize) == 16 || (rowsize) == 32 ? (rowsize) : 16	\
+	    )
 #ifdef CONFIG_PRINTK
 extern void print_hex_dump(const char *level, const char *prefix_str,
 			   int prefix_type, int rowsize, int groupsize,
