@@ -848,6 +848,13 @@ foreach my $entry (keys %deprecated_apis) {
 }
 $deprecated_apis_search = "(?:${deprecated_apis_search})";
 
+our %deprecated_members = (
+	"legacy_static_base"			=> "setting .base to -1",
+);
+
+our $deprecated_memb_search = "(?:" . join("|", keys %deprecated_members) . ")";
+%deprecated_apis = (%deprecated_apis, %deprecated_members);
+
 our $mode_perms_world_writable = qr{
 	S_IWUGO		|
 	S_IWOTH		|
@@ -7407,8 +7414,8 @@ sub process {
 		}
 
 # check for deprecated apis
-		if ($line =~ /\b($deprecated_apis_search)\b\s*\(/) {
-			my $deprecated_api = $1;
+		if ($line =~ /\b(?<old>$deprecated_apis_search)\b\s*\(|(?:->|\.)(?<old>$deprecated_memb_search)\b/) {
+			my $deprecated_api = ${^CAPTURE}{old};
 			my $new_api = $deprecated_apis{$deprecated_api};
 			WARN("DEPRECATED_API",
 			     "Deprecated use of '$deprecated_api', prefer '$new_api' instead\n" . $herecurr);
