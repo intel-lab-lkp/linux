@@ -82,7 +82,11 @@ static inline void syscall_set_return_value(struct task_struct *task,
 		 */
 		if (error) {
 			regs->ccr |= 0x10000000L;
-			regs->gpr[3] = error;
+			/*
+			 * In case of an error regs->gpr[3] contains
+			 * a positive ERRORCODE.
+			 */
+			regs->gpr[3] = -error;
 		} else {
 			regs->ccr &= ~0x10000000L;
 			regs->gpr[3] = val;
