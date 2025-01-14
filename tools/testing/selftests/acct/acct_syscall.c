@@ -54,6 +54,7 @@ int main(void)
 	if (child_pid < 0) {
 		ksft_test_result_error("Creating a child process to log failed\n");
 		acct(NULL);
+		fclose(fp);
 		return 1;
 	} else if (child_pid > 0) {
 		wait(NULL);
@@ -65,6 +66,7 @@ int main(void)
 		if (sz <= 0) {
 			ksft_test_result_fail("Terminated child process not logged\n");
 			ksft_exit_fail();
+			fclose(fp);
 			return 1;
 		}
 
@@ -73,6 +75,6 @@ int main(void)
 		ksft_exit_pass();
 		return 0;
 	}
-
+	fclose(fp);
 	return 1;
 }
