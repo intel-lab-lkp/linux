@@ -22,6 +22,7 @@
 
 #include <linux/freezer.h>
 #include <linux/kthread.h>
+#include <linux/sched.h>
 #include <linux/sched/cputime.h>
 
 #define REBALANCE_WORK_SCAN_OFFSET	(U64_MAX - 1)
@@ -477,6 +478,8 @@ int bch2_rebalance_start(struct bch_fs *c)
 	bch_err_msg(c, ret, "creating rebalance thread");
 	if (ret)
 		return ret;
+
+	sched_set_batch(p, 19);
 
 	get_task_struct(p);
 	rcu_assign_pointer(c->rebalance.thread, p);
