@@ -5718,18 +5718,21 @@ static int ceph_mds_auth_match(struct ceph_mds_client *mdsc,
 			 *
 			 * All the other cases                       --> mismatch
 			 */
+			int rc = 1;
 			char *first = strstr(_tpath, auth->match.path);
 			if (first != _tpath) {
-				if (free_tpath)
-					kfree(_tpath);
-				return 0;
+				rc = 0;
 			}
 
 			if (tlen > len && _tpath[len] != '/') {
-				if (free_tpath)
-					kfree(_tpath);
-				return 0;
+				rc = 0;
 			}
+
+			if (free_tpath)
+			  kfree(_tpath);
+
+			if (!rc)
+			  return 0;
 		}
 	}
 
