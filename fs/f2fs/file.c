@@ -2429,6 +2429,55 @@ static int f2fs_ioc_shutdown(struct file *filp, unsigned long arg)
 	return ret;
 }
 
+static int f2fs_ioc_donate_range(struct file *filp, unsigned long arg)
+{
+	struct inode *inode = file_inode(filp);
+	struct mnt_idmap *idmap = file_mnt_idmap(filp);
+	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
+	struct f2fs_donate_range range;
+	int ret;
+
+	if (copy_from_user(&range, (struct f2fs_donate_range __user *)arg,
+							sizeof(range)))
+		return -EFAULT;
+
+	if (!inode_owner_or_capable(idmap, inode))
+		return -EACCES;
+
+	if (!S_ISREG(inode->i_mode))
+		return -EINVAL;
+
+	if (unlikely((range.start + range.len) >> PAGE_SHIFT >
+					max_file_blocks(inode)))
+		return -EINVAL;
+
+	ret = mnt_want_write_file(filp);
+	if (ret)
+		return ret;
+
+	inode_lock(inode);
+
+	if (f2fs_is_atomic_file(inode))
+		goto out;
+
+	spin_lock(&sbi->inode_lock[DONATE_INODE]);
+	if (list_empty(&F2FS_I(inode)->gdonate_list)) {
+		list_add_tail(&F2FS_I(inode)->gdonate_list,
+				&sbi->inode_list[DONATE_INODE]);
+		sbi->donate_files++;
+	} else {
+		list_move_tail(&F2FS_I(inode)->gdonate_list,
+				&sbi->inode_list[DONATE_INODE]);
+	}
+	F2FS_I(inode)->donate_start = range.start;
+	F2FS_I(inode)->donate_end = range.start + range.len - 1;
+	spin_unlock(&sbi->inode_lock[DONATE_INODE]);
+out:
+	inode_unlock(inode);
+	mnt_drop_write_file(filp);
+	return ret;
+}
+
 static int f2fs_ioc_fitrim(struct file *filp, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -4458,6 +4507,8 @@ static long __f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return -EOPNOTSUPP;
 	case F2FS_IOC_SHUTDOWN:
 		return f2fs_ioc_shutdown(filp, arg);
+	case F2FS_IOC_DONATE_RANGE:
+		return f2fs_ioc_donate_range(filp, arg);
 	case FITRIM:
 		return f2fs_ioc_fitrim(filp, arg);
 	case FS_IOC_SET_ENCRYPTION_POLICY:
@@ -5209,6 +5260,7 @@ long f2fs_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case F2FS_IOC_RELEASE_VOLATILE_WRITE:
 	case F2FS_IOC_ABORT_ATOMIC_WRITE:
 	case F2FS_IOC_SHUTDOWN:
+	case F2FS_IOC_DONATE_RANGE:
 	case FITRIM:
 	case FS_IOC_SET_ENCRYPTION_POLICY:
 	case FS_IOC_GET_ENCRYPTION_PWSALT:
