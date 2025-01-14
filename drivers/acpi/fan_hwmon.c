@@ -44,6 +44,12 @@ static umode_t acpi_fan_hwmon_is_visible(const void *drvdata, enum hwmon_sensor_
 			return 0444;
 		case hwmon_fan_target:
 			/*
+			 * Fans with only _FST do not support fan control.
+			 */
+			if (fan->acpi4_only_fst)
+				return 0;
+
+			/*
 			 * When in fine grain control mode, not every fan control value
 			 * has an associated fan performance state.
 			 */

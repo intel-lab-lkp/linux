@@ -211,6 +211,11 @@ static bool acpi_fan_is_acpi4(struct acpi_device *device)
 	       acpi_has_method(device->handle, "_FST");
 }
 
+static bool acpi_fan_has_fst(struct acpi_device *device)
+{
+	return acpi_has_method(device->handle, "_FST");
+}
+
 static int acpi_fan_get_fif(struct acpi_device *device)
 {
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
@@ -327,7 +332,12 @@ static int acpi_fan_probe(struct platform_device *pdev)
 	device->driver_data = fan;
 	platform_set_drvdata(pdev, fan);
 
-	if (acpi_fan_is_acpi4(device)) {
+	if (acpi_fan_is_acpi4(device))
+		fan->acpi4 = true;
+	else if (acpi_fan_has_fst(device))
+		fan->acpi4_only_fst = true;
+
+	if (fan->acpi4) {
 		result = acpi_fan_get_fif(device);
 		if (result)
 			return result;
@@ -335,7 +345,7 @@ static int acpi_fan_probe(struct platform_device *pdev)
 		result = acpi_fan_get_fps(device);
 		if (result)
 			return result;
-
+	} else if (fan->acpi4 || fan->acpi4_only_fst) {
 		result = devm_acpi_fan_create_hwmon(device);
 		if (result)
 			return result;
@@ -343,8 +353,6 @@ static int acpi_fan_probe(struct platform_device *pdev)
 		result = acpi_fan_create_attributes(device);
 		if (result)
 			return result;
-
-		fan->acpi4 = true;
 	} else {
 		result = acpi_device_update_power(device, NULL);
 		if (result) {
@@ -391,7 +399,7 @@ err_remove_link:
 err_unregister:
 	thermal_cooling_device_unregister(cdev);
 err_end:
-	if (fan->acpi4)
+	if (fan->acpi4 || fan->acpi4_only_fst)
 		acpi_fan_delete_attributes(device);
 
 	return result;
@@ -401,7 +409,7 @@ static void acpi_fan_remove(struct platform_device *pdev)
 {
 	struct acpi_fan *fan = platform_get_drvdata(pdev);
 
-	if (fan->acpi4) {
+	if (fan->acpi4 || fan->acpi4_only_fst) {
 		struct acpi_device *device = ACPI_COMPANION(&pdev->dev);
 
 		acpi_fan_delete_attributes(device);
@@ -415,7 +423,7 @@ static void acpi_fan_remove(struct platform_device *pdev)
 static int acpi_fan_suspend(struct device *dev)
 {
 	struct acpi_fan *fan = dev_get_drvdata(dev);
-	if (fan->acpi4)
+	if (fan->acpi4 || fan->acpi4_only_fst)
 		return 0;
 
 	acpi_device_set_power(ACPI_COMPANION(dev), ACPI_STATE_D0);
@@ -428,7 +436,7 @@ static int acpi_fan_resume(struct device *dev)
 	int result;
 	struct acpi_fan *fan = dev_get_drvdata(dev);
 
-	if (fan->acpi4)
+	if (fan->acpi4 || fan->acpi4_only_fst)
 		return 0;
 
 	result = acpi_device_update_power(ACPI_COMPANION(dev), NULL);
