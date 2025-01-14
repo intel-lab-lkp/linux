@@ -108,6 +108,36 @@ static ssize_t netdev_store(struct device *dev, struct device_attribute *attr,
 	return ret;
 }
 
+/* Same as netdev_store() but takes netdev_lock() instead of rtnl_lock() */
+static ssize_t
+netdev_lock_store(struct device *dev, struct device_attribute *attr,
+		  const char *buf, size_t len,
+		  int (*set)(struct net_device *, unsigned long))
+{
+	struct net_device *netdev = to_net_dev(dev);
+	struct net *net = dev_net(netdev);
+	unsigned long new;
+	int ret;
+
+	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		return -EPERM;
+
+	ret = kstrtoul(buf, 0, &new);
+	if (ret)
+		return ret;
+
+	netdev_lock(netdev);
+
+	if (dev_isalive(netdev)) {
+		ret = (*set)(netdev, new);
+		if (ret == 0)
+			ret = len;
+	}
+	netdev_unlock(netdev);
+
+	return ret;
+}
+
 NETDEVICE_SHOW_RO(dev_id, fmt_hex);
 NETDEVICE_SHOW_RO(dev_port, fmt_dec);
 NETDEVICE_SHOW_RO(addr_assign_type, fmt_dec);
@@ -638,7 +668,7 @@ static ssize_t threaded_store(struct device *dev,
 			      struct device_attribute *attr,
 			      const char *buf, size_t len)
 {
-	return netdev_store(dev, attr, buf, len, modify_napi_threaded);
+	return netdev_lock_store(dev, attr, buf, len, modify_napi_threaded);
 }
 static DEVICE_ATTR_RW(threaded);
 
