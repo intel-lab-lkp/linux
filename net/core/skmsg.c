@@ -548,7 +548,9 @@ static int sk_psock_skb_ingress_enqueue(struct sk_buff *skb,
 		if (unlikely(num_sge < 0))
 			return num_sge;
 	}
-
+#if IS_ENABLED(CONFIG_BPF_STREAM_PARSER)
+	psock->ingress_bytes += len;
+#endif
 	copied = len;
 	msg->sg.start = 0;
 	msg->sg.size = copied;
@@ -1092,6 +1094,20 @@ static int sk_psock_strp_read_done(struct strparser *strp, int err)
 	return err;
 }
 
+static int sk_psock_strp_read_sock(struct strparser *strp,
+				   read_descriptor_t *desc,
+				   sk_read_actor_t recv_actor)
+{
+	struct sock *sk = strp->sk;
+
+	if (WARN_ON(!sk_is_tcp(sk))) {
+		desc->error = -EINVAL;
+		return 0;
+	}
+
+	return tcp_bpf_strp_read_sock(sk, desc, recv_actor);
+}
+
 static int sk_psock_strp_parse(struct strparser *strp, struct sk_buff *skb)
 {
 	struct sk_psock *psock = container_of(strp, struct sk_psock, strp);
@@ -1136,6 +1152,7 @@ int sk_psock_init_strp(struct sock *sk, struct sk_psock *psock)
 
 	static const struct strp_callbacks cb = {
 		.rcv_msg	= sk_psock_strp_read,
+		.read_sock	= sk_psock_strp_read_sock,
 		.read_sock_done	= sk_psock_strp_read_done,
 		.parse_msg	= sk_psock_strp_parse,
 	};
@@ -1143,6 +1160,9 @@ int sk_psock_init_strp(struct sock *sk, struct sk_psock *psock)
 	ret = strp_init(&psock->strp, sk, &cb);
 	if (!ret)
 		sk_psock_set_state(psock, SK_PSOCK_RX_STRP_ENABLED);
+
+	if (sk_is_tcp(sk))
+		psock->copied_seq = tcp_sk(sk)->copied_seq;
 
 	return ret;
 }
