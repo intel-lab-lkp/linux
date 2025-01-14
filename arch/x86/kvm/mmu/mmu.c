@@ -7443,6 +7443,8 @@ int kvm_mmu_post_init_vm(struct kvm *kvm)
 {
 	if (nx_hugepage_mitigation_hard_disabled)
 		return 0;
+	if (kvm->arch.nx_huge_page_recovery_thread)
+		return 0;
 
 	kvm->arch.nx_huge_page_last = get_jiffies_64();
 	kvm->arch.nx_huge_page_recovery_thread = vhost_task_create(
