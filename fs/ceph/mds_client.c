@@ -5730,6 +5730,9 @@ static int ceph_mds_auth_match(struct ceph_mds_client *mdsc,
 					kfree(_tpath);
 				return 0;
 			}
+
+			if (free_tpath)
+			  kfree(_tpath);
 		}
 	}
 
