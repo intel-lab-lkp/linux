@@ -113,7 +113,7 @@ Printing backtraces on x86
 
 The question about the '?' preceding function names in an x86 stacktrace
 keeps popping up, here's an indepth explanation. It helps if the reader
-stares at print_context_stack() and the whole machinery in and around
+stares at 'question mark' and the whole machinery in and around
 arch/x86/kernel/dumpstack.c.
 
 Adapted from Ingo's mail, Message-ID: <20150521101614.GA10889@gmail.com>:
