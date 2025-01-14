@@ -102,17 +102,19 @@ static void iommufd_auto_response_faults(struct iommufd_hw_pagetable *hwpt,
 					 struct iommufd_attach_handle *handle)
 {
 	struct iommufd_fault *fault = hwpt->fault;
-	struct iopf_group *group, *next;
+	struct iopf_group *group;
 	unsigned long index;
 
 	if (!fault)
 		return;
 
 	mutex_lock(&fault->mutex);
-	list_for_each_entry_safe(group, next, &fault->deliver, node) {
-		if (group->attach_handle != &handle->handle)
+	for (group = iommufd_fault_deliver_extract(fault); group;
+	     group = iommufd_fault_deliver_extract(fault)) {
+		if (group->attach_handle != &handle->handle) {
+			iommufd_fault_deliver_restore(fault, group);
 			continue;
-		list_del(&group->node);
+		}
 		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
 		iopf_free_group(group);
 	}
@@ -212,7 +214,7 @@ int iommufd_fault_domain_replace_dev(struct iommufd_device *idev,
 void iommufd_fault_destroy(struct iommufd_object *obj)
 {
 	struct iommufd_fault *fault = container_of(obj, struct iommufd_fault, obj);
-	struct iopf_group *group, *next;
+	struct iopf_group *group;
 	unsigned long index;
 
 	/*
@@ -221,8 +223,8 @@ void iommufd_fault_destroy(struct iommufd_object *obj)
 	 * accessing this pointer. Therefore, acquiring the mutex here
 	 * is unnecessary.
 	 */
-	list_for_each_entry_safe(group, next, &fault->deliver, node) {
-		list_del(&group->node);
+	for (group = iommufd_fault_deliver_extract(fault); group;
+	     group = iommufd_fault_deliver_extract(fault)) {
 		iopf_group_response(group, IOMMU_PAGE_RESP_INVALID);
 		iopf_free_group(group);
 	}
@@ -266,17 +268,20 @@ static ssize_t iommufd_fault_fops_read(struct file *filep, char __user *buf,
 		return -ESPIPE;
 
 	mutex_lock(&fault->mutex);
-	while (!list_empty(&fault->deliver) && count > done) {
-		group = list_first_entry(&fault->deliver,
-					 struct iopf_group, node);
-
-		if (group->fault_count * fault_size > count - done)
+	for (group = iommufd_fault_deliver_extract(fault); group;
+	     group = iommufd_fault_deliver_extract(fault)) {
+		if (done >= count ||
+		    group->fault_count * fault_size > count - done) {
+			iommufd_fault_deliver_restore(fault, group);
 			break;
+		}
 
 		rc = xa_alloc(&fault->response, &group->cookie, group,
 			      xa_limit_32b, GFP_KERNEL);
-		if (rc)
+		if (rc) {
+			iommufd_fault_deliver_restore(fault, group);
 			break;
+		}
 
 		idev = to_iommufd_handle(group->attach_handle)->idev;
 		list_for_each_entry(iopf, &group->faults, list) {
@@ -284,14 +289,13 @@ static ssize_t iommufd_fault_fops_read(struct file *filep, char __user *buf,
 						      &data, idev,
 						      group->cookie);
 			if (copy_to_user(buf + done, &data, fault_size)) {
+				iommufd_fault_deliver_restore(fault, group);
 				xa_erase(&fault->response, group->cookie);
 				rc = -EFAULT;
 				break;
 			}
 			done += fault_size;
 		}
-
-		list_del(&group->node);
 	}
 	mutex_unlock(&fault->mutex);
 
@@ -349,10 +353,10 @@ static __poll_t iommufd_fault_fops_poll(struct file *filep,
 	__poll_t pollflags = EPOLLOUT;
 
 	poll_wait(filep, &fault->wait_queue, wait);
-	mutex_lock(&fault->mutex);
+	spin_lock(&fault->lock);
 	if (!list_empty(&fault->deliver))
 		pollflags |= EPOLLIN | EPOLLRDNORM;
-	mutex_unlock(&fault->mutex);
+	spin_unlock(&fault->lock);
 
 	return pollflags;
 }
@@ -394,6 +398,7 @@ int iommufd_fault_alloc(struct iommufd_ucmd *ucmd)
 	INIT_LIST_HEAD(&fault->deliver);
 	xa_init_flags(&fault->response, XA_FLAGS_ALLOC1);
 	mutex_init(&fault->mutex);
+	spin_lock_init(&fault->lock);
 	init_waitqueue_head(&fault->wait_queue);
 
 	filep = anon_inode_getfile("[iommufd-pgfault]", &iommufd_fault_fops,
@@ -442,9 +447,9 @@ int iommufd_fault_iopf_handler(struct iopf_group *group)
 	hwpt = group->attach_handle->domain->fault_data;
 	fault = hwpt->fault;
 
-	mutex_lock(&fault->mutex);
+	spin_lock(&fault->lock);
 	list_add_tail(&group->node, &fault->deliver);
-	mutex_unlock(&fault->mutex);
+	spin_unlock(&fault->lock);
 
 	wake_up_interruptible(&fault->wait_queue);
 
