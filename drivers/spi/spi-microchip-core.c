@@ -221,6 +221,13 @@ static inline void mchp_corespi_write_fifo(struct mchp_corespi *spi)
 	while ((i < fifo_max) && !(mchp_corespi_read(spi, REG_STATUS) & STATUS_TXFIFO_FULL)) {
 		u32 word;
 
+		/*
+		 * If the transfer is larger than FIFO_DEPTH, spin until space
+		 * is made in the RX FIFO to avoid losing data to RX overflows
+		 */
+		while (mchp_corespi_read(spi, REG_STATUS) & STATUS_RXFIFO_FULL)
+			;
+
 		if (spi->n_bytes == 4)
 			word = spi->tx_buf ? *((u32 *)spi->tx_buf) : 0xaa;
 		else if (spi->n_bytes == 2)
