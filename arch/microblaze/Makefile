@@ -66,6 +66,7 @@ PHONY += linux.bin linux.bin.gz linux.bin.ub
 linux.bin.ub linux.bin.gz: linux.bin
 linux.bin: vmlinux
 linux.bin linux.bin.gz linux.bin.ub:
+	$(if $(filter simpleImage.%, $(MAKECMDGOALS)),$(error You cannot build linux.bin and simpleImage.* at the same time))
 	$(Q)$(MAKE) $(build)=$(boot) $(boot)/$@
 	@echo 'Kernel: $(boot)/$@ is ready' ' (#'$(or $(KBUILD_BUILD_VERSION),`cat .version`)')'
 
