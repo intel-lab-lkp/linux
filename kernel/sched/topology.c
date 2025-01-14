@@ -499,6 +499,7 @@ void rq_attach_root(struct rq *rq, struct root_domain *rd)
 			set_rq_offline(rq);
 
 		cpumask_clear_cpu(rq->cpu, old_rd->span);
+		cpudl_clear_freecpu(&old_rd->cpudl, rq->cpu);
 
 		/*
 		 * If we don't want to free the old_rd yet then
