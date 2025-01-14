@@ -900,7 +900,11 @@ static int show_partition(struct seq_file *seqf, void *v)
 
 	rcu_read_lock();
 	xa_for_each(&sgp->part_tbl, idx, part) {
+		int partno = bdev_partno(part);
+
 		if (!bdev_nr_sectors(part))
+			continue;
+		if (WARN_ON_ONCE(partno >= DISK_MAX_PARTS))
 			continue;
 		seq_printf(seqf, "%4d  %7d %10llu %pg\n",
 			   MAJOR(part->bd_dev), MINOR(part->bd_dev),
