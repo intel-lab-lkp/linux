@@ -673,7 +673,7 @@ static int _hardware_enqueue(struct ci_hw_ep *hwep, struct ci_hw_req *hwreq)
 	struct ci_hdrc *ci = hwep->ci;
 	int ret = 0;
 	struct td_node *firstnode, *lastnode;
-	unsigned int bounced_size;
+	unsigned int bounced_size = 0;
 	struct scatterlist *sg;
 
 	/* don't queue twice */
