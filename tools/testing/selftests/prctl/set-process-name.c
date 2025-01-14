@@ -66,14 +66,18 @@ int check_name(void)
 		return -EIO;
 
 	fscanf(fptr, "%s", output);
-	if (ferror(fptr))
+	if (ferror(fptr)) {
+		fclose(fptr);
 		return -EIO;
+	}
 
 	int res = prctl(PR_GET_NAME, name, NULL, NULL, NULL);
 
-	if (res < 0)
+	if (res < 0) {
+		fclose(fptr);
 		return -errno;
-
+	}
+	fclose(fptr);
 	return !strcmp(output, name);
 }
 
