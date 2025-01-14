@@ -128,6 +128,11 @@ config CXL_REGION
 
 	  If unsure say 'y'
 
+config CXL_ARCH_LOW_MEMORY_HOLE
+	def_bool y
+	depends on CXL_REGION
+	depends on X86
+
 config CXL_REGION_INVALIDATION_TEST
 	bool "CXL: Region Cache Management Bypass (TEST)"
 	depends on CXL_REGION
