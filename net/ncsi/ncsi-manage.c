@@ -1479,7 +1479,10 @@ static void ncsi_probe_channel(struct ncsi_dev_priv *ndp)
 		}
 		break;
 	case ncsi_dev_state_probe_dp:
-		ndp->pending_req_num = 1;
+		if (ndp->package_probe_id + 1 < 8)
+			ndp->pending_req_num = 1;
+		else
+			nca.req_flags = 0;
 
 		/* Deselect the current package */
 		nca.type = NCSI_PKT_CMD_DP;
