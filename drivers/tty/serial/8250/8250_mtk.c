@@ -19,6 +19,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
+#include <linux/acpi.h>
 
 #include "8250.h"
 
@@ -519,6 +520,7 @@ static int mtk8250_probe(struct platform_device *pdev)
 	struct mtk8250_data *data;
 	struct resource *regs;
 	int irq, err;
+	acpi_handle hdl = ACPI_HANDLE(&pdev->dev);
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
@@ -545,8 +547,12 @@ static int mtk8250_probe(struct platform_device *pdev)
 		err = mtk8250_probe_of(pdev, &uart.port, data);
 		if (err)
 			return err;
-	} else
-		return -ENODEV;
+	} else {
+		if (!hdl) {
+			dev_err(&pdev->dev, "no device\n");
+			return -ENODEV;
+		}
+	}
 
 	spin_lock_init(&uart.port.lock);
 	uart.port.mapbase = regs->start;
@@ -560,16 +566,22 @@ static int mtk8250_probe(struct platform_device *pdev)
 	uart.port.private_data = data;
 	uart.port.shutdown = mtk8250_shutdown;
 	uart.port.startup = mtk8250_startup;
-	uart.port.set_termios = mtk8250_set_termios;
-	uart.port.uartclk = clk_get_rate(data->uart_clk);
+	if (hdl) {
+		uart.port.uartclk = 26000000;
+	} else {
+		uart.port.set_termios = mtk8250_set_termios;
+		uart.port.uartclk = clk_get_rate(data->uart_clk);
+	}
 #ifdef CONFIG_SERIAL_8250_DMA
 	if (data->dma)
 		uart.dma = data->dma;
 #endif
 
-	/* Disable Rate Fix function */
-	writel(0x0, uart.port.membase +
+	if (!hdl) {
+		/* Disable Rate Fix function */
+		writel(0x0, uart.port.membase +
 			(MTK_UART_RATE_FIX << uart.port.regshift));
+	}
 
 	platform_set_drvdata(pdev, data);
 
@@ -647,11 +659,18 @@ static const struct of_device_id mtk8250_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mtk8250_of_match);
 
+static const struct acpi_device_id mtk8250_acpi_match[] = {
+	{ "MTKI0511", 0 },
+	{},
+};
+MODULE_DEVICE_TABLE(acpi, mtk8250_acpi_match);
+
 static struct platform_driver mtk8250_platform_driver = {
 	.driver = {
 		.name		= "mt6577-uart",
 		.pm		= &mtk8250_pm_ops,
 		.of_match_table	= mtk8250_of_match,
+		.acpi_match_table = ACPI_PTR(mtk8250_acpi_match),
 	},
 	.probe			= mtk8250_probe,
 	.remove			= mtk8250_remove,
