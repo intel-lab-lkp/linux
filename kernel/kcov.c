@@ -716,6 +716,8 @@ static int kcov_close(struct inode *inode, struct file *filep)
 
 static int kcov_get_mode(unsigned long arg)
 {
+	int mode = 0;
+
 	if (arg == KCOV_TRACE_PC)
 		return KCOV_MODE_TRACE_PC;
 	else if (arg == KCOV_TRACE_CMP)
@@ -724,12 +726,14 @@ static int kcov_get_mode(unsigned long arg)
 #else
 		return -ENOTSUPP;
 #endif
-	else if (arg == KCOV_TRACE_UNIQ_PC)
-		return KCOV_MODE_TRACE_UNIQ_PC;
-	else if (arg == KCOV_TRACE_UNIQ_EDGE)
-		return KCOV_MODE_TRACE_UNIQ_EDGE;
-	else
+	if (arg & KCOV_TRACE_UNIQ_PC)
+		mode |= KCOV_MODE_TRACE_UNIQ_PC;
+	if (arg & KCOV_TRACE_UNIQ_EDGE)
+		mode |= KCOV_MODE_TRACE_UNIQ_EDGE;
+	if (!mode)
 		return -EINVAL;
+
+	return mode;
 }
 
 /*
