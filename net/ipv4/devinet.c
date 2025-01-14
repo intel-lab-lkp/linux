@@ -107,15 +107,6 @@ static const struct nla_policy ifa_ipv4_policy[IFA_MAX+1] = {
 	[IFA_PROTO]		= { .type = NLA_U8 },
 };
 
-struct inet_fill_args {
-	u32 portid;
-	u32 seq;
-	int event;
-	unsigned int flags;
-	int netnsid;
-	int ifindex;
-};
-
 #define IN4_ADDR_HSIZE_SHIFT	8
 #define IN4_ADDR_HSIZE		(1U << IN4_ADDR_HSIZE_SHIFT)
 
@@ -1846,9 +1837,38 @@ static int inet_valid_dump_ifaddr_req(const struct nlmsghdr *nlh,
 	return 0;
 }
 
-static int in_dev_dump_addr(struct in_device *in_dev, struct sk_buff *skb,
-			    struct netlink_callback *cb, int *s_ip_idx,
-			    struct inet_fill_args *fillargs)
+static int in_dev_dump_ifmcaddr(struct in_device *in_dev, struct sk_buff *skb,
+				struct netlink_callback *cb, int *s_ip_idx,
+				struct inet_fill_args *fillargs)
+{
+	struct ip_mc_list *im;
+	int ip_idx = 0;
+	int err;
+
+	for (im = rcu_dereference(in_dev->mc_list);
+	     im;
+	     im = rcu_dereference(im->next_rcu)) {
+		if (ip_idx < *s_ip_idx) {
+			ip_idx++;
+			continue;
+		}
+		err = inet_fill_ifmcaddr(skb, in_dev->dev, im, fillargs);
+		if (err < 0)
+			goto done;
+
+		nl_dump_check_consistent(cb, nlmsg_hdr(skb));
+		ip_idx++;
+	}
+	err = 0;
+	ip_idx = 0;
+done:
+	*s_ip_idx = ip_idx;
+	return err;
+}
+
+static int in_dev_dump_ifaddr(struct in_device *in_dev, struct sk_buff *skb,
+			      struct netlink_callback *cb, int *s_ip_idx,
+			      struct inet_fill_args *fillargs)
 {
 	struct in_ifaddr *ifa;
 	int ip_idx = 0;
@@ -1874,6 +1894,23 @@ done:
 	return err;
 }
 
+static int in_dev_dump_addr(struct in_device *in_dev, struct sk_buff *skb,
+			    struct netlink_callback *cb, int *s_ip_idx,
+			    struct inet_fill_args *fillargs)
+{
+	switch (fillargs->type) {
+	case UNICAST_ADDR:
+		fillargs->event = RTM_NEWADDR;
+		return in_dev_dump_ifaddr(in_dev, skb, cb, s_ip_idx, fillargs);
+	case MULTICAST_ADDR:
+		fillargs->event = RTM_GETMULTICAST;
+		return in_dev_dump_ifmcaddr(in_dev, skb, cb, s_ip_idx,
+					    fillargs);
+	default:
+		return 0;
+	}
+}
+
 /* Combine dev_addr_genid and dev_base_seq to detect changes.
  */
 static u32 inet_base_seq(const struct net *net)
@@ -1889,15 +1926,16 @@ static u32 inet_base_seq(const struct net *net)
 	return res;
 }
 
-static int inet_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
+static int inet_dump_addr(struct sk_buff *skb, struct netlink_callback *cb,
+			  enum addr_type_t type)
 {
 	const struct nlmsghdr *nlh = cb->nlh;
 	struct inet_fill_args fillargs = {
 		.portid = NETLINK_CB(cb->skb).portid,
 		.seq = nlh->nlmsg_seq,
-		.event = RTM_NEWADDR,
 		.flags = NLM_F_MULTI,
 		.netnsid = -1,
+		.type = type,
 	};
 	struct net *net = sock_net(skb->sk);
 	struct net *tgt_net = net;
@@ -1947,6 +1985,20 @@ done:
 		put_net(tgt_net);
 	rcu_read_unlock();
 	return err;
+}
+
+static int inet_dump_ifaddr(struct sk_buff *skb, struct netlink_callback *cb)
+{
+	enum addr_type_t type = UNICAST_ADDR;
+
+	return inet_dump_addr(skb, cb, type);
+}
+
+static int inet_dump_ifmcaddr(struct sk_buff *skb, struct netlink_callback *cb)
+{
+	enum addr_type_t type = MULTICAST_ADDR;
+
+	return inet_dump_addr(skb, cb, type);
 }
 
 static void rtmsg_ifa(int event, struct in_ifaddr *ifa, struct nlmsghdr *nlh,
@@ -2845,6 +2897,8 @@ static const struct rtnl_msg_handler devinet_rtnl_msg_handlers[] __initconst = {
 	{.protocol = PF_INET, .msgtype = RTM_GETNETCONF,
 	 .doit = inet_netconf_get_devconf, .dumpit = inet_netconf_dump_devconf,
 	 .flags = RTNL_FLAG_DOIT_UNLOCKED | RTNL_FLAG_DUMP_UNLOCKED},
+	{.owner = THIS_MODULE, .protocol = PF_INET, .msgtype = RTM_GETMULTICAST,
+	 .dumpit = inet_dump_ifmcaddr, .flags = RTNL_FLAG_DUMP_UNLOCKED},
 };
 
 void __init devinet_init(void)

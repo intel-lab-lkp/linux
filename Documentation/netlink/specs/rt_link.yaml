@@ -93,6 +93,41 @@ definitions:
         name: ifi-change
         type: u32
   -
+    name: ifaddrmsg
+    type: struct
+    members:
+      -
+        name: ifa-family
+        type: u8
+      -
+        name: ifa-prefixlen
+        type: u8
+      -
+        name: ifa-flags
+        type: u8
+      -
+        name: ifa-scope
+        type: u8
+      -
+        name: ifa-index
+        type: u32
+  -
+    name: ifacacheinfo
+    type: struct
+    members:
+      -
+        name: ifa-prefered
+        type: u32
+      -
+        name: ifa-valid
+        type: u32
+      -
+        name: cstamp
+        type: u32
+      -
+        name: tstamp
+        type: u32
+  -
     name: ifla-bridge-id
     type: struct
     members:
@@ -2253,6 +2288,18 @@ attribute-sets:
       -
         name: tailroom
         type: u16
+  -
+    name: ifmcaddr-attrs
+    attributes:
+      -
+        name: addr
+        type: binary
+        value: 7
+      -
+        name: cacheinfo
+        type: binary
+        struct: ifacacheinfo
+        value: 6
 
 sub-messages:
   -
@@ -2493,6 +2540,29 @@ operations:
         reply:
           value: 92
           attributes: *link-stats-attrs
+    -
+      name: getmaddrs
+      doc: Get / dump IPv4/IPv6 multicast addresses.
+      attribute-set: ifmcaddr-attrs
+      fixed-header: ifaddrmsg
+      do:
+        request:
+          value: 58
+          attributes:
+            - ifa-family
+            - ifa-index
+        reply:
+          value: 58
+          attributes: &mcaddr-attrs
+            - addr
+            - cacheinfo
+      dump:
+        request:
+          value: 58
+            - ifa-family
+        reply:
+          value: 58
+          attributes: *mcaddr-attrs
 
 mcast-groups:
   list:
