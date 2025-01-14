@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0
+config CRYPTO_DEV_LS6000SE_RNG
+        tristate "Support for Loongson 6000SE RNG Driver"
+        depends on MFD_LS6000SE
+        help
+          Support for Loongson 6000SE RNG Driver.
