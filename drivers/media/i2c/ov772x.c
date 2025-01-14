@@ -877,11 +877,9 @@ static int ov772x_power_on(struct ov772x_priv *priv)
 	struct i2c_client *client = v4l2_get_subdevdata(&priv->subdev);
 	int ret;
 
-	if (priv->clk) {
-		ret = clk_prepare_enable(priv->clk);
-		if (ret)
-			return ret;
-	}
+	ret = clk_prepare_enable(priv->clk);
+	if (ret)
+		return ret;
 
 	if (priv->pwdn_gpio) {
 		gpiod_set_value(priv->pwdn_gpio, 1);
