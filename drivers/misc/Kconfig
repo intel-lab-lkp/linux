@@ -634,6 +634,15 @@ config MCHP_LAN966X_PCI
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
 
+config LS6000SE_SDF
+	tristate "Loongson Secure Device Function driver"
+	depends on MFD_LS6000SE
+	help
+	  Loongson Secure Device Function device is the child device of Loongson
+	  Security Module device, it supports the functions specified in
+	  GB/T 36322-2018.  This driver will use the interface of Loongson Security
+	  Module driver.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
