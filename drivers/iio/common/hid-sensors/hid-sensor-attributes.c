@@ -564,8 +564,21 @@ int hid_sensor_parse_common_attributes(struct hid_sensor_hub_device *hsdev,
 	} else
 		st->timestamp_ns_scale = 1000000000;
 
+	ret = 0;
+	if (st->sensitivity.index < 0 || st->sensitivity_rel.index < 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
 	hid_sensor_get_report_latency_info(hsdev, usage_id, st);
 
+	ret = sensor_hub_get_feature(hsdev,
+				st->power_state.report_id,
+				st->power_state.index, sizeof(value), &value);
+	if (value < 0)
+		ret = -EINVAL;
+
+out:
 	hid_dbg(hsdev->hdev, "common attributes: %x:%x, %x:%x, %x:%x %x:%x %x:%x\n",
 		st->poll.index, st->poll.report_id,
 		st->report_state.index, st->report_state.report_id,
@@ -573,15 +586,7 @@ int hid_sensor_parse_common_attributes(struct hid_sensor_hub_device *hsdev,
 		st->sensitivity.index, st->sensitivity.report_id,
 		timestamp.index, timestamp.report_id);
 
-	ret = sensor_hub_get_feature(hsdev,
-				st->power_state.report_id,
-				st->power_state.index, sizeof(value), &value);
-	if (ret < 0)
-		return ret;
-	if (value < 0)
-		return -EINVAL;
-
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_NS(hid_sensor_parse_common_attributes, "IIO_HID");
 
