@@ -167,19 +167,30 @@ static int child_vmsplice_memcmp_fn(char *mem, size_t size,
 	/* Backup the original content. */
 	memcpy(old, mem, size);
 
-	if (pipe(fds) < 0)
+	if (pipe(fds) < 0) {
+		free(old);
+		free(new);
 		return -errno;
-
+	}
 	/* Trigger a read-only pin. */
 	transferred = vmsplice(fds[1], &iov, 1, 0);
-	if (transferred < 0)
+	if (transferred < 0) {
+		free(old);
+		free(new);
 		return -errno;
-	if (transferred == 0)
+	}
+	if (transferred == 0) {
+		free(old);
+		free(new);
 		return -EINVAL;
+	}
 
 	/* Unmap it from our page tables. */
-	if (munmap(mem, size) < 0)
+	if (munmap(mem, size) < 0) {
+		free(old);
+		free(new);
 		return -errno;
+	}
 
 	/* Wait until the parent modified it. */
 	write(comm_pipes->child_ready[1], "0", 1);
