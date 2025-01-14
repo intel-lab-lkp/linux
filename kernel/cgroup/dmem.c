@@ -222,8 +222,7 @@ dmem_cgroup_calculate_protection(struct dmem_cgroup_pool_state *limit_pool,
 	struct page_counter *climit;
 	struct cgroup_subsys_state *css, *next_css;
 	struct dmemcg_state *dmemcg_iter;
-	struct dmem_cgroup_pool_state *pool, *parent_pool;
-	bool found_descendant;
+	struct dmem_cgroup_pool_state *pool, *candidate_pool, *parent_pool;
 
 	climit = &limit_pool->cnt;
 
@@ -241,7 +240,13 @@ dmem_cgroup_calculate_protection(struct dmem_cgroup_pool_state *limit_pool,
 	 */
 	while (pool != test_pool) {
 		next_css = css_next_child(NULL, css);
-		if (next_css) {
+		/*
+		 * pool is NULL when the current css does not contain a
+		 * pool of the type we're interested in. In that case, it's
+		 * impossible that any child css contains a relevant pool, so
+		 * skip the subtree entirely and move on to the next sibling.
+		 */
+		if (next_css && pool) {
 			parent_pool = pool;
 		} else {
 			while (css != &limit_pool->cs->css) {
@@ -260,16 +265,16 @@ dmem_cgroup_calculate_protection(struct dmem_cgroup_pool_state *limit_pool,
 		}
 		css = next_css;
 
-		found_descendant = false;
 		dmemcg_iter = container_of(css, struct dmemcg_state, css);
 
-		list_for_each_entry_rcu(pool, &dmemcg_iter->pools, css_node) {
-			if (pool_parent(pool) == parent_pool) {
-				found_descendant = true;
+		pool = NULL;
+		list_for_each_entry_rcu(candidate_pool, &dmemcg_iter->pools, css_node) {
+			if (pool_parent(candidate_pool) == parent_pool) {
+				pool = candidate_pool;
 				break;
 			}
 		}
-		if (!found_descendant)
+		if (!pool)
 			continue;
 
 		page_counter_calculate_protection(
