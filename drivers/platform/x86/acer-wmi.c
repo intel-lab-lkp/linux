@@ -1939,7 +1939,7 @@ static int acer_platform_profile_setup(struct platform_device *device)
 		set_bit(PLATFORM_PROFILE_LOW_POWER,
 			platform_profile_handler.choices);
 
-		err = platform_profile_register(&platform_profile_handler);
+		err = platform_profile_register(&platform_profile_handler, NULL);
 		if (err)
 			return err;
 
