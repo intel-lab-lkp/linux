@@ -83,10 +83,14 @@ struct kcov {
 	enum kcov_mode		mode;
 	/* Size of arena (in long's). */
 	unsigned int		size;
+	/* Previous PC. */
+	unsigned long		prev_pc;
 	/* Coverage buffer shared with user space. */
 	void			*area;
 	/* Coverage hashmap for unique pc. */
 	struct kcov_map		*map;
+	/* Edge hashmap for unique edge. */
+	struct kcov_map		*map_edge;
 	/* Task for which we collect coverage, or NULL. */
 	struct task_struct	*t;
 	/* Collecting coverage from remote (background) threads. */
@@ -221,7 +225,7 @@ static notrace unsigned int check_kcov_mode(enum kcov_mode needed_mode, struct t
 	return mode & needed_mode;
 }
 
-static int kcov_map_init(struct kcov *kcov, unsigned long size)
+static int kcov_map_init(struct kcov *kcov, unsigned long size, bool edge)
 {
 	struct kcov_map *map;
 	void *area;
@@ -240,8 +244,12 @@ static int kcov_map_init(struct kcov *kcov, unsigned long size)
 	spin_lock_irqsave(&kcov->lock, flags);
 	map->area = area;
 
-	kcov->map = map;
-	kcov->area = area;
+	if (edge) {
+		kcov->map_edge = map;
+	} else {
+		kcov->map = map;
+		kcov->area = area;
+	}
 	spin_unlock_irqrestore(&kcov->lock, flags);
 
 	hash_init(map->buckets);
@@ -276,7 +284,7 @@ static inline u32 hash_key(const struct kcov_entry *k)
 }
 
 static notrace inline void kcov_map_add(struct kcov_map *map, struct kcov_entry *ent,
-					struct task_struct *t)
+					struct task_struct *t, unsigned int mode)
 {
 	struct kcov *kcov;
 	struct kcov_entry *entry;
@@ -298,7 +306,10 @@ static notrace inline void kcov_map_add(struct kcov_map *map, struct kcov_entry 
 	memcpy(entry, ent, sizeof(*entry));
 	hash_add_rcu(map->buckets, &entry->node, key);
 
-	area = t->kcov_area;
+	if (mode == KCOV_MODE_TRACE_UNIQ_PC)
+		area = t->kcov_area;
+	else
+		area = kcov->map_edge->area;
 
 	pos = READ_ONCE(area[0]) + 1;
 	if (likely(pos < t->kcov_size)) {
@@ -327,13 +338,15 @@ void notrace __sanitizer_cov_trace_pc(void)
 	unsigned long ip = canonicalize_ip(_RET_IP_);
 	unsigned long pos;
 	struct kcov_entry entry = {0};
+	/* Only hash the lower 12 bits so the hash is independent of any module offsets. */
+	unsigned long mask = (1 << 12) - 1;
 	unsigned int mode;
 
 	t = current;
-	if (!check_kcov_mode(KCOV_MODE_TRACE_PC | KCOV_MODE_TRACE_UNIQ_PC, t))
+	if (!check_kcov_mode(KCOV_MODE_TRACE_PC | KCOV_MODE_TRACE_UNIQ_PC |
+			       KCOV_MODE_TRACE_UNIQ_EDGE, t))
 		return;
 
-	area = t->kcov_area;
 	mode = t->kcov_mode;
 	if (mode == KCOV_MODE_TRACE_PC) {
 		area = t->kcov_area;
@@ -352,8 +365,15 @@ void notrace __sanitizer_cov_trace_pc(void)
 			area[pos] = ip;
 		}
 	} else {
-		entry.ent = ip;
-		kcov_map_add(t->kcov->map, &entry, t);
+		if (mode & KCOV_MODE_TRACE_UNIQ_PC) {
+			entry.ent = ip;
+			kcov_map_add(t->kcov->map, &entry, t, KCOV_MODE_TRACE_UNIQ_PC);
+		}
+		if (mode & KCOV_MODE_TRACE_UNIQ_EDGE) {
+			entry.ent = (hash_long(t->kcov->prev_pc & mask, BITS_PER_LONG) & mask) ^ ip;
+			t->kcov->prev_pc = ip;
+			kcov_map_add(t->kcov->map_edge, &entry, t, KCOV_MODE_TRACE_UNIQ_EDGE);
+		}
 	}
 }
 EXPORT_SYMBOL(__sanitizer_cov_trace_pc);
@@ -555,14 +575,17 @@ static void kcov_get(struct kcov *kcov)
 	refcount_inc(&kcov->refcount);
 }
 
-static void kcov_map_free(struct kcov *kcov)
+static void kcov_map_free(struct kcov *kcov, bool edge)
 {
 	int bkt;
 	struct hlist_node *tmp;
 	struct kcov_entry *entry;
 	struct kcov_map *map;
 
-	map = kcov->map;
+	if (edge)
+		map = kcov->map_edge;
+	else
+		map = kcov->map;
 	if (!map)
 		return;
 	rcu_read_lock();
@@ -581,7 +604,8 @@ static void kcov_put(struct kcov *kcov)
 {
 	if (refcount_dec_and_test(&kcov->refcount)) {
 		kcov_remote_reset(kcov);
-		kcov_map_free(kcov);
+		kcov_map_free(kcov, false);
+		kcov_map_free(kcov, true);
 		kfree(kcov);
 	}
 }
@@ -636,18 +660,27 @@ static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
 	unsigned long size, off;
 	struct page *page;
 	unsigned long flags;
+	void *area;
 
 	spin_lock_irqsave(&kcov->lock, flags);
 	size = kcov->size * sizeof(unsigned long);
-	if (kcov->area == NULL || vma->vm_pgoff != 0 ||
-	    vma->vm_end - vma->vm_start != size) {
+	if (!vma->vm_pgoff) {
+		area = kcov->area;
+	} else if (vma->vm_pgoff == size >> PAGE_SHIFT) {
+		area = kcov->map_edge->area;
+	} else {
+		spin_unlock_irqrestore(&kcov->lock, flags);
+		return -EINVAL;
+	}
+
+	if (!area || vma->vm_end - vma->vm_start != size) {
 		res = -EINVAL;
 		goto exit;
 	}
 	spin_unlock_irqrestore(&kcov->lock, flags);
 	vm_flags_set(vma, VM_DONTEXPAND);
 	for (off = 0; off < size; off += PAGE_SIZE) {
-		page = vmalloc_to_page(kcov->area + off);
+		page = vmalloc_to_page(area + off);
 		res = vm_insert_page(vma, vma->vm_start + off, page);
 		if (res) {
 			pr_warn_once("kcov: vm_insert_page() failed\n");
@@ -693,6 +726,8 @@ static int kcov_get_mode(unsigned long arg)
 #endif
 	else if (arg == KCOV_TRACE_UNIQ_PC)
 		return KCOV_MODE_TRACE_UNIQ_PC;
+	else if (arg == KCOV_TRACE_UNIQ_EDGE)
+		return KCOV_MODE_TRACE_UNIQ_EDGE;
 	else
 		return -EINVAL;
 }
@@ -747,7 +782,8 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 		 * at task exit or voluntary by KCOV_DISABLE. After that it can
 		 * be enabled for another task.
 		 */
-		if (kcov->mode != KCOV_MODE_INIT || !kcov->area)
+		if (kcov->mode != KCOV_MODE_INIT || !kcov->area ||
+		    !kcov->map_edge->area)
 			return -EINVAL;
 		t = current;
 		if (kcov->t != NULL || t->kcov != NULL)
@@ -859,7 +895,10 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		size = arg;
 		if (size < 2 || size > INT_MAX / sizeof(unsigned long))
 			return -EINVAL;
-		res = kcov_map_init(kcov, size);
+		res = kcov_map_init(kcov, size, false);
+		if (res)
+			return res;
+		res = kcov_map_init(kcov, size, true);
 		if (res)
 			return res;
 		spin_lock_irqsave(&kcov->lock, flags);

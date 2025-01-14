@@ -23,8 +23,10 @@ enum kcov_mode {
 	KCOV_MODE_TRACE_CMP = 4,
 	/* The process owns a KCOV remote reference. */
 	KCOV_MODE_REMOTE = 8,
-	/* COllecting uniq pc mode. */
+	/* Collecting uniq pc mode. */
 	KCOV_MODE_TRACE_UNIQ_PC = 16,
+	/* Collecting uniq edge mode. */
+	KCOV_MODE_TRACE_UNIQ_EDGE = 32,
 };
 
 #define KCOV_IN_CTXSW	(1 << 30)
