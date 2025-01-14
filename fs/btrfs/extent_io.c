@@ -915,7 +915,8 @@ static struct extent_map *get_extent_map(struct btrfs_inode *inode,
 		*em_cached = NULL;
 	}
 
-	btrfs_lock_and_flush_ordered_range(inode, start, start + len - 1, &cached_state);
+	btrfs_lock_and_flush_ordered_range(inode, folio,
+					   start, start + len - 1, &cached_state);
 	em = btrfs_get_extent(inode, folio, start, len);
 	if (!IS_ERR(em)) {
 		BUG_ON(*em_cached);
