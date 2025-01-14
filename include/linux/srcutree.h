@@ -219,7 +219,7 @@ void srcu_torture_stats_print(struct srcu_struct *ssp, char *tt, char *tf);
  * or because it is a read-modify-write atomic operation, depending on
  * the whims of the architecture.
  */
-static inline int __srcu_read_lock_lite(struct srcu_struct *ssp)
+static inline int __srcu_read_lock_lite(struct srcu_struct *ssp) __acquires(ssp)
 {
 	int idx;
 
@@ -241,7 +241,7 @@ static inline int __srcu_read_lock_lite(struct srcu_struct *ssp)
  * or because it is a read-modify-write atomic operation, depending on
  * the whims of the architecture.
  */
-static inline void __srcu_read_unlock_lite(struct srcu_struct *ssp, int idx)
+static inline void __srcu_read_unlock_lite(struct srcu_struct *ssp, int idx) __releases(ssp)
 {
 	barrier();  /* Avoid leaking the critical section. */
 	this_cpu_inc(ssp->sda->srcu_unlock_count[idx].counter);  /* Z */
