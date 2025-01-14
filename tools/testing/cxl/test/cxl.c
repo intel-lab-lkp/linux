@@ -9,6 +9,7 @@
 #include <linux/pci.h>
 #include <linux/mm.h>
 #include <cxlmem.h>
+#include <core/lmh.h>
 
 #include "../watermark.h"
 #include "mock.h"
@@ -212,7 +213,11 @@ static struct {
 			.restrictions = ACPI_CEDT_CFMWS_RESTRICT_TYPE3 |
 					ACPI_CEDT_CFMWS_RESTRICT_VOLATILE,
 			.qtg_id = FAKE_QTG_ID,
+#if defined(CONFIG_CXL_ARCH_LOW_MEMORY_HOLE)
+			.window_size = SZ_256M * 3UL,
+#else
 			.window_size = SZ_256M * 4UL,
+#endif
 		},
 		.target = { 0 },
 	},
@@ -454,6 +459,7 @@ static int populate_cedt(void)
 			return -ENOMEM;
 		window->base_hpa = res->range.start;
 	}
+	set_mock_cfmws0_range_start(mock_cfmws[0]->base_hpa);
 
 	return 0;
 }
@@ -744,7 +750,11 @@ static void mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	struct cxl_endpoint_decoder *cxled;
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_port *port, *iter;
+#if defined(CONFIG_CXL_ARCH_LOW_MEMORY_HOLE)
+	const int size = SZ_1G;
+#else
 	const int size = SZ_512M;
+#endif
 	struct cxl_memdev *cxlmd;
 	struct cxl_dport *dport;
 	struct device *dev;

@@ -2,6 +2,8 @@
 
 #include "cxl.h"
 
+void set_mock_cfmws0_range_start(u64 start);
+
 #ifdef CONFIG_CXL_ARCH_LOW_MEMORY_HOLE
 bool arch_match_spa(struct cxl_root_decoder *cxlrd,
 		    struct cxl_endpoint_decoder *cxled);
