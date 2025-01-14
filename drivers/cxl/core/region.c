@@ -13,6 +13,7 @@
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
+#include "lmh.h"
 
 /**
  * DOC: cxl core region
@@ -836,8 +837,12 @@ static int match_auto_decoder(struct device *dev, void *data)
 	cxld = to_cxl_decoder(dev);
 	r = &cxld->hpa_range;
 
-	if (p->res && p->res->start == r->start && p->res->end == r->end)
-		return 1;
+	if (p->res) {
+		if (p->res->start == r->start && p->res->end == r->end)
+			return 1;
+		if (arch_match_region(p, cxld))
+			return 1;
+	}
 
 	return 0;
 }
@@ -1425,7 +1430,8 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		if (cxld->interleave_ways != iw ||
 		    cxld->interleave_granularity != ig ||
 		    cxld->hpa_range.start != p->res->start ||
-		    cxld->hpa_range.end != p->res->end ||
+		    (cxld->hpa_range.end != p->res->end &&
+		     !arch_match_region(p, cxld)) ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
 				"%s:%s %s expected iw: %d ig: %d %pr\n",
@@ -1737,6 +1743,7 @@ static int match_switch_decoder_by_range(struct device *dev, void *data)
 {
 	struct cxl_endpoint_decoder *cxled = data;
 	struct cxl_switch_decoder *cxlsd;
+	struct cxl_root_decoder *cxlrd;
 	struct range *r1, *r2;
 
 	if (!is_switch_decoder(dev))
@@ -1746,8 +1753,13 @@ static int match_switch_decoder_by_range(struct device *dev, void *data)
 	r1 = &cxlsd->cxld.hpa_range;
 	r2 = &cxled->cxld.hpa_range;
 
-	if (is_root_decoder(dev))
-		return range_contains(r1, r2);
+	if (is_root_decoder(dev)) {
+		if (range_contains(r1, r2))
+			return 1;
+		cxlrd = to_cxl_root_decoder(dev);
+		if (arch_match_spa(cxlrd, cxled))
+			return 1;
+	}
 	return (r1->start == r2->start && r1->end == r2->end);
 }
 
@@ -1954,7 +1966,8 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	}
 
 	if (resource_size(cxled->dpa_res) * p->interleave_ways !=
-	    resource_size(p->res)) {
+		    resource_size(p->res) &&
+	    !arch_match_spa(cxlrd, cxled)) {
 		dev_dbg(&cxlr->dev,
 			"%s:%s: decoder-size-%#llx * ways-%d != region-size-%#llx\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
@@ -3204,7 +3217,12 @@ static int match_root_decoder_by_range(struct device *dev, void *data)
 	r1 = &cxlrd->cxlsd.cxld.hpa_range;
 	r2 = &cxled->cxld.hpa_range;
 
-	return range_contains(r1, r2);
+	if (range_contains(r1, r2))
+		return true;
+	if (arch_match_spa(cxlrd, cxled))
+		return true;
+
+	return false;
 }
 
 static int match_region_by_range(struct device *dev, void *data)
@@ -3222,8 +3240,12 @@ static int match_region_by_range(struct device *dev, void *data)
 	p = &cxlr->params;
 
 	down_read(&cxl_region_rwsem);
-	if (p->res && p->res->start == r->start && p->res->end == r->end)
-		rc = 1;
+	if (p->res) {
+		if (p->res->start == r->start && p->res->end == r->end)
+			rc = 1;
+		if (arch_match_region(p, &cxled->cxld))
+			rc = 1;
+	}
 	up_read(&cxl_region_rwsem);
 
 	return rc;
@@ -3275,6 +3297,22 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 
 	*res = DEFINE_RES_MEM_NAMED(hpa->start, range_len(hpa),
 				    dev_name(&cxlr->dev));
+
+	/*
+	 * Trim the HPA retrieved from hardware to fit the SPA mapped by the
+	 * platform
+	 */
+	if (arch_match_spa(cxlrd, cxled)) {
+		dev_dbg(cxlmd->dev.parent, "(LMH) Resource (%s: %pr)\n",
+			dev_name(&cxled->cxld.dev), res);
+
+		arch_adjust_region_resource(res, cxlrd);
+
+		dev_dbg(cxlmd->dev.parent,
+			"(LMH) has been adjusted (%s: %pr)\n",
+			dev_name(&cxled->cxld.dev), res);
+	}
+
 	rc = insert_resource(cxlrd->res, res);
 	if (rc) {
 		/*
