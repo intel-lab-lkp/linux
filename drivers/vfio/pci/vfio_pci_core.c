@@ -2002,7 +2002,6 @@ static int vfio_pci_vf_init(struct vfio_pci_core_device *vdev)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_pci_core_device *cur;
-	struct pci_dev *physfn;
 	int ret;
 
 	if (pdev->is_virtfn) {
@@ -2012,7 +2011,7 @@ static int vfio_pci_vf_init(struct vfio_pci_core_device *vdev)
 		 * the locking in pci_disable_sriov() it cannot change until
 		 * this VF device driver is removed.
 		 */
-		physfn = pci_physfn(vdev->pdev);
+		struct pci_dev *physfn = pci_physfn(vdev->pdev);
 		mutex_lock(&vfio_pci_sriov_pfs_mutex);
 		list_for_each_entry(cur, &vfio_pci_sriov_pfs, sriov_pfs_item) {
 			if (cur->pdev == physfn) {
