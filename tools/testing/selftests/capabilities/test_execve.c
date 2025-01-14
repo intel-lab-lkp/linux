@@ -83,7 +83,7 @@ static bool create_and_enter_ns(uid_t inner_uid)
 	uid_t outer_uid;
 	gid_t outer_gid;
 	int i, ret;
-	bool have_outer_privilege;
+	bool have_outer_privilege = false;
 
 	outer_uid = getuid();
 	outer_gid = getgid();
