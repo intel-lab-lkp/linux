@@ -110,6 +110,7 @@ static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *
 	if (ret)
 		return ret;
 
+	vm_flags_set(vma, VM_DONTEXPAND);
 	vma_set_file(vma, obj->base.filp);
 
 	return 0;
