@@ -28,6 +28,30 @@ enum platform_profile_option {
 	PLATFORM_PROFILE_LAST, /*must always be last */
 };
 
+/**
+ * struct platform_profile_ops - platform profile operations
+ * @probe:	Callback to setup choices available to the new class device.
+ *		Parameters are:
+ *		@drvdata: drvdata pointer passed to platform_profile_register.
+ *		@choices: Empty choices bitmap which the driver has to manually
+ *			  setup, by using set_bit() in bits corresponding to
+ *			  platform_profile_option values. These values will only
+ *			  be enforced when a new profile is selected from
+ *			  user-space.
+ * @profile_get: Callback that will be called when showing the current platform
+ *		 profile.
+ *		 Parameters are:
+ *		 @dev: Class device.
+ *		 @profile: Pointer to the profile which will be read from
+ *			   user-space. Selected choices are not enforced when
+ *			   modifying this value.
+ * @profile_set: Callback that will be called when storing the new platform
+ *		 profile.
+ *		 Parameters are:
+ *		 @dev: Class device.
+ *		 @profile: New platform profile to be set. Guaranteed to be a
+ *			   value selected in the @probe callback.
+ */
 struct platform_profile_ops {
 	int (*probe)(void *drvdata, unsigned long *choices);
 	int (*profile_get)(struct device *dev, enum platform_profile_option *profile);
