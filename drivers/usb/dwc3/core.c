@@ -1669,7 +1669,7 @@ static void dwc3_get_software_properties(struct dwc3 *dwc)
 	}
 }
 
-static void dwc3_get_properties(struct dwc3 *dwc)
+static int dwc3_get_properties(struct dwc3 *dwc)
 {
 	struct device		*dev = dwc->dev;
 	u8			lpm_nyet_threshold;
@@ -1724,7 +1724,7 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	if (ret >= 0) {
 		dwc->usb_psy = power_supply_get_by_name(usb_psy_name);
 		if (!dwc->usb_psy)
-			dev_err(dev, "couldn't get usb power supply\n");
+			return dev_err_probe(dev, -EPROBE_DEFER, "couldn't get usb power supply\n");
 	}
 
 	dwc->has_lpm_erratum = device_property_read_bool(dev,
@@ -1847,6 +1847,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	dwc->imod_interval = 0;
 
 	dwc->tx_fifo_resize_max_num = tx_fifo_resize_max_num;
+
+	return 0;
 }
 
 /* check whether the core supports IMOD */
@@ -2181,7 +2183,9 @@ static int dwc3_probe(struct platform_device *pdev)
 	dwc->regs	= regs;
 	dwc->regs_size	= resource_size(&dwc_res);
 
-	dwc3_get_properties(dwc);
+	ret = dwc3_get_properties(dwc);
+	if (ret)
+		return ret;
 
 	dwc3_get_software_properties(dwc);
 
