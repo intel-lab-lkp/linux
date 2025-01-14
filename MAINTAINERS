@@ -24070,6 +24070,8 @@ R:	Avri Altman <avri.altman@wdc.com>
 R:	Bart Van Assche <bvanassche@acm.org>
 L:	linux-scsi@vger.kernel.org
 S:	Supported
+F:	Documentation/ABI/testing/sysfs-driver-ufs
+F:	Documentation/ABI/testing/sysfs-driver-ufs-hwmon
 F:	Documentation/devicetree/bindings/ufs/
 F:	Documentation/scsi/ufs.rst
 F:	drivers/ufs/core/

@@ -1,0 +1,31 @@
+What:		/sys/class/hwmon/hwmon*/temp*_input
+Date:		September 2021
+KernelVersion:	5.16
+Contact:	avri.altman@wdc.com
+Description:
+		Temperature input value in millidegrees Celsius.
+		Read-only.
+
+What:		/sys/class/hwmon/hwmon*/temp*_crit
+Date:		September 2021
+KernelVersion:	5.16
+Contact:	avri.altman@wdc.com
+Description:
+		Critical temperature value in millidegrees Celsius.
+		Read-only.
+
+What:		/sys/class/hwmon/hwmon*/temp*_lcrit
+Date:		September 2021
+KernelVersion:	5.16
+Contact:	avri.altman@wdc.com
+Description:
+		Lower critical temperature value in millidegrees Celsius.
+		Read-only.
+
+What:		/sys/class/hwmon/hwmon*/temp*_enable
+Date:		September 2021
+KernelVersion:	5.16
+Contact:	avri.altman@wdc.com
+Description:
+		Enable (1) or disable (0) this temperature sensor.
+		Read-write.
