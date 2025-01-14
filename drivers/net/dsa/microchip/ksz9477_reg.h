@@ -803,6 +803,7 @@
 #define REG_PORT_INT_STATUS		0x001B
 #define REG_PORT_INT_MASK		0x001F
 
+#define PORT_SGMII_INT_LOC		3
 #define PORT_SGMII_INT			BIT(3)
 #define PORT_PTP_INT			BIT(2)
 #define PORT_PHY_INT			BIT(1)

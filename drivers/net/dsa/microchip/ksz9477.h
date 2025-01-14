@@ -2,7 +2,7 @@
 /*
  * Microchip KSZ9477 series Header file
  *
- * Copyright (C) 2017-2022 Microchip Technology Inc.
+ * Copyright (C) 2017-2025 Microchip Technology Inc.
  */
 
 #ifndef __KSZ9477_H
@@ -96,5 +96,12 @@ void ksz9477_acl_processing_rule_set_action(u8 *entry, u8 action_idx);
 void ksz9477_acl_match_process_l2(struct ksz_device *dev, int port,
 				  u16 ethtype, u8 *src_mac, u8 *dst_mac,
 				  unsigned long cookie, u32 prio);
+
+int ksz9477_pcs_create(struct ksz_device *dev);
+int ksz9477_pcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
+		       phy_interface_t interface,
+		       const unsigned long *advertising);
+void ksz9477_pcs_get_state(struct phylink_pcs *pcs,
+			   struct phylink_link_state *state);
 
 #endif

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Microchip switch driver common header
  *
- * Copyright (C) 2017-2024 Microchip Technology Inc.
+ * Copyright (C) 2017-2025 Microchip Technology Inc.
  */
 
 #ifndef __KSZ_COMMON_H
@@ -93,6 +93,7 @@ struct ksz_chip_data {
 	bool internal_phy[KSZ_MAX_NUM_PORTS];
 	bool gbit_capable[KSZ_MAX_NUM_PORTS];
 	bool ptp_capable;
+	u8 sgmii_port;
 	const struct regmap_access_table *wr_table;
 	const struct regmap_access_table *rd_table;
 };
@@ -121,6 +122,15 @@ struct ksz_switch_macaddr {
 	refcount_t refcount;
 };
 
+struct ksz_pcs {
+	struct phylink_pcs pcs;
+	struct ksz_device *dev;
+	u8 port;
+	u32 has_intr:1;
+	u32 link:8;
+	u32 using_sfp:1;
+};
+
 struct ksz_port {
 	bool remove_tag;		/* Remove Tag flag set, for ksz8795 only */
 	bool learning;
@@ -141,6 +151,7 @@ struct ksz_port {
 	void *acl_priv;
 	struct ksz_irq pirq;
 	u8 num;
+	struct ksz_pcs *pcs_priv;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_KSZ_PTP)
 	struct hwtstamp_config tstamp_config;
 	bool hwts_tx_en;
@@ -162,6 +173,8 @@ struct ksz_device {
 	struct mutex regmap_mutex;	/* regmap access */
 	struct mutex alu_mutex;		/* ALU access */
 	struct mutex vlan_mutex;	/* vlan access */
+	struct mutex sgmii_mutex;	/* SGMII access */
+	const struct phylink_pcs_ops *pcs_ops;
 	const struct ksz_dev_ops *dev_ops;
 
 	struct device *dev;
@@ -188,6 +201,7 @@ struct ksz_device {
 	struct ksz_port *ports;
 	struct delayed_work mib_read;
 	unsigned long mib_read_interval;
+	struct delayed_work sgmii_check;
 	u16 mirror_rx;
 	u16 mirror_tx;
 	u16 port_mask;
@@ -440,6 +454,13 @@ struct ksz_dev_ops {
 	int (*reset)(struct ksz_device *dev);
 	int (*init)(struct ksz_device *dev);
 	void (*exit)(struct ksz_device *dev);
+
+	int (*pcs_create)(struct ksz_device *dev);
+	int (*pcs_config)(struct phylink_pcs *pcs, unsigned int neg_mode,
+			  phy_interface_t interface,
+			  const unsigned long *advertising);
+	void (*pcs_get_state)(struct phylink_pcs *pcs,
+			      struct phylink_link_state *state);
 };
 
 struct ksz_device *ksz_switch_alloc(struct device *base, void *priv);
