@@ -27,6 +27,8 @@ enum kcov_mode {
 	KCOV_MODE_TRACE_UNIQ_PC = 16,
 	/* Collecting uniq edge mode. */
 	KCOV_MODE_TRACE_UNIQ_EDGE = 32,
+	/* Collecting uniq cmp mode. */
+	KCOV_MODE_TRACE_UNIQ_CMP = 64,
 };
 
 #define KCOV_IN_CTXSW	(1 << 30)
