@@ -2509,8 +2509,10 @@ rpc_check_timeout(struct rpc_task *task)
 {
 	struct rpc_clnt	*clnt = task->tk_client;
 
-	if (RPC_SIGNALLED(task))
+	if (RPC_SIGNALLED(task)) {
+		rpc_call_rpcerror(task, -ERESTARTSYS);
 		return;
+	}
 
 	if (xprt_adjust_timeout(task->tk_rqstp) == 0)
 		return;
