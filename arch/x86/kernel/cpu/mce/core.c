@@ -1751,7 +1751,6 @@ int mce_notify_irq(void)
 	}
 	return 0;
 }
-EXPORT_SYMBOL_GPL(mce_notify_irq);
 
 static void __mcheck_cpu_mce_banks_init(void)
 {
