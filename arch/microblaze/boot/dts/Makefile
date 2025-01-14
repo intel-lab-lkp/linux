@@ -1,8 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 #
 
-dtb-y := system.dtb
-
 ifneq ($(DTB),)
 obj-y += linked_dtb.o
 
@@ -11,6 +9,7 @@ $(obj)/linked_dtb.o: $(obj)/system.dtb
 
 # Generate system.dtb from $(DTB).dtb
 ifneq ($(DTB),system)
+targets += system.dtb
 $(obj)/system.dtb: $(obj)/$(DTB).dtb FORCE
 	$(call if_changed,copy)
 endif
