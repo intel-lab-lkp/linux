@@ -79,9 +79,11 @@ static int read_proc_uptime(struct timespec *uptime)
 	if (fscanf(proc, "%lu.%02lu", &up_sec, &up_nsec) != 2) {
 		if (errno) {
 			pr_perror("fscanf");
+			fclose(proc);
 			return -errno;
 		}
 		pr_err("failed to parse /proc/uptime");
+		fclose(proc);
 		return -1;
 	}
 	fclose(proc);
