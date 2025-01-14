@@ -6719,7 +6719,8 @@ deleg_reaper(struct nfsd_net *nn)
 				clp->cl_ra_time < 5)) {
 			continue;
 		}
-		list_add(&clp->cl_ra_cblist, &cblist);
+		if (clp->cl_cb_state == NFSD4_CB_UP)
+			list_add(&clp->cl_ra_cblist, &cblist);
 
 		/* release in nfsd4_cb_recall_any_release */
 		kref_get(&clp->cl_nfsdfs.cl_ref);
