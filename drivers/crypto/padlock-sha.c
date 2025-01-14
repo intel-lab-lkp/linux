@@ -5,6 +5,10 @@
  * Support for VIA PadLock hardware crypto engine.
  *
  * Copyright (c) 2006  Michal Ludvig <michal@logix.cz>
+ *
+ * Add SHA384/SHA512 support for Zhaoxin processors.
+ *
+ * Copyright (c) 2025  George Xue <georgexue@zhaoxin.com>
  */
 
 #include <crypto/internal/hash.h>
@@ -434,6 +438,123 @@ static int padlock_sha256_final_nano(struct shash_desc *desc, u8 *out)
 	return 0;
 }
 
+static inline void padlock_output_block_512(uint64_t *src, uint64_t *dst, size_t count)
+{
+	while (count--)
+		*dst++ = swab64(*src++);
+}
+
+static int padlock_sha384_init(struct shash_desc *desc)
+{
+	struct sha512_state *sctx = shash_desc_ctx(desc);
+
+	*sctx = (struct sha512_state){
+		.state = { SHA384_H0, SHA384_H1, SHA384_H2, SHA384_H3, SHA384_H4, SHA384_H5,
+			   SHA384_H6, SHA384_H7 },
+		.count = { 0, 0 },
+	};
+
+	return 0;
+}
+
+static int padlock_sha512_init(struct shash_desc *desc)
+{
+	struct sha512_state *sctx = shash_desc_ctx(desc);
+
+	*sctx = (struct sha512_state){
+		.state = { SHA512_H0, SHA512_H1, SHA512_H2, SHA512_H3, SHA512_H4, SHA512_H5,
+			   SHA512_H6, SHA512_H7 },
+		.count = { 0, 0 },
+	};
+
+	return 0;
+}
+
+static int padlock_sha512_update(struct shash_desc *desc, const u8 *data, unsigned int len)
+{
+	struct sha512_state *sctx = shash_desc_ctx(desc);
+	unsigned int partial, done;
+	const u8 *src;
+	u8 buf[SHA512_BLOCK_SIZE];
+	u8 *dst = &buf[0];
+
+	partial = sctx->count[0] % SHA512_BLOCK_SIZE;
+
+	sctx->count[0] += len;
+	if (sctx->count[0] < len)
+		sctx->count[1]++;
+
+	done = 0;
+	src = data;
+	memcpy(dst, sctx->state, SHA512_DIGEST_SIZE);
+
+	if ((partial + len) >= SHA512_BLOCK_SIZE) {
+		/* Append the bytes in state's buffer to a block to handle */
+		if (partial) {
+			done = -partial;
+			memcpy(sctx->buf + partial, data, done + SHA512_BLOCK_SIZE);
+
+			src = sctx->buf;
+
+			asm volatile(".byte 0xf3, 0x0f, 0xa6, 0xe0"
+				     : "+S"(src), "+D"(dst)
+				     : "c"(1UL));
+
+			done += SHA512_BLOCK_SIZE;
+			src = data + done;
+		}
+
+		/* Process the left bytes from input data */
+		if (len - done >= SHA512_BLOCK_SIZE) {
+			asm volatile(".byte 0xf3, 0x0f, 0xa6, 0xe0"
+				     : "+S"(src), "+D"(dst)
+				     : "c"((unsigned long)((len - done) / SHA512_BLOCK_SIZE)));
+
+			done += ((len - done) - (len - done) % SHA512_BLOCK_SIZE);
+			src = data + done;
+		}
+		partial = 0;
+	}
+
+	memcpy(sctx->state, dst, SHA512_DIGEST_SIZE);
+	memcpy(sctx->buf + partial, src, len - done);
+
+	return 0;
+}
+
+static int padlock_sha512_final(struct shash_desc *desc, u8 *out)
+{
+	const int bit_offset = SHA512_BLOCK_SIZE - sizeof(__be64[2]);
+	struct sha512_state *state = shash_desc_ctx(desc);
+	unsigned int partial = state->count[0] % SHA512_BLOCK_SIZE, padlen;
+	__be64 bits[2];
+
+	/* Both SHA384 and SHA512 may be supported. */
+	int dgst_size = crypto_shash_digestsize(desc->tfm);
+
+	static u8 padding[SHA512_BLOCK_SIZE];
+
+	memset(padding, 0, SHA512_BLOCK_SIZE);
+	padding[0] = 0x80;
+
+	/* Convert byte count in little endian to bit count in big endian. */
+	bits[0] = cpu_to_be64(state->count[1] << 3 | state->count[0] >> 61);
+	bits[1] = cpu_to_be64(state->count[0] << 3);
+
+	padlen = (partial < bit_offset) ? (bit_offset - partial) :
+					  ((SHA512_BLOCK_SIZE + bit_offset) - partial);
+
+	padlock_sha512_update(desc, padding, padlen);
+
+	/* Append length field bytes */
+	padlock_sha512_update(desc, (const u8 *)bits, sizeof(__be64[2]));
+
+	/* Swap to output */
+	padlock_output_block_512(state->state, (uint64_t *)out, dgst_size / sizeof(uint64_t));
+
+	return 0;
+}
+
 static int padlock_sha_export_nano(struct shash_desc *desc,
 				void *out)
 {
@@ -490,6 +611,42 @@ static struct shash_alg sha256_alg_nano = {
 	}
 };
 
+static struct shash_alg sha384_alg = {
+	.digestsize = SHA384_DIGEST_SIZE,
+	.init       = padlock_sha384_init,
+	.update     = padlock_sha512_update,
+	.final      = padlock_sha512_final,
+	.export     = padlock_sha_export_nano,
+	.import     = padlock_sha_import_nano,
+	.descsize   = sizeof(struct sha512_state),
+	.statesize  = sizeof(struct sha512_state),
+	.base       = {
+		.cra_name        = "sha384",
+		.cra_driver_name = "sha384-padlock-zhaoxin",
+		.cra_priority    = PADLOCK_CRA_PRIORITY,
+		.cra_blocksize   = SHA384_BLOCK_SIZE,
+		.cra_module      = THIS_MODULE,
+	}
+};
+
+static struct shash_alg sha512_alg = {
+	.digestsize = SHA512_DIGEST_SIZE,
+	.init       = padlock_sha512_init,
+	.update     = padlock_sha512_update,
+	.final      = padlock_sha512_final,
+	.export     = padlock_sha_export_nano,
+	.import     = padlock_sha_import_nano,
+	.descsize   = sizeof(struct sha512_state),
+	.statesize  = sizeof(struct sha512_state),
+	.base       = {
+		.cra_name        = "sha512",
+		.cra_driver_name = "sha512-padlock-zhaoxin",
+		.cra_priority    = PADLOCK_CRA_PRIORITY,
+		.cra_blocksize   = SHA512_BLOCK_SIZE,
+		.cra_module      = THIS_MODULE,
+	}
+};
+
 static const struct x86_cpu_id padlock_sha_ids[] = {
 	X86_MATCH_FEATURE(X86_FEATURE_PHE, NULL),
 	{}
@@ -502,12 +659,16 @@ static int __init padlock_init(void)
 	struct cpuinfo_x86 *c = &cpu_data(0);
 	struct shash_alg *sha1;
 	struct shash_alg *sha256;
+	struct shash_alg *sha384;
+	struct shash_alg *sha512;
 
 	if (!x86_match_cpu(padlock_sha_ids) || !boot_cpu_has(X86_FEATURE_PHE_EN))
 		return -ENODEV;
 
-	/* Register the newly added algorithm module if on *
-	* VIA Nano processor, or else just do as before */
+	/*
+	 * Register the newly added algorithm module if on
+	 * Zhaoxin/VIA Nano processor, or else just do as before
+	 */
 	if (c->x86_model < 0x0f) {
 		sha1 = &sha1_alg;
 		sha256 = &sha256_alg;
@@ -524,15 +685,34 @@ static int __init padlock_init(void)
 	if (rc)
 		goto out_unreg1;
 
-	printk(KERN_NOTICE PFX "Using VIA PadLock ACE for SHA1/SHA256 algorithms.\n");
+	printk(KERN_NOTICE PFX "Using PadLock ACE for SHA1/SHA256 algorithms.\n");
+
+	if (boot_cpu_has(X86_FEATURE_PHE2_EN)) {
+		sha384 = &sha384_alg;
+		sha512 = &sha512_alg;
+
+		rc = crypto_register_shash(sha384);
+		if (rc)
+			goto out_unreg2;
+
+		rc = crypto_register_shash(sha512);
+		if (rc)
+			goto out_unreg3;
+
+		printk(KERN_NOTICE PFX "Using PadLock ACE for SHA384/SHA512 algorithms.\n");
+	}
 
 	return 0;
 
+out_unreg3:
+	crypto_unregister_shash(sha384);
+out_unreg2:
+	crypto_unregister_shash(sha256);
 out_unreg1:
 	crypto_unregister_shash(sha1);
 
 out:
-	printk(KERN_ERR PFX "VIA PadLock SHA1/SHA256 initialization failed.\n");
+	printk(KERN_ERR PFX "PadLock SHA1/SHA256/SHA384/SHA5112 initialization failed.\n");
 	return rc;
 }
 
@@ -543,6 +723,11 @@ static void __exit padlock_fini(void)
 	if (c->x86_model >= 0x0f) {
 		crypto_unregister_shash(&sha1_alg_nano);
 		crypto_unregister_shash(&sha256_alg_nano);
+
+		if (boot_cpu_has(X86_FEATURE_PHE2_EN)) {
+			crypto_unregister_shash(&sha384_alg);
+			crypto_unregister_shash(&sha512_alg);
+		}
 	} else {
 		crypto_unregister_shash(&sha1_alg);
 		crypto_unregister_shash(&sha256_alg);
@@ -552,11 +737,16 @@ static void __exit padlock_fini(void)
 module_init(padlock_init);
 module_exit(padlock_fini);
 
-MODULE_DESCRIPTION("VIA PadLock SHA1/SHA256 algorithms support.");
+MODULE_DESCRIPTION("PadLock SHA1/SHA256/SHA384/SHA512 algorithms support.");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Michal Ludvig");
+MODULE_AUTHOR("George Xue <georgexue@zhaoxin.com>");
 
 MODULE_ALIAS_CRYPTO("sha1-all");
 MODULE_ALIAS_CRYPTO("sha256-all");
+MODULE_ALIAS_CRYPTO("sha384-all");
+MODULE_ALIAS_CRYPTO("sha512-all");
 MODULE_ALIAS_CRYPTO("sha1-padlock");
 MODULE_ALIAS_CRYPTO("sha256-padlock");
+MODULE_ALIAS_CRYPTO("sha384-padlock");
+MODULE_ALIAS_CRYPTO("sha512-padlock");

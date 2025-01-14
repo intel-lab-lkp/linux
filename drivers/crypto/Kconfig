@@ -39,15 +39,19 @@ config CRYPTO_DEV_PADLOCK_AES
 	  called padlock-aes.
 
 config CRYPTO_DEV_PADLOCK_SHA
-	tristate "PadLock driver for SHA1 and SHA256 algorithms"
+	tristate "PadLock driver for SHA1/SHA256/SHA384/SHA512 algorithms"
+	depends on X86 && !UML
 	depends on CRYPTO_DEV_PADLOCK
 	select CRYPTO_HASH
 	select CRYPTO_SHA1
 	select CRYPTO_SHA256
+	select CRYPTO_SHA512
 	help
-	  Use VIA PadLock for SHA1/SHA256 algorithms.
+	  Use PadLock for SHA1/SHA256 algorithms.
+	  Available in VIA C7 and newer processors, available in Zhaoxin processors.
 
-	  Available in VIA C7 and newer processors.
+	  Use PadLock for SHA384/SHA512 algorithms.
+	  Available in Zhaoxin processors.
 
 	  If unsure say M. The compiled module will be
 	  called padlock-sha.
