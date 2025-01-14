@@ -149,6 +149,15 @@ xchk_probe(
 	if (xchk_should_terminate(sc, &error))
 		return error;
 
+	/*
+	 * If the caller is probing to see if repair works, set the CORRUPT
+	 * flag (without any of the usual tracing/logging) to force us into
+	 * the repair codepaths.  If repair is compiled into the kernel, we'll
+	 * call xrep_probe and simulate a repair; otherwise, the repair
+	 * codepaths return EOPNOTSUPP.
+	 */
+	if (xchk_could_repair(sc))
+		sc->sm->sm_flags |= XFS_SCRUB_OFLAG_CORRUPT;
 	return 0;
 }
 
