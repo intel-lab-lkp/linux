@@ -399,6 +399,11 @@ struct queue_limits {
 
 	unsigned int		max_open_zones;
 	unsigned int		max_active_zones;
+	/*
+	 * Whether or not the block driver preserves the order of write
+	 * requests. Set by the block driver.
+	 */
+	bool			driver_preserves_write_order;
 
 	/*
 	 * Drivers that set dma_alignment to less than 511 must be prepared to
