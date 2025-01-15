@@ -313,7 +313,7 @@ struct asus_wmi {
 	bool mid_fan_curve_available;
 	struct fan_curve_data custom_fan_curves[3];
 
-	struct platform_profile_handler platform_profile_handler;
+	struct device *ppdev;
 	bool platform_profile_support;
 
 	// The RSOC controls the maximum charging percentage.
@@ -3789,7 +3789,7 @@ static ssize_t throttle_thermal_policy_store(struct device *dev,
 	 * Ensure that platform_profile updates userspace with the change to ensure
 	 * that platform_profile and throttle_thermal_policy_mode are in sync.
 	 */
-	platform_profile_notify(&asus->platform_profile_handler);
+	platform_profile_notify(asus->ppdev);
 
 	return count;
 }
@@ -3891,17 +3891,13 @@ static int platform_profile_setup(struct asus_wmi *asus)
 
 	dev_info(dev, "Using throttle_thermal_policy for platform_profile support\n");
 
-	asus->platform_profile_handler.name = "asus-wmi";
-	asus->platform_profile_handler.dev = dev;
-	asus->platform_profile_handler.ops = &asus_wmi_platform_profile_ops;
+	asus->ppdev = devm_platform_profile_register(dev, "asus-wmi", asus,
+						     &asus_wmi_platform_profile_ops);
+	if (IS_ERR(asus->ppdev)) {
+		pr_err("%s, failed at devm_platform_profile_register: %ld\n",
+		       __func__, PTR_ERR(asus->ppdev));
 
-	err = devm_platform_profile_register(&asus->platform_profile_handler, asus);
-	if (err == -EEXIST) {
-		pr_warn("%s, a platform_profile handler is already registered\n", __func__);
-		return 0;
-	} else if (err) {
-		pr_err("%s, failed at devm_platform_profile_register: %d\n", __func__, err);
-		return err;
+		return PTR_ERR(asus->ppdev);
 	}
 
 	asus->platform_profile_support = true;
