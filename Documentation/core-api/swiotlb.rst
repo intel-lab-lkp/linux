@@ -67,7 +67,9 @@ to the driver for programming into the device. If a DMA operation specifies
 multiple memory buffer segments, a separate bounce buffer must be allocated for
 each segment. swiotlb_tbl_map_single() always does a "sync" operation (i.e., a
 CPU copy) to initialize the bounce buffer to match the contents of the original
-buffer.
+buffer, except if DMA_ATTR_SKIP_DEVICE_SYNC is specified and the direction is
+DMA_FROM_DEVICE. This is a performance optimization that may not be suitable for
+all platforms.
 
 swiotlb_tbl_unmap_single() does the reverse. If the DMA operation might have
 updated the bounce buffer memory and DMA_ATTR_SKIP_CPU_SYNC is not set, the

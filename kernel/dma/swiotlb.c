@@ -1435,8 +1435,16 @@ phys_addr_t swiotlb_tbl_map_single(struct device *dev, phys_addr_t orig_addr,
 	 * the original data, even if it's garbage, is necessary to match
 	 * hardware behavior.  Use of swiotlb is supposed to be transparent,
 	 * i.e. swiotlb must not corrupt memory by clobbering unwritten bytes.
+	 *
+	 * Setting DMA_ATTR_SKIP_DEVICE_SYNC will negate the behavior described
+	 * before and avoid the copy from the original buffer to the TLB
+	 * buffer.
 	 */
+	if (dir == DMA_FROM_DEVICE && (attrs & DMA_ATTR_SKIP_DEVICE_SYNC))
+		goto out;
+
 	swiotlb_bounce(dev, tlb_addr, mapping_size, DMA_TO_DEVICE, pool);
+out:
 	return tlb_addr;
 }
 

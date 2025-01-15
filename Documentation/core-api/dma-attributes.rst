@@ -130,3 +130,12 @@ accesses to DMA buffers in both privileged "supervisor" and unprivileged
 subsystem that the buffer is fully accessible at the elevated privilege
 level (and ideally inaccessible or at least read-only at the
 lesser-privileged levels).
+
+DMA_ATTR_SKIP_DEVICE_SYNC
+-------------------------
+
+Device drivers can set DMA_ATTR_SKIP_DEVICE_SYNC in order to avoid doing a copy
+from the original buffer to the TLB buffer for dma_map_single() with a
+DMA_FROM_DEVICE direction. This can be used to save an extra copy in a device
+driver's data path when using swiotlb bounce buffering.
+
