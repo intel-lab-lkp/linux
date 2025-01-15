@@ -11,6 +11,8 @@
 
 #include "init.h"
 
+#include <ras/ras_event.h>
+
 #undef pr_fmt
 #define pr_fmt(fmt) "ACPI AEST: " fmt
 
