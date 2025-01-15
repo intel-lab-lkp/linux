@@ -11,6 +11,7 @@
 
 #include <linux/device.h>
 #include <linux/workqueue.h>
+#include <linux/uuid.h>
 
 /* The remote peer rgid can use dmb_tok to write into this buffer. */
 struct ism_dmb {
@@ -22,11 +23,6 @@ struct ism_dmb {
 	u32 vlan_id;
 	void *cpu_addr;
 	dma_addr_t dma_addr;
-};
-
-struct smcd_gid {
-	u64	gid;
-	u64	gid_ext;
 };
 
 struct ism_event {
@@ -61,7 +57,7 @@ int ism_register_client(struct ism_client *client);
 int  ism_unregister_client(struct ism_client *client);
 
 /* Mandatory operations for all ism devices:
- * int (*query_remote_gid)(struct ism_dev *dev, struct smcd_gid *rgid,
+ * int (*query_remote_gid)(struct ism_dev *dev, uuid_t *rgid,
  *	                   u32 vid_valid, u32 vid);
  *	Query whether remote GID rgid is reachable via this device and this
  *	vlan id. Vlan id is only checked if vid_valid != 0.
@@ -101,14 +97,14 @@ int  ism_unregister_client(struct ism_client *client);
  *	Ability to assign dmbs to VLANs is missing
  *	- do we really want / need this?
  *
- * int (*signal_event)(struct ism_dev *dev, struct smcd_gid *rgid,
+ * int (*signal_event)(struct ism_dev *dev, uuid_t *rgid,
  *			    u32 trigger_irq, u32 event_code, u64 info);
  *	Send a control event into the event queue of a remote gid (rgid)
  *	with (1) or without (0) triggering an interrupt at the remote gid.
  */
 
 struct ism_ops {
-	int (*query_remote_gid)(struct ism_dev *dev, struct smcd_gid *rgid,
+	int (*query_remote_gid)(struct ism_dev *dev, uuid_t *rgid,
 				u32 vid_valid, u32 vid);
 	int (*register_dmb)(struct ism_dev *dev, struct ism_dmb *dmb,
 			    struct ism_client *client);
@@ -125,7 +121,7 @@ struct ism_ops {
 	int (*del_vlan_id)(struct ism_dev *dev, u64 vlan_id);
 	int (*set_vlan_required)(struct ism_dev *dev);
 	int (*reset_vlan_required)(struct ism_dev *dev);
-	int (*signal_event)(struct ism_dev *dev, struct smcd_gid *rgid,
+	int (*signal_event)(struct ism_dev *dev, uuid_t *rgid,
 			    u32 trigger_irq, u32 event_code, u64 info);
 };
 
@@ -150,7 +146,7 @@ struct ism_dev {
 	dma_addr_t ieq_dma_addr;
 
 	struct device dev;
-	struct smcd_gid gid;
+	uuid_t gid;
 	int ieq_idx;
 
 	struct ism_client *subs[MAX_CLIENTS];

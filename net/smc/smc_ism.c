@@ -485,8 +485,10 @@ static int smcd_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
 			   u32 vid_valid, u32 vid)
 {
 	struct ism_dev *ism = smcd->priv;
+	uuid_t ism_rgid;
 
-	return ism->ops->query_remote_gid(ism, rgid, vid_valid, vid);
+	copy_to_ismgid(&ism_rgid, rgid);
+	return ism->ops->query_remote_gid(ism, &ism_rgid, vid_valid, vid);
 }
 
 static int smcd_register_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb,
@@ -536,9 +538,11 @@ static int smcd_signal_ieq(struct smcd_dev *smcd, struct smcd_gid *rgid,
 			   u32 trigger_irq, u32 event_code, u64 info)
 {
 	struct ism_dev *ism = smcd->priv;
+	uuid_t ism_rgid;
 
-	return ism->ops->signal_event(ism, rgid,
-			      trigger_irq, event_code, info);
+	copy_to_ismgid(&ism_rgid, rgid);
+	return ism->ops->signal_event(ism, &ism_rgid, trigger_irq,
+				      event_code, info);
 }
 
 static int smcd_move(struct smcd_dev *smcd, u64 dmb_tok, unsigned int idx,
@@ -560,8 +564,7 @@ static void smcd_get_local_gid(struct smcd_dev *smcd,
 {
 	struct ism_dev *ism = smcd->priv;
 
-	smcd_gid->gid = ism->gid.gid;
-	smcd_gid->gid_ext = ism->gid.gid_ext;
+	copy_to_smcdgid(smcd_gid, &ism->gid);
 }
 
 static u16 smcd_get_chid(struct smcd_dev *smcd)

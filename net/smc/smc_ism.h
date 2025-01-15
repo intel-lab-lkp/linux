@@ -12,6 +12,7 @@
 #include <linux/uio.h>
 #include <linux/types.h>
 #include <linux/mutex.h>
+#include <linux/ism.h>
 
 #include "smc.h"
 
@@ -92,6 +93,26 @@ static inline bool smc_ism_is_emulated(struct smcd_dev *smcd)
 static inline bool smc_ism_is_loopback(struct smcd_dev *smcd)
 {
 	return (smcd->ops->get_chid(smcd) == 0xFFFF);
+}
+
+static inline void copy_to_smcdgid(struct smcd_gid *sgid, uuid_t *igid)
+{
+	__be64 temp;
+
+	memcpy(&temp, igid, sizeof(sgid->gid));
+	sgid->gid = ntohll(temp);
+	memcpy(&temp, igid + sizeof(sgid->gid), sizeof(sgid->gid_ext));
+	sgid->gid_ext = ntohll(temp);
+}
+
+static inline void copy_to_ismgid(uuid_t *igid, struct smcd_gid *sgid)
+{
+	__be64 temp;
+
+	temp = htonll(sgid->gid);
+	memcpy(igid, &temp, sizeof(sgid->gid));
+	temp = htonll(sgid->gid_ext);
+	memcpy(igid + sizeof(sgid->gid), &temp, sizeof(sgid->gid_ext));
 }
 
 #endif

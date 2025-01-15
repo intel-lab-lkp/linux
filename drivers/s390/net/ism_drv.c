@@ -191,14 +191,14 @@ static int ism_read_local_gid(struct ism_dev *ism)
 	if (ret)
 		goto out;
 
-	ism->gid.gid = cmd.response.gid;
-	ism->gid.gid_ext = 0;
+	memset(&ism->gid, 0, sizeof(ism->gid));
+	memcpy(&ism->gid, &cmd.response.gid, sizeof(cmd.response.gid));
 out:
 	return ret;
 }
 
-static int ism_query_rgid(struct ism_dev *ism, struct smcd_gid *rgid,
-			  u32 vid_valid, u32 vid)
+static int ism_query_rgid(struct ism_dev *ism, uuid_t *rgid, u32 vid_valid,
+			  u32 vid)
 {
 	union ism_query_rgid cmd;
 
@@ -206,7 +206,7 @@ static int ism_query_rgid(struct ism_dev *ism, struct smcd_gid *rgid,
 	cmd.request.hdr.cmd = ISM_QUERY_RGID;
 	cmd.request.hdr.len = sizeof(cmd.request);
 
-	cmd.request.rgid = rgid->gid;
+	memcpy(&cmd.request.rgid, rgid, sizeof(cmd.request.rgid));
 	cmd.request.vlan_valid = vid_valid;
 	cmd.request.vlan_id = vid;
 
@@ -364,8 +364,8 @@ static int ism_reset_vlan_required(struct ism_dev *ism)
 	return ism_cmd_simple(ism, ISM_RESET_VLAN);
 }
 
-static int ism_signal_ieq(struct ism_dev *ism, struct smcd_gid *rgid,
-			  u32 trigger_irq, u32 event_code, u64 info)
+static int ism_signal_ieq(struct ism_dev *ism, uuid_t *rgid, u32 trigger_irq,
+			  u32 event_code, u64 info)
 {
 	union ism_sig_ieq cmd;
 
@@ -373,7 +373,7 @@ static int ism_signal_ieq(struct ism_dev *ism, struct smcd_gid *rgid,
 	cmd.request.hdr.cmd = ISM_SIGNAL_IEQ;
 	cmd.request.hdr.len = sizeof(cmd.request);
 
-	cmd.request.rgid = rgid->gid;
+	memcpy(&cmd.request.rgid, rgid, sizeof(cmd.request.rgid));
 	cmd.request.trigger_irq = trigger_irq;
 	cmd.request.event_code = event_code;
 	cmd.request.info = info;
