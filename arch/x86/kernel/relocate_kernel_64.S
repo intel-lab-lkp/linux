@@ -24,11 +24,11 @@
 #define PAGE_ATTR (_PAGE_PRESENT | _PAGE_RW | _PAGE_ACCESSED | _PAGE_DIRTY)
 
 /*
- * The .text.relocate_kernel and .data.relocate_kernel sections are copied
+ * The .text..relocate_kernel and .data..relocate_kernel sections are copied
  * into the control page, and the remainder of the page is used as the stack.
  */
 
-	.section .data.relocate_kernel,"a";
+	.section .data..relocate_kernel,"a";
 /* Minimal CPU state */
 SYM_DATA_LOCAL(saved_rsp, .quad 0)
 SYM_DATA_LOCAL(saved_cr0, .quad 0)
@@ -40,7 +40,7 @@ SYM_DATA(kexec_pa_table_page, .quad 0)
 SYM_DATA(kexec_pa_swap_page, .quad 0)
 SYM_DATA_LOCAL(pa_backup_pages_map, .quad 0)
 
-	.section .text.relocate_kernel,"ax";
+	.section .text..relocate_kernel,"ax";
 	.code64
 SYM_CODE_START_NOALIGN(relocate_kernel)
 	UNWIND_HINT_END_OF_STACK
@@ -71,14 +71,20 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	movq	kexec_pa_table_page(%rip), %r9
 	movq	%r9, %cr3
 
+	/* Leave CR4 in %r13 to enable the right paging mode later. */
+	movq	%cr4, %r13
+
+	/* Disable global pages immediately to ensure this mapping is RWX */
+	movq	%r13, %r12
+	andq	$~(X86_CR4_PGE), %r12
+	movq	%r12, %cr4
+
 	/* Save %rsp and CRs. */
+	movq	%r13, saved_cr4(%rip)
 	movq    %rsp, saved_rsp(%rip)
 	movq	%rax, saved_cr3(%rip)
 	movq	%cr0, %rax
 	movq	%rax, saved_cr0(%rip)
-	/* Leave CR4 in %r13 to enable the right paging mode later. */
-	movq	%cr4, %r13
-	movq	%r13, saved_cr4(%rip)
 
 	/* save indirection list for jumping back */
 	movq	%rdi, pa_backup_pages_map(%rip)
@@ -90,11 +96,10 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	lea	PAGE_SIZE(%rsi), %rsp
 
 	/* jump to identity mapped page */
-	addq	$(identity_mapped - relocate_kernel), %rsi
-	pushq	%rsi
-	ANNOTATE_UNRET_SAFE
-	ret
-	int3
+0:	addq	$identity_mapped - 0b, %rsi
+	subq	$__relocate_kernel_start - 0b, %rsi
+	ANNOTATE_RETPOLINE_SAFE
+	jmp	*%rsi
 SYM_CODE_END(relocate_kernel)
 
 SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
@@ -108,8 +113,6 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	 * %r13 original CR4 when relocate_kernel() was invoked
 	 */
 
-	/* set return address to 0 if not preserving context */
-	pushq	$0
 	/* store the start address on the stack */
 	pushq   %rdx
 
@@ -203,21 +206,34 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 
 .Lrelocate:
 	popq	%rdx
+
+	/* Use the swap page for the callee's stack */
+	movq	kexec_pa_swap_page(%rip), %r10
 	leaq	PAGE_SIZE(%r10), %rsp
+
+	/* push the existing entry point onto the callee's stack */
+	pushq	%rdx
+
 	ANNOTATE_RETPOLINE_SAFE
 	call	*%rdx
 
 	/* get the re-entry point of the peer system */
-	movq	0(%rsp), %rbp
-	leaq	relocate_kernel(%rip), %r8
+	popq	%rbp
 	movq	kexec_pa_swap_page(%rip), %r10
 	movq	pa_backup_pages_map(%rip), %rdi
 	movq	kexec_pa_table_page(%rip), %rax
 	movq	%rax, %cr3
+
+	/* Find start (and end) of this physical mapping of control page */
+	leaq	(%rip), %r8
+	ANNOTATE_NOENDBR
+	andq	$PAGE_MASK, %r8
 	lea	PAGE_SIZE(%r8), %rsp
+	movl	$1, %r11d	/* Ensure preserve_context flag is set */
 	call	swap_pages
 	movq	kexec_va_control_page(%rip), %rax
-	addq	$(virtual_mapped - relocate_kernel), %rax
+0:	addq	$virtual_mapped - 0b, %rax
+	subq	$__relocate_kernel_start - 0b, %rax
 	pushq	%rax
 	ANNOTATE_UNRET_SAFE
 	ret
@@ -241,6 +257,7 @@ SYM_CODE_START_LOCAL_NOALIGN(virtual_mapped)
 	lgdt    saved_context_gdt_desc(%rax)
 #endif
 
+	/* relocate_kernel() returns the re-entry point for next time */
 	movq	%rbp, %rax
 
 	popf
@@ -258,6 +275,10 @@ SYM_CODE_END(virtual_mapped)
 	/* Do the copies */
 SYM_CODE_START_LOCAL_NOALIGN(swap_pages)
 	UNWIND_HINT_END_OF_STACK
+	/*
+	 * %rdi indirection page
+	 * %r11 preserve_context
+	 */
 	movq	%rdi, %rcx	/* Put the indirection_page in %rcx */
 	xorl	%edi, %edi
 	xorl	%esi, %esi
@@ -296,7 +317,7 @@ SYM_CODE_START_LOCAL_NOALIGN(swap_pages)
 	jz	.Lnoswap
 
 	/* copy source page to swap page */
-	movq	%r10, %rdi
+	movq	kexec_pa_swap_page(%rip), %rdi
 	movl	$512, %ecx
 	rep ; movsq
 
@@ -308,7 +329,7 @@ SYM_CODE_START_LOCAL_NOALIGN(swap_pages)
 
 	/* copy swap page to destination page */
 	movq	%rdx, %rdi
-	movq	%r10, %rsi
+	movq	kexec_pa_swap_page(%rip), %rsi
 .Lnoswap:
 	movl	$512, %ecx
 	rep ; movsq
