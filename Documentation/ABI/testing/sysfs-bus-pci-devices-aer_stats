@@ -117,3 +117,35 @@ Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com
 Description:	Total number of ERR_NONFATAL messages reported to rootport.
+
+PCIe AER ratelimits
+----------------------------
+
+These attributes show up under all the devices that are AER capable. Provides
+configurable ratelimits of logs/irq per error type. Writing a nonzero value
+changes the number of errors (burst) allowed per 5 second window before
+ratelimiting. Reading gets the current ratelimits.
+
+What:		/sys/bus/pci/devices/<dev>/aer/ratelimit_cor_irq
+Date:		Jan 2025
+KernelVersion:	6.14.0
+Contact:	linux-pci@vger.kernel.org, pandoh@google.com
+Description:	IRQ ratelimit for correctable errors.
+
+What:		/sys/bus/pci/devices/<dev>/aer/ratelimit_uncor_irq
+Date:		Jan 2025
+KernelVersion:	6.14.0
+Contact:	linux-pci@vger.kernel.org, pandoh@google.com
+Description:	IRQ ratelimit for uncorrectable errors.
+
+What:		/sys/bus/pci/devices/<dev>/aer/ratelimit_cor_log
+Date:		Jan 2025
+KernelVersion:	6.14.0
+Contact:	linux-pci@vger.kernel.org, pandoh@google.com
+Description:	Log ratelimit for correctable errors.
+
+What:		/sys/bus/pci/devices/<dev>/aer/ratelimit_uncor_log
+Date:		Jan 2025
+KernelVersion:	6.14.0
+Contact:	linux-pci@vger.kernel.org, pandoh@google.com
+Description:	Log ratelimit for uncorrectable errors.

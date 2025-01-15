@@ -630,6 +630,62 @@ const struct attribute_group aer_stats_attr_group = {
 	.is_visible = aer_stats_attrs_are_visible,
 };
 
+#define aer_ratelimit_attr(name, ratelimit)				\
+	static ssize_t							\
+	name##_show(struct device *dev, struct device_attribute *attr,	\
+		     char *buf)						\
+{									\
+	struct pci_dev *pdev = to_pci_dev(dev);				\
+	return sysfs_emit(buf, "%u errors every %u seconds\n",	\
+			  pdev->aer_info->ratelimit.burst,		\
+			  pdev->aer_info->ratelimit.interval / HZ);	\
+}									\
+									\
+	static ssize_t							\
+	name##_store(struct device *dev, struct device_attribute *attr,	\
+		     const char *buf, size_t count)				\
+{									\
+	struct pci_dev *pdev = to_pci_dev(dev);				\
+	int burst;							\
+									\
+	if (kstrtoint(buf, 0, &burst) < 0)				\
+		return -EINVAL;						\
+									\
+	pdev->aer_info->ratelimit.burst = burst;			\
+	return count;							\
+}									\
+static DEVICE_ATTR_RW(name)
+
+aer_ratelimit_attr(ratelimit_cor_irq, cor_irq_ratelimit);
+aer_ratelimit_attr(ratelimit_uncor_irq, uncor_irq_ratelimit);
+aer_ratelimit_attr(ratelimit_cor_log, cor_log_ratelimit);
+aer_ratelimit_attr(ratelimit_uncor_log, uncor_log_ratelimit);
+
+static struct attribute *aer_attrs[] __ro_after_init = {
+	&dev_attr_ratelimit_cor_irq.attr,
+	&dev_attr_ratelimit_uncor_irq.attr,
+	&dev_attr_ratelimit_cor_log.attr,
+	&dev_attr_ratelimit_uncor_log.attr,
+	NULL
+};
+
+static umode_t aer_attrs_are_visible(struct kobject *kobj,
+				     struct attribute *a, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (!pdev->aer_info)
+		return 0;
+	return a->mode;
+}
+
+const struct attribute_group aer_attr_group = {
+	.name = "aer",
+	.attrs = aer_attrs,
+	.is_visible = aer_attrs_are_visible,
+};
+
 static void pci_dev_aer_stats_incr(struct pci_dev *pdev,
 				   struct aer_err_info *info)
 {
