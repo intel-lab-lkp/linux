@@ -248,8 +248,124 @@ impl From<core::convert::Infallible> for Error {
 /// [`Error`] as its error type.
 ///
 /// Note that even if a function does not return anything when it succeeds,
-/// it should still be modeled as returning a `Result` rather than
+/// it should still be modeled as returning a [`Result`] rather than
 /// just an [`Error`].
+///
+/// Calling a function that returns [`Result`] needs the caller to handle
+/// the returned [`Result`].
+///
+/// This can be done "manually" by using [`match`]. Using [`match`] to decode
+/// the [`Result`] is similar to C where all the return value decoding and the
+/// error handling is done explicitly by writing handling code for each
+/// error to cover. Using [`match`] the error and success handling can be
+/// implemented in all detail as required. For example (inspired by
+/// [samples/rust/rust_minimal.rs]):
+///
+/// ```
+/// fn example() -> Result {
+///     let mut numbers = KVec::new();
+///
+///     match numbers.push(72, GFP_KERNEL) {
+///         Err(e) => {
+///             pr_err!("Error pushing 72: {e:?}");
+///             return Err(e.into());
+///         }
+///         // Do nothing, continue.
+///         Ok(()) => (),
+///     }
+///
+///     match numbers.push(108, GFP_KERNEL) {
+///         Err(e) => {
+///             pr_err!("Error pushing 108: {e:?}");
+///             return Err(e.into());
+///         }
+///         // Do nothing, continue.
+///         Ok(()) => (),
+///     }
+///
+///     match numbers.push(200, GFP_KERNEL) {
+///         Err(e) => {
+///             pr_err!("Error pushing 200: {e:?}");
+///             return Err(e.into());
+///         }
+///         // Do nothing, continue.
+///         Ok(()) => (),
+///     }
+///
+///     Ok(())
+/// }
+/// # example();
+/// ```
+///
+/// An alternative to be more concise is the [`if let`] syntax:
+///
+/// ```
+/// fn example() -> Result {
+///     let mut numbers = KVec::new();
+///
+///     if let Err(e) = numbers.push(72, GFP_KERNEL) {
+///         pr_err!("Error pushing 72: {e:?}");
+///         return Err(e.into());
+///     }
+///
+///     if let Err(e) = numbers.push(108, GFP_KERNEL) {
+///         pr_err!("Error pushing 108: {e:?}");
+///         return Err(e.into());
+///     }
+///
+///     if let Err(e) = numbers.push(200, GFP_KERNEL) {
+///         pr_err!("Error pushing 200: {e:?}");
+///         return Err(e.into());
+///     }
+///
+///     Ok(())
+/// }
+/// # example();
+/// ```
+///
+/// Instead of these verbose [`match`]/[`if let`] the [`?`]-operator or
+/// [`unwrap()`](Result::unwrap)/[`expect()`](Result::expect) can be used to
+/// handle the [`Result`] . However, in the kernel context, the usage of
+/// [`unwrap()`](Result::unwrap) or [`expect()`](Result::expect) has a side
+/// effect which is often not wanted: The [`panic`] called when using
+/// [`unwrap()`](Result::unwrap) or [`expect()`](Result::expect). While
+/// the console output from [`panic`] is nice and quite helpful for debugging the
+/// error, stopping the whole Linux system due to the kernel panic is often **not**
+/// desired:
+///
+/// ```
+/// fn example () -> Result {
+///     let mut numbers = KVec::new();
+///     numbers.push(72, GFP_KERNEL).expect("Error pushing 72");  // Panics the system in case of an error
+///     numbers.push(108, GFP_KERNEL).expect("Error pushing 108"); // Panics the system in case of an error
+///     numbers.push(200, GFP_KERNEL).expect("Error pushing 200"); // Panics the system in case of an error
+///     Ok(())
+/// }
+/// # example();
+/// ```
+///
+/// In consequence, using the [`?`]-operator is often the best choice to handle
+/// [`Result`] in a non-verbose way as done in [samples/rust/rust_minimal.rs]:
+///
+/// ```
+/// fn example () -> Result {
+///     let mut numbers = KVec::new();
+///     numbers.push(72, GFP_KERNEL)?;
+///     numbers.push(108, GFP_KERNEL)?;
+///     numbers.push(200, GFP_KERNEL)?;
+///     Ok(())
+/// }
+/// # example();
+/// ```
+/// Depending on the use case using [`unwrap_or()`](Result::unwrap_or),
+/// [`unwrap_or_else()`](Result::unwrap_or_else) or
+/// [`unwrap_or_default()`](Result::unwrap_or_default) might be an alternative, as well.
+///
+/// [`?`]: https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator
+/// [`match`]: https://doc.rust-lang.org/reference/expressions/match-expr.html
+/// [`panic`]: https://docs.kernel.org/driver-api/basics.html#c.panic
+/// [`if let`]: https://doc.rust-lang.org/reference/expressions/if-expr.html#if-let-expressions
+/// [samples/rust/rust_minimal.rs]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/samples/rust/rust_minimal.rs
 pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
 /// Converts an integer as returned by a C kernel function to an error if it's negative, and
