@@ -12,6 +12,49 @@ Checkpatch is not always right. Your judgement takes precedence over checkpatch
 messages.  If your code looks better with the violations, then its probably
 best left alone.
 
+Inoring violations
+==================
+
+As well as the --ignore flag documented below, violation types can be ignored
+for a specific patch by including a block after the "---" in the following
+format::
+
+  Notes(checkpatch-ignore):
+    TYPE_1,TYPE_2
+    TYPE_3
+
+If using Git, you can store that information alongside your commit using
+`notes <https://git-scm.com/docs/git-notes>`_. To set this up:
+
+1. Configure git to include the `checkpatch-ignore` notes ref in formatted
+   patches::
+
+     git config set format.notes checkpatch-ignore
+
+   If you use checkpatch in `--git` mode, this isn't necessary, it will include
+   the `checkpatch-ignore` note regardless.
+
+2. Configure git to persist notes across amends and rebases::
+
+     git config set notes.rewriteRef "refs/notes/checkpatch-ignore"
+
+   (To enable this behaviour for _all_ notes, set `refs/notes/**` instead).
+
+   Also ensure that `notes.rewrite.rebase` and `notes.rewrite.amend` have not
+   been set to `false`.
+
+3. Now, to set the note on the HEAD commit, use a command like::
+
+     git notes --ref checkpatch-ignore add -m "TYPE_1,TYPE_2"
+
+   Beware that blank lines terminate the `checkpatch-ignore` block, so if you
+   use `git notes append` to ignore additional types, you'll need to also set
+   `--no-separator`::
+
+     git notes --ref checkpatch-ignore append -m "TYPE_3" --no-separator
+
+To see the names of the error type in checkpatch output, set the `--show-types`
+option.
 
 Options
 =======
@@ -113,6 +156,9 @@ Available options:
  - --ignore TYPE(,TYPE2...)
 
    Checkpatch will not emit messages for the specified types.
+
+   Note that violations can also be permanently disabled using the
+   Checkpatch-ignore patch footer.
 
    Example::
 
