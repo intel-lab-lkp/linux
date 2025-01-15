@@ -4,7 +4,7 @@
 /*
  *	mcfuart.h -- ColdFire internal UART support defines.
  *
- *	(C) Copyright 1999-2003, Greg Ungerer (gerg@snapgear.com)
+ *	(C) Copyright 1999-2003, 2025 Greg Ungerer (gerg@linux-m68k.org)
  * 	(C) Copyright 2000, Lineo Inc. (www.lineo.com) 
  */
 
@@ -12,16 +12,6 @@
 #ifndef	mcfuart_h
 #define	mcfuart_h
 /****************************************************************************/
-
-#include <linux/serial_core.h>
-#include <linux/platform_device.h>
-
-struct mcf_platform_uart {
-	unsigned long	mapbase;	/* Physical address base */
-	void __iomem	*membase;	/* Virtual address if mapped */
-	unsigned int	irq;		/* Interrupt vector */
-	unsigned int	uartclk;	/* UART clock rate */
-};
 
 /*
  *	Define the ColdFire UART register set addresses.

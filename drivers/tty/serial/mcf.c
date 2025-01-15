@@ -4,7 +4,7 @@
 /*
  *	mcf.c -- Freescale ColdFire UART driver
  *
- *	(C) Copyright 2003-2007, Greg Ungerer <gerg@uclinux.org>
+ *	(C) Copyright 2003-2007,2025 Greg Ungerer <gerg@linux-m68k.org>
  */
 
 /****************************************************************************/
@@ -570,31 +570,34 @@ static struct uart_driver mcf_driver = {
 
 static int mcf_probe(struct platform_device *pdev)
 {
-	struct mcf_platform_uart *platp = dev_get_platdata(&pdev->dev);
 	struct uart_port *port;
-	int i;
+	struct resource *res;
 
-	for (i = 0; ((i < MCF_MAXPORTS) && (platp[i].mapbase)); i++) {
-		port = &mcf_ports[i].port;
+	if (pdev->id >= MCF_MAXPORTS)
+		return -ENODEV;
+	port = &mcf_ports[pdev->id].port;
 
-		port->line = i;
-		port->type = PORT_MCF;
-		port->mapbase = platp[i].mapbase;
-		port->membase = (platp[i].membase) ? platp[i].membase :
-			(unsigned char __iomem *) platp[i].mapbase;
-		port->dev = &pdev->dev;
-		port->iotype = SERIAL_IO_MEM;
-		port->irq = platp[i].irq;
-		port->uartclk = MCF_BUSCLK;
-		port->ops = &mcf_uart_ops;
-		port->flags = UPF_BOOT_AUTOCONF;
-		port->rs485_config = mcf_config_rs485;
-		port->rs485_supported = mcf_rs485_supported;
-		port->has_sysrq = IS_ENABLED(CONFIG_SERIAL_MCF_CONSOLE);
+	port->membase = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
+	if (IS_ERR(port->membase))
+		return PTR_ERR(port->membase);
+	port->mapbase = res->start;
 
-		uart_add_one_port(&mcf_driver, port);
-	}
+	port->irq = platform_get_irq(pdev, 0);
+	if (port->irq < 0)
+		return port->irq;
 
+	port->line = pdev->id;
+	port->type = PORT_MCF;
+	port->dev = &pdev->dev;
+	port->iotype = SERIAL_IO_MEM;
+	port->uartclk = MCF_BUSCLK;
+	port->ops = &mcf_uart_ops;
+	port->flags = UPF_BOOT_AUTOCONF;
+	port->rs485_config = mcf_config_rs485;
+	port->rs485_supported = mcf_rs485_supported;
+	port->has_sysrq = IS_ENABLED(CONFIG_SERIAL_MCF_CONSOLE);
+
+	uart_add_one_port(&mcf_driver, port);
 	return 0;
 }
 
@@ -654,7 +657,7 @@ static void __exit mcf_exit(void)
 module_init(mcf_init);
 module_exit(mcf_exit);
 
-MODULE_AUTHOR("Greg Ungerer <gerg@uclinux.org>");
+MODULE_AUTHOR("Greg Ungerer <gerg@linux-m68k.org>");
 MODULE_DESCRIPTION("Freescale ColdFire UART driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:mcfuart");

@@ -1,7 +1,7 @@
 /*
  * device.c  -- common ColdFire SoC device support
  *
- * (C) Copyright 2011, Greg Ungerer <gerg@uclinux.org>
+ * (C) Copyright 2011,2025 Greg Ungerer <gerg@linux-m68k.org>
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file COPYING in the main directory of this archive
@@ -18,8 +18,8 @@
 #include <asm/traps.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
-#include <asm/mcfuart.h>
 #include <asm/mcfqspi.h>
+#include <linux/platform_device.h>
 #include <linux/platform_data/edma.h>
 #include <linux/platform_data/dma-mcf-edma.h>
 #include <linux/platform_data/mmc-esdhc-mcf.h>
@@ -27,71 +27,205 @@
 /*
  *	All current ColdFire parts contain from 2, 3, 4 or 10 UARTS.
  */
-static struct mcf_platform_uart mcf_uart_platform_data[] = {
+static struct resource mcf_uart0_resources[] = {
 	{
-		.mapbase	= MCFUART_BASE0,
-		.irq		= MCF_IRQ_UART0,
+		.start		= MCFUART_BASE0,
+		.end		= MCFUART_BASE0 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
 	},
 	{
-		.mapbase	= MCFUART_BASE1,
-		.irq		= MCF_IRQ_UART1,
+		.start		= MCF_IRQ_UART0,
+		.end		= MCF_IRQ_UART0,
+		.flags		= IORESOURCE_IRQ,
 	},
-#ifdef MCFUART_BASE2
-	{
-		.mapbase	= MCFUART_BASE2,
-		.irq		= MCF_IRQ_UART2,
-	},
-#endif
-#ifdef MCFUART_BASE3
-	{
-		.mapbase	= MCFUART_BASE3,
-		.irq		= MCF_IRQ_UART3,
-	},
-#endif
-#ifdef MCFUART_BASE4
-	{
-		.mapbase	= MCFUART_BASE4,
-		.irq		= MCF_IRQ_UART4,
-	},
-#endif
-#ifdef MCFUART_BASE5
-	{
-		.mapbase	= MCFUART_BASE5,
-		.irq		= MCF_IRQ_UART5,
-	},
-#endif
-#ifdef MCFUART_BASE6
-	{
-		.mapbase	= MCFUART_BASE6,
-		.irq		= MCF_IRQ_UART6,
-	},
-#endif
-#ifdef MCFUART_BASE7
-	{
-		.mapbase	= MCFUART_BASE7,
-		.irq		= MCF_IRQ_UART7,
-	},
-#endif
-#ifdef MCFUART_BASE8
-	{
-		.mapbase	= MCFUART_BASE8,
-		.irq		= MCF_IRQ_UART8,
-	},
-#endif
-#ifdef MCFUART_BASE9
-	{
-		.mapbase	= MCFUART_BASE9,
-		.irq		= MCF_IRQ_UART9,
-	},
-#endif
-	{ },
 };
-
-static struct platform_device mcf_uart = {
+static struct platform_device mcf_uart0 = {
 	.name			= "mcfuart",
 	.id			= 0,
-	.dev.platform_data	= mcf_uart_platform_data,
+	.num_resources		= ARRAY_SIZE(mcf_uart0_resources),
+	.resource		= mcf_uart0_resources,
 };
+
+#ifdef MCFUART_BASE1
+static struct resource mcf_uart1_resources[] = {
+	{
+		.start		= MCFUART_BASE1,
+		.end		= MCFUART_BASE1 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART1,
+		.end		= MCF_IRQ_UART1,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart1 = {
+	.name			= "mcfuart",
+	.id			= 1,
+	.num_resources		= ARRAY_SIZE(mcf_uart1_resources),
+	.resource		= mcf_uart1_resources,
+};
+#endif
+#ifdef MCFUART_BASE2
+static struct resource mcf_uart2_resources[] = {
+	{
+		.start		= MCFUART_BASE2,
+		.end		= MCFUART_BASE2 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART2,
+		.end		= MCF_IRQ_UART2,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart2 = {
+	.name			= "mcfuart",
+	.id			= 2,
+	.num_resources		= ARRAY_SIZE(mcf_uart2_resources),
+	.resource		= mcf_uart2_resources,
+};
+#endif
+#ifdef MCFUART_BASE3
+static struct resource mcf_uart3_resources[] = {
+	{
+		.start		= MCFUART_BASE3,
+		.end		= MCFUART_BASE3 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART3,
+		.end		= MCF_IRQ_UART3,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart3 = {
+	.name			= "mcfuart",
+	.id			= 3,
+	.num_resources		= ARRAY_SIZE(mcf_uart3_resources),
+	.resource		= mcf_uart3_resources,
+};
+#endif
+#ifdef MCFUART_BASE4
+static struct resource mcf_uart4_resources[] = {
+	{
+		.start		= MCFUART_BASE4,
+		.end		= MCFUART_BASE4 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART4,
+		.end		= MCF_IRQ_UART4,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart4 = {
+	.name			= "mcfuart",
+	.id			= 4,
+	.num_resources		= ARRAY_SIZE(mcf_uart4_resources),
+	.resource		= mcf_uart4_resources,
+};
+#endif
+#ifdef MCFUART_BASE5
+static struct resource mcf_uart5_resources[] = {
+	{
+		.start		= MCFUART_BASE5,
+		.end		= MCFUART_BASE5 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART5,
+		.end		= MCF_IRQ_UART5,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart5 = {
+	.name			= "mcfuart",
+	.id			= 5,
+	.num_resources		= ARRAY_SIZE(mcf_uart5_resources),
+	.resource		= mcf_uart5_resources,
+};
+#endif
+#ifdef MCFUART_BASE6
+static struct resource mcf_uart6_resources[] = {
+	{
+		.start		= MCFUART_BASE6,
+		.end		= MCFUART_BASE6 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART6,
+		.end		= MCF_IRQ_UART6,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart6 = {
+	.name			= "mcfuart",
+	.id			= 6,
+	.num_resources		= ARRAY_SIZE(mcf_uart6_resources),
+	.resource		= mcf_uart6_resources,
+};
+#endif
+#ifdef MCFUART_BASE7
+static struct resource mcf_uart7_resources[] = {
+	{
+		.start		= MCFUART_BASE7,
+		.end		= MCFUART_BASE7 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART7,
+		.end		= MCF_IRQ_UART7,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart7 = {
+	.name			= "mcfuart",
+	.id			= 7,
+	.num_resources		= ARRAY_SIZE(mcf_uart7_resources),
+	.resource		= mcf_uart7_resources,
+};
+#endif
+#ifdef MCFUART_BASE8
+static struct resource mcf_uart8_resources[] = {
+	{
+		.start		= MCFUART_BASE8,
+		.end		= MCFUART_BASE8 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART8,
+		.end		= MCF_IRQ_UART8,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart8 = {
+	.name			= "mcfuart",
+	.id			= 8,
+	.num_resources		= ARRAY_SIZE(mcf_uart8_resources),
+	.resource		= mcf_uart8_resources,
+};
+#endif
+#ifdef MCFUART_BASE9
+static struct resource mcf_uart9_resources[] = {
+	{
+		.start		= MCFUART_BASE9,
+		.end		= MCFUART_BASE9 + 0x80 - 1,
+		.flags		= IORESOURCE_MEM,
+	},
+	{
+		.start		= MCF_IRQ_UART9,
+		.end		= MCF_IRQ_UART9,
+		.flags		= IORESOURCE_IRQ,
+	},
+};
+static struct platform_device mcf_uart9 = {
+	.name			= "mcfuart",
+	.id			= 9,
+	.num_resources		= ARRAY_SIZE(mcf_uart9_resources),
+	.resource		= mcf_uart9_resources,
+};
+#endif
 
 #ifdef MCFFEC_BASE0
 
@@ -623,7 +757,34 @@ static struct platform_device mcf_flexcan0 = {
 #endif /* MCFFLEXCAN_SIZE */
 
 static struct platform_device *mcf_devices[] __initdata = {
-	&mcf_uart,
+	&mcf_uart0,
+#ifdef MCFUART_BASE1
+	&mcf_uart1,
+#endif
+#ifdef MCFUART_BASE2
+	&mcf_uart2,
+#endif
+#ifdef MCFUART_BASE3
+	&mcf_uart3,
+#endif
+#ifdef MCFUART_BASE4
+	&mcf_uart4,
+#endif
+#ifdef MCFUART_BASE5
+	&mcf_uart5,
+#endif
+#ifdef MCFUART_BASE6
+	&mcf_uart6,
+#endif
+#ifdef MCFUART_BASE7
+	&mcf_uart7,
+#endif
+#ifdef MCFUART_BASE8
+	&mcf_uart8,
+#endif
+#ifdef MCFUART_BASE9
+	&mcf_uart9,
+#endif
 #ifdef MCFFEC_BASE0
 	&mcf_fec0,
 #endif
