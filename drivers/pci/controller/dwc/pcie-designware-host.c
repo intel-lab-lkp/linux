@@ -181,25 +181,75 @@ static int dw_pcie_irq_domain_alloc(struct irq_domain *domain,
 				    void *args)
 {
 	struct dw_pcie_rp *pp = domain->host_data;
-	unsigned long flags;
-	u32 i;
-	int bit;
+	const struct cpumask *mask;
+	unsigned long flags, index, start, size;
+	int irq, ctrl, p_irq, *msi_vec_index;
+	unsigned int controller_count = (pp->num_vectors / MAX_MSI_IRQS_PER_CTRL);
+
+	/*
+	 * All IRQs on a given controller will use the same parent interrupt,
+	 * and therefore the same CPU affinity. We try to honor any CPU spreading
+	 * requests by assigning distinct affinity masks to distinct vectors.
+	 * So instead of always allocating the msi vectors in a contiguous fashion,
+	 * the algo here honor whoever comes first can bind the msi controller to
+	 * its irq affinity mask, or compare its cpumask against
+	 * currently recorded to decide if binding to this msi controller.
+	 */
+
+	msi_vec_index = kcalloc(nr_irqs, sizeof(*msi_vec_index), GFP_KERNEL);
+	if (!msi_vec_index)
+		return -ENOMEM;
 
 	raw_spin_lock_irqsave(&pp->lock, flags);
 
-	bit = bitmap_find_free_region(pp->msi_irq_in_use, pp->num_vectors,
-				      order_base_2(nr_irqs));
+	for (irq = 0; irq < nr_irqs; irq++) {
+		mask = irq_get_affinity_mask(virq + irq);
+		for (ctrl = 0; ctrl < controller_count; ctrl++) {
+			start = ctrl * MAX_MSI_IRQS_PER_CTRL;
+			size = start + MAX_MSI_IRQS_PER_CTRL;
+			if (find_next_bit(pp->msi_irq_in_use, size, start) >= size) {
+				cpumask_copy(&pp->msi_ctrl_to_cpu[ctrl], mask);
+				break;
+			}
+
+			if (cpumask_equal(&pp->msi_ctrl_to_cpu[ctrl], mask) &&
+			    find_next_zero_bit(pp->msi_irq_in_use, size, start) < size)
+				break;
+		}
+
+		/*
+		 * no msi controller matches, we would error return (no space) and
+		 * clear those previously allocated bit, because all those msi vectors
+		 * didn't really successfully allocated, so we shouldn't occupied that
+		 * position in the bitmap in case other endpoint may still make use of
+		 * those. An extra step when choosing to not allocate in contiguous
+		 * fashion.
+		 */
+		if (ctrl == controller_count) {
+			for (p_irq = irq - 1; p_irq >= 0; p_irq--)
+				bitmap_clear(pp->msi_irq_in_use, msi_vec_index[p_irq], 1);
+			raw_spin_unlock_irqrestore(&pp->lock, flags);
+			kfree(msi_vec_index);
+			return -ENOSPC;
+		}
+
+		index = bitmap_find_next_zero_area(pp->msi_irq_in_use,
+						   size,
+						   start,
+						   1,
+						   0);
+		bitmap_set(pp->msi_irq_in_use, index, 1);
+		msi_vec_index[irq] = index;
+	}
 
 	raw_spin_unlock_irqrestore(&pp->lock, flags);
 
-	if (bit < 0)
-		return -ENOSPC;
-
-	for (i = 0; i < nr_irqs; i++)
-		irq_domain_set_info(domain, virq + i, bit + i,
+	for (irq = 0; irq < nr_irqs; irq++)
+		irq_domain_set_info(domain, virq + irq, msi_vec_index[irq],
 				    pp->msi_irq_chip,
 				    pp, handle_edge_irq,
 				    NULL, NULL);
+	kfree(msi_vec_index);
 
 	return 0;
 }
@@ -207,15 +257,15 @@ static int dw_pcie_irq_domain_alloc(struct irq_domain *domain,
 static void dw_pcie_irq_domain_free(struct irq_domain *domain,
 				    unsigned int virq, unsigned int nr_irqs)
 {
-	struct irq_data *d = irq_domain_get_irq_data(domain, virq);
+	struct irq_data *d;
 	struct dw_pcie_rp *pp = domain->host_data;
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&pp->lock, flags);
-
-	bitmap_release_region(pp->msi_irq_in_use, d->hwirq,
-			      order_base_2(nr_irqs));
-
+	for (int i = 0; i < nr_irqs; i++) {
+		d = irq_domain_get_irq_data(domain, virq + i);
+		bitmap_clear(pp->msi_irq_in_use, d->hwirq, 1);
+	}
 	raw_spin_unlock_irqrestore(&pp->lock, flags);
 }
 

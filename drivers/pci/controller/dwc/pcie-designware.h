@@ -14,6 +14,7 @@
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/clk.h>
+#include <linux/cpumask.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma/edma.h>
 #include <linux/gpio/consumer.h>
@@ -374,6 +375,7 @@ struct dw_pcie_rp {
 	struct irq_chip		*msi_irq_chip;
 	u32			num_vectors;
 	u32			irq_mask[MAX_MSI_CTRLS];
+	struct cpumask		msi_ctrl_to_cpu[MAX_MSI_CTRLS];
 	struct pci_host_bridge  *bridge;
 	raw_spinlock_t		lock;
 	DECLARE_BITMAP(msi_irq_in_use, MAX_MSI_IRQS);
