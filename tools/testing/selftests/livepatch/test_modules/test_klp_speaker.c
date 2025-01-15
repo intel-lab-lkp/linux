@@ -12,13 +12,30 @@
  * The module provides a virtual speaker who can do:
  *
  *    - Start a show with a greeting, see speaker_welcome().
+ *
+ *    - Log the greeting by reading the "welcome" module parameter, see
+ *	welcome_get().
  */
 
 noinline
-static void __always_used speaker_welcome(void)
+static void speaker_welcome(void)
 {
 	pr_info("%s: Hello, World!\n", __func__);
 }
+
+static int welcome_get(char *buffer, const struct kernel_param *kp)
+{
+	speaker_welcome();
+
+	return 0;
+}
+
+static const struct kernel_param_ops welcome_ops = {
+	.get	= welcome_get,
+};
+
+module_param_cb(welcome, &welcome_ops, NULL, 0400);
+MODULE_PARM_DESC(welcome, "Print speaker's welcome message into the kernel log when reading the value.");
 
 static int test_klp_speaker_init(void)
 {
