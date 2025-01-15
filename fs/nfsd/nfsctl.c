@@ -2030,7 +2030,7 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 	/* Close the remaining sockets on the permsocks list */
 	while (!list_empty(&permsocks)) {
 		xprt = list_first_entry(&permsocks, struct svc_xprt, xpt_list);
-		list_move(&xprt->xpt_list, &serv->sv_permsocks);
+		list_del_init(&xprt->xpt_list);
 
 		/*
 		 * Newly-created sockets are born with the BUSY bit set. Clear
@@ -2042,6 +2042,7 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 
 		set_bit(XPT_CLOSE, &xprt->xpt_flags);
 		spin_unlock_bh(&serv->sv_lock);
+		svc_xprt_dequeue_entry(xprt);
 		svc_xprt_close(xprt);
 		spin_lock_bh(&serv->sv_lock);
 	}
@@ -2073,6 +2074,7 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 
 		xprt = svc_find_listener(serv, xcl_name, net, sa);
 		if (xprt) {
+			clear_bit(XPT_BUSY, &xprt->xpt_flags);
 			svc_xprt_put(xprt);
 			continue;
 		}
