@@ -113,6 +113,19 @@ struct s390_phmac_req_ctx {
 };
 
 /*
+ * Pkey 'token' struct used to derive a protected key value from a clear key.
+ */
+struct hmac_clrkey_token {
+	u8  type;
+	u8  res0[3];
+	u8  version;
+	u8  res1[3];
+	u32 keytype;
+	u32 len;
+	u8 key[];
+} __packed;
+
+/*
  * kmac_sha2_set_imbl - sets the input message bit-length based on the blocksize
  */
 static inline void kmac_sha2_set_imbl(u8 *param, unsigned int buflen,
@@ -130,6 +143,101 @@ static inline void kmac_sha2_set_imbl(u8 *param, unsigned int buflen,
 	default:
 		break;
 	}
+}
+
+static int hash_key(const u8 *in, unsigned int inlen,
+		    u8 *digest, unsigned int digestsize)
+{
+	unsigned long func;
+	union {
+		struct sha256_paramblock {
+			u32 h[8];
+			u64 mbl;
+		} sha256;
+		struct sha512_paramblock {
+			u64 h[8];
+			u128 mbl;
+		} sha512;
+	} __packed param;
+
+#define PARAM_INIT(x, y, z)		   \
+	param.sha##x.h[0] = SHA##y ## _H0; \
+	param.sha##x.h[1] = SHA##y ## _H1; \
+	param.sha##x.h[2] = SHA##y ## _H2; \
+	param.sha##x.h[3] = SHA##y ## _H3; \
+	param.sha##x.h[4] = SHA##y ## _H4; \
+	param.sha##x.h[5] = SHA##y ## _H5; \
+	param.sha##x.h[6] = SHA##y ## _H6; \
+	param.sha##x.h[7] = SHA##y ## _H7; \
+	param.sha##x.mbl = (z)
+
+	switch (digestsize) {
+	case SHA224_DIGEST_SIZE:
+		func = CPACF_KLMD_SHA_256;
+		PARAM_INIT(256, 224, inlen * 8);
+		break;
+	case SHA256_DIGEST_SIZE:
+		func = CPACF_KLMD_SHA_256;
+		PARAM_INIT(256, 256, inlen * 8);
+		break;
+	case SHA384_DIGEST_SIZE:
+		func = CPACF_KLMD_SHA_512;
+		PARAM_INIT(512, 384, inlen * 8);
+		break;
+	case SHA512_DIGEST_SIZE:
+		func = CPACF_KLMD_SHA_512;
+		PARAM_INIT(512, 512, inlen * 8);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+#undef PARAM_INIT
+
+	cpacf_klmd(func, &param, in, inlen);
+
+	memcpy(digest, &param, digestsize);
+
+	return 0;
+}
+
+/*
+ * make_clrkey_token() - wrap the clear key into a pkey clearkey token.
+ */
+static inline int make_clrkey_token(const u8 *clrkey, size_t clrkeylen,
+				    unsigned int digestsize, u8 *dest)
+{
+	struct hmac_clrkey_token *token = (struct hmac_clrkey_token *)dest;
+	unsigned int blocksize;
+	int rc;
+
+	token->type = 0x00;
+	token->version = 0x02;
+	switch (digestsize) {
+	case SHA224_DIGEST_SIZE:
+	case SHA256_DIGEST_SIZE:
+		token->keytype = PKEY_KEYTYPE_HMAC_512;
+		blocksize = 64;
+		break;
+	case SHA384_DIGEST_SIZE:
+	case SHA512_DIGEST_SIZE:
+		token->keytype = PKEY_KEYTYPE_HMAC_1024;
+		blocksize = 128;
+		break;
+	default:
+		return -EINVAL;
+	}
+	token->len = blocksize;
+
+	if (clrkeylen > blocksize) {
+		rc = hash_key(clrkey, clrkeylen, token->key, digestsize);
+		if (rc)
+			return rc;
+	} else {
+		memcpy(token->key, clrkey, clrkeylen);
+	}
+
+	return 0;
 }
 
 /*
@@ -680,6 +788,12 @@ static int s390_phmac_setkey(struct crypto_ahash *tfm,
 			     const u8 *key, unsigned int keylen)
 {
 	struct s390_phmac_ctx *tfm_ctx = crypto_ahash_ctx(tfm);
+	struct crypto_tfm *tfm_base = crypto_ahash_tfm(tfm);
+	unsigned int ds = crypto_ahash_digestsize(tfm);
+	unsigned int bs = crypto_ahash_blocksize(tfm);
+	unsigned int tmpkeylen;
+	u8 *tmpkey = NULL;
+	int rc = 0;
 
 	if (tfm_ctx->keylen) {
 		kfree_sensitive(tfm_ctx->key);
@@ -687,9 +801,31 @@ static int s390_phmac_setkey(struct crypto_ahash *tfm,
 		tfm_ctx->keylen = 0;
 	}
 
+	if (!(crypto_tfm_alg_get_flags(tfm_base) & CRYPTO_ALG_TESTED)) {
+		/*
+		 * selftest running: key is a raw hmac clear key and needs
+		 * to get embedded into a 'clear key token' in order to have
+		 * it correctly processed by the pkey module.
+		 */
+		tmpkeylen = sizeof(struct hmac_clrkey_token) + bs;
+		tmpkey = kzalloc(tmpkeylen, GFP_ATOMIC);
+		if (!tmpkey) {
+			rc = -ENOMEM;
+			goto out;
+		}
+		rc = make_clrkey_token(key, keylen, ds, tmpkey);
+		if (rc)
+			goto out;
+		keylen = tmpkeylen;
+		key = tmpkey;
+	}
+
+	/* key is always a key token digestable by PKEY */
 	tfm_ctx->key = kmemdup(key, keylen, GFP_ATOMIC);
-	if (!tfm_ctx->key)
-		return -ENOMEM;
+	if (!tfm_ctx->key) {
+		rc = -ENOMEM;
+		goto out;
+	}
 	tfm_ctx->keylen = keylen;
 
 	/* Always trigger an asynch key convert */
@@ -698,8 +834,10 @@ static int s390_phmac_setkey(struct crypto_ahash *tfm,
 	spin_unlock_bh(&tfm_ctx->pk_lock);
 	schedule_delayed_work(&tfm_ctx->work, 0);
 
-	pr_debug("rc=0\n");
-	return 0;
+out:
+	kfree(tmpkey);
+	pr_debug("rc=%d\n", rc);
+	return rc;
 }
 
 static int s390_phmac_import(struct ahash_request *req, const void *in)
@@ -815,6 +953,11 @@ static int __init phmac_s390_init(void)
 {
 	struct s390_hmac_alg *hmac;
 	int i, rc = -ENODEV;
+
+	if (!cpacf_query_func(CPACF_KLMD, CPACF_KLMD_SHA_256))
+		return -ENODEV;
+	if (!cpacf_query_func(CPACF_KLMD, CPACF_KLMD_SHA_512))
+		return -ENODEV;
 
 	for (i = 0; i < ARRAY_SIZE(s390_hmac_algs); i++) {
 		hmac = &s390_hmac_algs[i];
