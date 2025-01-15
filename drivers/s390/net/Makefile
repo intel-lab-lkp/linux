@@ -16,5 +16,5 @@ obj-$(CONFIG_QETH_L2) += qeth_l2.o
 qeth_l3-y += qeth_l3_main.o qeth_l3_sys.o
 obj-$(CONFIG_QETH_L3) += qeth_l3.o
 
-ism-y := ism_drv.o
-obj-$(CONFIG_ISM) += ism.o
+ism_vpci-y += ism_drv.o
+obj-$(CONFIG_ISM_VPCI) += ism_vpci.o

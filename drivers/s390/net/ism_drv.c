@@ -4,7 +4,7 @@
  *
  * Copyright IBM Corp. 2018
  */
-#define KMSG_COMPONENT "ism"
+#define KMSG_COMPONENT "ism-vpci"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
@@ -31,100 +31,7 @@ MODULE_DEVICE_TABLE(pci, ism_device_table);
 
 static debug_info_t *ism_debug_info;
 
-#define NO_CLIENT		0xff		/* must be >= MAX_CLIENTS */
-static struct ism_client *clients[MAX_CLIENTS];	/* use an array rather than */
-						/* a list for fast mapping  */
-static u8 max_client;
-static DEFINE_MUTEX(clients_lock);
 static bool ism_v2_capable;
-struct ism_dev_list {
-	struct list_head list;
-	struct mutex mutex; /* protects ism device list */
-};
-
-static struct ism_dev_list ism_dev_list = {
-	.list = LIST_HEAD_INIT(ism_dev_list.list),
-	.mutex = __MUTEX_INITIALIZER(ism_dev_list.mutex),
-};
-
-static void ism_setup_forwarding(struct ism_client *client, struct ism_dev *ism)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&ism->lock, flags);
-	ism->subs[client->id] = client;
-	spin_unlock_irqrestore(&ism->lock, flags);
-}
-
-int ism_register_client(struct ism_client *client)
-{
-	struct ism_dev *ism;
-	int i, rc = -ENOSPC;
-
-	mutex_lock(&ism_dev_list.mutex);
-	mutex_lock(&clients_lock);
-	for (i = 0; i < MAX_CLIENTS; ++i) {
-		if (!clients[i]) {
-			clients[i] = client;
-			client->id = i;
-			if (i == max_client)
-				max_client++;
-			rc = 0;
-			break;
-		}
-	}
-	mutex_unlock(&clients_lock);
-
-	if (i < MAX_CLIENTS) {
-		/* initialize with all devices that we got so far */
-		list_for_each_entry(ism, &ism_dev_list.list, list) {
-			ism->priv[i] = NULL;
-			client->add(ism);
-			ism_setup_forwarding(client, ism);
-		}
-	}
-	mutex_unlock(&ism_dev_list.mutex);
-
-	return rc;
-}
-EXPORT_SYMBOL_GPL(ism_register_client);
-
-int ism_unregister_client(struct ism_client *client)
-{
-	struct ism_dev *ism;
-	unsigned long flags;
-	int rc = 0;
-
-	mutex_lock(&ism_dev_list.mutex);
-	list_for_each_entry(ism, &ism_dev_list.list, list) {
-		spin_lock_irqsave(&ism->lock, flags);
-		/* Stop forwarding IRQs and events */
-		ism->subs[client->id] = NULL;
-		for (int i = 0; i < ISM_NR_DMBS; ++i) {
-			if (ism->sba_client_arr[i] == client->id) {
-				WARN(1, "%s: attempt to unregister '%s' with registered dmb(s)\n",
-				     __func__, client->name);
-				rc = -EBUSY;
-				goto err_reg_dmb;
-			}
-		}
-		spin_unlock_irqrestore(&ism->lock, flags);
-	}
-	mutex_unlock(&ism_dev_list.mutex);
-
-	mutex_lock(&clients_lock);
-	clients[client->id] = NULL;
-	if (client->id + 1 == max_client)
-		max_client--;
-	mutex_unlock(&clients_lock);
-	return rc;
-
-err_reg_dmb:
-	spin_unlock_irqrestore(&ism->lock, flags);
-	mutex_unlock(&ism_dev_list.mutex);
-	return rc;
-}
-EXPORT_SYMBOL_GPL(ism_unregister_client);
 
 static int ism_cmd(struct ism_dev *ism, void *cmd)
 {
@@ -475,7 +382,7 @@ static void ism_handle_event(struct ism_dev *ism)
 
 		entry = &ism->ieq->entry[ism->ieq_idx];
 		debug_event(ism_debug_info, 2, entry, sizeof(*entry));
-		for (i = 0; i < max_client; ++i) {
+		for (i = 0; i < MAX_CLIENTS; ++i) {
 			clt = ism->subs[i];
 			if (clt)
 				clt->handle_event(ism, entry);
@@ -524,7 +431,7 @@ static irqreturn_t ism_handle_irq(int irq, void *data)
 static int ism_dev_init(struct ism_dev *ism)
 {
 	struct pci_dev *pdev = ism->pdev;
-	int i, ret;
+	int ret;
 
 	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
 	if (ret <= 0)
@@ -558,19 +465,7 @@ static int ism_dev_init(struct ism_dev *ism)
 	else
 		ism_v2_capable = false;
 
-	mutex_lock(&ism_dev_list.mutex);
-	mutex_lock(&clients_lock);
-	for (i = 0; i < max_client; ++i) {
-		if (clients[i]) {
-			clients[i]->add(ism);
-			ism_setup_forwarding(clients[i], ism);
-		}
-	}
-	mutex_unlock(&clients_lock);
-
-	list_add(&ism->list, &ism_dev_list.list);
-	mutex_unlock(&ism_dev_list.mutex);
-
+	ism_dev_register(ism);
 	query_info(ism);
 	return 0;
 
@@ -649,17 +544,11 @@ static void ism_dev_exit(struct ism_dev *ism)
 	int i;
 
 	spin_lock_irqsave(&ism->lock, flags);
-	for (i = 0; i < max_client; ++i)
+	for (i = 0; i < MAX_CLIENTS; ++i)
 		ism->subs[i] = NULL;
 	spin_unlock_irqrestore(&ism->lock, flags);
 
-	mutex_lock(&ism_dev_list.mutex);
-	mutex_lock(&clients_lock);
-	for (i = 0; i < max_client; ++i) {
-		if (clients[i])
-			clients[i]->remove(ism);
-	}
-	mutex_unlock(&clients_lock);
+	ism_dev_unregister(ism);
 
 	if (ism_v2_capable)
 		ism_del_vlan_id(ism, ISM_RESERVED_VLANID);
@@ -668,8 +557,6 @@ static void ism_dev_exit(struct ism_dev *ism)
 	free_irq(pci_irq_vector(pdev, 0), ism);
 	kfree(ism->sba_client_arr);
 	pci_free_irq_vectors(pdev);
-	list_del_init(&ism->list);
-	mutex_unlock(&ism_dev_list.mutex);
 }
 
 static void ism_remove(struct pci_dev *pdev)
@@ -700,8 +587,6 @@ static int __init ism_init(void)
 	if (!ism_debug_info)
 		return -ENODEV;
 
-	memset(clients, 0, sizeof(clients));
-	max_client = 0;
 	debug_register_view(ism_debug_info, &debug_hex_ascii_view);
 	ret = pci_register_driver(&ism_driver);
 	if (ret)
@@ -721,7 +606,7 @@ module_exit(ism_exit);
 
 /*************************** SMC-D Implementation *****************************/
 
-#if IS_ENABLED(CONFIG_SMC)
+#if IS_ENABLED(CONFIG_SMC) // needed to avoid unused functions
 static int ism_query_rgid(struct ism_dev *ism, u64 rgid, u32 vid_valid,
 			  u32 vid)
 {

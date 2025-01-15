@@ -42,9 +42,6 @@ struct smcd_dmb {
 #define ISM_EVENT_GID	1
 #define ISM_EVENT_SWR	2
 
-#define ISM_RESERVED_VLANID	0x1FFF
-
-#define ISM_ERROR	0xFFFF
 
 struct smcd_dev;
 

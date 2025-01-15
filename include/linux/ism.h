@@ -9,6 +9,7 @@
 #ifndef _ISM_H
 #define _ISM_H
 
+#include <linux/device.h>
 #include <linux/workqueue.h>
 
 struct ism_dmb {
@@ -24,6 +25,7 @@ struct ism_dmb {
 
 /* Unless we gain unexpected popularity, this limit should hold for a while */
 #define MAX_CLIENTS		8
+#define NO_CLIENT		0xff		/* must be >= MAX_CLIENTS */
 #define ISM_NR_DMBS		1920
 
 struct ism_dev {
@@ -76,6 +78,9 @@ static inline void *ism_get_priv(struct ism_dev *dev,
 	return dev->priv[client->id];
 }
 
+int ism_dev_register(struct ism_dev *ism);
+void ism_dev_unregister(struct ism_dev *ism);
+
 static inline void ism_set_priv(struct ism_dev *dev, struct ism_client *client,
 				void *priv) {
 	dev->priv[client->id] = priv;
@@ -86,6 +91,9 @@ int  ism_register_dmb(struct ism_dev *dev, struct ism_dmb *dmb,
 int  ism_unregister_dmb(struct ism_dev *dev, struct ism_dmb *dmb);
 int  ism_move(struct ism_dev *dev, u64 dmb_tok, unsigned int idx, bool sf,
 	      unsigned int offset, void *data, unsigned int size);
+
+#define ISM_RESERVED_VLANID	0x1FFF
+#define ISM_ERROR	0xFFFF
 
 const struct smcd_ops *ism_get_smcd_ops(void);
 
