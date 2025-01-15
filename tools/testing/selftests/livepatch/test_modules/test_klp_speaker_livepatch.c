@@ -21,9 +21,27 @@
  *    - Support more speaker modules, see __lp_speaker_welcome().
  */
 
+#define APPLAUSE_ID 10
+#define APPLAUSE_STR_SIZE 16
+
+/* associate the shadow variable with NULL address */;
+static void *shadow_object = NULL;
+
+static bool add_applause;
+module_param_named(applause, add_applause, bool, 0400);
+MODULE_PARM_DESC(applause, "Use shadow variable to add applause (default=false)");
+
 static void __lp_speaker_welcome(const char *caller_func, const char *speaker_id)
 {
-	pr_info("%s%s: Ladies and gentleman, ...\n", caller_func, speaker_id);
+	char entire_applause[APPLAUSE_STR_SIZE + 1] = "";
+	const char *applause;
+
+	applause = (char *)klp_shadow_get(shadow_object, APPLAUSE_ID);
+	if (applause)
+		snprintf(entire_applause, sizeof(entire_applause), "%s ", applause);
+
+	pr_info("%s%s: %sLadies and gentleman, ...\n", caller_func, speaker_id,
+		entire_applause);
 }
 
 static void lp_speaker_welcome(void)
@@ -34,6 +52,122 @@ static void lp_speaker_welcome(void)
 static void lp_speaker2_welcome(void)
 {
 	__lp_speaker_welcome(__func__, "(2)");
+}
+
+static int allocate_applause(unsigned long id)
+{
+	char *applause;
+
+	/*
+	 * Attach the shadow variable to some well known address it stays
+	 * even when the livepatch gets replaced with a newer version.
+	 *
+	 * Make sure that the shadow variable does not exist yet.
+	 */
+	applause = (char *)klp_shadow_alloc(shadow_object, id,
+					   APPLAUSE_STR_SIZE, GFP_KERNEL,
+					   NULL, NULL);
+
+	if (!applause) {
+		pr_err("%s: failed to allocated shadow variable for storing an applause description\n",
+		       __func__);
+		return -ENOMEM;
+	}
+
+	strscpy(applause, "[]", APPLAUSE_STR_SIZE);
+
+	return 0;
+}
+
+static void set_applause(unsigned long id)
+{
+	char *applause;
+
+	applause = (char *)klp_shadow_get(shadow_object, id);
+	if (!applause) {
+		pr_err("%s: failed to get shadow variable with the applause description: %lu\n",
+		       __func__, id);
+		return;
+	}
+
+	strscpy(applause, "[APPLAUSE]", APPLAUSE_STR_SIZE);
+}
+
+static void unset_applause(unsigned long id)
+{
+	char *applause;
+
+	applause = (char *)klp_shadow_get(shadow_object, id);
+	if (!applause) {
+		pr_err("%s: failed to get shadow variable with the applause description: %lu\n",
+		       __func__, id);
+		return;
+	}
+
+	strscpy(applause, "[]", APPLAUSE_STR_SIZE);
+}
+
+static void check_applause(unsigned long id)
+{
+	char *applause;
+
+	applause = (char *)klp_shadow_get(shadow_object, id);
+	if (!applause) {
+		pr_err("%s: failed to get shadow variable with the applause description: %lu\n",
+		       __func__, id);
+		return;
+	}
+}
+
+/* Executed before patching when the state is being enabled. */
+static int applause_pre_patch_callback(struct klp_patch *patch, struct klp_state *state)
+{
+	pr_info("%s: state %lu\n", __func__, state->id);
+	return allocate_applause(state->id);
+}
+
+/* Executed after patching when the state being enabled. */
+static void applause_post_patch_callback(struct klp_patch *patch, struct klp_state *state)
+{
+	pr_info("%s: state %lu\n", __func__, state->id);
+	set_applause(state->id);
+}
+
+/* Executed before unpatching when the state is being disabled. */
+static void applause_pre_unpatch_callback(struct klp_patch *patch, struct klp_state *state)
+{
+	pr_info("%s: state %lu\n", __func__, state->id);
+	unset_applause(state->id);
+}
+
+/* Executed after unpatching when the state is being disabled. */
+static void applause_post_unpatch_callback(struct klp_patch *patch, struct klp_state *state)
+{
+	/*
+	 * Just check that the shadow variable still exist. It will be
+	 * freed automatically because state->is_shadow is set.
+	 */
+	pr_info("%s: state %lu (nope)\n", __func__, state->id);
+	check_applause(state->id);
+}
+
+/*
+ * The shadow_dtor callback is not really needed. The space for the string
+ * has been allocated as part of struct klp_shadow. The callback is added
+ * just to check that the shadow variable is freed automatically because of
+ * state->is_shadow is set.
+ */
+static void applause_shadow_dtor(void *obj, void *shadow_data)
+{
+	char *applause = (char *)shadow_data;
+
+	/*
+	 * It would be better to print the related state->id. And it would be
+	 * easy to get the pointer to struct klp_shadow via the @shadow_data
+	 * pointer. But struct klp_state is not defined in a public header.
+	 */
+	pr_info("%s: freeing applause %s (nope)\n",
+		__func__, applause);
 }
 
 static struct klp_func test_klp_speaker_funcs[] = {
@@ -64,6 +198,21 @@ static struct klp_object objs[] = {
 	{ }
 };
 
+static struct klp_state states[] = {
+	{
+		.id = APPLAUSE_ID,
+		.is_shadow = true,
+		.callbacks = {
+			.pre_patch = applause_pre_patch_callback,
+			.post_patch = applause_post_patch_callback,
+			.pre_unpatch = applause_pre_unpatch_callback,
+			.post_unpatch = applause_post_unpatch_callback,
+			.shadow_dtor = applause_shadow_dtor,
+		},
+	},
+	{}
+};
+
 static struct klp_patch patch = {
 	.mod = THIS_MODULE,
 	.objs = objs,
@@ -71,6 +220,9 @@ static struct klp_patch patch = {
 
 static int test_klp_speaker_livepatch_init(void)
 {
+	if (add_applause)
+		patch.states = states;
+
 	return klp_enable_patch(&patch);
 }
 

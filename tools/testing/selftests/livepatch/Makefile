@@ -9,6 +9,7 @@ TEST_PROGS := \
 	test-callbacks.sh \
 	test-shadow-vars.sh \
 	test-state.sh \
+	test-state-callbacks.sh \
 	test-ftrace.sh \
 	test-sysfs.sh \
 	test-syscall.sh \
