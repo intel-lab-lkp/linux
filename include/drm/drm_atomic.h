@@ -1185,6 +1185,22 @@ drm_priv_to_bridge_state(struct drm_private_state *priv)
 	return container_of(priv, struct drm_bridge_state, base);
 }
 
+/**
+ * @drm_bridge_state_get_atomic_state() - Get the atomic state from a bridge state
+ * @bridge_state: bridge state object
+ *
+ * RETURNS:
+ * The global atomic state @bridge_state is a part of, or NULL if there is none.
+ */
+static inline struct drm_atomic_state *
+drm_bridge_state_get_atomic_state(struct drm_bridge_state *bridge_state)
+{
+	if (!bridge_state)
+		return NULL;
+
+	return bridge_state->base.state;
+}
+
 struct drm_bridge_state *
 drm_atomic_get_bridge_state(struct drm_atomic_state *state,
 			    struct drm_bridge *bridge);
