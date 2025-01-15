@@ -228,16 +228,16 @@ static void aest_node_pool_process(struct work_struct *work)
 	llist_for_each_entry(event, head, llnode) {
 		aest_print(event);
 
-		/* TODO: translate Logical Addresses to System Physical Addresses */
+		addr = event->regs.err_addr & (1UL << CONFIG_ARM64_PA_BITS);
+
 		if (event->addressing_mode == AEST_ADDREESS_LA ||
-			(event->regs.err_addr & ERR_ADDR_AI)) {
-			pr_notice("Can not translate LA to SPA\n");
-			addr = 0;
-		} else
+			(event->regs.err_addr & ERR_ADDR_AI))
+			addr = convert_ras_la_to_spa(event);
+		else
 			addr = event->regs.err_addr & (1UL << CONFIG_ARM64_PA_BITS);
 
 		status = event->regs.err_status;
-		if (addr && ((status & ERR_STATUS_UE) || (status & ERR_STATUS_DE)))
+		if (addr > 0 && ((status & ERR_STATUS_UE) || (status & ERR_STATUS_DE)))
 			aest_handle_memory_failure(addr);
 
 		blocking_notifier_call_chain(&aest_decoder_chain, 0, event);
