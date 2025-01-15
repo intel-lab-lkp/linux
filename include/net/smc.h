@@ -63,8 +63,8 @@ struct smcd_ops {
 
 struct smcd_dev {
 	const struct smcd_ops *ops;
-	void *priv;
-	void *client;
+	struct ism_dev *ism;
+	struct ism_client *client;
 	struct list_head list;
 	spinlock_t lock;
 	struct smc_connection **conn;

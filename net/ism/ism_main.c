@@ -14,6 +14,8 @@
 #include <linux/err.h>
 #include <linux/ism.h>
 
+#include "ism_loopback.h"
+
 MODULE_DESCRIPTION("Internal Shared Memory class");
 MODULE_LICENSE("GPL");
 
@@ -148,14 +150,21 @@ EXPORT_SYMBOL_GPL(ism_dev_unregister);
 
 static int __init ism_init(void)
 {
+	int rc;
+
 	memset(clients, 0, sizeof(clients));
 	max_client = 0;
 
-	return 0;
+	rc = ism_loopback_init();
+	if (rc)
+		pr_err("%s: ism_loopback_init fails with %d\n", __func__, rc);
+
+	return rc;
 }
 
 static void __exit ism_exit(void)
 {
+	ism_loopback_exit();
 }
 
 module_init(ism_init);

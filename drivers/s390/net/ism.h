@@ -202,7 +202,7 @@ struct ism_sba {
 static inline void __ism_read_cmd(struct ism_dev *ism, void *data,
 				  unsigned long offset, unsigned long len)
 {
-	struct zpci_dev *zdev = to_zpci(ism->pdev);
+	struct zpci_dev *zdev = to_zpci(to_pci_dev(ism->dev.parent));
 	u64 req = ZPCI_CREATE_REQ(zdev->fh, 2, 8);
 
 	while (len > 0) {
@@ -216,7 +216,7 @@ static inline void __ism_read_cmd(struct ism_dev *ism, void *data,
 static inline void __ism_write_cmd(struct ism_dev *ism, void *data,
 				   unsigned long offset, unsigned long len)
 {
-	struct zpci_dev *zdev = to_zpci(ism->pdev);
+	struct zpci_dev *zdev = to_zpci(to_pci_dev(ism->dev.parent));
 	u64 req = ZPCI_CREATE_REQ(zdev->fh, 2, len);
 
 	if (len)
@@ -226,7 +226,7 @@ static inline void __ism_write_cmd(struct ism_dev *ism, void *data,
 static inline int __ism_move(struct ism_dev *ism, u64 dmb_req, void *data,
 			     unsigned int size)
 {
-	struct zpci_dev *zdev = to_zpci(ism->pdev);
+	struct zpci_dev *zdev = to_zpci(to_pci_dev(ism->dev.parent));
 	u64 req = ZPCI_CREATE_REQ(zdev->fh, 0, size);
 
 	return __zpci_store_block(data, req, dmb_req);

@@ -12,3 +12,16 @@ config ISM
 
 	  To compile as a module choose M. The module name is ism.
 	  If unsure, choose N.
+
+config ISM_LO
+	bool "intra-OS shortcut with loopback-ism"
+	depends on ISM
+	default n
+	help
+	  ISM_LO enables the creation of an Emulated-ISM device named
+	  loopback-ism which can be used for transferring data
+	  when communication occurs within the same OS. This helps in
+	  convenient testing of ISM clients, since loopback-ism is
+	  independent of architecture or hardware.
+
+	  if unsure, say N.

@@ -88,7 +88,7 @@ static int register_sba(struct ism_dev *ism)
 	dma_addr_t dma_handle;
 	struct ism_sba *sba;
 
-	sba = dma_alloc_coherent(&ism->pdev->dev, PAGE_SIZE, &dma_handle,
+	sba = dma_alloc_coherent(ism->dev.parent, PAGE_SIZE, &dma_handle,
 				 GFP_KERNEL);
 	if (!sba)
 		return -ENOMEM;
@@ -99,7 +99,7 @@ static int register_sba(struct ism_dev *ism)
 	cmd.request.sba = dma_handle;
 
 	if (ism_cmd(ism, &cmd)) {
-		dma_free_coherent(&ism->pdev->dev, PAGE_SIZE, sba, dma_handle);
+		dma_free_coherent(ism->dev.parent, PAGE_SIZE, sba, dma_handle);
 		return -EIO;
 	}
 
@@ -115,7 +115,7 @@ static int register_ieq(struct ism_dev *ism)
 	dma_addr_t dma_handle;
 	struct ism_eq *ieq;
 
-	ieq = dma_alloc_coherent(&ism->pdev->dev, PAGE_SIZE, &dma_handle,
+	ieq = dma_alloc_coherent(ism->dev.parent, PAGE_SIZE, &dma_handle,
 				 GFP_KERNEL);
 	if (!ieq)
 		return -ENOMEM;
@@ -127,7 +127,7 @@ static int register_ieq(struct ism_dev *ism)
 	cmd.request.len = sizeof(*ieq);
 
 	if (ism_cmd(ism, &cmd)) {
-		dma_free_coherent(&ism->pdev->dev, PAGE_SIZE, ieq, dma_handle);
+		dma_free_coherent(ism->dev.parent, PAGE_SIZE, ieq, dma_handle);
 		return -EIO;
 	}
 
@@ -149,7 +149,7 @@ static int unregister_sba(struct ism_dev *ism)
 	if (ret && ret != ISM_ERROR)
 		return -EIO;
 
-	dma_free_coherent(&ism->pdev->dev, PAGE_SIZE,
+	dma_free_coherent(ism->dev.parent, PAGE_SIZE,
 			  ism->sba, ism->sba_dma_addr);
 
 	ism->sba = NULL;
@@ -169,7 +169,7 @@ static int unregister_ieq(struct ism_dev *ism)
 	if (ret && ret != ISM_ERROR)
 		return -EIO;
 
-	dma_free_coherent(&ism->pdev->dev, PAGE_SIZE,
+	dma_free_coherent(ism->dev.parent, PAGE_SIZE,
 			  ism->ieq, ism->ieq_dma_addr);
 
 	ism->ieq = NULL;
@@ -216,7 +216,7 @@ static int ism_query_rgid(struct ism_dev *ism, uuid_t *rgid, u32 vid_valid,
 static void ism_free_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
 {
 	clear_bit(dmb->sba_idx, ism->sba_bitmap);
-	dma_unmap_page(&ism->pdev->dev, dmb->dma_addr, dmb->dmb_len,
+	dma_unmap_page(ism->dev.parent, dmb->dma_addr, dmb->dmb_len,
 		       DMA_FROM_DEVICE);
 	folio_put(virt_to_folio(dmb->cpu_addr));
 }
@@ -227,7 +227,7 @@ static int ism_alloc_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
 	unsigned long bit;
 	int rc;
 
-	if (PAGE_ALIGN(dmb->dmb_len) > dma_get_max_seg_size(&ism->pdev->dev))
+	if (PAGE_ALIGN(dmb->dmb_len) > dma_get_max_seg_size(ism->dev.parent))
 		return -EINVAL;
 
 	if (!dmb->sba_idx) {
@@ -251,10 +251,10 @@ static int ism_alloc_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
 	}
 
 	dmb->cpu_addr = folio_address(folio);
-	dmb->dma_addr = dma_map_page(&ism->pdev->dev,
+	dmb->dma_addr = dma_map_page(ism->dev.parent,
 				     virt_to_page(dmb->cpu_addr), 0,
 				     dmb->dmb_len, DMA_FROM_DEVICE);
-	if (dma_mapping_error(&ism->pdev->dev, dmb->dma_addr)) {
+	if (dma_mapping_error(ism->dev.parent, dmb->dma_addr)) {
 		rc = -ENOMEM;
 		goto out_free;
 	}
@@ -419,10 +419,7 @@ static int ism_supports_v2(void)
 
 static u16 ism_get_chid(struct ism_dev *ism)
 {
-	if (!ism || !ism->pdev)
-		return 0;
-
-	return to_zpci(ism->pdev)->pchid;
+	return to_zpci(to_pci_dev(ism->dev.parent))->pchid;
 }
 
 static void ism_handle_event(struct ism_dev *ism)
@@ -499,7 +496,7 @@ static const struct ism_ops ism_vp_ops = {
 
 static int ism_dev_init(struct ism_dev *ism)
 {
-	struct pci_dev *pdev = ism->pdev;
+	struct pci_dev *pdev = to_pci_dev(ism->dev.parent);
 	int ret;
 
 	ret = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
@@ -565,7 +562,6 @@ static int ism_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	spin_lock_init(&ism->lock);
 	dev_set_drvdata(&pdev->dev, ism);
-	ism->pdev = pdev;
 	ism->dev.parent = &pdev->dev;
 	device_initialize(&ism->dev);
 	dev_set_name(&ism->dev, dev_name(&pdev->dev));
@@ -603,14 +599,13 @@ err:
 	device_del(&ism->dev);
 err_dev:
 	dev_set_drvdata(&pdev->dev, NULL);
-	kfree(ism);
 
 	return ret;
 }
 
 static void ism_dev_exit(struct ism_dev *ism)
 {
-	struct pci_dev *pdev = ism->pdev;
+	struct pci_dev *pdev = to_pci_dev(ism->dev.parent);
 	unsigned long flags;
 	int i;
 

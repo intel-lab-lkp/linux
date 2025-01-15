@@ -302,7 +302,7 @@ static int smc_nl_handle_smcd_dev(struct smcd_dev *smcd,
 	int use_cnt = 0;
 	void *nlh;
 
-	ism = smcd->priv;
+	ism = smcd->ism;
 	nlh = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
 			  &smc_gen_nl_family, NLM_F_MULTI,
 			  SMC_NETLINK_GET_DEV_SMCD);
@@ -453,23 +453,24 @@ static void smc_ism_event_work(struct work_struct *work)
 	kfree(wrk);
 }
 
-static struct smcd_dev *smcd_alloc_dev(struct device *parent, const char *name,
-				       const struct smcd_ops *ops, int max_dmbs)
+static struct smcd_dev *smcd_alloc_dev(const char *name,
+				       const struct smcd_ops *ops,
+				       int max_dmbs)
 {
 	struct smcd_dev *smcd;
 
-	smcd = devm_kzalloc(parent, sizeof(*smcd), GFP_KERNEL);
+	smcd = kzalloc(sizeof(*smcd), GFP_KERNEL);
 	if (!smcd)
 		return NULL;
-	smcd->conn = devm_kcalloc(parent, max_dmbs,
-				  sizeof(struct smc_connection *), GFP_KERNEL);
+	smcd->conn = kcalloc(max_dmbs, sizeof(struct smc_connection *),
+			     GFP_KERNEL);
 	if (!smcd->conn)
-		return NULL;
+		goto free_smcd;
 
 	smcd->event_wq = alloc_ordered_workqueue("ism_evt_wq-%s)",
 						 WQ_MEM_RECLAIM, name);
 	if (!smcd->event_wq)
-		return NULL;
+		goto free_conn;
 
 	smcd->ops = ops;
 
@@ -479,12 +480,18 @@ static struct smcd_dev *smcd_alloc_dev(struct device *parent, const char *name,
 	INIT_LIST_HEAD(&smcd->lgr_list);
 	init_waitqueue_head(&smcd->lgrs_deleted);
 	return smcd;
+
+free_conn:
+	kfree(smcd->conn);
+free_smcd:
+	kfree(smcd);
+	return NULL;
 }
 
 static int smcd_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
 			   u32 vid_valid, u32 vid)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 	uuid_t ism_rgid;
 
 	copy_to_ismgid(&ism_rgid, rgid);
@@ -494,42 +501,42 @@ static int smcd_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
 static int smcd_register_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb,
 			     void *client)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->register_dmb(ism, dmb, (struct ism_client *)client);
 }
 
 static int smcd_unregister_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->unregister_dmb(ism, dmb);
 }
 
 static int smcd_add_vlan_id(struct smcd_dev *smcd, u64 vlan_id)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->add_vlan_id(ism, vlan_id);
 }
 
 static int smcd_del_vlan_id(struct smcd_dev *smcd, u64 vlan_id)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->del_vlan_id(ism, vlan_id);
 }
 
 static int smcd_set_vlan_required(struct smcd_dev *smcd)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->set_vlan_required(ism);
 }
 
 static int smcd_reset_vlan_required(struct smcd_dev *smcd)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->reset_vlan_required(ism);
 }
@@ -537,7 +544,7 @@ static int smcd_reset_vlan_required(struct smcd_dev *smcd)
 static int smcd_signal_ieq(struct smcd_dev *smcd, struct smcd_gid *rgid,
 			   u32 trigger_irq, u32 event_code, u64 info)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 	uuid_t ism_rgid;
 
 	copy_to_ismgid(&ism_rgid, rgid);
@@ -549,7 +556,7 @@ static int smcd_move(struct smcd_dev *smcd, u64 dmb_tok, unsigned int idx,
 		     bool sf, unsigned int offset, void *data,
 		     unsigned int size)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->move_data(ism, dmb_tok, idx, sf, offset, data, size);
 }
@@ -562,23 +569,21 @@ static int smcd_supports_v2(void)
 static void smcd_get_local_gid(struct smcd_dev *smcd,
 			       struct smcd_gid *smcd_gid)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	copy_to_smcdgid(smcd_gid, &ism->gid);
 }
 
 static u16 smcd_get_chid(struct smcd_dev *smcd)
 {
-	struct ism_dev *ism = smcd->priv;
+	struct ism_dev *ism = smcd->ism;
 
 	return ism->ops->get_chid(ism);
 }
 
 static inline struct device *smcd_get_dev(struct smcd_dev *dev)
 {
-	struct ism_dev *ism = dev->priv;
-
-	return &ism->dev;
+	return ism_get_dev(dev->ism);
 }
 
 static const struct smcd_ops ism_smcd_ops = {
@@ -597,22 +602,65 @@ static const struct smcd_ops ism_smcd_ops = {
 	.get_dev = smcd_get_dev,
 };
 
+static inline int smcd_support_dmb_nocopy(struct smcd_dev *smcd)
+{
+	struct ism_dev *ism = smcd->ism;
+
+	return ism->ops->support_dmb_nocopy(ism);
+}
+
+static inline int smcd_attach_dmb(struct smcd_dev *smcd,
+				  struct ism_dmb *dmb)
+{
+	struct ism_dev *ism = smcd->ism;
+
+	return ism->ops->attach_dmb(ism, dmb);
+}
+
+static inline int smcd_detach_dmb(struct smcd_dev *smcd, u64 token)
+{
+	struct ism_dev *ism = smcd->ism;
+
+	return ism->ops->detach_dmb(ism, token);
+}
+
+static const struct smcd_ops lo_ops = {
+	.query_remote_gid = smcd_query_rgid,
+	.register_dmb = smcd_register_dmb,
+	.unregister_dmb = smcd_unregister_dmb,
+	.support_dmb_nocopy = smcd_support_dmb_nocopy,
+	.attach_dmb = smcd_attach_dmb,
+	.detach_dmb = smcd_detach_dmb,
+	.move_data = smcd_move,
+	.supports_v2 = smcd_supports_v2,
+	.get_local_gid = smcd_get_local_gid,
+	.get_chid = smcd_get_chid,
+	.get_dev = smcd_get_dev,
+};
+
 static void smcd_register_dev(struct ism_dev *ism)
 {
-	const struct smcd_ops *ops = &ism_smcd_ops;
+	const struct smcd_ops *ops;
 	struct smcd_dev *smcd, *fentry;
+	int max_dmbs;
 
-	if (!ops)
-		return;
+	if (ism->ops->get_chid(ism) == ISM_LO_RESERVED_CHID) {
+		max_dmbs = ISM_LO_MAX_DMBS;
+		ops = &lo_ops;
+	} else {
+		max_dmbs = ISM_NR_DMBS;
+		ops = &ism_smcd_ops;
+	}
 
-	smcd = smcd_alloc_dev(&ism->pdev->dev, dev_name(&ism->pdev->dev), ops,
-			      ISM_NR_DMBS);
+	smcd = smcd_alloc_dev(dev_name(&ism->dev), ops, max_dmbs);
 	if (!smcd)
 		return;
-	smcd->priv = ism;
+
+	smcd->ism = ism;
 	smcd->client = &smc_ism_client;
 	ism_set_priv(ism, &smc_ism_client, smcd);
-	if (smc_pnetid_by_dev_port(&ism->pdev->dev, 0, smcd->pnetid))
+
+	if (smc_pnetid_by_dev_port(ism->dev.parent, 0, smcd->pnetid))
 		smc_pnetid_by_table_smcd(smcd);
 
 	if (ism->ops->supports_v2())
@@ -653,6 +701,8 @@ static void smcd_unregister_dev(struct ism_dev *ism)
 	list_del_init(&smcd->list);
 	mutex_unlock(&smcd_dev_list.mutex);
 	destroy_workqueue(smcd->event_wq);
+	kfree(smcd->conn);
+	kfree(smcd);
 }
 
 /* SMCD Device event handler. Called from ISM device interrupt handler.

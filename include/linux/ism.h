@@ -144,6 +144,9 @@ int  ism_unregister_client(struct ism_client *client);
  *	identified by dmb_tok and idx. If signal flag (sf) then signal
  *	the remote peer that data has arrived in this dmb.
  *
+ * int (*unregister_dmb)(struct ism_dev *dev, struct ism_dmb *dmb);
+ *	Unregister an ism_dmb buffer
+ *
  * int (*supports_v2)(void);
  *
  * u16 (*get_chid)(struct ism_dev *dev);
@@ -218,12 +221,63 @@ struct ism_ops {
 	int (*reset_vlan_required)(struct ism_dev *dev);
 	int (*signal_event)(struct ism_dev *dev, uuid_t *rgid,
 			    u32 trigger_irq, u32 event_code, u64 info);
+/* no copy option
+ * --------------
+ */
+	/**
+	 * support_dmb_nocopy() - does this device provide no-copy option?
+	 * @dev: ism device
+	 *
+	 * In addition to using move_data(), a sender device can provide a
+	 * kernel address + length, that represents a target dmb
+	 * (like MMIO). If a sender writes into such a ghost-send-buffer
+	 * (= at this kernel address) the data will automatically
+	 * immediately appear in the target dmb, even without calling
+	 * move_data().
+	 * Note that this is NOT related to the MSG_ZEROCOPY socket flag.
+	 *
+	 * Either all 3 function pointers for support_dmb_nocopy(),
+	 * attach_dmb() and detach_dmb() are defined, or all of them must
+	 * be NULL.
+	 *
+	 * Return: non-zero, if no-copy is supported.
+	 */
+	int (*support_dmb_nocopy)(struct ism_dev *dev);
+	/**
+	 * attach_dmb() - attach local memory to a remote dmb
+	 * @dev: Local sending ism device
+	 * @dmb: all other parameters are passed in the form of a
+	 *	 dmb struct
+	 *	 TODO: (THIS IS CONFUSING, should be changed)
+	 *  dmb_tok: (in) Token of the remote dmb, we want to attach to
+	 *  cpu_addr: (out) MMIO address
+	 *  dma_addr: (out) MMIO address (if applicable, invalid otherwise)
+	 *  dmb_len: (out) length of local MMIO region,
+	 *           equal to length of remote DMB.
+	 *  sba_idx: (out) index of remote dmb (NOT HELPFUL, should be removed)
+	 *
+	 * Provides a memory address to the sender that can be used to
+	 * directly write into the remote dmb.
+	 *
+	 * Return: Zero upon success, Error code otherwise
+	 */
+	int (*attach_dmb)(struct ism_dev *dev, struct ism_dmb *dmb);
+	/**
+	 * detach_dmb() - Detach the ghost buffer from a remote dmb
+	 * @dev: ism device
+	 * @token: dmb token of the remote dmb
+	 * Return: Zero upon success, Error code otherwise
+	 */
+	int (*detach_dmb)(struct ism_dev *dev, u64 token);
 };
 
 /* Unless we gain unexpected popularity, this limit should hold for a while */
 #define MAX_CLIENTS		8
 #define NO_CLIENT		0xff		/* must be >= MAX_CLIENTS */
 #define ISM_NR_DMBS		1920
+/* Defined fabric id / CHID for all loopback devices: */
+#define ISM_LO_RESERVED_CHID	0xFFFF
+#define ISM_LO_MAX_DMBS		5000
 
 struct ism_dev {
 	const struct ism_ops *ops;
@@ -257,6 +311,11 @@ static inline void *ism_get_priv(struct ism_dev *dev,
 static inline void ism_set_priv(struct ism_dev *dev, struct ism_client *client,
 				void *priv) {
 	dev->priv[client->id] = priv;
+}
+
+static inline struct device *ism_get_dev(struct ism_dev *ism)
+{
+	return &ism->dev;
 }
 
 #define ISM_RESERVED_VLANID	0x1FFF
