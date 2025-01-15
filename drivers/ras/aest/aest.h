@@ -7,6 +7,7 @@
 
 #include <linux/acpi_aest.h>
 #include <asm/ras.h>
+#include <linux/debugfs.h>
 
 #define MAX_GSI_PER_NODE 2
 #define AEST_MAX_PPI 3
@@ -53,7 +54,7 @@
 #define ERXGROUP		0xE00
 #define GIC_ERRDEVARCH		0xFFBC
 
-extern struct xarray *aest_array;
+extern struct dentry *aest_debugfs;
 
 struct aest_event {
 	struct llist_node llnode;
@@ -104,6 +105,15 @@ struct ce_threshold {
 	u64				reg_val;
 };
 
+struct record_count {
+	u64				ce;
+	u64				de;
+	u64				uc;
+	u64				uer;
+	u64				ueo;
+	u64				ueu;
+};
+
 struct aest_record {
 	char				*name;
 	int				index;
@@ -125,6 +135,7 @@ struct aest_record {
 	struct dentry			*debugfs;
 	struct ce_threshold		ce;
 	enum ras_ce_threshold		threshold_type;
+	struct record_count		count;
 	const struct aest_access	*access;
 
 	void				*vendor_data;
@@ -321,3 +332,5 @@ aest_set_name(struct aest_device *adev, struct aest_hnode *ahnode)
 
 	return 0;
 }
+
+void aest_dev_init_debugfs(struct aest_device *adev);

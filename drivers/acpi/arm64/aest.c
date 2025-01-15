@@ -318,6 +318,9 @@ void __init acpi_aest_init(void)
 	}
 
 	aest_array = kzalloc(sizeof(struct xarray), GFP_KERNEL);
+	if (!aest_array)
+		return;
+
 	xa_init(aest_array);
 
 	ret = acpi_aest_init_nodes(aest_table);
