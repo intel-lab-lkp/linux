@@ -418,6 +418,34 @@ static void dw_pcie_host_request_msg_tlp_res(struct dw_pcie_rp *pp)
 	}
 }
 
+static int dw_pcie_get_parent_addr(struct dw_pcie *pci, resource_size_t pci_addr,
+				   resource_size_t *i_addr)
+{
+	struct device *dev = pci->dev;
+	struct device_node *np = dev->of_node;
+	struct of_range_parser parser;
+	struct of_range range;
+	int ret;
+
+	if (!pci->use_parent_dt_ranges) {
+		*i_addr = pci_addr;
+		return 0;
+	}
+
+	ret = of_range_parser_init(&parser, np);
+	if (ret)
+		return ret;
+
+	for_each_of_pci_range(&parser, &range) {
+		if (pci_addr == range.bus_addr) {
+			*i_addr = range.parent_bus_addr;
+			break;
+		}
+	}
+
+	return 0;
+}
+
 int dw_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -427,6 +455,7 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	struct resource_entry *win;
 	struct pci_host_bridge *bridge;
 	struct resource *res;
+	int index;
 	int ret;
 
 	raw_spin_lock_init(&pp->lock);
@@ -439,6 +468,20 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	if (res) {
 		pp->cfg0_size = resource_size(res);
 		pp->cfg0_base = res->start;
+
+		if (pci->use_parent_dt_ranges) {
+			index = of_property_match_string(np, "reg-names", "config");
+			if (index < 0)
+				return -EINVAL;
+			/*
+			 * Retrieve the parent bus address of PCI config space.
+			 * If the parent bus ranges in the device tree provide
+			 * the correct address conversion information, set
+			 * 'use_parent_dt_ranges' to true, The
+			 * 'cpu_addr_fixup()' can be eliminated.
+			 */
+			of_property_read_reg(np, index, &pp->cfg0_base, NULL);
+		}
 
 		pp->va_cfg0_base = devm_pci_remap_cfg_resource(dev, res);
 		if (IS_ERR(pp->va_cfg0_base))
@@ -461,6 +504,10 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 		pp->io_bus_addr = win->res->start - win->offset;
 		pp->io_base = pci_pio_to_address(win->res->start);
 	}
+
+	ret = dw_pcie_get_parent_addr(pci, pp->io_bus_addr, &pp->io_base);
+	if (ret)
+		return ret;
 
 	/* Set default bus ops */
 	bridge->ops = &dw_pcie_ops;
@@ -530,8 +577,14 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 			goto err_remove_edma;
 	}
 
-	/* Ignore errors, the link may come up later */
-	dw_pcie_wait_for_link(pci);
+	/*
+	 * Note: Skip the link up delay only when a Link Up IRQ is present.
+	 * If there is no Link Up IRQ, we should not bypass the delay
+	 * because that would require users to manually rescan for devices.
+	 */
+	if (!pp->use_linkup_irq)
+		/* Ignore errors, the link may come up later */
+		dw_pcie_wait_for_link(pci);
 
 	bridge->sysdata = pp;
 
@@ -722,6 +775,8 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 
 	i = 0;
 	resource_list_for_each_entry(entry, &pp->bridge->windows) {
+		resource_size_t parent_bus_addr;
+
 		if (resource_type(entry->res) != IORESOURCE_MEM)
 			continue;
 
@@ -730,8 +785,14 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 
 		atu.index = i;
 		atu.type = PCIE_ATU_TYPE_MEM;
-		atu.cpu_addr = entry->res->start;
+		parent_bus_addr = entry->res->start;
 		atu.pci_addr = entry->res->start - entry->offset;
+
+		ret = dw_pcie_get_parent_addr(pci, entry->res->start, &parent_bus_addr);
+		if (ret)
+			return ret;
+
+		atu.cpu_addr = parent_bus_addr;
 
 		/* Adjust iATU size if MSG TLP region was allocated before */
 		if (pp->msg_res && pp->msg_res->parent == entry->res)
@@ -918,7 +979,7 @@ int dw_pcie_suspend_noirq(struct dw_pcie *pci)
 {
 	u8 offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
 	u32 val;
-	int ret = 0;
+	int ret;
 
 	/*
 	 * If L1SS is supported, then do not put the link into L2 as some
@@ -927,25 +988,33 @@ int dw_pcie_suspend_noirq(struct dw_pcie *pci)
 	if (dw_pcie_readw_dbi(pci, offset + PCI_EXP_LNKCTL) & PCI_EXP_LNKCTL_ASPM_L1)
 		return 0;
 
-	if (dw_pcie_get_ltssm(pci) <= DW_PCIE_LTSSM_DETECT_ACT)
-		return 0;
-
-	if (pci->pp.ops->pme_turn_off)
+	if (pci->pp.ops->pme_turn_off) {
 		pci->pp.ops->pme_turn_off(&pci->pp);
-	else
+	} else {
 		ret = dw_pcie_pme_turn_off(pci);
+		if (ret)
+			return ret;
+	}
 
-	if (ret)
-		return ret;
-
-	ret = read_poll_timeout(dw_pcie_get_ltssm, val, val == DW_PCIE_LTSSM_L2_IDLE,
+	ret = read_poll_timeout(dw_pcie_get_ltssm, val,
+				val == DW_PCIE_LTSSM_L2_IDLE ||
+				val <= DW_PCIE_LTSSM_DETECT_WAIT,
 				PCIE_PME_TO_L2_TIMEOUT_US/10,
 				PCIE_PME_TO_L2_TIMEOUT_US, false, pci);
 	if (ret) {
+		/* Only dump message when ltssm_stat isn't in DETECT and POLL */
 		dev_err(pci->dev, "Timeout waiting for L2 entry! LTSSM: 0x%x\n", val);
 		return ret;
 	}
 
+	/*
+	 * Refer to r6.0, sec 5.3.3.2.1, software should wait at least
+	 * 100ns after L2/L3 Ready before turning off refclock and
+	 * main power. It's harmless too when no endpoint connected.
+	 */
+	udelay(1);
+
+	dw_pcie_stop_link(pci);
 	if (pci->pp.ops->deinit)
 		pci->pp.ops->deinit(&pci->pp);
 
