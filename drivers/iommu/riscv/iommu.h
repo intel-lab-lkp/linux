@@ -60,10 +60,18 @@ struct riscv_iommu_device {
 	unsigned int ddt_mode;
 	dma_addr_t ddt_phys;
 	u64 *ddt_root;
+
+	/* hardware performance monitor */
+	struct riscv_iommu_pmu pmu;
 };
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu);
 void riscv_iommu_remove(struct riscv_iommu_device *iommu);
+
+int riscv_iommu_pmu_init(struct riscv_iommu_pmu *pmu, void __iomem *reg,
+			 const char *name);
+void riscv_iommu_pmu_uninit(struct riscv_iommu_pmu *pmu);
+irqreturn_t riscv_iommu_pmu_handle_irq(struct riscv_iommu_pmu *pmu);
 
 #define riscv_iommu_readl(iommu, addr) \
 	readl_relaxed((iommu)->reg + (addr))

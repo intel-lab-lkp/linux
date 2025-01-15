@@ -17,6 +17,7 @@
 #include <linux/types.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/perf_event.h>
 
 /*
  * Chapter 5: Memory Mapped register interface
@@ -207,6 +208,7 @@ enum riscv_iommu_ddtp_modes {
 /* 5.22 Performance monitoring event counters (31 * 64bits) */
 #define RISCV_IOMMU_REG_IOHPMCTR_BASE	0x0068
 #define RISCV_IOMMU_REG_IOHPMCTR(_n)	(RISCV_IOMMU_REG_IOHPMCTR_BASE + ((_n) * 0x8))
+#define RISCV_IOMMU_IOHPMCTR_COUNTER	GENMASK_ULL(63, 0)
 
 /* 5.23 Performance monitoring event selectors (31 * 64bits) */
 #define RISCV_IOMMU_REG_IOHPMEVT_BASE	0x0160
@@ -248,6 +250,20 @@ enum riscv_iommu_hpmevent_id {
 	RISCV_IOMMU_HPMEVENT_S_VS_WALKS = 7,
 	RISCV_IOMMU_HPMEVENT_G_WALKS    = 8,
 	RISCV_IOMMU_HPMEVENT_MAX        = 9
+};
+
+/* Use maximum event ID for cycle event */
+#define RISCV_IOMMU_HPMEVENT_CYCLE	GENMASK_ULL(14, 0)
+
+#define RISCV_IOMMU_HPM_COUNTER_NUM	32
+
+struct riscv_iommu_pmu {
+	struct pmu pmu;
+	void __iomem *reg;
+	int num_counters;
+	u64 mask_counter;
+	struct perf_event *events[RISCV_IOMMU_IOHPMEVT_CNT + 1];
+	DECLARE_BITMAP(used_counters, RISCV_IOMMU_IOHPMEVT_CNT + 1);
 };
 
 /* 5.24 Translation request IOVA (64bits) */
