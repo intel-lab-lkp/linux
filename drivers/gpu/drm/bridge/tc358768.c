@@ -602,11 +602,23 @@ static void tc358768_bridge_disable(struct drm_bridge *bridge)
 		dev_warn(priv->dev, "Software disable failed: %d\n", ret);
 }
 
+static void tc358768_bridge_atomic_disable(struct drm_bridge *bridge,
+					   struct drm_bridge_state *bridge_state)
+{
+	tc358768_bridge_disable(bridge);
+}
+
 static void tc358768_bridge_post_disable(struct drm_bridge *bridge)
 {
 	struct tc358768_priv *priv = bridge_to_tc358768(bridge);
 
 	tc358768_hw_disable(priv);
+}
+
+static void tc358768_bridge_atomic_post_disable(struct drm_bridge *bridge,
+						struct drm_bridge_state *bridge_state)
+{
+	tc358768_bridge_post_disable(bridge);
 }
 
 static int tc358768_setup_pll(struct tc358768_priv *priv,
@@ -682,7 +694,8 @@ static u32 tc358768_dsi_bytes_to_ns(struct tc358768_priv *priv, u32 val)
 	return (u32)div_u64(m, n);
 }
 
-static void tc358768_bridge_pre_enable(struct drm_bridge *bridge)
+static void tc358768_bridge_atomic_pre_enable(struct drm_bridge *bridge,
+					      struct drm_bridge_state *bridge_state)
 {
 	struct tc358768_priv *priv = bridge_to_tc358768(bridge);
 	struct mipi_dsi_device *dsi_dev = priv->output.dev;
@@ -719,7 +732,7 @@ static void tc358768_bridge_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	mode = &bridge->encoder->crtc->state->adjusted_mode;
+	mode = &bridge_state->crtc->state->adjusted_mode;
 	ret = tc358768_setup_pll(priv, mode);
 	if (ret) {
 		dev_err(dev, "PLL setup failed: %d\n", ret);
@@ -1083,7 +1096,8 @@ static void tc358768_bridge_pre_enable(struct drm_bridge *bridge)
 	}
 }
 
-static void tc358768_bridge_enable(struct drm_bridge *bridge)
+static void tc358768_bridge_atomic_enable(struct drm_bridge *bridge,
+					  struct drm_bridge_state *bridge_state)
 {
 	struct tc358768_priv *priv = bridge_to_tc358768(bridge);
 	int ret;
@@ -1166,10 +1180,10 @@ static const struct drm_bridge_funcs tc358768_bridge_funcs = {
 	.attach = tc358768_bridge_attach,
 	.mode_valid = tc358768_bridge_mode_valid,
 	.mode_fixup = tc358768_mode_fixup,
-	.pre_enable = tc358768_bridge_pre_enable,
-	.enable = tc358768_bridge_enable,
-	.disable = tc358768_bridge_disable,
-	.post_disable = tc358768_bridge_post_disable,
+	.atomic_pre_enable = tc358768_bridge_atomic_pre_enable,
+	.atomic_enable = tc358768_bridge_atomic_enable,
+	.atomic_disable = tc358768_bridge_atomic_disable,
+	.atomic_post_disable = tc358768_bridge_atomic_post_disable,
 
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
