@@ -23,32 +23,75 @@
  *    - Support more speaker modules, see __lp_speaker_welcome().
  *
  *    - Livepatch block_doors_func() which can block the transition.
+ *
+ *    - Support testing of more shadow variables and state callbacks. see
+ *	"applause", and "applause2" module parameters.
+ *
+ *    - Allow to enable the atomic replace via "replace" parameter.
  */
 
-#define APPLAUSE_ID 10
+#define APPLAUSE_NUM 2
+#define APPLAUSE_START_ID 10
 #define APPLAUSE_STR_SIZE 16
+#define APPLAUSE_IDX_STR_SIZE 8
 
 /* associate the shadow variable with NULL address */;
 static void *shadow_object = NULL;
 
-static bool add_applause;
-module_param_named(applause, add_applause, bool, 0400);
+static bool add_applause[APPLAUSE_NUM];
+module_param_named(applause, add_applause[0], bool, 0400);
 MODULE_PARM_DESC(applause, "Use shadow variable to add applause (default=false)");
+module_param_named(applause2, add_applause[1], bool, 0400);
+MODULE_PARM_DESC(applause2, "Use shadow variable to add 2nd applause (default=false)");
 
 static int pre_patch_ret;
 module_param(pre_patch_ret, int, 0400);
 MODULE_PARM_DESC(pre_patch_ret, "Allow to force failure for the pre_patch callback (default=0)");
 
+static bool replace;
+module_param(replace, bool, 0400);
+MODULE_PARM_DESC(replace, "Enable the atomic replace feature when loading the livepatch. (default=false)");
+
+/* Conversion between the index to the @add_applause table and state ID. */
+#define __idx_to_state_id(idx) (idx + APPLAUSE_START_ID)
+#define __state_id_to_idx(state_id) (state_id - APPLAUSE_START_ID)
+
 static void __lp_speaker_welcome(const char *caller_func,
 				 const char *speaker_id,
 				 const char *context)
 {
-	char entire_applause[APPLAUSE_STR_SIZE + 1] = "";
-	const char *applause;
+	char entire_applause[APPLAUSE_NUM * APPLAUSE_STR_SIZE + 1] = "";
+	int idx, ret;
+	int len = 0;
 
-	applause = (char *)klp_shadow_get(shadow_object, APPLAUSE_ID);
-	if (applause)
-		snprintf(entire_applause, sizeof(entire_applause), "%s ", applause);
+	for (idx = 0; idx < APPLAUSE_NUM ; idx++) {
+		const char *applause;
+
+		applause = (char *)klp_shadow_get(shadow_object,
+						  __idx_to_state_id(idx));
+
+		if (applause) {
+			ret = strscpy(entire_applause + len, applause,
+				       sizeof(entire_applause) - len);
+			if (ret < 0) {
+				pr_warn("Too small buffer for entire_applause. Truncating...\n");
+				len = sizeof(entire_applause) - 1;
+				break;
+			}
+			len += ret;
+		}
+	}
+
+	if (len) {
+		ret = strscpy(entire_applause + len, " ",
+			       sizeof(entire_applause) - len);
+		if (ret < 0) {
+			pr_warn("Too small buffer for entire_applause. Truncating...\n");
+			len = sizeof(entire_applause) - 1;
+		} else {
+			len += ret;
+		}
+	}
 
 	pr_info("%s%s: %sLadies and gentleman, ...%s\n",
 		caller_func, speaker_id, entire_applause, context);
@@ -64,8 +107,28 @@ static void lp_speaker2_welcome(const char *context)
 	__lp_speaker_welcome(__func__, "(2)", context);
 }
 
+static char *state_id_to_idx_str(char *buf, size_t size,
+				   unsigned long state_id)
+{
+	int idx;
+
+	idx = __state_id_to_idx(state_id);
+
+	if (idx < 0 || idx >= APPLAUSE_NUM) {
+		pr_err("%s: Applause table index out of scope: %d\n", __func__, idx);
+		return "";
+	}
+
+	if (idx == 0)
+		return "";
+
+	snprintf(buf, size, "%d", idx + 1);
+	return buf;
+}
+
 static int allocate_applause(unsigned long id)
 {
+	char idx_str[APPLAUSE_IDX_STR_SIZE];
 	char *applause;
 
 	/*
@@ -84,13 +147,15 @@ static int allocate_applause(unsigned long id)
 		return -ENOMEM;
 	}
 
-	strscpy(applause, "[]", APPLAUSE_STR_SIZE);
+	snprintf(applause, APPLAUSE_STR_SIZE, "[%s]",
+		 state_id_to_idx_str(idx_str, sizeof(idx_str), id));
 
 	return 0;
 }
 
 static void set_applause(unsigned long id)
 {
+	char idx_str[APPLAUSE_IDX_STR_SIZE];
 	char *applause;
 
 	applause = (char *)klp_shadow_get(shadow_object, id);
@@ -100,11 +165,13 @@ static void set_applause(unsigned long id)
 		return;
 	}
 
-	strscpy(applause, "[APPLAUSE]", APPLAUSE_STR_SIZE);
+	snprintf(applause, APPLAUSE_STR_SIZE, "[APPLAUSE%s]",
+		 state_id_to_idx_str(idx_str, sizeof(idx_str), id));
 }
 
 static void unset_applause(unsigned long id)
 {
+	char idx_str[APPLAUSE_IDX_STR_SIZE];
 	char *applause;
 
 	applause = (char *)klp_shadow_get(shadow_object, id);
@@ -114,7 +181,8 @@ static void unset_applause(unsigned long id)
 		return;
 	}
 
-	strscpy(applause, "[]", APPLAUSE_STR_SIZE);
+	snprintf(applause, APPLAUSE_STR_SIZE, "[%s]",
+		 state_id_to_idx_str(idx_str, sizeof(idx_str), id));
 }
 
 static void check_applause(unsigned long id)
@@ -251,36 +319,85 @@ static struct klp_object objs[] = {
 	{ }
 };
 
-static struct klp_state states[] = {
-	{
-		.id = APPLAUSE_ID,
-		.is_shadow = true,
-		.callbacks = {
-			.pre_patch = applause_pre_patch_callback,
-			.post_patch = applause_post_patch_callback,
-			.pre_unpatch = applause_pre_unpatch_callback,
-			.post_unpatch = applause_post_unpatch_callback,
-			.shadow_dtor = applause_shadow_dtor,
-		},
-	},
-	{}
-};
-
 static struct klp_patch patch = {
 	.mod = THIS_MODULE,
 	.objs = objs,
 };
 
+
+/*
+ * The array with states is dynamically allocated depending on which states
+ * are enabled on the command line.
+ */
+static struct klp_state *applause_states;
+
+static int applause_init(void)
+{
+	int idx, idx_allowed, id, enabled_cnt;
+
+	enabled_cnt = 0;
+
+	for (idx = 0, id = APPLAUSE_START_ID, enabled_cnt = 0;
+	     idx < APPLAUSE_NUM;
+	     idx++, id++) {
+		if (add_applause[idx])
+			enabled_cnt++;
+	}
+
+	if (enabled_cnt) {
+		/* Allocate one more state as the trailing entry. */
+		applause_states =
+			kzalloc(sizeof(applause_states[0]) * (enabled_cnt + 1),	GFP_KERNEL);
+		if (!applause_states)
+			return -ENOMEM;
+
+		patch.states = applause_states;
+
+		for (idx = 0, idx_allowed = 0;
+		     idx < APPLAUSE_NUM;
+		     idx++) {
+			struct klp_state *state;
+
+			if (!add_applause[idx])
+				continue;
+
+			if (idx_allowed >= enabled_cnt) {
+				pr_warn("Too many enabled applause states\n");
+				continue;
+			}
+
+			state = &applause_states[idx_allowed++];
+
+			state->id = __idx_to_state_id(idx);
+			state->is_shadow = true;
+			state->callbacks.pre_patch = applause_pre_patch_callback;
+			state->callbacks.post_patch = applause_post_patch_callback;
+			state->callbacks.pre_unpatch = applause_pre_unpatch_callback;
+			state->callbacks.post_unpatch = applause_post_unpatch_callback;
+			state->callbacks.shadow_dtor = applause_shadow_dtor;
+		}
+	}
+
+	return 0;
+}
+
 static int test_klp_speaker_livepatch_init(void)
 {
-	if (add_applause)
-		patch.states = states;
+	int err;
+
+	err = applause_init();
+	if (err)
+		return err;
+
+	if (replace)
+		patch.replace = true;
 
 	return klp_enable_patch(&patch);
 }
 
 static void test_klp_speaker_livepatch_exit(void)
 {
+	kfree(applause_states);
 }
 
 module_init(test_klp_speaker_livepatch_init);

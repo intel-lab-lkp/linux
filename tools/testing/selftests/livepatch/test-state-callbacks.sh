@@ -6,6 +6,7 @@
 . $(dirname $0)/functions.sh
 
 MOD_LIVEPATCH=test_klp_speaker_livepatch
+MOD_LIVEPATCH2=test_klp_speaker_livepatch2
 MOD_TARGET=test_klp_speaker
 
 setup_config
@@ -284,6 +285,166 @@ livepatch: '$MOD_LIVEPATCH': unpatching complete
 % cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
 $MOD_TARGET: speaker_welcome: Hello, World!
 % rmmod $MOD_LIVEPATCH
+% rmmod $MOD_TARGET
+$MOD_TARGET: ${MOD_TARGET}_exit"
+
+# Test loading multiple livepatches in parallel.
+#
+# Both livepatches fix the speaker's welcome message. The first one
+# also adds the base "[APPLAUSE]". The second one adds an extra "[APPLAUSE2]",
+# aka from another level of the concert hall.
+#
+# The per-state callbacks are called when the state is introduced or
+# or removed.
+#
+# The [APPLAUSE] and [APPLAUSE2] strings should appear in the speaker's
+# welcome message when the respective livepatches are enabled.
+start_test "multiple livepatches in parallel"
+
+load_mod $MOD_TARGET
+read_module_param $MOD_TARGET welcome
+
+load_lp $MOD_LIVEPATCH applause=1
+read_module_param $MOD_TARGET welcome
+
+load_lp $MOD_LIVEPATCH2 applause2=1
+read_module_param $MOD_TARGET welcome
+
+disable_lp $MOD_LIVEPATCH2
+unload_lp $MOD_LIVEPATCH2
+read_module_param $MOD_TARGET welcome
+
+disable_lp $MOD_LIVEPATCH
+unload_lp $MOD_LIVEPATCH
+read_module_param $MOD_TARGET welcome
+
+unload_mod $MOD_TARGET
+
+check_result "% insmod test_modules/$MOD_TARGET.ko
+$MOD_TARGET: ${MOD_TARGET}_init
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% insmod test_modules/$MOD_LIVEPATCH.ko applause=1
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+$MOD_LIVEPATCH: applause_pre_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting patching transition
+livepatch: '$MOD_LIVEPATCH': completing patching transition
+$MOD_LIVEPATCH: applause_post_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': patching complete
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH: lp_speaker_welcome: [APPLAUSE] Ladies and gentleman, ...
+% insmod test_modules/$MOD_LIVEPATCH2.ko applause2=1
+livepatch: enabling patch '$MOD_LIVEPATCH2'
+livepatch: '$MOD_LIVEPATCH2': initializing patching transition
+$MOD_LIVEPATCH2: applause_pre_patch_callback: state 11
+livepatch: '$MOD_LIVEPATCH2': starting patching transition
+livepatch: '$MOD_LIVEPATCH2': completing patching transition
+$MOD_LIVEPATCH2: applause_post_patch_callback: state 11
+livepatch: '$MOD_LIVEPATCH2': patching complete
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH2: lp_speaker_welcome: [APPLAUSE][APPLAUSE2] Ladies and gentleman, ...
+% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH2/enabled
+livepatch: '$MOD_LIVEPATCH2': initializing unpatching transition
+$MOD_LIVEPATCH2: applause_pre_unpatch_callback: state 11
+livepatch: '$MOD_LIVEPATCH2': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH2': completing unpatching transition
+$MOD_LIVEPATCH2: applause_post_unpatch_callback: state 11 (nope)
+$MOD_LIVEPATCH2: applause_shadow_dtor: freeing applause [2] (nope)
+livepatch: '$MOD_LIVEPATCH2': unpatching complete
+% rmmod $MOD_LIVEPATCH2
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH: lp_speaker_welcome: [APPLAUSE] Ladies and gentleman, ...
+% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH/enabled
+livepatch: '$MOD_LIVEPATCH': initializing unpatching transition
+$MOD_LIVEPATCH: applause_pre_unpatch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+$MOD_LIVEPATCH: applause_post_unpatch_callback: state 10 (nope)
+$MOD_LIVEPATCH: applause_shadow_dtor: freeing applause [] (nope)
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+% rmmod $MOD_LIVEPATCH
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% rmmod $MOD_TARGET
+$MOD_TARGET: ${MOD_TARGET}_exit"
+
+# Test loading multiple livepatches using the atomic replace.
+#
+# Both livepatches fix the speaker's welcome message. The first one
+# also adds the base "[APPLAUSE]". The second one also enables
+# "[APPLAUSE2]", aka from another level of the concert hall.
+#
+# In compare with the previous selftest, the 2nd livepatch has
+# to enable both "add_applause" and "add_applause2" module parameters.
+# By other words, the second livepatch has to support both states.
+# Otherwise, the base "[APPLAUSE]" would get disabled.
+#
+# The first livepatch is replaced. It does not need to be explicitly
+# disabled.
+#
+# The per-state callbacks are called when the state is introduced or
+# or removed.
+#
+# The [APPLAUSE] and [APPLAUSE2] strings should appear in the speaker's
+# welcome message when the respective livepatches are enabled.
+start_test "atomic replace"
+
+load_mod $MOD_TARGET
+read_module_param $MOD_TARGET welcome
+
+load_lp $MOD_LIVEPATCH applause=1
+read_module_param $MOD_TARGET welcome
+
+load_lp $MOD_LIVEPATCH2 replace=1 applause=1 applause2=1
+unload_lp $MOD_LIVEPATCH
+read_module_param $MOD_TARGET welcome
+
+disable_lp $MOD_LIVEPATCH2
+unload_lp $MOD_LIVEPATCH2
+read_module_param $MOD_TARGET welcome
+
+unload_mod $MOD_TARGET
+
+check_result "% insmod test_modules/$MOD_TARGET.ko
+$MOD_TARGET: ${MOD_TARGET}_init
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% insmod test_modules/$MOD_LIVEPATCH.ko applause=1
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+$MOD_LIVEPATCH: applause_pre_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting patching transition
+livepatch: '$MOD_LIVEPATCH': completing patching transition
+$MOD_LIVEPATCH: applause_post_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': patching complete
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH: lp_speaker_welcome: [APPLAUSE] Ladies and gentleman, ...
+% insmod test_modules/$MOD_LIVEPATCH2.ko replace=1 applause=1 applause2=1
+livepatch: enabling patch '$MOD_LIVEPATCH2'
+livepatch: '$MOD_LIVEPATCH2': initializing patching transition
+$MOD_LIVEPATCH2: applause_pre_patch_callback: state 11
+livepatch: '$MOD_LIVEPATCH2': starting patching transition
+livepatch: '$MOD_LIVEPATCH2': completing patching transition
+$MOD_LIVEPATCH2: applause_post_patch_callback: state 11
+livepatch: '$MOD_LIVEPATCH2': patching complete
+% rmmod $MOD_LIVEPATCH
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH2: lp_speaker_welcome: [APPLAUSE][APPLAUSE2] Ladies and gentleman, ...
+% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH2/enabled
+livepatch: '$MOD_LIVEPATCH2': initializing unpatching transition
+$MOD_LIVEPATCH2: applause_pre_unpatch_callback: state 10
+$MOD_LIVEPATCH2: applause_pre_unpatch_callback: state 11
+livepatch: '$MOD_LIVEPATCH2': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH2': completing unpatching transition
+$MOD_LIVEPATCH2: applause_post_unpatch_callback: state 10 (nope)
+$MOD_LIVEPATCH2: applause_shadow_dtor: freeing applause [] (nope)
+$MOD_LIVEPATCH2: applause_post_unpatch_callback: state 11 (nope)
+$MOD_LIVEPATCH2: applause_shadow_dtor: freeing applause [2] (nope)
+livepatch: '$MOD_LIVEPATCH2': unpatching complete
+% rmmod $MOD_LIVEPATCH2
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
 % rmmod $MOD_TARGET
 $MOD_TARGET: ${MOD_TARGET}_exit"
 
