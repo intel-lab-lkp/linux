@@ -201,6 +201,9 @@ void klp_states_post_unpatch(struct klp_patch *patch)
 		if (state->callbacks.post_unpatch)
 			state->callbacks.post_unpatch(patch, state);
 
+		if (state->is_shadow)
+			klp_shadow_free_all(state->id, state->callbacks.shadow_dtor);
+
 		state->callbacks.pre_patch_succeeded = 0;
 	}
 }
