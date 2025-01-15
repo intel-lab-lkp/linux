@@ -254,6 +254,42 @@ static inline bool __llist_add(struct llist_node *new, struct llist_head *head)
 }
 
 /**
+ * llist_del_entry - remove a particular entry from a lock-less list
+ * @head: head of the list to remove the entry from
+ * @entry: entry to be removed from the list
+ *
+ * Walk the list, find the given entry and remove it from the list.
+ * The caller must ensure that nothing can race in and change the
+ * list while this is running.
+ *
+ * Returns true if the entry was found and removed.
+ */
+static inline bool llist_del_entry(struct llist_head *head, struct llist_node *entry)
+{
+	struct llist_node *pos;
+
+	if (!head->first)
+		return false;
+
+	/* Is it the first entry? */
+	if (head->first == entry) {
+		head->first = entry->next;
+		entry->next = entry;
+		return true;
+	}
+
+	/* Find it in the list */
+	llist_for_each(head->first, pos) {
+		if (pos->next == entry) {
+			pos->next = entry->next;
+			entry->next = entry;
+			return true;
+		}
+	}
+	return false;
+}
+
+/**
  * llist_del_all - delete all entries from lock-less list
  * @head:	the head of lock-less list to delete all entries
  *
