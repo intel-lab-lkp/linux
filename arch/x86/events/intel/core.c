@@ -2788,15 +2788,18 @@ DEFINE_STATIC_CALL(intel_pmu_update_topdown_event, x86_perf_event_update);
 static void intel_pmu_read_topdown_event(struct perf_event *event)
 {
 	struct cpu_hw_events *cpuc = this_cpu_ptr(&cpu_hw_events);
+	int pmu_enabled = cpuc->enabled;
 
 	/* Only need to call update_topdown_event() once for group read. */
 	if ((cpuc->txn_flags & PERF_PMU_TXN_READ) &&
 	    !is_slots_event(event))
 		return;
 
-	perf_pmu_disable(event->pmu);
+	if (pmu_enabled)
+		perf_pmu_disable(event->pmu);
 	static_call(intel_pmu_update_topdown_event)(event);
-	perf_pmu_enable(event->pmu);
+	if (pmu_enabled)
+		perf_pmu_enable(event->pmu);
 }
 
 static void intel_pmu_read_event(struct perf_event *event)

@@ -2096,11 +2096,14 @@ get_next_pebs_record_by_bit(void *base, void *top, int bit)
 
 void intel_pmu_auto_reload_read(struct perf_event *event)
 {
-	WARN_ON(!(event->hw.flags & PERF_X86_EVENT_AUTO_RELOAD));
+	int pmu_enabled = this_cpu_read(cpu_hw_events.enabled);
 
-	perf_pmu_disable(event->pmu);
+	WARN_ON(!(event->hw.flags & PERF_X86_EVENT_AUTO_RELOAD));
+	if (pmu_enabled)
+		perf_pmu_disable(event->pmu);
 	intel_pmu_drain_pebs_buffer();
-	perf_pmu_enable(event->pmu);
+	if (pmu_enabled)
+		perf_pmu_enable(event->pmu);
 }
 
 /*
