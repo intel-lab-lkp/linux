@@ -504,6 +504,7 @@
 			clocks = <&gcc GCC_BLSP1_QUP4_I2C_APPS_CLK>,
 				 <&gcc GCC_BLSP1_AHB_CLK>;
 			clock-names = "core", "iface";
+			clock-frequency = <400000>;
 			assigned-clocks = <&gcc GCC_BLSP1_QUP4_I2C_APPS_CLK>;
 			assigned-clock-rates = <50000000>;
 			dmas = <&blsp_dma 18>, <&blsp_dma 19>;
