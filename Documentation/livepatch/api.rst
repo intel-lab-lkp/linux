@@ -27,4 +27,4 @@ Object Types
 ============
 
 .. kernel-doc:: include/linux/livepatch.h
-   :identifiers: klp_patch klp_object klp_func klp_callbacks klp_state
+   :identifiers: klp_patch klp_object klp_func klp_state_callbacks klp_state

@@ -42,7 +42,7 @@ They also allow to call a custom constructor function when a non-zero
 value is needed. Callers should provide whatever mutual exclusion
 is required.
 
-Note that the constructor is called under klp_shadow_lock spinlock. It allows
+Note that the constructor is called under *klp_shadow_lock* spinlock. It allows
 to do actions that can be done only once when a new variable is allocated.
 
 * klp_shadow_get() - retrieve a shadow variable data pointer
@@ -90,8 +90,49 @@ to do actions that can be done only once when a new variable is allocated.
       - call destructor function if defined
       - free shadow variable
 
+2. Lifetime
+===========
 
-2. Use cases
+Shadow variables are allocated only when there is code that can use them.
+This typically occurs when the entire system is livepatched and all
+processes are able to hanle them.
+
+To ensure proper management, shadow variables are associated with a specific
+system state using a unique identifier (*id*). This association governs
+their lifecycle:
+
+ - The *pre_patch()* callback can be used to allocate the shadow variable.
+
+ - The *post_patch()* callback can be used to enable the usage of the shadow
+   variable system wide.
+
+ - The *pre_unpatch()* callback can be used to disable the usage of the shadow
+   variable system wide.
+
+ - The *post_unpatch()* callback can be used for some clean up before
+   the obsolete shadow variables are freed.
+
+ - All instances of the shadow variable are automatically freed when their
+   associated state is removed. This occurs when:
+
+   - The livepatch is disabled.
+
+   - A new cumulative livepatch is applied that no longer supports
+     the associated state.
+
+**Important Notes:**
+
+  - **Persistence across Cumulative Livepatches:** Shadow variables are
+	preserved when a livepatch is replaced by another cumulative
+	livepatch that still supports the associated state. This ensures
+	continuity across updates.
+
+  - **Automatic Freeing:** There is no need to explicitly free shadow
+	variables. The livepatching mechanism handles their freeing
+	automatically after the associated state has been removed.
+
+
+3. Use cases
 ============
 
 (See the example shadow variable livepatch modules in samples/livepatch/
@@ -211,7 +252,7 @@ doesn't matter what data value the shadow variable holds, its existence
 suggests how to handle the parent object.
 
 
-3. References
+4. References
 =============
 
 * https://github.com/dynup/kpatch

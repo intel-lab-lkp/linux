@@ -8,11 +8,11 @@ Kernel Livepatching
     :maxdepth: 1
 
     livepatch
-    callbacks
     cumulative-patches
     module-elf-format
-    shadow-vars
     system-state
+    callbacks
+    shadow-vars
     reliable-stacktrace
     api
 

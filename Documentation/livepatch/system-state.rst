@@ -2,166 +2,102 @@
 System State Changes
 ====================
 
-Some users are really reluctant to reboot a system. This brings the need
-to provide more livepatches and maintain some compatibility between them.
+Livepatches provide a way to update running systems without requiring a reboot.
+However, managing compatibility between multiple livepatches can be challenging,
+especially when they introduce changes that affect system behavior or memory
+management.
 
-Maintaining more livepatches is much easier with cumulative livepatches.
-Each new livepatch completely replaces any older one. It can keep,
-add, and even remove fixes. And it is typically safe to replace any version
-of the livepatch with any other one thanks to the atomic replace feature.
+Cumulative livepatches simplify this process by completely replacing older
+versions with each update. This allows for the addition, modification, and
+removal of fixes while maintaining compatibility through atomic replacement.
+However, challenges can arise with callbacks and shadow variables.
 
-The problems might come with shadow variables and callbacks. They might
-change the system behavior or state so that it is no longer safe to
-go back and use an older livepatch or the original kernel code. Also
-any new livepatch must be able to detect what changes have already been
-done by the already installed livepatches.
+Callbacks are functions that can alter system behavior when a livepatch is
+applied. Shadow variables associate additional memory with existing data
+structures. These modifications need to be reverted when a livepatch is
+disabled or replaced with a livepatch not supporting the same state to ensure
+system stability.
 
-This is where the livepatch system state tracking gets useful. It
-allows to:
+Unused shadow variables can lead to memory leaks and synchronization issues.
+If a livepatch is replaced with one that doesn't maintain these variables,
+their content may become outdated, potentially causing problems if a future
+livepatch attempts to use them again.
 
-  - store data needed to manipulate and restore the system state
+To address these challenges, the livepatch system employs state tracking.
+This mechanism offers several benefits:
 
-  - define compatibility between livepatches using a change id
-    and version
+  - Callbacks associated with a specific state are called only when that state
+    is introduced or removed.
+
+  - Shadow variables associated with a state are automatically freed when that
+    state is no longer supported.
+
+  - When a livepatch is atomically replaced with another supporting the same
+    state, associated callbacks are not called, and shadow variables are not
+    freed, ensuring continuity.
+
+  - State tracking can prevent disabling a livepatch or proceeding with
+    an atomic replacement if the current livepatch cannot revert the state.
+    This safeguard is crucial when reverting modifications would be too complex
+    or risky.
+
+This approach ensures that changes introduced by livepatches are managed
+effectively, minimizing the risk of conflicts and maintaining system stability.
 
 
 1. Livepatch system state API
 =============================
 
-The state of the system might get modified either by several livepatch callbacks
-or by the newly used code. Also it must be possible to find changes done by
-already installed livepatches.
+Any livepatch might support an arbitrary number of states. A particular state
+represents either a change made by the associated callbacks and/or shadow
+variables using the same *@id*.
 
-Each modified state is described by struct klp_state, see
-include/linux/livepatch.h.
+The states are described by an array of `struct klp_state`, which is usually
+statically defined. The `struct klp_state` is defined in
+`include/linux/livepatch.h` and provides the following fields:
 
-Each livepatch defines an array of struct klp_states. They mention
-all states that the livepatch modifies.
+*id*
 
-The livepatch author must define the following two fields for each
-struct klp_state:
+  - A unique, non-zero number that identifies the state.
 
-  - *id*
+*is_shadow*
 
-    - Non-zero number used to identify the affected system state.
+  - A boolean value indicating whether the state is associated with a shadow
+    variable using the same *@id*. These are automatically freed when
+    the state is no longer supported after the livepatch transition.
+    See also Documentation/livepatch/shadow-vars.rst.
 
-  - *version*
+*block_disable*
 
-    - Number describing the variant of the system state change that
-      is supported by the given livepatch.
+  - A boolean value that, when set, prevents transitions that would disable
+    the state. In other words, it indicates that reverting the state is
+    not supported.
 
-The state can be manipulated using two functions:
+*callbacks*
 
-  - klp_get_state()
+  - A `struct klp_state_callbacks` containing (optional) pointers to
+    callbacks. These are invoked when a livepatch transition introduces
+    or removes the state. See Documentation/livepatch/callbacks.rst
+    for more information.
 
-    - Get struct klp_state associated with the given livepatch
-      and state id.
-
-  - klp_get_prev_state()
-
-    - Get struct klp_state associated with the given feature id and
-      already installed livepatches.
 
 2. Livepatch compatibility
 ==========================
 
-The system state version is used to prevent loading incompatible livepatches.
-The check is done when the livepatch is enabled. The rules are:
+The *@block_disable* state flag is used when a livepatch modifies the system
+state in a way that cannot be easily or safely reverted. This might be due
+to the complexity of the changes or the risk of instability during
+the reversion process.
 
-  - Any completely new system state modification is allowed.
+Preventing the disable operation can also be a strategic decision to save
+development costs, as implementing and testing the *pre_unpatch()* and
+*post_unpatch()* callbacks can significantly increase resource requirements.
 
-  - System state modifications with the same or higher version are allowed
-    for already modified system states.
+This flag prevents the livepatch from being disabled and also prevents atomic
+replacement with a livepatch that does not support this state. These
+livepatches are considered incompatible.
 
-  - Cumulative livepatches must handle all system state modifications from
-    already installed livepatches.
-
-  - Non-cumulative livepatches are allowed to touch already modified
-    system states.
-
-3. Supported scenarios
-======================
-
-Livepatches have their life-cycle and the same is true for the system
-state changes. Every compatible livepatch has to support the following
-scenarios:
-
-  - Modify the system state when the livepatch gets enabled and the state
-    has not been already modified by a livepatches that are being
-    replaced.
-
-  - Take over or update the system state modification when is has already
-    been done by a livepatch that is being replaced.
-
-  - Restore the original state when the livepatch is disabled.
-
-  - Restore the previous state when the transition is reverted.
-    It might be the original system state or the state modification
-    done by livepatches that were being replaced.
-
-  - Remove any already made changes when error occurs and the livepatch
-    cannot get enabled.
-
-4. Expected usage
-=================
-
-System states are usually modified by livepatch callbacks. The expected
-role of each callback is as follows:
-
-*pre_patch()*
-
-  - Allocate *state->data* when necessary. The allocation might fail
-    and *pre_patch()* is the only callback that could stop loading
-    of the livepatch. The allocation is not needed when the data
-    are already provided by previously installed livepatches.
-
-  - Do any other preparatory action that is needed by
-    the new code even before the transition gets finished.
-    For example, initialize *state->data*.
-
-    The system state itself is typically modified in *post_patch()*
-    when the entire system is able to handle it.
-
-  - Clean up its own mess in case of error. It might be done by a custom
-    code or by calling *post_unpatch()* explicitly.
-
-*post_patch()*
-
-  - Copy *state->data* from the previous livepatch when they are
-    compatible.
-
-  - Do the actual system state modification. Eventually allow
-    the new code to use it.
-
-  - Make sure that *state->data* has all necessary information.
-
-  - Free *state->data* from replaces livepatches when they are
-    not longer needed.
-
-*pre_unpatch()*
-
-  - Prevent the code, added by the livepatch, relying on the system
-    state change.
-
-  - Revert the system state modification..
-
-*post_unpatch()*
-
-  - Distinguish transition reverse and livepatch disabling by
-    checking *klp_get_prev_state()*.
-
-  - In case of transition reverse, restore the previous system
-    state. It might mean doing nothing.
-
-  - Remove any not longer needed setting or data.
-
-.. note::
-
-   *pre_unpatch()* typically does symmetric operations to *post_patch()*.
-   Except that it is called only when the livepatch is being disabled.
-   Therefore it does not need to care about any previously installed
-   livepatch.
-
-   *post_unpatch()* typically does symmetric operations to *pre_patch()*.
-   It might be called also during the transition reverse. Therefore it
-   has to handle the state of the previously installed livepatches.
+The kernel provides no mechanism for detecting incompatibility when atomic
+replacement is not used. Livepatch authors must manage incompatibility in
+other ways, such as through dependencies between the packages that install
+the livepatch modules.
