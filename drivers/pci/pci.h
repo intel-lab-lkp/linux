@@ -880,7 +880,6 @@ static inline void of_pci_remove_node(struct pci_dev *pdev) { }
 void pci_no_aer(void);
 void pci_aer_init(struct pci_dev *dev);
 void pci_aer_exit(struct pci_dev *dev);
-extern const struct attribute_group aer_stats_attr_group;
 extern const struct attribute_group aer_attr_group;
 void pci_aer_clear_fatal_status(struct pci_dev *dev);
 int pci_aer_clear_status(struct pci_dev *dev);

@@ -9,7 +9,7 @@ errors may be "seen" / reported by the link partner and not the
 problematic endpoint itself (which may report all counters as 0 as it never
 saw any problems).
 
-What:		/sys/bus/pci/devices/<dev>/aer_dev_correctable
+What:		/sys/bus/pci/devices/<dev>/aer/err_cor
 Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com
@@ -19,7 +19,7 @@ Description:	List of correctable errors seen and reported by this
 		TOTAL_ERR_COR at the end of the file may not match the actual
 		total of all the errors in the file. Sample output::
 
-		    localhost /sys/devices/pci0000:00/0000:00:1c.0 # cat aer_dev_correctable
+		    localhost /sys/devices/pci0000:00/0000:00:1c.0/aer # cat err_cor
 		    Receiver Error 2
 		    Bad TLP 0
 		    Bad DLLP 0
@@ -30,7 +30,7 @@ Description:	List of correctable errors seen and reported by this
 		    Header Log Overflow 0
 		    TOTAL_ERR_COR 2
 
-What:		/sys/bus/pci/devices/<dev>/aer_dev_fatal
+What:		/sys/bus/pci/devices/<dev>/aer/err_fatal
 Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com
@@ -40,7 +40,7 @@ Description:	List of uncorrectable fatal errors seen and reported by this
 		TOTAL_ERR_FATAL at the end of the file may not match the actual
 		total of all the errors in the file. Sample output::
 
-		    localhost /sys/devices/pci0000:00/0000:00:1c.0 # cat aer_dev_fatal
+		    localhost /sys/devices/pci0000:00/0000:00:1c.0/aer # cat err_fatal
 		    Undefined 0
 		    Data Link Protocol 0
 		    Surprise Down Error 0
@@ -60,7 +60,7 @@ Description:	List of uncorrectable fatal errors seen and reported by this
 		    TLP Prefix Blocked Error 0
 		    TOTAL_ERR_FATAL 0
 
-What:		/sys/bus/pci/devices/<dev>/aer_dev_nonfatal
+What:		/sys/bus/pci/devices/<dev>/aer/err_nonfatal
 Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com
@@ -70,7 +70,7 @@ Description:	List of uncorrectable nonfatal errors seen and reported by this
 		TOTAL_ERR_NONFATAL at the end of the file may not match the
 		actual total of all the errors in the file. Sample output::
 
-		    localhost /sys/devices/pci0000:00/0000:00:1c.0 # cat aer_dev_nonfatal
+		    localhost /sys/devices/pci0000:00/0000:00:1c.0/aer # cat err_nonfatal
 		    Undefined 0
 		    Data Link Protocol 0
 		    Surprise Down Error 0
@@ -100,19 +100,19 @@ collectors) that are AER capable. These indicate the number of error messages as
 device, so these counters include them and are thus cumulative of all the error
 messages on the PCI hierarchy originating at that root port.
 
-What:		/sys/bus/pci/devices/<dev>/aer_rootport_total_err_cor
+What:		/sys/bus/pci/devices/<dev>/aer/rootport_total_err_cor
 Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com
 Description:	Total number of ERR_COR messages reported to rootport.
 
-What:		/sys/bus/pci/devices/<dev>/aer_rootport_total_err_fatal
+What:		/sys/bus/pci/devices/<dev>/aer/rootport_total_err_fatal
 Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com
 Description:	Total number of ERR_FATAL messages reported to rootport.
 
-What:		/sys/bus/pci/devices/<dev>/aer_rootport_total_err_nonfatal
+What:		/sys/bus/pci/devices/<dev>/aer/rootport_total_err_nonfatal
 Date:		July 2018
 KernelVersion:	4.19.0
 Contact:	linux-pci@vger.kernel.org, rajatja@google.com

@@ -569,13 +569,13 @@ static const char *aer_agent_string[] = {
 }									\
 static DEVICE_ATTR_RO(name)
 
-aer_stats_dev_attr(aer_dev_correctable, dev_cor_errs,
+aer_stats_dev_attr(err_cor, dev_cor_errs,
 		   aer_correctable_error_string, "ERR_COR",
 		   dev_total_cor_errs);
-aer_stats_dev_attr(aer_dev_fatal, dev_fatal_errs,
+aer_stats_dev_attr(err_fatal, dev_fatal_errs,
 		   aer_uncorrectable_error_string, "ERR_FATAL",
 		   dev_total_fatal_errs);
-aer_stats_dev_attr(aer_dev_nonfatal, dev_nonfatal_errs,
+aer_stats_dev_attr(err_nonfatal, dev_nonfatal_errs,
 		   aer_uncorrectable_error_string, "ERR_NONFATAL",
 		   dev_total_nonfatal_errs);
 
@@ -589,46 +589,12 @@ aer_stats_dev_attr(aer_dev_nonfatal, dev_nonfatal_errs,
 }									\
 static DEVICE_ATTR_RO(name)
 
-aer_stats_rootport_attr(aer_rootport_total_err_cor,
+aer_stats_rootport_attr(rootport_total_err_cor,
 			 rootport_total_cor_errs);
-aer_stats_rootport_attr(aer_rootport_total_err_fatal,
+aer_stats_rootport_attr(rootport_total_err_fatal,
 			 rootport_total_fatal_errs);
-aer_stats_rootport_attr(aer_rootport_total_err_nonfatal,
+aer_stats_rootport_attr(rootport_total_err_nonfatal,
 			 rootport_total_nonfatal_errs);
-
-static struct attribute *aer_stats_attrs[] __ro_after_init = {
-	&dev_attr_aer_dev_correctable.attr,
-	&dev_attr_aer_dev_fatal.attr,
-	&dev_attr_aer_dev_nonfatal.attr,
-	&dev_attr_aer_rootport_total_err_cor.attr,
-	&dev_attr_aer_rootport_total_err_fatal.attr,
-	&dev_attr_aer_rootport_total_err_nonfatal.attr,
-	NULL
-};
-
-static umode_t aer_stats_attrs_are_visible(struct kobject *kobj,
-					   struct attribute *a, int n)
-{
-	struct device *dev = kobj_to_dev(kobj);
-	struct pci_dev *pdev = to_pci_dev(dev);
-
-	if (!pdev->aer_info)
-		return 0;
-
-	if ((a == &dev_attr_aer_rootport_total_err_cor.attr ||
-	     a == &dev_attr_aer_rootport_total_err_fatal.attr ||
-	     a == &dev_attr_aer_rootport_total_err_nonfatal.attr) &&
-	    ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ROOT_PORT) &&
-	     (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_EC)))
-		return 0;
-
-	return a->mode;
-}
-
-const struct attribute_group aer_stats_attr_group = {
-	.attrs  = aer_stats_attrs,
-	.is_visible = aer_stats_attrs_are_visible,
-};
 
 #define aer_ratelimit_attr(name, ratelimit)				\
 	static ssize_t							\
@@ -662,6 +628,14 @@ aer_ratelimit_attr(ratelimit_cor_log, cor_log_ratelimit);
 aer_ratelimit_attr(ratelimit_uncor_log, uncor_log_ratelimit);
 
 static struct attribute *aer_attrs[] __ro_after_init = {
+	/* Stats */
+	&dev_attr_err_cor.attr,
+	&dev_attr_err_fatal.attr,
+	&dev_attr_err_nonfatal.attr,
+	&dev_attr_rootport_total_err_cor.attr,
+	&dev_attr_rootport_total_err_fatal.attr,
+	&dev_attr_rootport_total_err_nonfatal.attr,
+	/* Ratelimits */
 	&dev_attr_ratelimit_cor_irq.attr,
 	&dev_attr_ratelimit_uncor_irq.attr,
 	&dev_attr_ratelimit_cor_log.attr,
@@ -670,13 +644,21 @@ static struct attribute *aer_attrs[] __ro_after_init = {
 };
 
 static umode_t aer_attrs_are_visible(struct kobject *kobj,
-				     struct attribute *a, int n)
+					   struct attribute *a, int n)
 {
 	struct device *dev = kobj_to_dev(kobj);
 	struct pci_dev *pdev = to_pci_dev(dev);
 
 	if (!pdev->aer_info)
 		return 0;
+
+	if ((a == &dev_attr_rootport_total_err_cor.attr ||
+	     a == &dev_attr_rootport_total_err_fatal.attr ||
+	     a == &dev_attr_rootport_total_err_nonfatal.attr) &&
+	    ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ROOT_PORT) &&
+	     (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_EC)))
+		return 0;
+
 	return a->mode;
 }
 
