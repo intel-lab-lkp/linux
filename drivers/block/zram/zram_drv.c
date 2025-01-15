@@ -1560,11 +1560,6 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
 
 	size = zram_get_obj_size(zram, index);
 
-	if (size != PAGE_SIZE) {
-		prio = zram_get_priority(zram, index);
-		zstrm = zcomp_stream_get(zram->comps[prio]);
-	}
-
 	src = zs_map_object(zram->mem_pool, handle, ZS_MM_RO);
 	if (size == PAGE_SIZE) {
 		dst = kmap_local_page(page);
@@ -1572,6 +1567,9 @@ static int zram_read_from_zspool(struct zram *zram, struct page *page,
 		kunmap_local(dst);
 		ret = 0;
 	} else {
+		prio = zram_get_priority(zram, index);
+		zstrm = zcomp_stream_get(zram->comps[prio]);
+
 		dst = kmap_local_page(page);
 		ret = zcomp_decompress(zram->comps[prio], zstrm,
 				       src, size, dst);
