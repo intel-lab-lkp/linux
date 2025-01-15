@@ -1267,7 +1267,7 @@ disable_outputs(struct drm_device *dev, struct drm_atomic_state *state)
 /**
  * drm_atomic_helper_update_legacy_modeset_state - update legacy modeset state
  * @dev: DRM device
- * @old_state: atomic state object with old state structures
+ * @state: atomic state object being committed
  *
  * This function updates all the various legacy modeset state pointers in
  * connectors, encoders and CRTCs.
@@ -1283,7 +1283,7 @@ disable_outputs(struct drm_device *dev, struct drm_atomic_state *state)
  */
 void
 drm_atomic_helper_update_legacy_modeset_state(struct drm_device *dev,
-					      struct drm_atomic_state *old_state)
+					      struct drm_atomic_state *state)
 {
 	struct drm_connector *connector;
 	struct drm_connector_state *old_conn_state, *new_conn_state;
@@ -1292,7 +1292,7 @@ drm_atomic_helper_update_legacy_modeset_state(struct drm_device *dev,
 	int i;
 
 	/* clear out existing links and update dpms */
-	for_each_oldnew_connector_in_state(old_state, connector, old_conn_state, new_conn_state, i) {
+	for_each_oldnew_connector_in_state(state, connector, old_conn_state, new_conn_state, i) {
 		if (connector->encoder) {
 			WARN_ON(!connector->encoder->crtc);
 
@@ -1313,7 +1313,7 @@ drm_atomic_helper_update_legacy_modeset_state(struct drm_device *dev,
 	}
 
 	/* set new links */
-	for_each_new_connector_in_state(old_state, connector, new_conn_state, i) {
+	for_each_new_connector_in_state(state, connector, new_conn_state, i) {
 		if (!new_conn_state->crtc)
 			continue;
 
@@ -1325,7 +1325,7 @@ drm_atomic_helper_update_legacy_modeset_state(struct drm_device *dev,
 	}
 
 	/* set legacy state in the crtc structure */
-	for_each_new_crtc_in_state(old_state, crtc, new_crtc_state, i) {
+	for_each_new_crtc_in_state(state, crtc, new_crtc_state, i) {
 		struct drm_plane *primary = crtc->primary;
 		struct drm_plane_state *new_plane_state;
 
@@ -1333,7 +1333,7 @@ drm_atomic_helper_update_legacy_modeset_state(struct drm_device *dev,
 		crtc->enabled = new_crtc_state->enable;
 
 		new_plane_state =
-			drm_atomic_get_new_plane_state(old_state, primary);
+			drm_atomic_get_new_plane_state(state, primary);
 
 		if (new_plane_state && new_plane_state->crtc == crtc) {
 			crtc->x = new_plane_state->src_x >> 16;
