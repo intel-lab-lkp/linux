@@ -8,6 +8,7 @@ TEST_INCLUDES := $(wildcard lib/py/*.py) \
 TEST_PROGS := \
 	netcons_basic.sh \
 	netcons_overflow.sh \
+	netcons_sysdata.sh \
 	ping.py \
 	queues.py \
 	stats.py \
