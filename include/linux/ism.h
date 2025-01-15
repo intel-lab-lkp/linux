@@ -30,6 +30,7 @@ struct ism_dmb {
 	 */
 	u64 dmb_tok;
 	/* rgid - GID of designated remote sending device */
+	//TODO: Change to uuid_t GID. Ok for now, because loopback ignores it.
 	u64 rgid;
 	u32 dmb_len;
 	/* sba_idx - Index of this DMB on this receiving device */

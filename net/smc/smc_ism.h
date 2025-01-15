@@ -68,7 +68,9 @@ static inline int smc_ism_write(struct smcd_dev *smcd, u64 dmb_tok,
 {
 	int rc;
 
-	rc = smcd->ops->move_data(smcd, dmb_tok, idx, sf, offset, data, len);
+	rc = smcd->ism->ops->move_data(smcd->ism, dmb_tok, idx, sf, offset,
+				       data, len);
+
 	return rc < 0 ? rc : 0;
 }
 
@@ -85,14 +87,14 @@ static inline bool __smc_ism_is_emulated(u16 chid)
 
 static inline bool smc_ism_is_emulated(struct smcd_dev *smcd)
 {
-	u16 chid = smcd->ops->get_chid(smcd);
+	u16 chid = smcd->ism->ops->get_chid(smcd->ism);
 
 	return __smc_ism_is_emulated(chid);
 }
 
 static inline bool smc_ism_is_loopback(struct smcd_dev *smcd)
 {
-	return (smcd->ops->get_chid(smcd) == 0xFFFF);
+	return (smcd->ism->ops->get_chid(smcd->ism) == ISM_LO_RESERVED_CHID);
 }
 
 static inline void copy_to_smcdgid(struct smcd_gid *sgid, uuid_t *igid)
