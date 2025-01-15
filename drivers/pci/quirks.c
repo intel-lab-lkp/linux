@@ -124,6 +124,7 @@ int pcie_failed_link_retrain(struct pci_dev *dev)
 			return ret;
 		}
 
+		pcie_capability_read_word(dev, PCI_EXP_LNKCTL2, &lnkctl2);
 		pcie_capability_read_word(dev, PCI_EXP_LNKSTA, &lnksta);
 	}
 
