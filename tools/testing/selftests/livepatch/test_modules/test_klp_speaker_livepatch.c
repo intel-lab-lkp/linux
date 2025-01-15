@@ -17,11 +17,23 @@
  *
  *    - Improve the speaker's greeting from "Hello, World!" to
  *	"Ladies and gentleman, ..."
+ *
+ *    - Support more speaker modules, see __lp_speaker_welcome().
  */
+
+static void __lp_speaker_welcome(const char *caller_func, const char *speaker_id)
+{
+	pr_info("%s%s: Ladies and gentleman, ...\n", caller_func, speaker_id);
+}
 
 static void lp_speaker_welcome(void)
 {
-	pr_info("%s: Ladies and gentleman, ...\n", __func__);
+	__lp_speaker_welcome(__func__, "");
+}
+
+static void lp_speaker2_welcome(void)
+{
+	__lp_speaker_welcome(__func__, "(2)");
 }
 
 static struct klp_func test_klp_speaker_funcs[] = {
@@ -32,10 +44,22 @@ static struct klp_func test_klp_speaker_funcs[] = {
 	{ }
 };
 
+static struct klp_func test_klp_speaker2_funcs[] = {
+	{
+		.old_name = "speaker_welcome",
+		.new_func = lp_speaker2_welcome,
+	},
+	{ }
+};
+
 static struct klp_object objs[] = {
 	{
 		.name = "test_klp_speaker",
 		.funcs = test_klp_speaker_funcs,
+	},
+	{
+		.name = "test_klp_speaker2",
+		.funcs = test_klp_speaker2_funcs,
 	},
 	{ }
 };

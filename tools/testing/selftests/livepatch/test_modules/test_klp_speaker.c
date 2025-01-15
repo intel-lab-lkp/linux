@@ -6,6 +6,10 @@
 #include <linux/module.h>
 #include <linux/printk.h>
 
+#ifndef SPEAKER_ID
+#define SPEAKER_ID ""
+#endif
+
 /**
  * test_klp_speaker - test module for testing misc livepatching features
  *
@@ -15,12 +19,14 @@
  *
  *    - Log the greeting by reading the "welcome" module parameter, see
  *	welcome_get().
+ *
+ *    - Reuse the module source for more speakers, see SPEAKER_ID.
  */
 
 noinline
 static void speaker_welcome(void)
 {
-	pr_info("%s: Hello, World!\n", __func__);
+	pr_info("%s%s: Hello, World!\n", __func__, SPEAKER_ID);
 }
 
 static int welcome_get(char *buffer, const struct kernel_param *kp)

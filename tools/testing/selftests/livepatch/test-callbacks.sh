@@ -93,65 +93,6 @@ $MOD_LIVEPATCH: post_unpatch_callback: vmlinux
 livepatch: '$MOD_LIVEPATCH': unpatching complete
 % rmmod $MOD_LIVEPATCH"
 
-
-# Test loading multiple targeted kernel modules.  This test-case is
-# mainly for comparing with the next test-case.
-#
-# - Load a target "busy" kernel module which kicks off a worker function
-#   that immediately exits.
-#
-# - Proceed with loading the livepatch and another ordinary target
-#   module.  Post-patch callbacks are executed and the transition
-#   completes quickly.
-
-start_test "multiple target modules"
-
-load_mod $MOD_TARGET_BUSY block_transition=N
-load_lp $MOD_LIVEPATCH
-load_mod $MOD_TARGET
-unload_mod $MOD_TARGET
-disable_lp $MOD_LIVEPATCH
-unload_lp $MOD_LIVEPATCH
-unload_mod $MOD_TARGET_BUSY
-
-check_result "% insmod test_modules/$MOD_TARGET_BUSY.ko block_transition=N
-$MOD_TARGET_BUSY: ${MOD_TARGET_BUSY}_init
-$MOD_TARGET_BUSY: busymod_work_func enter
-$MOD_TARGET_BUSY: busymod_work_func exit
-% insmod test_modules/$MOD_LIVEPATCH.ko
-livepatch: enabling patch '$MOD_LIVEPATCH'
-livepatch: '$MOD_LIVEPATCH': initializing patching transition
-$MOD_LIVEPATCH: pre_patch_callback: vmlinux
-$MOD_LIVEPATCH: pre_patch_callback: $MOD_TARGET_BUSY -> [MODULE_STATE_LIVE] Normal state
-livepatch: '$MOD_LIVEPATCH': starting patching transition
-livepatch: '$MOD_LIVEPATCH': completing patching transition
-$MOD_LIVEPATCH: post_patch_callback: vmlinux
-$MOD_LIVEPATCH: post_patch_callback: $MOD_TARGET_BUSY -> [MODULE_STATE_LIVE] Normal state
-livepatch: '$MOD_LIVEPATCH': patching complete
-% insmod test_modules/$MOD_TARGET.ko
-livepatch: applying patch '$MOD_LIVEPATCH' to loading module '$MOD_TARGET'
-$MOD_LIVEPATCH: pre_patch_callback: $MOD_TARGET -> [MODULE_STATE_COMING] Full formed, running module_init
-$MOD_LIVEPATCH: post_patch_callback: $MOD_TARGET -> [MODULE_STATE_COMING] Full formed, running module_init
-$MOD_TARGET: ${MOD_TARGET}_init
-% rmmod $MOD_TARGET
-$MOD_TARGET: ${MOD_TARGET}_exit
-$MOD_LIVEPATCH: pre_unpatch_callback: $MOD_TARGET -> [MODULE_STATE_GOING] Going away
-livepatch: reverting patch '$MOD_LIVEPATCH' on unloading module '$MOD_TARGET'
-$MOD_LIVEPATCH: post_unpatch_callback: $MOD_TARGET -> [MODULE_STATE_GOING] Going away
-% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH/enabled
-livepatch: '$MOD_LIVEPATCH': initializing unpatching transition
-$MOD_LIVEPATCH: pre_unpatch_callback: vmlinux
-$MOD_LIVEPATCH: pre_unpatch_callback: $MOD_TARGET_BUSY -> [MODULE_STATE_LIVE] Normal state
-livepatch: '$MOD_LIVEPATCH': starting unpatching transition
-livepatch: '$MOD_LIVEPATCH': completing unpatching transition
-$MOD_LIVEPATCH: post_unpatch_callback: vmlinux
-$MOD_LIVEPATCH: post_unpatch_callback: $MOD_TARGET_BUSY -> [MODULE_STATE_LIVE] Normal state
-livepatch: '$MOD_LIVEPATCH': unpatching complete
-% rmmod $MOD_LIVEPATCH
-% rmmod $MOD_TARGET_BUSY
-$MOD_TARGET_BUSY: ${MOD_TARGET_BUSY}_exit"
-
-
 # A similar test as the previous one, but force the "busy" kernel module
 # to block the livepatch transition.
 #
