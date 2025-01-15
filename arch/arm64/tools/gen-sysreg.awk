@@ -111,11 +111,10 @@ END {
 /^$/ { next }
 /^[\t ]*#/ { next }
 
-/^SysregFields/ && block_current() == "Root" {
+$1 == "SysregFields" && block_current() == "Root" {
 	block_push("SysregFields")
 
 	expect_fields(2)
-
 	reg = $2
 
 	res0 = "UL(0)"
@@ -145,7 +144,7 @@ END {
 	next
 }
 
-/^Sysreg/ && block_current() == "Root" {
+$1 == "Sysreg" && block_current() == "Root" {
 	block_push("Sysreg")
 
 	expect_fields(7)
@@ -206,7 +205,7 @@ END {
 
 # Currently this is effectivey a comment, in future we may want to emit
 # defines for the fields.
-(/^Fields/ || /^Mapping/) && block_current() == "Sysreg" {
+($1 == "Fields" || $1 == "Mapping") && block_current() == "Sysreg" {
 	expect_fields(2)
 
 	if (next_bit != 63)
@@ -224,7 +223,7 @@ END {
 }
 
 
-/^Res0/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Res0" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "RES0", $2)
 	field = "RES0_" msb "_" lsb
@@ -234,7 +233,7 @@ END {
 	next
 }
 
-/^Res1/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Res1" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "RES1", $2)
 	field = "RES1_" msb "_" lsb
@@ -244,7 +243,7 @@ END {
 	next
 }
 
-/^Unkn/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Unkn" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, "UNKN", $2)
 	field = "UNKN_" msb "_" lsb
@@ -254,7 +253,7 @@ END {
 	next
 }
 
-/^Field/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Field" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(3)
 	field = $3
 	parse_bitdef(reg, field, $2)
@@ -265,14 +264,14 @@ END {
 	next
 }
 
-/^Raz/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Raz" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	expect_fields(2)
 	parse_bitdef(reg, field, $2)
 
 	next
 }
 
-/^SignedEnum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "SignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
 	expect_fields(3)
@@ -285,7 +284,7 @@ END {
 	next
 }
 
-/^UnsignedEnum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "UnsignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
 	expect_fields(3)
@@ -298,7 +297,7 @@ END {
 	next
 }
 
-/^Enum/ && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Enum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
 	block_push("Enum")
 
 	expect_fields(3)
