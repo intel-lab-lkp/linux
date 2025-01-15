@@ -83,7 +83,12 @@ out:
 }
 EXPORT_SYMBOL_GPL(klp_get_prev_state);
 
-/* Check if the patch is able to deal with the existing system state. */
+/*
+ * Check if the new patch is able to deal with the existing system state.
+ * Used only for livepatches with the atomic replace enabled. The patch either
+ * has to support the existing state or the existing patch must be able
+ * to disable it.
+ */
 static bool klp_is_state_compatible(struct klp_patch *patch,
 				    struct klp_state *old_state)
 {
@@ -91,22 +96,24 @@ static bool klp_is_state_compatible(struct klp_patch *patch,
 
 	state = klp_get_state(patch, old_state->id);
 
-	/* A cumulative livepatch must handle all already modified states. */
-	if (!state)
-		return !patch->replace;
+	if (!state && old_state->block_disable)
+		return false;
 
-	return state->version >= old_state->version;
+	return true;
 }
 
 /*
- * Check that the new livepatch will not break the existing system states.
- * Cumulative patches must handle all already modified states.
- * Non-cumulative patches can touch already modified states.
+ * Check if the new livepatch could atomically replace existing ones.
+ * It must either support the existing states. Or the existing livepatches
+ * must be able to disable the obsolete states.
  */
 bool klp_is_patch_compatible(struct klp_patch *patch)
 {
 	struct klp_patch *old_patch;
 	struct klp_state *old_state;
+
+	if (!patch->replace)
+		return true;
 
 	klp_for_each_patch(old_patch) {
 		klp_for_each_state(old_patch, old_state) {
@@ -116,6 +123,18 @@ bool klp_is_patch_compatible(struct klp_patch *patch)
 	}
 
 	return true;
+}
+
+bool klp_patch_disable_blocked(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (state->block_disable)
+			return true;
+	}
+
+	return false;
 }
 
 static bool is_state_in_other_patches(struct klp_patch *patch,

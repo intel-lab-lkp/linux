@@ -171,16 +171,16 @@ struct klp_state_callbacks {
 /**
  * struct klp_state - state of the system modified by the livepatch
  * @id:		system state identifier (non-zero)
- * @version:	version of the change
  * @callbacks:	optional callbacks used when enabling or disabling the state
+ * @block_disable: the state disablement is not supported
  * @is_shadow:	the state handles lifetime of a shadow variable with
  *		the same @id
  * @data:	custom data
  */
 struct klp_state {
 	unsigned long id;
-	unsigned int version;
 	struct klp_state_callbacks callbacks;
+	bool block_disable;
 	bool is_shadow;
 	void *data;
 };

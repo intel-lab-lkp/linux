@@ -11,17 +11,6 @@
 
 #define CONSOLE_LOGLEVEL_FIX_ID 1
 
-/*
- * Version of the state which defines compatibility of livepaches.
- * The value is artificial. It set just for testing the compatibility
- * checks. In reality, all versions are compatible because all
- * the callbacks do nothing and the shadow variable clean up
- * is done by the core.
- */
-#ifndef CONSOLE_LOGLEVEL_FIX_VERSION
-#define CONSOLE_LOGLEVEL_FIX_VERSION 1
-#endif
-
 static struct klp_patch patch;
 
 static int allocate_loglevel_state(void)
@@ -132,7 +121,6 @@ static struct klp_object objs[] = {
 static struct klp_state states[] = {
 	{
 		.id = CONSOLE_LOGLEVEL_FIX_ID,
-		.version = CONSOLE_LOGLEVEL_FIX_VERSION,
 		.is_shadow = true,
 		.callbacks = {
 			.pre_patch = pre_patch_callback,
@@ -151,8 +139,23 @@ static struct klp_patch patch = {
 	.replace = true,
 };
 
+static bool state_block_disable;
+
+module_param(state_block_disable, bool, 0600);
+MODULE_PARM_DESC(state_block_disable, "Set to 1 to pretend that the livepatch is not capable of disabling the state (default = 0).");
+
+static bool no_state;
+
+module_param(no_state, bool, 0600);
+MODULE_PARM_DESC(no_state, "Set to 1 when the livepatch should not support the state (default = 0).");
+
 static int test_klp_callbacks_demo_init(void)
 {
+	states[0].block_disable = state_block_disable;
+
+	if (no_state)
+		patch.states = NULL;
+
 	return klp_enable_patch(&patch);
 }
 

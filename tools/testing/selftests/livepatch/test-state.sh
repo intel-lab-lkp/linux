@@ -132,12 +132,15 @@ livepatch: '$MOD_LIVEPATCH2': unpatching complete
 
 start_test "incompatible cumulative livepatches"
 
-load_lp $MOD_LIVEPATCH2
-load_failing_mod $MOD_LIVEPATCH
-disable_lp $MOD_LIVEPATCH2
+load_lp $MOD_LIVEPATCH2 state_block_disable=1
+load_failing_mod $MOD_LIVEPATCH no_state=1
+# load the livepatch again with default features (state and disable supported)
+load_lp $MOD_LIVEPATCH
 unload_lp $MOD_LIVEPATCH2
+disable_lp $MOD_LIVEPATCH
+unload_lp $MOD_LIVEPATCH
 
-check_result "% insmod test_modules/$MOD_LIVEPATCH2.ko
+check_result "% insmod test_modules/$MOD_LIVEPATCH2.ko state_block_disable=1
 livepatch: enabling patch '$MOD_LIVEPATCH2'
 livepatch: '$MOD_LIVEPATCH2': initializing patching transition
 $MOD_LIVEPATCH2: pre_patch_callback: state 1
@@ -147,18 +150,25 @@ livepatch: '$MOD_LIVEPATCH2': completing patching transition
 $MOD_LIVEPATCH2: post_patch_callback: state 1
 $MOD_LIVEPATCH2: fix_console_loglevel: fixing console_loglevel
 livepatch: '$MOD_LIVEPATCH2': patching complete
-% insmod test_modules/$MOD_LIVEPATCH.ko
+% insmod test_modules/$MOD_LIVEPATCH.ko no_state=1
 livepatch: Livepatch patch ($MOD_LIVEPATCH) is not compatible with the already installed livepatches.
 insmod: ERROR: could not insert module test_modules/$MOD_LIVEPATCH.ko: Invalid parameters
-% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH2/enabled
-livepatch: '$MOD_LIVEPATCH2': initializing unpatching transition
-$MOD_LIVEPATCH2: pre_unpatch_callback: state 1
-$MOD_LIVEPATCH2: restore_console_loglevel: restoring console_loglevel
-livepatch: '$MOD_LIVEPATCH2': starting unpatching transition
-livepatch: '$MOD_LIVEPATCH2': completing unpatching transition
-$MOD_LIVEPATCH2: post_unpatch_callback: state 1 (nope)
-$MOD_LIVEPATCH2: shadow_conosle_loglevel_dtor: freeing space for the stored console_loglevel
-livepatch: '$MOD_LIVEPATCH2': unpatching complete
-% rmmod $MOD_LIVEPATCH2"
+% insmod test_modules/$MOD_LIVEPATCH.ko
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+livepatch: '$MOD_LIVEPATCH': starting patching transition
+livepatch: '$MOD_LIVEPATCH': completing patching transition
+livepatch: '$MOD_LIVEPATCH': patching complete
+% rmmod $MOD_LIVEPATCH2
+% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH/enabled
+livepatch: '$MOD_LIVEPATCH': initializing unpatching transition
+$MOD_LIVEPATCH: pre_unpatch_callback: state 1
+$MOD_LIVEPATCH: restore_console_loglevel: restoring console_loglevel
+livepatch: '$MOD_LIVEPATCH': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+$MOD_LIVEPATCH: post_unpatch_callback: state 1 (nope)
+$MOD_LIVEPATCH: shadow_conosle_loglevel_dtor: freeing space for the stored console_loglevel
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+% rmmod $MOD_LIVEPATCH"
 
 exit 0

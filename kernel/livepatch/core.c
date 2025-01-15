@@ -374,6 +374,13 @@ static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
 		goto out;
 	}
 
+	if (patch->enabled && klp_patch_disable_blocked(patch)) {
+		pr_err("The livepatch '%s' does not support disable\n",
+		       patch->mod->name);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	/*
 	 * Allow to reverse a pending transition in both ways. It might be
 	 * necessary to complete the transition without forcing and breaking

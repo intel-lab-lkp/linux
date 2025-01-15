@@ -5,6 +5,7 @@
 #include <linux/livepatch.h>
 
 bool klp_is_patch_compatible(struct klp_patch *patch);
+bool klp_patch_disable_blocked(struct klp_patch *patch);
 int klp_states_pre_patch(struct klp_patch *patch);
 void klp_states_post_patch(struct klp_patch *patch);
 void klp_states_pre_unpatch(struct klp_patch *patch);
