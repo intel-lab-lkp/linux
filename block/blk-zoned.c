@@ -1165,6 +1165,7 @@ plug:
  * blk_zone_plug_bio - Handle a zone write BIO with zone write plugging
  * @bio: The BIO being submitted
  * @nr_segs: The number of physical segments of @bio
+ * @swq_cpu: [out] CPU of the software queue to which the bio should be queued
  *
  * Handle write, write zeroes and zone append operations requiring emulation
  * using zone write plugging.
@@ -1173,7 +1174,7 @@ plug:
  * write plug. Otherwise, return false to let the submission path process
  * @bio normally.
  */
-bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs)
+bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs, int *swq_cpu)
 {
 	struct block_device *bdev = bio->bi_bdev;
 
