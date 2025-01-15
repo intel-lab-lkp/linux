@@ -53,4 +53,12 @@ static inline unsigned long
 amd_convert_umc_mca_addr_to_sys_addr(struct atl_err *err) { return -EINVAL; }
 #endif /* CONFIG_AMD_ATL */
 
+#if IS_ENABLED(CONFIG_AEST)
+void aest_register_decode_chain(struct notifier_block *nb);
+void aest_unregister_decode_chain(struct notifier_block *nb);
+#else
+static inline void aest_register_decode_chain(struct notifier_block *nb) {}
+static inline void aest_unregister_decode_chain(struct notifier_block *nb) {}
+#endif /* CONFIG_AEST */
+
 #endif /* __RAS_H__ */

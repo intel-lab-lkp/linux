@@ -12,4 +12,6 @@ void __init acpi_arch_init(void)
 		acpi_iort_init();
 	if (IS_ENABLED(CONFIG_ARM_AMBA))
 		acpi_amba_init();
+	if (IS_ENABLED(CONFIG_ACPI_AEST))
+		acpi_aest_init();
 }
