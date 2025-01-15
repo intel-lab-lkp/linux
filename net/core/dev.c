@@ -180,8 +180,6 @@ static DEFINE_SPINLOCK(napi_hash_lock);
 static unsigned int napi_gen_id = NR_CPUS;
 static DEFINE_READ_MOSTLY_HASHTABLE(napi_hash, 8);
 
-static DECLARE_RWSEM(devnet_rename_sem);
-
 static inline void dev_base_seq_inc(struct net *net)
 {
 	unsigned int val = net->dev_base_seq + 1;
@@ -1249,12 +1247,8 @@ int dev_change_name(struct net_device *dev, const char *newname)
 
 	net = dev_net(dev);
 
-	down_write(&devnet_rename_sem);
-
-	if (strncmp(newname, dev->name, IFNAMSIZ) == 0) {
-		up_write(&devnet_rename_sem);
+	if (!strncmp(newname, dev->name, IFNAMSIZ))
 		return 0;
-	}
 
 	memcpy(oldname, dev->name, IFNAMSIZ);
 
@@ -1262,10 +1256,8 @@ int dev_change_name(struct net_device *dev, const char *newname)
 	err = dev_get_valid_name(net, dev, newname);
 	write_sequnlock_bh(&netdev_rename_lock);
 
-	if (err < 0) {
-		up_write(&devnet_rename_sem);
+	if (err < 0)
 		return err;
-	}
 
 	if (oldname[0] && !strchr(oldname, '%'))
 		netdev_info(dev, "renamed from %s%s\n", oldname,
@@ -1281,11 +1273,8 @@ rollback:
 		memcpy(dev->name, oldname, IFNAMSIZ);
 		write_sequnlock_bh(&netdev_rename_lock);
 		WRITE_ONCE(dev->name_assign_type, old_assign_type);
-		up_write(&devnet_rename_sem);
 		return ret;
 	}
-
-	up_write(&devnet_rename_sem);
 
 	netdev_adjacent_rename_links(dev, oldname);
 
@@ -1302,7 +1291,6 @@ rollback:
 		/* err >= 0 after dev_alloc_name() or stores the first errno */
 		if (err >= 0) {
 			err = ret;
-			down_write(&devnet_rename_sem);
 			write_seqlock_bh(&netdev_rename_lock);
 			memcpy(dev->name, oldname, IFNAMSIZ);
 			write_sequnlock_bh(&netdev_rename_lock);
