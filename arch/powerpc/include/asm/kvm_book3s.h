@@ -334,6 +334,9 @@ static inline bool kvmhv_is_nestedv1(void)
 	return !static_branch_likely(&__kvmhv_is_nestedv2);
 }
 
+int kvmppc_register_pmu(void);
+void kvmppc_unregister_pmu(void);
+
 #else
 
 static inline bool kvmhv_is_nestedv2(void)
@@ -344,6 +347,15 @@ static inline bool kvmhv_is_nestedv2(void)
 static inline bool kvmhv_is_nestedv1(void)
 {
 	return false;
+}
+
+static int kvmppc_register_pmu(void)
+{
+	return 0;
+}
+
+static void kvmppc_unregister_pmu(void)
+{
 }
 
 #endif
