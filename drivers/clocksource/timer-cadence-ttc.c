@@ -35,6 +35,10 @@
  * obtained from device tree. The pre-scaler of 32 is used.
  */
 
+struct ttc_timer_config {
+	bool is_pwm_mode;
+};
+
 /**
  * struct ttc_timer - This definition defines local timer structure
  *
@@ -453,6 +457,7 @@ out_kfree:
 
 static int __init ttc_timer_probe(struct platform_device *pdev)
 {
+	struct ttc_timer_config *ttc_config;
 	unsigned int irq;
 	void __iomem *timer_baseaddr;
 	struct clk *clk_cs, *clk_ce;
@@ -460,6 +465,24 @@ static int __init ttc_timer_probe(struct platform_device *pdev)
 	int clksel, ret;
 	u32 timer_width = 16;
 	struct device_node *timer = pdev->dev.of_node;
+
+	ttc_config = devm_kzalloc(&pdev->dev, sizeof(*ttc_config), GFP_KERNEL);
+	if (!ttc_config)
+		return -ENOMEM;
+
+	/*
+	 * If pwm-cells property is present in TTC node,
+	 * it would be treated as PWM device.
+	 */
+	if (of_property_read_bool(timer, "#pwm-cells")) {
+		#if defined(CONFIG_PWM_CADENCE)
+		ttc_config->is_pwm_mode = true;
+			return ttc_pwm_probe(pdev);
+		#else
+			return -ENODEV;
+		#endif
+	}
+	dev_set_drvdata(&pdev->dev, ttc_config);
 
 	if (initialized)
 		return 0;
@@ -521,6 +544,16 @@ put_clk_cs:
 	return ret;
 }
 
+static void ttc_timer_remove(struct platform_device *pdev)
+{
+	#if defined(CONFIG_PWM_CADENCE)
+	struct ttc_timer_config *ttc_config = dev_get_drvdata(&pdev->dev);
+
+	if (ttc_config->is_pwm_mode)
+		ttc_pwm_remove(pdev);
+	#endif
+}
+
 static const struct of_device_id ttc_timer_of_match[] = {
 	{.compatible = "cdns,ttc"},
 	{},
@@ -529,6 +562,7 @@ static const struct of_device_id ttc_timer_of_match[] = {
 MODULE_DEVICE_TABLE(of, ttc_timer_of_match);
 
 static struct platform_driver ttc_timer_driver = {
+	.remove = ttc_timer_remove,
 	.driver = {
 		.name	= "cdns_ttc_timer",
 		.of_match_table = ttc_timer_of_match,
