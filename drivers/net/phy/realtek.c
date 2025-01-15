@@ -720,8 +720,12 @@ static int rtlgen_read_status(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
-	if (!phydev->link)
+	if (!phydev->link) {
+		phydev->duplex = DUPLEX_UNKNOWN;
+		phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
+		phydev->speed = SPEED_UNKNOWN;
 		return 0;
+	}
 
 	val = phy_read_paged(phydev, 0xa43, 0x12);
 	if (val < 0)
@@ -1028,11 +1032,11 @@ static int rtl822x_c45_read_status(struct phy_device *phydev)
 		return ret;
 
 	if (phydev->autoneg == AUTONEG_DISABLE ||
-	    !genphy_c45_aneg_done(phydev))
+	    !genphy_c45_aneg_done(phydev) ||
+	    !phydev->link) {
 		mii_stat1000_mod_linkmode_lpa_t(phydev->lp_advertising, 0);
-
-	/* Vendor register as C45 has no standardized support for 1000BaseT */
-	if (phydev->autoneg == AUTONEG_ENABLE) {
+	} else {
+		/* Vendor register as C45 has no standardized support for 1000BaseT */
 		val = phy_read_mmd(phydev, MDIO_MMD_VEND2,
 				   RTL822X_VND2_GANLPAR);
 		if (val < 0)
@@ -1041,8 +1045,12 @@ static int rtl822x_c45_read_status(struct phy_device *phydev)
 		mii_stat1000_mod_linkmode_lpa_t(phydev->lp_advertising, val);
 	}
 
-	if (!phydev->link)
+	if (!phydev->link) {
+		phydev->duplex = DUPLEX_UNKNOWN;
+		phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
+		phydev->speed = SPEED_UNKNOWN;
 		return 0;
+	}
 
 	/* Read actual speed from vendor register. */
 	val = phy_read_mmd(phydev, MDIO_MMD_VEND2, RTL_VND2_PHYSR);
