@@ -1150,35 +1150,47 @@ static int rz_ssi_probe(struct platform_device *pdev)
 		ssi->irq_rx = platform_get_irq_byname(pdev, "dma_rx");
 		if (ssi->irq_tx == -ENXIO && ssi->irq_rx == -ENXIO) {
 			ssi->irq_rt = platform_get_irq_byname(pdev, "dma_rt");
-			if (ssi->irq_rt < 0)
-				return ssi->irq_rt;
+			if (ssi->irq_rt < 0) {
+				ret = ssi->irq_rt;
+				goto err_release_dma_chs;
+			}
 
 			ret = devm_request_irq(dev, ssi->irq_rt,
 					       &rz_ssi_interrupt, 0,
 					       dev_name(dev), ssi);
-			if (ret < 0)
-				return dev_err_probe(dev, ret,
-						     "irq request error (dma_rt)\n");
+			if (ret < 0) {
+				dev_err_probe(dev, ret,
+					      "irq request error (dma_rt)\n");
+				goto err_release_dma_chs;
+			}
 		} else {
-			if (ssi->irq_tx < 0)
-				return ssi->irq_tx;
+			if (ssi->irq_tx < 0) {
+				ret = ssi->irq_tx;
+				goto err_release_dma_chs;
+			}
 
-			if (ssi->irq_rx < 0)
-				return ssi->irq_rx;
+			if (ssi->irq_rx < 0) {
+				ret = ssi->irq_rx;
+				goto err_release_dma_chs;
+			}
 
 			ret = devm_request_irq(dev, ssi->irq_tx,
 					       &rz_ssi_interrupt, 0,
 					       dev_name(dev), ssi);
-			if (ret < 0)
-				return dev_err_probe(dev, ret,
-						"irq request error (dma_tx)\n");
+			if (ret < 0) {
+				dev_err_probe(dev, ret,
+					      "irq request error (dma_tx)\n");
+				goto err_release_dma_chs;
+			}
 
 			ret = devm_request_irq(dev, ssi->irq_rx,
 					       &rz_ssi_interrupt, 0,
 					       dev_name(dev), ssi);
-			if (ret < 0)
-				return dev_err_probe(dev, ret,
-						"irq request error (dma_rx)\n");
+			if (ret < 0) {
+				dev_err_probe(dev, ret,
+					      "irq request error (dma_rx)\n");
+				goto err_release_dma_chs;
+			}
 		}
 	}
 
