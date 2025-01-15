@@ -661,38 +661,6 @@ UnsignedEnum	3:0	SEVL
 EndEnum
 EndSysreg
 
-Sysreg ID_ISAR6_EL1	3	0	0	2	7
-Res0	63:28
-UnsignedEnum	27:24	I8MM
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-UnsignedEnum	23:20	BF16
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-UnsignedEnum	19:16	SPECRES
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-UnsignedEnum	15:12	SB
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-UnsignedEnum	11:8	FHM
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-UnsignedEnum	7:4	DP
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-UnsignedEnum	3:0	JSCVT
-	0b0000	NI
-	0b0001	IMP
-EndEnum
-EndSysreg
-
 Sysreg ID_MMFR4_EL1	3	0	0	2	6
 Res0	63:32
 UnsignedEnum	31:28	EVT
@@ -726,6 +694,38 @@ UnsignedEnum	7:4	AC2
 	0b0001	IMP
 EndEnum
 UnsignedEnum	3:0	SpecSEI
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+EndSysreg
+
+Sysreg ID_ISAR6_EL1	3	0	0	2	7
+Res0	63:28
+UnsignedEnum	27:24	I8MM
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+UnsignedEnum	23:20	BF16
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+UnsignedEnum	19:16	SPECRES
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+UnsignedEnum	15:12	SB
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+UnsignedEnum	11:8	FHM
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+UnsignedEnum	7:4	DP
+	0b0000	NI
+	0b0001	IMP
+EndEnum
+UnsignedEnum	3:0	JSCVT
 	0b0000	NI
 	0b0001	IMP
 EndEnum
@@ -1999,6 +1999,16 @@ Field	17:16	ZEN
 Res0	15:0
 EndSysreg
 
+SysregFields	ZCR_ELx
+Res0	63:9
+Raz	8:4
+Field	3:0	LEN
+EndSysregFields
+
+Sysreg ZCR_EL1	3	0	1	2	0
+Fields ZCR_ELx
+EndSysreg
+
 Sysreg	TRFCR_EL1	3	0	1	2	1
 Res0	63:7
 UnsignedEnum	6:5	TS
@@ -2016,16 +2026,6 @@ Res0	63:4
 Field	3:0	PRIORITY
 EndSysreg
 
-SysregFields	ZCR_ELx
-Res0	63:9
-Raz	8:4
-Field	3:0	LEN
-EndSysregFields
-
-Sysreg ZCR_EL1	3	0	1	2	0
-Fields ZCR_ELx
-EndSysreg
-
 SysregFields	SMCR_ELx
 Res0	63:32
 Field	31	FA64
@@ -2037,6 +2037,36 @@ EndSysregFields
 
 Sysreg	SMCR_EL1	3	0	1	2	6
 Fields	SMCR_ELx
+EndSysreg
+
+SysregFields TTBRx_EL1
+Field	63:48	ASID
+Field	47:1	BADDR
+Field	0	CnP
+EndSysregFields
+
+Sysreg	TTBR0_EL1	3	0	2	0	0
+Fields	TTBRx_EL1
+EndSysreg
+
+Sysreg	TTBR1_EL1	3	0	2	0	1
+Fields	TTBRx_EL1
+EndSysreg
+
+Sysreg	TCR2_EL1	3	0	2	0	3
+Res0	63:16
+Field	15	DisCH1
+Field	14	DisCH0
+Res0	13:12
+Field	11	HAFT
+Field	10	PTTWI
+Res0	9:6
+Field	5	D128
+Field	4	AIE
+Field	3	POE
+Field	2	E0POE
+Field	1	PIE
+Field	0	PnCH
 EndSysreg
 
 SysregFields	GCSCR_ELx
@@ -2082,31 +2112,6 @@ EndSysreg
 
 Sysreg	FAR_EL1	3	0	6	0	0
 Field	63:0	ADDR
-EndSysreg
-
-Sysreg	PMICNTR_EL0	3	3	9	4	0
-Field	63:0	ICNT
-EndSysreg
-
-Sysreg	PMICFILTR_EL0	3	3	9	6	0
-Res0	63:59
-Field	58	SYNC
-Field	57:56	VS
-Res0	55:32
-Field	31	P
-Field	30	U
-Field	29	NSK
-Field	28	NSU
-Field	27	NSH
-Field	26	M
-Res0	25
-Field	24	SH
-Field	23	T
-Field	22	RLK
-Field	21	RLU
-Field	20	RLH
-Res0	19:16
-Field	15:0	evtCount
 EndSysreg
 
 Sysreg	PMSCR_EL1	3	0	9	9	0
@@ -2233,6 +2238,83 @@ Field	4	P
 Field	3:0	ALIGN
 EndSysreg
 
+Sysreg	TRBLIMITR_EL1	3	0	9	11	0
+Field	63:12	LIMIT
+Res0	11:7
+Field	6	XE
+Field	5	nVM
+Enum	4:3	TM
+	0b00	STOP
+	0b01	IRQ
+	0b11	IGNR
+EndEnum
+Enum	2:1	FM
+	0b00	FILL
+	0b01	WRAP
+	0b11	CBUF
+EndEnum
+Field	0	E
+EndSysreg
+
+Sysreg	TRBPTR_EL1	3	0	9	11	1
+Field	63:0	PTR
+EndSysreg
+
+Sysreg	TRBBASER_EL1	3	0	9	11	2
+Field	63:12	BASE
+Res0	11:0
+EndSysreg
+
+Sysreg	TRBSR_EL1	3	0	9	11	3
+Res0	63:56
+Field	55:32	MSS2
+Field	31:26	EC
+Res0	25:24
+Field	23	DAT
+Field	22	IRQ
+Field	21	TRG
+Field	20	WRAP
+Res0	19
+Field	18	EA
+Field	17	S
+Res0	16
+Field	15:0	MSS
+EndSysreg
+
+Sysreg	TRBMAR_EL1	3	0	9	11	4
+Res0	63:12
+Enum	11:10	PAS
+	0b00	SECURE
+	0b01	NON_SECURE
+	0b10	ROOT
+	0b11	REALM
+EndEnum
+Enum	9:8	SH
+	0b00	NON_SHAREABLE
+	0b10	OUTER_SHAREABLE
+	0b11	INNER_SHAREABLE
+EndEnum
+Field	7:0	Attr
+EndSysreg
+
+Sysreg	TRBTRG_EL1	3	0	9	11	6
+Res0	63:32
+Field	31:0	TRG
+EndSysreg
+
+Sysreg	TRBIDR_EL1	3	0	9	11	7
+Res0	63:12
+Enum	11:8	EA
+	0b0000	NON_DESC
+	0b0001	IGNORE
+	0b0010	SERROR
+EndEnum
+Res0	7:6
+Field	5	F
+Field	4	P
+Field	3:0	Align
+EndSysreg
+
 Sysreg	PMUACR_EL1	3	0	9	14	4
 Res0	63:33
 Field	32	F0
@@ -2240,9 +2322,143 @@ Field	31	C
 Field	30:0	P
 EndSysreg
 
-Sysreg	PMSELR_EL0	3	3	9	12	5
-Res0	63:5
-Field	4:0	SEL
+SysregFields MAIR2_ELx
+Field	63:56	Attr7
+Field	55:48	Attr6
+Field	47:40	Attr5
+Field	39:32	Attr4
+Field	31:24	Attr3
+Field	23:16	Attr2
+Field	15:8	Attr1
+Field	7:0	Attr0
+EndSysregFields
+
+Sysreg	MAIR2_EL1	3	0	10	2	1
+Fields	MAIR2_ELx
+EndSysreg
+
+SysregFields PIRx_ELx
+Field	63:60	Perm15
+Field	59:56	Perm14
+Field	55:52	Perm13
+Field	51:48	Perm12
+Field	47:44	Perm11
+Field	43:40	Perm10
+Field	39:36	Perm9
+Field	35:32	Perm8
+Field	31:28	Perm7
+Field	27:24	Perm6
+Field	23:20	Perm5
+Field	19:16	Perm4
+Field	15:12	Perm3
+Field	11:8	Perm2
+Field	7:4	Perm1
+Field	3:0	Perm0
+EndSysregFields
+
+Sysreg	PIRE0_EL1	3	0	10	2	2
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	PIR_EL1		3	0	10	2	3
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	POR_EL1		3	0	10	2	4
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	S2POR_EL1	3	0	10	2	5
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	AMAIR2_EL1	3	0	10	3	1
+Field	63:0	ImpDef
+EndSysreg
+
+Sysreg	LORSA_EL1	3	0	10	4	0
+Res0	63:52
+Field	51:16	SA
+Res0	15:1
+Field	0	Valid
+EndSysreg
+
+Sysreg	LOREA_EL1	3	0	10	4	1
+Res0	63:52
+Field	51:48	EA_51_48
+Field	47:16	EA_47_16
+Res0	15:0
+EndSysreg
+
+Sysreg	LORN_EL1	3	0	10	4	2
+Res0	63:8
+Field	7:0	Num
+EndSysreg
+
+Sysreg	LORC_EL1	3	0	10	4	3
+Res0	63:10
+Field	9:2	DS
+Res0	1
+Field	0	EN
+EndSysreg
+
+Sysreg	MPAMIDR_EL1	3	0	10	4	4
+Res0	63:62
+Field	61	HAS_SDEFLT
+Field	60	HAS_FORCE_NS
+Field	59	SP4
+Field	58	HAS_TIDR
+Field	57	HAS_ALTSP
+Res0	56:40
+Field	39:32	PMG_MAX
+Res0	31:21
+Field	20:18	VPMR_MAX
+Field	17	HAS_HCR
+Res0	16
+Field	15:0	PARTID_MAX
+EndSysreg
+
+Sysreg	LORID_EL1	3	0	10	4	7
+Res0	63:24
+Field	23:16	LD
+Res0	15:8
+Field	7:0	LR
+EndSysreg
+
+Sysreg	MPAM1_EL1	3	0	10	5	0
+Field	63	MPAMEN
+Res0	62:61
+Field	60 FORCED_NS
+Res0	59:55
+Field	54	ALTSP_FRCD
+Res0	53:48
+Field	47:40	PMG_D
+Field	39:32	PMG_I
+Field	31:16	PARTID_D
+Field	15:0	PARTID_I
+EndSysreg
+
+Sysreg	MPAM0_EL1	3	0	10	5	1
+Res0	63:48
+Field	47:40	PMG_D
+Field	39:32	PMG_I
+Field	31:16	PARTID_D
+Field	15:0	PARTID_I
+EndSysreg
+
+Sysreg	ISR_EL1	3	0	12	1	0
+Res0	63:11
+Field	10	IS
+Field	9	FS
+Field	8	A
+Field	7	I
+Field	6	F
+Res0	5:0
+EndSysreg
+
+Sysreg	ICC_NMIAR1_EL1	3	0	12	9	5
+Res0	63:24
+Field	23:0	INTID
 EndSysreg
 
 SysregFields	CONTEXTIDR_ELx
@@ -2381,6 +2597,40 @@ UnsignedEnum	2:0	F8S1
 	0b000	E5M2
 	0b001	E4M3
 EndEnum
+EndSysreg
+
+Sysreg	PMICNTR_EL0	3	3	9	4	0
+Field	63:0	ICNT
+EndSysreg
+
+Sysreg	PMICFILTR_EL0	3	3	9	6	0
+Res0	63:59
+Field	58	SYNC
+Field	57:56	VS
+Res0	55:32
+Field	31	P
+Field	30	U
+Field	29	NSK
+Field	28	NSU
+Field	27	NSH
+Field	26	M
+Res0	25
+Field	24	SH
+Field	23	T
+Field	22	RLK
+Field	21	RLU
+Field	20	RLH
+Res0	19:16
+Field	15:0	evtCount
+EndSysreg
+
+Sysreg	PMSELR_EL0	3	3	9	12	5
+Res0	63:5
+Field	4:0	SEL
+EndSysreg
+
+Sysreg	POR_EL0		3	3	10	2	4
+Fields	PIRx_ELx
 EndSysreg
 
 SysregFields	HFGxTR_EL2
@@ -2560,6 +2810,10 @@ Field	1	ICIALLU
 Field	0	ICIALLUIS
 EndSysreg
 
+Sysreg	ZCR_EL2	3	4	1	2	0
+Fields	ZCR_ELx
+EndSysreg
+
 Sysreg TRFCR_EL2	3	4	1	2	1
 Res0	63:7
 UnsignedEnum	6:5	TS
@@ -2573,6 +2827,102 @@ Field	3	CX
 Res0	2
 Field	1	E2TRE
 Field	0	E0HTRE
+EndSysreg
+
+Sysreg	HCRX_EL2	3	4	1	2	2
+Res0	63:25
+Field	24	PACMEn
+Field	23	EnFPM
+Field	22	GCSEn
+Field	21	EnIDCP128
+Field	20	EnSDERR
+Field	19	TMEA
+Field	18	EnSNERR
+Field	17	D128En
+Field	16	PTTWI
+Field	15	SCTLR2En
+Field	14	TCR2En
+Res0	13:12
+Field	11	MSCEn
+Field	10	MCE2
+Field	9	CMOW
+Field	8	VFNMI
+Field	7	VINMI
+Field	6	TALLINT
+Field	5	SMPME
+Field	4	FGTnXS
+Field	3	FnXS
+Field	2	EnASR
+Field	1	EnALS
+Field	0	EnAS0
+EndSysreg
+
+Sysreg	SMPRIMAP_EL2	3	4	1	2	5
+Field	63:60	P15
+Field	59:56	P14
+Field	55:52	P13
+Field	51:48	P12
+Field	47:44	P11
+Field	43:40	P10
+Field	39:36	F9
+Field	35:32	P8
+Field	31:28	P7
+Field	27:24	P6
+Field	23:20	P5
+Field	19:16	P4
+Field	15:12	P3
+Field	11:8	P2
+Field	7:4	P1
+Field	3:0	P0
+EndSysreg
+
+Sysreg	SMCR_EL2	3	4	1	2	6
+Fields	SMCR_ELx
+EndSysreg
+
+Sysreg	TCR2_EL2	3	4	2	0	3
+Res0	63:16
+Field	15	DisCH1
+Field	14	DisCH0
+Field	13	AMEC1
+Field	12	AMEC0
+Field	11	HAFT
+Field	10	PTTWI
+Res0	9:6
+Field	5	D128
+Field	4	AIE
+Field	3	POE
+Field	2	E0POE
+Field	1	PIE
+Field	0	PnCH
+EndSysreg
+
+Sysreg	GCSCR_EL2	3	4	2	5	0
+Fields	GCSCR_ELx
+EndSysreg
+
+Sysreg	GCSPR_EL2	3	4	2	5	1
+Fields	GCSPR_ELx
+EndSysreg
+
+Sysreg	DACR32_EL2	3	4	3	0	0
+Res0	63:32
+Field	31:30	D15
+Field	29:28	D14
+Field	27:26	D13
+Field	25:24	D12
+Field	23:22	D11
+Field	21:20	D10
+Field	19:18	D9
+Field	17:16	D8
+Field	15:14	D7
+Field	13:12	D6
+Field	11:10	D5
+Field	9:8	D4
+Field	7:6	D3
+Field	5:4	D2
+Field	3:2	D1
+Field	1:0	D0
 EndSysreg
 
 
@@ -2748,89 +3098,6 @@ Field	1	AMEVCNTR00_EL0
 Field	0	AMCNTEN0
 EndSysreg
 
-Sysreg	ZCR_EL2	3	4	1	2	0
-Fields	ZCR_ELx
-EndSysreg
-
-Sysreg	HCRX_EL2	3	4	1	2	2
-Res0	63:25
-Field	24	PACMEn
-Field	23	EnFPM
-Field	22	GCSEn
-Field	21	EnIDCP128
-Field	20	EnSDERR
-Field	19	TMEA
-Field	18	EnSNERR
-Field	17	D128En
-Field	16	PTTWI
-Field	15	SCTLR2En
-Field	14	TCR2En
-Res0	13:12
-Field	11	MSCEn
-Field	10	MCE2
-Field	9	CMOW
-Field	8	VFNMI
-Field	7	VINMI
-Field	6	TALLINT
-Field	5	SMPME
-Field	4	FGTnXS
-Field	3	FnXS
-Field	2	EnASR
-Field	1	EnALS
-Field	0	EnAS0
-EndSysreg
-
-Sysreg	SMPRIMAP_EL2	3	4	1	2	5
-Field	63:60	P15
-Field	59:56	P14
-Field	55:52	P13
-Field	51:48	P12
-Field	47:44	P11
-Field	43:40	P10
-Field	39:36	F9
-Field	35:32	P8
-Field	31:28	P7
-Field	27:24	P6
-Field	23:20	P5
-Field	19:16	P4
-Field	15:12	P3
-Field	11:8	P2
-Field	7:4	P1
-Field	3:0	P0
-EndSysreg
-
-Sysreg	SMCR_EL2	3	4	1	2	6
-Fields	SMCR_ELx
-EndSysreg
-
-Sysreg	GCSCR_EL2	3	4	2	5	0
-Fields	GCSCR_ELx
-EndSysreg
-
-Sysreg	GCSPR_EL2	3	4	2	5	1
-Fields	GCSPR_ELx
-EndSysreg
-
-Sysreg	DACR32_EL2	3	4	3	0	0
-Res0	63:32
-Field	31:30	D15
-Field	29:28	D14
-Field	27:26	D13
-Field	25:24	D12
-Field	23:22	D11
-Field	21:20	D10
-Field	19:18	D9
-Field	17:16	D8
-Field	15:14	D7
-Field	13:12	D6
-Field	11:10	D5
-Field	9:8	D4
-Field	7:6	D3
-Field	5:4	D2
-Field	3:2	D1
-Field	1:0	D0
-EndSysreg
-
 Sysreg	FAR_EL2	3	4	6	0	0
 Field	63:0	ADDR
 EndSysreg
@@ -2848,6 +3115,30 @@ Field	3	CX
 Res0	2
 Field	1	E2SPE
 Field	0	E0HSPE
+EndSysreg
+
+Sysreg	MAIR2_EL2	3	4	10	1	1
+Fields	MAIR2_ELx
+EndSysreg
+
+Sysreg	PIRE0_EL2	3	4	10	2	2
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	PIR_EL2		3	4	10	2	3
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	POR_EL2		3	4	10	2	4
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	S2PIR_EL2	3	4	10	2	5
+Fields	PIRx_ELx
+EndSysreg
+
+Sysreg	AMAIR2_EL2	3	4	10	3	1
+Field	63:0	ImpDef
 EndSysreg
 
 Sysreg	MPAMHCR_EL2	3	4	10	4	0
@@ -2994,6 +3285,10 @@ Sysreg	SMCR_EL12	3	5	1	2	6
 Mapping	SMCR_EL1
 EndSysreg
 
+Sysreg	TCR2_EL12	3	5	2	0	3
+Mapping	TCR2_EL1
+EndSysreg
+
 Sysreg	GCSCR_EL12	3	5	2	5	0
 Mapping	GCSCR_EL1
 EndSysreg
@@ -3006,317 +3301,22 @@ Sysreg	FAR_EL12	3	5	6	0	0
 Field	63:0	ADDR
 EndSysreg
 
-Sysreg	MPAM1_EL12	3	5	10	5	0
-Fields	MPAM1_ELx
-EndSysreg
-
-Sysreg	CONTEXTIDR_EL12	3	5	13	0	1
-Mapping	CONTEXTIDR_EL1
-EndSysreg
-
-SysregFields TTBRx_EL1
-Field	63:48	ASID
-Field	47:1	BADDR
-Field	0	CnP
-EndSysregFields
-
-Sysreg	TTBR0_EL1	3	0	2	0	0
-Fields	TTBRx_EL1
-EndSysreg
-
-Sysreg	TTBR1_EL1	3	0	2	0	1
-Fields	TTBRx_EL1
-EndSysreg
-
-Sysreg	TCR2_EL1	3	0	2	0	3
-Res0	63:16
-Field	15	DisCH1
-Field	14	DisCH0
-Res0	13:12
-Field	11	HAFT
-Field	10	PTTWI
-Res0	9:6
-Field	5	D128
-Field	4	AIE
-Field	3	POE
-Field	2	E0POE
-Field	1	PIE
-Field	0	PnCH
-EndSysreg
-
-Sysreg	TCR2_EL12	3	5	2	0	3
-Mapping	TCR2_EL1
-EndSysreg
-
-Sysreg	TCR2_EL2	3	4	2	0	3
-Res0	63:16
-Field	15	DisCH1
-Field	14	DisCH0
-Field	13	AMEC1
-Field	12	AMEC0
-Field	11	HAFT
-Field	10	PTTWI
-Res0	9:6
-Field	5	D128
-Field	4	AIE
-Field	3	POE
-Field	2	E0POE
-Field	1	PIE
-Field	0	PnCH
-EndSysreg
-
-SysregFields MAIR2_ELx
-Field	63:56	Attr7
-Field	55:48	Attr6
-Field	47:40	Attr5
-Field	39:32	Attr4
-Field	31:24	Attr3
-Field	23:16	Attr2
-Field	15:8	Attr1
-Field	7:0	Attr0
-EndSysregFields
-
-Sysreg	MAIR2_EL1	3	0	10	2	1
-Fields	MAIR2_ELx
-EndSysreg
-
-Sysreg	MAIR2_EL2	3	4	10	1	1
-Fields	MAIR2_ELx
-EndSysreg
-
-Sysreg	AMAIR2_EL1	3	0	10	3	1
-Field	63:0	ImpDef
-EndSysreg
-
-Sysreg	AMAIR2_EL2	3	4	10	3	1
-Field	63:0	ImpDef
-EndSysreg
-
-SysregFields PIRx_ELx
-Field	63:60	Perm15
-Field	59:56	Perm14
-Field	55:52	Perm13
-Field	51:48	Perm12
-Field	47:44	Perm11
-Field	43:40	Perm10
-Field	39:36	Perm9
-Field	35:32	Perm8
-Field	31:28	Perm7
-Field	27:24	Perm6
-Field	23:20	Perm5
-Field	19:16	Perm4
-Field	15:12	Perm3
-Field	11:8	Perm2
-Field	7:4	Perm1
-Field	3:0	Perm0
-EndSysregFields
-
-Sysreg	PIRE0_EL1	3	0	10	2	2
-Fields	PIRx_ELx
-EndSysreg
-
 Sysreg	PIRE0_EL12	3	5	10	2	2
 Mapping	PIRE0_EL1
-EndSysreg
-
-Sysreg	PIRE0_EL2	3	4	10	2	2
-Fields	PIRx_ELx
-EndSysreg
-
-Sysreg	PIR_EL1		3	0	10	2	3
-Fields	PIRx_ELx
 EndSysreg
 
 Sysreg	PIR_EL12	3	5	10	2	3
 Mapping	PIR_EL1
 EndSysreg
 
-Sysreg	PIR_EL2		3	4	10	2	3
-Fields	PIRx_ELx
-EndSysreg
-
-Sysreg	POR_EL0		3	3	10	2	4
-Fields	PIRx_ELx
-EndSysreg
-
-Sysreg	POR_EL1		3	0	10	2	4
-Fields	PIRx_ELx
-EndSysreg
-
-Sysreg	POR_EL2		3	4	10	2	4
-Fields	PIRx_ELx
-EndSysreg
-
 Sysreg	POR_EL12	3	5	10	2	4
 Mapping	POR_EL1
 EndSysreg
 
-Sysreg	S2POR_EL1	3	0	10	2	5
-Fields	PIRx_ELx
+Sysreg	MPAM1_EL12	3	5	10	5	0
+Fields	MPAM1_ELx
 EndSysreg
 
-Sysreg	S2PIR_EL2	3	4	10	2	5
-Fields	PIRx_ELx
-EndSysreg
-
-Sysreg	LORSA_EL1	3	0	10	4	0
-Res0	63:52
-Field	51:16	SA
-Res0	15:1
-Field	0	Valid
-EndSysreg
-
-Sysreg	LOREA_EL1	3	0	10	4	1
-Res0	63:52
-Field	51:48	EA_51_48
-Field	47:16	EA_47_16
-Res0	15:0
-EndSysreg
-
-Sysreg	LORN_EL1	3	0	10	4	2
-Res0	63:8
-Field	7:0	Num
-EndSysreg
-
-Sysreg	LORC_EL1	3	0	10	4	3
-Res0	63:10
-Field	9:2	DS
-Res0	1
-Field	0	EN
-EndSysreg
-
-Sysreg	MPAMIDR_EL1	3	0	10	4	4
-Res0	63:62
-Field	61	HAS_SDEFLT
-Field	60	HAS_FORCE_NS
-Field	59	SP4
-Field	58	HAS_TIDR
-Field	57	HAS_ALTSP
-Res0	56:40
-Field	39:32	PMG_MAX
-Res0	31:21
-Field	20:18	VPMR_MAX
-Field	17	HAS_HCR
-Res0	16
-Field	15:0	PARTID_MAX
-EndSysreg
-
-Sysreg	LORID_EL1	3	0	10	4	7
-Res0	63:24
-Field	23:16	LD
-Res0	15:8
-Field	7:0	LR
-EndSysreg
-
-Sysreg	MPAM1_EL1	3	0	10	5	0
-Field	63	MPAMEN
-Res0	62:61
-Field	60 FORCED_NS
-Res0	59:55
-Field	54	ALTSP_FRCD
-Res0	53:48
-Field	47:40	PMG_D
-Field	39:32	PMG_I
-Field	31:16	PARTID_D
-Field	15:0	PARTID_I
-EndSysreg
-
-Sysreg	MPAM0_EL1	3	0	10	5	1
-Res0	63:48
-Field	47:40	PMG_D
-Field	39:32	PMG_I
-Field	31:16	PARTID_D
-Field	15:0	PARTID_I
-EndSysreg
-
-Sysreg	ISR_EL1	3	0	12	1	0
-Res0	63:11
-Field	10	IS
-Field	9	FS
-Field	8	A
-Field	7	I
-Field	6	F
-Res0	5:0
-EndSysreg
-
-Sysreg	ICC_NMIAR1_EL1	3	0	12	9	5
-Res0	63:24
-Field	23:0	INTID
-EndSysreg
-
-Sysreg	TRBLIMITR_EL1	3	0	9	11	0
-Field	63:12	LIMIT
-Res0	11:7
-Field	6	XE
-Field	5	nVM
-Enum	4:3	TM
-	0b00	STOP
-	0b01	IRQ
-	0b11	IGNR
-EndEnum
-Enum	2:1	FM
-	0b00	FILL
-	0b01	WRAP
-	0b11	CBUF
-EndEnum
-Field	0	E
-EndSysreg
-
-Sysreg	TRBPTR_EL1	3	0	9	11	1
-Field	63:0	PTR
-EndSysreg
-
-Sysreg	TRBBASER_EL1	3	0	9	11	2
-Field	63:12	BASE
-Res0	11:0
-EndSysreg
-
-Sysreg	TRBSR_EL1	3	0	9	11	3
-Res0	63:56
-Field	55:32	MSS2
-Field	31:26	EC
-Res0	25:24
-Field	23	DAT
-Field	22	IRQ
-Field	21	TRG
-Field	20	WRAP
-Res0	19
-Field	18	EA
-Field	17	S
-Res0	16
-Field	15:0	MSS
-EndSysreg
-
-Sysreg	TRBMAR_EL1	3	0	9	11	4
-Res0	63:12
-Enum	11:10	PAS
-	0b00	SECURE
-	0b01	NON_SECURE
-	0b10	ROOT
-	0b11	REALM
-EndEnum
-Enum	9:8	SH
-	0b00	NON_SHAREABLE
-	0b10	OUTER_SHAREABLE
-	0b11	INNER_SHAREABLE
-EndEnum
-Field	7:0	Attr
-EndSysreg
-
-Sysreg	TRBTRG_EL1	3	0	9	11	6
-Res0	63:32
-Field	31:0	TRG
-EndSysreg
-
-Sysreg	TRBIDR_EL1	3	0	9	11	7
-Res0	63:12
-Enum	11:8	EA
-	0b0000	NON_DESC
-	0b0001	IGNORE
-	0b0010	SERROR
-EndEnum
-Res0	7:6
-Field	5	F
-Field	4	P
-Field	3:0	Align
+Sysreg	CONTEXTIDR_EL12	3	5	13	0	1
+Mapping	CONTEXTIDR_EL1
 EndSysreg
