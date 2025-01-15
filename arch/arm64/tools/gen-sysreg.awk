@@ -98,6 +98,7 @@ BEGIN {
 
 	__current_block_depth = 0
 	__current_block[__current_block_depth] = "Root"
+	__last_sysreg_sort_val = 0
 }
 
 END {
@@ -155,6 +156,12 @@ $1 == "Sysreg" && block_current() == "Root" {
 	crn = $5
 	crm = $6
 	op2 = $7
+
+	sort_val = sprintf("%02d", $3) sprintf("%02d", $4) sprintf("%02d", $5) \
+			sprintf("%02d", $6) sprintf("%02d", $7)
+	if (sort_val < __last_sysreg_sort_val)
+		fatal($2 ": Sysregs should be sorted by encoding")
+	__last_sysreg_sort_val = sort_val
 
 	res0 = "UL(0)"
 	res1 = "UL(0)"
