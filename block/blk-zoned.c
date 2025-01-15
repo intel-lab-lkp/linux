@@ -51,6 +51,8 @@ static const char *const zone_cond_name[] = {
  * @zone_no: The number of the zone the plug is managing.
  * @wp_offset: The zone write pointer location relative to the start of the zone
  *             as a number of 512B sectors.
+ * @wp_offset_compl: End offset for completed zoned writes as a number of 512
+ *		     byte sectors.
  * @bio_list: The list of BIOs that are currently plugged.
  * @bio_work: Work struct to handle issuing of plugged BIOs
  * @rcu_head: RCU head to free zone write plugs with an RCU grace period.
@@ -63,6 +65,7 @@ struct blk_zone_wplug {
 	unsigned int		flags;
 	unsigned int		zone_no;
 	unsigned int		wp_offset;
+	unsigned int		wp_offset_compl;
 	struct bio_list		bio_list;
 	struct work_struct	bio_work;
 	struct rcu_head		rcu_head;
@@ -554,6 +557,7 @@ again:
 	zwplug->flags = 0;
 	zwplug->zone_no = zno;
 	zwplug->wp_offset = bdev_offset_from_zone_start(disk->part0, sector);
+	zwplug->wp_offset_compl = zwplug->wp_offset;
 	bio_list_init(&zwplug->bio_list);
 	INIT_WORK(&zwplug->bio_work, blk_zone_wplug_bio_work);
 	zwplug->disk = disk;
@@ -612,6 +616,7 @@ static void disk_zone_wplug_set_wp_offset(struct gendisk *disk,
 	/* Update the zone write pointer and abort all plugged BIOs. */
 	zwplug->flags &= ~BLK_ZONE_WPLUG_NEED_WP_UPDATE;
 	zwplug->wp_offset = wp_offset;
+	zwplug->wp_offset_compl = zwplug->wp_offset;
 	disk_zone_wplug_abort(zwplug);
 
 	/*
@@ -1148,6 +1153,7 @@ void blk_zone_write_plug_bio_endio(struct bio *bio)
 	struct gendisk *disk = bio->bi_bdev->bd_disk;
 	struct blk_zone_wplug *zwplug =
 		disk_get_zone_wplug(disk, bio->bi_iter.bi_sector);
+	unsigned int end_sector;
 	unsigned long flags;
 
 	if (WARN_ON_ONCE(!zwplug))
@@ -1165,11 +1171,24 @@ void blk_zone_write_plug_bio_endio(struct bio *bio)
 		bio->bi_opf |= REQ_OP_ZONE_APPEND;
 	}
 
-	/*
-	 * If the BIO failed, abort all plugged BIOs and mark the plug as
-	 * needing a write pointer update.
-	 */
-	if (bio->bi_status != BLK_STS_OK) {
+	if (bio->bi_status == BLK_STS_OK) {
+		switch (bio_op(bio)) {
+		case REQ_OP_WRITE:
+		case REQ_OP_ZONE_APPEND:
+		case REQ_OP_WRITE_ZEROES:
+			end_sector = bdev_offset_from_zone_start(disk->part0,
+				     bio->bi_iter.bi_sector + bio_sectors(bio));
+			if (end_sector > zwplug->wp_offset_compl)
+				zwplug->wp_offset_compl = end_sector;
+			break;
+		default:
+			break;
+		}
+	} else {
+		/*
+		 * If the BIO failed, mark the plug as having an error to
+		 * trigger recovery.
+		 */
 		spin_lock_irqsave(&zwplug->lock, flags);
 		disk_zone_wplug_abort(zwplug);
 		zwplug->flags |= BLK_ZONE_WPLUG_NEED_WP_UPDATE;
@@ -1772,7 +1791,7 @@ EXPORT_SYMBOL_GPL(blk_zone_issue_zeroout);
 static void queue_zone_wplug_show(struct blk_zone_wplug *zwplug,
 				  struct seq_file *m)
 {
-	unsigned int zwp_wp_offset, zwp_flags;
+	unsigned int zwp_wp_offset, zwp_wp_offset_compl, zwp_flags;
 	unsigned int zwp_zone_no, zwp_ref;
 	unsigned int zwp_bio_list_size;
 	unsigned long flags;
@@ -1782,11 +1801,13 @@ static void queue_zone_wplug_show(struct blk_zone_wplug *zwplug,
 	zwp_flags = zwplug->flags;
 	zwp_ref = refcount_read(&zwplug->ref);
 	zwp_wp_offset = zwplug->wp_offset;
+	zwp_wp_offset_compl = zwplug->wp_offset_compl;
 	zwp_bio_list_size = bio_list_size(&zwplug->bio_list);
 	spin_unlock_irqrestore(&zwplug->lock, flags);
 
-	seq_printf(m, "%u 0x%x %u %u %u\n", zwp_zone_no, zwp_flags, zwp_ref,
-		   zwp_wp_offset, zwp_bio_list_size);
+	seq_printf(m, "zone_no %u flags 0x%x ref %u wp_offset %u wp_offset_compl %u bio_list_size %u\n",
+		   zwp_zone_no, zwp_flags, zwp_ref, zwp_wp_offset,
+		   zwp_wp_offset_compl, zwp_bio_list_size);
 }
 
 int queue_zone_wplugs_show(void *data, struct seq_file *m)
