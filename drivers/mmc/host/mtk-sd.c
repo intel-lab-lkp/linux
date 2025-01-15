@@ -666,6 +666,20 @@ static const struct mtk_mmc_compatible mt8196_compat = {
 	.support_new_rx = true,
 };
 
+static const struct mtk_mmc_compatible an7581_compat = {
+	.clk_div_bits = 12,
+	.recheck_sdio_irq = true,
+	.hs400_tune = false,
+	.pad_tune_reg = MSDC_PAD_TUNE0,
+	.async_fifo = true,
+	.data_tune = true,
+	.busy_check = true,
+	.stop_clk_fix = true,
+	.stop_dly_sel = 3,
+	.enhance_rx = true,
+	.support_64g = false,
+};
+
 static const struct of_device_id msdc_of_ids[] = {
 	{ .compatible = "mediatek,mt2701-mmc", .data = &mt2701_compat},
 	{ .compatible = "mediatek,mt2712-mmc", .data = &mt2712_compat},
@@ -680,7 +694,7 @@ static const struct of_device_id msdc_of_ids[] = {
 	{ .compatible = "mediatek,mt8183-mmc", .data = &mt8183_compat},
 	{ .compatible = "mediatek,mt8196-mmc", .data = &mt8196_compat},
 	{ .compatible = "mediatek,mt8516-mmc", .data = &mt8516_compat},
-
+	{ .compatible = "airoha,an7581-mmc", .data = &an7581_compat},
 	{}
 };
 MODULE_DEVICE_TABLE(of, msdc_of_ids);
@@ -1600,6 +1614,10 @@ static int msdc_ops_switch_volt(struct mmc_host *mmc, struct mmc_ios *ios)
 	struct msdc_host *host = mmc_priv(mmc);
 	int ret;
 
+	/* Skip setting supply if not supported */
+	if (!mmc->supply.vqmmc)
+		return 0;
+
 	if (!IS_ERR(mmc->supply.vqmmc)) {
 		if (ios->signal_voltage != MMC_SIGNAL_VOLTAGE_330 &&
 		    ios->signal_voltage != MMC_SIGNAL_VOLTAGE_180) {
@@ -1699,7 +1717,9 @@ static void msdc_enable_sdio_irq(struct mmc_host *mmc, int enb)
 				dev_dbg(host->dev, "SDIO eint irq: %d!\n", host->eint_irq);
 			}
 
-			pinctrl_select_state(host->pinctrl, host->pins_uhs);
+			/* Skip setting uhs pins if not supported */
+			if (host->pins_uhs)
+				pinctrl_select_state(host->pinctrl, host->pins_uhs);
 		} else {
 			dev_pm_clear_wake_irq(host->dev);
 		}
@@ -2036,6 +2056,10 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	msdc_set_buswidth(host, ios->bus_width);
 
+	/* Skip regulator if not supported */
+	if (!mmc->supply.vmmc)
+		goto skip_regulator;
+
 	/* Suspend/Resume will do power off/on */
 	switch (ios->power_mode) {
 	case MMC_POWER_UP:
@@ -2071,6 +2095,7 @@ static void msdc_ops_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		break;
 	}
 
+skip_regulator:
 	if (host->mclk != ios->clock || host->timing != ios->timing)
 		msdc_set_mclk(host, ios->timing, ios->clock);
 }
@@ -2816,9 +2841,12 @@ static int msdc_of_clock_parse(struct platform_device *pdev,
 	if (IS_ERR(host->src_clk))
 		return PTR_ERR(host->src_clk);
 
-	host->h_clk = devm_clk_get(&pdev->dev, "hclk");
-	if (IS_ERR(host->h_clk))
-		return PTR_ERR(host->h_clk);
+	/* AN7581 SoC doesn't have hclk */
+	if (!device_is_compatible(&pdev->dev, "airoha,an7581-mmc")) {
+		host->h_clk = devm_clk_get(&pdev->dev, "hclk");
+		if (IS_ERR(host->h_clk))
+			return PTR_ERR(host->h_clk);
+	}
 
 	host->bus_clk = devm_clk_get_optional(&pdev->dev, "bus_clk");
 	if (IS_ERR(host->bus_clk))
@@ -2926,10 +2954,13 @@ static int msdc_drv_probe(struct platform_device *pdev)
 		return PTR_ERR(host->pins_default);
 	}
 
-	host->pins_uhs = pinctrl_lookup_state(host->pinctrl, "state_uhs");
-	if (IS_ERR(host->pins_uhs)) {
-		dev_err(&pdev->dev, "Cannot find pinctrl uhs!\n");
-		return PTR_ERR(host->pins_uhs);
+	/* AN7581 doesn't have state_uhs pins */
+	if (!device_is_compatible(&pdev->dev, "airoha,an7581-mmc")) {
+		host->pins_uhs = pinctrl_lookup_state(host->pinctrl, "state_uhs");
+		if (IS_ERR(host->pins_uhs)) {
+			dev_err(&pdev->dev, "Cannot find pinctrl uhs!\n");
+			return PTR_ERR(host->pins_uhs);
+		}
 	}
 
 	/* Support for SDIO eint irq ? */
@@ -3010,6 +3041,12 @@ static int msdc_drv_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Cannot ungate clocks!\n");
 		goto release_clk;
 	}
+
+	/* AN7581 without regulator require tune to OCR values */
+	if (device_is_compatible(&pdev->dev, "airoha,an7581-mmc") &&
+	    !mmc->ocr_avail)
+		mmc->ocr_avail = MMC_VDD_32_33 | MMC_VDD_33_34;
+
 	msdc_init_hw(host);
 
 	if (mmc->caps2 & MMC_CAP2_CQE) {
