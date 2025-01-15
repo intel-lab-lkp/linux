@@ -175,14 +175,12 @@ struct klp_state_callbacks {
  * @block_disable: the state disablement is not supported
  * @is_shadow:	the state handles lifetime of a shadow variable with
  *		the same @id
- * @data:	custom data
  */
 struct klp_state {
 	unsigned long id;
 	struct klp_state_callbacks callbacks;
 	bool block_disable;
 	bool is_shadow;
-	void *data;
 };
 
 /**
