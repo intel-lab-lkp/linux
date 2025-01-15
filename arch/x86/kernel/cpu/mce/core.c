@@ -1793,7 +1793,6 @@ bool mce_notify_irq(void)
 	}
 	return false;
 }
-EXPORT_SYMBOL_GPL(mce_notify_irq);
 
 static void __mcheck_cpu_mce_banks_init(void)
 {
