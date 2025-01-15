@@ -91,14 +91,14 @@ AER Ratelimits
 Errors, both at log and IRQ level, are ratelimited per device and error type.
 This prevents spammy devices from stalling execution. Ratelimits are exposed
 in the form of sysfs attributes and configurable. See
-Documentation/ABI/testing/sysfs-bus-pci-devices-aer_stats
+Documentation/ABI/testing/sysfs-bus-pci-devices-aer
 
 AER Statistics / Counters
 -------------------------
 
 When PCIe AER errors are captured, the counters / statistics are also exposed
 in the form of sysfs attributes which are documented at
-Documentation/ABI/testing/sysfs-bus-pci-devices-aer_stats
+Documentation/ABI/testing/sysfs-bus-pci-devices-aer
 
 Developer Guide
 ===============
