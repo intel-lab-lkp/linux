@@ -29,3 +29,7 @@
 	pinctrl-0 = <&scif_pins>;
 	pinctrl-names = "default";
 };
+
+&wdt1 {
+	status = "okay";
+};
