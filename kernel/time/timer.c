@@ -1395,6 +1395,39 @@ out_unlock:
 EXPORT_SYMBOL_GPL(add_timer_on);
 
 /**
+ * timer_try_add_on_cpu - Try to start a timer on a particular CPU,
+ *			  after ensuring that it is and remains online.
+ * @timer:	The timer to be started
+ * @cpu:	The CPU to start it on
+ *
+ * Check and ensure that specified cpu is around, before starting a timer
+ * on it.
+ *
+ * Return:
+ * * %true  - If timer was started on an online cpu
+ * * %false - If the specified cpu was offline or if its online status
+ *	      could not be ensured due to unavailability of hotplug lock.
+ */
+bool timer_try_add_on_cpu(struct timer_list *timer, int cpu)
+{
+	bool ret = true;
+
+	if (unlikely(!cpu_online(cpu)))
+		ret = false;
+	else if (cpus_read_trylock()) {
+		if (likely(cpu_online(cpu)))
+			add_timer_on(timer, cpu);
+		else
+			ret = false;
+		cpus_read_unlock();
+	} else
+		ret = false;
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(timer_try_add_on_cpu);
+
+/**
  * __timer_delete - Internal function: Deactivate a timer
  * @timer:	The timer to be deactivated
  * @shutdown:	If true, this indicates that the timer is about to be
