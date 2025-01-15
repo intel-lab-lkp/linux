@@ -507,6 +507,17 @@ static struct svc_xprt *svc_xprt_dequeue(struct svc_pool *pool)
 	return xprt;
 }
 
+void svc_xprt_dequeue_entry(struct svc_xprt *xprt)
+{
+	struct svc_pool *pool;
+
+	pool = svc_pool_for_cpu(xprt->xpt_server);
+
+	WARN_ON_ONCE(pool->sp_xprts.ready);
+	llist_del_entry(&pool->sp_xprts.new, &xprt->xpt_ready.node);
+}
+EXPORT_SYMBOL_GPL(svc_xprt_dequeue_entry);
+
 /**
  * svc_reserve - change the space reserved for the reply to a request.
  * @rqstp:  The request in question
