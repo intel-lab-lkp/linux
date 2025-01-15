@@ -1079,6 +1079,25 @@ out_err:
 	return NULL;
 }
 
+int osnoise_trace_is_off(struct osnoise_tool *tool, struct osnoise_tool *record)
+{
+	/*
+	 * The tool instance is always present, it is the one used to collect
+	 * data.
+	 */
+	if (!tracefs_trace_is_on(tool->trace.inst))
+		return 1;
+
+	/*
+	 * The trace record instance is only enabled when -t is set. IOW, when the system
+	 * is tracing.
+	 */
+	if (record && !tracefs_trace_is_on(record->trace.inst))
+		return 1;
+
+	return 0;
+}
+
 static void osnoise_usage(int err)
 {
 	int i;
