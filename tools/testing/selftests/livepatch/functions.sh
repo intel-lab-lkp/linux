@@ -250,13 +250,22 @@ function unload_lp() {
 	unload_mod "$1"
 }
 
-# disable_lp(modname) - disable a livepatch
-#	modname - module name to unload
-function disable_lp() {
+# disable_lp_nowait(modname) - disable a livepatch but do not wait
+#			       until the transition finishes
+#	modname - module name of the livepatch to disable
+function disable_lp_nowait() {
 	local mod="$1"
 
 	log "% echo 0 > $SYSFS_KLP_DIR/$mod/enabled"
 	echo 0 > "$SYSFS_KLP_DIR/$mod/enabled"
+}
+
+# disable_lp(modname) - disable a livepatch
+#	modname - module name of the livepatch to disable
+function disable_lp() {
+	local mod="$1"; shift
+
+	disable_lp_nowait "$mod" "$@"
 
 	# Wait until the transition finishes and the livepatch gets
 	# removed from sysfs...
@@ -277,6 +286,19 @@ function set_pre_patch_ret {
 	# Wait for sysfs value to hold ...
 	loop_until '[[ $(cat "$SYSFS_MODULE_DIR/$mod/parameters/pre_patch_ret") == "$ret" ]]' ||
 		die "failed to set pre_patch_ret parameter for $mod module"
+}
+
+# write_module_param(modname, param, val)
+#	modname - module name which provides the given parameter
+#	param - parameter name to be written
+#	val = value to be written
+function write_module_param {
+	local mod="$1"; shift
+	local param="$1"; shift
+	local val="$1"
+
+	log "% echo $val > $SYSFS_MODULE_DIR/$mod/parameters/$param"
+	echo "$val" > $SYSFS_MODULE_DIR/"$mod"/parameters/"$param"
 }
 
 # read_module_param(modname, param)

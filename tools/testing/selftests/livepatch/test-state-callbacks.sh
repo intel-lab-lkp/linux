@@ -121,9 +121,9 @@ unload_lp $MOD_LIVEPATCH
 unload_mod $MOD_TARGET
 
 check_result "% insmod test_modules/$MOD_TARGET.ko block_doors=1
-$MOD_TARGET: ${MOD_TARGET}_init
 $MOD_TARGET: block_doors_func: Going to block doors.
 $MOD_TARGET: do_block_doors: Started blocking doors.
+$MOD_TARGET: ${MOD_TARGET}_init
 % cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
 $MOD_TARGET: speaker_welcome: Hello, World!
 % insmod test_modules/$MOD_LIVEPATCH.ko applause=1
@@ -136,6 +136,147 @@ $MOD_LIVEPATCH: lp_speaker_welcome: [] Ladies and gentleman, ...
 % echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH/enabled
 livepatch: '$MOD_LIVEPATCH': reversing transition from patching to unpatching
 livepatch: '$MOD_LIVEPATCH': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+$MOD_LIVEPATCH: applause_post_unpatch_callback: state 10 (nope)
+$MOD_LIVEPATCH: applause_shadow_dtor: freeing applause [] (nope)
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% rmmod $MOD_LIVEPATCH
+% rmmod $MOD_TARGET
+$MOD_TARGET: ${MOD_TARGET}_exit"
+
+# Test state callbacks handling with blocked and later unblocked
+# transiton.
+#
+# Load the test module with the blocked operation. Then load the livepatch
+# and the transition should get stuck. Then unblock the operation
+# so that the transition could finish. Finally, disable the livepatch
+# and unload the modules as usual.
+#
+# Note that every process is transitioned separately. This is visible
+# on the difference between the welcome message printed when reading
+# the "welcome" parameter and the same message printed by the unblocked
+# do_block_doors() function.
+
+start_test "(un)blocked transition"
+
+load_mod $MOD_TARGET block_doors=1
+read_module_param $MOD_TARGET welcome
+
+load_lp_nowait $MOD_LIVEPATCH applause=1
+# Wait until the livepatch reports in-transition state, i.e. that it's
+# stalled because of the process with the waiting speaker
+loop_until 'grep -q '^1$' $SYSFS_KLP_DIR/$MOD_LIVEPATCH/transition' ||
+	die "failed to stall transition"
+read_module_param $MOD_TARGET welcome
+
+# Unblock the doors (livepatch transtition)
+write_module_param "$MOD_TARGET" block_doors 0
+# Wait until the livepatch reports that the transition has finished
+loop_until 'grep -q '^0$' $SYSFS_KLP_DIR/$MOD_LIVEPATCH/transition' ||
+	die "failed to finish transition"
+read_module_param $MOD_TARGET welcome
+
+disable_lp $MOD_LIVEPATCH
+read_module_param $MOD_TARGET welcome
+
+unload_lp $MOD_LIVEPATCH
+unload_mod $MOD_TARGET
+
+check_result "% insmod test_modules/$MOD_TARGET.ko block_doors=1
+$MOD_TARGET: block_doors_func: Going to block doors.
+$MOD_TARGET: do_block_doors: Started blocking doors.
+$MOD_TARGET: ${MOD_TARGET}_init
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% insmod test_modules/$MOD_LIVEPATCH.ko applause=1
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+$MOD_LIVEPATCH: applause_pre_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting patching transition
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH: lp_speaker_welcome: [] Ladies and gentleman, ...
+% echo 0 > $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/block_doors
+$MOD_TARGET: do_block_doors: Stopped blocking doors.
+$MOD_TARGET: speaker_welcome: Hello, World! <--- from blocked doors
+livepatch: '$MOD_LIVEPATCH': completing patching transition
+$MOD_LIVEPATCH: applause_post_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': patching complete
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH: lp_speaker_welcome: [APPLAUSE] Ladies and gentleman, ...
+% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH/enabled
+livepatch: '$MOD_LIVEPATCH': initializing unpatching transition
+$MOD_LIVEPATCH: applause_pre_unpatch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting unpatching transition
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+$MOD_LIVEPATCH: applause_post_unpatch_callback: state 10 (nope)
+$MOD_LIVEPATCH: applause_shadow_dtor: freeing applause [] (nope)
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% rmmod $MOD_LIVEPATCH
+% rmmod $MOD_TARGET
+$MOD_TARGET: ${MOD_TARGET}_exit"
+
+# Test state callbacks handling with blocked disable transition.
+#
+# Load the livepatch first. Then load the test module with the blocking
+# operation and disable the livepatch. The transition should get stuck.
+# Finally, get rid of the blocked function so that the transition could
+# finish and the livepatch could get unloaded.
+#
+# Note that every process is transitioned separately. This is visible
+# on the difference between the welcome message printed when reading
+# the "welcome" parameter and the same message printed by the unblocked
+# do_block_doors() function.
+start_test "blocked disable transition"
+
+load_lp $MOD_LIVEPATCH applause=1
+load_mod $MOD_TARGET block_doors=1
+read_module_param $MOD_TARGET welcome
+
+disable_lp_nowait $MOD_LIVEPATCH
+# Wait until the livepatch reports in-transition state, i.e. that it's
+# stalled because of the process with the waiting speaker
+loop_until 'grep -q '^1$' $SYSFS_KLP_DIR/$MOD_LIVEPATCH/transition' ||
+	die "failed to stall transition"
+read_module_param $MOD_TARGET welcome
+
+# Unblock the doors (livepatch transtition)
+write_module_param "$MOD_TARGET" block_doors 0
+# Wait until the livepatch reports that the transition has finished
+loop_until 'test ! -f $SYSFS_KLP_DIR/$MOD_LIVEPATCH/transition' ||
+	die "failed to finish transition"
+read_module_param $MOD_TARGET welcome
+
+unload_lp $MOD_LIVEPATCH
+unload_mod $MOD_TARGET
+
+check_result "% insmod test_modules/$MOD_LIVEPATCH.ko applause=1
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+$MOD_LIVEPATCH: applause_pre_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting patching transition
+livepatch: '$MOD_LIVEPATCH': completing patching transition
+$MOD_LIVEPATCH: applause_post_patch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': patching complete
+% insmod test_modules/$MOD_TARGET.ko block_doors=1
+livepatch: applying patch '$MOD_LIVEPATCH' to loading module '$MOD_TARGET'
+$MOD_LIVEPATCH: lp_block_doors_func: Going to block doors (fixed).
+$MOD_TARGET: do_block_doors: Started blocking doors.
+$MOD_TARGET: ${MOD_TARGET}_init
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_LIVEPATCH: lp_speaker_welcome: [APPLAUSE] Ladies and gentleman, ...
+% echo 0 > $SYSFS_KLP_DIR/$MOD_LIVEPATCH/enabled
+livepatch: '$MOD_LIVEPATCH': initializing unpatching transition
+$MOD_LIVEPATCH: applause_pre_unpatch_callback: state 10
+livepatch: '$MOD_LIVEPATCH': starting unpatching transition
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% echo 0 > $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/block_doors
+$MOD_TARGET: do_block_doors: Stopped blocking doors.
+$MOD_LIVEPATCH: lp_speaker_welcome: [] Ladies and gentleman, ... <--- from blocked doors
 livepatch: '$MOD_LIVEPATCH': completing unpatching transition
 $MOD_LIVEPATCH: applause_post_unpatch_callback: state 10 (nope)
 $MOD_LIVEPATCH: applause_shadow_dtor: freeing applause [] (nope)

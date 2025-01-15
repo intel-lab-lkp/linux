@@ -8,6 +8,8 @@
 #include <linux/livepatch.h>
 #include <linux/init.h>
 
+#include "test_klp_speaker.h"
+
 /**
  * test_klp_speaker_livepatch - test livepatch for testing various livepatching
  *	features.
@@ -37,7 +39,9 @@ static int pre_patch_ret;
 module_param(pre_patch_ret, int, 0400);
 MODULE_PARM_DESC(pre_patch_ret, "Allow to force failure for the pre_patch callback (default=0)");
 
-static void __lp_speaker_welcome(const char *caller_func, const char *speaker_id)
+static void __lp_speaker_welcome(const char *caller_func,
+				 const char *speaker_id,
+				 const char *context)
 {
 	char entire_applause[APPLAUSE_STR_SIZE + 1] = "";
 	const char *applause;
@@ -46,18 +50,18 @@ static void __lp_speaker_welcome(const char *caller_func, const char *speaker_id
 	if (applause)
 		snprintf(entire_applause, sizeof(entire_applause), "%s ", applause);
 
-	pr_info("%s%s: %sLadies and gentleman, ...\n", caller_func, speaker_id,
-		entire_applause);
+	pr_info("%s%s: %sLadies and gentleman, ...%s\n",
+		caller_func, speaker_id, entire_applause, context);
 }
 
-static void lp_speaker_welcome(void)
+static void lp_speaker_welcome(const char *context)
 {
-	__lp_speaker_welcome(__func__, "");
+	__lp_speaker_welcome(__func__, "", context);
 }
 
-static void lp_speaker2_welcome(void)
+static void lp_speaker2_welcome(const char *context)
 {
-	__lp_speaker_welcome(__func__, "(2)");
+	__lp_speaker_welcome(__func__, "(2)", context);
 }
 
 static int allocate_applause(unsigned long id)
@@ -185,16 +189,27 @@ static void applause_shadow_dtor(void *obj, void *shadow_data)
 static void __lp_block_doors_func(struct work_struct *work, const char *caller_func,
 		       const char *speaker_id)
 {
-	/* Just print the message. Never really used. */
-	pr_info("%s: Going to block doors%s (this should never happen).\n",
-		caller_func, speaker_id);
+	struct hall *hall = container_of(work, struct hall, block_doors_work);
+
+	pr_info("%s: Going to block doors%s (fixed).\n", caller_func, speaker_id);
+	hall->do_block_doors();
 }
 
+/*
+ * Prevent tail call optimizations to make sure that this function
+ * appears in the backtrace and can block the disable transition.
+ */
+__attribute__((__optimize__("no-optimize-sibling-calls")))
 static void lp_block_doors_func(struct work_struct *work)
 {
 	__lp_block_doors_func(work, __func__, "");
 }
 
+/*
+ * Prevent tail call optimizations to make sure that this function
+ * appears in the backtrace and can block the disable transition.
+ */
+__attribute__((__optimize__("no-optimize-sibling-calls")))
 static void lp_block_doors_func2(struct work_struct *work)
 {
 	__lp_block_doors_func(work, __func__, "(2)");
