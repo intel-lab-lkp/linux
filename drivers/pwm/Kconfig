@@ -202,6 +202,16 @@ config PWM_CROS_EC
 	  PWM driver for exposing a PWM attached to the ChromeOS Embedded
 	  Controller.
 
+config PWM_CADENCE
+	bool "Cadence TTC PWM driver"
+	depends on CADENCE_TTC_TIMER
+	help
+	  Generic PWM framework driver for cadence TTC IP found on
+          Xilinx Zynq/ZynqMP/Versal SOCs. Each TTC device has 3 PWM
+          channels. Output of 0th PWM channel of each TTC device can
+          be routed to MIO or EMIO, and output of 1st and 2nd PWM
+          channels can be routed only to EMIO.
+
 config PWM_DWC_CORE
 	tristate
 	depends on HAS_IOMEM
