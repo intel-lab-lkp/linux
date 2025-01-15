@@ -591,6 +591,7 @@ EXPORT_SYMBOL_GPL(mce_is_correctable);
  */
 static int mce_notify_irq(void)
 {
+#ifdef CONFIG_X86_MCELOG_LEGACY
 	/* Not more than two messages every minute */
 	static DEFINE_RATELIMIT_STATE(ratelimit, 60*HZ, 2);
 
@@ -602,7 +603,7 @@ static int mce_notify_irq(void)
 
 		return 1;
 	}
-
+#endif
 	return 0;
 }
 
