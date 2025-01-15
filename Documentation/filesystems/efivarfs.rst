@@ -18,6 +18,12 @@ efivarfs is typically mounted like this::
 
 	mount -t efivarfs none /sys/firmware/efi/efivars
 
+To support efivar updates from other sources (efi_test ioctl, runtime
+driver, etc.), set ``efivarfs.refresh=1``. After that, remount will
+update the efivar information in efivarfs, like this::
+
+	mount -t efivarfs none /sys/firmware/efi/efivars -o remount
+
 Due to the presence of numerous firmware bugs where removing non-standard
 UEFI variables causes the system firmware to fail to POST, efivarfs
 files that are not well-known standardized variables are created

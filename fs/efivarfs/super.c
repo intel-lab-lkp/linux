@@ -298,6 +298,44 @@ static const struct fs_parameter_spec efivarfs_parameters[] = {
 	{},
 };
 
+static bool efivarfs_refresh_default __read_mostly;
+module_param_named(refresh, efivarfs_refresh_default, bool, 0444);
+
+static void efivarfs_clean_dentry(struct dentry *dentry)
+{
+	struct dentry *child;
+
+	if (!dentry)
+		return;
+
+	if (d_is_dir(dentry)) {
+		spin_lock(&dentry->d_lock);
+		hlist_for_each_entry(child, &dentry->d_children, d_sib) {
+			if (child)
+				efivarfs_clean_dentry(child);
+		}
+		spin_unlock(&dentry->d_lock);
+	} else {
+		d_invalidate(dentry);
+	}
+}
+
+static int efivarfs_refresh(struct fs_context *fc)
+{
+	struct efivarfs_fs_info *sbi = fc->s_fs_info;
+
+	if (!efivarfs_refresh_default)
+		return 0;
+
+	if (!fc->root)
+		return -EINVAL;
+
+	efivarfs_clean_dentry(fc->root);
+	efivar_init(efivarfs_callback, fc->root->d_sb, &sbi->efivarfs_list);
+
+	return 0;
+}
+
 static int efivarfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct efivarfs_fs_info *sbi = fc->s_fs_info;
@@ -372,7 +410,7 @@ static int efivarfs_reconfigure(struct fs_context *fc)
 		return -EINVAL;
 	}
 
-	return 0;
+	return efivarfs_refresh(fc);
 }
 
 static const struct fs_context_operations efivarfs_context_ops = {
