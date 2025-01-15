@@ -19,6 +19,8 @@
  *	"Ladies and gentleman, ..."
  *
  *    - Support more speaker modules, see __lp_speaker_welcome().
+ *
+ *    - Livepatch block_doors_func() which can block the transition.
  */
 
 #define APPLAUSE_ID 10
@@ -180,10 +182,32 @@ static void applause_shadow_dtor(void *obj, void *shadow_data)
 		__func__, applause);
 }
 
+static void __lp_block_doors_func(struct work_struct *work, const char *caller_func,
+		       const char *speaker_id)
+{
+	/* Just print the message. Never really used. */
+	pr_info("%s: Going to block doors%s (this should never happen).\n",
+		caller_func, speaker_id);
+}
+
+static void lp_block_doors_func(struct work_struct *work)
+{
+	__lp_block_doors_func(work, __func__, "");
+}
+
+static void lp_block_doors_func2(struct work_struct *work)
+{
+	__lp_block_doors_func(work, __func__, "(2)");
+}
+
 static struct klp_func test_klp_speaker_funcs[] = {
 	{
 		.old_name = "speaker_welcome",
 		.new_func = lp_speaker_welcome,
+	},
+	{
+		.old_name = "block_doors_func",
+		.new_func = lp_block_doors_func,
 	},
 	{ }
 };
@@ -192,6 +216,10 @@ static struct klp_func test_klp_speaker2_funcs[] = {
 	{
 		.old_name = "speaker_welcome",
 		.new_func = lp_speaker2_welcome,
+	},
+	{
+		.old_name = "block_doors_func",
+		.new_func = lp_block_doors_func2,
 	},
 	{ }
 };
