@@ -97,13 +97,15 @@ static int ntsync_sem_post(struct ntsync_obj *sem, void __user *argp)
 	return ret;
 }
 
-static int ntsync_obj_release(struct inode *inode, struct file *file)
+static void ntsync_free_obj(struct ntsync_obj *obj)
 {
-	struct ntsync_obj *obj = file->private_data;
-
 	fput(obj->dev->file);
 	kfree(obj);
+}
 
+static int ntsync_obj_release(struct inode *inode, struct file *file)
+{
+	ntsync_free_obj(file->private_data);
 	return 0;
 }
 
@@ -183,7 +185,7 @@ static int ntsync_create_sem(struct ntsync_device *dev, void __user *argp)
 	sem->u.sem.max = args.max;
 	fd = ntsync_obj_get_fd(sem);
 	if (fd < 0) {
-		kfree(sem);
+		ntsync_free_obj(sem);
 		return fd;
 	}
 
