@@ -109,6 +109,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
+#include <linux/gcd.h>
 
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
@@ -138,16 +139,18 @@ static struct mempolicy default_policy = {
 
 static struct mempolicy preferred_node_policy[MAX_NUMNODES];
 
+static uint64_t *node_bw_table;
+
 /*
- * iw_table is the sysfs-set interleave weight table, a value of 0 denotes
- * system-default value should be used. A NULL iw_table also denotes that
- * system-default values should be used. Until the system-default table
- * is implemented, the system-default is always 1.
- *
+ * iw_table is the interleave weight table.
+ * If bandwiddth data is available and the user is in auto mode, the table
+ * is populated with default values in [1,255].
  * iw_table is RCU protected
  */
 static u8 __rcu *iw_table;
 static DEFINE_MUTEX(iw_table_lock);
+static const int weightiness = 32;
+static bool weighted_interleave_auto = true;
 
 static u8 get_il_weight(int node)
 {
@@ -156,12 +159,111 @@ static u8 get_il_weight(int node)
 
 	rcu_read_lock();
 	table = rcu_dereference(iw_table);
-	/* if no iw_table, use system default */
 	weight = table ? table[node] : 1;
-	/* if value in iw_table is 0, use system default */
-	weight = weight ? weight : 1;
 	rcu_read_unlock();
 	return weight;
+}
+
+/*
+ * Convert bandwidth values into weighted interleave weights.
+ * Call with iw_table_lock.
+ */
+static void reduce_interleave_weights(uint64_t *bw, u8 *new_iw)
+{
+	uint64_t ttl_bw = 0, ttl_iw = 0, scaling_factor = 1, iw_gcd = 1;
+	unsigned int i = 0;
+
+	/* Recalculate the bandwidth distribution given the new info */
+	for (i = 0; i < nr_node_ids; i++)
+		ttl_bw += bw[i];
+
+	/* If node is not set or has < 1% of total bw, use minimum value of 1 */
+	for (i = 0; i < nr_node_ids; i++) {
+		if (bw[i]) {
+			scaling_factor = 100 * bw[i];
+			new_iw[i] = max(scaling_factor / ttl_bw, 1);
+		} else {
+			new_iw[i] = 1;
+		}
+		ttl_iw += new_iw[i];
+	}
+
+	/*
+	 * Scale each node's share of the total bandwidth from percentages
+	 * to whole numbers in the range [1, weightiness]
+	 */
+	for (i = 0; i < nr_node_ids; i++) {
+		scaling_factor = weightiness * new_iw[i];
+		new_iw[i] = max(scaling_factor / ttl_iw, 1);
+		if (unlikely(i == 0))
+			iw_gcd = new_iw[0];
+		iw_gcd = gcd(iw_gcd, new_iw[i]);
+	}
+
+	/* 1:2 is strictly better than 16:32. Reduce by the weights' GCD. */
+	for (i = 0; i < nr_node_ids; i++)
+		new_iw[i] /= iw_gcd;
+}
+
+int mempolicy_set_node_perf(unsigned int node, struct access_coordinate *coords)
+{
+	uint64_t *old_bw, *new_bw;
+	uint64_t bw_val;
+	u8 *old_iw, *new_iw;
+
+	/*
+	 * Bandwidths above this limit cause rounding errors when reducing
+	 * weights. This value is ~16 exabytes, which is unreasonable anyways.
+	 */
+	bw_val = min(coords->read_bandwidth, coords->write_bandwidth);
+	if (bw_val > (U64_MAX / 10))
+		return -EINVAL;
+
+	new_bw = kcalloc(nr_node_ids, sizeof(uint64_t), GFP_KERNEL);
+	if (!new_bw)
+		return -ENOMEM;
+
+	new_iw = kcalloc(nr_node_ids, sizeof(u8), GFP_KERNEL);
+	if (!new_iw) {
+		kfree(new_bw);
+		return -ENOMEM;
+	}
+
+	/*
+	 * Update bandwidth info, even in manual mode. That way, when switching
+	 * to auto mode in the future, iw_table can be overwritten using
+	 * accurate bw data.
+	 */
+	mutex_lock(&iw_table_lock);
+	old_bw = node_bw_table;
+	old_iw = rcu_dereference_protected(iw_table,
+					   lockdep_is_held(&iw_table_lock));
+
+	if (old_bw)
+		memcpy(new_bw, old_bw, nr_node_ids*sizeof(uint64_t));
+	new_bw[node] = bw_val;
+	node_bw_table = new_bw;
+
+	if (weighted_interleave_auto) {
+		reduce_interleave_weights(new_bw, new_iw);
+	} else if (old_iw) {
+		/*
+		 * The first time mempolicy_set_node_perf is called, old_iw
+		 * (iw_table) is null. If that is the case, assign a zeroed
+		 * table to it. Otherwise, free the newly allocated iw_table.
+		 */
+		mutex_unlock(&iw_table_lock);
+		kfree(new_iw);
+		kfree(old_bw);
+		return 0;
+	}
+
+	rcu_assign_pointer(iw_table, new_iw);
+	mutex_unlock(&iw_table_lock);
+	synchronize_rcu();
+	kfree(old_iw);
+	kfree(old_bw);
+	return 0;
 }
 
 /**
@@ -1998,10 +2100,7 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 	table = rcu_dereference(iw_table);
 	/* calculate the total weight */
 	for_each_node_mask(nid, nodemask) {
-		/* detect system default usage */
-		weight = table ? table[nid] : 1;
-		weight = weight ? weight : 1;
-		weight_total += weight;
+		weight_total += table ? table[nid] : 1;
 	}
 
 	/* Calculate the node offset based on totals */
@@ -2010,7 +2109,6 @@ static unsigned int weighted_interleave_nid(struct mempolicy *pol, pgoff_t ilx)
 	while (target) {
 		/* detect system default usage */
 		weight = table ? table[nid] : 1;
-		weight = weight ? weight : 1;
 		if (target < weight)
 			break;
 		target -= weight;
@@ -2417,7 +2515,7 @@ static unsigned long alloc_pages_bulk_weighted_interleave(gfp_t gfp,
 	unsigned long nr_allocated = 0;
 	unsigned long rounds;
 	unsigned long node_pages, delta;
-	u8 *table, *weights, weight;
+	u8 *weights, weight;
 	unsigned int weight_total = 0;
 	unsigned long rem_pages = nr_pages;
 	nodemask_t nodes;
@@ -2466,16 +2564,8 @@ static unsigned long alloc_pages_bulk_weighted_interleave(gfp_t gfp,
 	if (!weights)
 		return total_allocated;
 
-	rcu_read_lock();
-	table = rcu_dereference(iw_table);
-	if (table)
-		memcpy(weights, table, nr_node_ids);
-	rcu_read_unlock();
-
-	/* calculate total, detect system default usage */
 	for_each_node_mask(node, nodes) {
-		if (!weights[node])
-			weights[node] = 1;
+		weights[node] = get_il_weight(node);
 		weight_total += weights[node];
 	}
 
@@ -3410,7 +3500,7 @@ static ssize_t node_store(struct kobject *kobj, struct kobj_attribute *attr,
 	node_attr = container_of(attr, struct iw_node_attr, kobj_attr);
 	if (count == 0 || sysfs_streq(buf, ""))
 		weight = 0;
-	else if (kstrtou8(buf, 0, &weight))
+	else if (kstrtou8(buf, 0, &weight) || weight == 0)
 		return -EINVAL;
 
 	new = kzalloc(nr_node_ids, GFP_KERNEL);
@@ -3427,10 +3517,67 @@ static ssize_t node_store(struct kobject *kobj, struct kobj_attribute *attr,
 	mutex_unlock(&iw_table_lock);
 	synchronize_rcu();
 	kfree(old);
+	weighted_interleave_auto = false;
 	return count;
 }
 
 static struct iw_node_attr **node_attrs;
+
+static ssize_t weighted_interleave_mode_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
+{
+	if (weighted_interleave_auto)
+		return sysfs_emit(buf, "auto\n");
+	else
+		return sysfs_emit(buf, "manual\n");
+}
+
+static ssize_t weighted_interleave_mode_store(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	uint64_t *bw;
+	u8 *old_iw, *new_iw;
+
+	if (count == 0)
+		return -EINVAL;
+
+	if (sysfs_streq(buf, "manual")) {
+		weighted_interleave_auto = false;
+		return count;
+	} else if (!sysfs_streq(buf, "auto")) {
+		return -EINVAL;
+	}
+
+	new_iw = kcalloc(nr_node_ids, sizeof(u8), GFP_KERNEL);
+	if (!new_iw)
+		return -ENOMEM;
+
+	mutex_lock(&iw_table_lock);
+	bw = node_bw_table;
+
+	if (!bw) {
+		mutex_unlock(&iw_table_lock);
+		kfree(new_iw);
+		return -ENODEV;
+	}
+
+	old_iw = rcu_dereference_protected(iw_table,
+					   lockdep_is_held(&iw_table_lock));
+
+	reduce_interleave_weights(bw, new_iw);
+	rcu_assign_pointer(iw_table, new_iw);
+	mutex_unlock(&iw_table_lock);
+
+	synchronize_rcu();
+	kfree(old_iw);
+
+	weighted_interleave_auto = true;
+	return count;
+}
+
+static struct kobj_attribute wi_attr =
+	__ATTR(mode, 0664, weighted_interleave_mode_show,
+			   weighted_interleave_mode_store);
 
 static void sysfs_wi_node_release(struct iw_node_attr *node_attr,
 				  struct kobject *parent)
@@ -3448,6 +3595,7 @@ static void sysfs_wi_release(struct kobject *wi_kobj)
 
 	for (i = 0; i < nr_node_ids; i++)
 		sysfs_wi_node_release(node_attrs[i], wi_kobj);
+
 	kobject_put(wi_kobj);
 }
 
@@ -3489,6 +3637,15 @@ static int add_weight_node(int nid, struct kobject *wi_kobj)
 	return 0;
 }
 
+static struct attribute *wi_default_attrs[] = {
+	&wi_attr.attr,
+	NULL
+};
+
+static const struct attribute_group wi_attr_group = {
+	.attrs = wi_default_attrs,
+};
+
 static int add_weighted_interleave_group(struct kobject *root_kobj)
 {
 	struct kobject *wi_kobj;
@@ -3502,6 +3659,13 @@ static int add_weighted_interleave_group(struct kobject *root_kobj)
 				   "weighted_interleave");
 	if (err) {
 		kfree(wi_kobj);
+		return err;
+	}
+
+	err = sysfs_create_group(wi_kobj, &wi_attr_group);
+	if (err) {
+		pr_err("failed to add sysfs [mode]\n");
+		kobject_put(wi_kobj);
 		return err;
 	}
 

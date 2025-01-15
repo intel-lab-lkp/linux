@@ -20,6 +20,30 @@ Description:	Weight configuration interface for nodeN
 		Minimum weight: 1
 		Maximum weight: 255
 
-		Writing an empty string or `0` will reset the weight to the
-		system default. The system default may be set by the kernel
-		or drivers at boot or during hotplug events.
+		Writing invalid values (i.e. any values not in [1,255],
+		empty string, ...) will return -EINVAL.
+
+What:		/sys/kernel/mm/mempolicy/weighted_interleave/mode
+Date:		January 2025
+Contact:	Linux memory management mailing list <linux-mm@kvack.org>
+Description:	Auto-weighting configuration interface
+
+		Configuration modes for weighted interleave. Can take one of
+		two options: "manual" and "auto". Default is "auto".
+
+		In auto mode, all node weights are re-calculated and overwritten
+		(visible via the nodeN interfaces) whenever new bandwidth data
+		is made available either during boot or hotplug events.
+
+		In manual mode, node weights can only be updated by the user.
+		If a node is hotplugged while the user is in manual mode,
+		the node will have a default weight of 1.
+
+		Modes can be changed by writing either "auto" or "manual" to the
+		interface. All other strings will be ignored, and -EINVAL will
+		be returned. If "auto" is written to the interface but the
+		recalculation / updates fail at any point (-ENOMEM or -ENODEV)
+		then the mode will remain in manual mode.
+
+		Writing a new weight to a node directly via the nodeN interface
+		will also automatically update the system to manual mode.
