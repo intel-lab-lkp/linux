@@ -382,6 +382,9 @@ static void __lru_cache_activate_folio(struct folio *folio)
 
 static void lru_gen_inc_refs(struct folio *folio)
 {
+	struct mem_cgroup *memcg;
+	struct lruvec *lruvec;
+	int gen;
 	unsigned long new_flags, old_flags = READ_ONCE(folio->flags);
 
 	if (folio_test_unevictable(folio))
@@ -395,13 +398,29 @@ static void lru_gen_inc_refs(struct folio *folio)
 
 	do {
 		if ((old_flags & LRU_REFS_MASK) == LRU_REFS_MASK) {
-			if (!folio_test_workingset(folio))
+			if (!folio_test_workingset(folio)) {
 				folio_set_workingset(folio);
-			return;
+				return;
+			}
+			goto promo_candid;
 		}
 
 		new_flags = old_flags + BIT(LRU_REFS_PGOFF);
 	} while (!try_cmpxchg(&folio->flags, &old_flags, new_flags));
+
+promo_candid:
+	if (!folio_test_isolated(folio) &&
+		(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
+		numa_pagecache_promotion_enabled) {
+		memcg = folio_memcg(folio);
+		if (memcg) {
+			lruvec = mem_cgroup_lruvec(memcg, folio_pgdat(folio));
+			gen = folio_lru_gen(folio);
+
+			if ((gen < MAX_NR_GENS) && lru_gen_is_active(lruvec, gen))
+				promotion_candidate(folio);
+		}
+	}
 }
 
 static bool lru_gen_clear_refs(struct folio *folio)
