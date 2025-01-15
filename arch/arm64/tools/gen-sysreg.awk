@@ -127,7 +127,7 @@ END {
 	next
 }
 
-/^EndSysregFields/ && block_current() == "SysregFields" {
+/^EndSysregFields$/ && block_current() == "SysregFields" {
 	if (next_bit > 0)
 		fatal("Unspecified bits in " reg)
 
@@ -177,7 +177,7 @@ END {
 	next
 }
 
-/^EndSysreg/ && block_current() == "Sysreg" {
+/^EndSysreg$/ && block_current() == "Sysreg" {
 	if (next_bit > 0)
 		fatal("Unspecified bits in " reg)
 
@@ -310,7 +310,7 @@ END {
 	next
 }
 
-/^EndEnum/ && block_current() == "Enum" {
+/^EndEnum$/ && block_current() == "Enum" {
 
 	field = null
 	msb = null
