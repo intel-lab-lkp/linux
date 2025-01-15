@@ -3064,11 +3064,6 @@ void blk_mq_submit_bio(struct bio *bio)
 	blk_status_t ret;
 
 	/*
-	 * If the plug has a cached request for this queue, try to use it.
-	 */
-	rq = blk_mq_peek_cached_request(plug, q, bio->bi_opf);
-
-	/*
 	 * A BIO that was released from a zone write plug has already been
 	 * through the preparation in this function, already holds a reference
 	 * on the queue usage counter, and is the only write BIO in-flight for
@@ -3076,21 +3071,13 @@ void blk_mq_submit_bio(struct bio *bio)
 	 */
 	if (bio_zone_write_plugging(bio)) {
 		nr_segs = bio->__bi_nr_segments;
-		if (rq)
-			blk_queue_exit(q);
 		goto new_request;
 	}
 
 	bio = blk_queue_bounce(bio, q);
 
-	/*
-	 * The cached request already holds a q_usage_counter reference and we
-	 * don't have to acquire a new one if we use it.
-	 */
-	if (!rq) {
-		if (unlikely(bio_queue_enter(bio)))
-			return;
-	}
+	if (unlikely(bio_queue_enter(bio)))
+		return;
 
 	/*
 	 * Device reconfiguration may change logical block size or reduce the
@@ -3122,8 +3109,15 @@ void blk_mq_submit_bio(struct bio *bio)
 		goto queue_exit;
 
 new_request:
+	rq = blk_mq_peek_cached_request(plug, q, bio->bi_opf);
 	if (rq) {
 		blk_mq_use_cached_rq(rq, plug, bio);
+		/*
+		 * Here we hold two references: one because of the
+		 * bio_queue_enter() call and a second one as the result of
+		 * request allocation. Drop one.
+		 */
+		blk_queue_exit(q);
 	} else {
 		rq = blk_mq_get_new_requests(q, plug, bio, nr_segs);
 		if (unlikely(!rq)) {
@@ -3169,12 +3163,7 @@ new_request:
 	return;
 
 queue_exit:
-	/*
-	 * Don't drop the queue reference if we were trying to use a cached
-	 * request and thus didn't acquire one.
-	 */
-	if (!rq)
-		blk_queue_exit(q);
+	blk_queue_exit(q);
 }
 
 #ifdef CONFIG_BLK_MQ_STACKING
