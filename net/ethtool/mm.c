@@ -214,8 +214,8 @@ static int ethnl_set_mm(struct ethnl_req_info *req_info, struct genl_info *info)
 		return -ERANGE;
 	}
 
-	if (cfg.verify_enabled && !cfg.tx_enabled) {
-		NL_SET_ERR_MSG(extack, "Verification requires TX enabled");
+	if (cfg.verify_enabled && !cfg.pmac_enabled) {
+		NL_SET_ERR_MSG(extack, "Verify enabled requires pMAC enabled");
 		return -EINVAL;
 	}
 
