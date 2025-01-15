@@ -334,3 +334,5 @@ aest_set_name(struct aest_device *adev, struct aest_hnode *ahnode)
 }
 
 void aest_dev_init_debugfs(struct aest_device *adev);
+void aest_inject_init_debugfs(struct aest_node *node);
+void aest_proc_record(struct aest_record *record, void *data);

@@ -96,3 +96,20 @@ KernelVersion	6.10
 Contact:	Ruidong Tian <tianruidong@linux.alibaba.com>
 Description:
 		(RO) Outputs error statistics for all this records.
+
+What:		/sys/devices/platform/AEST.<UID>/<Nome_name>/inject/err_*
+Date:		June 2024
+KernelVersion	6.10
+Contact:	Ruidong Tian <tianruidong@linux.alibaba.com>
+Description:
+		(RW) Write any integer to this file to trigger the error
+		injection. Make sure you have specified all necessary error
+		parameters, i.e. this write should be the last step when
+		injecting errors.
+
+		Accepts values -  -1 or n ( 0 <= n < <record_count>).
+		-1 : If you write -1, make sure you specified all err_* file,
+		     driver will use these err_* value to proce AEST error.
+		n : Driver will read record<n> of this error node to collect
+		    error register value, and use these values to proce AEST
+		    error.
