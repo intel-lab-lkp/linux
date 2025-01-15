@@ -196,6 +196,17 @@ struct ism_sba {
 	u16 dmbe_mask[ISM_NR_DMBS];
 };
 
+struct ismvp_dev {
+	struct ism_dev ism;
+	struct ism_sba *sba;
+	dma_addr_t sba_dma_addr;
+	DECLARE_BITMAP(sba_bitmap, ISM_NR_DMBS);
+
+	struct ism_eq *ieq;
+	dma_addr_t ieq_dma_addr;
+	int ieq_idx;
+};
+
 #define ISM_CREATE_REQ(dmb, idx, sf, offset)		\
 	((dmb) | (idx) << 24 | (sf) << 23 | (offset))
 

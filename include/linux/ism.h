@@ -281,24 +281,18 @@ struct ism_ops {
 
 struct ism_dev {
 	const struct ism_ops *ops;
-	spinlock_t lock; /* protects the ism device */
 	struct list_head list;
-	struct pci_dev *pdev;
-
-	struct ism_sba *sba;
-	dma_addr_t sba_dma_addr;
-	DECLARE_BITMAP(sba_bitmap, ISM_NR_DMBS);
-	u8 *sba_client_arr;	/* entries are indices into 'clients' array */
-	void *priv[MAX_CLIENTS];
-
-	struct ism_eq *ieq;
-	dma_addr_t ieq_dma_addr;
-
 	struct device dev;
 	uuid_t gid;
-	int ieq_idx;
 
+	/* get this lock before accessing any of the fields below */
+	spinlock_t lock;
+	/* indexed by dmb idx; entries are indices into priv and subs arrays: */
+	u8 *sba_client_arr;
+	/* Sparse array of all ISM clients */
 	struct ism_client *subs[MAX_CLIENTS];
+	/* priv pointer per client; for client usage only */
+	void *priv[MAX_CLIENTS];
 };
 
 int ism_dev_register(struct ism_dev *ism);
