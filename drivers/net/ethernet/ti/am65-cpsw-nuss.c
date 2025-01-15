@@ -2155,6 +2155,7 @@ static void am65_cpsw_nuss_mac_link_down(struct phylink_config *config, unsigned
 	cpsw_sl_ctl_clr(port->slave.mac_sl, mac_control);
 
 	am65_cpsw_qos_link_down(ndev);
+	netif_carrier_off(ndev);
 	netif_tx_stop_all_queues(ndev);
 }
 
@@ -2196,7 +2197,9 @@ static void am65_cpsw_nuss_mac_link_up(struct phylink_config *config, struct phy
 	cpsw_ale_control_set(common->ale, port->port_id, ALE_PORT_STATE, ALE_PORT_STATE_FORWARD);
 
 	am65_cpsw_qos_link_up(ndev, speed);
-	netif_tx_wake_all_queues(ndev);
+	netif_carrier_on(ndev);
+	if (netif_running(ndev))
+		netif_tx_wake_all_queues(ndev);
 }
 
 static const struct phylink_mac_ops am65_cpsw_phylink_mac_ops = {
