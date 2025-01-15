@@ -692,13 +692,13 @@ void drm_atomic_bridge_chain_post_disable(struct drm_bridge *bridge,
 EXPORT_SYMBOL(drm_atomic_bridge_chain_post_disable);
 
 static void drm_atomic_bridge_call_pre_enable(struct drm_bridge *bridge,
-					      struct drm_atomic_state *old_state)
+					      struct drm_atomic_state *state)
 {
-	if (old_state && bridge->funcs->atomic_pre_enable) {
+	if (state && bridge->funcs->atomic_pre_enable) {
 		struct drm_bridge_state *old_bridge_state;
 
 		old_bridge_state =
-			drm_atomic_get_old_bridge_state(old_state,
+			drm_atomic_get_old_bridge_state(state,
 							bridge);
 		if (WARN_ON(!old_bridge_state))
 			return;
@@ -713,7 +713,7 @@ static void drm_atomic_bridge_call_pre_enable(struct drm_bridge *bridge,
  * drm_atomic_bridge_chain_pre_enable - prepares for enabling all bridges in
  *					the encoder chain
  * @bridge: bridge control structure
- * @old_state: old atomic state
+ * @state: atomic state being committed
  *
  * Calls &drm_bridge_funcs.atomic_pre_enable (falls back on
  * &drm_bridge_funcs.pre_enable) op for all the bridges in the encoder chain,
@@ -733,7 +733,7 @@ static void drm_atomic_bridge_call_pre_enable(struct drm_bridge *bridge,
  * Note: the bridge passed should be the one closest to the encoder
  */
 void drm_atomic_bridge_chain_pre_enable(struct drm_bridge *bridge,
-					struct drm_atomic_state *old_state)
+					struct drm_atomic_state *state)
 {
 	struct drm_encoder *encoder;
 	struct drm_bridge *iter, *next, *limit;
@@ -772,11 +772,11 @@ void drm_atomic_bridge_chain_pre_enable(struct drm_bridge *bridge,
 					 */
 					break;
 
-				drm_atomic_bridge_call_pre_enable(next, old_state);
+				drm_atomic_bridge_call_pre_enable(next, state);
 			}
 		}
 
-		drm_atomic_bridge_call_pre_enable(iter, old_state);
+		drm_atomic_bridge_call_pre_enable(iter, state);
 
 		if (iter->pre_enable_prev_first)
 			/* Jump all bridges that we have already pre_enabled */
