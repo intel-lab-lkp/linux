@@ -55,4 +55,39 @@ $MOD_TARGET: speaker_welcome: Hello, World!
 % rmmod $MOD_TARGET
 $MOD_TARGET: ${MOD_TARGET}_exit"
 
+# Test failure of the "pre_patch" state callback.
+#
+# The livepatch should not get loaded. The test module should
+# should stay unpatched which is checked by reading the "welcome"
+# parameter.
+
+start_test "failing pre_patch callback with -ENODEV"
+
+load_mod $MOD_TARGET
+read_module_param $MOD_TARGET welcome
+
+load_failing_mod $MOD_LIVEPATCH applause=1 pre_patch_ret=-19
+read_module_param $MOD_TARGET welcome
+
+unload_mod $MOD_TARGET
+
+check_result "% insmod test_modules/$MOD_TARGET.ko
+$MOD_TARGET: ${MOD_TARGET}_init
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% insmod test_modules/$MOD_LIVEPATCH.ko applause=1 pre_patch_ret=-19
+livepatch: enabling patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': initializing patching transition
+$MOD_LIVEPATCH: applause_pre_patch_callback: state 10
+$MOD_LIVEPATCH: applause_pre_patch_callback: forcing err: -ENODEV
+livepatch: failed to enable patch '$MOD_LIVEPATCH'
+livepatch: '$MOD_LIVEPATCH': canceling patching transition, going to unpatch
+livepatch: '$MOD_LIVEPATCH': completing unpatching transition
+livepatch: '$MOD_LIVEPATCH': unpatching complete
+insmod: ERROR: could not insert module test_modules/$MOD_LIVEPATCH.ko: No such device
+% cat $SYSFS_MODULE_DIR/$MOD_TARGET/parameters/welcome
+$MOD_TARGET: speaker_welcome: Hello, World!
+% rmmod $MOD_TARGET
+$MOD_TARGET: ${MOD_TARGET}_exit"
+
 exit 0

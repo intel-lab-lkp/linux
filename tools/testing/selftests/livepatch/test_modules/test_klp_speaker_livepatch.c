@@ -31,6 +31,10 @@ static bool add_applause;
 module_param_named(applause, add_applause, bool, 0400);
 MODULE_PARM_DESC(applause, "Use shadow variable to add applause (default=false)");
 
+static int pre_patch_ret;
+module_param(pre_patch_ret, int, 0400);
+MODULE_PARM_DESC(pre_patch_ret, "Allow to force failure for the pre_patch callback (default=0)");
+
 static void __lp_speaker_welcome(const char *caller_func, const char *speaker_id)
 {
 	char entire_applause[APPLAUSE_STR_SIZE + 1] = "";
@@ -123,6 +127,12 @@ static void check_applause(unsigned long id)
 static int applause_pre_patch_callback(struct klp_patch *patch, struct klp_state *state)
 {
 	pr_info("%s: state %lu\n", __func__, state->id);
+
+	if (pre_patch_ret) {
+		pr_err("%s: forcing err: %pe\n", __func__, ERR_PTR(pre_patch_ret));
+		return pre_patch_ret;
+	}
+
 	return allocate_applause(state->id);
 }
 
