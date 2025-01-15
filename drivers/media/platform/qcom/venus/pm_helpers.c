@@ -406,55 +406,16 @@ static const struct venus_pm_ops pm_ops_v3 = {
 	.load_scale = load_scale_v1,
 };
 
-static int vcodec_control_v4(struct venus_core *core, u32 coreid, bool enable)
-{
-	void __iomem *ctrl, *stat;
-	u32 val;
-	int ret;
-
-	if (IS_V6(core) || IS_V4(core))
-		return dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[coreid], !enable);
-	else if (coreid == VIDC_CORE_ID_1) {
-		ctrl = core->wrapper_base + WRAPPER_VCODEC0_MMCC_POWER_CONTROL;
-		stat = core->wrapper_base + WRAPPER_VCODEC0_MMCC_POWER_STATUS;
-	} else {
-		ctrl = core->wrapper_base + WRAPPER_VCODEC1_MMCC_POWER_CONTROL;
-		stat = core->wrapper_base + WRAPPER_VCODEC1_MMCC_POWER_STATUS;
-	}
-
-	if (enable) {
-		writel(0, ctrl);
-
-		ret = readl_poll_timeout(stat, val, val & BIT(1), 1, 100);
-		if (ret)
-			return ret;
-	} else {
-		writel(1, ctrl);
-
-		ret = readl_poll_timeout(stat, val, !(val & BIT(1)), 1, 100);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
 static int poweroff_coreid(struct venus_core *core, unsigned int coreid_mask)
 {
 	int ret;
 
 	if (coreid_mask & VIDC_CORE_ID_1) {
-		ret = vcodec_control_v4(core, VIDC_CORE_ID_1, true);
+		ret = dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_1], false);
 		if (ret)
 			return ret;
 
 		vcodec_clks_disable(core, core->vcodec0_clks);
-
-		if (!IS_V6(core) && !IS_V4(core)) {
-			ret = vcodec_control_v4(core, VIDC_CORE_ID_1, false);
-			if (ret)
-				return ret;
-		}
 
 		ret = pm_runtime_put_sync(core->pmdomains->pd_devs[1]);
 		if (ret < 0)
@@ -462,17 +423,11 @@ static int poweroff_coreid(struct venus_core *core, unsigned int coreid_mask)
 	}
 
 	if (coreid_mask & VIDC_CORE_ID_2) {
-		ret = vcodec_control_v4(core, VIDC_CORE_ID_2, true);
+		ret = dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_2], false);
 		if (ret)
 			return ret;
 
 		vcodec_clks_disable(core, core->vcodec1_clks);
-
-		if (!IS_V6(core) && !IS_V4(core)) {
-			ret = vcodec_control_v4(core, VIDC_CORE_ID_2, false);
-			if (ret)
-				return ret;
-		}
 
 		ret = pm_runtime_put_sync(core->pmdomains->pd_devs[2]);
 		if (ret < 0)
@@ -491,17 +446,11 @@ static int poweron_coreid(struct venus_core *core, unsigned int coreid_mask)
 		if (ret < 0)
 			return ret;
 
-		if (!IS_V6(core) && !IS_V4(core)) {
-			ret = vcodec_control_v4(core, VIDC_CORE_ID_1, true);
-			if (ret)
-				return ret;
-		}
-
 		ret = vcodec_clks_enable(core, core->vcodec0_clks);
 		if (ret)
 			return ret;
 
-		ret = vcodec_control_v4(core, VIDC_CORE_ID_1, false);
+		ret = dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_1], true);
 		if (ret < 0)
 			return ret;
 	}
@@ -511,17 +460,11 @@ static int poweron_coreid(struct venus_core *core, unsigned int coreid_mask)
 		if (ret < 0)
 			return ret;
 
-		if (!IS_V6(core) && !IS_V4(core)) {
-			ret = vcodec_control_v4(core, VIDC_CORE_ID_2, true);
-			if (ret)
-				return ret;
-		}
-
 		ret = vcodec_clks_enable(core, core->vcodec1_clks);
 		if (ret)
 			return ret;
 
-		ret = vcodec_control_v4(core, VIDC_CORE_ID_2, false);
+		ret = dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_2], true);
 		if (ret < 0)
 			return ret;
 	}
@@ -802,7 +745,7 @@ static int vdec_power_v4(struct device *dev, int on)
 	if (!legacy_binding)
 		return 0;
 
-	ret = vcodec_control_v4(core, VIDC_CORE_ID_1, true);
+	ret = dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_1], false);
 	if (ret)
 		return ret;
 
@@ -811,7 +754,7 @@ static int vdec_power_v4(struct device *dev, int on)
 	else
 		vcodec_clks_disable(core, core->vcodec0_clks);
 
-	vcodec_control_v4(core, VIDC_CORE_ID_1, false);
+	dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_1], true);
 
 	return ret;
 }
@@ -847,7 +790,7 @@ static int venc_power_v4(struct device *dev, int on)
 	if (!legacy_binding)
 		return 0;
 
-	ret = vcodec_control_v4(core, VIDC_CORE_ID_2, true);
+	ret = dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_2], false);
 	if (ret)
 		return ret;
 
@@ -856,7 +799,7 @@ static int venc_power_v4(struct device *dev, int on)
 	else
 		vcodec_clks_disable(core, core->vcodec1_clks);
 
-	vcodec_control_v4(core, VIDC_CORE_ID_2, false);
+	dev_pm_genpd_set_hwmode(core->pmdomains->pd_devs[VIDC_CORE_ID_2], true);
 
 	return ret;
 }
