@@ -207,7 +207,7 @@ out:
 
 int smc_ism_unregister_dmb(struct smcd_dev *smcd, struct smc_buf_desc *dmb_desc)
 {
-	struct smcd_dmb dmb;
+	struct ism_dmb dmb;
 	int rc = 0;
 
 	if (!dmb_desc->dma_addr)
@@ -231,7 +231,7 @@ int smc_ism_unregister_dmb(struct smcd_dev *smcd, struct smc_buf_desc *dmb_desc)
 int smc_ism_register_dmb(struct smc_link_group *lgr, int dmb_len,
 			 struct smc_buf_desc *dmb_desc)
 {
-	struct smcd_dmb dmb;
+	struct ism_dmb dmb;
 	int rc;
 
 	memset(&dmb, 0, sizeof(dmb));
@@ -263,7 +263,7 @@ bool smc_ism_support_dmb_nocopy(struct smcd_dev *smcd)
 int smc_ism_attach_dmb(struct smcd_dev *dev, u64 token,
 		       struct smc_buf_desc *dmb_desc)
 {
-	struct smcd_dmb dmb;
+	struct ism_dmb dmb;
 	int rc = 0;
 
 	if (!dev->ops->attach_dmb)
@@ -481,9 +481,122 @@ static struct smcd_dev *smcd_alloc_dev(struct device *parent, const char *name,
 	return smcd;
 }
 
+static int smcd_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
+			   u32 vid_valid, u32 vid)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->query_remote_gid(ism, rgid, vid_valid, vid);
+}
+
+static int smcd_register_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb,
+			     void *client)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->register_dmb(ism, dmb, (struct ism_client *)client);
+}
+
+static int smcd_unregister_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->unregister_dmb(ism, dmb);
+}
+
+static int smcd_add_vlan_id(struct smcd_dev *smcd, u64 vlan_id)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->add_vlan_id(ism, vlan_id);
+}
+
+static int smcd_del_vlan_id(struct smcd_dev *smcd, u64 vlan_id)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->del_vlan_id(ism, vlan_id);
+}
+
+static int smcd_set_vlan_required(struct smcd_dev *smcd)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->set_vlan_required(ism);
+}
+
+static int smcd_reset_vlan_required(struct smcd_dev *smcd)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->reset_vlan_required(ism);
+}
+
+static int smcd_signal_ieq(struct smcd_dev *smcd, struct smcd_gid *rgid,
+			   u32 trigger_irq, u32 event_code, u64 info)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->signal_event(ism, rgid,
+			      trigger_irq, event_code, info);
+}
+
+static int smcd_move(struct smcd_dev *smcd, u64 dmb_tok, unsigned int idx,
+		     bool sf, unsigned int offset, void *data,
+		     unsigned int size)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->move_data(ism, dmb_tok, idx, sf, offset, data, size);
+}
+
+static int smcd_supports_v2(void)
+{
+	return smc_ism_v2_capable;
+}
+
+static void smcd_get_local_gid(struct smcd_dev *smcd,
+			       struct smcd_gid *smcd_gid)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	smcd_gid->gid = ism->gid.gid;
+	smcd_gid->gid_ext = ism->gid.gid_ext;
+}
+
+static u16 smcd_get_chid(struct smcd_dev *smcd)
+{
+	struct ism_dev *ism = smcd->priv;
+
+	return ism->ops->get_chid(ism);
+}
+
+static inline struct device *smcd_get_dev(struct smcd_dev *dev)
+{
+	struct ism_dev *ism = dev->priv;
+
+	return &ism->dev;
+}
+
+static const struct smcd_ops ism_smcd_ops = {
+	.query_remote_gid = smcd_query_rgid,
+	.register_dmb = smcd_register_dmb,
+	.unregister_dmb = smcd_unregister_dmb,
+	.add_vlan_id = smcd_add_vlan_id,
+	.del_vlan_id = smcd_del_vlan_id,
+	.set_vlan_required = smcd_set_vlan_required,
+	.reset_vlan_required = smcd_reset_vlan_required,
+	.signal_event = smcd_signal_ieq,
+	.move_data = smcd_move,
+	.supports_v2 = smcd_supports_v2,
+	.get_local_gid = smcd_get_local_gid,
+	.get_chid = smcd_get_chid,
+	.get_dev = smcd_get_dev,
+};
+
 static void smcd_register_dev(struct ism_dev *ism)
 {
-	const struct smcd_ops *ops = ism_get_smcd_ops();
+	const struct smcd_ops *ops = &ism_smcd_ops;
 	struct smcd_dev *smcd, *fentry;
 
 	if (!ops)
@@ -499,7 +612,7 @@ static void smcd_register_dev(struct ism_dev *ism)
 	if (smc_pnetid_by_dev_port(&ism->pdev->dev, 0, smcd->pnetid))
 		smc_pnetid_by_table_smcd(smcd);
 
-	if (smcd->ops->supports_v2())
+	if (ism->ops->supports_v2())
 		smc_ism_set_v2_capable();
 	mutex_lock(&smcd_dev_list.mutex);
 	/* sort list:

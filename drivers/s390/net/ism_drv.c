@@ -191,9 +191,26 @@ static int ism_read_local_gid(struct ism_dev *ism)
 	if (ret)
 		goto out;
 
-	ism->local_gid = cmd.response.gid;
+	ism->gid.gid = cmd.response.gid;
+	ism->gid.gid_ext = 0;
 out:
 	return ret;
+}
+
+static int ism_query_rgid(struct ism_dev *ism, struct smcd_gid *rgid,
+			  u32 vid_valid, u32 vid)
+{
+	union ism_query_rgid cmd;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.request.hdr.cmd = ISM_QUERY_RGID;
+	cmd.request.hdr.len = sizeof(cmd.request);
+
+	cmd.request.rgid = rgid->gid;
+	cmd.request.vlan_valid = vid_valid;
+	cmd.request.vlan_id = vid;
+
+	return ism_cmd(ism, &cmd);
 }
 
 static void ism_free_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
@@ -251,8 +268,8 @@ out_bit:
 	return rc;
 }
 
-int ism_register_dmb(struct ism_dev *ism, struct ism_dmb *dmb,
-		     struct ism_client *client)
+static int ism_register_dmb(struct ism_dev *ism, struct ism_dmb *dmb,
+			    struct ism_client *client)
 {
 	union ism_reg_dmb cmd;
 	unsigned long flags;
@@ -285,9 +302,8 @@ int ism_register_dmb(struct ism_dev *ism, struct ism_dmb *dmb,
 out:
 	return ret;
 }
-EXPORT_SYMBOL_GPL(ism_register_dmb);
 
-int ism_unregister_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
+static int ism_unregister_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
 {
 	union ism_unreg_dmb cmd;
 	unsigned long flags;
@@ -311,7 +327,6 @@ int ism_unregister_dmb(struct ism_dev *ism, struct ism_dmb *dmb)
 out:
 	return ret;
 }
-EXPORT_SYMBOL_GPL(ism_unregister_dmb);
 
 static int ism_add_vlan_id(struct ism_dev *ism, u64 vlan_id)
 {
@@ -339,14 +354,42 @@ static int ism_del_vlan_id(struct ism_dev *ism, u64 vlan_id)
 	return ism_cmd(ism, &cmd);
 }
 
+static int ism_set_vlan_required(struct ism_dev *ism)
+{
+	return ism_cmd_simple(ism, ISM_SET_VLAN);
+}
+
+static int ism_reset_vlan_required(struct ism_dev *ism)
+{
+	return ism_cmd_simple(ism, ISM_RESET_VLAN);
+}
+
+static int ism_signal_ieq(struct ism_dev *ism, struct smcd_gid *rgid,
+			  u32 trigger_irq, u32 event_code, u64 info)
+{
+	union ism_sig_ieq cmd;
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.request.hdr.cmd = ISM_SIGNAL_IEQ;
+	cmd.request.hdr.len = sizeof(cmd.request);
+
+	cmd.request.rgid = rgid->gid;
+	cmd.request.trigger_irq = trigger_irq;
+	cmd.request.event_code = event_code;
+	cmd.request.info = info;
+
+	return ism_cmd(ism, &cmd);
+}
+
 static unsigned int max_bytes(unsigned int start, unsigned int len,
 			      unsigned int boundary)
 {
 	return min(boundary - (start & (boundary - 1)), len);
 }
 
-int ism_move(struct ism_dev *ism, u64 dmb_tok, unsigned int idx, bool sf,
-	     unsigned int offset, void *data, unsigned int size)
+static int ism_move(struct ism_dev *ism, u64 dmb_tok, unsigned int idx,
+		    bool sf, unsigned int offset, void *data,
+		    unsigned int size)
 {
 	unsigned int bytes;
 	u64 dmb_req;
@@ -368,7 +411,19 @@ int ism_move(struct ism_dev *ism, u64 dmb_tok, unsigned int idx, bool sf,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(ism_move);
+
+static int ism_supports_v2(void)
+{
+	return ism_v2_capable;
+}
+
+static u16 ism_get_chid(struct ism_dev *ism)
+{
+	if (!ism || !ism->pdev)
+		return 0;
+
+	return to_zpci(ism->pdev)->pchid;
+}
 
 static void ism_handle_event(struct ism_dev *ism)
 {
@@ -428,6 +483,20 @@ static irqreturn_t ism_handle_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static const struct ism_ops ism_vp_ops = {
+	.query_remote_gid = ism_query_rgid,
+	.register_dmb = ism_register_dmb,
+	.unregister_dmb = ism_unregister_dmb,
+	.add_vlan_id = ism_add_vlan_id,
+	.del_vlan_id = ism_del_vlan_id,
+	.set_vlan_required = ism_set_vlan_required,
+	.reset_vlan_required = ism_reset_vlan_required,
+	.signal_event = ism_signal_ieq,
+	.move_data = ism_move,
+	.supports_v2 = ism_supports_v2,
+	.get_chid = ism_get_chid,
+};
+
 static int ism_dev_init(struct ism_dev *ism)
 {
 	struct pci_dev *pdev = ism->pdev;
@@ -464,6 +533,8 @@ static int ism_dev_init(struct ism_dev *ism)
 		ism_v2_capable = true;
 	else
 		ism_v2_capable = false;
+
+	ism->ops = &ism_vp_ops;
 
 	ism_dev_register(ism);
 	query_info(ism);
@@ -603,150 +674,3 @@ static void __exit ism_exit(void)
 
 module_init(ism_init);
 module_exit(ism_exit);
-
-/*************************** SMC-D Implementation *****************************/
-
-#if IS_ENABLED(CONFIG_SMC) // needed to avoid unused functions
-static int ism_query_rgid(struct ism_dev *ism, u64 rgid, u32 vid_valid,
-			  u32 vid)
-{
-	union ism_query_rgid cmd;
-
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.request.hdr.cmd = ISM_QUERY_RGID;
-	cmd.request.hdr.len = sizeof(cmd.request);
-
-	cmd.request.rgid = rgid;
-	cmd.request.vlan_valid = vid_valid;
-	cmd.request.vlan_id = vid;
-
-	return ism_cmd(ism, &cmd);
-}
-
-static int smcd_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
-			   u32 vid_valid, u32 vid)
-{
-	return ism_query_rgid(smcd->priv, rgid->gid, vid_valid, vid);
-}
-
-static int smcd_register_dmb(struct smcd_dev *smcd, struct smcd_dmb *dmb,
-			     void *client)
-{
-	return ism_register_dmb(smcd->priv, (struct ism_dmb *)dmb, client);
-}
-
-static int smcd_unregister_dmb(struct smcd_dev *smcd, struct smcd_dmb *dmb)
-{
-	return ism_unregister_dmb(smcd->priv, (struct ism_dmb *)dmb);
-}
-
-static int smcd_add_vlan_id(struct smcd_dev *smcd, u64 vlan_id)
-{
-	return ism_add_vlan_id(smcd->priv, vlan_id);
-}
-
-static int smcd_del_vlan_id(struct smcd_dev *smcd, u64 vlan_id)
-{
-	return ism_del_vlan_id(smcd->priv, vlan_id);
-}
-
-static int smcd_set_vlan_required(struct smcd_dev *smcd)
-{
-	return ism_cmd_simple(smcd->priv, ISM_SET_VLAN);
-}
-
-static int smcd_reset_vlan_required(struct smcd_dev *smcd)
-{
-	return ism_cmd_simple(smcd->priv, ISM_RESET_VLAN);
-}
-
-static int ism_signal_ieq(struct ism_dev *ism, u64 rgid, u32 trigger_irq,
-			  u32 event_code, u64 info)
-{
-	union ism_sig_ieq cmd;
-
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.request.hdr.cmd = ISM_SIGNAL_IEQ;
-	cmd.request.hdr.len = sizeof(cmd.request);
-
-	cmd.request.rgid = rgid;
-	cmd.request.trigger_irq = trigger_irq;
-	cmd.request.event_code = event_code;
-	cmd.request.info = info;
-
-	return ism_cmd(ism, &cmd);
-}
-
-static int smcd_signal_ieq(struct smcd_dev *smcd, struct smcd_gid *rgid,
-			   u32 trigger_irq, u32 event_code, u64 info)
-{
-	return ism_signal_ieq(smcd->priv, rgid->gid,
-			      trigger_irq, event_code, info);
-}
-
-static int smcd_move(struct smcd_dev *smcd, u64 dmb_tok, unsigned int idx,
-		     bool sf, unsigned int offset, void *data,
-		     unsigned int size)
-{
-	return ism_move(smcd->priv, dmb_tok, idx, sf, offset, data, size);
-}
-
-static int smcd_supports_v2(void)
-{
-	return ism_v2_capable;
-}
-
-static u64 ism_get_local_gid(struct ism_dev *ism)
-{
-	return ism->local_gid;
-}
-
-static void smcd_get_local_gid(struct smcd_dev *smcd,
-			       struct smcd_gid *smcd_gid)
-{
-	smcd_gid->gid = ism_get_local_gid(smcd->priv);
-	smcd_gid->gid_ext = 0;
-}
-
-static u16 ism_get_chid(struct ism_dev *ism)
-{
-	if (!ism || !ism->pdev)
-		return 0;
-
-	return to_zpci(ism->pdev)->pchid;
-}
-
-static u16 smcd_get_chid(struct smcd_dev *smcd)
-{
-	return ism_get_chid(smcd->priv);
-}
-
-static inline struct device *smcd_get_dev(struct smcd_dev *dev)
-{
-	struct ism_dev *ism = dev->priv;
-
-	return &ism->dev;
-}
-
-static const struct smcd_ops ism_ops = {
-	.query_remote_gid = smcd_query_rgid,
-	.register_dmb = smcd_register_dmb,
-	.unregister_dmb = smcd_unregister_dmb,
-	.add_vlan_id = smcd_add_vlan_id,
-	.del_vlan_id = smcd_del_vlan_id,
-	.set_vlan_required = smcd_set_vlan_required,
-	.reset_vlan_required = smcd_reset_vlan_required,
-	.signal_event = smcd_signal_ieq,
-	.move_data = smcd_move,
-	.supports_v2 = smcd_supports_v2,
-	.get_local_gid = smcd_get_local_gid,
-	.get_chid = smcd_get_chid,
-	.get_dev = smcd_get_dev,
-};
-
-const struct smcd_ops *ism_get_smcd_ops(void)
-{
-	return &ism_ops;
-}
-EXPORT_SYMBOL_GPL(ism_get_smcd_ops);
-#endif

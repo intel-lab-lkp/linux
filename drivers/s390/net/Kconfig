@@ -103,7 +103,6 @@ config CCWGROUP
 config ISM_VPCI
 	tristate "Support for ISM vPCI Adapter"
 	depends on PCI && ISM
-	imply SMC
 	default y
 	help
 	  Select this option if you want to use the Internal Shared Memory

@@ -51,7 +51,7 @@ static int smc_lo_query_rgid(struct smcd_dev *smcd, struct smcd_gid *rgid,
 	return 0;
 }
 
-static int smc_lo_register_dmb(struct smcd_dev *smcd, struct smcd_dmb *dmb,
+static int smc_lo_register_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb,
 			       void *client_priv)
 {
 	struct smc_lo_dmb_node *dmb_node, *tmp_node;
@@ -129,7 +129,7 @@ static void __smc_lo_unregister_dmb(struct smc_lo_dev *ldev,
 		wake_up(&ldev->ldev_release);
 }
 
-static int smc_lo_unregister_dmb(struct smcd_dev *smcd, struct smcd_dmb *dmb)
+static int smc_lo_unregister_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb)
 {
 	struct smc_lo_dmb_node *dmb_node = NULL, *tmp_node;
 	struct smc_lo_dev *ldev = smcd->priv;
@@ -158,7 +158,7 @@ static int smc_lo_support_dmb_nocopy(struct smcd_dev *smcd)
 	return SMC_LO_SUPPORT_NOCOPY;
 }
 
-static int smc_lo_attach_dmb(struct smcd_dev *smcd, struct smcd_dmb *dmb)
+static int smc_lo_attach_dmb(struct smcd_dev *smcd, struct ism_dmb *dmb)
 {
 	struct smc_lo_dmb_node *dmb_node = NULL, *tmp_node;
 	struct smc_lo_dev *ldev = smcd->priv;
