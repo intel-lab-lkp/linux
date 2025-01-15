@@ -1370,6 +1370,12 @@ void add_timer_on(struct timer_list *timer, int cpu)
 	if (!timer->function)
 		goto out_unlock;
 
+	/*
+	 * WARN if specified cpu is offline, because on offlined cpu
+	 * timer will not fire even after its expiry.
+	 */
+	WARN_ON_ONCE(!cpu_online(cpu));
+
 	if (base != new_base) {
 		timer->flags |= TIMER_MIGRATING;
 
