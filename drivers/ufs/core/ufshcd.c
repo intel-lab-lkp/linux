@@ -5255,6 +5255,13 @@ static int ufshcd_device_configure(struct scsi_device *sdev,
 	struct ufs_hba *hba = shost_priv(sdev->host);
 	struct request_queue *q = sdev->request_queue;
 
+	/*
+	 * With auto-hibernation disabled, the write order is preserved per
+	 * MCQ. Auto-hibernation may cause write reordering that results in
+	 * unaligned write errors. The SCSI core will retry the failed writes.
+	 */
+	lim->driver_preserves_write_order = true;
+
 	lim->dma_pad_mask = PRDT_DATA_BYTE_COUNT_PAD - 1;
 
 	/*
