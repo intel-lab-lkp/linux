@@ -799,6 +799,9 @@ void blk_mq_free_request(struct request *rq)
 	rq_qos_done(q, rq);
 
 	WRITE_ONCE(rq->state, MQ_RQ_IDLE);
+
+	blk_zone_free_request(rq);
+
 	if (req_ref_put_and_test(rq))
 		__blk_mq_free_request(rq);
 }
@@ -1195,6 +1198,9 @@ void blk_mq_end_request_batch(struct io_comp_batch *iob)
 			continue;
 
 		WRITE_ONCE(rq->state, MQ_RQ_IDLE);
+
+		blk_zone_free_request(rq);
+
 		if (!req_ref_put_and_test(rq))
 			continue;
 
@@ -1513,6 +1519,7 @@ static void __blk_mq_requeue_request(struct request *rq)
 	if (blk_mq_request_started(rq)) {
 		WRITE_ONCE(rq->state, MQ_RQ_IDLE);
 		rq->rq_flags &= ~RQF_TIMED_OUT;
+		blk_zone_requeue_work(q);
 	}
 }
 
@@ -1547,6 +1554,8 @@ static void blk_mq_requeue_work(struct work_struct *work)
 	list_splice_init(&q->requeue_list, &rq_list);
 	list_splice_init(&q->flush_list, &flush_list);
 	spin_unlock_irq(&q->requeue_lock);
+
+	blk_zone_requeue_work(q);
 
 	while (!list_empty(&rq_list)) {
 		rq = list_entry(rq_list.next, struct request, queuelist);
