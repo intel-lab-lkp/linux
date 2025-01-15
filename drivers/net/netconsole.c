@@ -97,6 +97,15 @@ struct netconsole_target_stats  {
 	struct u64_stats_sync syncp;
 };
 
+/* Features enabled in sysdata. Contrary to userdata, this data is populated by
+ * the kernel. The fields are designed as bitwise flags, allowing multiple
+ * features to be set in sysdata_fields.
+ */
+enum sysdata_feature {
+	/* Populate the CPU that sends the message */
+	CPU_NR = BIT(0),
+};
+
 /**
  * struct netconsole_target - Represents a configured netconsole target.
  * @list:	Links this target into the target_list.
@@ -104,6 +113,8 @@ struct netconsole_target_stats  {
  * @userdata_group:	Links to the userdata configfs hierarchy
  * @extradata_complete:	Cached, formatted string of append
  * @userdata_length:	String length of usedata in extradata_complete.
+ * @sysdata_length:	String length of sysdata in extradata_complete.
+ * @sysdata_fields:	Sysdata features enabled.
  * @stats:	Packet send stats for the target. Used for debugging.
  * @enabled:	On / off knob to enable / disable target.
  *		Visible from userspace (read-write).
@@ -130,7 +141,9 @@ struct netconsole_target {
 	struct config_group	group;
 	struct config_group	userdata_group;
 	char extradata_complete[MAX_EXTRADATA_ENTRY_LEN * MAX_EXTRADATA_ITEMS];
-	size_t			userdata_length;
+	size_t			userdata_length; /* updated at update_userdata() */
+	size_t			sysdata_length;  /* updated at every message */
+	u32			sysdata_fields;  /* bit-wise with sysdata_feature bits */
 #endif
 	struct netconsole_target_stats stats;
 	bool			enabled;
@@ -394,6 +407,19 @@ static ssize_t transmit_errors_show(struct config_item *item, char *buf)
 	} while (u64_stats_fetch_retry(&nt->stats.syncp, start));
 
 	return sysfs_emit(buf, "%llu\n", xmit_drop_count + enomem_count);
+}
+
+/* configfs helper to display if cpu_nr sysdata feature is enabled */
+static ssize_t sysdata_cpu_nr_show(struct config_item *item, char *buf)
+{
+	struct netconsole_target *nt = to_target(item->ci_parent);
+	bool cpu_nr_enabled;
+
+	mutex_lock(&dynamic_netconsole_mutex);
+	cpu_nr_enabled = nt->sysdata_fields & CPU_NR;
+	mutex_unlock(&dynamic_netconsole_mutex);
+
+	return sysfs_emit(buf, "%d\n", cpu_nr_enabled);
 }
 
 /*
@@ -666,7 +692,15 @@ out_unlock:
  */
 static size_t count_extradata_entries(struct netconsole_target *nt)
 {
-	return list_count_nodes(&nt->userdata_group.cg_children);
+	size_t entries;
+
+	/* Userdata entries */
+	entries = list_count_nodes(&nt->userdata_group.cg_children);
+	/* Plus sysdata entries */
+	if (nt->sysdata_fields & CPU_NR)
+		entries += 1;
+
+	return entries;
 }
 
 static ssize_t remote_mac_store(struct config_item *item, const char *buf,
@@ -790,7 +824,67 @@ out_unlock:
 	return ret;
 }
 
+/* disable_sysdata_feature - Disable sysdata feature and clean sysdata
+ * @nt: target that is diabling the feature
+ * @feature: feature being disabled
+ */
+static void disable_sysdata_feature(struct netconsole_target *nt,
+				    enum sysdata_feature feature)
+{
+	nt->sysdata_fields &= ~feature;
+	nt->sysdata_length = 0;
+	/* extradata_complete might have sysdata appended after
+	 * userdata. Clean everything, and it will be re-appened
+	 * when a new message is sent.
+	 */
+	nt->extradata_complete[nt->userdata_length] = 0;
+}
+
+/* configfs helper to sysdata cpu_nr feature */
+static ssize_t sysdata_cpu_nr_store(struct config_item *item, const char *buf,
+				    size_t count)
+{
+	struct netconsole_target *nt = to_target(item->ci_parent);
+	bool cpu_nr_enabled, curr;
+	ssize_t ret;
+
+	ret = kstrtobool(buf, &cpu_nr_enabled);
+	if (ret)
+		return ret;
+
+	mutex_lock(&dynamic_netconsole_mutex);
+	curr = nt->sysdata_fields & CPU_NR;
+	if (cpu_nr_enabled == curr)
+		/* no change requested */
+		goto unlock_ok;
+
+	if (cpu_nr_enabled &&
+	    count_extradata_entries(nt) >= MAX_EXTRADATA_ITEMS) {
+		/* user wants the new feature, but there is no space in the
+		 * buffer.
+		 */
+		ret = -ENOSPC;
+		goto unlock;
+	}
+
+	if (cpu_nr_enabled)
+		nt->sysdata_fields |= CPU_NR;
+	else
+		/* This is special because extradata_complete might have
+		 * remaining data from previous sysdata, and it needs to be
+		 * cleaned.
+		 */
+		disable_sysdata_feature(nt, CPU_NR);
+
+unlock_ok:
+	ret = strnlen(buf, count);
+unlock:
+	mutex_unlock(&dynamic_netconsole_mutex);
+	return ret;
+}
+
 CONFIGFS_ATTR(userdatum_, value);
+CONFIGFS_ATTR(sysdata_, cpu_nr);
 
 static struct configfs_attribute *userdatum_attrs[] = {
 	&userdatum_attr_value,
@@ -850,6 +944,7 @@ static void userdatum_drop(struct config_group *group, struct config_item *item)
 }
 
 static struct configfs_attribute *userdata_attrs[] = {
+	&sysdata_attr_cpu_nr,
 	NULL,
 };
 
@@ -1023,6 +1118,35 @@ static void populate_configfs_item(struct netconsole_target *nt,
 	snprintf(target_name, sizeof(target_name), "%s%d",
 		 NETCONSOLE_PARAM_TARGET_PREFIX, cmdline_count);
 	init_target_config_group(nt, target_name);
+}
+
+/*
+ * append_runtime_sysdata - append sysdata at extradata_complete in runtime
+ * @nt: target to send message to
+ */
+static void append_runtime_sysdata(struct netconsole_target *nt)
+{
+	size_t userdata_len = nt->userdata_length;
+	size_t sysdata_len;
+
+	if (!(nt->sysdata_fields & CPU_NR))
+		return;
+
+	/* Append cpu=%d at extradata_complete after userdata str */
+	sysdata_len = scnprintf(&nt->extradata_complete[userdata_len],
+				MAX_EXTRADATA_ENTRY_LEN, " cpu=%u\n",
+				raw_smp_processor_id());
+
+	WARN_ON_ONCE(userdata_len + sysdata_len >
+		     MAX_EXTRADATA_ENTRY_LEN * MAX_EXTRADATA_ITEMS);
+
+	/* nt->sysdata_length will be used later to decide if the message
+	 * needs to be fragmented.
+	 * userdata_len cannot be used for it, once next sysdata append should
+	 * start from the same userdata_len location, and only overwrite old
+	 * sysdata.
+	 */
+	nt->sysdata_length = sysdata_len;
 }
 
 #endif	/* CONFIG_NETCONSOLE_DYNAMIC */
@@ -1297,7 +1421,8 @@ static void send_ext_msg_udp(struct netconsole_target *nt, const char *msg,
 	int release_len = 0;
 
 #ifdef CONFIG_NETCONSOLE_DYNAMIC
-	extradata_len = nt->userdata_length;
+	append_runtime_sysdata(nt);
+	extradata_len = nt->userdata_length + nt->sysdata_length;
 #endif
 
 	if (nt->release)
