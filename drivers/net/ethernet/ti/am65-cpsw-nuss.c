@@ -2056,20 +2056,6 @@ static int am65_cpsw_enable_phy(struct phy *phy)
 	return 0;
 }
 
-static void am65_cpsw_disable_serdes_phy(struct am65_cpsw_common *common)
-{
-	struct am65_cpsw_port *port;
-	struct phy *phy;
-	int i;
-
-	for (i = 0; i < common->port_num; i++) {
-		port = &common->ports[i];
-		phy = port->slave.serdes_phy;
-		if (phy)
-			am65_cpsw_disable_phy(phy);
-	}
-}
-
 static int am65_cpsw_init_serdes_phy(struct device *dev, struct device_node *port_np,
 				     struct am65_cpsw_port *port)
 {
@@ -2222,30 +2208,10 @@ static void am65_cpsw_nuss_slave_disable_unused(struct am65_cpsw_port *port)
 	cpsw_sl_ctl_reset(port->slave.mac_sl);
 }
 
-static void am65_cpsw_nuss_free_tx_chns(void *data)
-{
-	struct am65_cpsw_common *common = data;
-	int i;
-
-	for (i = 0; i < common->tx_ch_num; i++) {
-		struct am65_cpsw_tx_chn *tx_chn = &common->tx_chns[i];
-
-		if (!IS_ERR_OR_NULL(tx_chn->desc_pool))
-			k3_cppi_desc_pool_destroy(tx_chn->desc_pool);
-
-		if (!IS_ERR_OR_NULL(tx_chn->tx_chn))
-			k3_udma_glue_release_tx_chn(tx_chn->tx_chn);
-
-		memset(tx_chn, 0, sizeof(*tx_chn));
-	}
-}
-
-static void am65_cpsw_nuss_remove_tx_chns(struct am65_cpsw_common *common)
+static void am65_cpsw_nuss_cleanup_tx_chns(struct am65_cpsw_common *common)
 {
 	struct device *dev = common->dev;
 	int i;
-
-	devm_remove_action(dev, am65_cpsw_nuss_free_tx_chns, common);
 
 	common->tx_ch_rate_msk = 0;
 	for (i = 0; i < common->tx_ch_num; i++) {
@@ -2255,9 +2221,15 @@ static void am65_cpsw_nuss_remove_tx_chns(struct am65_cpsw_common *common)
 			devm_free_irq(dev, tx_chn->irq, tx_chn);
 
 		netif_napi_del(&tx_chn->napi_tx);
-	}
 
-	am65_cpsw_nuss_free_tx_chns(common);
+		if (!IS_ERR_OR_NULL(tx_chn->desc_pool))
+			k3_cppi_desc_pool_destroy(tx_chn->desc_pool);
+
+		if (!IS_ERR_OR_NULL(tx_chn->tx_chn))
+			k3_udma_glue_release_tx_chn(tx_chn->tx_chn);
+
+		memset(tx_chn, 0, sizeof(*tx_chn));
+	}
 }
 
 static int am65_cpsw_nuss_ndev_add_tx_napi(struct am65_cpsw_common *common)
@@ -2360,36 +2332,14 @@ static int am65_cpsw_nuss_init_tx_chns(struct am65_cpsw_common *common)
 	}
 
 	ret = am65_cpsw_nuss_ndev_add_tx_napi(common);
-	if (ret) {
+	if (ret)
 		dev_err(dev, "Failed to add tx NAPI %d\n", ret);
-		goto err;
-	}
 
 err:
-	i = devm_add_action(dev, am65_cpsw_nuss_free_tx_chns, common);
-	if (i) {
-		dev_err(dev, "Failed to add free_tx_chns action %d\n", i);
-		return i;
-	}
-
 	return ret;
 }
 
-static void am65_cpsw_nuss_free_rx_chns(void *data)
-{
-	struct am65_cpsw_common *common = data;
-	struct am65_cpsw_rx_chn *rx_chn;
-
-	rx_chn = &common->rx_chns;
-
-	if (!IS_ERR_OR_NULL(rx_chn->desc_pool))
-		k3_cppi_desc_pool_destroy(rx_chn->desc_pool);
-
-	if (!IS_ERR_OR_NULL(rx_chn->rx_chn))
-		k3_udma_glue_release_rx_chn(rx_chn->rx_chn);
-}
-
-static void am65_cpsw_nuss_remove_rx_chns(struct am65_cpsw_common *common)
+static void am65_cpsw_nuss_cleanup_rx_chns(struct am65_cpsw_common *common)
 {
 	struct device *dev = common->dev;
 	struct am65_cpsw_rx_chn *rx_chn;
@@ -2398,7 +2348,6 @@ static void am65_cpsw_nuss_remove_rx_chns(struct am65_cpsw_common *common)
 
 	rx_chn = &common->rx_chns;
 	flows = rx_chn->flows;
-	devm_remove_action(dev, am65_cpsw_nuss_free_rx_chns, common);
 
 	for (i = 0; i < common->rx_ch_num_flows; i++) {
 		if (!(flows[i].irq < 0))
@@ -2406,7 +2355,11 @@ static void am65_cpsw_nuss_remove_rx_chns(struct am65_cpsw_common *common)
 		netif_napi_del(&flows[i].napi_rx);
 	}
 
-	am65_cpsw_nuss_free_rx_chns(common);
+	if (!IS_ERR_OR_NULL(rx_chn->desc_pool))
+		k3_cppi_desc_pool_destroy(rx_chn->desc_pool);
+
+	if (!IS_ERR_OR_NULL(rx_chn->rx_chn))
+		k3_udma_glue_release_rx_chn(rx_chn->rx_chn);
 
 	common->rx_flow_id_base = -1;
 }
@@ -2535,14 +2488,7 @@ static int am65_cpsw_nuss_init_rx_chns(struct am65_cpsw_common *common)
 
 	/* setup classifier to route priorities to flows */
 	cpsw_ale_classifier_setup_default(common->ale, common->rx_ch_num_flows);
-
 err:
-	i = devm_add_action(dev, am65_cpsw_nuss_free_rx_chns, common);
-	if (i) {
-		dev_err(dev, "Failed to add free_rx_chns action %d\n", i);
-		return i;
-	}
-
 	return ret;
 }
 
@@ -2624,6 +2570,22 @@ static int am65_cpsw_init_cpts(struct am65_cpsw_common *common)
 	pm_runtime_forbid(dev);
 
 	return 0;
+}
+
+static void am65_cpsw_nuss_cleanup_slave_ports(struct am65_cpsw_common *common)
+{
+	struct am65_cpsw_port *port;
+	struct phy *phy;
+	int i;
+
+	for (i = 0; i < common->port_num; i++) {
+		port = &common->ports[i];
+		phy = port->slave.serdes_phy;
+		if (phy) {
+			am65_cpsw_disable_phy(phy);
+			port->slave.serdes_phy = NULL;
+		}
+	}
 }
 
 static int am65_cpsw_nuss_init_slave_ports(struct am65_cpsw_common *common)
@@ -2743,18 +2705,6 @@ of_node_put:
 	return ret;
 }
 
-static void am65_cpsw_nuss_phylink_cleanup(struct am65_cpsw_common *common)
-{
-	struct am65_cpsw_port *port;
-	int i;
-
-	for (i = 0; i < common->port_num; i++) {
-		port = &common->ports[i];
-		if (port->slave.phylink)
-			phylink_destroy(port->slave.phylink);
-	}
-}
-
 static int
 am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 {
@@ -2863,6 +2813,30 @@ am65_cpsw_nuss_init_port_ndev(struct am65_cpsw_common *common, u32 port_idx)
 	return 0;
 }
 
+static void am65_cpsw_nuss_cleanup_ndevs(struct am65_cpsw_common *common)
+{
+	struct am65_cpsw_port *port;
+	int i;
+
+	for (i = 0; i < common->port_num; i++) {
+		port = &common->ports[i];
+		if (port->disabled)
+			continue;
+
+		if (port->slave.phylink) {
+			phylink_destroy(port->slave.phylink);
+			port->slave.phylink = NULL;
+		}
+
+		if (port->ndev) {
+			free_netdev(port->ndev);
+			port->ndev = NULL;
+		}
+	}
+
+	common->dma_ndev = NULL;
+}
+
 static int am65_cpsw_nuss_init_ndevs(struct am65_cpsw_common *common)
 {
 	int ret;
@@ -2875,22 +2849,6 @@ static int am65_cpsw_nuss_init_ndevs(struct am65_cpsw_common *common)
 	}
 
 	return ret;
-}
-
-static void am65_cpsw_nuss_cleanup_ndev(struct am65_cpsw_common *common)
-{
-	struct am65_cpsw_port *port;
-	int i;
-
-	for (i = 0; i < common->port_num; i++) {
-		port = &common->ports[i];
-		if (!port->ndev)
-			continue;
-		if (port->ndev->reg_state == NETREG_REGISTERED)
-			unregister_netdev(port->ndev);
-		free_netdev(port->ndev);
-		port->ndev = NULL;
-	}
 }
 
 static void am65_cpsw_port_offload_fwd_mark_update(struct am65_cpsw_common *common)
@@ -3338,21 +3296,29 @@ static void am65_cpsw_unregister_devlink(struct am65_cpsw_common *common)
 	devlink_free(common->devlink);
 }
 
-static int am65_cpsw_nuss_register_ndevs(struct am65_cpsw_common *common)
+static void am65_cpsw_nuss_cleanup_chns(struct am65_cpsw_common *common)
+{
+	am65_cpsw_nuss_cleanup_rx_chns(common);
+	am65_cpsw_nuss_cleanup_tx_chns(common);
+}
+
+static int am65_cpsw_nuss_init_chns(struct am65_cpsw_common *common)
 {
 	struct am65_cpsw_rx_chn *rx_chan = &common->rx_chns;
 	struct am65_cpsw_tx_chn *tx_chan = common->tx_chns;
-	struct device *dev = common->dev;
-	struct am65_cpsw_port *port;
-	int ret = 0, i;
+	int ret, i;
 
 	/* init tx channels */
 	ret = am65_cpsw_nuss_init_tx_chns(common);
 	if (ret)
 		return ret;
+
+	/* init rx channels */
 	ret = am65_cpsw_nuss_init_rx_chns(common);
-	if (ret)
+	if (ret) {
+		am65_cpsw_nuss_cleanup_tx_chns(common);
 		return ret;
+	}
 
 	/* The DMA Channels are not guaranteed to be in a clean state.
 	 * Reset and disable them to ensure that they are back to the
@@ -3371,13 +3337,32 @@ static int am65_cpsw_nuss_register_ndevs(struct am65_cpsw_common *common)
 
 	k3_udma_glue_disable_rx_chn(rx_chan->rx_chn);
 
-	ret = am65_cpsw_nuss_register_devlink(common);
-	if (ret)
-		return ret;
+	return 0;
+}
+
+static void am65_cpsw_nuss_unregister_ndev(struct am65_cpsw_common *common)
+{
+	struct am65_cpsw_port *port;
+	int i;
 
 	for (i = 0; i < common->port_num; i++) {
 		port = &common->ports[i];
+		if (!port->ndev)
+			continue;
 
+		if (port->ndev->reg_state == NETREG_REGISTERED)
+			unregister_netdev(port->ndev);
+	}
+}
+
+static int am65_cpsw_nuss_register_ndevs(struct am65_cpsw_common *common)
+{
+	struct device *dev = common->dev;
+	struct am65_cpsw_port *port;
+	int ret = 0, i;
+
+	for (i = 0; i < common->port_num; i++) {
+		port = &common->ports[i];
 		if (!port->ndev)
 			continue;
 
@@ -3387,25 +3372,11 @@ static int am65_cpsw_nuss_register_ndevs(struct am65_cpsw_common *common)
 		if (ret) {
 			dev_err(dev, "error registering slave net device%i %d\n",
 				i, ret);
-			goto err_cleanup_ndev;
+			return ret;
 		}
 	}
 
-	ret = am65_cpsw_register_notifiers(common);
-	if (ret)
-		goto err_cleanup_ndev;
-
-	/* can't auto unregister ndev using devm_add_action() due to
-	 * devres release sequence in DD core for DMA
-	 */
-
 	return 0;
-
-err_cleanup_ndev:
-	am65_cpsw_nuss_cleanup_ndev(common);
-	am65_cpsw_unregister_devlink(common);
-
-	return ret;
 }
 
 int am65_cpsw_nuss_update_tx_rx_chns(struct am65_cpsw_common *common,
@@ -3413,17 +3384,10 @@ int am65_cpsw_nuss_update_tx_rx_chns(struct am65_cpsw_common *common,
 {
 	int ret;
 
-	am65_cpsw_nuss_remove_tx_chns(common);
-	am65_cpsw_nuss_remove_rx_chns(common);
-
+	am65_cpsw_nuss_cleanup_chns(common);
 	common->tx_ch_num = num_tx;
 	common->rx_ch_num_flows = num_rx;
-	ret = am65_cpsw_nuss_init_tx_chns(common);
-	if (ret)
-		return ret;
-
-	ret = am65_cpsw_nuss_init_rx_chns(common);
-
+	ret = am65_cpsw_nuss_init_chns(common);
 	return ret;
 }
 
@@ -3599,7 +3563,7 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 
 	ret = am65_cpsw_nuss_init_slave_ports(common);
 	if (ret)
-		goto err_of_clear;
+		goto err_ports_clear;
 
 	/* init common data */
 	ale_params.dev = dev;
@@ -3613,7 +3577,7 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 	if (IS_ERR(common->ale)) {
 		dev_err(dev, "error initializing ale engine\n");
 		ret = PTR_ERR(common->ale);
-		goto err_of_clear;
+		goto err_ports_clear;
 	}
 
 	ale_entries = common->ale->params.ale_entries;
@@ -3622,7 +3586,7 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 					   GFP_KERNEL);
 	ret = am65_cpsw_init_cpts(common);
 	if (ret)
-		goto err_of_clear;
+		goto err_ports_clear;
 
 	/* init ports */
 	for (i = 0; i < common->port_num; i++)
@@ -3634,19 +3598,39 @@ static int am65_cpsw_nuss_probe(struct platform_device *pdev)
 
 	ret = am65_cpsw_nuss_init_ndevs(common);
 	if (ret)
-		goto err_ndevs_clear;
+		goto err_cpts_release;
+
+	ret = am65_cpsw_nuss_init_chns(common);
+	if (ret)
+		goto err_cleanup_ndevs;
+
+	ret = am65_cpsw_nuss_register_devlink(common);
+	if (ret)
+		goto err_cleanup_chns;
 
 	ret = am65_cpsw_nuss_register_ndevs(common);
 	if (ret)
-		goto err_ndevs_clear;
+		goto err_unregister_devlink;
+
+	ret = am65_cpsw_register_notifiers(common);
+	if (ret)
+		goto err_unregister_ndev;
 
 	pm_runtime_put(dev);
 	return 0;
 
-err_ndevs_clear:
-	am65_cpsw_nuss_cleanup_ndev(common);
-	am65_cpsw_nuss_phylink_cleanup(common);
+err_unregister_ndev:
+	am65_cpsw_nuss_unregister_ndev(common);
+err_unregister_devlink:
+	am65_cpsw_unregister_devlink(common);
+err_cleanup_chns:
+	am65_cpsw_nuss_cleanup_chns(common);
+err_cleanup_ndevs:
+	am65_cpsw_nuss_cleanup_ndevs(common);
+err_cpts_release:
 	am65_cpts_release(common->cpts);
+err_ports_clear:
+	am65_cpsw_nuss_cleanup_slave_ports(common);
 err_of_clear:
 	if (common->mdio_dev)
 		of_platform_device_destroy(common->mdio_dev, NULL);
@@ -3675,15 +3659,12 @@ static void am65_cpsw_nuss_remove(struct platform_device *pdev)
 	}
 
 	am65_cpsw_unregister_notifiers(common);
-
-	/* must unregister ndevs here because DD release_driver routine calls
-	 * dma_deconfigure(dev) before devres_release_all(dev)
-	 */
-	am65_cpsw_nuss_cleanup_ndev(common);
+	am65_cpsw_nuss_unregister_ndev(common);
 	am65_cpsw_unregister_devlink(common);
-	am65_cpsw_nuss_phylink_cleanup(common);
+	am65_cpsw_nuss_cleanup_chns(common);
+	am65_cpsw_nuss_cleanup_ndevs(common);
 	am65_cpts_release(common->cpts);
-	am65_cpsw_disable_serdes_phy(common);
+	am65_cpsw_nuss_cleanup_slave_ports(common);
 
 	if (common->mdio_dev)
 		of_platform_device_destroy(common->mdio_dev, NULL);
@@ -3723,9 +3704,7 @@ static int am65_cpsw_nuss_suspend(struct device *dev)
 	}
 
 	am65_cpts_suspend(common->cpts);
-
-	am65_cpsw_nuss_remove_rx_chns(common);
-	am65_cpsw_nuss_remove_tx_chns(common);
+	am65_cpsw_nuss_cleanup_chns(common);
 
 	return 0;
 }
@@ -3738,10 +3717,7 @@ static int am65_cpsw_nuss_resume(struct device *dev)
 	struct net_device *ndev;
 	int i, ret;
 
-	ret = am65_cpsw_nuss_init_tx_chns(common);
-	if (ret)
-		return ret;
-	ret = am65_cpsw_nuss_init_rx_chns(common);
+	ret = am65_cpsw_nuss_init_chns(common);
 	if (ret)
 		return ret;
 
