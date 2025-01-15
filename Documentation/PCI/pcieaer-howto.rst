@@ -85,6 +85,12 @@ In the example, 'Requester ID' means the ID of the device that sent
 the error message to the Root Port. Please refer to PCIe specs for other
 fields.
 
+AER Ratelimits
+-------------------------
+
+Error messages are ratelimited per device and error type. This prevents spammy
+devices from flooding the console.
+
 AER Statistics / Counters
 -------------------------
 

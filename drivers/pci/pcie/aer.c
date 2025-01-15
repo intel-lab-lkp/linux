@@ -27,6 +27,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/kfifo.h>
+#include <linux/ratelimit.h>
 #include <linux/slab.h>
 #include <acpi/apei.h>
 #include <acpi/ghes.h>
@@ -84,6 +85,10 @@ struct aer_info {
 	u64 rootport_total_cor_errs;
 	u64 rootport_total_fatal_errs;
 	u64 rootport_total_nonfatal_errs;
+
+	/* Ratelimits for errors */
+	struct ratelimit_state cor_log_ratelimit;
+	struct ratelimit_state uncor_log_ratelimit;
 };
 
 #define AER_LOG_TLP_MASKS		(PCI_ERR_UNC_POISON_TLP|	\
@@ -374,6 +379,12 @@ void pci_aer_init(struct pci_dev *dev)
 		return;
 
 	dev->aer_info = kzalloc(sizeof(struct aer_info), GFP_KERNEL);
+	ratelimit_state_init(&dev->aer_info->cor_log_ratelimit,
+			     DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
+	ratelimit_state_init(&dev->aer_info->uncor_log_ratelimit,
+			     DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
+	ratelimit_set_flags(&dev->aer_info->cor_log_ratelimit, RATELIMIT_MSG_ON_RELEASE);
+	ratelimit_set_flags(&dev->aer_info->uncor_log_ratelimit, RATELIMIT_MSG_ON_RELEASE);
 
 	/*
 	 * We save/restore PCI_ERR_UNCOR_MASK, PCI_ERR_UNCOR_SEVER,
@@ -702,6 +713,7 @@ void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 	int layer, agent;
 	int id = pci_dev_id(dev);
 	const char *level;
+	struct ratelimit_state *ratelimit;
 
 	if (!info->status) {
 		pci_err(dev, "PCIe Bus Error: severity=%s, type=Inaccessible, (Unregistered Agent ID)\n",
@@ -709,10 +721,19 @@ void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 		goto out;
 	}
 
+	if (info->severity == AER_CORRECTABLE) {
+		ratelimit = &dev->aer_info->cor_log_ratelimit;
+		level = KERN_WARNING;
+	} else {
+		ratelimit = &dev->aer_info->uncor_log_ratelimit;
+		level = KERN_ERR;
+	}
+
+	if (!__ratelimit(ratelimit))
+		return;
+
 	layer = AER_GET_LAYER_ERROR(info->severity, info->status);
 	agent = AER_GET_AGENT(info->severity, info->status);
-
-	level = (info->severity == AER_CORRECTABLE) ? KERN_WARNING : KERN_ERR;
 
 	pci_printk(level, dev, "PCIe Bus Error: severity=%s, type=%s, (%s)\n",
 		   aer_error_severity_string[info->severity],
@@ -755,11 +776,14 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	int layer, agent, tlp_header_valid = 0;
 	u32 status, mask;
 	struct aer_err_info info;
+	struct ratelimit_state *ratelimit;
 
 	if (aer_severity == AER_CORRECTABLE) {
+		ratelimit = &dev->aer_info->cor_log_ratelimit;
 		status = aer->cor_status;
 		mask = aer->cor_mask;
 	} else {
+		ratelimit = &dev->aer_info->uncor_log_ratelimit;
 		status = aer->uncor_status;
 		mask = aer->uncor_mask;
 		tlp_header_valid = status & AER_LOG_TLP_MASKS;
@@ -775,6 +799,9 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	info.first_error = PCI_ERR_CAP_FEP(aer->cap_control);
 
 	pci_dev_aer_stats_incr(dev, &info);
+
+	if (!__ratelimit(ratelimit))
+		return;
 
 	pci_err(dev, "aer_status: 0x%08x, aer_mask: 0x%08x\n", status, mask);
 	__aer_print_error(dev, &info);
