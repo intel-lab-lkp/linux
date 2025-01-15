@@ -117,3 +117,144 @@ bool klp_is_patch_compatible(struct klp_patch *patch)
 
 	return true;
 }
+
+static bool is_state_in_other_patches(struct klp_patch *patch,
+				      struct klp_state *state)
+{
+	struct klp_patch *p;
+	struct klp_state *s;
+
+	klp_for_each_patch(p) {
+		if (p == patch)
+			continue;
+
+		klp_for_each_state(p, s) {
+			if (s->id == state->id)
+				return true;
+		}
+	}
+
+	return false;
+}
+
+int klp_states_pre_patch(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (!is_state_in_other_patches(patch, state) &&
+		    state->callbacks.pre_patch) {
+			int err;
+
+			err = state->callbacks.pre_patch(patch, state);
+			if (err)
+				return err;
+		}
+
+		state->callbacks.pre_patch_succeeded = true;
+	}
+
+	return 0;
+}
+
+void klp_states_post_patch(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (is_state_in_other_patches(patch, state))
+			continue;
+
+		if (state->callbacks.post_patch)
+			state->callbacks.post_patch(patch, state);
+	}
+}
+
+void klp_states_pre_unpatch(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (is_state_in_other_patches(patch, state))
+			continue;
+
+		if (state->callbacks.pre_unpatch)
+			state->callbacks.pre_unpatch(patch, state);
+	}
+}
+
+void klp_states_post_unpatch(struct klp_patch *patch)
+{
+	struct klp_state *state;
+
+	klp_for_each_state(patch, state) {
+		if (is_state_in_other_patches(patch, state))
+			continue;
+
+		/*
+		 * This only occurs when a transition is canceled after
+		 * a preparation step failed.
+		 */
+		if (!state->callbacks.pre_patch_succeeded)
+			continue;
+
+		if (state->callbacks.post_unpatch)
+			state->callbacks.post_unpatch(patch, state);
+
+		state->callbacks.pre_patch_succeeded = 0;
+	}
+}
+
+/*
+ * Make it clear when pre_unpatch() callbacks need to be reverted
+ * in case of failure.
+ */
+static bool klp_states_pre_unpatch_replaced_called;
+
+void klp_states_pre_unpatch_replaced(struct klp_patch *patch)
+{
+	struct klp_patch *old_patch;
+
+	/* Make sure that it was cleared at the end of the last transition. */
+	WARN_ON(klp_states_pre_unpatch_replaced_called);
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch != patch)
+			klp_states_pre_unpatch(old_patch);
+	}
+
+	klp_states_pre_unpatch_replaced_called = true;
+}
+
+void klp_states_post_unpatch_replaced(struct klp_patch *patch)
+{
+	struct klp_patch *old_patch;
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch != patch)
+			klp_states_post_unpatch(old_patch);
+	}
+
+	/* Reset for the next transition. */
+	klp_states_pre_unpatch_replaced_called = false;
+}
+
+void klp_states_post_patch_replaced(struct klp_patch *patch)
+{
+	struct klp_patch *old_patch;
+
+	/*
+	 * This only occurs when a transition is canceled after
+	 * a preparation step failed.
+	 */
+	if (!klp_states_pre_unpatch_replaced_called)
+		return;
+
+	klp_for_each_patch(old_patch) {
+		if (old_patch != patch)
+			klp_states_post_patch(old_patch);
+	}
+
+	/* Reset for the next transition. */
+	klp_states_pre_unpatch_replaced_called = false;
+}
