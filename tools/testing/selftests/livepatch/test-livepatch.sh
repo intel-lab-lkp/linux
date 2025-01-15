@@ -6,7 +6,7 @@
 
 MOD_LIVEPATCH1=test_klp_livepatch
 MOD_LIVEPATCH2=test_klp_syscall
-MOD_LIVEPATCH3=test_klp_callbacks_demo
+MOD_LIVEPATCH3=test_klp_speaker_livepatch
 MOD_REPLACE=test_klp_atomic_replace
 
 setup_config
@@ -172,10 +172,8 @@ livepatch: '$MOD_LIVEPATCH2': patching complete
 % insmod test_modules/$MOD_LIVEPATCH3.ko
 livepatch: enabling patch '$MOD_LIVEPATCH3'
 livepatch: '$MOD_LIVEPATCH3': initializing patching transition
-$MOD_LIVEPATCH3: pre_patch_callback: vmlinux
 livepatch: '$MOD_LIVEPATCH3': starting patching transition
 livepatch: '$MOD_LIVEPATCH3': completing patching transition
-$MOD_LIVEPATCH3: post_patch_callback: vmlinux
 livepatch: '$MOD_LIVEPATCH3': patching complete
 % insmod test_modules/$MOD_REPLACE.ko replace=1
 livepatch: enabling patch '$MOD_REPLACE'
