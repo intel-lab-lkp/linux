@@ -6,7 +6,9 @@
 
 MAX_RETRIES=600
 RETRY_INTERVAL=".1"	# seconds
-SYSFS_KERNEL_DIR="/sys/kernel"
+SYSFS_DIR="/sys"
+SYSFS_KERNEL_DIR="$SYSFS_DIR/kernel"
+SYSFS_MODULE_DIR="$SYSFS_DIR/module"
 SYSFS_KLP_DIR="$SYSFS_KERNEL_DIR/livepatch"
 SYSFS_DEBUG_DIR="$SYSFS_KERNEL_DIR/debug"
 SYSFS_KPROBES_DIR="$SYSFS_DEBUG_DIR/kprobes"
@@ -160,7 +162,7 @@ function __load_mod() {
 	fi
 
 	# Wait for module in sysfs ...
-	loop_until '[[ -e "/sys/module/$mod" ]]' ||
+	loop_until '[[ -e "$SYSFS_MODULE_DIR/$mod" ]]' ||
 		die "failed to load module $mod"
 }
 
@@ -228,7 +230,7 @@ function unload_mod() {
 	local mod="$1"
 
 	# Wait for module reference count to clear ...
-	loop_until '[[ $(cat "/sys/module/$mod/refcnt") == "0" ]]' ||
+	loop_until '[[ $(cat "$SYSFS_MODULE_DIR/$mod/refcnt") == "0" ]]' ||
 		die "failed to unload module $mod (refcnt)"
 
 	log "% rmmod $mod"
@@ -238,8 +240,8 @@ function unload_mod() {
 	fi
 
 	# Wait for module in sysfs ...
-	loop_until '[[ ! -e "/sys/module/$mod" ]]' ||
-		die "failed to unload module $mod (/sys/module)"
+	loop_until '[[ ! -e "$SYSFS_MODULE_DIR/$mod" ]]' ||
+		die "failed to unload module $mod ($SYSFS_MODULE_DIR)"
 }
 
 # unload_lp(modname) - unload a kernel module with a livepatch
@@ -269,11 +271,11 @@ function set_pre_patch_ret {
 	local mod="$1"; shift
 	local ret="$1"
 
-	log "% echo $ret > /sys/module/$mod/parameters/pre_patch_ret"
-	echo "$ret" > /sys/module/"$mod"/parameters/pre_patch_ret
+	log "% echo $ret > $SYSFS_MODULE_DIR/$mod/parameters/pre_patch_ret"
+	echo "$ret" > $SYSFS_MODULE_DIR/"$mod"/parameters/pre_patch_ret
 
 	# Wait for sysfs value to hold ...
-	loop_until '[[ $(cat "/sys/module/$mod/parameters/pre_patch_ret") == "$ret" ]]' ||
+	loop_until '[[ $(cat "$SYSFS_MODULE_DIR/$mod/parameters/pre_patch_ret") == "$ret" ]]' ||
 		die "failed to set pre_patch_ret parameter for $mod module"
 }
 

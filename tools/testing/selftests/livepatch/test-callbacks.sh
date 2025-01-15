@@ -303,7 +303,7 @@ livepatch: '$MOD_LIVEPATCH': starting patching transition
 livepatch: '$MOD_LIVEPATCH': completing patching transition
 $MOD_LIVEPATCH: post_patch_callback: vmlinux
 livepatch: '$MOD_LIVEPATCH': patching complete
-% echo -19 > /sys/module/$MOD_LIVEPATCH/parameters/pre_patch_ret
+% echo -19 > $SYSFS_MODULE_DIR/$MOD_LIVEPATCH/parameters/pre_patch_ret
 % insmod test_modules/$MOD_TARGET.ko
 livepatch: applying patch '$MOD_LIVEPATCH' to loading module '$MOD_TARGET'
 $MOD_LIVEPATCH: pre_patch_callback: $MOD_TARGET -> [MODULE_STATE_COMING] Full formed, running module_init
