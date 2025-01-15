@@ -1587,6 +1587,16 @@ static const struct intel_c10pll_state mtl_c10_hdmi_262750 = {
 	.pll[15] = 0x09, .pll[16] = 0x09, .pll[17] = 0xCF, .pll[18] = 0x84, .pll[19] = 0x23,
 };
 
+static const struct intel_c10pll_state mtl_c10_hdmi_265250 = {
+	.clock = 265250,
+	.tx = 0x10,
+	.cmn = 0x1,
+	.pll[0] = 0xF4, .pll[1] = 0x00, .pll[2] = 0x6A, .pll[3] = 0x00, .pll[4] = 0x00,
+	.pll[5] = 0x00, .pll[6] = 0x00, .pll[7] = 0x00, .pll[8] = 0x20, .pll[9] = 0xFF,
+	.pll[10] = 0xFF, .pll[11] = 0x55, .pll[12] = 0x13, .pll[13] = 0x55, .pll[14] = 0x55,
+	.pll[15] = 0x09, .pll[16] = 0x08, .pll[17] = 0x0F, .pll[18] = 0x85, .pll[19] = 0x23,
+};
+
 static const struct intel_c10pll_state mtl_c10_hdmi_268500 = {
 	.clock = 268500,
 	.tx = 0x10,
@@ -1695,6 +1705,7 @@ static const struct intel_c10pll_state * const mtl_c10_hdmi_tables[] = {
 	&mtl_c10_hdmi_209800,
 	&mtl_c10_hdmi_241500,
 	&mtl_c10_hdmi_262750,
+	&mtl_c10_hdmi_265250,
 	&mtl_c10_hdmi_268500,
 	&mtl_c10_hdmi_296703,
 	&mtl_c10_hdmi_297000,
