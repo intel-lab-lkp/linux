@@ -3895,12 +3895,12 @@ static int platform_profile_setup(struct asus_wmi *asus)
 	asus->platform_profile_handler.dev = dev;
 	asus->platform_profile_handler.ops = &asus_wmi_platform_profile_ops;
 
-	err = platform_profile_register(&asus->platform_profile_handler, asus);
+	err = devm_platform_profile_register(&asus->platform_profile_handler, asus);
 	if (err == -EEXIST) {
 		pr_warn("%s, a platform_profile handler is already registered\n", __func__);
 		return 0;
 	} else if (err) {
-		pr_err("%s, failed at platform_profile_register: %d\n", __func__, err);
+		pr_err("%s, failed at devm_platform_profile_register: %d\n", __func__, err);
 		return err;
 	}
 
@@ -4859,8 +4859,6 @@ fail_input:
 fail_sysfs:
 fail_custom_fan_curve:
 fail_platform_profile_setup:
-	if (asus->platform_profile_support)
-		platform_profile_remove(&asus->platform_profile_handler);
 fail_fan_boost_mode:
 fail_platform:
 	kfree(asus);
@@ -4885,9 +4883,6 @@ static void asus_wmi_remove(struct platform_device *device)
 	asus_fan_set_auto(asus);
 	throttle_thermal_policy_set_default(asus);
 	asus_wmi_battery_exit(asus);
-
-	if (asus->platform_profile_support)
-		platform_profile_remove(&asus->platform_profile_handler);
 
 	kfree(asus);
 }
