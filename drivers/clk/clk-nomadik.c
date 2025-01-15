@@ -117,7 +117,7 @@ static void __init nomadik_src_init(void)
 
 	val = readl(src_base + SRC_XTALCR);
 	pr_info("SXTALO is %s\n",
-		str_enabled_disabled(val & SRC_XTALCR_SXTALDIS));
+		str_disabled_enabled(val & SRC_XTALCR_SXTALDIS));
 	pr_info("MXTAL is %s\n",
 		str_enabled_disabled(val & SRC_XTALCR_MXTALSTAT));
 	if (of_property_read_bool(np, "disable-sxtalo")) {
