@@ -629,10 +629,22 @@ int x86_pmu_hw_config(struct perf_event *event)
 		event->hw.config |= x86_pmu_get_event_config(event);
 
 	if (event->attr.sample_period && x86_pmu.limit_period) {
-		s64 left = event->attr.sample_period;
-		x86_pmu.limit_period(event, &left);
-		if (left > event->attr.sample_period)
-			return -EINVAL;
+		if (event->attr.freq) {
+			s64 left = event->hw.sample_period;
+
+			x86_pmu.limit_period(event, &left);
+			if (left != event->hw.sample_period) {
+				event->hw.sample_period = left;
+				event->hw.last_period = left;
+				local64_set(&event->hw.period_left, left);
+			}
+		} else {
+			s64 left = event->attr.sample_period;
+
+			x86_pmu.limit_period(event, &left);
+			if (left > event->attr.sample_period)
+				return -EINVAL;
+		}
 	}
 
 	/* sample_regs_user never support XMM registers */
@@ -2647,6 +2659,9 @@ static int x86_pmu_check_period(struct perf_event *event, u64 value)
 {
 	if (x86_pmu.check_period && x86_pmu.check_period(event, value))
 		return -EINVAL;
+
+	if (event->attr.freq)
+		return 0;
 
 	if (value && x86_pmu.limit_period) {
 		s64 left = value;
