@@ -87,6 +87,8 @@ struct aer_info {
 	u64 rootport_total_nonfatal_errs;
 
 	/* Ratelimits for errors */
+	struct ratelimit_state cor_irq_ratelimit;
+	struct ratelimit_state uncor_irq_ratelimit;
 	struct ratelimit_state cor_log_ratelimit;
 	struct ratelimit_state uncor_log_ratelimit;
 };
@@ -379,6 +381,10 @@ void pci_aer_init(struct pci_dev *dev)
 		return;
 
 	dev->aer_info = kzalloc(sizeof(struct aer_info), GFP_KERNEL);
+	ratelimit_state_init(&dev->aer_info->cor_irq_ratelimit,
+			     DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST*3);
+	ratelimit_state_init(&dev->aer_info->uncor_irq_ratelimit,
+			     DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST*3);
 	ratelimit_state_init(&dev->aer_info->cor_log_ratelimit,
 			     DEFAULT_RATELIMIT_INTERVAL, DEFAULT_RATELIMIT_BURST);
 	ratelimit_state_init(&dev->aer_info->uncor_log_ratelimit,
@@ -676,6 +682,39 @@ static void pci_rootport_aer_stats_incr(struct pci_dev *pdev,
 	}
 }
 
+static void mask_reported_error(struct pci_dev *dev, struct aer_err_info *info)
+{
+	const char **strings;
+	const char *errmsg;
+	u16 aer_offset = dev->aer_cap;
+	u16 mask_reg_offset;
+	u32 mask;
+	unsigned long status = info->status;
+	int i;
+
+	if (info->severity == AER_CORRECTABLE) {
+		strings = aer_correctable_error_string;
+		mask_reg_offset = PCI_ERR_COR_MASK;
+	} else {
+		strings = aer_uncorrectable_error_string;
+		mask_reg_offset = PCI_ERR_UNCOR_MASK;
+	}
+
+	pci_read_config_dword(dev, aer_offset + mask_reg_offset, &mask);
+	mask |= status;
+	pci_write_config_dword(dev, aer_offset + mask_reg_offset, mask);
+
+	pci_warn(dev, "%s error(s) masked due to rate-limiting:",
+		 aer_error_severity_string[info->severity]);
+	for_each_set_bit(i, &status, 32) {
+		errmsg = strings[i];
+		if (!errmsg)
+			errmsg = "Unknown Error Bit";
+
+		pci_warn(dev, "   [%2d] %-22s\n", i, errmsg);
+	}
+}
+
 static void __print_tlp_header(struct pci_dev *dev, struct pcie_tlp_log *t)
 {
 	pci_err(dev, "  TLP Header: %08x %08x %08x %08x\n",
@@ -713,7 +752,8 @@ void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 	int layer, agent;
 	int id = pci_dev_id(dev);
 	const char *level;
-	struct ratelimit_state *ratelimit;
+	struct ratelimit_state *irq_ratelimit;
+	struct ratelimit_state *log_ratelimit;
 
 	if (!info->status) {
 		pci_err(dev, "PCIe Bus Error: severity=%s, type=Inaccessible, (Unregistered Agent ID)\n",
@@ -722,14 +762,20 @@ void aer_print_error(struct pci_dev *dev, struct aer_err_info *info)
 	}
 
 	if (info->severity == AER_CORRECTABLE) {
-		ratelimit = &dev->aer_info->cor_log_ratelimit;
+		irq_ratelimit = &dev->aer_info->cor_irq_ratelimit;
+		log_ratelimit = &dev->aer_info->cor_log_ratelimit;
 		level = KERN_WARNING;
 	} else {
-		ratelimit = &dev->aer_info->uncor_log_ratelimit;
+		irq_ratelimit = &dev->aer_info->uncor_irq_ratelimit;
+		log_ratelimit = &dev->aer_info->uncor_log_ratelimit;
 		level = KERN_ERR;
 	}
 
-	if (!__ratelimit(ratelimit))
+	if (!__ratelimit(irq_ratelimit)) {
+		mask_reported_error(dev, info);
+		return;
+	}
+	if (!__ratelimit(log_ratelimit))
 		return;
 
 	layer = AER_GET_LAYER_ERROR(info->severity, info->status);
@@ -776,14 +822,14 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	int layer, agent, tlp_header_valid = 0;
 	u32 status, mask;
 	struct aer_err_info info;
-	struct ratelimit_state *ratelimit;
+	struct ratelimit_state *log_ratelimit;
 
 	if (aer_severity == AER_CORRECTABLE) {
-		ratelimit = &dev->aer_info->cor_log_ratelimit;
+		log_ratelimit = &dev->aer_info->cor_log_ratelimit;
 		status = aer->cor_status;
 		mask = aer->cor_mask;
 	} else {
-		ratelimit = &dev->aer_info->uncor_log_ratelimit;
+		log_ratelimit = &dev->aer_info->uncor_log_ratelimit;
 		status = aer->uncor_status;
 		mask = aer->uncor_mask;
 		tlp_header_valid = status & AER_LOG_TLP_MASKS;
@@ -799,8 +845,8 @@ void pci_print_aer(struct pci_dev *dev, int aer_severity,
 	info.first_error = PCI_ERR_CAP_FEP(aer->cap_control);
 
 	pci_dev_aer_stats_incr(dev, &info);
-
-	if (!__ratelimit(ratelimit))
+	/* Only ratelimit logs (no IRQ) as AERs reported via GHES/CXL (caller). */
+	if (!__ratelimit(log_ratelimit))
 		return;
 
 	pci_err(dev, "aer_status: 0x%08x, aer_mask: 0x%08x\n", status, mask);

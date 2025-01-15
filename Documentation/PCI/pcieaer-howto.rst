@@ -88,8 +88,8 @@ fields.
 AER Ratelimits
 -------------------------
 
-Error messages are ratelimited per device and error type. This prevents spammy
-devices from flooding the console.
+Errors, both at log and IRQ level, are ratelimited per device and error type.
+This prevents spammy devices from stalling execution.
 
 AER Statistics / Counters
 -------------------------
