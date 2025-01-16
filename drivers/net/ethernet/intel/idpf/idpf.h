@@ -290,6 +290,7 @@ struct idpf_port_stats {
  * @port_stats: per port csum, header split, and other offload stats
  * @link_up: True if link is up
  * @sw_marker_wq: workqueue for marker packets
+ * @vport_cfg_lock: Lock to protect access to vports during alloc/dealloc/reset
  */
 struct idpf_vport {
 	u16 num_txq;
@@ -334,6 +335,7 @@ struct idpf_vport {
 	bool link_up;
 
 	wait_queue_head_t sw_marker_wq;
+	struct mutex vport_cfg_lock;
 };
 
 /**
@@ -527,7 +529,6 @@ struct idpf_vc_xn_manager;
  * @req_tx_splitq: TX split or single queue model to request
  * @req_rx_splitq: RX split or single queue model to request
  * @vport_init_lock: Lock to protect vport init, re-init, and deinit flow
- * @vport_cfg_lock: Lock to protect the vport config flow
  * @vector_lock: Lock to protect vector distribution
  * @queue_lock: Lock to protect queue distribution
  * @vc_buf_lock: Lock to protect virtchnl buffer
@@ -585,7 +586,6 @@ struct idpf_adapter {
 	bool req_rx_splitq;
 
 	struct mutex vport_init_lock;
-	struct mutex vport_cfg_lock;
 	struct mutex vector_lock;
 	struct mutex queue_lock;
 	struct mutex vc_buf_lock;
@@ -812,23 +812,23 @@ static inline void idpf_vport_init_unlock(struct idpf_adapter *adapter)
 
 /**
  * idpf_vport_cfg_lock - Acquire the vport config lock
- * @adapter: private data struct
+ * @vport: private data struct
  *
  * This lock should be used by non-datapath code to protect against vport
  * destruction.
  */
-static inline void idpf_vport_cfg_lock(struct idpf_adapter *adapter)
+static inline void idpf_vport_cfg_lock(struct idpf_vport *vport)
 {
-	mutex_lock(&adapter->vport_cfg_lock);
+	mutex_lock(&vport->vport_cfg_lock);
 }
 
 /**
  * idpf_vport_cfg_unlock - Release the vport config lock
- * @adapter: private data struct
+ * @vport: private data struct
  */
-static inline void idpf_vport_cfg_unlock(struct idpf_adapter *adapter)
+static inline void idpf_vport_cfg_unlock(struct idpf_vport *vport)
 {
-	mutex_unlock(&adapter->vport_cfg_lock);
+	mutex_unlock(&vport->vport_cfg_lock);
 }
 
 void idpf_statistics_task(struct work_struct *work);
