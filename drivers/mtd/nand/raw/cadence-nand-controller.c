@@ -2908,7 +2908,7 @@ static int cadence_nand_init(struct cdns_nand_ctrl *cdns_ctrl)
 		if (!cdns_ctrl->dmac) {
 			dev_err(cdns_ctrl->dev,
 				"Unable to get a DMA channel\n");
-			ret = -EBUSY;
+			ret = -EPROBE_DEFER;
 			goto disable_irq;
 		}
 	}
