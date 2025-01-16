@@ -349,6 +349,14 @@ void mlx5e_ethtool_get_ringparam(struct mlx5e_priv *priv,
 		(priv->channels.params.packet_merge.type == MLX5E_PACKET_MERGE_SHAMPO) ?
 		ETHTOOL_TCP_DATA_SPLIT_ENABLED :
 		ETHTOOL_TCP_DATA_SPLIT_DISABLED;
+
+	/* if HW GRO is not enabled due to external limitations but is wanted,
+	 * report HDS state as unknown so it won't get truned off explicitly.
+	 */
+	if (kernel_param->tcp_data_split == ETHTOOL_TCP_DATA_SPLIT_DISABLED &&
+	    priv->netdev->wanted_features & NETIF_F_GRO_HW)
+		kernel_param->tcp_data_split = ETHTOOL_TCP_DATA_SPLIT_UNKNOWN;
+
 }
 
 static void mlx5e_get_ringparam(struct net_device *dev,
@@ -359,6 +367,43 @@ static void mlx5e_get_ringparam(struct net_device *dev,
 	struct mlx5e_priv *priv = netdev_priv(dev);
 
 	mlx5e_ethtool_get_ringparam(priv, param, kernel_param);
+}
+
+static bool mlx5e_ethtool_set_tcp_data_split(struct mlx5e_priv *priv,
+					     u8 tcp_data_split)
+{
+	bool enable = (tcp_data_split == ETHTOOL_TCP_DATA_SPLIT_ENABLED);
+	struct net_device *dev = priv->netdev;
+
+	if (tcp_data_split == ETHTOOL_TCP_DATA_SPLIT_UNKNOWN)
+		return true;
+
+	if (enable && !(dev->hw_features & NETIF_F_GRO_HW)) {
+		netdev_warn(dev, "TCP-data-split is not supported when GRO HW is not supported\n");
+		return false; /* GRO HW is not supported */
+	}
+
+	if (enable && (dev->features & NETIF_F_GRO_HW)) {
+		/* Already enabled */
+		dev->wanted_features |= NETIF_F_GRO_HW;
+		return true;
+	}
+
+	if (!enable && !(dev->features & NETIF_F_GRO_HW)) {
+		/* Already disabled */
+		dev->wanted_features &= ~NETIF_F_GRO_HW;
+		return true;
+	}
+
+	/* Try enable or disable GRO HW */
+	if (enable)
+		dev->wanted_features |= NETIF_F_GRO_HW;
+	else
+		dev->wanted_features &= ~NETIF_F_GRO_HW;
+
+	netdev_change_features(dev);
+
+	return enable == !!(dev->features & NETIF_F_GRO_HW);
 }
 
 int mlx5e_ethtool_set_ringparam(struct mlx5e_priv *priv,
@@ -418,6 +463,9 @@ static int mlx5e_set_ringparam(struct net_device *dev,
 			       struct netlink_ext_ack *extack)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
+
+	if (!mlx5e_ethtool_set_tcp_data_split(priv, kernel_param->tcp_data_split))
+		return -EINVAL;
 
 	return mlx5e_ethtool_set_ringparam(priv, param, extack);
 }
@@ -2613,6 +2661,7 @@ const struct ethtool_ops mlx5e_ethtool_ops = {
 				     ETHTOOL_COALESCE_MAX_FRAMES |
 				     ETHTOOL_COALESCE_USE_ADAPTIVE |
 				     ETHTOOL_COALESCE_USE_CQE,
+	.supported_ring_params = ETHTOOL_RING_USE_TCP_DATA_SPLIT,
 	.get_drvinfo       = mlx5e_get_drvinfo,
 	.get_link          = ethtool_op_get_link,
 	.get_link_ext_state  = mlx5e_get_link_ext_state,
