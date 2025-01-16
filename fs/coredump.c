@@ -950,6 +950,10 @@ int dump_user_range(struct coredump_params *cprm, unsigned long start,
 			}
 		} else {
 			dump_skip(cprm, PAGE_SIZE);
+			if (dump_interrupted()) {
+				dump_page_free(dump_page);
+				return 0;
+			}
 		}
 		cond_resched();
 	}
