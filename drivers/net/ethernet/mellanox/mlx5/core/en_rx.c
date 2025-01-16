@@ -528,15 +528,18 @@ mlx5e_add_skb_frag(struct mlx5e_rq *rq, struct sk_buff *skb,
 		   unsigned int truesize)
 {
 	dma_addr_t addr = page_pool_get_dma_addr_netmem(frag_page->netmem);
-	struct page *page = netmem_to_page(frag_page->netmem);
 	u8 next_frag = skb_shinfo(skb)->nr_frags;
 
 	dma_sync_single_for_cpu(rq->pdev, addr + frag_offset, len,
 				rq->buff.map_dir);
 
-	if (skb_can_coalesce(skb, next_frag, page, frag_offset)) {
-		skb_coalesce_rx_frag(skb, next_frag - 1, len, truesize);
-		return;
+	if (!netmem_is_net_iov(frag_page->netmem)) {
+		struct page *page = netmem_to_page(frag_page->netmem);
+
+		if (skb_can_coalesce(skb, next_frag, page, frag_offset)) {
+			skb_coalesce_rx_frag(skb, next_frag - 1, len, truesize);
+			return;
+		}
 	}
 
 	frag_page->frags++;
