@@ -222,6 +222,9 @@ static bool damos_pa_filter_match(struct damos_filter *filter,
 		if (matched)
 			damon_folio_mkold(folio);
 		break;
+	case DAMOS_FILTER_TYPE_HUGEPAGE:
+		matched = folio_size(folio) == HPAGE_PMD_SIZE;
+		break;
 	default:
 		break;
 	}
