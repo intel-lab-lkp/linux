@@ -6852,13 +6852,23 @@ EXPORT_SYMBOL(dev_set_threaded);
 void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 			  enum netdev_queue_type type, struct napi_struct *napi)
 {
+	netdev_lock(dev);
+	netif_queue_set_napi_locked(dev, queue_index, type, napi);
+	netdev_unlock(dev);
+}
+EXPORT_SYMBOL(netif_queue_set_napi);
+
+void netif_queue_set_napi_locked(struct net_device *dev,
+				 unsigned int queue_index,
+				 enum netdev_queue_type type,
+				 struct napi_struct *napi)
+{
 	struct netdev_rx_queue *rxq;
 	struct netdev_queue *txq;
 
 	if (WARN_ON_ONCE(napi && !napi->dev))
 		return;
-	if (dev->reg_state >= NETREG_REGISTERED)
-		ASSERT_RTNL();
+	netdev_assert_locked_or_invisible(dev);
 
 	switch (type) {
 	case NETDEV_QUEUE_TYPE_RX:
@@ -6873,7 +6883,7 @@ void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 		return;
 	}
 }
-EXPORT_SYMBOL(netif_queue_set_napi);
+EXPORT_SYMBOL(netif_queue_set_napi_locked);
 
 static void napi_restore_config(struct napi_struct *n)
 {

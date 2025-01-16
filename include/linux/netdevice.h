@@ -690,7 +690,7 @@ struct netdev_queue {
  * slow- / control-path part
  */
 	/* NAPI instance for the queue
-	 * Readers and writers must hold RTNL
+	 * Readers and writers must hold netdev->lock
 	 */
 	struct napi_struct	*napi;
 
@@ -2458,7 +2458,8 @@ struct net_device {
 	 * Partially protects (writers must hold both @lock and rtnl_lock):
 	 *	@up
 	 *
-	 * Also protects some fields in struct napi_struct.
+	 * Also protects some fields in:
+	 *	struct napi_struct, struct netdev_queue, struct netdev_rx_queue
 	 *
 	 * Ordering: take after rtnl_lock.
 	 */
@@ -2685,6 +2686,10 @@ static inline void *netdev_priv(const struct net_device *dev)
 void netif_queue_set_napi(struct net_device *dev, unsigned int queue_index,
 			  enum netdev_queue_type type,
 			  struct napi_struct *napi);
+void netif_queue_set_napi_locked(struct net_device *dev,
+				 unsigned int queue_index,
+				 enum netdev_queue_type type,
+				 struct napi_struct *napi);
 
 static inline void netdev_lock(struct net_device *dev)
 {
