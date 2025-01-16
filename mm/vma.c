@@ -641,6 +641,7 @@ static int commit_merge(struct vma_merge_struct *vmg,
 
 	init_multi_vma_prep(&vp, vmg->vma, adjust, remove, remove2);
 
+	VM_WARN_ON(!adjust && (!expanded || adj_start));
 	VM_WARN_ON(vp.anon_vma && adjust && adjust->anon_vma &&
 		   vp.anon_vma != adjust->anon_vma);
 
