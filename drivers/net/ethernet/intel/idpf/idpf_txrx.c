@@ -3592,10 +3592,15 @@ static void idpf_vport_intr_rel_irq(struct idpf_vport *vport)
 static void idpf_vport_intr_dis_irq_all(struct idpf_vport *vport)
 {
 	struct idpf_q_vector *q_vector = vport->q_vectors;
-	int q_idx;
+	int q_idx, vidx, irq_num;
 
-	for (q_idx = 0; q_idx < vport->num_q_vectors; q_idx++)
+	for (q_idx = 0; q_idx < vport->num_q_vectors; q_idx++) {
+		vidx = vport->q_vector_idxs[q_idx];
+		irq_num = vport->adapter->msix_entries[vidx].vector;
+
 		writel(0, q_vector[q_idx].intr_reg.dyn_ctl);
+		synchronize_irq(irq_num);
+	}
 }
 
 /**
