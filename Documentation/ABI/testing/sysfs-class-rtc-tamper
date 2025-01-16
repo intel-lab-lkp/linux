@@ -1,0 +1,21 @@
+What:		/sys/class/rtc/rtcX/tamper/enable
+Date:		January 2025
+KernelVersion:	6.13
+Contact:	Markus Burri <markus.burri@mt.com>
+Description:	(WO) Attribute to enable and disable the rtc tamper function.
+		Write a '1' to enable tamper detection or a '0' to disable.
+
+What:		/sys/class/rtc/rtcX/tamper/read
+Date:		January 2025
+KernelVersion:	6.13
+Contact:	Markus Burri <markus.burri@mt.com>
+Description:	(RO) Attribute to read the stored timestamps form buffer FIFO.
+		The timestamps are returned one by one
+		Format is 'seconds.milliseconds' since the epoch followed by the trigger events.
+		The value of the event is the current pin value.
+
+		Example values:
+		- "1234.567 EVIN1=1" for a trigger from EVIN1 changed from low to high
+		- "1234.567 EVIN1=0 EVIN2=1 for a simultaneous trigger of EVIN1 changed to low and
+		  EVIN2 changed to high.
+
