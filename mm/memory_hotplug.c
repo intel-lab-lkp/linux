@@ -1813,6 +1813,9 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		page = pfn_to_page(pfn);
 		folio = page_folio(page);
 
+		if (!folio_try_get(folio))
+			continue;
+
 		/*
 		 * No reference or lock is held on the folio, so it might
 		 * be modified concurrently (e.g. split).  As such,
@@ -1822,12 +1825,6 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		if (folio_test_large(folio))
 			pfn = folio_pfn(folio) + folio_nr_pages(folio) - 1;
 
-		/*
-		 * HWPoison pages have elevated reference counts so the migration would
-		 * fail on them. It also doesn't make any sense to migrate them in the
-		 * first place. Still try to unmap such a page in case it is still mapped
-		 * (keep the unmap as the catch all safety net).
-		 */
 		if (folio_test_hwpoison(folio) ||
 		    (folio_test_large(folio) && folio_test_has_hwpoisoned(folio))) {
 			if (WARN_ON(folio_test_lru(folio)))
@@ -1838,11 +1835,8 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 				folio_unlock(folio);
 			}
 
-			continue;
+			goto put_folio;
 		}
-
-		if (!folio_try_get(folio))
-			continue;
 
 		if (unlikely(page_folio(page) != folio))
 			goto put_folio;
