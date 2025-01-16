@@ -165,6 +165,8 @@ static int stmmac_mtl_setup(struct platform_device *pdev,
 	if (of_property_read_u32(rx_node, "snps,rx-queues-to-use",
 				 &plat->rx_queues_to_use))
 		plat->rx_queues_to_use = 1;
+	if (plat->rx_queues_to_use > MTL_MAX_RX_QUEUES)
+		plat->rx_queues_to_use = MTL_MAX_RX_QUEUES;
 
 	if (of_property_read_bool(rx_node, "snps,rx-sched-sp"))
 		plat->rx_sched_algorithm = MTL_RX_ALGORITHM_SP;
@@ -224,6 +226,8 @@ static int stmmac_mtl_setup(struct platform_device *pdev,
 	if (of_property_read_u32(tx_node, "snps,tx-queues-to-use",
 				 &plat->tx_queues_to_use))
 		plat->tx_queues_to_use = 1;
+	if (plat->tx_queues_to_use > MTL_MAX_TX_QUEUES)
+		plat->tx_queues_to_use = MTL_MAX_TX_QUEUES;
 
 	if (of_property_read_bool(tx_node, "snps,tx-sched-wrr"))
 		plat->tx_sched_algorithm = MTL_TX_ALGORITHM_WRR;
