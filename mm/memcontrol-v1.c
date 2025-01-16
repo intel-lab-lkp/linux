@@ -1377,7 +1377,7 @@ static int mem_cgroup_resize_max(struct mem_cgroup *memcg,
 			continue;
 		}
 
-		if (!try_to_free_mem_cgroup_pages(memcg, 1, GFP_KERNEL,
+		if (!try_to_free_mem_cgroup_pages(memcg, 1, GFP_HIGHUSER_MOVABLE,
 				memsw ? 0 : MEMCG_RECLAIM_MAY_SWAP, NULL)) {
 			ret = -EBUSY;
 			break;
@@ -1409,7 +1409,7 @@ static int mem_cgroup_force_empty(struct mem_cgroup *memcg)
 		if (signal_pending(current))
 			return -EINTR;
 
-		if (!try_to_free_mem_cgroup_pages(memcg, 1, GFP_KERNEL,
+		if (!try_to_free_mem_cgroup_pages(memcg, 1, GFP_HIGHUSER_MOVABLE,
 						  MEMCG_RECLAIM_MAY_SWAP, NULL))
 			nr_retries--;
 	}
