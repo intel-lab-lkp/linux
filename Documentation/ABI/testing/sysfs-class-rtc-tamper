@@ -26,3 +26,11 @@ KernelVersion:	6.13
 Contact:	Markus Burri <markus.burri@mt.com>
 Description:	(WO) Attribute to trigger an internal timestamp event
 		Write a '1' to trigger an internal event and store a timestamp.
+
+What:		/sys/class/rtc/rtcX/tamper/status
+Date:		January 2025
+KernelVersion:	6.13
+Contact:	Markus Burri <markus.burri@mt.com>
+Description:	(RO) Attribute to read configuration and status for EVINx and buffer.
+		Provide the number of stored timestamp events, the current EVIN pin configuration
+		and the enabled/disabled status.
