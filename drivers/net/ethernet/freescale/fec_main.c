@@ -913,7 +913,18 @@ static int fec_enet_txq_submit_tso(struct fec_enet_priv_tx_q *txq,
 	return 0;
 
 err_release:
-	/* TODO: Release all used data descriptors for TSO */
+	/* Release all used data descriptors for TSO */
+	struct bufdesc *tmp_bdp = txq->bd.cur;
+
+	while (tmp_bdp != bdp) {
+		tmp_bdp->cbd_sc = 0;
+		tmp_bdp->cbd_bufaddr = 0;
+		tmp_bdp->cbd_datlen = 0;
+		tmp_bdp = fec_enet_get_nextdesc(tmp_bdp, &txq->bd);
+	}
+
+	dev_kfree_skb_any(skb);
+
 	return ret;
 }
 
