@@ -2350,9 +2350,9 @@ static void stmmac_dma_operation_mode(struct stmmac_priv *priv)
 	u32 chan = 0;
 	u8 qmode = 0;
 
-	if (rxfifosz == 0)
+	if (!rxfifosz || rxfifosz > priv->dma_cap.rx_fifo_size)
 		rxfifosz = priv->dma_cap.rx_fifo_size;
-	if (txfifosz == 0)
+	if (!txfifosz || txfifosz > priv->dma_cap.tx_fifo_size)
 		txfifosz = priv->dma_cap.tx_fifo_size;
 
 	/* Split up the shared Tx/Rx FIFO memory on DW QoS Eth and DW XGMAC */
@@ -2826,9 +2826,9 @@ static void stmmac_set_dma_operation_mode(struct stmmac_priv *priv, u32 txmode,
 	int rxfifosz = priv->plat->rx_fifo_size;
 	int txfifosz = priv->plat->tx_fifo_size;
 
-	if (rxfifosz == 0)
+	if (!rxfifosz || rxfifosz > priv->dma_cap.rx_fifo_size)
 		rxfifosz = priv->dma_cap.rx_fifo_size;
-	if (txfifosz == 0)
+	if (!txfifosz || txfifosz > priv->dma_cap.tx_fifo_size)
 		txfifosz = priv->dma_cap.tx_fifo_size;
 
 	/* Adjust for real per queue fifo size */
