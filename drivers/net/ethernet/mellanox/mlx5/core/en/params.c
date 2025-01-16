@@ -930,9 +930,9 @@ int mlx5e_build_rq_param(struct mlx5_core_dev *mdev,
 			MLX5_SET(rqc, rqc, reservation_timeout,
 				 mlx5e_choose_lro_timeout(mdev, MLX5E_DEFAULT_SHAMPO_TIMEOUT));
 			MLX5_SET(rqc, rqc, shampo_match_criteria_type,
-				 params->packet_merge.shampo.match_criteria_type);
+				 MLX5_RQC_SHAMPO_MATCH_CRITERIA_TYPE_EXTENDED);
 			MLX5_SET(rqc, rqc, shampo_no_match_alignment_granularity,
-				 params->packet_merge.shampo.alignment_granularity);
+				 MLX5_RQC_SHAMPO_NO_MATCH_ALIGNMENT_GRANULARITY_STRIDE);
 		}
 		break;
 	}
