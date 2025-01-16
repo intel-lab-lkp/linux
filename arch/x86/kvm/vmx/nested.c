@@ -1241,7 +1241,7 @@ static void nested_vmx_transition_tlb_flush(struct kvm_vcpu *vcpu,
 	 * as the effective ASID is common to both L1 and L2.
 	 */
 	if (!nested_has_guest_tlb_tag(vcpu))
-		kvm_make_request(KVM_REQ_TLB_FLUSH_CURRENT, vcpu);
+		kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
 }
 
 static bool is_bitwise_subset(u64 superset, u64 subset, u64 mask)
