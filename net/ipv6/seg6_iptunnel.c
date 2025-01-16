@@ -160,7 +160,10 @@ int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
 		hdr->hop_limit = inner_hdr->hop_limit;
 	} else {
 		ip6_flow_hdr(hdr, 0, flowlabel);
-		hdr->hop_limit = ip6_dst_hoplimit(skb_dst(skb));
+		if (skb->protocol == htons(ETH_P_IP))
+			hdr->hop_limit = ((struct iphdr *)inner_hdr)->ttl;
+		else
+			hdr->hop_limit = ip6_dst_hoplimit(skb_dst(skb));
 
 		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
 
@@ -249,7 +252,10 @@ static int seg6_do_srh_encap_red(struct sk_buff *skb,
 		hdr->hop_limit = inner_hdr->hop_limit;
 	} else {
 		ip6_flow_hdr(hdr, 0, flowlabel);
-		hdr->hop_limit = ip6_dst_hoplimit(skb_dst(skb));
+		if (skb->protocol == htons(ETH_P_IP))
+			hdr->hop_limit = ((struct iphdr *)inner_hdr)->ttl;
+		else
+			hdr->hop_limit = ip6_dst_hoplimit(skb_dst(skb));
 
 		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
 		IP6CB(skb)->iif = skb->skb_iif;
