@@ -421,31 +421,48 @@ static void sxgbe_rx_ctxt_wbstatus(struct sxgbe_rx_ctxt_desc *p,
 	if (p->tstamp_dropped)
 		x->timestamp_dropped++;
 
-	/* ptp */
-	if (p->ptp_msgtype == RX_NO_PTP)
+	/* PTP Msg type */
+	switch (p->ptp_msgtype) {
+	case RX_NO_PTP:
 		x->rx_msg_type_no_ptp++;
-	else if (p->ptp_msgtype == RX_PTP_SYNC)
+		break;
+	case RX_PTP_SYNC:
 		x->rx_ptp_type_sync++;
-	else if (p->ptp_msgtype == RX_PTP_FOLLOW_UP)
+		break;
+	case RX_PTP_FOLLOW_UP:
 		x->rx_ptp_type_follow_up++;
-	else if (p->ptp_msgtype == RX_PTP_DELAY_REQ)
+		break;
+	case RX_PTP_DELAY_REQ:
 		x->rx_ptp_type_delay_req++;
-	else if (p->ptp_msgtype == RX_PTP_DELAY_RESP)
+		break;
+	case RX_PTP_DELAY_RESP:
 		x->rx_ptp_type_delay_resp++;
-	else if (p->ptp_msgtype == RX_PTP_PDELAY_REQ)
+		break;
+	case RX_PTP_PDELAY_REQ:
 		x->rx_ptp_type_pdelay_req++;
-	else if (p->ptp_msgtype == RX_PTP_PDELAY_RESP)
+		break;
+	case RX_PTP_PDELAY_RESP:
 		x->rx_ptp_type_pdelay_resp++;
-	else if (p->ptp_msgtype == RX_PTP_PDELAY_FOLLOW_UP)
+		break;
+	case RX_PTP_PDELAY_FOLLOW_UP:
 		x->rx_ptp_type_pdelay_follow_up++;
-	else if (p->ptp_msgtype == RX_PTP_ANNOUNCE)
+		break;
+	case RX_PTP_ANNOUNCE:
 		x->rx_ptp_announce++;
-	else if (p->ptp_msgtype == RX_PTP_MGMT)
+		break;
+	case RX_PTP_MGMT:
 		x->rx_ptp_mgmt++;
-	else if (p->ptp_msgtype == RX_PTP_SIGNAL)
+		break;
+	case RX_PTP_SIGNAL:
 		x->rx_ptp_signal++;
-	else if (p->ptp_msgtype == RX_PTP_RESV_MSG)
+		break;
+	case RX_PTP_RESV_MSG:
 		x->rx_ptp_resv_msg_type++;
+		break;
+	default:
+		pr_err("Invalid PTP Message type\n");
+		break;
+	}
 }
 
 /* Get rx timestamp status */
