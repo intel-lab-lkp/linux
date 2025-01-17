@@ -1209,7 +1209,8 @@ int resctrl_arch_update_one(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 }
 
 /* TODO: this is IPI heavy */
-int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
+static int __resctrl_arch_update_domains(struct rdt_resource *r, u32 closid,
+					 bool force)
 {
 	int err = 0;
 	enum resctrl_conf_type t;
@@ -1222,7 +1223,7 @@ int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
 	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
 		for (t = 0; t < CDP_NUM_TYPES; t++) {
 			cfg = &d->staged_config[t];
-			if (!cfg->have_new_ctrl)
+			if (!force && !cfg->have_new_ctrl)
 				continue;
 
 			err = resctrl_arch_update_one(r, d, closid, t,
@@ -1233,6 +1234,16 @@ int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
 	}
 
 	return err;
+}
+
+int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid)
+{
+	return __resctrl_arch_update_domains(r, closid, false);
+}
+
+int resctrl_arch_init_domains(struct rdt_resource *r, u32 closid)
+{
+	return __resctrl_arch_update_domains(r, closid, true);
 }
 
 void resctrl_arch_reset_resources(void)
