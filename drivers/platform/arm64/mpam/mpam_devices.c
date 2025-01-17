@@ -68,6 +68,7 @@ static DEFINE_MUTEX(mpam_cpuhp_state_lock);
  */
 u16 mpam_partid_max;
 u8 mpam_pmg_max;
+bool mpam_partid_aliasing; /* PARTID aliasing supported */
 static bool partid_max_init, partid_max_published;
 static DEFINE_SPINLOCK(partid_max_lock);
 
@@ -828,6 +829,7 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 	struct mpam_msc *msc = ris->vmsc->msc;
 	struct mpam_props *props = &ris->props;
 	struct mpam_class *class = ris->vmsc->comp->class;
+	bool partid_can_alias = true;
 
 	lockdep_assert_held(&msc->probe_lock);
 	lockdep_assert_held(&msc->part_sel_lock);
@@ -836,6 +838,8 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 
 	/* Cache Capacity Partitioning */
 	if (FIELD_GET(MPAMF_IDR_HAS_CCAP_PART, ris->idr)) {
+		partid_can_alias = false;
+
 		ris->ccap_idr = mpam_read_partsel_reg(msc, CCAP_IDR);
 
 		props->cmax_wd = FIELD_GET(MPAMF_CCAP_IDR_CMAX_WD, ris->ccap_idr);
@@ -884,14 +888,20 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 		 */
 		props->bwa_wd = min(props->bwa_wd, 16);
 
-		if (props->bwa_wd && FIELD_GET(MPAMF_MBW_IDR_HAS_MAX, mbw_features))
+		if (props->bwa_wd && FIELD_GET(MPAMF_MBW_IDR_HAS_MAX, mbw_features)) {
 			mpam_set_feature(mpam_feat_mbw_max, props);
+			partid_can_alias = false;
+		}
 
-		if (props->bwa_wd && FIELD_GET(MPAMF_MBW_IDR_HAS_MIN, mbw_features))
+		if (props->bwa_wd && FIELD_GET(MPAMF_MBW_IDR_HAS_MIN, mbw_features)) {
 			mpam_set_feature(mpam_feat_mbw_min, props);
+			partid_can_alias = false;
+		}
 
-		if (props->bwa_wd && FIELD_GET(MPAMF_MBW_IDR_HAS_PROP, mbw_features))
+		if (props->bwa_wd && FIELD_GET(MPAMF_MBW_IDR_HAS_PROP, mbw_features)) {
 			mpam_set_feature(mpam_feat_mbw_prop, props);
+			partid_can_alias = false;
+		}
 	}
 
 	/* Priority partitioning */
@@ -988,16 +998,25 @@ static void mpam_ris_hw_probe(struct mpam_msc_ris *ris)
 	 * RIS with PARTID narrowing don't have enough storage for one
 	 * configuration per PARTID. If these are in a class we could use,
 	 * reduce the supported partid_max to match the numer of intpartid.
-	 * If the class is unknown, just ignore it.
+	 * If the MSC won't be used for anything or implements PARTID
+	 * Narrowing then PARTIDs can be assigned freely, so PARTID
+	 * aliasing can be supported regardless of the resource
+	 * controls present.
 	 */
-	if (FIELD_GET(MPAMF_IDR_HAS_PARTID_NRW, ris->idr) &&
-	    class->type != MPAM_CLASS_UNKNOWN) {
+	if (class->type == MPAM_CLASS_UNKNOWN)
+		partid_can_alias = true;
+	else if (FIELD_GET(MPAMF_IDR_HAS_PARTID_NRW, ris->idr)) {
 		u32 nrwidr = mpam_read_partsel_reg(msc, PARTID_NRW_IDR);
 		u16 partid_max = FIELD_GET(MPAMF_PARTID_NRW_IDR_INTPARTID_MAX, nrwidr);
 
 		mpam_set_feature(mpam_feat_partid_nrw, props);
 		msc->partid_max = min(msc->partid_max, partid_max);
+
+		partid_can_alias = true;
 	}
+
+	if (partid_can_alias)
+		mpam_set_feature(mpam_feat_partid_aliasing, props);
 
 	mpam_mon_sel_outer_unlock(msc);
 }
@@ -2368,6 +2387,10 @@ static void __props_mismatch(struct mpam_props *parent,
 		mpam_clear_feature(mpam_feat_dspri_part_0_low, &parent->features);
 	}
 
+	/* PARTID aliasing must be supported everywhere, or not at all: */
+	if (!mpam_has_feature(mpam_feat_partid_aliasing, parent))
+		mpam_clear_feature(mpam_feat_partid_aliasing, &parent->features);
+
 	if (alias) {
 		/* Merge features for aliased resources */
 		parent->features |= child->features;
@@ -2486,6 +2509,7 @@ static void mpam_enable_merge_features(struct list_head *all_classes_list)
 {
 	struct mpam_class *class;
 	struct mpam_component *comp;
+	bool partid_can_alias = true, comp_partid_aliasing;
 
 	lockdep_assert_held(&mpam_list_lock);
 
@@ -2495,9 +2519,19 @@ static void mpam_enable_merge_features(struct list_head *all_classes_list)
 
 		mpam_enable_init_class_features(class);
 
-		list_for_each_entry(comp, &class->components, class_list)
+		list_for_each_entry(comp, &class->components, class_list) {
 			mpam_enable_merge_class_features(comp);
+
+			comp_partid_aliasing = mpam_has_feature(
+				mpam_feat_partid_aliasing, &class->props);
+			partid_can_alias = partid_can_alias &&
+				comp_partid_aliasing;
+		}
 	}
+
+	spin_lock(&partid_max_lock);
+	mpam_partid_aliasing = partid_can_alias;
+	spin_unlock(&partid_max_lock);
 }
 
 static char *mpam_errcode_names[16] = {
