@@ -1531,6 +1531,7 @@ static void mpam_quirk_post_config_change(struct mpam_msc_ris *ris, u16 partid,
 static void mpam_reprogram_ris_partid(struct mpam_msc_ris *ris, u16 partid,
 				      struct mpam_config *cfg)
 {
+	u16 intpartid = 0;
 	u32 pri_val = 0;
 	u16 cmax = MPAMCFG_CMAX_CMAX;
 	u16 bwa_fract = MPAMCFG_MBW_MAX_MAX;
@@ -1543,9 +1544,13 @@ static void mpam_reprogram_ris_partid(struct mpam_msc_ris *ris, u16 partid,
 	__mpam_part_sel(ris->ris_idx, partid, msc);
 
 	if (mpam_has_feature(mpam_feat_partid_nrw, rprops)) {
+		if (mpam_has_feature(mpam_feat_partid_nrw, cfg))
+			intpartid = cfg->cpartid;
+
 		mpam_write_partsel_reg(msc, INTPARTID,
-				       MPAMCFG_INTPARTID_INTERNAL | partid);
-		__mpam_intpart_sel(ris->ris_idx, partid, msc);
+				       MPAMCFG_INTPARTID_INTERNAL | intpartid);
+
+		__mpam_intpart_sel(ris->ris_idx, intpartid, msc);
 	}
 
 	if (mpam_has_feature(mpam_feat_cpor_part, rprops)) {
@@ -3084,6 +3089,7 @@ static mpam_features_t mpam_update_config(struct mpam_config *cfg,
 {
 	mpam_features_t changes = 0;
 
+	maybe_update_config(cfg, mpam_feat_partid_nrw, newcfg, cpartid, changes);
 	maybe_update_config(cfg, mpam_feat_cpor_part, newcfg, cpbm, changes);
 	maybe_update_config(cfg, mpam_feat_mbw_part, newcfg, mbw_pbm, changes);
 	maybe_update_config(cfg, mpam_feat_mbw_max, newcfg, mbw_max, changes);

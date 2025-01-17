@@ -205,7 +205,8 @@ u32 resctrl_arch_get_num_closid(struct rdt_resource *ignored)
 
 static void mpam_resctrl_partid_range(u32 closid, enum resctrl_conf_type type,
 				      const struct rdt_resource *r,
-				      u16 *min_partid, u16 *max_partid)
+				      u16 *min_partid, u16 *max_partid,
+				      u16 *cpartid)
 {
 	u16 base_partid = closid;
 	u16 span = 1;
@@ -222,6 +223,9 @@ static void mpam_resctrl_partid_range(u32 closid, enum resctrl_conf_type type,
 	*min_partid = base_partid * partid_per_closid;
 	if (max_partid)
 		*max_partid = *min_partid + (span * partid_per_closid - 1);
+
+	if (cpartid)
+		*cpartid = base_partid;
 }
 
 static void mpam_resctrl_hwid(u32 closid, u32 rmid,
@@ -318,7 +322,7 @@ bool resctrl_arch_match_closid(struct task_struct *tsk, u32 closid)
 	u32 tsk_closid = FIELD_GET(MPAM1_EL1_PARTID_D, regval);
 
 	mpam_resctrl_partid_range(closid, CDP_NONE, NULL,
-				  &min_partid, &max_partid);
+				  &min_partid, &max_partid, NULL);
 	return tsk_closid >= min_partid && tsk_closid <= max_partid;
 }
 
@@ -1147,7 +1151,7 @@ u32 resctrl_arch_get_config(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 	dom = container_of(d, struct mpam_resctrl_dom, resctrl_ctrl_dom);
 	cprops = &res->class->props;
 
-	mpam_resctrl_partid_range(closid, type, r, &partid, NULL);
+	mpam_resctrl_partid_range(closid, type, r, &partid, NULL, NULL);
 	cfg = &dom->comp->cfg[partid];
 
 	switch (r->rid) {
@@ -1205,13 +1209,15 @@ int resctrl_arch_update_one(struct rdt_resource *r, struct rdt_ctrl_domain *d,
 	dom = container_of(d, struct mpam_resctrl_dom, resctrl_ctrl_dom);
 	cprops = &res->class->props;
 
-	mpam_resctrl_partid_range(closid, t, r, &min_partid, &max_partid);
+	cfg.features = 0;
+	mpam_set_feature(mpam_feat_partid_nrw, &cfg);
+	mpam_resctrl_partid_range(closid, t, r, &min_partid, &max_partid,
+				  &cfg.cpartid);
 	if (!r->alloc_capable ||
 	    min_partid > mpam_partid_max ||
 	    max_partid > mpam_partid_max)
 		return -EINVAL;
 
-	cfg.features = 0;
 	switch (r->rid) {
 	case RDT_RESOURCE_L2:
 	case RDT_RESOURCE_L3:
