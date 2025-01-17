@@ -1520,6 +1520,53 @@ static void test_seqpacket_transport_uaf_server(const struct test_opts *opts)
 	control_expectln("DONE");
 }
 
+static void test_stream_connect_retry_client(const struct test_opts *opts)
+{
+	struct sockaddr_vm addr = {
+		.svm_family = AF_VSOCK,
+		.svm_cid = opts->peer_cid,
+		.svm_port = opts->peer_port
+	};
+	int s, alen = sizeof(addr);
+
+	s = socket(AF_VSOCK, SOCK_STREAM, 0);
+	if (s < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!connect(s, (struct sockaddr *)&addr, alen)) {
+		fprintf(stderr, "Unexpected connect() #1 success\n");
+		exit(EXIT_FAILURE);
+	}
+
+	control_writeln("LISTEN");
+	control_expectln("LISTENING");
+
+	if (connect(s, (struct sockaddr *)&addr, alen)) {
+		perror("connect() #2");
+		exit(EXIT_FAILURE);
+	}
+
+	close(s);
+}
+
+static void test_stream_connect_retry_server(const struct test_opts *opts)
+{
+	int fd;
+
+	control_expectln("LISTEN");
+
+	fd = vsock_stream_accept(VMADDR_CID_ANY, opts->peer_port, NULL);
+	if (fd < 0) {
+		perror("accept");
+		exit(EXIT_FAILURE);
+	}
+
+	vsock_wait_remote_close(fd);
+	close(fd);
+}
+
 static struct test_case test_cases[] = {
 	{
 		.name = "SOCK_STREAM connection reset",
@@ -1654,6 +1701,11 @@ static struct test_case test_cases[] = {
 		.name = "connectible transport release use-after-free",
 		.run_client = test_seqpacket_transport_uaf_client,
 		.run_server = test_seqpacket_transport_uaf_server,
+	},
+	{
+		.name = "connectible retry failed connect()",
+		.run_client = test_stream_connect_retry_client,
+		.run_server = test_stream_connect_retry_server,
 	},
 	{},
 };
