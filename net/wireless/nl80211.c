@@ -6686,7 +6686,7 @@ static bool nl80211_put_signal(struct sk_buff *msg, u8 mask, s8 *signal,
 
 static int nl80211_fill_link_station(struct sk_buff *msg,
 				     struct cfg80211_registered_device *rdev,
-				     struct station_info *sinfo)
+				     struct link_station_info *sinfo)
 {
 	struct nlattr *bss_param;
 
@@ -6844,6 +6844,7 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 {
 	void *hdr;
 	struct nlattr *sinfoattr;
+	struct link_station_info *link_sinfo = sinfo->links[0];
 
 	hdr = nl80211hdr_put(msg, portid, seq, flags, cmd);
 	if (!hdr) {
@@ -6880,7 +6881,7 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 		    &sinfo->sta_flags))
 		goto nla_put_failure;
 
-	if (nl80211_fill_link_station(msg, rdev, sinfo))
+	if (nl80211_fill_link_station(msg, rdev, link_sinfo))
 		goto nla_put_failure;
 
 	nla_nest_end(msg, sinfoattr);
@@ -13024,9 +13025,9 @@ static int cfg80211_cqm_rssi_update(struct cfg80211_registered_device *rdev,
 			return err;
 
 		cfg80211_sinfo_release_content(&sinfo);
-		if (sinfo.filled & BIT_ULL(NL80211_STA_INFO_BEACON_SIGNAL_AVG))
+		if (sinfo.links[0]->filled & BIT_ULL(NL80211_STA_INFO_BEACON_SIGNAL_AVG))
 			cqm_config->last_rssi_event_value =
-				(s8) sinfo.rx_beacon_signal_avg;
+				(s8)sinfo.links[0]->rx_beacon_signal_avg;
 	}
 
 	last = cqm_config->last_rssi_event_value;
