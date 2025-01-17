@@ -223,6 +223,30 @@ void cxl_dpa_debug(struct seq_file *file, struct cxl_dev_state *cxlds)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dpa_debug, "CXL");
 
+static void release_skip(struct cxl_dev_state *cxlds,
+			 const resource_size_t skip_base,
+			 const resource_size_t skip_len)
+{
+	resource_size_t skip_start = skip_base, skip_rem = skip_len;
+
+	for (int i = 0; i < cxlds->nr_partitions; i++) {
+		const struct resource *part_res = &cxlds->part[i].res;
+		resource_size_t skip_end, skip_size;
+
+		if (skip_start < part_res->start || skip_start > part_res->end)
+			continue;
+
+		skip_end = min(part_res->end, skip_start + skip_rem - 1);
+		skip_size = skip_end - skip_start + 1;
+		__release_region(&cxlds->dpa_res, skip_start, skip_size);
+		skip_start += skip_size;
+		skip_rem -= skip_size;
+
+		if (!skip_rem)
+			break;
+	}
+}
+
 /*
  * Must be called in a context that synchronizes against this decoder's
  * port ->remove() callback (like an endpoint decoder sysfs attribute)
@@ -241,7 +265,7 @@ static void __cxl_dpa_release(struct cxl_endpoint_decoder *cxled)
 	skip_start = res->start - cxled->skip;
 	__release_region(&cxlds->dpa_res, res->start, resource_size(res));
 	if (cxled->skip)
-		__release_region(&cxlds->dpa_res, skip_start, cxled->skip);
+		release_skip(cxlds, skip_start, cxled->skip);
 	cxled->skip = 0;
 	cxled->dpa_res = NULL;
 	put_device(&cxled->cxld.dev);
@@ -268,6 +292,47 @@ static void devm_cxl_dpa_release(struct cxl_endpoint_decoder *cxled)
 	__cxl_dpa_release(cxled);
 }
 
+static int request_skip(struct cxl_dev_state *cxlds,
+			struct cxl_endpoint_decoder *cxled,
+			const resource_size_t skip_base,
+			const resource_size_t skip_len)
+{
+	resource_size_t skip_start = skip_base, skip_rem = skip_len;
+
+	for (int i = 0; i < cxlds->nr_partitions; i++) {
+		const struct resource *part_res = &cxlds->part[i].res;
+		struct cxl_port *port = cxled_to_port(cxled);
+		resource_size_t skip_end, skip_size;
+		struct resource *res;
+
+		if (skip_start < part_res->start || skip_start > part_res->end)
+			continue;
+
+		skip_end = min(part_res->end, skip_start + skip_rem - 1);
+		skip_size = skip_end - skip_start + 1;
+
+		res = __request_region(&cxlds->dpa_res, skip_start, skip_size,
+				       dev_name(&cxled->cxld.dev), 0);
+		if (!res) {
+			dev_dbg(cxlds->dev,
+				"decoder%d.%d: failed to reserve skipped space\n",
+				port->id, cxled->cxld.id);
+			break;
+		}
+		skip_start += skip_size;
+		skip_rem -= skip_size;
+		if (!skip_rem)
+			break;
+	}
+
+	if (skip_rem == 0)
+		return 0;
+
+	release_skip(cxlds, skip_base, skip_len - skip_rem);
+
+	return -EBUSY;
+}
+
 static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 			     resource_size_t base, resource_size_t len,
 			     resource_size_t skipped)
@@ -277,6 +342,7 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct device *dev = &port->dev;
 	struct resource *res;
+	int rc;
 
 	lockdep_assert_held_write(&cxl_dpa_rwsem);
 
@@ -305,14 +371,9 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 	}
 
 	if (skipped) {
-		res = __request_region(&cxlds->dpa_res, base - skipped, skipped,
-				       dev_name(&cxled->cxld.dev), 0);
-		if (!res) {
-			dev_dbg(dev,
-				"decoder%d.%d: failed to reserve skipped space\n",
-				port->id, cxled->cxld.id);
-			return -EBUSY;
-		}
+		rc = request_skip(cxlds, cxled, base - skipped, skipped);
+		if (rc)
+			return rc;
 	}
 	res = __request_region(&cxlds->dpa_res, base, len,
 			       dev_name(&cxled->cxld.dev), 0);
@@ -320,16 +381,15 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 		dev_dbg(dev, "decoder%d.%d: failed to reserve allocation\n",
 			port->id, cxled->cxld.id);
 		if (skipped)
-			__release_region(&cxlds->dpa_res, base - skipped,
-					 skipped);
+			release_skip(cxlds, base - skipped, skipped);
 		return -EBUSY;
 	}
 	cxled->dpa_res = res;
 	cxled->skip = skipped;
 
-	if (resource_contains(to_pmem_res(cxlds), res))
+	if (cxl_partition_contains(cxlds, CXL_PARTITION_PMEM, res))
 		cxled->mode = CXL_DECODER_PMEM;
-	else if (resource_contains(to_ram_res(cxlds), res))
+	else if (cxl_partition_contains(cxlds, CXL_PARTITION_RAM, res))
 		cxled->mode = CXL_DECODER_RAM;
 	else {
 		dev_warn(dev, "decoder%d.%d: %pr does not map any partition\n",
@@ -527,15 +587,13 @@ int cxl_dpa_set_mode(struct cxl_endpoint_decoder *cxled,
 int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, unsigned long long size)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	resource_size_t free_ram_start, free_pmem_start;
 	struct cxl_port *port = cxled_to_port(cxled);
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct device *dev = &cxled->cxld.dev;
-	resource_size_t start, avail, skip;
+	struct resource *res, *prev = NULL;
+	resource_size_t start, avail, skip, skip_start;
 	struct resource *p, *last;
-	const struct resource *ram_res = to_ram_res(cxlds);
-	const struct resource *pmem_res = to_pmem_res(cxlds);
-	int rc;
+	int part, rc;
 
 	down_write(&cxl_dpa_rwsem);
 	if (cxled->cxld.region) {
@@ -551,46 +609,53 @@ int cxl_dpa_alloc(struct cxl_endpoint_decoder *cxled, unsigned long long size)
 		goto out;
 	}
 
-	for (p = ram_res->child, last = NULL; p; p = p->sibling)
-		last = p;
-	if (last)
-		free_ram_start = last->end + 1;
+	if (cxled->mode == CXL_DECODER_RAM)
+		part = CXL_PARTITION_RAM;
+	else if (cxled->mode == CXL_DECODER_PMEM)
+		part = CXL_PARTITION_PMEM;
 	else
-		free_ram_start = ram_res->start;
+		part = cxlds->nr_partitions;
 
-	for (p = pmem_res->child, last = NULL; p; p = p->sibling)
-		last = p;
-	if (last)
-		free_pmem_start = last->end + 1;
-	else
-		free_pmem_start = pmem_res->start;
-
-	if (cxled->mode == CXL_DECODER_RAM) {
-		start = free_ram_start;
-		avail = ram_res->end - start + 1;
-		skip = 0;
-	} else if (cxled->mode == CXL_DECODER_PMEM) {
-		resource_size_t skip_start, skip_end;
-
-		start = free_pmem_start;
-		avail = pmem_res->end - start + 1;
-		skip_start = free_ram_start;
-
-		/*
-		 * If some pmem is already allocated, then that allocation
-		 * already handled the skip.
-		 */
-		if (pmem_res->child &&
-		    skip_start == pmem_res->child->start)
-			skip_end = skip_start - 1;
-		else
-			skip_end = start - 1;
-		skip = skip_end - skip_start + 1;
-	} else {
-		dev_dbg(dev, "mode not set\n");
-		rc = -EINVAL;
+	if (part >= cxlds->nr_partitions) {
+		dev_dbg(dev, "partition %d not found\n", part);
+		rc = -EBUSY;
 		goto out;
 	}
+
+	res = &cxlds->part[part].res;
+
+	for (p = res->child, last = NULL; p; p = p->sibling)
+		last = p;
+	if (last)
+		start = last->end + 1;
+	else
+		start = res->start;
+
+	/*
+	 * To allocate at partition N, a skip needs to be calculated for all
+	 * unallocated space at lower partitions indices.
+	 *
+	 * If a partition has any allocations, the search can end because a
+	 * previous cxl_dpa_alloc() invocation is assumed to have accounted for
+	 * all previous partitions.
+	 */
+	skip_start = CXL_RESOURCE_NONE;
+	for (int i = part; i; i--) {
+		prev = &cxlds->part[i - 1].res;
+		for (p = prev->child, last = NULL; p; p = p->sibling)
+			last = p;
+		if (last) {
+			skip_start = last->end + 1;
+			break;
+		}
+		skip_start = prev->start;
+	}
+
+	avail = res->end - start + 1;
+	if (skip_start == CXL_RESOURCE_NONE)
+		skip = 0;
+	else
+		skip = res->start - skip_start;
 
 	if (size > avail) {
 		dev_dbg(dev, "%pa exceeds available %s capacity: %pa\n", &size,

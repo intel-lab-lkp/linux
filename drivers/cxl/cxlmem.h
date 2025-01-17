@@ -515,6 +515,15 @@ static inline resource_size_t cxl_pmem_size(struct cxl_dev_state *cxlds)
 	return resource_size(res);
 }
 
+static inline bool cxl_partition_contains(struct cxl_dev_state *cxlds,
+					  unsigned int part,
+					  struct resource *res)
+{
+	if (part >= cxlds->nr_partitions)
+		return false;
+	return resource_contains(&cxlds->part[part].res, res);
+}
+
 static inline struct cxl_dev_state *mbox_to_cxlds(struct cxl_mailbox *cxl_mbox)
 {
 	return dev_get_drvdata(cxl_mbox->host);
