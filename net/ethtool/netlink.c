@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include <net/netdev_queues.h>
 #include <net/sock.h>
 #include <linux/ethtool_netlink.h>
 #include <linux/phy_link_topology.h>
@@ -667,6 +668,7 @@ static int ethnl_default_set_doit(struct sk_buff *skb, struct genl_info *info)
 	const struct ethnl_request_ops *ops;
 	struct ethnl_req_info req_info = {};
 	const u8 cmd = info->genlhdr->cmd;
+	struct net_device *dev;
 	int ret;
 
 	ops = ethnl_default_requests[cmd];
@@ -688,21 +690,35 @@ static int ethnl_default_set_doit(struct sk_buff *skb, struct genl_info *info)
 			goto out_dev;
 	}
 
+	dev = req_info.dev;
+
+	dev->cfg_pending = kmemdup(dev->cfg, sizeof(*dev->cfg),
+				   GFP_KERNEL_ACCOUNT);
+	if (!dev->cfg_pending) {
+		ret = -ENOMEM;
+		goto out_tie_cfg;
+	}
+
 	rtnl_lock();
-	ret = ethnl_ops_begin(req_info.dev);
+	ret = ethnl_ops_begin(dev);
 	if (ret < 0)
 		goto out_rtnl;
 
 	ret = ops->set(&req_info, info);
 	if (ret <= 0)
 		goto out_ops;
-	ethtool_notify(req_info.dev, ops->set_ntf_cmd, NULL);
+	ethtool_notify(dev, ops->set_ntf_cmd, NULL);
 
 	ret = 0;
 out_ops:
-	ethnl_ops_complete(req_info.dev);
+	ethnl_ops_complete(dev);
 out_rtnl:
 	rtnl_unlock();
+	if (ret >= 0) /* success! */
+		swap(dev->cfg, dev->cfg_pending);
+	kfree(dev->cfg_pending);
+out_tie_cfg:
+	dev->cfg_pending = dev->cfg;
 out_dev:
 	ethnl_parse_header_dev_put(&req_info);
 	return ret;
