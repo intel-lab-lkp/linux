@@ -305,18 +305,6 @@ struct kmem_cache *__kmem_cache_create_args(const char *name,
 		goto out_unlock;
 	}
 
-	/* Refuse requests with allocator specific flags */
-	if (flags & ~SLAB_FLAGS_PERMITTED) {
-		err = -EINVAL;
-		goto out_unlock;
-	}
-
-	/*
-	 * Some allocators will constraint the set of valid flags to a subset
-	 * of all flags. We expect them to define CACHE_CREATE_MASK in this
-	 * case, and we'll just provide them with a sanitized version of the
-	 * passed flags.
-	 */
 	flags &= CACHE_CREATE_MASK;
 
 	/* Fail closed on bad usersize of useroffset values. */
