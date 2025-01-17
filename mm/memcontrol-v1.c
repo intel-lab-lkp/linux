@@ -106,6 +106,23 @@ static struct lockdep_map memcg_oom_lock_dep_map = {
 
 DEFINE_SPINLOCK(memcg_oom_lock);
 
+static unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
+{
+	return __memcg_events(memcg, event, true);
+}
+
+/* idx can be of type enum memcg_stat_item or node_stat_item. */
+static unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
+{
+	return __memcg_page_state(memcg, idx, true);
+}
+
+static unsigned long memcg_page_state_local_output(struct mem_cgroup *memcg, int item)
+{
+	return memcg_page_state_local(memcg, item) *
+		memcg_page_state_output_unit(item);
+}
+
 static void __mem_cgroup_insert_exceeded(struct mem_cgroup_per_node *mz,
 					 struct mem_cgroup_tree_per_node *mctz,
 					 unsigned long new_usage_in_excess)

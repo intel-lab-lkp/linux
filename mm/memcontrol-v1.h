@@ -65,13 +65,8 @@ static inline unsigned long memcg_events(struct mem_cgroup *memcg, int event)
 	return __memcg_events(memcg, event, false);
 }
 
-static inline unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
-{
-	return __memcg_events(memcg, event, true);
-}
-
+int memcg_page_state_output_unit(int item);
 unsigned long memcg_page_state_output(struct mem_cgroup *memcg, int item);
-unsigned long memcg_page_state_local_output(struct mem_cgroup *memcg, int item);
 int memory_stat_show(struct seq_file *m, void *v);
 
 /* Cgroup v1-specific declarations */

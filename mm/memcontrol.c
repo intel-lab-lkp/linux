@@ -1367,7 +1367,7 @@ static int memcg_page_state_unit(int item)
 }
 
 /* Translate stat items to the correct unit for memory.stat output */
-static int memcg_page_state_output_unit(int item)
+int memcg_page_state_output_unit(int item)
 {
 	/*
 	 * Workingset state is actually in pages, but we export it to userspace
@@ -1399,12 +1399,6 @@ static int memcg_page_state_output_unit(int item)
 unsigned long memcg_page_state_output(struct mem_cgroup *memcg, int item)
 {
 	return memcg_page_state(memcg, item) *
-		memcg_page_state_output_unit(item);
-}
-
-unsigned long memcg_page_state_local_output(struct mem_cgroup *memcg, int item)
-{
-	return memcg_page_state_local(memcg, item) *
 		memcg_page_state_output_unit(item);
 }
 

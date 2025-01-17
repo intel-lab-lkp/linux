@@ -938,12 +938,6 @@ static inline void mod_memcg_page_state(struct page *page,
 
 unsigned long __memcg_page_state(struct mem_cgroup *memcg, int idx, bool local);
 
-/* idx can be of type enum memcg_stat_item or node_stat_item. */
-static inline unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
-{
-	return __memcg_page_state(memcg, idx, true);
-}
-
 static inline unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
 {
 	return __memcg_page_state(memcg, idx, false);
