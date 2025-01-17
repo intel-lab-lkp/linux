@@ -44,6 +44,12 @@ static void  __noreturn hv_vtl_emergency_restart(void)
 	}
 }
 
+/* The only way to restart is triple fault */
+static void  __noreturn hv_vtl_restart(char *)
+{
+	hv_vtl_emergency_restart();
+}
+
 void __init hv_vtl_init_platform(void)
 {
 	pr_info("Linux runs in Hyper-V Virtual Trust Level\n");
@@ -269,6 +275,7 @@ int __init hv_vtl_early_init(void)
 	apic_update_callback(wakeup_secondary_cpu_64, hv_vtl_wakeup_secondary_cpu);
 
 	machine_ops.emergency_restart = hv_vtl_emergency_restart;
+	machine_ops.restart = hv_vtl_restart;
 
 	return 0;
 }
