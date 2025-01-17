@@ -46,7 +46,6 @@ struct color_platform {
 
 struct alienfx_priv {
 	struct platform_device *pdev;
-	struct alienfx_quirks *quirks;
 	struct led_classdev global_led;
 	struct color_platform colors[4];
 	u8 global_brightness;
