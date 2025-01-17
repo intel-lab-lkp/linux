@@ -300,6 +300,13 @@ struct mpam_config {
 	u16	mbw_max;
 	u16	mbw_min;
 
+	/*
+	 * Control partition; resource regulation context for stateful controls
+	 * Valid if features has mpam_feat_partid_nrw.
+	 * For MSCs that implement PARTID Narrowing, this is intPARTID.
+	 */
+	u16	cpartid;
+
 	struct mpam_garbage	garbage;
 };
 
