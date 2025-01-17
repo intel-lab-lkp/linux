@@ -66,6 +66,9 @@ static inline void mpam_set_cpu_defaults(int cpu, u16 partid_d, u16 partid_i,
 	default_val |= FIELD_PREP(MPAM1_EL1_PMG_I, pmg_i);
 
 	WRITE_ONCE(per_cpu(arm64_mpam_default, cpu), default_val);
+
+	pr_info("MPAM: CPU%d -> (D=%d:%d, I=%d:%d)\n",
+		cpu, partid_d, pmg_d, partid_i, pmg_i);
 }
 
 static inline void mpam_set_task_partid_pmg(struct task_struct *tsk,
@@ -81,6 +84,10 @@ static inline void mpam_set_task_partid_pmg(struct task_struct *tsk,
 	regval |= FIELD_PREP(MPAM1_EL1_PMG_I, pmg_i);
 
 	WRITE_ONCE(task_thread_info(tsk)->mpam_partid_pmg, regval);
+
+	pr_info("MPAM: task %s[%d/%d] -> (D=%d:%d, I=%d:%d)\n",
+		current->comm, current->pid, current->tgid,
+		partid_d, pmg_d, partid_i, pmg_i);
 #endif
 }
 
