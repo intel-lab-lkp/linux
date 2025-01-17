@@ -936,10 +936,33 @@ static inline void mod_memcg_page_state(struct page *page,
 	rcu_read_unlock();
 }
 
-unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx);
-unsigned long lruvec_page_state(struct lruvec *lruvec, enum node_stat_item idx);
-unsigned long lruvec_page_state_local(struct lruvec *lruvec,
-				      enum node_stat_item idx);
+unsigned long __memcg_page_state(struct mem_cgroup *memcg, int idx, bool local);
+
+/* idx can be of type enum memcg_stat_item or node_stat_item. */
+static inline unsigned long memcg_page_state_local(struct mem_cgroup *memcg, int idx)
+{
+	return __memcg_page_state(memcg, idx, true);
+}
+
+static inline unsigned long memcg_page_state(struct mem_cgroup *memcg, int idx)
+{
+	return __memcg_page_state(memcg, idx, false);
+}
+
+unsigned long __lruvec_page_state(struct lruvec *lruvec,
+		enum node_stat_item idx, bool local);
+
+static inline unsigned long lruvec_page_state(struct lruvec *lruvec,
+					      enum node_stat_item idx)
+{
+	return __lruvec_page_state(lruvec, idx, false);
+}
+
+static inline unsigned long lruvec_page_state_local(struct lruvec *lruvec,
+						    enum node_stat_item idx)
+{
+	return __lruvec_page_state(lruvec, idx, true);
+}
 
 void mem_cgroup_flush_stats(struct mem_cgroup *memcg);
 void mem_cgroup_flush_stats_ratelimited(struct mem_cgroup *memcg);
