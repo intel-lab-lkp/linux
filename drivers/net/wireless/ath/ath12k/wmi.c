@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/skbuff.h>
 #include <linux/ctype.h>
@@ -2093,6 +2093,65 @@ static void ath12k_wmi_copy_peer_flags(struct wmi_peer_assoc_complete_cmd *cmd,
 		cmd->peer_flags &= cpu_to_le32(~WMI_PEER_HT);
 }
 
+#define EMLSR_PAD_DELAY_MAX	5
+#define EMLSR_TRANS_DELAY_MAX	6
+#define EML_TRANS_TIMEOUT_MAX	11
+#define TU_TO_USEC(t)		((t) << 10)  /* (t) x 1024 */
+
+static u32 ath12k_wmi_get_emlsr_pad_delay_us(u16 eml_cap)
+{
+	/* IEEE Std 802.11be-2024 Table 9-417i—Encoding of the EMLSR
+	 * Padding Delay subfield.
+	 */
+	u32 pad_delay = u16_get_bits(eml_cap, IEEE80211_EML_CAP_EMLSR_PADDING_DELAY);
+	static const u32 pad_delay_us[EMLSR_PAD_DELAY_MAX] = {0, 32, 64, 128, 256};
+
+	if (pad_delay >= EMLSR_PAD_DELAY_MAX)
+		return 0;
+
+	return pad_delay_us[pad_delay];
+}
+
+static u32 ath12k_wmi_get_emlsr_trans_delay_us(u16 eml_cap)
+{
+	/* IEEE Std 802.11be-2024 Table 9-417j—Encoding of the EMLSR
+	 * Transition Delay subfield.
+	 */
+	u32 trans_delay = u16_get_bits(eml_cap,
+				       IEEE80211_EML_CAP_EMLSR_TRANSITION_DELAY);
+	static const u32 trans_delay_us[EMLSR_TRANS_DELAY_MAX] = {
+		0, 16, 32, 64, 128, 256
+	};
+
+	if (trans_delay >= EMLSR_TRANS_DELAY_MAX)
+		return 0;
+
+	return trans_delay_us[trans_delay];
+}
+
+static u32 ath12k_wmi_get_emlsr_trans_timeout_us(u16 eml_cap)
+{
+	/* IEEE Std 802.11be-2024 Table 9-417m—Encoding of the
+	 * Transition Timeout subfield.
+	 */
+	u8 timeout = u16_get_bits(eml_cap, IEEE80211_EML_CAP_TRANSITION_TIMEOUT);
+	static const u32 trans_timeout_us[EML_TRANS_TIMEOUT_MAX] = {
+		0, 128, 256, 512,
+		TU_TO_USEC(1),
+		TU_TO_USEC((1U << 1)),
+		TU_TO_USEC((1U << 2)),
+		TU_TO_USEC((1U << 3)),
+		TU_TO_USEC((1U << 4)),
+		TU_TO_USEC((1U << 5)),
+		TU_TO_USEC((1U << 6)),
+	};
+
+	if (timeout >= EML_TRANS_TIMEOUT_MAX)
+		return 0;
+
+	return trans_timeout_us[timeout];
+}
+
 int ath12k_wmi_send_peer_assoc_cmd(struct ath12k *ar,
 				   struct ath12k_wmi_peer_assoc_arg *arg)
 {
@@ -2106,9 +2165,10 @@ int ath12k_wmi_send_peer_assoc_cmd(struct ath12k *ar,
 	struct sk_buff *skb;
 	struct wmi_tlv *tlv;
 	void *ptr;
-	u32 peer_legacy_rates_align;
+	u32 peer_legacy_rates_align, eml_delay, eml_trans_timeout;
 	u32 peer_ht_rates_align;
 	int i, ret, len;
+	u16 eml_cap;
 	__le32 v;
 
 	peer_legacy_rates_align = roundup(arg->peer_legacy_rates.num_rates,
@@ -2280,6 +2340,23 @@ int ath12k_wmi_send_peer_assoc_cmd(struct ath12k *ar,
 	ml_params->logical_link_idx = cpu_to_le32(arg->ml.logical_link_idx);
 	ml_params->ml_peer_id = cpu_to_le32(arg->ml.ml_peer_id);
 	ml_params->ieee_link_id = cpu_to_le32(arg->ml.ieee_link_id);
+
+	eml_cap = arg->ml.eml_cap;
+	if (u16_get_bits(eml_cap, IEEE80211_EML_CAP_EMLSR_SUPP)) {
+		/* Padding delay */
+		eml_delay = ath12k_wmi_get_emlsr_pad_delay_us(eml_cap);
+		ml_params->emlsr_padding_delay_us = cpu_to_le32(eml_delay);
+		/* Transition delay */
+		eml_delay = ath12k_wmi_get_emlsr_trans_delay_us(eml_cap);
+		ml_params->emlsr_trans_delay_us = cpu_to_le32(eml_delay);
+		/* Transition timeout */
+		eml_trans_timeout = ath12k_wmi_get_emlsr_trans_timeout_us(eml_cap);
+		ml_params->emlsr_trans_timeout_us = cpu_to_le32(eml_trans_timeout);
+		ath12k_dbg(ar->ab, ATH12K_DBG_WMI, "wmi peer (%pM) emlsr padding delay %u, trans delay %u trans timeout %u",
+			   arg->peer_mac, ml_params->emlsr_padding_delay_us,
+			   ml_params->emlsr_trans_delay_us,
+			   ml_params->emlsr_trans_timeout_us);
+	}
 	ptr += sizeof(*ml_params);
 
 skip_ml_params:
