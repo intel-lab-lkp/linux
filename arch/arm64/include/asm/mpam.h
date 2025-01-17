@@ -93,20 +93,6 @@ static inline u64 mpam_get_regval(struct task_struct *tsk)
 #endif
 }
 
-static inline void resctrl_arch_set_rmid(struct task_struct *tsk, u32 rmid)
-{
-#ifdef CONFIG_ARM64_MPAM
-	u64 regval = mpam_get_regval(tsk);
-
-	regval &= ~MPAM1_EL1_PMG_D;
-	regval &= ~MPAM1_EL1_PMG_I;
-	regval |= FIELD_PREP(MPAM1_EL1_PMG_D, rmid);
-	regval |= FIELD_PREP(MPAM1_EL1_PMG_I, rmid);
-
-	WRITE_ONCE(task_thread_info(tsk)->mpam_partid_pmg, regval);
-#endif
-}
-
 static inline void mpam_thread_switch(struct task_struct *tsk)
 {
 	u64 oldregval;
