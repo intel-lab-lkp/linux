@@ -342,6 +342,75 @@ static int __cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 	return 0;
 }
 
+static int add_dpa_res(struct device *dev, struct resource *parent,
+		       struct resource *res, resource_size_t start,
+		       resource_size_t size, const char *type)
+{
+	int rc;
+
+	*res = (struct resource) {
+		.name = type,
+		.start = start,
+		.end =  start + size - 1,
+		.flags = IORESOURCE_MEM,
+	};
+	if (resource_size(res) == 0) {
+		dev_dbg(dev, "DPA(%s): no capacity\n", res->name);
+		return 0;
+	}
+	rc = request_resource(parent, res);
+	if (rc) {
+		dev_err(dev, "DPA(%s): failed to track %pr (%d)\n", res->name,
+			res, rc);
+		return rc;
+	}
+
+	dev_dbg(dev, "DPA(%s): %pr\n", res->name, res);
+
+	return 0;
+}
+
+/* if this fails the caller must destroy @cxlds, there is no recovery */
+int cxl_dpa_setup(struct cxl_dev_state *cxlds, const struct cxl_dpa_info *info)
+{
+	struct device *dev = cxlds->dev;
+
+	guard(rwsem_write)(&cxl_dpa_rwsem);
+
+	if (cxlds->nr_partitions)
+		return -EBUSY;
+
+	if (!info->size || !info->nr_partitions) {
+		cxlds->dpa_res = DEFINE_RES_MEM(0, 0);
+		cxlds->nr_partitions = 0;
+		return 0;
+	}
+
+	cxlds->dpa_res = DEFINE_RES_MEM(0, info->size);
+
+	for (int i = 0; i < info->nr_partitions; i++) {
+		const char *desc;
+		int rc;
+
+		if (i == CXL_PARTITION_RAM)
+			desc = "ram";
+		else if (i == CXL_PARTITION_PMEM)
+			desc = "pmem";
+		else
+			desc = "";
+		cxlds->part[i].perf.qos_class = CXL_QOS_CLASS_INVALID;
+		rc = add_dpa_res(dev, &cxlds->dpa_res, &cxlds->part[i].res,
+				 info->range[i].start,
+				 range_len(&info->range[i]), desc);
+		if (rc)
+			return rc;
+		cxlds->nr_partitions++;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(cxl_dpa_setup);
+
 int devm_cxl_dpa_reserve(struct cxl_endpoint_decoder *cxled,
 				resource_size_t base, resource_size_t len,
 				resource_size_t skipped)
