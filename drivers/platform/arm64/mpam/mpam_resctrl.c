@@ -1263,6 +1263,10 @@ static int __resctrl_arch_update_domains(struct rdt_resource *r, u32 closid,
 
 	list_for_each_entry(d, &r->ctrl_domains, hdr.list) {
 		for (t = 0; t < CDP_NUM_TYPES; t++) {
+			if ((t == CDP_NONE) !=
+			    (!cdp_enabled || mpam_resctrl_hide_cdp(r->rid)))
+				continue;
+
 			cfg = &d->staged_config[t];
 			if (!force && !cfg->have_new_ctrl)
 				continue;
