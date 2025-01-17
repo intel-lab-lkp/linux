@@ -2846,6 +2846,8 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 
 	sinfo->generation = sdata->local->sta_generation;
 	sinfo->valid_links = sta->sta.valid_links;
+	sinfo->is_per_link_stats_support =
+		!!(sdata->local->hw.wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO_STA_PER_LINK_STATS);
 
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_STA_FLAGS) |
 			 BIT_ULL(NL80211_STA_INFO_CONNECTED_TIME) |
@@ -2882,7 +2884,7 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	if (test_sta_flag(sta, WLAN_STA_TDLS_PEER))
 		sinfo->sta_flags.set |= BIT(NL80211_STA_FLAG_TDLS_PEER);
 
-	if (sinfo->valid_links) {
+	if (sinfo->is_per_link_stats_support && sinfo->valid_links) {
 		memcpy(sinfo->mld_addr, sta->addr, ETH_ALEN);
 
 		for_each_valid_link(sinfo, link_id) {
