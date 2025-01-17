@@ -388,6 +388,28 @@ enum folio_mappability {
 };
 
 /*
+ * Unregisters the __folio_put() callback from the folio.
+ *
+ * Restores a folio's refcount after all pending references have been released,
+ * and removes the folio type, thereby removing the callback. Now the folio can
+ * be freed normaly once all actual references have been dropped.
+ *
+ * Must be called with the filemap (inode->i_mapping) invalidate_lock held.
+ * Must also have exclusive access to the folio: folio must be either locked, or
+ * gmem holds the only reference.
+ */
+static void __kvm_gmem_restore_pending_folio(struct folio *folio)
+{
+	if (WARN_ON_ONCE(folio_mapped(folio) || !folio_test_guestmem(folio)))
+		return;
+
+	WARN_ON_ONCE(!folio_test_locked(folio) && folio_ref_count(folio) > 1);
+
+	__folio_clear_guestmem(folio);
+	folio_ref_add(folio, folio_nr_pages(folio));
+}
+
+/*
  * Marks the range [start, end) as mappable by both the host and the guest.
  * Usually called when guest shares memory with the host.
  */
@@ -400,7 +422,31 @@ static int gmem_set_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
 
 	filemap_invalidate_lock(inode->i_mapping);
 	for (i = start; i < end; i++) {
+		struct folio *folio = NULL;
+
+		/*
+		 * If the folio is NONE_MAPPABLE, it indicates that it is
+		 * transitioning to private (GUEST_MAPPABLE). Transition it to
+		 * shared (ALL_MAPPABLE) immediately, and remove the callback.
+		 */
+		if (xa_to_value(xa_load(mappable_offsets, i)) == KVM_GMEM_NONE_MAPPABLE) {
+			folio = filemap_lock_folio(inode->i_mapping, i);
+			if (WARN_ON_ONCE(IS_ERR(folio))) {
+				r = PTR_ERR(folio);
+				break;
+			}
+
+			if (folio_test_guestmem(folio))
+				__kvm_gmem_restore_pending_folio(folio);
+		}
+
 		r = xa_err(xa_store(mappable_offsets, i, xval, GFP_KERNEL));
+
+		if (folio) {
+			folio_unlock(folio);
+			folio_put(folio);
+		}
+
 		if (r)
 			break;
 	}
@@ -471,6 +517,105 @@ static int gmem_clear_mappable(struct inode *inode, pgoff_t start, pgoff_t end)
 	filemap_invalidate_unlock(inode->i_mapping);
 
 	return r;
+}
+
+/*
+ * Registers a callback to __folio_put(), so that gmem knows that the host does
+ * not have any references to the folio. It does that by setting the folio type
+ * to guestmem.
+ *
+ * Returns 0 if the host doesn't have any references, or -EAGAIN if the host
+ * has references, and the callback has been registered.
+ *
+ * Must be called with the following locks held:
+ * - filemap (inode->i_mapping) invalidate_lock
+ * - folio lock
+ */
+static int __gmem_register_callback(struct folio *folio, struct inode *inode, pgoff_t idx)
+{
+	struct xarray *mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	void *xval_guest = xa_mk_value(KVM_GMEM_GUEST_MAPPABLE);
+	int refcount;
+
+	rwsem_assert_held_write_nolockdep(&inode->i_mapping->invalidate_lock);
+	WARN_ON_ONCE(!folio_test_locked(folio));
+
+	if (folio_mapped(folio) || folio_test_guestmem(folio))
+		return -EAGAIN;
+
+	/* Register a callback first. */
+	__folio_set_guestmem(folio);
+
+	/*
+	 * Check for references after setting the type to guestmem, to guard
+	 * against potential races with the refcount being decremented later.
+	 *
+	 * At least one reference is expected because the folio is locked.
+	 */
+
+	refcount = folio_ref_sub_return(folio, folio_nr_pages(folio));
+	if (refcount == 1) {
+		int r;
+
+		/* refcount isn't elevated, it's now faultable by the guest. */
+		r = WARN_ON_ONCE(xa_err(xa_store(mappable_offsets, idx, xval_guest, GFP_KERNEL)));
+		if (!r)
+			__kvm_gmem_restore_pending_folio(folio);
+
+		return r;
+	}
+
+	return -EAGAIN;
+}
+
+int kvm_slot_gmem_register_callback(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	unsigned long pgoff = slot->gmem.pgoff + gfn - slot->base_gfn;
+	struct inode *inode = file_inode(slot->gmem.file);
+	struct folio *folio;
+	int r;
+
+	filemap_invalidate_lock(inode->i_mapping);
+
+	folio = filemap_lock_folio(inode->i_mapping, pgoff);
+	if (WARN_ON_ONCE(IS_ERR(folio))) {
+		r = PTR_ERR(folio);
+		goto out;
+	}
+
+	r = __gmem_register_callback(folio, inode, pgoff);
+
+	folio_unlock(folio);
+	folio_put(folio);
+out:
+	filemap_invalidate_unlock(inode->i_mapping);
+
+	return r;
+}
+
+/*
+ * Callback function for __folio_put(), i.e., called when all references by the
+ * host to the folio have been dropped. This allows gmem to transition the state
+ * of the folio to mappable by the guest, and allows the hypervisor to continue
+ * transitioning its state to private, since the host cannot attempt to access
+ * it anymore.
+ */
+void kvm_gmem_handle_folio_put(struct folio *folio)
+{
+	struct xarray *mappable_offsets;
+	struct inode *inode;
+	pgoff_t index;
+	void *xval;
+
+	inode = folio->mapping->host;
+	index = folio->index;
+	mappable_offsets = &kvm_gmem_private(inode)->mappable_offsets;
+	xval = xa_mk_value(KVM_GMEM_GUEST_MAPPABLE);
+
+	filemap_invalidate_lock(inode->i_mapping);
+	__kvm_gmem_restore_pending_folio(folio);
+	WARN_ON_ONCE(xa_err(xa_store(mappable_offsets, index, xval, GFP_KERNEL)));
+	filemap_invalidate_unlock(inode->i_mapping);
 }
 
 static bool gmem_is_mappable(struct inode *inode, pgoff_t pgoff)

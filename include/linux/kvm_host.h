@@ -2574,6 +2574,8 @@ int kvm_slot_gmem_clear_mappable(struct kvm_memory_slot *slot, gfn_t start,
 				 gfn_t end);
 bool kvm_slot_gmem_is_mappable(struct kvm_memory_slot *slot, gfn_t gfn);
 bool kvm_slot_gmem_is_guest_mappable(struct kvm_memory_slot *slot, gfn_t gfn);
+int kvm_slot_gmem_register_callback(struct kvm_memory_slot *slot, gfn_t gfn);
+void kvm_gmem_handle_folio_put(struct folio *folio);
 #else
 static inline bool kvm_gmem_is_mappable(struct kvm *kvm, gfn_t gfn, gfn_t end)
 {
@@ -2614,6 +2616,15 @@ static inline bool kvm_slot_gmem_is_guest_mappable(struct kvm_memory_slot *slot,
 {
 	WARN_ON_ONCE(1);
 	return false;
+}
+static inline int kvm_slot_gmem_register_callback(struct kvm_memory_slot *slot, gfn_t gfn)
+{
+	WARN_ON_ONCE(1);
+	return -EINVAL;
+}
+static inline void kvm_gmem_handle_folio_put(struct folio *folio)
+{
+	WARN_ON_ONCE(1);
 }
 #endif /* CONFIG_KVM_GMEM_MAPPABLE */
 
