@@ -2001,12 +2001,14 @@ void phy_detach(struct phy_device *phydev)
 	if (dev) {
 		struct hwtstamp_provider *hwprov;
 
-		hwprov = rtnl_dereference(dev->hwprov);
+		rcu_read_lock()
+		hwprov = rcu_dereference(dev->hwprov);
 		/* Disable timestamp if it is the one selected */
 		if (hwprov && hwprov->phydev == phydev) {
 			rcu_assign_pointer(dev->hwprov, NULL);
 			kfree_rcu(hwprov, rcu_head);
 		}
+		rcu_read_unlock();
 
 		phydev->attached_dev->phydev = NULL;
 		phydev->attached_dev = NULL;
