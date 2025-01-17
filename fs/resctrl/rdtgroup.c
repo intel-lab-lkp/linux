@@ -65,6 +65,8 @@ static struct seq_buf last_cmd_status;
 
 static char last_cmd_status_buf[512];
 
+static int rdtgroup_init_first_alloc(struct rdtgroup *rdtgrp);
+
 static int rdtgroup_setup_root(struct rdt_fs_context *ctx);
 
 static void rdtgroup_destroy_root(void);
@@ -2542,6 +2544,9 @@ static int rdt_get_tree(struct fs_context *fc)
 	}
 
 	closid_init();
+	ret = rdtgroup_init_first_alloc(&rdtgroup_default);
+	if (ret)
+		goto out_schemata_free;
 
 	if (resctrl_arch_mon_capable())
 		flags |= RFTYPE_MON;
@@ -3230,7 +3235,7 @@ static void rdtgroup_init_mba(struct rdt_resource *r, u32 closid)
 }
 
 /* Initialize the RDT group's allocations. */
-static int rdtgroup_init_alloc(struct rdtgroup *rdtgrp)
+static int __rdtgroup_init_alloc(struct rdtgroup *rdtgrp, bool first_time_init)
 {
 	struct resctrl_schema *s;
 	struct rdt_resource *r;
@@ -3251,7 +3256,11 @@ static int rdtgroup_init_alloc(struct rdtgroup *rdtgrp)
 				goto out;
 		}
 
-		ret = resctrl_arch_update_domains(r, rdtgrp->closid);
+		if (first_time_init)
+			ret = resctrl_arch_init_domains(r, rdtgrp->closid);
+		else
+			ret = resctrl_arch_update_domains(r, rdtgrp->closid);
+
 		if (ret < 0) {
 			rdt_last_cmd_puts("Failed to initialize allocations\n");
 			goto out;
@@ -3263,6 +3272,19 @@ static int rdtgroup_init_alloc(struct rdtgroup *rdtgrp)
 out:
 	rdt_staged_configs_clear();
 	return ret;
+}
+
+static int rdtgroup_init_alloc(struct rdtgroup *rdtgrp)
+{
+	return __rdtgroup_init_alloc(rdtgrp, false);
+}
+
+static int rdtgroup_init_first_alloc(struct rdtgroup *rdtgrp)
+{
+	if (!resctrl_arch_default_closid_needs_init())
+		return 0;
+
+	return __rdtgroup_init_alloc(rdtgrp, true);
 }
 
 static int mkdir_rdt_prepare_rmid_alloc(struct rdtgroup *rdtgrp)

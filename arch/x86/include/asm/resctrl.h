@@ -50,6 +50,18 @@ DECLARE_STATIC_KEY_FALSE(rdt_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_mon_enable_key);
 
+/* The default CLOSID needs no special setup on x86: */
+static inline bool resctrl_arch_default_closid_needs_init(void)
+{
+	return false;
+}
+
+/* ... so this won't be needed either: */
+static inline int resctrl_arch_init_domains(struct rdt_resource *r, u32 closid)
+{
+	return 0;
+}
+
 static inline bool resctrl_arch_alloc_capable(void)
 {
 	return rdt_alloc_capable;

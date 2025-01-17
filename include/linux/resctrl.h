@@ -371,6 +371,8 @@ u32 resctrl_arch_system_num_rmid_idx(void);
 
 struct rdt_domain_hdr *resctrl_arch_find_domain(struct list_head *domain_list,
 						int id);
+bool resctrl_arch_default_closid_needs_init(void);
+int resctrl_arch_init_domains(struct rdt_resource *r, u32 closid);
 int resctrl_arch_update_domains(struct rdt_resource *r, u32 closid);
 
 bool resctrl_arch_is_evt_configurable(enum resctrl_event_id evt);

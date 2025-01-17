@@ -45,6 +45,16 @@ static inline unsigned int resctrl_arch_round_mon_val(unsigned int val)
 	return val;
 }
 
+static inline bool resctrl_arch_default_closid_needs_init(void)
+{
+	return false;
+}
+
+static inline int resctrl_arch_init_domains(struct rdt_resource *r, u32 closid)
+{
+	return 0;
+}
+
 bool resctrl_arch_alloc_capable(void);
 bool resctrl_arch_mon_capable(void);
 bool resctrl_arch_is_llc_occupancy_enabled(void);
