@@ -160,7 +160,8 @@ static bool mpam_resctrl_hide_cdp(enum resctrl_res_level rid)
 	return cdp_enabled && !resctrl_arch_get_cdp_enabled(rid);
 }
 
-static unsigned int partid_per_closid = 1;
+static unsigned int bootparam_partid_per_closid = 1;
+static unsigned int partid_per_closid;
 
 static int mpam_resctrl_partid_per_closid_set(const char *val,
 					      const struct kernel_param *kp)
@@ -178,7 +179,7 @@ static const struct kernel_param_ops mpam_resctrl_partid_per_closid_ops  = {
 };
 
 device_param_cb(partid_per_closid, &mpam_resctrl_partid_per_closid_ops,
-		&partid_per_closid, 0444);
+		&bootparam_partid_per_closid, 0444);
 
 static unsigned int mpam_num_pmg(void)
 {
@@ -1112,6 +1113,13 @@ int mpam_resctrl_setup(void)
 
 	if (!err && !exposed_alloc_capable && !exposed_mon_capable)
 		err = -EOPNOTSUPP;
+
+	partid_per_closid = bootparam_partid_per_closid;
+	if ((!mpam_partid_aliasing && bootparam_partid_per_closid > 1) ||
+	    resctrl_arch_get_num_closid(NULL) < 1) {
+		pr_warn("Hardware incompatible with PARTID aliasing, limiting monitoring groups\n");
+		partid_per_closid = 1;
+	}
 
 	if (!err) {
 		err = resctrl_init();

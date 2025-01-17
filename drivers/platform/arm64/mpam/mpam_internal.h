@@ -215,6 +215,7 @@ enum mpam_device_features {
 	mpam_feat_msmon_mbwu_hw_nrdy,
 	mpam_feat_msmon_capt,
 	mpam_feat_partid_nrw,
+	mpam_feat_partid_aliasing, /* derived feature */
 	MPAM_FEATURE_LAST,
 };
 #define MPAM_ALL_FEATURES      ((1<<MPAM_FEATURE_LAST) - 1)
@@ -474,6 +475,7 @@ static inline void mpam_assert_srcu_read_lock_held(void)
 /* System wide partid/pmg values */
 extern u16 mpam_partid_max;
 extern u8 mpam_pmg_max;
+extern bool mpam_partid_aliasing;
 
 /* Scheduled work callback to enable mpam once all MSC have been probed */
 void mpam_enable(struct work_struct *work);
