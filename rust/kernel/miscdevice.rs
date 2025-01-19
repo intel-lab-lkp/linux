@@ -16,7 +16,7 @@ use crate::{
     prelude::*,
     seq_file::SeqFile,
     str::CStr,
-    types::{ForeignOwnable, Opaque},
+    types::{Aliased, ForeignOwnable, Opaque},
 };
 use core::{
     ffi::{c_int, c_long, c_uint, c_ulong},
@@ -49,24 +49,30 @@ impl MiscDeviceOptions {
 /// # Invariants
 ///
 /// `inner` is a registered misc device.
-#[repr(transparent)]
+#[repr(C)]
 #[pin_data(PinnedDrop)]
-pub struct MiscDeviceRegistration<T> {
+pub struct MiscDeviceRegistration<T: MiscDevice> {
     #[pin]
     inner: Opaque<bindings::miscdevice>,
+    #[pin]
+    data: Aliased<T::RegistrationData>,
     _t: PhantomData<T>,
 }
 
 // SAFETY: It is allowed to call `misc_deregister` on a different thread from where you called
 // `misc_register`.
-unsafe impl<T> Send for MiscDeviceRegistration<T> {}
+unsafe impl<T: MiscDevice<RegistrationData: Send>> Send for MiscDeviceRegistration<T> {}
 // SAFETY: All `&self` methods on this type are written to ensure that it is safe to call them in
 // parallel.
-unsafe impl<T> Sync for MiscDeviceRegistration<T> {}
+// MiscDevice::RegistrationData is always Sync.
+unsafe impl<T: MiscDevice> Sync for MiscDeviceRegistration<T> {}
 
 impl<T: MiscDevice> MiscDeviceRegistration<T> {
     /// Register a misc device.
-    pub fn register(opts: MiscDeviceOptions) -> impl PinInit<Self, Error> {
+    pub fn register(
+        opts: MiscDeviceOptions,
+        data: impl PinInit<T::RegistrationData, Error>,
+    ) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
             inner <- Opaque::try_ffi_init(move |slot: *mut bindings::miscdevice| {
                 // SAFETY: The initializer can write to the provided `slot`.
@@ -79,6 +85,7 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
                 // misc device.
                 to_result(unsafe { bindings::misc_register(slot) })
             }),
+            data <- Aliased::try_pin_init(data),
             _t: PhantomData,
         })
     }
@@ -97,10 +104,18 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
         // before the underlying `struct miscdevice` is destroyed.
         unsafe { Device::as_ref((*self.as_raw()).this_device) }
     }
+
+    /// Access the additional data stored in this registration.
+    pub fn data(&self) -> &T::RegistrationData {
+        // SAFETY:
+        // No mutable reference to the value contained by self.data can ever be created.
+        // The value contained by self.data is valid for the entire lifetime of self.
+        unsafe { &*self.data.get() }
+    }
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for MiscDeviceRegistration<T> {
+impl<T: MiscDevice> PinnedDrop for MiscDeviceRegistration<T> {
     fn drop(self: Pin<&mut Self>) {
         // SAFETY: We know that the device is registered by the type invariants.
         unsafe { bindings::misc_deregister(self.inner.get()) };
@@ -112,6 +127,11 @@ impl<T> PinnedDrop for MiscDeviceRegistration<T> {
 pub trait MiscDevice: Sized {
     /// What kind of pointer should `Self` be wrapped in.
     type Ptr: ForeignOwnable + Send + Sync;
+
+    /// The additional data carried by the `MiscDeviceRegistration` for this `MiscDevice`.
+    /// If no additional data is required than () should be used.
+    /// This data can be accessed in `open()` using `MiscDeviceRegistration::data()`.
+    type RegistrationData: Sync;
 
     /// Called when the misc device is opened.
     ///
@@ -218,6 +238,9 @@ unsafe extern "C" fn fops_open<T: MiscDevice>(
     // SAFETY: This is a miscdevice, so `misc_open()` set the private data to a pointer to the
     // associated `struct miscdevice` before calling into this method. Furthermore, `misc_open()`
     // ensures that the miscdevice can't be unregistered and freed during this call to `fops_open`.
+    // Since this the `MiscDeviceRegistration` struct uses `#[repr(C)]` and the miscdevice is the
+    // first entry it is guaranteed that the address of the miscdevice is the same as the address
+    // of the entire `MiscDeviceRegistration` struct.
     let misc = unsafe { &*misc_ptr.cast::<MiscDeviceRegistration<T>>() };
 
     // SAFETY:
