@@ -528,3 +528,43 @@ pub type NotThreadSafe = PhantomData<*mut ()>;
 /// [`NotThreadSafe`]: type@NotThreadSafe
 #[allow(non_upper_case_globals)]
 pub const NotThreadSafe: NotThreadSafe = PhantomData;
+
+/// Stores a value that may be aliased.
+///
+/// This is similar to `Opaque<T>` but is guaranteed to contain valid data and will
+/// Call the Drop implementation of T when dropped.
+#[repr(transparent)]
+pub struct Aliased<T> {
+    value: UnsafeCell<T>,
+    _pin: PhantomPinned,
+}
+
+impl<T> Aliased<T> {
+    /// Creates a new `Aliased` value.
+    pub const fn new(value: T) -> Self {
+        Self {
+            value: UnsafeCell::new(value),
+            _pin: PhantomPinned,
+        }
+    }
+    /// Create an `Aliased` pin-initializer from the given pin-initializer.
+    pub fn try_pin_init<E>(value: impl PinInit<T, E>) -> impl PinInit<Self, E> {
+        // SAFETY:
+        // In case of an error in value the error is returned, otherwise the slot is fully initialized,
+        // since value is initialized and _pin is a Zero sized type.
+        // The pin invariants of value are upheld, since no moving occurs.
+        unsafe { init::pin_init_from_closure(move |slot| value.__pinned_init(Self::raw_get(slot))) }
+    }
+    /// Returns a raw pointer to the opaque data.
+    pub const fn get(&self) -> *mut T {
+        UnsafeCell::get(&self.value).cast::<T>()
+    }
+
+    /// Gets the value behind `this`.
+    ///
+    /// This function is useful to get access to the value without creating intermediate
+    /// references.
+    pub const fn raw_get(this: *const Self) -> *mut T {
+        UnsafeCell::raw_get(this.cast::<UnsafeCell<MaybeUninit<T>>>()).cast::<T>()
+    }
+}
