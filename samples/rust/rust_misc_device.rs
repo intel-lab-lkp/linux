@@ -104,7 +104,7 @@ use kernel::{
     miscdevice::{MiscDevice, MiscDeviceOptions, MiscDeviceRegistration},
     new_mutex,
     prelude::*,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     types::ARef,
     uaccess::{UserSlice, UserSliceReader, UserSliceWriter},
 };
@@ -136,7 +136,10 @@ impl kernel::InPlaceModule for RustMiscDeviceModule {
         };
 
         try_pin_init!(Self {
-            _miscdev <- MiscDeviceRegistration::register(options, ()),
+            _miscdev <- MiscDeviceRegistration::register(
+                options,
+                Arc::pin_init(new_mutex!(Inner { value: 0_i32 }), GFP_KERNEL)?
+            ),
         })
     }
 }
@@ -145,10 +148,8 @@ struct Inner {
     value: i32,
 }
 
-#[pin_data(PinnedDrop)]
 struct RustMiscDevice {
-    #[pin]
-    inner: Mutex<Inner>,
+    inner: Arc<Mutex<Inner>>,
     dev: ARef<Device>,
 }
 
@@ -156,7 +157,7 @@ struct RustMiscDevice {
 impl MiscDevice for RustMiscDevice {
     type Ptr = Pin<KBox<Self>>;
 
-    type RegistrationData = ();
+    type RegistrationData = Arc<Mutex<Inner>>;
 
     fn open(_file: &File, misc: &MiscDeviceRegistration<Self>) -> Result<Pin<KBox<Self>>> {
         let dev = ARef::from(misc.device());
@@ -164,9 +165,9 @@ impl MiscDevice for RustMiscDevice {
         dev_info!(dev, "Opening Rust Misc Device Sample\n");
 
         KBox::try_pin_init(
-            try_pin_init! {
+            try_init! {
                 RustMiscDevice {
-                    inner <- new_mutex!( Inner{ value: 0_i32 } ),
+                    inner: misc.data().clone(),
                     dev: dev,
                 }
             },
@@ -193,9 +194,8 @@ impl MiscDevice for RustMiscDevice {
     }
 }
 
-#[pinned_drop]
-impl PinnedDrop for RustMiscDevice {
-    fn drop(self: Pin<&mut Self>) {
+impl Drop for RustMiscDevice {
+    fn drop(&mut self) {
         dev_info!(self.dev, "Exiting the Rust Misc Device Sample\n");
     }
 }
