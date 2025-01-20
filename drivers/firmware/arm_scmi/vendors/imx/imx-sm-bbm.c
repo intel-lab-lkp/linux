@@ -246,6 +246,20 @@ static const struct scmi_protocol_events scmi_imx_bbm_protocol_events = {
 	.num_events = ARRAY_SIZE(scmi_imx_bbm_events),
 };
 
+static int scmi_imx_bbm_info(const struct scmi_protocol_handle *ph, u32 *nr_rtc,
+			     u32 *nr_gpr)
+{
+	struct scmi_imx_bbm_info *pi = ph->get_priv(ph);
+
+	if (nr_rtc)
+		*nr_rtc = pi->nr_rtc;
+
+	if (nr_gpr)
+		*nr_gpr = pi->nr_gpr;
+
+	return 0;
+}
+
 static int scmi_imx_bbm_rtc_time_set(const struct scmi_protocol_handle *ph,
 				     u32 rtc_id, u64 sec)
 {
@@ -351,6 +365,7 @@ static int scmi_imx_bbm_button_get(const struct scmi_protocol_handle *ph, u32 *s
 }
 
 static const struct scmi_imx_bbm_proto_ops scmi_imx_bbm_proto_ops = {
+	.bbm_info = scmi_imx_bbm_info,
 	.rtc_time_get = scmi_imx_bbm_rtc_time_get,
 	.rtc_time_set = scmi_imx_bbm_rtc_time_set,
 	.rtc_alarm_set = scmi_imx_bbm_rtc_alarm_set,

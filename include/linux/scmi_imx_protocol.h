@@ -20,6 +20,8 @@
 #define SCMI_IMX_SUBVENDOR	"IMX"
 
 struct scmi_imx_bbm_proto_ops {
+	int (*bbm_info)(const struct scmi_protocol_handle *ph, u32 *nr_rtc,
+			u32 *nr_gpr);
 	int (*rtc_time_set)(const struct scmi_protocol_handle *ph, u32 id,
 			    uint64_t sec);
 	int (*rtc_time_get)(const struct scmi_protocol_handle *ph, u32 id,
