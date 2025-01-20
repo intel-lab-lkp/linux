@@ -15,16 +15,18 @@ struct scmi_imx_bbm {
 	struct rtc_device *rtc_dev;
 	struct scmi_protocol_handle *ph;
 	struct notifier_block nb;
+	u32 bbm_rtc_id;
 };
 
 static int scmi_imx_bbm_read_time(struct device *dev, struct rtc_time *tm)
 {
-	struct scmi_imx_bbm *bbnsm = dev_get_drvdata(dev);
+	struct rtc_device *rtc = to_rtc_device(dev);
+	struct scmi_imx_bbm *bbnsm = rtc->priv;
 	struct scmi_protocol_handle *ph = bbnsm->ph;
 	u64 val;
 	int ret;
 
-	ret = bbnsm->ops->rtc_time_get(ph, 0, &val);
+	ret = bbnsm->ops->rtc_time_get(ph, bbnsm->bbm_rtc_id, &val);
 	if (ret)
 		return ret;
 
@@ -35,37 +37,40 @@ static int scmi_imx_bbm_read_time(struct device *dev, struct rtc_time *tm)
 
 static int scmi_imx_bbm_set_time(struct device *dev, struct rtc_time *tm)
 {
-	struct scmi_imx_bbm *bbnsm = dev_get_drvdata(dev);
+	struct rtc_device *rtc = to_rtc_device(dev);
+	struct scmi_imx_bbm *bbnsm = rtc->priv;
 	struct scmi_protocol_handle *ph = bbnsm->ph;
 	u64 val;
 
 	val = rtc_tm_to_time64(tm);
 
-	return bbnsm->ops->rtc_time_set(ph, 0, val);
+	return bbnsm->ops->rtc_time_set(ph, bbnsm->bbm_rtc_id, val);
 }
 
 static int scmi_imx_bbm_alarm_irq_enable(struct device *dev, unsigned int enable)
 {
-	struct scmi_imx_bbm *bbnsm = dev_get_drvdata(dev);
+	struct rtc_device *rtc = to_rtc_device(dev);
+	struct scmi_imx_bbm *bbnsm = rtc->priv;
 	struct scmi_protocol_handle *ph = bbnsm->ph;
 
 	/* scmi_imx_bbm_set_alarm enables the irq, just handle disable here */
 	if (!enable)
-		return bbnsm->ops->rtc_alarm_set(ph, 0, false, 0);
+		return bbnsm->ops->rtc_alarm_set(ph, bbnsm->bbm_rtc_id, false, 0);
 
 	return 0;
 }
 
 static int scmi_imx_bbm_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 {
-	struct scmi_imx_bbm *bbnsm = dev_get_drvdata(dev);
+	struct rtc_device *rtc = to_rtc_device(dev);
+	struct scmi_imx_bbm *bbnsm = rtc->priv;
 	struct scmi_protocol_handle *ph = bbnsm->ph;
 	struct rtc_time *alrm_tm = &alrm->time;
 	u64 val;
 
 	val = rtc_tm_to_time64(alrm_tm);
 
-	return bbnsm->ops->rtc_alarm_set(ph, 0, true, val);
+	return bbnsm->ops->rtc_alarm_set(ph, bbnsm->bbm_rtc_id, true, val);
 }
 
 static const struct rtc_class_ops smci_imx_bbm_rtc_ops = {
@@ -83,19 +88,18 @@ static int scmi_imx_bbm_rtc_notifier(struct notifier_block *nb, unsigned long ev
 	if (r->is_rtc)
 		rtc_update_irq(bbnsm->rtc_dev, 1, RTC_AF | RTC_IRQF);
 	else
-		pr_err("Unexpected bbm event: %s\n", __func__);
+		pr_err("Unexpected bbm event: %s, bbm_rtc_id: %u\n", __func__, bbnsm->bbm_rtc_id);
 
 	return 0;
 }
 
-static int scmi_imx_bbm_rtc_init(struct scmi_device *sdev)
+static int scmi_imx_bbm_rtc_init(struct scmi_device *sdev, struct scmi_imx_bbm *bbnsm)
 {
 	const struct scmi_handle *handle = sdev->handle;
 	struct device *dev = &sdev->dev;
-	struct scmi_imx_bbm *bbnsm = dev_get_drvdata(dev);
 	int ret;
 
-	bbnsm->rtc_dev = devm_rtc_allocate_device(dev);
+	bbnsm->rtc_dev = devm_rtc_allocate_device_priv(dev, bbnsm);
 	if (IS_ERR(bbnsm->rtc_dev))
 		return PTR_ERR(bbnsm->rtc_dev);
 
@@ -105,7 +109,7 @@ static int scmi_imx_bbm_rtc_init(struct scmi_device *sdev)
 	bbnsm->nb.notifier_call = &scmi_imx_bbm_rtc_notifier;
 	ret = handle->notify_ops->devm_event_notifier_register(sdev, SCMI_PROTOCOL_IMX_BBM,
 							       SCMI_EVENT_IMX_BBM_RTC,
-							       NULL, &bbnsm->nb);
+							       &bbnsm->bbm_rtc_id, &bbnsm->nb);
 	if (ret)
 		return ret;
 
@@ -118,29 +122,42 @@ static int scmi_imx_bbm_rtc_probe(struct scmi_device *sdev)
 	struct device *dev = &sdev->dev;
 	struct scmi_protocol_handle *ph;
 	struct scmi_imx_bbm *bbnsm;
-	int ret;
+	const struct scmi_imx_bbm_proto_ops *ops;
+	int ret, i;
+	u32 nr_rtc;
 
 	if (!handle)
 		return -ENODEV;
 
-	bbnsm = devm_kzalloc(dev, sizeof(*bbnsm), GFP_KERNEL);
-	if (!bbnsm)
-		return -ENOMEM;
+	ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_IMX_BBM, &ph);
+	if (IS_ERR(ops))
+		return PTR_ERR(ops);
 
-	bbnsm->ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_IMX_BBM, &ph);
-	if (IS_ERR(bbnsm->ops))
-		return PTR_ERR(bbnsm->ops);
-
-	bbnsm->ph = ph;
+	ret = ops->bbm_info(ph, &nr_rtc, NULL);
+	if (ret)
+		return ret;
 
 	device_init_wakeup(dev, true);
 
-	dev_set_drvdata(dev, bbnsm);
+	for (i = 0; i < nr_rtc; i++) {
+		bbnsm = devm_kzalloc(dev, sizeof(*bbnsm), GFP_KERNEL);
+		if (!bbnsm) {
+			ret = -ENOMEM;
+			goto fail;
+		}
 
-	ret = scmi_imx_bbm_rtc_init(sdev);
-	if (ret)
-		device_init_wakeup(dev, false);
+		bbnsm->ops = ops;
+		bbnsm->ph = ph;
+		bbnsm->bbm_rtc_id = i;
 
+		ret = scmi_imx_bbm_rtc_init(sdev, bbnsm);
+		if (ret)
+			goto fail;
+	}
+
+	return 0;
+fail:
+	device_init_wakeup(dev, false);
 	return ret;
 }
 
