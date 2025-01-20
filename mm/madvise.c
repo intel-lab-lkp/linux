@@ -1263,6 +1263,8 @@ static int madvise_vma_behavior(struct vm_area_struct *vma,
 	case MADV_COLD:
 		return madvise_cold(vma, prev, start, end);
 	case MADV_PAGEOUT:
+		if (vma->vm_flags & VM_DROPPABLE)
+			return -EINVAL;
 		return madvise_pageout(vma, prev, start, end);
 	case MADV_FREE:
 	case MADV_DONTNEED:
