@@ -65,6 +65,7 @@ enum i2c_op {
  * @rx_len: receive length for buffer
  * @op: i2c cmd
  * @muli-msg: is part of multi i2c r-w msgs
+ * @bei_flag: true for block event interrupt support
  */
 struct gpi_i2c_config {
 	u8 set_config;
@@ -78,6 +79,7 @@ struct gpi_i2c_config {
 	u32 rx_len;
 	enum i2c_op op;
 	bool multi_msg;
+	bool bei_flag;
 };
 
 #endif /* QCOM_GPI_DMA_H */
