@@ -148,6 +148,21 @@ static int devlink_port_fn_ipsec_packet_fill(struct devlink_port *devlink_port,
 	return 0;
 }
 
+static int devlink_port_bridge_offload_fill(struct devlink_port *devlink_port,
+					    struct nla_bitfield32 *caps)
+{
+	bool is_enable;
+
+	if (!devlink_port->ops->port_fn_bridge_offload_get ||
+	    devlink_port->attrs.flavour != DEVLINK_PORT_FLAVOUR_PHYSICAL)
+		return 0;
+
+	devlink_port->ops->port_fn_bridge_offload_get(devlink_port, &is_enable);
+
+	devlink_port_fn_cap_fill(caps, DEVLINK_PORT_FN_CAP_BRIDGE_OFFLOAD, is_enable);
+	return 0;
+}
+
 static int devlink_port_fn_caps_fill(struct devlink_port *devlink_port,
 				     struct sk_buff *msg,
 				     struct netlink_ext_ack *extack,
@@ -169,6 +184,10 @@ static int devlink_port_fn_caps_fill(struct devlink_port *devlink_port,
 		return err;
 
 	err = devlink_port_fn_ipsec_packet_fill(devlink_port, &caps, extack);
+	if (err)
+		return err;
+
+	err = devlink_port_bridge_offload_fill(devlink_port, &caps);
 	if (err)
 		return err;
 
@@ -393,6 +412,12 @@ devlink_port_fn_ipsec_packet_set(struct devlink_port *devlink_port, bool enable,
 	return devlink_port->ops->port_fn_ipsec_packet_set(devlink_port, enable, extack);
 }
 
+static void
+devlink_port_fn_bridge_offload_set(struct devlink_port *devlink_port, bool enable)
+{
+	return devlink_port->ops->port_fn_bridge_offload_set(devlink_port, enable);
+}
+
 static int devlink_port_fn_caps_set(struct devlink_port *devlink_port,
 				    const struct nlattr *attr,
 				    struct netlink_ext_ack *extack)
@@ -430,6 +455,10 @@ static int devlink_port_fn_caps_set(struct devlink_port *devlink_port,
 						       extack);
 		if (err)
 			return err;
+	}
+	if (caps.selector & DEVLINK_PORT_FN_CAP_BRIDGE_OFFLOAD) {
+		devlink_port_fn_bridge_offload_set(devlink_port, caps_value &
+							 DEVLINK_PORT_FN_CAP_BRIDGE_OFFLOAD);
 	}
 	return 0;
 }
@@ -762,6 +791,18 @@ static int devlink_port_function_validate(struct devlink_port *devlink_port,
 			if (devlink_port->attrs.flavour != DEVLINK_PORT_FLAVOUR_PCI_VF) {
 				NL_SET_ERR_MSG_ATTR(extack, attr,
 						    "ipsec_packet function attribute supported for VFs only");
+				return -EOPNOTSUPP;
+			}
+		}
+		if (caps.selector & DEVLINK_PORT_FN_CAP_BRIDGE_OFFLOAD) {
+			if (!ops->port_fn_bridge_offload_set) {
+				NL_SET_ERR_MSG_ATTR(extack, attr,
+						    "Port doesn't support bridge offload function attribute");
+				return -EOPNOTSUPP;
+			}
+			if (devlink_port->attrs.flavour != DEVLINK_PORT_FLAVOUR_PHYSICAL) {
+				NL_SET_ERR_MSG_ATTR(extack, attr,
+						    "bridge offload function attribute supported for physical ports only");
 				return -EOPNOTSUPP;
 			}
 		}
