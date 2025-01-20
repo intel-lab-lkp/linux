@@ -110,6 +110,7 @@ struct rtc_device {
 	struct hrtimer pie_timer; /* sub second exp, so needs hrtimer */
 	int pie_enabled;
 	struct work_struct irqwork;
+	void *priv;
 
 	/*
 	 * This offset specifies the update timing of the RTC.
@@ -182,6 +183,7 @@ extern struct rtc_device *devm_rtc_device_register(struct device *dev,
 					const struct rtc_class_ops *ops,
 					struct module *owner);
 struct rtc_device *devm_rtc_allocate_device(struct device *dev);
+struct rtc_device *devm_rtc_allocate_device_priv(struct device *dev, void *priv);
 int __devm_rtc_register_device(struct module *owner, struct rtc_device *rtc);
 
 extern int rtc_read_time(struct rtc_device *rtc, struct rtc_time *tm);

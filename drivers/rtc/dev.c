@@ -410,7 +410,8 @@ static long rtc_dev_ioctl(struct file *file,
 		}
 		default:
 			if (rtc->ops->param_get)
-				err = rtc->ops->param_get(rtc->dev.parent, &param);
+				err = rtc->ops->param_get(rtc->priv ?
+							  &rtc->dev : rtc->dev.parent, &param);
 			else
 				err = -EINVAL;
 		}
@@ -440,7 +441,8 @@ static long rtc_dev_ioctl(struct file *file,
 
 		default:
 			if (rtc->ops->param_set)
-				err = rtc->ops->param_set(rtc->dev.parent, &param);
+				err = rtc->ops->param_set(rtc->priv ?
+							  &rtc->dev : rtc->dev.parent, &param);
 			else
 				err = -EINVAL;
 		}
@@ -450,7 +452,7 @@ static long rtc_dev_ioctl(struct file *file,
 	default:
 		/* Finally try the driver's ioctl interface */
 		if (ops->ioctl) {
-			err = ops->ioctl(rtc->dev.parent, cmd, arg);
+			err = ops->ioctl(rtc->priv ? &rtc->dev : rtc->dev.parent, cmd, arg);
 			if (err == -ENOIOCTLCMD)
 				err = -ENOTTY;
 		} else {

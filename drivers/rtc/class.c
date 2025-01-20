@@ -361,7 +361,7 @@ static void devm_rtc_release_device(void *res)
 	put_device(&rtc->dev);
 }
 
-struct rtc_device *devm_rtc_allocate_device(struct device *dev)
+struct rtc_device *devm_rtc_allocate_device_priv(struct device *dev, void *priv)
 {
 	struct rtc_device *rtc;
 	int id, err;
@@ -378,6 +378,7 @@ struct rtc_device *devm_rtc_allocate_device(struct device *dev)
 
 	rtc->id = id;
 	rtc->dev.parent = dev;
+	rtc->priv = priv;
 	err = devm_add_action_or_reset(dev, devm_rtc_release_device, rtc);
 	if (err)
 		return ERR_PTR(err);
@@ -387,6 +388,12 @@ struct rtc_device *devm_rtc_allocate_device(struct device *dev)
 		return ERR_PTR(err);
 
 	return rtc;
+}
+EXPORT_SYMBOL_GPL(devm_rtc_allocate_device_priv);
+
+struct rtc_device *devm_rtc_allocate_device(struct device *dev)
+{
+	return devm_rtc_allocate_device_priv(dev, NULL);
 }
 EXPORT_SYMBOL_GPL(devm_rtc_allocate_device);
 
