@@ -31,6 +31,7 @@ enum _slab_flag_bits {
 	_SLAB_CACHE_DMA32,
 	_SLAB_STORE_USER,
 	_SLAB_PANIC,
+	_SLAB_CORRUPTION_PANIC,
 	_SLAB_TYPESAFE_BY_RCU,
 	_SLAB_TRACE,
 #ifdef CONFIG_DEBUG_OBJECTS
@@ -97,6 +98,9 @@ enum _slab_flag_bits {
 #define SLAB_STORE_USER		__SLAB_FLAG_BIT(_SLAB_STORE_USER)
 /* Panic if kmem_cache_create() fails */
 #define SLAB_PANIC		__SLAB_FLAG_BIT(_SLAB_PANIC)
+/* Panic if object corruption is checked */
+#define SLAB_CORRUPTION_PANIC	__SLAB_FLAG_BIT(_SLAB_CORRUPTION_PANIC)
+
 /**
  * define SLAB_TYPESAFE_BY_RCU - **WARNING** READ THIS!
  *

@@ -1305,6 +1305,8 @@ slab_pad_check(struct kmem_cache *s, struct slab *slab)
 			fault, end - 1, fault - start);
 	print_section(KERN_ERR, "Padding ", pad, remainder);
 
+	BUG_ON(s->flags & SLAB_CORRUPTION_PANIC);
+
 	restore_bytes(s, "slab padding", POISON_INUSE, fault, end);
 }
 
@@ -1388,6 +1390,8 @@ static int check_object(struct kmem_cache *s, struct slab *slab,
 	if (!ret && !slab_in_kunit_test()) {
 		print_trailer(s, slab, object);
 		add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
+
+		BUG_ON(s->flags & SLAB_CORRUPTION_PANIC);
 	}
 
 	return ret;
@@ -1687,6 +1691,9 @@ parse_slub_debug_flags(char *str, slab_flags_t *flags, char **slabs, bool init)
 			break;
 		case 'a':
 			*flags |= SLAB_FAILSLAB;
+			break;
+		case 'c':
+			*flags |= SLAB_CORRUPTION_PANIC;
 			break;
 		case 'o':
 			/*
@@ -6869,6 +6876,12 @@ static ssize_t store_user_show(struct kmem_cache *s, char *buf)
 
 SLAB_ATTR_RO(store_user);
 
+static ssize_t corruption_panic_show(struct kmem_cache *s, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", !!(s->flags & SLAB_CORRUPTION_PANIC));
+}
+SLAB_ATTR_RO(corruption_panic);
+
 static ssize_t validate_show(struct kmem_cache *s, char *buf)
 {
 	return 0;
@@ -7087,6 +7100,7 @@ static struct attribute *slab_attrs[] = {
 	&red_zone_attr.attr,
 	&poison_attr.attr,
 	&store_user_attr.attr,
+	&corruption_panic_attr.attr,
 	&validate_attr.attr,
 #endif
 #ifdef CONFIG_ZONE_DMA

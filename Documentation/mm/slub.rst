@@ -53,6 +53,7 @@ Possible debug options are::
 	U		User tracking (free and alloc)
 	T		Trace (please only use on single slabs)
 	A		Enable failslab filter mark for the cache
+	C		Panic if object corruption is checked.
 	O		Switch debugging off for caches that would have
 			caused higher minimum slab orders
 	-		Switch all debugging off (useful if the kernel is
@@ -113,6 +114,7 @@ options from the ``slab_debug`` parameter translate to the following files::
 	U	store_user
 	T	trace
 	A	failslab
+	C	corruption_panic
 
 failslab file is writable, so writing 1 or 0 will enable or disable
 the option at runtime. Write returns -EINVAL if cache is an alias.
