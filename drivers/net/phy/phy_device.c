@@ -3096,7 +3096,7 @@ void phy_get_pause(struct phy_device *phydev, bool *tx_pause, bool *rx_pause)
 EXPORT_SYMBOL(phy_get_pause);
 
 #if IS_ENABLED(CONFIG_OF_MDIO)
-static int phy_get_int_delay_property(struct device *dev, const char *name)
+static int phy_get_u32_property(struct device *dev, const char *name)
 {
 	s32 int_delay;
 	int ret;
@@ -3108,7 +3108,7 @@ static int phy_get_int_delay_property(struct device *dev, const char *name)
 	return int_delay;
 }
 #else
-static int phy_get_int_delay_property(struct device *dev, const char *name)
+static int phy_get_u32_property(struct device *dev, const char *name)
 {
 	return -EINVAL;
 }
@@ -3137,7 +3137,7 @@ s32 phy_get_internal_delay(struct phy_device *phydev, struct device *dev,
 	int i;
 
 	if (is_rx) {
-		delay = phy_get_int_delay_property(dev, "rx-internal-delay-ps");
+		delay = phy_get_u32_property(dev, "rx-internal-delay-ps");
 		if (delay < 0 && size == 0) {
 			if (phydev->interface == PHY_INTERFACE_MODE_RGMII_ID ||
 			    phydev->interface == PHY_INTERFACE_MODE_RGMII_RXID)
@@ -3147,7 +3147,7 @@ s32 phy_get_internal_delay(struct phy_device *phydev, struct device *dev,
 		}
 
 	} else {
-		delay = phy_get_int_delay_property(dev, "tx-internal-delay-ps");
+		delay = phy_get_u32_property(dev, "tx-internal-delay-ps");
 		if (delay < 0 && size == 0) {
 			if (phydev->interface == PHY_INTERFACE_MODE_RGMII_ID ||
 			    phydev->interface == PHY_INTERFACE_MODE_RGMII_TXID)
@@ -3192,6 +3192,18 @@ s32 phy_get_internal_delay(struct phy_device *phydev, struct device *dev,
 	return -EINVAL;
 }
 EXPORT_SYMBOL(phy_get_internal_delay);
+
+s32 phy_get_tx_amplitude_gain(struct phy_device *phydev, struct device *dev,
+			      enum ethtool_link_mode_bit_indices linkmode)
+{
+	switch (linkmode) {
+	case ETHTOOL_LINK_MODE_100baseT_Full_BIT:
+		return phy_get_u32_property(dev, "tx-amplitude-100base-tx-gain-milli");
+	default:
+		return -EINVAL;
+	}
+}
+EXPORT_SYMBOL(phy_get_tx_amplitude_gain);
 
 static int phy_led_set_brightness(struct led_classdev *led_cdev,
 				  enum led_brightness value)
