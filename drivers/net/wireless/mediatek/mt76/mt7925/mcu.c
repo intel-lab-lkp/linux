@@ -617,7 +617,8 @@ int mt7925_mcu_uni_tx_ba(struct mt792x_dev *dev,
 	struct mt792x_bss_conf *mconf;
 	unsigned long usable_links = ieee80211_vif_usable_links(vif);
 	struct mt76_wcid *wcid;
-	u8 link_id, ret;
+	u8 link_id;
+	int ret;
 
 	for_each_set_bit(link_id, &usable_links, IEEE80211_MLD_MAX_NUM_LINKS) {
 		mconf = mt792x_vif_to_link(mvif, link_id);
@@ -630,10 +631,10 @@ int mt7925_mcu_uni_tx_ba(struct mt792x_dev *dev,
 		ret = mt7925_mcu_sta_ba(&dev->mt76, &mconf->mt76, wcid, params,
 					enable, true);
 		if (ret < 0)
-			break;
+			return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 int mt7925_mcu_uni_rx_ba(struct mt792x_dev *dev,
@@ -647,7 +648,8 @@ int mt7925_mcu_uni_rx_ba(struct mt792x_dev *dev,
 	struct mt792x_bss_conf *mconf;
 	unsigned long usable_links = ieee80211_vif_usable_links(vif);
 	struct mt76_wcid *wcid;
-	u8 link_id, ret;
+	u8 link_id;
+	int ret;
 
 	for_each_set_bit(link_id, &usable_links, IEEE80211_MLD_MAX_NUM_LINKS) {
 		mconf = mt792x_vif_to_link(mvif, link_id);
@@ -657,10 +659,10 @@ int mt7925_mcu_uni_rx_ba(struct mt792x_dev *dev,
 		ret = mt7925_mcu_sta_ba(&dev->mt76, &mconf->mt76, wcid, params,
 					enable, false);
 		if (ret < 0)
-			break;
+			return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int mt7925_load_clc(struct mt792x_dev *dev, const char *fw_name)
