@@ -188,4 +188,8 @@ void __init fdt_scan_reserved_mem_reg_nodes(void);
 
 bool of_fdt_device_is_available(const void *blob, unsigned long node);
 
+#if IS_ENABLED(CONFIG_KUNIT)
+int __of_address_resource_bounds(struct resource *r, u64 start, u64 size);
+#endif
+
 #endif /* _LINUX_OF_PRIVATE_H */
