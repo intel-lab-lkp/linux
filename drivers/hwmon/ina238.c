@@ -8,6 +8,7 @@
 
 #include <linux/err.h>
 #include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
 #include <linux/i2c.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
@@ -108,7 +109,41 @@ struct ina238_data {
 	struct regmap *regmap;
 	u32 rshunt;
 	int gain;
+	long shunt_volt_scale;
 };
+
+static ssize_t shunt_volt_scale_show(struct device *dev,
+				     struct device_attribute *attr, char *buf)
+{
+	struct ina238_data *data = dev_get_drvdata(dev);
+
+	return sprintf(buf, "%d\n", data->shunt_volt_scale);
+}
+
+static ssize_t shunt_volt_scale_store(struct device *dev,
+				      struct device_attribute *attr,
+				      const char *buf, size_t count)
+{
+	struct ina238_data *data = dev_get_drvdata(dev);
+	long val;
+	int err;
+
+	err = kstrtol(buf, 10, &val);
+	if (err)
+		return err;
+
+	data->shunt_volt_scale = val;
+	return count;
+}
+
+static SENSOR_DEVICE_ATTR_RW(in0_scale, shunt_volt_scale, 0);
+
+static struct attribute *ina238_attrs[] = {
+	&sensor_dev_attr_in0_scale.dev_attr.attr,
+	NULL,
+};
+
+ATTRIBUTE_GROUPS(ina238);
 
 static int ina238_read_reg24(const struct i2c_client *client, u8 reg, u32 *val)
 {
@@ -197,8 +232,9 @@ static int ina238_read_in(struct device *dev, u32 attr, int channel,
 		regval = (s16)regval;
 		if (channel == 0)
 			/* gain of 1 -> LSB / 4 */
-			*val = (regval * INA238_SHUNT_VOLTAGE_LSB) /
-			       (1000 * (4 - data->gain + 1));
+			*val = (regval * INA238_SHUNT_VOLTAGE_LSB *
+				data->shunt_volt_scale) /
+				(1000 * (4 - data->gain + 1));
 		else
 			*val = (regval * INA238_BUS_VOLTAGE_LSB) / 1000;
 		break;
@@ -603,9 +639,12 @@ static int ina238_probe(struct i2c_client *client)
 		return -ENODEV;
 	}
 
+	/* Setup default shunt voltage scale */
+	data->shunt_volt_scale = 1;
+
 	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name, data,
 							 &ina238_chip_info,
-							 NULL);
+							 ina238_groups);
 	if (IS_ERR(hwmon_dev))
 		return PTR_ERR(hwmon_dev);
 
