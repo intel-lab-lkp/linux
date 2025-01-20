@@ -1207,6 +1207,7 @@ check_bytes_and_report(struct kmem_cache *s, struct slab *slab,
 					fault[0], value);
 
 skip_bug_print:
+	print_section(KERN_ERR, "Corrupt  ", fault, end - fault);
 	restore_bytes(s, what, value, fault, end);
 	return 0;
 }
