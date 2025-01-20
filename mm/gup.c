@@ -2338,8 +2338,6 @@ static unsigned long collect_longterm_unpinnable_folios(
 		if (folio_is_longterm_pinnable(folio))
 			continue;
 
-		collected++;
-
 		if (folio_is_device_coherent(folio))
 			continue;
 
@@ -2355,6 +2353,8 @@ static unsigned long collect_longterm_unpinnable_folios(
 
 		if (!folio_isolate_lru(folio))
 			continue;
+
+		collected++;
 
 		list_add_tail(&folio->lru, movable_folio_list);
 		node_stat_mod_folio(folio,
