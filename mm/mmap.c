@@ -504,6 +504,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			vm_flags |= VM_SHARED | VM_MAYSHARE;
 			break;
 		case MAP_DROPPABLE:
+		case MAP_DROPPABLE | MAP_PRIVATE:
 			if (VM_DROPPABLE == VM_NONE)
 				return -ENOTSUPP;
 			/*
