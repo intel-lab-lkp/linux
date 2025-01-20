@@ -11244,7 +11244,6 @@ void ath12k_mac_mlo_teardown(struct ath12k_hw_group *ag)
 
 int ath12k_mac_register(struct ath12k_hw_group *ag)
 {
-	struct ath12k_base *ab = ag->ab[0];
 	struct ath12k_hw *ah;
 	int i;
 	int ret;
@@ -11256,8 +11255,6 @@ int ath12k_mac_register(struct ath12k_hw_group *ag)
 		if (ret)
 			goto err;
 	}
-
-	set_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags);
 
 	return 0;
 
@@ -11275,11 +11272,8 @@ err:
 
 void ath12k_mac_unregister(struct ath12k_hw_group *ag)
 {
-	struct ath12k_base *ab = ag->ab[0];
 	struct ath12k_hw *ah;
 	int i;
-
-	clear_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags);
 
 	for (i = ag->num_hw - 1; i >= 0; i--) {
 		ah = ath12k_ag_to_ah(ag, i);
