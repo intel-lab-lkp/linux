@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/skbuff.h>
 #include <linux/ctype.h>
@@ -16,6 +16,7 @@
 #include <linux/of.h>
 #include "core.h"
 #include "debug.h"
+#include "debugfs.h"
 #include "mac.h"
 #include "hw.h"
 #include "peer.h"
@@ -7417,6 +7418,234 @@ static void ath12k_wmi_event_teardown_complete(struct ath12k_base *ab,
 	kfree(tb);
 }
 
+#ifdef CONFIG_ATH12K_DEBUGFS
+static void
+ath12k_wmi_ctrl_path_pdev_stats_list_free(struct list_head *head)
+{
+	struct wmi_ctrl_path_pdev_stats *stats_list, *tmp;
+
+	list_for_each_entry_safe(stats_list, tmp, head, list) {
+		list_del(&stats_list->list);
+		kfree(stats_list);
+	}
+}
+
+static void
+ath12k_wmi_ctrl_path_stats_list_free(struct ath12k_wmi_ctrl_path_stats_list *param)
+{
+	ath12k_wmi_ctrl_path_pdev_stats_list_free(&param->pdev_stats);
+}
+
+static int wmi_pull_ctrl_path_pdev_tx_stats_tlv(struct ath12k_base *ab, u16 len,
+						const void *ptr, void *data)
+{
+	struct ath12k_wmi_ctrl_path_stats_list *stats_buff = data;
+	const struct wmi_ctrl_path_pdev_stats_params *stats = ptr;
+	struct ath12k_wmi_ctrl_path_stats_list *stats_list;
+	struct wmi_ctrl_path_pdev_stats *pdev_stats =
+		kzalloc(sizeof(*pdev_stats), GFP_ATOMIC);
+	struct ath12k *ar;
+	u32 pdev_id;
+	int i;
+
+	if (!pdev_stats)
+		return -ENOMEM;
+
+	for (i = 0; i < IEEE80211_MGMT_FRAME_SUBTYPE_MAX; i++) {
+		pdev_stats->tx_mgmt_subtype[i] =
+			__le32_to_cpu(stats->tx_mgmt_subtype[i]);
+		pdev_stats->rx_mgmt_subtype[i] =
+			__le32_to_cpu(stats->rx_mgmt_subtype[i]);
+	}
+	pdev_stats->scan_fail_dfs_viol_time_ms =
+		__le32_to_cpu(stats->scan_fail_dfs_viol_time_ms);
+	pdev_stats->nol_chk_fail_last_chan_freq =
+		__le32_to_cpu(stats->nol_chk_fail_last_chan_freq);
+	pdev_stats->nol_chk_fail_time_stamp_ms =
+		__le32_to_cpu(stats->nol_chk_fail_time_stamp_ms);
+	pdev_stats->tot_peer_create_cnt =
+		__le32_to_cpu(stats->tot_peer_create_cnt);
+	pdev_stats->tot_peer_del_cnt =
+		__le32_to_cpu(stats->tot_peer_del_cnt);
+	pdev_stats->tot_peer_del_resp_cnt =
+		__le32_to_cpu(stats->tot_peer_del_resp_cnt);
+	pdev_stats->sched_algo_fifo_full_cnt =
+		__le32_to_cpu(stats->sched_algo_fifo_full_cnt);
+
+	list_add_tail(&pdev_stats->list, &stats_buff->pdev_stats);
+	pdev_id = le32_to_cpu(stats->pdev_id);
+
+	rcu_read_lock();
+	ar = ath12k_mac_get_ar_by_pdev_id(ab, pdev_id + 1);
+	if (!ar) {
+		rcu_read_unlock();
+		ath12k_warn(ab, "Failed to get ar for wmi ctrl stats\n");
+		ath12k_wmi_ctrl_path_pdev_stats_list_free(&stats_buff->pdev_stats);
+		return -EINVAL;
+	}
+
+	spin_lock_bh(&ar->debug.wmi_ctrl_path_stats_lock);
+	stats_list = &ar->debug.wmi_ctrl_path_stats;
+	ath12k_wmi_ctrl_path_pdev_stats_list_free(&stats_list->pdev_stats);
+	spin_unlock_bh(&ar->debug.wmi_ctrl_path_stats_lock);
+	ar->debug.wmi_ctrl_path_stats_tagid = WMI_TAG_CTRL_PATH_PDEV_STATS;
+	stats_buff->ar = ar;
+	rcu_read_unlock();
+	return 0;
+}
+
+static int ath12k_wmi_ctrl_stats_subtlv_parser(struct ath12k_base *ab,
+					       u16 tag, u16 len,
+					       const void *ptr, void *data)
+{
+	int ret;
+
+	switch (tag) {
+	case WMI_TAG_CTRL_PATH_STATS_EV_FIXED_PARAM:
+		break;
+	case WMI_TAG_CTRL_PATH_PDEV_STATS:
+		ret = wmi_pull_ctrl_path_pdev_tx_stats_tlv(ab, len, ptr, data);
+		break;
+		/* Add case for newly wmi ctrl path added stats here */
+	default:
+		ath12k_warn(ab,
+			    "Received invalid tag for wmi ctrl path stats in subtlvs, tag : 0x%x\n",
+			    tag);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static int ath12k_wmi_ctrl_stats_event_parser(struct ath12k_base *ab,
+					      u16 tag, u16 len,
+					      const void *ptr, void *data)
+{
+	int ret;
+
+	ath12k_dbg(ab, ATH12K_DBG_WMI, "wmi ctrl path stats tag 0x%x of len %d rcvd\n",
+		   tag, len);
+
+	switch (tag) {
+	case WMI_TAG_CTRL_PATH_STATS_EV_FIXED_PARAM:
+		/* Fixed param is already processed*/
+		ret = 0;
+		break;
+	case WMI_TAG_ARRAY_STRUCT:
+		/* len 0 is expected for array of struct when there
+		 * is no content of that type to pack inside that tlv
+		 */
+		if (len == 0)
+			return 0;
+
+		ret = ath12k_wmi_tlv_iter(ab, ptr, len,
+					  ath12k_wmi_ctrl_stats_subtlv_parser,
+					  data);
+		break;
+	default:
+		ath12k_warn(ab, "Received invalid tag for wmi ctrl path stats\n");
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static void ath12k_wmi_ctrl_path_stats_event(struct ath12k_base *ab, struct sk_buff *skb)
+{
+	struct wmi_ctrl_path_stats_event *fixed_param;
+	struct ath12k_wmi_ctrl_path_stats_list param = {0};
+	struct ath12k_wmi_ctrl_path_stats_list *stats;
+	const struct wmi_tlv *tlv;
+	struct list_head *src, *dst;
+	struct ath12k *ar;
+	void *ptr = skb->data;
+	u16 tlv_tag, tag_id;
+	u32 more;
+	int ret;
+
+	if (!skb->data) {
+		ath12k_warn(ab, "No data present in wmi ctrl stats event\n");
+		return;
+	}
+
+	if (skb->len < (sizeof(*fixed_param) + TLV_HDR_SIZE)) {
+		ath12k_warn(ab, "wmi ctrl stats event size invalid\n");
+		return;
+	}
+
+	param.ar = NULL;
+
+	tlv = ptr;
+	tlv_tag = le32_get_bits(tlv->header, WMI_TLV_TAG);
+	ptr += sizeof(*tlv);
+
+	if (tlv_tag != WMI_TAG_CTRL_PATH_STATS_EV_FIXED_PARAM) {
+		ath12k_warn(ab, "wmi ctrl stats without fixed param tlv at start\n");
+		return;
+	}
+
+	INIT_LIST_HEAD(&param.pdev_stats);
+
+	fixed_param = ptr;
+	ret = ath12k_wmi_tlv_iter(ab, skb->data, skb->len,
+				  ath12k_wmi_ctrl_stats_event_parser,
+				  &param);
+	if (ret) {
+		ath12k_warn(ab, "failed to parse wmi_ctrl_path_stats tlv: %d\n", ret);
+		if (!param.ar)
+			return;
+		goto free;
+	}
+
+	ar = param.ar;
+	if (!ar)
+		return;
+
+	tag_id = ar->debug.wmi_ctrl_path_stats_tagid;
+	stats = &ar->debug.wmi_ctrl_path_stats;
+	more = __le32_to_cpu(fixed_param->more);
+
+	switch (tag_id) {
+	case WMI_TAG_CTRL_PATH_PDEV_STATS:
+		src = &param.pdev_stats;
+		dst = &stats->pdev_stats;
+		break;
+	default:
+		goto free;
+	}
+
+	spin_lock_bh(&ar->debug.wmi_ctrl_path_stats_lock);
+	if (!more) {
+		if (!ar->debug.wmi_ctrl_path_stats_more_enabled)
+			ath12k_wmi_ctrl_path_stats_list_free(stats);
+		else
+			ar->debug.wmi_ctrl_path_stats_more_enabled = false;
+
+		list_splice_tail_init(src, dst);
+		complete(&ar->debug.wmi_ctrl_path_stats_rcvd);
+	} else {
+		if (!ar->debug.wmi_ctrl_path_stats_more_enabled) {
+			ath12k_wmi_ctrl_path_stats_list_free(stats);
+			ar->debug.wmi_ctrl_path_stats_more_enabled = true;
+		}
+		list_splice_tail_init(src, dst);
+	}
+	spin_unlock_bh(&ar->debug.wmi_ctrl_path_stats_lock);
+	return;
+free:
+	spin_lock_bh(&ar->debug.wmi_ctrl_path_stats_lock);
+	ath12k_wmi_ctrl_path_stats_list_free(&param);
+	spin_unlock_bh(&ar->debug.wmi_ctrl_path_stats_lock);
+}
+#else
+static void ath12k_wmi_ctrl_path_stats_event(struct ath12k_base *ab,
+					     struct sk_buff *skb)
+{
+}
+#endif /* CONFIG_ATH12K_DEBUGFS */
+
 static void ath12k_wmi_op_rx(struct ath12k_base *ab, struct sk_buff *skb)
 {
 	struct wmi_cmd_hdr *cmd_hdr;
@@ -7541,6 +7770,9 @@ static void ath12k_wmi_op_rx(struct ath12k_base *ab, struct sk_buff *skb)
 		break;
 	case WMI_MLO_TEARDOWN_COMPLETE_EVENTID:
 		ath12k_wmi_event_teardown_complete(ab, skb);
+		break;
+	case WMI_CTRL_PATH_STATS_EVENTID:
+		ath12k_wmi_ctrl_path_stats_event(ab, skb);
 		break;
 	/* add Unsupported events (rare) here */
 	case WMI_TBTTOFFSET_EXT_UPDATE_EVENTID:
@@ -7691,6 +7923,92 @@ int ath12k_wmi_simulate_radar(struct ath12k *ar)
 
 	return ath12k_wmi_send_unit_test_cmd(ar, wmi_ut, dfs_args);
 }
+
+#ifdef CONFIG_ATH12K_DEBUGFS
+int
+ath12k_wmi_send_wmi_ctrl_stats_cmd(struct ath12k *ar,
+				   struct wmi_ctrl_path_stats_arg *arg)
+{
+	struct wmi_ctrl_path_stats_cmd *cmd;
+	struct ath12k_wmi_pdev *wmi = ar->wmi;
+	struct ath12k_base *ab = wmi->wmi_ab->ab;
+	struct ath12k_debug *debug = &ar->debug;
+	__le32 pdev_id;
+	struct wmi_tlv *tlv;
+	struct sk_buff *skb;
+	int len, ret;
+	void *ptr;
+	u32 stats_id;
+
+	pdev_id = cpu_to_le32(ath12k_mac_get_target_pdev_id(ar));
+	stats_id = (1 << arg->stats_id);
+
+	len = sizeof(*cmd) +
+		TLV_HDR_SIZE + sizeof(u32) +
+		TLV_HDR_SIZE + TLV_HDR_SIZE;
+
+	skb = ath12k_wmi_alloc_skb(wmi->wmi_ab, len);
+	if (!skb)
+		return -ENOMEM;
+
+	cmd = (void *)skb->data;
+	cmd->tlv_header = ath12k_wmi_tlv_cmd_hdr(WMI_TAG_CTRL_PATH_STATS_CMD_FIXED_PARAM,
+						 sizeof(*cmd));
+	cmd->stats_id = cpu_to_le32(stats_id);
+	cmd->req_id = cpu_to_le32(arg->req_id);
+	cmd->action = cpu_to_le32(arg->action);
+
+	ptr = skb->data + sizeof(*cmd);
+
+	/* The below TLV arrays optionally follow this fixed param TLV structure
+	 * 1. ARRAY_UINT32 pdev_ids[]
+	 *	If this array is present and non-zero length, stats should only
+	 *	be provided from the pdevs identified in the array.
+	 * 2. ARRAY_UNIT32 vdev_ids[]
+	 *	If this array is present and non-zero length, stats should only
+	 *	be provided from the vdevs identified in the array.
+	 * 3. ath12k_wmi_mac_addr_params peer_macaddr[];
+	 *	If this array is present and non-zero length, stats should only
+	 *	be provided from the peers with the MAC addresses specified
+	 *	in the array
+	 */
+
+	tlv = ptr;
+	tlv->header = ath12k_wmi_tlv_hdr(WMI_TAG_ARRAY_UINT32, sizeof(u32));
+	ptr += TLV_HDR_SIZE;
+	memcpy(ptr, &pdev_id, sizeof(u32));
+	ptr += sizeof(u32);
+
+	tlv = ptr;
+	tlv->header = ath12k_wmi_tlv_hdr(WMI_TAG_ARRAY_UINT32, 0);
+	ptr += TLV_HDR_SIZE;
+
+	tlv = ptr;
+	tlv->header = ath12k_wmi_tlv_hdr(WMI_TAG_ARRAY_FIXED_STRUCT, 0);
+	ptr += TLV_HDR_SIZE;
+
+	if (arg->action == WMI_REQUEST_CTRL_PATH_STAT_GET)
+		reinit_completion(&ar->debug.wmi_ctrl_path_stats_rcvd);
+
+	ret = ath12k_wmi_cmd_send(wmi, skb,
+				  WMI_REQUEST_CTRL_PATH_STATS_CMDID);
+	if (ret) {
+		dev_kfree_skb(skb);
+		ath12k_warn(ab, "Failed to send WMI_REQUEST_CTRL_PATH_STATS_CMDID: %d",
+			    ret);
+	} else {
+		if (arg->action == WMI_REQUEST_CTRL_PATH_STAT_GET) {
+			if (!wait_for_completion_timeout(&debug->wmi_ctrl_path_stats_rcvd,
+							 WMI_CTRL_STATS_READY_TIMEOUT)) {
+				ath12k_warn(ab, "wmi ctrl path stats timed out\n");
+				ret = -ETIMEDOUT;
+			}
+		}
+	}
+
+	return ret;
+}
+#endif
 
 int ath12k_wmi_connect(struct ath12k_base *ab)
 {
