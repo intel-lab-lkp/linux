@@ -128,7 +128,7 @@ static int scmi_imx_bbm_notify(const struct scmi_protocol_handle *ph,
 			return ret;
 
 		rtc_notify = t->tx.buf;
-		rtc_notify->rtc_id = cpu_to_le32(0);
+		rtc_notify->rtc_id = cpu_to_le32(src_id);
 		rtc_notify->flags =
 			cpu_to_le32(enable ? SCMI_IMX_BBM_NOTIFY_RTC_FLAG : 0);
 	} else if (message_id == IMX_BBM_BUTTON_NOTIFY) {
@@ -155,6 +155,20 @@ static enum scmi_imx_bbm_protocol_cmd evt_2_cmd[] = {
 	IMX_BBM_RTC_NOTIFY,
 	IMX_BBM_BUTTON_NOTIFY
 };
+
+static int scmi_imx_bbm_get_num_sources(const struct scmi_protocol_handle *ph)
+{
+	struct scmi_imx_bbm_info *pi = ph->get_priv(ph);
+
+	if (!pi)
+		return -EINVAL;
+
+	/*
+	 * There is RTC and Button, but there is only one BBM button, and
+	 * at least one RTC, so use nr_rtc as sources number
+	 */
+	return pi->nr_rtc;
+}
 
 static int scmi_imx_bbm_set_notify_enabled(const struct scmi_protocol_handle *ph,
 					   u8 evt_id, u32 src_id, bool enable)
@@ -220,6 +234,7 @@ static const struct scmi_event scmi_imx_bbm_events[] = {
 };
 
 static const struct scmi_event_ops scmi_imx_bbm_event_ops = {
+	.get_num_sources = scmi_imx_bbm_get_num_sources,
 	.set_notify_enabled = scmi_imx_bbm_set_notify_enabled,
 	.fill_custom_report = scmi_imx_bbm_fill_custom_report,
 };
@@ -229,7 +244,6 @@ static const struct scmi_protocol_events scmi_imx_bbm_protocol_events = {
 	.ops = &scmi_imx_bbm_event_ops,
 	.evts = scmi_imx_bbm_events,
 	.num_events = ARRAY_SIZE(scmi_imx_bbm_events),
-	.num_sources = 1,
 };
 
 static int scmi_imx_bbm_rtc_time_set(const struct scmi_protocol_handle *ph,
