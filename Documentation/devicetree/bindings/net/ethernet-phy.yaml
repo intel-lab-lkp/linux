@@ -232,6 +232,14 @@ properties:
       PHY's that have configurable TX internal delays. If this property is
       present then the PHY applies the TX delay.
 
+  tx-amplitude-100base-tx-gain-milli:
+    description: |
+      Transmit amplitude gain applied (in milli units) for 100BASE-TX. When
+      omitted, the PHYs default will be left as is. If not present, default to
+      1000 (no actual gain applied).
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 1000
+
   leds:
     type: object
 
