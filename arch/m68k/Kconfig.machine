@@ -406,12 +406,19 @@ config KERNELBASE
 	  for the theoretical maximum number of 256 vectors.
 
 config DMASIZE
-       hex "Size of DRAM (in bytes) reserved pool"
-       default "0x1000000"
-       depends on DMA_GLOBAL_POOL
-       help
-         Define the DMA pool size, allocated at init time, which can then
-         be used by DMA engine. Defaults to 16MB.
+	hex "Size of DRAM (in bytes) reserved pool"
+	default "0x1000000"
+	depends on DMA_GLOBAL_POOL
+	help
+	  Define the DMA pool size, allocated at init time, which can then
+	  be used by DMA engine. Defaults to 16MB.
+
+config DMABASE
+	hex "Address of the base of RAM"
+	default RAMBASE
+	depends on DMA_GLOBAL_POOL
+	help
+	  Define the DMA base address for the global pool.
 
 comment "ROM configuration"
 

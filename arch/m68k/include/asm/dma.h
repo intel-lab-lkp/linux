@@ -5,6 +5,4 @@
 /* it's useless on the m68k, but unfortunately needed by the new
    bootmem allocator (but this should do it for this) */
 #define MAX_DMA_ADDRESS PAGE_OFFSET
-
-extern size_t dma_coldfire_base;
 #endif /* _M68K_DMA_H */
