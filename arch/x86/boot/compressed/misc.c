@@ -88,6 +88,10 @@ static int cols __section(".data");
 #ifdef CONFIG_KERNEL_ZSTD
 #include "../../../../lib/decompress_unzstd.c"
 #endif
+
+#ifdef CONFIG_KERNEL_UNCOMPRESSED
+#include "../../../../lib/decompress_dummy.c"
+#endif
 /*
  * NOTE: When adding a new decompressor, please update the analysis in
  * ../header.S.

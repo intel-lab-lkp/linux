@@ -27,6 +27,8 @@ static unsigned long free_mem_ptr, free_mem_end_ptr;
 #include "../../../../lib/decompress_unxz.c"
 #elif defined(CONFIG_KERNEL_ZSTD)
 #include "../../../../lib/decompress_unzstd.c"
+#elif defined(CONFIG_KERNEL_UNCOMPRESSED)
+#include "../../../../lib/decompress_dummy.c"
 #endif
 
 extern char efi_zboot_header[];

@@ -483,6 +483,8 @@ pref_address:		.quad LOAD_PHYSICAL_ADDR	# preferred load addr
 # larger margin.
 #
 # extra_bytes = (uncompressed_size >> 8) + 131072
+#
+# Uncompressed data does not grow.
 
 #define ZO_z_extra_bytes	((ZO_z_output_len >> 8) + 131072)
 #if ZO_z_output_len > ZO_z_input_len

@@ -525,6 +525,9 @@ quiet_cmd_zstd22 = ZSTD22  $@
 quiet_cmd_zstd22_with_size = ZSTD22  $@
       cmd_zstd22_with_size = { cat $(real-prereqs) | $(ZSTD) -22 --ultra; $(size_append); } > $@
 
+quiet_cmd_store_with_size = STORE  $@
+      cmd_store_with_size = { cat $(real-prereqs); $(size_append); } > $@
+
 # ASM offsets
 # ---------------------------------------------------------------------------
 
