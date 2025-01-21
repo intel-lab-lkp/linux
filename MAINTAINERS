@@ -12702,6 +12702,7 @@ S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/gregkh/driver-core.git
 F:	fs/kernfs/
 F:	include/linux/kernfs.h
+F:	samples/kernfs/
 
 KEXEC
 M:	Eric Biederman <ebiederm@xmission.com>

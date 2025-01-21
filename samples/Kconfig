@@ -291,6 +291,12 @@ config SAMPLE_CGROUP
 	help
 	  Build samples that demonstrate the usage of the cgroup API.
 
+config SAMPLE_KERNFS
+	bool "Build sample_kernfs pseudo-filesystem."
+	help
+	  Build a sample pseudo-filesystem that demonstrates the use of the
+	  kernfs API. The filesystem name is sample_kernfs.
+
 source "samples/rust/Kconfig"
 
 endif # SAMPLES
