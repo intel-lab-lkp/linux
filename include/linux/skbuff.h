@@ -39,6 +39,7 @@
 #include <net/net_debug.h>
 #include <net/dropreason-core.h>
 #include <net/netmem.h>
+#include <uapi/linux/errqueue.h>
 
 /**
  * DOC: skb checksums
@@ -4533,18 +4534,18 @@ void skb_complete_tx_timestamp(struct sk_buff *skb,
 
 void __skb_tstamp_tx(struct sk_buff *orig_skb, const struct sk_buff *ack_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
-		     struct sock *sk, int tstype);
+		     struct sock *sk, bool sw, int tstype);
 
 /**
- * skb_tstamp_tx - queue clone of skb with send time stamps
+ * skb_tstamp_tx - queue clone of skb with send HARDWARE timestamps
  * @orig_skb:	the original outgoing packet
  * @hwtstamps:	hardware time stamps, may be NULL if not available
  *
  * If the skb has a socket associated, then this function clones the
  * skb (thus sharing the actual data and optional structures), stores
- * the optional hardware time stamping information (if non NULL) or
- * generates a software time stamp (otherwise), then queues the clone
- * to the error queue of the socket.  Errors are silently ignored.
+ * the optional hardware time stamping information (if non NULL) then
+ * queues the clone to the error queue of the socket.  Errors are
+ * silently ignored.
  */
 void skb_tstamp_tx(struct sk_buff *orig_skb,
 		   struct skb_shared_hwtstamps *hwtstamps);
@@ -4565,7 +4566,7 @@ static inline void skb_tx_timestamp(struct sk_buff *skb)
 {
 	skb_clone_tx_timestamp(skb);
 	if (skb_shinfo(skb)->tx_flags & SKBTX_SW_TSTAMP)
-		skb_tstamp_tx(skb, NULL);
+		__skb_tstamp_tx(skb, NULL, NULL, skb->sk, true, SCM_TSTAMP_SND);
 }
 
 /**
