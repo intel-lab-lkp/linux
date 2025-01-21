@@ -500,6 +500,7 @@ static void tcp_tx_timestamp(struct sock *sk, struct sockcm_cookie *sockc)
 		tcb->txstamp_ack_bpf = 1;
 		shinfo->tx_flags |= SKBTX_BPF;
 		shinfo->tskey = TCP_SKB_CB(skb)->seq + skb->len - 1;
+		bpf_skops_tx_timestamping(sk, skb, BPF_SOCK_OPS_TS_TCP_SND_CB);
 	}
 }
 

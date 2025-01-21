@@ -7042,6 +7042,9 @@ enum {
 					 * feature is on. It indicates the
 					 * recorded timestamp.
 					 */
+	BPF_SOCK_OPS_TS_TCP_SND_CB,	/* Called when every tcp_sendmsg
+					 * syscall is triggered
+					 */
 };
 
 /* List of TCP states. There is a build check in net/ipv4/tcp.c to detect
