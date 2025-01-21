@@ -1458,6 +1458,59 @@ static void test_stream_cred_upd_on_set_rcvlowat(const struct test_opts *opts)
 	test_stream_credit_update_test(opts, false);
 }
 
+#define MAX_PORT_RETRIES	24	/* net/vmw_vsock/af_vsock.c */
+
+/* Test attempts to trigger a transport release for an unbound socket. This can
+ * lead to a reference count mishandling.
+ */
+static void test_stream_transport_uaf_client(const struct test_opts *opts)
+{
+	int sockets[MAX_PORT_RETRIES];
+	struct sockaddr_vm addr;
+	int fd, i, alen;
+
+	fd = vsock_bind(VMADDR_CID_ANY, VMADDR_PORT_ANY, SOCK_STREAM);
+
+	alen = sizeof(addr);
+	if (getsockname(fd, (struct sockaddr *)&addr, &alen)) {
+		perror("getsockname");
+		exit(EXIT_FAILURE);
+	}
+
+	for (i = 0; i < MAX_PORT_RETRIES; ++i)
+		sockets[i] = vsock_bind(VMADDR_CID_ANY, ++addr.svm_port,
+					SOCK_STREAM);
+
+	close(fd);
+	fd = socket(AF_VSOCK, SOCK_STREAM, 0);
+	if (fd < 0) {
+		perror("socket");
+		exit(EXIT_FAILURE);
+	}
+
+	if (!vsock_connect_fd(fd, addr.svm_cid, addr.svm_port)) {
+		perror("Unexpected connect() #1 success");
+		exit(EXIT_FAILURE);
+	}
+
+	/* Vulnerable system may crash now. */
+	if (!vsock_connect_fd(fd, VMADDR_CID_HOST, VMADDR_PORT_ANY)) {
+		perror("Unexpected connect() #2 success");
+		exit(EXIT_FAILURE);
+	}
+
+	close(fd);
+	while (i--)
+		close(sockets[i]);
+
+	control_writeln("DONE");
+}
+
+static void test_stream_transport_uaf_server(const struct test_opts *opts)
+{
+	control_expectln("DONE");
+}
+
 static struct test_case test_cases[] = {
 	{
 		.name = "SOCK_STREAM connection reset",
@@ -1587,6 +1640,11 @@ static struct test_case test_cases[] = {
 		.name = "SOCK_SEQPACKET ioctl(SIOCOUTQ) 0 unsent bytes",
 		.run_client = test_seqpacket_unsent_bytes_client,
 		.run_server = test_seqpacket_unsent_bytes_server,
+	},
+	{
+		.name = "SOCK_STREAM transport release use-after-free",
+		.run_client = test_stream_transport_uaf_client,
+		.run_server = test_stream_transport_uaf_server,
 	},
 	{},
 };
