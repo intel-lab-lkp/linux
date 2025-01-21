@@ -17,9 +17,13 @@
 /**
  * struct sample_kernfs_directory - Represents a directory in the pseudo-filesystem
  * @count: Holds the current count in the counter file.
+ * @subdirs: Holds the list of this directory's subdirectories.
+ * @siblings: Used to add this dir to parent's subdirs list.
  */
 struct sample_kernfs_directory {
 	atomic64_t count;
+	struct list_head subdirs;
+	struct list_head siblings;
 };
 
 static struct sample_kernfs_directory *sample_kernfs_create_dir(void)
@@ -29,6 +33,9 @@ static struct sample_kernfs_directory *sample_kernfs_create_dir(void)
 	dir = kzalloc(sizeof(struct sample_kernfs_directory), GFP_KERNEL);
 	if (!dir)
 		return NULL;
+
+	INIT_LIST_HEAD(&dir->subdirs);
+	INIT_LIST_HEAD(&dir->siblings);
 
 	return dir;
 }
@@ -101,6 +108,87 @@ static int sample_kernfs_populate_dir(struct kernfs_node *dir_kn)
 	return 0;
 }
 
+static void sample_kernfs_remove_subtree(struct sample_kernfs_directory *dir)
+{
+	struct sample_kernfs_directory *child, *tmp;
+
+	/*
+	 * Recursively remove children. This approach is acceptable for this
+	 * sample since we expect the tree depth to remain small and manageable.
+	 * For real-world filesystems, an iterative approach should be used to
+	 * avoid stack overflows.
+	 *
+	 * Also, we could be more careful with locking our lists, but kernfs
+	 * holds a tree-wide lock before calling our rmdir, so we should be
+	 * safe.
+	 */
+	list_for_each_entry_safe(child, tmp, &dir->subdirs, siblings) {
+		sample_kernfs_remove_subtree(child);
+	}
+
+	/* Remove this directory from its parent's subdirs list */
+	list_del(&dir->siblings);
+
+	kfree(dir);
+}
+
+static int sample_kernfs_mkdir(struct kernfs_node *parent_kn, const char *name, umode_t mode)
+{
+	struct kernfs_node *dir_kn;
+	struct sample_kernfs_directory *dir, *parent_dir;
+	int ret;
+
+	dir = sample_kernfs_create_dir();
+	if (!dir)
+		return -ENOMEM;
+
+	/* dir gets stored in dir_kn->priv so we can access it later. */
+	dir_kn = kernfs_create_dir_ns(parent_kn, name, mode, current_fsuid(),
+				      current_fsgid(), dir, NULL);
+
+	if (IS_ERR(dir_kn)) {
+		ret = PTR_ERR(dir_kn);
+		goto err_free_dir;
+	}
+
+	ret = sample_kernfs_populate_dir(dir_kn);
+	if (ret)
+		goto err_free_dir_kn;
+
+	/* Add directory to parent->subdirs */
+	parent_dir = parent_kn->priv;
+	list_add(&dir->siblings, &parent_dir->subdirs);
+
+	return 0;
+
+err_free_dir_kn:
+	kernfs_remove(dir_kn);
+err_free_dir:
+	sample_kernfs_remove_subtree(dir);
+	return ret;
+}
+
+static int sample_kernfs_rmdir(struct kernfs_node *kn)
+{
+	struct sample_kernfs_directory *dir = kn->priv;
+
+	/*
+	 * kernfs_remove_self avoids a deadlock by breaking active protection;
+	 * see kernfs_break_active_protection(). This is required since
+	 * kernfs_iop_rmdir() holds a tree-wide lock.
+	 */
+	kernfs_remove_self(kn);
+
+	sample_kernfs_remove_subtree(dir);
+
+	return 0;
+}
+
+static struct kernfs_syscall_ops sample_kernfs_kf_syscall_ops = {
+	.mkdir		= sample_kernfs_mkdir,
+	.rmdir		= sample_kernfs_rmdir,
+};
+
 static void sample_kernfs_fs_context_free(struct fs_context *fc)
 {
 	struct kernfs_fs_context *kfc = fc->fs_private;
@@ -132,7 +220,7 @@ static int sample_kernfs_init_fs_context(struct fs_context *fc)
 	}
 
 	/* dir gets stored in root->priv so we can access it later. */
-	root = kernfs_create_root(NULL, 0, root_dir);
+	root = kernfs_create_root(&sample_kernfs_kf_syscall_ops, 0, root_dir);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
 		goto err_free_dir;
@@ -153,7 +241,7 @@ static int sample_kernfs_init_fs_context(struct fs_context *fc)
 err_free_root:
 	kernfs_destroy_root(root);
 err_free_dir:
-	kfree(root_dir);
+	sample_kernfs_remove_subtree(root_dir);
 err_free_kfc:
 	kfree(kfc);
 	return err;
@@ -167,7 +255,7 @@ static void sample_kernfs_kill_sb(struct super_block *sb)
 
 	kernfs_kill_sb(sb);
 	kernfs_destroy_root(root);
-	kfree(root_dir);
+	sample_kernfs_remove_subtree(root_dir);
 }
 
 static struct file_system_type sample_kernfs_fs_type = {
