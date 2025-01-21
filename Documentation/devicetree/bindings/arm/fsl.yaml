@@ -402,6 +402,12 @@ properties:
           - const: variscite,var-som-imx6q
           - const: fsl,imx6q
 
+      - description: i.MX6UL Variscite VAR-SOM-MX6 Boards
+        items:
+          - const: variscite,mx6concerto
+          - const: variscite,var-som-imx6ul
+          - const: fsl,imx6ul
+
       - description: TQ-Systems TQMa6Q SoM (variant A) on MBa6x
         items:
           - const: tq,imx6q-mba6x-a
