@@ -2805,7 +2805,11 @@ static void virtnet_napi_do_enable(struct virtqueue *vq,
 
 static void virtnet_napi_enable(struct virtqueue *vq, struct napi_struct *napi)
 {
+	struct virtnet_info *vi = vq->vdev->priv;
+
 	virtnet_napi_do_enable(vq, napi);
+
+	netif_queue_set_napi(vi->dev, vq2rxq(vq), NETDEV_QUEUE_TYPE_RX, napi);
 }
 
 static void virtnet_napi_tx_enable(struct virtnet_info *vi,
@@ -2826,6 +2830,16 @@ static void virtnet_napi_tx_enable(struct virtnet_info *vi,
 	virtnet_napi_do_enable(vq, napi);
 }
 
+static void virtnet_napi_disable(struct virtqueue *vq,
+				 struct napi_struct *napi)
+{
+	struct virtnet_info *vi = vq->vdev->priv;
+
+	netif_queue_set_napi(vi->dev, vq2rxq(vq), NETDEV_QUEUE_TYPE_RX, NULL);
+
+	napi_disable(napi);
+}
+
 static void virtnet_napi_tx_disable(struct napi_struct *napi)
 {
 	if (napi->weight)
@@ -2842,7 +2856,8 @@ static void refill_work(struct work_struct *work)
 	for (i = 0; i < vi->curr_queue_pairs; i++) {
 		struct receive_queue *rq = &vi->rq[i];
 
-		napi_disable(&rq->napi);
+		virtnet_napi_disable(rq->vq, &rq->napi);
+
 		still_empty = !try_fill_recv(vi, rq, GFP_KERNEL);
 		virtnet_napi_enable(rq->vq, &rq->napi);
 
@@ -3042,7 +3057,7 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 static void virtnet_disable_queue_pair(struct virtnet_info *vi, int qp_index)
 {
 	virtnet_napi_tx_disable(&vi->sq[qp_index].napi);
-	napi_disable(&vi->rq[qp_index].napi);
+	virtnet_napi_disable(vi->rq[qp_index].vq, &vi->rq[qp_index].napi);
 	xdp_rxq_info_unreg(&vi->rq[qp_index].xdp_rxq);
 }
 
@@ -3313,7 +3328,7 @@ static void virtnet_rx_pause(struct virtnet_info *vi, struct receive_queue *rq)
 	bool running = netif_running(vi->dev);
 
 	if (running) {
-		napi_disable(&rq->napi);
+		virtnet_napi_disable(rq->vq, &rq->napi);
 		virtnet_cancel_dim(vi, &rq->dim);
 	}
 }
@@ -5932,7 +5947,7 @@ static int virtnet_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 	/* Make sure NAPI is not using any XDP TX queues for RX. */
 	if (netif_running(dev)) {
 		for (i = 0; i < vi->max_queue_pairs; i++) {
-			napi_disable(&vi->rq[i].napi);
+			virtnet_napi_disable(vi->rq[i].vq, &vi->rq[i].napi);
 			virtnet_napi_tx_disable(&vi->sq[i].napi);
 		}
 	}
