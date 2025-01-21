@@ -5548,7 +5548,7 @@ static bool skb_enable_app_tstamp(struct sk_buff *skb, int tstype, bool sw)
 		flag = SKBTX_SCHED_TSTAMP;
 		break;
 	case SCM_TSTAMP_SND:
-		flag = sw ? SKBTX_SW_TSTAMP : SKBTX_HW_TSTAMP;
+		flag = sw ? SKBTX_SW_TSTAMP : __SKBTX_HW_TSTAMP;
 		break;
 	case SCM_TSTAMP_ACK:
 		if (TCP_SKB_CB(skb)->txstamp_ack)
@@ -5565,7 +5565,8 @@ static bool skb_enable_app_tstamp(struct sk_buff *skb, int tstype, bool sw)
 }
 
 static void skb_tstamp_tx_bpf(struct sk_buff *skb, struct sock *sk,
-			      int tstype, bool sw)
+			      int tstype, bool sw,
+			      struct skb_shared_hwtstamps *hwtstamps)
 {
 	int op;
 
@@ -5577,9 +5578,9 @@ static void skb_tstamp_tx_bpf(struct sk_buff *skb, struct sock *sk,
 		op = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
 		break;
 	case SCM_TSTAMP_SND:
+		op = sw ? BPF_SOCK_OPS_TS_SW_OPT_CB : BPF_SOCK_OPS_TS_HW_OPT_CB;
 		if (!sw)
-			return;
-		op = BPF_SOCK_OPS_TS_SW_OPT_CB;
+			*skb_hwtstamps(skb) = *hwtstamps;
 		break;
 	default:
 		return;
@@ -5602,7 +5603,7 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 
 	/* bpf extension feature entry */
 	if (skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
-		skb_tstamp_tx_bpf(orig_skb, sk, tstype, sw);
+		skb_tstamp_tx_bpf(orig_skb, sk, tstype, sw, hwtstamps);
 
 	/* application feature entry */
 	if (!skb_enable_app_tstamp(orig_skb, tstype, sw))
