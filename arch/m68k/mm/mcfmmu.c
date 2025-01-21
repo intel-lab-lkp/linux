@@ -156,6 +156,8 @@ out:
 	return ret;
 }
 
+size_t coldfire_dma_base = _ramend - CONFIG_DMASIZE;
+
 void __init cf_bootmem_alloc(void)
 {
 	unsigned long memstart;
@@ -178,6 +180,9 @@ void __init cf_bootmem_alloc(void)
 
 	/* Reserve kernel text/data/bss */
 	memblock_reserve(_rambase, memstart - _rambase);
+
+	/* Reserve DMA */
+	memblock_reserve(coldfire_dma_base, CONFIG_DMASIZE);
 
 	m68k_virt_to_node_shift = fls(_ramend - 1) - 6;
 	module_fixup(NULL, __start_fixup, __stop_fixup);

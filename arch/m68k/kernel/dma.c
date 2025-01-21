@@ -43,3 +43,13 @@ void arch_sync_dma_for_device(phys_addr_t handle, size_t size,
 		break;
 	}
 }
+
+#ifdef CONFIG_DMA_GLOBAL_POOL
+static int __init coldfire_dma_init(void)
+{
+	return dma_init_global_coherent(PFN_PHYS(PFN_DOWN(coldfire_dma_base)),
+					CONFIG_DMASIZE);
+}
+
+core_initcall(coldfire_dma_init);
+#endif
