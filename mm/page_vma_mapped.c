@@ -342,15 +342,26 @@ unsigned long page_mapped_in_vma(const struct page *page,
 {
 	const struct folio *folio = page_folio(page);
 	struct page_vma_mapped_walk pvmw = {
-		.pfn = page_to_pfn(page),
 		.nr_pages = 1,
 		.vma = vma,
 		.flags = PVMW_SYNC,
 	};
 
+	/* fine granularity address is always preferred */
 	pvmw.address = vma_address(vma, page_pgoff(folio, page), 1);
 	if (pvmw.address == -EFAULT)
 		goto out;
+
+	/*
+	 * Hugetlb doesn't support partial page-mapping, hugetlb_walk()
+	 * simply assumes hugetlb pte, hence feed the headpage pfn for
+	 * the walk and pte check.
+	 */
+	if (folio_test_hugetlb(folio))
+		pvmw.pfn = folio_pfn(folio);
+	else
+		pvmw.pfn = page_to_pfn(page);
+
 	if (!page_vma_mapped_walk(&pvmw))
 		return -EFAULT;
 	page_vma_mapped_walk_done(&pvmw);
