@@ -2,6 +2,7 @@
 #include <linux/skbuff.h>
 #include <linux/slab.h>
 #include <linux/netdevice.h>
+#include <net/gro.h>
 #include <net/gro_cells.h>
 #include <net/hotdata.h>
 
@@ -20,7 +21,7 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 	if (unlikely(!(dev->flags & IFF_UP)))
 		goto drop;
 
-	if (!gcells->cells || skb_cloned(skb) || netif_elide_gro(dev)) {
+	if (!gcells->cells || netif_elide_gro(dev)) {
 		res = netif_rx(skb);
 		goto unlock;
 	}
@@ -58,7 +59,11 @@ static int gro_cell_poll(struct napi_struct *napi, int budget)
 		skb = __skb_dequeue(&cell->napi_skbs);
 		if (!skb)
 			break;
-		napi_gro_receive(napi, skb);
+		/* Core GRO stack does not play well with clones. */
+		if (skb_cloned(skb))
+			gro_normal_one(napi, skb, 1);
+		else
+			napi_gro_receive(napi, skb);
 		work_done++;
 	}
 
