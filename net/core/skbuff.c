@@ -5564,6 +5564,24 @@ static bool skb_enable_app_tstamp(struct sk_buff *skb, int tstype, bool sw)
 	return false;
 }
 
+static void skb_tstamp_tx_bpf(struct sk_buff *skb, struct sock *sk, int tstype)
+{
+	int op;
+
+	if (!sk)
+		return;
+
+	switch (tstype) {
+	case SCM_TSTAMP_SCHED:
+		op = BPF_SOCK_OPS_TS_SCHED_OPT_CB;
+		break;
+	default:
+		return;
+	}
+
+	bpf_skops_tx_timestamping(sk, skb, op);
+}
+
 void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		     const struct sk_buff *ack_skb,
 		     struct skb_shared_hwtstamps *hwtstamps,
@@ -5576,6 +5594,11 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 	if (!sk)
 		return;
 
+	/* bpf extension feature entry */
+	if (skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
+		skb_tstamp_tx_bpf(orig_skb, sk, tstype);
+
+	/* application feature entry */
 	if (!skb_enable_app_tstamp(orig_skb, tstype, sw))
 		return;
 
