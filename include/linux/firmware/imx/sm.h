@@ -8,6 +8,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/errno.h>
+#include <linux/scmi_imx_protocol.h>
 #include <linux/types.h>
 
 #define SCMI_IMX_CTRL_PDM_CLK_SEL	0	/* AON PDM clock sel */
@@ -20,4 +21,30 @@
 int scmi_imx_misc_ctrl_get(u32 id, u32 *num, u32 *val);
 int scmi_imx_misc_ctrl_set(u32 id, u32 val);
 
+#if IS_ENABLED(CONFIG_IMX_SCMI_LMM_DRV) || IS_ENABLED(CONFIG_COMPILE_TEST)
+int scmi_imx_lmm_boot(u32 lmid);
+int scmi_imx_lmm_info(u32 lmid, struct scmi_imx_lmm_info *info);
+int scmi_imx_lmm_power_on(u32 lmid);
+int scmi_imx_lmm_shutdown(u32 lmid, u32 flags);
+#else
+static inline int scmi_imx_lmm_boot(u32 lmid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int scmi_imx_lmm_info(u32 lmid, struct scmi_imx_lmm_info *info)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int scmi_imx_lmm_power_on(u32 lmid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int scmi_imx_lmm_shutdown(u32 lmid, u32 flags)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 #endif
