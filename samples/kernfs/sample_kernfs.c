@@ -14,6 +14,93 @@
 
 #define SAMPLE_KERNFS_MAGIC 0x8d000ff0
 
+/**
+ * struct sample_kernfs_directory - Represents a directory in the pseudo-filesystem
+ * @count: Holds the current count in the counter file.
+ */
+struct sample_kernfs_directory {
+	atomic64_t count;
+};
+
+static struct sample_kernfs_directory *sample_kernfs_create_dir(void)
+{
+	struct sample_kernfs_directory *dir;
+
+	dir = kzalloc(sizeof(struct sample_kernfs_directory), GFP_KERNEL);
+	if (!dir)
+		return NULL;
+
+	return dir;
+}
+
+static struct sample_kernfs_directory *kernfs_of_to_dir(struct kernfs_open_file *of)
+{
+	struct kernfs_node *dir_kn = kernfs_get_parent(of->kn);
+	struct sample_kernfs_directory *dir = dir_kn->priv;
+
+	/* kernfs_get_parent adds a reference; drop it with kernfs_put */
+	kernfs_put(dir_kn);
+
+	return dir;
+}
+
+static int sample_kernfs_counter_seq_show(struct seq_file *sf, void *v)
+{
+	struct kernfs_open_file *of = sf->private;
+	struct sample_kernfs_directory *counter_dir = kernfs_of_to_dir(of);
+	u64 count = atomic64_inc_return(&counter_dir->count);
+
+	seq_printf(sf, "%llu\n", count);
+
+	return 0;
+}
+
+static ssize_t sample_kernfs_counter_write(struct kernfs_open_file *of, char *buf,
+					   size_t nbytes, loff_t off)
+{
+	struct sample_kernfs_directory *counter_dir = kernfs_of_to_dir(of);
+	int ret;
+	u64 new_value;
+
+	ret = kstrtou64(strstrip(buf), 10, &new_value);
+	if (ret)
+		return ret;
+
+	atomic64_set(&counter_dir->count, new_value);
+
+	return nbytes;
+}
+
+static struct kernfs_ops counter_kf_ops = {
+	.seq_show	= sample_kernfs_counter_seq_show,
+	.write		= sample_kernfs_counter_write,
+};
+
+static int sample_kernfs_add_file(struct kernfs_node *dir_kn, const char *name,
+				  struct kernfs_ops *ops)
+{
+	struct kernfs_node *kn;
+
+	kn = __kernfs_create_file(dir_kn, name, 0666, current_fsuid(),
+				  current_fsgid(), 0, ops, NULL, NULL, NULL);
+
+	if (IS_ERR(kn))
+		return PTR_ERR(kn);
+
+	return 0;
+}
+
+static int sample_kernfs_populate_dir(struct kernfs_node *dir_kn)
+{
+	int err;
+
+	err = sample_kernfs_add_file(dir_kn, "counter", &counter_kf_ops);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 static void sample_kernfs_fs_context_free(struct fs_context *fc)
 {
 	struct kernfs_fs_context *kfc = fc->fs_private;
@@ -30,6 +117,7 @@ static const struct fs_context_operations sample_kernfs_fs_context_ops = {
 static int sample_kernfs_init_fs_context(struct fs_context *fc)
 {
 	struct kernfs_fs_context *kfc;
+	struct sample_kernfs_directory *root_dir;
 	struct kernfs_root *root;
 	int err;
 
@@ -37,10 +125,17 @@ static int sample_kernfs_init_fs_context(struct fs_context *fc)
 	if (!kfc)
 		return -ENOMEM;
 
-	root = kernfs_create_root(NULL, 0, NULL);
+	root_dir = sample_kernfs_create_dir();
+	if (!root_dir) {
+		err = -ENOMEM;
+		goto err_free_kfc;
+	}
+
+	/* dir gets stored in root->priv so we can access it later. */
+	root = kernfs_create_root(NULL, 0, root_dir);
 	if (IS_ERR(root)) {
 		err = PTR_ERR(root);
-		goto err_free_kfc;
+		goto err_free_dir;
 	}
 
 	kfc->root = root;
@@ -49,8 +144,16 @@ static int sample_kernfs_init_fs_context(struct fs_context *fc)
 	fc->ops = &sample_kernfs_fs_context_ops;
 	fc->global = true;
 
+	err = sample_kernfs_populate_dir(kernfs_root_to_node(root));
+	if (err)
+		goto err_free_root;
+
 	return 0;
 
+err_free_root:
+	kernfs_destroy_root(root);
+err_free_dir:
+	kfree(root_dir);
 err_free_kfc:
 	kfree(kfc);
 	return err;
@@ -59,9 +162,12 @@ err_free_kfc:
 static void sample_kernfs_kill_sb(struct super_block *sb)
 {
 	struct kernfs_root *root = kernfs_root_from_sb(sb);
+	struct kernfs_node *root_kn = kernfs_root_to_node(root);
+	struct sample_kernfs_directory *root_dir = root_kn->priv;
 
 	kernfs_kill_sb(sb);
 	kernfs_destroy_root(root);
+	kfree(root_dir);
 }
 
 static struct file_system_type sample_kernfs_fs_type = {
