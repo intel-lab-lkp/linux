@@ -4651,7 +4651,7 @@ static int __init hugepages_setup(char *s)
 	 * But we need to allocate gigantic hstates here early to still
 	 * use the bootmem allocator.
 	 */
-	if (hugetlb_max_hstate && hstate_is_gigantic(parsed_hstate))
+	if (hugetlb_max_hstate && hstate_is_gigantic(parsed_hstate) && hugepages_supported())
 		hugetlb_hstate_alloc_pages(parsed_hstate);
 
 	last_mhp = mhp;
