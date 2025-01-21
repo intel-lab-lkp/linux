@@ -17,11 +17,13 @@
 /**
  * struct sample_kernfs_directory - Represents a directory in the pseudo-filesystem
  * @count: Holds the current count in the counter file.
+ * @inc: Amount to increment count by. Value of inc file.
  * @subdirs: Holds the list of this directory's subdirectories.
  * @siblings: Used to add this dir to parent's subdirs list.
  */
 struct sample_kernfs_directory {
 	atomic64_t count;
+	atomic64_t inc;
 	struct list_head subdirs;
 	struct list_head siblings;
 };
@@ -34,6 +36,7 @@ static struct sample_kernfs_directory *sample_kernfs_create_dir(void)
 	if (!dir)
 		return NULL;
 
+	atomic64_set(&dir->inc, 1);
 	INIT_LIST_HEAD(&dir->subdirs);
 	INIT_LIST_HEAD(&dir->siblings);
 
@@ -55,7 +58,8 @@ static int sample_kernfs_counter_seq_show(struct seq_file *sf, void *v)
 {
 	struct kernfs_open_file *of = sf->private;
 	struct sample_kernfs_directory *counter_dir = kernfs_of_to_dir(of);
-	u64 count = atomic64_inc_return(&counter_dir->count);
+	u64 inc = atomic64_read(&counter_dir->inc);
+	u64 count = atomic64_add_return(inc, &counter_dir->count);
 
 	seq_printf(sf, "%llu\n", count);
 
@@ -83,6 +87,38 @@ static struct kernfs_ops counter_kf_ops = {
 	.write		= sample_kernfs_counter_write,
 };
 
+static int sample_kernfs_inc_seq_show(struct seq_file *sf, void *v)
+{
+	struct kernfs_open_file *of = sf->private;
+	struct sample_kernfs_directory *counter_dir = kernfs_of_to_dir(of);
+	u64 inc = atomic64_read(&counter_dir->inc);
+
+	seq_printf(sf, "%llu\n", inc);
+
+	return 0;
+}
+
+static ssize_t sample_kernfs_inc_write(struct kernfs_open_file *of, char *buf,
+					   size_t nbytes, loff_t off)
+{
+	struct sample_kernfs_directory *counter_dir = kernfs_of_to_dir(of);
+	int ret;
+	u64 new_value;
+
+	ret = kstrtou64(strstrip(buf), 10, &new_value);
+	if (ret)
+		return ret;
+
+	atomic64_set(&counter_dir->inc, new_value);
+
+	return nbytes;
+}
+
+static struct kernfs_ops inc_kf_ops = {
+	.seq_show	= sample_kernfs_inc_seq_show,
+	.write		= sample_kernfs_inc_write,
+};
+
 static int sample_kernfs_add_file(struct kernfs_node *dir_kn, const char *name,
 				  struct kernfs_ops *ops)
 {
@@ -102,6 +138,10 @@ static int sample_kernfs_populate_dir(struct kernfs_node *dir_kn)
 	int err;
 
 	err = sample_kernfs_add_file(dir_kn, "counter", &counter_kf_ops);
+	if (err)
+		return err;
+
+	err = sample_kernfs_add_file(dir_kn, "inc", &inc_kf_ops);
 	if (err)
 		return err;
 
