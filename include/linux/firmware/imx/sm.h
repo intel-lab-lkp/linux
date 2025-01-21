@@ -21,6 +21,35 @@
 int scmi_imx_misc_ctrl_get(u32 id, u32 *num, u32 *val);
 int scmi_imx_misc_ctrl_set(u32 id, u32 val);
 
+#if IS_ENABLED(CONFIG_IMX_SCMI_CPU_DRV) || IS_ENABLED(CONFIG_COMPILE_TEST)
+int scmi_imx_cpu_start(u32 cpuid);
+int scmi_imx_cpu_started(u32 cpuid, bool *started);
+int scmi_imx_cpu_stop(u32 cpuid);
+int scmi_imx_cpu_reset_vector_set(u32 cpuid, u64 vector, bool start, bool boot,
+				  bool resume);
+#else
+static inline int scmi_imx_cpu_start(u32 cpuid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int scmi_imx_cpu_started(u32 cpuid, bool *started)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int scmi_imx_cpu_stop(u32 cpuid)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int scmi_imx_cpu_reset_vector_set(u32 cpuid, u64 vector,
+						bool start, bool boot, bool resume)
+{
+	return -EOPNOTSUPP;
+}
+#endif
+
 #if IS_ENABLED(CONFIG_IMX_SCMI_LMM_DRV) || IS_ENABLED(CONFIG_COMPILE_TEST)
 int scmi_imx_lmm_boot(u32 lmid);
 int scmi_imx_lmm_info(u32 lmid, struct scmi_imx_lmm_info *info);
