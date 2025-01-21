@@ -948,6 +948,19 @@ int sock_set_timestamping(struct sock *sk, int optname,
 	return 0;
 }
 
+void bpf_skops_tx_timestamping(struct sock *sk, struct sk_buff *skb, int op)
+{
+	struct bpf_sock_ops_kern sock_ops;
+
+	memset(&sock_ops, 0, offsetof(struct bpf_sock_ops_kern, temp));
+	sock_ops.op = op;
+	sock_ops.is_fullsock = 1;
+	sock_ops.sk = sk;
+	bpf_skops_init_skb(&sock_ops, skb, 0);
+	/* Timestamping bpf extension supports only TCP and UDP full socket */
+	__cgroup_bpf_run_filter_sock_ops(sk, &sock_ops, CGROUP_SOCK_OPS);
+}
+
 void sock_set_keepalive(struct sock *sk)
 {
 	lock_sock(sk);
