@@ -5605,11 +5605,13 @@ void __skb_tstamp_tx(struct sk_buff *orig_skb,
 		return;
 
 	/* bpf extension feature entry */
-	if (skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&
+	    skb_shinfo(orig_skb)->tx_flags & SKBTX_BPF)
 		skb_tstamp_tx_bpf(orig_skb, sk, tstype, sw, hwtstamps);
 
 	/* application feature entry */
-	if (!skb_enable_app_tstamp(orig_skb, tstype, sw))
+	if (cgroup_bpf_enabled(CGROUP_SOCK_OPS) &&
+	    !skb_enable_app_tstamp(orig_skb, tstype, sw))
 		return;
 
 	tsflags = READ_ONCE(sk->sk_tsflags);
