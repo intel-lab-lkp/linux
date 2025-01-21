@@ -23,7 +23,7 @@ struct netdev_rx_queue {
 	struct xsk_buff_pool            *pool;
 #endif
 	/* NAPI instance for the queue
-	 * Readers and writers must hold RTNL
+	 * Readers and writers must hold netdev->lock
 	 */
 	struct napi_struct		*napi;
 	struct pp_memory_provider_params mp_params;
