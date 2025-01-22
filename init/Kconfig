@@ -358,6 +358,9 @@ config KERNEL_LZ4
 	  is about 8% bigger than LZO. But the decompression speed is
 	  faster than LZO.
 
+	  If you are working on the kernel and recompiling frequently, you can
+	  adjust the compression level with CONFIG_LZ4_LEVEL.
+
 config KERNEL_ZSTD
 	bool "ZSTD"
 	depends on HAVE_KERNEL_ZSTD
@@ -379,6 +382,19 @@ config KERNEL_UNCOMPRESSED
 	  and jump right at uncompressed kernel image.
 
 endchoice
+
+config LZ4_LEVEL
+	int "LZ4 compression level"
+	range 1 12
+	depends on KERNEL_LZ4
+	default 9
+	help
+	  This option controls the compression level used for LZ4 invocations,
+	  in particular for compressing the kernel image.
+
+	  If you are working on the kernel and recompiling frequently, you can
+	  set this to a low value like 1 to speed up kernel builds at the cost
+	  of using more disk space.
 
 config DEFAULT_INIT
 	string "Default init path"
