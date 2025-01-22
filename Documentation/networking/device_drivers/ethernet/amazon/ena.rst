@@ -279,6 +279,16 @@ The ENA device restricts the frequency of PHC get time requests to a maximum
 of 125 requests per second. If this limit is surpassed, the get time request
 will fail, leading to an increment in the phc_err statistic.
 
+**PHC error bound**
+
+PTP HW clock error bound refers to the maximum allowable difference
+between the clock of the device and the reference clock.
+The error bound is used to ensure that the clock of the device
+remains within a certain level of accuracy relative to the reference
+clock. The error bound (expressed in nanoseconds) is calculated by
+the device and is retrieved and cached by the driver upon every get PHC
+timestamp request.
+
 **PHC statistics**
 
 PHC can be monitored using :code:`ethtool -S` counters:
@@ -287,7 +297,10 @@ PHC can be monitored using :code:`ethtool -S` counters:
 **phc_cnt**         Number of successful retrieved timestamps (below expire timeout).
 **phc_exp**         Number of expired retrieved timestamps (above expire timeout).
 **phc_skp**         Number of skipped get time attempts (during block period).
-**phc_err**         Number of failed get time attempts (entering into block state).
+**phc_err**         Number of failed get time attempts due to timestamp/error bound errors
+                    (entering into block state).
+                    Must remain below 1% of all PHC requests to maintain the desired level of
+                    accuracy and reliability.
 =================   ======================================================
 
 PHC timeouts:
