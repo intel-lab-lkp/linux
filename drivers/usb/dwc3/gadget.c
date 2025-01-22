@@ -4580,6 +4580,7 @@ static void dwc_gadget_release(struct device *dev)
 {
 	struct usb_gadget *gadget = container_of(dev, struct usb_gadget, dev);
 
+	flush_work(&gadget->work);
 	kfree(gadget);
 }
 
