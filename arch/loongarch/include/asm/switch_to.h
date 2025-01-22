@@ -26,6 +26,14 @@ extern asmlinkage struct task_struct *__switch_to(struct task_struct *prev,
 			struct task_struct *next, struct thread_info *next_ti,
 			void *sched_ra, void *sched_cfa);
 
+void noinstr __no_stack_protector ret_from_kernel_thread(struct task_struct *prev,
+							 struct pt_regs *regs,
+							 int (*fn)(void *),
+							 void *fn_arg);
+
+void noinstr __no_stack_protector ret_from_fork(struct task_struct *prev,
+						struct pt_regs *regs);
+
 /*
  * For newly created kernel threads switch_to() will return to
  * ret_from_kernel_thread, newly created user threads to ret_from_fork.
