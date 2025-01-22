@@ -659,9 +659,9 @@ void *__kvmalloc_node_noprof(DECL_BUCKET_PARAMS(size, b), gfp_t flags, int node)
 	 * It doesn't really make sense to fallback to vmalloc for sub page
 	 * requests
 	 */
-	ret = __kmalloc_node_noprof(PASS_BUCKET_PARAMS(size, b),
+	ret = __kmalloc_node_inline(size, PASS_BUCKET_PARAM(b),
 				    kmalloc_gfp_adjust(flags, size),
-				    node);
+				    node, _RET_IP_);
 	if (ret || size <= PAGE_SIZE)
 		return ret;
 

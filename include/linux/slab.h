@@ -834,6 +834,9 @@ void *__kmalloc_large_noprof(size_t size, gfp_t flags)
 void *__kmalloc_large_node_noprof(size_t size, gfp_t flags, int node)
 				__assume_page_alignment __alloc_size(1);
 
+void *__kmalloc_node_inline(size_t size, kmem_buckets *b, gfp_t flags,
+				int node, unsigned long caller);
+
 /**
  * kmalloc - allocate kernel memory
  * @size: how many bytes of memory are required.
