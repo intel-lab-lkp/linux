@@ -805,15 +805,6 @@ fec_enet_txq_put_hdr_tso(struct fec_enet_priv_tx_q *txq,
 
 		if (fep->quirks & FEC_QUIRK_SWAP_FRAME)
 			swap_buffer(bufaddr, hdr_len);
-
-		dmabuf = dma_map_single(&fep->pdev->dev, bufaddr,
-					hdr_len, DMA_TO_DEVICE);
-		if (dma_mapping_error(&fep->pdev->dev, dmabuf)) {
-			dev_kfree_skb_any(skb);
-			if (net_ratelimit())
-				netdev_err(ndev, "Tx DMA memory map failed\n");
-			return NETDEV_TX_OK;
-		}
 	}
 
 	bdp->cbd_bufaddr = cpu_to_fec32(dmabuf);
