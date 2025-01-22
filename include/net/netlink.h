@@ -1015,6 +1015,8 @@ static inline struct nlmsghdr *nlmsg_put_answer(struct sk_buff *skb,
  */
 static inline struct sk_buff *nlmsg_new(size_t payload, gfp_t flags)
 {
+	if (payload > INT_MAX)
+		return NULL;
 	return alloc_skb(nlmsg_total_size(payload), flags);
 }
 
