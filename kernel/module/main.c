@@ -59,6 +59,7 @@
 #include <linux/codetag.h>
 #include <linux/debugfs.h>
 #include <linux/execmem.h>
+#include <linux/bpf.h>
 #include <uapi/linux/module.h>
 #include "internal.h"
 
@@ -3089,6 +3090,7 @@ fail:
 
 	return ret;
 }
+ALLOW_ERROR_INJECTION(do_init_module, ERRNO);
 
 static int may_init_module(void)
 {
@@ -3225,6 +3227,7 @@ out:
 	mutex_unlock(&module_mutex);
 	return err;
 }
+ALLOW_ERROR_INJECTION(complete_formation, ERRNO);
 
 static int prepare_coming_module(struct module *mod)
 {
