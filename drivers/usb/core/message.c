@@ -2102,6 +2102,7 @@ free_interfaces:
 		struct usb_interface_cache *intfc;
 		struct usb_interface *intf;
 		struct usb_host_interface *alt;
+		struct device_node *np;
 		u8 ifnum;
 
 		cp->interface[i] = intf = new_interfaces[i];
@@ -2126,12 +2127,11 @@ free_interfaces:
 		intf->cur_altsetting = alt;
 		usb_enable_interface(dev, intf, true);
 		intf->dev.parent = &dev->dev;
-		if (usb_of_has_combined_node(dev)) {
+		np = usb_of_get_interface_node(dev, configuration, ifnum);
+		if (!of_get_child_count(np) && usb_of_has_combined_node(dev))
 			device_set_of_node_from_dev(&intf->dev, &dev->dev);
-		} else {
-			intf->dev.of_node = usb_of_get_interface_node(dev,
-					configuration, ifnum);
-		}
+		else
+			intf->dev.of_node = np;
 		ACPI_COMPANION_SET(&intf->dev, ACPI_COMPANION(&dev->dev));
 		intf->dev.driver = NULL;
 		intf->dev.bus = &usb_bus_type;
