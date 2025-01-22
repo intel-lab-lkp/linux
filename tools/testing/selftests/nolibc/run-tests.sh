@@ -158,9 +158,6 @@ test_arch() {
 	MAKE=(make -j"${nproc}" XARCH="${arch}" CROSS_COMPILE="${cross_compile}" LLVM="${llvm}" O="${build_dir}")
 
 	mkdir -p "$build_dir"
-	if [ "$test_mode" = "system" ] && [ ! -f "${build_dir}/.config" ]; then
-		swallow_output "${MAKE[@]}" defconfig
-	fi
 	case "$test_mode" in
 		'system')
 			test_target=run
@@ -173,7 +170,7 @@ test_arch() {
 			exit 1
 	esac
 	printf '%-15s' "$arch:"
-	swallow_output "${MAKE[@]}" CFLAGS_EXTRA="$CFLAGS_EXTRA" "$test_target" V=1
+	swallow_output "${MAKE[@]}" CFLAGS_EXTRA="$CFLAGS_EXTRA" defconfig "$test_target" V=1
 	cp run.out run.out."${arch}"
 	"${MAKE[@]}" report | grep passed
 }
