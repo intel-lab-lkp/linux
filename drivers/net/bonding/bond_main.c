@@ -1598,10 +1598,13 @@ static void bond_compute_features(struct bonding *bond)
 	}
 	bond_dev->hard_header_len = max_hard_header_len;
 
-	if (gso_partial_features & NETIF_F_GSO_ESP)
+	if (gso_partial_features & NETIF_F_GSO_ESP) {
 		bond_dev->gso_partial_features |= NETIF_F_GSO_ESP;
-	else
+		bond_dev->features |= NETIF_F_GSO_PARTIAL;
+	} else {
 		bond_dev->gso_partial_features &= ~NETIF_F_GSO_ESP;
+		bond_dev->features &= ~NETIF_F_GSO_PARTIAL;
+	}
 
 done:
 	bond_dev->vlan_features = vlan_features;
