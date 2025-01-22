@@ -53,6 +53,7 @@ ena_eth_io_defs.h   Definition of ENA data path interface.
 ena_common_defs.h   Common definitions for ena_com layer.
 ena_regs_defs.h     Definition of ENA PCI memory-mapped (MMIO) registers.
 ena_netdev.[ch]     Main Linux kernel driver.
+ena_sysfs.[ch]      Sysfs files.
 ena_ethtool.c       ethtool callbacks.
 ena_xdp.[ch]        XDP files
 ena_pci_id_tbl.h    Supported device IDs.
@@ -253,6 +254,17 @@ Load PTP module:
 
   sudo modprobe ptp
 
+**PHC activation**
+
+The feature is turned off by default, in order to turn the feature on,
+please use the following:
+
+- sysfs (during runtime):
+
+.. code-block:: shell
+
+  echo 1 > /sys/bus/pci/devices/<domain:bus:slot.function>/phc_enable
+
 All available PTP clock sources can be tracked here:
 
 .. code-block:: shell
@@ -288,6 +300,14 @@ remains within a certain level of accuracy relative to the reference
 clock. The error bound (expressed in nanoseconds) is calculated by
 the device and is retrieved and cached by the driver upon every get PHC
 timestamp request.
+
+To retrieve the cached PHC error bound value, use the following:
+
+sysfs:
+
+.. code-block:: shell
+
+  cat /sys/bus/pci/devices/<domain:bus:slot.function>/phc_error_bound
 
 **PHC statistics**
 

@@ -229,3 +229,11 @@ int ena_phc_get_index(struct ena_adapter *adapter)
 
 	return -1;
 }
+
+int ena_phc_get_error_bound(struct ena_adapter *adapter, u32 *error_bound_nsec)
+{
+	if (!ena_phc_is_active(adapter))
+		return -EOPNOTSUPP;
+
+	return ena_com_phc_get_error_bound(adapter->ena_dev, error_bound_nsec);
+}

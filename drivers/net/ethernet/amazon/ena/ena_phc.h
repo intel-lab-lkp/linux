@@ -33,5 +33,6 @@ int ena_phc_init(struct ena_adapter *adapter);
 void ena_phc_destroy(struct ena_adapter *adapter);
 int ena_phc_alloc(struct ena_adapter *adapter);
 void ena_phc_free(struct ena_adapter *adapter);
+int ena_phc_get_error_bound(struct ena_adapter *adapter, u32 *error_bound);
 
 #endif /* ENA_PHC_H */
