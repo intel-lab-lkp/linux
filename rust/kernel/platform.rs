@@ -14,7 +14,7 @@ use crate::{
     ThisModule,
 };
 
-use core::ptr::addr_of_mut;
+use core::ptr::{NonNull, addr_of_mut};
 
 /// An adapter for the registration of platform drivers.
 pub struct Adapter<T: Driver>(T);
@@ -184,6 +184,21 @@ impl Device {
     /// `bindings::platform_device`.
     unsafe fn from_dev(dev: ARef<device::Device>) -> Self {
         Self(dev)
+    }
+
+    /// Convert a raw pointer to a `struct platform_device` into a `Device`.
+    ///
+    /// # Safety
+    ///
+    /// * `pdev` must be a valid pointer to a `bindings::platform_device`.
+    /// * The caller must be guaranteed to hold at least one reference to `pdev`.
+    unsafe fn from_raw(pdev: *mut bindings::platform_device) -> Self {
+        // SAFETY:
+        // * Our safety contract ensures `pdev` is a valid pointer which we hold at least one
+        //   reference to.
+        // * struct device and `device::Device` have equivalent data layouts via the
+        //   `device::Device` type invariants.
+        Self(unsafe { ARef::from_raw(NonNull::new_unchecked(addr_of_mut!((*pdev).dev).cast())) })
     }
 
     fn as_raw(&self) -> *mut bindings::platform_device {
