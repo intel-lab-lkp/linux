@@ -3271,15 +3271,10 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 	bool use_napi = sq->napi.weight;
 	bool kick;
 
-	/* Free up any pending old buffers before queueing new ones. */
-	do {
-		if (use_napi)
-			virtqueue_disable_cb(sq->vq);
-
+	if (!use_napi)
 		free_old_xmit(sq, txq, false);
-
-	} while (use_napi && !xmit_more &&
-	       unlikely(!virtqueue_enable_cb_delayed(sq->vq)));
+	else
+		virtqueue_disable_cb(sq->vq);
 
 	/* timestamp packet in software */
 	skb_tx_timestamp(skb);
@@ -3305,7 +3300,18 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 		nf_reset_ct(skb);
 	}
 
-	check_sq_full_and_disable(vi, dev, sq);
+	if (tx_may_stop(vi, dev, sq) && !use_napi &&
+	    unlikely(virtqueue_enable_cb_delayed(sq->vq))) {
+		/* More just got used, free them then recheck. */
+		free_old_xmit(sq, txq, false);
+		if (sq->vq->num_free >= 2+MAX_SKB_FRAGS) {
+			netif_start_subqueue(dev, qnum);
+			u64_stats_update_begin(&sq->stats.syncp);
+			u64_stats_inc(&sq->stats.wake);
+			u64_stats_update_end(&sq->stats.syncp);
+			virtqueue_disable_cb(sq->vq);
+		}
+	}
 
 	kick = use_napi ? __netdev_tx_sent_queue(txq, skb->len, xmit_more) :
 			  !xmit_more || netif_xmit_stopped(txq);
@@ -3316,6 +3322,9 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 			u64_stats_update_end(&sq->stats.syncp);
 		}
 	}
+
+	if (use_napi && kick && unlikely(!virtqueue_enable_cb_delayed(sq->vq)))
+		virtqueue_napi_schedule(&sq->napi, sq->vq);
 
 	return NETDEV_TX_OK;
 }
