@@ -1325,6 +1325,17 @@ static void nfsd4_cb_prepare(struct rpc_task *task, void *calldata)
 	rpc_call_start(task);
 }
 
+/**
+ * nfsd4_cb_sequence_done - process the result of a CB_SEQUENCE
+ * @task: rpc_task
+ * @cb: nfsd4_callback for this call
+ *
+ * For minorversion 0, there is no CB_SEQUENCE. Only restart the call
+ * if the callback RPC client was killed. For v4.1+ the error handling
+ * is more sophisticated.
+ *
+ * Returns true if reply processing should continue.
+ */
 static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback *cb)
 {
 	struct nfs4_client *clp = cb->cb_clp;
@@ -1334,11 +1345,11 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 	if (!clp->cl_minorversion) {
 		/*
 		 * If the backchannel connection was shut down while this
-		 * task was queued, we need to resubmit it after setting up
-		 * a new backchannel connection.
+		 * task was queued, resubmit it after setting up a new
+		 * backchannel connection.
 		 *
-		 * Note that if we lost our callback connection permanently
-		 * the submission code will error out, so we don't need to
+		 * Note that if the callback connection is permanently lost,
+		 * the submission code will error out. There is no need to
 		 * handle that case here.
 		 */
 		if (RPC_SIGNALLED(task))
@@ -1355,8 +1366,6 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 	switch (cb->cb_seq_status) {
 	case 0:
 		/*
-		 * No need for lock, access serialized in nfsd4_cb_prepare
-		 *
 		 * RFC5661 20.9.3
 		 * If CB_SEQUENCE returns an error, then the state of the slot
 		 * (sequence ID, cached reply) MUST NOT change.
@@ -1365,6 +1374,11 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		ret = true;
 		break;
 	case -ESERVERFAULT:
+		/*
+		 * Client returned NFS4_OK, but decoding failed. Mark the
+		 * backchannel as faulty, but don't retransmit since the
+		 * call was successful.
+		 */
 		++session->se_cb_seq_nr[cb->cb_held_slot];
 		nfsd4_mark_cb_fault(cb->cb_clp);
 		break;
