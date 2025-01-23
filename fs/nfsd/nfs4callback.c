@@ -1371,17 +1371,24 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		nfsd4_mark_cb_fault(cb->cb_clp);
 		ret = false;
 		break;
+	case -NFS4ERR_BADSESSION:
+	case -NFS4ERR_BADSLOT:
+	case -NFS4ERR_SEQ_MISORDERED:
+		/*
+		 * These errors indicate that something has gone wrong
+		 * with the server and client's synchronization. Release
+		 * the slot, but handle it as if we hadn't gotten a reply.
+		 */
+		nfsd41_cb_release_slot(cb);
+		fallthrough;
 	case 1:
 		/*
 		 * cb_seq_status remains 1 if an RPC Reply was never
 		 * received. NFSD can't know if the client processed
 		 * the CB_SEQUENCE operation. Ask the client to send a
-		 * DESTROY_SESSION to recover.
+		 * DESTROY_SESSION to recover, but keep the slot.
 		 */
-		fallthrough;
-	case -NFS4ERR_BADSESSION:
 		nfsd4_mark_cb_fault(cb->cb_clp);
-		ret = false;
 		goto need_restart;
 	case -NFS4ERR_DELAY:
 		cb->cb_seq_status = 1;
@@ -1390,14 +1397,6 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 
 		rpc_delay(task, 2 * HZ);
 		return false;
-	case -NFS4ERR_BADSLOT:
-		goto retry_nowait;
-	case -NFS4ERR_SEQ_MISORDERED:
-		if (session->se_cb_seq_nr[cb->cb_held_slot] != 1) {
-			session->se_cb_seq_nr[cb->cb_held_slot] = 1;
-			goto retry_nowait;
-		}
-		break;
 	default:
 		nfsd4_mark_cb_fault(cb->cb_clp);
 	}
@@ -1405,10 +1404,6 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 	nfsd41_cb_release_slot(cb);
 out:
 	return ret;
-retry_nowait:
-	if (rpc_restart_call_prepare(task))
-		ret = false;
-	goto out;
 need_restart:
 	if (!test_bit(NFSD4_CLIENT_CB_KILL, &clp->cl_flags)) {
 		trace_nfsd_cb_restart(clp, cb);
