@@ -178,6 +178,10 @@ static const struct fec_devinfo fec_s32v234_info = {
 		  FEC_QUIRK_HAS_MDIO_C45,
 };
 
+static const struct fec_devinfo fec_m5208_info = {
+	.quirks = FEC_QUIRK_MIB_CLEAR | FEC_QUIRK_HAS_FRREG,
+};
+
 static struct platform_device_id fec_devtype[] = {
 	{
 		/* keep it for coldfire */
@@ -200,6 +204,7 @@ static const struct of_device_id fec_dt_ids[] = {
 	{ .compatible = "fsl,imx8mq-fec", .data = &fec_imx8mq_info, },
 	{ .compatible = "fsl,imx8qm-fec", .data = &fec_imx8qm_info, },
 	{ .compatible = "fsl,s32v234-fec", .data = &fec_s32v234_info, },
+	{ .compatible = "fsl,m5208-fec", .data = &fec_m5208_info, },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, fec_dt_ids);
