@@ -239,6 +239,7 @@ static void wpf_configure_stream(struct vsp1_entity *entity,
 	const struct v4l2_mbus_framefmt *source_format;
 	const struct v4l2_mbus_framefmt *sink_format;
 	unsigned int index = wpf->entity.index;
+	u32 irqmask = 0;
 	unsigned int i;
 	u32 outfmt = 0;
 	u32 srcrpf = 0;
@@ -312,9 +313,9 @@ static void wpf_configure_stream(struct vsp1_entity *entity,
 	vsp1_wpf_write(wpf, dlb, VI6_WPF_SRCRPF, srcrpf);
 
 	/* Enable interrupts. */
+	irqmask = VI6_WPF_IRQ_ENB_DFEE | (pipe->iif ? VI6_WPF_IRQ_ENB_FREE : 0);
 	vsp1_dl_body_write(dlb, VI6_WPF_IRQ_STA(index), 0);
-	vsp1_dl_body_write(dlb, VI6_WPF_IRQ_ENB(index),
-			   VI6_WPF_IRQ_ENB_DFEE);
+	vsp1_dl_body_write(dlb, VI6_WPF_IRQ_ENB(index), irqmask);
 
 	/*
 	 * Configure writeback for display pipelines (the wpf writeback flag is
