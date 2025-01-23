@@ -1018,10 +1018,6 @@ fuse_uring_create_ring_ent(struct io_uring_cmd *cmd,
 		return ERR_PTR(err);
 	}
 
-	/*
-	 * The created queue above does not need to be destructed in
-	 * case of entry errors below, will be done at ring destruction time.
-	 */
 	err = -ENOMEM;
 	ent = kzalloc(sizeof(*ent), GFP_KERNEL_ACCOUNT);
 	if (!ent)
@@ -1063,13 +1059,17 @@ static int fuse_uring_register(struct io_uring_cmd *cmd,
 		return -EINVAL;
 	}
 
-	err = -ENOMEM;
 	queue = ring->queues[qid];
 	if (!queue) {
 		queue = fuse_uring_create_queue(ring, qid);
 		if (!queue)
 			return err;
 	}
+
+	/*
+	 * The created queue above does not need to be destructed in
+	 * case of entry errors below, will be done at ring destruction time.
+	 */
 
 	ent = fuse_uring_create_ring_ent(cmd, queue);
 	if (IS_ERR(ent))
