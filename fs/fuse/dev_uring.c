@@ -779,7 +779,7 @@ static void fuse_uring_commit(struct fuse_ring_ent *ent,
 	err = copy_from_user(&req->out.h, &ent->headers->in_out,
 			     sizeof(req->out.h));
 	if (err) {
-		req->out.h.error = err;
+		req->out.h.error = -EFAULT;
 		goto out;
 	}
 
