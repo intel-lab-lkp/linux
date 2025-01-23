@@ -60,6 +60,7 @@ static void rpf_configure_stream(struct vsp1_entity *entity,
 	const struct v4l2_mbus_framefmt *sink_format;
 	unsigned int left = 0;
 	unsigned int top = 0;
+	u32 alpha_sel = 0;
 	u32 pstride;
 	u32 infmt;
 
@@ -84,7 +85,7 @@ static void rpf_configure_stream(struct vsp1_entity *entity,
 	sink_format = v4l2_subdev_state_get_format(state, RWPF_PAD_SINK);
 	source_format = v4l2_subdev_state_get_format(state, RWPF_PAD_SOURCE);
 
-	infmt = VI6_RPF_INFMT_CIPM
+	infmt = (pipe->iif ? 0 : VI6_RPF_INFMT_CIPM)
 	      | (fmtinfo->hwfmt << VI6_RPF_INFMT_RDFMT_SHIFT);
 
 	if (fmtinfo->swap_yc)
@@ -98,7 +99,7 @@ static void rpf_configure_stream(struct vsp1_entity *entity,
 	vsp1_rpf_write(rpf, dlb, VI6_RPF_INFMT, infmt);
 	vsp1_rpf_write(rpf, dlb, VI6_RPF_DSWAP, fmtinfo->swap);
 
-	if (entity->vsp1->info->gen == 4) {
+	if (entity->vsp1->info->gen == 4 && !pipe->iif) {
 		u32 ext_infmt0;
 		u32 ext_infmt1;
 		u32 ext_infmt2;
@@ -150,23 +151,6 @@ static void rpf_configure_stream(struct vsp1_entity *entity,
 		vsp1_rpf_write(rpf, dlb, VI6_RPF_EXT_INFMT2, ext_infmt2);
 	}
 
-	/* Output location. */
-	if (pipe->brx) {
-		const struct v4l2_rect *compose;
-
-		compose = v4l2_subdev_state_get_compose(pipe->brx->state,
-							rpf->brx_input);
-		left = compose->left;
-		top = compose->top;
-	}
-
-	if (pipe->interlaced)
-		top /= 2;
-
-	vsp1_rpf_write(rpf, dlb, VI6_RPF_LOC,
-		       (left << VI6_RPF_LOC_HCOORD_SHIFT) |
-		       (top << VI6_RPF_LOC_VCOORD_SHIFT));
-
 	/*
 	 * On Gen2 use the alpha channel (extended to 8 bits) when available or
 	 * a fixed alpha value set through the V4L2_CID_ALPHA_COMPONENT control
@@ -188,11 +172,35 @@ static void rpf_configure_stream(struct vsp1_entity *entity,
 	 * contains an alpha channel. On Gen2 the global alpha is ignored in
 	 * that case.
 	 *
-	 * In all cases, disable color keying.
+	 * In all the above cases, disable color keying.
+	 *
+	 * VSPX wants alpha_sel to be set to 0.
 	 */
-	vsp1_rpf_write(rpf, dlb, VI6_RPF_ALPH_SEL, VI6_RPF_ALPH_SEL_AEXT_EXT |
-		       (fmtinfo->alpha ? VI6_RPF_ALPH_SEL_ASEL_PACKED
-				       : VI6_RPF_ALPH_SEL_ASEL_FIXED));
+	alpha_sel = pipe->iif ? 0
+			      : VI6_RPF_ALPH_SEL_AEXT_EXT
+				| (fmtinfo->alpha ? VI6_RPF_ALPH_SEL_ASEL_PACKED
+						  : VI6_RPF_ALPH_SEL_ASEL_FIXED);
+	vsp1_rpf_write(rpf, dlb, VI6_RPF_ALPH_SEL, alpha_sel);
+
+	if (pipe->iif)
+		return;
+
+	/* Output location. */
+	if (pipe->brx) {
+		const struct v4l2_rect *compose;
+
+		compose = v4l2_subdev_state_get_compose(pipe->brx->state,
+							rpf->brx_input);
+		left = compose->left;
+		top = compose->top;
+	}
+
+	if (pipe->interlaced)
+		top /= 2;
+	vsp1_rpf_write(rpf, dlb, VI6_RPF_LOC,
+		       (left << VI6_RPF_LOC_HCOORD_SHIFT) |
+		       (top << VI6_RPF_LOC_VCOORD_SHIFT));
+
 
 	if (entity->vsp1->info->gen >= 3) {
 		u32 mult;
@@ -338,11 +346,15 @@ static void rpf_configure_partition(struct vsp1_entity *entity,
 	 */
 	if (pipe->interlaced) {
 		vsp1_rpf_configure_autofld(rpf, dl);
-	} else {
-		vsp1_rpf_write(rpf, dlb, VI6_RPF_SRCM_ADDR_Y, mem.addr[0]);
-		vsp1_rpf_write(rpf, dlb, VI6_RPF_SRCM_ADDR_C0, mem.addr[1]);
-		vsp1_rpf_write(rpf, dlb, VI6_RPF_SRCM_ADDR_C1, mem.addr[2]);
+		return;
 	}
+
+	vsp1_rpf_write(rpf, dlb, VI6_RPF_SRCM_ADDR_Y, mem.addr[0]);
+	if (!mem.addr[1])
+		return;
+
+	vsp1_rpf_write(rpf, dlb, VI6_RPF_SRCM_ADDR_C0, mem.addr[1]);
+	vsp1_rpf_write(rpf, dlb, VI6_RPF_SRCM_ADDR_C1, mem.addr[2]);
 }
 
 static void rpf_partition(struct vsp1_entity *entity,
