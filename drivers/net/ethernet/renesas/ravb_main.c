@@ -3217,10 +3217,16 @@ static int ravb_suspend(struct device *dev)
 
 	netif_device_detach(ndev);
 
-	if (priv->wol_enabled)
-		return ravb_wol_setup(ndev);
+	if (priv->wol_enabled) {
+		rtnl_lock();
+		ret = ravb_wol_setup(ndev);
+		rtnl_unlock();
+		return ret;
+	}
 
+	rtnl_lock();
 	ret = ravb_close(ndev);
+	rtnl_unlock();
 	if (ret)
 		return ret;
 
@@ -3247,7 +3253,9 @@ static int ravb_resume(struct device *dev)
 
 	/* If WoL is enabled restore the interface. */
 	if (priv->wol_enabled) {
+		rtnl_lock();
 		ret = ravb_wol_restore(ndev);
+		rtnl_unlock();
 		if (ret)
 			return ret;
 	} else {
@@ -3257,7 +3265,9 @@ static int ravb_resume(struct device *dev)
 	}
 
 	/* Reopening the interface will restore the device to the working state. */
+	rtnl_lock();
 	ret = ravb_open(ndev);
+	rtnl_unlock();
 	if (ret < 0)
 		goto out_rpm_put;
 
