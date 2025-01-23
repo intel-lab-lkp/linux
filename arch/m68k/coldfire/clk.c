@@ -20,8 +20,6 @@
 #include <asm/mcfsim.h>
 #include <asm/mcfclk.h>
 
-static DEFINE_SPINLOCK(clk_lock);
-
 #ifdef MCFPM_PPMCR0
 /*
  *	For more advanced ColdFire parts that have clocks that can be enabled
@@ -72,6 +70,10 @@ struct clk_ops clk_ops1 = {
 };
 #endif /* MCFPM_PPMCR1 */
 #endif /* MCFPM_PPMCR0 */
+
+#ifndef CONFIG_COMMON_CLK
+
+static DEFINE_SPINLOCK(clk_lock);
 
 int clk_enable(struct clk *clk)
 {
@@ -140,5 +142,7 @@ struct clk *clk_get_parent(struct clk *clk)
 	return NULL;
 }
 EXPORT_SYMBOL(clk_get_parent);
+
+#endif /* !CONFIG_COMMON_CLK */
 
 /***************************************************************************/
