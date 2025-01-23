@@ -1284,6 +1284,28 @@ EXPORT_TRACEPOINT_SYMBOL(kmem_cache_alloc);
 EXPORT_TRACEPOINT_SYMBOL(kfree);
 EXPORT_TRACEPOINT_SYMBOL(kmem_cache_free);
 
+#ifndef CONFIG_KFREE_RCU_BATCHED
+
+void kvfree_call_rcu(struct rcu_head *head, void *ptr)
+{
+	if (head) {
+		kasan_record_aux_stack_noalloc(ptr);
+		call_rcu(head, kvfree_rcu_cb);
+		return;
+	}
+
+	// kvfree_rcu(one_arg) call.
+	might_sleep();
+	synchronize_rcu();
+	kvfree(ptr);
+}
+
+void __init kvfree_rcu_init(void)
+{
+}
+
+#else /* CONFIG_KFREE_RCU_BATCHED */
+
 /*
  * This rcu parameter is runtime-read-only. It reflects
  * a minimum allowed number of objects which can be cached
@@ -1858,24 +1880,6 @@ add_ptr_to_bulk_krc_lock(struct kfree_rcu_cpu **krcp,
 	return true;
 }
 
-#ifdef CONFIG_TINY_RCU
-
-void kvfree_call_rcu(struct rcu_head *head, void *ptr)
-{
-	if (head) {
-		kasan_record_aux_stack_noalloc(ptr);
-		call_rcu(head, kvfree_rcu_cb);
-		return;
-	}
-
-	// kvfree_rcu(one_arg) call.
-	might_sleep();
-	synchronize_rcu();
-	kvfree(ptr);
-}
-
-#else /* !CONFIG_TINY_RCU */
-
 static enum hrtimer_restart
 schedule_page_work_fn(struct hrtimer *t)
 {
@@ -2084,8 +2088,6 @@ void kvfree_rcu_barrier(void)
 }
 EXPORT_SYMBOL_GPL(kvfree_rcu_barrier);
 
-#endif /* !CONFIG_TINY_RCU */
-
 static unsigned long
 kfree_rcu_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
 {
@@ -2175,3 +2177,6 @@ void __init kvfree_rcu_init(void)
 
 	shrinker_register(kfree_rcu_shrinker);
 }
+
+#endif /* CONFIG_KFREE_RCU_BATCHED */
+
