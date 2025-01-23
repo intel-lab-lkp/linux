@@ -960,6 +960,10 @@ static inline pci_power_t acpi_pci_choose_state(struct pci_dev *pdev)
 extern const struct attribute_group aspm_ctrl_attr_group;
 #endif
 
+#ifdef CONFIG_PCIE_DW_HOST
+extern const struct attribute_group dw_ltssm_status_attr_group;
+#endif
+
 extern const struct attribute_group pci_dev_reset_method_attr_group;
 
 #ifdef CONFIG_X86_INTEL_MID
