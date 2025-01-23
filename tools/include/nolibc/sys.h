@@ -532,7 +532,7 @@ uid_t getuid(void)
 
 
 /*
- * int ioctl(int fd, unsigned long req, void *value);
+ * int ioctl(int fd, unsigned long req, ... value);
  */
 
 static __attribute__((unused))
@@ -541,11 +541,7 @@ int sys_ioctl(int fd, unsigned long req, void *value)
 	return my_syscall3(__NR_ioctl, fd, req, value);
 }
 
-static __attribute__((unused))
-int ioctl(int fd, unsigned long req, void *value)
-{
-	return __sysret(sys_ioctl(fd, req, value));
-}
+#define ioctl(fd, req, value) __sysret(sys_ioctl(fd, req, (void *)(value)))
 
 /*
  * int kill(pid_t pid, int signal);
