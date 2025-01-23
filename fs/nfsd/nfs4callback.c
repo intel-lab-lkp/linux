@@ -1404,9 +1404,7 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 	case -NFS4ERR_DELAY:
 		cb->cb_seq_status = 1;
 		nfsd41_cb_release_slot(cb);
-		if (!rpc_restart_call(task))
-			goto out;
-
+		rpc_restart_call(task);
 		rpc_delay(task, 2 * HZ);
 		return false;
 	default:
@@ -1414,7 +1412,6 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 	}
 	trace_nfsd_cb_free_slot(task, cb);
 	nfsd41_cb_release_slot(cb);
-out:
 	return ret;
 need_restart:
 	if (!test_bit(NFSD4_CLIENT_CB_KILL, &clp->cl_flags)) {
