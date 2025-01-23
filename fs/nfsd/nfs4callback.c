@@ -1392,6 +1392,7 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		goto need_restart;
 	case -NFS4ERR_DELAY:
 		cb->cb_seq_status = 1;
+		nfsd41_cb_release_slot(cb);
 		if (!rpc_restart_call(task))
 			goto out;
 
