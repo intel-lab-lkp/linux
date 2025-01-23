@@ -21,6 +21,7 @@
 #include <linux/io.h>
 #include <linux/uaccess.h>
 #include <linux/platform_device.h>
+#include <linux/of.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
 #include <asm/mcfuart.h>
@@ -463,6 +464,7 @@ static const struct uart_ops mcf_uart_ops = {
 };
 
 static struct mcf_uart mcf_ports[10];
+static int mcf_numports;
 
 #define	MCF_MAXPORTS	ARRAY_SIZE(mcf_ports)
 
@@ -573,6 +575,8 @@ static int mcf_probe(struct platform_device *pdev)
 	struct uart_port *port;
 	struct resource *res;
 
+	if (pdev->id == -1)
+		pdev->id = mcf_numports;
 	if (pdev->id >= MCF_MAXPORTS)
 		return -ENODEV;
 	port = &mcf_ports[pdev->id].port;
@@ -598,6 +602,8 @@ static int mcf_probe(struct platform_device *pdev)
 	port->has_sysrq = IS_ENABLED(CONFIG_SERIAL_MCF_CONSOLE);
 
 	uart_add_one_port(&mcf_driver, port);
+
+	mcf_numports++;
 	return 0;
 }
 
@@ -617,11 +623,17 @@ static void mcf_remove(struct platform_device *pdev)
 
 /****************************************************************************/
 
+static const struct of_device_id mcf_uart_dt_ids[] = {
+	{ .compatible = "fsl,mcfuart", },
+	{ }
+};
+
 static struct platform_driver mcf_platform_driver = {
 	.probe		= mcf_probe,
 	.remove		= mcf_remove,
 	.driver		= {
 		.name	= "mcfuart",
+		.of_match_table = mcf_uart_dt_ids,
 	},
 };
 
