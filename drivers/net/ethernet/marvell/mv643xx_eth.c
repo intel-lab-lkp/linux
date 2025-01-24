@@ -881,10 +881,20 @@ static int txq_submit_tso(struct tx_queue *txq, struct sk_buff *skb,
 	txq_enable(txq);
 	txq->tx_desc_count += desc_count;
 	return 0;
+
 err_release:
-	/* TODO: Release all used data descriptors; header descriptors must not
+	/* Release all used data descriptors; header descriptors must not
 	 * be DMA-unmapped.
 	 */
+	for (int i = 0; i < desc_count; i++) {
+		int desc_index = (txq->tx_curr_desc + i) % txq->tx_ring_size;
+		struct tx_desc *desc = &txq->tx_desc_area[desc_index];
+		desc->cmd_sts = 0; /* Reset the descriptor */
+	}
+
+	/* Adjust the descriptor count */
+	txq->tx_desc_count -= desc_count;
+
 	return ret;
 }
 
