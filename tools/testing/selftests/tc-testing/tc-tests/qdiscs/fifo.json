@@ -313,6 +313,31 @@
         "matchPattern": "qdisc bfifo 1: root",
         "matchCount": "0",
         "teardown": [
+	]
+    },
+    {
+        "id": "d774",
+        "name": "Check pfifo_head_drop qdisc enqueue behaviour when limit == 0",
+        "category": [
+            "qdisc",
+            "pfifo_head_drop"
+        ],
+        "plugins": {
+            "requires": "nsPlugin"
+        },
+        "setup": [
+            "$IP link add dev dummy2 mtu 1279 type dummy || true",
+            "$IP addr add 10.10.10.10/24 dev dummy2 || true",
+            "$TC qdisc add dev dummy2 root handle 1: pfifo_head_drop limit 0",
+            "$IP link set dev dummy2 up || true"
+        ],
+        "cmdUnderTest": "ping -c10 -W0.01 -I dummy2 10.10.10.1",
+        "expExitCode": "1",
+        "verifyCmd": "$TC -s qdisc show dev dummy2",
+        "matchPattern": "dropped 10",
+        "matchCount": "1",
+        "teardown": [
+            "$IP link del dev dummy2"
         ]
     }
 ]
