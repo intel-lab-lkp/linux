@@ -4519,7 +4519,7 @@ static irqreturn_t dwc3_check_event_buf(struct dwc3_event_buffer *evt)
 	 * losing events.
 	 */
 	if (evt->flags & DWC3_EVENT_PENDING)
-		return IRQ_HANDLED;
+		return IRQ_WAKE_THREAD;
 
 	count = dwc3_readl(dwc->regs, DWC3_GEVNTCOUNT(0));
 	count &= DWC3_GEVNTCOUNT_MASK;
