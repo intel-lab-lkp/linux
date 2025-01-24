@@ -859,6 +859,21 @@ int clk_set_rate(struct clk *clk, unsigned long rate);
 int clk_set_rate_exclusive(struct clk *clk, unsigned long rate);
 
 /**
+ * clk_set_spread_spectrum - set the spread spectrum for a clock
+ * @clk: clock source
+ * @modfreq: modulation freq
+ * @spreadpercent: modulation percentage
+ * @method: down spread, up spread, center spread or else
+ * @enable: enable or disable
+ *
+ * Configure the spread spectrum parameters for a clock.
+ *
+ * Returns success (0) or negative errno.
+ */
+int clk_set_spread_spectrum(struct clk *clk, unsigned int modfreq,
+			    unsigned int spreadpercent, unsigned int method,
+			    bool enable);
+/**
  * clk_has_parent - check if a clock is a possible parent for another
  * @clk: clock source
  * @parent: parent clock source
@@ -1084,6 +1099,13 @@ static inline int clk_set_rate(struct clk *clk, unsigned long rate)
 }
 
 static inline int clk_set_rate_exclusive(struct clk *clk, unsigned long rate)
+{
+	return 0;
+}
+
+static inline int clk_set_spread_spectrum(struct clk *clk, unsigned int modfreq,
+					  unsigned int spreadpercent,
+					  unsigned int method, bool enable)
 {
 	return 0;
 }
