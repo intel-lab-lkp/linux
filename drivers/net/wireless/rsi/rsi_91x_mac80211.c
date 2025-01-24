@@ -1206,6 +1206,7 @@ unlock:
  * Return: 0 on success.
  */
 static int rsi_mac80211_set_rts_threshold(struct ieee80211_hw *hw,
+					  u8 radio_id,
 					  u32 value)
 {
 	struct rsi_hw *adapter = hw->priv;
