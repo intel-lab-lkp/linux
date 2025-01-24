@@ -98,6 +98,35 @@ static int scmi_clk_set_parent(struct clk_hw *hw, u8 parent_index)
 	return scmi_proto_clk_ops->parent_set(clk->ph, clk->id, parent_index);
 }
 
+static int scmi_clk_set_spread_spectrum_imx(struct clk_hw *hw,
+					    struct clk_spread_spectrum *clk_ss)
+{
+	struct scmi_clk *clk = to_scmi_clk(hw);
+	int ret;
+	u32 val;
+
+	/* SCMI OEM Duty Cycle is expressed as a percentage */
+	/*
+	 * extConfigValue[7:0]   - spread percentage (%)
+	 * extConfigValue[23:8]  - Modulation Frequency (KHz)
+	 * extConfigValue[24]    - Enable/Disable
+	 * extConfigValue[31:25] - Reserved
+	 */
+	val = FIELD_PREP(IMX_CLOCK_EXT_SS_PERCENTAGE_MASK, clk_ss->spreadpercent);
+	val |= FIELD_PREP(IMX_CLOCK_EXT_SS_MOD_FREQ_MASK, clk_ss->modfreq);
+	val |= IMX_CLOCK_EXT_SS_ENABLE_MASK;
+	ret = scmi_proto_clk_ops->config_oem_set(clk->ph, clk->id,
+						 SCMI_CLOCK_CFG_NXP_IMX_SSC,
+						 val, false);
+	if (ret)
+		dev_warn(clk->dev,
+			 "Failed to set spread spectrum(%u,%u,%u) for clock ID %d\n",
+			 clk_ss->modfreq, clk_ss->spreadpercent, clk_ss->method,
+			 clk->id);
+
+	return ret;
+}
+
 static u8 scmi_clk_get_parent(struct clk_hw *hw)
 {
 	struct scmi_clk *clk = to_scmi_clk(hw);
@@ -266,6 +295,11 @@ static int scmi_clk_ops_init(struct device *dev, struct scmi_clk *sclk,
  * Return: A pointer to the allocated and configured clk_ops on success,
  *	   or NULL on allocation failure.
  */
+static const char * const scmi_clk_ssc_allowlist[] = {
+	"fsl,imx95",
+	NULL
+};
+
 static const struct clk_ops *
 scmi_clk_ops_alloc(struct device *dev, unsigned long feats_key)
 {
@@ -315,6 +349,9 @@ scmi_clk_ops_alloc(struct device *dev, unsigned long feats_key)
 		ops->get_duty_cycle = scmi_clk_get_duty_cycle;
 		ops->set_duty_cycle = scmi_clk_set_duty_cycle;
 	}
+
+	if (of_machine_compatible_match(scmi_clk_ssc_allowlist))
+		ops->set_spread_spectrum = scmi_clk_set_spread_spectrum_imx;
 
 	return ops;
 }
