@@ -75,6 +75,7 @@ SECTIONS
 
 	DWARF_DEBUG
 	ELF_DETAILS
+	.ARM.attributes 0 : { *(.ARM.attributes) }
 
 	/DISCARD/	: {
 		*(.data .data.* .gnu.linkonce.d.* .sdata*)

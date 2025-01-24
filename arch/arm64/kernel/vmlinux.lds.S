@@ -335,6 +335,7 @@ SECTIONS
 	STABS_DEBUG
 	DWARF_DEBUG
 	ELF_DETAILS
+	.ARM.attributes 0 : { *(.ARM.attributes) }
 
 	HEAD_SYMBOLS
 
