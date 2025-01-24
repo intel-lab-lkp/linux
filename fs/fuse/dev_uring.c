@@ -36,7 +36,7 @@ static void uring_cmd_set_ring_ent(struct io_uring_cmd *cmd,
 	struct fuse_uring_pdu *pdu =
 		io_uring_cmd_to_pdu(cmd, struct fuse_uring_pdu);
 
-	pdu->ent = ring_ent;
+	WRITE_ONCE(pdu->ent, ring_ent);
 }
 
 static struct fuse_ring_ent *uring_cmd_to_ring_ent(struct io_uring_cmd *cmd)
@@ -44,7 +44,7 @@ static struct fuse_ring_ent *uring_cmd_to_ring_ent(struct io_uring_cmd *cmd)
 	struct fuse_uring_pdu *pdu =
 		io_uring_cmd_to_pdu(cmd, struct fuse_uring_pdu);
 
-	return pdu->ent;
+	return READ_ONCE(pdu->ent);
 }
 
 static void fuse_uring_flush_bg(struct fuse_ring_queue *queue)
