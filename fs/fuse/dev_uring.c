@@ -75,15 +75,16 @@ static void fuse_uring_flush_bg(struct fuse_ring_queue *queue)
 	}
 }
 
-static void fuse_uring_req_end(struct fuse_ring_ent *ent, int error)
+static void fuse_uring_req_end(struct fuse_ring_ent *ent, struct fuse_req *req,
+			       int error)
 {
 	struct fuse_ring_queue *queue = ent->queue;
-	struct fuse_req *req = ent->fuse_req;
 	struct fuse_ring *ring = queue->ring;
 	struct fuse_conn *fc = ring->fc;
 
 	lockdep_assert_not_held(&queue->lock);
 	spin_lock(&queue->lock);
+	ent->fuse_req = NULL;
 	if (test_bit(FR_BACKGROUND, &req->flags)) {
 		queue->active_background--;
 		spin_lock(&fc->bg_lock);
@@ -97,8 +98,7 @@ static void fuse_uring_req_end(struct fuse_ring_ent *ent, int error)
 		req->out.h.error = error;
 
 	clear_bit(FR_SENT, &req->flags);
-	fuse_request_end(ent->fuse_req);
-	ent->fuse_req = NULL;
+	fuse_request_end(req);
 }
 
 /* Abort all list queued request on the given ring queue */
@@ -298,13 +298,9 @@ static struct fuse_ring_queue *fuse_uring_create_queue(struct fuse_ring *ring,
 	return queue;
 }
 
-static void fuse_uring_stop_fuse_req_end(struct fuse_ring_ent *ent)
+static void fuse_uring_stop_fuse_req_end(struct fuse_req *req)
 {
-	struct fuse_req *req = ent->fuse_req;
-
 	/* remove entry from fuse_pqueue->processing */
-	list_del_init(&req->list);
-	ent->fuse_req = NULL;
 	clear_bit(FR_SENT, &req->flags);
 	req->out.h.error = -ECONNABORTED;
 	fuse_request_end(req);
@@ -685,16 +681,16 @@ static int fuse_uring_copy_to_ring(struct fuse_ring_ent *ent,
 	return 0;
 }
 
-static int fuse_uring_prepare_send(struct fuse_ring_ent *ent)
+static int fuse_uring_prepare_send(struct fuse_ring_ent *ent,
+				   struct fuse_req *req)
 {
-	struct fuse_req *req = ent->fuse_req;
 	int err;
 
 	err = fuse_uring_copy_to_ring(ent, req);
 	if (!err)
 		set_bit(FR_SENT, &req->flags);
 	else
-		fuse_uring_req_end(ent, err);
+		fuse_uring_req_end(ent, req, err);
 
 	return err;
 }
@@ -705,13 +701,14 @@ static int fuse_uring_prepare_send(struct fuse_ring_ent *ent)
  * This is comparable with classical read(/dev/fuse)
  */
 static int fuse_uring_send_next_to_ring(struct fuse_ring_ent *ent,
+					struct fuse_req *req,
 					unsigned int issue_flags)
 {
 	struct fuse_ring_queue *queue = ent->queue;
 	int err;
 	struct io_uring_cmd *cmd;
 
-	err = fuse_uring_prepare_send(ent);
+	err = fuse_uring_prepare_send(ent, req);
 	if (err)
 		return err;
 
@@ -777,28 +774,22 @@ static void fuse_uring_add_req_to_ring_ent(struct fuse_ring_ent *ent,
 	fuse_uring_add_to_pq(ent, req);
 }
 
-/*
- * Release the ring entry and fetch the next fuse request if available
- *
- * @return true if a new request has been fetched
- */
-static bool fuse_uring_ent_assign_req(struct fuse_ring_ent *ent)
+/* Fetch the next fuse request if available */
+static struct fuse_req *fuse_uring_ent_assign_req(struct fuse_ring_ent *ent)
 	__must_hold(&queue->lock)
 {
-	struct fuse_req *req;
 	struct fuse_ring_queue *queue = ent->queue;
 	struct list_head *req_queue = &queue->fuse_req_queue;
+	struct fuse_req *req;
 
 	lockdep_assert_held(&queue->lock);
 
 	/* get and assign the next entry while it is still holding the lock */
 	req = list_first_entry_or_null(req_queue, struct fuse_req, list);
-	if (req) {
+	if (req)
 		fuse_uring_add_req_to_ring_ent(ent, req);
-		return true;
-	}
 
-	return false;
+	return req;
 }
 
 /*
@@ -806,12 +797,11 @@ static bool fuse_uring_ent_assign_req(struct fuse_ring_ent *ent)
  * This is comparible with handling of classical write(/dev/fuse).
  * Also make the ring request available again for new fuse requests.
  */
-static void fuse_uring_commit(struct fuse_ring_ent *ent,
+static void fuse_uring_commit(struct fuse_ring_ent *ent, struct fuse_req *req,
 			      unsigned int issue_flags)
 {
 	struct fuse_ring *ring = ent->queue->ring;
 	struct fuse_conn *fc = ring->fc;
-	struct fuse_req *req = ent->fuse_req;
 	ssize_t err = 0;
 
 	err = copy_from_user(&req->out.h, &ent->headers->in_out,
@@ -829,7 +819,7 @@ static void fuse_uring_commit(struct fuse_ring_ent *ent,
 
 	err = fuse_uring_copy_from_ring(ring, req, ent);
 out:
-	fuse_uring_req_end(ent, err);
+	fuse_uring_req_end(ent, req, err);
 }
 
 /*
@@ -840,16 +830,16 @@ static void fuse_uring_next_fuse_req(struct fuse_ring_ent *ent,
 				     unsigned int issue_flags)
 {
 	int err;
-	bool has_next;
+	struct fuse_req *req;
 
 retry:
 	spin_lock(&queue->lock);
 	fuse_uring_ent_avail(ent, queue);
-	has_next = fuse_uring_ent_assign_req(ent);
+	req = fuse_uring_ent_assign_req(ent);
 	spin_unlock(&queue->lock);
 
-	if (has_next) {
-		err = fuse_uring_send_next_to_ring(ent, issue_flags);
+	if (req) {
+		err = fuse_uring_send_next_to_ring(ent, req, issue_flags);
 		if (err)
 			goto retry;
 	}
@@ -933,7 +923,7 @@ static int fuse_uring_commit_fetch(struct io_uring_cmd *cmd, int issue_flags,
 
 	/* without the queue lock, as other locks are taken */
 	fuse_uring_prepare_cancel(cmd, issue_flags, ent);
-	fuse_uring_commit(ent, issue_flags);
+	fuse_uring_commit(ent, req, issue_flags);
 
 	/*
 	 * Fetching the next request is absolutely required as queued
