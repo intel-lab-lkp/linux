@@ -93,6 +93,16 @@ static inline struct page_ext *page_ext_next(struct page_ext *curr)
 	return next;
 }
 
+struct page_ext_iter {
+	unsigned long pfn;
+	struct page_ext *page_ext;
+};
+
+struct page_ext *page_ext_iter_begin(struct page_ext_iter *iter, struct page *page);
+struct page_ext *page_ext_iter_get(const struct page_ext_iter *iter);
+struct page_ext *page_ext_iter_next(struct page_ext_iter *iter);
+void page_ext_iter_end(struct page_ext_iter *iter);
+
 #else /* !CONFIG_PAGE_EXTENSION */
 struct page_ext;
 
