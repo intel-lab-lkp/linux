@@ -315,14 +315,20 @@ static void fuse_uring_stop_fuse_req_end(struct fuse_ring_ent *ent)
  */
 static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent)
 {
-	struct fuse_ring_queue *queue = ent->queue;
-	if (ent->cmd) {
-		io_uring_cmd_done(ent->cmd, -ENOTCONN, 0, IO_URING_F_UNLOCKED);
-		ent->cmd = NULL;
-	}
+	struct fuse_req *req;
+	struct io_uring_cmd *cmd;
 
-	if (ent->fuse_req)
-		fuse_uring_stop_fuse_req_end(ent);
+	struct fuse_ring_queue *queue = ent->queue;
+
+	spin_lock(&queue->lock);
+	ent->fuse_req = NULL;
+
+	req = ent->fuse_req;
+	if (req)
+		list_del_init(&req->list);
+
+	cmd = ent->cmd;
+	ent->cmd = NULL;
 
 	/*
 	 * The entry must not be freed immediately, due to access of direct
@@ -330,10 +336,15 @@ static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent)
 	 * of race between daemon termination (which triggers IO_URING_F_CANCEL
 	 * and accesses entries without checking the list state first
 	 */
-	spin_lock(&queue->lock);
 	list_move(&ent->list, &queue->ent_released);
 	ent->state = FRRS_RELEASED;
 	spin_unlock(&queue->lock);
+
+	if (cmd)
+		io_uring_cmd_done(cmd, -ENOTCONN, 0, IO_URING_F_UNLOCKED);
+
+	if (req)
+		fuse_uring_stop_fuse_req_end(req);
 }
 
 static void fuse_uring_stop_list_entries(struct list_head *head,
