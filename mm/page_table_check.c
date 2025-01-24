@@ -63,6 +63,7 @@ static struct page_table_check *get_page_table_check(struct page_ext *page_ext)
 static void page_table_check_clear(unsigned long pfn, unsigned long pgcnt)
 {
 	struct page_ext *page_ext;
+	struct page_ext_iter iter;
 	struct page *page;
 	unsigned long i;
 	bool anon;
@@ -71,7 +72,7 @@ static void page_table_check_clear(unsigned long pfn, unsigned long pgcnt)
 		return;
 
 	page = pfn_to_page(pfn);
-	page_ext = page_ext_get(page);
+	page_ext = page_ext_iter_begin(&iter, page);
 
 	if (!page_ext)
 		return;
@@ -89,9 +90,9 @@ static void page_table_check_clear(unsigned long pfn, unsigned long pgcnt)
 			BUG_ON(atomic_read(&ptc->anon_map_count));
 			BUG_ON(atomic_dec_return(&ptc->file_map_count) < 0);
 		}
-		page_ext = page_ext_next(page_ext);
+		page_ext = page_ext_iter_next(&iter);
 	}
-	page_ext_put(page_ext);
+	page_ext_iter_end(&iter);
 }
 
 /*
@@ -103,6 +104,7 @@ static void page_table_check_set(unsigned long pfn, unsigned long pgcnt,
 				 bool rw)
 {
 	struct page_ext *page_ext;
+	struct page_ext_iter iter;
 	struct page *page;
 	unsigned long i;
 	bool anon;
@@ -111,7 +113,7 @@ static void page_table_check_set(unsigned long pfn, unsigned long pgcnt,
 		return;
 
 	page = pfn_to_page(pfn);
-	page_ext = page_ext_get(page);
+	page_ext = page_ext_iter_begin(&iter, page);
 
 	if (!page_ext)
 		return;
@@ -129,9 +131,9 @@ static void page_table_check_set(unsigned long pfn, unsigned long pgcnt,
 			BUG_ON(atomic_read(&ptc->anon_map_count));
 			BUG_ON(atomic_inc_return(&ptc->file_map_count) < 0);
 		}
-		page_ext = page_ext_next(page_ext);
+		page_ext = page_ext_iter_next(&iter);
 	}
-	page_ext_put(page_ext);
+	page_ext_iter_end(&iter);
 }
 
 /*
@@ -141,11 +143,12 @@ static void page_table_check_set(unsigned long pfn, unsigned long pgcnt,
 void __page_table_check_zero(struct page *page, unsigned int order)
 {
 	struct page_ext *page_ext;
+	struct page_ext_iter iter;
 	unsigned long i;
 
 	BUG_ON(PageSlab(page));
 
-	page_ext = page_ext_get(page);
+	page_ext = page_ext_iter_begin(&iter, page);
 
 	if (!page_ext)
 		return;
@@ -155,9 +158,9 @@ void __page_table_check_zero(struct page *page, unsigned int order)
 
 		BUG_ON(atomic_read(&ptc->anon_map_count));
 		BUG_ON(atomic_read(&ptc->file_map_count));
-		page_ext = page_ext_next(page_ext);
+		page_ext = page_ext_iter_next(&iter);
 	}
-	page_ext_put(page_ext);
+	page_ext_iter_end(&iter);
 }
 
 void __page_table_check_pte_clear(struct mm_struct *mm, pte_t pte)
