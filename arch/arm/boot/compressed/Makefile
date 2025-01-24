@@ -93,6 +93,9 @@ targets       := vmlinux vmlinux.lds piggy_data piggy.o \
 		 head.o $(OBJS)
 
 KBUILD_CFLAGS += -DDISABLE_BRANCH_PROFILING
+ifneq ($(CONFIG_LD_IS_LLD),y)
+KBUILD_CFLAGS += -include $(srctree)/include/linux/hidden.h
+endif
 
 ccflags-y := -fpic $(call cc-option,-mno-single-pic-base,) -fno-builtin \
 	     -I$(srctree)/scripts/dtc/libfdt -fno-stack-protector \
