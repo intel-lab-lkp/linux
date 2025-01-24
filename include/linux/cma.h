@@ -53,6 +53,8 @@ extern int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data)
 
 extern void cma_reserve_pages_on_error(struct cma *cma);
 
+extern bool cma_set_concurrency(struct cma *cma, bool concurrency);
+
 #ifdef CONFIG_CMA
 struct folio *cma_alloc_folio(struct cma *cma, int order, gfp_t gfp);
 bool cma_free_folio(struct cma *cma, const struct folio *folio);

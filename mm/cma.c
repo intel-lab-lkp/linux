@@ -460,9 +460,17 @@ static struct page *__cma_alloc(struct cma *cma, unsigned long count,
 		spin_unlock_irq(&cma->lock);
 
 		pfn = cma->base_pfn + (bitmap_no << cma->order_per_bit);
-		mutex_lock(&cma_mutex);
+
+		/*
+		 * If the user sets the concurr_alloc of CMA to true, concurrent
+		 * memory allocation is allowed. If the user sets it to false or
+		 * does not set it, concurrent memory allocation is not allowed.
+		 */
+		if (!cma->concurr_alloc)
+			mutex_lock(&cma_mutex);
 		ret = alloc_contig_range(pfn, pfn + count, MIGRATE_CMA, gfp);
-		mutex_unlock(&cma_mutex);
+		if (!cma->concurr_alloc)
+			mutex_unlock(&cma_mutex);
 		if (ret == 0) {
 			page = pfn_to_page(pfn);
 			break;
@@ -609,4 +617,14 @@ int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data)
 	}
 
 	return 0;
+}
+
+bool cma_set_concurrency(struct cma *cma, bool concurrency)
+{
+	if (!cma)
+		return false;
+
+	cma->concurr_alloc = concurrency;
+
+	return true;
 }
