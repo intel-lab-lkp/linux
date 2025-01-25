@@ -22,6 +22,9 @@
 #define	PID_EFFECTS_MAX		64
 #define	PID_INFINITE		0xffff
 
+/* Linux Force Feedback API only supports miliseconds as period unit */
+#define FF_PERIOD_EXPONENT	-3
+
 /* Report usage table used to put reports into an array */
 
 #define PID_SET_EFFECT		0
@@ -231,6 +234,24 @@ static int pidff_rescale_signed(int i, struct hid_field *field)
 	    field->logical_minimum / -0x8000;
 }
 
+/*
+ * Scale period value to device's units from Linux default (ms)
+ */
+static s32 pidff_rescale_period(u16 period, struct hid_field *field)
+{
+	s32 scaled_period = period;
+	int exponent = field->unit_exponent;
+	pr_debug("period exponent: %d\n", exponent);
+
+	for (;exponent < FF_PERIOD_EXPONENT; exponent++)
+		scaled_period *= 10;
+	for (;exponent > FF_PERIOD_EXPONENT; exponent--)
+		scaled_period /= 10;
+
+	pr_debug("period calculated from %d to %d\n", period, scaled_period);
+	return scaled_period;
+}
+
 static void pidff_set(struct pidff_usage *usage, u16 value)
 {
 	usage->value[0] = pidff_rescale(value, 0xffff, usage->field);
@@ -250,6 +271,14 @@ static void pidff_set_signed(struct pidff_usage *usage, s16 value)
 			    pidff_rescale(value, 0x7fff, usage->field);
 	}
 	pr_debug("calculated from %d to %d\n", value, usage->value[0]);
+}
+
+static void pidff_set_period(struct pidff_usage *usage, u16 period)
+{
+	s32 modified_period;
+	modified_period = pidff_rescale_period(period, usage->field);
+	modified_period = pidff_clamp(modified_period, usage->field);
+	usage->value[0] = modified_period;
 }
 
 /*
@@ -392,15 +421,11 @@ static void pidff_set_periodic_report(struct pidff_device *pidff,
 	pidff_set_signed(&pidff->set_periodic[PID_OFFSET],
 			 effect->u.periodic.offset);
 	pidff_set(&pidff->set_periodic[PID_PHASE], effect->u.periodic.phase);
-
-	/* Clamp period to ensure the device can play the effect */
-	pidff->set_periodic[PID_PERIOD].value[0] =
-		pidff_clamp(effect->u.periodic.period,
-			pidff->set_periodic[PID_PERIOD].field);
+	pidff_set_period(&pidff->set_periodic[PID_PERIOD],
+			 effect->u.periodic.period);
 
 	hid_hw_request(pidff->hid, pidff->reports[PID_SET_PERIODIC],
 			HID_REQ_SET_REPORT);
-
 }
 
 /*
