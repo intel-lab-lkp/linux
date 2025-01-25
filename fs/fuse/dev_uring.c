@@ -796,12 +796,11 @@ static bool fuse_uring_ent_assign_req(struct fuse_ring_ent *ent)
  * This is comparible with handling of classical write(/dev/fuse).
  * Also make the ring request available again for new fuse requests.
  */
-static void fuse_uring_commit(struct fuse_ring_ent *ent,
+static void fuse_uring_commit(struct fuse_ring_ent *ent, struct fuse_req *req,
 			      unsigned int issue_flags)
 {
 	struct fuse_ring *ring = ent->queue->ring;
 	struct fuse_conn *fc = ring->fc;
-	struct fuse_req *req = ent->fuse_req;
 	ssize_t err = 0;
 
 	err = copy_from_user(&req->out.h, &ent->headers->in_out,
@@ -923,7 +922,7 @@ static int fuse_uring_commit_fetch(struct io_uring_cmd *cmd, int issue_flags,
 
 	/* without the queue lock, as other locks are taken */
 	fuse_uring_prepare_cancel(cmd, issue_flags, ent);
-	fuse_uring_commit(ent, issue_flags);
+	fuse_uring_commit(ent, req, issue_flags);
 
 	/*
 	 * Fetching the next request is absolutely required as queued
