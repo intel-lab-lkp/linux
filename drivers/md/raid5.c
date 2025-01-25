@@ -4987,6 +4987,14 @@ static void handle_stripe(struct stripe_head *sh)
 			handle_failed_stripe(conf, sh, &s, disks);
 		if (s.syncing + s.replacing)
 			handle_failed_sync(conf, sh, &s);
+		if (test_bit(STRIPE_EXPANDING, &sh->state)) {
+			pr_warn_ratelimited("md/raid:%s: read error during reshape at %lu",
+					    mdname(conf->mddev),
+					    (unsigned long)sh->sector);
+			/* Abort the current stripe */
+			clear_bit(STRIPE_EXPANDING, &sh->state);
+			clear_bit(STRIPE_EXPAND_READY, &sh->state);
+		}
 	}
 
 	/* Now we check to see if any write operations have recently
