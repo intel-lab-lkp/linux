@@ -35,8 +35,6 @@ properties:
       - description: PCIE 2-lane PHY3 pipe clock source
 
   '#power-domain-cells': false
-  '#interconnect-cells':
-    const: 1
 
 required:
   - compatible
@@ -54,6 +52,9 @@ allOf:
         clocks:
           maxItems: 5
 
+        '#interconnect-cells':
+          const: 1
+
   - if:
       properties:
         compatible:
@@ -64,6 +65,9 @@ allOf:
         clocks:
           minItems: 7
           maxItems: 7
+
+        '#interconnect-cells':
+          const: 2
 
 unevaluatedProperties: false
 
