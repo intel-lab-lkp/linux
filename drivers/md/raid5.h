@@ -282,7 +282,7 @@ struct stripe_head_state {
 	 * read all devices, just the replacement targets.
 	 */
 	int syncing, expanding, expanded, replacing;
-	int locked, uptodate, to_read, to_write, failed, written;
+	int locked, uptodate, to_read, to_write, failed, written, bad_blocks;
 	int to_fill, compute, req_compute, non_overwrite;
 	int injournal, just_cached;
 	int failed_num[2];
