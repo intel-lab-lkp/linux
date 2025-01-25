@@ -675,9 +675,9 @@ static int fuse_uring_copy_to_ring(struct fuse_ring_ent *ent,
 	return 0;
 }
 
-static int fuse_uring_prepare_send(struct fuse_ring_ent *ent)
+static int fuse_uring_prepare_send(struct fuse_ring_ent *ent,
+				   struct fuse_req *req)
 {
-	struct fuse_req *req = ent->fuse_req;
 	int err;
 
 	err = fuse_uring_copy_to_ring(ent, req);
@@ -695,13 +695,14 @@ static int fuse_uring_prepare_send(struct fuse_ring_ent *ent)
  * This is comparable with classical read(/dev/fuse)
  */
 static int fuse_uring_send_next_to_ring(struct fuse_ring_ent *ent,
+					struct fuse_req *req,
 					unsigned int issue_flags)
 {
 	struct fuse_ring_queue *queue = ent->queue;
 	int err;
 	struct io_uring_cmd *cmd;
 
-	err = fuse_uring_prepare_send(ent);
+	err = fuse_uring_prepare_send(ent, req);
 	if (err)
 		return err;
 
@@ -838,7 +839,8 @@ retry:
 	spin_unlock(&queue->lock);
 
 	if (has_next) {
-		err = fuse_uring_send_next_to_ring(ent, issue_flags);
+		err = fuse_uring_send_next_to_ring(ent, ent->fuse_req,
+						   issue_flags);
 		if (err)
 			goto retry;
 	}
@@ -1205,7 +1207,7 @@ static void fuse_uring_send_in_task(struct io_uring_cmd *cmd,
 	int err;
 
 	if (!(issue_flags & IO_URING_F_TASK_DEAD)) {
-		err = fuse_uring_prepare_send(ent);
+		err = fuse_uring_prepare_send(ent, ent->fuse_req);
 		if (err) {
 			fuse_uring_next_fuse_req(ent, queue, issue_flags);
 			return;
