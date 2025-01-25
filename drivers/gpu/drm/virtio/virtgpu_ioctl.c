@@ -167,7 +167,7 @@ static int virtio_gpu_resource_create_ioctl(struct drm_device *dev, void *data,
 	params.size = rc->size;
 	/* allocate a single page size object */
 	if (params.size == 0)
-		params.size = PAGE_SIZE;
+		params.size = MAX_PAGE_SIZE;
 
 	fence = virtio_gpu_fence_alloc(vgdev, vgdev->fence_drv.context, 0);
 	if (!fence)

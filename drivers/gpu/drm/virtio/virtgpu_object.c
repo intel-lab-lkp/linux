@@ -190,7 +190,7 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 
 	*bo_ptr = NULL;
 
-	params->size = roundup(params->size, PAGE_SIZE);
+	params->size = roundup(params->size, MAX_PAGE_SIZE);
 	shmem_obj = drm_gem_shmem_create(vgdev->ddev, params->size);
 	if (IS_ERR(shmem_obj))
 		return PTR_ERR(shmem_obj);

@@ -61,6 +61,12 @@
 /* See virtio_gpu_ctx_create. One additional character for NULL terminator. */
 #define DEBUG_NAME_MAX_LEN 65
 
+#if defined(__powerpc64__) || defined(__aarch64__) || defined(__mips__) || defined(__loongarch__)
+#define MAX_PAGE_SIZE SZ_64K
+#else
+#define MAX_PAGE_SIZE PAGE_SIZE
+#endif
+
 struct virtio_gpu_object_params {
 	unsigned long size;
 	bool dumb;

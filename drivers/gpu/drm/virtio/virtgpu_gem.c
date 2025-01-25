@@ -73,7 +73,7 @@ int virtio_gpu_mode_dumb_create(struct drm_file *file_priv,
 
 	pitch = args->width * 4;
 	args->size = pitch * args->height;
-	args->size = ALIGN(args->size, PAGE_SIZE);
+	args->size = ALIGN(args->size, MAX_PAGE_SIZE);
 
 	params.format = virtio_gpu_translate_format(DRM_FORMAT_HOST_XRGB8888);
 	params.width = args->width;
