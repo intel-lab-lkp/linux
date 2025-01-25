@@ -1204,10 +1204,12 @@ static void fuse_uring_send_in_task(struct io_uring_cmd *cmd,
 {
 	struct fuse_ring_ent *ent = uring_cmd_to_ring_ent(cmd);
 	struct fuse_ring_queue *queue = ent->queue;
+	struct fuse_req *req;
 	int err;
 
 	if (!(issue_flags & IO_URING_F_TASK_DEAD)) {
-		err = fuse_uring_prepare_send(ent, ent->fuse_req);
+		req = READ_ONCE(ent->fuse_req);
+		err = fuse_uring_prepare_send(ent, req);
 		if (err) {
 			fuse_uring_next_fuse_req(ent, queue, issue_flags);
 			return;
