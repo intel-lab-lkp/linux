@@ -78,12 +78,14 @@ static void fuse_uring_flush_bg(struct fuse_ring_queue *queue)
 static void fuse_uring_req_end(struct fuse_ring_ent *ent, int error)
 {
 	struct fuse_ring_queue *queue = ent->queue;
-	struct fuse_req *req = ent->fuse_req;
+	struct fuse_req *req;
 	struct fuse_ring *ring = queue->ring;
 	struct fuse_conn *fc = ring->fc;
 
 	lockdep_assert_not_held(&queue->lock);
 	spin_lock(&queue->lock);
+	req = ent->fuse_req;
+	ent->fuse_req = NULL;
 	if (test_bit(FR_BACKGROUND, &req->flags)) {
 		queue->active_background--;
 		spin_lock(&fc->bg_lock);
@@ -97,8 +99,7 @@ static void fuse_uring_req_end(struct fuse_ring_ent *ent, int error)
 		req->out.h.error = error;
 
 	clear_bit(FR_SENT, &req->flags);
-	fuse_request_end(ent->fuse_req);
-	ent->fuse_req = NULL;
+	fuse_request_end(req);
 }
 
 /* Abort all list queued request on the given ring queue */
