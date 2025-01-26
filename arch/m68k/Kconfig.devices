@@ -158,6 +158,7 @@ config BUILTIN_DTB_NAME
 	string "Source file for builtin DTB"
 	depends on BUILTIN_DTB
 	default "mcf5208evb" if M520x
+	default "mcf5475evb" if M547x
 	help
 	  Base name (without suffix, relative to arch/m68k/boot/dts) for the
 	  DTS file that will be used to produce the DTB linked into the
