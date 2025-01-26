@@ -144,3 +144,21 @@ config SERIAL_CONSOLE
 endmenu
 
 endif
+
+config BUILTIN_DTB
+	bool "Builtin DTB"
+	select GENERIC_BUILTIN_DTB
+	select OF_EARLY_FLATTREE
+	help
+	  If there is no capability for the boot loader to specify a
+	  devicetree (DTB) then this option allows for it to be built
+	  into the linux binary itself.
+
+config BUILTIN_DTB_NAME
+	string "Source file for builtin DTB"
+	depends on BUILTIN_DTB
+	default "mcf5208evb" if M520x
+	help
+	  Base name (without suffix, relative to arch/m68k/boot/dts) for the
+	  DTS file that will be used to produce the DTB linked into the
+	  kernel.
