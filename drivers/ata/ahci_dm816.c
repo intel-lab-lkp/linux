@@ -170,9 +170,9 @@ disable_resources:
 	return rc;
 }
 
-static SIMPLE_DEV_PM_OPS(ahci_dm816_pm_ops,
-			 ahci_platform_suspend,
-			 ahci_platform_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_dm816_pm_ops,
+				ahci_platform_suspend,
+				ahci_platform_resume);
 
 static const struct of_device_id ahci_dm816_of_match[] = {
 	{ .compatible = "ti,dm816-ahci", },
@@ -186,7 +186,7 @@ static struct platform_driver ahci_dm816_driver = {
 	.driver = {
 		.name = AHCI_DM816_DRV_NAME,
 		.of_match_table = ahci_dm816_of_match,
-		.pm = &ahci_dm816_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_dm816_pm_ops),
 	},
 };
 module_platform_driver(ahci_dm816_driver);
