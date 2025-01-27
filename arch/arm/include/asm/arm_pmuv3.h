@@ -277,4 +277,14 @@ static inline u64 read_pmceid1(void)
 	return val;
 }
 
+static inline u32 read_mdcr(void)
+{
+	return read_sysreg(mdcr_el2);
+}
+
+static inline void write_mdcr(u32 val)
+{
+	write_sysreg(val, mdcr_el2);
+}
+
 #endif
