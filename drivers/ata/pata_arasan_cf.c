@@ -926,7 +926,6 @@ static void arasan_cf_remove(struct platform_device *pdev)
 	cf_exit(acdev);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int arasan_cf_suspend(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -950,9 +949,8 @@ static int arasan_cf_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(arasan_cf_pm_ops, arasan_cf_suspend, arasan_cf_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(arasan_cf_pm_ops, arasan_cf_suspend, arasan_cf_resume);
 
 #ifdef CONFIG_OF
 static const struct of_device_id arasan_cf_id_table[] = {
@@ -967,7 +965,7 @@ static struct platform_driver arasan_cf_driver = {
 	.remove		= arasan_cf_remove,
 	.driver		= {
 		.name	= DRIVER_NAME,
-		.pm	= &arasan_cf_pm_ops,
+		.pm	= pm_sleep_ptr(&arasan_cf_pm_ops),
 		.of_match_table = of_match_ptr(arasan_cf_id_table),
 	},
 };
