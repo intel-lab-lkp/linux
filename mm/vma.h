@@ -68,15 +68,25 @@ enum vma_merge_flags {
 	 */
 	VMG_FLAG_JUST_EXPAND = 1 << 0,
 	/*
+	 * Internal flag indicating the merge increases vmg->middle->vm_start
+	 * (and thereby, vmg->prev->vm_end).
+	 */
+	__VMG_FLAG_ADJUST_MIDDLE_START = 1 << 1,
+	/*
+	 * Internal flag indicating the merge decreases vmg->next->vm_start
+	 * (and thereby, vmg->middle->vm_end).
+	 */
+	__VMG_FLAG_ADJUST_NEXT_START = 1 << 2,
+	/*
 	 * Internal flag used during the merge operation to indicate we will
 	 * remove vmg->middle.
 	 */
-	__VMG_FLAG_REMOVE_MIDDLE = 1 << 1,
+	__VMG_FLAG_REMOVE_MIDDLE = 1 << 3,
 	/*
 	 * Internal flag used during the merge operationr to indicate we will
 	 * remove vmg->next.
 	 */
-	__VMG_FLAG_REMOVE_NEXT = 1 << 2,
+	__VMG_FLAG_REMOVE_NEXT = 1 << 4,
 };
 
 /*
