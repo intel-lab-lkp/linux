@@ -10,7 +10,6 @@
 #include <rdma/restrack.h>
 #include <linux/socket.h>
 #include <linux/skbuff.h>
-#include <crypto/hash.h>
 #include <linux/crc32.h>
 #include <linux/crc32c.h>
 
@@ -289,7 +288,8 @@ struct siw_rx_stream {
 
 	union iwarp_hdr hdr;
 	struct mpa_trailer trailer;
-	struct shash_desc *mpa_crc_hd;
+	u32 mpa_crc;
+	u8 mpa_crc_enabled : 1;
 
 	/*
 	 * For each FPDU, main RX loop runs through 3 stages:
@@ -390,7 +390,8 @@ struct siw_iwarp_tx {
 	int burst;
 	int bytes_unsent; /* ddp payload bytes */
 
-	struct shash_desc *mpa_crc_hd;
+	u32 mpa_crc;
+	u8 mpa_crc_enabled : 1;
 
 	u8 do_crc : 1; /* do crc for segment */
 	u8 use_sendpage : 1; /* send w/o copy */
@@ -496,7 +497,6 @@ extern u_char mpa_version;
 extern const bool peer_to_peer;
 extern struct task_struct *siw_tx_thread[];
 
-extern struct crypto_shash *siw_crypto_shash;
 extern struct iwarp_msg_info iwarp_pktinfo[RDMAP_TERMINATE + 1];
 
 /* QP general functions */
@@ -668,6 +668,30 @@ static inline struct siw_sqe *irq_alloc_free(struct siw_qp *qp)
 	return NULL;
 }
 
+static inline void siw_crc_init(u32 *crc)
+{
+	*crc = ~0;
+}
+
+static inline void siw_crc_update(u32 *crc, const void *addr, unsigned int len)
+{
+	*crc = crc32c(*crc, addr, len);
+}
+
+static inline __le32 siw_crc_final(u32 *crc)
+{
+	return cpu_to_le32(~*crc);
+}
+
+static inline __le32 siw_crc_oneshot(const void *addr, unsigned int len)
+{
+	u32 crc;
+
+	siw_crc_init(&crc);
+	siw_crc_update(&crc, addr, len);
+	return siw_crc_final(&crc);
+}
+
 static inline __wsum siw_csum_update(const void *buff, int len, __wsum sum)
 {
 	return (__force __wsum)crc32c((__force __u32)sum, buff, len);
@@ -686,11 +710,9 @@ static inline void siw_crc_skb(struct siw_rx_stream *srx, unsigned int len)
 		.update = siw_csum_update,
 		.combine = siw_csum_combine,
 	};
-	__wsum crc = *(u32 *)shash_desc_ctx(srx->mpa_crc_hd);
 
-	crc = __skb_checksum(srx->skb, srx->skb_offset, len, crc,
-			     &siw_cs_ops);
-	*(u32 *)shash_desc_ctx(srx->mpa_crc_hd) = crc;
+	srx->mpa_crc = __skb_checksum(srx->skb, srx->skb_offset, len,
+				      srx->mpa_crc, &siw_cs_ops);
 }
 
 #define siw_dbg(ibdev, fmt, ...)                                               \
