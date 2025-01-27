@@ -253,7 +253,6 @@ disable_resources:
 	return rc;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int ahci_sunxi_resume(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -278,10 +277,10 @@ disable_resources:
 	ahci_platform_disable_resources(hpriv);
 	return rc;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(ahci_sunxi_pm_ops, ahci_platform_suspend,
-			 ahci_sunxi_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_sunxi_pm_ops,
+				ahci_platform_suspend,
+				ahci_sunxi_resume);
 
 static const struct of_device_id ahci_sunxi_of_match[] = {
 	{ .compatible = "allwinner,sun4i-a10-ahci", },
@@ -296,7 +295,7 @@ static struct platform_driver ahci_sunxi_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = ahci_sunxi_of_match,
-		.pm = &ahci_sunxi_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_sunxi_pm_ops),
 	},
 };
 module_platform_driver(ahci_sunxi_driver);
