@@ -993,7 +993,6 @@ static void ahci_imx_host_stop(struct ata_host *host)
 	clk_disable_unprepare(imxpriv->sata_clk);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int imx_ahci_suspend(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -1021,9 +1020,8 @@ static int imx_ahci_resume(struct device *dev)
 
 	return ahci_platform_resume_host(dev);
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(ahci_imx_pm_ops, imx_ahci_suspend, imx_ahci_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_imx_pm_ops, imx_ahci_suspend, imx_ahci_resume);
 
 static struct platform_driver imx_ahci_driver = {
 	.probe = imx_ahci_probe,
@@ -1031,7 +1029,7 @@ static struct platform_driver imx_ahci_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = imx_ahci_of_match,
-		.pm = &ahci_imx_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_imx_pm_ops),
 	},
 };
 module_platform_driver(imx_ahci_driver);
