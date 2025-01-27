@@ -362,7 +362,7 @@ static int brcm_ahci_suspend(struct device *dev)
 	return ret;
 }
 
-static int __maybe_unused brcm_ahci_resume(struct device *dev)
+static int brcm_ahci_resume(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
 	struct ahci_host_priv *hpriv = host->private_data;
@@ -570,7 +570,7 @@ static void brcm_ahci_shutdown(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to shutdown\n");
 }
 
-static SIMPLE_DEV_PM_OPS(ahci_brcm_pm_ops, brcm_ahci_suspend, brcm_ahci_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_brcm_pm_ops, brcm_ahci_suspend, brcm_ahci_resume);
 
 static struct platform_driver brcm_ahci_driver = {
 	.probe = brcm_ahci_probe,
@@ -579,7 +579,7 @@ static struct platform_driver brcm_ahci_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = ahci_of_match,
-		.pm = &ahci_brcm_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_brcm_pm_ops),
 	},
 };
 module_platform_driver(brcm_ahci_driver);
