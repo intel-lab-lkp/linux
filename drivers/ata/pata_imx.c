@@ -201,7 +201,6 @@ static void pata_imx_remove(struct platform_device *pdev)
 	__raw_writel(0, priv->host_regs + PATA_IMX_ATA_INT_EN);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int pata_imx_suspend(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -234,9 +233,8 @@ static int pata_imx_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(pata_imx_pm_ops, pata_imx_suspend, pata_imx_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(pata_imx_pm_ops, pata_imx_suspend, pata_imx_resume);
 
 static const struct of_device_id imx_pata_dt_ids[] = {
 	{
@@ -253,7 +251,7 @@ static struct platform_driver pata_imx_driver = {
 	.driver = {
 		.name		= DRV_NAME,
 		.of_match_table	= imx_pata_dt_ids,
-		.pm		= &pata_imx_pm_ops,
+		.pm		= pm_sleep_ptr(&pata_imx_pm_ops),
 	},
 };
 
