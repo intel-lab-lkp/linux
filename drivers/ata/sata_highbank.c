@@ -565,7 +565,6 @@ err0:
 	return rc;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int ahci_highbank_suspend(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -609,17 +608,17 @@ static int ahci_highbank_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(ahci_highbank_pm_ops,
-		  ahci_highbank_suspend, ahci_highbank_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_highbank_pm_ops,
+				ahci_highbank_suspend,
+				ahci_highbank_resume);
 
 static struct platform_driver ahci_highbank_driver = {
 	.remove = ata_platform_remove_one,
 	.driver = {
 		.name = "highbank-ahci",
 		.of_match_table = ahci_of_match,
-		.pm = &ahci_highbank_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_highbank_pm_ops),
 	},
 	.probe = ahci_highbank_probe,
 };
