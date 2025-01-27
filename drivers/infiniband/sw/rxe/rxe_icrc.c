@@ -62,14 +62,13 @@ static u32 rxe_crc32(struct rxe_dev *rxe, u32 crc, void *next, size_t len)
 }
 
 /**
- * rxe_icrc_hdr() - Compute the partial ICRC for the network and transport
- *		  headers of a packet.
+ * rxe_icrc() - Compute the ICRC of a packet
  * @skb: packet buffer
  * @pkt: packet information
  *
- * Return: the partial ICRC
+ * Return: the ICRC
  */
-static u32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
+static u32 rxe_icrc(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 {
 	unsigned int bth_offset = 0;
 	struct iphdr *ip4h = NULL;
@@ -77,7 +76,6 @@ static u32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	struct udphdr *udph;
 	struct rxe_bth *bth;
 	u32 crc;
-	int length;
 	int hdr_size = sizeof(struct udphdr) +
 		(skb->protocol == htons(ETH_P_IP) ?
 		sizeof(struct iphdr) : sizeof(struct ipv6hdr));
@@ -120,13 +118,19 @@ static u32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	/* exclude bth.resv8a */
 	bth->qpn |= cpu_to_be32(~BTH_QPN_MASK);
 
-	length = hdr_size + RXE_BTH_BYTES;
-	crc = rxe_crc32(pkt->rxe, crc, pshdr, length);
+	/* Update the CRC with the first part of the headers. */
+	crc = rxe_crc32(pkt->rxe, crc, pshdr, hdr_size + RXE_BTH_BYTES);
 
-	/* And finish to compute the CRC on the remainder of the headers. */
+	/* Update the CRC with the remainder of the headers. */
 	crc = rxe_crc32(pkt->rxe, crc, pkt->hdr + RXE_BTH_BYTES,
 			rxe_opcode[pkt->opcode].length - RXE_BTH_BYTES);
-	return crc;
+
+	/* Update the CRC with the payload. */
+	crc = rxe_crc32(pkt->rxe, crc, payload_addr(pkt),
+			payload_size(pkt) + bth_pad(pkt));
+
+	/* Invert the CRC and return it. */
+	return ~crc;
 }
 
 /**
@@ -148,14 +152,8 @@ int rxe_icrc_check(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	 * mapping between bits and polynomial coefficients, it's a __le32.
 	 */
 	__le32 *icrcp = (__le32 *)(pkt->hdr + pkt->paylen - RXE_ICRC_SIZE);
-	u32 icrc;
 
-	icrc = rxe_icrc_hdr(skb, pkt);
-	icrc = rxe_crc32(pkt->rxe, icrc, (u8 *)payload_addr(pkt),
-				payload_size(pkt) + bth_pad(pkt));
-	icrc = ~icrc;
-
-	if (unlikely(icrc != le32_to_cpu(*icrcp)))
+	if (unlikely(rxe_icrc(skb, pkt) != le32_to_cpu(*icrcp)))
 		return -EINVAL;
 
 	return 0;
@@ -169,10 +167,6 @@ int rxe_icrc_check(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 void rxe_icrc_generate(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 {
 	__le32 *icrcp = (__le32 *)(pkt->hdr + pkt->paylen - RXE_ICRC_SIZE);
-	u32 icrc;
 
-	icrc = rxe_icrc_hdr(skb, pkt);
-	icrc = rxe_crc32(pkt->rxe, icrc, (u8 *)payload_addr(pkt),
-				payload_size(pkt) + bth_pad(pkt));
-	*icrcp = cpu_to_le32(~icrc);
+	*icrcp = cpu_to_le32(rxe_icrc(skb, pkt));
 }
