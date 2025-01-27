@@ -67,6 +67,16 @@ enum vma_merge_flags {
 	 * at the gap.
 	 */
 	VMG_FLAG_JUST_EXPAND = 1 << 0,
+	/*
+	 * Internal flag used during the merge operation to indicate we will
+	 * remove vmg->middle.
+	 */
+	__VMG_FLAG_REMOVE_MIDDLE = 1 << 1,
+	/*
+	 * Internal flag used during the merge operationr to indicate we will
+	 * remove vmg->next.
+	 */
+	__VMG_FLAG_REMOVE_NEXT = 1 << 2,
 };
 
 /*

@@ -154,6 +154,9 @@ static void vmg_set_range(struct vma_merge_struct *vmg, unsigned long start,
 	vmg->end = end;
 	vmg->pgoff = pgoff;
 	vmg->flags = flags;
+
+	vmg->merge_flags = VMG_FLAG_DEFAULT;
+	vmg->target = NULL;
 }
 
 /*
