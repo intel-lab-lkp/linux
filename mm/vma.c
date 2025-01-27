@@ -515,7 +515,7 @@ __split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	init_vma_prep(&vp, vma);
 	vp.insert = new;
 	vma_prepare(&vp);
-	vma_adjust_trans_huge(vma, vma->vm_start, addr, 0);
+	vma_adjust_trans_huge(vma, vma->vm_start, addr, NULL);
 
 	if (new_below) {
 		vma->vm_start = addr;
@@ -646,47 +646,46 @@ void validate_mm(struct mm_struct *mm)
 #endif /* CONFIG_DEBUG_VM_MAPLE_TREE */
 
 /*
+ * Based on the vmg flag indicating whether we need to adjust the vm_start field
+ * for the middle or next VMA, we calculate what the range of the newly adjusted
+ * VMA ought to be, and set the VMA's range accordingly.
+ */
+static void vmg_adjust_set_range(struct vma_merge_struct *vmg)
+{
+	unsigned long flags = vmg->merge_flags;
+	struct vm_area_struct *adjust;
+	pgoff_t pgoff;
+
+	if (flags & __VMG_FLAG_ADJUST_MIDDLE_START) {
+		adjust = vmg->middle;
+		pgoff = adjust->vm_pgoff + PHYS_PFN(vmg->end - adjust->vm_start);
+	} else if (flags & __VMG_FLAG_ADJUST_NEXT_START) {
+		adjust = vmg->next;
+		pgoff = adjust->vm_pgoff - PHYS_PFN(adjust->vm_start - vmg->end);
+	} else {
+		return;
+	}
+
+	vma_set_range(adjust, vmg->end, adjust->vm_end, pgoff);
+}
+
+/*
  * Actually perform the VMA merge operation.
  *
  * On success, returns the merged VMA. Otherwise returns NULL.
  */
-static struct vm_area_struct *commit_merge(struct vma_merge_struct *vmg)
+static int commit_merge(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *vma;
 	struct vma_prepare vp;
-	struct vm_area_struct *adjust;
-	long adj_start;
-	unsigned long flags = vmg->merge_flags;
+	bool adj_middle = vmg->merge_flags & __VMG_FLAG_ADJUST_MIDDLE_START;
 
-	/*
-	 * If modifying an existing VMA and we don't remove vmg->middle, then we
-	 * shrink the adjacent VMA.
-	 */
-	if (flags & __VMG_FLAG_ADJUST_MIDDLE_START) {
-		vma = vmg->target;
-		adjust = vmg->middle;
-		/* The POSITIVE value by which we offset vmg->middle->vm_start. */
-		adj_start = vmg->end - vmg->middle->vm_start;
-
-		 /* Note: vma iterator must be pointing to 'start'. */
-		vma_iter_config(vmg->vmi, vmg->start, vmg->end);
-	} else if (flags & __VMG_FLAG_ADJUST_NEXT_START) {
-		/*
-		 * In this case alone, the VMA we manipulate is vmg->middle, but
-		 * we ultimately return vmg->next.
-		 */
+	if (vmg->merge_flags & __VMG_FLAG_ADJUST_NEXT_START) {
+		/* In this case we manipulate middle and return next. */
 		vma = vmg->middle;
-		adjust = vmg->next;
-		/* The NEGATIVE value by which we offset vmg->next->vm_start. */
-		adj_start = -(vmg->middle->vm_end - vmg->end);
-
-		vma_iter_config(vmg->vmi, vmg->next->vm_start + adj_start,
-				vmg->next->vm_end);
+		vma_iter_config(vmg->vmi, vmg->end, vmg->next->vm_end);
 	} else {
 		vma = vmg->target;
-		adjust = NULL;
-		adj_start = 0;
-
 		 /* Note: vma iterator must be pointing to 'start'. */
 		vma_iter_config(vmg->vmi, vmg->start, vmg->end);
 	}
@@ -694,22 +693,22 @@ static struct vm_area_struct *commit_merge(struct vma_merge_struct *vmg)
 	init_multi_vma_prep(&vp, vma, vmg);
 
 	if (vma_iter_prealloc(vmg->vmi, vma))
-		return NULL;
+		return -ENOMEM;
 
 	vma_prepare(&vp);
-	vma_adjust_trans_huge(vma, vmg->start, vmg->end, adj_start);
+	/*
+	 * THP pages may need to do additional splits if we increase
+	 * middle->vm_start.
+	 */
+	vma_adjust_trans_huge(vma, vmg->start, vmg->end,
+			      adj_middle ? vmg->middle : NULL);
 	vma_set_range(vma, vmg->start, vmg->end, vmg->pgoff);
-
-	if (adj_start) {
-		adjust->vm_start += adj_start;
-		adjust->vm_pgoff += PHYS_PFN(adj_start);
-	}
-
+	vmg_adjust_set_range(vmg);
 	vma_iter_store(vmg->vmi, vmg->target);
 
 	vma_complete(&vp, vmg->vmi, vma->vm_mm);
 
-	return vmg->target;
+	return 0;
 }
 
 /* We can only remove VMAs when merging if they do not have a close hook. */
@@ -752,7 +751,7 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 {
 	struct vm_area_struct *middle = vmg->middle;
 	struct vm_area_struct *prev = vmg->prev;
-	struct vm_area_struct *next, *res;
+	struct vm_area_struct *next;
 	struct vm_area_struct *anon_dup = NULL;
 	unsigned long start = vmg->start;
 	unsigned long end = vmg->end;
@@ -904,12 +903,7 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 			vmg->end = next->vm_end;
 			vmg->pgoff = next->vm_pgoff - pglen;
 		} else {
-			/*
-			 * We shrink middle and expand next.
-			 *
-			 * IMPORTANT: This is the ONLY case where the final
-			 * merged VMA is NOT vmg->target, but rather vmg->next.
-			 */
+			/* We shrink middle and expand next. */
 			vmg->merge_flags |= __VMG_FLAG_ADJUST_NEXT_START;
 			vmg->start = middle->vm_start;
 			vmg->end = start;
@@ -927,8 +921,10 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 	if (merge_will_delete_next)
 		vmg->merge_flags |= __VMG_FLAG_REMOVE_NEXT;
 
-	res = commit_merge(vmg);
-	if (!res) {
+	err = commit_merge(vmg);
+	if (err) {
+		VM_WARN_ON(err != -ENOMEM);
+
 		if (anon_dup)
 			unlink_anon_vmas(anon_dup);
 
@@ -936,9 +932,9 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 		return NULL;
 	}
 
-	khugepaged_enter_vma(res, vmg->flags);
+	khugepaged_enter_vma(vmg->target, vmg->flags);
 	vmg->state = VMA_MERGE_SUCCESS;
-	return res;
+	return vmg->target;
 
 abort:
 	vma_iter_set(vmg->vmi, start);
@@ -1102,7 +1098,7 @@ int vma_expand(struct vma_merge_struct *vmg)
 	if (remove_next)
 		vmg->merge_flags |= __VMG_FLAG_REMOVE_NEXT;
 
-	if (!commit_merge(vmg))
+	if (commit_merge(vmg))
 		goto nomem;
 
 	return 0;
@@ -1142,7 +1138,7 @@ int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	init_vma_prep(&vp, vma);
 	vma_prepare(&vp);
-	vma_adjust_trans_huge(vma, start, end, 0);
+	vma_adjust_trans_huge(vma, start, end, NULL);
 
 	vma_iter_clear(vmi);
 	vma_set_range(vma, start, end, pgoff);
