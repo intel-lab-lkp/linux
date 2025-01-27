@@ -363,12 +363,12 @@ disable_resources:
 	return rc;
 }
 
-static int __maybe_unused ceva_ahci_suspend(struct device *dev)
+static int ceva_ahci_suspend(struct device *dev)
 {
 	return ahci_platform_suspend(dev);
 }
 
-static int __maybe_unused ceva_ahci_resume(struct device *dev)
+static int ceva_ahci_resume(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
 	struct ahci_host_priv *hpriv = host->private_data;
@@ -398,7 +398,7 @@ disable_resources:
 	return rc;
 }
 
-static SIMPLE_DEV_PM_OPS(ahci_ceva_pm_ops, ceva_ahci_suspend, ceva_ahci_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_ceva_pm_ops, ceva_ahci_suspend, ceva_ahci_resume);
 
 static const struct of_device_id ceva_ahci_of_match[] = {
 	{ .compatible = "ceva,ahci-1v84" },
@@ -412,7 +412,7 @@ static struct platform_driver ceva_ahci_driver = {
 	.driver = {
 		.name = DRV_NAME,
 		.of_match_table = ceva_ahci_of_match,
-		.pm = &ahci_ceva_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_ceva_pm_ops),
 	},
 };
 module_platform_driver(ceva_ahci_driver);
