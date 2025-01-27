@@ -2235,6 +2235,7 @@ static int nft_pipapo_init(const struct nft_set *set,
 	struct nft_pipapo_match *m;
 	struct nft_pipapo_field *f;
 	int err, i, field_count;
+	unsigned int len = 0;
 
 	BUILD_BUG_ON(offsetof(struct nft_pipapo_elem, priv) != 0);
 
@@ -2244,6 +2245,12 @@ static int nft_pipapo_init(const struct nft_set *set,
 	BUILD_BUG_ON(NFT_PIPAPO_MAX_FIELDS != NFT_REG32_COUNT);
 
 	if (field_count > NFT_PIPAPO_MAX_FIELDS)
+		return -EINVAL;
+
+	for (i = 0; i < field_count; i++)
+		len += round_up(desc->field_len[i], sizeof(u32));
+
+	if (len != set->klen)
 		return -EINVAL;
 
 	m = kmalloc(struct_size(m, f, field_count), GFP_KERNEL);
