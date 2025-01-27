@@ -319,7 +319,6 @@ disable_resources:
 	return rc;
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int ahci_qoriq_resume(struct device *dev)
 {
 	struct ata_host *host = dev_get_drvdata(dev);
@@ -350,10 +349,10 @@ disable_resources:
 
 	return rc;
 }
-#endif
 
-static SIMPLE_DEV_PM_OPS(ahci_qoriq_pm_ops, ahci_platform_suspend,
-			 ahci_qoriq_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(ahci_qoriq_pm_ops,
+				ahci_platform_suspend,
+				ahci_qoriq_resume);
 
 static struct platform_driver ahci_qoriq_driver = {
 	.probe = ahci_qoriq_probe,
@@ -362,7 +361,7 @@ static struct platform_driver ahci_qoriq_driver = {
 		.name = DRV_NAME,
 		.of_match_table = ahci_qoriq_of_match,
 		.acpi_match_table = ahci_qoriq_acpi_match,
-		.pm = &ahci_qoriq_pm_ops,
+		.pm = pm_sleep_ptr(&ahci_qoriq_pm_ops),
 	},
 };
 module_platform_driver(ahci_qoriq_driver);
