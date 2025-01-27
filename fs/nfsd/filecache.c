@@ -445,11 +445,20 @@ nfsd_file_dispose_list_delayed(struct list_head *dispose)
 						struct nfsd_file, nf_gc);
 		struct nfsd_net *nn = net_generic(nf->nf_net, nfsd_net_id);
 		struct nfsd_fcache_disposal *l = nn->fcache_disposal;
+		struct svc_serv *serv;
 
 		spin_lock(&l->lock);
 		list_move_tail(&nf->nf_gc, &l->freeme);
 		spin_unlock(&l->lock);
-		svc_wake_up(nn->nfsd_serv);
+
+		/*
+		 * The filecache laundrette is shut down after the
+		 * nn->nfsd_serv pointer is cleared, but before the
+		 * svc_serv is freed.
+		 */
+		serv = nn->nfsd_serv;
+		if (serv)
+			svc_wake_up(serv);
 	}
 }
 
@@ -541,13 +550,19 @@ nfsd_file_lru_cb(struct list_head *item, struct list_lru_one *lru,
 static void
 nfsd_file_gc(void)
 {
+	unsigned long remaining = list_lru_count(&nfsd_file_lru);
 	LIST_HEAD(dispose);
 	unsigned long ret;
 
-	ret = list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb,
-			    &dispose, list_lru_count(&nfsd_file_lru));
-	trace_nfsd_file_gc_removed(ret, list_lru_count(&nfsd_file_lru));
-	nfsd_file_dispose_list_delayed(&dispose);
+	while (remaining > 0) {
+		unsigned long num_to_scan = min(remaining, NFSD_FILE_GC_BATCH);
+
+		ret = list_lru_walk(&nfsd_file_lru, nfsd_file_lru_cb,
+				    &dispose, num_to_scan);
+		trace_nfsd_file_gc_removed(ret, list_lru_count(&nfsd_file_lru));
+		nfsd_file_dispose_list_delayed(&dispose);
+		remaining -= num_to_scan;
+	}
 }
 
 static void
