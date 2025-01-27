@@ -338,22 +338,22 @@ struct siw_rx_fpdu {
  */
 struct siw_send_pkt {
 	struct iwarp_send send;
-	__be32 crc;
+	__le32 crc;
 };
 
 struct siw_write_pkt {
 	struct iwarp_rdma_write write;
-	__be32 crc;
+	__le32 crc;
 };
 
 struct siw_rreq_pkt {
 	struct iwarp_rdma_rreq rreq;
-	__be32 crc;
+	__le32 crc;
 };
 
 struct siw_rresp_pkt {
 	struct iwarp_rdma_rresp rresp;
-	__be32 crc;
+	__le32 crc;
 };
 
 struct siw_iwarp_tx {

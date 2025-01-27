@@ -953,7 +953,7 @@ static int siw_get_trailer(struct siw_qp *qp, struct siw_rx_stream *srx)
 	struct sk_buff *skb = srx->skb;
 	int avail = min(srx->skb_new, srx->fpdu_part_rem);
 	u8 *tbuf = (u8 *)&srx->trailer.crc - srx->pad;
-	__wsum crc_in, crc_own = 0;
+	__le32 crc_in, crc_own = 0;
 
 	siw_dbg_qp(qp, "expected %d, available %d, pad %u\n",
 		   srx->fpdu_part_rem, srx->skb_new, srx->pad);
@@ -971,16 +971,22 @@ static int siw_get_trailer(struct siw_qp *qp, struct siw_rx_stream *srx)
 
 	if (srx->pad)
 		crypto_shash_update(srx->mpa_crc_hd, tbuf, srx->pad);
+
 	/*
-	 * CRC32 is computed, transmitted and received directly in NBO,
-	 * so there's never a reason to convert byte order.
+	 * The usual big endian convention of InfiniBand does not apply to the
+	 * CRC field, whose transmission is specified in terms of the CRC32
+	 * polynomial coefficients.  The coefficients are transmitted in
+	 * descending order from the x^31 coefficient to the x^0 one.  When the
+	 * result is interpreted as a 32-bit integer using the required reverse
+	 * mapping between bits and polynomial coefficients, it's a __le32.
 	 */
 	crypto_shash_final(srx->mpa_crc_hd, (u8 *)&crc_own);
-	crc_in = (__force __wsum)srx->trailer.crc;
+	crc_in = srx->trailer.crc;
 
 	if (unlikely(crc_in != crc_own)) {
 		pr_warn("siw: crc error. in: %08x, own %08x, op %u\n",
-			crc_in, crc_own, qp->rx_stream.rdmap_op);
+			le32_to_cpu(crc_in), le32_to_cpu(crc_own),
+			qp->rx_stream.rdmap_op);
 
 		siw_init_terminate(qp, TERM_ERROR_LAYER_LLP,
 				   LLP_ETYPE_MPA,

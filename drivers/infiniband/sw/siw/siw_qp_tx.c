@@ -244,7 +244,7 @@ static int siw_qp_prepare_tx(struct siw_iwarp_tx *c_tx)
 					cpu_to_be64(wqe->sqe.raddr);
 		}
 
-		*(u32 *)crc = 0;
+		*(__le32 *)crc = 0;
 		/*
 		 * Do complete CRC if enabled and short packet
 		 */

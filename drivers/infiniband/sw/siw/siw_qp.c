@@ -396,7 +396,7 @@ void siw_send_terminate(struct siw_qp *qp)
 	struct socket *s = qp->attrs.sk;
 	struct siw_rx_stream *srx = &qp->rx_stream;
 	union iwarp_hdr *rx_hdr = &srx->hdr;
-	u32 crc = 0;
+	__le32 crc = 0;
 	int num_frags, len_terminate, rv;
 
 	if (!qp->term_info.valid)

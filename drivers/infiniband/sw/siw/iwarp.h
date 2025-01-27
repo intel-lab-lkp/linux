@@ -81,7 +81,7 @@ struct mpa_marker {
  */
 struct mpa_trailer {
 	__u8 pad[4];
-	__be32 crc;
+	__le32 crc;
 };
 
 #define MPA_HDR_SIZE 2
