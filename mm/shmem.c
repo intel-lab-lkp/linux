@@ -4301,6 +4301,7 @@ static int shmem_xattr_handler_set(const struct xattr_handler *handler,
 	struct shmem_sb_info *sbinfo = SHMEM_SB(inode->i_sb);
 	struct simple_xattr *old_xattr;
 	size_t ispace = 0;
+	int ret = 0;
 
 	name = xattr_full_name(handler, name);
 	if (value && sbinfo->max_inodes) {
@@ -4316,7 +4317,9 @@ static int shmem_xattr_handler_set(const struct xattr_handler *handler,
 	}
 
 	old_xattr = simple_xattr_set(&info->xattrs, name, value, size, flags);
-	if (!IS_ERR(old_xattr)) {
+	if (IS_ERR(old_xattr)) {
+		ret = PTR_ERR(old_xattr);
+	} else {
 		ispace = 0;
 		if (old_xattr && sbinfo->max_inodes)
 			ispace = simple_xattr_space(old_xattr->name,
@@ -4326,12 +4329,13 @@ static int shmem_xattr_handler_set(const struct xattr_handler *handler,
 		inode_set_ctime_current(inode);
 		inode_inc_iversion(inode);
 	}
+
 	if (ispace) {
 		raw_spin_lock(&sbinfo->stat_lock);
 		sbinfo->free_ispace += ispace;
 		raw_spin_unlock(&sbinfo->stat_lock);
 	}
-	return PTR_ERR(old_xattr);
+	return ret;
 }
 
 static const struct xattr_handler shmem_security_xattr_handler = {
