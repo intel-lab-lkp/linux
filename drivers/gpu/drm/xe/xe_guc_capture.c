@@ -1866,36 +1866,6 @@ xe_guc_capture_get_matching_and_lock(struct xe_exec_queue *q,
 	return NULL;
 }
 
-/**
- * xe_engine_snapshot_capture_for_queue - Take snapshot of associated engine
- * @q: The exec queue object
- *
- * Take snapshot of associated HW Engine
- *
- * Returns: None.
- */
-void
-xe_engine_snapshot_capture_for_queue(struct xe_exec_queue *q)
-{
-	struct xe_device *xe = gt_to_xe(q->gt);
-	struct xe_devcoredump *coredump = &xe->devcoredump;
-	struct xe_hw_engine *hwe;
-	enum xe_hw_engine_id id;
-	u32 adj_logical_mask = q->logical_mask;
-
-	if (IS_SRIOV_VF(xe))
-		return;
-
-	for_each_hw_engine(hwe, q->gt, id) {
-		if (hwe->class != q->hwe->class ||
-		    !(BIT(hwe->logical_instance) & adj_logical_mask)) {
-			coredump->snapshot.hwe[id] = NULL;
-			continue;
-		}
-		coredump->snapshot.hwe[id] = xe_hw_engine_snapshot_capture(hwe, q);
-	}
-}
-
 /*
  * xe_guc_capture_put_matched_nodes - Cleanup matched nodes
  * @guc: The GuC object
