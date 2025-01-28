@@ -547,6 +547,8 @@ static int hmm_vma_walk_test(unsigned long start, unsigned long end,
 
 	hmm_pfns_fill(start, end, range, HMM_PFN_ERROR);
 
+	/* Update last to the end of the skipped VMA to prevent reprocessing */
+	hmm_vma_walk->last = end;
 	/* Skip this vma and continue processing the next vma. */
 	return 1;
 }
