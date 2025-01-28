@@ -1655,22 +1655,16 @@ guc_capture_find_reg(struct gcap_reg_list_info *reginfo, u32 addr, u32 flags)
 }
 
 static void
-snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_printer *p,
-			     u32 type, const struct __guc_mmio_reg_descr_group *list)
+print_noderegs_by_list_order(struct xe_guc *guc, struct gcap_reg_list_info *reginfo,
+			     const struct __guc_mmio_reg_descr_group *list, struct drm_printer *p)
 {
-	struct xe_gt *gt = snapshot->hwe->gt;
-	struct xe_guc *guc = &gt->uc.guc;
-	struct gcap_reg_list_info *reginfo = NULL;
-	u32 i, last_value = 0;
+	u32 last_value, i;
 	bool is_ext, low32_ready = false;
 
 	if (!list || !list->list || list->num_regs == 0)
 		return;
 
-	XE_WARN_ON(!snapshot->matched_node);
-
 	is_ext = list == guc->capture->extlists;
-	reginfo = &snapshot->matched_node->reginfo[type];
 
 	/*
 	 * loop through descriptor first and find the register in the node
@@ -1740,8 +1734,8 @@ snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_
 
 				group = FIELD_GET(GUC_REGSET_STEERING_GROUP, reg_desc->flags);
 				instance = FIELD_GET(GUC_REGSET_STEERING_INSTANCE, reg_desc->flags);
-				dss = xe_gt_mcr_steering_info_to_dss_id(gt, group, instance);
-
+				dss = xe_gt_mcr_steering_info_to_dss_id(guc_to_gt(guc), group,
+									instance);
 				drm_printf(p, "\t%s[%u]: 0x%08x\n", reg_desc->regname, dss, value);
 			} else {
 				drm_printf(p, "\t%s: 0x%08x\n", reg_desc->regname, value);
@@ -1760,13 +1754,18 @@ snapshot_print_by_list_order(struct xe_hw_engine_snapshot *snapshot, struct drm_
 }
 
 /**
- * xe_engine_snapshot_print - Print out a given Xe HW Engine snapshot.
- * @snapshot: Xe HW Engine snapshot object.
+ * xe_guc_capture_snapshot_print - Print out a the contents of a provided Guc-Err-Capture node
+ * @guc : Target GuC for operation.
+ * @node: GuC Error Capture register dump node.
  * @p: drm_printer where it will be printed out.
  *
- * This function prints out a given Xe HW Engine snapshot object.
+ * This function prints out a register dump of a GuC-Err-Capture node that was retrieved
+ * earlier either by GuC-FW reporting or by manual capture depending on how the
+ * caller (typically xe_hw_engine_snapshot) was invoked and used.
  */
-void xe_engine_snapshot_print(struct xe_hw_engine_snapshot *snapshot, struct drm_printer *p)
+
+void xe_guc_capture_snapshot_print(struct xe_guc *guc, struct xe_guc_capture_snapshot *node,
+				   struct drm_printer *p)
 {
 	const char *grptype[GUC_STATE_CAPTURE_GROUP_TYPE_MAX] = {
 		"full-capture",
@@ -1774,45 +1773,36 @@ void xe_engine_snapshot_print(struct xe_hw_engine_snapshot *snapshot, struct drm
 	};
 	int type;
 	const struct __guc_mmio_reg_descr_group *list;
-	enum guc_capture_list_class_type capture_class;
 	struct xe_gt *gt;
 
-	if (!snapshot)
+	if (!guc)
 		return;
-
-	gt = snapshot->hwe->gt;
-
-	if (!snapshot->matched_node)
+	gt = guc_to_gt(guc);
+	if (!node) {
+		xe_gt_warn(gt, "GuC Capture printing without node!\n");
 		return;
+	}
+	if (!p) {
+		xe_gt_warn(gt, "GuC Capture printing without printer!\n");
+		return;
+	}
 
-	xe_gt_assert(gt, snapshot->hwe);
-
-	capture_class = xe_engine_class_to_guc_capture_class(snapshot->hwe->class);
-
-	drm_printf(p, "%s (physical), logical instance=%d\n",
-		   snapshot->name ? snapshot->name : "",
-		   snapshot->logical_instance);
 	drm_printf(p, "\tCapture_source: %s\n",
-		   snapshot->matched_node->source == XE_ENGINE_CAPTURE_SOURCE_GUC ?
+		   node->source == XE_ENGINE_CAPTURE_SOURCE_GUC ?
 		   "GuC" : "Manual");
-	drm_printf(p, "\tCoverage: %s\n", grptype[snapshot->matched_node->is_partial]);
-	drm_printf(p, "\tForcewake: domain 0x%x, ref %d\n",
-		   snapshot->forcewake.domain, snapshot->forcewake.ref);
-	drm_printf(p, "\tReserved: %s\n",
-		   str_yes_no(snapshot->kernel_reserved));
+	drm_printf(p, "\tCoverage: %s\n", grptype[node->is_partial]);
 
 	for (type = GUC_STATE_CAPTURE_TYPE_GLOBAL; type < GUC_STATE_CAPTURE_TYPE_MAX; type++) {
 		list = xe_guc_capture_get_reg_desc_list(gt, GUC_CAPTURE_LIST_INDEX_PF, type,
-							capture_class, false);
-		snapshot_print_by_list_order(snapshot, p, type, list);
+							node->eng_class, false);
+		print_noderegs_by_list_order(guc, &node->reginfo[type], list, p);
 	}
 
-	if (capture_class == GUC_CAPTURE_LIST_CLASS_RENDER_COMPUTE) {
+	if (node->eng_class == GUC_CAPTURE_LIST_CLASS_RENDER_COMPUTE) {
+		type = GUC_STATE_CAPTURE_TYPE_ENGINE_CLASS;
 		list = xe_guc_capture_get_reg_desc_list(gt, GUC_CAPTURE_LIST_INDEX_PF,
-							GUC_STATE_CAPTURE_TYPE_ENGINE_CLASS,
-							capture_class, true);
-		snapshot_print_by_list_order(snapshot, p, GUC_STATE_CAPTURE_TYPE_ENGINE_CLASS,
-					     list);
+							type, node->eng_class, true);
+		print_noderegs_by_list_order(guc, &node->reginfo[type], list, p);
 	}
 
 	drm_puts(p, "\n");

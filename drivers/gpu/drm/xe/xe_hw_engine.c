@@ -906,6 +906,34 @@ void xe_hw_engine_snapshot_free(struct xe_hw_engine_snapshot *snapshot)
 }
 
 /**
+ * xe_engine_snapshot_print - Print out a given Xe HW Engine snapshot.
+ * @snapshot: Xe HW Engine snapshot object.
+ * @p: drm_printer where it will be printed out.
+ *
+ * This function prints out a given Xe HW Engine snapshot object.
+ */
+void xe_engine_snapshot_print(struct xe_hw_engine_snapshot *snapshot, struct drm_printer *p)
+{
+	struct xe_gt *gt;
+
+	if (!snapshot)
+		return;
+
+	gt = snapshot->hwe->gt;
+
+	drm_printf(p, "%s (physical), logical instance=%d\n",
+		   snapshot->name ? snapshot->name : "",
+		   snapshot->logical_instance);
+	drm_printf(p, "\tForcewake: domain 0x%x, ref %d\n",
+		   snapshot->forcewake.domain, snapshot->forcewake.ref);
+	drm_printf(p, "\tReserved: %s\n",
+		   str_yes_no(snapshot->kernel_reserved));
+	drm_puts(p, "\n");
+
+	xe_guc_capture_snapshot_print(&gt->uc.guc, snapshot->matched_node, p);
+}
+
+/**
  * xe_hw_engine_print - Xe HW Engine Print.
  * @hwe: Hardware Engine.
  * @p: drm_printer.
