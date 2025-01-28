@@ -152,6 +152,11 @@ static void *__vmalloc_user_flags(unsigned long size, gfp_t flags)
 	ret = __vmalloc(size, flags);
 	if (ret) {
 		struct vm_area_struct *vma;
+		struct mm_struct *mm = current->mm;
+
+		if(!mm){
+			goto out;
+		}
 
 		mmap_write_lock(current->mm);
 		vma = find_vma(current->mm, (unsigned long)ret);
@@ -160,6 +165,7 @@ static void *__vmalloc_user_flags(unsigned long size, gfp_t flags)
 		mmap_write_unlock(current->mm);
 	}
 
+	out:
 	return ret;
 }
 
