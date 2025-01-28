@@ -21729,10 +21729,14 @@ F:	sound/soc/uniphier/
 
 SOCKET TIMESTAMPING
 M:	Willem de Bruijn <willemdebruijn.kernel@gmail.com>
+M:	Kory Maincent <kory.maincent@bootlin.com>
 S:	Maintained
 F:	Documentation/networking/timestamping.rst
 F:	include/linux/net_tstamp.h
 F:	include/uapi/linux/net_tstamp.h
+F:	net/core/timestamping.c
+F:	net/ethtool/tsconfig.c
+F:	net/ethtool/tsinfo.c
 F:	tools/testing/selftests/net/so_txtime.c
 
 SOEKRIS NET48XX LED SUPPORT
