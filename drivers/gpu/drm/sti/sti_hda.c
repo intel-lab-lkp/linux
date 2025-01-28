@@ -741,7 +741,6 @@ static int sti_hda_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct sti_hda *hda;
-	struct resource *res;
 
 	DRM_INFO("%s\n", __func__);
 
@@ -750,14 +749,7 @@ static int sti_hda_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	hda->dev = pdev->dev;
-
-	/* Get resources */
-	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "hda-reg");
-	if (!res) {
-		DRM_ERROR("Invalid hda resource\n");
-		return -ENOMEM;
-	}
-	hda->regs = devm_ioremap(dev, res->start, resource_size(res));
+	hda->regs = devm_platform_ioremap_resource_byname(pdev, "hda-reg");
 	if (!hda->regs)
 		return -ENOMEM;
 
