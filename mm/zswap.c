@@ -1568,13 +1568,8 @@ bool zswap_store(struct folio *folio)
 
 		bytes = zswap_store_page(page, objcg, pool);
 		if (bytes < 0)
-			goto put_pool;
+			goto charge_zswap;
 		compressed_bytes += bytes;
-	}
-
-	if (objcg) {
-		obj_cgroup_charge_zswap(objcg, compressed_bytes);
-		count_objcg_events(objcg, ZSWPOUT, nr_pages);
 	}
 
 	atomic_long_add(nr_pages, &zswap_stored_pages);
@@ -1582,6 +1577,11 @@ bool zswap_store(struct folio *folio)
 
 	ret = true;
 
+charge_zswap:
+	if (objcg) {
+		obj_cgroup_charge_zswap(objcg, compressed_bytes);
+		count_objcg_events(objcg, ZSWPOUT, nr_pages);
+	}
 put_pool:
 	zswap_pool_put(pool);
 put_objcg:
