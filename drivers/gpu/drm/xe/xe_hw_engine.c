@@ -832,7 +832,7 @@ void xe_hw_engine_handle_irq(struct xe_hw_engine *hwe, u16 intr_vec)
 /**
  * hw_engine_snapshot_capture - Take a quick snapshot of the HW Engine.
  * @hwe: Xe HW Engine.
- * @q: The exec queue object.
+ * @q: The exec queue object. (can be NULL for debugfs engine-register dump)
  *
  * This can be printed out in a later stage like during dev_coredump
  * analysis.
@@ -845,9 +845,11 @@ hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
 {
 	struct xe_hw_engine_snapshot *snapshot;
 	struct xe_guc_capture_snapshot *node;
+	struct xe_guc *guc;
 
 	if (!xe_hw_engine_is_valid(hwe))
 		return NULL;
+	guc = &hwe->gt->uc.guc;
 
 	snapshot = kzalloc(sizeof(*snapshot), GFP_ATOMIC);
 
@@ -876,10 +878,19 @@ hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
 			xe_gt_dbg(hwe->gt, "No fw sourced GuC-Err-Capture for queue %s", q->name);
 			snapshot->matched_node = node;
 		} else if (node) {
-			xe_guc_capture_put_matched_nodes(&hwe->gt->uc.guc, node);
+			xe_guc_capture_put_matched_nodes(guc, node);
 		}
 		if (!snapshot->matched_node)
 			xe_gt_warn(hwe->gt, "Can't retrieve any GuC-Err-Capture node");
+	}
+
+	if (!snapshot->matched_node) {
+		/*
+		 * Fallback path - do an immediate jobless manual engine capture.
+		 * This will happen when debugfs is triggered to force an engine dump.
+		 */
+		snapshot->matched_node = xe_guc_capture_snapshot_manual_hwe(guc, hwe);
+		xe_gt_dbg(hwe->gt, "Fallback to jobless-manual-err-capture node");
 	}
 
 	return snapshot;

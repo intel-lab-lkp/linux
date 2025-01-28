@@ -1584,6 +1584,32 @@ guc_capture_get_manual_snapshot(struct xe_guc *guc, struct xe_hw_engine *hwe)
 }
 
 /**
+ * xe_guc_capture_snapshot_store_and_get_manual_hwe - Generate and get manual engine register dump
+ * @guc: Target GuC for manual capture
+ * @hwe: The engine instance to capture from
+ *
+ * Generate a manual GuC-Error-Capture snapshot of engine instance + engine class registers
+ * without any queue association. This capture node is not stored in outlist or cachelist,
+ * Returns: New capture node and caller must "put"
+ */
+struct xe_guc_capture_snapshot *
+xe_guc_capture_snapshot_manual_hwe(struct xe_guc *guc, struct xe_hw_engine *hwe)
+{
+	struct xe_guc_capture_snapshot *new;
+
+	new = guc_capture_get_manual_snapshot(guc, hwe);
+	if (!new)
+		return NULL;
+
+	new->guc_id = 0;
+	new->lrca = 0;
+	new->is_partial = 0;
+	new->source = XE_ENGINE_CAPTURE_SOURCE_MANUAL;
+
+	return new;
+}
+
+/**
  * xe_guc_capture_snapshot_store_manual_job - Generate and store a manual engine register dump
  * @guc: Target GuC for manual capture
  * @q: Associated xe_exec_queue to simulate a manual capture on its behalf.
