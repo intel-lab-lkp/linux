@@ -397,9 +397,12 @@ netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 		break;
 	case NETDEV_QUEUE_TYPE_TX:
 		txq = netdev_get_tx_queue(netdev, q_idx);
-		if (txq->napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
-					     txq->napi->napi_id))
+		if (!txq->napi)
 			goto nla_put_failure;
+		if (txq->napi->napi_id >= MIN_NAPI_ID)
+			if (nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
+					txq->napi->napi_id))
+				goto nla_put_failure;
 	}
 
 	genlmsg_end(rsp, hdr);
