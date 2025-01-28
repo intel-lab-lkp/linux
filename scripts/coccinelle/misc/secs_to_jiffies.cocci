@@ -11,12 +11,22 @@
 
 virtual patch
 
-@depends on patch@ constant C; @@
+@depends on patch@
+constant C;
+@@
 
-- msecs_to_jiffies(C * 1000)
-+ secs_to_jiffies(C)
+-msecs_to_jiffies
++secs_to_jiffies
+ (C
+- * \( 1000 \| MSEC_PER_SEC \)
+ )
 
-@depends on patch@ constant C; @@
+@depends on patch@
+expression E;
+@@
 
-- msecs_to_jiffies(C * MSEC_PER_SEC)
-+ secs_to_jiffies(C)
+-msecs_to_jiffies
++secs_to_jiffies
+ (E
+- * \( 1000 \| MSEC_PER_SEC \)
+ )
