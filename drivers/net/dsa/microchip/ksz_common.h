@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Microchip switch driver common header
  *
- * Copyright (C) 2017-2024 Microchip Technology Inc.
+ * Copyright (C) 2017-2025 Microchip Technology Inc.
  */
 
 #ifndef __KSZ_COMMON_H
@@ -10,6 +10,7 @@
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
 #include <linux/mutex.h>
+#include <linux/pcs/pcs-xpcs.h>
 #include <linux/phy.h>
 #include <linux/regmap.h>
 #include <net/dsa.h>
@@ -93,6 +94,7 @@ struct ksz_chip_data {
 	bool internal_phy[KSZ_MAX_NUM_PORTS];
 	bool gbit_capable[KSZ_MAX_NUM_PORTS];
 	bool ptp_capable;
+	u8 sgmii_port;
 	const struct regmap_access_table *wr_table;
 	const struct regmap_access_table *rd_table;
 };
@@ -141,6 +143,7 @@ struct ksz_port {
 	void *acl_priv;
 	struct ksz_irq pirq;
 	u8 num;
+	struct dw_xpcs *xpcs;
 #if IS_ENABLED(CONFIG_NET_DSA_MICROCHIP_KSZ_PTP)
 	struct hwtstamp_config tstamp_config;
 	bool hwts_tx_en;
@@ -162,6 +165,7 @@ struct ksz_device {
 	struct mutex regmap_mutex;	/* regmap access */
 	struct mutex alu_mutex;		/* ALU access */
 	struct mutex vlan_mutex;	/* vlan access */
+	struct mutex sgmii_mutex;	/* SGMII access */
 	const struct ksz_dev_ops *dev_ops;
 
 	struct device *dev;
@@ -440,6 +444,8 @@ struct ksz_dev_ops {
 	int (*reset)(struct ksz_device *dev);
 	int (*init)(struct ksz_device *dev);
 	void (*exit)(struct ksz_device *dev);
+
+	int (*pcs_create)(struct ksz_device *dev);
 };
 
 struct ksz_device *ksz_switch_alloc(struct device *base, void *priv);
@@ -729,6 +735,21 @@ static inline bool is_lan937x_tx_phy(struct ksz_device *dev, int port)
 {
 	return (dev->chip_id == LAN9371_CHIP_ID ||
 		dev->chip_id == LAN9372_CHIP_ID) && port == KSZ_PORT_4;
+}
+
+static inline int ksz_get_sgmii_port(struct ksz_device *dev)
+{
+	return (dev->info->sgmii_port - 1);
+}
+
+static inline bool ksz_has_sgmii_port(struct ksz_device *dev)
+{
+	return (dev->info->sgmii_port > 0);
+}
+
+static inline bool ksz_is_sgmii_port(struct ksz_device *dev, int port)
+{
+	return (dev->info->sgmii_port == port + 1);
 }
 
 /* STP State Defines */

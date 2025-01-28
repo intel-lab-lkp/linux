@@ -2,7 +2,7 @@
 /*
  * Microchip KSZ9477 switch driver main logic
  *
- * Copyright (C) 2017-2024 Microchip Technology Inc.
+ * Copyright (C) 2017-2025 Microchip Technology Inc.
  */
 
 #include <linux/kernel.h>
@@ -159,6 +159,113 @@ static int ksz9477_wait_alu_sta_ready(struct ksz_device *dev)
 					REG_SW_ALU_STAT_CTRL__4,
 					val, !(val & ALU_STAT_START),
 					10, 1000);
+}
+
+static void port_sgmii_s(struct ksz_device *dev, uint port, u16 devid, u16 reg,
+			 u16 len)
+{
+	u32 data;
+
+	data = (devid & MII_MMD_CTRL_DEVAD_MASK) << 16;
+	data |= reg;
+	if (len > 1)
+		data |= PORT_SGMII_AUTO_INCR;
+	ksz_pwrite32(dev, port, REG_PORT_SGMII_ADDR__4, data);
+}
+
+static void port_sgmii_r(struct ksz_device *dev, uint port, u16 devid, u16 reg,
+			 u16 *buf, u16 len)
+{
+	u32 data;
+
+	mutex_lock(&dev->sgmii_mutex);
+	port_sgmii_s(dev, port, devid, reg, len);
+	while (len) {
+		ksz_pread32(dev, port, REG_PORT_SGMII_DATA__4, &data);
+		*buf++ = (u16)data;
+		len--;
+	}
+	mutex_unlock(&dev->sgmii_mutex);
+}
+
+static void port_sgmii_w(struct ksz_device *dev, uint port, u16 devid, u16 reg,
+			 u16 *buf, u16 len)
+{
+	u32 data;
+
+	mutex_lock(&dev->sgmii_mutex);
+	port_sgmii_s(dev, port, devid, reg, len);
+	while (len) {
+		data = *buf++;
+		ksz_pwrite32(dev, port, REG_PORT_SGMII_DATA__4, data);
+		len--;
+	}
+	mutex_unlock(&dev->sgmii_mutex);
+}
+
+static void port_sgmii_reset(struct ksz_device *dev, uint p)
+{
+	u16 ctrl = BMCR_RESET;
+
+	port_sgmii_w(dev, p, MDIO_MMD_VEND2, MII_BMCR, &ctrl, 1);
+}
+
+static int ksz9477_pcs_read(struct mii_bus *bus, int phy, int mmd, int reg)
+{
+	struct ksz_device *dev = bus->priv;
+	int port = ksz_get_sgmii_port(dev);
+	u16 val;
+
+	port_sgmii_r(dev, port, mmd, reg, &val, 1);
+	return val;
+}
+
+static int ksz9477_pcs_write(struct mii_bus *bus, int phy, int mmd, int reg,
+			     u16 val)
+{
+	struct ksz_device *dev = bus->priv;
+	int port = ksz_get_sgmii_port(dev);
+
+	port_sgmii_w(dev, port, mmd, reg, &val, 1);
+	return 0;
+}
+
+int ksz9477_pcs_create(struct ksz_device *dev)
+{
+	/* This chip has a SGMII port. */
+	if (ksz_has_sgmii_port(dev)) {
+		int port = ksz_get_sgmii_port(dev);
+		struct ksz_port *p = &dev->ports[port];
+		struct dw_xpcs *xpcs;
+		struct mii_bus *bus;
+		int ret;
+
+		bus = devm_mdiobus_alloc(dev->dev);
+		if (!bus)
+			return -ENOMEM;
+
+		bus->name = "ksz_pcs_mdio_bus";
+		snprintf(bus->id, MII_BUS_ID_SIZE, "%s-pcs",
+			 dev_name(dev->dev));
+		bus->read_c45 = &ksz9477_pcs_read;
+		bus->write_c45 = &ksz9477_pcs_write;
+		bus->parent = dev->dev;
+		bus->phy_mask = ~0;
+		bus->priv = dev;
+
+		ret = devm_mdiobus_register(dev->dev, bus);
+		if (ret)
+			return ret;
+
+		xpcs = xpcs_create_mdiodev(bus, 0);
+		if (IS_ERR(xpcs))
+			return PTR_ERR(xpcs);
+
+		xpcs_set_quirk(xpcs, DW_XPCS_QUIRK_MICROCHIP_KSZ);
+		p->xpcs = xpcs;
+		port_sgmii_reset(dev, port);
+	}
+	return 0;
 }
 
 int ksz9477_reset_switch(struct ksz_device *dev)
@@ -978,6 +1085,13 @@ void ksz9477_get_caps(struct ksz_device *dev, int port,
 
 	if (dev->info->gbit_capable[port])
 		config->mac_capabilities |= MAC_1000FD;
+
+	if (ksz_is_sgmii_port(dev, port)) {
+		__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+			  config->supported_interfaces);
+		__set_bit(PHY_INTERFACE_MODE_SGMII,
+			  config->supported_interfaces);
+	}
 }
 
 int ksz9477_set_ageing_time(struct ksz_device *dev, unsigned int msecs)
