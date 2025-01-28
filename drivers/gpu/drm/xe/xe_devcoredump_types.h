@@ -58,7 +58,7 @@ struct xe_devcoredump_snapshot {
 	 * this single-node tracker works because devcoredump will always only
 	 * produce one hw-engine capture per devcoredump event
 	 */
-	struct __guc_capture_parsed_output *matched_node;
+	struct xe_guc_capture_snapshot *matched_node;
 	/** @vm: Snapshot of VM state */
 	struct xe_vm_snapshot *vm;
 
