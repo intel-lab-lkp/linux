@@ -2187,7 +2187,6 @@ static int vop_bind(struct device *dev, struct device *master, void *data)
 	const struct vop_data *vop_data;
 	struct drm_device *drm_dev = data;
 	struct vop *vop;
-	struct resource *res;
 	int ret, irq;
 
 	vop_data = of_device_get_match_data(dev);
@@ -2207,8 +2206,7 @@ static int vop_bind(struct device *dev, struct device *master, void *data)
 
 	vop_win_init(vop);
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	vop->regs = devm_ioremap_resource(dev, res);
+	vop->regs = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(vop->regs))
 		return PTR_ERR(vop->regs);
 	vop->len = resource_size(res);
