@@ -768,6 +768,14 @@ static int xpcs_config_aneg_c37_1000basex(struct dw_xpcs *xpcs,
 		val |= DW_VR_MII_AN_INTR_EN;
 	}
 
+	if (xpcs->quirk == DW_XPCS_QUIRK_MICROCHIP_KSZ &&
+	    neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED) {
+		mask |= DW_VR_MII_SGMII_LINK_STS | DW_VR_MII_TX_CONFIG_MASK;
+		val |= FIELD_PREP(DW_VR_MII_TX_CONFIG_MASK,
+				  DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII);
+		val |= DW_VR_MII_SGMII_LINK_STS;
+	}
+
 	ret = xpcs_modify(xpcs, MDIO_MMD_VEND2, DW_VR_MII_AN_CTRL, mask, val);
 	if (ret < 0)
 		return ret;
@@ -982,6 +990,15 @@ static int xpcs_get_state_c37_sgmii(struct dw_xpcs *xpcs,
 	if (ret < 0)
 		return ret;
 
+	/* DW_VR_MII_AN_STS_C37_ANCMPLT_INTR just means link change in SGMII
+	 * mode, so needs to be cleared.  It can appear just by itself, which
+	 * does not mean the link is up.
+	 */
+	if (xpcs->quirk == DW_XPCS_QUIRK_MICROCHIP_KSZ &&
+	    (ret & DW_VR_MII_AN_STS_C37_ANCMPLT_INTR)) {
+		ret &= ~DW_VR_MII_AN_STS_C37_ANCMPLT_INTR;
+		xpcs_write(xpcs, MDIO_MMD_VEND2, DW_VR_MII_AN_INTR_STS, 0);
+	}
 	if (ret & DW_VR_MII_C37_ANSGM_SP_LNKSTS) {
 		int speed_value;
 
@@ -1037,6 +1054,18 @@ static int xpcs_get_state_c37_1000basex(struct dw_xpcs *xpcs,
 {
 	int lpa, bmsr;
 
+	/* DW_VR_MII_AN_STS_C37_ANCMPLT_INTR just means link change, so needs
+	 * to be cleared.  If polling is not used then it is cleared by
+	 * following code.
+	 */
+	if (xpcs->quirk == DW_XPCS_QUIRK_MICROCHIP_KSZ && xpcs->pcs.poll) {
+		int val;
+
+		val = xpcs_read(xpcs, MDIO_MMD_VEND2, DW_VR_MII_AN_INTR_STS);
+		if (val & DW_VR_MII_AN_STS_C37_ANCMPLT_INTR)
+			xpcs_write(xpcs, MDIO_MMD_VEND2, DW_VR_MII_AN_INTR_STS,
+				   0);
+	}
 	if (linkmode_test_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
 			      state->advertising)) {
 		/* Reset link state */
@@ -1138,9 +1167,14 @@ static void xpcs_link_up_sgmii_1000basex(struct dw_xpcs *xpcs,
 					 phy_interface_t interface,
 					 int speed, int duplex)
 {
+	u16 val = 0;
 	int ret;
 
-	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+	/* Microchip KSZ SGMII implementation has a bug that needs MII_BMCR
+	 * register to be updated with current speed to pass traffic.
+	 */
+	if (xpcs->quirk != DW_XPCS_QUIRK_MICROCHIP_KSZ &&
+	    neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
 		return;
 
 	if (interface == PHY_INTERFACE_MODE_1000BASEX) {
@@ -1155,10 +1189,18 @@ static void xpcs_link_up_sgmii_1000basex(struct dw_xpcs *xpcs,
 			dev_err(&xpcs->mdiodev->dev,
 				"%s: half duplex not supported\n",
 				__func__);
+
+		/* No need to update MII_BMCR register if not in SGMII mode. */
+		if (xpcs->quirk == DW_XPCS_QUIRK_MICROCHIP_KSZ &&
+		    neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+			return;
 	}
 
+	if (xpcs->quirk == DW_XPCS_QUIRK_MICROCHIP_KSZ &&
+	    neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+		val = BMCR_ANENABLE;
 	ret = xpcs_write(xpcs, MDIO_MMD_VEND2, MII_BMCR,
-			 mii_bmcr_encode_fixed(speed, duplex));
+			 val | mii_bmcr_encode_fixed(speed, duplex));
 	if (ret)
 		dev_err(&xpcs->mdiodev->dev, "%s: xpcs_write returned %pe\n",
 			__func__, ERR_PTR(ret));
@@ -1562,6 +1604,12 @@ void xpcs_destroy_pcs(struct phylink_pcs *pcs)
 	xpcs_destroy(phylink_pcs_to_xpcs(pcs));
 }
 EXPORT_SYMBOL_GPL(xpcs_destroy_pcs);
+
+void xpcs_set_quirk(struct dw_xpcs *xpcs, int quirk)
+{
+	xpcs->quirk = quirk;
+}
+EXPORT_SYMBOL_GPL(xpcs_set_quirk);
 
 MODULE_DESCRIPTION("Synopsys DesignWare XPCS library");
 MODULE_LICENSE("GPL v2");

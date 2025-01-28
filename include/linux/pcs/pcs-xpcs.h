@@ -41,6 +41,10 @@ enum dw_xpcs_pma_id {
 	WX_TXGBE_XPCS_PMA_10G_ID = 0x0018fc80,
 };
 
+enum dw_xpcs_quirks {
+	DW_XPCS_QUIRK_MICROCHIP_KSZ = 1,
+};
+
 struct dw_xpcs_info {
 	u32 pcs;
 	u32 pma;
@@ -58,5 +62,7 @@ void xpcs_destroy(struct dw_xpcs *xpcs);
 
 struct phylink_pcs *xpcs_create_pcs_mdiodev(struct mii_bus *bus, int addr);
 void xpcs_destroy_pcs(struct phylink_pcs *pcs);
+
+void xpcs_set_quirk(struct dw_xpcs *xpcs, int quirk);
 
 #endif /* __LINUX_PCS_XPCS_H */

@@ -73,6 +73,7 @@
 
 /* VR_MII_AN_CTRL */
 #define DW_VR_MII_AN_CTRL_8BIT			BIT(8)
+#define DW_VR_MII_SGMII_LINK_STS		BIT(4)
 #define DW_VR_MII_TX_CONFIG_MASK		BIT(3)
 #define DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII	0x1
 #define DW_VR_MII_TX_CONFIG_MAC_SIDE_SGMII	0x0
@@ -122,6 +123,7 @@ struct dw_xpcs {
 	struct phylink_pcs pcs;
 	phy_interface_t interface;
 	bool need_reset;
+	int quirk;
 };
 
 int xpcs_read(struct dw_xpcs *xpcs, int dev, u32 reg);
