@@ -723,24 +723,39 @@ static int cgwb_create(struct backing_dev_info *bdi,
 	spin_lock_irqsave(&cgwb_lock, flags);
 	if (test_bit(WB_registered, &bdi->wb.state) &&
 	    blkcg_cgwb_list->next && memcg_cgwb_list->next) {
-		/* we might have raced another instance of this function */
-		ret = radix_tree_insert(&bdi->cgwb_tree, memcg_css->id, wb);
-		if (!ret) {
-			list_add_tail_rcu(&wb->bdi_node, &bdi->wb_list);
-			list_add(&wb->memcg_node, memcg_cgwb_list);
-			list_add(&wb->blkcg_node, blkcg_cgwb_list);
-			blkcg_pin_online(blkcg_css);
-			css_get(memcg_css);
-			css_get(blkcg_css);
+		/* Re-check under lock to handle races */
+		struct bdi_writeback *existing;
+
+		existing = radix_tree_lookup(&bdi->cgwb_tree, memcg_css->id);
+		if (existing) {
+			if (existing->blkcg_css != blkcg_css) {
+				cgwb_kill(existing);
+				existing = NULL;
+			} else {
+				ret = 0; /* Already exists, treat as success */
+			}
+		}
+
+		if (!existing) {
+			ret = radix_tree_insert(&bdi->cgwb_tree, memcg_css->id, wb);
+			if (!ret) {
+				list_add_tail_rcu(&wb->bdi_node, &bdi->wb_list);
+				list_add(&wb->memcg_node, memcg_cgwb_list);
+				list_add(&wb->blkcg_node, blkcg_cgwb_list);
+				blkcg_pin_online(blkcg_css);
+				css_get(memcg_css);
+				css_get(blkcg_css);
+			}
 		}
 	}
 	spin_unlock_irqrestore(&cgwb_lock, flags);
-	if (ret) {
-		if (ret == -EEXIST)
-			ret = 0;
+
+	if (!ret)
+		goto out_put;
+	if (ret == -EEXIST)
+		ret = 0; /* Lost race, another thread created the same wb */
+	else
 		goto err_fprop_exit;
-	}
-	goto out_put;
 
 err_fprop_exit:
 	bdi_put(bdi);
