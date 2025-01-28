@@ -450,11 +450,11 @@ void blk_mq_tagset_busy_iter(struct blk_mq_tag_set *tagset,
 }
 EXPORT_SYMBOL(blk_mq_tagset_busy_iter);
 
-static bool blk_mq_tagset_count_completed_rqs(struct request *rq, void *data)
+static bool blk_mq_tagset_count_inflight_rqs(struct request *rq, void *data)
 {
 	unsigned *count = data;
 
-	if (blk_mq_request_completed(rq))
+	if (blk_mq_rq_state(rq) == MQ_RQ_IN_FLIGHT)
 		(*count)++;
 	return true;
 }
@@ -472,7 +472,7 @@ void blk_mq_tagset_wait_completed_request(struct blk_mq_tag_set *tagset)
 		unsigned count = 0;
 
 		blk_mq_tagset_busy_iter(tagset,
-				blk_mq_tagset_count_completed_rqs, &count);
+				blk_mq_tagset_count_inflight_rqs, &count);
 		if (!count)
 			break;
 		msleep(5);
