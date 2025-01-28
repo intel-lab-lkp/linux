@@ -84,12 +84,16 @@ static DEFINE_SEQLOCK(mnt_ns_tree_lock);
 static struct rb_root mnt_ns_tree = RB_ROOT; /* protected by mnt_ns_tree_lock */
 static LIST_HEAD(mnt_ns_list); /* protected by mnt_ns_tree_lock */
 
+enum mount_kattr_flags_t {
+	MOUNT_KATTR_RECURSE		= (1 << 0),
+};
+
 struct mount_kattr {
 	unsigned int attr_set;
 	unsigned int attr_clr;
 	unsigned int propagation;
 	unsigned int lookup_flags;
-	bool recurse;
+	enum mount_kattr_flags_t kflags;
 	struct user_namespace *mnt_userns;
 	struct mnt_idmap *mnt_idmap;
 };
@@ -4579,7 +4583,7 @@ static int mount_setattr_prepare(struct mount_kattr *kattr, struct mount *mnt)
 				break;
 		}
 
-		if (!kattr->recurse)
+		if (!(kattr->kflags & MOUNT_KATTR_RECURSE))
 			return 0;
 	}
 
@@ -4640,7 +4644,7 @@ static void mount_setattr_commit(struct mount_kattr *kattr, struct mount *mnt)
 
 		if (kattr->propagation)
 			change_mnt_propagation(m, kattr->propagation);
-		if (!kattr->recurse)
+		if (!(kattr->kflags & MOUNT_KATTR_RECURSE))
 			break;
 	}
 	touch_mnt_namespace(mnt->mnt_ns);
@@ -4670,7 +4674,7 @@ static int do_mount_setattr(struct path *path, struct mount_kattr *kattr)
 		 */
 		namespace_lock();
 		if (kattr->propagation == MS_SHARED) {
-			err = invent_group_ids(mnt, kattr->recurse);
+			err = invent_group_ids(mnt, kattr->kflags & MOUNT_KATTR_RECURSE);
 			if (err) {
 				namespace_unlock();
 				return err;
@@ -4886,8 +4890,10 @@ SYSCALL_DEFINE5(mount_setattr, int, dfd, const char __user *, path,
 
 	kattr = (struct mount_kattr) {
 		.lookup_flags	= lookup_flags,
-		.recurse	= !!(flags & AT_RECURSIVE),
 	};
+
+	if (flags & AT_RECURSIVE)
+		kattr.kflags |= MOUNT_KATTR_RECURSE;
 
 	err = copy_mount_setattr(uattr, usize, &kattr);
 	if (err)
@@ -4918,9 +4924,10 @@ SYSCALL_DEFINE5(open_tree_attr, int, dfd, const char __user *, filename,
 
 	if (uattr) {
 		int ret;
-		struct mount_kattr kattr = {
-			.recurse = !!(flags & AT_RECURSIVE),
-		};
+		struct mount_kattr kattr = {};
+
+		if (flags & AT_RECURSIVE)
+			kattr.kflags |= MOUNT_KATTR_RECURSE;
 
 		ret = copy_mount_setattr(uattr, usize, &kattr);
 		if (ret)
