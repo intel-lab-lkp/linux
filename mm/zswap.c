@@ -1568,20 +1568,26 @@ bool zswap_store(struct folio *folio)
 
 		bytes = zswap_store_page(page, objcg, pool);
 		if (bytes < 0)
-			goto put_pool;
+			goto charge_zswap;
 		compressed_bytes += bytes;
 	}
 
-	if (objcg) {
-		obj_cgroup_charge_zswap(objcg, compressed_bytes);
+	if (objcg)
 		count_objcg_events(objcg, ZSWPOUT, nr_pages);
-	}
 
 	atomic_long_add(nr_pages, &zswap_stored_pages);
 	count_vm_events(ZSWPOUT, nr_pages);
 
 	ret = true;
 
+charge_zswap:
+	/*
+	 * Charge zswapped pages even when it failed to zswap the entire folio,
+	 * because zswap_entry_free() will uncharge them anyway.
+	 * Otherwise zswap charging will become inconsistent.
+	 */
+	if (objcg)
+		obj_cgroup_charge_zswap(objcg, compressed_bytes);
 put_pool:
 	zswap_pool_put(pool);
 put_objcg:
