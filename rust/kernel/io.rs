@@ -15,6 +15,11 @@ use crate::{bindings, build_assert};
 /// Instead, the bus specific MMIO implementation must convert this raw representation into an `Io`
 /// instance providing the actual memory accessors. Only by the conversion into an `Io` structure
 /// any guarantees are given.
+///
+/// # Invariant
+///
+/// - `maxsize` is larger or equal to `SIZE`.
+/// - `addr + maxsize` is always smaller then [`usize::MAX`] so that it fits in virtual memory.
 pub struct IoRaw<const SIZE: usize = 0> {
     addr: usize,
     maxsize: usize,
@@ -23,23 +28,75 @@ pub struct IoRaw<const SIZE: usize = 0> {
 impl<const SIZE: usize> IoRaw<SIZE> {
     /// Returns a new `IoRaw` instance on success, an error otherwise.
     pub fn new(addr: usize, maxsize: usize) -> Result<Self> {
-        if maxsize < SIZE {
+        if maxsize < SIZE || addr.checked_add(maxsize).is_none() {
             return Err(EINVAL);
         }
 
+        // INVARIANT: `maxsize` is at least `SIZE`, `addr + maxsize` is not wrapping.
         Ok(Self { addr, maxsize })
     }
 
     /// Returns the base address of the MMIO region.
     #[inline]
-    pub fn addr(&self) -> usize {
+    pub const fn addr(&self) -> usize {
         self.addr
     }
 
     /// Returns the maximum size of the MMIO region.
     #[inline]
-    pub fn maxsize(&self) -> usize {
+    pub const fn maxsize(&self) -> usize {
         self.maxsize
+    }
+
+    /// Check if the offset plus the size of the type `U` fits in the bounds of `size`.
+    /// Also checks if the offset is aligned with the type size.
+    #[inline]
+    const fn offset_valid<U>(offset: usize, size: usize) -> bool {
+        let type_size = core::mem::size_of::<U>();
+        if let Some(end) = offset.checked_add(type_size) {
+            end <= size && offset % type_size == 0
+        } else {
+            false
+        }
+    }
+
+    /// Check if the offset (plus the type size) is out of bounds.
+    ///
+    /// Runtime checked version of [`io_addr_assert`].
+    ///
+    /// See [`offset_valid`] for the performed offset check.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EINVAL`] if the type does not fit into [`IoRaw`] at the given offset.
+    ///
+    /// [`offset_valid`]: Self::offset_valid
+    /// [`io_addr_assert`]: Self::io_addr_assert
+    #[inline]
+    fn io_addr<U>(&self, offset: usize) -> Result<usize> {
+        if !Self::offset_valid::<U>(offset, self.maxsize()) {
+            return Err(EINVAL);
+        }
+
+        // SAFETY: by the invariant of `IoRaw` this cannot overflow.
+        Ok(unsafe { self.addr().unchecked_add(offset) })
+    }
+
+    /// Check at build time if the offset (plus the type size) is out of bounds.
+    ///
+    /// Compiletime checked version of [`io_addr`].
+    ///
+    /// See [`offset_valid`] for the performed offset check.
+    ///
+    ///
+    /// [`offset_valid`]: Self::offset_valid
+    /// [`io_addr`]: Self::io_addr
+    #[inline]
+    const fn io_addr_assert<U>(&self, offset: usize) -> usize {
+        build_assert!(Self::offset_valid::<U>(offset, SIZE));
+
+        // SAFETY: by the invariant of `IoRaw` this cannot overflow.
+        unsafe { self.addr().unchecked_add(offset) }
     }
 }
 
@@ -116,7 +173,7 @@ macro_rules! define_read {
         $(#[$attr])*
         #[inline]
         pub fn $name(&self, offset: usize) -> $type_name {
-            let addr = self.io_addr_assert::<$type_name>(offset);
+            let addr = self.0.io_addr_assert::<$type_name>(offset);
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
             unsafe { bindings::$name(addr as _) }
@@ -128,7 +185,7 @@ macro_rules! define_read {
         /// out of bounds.
         $(#[$attr])*
         pub fn $try_name(&self, offset: usize) -> Result<$type_name> {
-            let addr = self.io_addr::<$type_name>(offset)?;
+            let addr = self.0.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
             Ok(unsafe { bindings::$name(addr as _) })
@@ -145,7 +202,7 @@ macro_rules! define_write {
         $(#[$attr])*
         #[inline]
         pub fn $name(&self, value: $type_name, offset: usize) {
-            let addr = self.io_addr_assert::<$type_name>(offset);
+            let addr = self.0.io_addr_assert::<$type_name>(offset);
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
             unsafe { bindings::$name(value, addr as _, ) }
@@ -157,7 +214,7 @@ macro_rules! define_write {
         /// out of bounds.
         $(#[$attr])*
         pub fn $try_name(&self, value: $type_name, offset: usize) -> Result {
-            let addr = self.io_addr::<$type_name>(offset)?;
+            let addr = self.0.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
             unsafe { bindings::$name(value, addr as _) }
@@ -188,34 +245,6 @@ impl<const SIZE: usize> Io<SIZE> {
     #[inline]
     pub fn maxsize(&self) -> usize {
         self.0.maxsize()
-    }
-
-    #[inline]
-    const fn offset_valid<U>(offset: usize, size: usize) -> bool {
-        let type_size = core::mem::size_of::<U>();
-        if let Some(end) = offset.checked_add(type_size) {
-            end <= size && offset % type_size == 0
-        } else {
-            false
-        }
-    }
-
-    #[inline]
-    fn io_addr<U>(&self, offset: usize) -> Result<usize> {
-        if !Self::offset_valid::<U>(offset, self.maxsize()) {
-            return Err(EINVAL);
-        }
-
-        // Probably no need to check, since the safety requirements of `Self::new` guarantee that
-        // this can't overflow.
-        self.addr().checked_add(offset).ok_or(EINVAL)
-    }
-
-    #[inline]
-    fn io_addr_assert<U>(&self, offset: usize) -> usize {
-        build_assert!(Self::offset_valid::<U>(offset, SIZE));
-
-        self.addr() + offset
     }
 
     define_read!(readb, try_readb, u8);
