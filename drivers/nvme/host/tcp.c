@@ -1257,8 +1257,8 @@ done:
 	if (ret == -EAGAIN) {
 		ret = 0;
 	} else if (ret < 0) {
-		dev_err(queue->ctrl->ctrl.device,
-			"failed to send request %d\n", ret);
+		dev_err_ratelimited(queue->ctrl->ctrl.device,
+				    "failed to send request %d\n", ret);
 		nvme_tcp_fail_request(queue->request);
 		nvme_tcp_done_send_req(queue);
 	}
