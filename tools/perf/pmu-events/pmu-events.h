@@ -45,6 +45,11 @@ struct pmu_event {
 	const char *desc;
 	const char *topic;
 	const char *long_desc;
+	/**
+	 * The list of counter(s) the event could be collected on.
+	 * eg., "0,1,2,3,4,5,6,7".
+	 */
+	const char *counters_list;
 	const char *pmu;
 	const char *unit;
 	bool perpkg;
@@ -67,8 +72,18 @@ struct pmu_metric {
 	enum metric_event_groups event_grouping;
 };
 
+struct pmu_layout {
+	const char *pmu;
+	const char *desc;
+	/** Total number of generic counters*/
+	int counters_num_gp;
+	/** Total number of fixed counters. Set to zero if no fixed counter on the unit.*/
+	int counters_num_fixed;
+};
+
 struct pmu_events_table;
 struct pmu_metrics_table;
+struct pmu_layouts_table;
 
 #define PMU_EVENTS__NOT_FOUND -1000
 
@@ -78,6 +93,9 @@ typedef int (*pmu_event_iter_fn)(const struct pmu_event *pe,
 
 typedef int (*pmu_metric_iter_fn)(const struct pmu_metric *pm,
 				  const struct pmu_metrics_table *table,
+				  void *data);
+
+typedef int (*pmu_layout_iter_fn)(const struct pmu_layout *pm,
 				  void *data);
 
 int pmu_events_table__for_each_event(const struct pmu_events_table *table,
@@ -92,10 +110,13 @@ int pmu_events_table__for_each_event(const struct pmu_events_table *table,
  * search of all tables.
  */
 int pmu_events_table__find_event(const struct pmu_events_table *table,
-                                 struct perf_pmu *pmu,
-                                 const char *name,
-                                 pmu_event_iter_fn fn,
-				 void *data);
+				struct perf_pmu *pmu,
+				const char *name,
+				pmu_event_iter_fn fn,
+				void *data);
+int pmu_layouts_table__for_each_layout(const struct pmu_layouts_table *table,
+					pmu_layout_iter_fn fn,
+					void *data);
 size_t pmu_events_table__num_events(const struct pmu_events_table *table,
 				    struct perf_pmu *pmu);
 
@@ -104,10 +125,13 @@ int pmu_metrics_table__for_each_metric(const struct pmu_metrics_table *table, pm
 
 const struct pmu_events_table *perf_pmu__find_events_table(struct perf_pmu *pmu);
 const struct pmu_metrics_table *pmu_metrics_table__find(void);
+const struct pmu_layouts_table *perf_pmu__find_layouts_table(void);
 const struct pmu_events_table *find_core_events_table(const char *arch, const char *cpuid);
 const struct pmu_metrics_table *find_core_metrics_table(const char *arch, const char *cpuid);
+const struct pmu_layouts_table *find_core_layouts_table(const char *arch, const char *cpuid);
 int pmu_for_each_core_event(pmu_event_iter_fn fn, void *data);
 int pmu_for_each_core_metric(pmu_metric_iter_fn fn, void *data);
+int pmu_for_each_core_layout(pmu_layout_iter_fn fn, void *data);
 
 const struct pmu_events_table *find_sys_events_table(const char *name);
 const struct pmu_metrics_table *find_sys_metrics_table(const char *name);
