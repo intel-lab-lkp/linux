@@ -25,6 +25,7 @@
 #include "xe_gt_mcr.h"
 #include "xe_gt_topology.h"
 #include "xe_guc_capture.h"
+#include "xe_guc_capture_snapshot_types.h"
 #include "xe_hw_engine_group.h"
 #include "xe_hw_fence.h"
 #include "xe_irq.h"
@@ -867,21 +868,19 @@ xe_hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
 		return snapshot;
 
 	if (q) {
-		/* If got guc capture, set source to GuC */
-		node = xe_guc_capture_get_matching_and_lock(q);
-		if (node) {
-			struct xe_device *xe = gt_to_xe(hwe->gt);
-			struct xe_devcoredump *coredump = &xe->devcoredump;
-
-			coredump->snapshot.matched_node = node;
-			xe_gt_dbg(hwe->gt, "Found and locked GuC-err-capture node");
-			return snapshot;
+		/* First, retrieve the manual GuC-Error-Capture node if it exists */
+		node = xe_guc_capture_get_matching_and_lock(q, XE_ENGINE_CAPTURE_SOURCE_MANUAL);
+		/* Find preferred node type sourced from firmware if available */
+		snapshot->matched_node = xe_guc_capture_get_matching_and_lock(q, XE_ENGINE_CAPTURE_SOURCE_GUC);
+		if (!snapshot->matched_node) {
+			xe_gt_dbg(hwe->gt, "No fw sourced GuC-Err-Capture for queue %s", q->name);
+			snapshot->matched_node = node;
+		} else if (node) {
+			xe_guc_capture_put_matched_nodes(&hwe->gt->uc.guc, node);
 		}
+		if (!snapshot->matched_node)
+			xe_gt_warn(hwe->gt, "Can't retrieve any GuC-Err-Capture node");
 	}
-
-	/* otherwise, do manual capture */
-	xe_engine_manual_capture(hwe, snapshot);
-	xe_gt_dbg(hwe->gt, "Proceeding with manual engine snapshot");
 
 	return snapshot;
 }
@@ -900,12 +899,7 @@ void xe_hw_engine_snapshot_free(struct xe_hw_engine_snapshot *snapshot)
 		return;
 
 	gt = snapshot->hwe->gt;
-	/*
-	 * xe_guc_capture_put_matched_nodes is called here and from
-	 * xe_devcoredump_snapshot_free, to cover the 2 calling paths
-	 * of hw_engines - debugfs and devcoredump free.
-	 */
-	xe_guc_capture_put_matched_nodes(&gt->uc.guc);
+	xe_guc_capture_put_matched_nodes(&gt->uc.guc, snapshot->matched_node);
 
 	kfree(snapshot->name);
 	kfree(snapshot);
