@@ -294,8 +294,8 @@ static int ethnl_set_tsconfig(struct ethnl_req_info *req_base,
 	struct nlattr **tb = info->attrs;
 	int ret;
 
-	BUILD_BUG_ON(__HWTSTAMP_TX_CNT >= 32);
-	BUILD_BUG_ON(__HWTSTAMP_FILTER_CNT >= 32);
+	BUILD_BUG_ON(__HWTSTAMP_TX_CNT > 32);
+	BUILD_BUG_ON(__HWTSTAMP_FILTER_CNT > 32);
 
 	if (!netif_device_present(dev))
 		return -ENODEV;
