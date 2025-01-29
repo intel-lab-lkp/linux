@@ -1096,6 +1096,9 @@ static struct mon_evt mbm_local_event = {
  * Note that MBM events are also part of RDT_RESOURCE_L3 resource
  * because as per the SDM the total and local memory bandwidth
  * are enumerated as part of L3 monitoring.
+ *
+ * mon_put_default_kn_priv_all() also assumes monitor events are only supported
+ * on the L3 resource.
  */
 static void l3_mon_evt_init(struct rdt_resource *r)
 {
