@@ -332,6 +332,9 @@ skip_parse:
 
 			goto skip_reduce_power;
 		}
+	} else {
+		/* see iwl_uefi_get_reduced_power() to check why */
+		len = IWL_HARDCODED_REDUCE_POWER_SIZE;
 	}
 
 	ret = iwl_trans_set_reduce_power(trans, data, len);
