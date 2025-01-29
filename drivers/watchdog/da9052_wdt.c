@@ -45,6 +45,21 @@ static const struct {
 	{ 7, 131 },
 };
 
+static void da9052_wdt_wait_for_twdmin(struct watchdog_device *wdt_dev)
+{
+	struct da9052_wdt_data *driver_data = watchdog_get_drvdata(wdt_dev);
+	unsigned long msecs, twdmin, jnow = jiffies;
+
+	/*
+	 * The host must wait at least TWDMIN ms between writings to the watchdog
+	 * register or the DA9052 will assert TWD_ERROR and power down to RESET mode.
+	 */
+	twdmin  = driver_data->jpast + msecs_to_jiffies(DA9052_TWDMIN);
+	if (time_before(jnow, twdmin)) {
+		msecs = jiffies_to_msecs(twdmin - jnow);
+		mdelay(msecs);
+	}
+}
 
 static int da9052_wdt_set_timeout(struct watchdog_device *wdt_dev,
 				  unsigned int timeout)
@@ -53,6 +68,7 @@ static int da9052_wdt_set_timeout(struct watchdog_device *wdt_dev,
 	struct da9052 *da9052 = driver_data->da9052;
 	int ret, i;
 
+	da9052_wdt_wait_for_twdmin(wdt_dev);
 	/*
 	 * Disable the Watchdog timer before setting
 	 * new time out.
@@ -89,8 +105,8 @@ static int da9052_wdt_set_timeout(struct watchdog_device *wdt_dev,
 		}
 
 		wdt_dev->timeout = timeout;
-		driver_data->jpast = jiffies;
 	}
+	driver_data->jpast = jiffies;
 
 	return 0;
 }
@@ -109,16 +125,9 @@ static int da9052_wdt_ping(struct watchdog_device *wdt_dev)
 {
 	struct da9052_wdt_data *driver_data = watchdog_get_drvdata(wdt_dev);
 	struct da9052 *da9052 = driver_data->da9052;
-	unsigned long msec, jnow = jiffies;
 	int ret;
 
-	/*
-	 * We have a minimum time for watchdog window called TWDMIN. A write
-	 * to the watchdog before this elapsed time should cause an error.
-	 */
-	msec = (jnow - driver_data->jpast) * 1000/HZ;
-	if (msec < DA9052_TWDMIN)
-		mdelay(msec);
+	da9052_wdt_wait_for_twdmin(wdt_dev);
 
 	/* Reset the watchdog timer */
 	ret = da9052_reg_update(da9052, DA9052_CONTROL_D_REG,
@@ -130,8 +139,11 @@ static int da9052_wdt_ping(struct watchdog_device *wdt_dev)
 	 * FIXME: Reset the watchdog core, in general PMIC
 	 * is supposed to do this
 	 */
-	return da9052_reg_update(da9052, DA9052_CONTROL_D_REG,
+	ret = da9052_reg_update(da9052, DA9052_CONTROL_D_REG,
 				 DA9052_CONTROLD_WATCHDOG, 0 << 7);
+
+	driver_data->jpast = jiffies;
+	return ret;
 }
 
 static const struct watchdog_info da9052_wdt_info = {
@@ -187,6 +199,7 @@ static int da9052_wdt_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	driver_data->jpast = jiffies;
 	return devm_watchdog_register_device(dev, &driver_data->wdt);
 }
 
