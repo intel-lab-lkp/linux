@@ -1280,6 +1280,10 @@ static int idpf_set_real_num_queues(struct idpf_vport *vport)
 static int idpf_up_complete(struct idpf_vport *vport)
 {
 	struct idpf_netdev_priv *np = netdev_priv(vport->netdev);
+	int err = idpf_set_real_num_queues(vport);
+
+	if (err)
+		return err;
 
 	if (vport->link_up && !netif_carrier_ok(vport->netdev)) {
 		netif_carrier_on(vport->netdev);
@@ -1913,10 +1917,6 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 	if (reset_cause == IDPF_SR_Q_CHANGE)
 		idpf_vport_alloc_vec_indexes(vport);
 
-	err = idpf_set_real_num_queues(vport);
-	if (err)
-		goto err_open;
-
 	if (current_state == __IDPF_VPORT_UP)
 		err = idpf_vport_open(vport);
 
@@ -1928,7 +1928,6 @@ err_reset:
 	idpf_send_add_queues_msg(vport, vport->num_txq, vport->num_complq,
 				 vport->num_rxq, vport->num_bufq);
 
-err_open:
 	if (current_state == __IDPF_VPORT_UP)
 		idpf_vport_open(vport);
 
