@@ -2253,9 +2253,10 @@ static int uvc_probe(struct usb_interface *intf,
 	}
 
 	/* Parse the associated GPIOs. */
-	if (uvc_gpio_parse(dev) < 0) {
+	ret = uvc_gpio_parse(dev);
+	if (ret < 0) {
 		uvc_dbg(dev, PROBE, "Unable to parse UVC GPIOs\n");
-		goto error;
+		goto error_retcode;
 	}
 
 	dev_info(&dev->udev->dev, "Found UVC %u.%02x device %s (%04x:%04x)\n",
@@ -2328,9 +2329,11 @@ static int uvc_probe(struct usb_interface *intf,
 	return 0;
 
 error:
+	ret = -ENODEV;
+error_retcode:
 	uvc_unregister_video(dev);
 	kref_put(&dev->ref, uvc_delete);
-	return -ENODEV;
+	return ret;
 }
 
 static void uvc_disconnect(struct usb_interface *intf)
