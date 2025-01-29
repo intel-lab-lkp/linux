@@ -380,6 +380,8 @@ struct kvm_arch {
 	 * the associated pKVM instance in the hypervisor.
 	 */
 	struct kvm_protected_vm pkvm;
+
+	unsigned long vm_type;
 };
 
 struct kvm_vcpu_fault_info {
@@ -1528,5 +1530,13 @@ void kvm_set_vm_id_reg(struct kvm *kvm, u32 reg, u64 val);
 
 #define kvm_has_s1poe(k)				\
 	(kvm_has_feat((k), ID_AA64MMFR3_EL1, S1POE, IMP))
+
+#define kvm_arch_has_private_mem(kvm)			\
+	(IS_ENABLED(CONFIG_KVM_PRIVATE_MEM) &&		\
+	 ((kvm)->arch.vm_type & KVM_VM_TYPE_ARM_SW_PROTECTED))
+
+#define kvm_arch_gmem_supports_shared_mem(kvm)		\
+	(IS_ENABLED(CONFIG_KVM_GMEM_SHARED_MEM) &&	\
+	 ((kvm)->arch.vm_type & KVM_VM_TYPE_ARM_SW_PROTECTED))
 
 #endif /* __ARM64_KVM_HOST_H__ */
