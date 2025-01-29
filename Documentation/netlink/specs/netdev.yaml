@@ -286,6 +286,8 @@ attribute-sets:
       -
         name: type
         doc: Queue type as rx, tx. Each queue type defines a separate ID space.
+             XDP TX queues allocated in the kernel are not linked to NAPIs and
+             thus not listed. AF_XDP queues have the xsk attribute set.
         type: u32
         enum: queue-type
       -
@@ -296,7 +298,12 @@ attribute-sets:
         name: dmabuf
         doc: ID of the dmabuf attached to this queue, if any.
         type: u32
-
+      -
+        name: xsk
+        doc: Non-zero for queues which are used for XSK (AF_XDP), 0 otherwise.
+        type: u32
+        checks:
+          max: 1
   -
     name: qstats
     doc: |
@@ -637,6 +644,7 @@ operations:
             - napi-id
             - ifindex
             - dmabuf
+            - xsk
       dump:
         request:
           attributes:

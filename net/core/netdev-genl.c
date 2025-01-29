@@ -394,11 +394,17 @@ netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 		    nla_put_u32(rsp, NETDEV_A_QUEUE_DMABUF, binding->id))
 			goto nla_put_failure;
 
+		if (nla_put_u32(rsp, NETDEV_A_QUEUE_XSK, !!rxq->pool))
+			goto nla_put_failure;
+
 		break;
 	case NETDEV_QUEUE_TYPE_TX:
 		txq = netdev_get_tx_queue(netdev, q_idx);
 		if (txq->napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
 					     txq->napi->napi_id))
+			goto nla_put_failure;
+
+		if (nla_put_u32(rsp, NETDEV_A_QUEUE_XSK, !!txq->pool))
 			goto nla_put_failure;
 	}
 
