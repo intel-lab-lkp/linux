@@ -1450,8 +1450,8 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		if (RPC_SIGNALLED(task))
 			goto need_restart;
 		cb->cb_seq_status = 1;
-		if (rpc_restart_call(task))
-			rpc_delay(task, 2 * HZ);
+		rpc_restart_call(task);
+		rpc_delay(task, 2 * HZ);
 		return false;
 	case -NFS4ERR_SEQ_MISORDERED:
 		/*
