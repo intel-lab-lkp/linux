@@ -29,8 +29,6 @@ static const struct file_operations name## _ops = {			\
 	.llseek = generic_file_llseek,					\
 }
 
-DEBUGFS_READONLY_FILE(rts_threshold, 20, "%d",
-		      wiphy->rts_threshold);
 DEBUGFS_READONLY_FILE(fragmentation_threshold, 20, "%d",
 		      wiphy->frag_threshold);
 DEBUGFS_READONLY_FILE(short_retry_limit, 20, "%d",
@@ -93,6 +91,39 @@ static ssize_t ht40allow_map_read(struct file *file,
 
 static const struct file_operations ht40allow_map_ops = {
 	.read = ht40allow_map_read,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
+static ssize_t rts_threshold_read(struct file *file, char __user *user_buf,
+				  size_t count, loff_t *ppos)
+{
+	unsigned int buf_size = PAGE_SIZE, res = 0, i;
+	struct wiphy *wiphy = file->private_data;
+	char *buf;
+	ssize_t r;
+
+	buf = kzalloc(buf_size, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (wiphy->n_radio) {
+		for (i = 0; i < wiphy->n_radio; i++)
+			res += scnprintf(buf, buf_size, "%d\n",
+					 wiphy->radio_cfg[i].rts_threshold);
+	} else {
+		res = scnprintf(buf, buf_size, "%d\n", wiphy->rts_threshold);
+	}
+
+	r = simple_read_from_buffer(user_buf, count, ppos, buf, res);
+
+	kfree(buf);
+
+	return r;
+}
+
+static const struct file_operations rts_threshold_ops = {
+	.read = rts_threshold_read,
 	.open = simple_open,
 	.llseek = default_llseek,
 };

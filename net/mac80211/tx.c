@@ -680,6 +680,7 @@ ieee80211_tx_h_rate_ctrl(struct ieee80211_tx_data *tx)
 	struct ieee80211_hdr *hdr = (void *)tx->skb->data;
 	struct ieee80211_supported_band *sband;
 	u32 len;
+	u8 i;
 	struct ieee80211_tx_rate_control txrc;
 	struct ieee80211_sta_rates *ratetbl = NULL;
 	bool encap = info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP;
@@ -715,8 +716,14 @@ ieee80211_tx_h_rate_ctrl(struct ieee80211_tx_data *tx)
 		    tx->sdata->vif.type == NL80211_IFTYPE_OCB);
 
 	/* set up RTS protection if desired */
-	if (len > tx->local->hw.wiphy->rts_threshold) {
-		txrc.rts = true;
+	if (tx->local->hw.wiphy->n_radio) {
+		for (i = 0; i < tx->local->hw.wiphy->n_radio; i++) {
+			if (len > tx->local->hw.wiphy->radio_cfg[i].rts_threshold)
+				txrc.rts = true;
+		}
+	} else {
+		if (len > tx->local->hw.wiphy->rts_threshold)
+			txrc.rts = true;
 	}
 
 	info->control.use_rts = txrc.rts;
