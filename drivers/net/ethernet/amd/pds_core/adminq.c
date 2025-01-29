@@ -181,7 +181,10 @@ static int __pdsc_adminq_post(struct pdsc *pdsc,
 	else
 		avail -= q->head_idx + 1;
 	if (!avail) {
-		ret = -ENOSPC;
+		if (!pdsc_is_fw_running(pdsc))
+			ret = -ENXIO;
+		else
+			ret = -EAGAIN;
 		goto err_out_unlock;
 	}
 
@@ -251,14 +254,25 @@ int pdsc_adminq_post(struct pdsc *pdsc,
 	}
 
 	wc.qcq = &pdsc->adminqcq;
-	index = __pdsc_adminq_post(pdsc, &pdsc->adminqcq, cmd, comp, &wc);
+	time_start = jiffies;
+	time_limit = time_start + HZ * pdsc->devcmd_timeout;
+	do {
+		index = __pdsc_adminq_post(pdsc, &pdsc->adminqcq, cmd, comp,
+					   &wc);
+		if (index != -EAGAIN)
+			break;
+
+		dev_dbg(pdsc->dev, "Retrying adminq cmd opcode %u\n",
+			cmd->opcode);
+		/* Give completion processing a chance to free up space */
+		msleep(1);
+	} while (time_before(jiffies, time_limit));
+
 	if (index < 0) {
 		err = index;
 		goto err_out;
 	}
 
-	time_start = jiffies;
-	time_limit = time_start + HZ * pdsc->devcmd_timeout;
 	do {
 		/* Timeslice the actual wait to catch IO errors etc early */
 		poll_jiffies = msecs_to_jiffies(poll_interval);
