@@ -2118,6 +2118,7 @@ void mem_cgroup_handle_over_high(gfp_t gfp_mask)
 	unsigned long nr_reclaimed;
 	unsigned int nr_pages = current->memcg_nr_pages_over_high;
 	int nr_retries = MAX_RECLAIM_RETRIES;
+	int throttle_shift;
 	struct mem_cgroup *memcg;
 	bool in_retry = false;
 
@@ -2161,6 +2162,13 @@ retry_reclaim:
 
 	penalty_jiffies += calculate_high_delay(memcg, nr_pages,
 						swap_find_max_overage(memcg));
+
+	/*
+	 * Reduce penalty according to the high_throttle_shift value.
+	 */
+	throttle_shift = READ_ONCE(memcg->high_throttle_shift);
+	if (throttle_shift)
+		penalty_jiffies >>= throttle_shift;
 
 	/*
 	 * Clamp the max delay per usermode return so as to still keep the
@@ -4208,6 +4216,33 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static u64 memory_high_throttle_read(struct cgroup_subsys_state *css,
+				     struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return READ_ONCE(memcg->high_throttle_shift);
+}
+
+static ssize_t memory_high_throttle_write(struct kernfs_open_file *of,
+				char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	u64 val;
+	int err;
+
+	buf = strstrip(buf);
+	err = kstrtoull(buf, 10, &val);
+	if (err)
+		return err;
+
+	if (val > 32)
+		return -EINVAL;
+
+	WRITE_ONCE(memcg->high_throttle_shift, (int)val);
+	return nbytes;
+}
+
 /*
  * Note: don't forget to update the 'samples/cgroup/memcg_event_listener'
  * if any new events become available.
@@ -4431,6 +4466,12 @@ static struct cftype memory_files[] = {
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = memory_high_show,
 		.write = memory_high_write,
+	},
+	{
+		.name = "high.throttle",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.read_u64 = memory_high_throttle_read,
+		.write = memory_high_throttle_write,
 	},
 	{
 		.name = "max",

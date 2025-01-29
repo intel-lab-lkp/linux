@@ -1291,8 +1291,20 @@ PAGE_SIZE multiple when read back.
 	Going over the high limit never invokes the OOM killer and
 	under extreme conditions the limit may be breached. The high
 	limit should be used in scenarios where an external process
-	monitors the limited cgroup to alleviate heavy reclaim
-	pressure.
+	monitors the limited cgroup to alleviate heavy reclaim pressure
+	unless a high enough value is set in "memory.high.throttle".
+
+  memory.high.throttle
+	A read-write single value file which exists on non-root
+	cgroups.  The default is 0.
+
+	Memory usage throttle control.	This value controls the amount
+	of throttling that will be applied when memory consumption
+	exceeds the "memory.high" limit.  The larger the value is,
+	the smaller the amount of throttling will be and the easier an
+	offending application may get OOM killed.
+
+	The valid range of this control file is 0-32.
 
   memory.max
 	A read-write single value file which exists on non-root

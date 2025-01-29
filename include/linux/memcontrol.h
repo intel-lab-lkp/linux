@@ -199,6 +199,8 @@ struct mem_cgroup {
 	struct list_head swap_peaks;
 	spinlock_t	 peaks_lock;
 
+	int high_throttle_shift;
+
 	/* Range enforcement for interrupt charges */
 	struct work_struct high_work;
 
