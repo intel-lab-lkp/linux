@@ -1471,7 +1471,7 @@ int phy_attach_direct(struct net_device *dev, struct phy_device *phydev,
 	 * our own module->refcnt here, otherwise we would not be able to
 	 * unload later on.
 	 */
-	if (dev)
+	if (dev && dev->dev.parent)
 		ndev_owner = dev->dev.parent->driver->owner;
 	if (ndev_owner != bus->owner && !try_module_get(bus->owner)) {
 		phydev_err(phydev, "failed to get the bus module\n");
