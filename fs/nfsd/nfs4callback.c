@@ -1381,11 +1381,16 @@ static void nfsd4_cb_prepare(struct rpc_task *task, void *calldata)
 	rpc_call_start(task);
 }
 
+static bool cb_session_changed(struct nfsd4_callback *cb)
+{
+	return cb->cb_ses != rcu_access_pointer(cb->cb_clp->cl_cb_session);
+}
+
 static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback *cb)
 {
 	struct nfs4_client *clp = cb->cb_clp;
 	struct nfsd4_session *session = cb->cb_ses;
-	bool ret = true;
+	bool ret = false;
 
 	if (!clp->cl_minorversion) {
 		/*
@@ -1418,11 +1423,16 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		 * (sequence ID, cached reply) MUST NOT change.
 		 */
 		++session->se_cb_seq_nr[cb->cb_held_slot];
+		ret = true;
 		break;
 	case -ESERVERFAULT:
+		/*
+		 * Call succeeded, but CB_SEQUENCE reply failed sanity checks.
+		 * The client has gone insane. Mark the BC faulty, since there
+		 * isn't much else we can do.
+		 */
 		++session->se_cb_seq_nr[cb->cb_held_slot];
 		nfsd4_mark_cb_fault(cb->cb_clp);
-		ret = false;
 		break;
 	case 1:
 		/*
@@ -1433,39 +1443,67 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 		 */
 		fallthrough;
 	case -NFS4ERR_BADSESSION:
-		nfsd4_mark_cb_fault(cb->cb_clp);
-		ret = false;
+		/*
+		 * If the session hasn't changed, mark it faulty. Restart
+		 * the call.
+		 */
+		if (!cb_session_changed(cb))
+			nfsd4_mark_cb_fault(cb->cb_clp);
 		goto need_restart;
 	case -NFS4ERR_DELAY:
+		/*
+		 * If the rpc_clnt is being torn down, then we must restart
+		 * the call from scratch.
+		 */
+		if (RPC_SIGNALLED(task))
+			goto need_restart;
 		cb->cb_seq_status = 1;
-		if (!rpc_restart_call(task))
-			goto out;
-
-		rpc_delay(task, 2 * HZ);
+		if (rpc_restart_call(task))
+			rpc_delay(task, 2 * HZ);
 		return false;
-	case -NFS4ERR_BADSLOT:
-		goto retry_nowait;
 	case -NFS4ERR_SEQ_MISORDERED:
-		if (session->se_cb_seq_nr[cb->cb_held_slot] != 1) {
-			session->se_cb_seq_nr[cb->cb_held_slot] = 1;
+		/*
+		 * Reattempt once with seq_nr 1. If that fails, treat this
+		 * like BADSLOT.
+		 */
+		if (!cb_session_changed(cb)) {
+			if (session->se_cb_seq_nr[cb->cb_held_slot] != 1) {
+				session->se_cb_seq_nr[cb->cb_held_slot] = 1;
+				goto retry_nowait;
+			}
+		}
+		fallthrough;
+	case -NFS4ERR_BADSLOT:
+		/*
+		 * BADSLOT means that the client and server are out of sync
+		 * on the BC parameters. In this case, we want to mark the
+		 * backchannel faulty and then try it again, but _leak_ the
+		 * slot so no one uses it. If the callback session has
+		 * changed since then though, don't mark it.
+		 */
+		if (!cb_session_changed(cb)) {
+			nfsd4_mark_cb_fault(cb->cb_clp);
+			cb->cb_held_slot = -1;
 			goto retry_nowait;
 		}
-		break;
+		goto need_restart;
 	default:
 		nfsd4_mark_cb_fault(cb->cb_clp);
 	}
 	trace_nfsd_cb_free_slot(task, cb);
 	nfsd41_cb_release_slot(cb);
-
-	if (RPC_SIGNALLED(task))
-		goto need_restart;
-out:
 	return ret;
 retry_nowait:
-	if (rpc_restart_call_prepare(task))
-		ret = false;
-	goto out;
+	/*
+	 * RPC_SIGNALLED() means that the rpc_client is being torn down and
+	 * (possibly) recreated. Restart the call completely in that case.
+	 */
+	if (!RPC_SIGNALLED(task)) {
+		rpc_restart_call_prepare(task);
+		return false;
+	}
 need_restart:
+	nfsd41_cb_release_slot(cb);
 	if (!test_bit(NFSD4_CLIENT_CB_KILL, &clp->cl_flags)) {
 		trace_nfsd_cb_restart(clp, cb);
 		task->tk_status = 0;
