@@ -308,6 +308,13 @@ static pgoff_t kvm_gmem_get_index(struct kvm_memory_slot *slot, gfn_t gfn)
 }
 
 #ifdef CONFIG_KVM_GMEM_SHARED_MEM
+static bool kvm_gmem_is_shared(struct file *file, pgoff_t pgoff)
+{
+	struct kvm_gmem *gmem = file->private_data;
+
+	return kvm_arch_gmem_supports_shared_mem(gmem->kvm);
+}
+
 static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
 {
 	struct inode *inode = file_inode(vmf->vma->vm_file);
@@ -324,6 +331,12 @@ static vm_fault_t kvm_gmem_fault(struct vm_fault *vmf)
 
 	if (folio_test_hwpoison(folio)) {
 		ret = VM_FAULT_HWPOISON;
+		goto out_folio;
+	}
+
+	/* Must be called with folio lock held, i.e., after kvm_gmem_get_folio() */
+	if (!kvm_gmem_is_shared(vmf->vma->vm_file, vmf->pgoff)) {
+		ret = VM_FAULT_SIGBUS;
 		goto out_folio;
 	}
 
