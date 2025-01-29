@@ -1122,6 +1122,7 @@ static int setup_callback_client(struct nfs4_client *clp, struct nfs4_cb_conn *c
 	};
 	struct rpc_clnt *client;
 	const struct cred *cred;
+	int ret;
 
 	if (clp->cl_minorversion == 0) {
 		if (!clp->cl_cred.cr_principal &&
@@ -1137,7 +1138,9 @@ static int setup_callback_client(struct nfs4_client *clp, struct nfs4_cb_conn *c
 	} else {
 		if (!conn->cb_xprt || !ses)
 			return -EINVAL;
-		clp->cl_cb_session = ses;
+		if (!nfsd4_cb_get_session(ses))
+			return -EINVAL;
+		rcu_assign_pointer(clp->cl_cb_session, ses);
 		args.bc_xprt = conn->cb_xprt;
 		args.prognumber = clp->cl_cb_session->se_cb_prog;
 		args.protocol = conn->cb_xprt->xpt_class->xcl_ident |
@@ -1148,13 +1151,15 @@ static int setup_callback_client(struct nfs4_client *clp, struct nfs4_cb_conn *c
 	client = rpc_create(&args);
 	if (IS_ERR(client)) {
 		trace_nfsd_cb_setup_err(clp, PTR_ERR(client));
-		return PTR_ERR(client);
+		ret = PTR_ERR(client);
+		goto out_put_ses;
 	}
 	cred = get_backchannel_cred(clp, client, ses);
 	if (!cred) {
 		trace_nfsd_cb_setup_err(clp, -ENOMEM);
 		rpc_shutdown_client(client);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_put_ses;
 	}
 
 	if (clp->cl_minorversion != 0)
@@ -1166,6 +1171,12 @@ static int setup_callback_client(struct nfs4_client *clp, struct nfs4_cb_conn *c
 			    args.authflavor);
 	rcu_read_unlock();
 	return 0;
+out_put_ses:
+	if (clp->cl_minorversion != 0) {
+		rcu_assign_pointer(clp->cl_cb_session, NULL);
+		nfsd4_cb_put_session(ses);
+	}
+	return ret;
 }
 
 static void nfsd4_mark_cb_state(struct nfs4_client *clp, int newstate)
@@ -1529,11 +1540,15 @@ static void nfsd4_process_cb_update(struct nfsd4_callback *cb)
 	 * kill the old client:
 	 */
 	if (clp->cl_cb_client) {
+		struct nfsd4_session *ses;
+
 		trace_nfsd_cb_bc_shutdown(clp, cb);
 		rpc_shutdown_client(clp->cl_cb_client);
 		clp->cl_cb_client = NULL;
 		put_cred(clp->cl_cb_cred);
 		clp->cl_cb_cred = NULL;
+		ses = rcu_replace_pointer(clp->cl_cb_session, NULL, true);
+		nfsd4_cb_put_session(ses);
 	}
 	if (clp->cl_cb_conn.cb_xprt) {
 		svc_xprt_put(clp->cl_cb_conn.cb_xprt);
