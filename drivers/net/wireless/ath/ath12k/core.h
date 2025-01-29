@@ -567,9 +567,11 @@ struct ath12k_dbg_htt_stats {
 };
 
 struct ath12k_debug {
+	u32 rx_filter;
 	struct dentry *debugfs_pdev;
 	struct dentry *debugfs_pdev_symlink;
 	struct ath12k_dbg_htt_stats htt_stats;
+	bool extd_rx_stats;
 };
 
 struct ath12k_per_peer_tx_stats {

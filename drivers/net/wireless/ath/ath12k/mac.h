@@ -111,5 +111,7 @@ void ath12k_mac_get_any_chanctx_conf_iter(struct ieee80211_hw *hw,
 u16 ath12k_mac_he_convert_tones_to_ru_tones(u16 tones);
 enum nl80211_eht_ru_alloc ath12k_mac_eht_ru_tones_to_nl80211_eht_ru_alloc(u16 ru_tones);
 enum nl80211_eht_gi ath12k_mac_eht_gi_to_nl80211_eht_gi(u8 sgi);
-
+struct ath12k *ath12k_get_ar_by_vif(struct ieee80211_hw *hw,
+				    struct ieee80211_vif *vif,
+				    u8 link_id);
 #endif
