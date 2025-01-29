@@ -753,6 +753,8 @@ struct nfsd4_compound_state;
 struct nfsd_net;
 struct nfsd4_copy;
 
+bool nfsd4_cb_get_session(struct nfsd4_session *ses);
+void nfsd4_cb_put_session(struct nfsd4_session *ses);
 extern __be32 nfs4_preprocess_stateid_op(struct svc_rqst *rqstp,
 		struct nfsd4_compound_state *cstate, struct svc_fh *fhp,
 		stateid_t *stateid, int flags, struct nfsd_file **filp,

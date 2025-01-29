@@ -234,6 +234,35 @@ static void put_client_renew(struct nfs4_client *clp)
 	spin_unlock(&nn->client_lock);
 }
 
+/**
+ * nfsd4_cb_get_session - get a session reference for a callback
+ * @ses: session of which to get a reference
+ *
+ * Callbacks are different than client-driven RPCs. The caller doesn't
+ * need a reference to the nfs4_client, and doesn't want to renew the
+ * lease when putting the reference.
+ */
+bool nfsd4_cb_get_session(struct nfsd4_session *ses)
+{
+	if (is_session_dead(ses))
+		return false;
+	return atomic_inc_not_zero(&ses->se_ref);
+}
+
+/**
+ * nfsd4_cb_put_session - put a session reference for a callback
+ * @ses: session of which to put a reference
+ *
+ * Callbacks are different than client-driven RPCs. The caller doesn't
+ * need a reference to the nfs4_client, and doesn't want to renew the
+ * lease when putting the reference.
+ */
+void nfsd4_cb_put_session(struct nfsd4_session *ses)
+{
+	if (ses && atomic_dec_and_test(&ses->se_ref) && is_session_dead(ses))
+		free_session(ses);
+}
+
 static __be32 nfsd4_get_session_locked(struct nfsd4_session *ses)
 {
 	__be32 status;
@@ -254,8 +283,7 @@ static void nfsd4_put_session_locked(struct nfsd4_session *ses)
 
 	lockdep_assert_held(&nn->client_lock);
 
-	if (atomic_dec_and_test(&ses->se_ref) && is_session_dead(ses))
-		free_session(ses);
+	nfsd4_cb_put_session(ses);
 	put_client_renew_locked(clp);
 }
 
