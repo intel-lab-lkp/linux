@@ -37,6 +37,7 @@
 #include <linux/page_idle.h>
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
+#include <linux/kvm_host.h>
 
 #include "internal.h"
 
@@ -100,6 +101,10 @@ static void free_typed_folio(struct folio *folio)
 	case PGTY_hugetlb:
 		if (IS_ENABLED(CONFIG_HUGETLBFS))
 			free_huge_folio(folio);
+		return;
+	case PGTY_guestmem:
+		if (IS_ENABLED(CONFIG_KVM_GMEM_SHARED_MEM))
+			WARN_ONCE(1, "A placeholder that shouldn't trigger.");
 		return;
 	default:
 		WARN_ON_ONCE(1);
