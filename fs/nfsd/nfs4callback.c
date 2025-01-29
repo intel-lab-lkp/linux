@@ -1383,27 +1383,22 @@ static bool cb_session_changed(struct nfsd4_callback *cb)
 	return cb->cb_ses != rcu_access_pointer(cb->cb_clp->cl_cb_session);
 }
 
-static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback *cb)
+static void restart_callback(struct rpc_task *task, struct nfsd4_callback *cb)
 {
 	struct nfs4_client *clp = cb->cb_clp;
+
+	nfsd41_cb_release_slot(cb);
+	if (!test_bit(NFSD4_CLIENT_CB_KILL, &clp->cl_flags)) {
+		trace_nfsd_cb_restart(clp, cb);
+		task->tk_status = 0;
+		cb->cb_need_restart = true;
+	}
+}
+
+static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback *cb)
+{
 	struct nfsd4_session *session = cb->cb_ses;
 	bool ret = false;
-
-	if (!clp->cl_minorversion) {
-		/*
-		 * If the backchannel connection was shut down while this
-		 * task was queued, we need to resubmit it after setting up
-		 * a new backchannel connection.
-		 *
-		 * Note that if we lost our callback connection permanently
-		 * the submission code will error out, so we don't need to
-		 * handle that case here.
-		 */
-		if (RPC_SIGNALLED(task))
-			goto need_restart;
-
-		return true;
-	}
 
 	if (cb->cb_held_slot < 0)
 		goto need_restart;
@@ -1493,19 +1488,14 @@ static bool nfsd4_cb_sequence_done(struct rpc_task *task, struct nfsd4_callback 
 retry_nowait:
 	/*
 	 * RPC_SIGNALLED() means that the rpc_client is being torn down and
-	 * (possibly) recreated. Restart the call completely in that case.
+	 * (possibly) recreated. Restart the whole callback in that case.
 	 */
 	if (!RPC_SIGNALLED(task)) {
 		rpc_restart_call_prepare(task);
 		return false;
 	}
 need_restart:
-	nfsd41_cb_release_slot(cb);
-	if (!test_bit(NFSD4_CLIENT_CB_KILL, &clp->cl_flags)) {
-		trace_nfsd_cb_restart(clp, cb);
-		task->tk_status = 0;
-		cb->cb_need_restart = true;
-	}
+	restart_callback(task, cb);
 	return false;
 }
 
@@ -1516,8 +1506,21 @@ static void nfsd4_cb_done(struct rpc_task *task, void *calldata)
 
 	trace_nfsd_cb_rpc_done(clp);
 
-	if (!nfsd4_cb_sequence_done(task, cb))
+	if (!clp->cl_minorversion) {
+		/*
+		 * If the backchannel connection was shut down while this
+		 * task was queued, we need to resubmit it after setting up
+		 * a new backchannel connection.
+		 *
+		 * Note that if we lost our callback connection permanently
+		 * the submission code will error out, so we don't need to
+		 * handle that case here.
+		 */
+		if (RPC_SIGNALLED(task))
+			restart_callback(task, cb);
+	} else if (!nfsd4_cb_sequence_done(task, cb)) {
 		return;
+	}
 
 	if (cb->cb_status) {
 		WARN_ONCE(task->tk_status,
