@@ -66,6 +66,7 @@ typedef struct {
 
 struct nfsd4_callback {
 	struct nfs4_client *cb_clp;
+	struct nfsd4_session *cb_ses;
 	struct rpc_message cb_msg;
 	const struct nfsd4_callback_ops *cb_ops;
 	struct work_struct cb_work;
