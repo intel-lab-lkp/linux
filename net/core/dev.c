@@ -2070,12 +2070,55 @@ static void __move_netdevice_notifier_net(struct net *src_net,
 	__register_netdevice_notifier_net(dst_net, nb, true);
 }
 
+static bool from_cleanup_net(void)
+{
+#ifdef CONFIG_NET_NS
+	return current == cleanup_net_task;
+#else
+	return false;
+#endif
+}
+
+static void rtnl_net_dev_lock(struct net_device *dev)
+{
+	struct net *net;
+
+	DEBUG_NET_WARN_ON_ONCE(from_cleanup_net());
+again:
+	/* netns might be being dismantled. */
+	net = maybe_get_net(dev_net(dev));
+	if (!net) {
+		cond_resched();
+		goto again;
+	}
+
+	rtnl_net_lock(net);
+
+	/* dev might have been moved to another netns. */
+	if (!net_eq(net, dev_net(dev))) {
+		rtnl_net_unlock(net);
+		put_net(net);
+		cond_resched();
+		goto again;
+	}
+}
+
+static void rtnl_net_dev_unlock(struct net_device *dev)
+{
+	struct net *net = dev_net(dev);
+
+	rtnl_net_unlock(net);
+	put_net(net);
+}
+
 int register_netdevice_notifier_dev_net(struct net_device *dev,
 					struct notifier_block *nb,
 					struct netdev_net_notifier *nn)
 {
 	struct net *net = dev_net(dev);
 	int err;
+
+	DEBUG_NET_WARN_ON_ONCE(!list_empty(&dev->dev_list));
 
 	rtnl_net_lock(net);
 	err = __register_netdevice_notifier_net(net, nb, false);
@@ -2093,13 +2136,12 @@ int unregister_netdevice_notifier_dev_net(struct net_device *dev,
 					  struct notifier_block *nb,
 					  struct netdev_net_notifier *nn)
 {
-	struct net *net = dev_net(dev);
 	int err;
 
-	rtnl_net_lock(net);
+	rtnl_net_dev_lock(dev);
 	list_del(&nn->list);
-	err = __unregister_netdevice_notifier_net(net, nb);
-	rtnl_net_unlock(net);
+	err = __unregister_netdevice_notifier_net(dev_net(dev), nb);
+	rtnl_net_dev_unlock(dev);
 
 	return err;
 }
@@ -10253,15 +10295,6 @@ static void dev_index_release(struct net *net, int ifindex)
 {
 	/* Expect only unused indexes, unlist_netdevice() removes the used */
 	WARN_ON(xa_erase(&net->dev_by_index, ifindex));
-}
-
-static bool from_cleanup_net(void)
-{
-#ifdef CONFIG_NET_NS
-	return current == cleanup_net_task;
-#else
-	return false;
-#endif
 }
 
 /* Delayed registration/unregisteration */
