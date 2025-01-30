@@ -755,17 +755,20 @@ static const struct arm64_ftr_bits ftr_raz[] = {
 #define ARM64_FTR_REG(id, table)		\
 	__ARM64_FTR_REG_OVERRIDE(#id, id, table, &no_override)
 
-struct arm64_ftr_override id_aa64mmfr0_override;
-struct arm64_ftr_override id_aa64mmfr1_override;
-struct arm64_ftr_override id_aa64mmfr2_override;
-struct arm64_ftr_override id_aa64pfr0_override;
-struct arm64_ftr_override id_aa64pfr1_override;
-struct arm64_ftr_override id_aa64zfr0_override;
-struct arm64_ftr_override id_aa64smfr0_override;
-struct arm64_ftr_override id_aa64isar1_override;
-struct arm64_ftr_override id_aa64isar2_override;
+#define DEFINE_FTR_OVERRIDE(name)					\
+	struct arm64_ftr_override __section(".mmuoff.data.read") name
 
-struct arm64_ftr_override arm64_sw_feature_override;
+DEFINE_FTR_OVERRIDE(id_aa64mmfr0_override);
+DEFINE_FTR_OVERRIDE(id_aa64mmfr1_override);
+DEFINE_FTR_OVERRIDE(id_aa64mmfr2_override);
+DEFINE_FTR_OVERRIDE(id_aa64pfr0_override);
+DEFINE_FTR_OVERRIDE(id_aa64pfr1_override);
+DEFINE_FTR_OVERRIDE(id_aa64zfr0_override);
+DEFINE_FTR_OVERRIDE(id_aa64smfr0_override);
+DEFINE_FTR_OVERRIDE(id_aa64isar1_override);
+DEFINE_FTR_OVERRIDE(id_aa64isar2_override);
+
+DEFINE_FTR_OVERRIDE(arm64_sw_feature_override);
 
 static const struct __ftr_reg_entry {
 	u32			sys_id;
