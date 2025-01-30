@@ -179,6 +179,11 @@ struct linux_dirent64 {
 	char           d_name[];
 };
 
+struct dirent {
+	ino_t	d_ino;
+	char	d_name[256];
+};
+
 /* The format of the struct as returned by the libc to the application, which
  * significantly differs from the format returned by the stat() syscall flavours.
  */

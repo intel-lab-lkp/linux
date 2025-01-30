@@ -387,6 +387,82 @@ const char *strerror(int errno)
 	return buf;
 }
 
+/* See comment of FILE above */
+typedef struct {
+	char dummy[1];
+} DIR;
+
+static __attribute__((unused))
+DIR *fdopendir(int fd)
+{
+	if (fd < 0) {
+		SET_ERRNO(EBADF);
+		return NULL;
+	}
+	return (DIR *)(intptr_t)~fd;
+}
+
+static __attribute__((unused))
+DIR *opendir(const char *name)
+{
+	int fd;
+
+	fd = open(name, O_RDONLY);
+	if (fd == -1)
+		return NULL;
+	return fdopendir(fd);
+}
+
+static __attribute__((unused))
+int closedir(DIR *dirp)
+{
+	intptr_t i = (intptr_t)dirp;
+
+	if (i >= 0) {
+		SET_ERRNO(EBADF);
+		return -1;
+	}
+	return close(~i);
+}
+
+static __attribute__((unused))
+struct dirent *readdir(DIR *dirp)
+{
+	static struct dirent dirent;
+
+	char buf[sizeof(struct linux_dirent64) + NAME_MAX];
+	struct linux_dirent64 *ldir = (void *)buf;
+	intptr_t i = (intptr_t)dirp;
+	int fd, ret;
+
+	if (i >= 0) {
+		SET_ERRNO(EBADF);
+		return NULL;
+	}
+
+	fd = ~i;
+
+	ret = getdents64(fd, ldir, sizeof(buf));
+	if (ret == -1 || ret == 0)
+		return NULL;
+
+	/*
+	 * getdents64() returns as many entries as fit the buffer.
+	 * readdir() can only return one entry at a time.
+	 * Make sure the non-returned ones are not skipped.
+	 */
+	ret = lseek(fd, ldir->d_off, SEEK_SET);
+	if (ret == -1)
+		return NULL;
+
+	dirent = (struct dirent) {
+		.d_ino = ldir->d_ino,
+	};
+	strlcpy(dirent.d_name, ldir->d_name, sizeof(dirent.d_name));
+
+	return &dirent;
+}
+
 /* make sure to include all global symbols */
 #include "nolibc.h"
 
