@@ -609,6 +609,30 @@ u32 ath12k_core_get_max_num_tids(struct ath12k_base *ab)
 	return TARGET_NUM_TIDS(SINGLE);
 }
 
+struct device_node *ath12k_core_get_reserved_mem_by_name(struct ath12k_base *ab,
+							 const char *name)
+{
+	struct device *dev = ab->dev;
+	struct device_node *mem_np;
+	int index;
+
+	index = of_property_match_string(dev->of_node, "memory-region-names", name);
+	if (index < 0) {
+		ath12k_dbg(ab, ATH12K_DBG_BOOT,
+			   "memory region %s not found\n", name);
+		return NULL;
+	}
+
+	mem_np = of_parse_phandle(dev->of_node, "memory-region", index);
+	if (!mem_np) {
+		ath12k_dbg(ab, ATH12K_DBG_BOOT,
+			   "failed to parse memory region %s\n", name);
+		return NULL;
+	}
+
+	return mem_np;
+}
+
 static void ath12k_core_stop(struct ath12k_base *ab)
 {
 	ath12k_core_stopped(ab);
