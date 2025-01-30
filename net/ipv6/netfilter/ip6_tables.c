@@ -842,14 +842,12 @@ copy_entries_to_user(unsigned int total_size,
 
 	loc_cpu_entry = private->entries;
 
-	/* FIXME: use iterator macros --RR */
-	/* ... then go back and fix counters and names */
-	for (off = 0, num = 0; off < total_size; off += e->next_offset, num++){
+	num = 0;
+	xt_entry_foreach(e, loc_cpu_entry, total_size) {
 		unsigned int i;
 		const struct xt_entry_match *m;
 		const struct xt_entry_target *t;
 
-		e = loc_cpu_entry + off;
 		if (copy_to_user(userptr + off, e, sizeof(*e))) {
 			ret = -EFAULT;
 			goto free_counters;
