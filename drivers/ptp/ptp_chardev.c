@@ -108,15 +108,22 @@ int ptp_open(struct posix_clock_context *pccontext, fmode_t fmode)
 {
 	struct ptp_clock *ptp =
 		container_of(pccontext->clk, struct ptp_clock, clock);
+	struct ptp_private_ctxdata *ctxdata;
 	struct timestamp_event_queue *queue;
 	char debugfsname[32];
 	unsigned long flags;
 
-	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
-	if (!queue)
+	ctxdata = kzalloc(sizeof(*ctxdata), GFP_KERNEL);
+	if (!ctxdata)
 		return -EINVAL;
+	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
+	if (!queue) {
+		kfree(ctxdata);
+		return -EINVAL;
+	}
 	queue->mask = bitmap_alloc(PTP_MAX_CHANNELS, GFP_KERNEL);
 	if (!queue->mask) {
+		kfree(ctxdata);
 		kfree(queue);
 		return -EINVAL;
 	}
@@ -125,7 +132,9 @@ int ptp_open(struct posix_clock_context *pccontext, fmode_t fmode)
 	spin_lock_irqsave(&ptp->tsevqs_lock, flags);
 	list_add_tail(&queue->qlist, &ptp->tsevqs);
 	spin_unlock_irqrestore(&ptp->tsevqs_lock, flags);
-	pccontext->private_clkdata = queue;
+	ctxdata->queue = queue;
+	ctxdata->fmode = fmode;
+	pccontext->private_clkdata = ctxdata;
 
 	/* Debugfs contents */
 	sprintf(debugfsname, "0x%p", queue);
@@ -142,7 +151,8 @@ int ptp_open(struct posix_clock_context *pccontext, fmode_t fmode)
 
 int ptp_release(struct posix_clock_context *pccontext)
 {
-	struct timestamp_event_queue *queue = pccontext->private_clkdata;
+	struct ptp_private_ctxdata *ctxdata = pccontext->private_clkdata;
+	struct timestamp_event_queue *queue = ctxdata->queue;
 	unsigned long flags;
 	struct ptp_clock *ptp =
 		container_of(pccontext->clk, struct ptp_clock, clock);
@@ -154,6 +164,7 @@ int ptp_release(struct posix_clock_context *pccontext)
 	spin_unlock_irqrestore(&ptp->tsevqs_lock, flags);
 	bitmap_free(queue->mask);
 	kfree(queue);
+	kfree(ctxdata);
 	return 0;
 }
 
@@ -167,6 +178,7 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 	struct system_device_crosststamp xtstamp;
 	struct ptp_clock_info *ops = ptp->info;
 	struct ptp_sys_offset *sysoff = NULL;
+	struct ptp_private_ctxdata *ctxdata;
 	struct timestamp_event_queue *tsevq;
 	struct ptp_system_timestamp sts;
 	struct ptp_clock_request req;
@@ -180,7 +192,8 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 	if (in_compat_syscall() && cmd != PTP_ENABLE_PPS && cmd != PTP_ENABLE_PPS2)
 		arg = (unsigned long)compat_ptr(arg);
 
-	tsevq = pccontext->private_clkdata;
+	ctxdata = pccontext->private_clkdata;
+	tsevq = ctxdata->queue;
 
 	switch (cmd) {
 
@@ -205,6 +218,11 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 
 	case PTP_EXTTS_REQUEST:
 	case PTP_EXTTS_REQUEST2:
+		if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+			err = -EACCES;
+			break;
+		}
+
 		memset(&req, 0, sizeof(req));
 
 		if (copy_from_user(&req.extts, (void __user *)arg,
@@ -246,6 +264,10 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 
 	case PTP_PEROUT_REQUEST:
 	case PTP_PEROUT_REQUEST2:
+		if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+			err = -EACCES;
+			break;
+		}
 		memset(&req, 0, sizeof(req));
 
 		if (copy_from_user(&req.perout, (void __user *)arg,
@@ -314,6 +336,10 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 
 	case PTP_ENABLE_PPS:
 	case PTP_ENABLE_PPS2:
+		if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+			err = -EACCES;
+			break;
+		}
 		memset(&req, 0, sizeof(req));
 
 		if (!capable(CAP_SYS_TIME))
@@ -456,6 +482,10 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 
 	case PTP_PIN_SETFUNC:
 	case PTP_PIN_SETFUNC2:
+		if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+			err = -EACCES;
+			break;
+		}
 		if (copy_from_user(&pd, (void __user *)arg, sizeof(pd))) {
 			err = -EFAULT;
 			break;
@@ -485,10 +515,18 @@ long ptp_ioctl(struct posix_clock_context *pccontext, unsigned int cmd,
 		break;
 
 	case PTP_MASK_CLEAR_ALL:
+		if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+			err = -EACCES;
+			break;
+		}
 		bitmap_clear(tsevq->mask, 0, PTP_MAX_CHANNELS);
 		break;
 
 	case PTP_MASK_EN_SINGLE:
+		if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+			err = -EACCES;
+			break;
+		}
 		if (copy_from_user(&i, (void __user *)arg, sizeof(i))) {
 			err = -EFAULT;
 			break;
@@ -516,9 +554,15 @@ __poll_t ptp_poll(struct posix_clock_context *pccontext, struct file *fp,
 {
 	struct ptp_clock *ptp =
 		container_of(pccontext->clk, struct ptp_clock, clock);
+	struct ptp_private_ctxdata *ctxdata;
 	struct timestamp_event_queue *queue;
 
-	queue = pccontext->private_clkdata;
+	ctxdata = pccontext->private_clkdata;
+	if (!ctxdata)
+		return EPOLLERR;
+	if ((ctxdata->fmode & FMODE_WRITE) == 0)
+		return EACCES;
+	queue = ctxdata->queue;
 	if (!queue)
 		return EPOLLERR;
 
@@ -534,13 +578,23 @@ ssize_t ptp_read(struct posix_clock_context *pccontext, uint rdflags,
 {
 	struct ptp_clock *ptp =
 		container_of(pccontext->clk, struct ptp_clock, clock);
+	struct ptp_private_ctxdata *ctxdata;
 	struct timestamp_event_queue *queue;
 	struct ptp_extts_event *event;
 	unsigned long flags;
 	size_t qcnt, i;
 	int result;
 
-	queue = pccontext->private_clkdata;
+	ctxdata = pccontext->private_clkdata;
+	if (!ctxdata) {
+		result = -EINVAL;
+		goto exit;
+	}
+	if ((ctxdata->fmode & FMODE_WRITE) == 0) {
+		result = -EACCES;
+		goto exit;
+	}
+	queue = ctxdata->queue;
 	if (!queue) {
 		result = -EINVAL;
 		goto exit;

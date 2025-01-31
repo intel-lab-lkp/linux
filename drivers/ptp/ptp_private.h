@@ -64,6 +64,11 @@ struct ptp_clock {
 	struct dentry *debugfs_root;
 };
 
+struct ptp_private_ctxdata {
+	struct timestamp_event_queue *queue;
+	fmode_t fmode;
+};
+
 #define info_to_vclock(d) container_of((d), struct ptp_vclock, info)
 #define cc_to_vclock(d) container_of((d), struct ptp_vclock, cc)
 #define dw_to_vclock(d) container_of((d), struct ptp_vclock, refresh_work)
