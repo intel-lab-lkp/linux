@@ -4,6 +4,7 @@
  *
  * Copyright © 2017-2020 Mickaël Salaün <mic@digikod.net>
  * Copyright © 2019-2020 ANSSI
+ * Copyright © 2024-2025 Microsoft Corporation
  */
 
 #define _GNU_SOURCE
@@ -17,6 +18,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "audit.h"
 #include "common.h"
 
 /* Copied from security/yama/yama_lsm.c */
@@ -83,9 +85,27 @@ static int get_yama_ptrace_scope(void)
 	return ret;
 }
 
-/* clang-format off */
-FIXTURE(hierarchy) {};
-/* clang-format on */
+static int matches_log_ptrace(struct __test_metadata *const _metadata,
+			      int audit_fd, const pid_t opid)
+{
+	static const char log_template[] = REGEX_LANDLOCK_PREFIX
+		" blockers=ptrace opid=%d ocomm=\"ptrace_test\"$";
+	char log_match[sizeof(log_template) + 10];
+	int log_match_len;
+
+	log_match_len =
+		snprintf(log_match, sizeof(log_match), log_template, opid);
+	if (log_match_len > sizeof(log_match))
+		return -E2BIG;
+
+	return audit_match_record(audit_fd, AUDIT_LANDLOCK_ACCESS, log_match);
+}
+
+FIXTURE(hierarchy)
+{
+	struct audit_filter audit_filter;
+	int audit_fd;
+};
 
 FIXTURE_VARIANT(hierarchy)
 {
@@ -243,10 +263,16 @@ FIXTURE_VARIANT_ADD(hierarchy, deny_with_forked_domain) {
 
 FIXTURE_SETUP(hierarchy)
 {
+	disable_caps(_metadata);
+	set_cap(_metadata, CAP_AUDIT_CONTROL);
+	self->audit_fd = audit_init_with_exe_filter(&self->audit_filter);
+	EXPECT_LE(0, self->audit_fd);
+	clear_cap(_metadata, CAP_AUDIT_CONTROL);
 }
 
-FIXTURE_TEARDOWN(hierarchy)
+FIXTURE_TEARDOWN_PARENT(hierarchy)
 {
+	EXPECT_EQ(0, audit_cleanup(-1, NULL));
 }
 
 /* Test PTRACE_TRACEME and PTRACE_ATTACH for parent and child. */
@@ -259,6 +285,7 @@ TEST_F(hierarchy, trace)
 	char buf_parent;
 	long ret;
 	bool can_read_child, can_trace_child, can_read_parent, can_trace_parent;
+	struct audit_records records;
 
 	yama_ptrace_scope = get_yama_ptrace_scope();
 	ASSERT_LE(0, yama_ptrace_scope);
@@ -334,17 +361,29 @@ TEST_F(hierarchy, trace)
 		err_proc_read = test_ptrace_read(parent);
 		if (can_read_parent) {
 			EXPECT_EQ(0, err_proc_read);
+			EXPECT_EQ(-EAGAIN,
+				  matches_log_ptrace(_metadata, self->audit_fd,
+						     parent));
 		} else {
 			EXPECT_EQ(EACCES, err_proc_read);
+			EXPECT_EQ(0,
+				  matches_log_ptrace(_metadata, self->audit_fd,
+						     parent));
 		}
 
 		/* Tests PTRACE_ATTACH on the parent. */
 		ret = ptrace(PTRACE_ATTACH, parent, NULL, 0);
 		if (can_trace_parent) {
 			EXPECT_EQ(0, ret);
+			EXPECT_EQ(-EAGAIN,
+				  matches_log_ptrace(_metadata, self->audit_fd,
+						     parent));
 		} else {
 			EXPECT_EQ(-1, ret);
 			EXPECT_EQ(EPERM, errno);
+			EXPECT_EQ(can_read_parent ? -EAGAIN : 0,
+				  matches_log_ptrace(_metadata, self->audit_fd,
+						     parent));
 		}
 		if (ret == 0) {
 			ASSERT_EQ(parent, waitpid(parent, &status, 0));
@@ -356,9 +395,16 @@ TEST_F(hierarchy, trace)
 		ret = ptrace(PTRACE_TRACEME);
 		if (can_trace_child) {
 			EXPECT_EQ(0, ret);
+			EXPECT_EQ(-EAGAIN,
+				  matches_log_ptrace(_metadata, self->audit_fd,
+						     parent));
 		} else {
 			EXPECT_EQ(-1, ret);
 			EXPECT_EQ(EPERM, errno);
+			/* We should indeed see the parent process. */
+			EXPECT_EQ(can_read_child ? -EAGAIN : 0,
+				  matches_log_ptrace(_metadata, self->audit_fd,
+						     parent));
 		}
 
 		/*
@@ -406,17 +452,25 @@ TEST_F(hierarchy, trace)
 	err_proc_read = test_ptrace_read(child);
 	if (can_read_child) {
 		EXPECT_EQ(0, err_proc_read);
+		EXPECT_EQ(-EAGAIN,
+			  matches_log_ptrace(_metadata, self->audit_fd, child));
 	} else {
 		EXPECT_EQ(EACCES, err_proc_read);
+		EXPECT_EQ(0,
+			  matches_log_ptrace(_metadata, self->audit_fd, child));
 	}
 
 	/* Tests PTRACE_ATTACH on the child. */
 	ret = ptrace(PTRACE_ATTACH, child, NULL, 0);
 	if (can_trace_child) {
 		EXPECT_EQ(0, ret);
+		EXPECT_EQ(-EAGAIN,
+			  matches_log_ptrace(_metadata, self->audit_fd, child));
 	} else {
 		EXPECT_EQ(-1, ret);
 		EXPECT_EQ(EPERM, errno);
+		EXPECT_EQ(can_read_child ? -EAGAIN : 0,
+			  matches_log_ptrace(_metadata, self->audit_fd, child));
 	}
 
 	if (ret == 0) {
@@ -432,6 +486,11 @@ TEST_F(hierarchy, trace)
 	if (WIFSIGNALED(status) || !WIFEXITED(status) ||
 	    WEXITSTATUS(status) != EXIT_SUCCESS)
 		_metadata->exit_code = KSFT_FAIL;
+
+	/* Makes sure there is no superfluous logged records. */
+	audit_count_records(self->audit_fd, &records);
+	EXPECT_EQ(0, records.access);
+	EXPECT_EQ(0, records.domain);
 }
 
 TEST_HARNESS_MAIN
