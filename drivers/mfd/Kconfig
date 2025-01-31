@@ -2113,6 +2113,18 @@ config MFD_ROHM_BD71828
 	  also a single-cell linear charger, a Coulomb counter, a real-time
 	  clock (RTC), GPIOs and a 32.768 kHz clock gate.
 
+config MFD_ROHM_BD79124
+	tristate "Rohm BD79124 core driver"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say yes here to build support for the ROHM BD79124 ADC core. The
+	  ROHM BD79124 is a 12-bit, 8-channel, SAR ADC. The ADC supports
+	  also an automatic measurement mode, with an alarm interrupt for
+	  out-of-window measurements. The window is configurable for each
+	  channel. The ADC inputs can optionally be used as general purpose
+	  outputs.
+
 config MFD_ROHM_BD957XMUF
 	tristate "ROHM BD9576MUF and BD9573MUF Power Management ICs"
 	depends on I2C=y
