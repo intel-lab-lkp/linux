@@ -1079,9 +1079,6 @@ static void grow_ple_window(struct kvm_vcpu *vcpu)
 	struct vmcb_control_area *control = &svm->vmcb->control;
 	int old = control->pause_filter_count;
 
-	if (kvm_pause_in_guest(vcpu->kvm))
-		return;
-
 	control->pause_filter_count = __grow_ple_window(old,
 							pause_filter_count,
 							pause_filter_count_grow,
@@ -1099,9 +1096,6 @@ static void shrink_ple_window(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct vmcb_control_area *control = &svm->vmcb->control;
 	int old = control->pause_filter_count;
-
-	if (kvm_pause_in_guest(vcpu->kvm))
-		return;
 
 	control->pause_filter_count =
 				__shrink_ple_window(old,

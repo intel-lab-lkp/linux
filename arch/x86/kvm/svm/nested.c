@@ -171,6 +171,16 @@ void recalc_intercepts(struct vcpu_svm *svm)
 	if (!intercept_smi)
 		vmcb_clr_intercept(c, INTERCEPT_SMI);
 
+	/*
+	 * Intercept PAUSE if and only if L1 wants to.  KVM intercepts PAUSE so
+	 * that a vCPU that may be spinning waiting for a lock can be scheduled
+	 * out in favor of the vCPU that holds said lock.  KVM doesn't support
+	 * yielding across L2 vCPUs, as KVM has limited visilibity into which
+	 * L2 vCPUs are in the same L2 VM, i.e. may be contending for locks.
+	 */
+	if (!vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_PAUSE))
+		vmcb_clr_intercept(c, INTERCEPT_PAUSE);
+
 	if (nested_vmcb_needs_vls_intercept(svm)) {
 		/*
 		 * If the virtual VMLOAD/VMSAVE is not enabled for the L2,
@@ -643,8 +653,6 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 	struct kvm_vcpu *vcpu = &svm->vcpu;
 	struct vmcb *vmcb01 = svm->vmcb01.ptr;
 	struct vmcb *vmcb02 = svm->nested.vmcb02.ptr;
-	u32 pause_count12;
-	u32 pause_thresh12;
 
 	/*
 	 * Filled at exit: exit_code, exit_code_hi, exit_info_1, exit_info_2,
@@ -736,31 +744,13 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 		vmcb02->control.virt_ext |= VIRTUAL_VMLOAD_VMSAVE_ENABLE_MASK;
 
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_PAUSEFILTER))
-		pause_count12 = svm->nested.ctl.pause_filter_count;
+		vmcb02->control.pause_filter_count = svm->nested.ctl.pause_filter_count;
 	else
-		pause_count12 = 0;
+		vmcb02->control.pause_filter_count = 0;
 	if (guest_cpu_cap_has(vcpu, X86_FEATURE_PFTHRESHOLD))
-		pause_thresh12 = svm->nested.ctl.pause_filter_thresh;
+		vmcb02->control.pause_filter_thresh = svm->nested.ctl.pause_filter_thresh;
 	else
-		pause_thresh12 = 0;
-	if (kvm_pause_in_guest(svm->vcpu.kvm)) {
-		/* use guest values since host doesn't intercept PAUSE */
-		vmcb02->control.pause_filter_count = pause_count12;
-		vmcb02->control.pause_filter_thresh = pause_thresh12;
-
-	} else {
-		/* start from host values otherwise */
-		vmcb02->control.pause_filter_count = vmcb01->control.pause_filter_count;
-		vmcb02->control.pause_filter_thresh = vmcb01->control.pause_filter_thresh;
-
-		/* ... but ensure filtering is disabled if so requested.  */
-		if (vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_PAUSE)) {
-			if (!pause_count12)
-				vmcb02->control.pause_filter_count = 0;
-			if (!pause_thresh12)
-				vmcb02->control.pause_filter_thresh = 0;
-		}
-	}
+		vmcb02->control.pause_filter_thresh = 0;
 
 	nested_svm_transition_tlb_flush(vcpu);
 
@@ -1032,12 +1022,6 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	vmcb12->control.int_ctl           = svm->nested.ctl.int_ctl;
 	vmcb12->control.event_inj         = svm->nested.ctl.event_inj;
 	vmcb12->control.event_inj_err     = svm->nested.ctl.event_inj_err;
-
-	if (!kvm_pause_in_guest(vcpu->kvm)) {
-		vmcb01->control.pause_filter_count = vmcb02->control.pause_filter_count;
-		vmcb_mark_dirty(vmcb01, VMCB_INTERCEPTS);
-
-	}
 
 	nested_svm_copy_common_state(svm->nested.vmcb02.ptr, svm->vmcb01.ptr);
 
