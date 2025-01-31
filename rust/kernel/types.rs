@@ -253,6 +253,9 @@ impl<T, F: FnOnce(T)> Drop for ScopeGuard<T, F> {
 ///
 /// `Opaque<T>` is meant to be used with FFI objects that are never interpreted by Rust code.
 ///
+/// In cases where the contained data is only used by Rust, is not allowed to be
+/// uninitialized and automatic [`Drop`] is desired [`UnsafePinned`] should be used instead.
+///
 /// It is used to wrap structs from the C side, like for example `Opaque<bindings::mutex>`.
 /// It gets rid of all the usual assumptions that Rust has for a value:
 ///
@@ -573,3 +576,57 @@ pub type NotThreadSafe = PhantomData<*mut ()>;
 /// [`NotThreadSafe`]: type@NotThreadSafe
 #[allow(non_upper_case_globals)]
 pub const NotThreadSafe: NotThreadSafe = PhantomData;
+
+/// Stores a value that may be used from multiple mutable pointers.
+///
+/// `UnsafePinned` gets rid of some of the usual assumptions that Rust has for a value:
+/// - The value is allowed to be mutated, when a `&UnsafePinned<T>` exists on the Rust side.
+/// - No uniqueness for mutable references: it is fine to have multiple `&mut UnsafePinned<T>`
+///   point to the same value.
+///
+/// To avoid the ability to use [`core::mem::swap`] this still needs to be used through a
+/// [`core::pin::Pin`] reference.
+///
+/// This is useful for cases where a value might be shared with C code
+/// but not interpreted by it or in cases where it can not always be guaranteed that the
+/// references are unique.
+///
+/// This is similar to [`Opaque<T>`] but is guaranteed to always contain valid data and will
+/// call the [`Drop`] implementation of `T` when dropped.
+#[repr(transparent)]
+pub struct UnsafePinned<T> {
+    value: UnsafeCell<T>,
+    _pin: PhantomPinned,
+}
+
+impl<T> UnsafePinned<T> {
+    /// Creates a new [`UnsafePinned`] value.
+    pub const fn new(value: T) -> Self {
+        Self {
+            value: UnsafeCell::new(value),
+            _pin: PhantomPinned,
+        }
+    }
+
+    /// Create an [`UnsafePinned`] pin-initializer from the given pin-initializer.
+    pub fn try_pin_init<E>(value: impl PinInit<T, E>) -> impl PinInit<Self, E> {
+        // SAFETY:
+        //   - In case of an error in `value` the error is returned, otherwise `slot` is fully
+        //     initialized, since `self.value` is initialized and `_pin` is a zero sized type.
+        //   - The `Pin` invariants of `self.value` are upheld, since no moving occurs.
+        unsafe { init::pin_init_from_closure(move |slot| value.__pinned_init(Self::raw_get(slot))) }
+    }
+
+    /// Returns a raw pointer to the contained data.
+    pub const fn get(&self) -> *mut T {
+        UnsafeCell::get(&self.value).cast::<T>()
+    }
+
+    /// Gets the value behind `this`.
+    ///
+    /// This function is useful to get access to the value without creating intermediate
+    /// references.
+    pub const fn raw_get(this: *const Self) -> *mut T {
+        UnsafeCell::raw_get(this.cast::<UnsafeCell<MaybeUninit<T>>>()).cast::<T>()
+    }
+}
