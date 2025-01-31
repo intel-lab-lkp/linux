@@ -71,9 +71,20 @@ struct landlock_ruleset_attr {
  *   service manager).  Because programs sandboxing themselves should fix any
  *   denied access, they should not set this flag to be aware of potential
  *   issues reported by system's logs (i.e. audit).
+ * - %LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS: Do not create any log related
+ *   to the enforced restrictions coming from descendant domains.  This should
+ *   only be set according to a runtime configuration (i.e. not hardcoded) by
+ *   programs launching other unknown or untrusted programs that may create
+ *   their own Landlock domains and spam logs.  The main use case is for
+ *   container runtimes to enable users to mute buggy sandboxed programs for a
+ *   specific container image.  Other use cases include sandboxer tools and
+ *   init systems.  Unlike %LANDLOCK_RESTRICT_SELF_QUIET,
+ *   %LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS does not impact the requested
+ *   restriction but only the potential descendant domains.
  */
 /* clang-format off */
 #define LANDLOCK_RESTRICT_SELF_QUIET			(1U << 0)
+#define LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS		(1U << 1)
 /* clang-format on */
 
 /**

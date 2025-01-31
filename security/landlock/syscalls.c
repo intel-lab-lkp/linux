@@ -440,6 +440,7 @@ SYSCALL_DEFINE4(landlock_add_rule, const int, ruleset_fd,
  * @flags: Supported values:
  *
  * - %LANDLOCK_RESTRICT_SELF_QUIET
+ * - %LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS
  *
  * This system call enables to enforce a Landlock ruleset on the current
  * thread.  Enforcing a ruleset requires that the task has %CAP_SYS_ADMIN in its
@@ -465,7 +466,8 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 		*ruleset __free(landlock_put_ruleset) = NULL;
 	struct cred *new_cred;
 	struct landlock_cred_security *new_llcred;
-	bool is_quiet;
+	bool is_quiet, is_quiet_subdomains,
+		__maybe_unused inherits_quiet_subdomains;
 
 	if (!is_initialized())
 		return -EOPNOTSUPP;
@@ -483,6 +485,8 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 		return -EINVAL;
 
 	is_quiet = !!(flags & LANDLOCK_RESTRICT_SELF_QUIET);
+	is_quiet_subdomains =
+		!!(flags & LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS);
 
 	/* Gets and checks the ruleset. */
 	ruleset = get_ruleset_from_fd(ruleset_fd, FMODE_CAN_READ);
@@ -506,11 +510,15 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 		return PTR_ERR(new_dom);
 	}
 
-	if (is_quiet) {
 #ifdef CONFIG_AUDIT
+	inherits_quiet_subdomains =
+		new_llcred->domain &&
+		new_llcred->domain->hierarchy->quiet_subdomains;
+	new_dom->hierarchy->quiet_subdomains = is_quiet_subdomains ||
+					       inherits_quiet_subdomains;
+	if (is_quiet || inherits_quiet_subdomains)
 		new_dom->hierarchy->log_status = LANDLOCK_LOG_DISABLED;
 #endif /* CONFIG_AUDIT */
-	}
 
 	/* Replaces the old (prepared) domain. */
 	landlock_put_ruleset(new_llcred->domain);

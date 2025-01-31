@@ -104,6 +104,11 @@ struct landlock_hierarchy {
 	 * @details: Information about the related domain.
 	 */
 	const struct landlock_details *details;
+	/**
+	 * @quiet_subdomains: Set if the domain descendants's log_status
+	 * should be set to %LANDLOCK_LOG_DISABLED.
+	 */
+	u32 quiet_subdomains : 1;
 #endif /* CONFIG_AUDIT */
 };
 

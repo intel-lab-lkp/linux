@@ -127,6 +127,7 @@ int landlock_init_hierarchy_log(struct landlock_hierarchy *const hierarchy)
 	hierarchy->details = details;
 	hierarchy->id = landlock_get_id_range(1);
 	hierarchy->log_status = LANDLOCK_LOG_PENDING;
+	hierarchy->quiet_subdomains = false;
 	atomic64_set(&hierarchy->num_denials, 0);
 	return 0;
 }
