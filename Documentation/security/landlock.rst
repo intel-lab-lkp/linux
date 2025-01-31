@@ -124,6 +124,13 @@ makes the reasoning much easier and helps avoid pitfalls.
 .. kernel-doc:: security/landlock/ruleset.h
     :identifiers:
 
+Additional documentation
+========================
+
+* Documentation/userspace-api/landlock.rst
+* Documentation/admin-guide/LSM/landlock.rst
+* https://landlock.io
+
 .. Links
 .. _tools/testing/selftests/landlock/:
    https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/tree/tools/testing/selftests/landlock/
