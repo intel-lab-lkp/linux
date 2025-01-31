@@ -26,7 +26,6 @@ struct hp_82341_priv {
 	enum hp_82341_hardware_version hw_version;
 };
 
-
 // interface functions
 int hp_82341_accel_read(gpib_board_t *board, uint8_t *buffer, size_t length, int *end,
 			size_t *bytes_read);
