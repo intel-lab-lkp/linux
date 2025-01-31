@@ -246,6 +246,17 @@ is_masked_device_ioctl_compat(const unsigned int cmd)
 	}
 }
 
+static void
+update_request(struct landlock_request *const request,
+	       const struct landlock_file_security *const file_security,
+	       const access_mask_t access)
+{
+	request->access = access;
+#ifdef CONFIG_AUDIT
+	request->deny_masks = file_security->deny_masks;
+#endif /* CONFIG_AUDIT */
+}
+
 /* Ruleset management */
 
 static struct landlock_object *get_inode_object(struct inode *const inode)
@@ -1673,6 +1684,11 @@ static int hook_file_open(struct file *const file)
 	 * file access rights in the opened struct file.
 	 */
 	landlock_file(file)->allowed_access = allowed_access;
+#ifdef CONFIG_AUDIT
+	landlock_file(file)->deny_masks = landlock_get_deny_masks(
+		_LANDLOCK_ACCESS_FS_OPTIONAL, optional_access, &layer_masks,
+		ARRAY_SIZE(layer_masks));
+#endif /* CONFIG_AUDIT */
 
 	if ((open_access_request & allowed_access) == open_access_request)
 		return 0;
@@ -1685,6 +1701,15 @@ static int hook_file_open(struct file *const file)
 
 static int hook_file_truncate(struct file *const file)
 {
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_FS_ACCESS,
+		.audit = {
+			.type = LSM_AUDIT_DATA_FILE,
+			.u.file = file,
+		},
+		.all_existing_optional_access = _LANDLOCK_ACCESS_FS_OPTIONAL,
+	};
+
 	/*
 	 * Allows truncation if the truncate right was available at the time of
 	 * opening the file, to get a consistent access check as for read, write
@@ -1697,12 +1722,24 @@ static int hook_file_truncate(struct file *const file)
 	 */
 	if (landlock_file(file)->allowed_access & LANDLOCK_ACCESS_FS_TRUNCATE)
 		return 0;
+
+	update_request(&request, landlock_file(file),
+		       LANDLOCK_ACCESS_FS_TRUNCATE);
+	landlock_log_denial(landlock_cred(file->f_cred), &request);
 	return -EACCES;
 }
 
 static int hook_file_ioctl(struct file *file, unsigned int cmd,
 			   unsigned long arg)
 {
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_FS_ACCESS,
+		.audit = {
+			.type = LSM_AUDIT_DATA_FILE,
+			.u.file = file,
+		},
+		.all_existing_optional_access = _LANDLOCK_ACCESS_FS_OPTIONAL,
+	};
 	access_mask_t allowed_access = landlock_file(file)->allowed_access;
 
 	/*
@@ -1720,12 +1757,23 @@ static int hook_file_ioctl(struct file *file, unsigned int cmd,
 	if (is_masked_device_ioctl(cmd))
 		return 0;
 
+	update_request(&request, landlock_file(file),
+		       LANDLOCK_ACCESS_FS_IOCTL_DEV);
+	landlock_log_denial(landlock_cred(file->f_cred), &request);
 	return -EACCES;
 }
 
 static int hook_file_ioctl_compat(struct file *file, unsigned int cmd,
 				  unsigned long arg)
 {
+	struct landlock_request request = {
+		.type = LANDLOCK_REQUEST_FS_ACCESS,
+		.audit = {
+			.type = LSM_AUDIT_DATA_FILE,
+			.u.file = file,
+		},
+		.all_existing_optional_access = _LANDLOCK_ACCESS_FS_OPTIONAL,
+	};
 	access_mask_t allowed_access = landlock_file(file)->allowed_access;
 
 	/*
@@ -1743,6 +1791,9 @@ static int hook_file_ioctl_compat(struct file *file, unsigned int cmd,
 	if (is_masked_device_ioctl_compat(cmd))
 		return 0;
 
+	update_request(&request, landlock_file(file),
+		       LANDLOCK_ACCESS_FS_IOCTL_DEV);
+	landlock_log_denial(landlock_cred(file->f_cred), &request);
 	return -EACCES;
 }
 
