@@ -14,7 +14,6 @@ void ath12k_debugfs_register(struct ath12k *ar);
 void ath12k_debugfs_unregister(struct ath12k *ar);
 void ath12k_debugfs_fw_stats_process(struct ath12k *ar,
 				     struct ath12k_fw_stats *stats);
-void ath12k_debugfs_fw_stats_reset(struct ath12k *ar);
 #else
 static inline void ath12k_debugfs_soc_create(struct ath12k_base *ab)
 {
@@ -34,10 +33,6 @@ static inline void ath12k_debugfs_unregister(struct ath12k *ar)
 
 static inline void ath12k_debugfs_fw_stats_process(struct ath12k *ar,
 						   struct ath12k_fw_stats *stats)
-{
-}
-
-static inline void ath12k_debugfs_fw_stats_reset(struct ath12k *ar)
 {
 }
 #endif /* CONFIG_ATH12K_DEBUGFS */
