@@ -9,17 +9,32 @@
 #ifndef _SECURITY_LANDLOCK_CRED_H
 #define _SECURITY_LANDLOCK_CRED_H
 
+#include <linux/container_of.h>
 #include <linux/cred.h>
 #include <linux/init.h>
 #include <linux/rcupdate.h>
 
 #include "access.h"
+#include "limits.h"
 #include "ruleset.h"
 #include "setup.h"
 
 struct landlock_cred_security {
 	struct landlock_ruleset *domain;
+
+#ifdef CONFIG_AUDIT
+	u16 domain_exec;
+#endif /* CONFIG_AUDIT */
 };
+
+#ifdef CONFIG_AUDIT
+
+/* Makes sure all layer executions can be stored. */
+static_assert(BITS_PER_TYPE(typeof_member(struct landlock_cred_security,
+					  domain_exec)) >=
+	      LANDLOCK_MAX_NUM_LAYERS);
+
+#endif /* CONFIG_AUDIT */
 
 static inline struct landlock_cred_security *
 landlock_cred(const struct cred *cred)
