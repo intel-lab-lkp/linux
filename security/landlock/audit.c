@@ -434,7 +434,8 @@ void landlock_log_denial(const struct landlock_cred_security *const subject,
 	atomic64_inc(&youngest_denied->num_denials);
 
 	/* Ignores denials after an execution. */
-	if (!(subject->domain_exec & (1 << youngest_layer)))
+	if (!(subject->domain_exec & (1 << youngest_layer)) &&
+	    !youngest_denied->log_cross_exec)
 		return;
 
 	if (!unlikely(audit_context() && audit_enabled))

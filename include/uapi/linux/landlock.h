@@ -81,10 +81,16 @@ struct landlock_ruleset_attr {
  *   init systems.  Unlike %LANDLOCK_RESTRICT_SELF_QUIET,
  *   %LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS does not impact the requested
  *   restriction but only the potential descendant domains.
+ * - %LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC: Explicitly ask to continue logging
+ *   denied access requests even after an :manpage:`execve(2)` call.  This flag
+ *   should only be set if all the programs than can legitimately be executed
+ *   will not try to request a denied access (which could spam audit logs).
+ *   This flag is incompatible with %LANDLOCK_RESTRICT_SELF_QUIET.
  */
 /* clang-format off */
 #define LANDLOCK_RESTRICT_SELF_QUIET			(1U << 0)
 #define LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS		(1U << 1)
+#define LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC		(1U << 2)
 /* clang-format on */
 
 /**

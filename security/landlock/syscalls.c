@@ -441,6 +441,7 @@ SYSCALL_DEFINE4(landlock_add_rule, const int, ruleset_fd,
  *
  * - %LANDLOCK_RESTRICT_SELF_QUIET
  * - %LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS
+ * - %LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC
  *
  * This system call enables to enforce a Landlock ruleset on the current
  * thread.  Enforcing a ruleset requires that the task has %CAP_SYS_ADMIN in its
@@ -451,6 +452,8 @@ SYSCALL_DEFINE4(landlock_add_rule, const int, ruleset_fd,
  *
  * - %EOPNOTSUPP: Landlock is supported by the kernel but disabled at boot time;
  * - %EINVAL: @flags contains an unknown bit.
+ * - %EINVAL: @flags contains %LANDLOCK_RESTRICT_SELF_QUIET and
+ *   %LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC, which are incompatible.
  * - %EBADF: @ruleset_fd is not a file descriptor for the current thread;
  * - %EBADFD: @ruleset_fd is not a ruleset file descriptor;
  * - %EPERM: @ruleset_fd has no read access to the underlying ruleset, or the
@@ -467,7 +470,7 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 	struct cred *new_cred;
 	struct landlock_cred_security *new_llcred;
 	bool is_quiet, is_quiet_subdomains,
-		__maybe_unused inherits_quiet_subdomains;
+		__maybe_unused inherits_quiet_subdomains, is_log_cross_exec;
 
 	if (!is_initialized())
 		return -EOPNOTSUPP;
@@ -487,6 +490,9 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 	is_quiet = !!(flags & LANDLOCK_RESTRICT_SELF_QUIET);
 	is_quiet_subdomains =
 		!!(flags & LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS);
+	is_log_cross_exec = !!(flags & LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC);
+	if (is_quiet && is_log_cross_exec)
+		return -EINVAL;
 
 	/* Gets and checks the ruleset. */
 	ruleset = get_ruleset_from_fd(ruleset_fd, FMODE_CAN_READ);
@@ -518,6 +524,8 @@ SYSCALL_DEFINE2(landlock_restrict_self, const int, ruleset_fd, const __u32,
 					       inherits_quiet_subdomains;
 	if (is_quiet || inherits_quiet_subdomains)
 		new_dom->hierarchy->log_status = LANDLOCK_LOG_DISABLED;
+
+	new_dom->hierarchy->log_cross_exec = is_log_cross_exec;
 #endif /* CONFIG_AUDIT */
 
 	/* Replaces the old (prepared) domain. */

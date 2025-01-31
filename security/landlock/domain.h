@@ -108,7 +108,13 @@ struct landlock_hierarchy {
 	 * @quiet_subdomains: Set if the domain descendants's log_status
 	 * should be set to %LANDLOCK_LOG_DISABLED.
 	 */
-	u32 quiet_subdomains : 1;
+	u32 quiet_subdomains : 1,
+		/**
+		 * @log_cross_exec: Set if the domain is configured with
+		 * %LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC to log denials across
+		 * child executions.
+		 */
+		log_cross_exec : 1;
 #endif /* CONFIG_AUDIT */
 };
 
