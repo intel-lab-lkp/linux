@@ -145,6 +145,17 @@ config PINCTRL_AW9523
 
 	  Say yes to enable pinctrl and GPIO support for the AW9523(B).
 
+config PINCTRL_BD79124
+	tristate "Rohm BD79124 ADC/GPO"
+	depends on MFD_ROHM_BD79124
+	select PINMUX
+	select GPIOLIB
+	help
+	  The Rohm BD79124 is a 12-bit, 8-channel, SAR ADC. The analog input
+	  pins can also be configured to be used as general purpose outputs.
+
+	  Say yes to enable the pinmux and GPOs.
+
 config PINCTRL_BM1880
 	bool "Bitmain BM1880 Pinctrl driver"
 	depends on OF && (ARCH_BITMAIN || COMPILE_TEST)
