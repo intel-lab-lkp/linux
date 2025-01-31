@@ -233,6 +233,47 @@ TEST(restrict_self_checks_ordering)
 	ASSERT_EQ(0, close(ruleset_fd));
 }
 
+TEST(restrict_self_flags)
+{
+	const __u32 last_flag = LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC;
+
+	/* Tests valid flag combinations. */
+
+	ASSERT_EQ(-1, landlock_restrict_self(-1, 0));
+	ASSERT_EQ(EBADF, errno);
+
+	ASSERT_EQ(-1, landlock_restrict_self(-1, LANDLOCK_RESTRICT_SELF_QUIET));
+	ASSERT_EQ(EBADF, errno);
+
+	ASSERT_EQ(-1, landlock_restrict_self(
+			      -1, LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS));
+	ASSERT_EQ(EBADF, errno);
+
+	ASSERT_EQ(-1,
+		  landlock_restrict_self(
+			  -1, LANDLOCK_RESTRICT_SELF_QUIET |
+				      LANDLOCK_RESTRICT_SELF_QUIET_SUBDOMAINS));
+	ASSERT_EQ(EBADF, errno);
+
+	ASSERT_EQ(-1, landlock_restrict_self(
+			      -1, LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC));
+	ASSERT_EQ(EBADF, errno);
+
+	/* Tests invalid flag combinations. */
+
+	ASSERT_EQ(-1,
+		  landlock_restrict_self(
+			  -1, LANDLOCK_RESTRICT_SELF_QUIET |
+				      LANDLOCK_RESTRICT_SELF_LOG_CROSS_EXEC));
+	ASSERT_EQ(EINVAL, errno);
+
+	ASSERT_EQ(-1, landlock_restrict_self(-1, last_flag << 1));
+	ASSERT_EQ(EINVAL, errno);
+
+	ASSERT_EQ(-1, landlock_restrict_self(-1, -1));
+	ASSERT_EQ(EINVAL, errno);
+}
+
 TEST(ruleset_fd_io)
 {
 	struct landlock_ruleset_attr ruleset_attr = {
