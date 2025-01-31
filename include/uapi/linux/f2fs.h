@@ -44,6 +44,8 @@
 #define F2FS_IOC_COMPRESS_FILE		_IO(F2FS_IOCTL_MAGIC, 24)
 #define F2FS_IOC_START_ATOMIC_REPLACE	_IO(F2FS_IOCTL_MAGIC, 25)
 #define F2FS_IOC_GET_DEV_ALIAS_FILE	_IOR(F2FS_IOCTL_MAGIC, 26, __u32)
+#define F2FS_IOC_DONATE_RANGE		_IOW(F2FS_IOCTL_MAGIC, 27,	\
+						struct f2fs_donate_range)
 
 /*
  * should be same as XFS_IOC_GOINGDOWN.
@@ -95,6 +97,11 @@ struct f2fs_sectrim_range {
 struct f2fs_comp_option {
 	__u8 algorithm;
 	__u8 log_cluster_size;
+};
+
+struct f2fs_donate_range {
+	__u64 start;
+	__u64 len;
 };
 
 #endif /* _UAPI_LINUX_F2FS_H */
