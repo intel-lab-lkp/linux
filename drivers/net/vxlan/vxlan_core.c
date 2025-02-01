@@ -3723,6 +3723,10 @@ int vxlan_vni_in_use(struct net *src_net, struct vxlan_dev *vxlan,
 		} else if (tmp->cfg.vni != vni) {
 			continue;
 		}
+		if (!vxlan_addr_any(&conf->remote_ip) &&
+		    !vxlan_addr_multicast(&conf->remote_ip) &&
+		    !vxlan_addr_equal(&tmp->cfg.remote_ip, &conf->remote_ip))
+			continue;
 		if (tmp->cfg.dst_port != conf->dst_port)
 			continue;
 		if ((tmp->cfg.flags & (VXLAN_F_RCV_FLAGS | VXLAN_F_IPV6)) !=
