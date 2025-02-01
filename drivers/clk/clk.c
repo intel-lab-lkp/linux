@@ -1527,7 +1527,8 @@ static int __init clk_disable_unused(void)
 	struct clk_core *core;
 	int ret;
 
-	if (clk_ignore_unused) {
+	/* If you need ignore_unused, your platform description is broken / incomplete */
+	if (WARN_ON(clk_ignore_unused)) {
 		pr_warn("clk: Not disabling unused clocks\n");
 		return 0;
 	}
