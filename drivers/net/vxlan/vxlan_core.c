@@ -94,8 +94,10 @@ static struct vxlan_sock *vxlan_find_sock(struct net *net, sa_family_t family,
 
 static struct vxlan_dev *vxlan_vs_find_vni(struct vxlan_sock *vs,
 					   int ifindex, __be32 vni,
+					   const struct sk_buff *skb,
 					   struct vxlan_vni_node **vninode)
 {
+	union vxlan_addr saddr;
 	struct vxlan_vni_node *vnode;
 	struct vxlan_dev_node *node;
 
@@ -116,11 +118,28 @@ static struct vxlan_dev *vxlan_vs_find_vni(struct vxlan_sock *vs,
 			continue;
 		}
 
-		if (IS_ENABLED(CONFIG_IPV6)) {
-			const struct vxlan_config *cfg = &node->vxlan->cfg;
+		const struct vxlan_config *cfg = &node->vxlan->cfg;
 
+		if (IS_ENABLED(CONFIG_IPV6)) {
 			if ((cfg->flags & VXLAN_F_IPV6_LINKLOCAL) &&
 			    cfg->remote_ifindex != ifindex)
+				continue;
+		}
+
+		if (vni && !vxlan_addr_any(&cfg->remote_ip) &&
+		    !vxlan_addr_multicast(&cfg->remote_ip)) {
+			/* Get address from the outer IP header */
+			if (vxlan_get_sk_family(vs) == AF_INET) {
+				saddr.sin.sin_addr.s_addr = ip_hdr(skb)->saddr;
+				saddr.sa.sa_family = AF_INET;
+#if IS_ENABLED(CONFIG_IPV6)
+			} else {
+				saddr.sin6.sin6_addr = ipv6_hdr(skb)->saddr;
+				saddr.sa.sa_family = AF_INET6;
+#endif
+			}
+
+			if (!vxlan_addr_equal(&cfg->remote_ip, &saddr))
 				continue;
 		}
 
@@ -134,6 +153,7 @@ static struct vxlan_dev *vxlan_vs_find_vni(struct vxlan_sock *vs,
 
 /* Look up VNI in a per net namespace table */
 static struct vxlan_dev *vxlan_find_vni(struct net *net, int ifindex,
+					const struct sk_buff *skb,
 					__be32 vni, sa_family_t family,
 					__be16 port, u32 flags)
 {
@@ -143,7 +163,7 @@ static struct vxlan_dev *vxlan_find_vni(struct net *net, int ifindex,
 	if (!vs)
 		return NULL;
 
-	return vxlan_vs_find_vni(vs, ifindex, vni, NULL);
+	return vxlan_vs_find_vni(vs, ifindex, vni, skb, NULL);
 }
 
 /* Fill in neighbour message in skbuff. */
@@ -1701,7 +1721,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 
 	vni = vxlan_vni(vh->vx_vni);
 
-	vxlan = vxlan_vs_find_vni(vs, skb->dev->ifindex, vni, &vninode);
+	vxlan = vxlan_vs_find_vni(vs, skb->dev->ifindex, vni, skb, &vninode);
 	if (!vxlan) {
 		reason = SKB_DROP_REASON_VXLAN_VNI_NOT_FOUND;
 		goto drop;
@@ -1855,7 +1875,7 @@ static int vxlan_err_lookup(struct sock *sk, struct sk_buff *skb)
 		return -ENOENT;
 
 	vni = vxlan_vni(hdr->vx_vni);
-	vxlan = vxlan_vs_find_vni(vs, skb->dev->ifindex, vni, NULL);
+	vxlan = vxlan_vs_find_vni(vs, skb->dev->ifindex, vni, skb, NULL);
 	if (!vxlan)
 		return -ENOENT;
 
@@ -2330,7 +2350,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 		struct vxlan_dev *dst_vxlan;
 
 		dst_release(dst);
-		dst_vxlan = vxlan_find_vni(vxlan->net, dst_ifindex, vni,
+		dst_vxlan = vxlan_find_vni(vxlan->net, dst_ifindex, skb, vni,
 					   addr_family, dst_port,
 					   vxlan->cfg.flags);
 		if (!dst_vxlan) {
