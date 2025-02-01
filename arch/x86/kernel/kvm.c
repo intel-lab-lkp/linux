@@ -931,6 +931,23 @@ static void kvm_sev_hc_page_enc_status(unsigned long pfn, int npages, bool enc)
 			   KVM_MAP_GPA_RANGE_ENC_STAT(enc) | KVM_MAP_GPA_RANGE_PAGE_SZ_4K);
 }
 
+static u64 kvm_tolud __ro_after_init;
+
+static bool kvm_is_forced_wb_range(u64 start, u64 end)
+{
+	/*
+	 * In addition to the standard ISA override, force all low memory above
+	 * TOLUD to WB so that legacy devices are mapped with WB when running
+	 * as an SNP or TDX guest.  The memtype itself is completely irrevelant
+	 * as the devices are emulated, the override^Whack is needed purely to
+	 * avoid failures due to ACPI mapping device memory as WB in advance of
+	 * device drivers requesting WC or UC.  In a system with MTRRs, ACPI's
+	 * mappings get forced to UC via MTRRs (programmed sanely by firmware).
+	 */
+	return is_ISA_range(start, end) ||
+	       (start >= kvm_tolud && end <= SZ_4G);
+}
+
 static void __init kvm_init_platform(void)
 {
 	if (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT) &&
@@ -982,8 +999,18 @@ static void __init kvm_init_platform(void)
 	kvmclock_init();
 	x86_platform.apic_post_init = kvm_apic_init;
 
-	/* Set WB as the default cache mode for SEV-SNP and TDX */
-	guest_force_mtrr_state(NULL, 0, MTRR_TYPE_WRBACK);
+	/*
+	 * Set WB as the default cache mode for SEV-SNP and TDX.  MTRRs may be
+	 * enumerated as supported, but neither the TDX-Module (Secure EPT) nor
+	 * KVM (normal EPT for TDX, virtual MTRRs for NPT) actually virtualizes
+	 * MTRR memory types.  If MTRRs are forced to writeback, register KVM's
+	 * range-based WB override to handle cases where device drivers try to
+	 * map an emulated device's memory as WC, and fail because it's all WB.
+	 */
+	if (guest_force_mtrr_state(NULL, 0, MTRR_TYPE_WRBACK)) {
+		kvm_tolud = (e820__end_of_low_ram_pfn() << PAGE_SHIFT);
+		x86_platform.is_untracked_pat_range = kvm_is_forced_wb_range;
+	}
 }
 
 #if defined(CONFIG_AMD_MEM_ENCRYPT)
