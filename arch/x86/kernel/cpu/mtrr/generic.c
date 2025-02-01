@@ -435,19 +435,21 @@ void __init mtrr_copy_map(void)
  * @var: MTRR variable range array to use
  * @num_var: length of the @var array
  * @def_type: default caching type
+ *
+ * Returns %true if MTRRs were overridden, %false if they were not.
  */
-void guest_force_mtrr_state(struct mtrr_var_range *var, unsigned int num_var,
+bool guest_force_mtrr_state(struct mtrr_var_range *var, unsigned int num_var,
 			    mtrr_type def_type)
 {
 	unsigned int i;
 
 	/* Only allowed to be called once before mtrr_bp_init(). */
 	if (WARN_ON_ONCE(mtrr_state_set))
-		return;
+		return false;
 
 	/* Only allowed when running virtualized. */
 	if (!cpu_feature_enabled(X86_FEATURE_HYPERVISOR))
-		return;
+		return false;
 
 	/*
 	 * Only allowed for special virtualization cases:
@@ -460,7 +462,7 @@ void guest_force_mtrr_state(struct mtrr_var_range *var, unsigned int num_var,
 	    !hv_is_isolation_supported() &&
 	    !cpu_feature_enabled(X86_FEATURE_XENPV) &&
 	    !cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
-		return;
+		return false;
 
 	/* Disable MTRR in order to disable MTRR modifications. */
 	setup_clear_cpu_cap(X86_FEATURE_MTRR);
@@ -480,6 +482,7 @@ void guest_force_mtrr_state(struct mtrr_var_range *var, unsigned int num_var,
 	mtrr_state.enabled |= MTRR_STATE_MTRR_ENABLED;
 
 	mtrr_state_set = 1;
+	return true;
 }
 
 static u8 type_merge(u8 type, u8 new_type, u8 *uniform)

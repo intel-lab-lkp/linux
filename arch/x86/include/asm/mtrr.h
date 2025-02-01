@@ -58,7 +58,7 @@ struct mtrr_state_type {
  */
 # ifdef CONFIG_MTRR
 void mtrr_bp_init(void);
-void guest_force_mtrr_state(struct mtrr_var_range *var, unsigned int num_var,
+bool guest_force_mtrr_state(struct mtrr_var_range *var, unsigned int num_var,
 			    mtrr_type def_type);
 extern u8 mtrr_type_lookup(u64 addr, u64 end, u8 *uniform);
 extern void mtrr_save_fixed_ranges(void *);
@@ -75,10 +75,11 @@ void mtrr_disable(void);
 void mtrr_enable(void);
 void mtrr_generic_set_state(void);
 #  else
-static inline void guest_force_mtrr_state(struct mtrr_var_range *var,
+static inline bool guest_force_mtrr_state(struct mtrr_var_range *var,
 					  unsigned int num_var,
 					  mtrr_type def_type)
 {
+	return false;
 }
 
 static inline u8 mtrr_type_lookup(u64 addr, u64 end, u8 *uniform)
