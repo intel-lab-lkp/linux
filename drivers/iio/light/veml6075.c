@@ -210,7 +210,7 @@ static int veml6075_read_int_time_ms(struct veml6075_data *data, int *val)
 
 	guard(mutex)(&data->lock);
 	int_index = veml6075_read_int_time_index(data);
-	if (int_index < 0)
+	if (int_index < 0 || int_index >= ARRAY_SIZE(veml6075_it_ms))
 		return int_index;
 
 	*val = veml6075_it_ms[int_index];
