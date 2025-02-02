@@ -109,6 +109,12 @@ properties:
   power-domains:
     maxItems: 1
 
+  mediatek,pbus-csr:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to the syscon node used to detect if a given address is on
+      the PCIe ports.
+
   '#interrupt-cells':
     const: 1
 
@@ -168,6 +174,8 @@ allOf:
           minItems: 1
           maxItems: 2
 
+        mediatek,pbus-csr: false
+
   - if:
       properties:
         compatible:
@@ -197,6 +205,8 @@ allOf:
           minItems: 1
           maxItems: 2
 
+        mediatek,pbus-csr: false
+
   - if:
       properties:
         compatible:
@@ -223,6 +233,8 @@ allOf:
         reset-names:
           minItems: 1
           maxItems: 2
+
+        mediatek,pbus-csr: false
 
   - if:
       properties:
