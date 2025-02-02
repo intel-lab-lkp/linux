@@ -375,6 +375,19 @@ properties:
     items:
       enum: [1, 4, 8, 16, 32, 64, 128, 256]
 
+  snps,device-mode-intrpt-mod-interval:
+    description:
+      Specifies the minimum inter-interrupt interval in 250ns increments
+      during device mode operation. A value of 0 disables the interrupt
+      throttling logic and interrupts are generated immediately if event
+      count becomes non-zero. Otherwise, the interrupt is signaled when
+      all of the following conditons are met which are, EVNT_HANDLER_BUSY
+      is 0, event count is non-zero and at least 250ns increments of this
+      value has elapsed since the last time interrupt was de-asserted.
+    $ref: /schemas/types.yaml#/definitions/uint16
+    minimum: 0
+    maximum: 255
+
   num-hc-interrupters:
     maximum: 8
     default: 1
