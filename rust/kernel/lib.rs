@@ -29,6 +29,7 @@ extern crate self as kernel;
 
 pub use ffi;
 
+pub mod addr;
 pub mod alloc;
 #[cfg(CONFIG_BLOCK)]
 pub mod block;
