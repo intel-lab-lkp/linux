@@ -1428,7 +1428,7 @@ void aq_nic_deinit(struct aq_nic_s *self, bool link_down)
 	unsigned int i = 0U;
 
 	if (!self)
-		goto err_exit;
+		return;
 
 	for (i = 0U; i < self->aq_vecs; i++) {
 		aq_vec = self->aq_vec[i];
@@ -1441,13 +1441,14 @@ void aq_nic_deinit(struct aq_nic_s *self, bool link_down)
 	aq_ptp_ring_free(self);
 	aq_ptp_free(self);
 
-	if (likely(self->aq_fw_ops->deinit) && link_down) {
-		mutex_lock(&self->fwreq_mutex);
-		self->aq_fw_ops->deinit(self->aq_hw);
-		mutex_unlock(&self->fwreq_mutex);
+	/* May be invoked during hot unplug. */
+	if (pci_device_is_present(self->pdev)) {
+		if (likely(self->aq_fw_ops->deinit) && link_down) {
+			mutex_lock(&self->fwreq_mutex);
+			self->aq_fw_ops->deinit(self->aq_hw);
+			mutex_unlock(&self->fwreq_mutex);
+		}
 	}
-
-err_exit:;
 }
 
 void aq_nic_free_vectors(struct aq_nic_s *self)
