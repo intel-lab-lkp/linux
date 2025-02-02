@@ -83,7 +83,7 @@ impl Page {
     }
 
     /// Returns a raw pointer to the page.
-    pub fn as_ptr(&self) -> *mut bindings::page {
+    pub(crate) fn as_ptr(&self) -> *mut bindings::page {
         Opaque::raw_get(&self.page)
     }
 
