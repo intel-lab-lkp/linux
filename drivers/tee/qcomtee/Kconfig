@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Qualcomm Trusted Execution Environment Configuration
+config QCOMTEE
+	tristate "Qualcomm TEE Support"
+	select QCOM_SCM
+	help
+	  This option enables the Qualcomm Trusted Execution Environment (QTEE)
+	  driver. It provides an API to access services offered by QTEE and any
+	  loaded Trusted Applications (TAs), as well as exporting kernel
+	  services to QTEE.
