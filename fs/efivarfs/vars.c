@@ -490,7 +490,10 @@ void __efivar_entry_add(struct efivar_entry *entry, struct list_head *head)
  */
 void efivar_entry_remove(struct efivar_entry *entry)
 {
-	list_del(&entry->list);
+	if (!list_empty(&entry->list)) {
+        list_del(&entry->list);
+        INIT_LIST_HEAD(&entry->list);
+	}
 }
 
 /*
@@ -506,7 +509,10 @@ void efivar_entry_remove(struct efivar_entry *entry)
  */
 static void efivar_entry_list_del_unlock(struct efivar_entry *entry)
 {
-	list_del(&entry->list);
+	if (!list_empty(&entry->list)) {
+        list_del(&entry->list);
+        INIT_LIST_HEAD(&entry->list);
+    }
 	efivar_unlock();
 }
 
