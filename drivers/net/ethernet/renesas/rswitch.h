@@ -920,6 +920,7 @@ struct rswitch_etha {
 	bool external_phy;
 	struct mii_bus *mii;
 	phy_interface_t phy_interface;
+	u32 max_speed;
 	u32 psmcs;
 	u8 mac_addr[MAX_ADDR_LEN];
 	int link;

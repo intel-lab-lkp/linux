@@ -1308,36 +1308,40 @@ out:
 
 static int rswitch_etha_get_params(struct rswitch_device *rdev)
 {
-	u32 max_speed;
+	struct rswitch_etha *etha = rdev->etha;
 	int err;
 
 	if (!rdev->np_port)
 		return 0;	/* ignored */
 
-	err = of_get_phy_mode(rdev->np_port, &rdev->etha->phy_interface);
+	err = of_get_phy_mode(rdev->np_port, &etha->phy_interface);
 	if (err)
 		return err;
 
-	err = of_property_read_u32(rdev->np_port, "max-speed", &max_speed);
-	if (!err) {
-		rdev->etha->speed = max_speed;
-		return 0;
-	}
-
-	/* if no "max-speed" property, let's use default speed */
-	switch (rdev->etha->phy_interface) {
-	case PHY_INTERFACE_MODE_MII:
-		rdev->etha->speed = SPEED_100;
-		break;
+	switch (etha->phy_interface) {
 	case PHY_INTERFACE_MODE_SGMII:
-		rdev->etha->speed = SPEED_1000;
+		etha->max_speed = SPEED_1000;
 		break;
 	case PHY_INTERFACE_MODE_USXGMII:
-		rdev->etha->speed = SPEED_2500;
+	case PHY_INTERFACE_MODE_5GBASER:
+		etha->max_speed = SPEED_2500;
 		break;
 	default:
 		return -EINVAL;
 	}
+
+	/* Allow max_speed override */
+	of_property_read_u32(rdev->np_port, "max-speed", &etha->max_speed);
+
+	/* Set etha->speed to one of values expected by the driver */
+	if (etha->max_speed < SPEED_100)
+		return -EINVAL;
+	else if (etha->max_speed < SPEED_1000)
+		etha->speed = SPEED_100;
+	else if (etha->max_speed < SPEED_2500)
+		etha->speed = SPEED_1000;
+	else
+		etha->speed = SPEED_2500;
 
 	return 0;
 }
@@ -1412,6 +1416,13 @@ static void rswitch_adjust_link(struct net_device *ndev)
 static void rswitch_phy_remove_link_mode(struct rswitch_device *rdev,
 					 struct phy_device *phydev)
 {
+	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_10baseT_Half_BIT);
+	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_10baseT_Full_BIT);
+	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_100baseT_Half_BIT);
+	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
+
+	phy_set_max_speed(phydev, rdev->etha->max_speed);
+
 	if (!rdev->priv->etha_no_runtime_change)
 		return;
 
@@ -1431,8 +1442,6 @@ static void rswitch_phy_remove_link_mode(struct rswitch_device *rdev,
 	default:
 		break;
 	}
-
-	phy_set_max_speed(phydev, rdev->etha->speed);
 }
 
 static int rswitch_phy_device_init(struct rswitch_device *rdev)
@@ -1462,11 +1471,6 @@ static int rswitch_phy_device_init(struct rswitch_device *rdev)
 	if (!phydev)
 		goto out;
 
-	phy_set_max_speed(phydev, SPEED_2500);
-	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_10baseT_Half_BIT);
-	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_10baseT_Full_BIT);
-	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_100baseT_Half_BIT);
-	phy_remove_link_mode(phydev, ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
 	rswitch_phy_remove_link_mode(rdev, phydev);
 
 	phy_attached_info(phydev);
