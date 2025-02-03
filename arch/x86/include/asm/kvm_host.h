@@ -1150,11 +1150,8 @@ struct kvm_hv {
 	/* How many vCPUs have VP index != vCPU index */
 	atomic_t num_mismatched_vp_indexes;
 
-	/*
-	 * How many SynICs use 'AutoEOI' feature
-	 * (protected by arch.apicv_update_lock)
-	 */
-	unsigned int synic_auto_eoi_used;
+	/* How many SynICs use 'AutoEOI' feature */
+	atomic_t synic_auto_eoi_used;
 
 	struct kvm_hv_syndbg hv_syndbg;
 

@@ -131,25 +131,18 @@ static void synic_update_vector(struct kvm_vcpu_hv_synic *synic,
 	if (auto_eoi_old == auto_eoi_new)
 		return;
 
-	if (!enable_apicv)
-		return;
-
-	down_write(&vcpu->kvm->arch.apicv_update_lock);
-
 	if (auto_eoi_new)
-		hv->synic_auto_eoi_used++;
+		atomic_inc(&hv->synic_auto_eoi_used);
 	else
-		hv->synic_auto_eoi_used--;
+		atomic_dec(&hv->synic_auto_eoi_used);
 
 	/*
 	 * Inhibit APICv if any vCPU is using SynIC's AutoEOI, which relies on
 	 * the hypervisor to manually inject IRQs.
 	 */
-	__kvm_set_or_clear_apicv_inhibit(vcpu->kvm,
-					 APICV_INHIBIT_REASON_HYPERV,
-					 !!hv->synic_auto_eoi_used);
-
-	up_write(&vcpu->kvm->arch.apicv_update_lock);
+	kvm_set_or_clear_apicv_inhibit(vcpu->kvm,
+				       APICV_INHIBIT_REASON_HYPERV,
+				       !!atomic_read(&hv->synic_auto_eoi_used));
 }
 
 static int synic_set_sint(struct kvm_vcpu_hv_synic *synic, int sint,
