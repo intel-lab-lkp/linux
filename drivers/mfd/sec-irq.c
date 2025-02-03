@@ -14,6 +14,7 @@
 #include <linux/mfd/samsung/s2mps11.h>
 #include <linux/mfd/samsung/s2mps14.h>
 #include <linux/mfd/samsung/s2mpu02.h>
+#include <linux/mfd/samsung/s2mpu05.h>
 #include <linux/mfd/samsung/s5m8767.h>
 
 static const struct regmap_irq s2mps11_irqs[] = {
@@ -225,6 +226,77 @@ static const struct regmap_irq s2mpu02_irqs[] = {
 	},
 };
 
+static const struct regmap_irq s2mpu05_irqs[] = {
+	[S2MPU05_IRQ_PWRONF] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_PWRONF_MASK,
+	},
+	[S2MPU05_IRQ_PWRONR] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_PWRONR_MASK,
+	},
+	[S2MPU05_IRQ_JIGONBF] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_JIGONBF_MASK,
+	},
+	[S2MPU05_IRQ_JIGONBR] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_JIGONBR_MASK,
+	},
+	[S2MPU05_IRQ_ACOKF] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_ACOKF_MASK,
+	},
+	[S2MPU05_IRQ_ACOKR] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_ACOKR_MASK,
+	},
+	[S2MPU05_IRQ_PWRON1S] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_PWRON1S_MASK,
+	},
+	[S2MPU05_IRQ_MRB] = {
+		.reg_offset = 0,
+		.mask = S2MPU05_IRQ_MRB_MASK,
+	},
+	[S2MPU05_IRQ_RTC60S] = {
+		.reg_offset = 1,
+		.mask = S2MPU05_IRQ_RTC60S_MASK,
+	},
+	[S2MPU05_IRQ_RTCA1] = {
+		.reg_offset = 1,
+		.mask = S2MPU05_IRQ_RTCA1_MASK,
+	},
+	[S2MPU05_IRQ_RTCA0] = {
+		.reg_offset = 1,
+		.mask = S2MPU05_IRQ_RTCA0_MASK,
+	},
+	[S2MPU05_IRQ_SMPL] = {
+		.reg_offset = 1,
+		.mask = S2MPU05_IRQ_SMPL_MASK,
+	},
+	[S2MPU05_IRQ_RTC1S] = {
+		.reg_offset = 1,
+		.mask = S2MPU05_IRQ_RTC1S_MASK,
+	},
+	[S2MPU05_IRQ_WTSR] = {
+		.reg_offset = 1,
+		.mask = S2MPU05_IRQ_WTSR_MASK,
+	},
+	[S2MPU05_IRQ_INT120C] = {
+		.reg_offset = 2,
+		.mask = S2MPU05_IRQ_INT120C_MASK,
+	},
+	[S2MPU05_IRQ_INT140C] = {
+		.reg_offset = 2,
+		.mask = S2MPU05_IRQ_INT140C_MASK,
+	},
+	[S2MPU05_IRQ_TSD] = {
+		.reg_offset = 2,
+		.mask = S2MPU05_IRQ_TSD_MASK,
+	},
+};
+
 static const struct regmap_irq s5m8767_irqs[] = {
 	[S5M8767_IRQ_PWRR] = {
 		.reg_offset = 0,
@@ -339,6 +411,16 @@ static const struct regmap_irq_chip s2mpu02_irq_chip = {
 	.ack_base = S2MPU02_REG_INT1,
 };
 
+static const struct regmap_irq_chip s2mpu05_irq_chip = {
+	.name = "s2mpu05",
+	.irqs = s2mpu05_irqs,
+	.num_irqs = ARRAY_SIZE(s2mpu05_irqs),
+	.num_regs = 3,
+	.status_base = S2MPU05_REG_INT1,
+	.mask_base = S2MPU05_REG_INT1M,
+	.ack_base = S2MPU05_REG_INT1,
+};
+
 static const struct regmap_irq_chip s5m8767_irq_chip = {
 	.name = "s5m8767",
 	.irqs = s5m8767_irqs,
@@ -382,6 +464,9 @@ int sec_irq_init(struct sec_pmic_dev *sec_pmic)
 		break;
 	case S2MPU02:
 		sec_irq_chip = &s2mpu02_irq_chip;
+		break;
+	case S2MPU05:
+		sec_irq_chip = &s2mpu05_irq_chip;
 		break;
 	default:
 		dev_err(sec_pmic->dev, "Unknown device type %lu\n",
