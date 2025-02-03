@@ -385,9 +385,10 @@ netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 	switch (q_type) {
 	case NETDEV_QUEUE_TYPE_RX:
 		rxq = __netif_get_rx_queue(netdev, q_idx);
-		if (rxq->napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
-					     rxq->napi->napi_id))
-			goto nla_put_failure;
+		if (rxq->napi && rxq->napi->napi_id >= MIN_NAPI_ID)
+			if (nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
+					rxq->napi->napi_id))
+				goto nla_put_failure;
 
 		binding = rxq->mp_params.mp_priv;
 		if (binding &&
@@ -397,9 +398,10 @@ netdev_nl_queue_fill_one(struct sk_buff *rsp, struct net_device *netdev,
 		break;
 	case NETDEV_QUEUE_TYPE_TX:
 		txq = netdev_get_tx_queue(netdev, q_idx);
-		if (txq->napi && nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
-					     txq->napi->napi_id))
-			goto nla_put_failure;
+		if (txq->napi && txq->napi->napi_id >= MIN_NAPI_ID)
+			if (nla_put_u32(rsp, NETDEV_A_QUEUE_NAPI_ID,
+					txq->napi->napi_id))
+				goto nla_put_failure;
 	}
 
 	genlmsg_end(rsp, hdr);
