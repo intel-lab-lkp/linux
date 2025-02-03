@@ -6,6 +6,8 @@
 #ifndef _ASM_ARM64_POR_H
 #define _ASM_ARM64_POR_H
 
+#include <asm/sysreg.h>
+
 #define POR_BITS_PER_PKEY		4
 #define POR_ELx_IDX(por_elx, idx)	(((por_elx) >> ((idx) * POR_BITS_PER_PKEY)) & 0xf)
 
@@ -28,6 +30,13 @@ static inline bool por_elx_allows_exec(u64 por, u8 pkey)
 	u8 perm = POR_ELx_IDX(por, pkey);
 
 	return perm & POE_X;
+}
+
+static inline u64 por_set_pkey_perms(u64 por, u8 pkey, u64 perms)
+{
+	u64 shift = pkey * POR_BITS_PER_PKEY;
+
+	return (por & ~(POE_MASK << shift)) | (perms << shift);
 }
 
 #endif /* _ASM_ARM64_POR_H */
