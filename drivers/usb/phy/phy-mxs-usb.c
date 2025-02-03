@@ -770,9 +770,8 @@ static int mxs_phy_probe(struct platform_device *pdev)
 
 	clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(clk)) {
-		dev_err(&pdev->dev,
+		return dev_err_probe(&pdev->dev, PTR_ERR(clk),
 			"can't get the clock, err=%ld", PTR_ERR(clk));
-		return PTR_ERR(clk);
 	}
 
 	mxs_phy = devm_kzalloc(&pdev->dev, sizeof(*mxs_phy), GFP_KERNEL);
