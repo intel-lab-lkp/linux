@@ -408,6 +408,17 @@ at a greater cost than the value of such clean-ups.
 
 Conversely, spelling and grammar fixes are not discouraged.
 
+Inline functions
+----------------
+
+The use of static inline functions in .c file is strongly discouraged
+unless there is a demonstrable reason for them, usually performance
+related. Rather, it is preferred to omit the inline keyword and allow the
+compiler to inline them as it sees fit.
+
+This is a stricter requirement than that of the general Linux Kernel
+:ref:`Coding Style<codingstyle>`
+
 Resending after review
 ~~~~~~~~~~~~~~~~~~~~~~
 
