@@ -180,6 +180,55 @@ out:
 	return ret;
 }
 
+/* Show how long (in s) the oldest request has been waiting */
+static ssize_t fuse_conn_oldest_read(struct file *file, char __user *buf,
+				      size_t len, loff_t *ppos)
+{
+	char tmp[32];
+	size_t size;
+	unsigned long oldest = jiffies;
+
+	if (!*ppos) {
+		struct fuse_conn *fc = fuse_ctl_file_conn_get(file);
+		struct fuse_iqueue *fiq = &fc->iq;
+		struct fuse_dev *fud;
+		struct fuse_req *req;
+
+		if (!fc)
+			return 0;
+
+		spin_lock(&fc->lock);
+		list_for_each_entry(fud, &fc->devices, entry) {
+			struct fuse_pqueue *fpq = &fud->pq;
+			int i;
+
+			spin_lock(&fpq->lock);
+			for (i = 0; i < FUSE_PQ_HASH_SIZE; i++) {
+				if (list_empty(&fpq->processing[i]))
+					continue;
+				/*
+				 * Only check the first request in the queue. The
+				 * assumption is that the one at the head of the list
+				 * will always be the oldest.
+				 */
+				req = list_first_entry(&fpq->processing[i], struct fuse_req, list);
+				if (req->create_time < oldest)
+					oldest = req->create_time;
+			}
+			spin_unlock(&fpq->lock);
+		}
+		if (!list_empty(&fiq->pending)) {
+			req = list_first_entry(&fiq->pending, struct fuse_req, list);
+			if (req->create_time < oldest)
+				oldest = req->create_time;
+		}
+		spin_unlock(&fc->lock);
+		fuse_conn_put(fc);
+	}
+	size = sprintf(tmp, "%ld\n", (jiffies - oldest)/HZ);
+	return simple_read_from_buffer(buf, len, ppos, tmp, size);
+}
+
 static const struct file_operations fuse_ctl_abort_ops = {
 	.open = nonseekable_open,
 	.write = fuse_conn_abort_write,
@@ -200,6 +249,11 @@ static const struct file_operations fuse_conn_congestion_threshold_ops = {
 	.open = nonseekable_open,
 	.read = fuse_conn_congestion_threshold_read,
 	.write = fuse_conn_congestion_threshold_write,
+};
+
+static const struct file_operations fuse_ctl_oldest_ops = {
+	.open = nonseekable_open,
+	.read = fuse_conn_oldest_read,
 };
 
 static struct dentry *fuse_ctl_add_dentry(struct dentry *parent,
@@ -264,6 +318,8 @@ int fuse_ctl_add_conn(struct fuse_conn *fc)
 
 	if (!fuse_ctl_add_dentry(parent, fc, "waiting", S_IFREG | 0400, 1,
 				 NULL, &fuse_ctl_waiting_ops) ||
+	    !fuse_ctl_add_dentry(parent, fc, "oldest", S_IFREG | 0400, 1,
+				 NULL, &fuse_ctl_oldest_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "abort", S_IFREG | 0200, 1,
 				 NULL, &fuse_ctl_abort_ops) ||
 	    !fuse_ctl_add_dentry(parent, fc, "max_background", S_IFREG | 0600,
