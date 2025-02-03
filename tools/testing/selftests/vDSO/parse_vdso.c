@@ -18,7 +18,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#ifndef NOLIBC
 #include <limits.h>
+#endif
 #include <linux/auxvec.h>
 #include <linux/elf.h>
 
