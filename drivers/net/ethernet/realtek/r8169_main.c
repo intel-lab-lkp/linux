@@ -5180,9 +5180,6 @@ static int r8169_mdio_read_reg(struct mii_bus *mii_bus, int phyaddr, int phyreg)
 {
 	struct rtl8169_private *tp = mii_bus->priv;
 
-	if (phyaddr > 0)
-		return -ENODEV;
-
 	return rtl_readphy(tp, phyreg);
 }
 
@@ -5190,9 +5187,6 @@ static int r8169_mdio_write_reg(struct mii_bus *mii_bus, int phyaddr,
 				int phyreg, u16 val)
 {
 	struct rtl8169_private *tp = mii_bus->priv;
-
-	if (phyaddr > 0)
-		return -ENODEV;
 
 	rtl_writephy(tp, phyreg, val);
 
@@ -5222,6 +5216,7 @@ static int r8169_mdio_register(struct rtl8169_private *tp)
 	new_bus->priv = tp;
 	new_bus->parent = &pdev->dev;
 	new_bus->irq[0] = PHY_MAC_INTERRUPT;
+	new_bus->phy_mask = GENMASK(31, 1);
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "r8169-%x-%x",
 		 pci_domain_nr(pdev->bus), pci_dev_id(pdev));
 
