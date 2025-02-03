@@ -1113,7 +1113,7 @@ static void iwl_mvm_unshare_queue(struct iwl_mvm *mvm, int queue)
 					    "TXQ #%d is now aggregated again\n",
 					    queue);
 
-			/* Mark queue intenally as aggregating again */
+			/* Mark queue internally as aggregating again */
 			iwl_trans_txq_set_shared_mode(mvm->trans, queue, false);
 		}
 	}
@@ -2801,7 +2801,7 @@ static int iwl_mvm_fw_baid_op_sta(struct iwl_mvm *mvm,
 	switch (status & IWL_ADD_STA_STATUS_MASK) {
 	case ADD_STA_SUCCESS:
 		IWL_DEBUG_HT(mvm, "RX BA Session %sed in fw\n",
-			     start ? "start" : "stopp");
+			     start ? "start" : "stop");
 		if (WARN_ON(start && iwl_mvm_has_new_rx_api(mvm) &&
 			    !(status & IWL_ADD_STA_BAID_VALID_MASK)))
 			return -EINVAL;
@@ -2811,7 +2811,7 @@ static int iwl_mvm_fw_baid_op_sta(struct iwl_mvm *mvm,
 		return -ENOSPC;
 	default:
 		IWL_ERR(mvm, "RX BA Session failed %sing, status 0x%x\n",
-			start ? "start" : "stopp", status);
+			start ? "start" : "stop", status);
 		return -EIO;
 	}
 }
@@ -2861,7 +2861,7 @@ static int iwl_mvm_fw_baid_op_cmd(struct iwl_mvm *mvm,
 	}
 
 	IWL_DEBUG_HT(mvm, "RX BA Session %sed in fw\n",
-		     start ? "start" : "stopp");
+		     start ? "start" : "stop");
 
 	if (baid < 0 || baid >= ARRAY_SIZE(mvm->baid_map))
 		return -EINVAL;
@@ -3059,7 +3059,7 @@ int iwl_mvm_sta_tx_agg(struct iwl_mvm *mvm, struct ieee80211_sta *sta,
 	default:
 		ret = -EIO;
 		IWL_ERR(mvm, "TX BA Session failed %sing, status 0x%x\n",
-			start ? "start" : "stopp", status);
+			start ? "start" : "stop", status);
 		break;
 	}
 

@@ -1783,7 +1783,7 @@ static enum rs_action rs_get_rate_action(struct iwl_mvm *mvm,
 	if ((high_tpt != IWL_INVALID_VALUE) &&
 	    (high_tpt > current_tpt)) {
 		IWL_DEBUG_RATE(mvm,
-			       "Higher rate is better. Increate rate\n");
+			       "Higher rate is better. Increase rate\n");
 		return RS_ACTION_UPSCALE;
 	}
 
@@ -3125,7 +3125,7 @@ static void __iwl_mvm_rs_tx_status(struct iwl_mvm *mvm,
 			       "tx resp color 0x%x does not match 0x%x\n",
 			       lq_color, LQ_FLAG_COLOR_GET(table->flags));
 
-		/* Since rates mis-match, the last LQ command may have failed.
+		/* Since rates mismatch, the last LQ command may have failed.
 		 * After IWL_MISSED_RATE_MAX mis-matches, resync the uCode with
 		 * ... driver.
 		 */
