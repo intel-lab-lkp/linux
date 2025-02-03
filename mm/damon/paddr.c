@@ -19,6 +19,30 @@
 #include "../internal.h"
 #include "ops-common.h"
 
+/*
+ * Get an online page for a paddr if it's in the LRU list and if the head page is
+ * before region_start. Otherwise, returns NULL.
+ */
+static struct folio *damon_get_folio_in_region(unsigned long addr, unsigned long region_start)
+{
+	struct page *page = pfn_to_online_page(PHYS_PFN(addr));
+	struct folio *folio;
+
+	if (!page)
+		return NULL;
+
+	folio = page_folio(page);
+	if (addr - folio_page_idx(folio, page) * PAGE_SIZE < region_start)
+		return NULL;
+	if (!folio_test_lru(folio) || !folio_try_get(folio))
+		return NULL;
+	if (unlikely(page_folio(page) != folio || !folio_test_lru(folio))) {
+		folio_put(folio);
+		folio = NULL;
+	}
+	return folio;
+}
+
 static bool damon_folio_mkold_one(struct folio *folio,
 		struct vm_area_struct *vma, unsigned long addr, void *arg)
 {
@@ -58,9 +82,9 @@ static void damon_folio_mkold(struct folio *folio)
 
 }
 
-static void damon_pa_mkold(unsigned long paddr)
+static void damon_pa_mkold(unsigned long paddr, unsigned long region_start)
 {
-	struct folio *folio = damon_get_folio(PHYS_PFN(paddr));
+	struct folio *folio = damon_get_folio_in_region(paddr, region_start);
 
 	if (!folio)
 		return;
@@ -73,7 +97,7 @@ static void __damon_pa_prepare_access_check(struct damon_region *r)
 {
 	r->sampling_addr = damon_rand(r->ar.start, r->ar.end);
 
-	damon_pa_mkold(r->sampling_addr);
+	damon_pa_mkold(r->sampling_addr, r->ar.start);
 }
 
 static void damon_pa_prepare_access_checks(struct damon_ctx *ctx)
@@ -148,9 +172,9 @@ static bool damon_folio_young(struct folio *folio)
 	return accessed;
 }
 
-static bool damon_pa_young(unsigned long paddr, unsigned long *folio_sz)
+static bool damon_pa_young(unsigned long paddr, unsigned long *folio_sz, unsigned long region_start)
 {
-	struct folio *folio = damon_get_folio(PHYS_PFN(paddr));
+	struct folio *folio = damon_get_folio_in_region(paddr, region_start);
 	bool accessed;
 
 	if (!folio)
@@ -176,7 +200,7 @@ static void __damon_pa_check_access(struct damon_region *r,
 		return;
 	}
 
-	last_accessed = damon_pa_young(r->sampling_addr, &last_folio_sz);
+	last_accessed = damon_pa_young(r->sampling_addr, &last_folio_sz, r->ar.start);
 	damon_update_region_access_rate(r, last_accessed, attrs);
 
 	last_addr = r->sampling_addr;
@@ -268,7 +292,7 @@ static unsigned long damon_pa_pageout(struct damon_region *r, struct damos *s,
 
 	addr = r->ar.start;
 	while (addr < r->ar.end) {
-		struct folio *folio = damon_get_folio(PHYS_PFN(addr));
+		struct folio *folio = damon_get_folio_in_region(addr, r->ar.start);
 
 		if (!folio) {
 			addr += PAGE_SIZE;
@@ -307,7 +331,7 @@ static inline unsigned long damon_pa_mark_accessed_or_deactivate(
 
 	addr = r->ar.start;
 	while (addr < r->ar.end) {
-		struct folio *folio = damon_get_folio(PHYS_PFN(addr));
+		struct folio *folio = damon_get_folio_in_region(addr, r->ar.start);
 
 		if (!folio) {
 			addr += PAGE_SIZE;
@@ -474,7 +498,7 @@ static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
 
 	addr = r->ar.start;
 	while (addr < r->ar.end) {
-		struct folio *folio = damon_get_folio(PHYS_PFN(addr));
+		struct folio *folio = damon_get_folio_in_region(addr, r->ar.start);
 
 		if (!folio) {
 			addr += PAGE_SIZE;
@@ -518,7 +542,7 @@ static unsigned long damon_pa_stat(struct damon_region *r, struct damos *s,
 
 	addr = r->ar.start;
 	while (addr < r->ar.end) {
-		struct folio *folio = damon_get_folio(PHYS_PFN(addr));
+		struct folio *folio = damon_get_folio_in_region(addr, r->ar.start);
 
 		if (!folio) {
 			addr += PAGE_SIZE;
