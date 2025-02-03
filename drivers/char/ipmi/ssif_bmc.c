@@ -87,6 +87,7 @@ struct ssif_bmc_ctx {
 	/* Timeout waiting for response */
 	struct timer_list       response_timer;
 	bool                    response_timer_inited;
+	u32                     response_timeout;
 	/* Flag to identify a Multi-part Read Transaction */
 	bool                    is_singlepart_read;
 	u8                      nbytes_processed;
@@ -331,7 +332,8 @@ static void handle_request(struct ssif_bmc_ctx *ssif_bmc)
 		timer_setup(&ssif_bmc->response_timer, response_timeout, 0);
 		ssif_bmc->response_timer_inited = true;
 	}
-	mod_timer(&ssif_bmc->response_timer, jiffies + msecs_to_jiffies(RESPONSE_TIMEOUT));
+	mod_timer(&ssif_bmc->response_timer, jiffies +
+		  msecs_to_jiffies(ssif_bmc->response_timeout));
 }
 
 static void calculate_response_part_pec(struct ssif_part_buffer *part)
@@ -808,6 +810,10 @@ static int ssif_bmc_probe(struct i2c_client *client)
 	ssif_bmc = devm_kzalloc(&client->dev, sizeof(*ssif_bmc), GFP_KERNEL);
 	if (!ssif_bmc)
 		return -ENOMEM;
+
+	if (of_property_read_u32(client->dev.of_node, "timeout-ms",
+				 &ssif_bmc->response_timeout))
+		ssif_bmc->response_timeout = RESPONSE_TIMEOUT;
 
 	spin_lock_init(&ssif_bmc->lock);
 
