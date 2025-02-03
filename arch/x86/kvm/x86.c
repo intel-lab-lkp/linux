@@ -12038,19 +12038,14 @@ static void kvm_arch_vcpu_guestdbg_update_apicv_inhibit(struct kvm *kvm)
 	struct kvm_vcpu *vcpu;
 	unsigned long i;
 
-	if (!enable_apicv)
-		return;
-
-	down_write(&kvm->arch.apicv_update_lock);
-
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		if (vcpu->guest_debug & KVM_GUESTDBG_BLOCKIRQ) {
 			set = true;
 			break;
 		}
 	}
-	__kvm_set_or_clear_apicv_inhibit(kvm, APICV_INHIBIT_REASON_BLOCKIRQ, set);
-	up_write(&kvm->arch.apicv_update_lock);
+
+	kvm_set_or_clear_apicv_inhibit(kvm, APICV_INHIBIT_REASON_BLOCKIRQ, set);
 }
 
 int kvm_arch_vcpu_ioctl_set_guest_debug(struct kvm_vcpu *vcpu,
