@@ -26,6 +26,7 @@ properties:
           - samsung,s5pv210-uart
           - samsung,exynos4210-uart
           - samsung,exynos5433-uart
+          - samsung,exynos7870-uart
           - samsung,exynos850-uart
           - samsung,exynos8895-uart
       - items:
@@ -161,6 +162,7 @@ allOf:
           contains:
             enum:
               - google,gs101-uart
+              - samsung,exynos7870-uart
               - samsung,exynos8895-uart
     then:
       required:
