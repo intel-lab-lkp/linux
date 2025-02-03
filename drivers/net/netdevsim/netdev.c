@@ -783,6 +783,47 @@ static const struct file_operations nsim_qreset_fops = {
 };
 
 static ssize_t
+nsim_permaddr_write(struct file *file, const char __user *data,
+		    size_t count, loff_t *ppos)
+{
+	struct netdevsim *ns = file->private_data;
+	u8 eth_addr[ETH_ALEN];
+	char buf[32];
+	ssize_t ret;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, data, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	ret = sscanf(buf, "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx",
+		     &eth_addr[0], &eth_addr[1], &eth_addr[2],
+		     &eth_addr[3], &eth_addr[4], &eth_addr[5]);
+	if (ret != 6)
+		return -EINVAL;
+
+	rtnl_lock();
+	if (netif_running(ns->netdev)) {
+		ret = -EBUSY;
+		goto exit_unlock;
+	}
+
+	memcpy(ns->netdev->perm_addr, eth_addr, sizeof(eth_addr));
+
+	ret = count;
+exit_unlock:
+	rtnl_unlock();
+	return ret;
+}
+
+static const struct file_operations nsim_permaddr_fops = {
+	.open = simple_open,
+	.write = nsim_permaddr_write,
+	.owner = THIS_MODULE,
+};
+
+static ssize_t
 nsim_pp_hold_read(struct file *file, char __user *data,
 		  size_t count, loff_t *ppos)
 {
@@ -997,6 +1038,9 @@ nsim_create(struct nsim_dev *nsim_dev, struct nsim_dev_port *nsim_dev_port)
 	ns->qr_dfs = debugfs_create_file("queue_reset", 0200,
 					 nsim_dev_port->ddir, ns,
 					 &nsim_qreset_fops);
+	ns->permaddr_dfs = debugfs_create_file("perm_addr", 0200,
+					       nsim_dev_port->ddir, ns,
+					       &nsim_permaddr_fops);
 
 	return ns;
 

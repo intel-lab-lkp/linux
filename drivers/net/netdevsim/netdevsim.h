@@ -140,6 +140,7 @@ struct netdevsim {
 	struct page *page;
 	struct dentry *pp_dfs;
 	struct dentry *qr_dfs;
+	struct dentry *permaddr_dfs;
 
 	struct nsim_ethtool ethtool;
 	struct netdevsim __rcu *peer;
