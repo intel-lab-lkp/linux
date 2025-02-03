@@ -32,6 +32,7 @@ config TSNEP_SELFTESTS
 	bool "TSN endpoint self test support"
 	default n
 	depends on TSNEP
+	imply NET_SELFTESTS
 	help
 	  This enables self test support within the TSN endpoint driver.
 
