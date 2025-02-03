@@ -96,6 +96,12 @@ struct tee_param {
 	} u;
 };
 
+bool tee_device_get(struct tee_device *teedev);
+void tee_device_put(struct tee_device *teedev);
+
+void teedev_ctx_get(struct tee_context *ctx);
+void teedev_ctx_put(struct tee_context *ctx);
+
 /**
  * tee_shm_alloc_kernel_buf() - Allocate kernel shared memory for a
  *                              particular TEE client driver
