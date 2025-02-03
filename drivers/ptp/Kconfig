@@ -195,6 +195,16 @@ config PTP_1588_CLOCK_MOCK
 	  To compile this driver as a module, choose M here: the module
 	  will be called ptp_mock.
 
+config PTP_1588_CLOCK_MOCK_DEV
+	tristate "Mock-up PTP clock device"
+	depends on PTP_1588_CLOCK_MOCK
+	help
+	  Instantiante a dummy PTP clock device derived from the system
+	  monotonic time.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ptp_mock_dev.
+
 config PTP_1588_CLOCK_VMW
 	tristate "VMware virtual PTP clock"
 	depends on ACPI && HYPERVISOR_GUEST && X86
