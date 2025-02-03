@@ -330,6 +330,7 @@ static const char * const damon_sysfs_scheme_filter_type_strs[] = {
 	"anon",
 	"memcg",
 	"young",
+	"hugepage",
 	"addr",
 	"target",
 };
