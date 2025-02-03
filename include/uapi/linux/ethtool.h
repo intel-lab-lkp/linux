@@ -2263,12 +2263,13 @@ static inline int ethtool_validate_duplex(__u8 duplex)
 #define WOL_MODE_COUNT		8
 
 /* RSS hash function data
- * XOR the corresponding source and destination fields of each specified
- * protocol. Both copies of the XOR'ed fields are fed into the RSS and RXHASH
- * calculation. Note that this XORing reduces the input set entropy and could
+ * XOR/OR the corresponding source and destination fields of each specified
+ * protocol. Both copies of the XOR/OR'ed fields are fed into the RSS and RXHASH
+ * calculation. Note that this operation reduces the input set entropy and could
  * be exploited to reduce the RSS queue spread.
  */
 #define	RXH_XFRM_SYM_XOR	(1 << 0)
+#define	RXH_XFRM_SYM_OR_XOR	(1 << 1)
 #define	RXH_XFRM_NO_CHANGE	0xff
 
 /* L2-L4 network traffic flow types */
