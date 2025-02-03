@@ -19,6 +19,12 @@ properties:
   reg:
     maxItems: 1
 
+  timeout-ms:
+    minimum: 0
+    maximum: 4294967295
+    default: 500
+    description: Response timeout in millisecond.
+
 required:
   - compatible
   - reg
