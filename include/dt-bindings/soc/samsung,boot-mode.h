@@ -9,6 +9,12 @@
 #ifndef __DT_BINDINGS_SAMSUNG_BOOT_MODE_H
 #define __DT_BINDINGS_SAMSUNG_BOOT_MODE_H
 
+/* Boot mode definitions for Exynos 7870 SoC */
+
+#define EXYNOS7870_BOOT_DOWNLOAD	0x12345671
+#define EXYNOS7870_BOOT_RECOVERY	0x12345674
+#define EXYNOS7870_BOOT_BOOTLOADER	0x1234567d
+
 /* Boot mode definitions for Exynos Auto v9 SoC */
 
 #define EXYNOSAUTOV9_BOOT_FASTBOOT	0xfa
