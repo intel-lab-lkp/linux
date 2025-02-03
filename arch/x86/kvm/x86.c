@@ -9917,33 +9917,42 @@ static void kvm_pv_kick_cpu_op(struct kvm *kvm, int apicid)
 
 bool kvm_apicv_activated(struct kvm *kvm)
 {
-	return (READ_ONCE(kvm->arch.apicv_inhibit_reasons) == 0);
+	return READ_ONCE(kvm->arch.apicv_activated);
 }
 EXPORT_SYMBOL_GPL(kvm_apicv_activated);
 
 bool kvm_vcpu_apicv_activated(struct kvm_vcpu *vcpu)
 {
-	ulong vm_reasons = READ_ONCE(vcpu->kvm->arch.apicv_inhibit_reasons);
+	ulong vm_apicv_activated = READ_ONCE(vcpu->kvm->arch.apicv_activated);
 	ulong vcpu_reasons =
 			kvm_x86_call(vcpu_get_apicv_inhibit_reasons)(vcpu);
 
-	return (vm_reasons | vcpu_reasons) == 0;
+	return vm_apicv_activated && vcpu_reasons == 0;
 }
 EXPORT_SYMBOL_GPL(kvm_vcpu_apicv_activated);
 
-static void set_or_clear_apicv_inhibit(unsigned long *inhibits,
-				       enum kvm_apicv_inhibit reason, bool set)
+static unsigned long set_or_clear_apicv_inhibit(atomic_t *inhibits, enum kvm_apicv_inhibit reason,
+						bool set, unsigned long *new_inhibits)
 {
 	const struct trace_print_flags apicv_inhibits[] = { APICV_INHIBIT_REASONS };
+	unsigned long old, new;
 
 	BUILD_BUG_ON(ARRAY_SIZE(apicv_inhibits) != NR_APICV_INHIBIT_REASONS);
 
-	if (set)
-		__set_bit(reason, inhibits);
-	else
-		__clear_bit(reason, inhibits);
+	if (set) {
+		old = new = atomic_fetch_or(BIT(reason), inhibits);
+		__set_bit(reason, &new);
+	} else {
+		old = new = atomic_fetch_andnot(BIT(reason), inhibits);
+		__clear_bit(reason, &new);
+	}
 
-	trace_kvm_apicv_inhibit_changed(reason, set, *inhibits);
+	trace_kvm_apicv_inhibit_changed(reason, set, new);
+
+	if (new_inhibits)
+		*new_inhibits = new;
+
+	return old;
 }
 
 static void kvm_apicv_init(struct kvm *kvm)
@@ -9951,7 +9960,7 @@ static void kvm_apicv_init(struct kvm *kvm)
 	enum kvm_apicv_inhibit reason = enable_apicv ? APICV_INHIBIT_REASON_ABSENT :
 						       APICV_INHIBIT_REASON_DISABLED;
 
-	set_or_clear_apicv_inhibit(&kvm->arch.apicv_inhibit_reasons, reason, true);
+	set_or_clear_apicv_inhibit(&kvm->arch.apicv_inhibit_reasons, reason, true, NULL);
 
 	init_rwsem(&kvm->arch.apicv_update_lock);
 }
@@ -10592,56 +10601,51 @@ static void kvm_vcpu_update_apicv(struct kvm_vcpu *vcpu)
 	__kvm_vcpu_update_apicv(vcpu);
 }
 
-void __kvm_set_or_clear_apicv_inhibit(struct kvm *kvm,
-				      enum kvm_apicv_inhibit reason, bool set)
-{
-	unsigned long old, new;
-
-	lockdep_assert_held_write(&kvm->arch.apicv_update_lock);
-
-	if (!(kvm_x86_ops.required_apicv_inhibits & BIT(reason)))
-		return;
-
-	old = new = kvm->arch.apicv_inhibit_reasons;
-
-	set_or_clear_apicv_inhibit(&new, reason, set);
-
-	if (!!old != !!new) {
-		/*
-		 * Kick all vCPUs before setting apicv_inhibit_reasons to avoid
-		 * false positives in the sanity check WARN in vcpu_enter_guest().
-		 * This task will wait for all vCPUs to ack the kick IRQ before
-		 * updating apicv_inhibit_reasons, and all other vCPUs will
-		 * block on acquiring apicv_update_lock so that vCPUs can't
-		 * redo vcpu_enter_guest() without seeing the new inhibit state.
-		 *
-		 * Note, holding apicv_update_lock and taking it in the read
-		 * side (handling the request) also prevents other vCPUs from
-		 * servicing the request with a stale apicv_inhibit_reasons.
-		 */
-		kvm_make_all_cpus_request(kvm, KVM_REQ_APICV_UPDATE);
-		kvm->arch.apicv_inhibit_reasons = new;
-		if (new) {
-			unsigned long gfn = gpa_to_gfn(APIC_DEFAULT_PHYS_BASE);
-			int idx = srcu_read_lock(&kvm->srcu);
-
-			kvm_zap_gfn_range(kvm, gfn, gfn+1);
-			srcu_read_unlock(&kvm->srcu, idx);
-		}
-	} else {
-		kvm->arch.apicv_inhibit_reasons = new;
-	}
-}
-
 void kvm_set_or_clear_apicv_inhibit(struct kvm *kvm,
 				    enum kvm_apicv_inhibit reason, bool set)
 {
-	if (!enable_apicv)
+	unsigned long old, new;
+
+	if (!enable_apicv || !(kvm_x86_ops.required_apicv_inhibits & BIT(reason)))
 		return;
 
-	down_write(&kvm->arch.apicv_update_lock);
-	__kvm_set_or_clear_apicv_inhibit(kvm, reason, set);
-	up_write(&kvm->arch.apicv_update_lock);
+	old = set_or_clear_apicv_inhibit(&kvm->arch.apicv_inhibit_reasons, reason, set, &new);
+
+	if (!old != !new) {
+		down_write(&kvm->arch.apicv_update_lock);
+
+		/*
+		 * Someone else may have updated the inhibit reason and the flag
+		 * between when we do the update above and take the lock. Confirm
+		 * the state change needed before proceeding.
+		 */
+		new = atomic_read(&kvm->arch.apicv_inhibit_reasons);
+		if (!new != kvm->arch.apicv_activated) {
+			/*
+			 * Kick all vCPUs before setting apicv_activated to avoid false
+			 * positives in the sanity check WARN in vcpu_enter_guest().
+			 * This task will wait for all vCPUs to ack the kick IRQ before
+			 * updating apicv_activated, and all other vCPUs will block on
+			 * acquiring apicv_update_lock so that vCPUs can't redo
+			 * vcpu_enter_guest() without seeing the new inhibit state.
+			 *
+			 * Note, holding apicv_update_lock and taking it in the read side
+			 * (handling the request) also prevents other vCPUs from servicing
+			 * the request with a stale apicv_activated value.
+			 */
+			kvm_make_all_cpus_request(kvm, KVM_REQ_APICV_UPDATE);
+			kvm->arch.apicv_activated = !new;
+			if (new) {
+				unsigned long gfn = gpa_to_gfn(APIC_DEFAULT_PHYS_BASE);
+				int idx = srcu_read_lock(&kvm->srcu);
+
+				kvm_zap_gfn_range(kvm, gfn, gfn+1);
+				srcu_read_unlock(&kvm->srcu, idx);
+			}
+		}
+
+		up_write(&kvm->arch.apicv_update_lock);
+	}
 }
 EXPORT_SYMBOL_GPL(kvm_set_or_clear_apicv_inhibit);
 
