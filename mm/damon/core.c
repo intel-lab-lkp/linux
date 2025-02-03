@@ -776,6 +776,9 @@ static void damos_commit_filter_arg(
 	case DAMOS_FILTER_TYPE_TARGET:
 		dst->target_idx = src->target_idx;
 		break;
+	case DAMOS_FILTER_TYPE_HUGEPAGE:
+		dst->folio_size = src->folio_size;
+		break;
 	default:
 		break;
 	}

@@ -36,6 +36,16 @@ struct damon_addr_range {
 };
 
 /**
+ * struct damon_folio_size - Represents size of folio filter on [@min, @max].
+ * @min:	Min size of the folio (inclusive).
+ * @max:	Max size of the folio (inclusive).
+ */
+struct damon_folio_size {
+	unsigned long min;
+	unsigned long max;
+};
+
+/**
  * struct damon_region - Represents a monitoring target region.
  * @ar:			The address range of the region.
  * @sampling_addr:	Address of the sample for the next access check.
@@ -377,6 +387,7 @@ struct damos_filter {
 		struct damon_addr_range addr_range;
 		int target_idx;
 	};
+	struct damon_folio_size folio_size;
 	struct list_head list;
 };
 
