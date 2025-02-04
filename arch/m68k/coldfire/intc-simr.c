@@ -58,6 +58,14 @@ static inline unsigned int irq2ebit(unsigned int irq)
 
 #endif
 
+static inline void intc_irq_setlevel(unsigned long level)
+{
+	asm volatile ("move.w %0,%%sr"
+		      : /* no outputs */
+		      : "d" (0x2000 | ((level) << 8))
+		      : "memory");
+}
+
 /*
  *	There maybe one, two or three interrupt control units, each has 64
  *	interrupts. If there is no second or third unit then MCFINTC1_* or
@@ -67,13 +75,17 @@ static inline unsigned int irq2ebit(unsigned int irq)
 static void intc_irq_mask(struct irq_data *d)
 {
 	unsigned int irq = d->irq - MCFINT_VECBASE;
+	unsigned long flags = arch_local_save_flags();
 
+	intc_irq_setlevel(7);
 	if (MCFINTC2_SIMR && (irq > 127))
 		__raw_writeb(irq - 128, MCFINTC2_SIMR);
 	else if (MCFINTC1_SIMR && (irq > 63))
 		__raw_writeb(irq - 64, MCFINTC1_SIMR);
 	else
 		__raw_writeb(irq, MCFINTC0_SIMR);
+
+	arch_local_irq_restore(flags);
 }
 
 static void intc_irq_unmask(struct irq_data *d)
