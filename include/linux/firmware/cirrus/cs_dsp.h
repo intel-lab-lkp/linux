@@ -53,6 +53,16 @@
 #define CS_DSP_WSEQ_END		0xFF
 
 /**
+ * struct cs_dsp_coeff_desc - Describes a coeff. file + filename pair
+ * @coeff_firmware:	Firmware struct to populate with coeff. data
+ * @coeff_filename:	File from which coeff. data is loaded
+ */
+struct cs_dsp_coeff_desc {
+	const struct firmware *coeff_firmware;
+	const char *coeff_filename;
+};
+
+/**
  * struct cs_dsp_region - Describes a logical memory region in DSP address space
  * @type:	Memory region type
  * @base:	Address of region
@@ -227,6 +237,10 @@ int cs_dsp_adsp1_power_up(struct cs_dsp *dsp,
 			  const struct firmware *coeff_firmware, const char *coeff_filename,
 			  const char *fw_name);
 void cs_dsp_adsp1_power_down(struct cs_dsp *dsp);
+int cs_dsp_power_up_multiple(struct cs_dsp *dsp,
+			     const struct firmware *wmfw_firmware, const char *wmfw_filename,
+			     struct cs_dsp_coeff_desc *coeffs, int num_coeffs,
+			     const char *fw_name);
 int cs_dsp_power_up(struct cs_dsp *dsp,
 		    const struct firmware *wmfw_firmware, const char *wmfw_filename,
 		    const struct firmware *coeff_firmware, const char *coeff_filename,

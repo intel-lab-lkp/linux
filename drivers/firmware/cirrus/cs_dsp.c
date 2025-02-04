@@ -2695,28 +2695,29 @@ static void cs_dsp_halo_stop_watchdog(struct cs_dsp *dsp)
 }
 
 /**
- * cs_dsp_power_up() - Downloads firmware to the DSP
- * @dsp: pointer to DSP structure
+ * cs_dsp_power_up_multiple() - Downloads firmware and multiple coefficient files to the DSP
+ * @dsp: pointer to the DSP structure
  * @wmfw_firmware: the firmware to be sent
  * @wmfw_filename: file name of firmware to be sent
- * @coeff_firmware: the coefficient data to be sent
- * @coeff_filename: file name of coefficient to data be sent
+ * @coeffs: coefficient data and filename pairs to be sent
+ * @num_coeffs: number of coefficient files to be sent
  * @fw_name: the user-friendly firmware name
  *
  * This function is used on ADSP2 and Halo DSP cores, it powers-up the DSP core
  * and downloads the firmware but does not start the firmware running. The
  * cs_dsp booted flag will be set once completed and if the core has a low-power
  * memory retention mode it will be put into this state after the firmware is
- * downloaded.
+ * downloaded. Differs from cs_dsp_power_up() in that it allows for multiple
+ * coefficient files to be downloaded.
  *
  * Return: Zero for success, a negative number on error.
  */
-int cs_dsp_power_up(struct cs_dsp *dsp,
-		    const struct firmware *wmfw_firmware, const char *wmfw_filename,
-		    const struct firmware *coeff_firmware, const char *coeff_filename,
-		    const char *fw_name)
+int cs_dsp_power_up_multiple(struct cs_dsp *dsp,
+			     const struct firmware *wmfw_firmware, const char *wmfw_filename,
+			     struct cs_dsp_coeff_desc *coeffs, int num_coeffs,
+			     const char *fw_name)
 {
-	int ret;
+	int i, ret;
 
 	mutex_lock(&dsp->pwr_lock);
 
@@ -2742,9 +2743,12 @@ int cs_dsp_power_up(struct cs_dsp *dsp,
 	if (ret != 0)
 		goto err_ena;
 
-	ret = cs_dsp_load_coeff(dsp, coeff_firmware, coeff_filename);
-	if (ret != 0)
-		goto err_ena;
+	for (i = 0; i < num_coeffs; i++) {
+		ret = cs_dsp_load_coeff(dsp, coeffs[i].coeff_firmware,
+					coeffs[i].coeff_filename);
+		if (ret != 0)
+			goto err_ena;
+	}
 
 	/* Initialize caches for enabled and unset controls */
 	ret = cs_dsp_coeff_init_control_caches(dsp);
@@ -2769,6 +2773,37 @@ err_mutex:
 	mutex_unlock(&dsp->pwr_lock);
 
 	return ret;
+}
+EXPORT_SYMBOL_NS_GPL(cs_dsp_power_up_multiple, "FW_CS_DSP");
+
+/**
+ * cs_dsp_power_up() - Downloads firmware to the DSP
+ * @dsp: pointer to DSP structure
+ * @wmfw_firmware: the firmware to be sent
+ * @wmfw_filename: file name of firmware to be sent
+ * @coeff_firmware: the coefficient data to be sent
+ * @coeff_filename: file name of coefficient to data be sent
+ * @fw_name: the user-friendly firmware name
+ *
+ * This function is used on ADSP2 and Halo DSP cores, it powers-up the DSP core
+ * and downloads the firmware but does not start the firmware running. The
+ * cs_dsp booted flag will be set once completed and if the core has a low-power
+ * memory retention mode it will be put into this state after the firmware is
+ * downloaded.
+ *
+ * Return: Zero for success, a negative number on error.
+ */
+int cs_dsp_power_up(struct cs_dsp *dsp,
+		    const struct firmware *wmfw_firmware, const char *wmfw_filename,
+		    const struct firmware *coeff_firmware, const char *coeff_filename,
+		    const char *fw_name)
+{
+	struct cs_dsp_coeff_desc coeff_desc;
+
+	coeff_desc.coeff_firmware = coeff_firmware;
+	coeff_desc.coeff_filename = coeff_filename;
+
+	return cs_dsp_power_up_multiple(dsp, wmfw_firmware, wmfw_filename, &coeff_desc, 1, fw_name);
 }
 EXPORT_SYMBOL_NS_GPL(cs_dsp_power_up, "FW_CS_DSP");
 
