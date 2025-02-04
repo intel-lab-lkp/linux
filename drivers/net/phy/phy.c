@@ -1501,6 +1501,25 @@ void phy_free_interrupt(struct phy_device *phydev)
 }
 EXPORT_SYMBOL(phy_free_interrupt);
 
+/**
+ * phy_get_next_update_time - Determine the next PHY update time
+ * @phydev: Pointer to the phy_device structure
+ *
+ * This function queries the PHY driver to get the time for the next polling
+ * event. If the driver does not implement the callback, a default value is used.
+ *
+ * Return: The time for the next polling event in milliseconds
+ */
+static unsigned int phy_get_next_update_time(struct phy_device *phydev)
+{
+	const unsigned int default_time = PHY_STATE_TIME;
+
+	if (phydev->drv && phydev->drv->get_next_update_time)
+		return phydev->drv->get_next_update_time(phydev);
+
+	return default_time;
+}
+
 enum phy_state_work {
 	PHY_STATE_WORK_NONE,
 	PHY_STATE_WORK_ANEG,
@@ -1579,8 +1598,13 @@ static enum phy_state_work _phy_state_machine(struct phy_device *phydev)
 	 * state machine would be pointless and possibly error prone when
 	 * called from phy_disconnect() synchronously.
 	 */
-	if (phy_polling_mode(phydev) && phy_is_started(phydev))
-		phy_queue_state_machine(phydev, PHY_STATE_TIME);
+	if (phy_polling_mode(phydev) && phy_is_started(phydev)) {
+		unsigned int next_update_time =
+			phy_get_next_update_time(phydev);
+
+		phy_queue_state_machine(phydev,
+					msecs_to_jiffies(next_update_time));
+	}
 
 	return state_work;
 }
