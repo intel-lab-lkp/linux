@@ -3702,7 +3702,7 @@ int cs_dsp_wseq_write(struct cs_dsp *dsp, struct cs_dsp_wseq *wseq,
 
 		ret = cs_dsp_coeff_write_ctrl(wseq->ctl, op_end->offset / sizeof(u32),
 					      &op_end->data, sizeof(u32));
-		if (ret)
+		if (ret < 0)
 			goto op_new_free;
 
 		list_add_tail(&op_new->list, &op_end->list);
@@ -3710,7 +3710,7 @@ int cs_dsp_wseq_write(struct cs_dsp *dsp, struct cs_dsp_wseq *wseq,
 
 	ret = cs_dsp_coeff_write_ctrl(wseq->ctl, op_new->offset / sizeof(u32),
 				      words, new_op_size);
-	if (ret)
+	if (ret < 0)
 		goto op_new_free;
 
 	return 0;
