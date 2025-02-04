@@ -129,11 +129,12 @@ static bool kvm_is_mmio_pfn(kvm_pfn_t pfn)
 }
 
 /*
- * Returns true if the SPTE has bits that may be set without holding mmu_lock.
- * The caller is responsible for checking if the SPTE is shadow-present, and
- * for determining whether or not the caller cares about non-leaf SPTEs.
+ * Returns true if the SPTE has bits other than the Accessed bit that may be
+ * changed without holding mmu_lock. The caller is responsible for checking if
+ * the SPTE is shadow-present, and for determining whether or not the caller
+ * cares about non-leaf SPTEs.
  */
-bool spte_has_volatile_bits(u64 spte)
+bool spte_needs_atomic_write(u64 spte)
 {
 	if (!is_writable_pte(spte) && is_mmu_writable_spte(spte))
 		return true;

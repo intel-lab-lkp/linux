@@ -55,7 +55,7 @@ static inline bool kvm_tdp_mmu_spte_need_atomic_write(u64 old_spte, int level)
 {
 	return is_shadow_present_pte(old_spte) &&
 	       is_last_spte(old_spte, level) &&
-	       spte_has_volatile_bits(old_spte);
+	       spte_needs_atomic_write(old_spte);
 }
 
 static inline u64 kvm_tdp_mmu_write_spte(tdp_ptep_t sptep, u64 old_spte,
