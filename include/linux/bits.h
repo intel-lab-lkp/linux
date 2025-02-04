@@ -21,7 +21,7 @@
 #if !defined(__ASSEMBLY__)
 #include <linux/build_bug.h>
 #include <linux/compiler.h>
-#define GENMASK_INPUT_CHECK(h, l) BUILD_BUG_ON_ZERO(const_true((l) > (h)))
+#define GENMASK_INPUT_CHECK(h, l) BUILD_BUG_ON_ZERO(const_true((long)(l) > (long)(h)))
 #else
 /*
  * BUILD_BUG_ON_ZERO is not available in h files included from asm files,
