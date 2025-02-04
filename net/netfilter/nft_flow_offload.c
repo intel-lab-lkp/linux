@@ -105,6 +105,7 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 		switch (path->type) {
 		case DEV_PATH_ETHERNET:
 		case DEV_PATH_DSA:
+		case DEV_PATH_MTK_WDMA:
 		case DEV_PATH_VLAN:
 		case DEV_PATH_PPPOE:
 			info->indev = path->dev;
@@ -114,6 +115,10 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 			if (path->type == DEV_PATH_ETHERNET)
 				break;
 			if (path->type == DEV_PATH_DSA) {
+				i = stack->num_paths;
+				break;
+			}
+			if (path->type == DEV_PATH_MTK_WDMA) {
 				i = stack->num_paths;
 				break;
 			}
