@@ -239,8 +239,6 @@
 
 &macb0 {
 	phy-mode = "rmii";
-	#address-cells = <1>;
-	#size-cells = <0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_macb0_rmii>;
 	status = "okay";

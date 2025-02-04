@@ -110,8 +110,6 @@
 };
 
 &macb0 {
-	#address-cells = <1>;
-	#size-cells = <0>;
 	status = "okay";
 
 	ethernet-phy@7 {
@@ -132,8 +130,6 @@
 };
 
 &macb1 {
-	#address-cells = <1>;
-	#size-cells = <0>;
 	status = "okay";
 
 	ethernet-phy@1 {

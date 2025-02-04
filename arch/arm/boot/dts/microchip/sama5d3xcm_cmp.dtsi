@@ -46,8 +46,6 @@
 
 			macb0: ethernet@f0028000 {
 				phy-mode = "rgmii";
-				#address-cells = <1>;
-				#size-cells = <0>;
 
 				ethernet-phy@1 {
 					reg = <0x1>;

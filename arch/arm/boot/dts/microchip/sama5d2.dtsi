@@ -387,6 +387,8 @@
 					     <67 IRQ_TYPE_LEVEL_HIGH 3>;        /* Queue 2 */
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 5>, <&pmc PMC_TYPE_PERIPHERAL 5>;
 				clock-names = "hclk", "pclk";
+				#address-cells = <1>;
+				#size-cells = <0>;
 				status = "disabled";
 			};
 

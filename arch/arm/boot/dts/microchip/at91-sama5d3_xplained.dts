@@ -132,8 +132,6 @@
 
 			macb0: ethernet@f0028000 {
 				phy-mode = "rgmii-rxid";
-				#address-cells = <1>;
-				#size-cells = <0>;
 				status = "okay";
 
 				ethernet-phy@7 {
@@ -201,8 +199,6 @@
 
 			macb1: ethernet@f802c000 {
 				phy-mode = "rmii";
-				#address-cells = <1>;
-				#size-cells = <0>;
 				status = "okay";
 
 				ethernet-phy@1 {

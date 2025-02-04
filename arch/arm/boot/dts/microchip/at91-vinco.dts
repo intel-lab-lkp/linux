@@ -129,9 +129,6 @@
 			macb1: ethernet@fc028000 {
 				phy-mode = "rmii";
 				status = "okay";
-				#address-cells = <1>;
-				#size-cells = <0>;
-				status = "okay";
 
 				ethernet-phy@1 {
 					reg = <0x1>;

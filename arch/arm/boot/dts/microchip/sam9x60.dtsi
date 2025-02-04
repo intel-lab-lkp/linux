@@ -1035,6 +1035,8 @@
 				interrupts = <24 IRQ_TYPE_LEVEL_HIGH 3>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 24>, <&pmc PMC_TYPE_PERIPHERAL 24>;
 				clock-names = "hclk", "pclk";
+				#address-cells = <1>;
+				#size-cells = <0>;
 				status = "disabled";
 			};
 
@@ -1044,6 +1046,8 @@
 				interrupts = <27 IRQ_TYPE_LEVEL_HIGH 3>;
 				clocks = <&pmc PMC_TYPE_PERIPHERAL 27>, <&pmc PMC_TYPE_PERIPHERAL 27>;
 				clock-names = "hclk", "pclk";
+				#address-cells = <1>;
+				#size-cells = <0>;
 				status = "disabled";
 			};
 

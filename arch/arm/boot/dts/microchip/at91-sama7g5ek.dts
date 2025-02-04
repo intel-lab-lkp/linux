@@ -512,8 +512,6 @@
 };
 
 &gmac0 {
-	#address-cells = <1>;
-	#size-cells = <0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_gmac0_default
 		     &pinctrl_gmac0_mdio_default
@@ -532,8 +530,6 @@
 };
 
 &gmac1 {
-	#address-cells = <1>;
-	#size-cells = <0>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_gmac1_default
 		     &pinctrl_gmac1_mdio_default
