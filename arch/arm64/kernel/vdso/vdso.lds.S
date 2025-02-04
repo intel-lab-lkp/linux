@@ -80,6 +80,7 @@ SECTIONS
 		*(.data .data.* .gnu.linkonce.d.* .sdata*)
 		*(.bss .sbss .dynbss .dynsbss)
 		*(.eh_frame .eh_frame_hdr)
+		*(.ARM.attributes)
 	}
 }
 
