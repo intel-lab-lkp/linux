@@ -3577,10 +3577,12 @@ ath12k_mac_op_change_vif_links(struct ieee80211_hw *hw,
 			       struct ieee80211_bss_conf *ol[IEEE80211_MLD_MAX_NUM_LINKS])
 {
 	struct ath12k_vif *ahvif = ath12k_vif_to_ahvif(vif);
+	unsigned long to_remove = old_links & ~new_links;
 	unsigned long to_add = ~old_links & new_links;
 	struct ath12k_hw *ah = ath12k_hw_to_ah(hw);
 	struct ath12k_link_vif *arvif;
 	u8 link_id;
+	int ret;
 
 	lockdep_assert_wiphy(hw->wiphy);
 
@@ -3599,6 +3601,31 @@ ath12k_mac_op_change_vif_links(struct ieee80211_hw *hw,
 		arvif = ath12k_mac_assign_link_vif(ah, vif, link_id);
 		if (WARN_ON(!arvif))
 			return -EINVAL;
+	}
+
+	for_each_set_bit(link_id, &to_remove, IEEE80211_MLD_MAX_NUM_LINKS) {
+		arvif = wiphy_dereference(hw->wiphy, ahvif->link[link_id]);
+		if (WARN_ON(!arvif))
+			return -EINVAL;
+
+		if (!arvif->is_created)
+			continue;
+
+		if (WARN_ON(!arvif->ar))
+			return -EINVAL;
+
+		ath12k_dbg(arvif->ar->ab, ATH12K_DBG_MAC,
+			   "mac remove link interface (vdev %d link id %d)",
+			   arvif->vdev_id, arvif->link_id);
+
+		ret = ath12k_mac_vdev_delete(arvif->ar, arvif);
+		if (ret)
+			/* No need of error prints here since already inside the above
+			 * call, in error path, prints are there.
+			 */
+			return ret;
+
+		ath12k_mac_unassign_link_vif(arvif);
 	}
 
 	return 0;
@@ -4100,7 +4127,8 @@ static void ath12k_mac_op_link_info_changed(struct ieee80211_hw *hw,
 }
 
 static void ath12k_mac_remove_link_interface(struct ieee80211_hw *hw,
-					     struct ath12k_link_vif *arvif)
+					     struct ath12k_link_vif *arvif,
+					     bool delete_vdev)
 {
 	struct ath12k_vif *ahvif = arvif->ahvif;
 	struct ath12k_hw *ah = hw->priv;
@@ -4111,7 +4139,9 @@ static void ath12k_mac_remove_link_interface(struct ieee80211_hw *hw,
 
 	cancel_delayed_work_sync(&arvif->connection_loss_work);
 
-	ath12k_dbg(ar->ab, ATH12K_DBG_MAC, "mac remove link interface (vdev %d link id %d)",
+	ath12k_dbg(ar->ab, ATH12K_DBG_MAC,
+		   "mac remove link interface %s(vdev %d link id %d)",
+		   delete_vdev ? "" : "partially ",
 		   arvif->vdev_id, arvif->link_id);
 
 	if (ahvif->vdev_type == WMI_VDEV_TYPE_AP) {
@@ -4120,7 +4150,9 @@ static void ath12k_mac_remove_link_interface(struct ieee80211_hw *hw,
 			ath12k_warn(ar->ab, "failed to submit AP self-peer removal on vdev %d link id %d: %d",
 				    arvif->vdev_id, arvif->link_id, ret);
 	}
-	ath12k_mac_vdev_delete(ar, arvif);
+
+	if (delete_vdev)
+		ath12k_mac_vdev_delete(ar, arvif);
 }
 
 static struct ath12k*
@@ -4300,7 +4332,7 @@ static void ath12k_scan_vdev_clean_work(struct wiphy *wiphy, struct wiphy_work *
 	ath12k_dbg(ar->ab, ATH12K_DBG_MAC, "mac clean scan vdev (link id %u)",
 		   arvif->link_id);
 
-	ath12k_mac_remove_link_interface(ah->hw, arvif);
+	ath12k_mac_remove_link_interface(ah->hw, arvif, true);
 	ath12k_mac_unassign_link_vif(arvif);
 
 work_complete:
@@ -4436,7 +4468,7 @@ static int ath12k_mac_op_hw_scan(struct ieee80211_hw *hw,
 			return -EINVAL;
 
 		if (ar != arvif->ar) {
-			ath12k_mac_remove_link_interface(hw, arvif);
+			ath12k_mac_remove_link_interface(hw, arvif, true);
 			ath12k_mac_unassign_link_vif(arvif);
 		} else {
 			create = false;
@@ -8274,7 +8306,7 @@ static struct ath12k *ath12k_mac_assign_vif_to_vdev(struct ieee80211_hw *hw,
 					       ahvif->link[ATH12K_DEFAULT_SCAN_LINK]);
 		if (scan_arvif && scan_arvif->ar == ar) {
 			ar->scan.arvif = NULL;
-			ath12k_mac_remove_link_interface(hw, scan_arvif);
+			ath12k_mac_remove_link_interface(hw, scan_arvif, true);
 			ath12k_mac_unassign_link_vif(scan_arvif);
 		}
 	}
@@ -8297,7 +8329,7 @@ static struct ath12k *ath12k_mac_assign_vif_to_vdev(struct ieee80211_hw *hw,
 			if (WARN_ON(arvif->is_started))
 				return NULL;
 
-			ath12k_mac_remove_link_interface(hw, arvif);
+			ath12k_mac_remove_link_interface(hw, arvif, true);
 			ath12k_mac_unassign_link_vif(arvif);
 		}
 	}
@@ -8502,7 +8534,7 @@ static void ath12k_mac_op_remove_interface(struct ieee80211_hw *hw,
 			spin_unlock_bh(&ar->data_lock);
 		}
 
-		ath12k_mac_remove_link_interface(hw, arvif);
+		ath12k_mac_remove_link_interface(hw, arvif, true);
 		ath12k_mac_unassign_link_vif(arvif);
 	}
 }
@@ -9439,8 +9471,7 @@ ath12k_mac_op_unassign_vif_chanctx(struct ieee80211_hw *hw,
 	    ar->num_started_vdevs == 1 && ar->monitor_vdev_created)
 		ath12k_mac_monitor_stop(ar);
 
-	ath12k_mac_remove_link_interface(hw, arvif);
-	ath12k_mac_unassign_link_vif(arvif);
+	ath12k_mac_remove_link_interface(hw, arvif, false);
 }
 
 static int
@@ -10293,7 +10324,7 @@ static int ath12k_mac_op_remain_on_channel(struct ieee80211_hw *hw,
 			return -EBUSY;
 
 		if (ar != arvif->ar) {
-			ath12k_mac_remove_link_interface(hw, arvif);
+			ath12k_mac_remove_link_interface(hw, arvif, true);
 			ath12k_mac_unassign_link_vif(arvif);
 		} else {
 			create = false;
