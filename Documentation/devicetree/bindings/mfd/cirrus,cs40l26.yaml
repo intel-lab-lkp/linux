@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/cirrus,cs40l26.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Cirrus Logic CS40L26 Boosted Haptic Amplifier
+
+maintainers:
+  - Fred Treven <ftreven@opensource.cirrus.com>
+  - patches@opensource.cirrus.com
+
+description:
+  CS40L26 is a Boosted Haptic Driver with Integrated DSP, Waveform Memory,
+  Advanced Closed Loop Algorithms, and LRA protection
+
+properties:
+  compatible:
+    enum:
+      - cirrus,cs40l26a
+      - cirrus,cs40l27b
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+
+  va-supply:
+    description: Regulator for VA analog voltage
+
+  vp-supply:
+    description: Regulator for VP voltage
+
+  cirrus,bst-ipk-microamp:
+    description:
+      Maximum current that can be drawn by the device's boost converter.
+    multipleOf: 50000
+    minimum: 1600000
+    maximum: 4800000
+    default: 4500000
+
+  cirrus,bst-ctl-microvolt:
+    description: Maximum target voltage to which DSP may increase the VBST supply.
+    multipleOf: 50000
+    minimum: 2550000
+    maximum: 11000000
+    default: 11000000
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - reset-gpios
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      haptic-driver@58 {
+        compatible = "cirrus,cs40l26a";
+        reg = <0x58>;
+        interrupt-parent = <&gpio>;
+        interrupts = <57 IRQ_TYPE_LEVEL_LOW>;
+        reset-gpios = <&gpio 54 GPIO_ACTIVE_LOW>;
+        va-supply = <&vreg>;
+        vp-supply = <&vreg>;
+        cirrus,bst-ctl-microvolt = <2600000>;
+        cirrus,bst-ipk-microamp = <1650000>;
+      };
+    };
