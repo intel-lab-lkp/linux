@@ -77,6 +77,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_CS35L56_I2C
 	imply SND_SOC_CS35L56_SPI
 	imply SND_SOC_CS35L56_SDW
+	imply SND_SOC_CS40L26
 	imply SND_SOC_CS40L50
 	imply SND_SOC_CS42L42
 	imply SND_SOC_CS42L42_SDW
@@ -874,6 +875,17 @@ config SND_SOC_CS35L56_SDW
 	select SND_SOC_CS35L56_SHARED
 	help
 	  Enable support for Cirrus Logic CS35L56 boosted amplifier with SoundWire control
+
+config SND_SOC_CS40L26
+	tristate "Cirrus Logic CS40L26 CODEC"
+	depends on MFD_CS40L26_CORE
+	help
+	  This option enables support for I2S streaming to Cirrus Logic CS40L26.
+
+	  CS40L26 is a boosted haptic driver with integrated DSP and waveform
+	  memory with advanced closed loop algorithms and LRA protection.
+
+	  If built as a module, it will be named snd-soc-cs40l26.
 
 config SND_SOC_CS40L50
 	tristate "Cirrus Logic CS40L50 CODEC"
