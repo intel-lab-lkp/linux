@@ -301,7 +301,7 @@ drop:
 
 int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
 {
-	struct net *net = dev_net(skb->dev);
+	struct net *net = dev_net_rcu(skb->dev);
 
 	skb = ip6_rcv_core(skb, dev, net);
 	if (skb == NULL)
@@ -330,7 +330,7 @@ void ipv6_list_rcv(struct list_head *head, struct packet_type *pt,
 
 	list_for_each_entry_safe(skb, next, head, list) {
 		struct net_device *dev = skb->dev;
-		struct net *net = dev_net(dev);
+		struct net *net = dev_net_rcu(dev);
 
 		skb_list_del_init(skb);
 		skb = ip6_rcv_core(skb, dev, net);
@@ -488,7 +488,7 @@ static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *sk
 int ip6_input(struct sk_buff *skb)
 {
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
-		       dev_net(skb->dev), NULL, skb, skb->dev, NULL,
+		       dev_net_rcu(skb->dev), NULL, skb, skb->dev, NULL,
 		       ip6_input_finish);
 }
 EXPORT_SYMBOL_GPL(ip6_input);
@@ -500,14 +500,14 @@ int ip6_mc_input(struct sk_buff *skb)
 	struct net_device *dev;
 	bool deliver;
 
-	__IP6_UPD_PO_STATS(dev_net(skb_dst(skb)->dev),
+	__IP6_UPD_PO_STATS(dev_net_rcu(skb_dst(skb)->dev),
 			 __in6_dev_get_safely(skb->dev), IPSTATS_MIB_INMCAST,
 			 skb->len);
 
 	/* skb->dev passed may be master dev for vrfs. */
 	if (sdif) {
 		rcu_read_lock();
-		dev = dev_get_by_index_rcu(dev_net(skb->dev), sdif);
+		dev = dev_get_by_index_rcu(dev_net_rcu(skb->dev), sdif);
 		if (!dev) {
 			rcu_read_unlock();
 			kfree_skb(skb);
@@ -526,7 +526,7 @@ int ip6_mc_input(struct sk_buff *skb)
 	/*
 	 *      IPv6 multicast router mode is now supported ;)
 	 */
-	if (atomic_read(&dev_net(skb->dev)->ipv6.devconf_all->mc_forwarding) &&
+	if (atomic_read(&dev_net_rcu(skb->dev)->ipv6.devconf_all->mc_forwarding) &&
 	    !(ipv6_addr_type(&hdr->daddr) &
 	      (IPV6_ADDR_LOOPBACK|IPV6_ADDR_LINKLOCAL)) &&
 	    likely(!(IP6CB(skb)->flags & IP6SKB_FORWARDED))) {
