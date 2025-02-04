@@ -23,23 +23,33 @@ IOPTDESC_MATCH(memcg_data, memcg_data);
 static_assert(sizeof(struct ioptdesc) <= sizeof(struct page));
 
 /**
- * iommu_alloc_pages_node - Allocate a zeroed page of a given order from
- *                          specific NUMA node
+ * iommu_alloc_pages_node_lg2 - Allocate a zeroed page of a given size from
+ *                              specific NUMA node
  * @nid: memory NUMA node id
  * @gfp: buddy allocator flags
- * @order: page order
+ * @lg2sz: Memory size to allocate = 1 << lg2sz
  *
- * Returns the virtual address of the allocated page. The page must be
- * freed either by calling iommu_free_page() or via iommu_put_pages_list().
+ * Returns the virtual address of the allocated page. The page must be freed
+ * either by calling iommu_free_page() or via iommu_put_pages_list(). The
+ * returned allocation is 1 << lg2sz big, and is physically aligned to its size.
  */
-void *iommu_alloc_pages_node(int nid, gfp_t gfp, unsigned int order)
+void *iommu_alloc_pages_node_lg2(int nid, gfp_t gfp, unsigned int lg2sz)
 {
-	const unsigned long pgcnt = 1UL << order;
+	unsigned long pgcnt;
 	struct folio *folio;
+	unsigned int order;
 
 	/* This uses page_address() on the memory. */
 	if (WARN_ON(gfp & __GFP_HIGHMEM))
 		return NULL;
+
+	/*
+	 * Currently sub page allocations result in a full page being returned.
+	 */
+	if (lg2sz <= PAGE_SHIFT)
+		order = 0;
+	else
+		order = lg2sz - PAGE_SHIFT;
 
 	/*
 	 * __folio_alloc_node() does not handle NUMA_NO_NODE like
@@ -61,12 +71,13 @@ void *iommu_alloc_pages_node(int nid, gfp_t gfp, unsigned int order)
 	 * This is necessary for the proper accounting as IOMMU state can be
 	 * rather large, i.e. multiple gigabytes in size.
 	 */
+	pgcnt = 1UL << order;
 	mod_node_page_state(folio_pgdat(folio), NR_IOMMU_PAGES, pgcnt);
 	lruvec_stat_mod_folio(folio, NR_SECONDARY_PAGETABLE, pgcnt);
 
 	return folio_address(folio);
 }
-EXPORT_SYMBOL_GPL(iommu_alloc_pages_node);
+EXPORT_SYMBOL_GPL(iommu_alloc_pages_node_lg2);
 
 static void __iommu_free_page(struct ioptdesc *iopt)
 {

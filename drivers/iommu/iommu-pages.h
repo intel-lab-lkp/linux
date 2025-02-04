@@ -46,7 +46,7 @@ static inline struct ioptdesc *virt_to_ioptdesc(void *virt)
 	return folio_ioptdesc(virt_to_folio(virt));
 }
 
-void *iommu_alloc_pages_node(int nid, gfp_t gfp, unsigned int order);
+void *iommu_alloc_pages_node_lg2(int nid, gfp_t gfp, unsigned int lg2sz);
 void iommu_free_page(void *virt);
 void iommu_put_pages_list(struct iommu_pages_list *list);
 
@@ -85,15 +85,62 @@ static inline bool iommu_pages_list_empty(struct iommu_pages_list *list)
 }
 
 /**
+ * iommu_alloc_pages_node - Allocate a zeroed page of a given order from
+ *                          specific NUMA node
+ * @nid: memory NUMA node id
+ * @gfp: buddy allocator flags
+ * @order: page order
+ *
+ * Returns the virtual address of the allocated page.
+ * Prefer to use iommu_alloc_pages_node_lg2()
+ */
+static inline void *iommu_alloc_pages_node(int nid, gfp_t gfp,
+					   unsigned int order)
+{
+	return iommu_alloc_pages_node_lg2(nid, gfp, order + PAGE_SHIFT);
+}
+
+/**
+ * iommu_alloc_pages_lg2 - Allocate a zeroed page of a given order from
+ *                          specific NUMA node
+ * @nid: memory NUMA node id
+ * @gfp: buddy allocator flags
+ * @lg2sz: Memory size to allocate = 1 << lg2sz
+ *
+ * Returns the virtual address of the allocated page.
+ */
+static inline void *iommu_alloc_pages_lg2(gfp_t gfp, unsigned int lg2sz)
+{
+	return iommu_alloc_pages_node_lg2(numa_node_id(), gfp, lg2sz);
+}
+
+/**
  * iommu_alloc_pages - allocate a zeroed page of a given order
  * @gfp: buddy allocator flags
  * @order: page order
  *
  * returns the virtual address of the allocated page
+ * Prefer to use iommu_alloc_pages_lg2()
  */
 static inline void *iommu_alloc_pages(gfp_t gfp, int order)
 {
-	return iommu_alloc_pages_node(numa_node_id(), gfp, order);
+	return iommu_alloc_pages_node_lg2(numa_node_id(), gfp,
+					  order + PAGE_SHIFT);
+}
+
+/**
+ * iommu_alloc_pages_sz - Allocate a zeroed page of a given size from
+ *                          specific NUMA node
+ * @nid: memory NUMA node id
+ * @gfp: buddy allocator flags
+ * @size: Memory size to allocate, this is rounded up to a power of 2
+ *
+ * Returns the virtual address of the allocated page.
+ */
+static inline void *iommu_alloc_pages_sz(gfp_t gfp, unsigned int size)
+{
+	return iommu_alloc_pages_node_lg2(numa_node_id(), gfp,
+					  order_base_2(size));
 }
 
 /**
@@ -102,10 +149,11 @@ static inline void *iommu_alloc_pages(gfp_t gfp, int order)
  * @gfp: buddy allocator flags
  *
  * returns the virtual address of the allocated page
+ * Prefer to use iommu_alloc_pages_node_lg2()
  */
 static inline void *iommu_alloc_page_node(int nid, gfp_t gfp)
 {
-	return iommu_alloc_pages_node(nid, gfp, 0);
+	return iommu_alloc_pages_node_lg2(nid, gfp, PAGE_SHIFT);
 }
 
 /**
@@ -113,10 +161,11 @@ static inline void *iommu_alloc_page_node(int nid, gfp_t gfp)
  * @gfp: buddy allocator flags
  *
  * returns the virtual address of the allocated page
+ * Prefer to use iommu_alloc_pages_lg2()
  */
 static inline void *iommu_alloc_page(gfp_t gfp)
 {
-	return iommu_alloc_pages_node(numa_node_id(), gfp, 0);
+	return iommu_alloc_pages_node_lg2(numa_node_id(), gfp, PAGE_SHIFT);
 }
 
 #endif	/* __IOMMU_PAGES_H */
