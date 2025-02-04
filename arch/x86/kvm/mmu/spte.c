@@ -142,8 +142,14 @@ bool spte_has_volatile_bits(u64 spte)
 		return true;
 
 	if (spte_ad_enabled(spte)) {
-		if (!(spte & shadow_accessed_mask) ||
-		    (is_writable_pte(spte) && !(spte & shadow_dirty_mask)))
+		/*
+		 * Do not check the Accessed bit. It can be set (by the CPU)
+		 * and cleared (by kvm_tdp_mmu_age_spte()) without holding
+		 * the mmu_lock, but when clearing the Accessed bit, we do
+		 * not invalidate the TLB, so we can already miss Accessed bit
+		 * updates.
+		 */
+		if (is_writable_pte(spte) && !(spte & shadow_dirty_mask))
 			return true;
 	}
 
