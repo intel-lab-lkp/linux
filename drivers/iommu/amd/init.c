@@ -247,10 +247,7 @@ static void init_translation_status(struct amd_iommu *iommu)
 
 static inline unsigned long tbl_size(int entry_size, int last_bdf)
 {
-	unsigned shift = PAGE_SHIFT +
-			 get_order((last_bdf + 1) * entry_size);
-
-	return 1UL << shift;
+	return roundup_pow_of_two((last_bdf + 1) * entry_size);
 }
 
 int amd_iommu_get_num_iommus(void)
