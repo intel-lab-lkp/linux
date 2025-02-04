@@ -46,6 +46,7 @@
 #define F2FS_IOC_GET_DEV_ALIAS_FILE	_IOR(F2FS_IOCTL_MAGIC, 26, __u32)
 #define F2FS_IOC_DONATE_RANGE		_IOW(F2FS_IOCTL_MAGIC, 27,	\
 						struct f2fs_donate_range)
+#define F2FS_IOC_IO_PRIO		_IOW(F2FS_IOCTL_MAGIC, 28, __u32)
 
 /*
  * should be same as XFS_IOC_GOINGDOWN.
@@ -64,6 +65,12 @@
 #define F2FS_TRIM_FILE_DISCARD		0x1	/* send discard command */
 #define F2FS_TRIM_FILE_ZEROOUT		0x2	/* zero out */
 #define F2FS_TRIM_FILE_MASK		0x3
+
+/* for F2FS_IOC_IO_PRIO */
+enum {
+	F2FS_IOPRIO_WRITE = 1,	/* high write priority */
+	F2FS_IOPRIO_MAX,
+};
 
 struct f2fs_gc_range {
 	__u32 sync;
