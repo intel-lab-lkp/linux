@@ -180,29 +180,6 @@ test_string(struct kunit *test)
 #define ZEROS "00000000"	/* hex 32 zero bits */
 #define ONES "ffffffff"		/* hex 32 one bits */
 
-static int
-plain_format(void)
-{
-	char buf[PLAIN_BUF_SIZE];
-	int nchars;
-
-	nchars = snprintf(buf, PLAIN_BUF_SIZE, "%p", PTR);
-
-	if (nchars != PTR_WIDTH)
-		return -1;
-
-	if (strncmp(buf, PTR_VAL_NO_CRNG, PTR_WIDTH) == 0) {
-		pr_warn("crng possibly not yet initialized. plain 'p' buffer contains \"%s\"",
-			PTR_VAL_NO_CRNG);
-		return 0;
-	}
-
-	if (strncmp(buf, ZEROS, strlen(ZEROS)) != 0)
-		return -1;
-
-	return 0;
-}
-
 #else
 
 #define PTR_WIDTH 8
@@ -212,79 +189,44 @@ plain_format(void)
 #define ZEROS ""
 #define ONES ""
 
-static int
-plain_format(void)
-{
-	/* Format is implicitly tested for 32 bit machines by plain_hash() */
-	return 0;
-}
-
 #endif	/* BITS_PER_LONG == 64 */
 
-static int
-plain_hash_to_buffer(const void *p, char *buf, size_t len)
+static void
+plain_hash_to_buffer(struct kunit *test, const void *p, char *buf, size_t len)
 {
-	int nchars;
-
-	nchars = snprintf(buf, len, "%p", p);
-
-	if (nchars != PTR_WIDTH)
-		return -1;
+	KUNIT_ASSERT_EQ(test, snprintf(buf, len, "%p", p), PTR_WIDTH);
 
 	if (strncmp(buf, PTR_VAL_NO_CRNG, PTR_WIDTH) == 0) {
 		pr_warn("crng possibly not yet initialized. plain 'p' buffer contains \"%s\"",
 			PTR_VAL_NO_CRNG);
-		return 0;
 	}
-
-	return 0;
 }
 
-static int
-plain_hash(void)
-{
-	char buf[PLAIN_BUF_SIZE];
-	int ret;
-
-	ret = plain_hash_to_buffer(PTR, buf, PLAIN_BUF_SIZE);
-	if (ret)
-		return ret;
-
-	if (strncmp(buf, PTR_STR, PTR_WIDTH) == 0)
-		return -1;
-
-	return 0;
-}
-
-/*
- * We can't use test() to test %p because we don't know what output to expect
- * after an address is hashed.
- */
 static void
-plain(struct kunit *test)
+hash_pointer(struct kunit *test)
 {
-	if (no_hash_pointers) {
-		pr_warn("skipping plain 'p' tests");
-		return;
-	}
+	if (no_hash_pointers)
+		kunit_skip(test, "hash pointers disabled");
 
-	KUNIT_EXPECT_FALSE(test, plain_hash());
-	KUNIT_EXPECT_FALSE(test, plain_format());
+	char buf[PLAIN_BUF_SIZE];
+
+	plain_hash_to_buffer(test, PTR, buf, PLAIN_BUF_SIZE);
+
+	/*
+	 * We can't use test() to test %p because we don't know what output to expect
+	 * after an address is hashed.
+	 */
+
+	KUNIT_EXPECT_MEMEQ(test, buf, ZEROS, strlen(ZEROS));
+	KUNIT_EXPECT_MEMNEQ(test, buf+strlen(ZEROS), PTR_STR, PTR_WIDTH);
 }
 
 static void
 test_hashed(struct kunit *test, const char *fmt, const void *p)
 {
 	char buf[PLAIN_BUF_SIZE];
-	int ret;
 
-	/*
-	 * No need to increase failed test counter since this is assumed
-	 * to be called after plain().
-	 */
-	ret = plain_hash_to_buffer(p, buf, PLAIN_BUF_SIZE);
-	if (ret)
-		return;
+	plain_hash_to_buffer(test, p, buf, PLAIN_BUF_SIZE);
 
 	tc(test, buf, fmt, p);
 }
@@ -322,12 +264,12 @@ invalid_pointer(struct kunit *test)
 }
 
 static void
-symbol_ptr(void)
+symbol_ptr(struct kunit *test)
 {
 }
 
 static void
-kernel_ptr(void)
+kernel_ptr(struct kunit *test)
 {
 	/* We can't test this without access to kptr_restrict. */
 }
@@ -398,12 +340,12 @@ struct_range(struct kunit *test)
 }
 
 static void
-addr(void)
+addr(struct kunit *test)
 {
 }
 
 static void
-escaped_str(void)
+escaped_str(struct kunit *test)
 {
 }
 
@@ -446,15 +388,8 @@ ip4(struct kunit *test)
 }
 
 static void
-ip6(void)
+ip6(struct kunit *test)
 {
-}
-
-static void
-ip(struct kunit *test)
-{
-	ip4(test);
-	ip6();
 }
 
 static void
@@ -506,7 +441,7 @@ dentry(struct kunit *test)
 }
 
 static void
-struct_va_format(void)
+struct_va_format(struct kunit *test)
 {
 }
 
@@ -545,7 +480,7 @@ time_and_date(struct kunit *test)
 }
 
 static void
-struct_clk(void)
+struct_clk(struct kunit *test)
 {
 }
 
@@ -587,7 +522,7 @@ bitmap(struct kunit *test)
 }
 
 static void
-netdev_features(void)
+netdev_features(struct kunit *test)
 {
 }
 
@@ -712,8 +647,7 @@ static void fwnode_pointer(struct kunit *test)
 
 	rval = software_node_register_node_group(group);
 	if (rval) {
-		pr_warn("cannot register softnodes; rval %d\n", rval);
-		return;
+		kunit_skip(test, "cannot register softnodes; rval %d\n", rval);
 	}
 
 	tc(test, full_name_second, "%pfw", software_node_fwnode(&second));
@@ -762,57 +696,57 @@ errptr(struct kunit *test)
 #endif
 }
 
-static void
-test_pointer(struct kunit *test)
-{
-	plain(test);
-	null_pointer(test);
-	error_pointer(test);
-	invalid_pointer(test);
-	symbol_ptr();
-	kernel_ptr();
-	struct_resource(test);
-	struct_range(test);
-	addr();
-	escaped_str();
-	hex_string(test);
-	mac(test);
-	ip(test);
-	uuid(test);
-	dentry(test);
-	struct_va_format();
-	time_and_date(test);
-	struct_clk();
-	bitmap(test);
-	netdev_features();
-	flags(test);
-	errptr(test);
-	fwnode_pointer(test);
-	fourcc_pointer(test);
-}
-
-static void printf_test(struct kunit *test)
-{
-	alloced_buffer = kmalloc(BUF_SIZE + 2*PAD_SIZE, GFP_KERNEL);
-	if (!alloced_buffer)
-		return;
-	test_buffer = alloced_buffer + PAD_SIZE;
-
-	test_basic(test);
-	test_number(test);
-	test_string(test);
-	test_pointer(test);
-
-	kfree(alloced_buffer);
-}
-
 static struct kunit_case printf_test_cases[] = {
-	KUNIT_CASE(printf_test),
+	KUNIT_CASE(test_basic),
+	KUNIT_CASE(test_number),
+	KUNIT_CASE(test_string),
+	KUNIT_CASE(hash_pointer),
+	KUNIT_CASE(null_pointer),
+	KUNIT_CASE(error_pointer),
+	KUNIT_CASE(invalid_pointer),
+	KUNIT_CASE(symbol_ptr),
+	KUNIT_CASE(kernel_ptr),
+	KUNIT_CASE(struct_resource),
+	KUNIT_CASE(struct_range),
+	KUNIT_CASE(addr),
+	KUNIT_CASE(escaped_str),
+	KUNIT_CASE(hex_string),
+	KUNIT_CASE(mac),
+	KUNIT_CASE(ip4),
+	KUNIT_CASE(ip6),
+	KUNIT_CASE(uuid),
+	KUNIT_CASE(dentry),
+	KUNIT_CASE(struct_va_format),
+	KUNIT_CASE(time_and_date),
+	KUNIT_CASE(struct_clk),
+	KUNIT_CASE(bitmap),
+	KUNIT_CASE(netdev_features),
+	KUNIT_CASE(flags),
+	KUNIT_CASE(errptr),
+	KUNIT_CASE(fwnode_pointer),
+	KUNIT_CASE(fourcc_pointer),
 	{}
 };
 
+static int printf_suite_init(struct kunit_suite *suite)
+{
+	alloced_buffer = kmalloc(BUF_SIZE + 2*PAD_SIZE, GFP_KERNEL);
+	if (!alloced_buffer)
+		return -1;
+	test_buffer = alloced_buffer + PAD_SIZE;
+	return 0;
+}
+
+static void printf_suite_exit(struct kunit_suite *suite)
+{
+	kfree(alloced_buffer);
+}
+
+
 static struct kunit_suite printf_test_suite = {
 	.name = "printf",
+	.suite_init = printf_suite_init,
+	.suite_exit = printf_suite_exit,
 	.test_cases = printf_test_cases,
 };
 
