@@ -3743,6 +3743,11 @@ int cs_dsp_wseq_multi_write(struct cs_dsp *dsp, struct cs_dsp_wseq *wseq,
 {
 	int i, ret;
 
+	if (num_regs <= 0) {
+		cs_dsp_err(dsp, "Invalid number of regs: %d\n", num_regs);
+		return -EINVAL;
+	}
+
 	for (i = 0; i < num_regs; i++) {
 		ret = cs_dsp_wseq_write(dsp, wseq, reg_seq[i].reg,
 					reg_seq[i].def, op_code, update);
