@@ -105,11 +105,10 @@ static inline void *iommu_alloc_page(gfp_t gfp)
 }
 
 /**
- * iommu_free_pages - free page of a given order
+ * iommu_free_page - free page of any  order
  * @virt: virtual address of the page to be freed.
- * @order: page order
  */
-static inline void iommu_free_pages(void *virt, int order)
+static inline void iommu_free_page(void *virt)
 {
 	struct page *page;
 
@@ -119,15 +118,6 @@ static inline void iommu_free_pages(void *virt, int order)
 	page = virt_to_page(virt);
 	__iommu_free_account(page);
 	put_page(page);
-}
-
-/**
- * iommu_free_page - free page
- * @virt: virtual address of the page to be freed.
- */
-static inline void iommu_free_page(void *virt)
-{
-	iommu_free_pages(virt, 0);
 }
 
 /**
