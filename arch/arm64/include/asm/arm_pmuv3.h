@@ -10,6 +10,7 @@
 #include <asm/sysreg.h>
 
 #include <linux/perf_event.h>
+#include <linux/perf/pmevn_switch.h>
 
 #ifdef CONFIG_KVM
 void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr);
