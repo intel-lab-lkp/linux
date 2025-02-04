@@ -2566,6 +2566,48 @@ bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
 EXPORT_SYMBOL(queue_delayed_work_on);
 
 /**
+ * queue_delayed_work_on_offline_safe - queue work on specific online CPU after
+ *					delay,
+ *
+ * @cpu: CPU number to execute work on
+ * @wq: workqueue to use
+ * @dwork: work to queue
+ * @delay: number of jiffies to wait before queueing
+ * @online: online status of @cpu, for caller
+ *
+ * a wrapper, around queue_delayed_work_on, that checks and ensures that
+ * specified @cpu is online. If @cpu is found to be offline or if its online
+ * status can't be reliably determined, set @online to false and return
+ * false, leaving the decision, of selecting new cpu for delayed_work, to
+ * the caller.
+ *
+ * If caller sees @online as false, it can try submitting work on a
+ * different @cpu, but if it sees @online as true, it can check the return
+ * value to determine if the work was really submitted or not.
+ */
+bool queue_delayed_work_on_offline_safe(int cpu, struct workqueue_struct *wq,
+			   struct delayed_work *dwork, unsigned long delay,
+			   bool *online)
+{
+	bool ret = false;
+	int locked = cpus_read_trylock();
+
+	if (locked && cpu_online(cpu)) {
+		ret = queue_delayed_work_on(cpu, wq, dwork, delay);
+		*online = true;
+	} else {
+		*online = false;
+	}
+
+	if (locked)
+		cpus_read_unlock();
+
+	return ret;
+}
+EXPORT_SYMBOL(queue_delayed_work_on_offline_safe);
+
+
+/**
  * mod_delayed_work_on - modify delay of or queue a delayed work on specific CPU
  * @cpu: CPU number to execute work on
  * @wq: workqueue to use
