@@ -393,7 +393,7 @@ static int ip6_call_ra_chain(struct sk_buff *skb, int sel)
 		     sk->sk_bound_dev_if == skb->dev->ifindex)) {
 
 			if (inet6_test_bit(RTALERT_ISOLATE, sk) &&
-			    !net_eq(sock_net(sk), dev_net(skb->dev))) {
+			    !net_eq(sock_net(sk), dev_net_rcu(skb->dev))) {
 				continue;
 			}
 			if (last) {
@@ -503,7 +503,7 @@ int ip6_forward(struct sk_buff *skb)
 	struct dst_entry *dst = skb_dst(skb);
 	struct ipv6hdr *hdr = ipv6_hdr(skb);
 	struct inet6_skb_parm *opt = IP6CB(skb);
-	struct net *net = dev_net(dst->dev);
+	struct net *net = dev_net_rcu(dst->dev);
 	struct inet6_dev *idev;
 	SKB_DR(reason);
 	u32 mtu;
