@@ -723,7 +723,7 @@ static int hp_82341_attach(gpib_board_t *board, const gpib_board_config_t *confi
 		hp_priv->hw_version = HW_VERSION_82341C;
 		hp_priv->io_region_offset = 0x400;
 	}
-	pr_info("hp_82341: base io 0x%u\n", iobase);
+	pr_info("hp_82341: base io 0x%x\n", iobase);
 	for (i = 0; i < hp_82341_num_io_regions; ++i) {
 		start_addr = iobase + i * hp_priv->io_region_offset;
 		if (!request_region(start_addr, hp_82341_region_iosize, "hp_82341")) {
