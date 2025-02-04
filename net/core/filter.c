@@ -2244,7 +2244,7 @@ static int __bpf_redirect_neigh_v6(struct sk_buff *skb, struct net_device *dev,
 				   struct bpf_nh_params *nh)
 {
 	const struct ipv6hdr *ip6h = ipv6_hdr(skb);
-	struct net *net = dev_net(dev);
+	struct net *net = dev_net_rcu(dev);
 	int err, ret = NET_XMIT_DROP;
 
 	if (!nh) {
@@ -2348,7 +2348,7 @@ static int __bpf_redirect_neigh_v4(struct sk_buff *skb, struct net_device *dev,
 				   struct bpf_nh_params *nh)
 {
 	const struct iphdr *ip4h = ip_hdr(skb);
-	struct net *net = dev_net(dev);
+	struct net *net = dev_net_rcu(dev);
 	int err, ret = NET_XMIT_DROP;
 
 	if (!nh) {
@@ -2438,7 +2438,7 @@ BPF_CALL_3(bpf_clone_redirect, struct sk_buff *, skb, u32, ifindex, u64, flags)
 	if (unlikely(flags & (~(BPF_F_INGRESS) | BPF_F_REDIRECT_INTERNAL)))
 		return -EINVAL;
 
-	dev = dev_get_by_index_rcu(dev_net(skb->dev), ifindex);
+	dev = dev_get_by_index_rcu(dev_net_rcu(skb->dev), ifindex);
 	if (unlikely(!dev))
 		return -EINVAL;
 
@@ -2482,7 +2482,7 @@ static struct net_device *skb_get_peer_dev(struct net_device *dev)
 int skb_do_redirect(struct sk_buff *skb)
 {
 	struct bpf_redirect_info *ri = bpf_net_ctx_get_ri();
-	struct net *net = dev_net(skb->dev);
+	struct net *net = dev_net_rcu(skb->dev);
 	struct net_device *dev;
 	u32 flags = ri->flags;
 
@@ -2497,7 +2497,7 @@ int skb_do_redirect(struct sk_buff *skb)
 		dev = skb_get_peer_dev(dev);
 		if (unlikely(!dev ||
 			     !(dev->flags & IFF_UP) ||
-			     net_eq(net, dev_net(dev))))
+			     net_eq(net, dev_net_rcu(dev))))
 			goto out_drop;
 		skb->dev = dev;
 		dev_sw_netstats_rx_add(dev, skb->len);
@@ -4425,7 +4425,7 @@ __xdp_do_redirect_frame(struct bpf_redirect_info *ri, struct net_device *dev,
 		break;
 	case BPF_MAP_TYPE_UNSPEC:
 		if (map_id == INT_MAX) {
-			fwd = dev_get_by_index_rcu(dev_net(dev), ri->tgt_index);
+			fwd = dev_get_by_index_rcu(dev_net_rcu(dev), ri->tgt_index);
 			if (unlikely(!fwd)) {
 				err = -EINVAL;
 				break;
@@ -4550,7 +4550,7 @@ int xdp_do_generic_redirect(struct net_device *dev, struct sk_buff *skb,
 	ri->map_type = BPF_MAP_TYPE_UNSPEC;
 
 	if (map_type == BPF_MAP_TYPE_UNSPEC && map_id == INT_MAX) {
-		fwd = dev_get_by_index_rcu(dev_net(dev), ri->tgt_index);
+		fwd = dev_get_by_index_rcu(dev_net_rcu(dev), ri->tgt_index);
 		if (unlikely(!fwd)) {
 			err = -EINVAL;
 			goto err;
@@ -6203,12 +6203,12 @@ BPF_CALL_4(bpf_xdp_fib_lookup, struct xdp_buff *, ctx,
 	switch (params->family) {
 #if IS_ENABLED(CONFIG_INET)
 	case AF_INET:
-		return bpf_ipv4_fib_lookup(dev_net(ctx->rxq->dev), params,
+		return bpf_ipv4_fib_lookup(dev_net_rcu(ctx->rxq->dev), params,
 					   flags, true);
 #endif
 #if IS_ENABLED(CONFIG_IPV6)
 	case AF_INET6:
-		return bpf_ipv6_fib_lookup(dev_net(ctx->rxq->dev), params,
+		return bpf_ipv6_fib_lookup(dev_net_rcu(ctx->rxq->dev), params,
 					   flags, true);
 #endif
 	}
@@ -6228,7 +6228,7 @@ static const struct bpf_func_proto bpf_xdp_fib_lookup_proto = {
 BPF_CALL_4(bpf_skb_fib_lookup, struct sk_buff *, skb,
 	   struct bpf_fib_lookup *, params, int, plen, u32, flags)
 {
-	struct net *net = dev_net(skb->dev);
+	struct net *net = dev_net_rcu(skb->dev);
 	int rc = -EAFNOSUPPORT;
 	bool check_mtu = false;
 
@@ -6283,7 +6283,7 @@ static const struct bpf_func_proto bpf_skb_fib_lookup_proto = {
 static struct net_device *__dev_via_ifindex(struct net_device *dev_curr,
 					    u32 ifindex)
 {
-	struct net *netns = dev_net(dev_curr);
+	struct net *netns = dev_net_rcu(dev_curr);
 
 	/* Non-redirect use-cases can use ifindex=0 and save ifindex lookup */
 	if (ifindex == 0)
@@ -6806,7 +6806,7 @@ bpf_skc_lookup(struct sk_buff *skb, struct bpf_sock_tuple *tuple, u32 len,
 	int ifindex;
 
 	if (skb->dev) {
-		caller_net = dev_net(skb->dev);
+		caller_net = dev_net_rcu(skb->dev);
 		ifindex = skb->dev->ifindex;
 	} else {
 		caller_net = sock_net(skb->sk);
@@ -6906,7 +6906,7 @@ BPF_CALL_5(bpf_tc_skc_lookup_tcp, struct sk_buff *, skb,
 {
 	struct net_device *dev = skb->dev;
 	int ifindex = dev->ifindex, sdif = dev_sdif(dev);
-	struct net *caller_net = dev_net(dev);
+	struct net *caller_net = dev_net_rcu(dev);
 
 	return (unsigned long)__bpf_skc_lookup(skb, tuple, len, caller_net,
 					       ifindex, IPPROTO_TCP, netns_id,
@@ -6930,7 +6930,7 @@ BPF_CALL_5(bpf_tc_sk_lookup_tcp, struct sk_buff *, skb,
 {
 	struct net_device *dev = skb->dev;
 	int ifindex = dev->ifindex, sdif = dev_sdif(dev);
-	struct net *caller_net = dev_net(dev);
+	struct net *caller_net = dev_net_rcu(dev);
 
 	return (unsigned long)__bpf_sk_lookup(skb, tuple, len, caller_net,
 					      ifindex, IPPROTO_TCP, netns_id,
@@ -6954,7 +6954,7 @@ BPF_CALL_5(bpf_tc_sk_lookup_udp, struct sk_buff *, skb,
 {
 	struct net_device *dev = skb->dev;
 	int ifindex = dev->ifindex, sdif = dev_sdif(dev);
-	struct net *caller_net = dev_net(dev);
+	struct net *caller_net = dev_net_rcu(dev);
 
 	return (unsigned long)__bpf_sk_lookup(skb, tuple, len, caller_net,
 					      ifindex, IPPROTO_UDP, netns_id,
@@ -6992,7 +6992,7 @@ BPF_CALL_5(bpf_xdp_sk_lookup_udp, struct xdp_buff *, ctx,
 {
 	struct net_device *dev = ctx->rxq->dev;
 	int ifindex = dev->ifindex, sdif = dev_sdif(dev);
-	struct net *caller_net = dev_net(dev);
+	struct net *caller_net = dev_net_rcu(dev);
 
 	return (unsigned long)__bpf_sk_lookup(NULL, tuple, len, caller_net,
 					      ifindex, IPPROTO_UDP, netns_id,
@@ -7016,7 +7016,7 @@ BPF_CALL_5(bpf_xdp_skc_lookup_tcp, struct xdp_buff *, ctx,
 {
 	struct net_device *dev = ctx->rxq->dev;
 	int ifindex = dev->ifindex, sdif = dev_sdif(dev);
-	struct net *caller_net = dev_net(dev);
+	struct net *caller_net = dev_net_rcu(dev);
 
 	return (unsigned long)__bpf_skc_lookup(NULL, tuple, len, caller_net,
 					       ifindex, IPPROTO_TCP, netns_id,
@@ -7040,7 +7040,7 @@ BPF_CALL_5(bpf_xdp_sk_lookup_tcp, struct xdp_buff *, ctx,
 {
 	struct net_device *dev = ctx->rxq->dev;
 	int ifindex = dev->ifindex, sdif = dev_sdif(dev);
-	struct net *caller_net = dev_net(dev);
+	struct net *caller_net = dev_net_rcu(dev);
 
 	return (unsigned long)__bpf_sk_lookup(NULL, tuple, len, caller_net,
 					      ifindex, IPPROTO_TCP, netns_id,
@@ -7510,7 +7510,7 @@ BPF_CALL_3(bpf_sk_assign, struct sk_buff *, skb, struct sock *, sk, u64, flags)
 		return -EINVAL;
 	if (!skb_at_tc_ingress(skb))
 		return -EOPNOTSUPP;
-	if (unlikely(dev_net(skb->dev) != sock_net(sk)))
+	if (unlikely(dev_net_rcu(skb->dev) != sock_net(sk)))
 		return -ENETUNREACH;
 	if (sk_unhashed(sk))
 		return -EOPNOTSUPP;
@@ -11985,7 +11985,7 @@ __bpf_kfunc int bpf_sk_assign_tcp_reqsk(struct __sk_buff *s, struct sock *sk,
 	if (!skb_at_tc_ingress(skb))
 		return -EINVAL;
 
-	net = dev_net(skb->dev);
+	net = dev_net_rcu(skb->dev);
 	if (net != sock_net(sk))
 		return -ENETUNREACH;
 
