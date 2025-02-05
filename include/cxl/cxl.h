@@ -46,4 +46,6 @@ struct pci_dev;
 struct cxl_dev_state;
 int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_memdev_state *cxlmds,
 			     unsigned long *caps);
+int cxl_await_media_ready(struct cxl_memdev_state *mds);
+void cxl_set_media_ready(struct cxl_memdev_state *mds);
 #endif

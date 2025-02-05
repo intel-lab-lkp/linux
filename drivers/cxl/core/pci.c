@@ -177,8 +177,9 @@ static int cxl_dvsec_mem_range_active(struct cxl_dev_state *cxlds, int id)
  * Wait up to @media_ready_timeout for the device to report memory
  * active.
  */
-int cxl_await_media_ready(struct cxl_dev_state *cxlds)
+int cxl_await_media_ready(struct cxl_memdev_state *cxlmds)
 {
+	struct cxl_dev_state *cxlds = &cxlmds->cxlds;
 	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
 	int d = cxlds->cxl_dvsec;
 	int rc, i, hdm_count;
@@ -210,6 +211,14 @@ int cxl_await_media_ready(struct cxl_dev_state *cxlds)
 	return 0;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_await_media_ready, "CXL");
+
+void cxl_set_media_ready(struct cxl_memdev_state *cxlmds)
+{
+	struct cxl_dev_state *cxlds = &cxlmds->cxlds;
+
+	cxlds->media_ready = true;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_set_media_ready, "CXL");
 
 static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
 {
