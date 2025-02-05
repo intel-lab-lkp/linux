@@ -644,6 +644,9 @@ nsim_queue_mem_alloc(struct net_device *dev, void *per_queue_mem, int idx)
 
 	if (ns->rq_reset_mode > 3)
 		return -EINVAL;
+	/* Only "mode 0" works when device is down */
+	if (!netif_running(ns->netdev) && ns->rq_reset_mode)
+		return -ENETDOWN;
 
 	if (ns->rq_reset_mode == 1)
 		return nsim_create_page_pool(&qmem->pp, &ns->rq[idx]->napi);
@@ -754,11 +757,6 @@ nsim_qreset_write(struct file *file, const char __user *data,
 		return -EINVAL;
 
 	rtnl_lock();
-	if (!netif_running(ns->netdev)) {
-		ret = -ENETDOWN;
-		goto exit_unlock;
-	}
-
 	if (queue >= ns->netdev->real_num_rx_queues) {
 		ret = -EINVAL;
 		goto exit_unlock;
