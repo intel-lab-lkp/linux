@@ -1186,6 +1186,13 @@ static struct sock *unix_find_other(struct net *net,
 	return sk;
 }
 
+/*
+ * Define the total length of the autobind identifier for UNIX domain sockets.
+ * - The first byte distinguishes abstract sockets from filesystem-based sockets.
+ * - The subsequent five bytes store a unique identifier for the autobinding process.
+ */
+#define AUTOBIND_LEN 6
+
 static int unix_autobind(struct sock *sk)
 {
 	struct unix_sock *u = unix_sk(sk);
@@ -1204,11 +1211,11 @@ static int unix_autobind(struct sock *sk)
 
 	err = -ENOMEM;
 	addr = kzalloc(sizeof(*addr) +
-		       offsetof(struct sockaddr_un, sun_path) + 16, GFP_KERNEL);
+		       offsetof(struct sockaddr_un, sun_path) + AUTOBIND_LEN, GFP_KERNEL);
 	if (!addr)
 		goto out;
 
-	addr->len = offsetof(struct sockaddr_un, sun_path) + 6;
+	addr->len = offsetof(struct sockaddr_un, sun_path) + AUTOBIND_LEN;
 	addr->name->sun_family = AF_UNIX;
 	refcount_set(&addr->refcnt, 1);
 
@@ -1217,7 +1224,7 @@ static int unix_autobind(struct sock *sk)
 	lastnum = ordernum & 0xFFFFF;
 retry:
 	ordernum = (ordernum + 1) & 0xFFFFF;
-	sprintf(addr->name->sun_path + 1, "%05x", ordernum);
+	sprintf(addr->name->sun_path + 1, "%0*x", AUTOBIND_LEN - 1, ordernum);
 
 	new_hash = unix_abstract_hash(addr->name, addr->len, sk->sk_type);
 	unix_table_double_lock(net, old_hash, new_hash);
