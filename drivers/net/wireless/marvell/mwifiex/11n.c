@@ -308,7 +308,7 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 	int ret_len = 0;
 	struct ieee80211_supported_band *sband;
 	struct ieee_types_header *hdr;
-	u8 radio_type;
+	u8 radio_type, secch_offset;
 
 	if (!buffer || !*buffer)
 		return ret_len;
@@ -401,13 +401,15 @@ mwifiex_cmd_append_11n_tlv(struct mwifiex_private *priv,
 		chan_list->chan_scan_param[0].radio_type =
 			mwifiex_band_to_radio_type((u8) bss_desc->bss_band);
 
-		if (sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40 &&
-		    bss_desc->bcn_ht_oper->ht_param &
-		    IEEE80211_HT_PARAM_CHAN_WIDTH_ANY)
-			SET_SECONDARYCHAN(chan_list->chan_scan_param[0].
-					  radio_type,
-					  (bss_desc->bcn_ht_oper->ht_param &
-					  IEEE80211_HT_PARAM_CHA_SEC_OFFSET));
+		if (sband->ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40) {
+			if (bss_desc->bcn_ht_oper->ht_param & IEEE80211_HT_PARAM_CHAN_WIDTH_ANY) {
+				chan_list->chan_scan_param[0].radio_type |= (CHAN_BW_40MHZ << 2);
+				secch_offset = bss_desc->bcn_ht_oper->ht_param &
+				IEEE80211_HT_PARAM_CHA_SEC_OFFSET;
+				SET_SECONDARYCHAN(chan_list->chan_scan_param[0].radio_type,
+						  secch_offset);
+			}
+		}
 
 		*buffer += struct_size(chan_list, chan_scan_param, 1);
 		ret_len += struct_size(chan_list, chan_scan_param, 1);
