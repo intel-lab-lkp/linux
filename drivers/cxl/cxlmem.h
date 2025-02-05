@@ -88,8 +88,6 @@ static inline bool is_cxl_endpoint(struct cxl_port *port)
 	return is_cxl_memdev(port->uport_dev);
 }
 
-struct cxl_memdev *devm_cxl_add_memdev(struct device *host,
-				       struct cxl_dev_state *cxlds);
 int devm_cxl_sanitize_setup_notifier(struct device *host,
 				     struct cxl_memdev *cxlmd);
 struct cxl_memdev_state;
@@ -514,7 +512,8 @@ struct cxl_memdev_state {
 static inline struct cxl_memdev_state *
 to_cxl_memdev_state(struct cxl_dev_state *cxlds)
 {
-	if (cxlds->type != CXL_DEVTYPE_CLASSMEM)
+	if (cxlds->type != CXL_DEVTYPE_CLASSMEM &&
+	    cxlds->type != CXL_DEVTYPE_DEVMEM)
 		return NULL;
 	return container_of(cxlds, struct cxl_memdev_state, cxlds);
 }

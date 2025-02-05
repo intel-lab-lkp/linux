@@ -78,4 +78,6 @@ void cxl_set_media_ready(struct cxl_memdev_state *mds);
 void cxl_dev_state_setup(struct cxl_memdev_state *mds, struct mds_info *info);
 int cxl_mem_dpa_fetch(struct cxl_memdev_state *mds, struct cxl_dpa_info *info);
 int cxl_dpa_setup(struct cxl_memdev_state *cxlmds, const struct cxl_dpa_info *info);
+struct cxl_memdev *devm_cxl_add_memdev(struct device *host,
+				       struct cxl_memdev_state *cxlmds);
 #endif
