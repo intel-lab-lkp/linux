@@ -4,12 +4,15 @@
 #include "tsnep.h"
 
 #include <net/pkt_sched.h>
+#include <net/selftests.h>
 
 enum tsnep_test {
 	TSNEP_TEST_ENABLE = 0,
 	TSNEP_TEST_TAPRIO,
 	TSNEP_TEST_TAPRIO_CHANGE,
 	TSNEP_TEST_TAPRIO_EXTENSION,
+	TSNEP_TEST_PHY_1000_LOOPBACK,
+	TSNEP_TEST_PHY_100_LOOPBACK,
 };
 
 static const char tsnep_test_strings[][ETH_GSTRING_LEN] = {
@@ -17,6 +20,8 @@ static const char tsnep_test_strings[][ETH_GSTRING_LEN] = {
 	"TAPRIO                (offline)",
 	"TAPRIO change         (offline)",
 	"TAPRIO extension      (offline)",
+	"PHY 1000Mbps loopback (offline)",
+	"PHY 100Mbps loopback  (offline)",
 };
 
 #define TSNEP_TEST_COUNT (sizeof(tsnep_test_strings) / ETH_GSTRING_LEN)
@@ -754,6 +759,133 @@ failed:
 	return false;
 }
 
+static bool test_loopback(struct tsnep_adapter *adapter, int speed)
+{
+	struct phy_device *phydev = adapter->phydev;
+	int retval;
+
+	retval = phy_loopback(phydev, true, speed);
+	if (retval || !phydev->loopback_enabled || !phydev->link ||
+	    phydev->speed != speed)
+		return false;
+
+	retval = net_test_phy_loopback_udp(adapter->netdev);
+	if (retval)
+		return false;
+
+	retval = net_test_phy_loopback_udp_mtu(adapter->netdev);
+	if (retval)
+		return false;
+
+	retval = net_test_phy_loopback_tcp(adapter->netdev);
+	if (retval)
+		return false;
+
+	retval = phy_loopback(phydev, false, 0);
+	if (retval || phydev->loopback_enabled)
+		return false;
+
+	return true;
+}
+
+static bool set_speed(struct tsnep_adapter *adapter, int speed)
+{
+	struct ethtool_link_ksettings cmd;
+	int retval;
+
+	retval = tsnep_ethtool_ops.get_link_ksettings(adapter->netdev, &cmd);
+	if (retval)
+		return false;
+
+	if (speed) {
+		cmd.base.speed = speed;
+		cmd.base.duplex = DUPLEX_FULL;
+		cmd.base.autoneg = AUTONEG_DISABLE;
+	} else {
+		cmd.base.autoneg = AUTONEG_ENABLE;
+	}
+
+	retval = tsnep_ethtool_ops.set_link_ksettings(adapter->netdev, &cmd);
+	if (retval)
+		return false;
+
+	return true;
+}
+
+static bool tsnep_test_phy_1000_loopback(struct tsnep_adapter *adapter)
+{
+	if (!adapter->netdev->phydev)
+		return false;
+
+	if (!test_loopback(adapter, 1000))
+		goto failed;
+
+	/* after autonegotiation */
+	if (!set_speed(adapter, 0))
+		goto failed;
+	if (!test_loopback(adapter, 1000))
+		goto failed;
+
+	/* after 100Mbps fixed speed */
+	if (!set_speed(adapter, 100))
+		goto failed;
+	if (!test_loopback(adapter, 1000))
+		goto failed;
+
+	/* after 1000Mbps fixed speed */
+	if (!set_speed(adapter, 1000))
+		goto failed;
+	if (!test_loopback(adapter, 1000))
+		goto failed;
+
+	if (!set_speed(adapter, 0))
+		goto failed;
+
+	return true;
+
+failed:
+	phy_loopback(adapter->phydev, false, 0);
+	set_speed(adapter, 0);
+	return false;
+}
+
+static bool tsnep_test_phy_100_loopback(struct tsnep_adapter *adapter)
+{
+	if (!adapter->netdev->phydev)
+		return false;
+
+	if (!test_loopback(adapter, 100))
+		goto failed;
+
+	/* after autonegotiation */
+	if (!set_speed(adapter, 0))
+		goto failed;
+	if (!test_loopback(adapter, 100))
+		goto failed;
+
+	/* 100Mbps fixed speed */
+	if (!set_speed(adapter, 100))
+		goto failed;
+	if (!test_loopback(adapter, 100))
+		goto failed;
+
+	/* 1000Mbps fixed speed */
+	if (!set_speed(adapter, 1000))
+		goto failed;
+	if (!test_loopback(adapter, 100))
+		goto failed;
+
+	if (!set_speed(adapter, 0))
+		goto failed;
+
+	return true;
+
+failed:
+	phy_loopback(adapter->phydev, false, 0);
+	set_speed(adapter, 0);
+	return false;
+}
+
 int tsnep_ethtool_get_test_count(void)
 {
 	return TSNEP_TEST_COUNT;
@@ -768,15 +900,14 @@ void tsnep_ethtool_self_test(struct net_device *netdev,
 			     struct ethtool_test *eth_test, u64 *data)
 {
 	struct tsnep_adapter *adapter = netdev_priv(netdev);
+	int i;
 
 	eth_test->len = TSNEP_TEST_COUNT;
 
 	if (eth_test->flags != ETH_TEST_FL_OFFLINE) {
 		/* no tests are done online */
-		data[TSNEP_TEST_ENABLE] = 0;
-		data[TSNEP_TEST_TAPRIO] = 0;
-		data[TSNEP_TEST_TAPRIO_CHANGE] = 0;
-		data[TSNEP_TEST_TAPRIO_EXTENSION] = 0;
+		for (i = 0; i < TSNEP_TEST_COUNT; i++)
+			data[i] = 0;
 
 		return;
 	}
@@ -807,5 +938,19 @@ void tsnep_ethtool_self_test(struct net_device *netdev,
 	} else {
 		eth_test->flags |= ETH_TEST_FL_FAILED;
 		data[TSNEP_TEST_TAPRIO_EXTENSION] = 1;
+	}
+
+	if (tsnep_test_phy_1000_loopback(adapter)) {
+		data[TSNEP_TEST_PHY_1000_LOOPBACK] = 0;
+	} else {
+		eth_test->flags |= ETH_TEST_FL_FAILED;
+		data[TSNEP_TEST_PHY_1000_LOOPBACK] = 1;
+	}
+
+	if (tsnep_test_phy_100_loopback(adapter)) {
+		data[TSNEP_TEST_PHY_100_LOOPBACK] = 0;
+	} else {
+		eth_test->flags |= ETH_TEST_FL_FAILED;
+		data[TSNEP_TEST_PHY_100_LOOPBACK] = 1;
 	}
 }
