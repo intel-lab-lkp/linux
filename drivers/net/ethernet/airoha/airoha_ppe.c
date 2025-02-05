@@ -787,6 +787,10 @@ int airoha_ppe_init(struct airoha_eth *eth)
 	if (err)
 		goto error_npu_deinit;
 
+	err = airoha_ppe_debugfs_init(ppe);
+	if (err)
+		goto error_npu_deinit;
+
 	return 0;
 
 error_npu_deinit:
@@ -804,4 +808,5 @@ void airoha_ppe_deinit(struct airoha_eth *eth)
 		airoha_npu_deinit(eth->npu);
 	}
 	rhashtable_destroy(&eth->flow_table);
+	debugfs_remove(eth->ppe->debugfs_dir);
 }
