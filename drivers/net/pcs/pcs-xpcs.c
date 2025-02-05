@@ -774,9 +774,18 @@ static int xpcs_config_aneg_c37_1000basex(struct dw_xpcs *xpcs,
 			return ret;
 	}
 
-	mask = DW_VR_MII_PCS_MODE_MASK;
+	/* Older XPCS IP requires PHY_MODE (bit 3) and SGMII_LINK (but 4) to
+	 * be set when operating in 1000BASE-X mode. See page 233
+	 * https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/KSZ9477S-Data-Sheet-DS00002392C.pdf
+	 * "5.5.9 SGMII AUTO-NEGOTIATION CONTROL REGISTER"
+	 */
+	mask = DW_VR_MII_PCS_MODE_MASK | DW_VR_MII_AN_CTRL_SGMII_LINK |
+	       DW_VR_MII_TX_CONFIG_MASK;
 	val = FIELD_PREP(DW_VR_MII_PCS_MODE_MASK,
-			 DW_VR_MII_PCS_MODE_C37_1000BASEX);
+			 DW_VR_MII_PCS_MODE_C37_1000BASEX) |
+	      FIELD_PREP(DW_VR_MII_TX_CONFIG_MASK,
+			 DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII) |
+	      DW_VR_MII_AN_CTRL_SGMII_LINK;
 
 	if (!xpcs->pcs.poll) {
 		mask |= DW_VR_MII_AN_INTR_EN;
