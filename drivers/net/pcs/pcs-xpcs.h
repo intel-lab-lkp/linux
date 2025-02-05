@@ -114,6 +114,12 @@ enum dw_xpcs_clock {
 	DW_XPCS_NUM_CLKS,
 };
 
+enum dw_xpcs_sgmii_10_100 {
+	DW_XPCS_SGMII_10_100_UNCHANGED,
+	DW_XPCS_SGMII_10_100_4BIT,
+	DW_XPCS_SGMII_10_100_8BIT
+};
+
 struct dw_xpcs {
 	struct dw_xpcs_info info;
 	const struct dw_xpcs_desc *desc;
@@ -122,6 +128,8 @@ struct dw_xpcs {
 	struct phylink_pcs pcs;
 	phy_interface_t interface;
 	bool need_reset;
+	/* Width of the MII MAC/XPCS interface in 100M and 10M modes */
+	enum dw_xpcs_sgmii_10_100 sgmii_10_100_8bit;
 };
 
 int xpcs_read(struct dw_xpcs *xpcs, int dev, u32 reg);

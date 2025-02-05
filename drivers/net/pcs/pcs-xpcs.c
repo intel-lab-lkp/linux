@@ -695,9 +695,18 @@ static int xpcs_config_aneg_c37_sgmii(struct dw_xpcs *xpcs,
 	val = FIELD_PREP(DW_VR_MII_PCS_MODE_MASK,
 			 DW_VR_MII_PCS_MODE_C37_SGMII);
 
-	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID) {
-		mask |= DW_VR_MII_AN_CTRL_8BIT;
+	switch (xpcs->sgmii_10_100_8bit) {
+	case DW_XPCS_SGMII_10_100_8BIT:
 		val |= DW_VR_MII_AN_CTRL_8BIT;
+		fallthrough;
+	case DW_XPCS_SGMII_10_100_4BIT:
+		mask |= DW_VR_MII_AN_CTRL_8BIT;
+		fallthrough;
+	case DW_XPCS_SGMII_10_100_UNCHANGED:
+		break;
+	}
+
+	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID) {
 		/* Hardware requires it to be PHY side SGMII */
 		tx_conf = DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII;
 	} else {
@@ -1450,10 +1459,12 @@ static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev)
 
 	xpcs_get_interfaces(xpcs, xpcs->pcs.supported_interfaces);
 
-	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID)
+	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID) {
 		xpcs->pcs.poll = false;
-	else
+		xpcs->sgmii_10_100_8bit = DW_XPCS_SGMII_10_100_8BIT;
+	} else {
 		xpcs->need_reset = true;
+	}
 
 	return xpcs;
 
