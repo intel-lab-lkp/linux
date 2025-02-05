@@ -1435,26 +1435,6 @@ int cxl_mailbox_init(struct cxl_mailbox *cxl_mbox, struct device *host)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mailbox_init, "CXL");
 
-struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev)
-{
-	struct cxl_memdev_state *mds;
-
-	mds = devm_kzalloc(dev, sizeof(*mds), GFP_KERNEL);
-	if (!mds) {
-		dev_err(dev, "No memory available\n");
-		return ERR_PTR(-ENOMEM);
-	}
-
-	mutex_init(&mds->event.log_lock);
-	mds->cxlds.dev = dev;
-	mds->cxlds.reg_map.host = dev;
-	mds->cxlds.reg_map.resource = CXL_RESOURCE_NONE;
-	mds->cxlds.type = CXL_DEVTYPE_CLASSMEM;
-
-	return mds;
-}
-EXPORT_SYMBOL_NS_GPL(cxl_memdev_state_create, "CXL");
-
 void __init cxl_mbox_init(void)
 {
 	struct dentry *mbox_debugfs;

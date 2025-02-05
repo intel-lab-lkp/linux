@@ -632,6 +632,29 @@ static void detach_memdev(struct work_struct *work)
 
 static struct lock_class_key cxl_memdev_key;
 
+struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev, u64 serial,
+						 u16 dvsec, enum cxl_devtype type)
+{
+	struct cxl_memdev_state *mds;
+
+	mds = devm_kzalloc(dev, sizeof(*mds), GFP_KERNEL);
+	if (!mds) {
+		dev_err(dev, "No memory available\n");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	mutex_init(&mds->event.log_lock);
+	mds->cxlds.dev = dev;
+	mds->cxlds.reg_map.host = dev;
+	mds->cxlds.reg_map.resource = CXL_RESOURCE_NONE;
+	mds->cxlds.cxl_dvsec = dvsec;
+	mds->cxlds.serial = serial;
+	mds->cxlds.type = type;
+
+	return mds;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_memdev_state_create, "CXL");
+
 static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 					   const struct file_operations *fops)
 {
