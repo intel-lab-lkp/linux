@@ -24,3 +24,11 @@
 		reg = <0x0 0x80000000 0x2 0x00000000>;
 	};
 };
+
+&i2c0 {
+	status = "okay";
+};
+
+&snfi {
+	status = "okay";
+};
