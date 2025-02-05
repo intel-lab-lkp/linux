@@ -25,6 +25,7 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 	struct pci_dev *pci_dev = efx->pci_dev;
 	DECLARE_BITMAP(expected, CXL_MAX_CAPS);
 	DECLARE_BITMAP(found, CXL_MAX_CAPS);
+	resource_size_t max_size;
 	struct mds_info sfc_mds_info;
 	struct efx_cxl *cxl;
 
@@ -102,6 +103,24 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 		goto err_regs;
 	}
 
+	cxl->cxlrd = cxl_get_hpa_freespace(cxl->cxlmd, 1,
+					   CXL_DECODER_F_RAM | CXL_DECODER_F_TYPE2,
+					   &max_size);
+
+	if (IS_ERR(cxl->cxlrd)) {
+		pci_err(pci_dev, "cxl_get_hpa_freespace failed\n");
+		rc = PTR_ERR(cxl->cxlrd);
+		goto err_regs;
+	}
+
+	if (max_size < EFX_CTPIO_BUFFER_SIZE) {
+		pci_err(pci_dev, "%s: not enough free HPA space %pap < %u\n",
+			__func__, &max_size, EFX_CTPIO_BUFFER_SIZE);
+		rc = -ENOSPC;
+		cxl_put_root_decoder(cxl->cxlrd);
+		goto err_regs;
+	}
+
 	probe_data->cxl = cxl;
 
 	return 0;
@@ -114,8 +133,10 @@ err_regs:
 
 void efx_cxl_exit(struct efx_probe_data *probe_data)
 {
-	if (probe_data->cxl)
+	if (probe_data->cxl) {
+		cxl_put_root_decoder(probe_data->cxl->cxlrd);
 		kfree(probe_data->cxl);
+	}
 }
 
 MODULE_IMPORT_NS("CXL");

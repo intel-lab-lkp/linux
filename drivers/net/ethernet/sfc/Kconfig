@@ -69,6 +69,7 @@ config SFC_CXL
 	bool "Solarflare SFC9100-family CXL support"
 	depends on SFC && CXL_BUS && !(SFC=y && CXL_BUS=m)
 	depends on CXL_BUS >= CXL_BUS
+	depends on CXL_REGION
 	default SFC
 
 source "drivers/net/ethernet/sfc/falcon/Kconfig"
