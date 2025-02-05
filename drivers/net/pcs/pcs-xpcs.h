@@ -120,6 +120,19 @@ enum dw_xpcs_sgmii_10_100 {
 	DW_XPCS_SGMII_10_100_8BIT
 };
 
+/* The SGMII mode:
+ * DW_XPCS_SGMII_MODE_MAC: the XPCS acts as a MAC, reading and acknowledging
+ * the config word.
+ *
+ * DW_XPCS_SGMII_MODE_PHY_HW: the XPCS acts as a PHY, deriving the tx_config
+ * bits 15 (link), 12 (duplex) and 11:10 (speed) from hardware inputs to the
+ * XPCS.
+ */
+enum dw_xpcs_sgmii_mode {
+	DW_XPCS_SGMII_MODE_MAC,		/* XPCS is MAC on SGMII */
+	DW_XPCS_SGMII_MODE_PHY_HW,	/* XPCS is PHY, tx_config from hw */
+};
+
 struct dw_xpcs {
 	struct dw_xpcs_info info;
 	const struct dw_xpcs_desc *desc;
@@ -130,6 +143,7 @@ struct dw_xpcs {
 	bool need_reset;
 	/* Width of the MII MAC/XPCS interface in 100M and 10M modes */
 	enum dw_xpcs_sgmii_10_100 sgmii_10_100_8bit;
+	enum dw_xpcs_sgmii_mode sgmii_mode;
 };
 
 int xpcs_read(struct dw_xpcs *xpcs, int dev, u32 reg);

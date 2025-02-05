@@ -706,12 +706,10 @@ static int xpcs_config_aneg_c37_sgmii(struct dw_xpcs *xpcs,
 		break;
 	}
 
-	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID) {
-		/* Hardware requires it to be PHY side SGMII */
-		tx_conf = DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII;
-	} else {
+	if (xpcs->sgmii_mode == DW_XPCS_SGMII_MODE_MAC)
 		tx_conf = DW_VR_MII_TX_CONFIG_MAC_SIDE_SGMII;
-	}
+	else
+		tx_conf = DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII;
 
 	val |= FIELD_PREP(DW_VR_MII_TX_CONFIG_MASK, tx_conf);
 
@@ -722,12 +720,16 @@ static int xpcs_config_aneg_c37_sgmii(struct dw_xpcs *xpcs,
 	val = 0;
 	mask = DW_VR_MII_DIG_CTRL1_2G5_EN | DW_VR_MII_DIG_CTRL1_MAC_AUTO_SW;
 
-	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
-		val = DW_VR_MII_DIG_CTRL1_MAC_AUTO_SW;
+	switch (xpcs->sgmii_mode) {
+	case DW_XPCS_SGMII_MODE_MAC:
+		if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+			val = DW_VR_MII_DIG_CTRL1_MAC_AUTO_SW;
+		break;
 
-	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID) {
+	case DW_XPCS_SGMII_MODE_PHY_HW:
 		mask |= DW_VR_MII_DIG_CTRL1_PHY_MODE_CTRL;
 		val |= DW_VR_MII_DIG_CTRL1_PHY_MODE_CTRL;
+		break;
 	}
 
 	ret = xpcs_modify(xpcs, MDIO_MMD_VEND2, DW_VR_MII_DIG_CTRL1, mask, val);
@@ -1462,6 +1464,7 @@ static struct dw_xpcs *xpcs_create(struct mdio_device *mdiodev)
 	if (xpcs->info.pma == WX_TXGBE_XPCS_PMA_10G_ID) {
 		xpcs->pcs.poll = false;
 		xpcs->sgmii_10_100_8bit = DW_XPCS_SGMII_10_100_8BIT;
+		xpcs->sgmii_mode = DW_XPCS_SGMII_MODE_PHY_HW;
 	} else {
 		xpcs->need_reset = true;
 	}
