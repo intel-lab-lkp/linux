@@ -24,7 +24,7 @@ Optional properties:
 altr,emac-splitter: Should be the phandle to the emac splitter soft IP node if
 		DWMAC controller is connected emac splitter.
 phy-mode: The phy mode the ethernet operates in
-altr,sgmii-to-sgmii-converter: phandle to the TSE SGMII converter
+altr,gmii-to-sgmii-converter: phandle to the TSE SGMII converter
 
 This device node has additional phandle dependency, the sgmii converter:
 
