@@ -39,6 +39,16 @@ enum cxl_devtype {
 	CXL_DEVTYPE_CLASSMEM,
 };
 
+/*
+ * struct for an accel driver giving partition data when Type2 device without a
+ * mailbox.
+ */
+struct mds_info {
+	u64 total_bytes;
+	u64 volatile_only_bytes;
+	u64 persistent_only_bytes;
+};
+
 struct device;
 struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev, u64 serial,
 					   u16 dvsec, enum cxl_devtype type);
@@ -48,4 +58,5 @@ int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_memdev_state *cxlm
 			     unsigned long *caps);
 int cxl_await_media_ready(struct cxl_memdev_state *mds);
 void cxl_set_media_ready(struct cxl_memdev_state *mds);
+void cxl_dev_state_setup(struct cxl_memdev_state *mds, struct mds_info *info);
 #endif

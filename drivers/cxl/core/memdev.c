@@ -655,6 +655,18 @@ struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev, u64 serial,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_memdev_state_create, "CXL");
 
+void cxl_dev_state_setup(struct cxl_memdev_state *mds, struct mds_info *info)
+{
+	if (!mds->cxlds.media_ready)
+		return;
+
+	mds->total_bytes = info->total_bytes;
+	mds->volatile_only_bytes = info->volatile_only_bytes;
+	mds->persistent_only_bytes = info->persistent_only_bytes;
+	mds->partition_align_bytes = 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_dev_state_setup, "CXL");
+
 static struct cxl_memdev *cxl_memdev_alloc(struct cxl_dev_state *cxlds,
 					   const struct file_operations *fops)
 {
