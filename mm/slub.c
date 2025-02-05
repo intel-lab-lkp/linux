@@ -1043,7 +1043,7 @@ static void slab_fix(struct kmem_cache *s, char *fmt, ...)
 	va_start(args, fmt);
 	vaf.fmt = fmt;
 	vaf.va = &args;
-	pr_err("FIX %s: %pV\n", s->name, &vaf);
+	WARN(1, "FIX %s: %pV\n", s->name, &vaf);
 	va_end(args);
 }
 
@@ -1106,8 +1106,8 @@ static bool freelist_corrupted(struct kmem_cache *s, struct slab *slab,
 	if ((s->flags & SLAB_CONSISTENCY_CHECKS) &&
 	    !check_valid_pointer(s, slab, nextfree) && freelist) {
 		object_err(s, slab, *freelist, "Freechain corrupt");
-		*freelist = NULL;
 		slab_fix(s, "Isolate corrupted freechain");
+		*freelist = NULL;
 		return true;
 	}
 
@@ -1445,9 +1445,9 @@ static int on_freelist(struct kmem_cache *s, struct slab *slab, void *search)
 				set_freepointer(s, object, NULL);
 			} else {
 				slab_err(s, slab, "Freepointer corrupt");
+				slab_fix(s, "Freelist cleared");
 				slab->freelist = NULL;
 				slab->inuse = slab->objects;
-				slab_fix(s, "Freelist cleared");
 				return 0;
 			}
 			break;
@@ -1464,14 +1464,14 @@ static int on_freelist(struct kmem_cache *s, struct slab *slab, void *search)
 	if (slab->objects != max_objects) {
 		slab_err(s, slab, "Wrong number of objects. Found %d but should be %d",
 			 slab->objects, max_objects);
-		slab->objects = max_objects;
 		slab_fix(s, "Number of objects adjusted");
+		slab->objects = max_objects;
 	}
 	if (slab->inuse != slab->objects - nr) {
 		slab_err(s, slab, "Wrong object count. Counter is %d but counted were %d",
 			 slab->inuse, slab->objects - nr);
-		slab->inuse = slab->objects - nr;
 		slab_fix(s, "Object count adjusted");
+		slab->inuse = slab->objects - nr;
 	}
 	return search == NULL;
 }
