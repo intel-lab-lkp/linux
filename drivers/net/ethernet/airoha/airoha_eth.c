@@ -3,9 +3,6 @@
  * Copyright (c) 2024 AIROHA Inc
  * Author: Lorenzo Bianconi <lorenzo@kernel.org>
  */
-#include <linux/of.h>
-#include <linux/of_net.h>
-#include <linux/platform_device.h>
 #include <linux/tcp.h>
 #include <linux/u64_stats_sync.h>
 #include <net/dsa.h>
@@ -1301,6 +1298,9 @@ static int airoha_hw_init(struct platform_device *pdev,
 			return err;
 	}
 
+	if (airoha_ppe_init(eth))
+		dev_err(eth->dev, "ppe initialization failed\n");
+
 	set_bit(DEV_STATE_INITIALIZED, &eth->state);
 
 	return 0;
@@ -2496,6 +2496,7 @@ static void airoha_remove(struct platform_device *pdev)
 	}
 	free_netdev(eth->napi_dev);
 
+	airoha_ppe_deinit(eth);
 	platform_set_drvdata(pdev, NULL);
 }
 

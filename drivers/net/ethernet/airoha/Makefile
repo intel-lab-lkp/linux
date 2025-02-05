@@ -3,4 +3,6 @@
 # Airoha for the Mediatek SoCs built-in ethernet macs
 #
 
-obj-$(CONFIG_NET_AIROHA) += airoha_eth.o
+obj-$(CONFIG_NET_AIROHA) += airoha-eth.o
+airoha-eth-y := airoha_eth.o airoha_ppe.o
+airoha-eth-$(CONFIG_NET_AIROHA_NPU) += airoha_npu.o
