@@ -49,6 +49,23 @@ struct mds_info {
 	u64 persistent_only_bytes;
 };
 
+enum cxl_partition_mode {
+	CXL_PARTMODE_NONE,
+	CXL_PARTMODE_RAM,
+	CXL_PARTMODE_PMEM,
+};
+
+#define CXL_NR_PARTITIONS_MAX 2
+
+struct cxl_dpa_info {
+	u64 size;
+	struct cxl_dpa_part_info {
+		struct range range;
+		enum cxl_partition_mode mode;
+	} part[CXL_NR_PARTITIONS_MAX];
+	int nr_partitions;
+};
+
 struct device;
 struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev, u64 serial,
 					   u16 dvsec, enum cxl_devtype type);
@@ -59,4 +76,6 @@ int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_memdev_state *cxlm
 int cxl_await_media_ready(struct cxl_memdev_state *mds);
 void cxl_set_media_ready(struct cxl_memdev_state *mds);
 void cxl_dev_state_setup(struct cxl_memdev_state *mds, struct mds_info *info);
+int cxl_mem_dpa_fetch(struct cxl_memdev_state *mds, struct cxl_dpa_info *info);
+int cxl_dpa_setup(struct cxl_memdev_state *cxlmds, const struct cxl_dpa_info *info);
 #endif

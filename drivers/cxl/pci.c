@@ -955,7 +955,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		return rc;
 
-	rc = cxl_dpa_setup(cxlds, &range_info);
+	rc = cxl_dpa_setup(mds, &range_info);
 	if (rc)
 		return rc;
 

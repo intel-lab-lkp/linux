@@ -467,8 +467,10 @@ static const char *cxl_mode_name(enum cxl_partition_mode mode)
 }
 
 /* if this fails the caller must destroy @cxlds, there is no recovery */
-int cxl_dpa_setup(struct cxl_dev_state *cxlds, const struct cxl_dpa_info *info)
+int cxl_dpa_setup(struct cxl_memdev_state *cxlmds,
+		  const struct cxl_dpa_info *info)
 {
+	struct cxl_dev_state *cxlds = &cxlmds->cxlds;
 	struct device *dev = cxlds->dev;
 
 	guard(rwsem_write)(&cxl_dpa_rwsem);
