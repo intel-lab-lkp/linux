@@ -20,10 +20,12 @@
 
 int efx_cxl_init(struct efx_probe_data *probe_data)
 {
+	struct cxl_dpa_info sfc_dpa_info = { 0 };
 	struct efx_nic *efx = &probe_data->efx;
 	struct pci_dev *pci_dev = efx->pci_dev;
 	DECLARE_BITMAP(expected, CXL_MAX_CAPS);
 	DECLARE_BITMAP(found, CXL_MAX_CAPS);
+	struct mds_info sfc_mds_info;
 	struct efx_cxl *cxl;
 
 	u16 dvsec;
@@ -77,6 +79,20 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 	 * implies it is ready.
 	 */
 	cxl_set_media_ready(cxl->cxlmds);
+
+	sfc_mds_info.total_bytes = EFX_CTPIO_BUFFER_SIZE;
+	sfc_mds_info.volatile_only_bytes = EFX_CTPIO_BUFFER_SIZE;
+	sfc_mds_info.persistent_only_bytes = 0;
+
+	cxl_dev_state_setup(cxl->cxlmds, &sfc_mds_info);
+
+	rc = cxl_mem_dpa_fetch(cxl->cxlmds, &sfc_dpa_info);
+	if (rc)
+		goto err_regs;
+
+	rc = cxl_dpa_setup(cxl->cxlmds, &sfc_dpa_info);
+	if (rc)
+		goto err_regs;
 
 	probe_data->cxl = cxl;
 
