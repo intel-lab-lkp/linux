@@ -2790,6 +2790,40 @@ int clk_set_max_rate(struct clk *clk, unsigned long rate)
 }
 EXPORT_SYMBOL_GPL(clk_set_max_rate);
 
+int clk_hw_set_spread_spectrum(struct clk_hw *hw, unsigned int modfreq,
+			       unsigned int spreaddepth, enum clk_ssc_method method,
+			       bool enable)
+{
+	struct clk_spread_spectrum clk_ss;
+	struct clk_core *core;
+	int ret;
+
+	if (!hw)
+		return 0;
+
+	core = hw->core;
+
+	clk_ss.modfreq = modfreq;
+	clk_ss.spreaddepth = spreaddepth;
+	clk_ss.method = method;
+	clk_ss.enable = enable;
+
+	clk_prepare_lock();
+
+	ret = clk_pm_runtime_get(core);
+	if (ret)
+		goto fail;
+
+	if (core->ops->set_spread_spectrum)
+		ret = core->ops->set_spread_spectrum(hw, &clk_ss);
+
+	clk_pm_runtime_put(core);
+
+fail:
+	clk_prepare_unlock();
+	return ret;
+}
+
 /**
  * clk_get_parent - return the parent of a clk
  * @clk: the clk whose parent gets returned
