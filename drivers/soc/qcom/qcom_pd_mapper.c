@@ -46,6 +46,11 @@ struct qcom_pdm_data {
 	struct list_head services;
 };
 
+struct qcom_pdm_probe_first_dev_quirk {
+	const char *name;
+	u32 id;
+};
+
 static DEFINE_MUTEX(qcom_pdm_mutex); /* protects __qcom_pdm_data */
 static struct qcom_pdm_data *__qcom_pdm_data;
 
@@ -526,6 +531,11 @@ static const struct qcom_pdm_domain_data *x1e80100_domains[] = {
 	NULL,
 };
 
+static const struct qcom_pdm_probe_first_dev_quirk first_dev_remoteproc3 = {
+	.id = 3,
+	.name = "pd-mapper"
+};
+
 static const struct of_device_id qcom_pdm_domains[] __maybe_unused = {
 	{ .compatible = "qcom,apq8016", .data = NULL, },
 	{ .compatible = "qcom,apq8064", .data = NULL, },
@@ -566,6 +576,10 @@ static const struct of_device_id qcom_pdm_domains[] __maybe_unused = {
 	{},
 };
 
+static const struct of_device_id qcom_pdm_defer[] __maybe_unused = {
+	{ .compatible = "qcom,sdm845", .data = &first_dev_remoteproc3, },
+	{},
+};
 static void qcom_pdm_stop(struct qcom_pdm_data *data)
 {
 	qcom_pdm_free_domains(data);
@@ -637,6 +651,25 @@ err_stop:
 	return ERR_PTR(ret);
 }
 
+static bool qcom_pdm_ready(struct auxiliary_device *auxdev)
+{
+	const struct of_device_id *match;
+	struct device_node *root;
+	struct qcom_pdm_probe_first_dev_quirk *first_dev;
+
+	root = of_find_node_by_path("/");
+	if (!root)
+		return true;
+
+	match = of_match_node(qcom_pdm_defer, root);
+	of_node_put(root);
+	if (!match)
+		return true;
+
+	first_dev = (struct qcom_pdm_probe_first_dev_quirk *) match->data;
+	return (auxdev->id == first_dev->id) && !strcmp(auxdev->name, first_dev->name);
+}
+
 static int qcom_pdm_probe(struct auxiliary_device *auxdev,
 			  const struct auxiliary_device_id *id)
 
@@ -647,6 +680,15 @@ static int qcom_pdm_probe(struct auxiliary_device *auxdev,
 	mutex_lock(&qcom_pdm_mutex);
 
 	if (!__qcom_pdm_data) {
+		if (!qcom_pdm_ready(auxdev)) {
+			pr_debug("%s: Deferring probe for device %s (id: %u)\n",
+				__func__, auxdev->name, auxdev->id);
+			ret = -EPROBE_DEFER;
+			goto probe_stop;
+		}
+		pr_debug("%s: Probing for device %s (id: %u), starting pdm\n",
+			__func__, auxdev->name, auxdev->id);
+
 		data = qcom_pdm_start();
 
 		if (IS_ERR(data))
@@ -659,6 +701,7 @@ static int qcom_pdm_probe(struct auxiliary_device *auxdev,
 
 	auxiliary_set_drvdata(auxdev, __qcom_pdm_data);
 
+probe_stop:
 	mutex_unlock(&qcom_pdm_mutex);
 
 	return ret;
