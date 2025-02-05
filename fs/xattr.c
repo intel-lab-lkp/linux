@@ -704,7 +704,7 @@ static int path_setxattrat(int dfd, const char __user *pathname,
 
 	filename = getname_maybe_null(pathname, at_flags);
 	if (!filename) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_raw, f)(dfd);
 		if (fd_empty(f))
 			error = -EBADF;
 		else
@@ -848,7 +848,7 @@ static ssize_t path_getxattrat(int dfd, const char __user *pathname,
 
 	filename = getname_maybe_null(pathname, at_flags);
 	if (!filename) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_raw, f)(dfd);
 		if (fd_empty(f))
 			return -EBADF;
 		return file_getxattr(fd_file(f), &ctx);
@@ -978,7 +978,7 @@ static ssize_t path_listxattrat(int dfd, const char __user *pathname,
 
 	filename = getname_maybe_null(pathname, at_flags);
 	if (!filename) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_raw, f)(dfd);
 		if (fd_empty(f))
 			return -EBADF;
 		return file_listxattr(fd_file(f), list, size);
@@ -1079,7 +1079,7 @@ static int path_removexattrat(int dfd, const char __user *pathname,
 
 	filename = getname_maybe_null(pathname, at_flags);
 	if (!filename) {
-		CLASS(fd, f)(dfd);
+		CLASS(fd_raw, f)(dfd);
 		if (fd_empty(f))
 			return -EBADF;
 		return file_removexattr(fd_file(f), &kname);
