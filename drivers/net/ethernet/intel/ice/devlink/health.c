@@ -23,12 +23,12 @@ struct ice_health_status {
  * For instance, Health Code 0x1002 is triggered when the command fails.
  * Such codes should be disregarded by the end-user.
  * The below lookup requires to be sorted by code.
+ * #defines instead of proper const strings are used due to gcc 7 limitation.
  */
 
-static const char *const ice_common_port_solutions =
-	"Check your cable connection. Change or replace the module or cable. Manually set speed and duplex.";
-static const char *const ice_port_number_label = "Port Number";
-static const char *const ice_update_nvm_solution = "Update to the latest NVM image.";
+#define ice_common_port_solutions	"Check your cable connection. Change or replace the module or cable. Manually set speed and duplex."
+#define ice_port_number_label		"Port Number"
+#define ice_update_nvm_solution		"Update to the latest NVM image."
 
 static const struct ice_health_status ice_health_status_lookup[] = {
 	{ICE_AQC_HEALTH_STATUS_ERR_UNKNOWN_MOD_STRICT, "An unsupported module was detected.",
