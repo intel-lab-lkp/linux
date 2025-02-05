@@ -3075,7 +3075,7 @@ static int ravb_probe(struct platform_device *pdev)
 	if (info->coalesce_irqs) {
 		netdev_sw_irq_coalesce_default_on(ndev);
 		if (num_present_cpus() == 1)
-			dev_set_threaded(ndev, true);
+			dev_set_threaded(ndev, NETDEV_NAPI_THREADED_ENABLE);
 	}
 
 	/* Network device register */
