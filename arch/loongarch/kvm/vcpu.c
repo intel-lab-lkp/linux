@@ -1462,6 +1462,16 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	hrtimer_init(&vcpu->arch.swtimer, CLOCK_MONOTONIC, HRTIMER_MODE_ABS_PINNED_HARD);
 	vcpu->arch.swtimer.function = kvm_swtimer_wakeup;
 
+	/* Get pgd for secondary mmu */
+	vcpu->arch.host_second_pgd = (unsigned long)vcpu->kvm->arch.pgd;
+
+	/*
+	 * Get pgd for primary mmu
+	 *
+	 * Supposing current->mm == vcpu->kvm->mm and pgd table keeps unchanged
+	 * since vmm threads are created
+	 */
+	vcpu->arch.host_pgd = (unsigned long)vcpu->kvm->mm->pgd;
 	vcpu->arch.handle_exit = kvm_handle_exit;
 	vcpu->arch.guest_eentry = (unsigned long)kvm_loongarch_ops->exc_entry;
 	vcpu->arch.csr = kzalloc(sizeof(struct loongarch_csrs), GFP_KERNEL);
