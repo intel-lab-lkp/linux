@@ -441,22 +441,16 @@ int tpm_get_random(struct tpm_chip *chip, u8 *out, size_t max)
 	if (!out || max > TPM_MAX_RNG_DATA)
 		return -EINVAL;
 
+	/* NULL will be returned if chip is suspended */
 	chip = tpm_find_get_ops(chip);
 	if (!chip)
 		return -ENODEV;
-
-	/* Give back zero bytes, as TPM chip has not yet fully resumed: */
-	if (chip->flags & TPM_CHIP_FLAG_SUSPENDED) {
-		rc = 0;
-		goto out;
-	}
 
 	if (chip->flags & TPM_CHIP_FLAG_TPM2)
 		rc = tpm2_get_random(chip, out, max);
 	else
 		rc = tpm1_get_random(chip, out, max);
 
-out:
 	tpm_put_ops(chip);
 	return rc;
 }
