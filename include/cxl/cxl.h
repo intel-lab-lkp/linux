@@ -42,4 +42,8 @@ enum cxl_devtype {
 struct device;
 struct cxl_memdev_state *cxl_memdev_state_create(struct device *dev, u64 serial,
 					   u16 dvsec, enum cxl_devtype type);
+struct pci_dev;
+struct cxl_dev_state;
+int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_memdev_state *cxlmds,
+			     unsigned long *caps);
 #endif
