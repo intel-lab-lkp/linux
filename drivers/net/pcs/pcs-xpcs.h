@@ -121,15 +121,20 @@ enum dw_xpcs_sgmii_10_100 {
 };
 
 /* The SGMII mode:
- * DW_XPCS_SGMII_MODE_MAC: the XPCS acts as a MAC, reading and acknowledging
- * the config word.
+ * DW_XPCS_SGMII_MODE_MAC_AUTO: the XPCS acts as a MAC, accepting the
+ * parameters from the PHY end of the SGMII link and acknowledging the
+ * config word. The XPCS autonomously switches speed.
+ *
+ * DW_XPCS_SGMII_MODE_MAC_MANUAL: the XPCS acts as a MAC as above, but
+ * does not autonomously switch speed.
  *
  * DW_XPCS_SGMII_MODE_PHY_HW: the XPCS acts as a PHY, deriving the tx_config
  * bits 15 (link), 12 (duplex) and 11:10 (speed) from hardware inputs to the
  * XPCS.
  */
 enum dw_xpcs_sgmii_mode {
-	DW_XPCS_SGMII_MODE_MAC,		/* XPCS is MAC on SGMII */
+	DW_XPCS_SGMII_MODE_MAC_AUTO,	/* XPCS is MAC, auto update */
+	DW_XPCS_SGMII_MODE_MAC_MANUAL,	/* XPCS is MAC, manual update */
 	DW_XPCS_SGMII_MODE_PHY_HW,	/* XPCS is PHY, tx_config from hw */
 };
 

@@ -706,7 +706,8 @@ static int xpcs_config_aneg_c37_sgmii(struct dw_xpcs *xpcs,
 		break;
 	}
 
-	if (xpcs->sgmii_mode == DW_XPCS_SGMII_MODE_MAC)
+	if (xpcs->sgmii_mode == DW_XPCS_SGMII_MODE_MAC_AUTO ||
+	    xpcs->sgmii_mode == DW_XPCS_SGMII_MODE_MAC_MANUAL)
 		tx_conf = DW_VR_MII_TX_CONFIG_MAC_SIDE_SGMII;
 	else
 		tx_conf = DW_VR_MII_TX_CONFIG_PHY_SIDE_SGMII;
@@ -721,9 +722,12 @@ static int xpcs_config_aneg_c37_sgmii(struct dw_xpcs *xpcs,
 	mask = DW_VR_MII_DIG_CTRL1_2G5_EN | DW_VR_MII_DIG_CTRL1_MAC_AUTO_SW;
 
 	switch (xpcs->sgmii_mode) {
-	case DW_XPCS_SGMII_MODE_MAC:
+	case DW_XPCS_SGMII_MODE_MAC_AUTO:
 		if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
 			val = DW_VR_MII_DIG_CTRL1_MAC_AUTO_SW;
+		break;
+
+	case DW_XPCS_SGMII_MODE_MAC_MANUAL:
 		break;
 
 	case DW_XPCS_SGMII_MODE_PHY_HW:
@@ -1151,7 +1155,9 @@ static void xpcs_link_up_sgmii_1000basex(struct dw_xpcs *xpcs,
 {
 	int ret;
 
-	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED)
+	if (neg_mode == PHYLINK_PCS_NEG_INBAND_ENABLED &&
+	    !(interface == PHY_INTERFACE_MODE_SGMII &&
+	      xpcs->sgmii_mode == DW_XPCS_SGMII_MODE_MAC_MANUAL))
 		return;
 
 	if (interface == PHY_INTERFACE_MODE_1000BASEX) {
@@ -1168,10 +1174,11 @@ static void xpcs_link_up_sgmii_1000basex(struct dw_xpcs *xpcs,
 				__func__);
 	}
 
-	ret = xpcs_write(xpcs, MDIO_MMD_VEND2, MII_BMCR,
-			 mii_bmcr_encode_fixed(speed, duplex));
+	ret = xpcs_modify(xpcs, MDIO_MMD_VEND2, MII_BMCR,
+			  BMCR_SPEED1000 | BMCR_FULLDPLX | BMCR_SPEED100,
+			  mii_bmcr_encode_fixed(speed, duplex));
 	if (ret)
-		dev_err(&xpcs->mdiodev->dev, "%s: xpcs_write returned %pe\n",
+		dev_err(&xpcs->mdiodev->dev, "%s: xpcs_modify returned %pe\n",
 			__func__, ERR_PTR(ret));
 }
 
