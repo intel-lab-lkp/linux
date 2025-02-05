@@ -79,9 +79,15 @@ struct scmi_protocol_handle;
 enum scmi_clock_oem_config {
 	SCMI_CLOCK_CFG_DUTY_CYCLE = 0x1,
 	SCMI_CLOCK_CFG_PHASE,
+	SCMI_CLOCK_CFG_SSC,
 	SCMI_CLOCK_CFG_OEM_START = 0x80,
 	SCMI_CLOCK_CFG_OEM_END = 0xFF,
 };
+
+#define SCMI_CLOCK_EXT_SS_PERCENTAGE_MASK	GENMASK(7, 0)
+#define SCMI_CLOCK_EXT_SS_MOD_FREQ_MASK		GENMASK(23, 8)
+#define SCMI_CLOCK_EXT_SS_ENABLE_MASK		BIT(24)
+#define SCMI_CLOCK_EXT_SS_METHOD_MASK		GENMASK(31, 25)
 
 /**
  * struct scmi_clk_proto_ops - represents the various operations provided

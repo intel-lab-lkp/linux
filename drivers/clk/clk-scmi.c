@@ -23,6 +23,7 @@ enum scmi_clk_feats {
 	SCMI_CLK_RATE_CTRL_SUPPORTED,
 	SCMI_CLK_PARENT_CTRL_SUPPORTED,
 	SCMI_CLK_DUTY_CYCLE_SUPPORTED,
+	SCMI_CLK_SSC_SUPPORTED,
 	SCMI_CLK_FEATS_COUNT
 };
 
@@ -96,6 +97,36 @@ static int scmi_clk_set_parent(struct clk_hw *hw, u8 parent_index)
 	struct scmi_clk *clk = to_scmi_clk(hw);
 
 	return scmi_proto_clk_ops->parent_set(clk->ph, clk->id, parent_index);
+}
+
+static int scmi_clk_set_spread_spectrum(struct clk_hw *hw,
+					struct clk_spread_spectrum *clk_ss)
+{
+	struct scmi_clk *clk = to_scmi_clk(hw);
+	int ret;
+	u32 val;
+
+	/*
+	 * extConfigValue[7:0]   - spread percentage (%)
+	 * extConfigValue[23:8]  - Modulation Frequency (KHz)
+	 * extConfigValue[24]    - Enable/Disable
+	 * extConfigValue[31:25] - Modulation method
+	 */
+	val = FIELD_PREP(SCMI_CLOCK_EXT_SS_PERCENTAGE_MASK, clk_ss->spreaddepth);
+	val |= FIELD_PREP(SCMI_CLOCK_EXT_SS_MOD_FREQ_MASK, clk_ss->modfreq);
+	val |= FIELD_PREP(SCMI_CLOCK_EXT_SS_METHOD_MASK, clk_ss->method);
+	if (clk_ss->enable)
+		val |= SCMI_CLOCK_EXT_SS_ENABLE_MASK;
+	ret = scmi_proto_clk_ops->config_oem_set(clk->ph, clk->id,
+						 SCMI_CLOCK_CFG_SSC,
+						 val, false);
+	if (ret)
+		dev_warn(clk->dev,
+			 "Failed to set spread spectrum(%u,%u,%u) for clock ID %d\n",
+			 clk_ss->modfreq, clk_ss->spreaddepth, clk_ss->method,
+			 clk->id);
+
+	return ret;
 }
 
 static u8 scmi_clk_get_parent(struct clk_hw *hw)
@@ -316,8 +347,16 @@ scmi_clk_ops_alloc(struct device *dev, unsigned long feats_key)
 		ops->set_duty_cycle = scmi_clk_set_duty_cycle;
 	}
 
+	if (feats_key & BIT(SCMI_CLK_SSC_SUPPORTED))
+		ops->set_spread_spectrum = scmi_clk_set_spread_spectrum;
+
 	return ops;
 }
+
+static const char * const scmi_clk_imxlist[] = {
+	"fsl,imx95",
+	NULL
+};
 
 /**
  * scmi_clk_ops_select() - Select a proper set of clock operations
@@ -370,8 +409,12 @@ scmi_clk_ops_select(struct scmi_clk *sclk, bool atomic_capable,
 	if (!ci->parent_ctrl_forbidden)
 		feats_key |= BIT(SCMI_CLK_PARENT_CTRL_SUPPORTED);
 
-	if (ci->extended_config)
-		feats_key |= BIT(SCMI_CLK_DUTY_CYCLE_SUPPORTED);
+	if (ci->extended_config) {
+		if (of_machine_compatible_match(scmi_clk_imxlist))
+			feats_key |= BIT(SCMI_CLK_SSC_SUPPORTED);
+		else
+			feats_key |= BIT(SCMI_CLK_DUTY_CYCLE_SUPPORTED);
+	}
 
 	if (WARN_ON(feats_key >= db_size))
 		return NULL;
