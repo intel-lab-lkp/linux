@@ -20,6 +20,8 @@
 #define GNRL_CTL	0x0
 #define DIV_CTL0	0x4
 #define DIV_CTL1	0x8
+#define SSCG_CTRL	0xc
+
 #define LOCK_STATUS	BIT(31)
 #define LOCK_SEL_MASK	BIT(29)
 #define CLKE_MASK	BIT(11)
@@ -31,8 +33,18 @@
 #define KDIV_MASK	GENMASK(15, 0)
 #define KDIV_MIN	SHRT_MIN
 #define KDIV_MAX	SHRT_MAX
+#define SSCG_ENABLE	BIT(31)
+#define MFREQ_CTL_MASK	GENMASK(19, 12)
+#define MRAT_CTL_MASK	GENMASK(9, 4)
+#define SEL_PF_MASK	GENMASK(1, 0)
 
 #define LOCK_TIMEOUT_US		10000
+
+enum imx_pll14xx_ssc_mod_type {
+	IMX_PLL14XX_SSC_DOWN_SPREAD,
+	IMX_PLL14XX_SSC_UP_SPREAD,
+	IMX_PLL14XX_SSC_CENTER_SPREAD,
+};
 
 struct clk_pll14xx {
 	struct clk_hw			hw;
@@ -40,6 +52,7 @@ struct clk_pll14xx {
 	enum imx_pll14xx_type		type;
 	const struct imx_pll14xx_rate_table *rate_table;
 	int rate_count;
+	struct clk_spread_spectrum	ssc_conf;
 };
 
 #define to_clk_pll14xx(_hw) container_of(_hw, struct clk_pll14xx, hw)
@@ -349,6 +362,42 @@ static int clk_pll1416x_set_rate(struct clk_hw *hw, unsigned long drate,
 	return 0;
 }
 
+static void clk_pll1443x_enable_ssc(struct clk_hw *hw, unsigned long parent_rate,
+				    unsigned int pdiv, unsigned int mdiv)
+{
+	struct clk_pll14xx *pll = to_clk_pll14xx(hw);
+	struct clk_spread_spectrum *conf = &pll->ssc_conf;
+	u32 sscg_ctrl, mfr, mrr, mod_type;
+
+	sscg_ctrl = readl_relaxed(pll->base + SSCG_CTRL);
+	sscg_ctrl &=
+		~(SSCG_ENABLE | MFREQ_CTL_MASK | MRAT_CTL_MASK | SEL_PF_MASK);
+
+	mfr = parent_rate / (conf->modfreq * pdiv * (1 << 5));
+	mrr = ((conf->spreaddepth / 100) * mdiv * (1 << 6)) / (100 * mfr);
+
+	switch (conf->method) {
+	case CLK_SSC_CENTER_SPREAD:
+		mod_type = IMX_PLL14XX_SSC_CENTER_SPREAD;
+		break;
+	case CLK_SSC_UP_SPREAD:
+		mod_type = IMX_PLL14XX_SSC_UP_SPREAD;
+		break;
+	case CLK_SSC_DOWN_SPREAD:
+		mod_type = IMX_PLL14XX_SSC_DOWN_SPREAD;
+		break;
+	default:
+		mod_type = IMX_PLL14XX_SSC_DOWN_SPREAD;
+		break;
+	}
+
+	sscg_ctrl |= SSCG_ENABLE | FIELD_PREP(MFREQ_CTL_MASK, mfr) |
+		FIELD_PREP(MRAT_CTL_MASK, mrr) |
+		FIELD_PREP(SEL_PF_MASK, mod_type);
+
+	writel_relaxed(sscg_ctrl, pll->base + SSCG_CTRL);
+}
+
 static int clk_pll1443x_set_rate(struct clk_hw *hw, unsigned long drate,
 				 unsigned long prate)
 {
@@ -369,6 +418,9 @@ static int clk_pll1443x_set_rate(struct clk_hw *hw, unsigned long drate,
 
 		writel_relaxed(FIELD_PREP(KDIV_MASK, rate.kdiv),
 			       pll->base + DIV_CTL1);
+
+		if (pll->ssc_conf.enable)
+			clk_pll1443x_enable_ssc(hw, prate, rate.pdiv, rate.mdiv);
 
 		return 0;
 	}
@@ -409,6 +461,9 @@ static int clk_pll1443x_set_rate(struct clk_hw *hw, unsigned long drate,
 	/* Bypass */
 	gnrl_ctl &= ~BYPASS_MASK;
 	writel_relaxed(gnrl_ctl, pll->base + GNRL_CTL);
+
+	if (pll->ssc_conf.enable)
+		clk_pll1443x_enable_ssc(hw, prate, rate.pdiv, rate.mdiv);
 
 	return 0;
 }
@@ -465,6 +520,16 @@ static void clk_pll14xx_unprepare(struct clk_hw *hw)
 	writel_relaxed(val, pll->base + GNRL_CTL);
 }
 
+static int clk_pll1443x_set_spread_spectrum(struct clk_hw *hw,
+					    struct clk_spread_spectrum *clk_ss)
+{
+	struct clk_pll14xx *pll = to_clk_pll14xx(hw);
+
+	memcpy(&pll->ssc_conf, clk_ss, sizeof(pll->ssc_conf));
+
+	return 0;
+}
+
 static const struct clk_ops clk_pll1416x_ops = {
 	.prepare	= clk_pll14xx_prepare,
 	.unprepare	= clk_pll14xx_unprepare,
@@ -485,6 +550,7 @@ static const struct clk_ops clk_pll1443x_ops = {
 	.recalc_rate	= clk_pll14xx_recalc_rate,
 	.round_rate	= clk_pll1443x_round_rate,
 	.set_rate	= clk_pll1443x_set_rate,
+	.set_spread_spectrum = clk_pll1443x_set_spread_spectrum,
 };
 
 struct clk_hw *imx_dev_clk_hw_pll14xx(struct device *dev, const char *name,
