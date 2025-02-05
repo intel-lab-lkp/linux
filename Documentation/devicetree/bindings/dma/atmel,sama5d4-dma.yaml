@@ -33,15 +33,6 @@ properties:
               - microchip,sam9x7-dma
           - const: atmel,sama5d4-dma
 
-  "#dma-cells":
-    description: |
-      Represents the number of integer cells in the `dmas` property of client
-      devices. The single cell specifies the channel configuration register:
-        - bit 13: SIF (Source Interface Identifier) for memory interface.
-        - bit 14: DIF (Destination Interface Identifier) for peripheral interface.
-        - bit 30-24: PERID (Peripheral Identifier).
-    const: 1
-
   reg:
     maxItems: 1
 
@@ -53,6 +44,23 @@ properties:
 
   clock-names:
     const: dma_clk
+
+  "#dma-cells":
+    description: |
+      Represents the number of integer cells in the `dmas` property of client
+      devices. The single cell specifies the channel configuration register:
+        - bit 13: SIF (Source Interface Identifier) for memory interface.
+        - bit 14: DIF (Destination Interface Identifier) for peripheral interface.
+        - bit 30-24: PERID (Peripheral Identifier).
+    const: 1
+
+  dma-channels:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Represents the number of DMA channels available in XDMA controller. This
+      property is required when the channel count cannot be read from the
+      XDMAC_GTYPE register (which occurs when accessing from non-secure world
+      on certain devices).
 
 required:
   - compatible
