@@ -786,13 +786,13 @@ static const struct nla_policy fib_rule_policy[FRA_MAX + 1] = {
 int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		   struct netlink_ext_ack *extack)
 {
-	struct net *net = sock_net(skb->sk);
+	bool user_priority = false, hold_rtnl = !!extack;
 	struct fib_rule_hdr *frh = nlmsg_data(nlh);
-	struct fib_rules_ops *ops = NULL;
-	struct fib_rule *rule = NULL, *r, *last = NULL;
-	struct nlattr *tb[FRA_MAX + 1];
+	struct fib_rule *rule, *r, *last = NULL;
+	struct net *net = sock_net(skb->sk);
 	int err = -EINVAL, unresolved = 0;
-	bool user_priority = false;
+	struct fib_rules_ops *ops = NULL;
+	struct nlattr *tb[FRA_MAX + 1];
 
 	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*frh))) {
 		NL_SET_ERR_MSG(extack, "Invalid msg length");
@@ -816,6 +816,9 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	err = fib_nl2rule(net, nlh, extack, ops, tb, &rule, &user_priority);
 	if (err)
 		goto errout;
+
+	if (hold_rtnl)
+		rtnl_net_lock(net);
 
 	err = fib_nl2rule_rtnl(rule, ops, tb, extack);
 	if (err)
@@ -882,12 +885,20 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (rule->tun_id)
 		ip_tunnel_need_metadata();
 
+	fib_rule_get(rule);
+
+	if (hold_rtnl)
+		rtnl_net_unlock(net);
+
 	notify_rule_change(RTM_NEWRULE, rule, ops, nlh, NETLINK_CB(skb).portid);
+	fib_rule_put(rule);
 	flush_route_cache(ops);
 	rules_ops_put(ops);
 	return 0;
 
 errout_free:
+	if (hold_rtnl)
+		rtnl_net_unlock(net);
 	kfree(rule);
 errout:
 	rules_ops_put(ops);
@@ -1310,7 +1321,8 @@ static struct pernet_operations fib_rules_net_ops = {
 };
 
 static const struct rtnl_msg_handler fib_rules_rtnl_msg_handlers[] __initconst = {
-	{.msgtype = RTM_NEWRULE, .doit = fib_nl_newrule},
+	{.msgtype = RTM_NEWRULE, .doit = fib_nl_newrule,
+	 .flags = RTNL_FLAG_DOIT_PERNET},
 	{.msgtype = RTM_DELRULE, .doit = fib_nl_delrule},
 	{.msgtype = RTM_GETRULE, .dumpit = fib_nl_dumprule,
 	 .flags = RTNL_FLAG_DUMP_UNLOCKED},
