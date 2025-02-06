@@ -6,6 +6,9 @@ config RV_MON_SCHED
 	select RV_MON_TSS
 	select RV_MON_SCO
 	select RV_MON_SNROC
+	select RV_MON_SCPD if PREEMPT_TRACER
+	select RV_MON_SNEP if PREEMPT_TRACER
+	select RV_MON_SNCID if IRQSOFF_TRACER
 	bool "sched monitor"
 	help
 	  Collection of monitors to check the scheduler behaves according to specifications.
