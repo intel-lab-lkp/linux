@@ -1807,6 +1807,396 @@ static void compression_ctx_init(struct iaa_compression_ctx *ctx)
 	ctx->use_irq = use_irq;
 }
 
+static int iaa_comp_poll(struct acomp_req *req)
+{
+	struct idxd_desc *idxd_desc;
+	struct idxd_device *idxd;
+	struct iaa_wq *iaa_wq;
+	struct pci_dev *pdev;
+	struct device *dev;
+	struct idxd_wq *wq;
+	bool compress_op;
+	int ret;
+
+	idxd_desc = req->base.data;
+	if (!idxd_desc)
+		return -EAGAIN;
+
+	compress_op = (idxd_desc->iax_hw->opcode == IAX_OPCODE_COMPRESS);
+	wq = idxd_desc->wq;
+	iaa_wq = idxd_wq_get_private(wq);
+	idxd = iaa_wq->iaa_device->idxd;
+	pdev = idxd->pdev;
+	dev = &pdev->dev;
+
+	ret = check_completion(dev, idxd_desc->iax_completion, true, true);
+	if (ret == -EAGAIN)
+		return ret;
+	if (ret)
+		goto out;
+
+	req->dlen = idxd_desc->iax_completion->output_size;
+
+	/* Update stats */
+	if (compress_op) {
+		update_total_comp_bytes_out(req->dlen);
+		update_wq_comp_bytes(wq, req->dlen);
+	} else {
+		update_total_decomp_bytes_in(req->slen);
+		update_wq_decomp_bytes(wq, req->slen);
+	}
+
+	if (iaa_verify_compress && (idxd_desc->iax_hw->opcode == IAX_OPCODE_COMPRESS)) {
+		struct crypto_tfm *tfm = req->base.tfm;
+		dma_addr_t src_addr, dst_addr;
+		u32 compression_crc;
+
+		compression_crc = idxd_desc->iax_completion->crc;
+
+		dma_sync_sg_for_device(dev, req->dst, 1, DMA_FROM_DEVICE);
+		dma_sync_sg_for_device(dev, req->src, 1, DMA_TO_DEVICE);
+
+		src_addr = sg_dma_address(req->src);
+		dst_addr = sg_dma_address(req->dst);
+
+		ret = iaa_compress_verify(tfm, req, wq, src_addr, req->slen,
+					  dst_addr, &req->dlen, compression_crc);
+	}
+out:
+	/* caller doesn't call crypto_wait_req, so no acomp_request_complete() */
+
+	dma_unmap_sg(dev, req->dst, sg_nents(req->dst), DMA_FROM_DEVICE);
+	dma_unmap_sg(dev, req->src, sg_nents(req->src), DMA_TO_DEVICE);
+
+	idxd_free_desc(idxd_desc->wq, idxd_desc);
+
+	dev_dbg(dev, "%s: returning ret=%d\n", __func__, ret);
+
+	return ret;
+}
+
+static unsigned int iaa_comp_get_batch_size(void)
+{
+	return IAA_CRYPTO_MAX_BATCH_SIZE;
+}
+
+static void iaa_set_req_poll(
+	struct acomp_req *reqs[],
+	int nr_reqs,
+	bool set_flag)
+{
+	int i;
+
+	for (i = 0; i < nr_reqs; ++i) {
+		set_flag ? (reqs[i]->flags |= CRYPTO_ACOMP_REQ_POLL) :
+			   (reqs[i]->flags &= ~CRYPTO_ACOMP_REQ_POLL);
+	}
+}
+
+/**
+ * This API provides IAA compress batching functionality for use by swap
+ * modules.
+ *
+ * @reqs: @nr_pages asynchronous compress requests.
+ * @wait: crypto_wait for acomp batch compress implemented using request
+ *        chaining. Required if async_mode is "false". If async_mode is "true",
+ *        and @wait is NULL, the completions will be processed using
+ *        asynchronous polling of the requests' completion statuses.
+ * @pages: Pages to be compressed by IAA.
+ * @dsts: Pre-allocated destination buffers to store results of IAA
+ *        compression. Each element of @dsts must be of size "PAGE_SIZE * 2".
+ * @dlens: Will contain the compressed lengths.
+ * @errors: zero on successful compression of the corresponding
+ *          req, or error code in case of error.
+ * @nr_pages: The number of pages, up to IAA_CRYPTO_MAX_BATCH_SIZE,
+ *            to be compressed.
+ *
+ * Returns true if all compress requests complete successfully,
+ * false otherwise.
+ */
+static bool iaa_comp_acompress_batch(
+	struct acomp_req *reqs[],
+	struct crypto_wait *wait,
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_pages)
+{
+	struct scatterlist inputs[IAA_CRYPTO_MAX_BATCH_SIZE];
+	struct scatterlist outputs[IAA_CRYPTO_MAX_BATCH_SIZE];
+	bool compressions_done = false;
+	bool async = (async_mode && !use_irq);
+	bool async_poll = (async && !wait);
+	int i, err = 0;
+
+	BUG_ON(nr_pages > IAA_CRYPTO_MAX_BATCH_SIZE);
+	BUG_ON(!async && !wait);
+
+	if (async)
+		iaa_set_req_poll(reqs, nr_pages, true);
+	else
+		iaa_set_req_poll(reqs, nr_pages, false);
+
+	/*
+	 * Prepare and submit acomp_reqs to IAA. IAA will process these
+	 * compress jobs in parallel if async_mode is true.
+	 */
+	for (i = 0; i < nr_pages; ++i) {
+		sg_init_table(&inputs[i], 1);
+		sg_set_page(&inputs[i], pages[i], PAGE_SIZE, 0);
+
+		/*
+		 * Each dst buffer should be of size (PAGE_SIZE * 2).
+		 * Reflect same in sg_list.
+		 */
+		sg_init_one(&outputs[i], dsts[i], PAGE_SIZE * 2);
+		acomp_request_set_params(reqs[i], &inputs[i],
+					 &outputs[i], PAGE_SIZE, dlens[i]);
+
+		/*
+		 * As long as the API is called with a valid "wait", chain the
+		 * requests for synchronous/asynchronous compress ops.
+		 * If async_mode is in effect, but the API is called with a
+		 * NULL "wait", submit the requests first, and poll for
+		 * their completion status later, after all descriptors have
+		 * been submitted.
+		 */
+		if (!async_poll) {
+			/* acomp request chaining. */
+			if (i)
+				acomp_request_chain(reqs[i], reqs[0]);
+			else
+				acomp_reqchain_init(reqs[0], 0, crypto_req_done,
+						    wait);
+		} else {
+			errors[i] = iaa_comp_acompress(reqs[i]);
+
+			if (errors[i] != -EINPROGRESS) {
+				errors[i] = -EINVAL;
+				err = -EINVAL;
+			} else {
+				errors[i] = -EAGAIN;
+			}
+		}
+	}
+
+	if (!async_poll) {
+		if (async)
+			/* Process the request chain in parallel. */
+			err = crypto_wait_req(acomp_do_async_req_chain(reqs[0],
+					      iaa_comp_acompress, iaa_comp_poll),
+					      wait);
+		else
+			/* Process the request chain in series. */
+			err = crypto_wait_req(acomp_do_req_chain(reqs[0],
+					      iaa_comp_acompress), wait);
+
+		for (i = 0; i < nr_pages; ++i) {
+			errors[i] = acomp_request_err(reqs[i]);
+			if (errors[i]) {
+				err = -EINVAL;
+				pr_debug("Request chaining req %d compress error %d\n", i, errors[i]);
+			} else {
+				dlens[i] = reqs[i]->dlen;
+			}
+		}
+
+		goto reset_reqs;
+	}
+
+	/*
+	 * Asynchronously poll for and process IAA compress job completions.
+	 */
+	while (!compressions_done) {
+		compressions_done = true;
+
+		for (i = 0; i < nr_pages; ++i) {
+			/*
+			 * Skip, if the compression has already completed
+			 * successfully or with an error.
+			 */
+			if (errors[i] != -EAGAIN)
+				continue;
+
+			errors[i] = iaa_comp_poll(reqs[i]);
+
+			if (errors[i]) {
+				if (errors[i] == -EAGAIN)
+					compressions_done = false;
+				else
+					err = -EINVAL;
+			} else {
+				dlens[i] = reqs[i]->dlen;
+			}
+		}
+	}
+
+reset_reqs:
+	/*
+	 * For the same 'reqs[]' to be usable by
+	 * iaa_comp_acompress()/iaa_comp_deacompress(),
+	 * clear the CRYPTO_ACOMP_REQ_POLL bit on all acomp_reqs, and the
+	 * CRYPTO_TFM_REQ_CHAIN bit on the reqs[0].
+	 */
+	iaa_set_req_poll(reqs, nr_pages, false);
+	if (!async_poll)
+		acomp_reqchain_clear(reqs[0], wait);
+
+	return !err;
+}
+
+/**
+ * This API provides IAA decompress batching functionality for use by swap
+ * modules.
+ *
+ * @reqs: @nr_pages asynchronous decompress requests.
+ * @wait: crypto_wait for acomp batch decompress implemented using request
+ *        chaining. Required if async_mode is "false". If async_mode is "true",
+ *        and @wait is NULL, the completions will be processed using
+ *        asynchronous polling of the requests' completion statuses.
+ * @srcs: The src buffers to be decompressed by IAA.
+ * @pages: The pages to store the decompressed buffers.
+ * @slens: Compressed lengths of @srcs.
+ * @errors: zero on successful compression of the corresponding
+ *          req, or error code in case of error.
+ * @nr_pages: The number of pages, up to IAA_CRYPTO_MAX_BATCH_SIZE,
+ *            to be decompressed.
+ *
+ * Returns true if all decompress requests complete successfully,
+ * false otherwise.
+ */
+static bool iaa_comp_adecompress_batch(
+	struct acomp_req *reqs[],
+	struct crypto_wait *wait,
+	u8 *srcs[],
+	struct page *pages[],
+	unsigned int slens[],
+	int errors[],
+	int nr_pages)
+{
+	struct scatterlist inputs[IAA_CRYPTO_MAX_BATCH_SIZE];
+	struct scatterlist outputs[IAA_CRYPTO_MAX_BATCH_SIZE];
+	unsigned int dlens[IAA_CRYPTO_MAX_BATCH_SIZE];
+	bool decompressions_done = false;
+	bool async = (async_mode && !use_irq);
+	bool async_poll = (async && !wait);
+	int i, err = 0;
+
+	BUG_ON(nr_pages > IAA_CRYPTO_MAX_BATCH_SIZE);
+	BUG_ON(!async && !wait);
+
+	if (async)
+		iaa_set_req_poll(reqs, nr_pages, true);
+	else
+		iaa_set_req_poll(reqs, nr_pages, false);
+
+	/*
+	 * Prepare and submit acomp_reqs to IAA. IAA will process these
+	 * decompress jobs in parallel if async_mode is true.
+	 */
+	for (i = 0; i < nr_pages; ++i) {
+		dlens[i] = PAGE_SIZE;
+		sg_init_one(&inputs[i], srcs[i], slens[i]);
+		sg_init_table(&outputs[i], 1);
+		sg_set_page(&outputs[i], pages[i], PAGE_SIZE, 0);
+		acomp_request_set_params(reqs[i], &inputs[i],
+					&outputs[i], slens[i], dlens[i]);
+
+		/*
+		 * As long as the API is called with a valid "wait", chain the
+		 * requests for synchronous/asynchronous decompress ops.
+		 * If async_mode is in effect, but the API is called with a
+		 * NULL "wait", submit the requests first, and poll for
+		 * their completion status later, after all descriptors have
+		 * been submitted.
+		 */
+		if (!async_poll) {
+			/* acomp request chaining. */
+			if (i)
+				acomp_request_chain(reqs[i], reqs[0]);
+			else
+				acomp_reqchain_init(reqs[0], 0, crypto_req_done,
+						    wait);
+		} else {
+			errors[i] = iaa_comp_adecompress(reqs[i]);
+
+			if (errors[i] != -EINPROGRESS) {
+				errors[i] = -EINVAL;
+				err = -EINVAL;
+			} else {
+				errors[i] = -EAGAIN;
+			}
+		}
+	}
+
+	if (!async_poll) {
+		if (async)
+			/* Process the request chain in parallel. */
+			err = crypto_wait_req(acomp_do_async_req_chain(reqs[0],
+					      iaa_comp_adecompress, iaa_comp_poll),
+					      wait);
+		else
+			/* Process the request chain in series. */
+			err = crypto_wait_req(acomp_do_req_chain(reqs[0],
+					      iaa_comp_adecompress), wait);
+
+		for (i = 0; i < nr_pages; ++i) {
+			errors[i] = acomp_request_err(reqs[i]);
+			if (errors[i]) {
+				err = -EINVAL;
+				pr_debug("Request chaining req %d decompress error %d\n", i, errors[i]);
+			} else {
+				dlens[i] = reqs[i]->dlen;
+				BUG_ON(dlens[i] != PAGE_SIZE);
+			}
+		}
+
+		goto reset_reqs;
+	}
+
+	/*
+	 * Asynchronously poll for and process IAA decompress job completions.
+	 */
+	while (!decompressions_done) {
+		decompressions_done = true;
+
+		for (i = 0; i < nr_pages; ++i) {
+			/*
+			 * Skip, if the decompression has already completed
+			 * successfully or with an error.
+			 */
+			if (errors[i] != -EAGAIN)
+				continue;
+
+			errors[i] = iaa_comp_poll(reqs[i]);
+
+			if (errors[i]) {
+				if (errors[i] == -EAGAIN)
+					decompressions_done = false;
+				else
+					err = -EINVAL;
+			} else {
+				dlens[i] = reqs[i]->dlen;
+				BUG_ON(dlens[i] != PAGE_SIZE);
+			}
+		}
+	}
+
+reset_reqs:
+	/*
+	 * For the same 'reqs[]' to be usable by
+	 * iaa_comp_acompress()/iaa_comp_deacompress(),
+	 * clear the CRYPTO_ACOMP_REQ_POLL bit on all acomp_reqs, and the
+	 * CRYPTO_TFM_REQ_CHAIN bit on the reqs[0].
+	 */
+	iaa_set_req_poll(reqs, nr_pages, false);
+	if (!async_poll)
+		acomp_reqchain_clear(reqs[0], wait);
+
+	return !err;
+}
+
 static int iaa_comp_init_fixed(struct crypto_acomp *acomp_tfm)
 {
 	struct crypto_tfm *tfm = crypto_acomp_tfm(acomp_tfm);
@@ -1832,10 +2222,13 @@ static struct acomp_alg iaa_acomp_fixed_deflate = {
 	.compress		= iaa_comp_acompress,
 	.decompress		= iaa_comp_adecompress,
 	.dst_free               = dst_free,
+	.get_batch_size		= iaa_comp_get_batch_size,
+	.batch_compress		= iaa_comp_acompress_batch,
+	.batch_decompress	= iaa_comp_adecompress_batch,
 	.base			= {
 		.cra_name		= "deflate",
 		.cra_driver_name	= "deflate-iaa",
-		.cra_flags		= CRYPTO_ALG_ASYNC,
+		.cra_flags		= CRYPTO_ALG_ASYNC | CRYPTO_ALG_REQ_CHAIN,
 		.cra_ctxsize		= sizeof(struct iaa_compression_ctx),
 		.cra_module		= THIS_MODULE,
 		.cra_priority		= IAA_ALG_PRIORITY,
