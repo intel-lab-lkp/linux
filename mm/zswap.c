@@ -1509,81 +1509,116 @@ resched:
 * main API
 **********************************/
 
-static bool zswap_store_page(struct page *page,
-			     struct obj_cgroup *objcg,
-			     struct zswap_pool *pool)
+/*
+ * Store all pages in a folio.
+ *
+ * The error handling from all failure points is consolidated to the
+ * "store_folio_failed" label, based on the initialization of the zswap entries'
+ * handles to ERR_PTR(-EINVAL) at allocation time, and the fact that the
+ * entry's handle is subsequently modified only upon a successful zpool_malloc()
+ * after the page is compressed.
+ */
+static bool zswap_store_folio(struct folio *folio,
+			       struct obj_cgroup *objcg,
+			       struct zswap_pool *pool)
 {
-	swp_entry_t page_swpentry = page_swap_entry(page);
-	struct zswap_entry *entry, *old;
+	long index, from_index = 0, nr_pages = folio_nr_pages(folio);
+	struct zswap_entry **entries = NULL;
+	int node_id = folio_nid(folio);
 
-	/* allocate entry */
-	entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
-	if (!entry) {
-		zswap_reject_kmemcache_fail++;
+	entries = kmalloc(nr_pages * sizeof(*entries), GFP_KERNEL);
+	if (!entries)
 		return false;
+
+	for (index = 0; index < nr_pages; ++index) {
+		entries[index] = zswap_entry_cache_alloc(GFP_KERNEL, node_id);
+
+		if (!entries[index]) {
+			zswap_reject_kmemcache_fail++;
+			nr_pages = index;
+			goto store_folio_failed;
+		}
+
+		entries[index]->handle = (unsigned long)ERR_PTR(-EINVAL);
 	}
 
-	if (!zswap_compress(page, entry, pool))
-		goto compress_failed;
+	for (index = 0; index < nr_pages; ++index) {
+		struct page *page = folio_page(folio, index);
 
-	old = xa_store(swap_zswap_tree(page_swpentry),
-		       swp_offset(page_swpentry),
-		       entry, GFP_KERNEL);
-	if (xa_is_err(old)) {
-		int err = xa_err(old);
-
-		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
-		zswap_reject_alloc_fail++;
-		goto store_failed;
+		if (!zswap_compress(page, entries[index], pool))
+			goto store_folio_failed;
 	}
 
-	/*
-	 * We may have had an existing entry that became stale when
-	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
-	 */
-	if (old)
-		zswap_entry_free(old);
+	for (index = 0; index < nr_pages; ++index) {
+		swp_entry_t page_swpentry = page_swap_entry(folio_page(folio, index));
+		struct zswap_entry *old, *entry = entries[index];
 
-	/*
-	 * The entry is successfully compressed and stored in the tree, there is
-	 * no further possibility of failure. Grab refs to the pool and objcg,
-	 * charge zswap memory, and increment zswap_stored_pages.
-	 * The opposite actions will be performed by zswap_entry_free()
-	 * when the entry is removed from the tree.
-	 */
-	zswap_pool_get(pool);
-	if (objcg) {
-		obj_cgroup_get(objcg);
-		obj_cgroup_charge_zswap(objcg, entry->length);
+		old = xa_store(swap_zswap_tree(page_swpentry),
+			       swp_offset(page_swpentry),
+			       entry, GFP_KERNEL);
+		if (xa_is_err(old)) {
+			int err = xa_err(old);
+
+			WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
+			zswap_reject_alloc_fail++;
+			from_index = index;
+			goto store_folio_failed;
+		}
+
+		/*
+		 * We may have had an existing entry that became stale when
+		 * the folio was redirtied and now the new version is being
+		 * swapped out. Get rid of the old.
+		 */
+		if (old)
+			zswap_entry_free(old);
+
+		/*
+		 * The entry is successfully compressed and stored in the tree, there is
+		 * no further possibility of failure. Grab refs to the pool and objcg,
+		 * charge zswap memory, and increment zswap_stored_pages.
+		 * The opposite actions will be performed by zswap_entry_free()
+		 * when the entry is removed from the tree.
+		 */
+		zswap_pool_get(pool);
+		if (objcg) {
+			obj_cgroup_get(objcg);
+			obj_cgroup_charge_zswap(objcg, entry->length);
+		}
+		atomic_long_inc(&zswap_stored_pages);
+
+		/*
+		 * We finish initializing the entry while it's already in xarray.
+		 * This is safe because:
+		 *
+		 * 1. Concurrent stores and invalidations are excluded by folio lock.
+		 *
+		 * 2. Writeback is excluded by the entry not being on the LRU yet.
+		 *    The publishing order matters to prevent writeback from seeing
+		 *    an incoherent entry.
+		 */
+		entry->pool = pool;
+		entry->swpentry = page_swpentry;
+		entry->objcg = objcg;
+		entry->referenced = true;
+		if (entry->length) {
+			INIT_LIST_HEAD(&entry->lru);
+			zswap_lru_add(&zswap_list_lru, entry);
+		}
 	}
-	atomic_long_inc(&zswap_stored_pages);
 
-	/*
-	 * We finish initializing the entry while it's already in xarray.
-	 * This is safe because:
-	 *
-	 * 1. Concurrent stores and invalidations are excluded by folio lock.
-	 *
-	 * 2. Writeback is excluded by the entry not being on the LRU yet.
-	 *    The publishing order matters to prevent writeback from seeing
-	 *    an incoherent entry.
-	 */
-	entry->pool = pool;
-	entry->swpentry = page_swpentry;
-	entry->objcg = objcg;
-	entry->referenced = true;
-	if (entry->length) {
-		INIT_LIST_HEAD(&entry->lru);
-		zswap_lru_add(&zswap_list_lru, entry);
-	}
-
+	kfree(entries);
 	return true;
 
-store_failed:
-	zpool_free(pool->zpool, entry->handle);
-compress_failed:
-	zswap_entry_cache_free(entry);
+store_folio_failed:
+	for (index = from_index; index < nr_pages; ++index) {
+		if (!IS_ERR_VALUE(entries[index]->handle))
+			zpool_free(pool->zpool, entries[index]->handle);
+
+		zswap_entry_cache_free(entries[index]);
+	}
+
+	kfree(entries);
 	return false;
 }
 
@@ -1595,7 +1630,6 @@ bool zswap_store(struct folio *folio)
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_pool *pool;
 	bool ret = false;
-	long index;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1629,12 +1663,9 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	for (index = 0; index < nr_pages; ++index) {
-		struct page *page = folio_page(folio, index);
+	if (!zswap_store_folio(folio, objcg, pool))
+		goto put_pool;
 
-		if (!zswap_store_page(page, objcg, pool))
-			goto put_pool;
-	}
 
 	if (objcg)
 		count_objcg_events(objcg, ZSWPOUT, nr_pages);
@@ -1661,6 +1692,7 @@ check_old:
 		pgoff_t offset = swp_offset(swp);
 		struct zswap_entry *entry;
 		struct xarray *tree;
+		long index;
 
 		for (index = 0; index < nr_pages; ++index) {
 			tree = swap_zswap_tree(swp_entry(type, offset + index));
