@@ -186,6 +186,9 @@ struct batadv_hard_iface {
 	/** @net_dev: pointer to the net_device */
 	struct net_device *net_dev;
 
+	/** @dev_tracker device tracker for @net_dev */
+	netdevice_tracker  dev_tracker;
+
 	/** @refcount: number of contexts the object is used */
 	struct kref refcount;
 
