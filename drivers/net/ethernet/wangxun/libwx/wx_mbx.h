@@ -21,10 +21,60 @@
 #define WX_MBVFICR_VFREQ_MASK GENMASK(15, 0)
 #define WX_MBVFICR_VFACK_MASK GENMASK(31, 16)
 
+#define WX_VT_MSGTYPE_ACK     BIT(31)
+#define WX_VT_MSGTYPE_NACK    BIT(30)
+#define WX_VT_MSGTYPE_CTS     BIT(29)
+#define WX_VT_MSGINFO_SHIFT   16
 #define WX_VT_MSGINFO_MASK    GENMASK(23, 16)
+
+enum wx_pfvf_api_rev {
+	wx_mbox_api_null,
+	wx_mbox_api_10,      /* API version 1.0, linux/freebsd VF driver */
+	wx_mbox_api_11,      /* API version 1.1, linux/freebsd VF driver */
+	wx_mbox_api_12,      /* API version 1.2, linux/freebsd VF driver */
+	wx_mbox_api_13,      /* API version 1.3, linux/freebsd VF driver */
+	wx_mbox_api_20,      /* API version 2.0, solaris Phase1 VF driver */
+	wx_mbox_api_unknown, /* indicates that API version is not known */
+};
+
+/* mailbox API, legacy requests */
+#define WX_VF_RESET                  0x01 /* VF requests reset */
+#define WX_VF_SET_MAC_ADDR           0x02 /* VF requests PF to set MAC addr */
+#define WX_VF_SET_MULTICAST          0x03 /* VF requests PF to set MC addr */
+#define WX_VF_SET_VLAN               0x04 /* VF requests PF to set VLAN */
+
+/* mailbox API, version 1.0 VF requests */
+#define WX_VF_SET_LPE                0x05 /* VF requests PF to set VMOLR.LPE */
+#define WX_VF_SET_MACVLAN            0x06 /* VF requests PF unicast filter */
+#define WX_VF_API_NEGOTIATE          0x08 /* negotiate API version */
+
+/* mailbox API, version 1.1 VF requests */
+#define WX_VF_GET_QUEUES             0x09 /* get queue configuration */
+
+/* mailbox API, version 1.2 VF requests */
+#define WX_VF_GET_RETA               0x0a    /* VF request for RETA */
+#define WX_VF_GET_RSS_KEY            0x0b    /* get RSS key */
+#define WX_VF_UPDATE_XCAST_MODE      0x0c
+#define WX_VF_GET_LINK_STATE         0x10 /* get vf link state */
+#define WX_VF_GET_FW_VERSION         0x11 /* get fw version */
+#define WX_VF_BACKUP                 0x8001 /* VF requests backup */
+
+#define WX_PF_CONTROL_MSG            BIT(8) /* PF control message */
+#define WX_PF_NOFITY_VF_LINK_STATUS  0x1
+#define WX_PF_NOFITY_VF_NET_NOT_RUNNING BIT(31)
+
+#define WX_VF_TX_QUEUES              1 /* number of Tx queues supported */
+#define WX_VF_RX_QUEUES              2 /* number of Rx queues supported */
+#define WX_VF_TRANS_VLAN             3 /* Indication of port vlan */
+#define WX_VF_DEF_QUEUE              4 /* Default queue offset */
+
+#define WX_VF_PERMADDR_MSG_LEN       4
 
 enum wxvf_xcast_modes {
 	WXVF_XCAST_MODE_NONE = 0,
+	WXVF_XCAST_MODE_MULTI,
+	WXVF_XCAST_MODE_ALLMULTI,
+	WXVF_XCAST_MODE_PROMISC,
 };
 
 int wx_write_mbx_pf(struct wx *wx, u32 *msg, u16 size, u16 vf);
