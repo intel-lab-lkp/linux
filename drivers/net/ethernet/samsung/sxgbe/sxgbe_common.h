@@ -502,7 +502,6 @@ struct sxgbe_priv_data {
 	struct timer_list eee_ctrl_timer;
 	bool tx_path_in_lpi_mode;
 	int lpi_irq;
-	int eee_enabled;
 	int tx_lpi_timer;
 };
 
@@ -527,5 +526,4 @@ int sxgbe_restore(struct net_device *ndev);
 const struct sxgbe_mtl_ops *sxgbe_get_mtl_ops(void);
 
 void sxgbe_disable_eee_mode(struct sxgbe_priv_data * const priv);
-bool sxgbe_eee_init(struct sxgbe_priv_data * const priv);
 #endif /* __SXGBE_COMMON_H__ */

@@ -119,17 +119,10 @@ static void sxgbe_eee_ctrl_timer(struct timer_list *t)
  *  phy can also manage EEE, so enable the LPI state and start the timer
  *  to verify if the tx path can enter in LPI state.
  */
-bool sxgbe_eee_init(struct sxgbe_priv_data * const priv)
+static void sxgbe_eee_init(struct sxgbe_priv_data * const priv)
 {
-	struct net_device *ndev = priv->dev;
-	bool ret = false;
-
 	/* MAC core supports the EEE feature. */
 	if (priv->hw_cap.eee) {
-		/* Check if the PHY supports EEE */
-		if (phy_init_eee(ndev->phydev, true))
-			return false;
-
 		timer_setup(&priv->eee_ctrl_timer, sxgbe_eee_ctrl_timer, 0);
 		priv->eee_ctrl_timer.expires = SXGBE_LPI_TIMER(eee_timer);
 		add_timer(&priv->eee_ctrl_timer);
@@ -139,23 +132,15 @@ bool sxgbe_eee_init(struct sxgbe_priv_data * const priv)
 					     priv->tx_lpi_timer);
 
 		pr_info("Energy-Efficient Ethernet initialized\n");
-
-		ret = true;
 	}
-
-	return ret;
 }
 
-static void sxgbe_eee_adjust(const struct sxgbe_priv_data *priv)
+static void sxgbe_eee_adjust(const struct sxgbe_priv_data *priv,
+			     bool eee_active)
 {
-	struct net_device *ndev = priv->dev;
-
-	/* When the EEE has been already initialised we have to
-	 * modify the PLS bit in the LPI ctrl & status reg according
-	 * to the PHY link status. For this reason.
-	 */
-	if (priv->eee_enabled)
-		priv->hw->mac->set_eee_pls(priv->ioaddr, ndev->phydev->link);
+	if (priv->hw_cap.eee)
+		priv->hw->mac->set_eee_pls(priv->ioaddr, eee_active);
+	phy_eee_rx_clock_stop(priv->dev->phydev, true);
 }
 
 /**
@@ -249,7 +234,7 @@ static void sxgbe_adjust_link(struct net_device *dev)
 		phy_print_status(phydev);
 
 	/* Alter the MAC settings for EEE */
-	sxgbe_eee_adjust(priv);
+	sxgbe_eee_adjust(priv, phydev->eee_active);
 }
 
 /**
@@ -295,6 +280,9 @@ static int sxgbe_init_phy(struct net_device *ndev)
 	if ((phy_iface == PHY_INTERFACE_MODE_MII) ||
 	    (phy_iface == PHY_INTERFACE_MODE_RMII))
 		phy_set_max_speed(phydev, SPEED_1000);
+
+	if (priv->hw_cap.eee)
+		phy_support_eee(phydev);
 
 	if (phydev->phy_id == 0) {
 		phy_disconnect(phydev);
@@ -802,7 +790,7 @@ static void sxgbe_tx_all_clean(struct sxgbe_priv_data * const priv)
 		sxgbe_tx_queue_clean(tqueue);
 	}
 
-	if ((priv->eee_enabled) && (!priv->tx_path_in_lpi_mode)) {
+	if (priv->hw_cap.eee && !priv->tx_path_in_lpi_mode) {
 		sxgbe_enable_eee_mode(priv);
 		mod_timer(&priv->eee_ctrl_timer, SXGBE_LPI_TIMER(eee_timer));
 	}
@@ -1180,7 +1168,7 @@ static int sxgbe_open(struct net_device *dev)
 	}
 
 	priv->tx_lpi_timer = SXGBE_DEFAULT_LPI_TIMER;
-	priv->eee_enabled = sxgbe_eee_init(priv);
+	sxgbe_eee_init(priv);
 
 	napi_enable(&priv->napi);
 	netif_start_queue(dev);
@@ -1207,7 +1195,7 @@ static int sxgbe_release(struct net_device *dev)
 {
 	struct sxgbe_priv_data *priv = netdev_priv(dev);
 
-	if (priv->eee_enabled)
+	if (priv->hw_cap.eee)
 		del_timer_sync(&priv->eee_ctrl_timer);
 
 	/* Stop and disconnect the PHY */
