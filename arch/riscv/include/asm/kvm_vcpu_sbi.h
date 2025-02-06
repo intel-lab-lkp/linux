@@ -89,7 +89,7 @@ extern const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_sta;
 extern const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_experimental;
 extern const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_vendor;
 
-#ifdef CONFIG_RISCV_PMU_SBI
+#ifdef CONFIG_RISCV_PMU
 extern const struct kvm_vcpu_sbi_extension vcpu_sbi_ext_pmu;
 #endif
 #endif /* __RISCV_KVM_VCPU_SBI_H__ */
