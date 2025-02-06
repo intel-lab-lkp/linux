@@ -23,8 +23,19 @@ pub type Vmalloc = Kmalloc;
 pub type KVmalloc = Kmalloc;
 
 extern "C" {
-    #[link_name = "aligned_alloc"]
-    fn libc_aligned_alloc(align: usize, size: usize) -> *mut crate::ffi::c_void;
+    // NB: `posix_memalign` is intentionally used instead of `aligned_malloc`.
+    //
+    // ISO C (ISO/IEC 9899:2011) defines `aligned_malloc`:
+    //
+    // > The value of alignment shall be a valid alignment supported by the implementation [...].
+    //
+    // POSIX.1-2001 (IEEE 1003.1-2001) defines `posix_memalign`:
+    //
+    // > The value of alignment shall be a power of two multiple of sizeof (void *).
+    //
+    // `posix_memalign` is more portable than (but otherwise identical to) `aligned_malloc`.
+    #[link_name = "posix_memalign"]
+    fn libc_posix_memalign(align: usize, size: usize) -> *mut crate::ffi::c_void;
 
     #[link_name = "free"]
     fn libc_free(ptr: *mut crate::ffi::c_void);
@@ -62,13 +73,21 @@ unsafe impl Allocator for Cmalloc {
             ));
         }
 
+        // Ensure we comply with the requirements of `posix_memalign`.
+        let min_align = core::mem::size_of::<*const crate::ffi::c_void>();
+        let (align, size) = if layout.align() < min_align {
+            (min_align, layout.size().div_ceil(min_align) * min_align)
+        } else {
+            (layout.align(), layout.size())
+        };
+
         // SAFETY: Returns either NULL or a pointer to a memory allocation that satisfies or
         // exceeds the given size and alignment requirements.
-        let dst = unsafe { libc_aligned_alloc(layout.align(), layout.size()) } as *mut u8;
+        let dst = unsafe { libc_posix_memalign(align, size) } as *mut u8;
         let dst = NonNull::new(dst).ok_or(AllocError)?;
 
         if flags.contains(__GFP_ZERO) {
-            // SAFETY: The preceding calls to `libc_aligned_alloc` and `NonNull::new`
+            // SAFETY: The preceding calls to `libc_posix_memalign` and `NonNull::new`
             // guarantee that `dst` points to memory of at least `layout.size()` bytes.
             unsafe { dst.as_ptr().write_bytes(0, layout.size()) };
         }
