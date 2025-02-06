@@ -3,6 +3,8 @@
 config RV_MON_SCHED
 	depends on RV
 	select DA_MON_EVENTS_IMPLICIT
+	select RV_MON_TSS
+	select RV_MON_SCO
 	bool "sched monitor"
 	help
 	  Collection of monitors to check the scheduler behaves according to specifications.
