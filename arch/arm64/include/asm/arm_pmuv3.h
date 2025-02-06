@@ -6,9 +6,8 @@
 #ifndef __ASM_PMUV3_H
 #define __ASM_PMUV3_H
 
-#include <asm/kvm_host.h>
-
 #include <asm/cpufeature.h>
+#include <asm/kvm_pmu.h>
 #include <asm/sysreg.h>
 
 #define RETURN_READ_PMEVCNTRN(n) \
