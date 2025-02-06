@@ -491,6 +491,12 @@ sched_core_dequeue(struct rq *rq, struct task_struct *p, int flags) { }
 
 #endif /* CONFIG_SCHED_CORE */
 
+void trace_set_current_state(int state_value)
+{
+	trace_sched_set_state_tp(current, current->__state, state_value);
+}
+EXPORT_SYMBOL(trace_set_current_state);
+
 /*
  * Serialization rules:
  *
@@ -1102,6 +1108,8 @@ static void __resched_curr(struct rq *rq, int tif)
 		return;
 
 	cpu = cpu_of(rq);
+
+	trace_sched_set_need_resched_tp(curr);
 
 	if (cpu == smp_processor_id()) {
 		set_ti_thread_flag(cti, tif);
@@ -5306,6 +5314,12 @@ asmlinkage __visible void schedule_tail(struct task_struct *prev)
 	 */
 
 	finish_task_switch(prev);
+	/*
+	 * This is a special case: the newly created task has just
+	 * switched the context for the fist time. It is returning from
+	 * schedule for the first time in this path.
+	 */
+	trace_sched_exit_tp(true, CALLER_ADDR0);
 	preempt_enable();
 
 	if (current->set_child_tid)
@@ -6649,11 +6663,14 @@ static void __sched notrace __schedule(int sched_mode)
 	 * as a preemption by schedule_debug() and RCU.
 	 */
 	bool preempt = sched_mode > SM_NONE;
+	bool is_switch = false;
 	unsigned long *switch_count;
 	unsigned long prev_state;
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
+
+	trace_sched_entry_tp(preempt, CALLER_ADDR0);
 
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
@@ -6722,7 +6739,8 @@ picked:
 	rq->last_seen_need_resched_ns = 0;
 #endif
 
-	if (likely(prev != next)) {
+	is_switch = prev != next;
+	if (likely(is_switch)) {
 		rq->nr_switches++;
 		/*
 		 * RCU users of rcu_dereference(rq->curr) may not see
@@ -6767,6 +6785,7 @@ picked:
 		__balance_callbacks(rq);
 		raw_spin_rq_unlock_irq(rq);
 	}
+	trace_sched_exit_tp(is_switch, CALLER_ADDR0);
 }
 
 void __noreturn do_task_dead(void)
