@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
 #include <linux/of.h>
+#include <linux/bitfield.h>
 
 /* EHRPWM registers and bits definitions */
 
@@ -90,6 +91,19 @@
 #define AQCSFRC_CSFA_FRCLOW	BIT(0)
 #define AQCSFRC_CSFA_FRCHIGH	BIT(1)
 #define AQCSFRC_CSFA_DISSWFRC	(BIT(1) | BIT(0))
+
+#define AQCTLA_CAU      GENMASK(5, 4)
+#define AQCTLA_CAD      GENMASK(9, 8)
+
+/**
+ * The ePWM hardware encodes compare actions with two bits each:
+ *   00 = Do nothing
+ *   01 = Clear
+ *   10 = Set
+ *   11 = Toggle
+ */
+#define AQ_CLEAR  1
+#define AQ_SET    2
 
 #define NUM_PWM_CHANNEL		2	/* EHRPWM channels */
 
@@ -353,6 +367,165 @@ static int ehrpwm_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 	return 0;
 }
 
+/**
+ * ehrpwm_is_enabled - Checks if the eHRPWM channel is enabled
+ * @chip:	pointer to the PWM chip structure
+ *
+ * @return:	true if the channel is enabled, false otherwise
+ */
+static bool ehrpwm_is_enabled(struct pwm_chip *chip)
+{
+	bool ret = false;
+
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	u16 aqcsfrc_reg = 0u;
+	u8 csfa_bits = 0u;
+	u16 aqctla_reg = 0u;
+
+	aqcsfrc_reg	= readw(pc->mmio_base + AQCSFRC);
+	csfa_bits = (u8)(aqcsfrc_reg & AQCSFRC_CSFA_MASK);
+	aqctla_reg = readw(pc->mmio_base + AQCTLA);
+	/*
+	 * If the CSFA value is non-zero,
+	 * it means channel A is being forced via software
+	 * (override), so we consider the PWM "disabled".
+	 */
+	if (csfa_bits)
+		ret = false;
+
+	/*
+	 * If the control register (AQCTLA) is configured
+	 * (non-zero), it means channel A has qualified actions
+	 * and is therefore enabled to generate PWM.
+	 */
+	if (aqctla_reg)
+		ret = true;
+
+	return ret;
+}
+
+/**
+ * ehrpwm_read_period - Reads the period of the eHRPWM channel (in ns)
+ * @chip:		pointer to the PWM chip structure
+ * @tbclk_rate:	time-base clock rate in Hz
+ *
+ * @return:		period in nanoseconds
+ */
+static u64 ehrpwm_read_period(struct pwm_chip *chip, unsigned long tbclk_rate)
+{
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	u16 tbprd_reg = 0u;
+	u64 period_cycles = 0u;
+	u64 period_ns = 0u;
+
+	tbprd_reg = readw(pc->mmio_base + TBPRD);
+	period_cycles = tbprd_reg + 1u;
+
+	/*
+	 * period_ns = (period_cycles * 1e9) / tbclk_rate
+	 * Using DIV_ROUND_UP_ULL to avoid floating-point operations.
+	 */
+	period_ns = DIV_ROUND_UP_ULL(period_cycles * NSEC_PER_SEC, tbclk_rate);
+
+	return period_ns;
+}
+
+/**
+ * ehrpwm_read_duty_cycle - Reads the duty cycle of the eHRPWM channel (in ns)
+ * @chip:		pointer to the PWM chip structure
+ * @tbclk_rate:	time-base clock rate in Hz
+ *
+ * @return:		duty cycle in nanoseconds
+ */
+static u64 ehrpwm_read_duty_cycle(struct pwm_chip *chip, unsigned long tbclk_rate)
+{
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	u16 cmpa_reg = 0u;
+	u64 duty_cycles = 0u;
+	u64 duty_ns = 0u;
+
+	cmpa_reg = readw(pc->mmio_base + CMPA);
+
+	duty_cycles = cmpa_reg;
+
+	/*
+	 * duty_ns = (duty_cycles * 1e9) / tbclk_rate
+	 * Using DIV_ROUND_UP_ULL to avoid floating-point operations.
+	 */
+	duty_ns = DIV_ROUND_UP_ULL(duty_cycles * NSEC_PER_SEC, tbclk_rate);
+
+	return duty_ns;
+}
+
+/**
+ * ehrpwm_read_polarity - Reads the polarity of the eHRPWM channel
+ * @chip:	pointer to the PWM chip structure
+ *
+ * @return:	the polarity of the PWM (PWM_POLARITY_NORMAL or PWM_POLARITY_INVERSED)
+ */
+static enum pwm_polarity ehrpwm_read_polarity(struct pwm_chip *chip)
+{
+	enum pwm_polarity ret = PWM_POLARITY_NORMAL;
+
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+
+	u16 aqctla_reg = 0u;
+	u8 cau_action = 0u;
+	u8 cad_action = 0u;
+
+	aqctla_reg = readw(pc->mmio_base + AQCTLA);
+	cau_action = FIELD_GET(AQCTLA_CAU, aqctla_reg);
+	cad_action = FIELD_GET(AQCTLA_CAD, aqctla_reg);
+
+	/*
+	 * Evaluate the actions to determine the PWM polarity:
+	 *  - If an up-count event sets the output (AQ_SET) and a down-count
+	 *    event clears it (AQ_CLEAR), then polarity is NORMAL.
+	 *  - If an up-count event clears the output (AQ_CLEAR) and a down-count
+	 *    event sets it (AQ_SET), then polarity is INVERSED.
+	 */
+	if (cau_action == AQ_SET && cad_action == AQ_CLEAR)
+		ret = PWM_POLARITY_NORMAL;
+
+	else if (cau_action == AQ_CLEAR && cad_action == AQ_SET)
+		ret = PWM_POLARITY_INVERSED;
+
+	return ret;
+}
+
+/**
+ * ehrpwm_get_state - Retrieves the current state of the eHRPWM channel
+ * @chip:	pointer to the PWM chip structure
+ * @pwm:	pointer to the PWM device structure
+ * @state:	pointer to the pwm_state structure to be filled
+ *
+ * @return:	0 on success or a negative error code on failure
+ */
+static int ehrpwm_get_state(struct pwm_chip *chip, struct pwm_device *pwm,
+							struct pwm_state *state)
+{
+	int ret = 0u;
+	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
+	unsigned long tbclk_rate = 0u;
+
+	if (chip == NULL || pwm == NULL || state == NULL)
+		return -EINVAL;
+
+	tbclk_rate = clk_get_rate(pc->tbclk);
+	if (tbclk_rate <= 0)
+		return -EINVAL;
+
+	state->enabled = ehrpwm_is_enabled(chip);
+	state->period = ehrpwm_read_period(chip, tbclk_rate);
+	state->duty_cycle = ehrpwm_read_duty_cycle(chip, tbclk_rate);
+	state->polarity = ehrpwm_read_polarity(chip);
+
+	return ret;
+}
+
 static void ehrpwm_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
 	struct ehrpwm_pwm_chip *pc = to_ehrpwm_pwm_chip(chip);
@@ -436,6 +609,7 @@ static int ehrpwm_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 static const struct pwm_ops ehrpwm_pwm_ops = {
 	.free = ehrpwm_pwm_free,
 	.apply = ehrpwm_pwm_apply,
+	.get_state = ehrpwm_get_state,
 };
 
 static const struct of_device_id ehrpwm_of_match[] = {
@@ -449,8 +623,10 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct ehrpwm_pwm_chip *pc;
+	struct pwm_state state;
 	struct pwm_chip *chip;
 	struct clk *clk;
+	bool tbclk_enabled;
 	int ret;
 
 	chip = devm_pwmchip_alloc(&pdev->dev, NUM_PWM_CHANNEL, sizeof(*pc));
@@ -492,6 +668,18 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ehrpwm_get_state(chip, &chip->pwms[0], &state);
+
+	if (state.enabled == true) {
+		ret = clk_prepare_enable(pc->tbclk);
+		if (ret) {
+			dev_err_probe(&pdev->dev, ret, "clk_prepare_enable() failed");
+			goto err_pwmchip_remove;
+		}
+
+		tbclk_enabled = true;
+	}
+
 	ret = pwmchip_add(chip);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "pwmchip_add() failed: %d\n", ret);
@@ -501,10 +689,22 @@ static int ehrpwm_pwm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chip);
 	pm_runtime_enable(&pdev->dev);
 
+	if (state.enabled == true) {
+		ret = pm_runtime_get_sync(&pdev->dev);
+		if (ret < 0) {
+			dev_err_probe(&pdev->dev, ret, "pm_runtime_get_sync() failed");
+			clk_disable_unprepare(pc->tbclk);
+			goto err_pwmchip_remove;
+		}
+	}
+
 	return 0;
 
+err_pwmchip_remove:
+	pwmchip_remove(chip);
 err_clk_unprepare:
-	clk_unprepare(pc->tbclk);
+	if (tbclk_enabled)
+		clk_unprepare(pc->tbclk);
 
 	return ret;
 }
