@@ -942,23 +942,23 @@ int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	err = fib_nl2rule_rtnl(nlrule, ops, tb, extack);
 	if (err)
-		goto errout;
+		goto errout_free;
 
 	rule = rule_find(ops, frh, tb, nlrule, user_priority);
 	if (!rule) {
 		err = -ENOENT;
-		goto errout;
+		goto errout_free;
 	}
 
 	if (rule->flags & FIB_RULE_PERMANENT) {
 		err = -EPERM;
-		goto errout;
+		goto errout_free;
 	}
 
 	if (ops->delete) {
 		err = ops->delete(rule);
 		if (err)
-			goto errout;
+			goto errout_free;
 	}
 
 	if (rule->tun_id)
@@ -1004,8 +1004,9 @@ int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	kfree(nlrule);
 	return 0;
 
-errout:
+errout_free:
 	kfree(nlrule);
+errout:
 	rules_ops_put(ops);
 	return err;
 }
