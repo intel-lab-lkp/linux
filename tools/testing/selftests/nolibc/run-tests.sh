@@ -17,7 +17,7 @@ perform_download=0
 test_mode=system
 werror=1
 llvm=
-archs="i386 x86_64 arm64 arm mips32le mips32be ppc ppc64 ppc64le riscv32 riscv64 s390 loongarch"
+archs="i386 x86_64 arm64 arm mips32le mips32be ppc ppc64 ppc64le riscv32 riscv64 s390x loongarch"
 
 TEMP=$(getopt -o 'j:d:c:b:a:m:pelh' -n "$0" -- "$@")
 
@@ -100,6 +100,7 @@ crosstool_arch() {
 	riscv) echo riscv64;;
 	loongarch) echo loongarch64;;
 	mips*) echo mips;;
+	s390*) echo s390;;
 	*) echo "$1";;
 	esac
 }
