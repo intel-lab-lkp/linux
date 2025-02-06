@@ -1509,6 +1509,22 @@ resched:
 * main API
 **********************************/
 
+static bool zswap_compress_folio(struct folio *folio,
+				 struct zswap_entry *entries[],
+				 struct zswap_pool *pool)
+{
+	long index, nr_pages = folio_nr_pages(folio);
+
+	for (index = 0; index < nr_pages; ++index) {
+		struct page *page = folio_page(folio, index);
+
+		if (!zswap_compress(page, entries[index], pool))
+			return false;
+	}
+
+	return true;
+}
+
 /*
  * Store all pages in a folio.
  *
@@ -1542,12 +1558,8 @@ static bool zswap_store_folio(struct folio *folio,
 		entries[index]->handle = (unsigned long)ERR_PTR(-EINVAL);
 	}
 
-	for (index = 0; index < nr_pages; ++index) {
-		struct page *page = folio_page(folio, index);
-
-		if (!zswap_compress(page, entries[index], pool))
-			goto store_folio_failed;
-	}
+	if (!zswap_compress_folio(folio, entries, pool))
+		goto store_folio_failed;
 
 	for (index = 0; index < nr_pages; ++index) {
 		swp_entry_t page_swpentry = page_swap_entry(folio_page(folio, index));
