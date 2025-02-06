@@ -45,6 +45,8 @@ class BaseNlLib:
 
 
 class Type(SpecAttr):
+    starts_with_digit = re.compile(r"^\d")
+
     def __init__(self, family, attr_set, attr, value):
         super().__init__(family, attr_set, attr, value)
 
@@ -74,6 +76,8 @@ class Type(SpecAttr):
         self.c_name = c_lower(self.name)
         if self.c_name in _C_KW:
             self.c_name += '_'
+        if self.starts_with_digit.match(self.c_name):
+            self.c_name = '_' + self.c_name
 
         # Added by resolve():
         self.enum_name = None
