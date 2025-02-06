@@ -25,8 +25,7 @@ properties:
     maxItems: 1
 
   "#pwm-cells":
-    # Used for specifying the period length in nanoseconds
-    const: 1
+    const: 3
 
   clocks:
     maxItems: 1
@@ -45,6 +44,6 @@ examples:
     pwm0: pwm@40b00000 {
       compatible = "marvell,pxa250-pwm";
       reg = <0x40b00000 0x10>;
-      #pwm-cells = <1>;
+      #pwm-cells = <3>;
       clocks = <&clks CLK_PWM0>;
     };
