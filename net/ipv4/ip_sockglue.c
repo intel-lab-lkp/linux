@@ -314,8 +314,8 @@ int ip_cmsg_send(struct sock *sk, struct msghdr *msg, struct ipcm_cookie *ipc,
 				return -EINVAL;
 			if (val < 0 || val > 255)
 				return -EINVAL;
-			ipc->tos = val;
-			ipc->sockc.priority = rt_tos2priority(ipc->tos);
+			ipc->sockc.priority = rt_tos2priority(val);
+			ipc->tos = val & INET_DSCP_MASK;
 			break;
 		case IP_PROTOCOL:
 			if (cmsg->cmsg_len != CMSG_LEN(sizeof(int)))
