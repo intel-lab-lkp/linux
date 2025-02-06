@@ -35,6 +35,11 @@ struct timestamp_event_queue {
 	struct debugfs_u32_array dfs_bitmap;
 };
 
+struct ptp_private_ctxdata {
+	struct timestamp_event_queue queue;
+	fmode_t fmode;
+};
+
 struct ptp_clock {
 	struct posix_clock clock;
 	struct device dev;
