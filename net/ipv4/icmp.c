@@ -1240,6 +1240,22 @@ int icmp_rcv(struct sk_buff *skb)
 
 	/* Check for ICMP Extended Echo (PROBE) messages */
 	if (icmph->type == ICMP_EXT_ECHO) {
+		/*
+		 *	RFC 8335: 4 When a node receives [a message] and any of
+		 *	  the following conditions apply, the node MUST silently
+		 *	  discard the incoming message:
+		 *	  ...
+		 *	  - The Source Address of the incoming message is not
+		 *	    a unicast address.
+		 *	  - The Destination Address of the incoming message is a
+		 *	    multicast address.
+		 *	(Former constraint is handled by martian detection.)
+		 */
+		if (rt->rt_flags & RTCF_MULTICAST) {
+			reason = SKB_DROP_REASON_INVALID_PROTO;
+			goto error;
+		}
+
 		/* We can't use icmp_pointers[].handler() because it is an array of
 		 * size NR_ICMP_TYPES + 1 (19 elements) and PROBE has code 42.
 		 */

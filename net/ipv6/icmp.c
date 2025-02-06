@@ -738,6 +738,21 @@ static enum skb_drop_reason icmpv6_echo_reply(struct sk_buff *skb)
 	    net->ipv6.sysctl.icmpv6_echo_ignore_multicast)
 		return reason;
 
+	/*
+	 *	RFC 8335: 4 When a node receives [a message] and any of
+	 *	  the following conditions apply, the node MUST silently
+	 *	  discard the incoming message:
+	 *	  ...
+	 *	  - The Source Address of the incoming message is not
+	 *	    a unicast address.
+	 *	  - The Destination Address of the incoming message is a
+	 *	    multicast address.
+	 *	(Former constraint is handled by martian detection.)
+	 */
+	if (icmph->icmp6_type == ICMPV6_EXT_ECHO_REQUEST &&
+	    ipv6_addr_is_multicast(&ipv6_hdr(skb)->daddr))
+		return reason;
+
 	saddr = &ipv6_hdr(skb)->daddr;
 
 	acast = ipv6_anycast_destination(skb_dst(skb), saddr);
