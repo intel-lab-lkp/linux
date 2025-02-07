@@ -1996,6 +1996,8 @@ enum netdev_reg_state {
  *	@change_proto_down: device supports setting carrier via IFLA_PROTO_DOWN
  *	@netns_local: interface can't change network namespaces
  *	@fcoe_mtu:	device supports maximum FCoE MTU, 2158 bytes
+ *	@kernel_bond:	device is auto bonded to another device without user
+ *			configuration
  *
  *	@net_notifier_list:	List of per-net netdev notifier block
  *				that follow this device when it is moved
@@ -2402,6 +2404,7 @@ struct net_device {
 	unsigned long		change_proto_down:1;
 	unsigned long		netns_local:1;
 	unsigned long		fcoe_mtu:1;
+	unsigned long		kernel_bond:1;
 
 	struct list_head	net_notifier_list;
 
@@ -5293,12 +5296,14 @@ static inline bool netif_is_macvlan_port(const struct net_device *dev)
 
 static inline bool netif_is_bond_master(const struct net_device *dev)
 {
-	return dev->flags & IFF_MASTER && dev->priv_flags & IFF_BONDING;
+	return dev->flags & IFF_MASTER &&
+		(dev->priv_flags & IFF_BONDING || dev->kernel_bond);
 }
 
 static inline bool netif_is_bond_slave(const struct net_device *dev)
 {
-	return dev->flags & IFF_SLAVE && dev->priv_flags & IFF_BONDING;
+	return dev->flags & IFF_SLAVE &&
+		(dev->priv_flags & IFF_BONDING || dev->kernel_bond);
 }
 
 static inline bool netif_supports_nofcs(struct net_device *dev)
