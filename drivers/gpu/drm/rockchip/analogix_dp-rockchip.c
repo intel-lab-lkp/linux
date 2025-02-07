@@ -39,8 +39,6 @@
 
 #define HIWORD_UPDATE(val, mask)	(val | (mask) << 16)
 
-#define PSR_WAIT_LINE_FLAG_TIMEOUT_MS	100
-
 /**
  * struct rockchip_dp_chip_data - splite the grf setting of kind of chips
  * @lcdsel_grf_reg: grf register offset of lcdc select
@@ -216,29 +214,6 @@ static void rockchip_dp_drm_encoder_enable(struct drm_encoder *encoder,
 	clk_disable_unprepare(dp->grfclk);
 }
 
-static void rockchip_dp_drm_encoder_disable(struct drm_encoder *encoder,
-					    struct drm_atomic_state *state)
-{
-	struct rockchip_dp_device *dp = encoder_to_dp(encoder);
-	struct drm_crtc *crtc;
-	struct drm_crtc_state *new_crtc_state = NULL;
-	int ret;
-
-	crtc = rockchip_dp_drm_get_new_crtc(encoder, state);
-	/* No crtc means we're doing a full shutdown */
-	if (!crtc)
-		return;
-
-	new_crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
-	/* If we're not entering self-refresh, no need to wait for vact */
-	if (!new_crtc_state || !new_crtc_state->self_refresh_active)
-		return;
-
-	ret = rockchip_drm_wait_vact_end(crtc, PSR_WAIT_LINE_FLAG_TIMEOUT_MS);
-	if (ret)
-		DRM_DEV_ERROR(dp->dev, "line flag irq timed out\n");
-}
-
 static int
 rockchip_dp_drm_encoder_atomic_check(struct drm_encoder *encoder,
 				      struct drm_crtc_state *crtc_state,
@@ -266,7 +241,6 @@ static const struct drm_encoder_helper_funcs rockchip_dp_encoder_helper_funcs = 
 	.mode_fixup = rockchip_dp_drm_encoder_mode_fixup,
 	.mode_set = rockchip_dp_drm_encoder_mode_set,
 	.atomic_enable = rockchip_dp_drm_encoder_enable,
-	.atomic_disable = rockchip_dp_drm_encoder_disable,
 	.atomic_check = rockchip_dp_drm_encoder_atomic_check,
 };
 

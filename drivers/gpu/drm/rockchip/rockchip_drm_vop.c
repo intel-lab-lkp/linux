@@ -726,14 +726,67 @@ static void rockchip_drm_set_win_enabled(struct drm_crtc *crtc, bool enabled)
         spin_unlock(&vop->reg_lock);
 }
 
+/**
+ * rockchip_drm_wait_vact_end
+ * @crtc: CRTC to enable line flag
+ * @mstimeout: millisecond for timeout
+ *
+ * Wait for vact_end line flag irq or timeout.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+static int
+rockchip_drm_wait_vact_end(struct drm_crtc *crtc, unsigned int mstimeout)
+{
+	struct vop *vop = to_vop(crtc);
+	unsigned long jiffies_left;
+	int ret = 0;
+
+	if (!crtc || !vop->is_enabled)
+		return -ENODEV;
+
+	mutex_lock(&vop->vop_lock);
+	if (mstimeout <= 0) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (vop_line_flag_irq_is_enabled(vop)) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	reinit_completion(&vop->line_flag_completion);
+	vop_line_flag_irq_enable(vop);
+
+	jiffies_left = wait_for_completion_timeout(&vop->line_flag_completion,
+						   msecs_to_jiffies(mstimeout));
+	vop_line_flag_irq_disable(vop);
+
+	if (jiffies_left == 0) {
+		DRM_DEV_ERROR(vop->dev, "Timeout waiting for IRQ\n");
+		ret = -ETIMEDOUT;
+		goto out;
+	}
+
+out:
+	mutex_unlock(&vop->vop_lock);
+	return ret;
+}
+
 static void vop_crtc_atomic_disable(struct drm_crtc *crtc,
 				    struct drm_atomic_state *state)
 {
 	struct vop *vop = to_vop(crtc);
+	int ret;
 
 	WARN_ON(vop->event);
 
 	if (crtc->state->self_refresh_active) {
+		ret = rockchip_drm_wait_vact_end(crtc, 100);
+		if (ret)
+			DRM_DEV_ERROR(vop->dev, "line flag irq timed out\n");
 		rockchip_drm_set_win_enabled(crtc, false);
 		goto out;
 	}
@@ -2130,55 +2183,6 @@ static void vop_win_init(struct vop *vop)
 			vop_win->yuv2yuv_data = &vop_data->win_yuv2yuv[i];
 	}
 }
-
-/**
- * rockchip_drm_wait_vact_end
- * @crtc: CRTC to enable line flag
- * @mstimeout: millisecond for timeout
- *
- * Wait for vact_end line flag irq or timeout.
- *
- * Returns:
- * Zero on success, negative errno on failure.
- */
-int rockchip_drm_wait_vact_end(struct drm_crtc *crtc, unsigned int mstimeout)
-{
-	struct vop *vop = to_vop(crtc);
-	unsigned long jiffies_left;
-	int ret = 0;
-
-	if (!crtc || !vop->is_enabled)
-		return -ENODEV;
-
-	mutex_lock(&vop->vop_lock);
-	if (mstimeout <= 0) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (vop_line_flag_irq_is_enabled(vop)) {
-		ret = -EBUSY;
-		goto out;
-	}
-
-	reinit_completion(&vop->line_flag_completion);
-	vop_line_flag_irq_enable(vop);
-
-	jiffies_left = wait_for_completion_timeout(&vop->line_flag_completion,
-						   msecs_to_jiffies(mstimeout));
-	vop_line_flag_irq_disable(vop);
-
-	if (jiffies_left == 0) {
-		DRM_DEV_ERROR(vop->dev, "Timeout waiting for IRQ\n");
-		ret = -ETIMEDOUT;
-		goto out;
-	}
-
-out:
-	mutex_unlock(&vop->vop_lock);
-	return ret;
-}
-EXPORT_SYMBOL(rockchip_drm_wait_vact_end);
 
 static int vop_bind(struct device *dev, struct device *master, void *data)
 {
