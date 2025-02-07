@@ -1359,10 +1359,12 @@ static int l2cap_sock_shutdown(struct socket *sock, int how)
 
 	l2cap_chan_lock(chan);
 	conn = chan->conn;
-	if (conn)
+	l2cap_chan_unlock(chan);
+	if (conn) {
+		hci_dev_lock(conn->hcon->hdev);
 		/* prevent conn structure from being freed */
 		l2cap_conn_get(conn);
-	l2cap_chan_unlock(chan);
+	}
 
 	if (conn)
 		/* mutex lock must be taken before l2cap_chan_lock() */
@@ -1375,6 +1377,7 @@ static int l2cap_sock_shutdown(struct socket *sock, int how)
 	if (conn) {
 		mutex_unlock(&conn->chan_lock);
 		l2cap_conn_put(conn);
+		hci_dev_unlock(conn->hcon->hdev);
 	}
 
 	lock_sock(sk);
