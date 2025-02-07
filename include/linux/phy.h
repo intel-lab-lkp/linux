@@ -2209,6 +2209,8 @@ int __phy_hwtstamp_set(struct phy_device *phydev,
 		       struct kernel_hwtstamp_config *config,
 		       struct netlink_ext_ack *extack);
 
+struct phy_port *phy_get_sfp_port(struct phy_device *phydev);
+
 static inline int phy_package_address(struct phy_device *phydev,
 				      unsigned int addr_offset)
 {
