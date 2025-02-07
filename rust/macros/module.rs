@@ -11,12 +11,14 @@ fn expect_string_array(it: &mut token_stream::IntoIter) -> Vec<String> {
     let mut it = group.stream().into_iter();
 
     while let Some(val) = try_string(&mut it) {
-        assert!(val.is_ascii(), "Expected ASCII string");
+        assert!(val.is_ascii(), "Expected ASCII string, got {}", val);
         values.push(val);
-        match it.next() {
-            Some(TokenTree::Punct(punct)) => assert_eq!(punct.as_char(), ','),
-            None => break,
-            _ => panic!("Expected ',' or end of array"),
+        let Some(token) = it.next() else {
+            break;
+        };
+        match token {
+            TokenTree::Punct(punct) => assert_eq!(punct.as_char(), ','),
+            token => panic!("Expected ',' or end of array, got {}", token),
         }
     }
     values
@@ -116,11 +118,10 @@ impl ModuleInfo {
         const REQUIRED_KEYS: &[&str] = &["type", "name", "license"];
         let mut seen_keys = Vec::new();
 
-        loop {
-            let key = match it.next() {
-                Some(TokenTree::Ident(ident)) => ident.to_string(),
-                Some(_) => panic!("Expected Ident or end"),
-                None => break,
+        while let Some(token) = it.next() {
+            let key = match token {
+                TokenTree::Ident(ident) => ident.to_string(),
+                token => panic!("Expected Ident or end, got {}", token),
             };
 
             if seen_keys.contains(&key) {
