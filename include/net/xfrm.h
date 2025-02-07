@@ -14,7 +14,7 @@
 #include <linux/mutex.h>
 #include <linux/audit.h>
 #include <linux/slab.h>
-#include <linux/refcount.h>
+#include <linux/rcuref.h>
 #include <linux/sockptr.h>
 
 #include <net/sock.h>
@@ -189,7 +189,7 @@ struct xfrm_state {
 	struct hlist_node	state_cache;
 	struct hlist_node	state_cache_input;
 
-	refcount_t		refcnt;
+	rcuref_t		ref;
 	spinlock_t		lock;
 
 	u32			pcpu_num;
@@ -901,24 +901,24 @@ void __xfrm_state_destroy(struct xfrm_state *, bool);
 
 static inline void __xfrm_state_put(struct xfrm_state *x)
 {
-	refcount_dec(&x->refcnt);
+	WARN_ON(rcuref_put(&x->ref));
 }
 
 static inline void xfrm_state_put(struct xfrm_state *x)
 {
-	if (refcount_dec_and_test(&x->refcnt))
+	if (rcuref_put(&x->ref))
 		__xfrm_state_destroy(x, false);
 }
 
 static inline void xfrm_state_put_sync(struct xfrm_state *x)
 {
-	if (refcount_dec_and_test(&x->refcnt))
+	if (rcuref_put(&x->ref))
 		__xfrm_state_destroy(x, true);
 }
 
 static inline void xfrm_state_hold(struct xfrm_state *x)
 {
-	refcount_inc(&x->refcnt);
+	WARN_ON(!rcuref_get(&x->ref));
 }
 
 static inline bool addr_match(const void *token1, const void *token2,

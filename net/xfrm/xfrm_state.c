@@ -55,7 +55,7 @@ static HLIST_HEAD(xfrm_state_dev_gc_list);
 
 static inline bool xfrm_state_hold_rcu(struct xfrm_state __rcu *x)
 {
-	return refcount_inc_not_zero(&x->refcnt);
+	return rcuref_get(&x->ref);
 }
 
 static inline unsigned int xfrm_dst_hash(struct net *net,
@@ -738,7 +738,7 @@ struct xfrm_state *xfrm_state_alloc(struct net *net)
 
 	if (x) {
 		write_pnet(&x->xs_net, net);
-		refcount_set(&x->refcnt, 1);
+		rcuref_init(&x->ref, 1);
 		atomic_set(&x->tunnel_users, 0);
 		INIT_LIST_HEAD(&x->km.all);
 		INIT_HLIST_NODE(&x->state_cache);
