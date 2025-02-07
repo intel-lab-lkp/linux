@@ -140,8 +140,6 @@ static int sxgbe_get_eee(struct net_device *dev,
 	if (!priv->hw_cap.eee)
 		return -EOPNOTSUPP;
 
-	edata->tx_lpi_timer = priv->tx_lpi_timer;
-
 	return phy_ethtool_get_eee(dev->phydev, edata);
 }
 
@@ -150,22 +148,8 @@ static int sxgbe_set_eee(struct net_device *dev,
 {
 	struct sxgbe_priv_data *priv = netdev_priv(dev);
 
-	priv->eee_enabled = edata->eee_enabled;
-
-	if (!priv->eee_enabled) {
-		sxgbe_disable_eee_mode(priv);
-	} else {
-		/* We are asking for enabling the EEE but it is safe
-		 * to verify all by invoking the eee_init function.
-		 * In case of failure it will return an error.
-		 */
-		priv->eee_enabled = sxgbe_eee_init(priv);
-		if (!priv->eee_enabled)
-			return -EOPNOTSUPP;
-
-		/* Do not change tx_lpi_timer in case of failure */
-		priv->tx_lpi_timer = edata->tx_lpi_timer;
-	}
+	if (!priv->hw_cap.eee)
+		return -EOPNOTSUPP;
 
 	return phy_ethtool_set_eee(dev->phydev, edata);
 }
@@ -228,7 +212,7 @@ static void sxgbe_get_ethtool_stats(struct net_device *dev,
 	int i;
 	char *p;
 
-	if (priv->eee_enabled) {
+	if (dev->phydev->eee_active) {
 		int val = phy_get_eee_err(dev->phydev);
 
 		if (val)

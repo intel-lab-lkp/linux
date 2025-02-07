@@ -526,6 +526,4 @@ int sxgbe_restore(struct net_device *ndev);
 
 const struct sxgbe_mtl_ops *sxgbe_get_mtl_ops(void);
 
-void sxgbe_disable_eee_mode(struct sxgbe_priv_data * const priv);
-bool sxgbe_eee_init(struct sxgbe_priv_data * const priv);
 #endif /* __SXGBE_COMMON_H__ */

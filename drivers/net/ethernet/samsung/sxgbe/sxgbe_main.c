@@ -87,7 +87,7 @@ static void sxgbe_enable_eee_mode(const struct sxgbe_priv_data *priv)
 		priv->hw->mac->set_eee_mode(priv->ioaddr);
 }
 
-void sxgbe_disable_eee_mode(struct sxgbe_priv_data * const priv)
+static void sxgbe_disable_eee_mode(struct sxgbe_priv_data * const priv)
 {
 	/* Exit and disable EEE in case of we are in LPI state. */
 	priv->hw->mac->reset_eee_mode(priv->ioaddr);
@@ -110,52 +110,25 @@ static void sxgbe_eee_ctrl_timer(struct timer_list *t)
 	mod_timer(&priv->eee_ctrl_timer, SXGBE_LPI_TIMER(eee_timer));
 }
 
-/**
- * sxgbe_eee_init
- * @priv: private device pointer
- * Description:
- *  If the EEE support has been enabled while configuring the driver,
- *  if the GMAC actually supports the EEE (from the HW cap reg) and the
- *  phy can also manage EEE, so enable the LPI state and start the timer
- *  to verify if the tx path can enter in LPI state.
- */
-bool sxgbe_eee_init(struct sxgbe_priv_data * const priv)
+static void sxgbe_eee_adjust(struct sxgbe_priv_data *priv)
 {
-	struct net_device *ndev = priv->dev;
-	bool ret = false;
+	struct phy_device *phydev = priv->dev->phydev;
 
-	/* MAC core supports the EEE feature. */
-	if (priv->hw_cap.eee) {
-		/* Check if the PHY supports EEE */
-		if (phy_init_eee(ndev->phydev, true))
-			return false;
+	if (!priv->hw_cap.eee)
+		return;
 
-		timer_setup(&priv->eee_ctrl_timer, sxgbe_eee_ctrl_timer, 0);
-		priv->eee_ctrl_timer.expires = SXGBE_LPI_TIMER(eee_timer);
+	if (phydev->enable_tx_lpi) {
 		add_timer(&priv->eee_ctrl_timer);
-
 		priv->hw->mac->set_eee_timer(priv->ioaddr,
 					     SXGBE_DEFAULT_LPI_TIMER,
-					     priv->tx_lpi_timer);
-
-		pr_info("Energy-Efficient Ethernet initialized\n");
-
-		ret = true;
+					     phydev->eee_cfg.tx_lpi_timer);
+		priv->eee_enabled = true;
+	} else {
+		sxgbe_disable_eee_mode(priv);
+		priv->eee_enabled = false;
 	}
 
-	return ret;
-}
-
-static void sxgbe_eee_adjust(const struct sxgbe_priv_data *priv)
-{
-	struct net_device *ndev = priv->dev;
-
-	/* When the EEE has been already initialised we have to
-	 * modify the PLS bit in the LPI ctrl & status reg according
-	 * to the PHY link status. For this reason.
-	 */
-	if (priv->eee_enabled)
-		priv->hw->mac->set_eee_pls(priv->ioaddr, ndev->phydev->link);
+	priv->hw->mac->set_eee_pls(priv->ioaddr, phydev->link);
 }
 
 /**
@@ -299,6 +272,16 @@ static int sxgbe_init_phy(struct net_device *ndev)
 	if (phydev->phy_id == 0) {
 		phy_disconnect(phydev);
 		return -ENODEV;
+	}
+
+	if (priv->hw_cap.eee) {
+		phy_support_eee(phydev);
+		phy_eee_rx_clock_stop(priv->dev->phydev, true);
+		phydev->eee_cfg.tx_lpi_timer = SXGBE_DEFAULT_LPI_TIMER;
+
+		/* configure timer which will be used for LPI handling */
+		timer_setup(&priv->eee_ctrl_timer, sxgbe_eee_ctrl_timer, 0);
+		priv->eee_ctrl_timer.expires = SXGBE_LPI_TIMER(eee_timer);
 	}
 
 	netdev_dbg(ndev, "%s: attached to PHY (UID 0x%x) Link = %d\n",
@@ -802,7 +785,7 @@ static void sxgbe_tx_all_clean(struct sxgbe_priv_data * const priv)
 		sxgbe_tx_queue_clean(tqueue);
 	}
 
-	if ((priv->eee_enabled) && (!priv->tx_path_in_lpi_mode)) {
+	if (priv->eee_enabled && !priv->tx_path_in_lpi_mode) {
 		sxgbe_enable_eee_mode(priv);
 		mod_timer(&priv->eee_ctrl_timer, SXGBE_LPI_TIMER(eee_timer));
 	}
@@ -1179,9 +1162,6 @@ static int sxgbe_open(struct net_device *dev)
 		priv->hw->dma->rx_watchdog(priv->ioaddr, SXGBE_MAX_DMA_RIWT);
 	}
 
-	priv->tx_lpi_timer = SXGBE_DEFAULT_LPI_TIMER;
-	priv->eee_enabled = sxgbe_eee_init(priv);
-
 	napi_enable(&priv->napi);
 	netif_start_queue(dev);
 
@@ -1206,9 +1186,6 @@ phy_error:
 static int sxgbe_release(struct net_device *dev)
 {
 	struct sxgbe_priv_data *priv = netdev_priv(dev);
-
-	if (priv->eee_enabled)
-		del_timer_sync(&priv->eee_ctrl_timer);
 
 	/* Stop and disconnect the PHY */
 	if (dev->phydev) {
