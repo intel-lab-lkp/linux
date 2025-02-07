@@ -227,6 +227,10 @@ enum ethtool_link_medium {
 	__ETHTOOL_LINK_MEDIUM_LAST,
 };
 
+#define ETHTOOL_MEDIUM_FIBER_BITS (BIT(ETHTOOL_LINK_MEDIUM_BASES) | \
+				   BIT(ETHTOOL_LINK_MEDIUM_BASEL) | \
+				   BIT(ETHTOOL_LINK_MEDIUM_BASEF))
+
 static inline const char *phy_mediums(enum ethtool_link_medium medium)
 {
 	switch (medium) {
@@ -256,6 +260,17 @@ static inline const char *phy_mediums(enum ethtool_link_medium medium)
 		return "None";
 	default: return "unknown";
 	}
+}
+
+static inline int phy_medium_default_lanes(enum ethtool_link_medium medium)
+{
+	/* Let's consider that the default BaseT ethernet is BaseT4, i.e.
+	 * Gigabit Ethernet.
+	 */
+	if (medium == ETHTOOL_LINK_MEDIUM_BASET)
+		return 4;
+
+	return 1;
 }
 
 struct link_mode_info {
