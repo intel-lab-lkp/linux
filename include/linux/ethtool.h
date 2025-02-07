@@ -210,6 +210,54 @@ static inline u8 *ethtool_rxfh_context_key(struct ethtool_rxfh_context *ctx)
 
 void ethtool_rxfh_context_lost(struct net_device *dev, u32 context_id);
 
+enum ethtool_link_medium {
+	ETHTOOL_LINK_MEDIUM_BASET = 0,
+	ETHTOOL_LINK_MEDIUM_BASEK,
+	ETHTOOL_LINK_MEDIUM_BASES,
+	ETHTOOL_LINK_MEDIUM_BASEC,
+	ETHTOOL_LINK_MEDIUM_BASEL,
+	ETHTOOL_LINK_MEDIUM_BASED,
+	ETHTOOL_LINK_MEDIUM_BASEE,
+	ETHTOOL_LINK_MEDIUM_BASEF,
+	ETHTOOL_LINK_MEDIUM_BASEV,
+	ETHTOOL_LINK_MEDIUM_BASEMLD, /* I don't know what that is */
+	ETHTOOL_LINK_MEDIUM_BASEX, /* Not a true medium, but abused... */
+	ETHTOOL_LINK_MEDIUM_NONE,
+
+	__ETHTOOL_LINK_MEDIUM_LAST,
+};
+
+static inline const char *phy_mediums(enum ethtool_link_medium medium)
+{
+	switch (medium) {
+	case ETHTOOL_LINK_MEDIUM_BASET:
+		return "BaseT";
+	case ETHTOOL_LINK_MEDIUM_BASEK:
+		return "BaseK";
+	case ETHTOOL_LINK_MEDIUM_BASES:
+		return "BaseS";
+	case ETHTOOL_LINK_MEDIUM_BASEC:
+		return "BaseC";
+	case ETHTOOL_LINK_MEDIUM_BASEL:
+		return "BaseL";
+	case ETHTOOL_LINK_MEDIUM_BASED:
+		return "BaseD";
+	case ETHTOOL_LINK_MEDIUM_BASEE:
+		return "BaseE";
+	case ETHTOOL_LINK_MEDIUM_BASEF:
+		return "BaseF";
+	case ETHTOOL_LINK_MEDIUM_BASEV:
+		return "BaseV";
+	case ETHTOOL_LINK_MEDIUM_BASEMLD:
+		return "BaseMLD";
+	case ETHTOOL_LINK_MEDIUM_BASEX:
+		return "BaseX";
+	case ETHTOOL_LINK_MEDIUM_NONE:
+		return "None";
+	default: return "unknown";
+	}
+}
+
 /* declare a link mode bitmap */
 #define __ETHTOOL_DECLARE_LINK_MODE_MASK(name)		\
 	DECLARE_BITMAP(name, __ETHTOOL_LINK_MODE_MASK_NBITS)
