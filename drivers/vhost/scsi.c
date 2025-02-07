@@ -98,6 +98,11 @@ struct vhost_scsi_cmd {
 	unsigned char tvc_cdb[VHOST_SCSI_MAX_CDB_SIZE];
 	/* Sense buffer that will be mapped into outgoing status */
 	unsigned char tvc_sense_buf[TRANSPORT_SENSE_BUFFER];
+	/*
+	 * Dirty write descriptors of this command.
+	 */
+	struct vhost_log *tvc_log;
+	unsigned int tvc_log_num;
 	/* Completed commands list, serviced from vhost worker thread */
 	struct llist_node tvc_completion_list;
 	/* Used to track inflight cmd */
@@ -619,6 +624,7 @@ vhost_scsi_get_cmd(struct vhost_virtqueue *vq, struct vhost_scsi_tpg *tpg,
 	struct vhost_scsi_nexus *tv_nexus;
 	struct scatterlist *sg, *prot_sg;
 	struct iovec *tvc_resp_iov;
+	struct vhost_log *log;
 	struct page **pages;
 	int tag;
 
@@ -639,6 +645,7 @@ vhost_scsi_get_cmd(struct vhost_virtqueue *vq, struct vhost_scsi_tpg *tpg,
 	prot_sg = cmd->tvc_prot_sgl;
 	pages = cmd->tvc_upages;
 	tvc_resp_iov = cmd->tvc_resp_iov;
+	log = cmd->tvc_log;
 	memset(cmd, 0, sizeof(*cmd));
 	cmd->tvc_sgl = sg;
 	cmd->tvc_prot_sgl = prot_sg;
@@ -652,6 +659,7 @@ vhost_scsi_get_cmd(struct vhost_virtqueue *vq, struct vhost_scsi_tpg *tpg,
 	cmd->tvc_nexus = tv_nexus;
 	cmd->inflight = vhost_scsi_get_inflight(vq);
 	cmd->tvc_resp_iov = tvc_resp_iov;
+	cmd->tvc_log = log;
 
 	memcpy(cmd->tvc_cdb, cdb, VHOST_SCSI_MAX_CDB_SIZE);
 
@@ -1604,6 +1612,7 @@ static void vhost_scsi_destroy_vq_cmds(struct vhost_virtqueue *vq)
 		kfree(tv_cmd->tvc_prot_sgl);
 		kfree(tv_cmd->tvc_upages);
 		kfree(tv_cmd->tvc_resp_iov);
+		kfree(tv_cmd->tvc_log);
 	}
 
 	sbitmap_free(&svq->scsi_tags);
@@ -1664,6 +1673,18 @@ static int vhost_scsi_setup_vq_cmds(struct vhost_virtqueue *vq, int max_cmds)
 					       GFP_KERNEL);
 		if (!tv_cmd->tvc_prot_sgl) {
 			pr_err("Unable to allocate tv_cmd->tvc_prot_sgl\n");
+			goto out;
+		}
+
+		/*
+		 * tv_cmd->tvc_log and vq->log need to have the same max
+		 * length.
+		 */
+		tv_cmd->tvc_log = kcalloc(vq->dev->iov_limit,
+					  sizeof(struct vhost_log),
+					  GFP_KERNEL);
+		if (!tv_cmd->tvc_log) {
+			pr_err("Unable to allocate tv_cmd->tvc_log\n");
 			goto out;
 		}
 	}
