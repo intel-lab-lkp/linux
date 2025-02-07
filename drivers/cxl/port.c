@@ -46,13 +46,14 @@ static int discover_region(struct device *dev, void *unused)
 		return 0;
 
 	/*
-	 * Region enumeration is opportunistic, if this add-event fails,
+	 * Region enumeration is opportunistic, ignore errors and
 	 * continue to the next endpoint decoder.
 	 */
-	rc = cxl_add_to_region(cxled);
+	rc = cxl_endpoint_decoder_register(cxled);
 	if (rc)
-		dev_dbg(dev, "failed to add to region: %#llx-%#llx\n",
-			cxled->cxld.hpa_range.start, cxled->cxld.hpa_range.end);
+		dev_warn(cxled->cxld.dev.parent,
+			"failed to register %s: %d\n",
+			dev_name(&cxled->cxld.dev), rc);
 
 	return 0;
 }
