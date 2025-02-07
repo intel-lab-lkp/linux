@@ -1289,6 +1289,10 @@ int cxl_dirty_shutdown_state(struct cxl_memdev_state *mds)
 		.state = 1
 	};
 
+	if (!test_bit(CXL_MEM_COMMAND_ID_SET_SHUTDOWN_STATE,
+		      cxl_mbox->enabled_cmds))
+		return 0;
+
 	mbox_cmd = (struct cxl_mbox_cmd) {
 		.opcode = CXL_MBOX_OP_SET_SHUTDOWN_STATE,
 		.size_in = sizeof(in),
