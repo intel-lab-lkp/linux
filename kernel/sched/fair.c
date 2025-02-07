@@ -74,10 +74,49 @@ unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (default: 0.75 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * (default: 0.70 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ *
+ * The old default value for slice is 0.75 msec * (1 + ilog(ncpus)) which
+ * means that we have a default slice of
+ * 0.75 for 1 cpu
+ * 1.50 up to 3 cpus
+ * 2.25 up to 7 cpus
+ * 3.00 for 8 cpus and above.
+ *
+ * For HZ=250 and HZ=100, because of the tick accuracy, the runtime of tasks
+ * is far higher than their slice.
+ * For HZ=1000 with 8 cpus or more, the accuracy of tick is already
+ * satisfactory, but there is still an issue that tasks will get an extra
+ * tick because the tick often arrives a little faster than expected. In this
+ * case, the task can only wait until the next tick to consider that it has
+ * reached its deadline, and will run 1ms longer.
+ *
+ * vruntime + sysctl_sched_base_slice =     deadline
+ *         |-----------|-----------|-----------|-----------|
+ *              1ms          1ms         1ms         1ms
+ *                    ^           ^           ^           ^
+ *                  tick1       tick2       tick3       tick4(nearly 4ms)
+ *
+ * There are two reasons for tick error: clockevent precision and the
+ * CONFIG_IRQ_TIME_ACCOUNTING/CONFIG_PARAVIRT_TIME_ACCOUNTING.
+ * with CONFIG_IRQ_TIME_ACCOUNTING every tick will be less than 1ms, but even
+ * without it, because of clockevent precision, tick still often less than
+ * 1ms.
+ *
+ * In order to make scheduling more precise, we changed 0.75 to 0.70,
+ * Using 0.70 instead of 0.75 should not change much for other configs
+ * and would fix this issue:
+ * 0.70 for 1 cpu
+ * 1.40 up to 3 cpus
+ * 2.10 up to 7 cpus
+ * 2.8 for 8 cpus and above.
+ *
+ * This does not guarantee that tasks can run the slice time accurately every
+ * time, but occasionally running an extra tick has little impact.
+ *
  */
-unsigned int sysctl_sched_base_slice			= 750000ULL;
-static unsigned int normalized_sysctl_sched_base_slice	= 750000ULL;
+unsigned int sysctl_sched_base_slice			= 700000ULL;
+static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
