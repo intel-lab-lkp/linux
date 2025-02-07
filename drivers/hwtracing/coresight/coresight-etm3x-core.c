@@ -701,6 +701,7 @@ static const struct coresight_ops_source etm_source_ops = {
 	.cpu_id		= etm_cpu_id,
 	.enable		= etm_enable,
 	.disable	= etm_disable,
+	.trace_id	= coresight_etm_get_trace_id,
 };
 
 static const struct coresight_ops etm_cs_ops = {
