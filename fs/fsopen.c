@@ -451,11 +451,14 @@ SYSCALL_DEFINE5(fsconfig,
 		param.size = strlen(param.name->name);
 		break;
 	case FSCONFIG_SET_FD:
-		param.type = fs_value_is_file;
 		ret = -EBADF;
-		param.file = fget(aux);
+		param.file = fget_raw(aux);
 		if (!param.file)
 			goto out_key;
+		if (param.file->f_mode & FMODE_PATH)
+			param.type = fs_value_is_raw_file;
+		else
+			param.type = fs_value_is_file;
 		param.dirfd = aux;
 		break;
 	default:

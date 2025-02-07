@@ -141,10 +141,10 @@ static int ovl_verity_mode_def(void)
 
 const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_string_empty("lowerdir",    Opt_lowerdir),
-	fsparam_file_or_string("lowerdir+", Opt_lowerdir_add),
-	fsparam_file_or_string("datadir+",  Opt_datadir_add),
-	fsparam_file_or_string("upperdir",  Opt_upperdir),
-	fsparam_file_or_string("workdir",   Opt_workdir),
+	fsparam_raw_file_or_string("lowerdir+", Opt_lowerdir_add),
+	fsparam_raw_file_or_string("datadir+",  Opt_datadir_add),
+	fsparam_raw_file_or_string("upperdir",  Opt_upperdir),
+	fsparam_raw_file_or_string("workdir",   Opt_workdir),
 	fsparam_flag("default_permissions", Opt_default_permissions),
 	fsparam_enum("redirect_dir",        Opt_redirect_dir, ovl_parameter_redirect_dir),
 	fsparam_enum("index",               Opt_index, ovl_parameter_bool),
@@ -438,6 +438,8 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 			return err;
 		err = ovl_do_parse_layer(fc, param->string, &layer_path, layer);
 		break;
+	case fs_value_is_raw_file:
+		fallthrough;
 	case fs_value_is_file: {
 		char *buf __free(kfree);
 		char *layer_name;

@@ -55,6 +55,7 @@ enum fs_value_type {
 	fs_value_is_blob,		/* Value is a binary blob */
 	fs_value_is_filename,		/* Value is a filename* + dirfd */
 	fs_value_is_file,		/* Value is a file* */
+	fs_value_is_raw_file,		/* Value is an O_PATH/FMODE_PATH file* */
 };
 
 /*
