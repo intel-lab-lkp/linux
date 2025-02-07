@@ -168,13 +168,23 @@ generic_file_llseek_size(struct file *file, loff_t offset, int whence,
 		return offset;
 
 	if (whence == SEEK_CUR) {
+		bool locked;
+
 		/*
-		 * f_lock protects against read/modify/write race with
-		 * other SEEK_CURs. Note that parallel writes and reads
-		 * behave like SEEK_SET.
+		 * If the file requires locking via f_pos_lock we know
+		 * that mutual exclusion for SEEK_CUR on the same file
+		 * is guaranteed. If the file isn't locked, we take
+		 * f_lock to protect against f_pos races with other
+		 * SEEK_CURs.
 		 */
-		guard(spinlock)(&file->f_lock);
-		return vfs_setpos(file, file->f_pos + offset, maxsize);
+		locked = (file->f_mode & FMODE_ATOMIC_POS) ||
+			 file->f_op->iterate_shared;
+		if (!locked)
+			spin_lock(&file->f_lock);
+		offset = vfs_setpos(file, file->f_pos + offset, maxsize);
+		if (!locked)
+			spin_unlock(&file->f_lock);
+		return offset;
 	}
 
 	return vfs_setpos(file, offset, maxsize);
