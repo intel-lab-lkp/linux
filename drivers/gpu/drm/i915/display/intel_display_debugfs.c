@@ -1383,6 +1383,80 @@ static const struct file_operations i915_joiner_fops = {
 	.write = i915_joiner_write
 };
 
+static ssize_t i915_force_hdcp14_write(struct file *file,
+				       const char __user *ubuf,
+				       size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *connector = m->private;
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_hdcp *hdcp = &connector->hdcp;
+	bool force_hdcp14 = false;
+	int ret;
+
+	if (len == 0)
+		return 0;
+
+	drm_dbg(display->drm,
+		"Copied %zu bytes from user to force DSC\n", len);
+
+	ret = kstrtobool_from_user(ubuf, len, &force_hdcp14);
+	if (ret < 0)
+		return ret;
+
+	drm_dbg(display->drm, "Got %s for force HDCP1.4\n",
+		(force_hdcp14) ? "true" : "false");
+	hdcp->force_hdcp14 = force_hdcp14;
+
+	*offp += len;
+	return len;
+}
+
+static int i915_force_hdcp14_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = m->private;
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_encoder *encoder = intel_attached_encoder(connector);
+	struct intel_hdcp *hdcp = &connector->hdcp;
+	struct drm_crtc *crtc;
+	int ret;
+
+	if (!encoder)
+		return -ENODEV;
+
+	ret = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	crtc = connector->base.state->crtc;
+	if (connector->base.status != connector_status_connected || !crtc) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	seq_printf(m, "Force_HDCP14: %s\n",
+		   str_yes_no(hdcp->force_hdcp14));
+out:
+	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
+	return ret;
+}
+
+static int i915_force_hdcp14_open(struct inode *inode,
+				  struct file *file)
+{
+	return single_open(file, i915_force_hdcp14_show,
+			   inode->i_private);
+}
+
+static const struct file_operations i915_force_hdcp14_fops = {
+	.owner = THIS_MODULE,
+	.open = i915_force_hdcp14_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = i915_force_hdcp14_write
+};
+
 /**
  * intel_connector_debugfs_add - add i915 specific connector debugfs files
  * @connector: pointer to a registered intel_connector
@@ -1411,6 +1485,8 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	    connector_type == DRM_MODE_CONNECTOR_HDMIB) {
 		debugfs_create_file("i915_hdcp_sink_capability", 0444, root,
 				    connector, &i915_hdcp_sink_capability_fops);
+		debugfs_create_file("i915_force_hdcp14", 0644, root,
+				    connector, &i915_force_hdcp14_fops);
 	}
 
 	if (DISPLAY_VER(i915) >= 11 &&
