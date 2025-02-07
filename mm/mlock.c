@@ -224,7 +224,7 @@ void mlock_drain_remote(int cpu)
 {
 	struct folio_batch *fbatch;
 
-	WARN_ON_ONCE(cpu_online(cpu));
+	WARN_ON_ONCE(!cpu_online(cpu));
 	fbatch = &per_cpu(mlock_fbatch.fbatch, cpu);
 	if (folio_batch_count(fbatch))
 		mlock_folio_batch(fbatch);
