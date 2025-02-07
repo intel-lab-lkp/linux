@@ -1565,6 +1565,7 @@ static void scsi_complete(struct request *rq)
 static int scsi_dispatch_cmd(struct scsi_cmnd *cmd)
 {
 	struct Scsi_Host *host = cmd->device->host;
+	struct scsi_device *sdev = cmd->device;
 	int rtn = 0;
 
 	atomic_inc(&cmd->device->iorequest_cnt);
@@ -1609,6 +1610,13 @@ static int scsi_dispatch_cmd(struct scsi_cmnd *cmd)
 			       "queuecommand : command too long. "
 			       "cdb_size=%d host->max_cmd_len=%d\n",
 			       cmd->cmd_len, cmd->device->host->max_cmd_len));
+		cmd->result = (DID_ABORT << 16);
+		goto done;
+	}
+
+	/* Bofore we queue this comman, check attribute use_192_bytes_for_3f */
+	if (cmd->cmnd[0] == MODE_SENSE && sdev->use_192_bytes_for_3f == 1 &&
+		cmd->cmnd[2] == 0x3f && cmd->cmnd[4] != 192) {
 		cmd->result = (DID_ABORT << 16);
 		goto done;
 	}
