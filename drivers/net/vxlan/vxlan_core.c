@@ -3888,6 +3888,11 @@ static void vxlan_config_apply(struct net_device *dev,
 	unsigned short needed_headroom = ETH_HLEN;
 	int max_mtu = ETH_MAX_MTU;
 	u32 flags = conf->flags;
+	bool rem_changed;
+
+	rem_changed = !vxlan_addr_equal(&vxlan->default_dst.remote_ip,
+					&conf->remote_ip) ||
+		      vxlan->default_dst.remote_ifindex != conf->remote_ifindex;
 
 	if (!changelink) {
 		if (flags & VXLAN_F_GPE)
@@ -3899,6 +3904,11 @@ static void vxlan_config_apply(struct net_device *dev,
 			dev->mtu = conf->mtu;
 
 		vxlan->net = src_net;
+
+	} else if (vxlan->dev->flags & IFF_UP) {
+		if (vxlan_addr_multicast(&vxlan->default_dst.remote_ip) &&
+		    rem_changed)
+			vxlan_multicast_leave(vxlan);
 	}
 
 	dst->remote_vni = conf->vni;
@@ -3932,6 +3942,11 @@ static void vxlan_config_apply(struct net_device *dev,
 	dev->needed_headroom = needed_headroom;
 
 	memcpy(&vxlan->cfg, conf, sizeof(*conf));
+
+	if (changelink && vxlan->dev->flags & IFF_UP &&
+	    vxlan_addr_multicast(&vxlan->default_dst.remote_ip) &&
+	    rem_changed)
+		vxlan_multicast_join(vxlan);
 }
 
 static int vxlan_dev_configure(struct net *src_net, struct net_device *dev,
