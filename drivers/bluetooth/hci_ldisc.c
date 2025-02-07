@@ -683,8 +683,10 @@ static int hci_uart_register_dev(struct hci_uart *hu)
 	if (test_bit(HCI_UART_INIT_PENDING, &hu->hdev_flags))
 		return 0;
 
+	set_bit(HCI_UART_PROTO_READY, &hu->flags);
 	if (hci_register_dev(hdev) < 0) {
 		BT_ERR("Can't register HCI device");
+		clear_bit(HCI_UART_PROTO_READY, &hu->flags);
 		hu->proto->close(hu);
 		hu->hdev = NULL;
 		hci_free_dev(hdev);
@@ -706,8 +708,6 @@ static int hci_uart_set_proto(struct hci_uart *hu, int id)
 		return -EPROTONOSUPPORT;
 
 	hu->proto = p;
-
-	set_bit(HCI_UART_PROTO_READY, &hu->flags);
 
 	err = hci_uart_register_dev(hu);
 	if (err) {
