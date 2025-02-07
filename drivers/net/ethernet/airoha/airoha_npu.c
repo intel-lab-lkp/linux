@@ -336,6 +336,56 @@ static irqreturn_t airoha_npu_wdt_handler(int irq, void *core_instance)
 	return IRQ_HANDLED;
 }
 
+int airoha_npu_foe_commit_entry(struct airoha_ppe *ppe,
+				struct airoha_foe_entry *e, u32 hash)
+{
+	struct airoha_foe_entry *hwe = ppe->foe + hash * sizeof(*hwe);
+	u16 ts = airoha_ppe_get_timestamp(ppe);
+
+	memcpy(&hwe->d, &e->d, sizeof(*hwe) - sizeof(hwe->ib1));
+	wmb();
+
+	e->ib1 &= ~AIROHA_FOE_IB1_BIND_TIMESTAMP;
+	e->ib1 |= FIELD_PREP(AIROHA_FOE_IB1_BIND_TIMESTAMP, ts);
+	hwe->ib1 = e->ib1;
+
+	if (hash < PPE_SRAM_NUM_ENTRIES) {
+		dma_addr_t addr = ppe->foe_dma + hash * sizeof(*hwe);
+		struct ppe_mbox_data ppe_data = {
+			.func_type = NPU_OP_SET,
+			.func_id = PPE_FUNC_SET_WAIT_API,
+			.set_info = {
+				.data = addr,
+				.size = sizeof(*hwe),
+			},
+		};
+		struct airoha_eth *eth = ppe->eth;
+		bool ppe2;
+		int err;
+
+		ppe2 = airoha_ppe2_is_enabled(ppe->eth) &&
+		       hash >= PPE1_SRAM_NUM_ENTRIES;
+		ppe_data.set_info.func_id = ppe2 ? PPE2_SRAM_SET_ENTRY
+						 : PPE_SRAM_SET_ENTRY;
+
+		err = airoha_npu_send_msg(eth->npu, NPU_FUNC_PPE, &ppe_data,
+					  sizeof(struct ppe_mbox_data));
+		if (err)
+			return err;
+
+		ppe_data.set_info.func_id = PPE_SRAM_SET_VAL;
+		ppe_data.set_info.data = hash;
+		ppe_data.set_info.size = sizeof(u32);
+
+		err = airoha_npu_send_msg(eth->npu, NPU_FUNC_PPE, &ppe_data,
+					  sizeof(struct ppe_mbox_data));
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
 struct airoha_npu *airoha_npu_init(struct airoha_eth *eth)
 {
 	struct reserved_mem *rmem;
