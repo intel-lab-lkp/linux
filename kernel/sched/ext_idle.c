@@ -14,6 +14,9 @@
 /* Enable/disable built-in idle CPU selection policy */
 DEFINE_STATIC_KEY_FALSE(scx_builtin_idle_enabled);
 
+/* Enable/disable per-node idle cpumasks */
+DEFINE_STATIC_KEY_FALSE(scx_builtin_idle_per_node);
+
 #ifdef CONFIG_SMP
 #ifdef CONFIG_CPUMASK_OFFSTACK
 #define CL_ALIGNED_IF_ONSTACK
@@ -204,9 +207,9 @@ static bool llc_numa_mismatch(void)
  * CPU belongs to a single LLC domain, and that each LLC domain is entirely
  * contained within a single NUMA node.
  */
-void scx_idle_update_selcpu_topology(void)
+void scx_idle_update_selcpu_topology(struct sched_ext_ops *ops)
 {
-	bool enable_llc = false, enable_numa = false;
+	bool enable_llc = false, enable_numa = false, enable_idle_node = false;
 	unsigned int nr_cpus;
 	s32 cpu = cpumask_first(cpu_online_mask);
 
@@ -237,13 +240,21 @@ void scx_idle_update_selcpu_topology(void)
 	 * If all CPUs belong to the same NUMA node and the same LLC domain,
 	 * enabling both NUMA and LLC optimizations is unnecessary, as checking
 	 * for an idle CPU in the same domain twice is redundant.
+	 *
+	 * If SCX_OPS_BUILTIN_IDLE_PER_NODE is enabled ignore the NUMA
+	 * optimization, as we would naturally select idle CPUs within
+	 * specific NUMA nodes querying the corresponding per-node cpumask.
 	 */
-	nr_cpus = numa_weight(cpu);
-	if (nr_cpus > 0) {
-		if (nr_cpus < num_online_cpus() && llc_numa_mismatch())
-			enable_numa = true;
-		pr_debug("sched_ext: NUMA=%*pb weight=%u\n",
-			 cpumask_pr_args(numa_span(cpu)), numa_weight(cpu));
+	if (ops->flags & SCX_OPS_BUILTIN_IDLE_PER_NODE) {
+		enable_idle_node = true;
+	} else {
+		nr_cpus = numa_weight(cpu);
+		if (nr_cpus > 0) {
+			if (nr_cpus < num_online_cpus() && llc_numa_mismatch())
+				enable_numa = true;
+			pr_debug("sched_ext: NUMA=%*pb weight=%u\n",
+				 cpumask_pr_args(numa_span(cpu)), numa_weight(cpu));
+		}
 	}
 	rcu_read_unlock();
 
@@ -251,6 +262,8 @@ void scx_idle_update_selcpu_topology(void)
 		 str_enabled_disabled(enable_llc));
 	pr_debug("sched_ext: NUMA idle selection %s\n",
 		 str_enabled_disabled(enable_numa));
+	pr_debug("sched_ext: per-node idle cpumask %s\n",
+		 str_enabled_disabled(enable_idle_node));
 
 	if (enable_llc)
 		static_branch_enable_cpuslocked(&scx_selcpu_topo_llc);
@@ -260,6 +273,10 @@ void scx_idle_update_selcpu_topology(void)
 		static_branch_enable_cpuslocked(&scx_selcpu_topo_numa);
 	else
 		static_branch_disable_cpuslocked(&scx_selcpu_topo_numa);
+	if (enable_idle_node)
+		static_branch_enable_cpuslocked(&scx_builtin_idle_per_node);
+	else
+		static_branch_disable_cpuslocked(&scx_builtin_idle_per_node);
 }
 
 /*
