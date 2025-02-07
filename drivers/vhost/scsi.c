@@ -989,23 +989,46 @@ static void vhost_scsi_target_queue_cmd(struct vhost_scsi_cmd *cmd)
 	target_submit(se_cmd);
 }
 
+#define TYPE_IO_CMD	0
+#define TYPE_CTRL_TMF	1
+#define TYPE_CTRL_AN	2
+
 static void
 vhost_scsi_send_bad_target(struct vhost_scsi *vs,
 			   struct vhost_virtqueue *vq,
-			   int head, unsigned out)
+			   struct vhost_scsi_ctx *vc, int type)
 {
-	struct virtio_scsi_cmd_resp __user *resp;
-	struct virtio_scsi_cmd_resp rsp;
+	union {
+		struct virtio_scsi_cmd_resp cmd;
+		struct virtio_scsi_ctrl_tmf_resp tmf;
+		struct virtio_scsi_ctrl_an_resp an;
+	} resp;
+	struct iov_iter iov_iter;
+	size_t resp_size;
 	int ret;
 
-	memset(&rsp, 0, sizeof(rsp));
-	rsp.response = VIRTIO_SCSI_S_BAD_TARGET;
-	resp = vq->iov[out].iov_base;
-	ret = __copy_to_user(resp, &rsp, sizeof(rsp));
-	if (!ret)
-		vhost_add_used_and_signal(&vs->dev, vq, head, 0);
+	memset(&resp, 0, sizeof(resp));
+
+	if (type == TYPE_IO_CMD) {
+		resp_size = sizeof(struct virtio_scsi_cmd_resp);
+		resp.cmd.response = VIRTIO_SCSI_S_BAD_TARGET;
+	} else if (type == TYPE_CTRL_TMF) {
+		resp_size = sizeof(struct virtio_scsi_ctrl_tmf_resp);
+		resp.tmf.response = VIRTIO_SCSI_S_BAD_TARGET;
+	} else {
+		resp_size = sizeof(struct virtio_scsi_ctrl_an_resp);
+		resp.an.response = VIRTIO_SCSI_S_BAD_TARGET;
+	}
+
+	iov_iter_init(&iov_iter, ITER_DEST, &vq->iov[vc->out], vc->in,
+		      resp_size);
+
+	ret = copy_to_iter(&resp, resp_size, &iov_iter);
+
+	if (likely(ret == resp_size))
+		vhost_add_used_and_signal(&vs->dev, vq, vc->head, 0);
 	else
-		pr_err("Faulted on virtio_scsi_cmd_resp\n");
+		pr_err("Faulted on virtio scsi type=%d\n", type);
 }
 
 static int
@@ -1332,7 +1355,7 @@ err:
 		if (ret == -ENXIO)
 			break;
 		else if (ret == -EIO) {
-			vhost_scsi_send_bad_target(vs, vq, vc.head, vc.out);
+			vhost_scsi_send_bad_target(vs, vq, &vc, TYPE_IO_CMD);
 			vhost_scsi_log_write(vq, vq_log, log_num);
 		}
 	} while (likely(!vhost_exceeds_weight(vq, ++c, 0)));
@@ -1594,7 +1617,10 @@ err:
 		if (ret == -ENXIO)
 			break;
 		else if (ret == -EIO) {
-			vhost_scsi_send_bad_target(vs, vq, vc.head, vc.out);
+			vhost_scsi_send_bad_target(vs, vq, &vc,
+						   v_req.type == VIRTIO_SCSI_T_TMF ?
+						   TYPE_CTRL_TMF :
+						   TYPE_CTRL_AN);
 			vhost_scsi_log_write(vq, vq_log, log_num);
 		}
 	} while (likely(!vhost_exceeds_weight(vq, ++c, 0)));
