@@ -11,8 +11,13 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
+#include <linux/of.h>
+#include <linux/of_net.h>
+#include <linux/of_platform.h>
+#include <linux/platform_device.h>
 #include <linux/reset.h>
 
+#define AIROHA_NPU_NUM_CORES		8
 #define AIROHA_MAX_NUM_GDM_PORTS	4
 #define AIROHA_MAX_NUM_QDMA		2
 #define AIROHA_MAX_DSA_PORTS		7
@@ -43,6 +48,15 @@
 
 #define QDMA_METER_IDX(_n)		((_n) & 0xff)
 #define QDMA_METER_GROUP(_n)		(((_n) >> 8) & 0x3)
+
+#define PPE_NUM				2
+#define PPE1_SRAM_NUM_ENTRIES		(8 * 1024)
+#define PPE_SRAM_NUM_ENTRIES		(2 * PPE1_SRAM_NUM_ENTRIES)
+#define PPE_DRAM_NUM_ENTRIES		(16 * 1024)
+#define PPE_NUM_ENTRIES			(PPE_SRAM_NUM_ENTRIES + PPE_DRAM_NUM_ENTRIES)
+#define PPE_HASH_MASK			(PPE_NUM_ENTRIES - 1)
+#define PPE_ENTRY_SIZE			80
+#define PPE_RAM_NUM_ENTRIES_SHIFT(_n)	(__ffs((_n) >> 10))
 
 #define MTK_HDR_LEN			4
 #define MTK_HDR_XMIT_TAGGED_TPID_8100	1
@@ -195,6 +209,10 @@ struct airoha_hw_stats {
 	u64 rx_len[7];
 };
 
+struct airoha_foe_entry {
+	u8 data[PPE_ENTRY_SIZE];
+};
+
 struct airoha_qdma {
 	struct airoha_eth *eth;
 	void __iomem *regs;
@@ -234,11 +252,35 @@ struct airoha_gdm_port {
 	struct metadata_dst *dsa_meta[AIROHA_MAX_DSA_PORTS];
 };
 
+struct airoha_npu {
+	struct platform_device *pdev;
+	struct device_node *np;
+
+	void __iomem *base;
+
+	struct airoha_npu_core {
+		struct airoha_npu *npu;
+		/* protect concurrent npu memory accesses */
+		spinlock_t lock;
+		struct work_struct wdt_work;
+	} cores[AIROHA_NPU_NUM_CORES];
+};
+
+struct airoha_ppe {
+	struct airoha_eth *eth;
+
+	void *foe;
+	dma_addr_t foe_dma;
+};
+
 struct airoha_eth {
 	struct device *dev;
 
 	unsigned long state;
 	void __iomem *fe_regs;
+
+	struct airoha_npu *npu;
+	struct airoha_ppe *ppe;
 
 	struct reset_control_bulk_data rsts[AIROHA_MAX_NUM_RSTS];
 	struct reset_control_bulk_data xsi_rsts[AIROHA_MAX_NUM_XSI_RSTS];
@@ -274,5 +316,52 @@ u32 airoha_rmw(void __iomem *base, u32 offset, u32 mask, u32 val);
 	airoha_rmw((qdma)->regs, (offset), 0, (val))
 #define airoha_qdma_clear(qdma, offset, val)			\
 	airoha_rmw((qdma)->regs, (offset), (val), 0)
+
+bool airoha_ppe2_is_enabled(struct airoha_eth *eth);
+
+#ifdef CONFIG_NET_AIROHA_NPU
+int airoha_ppe_init(struct airoha_eth *eth);
+void airoha_ppe_deinit(struct airoha_eth *eth);
+struct airoha_npu *airoha_npu_init(struct airoha_eth *eth);
+void airoha_npu_deinit(struct airoha_npu *npu);
+int airoha_npu_ppe_init(struct airoha_npu *npu);
+int airoha_npu_ppe_deinit(struct airoha_npu *npu);
+int airoha_npu_flush_ppe_sram_entries(struct airoha_npu *npu,
+				      struct airoha_ppe *ppe);
+#else
+static inline int airoha_ppe_init(struct airoha_eth *eth)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void airoha_ppe_deinit(struct airoha_eth *eth)
+{
+}
+
+static inline struct airoha_npu *airoha_npu_init(struct airoha_eth *eth)
+{
+	return NULL;
+}
+
+static inline void airoha_npu_deinit(struct airoha_npu *npu)
+{
+}
+
+static inline int airoha_npu_ppe_init(struct airoha_npu *npu)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int airoha_npu_ppe_deinit(struct airoha_npu *npu)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int airoha_npu_flush_ppe_sram_entries(struct airoha_npu *npu,
+						    struct airoha_ppe *ppe)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_NET_AIROHA_NPU */
 
 #endif /* AIROHA_ETH_H */
