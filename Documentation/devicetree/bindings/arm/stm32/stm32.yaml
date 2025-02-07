@@ -59,6 +59,7 @@ properties:
               - prt,prtt1a   # Protonic PRTT1A
               - prt,prtt1c   # Protonic PRTT1C
               - prt,prtt1s   # Protonic PRTT1S
+              - ply,plyaqm   # Plymovent AQM board
           - const: st,stm32mp151
 
       - description: DH STM32MP135 DHCOR SoM based Boards
