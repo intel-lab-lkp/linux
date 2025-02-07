@@ -176,6 +176,8 @@ struct phylink_config {
 };
 
 void phylink_limit_mac_speed(struct phylink_config *config, u32 max_speed);
+void phylink_interfaces_to_linkmodes(unsigned long *linkmodes,
+				     const unsigned long *interfaces);
 
 /**
  * struct phylink_mac_ops - MAC operations structure.

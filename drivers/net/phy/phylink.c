@@ -673,6 +673,38 @@ static void phylink_validate_mask_caps(unsigned long *supported,
 	linkmode_and(state->advertising, state->advertising, mask);
 }
 
+/**
+ * phylink_interfaces_to_linkmodes() - List all possible linkmodes based on a
+ *				       set of supported interfaces, assuming no
+ *				       rate matching.
+ * @linkmodes: the supported linkmodes
+ * @interfaces: Set of interfaces (PHY_INTERFACE_MODE_XXX)
+ *
+ * Compute the exhaustive list of modes that can conceivably be achieved from a
+ * set of MII interfaces. This is derived from the possible speeds and duplex
+ * achievable from these interfaces. This list is likely too exhaustive (there
+ * may not exist any device out there that can convert from an interface to a
+ * linkmode) and it needs further filtering based on real HW capabilities.
+ */
+void phylink_interfaces_to_linkmodes(unsigned long *linkmodes,
+				     const unsigned long *interfaces)
+{
+	phy_interface_t interface;
+	unsigned long caps = 0;
+
+	linkmode_zero(linkmodes);
+
+	for_each_set_bit(interface, interfaces, PHY_INTERFACE_MODE_MAX)
+		caps = phylink_get_capabilities(interface,
+						GENMASK(__fls(MAC_400000FD),
+							__fls(MAC_10HD)),
+						RATE_MATCH_NONE);
+
+	phylink_set(linkmodes, Autoneg);
+	phylink_caps_to_linkmodes(linkmodes, caps);
+}
+EXPORT_SYMBOL_GPL(phylink_interfaces_to_linkmodes);
+
 static int phylink_validate_mac_and_pcs(struct phylink *pl,
 					unsigned long *supported,
 					struct phylink_link_state *state)
