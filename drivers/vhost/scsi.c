@@ -645,7 +645,9 @@ static void vhost_scsi_complete_cmd_work(struct vhost_work *work)
 		if (likely(ret == sizeof(v_rsp))) {
 			signal = true;
 
+			mutex_lock(&cmd->tvc_vq->mutex);
 			vhost_add_used(cmd->tvc_vq, cmd->tvc_vq_desc, 0);
+			mutex_unlock(&cmd->tvc_vq->mutex);
 		} else
 			pr_err("Faulted on virtio_scsi_cmd_resp\n");
 
@@ -1371,8 +1373,10 @@ static void vhost_scsi_tmf_resp_work(struct vhost_work *work)
 	else
 		resp_code = VIRTIO_SCSI_S_FUNCTION_REJECTED;
 
+	mutex_lock(&tmf->svq->vq.mutex);
 	vhost_scsi_send_tmf_resp(tmf->vhost, &tmf->svq->vq, tmf->in_iovs,
 				 tmf->vq_desc, &tmf->resp_iov, resp_code);
+	mutex_unlock(&tmf->svq->vq.mutex);
 
 	if (unlikely(tmf->tmf_log_num)) {
 		mutex_lock(&tmf->svq->vq.mutex);
