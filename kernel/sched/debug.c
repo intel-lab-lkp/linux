@@ -166,6 +166,55 @@ static const struct file_operations sched_feat_fops = {
 	.release	= single_release,
 };
 
+
+static ssize_t sched_base_slice_write(struct file *filp, const char __user *ubuf,
+				   size_t cnt, loff_t *ppos)
+{
+	char buf[16];
+	unsigned int base_slice;
+
+	if (cnt > 15)
+		cnt = 15;
+
+	if (copy_from_user(&buf, ubuf, cnt))
+		return -EFAULT;
+	buf[cnt] = '\0';
+
+	if (kstrtouint(buf, 10, &base_slice))
+		return -EINVAL;
+
+
+	base_slice = clamp_t(u64, base_slice,
+					NSEC_PER_MSEC/10,   /* HZ=1000 * 10 */
+					NSEC_PER_MSEC*100); /* HZ=100  / 10 */
+
+	sysctl_sched_base_slice = base_slice;
+
+	sched_update_scaling();
+
+	*ppos += cnt;
+	return cnt;
+}
+
+static int sched_base_slice_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", sysctl_sched_base_slice);
+	return 0;
+}
+
+static int sched_base_slice_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, sched_base_slice_show, NULL);
+}
+
+static const struct file_operations sched_base_slice_fops = {
+	.open		= sched_base_slice_open,
+	.write		= sched_base_slice_write,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 #ifdef CONFIG_SMP
 
 static ssize_t sched_scaling_write(struct file *filp, const char __user *ubuf,
@@ -505,7 +554,7 @@ static __init int sched_init_debug(void)
 	debugfs_create_file("preempt", 0644, debugfs_sched, NULL, &sched_dynamic_fops);
 #endif
 
-	debugfs_create_u32("base_slice_ns", 0644, debugfs_sched, &sysctl_sched_base_slice);
+	debugfs_create_file("base_slice_ns", 0644, debugfs_sched, NULL, &sched_base_slice_fops);
 
 	debugfs_create_u32("latency_warn_ms", 0644, debugfs_sched, &sysctl_resched_latency_warn_ms);
 	debugfs_create_u32("latency_warn_once", 0644, debugfs_sched, &sysctl_resched_latency_warn_once);
