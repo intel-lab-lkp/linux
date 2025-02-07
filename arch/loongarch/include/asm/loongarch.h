@@ -502,49 +502,75 @@
 #define LOONGARCH_CSR_GCFG		0x51	/* Guest config */
 #define  CSR_GCFG_GPERF_SHIFT		24
 #define  CSR_GCFG_GPERF_WIDTH		3
+/* Number PMU register started from PM0 passthrough to VM */
 #define  CSR_GCFG_GPERF			(_ULCAST_(0x7) << CSR_GCFG_GPERF_SHIFT)
+#define  CSR_GCFG_GPERFP_SHIFT		23
+/* Read-only bit: show PMU passthrough supported or not */
+#define  CSR_GCFG_GPERFP		(_ULCAST_(0x1) << CSR_GCFG_GPERFP_SHIFT)
 #define  CSR_GCFG_GCI_SHIFT		20
 #define  CSR_GCFG_GCI_WIDTH		2
 #define  CSR_GCFG_GCI			(_ULCAST_(0x3) << CSR_GCFG_GCI_SHIFT)
+/* All cacheop instructions will trap to host */
 #define  CSR_GCFG_GCI_ALL		(_ULCAST_(0x0) << CSR_GCFG_GCI_SHIFT)
+/* Cacheop instruction except hit invalidate will trap to host */
 #define  CSR_GCFG_GCI_HIT		(_ULCAST_(0x1) << CSR_GCFG_GCI_SHIFT)
+/* Cacheop instruction except hit and index invalidate will trap to host */
 #define  CSR_GCFG_GCI_SECURE		(_ULCAST_(0x2) << CSR_GCFG_GCI_SHIFT)
 #define  CSR_GCFG_GCIP_SHIFT		16
 #define  CSR_GCFG_GCIP			(_ULCAST_(0xf) << CSR_GCFG_GCIP_SHIFT)
+/* Read-only bit: show feature CSR_GCFG_GCI_ALL supported or not */
 #define  CSR_GCFG_GCIP_ALL		(_ULCAST_(0x1) << CSR_GCFG_GCIP_SHIFT)
+/* Read-only bit: show feature CSR_GCFG_GCI_HIT supported or not */
 #define  CSR_GCFG_GCIP_HIT		(_ULCAST_(0x1) << (CSR_GCFG_GCIP_SHIFT + 1))
+/* Read-only bit: show feature CSR_GCFG_GCI_SECURE supported or not */
 #define  CSR_GCFG_GCIP_SECURE		(_ULCAST_(0x1) << (CSR_GCFG_GCIP_SHIFT + 2))
 #define  CSR_GCFG_TORU_SHIFT		15
+/* Operation with CSR register unimplemented will trap to host */
 #define  CSR_GCFG_TORU			(_ULCAST_(0x1) << CSR_GCFG_TORU_SHIFT)
 #define  CSR_GCFG_TORUP_SHIFT		14
+/* Read-only bit: show feature CSR_GCFG_TORU supported or not */
 #define  CSR_GCFG_TORUP			(_ULCAST_(0x1) << CSR_GCFG_TORUP_SHIFT)
 #define  CSR_GCFG_TOP_SHIFT		13
+/* Modificattion with CRMD.PLV will trap to host */
 #define  CSR_GCFG_TOP			(_ULCAST_(0x1) << CSR_GCFG_TOP_SHIFT)
 #define  CSR_GCFG_TOPP_SHIFT		12
+/* Read-only bit: show feature CSR_GCFG_TOP supported or not */
 #define  CSR_GCFG_TOPP			(_ULCAST_(0x1) << CSR_GCFG_TOPP_SHIFT)
 #define  CSR_GCFG_TOE_SHIFT		11
+/* ertn instruction will trap to host */
 #define  CSR_GCFG_TOE			(_ULCAST_(0x1) << CSR_GCFG_TOE_SHIFT)
 #define  CSR_GCFG_TOEP_SHIFT		10
+/* Read-only bit: show feature CSR_GCFG_TOE supported or not */
 #define  CSR_GCFG_TOEP			(_ULCAST_(0x1) << CSR_GCFG_TOEP_SHIFT)
 #define  CSR_GCFG_TIT_SHIFT		9
+/* Timer instruction such as rdtime/TCFG/TVAL will trap to host */
 #define  CSR_GCFG_TIT			(_ULCAST_(0x1) << CSR_GCFG_TIT_SHIFT)
 #define  CSR_GCFG_TITP_SHIFT		8
+/* Read-only bit: show feature CSR_GCFG_TIT supported or not */
 #define  CSR_GCFG_TITP			(_ULCAST_(0x1) << CSR_GCFG_TITP_SHIFT)
 #define  CSR_GCFG_SIT_SHIFT		7
+/* All privilege instruction will trap to host */
 #define  CSR_GCFG_SIT			(_ULCAST_(0x1) << CSR_GCFG_SIT_SHIFT)
 #define  CSR_GCFG_SITP_SHIFT		6
+/* Read-only bit: show feature CSR_GCFG_SIT supported or not */
 #define  CSR_GCFG_SITP			(_ULCAST_(0x1) << CSR_GCFG_SITP_SHIFT)
 #define  CSR_GCFG_MATC_SHITF		4
 #define  CSR_GCFG_MATC_WIDTH		2
 #define  CSR_GCFG_MATC_MASK		(_ULCAST_(0x3) << CSR_GCFG_MATC_SHITF)
+/* Cache attribute comes from GVA->GPA mapping */
 #define  CSR_GCFG_MATC_GUEST		(_ULCAST_(0x0) << CSR_GCFG_MATC_SHITF)
+/* Cache attribute comes from GPA->HPA mapping */
 #define  CSR_GCFG_MATC_ROOT		(_ULCAST_(0x1) << CSR_GCFG_MATC_SHITF)
+/* Cache attribute comes from weaker one of GVA->GPA and GPA->HPA mapping */
 #define  CSR_GCFG_MATC_NEST		(_ULCAST_(0x2) << CSR_GCFG_MATC_SHITF)
 #define  CSR_GCFG_MATP_NEST_SHIFT	2
+/* Read-only bit: show feature CSR_GCFG_MATC_NEST supported or not */
 #define  CSR_GCFG_MATP_NEST		(_ULCAST_(0x1) << CSR_GCFG_MATP_NEST_SHIFT)
 #define  CSR_GCFG_MATP_ROOT_SHIFT	1
+/* Read-only bit: show feature CSR_GCFG_MATC_ROOT supported or not */
 #define  CSR_GCFG_MATP_ROOT		(_ULCAST_(0x1) << CSR_GCFG_MATP_ROOT_SHIFT)
 #define  CSR_GCFG_MATP_GUEST_SHIFT	0
+/* Read-only bit: show feature CSR_GCFG_MATC_GUEST suppoorted or not */
 #define  CSR_GCFG_MATP_GUEST		(_ULCAST_(0x1) << CSR_GCFG_MATP_GUEST_SHIFT)
 
 #define LOONGARCH_CSR_GINTC		0x52	/* Guest interrupt control */
