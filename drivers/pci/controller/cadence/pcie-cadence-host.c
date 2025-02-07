@@ -576,8 +576,6 @@ int cdns_pcie_host_setup(struct cdns_pcie_rc *rc)
 
 	return 0;
 
- err_init:
-	pm_runtime_put_sync(dev);
-
+err_init:
 	return ret;
 }
