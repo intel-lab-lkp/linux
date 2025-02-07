@@ -27,6 +27,8 @@ static inline bool numa_valid_node(int nid)
 #define __initdata_or_meminfo __initdata
 #endif
 
+struct nodemask;
+
 #ifdef CONFIG_NUMA
 #include <asm/sparsemem.h>
 
@@ -38,6 +40,7 @@ void __init alloc_offline_node_data(int nid);
 
 /* Generic implementation available */
 int numa_nearest_node(int node, unsigned int state);
+int numa_nearest_nodemask(int node, unsigned int state, struct nodemask *mask);
 
 #ifndef memory_add_physaddr_to_nid
 int memory_add_physaddr_to_nid(u64 start);
@@ -51,6 +54,11 @@ int numa_fill_memblks(u64 start, u64 end);
 
 #else /* !CONFIG_NUMA */
 static inline int numa_nearest_node(int node, unsigned int state)
+{
+	return NUMA_NO_NODE;
+}
+
+static inline int numa_nearest_nodemask(int node, unsigned int state, struct nodemask *mask)
 {
 	return NUMA_NO_NODE;
 }

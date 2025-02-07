@@ -5,6 +5,10 @@
 #include <linux/bitops.h>
 #include <linux/numa.h>
 
-typedef struct { DECLARE_BITMAP(bits, MAX_NUMNODES); } nodemask_t;
+struct nodemask {
+	DECLARE_BITMAP(bits, MAX_NUMNODES);
+};
+
+typedef struct nodemask nodemask_t;
 
 #endif /* __LINUX_NODEMASK_TYPES_H */

@@ -196,6 +196,44 @@ int numa_nearest_node(int node, unsigned int state)
 }
 EXPORT_SYMBOL_GPL(numa_nearest_node);
 
+/**
+ * numa_nearest_nodemask - Find the node in @mask at the nearest distance
+ *			   from @node.
+ *
+ * @node: the node to start the search from.
+ * @state: the node state to filter nodes by.
+ * @mask: a pointer to a nodemask representing the allowed nodes.
+ *
+ * This function iterates over all nodes in the given state and calculates
+ * the distance to the starting node.
+ *
+ * Returns the node ID in @mask that is the closest in terms of distance
+ * from @node, or MAX_NUMNODES if no node is found.
+ */
+int numa_nearest_nodemask(int node, unsigned int state, nodemask_t *mask)
+{
+	int dist, n, min_dist = INT_MAX, min_node = MAX_NUMNODES;
+
+	if (node == NUMA_NO_NODE)
+		return MAX_NUMNODES;
+
+	if (node_state(node, state) && node_isset(node, *mask))
+		return node;
+
+	for_each_node_state(n, state) {
+		if (!node_isset(n, *mask))
+			continue;
+		dist = node_distance(node, n);
+		if (dist < min_dist) {
+			min_dist = dist;
+			min_node = n;
+		}
+	}
+
+	return min_node;
+}
+EXPORT_SYMBOL_GPL(numa_nearest_nodemask);
+
 struct mempolicy *get_task_policy(struct task_struct *p)
 {
 	struct mempolicy *pol = p->mempolicy;
