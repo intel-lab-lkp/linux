@@ -2421,6 +2421,9 @@ struct vfsmount *clone_private_mount(const struct path *path)
 		if (!check_mnt(old_mnt))
 			return ERR_PTR(-EINVAL);
 	} else {
+		if (!is_mounted(&old_mnt->mnt))
+			return ERR_PTR(-EINVAL);
+
 		/* Make sure this isn't something purely kernel internal. */
 		if (!is_anon_ns(old_mnt->mnt_ns))
 			return ERR_PTR(-EINVAL);
