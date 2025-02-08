@@ -1807,6 +1807,7 @@ static int fsl_diu_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(&pdev->dev, "could not create sysfs file %s\n",
 			data->dev_attr.attr.name);
+		goto error;
 	}
 
 	dev_set_drvdata(&pdev->dev, data);
@@ -1827,6 +1828,9 @@ static void fsl_diu_remove(struct platform_device *pdev)
 	int i;
 
 	data = dev_get_drvdata(&pdev->dev);
+
+	device_remove_file(&pdev->dev, &data->dev_attr);
+
 	disable_lcdc(&data->fsl_diu_info[0]);
 
 	free_irq(data->irq, data->diu_reg);
