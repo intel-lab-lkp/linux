@@ -32,9 +32,9 @@ void machine_halt(void)
 	pr_notice("\n\n** You can safely turn off the power now **\n\n");
 	console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 
-	while (true) {
-		__arch_cpu_idle();
-	}
+	while (1) {
+		asm volatile("idle 0" : : : "memory");
+	};
 }
 
 void machine_power_off(void)
@@ -52,9 +52,9 @@ void machine_power_off(void)
 	efi.reset_system(EFI_RESET_SHUTDOWN, EFI_SUCCESS, 0, NULL);
 #endif
 
-	while (true) {
-		__arch_cpu_idle();
-	}
+	while (1) {
+		asm volatile("idle 0" : : : "memory");
+	};
 }
 
 void machine_restart(char *command)
@@ -73,7 +73,7 @@ void machine_restart(char *command)
 	if (!acpi_disabled)
 		acpi_reboot();
 
-	while (true) {
-		__arch_cpu_idle();
-	}
+	while (1) {
+		asm volatile("idle 0" : : : "memory");
+	};
 }
