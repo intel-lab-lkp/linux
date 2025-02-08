@@ -999,6 +999,22 @@ static void acpi_battery_quirks(struct acpi_battery *battery)
 	}
 }
 
+static inline bool acpi_battery_should_wake(struct acpi_battery *battery)
+{
+	if (battery->state & ACPI_BATTERY_STATE_CRITICAL) {
+		pm_pr_dbg("Waking due critical battery level");
+		return true;
+	}
+
+	if (test_bit(ACPI_BATTERY_ALARM_PRESENT, &battery->flags) &&
+	    battery->capacity_now <= battery->alarm) {
+		pm_pr_dbg("Waking due to battery alarm");
+		return true;
+	}
+
+	return false;
+}
+
 static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 {
 	int result = acpi_battery_get_status(battery);
@@ -1038,13 +1054,7 @@ static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 		return 0;
 	}
 
-	/*
-	 * Wakeup the system if battery is critical low
-	 * or lower than the alarm level
-	 */
-	if ((battery->state & ACPI_BATTERY_STATE_CRITICAL) ||
-	    (test_bit(ACPI_BATTERY_ALARM_PRESENT, &battery->flags) &&
-	     (battery->capacity_now <= battery->alarm)))
+	if (acpi_battery_should_wake(battery))
 		acpi_pm_wakeup_event(&battery->device->dev);
 
 	return result;
