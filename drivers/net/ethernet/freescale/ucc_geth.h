@@ -890,7 +890,6 @@ struct ucc_geth_hardware_statistics {
 							   addresses */
 
 #define TX_TIMEOUT                              (1*HZ)
-#define PHY_INIT_TIMEOUT                        100000
 #define PHY_CHANGE_TIME                         2
 
 /* Fast Ethernet (10/100 Mbps) */
