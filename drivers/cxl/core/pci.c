@@ -701,7 +701,7 @@ static void header_log_copy(void __iomem *ras_base, u32 *log)
  * Log the state of the RAS status registers and prepare them to log the
  * next error status. Return 1 if reset needed.
  */
-static bool __cxl_handle_ras(struct device *dev, void __iomem *ras_base)
+static pci_ers_result_t __cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 {
 	u32 hl[CXL_HEADERLOG_SIZE_U32];
 	void __iomem *addr;
@@ -710,13 +710,13 @@ static bool __cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 
 	if (!ras_base) {
 		dev_warn_once(dev, "CXL RAS register block is not mapped");
-		return false;
+		return PCI_ERS_RESULT_NONE;
 	}
 
 	addr = ras_base + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
 	if (!(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK))
-		return false;
+		return PCI_ERS_RESULT_NONE;
 
 	/* If multiple errors, log header points to first error from ctrl reg */
 	if (hweight32(status) > 1) {
@@ -733,7 +733,7 @@ static bool __cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 	trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status, fe, hl);
 	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
 
-	return true;
+	return PCI_ERS_RESULT_PANIC;
 }
 
 static bool cxl_handle_endpoint_ras(struct cxl_dev_state *cxlds)
@@ -780,6 +780,79 @@ static void cxl_disable_rch_root_ints(struct cxl_dport *dport)
 	aer_cmd = readl(aer_base + PCI_ERR_ROOT_COMMAND);
 	aer_cmd &= ~aer_cmd_mask;
 	writel(aer_cmd, aer_base + PCI_ERR_ROOT_COMMAND);
+}
+
+static int match_uport(struct device *dev, const void *data)
+{
+	const struct device *uport_dev = data;
+	struct cxl_port *port;
+
+	if (!is_cxl_port(dev))
+		return 0;
+
+	port = to_cxl_port(dev);
+
+	return port->uport_dev == uport_dev;
+}
+
+static void __iomem *cxl_pci_port_ras(struct pci_dev *pdev, struct device **dev)
+{
+	void __iomem *ras_base;
+
+	if (!pdev || !*dev) {
+		pr_err("Failed, parameter is NULL");
+		return NULL;
+	}
+
+	if ((pci_pcie_type(pdev) == PCI_EXP_TYPE_ROOT_PORT) ||
+	    (pci_pcie_type(pdev) == PCI_EXP_TYPE_DOWNSTREAM)) {
+		struct cxl_port *port __free(put_cxl_port);
+		struct cxl_dport *dport = NULL;
+
+		port = find_cxl_port(&pdev->dev, &dport);
+		if (!port) {
+			pci_err(pdev, "Failed to find root/dport in CXL topology\n");
+			return NULL;
+		}
+
+		ras_base = dport ? dport->regs.ras : NULL;
+		*dev = &port->dev;
+	} else if (pci_pcie_type(pdev) == PCI_EXP_TYPE_UPSTREAM) {
+		struct device *port_dev __free(put_device);
+		struct cxl_port *port;
+
+		port_dev = bus_find_device(&cxl_bus_type, NULL, &pdev->dev,
+					   match_uport);
+		if (!port_dev || !is_cxl_port(port_dev)) {
+			pci_err(pdev, "Failed to find uport in CXL topology\n");
+			return NULL;
+		}
+
+		port = to_cxl_port(port_dev);
+		ras_base = port ? port->uport_regs.ras : NULL;
+		*dev = port_dev;
+	} else {
+		pci_err(pdev, "Unsupported device type\n");
+		ras_base = NULL;
+	}
+
+	return ras_base;
+}
+
+static void cxl_port_cor_error_detected(struct pci_dev *pdev)
+{
+	struct device *dev;
+	void __iomem *ras_base = cxl_pci_port_ras(pdev, &dev);
+
+	__cxl_handle_cor_ras(dev, ras_base);
+}
+
+static pci_ers_result_t cxl_port_error_detected(struct pci_dev *pdev)
+{
+	struct device *dev;
+	void __iomem *ras_base = cxl_pci_port_ras(pdev, &dev);
+
+	return __cxl_handle_ras(dev, ras_base);
 }
 
 void cxl_uport_init_ras_reporting(struct cxl_port *port)
