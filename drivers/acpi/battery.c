@@ -125,6 +125,7 @@ struct acpi_battery {
 	int state;
 	int power_unit;
 	int capacity_suspend;
+	int suspend_state;
 	unsigned long flags;
 };
 
@@ -1012,6 +1013,12 @@ static inline bool acpi_battery_should_wake(struct acpi_battery *battery)
 		return true;
 	}
 
+	if (battery->state != battery->suspend_state) {
+		pm_pr_dbg("Waking due to battery state changed from 0x%x to 0x%x",
+			  battery->suspend_state, battery->state);
+		return true;
+	}
+
 	return false;
 }
 
@@ -1313,6 +1320,7 @@ static int acpi_battery_suspend(struct device *dev)
 		return -EINVAL;
 
 	battery->capacity_suspend = battery->capacity_now;
+	battery->suspend_state = battery->state;
 
 	return 0;
 }
