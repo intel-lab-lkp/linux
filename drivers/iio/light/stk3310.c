@@ -59,17 +59,6 @@
 	"0.023680 0.047360 0.094720 0.189440 0.378880 0.757760 1.515520 " \
 	"3.031040 6.062080"
 
-#define STK3310_REGFIELD(name)						    \
-	do {								    \
-		data->reg_##name =					    \
-			devm_regmap_field_alloc(&client->dev, regmap,	    \
-				stk3310_reg_field_##name);		    \
-		if (IS_ERR(data->reg_##name)) {				    \
-			dev_err(&client->dev, "reg field alloc failed.\n"); \
-			return PTR_ERR(data->reg_##name);		    \
-		}							    \
-	} while (0)
-
 static const struct reg_field stk3310_reg_field_state =
 				REG_FIELD(STK3310_REG_STATE, 0, 2);
 static const struct reg_field stk3310_reg_field_als_gain =
@@ -568,14 +557,45 @@ static int stk3310_regmap_init(struct stk3310_data *data)
 	}
 	data->regmap = regmap;
 
-	STK3310_REGFIELD(state);
-	STK3310_REGFIELD(als_gain);
-	STK3310_REGFIELD(ps_gain);
-	STK3310_REGFIELD(als_it);
-	STK3310_REGFIELD(ps_it);
-	STK3310_REGFIELD(int_ps);
-	STK3310_REGFIELD(flag_psint);
-	STK3310_REGFIELD(flag_nf);
+	data->reg_state = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_state);
+	if (IS_ERR(data->reg_state))
+		return dev_err_probe(dev, PTR_ERR(data->reg_state),
+				     "reg_state alloc failed\n");
+
+	data->reg_als_gain = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_als_gain);
+	if (IS_ERR(data->reg_als_gain))
+		return dev_err_probe(dev, PTR_ERR(data->reg_als_gain),
+				     "reg_als_gain alloc failed\n");
+
+	data->reg_ps_gain = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_ps_gain);
+	if (IS_ERR(data->reg_ps_gain))
+		return dev_err_probe(dev, PTR_ERR(data->reg_ps_gain),
+				     "reg_ps_gain alloc failed\n");
+
+	data->reg_als_it = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_als_it);
+	if (IS_ERR(data->reg_als_it))
+		return dev_err_probe(dev, PTR_ERR(data->reg_als_it),
+				     "reg_als_it alloc failed\n");
+
+	data->reg_ps_it = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_ps_it);
+	if (IS_ERR(data->reg_ps_it))
+		return dev_err_probe(dev, PTR_ERR(data->reg_ps_it),
+				     "reg_ps_it alloc failed\n");
+
+	data->reg_int_ps = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_int_ps);
+	if (IS_ERR(data->reg_int_ps))
+		return dev_err_probe(dev, PTR_ERR(data->reg_int_ps),
+				     "reg_int_ps alloc failed\n");
+
+	data->reg_flag_psint = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_flag_psint);
+	if (IS_ERR(data->reg_flag_psint))
+		return dev_err_probe(dev, PTR_ERR(data->reg_flag_psint),
+				     "reg_flag_psint alloc failed\n");
+
+	data->reg_flag_nf = devm_regmap_field_alloc(dev, regmap, stk3310_reg_field_flag_nf);
+	if (IS_ERR(data->reg_flag_nf))
+		return dev_err_probe(dev, PTR_ERR(data->reg_flag_nf),
+				     "reg_flag_nf alloc failed\n");
 
 	return 0;
 }
