@@ -29,6 +29,9 @@ properties:
       - wlan
       - wwan
 
+  reset-gpios:
+    maxItems: 1
+
   shutdown-gpios:
     maxItems: 1
 
@@ -48,4 +51,15 @@ examples:
         label = "rfkill-pcie-wlan";
         radio-type = "wlan";
         shutdown-gpios = <&gpio2 25 GPIO_ACTIVE_HIGH>;
+    };
+
+  - | # 5G WWAN modem
+    #include <dt-bindings/gpio/gpio.h>
+
+    rfkill {
+        compatible = "rfkill-gpio";
+        label = "rfkill-modem";
+        radio-type = "wwan";
+        reset-gpios = <&gpio0 5 GPIO_ACTIVE_HIGH>;
+        shutdown-gpios = <&gpio0 6 GPIO_ACTIVE_HIGH>;
     };
