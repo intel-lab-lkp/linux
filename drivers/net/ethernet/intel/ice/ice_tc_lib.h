@@ -213,7 +213,7 @@ static inline int ice_chnl_dmac_fltr_cnt(struct ice_pf *pf)
 struct ice_vsi *ice_locate_vsi_using_queue(struct ice_vsi *vsi, int queue);
 int
 ice_add_cls_flower(struct net_device *netdev, struct ice_vsi *vsi,
-		   struct flow_cls_offload *cls_flower);
+		   struct flow_cls_offload *cls_flower, bool ingress);
 int
 ice_del_cls_flower(struct ice_vsi *vsi, struct flow_cls_offload *cls_flower);
 void ice_replay_tc_fltrs(struct ice_pf *pf);
