@@ -321,6 +321,7 @@ struct suspend_stats {
 	u64 last_hw_sleep;
 	u64 total_hw_sleep;
 	u64 max_hw_sleep;
+	u64 last_sleep_energy;
 	enum suspend_stat_step failed_steps[REC_FAILED_NUM];
 };
 
@@ -368,6 +369,12 @@ void pm_report_hw_sleep_time(u64 t)
 }
 EXPORT_SYMBOL_GPL(pm_report_hw_sleep_time);
 
+void pm_report_sleep_energy(u64 t)
+{
+	suspend_stats.last_sleep_energy = t;
+}
+EXPORT_SYMBOL_GPL(pm_report_sleep_energy);
+
 void pm_report_max_hw_sleep(u64 t)
 {
 	suspend_stats.max_hw_sleep = t;
@@ -399,6 +406,7 @@ suspend_attr(fail, "%u\n");
 suspend_attr(last_hw_sleep, "%llu\n");
 suspend_attr(total_hw_sleep, "%llu\n");
 suspend_attr(max_hw_sleep, "%llu\n");
+suspend_attr(last_sleep_energy, "%llu\n");
 
 #define suspend_step_attr(_name, step)		\
 static ssize_t _name##_show(struct kobject *kobj,		\
@@ -477,6 +485,7 @@ static struct attribute *suspend_attrs[] = {
 	&last_hw_sleep.attr,
 	&total_hw_sleep.attr,
 	&max_hw_sleep.attr,
+	&last_sleep_energy.attr,
 	NULL,
 };
 
@@ -484,6 +493,7 @@ static umode_t suspend_attr_is_visible(struct kobject *kobj, struct attribute *a
 {
 	if (attr != &last_hw_sleep.attr &&
 	    attr != &total_hw_sleep.attr &&
+	    attr != &last_sleep_energy.attr &&
 	    attr != &max_hw_sleep.attr)
 		return 0444;
 
