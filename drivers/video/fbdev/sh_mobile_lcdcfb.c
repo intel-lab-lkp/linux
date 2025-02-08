@@ -1504,9 +1504,13 @@ static void
 sh_mobile_lcdc_overlay_fb_unregister(struct sh_mobile_lcdc_overlay *ovl)
 {
 	struct fb_info *info = ovl->info;
+	unsigned int i;
 
 	if (info == NULL || info->dev == NULL)
 		return;
+
+	for (i = 0; i < ARRAY_SIZE(overlay_sysfs_attrs); ++i)
+		device_remove_file(info->dev, &overlay_sysfs_attrs[i]);
 
 	unregister_framebuffer(ovl->info);
 }
@@ -1516,7 +1520,7 @@ sh_mobile_lcdc_overlay_fb_register(struct sh_mobile_lcdc_overlay *ovl)
 {
 	struct sh_mobile_lcdc_priv *lcdc = ovl->channel->lcdc;
 	struct fb_info *info = ovl->info;
-	unsigned int i;
+	unsigned int i, error = 0;
 	int ret;
 
 	if (info == NULL)
@@ -1531,9 +1535,15 @@ sh_mobile_lcdc_overlay_fb_register(struct sh_mobile_lcdc_overlay *ovl)
 		 info->var.yres, info->var.bits_per_pixel);
 
 	for (i = 0; i < ARRAY_SIZE(overlay_sysfs_attrs); ++i) {
-		ret = device_create_file(info->dev, &overlay_sysfs_attrs[i]);
-		if (ret < 0)
-			return ret;
+		error = device_create_file(info->dev, &overlay_sysfs_attrs[i]);
+		if (error)
+			break;
+	}
+
+	if (error) {
+		while (--i >= 0)
+			device_remove_file(info->dev, &overlay_sysfs_attrs[i]);
+		return error;
 	}
 
 	return 0;
