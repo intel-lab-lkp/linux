@@ -12,6 +12,7 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/amdxdna.h>
+#include <linux/slab.h>
 
 #include "amdxdna_mailbox.h"
 
