@@ -5549,7 +5549,7 @@ static bool skb_tstamp_tx_report_so_timestamping(struct sk_buff *skb,
 		return skb_shinfo(skb)->tx_flags & (sw ? SKBTX_SW_TSTAMP :
 						    SKBTX_HW_TSTAMP_NOBPF);
 	case SCM_TSTAMP_ACK:
-		return TCP_SKB_CB(skb)->txstamp_ack;
+		return TCP_SKB_CB(skb)->txstamp_ack == 1;
 	}
 
 	return false;
@@ -5568,6 +5568,9 @@ static void skb_tstamp_tx_report_bpf_timestamping(struct sk_buff *skb,
 		break;
 	case SCM_TSTAMP_SND:
 		op = sw ? BPF_SOCK_OPS_TS_SW_OPT_CB : BPF_SOCK_OPS_TS_HW_OPT_CB;
+		break;
+	case SCM_TSTAMP_ACK:
+		op = BPF_SOCK_OPS_TS_ACK_OPT_CB;
 		break;
 	default:
 		return;
