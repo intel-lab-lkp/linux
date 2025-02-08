@@ -124,6 +124,7 @@ struct acpi_battery {
 	char oem_info[MAX_STRING_LENGTH];
 	int state;
 	int power_unit;
+	int capacity_suspend;
 	unsigned long flags;
 };
 
@@ -1011,9 +1012,6 @@ static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 		return 0;
 	}
 
-	if (resume)
-		return 0;
-
 	if (!battery->update_time) {
 		result = acpi_battery_get_info(battery);
 		if (result)
@@ -1030,6 +1028,14 @@ static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 		result = sysfs_add_battery(battery);
 		if (result)
 			return result;
+	}
+
+	if (resume) {
+		if (battery->capacity_suspend > battery->capacity_now)
+			pm_report_sleep_energy(battery->capacity_suspend - battery->capacity_now);
+		else
+			pm_report_sleep_energy(0);
+		return 0;
 	}
 
 	/*
@@ -1285,6 +1291,22 @@ static void acpi_battery_remove(struct acpi_device *device)
 }
 
 /* this is needed to learn about changes made in suspended state */
+static int acpi_battery_suspend(struct device *dev)
+{
+	struct acpi_battery *battery;
+
+	if (!dev)
+		return -EINVAL;
+
+	battery = acpi_driver_data(to_acpi_device(dev));
+	if (!battery)
+		return -EINVAL;
+
+	battery->capacity_suspend = battery->capacity_now;
+
+	return 0;
+}
+
 static int acpi_battery_resume(struct device *dev)
 {
 	struct acpi_battery *battery;
@@ -1301,7 +1323,7 @@ static int acpi_battery_resume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(acpi_battery_pm, NULL, acpi_battery_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(acpi_battery_pm, acpi_battery_suspend, acpi_battery_resume);
 
 static struct acpi_driver acpi_battery_driver = {
 	.name = "battery",
