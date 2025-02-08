@@ -270,6 +270,7 @@ enum tpacpi_hkey_event_t {
 #define TPACPI_DRVR_NAME TPACPI_FILE
 #define TPACPI_DRVR_SHORTNAME "tpacpi"
 #define TPACPI_HWMON_DRVR_NAME TPACPI_NAME "_hwmon"
+#define TPACPI_PROFILE_DRVR_NAME TPACPI_NAME "_profile"
 
 #define TPACPI_NVRAM_KTHREAD_NAME "ktpacpi_nvramd"
 #define TPACPI_WORKQUEUE_NAME "ktpacpid"
@@ -962,6 +963,7 @@ static const struct proc_ops dispatch_proc_ops = {
 
 static struct platform_device *tpacpi_pdev;
 static struct platform_device *tpacpi_sensors_pdev;
+static struct platform_device *tpacpi_profile_pdev;
 static struct device *tpacpi_hwmon;
 static struct device *tpacpi_pprof;
 static struct input_dev *tpacpi_inputdev;
@@ -10646,7 +10648,8 @@ static int tpacpi_dytc_profile_init(struct ibm_init_struct *iibm)
 			"DYTC version %d: thermal mode available\n", dytc_version);
 
 	/* Create platform_profile structure and register */
-	tpacpi_pprof = devm_platform_profile_register(&tpacpi_pdev->dev, "thinkpad-acpi",
+	tpacpi_pprof = devm_platform_profile_register(&tpacpi_profile_pdev->dev,
+						      "thinkpad-acpi-profile",
 						      NULL, &dytc_profile_ops);
 	/*
 	 * If for some reason platform_profiles aren't enabled
@@ -11815,6 +11818,8 @@ static void thinkpad_acpi_module_exit(void)
 
 	if (tpacpi_sensors_pdev)
 		platform_device_unregister(tpacpi_sensors_pdev);
+	if (tpacpi_profile_pdev)
+		platform_device_unregister(tpacpi_profile_pdev);
 	if (tpacpi_pdev)
 		platform_device_unregister(tpacpi_pdev);
 	if (proc_dir)
@@ -11901,6 +11906,17 @@ static int __init thinkpad_acpi_module_init(void)
 		thinkpad_acpi_module_exit();
 		return ret;
 	}
+
+	tpacpi_profile_pdev = platform_device_register_simple(TPACPI_PROFILE_DRVR_NAME,
+							      PLATFORM_DEVID_NONE, NULL, 0);
+	if (IS_ERR(tpacpi_profile_pdev)) {
+		ret = PTR_ERR(tpacpi_profile_pdev);
+		tpacpi_profile_pdev = NULL;
+		pr_err("unable to register platform profile device\n");
+		thinkpad_acpi_module_exit();
+		return ret;
+	}
+
 	tpacpi_sensors_pdev = platform_device_register_simple(
 						TPACPI_HWMON_DRVR_NAME,
 						PLATFORM_DEVID_NONE, NULL, 0);
