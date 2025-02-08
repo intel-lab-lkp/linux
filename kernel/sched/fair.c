@@ -8762,8 +8762,17 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	 * Preempt an idle entity in favor of a non-idle entity (and don't preempt
 	 * in the inverse case).
 	 */
-	if (cse_is_idle && !pse_is_idle)
+	if (cse_is_idle && !pse_is_idle) {
+		/*
+		 * When non-idle entity preempt an idle entity,
+		 * don't give idle entity slice protection.
+		 */
+		if (se->vlag == se->deadline)
+			se->vlag = se->deadline + 1;
+
 		goto preempt;
+	}
+
 	if (cse_is_idle != pse_is_idle)
 		return;
 
