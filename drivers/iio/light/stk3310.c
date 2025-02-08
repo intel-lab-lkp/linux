@@ -237,6 +237,7 @@ static int stk3310_read_event(struct iio_dev *indio_dev,
 	__be16 buf;
 	int ret;
 	struct stk3310_data *data = iio_priv(indio_dev);
+	struct device *dev = &data->client->dev;
 
 	if (info != IIO_EV_INFO_VALUE)
 		return -EINVAL;
@@ -253,7 +254,7 @@ static int stk3310_read_event(struct iio_dev *indio_dev,
 	ret = regmap_bulk_read(data->regmap, reg, &buf, 2);
 	mutex_unlock(&data->lock);
 	if (ret < 0) {
-		dev_err(&data->client->dev, "register read failed\n");
+		dev_err(dev, "register read failed\n");
 		return ret;
 	}
 	*val = be16_to_cpu(buf);
@@ -273,7 +274,7 @@ static int stk3310_write_event(struct iio_dev *indio_dev,
 	int ret;
 	unsigned int index;
 	struct stk3310_data *data = iio_priv(indio_dev);
-	struct i2c_client *client = data->client;
+	struct device *dev = &data->client->dev;
 
 	ret = regmap_field_read(data->reg_ps_gain, &index);
 	if (ret < 0)
@@ -292,7 +293,7 @@ static int stk3310_write_event(struct iio_dev *indio_dev,
 	buf = cpu_to_be16(val);
 	ret = regmap_bulk_write(data->regmap, reg, &buf, 2);
 	if (ret < 0)
-		dev_err(&client->dev, "failed to set PS threshold!\n");
+		dev_err(dev, "failed to set PS threshold!\n");
 
 	return ret;
 }
@@ -321,13 +322,13 @@ static int stk3310_write_event_config(struct iio_dev *indio_dev,
 {
 	int ret;
 	struct stk3310_data *data = iio_priv(indio_dev);
-	struct i2c_client *client = data->client;
+	struct device *dev = &data->client->dev;
 
 	/* Set INT_PS value */
 	mutex_lock(&data->lock);
 	ret = regmap_field_write(data->reg_int_ps, state);
 	if (ret < 0)
-		dev_err(&client->dev, "failed to set interrupt mode\n");
+		dev_err(dev, "failed to set interrupt mode\n");
 	mutex_unlock(&data->lock);
 
 	return ret;
@@ -342,7 +343,7 @@ static int stk3310_read_raw(struct iio_dev *indio_dev,
 	int ret;
 	unsigned int index;
 	struct stk3310_data *data = iio_priv(indio_dev);
-	struct i2c_client *client = data->client;
+	struct device *dev = &data->client->dev;
 
 	if (chan->type != IIO_LIGHT && chan->type != IIO_PROXIMITY)
 		return -EINVAL;
@@ -357,7 +358,7 @@ static int stk3310_read_raw(struct iio_dev *indio_dev,
 		mutex_lock(&data->lock);
 		ret = regmap_bulk_read(data->regmap, reg, &buf, 2);
 		if (ret < 0) {
-			dev_err(&client->dev, "register read failed\n");
+			dev_err(dev, "register read failed\n");
 			mutex_unlock(&data->lock);
 			return ret;
 		}
@@ -398,6 +399,7 @@ static int stk3310_write_raw(struct iio_dev *indio_dev,
 	int ret;
 	int index;
 	struct stk3310_data *data = iio_priv(indio_dev);
+	struct device *dev = &data->client->dev;
 
 	if (chan->type != IIO_LIGHT && chan->type != IIO_PROXIMITY)
 		return -EINVAL;
@@ -415,8 +417,7 @@ static int stk3310_write_raw(struct iio_dev *indio_dev,
 		else
 			ret = regmap_field_write(data->reg_ps_it, index);
 		if (ret < 0)
-			dev_err(&data->client->dev,
-				"sensor configuration failed\n");
+			dev_err(dev, "sensor configuration failed\n");
 		mutex_unlock(&data->lock);
 		return ret;
 
@@ -432,8 +433,7 @@ static int stk3310_write_raw(struct iio_dev *indio_dev,
 		else
 			ret = regmap_field_write(data->reg_ps_gain, index);
 		if (ret < 0)
-			dev_err(&data->client->dev,
-				"sensor configuration failed\n");
+			dev_err(dev, "sensor configuration failed\n");
 		mutex_unlock(&data->lock);
 		return ret;
 	}
@@ -454,7 +454,7 @@ static const struct iio_info stk3310_info = {
 static int stk3310_set_state(struct stk3310_data *data, u8 state)
 {
 	int ret;
-	struct i2c_client *client = data->client;
+	struct device *dev = &data->client->dev;
 
 	/* 3-bit state; 0b100 is not supported. */
 	if (state > 7 || state == 4)
@@ -463,7 +463,7 @@ static int stk3310_set_state(struct stk3310_data *data, u8 state)
 	mutex_lock(&data->lock);
 	ret = regmap_field_write(data->reg_state, state);
 	if (ret < 0) {
-		dev_err(&client->dev, "failed to change sensor state\n");
+		dev_err(dev, "failed to change sensor state\n");
 	} else if (state != STK3310_STATE_STANDBY) {
 		/* Don't reset the 'enabled' flags if we're going in standby */
 		data->ps_enabled  = !!(state & STK3310_STATE_EN_PS);
@@ -500,7 +500,7 @@ static int stk3310_init(struct iio_dev *indio_dev)
 
 	ret = stk3310_check_chip_id(chipid);
 	if (ret < 0)
-		dev_info(&client->dev, "new unknown chip id: 0x%x\n", chipid);
+		dev_info(dev, "new unknown chip id: 0x%x\n", chipid);
 
 	state = STK3310_STATE_EN_ALS | STK3310_STATE_EN_PS;
 	ret = stk3310_set_state(data, state);
@@ -618,12 +618,13 @@ static irqreturn_t stk3310_irq_event_handler(int irq, void *private)
 
 	struct iio_dev *indio_dev = private;
 	struct stk3310_data *data = iio_priv(indio_dev);
+	struct device *dev = &data->client->dev;
 
 	/* Read FLAG_NF to figure out what threshold has been met. */
 	mutex_lock(&data->lock);
 	ret = regmap_field_read(data->reg_flag_nf, &dir);
 	if (ret < 0) {
-		dev_err(&data->client->dev, "register read failed: %d\n", ret);
+		dev_err(dev, "register read failed: %d\n", ret);
 		goto out;
 	}
 	event = IIO_UNMOD_EVENT_CODE(IIO_PROXIMITY, 1,
@@ -635,7 +636,7 @@ static irqreturn_t stk3310_irq_event_handler(int irq, void *private)
 	/* Reset the interrupt flag */
 	ret = regmap_field_write(data->reg_flag_psint, 0);
 	if (ret < 0)
-		dev_err(&data->client->dev, "failed to reset interrupts\n");
+		dev_err(dev, "failed to reset interrupts\n");
 out:
 	mutex_unlock(&data->lock);
 
@@ -674,7 +675,7 @@ static int stk3310_probe(struct i2c_client *client)
 	struct stk3310_data *data;
 	struct device *dev = &client->dev;
 
-	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
+	indio_dev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!indio_dev) {
 		dev_err(&client->dev, "iio allocation failed!\n");
 		return -ENOMEM;
@@ -684,8 +685,7 @@ static int stk3310_probe(struct i2c_client *client)
 	data->client = client;
 	i2c_set_clientdata(client, indio_dev);
 
-	device_property_read_u32(&client->dev, "proximity-near-level",
-				 &data->ps_near_level);
+	device_property_read_u32(dev, "proximity-near-level", &data->ps_near_level);
 
 	ret = devm_mutex_init(dev, &data->lock);
 	if (ret)
@@ -722,7 +722,7 @@ static int stk3310_probe(struct i2c_client *client)
 		return ret;
 
 	if (client->irq > 0) {
-		ret = devm_request_threaded_irq(&client->dev, client->irq,
+		ret = devm_request_threaded_irq(dev, client->irq,
 						stk3310_irq_handler,
 						stk3310_irq_event_handler,
 						IRQF_TRIGGER_FALLING |
