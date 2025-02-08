@@ -381,7 +381,46 @@ static const struct plda_pcie_host_ops sf_host_ops = {
 	.host_deinit = starfive_pcie_host_deinit,
 };
 
+/* IRQ handler for PCIe events */
+static irqreturn_t starfive_event_handler(int irq, void *dev_id)
+{
+	struct plda_pcie_rp *port = dev_id;
+	struct irq_data *data;
+
+	/* Retrieve IRQ data */
+	data = irq_domain_get_irq_data(port->event_domain, irq);
+
+	if (data) {
+		dev_err_ratelimited(port->dev, "Event IRQ %ld triggered\n",
+				    data->hwirq);
+	} else {
+		dev_err_ratelimited(port->dev, "Invalid event IRQ %d\n", irq);
+	}
+
+	return IRQ_HANDLED;
+}
+
+/* Request an IRQ for a specific event */
+static int starfive_request_event_irq(struct plda_pcie_rp *plda, int event_irq,
+				      int event)
+{
+	int ret;
+
+	/* Request the IRQ and associate it with the handler */
+	ret = devm_request_irq(plda->dev, event_irq, starfive_event_handler,
+			       IRQF_SHARED, "starfivepcie", plda);
+
+	if (ret) {
+		dev_err(plda->dev, "Failed to request IRQ %d: %d\n", event_irq,
+			ret);
+		return ret;
+	}
+
+	return ret;
+}
+
 static const struct plda_event stf_pcie_event = {
+	.request_event_irq = starfive_request_event_irq,
 	.intx_event = EVENT_PM_MSI_INT_INTX,
 	.msi_event  = EVENT_PM_MSI_INT_MSI
 };
