@@ -1835,7 +1835,7 @@ static void dwc3_get_properties(struct dwc3 *dwc)
 	dwc->tx_thr_num_pkt_prd = tx_thr_num_pkt_prd;
 	dwc->tx_max_burst_prd = tx_max_burst_prd;
 
-	dwc->imod_interval = 0;
+	dwc->imod_interval = 1;
 
 	dwc->tx_fifo_resize_max_num = tx_fifo_resize_max_num;
 }
