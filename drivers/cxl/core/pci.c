@@ -661,10 +661,16 @@ static void __cxl_handle_cor_ras(struct cxl_dev_state *cxlds,
 
 	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
-	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
-		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
-		trace_cxl_aer_correctable_error(cxlds->cxlmd, status);
+	if (!(status & CXL_RAS_CORRECTABLE_STATUS_MASK)) {
+		dev_err(cxl_dev, "%s():%d: CE Status is empty\n", __func__, __LINE__);
+		return;
 	}
+	writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
+
+	if (is_cxl_memdev(cxl_dev))
+		trace_cxl_aer_correctable_error(to_cxl_memdev(cxl_dev), status);
+	else if (is_cxl_port(cxl_dev))
+		trace_cxl_port_aer_correctable_error(cxl_dev, pcie_dev, status);
 }
 
 static void cxl_handle_endpoint_cor_ras(struct cxl_dev_state *cxlds)

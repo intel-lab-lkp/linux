@@ -24,6 +24,9 @@
 static pci_ers_result_t merge_result(enum pci_ers_result orig,
 				  enum pci_ers_result new)
 {
+	if (new == PCI_ERS_RESULT_PANIC)
+		return PCI_ERS_RESULT_PANIC;
+
 	if (new == PCI_ERS_RESULT_NO_AER_DRIVER)
 		return PCI_ERS_RESULT_NO_AER_DRIVER;
 
@@ -275,4 +278,59 @@ failed:
 	pci_info(bridge, "device recovery failed\n");
 
 	return status;
+}
+
+static void cxl_walk_bridge(struct pci_dev *bridge,
+			    int (*cb)(struct pci_dev *, void *),
+			    void *userdata)
+{
+	if (cb(bridge, userdata))
+		return;
+
+	if (bridge->subordinate)
+		pci_walk_bus(bridge->subordinate, cb, userdata);
+}
+
+static int cxl_report_error_detected(struct pci_dev *dev, void *data)
+{
+	const struct cxl_error_handlers *cxl_err_handler;
+	pci_ers_result_t vote, *result = data;
+	struct pci_driver *pdrv;
+
+	device_lock(&dev->dev);
+	pdrv = dev->driver;
+	if (!pdrv || !pdrv->cxl_err_handler ||
+	    !pdrv->cxl_err_handler->error_detected)
+		goto out;
+
+	cxl_err_handler = pdrv->cxl_err_handler;
+	vote = cxl_err_handler->error_detected(dev);
+	*result = merge_result(*result, vote);
+out:
+	device_unlock(&dev->dev);
+	return 0;
+}
+
+void cxl_do_recovery(struct pci_dev *dev)
+{
+	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
+	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
+
+	cxl_walk_bridge(dev, cxl_report_error_detected, &status);
+	if (status == PCI_ERS_RESULT_PANIC)
+		panic("CXL cachemem error.");
+
+	/*
+	 * If we have native control of AER, clear error status in the device
+	 * that detected the error.  If the platform retained control of AER,
+	 * it is responsible for clearing this status.  In that case, the
+	 * signaling device may not even be visible to the OS.
+	 */
+	if (host->native_aer || pcie_ports_native) {
+		pcie_clear_device_status(dev);
+		pci_aer_clear_nonfatal_status(dev);
+		pci_aer_clear_fatal_status(dev);
+	}
+
+	pci_info(dev, "CXL uncorrectable error.\n");
 }
