@@ -4002,6 +4002,12 @@ bool mlxsw_sp_port_dev_check(const struct net_device *dev)
 	return dev->netdev_ops == &mlxsw_sp_port_netdev_ops;
 }
 
+bool mlxsw_sp_foreign_dev_check(const struct net_device *dev,
+				const struct net_device *foreign_dev)
+{
+	return netif_is_vxlan(foreign_dev);
+}
+
 static int mlxsw_sp_lower_dev_walk(struct net_device *lower_dev,
 				   struct netdev_nested_priv *priv)
 {
