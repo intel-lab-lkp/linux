@@ -224,6 +224,13 @@
 				 ARMV8_PMU_PMCR_LC | ARMV8_PMU_PMCR_LP)
 
 /*
+ * Per-CPU MDCR: config reg
+ */
+#define ARMV8_PMU_MDCR_HPMN		GENMASK(4, 0)
+#define ARMV8_PMU_MDCR_HPME		BIT(7)
+#define ARMV8_PMU_MDCR_HPMD		BIT(17)
+
+/*
  * Counter bitmask layouts for overflow, enable, and interrupts
  */
 #define ARMV8_PMU_CNT_MASK_P		GENMASK(30, 0)

@@ -11,6 +11,8 @@
 
 #define PMCCNTR			__ACCESS_CP15_64(0, c9)
 
+#define HDCR			__ACCESS_CP15(c1, 4, c1, 1)
+
 #define PMCR			__ACCESS_CP15(c9,  0, c12, 0)
 #define PMCNTENSET		__ACCESS_CP15(c9,  0, c12, 1)
 #define PMCNTENCLR		__ACCESS_CP15(c9,  0, c12, 2)
@@ -214,6 +216,7 @@ static inline void write_pmuserenr(u32 val)
 
 static inline void write_pmuacr(u64 val) {}
 
+static inline bool has_vhe(void) { return false; }
 static inline void kvm_set_pmu_events(u32 set, struct perf_event_attr *attr) {}
 static inline void kvm_clr_pmu_events(u32 clr) {}
 static inline bool kvm_pmu_counter_deferred(struct perf_event_attr *attr)
@@ -275,6 +278,16 @@ static inline u64 read_pmceid1(void)
 		val |= (u64)read_sysreg(PMCEID3) << 32;
 
 	return val;
+}
+
+static inline u32 read_mdcr(void)
+{
+	return read_sysreg(HDCR);
+}
+
+static inline void write_mdcr(u32 val)
+{
+	write_sysreg(val, HDCR);
 }
 
 #endif
