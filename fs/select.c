@@ -771,8 +771,8 @@ struct sigset_argpack {
 	size_t size;
 };
 
-static inline int get_sigset_argpack(struct sigset_argpack *to,
-				     struct sigset_argpack __user *from)
+static __always_inline int get_sigset_argpack(struct sigset_argpack *to,
+		struct sigset_argpack __user *from)
 {
 	// the path is hot enough for overhead of copy_from_user() to matter
 	if (from) {
@@ -1343,8 +1343,8 @@ struct compat_sigset_argpack {
 	compat_uptr_t p;
 	compat_size_t size;
 };
-static inline int get_compat_sigset_argpack(struct compat_sigset_argpack *to,
-					    struct compat_sigset_argpack __user *from)
+static __always_inline int get_compat_sigset_argpack(struct compat_sigset_argpack *to,
+		struct compat_sigset_argpack __user *from)
 {
 	if (from) {
 		if (!user_read_access_begin(from, sizeof(*from)))
