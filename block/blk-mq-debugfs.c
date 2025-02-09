@@ -634,7 +634,7 @@ void blk_mq_debugfs_register(struct request_queue *q)
 	/* Similarly, blk_mq_init_hctx() couldn't do this previously. */
 	queue_for_each_hw_ctx(q, hctx, i) {
 		blk_mq_debugfs_register_hctx(q, hctx);
-		if (q->elevator && !hctx->sched_debugfs_dir)
+		if (q->elevator)
 			blk_mq_debugfs_register_sched_hctx(q, hctx);
 	}
 
@@ -655,6 +655,19 @@ static __must_check struct dentry *blk_mq_get_hctx_entry(
 
 	snprintf(name, sizeof(name), "hctx%u", hctx->queue_num);
 	return debugfs_lookup(name, hctx->queue->debugfs_dir);
+}
+
+static __must_check struct dentry *blk_mq_get_hctx_sched_entry(
+		struct blk_mq_hw_ctx *hctx)
+{
+	struct dentry *hctx_dir = blk_mq_get_hctx_entry(hctx);
+	struct dentry *sched_dir = NULL;
+
+	if (hctx_dir) {
+		sched_dir = debugfs_lookup("sched", hctx_dir);
+		dput(hctx_dir);
+	}
+	return sched_dir;
 }
 
 static void blk_mq_debugfs_register_ctx(struct blk_mq_hw_ctx *hctx,
@@ -708,7 +721,6 @@ void blk_mq_debugfs_unregister_hctx(struct blk_mq_hw_ctx *hctx)
 		return;
 
 	debugfs_remove_recursive(hctx_dir);
-	hctx->sched_debugfs_dir = NULL;
 	dput(hctx_dir);
 }
 
@@ -805,6 +817,7 @@ void blk_mq_debugfs_register_sched_hctx(struct request_queue *q,
 {
 	struct dentry *hctx_dir = blk_mq_get_hctx_entry(hctx);
 	struct elevator_type *e = q->elevator->type;
+	struct dentry *sched_dir;
 
 	lockdep_assert_held(&q->debugfs_mutex);
 
@@ -819,19 +832,23 @@ void blk_mq_debugfs_register_sched_hctx(struct request_queue *q,
 	if (!e->hctx_debugfs_attrs)
 		goto exit;
 
-	hctx->sched_debugfs_dir = debugfs_create_dir("sched", hctx_dir);
-	debugfs_create_files(hctx->sched_debugfs_dir, hctx,
-			     e->hctx_debugfs_attrs);
+	sched_dir = debugfs_create_dir("sched", hctx_dir);
+	debugfs_create_files(sched_dir, hctx, e->hctx_debugfs_attrs);
 exit:
 	dput(hctx_dir);
 }
 
 void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 {
+	struct dentry *sched_dir;
+
 	lockdep_assert_held(&hctx->queue->debugfs_mutex);
 
 	if (!hctx->queue->debugfs_dir)
 		return;
-	debugfs_remove_recursive(hctx->sched_debugfs_dir);
-	hctx->sched_debugfs_dir = NULL;
+	sched_dir = blk_mq_get_hctx_sched_entry(hctx);
+	if (sched_dir) {
+		debugfs_remove_recursive(sched_dir);
+		dput(sched_dir);
+	}
 }

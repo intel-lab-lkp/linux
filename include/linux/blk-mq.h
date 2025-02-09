@@ -426,11 +426,6 @@ struct blk_mq_hw_ctx {
 	/** @kobj: Kernel object for sysfs. */
 	struct kobject		kobj;
 
-#ifdef CONFIG_BLK_DEBUG_FS
-	/** @sched_debugfs_dir:	debugfs directory for the scheduler. */
-	struct dentry		*sched_debugfs_dir;
-#endif
-
 	/**
 	 * @hctx_list: if this hctx is not in use, this is an entry in
 	 * q->unused_hctx_list.
