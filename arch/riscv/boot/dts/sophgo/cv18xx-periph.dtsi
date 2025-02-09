@@ -309,5 +309,21 @@
 			snps,data-width = <4>;
 			status = "disabled";
 		};
+
+		rtcsys_ctrl: syscon@5025000 {
+			compatible = "sophgo,cv1800-rtcsys-ctrl", "syscon";
+			reg = <0x05025000 0x1000>;
+		};
+
+		rtcsys_core: syscon@5026000 {
+			compatible = "sophgo,cv1800-rtcsys-core", "syscon";
+			reg = <0x05026000 0x1000>;
+		};
+
+		soc-reset {
+			compatible = "sophgo,cv1800-reset";
+			sophgo,rtcsys-ctrl = <&rtcsys_ctrl>;
+			sophgo,rtcsys-core = <&rtcsys_core>;
+		};
 	};
 };
