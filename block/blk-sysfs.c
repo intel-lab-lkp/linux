@@ -744,10 +744,8 @@ static void blk_debugfs_remove(struct gendisk *disk)
 {
 	struct request_queue *q = disk->queue;
 
-	mutex_lock(&q->debugfs_mutex);
 	blk_trace_shutdown(q);
 	debugfs_lookup_and_remove(disk->disk_name, blk_debugfs_root);
-	mutex_unlock(&q->debugfs_mutex);
 }
 
 /**
@@ -769,14 +767,12 @@ int blk_register_queue(struct gendisk *disk)
 		if (ret)
 			goto out_put_queue_kobj;
 	}
-	mutex_lock(&q->sysfs_lock);
 
-	mutex_lock(&q->debugfs_mutex);
 	debugfs_create_dir(disk->disk_name, blk_debugfs_root);
 	if (queue_is_mq(q))
 		blk_mq_debugfs_register(q);
-	mutex_unlock(&q->debugfs_mutex);
 
+	mutex_lock(&q->sysfs_lock);
 	ret = disk_register_independent_access_ranges(disk);
 	if (ret)
 		goto out_debugfs_remove;

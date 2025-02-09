@@ -770,8 +770,6 @@ void blk_mq_debugfs_register_sched(struct request_queue *q)
 	struct elevator_type *e = q->elevator->type;
 	struct dentry *sched_dir;
 
-	lockdep_assert_held(&q->debugfs_mutex);
-
 	/*
 	 * If the parent directory has not been created yet, return, we will be
 	 * called again later on and the directory/files will be created then.
@@ -792,8 +790,6 @@ exit:
 void blk_mq_debugfs_unregister_sched(struct request_queue *q)
 {
 	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
-
-	lockdep_assert_held(&q->debugfs_mutex);
 
 	if (IS_ERR_OR_NULL(queue_dir))
 		return;
@@ -832,8 +828,6 @@ void blk_mq_debugfs_unregister_rqos(struct rq_qos *rqos)
 	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
 	struct dentry *rqos_top;
 
-	lockdep_assert_held(&q->debugfs_mutex);
-
 	if (IS_ERR_OR_NULL(queue_dir))
 		return;
 
@@ -853,8 +847,6 @@ void blk_mq_debugfs_register_rqos(struct rq_qos *rqos)
 	struct dentry *rqos_top;
 	struct dentry *rqos_dir;
 
-	lockdep_assert_held(&q->debugfs_mutex);
-
 	if (!rqos->ops->debugfs_attrs)
 		return;
 
@@ -873,8 +865,6 @@ void blk_mq_debugfs_register_sched_hctx(struct request_queue *q,
 	struct dentry *hctx_dir = blk_mq_get_hctx_entry(hctx);
 	struct elevator_type *e = q->elevator->type;
 	struct dentry *sched_dir;
-
-	lockdep_assert_held(&q->debugfs_mutex);
 
 	/*
 	 * If the parent debugfs directory has not been created yet, return;
@@ -896,8 +886,6 @@ exit:
 void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 {
 	struct dentry *sched_dir;
-
-	lockdep_assert_held(&hctx->queue->debugfs_mutex);
 
 	sched_dir = blk_mq_get_hctx_sched_entry(hctx);
 	if (sched_dir) {
