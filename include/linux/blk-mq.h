@@ -427,11 +427,6 @@ struct blk_mq_hw_ctx {
 	struct kobject		kobj;
 
 #ifdef CONFIG_BLK_DEBUG_FS
-	/**
-	 * @debugfs_dir: debugfs directory for this hardware queue. Named
-	 * as cpu<cpu_number>.
-	 */
-	struct dentry		*debugfs_dir;
 	/** @sched_debugfs_dir:	debugfs directory for the scheduler. */
 	struct dentry		*sched_debugfs_dir;
 #endif
