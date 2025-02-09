@@ -786,14 +786,27 @@ static const char *rq_qos_id_to_name(enum rq_qos_id id)
 	return "unknown";
 }
 
+static __must_check struct dentry *blk_mq_debugfs_get_rqos_top(
+		struct request_queue *q)
+{
+	return debugfs_lookup("rqos", q->debugfs_dir);
+}
+
 void blk_mq_debugfs_unregister_rqos(struct rq_qos *rqos)
 {
-	lockdep_assert_held(&rqos->disk->queue->debugfs_mutex);
+	struct request_queue *q = rqos->disk->queue;
+	struct dentry *rqos_top;
 
-	if (!rqos->disk->queue->debugfs_dir)
+	lockdep_assert_held(&q->debugfs_mutex);
+
+	if (!q->debugfs_dir)
 		return;
-	debugfs_remove_recursive(rqos->debugfs_dir);
-	rqos->debugfs_dir = NULL;
+
+	rqos_top = blk_mq_debugfs_get_rqos_top(q);
+	if (IS_ERR_OR_NULL(rqos_top))
+		return;
+	debugfs_lookup_and_remove(rq_qos_id_to_name(rqos->id), rqos_top);
+	dput(rqos_top);
 }
 
 void blk_mq_debugfs_register_rqos(struct rq_qos *rqos)
@@ -801,19 +814,20 @@ void blk_mq_debugfs_register_rqos(struct rq_qos *rqos)
 	struct request_queue *q = rqos->disk->queue;
 	const char *dir_name = rq_qos_id_to_name(rqos->id);
 	struct dentry *rqos_top;
+	struct dentry *rqos_dir;
 
 	lockdep_assert_held(&q->debugfs_mutex);
 
-	if (rqos->debugfs_dir || !rqos->ops->debugfs_attrs)
+	if (!rqos->ops->debugfs_attrs)
 		return;
 
-	rqos_top = debugfs_lookup("rqos", q->debugfs_dir);
+	rqos_top = blk_mq_debugfs_get_rqos_top(q);
 	if (IS_ERR_OR_NULL(rqos_top))
 		return;
 
-	rqos->debugfs_dir = debugfs_create_dir(dir_name, rqos_top);
+	rqos_dir = debugfs_create_dir(dir_name, rqos_top);
 	dput(rqos_top);
-	debugfs_create_files(rqos->debugfs_dir, rqos, rqos->ops->debugfs_attrs);
+	debugfs_create_files(rqos_dir, rqos, rqos->ops->debugfs_attrs);
 }
 
 void blk_mq_debugfs_register_sched_hctx(struct request_queue *q,

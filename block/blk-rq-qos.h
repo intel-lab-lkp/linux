@@ -29,9 +29,6 @@ struct rq_qos {
 	struct gendisk *disk;
 	enum rq_qos_id id;
 	struct rq_qos *next;
-#ifdef CONFIG_BLK_DEBUG_FS
-	struct dentry *debugfs_dir;
-#endif
 };
 
 struct rq_qos_ops {
