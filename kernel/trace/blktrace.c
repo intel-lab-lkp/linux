@@ -311,17 +311,31 @@ record_it:
 	local_irq_restore(flags);
 }
 
+static struct dentry *blk_get_queue_debugfs_dir(struct request_queue *q)
+{
+	struct dentry *dir = NULL;;
+
+	if (q->disk)
+		dir = debugfs_lookup(q->disk->disk_name, blk_debugfs_root);
+	return dir;
+}
+
 static void blk_trace_free(struct request_queue *q, struct blk_trace *bt)
 {
 	relay_close(bt->rchan);
 
 	/*
 	 * If 'bt->dir' is not set, then both 'dropped' and 'msg' are created
-	 * under 'q->debugfs_dir', thus lookup and remove them.
+	 * under block queue debugfs dir, thus lookup and remove them.
 	 */
 	if (!bt->dir) {
-		debugfs_lookup_and_remove("dropped", q->debugfs_dir);
-		debugfs_lookup_and_remove("msg", q->debugfs_dir);
+		struct dentry *dir = blk_get_queue_debugfs_dir(q);
+
+		if (!IS_ERR_OR_NULL(dir)) {
+			debugfs_lookup_and_remove("dropped", dir);
+			debugfs_lookup_and_remove("msg", dir);
+			dput(dir);
+		}
 	} else {
 		debugfs_remove(bt->dir);
 	}
@@ -517,6 +531,7 @@ static int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 {
 	struct blk_trace *bt = NULL;
 	struct dentry *dir = NULL;
+	struct dentry *dir_to_drop = NULL;
 	int ret;
 
 	lockdep_assert_held(&q->debugfs_mutex);
@@ -563,7 +578,7 @@ static int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 	 * directory that will be removed once the trace ends.
 	 */
 	if (bdev && !bdev_is_partition(bdev))
-		dir = q->debugfs_dir;
+		dir_to_drop = dir = blk_get_queue_debugfs_dir(q);
 	else
 		bt->dir = dir = debugfs_create_dir(buts->name, blk_debugfs_root);
 
@@ -614,6 +629,8 @@ static int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 err:
 	if (ret)
 		blk_trace_free(q, bt);
+	if (!IS_ERR_OR_NULL(dir_to_drop))
+		dput(dir_to_drop);
 	return ret;
 }
 

@@ -616,15 +616,25 @@ static void debugfs_create_files(struct dentry *parent, void *data,
 				    (void *)attr, &blk_mq_debugfs_fops);
 }
 
+static __must_check struct dentry *blk_mq_get_queue_entry(
+		struct request_queue *q)
+{
+	return debugfs_lookup(q->disk->disk_name, blk_debugfs_root);
+}
+
 void blk_mq_debugfs_register(struct request_queue *q)
 {
+	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
 	struct blk_mq_hw_ctx *hctx;
 	unsigned long i;
 
-	debugfs_create_files(q->debugfs_dir, q, blk_mq_debugfs_queue_attrs);
+	if (IS_ERR_OR_NULL(queue_dir))
+		return;
+
+	debugfs_create_files(queue_dir, q, blk_mq_debugfs_queue_attrs);
 
 	/*
-	 * blk_mq_init_sched() attempted to do this already, but q->debugfs_dir
+	 * blk_mq_init_sched() attempted to do this already, but queue debugfs_dir
 	 * didn't exist yet (because we don't know what to name the directory
 	 * until the queue is registered to a gendisk).
 	 */
@@ -638,7 +648,7 @@ void blk_mq_debugfs_register(struct request_queue *q)
 			blk_mq_debugfs_register_sched_hctx(q, hctx);
 	}
 
-	debugfs_create_dir("rqos", q->debugfs_dir);
+	debugfs_create_dir("rqos", queue_dir);
 
 	if (q->rq_qos) {
 		struct rq_qos *rqos = q->rq_qos;
@@ -648,15 +658,25 @@ void blk_mq_debugfs_register(struct request_queue *q)
 			rqos = rqos->next;
 		}
 	}
+
+	dput(queue_dir);
 }
 
 static __must_check struct dentry *blk_mq_get_hctx_entry(
 		struct blk_mq_hw_ctx *hctx)
 {
+	struct dentry *queue_dir = blk_mq_get_queue_entry(hctx->queue);
+	struct dentry *dir;
 	char name[20];
 
+	if (IS_ERR_OR_NULL(queue_dir))
+		return NULL;
+
 	snprintf(name, sizeof(name), "hctx%u", hctx->queue_num);
-	return debugfs_lookup(name, hctx->queue->debugfs_dir);
+	dir = debugfs_lookup(name, queue_dir);
+	dput(queue_dir);
+
+	return dir;
 }
 
 static __must_check struct dentry *blk_mq_get_hctx_sched_entry(
@@ -692,31 +712,31 @@ static void blk_mq_debugfs_register_ctx(struct blk_mq_hw_ctx *hctx,
 void blk_mq_debugfs_register_hctx(struct request_queue *q,
 				  struct blk_mq_hw_ctx *hctx)
 {
+	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
 	struct dentry *hctx_dir;
 	struct blk_mq_ctx *ctx;
 	char name[20];
 	int i;
 
-	if (!q->debugfs_dir)
+	if (IS_ERR_OR_NULL(queue_dir))
 		return;
 
 	snprintf(name, sizeof(name), "hctx%u", hctx->queue_num);
-	hctx_dir = debugfs_create_dir(name, q->debugfs_dir);
+	hctx_dir = debugfs_create_dir(name, queue_dir);
 	if (IS_ERR_OR_NULL(hctx_dir))
-		return;
+		goto exit;
 
 	debugfs_create_files(hctx_dir, hctx, blk_mq_debugfs_hctx_attrs);
 
 	hctx_for_each_ctx(hctx, ctx, i)
 		blk_mq_debugfs_register_ctx(hctx, ctx);
+exit:
+	dput(queue_dir);
 }
 
 void blk_mq_debugfs_unregister_hctx(struct blk_mq_hw_ctx *hctx)
 {
 	struct dentry *hctx_dir;
-
-	if (!hctx->queue->debugfs_dir)
-		return;
 
 	hctx_dir = blk_mq_get_hctx_entry(hctx);
 	if (IS_ERR_OR_NULL(hctx_dir))
@@ -746,6 +766,7 @@ void blk_mq_debugfs_unregister_hctxs(struct request_queue *q)
 
 void blk_mq_debugfs_register_sched(struct request_queue *q)
 {
+	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
 	struct elevator_type *e = q->elevator->type;
 	struct dentry *sched_dir;
 
@@ -755,22 +776,29 @@ void blk_mq_debugfs_register_sched(struct request_queue *q)
 	 * If the parent directory has not been created yet, return, we will be
 	 * called again later on and the directory/files will be created then.
 	 */
-	if (!q->debugfs_dir)
+	if (IS_ERR_OR_NULL(queue_dir))
 		return;
 
 	if (!e->queue_debugfs_attrs)
-		return;
+		goto exit;
 
-	sched_dir = debugfs_create_dir("sched", q->debugfs_dir);
+	sched_dir = debugfs_create_dir("sched", queue_dir);
 
 	debugfs_create_files(sched_dir, q, e->queue_debugfs_attrs);
+exit:
+	dput(queue_dir);
 }
 
 void blk_mq_debugfs_unregister_sched(struct request_queue *q)
 {
+	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
+
 	lockdep_assert_held(&q->debugfs_mutex);
 
-	debugfs_lookup_and_remove("sched", q->debugfs_dir);
+	if (IS_ERR_OR_NULL(queue_dir))
+		return;
+	debugfs_lookup_and_remove("sched", queue_dir);
+	dput(queue_dir);
 }
 
 static const char *rq_qos_id_to_name(enum rq_qos_id id)
@@ -789,24 +817,33 @@ static const char *rq_qos_id_to_name(enum rq_qos_id id)
 static __must_check struct dentry *blk_mq_debugfs_get_rqos_top(
 		struct request_queue *q)
 {
-	return debugfs_lookup("rqos", q->debugfs_dir);
+	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
+	struct dentry *dir = NULL;
+
+	if (queue_dir)
+		dir = debugfs_lookup("rqos", queue_dir);
+	dput(queue_dir);
+	return dir;
 }
 
 void blk_mq_debugfs_unregister_rqos(struct rq_qos *rqos)
 {
 	struct request_queue *q = rqos->disk->queue;
+	struct dentry *queue_dir = blk_mq_get_queue_entry(q);
 	struct dentry *rqos_top;
 
 	lockdep_assert_held(&q->debugfs_mutex);
 
-	if (!q->debugfs_dir)
+	if (IS_ERR_OR_NULL(queue_dir))
 		return;
 
 	rqos_top = blk_mq_debugfs_get_rqos_top(q);
 	if (IS_ERR_OR_NULL(rqos_top))
-		return;
+		goto exit;
 	debugfs_lookup_and_remove(rq_qos_id_to_name(rqos->id), rqos_top);
 	dput(rqos_top);
+exit:
+	dput(queue_dir);
 }
 
 void blk_mq_debugfs_register_rqos(struct rq_qos *rqos)
@@ -862,8 +899,6 @@ void blk_mq_debugfs_unregister_sched_hctx(struct blk_mq_hw_ctx *hctx)
 
 	lockdep_assert_held(&hctx->queue->debugfs_mutex);
 
-	if (!hctx->queue->debugfs_dir)
-		return;
 	sched_dir = blk_mq_get_hctx_sched_entry(hctx);
 	if (sched_dir) {
 		debugfs_remove_recursive(sched_dir);

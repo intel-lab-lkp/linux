@@ -746,8 +746,7 @@ static void blk_debugfs_remove(struct gendisk *disk)
 
 	mutex_lock(&q->debugfs_mutex);
 	blk_trace_shutdown(q);
-	debugfs_remove_recursive(q->debugfs_dir);
-	q->debugfs_dir = NULL;
+	debugfs_lookup_and_remove(disk->disk_name, blk_debugfs_root);
 	mutex_unlock(&q->debugfs_mutex);
 }
 
@@ -773,7 +772,7 @@ int blk_register_queue(struct gendisk *disk)
 	mutex_lock(&q->sysfs_lock);
 
 	mutex_lock(&q->debugfs_mutex);
-	q->debugfs_dir = debugfs_create_dir(disk->disk_name, blk_debugfs_root);
+	debugfs_create_dir(disk->disk_name, blk_debugfs_root);
 	if (queue_is_mq(q))
 		blk_mq_debugfs_register(q);
 	mutex_unlock(&q->debugfs_mutex);

@@ -597,7 +597,6 @@ struct request_queue {
 	struct blk_mq_tag_set	*tag_set;
 	struct list_head	tag_set_list;
 
-	struct dentry		*debugfs_dir;
 	/*
 	 * Serializes all debugfs metadata operations using the above dentries.
 	 */
