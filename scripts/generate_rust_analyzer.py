@@ -57,25 +57,33 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         crates_indexes[display_name] = len(crates)
         crates.append(crate)
 
-    # First, the ones in `rust/` since they are a bit special.
-    append_crate(
-        "core",
-        sysroot_src / "core" / "src" / "lib.rs",
-        [],
-        cfg=crates_cfgs.get("core", []),
-        is_workspace_member=False,
-    )
-
     append_crate(
         "compiler_builtins",
         srctree / "rust" / "compiler_builtins.rs",
         [],
     )
 
+    # NB: sysroot crates reexport items from one another so setting up our transitive dependencies
+    # here is important for ensuring that rust-analyzer can resolve symbols. The sources of truth
+    # for this dependency graph are `(sysroot_src / crate / "Cargo.toml" for crate in crates)`.
+    for crate, deps in [
+        ("core", []),
+        ("alloc", ["compiler_builtins", "core"]),
+        ("std", ["alloc", "compiler_builtins", "core"]),
+        ("proc_macro", ["core", "std"]),
+    ]:
+        append_crate(
+            crate,
+            sysroot_src / crate / "src" / "lib.rs",
+            deps=deps,
+            cfg=crates_cfgs.get(crate, []),
+            is_workspace_member=False,
+        )
+
     append_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
-        [],
+        ["std", "proc_macro"],
         is_proc_macro=True,
     )
 
