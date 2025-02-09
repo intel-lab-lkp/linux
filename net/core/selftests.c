@@ -310,15 +310,16 @@ static int net_test_phy_loopback_disable(struct net_device *ndev)
 	return phy_loopback(ndev->phydev, false, 0);
 }
 
-static int net_test_phy_loopback_udp(struct net_device *ndev)
+int net_test_phy_loopback_udp(struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
 	return __net_test_loopback(ndev, &attr);
 }
+EXPORT_SYMBOL_GPL(net_test_phy_loopback_udp);
 
-static int net_test_phy_loopback_udp_mtu(struct net_device *ndev)
+int net_test_phy_loopback_udp_mtu(struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
@@ -326,8 +327,9 @@ static int net_test_phy_loopback_udp_mtu(struct net_device *ndev)
 	attr.max_size = ndev->mtu;
 	return __net_test_loopback(ndev, &attr);
 }
+EXPORT_SYMBOL_GPL(net_test_phy_loopback_udp_mtu);
 
-static int net_test_phy_loopback_tcp(struct net_device *ndev)
+int net_test_phy_loopback_tcp(struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
@@ -335,6 +337,7 @@ static int net_test_phy_loopback_tcp(struct net_device *ndev)
 	attr.tcp = true;
 	return __net_test_loopback(ndev, &attr);
 }
+EXPORT_SYMBOL_GPL(net_test_phy_loopback_tcp);
 
 static const struct net_test {
 	char name[ETH_GSTRING_LEN];
