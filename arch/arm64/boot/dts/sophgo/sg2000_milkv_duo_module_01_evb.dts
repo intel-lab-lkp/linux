@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+
+/dts-v1/;
+
+#include "sg2000_milkv_duo_module_01.dtsi"
+
+/ {
+	model = "Milk-V Duo Module 01 Evaluation Board";
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+};
+
+&sdhci0 {
+	/delete-property/ status;
+	bus-width = <4>;
+	no-1-8-v;
+	no-mmc;
+	no-sdio;
+	disable-wp;
+	pinctrl-0 = <&sdhci0_cfg>;
+	pinctrl-names = "default";
+};
+
+&uart0 {
+	/delete-property/ status;
+	pinctrl-0 = <&uart0_cfg>;
+	pinctrl-names = "default";
+};
