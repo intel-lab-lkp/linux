@@ -307,6 +307,18 @@ config ARCH_INTEL_SOCFPGA
 	  Stratix 10 (ex. Altera), Stratix10 Software Virtual Platform,
 	  Agilex and eASIC N5X.
 
+config ARCH_SOPHGO
+	bool "Sophgo SoCs"
+	select CLK_SOPHGO_CV1800
+	select MFD_SYSCON
+	select RESET_CONTROLLER
+	help
+	  This enables support for Sophgo SoC platform hardware, such as
+	  SG2000.
+
+	  Enable this option if you are going to boot your dual-ARCH SoC in
+	  ARM64 mode.
+
 config ARCH_STM32
 	bool "STMicroelectronics STM32 SoC Family"
 	select GPIOLIB
