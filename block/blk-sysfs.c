@@ -748,7 +748,6 @@ static void blk_debugfs_remove(struct gendisk *disk)
 	blk_trace_shutdown(q);
 	debugfs_remove_recursive(q->debugfs_dir);
 	q->debugfs_dir = NULL;
-	q->rqos_debugfs_dir = NULL;
 	mutex_unlock(&q->debugfs_mutex);
 }
 
