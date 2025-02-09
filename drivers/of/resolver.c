@@ -256,6 +256,7 @@ int of_resolve_phandles(struct device_node *overlay)
 	phandle phandle, phandle_delta;
 	int err;
 
+	local_fixups = NULL;
 	tree_symbols = NULL;
 
 	if (!overlay) {
@@ -332,6 +333,7 @@ out:
 	if (err)
 		pr_err("overlay phandle fixup failed: %d\n", err);
 	of_node_put(tree_symbols);
+	of_node_put(local_fixups);
 
 	return err;
 }
