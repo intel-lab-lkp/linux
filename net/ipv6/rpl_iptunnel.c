@@ -208,6 +208,12 @@ static int rpl_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	struct rpl_lwt *rlwt;
 	int err;
 
+	/* Don't re-apply the transformation when rpl_input() already did it */
+	if (skb_is_redirected(skb)) {
+		skb_reset_redirect(skb);
+		return orig_dst->lwtstate->orig_output(net, sk, skb);
+	}
+
 	rlwt = rpl_lwt_lwtunnel(orig_dst->lwtstate);
 
 	local_bh_disable();
@@ -311,9 +317,13 @@ static int rpl_input(struct sk_buff *skb)
 		skb_dst_set(skb, dst);
 	}
 
-	/* avoid a lwtunnel_input() loop when dst_entry is the same */
-	if (lwtst == dst->lwtstate)
+	/* avoid a lwtunnel_input() loop when dst_entry is the same, and make
+	 * sure rpl_output() does not apply the transformation one more time
+	 */
+	if (lwtst == dst->lwtstate) {
+		skb_set_redirected_noclear(skb, true);
 		return dst->lwtstate->orig_input(skb);
+	}
 
 	return dst_input(skb);
 
