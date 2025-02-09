@@ -75,6 +75,18 @@ config POWER_RESET_BRCMSTB
 	  Say Y here if you have a Broadcom STB board and you wish
 	  to have restart support.
 
+config POWER_RESET_CV18XX
+	bool "Cvitek CV18XX/Sophgo SG2000 reset driver"
+	depends on ARCH_SOPHGO || COMPILE_TEST
+	depends on MFD_SYSCON
+	default ARCH_SOPHGO
+	help
+	  This driver provides restart support for Cvitek CV18xx and
+	  Sophgo SG2000 SoCs.
+
+	  Say Y here if you have a Cvitek CV18xx or Sophgo SG2000 SoC and
+	  you wish to have restart support.
+
 config POWER_RESET_EP93XX
 	bool "Cirrus EP93XX reset driver" if COMPILE_TEST
 	depends on MFD_SYSCON
