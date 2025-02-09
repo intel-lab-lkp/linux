@@ -10,8 +10,9 @@ import os
 import pathlib
 import subprocess
 import sys
+import typing as T
 
-def args_crates_cfgs(cfgs):
+def args_crates_cfgs(cfgs: T.Iterable[str]) -> dict[str, list[str]]:
     crates_cfgs = {}
     for cfg in cfgs:
         crate, vals = cfg.split("=", 1)
@@ -19,7 +20,34 @@ def args_crates_cfgs(cfgs):
 
     return crates_cfgs
 
-def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
+class Dependency(T.TypedDict):
+    crate: int
+    name: str
+
+class Source(T.TypedDict):
+    include_dirs: list[str]
+    exclude_dirs: list[str]
+
+class Crate(T.TypedDict):
+    display_name: str
+    root_module: str
+    is_workspace_member: bool
+    is_proc_macro: bool
+    deps: list[Dependency]
+    cfg: list[str]
+    edition: T.Literal["2021"]
+    env: dict[str, str]
+    # `NotRequired` would be better but was added in 3.11.
+    proc_macro_dylib_path: T.Optional[str]
+    source: T.Optional[Source]
+
+def generate_crates(
+    srctree: pathlib.Path,
+    objtree: pathlib.Path,
+    sysroot_src: pathlib.Path,
+    external_src: pathlib.Path,
+    cfgs: list[str],
+) -> list[Crate]:
     # Generate the configuration list.
     cfg = []
     with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
@@ -31,31 +59,40 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
     # Now fill the crates list -- dependencies need to come first.
     #
     # Avoid O(n^2) iterations by keeping a map of indexes.
-    crates = []
-    crates_indexes = {}
+    crates: list[Crate] = []
+    crates_indexes: dict[str, int] = {}
     crates_cfgs = args_crates_cfgs(cfgs)
 
-    def append_crate(display_name, root_module, deps, cfg=[], is_workspace_member=True, is_proc_macro=False):
-        crate = {
-            "display_name": display_name,
-            "root_module": str(root_module),
-            "is_workspace_member": is_workspace_member,
-            "is_proc_macro": is_proc_macro,
-            "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
-            "cfg": cfg,
-            "edition": "2021",
-            "env": {
-                "RUST_MODFILE": "This is only for rust-analyzer"
-            }
-        }
+    def append_crate(
+        display_name: str,
+        root_module: pathlib.Path,
+        deps: list[str],
+        cfg: list[str] = [],
+        is_workspace_member: bool = True,
+        is_proc_macro: bool = False,
+    ) -> None:
+        proc_macro_dylib_path = None
         if is_proc_macro:
             proc_macro_dylib_name = subprocess.check_output(
                 [os.environ["RUSTC"], "--print", "file-names", "--crate-name", display_name, "--crate-type", "proc-macro", "-"],
                 stdin=subprocess.DEVNULL,
             ).decode('utf-8').strip()
-            crate["proc_macro_dylib_path"] = f"{objtree}/rust/{proc_macro_dylib_name}"
+            proc_macro_dylib_path = f"{objtree}/rust/{proc_macro_dylib_name}"
         crates_indexes[display_name] = len(crates)
-        crates.append(crate)
+        crates.append(
+            {
+                "display_name": display_name,
+                "root_module": str(root_module),
+                "is_workspace_member": is_workspace_member,
+                "is_proc_macro": is_proc_macro,
+                "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
+                "cfg": cfg,
+                "edition": "2021",
+                "env": {"RUST_MODFILE": "This is only for rust-analyzer"},
+                "proc_macro_dylib_path": proc_macro_dylib_path,
+                "source": None,
+            }
+        )
 
     # First, the ones in `rust/` since they are a bit special.
     append_crate(
@@ -107,7 +144,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
         "exclude_dirs": [],
     }
 
-    def is_root_crate(build_file, target):
+    def is_root_crate(build_file: pathlib.Path, target: str) -> bool:
         try:
             return f"{target}.o" in open(build_file).read()
         except FileNotFoundError:
@@ -116,7 +153,9 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
     # Then, the rest outside of `rust/`.
     #
     # We explicitly mention the top-level folders we want to cover.
-    extra_dirs = map(lambda dir: srctree / dir, ("samples", "drivers"))
+    extra_dirs: T.Iterable[pathlib.Path] = map(
+        lambda dir: srctree / dir, ("samples", "drivers")
+    )
     if external_src is not None:
         extra_dirs = [external_src]
     for folder in extra_dirs:
@@ -139,7 +178,7 @@ def generate_crates(srctree, objtree, sysroot_src, external_src, cfgs):
 
     return crates
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--verbose', '-v', action='store_true')
     parser.add_argument('--cfgs', action='append', default=[])
