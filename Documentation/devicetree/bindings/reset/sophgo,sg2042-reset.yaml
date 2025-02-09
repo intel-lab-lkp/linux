@@ -11,7 +11,9 @@ maintainers:
 
 properties:
   compatible:
-    const: sophgo,sg2042-reset
+    enum:
+      - sophgo,cv1800b-reset
+      - sophgo,sg2042-reset
 
   reg:
     maxItems: 1
