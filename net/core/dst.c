@@ -286,7 +286,8 @@ struct metadata_dst *metadata_dst_alloc(u8 optslen, enum metadata_type type,
 {
 	struct metadata_dst *md_dst;
 
-	md_dst = kmalloc(sizeof(*md_dst) + optslen, flags);
+	md_dst = kmalloc(struct_size(md_dst, u.tun_info.options, optslen),
+			 flags);
 	if (!md_dst)
 		return NULL;
 

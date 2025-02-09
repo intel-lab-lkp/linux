@@ -620,9 +620,7 @@ bool mlx5e_tc_tun_encap_info_equal_options(struct mlx5e_encap_key *a,
 	b_info = container_of(b->ip_tun_key, struct ip_tunnel_info, key);
 
 	return a_info->options_len == b_info->options_len &&
-	       !memcmp(ip_tunnel_info_opts(a_info),
-		       ip_tunnel_info_opts(b_info),
-		       a_info->options_len);
+	       !memcmp(a_info->options, b_info->options, a_info->options_len);
 }
 
 static int cmp_decap_info(struct mlx5e_decap_key *a,

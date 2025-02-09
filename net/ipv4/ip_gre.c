@@ -338,7 +338,7 @@ static int erspan_rcv(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 			     skb_network_header_len(skb);
 			pkt_md = (struct erspan_metadata *)(gh + gre_hdr_len +
 							    sizeof(*ershdr));
-			md = ip_tunnel_info_opts(&tun_dst->u.tun_info);
+			md = (struct erspan_metadata *)tun_dst->u.tun_info.options;
 			md->version = ver;
 			md2 = &md->u.md2;
 			memcpy(md2, pkt_md, ver == 1 ? ERSPAN_V1_MDSIZE :
@@ -560,7 +560,7 @@ static void erspan_fb_xmit(struct sk_buff *skb, struct net_device *dev)
 		goto err_free_skb;
 	if (tun_info->options_len < sizeof(*md))
 		goto err_free_skb;
-	md = ip_tunnel_info_opts(tun_info);
+	md = (struct erspan_metadata *)tun_info->options;
 
 	/* ERSPAN has fixed 8 byte GRE header */
 	version = md->version;

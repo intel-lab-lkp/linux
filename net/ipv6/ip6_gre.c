@@ -575,7 +575,7 @@ static int ip6erspan_rcv(struct sk_buff *skb,
 			pkt_md = (struct erspan_metadata *)(gh + gre_hdr_len +
 							    sizeof(*ershdr));
 			info = &tun_dst->u.tun_info;
-			md = ip_tunnel_info_opts(info);
+			md = (struct erspan_metadata *)info->options;
 			md->version = ver;
 			md2 = &md->u.md2;
 			memcpy(md2, pkt_md, ver == 1 ? ERSPAN_V1_MDSIZE :
@@ -1022,7 +1022,7 @@ static netdev_tx_t ip6erspan_tunnel_xmit(struct sk_buff *skb,
 			goto tx_err;
 		if (tun_info->options_len < sizeof(*md))
 			goto tx_err;
-		md = ip_tunnel_info_opts(tun_info);
+		md = (struct erspan_metadata *)tun_info->options;
 
 		tun_id = tunnel_id_to_key32(key->tun_id);
 		if (md->version == 1) {

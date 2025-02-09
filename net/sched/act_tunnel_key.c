@@ -303,7 +303,7 @@ static int tunnel_key_opts_set(struct nlattr *nla, struct ip_tunnel_info *info,
 	case TCA_TUNNEL_KEY_ENC_OPTS_GENEVE:
 #if IS_ENABLED(CONFIG_INET)
 		__set_bit(IP_TUNNEL_GENEVE_OPT_BIT, info->key.tun_flags);
-		return tunnel_key_copy_opts(nla, ip_tunnel_info_opts(info),
+		return tunnel_key_copy_opts(nla, info->options,
 					    opts_len, extack);
 #else
 		return -EAFNOSUPPORT;
@@ -311,7 +311,7 @@ static int tunnel_key_opts_set(struct nlattr *nla, struct ip_tunnel_info *info,
 	case TCA_TUNNEL_KEY_ENC_OPTS_VXLAN:
 #if IS_ENABLED(CONFIG_INET)
 		__set_bit(IP_TUNNEL_VXLAN_OPT_BIT, info->key.tun_flags);
-		return tunnel_key_copy_opts(nla, ip_tunnel_info_opts(info),
+		return tunnel_key_copy_opts(nla, info->options,
 					    opts_len, extack);
 #else
 		return -EAFNOSUPPORT;
@@ -319,7 +319,7 @@ static int tunnel_key_opts_set(struct nlattr *nla, struct ip_tunnel_info *info,
 	case TCA_TUNNEL_KEY_ENC_OPTS_ERSPAN:
 #if IS_ENABLED(CONFIG_INET)
 		__set_bit(IP_TUNNEL_ERSPAN_OPT_BIT, info->key.tun_flags);
-		return tunnel_key_copy_opts(nla, ip_tunnel_info_opts(info),
+		return tunnel_key_copy_opts(nla, info->options,
 					    opts_len, extack);
 #else
 		return -EAFNOSUPPORT;
@@ -572,7 +572,7 @@ static int tunnel_key_geneve_opts_dump(struct sk_buff *skb,
 				       const struct ip_tunnel_info *info)
 {
 	int len = info->options_len;
-	u8 *src = (u8 *)(info + 1);
+	u8 *src = (u8 *)info->options;
 	struct nlattr *start;
 
 	start = nla_nest_start_noflag(skb, TCA_TUNNEL_KEY_ENC_OPTS_GENEVE);
@@ -603,7 +603,7 @@ static int tunnel_key_geneve_opts_dump(struct sk_buff *skb,
 static int tunnel_key_vxlan_opts_dump(struct sk_buff *skb,
 				      const struct ip_tunnel_info *info)
 {
-	struct vxlan_metadata *md = (struct vxlan_metadata *)(info + 1);
+	struct vxlan_metadata *md = (struct vxlan_metadata *)info->options;
 	struct nlattr *start;
 
 	start = nla_nest_start_noflag(skb, TCA_TUNNEL_KEY_ENC_OPTS_VXLAN);
@@ -622,7 +622,7 @@ static int tunnel_key_vxlan_opts_dump(struct sk_buff *skb,
 static int tunnel_key_erspan_opts_dump(struct sk_buff *skb,
 				       const struct ip_tunnel_info *info)
 {
-	struct erspan_metadata *md = (struct erspan_metadata *)(info + 1);
+	struct erspan_metadata *md = (struct erspan_metadata *)info->options;
 	struct nlattr *start;
 
 	start = nla_nest_start_noflag(skb, TCA_TUNNEL_KEY_ENC_OPTS_ERSPAN);
