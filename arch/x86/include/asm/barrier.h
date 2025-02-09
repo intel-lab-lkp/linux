@@ -45,7 +45,11 @@
 	__mask; })
 
 /* Prevent speculative execution past this barrier. */
-#define barrier_nospec() alternative("", "lfence", X86_FEATURE_LFENCE_RDTSC)
+#ifdef CONFIG_X86_32
+#define barrier_nospec() alternative("", "lfence", X86_FEATURE_XMM2)
+#else
+#define barrier_nospec() asm volatile("lfence":::"memory")
+#endif
 
 #define __dma_rmb()	barrier()
 #define __dma_wmb()	barrier()
