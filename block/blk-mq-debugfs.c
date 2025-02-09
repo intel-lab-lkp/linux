@@ -628,7 +628,7 @@ void blk_mq_debugfs_register(struct request_queue *q)
 	 * didn't exist yet (because we don't know what to name the directory
 	 * until the queue is registered to a gendisk).
 	 */
-	if (q->elevator && !q->sched_debugfs_dir)
+	if (q->elevator)
 		blk_mq_debugfs_register_sched(q);
 
 	/* Similarly, blk_mq_init_hctx() couldn't do this previously. */
@@ -745,6 +745,7 @@ void blk_mq_debugfs_unregister_hctxs(struct request_queue *q)
 void blk_mq_debugfs_register_sched(struct request_queue *q)
 {
 	struct elevator_type *e = q->elevator->type;
+	struct dentry *sched_dir;
 
 	lockdep_assert_held(&q->debugfs_mutex);
 
@@ -758,17 +759,16 @@ void blk_mq_debugfs_register_sched(struct request_queue *q)
 	if (!e->queue_debugfs_attrs)
 		return;
 
-	q->sched_debugfs_dir = debugfs_create_dir("sched", q->debugfs_dir);
+	sched_dir = debugfs_create_dir("sched", q->debugfs_dir);
 
-	debugfs_create_files(q->sched_debugfs_dir, q, e->queue_debugfs_attrs);
+	debugfs_create_files(sched_dir, q, e->queue_debugfs_attrs);
 }
 
 void blk_mq_debugfs_unregister_sched(struct request_queue *q)
 {
 	lockdep_assert_held(&q->debugfs_mutex);
 
-	debugfs_remove_recursive(q->sched_debugfs_dir);
-	q->sched_debugfs_dir = NULL;
+	debugfs_lookup_and_remove("sched", q->debugfs_dir);
 }
 
 static const char *rq_qos_id_to_name(enum rq_qos_id id)

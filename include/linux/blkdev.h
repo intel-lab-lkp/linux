@@ -598,7 +598,6 @@ struct request_queue {
 	struct list_head	tag_set_list;
 
 	struct dentry		*debugfs_dir;
-	struct dentry		*sched_debugfs_dir;
 	struct dentry		*rqos_debugfs_dir;
 	/*
 	 * Serializes all debugfs metadata operations using the above dentries.
