@@ -56,21 +56,18 @@ def generate_crates(
             line = line.replace("\n", "")
             cfg.append(line)
 
-    # Now fill the crates list -- dependencies need to come first.
-    #
-    # Avoid O(n^2) iterations by keeping a map of indexes.
+    # Now fill the crates list.
     crates: list[Crate] = []
-    crates_indexes: dict[str, int] = {}
     crates_cfgs = args_crates_cfgs(cfgs)
 
     def append_crate(
         display_name: str,
         root_module: pathlib.Path,
-        deps: list[str],
+        deps: list[Dependency],
         cfg: list[str] = [],
         is_workspace_member: bool = True,
         is_proc_macro: bool = False,
-    ) -> None:
+    ) -> Dependency:
         proc_macro_dylib_path = None
         if is_proc_macro:
             proc_macro_dylib_name = subprocess.check_output(
@@ -78,14 +75,14 @@ def generate_crates(
                 stdin=subprocess.DEVNULL,
             ).decode('utf-8').strip()
             proc_macro_dylib_path = f"{objtree}/rust/{proc_macro_dylib_name}"
-        crates_indexes[display_name] = len(crates)
+        index = len(crates)
         crates.append(
             {
                 "display_name": display_name,
                 "root_module": str(root_module),
                 "is_workspace_member": is_workspace_member,
                 "is_proc_macro": is_proc_macro,
-                "deps": [{"crate": crates_indexes[dep], "name": dep} for dep in deps],
+                "deps": deps,
                 "cfg": cfg,
                 "edition": "2021",
                 "env": {"RUST_MODFILE": "This is only for rust-analyzer"},
@@ -93,9 +90,10 @@ def generate_crates(
                 "source": None,
             }
         )
+        return {"crate": index, "name": display_name}
 
     # First, the ones in `rust/` since they are a bit special.
-    append_crate(
+    core = append_crate(
         "core",
         sysroot_src / "core" / "src" / "lib.rs",
         [],
@@ -103,37 +101,37 @@ def generate_crates(
         is_workspace_member=False,
     )
 
-    append_crate(
+    compiler_builtins = append_crate(
         "compiler_builtins",
         srctree / "rust" / "compiler_builtins.rs",
         [],
     )
 
-    append_crate(
+    macros = append_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
         [],
         is_proc_macro=True,
     )
 
-    append_crate(
+    build_error = append_crate(
         "build_error",
         srctree / "rust" / "build_error.rs",
-        ["core", "compiler_builtins"],
+        [core, compiler_builtins],
     )
 
-    append_crate(
+    bindings = append_crate(
         "bindings",
         srctree / "rust"/ "bindings" / "lib.rs",
-        ["core"],
+        [core],
         cfg=cfg,
     )
     crates[-1]["env"]["OBJTREE"] = str(objtree.resolve(True))
 
-    append_crate(
+    kernel = append_crate(
         "kernel",
         srctree / "rust" / "kernel" / "lib.rs",
-        ["core", "macros", "build_error", "bindings"],
+        [core, macros, build_error, bindings],
         cfg=cfg,
     )
     crates[-1]["source"] = {
@@ -172,7 +170,7 @@ def generate_crates(
             append_crate(
                 name,
                 path,
-                ["core", "kernel"],
+                [core, kernel],
                 cfg=cfg,
             )
 
