@@ -662,6 +662,8 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 		if (ret)
 			return ERR_PTR(ret);
 
+		drm_connector_attach_dp_subconnector_property(connector);
+
 		ret = drm_bridge_connector_hdmi_audio_init(connector, bridge);
 		if (ret)
 			return ERR_PTR(ret);
