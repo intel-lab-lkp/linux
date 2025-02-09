@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/i2c/dongwoon,dw9719.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Dongwoon Anatech DW9719 Voice Coil Motor (VCM) Controller
+
+maintainers:
+  - devicetree@vger.kernel.org
+
+description:
+  The Dongwoon DW9719 is a 10-bit digital-to-analog (DAC) converter. The DAC
+  is controlled via a 2-wire (I2C-compatible) serial interface.
+
+properties:
+  compatible:
+    enum:
+      - dongwoon,dw9719
+      - dongwoon,dw9761
+
+  reg:
+    maxItems: 1
+
+  vdd-supply:
+    description: Regulator providing power to the "VDD" pin.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        camera-lens@c {
+            compatible = "dongwoon,dw9761";
+            reg = <0x0c>;
+            vdd-supply = <&pm8916_l10>;
+        };
+    };
