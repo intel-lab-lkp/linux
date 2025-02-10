@@ -21,6 +21,13 @@ enum aiu_clk_ids {
 	MIXER
 };
 
+enum aiu_i2s_extra_clk_ids {
+	AOCLK_DIV_GATE = 0,
+	AOCLK_BASIC_DIV,
+	AOCLK_MORE_DIV,
+	LRCLK_DIV,
+};
+
 struct aiu_interface {
 	struct clk_bulk_data *clks;
 	unsigned int clk_num;
@@ -35,6 +42,7 @@ struct aiu_platform_data {
 struct aiu {
 	struct clk *spdif_mclk;
 	struct aiu_interface i2s;
+	struct aiu_interface i2s_extra;
 	struct aiu_interface spdif;
 	const struct aiu_platform_data *platform;
 };
@@ -53,6 +61,8 @@ int aiu_acodec_ctrl_register_component(struct device *dev);
 
 int aiu_fifo_i2s_dai_probe(struct snd_soc_dai *dai);
 int aiu_fifo_spdif_dai_probe(struct snd_soc_dai *dai);
+
+int aiu_register_clocks(struct device *dev, struct regmap *map);
 
 extern const struct snd_soc_dai_ops aiu_fifo_i2s_dai_ops;
 extern const struct snd_soc_dai_ops aiu_fifo_spdif_dai_ops;

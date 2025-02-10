@@ -18,22 +18,10 @@
 #define AIU_RST_SOFT_I2S_FAST		BIT(0)
 
 #define AIU_I2S_DAC_CFG_MSB_FIRST	BIT(2)
-#define AIU_CLK_CTRL_I2S_DIV_EN		BIT(0)
-#define AIU_CLK_CTRL_I2S_DIV		GENMASK(3, 2)
 #define AIU_CLK_CTRL_AOCLK_INVERT	BIT(6)
 #define AIU_CLK_CTRL_LRCLK_INVERT	BIT(7)
 #define AIU_CLK_CTRL_LRCLK_SKEW		GENMASK(9, 8)
 #define AIU_CLK_CTRL_MORE_HDMI_AMCLK	BIT(6)
-#define AIU_CLK_CTRL_MORE_I2S_DIV	GENMASK(5, 0)
-#define AIU_CODEC_DAC_LRCLK_CTRL_DIV	GENMASK(11, 0)
-
-static void aiu_encoder_i2s_divider_enable(struct snd_soc_component *component,
-					   bool enable)
-{
-	snd_soc_component_update_bits(component, AIU_CLK_CTRL,
-				      AIU_CLK_CTRL_I2S_DIV_EN,
-				      enable ? AIU_CLK_CTRL_I2S_DIV_EN : 0);
-}
 
 static int aiu_encoder_i2s_setup_desc(struct snd_soc_component *component,
 				      struct snd_pcm_hw_params *params)
@@ -80,8 +68,13 @@ static int aiu_encoder_i2s_setup_desc(struct snd_soc_component *component,
 
 static int aiu_encoder_i2s_set_legacy_div(struct snd_soc_component *component,
 					  struct snd_pcm_hw_params *params,
-					  unsigned int bs)
+					  unsigned long mclk_rate,
+					  unsigned long aoclk_rate)
 {
+	struct aiu *aiu = snd_soc_component_get_drvdata(component);
+	unsigned long bs = mclk_rate / aoclk_rate;
+	int ret;
+
 	switch (bs) {
 	case 1:
 	case 2:
@@ -91,27 +84,38 @@ static int aiu_encoder_i2s_set_legacy_div(struct snd_soc_component *component,
 		break;
 
 	default:
-		dev_err(component->dev, "Unsupported i2s divider: %u\n", bs);
+		dev_err(component->dev, "Unsupported i2s divider: %lu\n", bs);
 		return -EINVAL;
 	}
 
-	snd_soc_component_update_bits(component, AIU_CLK_CTRL,
-				      AIU_CLK_CTRL_I2S_DIV,
-				      FIELD_PREP(AIU_CLK_CTRL_I2S_DIV,
-						 __ffs(bs)));
+	/* Use AOCLK_BASIC divider, i.e. set AOCLK_MORE to the same rate as
+	 * its parent so that it acts as a passthrough.
+	 */
+	ret = clk_set_rate(aiu->i2s_extra.clks[AOCLK_BASIC_DIV].clk,
+			   aoclk_rate);
+	if (ret) {
+		dev_err(component->dev, "failed to set AOCLK_BASIC_DIV\n");
+		return ret;
+	}
 
-	snd_soc_component_update_bits(component, AIU_CLK_CTRL_MORE,
-				      AIU_CLK_CTRL_MORE_I2S_DIV,
-				      FIELD_PREP(AIU_CLK_CTRL_MORE_I2S_DIV,
-						 0));
+	ret = clk_set_rate(aiu->i2s_extra.clks[AOCLK_MORE_DIV].clk, aoclk_rate);
+	if (ret) {
+		dev_err(component->dev, "failed to set AOCLK_MORE_DIV\n");
+		return ret;
+	}
 
 	return 0;
 }
 
 static int aiu_encoder_i2s_set_more_div(struct snd_soc_component *component,
 					struct snd_pcm_hw_params *params,
-					unsigned int bs)
+					unsigned long mclk_rate,
+					unsigned long aoclk_rate)
 {
+	struct aiu *aiu = snd_soc_component_get_drvdata(component);
+	unsigned long bs = mclk_rate / aoclk_rate;
+	int ret;
+
 	/*
 	 * NOTE: this HW is odd.
 	 * In most configuration, the i2s divider is 'mclk / blck'.
@@ -126,31 +130,41 @@ static int aiu_encoder_i2s_set_more_div(struct snd_soc_component *component,
 			return -EINVAL;
 		}
 		bs += bs / 2;
+		aoclk_rate = mclk_rate / bs;
 	}
 
-	/* Use CLK_MORE for mclk to bclk divider */
-	snd_soc_component_update_bits(component, AIU_CLK_CTRL,
-				      AIU_CLK_CTRL_I2S_DIV,
-				      FIELD_PREP(AIU_CLK_CTRL_I2S_DIV, 0));
+	/* Use AOCLK_MORE divider, i.e. set AOCLK_BASIC to the same rate as
+	 * its parent so that it acts as a passthough.
+	 */
+	ret = clk_set_rate(aiu->i2s_extra.clks[AOCLK_BASIC_DIV].clk, mclk_rate);
+	if (ret) {
+		dev_err(component->dev, "failed to set AOCLK_BASIC_DIV\n");
+		return ret;
+	}
 
-	snd_soc_component_update_bits(component, AIU_CLK_CTRL_MORE,
-				      AIU_CLK_CTRL_MORE_I2S_DIV,
-				      FIELD_PREP(AIU_CLK_CTRL_MORE_I2S_DIV,
-						 bs - 1));
+	ret = clk_set_rate(aiu->i2s_extra.clks[AOCLK_MORE_DIV].clk, aoclk_rate);
+	if (ret) {
+		dev_err(component->dev, "failed to set AOCLK_MORE_DIV\n");
+		return ret;
+	}
 
 	return 0;
 }
 
 static int aiu_encoder_i2s_set_clocks(struct snd_soc_component *component,
-				      struct snd_pcm_hw_params *params)
+				      struct snd_pcm_hw_params *params,
+				      struct snd_soc_dai *dai)
 {
 	struct aiu *aiu = snd_soc_component_get_drvdata(component);
 	unsigned int srate = params_rate(params);
-	unsigned int fs, bs;
+	unsigned int fs;
+	unsigned long mclk_rate, aoclk_rate;
 	int ret;
 
+	mclk_rate = clk_get_rate(aiu->i2s.clks[MCLK].clk);
+
 	/* Get the oversampling factor */
-	fs = DIV_ROUND_CLOSEST(clk_get_rate(aiu->i2s.clks[MCLK].clk), srate);
+	fs = DIV_ROUND_CLOSEST(mclk_rate, srate);
 
 	if (fs % 64)
 		return -EINVAL;
@@ -160,21 +174,25 @@ static int aiu_encoder_i2s_set_clocks(struct snd_soc_component *component,
 				      AIU_I2S_DAC_CFG_MSB_FIRST,
 				      AIU_I2S_DAC_CFG_MSB_FIRST);
 
-	/* Set bclk to lrlck ratio */
-	snd_soc_component_update_bits(component, AIU_CODEC_DAC_LRCLK_CTRL,
-				      AIU_CODEC_DAC_LRCLK_CTRL_DIV,
-				      FIELD_PREP(AIU_CODEC_DAC_LRCLK_CTRL_DIV,
-						 64 - 1));
-
-	bs = fs / 64;
+	/* aoclk rate is 64 times the sample rate */
+	aoclk_rate = srate * 64;
 
 	if (aiu->platform->has_clk_ctrl_more_i2s_div)
-		ret = aiu_encoder_i2s_set_more_div(component, params, bs);
+		ret = aiu_encoder_i2s_set_more_div(component, params,
+						   mclk_rate, aoclk_rate);
 	else
-		ret = aiu_encoder_i2s_set_legacy_div(component, params, bs);
+		ret = aiu_encoder_i2s_set_legacy_div(component, params,
+						     mclk_rate, aoclk_rate);
 
 	if (ret)
 		return ret;
+
+	/* lrclk rate is equal to the sample rate */
+	ret = clk_set_rate(aiu->i2s_extra.clks[LRCLK_DIV].clk, srate);
+	if (ret) {
+		dev_err(dai->dev, "failed to set LRCLK_DIV\n");
+		return ret;
+	}
 
 	/* Make sure amclk is used for HDMI i2s as well */
 	snd_soc_component_update_bits(component, AIU_CLK_CTRL_MORE,
@@ -189,10 +207,11 @@ static int aiu_encoder_i2s_hw_params(struct snd_pcm_substream *substream,
 				     struct snd_soc_dai *dai)
 {
 	struct snd_soc_component *component = dai->component;
+	struct aiu *aiu = snd_soc_component_get_drvdata(dai->component);
 	int ret;
 
 	/* Disable the clock while changing the settings */
-	aiu_encoder_i2s_divider_enable(component, false);
+	// clk_disable_unprepare(aiu->i2s_extra.clks[AOCLK_DIV_GATE].clk);
 
 	ret = aiu_encoder_i2s_setup_desc(component, params);
 	if (ret) {
@@ -200,13 +219,17 @@ static int aiu_encoder_i2s_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	ret = aiu_encoder_i2s_set_clocks(component, params);
+	ret = aiu_encoder_i2s_set_clocks(component, params, dai);
 	if (ret) {
 		dev_err(dai->dev, "setting i2s clocks failed\n");
 		return ret;
 	}
 
-	aiu_encoder_i2s_divider_enable(component, true);
+	ret = clk_prepare_enable(aiu->i2s_extra.clks[AOCLK_DIV_GATE].clk);
+	if (ret) {
+		dev_err(dai->dev, "failed to enable AOCLK_DIV_GATE\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -214,10 +237,10 @@ static int aiu_encoder_i2s_hw_params(struct snd_pcm_substream *substream,
 static int aiu_encoder_i2s_hw_free(struct snd_pcm_substream *substream,
 				   struct snd_soc_dai *dai)
 {
-	struct snd_soc_component *component = dai->component;
+	struct aiu *aiu = snd_soc_component_get_drvdata(dai->component);
 
-	aiu_encoder_i2s_divider_enable(component, false);
-
+	clk_disable_unprepare(aiu->i2s_extra.clks[AOCLK_DIV_GATE].clk);
+	
 	return 0;
 }
 

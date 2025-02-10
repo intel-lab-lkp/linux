@@ -9,6 +9,8 @@
 #include <linux/of_platform.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+#include <linux/clk-provider.h>
+#include "../../../drivers/clk/meson/clk-regmap.h"
 #include <sound/soc.h>
 #include <sound/soc-dai.h>
 
@@ -203,6 +205,13 @@ static const char * const aiu_i2s_ids[] = {
 	[MIXER]	= "i2s_mixer",
 };
 
+static const char * const aiu_i2s_extra_ids[] = {
+	[AOCLK_DIV_GATE]	= "i2s_aoclk_div_gate",
+	[AOCLK_BASIC_DIV]	= "i2s_aoclk_basic_div",
+	[AOCLK_MORE_DIV]	= "i2s_aoclk_more_div",
+	[LRCLK_DIV]		= "i2s_lrclk_div",
+};
+
 static const char * const aiu_spdif_ids[] = {
 	[PCLK]	= "spdif_pclk",
 	[AOCLK]	= "spdif_aoclk",
@@ -228,6 +237,13 @@ static int aiu_clk_get(struct device *dev)
 			       &aiu->i2s);
 	if (ret)
 		return dev_err_probe(dev, ret, "Can't get the i2s clocks\n");
+
+	ret = aiu_clk_bulk_get(dev, aiu_i2s_extra_ids,
+			       ARRAY_SIZE(aiu_i2s_extra_ids),
+			       &aiu->i2s_extra);
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "Can't get the i2s extra clocks\n");
 
 	ret = aiu_clk_bulk_get(dev, aiu_spdif_ids, ARRAY_SIZE(aiu_spdif_ids),
 			       &aiu->spdif);
@@ -277,6 +293,12 @@ static int aiu_probe(struct platform_device *pdev)
 	aiu->spdif.irq = platform_get_irq_byname(pdev, "spdif");
 	if (aiu->spdif.irq < 0)
 		return aiu->spdif.irq;
+
+	ret = aiu_register_clocks(dev, map);
+	if (ret) {
+		dev_err(dev, "Failed to register AIU clocks\n");
+		return ret;
+	}
 
 	ret = aiu_clk_get(dev);
 	if (ret)

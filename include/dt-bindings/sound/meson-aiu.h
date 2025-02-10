@@ -15,4 +15,9 @@
 #define CTRL_PCM		1
 #define CTRL_OUT		2
 
+#define AIU_AOCLK_DIV_GATE	0
+#define AIU_AOCLK_BASIC_DIV	1
+#define AIU_AOCLK_MORE_DIV	2
+#define AIU_LRCLK_DIV		3
+
 #endif /* __DT_MESON_AIU_H */
