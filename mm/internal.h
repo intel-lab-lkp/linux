@@ -869,6 +869,8 @@ static inline bool free_area_empty(struct free_area *area, int migratetype)
 
 /* mm/util.c */
 struct anon_vma *folio_anon_vma(const struct folio *folio);
+const struct folio *snapshot_page(struct folio *foliop, struct page *precise,
+		unsigned long *idxp, const struct page *unstable);
 
 #ifdef CONFIG_MMU
 void unmap_mapping_folio(struct folio *folio);

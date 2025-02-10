@@ -1239,3 +1239,53 @@ void flush_dcache_folio(struct folio *folio)
 }
 EXPORT_SYMBOL(flush_dcache_folio);
 #endif
+
+/*
+ * If you have an unstable reference to a page, use this to get a
+ * somewhat-consistent (potentially outdated) snapshot.  The consistency
+ * is limited to the page being contained in the folio.  You need to pass in
+ * a scratch folio and scratch page, probably allocated on the stack.
+ * You get back a pointer to the scratch folio you passed in, marked
+ * as const to remind you not to modify this.
+ */
+const struct folio *snapshot_page(struct folio *foliop, struct page *precise,
+		unsigned long *idxp, const struct page *unstable)
+{
+	struct folio *folio;
+	unsigned long head;
+	unsigned long idx, nr_pages = 1;
+	int loops = 5;
+
+again:
+	memcpy(precise, unstable, sizeof(struct page));
+	head = precise->compound_head;
+	/* Open-coded !PageTail because page_is_fake_head() doesn't work here */
+	if ((head & 1) == 0) {
+		folio = (struct folio *)precise;
+		*idxp = 0;
+		/* Not a tail, not a head, we have a single page */
+		if (!folio_test_large(folio))
+			goto out;
+		folio = (struct folio *)unstable;
+	} else {
+		folio = (struct folio *)(head - 1);
+		*idxp = folio_page_idx(folio, unstable);
+	}
+
+	if (idx < MAX_FOLIO_NR_PAGES || folio_test_hugetlb(folio)) {
+		memcpy(foliop, folio, sizeof(struct folio));
+		nr_pages = folio_nr_pages(foliop);
+		folio = foliop;
+	}
+
+	if (idx > nr_pages) {
+		if (loops-- > 0)
+			goto again;
+		pr_warn("page does not match folio\n");
+		precise->compound_head &= ~1UL;
+		folio = (struct folio *)precise;
+		*idxp = 0;
+	}
+out:
+	return folio;
+}

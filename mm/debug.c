@@ -120,54 +120,19 @@ static void __dump_folio(const struct folio *folio, struct page *page,
 			2 * sizeof(struct page), false);
 }
 
-static void __dump_page(const struct page *page)
-{
-	struct folio *foliop, folio;
-	struct page precise;
-	unsigned long head;
-	unsigned long pfn = page_to_pfn(page);
-	unsigned long idx, nr_pages = 1;
-	int loops = 5;
-
-again:
-	memcpy(&precise, page, sizeof(*page));
-	head = precise.compound_head;
-	if ((head & 1) == 0) {
-		foliop = (struct folio *)&precise;
-		idx = 0;
-		if (!folio_test_large(foliop))
-			goto dump;
-		foliop = (struct folio *)page;
-	} else {
-		foliop = (struct folio *)(head - 1);
-		idx = folio_page_idx(foliop, page);
-	}
-
-	if (idx < MAX_FOLIO_NR_PAGES) {
-		memcpy(&folio, foliop, 2 * sizeof(struct page));
-		nr_pages = folio_nr_pages(&folio);
-		foliop = &folio;
-	}
-
-	if (idx > nr_pages) {
-		if (loops-- > 0)
-			goto again;
-		pr_warn("page does not match folio\n");
-		precise.compound_head &= ~1UL;
-		foliop = (struct folio *)&precise;
-		idx = 0;
-	}
-
-dump:
-	__dump_folio(foliop, &precise, pfn, idx);
-}
-
 void dump_page(const struct page *page, const char *reason)
 {
+	struct folio stack_folio;
+	struct page stack_page;
+	const struct folio *folio;
+	unsigned long idx;
+
 	if (PagePoisoned(page))
 		pr_warn("page:%p is uninitialized and poisoned", page);
-	else
-		__dump_page(page);
+	else {
+		folio = snapshot_page(&stack_folio, &stack_page, &idx, page);
+		__dump_folio(folio, &stack_page, page_to_pfn(page), idx);
+	}
 	if (reason)
 		pr_warn("page dumped because: %s\n", reason);
 	dump_page_owner(page);
