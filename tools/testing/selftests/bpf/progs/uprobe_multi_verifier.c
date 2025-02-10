@@ -10,14 +10,14 @@ char _license[] SEC("license") = "GPL";
 
 SEC("uprobe.session")
 __success
-int uprobe_sesison_return_0(struct pt_regs *ctx)
+int uprobe_session_return_0(struct pt_regs *ctx)
 {
 	return 0;
 }
 
 SEC("uprobe.session")
 __success
-int uprobe_sesison_return_1(struct pt_regs *ctx)
+int uprobe_session_return_1(struct pt_regs *ctx)
 {
 	return 1;
 }
@@ -25,7 +25,7 @@ int uprobe_sesison_return_1(struct pt_regs *ctx)
 SEC("uprobe.session")
 __failure
 __msg("At program exit the register R0 has smin=2 smax=2 should have been in [0, 1]")
-int uprobe_sesison_return_2(struct pt_regs *ctx)
+int uprobe_session_return_2(struct pt_regs *ctx)
 {
 	return 2;
 }

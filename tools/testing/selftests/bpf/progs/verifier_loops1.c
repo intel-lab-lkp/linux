@@ -261,7 +261,7 @@ l0_%=:	r2 += r1;					\
 
 SEC("xdp")
 __success
-__naked void not_an_inifinite_loop(void)
+__naked void not_an_infinite_loop(void)
 {
 	asm volatile ("					\
 	call %[bpf_get_prandom_u32];			\

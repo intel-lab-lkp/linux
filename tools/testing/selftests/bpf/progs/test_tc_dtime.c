@@ -21,7 +21,7 @@
  *  ns_src   |              ns_fwd             |   ns_dst
  *
  * ns_src and ns_dst: ENDHOST namespace
- *            ns_fwd: Fowarding namespace
+ *            ns_fwd: Forwarding namespace
  */
 
 #define ctx_ptr(field)		(void *)(long)(field)

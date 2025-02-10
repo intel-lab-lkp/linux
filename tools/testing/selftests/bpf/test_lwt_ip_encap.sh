@@ -164,7 +164,7 @@ setup()
 		ip -netns ${NS2} link set veth7 vrf red
 	fi
 
-	# configure addesses: the top route (1-2-3-4)
+	# configure addresses: the top route (1-2-3-4)
 	ip -netns ${NS1}    addr add ${IPv4_1}/24  dev veth1
 	ip -netns ${NS2}    addr add ${IPv4_2}/24  dev veth2
 	ip -netns ${NS2}    addr add ${IPv4_3}/24  dev veth3

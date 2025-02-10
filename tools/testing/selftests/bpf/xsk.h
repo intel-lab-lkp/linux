@@ -94,7 +94,7 @@ static inline __u32 xsk_prod_nb_free(struct xsk_ring_prod *r, __u32 nb)
 	 * cached_cons is r->size bigger than the real consumer pointer so
 	 * that this addition can be avoided in the more frequently
 	 * executed code that computs free_entries in the beginning of
-	 * this function. Without this optimization it whould have been
+	 * this function. Without this optimization it would have been
 	 * free_entries = r->cached_prod - r->cached_cons + r->size.
 	 */
 	r->cached_cons = __atomic_load_n(r->consumer, __ATOMIC_ACQUIRE);

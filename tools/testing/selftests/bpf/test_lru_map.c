@@ -306,7 +306,7 @@ static void test_lru_sanity1(int map_type, int map_flags, unsigned int tgt_free)
  * Update 1 to tgt_free/2
  *   => The original 1 to tgt_free/2 will be removed due to
  *      the LRU shrink process
- * Re-insert 1 to tgt_free/2 again and do a lookup immeidately
+ * Re-insert 1 to tgt_free/2 again and do a lookup immediately
  * Insert 1+tgt_free to tgt_free*3/2
  * Insert 1+tgt_free*3/2 to tgt_free*5/2
  *   => Key 1+tgt_free to tgt_free*3/2
@@ -371,7 +371,7 @@ static void test_lru_sanity2(int map_type, int map_flags, unsigned int tgt_free)
 	}
 
 	/* Re-insert 1 to tgt_free/2 again and do a lookup
-	 * immeidately.
+	 * immediately.
 	 */
 	end_key = 1 + batch_size;
 	value[0] = 4321;
