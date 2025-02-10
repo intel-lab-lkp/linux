@@ -1167,7 +1167,7 @@ void page_pool_destroy(struct page_pool *pool)
 	page_pool_disable_direct_recycling(pool);
 	page_pool_free_frag(pool);
 
-	if (!page_pool_release(pool))
+	if (page_pool_release(pool) <= 0)
 		return;
 
 	page_pool_detached(pool);
