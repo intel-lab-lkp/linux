@@ -452,16 +452,8 @@ apple_dart_t8110_hw_invalidate_tlb(struct apple_dart_stream_map *stream_map)
 
 static int apple_dart_hw_reset(struct apple_dart *dart)
 {
-	u32 config;
 	struct apple_dart_stream_map stream_map;
 	int i;
-
-	config = readl(dart->regs + dart->hw->lock);
-	if (config & dart->hw->lock_bit) {
-		dev_err(dart->dev, "DART is locked down until reboot: %08x\n",
-			config);
-		return -EINVAL;
-	}
 
 	stream_map.dart = dart;
 	bitmap_zero(stream_map.sidmap, DART_MAX_STREAMS);
@@ -1151,9 +1143,11 @@ static int apple_dart_probe(struct platform_device *pdev)
 	}
 
 	dart->locked = apple_dart_is_locked(dart);
-	ret = apple_dart_hw_reset(dart);
-	if (ret)
-		goto err_clk_disable;
+	if (!dart->locked) {
+		ret = apple_dart_hw_reset(dart);
+		if (ret)
+			goto err_clk_disable;
+	}
 
 	ret = request_irq(dart->irq, dart->hw->irq_handler, IRQF_SHARED,
 			  "apple-dart fault handler", dart);
@@ -1192,7 +1186,9 @@ static void apple_dart_remove(struct platform_device *pdev)
 {
 	struct apple_dart *dart = platform_get_drvdata(pdev);
 
-	apple_dart_hw_reset(dart);
+	if (!dart->locked)
+		apple_dart_hw_reset(dart);
+
 	free_irq(dart->irq, dart);
 
 	iommu_device_unregister(&dart->iommu);
@@ -1324,6 +1320,10 @@ static __maybe_unused int apple_dart_resume(struct device *dev)
 	struct apple_dart *dart = dev_get_drvdata(dev);
 	unsigned int sid, idx;
 	int ret;
+
+	/* Locked DARTs can't be restored, and they should not need it */
+	if (dart->locked)
+		return 0;
 
 	ret = apple_dart_hw_reset(dart);
 	if (ret) {
