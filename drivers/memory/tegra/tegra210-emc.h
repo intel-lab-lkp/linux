@@ -925,7 +925,7 @@ struct tegra210_emc {
 	unsigned long resume_rate;
 
 	struct {
-		struct dentry *root;
+		struct debugfs_node *root;
 		unsigned long min_rate;
 		unsigned long max_rate;
 		unsigned int temperature;

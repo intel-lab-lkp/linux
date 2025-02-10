@@ -133,7 +133,7 @@ enum visl_codec {
 
 struct visl_blob {
 	struct list_head list;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct debugfs_blob_wrapper blob;
 };
 

@@ -130,7 +130,7 @@ struct atk_data {
 	const struct attribute_group *attr_groups[2];
 
 	struct {
-		struct dentry *root;
+		struct debugfs_node *root;
 		u32 id;
 	} debugfs;
 };

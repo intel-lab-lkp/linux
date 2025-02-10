@@ -2194,8 +2194,9 @@ void iwl_mvm_dbgfs_register(struct iwl_mvm *mvm)
 	 */
 	if (!IS_ERR(mvm->debugfs_dir)) {
 		char buf[100];
+		struct dentry *dir = debugfs_node_dentry(mvm->debugfs_dir);
 
-		snprintf(buf, 100, "../../%pd2", mvm->debugfs_dir->d_parent);
+		snprintf(buf, 100, "../../%pd2", dir->d_parent);
 		debugfs_create_symlink("iwlwifi", mvm->hw->wiphy->debugfsdir,
 				       buf);
 	}

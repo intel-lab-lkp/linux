@@ -39,7 +39,7 @@ struct rsi_dbg_files {
 
 struct rsi_debugfs {
 	struct debugfs_node *subdir;
-	struct dentry *rsi_files[MAX_DEBUGFS_ENTRIES];
+	struct debugfs_node *rsi_files[MAX_DEBUGFS_ENTRIES];
 };
 int rsi_init_dbgfs(struct rsi_hw *adapter);
 void rsi_remove_dbgfs(struct rsi_hw *adapter);

@@ -2369,9 +2369,10 @@ void iwl_dbgfs_register(struct iwl_priv *priv, struct debugfs_node *dbgfs_dir)
 	 */
 	if (priv->mac80211_registered) {
 		char buf[100];
-		struct debugfs_node *mac80211_dir, *dev_dir;
+		struct dentry *dev_dir;
+		struct debugfs_node *mac80211_dir;
 
-		dev_dir = dbgfs_dir->d_parent;
+		dev_dir = debugfs_node_dentry(dbgfs_dir)->d_parent;
 		mac80211_dir = priv->hw->wiphy->debugfsdir;
 
 		snprintf(buf, 100, "../../%pd2", dev_dir);

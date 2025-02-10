@@ -126,11 +126,14 @@ static int do_xprt_debugfs(struct rpc_clnt *clnt, struct rpc_xprt *xprt, void *n
 	char name[24]; /* enough for "../../rpc_xprt/ + 8 hex digits + NULL */
 	char link[9]; /* enough for 8 hex digits + NULL */
 	int *nump = numv;
+	struct dentry *dentry;
 
 	if (IS_ERR_OR_NULL(xprt->debugfs))
 		return 0;
+
+	dentry = debugfs_node_dentry(xprt->debugfs);
 	len = snprintf(name, sizeof(name), "../../rpc_xprt/%s",
-		       xprt->debugfs->d_name.name);
+		       dentry->d_name.name);
 	if (len >= sizeof(name))
 		return -1;
 	if (*nump == 0)

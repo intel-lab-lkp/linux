@@ -308,7 +308,8 @@ void coda_write_base(struct coda_ctx *ctx, struct coda_q_data *q_data,
 		     struct vb2_v4l2_buffer *buf, unsigned int reg_y);
 
 int coda_alloc_aux_buf(struct coda_dev *dev, struct coda_aux_buf *buf,
-		       size_t size, const char *name, struct dentry *parent);
+		       size_t size, const char *name,
+		       struct debugfs_node *parent);
 void coda_free_aux_buf(struct coda_dev *dev, struct coda_aux_buf *buf);
 
 int coda_encoder_queue_init(void *priv, struct vb2_queue *src_vq,

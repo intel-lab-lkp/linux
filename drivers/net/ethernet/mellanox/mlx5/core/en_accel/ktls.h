@@ -78,8 +78,8 @@ struct mlx5e_tls_sw_stats {
 };
 
 struct mlx5e_tls_debugfs {
-	struct dentry *dfs;
-	struct dentry *dfs_tx;
+	struct debugfs_node *dfs;
+	struct debugfs_node *dfs_tx;
 };
 
 struct mlx5e_tls {

@@ -573,7 +573,7 @@ struct ice_pf {
 	struct debugfs_node *ice_debugfs_pf;
 	struct debugfs_node *ice_debugfs_pf_fwlog;
 	/* keep track of all the dentrys for FW log modules */
-	struct dentry **ice_debugfs_pf_fwlog_modules;
+	struct debugfs_node **ice_debugfs_pf_fwlog_modules;
 	struct ice_vfs vfs;
 	DECLARE_BITMAP(features, ICE_F_MAX);
 	DECLARE_BITMAP(state, ICE_STATE_NBITS);

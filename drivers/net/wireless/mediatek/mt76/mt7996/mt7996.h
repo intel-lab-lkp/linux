@@ -743,7 +743,7 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 u32 mt7996_wed_init_buf(void *ptr, dma_addr_t phys, int token_id);
 
 #ifdef CONFIG_MTK_DEBUG
-int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir);
+int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct debugfs_node *dir);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED

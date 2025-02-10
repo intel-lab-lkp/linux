@@ -24,6 +24,7 @@
 #ifndef __DRM_PANEL_H__
 #define __DRM_PANEL_H__
 
+#include <linux/debugfs.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/list.h>
@@ -144,7 +145,7 @@ struct drm_panel_funcs {
 	 *
 	 * Allows panels to create panels-specific debugfs files.
 	 */
-	void (*debugfs_init)(struct drm_panel *panel, struct dentry *root);
+	void (*debugfs_init)(struct drm_panel *panel, struct debugfs_node *root);
 };
 
 struct drm_panel_follower_funcs {

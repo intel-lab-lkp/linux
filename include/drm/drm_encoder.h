@@ -87,7 +87,7 @@ struct drm_encoder_funcs {
 	 *
 	 * Allows encoders to create encoder-specific debugfs files.
 	 */
-	void (*debugfs_init)(struct drm_encoder *encoder, struct dentry *root);
+	void (*debugfs_init)(struct drm_encoder *encoder, struct debugfs_node *root);
 };
 
 /**

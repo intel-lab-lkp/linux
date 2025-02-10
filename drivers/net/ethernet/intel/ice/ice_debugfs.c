@@ -106,11 +106,12 @@ ice_fwlog_print_module_cfg(struct ice_hw *hw, int module, struct seq_file *s)
 static int ice_find_module_by_dentry(struct ice_pf *pf, struct dentry *d)
 {
 	int i, module;
+	struct debugfs_node *node = debugfs_node_from_dentry(d);
 
 	module = -1;
 	/* find the module based on the dentry */
 	for (i = 0; i < ICE_NR_FW_LOG_MODULES; i++) {
-		if (d == pf->ice_debugfs_pf_fwlog_modules[i]) {
+		if (node == pf->ice_debugfs_pf_fwlog_modules[i]) {
 			module = i;
 			break;
 		}
@@ -585,7 +586,7 @@ void ice_debugfs_fwlog_init(struct ice_pf *pf)
 {
 	const char *name = pci_name(pf->pdev);
 	struct debugfs_node *fw_modules_dir;
-	struct dentry **fw_modules;
+	struct debugfs_node **fw_modules;
 	int i;
 
 	/* only support fw log commands on PF 0 */

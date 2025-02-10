@@ -219,7 +219,7 @@ mlx5_cmdif_alloc_stats(struct xarray *stats_xa, int opcode)
 void mlx5_cmdif_debugfs_init(struct mlx5_core_dev *dev)
 {
 	struct mlx5_cmd_stats *stats;
-	struct dentry **cmd;
+	struct debugfs_node **cmd;
 	const char *namep;
 	int i;
 

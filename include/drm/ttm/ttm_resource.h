@@ -38,6 +38,7 @@
 #define TTM_MAX_BO_PRIORITY	4U
 #define TTM_NUM_MEM_TYPES 8
 
+#define debugfs_node dentry
 struct dmem_cgroup_device;
 struct ttm_device;
 struct ttm_resource_manager;
@@ -504,6 +505,6 @@ void ttm_kmap_iter_linear_io_fini(struct ttm_kmap_iter_linear_io *iter_io,
 				  struct ttm_resource *mem);
 
 void ttm_resource_manager_create_debugfs(struct ttm_resource_manager *man,
-					 struct dentry * parent,
+					 struct debugfs_node * parent,
 					 const char *name);
 #endif

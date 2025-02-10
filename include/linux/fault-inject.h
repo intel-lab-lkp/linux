@@ -34,7 +34,7 @@ struct fault_attr {
 
 	unsigned long count;
 	struct ratelimit_state ratelimit_state;
-	struct dentry *dname;
+	struct debugfs_node *dname;
 };
 
 enum fault_flags {

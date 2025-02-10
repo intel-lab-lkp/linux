@@ -163,7 +163,7 @@ struct debugfs_node *nfp_net_debugfs_device_add(struct pci_dev *pdev)
 	return debugfs_create_dir(pci_name(pdev), nfp_dir);
 }
 
-void nfp_net_debugfs_dir_clean(struct dentry **dir)
+void nfp_net_debugfs_dir_clean(struct debugfs_node **dir)
 {
 	debugfs_remove_recursive(*dir);
 	*dir = NULL;

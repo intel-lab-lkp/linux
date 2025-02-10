@@ -85,7 +85,7 @@ struct qcaspi {
 	u16 reset_count;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *device_root;
+	struct debugfs_node *device_root;
 #endif
 
 	/* user configurable options */

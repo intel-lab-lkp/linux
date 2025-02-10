@@ -2264,10 +2264,10 @@ r535_gsp_libos_debugfs_init(struct nvkm_gsp *gsp)
 		goto error;
 	}
 
-	i_size_write(d_inode(gsp->debugfs.init), gsp->blob_init.size);
-	i_size_write(d_inode(gsp->debugfs.intr), gsp->blob_intr.size);
-	i_size_write(d_inode(gsp->debugfs.rm), gsp->blob_rm.size);
-	i_size_write(d_inode(gsp->debugfs.pmu), gsp->blob_pmu.size);
+	i_size_write(debugfs_node_inode(gsp->debugfs.init), gsp->blob_init.size);
+	i_size_write(debugfs_node_inode(gsp->debugfs.intr), gsp->blob_intr.size);
+	i_size_write(debugfs_node_inode(gsp->debugfs.rm), gsp->blob_rm.size);
+	i_size_write(debugfs_node_inode(gsp->debugfs.pmu), gsp->blob_pmu.size);
 
 	r535_gsp_msg_ntfy_add(gsp, NV_VGPU_MSG_EVENT_UCODE_LIBOS_PRINT,
 			      r535_gsp_msg_libos_print, gsp);

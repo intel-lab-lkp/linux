@@ -65,9 +65,9 @@ struct lbs_private {
 	struct debugfs_node *debugfs_dir;
 	struct debugfs_node *debugfs_debug;
 	struct debugfs_node *debugfs_files[6];
-	struct dentry *events_dir;
+	struct debugfs_node *events_dir;
 	struct debugfs_node *debugfs_events_files[6];
-	struct dentry *regs_dir;
+	struct debugfs_node *regs_dir;
 	struct debugfs_node *debugfs_regs_files[6];
 
 	/* Hardware debugging */

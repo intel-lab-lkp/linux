@@ -9,6 +9,7 @@
 #include <linux/file.h>
 
 struct intel_gt;
+#define debugfs_node dentry
 
 #define __GT_DEBUGFS_ATTRIBUTE_FOPS(__name)				\
 static const struct file_operations __name ## _fops = {			\

@@ -37,6 +37,8 @@
 
 #include <drm/drm_gpuvm.h>
 
+#define debugfs_node dentry
+
 /**
  * DRM_DEBUGFS_GPUVA_INFO - &drm_info_list entry to dump a GPU VA space
  * @show: the &drm_info_list's show callback

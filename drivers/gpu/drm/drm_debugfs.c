@@ -616,9 +616,9 @@ static const struct file_operations _f##_infoframe_fops = { \
 }; \
 \
 static int create_hdmi_## _f ## _infoframe_file(struct drm_connector *connector, \
-						struct dentry *parent) \
+						struct debugfs_node *parent) \
 { \
-	struct dentry *file; \
+	struct debugfs_node *file; \
 	\
 	file = debugfs_create_file(#_f, 0400, parent, connector, &_f ## _infoframe_fops); \
 	if (IS_ERR(file)) \

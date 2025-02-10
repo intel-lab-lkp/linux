@@ -64,7 +64,7 @@ struct dpaa2_caam_priv {
 	struct iommu_domain *domain;
 
 	struct dpaa2_caam_priv_per_cpu __percpu *ppriv;
-	struct dentry *dfs_root;
+	struct debugfs_node *dfs_root;
 };
 
 /**

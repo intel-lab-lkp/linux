@@ -387,7 +387,7 @@ struct trace_array {
 	raw_spinlock_t		start_lock;
 	const char		*system_names;
 	struct list_head	err_log;
-	struct dentry		*dir;
+	struct dentry 		*dir;
 	struct dentry		*options;
 	struct dentry		*percpu_dir;
 	struct eventfs_inode	*event_dir;

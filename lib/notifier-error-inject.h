@@ -20,6 +20,7 @@ struct notifier_err_inject {
 
 extern struct debugfs_node *notifier_err_inject_dir;
 
-extern struct debugfs_node *notifier_err_inject_init(const char *name,
-		struct dentry *parent, struct notifier_err_inject *err_inject,
-		int priority);
+extern struct debugfs_node *
+notifier_err_inject_init(const char *name, struct debugfs_node *parent,
+			 struct notifier_err_inject *err_inject,
+			 int priority);

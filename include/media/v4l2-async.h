@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 
 struct dentry;
+#define debugfs_node dentry
 struct device;
 struct device_node;
 struct v4l2_device;
@@ -140,9 +141,9 @@ struct v4l2_async_subdev_endpoint {
 /**
  * v4l2_async_debug_init - Initialize debugging tools.
  *
- * @debugfs_dir: pointer to the parent debugfs &struct dentry
+ * @debugfs_dir: pointer to the parent debugfs &struct debugfs_node
  */
-void v4l2_async_debug_init(struct dentry *debugfs_dir);
+void v4l2_async_debug_init(struct debugfs_node *debugfs_dir);
 
 /**
  * v4l2_async_nf_init - Initialize a notifier.

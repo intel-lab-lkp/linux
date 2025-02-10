@@ -57,7 +57,7 @@ struct gcov_node {
 	struct gcov_info **loaded_info;
 	struct gcov_info *unloaded_info;
 	struct debugfs_node *dentry;
-	struct dentry **links;
+	struct debugfs_node **links;
 	int num_loaded;
 	char name[];
 };

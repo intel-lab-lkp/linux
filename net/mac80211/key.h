@@ -121,8 +121,8 @@ struct ieee80211_key {
 
 #ifdef CONFIG_MAC80211_DEBUGFS
 	struct {
-		struct dentry *stalink;
-		struct dentry *dir;
+		struct debugfs_node *stalink;
+		struct debugfs_node *dir;
 		int cnt;
 	} debugfs;
 #endif

@@ -319,6 +319,7 @@ static inline void sdi_uninit_port(struct device_node *port)
 #ifdef CONFIG_FB_OMAP2_DSS_DSI
 
 struct dentry;
+#define debugfs_node dentry
 struct file_operations;
 
 int dsi_init_platform_driver(void) __init;

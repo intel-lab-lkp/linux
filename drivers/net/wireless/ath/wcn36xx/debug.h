@@ -23,7 +23,7 @@
 
 #ifdef CONFIG_WCN36XX_DEBUGFS
 struct wcn36xx_dfs_file {
-	struct dentry *dentry;
+	struct debugfs_node *node;
 	u32 value;
 };
 

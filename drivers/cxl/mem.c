@@ -110,7 +110,7 @@ static int cxl_mem_probe(struct device *dev)
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct device *endpoint_parent;
 	struct cxl_dport *dport;
-	struct dentry *dentry;
+	struct debugfs_node *node;
 	int rc;
 
 	if (!cxlds->media_ready)
@@ -127,17 +127,17 @@ static int cxl_mem_probe(struct device *dev)
 	if (work_pending(&cxlmd->detach_work))
 		return -EBUSY;
 
-	dentry = cxl_debugfs_create_dir(dev_name(dev));
-	debugfs_create_devm_seqfile(dev, "dpamem", dentry, cxl_mem_dpa_show);
+	node = cxl_debugfs_create_dir(dev_name(dev));
+	debugfs_create_devm_seqfile(dev, "dpamem", node, cxl_mem_dpa_show);
 
 	if (test_bit(CXL_POISON_ENABLED_INJECT, mds->poison.enabled_cmds))
-		debugfs_create_file("inject_poison", 0200, dentry, cxlmd,
+		debugfs_create_file("inject_poison", 0200, node, cxlmd,
 				    &cxl_poison_inject_fops);
 	if (test_bit(CXL_POISON_ENABLED_CLEAR, mds->poison.enabled_cmds))
-		debugfs_create_file("clear_poison", 0200, dentry, cxlmd,
+		debugfs_create_file("clear_poison", 0200, node, cxlmd,
 				    &cxl_poison_clear_fops);
 
-	rc = devm_add_action_or_reset(dev, remove_debugfs, dentry);
+	rc = devm_add_action_or_reset(dev, remove_debugfs, node);
 	if (rc)
 		return rc;
 

@@ -3311,7 +3311,7 @@ static const struct file_operations iwl_dbgfs_monitor_data_ops = {
 /* Create the debugfs files and directories */
 void iwl_trans_pcie_dbgfs_register(struct iwl_trans *trans)
 {
-	struct dentry *dir = trans->dbgfs_dir;
+	struct debugfs_node *dir = trans->dbgfs_dir;
 
 	DEBUGFS_ADD_FILE(rx_queue, dir, 0400);
 	DEBUGFS_ADD_FILE(tx_queue, dir, 0400);

@@ -1028,7 +1028,7 @@ void nfp_net_debugfs_create(void);
 void nfp_net_debugfs_destroy(void);
 struct debugfs_node *nfp_net_debugfs_device_add(struct pci_dev *pdev);
 void nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct debugfs_node *ddir);
-void nfp_net_debugfs_dir_clean(struct dentry **dir);
+void nfp_net_debugfs_dir_clean(struct debugfs_node **dir);
 #else
 static inline void nfp_net_debugfs_create(void)
 {
@@ -1048,7 +1048,7 @@ nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct debugfs_node *ddir)
 {
 }
 
-static inline void nfp_net_debugfs_dir_clean(struct dentry **dir)
+static inline void nfp_net_debugfs_dir_clean(struct debugfs_node **dir)
 {
 }
 #endif /* CONFIG_NFP_DEBUG */

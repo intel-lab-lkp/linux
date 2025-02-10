@@ -59,7 +59,7 @@ void visl_trace_bitstream(struct visl_ctx *ctx, struct visl_run *run)
 	memcpy(blob->blob.data, vaddr, data_sz);
 
 	dentry = debugfs_create_blob(name, 0444, ctx->dev->bitstream_debugfs,
-				     &blob->blob);
+				   &blob->blob);
 	if (IS_ERR(dentry))
 		goto err_debugfs;
 

@@ -637,8 +637,8 @@ struct cxl_service_layer_ops {
 	int (*attach_afu_directed)(struct cxl_context *ctx, u64 wed, u64 amr);
 	int (*attach_dedicated_process)(struct cxl_context *ctx, u64 wed, u64 amr);
 	void (*update_dedicated_ivtes)(struct cxl_context *ctx);
-	void (*debugfs_add_adapter_regs)(struct cxl *adapter, struct dentry *dir);
-	void (*debugfs_add_afu_regs)(struct cxl_afu *afu, struct dentry *dir);
+	void (*debugfs_add_adapter_regs)(struct cxl *adapter, struct debugfs_node *dir);
+	void (*debugfs_add_afu_regs)(struct cxl_afu *afu, struct debugfs_node *dir);
 	void (*psl_irq_dump_registers)(struct cxl_context *ctx);
 	void (*err_irq_dump_registers)(struct cxl *adapter);
 	void (*debugfs_stop_trace)(struct cxl *adapter);

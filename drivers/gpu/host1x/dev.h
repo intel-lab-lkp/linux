@@ -53,7 +53,7 @@ struct host1x_pushbuffer_ops {
 };
 
 struct host1x_debug_ops {
-	void (*debug_init)(struct dentry *de);
+	void (*debug_init)(struct debugfs_node *de);
 	void (*show_channel_cdma)(struct host1x *host,
 				  struct host1x_channel *ch,
 				  struct output *o);

@@ -481,7 +481,7 @@ void drbd_debugfs_resource_add(struct drbd_resource *resource)
 	resource->debugfs_res_in_flight_summary = dentry;
 }
 
-static void drbd_debugfs_remove(struct dentry **dp)
+static void drbd_debugfs_remove(struct debugfs_node **dp)
 {
 	debugfs_remove(*dp);
 	*dp = NULL;

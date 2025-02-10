@@ -19,7 +19,7 @@ struct rproc;
 
 struct rproc_debug_trace {
 	struct rproc *rproc;
-	struct dentry *tfile;
+	struct debugfs_node *tfile;
 	struct list_head node;
 	struct rproc_mem_entry trace_mem;
 };
@@ -63,7 +63,7 @@ int rproc_of_parse_firmware(struct device *dev, int index,
 irqreturn_t rproc_vq_interrupt(struct rproc *rproc, int vq_id);
 
 /* from remoteproc_debugfs.c */
-void rproc_remove_trace_file(struct dentry *tfile);
+void rproc_remove_trace_file(struct debugfs_node *tfile);
 struct debugfs_node *rproc_create_trace_file(const char *name, struct rproc *rproc,
 				       struct rproc_debug_trace *trace);
 void rproc_delete_debug_dir(struct rproc *rproc);

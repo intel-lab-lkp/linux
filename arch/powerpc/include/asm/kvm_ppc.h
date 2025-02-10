@@ -318,7 +318,7 @@ struct kvmppc_ops {
 	int (*enable_dawr1)(struct kvm *kvm);
 	bool (*hash_v3_possible)(void);
 	int (*create_vm_debugfs)(struct kvm *kvm);
-	int (*create_vcpu_debugfs)(struct kvm_vcpu *vcpu, struct dentry *debugfs_dentry);
+	int (*create_vcpu_debugfs)(struct kvm_vcpu *vcpu, struct debugfs_node *debugfs_dentry);
 };
 
 extern struct kvmppc_ops *kvmppc_hv_ops;

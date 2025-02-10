@@ -105,7 +105,7 @@
 struct closure;
 struct closure_syncer;
 typedef void (closure_fn) (struct work_struct *);
-extern struct dentry *bcache_debug;
+extern struct debugfs_node *bcache_debug;
 
 struct closure_waitlist {
 	struct llist_head	list;

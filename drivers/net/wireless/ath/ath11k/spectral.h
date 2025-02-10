@@ -29,9 +29,9 @@ struct ath11k_spectral {
 	/* Protects enabled */
 	spinlock_t lock;
 	struct rchan *rfs_scan;	/* relay(fs) channel for spectral scan */
-	struct dentry *scan_ctl;
-	struct dentry *scan_count;
-	struct dentry *scan_bins;
+	struct debugfs_node *scan_ctl;
+	struct debugfs_node *scan_count;
+	struct debugfs_node *scan_bins;
 	enum ath11k_spectral_mode mode;
 	u16 count;
 	u8 fft_size;

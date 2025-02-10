@@ -32,17 +32,20 @@
  *      │   ├── vfN	# d_inode->i_private = VFID(N)
  */
 
-static void *extract_priv(struct dentry *d)
+static void *extract_priv(struct debugfs_node *d)
 {
-	return d->d_inode->i_private;
+	return debugfs_node_inode(d)->i_private;
 }
 
-static struct xe_gt *extract_gt(struct dentry *d)
+static struct xe_gt *extract_gt(struct debugfs_node *d)
 {
-	return extract_priv(d->d_parent);
+	struct dentry *dentry = debugfs_node_dentry(d);
+	struct debugfs_node *parent = debugfs_node_from_dentry(dentry->d_parent);
+
+	return extract_priv(parent);
 }
 
-static unsigned int extract_vfid(struct dentry *d)
+static unsigned int extract_vfid(struct debugfs_node *d)
 {
 	return extract_priv(d) == extract_gt(d) ? PFID : (uintptr_t)extract_priv(d);
 }
@@ -332,7 +335,7 @@ static const struct {
 static ssize_t control_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct debugfs_node *parent = dent->d_parent;
+	struct debugfs_node *parent = debugfs_node_from_dentry(dent->d_parent);
 	struct xe_gt *gt = extract_gt(parent);
 	struct xe_device *xe = gt_to_xe(gt);
 	unsigned int vfid = extract_vfid(parent);
@@ -400,7 +403,7 @@ static ssize_t guc_state_read(struct file *file, char __user *buf,
 			      size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct debugfs_node *parent = dent->d_parent;
+	struct debugfs_node *parent = debugfs_node_from_dentry(dent->d_parent);
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 
@@ -411,7 +414,7 @@ static ssize_t guc_state_write(struct file *file, const char __user *buf,
 			       size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct debugfs_node *parent = dent->d_parent;
+	struct debugfs_node *parent = debugfs_node_from_dentry(dent->d_parent);
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 
@@ -438,7 +441,7 @@ static ssize_t config_blob_read(struct file *file, char __user *buf,
 				size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct debugfs_node *parent = dent->d_parent;
+	struct debugfs_node *parent = debugfs_node_from_dentry(dent->d_parent);
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 	ssize_t ret;
@@ -466,7 +469,7 @@ static ssize_t config_blob_write(struct file *file, const char __user *buf,
 				 size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct debugfs_node *parent = dent->d_parent;
+	struct debugfs_node *parent = debugfs_node_from_dentry(dent->d_parent);
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 	ssize_t ret;

@@ -2010,7 +2010,7 @@ enum ieee80211_neg_ttlm_res {
  *	restrictions.
  * @hw_queue: hardware queue for each AC
  * @cab_queue: content-after-beacon (DTIM beacon really) queue, AP mode only
- * @debugfs_dir: debugfs dentry, can be used by drivers to create own per
+ * @debugfs_dir: debugfs_node, can be used by drivers to create own per
  *	interface debug files. Note that it will be NULL for the virtual
  *	monitor interface (if that is requested.)
  * @probe_req_reg: probe requests should be reported to mac80211 for this
@@ -4570,15 +4570,15 @@ struct ieee80211_ops {
 	void (*link_add_debugfs)(struct ieee80211_hw *hw,
 				 struct ieee80211_vif *vif,
 				 struct ieee80211_bss_conf *link_conf,
-				 struct dentry *dir);
+				 struct debugfs_node *dir);
 	void (*sta_add_debugfs)(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_sta *sta,
-				struct dentry *dir);
+				struct debugfs_node *dir);
 	void (*link_sta_add_debugfs)(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_link_sta *link_sta,
-				     struct dentry *dir);
+				     struct debugfs_node *dir);
 #endif
 	void (*sta_notify)(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			enum sta_notify_cmd, struct ieee80211_sta *sta);
@@ -7010,7 +7010,7 @@ struct rate_control_ops {
 	const char *name;
 	void *(*alloc)(struct ieee80211_hw *hw);
 	void (*add_debugfs)(struct ieee80211_hw *hw, void *priv,
-			    struct dentry *debugfsdir);
+			    struct debugfs_node *debugfsdir);
 	void (*free)(void *priv);
 
 	void *(*alloc_sta)(void *priv, struct ieee80211_sta *sta, gfp_t gfp);
@@ -7034,7 +7034,7 @@ struct rate_control_ops {
 			 struct ieee80211_tx_rate_control *txrc);
 
 	void (*add_sta_debugfs)(void *priv, void *priv_sta,
-				struct dentry *dir);
+				struct debugfs_node *dir);
 
 	u32 (*get_expected_throughput)(void *priv_sta);
 };

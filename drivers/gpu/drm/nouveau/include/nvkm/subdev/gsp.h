@@ -229,11 +229,11 @@ struct nvkm_gsp {
 	 * in memory until the dentry is deleted.
 	 */
 	struct {
-		struct dentry *parent;
-		struct dentry *init;
-		struct dentry *rm;
-		struct dentry *intr;
-		struct dentry *pmu;
+		struct debugfs_node *parent;
+		struct debugfs_node *init;
+		struct debugfs_node *rm;
+		struct debugfs_node *intr;
+		struct debugfs_node *pmu;
 	} debugfs;
 	struct debugfs_blob_wrapper blob_init;
 	struct debugfs_blob_wrapper blob_intr;

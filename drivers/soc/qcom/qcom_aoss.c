@@ -506,6 +506,7 @@ static ssize_t qmp_debugfs_write(struct file *file, const char __user *user_buf,
 				 size_t count, loff_t *pos)
 {
 	const struct qmp_debugfs_entry *entry = NULL;
+	struct debugfs_node *node;
 	struct qmp *qmp = file->private_data;
 	char buf[QMP_MSG_LEN];
 	unsigned int uint_val;
@@ -515,7 +516,8 @@ static ssize_t qmp_debugfs_write(struct file *file, const char __user *user_buf,
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(qmp->debugfs_files); i++) {
-		if (qmp->debugfs_files[i] == file->f_path.dentry) {
+		node = debugfs_node_from_dentry(file->f_path.dentry);
+		if (qmp->debugfs_files[i] == node) {
 			entry = &qmp_debugfs_entries[i];
 			break;
 		}

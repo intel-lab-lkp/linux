@@ -105,17 +105,17 @@ struct ubifs_debug_info {
 	unsigned int tst_rcvry:1;
 
 	char dfs_dir_name[UBIFS_DFS_DIR_LEN];
-	struct dentry *dfs_dir;
-	struct dentry *dfs_dump_lprops;
-	struct dentry *dfs_dump_budg;
-	struct dentry *dfs_dump_tnc;
-	struct dentry *dfs_chk_gen;
-	struct dentry *dfs_chk_index;
-	struct dentry *dfs_chk_orph;
-	struct dentry *dfs_chk_lprops;
-	struct dentry *dfs_chk_fs;
-	struct dentry *dfs_tst_rcvry;
-	struct dentry *dfs_ro_error;
+	struct debugfs_node *dfs_dir;
+	struct debugfs_node *dfs_dump_lprops;
+	struct debugfs_node *dfs_dump_budg;
+	struct debugfs_node *dfs_dump_tnc;
+	struct debugfs_node *dfs_chk_gen;
+	struct debugfs_node *dfs_chk_index;
+	struct debugfs_node *dfs_chk_orph;
+	struct debugfs_node *dfs_chk_lprops;
+	struct debugfs_node *dfs_chk_fs;
+	struct debugfs_node *dfs_tst_rcvry;
+	struct debugfs_node *dfs_ro_error;
 };
 
 /**

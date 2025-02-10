@@ -6,6 +6,7 @@
 #ifndef __LINUX_CLK_PROVIDER_H
 #define __LINUX_CLK_PROVIDER_H
 
+#include <linux/debugfs.h>
 #include <linux/of.h>
 #include <linux/of_clk.h>
 
@@ -266,7 +267,7 @@ struct clk_ops {
 					  struct clk_duty *duty);
 	int		(*init)(struct clk_hw *hw);
 	void		(*terminate)(struct clk_hw *hw);
-	void		(*debug_init)(struct clk_hw *hw, struct dentry *dentry);
+	void		(*debug_init)(struct clk_hw *hw, struct debugfs_node *dentry);
 };
 
 /**

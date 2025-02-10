@@ -146,10 +146,10 @@ struct ceph_fs_client {
 	spinlock_t async_unlink_conflict_lock;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_dentry_lru, *debugfs_caps;
+	struct debugfs_node *debugfs_dentry_lru, *debugfs_caps;
 	struct debugfs_node *debugfs_congestion_kb;
 	struct debugfs_node *debugfs_bdi;
-	struct dentry *debugfs_mdsc, *debugfs_mdsmap;
+	struct debugfs_node *debugfs_mdsc, *debugfs_mdsmap;
 	struct debugfs_node *debugfs_status;
 	struct debugfs_node *debugfs_mds_sessions;
 	struct debugfs_node *debugfs_metrics_dir;

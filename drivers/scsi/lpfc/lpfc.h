@@ -1366,7 +1366,7 @@ struct lpfc_hba {
 
 	struct debugfs_node *debug_nvmeio_trc;
 	struct lpfc_debugfs_nvmeio_trc *nvmeio_trc;
-	struct dentry *debug_hdwqinfo;
+	struct debugfs_node *debug_hdwqinfo;
 #ifdef LPFC_HDWQ_LOCK_STAT
 	struct debugfs_node *debug_lockstat;
 #endif

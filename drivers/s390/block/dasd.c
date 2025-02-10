@@ -40,7 +40,7 @@
  */
 debug_info_t *dasd_debug_area;
 EXPORT_SYMBOL(dasd_debug_area);
-static struct dentry *dasd_debugfs_root_entry;
+static struct debugfs_node *dasd_debugfs_root_entry;
 struct dasd_discipline *dasd_diag_discipline_pointer;
 EXPORT_SYMBOL(dasd_diag_discipline_pointer);
 void dasd_int_handler(struct ccw_device *, unsigned long, struct irb *);
@@ -63,9 +63,9 @@ static void dasd_return_cqr_cb(struct dasd_ccw_req *, void *);
 static void dasd_device_timeout(struct timer_list *);
 static void dasd_block_timeout(struct timer_list *);
 static void __dasd_process_erp(struct dasd_device *, struct dasd_ccw_req *);
-static void dasd_profile_init(struct dasd_profile *, struct dentry *);
+static void dasd_profile_init(struct dasd_profile *, struct debugfs_node *);
 static void dasd_profile_exit(struct dasd_profile *);
-static void dasd_hosts_init(struct dentry *, struct dasd_device *);
+static void dasd_hosts_init(struct debugfs_node *, struct dasd_device *);
 static void dasd_hosts_exit(struct dasd_device *);
 static int dasd_handle_autoquiesce(struct dasd_device *, struct dasd_ccw_req *,
 				   unsigned int);
@@ -205,10 +205,10 @@ static int dasd_state_known_to_new(struct dasd_device *device)
 	return 0;
 }
 
-static struct dentry *dasd_debugfs_setup(const char *name,
-					 struct dentry *base_dentry)
+static struct debugfs_node *dasd_debugfs_setup(const char *name,
+					 struct debugfs_node *base_dentry)
 {
-	struct dentry *pde;
+	struct debugfs_node *pde;
 
 	if (!base_dentry)
 		return NULL;
@@ -646,7 +646,7 @@ unsigned int dasd_global_profile_level = DASD_PROFILE_OFF;
 struct dasd_profile dasd_global_profile = {
 	.lock = __SPIN_LOCK_UNLOCKED(dasd_global_profile.lock),
 };
-static struct dentry *dasd_debugfs_global_entry;
+static struct debugfs_node *dasd_debugfs_global_entry;
 
 /*
  * Add profiling information for cqr before execution.
@@ -1049,10 +1049,10 @@ static const struct file_operations dasd_stats_raw_fops = {
 };
 
 static void dasd_profile_init(struct dasd_profile *profile,
-			      struct dentry *base_dentry)
+			      struct debugfs_node *base_dentry)
 {
 	umode_t mode;
-	struct dentry *pde;
+	struct debugfs_node *pde;
 
 	if (!base_dentry)
 		return;
@@ -1083,7 +1083,7 @@ static void dasd_statistics_removeroot(void)
 
 static void dasd_statistics_createroot(void)
 {
-	struct dentry *pde;
+	struct debugfs_node *pde;
 
 	dasd_debugfs_root_entry = NULL;
 	pde = debugfs_create_dir("dasd", NULL);
@@ -1119,7 +1119,7 @@ static void dasd_statistics_removeroot(void)
 }
 
 static void dasd_profile_init(struct dasd_profile *profile,
-			      struct dentry *base_dentry)
+			      struct debugfs_node *base_dentry)
 {
 	return;
 }
@@ -1159,10 +1159,10 @@ static void dasd_hosts_exit(struct dasd_device *device)
 	device->hosts_dentry = NULL;
 }
 
-static void dasd_hosts_init(struct dentry *base_dentry,
+static void dasd_hosts_init(struct debugfs_node *base_dentry,
 			    struct dasd_device *device)
 {
-	struct dentry *pde;
+	struct debugfs_node *pde;
 	umode_t mode;
 
 	if (!base_dentry)

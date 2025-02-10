@@ -18,7 +18,7 @@ enum {
 };
 
 void *scmi_raw_mode_init(const struct scmi_handle *handle,
-			 struct dentry *top_dentry, int instance_id,
+			 struct debugfs_node *top_dentry, int instance_id,
 			 u8 *channels, int num_chans,
 			 const struct scmi_desc *desc, int tx_max_msg);
 void scmi_raw_mode_cleanup(void *raw);

@@ -1101,10 +1101,13 @@ void amdgpu_ras_debugfs_set_ret_size(struct amdgpu_ras_eeprom_control *control)
 {
 	struct amdgpu_ras *ras = container_of(control, struct amdgpu_ras,
 					      eeprom_control);
-	struct dentry *de = ras->de_ras_eeprom_table;
+	struct debugfs_node *de = ras->de_ras_eeprom_table;
+	struct inode *de_inode;
 
-	if (de)
-		d_inode(de)->i_size = amdgpu_ras_debugfs_table_size(control);
+	if (de) {
+		de_inode = debugfs_node_inode(de);
+		de_inode->i_size = amdgpu_ras_debugfs_table_size(control);
+	}
 }
 
 static ssize_t amdgpu_ras_debugfs_table_read(struct file *f, char __user *buf,

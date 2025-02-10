@@ -102,7 +102,7 @@ static const struct file_operations ht40allow_map_ops = {
 
 void cfg80211_debugfs_rdev_add(struct cfg80211_registered_device *rdev)
 {
-	struct dentry *phyd = rdev->wiphy.debugfsdir;
+	struct debugfs_node *phyd = rdev->wiphy.debugfsdir;
 
 	DEBUGFS_ADD(rts_threshold);
 	DEBUGFS_ADD(fragmentation_threshold);

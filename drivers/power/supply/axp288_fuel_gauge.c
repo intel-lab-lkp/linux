@@ -123,7 +123,7 @@ struct axp288_fg_info {
 	int max_volt;
 	int pwr_op;
 	int low_cap;
-	struct dentry *debug_file;
+	struct debugfs_node *debug_file;
 
 	char valid;                 /* zero until following fields are valid */
 	unsigned long last_updated; /* in jiffies */

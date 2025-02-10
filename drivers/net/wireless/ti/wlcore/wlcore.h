@@ -76,7 +76,7 @@ struct wlcore_ops {
 			    struct sk_buff *skb);
 	u32 (*ap_get_mimo_wide_rate_mask)(struct wl1271 *wl,
 					  struct wl12xx_vif *wlvif);
-	int (*debugfs_init)(struct wl1271 *wl, struct dentry *rootdir);
+	int (*debugfs_init)(struct wl1271 *wl, struct debugfs_node *rootdir);
 	int (*handle_static_data)(struct wl1271 *wl,
 				  struct wl1271_static_data *static_data);
 	int (*scan_start)(struct wl1271 *wl, struct wl12xx_vif *wlvif,

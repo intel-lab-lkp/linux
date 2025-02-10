@@ -330,6 +330,7 @@ static ssize_t dfs_file_read(struct file *file, char __user *user_buf,
 {
 	unsigned long ubi_num = (unsigned long)file->private_data;
 	struct dentry *dent = file->f_path.dentry;
+	struct debugfs_node *node = debugfs_node_from_dentry(dent);
 	struct ubi_device *ubi;
 	struct ubi_debug_info *d;
 	char buf[16];
@@ -340,34 +341,34 @@ static ssize_t dfs_file_read(struct file *file, char __user *user_buf,
 		return -ENODEV;
 	d = &ubi->dbg;
 
-	if (dent == d->dfs_chk_gen)
+	if (node == d->dfs_chk_gen)
 		val = d->chk_gen;
-	else if (dent == d->dfs_chk_io)
+	else if (node == d->dfs_chk_io)
 		val = d->chk_io;
-	else if (dent == d->dfs_chk_fastmap)
+	else if (node == d->dfs_chk_fastmap)
 		val = d->chk_fastmap;
-	else if (dent == d->dfs_disable_bgt)
+	else if (node == d->dfs_disable_bgt)
 		val = d->disable_bgt;
-	else if (dent == d->dfs_emulate_bitflips)
+	else if (node == d->dfs_emulate_bitflips)
 		val = d->emulate_bitflips;
-	else if (dent == d->dfs_emulate_io_failures)
+	else if (node == d->dfs_emulate_io_failures)
 		val = d->emulate_io_failures;
-	else if (dent == d->dfs_emulate_failures) {
+	else if (node == d->dfs_emulate_failures) {
 		snprintf(buf, sizeof(buf), "0x%04x\n", d->emulate_failures);
 		count = simple_read_from_buffer(user_buf, count, ppos,
 						buf, strlen(buf));
 		goto out;
-	} else if (dent == d->dfs_emulate_power_cut) {
+	} else if (node == d->dfs_emulate_power_cut) {
 		snprintf(buf, sizeof(buf), "%u\n", d->emulate_power_cut);
 		count = simple_read_from_buffer(user_buf, count, ppos,
 						buf, strlen(buf));
 		goto out;
-	} else if (dent == d->dfs_power_cut_min) {
+	} else if (node == d->dfs_power_cut_min) {
 		snprintf(buf, sizeof(buf), "%u\n", d->power_cut_min);
 		count = simple_read_from_buffer(user_buf, count, ppos,
 						buf, strlen(buf));
 		goto out;
-	} else if (dent == d->dfs_power_cut_max) {
+	} else if (node == d->dfs_power_cut_max) {
 		snprintf(buf, sizeof(buf), "%u\n", d->power_cut_max);
 		count = simple_read_from_buffer(user_buf, count, ppos,
 						buf, strlen(buf));
@@ -397,6 +398,7 @@ static ssize_t dfs_file_write(struct file *file, const char __user *user_buf,
 {
 	unsigned long ubi_num = (unsigned long)file->private_data;
 	struct dentry *dent = file->f_path.dentry;
+	struct debugfs_node *node = debugfs_node_from_dentry(dent);
 	struct ubi_device *ubi;
 	struct ubi_debug_info *d;
 	size_t buf_size;
@@ -414,19 +416,19 @@ static ssize_t dfs_file_write(struct file *file, const char __user *user_buf,
 		goto out;
 	}
 
-	if (dent == d->dfs_emulate_failures) {
+	if (node == d->dfs_emulate_failures) {
 		if (kstrtouint(buf, 0, &d->emulate_failures) != 0)
 			count = -EINVAL;
 		goto out;
-	} else if (dent == d->dfs_power_cut_min) {
+	} else if (node == d->dfs_power_cut_min) {
 		if (kstrtouint(buf, 0, &d->power_cut_min) != 0)
 			count = -EINVAL;
 		goto out;
-	} else if (dent == d->dfs_power_cut_max) {
+	} else if (node == d->dfs_power_cut_max) {
 		if (kstrtouint(buf, 0, &d->power_cut_max) != 0)
 			count = -EINVAL;
 		goto out;
-	} else if (dent == d->dfs_emulate_power_cut) {
+	} else if (node == d->dfs_emulate_power_cut) {
 		if (kstrtoint(buf, 0, &val) != 0)
 			count = -EINVAL;
 		else
@@ -443,17 +445,17 @@ static ssize_t dfs_file_write(struct file *file, const char __user *user_buf,
 		goto out;
 	}
 
-	if (dent == d->dfs_chk_gen)
+	if (node == d->dfs_chk_gen)
 		d->chk_gen = val;
-	else if (dent == d->dfs_chk_io)
+	else if (node == d->dfs_chk_io)
 		d->chk_io = val;
-	else if (dent == d->dfs_chk_fastmap)
+	else if (node == d->dfs_chk_fastmap)
 		d->chk_fastmap = val;
-	else if (dent == d->dfs_disable_bgt)
+	else if (node == d->dfs_disable_bgt)
 		d->disable_bgt = val;
-	else if (dent == d->dfs_emulate_bitflips)
+	else if (node == d->dfs_emulate_bitflips)
 		d->emulate_bitflips = val;
-	else if (dent == d->dfs_emulate_io_failures)
+	else if (node == d->dfs_emulate_io_failures)
 		d->emulate_io_failures = val;
 	else
 		count = -EINVAL;

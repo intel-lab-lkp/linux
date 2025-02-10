@@ -734,7 +734,7 @@ struct drm_bridge_funcs {
 	 *
 	 * Allows bridges to create bridge-specific debugfs files.
 	 */
-	void (*debugfs_init)(struct drm_bridge *bridge, struct dentry *root);
+	void (*debugfs_init)(struct drm_bridge *bridge, struct debugfs_node *root);
 };
 
 /**

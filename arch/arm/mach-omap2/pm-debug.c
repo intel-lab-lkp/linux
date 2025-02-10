@@ -187,7 +187,7 @@ static int __init pwrdms_setup(struct powerdomain *pwrdm, void *dir)
 	if (strncmp(pwrdm->name, "dpll", 4) == 0)
 		return 0;
 
-	d = debugfs_create_dir(pwrdm->name, (struct dentry *)dir);
+	d = debugfs_create_dir(pwrdm->name, (struct debugfs_node *)dir);
 	debugfs_create_file("suspend", S_IRUGO|S_IWUSR, d, pwrdm,
 			    &pwrdm_suspend_fops);
 

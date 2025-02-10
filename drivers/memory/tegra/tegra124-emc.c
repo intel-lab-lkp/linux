@@ -496,7 +496,7 @@ struct tegra_emc {
 	unsigned int num_timings;
 
 	struct {
-		struct dentry *root;
+		struct debugfs_node *root;
 		unsigned long min_rate;
 		unsigned long max_rate;
 	} debugfs;

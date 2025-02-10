@@ -6,6 +6,8 @@
 #ifndef __XFS_SCRUB_STATS_H__
 #define __XFS_SCRUB_STATS_H__
 
+#include <linux/debugfs.h>
+
 struct xchk_stats_run {
 	u64			scrub_ns;
 	u64			repair_ns;
@@ -17,13 +19,13 @@ struct xchk_stats_run {
 #ifdef CONFIG_XFS_ONLINE_SCRUB_STATS
 struct xchk_stats;
 
-int __init xchk_global_stats_setup(struct dentry *parent);
+int __init xchk_global_stats_setup(struct debugfs_node *parent);
 void xchk_global_stats_teardown(void);
 
 int xchk_mount_stats_alloc(struct xfs_mount *mp);
 void xchk_mount_stats_free(struct xfs_mount *mp);
 
-void xchk_stats_register(struct xchk_stats *cs, struct dentry *parent);
+void xchk_stats_register(struct xchk_stats *cs, struct debugfs_node *parent);
 void xchk_stats_unregister(struct xchk_stats *cs);
 
 void xchk_stats_merge(struct xfs_mount *mp, const struct xfs_scrub_metadata *sm,

@@ -34,6 +34,7 @@
 
 #include <uapi/drm/drm_mode.h>
 
+#define debugfs_node dentry
 struct drm_connector_helper_funcs;
 struct drm_modeset_acquire_ctx;
 struct drm_device;
@@ -1576,7 +1577,7 @@ struct drm_connector_funcs {
 	 *
 	 * Allows connectors to create connector-specific debugfs files.
 	 */
-	void (*debugfs_init)(struct drm_connector *connector, struct dentry *root);
+	void (*debugfs_init)(struct drm_connector *connector, struct debugfs_node *root);
 };
 
 /**

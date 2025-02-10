@@ -1056,8 +1056,8 @@ struct bch_fs {
 	struct semaphore	online_fsck_mutex;
 
 	/* DEBUG JUNK */
-	struct dentry		*fs_debug_dir;
-	struct dentry		*btree_debug_dir;
+	struct debugfs_node	*fs_debug_dir;
+	struct debugfs_node	*btree_debug_dir;
 	struct btree_debug	btree_debug[BTREE_ID_NR];
 	struct btree		*verify_data;
 	struct btree_node	*verify_ondisk;

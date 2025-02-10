@@ -981,15 +981,15 @@ static void add_files(struct ieee80211_sub_if_data *sdata)
 #define DEBUGFS_ADD(dentry, name) DEBUGFS_ADD_MODE(dentry, name, 0400)
 
 static void add_link_files(struct ieee80211_link_data *link,
-			   struct dentry *dentry)
+			   struct debugfs_node *node)
 {
-	DEBUGFS_ADD(dentry, txpower);
-	DEBUGFS_ADD(dentry, user_power_level);
-	DEBUGFS_ADD(dentry, ap_power_level);
+	DEBUGFS_ADD(node, txpower);
+	DEBUGFS_ADD(node, user_power_level);
+	DEBUGFS_ADD(node, ap_power_level);
 
 	switch (link->sdata->vif.type) {
 	case NL80211_IFTYPE_STATION:
-		DEBUGFS_ADD_MODE(dentry, smps, 0600);
+		DEBUGFS_ADD_MODE(node, smps, 0600);
 		break;
 	default:
 		break;

@@ -72,7 +72,7 @@ struct hinic_debug_priv {
 	struct hinic_dev	*dev;
 	void			*object;
 	enum hinic_dbg_type	type;
-	struct dentry		*root;
+	struct debugfs_node	*root;
 	int			field_id[64];
 };
 

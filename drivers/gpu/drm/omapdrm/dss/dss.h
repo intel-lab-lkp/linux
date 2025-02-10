@@ -247,7 +247,7 @@ struct dss_device {
 	const struct dss_features *feat;
 
 	struct {
-		struct dentry *root;
+		struct debugfs_node *root;
 		struct dss_debugfs_entry *clk;
 		struct dss_debugfs_entry *dss;
 	} debugfs;

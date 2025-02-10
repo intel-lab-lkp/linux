@@ -290,7 +290,7 @@ struct cec_adapter {
 	struct cec_pin *pin;
 #endif
 
-	struct dentry *cec_dir;
+	struct debugfs_node *cec_dir;
 
 	u32 sequence;
 

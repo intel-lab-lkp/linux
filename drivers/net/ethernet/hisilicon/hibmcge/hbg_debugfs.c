@@ -128,7 +128,7 @@ static const struct hbg_dbg_info hbg_dbg_infos[] = {
 
 static void hbg_debugfs_uninit(void *data)
 {
-	debugfs_remove_recursive((struct dentry *)data);
+	debugfs_remove_recursive((struct debugfs_node *)data);
 }
 
 void hbg_debugfs_init(struct hbg_priv *priv)

@@ -2708,23 +2708,24 @@ static ssize_t dfs_file_read(struct file *file, char __user *u, size_t count,
 			     loff_t *ppos)
 {
 	struct dentry *dent = file->f_path.dentry;
+	struct debugfs_node *node = debugfs_node_from_dentry(dent);
 	struct ubifs_info *c = file->private_data;
 	struct ubifs_debug_info *d = c->dbg;
 	int val;
 
-	if (dent == d->dfs_chk_gen)
+	if (node == d->dfs_chk_gen)
 		val = d->chk_gen;
-	else if (dent == d->dfs_chk_index)
+	else if (node == d->dfs_chk_index)
 		val = d->chk_index;
-	else if (dent == d->dfs_chk_orph)
+	else if (node == d->dfs_chk_orph)
 		val = d->chk_orph;
-	else if (dent == d->dfs_chk_lprops)
+	else if (node == d->dfs_chk_lprops)
 		val = d->chk_lprops;
-	else if (dent == d->dfs_chk_fs)
+	else if (node == d->dfs_chk_fs)
 		val = d->chk_fs;
-	else if (dent == d->dfs_tst_rcvry)
+	else if (node == d->dfs_tst_rcvry)
 		val = d->tst_rcvry;
-	else if (dent == d->dfs_ro_error)
+	else if (node == d->dfs_ro_error)
 		val = c->ro_error;
 	else
 		return -EINVAL;
@@ -2764,17 +2765,18 @@ static ssize_t dfs_file_write(struct file *file, const char __user *u,
 	struct ubifs_info *c = file->private_data;
 	struct ubifs_debug_info *d = c->dbg;
 	struct dentry *dent = file->f_path.dentry;
+	struct debugfs_node *node = debugfs_node_from_dentry(dent);
 	int val;
 
-	if (file->f_path.dentry == d->dfs_dump_lprops) {
+	if (node == d->dfs_dump_lprops) {
 		ubifs_dump_lprops(c);
 		return count;
 	}
-	if (file->f_path.dentry == d->dfs_dump_budg) {
+	if (node == d->dfs_dump_budg) {
 		ubifs_dump_budg(c, &c->bi);
 		return count;
 	}
-	if (file->f_path.dentry == d->dfs_dump_tnc) {
+	if (node == d->dfs_dump_tnc) {
 		mutex_lock(&c->tnc_mutex);
 		ubifs_dump_tnc(c);
 		mutex_unlock(&c->tnc_mutex);
@@ -2785,19 +2787,19 @@ static ssize_t dfs_file_write(struct file *file, const char __user *u,
 	if (val < 0)
 		return val;
 
-	if (dent == d->dfs_chk_gen)
+	if (node == d->dfs_chk_gen)
 		d->chk_gen = val;
-	else if (dent == d->dfs_chk_index)
+	else if (node == d->dfs_chk_index)
 		d->chk_index = val;
-	else if (dent == d->dfs_chk_orph)
+	else if (node == d->dfs_chk_orph)
 		d->chk_orph = val;
-	else if (dent == d->dfs_chk_lprops)
+	else if (node == d->dfs_chk_lprops)
 		d->chk_lprops = val;
-	else if (dent == d->dfs_chk_fs)
+	else if (node == d->dfs_chk_fs)
 		d->chk_fs = val;
-	else if (dent == d->dfs_tst_rcvry)
+	else if (node == d->dfs_tst_rcvry)
 		d->tst_rcvry = val;
-	else if (dent == d->dfs_ro_error)
+	else if (node == d->dfs_ro_error)
 		c->ro_error = !!val;
 	else
 		return -EINVAL;
@@ -2902,19 +2904,20 @@ static ssize_t dfs_global_file_read(struct file *file, char __user *u,
 				    size_t count, loff_t *ppos)
 {
 	struct dentry *dent = file->f_path.dentry;
+	struct debugfs_node *node = debugfs_node_from_dentry(dent);
 	int val;
 
-	if (dent == dfs_chk_gen)
+	if (node == dfs_chk_gen)
 		val = ubifs_dbg.chk_gen;
-	else if (dent == dfs_chk_index)
+	else if (node == dfs_chk_index)
 		val = ubifs_dbg.chk_index;
-	else if (dent == dfs_chk_orph)
+	else if (node == dfs_chk_orph)
 		val = ubifs_dbg.chk_orph;
-	else if (dent == dfs_chk_lprops)
+	else if (node == dfs_chk_lprops)
 		val = ubifs_dbg.chk_lprops;
-	else if (dent == dfs_chk_fs)
+	else if (node == dfs_chk_fs)
 		val = ubifs_dbg.chk_fs;
-	else if (dent == dfs_tst_rcvry)
+	else if (node == dfs_tst_rcvry)
 		val = ubifs_dbg.tst_rcvry;
 	else
 		return -EINVAL;
@@ -2926,23 +2929,24 @@ static ssize_t dfs_global_file_write(struct file *file, const char __user *u,
 				     size_t count, loff_t *ppos)
 {
 	struct dentry *dent = file->f_path.dentry;
+	struct debugfs_node *node = debugfs_node_from_dentry(dent);
 	int val;
 
 	val = interpret_user_input(u, count);
 	if (val < 0)
 		return val;
 
-	if (dent == dfs_chk_gen)
+	if (node == dfs_chk_gen)
 		ubifs_dbg.chk_gen = val;
-	else if (dent == dfs_chk_index)
+	else if (node == dfs_chk_index)
 		ubifs_dbg.chk_index = val;
-	else if (dent == dfs_chk_orph)
+	else if (node == dfs_chk_orph)
 		ubifs_dbg.chk_orph = val;
-	else if (dent == dfs_chk_lprops)
+	else if (node == dfs_chk_lprops)
 		ubifs_dbg.chk_lprops = val;
-	else if (dent == dfs_chk_fs)
+	else if (node == dfs_chk_fs)
 		ubifs_dbg.chk_fs = val;
-	else if (dent == dfs_tst_rcvry)
+	else if (node == dfs_tst_rcvry)
 		ubifs_dbg.tst_rcvry = val;
 	else
 		return -EINVAL;

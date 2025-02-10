@@ -2405,7 +2405,7 @@ struct hl_debugfs_entry {
  * @i2c_len: generic u8 debugfs file for length value to use in i2c_data_read.
  */
 struct hl_dbg_device_entry {
-	struct dentry			*root;
+	struct debugfs_node		*root;
 	struct hl_device		*hdev;
 	struct hl_debugfs_entry		*entry_arr;
 	struct list_head		file_list;

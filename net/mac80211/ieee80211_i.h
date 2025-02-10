@@ -1186,11 +1186,11 @@ struct ieee80211_sub_if_data {
 
 #ifdef CONFIG_MAC80211_DEBUGFS
 	struct {
-		struct dentry *subdir_stations;
-		struct dentry *default_unicast_key;
-		struct dentry *default_multicast_key;
-		struct dentry *default_mgmt_key;
-		struct dentry *default_beacon_key;
+		struct debugfs_node *subdir_stations;
+		struct debugfs_node *default_unicast_key;
+		struct debugfs_node *default_multicast_key;
+		struct debugfs_node *default_mgmt_key;
+		struct debugfs_node *default_beacon_key;
 	} debugfs;
 #endif
 
@@ -1594,8 +1594,8 @@ struct ieee80211_local {
 
 #ifdef CONFIG_MAC80211_DEBUGFS
 	struct local_debugfsdentries {
-		struct dentry *rcdir;
-		struct dentry *keys;
+		struct debugfs_node *rcdir;
+		struct debugfs_node *keys;
 	} debugfs;
 	bool force_tx_status;
 #endif

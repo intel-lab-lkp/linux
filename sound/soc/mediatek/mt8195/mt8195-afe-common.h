@@ -128,7 +128,7 @@ struct mt8195_afe_private {
 	struct regmap *topckgen;
 	int pm_runtime_bypass_reg_ctl;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry **debugfs_dentry;
+	struct debugfs_node **debugfs_dentry;
 #endif
 	int afe_on_ref_cnt;
 	int top_cg_ref_cnt[MT8195_TOP_CG_NUM];

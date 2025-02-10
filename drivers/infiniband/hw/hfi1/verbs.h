@@ -253,9 +253,9 @@ struct hfi1_ibdev {
 
 #ifdef CONFIG_DEBUG_FS
 	/* per HFI debugfs */
-	struct dentry *hfi1_ibdev_dbg;
+	struct debugfs_node *hfi1_ibdev_dbg;
 	/* per HFI symlinks to above */
-	struct dentry *hfi1_ibdev_link;
+	struct debugfs_node *hfi1_ibdev_link;
 #ifdef CONFIG_FAULT_INJECTION
 	struct fault *fault;
 #endif

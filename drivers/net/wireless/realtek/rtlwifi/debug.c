@@ -436,7 +436,7 @@ void rtl_debug_add_one(struct ieee80211_hw *hw)
 {
 	struct rtl_priv *rtlpriv = rtl_priv(hw);
 	struct rtl_efuse *rtlefuse = rtl_efuse(rtl_priv(hw));
-	struct dentry *parent;
+	struct debugfs_node *parent;
 
 	snprintf(rtlpriv->dbg.debugfs_name, 18, "%pMF", rtlefuse->dev_addr);
 

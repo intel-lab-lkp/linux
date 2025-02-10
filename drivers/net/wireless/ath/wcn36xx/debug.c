@@ -179,10 +179,10 @@ static const struct file_operations fops_wcn36xx_firmware_feat_caps = {
 		d = debugfs_create_file(__stringify(name),	\
 					mode, dfs->rootdir,	\
 					priv_data, fop);	\
-		dfs->file_##name.dentry = d;			\
+		dfs->file_##name.node = d;			\
 		if (IS_ERR(d)) {				\
 			wcn36xx_warn("Create the debugfs entry failed");\
-			dfs->file_##name.dentry = NULL;		\
+			dfs->file_##name.node = NULL;		\
 		}						\
 	} while (0)
 

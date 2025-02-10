@@ -223,7 +223,7 @@ struct tegra_mc {
 	spinlock_t lock;
 
 	struct {
-		struct dentry *root;
+		struct debugfs_node *root;
 	} debugfs;
 };
 

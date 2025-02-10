@@ -189,7 +189,7 @@ static int davinci_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 }
 
 #ifdef CONFIG_DEBUG_FS
-static void davinci_pll_debug_init(struct clk_hw *hw, struct dentry *dentry);
+static void davinci_pll_debug_init(struct clk_hw *hw, struct debugfs_node *dentry);
 #else
 #define davinci_pll_debug_init NULL
 #endif

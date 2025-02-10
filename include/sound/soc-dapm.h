@@ -10,6 +10,7 @@
 #ifndef __LINUX_SND_SOC_DAPM_H
 #define __LINUX_SND_SOC_DAPM_H
 
+#include <linux/debugfs.h>
 #include <linux/types.h>
 #include <sound/control.h>
 #include <sound/soc-topology.h>
@@ -498,7 +499,7 @@ int snd_soc_dapm_mux_update_power(struct snd_soc_dapm_context *dapm,
 
 /* dapm sys fs - used by the core */
 extern struct attribute *soc_dapm_dev_attrs[];
-void snd_soc_dapm_debugfs_init(struct snd_soc_dapm_context *dapm, struct dentry *parent);
+void snd_soc_dapm_debugfs_init(struct snd_soc_dapm_context *dapm, struct debugfs_node *parent);
 
 /* dapm audio pin control and status */
 int snd_soc_dapm_enable_pin(struct snd_soc_dapm_context *dapm, const char *pin);

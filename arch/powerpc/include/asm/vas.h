@@ -84,7 +84,7 @@ struct vas_window {
 	enum vas_cop_type cop;
 	struct vas_user_win_ref task_ref;
 	char *dbgname;
-	struct dentry *dbgdir;
+	struct debugfs_node *dbgdir;
 };
 
 /*

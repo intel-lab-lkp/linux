@@ -6209,7 +6209,8 @@ static void kvm_uevent_notify_change(unsigned int type, struct kvm *kvm)
 		char *tmp, *p = kmalloc(PATH_MAX, GFP_KERNEL);
 
 		if (p) {
-			tmp = dentry_path_raw(kvm->debugfs_dentry, p, PATH_MAX);
+			tmp = debugfs_node_path_raw(kvm->debugfs_dentry, p,
+						    PATH_MAX);
 			if (!IS_ERR(tmp))
 				add_uevent_var(env, "STATS_PATH=%s", tmp);
 			kfree(p);

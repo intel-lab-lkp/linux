@@ -253,7 +253,7 @@ static debug_info_t *debug_info_alloc(const char *name, int pages_per_area,
 	rc->entry_size	   = sizeof(debug_entry_t) + buf_size;
 	strscpy(rc->name, name, sizeof(rc->name));
 	memset(rc->views, 0, DEBUG_MAX_VIEWS * sizeof(struct debug_view *));
-	memset(rc->debugfs_entries, 0, DEBUG_MAX_VIEWS * sizeof(struct dentry *));
+	memset(rc->debugfs_entries, 0, DEBUG_MAX_VIEWS * sizeof(struct debugfs_node *));
 	refcount_set(&(rc->ref_count), 0);
 
 	return rc;
@@ -660,15 +660,17 @@ static int debug_open(struct inode *inode, struct file *file)
 {
 	debug_info_t *debug_info;
 	file_private_info_t *p_info;
+	struct debugfs_node *node;
 	int i, rc = 0;
 
 	mutex_lock(&debug_mutex);
 	debug_info = file_inode(file)->i_private;
+	node = debugfs_node_from_dentry(file->f_path.dentry);
 	/* find debug view */
 	for (i = 0; i < DEBUG_MAX_VIEWS; i++) {
 		if (!debug_info->views[i])
 			continue;
-		else if (debug_info->debugfs_entries[i] == file->f_path.dentry)
+		else if (debug_info->debugfs_entries[i] == node)
 			goto found; /* found view ! */
 	}
 	/* no entry found */

@@ -272,7 +272,7 @@ void ath9k_get_et_strings(struct ieee80211_hw *hw,
 void ath9k_sta_add_debugfs(struct ieee80211_hw *hw,
 			   struct ieee80211_vif *vif,
 			   struct ieee80211_sta *sta,
-			   struct dentry *dir);
+			   struct debugfs_node *dir);
 void ath9k_debug_stat_ant(struct ath_softc *sc,
 			  struct ath_hw_antcomb_conf *div_ant_conf,
 			  int main_rssi_avg, int alt_rssi_avg);

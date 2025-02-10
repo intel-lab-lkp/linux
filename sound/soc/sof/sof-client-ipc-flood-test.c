@@ -29,7 +29,7 @@
 
 struct sof_ipc_flood_priv {
 	struct debugfs_node *dfs_root;
-	struct dentry *dfs_link[2];
+	struct debugfs_node *dfs_link[2];
 	char *buf;
 };
 

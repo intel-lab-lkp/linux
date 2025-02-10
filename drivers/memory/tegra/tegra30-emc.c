@@ -378,7 +378,7 @@ struct tegra_emc {
 	bool dll_on : 1;
 
 	struct {
-		struct dentry *root;
+		struct debugfs_node *root;
 		unsigned long min_rate;
 		unsigned long max_rate;
 	} debugfs;

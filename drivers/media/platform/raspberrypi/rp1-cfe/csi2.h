@@ -83,7 +83,7 @@ void csi2_start_channel(struct csi2_device *csi2, unsigned int channel,
 void csi2_stop_channel(struct csi2_device *csi2, unsigned int channel);
 void csi2_open_rx(struct csi2_device *csi2);
 void csi2_close_rx(struct csi2_device *csi2);
-int csi2_init(struct csi2_device *csi2, struct dentry *debugfs);
+int csi2_init(struct csi2_device *csi2, struct debugfs_node *debugfs);
 void csi2_uninit(struct csi2_device *csi2);
 
 #endif
