@@ -28,7 +28,7 @@
 
 struct clk_bulk_data;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct device;
 struct media_intf_devnode;
 struct regmap;

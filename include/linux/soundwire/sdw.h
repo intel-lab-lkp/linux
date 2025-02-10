@@ -17,7 +17,7 @@
 #include <sound/sdca.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct fwnode_handle;
 
 struct sdw_bus;

@@ -17,7 +17,7 @@
 #include <net/devlink.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct device;
 struct pci_dev;
 

@@ -330,7 +330,7 @@ enum {
 };
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct mlx5_qos_domain;
 
 struct mlx5_eswitch {

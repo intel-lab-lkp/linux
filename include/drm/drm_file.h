@@ -38,7 +38,7 @@
 
 #include <drm/drm_prime.h>
 
-#define debugfs_node dentry
+struct debugfs_node;
 struct dma_fence;
 struct drm_file;
 struct drm_device;

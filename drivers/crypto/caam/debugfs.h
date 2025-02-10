@@ -5,7 +5,7 @@
 #define CAAM_DEBUGFS_H
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct caam_drv_private;
 struct caam_perfmon;
 

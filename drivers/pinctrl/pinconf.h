@@ -13,7 +13,7 @@
 #include <linux/errno.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct device_node;
 struct seq_file;
 

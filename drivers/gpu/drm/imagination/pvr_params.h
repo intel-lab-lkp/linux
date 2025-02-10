@@ -65,7 +65,7 @@ struct pvr_device;
 
 /* Forward declaration from <linux/dcache.h>. */
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 void pvr_params_debugfs_init(struct pvr_device *pvr_dev,
 			     struct debugfs_node *dir);

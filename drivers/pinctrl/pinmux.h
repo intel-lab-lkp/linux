@@ -13,7 +13,7 @@
 #include <linux/types.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct seq_file;
 
 struct pinctrl_dev;

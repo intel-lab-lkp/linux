@@ -28,7 +28,7 @@ struct host1x_job;
 struct push_buffer;
 struct output;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 struct host1x_channel_ops {
 	int (*init)(struct host1x_channel *channel, struct host1x *host,

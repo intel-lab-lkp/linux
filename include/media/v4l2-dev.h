@@ -63,7 +63,7 @@ struct video_device;
 struct v4l2_device;
 struct v4l2_ctrl_handler;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 /**
  * enum v4l2_video_device_flags - Flags used by &struct video_device

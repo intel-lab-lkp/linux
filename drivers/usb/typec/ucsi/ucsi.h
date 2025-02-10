@@ -20,7 +20,7 @@ struct ucsi;
 struct ucsi_altmode;
 struct ucsi_connector;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 /* UCSI offsets (Bytes) */
 #define UCSI_VERSION			0

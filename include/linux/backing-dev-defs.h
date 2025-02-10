@@ -17,7 +17,7 @@
 struct page;
 struct device;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 /*
  * Bits in bdi_writeback.state

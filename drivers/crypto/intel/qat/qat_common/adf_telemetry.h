@@ -13,7 +13,7 @@
 struct adf_accel_dev;
 struct adf_tl_dbg_counter;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 #define ADF_TL_SL_CNT_COUNT		\
 	(sizeof(struct icp_qat_fw_init_admin_slice_cnt) / sizeof(__u8))

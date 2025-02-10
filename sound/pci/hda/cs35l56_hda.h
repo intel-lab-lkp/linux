@@ -18,7 +18,7 @@
 #include <sound/cs35l56.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 struct cs35l56_hda {
 	struct cs35l56_base base;

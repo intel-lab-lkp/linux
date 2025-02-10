@@ -9,7 +9,7 @@
 
 struct intel_gt;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct seq_file;
 
 int intel_sseu_status(struct seq_file *m, struct intel_gt *gt);

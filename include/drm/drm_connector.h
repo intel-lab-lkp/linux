@@ -34,7 +34,7 @@
 
 #include <uapi/drm/drm_mode.h>
 
-#define debugfs_node dentry
+struct debugfs_node;
 struct drm_connector_helper_funcs;
 struct drm_modeset_acquire_ctx;
 struct drm_device;

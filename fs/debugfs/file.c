@@ -568,11 +568,12 @@ ssize_t debugfs_attr_write_signed(struct file *file, const char __user *buf,
 }
 EXPORT_SYMBOL_GPL(debugfs_attr_write_signed);
 
-static struct dentry *debugfs_create_mode_unsafe(const char *name, umode_t mode,
-					struct dentry *parent, void *value,
-					const struct file_operations *fops,
-					const struct file_operations *fops_ro,
-					const struct file_operations *fops_wo)
+static struct debugfs_node *
+debugfs_create_mode_unsafe(const char *name, umode_t mode,
+			   struct debugfs_node *parent, void *value,
+			   const struct file_operations *fops,
+			   const struct file_operations *fops_ro,
+			   const struct file_operations *fops_wo)
 {
 	/* if there are no write bits set, make read only */
 	if (!(mode & S_IWUGO))
@@ -604,8 +605,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u8_wo, NULL, debugfs_u8_set, "%llu\n");
  * debugfs_create_u8 - create a debugfs file that is used to read and write an unsigned 8-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -614,7 +615,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u8_wo, NULL, debugfs_u8_set, "%llu\n");
  * contains the value of the variable @value.  If the @mode variable is so
  * set, it can be read from, and written to.
  */
-void debugfs_create_u8(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_u8(const char *name, umode_t mode, struct debugfs_node *parent,
 		       u8 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_u8,
@@ -640,8 +641,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u16_wo, NULL, debugfs_u16_set, "%llu\n");
  * debugfs_create_u16 - create a debugfs file that is used to read and write an unsigned 16-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -650,7 +651,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u16_wo, NULL, debugfs_u16_set, "%llu\n");
  * contains the value of the variable @value.  If the @mode variable is so
  * set, it can be read from, and written to.
  */
-void debugfs_create_u16(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_u16(const char *name, umode_t mode, struct debugfs_node *parent,
 			u16 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_u16,
@@ -676,8 +677,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u32_wo, NULL, debugfs_u32_set, "%llu\n");
  * debugfs_create_u32 - create a debugfs file that is used to read and write an unsigned 32-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -686,7 +687,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u32_wo, NULL, debugfs_u32_set, "%llu\n");
  * contains the value of the variable @value.  If the @mode variable is so
  * set, it can be read from, and written to.
  */
-void debugfs_create_u32(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_u32(const char *name, umode_t mode, struct debugfs_node *parent,
 			u32 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_u32,
@@ -713,8 +714,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u64_wo, NULL, debugfs_u64_set, "%llu\n");
  * debugfs_create_u64 - create a debugfs file that is used to read and write an unsigned 64-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -723,7 +724,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_u64_wo, NULL, debugfs_u64_set, "%llu\n");
  * contains the value of the variable @value.  If the @mode variable is so
  * set, it can be read from, and written to.
  */
-void debugfs_create_u64(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_u64(const char *name, umode_t mode, struct debugfs_node *parent,
 			u64 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_u64,
@@ -752,8 +753,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_ulong_wo, NULL, debugfs_ulong_set, "%llu\n");
  * an unsigned long value.
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -762,7 +763,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_ulong_wo, NULL, debugfs_ulong_set, "%llu\n");
  * contains the value of the variable @value.  If the @mode variable is so
  * set, it can be read from, and written to.
  */
-void debugfs_create_ulong(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_ulong(const char *name, umode_t mode, struct debugfs_node *parent,
 			  unsigned long *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_ulong,
@@ -801,13 +802,13 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_x64_wo, NULL, debugfs_u64_set, "0x%016llx\n");
  * debugfs_create_x8 - create a debugfs file that is used to read and write an unsigned 8-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
  */
-void debugfs_create_x8(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_x8(const char *name, umode_t mode, struct debugfs_node *parent,
 		       u8 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_x8,
@@ -819,13 +820,13 @@ EXPORT_SYMBOL_GPL(debugfs_create_x8);
  * debugfs_create_x16 - create a debugfs file that is used to read and write an unsigned 16-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
  */
-void debugfs_create_x16(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_x16(const char *name, umode_t mode, struct debugfs_node *parent,
 			u16 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_x16,
@@ -837,13 +838,13 @@ EXPORT_SYMBOL_GPL(debugfs_create_x16);
  * debugfs_create_x32 - create a debugfs file that is used to read and write an unsigned 32-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
  */
-void debugfs_create_x32(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_x32(const char *name, umode_t mode, struct debugfs_node *parent,
 			u32 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_x32,
@@ -855,13 +856,13 @@ EXPORT_SYMBOL_GPL(debugfs_create_x32);
  * debugfs_create_x64 - create a debugfs file that is used to read and write an unsigned 64-bit value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
  */
-void debugfs_create_x64(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_x64(const char *name, umode_t mode, struct debugfs_node *parent,
 			u64 *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_x64,
@@ -889,14 +890,14 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_size_t_wo, NULL, debugfs_size_t_set, "%llu\n");
  * debugfs_create_size_t - create a debugfs file that is used to read and write an size_t value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
  */
 void debugfs_create_size_t(const char *name, umode_t mode,
-			   struct dentry *parent, size_t *value)
+			   struct debugfs_node *parent, size_t *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_size_t,
 				   &fops_size_t_ro, &fops_size_t_wo);
@@ -925,14 +926,14 @@ DEFINE_DEBUGFS_ATTRIBUTE_SIGNED(fops_atomic_t_wo, NULL, debugfs_atomic_t_set,
  * write an atomic_t value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
  */
 void debugfs_create_atomic_t(const char *name, umode_t mode,
-			     struct dentry *parent, atomic_t *value)
+			     struct debugfs_node *parent, atomic_t *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_atomic_t,
 				   &fops_atomic_t_ro, &fops_atomic_t_wo);
@@ -1006,8 +1007,8 @@ static const struct file_operations fops_bool_wo = {
  * debugfs_create_bool - create a debugfs file that is used to read and write a boolean value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -1016,7 +1017,7 @@ static const struct file_operations fops_bool_wo = {
  * contains the value of the variable @value.  If the @mode variable is so
  * set, it can be read from, and written to.
  */
-void debugfs_create_bool(const char *name, umode_t mode, struct dentry *parent,
+void debugfs_create_bool(const char *name, umode_t mode, struct debugfs_node *parent,
 			 bool *value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_bool,
@@ -1134,8 +1135,8 @@ static const struct file_operations fops_str_wo = {
  * debugfs_create_str - create a debugfs file that is used to read and write a string value
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @value: a pointer to the variable that the file should read to and write
  *         from.
@@ -1145,7 +1146,7 @@ static const struct file_operations fops_str_wo = {
  * set, it can be read from, and written to.
  */
 void debugfs_create_str(const char *name, umode_t mode,
-			struct dentry *parent, char **value)
+			struct debugfs_node *parent, char **value)
 {
 	debugfs_create_mode_unsafe(name, mode, parent, value, &fops_str,
 				   &fops_str_ro, &fops_str_wo);
@@ -1196,8 +1197,8 @@ static const struct file_operations fops_blob = {
  * a binary blob
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @blob: a pointer to a struct debugfs_blob_wrapper which contains a pointer
  *        to the blob data and the size of the data.
@@ -1206,7 +1207,7 @@ static const struct file_operations fops_blob = {
  * @blob->data as a binary blob. If the @mode variable is so set it can be
  * read from and written to.
  *
- * This function will return a pointer to a dentry if it succeeds.  This
+ * This function will return a pointer to a debugfs_node if it succeeds.  This
  * pointer must be passed to the debugfs_remove() function when the file is
  * to be removed (no automatic cleanup happens if your module is unloaded,
  * you are responsible here.)  If an error occurs, ERR_PTR(-ERROR) will be
@@ -1215,8 +1216,8 @@ static const struct file_operations fops_blob = {
  * If debugfs is not enabled in the kernel, the value ERR_PTR(-ENODEV) will
  * be returned.
  */
-struct dentry *debugfs_create_blob(const char *name, umode_t mode,
-				   struct dentry *parent,
+struct debugfs_node *debugfs_create_blob(const char *name, umode_t mode,
+				   struct debugfs_node *parent,
 				   struct debugfs_blob_wrapper *blob)
 {
 	return debugfs_create_file_unsafe(name, mode & 0644, parent, blob, &fops_blob);
@@ -1292,8 +1293,8 @@ static const struct file_operations u32_array_fops = {
  * array.
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have.
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @array: wrapper struct containing data pointer and size of the array.
  *
@@ -1303,7 +1304,7 @@ static const struct file_operations u32_array_fops = {
  * Once array is created its size can not be changed.
  */
 void debugfs_create_u32_array(const char *name, umode_t mode,
-			      struct dentry *parent,
+			      struct debugfs_node *parent,
 			      struct debugfs_u32_array *array)
 {
 	debugfs_create_file_unsafe(name, mode, parent, array, &u32_array_fops);
@@ -1370,8 +1371,8 @@ DEFINE_SHOW_ATTRIBUTE(debugfs_regset32);
  * debugfs_create_regset32 - create a debugfs file that returns register values
  * @name: a pointer to a string containing the name of the file to create.
  * @mode: the permission that the file should have
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *          directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *          directory debugfs_node if set.  If this parameter is %NULL, then the
  *          file will be created in the root of the debugfs filesystem.
  * @regset: a pointer to a struct debugfs_regset32, which contains a pointer
  *          to an array of register definitions, the array size and the base
@@ -1382,7 +1383,7 @@ DEFINE_SHOW_ATTRIBUTE(debugfs_regset32);
  * is so set it can be read from. Writing is not supported.
  */
 void debugfs_create_regset32(const char *name, umode_t mode,
-			     struct dentry *parent,
+			     struct debugfs_node *parent,
 			     struct debugfs_regset32 *regset)
 {
 	debugfs_create_file(name, mode, parent, regset, &debugfs_regset32_fops);
@@ -1416,13 +1417,13 @@ static const struct file_operations debugfs_devm_entry_ops = {
  *
  * @dev: device related to this debugfs file.
  * @name: name of the debugfs file.
- * @parent: a pointer to the parent dentry for this file.  This should be a
- *	directory dentry if set.  If this parameter is %NULL, then the
+ * @parent: a pointer to the parent debugfs_node for this file.  This should be a
+ *	directory debugfs_node if set.  If this parameter is %NULL, then the
  *	file will be created in the root of the debugfs filesystem.
  * @read_fn: function pointer called to print the seq_file content.
  */
 void debugfs_create_devm_seqfile(struct device *dev, const char *name,
-				 struct dentry *parent,
+				 struct debugfs_node *parent,
 				 int (*read_fn)(struct seq_file *s, void *data))
 {
 	struct debugfs_devm_entry *entry;

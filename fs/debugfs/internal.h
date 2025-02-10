@@ -7,9 +7,15 @@
 
 #ifndef _DEBUGFS_INTERNAL_H_
 #define _DEBUGFS_INTERNAL_H_
+
+#include <linux/debugfs.h>
 #include <linux/list.h>
 
 struct file_operations;
+
+struct debugfs_node {
+	struct dentry dentry;
+};
 
 struct debugfs_inode_info {
 	struct inode vfs_inode;

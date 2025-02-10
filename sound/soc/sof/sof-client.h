@@ -12,7 +12,7 @@ struct sof_ipc_fw_version;
 struct sof_ipc_cmd_hdr;
 struct snd_sof_dev;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 struct sof_ipc4_fw_module;
 

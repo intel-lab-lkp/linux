@@ -8,7 +8,7 @@
 
 struct xe_gt;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 #ifdef CONFIG_PCI_IOV
 void xe_gt_sriov_pf_debugfs_register(struct xe_gt *gt,

@@ -8,7 +8,7 @@
 
 struct adf_accel_dev;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 #define ADF_CFG_HB_TIMER_MIN_MS 200
 #define ADF_CFG_HB_TIMER_DEFAULT_MS 500

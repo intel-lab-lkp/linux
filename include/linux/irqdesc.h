@@ -16,7 +16,7 @@ struct module;
 struct irq_desc;
 struct irq_domain;
 struct pt_regs;
-#define debugfs_node dentry
+struct debugfs_node;
 
 /**
  * struct irqstat - interrupt statistics

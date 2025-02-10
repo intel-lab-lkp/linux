@@ -698,7 +698,7 @@ struct port_info {
 };
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct work_struct;
 
 enum {                                 /* adapter flags */

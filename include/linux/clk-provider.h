@@ -38,7 +38,7 @@ struct clk;
 struct clk_hw;
 struct clk_core;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 /**
  * struct clk_rate_request - Structure encoding the clk constraints that

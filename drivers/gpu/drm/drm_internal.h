@@ -36,7 +36,7 @@
 #define DRM_IF_VERSION(maj, min) (maj << 16 | min)
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct dma_buf;
 struct iosys_map;
 struct drm_connector;

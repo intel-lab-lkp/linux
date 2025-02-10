@@ -191,7 +191,7 @@ dmaengine_get_debugfs_root(struct dma_device *dma_dev) {
 }
 #else
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 static inline struct debugfs_node *
 dmaengine_get_debugfs_root(struct dma_device *dma_dev)
 {

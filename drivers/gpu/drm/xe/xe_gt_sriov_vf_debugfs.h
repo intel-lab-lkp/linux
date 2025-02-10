@@ -8,7 +8,7 @@
 
 struct xe_gt;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt,
 				     struct debugfs_node *root);

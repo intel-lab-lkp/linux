@@ -6,7 +6,7 @@
 #include <linux/types.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct kmem_cache;
 
 #ifdef CONFIG_FAULT_INJECTION

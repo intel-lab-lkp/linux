@@ -8,7 +8,7 @@
 
 struct intel_guc_log;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 void intel_guc_log_debugfs_register(struct intel_guc_log *log,
 				    struct debugfs_node *root);

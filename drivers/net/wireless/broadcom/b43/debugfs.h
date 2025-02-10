@@ -21,7 +21,7 @@ enum b43_dyndbg {		/* Dynamic debugging features */
 #ifdef CONFIG_B43_DEBUG
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 #define B43_NR_LOGGED_TXSTATUS	100
 

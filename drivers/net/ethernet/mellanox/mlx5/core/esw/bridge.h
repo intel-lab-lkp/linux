@@ -11,7 +11,7 @@
 #include "eswitch.h"
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct mlx5_flow_table;
 struct mlx5_flow_group;
 

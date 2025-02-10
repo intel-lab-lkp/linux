@@ -8,7 +8,7 @@
 
 struct intel_guc;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 
 void intel_guc_debugfs_register(struct intel_guc *guc,
 				struct debugfs_node *root);

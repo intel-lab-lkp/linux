@@ -17,7 +17,7 @@
 #include <linux/pinctrl/machine.h>
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct device;
 struct device_node;
 struct module;

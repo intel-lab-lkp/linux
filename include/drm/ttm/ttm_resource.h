@@ -38,7 +38,7 @@
 #define TTM_MAX_BO_PRIORITY	4U
 #define TTM_NUM_MEM_TYPES 8
 
-#define debugfs_node dentry
+struct debugfs_node;
 struct dmem_cgroup_device;
 struct ttm_device;
 struct ttm_resource_manager;

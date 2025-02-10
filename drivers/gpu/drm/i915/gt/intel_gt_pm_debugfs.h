@@ -8,7 +8,7 @@
 
 struct intel_gt;
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct drm_printer;
 
 void intel_gt_pm_debugfs_register(struct intel_gt *gt,

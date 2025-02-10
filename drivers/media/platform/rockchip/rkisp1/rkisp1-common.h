@@ -24,7 +24,7 @@
 #include "rkisp1-regs.h"
 
 struct dentry;
-#define debugfs_node dentry
+struct debugfs_node;
 struct regmap;
 
 /*
