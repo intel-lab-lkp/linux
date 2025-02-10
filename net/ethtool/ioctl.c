@@ -659,6 +659,9 @@ static int ethtool_get_settings(struct net_device *dev, void __user *useraddr)
 	int err;
 
 	ASSERT_RTNL();
+	if (!netif_device_present(dev))
+		return -ENODEV;
+
 	if (!dev->ethtool_ops->get_link_ksettings)
 		return -EOPNOTSUPP;
 
