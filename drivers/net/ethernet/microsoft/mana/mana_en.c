@@ -2873,6 +2873,8 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 	ndev->dev_port = port_idx;
 	SET_NETDEV_DEV(ndev, gc->dev);
 
+	netif_set_tso_max_size(ndev, GSO_MAX_SIZE);
+
 	netif_carrier_off(ndev);
 
 	netdev_rss_key_fill(apc->hashkey, MANA_HASH_KEY_SIZE);
