@@ -908,7 +908,6 @@ int ath12k_mac_mlo_ready(struct ath12k_hw_group *ag)
 {
 	struct ath12k_hw *ah;
 	struct ath12k *ar;
-	int ret;
 	int i, j;
 
 	for (i = 0; i < ag->num_hw; i++) {
@@ -918,14 +917,13 @@ int ath12k_mac_mlo_ready(struct ath12k_hw_group *ag)
 
 		for_each_ar(ah, ar, j) {
 			ar = &ah->radio[j];
-			ret = __ath12k_mac_mlo_ready(ar);
+			int ret = __ath12k_mac_mlo_ready(ar);
 			if (ret)
-				goto out;
+				return ret;
 		}
 	}
 
-out:
-	return ret;
+	return 0;
 }
 
 static int ath12k_core_mlo_setup(struct ath12k_hw_group *ag)
