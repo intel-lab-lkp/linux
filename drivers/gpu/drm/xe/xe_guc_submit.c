@@ -1079,7 +1079,7 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 		/*
 		 * Generate a manual capture. Below function will store it
 		 * in GuC Error Capture's internal link-list as if it came from GuC
-		 * but with a source-type == XE_ENGINE_CAPTURE_SOURCE_MANUAL
+		 * but with a source-type == XE_ENGINE_CAPTURE_SOURCE_MANUAL_JOB
 		 */
 		xe_guc_capture_snapshot_store_manual_job(guc, q);
 		xe_force_wake_put(gt_to_fw(q->gt), fw_ref);

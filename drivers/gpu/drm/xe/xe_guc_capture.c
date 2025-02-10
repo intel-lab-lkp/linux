@@ -1585,6 +1585,32 @@ guc_capture_get_manual_snapshot(struct xe_guc *guc, struct xe_hw_engine *hwe)
 }
 
 /**
+ * xe_guc_capture_snapshot_manual_hwe - Generate and get manual engine register dump
+ * @guc: Target GuC for manual capture
+ * @hwe: The engine instance to capture from
+ *
+ * Generate a manual GuC-Error-Capture snapshot of engine instance + engine class registers
+ * without any queue association. This capture node is not stored in outlist or cachelist,
+ * Returns: New capture node and caller must "put"
+ */
+struct xe_guc_capture_snapshot *
+xe_guc_capture_snapshot_manual_hwe(struct xe_guc *guc, struct xe_hw_engine *hwe)
+{
+	struct xe_guc_capture_snapshot *new;
+
+	new = guc_capture_get_manual_snapshot(guc, hwe);
+	if (!new)
+		return NULL;
+
+	new->guc_id = 0;
+	new->lrca = 0;
+	new->is_partial = 0;
+	new->source = XE_ENGINE_CAPTURE_SOURCE_MANUAL_RAW;
+
+	return new;
+}
+
+/**
  * xe_guc_capture_snapshot_store_manual_job - Generate and store a manual engine register dump
  * @guc: Target GuC for manual capture
  * @q: Associated xe_exec_queue to simulate a manual capture on its behalf.
@@ -1631,7 +1657,7 @@ xe_guc_capture_snapshot_store_manual_job(struct xe_guc *guc, struct xe_exec_queu
 	new->lrca = xe_lrc_ggtt_addr(q->lrc[0]);
 	new->is_partial = 0;
 	new->locked = 1;
-	new->source = XE_ENGINE_CAPTURE_SOURCE_MANUAL;
+	new->source = XE_ENGINE_CAPTURE_SOURCE_MANUAL_JOB;
 
 	guc_capture_add_node_to_outlist(guc->capture, new);
 
@@ -1772,6 +1798,11 @@ void xe_guc_capture_snapshot_print(struct xe_guc *guc, struct xe_guc_capture_sna
 		"full-capture",
 		"partial-capture"
 	};
+	const char *srctype[XE_ENGINE_CAPTURE_SOURCE_GUC + 1] = {
+		"Manual-Job",
+		"Manual-Raw",
+		"GuC"
+	};
 	int type;
 	const struct __guc_mmio_reg_descr_group *list;
 	struct xe_gt *gt;
@@ -1788,9 +1819,7 @@ void xe_guc_capture_snapshot_print(struct xe_guc *guc, struct xe_guc_capture_sna
 		return;
 	}
 
-	drm_printf(p, "\tCapture_source: %s\n",
-		   node->source == XE_ENGINE_CAPTURE_SOURCE_GUC ?
-		   "GuC" : "Manual");
+	drm_printf(p, "\tCapture_source: %s\n", srctype[node->source]);
 	drm_printf(p, "\tCoverage: %s\n", grptype[node->is_partial]);
 
 	for (type = GUC_STATE_CAPTURE_TYPE_GLOBAL; type < GUC_STATE_CAPTURE_TYPE_MAX; type++) {
