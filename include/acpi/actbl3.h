@@ -42,6 +42,7 @@
 #define ACPI_SIG_WSMT           "WSMT"	/* Windows SMM Security Mitigations Table */
 #define ACPI_SIG_XENV           "XENV"	/* Xen Environment table */
 #define ACPI_SIG_XXXX           "XXXX"	/* Intermediate AML header for ASL/ASL+ converter */
+#define ACPI_SIG_MRRM           "MRRM"	/* Memory Range and Region Mapping table */
 
 /*
  * All tables must be byte-packed to match the ACPI specification, since
@@ -792,6 +793,45 @@ struct acpi_table_xenv {
 	u32 event_interrupt;
 	u8 event_flags;
 };
+
+/*******************************************************************************
+ *
+ * MRRM - Memory Range and Region Mapping (MRRM) table
+ *
+ ******************************************************************************/
+
+struct acpi_table_mrrm {
+	struct acpi_table_header header;
+	u8 max_mem_region;	/* Max Memory Regions supported */
+	u8 flags;		/* Region assignment type */
+	u8 reserved[26];
+	/* Memory range entry array */
+};
+#define ACPI_MRRM_FLAGS_REGION_ASSIGNMENT_OS	(1<<0)
+
+/*******************************************************************************
+ *
+ * Memory Range entry - Memory Range entry in MRRM table
+ *
+ ******************************************************************************/
+
+struct acpi_table_mrrm_mem_range_entry {
+	u16 type;		/* Type 0="MRRM" */
+	u16 length;		/* 32B + sizeof(Region-ID Programming Reg[]) */
+	u32 reserved;		/* Reserved */
+	u32 base_addr_low;	/* Low 32 bits of base addr of the mem range */
+	u32 base_addr_high;	/* High 32 bits of base addr of the mem range */
+	u32 len_low;		/* Low 32 bits of length of the mem range */
+	u32 len_high;		/* High 32 bits of length of the mem range */
+	u16 region_id_flags;	/* Valid local or remote Region-ID */
+	u8  local_region_id;	/* Platform-assigned static local Region-ID */
+	u8  remote_region_id;	/* Platform-assigned static remote Region-ID */
+	u32 reserved1;		/* Reserved */
+	/* Region-ID Programming Registers[] */
+};
+
+#define ACPI_MRRM_VALID_REGION_ID_FLAGS_LOCAL 	(1<<0)
+#define ACPI_MRRM_VALID_REGION_ID_FLAGS_REMOTE	(1<<1)
 
 /* Reset to default packing */
 
