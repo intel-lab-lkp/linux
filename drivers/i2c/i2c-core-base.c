@@ -2441,8 +2441,8 @@ static int i2c_default_probe(struct i2c_adapter *adap, unsigned short addr)
 	return err >= 0;
 }
 
-static int i2c_detect_address(struct i2c_client *temp_client,
-			      struct i2c_driver *driver)
+static noinline_for_stack int i2c_detect_address(struct i2c_client *temp_client,
+						 struct i2c_driver *driver)
 {
 	struct i2c_board_info info;
 	struct i2c_adapter *adapter = temp_client->adapter;
