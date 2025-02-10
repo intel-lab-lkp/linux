@@ -17,6 +17,7 @@
 #include <linux/kernel-page-flags.h>
 #include <linux/uaccess.h>
 #include "internal.h"
+#include "../mm/internal.h"	/* snapshot_page() */
 
 #define KPMSIZE sizeof(u64)
 #define KPMMASK (KPMSIZE - 1)
@@ -106,9 +107,12 @@ static inline u64 kpf_copy_bit(u64 kflags, int ubit, int kbit)
 	return ((kflags >> kbit) & 1) << ubit;
 }
 
-u64 stable_page_flags(const struct page *page)
+u64 stable_page_flags(const struct page *unstable)
 {
+	struct folio stack_folio;
+	struct page stack_page;
 	const struct folio *folio;
+	unsigned long idx;
 	unsigned long k;
 	unsigned long mapping;
 	bool is_anon;
@@ -118,9 +122,9 @@ u64 stable_page_flags(const struct page *page)
 	 * pseudo flag: KPF_NOPAGE
 	 * it differentiates a memory hole from a page with no flags
 	 */
-	if (!page)
+	if (!unstable)
 		return 1 << KPF_NOPAGE;
-	folio = page_folio(page);
+	folio = snapshot_page(&stack_folio, &stack_page, &idx, unstable);
 
 	k = folio->flags;
 	mapping = (unsigned long)folio->mapping;
@@ -129,7 +133,7 @@ u64 stable_page_flags(const struct page *page)
 	/*
 	 * pseudo flags for the well known (anonymous) memory mapped pages
 	 */
-	if (page_mapped(page))
+	if (page_mapped(&stack_page))
 		u |= 1 << KPF_MMAP;
 	if (is_anon) {
 		u |= 1 << KPF_ANON;
@@ -141,7 +145,7 @@ u64 stable_page_flags(const struct page *page)
 	 * compound pages: export both head/tail info
 	 * they together define a compound page's start/end pos and order
 	 */
-	if (page == &folio->page)
+	if (idx == 0)
 		u |= kpf_copy_bit(k, KPF_COMPOUND_HEAD, PG_head);
 	else
 		u |= 1 << KPF_COMPOUND_TAIL;
@@ -162,14 +166,14 @@ u64 stable_page_flags(const struct page *page)
 	 * Caveats on high order pages: PG_buddy and PG_slab will only be set
 	 * on the head page.
 	 */
-	if (PageBuddy(page))
+	if (PageBuddy(unstable))
 		u |= 1 << KPF_BUDDY;
-	else if (page_count(page) == 0 && is_free_buddy_page(page))
+	else if (folio_ref_count(folio) == 0 && is_free_buddy_page(unstable))
 		u |= 1 << KPF_BUDDY;
 
-	if (PageOffline(page))
+	if (folio_test_offline(folio))
 		u |= 1 << KPF_OFFLINE;
-	if (PageTable(page))
+	if (folio_test_pgtable(folio))
 		u |= 1 << KPF_PGTABLE;
 	if (folio_test_slab(folio))
 		u |= 1 << KPF_SLAB;
@@ -203,7 +207,7 @@ u64 stable_page_flags(const struct page *page)
 	if (u & (1 << KPF_HUGE))
 		u |= kpf_copy_bit(k, KPF_HWPOISON,	PG_hwpoison);
 	else
-		u |= kpf_copy_bit(page->flags, KPF_HWPOISON,	PG_hwpoison);
+		u |= kpf_copy_bit(stack_page.flags, KPF_HWPOISON, PG_hwpoison);
 #endif
 
 	u |= kpf_copy_bit(k, KPF_RESERVED,	PG_reserved);
