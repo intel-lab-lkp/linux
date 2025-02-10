@@ -20,6 +20,8 @@
 #define DW9719_MAX_FOCUS_POS	1023
 #define DW9719_CTRL_STEPS	16
 #define DW9719_CTRL_DELAY_US	1000
+/* 100 us is not enough on resume */
+#define DW9719_T_OPR_US				200
 
 #define DW9719_INFO			CCI_REG8(0)
 #define DW9719_ID			0xF1
@@ -85,8 +87,8 @@ static int dw9719_power_up(struct dw9719_device *dw9719)
 	/* Jiggle SCL pin to wake up device */
 	cci_write(dw9719->regmap, DW9719_CONTROL, 1, &ret);
 
-	/* Need 100us to transit from SHUTDOWN to STANDBY */
-	fsleep(100);
+	/* Need tOPR to transition from SHUTDOWN to STANDBY */
+	usleep_range(DW9719_T_OPR_US, DW9719_T_OPR_US + 10);
 
 	cci_write(dw9719->regmap, DW9719_CONTROL, DW9719_ENABLE_RINGING, &ret);
 	cci_write(dw9719->regmap, DW9719_MODE,
