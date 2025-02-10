@@ -124,9 +124,10 @@ static int __get_fan_ctrl(struct gpio_fan_data *fan_data)
 	return ctrl_val;
 }
 
-/* Must be called with fan_data->lock held, except during initialization. */
 static void set_fan_speed(struct gpio_fan_data *fan_data, int speed_index)
 {
+	WARN_ON_ONCE(!mutex_is_locked(&fan_data->lock));
+
 	if (fan_data->speed_index == speed_index)
 		return;
 
