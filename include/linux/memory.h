@@ -189,4 +189,13 @@ void memory_block_add_nid(struct memory_block *mem, int nid,
  */
 extern struct mutex text_mutex;
 
+#ifdef CONFIG_ACPI_MRRM
+int mrrm_max_mem_region(void);
+int memory_subsys_device_register(struct device *dev);
+#else
+static inline int mrrm_max_mem_region(void) { return -EONENT; }
+static inline int memory_subsys_device_register(struct device *dev) { return -EINVAL; }
+#define memory_subsys_device_register memory_subsys_device_register
+#endif
+
 #endif /* _LINUX_MEMORY_H_ */

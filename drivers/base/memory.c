@@ -699,6 +699,15 @@ static int __add_memory_block(struct memory_block *memory)
 	return ret;
 }
 
+#ifndef memory_subsys_device_register
+int memory_subsys_device_register(struct device *dev)
+{
+	dev->bus = &memory_subsys;
+
+	return device_register(dev);
+}
+#endif
+
 static struct zone *early_node_zone_for_memory_block(struct memory_block *mem,
 						     int nid)
 {
