@@ -856,7 +856,7 @@ debug_fops_ro(status);
 static int svs_create_debug_cmds(struct svs_platform *svsp)
 {
 	struct svs_bank *svsb;
-	struct dentry *svs_dir, *svsb_dir, *file_entry;
+	struct debugfs_node *svs_dir, *svsb_dir, *file_entry;
 	const char *d = "/sys/kernel/debug/svs";
 	u32 i, idx;
 

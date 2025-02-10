@@ -323,7 +323,7 @@ static const struct file_operations musb_softconnect_fops = {
 
 void musb_init_debugfs(struct musb *musb)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(dev_name(musb->controller), usb_debug_root);
 	musb->debugfs_root = root;

@@ -214,7 +214,7 @@ DEFINE_SEQ_ATTRIBUTE(ei);
 
 static int __init ei_debugfs_init(void)
 {
-	struct dentry *dir, *file;
+	struct debugfs_node *dir, *file;
 
 	dir = debugfs_create_dir("error_injection", NULL);
 

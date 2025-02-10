@@ -98,8 +98,8 @@ DEFINE_SHOW_ATTRIBUTE(queued);
 void qaic_debugfs_init(struct qaic_drm_device *qddev)
 {
 	struct qaic_device *qdev = qddev->qdev;
-	struct dentry *debugfs_root;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_root;
+	struct debugfs_node *debugfs_dir;
 	char name[QAIC_DBC_DIR_NAME];
 	u32 i;
 

@@ -561,7 +561,7 @@ struct hci_dev {
 
 	const char		*hw_info;
 	const char		*fw_info;
-	struct dentry		*debugfs;
+	struct debugfs_node *debugfs;
 
 	struct hci_devcoredump	dump;
 
@@ -739,7 +739,7 @@ struct hci_conn {
 	struct delayed_work le_conn_timeout;
 
 	struct device	dev;
-	struct dentry	*debugfs;
+	struct debugfs_node *debugfs;
 
 	struct hci_dev	*hdev;
 	void		*l2cap_data;

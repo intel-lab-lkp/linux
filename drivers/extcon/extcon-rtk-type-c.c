@@ -96,7 +96,7 @@ struct type_c_data {
 
 	bool rd_en_at_first;
 
-	struct dentry *debug_dir;
+	struct debugfs_node *debug_dir;
 
 	struct typec_port *port;
 };

@@ -551,7 +551,7 @@ struct csio_hw {
 	/* MSIX vectors */
 	struct csio_msix_entries msix_entries[CSIO_MAX_MSIX_VECS];
 
-	struct dentry		*debugfs_root;		/* Debug FS */
+	struct debugfs_node *debugfs_root;		/* Debug FS */
 	struct csio_hw_stats	stats;			/* Hw statistics */
 };
 

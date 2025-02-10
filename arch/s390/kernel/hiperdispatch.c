@@ -395,7 +395,7 @@ DEFINE_SIMPLE_ATTRIBUTE(hd_adjustments_fops, hd_adjustment_count_get, NULL, "%ll
 
 static void __init hd_create_debugfs_counters(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("hiperdispatch", arch_debugfs_dir);
 	debugfs_create_file("conservative_time_ms", 0400, dir, NULL, &hd_conservative_time_fops);

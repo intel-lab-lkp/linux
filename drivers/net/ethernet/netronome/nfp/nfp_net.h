@@ -714,7 +714,7 @@ struct nfp_net {
 		u16 tag;
 	} mbox_cmsg;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	struct list_head vnic_list;
 
@@ -1026,8 +1026,8 @@ int nfp_net_fs_del_hw(struct nfp_net *nn, struct nfp_fs_entry *entry);
 #ifdef CONFIG_NFP_DEBUG
 void nfp_net_debugfs_create(void);
 void nfp_net_debugfs_destroy(void);
-struct dentry *nfp_net_debugfs_device_add(struct pci_dev *pdev);
-void nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct dentry *ddir);
+struct debugfs_node *nfp_net_debugfs_device_add(struct pci_dev *pdev);
+void nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct debugfs_node *ddir);
 void nfp_net_debugfs_dir_clean(struct dentry **dir);
 #else
 static inline void nfp_net_debugfs_create(void)
@@ -1038,13 +1038,13 @@ static inline void nfp_net_debugfs_destroy(void)
 {
 }
 
-static inline struct dentry *nfp_net_debugfs_device_add(struct pci_dev *pdev)
+static inline struct debugfs_node *nfp_net_debugfs_device_add(struct pci_dev *pdev)
 {
 	return NULL;
 }
 
 static inline void
-nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct dentry *ddir)
+nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct debugfs_node *ddir)
 {
 }
 

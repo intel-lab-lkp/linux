@@ -189,7 +189,7 @@ struct arena_info {
 	struct aligned_lock *map_locks;
 	struct nd_btt *nd_btt;
 	struct list_head list;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	/* Arena flags */
 	u32 flags;
 	struct mutex err_lock;
@@ -219,7 +219,7 @@ struct badblocks;
 struct btt {
 	struct gendisk *btt_disk;
 	struct list_head arena_list;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct nd_btt *nd_btt;
 	u64 nlba;
 	unsigned long long rawsize;

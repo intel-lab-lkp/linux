@@ -63,6 +63,7 @@ struct video_device;
 struct v4l2_device;
 struct v4l2_ctrl_handler;
 struct dentry;
+#define debugfs_node dentry
 
 /**
  * enum v4l2_video_device_flags - Flags used by &struct video_device
@@ -546,9 +547,9 @@ static inline int video_is_registered(struct video_device *vdev)
  * If this directory does not yet exist, then it will be created.
  */
 #ifdef CONFIG_DEBUG_FS
-struct dentry *v4l2_debugfs_root(void);
+struct debugfs_node *v4l2_debugfs_root(void);
 #else
-static inline struct dentry *v4l2_debugfs_root(void)
+static inline struct debugfs_node *v4l2_debugfs_root(void)
 {
 	return NULL;
 }

@@ -54,7 +54,7 @@ struct gpio_mockup_chip {
 	struct gpio_chip gc;
 	struct gpio_mockup_line_status *lines;
 	struct irq_domain *irq_sim_domain;
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 	struct mutex lock;
 };
 
@@ -71,7 +71,7 @@ static bool gpio_mockup_named_lines;
 module_param_named(gpio_mockup_named_lines,
 		   gpio_mockup_named_lines, bool, 0400);
 
-static struct dentry *gpio_mockup_dbg_dir;
+static struct debugfs_node *gpio_mockup_dbg_dir;
 
 static int gpio_mockup_range_base(unsigned int index)
 {

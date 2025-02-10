@@ -41,7 +41,7 @@ int snd_ecards_limit;
 EXPORT_SYMBOL(snd_ecards_limit);
 
 #ifdef CONFIG_SND_DEBUG
-struct dentry *sound_debugfs_root;
+struct debugfs_node *sound_debugfs_root;
 EXPORT_SYMBOL_GPL(sound_debugfs_root);
 #endif
 

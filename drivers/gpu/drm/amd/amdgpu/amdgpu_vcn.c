@@ -1167,7 +1167,7 @@ void amdgpu_debugfs_vcn_fwlog_init(struct amdgpu_device *adev, uint8_t i,
 {
 #if defined(CONFIG_DEBUG_FS)
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	char name[32];
 
 	sprintf(name, "amdgpu_vcn_%d_fwlog", i);
@@ -1387,7 +1387,7 @@ void amdgpu_debugfs_vcn_sched_mask_init(struct amdgpu_device *adev)
 {
 #if defined(CONFIG_DEBUG_FS)
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	char name[32];
 
 	if (adev->vcn.num_vcn_inst <= 1 || !adev->vcn.using_unified_queue)

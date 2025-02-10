@@ -144,7 +144,7 @@ DEFINE_SRIOV_GT_POLICY_DEBUGFS_ATTRIBUTE(reset_engine, bool, "%llu\n");
 DEFINE_SRIOV_GT_POLICY_DEBUGFS_ATTRIBUTE(sched_if_idle, bool, "%llu\n");
 DEFINE_SRIOV_GT_POLICY_DEBUGFS_ATTRIBUTE(sample_period, u32, "%llu\n");
 
-static void pf_add_policy_attrs(struct xe_gt *gt, struct dentry *parent)
+static void pf_add_policy_attrs(struct xe_gt *gt, struct debugfs_node *parent)
 {
 	xe_gt_assert(gt, gt == extract_gt(parent));
 	xe_gt_assert(gt, PFID == extract_vfid(parent));
@@ -278,7 +278,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(THRESHOLD##_fops, THRESHOLD##_get, THRESHOLD##_set, "%l
 MAKE_XE_GUC_KLV_THRESHOLDS_SET(define_threshold_attribute)
 #undef define_threshold_attribute
 
-static void pf_add_config_attrs(struct xe_gt *gt, struct dentry *parent, unsigned int vfid)
+static void pf_add_config_attrs(struct xe_gt *gt, struct debugfs_node *parent,
+				unsigned int vfid)
 {
 	xe_gt_assert(gt, gt == extract_gt(parent));
 	xe_gt_assert(gt, vfid == extract_vfid(parent));
@@ -331,7 +332,7 @@ static const struct {
 static ssize_t control_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct dentry *parent = dent->d_parent;
+	struct debugfs_node *parent = dent->d_parent;
 	struct xe_gt *gt = extract_gt(parent);
 	struct xe_device *xe = gt_to_xe(gt);
 	unsigned int vfid = extract_vfid(parent);
@@ -399,7 +400,7 @@ static ssize_t guc_state_read(struct file *file, char __user *buf,
 			      size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct dentry *parent = dent->d_parent;
+	struct debugfs_node *parent = dent->d_parent;
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 
@@ -410,7 +411,7 @@ static ssize_t guc_state_write(struct file *file, const char __user *buf,
 			       size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct dentry *parent = dent->d_parent;
+	struct debugfs_node *parent = dent->d_parent;
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 
@@ -437,7 +438,7 @@ static ssize_t config_blob_read(struct file *file, char __user *buf,
 				size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct dentry *parent = dent->d_parent;
+	struct debugfs_node *parent = dent->d_parent;
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 	ssize_t ret;
@@ -465,7 +466,7 @@ static ssize_t config_blob_write(struct file *file, const char __user *buf,
 				 size_t count, loff_t *pos)
 {
 	struct dentry *dent = file_dentry(file);
-	struct dentry *parent = dent->d_parent;
+	struct debugfs_node *parent = dent->d_parent;
 	struct xe_gt *gt = extract_gt(parent);
 	unsigned int vfid = extract_vfid(parent);
 	ssize_t ret;
@@ -509,17 +510,18 @@ static const struct file_operations config_blob_ops = {
  *
  * Register SR-IOV PF entries that are GT related and must be shown under GT debugfs.
  */
-void xe_gt_sriov_pf_debugfs_register(struct xe_gt *gt, struct dentry *root)
+void xe_gt_sriov_pf_debugfs_register(struct xe_gt *gt,
+				     struct debugfs_node *root)
 {
 	struct xe_device *xe = gt_to_xe(gt);
 	struct drm_minor *minor = xe->drm.primary;
 	int n, totalvfs = xe_sriov_pf_get_totalvfs(xe);
-	struct dentry *pfdentry;
-	struct dentry *vfdentry;
+	struct debugfs_node *pfdentry;
+	struct debugfs_node *vfdentry;
 	char buf[14]; /* should be enough up to "vf%u\0" for 2^32 - 1 */
 
 	xe_gt_assert(gt, IS_SRIOV_PF(xe));
-	xe_gt_assert(gt, root->d_inode->i_private == gt);
+	xe_gt_assert(gt, debugfs_node_inode(root)->i_private == gt);
 
 	/*
 	 *      /sys/kernel/debug/dri/0/
@@ -529,7 +531,7 @@ void xe_gt_sriov_pf_debugfs_register(struct xe_gt *gt, struct dentry *root)
 	pfdentry = debugfs_create_dir("pf", root);
 	if (IS_ERR(pfdentry))
 		return;
-	pfdentry->d_inode->i_private = gt;
+	debugfs_node_inode(pfdentry)->i_private = gt;
 
 	drm_debugfs_create_files(pf_info, ARRAY_SIZE(pf_info), pfdentry, minor);
 	pf_add_policy_attrs(gt, pfdentry);
@@ -546,7 +548,7 @@ void xe_gt_sriov_pf_debugfs_register(struct xe_gt *gt, struct dentry *root)
 		vfdentry = debugfs_create_dir(buf, root);
 		if (IS_ERR(vfdentry))
 			break;
-		vfdentry->d_inode->i_private = (void *)(uintptr_t)n;
+		debugfs_node_inode(vfdentry)->i_private = (void *)(uintptr_t)n;
 
 		pf_add_config_attrs(gt, vfdentry, VFID(n));
 		debugfs_create_file("control", 0600, vfdentry, NULL, &control_ops);

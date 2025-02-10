@@ -85,7 +85,7 @@ static char *cq_fields[] = {
 	[CQ_LOG_PG_SZ]	= "log_page_size",
 };
 
-struct dentry *mlx5_debugfs_root;
+struct debugfs_node *mlx5_debugfs_root;
 EXPORT_SYMBOL(mlx5_debugfs_root);
 
 void mlx5_register_debugfs(void)
@@ -98,7 +98,7 @@ void mlx5_unregister_debugfs(void)
 	debugfs_remove(mlx5_debugfs_root);
 }
 
-struct dentry *mlx5_debugfs_get_dev_root(struct mlx5_core_dev *dev)
+struct debugfs_node *mlx5_debugfs_get_dev_root(struct mlx5_core_dev *dev)
 {
 	return dev->priv.dbg.dbg_root;
 }
@@ -279,7 +279,7 @@ void mlx5_cq_debugfs_cleanup(struct mlx5_core_dev *dev)
 
 void mlx5_pages_debugfs_init(struct mlx5_core_dev *dev)
 {
-	struct dentry *pages;
+	struct debugfs_node *pages;
 
 	dev->priv.dbg.pages_debugfs = debugfs_create_dir("pages", dev->priv.dbg.dbg_root);
 	pages = dev->priv.dbg.pages_debugfs;
@@ -502,7 +502,8 @@ static const struct file_operations fops = {
 };
 
 static int add_res_tree(struct mlx5_core_dev *dev, enum dbg_rsc_type type,
-			struct dentry *root, struct mlx5_rsc_debug **dbg,
+			struct debugfs_node *root,
+			struct mlx5_rsc_debug **dbg,
 			int rsn, char **field, int nfile, void *data)
 {
 	struct mlx5_rsc_debug *d;

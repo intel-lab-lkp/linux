@@ -51,7 +51,7 @@ struct bcm_kona_wdt {
 	spinlock_t lock;
 #ifdef CONFIG_BCM_KONA_WDT_DEBUG
 	unsigned long busy_count;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 };
 
@@ -134,7 +134,7 @@ DEFINE_SHOW_ATTRIBUTE(bcm_kona);
 
 static void bcm_kona_wdt_debug_init(struct platform_device *pdev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	struct bcm_kona_wdt *wdt = platform_get_drvdata(pdev);
 
 	if (!wdt)

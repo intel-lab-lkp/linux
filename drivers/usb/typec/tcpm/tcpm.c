@@ -581,7 +581,7 @@ struct tcpm_port {
 	/* Indicates maximum (revision, version) supported */
 	struct pd_revision_info pd_rev;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct mutex logbuffer_lock;	/* log buffer access lock */
 	int logbuffer_head;
 	int logbuffer_tail;

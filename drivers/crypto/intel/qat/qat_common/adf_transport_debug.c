@@ -191,7 +191,7 @@ DEFINE_SEQ_ATTRIBUTE(adf_bank_debug);
 int adf_bank_debugfs_add(struct adf_etr_bank_data *bank)
 {
 	struct adf_accel_dev *accel_dev = bank->accel_dev;
-	struct dentry *parent = accel_dev->transport->debug;
+	struct debugfs_node *parent = accel_dev->transport->debug;
 	char name[16];
 
 	snprintf(name, sizeof(name), "bank_%02d", bank->bank_number);

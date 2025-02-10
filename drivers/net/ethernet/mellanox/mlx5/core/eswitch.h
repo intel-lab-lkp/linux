@@ -330,6 +330,7 @@ enum {
 };
 
 struct dentry;
+#define debugfs_node dentry
 struct mlx5_qos_domain;
 
 struct mlx5_eswitch {
@@ -340,7 +341,7 @@ struct mlx5_eswitch {
 	struct hlist_head       mc_table[MLX5_L2_ADDR_HASH_SIZE];
 	struct esw_mc_addr mc_promisc;
 	/* end of legacy */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct workqueue_struct *work_queue;
 	struct xarray vports;
 	u32 flags;

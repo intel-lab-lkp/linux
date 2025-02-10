@@ -111,8 +111,8 @@ DEFINE_SHOW_ATTRIBUTE(dps920ab_mfr_model);
 
 static void dps920ab_init_debugfs(struct dps920ab_data *data, struct i2c_client *client)
 {
-	struct dentry *debugfs_dir;
-	struct dentry *root;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *root;
 
 	root = pmbus_get_debugfs_dir(client);
 	if (!root)

@@ -205,7 +205,7 @@ DEFINE_SHOW_ATTRIBUTE(eps_dbg);
 
 static void pxa_init_debugfs(struct pxa_udc *udc)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(udc->gadget.name, usb_debug_root);
 	debugfs_create_file("udcstate", 0400, root, udc, &state_dbg_fops);

@@ -42,7 +42,7 @@ enum hns3_dbg_dentry_type {
 
 struct hns3_dbg_dentry_info {
 	const char *name;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 };
 
 struct hns3_dbg_cmd_info {

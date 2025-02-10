@@ -52,7 +52,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(iommu_debugfs_fops_weight, iommu_debugfs_weight_get, NU
 static void iommu_debugfs_add(struct iommu_table *tbl)
 {
 	char name[10];
-	struct dentry *liobn_entry;
+	struct debugfs_node *liobn_entry;
 
 	sprintf(name, "%08lx", tbl->it_index);
 	liobn_entry = debugfs_create_dir(name, iommu_debugfs_dir);
@@ -130,7 +130,7 @@ static bool should_fail_iommu(struct device *dev)
 
 static int __init fail_iommu_debugfs(void)
 {
-	struct dentry *dir = fault_create_debugfs_attr("fail_iommu",
+	struct debugfs_node *dir = fault_create_debugfs_attr("fail_iommu",
 						       NULL, &fail_iommu);
 
 	return PTR_ERR_OR_ZERO(dir);

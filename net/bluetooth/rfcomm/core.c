@@ -2213,7 +2213,7 @@ static int rfcomm_dlc_debugfs_show(struct seq_file *f, void *x)
 
 DEFINE_SHOW_ATTRIBUTE(rfcomm_dlc_debugfs);
 
-static struct dentry *rfcomm_dlc_debugfs;
+static struct debugfs_node *rfcomm_dlc_debugfs;
 
 /* ---- Initialization ---- */
 static int __init rfcomm_init(void)

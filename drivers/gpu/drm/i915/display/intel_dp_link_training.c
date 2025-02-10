@@ -2021,7 +2021,7 @@ DEFINE_SHOW_ATTRIBUTE(i915_dp_link_retrain_disabled);
 
 void intel_dp_link_training_debugfs_add(struct intel_connector *connector)
 {
-	struct dentry *root = connector->base.debugfs_entry;
+	struct debugfs_node *root = connector->base.debugfs_entry;
 
 	if (connector->base.connector_type != DRM_MODE_CONNECTOR_DisplayPort &&
 	    connector->base.connector_type != DRM_MODE_CONNECTOR_eDP)

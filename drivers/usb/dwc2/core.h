@@ -124,7 +124,7 @@ struct dwc2_hsotg_ep {
 	struct list_head        queue;
 	struct dwc2_hsotg       *parent;
 	struct dwc2_hsotg_req    *req;
-	struct dentry           *debugfs;
+	struct debugfs_node *debugfs;
 
 	unsigned long           total_data;
 	unsigned int            size_loaded;
@@ -1099,7 +1099,7 @@ struct dwc2_hsotg {
 	struct dwc2_dregs_backup dr_backup;
 	struct dwc2_hregs_backup hr_backup;
 
-	struct dentry *debug_root;
+	struct debugfs_node *debug_root;
 	struct debugfs_regset32 *regset;
 	bool needs_byte_swap;
 

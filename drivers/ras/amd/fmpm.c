@@ -118,8 +118,8 @@ static struct fru_rec **fru_records;
 /* system physical addresses array */
 static u64 *spa_entries;
 
-static struct dentry *fmpm_dfs_dir;
-static struct dentry *fmpm_dfs_entries;
+static struct debugfs_node *fmpm_dfs_dir;
+static struct debugfs_node *fmpm_dfs_entries;
 
 #define CPER_CREATOR_FMP						\
 	GUID_INIT(0xcd5c2993, 0xf4b2, 0x41b2, 0xb5, 0xd4, 0xf9, 0xc3,	\
@@ -950,7 +950,7 @@ static const struct file_operations fmpm_fops = {
 
 static void setup_debugfs(void)
 {
-	struct dentry *dfs = ras_get_debugfs_root();
+	struct debugfs_node *dfs = ras_get_debugfs_root();
 
 	if (!dfs)
 		return;

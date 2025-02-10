@@ -109,9 +109,9 @@ WL12XX_DEBUGFS_FWSTATS_FILE(rxpipe, missed_beacon_host_int_trig_rx_data, "%u");
 WL12XX_DEBUGFS_FWSTATS_FILE(rxpipe, tx_xfr_host_int_trig_rx_data, "%u");
 
 int wl12xx_debugfs_add_files(struct wl1271 *wl,
-			     struct dentry *rootdir)
+			     struct debugfs_node *rootdir)
 {
-	struct dentry *stats, *moddir;
+	struct debugfs_node *stats, *moddir;
 
 	moddir = debugfs_create_dir(KBUILD_MODNAME, rootdir);
 	stats = debugfs_create_dir("fw_stats", moddir);

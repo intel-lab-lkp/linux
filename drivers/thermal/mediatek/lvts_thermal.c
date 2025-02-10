@@ -162,7 +162,7 @@ struct lvts_domain {
 	size_t calib_len;
 	u8 *calib;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dom_dentry;
+	struct debugfs_node *dom_dentry;
 #endif
 };
 
@@ -217,7 +217,7 @@ static int lvts_debugfs_init(struct device *dev, struct lvts_domain *lvts_td)
 {
 	struct debugfs_regset32 *regset;
 	struct lvts_ctrl *lvts_ctrl;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	char name[64];
 	int i;
 

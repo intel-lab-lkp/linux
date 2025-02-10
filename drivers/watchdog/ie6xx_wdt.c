@@ -68,7 +68,7 @@ static struct {
 	unsigned short sch_wdtba;
 	spinlock_t unlock_sequence;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 } ie6xx_wdt_data;
 

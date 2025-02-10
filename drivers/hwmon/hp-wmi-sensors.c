@@ -1317,9 +1317,9 @@ static void hp_wmi_debugfs_init(struct device *dev, struct hp_wmi_info *info,
 {
 	struct hp_wmi_numeric_sensor *nsensor;
 	char buf[HP_WMI_MAX_STR_SIZE];
-	struct dentry *debugfs;
-	struct dentry *entries;
-	struct dentry *dir;
+	struct debugfs_node *debugfs;
+	struct debugfs_node *entries;
+	struct debugfs_node *dir;
 	int err;
 	u8 i;
 

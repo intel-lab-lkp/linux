@@ -4427,7 +4427,7 @@ static int mlx5_ib_stage_post_ib_reg_umr_init(struct mlx5_ib_dev *dev)
 
 static int mlx5_ib_stage_delay_drop_init(struct mlx5_ib_dev *dev)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!(dev->ib_dev.attrs.raw_packet_caps & IB_RAW_PACKET_CAP_DELAY_DROP))
 		return 0;

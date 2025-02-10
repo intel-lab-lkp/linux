@@ -1304,7 +1304,7 @@ struct xgbe_prv_data {
 	struct work_struct i2c_bh_work;
 	struct work_struct an_bh_work;
 
-	struct dentry *xgbe_debugfs;
+	struct debugfs_node *xgbe_debugfs;
 
 	unsigned int debugfs_xgmac_reg;
 

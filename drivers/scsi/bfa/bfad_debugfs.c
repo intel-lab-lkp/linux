@@ -433,7 +433,7 @@ static const struct bfad_debugfs_entry bfad_debugfs_files[] = {
 	{ "regwr",  S_IFREG|S_IWUSR, &bfad_debugfs_op_regwr,  },
 };
 
-static struct dentry *bfa_debugfs_root;
+static struct debugfs_node *bfa_debugfs_root;
 static atomic_t bfa_debugfs_port_count;
 
 inline void

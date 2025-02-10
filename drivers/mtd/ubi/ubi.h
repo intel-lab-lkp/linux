@@ -421,17 +421,17 @@ struct ubi_debug_info {
 	unsigned int power_cut_max;
 	unsigned int emulate_failures;
 	char dfs_dir_name[UBI_DFS_DIR_LEN];
-	struct dentry *dfs_dir;
-	struct dentry *dfs_chk_gen;
-	struct dentry *dfs_chk_io;
-	struct dentry *dfs_chk_fastmap;
-	struct dentry *dfs_disable_bgt;
-	struct dentry *dfs_emulate_bitflips;
-	struct dentry *dfs_emulate_io_failures;
-	struct dentry *dfs_emulate_power_cut;
-	struct dentry *dfs_power_cut_min;
-	struct dentry *dfs_power_cut_max;
-	struct dentry *dfs_emulate_failures;
+	struct debugfs_node *dfs_dir;
+	struct debugfs_node *dfs_chk_gen;
+	struct debugfs_node *dfs_chk_io;
+	struct debugfs_node *dfs_chk_fastmap;
+	struct debugfs_node *dfs_disable_bgt;
+	struct debugfs_node *dfs_emulate_bitflips;
+	struct debugfs_node *dfs_emulate_io_failures;
+	struct debugfs_node *dfs_emulate_power_cut;
+	struct debugfs_node *dfs_power_cut_min;
+	struct debugfs_node *dfs_power_cut_max;
+	struct debugfs_node *dfs_emulate_failures;
 };
 
 /**

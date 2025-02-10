@@ -463,10 +463,11 @@ static const struct file_operations dpu_core_perf_mode_fops = {
  * @dpu_kms: Pointer to the dpu_kms struct
  * @parent: Pointer to parent debugfs
  */
-int dpu_core_perf_debugfs_init(struct dpu_kms *dpu_kms, struct dentry *parent)
+int dpu_core_perf_debugfs_init(struct dpu_kms *dpu_kms,
+			       struct debugfs_node *parent)
 {
 	struct dpu_core_perf *perf = &dpu_kms->perf;
-	struct dentry *entry;
+	struct debugfs_node *entry;
 
 	entry = debugfs_create_dir("core_perf", parent);
 

@@ -119,7 +119,7 @@ struct rtk_phy {
 	int num_phy;
 	struct phy_parameter *phy_parameter;
 
-	struct dentry *debug_dir;
+	struct debugfs_node *debug_dir;
 };
 
 /* mapping 0xE0 to 0 ... 0xE7 to 7, 0xF0 to 8 ,,, 0xF7 to 15 */
@@ -708,9 +708,9 @@ static const struct phy_ops ops = {
 };
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *create_phy_debug_root(void)
+static struct debugfs_node *create_phy_debug_root(void)
 {
-	struct dentry *phy_debug_root;
+	struct debugfs_node *phy_debug_root;
 
 	phy_debug_root = debugfs_lookup("phy", usb_debug_root);
 	if (!phy_debug_root)
@@ -845,7 +845,7 @@ DEFINE_SHOW_ATTRIBUTE(rtk_usb2_parameter);
 
 static inline void create_debug_files(struct rtk_phy *rtk_phy)
 {
-	struct dentry *phy_debug_root = NULL;
+	struct debugfs_node *phy_debug_root = NULL;
 
 	phy_debug_root = create_phy_debug_root();
 	if (!phy_debug_root)

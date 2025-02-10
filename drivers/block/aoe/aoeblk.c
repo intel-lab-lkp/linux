@@ -22,7 +22,7 @@
 
 static DEFINE_MUTEX(aoeblk_mutex);
 static struct kmem_cache *buf_pool_cache;
-static struct dentry *aoe_debugfs_dir;
+static struct debugfs_node *aoe_debugfs_dir;
 
 /* random default picked from the historic block max_sectors cap */
 static int aoe_maxsectors = 2560;

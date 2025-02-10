@@ -915,7 +915,7 @@ struct hnae3_handle {
 	enum hnae3_port_base_vlan_state port_base_vlan_state;
 
 	u8 netdev_flags;
-	struct dentry *hnae3_dbgfs;
+	struct debugfs_node *hnae3_dbgfs;
 
 	/* Network interface message level enabled bits */
 	u32 msg_enable;

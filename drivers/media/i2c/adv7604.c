@@ -193,7 +193,7 @@ struct adv76xx_state {
 	struct delayed_work delayed_work_enable_hotplug;
 	bool restart_stdi_once;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct v4l2_debugfs_if *infoframes;
 
 	/* CEC */

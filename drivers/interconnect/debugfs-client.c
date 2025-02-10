@@ -131,9 +131,9 @@ out:
 
 DEFINE_DEBUGFS_ATTRIBUTE(icc_commit_fops, NULL, icc_commit_set, "%llu\n");
 
-int icc_debugfs_client_init(struct dentry *icc_dir)
+int icc_debugfs_client_init(struct debugfs_node *icc_dir)
 {
-	struct dentry *client_dir;
+	struct debugfs_node *client_dir;
 	int ret;
 
 	pdev = platform_device_alloc("icc-debugfs-client", PLATFORM_DEVID_NONE);
@@ -160,7 +160,7 @@ int icc_debugfs_client_init(struct dentry *icc_dir)
 
 #else
 
-int icc_debugfs_client_init(struct dentry *icc_dir)
+int icc_debugfs_client_init(struct debugfs_node *icc_dir)
 {
 	return 0;
 }

@@ -371,7 +371,7 @@ struct mhi_controller {
 	const char *name;
 	struct device *cntrl_dev;
 	struct mhi_device *mhi_dev;
-	struct dentry *debugfs_dentry;
+	struct debugfs_node *debugfs_dentry;
 	void __iomem *regs;
 	void __iomem *bhi;
 	void __iomem *bhie;

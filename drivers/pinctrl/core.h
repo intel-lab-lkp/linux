@@ -17,6 +17,7 @@
 #include <linux/pinctrl/machine.h>
 
 struct dentry;
+#define debugfs_node dentry
 struct device;
 struct device_node;
 struct module;
@@ -70,7 +71,7 @@ struct pinctrl_dev {
 	struct pinctrl_state *hog_sleep;
 	struct mutex mutex;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *device_root;
+	struct debugfs_node *device_root;
 #endif
 };
 

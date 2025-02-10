@@ -90,7 +90,7 @@ struct xhci_file_map {
 
 struct xhci_ep_priv {
 	char			name[DEBUGFS_NAMELEN];
-	struct dentry		*root;
+	struct debugfs_node *root;
 	struct xhci_stream_info *stream_info;
 	struct xhci_ring	*show_ring;
 	unsigned int		stream_id;
@@ -98,7 +98,7 @@ struct xhci_ep_priv {
 
 struct xhci_slot_priv {
 	char			name[DEBUGFS_NAMELEN];
-	struct dentry		*root;
+	struct debugfs_node *root;
 	struct xhci_ep_priv	*eps[31];
 	struct xhci_virt_device	*dev;
 };

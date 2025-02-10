@@ -3687,7 +3687,7 @@ static int skge_reset(struct skge_hw *hw)
 
 #ifdef CONFIG_SKGE_DEBUG
 
-static struct dentry *skge_debug;
+static struct debugfs_node *skge_debug;
 
 static int skge_debug_show(struct seq_file *seq, void *v)
 {

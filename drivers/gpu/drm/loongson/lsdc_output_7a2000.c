@@ -138,7 +138,7 @@ static const struct drm_info_list ls7a2000_hdmi1_debugfs_files[] = {
 };
 
 static void ls7a2000_hdmi0_late_register(struct drm_connector *connector,
-					 struct dentry *root)
+					 struct debugfs_node *root)
 {
 	struct drm_device *ddev = connector->dev;
 	struct drm_minor *minor = ddev->primary;
@@ -149,7 +149,7 @@ static void ls7a2000_hdmi0_late_register(struct drm_connector *connector,
 }
 
 static void ls7a2000_hdmi1_late_register(struct drm_connector *connector,
-					 struct dentry *root)
+					 struct debugfs_node *root)
 {
 	struct drm_device *ddev = connector->dev;
 	struct drm_minor *minor = ddev->primary;

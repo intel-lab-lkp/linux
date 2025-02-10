@@ -8,7 +8,7 @@
 
 #include "fbnic.h"
 
-static struct dentry *fbnic_dbg_root;
+static struct debugfs_node *fbnic_dbg_root;
 
 static int fbnic_dbg_pcie_stats_show(struct seq_file *s, void *v)
 {

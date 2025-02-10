@@ -205,7 +205,7 @@ static const struct file_operations kvmppc_exit_timing_fops = {
 };
 
 int kvmppc_create_vcpu_debugfs_e500(struct kvm_vcpu *vcpu,
-				    struct dentry *debugfs_dentry)
+				    struct debugfs_node *debugfs_dentry)
 {
 	debugfs_create_file("timing", 0666, debugfs_dentry,
 			    vcpu, &kvmppc_exit_timing_fops);

@@ -21,8 +21,8 @@ struct mlx5dr_dbg_dump_data {
 
 struct mlx5dr_dbg_dump_info {
 	struct mutex dbg_mutex; /* protect dbg lists */
-	struct dentry *steering_debugfs;
-	struct dentry *fdb_debugfs;
+	struct debugfs_node *steering_debugfs;
+	struct debugfs_node *fdb_debugfs;
 	struct mlx5dr_dbg_dump_data *dump_data;
 	atomic_t state;
 };

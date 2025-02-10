@@ -369,8 +369,8 @@ static int pinconf_groups_show(struct seq_file *s, void *what)
 DEFINE_SHOW_ATTRIBUTE(pinconf_pins);
 DEFINE_SHOW_ATTRIBUTE(pinconf_groups);
 
-void pinconf_init_device_debugfs(struct dentry *devroot,
-			 struct pinctrl_dev *pctldev)
+void pinconf_init_device_debugfs(struct debugfs_node *devroot,
+				 struct pinctrl_dev *pctldev)
 {
 	debugfs_create_file("pinconf-pins", 0444,
 			    devroot, pctldev, &pinconf_pins_fops);

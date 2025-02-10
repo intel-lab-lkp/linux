@@ -45,7 +45,7 @@ struct xchk_scrub_stats {
 };
 
 struct xchk_stats {
-	struct dentry		*cs_debugfs;
+	struct debugfs_node *cs_debugfs;
 	struct xchk_scrub_stats	cs_stats[XFS_SCRUB_TYPE_NR];
 };
 
@@ -327,7 +327,7 @@ xchk_stats_init(
 void
 xchk_stats_register(
 	struct xchk_stats	*cs,
-	struct dentry		*parent)
+	struct debugfs_node		*parent)
 {
 	if (!parent)
 		return;
@@ -360,8 +360,7 @@ xchk_stats_unregister(
 
 /* Initialize global stats and register them */
 int __init
-xchk_global_stats_setup(
-	struct dentry		*parent)
+xchk_global_stats_setup(struct debugfs_node		*parent)
 {
 	int			error;
 

@@ -44,7 +44,7 @@ static DECLARE_FAULT_ATTR(inject_fault);
 static char *inject_request;
 module_param(inject_request, charp, 0);
 MODULE_PARM_DESC(inject_request, "default fault injection attributes");
-static struct dentry *dbgfs_root;
+static struct debugfs_node *dbgfs_root;
 
 /* IO accessors */
 static inline void xtmr_inject_write(struct xtmr_inject_dev *xtmr_inject,
@@ -71,7 +71,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(xtmr_inject_fops, NULL, xtmr_inject_set, "%llu\n");
 
 static void xtmr_init_debugfs(struct xtmr_inject_dev *xtmr_inject)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dbgfs_root = debugfs_create_dir("xtmr_inject", NULL);
 	dir = fault_create_debugfs_attr("inject_fault", dbgfs_root,

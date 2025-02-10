@@ -44,7 +44,7 @@ static const unsigned char sht3x_cmd_read_status_reg[]         = { 0xf3, 0x2d };
 static const unsigned char sht3x_cmd_clear_status_reg[]        = { 0x30, 0x41 };
 static const unsigned char sht3x_cmd_read_serial_number[]      = { 0x37, 0x80 };
 
-static struct dentry *debugfs;
+static struct debugfs_node *debugfs;
 
 /* delays for single-shot mode i2c commands, both in us */
 #define SHT3X_SINGLE_WAIT_TIME_HPM  15000
@@ -167,7 +167,7 @@ struct sht3x_data {
 	enum sht3x_chips chip_id;
 	struct mutex i2c_lock; /* lock for sending i2c commands */
 	struct mutex data_lock; /* lock for updating driver data */
-	struct dentry *sensor_dir;
+	struct debugfs_node *sensor_dir;
 
 	u8 mode;
 	const unsigned char *command;

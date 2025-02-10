@@ -31,6 +31,7 @@
 
 struct backlight_device;
 struct dentry;
+#define debugfs_node dentry
 struct device_node;
 struct drm_connector;
 struct drm_device;

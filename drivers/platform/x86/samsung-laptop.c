@@ -306,7 +306,7 @@ static const struct sabi_config sabi_configs[] = {
  */
 
 struct samsung_laptop_debug {
-	struct dentry *root;
+	struct debugfs_node *root;
 	struct sabi_data data;
 	u16 command;
 
@@ -1264,7 +1264,7 @@ static void samsung_debugfs_exit(struct samsung_laptop *samsung)
 
 static void samsung_debugfs_init(struct samsung_laptop *samsung)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir("samsung-laptop", NULL);
 	samsung->debug.root = root;

@@ -363,14 +363,14 @@ struct sdebug_dev_info {
 	ktime_t create_ts;	/* time since bootup that this device was created */
 	struct sdeb_zone_state *zstate;
 
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 	struct spinlock list_lock;
 	struct list_head inject_err_list;
 };
 
 struct sdebug_target_info {
 	bool reset_fail;
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 };
 
 struct sdebug_host_info {
@@ -959,7 +959,7 @@ static const int device_qfull_result =
 
 static const int condition_met_result = SAM_STAT_CONDITION_MET;
 
-static struct dentry *sdebug_debugfs_root;
+static struct debugfs_node *sdebug_debugfs_root;
 static ASYNC_DOMAIN_EXCLUSIVE(sdebug_async_domain);
 
 static void sdebug_err_free(struct rcu_head *head)
@@ -5893,7 +5893,7 @@ static int scsi_debug_sdev_configure(struct scsi_device *sdp,
 {
 	struct sdebug_dev_info *devip =
 			(struct sdebug_dev_info *)sdp->hostdata;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 
 	if (sdebug_verbose)
 		pr_info("sdev_configure <%u %u %u %llu>\n",

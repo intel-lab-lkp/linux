@@ -674,7 +674,7 @@ struct ath10k_fw_crash_data {
 };
 
 struct ath10k_debug {
-	struct dentry *debugfs_phy;
+	struct debugfs_node *debugfs_phy;
 
 	struct ath10k_fw_stats fw_stats;
 	struct completion fw_stats_complete;

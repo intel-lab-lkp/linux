@@ -357,7 +357,7 @@ struct arm_cmn {
 	struct hlist_node cpuhp_node;
 
 	struct pmu pmu;
-	struct dentry *debug;
+	struct debugfs_node *debug;
 };
 
 #define to_cmn(p)	container_of(p, struct arm_cmn, pmu)
@@ -451,7 +451,7 @@ static u32 arm_cmn_device_connect_info(const struct arm_cmn *cmn,
 	return readl_relaxed(xp->pmu_base + offset);
 }
 
-static struct dentry *arm_cmn_debugfs;
+static struct debugfs_node *arm_cmn_debugfs;
 
 #ifdef CONFIG_DEBUG_FS
 static const char *arm_cmn_device_type(u8 type)

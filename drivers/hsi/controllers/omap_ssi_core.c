@@ -112,7 +112,7 @@ DEFINE_SHOW_ATTRIBUTE(ssi_gdd_regs);
 static int ssi_debug_add_ctrl(struct hsi_controller *ssi)
 {
 	struct omap_ssi_controller *omap_ssi = hsi_controller_drvdata(ssi);
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	/* SSI controller */
 	omap_ssi->dir = debugfs_create_dir(dev_name(&ssi->device), NULL);

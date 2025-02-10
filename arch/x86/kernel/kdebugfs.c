@@ -16,7 +16,7 @@
 
 #include <asm/setup.h>
 
-struct dentry *arch_debugfs_dir;
+struct debugfs_node *arch_debugfs_dir;
 EXPORT_SYMBOL(arch_debugfs_dir);
 
 #ifdef CONFIG_DEBUG_BOOT_PARAMS
@@ -73,10 +73,10 @@ static const struct file_operations fops_setup_data = {
 };
 
 static void __init
-create_setup_data_node(struct dentry *parent, int no,
+create_setup_data_node(struct debugfs_node *parent, int no,
 		       struct setup_data_node *node)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 	char buf[16];
 
 	sprintf(buf, "%d", no);
@@ -86,13 +86,13 @@ create_setup_data_node(struct dentry *parent, int no,
 	debugfs_create_file("data", S_IRUGO, d, node, &fops_setup_data);
 }
 
-static int __init create_setup_data_nodes(struct dentry *parent)
+static int __init create_setup_data_nodes(struct debugfs_node *parent)
 {
 	struct setup_indirect *indirect;
 	struct setup_data_node *node;
 	struct setup_data *data;
 	u64 pa_data, pa_next;
-	struct dentry *d;
+	struct debugfs_node *d;
 	int error;
 	u32 len;
 	int no = 0;
@@ -164,7 +164,7 @@ static struct debugfs_blob_wrapper boot_params_blob = {
 
 static int __init boot_params_kdebugfs_init(void)
 {
-	struct dentry *dbp;
+	struct debugfs_node *dbp;
 	int error;
 
 	dbp = debugfs_create_dir("boot_params", arch_debugfs_dir);

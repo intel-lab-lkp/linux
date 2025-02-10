@@ -63,7 +63,7 @@ struct pt5161l_fw_ver {
 /* Each client has this additional data */
 struct pt5161l_data {
 	struct i2c_client *client;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct pt5161l_fw_ver fw_ver;
 	struct mutex lock; /* for atomic I2C transactions */
 	bool init_done;
@@ -72,7 +72,7 @@ struct pt5161l_data {
 	bool mm_wide_reg_access; /* MM assisted wide register access */
 };
 
-static struct dentry *pt5161l_debugfs_dir;
+static struct debugfs_node *pt5161l_debugfs_dir;
 
 /*
  * Write multiple data bytes to Aries over I2C

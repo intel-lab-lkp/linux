@@ -70,7 +70,8 @@ static int steering_show(struct seq_file *m, void *data)
 }
 DEFINE_INTEL_GT_DEBUGFS_ATTRIBUTE(steering);
 
-static void gt_debugfs_register(struct intel_gt *gt, struct dentry *root)
+static void gt_debugfs_register(struct intel_gt *gt,
+				struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "reset", &reset_fops, NULL },
@@ -82,7 +83,7 @@ static void gt_debugfs_register(struct intel_gt *gt, struct dentry *root)
 
 void intel_gt_debugfs_register(struct intel_gt *gt)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	char gtname[4];
 
 	if (!gt->i915->drm.primary->debugfs_root)
@@ -102,7 +103,7 @@ void intel_gt_debugfs_register(struct intel_gt *gt)
 	intel_uc_debugfs_register(&gt->uc, root);
 }
 
-void intel_gt_debugfs_register_files(struct dentry *root,
+void intel_gt_debugfs_register_files(struct debugfs_node *root,
 				     const struct intel_gt_debugfs_file *files,
 				     unsigned long count, void *data)
 {

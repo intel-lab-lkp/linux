@@ -481,7 +481,7 @@ static int mcr_set(void *data, u64 val)
 }
 DEFINE_SIMPLE_ATTRIBUTE(iosf_mcr_fops, mcr_get, mcr_set , "%llx\n");
 
-static struct dentry *iosf_dbg;
+static struct debugfs_node *iosf_dbg;
 
 static void iosf_sideband_debug_init(void)
 {

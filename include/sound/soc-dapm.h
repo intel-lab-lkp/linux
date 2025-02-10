@@ -711,7 +711,7 @@ struct snd_soc_dapm_context {
 	struct snd_soc_dapm_widget *wcache_source;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_dapm;
+	struct debugfs_node *debugfs_dapm;
 #endif
 };
 

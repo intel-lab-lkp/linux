@@ -288,7 +288,7 @@ DEFINE_SHOW_ATTRIBUTE(ci_registers);
  */
 void dbg_create_files(struct ci_hdrc *ci)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(dev_name(ci->dev), usb_debug_root);
 

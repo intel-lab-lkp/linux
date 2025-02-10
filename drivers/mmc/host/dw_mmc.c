@@ -169,7 +169,7 @@ static void dw_mci_init_debugfs(struct dw_mci_slot *slot)
 {
 	struct mmc_host	*mmc = slot->mmc;
 	struct dw_mci *host = slot->host;
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = mmc->debugfs_root;
 	if (!root)

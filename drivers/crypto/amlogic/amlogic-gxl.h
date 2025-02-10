@@ -97,7 +97,7 @@ struct meson_dev {
 	atomic_t flow;
 	int irqs[MAXFLOW];
 #ifdef CONFIG_CRYPTO_DEV_AMLOGIC_GXL_DEBUG
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif
 };
 

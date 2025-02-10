@@ -849,7 +849,8 @@ static const struct file_operations fops_total_ps_duration = {
 };
 
 void ath11k_debugfs_sta_op_add(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			       struct ieee80211_sta *sta, struct dentry *dir)
+			       struct ieee80211_sta *sta,
+			       struct debugfs_node *dir)
 {
 	struct ath11k *ar = hw->priv;
 

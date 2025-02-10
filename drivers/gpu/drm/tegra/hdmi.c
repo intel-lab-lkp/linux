@@ -1095,7 +1095,7 @@ static int tegra_hdmi_late_register(struct drm_connector *connector)
 	struct tegra_output *output = connector_to_output(connector);
 	unsigned int i, count = ARRAY_SIZE(debugfs_files);
 	struct drm_minor *minor = connector->dev->primary;
-	struct dentry *root = connector->debugfs_entry;
+	struct debugfs_node *root = connector->debugfs_entry;
 	struct tegra_hdmi *hdmi = to_hdmi(output);
 
 	hdmi->debugfs_files = kmemdup(debugfs_files, sizeof(debugfs_files),

@@ -570,7 +570,7 @@ struct link_sta_info {
 					rx_omi_bw_staging;
 
 #ifdef CONFIG_MAC80211_DEBUGFS
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 
 	struct ieee80211_link_sta *pub;
@@ -714,7 +714,7 @@ struct sta_info {
 	struct sta_ampdu_mlme ampdu_mlme;
 
 #ifdef CONFIG_MAC80211_DEBUGFS
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 
 	struct codel_params cparams;

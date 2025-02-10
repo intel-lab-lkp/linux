@@ -106,7 +106,7 @@ struct debug_drvdata {
 static DEFINE_MUTEX(debug_lock);
 static DEFINE_PER_CPU(struct debug_drvdata *, debug_drvdata);
 static int debug_count;
-static struct dentry *debug_debugfs_dir;
+static struct debugfs_node *debug_debugfs_dir;
 
 static bool debug_enable = IS_ENABLED(CONFIG_CORESIGHT_CPU_DEBUG_DEFAULT_ON);
 module_param_named(enable, debug_enable, bool, 0600);

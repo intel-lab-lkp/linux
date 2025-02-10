@@ -15,7 +15,7 @@
 #include "internal.h"
 
 static LIST_HEAD(unloaded_tainted_modules);
-extern struct dentry *mod_debugfs_root;
+extern struct debugfs_node *mod_debugfs_root;
 
 int try_add_tainted_module(struct module *mod)
 {

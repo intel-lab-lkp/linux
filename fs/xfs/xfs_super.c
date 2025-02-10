@@ -55,7 +55,7 @@
 
 static const struct super_operations xfs_super_operations;
 
-static struct dentry *xfs_debugfs;	/* top-level xfs debugfs dir */
+static struct debugfs_node *xfs_debugfs;	/* top-level xfs debugfs dir */
 static struct kset *xfs_kset;		/* top-level xfs sysfs dir */
 #ifdef DEBUG
 static struct xfs_kobj xfs_dbg_kobj;	/* global debug sysfs attrs */
@@ -1520,12 +1520,12 @@ xfs_fs_validate_params(
 	return 0;
 }
 
-struct dentry *
+struct debugfs_node *
 xfs_debugfs_mkdir(
 	const char	*name,
-	struct dentry	*parent)
+	struct debugfs_node	*parent)
 {
-	struct dentry	*child;
+	struct debugfs_node	*child;
 
 	/* Apparently we're expected to ignore error returns?? */
 	child = debugfs_create_dir(name, parent);

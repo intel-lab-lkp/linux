@@ -90,7 +90,7 @@ struct intel_lpss {
 	u32 caps;
 	u32 active_ltr;
 	u32 idle_ltr;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 static const struct resource intel_lpss_dev_resources[] = {
@@ -134,7 +134,7 @@ static const struct mfd_cell intel_lpss_spi_cell = {
 };
 
 static DEFINE_IDA(intel_lpss_devid_ida);
-static struct dentry *intel_lpss_debugfs;
+static struct debugfs_node *intel_lpss_debugfs;
 
 static void intel_lpss_cache_ltr(struct intel_lpss *lpss)
 {
@@ -144,7 +144,7 @@ static void intel_lpss_cache_ltr(struct intel_lpss *lpss)
 
 static int intel_lpss_debugfs_add(struct intel_lpss *lpss)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(dev_name(lpss->dev), intel_lpss_debugfs);
 	if (IS_ERR(dir))

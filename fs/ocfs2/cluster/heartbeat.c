@@ -90,7 +90,7 @@ static struct o2hb_debug_buf *o2hb_db_failedregions;
 #define O2HB_DEBUG_REGION_ELAPSED_TIME	"elapsed_time_in_ms"
 #define O2HB_DEBUG_REGION_PINNED	"pinned"
 
-static struct dentry *o2hb_debug_dir;
+static struct debugfs_node *o2hb_debug_dir;
 
 static LIST_HEAD(o2hb_all_regions);
 
@@ -221,7 +221,7 @@ struct o2hb_region {
 	unsigned long		hr_live_node_bitmap[BITS_TO_LONGS(O2NM_MAX_NODES)];
 	unsigned int		hr_region_num;
 
-	struct dentry		*hr_debug_dir;
+	struct debugfs_node *hr_debug_dir;
 	struct o2hb_debug_buf	*hr_db_livenodes;
 	struct o2hb_debug_buf	*hr_db_regnum;
 	struct o2hb_debug_buf	*hr_db_elapsed_time;
@@ -1389,7 +1389,7 @@ void o2hb_exit(void)
 	kfree(o2hb_db_failedregions);
 }
 
-static void o2hb_debug_create(const char *name, struct dentry *dir,
+static void o2hb_debug_create(const char *name, struct debugfs_node *dir,
 			      struct o2hb_debug_buf **db, int db_len, int type,
 			      int size, int len, void *data)
 {
@@ -1967,9 +1967,9 @@ static struct o2hb_heartbeat_group *to_o2hb_heartbeat_group(struct config_group 
 }
 
 static void o2hb_debug_region_init(struct o2hb_region *reg,
-				   struct dentry *parent)
+				   struct debugfs_node *parent)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(config_item_name(&reg->hr_item), parent);
 	reg->hr_debug_dir = dir;

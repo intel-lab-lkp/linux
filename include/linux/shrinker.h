@@ -111,7 +111,7 @@ struct shrinker {
 #ifdef CONFIG_SHRINKER_DEBUG
 	int debugfs_id;
 	const char *name;
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 #endif
 	/* objs pending delete, per node */
 	atomic_long_t *nr_deferred;

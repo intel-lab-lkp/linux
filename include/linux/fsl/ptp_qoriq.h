@@ -145,7 +145,7 @@ struct ptp_qoriq {
 	struct ptp_clock *clock;
 	struct ptp_clock_info caps;
 	struct resource *rsrc;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct device *dev;
 	bool extts_fifo_support;
 	bool fiper3_support;

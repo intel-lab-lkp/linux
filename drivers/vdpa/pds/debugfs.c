@@ -13,7 +13,7 @@
 #include "vdpa_dev.h"
 #include "debugfs.h"
 
-static struct dentry *dbfs_dir;
+static struct debugfs_node *dbfs_dir;
 
 void pds_vdpa_debugfs_create(void)
 {

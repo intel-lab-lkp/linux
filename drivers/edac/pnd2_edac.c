@@ -1418,7 +1418,7 @@ static struct notifier_block pnd2_mce_dec = {
 static u64 pnd2_fake_addr;
 #define PND2_BLOB_SIZE 1024
 static char pnd2_result[PND2_BLOB_SIZE];
-static struct dentry *pnd2_test;
+static struct debugfs_node *pnd2_test;
 static struct debugfs_blob_wrapper pnd2_blob = {
 	.data = pnd2_result,
 	.size = 0

@@ -451,7 +451,7 @@ static const struct file_operations fops_xilinx_dpdma_dbgfs = {
 
 static void xilinx_dpdma_debugfs_init(struct xilinx_dpdma_device *xdev)
 {
-	struct dentry *dent;
+	struct debugfs_node *dent;
 
 	dpdma_debugfs.testcase = DPDMA_TC_NONE;
 

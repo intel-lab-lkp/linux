@@ -331,7 +331,7 @@ static const struct nfc_digital_ops nfcsim_digital_ops = {
 	.switch_rf = nfcsim_switch_rf,
 };
 
-static struct dentry *nfcsim_debugfs_root;
+static struct debugfs_node *nfcsim_debugfs_root;
 
 static void nfcsim_debugfs_init(void)
 {
@@ -345,7 +345,7 @@ static void nfcsim_debugfs_remove(void)
 
 static void nfcsim_debugfs_init_dev(struct nfcsim *dev)
 {
-	struct dentry *dev_dir;
+	struct debugfs_node *dev_dir;
 	char devname[5]; /* nfcX\0 */
 	u32 idx;
 	int n;

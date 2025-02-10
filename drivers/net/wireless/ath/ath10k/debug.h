@@ -210,7 +210,8 @@ static inline int ath10k_debug_fw_stats_request(struct ath10k *ar)
 #endif /* CONFIG_ATH10K_DEBUGFS */
 #ifdef CONFIG_MAC80211_DEBUGFS
 void ath10k_sta_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			    struct ieee80211_sta *sta, struct dentry *dir);
+			    struct ieee80211_sta *sta,
+			    struct debugfs_node *dir);
 void ath10k_sta_update_rx_duration(struct ath10k *ar,
 				   struct ath10k_fw_stats *stats);
 void ath10k_sta_update_rx_tid_stats(struct ath10k *ar, u8 *first_hdr,

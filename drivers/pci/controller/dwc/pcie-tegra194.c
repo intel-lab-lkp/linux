@@ -274,7 +274,7 @@ struct tegra_pcie_dw {
 	unsigned int phy_count;
 	struct phy **phys;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	/* Endpoint mode specific */
 	struct gpio_desc *pex_rst_gpiod;

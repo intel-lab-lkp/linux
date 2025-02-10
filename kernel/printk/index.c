@@ -15,7 +15,7 @@ extern struct pi_entry *__start_printk_index[];
 extern struct pi_entry *__stop_printk_index[];
 
 /* The base dir for module formats, typically debugfs/printk/index/ */
-static struct dentry *dfs_index;
+static struct debugfs_node *dfs_index;
 
 static struct pi_entry *pi_get_entry(const struct module *mod, loff_t pos)
 {
@@ -181,7 +181,7 @@ static inline void __init pi_setup_module_notifier(void) { }
 
 static int __init pi_init(void)
 {
-	struct dentry *dfs_root = debugfs_create_dir("printk", NULL);
+	struct debugfs_node *dfs_root = debugfs_create_dir("printk", NULL);
 
 	dfs_index = debugfs_create_dir("index", dfs_root);
 	pi_setup_module_notifier();

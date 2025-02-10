@@ -241,7 +241,7 @@ static int clk_fd_denominator_get(void *hw, u64 *val)
 }
 DEFINE_DEBUGFS_ATTRIBUTE(clk_fd_denominator_fops, clk_fd_denominator_get, NULL, "%llu\n");
 
-static void clk_fd_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void clk_fd_debug_init(struct clk_hw *hw, struct debugfs_node *dentry)
 {
 	debugfs_create_file("numerator", 0444, dentry, hw, &clk_fd_numerator_fops);
 	debugfs_create_file("denominator", 0444, dentry, hw, &clk_fd_denominator_fops);

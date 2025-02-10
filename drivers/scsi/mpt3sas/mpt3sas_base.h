@@ -1625,8 +1625,8 @@ struct MPT3SAS_ADAPTER {
 	u16		device_remove_in_progress_sz;
 	u8		is_gen35_ioc;
 	u8		is_aero_ioc;
-	struct dentry	*debugfs_root;
-	struct dentry	*ioc_dump;
+	struct debugfs_node *debugfs_root;
+	struct debugfs_node *ioc_dump;
 	PUT_SMID_IO_FP_HIP put_smid_scsi_io;
 	PUT_SMID_IO_FP_HIP put_smid_fast_path;
 	PUT_SMID_IO_FP_HIP put_smid_hi_priority;

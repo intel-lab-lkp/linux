@@ -43,7 +43,7 @@ struct mbox_test_device {
 	struct mutex		mutex;
 	wait_queue_head_t	waitq;
 	struct fasync_struct	*async_queue;
-	struct dentry		*root_debugfs_dir;
+	struct debugfs_node *root_debugfs_dir;
 };
 
 static ssize_t mbox_test_signal_write(struct file *filp,

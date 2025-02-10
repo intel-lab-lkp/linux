@@ -1263,9 +1263,9 @@ static const struct file_operations fw_logger_ops = {
 };
 
 static void wl1271_debugfs_add_files(struct wl1271 *wl,
-				     struct dentry *rootdir)
+				     struct debugfs_node *rootdir)
 {
-	struct dentry *streaming;
+	struct debugfs_node *streaming;
 
 	DEBUGFS_ADD(tx_queue_len, rootdir);
 	DEBUGFS_ADD(retry_count, rootdir);
@@ -1310,7 +1310,7 @@ void wl1271_debugfs_reset(struct wl1271 *wl)
 int wl1271_debugfs_init(struct wl1271 *wl)
 {
 	int ret;
-	struct dentry *rootdir;
+	struct debugfs_node *rootdir;
 
 	rootdir = debugfs_create_dir(KBUILD_MODNAME,
 				     wl->hw->wiphy->debugfsdir);

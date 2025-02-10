@@ -209,7 +209,7 @@ struct bno055_priv {
 		__le16 chans[BNO055_SCAN_CH_COUNT];
 		aligned_s64 timestamp;
 	} buf;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 static bool bno055_regmap_volatile(struct device *dev, unsigned int reg)

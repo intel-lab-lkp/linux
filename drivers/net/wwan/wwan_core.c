@@ -30,7 +30,7 @@ static const struct class wwan_class = {
 	.name = "wwan",
 };
 static int wwan_major;
-static struct dentry *wwan_debugfs_dir;
+static struct debugfs_node *wwan_debugfs_dir;
 
 #define to_wwan_dev(d) container_of(d, struct wwan_device, dev)
 #define to_wwan_port(d) container_of(d, struct wwan_port, dev)
@@ -55,7 +55,7 @@ struct wwan_device {
 	const struct wwan_ops *ops;
 	void *ops_ctxt;
 #ifdef CONFIG_WWAN_DEBUGFS
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 };
 
@@ -157,7 +157,7 @@ static struct wwan_device *wwan_dev_get_by_name(const char *name)
 }
 
 #ifdef CONFIG_WWAN_DEBUGFS
-struct dentry *wwan_get_debugfs_dir(struct device *parent)
+struct debugfs_node *wwan_get_debugfs_dir(struct device *parent)
 {
 	struct wwan_device *wwandev;
 
@@ -181,7 +181,7 @@ static int wwan_dev_debugfs_match(struct device *dev, const void *dir)
 	return wwandev->debugfs_dir == dir;
 }
 
-static struct wwan_device *wwan_dev_get_by_debugfs(struct dentry *dir)
+static struct wwan_device *wwan_dev_get_by_debugfs(struct debugfs_node *dir)
 {
 	struct device *dev;
 
@@ -192,7 +192,7 @@ static struct wwan_device *wwan_dev_get_by_debugfs(struct dentry *dir)
 	return to_wwan_dev(dev);
 }
 
-void wwan_put_debugfs_dir(struct dentry *dir)
+void wwan_put_debugfs_dir(struct debugfs_node *dir)
 {
 	struct wwan_device *wwandev = wwan_dev_get_by_debugfs(dir);
 

@@ -3215,7 +3215,7 @@ static void brcmf_sdio_debugfs_create(struct device *dev)
 	struct brcmf_pub *drvr = bus_if->drvr;
 	struct brcmf_sdio_dev *sdiodev = bus_if->bus_priv.sdio;
 	struct brcmf_sdio *bus = sdiodev->bus;
-	struct dentry *dentry = brcmf_debugfs_get_devdir(drvr);
+	struct debugfs_node *dentry = brcmf_debugfs_get_devdir(drvr);
 
 	if (IS_ERR_OR_NULL(dentry))
 		return;

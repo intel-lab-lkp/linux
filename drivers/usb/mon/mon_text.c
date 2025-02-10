@@ -93,7 +93,7 @@ struct mon_reader_text {
 	char slab_name[SLAB_NAME_SZ];
 };
 
-static struct dentry *mon_dir;		/* Usually /sys/kernel/debug/usbmon */
+static struct debugfs_node *mon_dir;		/* Usually /sys/kernel/debug/usbmon */
 
 static void mon_text_ctor(void *);
 

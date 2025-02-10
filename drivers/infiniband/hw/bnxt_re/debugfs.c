@@ -20,7 +20,7 @@
 #include "ib_verbs.h"
 #include "debugfs.h"
 
-static struct dentry *bnxt_re_debugfs_root;
+static struct debugfs_node *bnxt_re_debugfs_root;
 
 static inline const char *bnxt_re_qp_state_str(u8 state)
 {

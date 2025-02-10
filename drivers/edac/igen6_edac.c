@@ -1079,7 +1079,7 @@ static void igen6_reg_dump(struct igen6_imc *imc)
 	edac_dbg(2, "TOM              : 0x%llx", igen6_tom);
 }
 
-static struct dentry *igen6_test;
+static struct debugfs_node *igen6_test;
 
 static int debugfs_u64_set(void *data, u64 val)
 {

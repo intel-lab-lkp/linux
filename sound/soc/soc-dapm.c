@@ -2254,7 +2254,7 @@ static const struct file_operations dapm_bias_fops = {
 };
 
 void snd_soc_dapm_debugfs_init(struct snd_soc_dapm_context *dapm,
-	struct dentry *parent)
+	struct debugfs_node *parent)
 {
 	if (IS_ERR_OR_NULL(parent))
 		return;
@@ -2294,7 +2294,7 @@ static void dapm_debugfs_cleanup(struct snd_soc_dapm_context *dapm)
 
 #else
 void snd_soc_dapm_debugfs_init(struct snd_soc_dapm_context *dapm,
-	struct dentry *parent)
+	struct debugfs_node *parent)
 {
 }
 

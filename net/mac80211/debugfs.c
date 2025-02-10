@@ -635,8 +635,8 @@ DEBUGFS_DEVSTATS_FILE(dot11RTSSuccessCount);
 
 void debugfs_hw_add(struct ieee80211_local *local)
 {
-	struct dentry *phyd = local->hw.wiphy->debugfsdir;
-	struct dentry *statsd;
+	struct debugfs_node *phyd = local->hw.wiphy->debugfsdir;
+	struct debugfs_node *statsd;
 
 	if (!phyd)
 		return;

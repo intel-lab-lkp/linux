@@ -11,7 +11,7 @@ module_param_named(template_counts, sw842_template_counts, bool, 0444);
 static atomic_t template_count[OPS_MAX], template_repeat_count,
 	template_zeros_count, template_short_data_count, template_end_count;
 
-static struct dentry *sw842_debugfs_root;
+static struct debugfs_node *sw842_debugfs_root;
 
 static int __init sw842_debugfs_create(void)
 {

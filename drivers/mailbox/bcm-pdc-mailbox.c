@@ -415,7 +415,7 @@ struct pdc_globals {
 static struct pdc_globals pdcg;
 
 /* top level debug FS directory for PDC driver */
-static struct dentry *debugfs_dir;
+static struct debugfs_node *debugfs_dir;
 
 static ssize_t pdc_debugfs_read(struct file *filp, char __user *ubuf,
 				size_t count, loff_t *offp)

@@ -112,8 +112,8 @@ struct es2_ap_dev {
 	bool cdsi1_in_use;
 
 	struct task_struct *apb_log_task;
-	struct dentry *apb_log_dentry;
-	struct dentry *apb_log_enable_dentry;
+	struct debugfs_node *apb_log_dentry;
+	struct debugfs_node *apb_log_enable_dentry;
 	DECLARE_KFIFO(apb_log_fifo, char, APB1_LOG_SIZE);
 
 	__u8 arpc_endpoint_in;

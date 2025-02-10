@@ -66,7 +66,7 @@ struct qedf_dbg_ctx {
 	unsigned int host_no;
 	struct pci_dev *pdev;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *bdf_dentry;
+	struct debugfs_node *bdf_dentry;
 #endif
 };
 

@@ -133,7 +133,7 @@ struct bcm2835_spi {
 	int rx_prologue;
 	unsigned int tx_spillover;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u64 count_transfer_polling;
 	u64 count_transfer_irq;
 	u64 count_transfer_irq_after_polling;
@@ -168,7 +168,7 @@ static void bcm2835_debugfs_create(struct bcm2835_spi *bs,
 				   const char *dname)
 {
 	char name[64];
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	/* get full name */
 	snprintf(name, sizeof(name), "spi-bcm2835-%s", dname);

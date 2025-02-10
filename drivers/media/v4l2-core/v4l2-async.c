@@ -949,7 +949,7 @@ static int pending_subdevs_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(pending_subdevs);
 
-static struct dentry *v4l2_async_debugfs_dir;
+static struct debugfs_node *v4l2_async_debugfs_dir;
 
 static int __init v4l2_async_init(void)
 {

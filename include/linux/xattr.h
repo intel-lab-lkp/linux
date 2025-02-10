@@ -25,6 +25,7 @@
 
 struct inode;
 struct dentry;
+#define debugfs_node dentry
 
 static inline bool is_posix_acl_xattr(const char *name)
 {

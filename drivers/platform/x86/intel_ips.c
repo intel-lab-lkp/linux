@@ -285,7 +285,7 @@ struct ips_driver {
 
 	struct task_struct *monitor;
 	struct task_struct *adjust;
-	struct dentry *debug_root;
+	struct debugfs_node *debug_root;
 	struct timer_list timer;
 
 	/* Average CPU core temps (all averages in .01 degrees C for precision) */

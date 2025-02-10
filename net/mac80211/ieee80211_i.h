@@ -1093,7 +1093,7 @@ struct ieee80211_link_data {
 	struct ieee80211_bss_conf *conf;
 
 #ifdef CONFIG_MAC80211_DEBUGFS
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 };
 

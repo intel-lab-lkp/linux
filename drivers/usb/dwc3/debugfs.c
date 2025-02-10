@@ -988,7 +988,7 @@ static const struct dwc3_ep_file_map dwc3_ep_file_map[] = {
 
 void dwc3_debugfs_create_endpoint_dir(struct dwc3_ep *dep)
 {
-	struct dentry		*dir;
+	struct debugfs_node		*dir;
 	int			i;
 
 	dir = debugfs_create_dir(dep->name, dep->dwc->debug_root);
@@ -1007,7 +1007,7 @@ void dwc3_debugfs_remove_endpoint_dir(struct dwc3_ep *dep)
 
 void dwc3_debugfs_init(struct dwc3 *dwc)
 {
-	struct dentry		*root;
+	struct debugfs_node		*root;
 
 	dwc->regset = kzalloc(sizeof(*dwc->regset), GFP_KERNEL);
 	if (!dwc->regset)

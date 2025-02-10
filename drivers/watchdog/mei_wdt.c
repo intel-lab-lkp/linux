@@ -101,7 +101,7 @@ struct mei_wdt {
 	u16 timeout;
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif /* CONFIG_DEBUG_FS */
 };
 
@@ -540,7 +540,7 @@ static void dbgfs_unregister(struct mei_wdt *wdt)
 
 static void dbgfs_register(struct mei_wdt *wdt)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(KBUILD_MODNAME, NULL);
 	wdt->dbgfs_dir = dir;

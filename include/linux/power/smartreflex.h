@@ -153,7 +153,7 @@ struct omap_sr {
 	struct platform_device		*pdev;
 	struct omap_sr_nvalue_table	*nvalue_table;
 	struct voltagedomain		*voltdm;
-	struct dentry			*dbg_dir;
+	struct debugfs_node *dbg_dir;
 	unsigned int			irq;
 	struct clk			*fck;
 	int				srid;

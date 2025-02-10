@@ -97,7 +97,7 @@ static int dss_show(struct seq_file *s, void *unused)
 
 DEFINE_SHOW_ATTRIBUTE(dss);
 
-static struct dentry *dss_debugfs_dir;
+static struct debugfs_node *dss_debugfs_dir;
 
 static void dss_initialize_debugfs(void)
 {

@@ -12,7 +12,7 @@
 #include <linux/soundwire/sdw_registers.h>
 #include "bus.h"
 
-static struct dentry *sdw_debugfs_root;
+static struct debugfs_node *sdw_debugfs_root;
 
 void sdw_bus_debugfs_init(struct sdw_bus *bus)
 {
@@ -276,8 +276,8 @@ DEFINE_SHOW_ATTRIBUTE(read_buffer);
 
 void sdw_slave_debugfs_init(struct sdw_slave *slave)
 {
-	struct dentry *master;
-	struct dentry *d;
+	struct debugfs_node *master;
+	struct debugfs_node *d;
 	char name[32];
 
 	master = slave->bus->debugfs;

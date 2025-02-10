@@ -299,7 +299,7 @@ struct mt7915_dev {
 
 	u8 monitor_mask;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct rchan *relay_fwlog;
 
 	void *cal;
@@ -597,7 +597,8 @@ void mt7915_debugfs_rx_fw_monitor(struct mt7915_dev *dev, const void *data, int 
 bool mt7915_debugfs_rx_log(struct mt7915_dev *dev, const void *data, int len);
 #ifdef CONFIG_MAC80211_DEBUGFS
 void mt7915_sta_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			    struct ieee80211_sta *sta, struct dentry *dir);
+			    struct ieee80211_sta *sta,
+			    struct debugfs_node *dir);
 #endif
 int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 			 bool pci, int *irq);

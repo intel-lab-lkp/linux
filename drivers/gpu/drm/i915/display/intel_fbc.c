@@ -2059,7 +2059,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(intel_fbc_debugfs_false_color_fops,
 			 "%llu\n");
 
 static void intel_fbc_debugfs_add(struct intel_fbc *fbc,
-				  struct dentry *parent)
+				  struct debugfs_node *parent)
 {
 	debugfs_create_file("i915_fbc_status", 0444, parent,
 			    fbc, &intel_fbc_debugfs_status_fops);

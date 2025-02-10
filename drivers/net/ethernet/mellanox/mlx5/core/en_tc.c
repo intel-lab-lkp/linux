@@ -96,7 +96,7 @@ struct mlx5e_tc_table {
 
 	struct mlx5_tc_ct_priv         *ct;
 	struct mapping_ctx             *mapping;
-	struct dentry                  *dfs_root;
+	struct debugfs_node *dfs_root;
 
 	/* tc action stats */
 	struct mlx5e_tc_act_stats_handle *action_stats_handle;
@@ -1075,7 +1075,7 @@ static int debugfs_hairpin_table_dump_show(struct seq_file *file, void *priv)
 DEFINE_SHOW_ATTRIBUTE(debugfs_hairpin_table_dump);
 
 static void mlx5e_tc_debugfs_init(struct mlx5e_tc_table *tc,
-				  struct dentry *dfs_root)
+				  struct debugfs_node *dfs_root)
 {
 	if (IS_ERR_OR_NULL(dfs_root))
 		return;

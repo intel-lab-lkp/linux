@@ -114,7 +114,7 @@ struct adv7842_state {
 	bool restart_stdi_once;
 	bool hdmi_port_a;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct v4l2_debugfs_if *infoframes;
 
 	/* i2c clients */

@@ -575,7 +575,7 @@ void lsdc_ttm_debugfs_init(struct lsdc_device *ldev)
 	struct ttm_device *bdev = &ldev->bdev;
 	struct drm_device *ddev = &ldev->base;
 	struct drm_minor *minor = ddev->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	struct ttm_resource_manager *vram_man;
 	struct ttm_resource_manager *gtt_man;
 

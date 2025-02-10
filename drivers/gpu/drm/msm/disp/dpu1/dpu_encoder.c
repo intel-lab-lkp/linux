@@ -2435,7 +2435,8 @@ static int _dpu_encoder_status_show(struct seq_file *s, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(_dpu_encoder_status);
 
-static void dpu_encoder_debugfs_init(struct drm_encoder *drm_enc, struct dentry *root)
+static void dpu_encoder_debugfs_init(struct drm_encoder *drm_enc,
+				     struct debugfs_node *root)
 {
 	/* don't error check these */
 	debugfs_create_file("status", 0600,

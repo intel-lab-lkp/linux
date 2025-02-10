@@ -199,7 +199,8 @@ static int jh71x0_clk_set_phase(struct clk_hw *hw, int degrees)
 }
 
 #ifdef CONFIG_DEBUG_FS
-static void jh71x0_clk_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void jh71x0_clk_debug_init(struct clk_hw *hw,
+				  struct debugfs_node *dentry)
 {
 	static const struct debugfs_reg32 jh71x0_clk_reg = {
 		.name = "CTRL",

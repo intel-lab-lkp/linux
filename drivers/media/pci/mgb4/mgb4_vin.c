@@ -843,7 +843,7 @@ static void create_debugfs(struct mgb4_vin_dev *vindev)
 {
 #ifdef CONFIG_DEBUG_FS
 	struct mgb4_regs *video = &vindev->mgbdev->video;
-	struct dentry *entry;
+	struct debugfs_node *entry;
 
 	if (IS_ERR_OR_NULL(vindev->mgbdev->debugfs))
 		return;

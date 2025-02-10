@@ -22,7 +22,7 @@
 
 struct wilco_ec_debugfs {
 	struct wilco_ec_device *ec;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	size_t response_size;
 	u8 raw_data[EC_MAILBOX_DATA_SIZE];
 	u8 formatted_data[FORMATTED_BUFFER_SIZE];

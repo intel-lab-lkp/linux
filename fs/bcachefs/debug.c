@@ -29,7 +29,7 @@
 #include <linux/random.h>
 #include <linux/seq_file.h>
 
-static struct dentry *bch_debug;
+static struct debugfs_node *bch_debug;
 
 static bool bch2_btree_verify_replica(struct bch_fs *c, struct btree *b,
 				      struct extent_ptr_decoded pick)
@@ -884,7 +884,7 @@ void bch2_fs_debug_exit(struct bch_fs *c)
 
 static void bch2_fs_debug_btree_init(struct bch_fs *c, struct btree_debug *bd)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	d = debugfs_create_dir(bch2_btree_id_str(bd->id), c->btree_debug_dir);
 

@@ -2437,7 +2437,7 @@ DEFINE_SHOW_ATTRIBUTE(memblock_debug);
 
 static int __init memblock_init_debugfs(void)
 {
-	struct dentry *root = debugfs_create_dir("memblock", NULL);
+	struct debugfs_node *root = debugfs_create_dir("memblock", NULL);
 
 	debugfs_create_file("memory", 0444, root,
 			    &memblock.memory, &memblock_debug_fops);

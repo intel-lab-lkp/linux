@@ -73,7 +73,7 @@ static DEFINE_MUTEX(thermal_zone_mutex);
 static enum cpuhp_state pkg_thermal_hp_state __read_mostly;
 
 /* Debug counters to show using debugfs */
-static struct dentry *debugfs;
+static struct debugfs_node *debugfs;
 static unsigned int pkg_interrupt_cnt;
 static unsigned int pkg_work_cnt;
 

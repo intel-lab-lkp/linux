@@ -15,7 +15,7 @@
 void kvmppc_init_timing_stats(struct kvm_vcpu *vcpu);
 void kvmppc_update_timing_stats(struct kvm_vcpu *vcpu);
 int kvmppc_create_vcpu_debugfs_e500(struct kvm_vcpu *vcpu,
-				    struct dentry *debugfs_dentry);
+				    struct debugfs_node *debugfs_dentry);
 
 static inline void kvmppc_set_exit_type(struct kvm_vcpu *vcpu, int type)
 {
@@ -27,7 +27,7 @@ static inline void kvmppc_set_exit_type(struct kvm_vcpu *vcpu, int type)
 static inline void kvmppc_init_timing_stats(struct kvm_vcpu *vcpu) {}
 static inline void kvmppc_update_timing_stats(struct kvm_vcpu *vcpu) {}
 static inline int kvmppc_create_vcpu_debugfs_e500(struct kvm_vcpu *vcpu,
-						  struct dentry *debugfs_dentry)
+						  struct debugfs_node *debugfs_dentry)
 {
 	return 0;
 }

@@ -611,7 +611,7 @@ int bt_procfs_init(struct net *net, const char *name,
 		   int (*seq_show)(struct seq_file *, void *));
 void bt_procfs_cleanup(struct net *net, const char *name);
 
-extern struct dentry *bt_debugfs;
+extern struct debugfs_node *bt_debugfs;
 
 int l2cap_init(void);
 void l2cap_exit(void);

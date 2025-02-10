@@ -308,7 +308,7 @@ struct si476x_radio {
 	/* This field should not be accesses unless core lock is held */
 	const struct si476x_radio_ops *ops;
 
-	struct dentry	*debugfs;
+	struct debugfs_node *debugfs;
 	u32 audmode;
 };
 

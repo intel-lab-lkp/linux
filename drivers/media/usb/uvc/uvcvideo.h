@@ -493,7 +493,7 @@ struct uvc_streaming {
 	u8 last_fid;
 
 	/* debugfs */
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct {
 		struct uvc_stats_frame frame;
 		struct uvc_stats_stream stream;

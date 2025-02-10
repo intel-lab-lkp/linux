@@ -220,7 +220,7 @@ static void drm_bridge_connector_force(struct drm_connector *connector)
 }
 
 static void drm_bridge_connector_debugfs_init(struct drm_connector *connector,
-					      struct dentry *root)
+					      struct debugfs_node *root)
 {
 	struct drm_bridge_connector *bridge_connector =
 		to_drm_bridge_connector(connector);

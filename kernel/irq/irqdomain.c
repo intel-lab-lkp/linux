@@ -2059,7 +2059,7 @@ static void irq_domain_free_one_irq(struct irq_domain *domain, unsigned int virq
 #ifdef CONFIG_GENERIC_IRQ_DEBUGFS
 #include "internals.h"
 
-static struct dentry *domain_dir;
+static struct debugfs_node *domain_dir;
 
 static const struct irq_bit_descr irqdomain_flags[] = {
 	BIT_MASK_DESCR(IRQ_DOMAIN_FLAG_HIERARCHY),
@@ -2119,7 +2119,7 @@ static void debugfs_remove_domain_dir(struct irq_domain *d)
 	debugfs_lookup_and_remove(d->name, domain_dir);
 }
 
-void __init irq_domain_debugfs_init(struct dentry *root)
+void __init irq_domain_debugfs_init(struct debugfs_node *root)
 {
 	struct irq_domain *d;
 

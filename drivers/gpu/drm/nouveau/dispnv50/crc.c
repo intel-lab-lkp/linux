@@ -709,7 +709,7 @@ int nv50_head_crc_late_register(struct nv50_head *head)
 	struct drm_crtc *crtc = &head->base.base;
 	const struct nv50_crc_func *func =
 		nv50_disp(crtc->dev)->core->func->crc;
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!func || !crtc->debugfs_entry)
 		return 0;

@@ -85,7 +85,7 @@ struct mse102x_net_spi {
 	struct spi_transfer	spi_xfer;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry		*device_root;
+	struct debugfs_node *device_root;
 #endif
 };
 

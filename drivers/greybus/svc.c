@@ -760,7 +760,7 @@ static void gb_svc_pwrmon_debugfs_init(struct gb_svc *svc)
 {
 	int i;
 	size_t bufsize;
-	struct dentry *dent;
+	struct debugfs_node *dent;
 	struct gb_svc_pwrmon_rail_names_get_response *rail_names;
 	u8 rail_count;
 
@@ -790,7 +790,7 @@ static void gb_svc_pwrmon_debugfs_init(struct gb_svc *svc)
 		goto err_pwrmon_debugfs_free;
 
 	for (i = 0; i < rail_count; i++) {
-		struct dentry *dir;
+		struct debugfs_node *dir;
 		struct svc_debugfs_pwrmon_rail *rail = &svc->pwrmon_rails[i];
 		char fname[GB_SVC_PWRMON_RAIL_NAME_BUFSIZE];
 

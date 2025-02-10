@@ -82,7 +82,7 @@ struct regmap {
 
 #ifdef CONFIG_DEBUG_FS
 	bool debugfs_disable;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	const char *debugfs_name;
 
 	unsigned int debugfs_reg_len;

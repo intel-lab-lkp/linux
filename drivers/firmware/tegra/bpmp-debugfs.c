@@ -401,12 +401,12 @@ static const struct file_operations bpmp_debug_fops = {
 };
 
 static int bpmp_populate_debugfs_inband(struct tegra_bpmp *bpmp,
-					struct dentry *parent,
+					struct debugfs_node *parent,
 					char *ppath)
 {
 	const size_t pathlen = SZ_256;
 	const size_t bufsize = SZ_16K;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	u32 dsize, attrs = 0;
 	struct seqbuf seqbuf;
 	char *buf, *pathbuf;
@@ -688,12 +688,12 @@ static const struct file_operations debugfs_fops = {
 };
 
 static int bpmp_populate_dir(struct tegra_bpmp *bpmp, struct seqbuf *seqbuf,
-			     struct dentry *parent, u32 depth)
+			     struct debugfs_node *parent, u32 depth)
 {
 	int err;
 	u32 d, t;
 	const char *name;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 
 	while (!seqbuf_eof(seqbuf)) {
 		err = seqbuf_read_u32(seqbuf, &d);
@@ -771,7 +771,7 @@ free:
 
 int tegra_bpmp_init_debugfs(struct tegra_bpmp *bpmp)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	bool inband;
 	int err;
 

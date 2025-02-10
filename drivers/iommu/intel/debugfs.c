@@ -108,7 +108,7 @@ static const struct iommu_regset iommu_regs_64[] = {
 	IOMMU_REGSET_ENTRY(MTRR_PHYSMASK9),
 };
 
-static struct dentry *intel_iommu_debug;
+static struct debugfs_node *intel_iommu_debug;
 
 static int iommu_regset_show(struct seq_file *m, void *unused)
 {

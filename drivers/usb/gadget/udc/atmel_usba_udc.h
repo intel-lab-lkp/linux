@@ -286,7 +286,7 @@ struct usba_ep {
 	unsigned long				ept_cfg;
 #ifdef CONFIG_USB_GADGET_DEBUG_FS
 	u32					last_dma_status;
-	struct dentry				*debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 };
 
@@ -354,7 +354,7 @@ struct usba_udc {
 	u32 int_enb_cache;
 
 #ifdef CONFIG_USB_GADGET_DEBUG_FS
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 #endif
 
 	struct regmap *pmc;

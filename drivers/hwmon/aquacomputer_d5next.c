@@ -550,7 +550,7 @@ static struct aqc_fan_structure_offsets aqc_general_fan_structure = {
 struct aqc_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct mutex mutex;	/* Used for locking access when reading and writing PWM values */
 	enum kinds kind;
 	const char *name;

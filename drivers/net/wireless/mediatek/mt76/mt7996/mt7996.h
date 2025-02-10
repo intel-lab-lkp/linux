@@ -371,7 +371,7 @@ struct mt7996_dev {
 	u8 fw_debug_bin;
 	u16 fw_debug_seq;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct rchan *relay_fwlog;
 
 	struct {
@@ -735,7 +735,8 @@ int mt7996_mcu_wtbl_update_hdr_trans(struct mt7996_dev *dev,
 int mt7996_mcu_cp_support(struct mt7996_dev *dev, u8 mode);
 #ifdef CONFIG_MAC80211_DEBUGFS
 void mt7996_sta_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			    struct ieee80211_sta *sta, struct dentry *dir);
+			    struct ieee80211_sta *sta,
+			    struct debugfs_node *dir);
 #endif
 int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 			 bool hif2, int *irq);

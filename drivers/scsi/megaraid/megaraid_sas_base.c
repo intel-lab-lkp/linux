@@ -216,7 +216,7 @@ static bool support_pci_lane_margining;
 /* define lock for aen poll */
 static DEFINE_SPINLOCK(poll_aen_lock);
 
-extern struct dentry *megasas_debugfs_root;
+extern struct debugfs_node *megasas_debugfs_root;
 extern int megasas_blk_mq_poll(struct Scsi_Host *shost, unsigned int queue_num);
 
 void

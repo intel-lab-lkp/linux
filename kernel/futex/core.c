@@ -89,7 +89,7 @@ bool should_fail_futex(bool fshared)
 static int __init fail_futex_debugfs(void)
 {
 	umode_t mode = S_IFREG | S_IRUSR | S_IWUSR;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = fault_create_debugfs_attr("fail_futex", NULL,
 					&fail_futex.attr);

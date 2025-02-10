@@ -452,7 +452,8 @@ pvr_fw_trace_mask_update(struct pvr_device *pvr_dev, u32 old_mask, u32 new_mask)
 }
 
 void
-pvr_fw_trace_debugfs_init(struct pvr_device *pvr_dev, struct dentry *dir)
+pvr_fw_trace_debugfs_init(struct pvr_device *pvr_dev,
+			  struct debugfs_node *dir)
 {
 	struct pvr_fw_trace *fw_trace = &pvr_dev->fw_dev.fw_trace;
 	u32 thread_nr;

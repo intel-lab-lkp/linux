@@ -32,7 +32,7 @@
 #include "brcms_trace_events.h"
 #include "phy/phy_int.h"
 
-static struct dentry *root_folder;
+static struct debugfs_node *root_folder;
 
 void brcms_debugfs_init(void)
 {
@@ -186,7 +186,7 @@ brcms_debugfs_add_entry(struct brcms_pub *drvr, const char *fn,
 			int (*read_fn)(struct seq_file *seq, void *data))
 {
 	struct device *dev = &drvr->wlc->hw->d11core->dev;
-	struct dentry *dentry =  drvr->dbgfs_dir;
+	struct debugfs_node *dentry =  drvr->dbgfs_dir;
 	struct brcms_debugfs_entry *entry;
 
 	entry = devm_kzalloc(dev, sizeof(*entry), GFP_KERNEL);

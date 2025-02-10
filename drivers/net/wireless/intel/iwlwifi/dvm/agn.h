@@ -405,10 +405,10 @@ iwl_parse_eeprom_data(struct iwl_trans *trans, const struct iwl_cfg *cfg,
 int iwl_read_eeprom(struct iwl_trans *trans, u8 **eeprom, size_t *eeprom_size);
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
-void iwl_dbgfs_register(struct iwl_priv *priv, struct dentry *dbgfs_dir);
+void iwl_dbgfs_register(struct iwl_priv *priv, struct debugfs_node *dbgfs_dir);
 #else
 static inline void iwl_dbgfs_register(struct iwl_priv *priv,
-				      struct dentry *dbgfs_dir) { }
+				      struct debugfs_node *dbgfs_dir) { }
 #endif /* CONFIG_IWLWIFI_DEBUGFS */
 
 #ifdef CONFIG_IWLWIFI_DEBUG

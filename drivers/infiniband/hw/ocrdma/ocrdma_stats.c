@@ -44,7 +44,7 @@
 #include <rdma/ib_pma.h>
 #include "ocrdma_stats.h"
 
-static struct dentry *ocrdma_dbgfs_dir;
+static struct debugfs_node *ocrdma_dbgfs_dir;
 
 static noinline_for_stack int ocrdma_add_stat(char *start, char *pcur,
 				char *name, u64 count)

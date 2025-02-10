@@ -424,7 +424,8 @@ static const struct file_operations jh7110_pll_registers_ops = {
 	.llseek = seq_lseek
 };
 
-static void jh7110_pll_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void jh7110_pll_debug_init(struct clk_hw *hw,
+				  struct debugfs_node *dentry)
 {
 	struct jh7110_pll_data *pll = jh7110_pll_data_from(hw);
 

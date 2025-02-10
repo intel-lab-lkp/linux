@@ -20,7 +20,7 @@
 
 DEFINE_XARRAY_ALLOC(accel_minors_xa);
 
-static struct dentry *accel_debugfs_root;
+static struct debugfs_node *accel_debugfs_root;
 
 static const struct device_type accel_sysfs_device_minor = {
 	.name = "accel_minor"

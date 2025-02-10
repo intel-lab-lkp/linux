@@ -552,7 +552,7 @@ static const struct file_operations output_fops = {
 
 static int moxtet_register_debugfs(struct moxtet *moxtet)
 {
-	struct dentry *root, *entry;
+	struct debugfs_node *root, *entry;
 
 	root = debugfs_create_dir("moxtet", NULL);
 

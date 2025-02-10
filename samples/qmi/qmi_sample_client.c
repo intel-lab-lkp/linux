@@ -443,12 +443,12 @@ static const struct qmi_msg_handler qmi_sample_handlers[] = {
 struct qmi_sample {
 	struct qmi_handle qmi;
 
-	struct dentry *de_dir;
-	struct dentry *de_data;
-	struct dentry *de_ping;
+	struct debugfs_node *de_dir;
+	struct debugfs_node *de_data;
+	struct debugfs_node *de_ping;
 };
 
-static struct dentry *qmi_debug_dir;
+static struct debugfs_node *qmi_debug_dir;
 
 static int qmi_sample_probe(struct platform_device *pdev)
 {

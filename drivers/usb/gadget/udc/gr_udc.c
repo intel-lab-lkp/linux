@@ -206,7 +206,7 @@ DEFINE_SHOW_ATTRIBUTE(gr_dfs);
 static void gr_dfs_create(struct gr_udc *dev)
 {
 	const char *name = "gr_udc_state";
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(dev_name(dev->dev), usb_debug_root);
 	debugfs_create_file(name, 0444, root, dev, &gr_dfs_fops);

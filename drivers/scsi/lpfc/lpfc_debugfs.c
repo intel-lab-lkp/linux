@@ -5727,7 +5727,7 @@ static const struct file_operations lpfc_debugfs_op_slow_ring_trc = {
 	.release =      lpfc_debugfs_release,
 };
 
-static struct dentry *lpfc_debugfs_root = NULL;
+static struct debugfs_node *lpfc_debugfs_root = NULL;
 static atomic_t lpfc_debugfs_hba_count;
 
 /*

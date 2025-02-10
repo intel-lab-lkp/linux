@@ -831,7 +831,7 @@ struct mlx5_mkey_cache {
 	struct workqueue_struct *wq;
 	struct rb_root		rb_root;
 	struct mutex		rb_lock;
-	struct dentry		*fs_root;
+	struct debugfs_node *fs_root;
 	unsigned long		last_add;
 };
 
@@ -919,7 +919,7 @@ struct mlx5_ib_port {
 struct mlx5_ib_dbg_param {
 	int			offset;
 	struct mlx5_ib_dev	*dev;
-	struct dentry		*dentry;
+	struct debugfs_node *dentry;
 	u32			port_num;
 };
 
@@ -950,7 +950,7 @@ enum mlx5_ib_dbg_cc_types {
 };
 
 struct mlx5_ib_dbg_cc_params {
-	struct dentry			*root;
+	struct debugfs_node *root;
 	struct mlx5_ib_dbg_param	params[MLX5_IB_DBG_CC_MAX];
 };
 
@@ -967,7 +967,7 @@ struct mlx5_ib_delay_drop {
 	bool			activate;
 	atomic_t		events_cnt;
 	atomic_t		rqs_cnt;
-	struct dentry		*dir_debugfs;
+	struct debugfs_node *dir_debugfs;
 };
 
 enum mlx5_ib_stages {

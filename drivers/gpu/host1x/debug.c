@@ -169,7 +169,7 @@ DEFINE_SHOW_ATTRIBUTE(host1x_debug);
 
 static void host1x_debugfs_init(struct host1x *host1x)
 {
-	struct dentry *de = debugfs_create_dir("tegra-host1x", NULL);
+	struct debugfs_node *de = debugfs_create_dir("tegra-host1x", NULL);
 
 	/* Store the created entry */
 	host1x->debugfs = de;

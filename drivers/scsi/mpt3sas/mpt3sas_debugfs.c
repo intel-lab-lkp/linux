@@ -26,7 +26,7 @@
 #include "mpt3sas_base.h"
 #include <linux/debugfs.h>
 
-static struct dentry *mpt3sas_debugfs_root;
+static struct debugfs_node *mpt3sas_debugfs_root;
 
 /*
  * _debugfs_iocdump_read - copy ioc dump from debugfs buffer

@@ -77,7 +77,7 @@ struct apple_gmux_data {
 
 	/* debugfs data */
 	u8 selected_port;
-	struct dentry *debug_dentry;
+	struct debugfs_node *debug_dentry;
 };
 
 static struct apple_gmux_data *apple_gmux_data;

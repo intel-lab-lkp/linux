@@ -4,7 +4,7 @@
 #include <linux/virtio_config.h>
 #include <linux/debugfs.h>
 
-static struct dentry *virtio_debugfs_dir;
+static struct debugfs_node *virtio_debugfs_dir;
 
 static int virtio_debug_device_features_show(struct seq_file *s, void *data)
 {

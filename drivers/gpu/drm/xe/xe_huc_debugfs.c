@@ -48,7 +48,7 @@ static const struct drm_info_list debugfs_list[] = {
 	{"huc_info", huc_info, 0},
 };
 
-void xe_huc_debugfs_register(struct xe_huc *huc, struct dentry *parent)
+void xe_huc_debugfs_register(struct xe_huc *huc, struct debugfs_node *parent)
 {
 	struct drm_minor *minor = huc_to_xe(huc)->drm.primary;
 	struct drm_info_list *local;

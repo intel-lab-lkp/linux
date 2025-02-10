@@ -238,9 +238,9 @@ static void ocfs2_blockcheck_debug_remove(struct ocfs2_blockcheck_stats *stats)
 }
 
 static void ocfs2_blockcheck_debug_install(struct ocfs2_blockcheck_stats *stats,
-					   struct dentry *parent)
+					   struct debugfs_node *parent)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("blockcheck", parent);
 	stats->b_debug_dir = dir;
@@ -257,7 +257,7 @@ static void ocfs2_blockcheck_debug_install(struct ocfs2_blockcheck_stats *stats,
 }
 #else
 static inline void ocfs2_blockcheck_debug_install(struct ocfs2_blockcheck_stats *stats,
-						  struct dentry *parent)
+						  struct debugfs_node *parent)
 {
 }
 
@@ -268,7 +268,7 @@ static inline void ocfs2_blockcheck_debug_remove(struct ocfs2_blockcheck_stats *
 
 /* Always-called wrappers for starting and stopping the debugfs files */
 void ocfs2_blockcheck_stats_debugfs_install(struct ocfs2_blockcheck_stats *stats,
-					    struct dentry *parent)
+					    struct debugfs_node *parent)
 {
 	ocfs2_blockcheck_debug_install(stats, parent);
 }

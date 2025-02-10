@@ -176,9 +176,9 @@ static const struct file_operations dpu_plane_danger_enable = {
 };
 
 static void dpu_debugfs_danger_init(struct dpu_kms *dpu_kms,
-		struct dentry *parent)
+		struct debugfs_node *parent)
 {
-	struct dentry *entry = debugfs_create_dir("danger", parent);
+	struct debugfs_node *entry = debugfs_create_dir("danger", parent);
 
 	debugfs_create_file("danger_status", 0600, entry,
 			dpu_kms, &dpu_debugfs_danger_stats_fops);
@@ -269,9 +269,10 @@ void dpu_debugfs_create_regset32(const char *name, umode_t mode,
 	debugfs_create_file(name, mode, parent, regset, &dpu_regset32_fops);
 }
 
-static void dpu_debugfs_sspp_init(struct dpu_kms *dpu_kms, struct dentry *debugfs_root)
+static void dpu_debugfs_sspp_init(struct dpu_kms *dpu_kms,
+				  struct debugfs_node *debugfs_root)
 {
-	struct dentry *entry = debugfs_create_dir("sspp", debugfs_root);
+	struct debugfs_node *entry = debugfs_create_dir("sspp", debugfs_root);
 	int i;
 
 	if (IS_ERR(entry))
@@ -291,7 +292,7 @@ static int dpu_kms_debugfs_init(struct msm_kms *kms, struct drm_minor *minor)
 {
 	struct dpu_kms *dpu_kms = to_dpu_kms(kms);
 	void *p = dpu_hw_util_get_log_mask_ptr();
-	struct dentry *entry;
+	struct debugfs_node *entry;
 
 	if (!p)
 		return -EINVAL;

@@ -3971,7 +3971,7 @@ DEFINE_SHOW_ATTRIBUTE(i915_psr_status);
 void intel_psr_connector_debugfs_add(struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
-	struct dentry *root = connector->base.debugfs_entry;
+	struct debugfs_node *root = connector->base.debugfs_entry;
 
 	if (connector->base.connector_type != DRM_MODE_CONNECTOR_eDP &&
 	    connector->base.connector_type != DRM_MODE_CONNECTOR_DisplayPort)

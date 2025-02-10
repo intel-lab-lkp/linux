@@ -118,7 +118,8 @@ int apei_exec_collect_resources(struct apei_exec_context *ctx,
 				struct apei_resources *resources);
 
 struct dentry;
-struct dentry *apei_get_debugfs_dir(void);
+#define debugfs_node dentry
+struct debugfs_node *apei_get_debugfs_dir(void);
 
 static inline u32 cper_estatus_len(struct acpi_hest_generic_status *estatus)
 {

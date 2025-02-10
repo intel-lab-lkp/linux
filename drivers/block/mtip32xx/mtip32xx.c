@@ -99,7 +99,7 @@ static int instance;
  * allocated in mtip_init().
  */
 static int mtip_major;
-static struct dentry *dfs_parent;
+static struct debugfs_node *dfs_parent;
 
 static u32 cpu_use[NR_CPUS];
 

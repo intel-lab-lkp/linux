@@ -38,7 +38,7 @@ struct gb_loopback_stats {
 };
 
 struct gb_loopback_device {
-	struct dentry *root;
+	struct debugfs_node *root;
 	u32 count;
 	size_t size_max;
 
@@ -59,7 +59,7 @@ struct gb_loopback_async_operation {
 struct gb_loopback {
 	struct gb_connection *connection;
 
-	struct dentry *file;
+	struct debugfs_node *file;
 	struct kfifo kfifo_lat;
 	struct mutex mutex;
 	struct task_struct *task;

@@ -580,10 +580,10 @@ enum which_state { NOW, OLD = NOW, NEW };
 struct drbd_resource {
 	char *name;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_res;
-	struct dentry *debugfs_res_volumes;
-	struct dentry *debugfs_res_connections;
-	struct dentry *debugfs_res_in_flight_summary;
+	struct debugfs_node *debugfs_res;
+	struct debugfs_node *debugfs_res_volumes;
+	struct debugfs_node *debugfs_res_connections;
+	struct debugfs_node *debugfs_res_in_flight_summary;
 #endif
 	struct kref kref;
 	struct idr devices;		/* volume number to device mapping */
@@ -616,9 +616,9 @@ struct drbd_connection {
 	struct list_head connections;
 	struct drbd_resource *resource;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_conn;
-	struct dentry *debugfs_conn_callback_history;
-	struct dentry *debugfs_conn_oldest_requests;
+	struct debugfs_node *debugfs_conn;
+	struct debugfs_node *debugfs_conn_callback_history;
+	struct debugfs_node *debugfs_conn_oldest_requests;
 #endif
 	struct kref kref;
 	struct idr peer_devices;	/* volume number to peer device mapping */
@@ -736,7 +736,7 @@ struct drbd_peer_device {
 	struct drbd_connection *connection;
 	struct work_struct send_acks_work;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_peer_dev;
+	struct debugfs_node *debugfs_peer_dev;
 #endif
 };
 
@@ -747,13 +747,13 @@ struct drbd_device {
 
 	unsigned long flush_jif;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_minor;
-	struct dentry *debugfs_vol;
-	struct dentry *debugfs_vol_oldest_requests;
-	struct dentry *debugfs_vol_act_log_extents;
-	struct dentry *debugfs_vol_resync_extents;
-	struct dentry *debugfs_vol_data_gen_id;
-	struct dentry *debugfs_vol_ed_gen_id;
+	struct debugfs_node *debugfs_minor;
+	struct debugfs_node *debugfs_vol;
+	struct debugfs_node *debugfs_vol_oldest_requests;
+	struct debugfs_node *debugfs_vol_act_log_extents;
+	struct debugfs_node *debugfs_vol_resync_extents;
+	struct debugfs_node *debugfs_vol_data_gen_id;
+	struct debugfs_node *debugfs_vol_ed_gen_id;
 #endif
 
 	unsigned int vnr;	/* volume number within the connection */

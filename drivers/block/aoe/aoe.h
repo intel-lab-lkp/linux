@@ -168,7 +168,7 @@ struct aoedev {
 	ulong ref;
 	struct work_struct work;/* disk create work struct */
 	struct gendisk *gd;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct request_queue *blkq;
 	struct list_head rq_list;
 	struct blk_mq_tag_set tag_set;

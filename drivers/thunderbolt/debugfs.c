@@ -121,7 +121,7 @@ static const struct file_operations __space ## _fops = {		\
 #define DEBUGFS_ATTR_RW(__space)					\
 	DEBUGFS_ATTR(__space, __space ## _write)
 
-static struct dentry *tb_debugfs_root;
+static struct debugfs_node *tb_debugfs_root;
 
 static void *validate_and_copy_from_user(const void __user *user_buf,
 					 size_t *count)
@@ -1643,10 +1643,11 @@ DEBUGFS_ATTR_RW(margining_eye);
 static struct tb_margining *margining_alloc(struct tb_port *port,
 					    struct device *dev,
 					    enum usb4_sb_target target,
-					    u8 index, struct dentry *parent)
+					    u8 index,
+					    struct debugfs_node *parent)
 {
 	struct tb_margining *margining;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	unsigned int val;
 	int ret;
 
@@ -1759,7 +1760,7 @@ static struct tb_margining *margining_alloc(struct tb_port *port,
 
 static void margining_port_init(struct tb_port *port)
 {
-	struct dentry *parent;
+	struct debugfs_node *parent;
 	char dir_name[10];
 
 	if (!port->usb4)
@@ -1774,7 +1775,7 @@ static void margining_port_init(struct tb_port *port)
 
 static void margining_port_remove(struct tb_port *port)
 {
-	struct dentry *parent;
+	struct debugfs_node *parent;
 	char dir_name[10];
 
 	if (!port->usb4)
@@ -1844,7 +1845,8 @@ static void margining_xdomain_remove(struct tb_xdomain *xd)
 	margining_port_remove(downstream);
 }
 
-static void margining_retimer_init(struct tb_retimer *rt, struct dentry *debugfs_dir)
+static void margining_retimer_init(struct tb_retimer *rt,
+				   struct debugfs_node *debugfs_dir)
 {
 	rt->margining = margining_alloc(rt->port, &rt->dev,
 					USB4_SB_TARGET_RETIMER, rt->index,
@@ -1862,7 +1864,7 @@ static inline void margining_switch_remove(struct tb_switch *sw) { }
 static inline void margining_xdomain_init(struct tb_xdomain *xd) { }
 static inline void margining_xdomain_remove(struct tb_xdomain *xd) { }
 static inline void margining_retimer_init(struct tb_retimer *rt,
-					  struct dentry *debugfs_dir) { }
+					  struct debugfs_node *debugfs_dir) { }
 static inline void margining_retimer_remove(struct tb_retimer *rt) { }
 #endif
 
@@ -2406,7 +2408,7 @@ DEBUGFS_ATTR_RW(port_sb_regs);
  */
 void tb_switch_debugfs_init(struct tb_switch *sw)
 {
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct tb_port *port;
 
 	debugfs_dir = debugfs_create_dir(dev_name(&sw->dev), tb_debugfs_root);
@@ -2417,7 +2419,7 @@ void tb_switch_debugfs_init(struct tb_switch *sw)
 		debugfs_create_blob("drom", 0400, debugfs_dir, &sw->drom_blob);
 
 	tb_switch_for_each_port(sw, port) {
-		struct dentry *debugfs_dir;
+		struct debugfs_node *debugfs_dir;
 		char dir_name[10];
 
 		if (port->disabled)
@@ -2521,7 +2523,7 @@ DEBUGFS_ATTR_RW(retimer_sb_regs);
  */
 void tb_retimer_debugfs_init(struct tb_retimer *rt)
 {
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	debugfs_dir = debugfs_create_dir(dev_name(&rt->dev), tb_debugfs_root);
 	debugfs_create_file("sb_regs", DEBUGFS_MODE, debugfs_dir, rt,

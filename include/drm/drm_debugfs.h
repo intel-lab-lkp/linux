@@ -92,7 +92,7 @@ struct drm_info_node {
 	const struct drm_info_list *info_ent;
 	/* private: */
 	struct list_head list;
-	struct dentry *dent;
+	struct debugfs_node *dent;
 };
 
 /**
@@ -140,10 +140,11 @@ struct drm_debugfs_entry {
 
 #if defined(CONFIG_DEBUG_FS)
 void drm_debugfs_create_files(const struct drm_info_list *files,
-			      int count, struct dentry *root,
+			      int count, struct debugfs_node *root,
 			      struct drm_minor *minor);
 int drm_debugfs_remove_files(const struct drm_info_list *files, int count,
-			     struct dentry *root, struct drm_minor *minor);
+			     struct debugfs_node *root,
+			     struct drm_minor *minor);
 
 void drm_debugfs_add_file(struct drm_device *dev, const char *name,
 			  int (*show)(struct seq_file*, void*), void *data);
@@ -155,12 +156,14 @@ int drm_debugfs_gpuva_info(struct seq_file *m,
 			   struct drm_gpuvm *gpuvm);
 #else
 static inline void drm_debugfs_create_files(const struct drm_info_list *files,
-					    int count, struct dentry *root,
+					    int count,
+					    struct debugfs_node *root,
 					    struct drm_minor *minor)
 {}
 
 static inline int drm_debugfs_remove_files(const struct drm_info_list *files,
-					   int count, struct dentry *root,
+					   int count,
+					   struct debugfs_node *root,
 					   struct drm_minor *minor)
 {
 	return 0;

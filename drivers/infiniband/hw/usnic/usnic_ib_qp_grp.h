@@ -80,7 +80,7 @@ struct usnic_ib_qp_grp_flow {
 	struct list_head		link;
 
 	/* Debug FS */
-	struct dentry			*dbgfs_dentry;
+	struct debugfs_node *dbgfs_dentry;
 	char				dentry_name[32];
 };
 

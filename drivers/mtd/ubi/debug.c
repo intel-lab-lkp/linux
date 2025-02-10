@@ -240,12 +240,12 @@ void ubi_dump_mkvol_req(const struct ubi_mkvol_req *req)
  * Root directory for UBI stuff in debugfs. Contains sub-directories which
  * contain the stuff specific to particular UBI devices.
  */
-static struct dentry *dfs_rootdir;
+static struct debugfs_node *dfs_rootdir;
 
 #ifdef CONFIG_MTD_UBI_FAULT_INJECTION
-static void dfs_create_fault_entry(struct dentry *parent)
+static void dfs_create_fault_entry(struct debugfs_node *parent)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("fault_inject", parent);
 	if (IS_ERR_OR_NULL(dir)) {

@@ -583,7 +583,8 @@ static bool perf_limit_reasons_eval(void *data)
 DEFINE_SIMPLE_ATTRIBUTE(perf_limit_reasons_fops, perf_limit_reasons_get,
 			perf_limit_reasons_clear, "0x%llx\n");
 
-void intel_gt_pm_debugfs_register(struct intel_gt *gt, struct dentry *root)
+void intel_gt_pm_debugfs_register(struct intel_gt *gt,
+				  struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "drpc", &drpc_fops, NULL },

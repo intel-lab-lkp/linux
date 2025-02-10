@@ -333,7 +333,7 @@ struct mipi_csis_device {
 
 	spinlock_t slock;	/* Protect events */
 	struct mipi_csis_event events[MIPI_CSIS_NUM_EVENTS];
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct {
 		bool enable;
 		u32 hs_settle;

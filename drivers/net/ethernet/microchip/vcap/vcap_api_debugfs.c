@@ -383,7 +383,7 @@ static int vcap_port_debugfs_show(struct seq_file *m, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(vcap_port_debugfs);
 
-void vcap_port_debugfs(struct device *dev, struct dentry *parent,
+void vcap_port_debugfs(struct device *dev, struct debugfs_node *parent,
 		       struct vcap_control *vctrl,
 		       struct net_device *ndev)
 {
@@ -434,12 +434,13 @@ static int vcap_raw_debugfs_show(struct seq_file *m, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(vcap_raw_debugfs);
 
-struct dentry *vcap_debugfs(struct device *dev, struct dentry *parent,
-			    struct vcap_control *vctrl)
+struct debugfs_node *vcap_debugfs(struct device *dev,
+				  struct debugfs_node *parent,
+				  struct vcap_control *vctrl)
 {
 	struct vcap_admin_debugfs_info *info;
 	struct vcap_admin *admin;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char name[50];
 
 	dir = debugfs_create_dir("vcaps", parent);

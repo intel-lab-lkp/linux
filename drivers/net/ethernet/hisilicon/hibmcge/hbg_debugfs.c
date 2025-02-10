@@ -12,7 +12,7 @@
 #include "hbg_irq.h"
 #include "hbg_txrx.h"
 
-static struct dentry *hbg_dbgfs_root;
+static struct debugfs_node *hbg_dbgfs_root;
 
 struct hbg_dbg_info {
 	const char *name;
@@ -135,7 +135,7 @@ void hbg_debugfs_init(struct hbg_priv *priv)
 {
 	const char *name = pci_name(priv->pdev);
 	struct device *dev = &priv->pdev->dev;
-	struct dentry *root;
+	struct debugfs_node *root;
 	u32 i;
 
 	root = debugfs_create_dir(name, hbg_dbgfs_root);

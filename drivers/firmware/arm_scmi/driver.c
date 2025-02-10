@@ -57,7 +57,7 @@ static DEFINE_MUTEX(scmi_list_mutex);
 /* Track the unique id for the transfers for debug & profiling purpose */
 static atomic_t transfer_last_id;
 
-static struct dentry *scmi_top_dentry;
+static struct debugfs_node *scmi_top_dentry;
 
 /**
  * struct scmi_xfers_info - Structure to manage transfer information
@@ -123,7 +123,7 @@ struct scmi_protocol_instance {
  * @counters: An array of atomic_c's used for tracking statistics (if enabled)
  */
 struct scmi_debug_info {
-	struct dentry *top_dentry;
+	struct debugfs_node *top_dentry;
 	const char *name;
 	const char *type;
 	bool is_atomic;
@@ -2926,9 +2926,9 @@ static const struct file_operations fops_reset_counts = {
 };
 
 static void scmi_debugfs_counters_setup(struct scmi_debug_info *dbg,
-					struct dentry *trans)
+					struct debugfs_node *trans)
 {
-	struct dentry *counters;
+	struct debugfs_node *counters;
 	int idx;
 
 	counters = debugfs_create_dir("counters", trans);
@@ -2955,7 +2955,7 @@ static void scmi_debugfs_common_cleanup(void *d)
 static struct scmi_debug_info *scmi_debugfs_common_setup(struct scmi_info *info)
 {
 	char top_dir[16];
-	struct dentry *trans, *top_dentry;
+	struct debugfs_node *trans, *top_dentry;
 	struct scmi_debug_info *dbg;
 	const char *c_ptr = NULL;
 
@@ -3372,9 +3372,9 @@ static struct platform_driver scmi_driver = {
 	.remove = scmi_remove,
 };
 
-static struct dentry *scmi_debugfs_init(void)
+static struct debugfs_node *scmi_debugfs_init(void)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	d = debugfs_create_dir("scmi", NULL);
 	if (IS_ERR(d)) {

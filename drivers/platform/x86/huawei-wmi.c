@@ -54,7 +54,7 @@ struct quirk_entry {
 static struct quirk_entry *quirks;
 
 struct huawei_wmi_debug {
-	struct dentry *root;
+	struct debugfs_node *root;
 	u64 arg;
 };
 

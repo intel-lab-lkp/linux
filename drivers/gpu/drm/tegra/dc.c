@@ -1719,7 +1719,7 @@ static int tegra_dc_late_register(struct drm_crtc *crtc)
 {
 	unsigned int i, count = ARRAY_SIZE(debugfs_files);
 	struct drm_minor *minor = crtc->dev->primary;
-	struct dentry *root;
+	struct debugfs_node *root;
 	struct tegra_dc *dc = to_tegra_dc(crtc);
 
 #ifdef CONFIG_DEBUG_FS
@@ -1746,7 +1746,7 @@ static void tegra_dc_early_unregister(struct drm_crtc *crtc)
 	unsigned int count = ARRAY_SIZE(debugfs_files);
 	struct drm_minor *minor = crtc->dev->primary;
 	struct tegra_dc *dc = to_tegra_dc(crtc);
-	struct dentry *root;
+	struct debugfs_node *root;
 
 #ifdef CONFIG_DEBUG_FS
 	root = crtc->debugfs_entry;

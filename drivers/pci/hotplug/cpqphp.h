@@ -306,7 +306,7 @@ struct controller {
 	u16 vendor_id;
 	struct work_struct int_task_event;
 	wait_queue_head_t queue;	/* sleep & wake process */
-	struct dentry *dentry;		/* debugfs dentry */
+	struct debugfs_node *dentry;		/* debugfs dentry */
 };
 
 struct irq_mapping {

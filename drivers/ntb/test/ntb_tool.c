@@ -215,7 +215,7 @@ struct tool_mw {
 		u64 tr_base;
 	};
 	resource_size_t size;
-	struct dentry *dbgfs_file;
+	struct debugfs_node *dbgfs_file;
 };
 
 /*
@@ -250,7 +250,7 @@ struct tool_peer {
 	struct tool_msg *outmsgs;
 	int outspad_cnt;
 	struct tool_spad *outspads;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 
 struct tool_ctx {
@@ -266,7 +266,7 @@ struct tool_ctx {
 	struct tool_msg *inmsgs;
 	int inspad_cnt;
 	struct tool_spad *inspads;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 
 #define TOOL_FOPS_RDWR(__name, __read, __write) \
@@ -279,7 +279,7 @@ struct tool_ctx {
 
 #define TOOL_BUF_LEN 32
 
-static struct dentry *tool_dbgfs_topdir;
+static struct debugfs_node *tool_dbgfs_topdir;
 
 /*==============================================================================
  *                               NTB events handlers

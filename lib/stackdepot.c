@@ -805,7 +805,7 @@ DEFINE_SHOW_ATTRIBUTE(stats);
 
 static int depot_debugfs_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	if (stack_depot_disabled)
 		return 0;

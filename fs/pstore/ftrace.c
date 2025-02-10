@@ -122,7 +122,7 @@ static const struct file_operations pstore_knob_fops = {
 	.write	= pstore_ftrace_knob_write,
 };
 
-static struct dentry *pstore_ftrace_dir;
+static struct debugfs_node *pstore_ftrace_dir;
 
 static bool record_ftrace;
 module_param(record_ftrace, bool, 0400);

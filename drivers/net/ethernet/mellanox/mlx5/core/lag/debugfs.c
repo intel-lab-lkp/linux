@@ -160,7 +160,7 @@ DEFINE_SHOW_ATTRIBUTE(members);
 
 void mlx5_ldev_add_debugfs(struct mlx5_core_dev *dev)
 {
-	struct dentry *dbg;
+	struct debugfs_node *dbg;
 
 	dbg = debugfs_create_dir("lag", mlx5_debugfs_get_dev_root(dev));
 	dev->priv.dbg.lag_debugfs = dbg;
@@ -173,7 +173,7 @@ void mlx5_ldev_add_debugfs(struct mlx5_core_dev *dev)
 	debugfs_create_file("members", 0444, dbg, dev, &members_fops);
 }
 
-void mlx5_ldev_remove_debugfs(struct dentry *dbg)
+void mlx5_ldev_remove_debugfs(struct debugfs_node *dbg)
 {
 	debugfs_remove_recursive(dbg);
 }

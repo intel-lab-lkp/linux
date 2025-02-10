@@ -874,7 +874,7 @@ static int hisi_dma_create_chan_dir(struct hisi_dma_dev *hdma_dev)
 	char dir_name[HISI_DMA_MAX_DIR_NAME_LEN];
 	struct debugfs_regset32 *regsets;
 	struct debugfs_reg32 *regs;
-	struct dentry *chan_dir;
+	struct debugfs_node *chan_dir;
 	struct device *dev;
 	u32 regs_sz;
 	int ret;

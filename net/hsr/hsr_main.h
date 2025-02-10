@@ -214,7 +214,7 @@ struct hsr_priv {
 				 * in ether_addr_equal
 				 */
 #ifdef	CONFIG_DEBUG_FS
-	struct dentry *node_tbl_root;
+	struct debugfs_node *node_tbl_root;
 #endif
 };
 

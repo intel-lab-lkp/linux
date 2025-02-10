@@ -29,7 +29,7 @@
 struct nsim_bpf_bound_prog {
 	struct nsim_dev *nsim_dev;
 	struct bpf_prog *prog;
-	struct dentry *ddir;
+	struct debugfs_node *ddir;
 	const char *state;
 	bool is_loaded;
 	struct list_head l;
@@ -614,7 +614,7 @@ void nsim_bpf_dev_exit(struct nsim_dev *nsim_dev)
 
 int nsim_bpf_init(struct netdevsim *ns)
 {
-	struct dentry *ddir = ns->nsim_dev_port->ddir;
+	struct debugfs_node *ddir = ns->nsim_dev_port->ddir;
 	int err;
 
 	err = bpf_offload_dev_netdev_register(ns->nsim_dev->bpf_dev,

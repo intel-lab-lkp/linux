@@ -193,7 +193,7 @@ void xe_debugfs_register(struct xe_device *xe)
 {
 	struct ttm_device *bdev = &xe->ttm;
 	struct drm_minor *minor = xe->drm.primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	struct ttm_resource_manager *man;
 	struct xe_gt *gt;
 	u32 mem_type;

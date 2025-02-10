@@ -314,7 +314,7 @@ int snd_sof_dbg_init(struct snd_sof_dev *sdev)
 	const struct snd_sof_dsp_ops *ops = sof_ops(sdev);
 	struct snd_sof_pdata *plat_data = sdev->pdata;
 	const struct snd_sof_debugfs_map *map;
-	struct dentry *fw_profile;
+	struct debugfs_node *fw_profile;
 	int i;
 	int err;
 

@@ -2669,7 +2669,7 @@ int dbg_leb_map(struct ubifs_info *c, int lnum)
  * Root directory for UBIFS stuff in debugfs. Contains sub-directories which
  * contain the stuff specific to particular file-system mounts.
  */
-static struct dentry *dfs_rootdir;
+static struct debugfs_node *dfs_rootdir;
 
 static int dfs_file_open(struct inode *inode, struct file *file)
 {
@@ -2891,12 +2891,12 @@ void dbg_debugfs_exit_fs(struct ubifs_info *c)
 
 struct ubifs_global_debug_info ubifs_dbg;
 
-static struct dentry *dfs_chk_gen;
-static struct dentry *dfs_chk_index;
-static struct dentry *dfs_chk_orph;
-static struct dentry *dfs_chk_lprops;
-static struct dentry *dfs_chk_fs;
-static struct dentry *dfs_tst_rcvry;
+static struct debugfs_node *dfs_chk_gen;
+static struct debugfs_node *dfs_chk_index;
+static struct debugfs_node *dfs_chk_orph;
+static struct debugfs_node *dfs_chk_lprops;
+static struct debugfs_node *dfs_chk_fs;
+static struct debugfs_node *dfs_tst_rcvry;
 
 static ssize_t dfs_global_file_read(struct file *file, char __user *u,
 				    size_t count, loff_t *ppos)

@@ -14,8 +14,8 @@
 #define DEBUGFS_WRITE_BUF_SIZE 256
 
 /* Global 'vchiq' debugfs and clients entry used by all instances */
-static struct dentry *vchiq_dbg_dir;
-static struct dentry *vchiq_dbg_clients;
+static struct debugfs_node *vchiq_dbg_dir;
+static struct debugfs_node *vchiq_dbg_clients;
 
 static int debugfs_usecount_show(struct seq_file *f, void *offset)
 {
@@ -99,7 +99,7 @@ static const struct file_operations debugfs_trace_fops = {
 void vchiq_debugfs_add_instance(struct vchiq_instance *instance)
 {
 	char pidstr[16];
-	struct dentry *top;
+	struct debugfs_node *top;
 
 	snprintf(pidstr, sizeof(pidstr), "%d",
 		 vchiq_instance_get_pid(instance));

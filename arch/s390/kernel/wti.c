@@ -165,7 +165,7 @@ static struct smp_hotplug_thread wti_threads = {
 static int __init wti_init(void)
 {
 	struct sched_param wti_sched_param = { .sched_priority = MAX_RT_PRIO - 1 };
-	struct dentry *wti_dir;
+	struct debugfs_node *wti_dir;
 	struct wti_state *st;
 	int cpu, rc;
 

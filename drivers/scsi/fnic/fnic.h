@@ -386,9 +386,9 @@ struct fnic {
 	struct mutex sgreset_mutex;
 	spinlock_t sgreset_lock; /* lock for sgreset */
 	struct scsi_cmnd *sgreset_sc;
-	struct dentry *fnic_stats_debugfs_host;
-	struct dentry *fnic_stats_debugfs_file;
-	struct dentry *fnic_reset_debugfs_file;
+	struct debugfs_node *fnic_stats_debugfs_host;
+	struct debugfs_node *fnic_stats_debugfs_file;
+	struct debugfs_node *fnic_reset_debugfs_file;
 	unsigned int reset_stats;
 	atomic64_t io_cmpl_skip;
 	struct fnic_stats fnic_stats;

@@ -775,7 +775,7 @@ DEFINE_SEQ_ATTRIBUTE(objects);
 
 static int kfence_debugfs_init(void)
 {
-	struct dentry *kfence_dir;
+	struct debugfs_node *kfence_dir;
 
 	if (!READ_ONCE(kfence_enabled))
 		return 0;

@@ -50,11 +50,11 @@
 
 struct sg2042_mcu_data {
 	struct i2c_client	*client;
-	struct dentry		*debugfs;
+	struct debugfs_node *debugfs;
 	struct mutex		mutex;
 };
 
-static struct dentry *sgmcu_debugfs;
+static struct debugfs_node *sgmcu_debugfs;
 
 static ssize_t reset_count_show(struct device *dev,
 				struct device_attribute *attr,

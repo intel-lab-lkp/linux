@@ -556,8 +556,8 @@ struct ath12k_dbg_htt_stats {
 };
 
 struct ath12k_debug {
-	struct dentry *debugfs_pdev;
-	struct dentry *debugfs_pdev_symlink;
+	struct debugfs_node *debugfs_pdev;
+	struct debugfs_node *debugfs_pdev_symlink;
 	struct ath12k_dbg_htt_stats htt_stats;
 };
 
@@ -966,7 +966,7 @@ struct ath12k_base {
 	enum ath12k_dfs_region dfs_region;
 	struct ath12k_soc_dp_stats soc_stats;
 #ifdef CONFIG_ATH12K_DEBUGFS
-	struct dentry *debugfs_soc;
+	struct debugfs_node *debugfs_soc;
 #endif
 
 	unsigned long dev_flags;

@@ -327,7 +327,7 @@ static const struct file_operations dtl_fops = {
 	.read		= dtl_file_read,
 };
 
-static struct dentry *dtl_dir;
+static struct debugfs_node *dtl_dir;
 
 static void dtl_setup_file(struct dtl *dtl)
 {

@@ -424,7 +424,7 @@ struct ceph_osd_client {
 	struct delayed_work    timeout_work;
 	struct delayed_work    osds_timeout_work;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry 	       *debugfs_file;
+	struct debugfs_node *debugfs_file;
 #endif
 
 	mempool_t              *req_mempool;

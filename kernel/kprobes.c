@@ -2977,7 +2977,7 @@ static const struct file_operations fops_kp = {
 
 static int __init debugfs_kprobe_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("kprobes", NULL);
 

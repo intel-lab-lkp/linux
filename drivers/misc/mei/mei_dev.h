@@ -645,7 +645,7 @@ struct mei_device {
 	const char *kind;
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif /* CONFIG_DEBUG_FS */
 
 	struct mei_fw_status saved_fw_status;

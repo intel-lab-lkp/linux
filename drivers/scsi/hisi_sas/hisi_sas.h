@@ -480,10 +480,10 @@ struct hisi_hba {
 
 	u64 debugfs_timestamp[HISI_SAS_MAX_DEBUGFS_DUMP];
 	int debugfs_dump_index;
-	struct dentry *debugfs_dir;
-	struct dentry *debugfs_dump_dentry;
-	struct dentry *debugfs_bist_dentry;
-	struct dentry *debugfs_fifo_dentry;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *debugfs_dump_dentry;
+	struct debugfs_node *debugfs_bist_dentry;
+	struct debugfs_node *debugfs_fifo_dentry;
 
 	int iopoll_q_cnt;
 };
@@ -628,7 +628,7 @@ extern struct scsi_transport_template *hisi_sas_stt;
 
 extern bool hisi_sas_debugfs_enable;
 extern u32 hisi_sas_debugfs_dump_count;
-extern struct dentry *hisi_sas_debugfs_dir;
+extern struct debugfs_node *hisi_sas_debugfs_dir;
 
 extern void hisi_sas_stop_phys(struct hisi_hba *hisi_hba);
 extern int hisi_sas_alloc(struct hisi_hba *hisi_hba);

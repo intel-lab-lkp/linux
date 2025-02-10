@@ -42,7 +42,7 @@
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-struct dentry *megasas_debugfs_root;
+struct debugfs_node *megasas_debugfs_root;
 
 static ssize_t
 megasas_debugfs_read(struct file *filp, char __user *ubuf, size_t cnt,

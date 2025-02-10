@@ -30,7 +30,7 @@ struct sun6i_hwspinlock_data {
 	struct hwspinlock_device *bank;
 	struct reset_control *reset;
 	struct clk *ahb_clk;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	int nlocks;
 };
 

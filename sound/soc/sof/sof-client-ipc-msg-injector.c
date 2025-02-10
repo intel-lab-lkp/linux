@@ -22,7 +22,7 @@
 #define SOF_IPC_CLIENT_SUSPEND_DELAY_MS	3000
 
 struct sof_msg_inject_priv {
-	struct dentry *dfs_file;
+	struct debugfs_node *dfs_file;
 	size_t max_msg_size;
 	enum sof_ipc_type ipc_type;
 
@@ -252,7 +252,7 @@ static int sof_msg_inject_probe(struct auxiliary_device *auxdev,
 				const struct auxiliary_device_id *id)
 {
 	struct sof_client_dev *cdev = auxiliary_dev_to_sof_client_dev(auxdev);
-	struct dentry *debugfs_root = sof_client_get_debugfs_root(cdev);
+	struct debugfs_node *debugfs_root = sof_client_get_debugfs_root(cdev);
 	static const struct file_operations *fops;
 	struct device *dev = &auxdev->dev;
 	struct sof_msg_inject_priv *priv;

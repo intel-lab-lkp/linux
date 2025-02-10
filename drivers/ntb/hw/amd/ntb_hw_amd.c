@@ -71,7 +71,7 @@ MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("AMD Inc.");
 
 static const struct file_operations amd_ntb_debugfs_info;
-static struct dentry *debugfs_dir;
+static struct debugfs_node *debugfs_dir;
 
 static int ndev_mw_to_bar(struct amd_ntb_dev *ndev, int idx)
 {

@@ -672,7 +672,8 @@ static int detected_panel_show(struct seq_file *s, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(detected_panel);
 
-static void panel_edp_debugfs_init(struct drm_panel *panel, struct dentry *root)
+static void panel_edp_debugfs_init(struct drm_panel *panel,
+				   struct debugfs_node *root)
 {
 	debugfs_create_file("detected_panel", 0600, root, panel, &detected_panel_fops);
 }

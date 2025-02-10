@@ -67,7 +67,7 @@ static const struct file_operations uvc_debugfs_stats_fops = {
  * Global and stream initialization/cleanup
  */
 
-static struct dentry *uvc_debugfs_root_dir;
+static struct debugfs_node *uvc_debugfs_root_dir;
 
 void uvc_debugfs_init_stream(struct uvc_streaming *stream)
 {

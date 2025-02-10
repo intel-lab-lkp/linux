@@ -369,7 +369,8 @@ static const struct file_operations pb_fops = {
 	.open = simple_open,
 };
 
-static void amd_pmf_open_pb(struct amd_pmf_dev *dev, struct dentry *debugfs_root)
+static void amd_pmf_open_pb(struct amd_pmf_dev *dev,
+			    struct debugfs_node *debugfs_root)
 {
 	dev->esbin = debugfs_create_dir("pb", debugfs_root);
 	debugfs_create_file("update_policy", 0644, dev->esbin, dev, &pb_fops);
@@ -380,7 +381,8 @@ static void amd_pmf_remove_pb(struct amd_pmf_dev *dev)
 	debugfs_remove_recursive(dev->esbin);
 }
 #else
-static void amd_pmf_open_pb(struct amd_pmf_dev *dev, struct dentry *debugfs_root) {}
+static void amd_pmf_open_pb(struct amd_pmf_dev *dev,
+			    struct debugfs_node *debugfs_root) {}
 static void amd_pmf_remove_pb(struct amd_pmf_dev *dev) {}
 static void amd_pmf_hex_dump_pb(struct amd_pmf_dev *dev) {}
 #endif

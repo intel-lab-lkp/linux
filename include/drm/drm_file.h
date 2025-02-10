@@ -81,8 +81,8 @@ struct drm_minor {
 	struct device *kdev;		/* Linux device */
 	struct drm_device *dev;
 
-	struct dentry *debugfs_symlink;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_symlink;
+	struct debugfs_node *debugfs_root;
 };
 
 /**

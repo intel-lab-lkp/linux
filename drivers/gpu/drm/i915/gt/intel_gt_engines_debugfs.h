@@ -8,7 +8,9 @@
 
 struct intel_gt;
 struct dentry;
+#define debugfs_node dentry
 
-void intel_gt_engines_debugfs_register(struct intel_gt *gt, struct dentry *root);
+void intel_gt_engines_debugfs_register(struct intel_gt *gt,
+				       struct debugfs_node *root);
 
 #endif /* INTEL_GT_ENGINES_DEBUGFS_H */

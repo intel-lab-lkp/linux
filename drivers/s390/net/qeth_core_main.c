@@ -62,7 +62,7 @@ static struct kmem_cache *qeth_qdio_outbuf_cache;
 static struct kmem_cache *qeth_qaob_cache;
 
 static struct device *qeth_core_root_dev;
-static struct dentry *qeth_debugfs_root;
+static struct debugfs_node *qeth_debugfs_root;
 static struct lock_class_key qdio_out_skb_queue_key;
 
 static void qeth_issue_next_read_cb(struct qeth_card *card,

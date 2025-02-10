@@ -3852,7 +3852,7 @@ void print_modules(void)
 }
 
 #ifdef CONFIG_MODULE_DEBUGFS
-struct dentry *mod_debugfs_root;
+struct debugfs_node *mod_debugfs_root;
 
 static int module_debugfs_init(void)
 {

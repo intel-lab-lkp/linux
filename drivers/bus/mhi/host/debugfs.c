@@ -372,7 +372,7 @@ static const struct file_operations debugfs_timeout_ms_fops = {
 	.read = seq_read,
 };
 
-static struct dentry *mhi_debugfs_root;
+static struct debugfs_node *mhi_debugfs_root;
 
 void mhi_create_debugfs(struct mhi_controller *mhi_cntrl)
 {

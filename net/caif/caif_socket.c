@@ -51,7 +51,7 @@ struct caifsock {
 	unsigned long flow_state;
 	struct caif_connect_request conn_req;
 	struct mutex readlock;
-	struct dentry *debugfs_socket_dir;
+	struct debugfs_node *debugfs_socket_dir;
 	int headroom, tailroom, maxframe;
 };
 

@@ -20,6 +20,7 @@ struct ucsi;
 struct ucsi_altmode;
 struct ucsi_connector;
 struct dentry;
+#define debugfs_node dentry
 
 /* UCSI offsets (Bytes) */
 #define UCSI_VERSION			0
@@ -428,7 +429,7 @@ struct ucsi_debugfs_entry {
 		u64 high;
 	} response;
 	u32 status;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 };
 
 struct ucsi {

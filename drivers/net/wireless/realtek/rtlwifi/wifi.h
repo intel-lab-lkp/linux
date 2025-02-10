@@ -2420,7 +2420,7 @@ struct rtl_works {
 
 struct rtl_debug {
 	/* add for debug */
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	char debugfs_name[20];
 };
 

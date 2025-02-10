@@ -350,7 +350,7 @@ struct tegra_pcie {
 	unsigned int num_supplies;
 
 	const struct tegra_pcie_soc *soc;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 static inline struct tegra_pcie *msi_to_pcie(struct tegra_msi *msi)

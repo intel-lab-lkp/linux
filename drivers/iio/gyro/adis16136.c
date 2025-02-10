@@ -143,7 +143,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(adis16136_flash_count_fops,
 static int adis16136_debugfs_init(struct iio_dev *indio_dev)
 {
 	struct adis16136 *adis16136 = iio_priv(indio_dev);
-	struct dentry *d = iio_get_debugfs_dentry(indio_dev);
+	struct debugfs_node *d = iio_get_debugfs_dentry(indio_dev);
 
 	debugfs_create_file_unsafe("serial_number", 0400,
 		d, adis16136, &adis16136_serial_fops);

@@ -1827,8 +1827,8 @@ DEFINE_SHOW_ATTRIBUTE(xive_eq_debug);
 
 static void xive_core_debugfs_create(void)
 {
-	struct dentry *xive_dir;
-	struct dentry *xive_eq_dir;
+	struct debugfs_node *xive_dir;
+	struct debugfs_node *xive_eq_dir;
 	long cpu;
 	char name[16];
 

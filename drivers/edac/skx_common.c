@@ -785,7 +785,7 @@ EXPORT_SYMBOL_GPL(skx_remove);
  * Exercise the address decode logic by writing an address to
  * /sys/kernel/debug/edac/{skx,i10nm}_test/addr.
  */
-static struct dentry *skx_test;
+static struct debugfs_node *skx_test;
 
 static int debugfs_u64_set(void *data, u64 val)
 {

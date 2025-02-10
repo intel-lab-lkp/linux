@@ -375,11 +375,12 @@ mt7996_fw_debug_wa_get(void *data, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_fw_debug_wa, mt7996_fw_debug_wa_get,
 			 mt7996_fw_debug_wa_set, "%lld\n");
 
-static struct dentry *
-create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
+static struct debugfs_node *
+create_buf_file_cb(const char *filename, struct debugfs_node *parent,
+		   umode_t mode,
 		   struct rchan_buf *buf, int *is_global)
 {
-	struct dentry *f;
+	struct debugfs_node *f;
 
 	f = debugfs_create_file("fwlog_data", mode, parent, buf,
 				&relay_file_operations);
@@ -392,7 +393,7 @@ create_buf_file_cb(const char *filename, struct dentry *parent, umode_t mode,
 }
 
 static int
-remove_buf_file_cb(struct dentry *f)
+remove_buf_file_cb(struct debugfs_node *f)
 {
 	debugfs_remove(f);
 
@@ -821,7 +822,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_rf_regval, mt7996_rf_regval_get,
 
 int mt7996_init_debugfs(struct mt7996_dev *dev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = mt76_register_debugfs_fops(&dev->mphy, NULL);
 	if (!dir)
@@ -998,7 +999,8 @@ mt7996_queues_show(struct seq_file *s, void *data)
 DEFINE_SHOW_ATTRIBUTE(mt7996_queues);
 
 void mt7996_sta_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			    struct ieee80211_sta *sta, struct dentry *dir)
+			    struct ieee80211_sta *sta,
+			    struct debugfs_node *dir)
 {
 	debugfs_create_file("fixed_rate", 0600, dir, sta, &fops_fixed_rate);
 	debugfs_create_file("hw-queues", 0400, dir, sta, &mt7996_queues_fops);

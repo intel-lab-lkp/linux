@@ -1536,8 +1536,8 @@ static void hisi_acc_vfio_debug_init(struct hisi_acc_vf_core_device *hisi_acc_vd
 {
 	struct vfio_device *vdev = &hisi_acc_vdev->core_device.vdev;
 	struct hisi_acc_vf_migration_file *migf;
-	struct dentry *vfio_dev_migration;
-	struct dentry *vfio_hisi_acc;
+	struct debugfs_node *vfio_dev_migration;
+	struct debugfs_node *vfio_hisi_acc;
 	struct device *dev = vdev->dev;
 
 	if (!debugfs_initialized() ||

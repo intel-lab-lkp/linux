@@ -56,7 +56,7 @@ struct gcov_node {
 	struct gcov_node *parent;
 	struct gcov_info **loaded_info;
 	struct gcov_info *unloaded_info;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct dentry **links;
 	int num_loaded;
 	char name[];
@@ -473,7 +473,7 @@ static const char *deskew(const char *basename)
  * Create links to additional files (usually .c and .gcno files) which the
  * gcov tool expects to find in the same directory as the gcov data file.
  */
-static void add_links(struct gcov_node *node, struct dentry *parent)
+static void add_links(struct gcov_node *node, struct debugfs_node *parent)
 {
 	const char *basename;
 	char *target;

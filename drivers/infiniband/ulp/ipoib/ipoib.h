@@ -409,8 +409,8 @@ struct ipoib_dev_priv {
 
 #ifdef CONFIG_INFINIBAND_IPOIB_DEBUG
 	struct list_head fs_list;
-	struct dentry *mcg_dentry;
-	struct dentry *path_dentry;
+	struct debugfs_node *mcg_dentry;
+	struct debugfs_node *path_dentry;
 #endif
 	u64	hca_caps;
 	u64	kernel_caps;

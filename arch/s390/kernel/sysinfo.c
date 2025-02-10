@@ -546,7 +546,7 @@ static u8 stsi_0_0_0;
 
 static __init int stsi_init_debugfs(void)
 {
-	struct dentry *stsi_root;
+	struct debugfs_node *stsi_root;
 	struct stsi_file *sf;
 	int lvl, i;
 

@@ -54,7 +54,7 @@ struct gb_svc {
 	struct gb_svc_watchdog	*watchdog;
 	enum gb_svc_watchdog_bite action;
 
-	struct dentry *debugfs_dentry;
+	struct debugfs_node *debugfs_dentry;
 	struct svc_debugfs_pwrmon_rail *pwrmon_rails;
 };
 #define to_gb_svc(d) container_of(d, struct gb_svc, dev)

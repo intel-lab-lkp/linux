@@ -175,7 +175,7 @@ static int __init pwrdms_setup(struct powerdomain *pwrdm, void *dir)
 {
 	int i;
 	s64 t;
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	t = sched_clock();
 
@@ -221,7 +221,7 @@ DEFINE_SIMPLE_ATTRIBUTE(pm_dbg_option_fops, option_get, option_set, "%llu\n");
 
 static int __init pm_dbg_init(void)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	if (pm_dbg_init_done)
 		return 0;

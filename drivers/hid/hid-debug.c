@@ -28,7 +28,7 @@
 #include <linux/hid.h>
 #include <linux/hid-debug.h>
 
-static struct dentry *hid_debug_root;
+static struct debugfs_node *hid_debug_root;
 
 struct hid_usage_entry {
 	unsigned  page;

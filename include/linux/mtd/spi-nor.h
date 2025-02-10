@@ -408,7 +408,7 @@ struct spi_nor {
 	u32			flags;
 	enum spi_nor_cmd_ext	cmd_ext_type;
 	struct sfdp		*sfdp;
-	struct dentry		*debugfs_root;
+	struct debugfs_node *debugfs_root;
 
 	const struct spi_nor_controller_ops *controller_ops;
 

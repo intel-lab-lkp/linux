@@ -318,7 +318,7 @@ static const struct file_operations wfx_send_hif_msg_fops = {
 
 int wfx_debug_init(struct wfx_dev *wdev)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	d = debugfs_create_dir("wfx", wdev->hw->wiphy->debugfsdir);
 	debugfs_create_file("counters", 0444, d, wdev, &wfx_counters_fops);

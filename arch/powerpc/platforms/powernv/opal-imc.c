@@ -18,7 +18,7 @@
 #include <asm/imc-pmu.h>
 #include <asm/cputhreads.h>
 
-static struct dentry *imc_debugfs_parent;
+static struct debugfs_node *imc_debugfs_parent;
 
 /* Helpers to export imc command and mode via debugfs */
 static int imc_mem_get(void *data, u64 *val)
@@ -35,7 +35,7 @@ static int imc_mem_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_imc_x64, imc_mem_get, imc_mem_set, "0x%016llx\n");
 
 static void imc_debugfs_create_x64(const char *name, umode_t mode,
-				   struct dentry *parent, u64  *value)
+				   struct debugfs_node *parent, u64  *value)
 {
 	debugfs_create_file_unsafe(name, mode, parent, value, &fops_imc_x64);
 }

@@ -16,7 +16,7 @@ struct mlx5_vdpa_net_resources {
 	u32 tirn;
 	u32 rqtn;
 	bool valid;
-	struct dentry *tirn_dent;
+	struct debugfs_node *tirn_dent;
 };
 
 #define MLX5V_MACVLAN_SIZE 256
@@ -53,8 +53,8 @@ struct mlx5_vdpa_net {
 	 */
 	struct rw_semaphore reslock;
 	struct mlx5_flow_table *rxft;
-	struct dentry *rx_dent;
-	struct dentry *rx_table_dent;
+	struct debugfs_node *rx_dent;
+	struct debugfs_node *rx_table_dent;
 	bool setup;
 	bool needs_teardown;
 	u32 cur_num_vqs;
@@ -65,7 +65,7 @@ struct mlx5_vdpa_net {
 	struct mlx5_vdpa_wq_ent cvq_ent;
 	struct hlist_head macvlan_hash[MLX5V_MACVLAN_SIZE];
 	struct mlx5_vdpa_irq_pool irqp;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	u32 umem_1_buffer_param_a;
 	u32 umem_1_buffer_param_b;
@@ -79,7 +79,7 @@ struct mlx5_vdpa_net {
 
 struct mlx5_vdpa_counter {
 	struct mlx5_fc *counter;
-	struct dentry *dent;
+	struct debugfs_node *dent;
 	struct mlx5_core_dev *mdev;
 };
 
@@ -91,7 +91,7 @@ struct macvlan_node {
 	struct mlx5_vdpa_net *ndev;
 	bool tagged;
 #if defined(CONFIG_MLX5_VDPA_STEERING_DEBUG)
-	struct dentry *dent;
+	struct debugfs_node *dent;
 	struct mlx5_vdpa_counter ucast_counter;
 	struct mlx5_vdpa_counter mcast_counter;
 #endif

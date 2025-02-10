@@ -108,7 +108,7 @@ struct io_tlb_pool {
 struct io_tlb_mem {
 	struct io_tlb_pool defpool;
 	unsigned long nslabs;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	bool force_bounce;
 	bool for_alloc;
 #ifdef CONFIG_SWIOTLB_DYNAMIC

@@ -155,7 +155,7 @@ struct sba_device {
 	struct list_head reqs_aborted_list;
 	struct list_head reqs_free_list;
 	/* DebugFS directory entries */
-	struct dentry *root;
+	struct debugfs_node *root;
 };
 
 /* ====== Command helper routines ===== */

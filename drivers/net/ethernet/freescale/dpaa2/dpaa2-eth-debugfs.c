@@ -9,7 +9,7 @@
 
 #define DPAA2_ETH_DBG_ROOT "dpaa2-eth"
 
-static struct dentry *dpaa2_dbg_root;
+static struct debugfs_node *dpaa2_dbg_root;
 
 static int dpaa2_dbg_cpu_show(struct seq_file *file, void *offset)
 {
@@ -167,7 +167,7 @@ DEFINE_SHOW_ATTRIBUTE(dpaa2_dbg_bp);
 void dpaa2_dbg_add(struct dpaa2_eth_priv *priv)
 {
 	struct fsl_mc_device *dpni_dev;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char name[10];
 
 	/* Create a directory for the interface */

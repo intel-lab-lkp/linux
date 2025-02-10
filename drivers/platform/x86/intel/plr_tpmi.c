@@ -55,7 +55,7 @@ struct tpmi_plr_die {
 };
 
 struct tpmi_plr {
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	struct tpmi_plr_die *die_info;
 	int num_dies;
 	struct auxiliary_device *auxdev;
@@ -257,7 +257,7 @@ DEFINE_SHOW_STORE_ATTRIBUTE(plr_status);
 static int intel_plr_probe(struct auxiliary_device *auxdev, const struct auxiliary_device_id *id)
 {
 	struct intel_tpmi_plat_info *plat_info;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	int i, num_resources;
 	struct resource *res;
 	struct tpmi_plr *plr;

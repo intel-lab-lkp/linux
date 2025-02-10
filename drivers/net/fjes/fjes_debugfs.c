@@ -14,7 +14,7 @@
 
 #include "fjes.h"
 
-static struct dentry *fjes_debug_root;
+static struct debugfs_node *fjes_debug_root;
 
 static const char * const ep_status_string[] = {
 	"unshared",

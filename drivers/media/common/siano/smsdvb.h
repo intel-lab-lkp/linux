@@ -46,7 +46,7 @@ struct smsdvb_client_t {
 	bool			has_tuned;
 
 	/* stats debugfs data */
-	struct dentry		*debugfs;
+	struct debugfs_node *debugfs;
 
 	struct smsdvb_debugfs	*debug_data;
 

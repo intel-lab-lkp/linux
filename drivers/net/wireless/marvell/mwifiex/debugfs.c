@@ -11,7 +11,7 @@
 #include "11n.h"
 
 
-static struct dentry *mwifiex_dfs_dir;
+static struct debugfs_node *mwifiex_dfs_dir;
 
 static char *bss_modes[] = {
 	"UNSPECIFIED",

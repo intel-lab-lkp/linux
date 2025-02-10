@@ -18,6 +18,7 @@
 #include <sound/cs35l56.h>
 
 struct dentry;
+#define debugfs_node dentry
 
 struct cs35l56_hda {
 	struct cs35l56_base base;
@@ -38,7 +39,7 @@ struct cs35l56_hda {
 	struct snd_kcontrol *mixer_ctl[4];
 
 #if IS_ENABLED(CONFIG_SND_DEBUG)
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 #endif
 };
 

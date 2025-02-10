@@ -64,9 +64,9 @@ struct picolcd_pending {
 struct picolcd_data {
 	struct hid_device *hdev;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debug_reset;
-	struct dentry *debug_eeprom;
-	struct dentry *debug_flash;
+	struct debugfs_node *debug_reset;
+	struct debugfs_node *debug_eeprom;
+	struct debugfs_node *debug_flash;
 	struct mutex mutex_flash;
 	int addr_sz;
 #endif

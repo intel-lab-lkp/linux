@@ -11,7 +11,7 @@
 #include <linux/iommu.h>
 #include <linux/debugfs.h>
 
-struct dentry *iommu_debugfs_dir;
+struct debugfs_node *iommu_debugfs_dir;
 EXPORT_SYMBOL_GPL(iommu_debugfs_dir);
 
 /**

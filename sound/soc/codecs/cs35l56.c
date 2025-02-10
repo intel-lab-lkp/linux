@@ -835,7 +835,7 @@ err:
 static int cs35l56_component_probe(struct snd_soc_component *component)
 {
 	struct cs35l56_private *cs35l56 = snd_soc_component_get_drvdata(component);
-	struct dentry *debugfs_root = component->debugfs_root;
+	struct debugfs_node *debugfs_root = component->debugfs_root;
 	unsigned short vendor, device;
 
 	BUILD_BUG_ON(ARRAY_SIZE(cs35l56_tx_input_texts) != ARRAY_SIZE(cs35l56_tx_input_values));

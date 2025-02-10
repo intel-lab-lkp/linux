@@ -57,7 +57,7 @@ module_param(ser_write_chunk, int, 0444);
 
 MODULE_PARM_DESC(ser_write_chunk, "Maximum size of data written to UART.");
 
-static struct dentry *debugfsdir;
+static struct debugfs_node *debugfsdir;
 
 static int caif_net_open(struct net_device *dev);
 static int caif_net_close(struct net_device *dev);
@@ -71,7 +71,7 @@ struct ser_device {
 	bool tx_started;
 	unsigned long state;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_tty_dir;
+	struct debugfs_node *debugfs_tty_dir;
 	struct debugfs_blob_wrapper tx_blob;
 	struct debugfs_blob_wrapper rx_blob;
 	u8 rx_data[128];

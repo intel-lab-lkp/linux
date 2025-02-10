@@ -605,7 +605,7 @@ struct mem_ctl_info {
 	/* the internal state of this controller instance */
 	int op_state;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	u8 fake_inject_layer[EDAC_MAX_LAYERS];
 	bool fake_inject_ue;
 	u16 fake_inject_count;

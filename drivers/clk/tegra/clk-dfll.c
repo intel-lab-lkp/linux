@@ -279,7 +279,7 @@ struct tegra_dfll {
 
 	enum dfll_ctrl_mode		mode;
 	enum dfll_tune_range		tune_range;
-	struct dentry			*debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct clk_hw			dfll_clk_hw;
 	const char			*output_clock_name;
 	struct dfll_rate_req		last_req;
@@ -1362,7 +1362,7 @@ DEFINE_SHOW_ATTRIBUTE(attr_registers);
 
 static void dfll_debug_init(struct tegra_dfll *td)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!td || (td->mode == DFLL_UNINITIALIZED))
 		return;

@@ -351,7 +351,7 @@ struct bnad {
 	/* debugfs specific data */
 	char	*regdata;
 	u32	reglen;
-	struct dentry *port_debugfs_root;
+	struct debugfs_node *port_debugfs_root;
 };
 
 struct bnad_drvinfo {

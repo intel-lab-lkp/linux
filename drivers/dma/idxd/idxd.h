@@ -370,8 +370,8 @@ struct idxd_device {
 	struct idxd_evl *evl;
 	struct kmem_cache *evl_cache;
 
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_evl_file;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_evl_file;
 
 	bool user_submission_safe;
 

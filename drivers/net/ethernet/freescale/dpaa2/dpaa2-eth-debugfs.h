@@ -10,7 +10,7 @@
 struct dpaa2_eth_priv;
 
 struct dpaa2_debugfs {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 };
 
 #ifdef CONFIG_DEBUG_FS

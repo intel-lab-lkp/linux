@@ -367,7 +367,7 @@ static const struct file_operations drm_crtc_crc_data_fops = {
 
 void drm_debugfs_crtc_crc_add(struct drm_crtc *crtc)
 {
-	struct dentry *crc_ent;
+	struct debugfs_node *crc_ent;
 
 	if (!crtc->funcs->set_crc_source || !crtc->funcs->verify_crc_source)
 		return;

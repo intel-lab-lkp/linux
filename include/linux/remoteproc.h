@@ -558,7 +558,7 @@ struct rproc {
 	unsigned int state;
 	enum rproc_dump_mechanism dump_conf;
 	struct mutex lock;
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 	struct list_head traces;
 	int num_traces;
 	struct list_head carveouts;

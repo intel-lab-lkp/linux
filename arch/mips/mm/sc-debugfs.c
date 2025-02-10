@@ -51,7 +51,7 @@ static const struct file_operations sc_prefetch_fops = {
 
 static int __init sc_debugfs_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("l2cache", mips_debugfs_dir);
 	debugfs_create_file("prefetch", S_IRUGO | S_IWUSR, dir, NULL,

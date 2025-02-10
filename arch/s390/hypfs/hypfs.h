@@ -75,7 +75,7 @@ struct hypfs_dbfs_file {
 
 	/* Private data for hypfs_dbfs.c */
 	struct mutex		lock;
-	struct dentry		*dentry;
+	struct debugfs_node *dentry;
 };
 
 extern void hypfs_dbfs_create_file(struct hypfs_dbfs_file *df);

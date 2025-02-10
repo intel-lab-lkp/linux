@@ -616,7 +616,8 @@ static const struct file_operations mca_ue_dump_debug_fops = {
 DEFINE_DEBUGFS_ATTRIBUTE(mca_debug_mode_fops, NULL, amdgpu_mca_smu_debug_mode_set, "%llu\n");
 #endif
 
-void amdgpu_mca_smu_debugfs_init(struct amdgpu_device *adev, struct dentry *root)
+void amdgpu_mca_smu_debugfs_init(struct amdgpu_device *adev,
+				 struct debugfs_node *root)
 {
 #if defined(CONFIG_DEBUG_FS)
 	if (!root)

@@ -13,6 +13,7 @@ struct pvr_device;
 
 /* Forward declaration from <linux/dcache.h>. */
 struct dentry;
+#define debugfs_node dentry
 
 struct pvr_debugfs_entry {
 	const char *name;

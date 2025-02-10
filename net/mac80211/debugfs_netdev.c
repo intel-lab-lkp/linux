@@ -881,7 +881,7 @@ static void add_mesh_files(struct ieee80211_sub_if_data *sdata)
 
 static void add_mesh_stats(struct ieee80211_sub_if_data *sdata)
 {
-	struct dentry *dir = debugfs_create_dir("mesh_stats",
+	struct debugfs_node *dir = debugfs_create_dir("mesh_stats",
 						sdata->vif.debugfs_dir);
 #define MESHSTATS_ADD(name)\
 	debugfs_create_file(#name, 0400, dir, sdata, &name##_ops)
@@ -896,7 +896,7 @@ static void add_mesh_stats(struct ieee80211_sub_if_data *sdata)
 
 static void add_mesh_config(struct ieee80211_sub_if_data *sdata)
 {
-	struct dentry *dir = debugfs_create_dir("mesh_config",
+	struct debugfs_node *dir = debugfs_create_dir("mesh_config",
 						sdata->vif.debugfs_dir);
 
 #define MESHPARAMS_ADD(name) \

@@ -42,7 +42,7 @@ struct mtk_vcodec_dbgfs_inst {
  */
 struct mtk_vcodec_dbgfs {
 	struct list_head dbgfs_head;
-	struct dentry *vcodec_root;
+	struct debugfs_node *vcodec_root;
 	struct mutex dbgfs_lock;
 	char dbgfs_buf[1024];
 	int buf_size;

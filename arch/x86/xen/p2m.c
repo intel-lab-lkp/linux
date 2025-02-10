@@ -915,11 +915,11 @@ static int p2m_dump_show(struct seq_file *m, void *v)
 
 DEFINE_SHOW_ATTRIBUTE(p2m_dump);
 
-static struct dentry *d_mmu_debug;
+static struct debugfs_node *d_mmu_debug;
 
 static int __init xen_p2m_debugfs(void)
 {
-	struct dentry *d_xen = xen_init_debugfs();
+	struct debugfs_node *d_xen = xen_init_debugfs();
 
 	d_mmu_debug = debugfs_create_dir("mmu", d_xen);
 

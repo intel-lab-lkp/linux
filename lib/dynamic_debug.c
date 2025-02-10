@@ -1384,7 +1384,7 @@ static __initdata int ddebug_init_success;
 static int __init dynamic_debug_init_control(void)
 {
 	struct proc_dir_entry *procfs_dir;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	if (!ddebug_init_success)
 		return -ENODEV;

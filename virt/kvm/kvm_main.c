@@ -115,7 +115,7 @@ static struct kmem_cache *kvm_vcpu_cache;
 static __read_mostly struct preempt_ops kvm_preempt_ops;
 static DEFINE_PER_CPU(struct kvm_vcpu *, kvm_running_vcpu);
 
-static struct dentry *kvm_debugfs_dir;
+static struct debugfs_node *kvm_debugfs_dir;
 
 static const struct file_operations stat_fops_per_vm;
 
@@ -1001,7 +1001,7 @@ static void kvm_destroy_vm_debugfs(struct kvm *kvm)
 static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 {
 	static DEFINE_MUTEX(kvm_debugfs_lock);
-	struct dentry *dent;
+	struct debugfs_node *dent;
 	char dir_name[ITOA_MAX_LEN * 2];
 	struct kvm_stat_data *stat_data;
 	const struct _kvm_stats_desc *pdesc;
@@ -1017,7 +1017,7 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 	dent = debugfs_lookup(dir_name, kvm_debugfs_dir);
 	if (dent) {
 		pr_warn_ratelimited("KVM: debugfs: duplicate directory %s\n", dir_name);
-		dput(dent);
+		debugfs_node_put(dent);
 		mutex_unlock(&kvm_debugfs_lock);
 		return 0;
 	}
@@ -4037,7 +4037,7 @@ DEFINE_SIMPLE_ATTRIBUTE(vcpu_get_pid_fops, vcpu_get_pid, NULL, "%llu\n");
 
 static void kvm_create_vcpu_debugfs(struct kvm_vcpu *vcpu)
 {
-	struct dentry *debugfs_dentry;
+	struct debugfs_node *debugfs_dentry;
 	char dir_name[ITOA_MAX_LEN * 2];
 
 	if (!debugfs_initialized())

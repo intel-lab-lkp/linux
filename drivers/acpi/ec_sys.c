@@ -25,7 +25,7 @@ MODULE_PARM_DESC(write_support, "Dangerous, reboot and removal of battery may "
 
 #define EC_SPACE_SIZE 256
 
-static struct dentry *acpi_ec_debugfs_dir;
+static struct debugfs_node *acpi_ec_debugfs_dir;
 
 static ssize_t acpi_ec_read_io(struct file *f, char __user *buf,
 			       size_t count, loff_t *off)
@@ -109,7 +109,7 @@ static const struct file_operations acpi_ec_io_ops = {
 
 static void acpi_ec_add_debugfs(struct acpi_ec *ec, unsigned int ec_device_count)
 {
-	struct dentry *dev_dir;
+	struct debugfs_node *dev_dir;
 	char name[64];
 	umode_t mode = 0400;
 

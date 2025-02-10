@@ -18,7 +18,7 @@
 
 #include <asm/pci_dma.h>
 
-static struct dentry *debugfs_root;
+static struct debugfs_node *debugfs_root;
 debug_info_t *pci_debug_msg_id;
 EXPORT_SYMBOL_GPL(pci_debug_msg_id);
 debug_info_t *pci_debug_err_id;

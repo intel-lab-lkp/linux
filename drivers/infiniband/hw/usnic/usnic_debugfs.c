@@ -39,8 +39,8 @@
 #include "usnic_ib_qp_grp.h"
 #include "usnic_transport.h"
 
-static struct dentry *debugfs_root;
-static struct dentry *flows_dentry;
+static struct debugfs_node *debugfs_root;
+static struct debugfs_node *flows_dentry;
 
 static ssize_t usnic_debugfs_buildinfo_read(struct file *f, char __user *data,
 						size_t count, loff_t *ppos)

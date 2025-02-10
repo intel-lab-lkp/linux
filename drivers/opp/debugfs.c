@@ -17,7 +17,7 @@
 
 #include "opp.h"
 
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 
 static void opp_set_dev_name(const struct device *dev, char *name)
 {
@@ -55,9 +55,9 @@ static const struct file_operations bw_name_fops = {
 
 static void opp_debug_create_bw(struct dev_pm_opp *opp,
 				struct opp_table *opp_table,
-				struct dentry *pdentry)
+				struct debugfs_node *pdentry)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 	char name[] = "icc-path-XXXXXXXXXXX"; /* Integers can take 11 chars max */
 	int i;
 
@@ -78,7 +78,7 @@ static void opp_debug_create_bw(struct dev_pm_opp *opp,
 
 static void opp_debug_create_clks(struct dev_pm_opp *opp,
 				  struct opp_table *opp_table,
-				  struct dentry *pdentry)
+				  struct debugfs_node *pdentry)
 {
 	char name[] = "rate_hz_XXXXXXXXXXX"; /* Integers can take 11 chars max */
 	int i;
@@ -96,9 +96,9 @@ static void opp_debug_create_clks(struct dev_pm_opp *opp,
 
 static void opp_debug_create_supplies(struct dev_pm_opp *opp,
 				      struct opp_table *opp_table,
-				      struct dentry *pdentry)
+				      struct debugfs_node *pdentry)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 	int i;
 
 	for (i = 0; i < opp_table->regulator_count; i++) {
@@ -128,8 +128,8 @@ static void opp_debug_create_supplies(struct dev_pm_opp *opp,
 
 void opp_debug_create_one(struct dev_pm_opp *opp, struct opp_table *opp_table)
 {
-	struct dentry *pdentry = opp_table->dentry;
-	struct dentry *d;
+	struct debugfs_node *pdentry = opp_table->dentry;
+	struct debugfs_node *d;
 	unsigned long id;
 	char name[25];	/* 20 chars for 64 bit value + 5 (opp:\0) */
 
@@ -172,7 +172,7 @@ static void opp_list_debug_create_dir(struct opp_device *opp_dev,
 				      struct opp_table *opp_table)
 {
 	const struct device *dev = opp_dev->dev;
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	opp_set_dev_name(dev, opp_table->dentry_name);
 

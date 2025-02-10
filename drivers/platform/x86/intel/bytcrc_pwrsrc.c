@@ -30,7 +30,7 @@
 
 struct crc_pwrsrc_data {
 	struct regmap *regmap;
-	struct dentry *debug_dentry;
+	struct debugfs_node *debug_dentry;
 	struct power_supply *psy;
 	unsigned int resetsrc0;
 	unsigned int resetsrc1;

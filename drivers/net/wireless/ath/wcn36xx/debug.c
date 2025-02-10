@@ -175,7 +175,7 @@ static const struct file_operations fops_wcn36xx_firmware_feat_caps = {
 
 #define ADD_FILE(name, mode, fop, priv_data)		\
 	do {							\
-		struct dentry *d;				\
+		struct debugfs_node *d;				\
 		d = debugfs_create_file(__stringify(name),	\
 					mode, dfs->rootdir,	\
 					priv_data, fop);	\

@@ -63,7 +63,7 @@ MODULE_AUTHOR("T-platforms");
 /*
  * csr_dbgdir - CSR read/write operations Debugfs directory
  */
-static struct dentry *csr_dbgdir;
+static struct debugfs_node *csr_dbgdir;
 
 /*
  * struct idt_89hpesx_dev - IDT 89HPESx device data structure
@@ -104,7 +104,7 @@ struct idt_89hpesx_dev {
 	struct i2c_client *client;
 
 	struct bin_attribute *ee_file;
-	struct dentry *csr_dir;
+	struct debugfs_node *csr_dir;
 };
 
 /*

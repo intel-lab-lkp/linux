@@ -791,14 +791,14 @@ static int dell_wmi_ddv_temp_read(struct seq_file *seq, void *offset)
 
 static void dell_wmi_ddv_debugfs_remove(void *data)
 {
-	struct dentry *entry = data;
+	struct debugfs_node *entry = data;
 
 	debugfs_remove(entry);
 }
 
 static void dell_wmi_ddv_debugfs_init(struct wmi_device *wdev)
 {
-	struct dentry *entry;
+	struct debugfs_node *entry;
 	char name[64];
 
 	scnprintf(name, ARRAY_SIZE(name), "%s-%s", DRIVER_NAME, dev_name(&wdev->dev));

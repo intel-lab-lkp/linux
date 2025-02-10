@@ -622,7 +622,7 @@ void amdgpu_debugfs_ring_init(struct amdgpu_device *adev,
 {
 #if defined(CONFIG_DEBUG_FS)
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	char name[32];
 
 	sprintf(name, "amdgpu_ring_%s", ring->name);

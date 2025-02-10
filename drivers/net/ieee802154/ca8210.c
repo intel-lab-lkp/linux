@@ -279,7 +279,7 @@ struct cas_control {
  * This structure stores all the data pertaining to the debug interface
  */
 struct ca8210_test {
-	struct dentry *ca8210_dfs_spi_int;
+	struct debugfs_node *ca8210_dfs_spi_int;
 	struct kfifo up_fifo;
 	wait_queue_head_t readq;
 };

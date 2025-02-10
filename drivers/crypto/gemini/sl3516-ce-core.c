@@ -477,8 +477,8 @@ static int sl3516_ce_probe(struct platform_device *pdev)
 	pm_runtime_put_sync(ce->dev);
 
 	if (IS_ENABLED(CONFIG_CRYPTO_DEV_SL3516_DEBUG)) {
-		struct dentry *dbgfs_dir __maybe_unused;
-		struct dentry *dbgfs_stats __maybe_unused;
+		struct debugfs_node *dbgfs_dir __maybe_unused;
+		struct debugfs_node *dbgfs_stats __maybe_unused;
 
 		/* Ignore error of debugfs */
 		dbgfs_dir = debugfs_create_dir("sl3516", NULL);

@@ -80,7 +80,7 @@ struct rpc_clnt {
 	const struct rpc_program *cl_program;
 	const char *		cl_principal;	/* use for machine cred */
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
-	struct dentry		*cl_debugfs;	/* debugfs directory */
+	struct debugfs_node *cl_debugfs;	/* debugfs directory */
 #endif
 	struct rpc_sysfs_client *cl_sysfs;	/* sysfs directory */
 	/* cl_work is only needed after cl_xpi is no longer used,

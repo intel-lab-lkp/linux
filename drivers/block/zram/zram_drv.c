@@ -966,7 +966,7 @@ static void free_block_bdev(struct zram *zram, unsigned long blk_idx) {};
 
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 
-static struct dentry *zram_debugfs_root;
+static struct debugfs_node *zram_debugfs_root;
 
 static void zram_debugfs_create(void)
 {

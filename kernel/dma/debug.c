@@ -804,7 +804,7 @@ static const struct file_operations filter_fops = {
 
 static int __init dma_debug_fs_init(void)
 {
-	struct dentry *dentry = debugfs_create_dir("dma-api", NULL);
+	struct debugfs_node *dentry = debugfs_create_dir("dma-api", NULL);
 
 	debugfs_create_bool("disabled", 0444, dentry, &global_disable);
 	debugfs_create_u32("error_count", 0444, dentry, &error_count);

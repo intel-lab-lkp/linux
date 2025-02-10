@@ -1315,8 +1315,8 @@ DEBUGFS_WRITE_FILE_OPS(wd_timeout);
 void
 il_dbgfs_register(struct il_priv *il, const char *name)
 {
-	struct dentry *phyd = il->hw->wiphy->debugfsdir;
-	struct dentry *dir_drv, *dir_data, *dir_rf, *dir_debug;
+	struct debugfs_node *phyd = il->hw->wiphy->debugfsdir;
+	struct debugfs_node *dir_drv, *dir_data, *dir_rf, *dir_debug;
 
 	dir_drv = debugfs_create_dir(name, phyd);
 	il->debugfs_dir = dir_drv;

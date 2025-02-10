@@ -434,7 +434,7 @@ static const struct file_operations iwl_dbgfs_fw_info_ops = {
 };
 
 void iwl_fwrt_dbgfs_register(struct iwl_fw_runtime *fwrt,
-			    struct dentry *dbgfs_dir)
+			    struct debugfs_node *dbgfs_dir)
 {
 	INIT_DELAYED_WORK(&fwrt->timestamp.wk, iwl_fw_timestamp_marker_wk);
 	FWRT_DEBUGFS_ADD_FILE(timestamp_marker, dbgfs_dir, 0200);

@@ -676,7 +676,7 @@ static void create_debugfs(struct mgb4_vout_dev *voutdev)
 {
 #ifdef CONFIG_DEBUG_FS
 	struct mgb4_regs *video = &voutdev->mgbdev->video;
-	struct dentry *entry;
+	struct debugfs_node *entry;
 
 	if (IS_ERR_OR_NULL(voutdev->mgbdev->debugfs))
 		return;

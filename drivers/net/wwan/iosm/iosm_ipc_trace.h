@@ -36,7 +36,7 @@ enum trace_ctrl_mode {
 
 struct iosm_trace {
 	struct rchan *ipc_rchan;
-	struct dentry *ctrl_file;
+	struct debugfs_node *ctrl_file;
 	struct iosm_imem *ipc_imem;
 	struct device *dev;
 	struct ipc_mem_channel *channel;

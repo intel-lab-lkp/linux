@@ -424,7 +424,7 @@ struct ocfs2_super
 	struct mutex obs_trim_fs_mutex;
 	struct ocfs2_dlm_debug *osb_dlm_debug;
 
-	struct dentry *osb_debug_root;
+	struct debugfs_node *osb_debug_root;
 
 	wait_queue_head_t recovery_event;
 

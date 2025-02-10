@@ -781,7 +781,7 @@ struct device_domain_info {
 	/* device tracking node(lookup by PCI RID) */
 	struct rb_node node;
 #ifdef CONFIG_INTEL_IOMMU_DEBUGFS
-	struct dentry *debugfs_dentry; /* pointer to device directory dentry */
+	struct debugfs_node *debugfs_dentry; /* pointer to device directory dentry */
 #endif
 };
 
@@ -790,7 +790,7 @@ struct dev_pasid_info {
 	struct device *dev;
 	ioasid_t pasid;
 #ifdef CONFIG_INTEL_IOMMU_DEBUGFS
-	struct dentry *debugfs_dentry; /* pointer to pasid directory dentry */
+	struct debugfs_node *debugfs_dentry; /* pointer to pasid directory dentry */
 #endif
 };
 

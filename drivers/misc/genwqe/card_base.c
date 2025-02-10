@@ -43,7 +43,7 @@ MODULE_LICENSE("GPL");
 
 static char genwqe_driver_name[] = GENWQE_DEVNAME;
 
-static struct dentry *debugfs_genwqe;
+static struct debugfs_node *debugfs_genwqe;
 static struct genwqe_dev *genwqe_devices[GENWQE_CARD_NO_MAX];
 
 /* PCI structure for identifying device by PCI vendor and device ID */

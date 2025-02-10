@@ -13,6 +13,7 @@
 #include <linux/errno.h>
 
 struct dentry;
+#define debugfs_node dentry
 struct device_node;
 struct seq_file;
 
@@ -81,7 +82,7 @@ static inline int pinconf_set_config(struct pinctrl_dev *pctldev, unsigned int p
 void pinconf_show_map(struct seq_file *s, const struct pinctrl_map *map);
 void pinconf_show_setting(struct seq_file *s,
 			  const struct pinctrl_setting *setting);
-void pinconf_init_device_debugfs(struct dentry *devroot,
+void pinconf_init_device_debugfs(struct debugfs_node *devroot,
 				 struct pinctrl_dev *pctldev);
 
 #else
@@ -96,7 +97,7 @@ static inline void pinconf_show_setting(struct seq_file *s,
 {
 }
 
-static inline void pinconf_init_device_debugfs(struct dentry *devroot,
+static inline void pinconf_init_device_debugfs(struct debugfs_node *devroot,
 					       struct pinctrl_dev *pctldev)
 {
 }

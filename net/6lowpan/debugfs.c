@@ -12,7 +12,7 @@
 
 #define LOWPAN_DEBUGFS_CTX_PFX_NUM_ARGS	8
 
-static struct dentry *lowpan_debugfs;
+static struct debugfs_node *lowpan_debugfs;
 
 static int lowpan_ctx_flag_active_set(void *data, u64 val)
 {
@@ -164,10 +164,10 @@ static const struct file_operations lowpan_ctx_pfx_fops = {
 };
 
 static void lowpan_dev_debugfs_ctx_init(struct net_device *dev,
-					struct dentry *ctx, u8 id)
+					struct debugfs_node *ctx, u8 id)
 {
 	struct lowpan_dev *ldev = lowpan_dev(dev);
-	struct dentry *root;
+	struct debugfs_node *root;
 	char buf[32];
 
 	if (WARN_ON_ONCE(id >= LOWPAN_IPHC_CTX_TABLE_SIZE))
@@ -230,7 +230,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(lowpan_short_addr_fops, lowpan_short_addr_get, NULL,
 static void lowpan_dev_debugfs_802154_init(const struct net_device *dev,
 					  struct lowpan_dev *ldev)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!lowpan_is_ll(dev, LOWPAN_LLTYPE_IEEE802154))
 		return;
@@ -245,7 +245,7 @@ static void lowpan_dev_debugfs_802154_init(const struct net_device *dev,
 void lowpan_dev_debugfs_init(struct net_device *dev)
 {
 	struct lowpan_dev *ldev = lowpan_dev(dev);
-	struct dentry *contexts;
+	struct debugfs_node *contexts;
 	int i;
 
 	/* creating the root */

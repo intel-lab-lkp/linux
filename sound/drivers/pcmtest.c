@@ -69,7 +69,7 @@ static short fill_mode = FILL_MODE_PAT;
 
 static u8 playback_capture_test;
 static u8 ioctl_reset_test;
-static struct dentry *driver_debug_dir;
+static struct debugfs_node *driver_debug_dir;
 
 module_param(index, int, 0444);
 MODULE_PARM_DESC(index, "Index value for pcmtest soundcard");

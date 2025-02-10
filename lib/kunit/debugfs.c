@@ -28,7 +28,7 @@
  *
  */
 
-static struct dentry *debugfs_rootdir;
+static struct debugfs_node *debugfs_rootdir;
 
 void kunit_debugfs_cleanup(void)
 {

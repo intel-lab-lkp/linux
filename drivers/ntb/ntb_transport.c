@@ -99,7 +99,7 @@ module_param(use_msi, bool, 0644);
 MODULE_PARM_DESC(use_msi, "Use MSI interrupts instead of doorbells");
 #endif
 
-static struct dentry *nt_debugfs_dir;
+static struct debugfs_node *nt_debugfs_dir;
 
 /* Only two-ports NTB devices are supported */
 #define PIDX		NTB_DEF_PEER_IDX
@@ -176,8 +176,8 @@ struct ntb_transport_qp {
 	struct delayed_work link_work;
 	struct work_struct link_cleanup;
 
-	struct dentry *debugfs_dir;
-	struct dentry *debugfs_stats;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *debugfs_stats;
 
 	/* Stats */
 	u64 rx_bytes;
@@ -240,7 +240,7 @@ struct ntb_transport_ctx {
 	struct delayed_work link_work;
 	struct work_struct link_cleanup;
 
-	struct dentry *debugfs_node_dir;
+	struct debugfs_node *debugfs_node_dir;
 };
 
 enum {

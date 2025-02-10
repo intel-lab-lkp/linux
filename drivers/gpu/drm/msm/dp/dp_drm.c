@@ -90,7 +90,8 @@ static int msm_dp_bridge_get_modes(struct drm_bridge *bridge, struct drm_connect
 	return rc;
 }
 
-static void msm_dp_bridge_debugfs_init(struct drm_bridge *bridge, struct dentry *root)
+static void msm_dp_bridge_debugfs_init(struct drm_bridge *bridge,
+				       struct debugfs_node *root)
 {
 	struct msm_dp *dp = to_dp_bridge(bridge)->msm_dp_display;
 
@@ -268,7 +269,8 @@ static enum drm_mode_status msm_edp_bridge_mode_valid(struct drm_bridge *bridge,
 	return MODE_OK;
 }
 
-static void msm_edp_bridge_debugfs_init(struct drm_bridge *bridge, struct dentry *root)
+static void msm_edp_bridge_debugfs_init(struct drm_bridge *bridge,
+					struct debugfs_node *root)
 {
 	struct msm_dp *dp = to_dp_bridge(bridge)->msm_dp_display;
 

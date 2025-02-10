@@ -63,7 +63,7 @@ static char last_cmd_status_buf[512];
 static int rdtgroup_setup_root(struct rdt_fs_context *ctx);
 static void rdtgroup_destroy_root(void);
 
-struct dentry *debugfs_resctrl;
+struct debugfs_node *debugfs_resctrl;
 
 /*
  * Memory bandwidth monitoring event to use for the default CTRL_MON group

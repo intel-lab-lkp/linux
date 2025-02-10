@@ -180,7 +180,7 @@ static const struct file_operations debug_ops = {
 	.release = release,
 };
 
-static struct dentry *root;
+static struct debugfs_node *root;
 
 void cpqhp_initialize_debugfs(void)
 {

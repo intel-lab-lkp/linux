@@ -18,8 +18,8 @@ static int debugfs_errno_get(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE_SIGNED(fops_errno, debugfs_errno_get, debugfs_errno_set,
 			"%lld\n");
 
-static struct dentry *debugfs_create_errno(const char *name, umode_t mode,
-				struct dentry *parent, int *value)
+static struct debugfs_node *debugfs_create_errno(const char *name, umode_t mode,
+				struct debugfs_node *parent, int *value)
 {
 	return debugfs_create_file(name, mode, parent, value, &fops_errno);
 }
@@ -44,16 +44,18 @@ static int notifier_err_inject_callback(struct notifier_block *nb,
 	return notifier_from_errno(err);
 }
 
-struct dentry *notifier_err_inject_dir;
+struct debugfs_node *notifier_err_inject_dir;
 EXPORT_SYMBOL_GPL(notifier_err_inject_dir);
 
-struct dentry *notifier_err_inject_init(const char *name, struct dentry *parent,
-			struct notifier_err_inject *err_inject, int priority)
+struct debugfs_node *notifier_err_inject_init(const char *name,
+					struct debugfs_node *parent,
+					struct notifier_err_inject *err_inject,
+					int priority)
 {
 	struct notifier_err_inject_action *action;
 	umode_t mode = S_IFREG | S_IRUSR | S_IWUSR;
-	struct dentry *dir;
-	struct dentry *actions_dir;
+	struct debugfs_node *dir;
+	struct debugfs_node *actions_dir;
 
 	err_inject->nb.notifier_call = notifier_err_inject_callback;
 	err_inject->nb.priority = priority;
@@ -63,7 +65,7 @@ struct dentry *notifier_err_inject_init(const char *name, struct dentry *parent,
 	actions_dir = debugfs_create_dir("actions", dir);
 
 	for (action = err_inject->actions; action->name; action++) {
-		struct dentry *action_dir;
+		struct debugfs_node *action_dir;
 
 		action_dir = debugfs_create_dir(action->name, actions_dir);
 

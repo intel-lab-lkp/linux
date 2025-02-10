@@ -20,7 +20,7 @@
 #include "sdma.h"
 #include "fault.h"
 
-static struct dentry *hfi1_dbg_root;
+static struct debugfs_node *hfi1_dbg_root;
 
 /* wrappers to enforce srcu in seq file */
 ssize_t hfi1_seq_read(struct file *file, char __user *buf, size_t size,
@@ -1183,7 +1183,7 @@ void hfi1_dbg_ibdev_init(struct hfi1_ibdev *ibd)
 	char link[10];
 	struct hfi1_devdata *dd = dd_from_dev(ibd);
 	struct hfi1_pportdata *ppd;
-	struct dentry *root;
+	struct debugfs_node *root;
 	int unit = dd->unit;
 	int i, j;
 

@@ -162,7 +162,8 @@ int amdgpu_mca_reset(struct amdgpu_device *adev);
 int amdgpu_mca_smu_set_debug_mode(struct amdgpu_device *adev, bool enable);
 int amdgpu_mca_smu_get_mca_set_error_count(struct amdgpu_device *adev, enum amdgpu_ras_block blk,
 					   enum amdgpu_mca_error_type type, uint32_t *total);
-void amdgpu_mca_smu_debugfs_init(struct amdgpu_device *adev, struct dentry *root);
+void amdgpu_mca_smu_debugfs_init(struct amdgpu_device *adev,
+				 struct debugfs_node *root);
 int amdgpu_mca_smu_log_ras_error(struct amdgpu_device *adev, enum amdgpu_ras_block blk, enum amdgpu_mca_error_type type,
 				 struct ras_err_data *err_data, struct ras_query_context *qctx);
 

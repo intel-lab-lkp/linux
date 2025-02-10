@@ -25,7 +25,7 @@ struct adf_cfg_section {
 
 struct adf_cfg_device_data {
 	struct list_head sec_list;
-	struct dentry *debug;
+	struct debugfs_node *debug;
 	struct rw_semaphore lock;
 };
 

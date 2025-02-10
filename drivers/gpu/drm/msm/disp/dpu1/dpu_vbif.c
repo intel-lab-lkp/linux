@@ -292,10 +292,11 @@ void dpu_vbif_init_memtypes(struct dpu_kms *dpu_kms)
 
 #ifdef CONFIG_DEBUG_FS
 
-void dpu_debugfs_vbif_init(struct dpu_kms *dpu_kms, struct dentry *debugfs_root)
+void dpu_debugfs_vbif_init(struct dpu_kms *dpu_kms,
+			   struct debugfs_node *debugfs_root)
 {
 	char vbif_name[32];
-	struct dentry *entry, *debugfs_vbif;
+	struct debugfs_node *entry, *debugfs_vbif;
 	int i, j;
 
 	entry = debugfs_create_dir("vbif", debugfs_root);

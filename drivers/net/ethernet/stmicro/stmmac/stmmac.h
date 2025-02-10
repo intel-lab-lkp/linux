@@ -347,7 +347,7 @@ struct stmmac_priv {
 	char int_name_tx_irq[MTL_MAX_TX_QUEUES][IFNAMSIZ + 18];
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif
 
 	unsigned long state;

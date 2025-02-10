@@ -61,7 +61,7 @@ struct tps65010 {
 	struct i2c_client	*client;
 	struct mutex		lock;
 	struct delayed_work	work;
-	struct dentry		*file;
+	struct debugfs_node *file;
 	unsigned		charging:1;
 	unsigned		por:1;
 	unsigned		model:8;

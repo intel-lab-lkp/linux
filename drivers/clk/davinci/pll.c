@@ -944,7 +944,8 @@ static const struct debugfs_reg32 davinci_pll_regs[] = {
 	DEBUG_REG(PLLDIV9),
 };
 
-static void davinci_pll_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void davinci_pll_debug_init(struct clk_hw *hw,
+				   struct debugfs_node *dentry)
 {
 	struct davinci_pll_clk *pll = to_davinci_pll_clk(hw);
 	struct debugfs_regset32 *regset;

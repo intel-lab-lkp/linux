@@ -8,10 +8,10 @@
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
 void iwl_fwrt_dbgfs_register(struct iwl_fw_runtime *fwrt,
-			    struct dentry *dbgfs_dir);
+			    struct debugfs_node *dbgfs_dir);
 
 #else
 static inline void iwl_fwrt_dbgfs_register(struct iwl_fw_runtime *fwrt,
-					   struct dentry *dbgfs_dir) { }
+					   struct debugfs_node *dbgfs_dir) { }
 
 #endif /* CONFIG_IWLWIFI_DEBUGFS */

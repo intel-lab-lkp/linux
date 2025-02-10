@@ -12,9 +12,9 @@
 #include "netns.h"
 #include "fail.h"
 
-static struct dentry *topdir;
-static struct dentry *rpc_clnt_dir;
-static struct dentry *rpc_xprt_dir;
+static struct debugfs_node *topdir;
+static struct debugfs_node *rpc_clnt_dir;
+static struct debugfs_node *rpc_xprt_dir;
 
 static int
 tasks_show(struct seq_file *f, void *v)
@@ -267,7 +267,7 @@ EXPORT_SYMBOL_GPL(fail_sunrpc);
 
 static void fail_sunrpc_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = fault_create_debugfs_attr("fail_sunrpc", NULL,
 					&fail_sunrpc.attr);

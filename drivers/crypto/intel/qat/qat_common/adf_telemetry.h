@@ -13,6 +13,7 @@
 struct adf_accel_dev;
 struct adf_tl_dbg_counter;
 struct dentry;
+#define debugfs_node dentry
 
 #define ADF_TL_SL_CNT_COUNT		\
 	(sizeof(struct icp_qat_fw_init_admin_slice_cnt) / sizeof(__u8))
@@ -56,7 +57,7 @@ struct adf_telemetry {
 	 * values of @regs_data
 	 */
 	void **regs_hist_buff;
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 	u8 *rp_num_indexes;
 	/**
 	 * @regs_hist_lock: protects from race conditions between write and read

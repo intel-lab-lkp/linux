@@ -85,8 +85,8 @@ static DEFINE_MUTEX(binder_procs_lock);
 static HLIST_HEAD(binder_dead_nodes);
 static DEFINE_SPINLOCK(binder_dead_nodes_lock);
 
-static struct dentry *binder_debugfs_dir_entry_root;
-static struct dentry *binder_debugfs_dir_entry_proc;
+static struct debugfs_node *binder_debugfs_dir_entry_root;
+static struct debugfs_node *binder_debugfs_dir_entry_proc;
 static atomic_t binder_last_id;
 
 static int proc_show(struct seq_file *m, void *unused);

@@ -202,7 +202,7 @@ static const struct file_operations regs_dbg_fops = {
 static void usba_ep_init_debugfs(struct usba_udc *udc,
 		struct usba_ep *ep)
 {
-	struct dentry *ep_root;
+	struct debugfs_node *ep_root;
 
 	ep_root = debugfs_create_dir(ep->ep.name, udc->debugfs_root);
 	ep->debugfs_dir = ep_root;
@@ -222,7 +222,7 @@ static void usba_ep_cleanup_debugfs(struct usba_ep *ep)
 
 static void usba_init_debugfs(struct usba_udc *udc)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	struct resource *regs_resource;
 
 	root = debugfs_create_dir(udc->gadget.name, usb_debug_root);

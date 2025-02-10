@@ -268,7 +268,7 @@ struct gdma_queue;
 
 struct mana_eq {
 	struct gdma_queue	*eq;
-	struct dentry		*mana_eq_debugfs;
+	struct debugfs_node *mana_eq_debugfs;
 };
 
 typedef void gdma_eq_callback(void *context, struct gdma_queue *q,
@@ -366,7 +366,7 @@ struct gdma_irq_context {
 
 struct gdma_context {
 	struct device		*dev;
-	struct dentry		*mana_pci_debugfs;
+	struct debugfs_node *mana_pci_debugfs;
 
 	/* Per-vPort max number of queues */
 	unsigned int		max_num_queues;

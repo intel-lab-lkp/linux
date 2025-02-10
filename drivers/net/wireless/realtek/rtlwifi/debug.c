@@ -50,7 +50,7 @@ struct rtl_debugfs_priv {
 	u32 cb_data;
 };
 
-static struct dentry *debugfs_topdir;
+static struct debugfs_node *debugfs_topdir;
 
 static int rtl_debug_get_common(struct seq_file *m, void *v)
 {

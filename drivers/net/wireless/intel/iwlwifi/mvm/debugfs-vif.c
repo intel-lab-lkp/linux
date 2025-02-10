@@ -890,7 +890,7 @@ MVM_DEBUGFS_READ_WRITE_FILE_OPS(esr_disable_reason, 32);
 void iwl_mvm_vif_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
-	struct dentry *dbgfs_dir = vif->debugfs_dir;
+	struct debugfs_node *dbgfs_dir = vif->debugfs_dir;
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 
 	mvmvif->dbgfs_dir = debugfs_create_dir("iwlmvm", dbgfs_dir);
@@ -926,7 +926,7 @@ void iwl_mvm_vif_add_debugfs(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 void iwl_mvm_vif_dbgfs_add_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 {
-	struct dentry *dbgfs_dir = vif->debugfs_dir;
+	struct debugfs_node *dbgfs_dir = vif->debugfs_dir;
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	char buf[3 * 3 + 11 + (NL80211_WIPHY_NAME_MAXLEN + 1) +
 		 (7 + IFNAMSIZ + 1) + 6 + 1];
@@ -970,7 +970,7 @@ void iwl_mvm_vif_dbgfs_rm_link(struct iwl_mvm *mvm, struct ieee80211_vif *vif)
 
 static void iwl_mvm_debugfs_add_link_files(struct ieee80211_vif *vif,
 					   struct ieee80211_bss_conf *link_conf,
-					   struct dentry *mvm_dir)
+					   struct debugfs_node *mvm_dir)
 {
 	/* Add per-link files here*/
 }
@@ -978,13 +978,13 @@ static void iwl_mvm_debugfs_add_link_files(struct ieee80211_vif *vif,
 void iwl_mvm_link_add_debugfs(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      struct ieee80211_bss_conf *link_conf,
-			      struct dentry *dir)
+			      struct debugfs_node *dir)
 {
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mvm *mvm = mvmvif->mvm;
 	unsigned int link_id = link_conf->link_id;
 	struct iwl_mvm_vif_link_info *link_info = mvmvif->link[link_id];
-	struct dentry *mvm_dir;
+	struct debugfs_node *mvm_dir;
 
 	if (WARN_ON(!link_info) || !dir)
 		return;

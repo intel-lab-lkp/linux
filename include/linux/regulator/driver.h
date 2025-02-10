@@ -644,7 +644,7 @@ struct regulator_dev {
 
 	void *reg_data;		/* regulator_dev data */
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	struct regulator_enable_gpio *ena_pin;
 	unsigned int ena_gpio_state:1;

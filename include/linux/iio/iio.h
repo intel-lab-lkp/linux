@@ -802,9 +802,9 @@ struct iio_trigger *__devm_iio_trigger_alloc(struct device *parent,
  * @indio_dev:		IIO device structure for device
  **/
 #if defined(CONFIG_DEBUG_FS)
-struct dentry *iio_get_debugfs_dentry(struct iio_dev *indio_dev);
+struct debugfs_node *iio_get_debugfs_dentry(struct iio_dev *indio_dev);
 #else
-static inline struct dentry *iio_get_debugfs_dentry(struct iio_dev *indio_dev)
+static inline struct debugfs_node *iio_get_debugfs_dentry(struct iio_dev *indio_dev)
 {
 	return NULL;
 }

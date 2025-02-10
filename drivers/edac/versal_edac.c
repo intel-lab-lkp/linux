@@ -241,7 +241,7 @@ struct edac_priv {
 	u32 ch_bit;
 #ifdef CONFIG_EDAC_DEBUG
 	u64 err_inject_addr;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 };
 

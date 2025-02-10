@@ -14,8 +14,8 @@
 #include "btmrvl_drv.h"
 
 struct btmrvl_debugfs_data {
-	struct dentry *config_dir;
-	struct dentry *status_dir;
+	struct debugfs_node *config_dir;
+	struct debugfs_node *status_dir;
 };
 
 static ssize_t btmrvl_hscfgcmd_write(struct file *file,

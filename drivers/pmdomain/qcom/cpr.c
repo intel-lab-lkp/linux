@@ -246,7 +246,7 @@ struct cpr_drv {
 	const struct acc_desc *acc_desc;
 	const struct cpr_fuse *cpr_fuses;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 static bool cpr_is_allowed(struct cpr_drv *drv)

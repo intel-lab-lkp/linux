@@ -602,7 +602,7 @@ static const struct rfkill_ops dell_rfkill_ops = {
 	.query = dell_rfkill_query,
 };
 
-static struct dentry *dell_laptop_dir;
+static struct debugfs_node *dell_laptop_dir;
 
 static int dell_debugfs_show(struct seq_file *s, void *data)
 {

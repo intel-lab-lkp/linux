@@ -532,7 +532,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(cdns_pdi_loopback_target_fops, NULL, cdns_set_pdi_loopb
  * @cdns: Cadence instance
  * @root: debugfs root
  */
-void sdw_cdns_debugfs_init(struct sdw_cdns *cdns, struct dentry *root)
+void sdw_cdns_debugfs_init(struct sdw_cdns *cdns, struct debugfs_node *root)
 {
 	debugfs_create_file("cdns-registers", 0400, root, cdns, &cdns_reg_fops);
 

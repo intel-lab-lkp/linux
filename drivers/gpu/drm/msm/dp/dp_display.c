@@ -1445,7 +1445,8 @@ bool msm_dp_wide_bus_available(const struct msm_dp *msm_dp_display)
 	return dp->wide_bus_supported;
 }
 
-void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *root, bool is_edp)
+void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display,
+				 struct debugfs_node *root, bool is_edp)
 {
 	struct msm_dp_display_private *dp;
 	struct device *dev;

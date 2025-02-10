@@ -12,7 +12,7 @@
 #include "intel_th.h"
 #include "debug.h"
 
-struct dentry *intel_th_dbg;
+struct debugfs_node *intel_th_dbg;
 
 void intel_th_debug_init(void)
 {

@@ -597,9 +597,9 @@ struct request_queue {
 	struct blk_mq_tag_set	*tag_set;
 	struct list_head	tag_set_list;
 
-	struct dentry		*debugfs_dir;
-	struct dentry		*sched_debugfs_dir;
-	struct dentry		*rqos_debugfs_dir;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *sched_debugfs_dir;
+	struct debugfs_node *rqos_debugfs_dir;
 	/*
 	 * Serializes all debugfs metadata operations using the above dentries.
 	 */

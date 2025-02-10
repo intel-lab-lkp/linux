@@ -26,7 +26,8 @@ static int gsc_info_show(struct seq_file *m, void *data)
 }
 DEFINE_INTEL_GT_DEBUGFS_ATTRIBUTE(gsc_info);
 
-void intel_gsc_uc_debugfs_register(struct intel_gsc_uc *gsc_uc, struct dentry *root)
+void intel_gsc_uc_debugfs_register(struct intel_gsc_uc *gsc_uc,
+				   struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "gsc_info", &gsc_info_fops, NULL },

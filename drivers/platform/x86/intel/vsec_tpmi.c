@@ -118,7 +118,7 @@ struct intel_tpmi_info {
 	u64 pfs_start;
 	struct intel_tpmi_plat_info plat_info;
 	void __iomem *tpmi_control_mem;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 
 /**
@@ -356,7 +356,7 @@ int tpmi_get_feature_status(struct auxiliary_device *auxdev,
 }
 EXPORT_SYMBOL_NS_GPL(tpmi_get_feature_status, "INTEL_TPMI");
 
-struct dentry *tpmi_get_debugfs_dir(struct auxiliary_device *auxdev)
+struct debugfs_node *tpmi_get_debugfs_dir(struct auxiliary_device *auxdev)
 {
 	struct intel_vsec_device *intel_vsec_dev = dev_to_ivdev(auxdev->dev.parent);
 	struct intel_tpmi_info *tpmi_info = auxiliary_get_drvdata(&intel_vsec_dev->auxdev);
@@ -544,7 +544,7 @@ static void tpmi_dbgfs_register(struct intel_tpmi_info *tpmi_info)
 
 	for (i = 0; i < tpmi_info->feature_count; ++i) {
 		struct intel_tpmi_pm_feature *pfs;
-		struct dentry *dir;
+		struct debugfs_node *dir;
 
 		pfs = &tpmi_info->tpmi_features[i];
 		snprintf(name, sizeof(name), "tpmi-id-%02x", pfs->pfs_header.tpmi_id);

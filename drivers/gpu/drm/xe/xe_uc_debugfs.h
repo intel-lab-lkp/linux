@@ -7,8 +7,9 @@
 #define _XE_UC_DEBUGFS_H_
 
 struct dentry;
+#define debugfs_node dentry
 struct xe_uc;
 
-void xe_uc_debugfs_register(struct xe_uc *uc, struct dentry *parent);
+void xe_uc_debugfs_register(struct xe_uc *uc, struct debugfs_node *parent);
 
 #endif

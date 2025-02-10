@@ -157,10 +157,10 @@ struct pmc_usb {
 	u32 iom_port_status_offset;
 	u8 iom_port_status_size;
 
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 };
 
-static struct dentry *pmc_mux_debugfs_root;
+static struct debugfs_node *pmc_mux_debugfs_root;
 
 static void update_port_status(struct pmc_usb_port *port)
 {
@@ -717,7 +717,7 @@ DEFINE_SHOW_ATTRIBUTE(port_iom_status);
 
 static void pmc_mux_port_debugfs_init(struct pmc_usb_port *port)
 {
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	char name[8];
 
 	snprintf(name, sizeof(name), "port%d", port->usb3_port - 1);

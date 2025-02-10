@@ -117,7 +117,7 @@ enum {
 };
 
 static const char hisi_zip_name[] = "hisi_zip";
-static struct dentry *hzip_debugfs_root;
+static struct debugfs_node *hzip_debugfs_root;
 
 struct hisi_zip_hw_error {
 	u32 int_msk;
@@ -817,7 +817,7 @@ static int hisi_zip_core_debug_init(struct hisi_qm *qm)
 	struct device *dev = &qm->pdev->dev;
 	struct debugfs_regset32 *regset;
 	u32 zip_core_info;
-	struct dentry *tmp_d;
+	struct debugfs_node *tmp_d;
 	char buf[HZIP_BUF_SIZE];
 	int i;
 
@@ -876,7 +876,7 @@ static void hisi_zip_dfx_debug_init(struct hisi_qm *qm)
 	struct dfx_diff_registers *hzip_regs = qm->debug.acc_diff_regs;
 	struct hisi_zip *zip = container_of(qm, struct hisi_zip, qm);
 	struct hisi_zip_dfx *dfx = &zip->dfx;
-	struct dentry *tmp_dir;
+	struct debugfs_node *tmp_dir;
 	void *data;
 	int i;
 

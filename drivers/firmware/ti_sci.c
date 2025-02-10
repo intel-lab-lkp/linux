@@ -108,7 +108,7 @@ struct ti_sci_desc {
 struct ti_sci_info {
 	struct device *dev;
 	const struct ti_sci_desc *desc;
-	struct dentry *d;
+	struct debugfs_node *d;
 	void __iomem *debug_region;
 	char *debug_buffer;
 	size_t debug_region_size;

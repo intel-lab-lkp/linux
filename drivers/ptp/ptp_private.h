@@ -31,7 +31,7 @@ struct timestamp_event_queue {
 	spinlock_t lock;
 	struct list_head qlist;
 	unsigned long *mask;
-	struct dentry *debugfs_instance;
+	struct debugfs_node *debugfs_instance;
 	struct debugfs_u32_array dfs_bitmap;
 };
 
@@ -61,7 +61,7 @@ struct ptp_clock {
 	struct mutex n_vclocks_mux; /* protect concurrent n_vclocks access */
 	bool is_virtual_clock;
 	bool has_cycles;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 #define info_to_vclock(d) container_of((d), struct ptp_vclock, info)

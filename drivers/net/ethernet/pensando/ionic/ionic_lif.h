@@ -89,7 +89,7 @@ struct ionic_qcq {
 	struct napi_struct napi;
 	struct ionic_intr_info intr;
 	struct work_struct doorbell_napi_work;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 };
 
 #define q_to_qcq(q)		container_of(q, struct ionic_qcq, q)
@@ -241,7 +241,7 @@ struct ionic_lif {
 
 	struct ionic_phc *phc;
 
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct bpf_prog *xdp_prog;
 };
 

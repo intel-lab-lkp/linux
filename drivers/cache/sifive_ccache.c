@@ -71,7 +71,7 @@ enum {
 };
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *sifive_test;
+static struct debugfs_node *sifive_test;
 
 static ssize_t ccache_write(struct file *file, const char __user *data,
 			    size_t count, loff_t *ppos)

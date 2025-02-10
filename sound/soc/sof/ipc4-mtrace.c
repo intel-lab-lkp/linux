@@ -381,7 +381,7 @@ static const struct file_operations sof_dfs_priority_mask_fops = {
 static int mtrace_debugfs_create(struct snd_sof_dev *sdev)
 {
 	struct sof_mtrace_priv *priv = sdev->fw_trace_data;
-	struct dentry *dfs_root;
+	struct debugfs_node *dfs_root;
 	char dfs_name[100];
 	int i;
 

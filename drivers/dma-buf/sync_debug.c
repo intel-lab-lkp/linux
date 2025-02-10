@@ -8,7 +8,7 @@
 #include <linux/debugfs.h>
 #include "sync_debug.h"
 
-static struct dentry *dbgfs;
+static struct debugfs_node *dbgfs;
 
 static LIST_HEAD(sync_timeline_list_head);
 static DEFINE_SPINLOCK(sync_timeline_list_lock);

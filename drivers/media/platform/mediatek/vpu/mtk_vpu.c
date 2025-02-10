@@ -806,7 +806,7 @@ static irqreturn_t vpu_irq_handler(int irq, void *priv)
 }
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *vpu_debugfs;
+static struct debugfs_node *vpu_debugfs;
 #endif
 static int mtk_vpu_probe(struct platform_device *pdev)
 {

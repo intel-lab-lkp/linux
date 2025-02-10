@@ -178,7 +178,7 @@ module_param(select_queue, int, 0644);
 MODULE_PARM_DESC(select_queue,
 		 "Select between kernel provided method of selecting or driver method of selecting TX queue. Default is kernel method.");
 
-static struct dentry *cxgb4_debugfs_root;
+static struct debugfs_node *cxgb4_debugfs_root;
 
 LIST_HEAD(adapter_list);
 DEFINE_MUTEX(uld_mutex);

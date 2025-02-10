@@ -2180,7 +2180,7 @@ struct drm_connector {
 	u8 real_edid_checksum;
 
 	/** @debugfs_entry: debugfs directory for this connector */
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 
 	/**
 	 * @state:

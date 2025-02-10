@@ -8,7 +8,7 @@ struct vchiq_state;
 struct vchiq_instance;
 
 struct vchiq_debugfs_node {
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 };
 
 void vchiq_debugfs_init(struct vchiq_state *state);

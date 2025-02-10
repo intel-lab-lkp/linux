@@ -343,7 +343,7 @@ struct renesas_usb3 {
 	struct extcon_dev *extcon;
 	struct work_struct extcon_work;
 	struct phy *phy;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 
 	struct usb_role_switch *role_sw;
 	struct device *host_dev;

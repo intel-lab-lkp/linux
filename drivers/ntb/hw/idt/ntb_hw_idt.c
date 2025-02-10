@@ -271,7 +271,7 @@ static const struct idt_ntb_part partdata_tbl[IDT_MAX_NR_PARTS] = {
 /*
  * DebugFS directory to place the driver debug file
  */
-static struct dentry *dbgfs_topdir;
+static struct debugfs_node *dbgfs_topdir;
 
 /*=============================================================================
  *                1. IDT PCIe-switch registers IO-functions

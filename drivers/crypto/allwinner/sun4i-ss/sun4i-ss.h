@@ -154,8 +154,8 @@ struct sun4i_ss_ctx {
 #ifdef CONFIG_CRYPTO_DEV_SUN4I_SS_PRNG
 	u32 seed[SS_SEED_LEN / BITS_PER_LONG];
 #endif
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_stats;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_stats;
 };
 
 struct sun4i_ss_alg_template {

@@ -903,7 +903,7 @@ DEFINE_SHOW_ATTRIBUTE(ttm_resource_manager);
  * at debug statistics of the specified ttm_resource_manager.
  */
 void ttm_resource_manager_create_debugfs(struct ttm_resource_manager *man,
-					 struct dentry * parent,
+					 struct debugfs_node * parent,
 					 const char *name)
 {
 #if defined(CONFIG_DEBUG_FS)

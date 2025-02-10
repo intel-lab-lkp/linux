@@ -954,7 +954,7 @@ DEFINE_SIMPLE_ATTRIBUTE(proc_page_owner_threshold, &page_owner_threshold_get,
 
 static int __init pageowner_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	if (!static_branch_unlikely(&page_owner_inited)) {
 		pr_info("page_owner is disabled\n");

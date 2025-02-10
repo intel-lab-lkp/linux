@@ -360,7 +360,7 @@ struct ptp_ocp {
 	struct timer_list	watchdog;
 	const struct attribute_group **attr_group;
 	const struct ptp_ocp_eeprom_map *eeprom_map;
-	struct dentry		*debug_root;
+	struct debugfs_node *debug_root;
 	bool			sync;
 	time64_t		gnss_lost;
 	struct delayed_work	sync_work;
@@ -4295,12 +4295,12 @@ ptp_ocp_tod_status_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(ptp_ocp_tod_status);
 
-static struct dentry *ptp_ocp_debugfs_root;
+static struct debugfs_node *ptp_ocp_debugfs_root;
 
 static void
 ptp_ocp_debugfs_add_device(struct ptp_ocp *bp)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	d = debugfs_create_dir(dev_name(&bp->dev), ptp_ocp_debugfs_root);
 	bp->debug_root = d;

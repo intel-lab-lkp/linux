@@ -135,7 +135,7 @@ struct hisi_spi {
 	unsigned int		rx_len;
 	u8			n_bytes; /* current is a 1/2/4 bytes op */
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct debugfs_regset32 regset;
 };
 

@@ -187,8 +187,8 @@ DEFINE_SHOW_ATTRIBUTE(fpuemustats_clear);
 
 static int __init debugfs_fpuemu(void)
 {
-	struct dentry *fpuemu_debugfs_base_dir;
-	struct dentry *fpuemu_debugfs_inst_dir;
+	struct debugfs_node *fpuemu_debugfs_base_dir;
+	struct debugfs_node *fpuemu_debugfs_inst_dir;
 	char name[32];
 
 	fpuemu_debugfs_base_dir = debugfs_create_dir("fpuemustats",

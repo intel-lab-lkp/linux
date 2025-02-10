@@ -132,7 +132,7 @@ struct sec_dfx_item {
 };
 
 static const char sec_name[] = "hisi_sec2";
-static struct dentry *sec_debugfs_root;
+static struct debugfs_node *sec_debugfs_root;
 
 static struct hisi_qm_list sec_devices = {
 	.register_to_crypto	= sec_register_to_crypto,
@@ -888,7 +888,7 @@ static int sec_core_debug_init(struct hisi_qm *qm)
 	struct device *dev = &qm->pdev->dev;
 	struct sec_dfx *dfx = &sec->debug.dfx;
 	struct debugfs_regset32 *regset;
-	struct dentry *tmp_d;
+	struct debugfs_node *tmp_d;
 	int i;
 
 	tmp_d = debugfs_create_dir("sec_dfx", qm->debug.debug_root);

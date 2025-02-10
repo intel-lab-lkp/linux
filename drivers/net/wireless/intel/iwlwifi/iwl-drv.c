@@ -35,7 +35,7 @@ MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_LICENSE("GPL");
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
-static struct dentry *iwl_dbgfs_root;
+static struct debugfs_node *iwl_dbgfs_root;
 #endif
 
 /**
@@ -66,9 +66,9 @@ struct iwl_drv {
 	struct completion request_firmware_complete;
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
-	struct dentry *dbgfs_drv;
-	struct dentry *dbgfs_trans;
-	struct dentry *dbgfs_op_mode;
+	struct debugfs_node *dbgfs_drv;
+	struct debugfs_node *dbgfs_trans;
+	struct debugfs_node *dbgfs_op_mode;
 #endif
 };
 
@@ -1413,7 +1413,7 @@ static struct iwl_op_mode *
 _iwl_op_mode_start(struct iwl_drv *drv, struct iwlwifi_opmode_table *op)
 {
 	const struct iwl_op_mode_ops *ops = op->ops;
-	struct dentry *dbgfs_dir = NULL;
+	struct debugfs_node *dbgfs_dir = NULL;
 	struct iwl_op_mode *op_mode = NULL;
 	int retry, max_retry = !!iwlwifi_mod_params.fw_restart * IWL_MAX_INIT_RETRY;
 

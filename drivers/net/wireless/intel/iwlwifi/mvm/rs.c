@@ -4052,7 +4052,7 @@ static ssize_t iwl_dbgfs_ss_force_write(struct iwl_lq_sta *lq_sta, char *buf,
 MVM_DEBUGFS_READ_WRITE_FILE_OPS(ss_force, 32);
 
 static void rs_drv_add_sta_debugfs(void *mvm, void *priv_sta,
-				   struct dentry *dir)
+				   struct debugfs_node *dir)
 {
 	struct iwl_lq_sta *lq_sta = priv_sta;
 	struct iwl_mvm_sta *mvmsta;

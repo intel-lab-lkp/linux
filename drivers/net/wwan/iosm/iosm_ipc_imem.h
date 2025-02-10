@@ -372,8 +372,8 @@ struct iosm_imem {
 	   reset_det_n:1,
 	   pcie_wake_n:1;
 #ifdef CONFIG_WWAN_DEBUGFS
-	struct dentry *debugfs_wwan_dir;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_wwan_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 };
 

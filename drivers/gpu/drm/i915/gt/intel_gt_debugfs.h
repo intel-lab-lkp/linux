@@ -42,7 +42,7 @@ struct intel_gt_debugfs_file {
 	bool (*eval)(void *data);
 };
 
-void intel_gt_debugfs_register_files(struct dentry *root,
+void intel_gt_debugfs_register_files(struct debugfs_node *root,
 				     const struct intel_gt_debugfs_file *files,
 				     unsigned long count, void *data);
 

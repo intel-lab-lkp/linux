@@ -570,8 +570,8 @@ struct ice_pf {
 	struct ice_vsi_stats **vsi_stats;
 	struct ice_sw *first_sw;	/* first switch created by firmware */
 	u16 eswitch_mode;		/* current mode of eswitch */
-	struct dentry *ice_debugfs_pf;
-	struct dentry *ice_debugfs_pf_fwlog;
+	struct debugfs_node *ice_debugfs_pf;
+	struct debugfs_node *ice_debugfs_pf_fwlog;
 	/* keep track of all the dentrys for FW log modules */
 	struct dentry **ice_debugfs_pf_fwlog_modules;
 	struct ice_vfs vfs;

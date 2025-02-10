@@ -45,7 +45,7 @@ static unsigned ttm_glob_use_count;
 struct ttm_global ttm_glob;
 EXPORT_SYMBOL(ttm_glob);
 
-struct dentry *ttm_debugfs_root;
+struct debugfs_node *ttm_debugfs_root;
 
 static void ttm_global_release(void)
 {

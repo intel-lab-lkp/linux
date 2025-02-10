@@ -606,7 +606,7 @@ static int meson_msr_probe(struct platform_device *pdev)
 {
 	const struct meson_msr_id *match_data;
 	struct meson_msr *priv;
-	struct dentry *root, *clks;
+	struct debugfs_node *root, *clks;
 	void __iomem *base;
 	int i;
 

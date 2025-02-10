@@ -19,7 +19,7 @@
 #include "iommufd_test.h"
 
 static DECLARE_FAULT_ATTR(fail_iommufd);
-static struct dentry *dbgfs_root;
+static struct debugfs_node *dbgfs_root;
 static struct platform_device *selftest_iommu_dev;
 static const struct iommu_ops mock_ops;
 static struct iommu_domain_ops domain_nested_ops;

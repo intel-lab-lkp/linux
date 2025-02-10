@@ -1315,7 +1315,7 @@ struct hv_device {
 	u64 dma_mask;
 
 	/* place holder to keep track of the dir for hv device in debugfs */
-	struct dentry *debug_dir;
+	struct debugfs_node *debug_dir;
 
 };
 

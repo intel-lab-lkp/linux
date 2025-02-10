@@ -4004,7 +4004,8 @@ static const struct rtw89_debugfs rtw89_debugfs_templ = {
 	rtw89_debugfs_add(name, S_IFREG | 0444, single_r, debugfs_topdir)
 
 static
-void rtw89_debugfs_add_sec0(struct rtw89_dev *rtwdev, struct dentry *debugfs_topdir)
+void rtw89_debugfs_add_sec0(struct rtw89_dev *rtwdev,
+			    struct debugfs_node *debugfs_topdir)
 {
 	rtw89_debugfs_add_rw(read_reg);
 	rtw89_debugfs_add_w(write_reg);
@@ -4018,7 +4019,8 @@ void rtw89_debugfs_add_sec0(struct rtw89_dev *rtwdev, struct dentry *debugfs_top
 }
 
 static
-void rtw89_debugfs_add_sec1(struct rtw89_dev *rtwdev, struct dentry *debugfs_topdir)
+void rtw89_debugfs_add_sec1(struct rtw89_dev *rtwdev,
+			    struct debugfs_node *debugfs_topdir)
 {
 	rtw89_debugfs_add_w(send_h2c);
 	rtw89_debugfs_add_rw(early_h2c);
@@ -4033,7 +4035,7 @@ void rtw89_debugfs_add_sec1(struct rtw89_dev *rtwdev, struct dentry *debugfs_top
 
 void rtw89_debugfs_init(struct rtw89_dev *rtwdev)
 {
-	struct dentry *debugfs_topdir;
+	struct debugfs_node *debugfs_topdir;
 
 	rtwdev->debugfs = kmemdup(&rtw89_debugfs_templ,
 				  sizeof(rtw89_debugfs_templ), GFP_KERNEL);

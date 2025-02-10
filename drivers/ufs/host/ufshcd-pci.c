@@ -36,7 +36,7 @@ struct intel_host {
 	u32		dsm_fns;
 	u32		active_ltr;
 	u32		idle_ltr;
-	struct dentry	*debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct gpio_desc *reset_gpio;
 };
 
@@ -291,7 +291,7 @@ static void intel_ltr_hide(struct device *dev)
 
 static void intel_add_debugfs(struct ufs_hba *hba)
 {
-	struct dentry *dir = debugfs_create_dir(dev_name(hba->dev), NULL);
+	struct debugfs_node *dir = debugfs_create_dir(dev_name(hba->dev), NULL);
 	struct intel_host *host = ufshcd_get_variant(hba);
 
 	intel_cache_ltr(hba);

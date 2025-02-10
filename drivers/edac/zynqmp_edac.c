@@ -114,7 +114,7 @@ struct edac_priv {
 	u32 ce_cnt;
 	u32 ue_cnt;
 #ifdef CONFIG_EDAC_DEBUG
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u8 ce_bitpos;
 	u8 ue_bitpos[OCM_NUM_UE_BITPOS];
 	u32 fault_injection_cnt;

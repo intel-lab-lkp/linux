@@ -435,7 +435,7 @@ static void ti_sn65dsi86_debugfs_remove(void *data)
 static void ti_sn65dsi86_debugfs_init(struct ti_sn65dsi86 *pdata)
 {
 	struct device *dev = pdata->dev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	int ret;
 
 	debugfs = debugfs_create_dir(dev_name(dev), NULL);

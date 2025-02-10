@@ -1960,7 +1960,7 @@ static int aspeed_video_debugfs_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(aspeed_video_debugfs);
 
-static struct dentry *debugfs_entry;
+static struct debugfs_node *debugfs_entry;
 
 static void aspeed_video_debugfs_remove(struct aspeed_video *video)
 {

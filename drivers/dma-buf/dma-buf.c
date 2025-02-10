@@ -1686,11 +1686,11 @@ error_unlock:
 
 DEFINE_SHOW_ATTRIBUTE(dma_buf_debug);
 
-static struct dentry *dma_buf_debugfs_dir;
+static struct debugfs_node *dma_buf_debugfs_dir;
 
 static int dma_buf_init_debugfs(void)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 	int err = 0;
 
 	d = debugfs_create_dir("dma_buf", NULL);

@@ -2303,10 +2303,10 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_zynqmp_dp_ignore_hpd, zynqmp_dp_ignore_hpd_get,
 			 zynqmp_dp_ignore_hpd_set, "%llu\n");
 
 static void zynqmp_dp_bridge_debugfs_init(struct drm_bridge *bridge,
-					  struct dentry *root)
+					  struct debugfs_node *root)
 {
 	struct zynqmp_dp *dp = bridge_to_dp(bridge);
-	struct dentry *test;
+	struct debugfs_node *test;
 	int i;
 
 	dp->test.bw_code = DP_LINK_BW_5_4;

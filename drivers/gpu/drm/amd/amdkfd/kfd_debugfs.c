@@ -26,7 +26,7 @@
 
 #include "kfd_priv.h"
 
-static struct dentry *debugfs_root;
+static struct debugfs_node *debugfs_root;
 
 static int kfd_debugfs_open(struct inode *inode, struct file *file)
 {

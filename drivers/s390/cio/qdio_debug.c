@@ -16,7 +16,7 @@
 debug_info_t *qdio_dbf_setup;
 debug_info_t *qdio_dbf_error;
 
-static struct dentry *debugfs_root;
+static struct debugfs_node *debugfs_root;
 #define QDIO_DEBUGFS_NAME_LEN	10
 #define QDIO_DBF_NAME_LEN	20
 
@@ -281,7 +281,7 @@ static const struct file_operations debugfs_perf_fops = {
 	.release = single_release,
 };
 
-static void setup_debugfs_entry(struct dentry *parent, struct qdio_q *q)
+static void setup_debugfs_entry(struct debugfs_node *parent, struct qdio_q *q)
 {
 	char name[QDIO_DEBUGFS_NAME_LEN];
 

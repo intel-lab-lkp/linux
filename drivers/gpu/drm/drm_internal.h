@@ -36,6 +36,7 @@
 #define DRM_IF_VERSION(maj, min) (maj << 16 | min)
 
 struct dentry;
+#define debugfs_node dentry
 struct dma_buf;
 struct iosys_map;
 struct drm_connector;
@@ -187,7 +188,7 @@ void drm_gem_vunmap(struct drm_gem_object *obj, struct iosys_map *map);
 void drm_debugfs_dev_fini(struct drm_device *dev);
 void drm_debugfs_dev_register(struct drm_device *dev);
 int drm_debugfs_register(struct drm_minor *minor, int minor_id,
-			 struct dentry *root);
+			 struct debugfs_node *root);
 void drm_debugfs_unregister(struct drm_minor *minor);
 void drm_debugfs_connector_add(struct drm_connector *connector);
 void drm_debugfs_connector_remove(struct drm_connector *connector);
@@ -206,7 +207,7 @@ static inline void drm_debugfs_dev_register(struct drm_device *dev)
 }
 
 static inline int drm_debugfs_register(struct drm_minor *minor, int minor_id,
-				       struct dentry *root)
+				       struct debugfs_node *root)
 {
 	return 0;
 }

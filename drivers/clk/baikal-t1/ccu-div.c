@@ -432,7 +432,8 @@ static int ccu_div_dbgfs_fixed_clkdiv_get(void *priv, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(ccu_div_dbgfs_fixed_clkdiv_fops,
 	ccu_div_dbgfs_fixed_clkdiv_get, NULL, "%llu\n");
 
-static void ccu_div_var_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void ccu_div_var_debug_init(struct clk_hw *hw,
+				   struct debugfs_node *dentry)
 {
 	struct ccu_div *div = to_ccu_div(hw);
 	struct ccu_div_dbgfs_bit *bits;
@@ -479,7 +480,8 @@ static void ccu_div_var_debug_init(struct clk_hw *hw, struct dentry *dentry)
 				   div, &ccu_div_dbgfs_var_clkdiv_fops);
 }
 
-static void ccu_div_gate_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void ccu_div_gate_debug_init(struct clk_hw *hw,
+				    struct debugfs_node *dentry)
 {
 	struct ccu_div *div = to_ccu_div(hw);
 	struct ccu_div_dbgfs_bit *bit;
@@ -497,7 +499,8 @@ static void ccu_div_gate_debug_init(struct clk_hw *hw, struct dentry *dentry)
 				   &ccu_div_dbgfs_fixed_clkdiv_fops);
 }
 
-static void ccu_div_buf_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void ccu_div_buf_debug_init(struct clk_hw *hw,
+				   struct debugfs_node *dentry)
 {
 	struct ccu_div *div = to_ccu_div(hw);
 	struct ccu_div_dbgfs_bit *bit;
@@ -512,7 +515,8 @@ static void ccu_div_buf_debug_init(struct clk_hw *hw, struct dentry *dentry)
 				   &ccu_div_dbgfs_bit_fops);
 }
 
-static void ccu_div_fixed_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void ccu_div_fixed_debug_init(struct clk_hw *hw,
+				     struct debugfs_node *dentry)
 {
 	struct ccu_div *div = to_ccu_div(hw);
 

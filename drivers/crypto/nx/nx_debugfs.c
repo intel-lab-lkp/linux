@@ -32,7 +32,7 @@
 
 void nx_debugfs_init(struct nx_crypto_driver *drv)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(NX_NAME, NULL);
 	drv->dfs_root = root;

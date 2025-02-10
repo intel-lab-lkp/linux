@@ -1118,7 +1118,7 @@ struct snd_soc_card {
 	struct snd_soc_dapm_update *update;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_card_root;
+	struct debugfs_node *debugfs_card_root;
 #endif
 #ifdef CONFIG_PM_SLEEP
 	struct work_struct deferred_resume_work;
@@ -1489,7 +1489,7 @@ int snd_soc_fixup_dai_links_platform_name(struct snd_soc_card *card,
 }
 
 #ifdef CONFIG_DEBUG_FS
-extern struct dentry *snd_soc_debugfs_root;
+extern struct debugfs_node *snd_soc_debugfs_root;
 #endif
 
 extern const struct dev_pm_ops snd_soc_pm_ops;

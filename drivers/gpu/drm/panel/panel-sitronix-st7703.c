@@ -59,7 +59,7 @@ struct st7703 {
 	struct regulator *vcc;
 	struct regulator *iovcc;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	const struct st7703_panel_desc *desc;
 	enum drm_panel_orientation orientation;
 };

@@ -4381,7 +4381,7 @@ static const struct ethtool_ops sky2_ethtool_ops = {
 
 #ifdef CONFIG_SKY2_DEBUG
 
-static struct dentry *sky2_debug;
+static struct debugfs_node *sky2_debug;
 
 static int sky2_debug_show(struct seq_file *seq, void *v)
 {
@@ -4523,7 +4523,7 @@ static struct notifier_block sky2_notifier = {
 
 static __init void sky2_debug_init(void)
 {
-	struct dentry *ent;
+	struct debugfs_node *ent;
 
 	ent = debugfs_create_dir("sky2", NULL);
 	if (IS_ERR(ent))

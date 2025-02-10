@@ -565,7 +565,7 @@ struct i40e_pf {
 	u16 main_vsi_seid;
 	u16 mac_seid;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *i40e_dbg_pf;
+	struct debugfs_node *i40e_dbg_pf;
 #endif /* CONFIG_DEBUG_FS */
 	bool cur_promisc;
 

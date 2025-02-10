@@ -3237,7 +3237,7 @@ static const struct file_operations rs_sta_dbgfs_rate_scale_data_ops = {
 };
 
 static void rs_add_debugfs(void *priv, void *priv_sta,
-					struct dentry *dir)
+					struct debugfs_node *dir)
 {
 	struct iwl_lq_sta *lq_sta = priv_sta;
 

@@ -12,6 +12,7 @@ struct sof_ipc_fw_version;
 struct sof_ipc_cmd_hdr;
 struct snd_sof_dev;
 struct dentry;
+#define debugfs_node dentry
 
 struct sof_ipc4_fw_module;
 
@@ -48,7 +49,7 @@ int sof_client_ipc_set_get_data(struct sof_client_dev *cdev, void *ipc_msg,
 
 struct sof_ipc4_fw_module *sof_client_ipc4_find_module(struct sof_client_dev *c, const guid_t *u);
 
-struct dentry *sof_client_get_debugfs_root(struct sof_client_dev *cdev);
+struct debugfs_node *sof_client_get_debugfs_root(struct sof_client_dev *cdev);
 struct device *sof_client_get_dma_dev(struct sof_client_dev *cdev);
 const struct sof_ipc_fw_version *sof_client_get_fw_version(struct sof_client_dev *cdev);
 size_t sof_client_get_ipc_max_payload_size(struct sof_client_dev *cdev);

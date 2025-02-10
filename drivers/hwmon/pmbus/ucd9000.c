@@ -66,7 +66,7 @@ struct ucd9000_data {
 #ifdef CONFIG_GPIOLIB
 	struct gpio_chip gpio;
 #endif
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 #define to_ucd9000_data(_info) container_of(_info, struct ucd9000_data, info)
 
@@ -444,7 +444,7 @@ static int ucd9000_init_debugfs(struct i2c_client *client,
 				const struct i2c_device_id *mid,
 				struct ucd9000_data *data)
 {
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct ucd9000_debugfs_entry *entries;
 	int i, gpi_count;
 	char name[UCD9000_DEBUGFS_NAME_LEN];

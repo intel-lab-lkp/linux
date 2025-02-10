@@ -389,7 +389,7 @@ struct adapter {
 	unsigned int msg_enable;
 
 	/* debugfs resources */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 
 	/* various locks */
 	spinlock_t stats_lock;

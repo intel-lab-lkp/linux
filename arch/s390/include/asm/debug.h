@@ -55,8 +55,8 @@ typedef struct debug_info {
 	int active_area;
 	int *active_pages;
 	int *active_entries;
-	struct dentry *debugfs_root_entry;
-	struct dentry *debugfs_entries[DEBUG_MAX_VIEWS];
+	struct debugfs_node *debugfs_root_entry;
+	struct debugfs_node *debugfs_entries[DEBUG_MAX_VIEWS];
 	struct debug_view *views[DEBUG_MAX_VIEWS];
 	char name[DEBUG_MAX_NAME_LEN];
 	umode_t mode;

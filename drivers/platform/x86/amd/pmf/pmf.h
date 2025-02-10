@@ -339,7 +339,7 @@ struct amd_pmf_dev {
 	u32 supported_func;
 	enum platform_profile_option current_profile;
 	struct device *ppdev; /* platform profile class device */
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	int hb_interval; /* SBIOS heartbeat interval */
 	struct delayed_work heart_beat;
 	struct smu_pmf_metrics m_table;
@@ -354,7 +354,7 @@ struct amd_pmf_dev {
 	bool cnqf_supported;
 	struct notifier_block pwr_src_notifier;
 	/* Smart PC solution builder */
-	struct dentry *esbin;
+	struct debugfs_node *esbin;
 	unsigned char *policy_buf;
 	resource_size_t policy_sz;
 	struct tee_context *tee_ctx;

@@ -350,7 +350,7 @@ static const struct file_operations lpc_fops = {
 	.llseek =	default_llseek,
 };
 
-static int opal_lpc_debugfs_create_type(struct dentry *folder,
+static int opal_lpc_debugfs_create_type(struct debugfs_node *folder,
 					const char *fname,
 					enum OpalLPCAddressType type)
 {
@@ -365,7 +365,7 @@ static int opal_lpc_debugfs_create_type(struct dentry *folder,
 
 static int opal_lpc_init_debugfs(void)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	int rc = 0;
 
 	if (opal_lpc_chip_id < 0)

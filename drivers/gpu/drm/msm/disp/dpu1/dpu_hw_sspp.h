@@ -327,7 +327,7 @@ struct dpu_hw_sspp *dpu_hw_sspp_init(struct drm_device *dev,
 				     const struct dpu_mdss_version *mdss_rev);
 
 int _dpu_hw_sspp_init_debugfs(struct dpu_hw_sspp *hw_pipe, struct dpu_kms *kms,
-			      struct dentry *entry);
+			      struct debugfs_node *entry);
 
 #endif /*_DPU_HW_SSPP_H */
 

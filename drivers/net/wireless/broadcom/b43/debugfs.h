@@ -21,6 +21,7 @@ enum b43_dyndbg {		/* Dynamic debugging features */
 #ifdef CONFIG_B43_DEBUG
 
 struct dentry;
+#define debugfs_node dentry
 
 #define B43_NR_LOGGED_TXSTATUS	100
 
@@ -38,7 +39,7 @@ struct b43_dfs_file {
 
 struct b43_dfsentry {
 	struct b43_wldev *dev;
-	struct dentry *subdir;
+	struct debugfs_node *subdir;
 
 	struct b43_dfs_file file_shm16read;
 	struct b43_dfs_file file_shm16write;

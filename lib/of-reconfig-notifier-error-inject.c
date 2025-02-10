@@ -20,7 +20,7 @@ static struct notifier_err_inject reconfig_err_inject = {
 	}
 };
 
-static struct dentry *dir;
+static struct debugfs_node *dir;
 
 static int err_inject_init(void)
 {

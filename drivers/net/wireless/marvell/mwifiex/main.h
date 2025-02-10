@@ -631,7 +631,7 @@ struct mwifiex_private {
 	u32 versionstrsel;
 	char version_str[MWIFIEX_VERSION_STR_LENGTH];
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dfs_dev_dir;
+	struct debugfs_node *dfs_dev_dir;
 #endif
 	u16 current_key_index;
 	struct mutex async_mutex;

@@ -9,7 +9,7 @@
 #include "i40e.h"
 #include "i40e_virtchnl_pf.h"
 
-static struct dentry *i40e_dbg_root;
+static struct debugfs_node *i40e_dbg_root;
 
 enum ring_type {
 	RING_TYPE_RX,

@@ -35,7 +35,7 @@
 #define SHOW_SOCK_CONTAINERS	0
 #define SHOW_SOCK_STATS		1
 
-static struct dentry *o2net_dentry;
+static struct debugfs_node *o2net_dentry;
 
 static DEFINE_SPINLOCK(o2net_debug_lock);
 

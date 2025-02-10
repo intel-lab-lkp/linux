@@ -35,7 +35,7 @@ early_param("coherent_pool", early_coherent_pool);
 
 static void __init dma_atomic_pool_debugfs_init(void)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir("dma_pools", NULL);
 	debugfs_create_ulong("pool_size_dma", 0400, root, &pool_size_dma);

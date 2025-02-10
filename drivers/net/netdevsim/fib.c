@@ -58,7 +58,7 @@ struct nsim_fib_data {
 	struct list_head fib_event_queue;
 	spinlock_t fib_event_queue_lock; /* Protects fib event queue list */
 	struct mutex nh_lock; /* Protects NH HT */
-	struct dentry *ddir;
+	struct debugfs_node *ddir;
 	bool fail_route_offload;
 	bool fail_res_nexthop_group_replace;
 	bool fail_nexthop_bucket_replace;

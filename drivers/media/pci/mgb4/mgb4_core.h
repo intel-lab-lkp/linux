@@ -65,7 +65,7 @@ struct mgb4_dev {
 	u8 module_version;
 	u32 serial_number;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 #endif

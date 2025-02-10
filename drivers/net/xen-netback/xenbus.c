@@ -21,7 +21,7 @@ static void set_backend_state(struct backend_info *be,
 			      enum xenbus_state state);
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *xen_netback_dbg_root = NULL;
+struct debugfs_node *xen_netback_dbg_root = NULL;
 
 static int xenvif_read_io_ring(struct seq_file *m, void *v)
 {

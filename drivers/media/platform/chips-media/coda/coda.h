@@ -72,7 +72,7 @@ struct coda_aux_buf {
 	dma_addr_t		paddr;
 	u32			size;
 	struct debugfs_blob_wrapper blob;
-	struct dentry		*dentry;
+	struct debugfs_node *dentry;
 };
 
 struct coda_dev {
@@ -99,7 +99,7 @@ struct coda_dev {
 	struct workqueue_struct	*workqueue;
 	struct v4l2_m2m_dev	*m2m_dev;
 	struct ida		ida;
-	struct dentry		*debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct ratelimit_state	mb_err_rs;
 };
 
@@ -281,7 +281,7 @@ struct coda_ctx {
 	u32				frame_mem_ctrl;
 	u32				para_change;
 	int				display_idx;
-	struct dentry			*debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 	bool				use_bit;
 	bool				use_vdoa;
 	struct vdoa_ctx			*vdoa;

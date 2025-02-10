@@ -507,7 +507,7 @@ struct amdgpu_ras {
 	struct device_attribute schema_attr;
 	struct device_attribute event_state_attr;
 	struct bin_attribute badpages_attr;
-	struct dentry *de_ras_eeprom_table;
+	struct debugfs_node *de_ras_eeprom_table;
 	/* block array */
 	struct ras_manager *objs;
 

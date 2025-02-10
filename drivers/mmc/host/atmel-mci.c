@@ -603,7 +603,7 @@ static void atmci_init_debugfs(struct atmel_mci_slot *slot)
 {
 	struct mmc_host		*mmc = slot->mmc;
 	struct atmel_mci	*host = slot->host;
-	struct dentry		*root;
+	struct debugfs_node		*root;
 
 	root = mmc->debugfs_root;
 	if (!root)

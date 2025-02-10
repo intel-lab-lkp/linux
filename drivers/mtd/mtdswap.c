@@ -1254,7 +1254,7 @@ DEFINE_SHOW_ATTRIBUTE(mtdswap);
 
 static int mtdswap_add_debugfs(struct mtdswap_dev *d)
 {
-	struct dentry *root = d->mtd->dbg.dfs_dir;
+	struct debugfs_node *root = d->mtd->dbg.dfs_dir;
 
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))
 		return 0;

@@ -199,7 +199,7 @@ struct tb_switch {
 	bool rpm;
 	unsigned int authorized;
 	enum tb_security_level security_level;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u8 *key;
 	u8 connection_id;
 	u8 connection_key;

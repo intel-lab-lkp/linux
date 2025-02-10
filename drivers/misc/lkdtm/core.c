@@ -388,7 +388,7 @@ int lkdtm_check_bool_cmdline(const char *param)
 }
 #endif
 
-static struct dentry *lkdtm_debugfs_root;
+static struct debugfs_node *lkdtm_debugfs_root;
 
 static int __init lkdtm_module_init(void)
 {

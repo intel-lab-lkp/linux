@@ -211,7 +211,7 @@ void adf_heartbeat_dbgfs_add(struct adf_accel_dev *accel_dev)
 					    accel_dev, &adf_hb_cfg_fops);
 
 	if (IS_ENABLED(CONFIG_CRYPTO_DEV_QAT_ERROR_INJECTION)) {
-		struct dentry *inject_error __maybe_unused;
+		struct debugfs_node *inject_error __maybe_unused;
 
 		inject_error = debugfs_create_file("inject_error", 0200,
 						   hb->dbgfs.base_dir, accel_dev,

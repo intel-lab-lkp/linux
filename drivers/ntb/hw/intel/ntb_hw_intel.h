@@ -180,8 +180,8 @@ struct intel_ntb_dev {
 	unsigned long			unsafe_flags;
 	unsigned long			unsafe_flags_ignore;
 
-	struct dentry			*debugfs_dir;
-	struct dentry			*debugfs_info;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *debugfs_info;
 
 	/* gen4 entries */
 	int				dev_up;

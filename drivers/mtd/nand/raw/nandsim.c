@@ -357,7 +357,7 @@ struct nandsim {
 	int held_cnt;
 
 	/* debugfs entry */
-	struct dentry *dent;
+	struct debugfs_node *dent;
 };
 
 /*
@@ -499,7 +499,7 @@ DEFINE_SHOW_ATTRIBUTE(ns);
  */
 static int ns_debugfs_create(struct nandsim *ns)
 {
-	struct dentry *root = nsmtd->dbg.dfs_dir;
+	struct debugfs_node *root = nsmtd->dbg.dfs_dir;
 
 	/*
 	 * Just skip debugfs initialization when the debugfs directory is

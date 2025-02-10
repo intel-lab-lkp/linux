@@ -280,8 +280,8 @@ static int q54sj108a2_probe(struct i2c_client *client)
 	u8 buf[I2C_SMBUS_BLOCK_MAX + 1];
 	enum chips chip_id;
 	int ret, i;
-	struct dentry *debugfs;
-	struct dentry *q54sj108a2_dir;
+	struct debugfs_node *debugfs;
+	struct debugfs_node *q54sj108a2_dir;
 	struct q54sj108a2_data *psu;
 
 	if (!i2c_check_functionality(client->adapter,

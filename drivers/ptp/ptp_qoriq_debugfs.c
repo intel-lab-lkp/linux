@@ -69,7 +69,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(ptp_qoriq_fiper2_fops, ptp_qoriq_fiper2_lpbk_get,
 
 void ptp_qoriq_create_debugfs(struct ptp_qoriq *ptp_qoriq)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(dev_name(ptp_qoriq->dev), NULL);
 	if (IS_ERR(root))

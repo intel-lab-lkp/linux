@@ -78,7 +78,7 @@ struct snd_soc_dpcm {
 	struct list_head list_fe;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_state;
+	struct debugfs_node *debugfs_state;
 #endif
 };
 

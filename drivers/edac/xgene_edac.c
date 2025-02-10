@@ -51,7 +51,7 @@ struct xgene_edac {
 	struct regmap		*rb_map;
 	void __iomem		*pcp_csr;
 	spinlock_t		lock;
-	struct dentry           *dfs;
+	struct debugfs_node *dfs;
 
 	struct list_head	mcus;
 	struct list_head	pmds;
@@ -861,7 +861,7 @@ static void
 xgene_edac_pmd_create_debugfs_nodes(struct edac_device_ctl_info *edac_dev)
 {
 	struct xgene_edac_pmd_ctx *ctx = edac_dev->pvt_info;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	char name[10];
 
 	if (!IS_ENABLED(CONFIG_EDAC_DEBUG) || !ctx->edac->dfs)
@@ -1165,7 +1165,7 @@ static void
 xgene_edac_l3_create_debugfs_nodes(struct edac_device_ctl_info *edac_dev)
 {
 	struct xgene_edac_dev_ctx *ctx = edac_dev->pvt_info;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	char name[10];
 
 	if (!IS_ENABLED(CONFIG_EDAC_DEBUG) || !ctx->edac->dfs)

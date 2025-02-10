@@ -64,7 +64,7 @@ static void do_xmote(struct gfs2_glock *gl, struct gfs2_holder *gh, unsigned int
 static void request_demote(struct gfs2_glock *gl, unsigned int state,
 			   unsigned long delay, bool remote);
 
-static struct dentry *gfs2_root;
+static struct debugfs_node *gfs2_root;
 static LIST_HEAD(lru_list);
 static atomic_t lru_count = ATOMIC_INIT(0);
 static DEFINE_SPINLOCK(lru_lock);

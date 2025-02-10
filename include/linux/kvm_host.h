@@ -842,7 +842,7 @@ struct kvm {
 #endif
 	struct list_head devices;
 	u64 manual_dirty_log_protect;
-	struct dentry *debugfs_dentry;
+	struct debugfs_node *debugfs_dentry;
 	struct kvm_stat_data **debugfs_stat_data;
 	struct srcu_struct srcu;
 	struct srcu_struct irq_srcu;
@@ -1586,7 +1586,8 @@ int kvm_arch_pm_notifier(struct kvm *kvm, unsigned long state);
 #endif
 
 #ifdef __KVM_HAVE_ARCH_VCPU_DEBUGFS
-void kvm_arch_create_vcpu_debugfs(struct kvm_vcpu *vcpu, struct dentry *debugfs_dentry);
+void kvm_arch_create_vcpu_debugfs(struct kvm_vcpu *vcpu,
+				  struct debugfs_node *debugfs_dentry);
 #else
 static inline void kvm_create_vcpu_debugfs(struct kvm_vcpu *vcpu) {}
 #endif

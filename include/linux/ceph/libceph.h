@@ -134,10 +134,10 @@ struct ceph_client {
 	struct ceph_osd_client osdc;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_dir;
-	struct dentry *debugfs_monmap;
-	struct dentry *debugfs_osdmap;
-	struct dentry *debugfs_options;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *debugfs_monmap;
+	struct debugfs_node *debugfs_osdmap;
+	struct debugfs_node *debugfs_options;
 #endif
 };
 

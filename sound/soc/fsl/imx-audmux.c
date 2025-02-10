@@ -29,7 +29,7 @@ static u32 reg_max;
 #define IMX_AUDMUX_V2_PDCR(x)		((x) * 8 + 4)
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *audmux_debugfs_root;
+static struct debugfs_node *audmux_debugfs_root;
 
 /* There is an annoying discontinuity in the SSI numbering with regard
  * to the Linux number of the devices */

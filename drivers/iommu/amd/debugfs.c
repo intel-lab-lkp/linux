@@ -12,7 +12,7 @@
 
 #include "amd_iommu.h"
 
-static struct dentry *amd_iommu_debugfs;
+static struct debugfs_node *amd_iommu_debugfs;
 static DEFINE_MUTEX(amd_iommu_debugfs_lock);
 
 #define	MAX_NAME_LEN	20

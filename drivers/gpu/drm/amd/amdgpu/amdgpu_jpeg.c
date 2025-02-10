@@ -405,7 +405,7 @@ void amdgpu_debugfs_jpeg_sched_mask_init(struct amdgpu_device *adev)
 {
 #if defined(CONFIG_DEBUG_FS)
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	char name[32];
 
 	if (!(adev->jpeg.num_jpeg_inst > 1) && !(adev->jpeg.num_jpeg_rings > 1))

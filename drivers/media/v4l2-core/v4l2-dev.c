@@ -93,7 +93,7 @@ static struct attribute *video_device_attrs[] = {
 };
 ATTRIBUTE_GROUPS(video_device);
 
-static struct dentry *v4l2_debugfs_root_dir;
+static struct debugfs_node *v4l2_debugfs_root_dir;
 
 /*
  *	Active devices
@@ -1121,7 +1121,7 @@ void video_unregister_device(struct video_device *vdev)
 EXPORT_SYMBOL(video_unregister_device);
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *v4l2_debugfs_root(void)
+struct debugfs_node *v4l2_debugfs_root(void)
 {
 	if (!v4l2_debugfs_root_dir)
 		v4l2_debugfs_root_dir = debugfs_create_dir("v4l2", NULL);

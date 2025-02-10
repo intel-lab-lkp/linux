@@ -41,7 +41,7 @@
  */
 struct ports_driver_data {
 	/* Used for exporting per-port information to debugfs */
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	/* List of all the devices we're handling */
 	struct list_head portdevs;
@@ -187,7 +187,7 @@ struct port {
 	struct virtqueue *in_vq, *out_vq;
 
 	/* File in the debugfs directory that exposes this port's information */
-	struct dentry *debugfs_file;
+	struct debugfs_node *debugfs_file;
 
 	/*
 	 * Keep count of the bytes sent, received and discarded for

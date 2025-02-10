@@ -1391,7 +1391,7 @@ struct dwc3 {
 	int			max_cfg_eps;
 	int			last_fifo_depth;
 	int			num_ep_resized;
-	struct dentry		*debug_root;
+	struct debugfs_node *debug_root;
 	u32			gsbuscfg0_reqinfo;
 };
 

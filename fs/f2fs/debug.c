@@ -23,7 +23,7 @@
 static LIST_HEAD(f2fs_stat_list);
 static DEFINE_RAW_SPINLOCK(f2fs_stat_lock);
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *f2fs_debugfs_root;
+static struct debugfs_node *f2fs_debugfs_root;
 #endif
 
 /*

@@ -9,7 +9,7 @@
 
 #include "hns_roce_device.h"
 
-static struct dentry *hns_roce_dbgfs_root;
+static struct debugfs_node *hns_roce_dbgfs_root;
 
 static int hns_debugfs_seqfile_open(struct inode *inode, struct file *f)
 {
@@ -27,7 +27,8 @@ static const struct file_operations hns_debugfs_seqfile_fops = {
 };
 
 static void init_debugfs_seqfile(struct hns_debugfs_seqfile *seq,
-				 const char *name, struct dentry *parent,
+				 const char *name,
+				 struct debugfs_node *parent,
 				 int (*read_fn)(struct seq_file *, void *),
 				 void *data)
 {
@@ -72,7 +73,7 @@ static int sw_stat_debugfs_show(struct seq_file *file, void *offset)
 }
 
 static void create_sw_stat_debugfs(struct hns_roce_dev *hr_dev,
-				   struct dentry *parent)
+				   struct debugfs_node *parent)
 {
 	struct hns_sw_stat_debugfs *dbgfs = &hr_dev->dbgfs.sw_stat_root;
 

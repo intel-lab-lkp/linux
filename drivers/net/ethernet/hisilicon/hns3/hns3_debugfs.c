@@ -8,7 +8,7 @@
 #include "hns3_debugfs.h"
 #include "hns3_enet.h"
 
-static struct dentry *hns3_dbgfs_root;
+static struct debugfs_node *hns3_dbgfs_root;
 
 static struct hns3_dbg_dentry_info hns3_dbg_dentry[] = {
 	{
@@ -1313,7 +1313,7 @@ static const struct file_operations hns3_dbg_fops = {
 
 static int hns3_dbg_bd_file_init(struct hnae3_handle *handle, u32 cmd)
 {
-	struct dentry *entry_dir;
+	struct debugfs_node *entry_dir;
 	struct hns3_dbg_data *data;
 	u16 max_queue_num;
 	unsigned int i;
@@ -1343,7 +1343,7 @@ static int
 hns3_dbg_common_file_init(struct hnae3_handle *handle, u32 cmd)
 {
 	struct hns3_dbg_data *data;
-	struct dentry *entry_dir;
+	struct debugfs_node *entry_dir;
 
 	data = devm_kzalloc(&handle->pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)

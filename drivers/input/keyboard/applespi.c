@@ -424,7 +424,7 @@ struct applespi_data {
 	struct work_struct		work;
 	struct touchpad_info_protocol	rcvd_tp_info;
 
-	struct dentry			*debugfs_root;
+	struct debugfs_node *debugfs_root;
 	bool				debug_tp_dim;
 	char				tp_dim_val[40];
 	int				tp_dim_min_x;

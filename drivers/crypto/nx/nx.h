@@ -78,7 +78,7 @@ struct nx_crypto_driver {
 	struct nx_of       of;
 	struct vio_dev    *viodev;
 	struct vio_driver  viodriver;
-	struct dentry     *dfs_root;
+	struct debugfs_node *dfs_root;
 };
 
 #define NX_GCM4106_NONCE_LEN		(4)

@@ -698,6 +698,7 @@ struct port_info {
 };
 
 struct dentry;
+#define debugfs_node dentry
 struct work_struct;
 
 enum {                                 /* adapter flags */
@@ -1178,7 +1179,7 @@ struct adapter {
 
 	struct mutex uld_mutex;
 
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	bool use_bd;     /* Use SGE Back Door intfc for reading SGE Contexts */
 	bool trace_rss;	/* 1 implies that different RSS flit per filter is
 			 * used per filter else if 0 default RSS flit is

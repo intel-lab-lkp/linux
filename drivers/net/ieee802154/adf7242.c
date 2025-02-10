@@ -273,7 +273,7 @@ struct adf7242_local {
 	struct mutex bmux; /* protect SPI messages */
 	struct spi_message stat_msg;
 	struct spi_transfer stat_xfer;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct delayed_work work;
 	struct workqueue_struct *wqueue;
 	unsigned long flags;

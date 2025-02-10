@@ -457,13 +457,13 @@ static struct debugfs_entry *lmc_dfs_ents[] = {
 	&debugfs_int_w1c,
 };
 
-static int thunderx_create_debugfs_nodes(struct dentry *parent,
+static int thunderx_create_debugfs_nodes(struct debugfs_node *parent,
 					  struct debugfs_entry *attrs[],
 					  void *data,
 					  size_t num)
 {
 	int i;
-	struct dentry *ent;
+	struct debugfs_node *ent;
 
 	if (!IS_ENABLED(CONFIG_EDAC_DEBUG))
 		return 0;
@@ -1049,7 +1049,7 @@ struct thunderx_ocx {
 	struct pci_dev *pdev;
 	struct edac_device_ctl_info *edac_dev;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct msix_entry msix_ent[OCX_INTS];
 
 	struct ocx_com_err_ctx com_err_ctx[RING_ENTRIES];
@@ -1739,7 +1739,7 @@ struct thunderx_l2c {
 	struct pci_dev *pdev;
 	struct edac_device_ctl_info *edac_dev;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	int index;
 

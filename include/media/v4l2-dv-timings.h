@@ -280,20 +280,22 @@ typedef ssize_t (*v4l2_debugfs_if_read_t)(u32 type, void *priv,
 					  size_t count, loff_t *ppos);
 
 struct v4l2_debugfs_if {
-	struct dentry *if_dir;
+	struct debugfs_node *if_dir;
 	void *priv;
 
 	v4l2_debugfs_if_read_t if_read;
 };
 
 #ifdef CONFIG_DEBUG_FS
-struct v4l2_debugfs_if *v4l2_debugfs_if_alloc(struct dentry *root, u32 if_types,
+struct v4l2_debugfs_if *v4l2_debugfs_if_alloc(struct debugfs_node *root,
+					      u32 if_types,
 					      void *priv,
 					      v4l2_debugfs_if_read_t if_read);
 void v4l2_debugfs_if_free(struct v4l2_debugfs_if *infoframes);
 #else
 static inline
-struct v4l2_debugfs_if *v4l2_debugfs_if_alloc(struct dentry *root, u32 if_types,
+struct v4l2_debugfs_if *v4l2_debugfs_if_alloc(struct debugfs_node *root,
+					      u32 if_types,
 					      void *priv,
 					      v4l2_debugfs_if_read_t if_read)
 {

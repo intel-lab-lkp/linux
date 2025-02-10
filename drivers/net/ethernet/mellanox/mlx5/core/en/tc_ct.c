@@ -55,7 +55,7 @@ struct mlx5_tc_ct_debugfs {
 		atomic_t rx_dropped;
 	} stats;
 
-	struct dentry *root;
+	struct debugfs_node *root;
 };
 
 struct mlx5_tc_ct_priv {

@@ -83,7 +83,7 @@ static const struct intel_ntb_xlat_reg xeon_sec_xlat;
 static const struct ntb_dev_ops intel_ntb_ops;
 
 static const struct file_operations intel_ntb_debugfs_info;
-static struct dentry *debugfs_dir;
+static struct debugfs_node *debugfs_dir;
 
 static int b2b_mw_idx = -1;
 module_param(b2b_mw_idx, int, 0644);

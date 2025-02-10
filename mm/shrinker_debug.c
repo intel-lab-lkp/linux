@@ -13,7 +13,7 @@ extern struct mutex shrinker_mutex;
 extern struct list_head shrinker_list;
 
 static DEFINE_IDA(shrinker_debugfs_ida);
-static struct dentry *shrinker_debugfs_root;
+static struct debugfs_node *shrinker_debugfs_root;
 
 static unsigned long shrinker_count_objects(struct shrinker *shrinker,
 					    struct mem_cgroup *memcg,
@@ -161,7 +161,7 @@ static const struct file_operations shrinker_debugfs_scan_fops = {
 
 int shrinker_debugfs_add(struct shrinker *shrinker)
 {
-	struct dentry *entry;
+	struct debugfs_node *entry;
 	char buf[128];
 	int id;
 
@@ -222,10 +222,10 @@ int shrinker_debugfs_rename(struct shrinker *shrinker, const char *fmt, ...)
 }
 EXPORT_SYMBOL(shrinker_debugfs_rename);
 
-struct dentry *shrinker_debugfs_detach(struct shrinker *shrinker,
+struct debugfs_node *shrinker_debugfs_detach(struct shrinker *shrinker,
 				       int *debugfs_id)
 {
-	struct dentry *entry = shrinker->debugfs_entry;
+	struct debugfs_node *entry = shrinker->debugfs_entry;
 
 	lockdep_assert_held(&shrinker_mutex);
 
@@ -235,7 +235,8 @@ struct dentry *shrinker_debugfs_detach(struct shrinker *shrinker,
 	return entry;
 }
 
-void shrinker_debugfs_remove(struct dentry *debugfs_entry, int debugfs_id)
+void shrinker_debugfs_remove(struct debugfs_node *debugfs_entry,
+			     int debugfs_id)
 {
 	debugfs_remove_recursive(debugfs_entry);
 	ida_free(&shrinker_debugfs_ida, debugfs_id);
@@ -244,7 +245,7 @@ void shrinker_debugfs_remove(struct dentry *debugfs_entry, int debugfs_id)
 static int __init shrinker_debugfs_init(void)
 {
 	struct shrinker *shrinker;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	int ret = 0;
 
 	dentry = debugfs_create_dir("shrinker", NULL);

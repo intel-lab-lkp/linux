@@ -253,8 +253,8 @@ struct sl3516_ce_dev {
 	unsigned long fallback_mod16;
 	unsigned long fallback_align16;
 #ifdef CONFIG_CRYPTO_DEV_SL3516_DEBUG
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_stats;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_stats;
 #endif
 	void *pctrl;
 	dma_addr_t dctrl;

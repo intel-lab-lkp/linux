@@ -768,7 +768,7 @@ static void shrinker_free_rcu_cb(struct rcu_head *head)
 
 void shrinker_free(struct shrinker *shrinker)
 {
-	struct dentry *debugfs_entry = NULL;
+	struct debugfs_node *debugfs_entry = NULL;
 	int debugfs_id;
 
 	if (!shrinker)

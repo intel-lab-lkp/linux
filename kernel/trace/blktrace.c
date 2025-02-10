@@ -473,15 +473,15 @@ static int blk_subbuf_start_callback(struct rchan_buf *buf, void *subbuf,
 	return 0;
 }
 
-static int blk_remove_buf_file_callback(struct dentry *dentry)
+static int blk_remove_buf_file_callback(struct debugfs_node *dentry)
 {
 	debugfs_remove(dentry);
 
 	return 0;
 }
 
-static struct dentry *blk_create_buf_file_callback(const char *filename,
-						   struct dentry *parent,
+static struct debugfs_node *blk_create_buf_file_callback(const char *filename,
+						   struct debugfs_node *parent,
 						   umode_t mode,
 						   struct rchan_buf *buf,
 						   int *is_global)
@@ -516,7 +516,7 @@ static int do_blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 			      struct blk_user_trace_setup *buts)
 {
 	struct blk_trace *bt = NULL;
-	struct dentry *dir = NULL;
+	struct debugfs_node *dir = NULL;
 	int ret;
 
 	lockdep_assert_held(&q->debugfs_mutex);

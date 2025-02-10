@@ -152,11 +152,12 @@ static const struct file_operations scom_debug_fops = {
 	.llseek =	default_llseek,
 };
 
-static int scom_debug_init_one(struct dentry *root, struct device_node *dn,
+static int scom_debug_init_one(struct debugfs_node *root,
+			       struct device_node *dn,
 			       int chip)
 {
 	struct scom_debug_entry *ent;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	ent = kzalloc(sizeof(*ent), GFP_KERNEL);
 	if (!ent)
@@ -188,7 +189,7 @@ static int scom_debug_init_one(struct dentry *root, struct device_node *dn,
 static int scom_debug_init(void)
 {
 	struct device_node *dn;
-	struct dentry *root;
+	struct debugfs_node *root;
 	int chip, rc;
 
 	if (!firmware_has_feature(FW_FEATURE_OPAL))

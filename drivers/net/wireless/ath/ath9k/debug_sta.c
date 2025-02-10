@@ -245,7 +245,7 @@ static const struct file_operations fops_node_recv = {
 void ath9k_sta_add_debugfs(struct ieee80211_hw *hw,
 			   struct ieee80211_vif *vif,
 			   struct ieee80211_sta *sta,
-			   struct dentry *dir)
+			   struct debugfs_node *dir)
 {
 	struct ath_node *an = (struct ath_node *)sta->drv_priv;
 

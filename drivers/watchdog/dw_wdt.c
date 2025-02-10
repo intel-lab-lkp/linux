@@ -93,7 +93,7 @@ struct dw_wdt {
 	u32			timeout;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry		*dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif
 };
 

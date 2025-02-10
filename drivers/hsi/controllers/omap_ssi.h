@@ -101,7 +101,7 @@ struct omap_ssi_port {
 	u32			loss_count;
 	u32			port_id;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dir;
+	struct debugfs_node *dir;
 #endif
 };
 
@@ -152,7 +152,7 @@ struct omap_ssi_controller {
 	int			(*get_loss)(struct device *dev);
 	struct omap_ssi_port	**port;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dir;
+	struct debugfs_node *dir;
 #endif
 };
 

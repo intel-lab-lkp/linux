@@ -11,7 +11,7 @@
 
 #include "hyperv_vmbus.h"
 
-static struct dentry *hv_debug_root;
+static struct debugfs_node *hv_debug_root;
 
 static int hv_debugfs_delay_get(void *data, u64 *val)
 {
@@ -51,14 +51,15 @@ DEFINE_DEBUGFS_ATTRIBUTE(hv_debugfs_state_fops, hv_debugfs_state_get,
 			 hv_debugfs_state_set, "%llu\n");
 
 /* Setup delay files to store test values */
-static int hv_debug_delay_files(struct hv_device *dev, struct dentry *root)
+static int hv_debug_delay_files(struct hv_device *dev,
+				struct debugfs_node *root)
 {
 	struct vmbus_channel *channel = dev->channel;
 	char *buffer = "fuzz_test_buffer_interrupt_delay";
 	char *message = "fuzz_test_message_delay";
 	int *buffer_val = &channel->fuzz_testing_interrupt_delay;
 	int *message_val = &channel->fuzz_testing_message_delay;
-	struct dentry *buffer_file, *message_file;
+	struct debugfs_node *buffer_file, *message_file;
 
 	buffer_file = debugfs_create_file(buffer, 0644, root,
 					  buffer_val,
@@ -80,12 +81,13 @@ static int hv_debug_delay_files(struct hv_device *dev, struct dentry *root)
 }
 
 /* Setup test state value for vmbus device */
-static int hv_debug_set_test_state(struct hv_device *dev, struct dentry *root)
+static int hv_debug_set_test_state(struct hv_device *dev,
+				   struct debugfs_node *root)
 {
 	struct vmbus_channel *channel = dev->channel;
 	bool *state = &channel->fuzz_testing_state;
 	char *status = "fuzz_test_state";
-	struct dentry *test_state;
+	struct debugfs_node *test_state;
 
 	test_state = debugfs_create_file(status, 0644, root,
 					 state,
@@ -99,7 +101,8 @@ static int hv_debug_set_test_state(struct hv_device *dev, struct dentry *root)
 }
 
 /* Bind hv device to a dentry for debugfs */
-static void hv_debug_set_dir_dentry(struct hv_device *dev, struct dentry *root)
+static void hv_debug_set_dir_dentry(struct hv_device *dev,
+				    struct debugfs_node *root)
 {
 	if (hv_debug_root)
 		dev->debug_dir = root;
@@ -110,7 +113,7 @@ int hv_debug_add_dev_dir(struct hv_device *dev)
 {
 	const char *device = dev_name(&dev->device);
 	char *delay_name = "delay";
-	struct dentry *delay, *dev_root;
+	struct debugfs_node *delay, *dev_root;
 	int ret;
 
 	if (!IS_ERR(hv_debug_root)) {

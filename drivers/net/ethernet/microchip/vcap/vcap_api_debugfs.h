@@ -14,24 +14,26 @@
 
 #if defined(CONFIG_DEBUG_FS)
 
-void vcap_port_debugfs(struct device *dev, struct dentry *parent,
+void vcap_port_debugfs(struct device *dev, struct debugfs_node *parent,
 		       struct vcap_control *vctrl,
 		       struct net_device *ndev);
 
 /* Create a debugFS entry for a vcap instance */
-struct dentry *vcap_debugfs(struct device *dev, struct dentry *parent,
-			    struct vcap_control *vctrl);
+struct debugfs_node *vcap_debugfs(struct device *dev,
+				  struct debugfs_node *parent,
+				  struct vcap_control *vctrl);
 
 #else
 
-static inline void vcap_port_debugfs(struct device *dev, struct dentry *parent,
+static inline void vcap_port_debugfs(struct device *dev,
+				     struct debugfs_node *parent,
 				     struct vcap_control *vctrl,
 				     struct net_device *ndev)
 {
 }
 
-static inline struct dentry *vcap_debugfs(struct device *dev,
-					  struct dentry *parent,
+static inline struct debugfs_node *vcap_debugfs(struct device *dev,
+					  struct debugfs_node *parent,
 					  struct vcap_control *vctrl)
 {
 	return NULL;

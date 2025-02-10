@@ -318,7 +318,7 @@ DEFINE_SHOW_ATTRIBUTE(info);
 
 void genwqe_init_debugfs(struct genwqe_dev *cd)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	char card_name[64];
 	char name[64];
 	unsigned int i;

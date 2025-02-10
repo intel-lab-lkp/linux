@@ -11,7 +11,7 @@
 
 #ifdef CONFIG_DEBUG_FS
 
-static struct dentry *ionic_dir;
+static struct debugfs_node *ionic_dir;
 
 void ionic_debugfs_create(void)
 {
@@ -112,9 +112,9 @@ static const struct debugfs_reg32 intr_ctrl_regs[] = {
 
 void ionic_debugfs_add_qcq(struct ionic_lif *lif, struct ionic_qcq *qcq)
 {
-	struct dentry *qcq_dentry, *q_dentry, *cq_dentry;
+	struct debugfs_node *qcq_dentry, *q_dentry, *cq_dentry;
 	struct ionic_dev *idev = &lif->ionic->idev;
-	struct dentry *intr_dentry, *stats_dentry;
+	struct debugfs_node *intr_dentry, *stats_dentry;
 	struct debugfs_regset32 *intr_ctrl_regset;
 	struct ionic_intr_info *intr = &qcq->intr;
 	struct debugfs_blob_wrapper *desc_blob;
@@ -272,7 +272,7 @@ DEFINE_SHOW_ATTRIBUTE(lif_filters);
 
 void ionic_debugfs_add_lif(struct ionic_lif *lif)
 {
-	struct dentry *lif_dentry;
+	struct debugfs_node *lif_dentry;
 
 	lif_dentry = debugfs_create_dir(lif->name, lif->ionic->dentry);
 	if (IS_ERR_OR_NULL(lif_dentry))

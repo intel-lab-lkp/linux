@@ -219,7 +219,7 @@ struct mlx5_rsc_debug {
 	struct mlx5_core_dev   *dev;
 	void		       *object;
 	enum dbg_rsc_type	type;
-	struct dentry	       *root;
+	struct debugfs_node *root;
 	struct mlx5_field_desc	fields[];
 };
 
@@ -253,7 +253,7 @@ struct mlx5_cmd_msg {
 };
 
 struct mlx5_cmd_debug {
-	struct dentry	       *dbg_root;
+	struct debugfs_node *dbg_root;
 	void		       *in_msg;
 	void		       *out_msg;
 	u8			status;
@@ -287,7 +287,7 @@ struct mlx5_cmd_stats {
 	u8		last_failed_mbox_status;
 	/* last command failed syndrome returned by FW */
 	u32		last_failed_syndrome;
-	struct dentry  *root;
+	struct debugfs_node *root;
 	/* protect command average calculations */
 	spinlock_t	lock;
 };
@@ -537,13 +537,13 @@ struct mlx5_adev {
 };
 
 struct mlx5_debugfs_entries {
-	struct dentry *dbg_root;
-	struct dentry *qp_debugfs;
-	struct dentry *eq_debugfs;
-	struct dentry *cq_debugfs;
-	struct dentry *cmdif_debugfs;
-	struct dentry *pages_debugfs;
-	struct dentry *lag_debugfs;
+	struct debugfs_node *dbg_root;
+	struct debugfs_node *qp_debugfs;
+	struct debugfs_node *eq_debugfs;
+	struct debugfs_node *cq_debugfs;
+	struct debugfs_node *cmdif_debugfs;
+	struct debugfs_node *pages_debugfs;
+	struct debugfs_node *lag_debugfs;
 };
 
 enum mlx5_func_type {
@@ -899,7 +899,7 @@ struct mlx5_hca_vport_context {
 	.struct_offset_bytes = offsetof(struct ib_unpacked_ ## header, field),      \
 	.struct_size_bytes   = sizeof((struct ib_unpacked_ ## header *)0)->field
 
-extern struct dentry *mlx5_debugfs_root;
+extern struct debugfs_node *mlx5_debugfs_root;
 
 static inline u16 fw_rev_maj(struct mlx5_core_dev *dev)
 {
@@ -1059,7 +1059,7 @@ int mlx5_comp_eqn_get(struct mlx5_core_dev *dev, u16 vecidx, int *eqn);
 int mlx5_core_attach_mcg(struct mlx5_core_dev *dev, union ib_gid *mgid, u32 qpn);
 int mlx5_core_detach_mcg(struct mlx5_core_dev *dev, union ib_gid *mgid, u32 qpn);
 
-struct dentry *mlx5_debugfs_get_dev_root(struct mlx5_core_dev *dev);
+struct debugfs_node *mlx5_debugfs_get_dev_root(struct mlx5_core_dev *dev);
 void mlx5_qp_debugfs_init(struct mlx5_core_dev *dev);
 void mlx5_qp_debugfs_cleanup(struct mlx5_core_dev *dev);
 int mlx5_access_reg(struct mlx5_core_dev *dev, void *data_in, int size_in,

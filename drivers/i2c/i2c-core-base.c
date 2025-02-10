@@ -68,7 +68,7 @@ static int i2c_detect(struct i2c_adapter *adapter, struct i2c_driver *driver);
 static DEFINE_STATIC_KEY_FALSE(i2c_trace_msg_key);
 static bool is_registered;
 
-static struct dentry *i2c_debugfs_root;
+static struct debugfs_node *i2c_debugfs_root;
 
 int i2c_transfer_trace_reg(void)
 {

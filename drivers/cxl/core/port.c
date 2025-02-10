@@ -810,7 +810,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(cxl_einj_inject_fops, NULL, cxl_einj_inject,
 
 static void cxl_debugfs_create_dport_dir(struct cxl_dport *dport)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	if (!einj_cxl_is_initialized())
 		return;
@@ -2301,9 +2301,9 @@ struct bus_type cxl_bus_type = {
 };
 EXPORT_SYMBOL_NS_GPL(cxl_bus_type, "CXL");
 
-static struct dentry *cxl_debugfs;
+static struct debugfs_node *cxl_debugfs;
 
-struct dentry *cxl_debugfs_create_dir(const char *dir)
+struct debugfs_node *cxl_debugfs_create_dir(const char *dir)
 {
 	return debugfs_create_dir(dir, cxl_debugfs);
 }

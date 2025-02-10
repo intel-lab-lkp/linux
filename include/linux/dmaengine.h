@@ -960,7 +960,7 @@ struct dma_device {
 	void (*device_release)(struct dma_device *dev);
 	/* debugfs support */
 	void (*dbg_summary_show)(struct seq_file *s, struct dma_device *dev);
-	struct dentry *dbg_dev_root;
+	struct debugfs_node *dbg_dev_root;
 };
 
 static inline int dmaengine_slave_config(struct dma_chan *chan,

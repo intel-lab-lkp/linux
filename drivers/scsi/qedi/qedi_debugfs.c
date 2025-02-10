@@ -12,7 +12,7 @@
 #include <linux/module.h>
 
 int qedi_do_not_recover;
-static struct dentry *qedi_dbg_root;
+static struct debugfs_node *qedi_dbg_root;
 
 void
 qedi_dbg_host_init(struct qedi_dbg_ctx *qedi,

@@ -2045,7 +2045,7 @@ struct ieee80211_vif {
 	u32 offload_flags;
 
 #ifdef CONFIG_MAC80211_DEBUGFS
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 
 	bool probe_req_reg;

@@ -316,7 +316,7 @@ struct drm_device {
 	 *
 	 * Root directory for debugfs files.
 	 */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 #endif

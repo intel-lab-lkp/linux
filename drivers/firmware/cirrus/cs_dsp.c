@@ -498,9 +498,10 @@ DEFINE_SHOW_ATTRIBUTE(cs_dsp_debugfs_read_controls);
  * @debugfs_root: pointer to debugfs directory in which to create this DSP
  *                representation
  */
-void cs_dsp_init_debugfs(struct cs_dsp *dsp, struct dentry *debugfs_root)
+void cs_dsp_init_debugfs(struct cs_dsp *dsp,
+			 struct debugfs_node *debugfs_root)
 {
-	struct dentry *root = NULL;
+	struct debugfs_node *root = NULL;
 	int i;
 
 	root = debugfs_create_dir(dsp->name, debugfs_root);
@@ -533,7 +534,8 @@ void cs_dsp_cleanup_debugfs(struct cs_dsp *dsp)
 }
 EXPORT_SYMBOL_NS_GPL(cs_dsp_cleanup_debugfs, "FW_CS_DSP");
 #else
-void cs_dsp_init_debugfs(struct cs_dsp *dsp, struct dentry *debugfs_root)
+void cs_dsp_init_debugfs(struct cs_dsp *dsp,
+			 struct debugfs_node *debugfs_root)
 {
 }
 EXPORT_SYMBOL_NS_GPL(cs_dsp_init_debugfs, "FW_CS_DSP");

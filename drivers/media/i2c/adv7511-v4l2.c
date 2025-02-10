@@ -117,7 +117,7 @@ struct adv7511_state {
 	struct workqueue_struct *work_queue;
 	struct delayed_work edid_handler; /* work entry */
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct v4l2_debugfs_if *infoframes;
 };
 

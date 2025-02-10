@@ -134,7 +134,7 @@ lowpan_iphc_ctx_is_compression(const struct lowpan_iphc_ctx *ctx)
 
 struct lowpan_dev {
 	enum lowpan_lltypes lltype;
-	struct dentry *iface_debugfs;
+	struct debugfs_node *iface_debugfs;
 	struct lowpan_iphc_ctx_table ctx;
 
 	/* must be last */

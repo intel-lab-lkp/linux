@@ -7,7 +7,7 @@
 
 #include "internals.h"
 
-static struct dentry *irq_dir;
+static struct debugfs_node *irq_dir;
 
 void irq_debug_show_bits(struct seq_file *m, int ind, unsigned int state,
 			 const struct irq_bit_descr *sd, int size)
@@ -238,7 +238,7 @@ void irq_add_debugfs_entry(unsigned int irq, struct irq_desc *desc)
 
 static int __init irq_debugfs_init(void)
 {
-	struct dentry *root_dir;
+	struct debugfs_node *root_dir;
 	int irq;
 
 	root_dir = debugfs_create_dir("irq", NULL);

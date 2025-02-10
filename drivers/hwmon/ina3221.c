@@ -128,7 +128,7 @@ struct ina3221_data {
 	struct regmap_field *fields[F_MAX_FIELDS];
 	struct ina3221_input inputs[INA3221_NUM_CHANNELS];
 	struct mutex lock;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	u32 reg_config;
 	int summation_shunt_resistor;
 	u32 summation_channel_control;

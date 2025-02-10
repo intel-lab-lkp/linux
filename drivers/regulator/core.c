@@ -44,7 +44,7 @@ static LIST_HEAD(regulator_supply_alias_list);
 static LIST_HEAD(regulator_coupler_list);
 static bool has_full_constraints;
 
-static struct dentry *debugfs_root;
+static struct debugfs_node *debugfs_root;
 
 /*
  * struct regulator_map

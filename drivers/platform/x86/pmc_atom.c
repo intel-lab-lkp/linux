@@ -43,7 +43,7 @@ struct pmc_dev {
 	void __iomem *regmap;
 	const struct pmc_reg_map *map;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif /* CONFIG_DEBUG_FS */
 	bool init;
 };
@@ -333,7 +333,7 @@ DEFINE_SHOW_ATTRIBUTE(pmc_sleep_tmr);
 
 static void pmc_dbgfs_register(struct pmc_dev *pmc)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("pmc_atom", NULL);
 

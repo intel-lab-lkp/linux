@@ -8,7 +8,7 @@
 
 #include "hinic_debugfs.h"
 
-static struct dentry *hinic_dbgfs_root;
+static struct debugfs_node *hinic_dbgfs_root;
 
 enum sq_dbg_info {
 	GLB_SQ_ID,
@@ -176,7 +176,8 @@ static const struct file_operations hinic_dbg_cmd_fops = {
 };
 
 static int create_dbg_files(struct hinic_dev *dev, enum hinic_dbg_type type, void *data,
-			    struct dentry *root, struct hinic_debug_priv **dbg, char **field,
+			    struct debugfs_node *root,
+			    struct hinic_debug_priv **dbg, char **field,
 			    int nfile)
 {
 	struct hinic_debug_priv *tmp;
@@ -212,7 +213,7 @@ static void rem_dbg_files(struct hinic_debug_priv *dbg)
 int hinic_sq_debug_add(struct hinic_dev *dev, u16 sq_id)
 {
 	struct hinic_sq *sq;
-	struct dentry *root;
+	struct debugfs_node *root;
 	char sub_dir[16];
 
 	sq = dev->txqs[sq_id].sq;
@@ -234,7 +235,7 @@ void hinic_sq_debug_rem(struct hinic_sq *sq)
 int hinic_rq_debug_add(struct hinic_dev *dev, u16 rq_id)
 {
 	struct hinic_rq *rq;
-	struct dentry *root;
+	struct debugfs_node *root;
 	char sub_dir[16];
 
 	rq = dev->rxqs[rq_id].rq;

@@ -553,6 +553,6 @@ int pmbus_lock_interruptible(struct i2c_client *client);
 void pmbus_unlock(struct i2c_client *client);
 int pmbus_update_fan(struct i2c_client *client, int page, int id,
 		     u8 config, u8 mask, u16 command);
-struct dentry *pmbus_get_debugfs_dir(struct i2c_client *client);
+struct debugfs_node *pmbus_get_debugfs_dir(struct i2c_client *client);
 
 #endif /* PMBUS_H */

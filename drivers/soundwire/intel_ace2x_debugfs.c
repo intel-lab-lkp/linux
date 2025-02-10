@@ -121,7 +121,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(intel_set_s_datamode_fops, NULL,
 
 void intel_ace2x_debugfs_init(struct sdw_intel *sdw)
 {
-	struct dentry *root = sdw->cdns.bus.debugfs;
+	struct debugfs_node *root = sdw->cdns.bus.debugfs;
 
 	if (!root)
 		return;

@@ -95,7 +95,7 @@ DEFINE_SHOW_ATTRIBUTE(mt7603_ampdu_stat);
 
 void mt7603_init_debugfs(struct mt7603_dev *dev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = mt76_register_debugfs(&dev->mt76);
 	if (!dir)

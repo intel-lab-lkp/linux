@@ -352,7 +352,7 @@ static struct debugfs_blob_wrapper debugfs_blob[EFI_DEBUGFS_MAX_BLOBS];
 
 static void __init efi_debugfs_init(void)
 {
-	struct dentry *efi_debugfs;
+	struct debugfs_node *efi_debugfs;
 	efi_memory_desc_t *md;
 	char name[32];
 	int type_count[EFI_BOOT_SERVICES_DATA + 1] = {};

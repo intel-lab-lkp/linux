@@ -49,7 +49,7 @@
  */
 #define DEFAULT_DURATION_JIFFIES (6)
 
-static struct dentry *debug_dir;
+static struct debugfs_node *debug_dir;
 static bool poll_pkg_cstate_enable;
 
 /* Idle ratio observed using package C-state counters */

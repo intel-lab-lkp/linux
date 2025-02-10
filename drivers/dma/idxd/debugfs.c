@@ -10,7 +10,7 @@
 #include "idxd.h"
 #include "registers.h"
 
-static struct dentry *idxd_debugfs_dir;
+static struct debugfs_node *idxd_debugfs_dir;
 
 static void dump_event_entry(struct idxd_device *idxd, struct seq_file *s,
 			     u16 index, int *count, bool processed)

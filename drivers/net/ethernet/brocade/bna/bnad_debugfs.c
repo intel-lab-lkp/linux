@@ -485,7 +485,7 @@ static const struct bnad_debugfs_entry bnad_debugfs_files[] = {
 	{ "drvinfo", S_IFREG | 0444, &bnad_debugfs_op_drvinfo, },
 };
 
-static struct dentry *bna_debugfs_root;
+static struct debugfs_node *bna_debugfs_root;
 static atomic_t bna_debugfs_port_count;
 
 /* Initialize debugfs interface for BNA */

@@ -2456,8 +2456,8 @@ struct megasas_instance {
 	u8 max_reset_tmo;
 	u8 snapdump_wait_time;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_root;
-	struct dentry *raidmap_dump;
+	struct debugfs_node *debugfs_root;
+	struct debugfs_node *raidmap_dump;
 #endif
 	u8 enable_fw_dev_list;
 	bool atomic_desc_support;

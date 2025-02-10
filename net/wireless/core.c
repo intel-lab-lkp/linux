@@ -44,7 +44,7 @@ LIST_HEAD(cfg80211_rdev_list);
 int cfg80211_rdev_list_generation;
 
 /* for debugfs */
-static struct dentry *ieee80211_debugfs_dir;
+static struct debugfs_node *ieee80211_debugfs_dir;
 
 /* for the cleanup, scan and event works */
 struct workqueue_struct *cfg80211_wq;

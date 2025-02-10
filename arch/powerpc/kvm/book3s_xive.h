@@ -103,7 +103,7 @@ struct kvmppc_xive_ops {
 struct kvmppc_xive {
 	struct kvm *kvm;
 	struct kvm_device *dev;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 
 	/* VP block associated with the VM */
 	u32	vp_base;

@@ -436,7 +436,7 @@ static int ccu_pll_dbgfs_fld_get(void *priv, u64 *val)
 DEFINE_DEBUGFS_ATTRIBUTE(ccu_pll_dbgfs_fld_fops,
 	ccu_pll_dbgfs_fld_get, ccu_pll_dbgfs_fld_set, "%llu\n");
 
-static void ccu_pll_debug_init(struct clk_hw *hw, struct dentry *dentry)
+static void ccu_pll_debug_init(struct clk_hw *hw, struct debugfs_node *dentry)
 {
 	struct ccu_pll *pll = to_ccu_pll(hw);
 	struct ccu_pll_dbgfs_bit *bits;

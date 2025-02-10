@@ -10,7 +10,7 @@
 #define CW1200_DEBUG_H_INCLUDED
 
 struct cw1200_debug_priv {
-	struct dentry *debugfs_phy;
+	struct debugfs_node *debugfs_phy;
 	int tx;
 	int tx_agg;
 	int rx;

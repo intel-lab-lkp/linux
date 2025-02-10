@@ -1105,7 +1105,7 @@ struct ufs_hba {
 	struct blk_crypto_profile crypto_profile;
 #endif
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct delayed_work debugfs_ee_work;
 	u32 debugfs_ee_rate_limit_ms;
 #endif

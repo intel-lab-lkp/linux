@@ -106,12 +106,12 @@ struct pp_ctx {
 	u64 pmask;
 	atomic_t count;
 	spinlock_t lock;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 #define to_pp_timer(__timer) \
 	container_of(__timer, struct pp_ctx, timer)
 
-static struct dentry *pp_dbgfs_topdir;
+static struct debugfs_node *pp_dbgfs_topdir;
 
 static int pp_find_next_peer(struct pp_ctx *pp)
 {

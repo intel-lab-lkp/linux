@@ -100,13 +100,13 @@ void mt76_seq_puts_array(struct seq_file *file, const char *str,
 }
 EXPORT_SYMBOL_GPL(mt76_seq_puts_array);
 
-struct dentry *
+struct debugfs_node *
 mt76_register_debugfs_fops(struct mt76_phy *phy,
 			   const struct file_operations *ops)
 {
 	const struct file_operations *fops = ops ? ops : &fops_regval;
 	struct mt76_dev *dev = phy->dev;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("mt76", phy->hw->wiphy->debugfsdir);
 

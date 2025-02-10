@@ -483,7 +483,7 @@ static int ibm_cffps_probe(struct i2c_client *client)
 {
 	int i, rc;
 	enum versions vs = cffps_unknown;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct ibm_cffps *psu;
 	const void *md = of_device_get_match_data(&client->dev);
 	const struct i2c_device_id *id;

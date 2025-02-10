@@ -361,7 +361,7 @@ struct ath_skbrx_stats {
 };
 
 struct ath9k_debug {
-	struct dentry *debugfs_phy;
+	struct debugfs_node *debugfs_phy;
 	struct ath_tx_stats tx_stats;
 	struct ath_rx_stats rx_stats;
 	struct ath_skbrx_stats skbrx_stats;

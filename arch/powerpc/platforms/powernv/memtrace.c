@@ -26,7 +26,7 @@ struct memtrace_entry {
 	u64 start;
 	u64 size;
 	u32 nid;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char name[16];
 };
 
@@ -159,7 +159,7 @@ static int memtrace_init_regions_runtime(u64 size)
 	return 0;
 }
 
-static struct dentry *memtrace_debugfs_dir;
+static struct debugfs_node *memtrace_debugfs_dir;
 
 static int memtrace_init_debugfs(void)
 {
@@ -167,7 +167,7 @@ static int memtrace_init_debugfs(void)
 	int i;
 
 	for (i = 0; i < memtrace_array_nr; i++) {
-		struct dentry *dir;
+		struct debugfs_node *dir;
 		struct memtrace_entry *ent = &memtrace_array[i];
 
 		ent->mem = ioremap(ent->start, ent->size);

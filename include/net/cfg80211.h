@@ -5793,7 +5793,7 @@ struct wiphy {
 
 	bool registered;
 
-	struct dentry *debugfsdir;
+	struct debugfs_node *debugfsdir;
 
 	const struct ieee80211_ht_cap *ht_capa_mod_mask;
 	const struct ieee80211_vht_cap *vht_capa_mod_mask;

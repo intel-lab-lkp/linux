@@ -230,8 +230,8 @@ struct sun8i_ce_dev {
 	atomic_t flow;
 	const struct ce_variant *variant;
 #ifdef CONFIG_CRYPTO_DEV_SUN8I_CE_DEBUG
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_stats;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_stats;
 #endif
 #ifdef CONFIG_CRYPTO_DEV_SUN8I_CE_TRNG
 	struct hwrng trng;

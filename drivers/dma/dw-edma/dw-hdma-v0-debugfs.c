@@ -58,7 +58,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_x32, dw_hdma_debugfs_u32_get, NULL, "0x%08llx\n");
 
 static void dw_hdma_debugfs_create_x32(struct dw_edma *dw,
 				       const struct dw_hdma_debugfs_entry ini[],
-				       int nr_entries, struct dentry *dent)
+				       int nr_entries,
+				       struct debugfs_node *dent)
 {
 	struct dw_hdma_debugfs_entry *entries;
 	int i;
@@ -77,7 +78,7 @@ static void dw_hdma_debugfs_create_x32(struct dw_edma *dw,
 }
 
 static void dw_hdma_debugfs_regs_ch(struct dw_edma *dw, enum dw_edma_dir dir,
-				    u16 ch, struct dentry *dent)
+				    u16 ch, struct debugfs_node *dent)
 {
 	const struct dw_hdma_debugfs_entry debugfs_regs[] = {
 		CTX_REGISTER(dw, ch_en, dir, ch),
@@ -113,9 +114,10 @@ static void dw_hdma_debugfs_regs_ch(struct dw_edma *dw, enum dw_edma_dir dir,
 	dw_hdma_debugfs_create_x32(dw, debugfs_regs, nr_entries, dent);
 }
 
-static void dw_hdma_debugfs_regs_wr(struct dw_edma *dw, struct dentry *dent)
+static void dw_hdma_debugfs_regs_wr(struct dw_edma *dw,
+				    struct debugfs_node *dent)
 {
-	struct dentry *regs_dent, *ch_dent;
+	struct debugfs_node *regs_dent, *ch_dent;
 	char name[32];
 	int i;
 
@@ -130,9 +132,10 @@ static void dw_hdma_debugfs_regs_wr(struct dw_edma *dw, struct dentry *dent)
 	}
 }
 
-static void dw_hdma_debugfs_regs_rd(struct dw_edma *dw, struct dentry *dent)
+static void dw_hdma_debugfs_regs_rd(struct dw_edma *dw,
+				    struct debugfs_node *dent)
 {
-	struct dentry *regs_dent, *ch_dent;
+	struct debugfs_node *regs_dent, *ch_dent;
 	char name[32];
 	int i;
 
@@ -149,7 +152,7 @@ static void dw_hdma_debugfs_regs_rd(struct dw_edma *dw, struct dentry *dent)
 
 static void dw_hdma_debugfs_regs(struct dw_edma *dw)
 {
-	struct dentry *regs_dent;
+	struct debugfs_node *regs_dent;
 
 	regs_dent = debugfs_create_dir(REGISTERS_STR, dw->dma.dbg_dev_root);
 

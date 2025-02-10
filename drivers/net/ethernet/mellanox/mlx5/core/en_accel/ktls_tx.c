@@ -895,7 +895,7 @@ err_out:
 }
 
 static void mlx5e_tls_tx_debugfs_init(struct mlx5e_tls *tls,
-				      struct dentry *dfs_root)
+				      struct debugfs_node *dfs_root)
 {
 	if (IS_ERR_OR_NULL(dfs_root))
 		return;

@@ -1496,7 +1496,7 @@ static inline ssize_t iommu_map_sgtable(struct iommu_domain *domain,
 }
 
 #ifdef CONFIG_IOMMU_DEBUGFS
-extern	struct dentry *iommu_debugfs_dir;
+extern	struct debugfs_node *iommu_debugfs_dir;
 void iommu_debugfs_setup(void);
 #else
 static inline void iommu_debugfs_setup(void) {}

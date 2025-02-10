@@ -81,7 +81,7 @@ static const struct debugfs_reg32 xhci_extcap_dbc[] = {
 	dump_register(EXTCAP_DBC_DEVINFO2),
 };
 
-static struct dentry *xhci_debugfs_root;
+static struct debugfs_node *xhci_debugfs_root;
 
 static struct xhci_regset *xhci_debugfs_alloc_regset(struct xhci_hcd *xhci)
 {
@@ -113,7 +113,7 @@ static void xhci_debugfs_free_regset(struct xhci_regset *regset)
 __printf(6, 7)
 static void xhci_debugfs_regset(struct xhci_hcd *xhci, u32 base,
 				const struct debugfs_reg32 *regs,
-				size_t nregs, struct dentry *parent,
+				size_t nregs, struct debugfs_node *parent,
 				const char *fmt, ...)
 {
 	struct xhci_regset	*rgs;
@@ -386,7 +386,7 @@ static const struct file_operations port_fops = {
 static void xhci_debugfs_create_files(struct xhci_hcd *xhci,
 				      struct xhci_file_map *files,
 				      size_t nentries, void *data,
-				      struct dentry *parent,
+				      struct debugfs_node *parent,
 				      const struct file_operations *fops)
 {
 	int			i;
@@ -396,12 +396,12 @@ static void xhci_debugfs_create_files(struct xhci_hcd *xhci,
 					data, &files[i], fops);
 }
 
-static struct dentry *xhci_debugfs_create_ring_dir(struct xhci_hcd *xhci,
+static struct debugfs_node *xhci_debugfs_create_ring_dir(struct xhci_hcd *xhci,
 						   struct xhci_ring **ring,
 						   const char *name,
-						   struct dentry *parent)
+						   struct debugfs_node *parent)
 {
-	struct dentry		*dir;
+	struct debugfs_node		*dir;
 
 	dir = debugfs_create_dir(name, parent);
 	xhci_debugfs_create_files(xhci, ring_files, ARRAY_SIZE(ring_files),
@@ -411,7 +411,7 @@ static struct dentry *xhci_debugfs_create_ring_dir(struct xhci_hcd *xhci,
 }
 
 static void xhci_debugfs_create_context_files(struct xhci_hcd *xhci,
-					      struct dentry *parent,
+					      struct debugfs_node *parent,
 					      int slot_id)
 {
 	struct xhci_virt_device	*dev = xhci->devs[slot_id];
@@ -611,12 +611,12 @@ void xhci_debugfs_remove_slot(struct xhci_hcd *xhci, int slot_id)
 }
 
 static void xhci_debugfs_create_ports(struct xhci_hcd *xhci,
-				      struct dentry *parent)
+				      struct debugfs_node *parent)
 {
 	unsigned int		num_ports;
 	char			port_name[8];
 	struct xhci_port	*port;
-	struct dentry		*dir;
+	struct debugfs_node		*dir;
 
 	num_ports = HCS_MAX_PORTS(xhci->hcs_params1);
 

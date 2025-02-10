@@ -2943,7 +2943,8 @@ static const struct file_operations debugfs_timings_ops = {
 };
 
 /* Create a debugfs directory for the vcpu */
-static int kvmppc_arch_create_vcpu_debugfs_hv(struct kvm_vcpu *vcpu, struct dentry *debugfs_dentry)
+static int kvmppc_arch_create_vcpu_debugfs_hv(struct kvm_vcpu *vcpu,
+					      struct debugfs_node *debugfs_dentry)
 {
 	if (cpu_has_feature(CPU_FTR_ARCH_300) == IS_ENABLED(CONFIG_KVM_BOOK3S_HV_P9_TIMING))
 		debugfs_create_file("timings", 0444, debugfs_dentry, vcpu,
@@ -2952,7 +2953,8 @@ static int kvmppc_arch_create_vcpu_debugfs_hv(struct kvm_vcpu *vcpu, struct dent
 }
 
 #else /* CONFIG_KVM_BOOK3S_HV_EXIT_TIMING */
-static int kvmppc_arch_create_vcpu_debugfs_hv(struct kvm_vcpu *vcpu, struct dentry *debugfs_dentry)
+static int kvmppc_arch_create_vcpu_debugfs_hv(struct kvm_vcpu *vcpu,
+					      struct debugfs_node *debugfs_dentry)
 {
 	return 0;
 }

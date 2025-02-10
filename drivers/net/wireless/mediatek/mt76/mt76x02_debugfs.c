@@ -131,7 +131,7 @@ static int mt76x02_read_rate_txpower(struct seq_file *s, void *data)
 
 void mt76x02_init_debugfs(struct mt76x02_dev *dev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = mt76_register_debugfs(&dev->mt76);
 	if (!dir)

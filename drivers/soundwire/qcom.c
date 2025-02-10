@@ -183,7 +183,7 @@ struct qcom_swrm_ctrl {
 	void __iomem *mmio;
 	struct reset_control *audio_cgcr;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 	struct completion broadcast;
 	struct completion enumeration;

@@ -222,7 +222,7 @@ struct qdio_irq {
 	u32 *dsci;		/* address of device state change indicator */
 	struct ccw_device *cdev;
 	struct list_head entry;		/* list of thinint devices */
-	struct dentry *debugfs_dev;
+	struct debugfs_node *debugfs_dev;
 	u64 last_data_irq_time;
 
 	unsigned long int_parm;

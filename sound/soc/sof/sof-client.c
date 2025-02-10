@@ -401,7 +401,7 @@ int sof_resume_clients(struct snd_sof_dev *sdev)
 }
 EXPORT_SYMBOL_NS_GPL(sof_resume_clients, "SND_SOC_SOF_CLIENT");
 
-struct dentry *sof_client_get_debugfs_root(struct sof_client_dev *cdev)
+struct debugfs_node *sof_client_get_debugfs_root(struct sof_client_dev *cdev)
 {
 	return cdev->sdev->debugfs_root;
 }

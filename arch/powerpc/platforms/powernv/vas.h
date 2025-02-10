@@ -342,7 +342,7 @@ struct vas_instance {
 
 	char *name;
 	char *dbgname;
-	struct dentry *dbgdir;
+	struct debugfs_node *dbgdir;
 };
 
 /*

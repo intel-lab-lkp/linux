@@ -432,7 +432,7 @@ struct sparx5 {
 	u8 pgid_map[PGID_TABLE_SIZE];
 	struct list_head mall_entries;
 	/* Common root for debugfs */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	const struct sparx5_match_data *data;
 };
 

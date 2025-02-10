@@ -131,7 +131,7 @@ struct bfad_port_s {
 	enum bfad_port_pvb_type pvb_type;
 	struct bfad_im_port_s *im_port;	/* IM specific data */
 	/* port debugfs specific data */
-	struct dentry *port_debugfs_root;
+	struct debugfs_node *port_debugfs_root;
 };
 
 /*

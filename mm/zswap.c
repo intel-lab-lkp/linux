@@ -1728,7 +1728,7 @@ void zswap_swapoff(int type)
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-static struct dentry *zswap_debugfs_root;
+static struct debugfs_node *zswap_debugfs_root;
 
 static int debugfs_get_total_size(void *data, u64 *val)
 {

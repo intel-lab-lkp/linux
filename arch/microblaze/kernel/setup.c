@@ -181,7 +181,7 @@ void __init time_init(void)
 }
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *of_debugfs_root;
+struct debugfs_node *of_debugfs_root;
 
 static int microblaze_debugfs_init(void)
 {

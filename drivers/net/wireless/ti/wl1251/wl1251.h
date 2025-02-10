@@ -143,8 +143,8 @@ struct wl1251_stats {
 };
 
 struct wl1251_debugfs {
-	struct dentry *rootdir;
-	struct dentry *fw_statistics;
+	struct debugfs_node *rootdir;
+	struct debugfs_node *fw_statistics;
 
 	struct dentry *tx_internal_desc_overflow;
 

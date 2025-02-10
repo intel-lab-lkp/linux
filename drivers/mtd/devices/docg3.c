@@ -1724,7 +1724,7 @@ DEFINE_SHOW_ATTRIBUTE(protection);
 
 static void __init doc_dbg_register(struct mtd_info *floor)
 {
-	struct dentry *root = floor->dbg.dfs_dir;
+	struct debugfs_node *root = floor->dbg.dfs_dir;
 	struct docg3 *docg3 = floor->priv;
 
 	if (IS_ERR_OR_NULL(root)) {

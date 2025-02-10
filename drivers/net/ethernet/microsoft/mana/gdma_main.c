@@ -9,7 +9,7 @@
 
 #include <net/mana/mana.h>
 
-struct dentry *mana_debugfs_root;
+struct debugfs_node *mana_debugfs_root;
 
 static u32 mana_gd_r32(struct gdma_context *g, u64 offset)
 {

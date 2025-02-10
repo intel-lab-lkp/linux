@@ -977,7 +977,7 @@ static const struct file_operations fops_eeprom = {
 void
 ath5k_debug_init_device(struct ath5k_hw *ah)
 {
-	struct dentry *phydir;
+	struct debugfs_node *phydir;
 
 	ah->debug.level = ath5k_debug;
 

@@ -713,7 +713,7 @@ struct mac80211_hwsim_data {
 		PS_DISABLED, PS_ENABLED, PS_AUTO_POLL, PS_MANUAL_POLL
 	} ps;
 	bool ps_poll_pending;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	atomic_t pending_cookie;
 	struct sk_buff_head pending;	/* packets pending */
@@ -2149,7 +2149,7 @@ static void
 mac80211_hwsim_link_add_debugfs(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_bss_conf *link_conf,
-				struct dentry *dir)
+				struct debugfs_node *dir)
 {
 	struct hwsim_vif_priv *vp = (void *)vif->drv_priv;
 

@@ -771,8 +771,8 @@ exit_free_buf:
 }
 DEFINE_SHOW_STORE_ATTRIBUTE(pinmux_select);
 
-void pinmux_init_device_debugfs(struct dentry *devroot,
-			 struct pinctrl_dev *pctldev)
+void pinmux_init_device_debugfs(struct debugfs_node *devroot,
+				struct pinctrl_dev *pctldev)
 {
 	debugfs_create_file("pinmux-functions", 0444,
 			    devroot, pctldev, &pinmux_functions_fops);

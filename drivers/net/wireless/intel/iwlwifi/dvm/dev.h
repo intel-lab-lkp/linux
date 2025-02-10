@@ -846,7 +846,7 @@ struct iwl_priv {
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
 	/* debugfs */
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u32 dbgfs_sram_offset, dbgfs_sram_len;
 	bool disable_ht40;
 	void *wowlan_sram;

@@ -129,7 +129,8 @@ DEFINE_SIMPLE_ATTRIBUTE(guc_sched_disable_gucid_threshold_fops,
 			guc_sched_disable_gucid_threshold_get,
 			guc_sched_disable_gucid_threshold_set, "%lld\n");
 
-void intel_guc_debugfs_register(struct intel_guc *guc, struct dentry *root)
+void intel_guc_debugfs_register(struct intel_guc *guc,
+				struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "guc_info", &guc_info_fops, NULL },

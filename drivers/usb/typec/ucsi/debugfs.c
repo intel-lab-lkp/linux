@@ -17,7 +17,7 @@
 
 #include "ucsi.h"
 
-static struct dentry *ucsi_debugfs_root;
+static struct debugfs_node *ucsi_debugfs_root;
 
 static int ucsi_cmd(void *data, u64 val)
 {

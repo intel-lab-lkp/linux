@@ -116,7 +116,7 @@ static struct drm_driver driver_pci;
 static struct drm_driver driver_platform;
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *nouveau_debugfs_root;
+struct debugfs_node *nouveau_debugfs_root;
 
 /**
  * gsp_logs - list of nvif_log GSP-RM logging buffers

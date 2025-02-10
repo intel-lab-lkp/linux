@@ -64,7 +64,7 @@ int acpi_scan_add_handler_with_hotplug(struct acpi_scan_handler *handler,
 void acpi_scan_hotplug_enabled(struct acpi_hotplug_profile *hotplug, bool val);
 
 #ifdef CONFIG_DEBUG_FS
-extern struct dentry *acpi_debugfs_dir;
+extern struct debugfs_node *acpi_debugfs_dir;
 void acpi_debugfs_init(void);
 #else
 static inline void acpi_debugfs_init(void) { return; }

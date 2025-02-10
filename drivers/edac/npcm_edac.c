@@ -95,7 +95,7 @@ struct priv_data {
 	const struct npcm_platform_data *pdata;
 
 	/* error injection */
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	u8 error_type;
 	u8 location;
 	u8 bit;

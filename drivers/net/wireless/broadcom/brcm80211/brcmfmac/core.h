@@ -132,7 +132,7 @@ struct brcmf_pub {
 
 	struct brcmf_rev_info revinfo;
 #ifdef DEBUG
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 #endif
 
 	struct notifier_block inetaddr_notifier;

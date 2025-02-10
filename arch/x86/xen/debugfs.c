@@ -5,9 +5,9 @@
 
 #include "xen-ops.h"
 
-static struct dentry *d_xen_debug;
+static struct debugfs_node *d_xen_debug;
 
-struct dentry * __init xen_init_debugfs(void)
+struct debugfs_node * __init xen_init_debugfs(void)
 {
 	if (!d_xen_debug)
 		d_xen_debug = debugfs_create_dir("xen", NULL);

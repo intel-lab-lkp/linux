@@ -2630,7 +2630,7 @@ EXPORT_SYMBOL_GPL(hisi_sas_debugfs_dump_count);
 module_param_named(debugfs_dump_count, hisi_sas_debugfs_dump_count, uint, 0444);
 MODULE_PARM_DESC(hisi_sas_debugfs_dump_count, "Number of debugfs dumps to allow");
 
-struct dentry *hisi_sas_debugfs_dir;
+struct debugfs_node *hisi_sas_debugfs_dir;
 EXPORT_SYMBOL_GPL(hisi_sas_debugfs_dir);
 
 static __init int hisi_sas_init(void)

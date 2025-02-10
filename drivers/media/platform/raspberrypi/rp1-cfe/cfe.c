@@ -269,7 +269,7 @@ struct cfe_node {
 };
 
 struct cfe_device {
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct kref kref;
 
 	/* peripheral base address */

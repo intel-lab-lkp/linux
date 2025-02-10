@@ -23,7 +23,7 @@ struct jent_testing {
 	wait_queue_head_t read_wait;
 };
 
-static struct dentry *jent_raw_debugfs_root = NULL;
+static struct debugfs_node *jent_raw_debugfs_root = NULL;
 
 /*************************** Generic Data Handling ****************************/
 

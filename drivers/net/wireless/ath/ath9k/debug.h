@@ -248,7 +248,7 @@ struct ath_stats {
 };
 
 struct ath9k_debug {
-	struct dentry *debugfs_phy;
+	struct debugfs_node *debugfs_phy;
 	u32 regidx;
 	struct ath_stats stats;
 };

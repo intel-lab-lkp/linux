@@ -114,7 +114,7 @@ struct tps23861_data {
 	struct regmap *regmap;
 	u32 shunt_resistor;
 	struct i2c_client *client;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 };
 
 static const struct regmap_config tps23861_regmap_config = {

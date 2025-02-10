@@ -70,7 +70,7 @@ DEFINE_SIMPLE_ATTRIBUTE(pxp_terminate_fops, pxp_terminate_get, pxp_terminate_set
 void intel_pxp_debugfs_register(struct intel_pxp *pxp)
 {
 	struct drm_minor *minor;
-	struct dentry *pxproot;
+	struct debugfs_node *pxproot;
 
 	if (!intel_pxp_is_supported(pxp))
 		return;

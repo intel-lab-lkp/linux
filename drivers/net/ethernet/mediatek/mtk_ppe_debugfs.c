@@ -183,7 +183,7 @@ DEFINE_SHOW_ATTRIBUTE(mtk_ppe_debugfs_foe_bind);
 
 int mtk_ppe_debugfs_init(struct mtk_ppe *ppe, int index)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	snprintf(ppe->dirname, sizeof(ppe->dirname), "ppe%d", index);
 

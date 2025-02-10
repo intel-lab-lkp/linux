@@ -142,7 +142,7 @@ void hidma_debug_init(struct hidma_dev *dmadev)
 {
 	int chidx = 0;
 	struct list_head *position = NULL;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dmadev->debugfs = debugfs_create_dir(dev_name(dmadev->ddev.dev), NULL);
 

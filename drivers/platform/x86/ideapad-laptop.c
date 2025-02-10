@@ -161,7 +161,7 @@ struct ideapad_private {
 	struct input_dev *inputdev;
 	struct backlight_device *blightdev;
 	struct ideapad_dytc_priv *dytc;
-	struct dentry *debug;
+	struct debugfs_node *debug;
 	unsigned long cfg;
 	unsigned long r_touchpad_val;
 	struct {
@@ -531,7 +531,7 @@ DEFINE_SHOW_ATTRIBUTE(debugfs_cfg);
 
 static void ideapad_debugfs_init(struct ideapad_private *priv)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("ideapad", NULL);
 	priv->debug = dir;

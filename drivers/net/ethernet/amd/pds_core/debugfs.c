@@ -5,7 +5,7 @@
 
 #include "core.h"
 
-static struct dentry *pdsc_dir;
+static struct debugfs_node *pdsc_dir;
 
 void pdsc_debugfs_create(void)
 {
@@ -106,7 +106,7 @@ static const struct debugfs_reg32 intr_ctrl_regs[] = {
 
 void pdsc_debugfs_add_qcq(struct pdsc *pdsc, struct pdsc_qcq *qcq)
 {
-	struct dentry *qcq_dentry, *q_dentry, *cq_dentry, *intr_dentry;
+	struct debugfs_node *qcq_dentry, *q_dentry, *cq_dentry, *intr_dentry;
 	struct debugfs_regset32 *intr_ctrl_regset;
 	struct pdsc_queue *q = &qcq->q;
 	struct pdsc_cq *cq = &qcq->cq;

@@ -463,13 +463,13 @@ static const struct file_operations fops_spectral_bins = {
 	.llseek = default_llseek,
 };
 
-static struct dentry *create_buf_file_handler(const char *filename,
-					      struct dentry *parent,
+static struct debugfs_node *create_buf_file_handler(const char *filename,
+					      struct debugfs_node *parent,
 					      umode_t mode,
 					      struct rchan_buf *buf,
 					      int *is_global)
 {
-	struct dentry *buf_file;
+	struct debugfs_node *buf_file;
 
 	buf_file = debugfs_create_file(filename, mode, parent, buf,
 				       &relay_file_operations);
@@ -480,7 +480,7 @@ static struct dentry *create_buf_file_handler(const char *filename,
 	return buf_file;
 }
 
-static int remove_buf_file_handler(struct dentry *dentry)
+static int remove_buf_file_handler(struct debugfs_node *dentry)
 {
 	debugfs_remove(dentry);
 

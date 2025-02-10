@@ -386,7 +386,7 @@ static const struct file_operations debug_registers_fops = {
 	.llseek		= default_llseek,
 };
 
-static struct dentry *ohci_debug_root;
+static struct debugfs_node *ohci_debug_root;
 
 struct debug_buffer {
 	ssize_t (*fill_func)(struct debug_buffer *);	/* fill method */
@@ -762,7 +762,7 @@ static int debug_registers_open(struct inode *inode, struct file *file)
 static inline void create_debug_files (struct ohci_hcd *ohci)
 {
 	struct usb_bus *bus = &ohci_to_hcd(ohci)->self;
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(bus->bus_name, ohci_debug_root);
 	ohci->debug_dir = root;

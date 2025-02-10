@@ -343,7 +343,7 @@ struct tegra_soctherm {
 
 	struct soctherm_throt_cfg throt_cfgs[THROTTLE_SIZE];
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	struct mutex thermctl_lock;
 };
@@ -1449,7 +1449,7 @@ DEFINE_SHOW_ATTRIBUTE(regs);
 static void soctherm_debug_init(struct platform_device *pdev)
 {
 	struct tegra_soctherm *tegra = platform_get_drvdata(pdev);
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir("soctherm", NULL);
 

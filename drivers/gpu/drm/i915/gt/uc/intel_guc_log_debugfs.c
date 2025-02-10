@@ -159,7 +159,7 @@ static const struct file_operations guc_log_relay_fops = {
 };
 
 void intel_guc_log_debugfs_register(struct intel_guc_log *log,
-				    struct dentry *root)
+				    struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "guc_log_dump", &guc_log_dump_fops, NULL },

@@ -520,7 +520,7 @@ struct cache_set {
 	struct list_head	list;
 	struct kobject		kobj;
 	struct kobject		internal;
-	struct dentry		*debug;
+	struct debugfs_node *debug;
 	struct cache_accounting accounting;
 
 	unsigned long		flags;

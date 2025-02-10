@@ -414,7 +414,7 @@ static void rwtm_debugfs_release(void *root)
 
 static void rwtm_register_debugfs(struct mox_rwtm *rwtm)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir("turris-mox-rwtm", NULL);
 

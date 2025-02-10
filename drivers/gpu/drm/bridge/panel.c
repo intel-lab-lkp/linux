@@ -197,7 +197,7 @@ static int panel_bridge_get_modes(struct drm_bridge *bridge,
 }
 
 static void panel_bridge_debugfs_init(struct drm_bridge *bridge,
-				      struct dentry *root)
+				      struct debugfs_node *root)
 {
 	struct panel_bridge *panel_bridge = drm_bridge_to_panel_bridge(bridge);
 	struct drm_panel *panel = panel_bridge->panel;

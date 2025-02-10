@@ -933,7 +933,7 @@ struct hclge_dev {
 	struct hclge_comm_tqp *htqp;
 	struct hclge_vport *vport;
 
-	struct dentry *hclge_dbgfs;
+	struct debugfs_node *hclge_dbgfs;
 
 	struct hnae3_client *nic_client;
 	struct hnae3_client *roce_client;

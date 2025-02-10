@@ -9,7 +9,7 @@
 
 #include "cxl.h"
 
-static struct dentry *cxl_debugfs;
+static struct debugfs_node *cxl_debugfs;
 
 /* Helpers to export CXL mmaped IO registers via debugfs */
 static int debugfs_io_u64_get(void *data, u64 *val)
@@ -27,13 +27,15 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_io_x64, debugfs_io_u64_get, debugfs_io_u64_set,
 			 "0x%016llx\n");
 
 static void debugfs_create_io_x64(const char *name, umode_t mode,
-				  struct dentry *parent, u64 __iomem *value)
+				  struct debugfs_node *parent,
+				  u64 __iomem *value)
 {
 	debugfs_create_file_unsafe(name, mode, parent, (void __force *)value,
 				   &fops_io_x64);
 }
 
-void cxl_debugfs_add_adapter_regs_psl9(struct cxl *adapter, struct dentry *dir)
+void cxl_debugfs_add_adapter_regs_psl9(struct cxl *adapter,
+				       struct debugfs_node *dir)
 {
 	debugfs_create_io_x64("fir1", S_IRUSR, dir, _cxl_p1_addr(adapter, CXL_PSL9_FIR1));
 	debugfs_create_io_x64("fir_mask", 0400, dir,
@@ -46,7 +48,8 @@ void cxl_debugfs_add_adapter_regs_psl9(struct cxl *adapter, struct dentry *dir)
 			      _cxl_p1_addr(adapter, CXL_XSL9_DBG));
 }
 
-void cxl_debugfs_add_adapter_regs_psl8(struct cxl *adapter, struct dentry *dir)
+void cxl_debugfs_add_adapter_regs_psl8(struct cxl *adapter,
+				       struct debugfs_node *dir)
 {
 	debugfs_create_io_x64("fir1", S_IRUSR, dir, _cxl_p1_addr(adapter, CXL_PSL_FIR1));
 	debugfs_create_io_x64("fir2", S_IRUSR, dir, _cxl_p1_addr(adapter, CXL_PSL_FIR2));
@@ -56,7 +59,7 @@ void cxl_debugfs_add_adapter_regs_psl8(struct cxl *adapter, struct dentry *dir)
 
 void cxl_debugfs_adapter_add(struct cxl *adapter)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char buf[32];
 
 	if (!cxl_debugfs)
@@ -77,12 +80,14 @@ void cxl_debugfs_adapter_remove(struct cxl *adapter)
 	debugfs_remove_recursive(adapter->debugfs);
 }
 
-void cxl_debugfs_add_afu_regs_psl9(struct cxl_afu *afu, struct dentry *dir)
+void cxl_debugfs_add_afu_regs_psl9(struct cxl_afu *afu,
+				   struct debugfs_node *dir)
 {
 	debugfs_create_io_x64("serr", S_IRUSR, dir, _cxl_p1n_addr(afu, CXL_PSL_SERR_An));
 }
 
-void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu, struct dentry *dir)
+void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu,
+				   struct debugfs_node *dir)
 {
 	debugfs_create_io_x64("sstp0", S_IRUSR, dir, _cxl_p2n_addr(afu, CXL_SSTP0_An));
 	debugfs_create_io_x64("sstp1", S_IRUSR, dir, _cxl_p2n_addr(afu, CXL_SSTP1_An));
@@ -95,7 +100,7 @@ void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu, struct dentry *dir)
 
 void cxl_debugfs_afu_add(struct cxl_afu *afu)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char buf[32];
 
 	if (!afu->adapter->debugfs)

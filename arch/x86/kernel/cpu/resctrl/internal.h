@@ -266,7 +266,7 @@ struct pseudo_lock_region {
 	unsigned int		size;
 	void			*kmem;
 	unsigned int		minor;
-	struct dentry		*debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct list_head	pm_reqs;
 };
 
@@ -509,7 +509,7 @@ extern struct mutex rdtgroup_mutex;
 
 extern struct rdt_hw_resource rdt_resources_all[];
 extern struct rdtgroup rdtgroup_default;
-extern struct dentry *debugfs_resctrl;
+extern struct debugfs_node *debugfs_resctrl;
 extern enum resctrl_event_id mba_mbps_default_event;
 
 enum resctrl_res_level {

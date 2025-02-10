@@ -523,7 +523,7 @@ static const struct v4l2_subdev_internal_ops csi2_internal_ops = {
 	.init_state = csi2_init_state,
 };
 
-int csi2_init(struct csi2_device *csi2, struct dentry *debugfs)
+int csi2_init(struct csi2_device *csi2, struct debugfs_node *debugfs)
 {
 	unsigned int ret;
 

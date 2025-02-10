@@ -10,7 +10,7 @@
 
 #include "internal.h"
 
-struct dentry *acpi_debugfs_dir;
+struct debugfs_node *acpi_debugfs_dir;
 EXPORT_SYMBOL_GPL(acpi_debugfs_dir);
 
 void __init acpi_debugfs_init(void)

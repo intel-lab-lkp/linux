@@ -118,7 +118,7 @@ struct pnv_phb {
 
 #ifdef CONFIG_DEBUG_FS
 	int			has_dbgfs;
-	struct dentry		*dbgfs;
+	struct debugfs_node *dbgfs;
 #endif
 
 	unsigned int		msi_base;

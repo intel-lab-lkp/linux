@@ -123,7 +123,7 @@ struct hidma_dev {
 	spinlock_t			lock;
 	struct dma_device		ddev;
 
-	struct dentry			*debugfs;
+	struct debugfs_node *debugfs;
 
 	/* sysfs entry for the channel id */
 	struct device_attribute		*chid_attrs;

@@ -603,13 +603,13 @@ static const struct blk_mq_debugfs_attr blk_mq_debugfs_ctx_attrs[] = {
 	{},
 };
 
-static void debugfs_create_files(struct dentry *parent, void *data,
+static void debugfs_create_files(struct debugfs_node *parent, void *data,
 				 const struct blk_mq_debugfs_attr *attr)
 {
 	if (IS_ERR_OR_NULL(parent))
 		return;
 
-	d_inode(parent)->i_private = data;
+	debugfs_node_inode(parent)->i_private = data;
 
 	for (; attr->name; attr++)
 		debugfs_create_file(attr->name, attr->mode, parent,
@@ -652,7 +652,7 @@ void blk_mq_debugfs_register(struct request_queue *q)
 static void blk_mq_debugfs_register_ctx(struct blk_mq_hw_ctx *hctx,
 					struct blk_mq_ctx *ctx)
 {
-	struct dentry *ctx_dir;
+	struct debugfs_node *ctx_dir;
 	char name[20];
 
 	snprintf(name, sizeof(name), "cpu%u", ctx->cpu);

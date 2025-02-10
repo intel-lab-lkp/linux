@@ -68,6 +68,7 @@ int dpu_core_perf_init(struct dpu_core_perf *perf,
 
 struct dpu_kms;
 
-int dpu_core_perf_debugfs_init(struct dpu_kms *dpu_kms, struct dentry *parent);
+int dpu_core_perf_debugfs_init(struct dpu_kms *dpu_kms,
+			       struct debugfs_node *parent);
 
 #endif /* _DPU_CORE_PERF_H_ */

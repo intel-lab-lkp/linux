@@ -99,8 +99,8 @@ static char *debug_help_string;
 static char client_debug_string[ORANGEFS_MAX_DEBUG_STRING_LEN];
 static char client_debug_array_string[ORANGEFS_MAX_DEBUG_STRING_LEN];
 
-static struct dentry *client_debug_dentry;
-static struct dentry *debug_dir;
+static struct debugfs_node *client_debug_dentry;
+static struct debugfs_node *debug_dir;
 
 static unsigned int kernel_mask_set_mod_init;
 static int orangefs_debug_disabled = 1;

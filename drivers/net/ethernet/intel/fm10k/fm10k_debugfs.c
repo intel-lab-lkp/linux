@@ -6,7 +6,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
-static struct dentry *dbg_root;
+static struct debugfs_node *dbg_root;
 
 /* Descriptor Seq Functions */
 

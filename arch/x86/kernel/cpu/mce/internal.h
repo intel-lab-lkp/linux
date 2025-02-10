@@ -36,7 +36,7 @@ bool mce_gen_pool_init(void);
 struct llist_node *mce_gen_pool_prepare_records(void);
 
 int mce_severity(struct mce *a, struct pt_regs *regs, char **msg, bool is_excp);
-struct dentry *mce_get_debugfs_dir(void);
+struct debugfs_node *mce_get_debugfs_dir(void);
 
 extern mce_banks_t mce_banks_ce_disabled;
 

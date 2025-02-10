@@ -24,8 +24,8 @@ struct mlx5hws_context_common_res {
 };
 
 struct mlx5hws_context_debug_info {
-	struct dentry *steering_debugfs;
-	struct dentry *fdb_debugfs;
+	struct debugfs_node *steering_debugfs;
+	struct debugfs_node *fdb_debugfs;
 };
 
 struct mlx5hws_context_vports {

@@ -19,7 +19,7 @@
  * a specific instance of ccree, hence it is
  * global.
  */
-static struct dentry *cc_debugfs_dir;
+static struct debugfs_node *cc_debugfs_dir;
 
 static struct debugfs_reg32 ver_sig_regs[] = {
 	{ .name = "SIGNATURE" }, /* Must be 0th */

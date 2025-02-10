@@ -435,7 +435,7 @@ struct ccp_device {
 	unsigned long total_interrupts;
 
 	/* DebugFS info */
-	struct dentry *debugfs_instance;
+	struct debugfs_node *debugfs_instance;
 };
 
 enum ccp_memtype {

@@ -100,7 +100,7 @@ DEFINE_SHOW_ATTRIBUTE(pt_debugfs_stats);
 
 void ptdma_debugfs_setup(struct pt_device *pt)
 {
-	struct dentry *debugfs_q_instance;
+	struct debugfs_node *debugfs_q_instance;
 	struct ae4_cmd_queue *ae4cmd_q;
 	struct pt_cmd_queue *cmd_q;
 	struct ae4_device *ae4;

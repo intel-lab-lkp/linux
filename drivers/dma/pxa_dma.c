@@ -128,7 +128,7 @@ struct pxad_device {
 	struct pxad_phy			*phys;
 	spinlock_t			phy_lock;	/* Phy association */
 #ifdef CONFIG_DEBUG_FS
-	struct dentry			*dbgfs_root;
+	struct debugfs_node *dbgfs_root;
 	struct dentry			**dbgfs_chan;
 #endif
 };
@@ -318,11 +318,12 @@ DEFINE_SHOW_ATTRIBUTE(chan_state);
 DEFINE_SHOW_ATTRIBUTE(descriptors);
 DEFINE_SHOW_ATTRIBUTE(requester_chan);
 
-static struct dentry *pxad_dbg_alloc_chan(struct pxad_device *pdev,
-					     int ch, struct dentry *chandir)
+static struct debugfs_node *pxad_dbg_alloc_chan(struct pxad_device *pdev,
+					     int ch,
+					     struct debugfs_node *chandir)
 {
 	char chan_name[11];
-	struct dentry *chan;
+	struct debugfs_node *chan;
 	void *dt;
 
 	scnprintf(chan_name, sizeof(chan_name), "%d", ch);
@@ -339,7 +340,7 @@ static struct dentry *pxad_dbg_alloc_chan(struct pxad_device *pdev,
 static void pxad_init_debugfs(struct pxad_device *pdev)
 {
 	int i;
-	struct dentry *chandir;
+	struct debugfs_node *chandir;
 
 	pdev->dbgfs_chan =
 		kmalloc_array(pdev->nr_chans, sizeof(struct dentry *),

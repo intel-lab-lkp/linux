@@ -182,7 +182,7 @@ struct zpci_dev {
 	u8		version;
 	enum pci_bus_speed max_bus_speed;
 
-	struct dentry	*debugfs_dev;
+	struct debugfs_node *debugfs_dev;
 
 	/* IOMMU and passthrough */
 	struct iommu_domain *s390_domain; /* attached IOMMU domain */

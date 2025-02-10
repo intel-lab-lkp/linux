@@ -67,7 +67,7 @@ DEFINE_XARRAY_ALLOC(drm_minors_xa);
  */
 static bool drm_core_init_complete;
 
-static struct dentry *drm_debugfs_root;
+static struct debugfs_node *drm_debugfs_root;
 
 DEFINE_STATIC_SRCU(drm_unplug_srcu);
 

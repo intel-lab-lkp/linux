@@ -153,7 +153,7 @@ struct bdisp_m2m_device {
  * @tot_duration:  total HW processing duration in microsecs
  */
 struct bdisp_dbg {
-	struct dentry           *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 	struct bdisp_node       *copy_node[MAX_NB_NODE];
 	struct bdisp_request    copy_request;
 	ktime_t                 hw_start;

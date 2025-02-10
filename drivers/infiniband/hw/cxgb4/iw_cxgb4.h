@@ -318,7 +318,7 @@ struct c4iw_dev {
 	struct xarray qps;
 	struct xarray mrs;
 	struct mutex db_mutex;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	enum db_state db_state;
 	struct xarray hwtids;
 	struct xarray atids;

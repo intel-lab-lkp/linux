@@ -110,7 +110,7 @@ struct dsps_glue {
 
 	struct dsps_context context;
 	struct debugfs_regset32 regset;
-	struct dentry *dbgfs_root;
+	struct debugfs_node *dbgfs_root;
 };
 
 static const struct debugfs_reg32 dsps_musb_regs[] = {
@@ -407,7 +407,7 @@ out:
 
 static int dsps_musb_dbg_init(struct musb *musb, struct dsps_glue *glue)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	char buf[128];
 
 	sprintf(buf, "%s.dsps", dev_name(musb->controller));

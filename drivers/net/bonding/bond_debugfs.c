@@ -12,7 +12,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
-static struct dentry *bonding_debug_root;
+static struct debugfs_node *bonding_debug_root;
 
 /* Show RLB hash table */
 static int bond_debug_rlb_hash_show(struct seq_file *m, void *v)

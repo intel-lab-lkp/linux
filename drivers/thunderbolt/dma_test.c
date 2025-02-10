@@ -108,7 +108,7 @@ struct dma_test {
 	enum dma_test_test_error error_code;
 	struct completion complete;
 	struct mutex lock;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 };
 
 /* DMA test property directory UUID: 3188cd10-6523-4a5a-a682-fdca07a248d8 */

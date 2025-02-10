@@ -52,8 +52,8 @@ extern const struct sof_probes_ipc_ops ipc3_probe_ops;
 extern const struct sof_probes_ipc_ops ipc4_probe_ops;
 
 struct sof_probes_priv {
-	struct dentry *dfs_points;
-	struct dentry *dfs_points_remove;
+	struct debugfs_node *dfs_points;
+	struct debugfs_node *dfs_points_remove;
 	u32 extractor_stream_tag;
 	struct snd_soc_card card;
 	void *ipc_priv;

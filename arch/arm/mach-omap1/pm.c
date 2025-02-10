@@ -490,7 +490,7 @@ DEFINE_SHOW_ATTRIBUTE(omap_pm_debug);
 
 static void omap_pm_init_debugfs(void)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	d = debugfs_create_dir("pm_debug", NULL);
 	debugfs_create_file("omap_pm", S_IWUSR | S_IRUGO, d, NULL,

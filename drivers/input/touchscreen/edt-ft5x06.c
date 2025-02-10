@@ -120,7 +120,7 @@ struct edt_ft5x06_ts_data {
 	struct regmap *regmap;
 
 #if defined(CONFIG_DEBUG_FS)
-	struct dentry *debug_dir;
+	struct debugfs_node *debug_dir;
 	u8 *raw_buffer;
 	size_t raw_bufsize;
 #endif

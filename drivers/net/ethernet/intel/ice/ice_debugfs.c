@@ -7,7 +7,7 @@
 #include <linux/vmalloc.h>
 #include "ice.h"
 
-static struct dentry *ice_debugfs_root;
+static struct debugfs_node *ice_debugfs_root;
 
 /* create a define that has an extra module that doesn't really exist. this
  * is so we can add a module 'all' to easily enable/disable all the modules
@@ -584,7 +584,7 @@ static const struct file_operations ice_debugfs_data_fops = {
 void ice_debugfs_fwlog_init(struct ice_pf *pf)
 {
 	const char *name = pci_name(pf->pdev);
-	struct dentry *fw_modules_dir;
+	struct debugfs_node *fw_modules_dir;
 	struct dentry **fw_modules;
 	int i;
 

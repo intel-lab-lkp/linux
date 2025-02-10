@@ -3843,8 +3843,8 @@ DEFINE_SHOW_ATTRIBUTE(debugfs_itct_cache_v3_hw);
 static void debugfs_create_files_v3_hw(struct hisi_hba *hisi_hba, int index)
 {
 	u64 *debugfs_timestamp;
-	struct dentry *dump_dentry;
-	struct dentry *dentry;
+	struct debugfs_node *dump_dentry;
+	struct debugfs_node *dentry;
 	char name[256];
 	int p;
 	int c;
@@ -4507,7 +4507,7 @@ static void debugfs_fifo_init_v3_hw(struct hisi_hba *hisi_hba)
 
 	for (phy_no = 0; phy_no < hisi_hba->n_phy; phy_no++) {
 		struct hisi_sas_phy *phy = &hisi_hba->phy[phy_no];
-		struct dentry *port_dentry;
+		struct debugfs_node *port_dentry;
 		char name[256];
 		u32 val;
 
@@ -4739,7 +4739,7 @@ static int debugfs_snapshot_regs_v3_hw(struct hisi_hba *hisi_hba)
 
 static void debugfs_phy_down_cnt_init_v3_hw(struct hisi_hba *hisi_hba)
 {
-	struct dentry *dir = debugfs_create_dir("phy_down_cnt",
+	struct debugfs_node *dir = debugfs_create_dir("phy_down_cnt",
 						hisi_hba->debugfs_dir);
 	char name[16];
 	int phy_no;
@@ -4754,7 +4754,7 @@ static void debugfs_phy_down_cnt_init_v3_hw(struct hisi_hba *hisi_hba)
 
 static void debugfs_bist_init_v3_hw(struct hisi_hba *hisi_hba)
 {
-	struct dentry *ports_dentry;
+	struct debugfs_node *ports_dentry;
 	int phy_no;
 
 	hisi_hba->debugfs_bist_dentry =
@@ -4793,8 +4793,8 @@ static void debugfs_bist_init_v3_hw(struct hisi_hba *hisi_hba)
 	ports_dentry = debugfs_create_dir("port", hisi_hba->debugfs_bist_dentry);
 
 	for (phy_no = 0; phy_no < hisi_hba->n_phy; phy_no++) {
-		struct dentry *port_dentry;
-		struct dentry *ffe_dentry;
+		struct debugfs_node *port_dentry;
+		struct debugfs_node *ffe_dentry;
 		char name[256];
 		int i;
 

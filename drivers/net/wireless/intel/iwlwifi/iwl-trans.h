@@ -938,7 +938,7 @@ struct iwl_trans {
 	struct kmem_cache *dev_cmd_pool;
 	char dev_cmd_pool_name[50];
 
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 
 #ifdef CONFIG_LOCKDEP
 	struct lockdep_map sync_cmd_lockdep_map;

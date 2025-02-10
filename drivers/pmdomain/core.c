@@ -270,7 +270,7 @@ static void genpd_sd_counter_inc(struct generic_pm_domain *genpd)
 }
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *genpd_debugfs_dir;
+static struct debugfs_node *genpd_debugfs_dir;
 
 static void genpd_debug_add(struct generic_pm_domain *genpd);
 
@@ -3582,7 +3582,7 @@ DEFINE_SHOW_ATTRIBUTE(perf_state);
 
 static void genpd_debug_add(struct generic_pm_domain *genpd)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	if (!genpd_debugfs_dir)
 		return;

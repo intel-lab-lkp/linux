@@ -869,7 +869,7 @@ void picolcd_init_devfs(struct picolcd_data *data,
 
 void picolcd_exit_devfs(struct picolcd_data *data)
 {
-	struct dentry *dent;
+	struct debugfs_node *dent;
 
 	dent = data->debug_reset;
 	data->debug_reset = NULL;

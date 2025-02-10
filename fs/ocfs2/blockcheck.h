@@ -22,7 +22,7 @@ struct ocfs2_blockcheck_stats {
 	 * debugfs entries, used if this is passed to
 	 * ocfs2_blockcheck_stats_debugfs_install()
 	 */
-	struct dentry *b_debug_dir;	/* Parent of the debugfs  files */
+	struct debugfs_node *b_debug_dir;	/* Parent of the debugfs  files */
 };
 
 
@@ -52,7 +52,7 @@ int ocfs2_block_check_validate_bhs(struct buffer_head **bhs, int nr,
 
 /* Debug Initialization */
 void ocfs2_blockcheck_stats_debugfs_install(struct ocfs2_blockcheck_stats *stats,
-					    struct dentry *parent);
+					    struct debugfs_node *parent);
 void ocfs2_blockcheck_stats_debugfs_remove(struct ocfs2_blockcheck_stats *stats);
 
 /*

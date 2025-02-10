@@ -261,7 +261,7 @@ struct nitrox_device {
 	struct nitrox_stats stats;
 	struct nitrox_hw hw;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 };
 

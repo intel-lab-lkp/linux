@@ -785,7 +785,7 @@ static const struct net_proto_family bt_sock_family_ops = {
 	.create	= bt_sock_create,
 };
 
-struct dentry *bt_debugfs;
+struct debugfs_node *bt_debugfs;
 EXPORT_SYMBOL_GPL(bt_debugfs);
 
 #define VERSION __stringify(BT_SUBSYS_VERSION) "." \

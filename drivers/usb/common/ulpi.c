@@ -271,12 +271,12 @@ static int ulpi_regs_show(struct seq_file *seq, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(ulpi_regs);
 
-static struct dentry *ulpi_root;
+static struct debugfs_node *ulpi_root;
 
 static int ulpi_register(struct device *dev, struct ulpi *ulpi)
 {
 	int ret;
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	ulpi->dev.parent = dev; /* needed early for ops */
 	ulpi->dev.bus = &ulpi_bus;

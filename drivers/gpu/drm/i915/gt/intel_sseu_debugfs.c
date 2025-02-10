@@ -288,7 +288,8 @@ static int sseu_topology_show(struct seq_file *m, void *unused)
 }
 DEFINE_INTEL_GT_DEBUGFS_ATTRIBUTE(sseu_topology);
 
-void intel_sseu_debugfs_register(struct intel_gt *gt, struct dentry *root)
+void intel_sseu_debugfs_register(struct intel_gt *gt,
+				 struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "sseu_status", &sseu_status_fops, NULL },

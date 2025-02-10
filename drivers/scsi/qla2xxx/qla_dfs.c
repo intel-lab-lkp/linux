@@ -8,7 +8,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 
-static struct dentry *qla2x00_dfs_root;
+static struct debugfs_node *qla2x00_dfs_root;
 static atomic_t qla2x00_dfs_root_count;
 
 #define QLA_DFS_RPORT_DEVLOSS_TMO	1

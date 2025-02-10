@@ -121,18 +121,18 @@ static const struct file_operations intel_display_param_uint_fops_ro = {
 
 #define RO(mode) (((mode) & 0222) == 0)
 
-__maybe_unused static struct dentry *
+__maybe_unused static struct debugfs_node *
 intel_display_debugfs_create_int(const char *name, umode_t mode,
-			struct dentry *parent, int *value)
+			struct debugfs_node *parent, int *value)
 {
 	return debugfs_create_file_unsafe(name, mode, parent, value,
 					  RO(mode) ? &intel_display_param_int_fops_ro :
 					  &intel_display_param_int_fops);
 }
 
-__maybe_unused static struct dentry *
+__maybe_unused static struct debugfs_node *
 intel_display_debugfs_create_uint(const char *name, umode_t mode,
-			 struct dentry *parent, unsigned int *value)
+			 struct debugfs_node *parent, unsigned int *value)
 {
 	return debugfs_create_file_unsafe(name, mode, parent, value,
 					  RO(mode) ? &intel_display_param_uint_fops_ro :
@@ -155,7 +155,7 @@ intel_display_debugfs_create_uint(const char *name, umode_t mode,
 void intel_display_debugfs_params(struct intel_display *display)
 {
 	struct drm_minor *minor = display->drm->primary;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char dirname[16];
 
 	snprintf(dirname, sizeof(dirname), "%s_params", display->drm->driver->name);

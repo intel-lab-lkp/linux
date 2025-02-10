@@ -71,7 +71,7 @@ DEFINE_SHOW_ATTRIBUTE(tegra_cbb_err);
 
 static void tegra_cbb_err_debugfs_init(struct tegra_cbb *cbb)
 {
-	static struct dentry *root;
+	static struct debugfs_node *root;
 
 	if (!root)
 		root = debugfs_create_file("tegra_cbb_err", 0444, NULL, cbb, &tegra_cbb_err_fops);

@@ -278,7 +278,7 @@ static int meson_crypto_probe(struct platform_device *pdev)
 		goto error_alg;
 
 	if (IS_ENABLED(CONFIG_CRYPTO_DEV_AMLOGIC_GXL_DEBUG)) {
-		struct dentry *dbgfs_dir;
+		struct debugfs_node *dbgfs_dir;
 
 		dbgfs_dir = debugfs_create_dir("gxl-crypto", NULL);
 		debugfs_create_file("stats", 0444, dbgfs_dir, mc, &meson_debugfs_fops);

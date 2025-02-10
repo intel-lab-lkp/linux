@@ -93,7 +93,7 @@ struct kraken3_channel_info {
 struct kraken3_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct mutex buffer_lock;	/* For locking access to buffer */
 	struct mutex z53_status_request_lock;
 	struct completion fw_version_processed;

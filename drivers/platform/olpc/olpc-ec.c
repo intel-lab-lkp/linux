@@ -43,7 +43,7 @@ struct olpc_ec_priv {
 	struct list_head cmd_q;
 	spinlock_t cmd_q_lock;
 
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 
 	/*
 	 * EC event mask to be applied during suspend (defining wakeup
@@ -327,9 +327,9 @@ static const struct file_operations ec_dbgfs_ops = {
 	.read = ec_dbgfs_cmd_read,
 };
 
-static struct dentry *olpc_ec_setup_debugfs(void)
+static struct debugfs_node *olpc_ec_setup_debugfs(void)
 {
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 
 	dbgfs_dir = debugfs_create_dir("olpc-ec", NULL);
 	debugfs_create_file("cmd", 0600, dbgfs_dir, NULL, &ec_dbgfs_ops);
@@ -339,7 +339,7 @@ static struct dentry *olpc_ec_setup_debugfs(void)
 
 #else
 
-static struct dentry *olpc_ec_setup_debugfs(void)
+static struct debugfs_node *olpc_ec_setup_debugfs(void)
 {
 	return NULL;
 }

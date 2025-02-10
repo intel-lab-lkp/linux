@@ -53,7 +53,7 @@ struct fjes_adapter {
 	struct fjes_hw hw;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dbg_adapter;
+	struct debugfs_node *dbg_adapter;
 #endif
 };
 

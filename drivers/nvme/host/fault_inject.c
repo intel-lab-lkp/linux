@@ -19,7 +19,7 @@ module_param(fail_request, charp, 0000);
 void nvme_fault_inject_init(struct nvme_fault_inject *fault_inj,
 			    const char *dev_name)
 {
-	struct dentry *dir, *parent;
+	struct debugfs_node *dir, *parent;
 	struct fault_attr *attr = &fault_inj->attr;
 
 	/* set default fault injection attribute */

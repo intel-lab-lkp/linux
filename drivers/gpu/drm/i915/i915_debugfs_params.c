@@ -207,27 +207,27 @@ static const struct file_operations i915_param_charp_fops_ro = {
 
 #define RO(mode) (((mode) & 0222) == 0)
 
-static struct dentry *
+static struct debugfs_node *
 i915_debugfs_create_int(const char *name, umode_t mode,
-			struct dentry *parent, int *value)
+			struct debugfs_node *parent, int *value)
 {
 	return debugfs_create_file_unsafe(name, mode, parent, value,
 					  RO(mode) ? &i915_param_int_fops_ro :
 					  &i915_param_int_fops);
 }
 
-static struct dentry *
+static struct debugfs_node *
 i915_debugfs_create_uint(const char *name, umode_t mode,
-			 struct dentry *parent, unsigned int *value)
+			 struct debugfs_node *parent, unsigned int *value)
 {
 	return debugfs_create_file_unsafe(name, mode, parent, value,
 					  RO(mode) ? &i915_param_uint_fops_ro :
 					  &i915_param_uint_fops);
 }
 
-static struct dentry *
+static struct debugfs_node *
 i915_debugfs_create_charp(const char *name, umode_t mode,
-			  struct dentry *parent, char **value)
+			  struct debugfs_node *parent, char **value)
 {
 	return debugfs_create_file(name, mode, parent, value,
 				   RO(mode) ? &i915_param_charp_fops_ro :
@@ -246,11 +246,11 @@ i915_debugfs_create_charp(const char *name, umode_t mode,
 	} while(0)
 
 /* add a subdirectory with files for each i915 param */
-struct dentry *i915_debugfs_params(struct drm_i915_private *i915)
+struct debugfs_node *i915_debugfs_params(struct drm_i915_private *i915)
 {
 	struct drm_minor *minor = i915->drm.primary;
 	struct i915_params *params = &i915->params;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("i915_params", minor->debugfs_root);
 	if (IS_ERR(dir))

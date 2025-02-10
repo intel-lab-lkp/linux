@@ -147,12 +147,12 @@ struct ceph_fs_client {
 
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *debugfs_dentry_lru, *debugfs_caps;
-	struct dentry *debugfs_congestion_kb;
-	struct dentry *debugfs_bdi;
+	struct debugfs_node *debugfs_congestion_kb;
+	struct debugfs_node *debugfs_bdi;
 	struct dentry *debugfs_mdsc, *debugfs_mdsmap;
-	struct dentry *debugfs_status;
-	struct dentry *debugfs_mds_sessions;
-	struct dentry *debugfs_metrics_dir;
+	struct debugfs_node *debugfs_status;
+	struct debugfs_node *debugfs_mds_sessions;
+	struct debugfs_node *debugfs_metrics_dir;
 #endif
 
 #ifdef CONFIG_CEPH_FSCACHE

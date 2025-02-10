@@ -111,7 +111,7 @@ struct fusb302_chip {
 	u32 snk_pdo[PDO_MAX_OBJECTS];
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	/* lock for log buffer access */
 	struct mutex logbuffer_lock;
 	int logbuffer_head;

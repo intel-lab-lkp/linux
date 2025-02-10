@@ -111,8 +111,8 @@ struct visl_dev {
 	struct v4l2_m2m_dev	*m2m_dev;
 
 #ifdef CONFIG_VISL_DEBUGFS
-	struct dentry		*debugfs_root;
-	struct dentry		*bitstream_debugfs;
+	struct debugfs_node *debugfs_root;
+	struct debugfs_node *bitstream_debugfs;
 	struct list_head	bitstream_blobs;
 
 	/* Protects the "blob" list */

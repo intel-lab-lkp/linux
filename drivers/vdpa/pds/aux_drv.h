@@ -18,7 +18,7 @@ struct pds_vdpa_aux {
 	struct pds_vdpa_ident ident;
 
 	int vf_id;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct virtio_pci_modern_device vd_mdev;
 
 	int nintrs;

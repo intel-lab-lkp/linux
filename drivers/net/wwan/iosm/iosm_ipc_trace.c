@@ -31,9 +31,9 @@ void ipc_trace_port_rx(struct iosm_imem *ipc_imem, struct sk_buff *skb)
 }
 
 /* Creates relay file in debugfs. */
-static struct dentry *
+static struct debugfs_node *
 ipc_trace_create_buf_file_handler(const char *filename,
-				  struct dentry *parent,
+				  struct debugfs_node *parent,
 				  umode_t mode,
 				  struct rchan_buf *buf,
 				  int *is_global)
@@ -44,7 +44,7 @@ ipc_trace_create_buf_file_handler(const char *filename,
 }
 
 /* Removes relay file from debugfs. */
-static int ipc_trace_remove_buf_file_handler(struct dentry *dentry)
+static int ipc_trace_remove_buf_file_handler(struct debugfs_node *dentry)
 {
 	debugfs_remove(dentry);
 	return 0;

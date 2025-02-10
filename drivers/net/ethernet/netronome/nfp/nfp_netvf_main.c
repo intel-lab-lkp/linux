@@ -32,7 +32,7 @@ struct nfp_net_vf {
 				      NFP_NET_MAX_TX_RINGS];
 	u8 __iomem *q_bar;
 
-	struct dentry *ddir;
+	struct debugfs_node *ddir;
 };
 
 static const char nfp_net_driver_name[] = "nfp_netvf";

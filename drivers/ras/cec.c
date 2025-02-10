@@ -480,7 +480,7 @@ DEFINE_SHOW_ATTRIBUTE(array);
 
 static int __init create_debugfs_nodes(void)
 {
-	struct dentry *d, *pfn, *decay, *count, *array, *dfs;
+	struct debugfs_node *d, *pfn, *decay, *count, *array, *dfs;
 
 	dfs = ras_get_debugfs_root();
 	if (!dfs) {

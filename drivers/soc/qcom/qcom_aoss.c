@@ -90,8 +90,8 @@ struct qmp {
 
 	struct clk_hw qdss_clk;
 	struct qmp_cooling_device *cooling_devs;
-	struct dentry *debugfs_root;
-	struct dentry *debugfs_files[QMP_DEBUGFS_FILES];
+	struct debugfs_node *debugfs_root;
+	struct debugfs_node *debugfs_files[QMP_DEBUGFS_FILES];
 };
 
 static void qmp_kick(struct qmp *qmp)

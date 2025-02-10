@@ -26,7 +26,7 @@ static const struct class phy_class = {
 	.dev_release = phy_release,
 };
 
-static struct dentry *phy_debugfs_root;
+static struct debugfs_node *phy_debugfs_root;
 static DEFINE_MUTEX(phy_provider_mutex);
 static LIST_HEAD(phy_provider_list);
 static LIST_HEAD(phys);

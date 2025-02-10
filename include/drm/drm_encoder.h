@@ -197,7 +197,7 @@ struct drm_encoder {
 	 *
 	 * Debugfs directory for this CRTC.
 	 */
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 };
 
 #define obj_to_encoder(x) container_of(x, struct drm_encoder, base)

@@ -37,7 +37,7 @@
 #define IS_SUPPORTED_ATTR(f, name) ((f & DEVFREQ_GOV_ATTR_##name) ? true : false)
 
 static struct class *devfreq_class;
-static struct dentry *devfreq_debugfs;
+static struct debugfs_node *devfreq_debugfs;
 
 /*
  * devfreq core provides delayed work based load monitoring helper

@@ -3488,7 +3488,7 @@ static const struct file_operations edp_ilr_debugfs_fops = {
 void connector_debugfs_init(struct amdgpu_dm_connector *connector)
 {
 	int i;
-	struct dentry *dir = connector->base.debugfs_entry;
+	struct debugfs_node *dir = connector->base.debugfs_entry;
 
 	if (connector->base.connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
 	    connector->base.connector_type == DRM_MODE_CONNECTOR_eDP) {
@@ -3724,7 +3724,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(crc_win_update_fops, crc_win_update_get,
 void crtc_debugfs_init(struct drm_crtc *crtc)
 {
 #ifdef CONFIG_DRM_AMD_SECURE_DISPLAY
-	struct dentry *dir = debugfs_lookup("crc", crtc->debugfs_entry);
+	struct debugfs_node *dir = debugfs_lookup("crc", crtc->debugfs_entry);
 
 	if (!dir)
 		return;
@@ -3739,7 +3739,7 @@ void crtc_debugfs_init(struct drm_crtc *crtc)
 				   &crc_win_y_end_fops);
 	debugfs_create_file_unsafe("crc_win_update", 0644, dir, crtc,
 				   &crc_win_update_fops);
-	dput(dir);
+	debugfs_node_put(dir);
 #endif
 	debugfs_create_file("amdgpu_current_bpc", 0644, crtc->debugfs_entry,
 			    crtc, &amdgpu_current_bpc_fops);
@@ -4193,7 +4193,7 @@ void dtn_debugfs_init(struct amdgpu_device *adev)
 	};
 
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 
 	debugfs_create_file("amdgpu_mst_topology", 0444, root,
 			    adev, &mst_topo_fops);

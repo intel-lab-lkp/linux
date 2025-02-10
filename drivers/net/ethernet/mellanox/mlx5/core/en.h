@@ -936,7 +936,7 @@ struct mlx5e_priv {
 	struct mlx5e_scratchpad    scratchpad;
 	struct mlx5e_htb          *htb;
 	struct mlx5e_mqprio_rl    *mqprio_rl;
-	struct dentry             *dfs_root;
+	struct debugfs_node *dfs_root;
 	struct mlx5_devcom_comp_dev *devcom;
 };
 

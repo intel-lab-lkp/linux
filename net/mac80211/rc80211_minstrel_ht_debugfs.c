@@ -325,7 +325,8 @@ static const struct file_operations minstrel_ht_stat_csv_fops = {
 };
 
 void
-minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir)
+minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta,
+			    struct debugfs_node *dir)
 {
 	debugfs_create_file("rc_stats", 0444, dir, priv_sta,
 			    &minstrel_ht_stat_fops);

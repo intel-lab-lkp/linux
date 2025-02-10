@@ -19,7 +19,7 @@ struct hfi1_ibdev;
 #if defined(CONFIG_FAULT_INJECTION) && defined(CONFIG_FAULT_INJECTION_DEBUG_FS)
 struct fault {
 	struct fault_attr attr;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	u64 n_rxfaults[(1U << BITS_PER_BYTE)];
 	u64 n_txfaults[(1U << BITS_PER_BYTE)];
 	u64 fault_skip;

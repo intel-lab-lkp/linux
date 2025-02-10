@@ -163,7 +163,7 @@ struct avs_dev {
 	u32 aging_timer_period;
 	u32 fifo_full_timer_period;
 	u32 logged_resources;	/* context dependent: core or library */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	/* probes */
 	struct hdac_ext_stream *extractor;
 	unsigned int num_probe_streams;

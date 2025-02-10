@@ -1393,7 +1393,7 @@ static const struct file_operations i915_joiner_fops = {
 void intel_connector_debugfs_add(struct intel_connector *connector)
 {
 	struct drm_i915_private *i915 = to_i915(connector->base.dev);
-	struct dentry *root = connector->base.debugfs_entry;
+	struct debugfs_node *root = connector->base.debugfs_entry;
 	int connector_type = connector->base.connector_type;
 
 	/* The connector must have been registered beforehands. */
@@ -1453,7 +1453,7 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
  */
 void intel_crtc_debugfs_add(struct intel_crtc *crtc)
 {
-	struct dentry *root = crtc->base.debugfs_entry;
+	struct debugfs_node *root = crtc->base.debugfs_entry;
 
 	if (!root)
 		return;

@@ -276,7 +276,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(adis16475_flash_count_fops,
 static void adis16475_debugfs_init(struct iio_dev *indio_dev)
 {
 	struct adis16475 *st = iio_priv(indio_dev);
-	struct dentry *d = iio_get_debugfs_dentry(indio_dev);
+	struct debugfs_node *d = iio_get_debugfs_dentry(indio_dev);
 
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))
 		return;

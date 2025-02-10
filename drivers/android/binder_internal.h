@@ -445,7 +445,7 @@ struct binder_proc {
 	int requested_threads_started;
 	int tmp_ref;
 	long default_priority;
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 	struct binder_alloc alloc;
 	struct binder_context *context;
 	spinlock_t inner_lock;

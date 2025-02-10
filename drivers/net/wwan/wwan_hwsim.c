@@ -29,8 +29,8 @@ static const struct class wwan_hwsim_class = {
 	.name = "wwan_hwsim",
 };
 
-static struct dentry *wwan_hwsim_debugfs_topdir;
-static struct dentry *wwan_hwsim_debugfs_devcreate;
+static struct debugfs_node *wwan_hwsim_debugfs_topdir;
+static struct debugfs_node *wwan_hwsim_debugfs_devcreate;
 
 static DEFINE_SPINLOCK(wwan_hwsim_devs_lock);
 static LIST_HEAD(wwan_hwsim_devs);
@@ -42,8 +42,8 @@ struct wwan_hwsim_dev {
 	unsigned int id;
 	struct device dev;
 	struct work_struct del_work;
-	struct dentry *debugfs_topdir;
-	struct dentry *debugfs_portcreate;
+	struct debugfs_node *debugfs_topdir;
+	struct debugfs_node *debugfs_portcreate;
 	spinlock_t ports_lock;	/* Serialize ports creation/deletion */
 	unsigned int port_idx;
 	struct list_head ports;
@@ -55,7 +55,7 @@ struct wwan_hwsim_port {
 	struct wwan_hwsim_dev *dev;
 	struct wwan_port *wwan;
 	struct work_struct del_work;
-	struct dentry *debugfs_topdir;
+	struct debugfs_node *debugfs_topdir;
 	enum {			/* AT command parser state */
 		AT_PARSER_WAIT_A,
 		AT_PARSER_WAIT_T,

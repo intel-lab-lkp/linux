@@ -46,9 +46,9 @@ struct ipib_info {
 
 static struct debug_info *zcore_dbf;
 static int hsa_available;
-static struct dentry *zcore_dir;
-static struct dentry *zcore_reipl_file;
-static struct dentry *zcore_hsa_file;
+static struct debugfs_node *zcore_dir;
+static struct debugfs_node *zcore_reipl_file;
+static struct debugfs_node *zcore_hsa_file;
 static struct ipl_parameter_block *zcore_ipl_block;
 static unsigned long os_info_flags;
 

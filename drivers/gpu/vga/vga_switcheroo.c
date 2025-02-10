@@ -151,7 +151,7 @@ struct vgasr_priv {
 	bool delayed_switch_active;
 	enum vga_switcheroo_client_id delayed_client_id;
 
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 
 	int registered_clients;
 	struct list_head clients;

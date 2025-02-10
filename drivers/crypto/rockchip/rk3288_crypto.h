@@ -197,8 +197,8 @@
 struct rockchip_ip {
 	struct list_head	dev_list;
 	spinlock_t		lock; /* Control access to dev_list */
-	struct dentry		*dbgfs_dir;
-	struct dentry		*dbgfs_stats;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_stats;
 };
 
 struct rk_clks {

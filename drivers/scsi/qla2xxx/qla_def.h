@@ -2678,7 +2678,7 @@ typedef struct fc_port {
 	u16 n2n_link_reset_cnt;
 	u16 n2n_chip_reset;
 
-	struct dentry *dfs_rport_dir;
+	struct debugfs_node *dfs_rport_dir;
 
 	u64 tgt_short_link_down_cnt;
 	u64 tgt_link_down_time;
@@ -4036,9 +4036,9 @@ struct qlt_hw_data {
 
 	uint8_t tgt_node_name[WWN_SIZE];
 
-	struct dentry *dfs_tgt_sess;
-	struct dentry *dfs_tgt_port_database;
-	struct dentry *dfs_naqp;
+	struct debugfs_node *dfs_tgt_sess;
+	struct debugfs_node *dfs_tgt_port_database;
+	struct debugfs_node *dfs_naqp;
 
 	struct list_head q_full_list;
 	uint32_t num_pend_cmds;
@@ -4627,10 +4627,10 @@ struct qla_hw_data {
 	int		mctp_dumped;
 	int		mctp_dump_reading;
 	uint32_t	chain_offset;
-	struct dentry *dfs_dir;
-	struct dentry *dfs_fce;
-	struct dentry *dfs_tgt_counters;
-	struct dentry *dfs_fw_resource_cnt;
+	struct debugfs_node *dfs_dir;
+	struct debugfs_node *dfs_fce;
+	struct debugfs_node *dfs_tgt_counters;
+	struct debugfs_node *dfs_fw_resource_cnt;
 
 	dma_addr_t	fce_dma;
 	void		*fce;
@@ -5095,7 +5095,7 @@ typedef struct scsi_qla_host {
 	uint16_t ql2xexchoffld;
 	uint16_t ql2xiniexchg;
 
-	struct dentry *dfs_rport_root;
+	struct debugfs_node *dfs_rport_root;
 
 	struct purex_list {
 		struct list_head head;

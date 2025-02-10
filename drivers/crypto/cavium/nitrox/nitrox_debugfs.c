@@ -59,7 +59,7 @@ void nitrox_debugfs_exit(struct nitrox_device *ndev)
 
 void nitrox_debugfs_init(struct nitrox_device *ndev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(KBUILD_MODNAME, NULL);
 

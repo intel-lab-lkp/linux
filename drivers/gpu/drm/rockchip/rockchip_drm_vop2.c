@@ -3005,7 +3005,7 @@ static struct drm_info_list vop2_debugfs_list[] = {
 
 static void vop2_debugfs_init(struct vop2 *vop2, struct drm_minor *minor)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	unsigned int i;
 
 	root = debugfs_create_dir("vop2", minor->debugfs_root);

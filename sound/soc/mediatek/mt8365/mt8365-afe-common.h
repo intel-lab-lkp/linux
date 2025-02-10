@@ -345,7 +345,7 @@ struct mt8365_afe_private {
 	spinlock_t afe_ctrl_lock;
 	struct mutex afe_clk_mutex;	/* Protect & sync APLL TUNER registers access*/
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_dentry[MT8365_AFE_DEBUGFS_NUM];
+	struct debugfs_node *debugfs_dentry[MT8365_AFE_DEBUGFS_NUM];
 #endif
 	int apll_tuner_ref_cnt[MT8365_AFE_APLL_NUM];
 	unsigned int tdm_out_mode;

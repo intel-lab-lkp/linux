@@ -2376,7 +2376,7 @@ static void brcmf_pcie_debugfs_create(struct device *dev)
 	struct brcmf_pub *drvr = bus_if->drvr;
 	struct brcmf_pciedev *pcie_bus_dev = bus_if->bus_priv.pcie;
 	struct brcmf_pciedev_info *devinfo = pcie_bus_dev->devinfo;
-	struct dentry *dentry = brcmf_debugfs_get_devdir(drvr);
+	struct debugfs_node *dentry = brcmf_debugfs_get_devdir(drvr);
 
 	if (IS_ERR_OR_NULL(dentry))
 		return;

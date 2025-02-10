@@ -185,13 +185,14 @@ struct dma_chan *dma_get_any_slave_channel(struct dma_device *device);
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-static inline struct dentry *
+static inline struct debugfs_node *
 dmaengine_get_debugfs_root(struct dma_device *dma_dev) {
 	return dma_dev->dbg_dev_root;
 }
 #else
 struct dentry;
-static inline struct dentry *
+#define debugfs_node dentry
+static inline struct debugfs_node *
 dmaengine_get_debugfs_root(struct dma_device *dma_dev)
 {
 	return NULL;

@@ -40,7 +40,7 @@ struct mtk_wed_hw {
 	void __iomem *wdma;
 	phys_addr_t wdma_phy;
 	struct regmap *mirror;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct mtk_wed_device *wed_dev;
 	struct mtk_wed_wo *wed_wo;
 	struct mtk_wed_amsdu *wed_amsdu;

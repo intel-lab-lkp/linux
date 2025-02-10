@@ -839,7 +839,7 @@ static const struct file_operations rs_sta_dbgfs_stats_table_ops = {
 };
 
 static void
-il3945_add_debugfs(void *il, void *il_sta, struct dentry *dir)
+il3945_add_debugfs(void *il, void *il_sta, struct debugfs_node *dir)
 {
 	struct il3945_rs_sta *lq_sta = il_sta;
 

@@ -23,7 +23,8 @@ static int huc_info_show(struct seq_file *m, void *data)
 }
 DEFINE_INTEL_GT_DEBUGFS_ATTRIBUTE(huc_info);
 
-void intel_huc_debugfs_register(struct intel_huc *huc, struct dentry *root)
+void intel_huc_debugfs_register(struct intel_huc *huc,
+				struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "huc_info", &huc_info_fops, NULL },

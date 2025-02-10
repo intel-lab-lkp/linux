@@ -13,7 +13,7 @@
 #include "nvmet.h"
 #include "debugfs.h"
 
-static struct dentry *nvmet_debugfs;
+static struct debugfs_node *nvmet_debugfs;
 
 #define NVMET_DEBUGFS_ATTR(field) \
 	static int field##_open(struct inode *inode, struct file *file) \
@@ -135,7 +135,7 @@ NVMET_DEBUGFS_ATTR(nvmet_ctrl_host_traddr);
 int nvmet_debugfs_ctrl_setup(struct nvmet_ctrl *ctrl)
 {
 	char name[32];
-	struct dentry *parent = ctrl->subsys->debugfs_dir;
+	struct debugfs_node *parent = ctrl->subsys->debugfs_dir;
 	int ret;
 
 	if (!parent)
@@ -185,7 +185,7 @@ void nvmet_debugfs_subsys_free(struct nvmet_subsys *subsys)
 
 int __init nvmet_init_debugfs(void)
 {
-	struct dentry *parent;
+	struct debugfs_node *parent;
 
 	parent = debugfs_create_dir("nvmet", NULL);
 	if (IS_ERR(parent)) {

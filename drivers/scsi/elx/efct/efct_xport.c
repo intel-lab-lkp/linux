@@ -7,7 +7,7 @@
 #include "efct_driver.h"
 #include "efct_unsol.h"
 
-static struct dentry *efct_debugfs_root;
+static struct debugfs_node *efct_debugfs_root;
 static atomic_t efct_debugfs_count;
 
 static const struct scsi_host_template efct_template = {

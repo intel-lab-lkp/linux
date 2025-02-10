@@ -252,7 +252,7 @@ struct snd_soc_component {
 	struct snd_compr_stream  *mark_compr_open;
 	void *mark_pm;
 
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	const char *debugfs_prefix;
 };
 

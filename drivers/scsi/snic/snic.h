@@ -318,9 +318,9 @@ struct snic {
 
 	/* platform specific */
 #ifdef CONFIG_SCSI_SNIC_DEBUG_FS
-	struct dentry *stats_host;	/* Per snic debugfs root */
-	struct dentry *stats_file;	/* Per snic debugfs file */
-	struct dentry *reset_stats_file;/* Per snic reset stats file */
+	struct debugfs_node *stats_host;	/* Per snic debugfs root */
+	struct debugfs_node *stats_file;	/* Per snic debugfs file */
+	struct debugfs_node *reset_stats_file;/* Per snic reset stats file */
 #endif
 
 	/* completion queue cache line section */
@@ -347,8 +347,8 @@ struct snic_global {
 
 #ifdef CONFIG_SCSI_SNIC_DEBUG_FS
 	/* debugfs related global data */
-	struct dentry *trc_root;
-	struct dentry *stats_root;
+	struct debugfs_node *trc_root;
+	struct debugfs_node *stats_root;
 
 	struct snic_trc trc ____cacheline_aligned;
 #endif

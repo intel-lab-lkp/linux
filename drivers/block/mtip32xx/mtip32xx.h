@@ -445,7 +445,7 @@ struct driver_data {
 
 	struct task_struct *mtip_svc_handler; /* task_struct of svc thd */
 
-	struct dentry *dfs_node;
+	struct debugfs_node *dfs_node;
 
 	bool sr;
 

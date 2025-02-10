@@ -671,7 +671,7 @@ DEFINE_SHOW_ATTRIBUTE(dpu_debugfs_core_irq);
  * @parent: debugfs directory root
  */
 void dpu_debugfs_core_irq_init(struct dpu_kms *dpu_kms,
-		struct dentry *parent)
+		struct debugfs_node *parent)
 {
 	debugfs_create_file("core_irq", 0600, parent, dpu_kms,
 		&dpu_debugfs_core_irq_fops);

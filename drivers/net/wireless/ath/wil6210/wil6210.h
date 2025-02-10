@@ -1007,7 +1007,7 @@ struct wil6210_priv {
 	/* statistics */
 	atomic_t isr_count_rx, isr_count_tx;
 	/* debugfs */
-	struct dentry *debug;
+	struct debugfs_node *debug;
 	struct wil_blob_wrapper blobs[MAX_FW_MAPPING_TABLE_SIZE];
 	u8 discovery_mode;
 	u8 abft_len;

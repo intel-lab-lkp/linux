@@ -129,7 +129,7 @@ struct pdsc_qcq {
 	int intx;
 
 	u32 accum_work;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 };
 
 struct pdsc_viftype {
@@ -153,7 +153,7 @@ enum pdsc_state_flags {
 
 struct pdsc {
 	struct pci_dev *pdev;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct device *dev;
 	struct pdsc_dev_bar bars[PDS_CORE_BARS_MAX];
 	struct pdsc_vf *vfs;

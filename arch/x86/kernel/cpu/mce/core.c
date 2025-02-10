@@ -2921,9 +2921,9 @@ static int __init mcheck_disable(char *str)
 __setup("nomce", mcheck_disable);
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *mce_get_debugfs_dir(void)
+struct debugfs_node *mce_get_debugfs_dir(void)
 {
-	static struct dentry *dmce;
+	static struct debugfs_node *dmce;
 
 	if (!dmce)
 		dmce = debugfs_create_dir("mce", NULL);
@@ -2958,7 +2958,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fake_panic_fops, fake_panic_get, fake_panic_set,
 
 static void __init mcheck_debugfs_init(void)
 {
-	struct dentry *dmce;
+	struct debugfs_node *dmce;
 
 	dmce = mce_get_debugfs_dir();
 	debugfs_create_file_unsafe("fake_panic", 0444, dmce, NULL,

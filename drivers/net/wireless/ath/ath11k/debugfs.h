@@ -74,7 +74,7 @@ struct ath11k_dbg_dbr_data {
 
 struct ath11k_debug_dbr {
 	struct ath11k_dbg_dbr_data dbr_dbg_data;
-	struct dentry *dbr_debugfs;
+	struct debugfs_node *dbr_debugfs;
 	bool dbr_debug_enabled;
 };
 

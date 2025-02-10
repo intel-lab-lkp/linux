@@ -710,7 +710,7 @@ int lan966x_vcap_init(struct lan966x *lan966x)
 	struct lan966x_vcap_inst *cfg;
 	struct vcap_control *ctrl;
 	struct vcap_admin *admin;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
 	if (!ctrl)

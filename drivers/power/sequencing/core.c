@@ -1068,7 +1068,7 @@ static const struct seq_operations pwrseq_debugfs_sops = {
 };
 DEFINE_SEQ_ATTRIBUTE(pwrseq_debugfs);
 
-static struct dentry *pwrseq_debugfs_dentry;
+static struct debugfs_node *pwrseq_debugfs_dentry;
 
 #endif /* CONFIG_DEBUG_FS */
 

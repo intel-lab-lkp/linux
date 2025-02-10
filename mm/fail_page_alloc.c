@@ -50,7 +50,7 @@ ALLOW_ERROR_INJECTION(should_fail_alloc_page, TRUE);
 static int __init fail_page_alloc_debugfs(void)
 {
 	umode_t mode = S_IFREG | 0600;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = fault_create_debugfs_attr("fail_page_alloc", NULL,
 					&fail_page_alloc.attr);

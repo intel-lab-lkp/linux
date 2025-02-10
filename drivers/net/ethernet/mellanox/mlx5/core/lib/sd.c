@@ -17,7 +17,7 @@ struct mlx5_sd {
 	u32 group_id;
 	u8 host_buses;
 	struct mlx5_devcom_comp_dev *devcom;
-	struct dentry *dfs;
+	struct debugfs_node *dfs;
 	bool primary;
 	union {
 		struct { /* primary */

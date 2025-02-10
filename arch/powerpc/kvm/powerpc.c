@@ -2521,7 +2521,8 @@ EXPORT_SYMBOL_GPL(kvmppc_init_lpid);
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(kvm_ppc_instr);
 
-void kvm_arch_create_vcpu_debugfs(struct kvm_vcpu *vcpu, struct dentry *debugfs_dentry)
+void kvm_arch_create_vcpu_debugfs(struct kvm_vcpu *vcpu,
+				  struct debugfs_node *debugfs_dentry)
 {
 	if (vcpu->kvm->arch.kvm_ops->create_vcpu_debugfs)
 		vcpu->kvm->arch.kvm_ops->create_vcpu_debugfs(vcpu, debugfs_dentry);

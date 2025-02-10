@@ -22,7 +22,7 @@
 struct map_benchmark_data {
 	struct map_benchmark bparam;
 	struct device *dev;
-	struct dentry  *debugfs;
+	struct debugfs_node *debugfs;
 	enum dma_data_direction dir;
 	atomic64_t sum_map_100ns;
 	atomic64_t sum_unmap_100ns;
@@ -300,7 +300,7 @@ static void map_benchmark_remove_debugfs(void *data)
 
 static int __map_benchmark_probe(struct device *dev)
 {
-	struct dentry *entry;
+	struct debugfs_node *entry;
 	struct map_benchmark_data *map;
 	int ret;
 

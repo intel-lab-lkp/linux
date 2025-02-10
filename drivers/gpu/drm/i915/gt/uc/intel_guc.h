@@ -43,7 +43,7 @@ struct intel_guc {
 	struct intel_guc_state_capture *capture;
 
 	/** @dbgfs_node: debugfs node */
-	struct dentry *dbgfs_node;
+	struct debugfs_node *dbgfs_node;
 
 	/** @sched_engine: Global engine used to submit requests to GuC */
 	struct i915_sched_engine *sched_engine;

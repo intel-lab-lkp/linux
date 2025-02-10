@@ -137,7 +137,7 @@ struct dlm_ctxt
 	atomic_t res_tot_count;
 	atomic_t res_cur_count;
 
-	struct dentry *dlm_debugfs_subroot;
+	struct debugfs_node *dlm_debugfs_subroot;
 
 	/* NOTE: Next three are protected by dlm_domain_lock */
 	struct kref dlm_refs;

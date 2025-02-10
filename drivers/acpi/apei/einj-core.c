@@ -629,7 +629,7 @@ static u64 error_param1;
 static u64 error_param2;
 static u64 error_param3;
 static u64 error_param4;
-static struct dentry *einj_debug_dir;
+static struct debugfs_node *einj_debug_dir;
 static struct { u32 mask; const char *str; } const einj_error_type_string[] = {
 	{ BIT(0), "Processor Correctable" },
 	{ BIT(1), "Processor Uncorrectable non-fatal" },

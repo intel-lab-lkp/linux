@@ -462,7 +462,7 @@ void xive_native_sync_queue(u32 hw_irq)
 EXPORT_SYMBOL_GPL(xive_native_sync_queue);
 
 #ifdef CONFIG_DEBUG_FS
-static int xive_native_debug_create(struct dentry *xive_dir)
+static int xive_native_debug_create(struct debugfs_node *xive_dir)
 {
 	debugfs_create_bool("save-restore", 0600, xive_dir, &xive_has_save_restore);
 	return 0;

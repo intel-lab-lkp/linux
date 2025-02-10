@@ -86,7 +86,7 @@
 
 #include "thermal_testing.h"
 
-struct dentry *d_testing;
+struct debugfs_node *d_testing;
 
 #define TT_COMMAND_SIZE		16
 

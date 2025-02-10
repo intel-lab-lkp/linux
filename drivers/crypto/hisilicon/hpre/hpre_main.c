@@ -116,7 +116,7 @@
 #define HPRE_DFX_CORE_LEN		0x43
 
 static const char hpre_name[] = "hisi_hpre";
-static struct dentry *hpre_debugfs_root;
+static struct debugfs_node *hpre_debugfs_root;
 static const struct pci_device_id hpre_dev_ids[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HUAWEI_HPRE_PF) },
 	{ PCI_DEVICE(PCI_VENDOR_ID_HUAWEI, PCI_DEVICE_ID_HUAWEI_HPRE_VF) },
@@ -978,12 +978,13 @@ static int hpre_debugfs_atomic64_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(hpre_atomic64_ops, hpre_debugfs_atomic64_get,
 			 hpre_debugfs_atomic64_set, "%llu\n");
 
-static int hpre_create_debugfs_file(struct hisi_qm *qm, struct dentry *dir,
+static int hpre_create_debugfs_file(struct hisi_qm *qm,
+				    struct debugfs_node *dir,
 				    enum hpre_ctrl_dbgfs_file type, int indx)
 {
 	struct hpre *hpre = container_of(qm, struct hpre, qm);
 	struct hpre_debug *dbg = &hpre->debug;
-	struct dentry *file_dir;
+	struct debugfs_node *file_dir;
 
 	if (dir)
 		file_dir = dir;
@@ -1028,7 +1029,7 @@ static int hpre_cluster_debugfs_init(struct hisi_qm *qm)
 	struct device *dev = &qm->pdev->dev;
 	char buf[HPRE_DBGFS_VAL_MAX_LEN];
 	struct debugfs_regset32 *regset;
-	struct dentry *tmp_d;
+	struct debugfs_node *tmp_d;
 	u32 hpre_core_info;
 	u8 clusters_num;
 	int i, ret;
@@ -1103,7 +1104,7 @@ static void hpre_dfx_debug_init(struct hisi_qm *qm)
 	struct dfx_diff_registers *hpre_regs = qm->debug.acc_diff_regs;
 	struct hpre *hpre = container_of(qm, struct hpre, qm);
 	struct hpre_dfx *dfx = hpre->debug.dfx;
-	struct dentry *parent;
+	struct debugfs_node *parent;
 	int i;
 
 	parent = debugfs_create_dir("hpre_dfx", qm->debug.debug_root);

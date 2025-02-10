@@ -202,7 +202,8 @@ static int debugfs_ul_get(void *data, u64 *val)
 DEFINE_SIMPLE_ATTRIBUTE(fops_ul, debugfs_ul_get, debugfs_ul_set, "%llu\n");
 
 static void debugfs_create_ul(const char *name, umode_t mode,
-			      struct dentry *parent, unsigned long *value)
+			      struct debugfs_node *parent,
+			      unsigned long *value)
 {
 	debugfs_create_file(name, mode, parent, value, &fops_ul);
 }
@@ -221,7 +222,7 @@ DEFINE_SIMPLE_ATTRIBUTE(fops_stacktrace_depth, debugfs_ul_get,
 			debugfs_stacktrace_depth_set, "%llu\n");
 
 static void debugfs_create_stacktrace_depth(const char *name, umode_t mode,
-					    struct dentry *parent,
+					    struct debugfs_node *parent,
 					    unsigned long *value)
 {
 	debugfs_create_file(name, mode, parent, value, &fops_stacktrace_depth);
@@ -229,11 +230,11 @@ static void debugfs_create_stacktrace_depth(const char *name, umode_t mode,
 
 #endif /* CONFIG_FAULT_INJECTION_STACKTRACE_FILTER */
 
-struct dentry *fault_create_debugfs_attr(const char *name,
-			struct dentry *parent, struct fault_attr *attr)
+struct debugfs_node *fault_create_debugfs_attr(const char *name,
+			struct debugfs_node *parent, struct fault_attr *attr)
 {
 	umode_t mode = S_IFREG | S_IRUSR | S_IWUSR;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(name, parent);
 	if (IS_ERR(dir))
@@ -261,7 +262,7 @@ struct dentry *fault_create_debugfs_attr(const char *name,
 	debugfs_create_xul("reject-end", mode, dir, &attr->reject_end);
 #endif /* CONFIG_FAULT_INJECTION_STACKTRACE_FILTER */
 
-	attr->dname = dget(dir);
+	attr->dname = debugfs_node_get(dir);
 	return dir;
 }
 EXPORT_SYMBOL_GPL(fault_create_debugfs_attr);

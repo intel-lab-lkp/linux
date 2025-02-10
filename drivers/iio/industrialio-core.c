@@ -48,7 +48,7 @@ const struct bus_type iio_bus_type = {
 };
 EXPORT_SYMBOL(iio_bus_type);
 
-static struct dentry *iio_debugfs_dentry;
+static struct debugfs_node *iio_debugfs_dentry;
 
 static const char * const iio_direction[] = {
 	[0] = "in",
@@ -224,7 +224,7 @@ EXPORT_SYMBOL_GPL(iio_buffer_enabled);
  * There's also a CONFIG_DEBUG_FS guard in include/linux/iio/iio.h for
  * iio_get_debugfs_dentry() to make it inline if CONFIG_DEBUG_FS is undefined
  */
-struct dentry *iio_get_debugfs_dentry(struct iio_dev *indio_dev)
+struct debugfs_node *iio_get_debugfs_dentry(struct iio_dev *indio_dev)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 

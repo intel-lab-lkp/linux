@@ -23,7 +23,7 @@ struct fbnic_napi_vector;
 struct fbnic_dev {
 	struct device *dev;
 	struct net_device *netdev;
-	struct dentry *dbg_fbd;
+	struct debugfs_node *dbg_fbd;
 	struct device *hwmon;
 
 	u32 __iomem *uc_addr0;

@@ -29,7 +29,7 @@
 
 #include "l2tp_core.h"
 
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 
 struct l2tp_dfs_seq_data {
 	struct net	*net;

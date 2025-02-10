@@ -14,9 +14,9 @@
 #include "xe_macros.h"
 #include "xe_uc_debugfs.h"
 
-void xe_uc_debugfs_register(struct xe_uc *uc, struct dentry *parent)
+void xe_uc_debugfs_register(struct xe_uc *uc, struct debugfs_node *parent)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir("uc", parent);
 	if (IS_ERR(root)) {

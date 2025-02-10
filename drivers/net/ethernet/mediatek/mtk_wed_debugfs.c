@@ -613,7 +613,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_regval, mtk_wed_reg_get, mtk_wed_reg_set,
 
 void mtk_wed_hw_add_debugfs(struct mtk_wed_hw *hw)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	snprintf(hw->dirname, sizeof(hw->dirname), "wed%d", hw->index);
 	dir = debugfs_create_dir(hw->dirname, NULL);

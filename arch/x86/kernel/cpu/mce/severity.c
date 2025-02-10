@@ -478,7 +478,7 @@ static const struct file_operations severities_coverage_fops = {
 
 static int __init severities_debugfs_init(void)
 {
-	struct dentry *dmce;
+	struct debugfs_node *dmce;
 
 	dmce = mce_get_debugfs_dir();
 

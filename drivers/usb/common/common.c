@@ -426,7 +426,7 @@ struct device *usb_of_get_companion_dev(struct device *dev)
 EXPORT_SYMBOL_GPL(usb_of_get_companion_dev);
 #endif
 
-struct dentry *usb_debug_root;
+struct debugfs_node *usb_debug_root;
 EXPORT_SYMBOL_GPL(usb_debug_root);
 
 DEFINE_MUTEX(usb_dynids_lock);

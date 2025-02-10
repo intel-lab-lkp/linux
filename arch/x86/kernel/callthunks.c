@@ -380,7 +380,7 @@ static const struct file_operations dfs_ops = {
 
 static int __init callthunks_debugfs_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	unsigned long cpu;
 
 	dir = debugfs_create_dir("callthunks", NULL);

@@ -46,7 +46,7 @@ struct tegra_smmu {
 
 	struct list_head list;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	struct iommu_device iommu;	/* IOMMU Core code handle */
 };

@@ -52,7 +52,7 @@ struct moxtet {
 		} position[MOXTET_NIRQS];
 	} irq;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry			*debugfs_root;
+	struct debugfs_node *debugfs_root;
 #endif
 };
 

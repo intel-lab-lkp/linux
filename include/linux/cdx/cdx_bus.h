@@ -156,7 +156,7 @@ struct cdx_device {
 	u8 dev_num;
 	struct resource res[MAX_CDX_DEV_RESOURCES];
 	struct bin_attribute *res_attr[MAX_CDX_DEV_RESOURCES];
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u8 res_count;
 	u64 dma_mask;
 	u16 flags;

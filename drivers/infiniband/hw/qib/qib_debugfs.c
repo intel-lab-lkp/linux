@@ -38,7 +38,7 @@
 #include "qib_verbs.h"
 #include "qib_debugfs.h"
 
-static struct dentry *qib_dbg_root;
+static struct debugfs_node *qib_dbg_root;
 
 #define DEBUGFS_FILE(name) \
 static const struct seq_operations _##name##_seq_ops = { \
@@ -240,7 +240,7 @@ DEBUGFS_FILE(qp_stats)
 
 void qib_dbg_ibdev_init(struct qib_ibdev *ibd)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	char name[10];
 
 	snprintf(name, sizeof(name), "qib%d", dd_from_dev(ibd)->unit);

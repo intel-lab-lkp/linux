@@ -810,7 +810,7 @@ static void mlx5_mkey_cache_debugfs_add_ent(struct mlx5_ib_dev *dev,
 					    struct mlx5_cache_ent *ent)
 {
 	int order = order_base_2(ent->rb_key.ndescs);
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	if (!mlx5_debugfs_root || dev->is_rep)
 		return;
@@ -828,7 +828,7 @@ static void mlx5_mkey_cache_debugfs_add_ent(struct mlx5_ib_dev *dev,
 
 static void mlx5_mkey_cache_debugfs_init(struct mlx5_ib_dev *dev)
 {
-	struct dentry *dbg_root = mlx5_debugfs_get_dev_root(dev->mdev);
+	struct debugfs_node *dbg_root = mlx5_debugfs_get_dev_root(dev->mdev);
 	struct mlx5_mkey_cache *cache = &dev->cache;
 
 	if (!mlx5_debugfs_root || dev->is_rep)

@@ -37,7 +37,7 @@ static inline
 int msm_dp_debug_init(struct device *dev, struct msm_dp_panel *panel,
 		  struct msm_dp_link *link,
 		  struct drm_connector *connector,
-		  struct dentry *root,
+		  struct debugfs_node *root,
 		  bool is_edp)
 {
 	return -EINVAL;

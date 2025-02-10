@@ -44,7 +44,7 @@ void caam_debugfs_qi_init(struct caam_drv_private *ctrlpriv)
 
 void caam_debugfs_init(struct caam_drv_private *ctrlpriv,
 		       struct caam_perfmon __force *perfmon,
-		       struct dentry *root)
+		       struct debugfs_node *root)
 {
 	/*
 	 * FIXME: needs better naming distinction, as some amalgamation of

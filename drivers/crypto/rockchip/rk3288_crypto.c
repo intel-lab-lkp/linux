@@ -235,8 +235,8 @@ DEFINE_SHOW_ATTRIBUTE(rk_crypto_debugfs);
 
 static void register_debugfs(struct rk_crypto_info *crypto_info)
 {
-	struct dentry *dbgfs_dir __maybe_unused;
-	struct dentry *dbgfs_stats __maybe_unused;
+	struct debugfs_node *dbgfs_dir __maybe_unused;
+	struct debugfs_node *dbgfs_stats __maybe_unused;
 
 	/* Ignore error of debugfs */
 	dbgfs_dir = debugfs_create_dir("rk3288_crypto", NULL);

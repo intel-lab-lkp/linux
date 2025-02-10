@@ -346,7 +346,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(mmc_caps2_fops, mmc_caps_get, mmc_caps2_set,
 
 void mmc_add_host_debugfs(struct mmc_host *host)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir(mmc_hostname(host), NULL);
 	host->debugfs_root = root;
@@ -380,7 +380,7 @@ void mmc_remove_host_debugfs(struct mmc_host *host)
 void mmc_add_card_debugfs(struct mmc_card *card)
 {
 	struct mmc_host	*host = card->host;
-	struct dentry	*root;
+	struct debugfs_node	*root;
 
 	if (!host->debugfs_root)
 		return;

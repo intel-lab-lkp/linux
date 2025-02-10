@@ -319,7 +319,7 @@ __setup("ramdisk_size=", ramdisk_size);
  */
 static LIST_HEAD(brd_devices);
 static DEFINE_MUTEX(brd_devices_mutex);
-static struct dentry *brd_debugfs_dir;
+static struct debugfs_node *brd_debugfs_dir;
 
 static struct brd_device *brd_find_or_alloc_device(int i)
 {

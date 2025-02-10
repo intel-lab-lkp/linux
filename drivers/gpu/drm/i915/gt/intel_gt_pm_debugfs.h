@@ -8,9 +8,11 @@
 
 struct intel_gt;
 struct dentry;
+#define debugfs_node dentry
 struct drm_printer;
 
-void intel_gt_pm_debugfs_register(struct intel_gt *gt, struct dentry *root);
+void intel_gt_pm_debugfs_register(struct intel_gt *gt,
+				  struct debugfs_node *root);
 void intel_gt_pm_frequency_dump(struct intel_gt *gt, struct drm_printer *m);
 
 /* functions that need to be accessed by the upper level non-gt interfaces */

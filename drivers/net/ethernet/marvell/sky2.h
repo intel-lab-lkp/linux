@@ -2266,7 +2266,7 @@ struct sky2_port {
 	enum flow_control    flow_status;
 
 #ifdef CONFIG_SKY2_DEBUG
-	struct dentry	     *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 };
 

@@ -399,7 +399,7 @@ out:
 
 static void bcm2835_debugfs_regset(struct bcm2835_cprman *cprman, u32 base,
 				   const struct debugfs_reg32 *regs,
-				   size_t nregs, struct dentry *dentry)
+				   size_t nregs, struct debugfs_node *dentry)
 {
 	struct debugfs_regset32 *regset;
 
@@ -748,7 +748,7 @@ static int bcm2835_pll_set_rate(struct clk_hw *hw,
 }
 
 static void bcm2835_pll_debug_init(struct clk_hw *hw,
-				  struct dentry *dentry)
+				  struct debugfs_node *dentry)
 {
 	struct bcm2835_pll *pll = container_of(hw, struct bcm2835_pll, hw);
 	struct bcm2835_cprman *cprman = pll->cprman;
@@ -878,7 +878,7 @@ static int bcm2835_pll_divider_set_rate(struct clk_hw *hw,
 }
 
 static void bcm2835_pll_divider_debug_init(struct clk_hw *hw,
-					   struct dentry *dentry)
+					   struct debugfs_node *dentry)
 {
 	struct bcm2835_pll_divider *divider = bcm2835_pll_divider_from_hw(hw);
 	struct bcm2835_cprman *cprman = divider->cprman;
@@ -1292,7 +1292,7 @@ static const struct debugfs_reg32 bcm2835_debugfs_clock_reg32[] = {
 };
 
 static void bcm2835_clock_debug_init(struct clk_hw *hw,
-				    struct dentry *dentry)
+				    struct debugfs_node *dentry)
 {
 	struct bcm2835_clock *clock = bcm2835_clock_from_hw(hw);
 	struct bcm2835_cprman *cprman = clock->cprman;

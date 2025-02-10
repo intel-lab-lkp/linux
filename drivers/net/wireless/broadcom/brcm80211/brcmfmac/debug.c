@@ -42,7 +42,7 @@ int brcmf_debug_create_memdump(struct brcmf_bus *bus, const void *data,
 	return 0;
 }
 
-struct dentry *brcmf_debugfs_get_devdir(struct brcmf_pub *drvr)
+struct debugfs_node *brcmf_debugfs_get_devdir(struct brcmf_pub *drvr)
 {
 	return drvr->wiphy->debugfsdir;
 }

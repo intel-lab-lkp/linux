@@ -88,7 +88,7 @@ struct tc358743_state {
 	struct work_struct work_i2c_poll;
 
 	/* debugfs */
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct v4l2_debugfs_if *infoframes;
 
 	/* edid  */

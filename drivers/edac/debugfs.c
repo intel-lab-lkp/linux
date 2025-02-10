@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "edac_module.h"
 
-static struct dentry *edac_debugfs;
+static struct debugfs_node *edac_debugfs;
 
 static ssize_t edac_fake_inject_write(struct file *file,
 				      const char __user *data,
@@ -54,7 +54,7 @@ void edac_debugfs_exit(void)
 
 void edac_create_debugfs_nodes(struct mem_ctl_info *mci)
 {
-	struct dentry *parent;
+	struct debugfs_node *parent;
 	char name[80];
 	int i;
 
@@ -80,7 +80,7 @@ void edac_create_debugfs_nodes(struct mem_ctl_info *mci)
 }
 
 /* Create a toplevel dir under EDAC's debugfs hierarchy */
-struct dentry *edac_debugfs_create_dir(const char *dirname)
+struct debugfs_node *edac_debugfs_create_dir(const char *dirname)
 {
 	if (!edac_debugfs)
 		return NULL;
@@ -90,8 +90,8 @@ struct dentry *edac_debugfs_create_dir(const char *dirname)
 EXPORT_SYMBOL_GPL(edac_debugfs_create_dir);
 
 /* Create a toplevel dir under EDAC's debugfs hierarchy with parent @parent */
-struct dentry *
-edac_debugfs_create_dir_at(const char *dirname, struct dentry *parent)
+struct debugfs_node *
+edac_debugfs_create_dir_at(const char *dirname, struct debugfs_node *parent)
 {
 	return debugfs_create_dir(dirname, parent);
 }
@@ -106,8 +106,9 @@ EXPORT_SYMBOL_GPL(edac_debugfs_create_dir_at);
  * @data: private data of caller
  * @fops: file operations of this file
  */
-struct dentry *
-edac_debugfs_create_file(const char *name, umode_t mode, struct dentry *parent,
+struct debugfs_node *
+edac_debugfs_create_file(const char *name, umode_t mode,
+			 struct debugfs_node *parent,
 			 void *data, const struct file_operations *fops)
 {
 	if (!parent)
@@ -119,7 +120,7 @@ EXPORT_SYMBOL_GPL(edac_debugfs_create_file);
 
 /* Wrapper for debugfs_create_x8() */
 void edac_debugfs_create_x8(const char *name, umode_t mode,
-			    struct dentry *parent, u8 *value)
+			    struct debugfs_node *parent, u8 *value)
 {
 	if (!parent)
 		parent = edac_debugfs;
@@ -130,7 +131,7 @@ EXPORT_SYMBOL_GPL(edac_debugfs_create_x8);
 
 /* Wrapper for debugfs_create_x16() */
 void edac_debugfs_create_x16(const char *name, umode_t mode,
-			     struct dentry *parent, u16 *value)
+			     struct debugfs_node *parent, u16 *value)
 {
 	if (!parent)
 		parent = edac_debugfs;
@@ -141,7 +142,7 @@ EXPORT_SYMBOL_GPL(edac_debugfs_create_x16);
 
 /* Wrapper for debugfs_create_x32() */
 void edac_debugfs_create_x32(const char *name, umode_t mode,
-			     struct dentry *parent, u32 *value)
+			     struct debugfs_node *parent, u32 *value)
 {
 	if (!parent)
 		parent = edac_debugfs;

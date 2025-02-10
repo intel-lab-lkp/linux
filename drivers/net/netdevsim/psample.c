@@ -22,7 +22,7 @@
 
 struct nsim_dev_psample {
 	struct delayed_work psample_dw;
-	struct dentry *ddir;
+	struct debugfs_node *ddir;
 	struct psample_group *group;
 	u32 rate;
 	u32 group_num;

@@ -51,7 +51,7 @@
 
 #define CSIO_MIN_MEMPOOL_SZ	64
 
-static struct dentry *csio_debugfs_root;
+static struct debugfs_node *csio_debugfs_root;
 
 static struct scsi_transport_template *csio_fcoe_transport;
 static struct scsi_transport_template *csio_fcoe_transport_vport;

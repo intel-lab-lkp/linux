@@ -359,7 +359,7 @@ struct brcmf_cfg80211_info {
 	bool scan_tried;
 	u8 *dcmd_buf;
 	u8 *extra_buf;
-	struct dentry *debugfsdir;
+	struct debugfs_node *debugfsdir;
 	struct escan_info escan_info;
 	struct timer_list escan_timeout;
 	struct work_struct escan_timeout_work;

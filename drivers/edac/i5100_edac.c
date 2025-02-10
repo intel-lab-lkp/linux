@@ -347,10 +347,10 @@ struct i5100_priv {
 	u16 inject_eccmask1;
 	u16 inject_eccmask2;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
-static struct dentry *i5100_debugfs;
+static struct debugfs_node *i5100_debugfs;
 
 /* map a rank/chan to a slot number on the mainboard */
 static int i5100_rank_to_slot(const struct mem_ctl_info *mci,

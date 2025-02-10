@@ -205,7 +205,7 @@ struct perf_ctx {
 	int (*cmd_recv)(struct perf_ctx *perf, int *pidx, enum perf_cmd *cmd,
 			u64 *data);
 
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 
 /*
@@ -235,7 +235,7 @@ struct perf_ctx {
  *==============================================================================
  */
 
-static struct dentry *perf_dbgfs_topdir;
+static struct debugfs_node *perf_dbgfs_topdir;
 
 static struct workqueue_struct *perf_wq __read_mostly;
 

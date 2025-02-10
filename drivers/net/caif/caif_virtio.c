@@ -123,7 +123,7 @@ struct cfv_info {
 	unsigned long reserved_mem;
 	size_t reserved_size;
 	struct cfv_stats stats;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 /* struct buf_info - maintains transmit buffer data handle

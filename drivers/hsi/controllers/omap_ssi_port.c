@@ -152,7 +152,7 @@ static int ssi_div_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(ssi_sst_div_fops, ssi_div_get, ssi_div_set, "%llu\n");
 
 static void ssi_debug_add_port(struct omap_ssi_port *omap_port,
-				     struct dentry *dir)
+				     struct debugfs_node *dir)
 {
 	struct hsi_port *port = to_hsi_port(omap_port->dev);
 

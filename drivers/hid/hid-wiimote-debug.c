@@ -16,8 +16,8 @@
 
 struct wiimote_debug {
 	struct wiimote_data *wdata;
-	struct dentry *eeprom;
-	struct dentry *drm;
+	struct debugfs_node *eeprom;
+	struct debugfs_node *drm;
 };
 
 static ssize_t wiidebug_eeprom_read(struct file *f, char __user *u, size_t s,

@@ -242,7 +242,8 @@ EXPORT_SYMBOL(drm_debugfs_gpuva_info);
  * automatically on drm_debugfs_dev_fini().
  */
 void drm_debugfs_create_files(const struct drm_info_list *files, int count,
-			      struct dentry *root, struct drm_minor *minor)
+			      struct debugfs_node *root,
+			      struct drm_minor *minor)
 {
 	struct drm_device *dev = minor->dev;
 	struct drm_info_node *tmp;
@@ -268,17 +269,18 @@ void drm_debugfs_create_files(const struct drm_info_list *files, int count,
 EXPORT_SYMBOL(drm_debugfs_create_files);
 
 int drm_debugfs_remove_files(const struct drm_info_list *files, int count,
-			     struct dentry *root, struct drm_minor *minor)
+			     struct debugfs_node *root,
+			     struct drm_minor *minor)
 {
 	int i;
 
 	for (i = 0; i < count; i++) {
-		struct dentry *dent = debugfs_lookup(files[i].name, root);
+		struct debugfs_node *dent = debugfs_lookup(files[i].name, root);
 
 		if (!dent)
 			continue;
 
-		drmm_kfree(minor->dev, d_inode(dent)->i_private);
+		drmm_kfree(minor->dev, debugfs_node_inode(dent)->i_private);
 		debugfs_remove(dent);
 	}
 	return 0;
@@ -292,7 +294,7 @@ EXPORT_SYMBOL(drm_debugfs_remove_files);
  *
  * Creates the debugfs directory for the device under the given root directory.
  */
-void drm_debugfs_dev_init(struct drm_device *dev, struct dentry *root)
+void drm_debugfs_dev_init(struct drm_device *dev, struct debugfs_node *root)
 {
 	dev->debugfs_root = debugfs_create_dir(dev->unique, root);
 }
@@ -322,7 +324,7 @@ void drm_debugfs_dev_register(struct drm_device *dev)
 }
 
 int drm_debugfs_register(struct drm_minor *minor, int minor_id,
-			 struct dentry *root)
+			 struct debugfs_node *root)
 {
 	struct drm_device *dev = minor->dev;
 	char name[64];
@@ -560,9 +562,9 @@ static const struct file_operations audio_infoframe_fops = {
 };
 
 static int create_hdmi_audio_infoframe_file(struct drm_connector *connector,
-					    struct dentry *parent)
+					    struct debugfs_node *parent)
 {
-	struct dentry *file;
+	struct debugfs_node *file;
 
 	file = debugfs_create_file("audio", 0400, parent, connector, &audio_infoframe_fops);
 	if (IS_ERR(file))
@@ -631,7 +633,7 @@ DEFINE_INFOFRAME_FILE(hdr_drm);
 DEFINE_INFOFRAME_FILE(spd);
 
 static int create_hdmi_infoframe_files(struct drm_connector *connector,
-				       struct dentry *parent)
+				       struct debugfs_node *parent)
 {
 	int ret;
 
@@ -660,7 +662,7 @@ static int create_hdmi_infoframe_files(struct drm_connector *connector,
 
 static void hdmi_debugfs_add(struct drm_connector *connector)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	if (!(connector->connector_type == DRM_MODE_CONNECTOR_HDMIA ||
 	      connector->connector_type == DRM_MODE_CONNECTOR_HDMIB))
@@ -676,7 +678,7 @@ static void hdmi_debugfs_add(struct drm_connector *connector)
 void drm_debugfs_connector_add(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!dev->debugfs_root)
 		return;
@@ -719,7 +721,7 @@ void drm_debugfs_connector_remove(struct drm_connector *connector)
 void drm_debugfs_crtc_add(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
-	struct dentry *root;
+	struct debugfs_node *root;
 	char *name;
 
 	name = kasprintf(GFP_KERNEL, "crtc-%d", crtc->index);
@@ -777,7 +779,7 @@ DEFINE_SHOW_ATTRIBUTE(bridges);
 void drm_debugfs_encoder_add(struct drm_encoder *encoder)
 {
 	struct drm_minor *minor = encoder->dev->primary;
-	struct dentry *root;
+	struct debugfs_node *root;
 	char *name;
 
 	name = kasprintf(GFP_KERNEL, "encoder-%d", encoder->index);

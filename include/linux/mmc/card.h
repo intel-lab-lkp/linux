@@ -372,7 +372,7 @@ struct mmc_card {
 	unsigned int		mmc_avail_type;	/* supported device type by both host and card */
 	unsigned int		drive_strength;	/* for UHS-I, HS200 or HS400 */
 
-	struct dentry		*debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct mmc_part	part[MMC_NUM_PHY_PARTITION]; /* physical partitions */
 	unsigned int    nr_parts;
 

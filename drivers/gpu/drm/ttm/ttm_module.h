@@ -34,9 +34,10 @@
 #define TTM_PFX "[TTM] "
 
 struct dentry;
+#define debugfs_node dentry
 struct ttm_device;
 
-extern struct dentry *ttm_debugfs_root;
+extern struct debugfs_node *ttm_debugfs_root;
 
 void ttm_sys_man_init(struct ttm_device *bdev);
 

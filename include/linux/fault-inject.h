@@ -6,6 +6,7 @@
 #include <linux/types.h>
 
 struct dentry;
+#define debugfs_node dentry
 struct kmem_cache;
 
 #ifdef CONFIG_FAULT_INJECTION
@@ -79,13 +80,13 @@ static inline bool should_fail(struct fault_attr *attr, ssize_t size)
 
 #ifdef CONFIG_FAULT_INJECTION_DEBUG_FS
 
-struct dentry *fault_create_debugfs_attr(const char *name,
-			struct dentry *parent, struct fault_attr *attr);
+struct debugfs_node *fault_create_debugfs_attr(const char *name,
+			struct debugfs_node *parent, struct fault_attr *attr);
 
 #else /* CONFIG_FAULT_INJECTION_DEBUG_FS */
 
-static inline struct dentry *fault_create_debugfs_attr(const char *name,
-			struct dentry *parent, struct fault_attr *attr)
+static inline struct debugfs_node *fault_create_debugfs_attr(const char *name,
+			struct debugfs_node *parent, struct fault_attr *attr)
 {
 	return ERR_PTR(-ENODEV);
 }

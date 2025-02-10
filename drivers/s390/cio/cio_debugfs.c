@@ -9,7 +9,7 @@
 #include <linux/debugfs.h>
 #include "cio_debug.h"
 
-struct dentry *cio_debugfs_dir;
+struct debugfs_node *cio_debugfs_dir;
 
 /* Create the debugfs directory for CIO under the arch_debugfs_dir
  * i.e /sys/kernel/debug/s390/cio

@@ -42,7 +42,7 @@ void visl_trace_bitstream(struct visl_ctx *ctx, struct visl_run *run)
 	u8 *vaddr = vb2_plane_vaddr(&run->src->vb2_buf, 0);
 	struct visl_blob *blob;
 	size_t data_sz = vb2_get_plane_payload(&run->src->vb2_buf, 0);
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	char name[32];
 
 	blob  = kzalloc(sizeof(*blob), GFP_KERNEL);

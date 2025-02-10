@@ -3,11 +3,11 @@
 #include <linux/ras.h>
 #include "debugfs.h"
 
-static struct dentry *ras_debugfs_dir;
+static struct debugfs_node *ras_debugfs_dir;
 
 static atomic_t trace_count = ATOMIC_INIT(0);
 
-struct dentry *ras_get_debugfs_root(void)
+struct debugfs_node *ras_get_debugfs_root(void)
 {
 	return ras_debugfs_dir;
 }
@@ -45,7 +45,7 @@ static const struct file_operations trace_fops = {
 
 int __init ras_add_daemon_trace(void)
 {
-	struct dentry *fentry;
+	struct debugfs_node *fentry;
 
 	if (!ras_debugfs_dir)
 		return -ENOENT;

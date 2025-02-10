@@ -541,7 +541,7 @@ static const struct v4l2_subdev_internal_ops pisp_fe_internal_ops = {
 	.init_state = pisp_fe_init_state,
 };
 
-int pisp_fe_init(struct pisp_fe_device *fe, struct dentry *debugfs)
+int pisp_fe_init(struct pisp_fe_device *fe, struct debugfs_node *debugfs)
 {
 	int ret;
 

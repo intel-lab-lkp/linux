@@ -56,7 +56,7 @@ __setup("failslab=", setup_failslab);
 #ifdef CONFIG_FAULT_INJECTION_DEBUG_FS
 static int __init failslab_debugfs_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	umode_t mode = S_IFREG | 0600;
 
 	dir = fault_create_debugfs_attr("failslab", NULL, &failslab.attr);

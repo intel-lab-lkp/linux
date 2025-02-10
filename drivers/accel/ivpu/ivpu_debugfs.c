@@ -399,7 +399,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(ivpu_dct_fops, dct_active_get, dct_active_set, "%llu\n"
 
 void ivpu_debugfs_init(struct ivpu_device *vdev)
 {
-	struct dentry *debugfs_root = vdev->drm.debugfs_root;
+	struct debugfs_node *debugfs_root = vdev->drm.debugfs_root;
 
 	drm_debugfs_add_files(&vdev->drm, vdev_debugfs_list, ARRAY_SIZE(vdev_debugfs_list));
 

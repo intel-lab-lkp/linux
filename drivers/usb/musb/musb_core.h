@@ -413,7 +413,7 @@ struct musb {
 
 	int			xceiv_old_state;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry		*debugfs_root;
+	struct debugfs_node *debugfs_root;
 #endif
 };
 

@@ -591,7 +591,7 @@ enum ath11k_state {
 #define ATH11K_INVALID_RSSI_EMPTY -128
 
 struct ath11k_fw_stats {
-	struct dentry *debugfs_fwstats;
+	struct debugfs_node *debugfs_fwstats;
 	u32 pdev_id;
 	u32 stats_id;
 	struct list_head pdevs;
@@ -610,7 +610,7 @@ struct ath11k_dbg_htt_stats {
 #define MAX_MODULE_ID_BITMAP_WORDS	16
 
 struct ath11k_debug {
-	struct dentry *debugfs_pdev;
+	struct debugfs_node *debugfs_pdev;
 	struct ath11k_dbg_htt_stats htt_stats;
 	u32 extd_tx_stats;
 	u32 extd_rx_stats;
@@ -972,7 +972,7 @@ struct ath11k_base {
 	/* Current DFS Regulatory */
 	enum ath11k_dfs_region dfs_region;
 #ifdef CONFIG_ATH11K_DEBUGFS
-	struct dentry *debugfs_soc;
+	struct debugfs_node *debugfs_soc;
 #endif
 	struct ath11k_soc_dp_stats soc_stats;
 

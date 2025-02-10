@@ -261,7 +261,7 @@ struct fhci_hcd {
 
 #ifdef CONFIG_FHCI_DEBUG
 	int usb_irq_stat[13];
-	struct dentry *dfs_root;
+	struct debugfs_node *dfs_root;
 #endif
 };
 

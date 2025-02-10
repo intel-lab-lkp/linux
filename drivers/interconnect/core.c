@@ -29,7 +29,7 @@ static int providers_count;
 static bool synced_state;
 static DEFINE_MUTEX(icc_lock);
 static DEFINE_MUTEX(icc_bw_lock);
-static struct dentry *icc_debugfs_dir;
+static struct debugfs_node *icc_debugfs_dir;
 
 static void icc_summary_show_one(struct seq_file *s, struct icc_node *n)
 {

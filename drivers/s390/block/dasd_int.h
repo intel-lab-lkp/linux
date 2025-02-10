@@ -533,7 +533,7 @@ struct dasd_profile_info {
 };
 
 struct dasd_profile {
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	struct dasd_profile_info *data;
 	spinlock_t lock;
 };
@@ -604,8 +604,8 @@ struct dasd_device {
 	unsigned long path_thrhld;
 	unsigned long path_interval;
 
-	struct dentry *debugfs_dentry;
-	struct dentry *hosts_dentry;
+	struct debugfs_node *debugfs_dentry;
+	struct debugfs_node *hosts_dentry;
 	struct dasd_profile profile;
 	struct dasd_format_entry format_entry;
 	struct kset *paths_info;
@@ -634,7 +634,7 @@ struct dasd_block {
 	struct tasklet_struct tasklet;
 	struct timer_list timer;
 
-	struct dentry *debugfs_dentry;
+	struct debugfs_node *debugfs_dentry;
 	struct dasd_profile profile;
 
 	struct list_head format_list;

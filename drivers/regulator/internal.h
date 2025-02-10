@@ -55,7 +55,7 @@ struct regulator {
 	const char *supply_name;
 	struct device_attribute dev_attr;
 	struct regulator_dev *rdev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 extern const struct class regulator_class;

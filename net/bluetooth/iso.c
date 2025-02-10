@@ -2396,7 +2396,7 @@ static int iso_debugfs_show(struct seq_file *f, void *p)
 
 DEFINE_SHOW_ATTRIBUTE(iso_debugfs);
 
-static struct dentry *iso_debugfs;
+static struct debugfs_node *iso_debugfs;
 
 static const struct proto_ops iso_sock_ops = {
 	.family		= PF_BLUETOOTH,

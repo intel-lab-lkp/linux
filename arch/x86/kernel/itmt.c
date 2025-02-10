@@ -66,7 +66,7 @@ static const struct file_operations dfs_sched_itmt_fops = {
 	.llseek =       default_llseek,
 };
 
-static struct dentry *dfs_sched_itmt;
+static struct debugfs_node *dfs_sched_itmt;
 
 /**
  * sched_set_itmt_support() - Indicate platform supports ITMT

@@ -91,7 +91,7 @@ struct t7xx_pci_dev {
 	unsigned int		sleep_disable_count;
 	struct completion	sleep_lock_acquire;
 #ifdef CONFIG_WWAN_DEBUGFS
-	struct dentry		*debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 	u32			mode;
 	bool			debug_ports_show;

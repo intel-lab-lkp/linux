@@ -194,7 +194,7 @@ struct module;	/* only needed for owner field in mtd_info */
  * @dfs_dir: direntry object of the MTD device debugfs directory
  */
 struct mtd_debug_info {
-	struct dentry *dfs_dir;
+	struct debugfs_node *dfs_dir;
 };
 
 /**

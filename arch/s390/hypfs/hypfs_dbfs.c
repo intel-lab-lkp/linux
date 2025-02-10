@@ -9,7 +9,7 @@
 #include <linux/slab.h>
 #include "hypfs.h"
 
-static struct dentry *dbfs_dir;
+static struct debugfs_node *dbfs_dir;
 
 static struct hypfs_dbfs_data *hypfs_dbfs_data_alloc(struct hypfs_dbfs_file *f)
 {

@@ -2096,7 +2096,7 @@ static const struct file_operations iwl_dbgfs_mem_ops = {
 void iwl_mvm_link_sta_add_debugfs(struct ieee80211_hw *hw,
 				  struct ieee80211_vif *vif,
 				  struct ieee80211_link_sta *link_sta,
-				  struct dentry *dir)
+				  struct debugfs_node *dir)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 

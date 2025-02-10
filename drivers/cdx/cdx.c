@@ -80,7 +80,7 @@ static DEFINE_IDA(cdx_controller_ida);
 /* Lock to protect controller ops */
 static DEFINE_MUTEX(cdx_controller_lock);
 /* Debugfs dir for cdx bus */
-static struct dentry *cdx_debugfs_dir;
+static struct debugfs_node *cdx_debugfs_dir;
 
 static char *compat_node_name = "xlnx,versal-net-cdx";
 

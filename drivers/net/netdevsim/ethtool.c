@@ -192,7 +192,7 @@ static void nsim_ethtool_ring_init(struct netdevsim *ns)
 
 void nsim_ethtool_init(struct netdevsim *ns)
 {
-	struct dentry *ethtool, *dir;
+	struct debugfs_node *ethtool, *dir;
 
 	ns->netdev->ethtool_ops = &nsim_ethtool_ops;
 

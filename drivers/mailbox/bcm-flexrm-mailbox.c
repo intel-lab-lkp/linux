@@ -285,7 +285,7 @@ struct flexrm_mbox {
 	struct flexrm_ring *rings;
 	struct dma_pool *bd_pool;
 	struct dma_pool *cmpl_pool;
-	struct dentry *root;
+	struct debugfs_node *root;
 	struct mbox_controller controller;
 };
 

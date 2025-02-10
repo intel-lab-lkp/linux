@@ -1132,7 +1132,7 @@ struct drm_crtc {
 	 *
 	 * Debugfs directory for this CRTC.
 	 */
-	struct dentry *debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 
 	/**
 	 * @crc:

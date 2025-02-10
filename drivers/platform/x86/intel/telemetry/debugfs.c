@@ -235,7 +235,7 @@ static struct telem_ioss_pg_info telem_apl_ioss_pg_data[] = {
 
 struct telemetry_debugfs_conf {
 	struct telemetry_susp_stats suspend_stats;
-	struct dentry *telemetry_dbg_dir;
+	struct debugfs_node *telemetry_dbg_dir;
 
 	/* Bitmap Data */
 	struct telem_ioss_d0ix_stateinfo *ioss_d0ix_data;
@@ -905,7 +905,7 @@ static int __init telemetry_debugfs_init(void)
 {
 	const struct x86_cpu_id *id;
 	int err;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	/* Only APL supported for now */
 	id = x86_match_cpu(telemetry_debugfs_cpu_ids);

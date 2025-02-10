@@ -128,7 +128,7 @@ struct dev_pm_opp {
 	struct device_node *np;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	const char *of_name;
 #endif
 };
@@ -147,7 +147,7 @@ struct opp_device {
 	const struct device *dev;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 #endif
 };
 
@@ -244,7 +244,7 @@ struct opp_table {
 	bool is_genpd;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	char dentry_name[NAME_MAX];
 #endif
 };

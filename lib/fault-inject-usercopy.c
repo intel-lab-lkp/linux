@@ -18,7 +18,7 @@ __setup("fail_usercopy=", setup_fail_usercopy);
 
 static int __init fail_usercopy_debugfs(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = fault_create_debugfs_attr("fail_usercopy", NULL,
 					&fail_usercopy.attr);

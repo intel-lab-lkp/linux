@@ -62,7 +62,7 @@ struct acpi_aml_io {
 static struct acpi_aml_io acpi_aml_io;
 static bool acpi_aml_initialized;
 static struct file *acpi_aml_active_reader;
-static struct dentry *acpi_aml_dentry;
+static struct debugfs_node *acpi_aml_dentry;
 
 static inline bool __acpi_aml_running(void)
 {

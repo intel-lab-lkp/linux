@@ -28,7 +28,7 @@
 #define DEBUGFS_IPC_FLOOD_DURATION	"ipc_flood_duration_ms"
 
 struct sof_ipc_flood_priv {
-	struct dentry *dfs_root;
+	struct debugfs_node *dfs_root;
 	struct dentry *dfs_link[2];
 	char *buf;
 };
@@ -286,7 +286,7 @@ static int sof_ipc_flood_probe(struct auxiliary_device *auxdev,
 			       const struct auxiliary_device_id *id)
 {
 	struct sof_client_dev *cdev = auxiliary_dev_to_sof_client_dev(auxdev);
-	struct dentry *debugfs_root = sof_client_get_debugfs_root(cdev);
+	struct debugfs_node *debugfs_root = sof_client_get_debugfs_root(cdev);
 	struct device *dev = &auxdev->dev;
 	struct sof_ipc_flood_priv *priv;
 

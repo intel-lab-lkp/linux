@@ -432,7 +432,7 @@ struct ohci_hcd {
 
 	struct work_struct	nec_work;	/* Worker for NEC quirk */
 
-	struct dentry		*debug_dir;
+	struct debugfs_node *debug_dir;
 
 	/* platform-specific data -- must come last */
 	unsigned long           priv[] __aligned(sizeof(s64));

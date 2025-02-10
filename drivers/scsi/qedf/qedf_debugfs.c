@@ -13,7 +13,7 @@
 #include "qedf.h"
 #include "qedf_dbg.h"
 
-static struct dentry *qedf_dbg_root;
+static struct debugfs_node *qedf_dbg_root;
 
 /*
  * qedf_dbg_host_init - setup the debugfs file for the pf

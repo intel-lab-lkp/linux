@@ -44,7 +44,7 @@ static int ptdump_efi_show(struct seq_file *m, void *v)
 DEFINE_SHOW_ATTRIBUTE(ptdump_efi);
 #endif
 
-static struct dentry *dir;
+static struct debugfs_node *dir;
 
 static int __init pt_dump_debug_init(void)
 {

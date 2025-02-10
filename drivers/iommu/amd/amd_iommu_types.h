@@ -792,7 +792,7 @@ struct amd_iommu {
 
 #ifdef CONFIG_AMD_IOMMU_DEBUGFS
 	/* DebugFS Info */
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 
 	/* IOPF support */

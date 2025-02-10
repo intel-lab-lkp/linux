@@ -98,7 +98,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_x32, dw_edma_debugfs_u32_get, NULL, "0x%08llx\n");
 
 static void dw_edma_debugfs_create_x32(struct dw_edma *dw,
 				       const struct dw_edma_debugfs_entry ini[],
-				       int nr_entries, struct dentry *dent)
+				       int nr_entries,
+				       struct debugfs_node *dent)
 {
 	struct dw_edma_debugfs_entry *entries;
 	int i;
@@ -117,7 +118,7 @@ static void dw_edma_debugfs_create_x32(struct dw_edma *dw,
 }
 
 static void dw_edma_debugfs_regs_ch(struct dw_edma *dw, enum dw_edma_dir dir,
-				    u16 ch, struct dentry *dent)
+				    u16 ch, struct debugfs_node *dent)
 {
 	struct dw_edma_debugfs_entry debugfs_regs[] = {
 		CTX_REGISTER(dw, ch_control1, dir, ch),
@@ -137,7 +138,7 @@ static void dw_edma_debugfs_regs_ch(struct dw_edma *dw, enum dw_edma_dir dir,
 }
 
 static noinline_for_stack void
-dw_edma_debugfs_regs_wr(struct dw_edma *dw, struct dentry *dent)
+dw_edma_debugfs_regs_wr(struct dw_edma *dw, struct debugfs_node *dent)
 {
 	const struct dw_edma_debugfs_entry debugfs_regs[] = {
 		/* eDMA global registers */
@@ -174,7 +175,7 @@ dw_edma_debugfs_regs_wr(struct dw_edma *dw, struct dentry *dent)
 		WR_REGISTER_UNROLL(dw, ch6_pwr_en),
 		WR_REGISTER_UNROLL(dw, ch7_pwr_en),
 	};
-	struct dentry *regs_dent, *ch_dent;
+	struct debugfs_node *regs_dent, *ch_dent;
 	int nr_entries, i;
 	char name[32];
 
@@ -199,7 +200,7 @@ dw_edma_debugfs_regs_wr(struct dw_edma *dw, struct dentry *dent)
 }
 
 static noinline_for_stack void dw_edma_debugfs_regs_rd(struct dw_edma *dw,
-						       struct dentry *dent)
+						       struct debugfs_node *dent)
 {
 	const struct dw_edma_debugfs_entry debugfs_regs[] = {
 		/* eDMA global registers */
@@ -237,7 +238,7 @@ static noinline_for_stack void dw_edma_debugfs_regs_rd(struct dw_edma *dw,
 		RD_REGISTER_UNROLL(dw, ch6_pwr_en),
 		RD_REGISTER_UNROLL(dw, ch7_pwr_en),
 	};
-	struct dentry *regs_dent, *ch_dent;
+	struct debugfs_node *regs_dent, *ch_dent;
 	int nr_entries, i;
 	char name[32];
 
@@ -267,7 +268,7 @@ static void dw_edma_debugfs_regs(struct dw_edma *dw)
 		REGISTER(dw, ctrl_data_arb_prior),
 		REGISTER(dw, ctrl),
 	};
-	struct dentry *regs_dent;
+	struct debugfs_node *regs_dent;
 	int nr_entries;
 
 	regs_dent = debugfs_create_dir(REGISTERS_STR, dw->dma.dbg_dev_root);

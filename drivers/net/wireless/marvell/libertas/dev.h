@@ -62,13 +62,13 @@ struct lbs_private {
 #endif
 
 	/* Debugfs */
-	struct dentry *debugfs_dir;
-	struct dentry *debugfs_debug;
-	struct dentry *debugfs_files[6];
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *debugfs_debug;
+	struct debugfs_node *debugfs_files[6];
 	struct dentry *events_dir;
-	struct dentry *debugfs_events_files[6];
+	struct debugfs_node *debugfs_events_files[6];
 	struct dentry *regs_dir;
-	struct dentry *debugfs_regs_files[6];
+	struct debugfs_node *debugfs_regs_files[6];
 
 	/* Hardware debugging */
 	u32 mac_offset;

@@ -376,7 +376,7 @@ struct altr_edac_device_dev {
 	int sb_irq;
 	int db_irq;
 	const struct edac_device_prv_data *data;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	char *edac_dev_name;
 	struct altr_arria10_edac *edac;
 	struct edac_device_ctl_info *edac_dev;

@@ -335,7 +335,7 @@ struct lan966x {
 	struct vcap_control *vcap_ctrl;
 
 	/* debugfs */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 struct lan966x_port_config {

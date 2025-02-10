@@ -40,7 +40,7 @@ static const struct file_operations acbel_debugfs_ops = {
 
 static void acbel_fsg032_init_debugfs(struct i2c_client *client)
 {
-	struct dentry *debugfs = pmbus_get_debugfs_dir(client);
+	struct debugfs_node *debugfs = pmbus_get_debugfs_dir(client);
 
 	if (!debugfs)
 		return;

@@ -272,16 +272,17 @@ static const struct file_operations msi_wmi_platform_debugfs_fops = {
 
 static void msi_wmi_platform_debugfs_remove(void *data)
 {
-	struct dentry *dir = data;
+	struct debugfs_node *dir = data;
 
 	debugfs_remove_recursive(dir);
 }
 
-static void msi_wmi_platform_debugfs_add(struct wmi_device *wdev, struct dentry *dir,
+static void msi_wmi_platform_debugfs_add(struct wmi_device *wdev,
+					 struct debugfs_node *dir,
 					 const char *name, enum msi_wmi_platform_method method)
 {
 	struct msi_wmi_platform_debugfs_data *data;
-	struct dentry *entry;
+	struct debugfs_node *entry;
 
 	data = devm_kzalloc(&wdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
@@ -303,7 +304,7 @@ static void msi_wmi_platform_debugfs_add(struct wmi_device *wdev, struct dentry 
 
 static void msi_wmi_platform_debugfs_init(struct wmi_device *wdev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char dir_name[64];
 	int ret, method;
 

@@ -164,8 +164,8 @@ struct sun8i_ss_dev {
 	atomic_t flow;
 	const struct ss_variant *variant;
 #ifdef CONFIG_CRYPTO_DEV_SUN8I_SS_DEBUG
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_stats;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_stats;
 #endif
 };
 

@@ -1929,7 +1929,8 @@ static void coda_buf_queue(struct vb2_buffer *vb)
 }
 
 int coda_alloc_aux_buf(struct coda_dev *dev, struct coda_aux_buf *buf,
-		       size_t size, const char *name, struct dentry *parent)
+		       size_t size, const char *name,
+		       struct debugfs_node *parent)
 {
 	buf->vaddr = dma_alloc_coherent(dev->dev, size, &buf->paddr,
 					GFP_KERNEL);

@@ -134,9 +134,9 @@ struct mvebu_mbus_state {
 	void __iomem *sdramwins_base;
 	void __iomem *mbusbridge_base;
 	phys_addr_t sdramwins_phys_base;
-	struct dentry *debugfs_root;
-	struct dentry *debugfs_sdram;
-	struct dentry *debugfs_devs;
+	struct debugfs_node *debugfs_root;
+	struct debugfs_node *debugfs_sdram;
+	struct debugfs_node *debugfs_devs;
 	struct resource pcie_mem_aperture;
 	struct resource pcie_io_aperture;
 	const struct mvebu_mbus_soc_data *soc;

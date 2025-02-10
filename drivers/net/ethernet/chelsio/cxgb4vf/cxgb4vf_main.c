@@ -124,7 +124,7 @@ enum {
  * ====================
  */
 
-static struct dentry *cxgb4vf_debugfs_root;
+static struct debugfs_node *cxgb4vf_debugfs_root;
 
 /*
  * OS "Callback" functions.

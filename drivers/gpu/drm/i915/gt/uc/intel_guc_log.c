@@ -242,13 +242,13 @@ static int subbuf_start_callback(struct rchan_buf *buf,
 /*
  * file_create() callback. Creates relay file in debugfs.
  */
-static struct dentry *create_buf_file_callback(const char *filename,
-					       struct dentry *parent,
+static struct debugfs_node *create_buf_file_callback(const char *filename,
+					       struct debugfs_node *parent,
 					       umode_t mode,
 					       struct rchan_buf *buf,
 					       int *is_global)
 {
-	struct dentry *buf_file;
+	struct debugfs_node *buf_file;
 
 	/*
 	 * This to enable the use of a single buffer for the relay channel and
@@ -272,7 +272,7 @@ static struct dentry *create_buf_file_callback(const char *filename,
 /*
  * file_remove() default callback. Removes relay file in debugfs.
  */
-static int remove_buf_file_callback(struct dentry *dentry)
+static int remove_buf_file_callback(struct debugfs_node *dentry)
 {
 	debugfs_remove(dentry);
 	return 0;

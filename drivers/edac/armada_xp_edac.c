@@ -383,7 +383,7 @@ struct aurora_l2_drvdata {
 	uint32_t inject_mask;
 	uint8_t inject_ctl;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 #ifdef CONFIG_EDAC_DEBUG

@@ -2704,7 +2704,7 @@ struct bnxt {
 	u8			dsn[8];
 	struct bnxt_tc_info	*tc_info;
 	struct list_head	tc_indr_block_list;
-	struct dentry		*debugfs_pdev;
+	struct debugfs_node *debugfs_pdev;
 #ifdef CONFIG_BNXT_HWMON
 	struct device		*hwmon_dev;
 	u8			warn_thresh_temp;

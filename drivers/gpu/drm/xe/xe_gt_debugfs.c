@@ -315,7 +315,7 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
 {
 	struct xe_device *xe = gt_to_xe(gt);
 	struct drm_minor *minor = gt_to_xe(gt)->drm.primary;
-	struct dentry *root;
+	struct debugfs_node *root;
 	char name[8];
 
 	xe_gt_assert(gt, minor->debugfs_root);
@@ -332,7 +332,7 @@ void xe_gt_debugfs_register(struct xe_gt *gt)
 	 * so other GT specific attributes under that directory may refer to
 	 * it by looking at its parent node private data.
 	 */
-	root->d_inode->i_private = gt;
+	debugfs_node_inode(root)->i_private = gt;
 
 	drm_debugfs_create_files(debugfs_list,
 				 ARRAY_SIZE(debugfs_list),

@@ -251,7 +251,7 @@ struct kunit_suite {
 
 	/* private: internal use only */
 	char status_comment[KUNIT_STATUS_COMMENT_SIZE];
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct string_stream *log;
 	int suite_init_err;
 	bool is_init;

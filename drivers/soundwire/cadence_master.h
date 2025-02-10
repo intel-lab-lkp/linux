@@ -180,7 +180,7 @@ int sdw_cdns_clock_stop(struct sdw_cdns *cdns, bool block_wake);
 int sdw_cdns_clock_restart(struct sdw_cdns *cdns, bool bus_reset);
 
 #ifdef CONFIG_DEBUG_FS
-void sdw_cdns_debugfs_init(struct sdw_cdns *cdns, struct dentry *root);
+void sdw_cdns_debugfs_init(struct sdw_cdns *cdns, struct debugfs_node *root);
 #endif
 
 struct sdw_cdns_pdi *sdw_cdns_alloc_pdi(struct sdw_cdns *cdns,

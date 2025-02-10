@@ -7,7 +7,7 @@
 #include "nfp_net.h"
 #include "nfp_net_dp.h"
 
-static struct dentry *nfp_dir;
+static struct debugfs_node *nfp_dir;
 
 static int nfp_rx_q_show(struct seq_file *file, void *data)
 {
@@ -121,9 +121,9 @@ static int nfp_xdp_q_show(struct seq_file *file, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(nfp_xdp_q);
 
-void nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct dentry *ddir)
+void nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct debugfs_node *ddir)
 {
-	struct dentry *queues, *tx, *rx, *xdp;
+	struct debugfs_node *queues, *tx, *rx, *xdp;
 	char name[20];
 	int i;
 
@@ -158,7 +158,7 @@ void nfp_net_debugfs_vnic_add(struct nfp_net *nn, struct dentry *ddir)
 	}
 }
 
-struct dentry *nfp_net_debugfs_device_add(struct pci_dev *pdev)
+struct debugfs_node *nfp_net_debugfs_device_add(struct pci_dev *pdev)
 {
 	return debugfs_create_dir(pci_name(pdev), nfp_dir);
 }

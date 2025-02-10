@@ -59,18 +59,18 @@ struct cpt_ctx {
 };
 
 struct rvu_debugfs {
-	struct dentry *root;
-	struct dentry *cgx_root;
-	struct dentry *cgx;
-	struct dentry *lmac;
-	struct dentry *npa;
-	struct dentry *nix;
-	struct dentry *npc;
-	struct dentry *cpt;
-	struct dentry *mcs_root;
-	struct dentry *mcs;
-	struct dentry *mcs_rx;
-	struct dentry *mcs_tx;
+	struct debugfs_node *root;
+	struct debugfs_node *cgx_root;
+	struct debugfs_node *cgx;
+	struct debugfs_node *lmac;
+	struct debugfs_node *npa;
+	struct debugfs_node *nix;
+	struct debugfs_node *npc;
+	struct debugfs_node *cpt;
+	struct debugfs_node *mcs_root;
+	struct debugfs_node *mcs;
+	struct debugfs_node *mcs_rx;
+	struct debugfs_node *mcs_tx;
 	struct dump_ctx npa_aura_ctx;
 	struct dump_ctx npa_pool_ctx;
 	struct dump_ctx nix_cq_ctx;

@@ -50,7 +50,7 @@ static const char *const waterforce_speed_label[] = {
 struct waterforce_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	/* For locking access to buffer */
 	struct mutex buffer_lock;
 	/* For queueing multiple readers */

@@ -1948,12 +1948,12 @@ static int amdgpu_ras_sysfs_remove_all(struct amdgpu_device *adev)
  *
  */
 /* debugfs begin */
-static struct dentry *amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *adev)
+static struct debugfs_node *amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *adev)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
 	struct amdgpu_ras_eeprom_control *eeprom = &con->eeprom_control;
 	struct drm_minor  *minor = adev_to_drm(adev)->primary;
-	struct dentry     *dir;
+	struct debugfs_node     *dir;
 
 	dir = debugfs_create_dir(RAS_FS_NAME, minor->debugfs_root);
 	debugfs_create_file("ras_ctrl", S_IWUGO | S_IRUGO, dir, adev,
@@ -1993,7 +1993,7 @@ static struct dentry *amdgpu_ras_debugfs_create_ctrl_node(struct amdgpu_device *
 
 static void amdgpu_ras_debugfs_create(struct amdgpu_device *adev,
 				      struct ras_fs_if *head,
-				      struct dentry *dir)
+				      struct debugfs_node *dir)
 {
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &head->head);
 
@@ -2031,7 +2031,7 @@ static bool amdgpu_ras_aca_is_supported(struct amdgpu_device *adev)
 void amdgpu_ras_debugfs_create_all(struct amdgpu_device *adev)
 {
 	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	struct ras_manager *obj;
 	struct ras_fs_if fs_info;
 

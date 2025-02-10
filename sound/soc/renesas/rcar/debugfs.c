@@ -68,7 +68,7 @@ int rsnd_debugfs_probe(struct snd_soc_component *component)
 {
 	struct rsnd_priv *priv = dev_get_drvdata(component->dev);
 	struct rsnd_dai *rdai;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	char name[64];
 	int i;
 

@@ -85,7 +85,7 @@ unsigned long __get_wchan(struct task_struct *p);
 #  define STACK_TOP_MAX	STACK_TOP
 
 #ifdef CONFIG_DEBUG_FS
-extern struct dentry *of_debugfs_root;
+extern struct debugfs_node *of_debugfs_root;
 #endif
 
 #  endif /* __ASSEMBLY__ */

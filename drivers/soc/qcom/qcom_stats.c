@@ -125,7 +125,8 @@ static int qcom_soc_sleep_stats_show(struct seq_file *s, void *unused)
 DEFINE_SHOW_ATTRIBUTE(qcom_soc_sleep_stats);
 DEFINE_SHOW_ATTRIBUTE(qcom_subsystem_sleep_stats);
 
-static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *reg,
+static void qcom_create_soc_sleep_stat_files(struct debugfs_node *root,
+					     void __iomem *reg,
 					     struct stats_data *d,
 					     const struct stats_config *config)
 {
@@ -171,7 +172,7 @@ static void qcom_create_soc_sleep_stat_files(struct dentry *root, void __iomem *
 	}
 }
 
-static void qcom_create_subsystem_stat_files(struct dentry *root,
+static void qcom_create_subsystem_stat_files(struct debugfs_node *root,
 					     const struct stats_config *config)
 {
 	int i;
@@ -187,7 +188,7 @@ static void qcom_create_subsystem_stat_files(struct dentry *root,
 static int qcom_stats_probe(struct platform_device *pdev)
 {
 	void __iomem *reg;
-	struct dentry *root;
+	struct debugfs_node *root;
 	const struct stats_config *config;
 	struct stats_data *d;
 	int i;
@@ -222,7 +223,7 @@ static int qcom_stats_probe(struct platform_device *pdev)
 
 static void qcom_stats_remove(struct platform_device *pdev)
 {
-	struct dentry *root = platform_get_drvdata(pdev);
+	struct debugfs_node *root = platform_get_drvdata(pdev);
 
 	debugfs_remove_recursive(root);
 }

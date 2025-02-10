@@ -91,7 +91,7 @@ static const struct file_operations devname_ops = {
 static int __init fail_skb_realloc_debugfs(void)
 {
 	umode_t mode = S_IFREG | 0600;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = fault_create_debugfs_attr("fail_skb_realloc", NULL,
 					&skb_realloc.attr);

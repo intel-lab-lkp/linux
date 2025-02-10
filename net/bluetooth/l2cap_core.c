@@ -7598,7 +7598,7 @@ static int l2cap_debugfs_show(struct seq_file *f, void *p)
 
 DEFINE_SHOW_ATTRIBUTE(l2cap_debugfs);
 
-static struct dentry *l2cap_debugfs;
+static struct debugfs_node *l2cap_debugfs;
 
 int __init l2cap_init(void)
 {

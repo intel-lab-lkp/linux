@@ -7,7 +7,7 @@
 #include <ufs/ufshcd.h>
 #include "ufshcd-priv.h"
 
-static struct dentry *ufs_debugfs_root;
+static struct debugfs_node *ufs_debugfs_root;
 
 struct ufs_debugfs_attr {
 	const char			*name;
@@ -212,7 +212,7 @@ static const struct ufs_debugfs_attr ufs_attrs[] = {
 void ufs_debugfs_hba_init(struct ufs_hba *hba)
 {
 	const struct ufs_debugfs_attr *attr;
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	/* Set default exception event rate limit period to 20ms */
 	hba->debugfs_ee_rate_limit_ms = 20;
@@ -222,7 +222,7 @@ void ufs_debugfs_hba_init(struct ufs_hba *hba)
 	if (IS_ERR_OR_NULL(root))
 		return;
 	hba->debugfs_root = root;
-	d_inode(root)->i_private = hba;
+	debugfs_node_inode(root)->i_private = hba;
 	for (attr = ufs_attrs; attr->name; attr++)
 		debugfs_create_file(attr->name, attr->mode, root, (void *)attr,
 				    attr->fops);

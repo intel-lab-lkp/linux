@@ -1467,7 +1467,7 @@ static int sco_debugfs_show(struct seq_file *f, void *p)
 
 DEFINE_SHOW_ATTRIBUTE(sco_debugfs);
 
-static struct dentry *sco_debugfs;
+static struct debugfs_node *sco_debugfs;
 
 static const struct proto_ops sco_sock_ops = {
 	.family		= PF_BLUETOOTH,

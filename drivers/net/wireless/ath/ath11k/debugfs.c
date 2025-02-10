@@ -998,7 +998,7 @@ void ath11k_debugfs_pdev_destroy(struct ath11k_base *ab)
 
 int ath11k_debugfs_soc_create(struct ath11k_base *ab)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	bool dput_needed;
 	char name[64];
 	int ret;
@@ -1028,7 +1028,7 @@ int ath11k_debugfs_soc_create(struct ath11k_base *ab)
 
 out:
 	if (dput_needed)
-		dput(root);
+		debugfs_node_put(root);
 
 	return ret;
 }
@@ -1048,7 +1048,7 @@ EXPORT_SYMBOL(ath11k_debugfs_soc_destroy);
 
 void ath11k_debugfs_fw_stats_init(struct ath11k *ar)
 {
-	struct dentry *fwstats_dir = debugfs_create_dir("fw_stats",
+	struct debugfs_node *fwstats_dir = debugfs_create_dir("fw_stats",
 							ar->debug.debugfs_pdev);
 
 	ar->fw_stats.debugfs_fwstats = fwstats_dir;
@@ -1899,7 +1899,7 @@ void ath11k_debugfs_op_vif_add(struct ieee80211_hw *hw,
 {
 	struct ath11k_vif *arvif = ath11k_vif_to_arvif(vif);
 	struct ath11k_base *ab = arvif->ar->ab;
-	struct dentry *debugfs_twt;
+	struct debugfs_node *debugfs_twt;
 
 	if (arvif->vif->type != NL80211_IFTYPE_AP &&
 	    !(arvif->vif->type == NL80211_IFTYPE_STATION &&

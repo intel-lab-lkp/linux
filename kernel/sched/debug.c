@@ -282,7 +282,7 @@ static const struct file_operations sched_dynamic_fops = {
 __read_mostly bool sched_debug_verbose;
 
 #ifdef CONFIG_SMP
-static struct dentry           *sd_dentry;
+static struct debugfs_node           *sd_dentry;
 
 
 static ssize_t sched_verbose_write(struct file *filp, const char __user *ubuf,
@@ -470,11 +470,11 @@ static const struct file_operations fair_server_period_fops = {
 	.release	= single_release,
 };
 
-static struct dentry *debugfs_sched;
+static struct debugfs_node *debugfs_sched;
 
 static void debugfs_fair_server_init(void)
 {
-	struct dentry *d_fair;
+	struct debugfs_node *d_fair;
 	unsigned long cpu;
 
 	d_fair = debugfs_create_dir("fair_server", debugfs_sched);
@@ -482,7 +482,7 @@ static void debugfs_fair_server_init(void)
 		return;
 
 	for_each_possible_cpu(cpu) {
-		struct dentry *d_cpu;
+		struct debugfs_node *d_cpu;
 		char buf[32];
 
 		snprintf(buf, sizeof(buf), "cpu%lu", cpu);
@@ -495,7 +495,7 @@ static void debugfs_fair_server_init(void)
 
 static __init int sched_init_debug(void)
 {
-	struct dentry __maybe_unused *numa;
+	struct debugfs_node __maybe_unused *numa;
 
 	debugfs_sched = debugfs_create_dir("sched", NULL);
 
@@ -568,7 +568,7 @@ static const struct file_operations sd_flags_fops = {
 	.release	= single_release,
 };
 
-static void register_sd(struct sched_domain *sd, struct dentry *parent)
+static void register_sd(struct sched_domain *sd, struct debugfs_node *parent)
 {
 #define SDM(type, mode, member)	\
 	debugfs_create_##type(#member, mode, parent, &sd->member)
@@ -618,7 +618,7 @@ void update_sched_domain_debugfs(void)
 
 	for_each_cpu(cpu, sd_sysctl_cpus) {
 		struct sched_domain *sd;
-		struct dentry *d_cpu;
+		struct debugfs_node *d_cpu;
 		char buf[32];
 
 		snprintf(buf, sizeof(buf), "cpu%d", cpu);
@@ -627,7 +627,7 @@ void update_sched_domain_debugfs(void)
 
 		i = 0;
 		for_each_domain(cpu, sd) {
-			struct dentry *d_sd;
+			struct debugfs_node *d_sd;
 
 			snprintf(buf, sizeof(buf), "domain%d", i);
 			d_sd = debugfs_create_dir(buf, d_cpu);

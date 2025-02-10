@@ -306,8 +306,8 @@ static int max20730_init_debugfs(struct i2c_client *client,
 				 struct max20730_data *data)
 {
 	int ret, i;
-	struct dentry *debugfs;
-	struct dentry *max20730_dir;
+	struct debugfs_node *debugfs;
+	struct debugfs_node *max20730_dir;
 	struct max20730_debugfs_data *psu;
 
 	ret = i2c_smbus_read_word_data(client, MAX20730_MFR_DEVSET2);

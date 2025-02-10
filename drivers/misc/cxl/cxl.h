@@ -490,7 +490,7 @@ struct cxl_afu {
 	struct cdev afu_cdev_s, afu_cdev_m, afu_cdev_d;
 	struct device *chardev_s, *chardev_m, *chardev_d;
 	struct idr contexts_idr;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct mutex contexts_lock;
 	spinlock_t afu_cntl_lock;
 
@@ -683,7 +683,7 @@ struct cxl {
 	struct device dev;
 	struct dentry *trace;
 	struct dentry *psl_err_chk;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	char *irq_name;
 	struct bin_attribute cxl_attr;
 	int adapter_num;
@@ -917,10 +917,14 @@ void cxl_debugfs_adapter_add(struct cxl *adapter);
 void cxl_debugfs_adapter_remove(struct cxl *adapter);
 void cxl_debugfs_afu_add(struct cxl_afu *afu);
 void cxl_debugfs_afu_remove(struct cxl_afu *afu);
-void cxl_debugfs_add_adapter_regs_psl9(struct cxl *adapter, struct dentry *dir);
-void cxl_debugfs_add_adapter_regs_psl8(struct cxl *adapter, struct dentry *dir);
-void cxl_debugfs_add_afu_regs_psl9(struct cxl_afu *afu, struct dentry *dir);
-void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu, struct dentry *dir);
+void cxl_debugfs_add_adapter_regs_psl9(struct cxl *adapter,
+				       struct debugfs_node *dir);
+void cxl_debugfs_add_adapter_regs_psl8(struct cxl *adapter,
+				       struct debugfs_node *dir);
+void cxl_debugfs_add_afu_regs_psl9(struct cxl_afu *afu,
+				   struct debugfs_node *dir);
+void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu,
+				   struct debugfs_node *dir);
 
 #else /* CONFIG_DEBUG_FS */
 
@@ -949,20 +953,22 @@ static inline void cxl_debugfs_afu_remove(struct cxl_afu *afu)
 }
 
 static inline void cxl_debugfs_add_adapter_regs_psl9(struct cxl *adapter,
-						    struct dentry *dir)
+						    struct debugfs_node *dir)
 {
 }
 
 static inline void cxl_debugfs_add_adapter_regs_psl8(struct cxl *adapter,
-						    struct dentry *dir)
+						    struct debugfs_node *dir)
 {
 }
 
-static inline void cxl_debugfs_add_afu_regs_psl9(struct cxl_afu *afu, struct dentry *dir)
+static inline void cxl_debugfs_add_afu_regs_psl9(struct cxl_afu *afu,
+						 struct debugfs_node *dir)
 {
 }
 
-static inline void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu, struct dentry *dir)
+static inline void cxl_debugfs_add_afu_regs_psl8(struct cxl_afu *afu,
+						 struct debugfs_node *dir)
 {
 }
 

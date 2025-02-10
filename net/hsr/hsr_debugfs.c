@@ -12,7 +12,7 @@
 #include "hsr_main.h"
 #include "hsr_framereg.h"
 
-static struct dentry *hsr_debugfs_root_dir;
+static struct debugfs_node *hsr_debugfs_root_dir;
 
 /* hsr_node_table_show - Formats and prints node_table entries */
 static int
@@ -73,7 +73,7 @@ void hsr_debugfs_rename(struct net_device *dev)
  */
 void hsr_debugfs_init(struct hsr_priv *priv, struct net_device *hsr_dev)
 {
-	struct dentry *de = NULL;
+	struct debugfs_node *de = NULL;
 
 	de = debugfs_create_dir(hsr_dev->name, hsr_debugfs_root_dir);
 	if (IS_ERR(de)) {

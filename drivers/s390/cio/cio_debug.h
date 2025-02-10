@@ -27,6 +27,6 @@ static inline void CIO_HEX_EVENT(int level, void *data, int length)
 }
 
 /* For the CIO debugfs related features */
-extern struct dentry *cio_debugfs_dir;
+extern struct debugfs_node *cio_debugfs_dir;
 
 #endif

@@ -225,7 +225,7 @@ struct brcmuart_priv {
 	size_t		tx_size;
 	bool		tx_running;
 	bool		rx_running;
-	struct dentry	*debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	/* stats exposed through debugfs */
 	u64		dma_rx_partial_buf;
@@ -239,7 +239,7 @@ struct brcmuart_priv {
 	u32		saved_mctrl;
 };
 
-static struct dentry *brcmuart_debugfs_root;
+static struct debugfs_node *brcmuart_debugfs_root;
 
 /*
  * Register access routines

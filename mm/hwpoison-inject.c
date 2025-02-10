@@ -9,7 +9,7 @@
 #include <linux/hugetlb.h>
 #include "internal.h"
 
-static struct dentry *hwpoison_dir;
+static struct debugfs_node *hwpoison_dir;
 
 static int hwpoison_inject(void *data, u64 val)
 {

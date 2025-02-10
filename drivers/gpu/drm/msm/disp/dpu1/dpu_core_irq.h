@@ -29,6 +29,6 @@ int dpu_core_irq_unregister_callback(
 		unsigned int irq_idx);
 
 void dpu_debugfs_core_irq_init(struct dpu_kms *dpu_kms,
-		struct dentry *parent);
+		struct debugfs_node *parent);
 
 #endif /* __DPU_CORE_IRQ_H__ */

@@ -5,9 +5,9 @@
 #include <linux/debugfs.h>
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-struct dentry *ras_get_debugfs_root(void);
+struct debugfs_node *ras_get_debugfs_root(void);
 #else
-static inline struct dentry *ras_get_debugfs_root(void) { return NULL; }
+static inline struct debugfs_node *ras_get_debugfs_root(void) { return NULL; }
 #endif /* DEBUG_FS */
 
 #endif /* __RAS_DEBUGFS_H__ */

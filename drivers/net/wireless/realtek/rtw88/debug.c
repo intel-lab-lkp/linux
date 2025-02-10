@@ -1239,7 +1239,8 @@ static const struct rtw_debugfs rtw_debugfs_templ = {
 	rtw_debugfs_add_core(name, S_IFREG | 0444, single_r, debugfs_topdir)
 
 static
-void rtw_debugfs_add_basic(struct rtw_dev *rtwdev, struct dentry *debugfs_topdir)
+void rtw_debugfs_add_basic(struct rtw_dev *rtwdev,
+			   struct debugfs_node *debugfs_topdir)
 {
 	rtw_debugfs_add_w(write_reg);
 	rtw_debugfs_add_rw(read_reg);
@@ -1261,7 +1262,8 @@ void rtw_debugfs_add_basic(struct rtw_dev *rtwdev, struct dentry *debugfs_topdir
 }
 
 static
-void rtw_debugfs_add_sec0(struct rtw_dev *rtwdev, struct dentry *debugfs_topdir)
+void rtw_debugfs_add_sec0(struct rtw_dev *rtwdev,
+			  struct debugfs_node *debugfs_topdir)
 {
 	rtw_debugfs_add_r(mac_0);
 	rtw_debugfs_add_r(mac_1);
@@ -1282,7 +1284,8 @@ void rtw_debugfs_add_sec0(struct rtw_dev *rtwdev, struct dentry *debugfs_topdir)
 }
 
 static
-void rtw_debugfs_add_sec1(struct rtw_dev *rtwdev, struct dentry *debugfs_topdir)
+void rtw_debugfs_add_sec1(struct rtw_dev *rtwdev,
+			  struct debugfs_node *debugfs_topdir)
 {
 	rtw_debugfs_add_r(mac_10);
 	rtw_debugfs_add_r(mac_11);
@@ -1310,7 +1313,7 @@ void rtw_debugfs_add_sec1(struct rtw_dev *rtwdev, struct dentry *debugfs_topdir)
 
 void rtw_debugfs_init(struct rtw_dev *rtwdev)
 {
-	struct dentry *debugfs_topdir;
+	struct debugfs_node *debugfs_topdir;
 
 	rtwdev->debugfs = kmemdup(&rtw_debugfs_templ, sizeof(rtw_debugfs_templ),
 				  GFP_KERNEL);

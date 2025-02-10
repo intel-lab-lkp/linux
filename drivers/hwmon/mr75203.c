@@ -172,7 +172,7 @@ struct pvt_device {
 	struct regmap		*v_map;
 	struct clk		*clk;
 	struct reset_control	*rst;
-	struct dentry		*dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	struct voltage_device	*vd;
 	struct voltage_channels	vm_channels;
 	struct temp_coeff	ts_coeff;

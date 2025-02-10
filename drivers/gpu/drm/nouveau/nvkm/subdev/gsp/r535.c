@@ -58,7 +58,7 @@
 #include <linux/ctype.h>
 #include <linux/parser.h>
 
-extern struct dentry *nouveau_debugfs_root;
+extern struct debugfs_node *nouveau_debugfs_root;
 
 #define GSP_MSG_MIN_SIZE GSP_PAGE_SIZE
 #define GSP_MSG_MAX_SIZE GSP_PAGE_MIN_SIZE * 16
@@ -2169,10 +2169,10 @@ r535_gsp_msg_libos_print(void *priv, u32 fn, void *repv, u32 repc)
  *
  * Creates a debugfs entry for a logging buffer with the name 'name'.
  */
-static struct dentry *create_debugfs(struct nvkm_gsp *gsp, const char *name,
+static struct debugfs_node *create_debugfs(struct nvkm_gsp *gsp, const char *name,
 				     struct debugfs_blob_wrapper *blob)
 {
-	struct dentry *dent;
+	struct debugfs_node *dent;
 
 	dent = debugfs_create_blob(name, 0444, gsp->debugfs.parent, blob);
 	if (IS_ERR(dent)) {
@@ -2187,7 +2187,7 @@ static struct dentry *create_debugfs(struct nvkm_gsp *gsp, const char *name,
 	 *
 	 * [1] https://lore.kernel.org/r/linux-fsdevel/20240207200619.3354549-1-ttabi@nvidia.com/
 	 */
-	i_size_write(d_inode(dent), blob->size);
+	i_size_write(debugfs_node_inode(dent), blob->size);
 
 	return dent;
 }
@@ -2737,7 +2737,7 @@ struct r535_gsp_log {
 	 * Logging buffers in debugfs. The wrapper objects need to remain
 	 * in memory until the dentry is deleted.
 	 */
-	struct dentry *debugfs_logging_dir;
+	struct debugfs_node *debugfs_logging_dir;
 	struct debugfs_blob_wrapper blob_init;
 	struct debugfs_blob_wrapper blob_intr;
 	struct debugfs_blob_wrapper blob_rm;
@@ -2793,12 +2793,12 @@ static bool is_empty(const struct debugfs_blob_wrapper *b)
  * To preserve the logging buffers, the buffers need to be copied, but only
  * if they actually have data.
  */
-static int r535_gsp_copy_log(struct dentry *parent,
+static int r535_gsp_copy_log(struct debugfs_node *parent,
 			     const char *name,
 			     const struct debugfs_blob_wrapper *s,
 			     struct debugfs_blob_wrapper *t)
 {
-	struct dentry *dent;
+	struct debugfs_node *dent;
 	void *p;
 
 	if (is_empty(s))
@@ -2819,7 +2819,7 @@ static int r535_gsp_copy_log(struct dentry *parent,
 		return PTR_ERR(dent);
 	}
 
-	i_size_write(d_inode(dent), t->size);
+	i_size_write(debugfs_node_inode(dent), t->size);
 
 	return 0;
 }

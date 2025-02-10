@@ -831,7 +831,7 @@ struct ath6kl {
 
 	struct workqueue_struct *ath6kl_wq;
 
-	struct dentry *debugfs_phy;
+	struct debugfs_node *debugfs_phy;
 
 	bool p2p;
 

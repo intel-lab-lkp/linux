@@ -104,7 +104,7 @@ struct nbd_config {
 	unsigned int blksize_bits;
 	loff_t bytesize;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 #endif
 };
 
@@ -157,7 +157,7 @@ struct nbd_cmd {
 };
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
-static struct dentry *nbd_dbg_dir;
+static struct debugfs_node *nbd_dbg_dir;
 #endif
 
 #define nbd_name(nbd) ((nbd)->disk->disk_name)
@@ -1798,7 +1798,7 @@ DEFINE_SHOW_ATTRIBUTE(nbd_dbg_flags);
 
 static int nbd_dev_dbg_init(struct nbd_device *nbd)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	struct nbd_config *config = nbd->config;
 
 	if (!nbd_dbg_dir)
@@ -1828,7 +1828,7 @@ static void nbd_dev_dbg_close(struct nbd_device *nbd)
 
 static int nbd_dbg_init(void)
 {
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 
 	dbg_dir = debugfs_create_dir("nbd", NULL);
 	if (IS_ERR(dbg_dir))

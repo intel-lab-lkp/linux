@@ -210,7 +210,8 @@ int amdgpu_aca_get_error_data(struct amdgpu_device *adev, struct aca_handle *han
 			      enum aca_error_type type, struct ras_err_data *err_data,
 			      struct ras_query_context *qctx);
 int amdgpu_aca_smu_set_debug_mode(struct amdgpu_device *adev, bool en);
-void amdgpu_aca_smu_debugfs_init(struct amdgpu_device *adev, struct dentry *root);
+void amdgpu_aca_smu_debugfs_init(struct amdgpu_device *adev,
+				 struct debugfs_node *root);
 int aca_error_cache_log_bank_error(struct aca_handle *handle, struct aca_bank_info *info,
 				   enum aca_error_type type, u64 count);
 #endif

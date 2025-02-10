@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-extern struct dentry *d_testing;
+extern struct debugfs_node *d_testing;
 
 int tt_add_tz(void);
 int tt_del_tz(const char *arg);

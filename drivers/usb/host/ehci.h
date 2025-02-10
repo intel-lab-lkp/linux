@@ -246,7 +246,7 @@ struct ehci_hcd {			/* one per controller */
 
 	/* debug files */
 #ifdef CONFIG_DYNAMIC_DEBUG
-	struct dentry		*debug_dir;
+	struct debugfs_node *debug_dir;
 #endif
 
 	/* bandwidth usage */

@@ -91,7 +91,7 @@ struct efct {
 	u32				target_io_timer_sec;
 
 	int				speed;
-	struct dentry			*sess_debugfs_dir;
+	struct debugfs_node *sess_debugfs_dir;
 };
 
 #define FW_WRITE_BUFSIZE		(64 * 1024)

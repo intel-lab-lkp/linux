@@ -862,7 +862,7 @@ static void byt_add_debugfs(struct sdhci_pci_slot *slot)
 {
 	struct intel_host *intel_host = sdhci_pci_priv(slot);
 	struct mmc_host *mmc = slot->host->mmc;
-	struct dentry *dir = mmc->debugfs_root;
+	struct debugfs_node *dir = mmc->debugfs_root;
 
 	if (!intel_use_ltr(slot->chip))
 		return;

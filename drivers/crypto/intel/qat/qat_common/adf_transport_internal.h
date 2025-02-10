@@ -9,7 +9,7 @@
 
 struct adf_etr_ring_debug_entry {
 	char ring_name[ADF_CFG_MAX_KEY_LEN_IN_BYTES];
-	struct dentry *debug;
+	struct debugfs_node *debug;
 };
 
 struct adf_etr_ring_data {
@@ -38,13 +38,13 @@ struct adf_etr_bank_data {
 	u16 irq_mask;
 	spinlock_t lock;	/* protects bank data struct */
 	struct adf_accel_dev *accel_dev;
-	struct dentry *bank_debug_dir;
-	struct dentry *bank_debug_cfg;
+	struct debugfs_node *bank_debug_dir;
+	struct debugfs_node *bank_debug_cfg;
 };
 
 struct adf_etr_data {
 	struct adf_etr_bank_data *banks;
-	struct dentry *debug;
+	struct debugfs_node *debug;
 };
 
 void adf_response_handler(uintptr_t bank_addr);

@@ -261,7 +261,7 @@ enum nvme_ctrl_state {
 struct nvme_fault_inject {
 #ifdef CONFIG_FAULT_INJECTION_DEBUG_FS
 	struct fault_attr attr;
-	struct dentry *parent;
+	struct debugfs_node *parent;
 	bool dont_retry;	/* DNR, do not retry */
 	u16 status;		/* status code */
 #endif

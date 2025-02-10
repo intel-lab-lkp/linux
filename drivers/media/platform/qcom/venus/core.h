@@ -227,7 +227,7 @@ struct venus_core {
 	unsigned int codecs_count;
 	unsigned int core0_usage_count;
 	unsigned int core1_usage_count;
-	struct dentry *root;
+	struct debugfs_node *root;
 	struct venus_img_version {
 		u32 major;
 		u32 minor;

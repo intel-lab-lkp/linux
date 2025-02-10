@@ -40,14 +40,14 @@
 #define GPIO_VIRTUSER_NAME_BUF_LEN 32
 
 static DEFINE_IDA(gpio_virtuser_ida);
-static struct dentry *gpio_virtuser_dbg_root;
+static struct debugfs_node *gpio_virtuser_dbg_root;
 
 struct gpio_virtuser_attr_data {
 	union {
 		struct gpio_desc *desc;
 		struct gpio_descs *descs;
 	};
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 
 struct gpio_virtuser_line_array_data {
@@ -747,9 +747,10 @@ gpio_virtuser_line_dbgfs_attrs[] = {
 
 static int gpio_virtuser_create_debugfs_attrs(
 			const struct gpio_virtuser_dbgfs_attr_descr *attr,
-			size_t num_attrs, struct dentry *parent, void *data)
+			size_t num_attrs, struct debugfs_node *parent,
+			void *data)
 {
-	struct dentry *ret;
+	struct debugfs_node *ret;
 	size_t i;
 
 	for (i = 0; i < num_attrs; i++, attr++) {
@@ -765,7 +766,7 @@ static int gpio_virtuser_create_debugfs_attrs(
 static int gpio_virtuser_dbgfs_init_line_array_attrs(struct device *dev,
 						     struct gpio_descs *descs,
 						     const char *id,
-						     struct dentry *dbgfs_entry)
+						     struct debugfs_node *dbgfs_entry)
 {
 	struct gpio_virtuser_line_array_data *data;
 	char *name;
@@ -794,7 +795,7 @@ static int gpio_virtuser_dbgfs_init_line_attrs(struct device *dev,
 					       struct gpio_desc *desc,
 					       const char *id,
 					       unsigned int index,
-					       struct dentry *dbgfs_entry)
+					       struct debugfs_node *dbgfs_entry)
 {
 	struct gpio_virtuser_line_data *data;
 	char *name;
@@ -829,7 +830,7 @@ static int gpio_virtuser_dbgfs_init_line_attrs(struct device *dev,
 
 static void gpio_virtuser_debugfs_remove(void *data)
 {
-	struct dentry *dbgfs_entry = data;
+	struct debugfs_node *dbgfs_entry = data;
 
 	debugfs_remove_recursive(dbgfs_entry);
 }
@@ -900,7 +901,7 @@ static int gpio_virtuser_get_ids(struct device *dev, const char **ids,
 static int gpio_virtuser_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct dentry *dbgfs_entry;
+	struct debugfs_node *dbgfs_entry;
 	struct gpio_descs *descs;
 	int ret, num_ids = 0, i;
 	const char **ids;

@@ -15,9 +15,9 @@
 
 #include "thermal_core.h"
 
-static struct dentry *d_root;
-static struct dentry *d_cdev;
-static struct dentry *d_tz;
+static struct debugfs_node *d_root;
+static struct debugfs_node *d_cdev;
+static struct debugfs_node *d_tz;
 
 /*
  * Length of the string containing the thermal zone id or the cooling
@@ -167,7 +167,7 @@ struct tz_debugfs {
  * @tz_dbg: a thermal zone debug structure
  */
 struct thermal_debugfs {
-	struct dentry *d_top;
+	struct debugfs_node *d_top;
 	struct mutex lock;
 	union {
 		struct cdev_debugfs cdev_dbg;
@@ -188,7 +188,8 @@ void thermal_debug_init(void)
 	d_tz = debugfs_create_dir("thermal_zones", d_root);
 }
 
-static struct thermal_debugfs *thermal_debugfs_add_id(struct dentry *d, int id)
+static struct thermal_debugfs *thermal_debugfs_add_id(struct debugfs_node *d,
+						      int id)
 {
 	struct thermal_debugfs *thermal_dbg;
 	char ids[IDSLENGTH];

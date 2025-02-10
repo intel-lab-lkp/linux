@@ -64,7 +64,7 @@ irqreturn_t rproc_vq_interrupt(struct rproc *rproc, int vq_id);
 
 /* from remoteproc_debugfs.c */
 void rproc_remove_trace_file(struct dentry *tfile);
-struct dentry *rproc_create_trace_file(const char *name, struct rproc *rproc,
+struct debugfs_node *rproc_create_trace_file(const char *name, struct rproc *rproc,
 				       struct rproc_debug_trace *trace);
 void rproc_delete_debug_dir(struct rproc *rproc);
 void rproc_create_debug_dir(struct rproc *rproc);

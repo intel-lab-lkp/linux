@@ -19,7 +19,7 @@
 
 #define EXTRA_SPACE	1024
 
-static struct dentry *uhci_debugfs_root;
+static struct debugfs_node *uhci_debugfs_root;
 
 #ifdef CONFIG_DYNAMIC_DEBUG
 

@@ -655,7 +655,7 @@ static void qca_debugfs_init(struct hci_dev *hdev)
 {
 	struct hci_uart *hu = hci_get_drvdata(hdev);
 	struct qca_data *qca = hu->priv;
-	struct dentry *ibs_dir;
+	struct debugfs_node *ibs_dir;
 	umode_t mode;
 
 	if (!hdev->debugfs)

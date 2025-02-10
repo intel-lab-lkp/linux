@@ -34,7 +34,7 @@ static int test_fpu_get(void *data, u64 *val)
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(test_fpu_fops, test_fpu_get, NULL, "%lld\n");
-static struct dentry *selftest_dir;
+static struct debugfs_node *selftest_dir;
 
 static int __init test_fpu_init(void)
 {

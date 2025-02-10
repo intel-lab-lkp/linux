@@ -5,7 +5,7 @@
 #include <linux/kstrtox.h>
 #include <asm/loongarch.h>
 
-struct dentry *arch_debugfs_dir;
+struct debugfs_node *arch_debugfs_dir;
 EXPORT_SYMBOL(arch_debugfs_dir);
 
 static int sfb_state, tso_state;

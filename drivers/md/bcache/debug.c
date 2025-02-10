@@ -17,7 +17,7 @@
 #include <linux/random.h>
 #include <linux/seq_file.h>
 
-struct dentry *bcache_debug;
+struct debugfs_node *bcache_debug;
 
 #ifdef CONFIG_BCACHE_DEBUG
 

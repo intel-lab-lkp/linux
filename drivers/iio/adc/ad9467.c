@@ -1144,7 +1144,7 @@ static const struct file_operations ad9467_calib_table_fops = {
 
 static void ad9467_debugfs_init(struct iio_dev *indio_dev)
 {
-	struct dentry *d = iio_get_debugfs_dentry(indio_dev);
+	struct debugfs_node *d = iio_get_debugfs_dentry(indio_dev);
 	struct ad9467_state *st = iio_priv(indio_dev);
 	char attr_name[32];
 	unsigned int chan;

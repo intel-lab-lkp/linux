@@ -26,7 +26,7 @@ static atomic64_t total_completion_einval_errors;
 static atomic64_t total_completion_timeout_errors;
 static atomic64_t total_completion_comp_buf_overflow_errors;
 
-static struct dentry *iaa_crypto_debugfs_root;
+static struct debugfs_node *iaa_crypto_debugfs_root;
 
 void update_total_comp_calls(void)
 {

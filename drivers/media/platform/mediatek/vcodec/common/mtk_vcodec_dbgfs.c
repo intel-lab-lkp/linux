@@ -179,7 +179,7 @@ EXPORT_SYMBOL_GPL(mtk_vcodec_dbgfs_remove);
 
 static void mtk_vcodec_dbgfs_vdec_init(struct mtk_vcodec_dec_dev *vcodec_dev)
 {
-	struct dentry *vcodec_root;
+	struct debugfs_node *vcodec_root;
 
 	vcodec_dev->dbgfs.vcodec_root = debugfs_create_dir("vcodec-dec", NULL);
 	if (IS_ERR(vcodec_dev->dbgfs.vcodec_root))
@@ -198,7 +198,7 @@ static void mtk_vcodec_dbgfs_vdec_init(struct mtk_vcodec_dec_dev *vcodec_dev)
 
 static void mtk_vcodec_dbgfs_venc_init(struct mtk_vcodec_enc_dev *vcodec_dev)
 {
-	struct dentry *vcodec_root;
+	struct debugfs_node *vcodec_root;
 
 	vcodec_dev->dbgfs.vcodec_root = debugfs_create_dir("vcodec-enc", NULL);
 	if (IS_ERR(vcodec_dev->dbgfs.vcodec_root))

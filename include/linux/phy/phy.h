@@ -164,7 +164,7 @@ struct phy {
 	int			power_count;
 	struct phy_attrs	attrs;
 	struct regulator	*pwr;
-	struct dentry		*debugfs;
+	struct debugfs_node *debugfs;
 };
 
 /**

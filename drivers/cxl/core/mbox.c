@@ -1459,7 +1459,7 @@ EXPORT_SYMBOL_NS_GPL(cxl_memdev_state_create, "CXL");
 
 void __init cxl_mbox_init(void)
 {
-	struct dentry *mbox_debugfs;
+	struct debugfs_node *mbox_debugfs;
 
 	mbox_debugfs = cxl_debugfs_create_dir("mbox");
 	debugfs_create_bool("raw_allow_all", 0600, mbox_debugfs,

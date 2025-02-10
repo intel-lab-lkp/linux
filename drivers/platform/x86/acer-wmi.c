@@ -329,7 +329,7 @@ struct acer_data {
 };
 
 struct acer_debug {
-	struct dentry *root;
+	struct debugfs_node *root;
 	u32 wmid_devices;
 };
 

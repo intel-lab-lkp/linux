@@ -24,7 +24,7 @@ static struct notifier_err_inject netdev_notifier_err_inject = {
 	}
 };
 
-static struct dentry *dir;
+static struct debugfs_node *dir;
 
 static int netdev_err_inject_init(void)
 {

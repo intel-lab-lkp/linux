@@ -20,7 +20,7 @@
 
 static DEFINE_MUTEX(iommu_debug_lock);
 
-static struct dentry *iommu_debug_root;
+static struct debugfs_node *iommu_debug_root;
 
 static inline bool is_omap_iommu_detached(struct omap_iommu *obj)
 {
@@ -241,7 +241,7 @@ DEFINE_SHOW_ATTRIBUTE(pagetable);
 
 void omap_iommu_debugfs_add(struct omap_iommu *obj)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	if (!iommu_debug_root)
 		return;

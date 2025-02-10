@@ -7,8 +7,9 @@
 #define _XE_GSC_DEBUGFS_H_
 
 struct dentry;
+#define debugfs_node dentry
 struct xe_gsc;
 
-void xe_gsc_debugfs_register(struct xe_gsc *gsc, struct dentry *parent);
+void xe_gsc_debugfs_register(struct xe_gsc *gsc, struct debugfs_node *parent);
 
 #endif

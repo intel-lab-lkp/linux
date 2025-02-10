@@ -213,7 +213,7 @@ struct agfn_fan_args {
  *   call        - call method_id(dev_id, ctrl_param) and print result
  */
 struct asus_wmi_debug {
-	struct dentry *root;
+	struct debugfs_node *root;
 	u32 method_id;
 	u32 dev_id;
 	u32 ctrl_param;

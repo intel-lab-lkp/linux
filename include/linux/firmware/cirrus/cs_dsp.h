@@ -189,7 +189,7 @@ struct cs_dsp {
 	unsigned int lock_regions;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	char *wmfw_file_name;
 	char *bin_file_name;
 #endif
@@ -242,7 +242,8 @@ void cs_dsp_adsp2_bus_error(struct cs_dsp *dsp);
 void cs_dsp_halo_bus_error(struct cs_dsp *dsp);
 void cs_dsp_halo_wdt_expire(struct cs_dsp *dsp);
 
-void cs_dsp_init_debugfs(struct cs_dsp *dsp, struct dentry *debugfs_root);
+void cs_dsp_init_debugfs(struct cs_dsp *dsp,
+			 struct debugfs_node *debugfs_root);
 void cs_dsp_cleanup_debugfs(struct cs_dsp *dsp);
 
 int cs_dsp_coeff_write_acked_control(struct cs_dsp_coeff_ctl *ctl, unsigned int event_id);

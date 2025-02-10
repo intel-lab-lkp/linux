@@ -800,7 +800,7 @@ unsigned long kernelsp[NR_CPUS];
 unsigned long fw_arg0, fw_arg1, fw_arg2, fw_arg3;
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *mips_debugfs_dir;
+struct debugfs_node *mips_debugfs_dir;
 static int __init debugfs_mips(void)
 {
 	mips_debugfs_dir = debugfs_create_dir("mips", NULL);

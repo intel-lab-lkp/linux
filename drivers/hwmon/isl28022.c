@@ -324,7 +324,7 @@ static int shunt_voltage_show(struct seq_file *seqf, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(shunt_voltage);
 
-static struct dentry *isl28022_debugfs_root;
+static struct debugfs_node *isl28022_debugfs_root;
 
 static void isl28022_debugfs_remove(void *res)
 {
@@ -334,7 +334,7 @@ static void isl28022_debugfs_remove(void *res)
 static void isl28022_debugfs_init(struct i2c_client *client, struct isl28022_data *data)
 {
 	char name[16];
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	scnprintf(name, sizeof(name), "%d-%04hx", client->adapter->nr, client->addr);
 

@@ -197,7 +197,7 @@ struct dw_spi {
 	struct completion	dma_completion;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct debugfs_regset32 regset;
 #endif
 };

@@ -102,7 +102,7 @@ int greybus_disabled(void);
 
 void gb_debugfs_init(void);
 void gb_debugfs_cleanup(void);
-struct dentry *gb_debugfs_get(void);
+struct debugfs_node *gb_debugfs_get(void);
 
 extern const struct bus_type greybus_bus_type;
 

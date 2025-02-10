@@ -256,7 +256,7 @@ struct dw_mipi_dsi {
 	unsigned long mode_flags;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct debugfs_entries *debugfs_vpg;
 	struct {
 		bool vpg;

@@ -105,7 +105,7 @@ static int punit_dev_state_show(struct seq_file *seq_file, void *unused)
 }
 DEFINE_SHOW_ATTRIBUTE(punit_dev_state);
 
-static struct dentry *punit_dbg_file;
+static struct debugfs_node *punit_dbg_file;
 
 static void punit_dbgfs_register(struct punit_device *punit_device)
 {

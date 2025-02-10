@@ -2467,7 +2467,7 @@ struct skge_port {
 	dma_addr_t	     dma;
 	unsigned long	     mem_size;
 #ifdef CONFIG_SKGE_DEBUG
-	struct dentry	     *debugfs;
+	struct debugfs_node *debugfs;
 #endif
 };
 

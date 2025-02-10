@@ -319,7 +319,7 @@ struct xenvif {
 	spinlock_t lock;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *xenvif_dbg_root;
+	struct debugfs_node *xenvif_dbg_root;
 #endif
 
 	struct xen_netif_ctrl_back_ring ctrl;
@@ -410,7 +410,7 @@ extern unsigned int xenvif_max_queues;
 extern unsigned int xenvif_hash_cache_size;
 
 #ifdef CONFIG_DEBUG_FS
-extern struct dentry *xen_netback_dbg_root;
+extern struct debugfs_node *xen_netback_dbg_root;
 #endif
 
 void xenvif_skb_zerocopy_prepare(struct xenvif_queue *queue,

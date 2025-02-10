@@ -200,7 +200,7 @@ static const struct file_operations test_active_fops = {
 int msm_dp_debug_init(struct device *dev, struct msm_dp_panel *panel,
 		  struct msm_dp_link *link,
 		  struct drm_connector *connector,
-		  struct dentry *root, bool is_edp)
+		  struct debugfs_node *root, bool is_edp)
 {
 	struct msm_dp_debug_private *debug;
 

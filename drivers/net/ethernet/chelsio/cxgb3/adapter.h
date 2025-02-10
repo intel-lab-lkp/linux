@@ -258,7 +258,7 @@ struct adapter {
 	struct work_struct db_empty_task;
 	struct work_struct db_drop_task;
 
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 
 	struct mutex mdio_lock;
 	spinlock_t stats_lock;

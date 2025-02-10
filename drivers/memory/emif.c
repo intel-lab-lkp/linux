@@ -63,7 +63,7 @@ struct emif_data {
 	struct emif_regs		*regs_cache[EMIF_MAX_NUM_FREQUENCIES];
 	struct emif_regs		*curr_regs;
 	struct emif_platform_data	*plat_data;
-	struct dentry			*debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct device_node		*np_ddr;
 };
 

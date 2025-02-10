@@ -210,7 +210,7 @@ struct intel_vgpu {
 	/* Set on PCI_D3, reset on DMLR, not reflecting the actual PM state */
 	bool d3_entered;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	struct list_head dmabuf_obj_list_head;
 	struct mutex dmabuf_lock;
@@ -363,7 +363,7 @@ struct intel_gvt {
 	} engine_mmio_list;
 	bool is_reg_whitelist_updated;
 
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 enum {

@@ -40,7 +40,7 @@
 struct tt_thermal_zone {
 	struct list_head list_node;
 	struct list_head trips;
-	struct dentry *d_tt_zone;
+	struct debugfs_node *d_tt_zone;
 	struct thermal_zone_device *tz;
 	struct mutex lock;
 	struct ida ida;

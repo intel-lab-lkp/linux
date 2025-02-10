@@ -263,7 +263,7 @@ mt7921s_sched_quota_read(struct seq_file *s, void *data)
 
 int mt7921_init_debugfs(struct mt792x_dev *dev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = mt76_register_debugfs_fops(&dev->mphy, &fops_regval);
 	if (!dir)

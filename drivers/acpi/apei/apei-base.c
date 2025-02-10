@@ -749,9 +749,9 @@ int apei_exec_collect_resources(struct apei_exec_context *ctx,
 }
 EXPORT_SYMBOL_GPL(apei_exec_collect_resources);
 
-struct dentry *apei_get_debugfs_dir(void)
+struct debugfs_node *apei_get_debugfs_dir(void)
 {
-	static struct dentry *dapei;
+	static struct debugfs_node *dapei;
 
 	if (!dapei)
 		dapei = debugfs_create_dir("apei", NULL);

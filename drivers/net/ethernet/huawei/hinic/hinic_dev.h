@@ -113,10 +113,10 @@ struct hinic_dev {
 	int				lb_pkt_len;
 	u8				*lb_test_rx_buf;
 
-	struct dentry			*dbgfs_root;
-	struct dentry			*sq_dbgfs;
-	struct dentry			*rq_dbgfs;
-	struct dentry			*func_tbl_dbgfs;
+	struct debugfs_node *dbgfs_root;
+	struct debugfs_node *sq_dbgfs;
+	struct debugfs_node *rq_dbgfs;
+	struct debugfs_node *func_tbl_dbgfs;
 	struct hinic_debug_priv		*dbg;
 	struct devlink			*devlink;
 	bool				cable_unplugged;

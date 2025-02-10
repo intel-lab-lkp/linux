@@ -227,11 +227,11 @@ static void spi_nor_debugfs_unregister(void *data)
 	nor->debugfs_root = NULL;
 }
 
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 
 void spi_nor_debugfs_register(struct spi_nor *nor)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 	int ret;
 
 	if (!rootdir)

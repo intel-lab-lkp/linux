@@ -401,7 +401,7 @@ struct tb_service {
 	u32 prtcvers;
 	u32 prtcrevs;
 	u32 prtcstns;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 };
 
 static inline struct tb_service *tb_service_get(struct tb_service *svc)

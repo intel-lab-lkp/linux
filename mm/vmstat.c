@@ -2348,7 +2348,7 @@ DEFINE_SEQ_ATTRIBUTE(extfrag);
 
 static int __init extfrag_debug_init(void)
 {
-	struct dentry *extfrag_debug_root;
+	struct debugfs_node *extfrag_debug_root;
 
 	extfrag_debug_root = debugfs_create_dir("extfrag", NULL);
 

@@ -85,7 +85,7 @@ static const struct file_operations dfs_dom_ops = {
 
 static __init int cpu_init_debugfs(void)
 {
-	struct dentry *dir, *base = debugfs_create_dir("topo", arch_debugfs_dir);
+	struct debugfs_node *dir, *base = debugfs_create_dir("topo", arch_debugfs_dir);
 	unsigned long id;
 	char name[24];
 

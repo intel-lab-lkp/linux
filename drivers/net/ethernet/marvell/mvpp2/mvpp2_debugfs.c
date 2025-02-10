@@ -444,12 +444,12 @@ static int mvpp2_dbgfs_prs_valid_show(struct seq_file *s, void *unused)
 
 DEFINE_SHOW_ATTRIBUTE(mvpp2_dbgfs_prs_valid);
 
-static int mvpp2_dbgfs_flow_port_init(struct dentry *parent,
+static int mvpp2_dbgfs_flow_port_init(struct debugfs_node *parent,
 				      struct mvpp2_port *port,
 				      struct mvpp2_dbgfs_flow_entry *entry)
 {
 	struct mvpp2_dbgfs_port_flow_entry *port_entry;
-	struct dentry *port_dir;
+	struct debugfs_node *port_dir;
 
 	port_dir = debugfs_create_dir(port->dev->name, parent);
 
@@ -467,11 +467,11 @@ static int mvpp2_dbgfs_flow_port_init(struct dentry *parent,
 	return 0;
 }
 
-static int mvpp2_dbgfs_flow_entry_init(struct dentry *parent,
+static int mvpp2_dbgfs_flow_entry_init(struct debugfs_node *parent,
 				       struct mvpp2 *priv, int flow)
 {
 	struct mvpp2_dbgfs_flow_entry *entry;
-	struct dentry *flow_entry_dir;
+	struct debugfs_node *flow_entry_dir;
 	char flow_entry_name[10];
 	int i, ret;
 
@@ -504,9 +504,10 @@ static int mvpp2_dbgfs_flow_entry_init(struct dentry *parent,
 	return 0;
 }
 
-static int mvpp2_dbgfs_flow_init(struct dentry *parent, struct mvpp2 *priv)
+static int mvpp2_dbgfs_flow_init(struct debugfs_node *parent,
+				 struct mvpp2 *priv)
 {
-	struct dentry *flow_dir;
+	struct debugfs_node *flow_dir;
 	int i, ret;
 
 	flow_dir = debugfs_create_dir("flows", parent);
@@ -520,11 +521,11 @@ static int mvpp2_dbgfs_flow_init(struct dentry *parent, struct mvpp2 *priv)
 	return 0;
 }
 
-static int mvpp2_dbgfs_prs_entry_init(struct dentry *parent,
+static int mvpp2_dbgfs_prs_entry_init(struct debugfs_node *parent,
 				      struct mvpp2 *priv, int tid)
 {
 	struct mvpp2_dbgfs_prs_entry *entry;
-	struct dentry *prs_entry_dir;
+	struct debugfs_node *prs_entry_dir;
 	char prs_entry_name[10];
 
 	if (tid >= MVPP2_PRS_TCAM_SRAM_SIZE)
@@ -564,9 +565,10 @@ static int mvpp2_dbgfs_prs_entry_init(struct dentry *parent,
 	return 0;
 }
 
-static int mvpp2_dbgfs_prs_init(struct dentry *parent, struct mvpp2 *priv)
+static int mvpp2_dbgfs_prs_init(struct debugfs_node *parent,
+				struct mvpp2 *priv)
 {
-	struct dentry *prs_dir;
+	struct debugfs_node *prs_dir;
 	int i, ret;
 
 	prs_dir = debugfs_create_dir("parser", parent);
@@ -580,11 +582,11 @@ static int mvpp2_dbgfs_prs_init(struct dentry *parent, struct mvpp2 *priv)
 	return 0;
 }
 
-static int mvpp2_dbgfs_c2_entry_init(struct dentry *parent,
+static int mvpp2_dbgfs_c2_entry_init(struct debugfs_node *parent,
 				     struct mvpp2 *priv, int id)
 {
 	struct mvpp2_dbgfs_c2_entry *entry;
-	struct dentry *c2_entry_dir;
+	struct debugfs_node *c2_entry_dir;
 	char c2_entry_name[10];
 
 	if (id >= MVPP22_CLS_C2_N_ENTRIES)
@@ -611,11 +613,11 @@ static int mvpp2_dbgfs_c2_entry_init(struct dentry *parent,
 	return 0;
 }
 
-static int mvpp2_dbgfs_flow_tbl_entry_init(struct dentry *parent,
+static int mvpp2_dbgfs_flow_tbl_entry_init(struct debugfs_node *parent,
 					   struct mvpp2 *priv, int id)
 {
 	struct mvpp2_dbgfs_flow_tbl_entry *entry;
-	struct dentry *flow_tbl_entry_dir;
+	struct debugfs_node *flow_tbl_entry_dir;
 	char flow_tbl_entry_name[10];
 
 	if (id >= MVPP2_CLS_FLOWS_TBL_SIZE)
@@ -636,9 +638,10 @@ static int mvpp2_dbgfs_flow_tbl_entry_init(struct dentry *parent,
 	return 0;
 }
 
-static int mvpp2_dbgfs_cls_init(struct dentry *parent, struct mvpp2 *priv)
+static int mvpp2_dbgfs_cls_init(struct debugfs_node *parent,
+				struct mvpp2 *priv)
 {
-	struct dentry *cls_dir, *c2_dir, *flow_tbl_dir;
+	struct debugfs_node *cls_dir, *c2_dir, *flow_tbl_dir;
 	int i, ret;
 
 	cls_dir = debugfs_create_dir("classifier", parent);
@@ -662,10 +665,10 @@ static int mvpp2_dbgfs_cls_init(struct dentry *parent, struct mvpp2 *priv)
 	return 0;
 }
 
-static int mvpp2_dbgfs_port_init(struct dentry *parent,
+static int mvpp2_dbgfs_port_init(struct debugfs_node *parent,
 				 struct mvpp2_port *port)
 {
-	struct dentry *port_dir;
+	struct debugfs_node *port_dir;
 
 	port_dir = debugfs_create_dir(port->dev->name, parent);
 
@@ -681,7 +684,7 @@ static int mvpp2_dbgfs_port_init(struct dentry *parent,
 	return 0;
 }
 
-static struct dentry *mvpp2_root;
+static struct debugfs_node *mvpp2_root;
 
 void mvpp2_dbgfs_exit(void)
 {
@@ -697,7 +700,7 @@ void mvpp2_dbgfs_cleanup(struct mvpp2 *priv)
 
 void mvpp2_dbgfs_init(struct mvpp2 *priv, const char *name)
 {
-	struct dentry *mvpp2_dir;
+	struct debugfs_node *mvpp2_dir;
 	int ret, i;
 
 	if (!mvpp2_root)

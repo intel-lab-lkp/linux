@@ -39,7 +39,7 @@ static bool hw_injection_possible = true;
  * Collect all the MCi_XXX settings
  */
 static struct mce i_mce;
-static struct dentry *dfs_inj;
+static struct debugfs_node *dfs_inj;
 
 #define MAX_FLAG_OPT_SIZE	4
 #define NBCFG			0x44

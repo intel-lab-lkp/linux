@@ -380,7 +380,7 @@ void amdgpu_ta_if_debugfs_init(struct amdgpu_device *adev)
 {
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
 
-	struct dentry *dir = debugfs_create_dir("ta_if", minor->debugfs_root);
+	struct debugfs_node *dir = debugfs_create_dir("ta_if", minor->debugfs_root);
 
 	debugfs_create_file("ta_load", 0200, dir, adev,
 				     &ta_load_debugfs_fops);

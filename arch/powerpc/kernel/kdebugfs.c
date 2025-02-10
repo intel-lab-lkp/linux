@@ -3,7 +3,7 @@
 #include <linux/export.h>
 #include <linux/init.h>
 
-struct dentry *arch_debugfs_dir;
+struct debugfs_node *arch_debugfs_dir;
 EXPORT_SYMBOL(arch_debugfs_dir);
 
 static int __init arch_kdebugfs_init(void)

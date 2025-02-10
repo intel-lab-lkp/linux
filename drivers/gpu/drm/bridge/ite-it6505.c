@@ -478,7 +478,7 @@ struct it6505 {
 	struct device *codec_dev;
 	struct delayed_work delayed_audio;
 	struct it6505_audio_data audio;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	/* it6505 driver hold option */
 	bool enable_drv_hold;

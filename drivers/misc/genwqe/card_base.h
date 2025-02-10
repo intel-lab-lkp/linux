@@ -293,8 +293,8 @@ struct genwqe_dev {
 	struct device *dev;		/* for device creation */
 	struct cdev cdev_genwqe;	/* char device for card */
 
-	struct dentry *debugfs_root;	/* debugfs card root directory */
-	struct dentry *debugfs_genwqe;	/* debugfs driver root directory */
+	struct debugfs_node *debugfs_root;	/* debugfs card root directory */
+	struct debugfs_node *debugfs_genwqe;	/* debugfs driver root directory */
 
 	/* pci resources */
 	struct pci_dev *pci_dev;	/* PCI device */

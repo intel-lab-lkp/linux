@@ -26,7 +26,8 @@ static int engines_show(struct seq_file *m, void *data)
 }
 DEFINE_INTEL_GT_DEBUGFS_ATTRIBUTE(engines);
 
-void intel_gt_engines_debugfs_register(struct intel_gt *gt, struct dentry *root)
+void intel_gt_engines_debugfs_register(struct intel_gt *gt,
+				       struct debugfs_node *root)
 {
 	static const struct intel_gt_debugfs_file files[] = {
 		{ "engines", &engines_fops },

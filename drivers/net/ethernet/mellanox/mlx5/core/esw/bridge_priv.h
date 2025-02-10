@@ -200,7 +200,7 @@ struct mlx5_esw_bridge {
 	int refcnt;
 	struct list_head list;
 	struct mlx5_esw_bridge_offloads *br_offloads;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 
 	struct list_head fdb_list;
 	struct rhashtable fdb_ht;

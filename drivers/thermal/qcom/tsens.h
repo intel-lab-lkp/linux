@@ -582,8 +582,8 @@ struct tsens_priv {
 	const struct reg_field		*fields;
 	const struct tsens_ops		*ops;
 
-	struct dentry			*debug_root;
-	struct dentry			*debug;
+	struct debugfs_node *debug_root;
+	struct debugfs_node *debug;
 
 	struct tsens_sensor		sensor[] __counted_by(num_sensors);
 };

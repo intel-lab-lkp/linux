@@ -385,7 +385,7 @@ static int sof_probes_client_probe(struct auxiliary_device *auxdev,
 				   const struct auxiliary_device_id *id)
 {
 	struct sof_client_dev *cdev = auxiliary_dev_to_sof_client_dev(auxdev);
-	struct dentry *dfsroot = sof_client_get_debugfs_root(cdev);
+	struct debugfs_node *dfsroot = sof_client_get_debugfs_root(cdev);
 	struct device *dev = &auxdev->dev;
 	struct snd_soc_dai_link_component platform_component[] = {
 		{

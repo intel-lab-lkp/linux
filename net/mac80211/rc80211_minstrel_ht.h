@@ -195,7 +195,8 @@ struct minstrel_ht_sta {
 	struct minstrel_mcs_group_data groups[MINSTREL_GROUPS_NB];
 };
 
-void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta, struct dentry *dir);
+void minstrel_ht_add_sta_debugfs(void *priv, void *priv_sta,
+				 struct debugfs_node *dir);
 int minstrel_ht_get_tp_avg(struct minstrel_ht_sta *mi, int group, int rate,
 			   int prob_avg);
 

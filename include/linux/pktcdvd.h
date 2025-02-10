@@ -191,8 +191,8 @@ struct pktcdvd_device
 
 	struct device		*dev;		/* sysfs pktcdvd[0-7] dev */
 
-	struct dentry		*dfs_d_root;	/* debugfs: devname directory */
-	struct dentry		*dfs_f_info;	/* debugfs: info file */
+	struct debugfs_node *dfs_d_root;	/* debugfs: devname directory */
+	struct debugfs_node *dfs_f_info;	/* debugfs: info file */
 };
 
 #endif /* __PKTCDVD_H */

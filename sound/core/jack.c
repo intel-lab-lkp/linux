@@ -22,7 +22,7 @@ struct snd_jack_kctl {
 	struct snd_jack *jack;  /* pointer to struct snd_jack */
 	bool sw_inject_enable;  /* allow to inject plug event via debugfs */
 #ifdef CONFIG_SND_JACK_INJECTION_DEBUG
-	struct dentry *jack_debugfs_root; /* jack_kctl debugfs root */
+	struct debugfs_node *jack_debugfs_root; /* jack_kctl debugfs root */
 #endif
 };
 

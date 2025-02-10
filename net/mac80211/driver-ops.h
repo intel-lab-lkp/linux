@@ -509,7 +509,7 @@ static inline void drv_vif_add_debugfs(struct ieee80211_local *local,
 static inline void drv_link_add_debugfs(struct ieee80211_local *local,
 					struct ieee80211_sub_if_data *sdata,
 					struct ieee80211_bss_conf *link_conf,
-					struct dentry *dir)
+					struct debugfs_node *dir)
 {
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
@@ -526,7 +526,7 @@ static inline void drv_link_add_debugfs(struct ieee80211_local *local,
 static inline void drv_sta_add_debugfs(struct ieee80211_local *local,
 				       struct ieee80211_sub_if_data *sdata,
 				       struct ieee80211_sta *sta,
-				       struct dentry *dir)
+				       struct debugfs_node *dir)
 {
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);
@@ -543,7 +543,7 @@ static inline void drv_sta_add_debugfs(struct ieee80211_local *local,
 static inline void drv_link_sta_add_debugfs(struct ieee80211_local *local,
 					    struct ieee80211_sub_if_data *sdata,
 					    struct ieee80211_link_sta *link_sta,
-					    struct dentry *dir)
+					    struct debugfs_node *dir)
 {
 	might_sleep();
 	lockdep_assert_wiphy(local->hw.wiphy);

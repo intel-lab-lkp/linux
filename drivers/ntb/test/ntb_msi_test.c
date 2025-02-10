@@ -18,7 +18,7 @@ MODULE_PARM_DESC(num_irqs, "number of irqs to use");
 
 struct ntb_msit_ctx {
 	struct ntb_dev *ntb;
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	struct work_struct setup_work;
 
 	struct ntb_msit_isr_ctx {
@@ -38,7 +38,7 @@ struct ntb_msit_ctx {
 	} peers[];
 };
 
-static struct dentry *ntb_msit_dbgfs_topdir;
+static struct debugfs_node *ntb_msit_dbgfs_topdir;
 
 static irqreturn_t ntb_msit_isr(int irq, void *dev)
 {
@@ -272,7 +272,7 @@ static void ntb_msit_create_dbgfs(struct ntb_msit_ctx *nm)
 	struct pci_dev *pdev = nm->ntb->pdev;
 	char buf[32];
 	int i;
-	struct dentry *peer_dir;
+	struct debugfs_node *peer_dir;
 
 	nm->dbgfs_dir = debugfs_create_dir(pci_name(pdev),
 					   ntb_msit_dbgfs_topdir);

@@ -116,7 +116,7 @@ struct da9030_charger {
 	void (*battery_low)(void);
 	void (*battery_critical)(void);
 
-	struct dentry *debug_file;
+	struct debugfs_node *debug_file;
 };
 
 static inline int da9030_reg_to_mV(int reg)
@@ -175,7 +175,7 @@ static int bat_debug_show(struct seq_file *s, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(bat_debug);
 
-static struct dentry *da9030_bat_create_debugfs(struct da9030_charger *charger)
+static struct debugfs_node *da9030_bat_create_debugfs(struct da9030_charger *charger)
 {
 	charger->debug_file = debugfs_create_file("charger", 0666, NULL,
 						  charger, &bat_debug_fops);
@@ -187,7 +187,7 @@ static void da9030_bat_remove_debugfs(struct da9030_charger *charger)
 	debugfs_remove(charger->debug_file);
 }
 #else
-static inline struct dentry *da9030_bat_create_debugfs(struct da9030_charger *charger)
+static inline struct debugfs_node *da9030_bat_create_debugfs(struct da9030_charger *charger)
 {
 	return NULL;
 }

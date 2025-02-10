@@ -100,7 +100,7 @@ struct pmbus_data {
 	int num_attributes;
 	struct attribute_group group;
 	const struct attribute_group **groups;
-	struct dentry *debugfs;		/* debugfs device directory */
+	struct debugfs_node *debugfs;		/* debugfs device directory */
 
 	struct pmbus_sensor *sensors;
 
@@ -3426,7 +3426,7 @@ static int pmbus_irq_setup(struct i2c_client *client, struct pmbus_data *data)
 	return 0;
 }
 
-static struct dentry *pmbus_debugfs_dir;	/* pmbus debugfs directory */
+static struct debugfs_node *pmbus_debugfs_dir;	/* pmbus debugfs directory */
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 static int pmbus_debugfs_get(void *data, u64 *val)
@@ -3506,7 +3506,7 @@ static const struct file_operations pmbus_debugfs_ops_mfr = {
 
 static void pmbus_remove_debugfs(void *data)
 {
-	struct dentry *entry = data;
+	struct debugfs_node *entry = data;
 
 	debugfs_remove_recursive(entry);
 }
@@ -3823,7 +3823,7 @@ int pmbus_do_probe(struct i2c_client *client, struct pmbus_driver_info *info)
 }
 EXPORT_SYMBOL_NS_GPL(pmbus_do_probe, "PMBUS");
 
-struct dentry *pmbus_get_debugfs_dir(struct i2c_client *client)
+struct debugfs_node *pmbus_get_debugfs_dir(struct i2c_client *client)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
 

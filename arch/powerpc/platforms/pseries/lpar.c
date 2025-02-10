@@ -2012,7 +2012,7 @@ static int __init vpa_debugfs_init(void)
 {
 	char name[16];
 	long i;
-	struct dentry *vpa_dir;
+	struct debugfs_node *vpa_dir;
 
 	if (!firmware_has_feature(FW_FEATURE_SPLPAR))
 		return 0;

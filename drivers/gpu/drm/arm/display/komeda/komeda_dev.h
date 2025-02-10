@@ -198,7 +198,7 @@ struct komeda_dev {
 	struct iommu_domain *iommu;
 
 	/** @debugfs_root: root directory of komeda debugfs */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	/**
 	 * @err_verbosity: bitmask for how much extra info to print on error
 	 *

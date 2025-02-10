@@ -439,7 +439,7 @@ struct ar9170 {
 
 #ifdef CONFIG_CARL9170_DEBUGFS
 	struct carl9170_debug debug;
-	struct dentry *debug_dir;
+	struct debugfs_node *debug_dir;
 #endif /* CONFIG_CARL9170_DEBUGFS */
 
 	/* PSM */

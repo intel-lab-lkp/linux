@@ -1148,7 +1148,7 @@ struct idt_ntb_dev {
 
 	struct mutex hwmon_mtx;
 
-	struct dentry *dbgfs_info;
+	struct debugfs_node *dbgfs_info;
 };
 #define to_ndev_ntb(__ntb) container_of(__ntb, struct idt_ntb_dev, ntb)
 

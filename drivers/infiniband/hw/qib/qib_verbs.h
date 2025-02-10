@@ -183,7 +183,7 @@ struct qib_ibdev {
 
 #ifdef CONFIG_DEBUG_FS
 	/* per HCA debugfs */
-	struct dentry *qib_ibdev_dbg;
+	struct debugfs_node *qib_ibdev_dbg;
 #endif
 };
 

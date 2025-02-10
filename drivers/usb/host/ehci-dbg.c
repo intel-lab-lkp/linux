@@ -328,7 +328,7 @@ static const struct file_operations debug_registers_fops = {
 	.llseek		= default_llseek,
 };
 
-static struct dentry *ehci_debug_root;
+static struct debugfs_node *ehci_debug_root;
 
 struct debug_buffer {
 	ssize_t (*fill_func)(struct debug_buffer *);	/* fill method */

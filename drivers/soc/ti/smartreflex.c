@@ -34,7 +34,7 @@
 static LIST_HEAD(sr_list);
 
 static struct omap_sr_class_data *sr_class;
-static struct dentry		*sr_dbg_dir;
+static struct debugfs_node		*sr_dbg_dir;
 
 static inline void sr_write_reg(struct omap_sr *sr, unsigned offset, u32 value)
 {
@@ -815,7 +815,7 @@ static int omap_sr_probe(struct platform_device *pdev)
 {
 	struct omap_sr *sr_info;
 	struct omap_sr_data *pdata = pdev->dev.platform_data;
-	struct dentry *nvalue_dir;
+	struct debugfs_node *nvalue_dir;
 	int i, ret = 0;
 
 	sr_info = devm_kzalloc(&pdev->dev, sizeof(struct omap_sr), GFP_KERNEL);

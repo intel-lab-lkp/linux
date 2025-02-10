@@ -162,7 +162,7 @@ struct zs_size_stat {
 };
 
 #ifdef CONFIG_ZSMALLOC_STAT
-static struct dentry *zs_stat_root;
+static struct debugfs_node *zs_stat_root;
 #endif
 
 static size_t huge_class_size;
@@ -218,7 +218,7 @@ struct zs_pool {
 	struct shrinker *shrinker;
 
 #ifdef CONFIG_ZSMALLOC_STAT
-	struct dentry *stat_dentry;
+	struct debugfs_node *stat_dentry;
 #endif
 #ifdef CONFIG_COMPACTION
 	struct work_struct free_work;

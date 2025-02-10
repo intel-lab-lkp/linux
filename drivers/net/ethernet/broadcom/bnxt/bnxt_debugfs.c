@@ -15,7 +15,7 @@
 #include "bnxt.h"
 #include "bnxt_debugfs.h"
 
-static struct dentry *bnxt_debug_mnt;
+static struct debugfs_node *bnxt_debug_mnt;
 
 static ssize_t debugfs_dim_read(struct file *filep,
 				char __user *buffer,
@@ -62,7 +62,7 @@ static const struct file_operations debugfs_dim_fops = {
 };
 
 static void debugfs_dim_ring_init(struct dim *dim, int ring_idx,
-				  struct dentry *dd)
+				  struct debugfs_node *dd)
 {
 	static char qname[12];
 
@@ -73,7 +73,7 @@ static void debugfs_dim_ring_init(struct dim *dim, int ring_idx,
 void bnxt_debug_dev_init(struct bnxt *bp)
 {
 	const char *pname = pci_name(bp->pdev);
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	int i;
 
 	bp->debugfs_pdev = debugfs_create_dir(pname, bnxt_debug_mnt);

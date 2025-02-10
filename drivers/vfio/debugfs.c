@@ -9,7 +9,7 @@
 #include <linux/vfio.h>
 #include "vfio.h"
 
-static struct dentry *vfio_debugfs_root;
+static struct debugfs_node *vfio_debugfs_root;
 
 static int vfio_device_state_read(struct seq_file *seq, void *data)
 {
@@ -66,7 +66,7 @@ void vfio_device_debugfs_init(struct vfio_device *vdev)
 					      vfio_debugfs_root);
 
 	if (vdev->mig_ops) {
-		struct dentry *vfio_dev_migration = NULL;
+		struct debugfs_node *vfio_dev_migration = NULL;
 
 		vfio_dev_migration = debugfs_create_dir("migration",
 							vdev->debug_root);

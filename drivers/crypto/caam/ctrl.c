@@ -865,7 +865,7 @@ static int caam_probe(struct platform_device *pdev)
 	struct caam_ctrl __iomem *ctrl;
 	struct caam_drv_private *ctrlpriv;
 	struct caam_perfmon __iomem *perfmon;
-	struct dentry *dfs_root;
+	struct debugfs_node *dfs_root;
 	u32 scfgr, comp_params;
 	int pg_size;
 	int BLOCK_OFFSET = 0;

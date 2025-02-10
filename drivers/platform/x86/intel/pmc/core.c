@@ -1266,7 +1266,7 @@ static void pmc_core_dbgfs_unregister(struct pmc_dev *pmcdev)
 static void pmc_core_dbgfs_register(struct pmc_dev *pmcdev)
 {
 	struct pmc *primary_pmc = pmcdev->pmcs[PMC_IDX_MAIN];
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("pmc_core", NULL);
 	pmcdev->dbgfs_dir = dir;

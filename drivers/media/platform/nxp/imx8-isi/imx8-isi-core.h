@@ -28,6 +28,7 @@
 
 struct clk_bulk_data;
 struct dentry;
+#define debugfs_node dentry
 struct device;
 struct media_intf_devnode;
 struct regmap;
@@ -293,7 +294,7 @@ struct mxc_isi_dev {
 	struct v4l2_device		v4l2_dev;
 	struct v4l2_async_notifier	notifier;
 
-	struct dentry			*debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 extern const struct mxc_gasket_ops mxc_imx8_gasket_ops;

@@ -67,7 +67,7 @@ struct bcm2835_thermal_data {
 	struct thermal_zone_device *tz;
 	void __iomem *regs;
 	struct clk *clk;
-	struct dentry *debugfsdir;
+	struct debugfs_node *debugfsdir;
 };
 
 static int bcm2835_thermal_adc2temp(u32 adc, int offset, int slope)

@@ -128,7 +128,7 @@ struct mmc_test_general_result {
 struct mmc_test_dbgfs_file {
 	struct list_head link;
 	struct mmc_card *card;
-	struct dentry *file;
+	struct debugfs_node *file;
 };
 
 /**
@@ -3192,7 +3192,7 @@ static void mmc_test_free_dbgfs_file(struct mmc_card *card)
 static int __mmc_test_register_dbgfs_file(struct mmc_card *card,
 	const char *name, umode_t mode, const struct file_operations *fops)
 {
-	struct dentry *file = NULL;
+	struct debugfs_node *file = NULL;
 	struct mmc_test_dbgfs_file *df;
 
 	if (card->debugfs_root)

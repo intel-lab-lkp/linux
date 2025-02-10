@@ -124,7 +124,7 @@ DEFINE_SHOW_ATTRIBUTE(mtu3_ep_used);
 
 static void mtu3_debugfs_regset(struct mtu3 *mtu, void __iomem *base,
 				const struct debugfs_reg32 *regs, size_t nregs,
-				const char *name, struct dentry *parent)
+				const char *name, struct debugfs_node *parent)
 {
 	struct debugfs_regset32 *regset;
 	struct mtu3_regset *mregs;
@@ -143,7 +143,7 @@ static void mtu3_debugfs_regset(struct mtu3 *mtu, void __iomem *base,
 }
 
 static void mtu3_debugfs_ep_regset(struct mtu3 *mtu, struct mtu3_ep *mep,
-				   struct dentry *parent)
+				   struct debugfs_node *parent)
 {
 	struct debugfs_reg32 *regs;
 	int epnum = mep->epnum;
@@ -326,7 +326,7 @@ static void mtu3_debugfs_create_prb_files(struct mtu3 *mtu)
 {
 	struct ssusb_mtk *ssusb = mtu->ssusb;
 	const struct debugfs_reg32 *regs;
-	struct dentry *dir_prb;
+	struct debugfs_node *dir_prb;
 	int i;
 
 	dir_prb = debugfs_create_dir("probe", ssusb->dbgfs_root);
@@ -342,10 +342,10 @@ static void mtu3_debugfs_create_prb_files(struct mtu3 *mtu)
 }
 
 static void mtu3_debugfs_create_ep_dir(struct mtu3_ep *mep,
-				       struct dentry *parent)
+				       struct debugfs_node *parent)
 {
 	const struct mtu3_file_map *files;
-	struct dentry *dir_ep;
+	struct debugfs_node *dir_ep;
 	int i;
 
 	dir_ep = debugfs_create_dir(mep->name, parent);
@@ -362,7 +362,7 @@ static void mtu3_debugfs_create_ep_dir(struct mtu3_ep *mep,
 static void mtu3_debugfs_create_ep_dirs(struct mtu3 *mtu)
 {
 	struct ssusb_mtk *ssusb = mtu->ssusb;
-	struct dentry *dir_eps;
+	struct debugfs_node *dir_eps;
 	int i;
 
 	dir_eps = debugfs_create_dir("eps", ssusb->dbgfs_root);
@@ -376,7 +376,7 @@ static void mtu3_debugfs_create_ep_dirs(struct mtu3 *mtu)
 void ssusb_dev_debugfs_init(struct ssusb_mtk *ssusb)
 {
 	struct mtu3 *mtu = ssusb->u3d;
-	struct dentry *dir_regs;
+	struct debugfs_node *dir_regs;
 
 	dir_regs = debugfs_create_dir("regs", ssusb->dbgfs_root);
 
@@ -496,7 +496,7 @@ static const struct file_operations ssusb_vbus_fops = {
 
 void ssusb_dr_debugfs_init(struct ssusb_mtk *ssusb)
 {
-	struct dentry *root = ssusb->dbgfs_root;
+	struct debugfs_node *root = ssusb->dbgfs_root;
 
 	debugfs_create_file("mode", 0644, root, ssusb, &ssusb_mode_fops);
 	debugfs_create_file("vbus", 0644, root, ssusb, &ssusb_vbus_fops);

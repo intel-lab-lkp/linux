@@ -12,7 +12,7 @@
 #include <asm/vas.h>
 #include "vas.h"
 
-static struct dentry *vas_debugfs;
+static struct debugfs_node *vas_debugfs;
 
 static char *cop_to_str(int cop)
 {
@@ -118,7 +118,7 @@ void vas_window_free_dbgdir(struct pnv_vas_window *pnv_win)
 
 void vas_window_init_dbgdir(struct pnv_vas_window *window)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	if (!window->vinst->dbgdir)
 		return;
@@ -138,7 +138,7 @@ void vas_window_init_dbgdir(struct pnv_vas_window *window)
 
 void vas_instance_init_dbgdir(struct vas_instance *vinst)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	vas_init_dbgdir();
 

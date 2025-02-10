@@ -68,7 +68,7 @@ struct mlx5e_flow_steering {
 	struct mlx5e_fs_udp            *udp;
 	struct mlx5e_fs_any            *any;
 	struct mlx5e_ptp_fs            *ptp_fs;
-	struct dentry                  *dfs_root;
+	struct debugfs_node *dfs_root;
 };
 
 static int mlx5e_add_l2_flow_rule(struct mlx5e_flow_steering *fs,
@@ -106,7 +106,7 @@ static inline int mlx5e_hash_l2(const u8 *addr)
 	return addr[5];
 }
 
-struct dentry *mlx5e_fs_get_debugfs_root(struct mlx5e_flow_steering *fs)
+struct debugfs_node *mlx5e_fs_get_debugfs_root(struct mlx5e_flow_steering *fs)
 {
 	return fs->dfs_root;
 }
@@ -1429,7 +1429,7 @@ static void mlx5e_fs_ethtool_free(struct mlx5e_flow_steering *fs) { }
 #endif
 
 static void mlx5e_fs_debugfs_init(struct mlx5e_flow_steering *fs,
-				  struct dentry *dfs_root)
+				  struct debugfs_node *dfs_root)
 {
 	if (IS_ERR_OR_NULL(dfs_root))
 		return;
@@ -1440,7 +1440,7 @@ static void mlx5e_fs_debugfs_init(struct mlx5e_flow_steering *fs,
 struct mlx5e_flow_steering *mlx5e_fs_init(const struct mlx5e_profile *profile,
 					  struct mlx5_core_dev *mdev,
 					  bool state_destroy,
-					  struct dentry *dfs_root)
+					  struct debugfs_node *dfs_root)
 {
 	struct mlx5e_flow_steering *fs;
 	int err;

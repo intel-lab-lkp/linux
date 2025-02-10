@@ -6,7 +6,7 @@
 
 #include "ixgbe.h"
 
-static struct dentry *ixgbe_dbg_root;
+static struct debugfs_node *ixgbe_dbg_root;
 
 static char ixgbe_dbg_reg_ops_buf[256] = "";
 

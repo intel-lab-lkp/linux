@@ -127,7 +127,7 @@ static const struct attribute_group *soc_dev_attr_groups[] = {
 };
 
 #ifdef CONFIG_DEBUG_FS
-struct dentry *snd_soc_debugfs_root;
+struct debugfs_node *snd_soc_debugfs_root;
 EXPORT_SYMBOL_GPL(snd_soc_debugfs_root);
 
 static void soc_init_component_debugfs(struct snd_soc_component *component)

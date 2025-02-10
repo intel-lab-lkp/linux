@@ -1414,7 +1414,7 @@ struct il_priv {
 	u16 rx_traffic_idx;
 	u8 *tx_traffic;
 	u8 *rx_traffic;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u32 dbgfs_sram_offset, dbgfs_sram_len;
 	bool disable_ht40;
 #endif				/* CONFIG_IWLEGACY_DEBUGFS */

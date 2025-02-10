@@ -72,7 +72,7 @@ static struct workqueue_struct *reg_workq;
 #define DB_FC_RESUME_DELAY 1
 #define DB_FC_DRAIN_THRESH 0
 
-static struct dentry *c4iw_debugfs_root;
+static struct debugfs_node *c4iw_debugfs_root;
 
 struct c4iw_debugfs_data {
 	struct c4iw_dev *devp;

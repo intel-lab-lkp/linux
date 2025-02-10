@@ -1146,7 +1146,7 @@ static const struct seq_operations saa7164_sops = {
 
 DEFINE_SEQ_ATTRIBUTE(saa7164);
 
-static struct dentry *saa7614_dentry;
+static struct debugfs_node *saa7614_dentry;
 
 static void __init saa7164_debugfs_create(void)
 {

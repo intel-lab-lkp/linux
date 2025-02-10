@@ -1469,9 +1469,9 @@ static inline void shrinker_debugfs_name_free(struct shrinker *shrinker)
 }
 
 extern int shrinker_debugfs_add(struct shrinker *shrinker);
-extern struct dentry *shrinker_debugfs_detach(struct shrinker *shrinker,
+extern struct debugfs_node *shrinker_debugfs_detach(struct shrinker *shrinker,
 					      int *debugfs_id);
-extern void shrinker_debugfs_remove(struct dentry *debugfs_entry,
+extern void shrinker_debugfs_remove(struct debugfs_node *debugfs_entry,
 				    int debugfs_id);
 #else /* CONFIG_SHRINKER_DEBUG */
 static inline int shrinker_debugfs_add(struct shrinker *shrinker)
@@ -1486,13 +1486,13 @@ static inline int shrinker_debugfs_name_alloc(struct shrinker *shrinker,
 static inline void shrinker_debugfs_name_free(struct shrinker *shrinker)
 {
 }
-static inline struct dentry *shrinker_debugfs_detach(struct shrinker *shrinker,
+static inline struct debugfs_node *shrinker_debugfs_detach(struct shrinker *shrinker,
 						     int *debugfs_id)
 {
 	*debugfs_id = -1;
 	return NULL;
 }
-static inline void shrinker_debugfs_remove(struct dentry *debugfs_entry,
+static inline void shrinker_debugfs_remove(struct debugfs_node *debugfs_entry,
 					   int debugfs_id)
 {
 }

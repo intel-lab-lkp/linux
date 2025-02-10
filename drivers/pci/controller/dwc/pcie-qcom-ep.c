@@ -207,7 +207,7 @@ struct qcom_pcie_ep {
 	struct gpio_desc *reset;
 	struct gpio_desc *wake;
 	struct phy *phy;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	struct icc_path *icc_mem;
 

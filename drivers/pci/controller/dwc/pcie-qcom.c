@@ -273,7 +273,7 @@ struct qcom_pcie {
 	struct icc_path *icc_mem;
 	struct icc_path *icc_cpu;
 	const struct qcom_pcie_cfg *cfg;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	bool suspended;
 	bool use_pm_opp;
 };

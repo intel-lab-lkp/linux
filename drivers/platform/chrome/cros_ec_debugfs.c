@@ -48,7 +48,7 @@ static DECLARE_WAIT_QUEUE_HEAD(cros_ec_debugfs_log_wq);
  */
 struct cros_ec_debugfs {
 	struct cros_ec_dev *ec;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	/* EC log */
 	struct circ_buf log_buffer;
 	struct cros_ec_command *read_msg;

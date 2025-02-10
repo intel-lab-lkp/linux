@@ -12,7 +12,7 @@
 #include "cmd.h"
 #include "debugfs.h"
 
-static struct dentry *lbs_dir;
+static struct debugfs_node *lbs_dir;
 static char *szStates[] = {
 	"Connected",
 	"Disconnected"

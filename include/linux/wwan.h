@@ -192,14 +192,14 @@ int wwan_register_ops(struct device *parent, const struct wwan_ops *ops,
 void wwan_unregister_ops(struct device *parent);
 
 #ifdef CONFIG_WWAN_DEBUGFS
-struct dentry *wwan_get_debugfs_dir(struct device *parent);
-void wwan_put_debugfs_dir(struct dentry *dir);
+struct debugfs_node *wwan_get_debugfs_dir(struct device *parent);
+void wwan_put_debugfs_dir(struct debugfs_node *dir);
 #else
-static inline struct dentry *wwan_get_debugfs_dir(struct device *parent)
+static inline struct debugfs_node *wwan_get_debugfs_dir(struct device *parent)
 {
 	return ERR_PTR(-ENODEV);
 }
-static inline void wwan_put_debugfs_dir(struct dentry *dir) {}
+static inline void wwan_put_debugfs_dir(struct debugfs_node *dir) {}
 #endif
 
 #endif /* __WWAN_H */

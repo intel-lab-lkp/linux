@@ -44,15 +44,15 @@ struct gpio_la_poll_priv {
 	unsigned long delay_ns;
 	unsigned long acq_delay;
 	struct debugfs_blob_wrapper blob;
-	struct dentry *debug_dir;
-	struct dentry *blob_dent;
+	struct debugfs_node *debug_dir;
+	struct debugfs_node *blob_dent;
 	struct debugfs_blob_wrapper meta;
 	struct device *dev;
 	unsigned int trig_len;
 	u8 *trig_data;
 };
 
-static struct dentry *gpio_la_poll_debug_dir;
+static struct debugfs_node *gpio_la_poll_debug_dir;
 
 static __always_inline int gpio_la_get_array(struct gpio_descs *d, unsigned long *sptr)
 {

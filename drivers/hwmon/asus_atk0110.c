@@ -788,7 +788,7 @@ static const struct file_operations atk_debugfs_ggrp_fops = {
 
 static void atk_debugfs_init(struct atk_data *data)
 {
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	data->debugfs.id = 0;
 

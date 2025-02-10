@@ -185,7 +185,7 @@ static inline void xen_hvm_post_suspend(int suspend_cancelled) {}
 
 void xen_add_extra_mem(unsigned long start_pfn, unsigned long n_pfns);
 
-struct dentry * __init xen_init_debugfs(void);
+struct debugfs_node * __init xen_init_debugfs(void);
 
 enum pt_level {
 	PT_PGD,

@@ -143,7 +143,7 @@ static inline bool skip_lockevent(const char *name)
  */
 static int __init init_lockevent_counts(void)
 {
-	struct dentry *d_counts = debugfs_create_dir(LOCK_EVENTS_DIR, NULL);
+	struct debugfs_node *d_counts = debugfs_create_dir(LOCK_EVENTS_DIR, NULL);
 	int i;
 
 	if (IS_ERR(d_counts))

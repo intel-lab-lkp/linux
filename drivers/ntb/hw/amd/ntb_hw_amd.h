@@ -209,8 +209,8 @@ struct amd_ntb_dev {
 
 	struct delayed_work hb_timer;
 
-	struct dentry *debugfs_dir;
-	struct dentry *debugfs_info;
+	struct debugfs_node *debugfs_dir;
+	struct debugfs_node *debugfs_info;
 };
 
 #define ntb_ndev(__ntb) container_of(__ntb, struct amd_ntb_dev, ntb)

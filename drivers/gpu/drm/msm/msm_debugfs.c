@@ -308,7 +308,7 @@ static void msm_debugfs_gpu_init(struct drm_minor *minor)
 {
 	struct drm_device *dev = minor->dev;
 	struct msm_drm_private *priv = dev->dev_private;
-	struct dentry *gpu_devfreq;
+	struct debugfs_node *gpu_devfreq;
 
 	debugfs_create_file("gpu", S_IRUSR, minor->debugfs_root,
 		dev, &msm_gpu_fops);

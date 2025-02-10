@@ -15,8 +15,8 @@
 #define T7XX_TRC_SUB_BUFF_SIZE		131072
 #define T7XX_TRC_N_SUB_BUFF		32
 
-static struct dentry *t7xx_trace_create_buf_file_handler(const char *filename,
-							 struct dentry *parent,
+static struct debugfs_node *t7xx_trace_create_buf_file_handler(const char *filename,
+							 struct debugfs_node *parent,
 							 umode_t mode,
 							 struct rchan_buf *buf,
 							 int *is_global)
@@ -26,7 +26,7 @@ static struct dentry *t7xx_trace_create_buf_file_handler(const char *filename,
 				   &relay_file_operations);
 }
 
-static int t7xx_trace_remove_buf_file_handler(struct dentry *dentry)
+static int t7xx_trace_remove_buf_file_handler(struct debugfs_node *dentry)
 {
 	debugfs_remove(dentry);
 	return 0;
@@ -51,7 +51,7 @@ static struct rchan_callbacks relay_callbacks = {
 
 static void t7xx_trace_port_uninit(struct t7xx_port *port)
 {
-	struct dentry *debugfs_dir = port->t7xx_dev->debugfs_dir;
+	struct debugfs_node *debugfs_dir = port->t7xx_dev->debugfs_dir;
 	struct rchan *relaych = port->log.relaych;
 
 	if (!relaych)
@@ -77,8 +77,8 @@ static int t7xx_trace_port_recv_skb(struct t7xx_port *port, struct sk_buff *skb)
 static void t7xx_port_trace_md_state_notify(struct t7xx_port *port, unsigned int state)
 {
 	struct rchan *relaych = port->log.relaych;
-	struct dentry *debugfs_wwan_dir;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_wwan_dir;
+	struct debugfs_node *debugfs_dir;
 
 	if (state != MD_STATE_READY || relaych)
 		return;

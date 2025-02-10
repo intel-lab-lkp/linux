@@ -26,7 +26,7 @@
 
 
 /* The root directory. */
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 
 struct b43legacy_debugfs_fops {
 	ssize_t (*read)(struct b43legacy_wldev *dev, char *buf, size_t bufsize);

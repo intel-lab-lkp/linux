@@ -54,7 +54,7 @@ static inline unsigned int nsim_dev_port_index_to_vf_index(unsigned int port_ind
 	return port_index - NSIM_DEV_VF_PORT_INDEX_BASE;
 }
 
-static struct dentry *nsim_dev_ddir;
+static struct debugfs_node *nsim_dev_ddir;
 
 unsigned int nsim_dev_get_vfs(struct nsim_dev *nsim_dev)
 {
@@ -1205,8 +1205,8 @@ static int nsim_leaf_tx_max_set(struct devlink_rate *devlink_rate, void *priv,
 }
 
 struct nsim_rate_node {
-	struct dentry *ddir;
-	struct dentry *rate_parent;
+	struct debugfs_node *ddir;
+	struct debugfs_node *rate_parent;
 	char *parent_name;
 	u16 tx_share;
 	u16 tx_max;

@@ -73,7 +73,7 @@ struct dw100_device {
 	void __iomem			*mmio;
 	struct clk_bulk_data		*clks;
 	int				num_clks;
-	struct dentry			*debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 struct dw100_q_data {

@@ -24,8 +24,8 @@
 static char debug_buf[DLM_DEBUG_BUF_LEN];
 static struct mutex debug_buf_lock;
 
-static struct dentry *dlm_root;
-static struct dentry *dlm_comms;
+static struct debugfs_node *dlm_root;
+static struct debugfs_node *dlm_comms;
 
 static char *print_lockmode(int mode)
 {
@@ -737,7 +737,7 @@ static const struct file_operations dlm_rawmsg_fops = {
 
 void *dlm_create_debug_comms_file(int nodeid, void *data)
 {
-	struct dentry *d_node;
+	struct debugfs_node *d_node;
 	char name[256];
 
 	memset(name, 0, sizeof(name));

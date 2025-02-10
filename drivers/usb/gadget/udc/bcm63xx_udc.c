@@ -2235,7 +2235,7 @@ DEFINE_SHOW_ATTRIBUTE(bcm63xx_iudma_dbg);
  */
 static void bcm63xx_udc_init_debugfs(struct bcm63xx_udc *udc)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!IS_ENABLED(CONFIG_USB_GADGET_DEBUG_FS))
 		return;

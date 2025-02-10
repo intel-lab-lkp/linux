@@ -845,7 +845,7 @@ struct gfs2_sbd {
 	/* Debugging crud */
 
 	unsigned long sd_last_warning;
-	struct dentry *debugfs_dir;    /* debugfs directory */
+	struct debugfs_node *debugfs_dir;    /* debugfs directory */
 	unsigned long sd_glock_dqs_held;
 };
 

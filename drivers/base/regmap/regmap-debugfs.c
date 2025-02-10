@@ -21,7 +21,7 @@ struct regmap_debugfs_node {
 };
 
 static unsigned int dummy_index;
-static struct dentry *regmap_debugfs_root;
+static struct debugfs_node *regmap_debugfs_root;
 static LIST_HEAD(regmap_debugfs_early_list);
 static DEFINE_MUTEX(regmap_debugfs_early_lock);
 

@@ -1935,11 +1935,11 @@ static int pinctrl_show(struct seq_file *s, void *what)
 }
 DEFINE_SHOW_ATTRIBUTE(pinctrl);
 
-static struct dentry *debugfs_root;
+static struct debugfs_node *debugfs_root;
 
 static void pinctrl_init_device_debugfs(struct pinctrl_dev *pctldev)
 {
-	struct dentry *device_root;
+	struct debugfs_node *device_root;
 	const char *debugfs_name;
 
 	if (pctldev->desc->name &&

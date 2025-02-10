@@ -47,7 +47,7 @@ static dev_t cec_dev_t;
 static DEFINE_MUTEX(cec_devnode_lock);
 static DECLARE_BITMAP(cec_devnode_nums, CEC_NUM_DEVICES);
 
-static struct dentry *top_cec_dir;
+static struct debugfs_node *top_cec_dir;
 
 /* dev to cec_devnode */
 #define to_cec_devnode(cd) container_of(cd, struct cec_devnode, dev)

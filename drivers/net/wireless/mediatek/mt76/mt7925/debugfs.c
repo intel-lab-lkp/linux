@@ -288,7 +288,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_reset, NULL, mt7925_chip_reset, "%lld\n");
 
 int mt7925_init_debugfs(struct mt792x_dev *dev)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = mt76_register_debugfs_fops(&dev->mphy, &fops_regval);
 	if (!dir)

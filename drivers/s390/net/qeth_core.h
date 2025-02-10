@@ -810,7 +810,7 @@ struct qeth_card {
 	struct qeth_channel data;
 
 	struct net_device *dev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct qeth_card_stats stats;
 	struct qeth_card_info info;
 	struct qeth_token token;

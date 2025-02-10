@@ -35,7 +35,7 @@ static bool _is_cpu_device(struct device *dev)
 }
 
 #ifdef CONFIG_DEBUG_FS
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 
 struct em_dbg_info {
 	struct em_perf_domain *pd;
@@ -67,11 +67,11 @@ DEFINE_EM_DBG_SHOW(flags, inefficiency);
 
 static void em_debug_create_ps(struct em_perf_domain *em_pd,
 			       struct em_dbg_info *em_dbg, int i,
-			       struct dentry *pd)
+			       struct debugfs_node *pd)
 {
 	struct em_perf_state *table;
 	unsigned long freq;
-	struct dentry *d;
+	struct debugfs_node *d;
 	char name[24];
 
 	em_dbg[i].pd = em_pd;
@@ -119,7 +119,7 @@ DEFINE_SHOW_ATTRIBUTE(em_debug_flags);
 static void em_debug_create_pd(struct device *dev)
 {
 	struct em_dbg_info *em_dbg;
-	struct dentry *d;
+	struct debugfs_node *d;
 	int i;
 
 	/* Create the directory of the performance domain */

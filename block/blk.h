@@ -18,7 +18,7 @@ struct elevator_type;
 /* Max future timer expiry for timeouts */
 #define BLK_MAX_TIMEOUT		(5 * HZ)
 
-extern struct dentry *blk_debugfs_root;
+extern struct debugfs_node *blk_debugfs_root;
 
 struct blk_flush_queue {
 	spinlock_t		mq_flush_lock;

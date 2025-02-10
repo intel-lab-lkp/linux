@@ -128,7 +128,7 @@ static struct {
 };
 
 void
-pvr_params_debugfs_init(struct pvr_device *pvr_dev, struct dentry *dir)
+pvr_params_debugfs_init(struct pvr_device *pvr_dev, struct debugfs_node *dir)
 {
 #define X_MODE(mode_) X_MODE_##mode_
 #define X_MODE_RO 0400

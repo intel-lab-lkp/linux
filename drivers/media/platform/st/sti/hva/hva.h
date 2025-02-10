@@ -183,7 +183,7 @@ struct hva_stream {
  * @avg_bitrate:        average bitrate in kbps
  */
 struct hva_ctx_dbg {
-	struct dentry	*debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 	bool		is_valid_period;
 	ktime_t		begin;
 	u32		total_duration;
@@ -288,7 +288,7 @@ struct hva_ctx {
  * @last_ctx:      debug information about last running instance context
  */
 struct hva_dev_dbg {
-	struct dentry	*debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 	struct hva_ctx	last_ctx;
 };
 #endif

@@ -48,7 +48,7 @@ static const struct drm_info_list debugfs_list[] = {
 	{"gsc_info", gsc_info, 0},
 };
 
-void xe_gsc_debugfs_register(struct xe_gsc *gsc, struct dentry *parent)
+void xe_gsc_debugfs_register(struct xe_gsc *gsc, struct debugfs_node *parent)
 {
 	struct drm_minor *minor = gsc_to_xe(gsc)->drm.primary;
 	struct drm_info_list *local;

@@ -885,7 +885,7 @@ struct dss_device *dss_get_device(struct device *dev)
 #if defined(CONFIG_OMAP2_DSS_DEBUGFS)
 static int dss_initialize_debugfs(struct dss_device *dss)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir("omapdss", NULL);
 	if (IS_ERR(dir))
@@ -902,7 +902,7 @@ static void dss_uninitialize_debugfs(struct dss_device *dss)
 }
 
 struct dss_debugfs_entry {
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	int (*show_fn)(struct seq_file *s, void *data);
 	void *data;
 };

@@ -80,7 +80,7 @@ struct vpu_dev {
 	atomic_t ref_enc;
 	atomic_t ref_dec;
 
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 };
 
 struct vpu_format {
@@ -167,8 +167,8 @@ struct vpu_core {
 	struct vpu_dev *vpu;
 	void *iface;
 
-	struct dentry *debugfs;
-	struct dentry *debugfs_fwlog;
+	struct debugfs_node *debugfs;
+	struct debugfs_node *debugfs_fwlog;
 };
 
 enum vpu_codec_state {
@@ -276,7 +276,7 @@ struct vpu_inst {
 
 	pid_t pid;
 	pid_t tgid;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 
 	void *priv;
 };

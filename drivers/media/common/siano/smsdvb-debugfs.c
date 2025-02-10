@@ -18,7 +18,7 @@
 
 #include "smsdvb.h"
 
-static struct dentry *smsdvb_debugfs_usb_root;
+static struct debugfs_node *smsdvb_debugfs_usb_root;
 
 struct smsdvb_debugfs {
 	struct kref		refcount;

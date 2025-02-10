@@ -18,7 +18,7 @@ void iwl_fw_runtime_init(struct iwl_fw_runtime *fwrt, struct iwl_trans *trans,
 			const struct iwl_fw_runtime_ops *ops, void *ops_ctx,
 			const struct iwl_dump_sanitize_ops *sanitize_ops,
 			void *sanitize_ctx,
-			struct dentry *dbgfs_dir)
+			struct debugfs_node *dbgfs_dir)
 {
 	int i;
 

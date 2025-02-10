@@ -2811,7 +2811,7 @@ static struct aead_alg aead_algos[] = {
 
 #ifdef CONFIG_DEBUG_FS
 
-static struct dentry *dbgfs_root;
+static struct debugfs_node *dbgfs_root;
 
 static void artpec6_crypto_init_debugfs(void)
 {

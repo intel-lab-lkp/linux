@@ -9,7 +9,7 @@
 #include <linux/debugfs.h>
 #include <linux/greybus.h>
 
-static struct dentry *gb_debug_root;
+static struct debugfs_node *gb_debug_root;
 
 void __init gb_debugfs_init(void)
 {
@@ -22,7 +22,7 @@ void gb_debugfs_cleanup(void)
 	gb_debug_root = NULL;
 }
 
-struct dentry *gb_debugfs_get(void)
+struct debugfs_node *gb_debugfs_get(void)
 {
 	return gb_debug_root;
 }

@@ -1684,7 +1684,7 @@ static void ltc4282_debugfs_init(struct ltc4282_state *st,
 				 const struct device *hwmon)
 {
 	const char *debugfs_name;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	int ret;
 
 	if (!IS_ENABLED(CONFIG_DEBUG_FS))

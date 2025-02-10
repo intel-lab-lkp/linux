@@ -193,7 +193,7 @@ struct fm10k_q_vector {
 	char name[IFNAMSIZ + 9];
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dbg_q_vector;
+	struct debugfs_node *dbg_q_vector;
 #endif /* CONFIG_DEBUG_FS */
 	struct rcu_head rcu;	/* to avoid race with update stats on free */
 
@@ -374,7 +374,7 @@ struct fm10k_intfc {
 	spinlock_t macvlan_lock;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dbg_intfc;
+	struct debugfs_node *dbg_intfc;
 #endif /* CONFIG_DEBUG_FS */
 
 #ifdef CONFIG_DCB

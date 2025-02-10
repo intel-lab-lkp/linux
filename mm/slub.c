@@ -6350,7 +6350,7 @@ struct loc_track {
 	loff_t idx;
 };
 
-static struct dentry *slab_debugfs_root;
+static struct debugfs_node *slab_debugfs_root;
 
 static void free_loc_track(struct loc_track *t)
 {
@@ -7558,7 +7558,7 @@ static const struct file_operations slab_debugfs_fops = {
 
 static void debugfs_slab_add(struct kmem_cache *s)
 {
-	struct dentry *slab_cache_dir;
+	struct debugfs_node *slab_cache_dir;
 
 	if (unlikely(!slab_debugfs_root))
 		return;

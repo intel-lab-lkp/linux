@@ -162,7 +162,7 @@ struct virtio_device {
 	u64 features;
 	void *priv;
 #ifdef CONFIG_VIRTIO_DEBUG
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	u64 debugfs_filter_features;
 #endif
 };

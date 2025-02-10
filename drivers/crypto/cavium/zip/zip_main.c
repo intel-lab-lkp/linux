@@ -611,7 +611,7 @@ DEFINE_SHOW_ATTRIBUTE(zip_clear);
 DEFINE_SHOW_ATTRIBUTE(zip_regs);
 
 /* Root directory for thunderx_zip debugfs entry */
-static struct dentry *zip_debugfs_root;
+static struct debugfs_node *zip_debugfs_root;
 
 static void zip_debugfs_init(void)
 {

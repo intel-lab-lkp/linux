@@ -52,7 +52,7 @@ struct wb_stats {
 	unsigned long wb_thresh;
 };
 
-static struct dentry *bdi_debug_root;
+static struct debugfs_node *bdi_debug_root;
 
 static void bdi_debug_init(void)
 {

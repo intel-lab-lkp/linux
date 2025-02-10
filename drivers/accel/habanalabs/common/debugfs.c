@@ -1555,7 +1555,8 @@ static const struct file_operations hl_debugfs_fops = {
 	.release = single_release,
 };
 
-static void add_secured_nodes(struct hl_dbg_device_entry *dev_entry, struct dentry *root)
+static void add_secured_nodes(struct hl_dbg_device_entry *dev_entry,
+			      struct debugfs_node *root)
 {
 	debugfs_create_u8("i2c_bus",
 				0644,
@@ -1603,7 +1604,7 @@ static void add_secured_nodes(struct hl_dbg_device_entry *dev_entry, struct dent
 }
 
 static void add_files_to_device(struct hl_device *hdev, struct hl_dbg_device_entry *dev_entry,
-				struct dentry *root)
+				struct debugfs_node *root)
 {
 	int count = ARRAY_SIZE(hl_debugfs_list);
 	struct hl_debugfs_entry *entry;

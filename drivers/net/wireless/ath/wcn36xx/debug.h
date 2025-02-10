@@ -28,7 +28,7 @@ struct wcn36xx_dfs_file {
 };
 
 struct wcn36xx_dfs_entry {
-	struct dentry *rootdir;
+	struct debugfs_node *rootdir;
 	struct wcn36xx_dfs_file file_bmps_switcher;
 	struct wcn36xx_dfs_file file_dump;
 	struct wcn36xx_dfs_file file_firmware_feat_caps;

@@ -545,8 +545,8 @@ struct iwl_mvm_vif {
 #endif
 
 #ifdef CONFIG_IWLWIFI_DEBUGFS
-	struct dentry *dbgfs_dir;
-	struct dentry *dbgfs_slink;
+	struct debugfs_node *dbgfs_dir;
+	struct debugfs_node *dbgfs_slink;
 	struct iwl_dbgfs_pm dbgfs_pm;
 	struct iwl_dbgfs_bf dbgfs_bf;
 	struct iwl_mac_power_cmd mac_pwr_cmd;
@@ -1137,7 +1137,7 @@ struct iwl_mvm {
 	 * Leave this pointer outside the ifdef below so that it can be
 	 * assigned without ifdef in the source code.
 	 */
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #ifdef CONFIG_IWLWIFI_DEBUGFS
 	u32 dbgfs_sram_offset, dbgfs_sram_len;
 	u32 dbgfs_prph_reg_addr;
@@ -2614,11 +2614,11 @@ void iwl_mvm_get_bios_tables(struct iwl_mvm *mvm);
 void iwl_mvm_link_sta_add_debugfs(struct ieee80211_hw *hw,
 				  struct ieee80211_vif *vif,
 				  struct ieee80211_link_sta *link_sta,
-				  struct dentry *dir);
+				  struct debugfs_node *dir);
 void iwl_mvm_link_add_debugfs(struct ieee80211_hw *hw,
 			      struct ieee80211_vif *vif,
 			      struct ieee80211_bss_conf *link_conf,
-			      struct dentry *dir);
+			      struct debugfs_node *dir);
 #endif
 
 /* new MLD related APIs */

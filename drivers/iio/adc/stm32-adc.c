@@ -1883,7 +1883,7 @@ static const struct iio_chan_spec_ext_info stm32_adc_ext_info[] = {
 static void stm32_adc_debugfs_init(struct iio_dev *indio_dev)
 {
 	struct stm32_adc *adc = iio_priv(indio_dev);
-	struct dentry *d = iio_get_debugfs_dentry(indio_dev);
+	struct debugfs_node *d = iio_get_debugfs_dentry(indio_dev);
 	struct stm32_adc_calib *cal = &adc->cal;
 	char buf[16];
 	unsigned int i;

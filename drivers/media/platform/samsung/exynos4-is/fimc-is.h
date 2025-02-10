@@ -296,7 +296,7 @@ struct fimc_is {
 	struct is_share_region		*is_shared_region;
 	struct is_af_info		af;
 
-	struct dentry			*debugfs_entry;
+	struct debugfs_node *debugfs_entry;
 };
 
 static inline struct fimc_is *fimc_isp_to_is(struct fimc_isp *isp)

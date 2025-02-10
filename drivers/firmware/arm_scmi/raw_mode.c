@@ -185,7 +185,7 @@ struct scmi_raw_mode_info {
 	struct mutex active_mtx;
 	struct work_struct waiters_work;
 	struct workqueue_struct	*wait_wq;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	void *gid;
 };
 
@@ -1161,7 +1161,7 @@ err:
  * Return: An opaque handle to the Raw instance on Success, an ERR_PTR otherwise
  */
 void *scmi_raw_mode_init(const struct scmi_handle *handle,
-			 struct dentry *top_dentry, int instance_id,
+			 struct debugfs_node *top_dentry, int instance_id,
 			 u8 *channels, int num_chans,
 			 const struct scmi_desc *desc, int tx_max_msg)
 {
@@ -1212,13 +1212,13 @@ void *scmi_raw_mode_init(const struct scmi_handle *handle,
 	 */
 	if (num_chans > 1) {
 		int i;
-		struct dentry *top_chans;
+		struct debugfs_node *top_chans;
 
 		top_chans = debugfs_create_dir("channels", raw->dentry);
 
 		for (i = 0; i < num_chans; i++) {
 			char cdir[8];
-			struct dentry *chd;
+			struct debugfs_node *chd;
 
 			snprintf(cdir, 8, "0x%02X", channels[i]);
 			chd = debugfs_create_dir(cdir, top_chans);

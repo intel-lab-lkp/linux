@@ -26,7 +26,7 @@ struct latency_info {
 };
 
 static struct latency_info li;
-static struct dentry *dir;
+static struct debugfs_node *dir;
 
 static int oct_ilm_show(struct seq_file *m, void *v)
 {

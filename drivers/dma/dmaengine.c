@@ -64,7 +64,7 @@ static long dmaengine_ref_count;
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 
 static void dmaengine_debug_register(struct dma_device *dma_dev)
 {

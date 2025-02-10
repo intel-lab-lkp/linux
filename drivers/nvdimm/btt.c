@@ -213,13 +213,14 @@ static int btt_log_group_read(struct arena_info *arena, u32 lane,
 			LOG_GRP_SIZE, 0);
 }
 
-static struct dentry *debugfs_root;
+static struct debugfs_node *debugfs_root;
 
-static void arena_debugfs_init(struct arena_info *a, struct dentry *parent,
+static void arena_debugfs_init(struct arena_info *a,
+				struct debugfs_node *parent,
 				int idx)
 {
 	char dirname[32];
-	struct dentry *d;
+	struct debugfs_node *d;
 
 	/* If for some reason, parent bttN was not created, exit */
 	if (!parent)

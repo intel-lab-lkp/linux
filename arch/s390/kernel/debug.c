@@ -167,7 +167,7 @@ static const struct file_operations debug_file_ops = {
 	.release = debug_close,
 };
 
-static struct dentry *debug_debugfs_root_entry;
+static struct debugfs_node *debug_debugfs_root_entry;
 
 /* functions */
 
@@ -1337,7 +1337,7 @@ EXPORT_SYMBOL(__debug_sprintf_exception);
 int debug_register_view(debug_info_t *id, struct debug_view *view)
 {
 	unsigned long flags;
-	struct dentry *pde;
+	struct debugfs_node *pde;
 	umode_t mode;
 	int rc = 0;
 	int i;
@@ -1386,7 +1386,7 @@ EXPORT_SYMBOL(debug_register_view);
  */
 int debug_unregister_view(debug_info_t *id, struct debug_view *view)
 {
-	struct dentry *dentry = NULL;
+	struct debugfs_node *dentry = NULL;
 	unsigned long flags;
 	int i, rc = 0;
 

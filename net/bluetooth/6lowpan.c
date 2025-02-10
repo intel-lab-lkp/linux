@@ -23,8 +23,8 @@
 
 #define VERSION "0.1"
 
-static struct dentry *lowpan_enable_debugfs;
-static struct dentry *lowpan_control_debugfs;
+static struct debugfs_node *lowpan_enable_debugfs;
+static struct debugfs_node *lowpan_control_debugfs;
 
 #define IFACE_NAME_TEMPLATE "bt%d"
 

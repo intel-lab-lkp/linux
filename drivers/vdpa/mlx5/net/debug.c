@@ -84,7 +84,7 @@ DEFINE_SHOW_ATTRIBUTE(packets);
 DEFINE_SHOW_ATTRIBUTE(bytes);
 
 static void add_counter_node(struct mlx5_vdpa_counter *counter,
-			     struct dentry *parent)
+			     struct debugfs_node *parent)
 {
 	debugfs_create_file("packets", 0444, parent, counter,
 			    &packets_fops);

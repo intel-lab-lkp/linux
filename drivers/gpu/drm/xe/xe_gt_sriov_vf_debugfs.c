@@ -49,14 +49,15 @@ static const struct drm_info_list vf_info[] = {
  *
  * Register SR-IOV VF entries that are GT related and must be shown under GT debugfs.
  */
-void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt, struct dentry *root)
+void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt,
+				     struct debugfs_node *root)
 {
 	struct xe_device *xe = gt_to_xe(gt);
 	struct drm_minor *minor = xe->drm.primary;
-	struct dentry *vfdentry;
+	struct debugfs_node *vfdentry;
 
 	xe_assert(xe, IS_SRIOV_VF(xe));
-	xe_assert(xe, root->d_inode->i_private == gt);
+	xe_assert(xe, debugfs_node_inode(root)->i_private == gt);
 
 	/*
 	 *      /sys/kernel/debug/dri/0/
@@ -66,7 +67,7 @@ void xe_gt_sriov_vf_debugfs_register(struct xe_gt *gt, struct dentry *root)
 	vfdentry = debugfs_create_dir("vf", root);
 	if (IS_ERR(vfdentry))
 		return;
-	vfdentry->d_inode->i_private = gt;
+	debugfs_node_inode(vfdentry)->i_private = gt;
 
 	drm_debugfs_create_files(vf_info, ARRAY_SIZE(vf_info), vfdentry, minor);
 }

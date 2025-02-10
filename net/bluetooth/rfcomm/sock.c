@@ -998,7 +998,7 @@ static int rfcomm_sock_debugfs_show(struct seq_file *f, void *p)
 
 DEFINE_SHOW_ATTRIBUTE(rfcomm_sock_debugfs);
 
-static struct dentry *rfcomm_sock_debugfs;
+static struct debugfs_node *rfcomm_sock_debugfs;
 
 static const struct proto_ops rfcomm_sock_ops = {
 	.family		= PF_BLUETOOTH,

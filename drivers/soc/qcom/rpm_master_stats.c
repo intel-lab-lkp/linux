@@ -70,7 +70,7 @@ static int master_stats_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct master_stats_data *data;
 	struct device_node *msgram_np;
-	struct dentry *dent, *root;
+	struct debugfs_node *dent, *root;
 	struct resource res;
 	int count, i, ret;
 
@@ -139,7 +139,7 @@ static int master_stats_probe(struct platform_device *pdev)
 
 static void master_stats_remove(struct platform_device *pdev)
 {
-	struct dentry *root = platform_get_drvdata(pdev);
+	struct debugfs_node *root = platform_get_drvdata(pdev);
 
 	debugfs_remove_recursive(root);
 }

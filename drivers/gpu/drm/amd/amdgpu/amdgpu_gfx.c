@@ -2177,7 +2177,7 @@ void amdgpu_debugfs_gfx_sched_mask_init(struct amdgpu_device *adev)
 {
 #if defined(CONFIG_DEBUG_FS)
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	char name[32];
 
 	if (!(adev->gfx.num_gfx_rings > 1))
@@ -2248,7 +2248,7 @@ void amdgpu_debugfs_compute_sched_mask_init(struct amdgpu_device *adev)
 {
 #if defined(CONFIG_DEBUG_FS)
 	struct drm_minor *minor = adev_to_drm(adev)->primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 	char name[32];
 
 	if (!(adev->gfx.num_compute_rings > 1))

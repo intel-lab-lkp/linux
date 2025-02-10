@@ -62,7 +62,7 @@ struct hte_ts_info {
 	spinlock_t slock;
 	struct work_struct cb_work;
 	struct mutex req_mlock;
-	struct dentry *ts_dbg_root;
+	struct debugfs_node *ts_dbg_root;
 	struct hte_device *gdev;
 	void *cl_data;
 };
@@ -82,7 +82,7 @@ struct hte_device {
 	u32 nlines;
 	atomic_t ts_req;
 	struct device *sdev;
-	struct dentry *dbg_root;
+	struct debugfs_node *dbg_root;
 	struct list_head list;
 	struct hte_chip *chip;
 	struct module *owner;
@@ -91,7 +91,7 @@ struct hte_device {
 
 #ifdef CONFIG_DEBUG_FS
 
-static struct dentry *hte_root;
+static struct debugfs_node *hte_root;
 
 static int __init hte_subsys_dbgfs_init(void)
 {

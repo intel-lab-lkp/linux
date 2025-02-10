@@ -23,7 +23,7 @@ struct blk_trace {
 	u64 end_lba;
 	u32 pid;
 	u32 dev;
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	struct list_head running_list;
 	atomic_t dropped;
 };

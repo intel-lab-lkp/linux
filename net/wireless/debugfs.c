@@ -136,7 +136,7 @@ static void wiphy_locked_debugfs_read_work(struct wiphy *wiphy,
 	complete(&w->completion);
 }
 
-static void wiphy_locked_debugfs_read_cancel(struct dentry *dentry,
+static void wiphy_locked_debugfs_read_cancel(struct debugfs_node *dentry,
 					     void *data)
 {
 	struct debugfs_read_work *w = data;
@@ -216,7 +216,7 @@ static void wiphy_locked_debugfs_write_work(struct wiphy *wiphy,
 	complete(&w->completion);
 }
 
-static void wiphy_locked_debugfs_write_cancel(struct dentry *dentry,
+static void wiphy_locked_debugfs_write_cancel(struct debugfs_node *dentry,
 					      void *data)
 {
 	struct debugfs_write_work *w = data;

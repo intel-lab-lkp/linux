@@ -11,6 +11,7 @@
 #include "eswitch.h"
 
 struct dentry;
+#define debugfs_node dentry
 struct mlx5_flow_table;
 struct mlx5_flow_group;
 
@@ -18,7 +19,7 @@ struct mlx5_esw_bridge_offloads {
 	struct mlx5_eswitch *esw;
 	struct list_head bridges;
 	struct xarray ports;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 
 	struct notifier_block netdev_nb;
 	struct notifier_block nb_blk;

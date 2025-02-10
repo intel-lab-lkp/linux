@@ -1097,7 +1097,7 @@ struct mvpp2 {
 	struct workqueue_struct *stats_queue;
 
 	/* Debugfs root entry */
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 
 	/* Debugfs entries private data */
 	struct mvpp2_dbgfs_entries *dbgfs_entries;

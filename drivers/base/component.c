@@ -78,7 +78,7 @@ static LIST_HEAD(aggregate_devices);
 
 #ifdef CONFIG_DEBUG_FS
 
-static struct dentry *component_debugfs_dir;
+static struct debugfs_node *component_debugfs_dir;
 
 static int component_devices_show(struct seq_file *s, void *data)
 {

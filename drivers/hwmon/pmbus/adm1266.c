@@ -54,7 +54,7 @@ struct adm1266_data {
 	struct gpio_chip gc;
 	const char *gpio_names[ADM1266_GPIO_NR + ADM1266_PDIO_NR];
 	struct i2c_client *client;
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 	struct nvmem_config nvmem_config;
 	struct nvmem_device *nvmem;
 	u8 *dev_mem;
@@ -333,7 +333,7 @@ static int adm1266_state_read(struct seq_file *s, void *pdata)
 
 static void adm1266_init_debugfs(struct adm1266_data *data)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = pmbus_get_debugfs_dir(data->client);
 	if (!root)

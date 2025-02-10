@@ -643,10 +643,10 @@ DEFINE_SHOW_STORE_ATTRIBUTE(tl_rp_data);
 void adf_tl_dbgfs_add(struct adf_accel_dev *accel_dev)
 {
 	struct adf_telemetry *telemetry = accel_dev->telemetry;
-	struct dentry *parent = accel_dev->debugfs_dir;
+	struct debugfs_node *parent = accel_dev->debugfs_dir;
 	u8 max_rp = GET_TL_DATA(accel_dev).max_rp;
 	char name[ADF_TL_RP_REGS_FNAME_SIZE];
-	struct dentry *dir;
+	struct debugfs_node *dir;
 	unsigned int i;
 
 	if (!telemetry)
@@ -668,7 +668,7 @@ void adf_tl_dbgfs_add(struct adf_accel_dev *accel_dev)
 void adf_tl_dbgfs_rm(struct adf_accel_dev *accel_dev)
 {
 	struct adf_telemetry *telemetry = accel_dev->telemetry;
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 
 	if (!telemetry)
 		return;

@@ -259,7 +259,7 @@ struct ssusb_mtk {
 	int u3_ports;
 	int u2p_dis_msk;
 	int u3p_dis_msk;
-	struct dentry *dbgfs_root;
+	struct debugfs_node *dbgfs_root;
 	/* usb wakeup for host mode */
 	bool uwk_en;
 	struct regmap *uwk;

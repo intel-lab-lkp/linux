@@ -2308,9 +2308,9 @@ DEBUGFS_READ_WRITE_FILE_OPS(calib_disabled);
  * Create the debugfs files and directories
  *
  */
-void iwl_dbgfs_register(struct iwl_priv *priv, struct dentry *dbgfs_dir)
+void iwl_dbgfs_register(struct iwl_priv *priv, struct debugfs_node *dbgfs_dir)
 {
-	struct dentry *dir_data, *dir_rf, *dir_debug;
+	struct debugfs_node *dir_data, *dir_rf, *dir_debug;
 
 	priv->debugfs_dir = dbgfs_dir;
 
@@ -2369,7 +2369,7 @@ void iwl_dbgfs_register(struct iwl_priv *priv, struct dentry *dbgfs_dir)
 	 */
 	if (priv->mac80211_registered) {
 		char buf[100];
-		struct dentry *mac80211_dir, *dev_dir;
+		struct debugfs_node *mac80211_dir, *dev_dir;
 
 		dev_dir = dbgfs_dir->d_parent;
 		mac80211_dir = priv->hw->wiphy->debugfsdir;

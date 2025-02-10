@@ -178,7 +178,7 @@ void mei_dbgfs_deregister(struct mei_device *dev)
  */
 void mei_dbgfs_register(struct mei_device *dev, const char *name)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(name, NULL);
 	dev->dbgfs_dir = dir;

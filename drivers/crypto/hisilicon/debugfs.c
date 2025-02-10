@@ -1093,7 +1093,8 @@ static const struct file_operations qm_status_fops = {
 	.read = qm_status_read,
 };
 
-static void qm_create_debugfs_file(struct hisi_qm *qm, struct dentry *dir,
+static void qm_create_debugfs_file(struct hisi_qm *qm,
+				   struct debugfs_node *dir,
 				   enum qm_debug_file index)
 {
 	struct debugfs_file *file = qm->debug.files + index;
@@ -1137,7 +1138,7 @@ void hisi_qm_debug_init(struct hisi_qm *qm)
 	struct dfx_diff_registers *qm_regs = qm->debug.qm_diff_regs;
 	struct qm_dev_dfx *dev_dfx = &qm->debug.dev_dfx;
 	struct qm_dfx *dfx = &qm->debug.dfx;
-	struct dentry *qm_d;
+	struct debugfs_node *qm_d;
 	void *data;
 	int i;
 

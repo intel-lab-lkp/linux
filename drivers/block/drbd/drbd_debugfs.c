@@ -17,10 +17,10 @@
  * Whenever you change the file format, remember to bump the version. *
  **********************************************************************/
 
-static struct dentry *drbd_debugfs_root;
-static struct dentry *drbd_debugfs_version;
-static struct dentry *drbd_debugfs_resources;
-static struct dentry *drbd_debugfs_minors;
+static struct debugfs_node *drbd_debugfs_root;
+static struct debugfs_node *drbd_debugfs_version;
+static struct debugfs_node *drbd_debugfs_resources;
+static struct debugfs_node *drbd_debugfs_minors;
 
 static void seq_print_age_or_dash(struct seq_file *m, bool valid, unsigned long dt)
 {
@@ -464,7 +464,7 @@ static const struct file_operations in_flight_summary_fops = {
 
 void drbd_debugfs_resource_add(struct drbd_resource *resource)
 {
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 
 	dentry = debugfs_create_dir(resource->name, drbd_debugfs_resources);
 	resource->debugfs_res = dentry;
@@ -619,8 +619,8 @@ static const struct file_operations connection_oldest_requests_fops = {
 
 void drbd_debugfs_connection_add(struct drbd_connection *connection)
 {
-	struct dentry *conns_dir = connection->resource->debugfs_res_connections;
-	struct dentry *dentry;
+	struct debugfs_node *conns_dir = connection->resource->debugfs_res_connections;
+	struct debugfs_node *dentry;
 
 	/* Once we enable mutliple peers,
 	 * these connections will have descriptive names.
@@ -770,12 +770,12 @@ drbd_debugfs_device_attr(ed_gen_id)
 
 void drbd_debugfs_device_add(struct drbd_device *device)
 {
-	struct dentry *vols_dir = device->resource->debugfs_res_volumes;
+	struct debugfs_node *vols_dir = device->resource->debugfs_res_volumes;
 	char minor_buf[8]; /* MINORMASK, MINORBITS == 20; */
 	char vnr_buf[8];   /* volume number vnr is even 16 bit only; */
 	char *slink_name = NULL;
 
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	if (!vols_dir || !drbd_debugfs_minors)
 		return;
 
@@ -826,8 +826,8 @@ void drbd_debugfs_device_cleanup(struct drbd_device *device)
 
 void drbd_debugfs_peer_device_add(struct drbd_peer_device *peer_device)
 {
-	struct dentry *conn_dir = peer_device->connection->debugfs_conn;
-	struct dentry *dentry;
+	struct debugfs_node *conn_dir = peer_device->connection->debugfs_conn;
+	struct debugfs_node *dentry;
 	char vnr_buf[8];
 
 	snprintf(vnr_buf, sizeof(vnr_buf), "%u", peer_device->device->vnr);
@@ -875,7 +875,7 @@ void drbd_debugfs_cleanup(void)
 
 void __init drbd_debugfs_init(void)
 {
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 
 	dentry = debugfs_create_dir("drbd", NULL);
 	drbd_debugfs_root = dentry;

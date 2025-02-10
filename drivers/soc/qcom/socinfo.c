@@ -167,7 +167,7 @@ struct qcom_socinfo {
 	struct soc_device *soc_dev;
 	struct soc_device_attribute attr;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *dbg_root;
+	struct debugfs_node *dbg_root;
 	struct socinfo_params info;
 #endif /* CONFIG_DEBUG_FS */
 };
@@ -593,7 +593,7 @@ static void socinfo_debugfs_init(struct qcom_socinfo *qcom_socinfo,
 				 struct socinfo *info, size_t info_size)
 {
 	struct smem_image_version *versions;
-	struct dentry *dentry;
+	struct debugfs_node *dentry;
 	size_t size;
 	int i;
 	unsigned int num_pmics;

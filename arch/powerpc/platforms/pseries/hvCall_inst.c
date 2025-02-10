@@ -111,7 +111,7 @@ static void probe_hcall_exit(void *ignored, unsigned long opcode, long retval,
 
 static int __init hcall_inst_init(void)
 {
-	struct dentry *hcall_root;
+	struct debugfs_node *hcall_root;
 	char cpu_name_buf[CPU_NAME_BUF_SIZE];
 	int cpu;
 

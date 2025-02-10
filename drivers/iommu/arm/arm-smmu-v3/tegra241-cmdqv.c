@@ -804,7 +804,7 @@ out_fallback:
 }
 
 #ifdef CONFIG_IOMMU_DEBUGFS
-static struct dentry *cmdqv_debugfs_dir;
+static struct debugfs_node *cmdqv_debugfs_dir;
 #endif
 
 static struct arm_smmu_device *

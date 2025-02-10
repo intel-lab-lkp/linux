@@ -64,7 +64,7 @@ struct rt2x00debug_intf {
 	 *     - queue stats file
 	 *     - crypto stats file
 	 */
-	struct dentry *driver_folder;
+	struct debugfs_node *driver_folder;
 
 	/*
 	 * The frame dump file only allows a single reader,
@@ -636,8 +636,8 @@ void rt2x00debug_register(struct rt2x00_dev *rt2x00dev)
 {
 	const struct rt2x00debug *debug = rt2x00dev->ops->debugfs;
 	struct rt2x00debug_intf *intf;
-	struct dentry *queue_folder;
-	struct dentry *register_folder;
+	struct debugfs_node *queue_folder;
+	struct debugfs_node *register_folder;
 
 	intf = kzalloc(sizeof(struct rt2x00debug_intf), GFP_KERNEL);
 	if (!intf) {

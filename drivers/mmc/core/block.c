@@ -181,8 +181,8 @@ struct mmc_blk_data {
 	int	area_type;
 
 	/* debugfs files (only in main mmc_blk_data) */
-	struct dentry *status_dentry;
-	struct dentry *ext_csd_dentry;
+	struct debugfs_node *status_dentry;
+	struct debugfs_node *ext_csd_dentry;
 };
 
 /* Device type for RPMB character devices */
@@ -3228,7 +3228,7 @@ static const struct file_operations mmc_dbg_ext_csd_fops = {
 
 static void mmc_blk_add_debugfs(struct mmc_card *card, struct mmc_blk_data *md)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!card->debugfs_root)
 		return;

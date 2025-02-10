@@ -193,7 +193,7 @@ struct iwl_mei {
 	atomic_t sap_seq_no;
 	atomic_t seq_no;
 
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 };
 
 /**

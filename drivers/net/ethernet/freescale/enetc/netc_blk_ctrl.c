@@ -84,7 +84,7 @@ struct netc_blk_ctrl {
 
 	const struct netc_devinfo *devinfo;
 	struct platform_device *pdev;
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 };
 
 static void netc_reg_write(void __iomem *base, u32 offset, u32 val)
@@ -298,7 +298,7 @@ DEFINE_SHOW_ATTRIBUTE(netc_prb);
 
 static void netc_blk_ctrl_create_debugfs(struct netc_blk_ctrl *priv)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	root = debugfs_create_dir("netc_blk_ctrl", NULL);
 	if (IS_ERR(root))

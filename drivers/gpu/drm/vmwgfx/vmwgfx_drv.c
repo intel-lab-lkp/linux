@@ -1434,7 +1434,7 @@ static void vmw_remove(struct pci_dev *pdev)
 static void vmw_debugfs_resource_managers_init(struct vmw_private *vmw)
 {
 	struct drm_minor *minor = vmw->drm.primary;
-	struct dentry *root = minor->debugfs_root;
+	struct debugfs_node *root = minor->debugfs_root;
 
 	ttm_resource_manager_create_debugfs(ttm_manager_type(&vmw->bdev, TTM_PL_SYSTEM),
 					    root, "system_ttm");

@@ -31,7 +31,7 @@ struct fei_attr {
 static DEFINE_MUTEX(fei_lock);
 static LIST_HEAD(fei_attr_list);
 static DECLARE_FAULT_ATTR(fei_fault_attr);
-static struct dentry *fei_debugfs_dir;
+static struct debugfs_node *fei_debugfs_dir;
 
 static unsigned long adjust_error_retval(unsigned long addr, unsigned long retv)
 {
@@ -154,7 +154,7 @@ DEFINE_DEBUGFS_ATTRIBUTE(fei_retval_ops, fei_retval_get, fei_retval_set,
 
 static void fei_debugfs_add_attr(struct fei_attr *attr)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = debugfs_create_dir(attr->kp.symbol_name, fei_debugfs_dir);
 
@@ -314,7 +314,7 @@ static const struct file_operations fei_ops = {
 
 static int __init fei_debugfs_init(void)
 {
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	dir = fault_create_debugfs_attr("fail_function", NULL,
 					&fei_fault_attr);

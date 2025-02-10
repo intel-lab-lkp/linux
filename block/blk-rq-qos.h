@@ -30,7 +30,7 @@ struct rq_qos {
 	enum rq_qos_id id;
 	struct rq_qos *next;
 #ifdef CONFIG_BLK_DEBUG_FS
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 #endif
 };
 

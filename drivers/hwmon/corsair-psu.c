@@ -122,7 +122,7 @@ static const char *const label_amps[] = {
 struct corsairpsu_data {
 	struct hid_device *hdev;
 	struct device *hwmon_dev;
-	struct dentry *debugfs;
+	struct debugfs_node *debugfs;
 	struct completion wait_completion;
 	struct mutex lock; /* for locking access to cmd_buffer */
 	u8 *cmd_buffer;

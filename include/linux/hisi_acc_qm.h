@@ -197,8 +197,8 @@ struct qm_debug {
 	u32 sqe_mask_offset;
 	u32 sqe_mask_len;
 	struct qm_dfx dfx;
-	struct dentry *debug_root;
-	struct dentry *qm_d;
+	struct debugfs_node *debug_root;
+	struct debugfs_node *qm_d;
 	struct debugfs_file files[DEBUG_FILE_NUM];
 	struct qm_dev_dfx dev_dfx;
 	unsigned int *qm_last_words;

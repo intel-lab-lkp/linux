@@ -41,7 +41,7 @@ struct file_operations;
 
 #include "ipoib.h"
 
-static struct dentry *ipoib_root;
+static struct debugfs_node *ipoib_root;
 
 static void format_gid(union ib_gid *gid, char *buf)
 {

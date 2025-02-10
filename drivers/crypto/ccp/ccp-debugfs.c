@@ -274,7 +274,7 @@ static const struct file_operations ccp_debugfs_stats_ops = {
 	.write = ccp5_debugfs_stats_write,
 };
 
-static struct dentry *ccp_debugfs_dir;
+static struct debugfs_node *ccp_debugfs_dir;
 static DEFINE_MUTEX(ccp_debugfs_lock);
 
 #define	MAX_NAME_LEN	20
@@ -283,7 +283,7 @@ void ccp5_debugfs_setup(struct ccp_device *ccp)
 {
 	struct ccp_cmd_queue *cmd_q;
 	char name[MAX_NAME_LEN + 1];
-	struct dentry *debugfs_q_instance;
+	struct debugfs_node *debugfs_q_instance;
 	int i;
 
 	if (!debugfs_initialized())

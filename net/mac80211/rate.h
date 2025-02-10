@@ -67,7 +67,7 @@ extern const struct debugfs_short_fops rcname_ops;
 static inline void rate_control_add_debugfs(struct ieee80211_local *local)
 {
 #ifdef CONFIG_MAC80211_DEBUGFS
-	struct dentry *debugfsdir;
+	struct debugfs_node *debugfsdir;
 
 	if (!local->rate_ctrl)
 		return;

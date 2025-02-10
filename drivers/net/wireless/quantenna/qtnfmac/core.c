@@ -25,7 +25,7 @@ static bool dfs_offload;
 module_param(dfs_offload, bool, 0644);
 MODULE_PARM_DESC(dfs_offload, "set 1 to enable DFS offload to firmware");
 
-static struct dentry *qtnf_debugfs_dir;
+static struct debugfs_node *qtnf_debugfs_dir;
 
 bool qtnf_slave_radar_get(void)
 {
@@ -903,7 +903,7 @@ void qtnf_wake_all_queues(struct net_device *ndev)
 }
 EXPORT_SYMBOL_GPL(qtnf_wake_all_queues);
 
-struct dentry *qtnf_get_debugfs_dir(void)
+struct debugfs_node *qtnf_get_debugfs_dir(void)
 {
 	return qtnf_debugfs_dir;
 }

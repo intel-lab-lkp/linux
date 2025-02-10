@@ -269,7 +269,7 @@ struct device;
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 
 struct fsl_ssi_dbg {
-	struct dentry *dbg_dir;
+	struct debugfs_node *dbg_dir;
 
 	struct {
 		unsigned int rfrc;

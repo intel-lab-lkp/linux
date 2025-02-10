@@ -291,7 +291,7 @@ DEFINE_SHOW_ATTRIBUTE(ep);
  */
 static void dwc2_hsotg_create_debug(struct dwc2_hsotg *hsotg)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 	unsigned int epidx;
 
 	root = hsotg->debug_root;
@@ -775,7 +775,7 @@ DEFINE_SHOW_ATTRIBUTE(dr_mode);
 int dwc2_debugfs_init(struct dwc2_hsotg *hsotg)
 {
 	int			ret;
-	struct dentry		*root;
+	struct debugfs_node		*root;
 
 	root = debugfs_create_dir(dev_name(hsotg->dev), usb_debug_root);
 	hsotg->debug_root = root;

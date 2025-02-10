@@ -13,6 +13,6 @@
  * of the DebugFS hierarchy. MIPS-specific DebugFS entries should be
  * placed beneath this directory.
  */
-extern struct dentry *mips_debugfs_dir;
+extern struct debugfs_node *mips_debugfs_dir;
 
 #endif /* __MIPS_ASM_DEBUG_H__ */

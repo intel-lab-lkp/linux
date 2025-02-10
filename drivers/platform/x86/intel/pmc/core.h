@@ -406,7 +406,7 @@ struct pmc {
  */
 struct pmc_dev {
 	struct pmc *pmcs[MAX_NUM_PMC];
-	struct dentry *dbgfs_dir;
+	struct debugfs_node *dbgfs_dir;
 	struct platform_device *pdev;
 	struct pci_dev *ssram_pcidev;
 	unsigned int crystal_freq;

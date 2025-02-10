@@ -606,7 +606,7 @@ struct snd_sof_dev {
 	size_t dsp_oops_offset;
 
 	/* debug */
-	struct dentry *debugfs_root;
+	struct debugfs_node *debugfs_root;
 	struct list_head dfsentry_list;
 	bool dbg_dump_printed;
 	bool ipc_dump_printed;

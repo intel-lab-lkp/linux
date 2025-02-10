@@ -66,34 +66,38 @@ extern void edac_mc_reset_delay_period(unsigned long value);
 void edac_debugfs_init(void);
 void edac_debugfs_exit(void);
 void edac_create_debugfs_nodes(struct mem_ctl_info *mci);
-struct dentry *edac_debugfs_create_dir(const char *dirname);
-struct dentry *
-edac_debugfs_create_dir_at(const char *dirname, struct dentry *parent);
-struct dentry *
-edac_debugfs_create_file(const char *name, umode_t mode, struct dentry *parent,
+struct debugfs_node *edac_debugfs_create_dir(const char *dirname);
+struct debugfs_node *
+edac_debugfs_create_dir_at(const char *dirname, struct debugfs_node *parent);
+struct debugfs_node *
+edac_debugfs_create_file(const char *name, umode_t mode,
+			 struct debugfs_node *parent,
 			 void *data, const struct file_operations *fops);
 void edac_debugfs_create_x8(const char *name, umode_t mode,
-			    struct dentry *parent, u8 *value);
+			    struct debugfs_node *parent, u8 *value);
 void edac_debugfs_create_x16(const char *name, umode_t mode,
-			     struct dentry *parent, u16 *value);
+			     struct debugfs_node *parent, u16 *value);
 void edac_debugfs_create_x32(const char *name, umode_t mode,
-			     struct dentry *parent, u32 *value);
+			     struct debugfs_node *parent, u32 *value);
 #else
 static inline void edac_debugfs_init(void)					{ }
 static inline void edac_debugfs_exit(void)					{ }
 static inline void edac_create_debugfs_nodes(struct mem_ctl_info *mci)		{ }
-static inline struct dentry *edac_debugfs_create_dir(const char *dirname)	{ return NULL; }
-static inline struct dentry *
-edac_debugfs_create_dir_at(const char *dirname, struct dentry *parent)		{ return NULL; }
-static inline struct dentry *
-edac_debugfs_create_file(const char *name, umode_t mode, struct dentry *parent,
+static inline struct debugfs_node *edac_debugfs_create_dir(const char *dirname)	{ return NULL; }
+static inline struct debugfs_node *
+edac_debugfs_create_dir_at(const char *dirname, struct debugfs_node *parent)		{ return NULL; }
+static inline struct debugfs_node *
+edac_debugfs_create_file(const char *name, umode_t mode,
+			 struct debugfs_node *parent,
 			 void *data, const struct file_operations *fops)	{ return NULL; }
 static inline void edac_debugfs_create_x8(const char *name, umode_t mode,
-					  struct dentry *parent, u8 *value)	{ }
+					  struct debugfs_node *parent,
+					  u8 *value)	{ }
 static inline void edac_debugfs_create_x16(const char *name, umode_t mode,
-					   struct dentry *parent, u16 *value)	{ }
+					   struct debugfs_node *parent,
+					   u16 *value)	{ }
 static inline void edac_debugfs_create_x32(const char *name, umode_t mode,
-		       struct dentry *parent, u32 *value)			{ }
+		       struct debugfs_node *parent, u32 *value)			{ }
 #endif
 
 /*

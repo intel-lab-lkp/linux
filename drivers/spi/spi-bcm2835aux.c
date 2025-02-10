@@ -98,7 +98,7 @@ struct bcm2835aux_spi {
 	u64 count_transfer_irq;
 	u64 count_transfer_irq_after_poll;
 
-	struct dentry *debugfs_dir;
+	struct debugfs_node *debugfs_dir;
 };
 
 #if defined(CONFIG_DEBUG_FS)
@@ -106,7 +106,7 @@ static void bcm2835aux_debugfs_create(struct bcm2835aux_spi *bs,
 				      const char *dname)
 {
 	char name[64];
-	struct dentry *dir;
+	struct debugfs_node *dir;
 
 	/* get full name */
 	snprintf(name, sizeof(name), "spi-bcm2835aux-%s", dname);

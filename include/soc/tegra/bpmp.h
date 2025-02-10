@@ -100,7 +100,7 @@ struct tegra_bpmp {
 	struct genpd_onecell_data genpd;
 
 #ifdef CONFIG_DEBUG_FS
-	struct dentry *debugfs_mirror;
+	struct debugfs_node *debugfs_mirror;
 #endif
 
 	bool suspended;

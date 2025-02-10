@@ -1167,7 +1167,7 @@ DEFINE_SHOW_ATTRIBUTE(debug_stats);
 
 static int __init debug_objects_init_debugfs(void)
 {
-	struct dentry *dbgdir;
+	struct debugfs_node *dbgdir;
 
 	if (!debug_objects_enabled)
 		return 0;

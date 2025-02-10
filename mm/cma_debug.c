@@ -160,9 +160,10 @@ static int cma_alloc_write(void *data, u64 val)
 }
 DEFINE_DEBUGFS_ATTRIBUTE(cma_alloc_fops, NULL, cma_alloc_write, "%llu\n");
 
-static void cma_debugfs_add_one(struct cma *cma, struct dentry *root_dentry)
+static void cma_debugfs_add_one(struct cma *cma,
+				struct debugfs_node *root_dentry)
 {
-	struct dentry *tmp;
+	struct debugfs_node *tmp;
 
 	tmp = debugfs_create_dir(cma->name, root_dentry);
 
@@ -184,7 +185,7 @@ static void cma_debugfs_add_one(struct cma *cma, struct dentry *root_dentry)
 
 static int __init cma_debugfs_init(void)
 {
-	struct dentry *cma_debugfs_root;
+	struct debugfs_node *cma_debugfs_root;
 	int i;
 
 	cma_debugfs_root = debugfs_create_dir("cma", NULL);

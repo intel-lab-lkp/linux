@@ -90,7 +90,7 @@ struct clk_core {
 	struct hlist_head	clks;
 	unsigned int		notifier_count;
 #ifdef CONFIG_DEBUG_FS
-	struct dentry		*dentry;
+	struct debugfs_node *dentry;
 	struct hlist_node	debug_node;
 #endif
 	struct kref		ref;
@@ -3278,7 +3278,7 @@ EXPORT_SYMBOL_GPL(clk_is_match);
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-static struct dentry *rootdir;
+static struct debugfs_node *rootdir;
 static int inited = 0;
 static DEFINE_MUTEX(clk_debug_lock);
 static HLIST_HEAD(clk_debug_list);
@@ -3705,9 +3705,10 @@ static int clk_max_rate_show(struct seq_file *s, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(clk_max_rate);
 
-static void clk_debug_create_one(struct clk_core *core, struct dentry *pdentry)
+static void clk_debug_create_one(struct clk_core *core,
+				 struct debugfs_node *pdentry)
 {
-	struct dentry *root;
+	struct debugfs_node *root;
 
 	if (!core || !pdentry)
 		return;

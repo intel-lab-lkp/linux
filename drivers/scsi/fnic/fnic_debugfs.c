@@ -10,15 +10,15 @@
 extern int fnic_get_debug_info(struct stats_debug_info *debug_buffer,
 							   struct fnic *fnic);
 
-static struct dentry *fnic_trace_debugfs_root;
-static struct dentry *fnic_trace_debugfs_file;
-static struct dentry *fnic_trace_enable;
-static struct dentry *fnic_stats_debugfs_root;
+static struct debugfs_node *fnic_trace_debugfs_root;
+static struct debugfs_node *fnic_trace_debugfs_file;
+static struct debugfs_node *fnic_trace_enable;
+static struct debugfs_node *fnic_stats_debugfs_root;
 
-static struct dentry *fnic_fc_trace_debugfs_file;
-static struct dentry *fnic_fc_rdata_trace_debugfs_file;
-static struct dentry *fnic_fc_trace_enable;
-static struct dentry *fnic_fc_trace_clear;
+static struct debugfs_node *fnic_fc_trace_debugfs_file;
+static struct debugfs_node *fnic_fc_rdata_trace_debugfs_file;
+static struct debugfs_node *fnic_fc_trace_enable;
+static struct debugfs_node *fnic_fc_trace_clear;
 
 struct fc_trace_flag_type {
 	u8 fc_row_file;

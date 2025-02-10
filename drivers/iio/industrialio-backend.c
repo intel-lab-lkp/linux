@@ -207,8 +207,8 @@ static const struct file_operations iio_backend_debugfs_name_fops = {
 void iio_backend_debugfs_add(struct iio_backend *back,
 			     struct iio_dev *indio_dev)
 {
-	struct dentry *d = iio_get_debugfs_dentry(indio_dev);
-	struct dentry *back_d;
+	struct debugfs_node *d = iio_get_debugfs_dentry(indio_dev);
+	struct debugfs_node *back_d;
 	char name[128];
 
 	if (!IS_ENABLED(CONFIG_DEBUG_FS) || !d)

@@ -382,7 +382,7 @@ bool mtd_check_expert_analysis_mode(void)
 EXPORT_SYMBOL_GPL(mtd_check_expert_analysis_mode);
 #endif
 
-static struct dentry *dfs_dir_mtd;
+static struct debugfs_node *dfs_dir_mtd;
 
 static void mtd_debugfs_populate(struct mtd_info *mtd)
 {

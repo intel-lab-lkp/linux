@@ -57,7 +57,7 @@ struct omap_iommu {
 	struct regmap	*syscfg;
 	struct device	*dev;
 	struct iommu_domain *domain;
-	struct dentry	*debug_dir;
+	struct debugfs_node *debug_dir;
 
 	spinlock_t	iommu_lock;	/* global for this whole object */
 

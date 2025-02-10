@@ -400,9 +400,9 @@ static const struct file_operations radar_debug_mode_ops = {
 #endif /* CFG80211_CERTIFICATION_ONUS */
 
 int wl18xx_debugfs_add_files(struct wl1271 *wl,
-			     struct dentry *rootdir)
+			     struct debugfs_node *rootdir)
 {
-	struct dentry *stats, *moddir;
+	struct debugfs_node *stats, *moddir;
 
 	moddir = debugfs_create_dir(KBUILD_MODNAME, rootdir);
 	stats = debugfs_create_dir("fw_stats", moddir);

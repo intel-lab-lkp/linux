@@ -300,7 +300,7 @@ struct rpc_xprt {
 	const char		*servername;
 	const char		*address_strings[RPC_DISPLAY_MAX];
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
-	struct dentry		*debugfs;		/* debugfs directory */
+	struct debugfs_node *debugfs;		/* debugfs directory */
 #endif
 	struct rcu_head		rcu;
 	const struct xprt_class	*xprt_class;

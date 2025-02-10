@@ -511,9 +511,9 @@ static inline void irq_remove_debugfs_entry(struct irq_desc *desc)
 }
 void irq_debugfs_copy_devname(int irq, struct device *dev);
 # ifdef CONFIG_IRQ_DOMAIN
-void irq_domain_debugfs_init(struct dentry *root);
+void irq_domain_debugfs_init(struct debugfs_node *root);
 # else
-static inline void irq_domain_debugfs_init(struct dentry *root)
+static inline void irq_domain_debugfs_init(struct debugfs_node *root)
 {
 }
 # endif

@@ -44,7 +44,7 @@ static const struct file_operations fops_modal_eeprom = {
 };
 
 
-void ath9k_cmn_debug_modal_eeprom(struct dentry *debugfs_phy,
+void ath9k_cmn_debug_modal_eeprom(struct debugfs_node *debugfs_phy,
 				  struct ath_hw *ah)
 {
 	debugfs_create_file("modal_eeprom", 0400, debugfs_phy, ah,
@@ -79,7 +79,7 @@ static const struct file_operations fops_base_eeprom = {
 	.llseek = default_llseek,
 };
 
-void ath9k_cmn_debug_base_eeprom(struct dentry *debugfs_phy,
+void ath9k_cmn_debug_base_eeprom(struct debugfs_node *debugfs_phy,
 				 struct ath_hw *ah)
 {
 	debugfs_create_file("base_eeprom", 0400, debugfs_phy, ah,
@@ -177,7 +177,7 @@ static const struct file_operations fops_recv = {
 	.llseek = default_llseek,
 };
 
-void ath9k_cmn_debug_recv(struct dentry *debugfs_phy,
+void ath9k_cmn_debug_recv(struct debugfs_node *debugfs_phy,
 			  struct ath_rx_stats *rxstats)
 {
 	debugfs_create_file("recv", 0400, debugfs_phy, rxstats, &fops_recv);
@@ -253,7 +253,7 @@ static const struct file_operations fops_phy_err = {
 	.llseek = default_llseek,
 };
 
-void ath9k_cmn_debug_phy_err(struct dentry *debugfs_phy,
+void ath9k_cmn_debug_phy_err(struct debugfs_node *debugfs_phy,
 			     struct ath_rx_stats *rxstats)
 {
 	debugfs_create_file("phy_err", 0400, debugfs_phy, rxstats,

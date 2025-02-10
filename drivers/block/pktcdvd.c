@@ -89,7 +89,7 @@ static struct bio_set pkt_bio_set;
 
 /* /sys/class/pktcdvd */
 static struct class	class_pktcdvd;
-static struct dentry	*pkt_debugfs_root = NULL; /* /sys/kernel/debug/pktcdvd */
+static struct debugfs_node	*pkt_debugfs_root = NULL; /* /sys/kernel/debug/pktcdvd */
 
 /* forward declaration */
 static int pkt_setup_dev(dev_t dev, dev_t* pkt_dev);
