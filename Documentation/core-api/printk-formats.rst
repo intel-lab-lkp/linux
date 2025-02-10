@@ -661,7 +661,7 @@ Do *not* use it from C.
 Thanks
 ======
 
-If you add other %p extensions, please extend <lib/test_printf.c> with
+If you add other %p extensions, please extend <lib/printf_kunit.c> with
 one or more test cases, if at all feasible.
 
 Thank you for your cooperation and attention.
