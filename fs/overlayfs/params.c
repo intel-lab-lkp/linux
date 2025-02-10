@@ -846,8 +846,8 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 		config->uuid = OVL_UUID_NULL;
 	}
 
-	/* Resolve verity -> metacopy dependency */
-	if (config->verity_mode && !config->metacopy) {
+	/* Resolve verity -> metacopy dependency (unless used with userxattr) */
+	if (config->verity_mode && !config->metacopy && !config->userxattr) {
 		/* Don't allow explicit specified conflicting combinations */
 		if (set.metacopy) {
 			pr_err("conflicting options: metacopy=off,verity=%s\n",
@@ -945,7 +945,7 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 	}
 
 
-	/* Resolve userxattr -> !redirect && !metacopy && !verity dependency */
+	/* Resolve userxattr -> !redirect && !metacopy dependency */
 	if (config->userxattr) {
 		if (set.redirect &&
 		    config->redirect_mode != OVL_REDIRECT_NOFOLLOW) {
@@ -955,11 +955,6 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 		}
 		if (config->metacopy && set.metacopy) {
 			pr_err("conflicting options: userxattr,metacopy=on\n");
-			return -EINVAL;
-		}
-		if (config->verity_mode) {
-			pr_err("conflicting options: userxattr,verity=%s\n",
-			       ovl_verity_mode(config));
 			return -EINVAL;
 		}
 		/*
@@ -984,10 +979,6 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 		}
 		if (config->metacopy && set.metacopy) {
 			pr_err("metacopy requires permission to access trusted xattrs\n");
-			return -EPERM;
-		}
-		if (config->verity_mode) {
-			pr_err("verity requires permission to access trusted xattrs\n");
 			return -EPERM;
 		}
 		if (ctx->nr_data > 0) {
