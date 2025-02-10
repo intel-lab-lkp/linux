@@ -10140,6 +10140,27 @@ static int ath12k_mac_get_fw_stats(struct ath12k *ar, u32 pdev_id,
 	return ret;
 }
 
+static void ath12k_mac_put_chain_rssi(struct station_info *sinfo,
+				      struct ath12k_link_sta *arsta)
+{
+	s8 rssi;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(sinfo->chain_signal); i++) {
+		sinfo->chains &= ~BIT(i);
+		rssi = arsta->chain_signal[i];
+
+		if (rssi != ATH12K_DEFAULT_NOISE_FLOOR &&
+		    rssi != ATH12K_INVALID_RSSI_FULL &&
+		    rssi != ATH12K_INVALID_RSSI_EMPTY &&
+		    rssi != 0) {
+			sinfo->chain_signal[i] = rssi;
+			sinfo->chains |= BIT(i);
+			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL);
+		}
+	}
+}
+
 static void ath12k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 					 struct ieee80211_vif *vif,
 					 struct ieee80211_sta *sta,
@@ -10187,11 +10208,21 @@ static void ath12k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 	/* TODO: Use real NF instead of default one. */
 	signal = arsta->rssi_comb;
 
-	if (!signal &&
-	    ahsta->ahvif->vdev_type == WMI_VDEV_TYPE_STA &&
-	    !(ath12k_mac_get_fw_stats(ar, ar->pdev->pdev_id, 0,
-				      WMI_REQUEST_VDEV_STAT)))
+	/* Limit the requests to Firmware for fetching the signal strength */
+	if (time_after(jiffies, msecs_to_jiffies(ATH12K_PDEV_SIGNAL_UPDATE_TIME_MSECS) +
+				ar->last_signal_update)) {
+		ath12k_mac_get_fw_stats(ar, ar->pdev->pdev_id, 0, WMI_REQUEST_VDEV_STAT);
+		ath12k_mac_get_fw_stats(ar, ar->pdev->pdev_id, 0,
+					WMI_REQUEST_RSSI_PER_CHAIN_STAT);
+		ar->last_signal_update = jiffies;
+	}
+
+	if (!signal && ahsta->ahvif->vdev_type == WMI_VDEV_TYPE_STA)
 		signal = arsta->rssi_beacon;
+
+	if (!(sinfo->filled & BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL)) &&
+	    ahsta->ahvif->vdev_type == WMI_VDEV_TYPE_STA)
+		ath12k_mac_put_chain_rssi(sinfo, arsta);
 
 	if (signal) {
 		sinfo->signal = db2dbm ? signal : signal + ATH12K_DEFAULT_NOISE_FLOOR;
