@@ -550,25 +550,78 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 	return NULL;
 }
 
-int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
-			     loff_t offset, loff_t len)
+static void inval_single_inode(struct inode *inode, struct fuse_conn *fc)
 {
 	struct fuse_inode *fi;
-	struct inode *inode;
-	pgoff_t pg_start;
-	pgoff_t pg_end;
-
-	inode = fuse_ilookup(fc, nodeid, NULL);
-	if (!inode)
-		return -ENOENT;
 
 	fi = get_fuse_inode(inode);
 	spin_lock(&fi->lock);
 	fi->attr_version = atomic64_inc_return(&fc->attr_version);
 	spin_unlock(&fi->lock);
-
 	fuse_invalidate_attr(inode);
 	forget_all_cached_acls(inode);
+}
+
+static int fuse_reverse_inval_all(struct fuse_conn *fc)
+{
+	struct fuse_mount *fm;
+	struct super_block *sb;
+	struct inode *inode, *old_inode = NULL;
+
+	inode = fuse_ilookup(fc, FUSE_ROOT_ID, NULL);
+	if (!inode)
+		return -ENOENT;
+
+	fm = get_fuse_mount(inode);
+	iput(inode);
+	if (!fm)
+		return -ENOENT;
+	sb = fm->sb;
+
+	spin_lock(&sb->s_inode_list_lock);
+	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+		spin_lock(&inode->i_lock);
+		if ((inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) ||
+		    !atomic_read(&inode->i_count)) {
+			spin_unlock(&inode->i_lock);
+			continue;
+		}
+
+		__iget(inode);
+		spin_unlock(&inode->i_lock);
+		spin_unlock(&sb->s_inode_list_lock);
+		iput(old_inode);
+
+		inval_single_inode(inode, fc);
+
+		old_inode = inode;
+		cond_resched();
+		spin_lock(&sb->s_inode_list_lock);
+	}
+	spin_unlock(&sb->s_inode_list_lock);
+	iput(old_inode);
+
+	shrink_dcache_sb(sb);
+
+	return 0;
+}
+
+int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
+			     loff_t offset, loff_t len)
+{
+	struct inode *inode;
+	pgoff_t pg_start;
+	pgoff_t pg_end;
+
+	if (nodeid == FUSE_INVAL_ALL_INODES)
+		return fuse_reverse_inval_all(fc);
+
+	inode = fuse_ilookup(fc, nodeid, NULL);
+	if (!inode)
+		return -ENOENT;
+
+	inval_single_inode(inode, fc);
+
 	if (offset >= 0) {
 		pg_start = offset >> PAGE_SHIFT;
 		if (len <= 0)
