@@ -63,6 +63,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_BT_SCO
 	imply SND_SOC_BD28623
 	imply SND_SOC_CHV3_CODEC
+	imply SND_SOC_CMX655
 	imply SND_SOC_CQ0093VC
 	imply SND_SOC_CROS_EC_CODEC
 	imply SND_SOC_CS35L32
@@ -746,6 +747,21 @@ config SND_SOC_CHV3_CODEC
 config SND_SOC_CPCAP
 	tristate "Motorola CPCAP codec"
 	depends on MFD_CPCAP || COMPILE_TEST
+
+config SND_SOC_CMX655D
+	tristate
+
+config SND_SOC_CMX655D_I2C
+       tristate "CMX655D codec (I2C)"
+       depends on I2C
+       select SND_SOC_CMX655D
+       select REGMAP_I2C
+
+config SND_SOC_CMX655D_SPI
+       tristate "CMX655D codec (SPI)"
+       depends on SPI
+       select SND_SOC_CMX655D
+       select REGMAP_SPI
 
 config SND_SOC_CQ0093VC
 	tristate
