@@ -119,6 +119,31 @@ static struct attribute *memory_range_attrs[] = {
 
 ATTRIBUTE_GROUPS(memory_range);
 
+static __init int add_node_link(struct mrrm_mem_range_entry *entry)
+{
+	struct node *node = NULL;
+	int ret = 0;
+	int nid;
+
+	for_each_online_node(nid) {
+		for (int z = 0; z < MAX_NR_ZONES; z++) {
+			struct zone *zone = NODE_DATA(nid)->node_zones + z;
+
+			if (!populated_zone(zone))
+				continue;
+			if (zone_intersects(zone, PHYS_PFN(entry->base), PHYS_PFN(entry->length))) {
+				node = node_devices[zone->node];
+				goto found;
+			}
+		}
+	}
+found:
+	if (node)
+		ret = sysfs_create_link(&entry->dev.kobj, &node->dev.kobj, "node");
+
+	return ret;
+}
+
 static __init int add_boot_memory_ranges(void)
 {
 	char name[16];
@@ -140,6 +165,10 @@ static __init int add_boot_memory_ranges(void)
 			put_device(&entry->dev);
 			return ret;
 		}
+
+		ret = add_node_link(entry);
+		if (ret)
+			break;
 	}
 
 	return ret;
