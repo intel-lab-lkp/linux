@@ -118,3 +118,35 @@ Description:
 		(RO) indicates whether or not the kernel updates relevant kexec
 		segments on memory hot un/plug and/or on/offline events, avoiding the
 		need to reload kdump kernel.
+
+What:           /sys/devices/system/memory/rangeX/base
+Date:           January 2025
+Contact:	Tony Luck <tony.luck@intel.com>
+Description:
+		On systems with the ACPI MRRM table reports the
+		base system physical address of memory range X.
+
+What:           /sys/devices/system/memory/rangeX/length
+Date:           January 2025
+Contact:	Tony Luck <tony.luck@intel.com>
+Description:
+		On systems with the ACPI MRRM table reports the
+		size of rangeX system physical memory.
+
+What:           /sys/devices/system/memory/rangeX/local_region_id
+Date:           January 2025
+Contact:	Tony Luck <tony.luck@intel.com>
+Description:
+		On systems with the ACPI MRRM table reports the
+		the region id associated with memory access by
+		agents local to this range of addresses. Reports
+		0xff when no region id has been assigned.
+
+What:           /sys/devices/system/memory/rangeX/remote_region_id
+Date:           January 2025
+Contact:	Tony Luck <tony.luck@intel.com>
+Description:
+		On systems with the ACPI MRRM table reports the
+		the region id associated with memory access by
+		agents non-local to this range of addresses. Reports
+		0xff when no region id has been assigned.
