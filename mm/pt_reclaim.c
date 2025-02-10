@@ -42,8 +42,10 @@ void try_to_free_pte(struct mm_struct *mm, pmd_t *pmd, unsigned long addr,
 
 	pml = pmd_lock(mm, pmd);
 	start_pte = pte_offset_map_rw_nolock(mm, pmd, addr, &pmdval, &ptl);
-	if (!start_pte)
-		goto out_ptl;
+	if (!start_pte) {
+		spin_unlock(pml);
+		return;
+	}
 	if (ptl != pml)
 		spin_lock_nested(ptl, SINGLE_DEPTH_NESTING);
 
