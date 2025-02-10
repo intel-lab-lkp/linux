@@ -278,7 +278,6 @@ struct phy *phy_create(struct device *dev, struct device_node *node,
 struct phy *devm_phy_create(struct device *dev, struct device_node *node,
 			    const struct phy_ops *ops);
 void phy_destroy(struct phy *phy);
-void devm_phy_destroy(struct device *dev, struct phy *phy);
 struct phy_provider *__of_phy_provider_register(struct device *dev,
 	struct device_node *children, struct module *owner,
 	struct phy * (*of_xlate)(struct device *dev,
@@ -518,10 +517,6 @@ static inline struct phy *devm_phy_create(struct device *dev,
 }
 
 static inline void phy_destroy(struct phy *phy)
-{
-}
-
-static inline void devm_phy_destroy(struct device *dev, struct phy *phy)
 {
 }
 
