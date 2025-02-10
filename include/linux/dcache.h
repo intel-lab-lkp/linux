@@ -127,6 +127,8 @@ struct dentry {
 	} d_u;
 };
 
+#define debugfs_node dentry
+
 /*
  * dentry->d_lock spinlock nesting subclasses:
  *

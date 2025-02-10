@@ -21,6 +21,8 @@
 struct device;
 struct file_operations;
 
+#define debugfs_node dentry
+
 struct debugfs_blob_wrapper {
 	void *data;
 	unsigned long size;
