@@ -304,6 +304,14 @@
 				status = "disabled";
 			};
 
+			audin: audio-input-controller@a000 {
+				compatible = "amlogic,audin";
+				#sound-dai-cells = <1>;
+				sound-name-prefix = "AUDIN";
+				reg = <0x0 0xa000 0x0 0x308>;
+				status = "disabled";
+			};
+
 			uart_A: serial@84c0 {
 				compatible = "amlogic,meson-gx-uart";
 				reg = <0x0 0x84c0 0x0 0x18>;
