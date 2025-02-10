@@ -353,6 +353,44 @@ struct dentry *debugfs_lookup(const char *name, struct dentry *parent)
 }
 EXPORT_SYMBOL_GPL(debugfs_lookup);
 
+char *debugfs_node_path_raw(struct debugfs_node *node, char *buf, size_t buflen)
+{
+	return dentry_path_raw(node, buf, buflen);
+}
+EXPORT_SYMBOL_GPL(debugfs_node_path_raw);
+
+struct debugfs_node *debugfs_node_get(struct debugfs_node *node)
+{
+	return dget(node);
+}
+EXPORT_SYMBOL_GPL(debugfs_node_get);
+
+void debugfs_node_put(struct debugfs_node *node)
+{
+	dput(node);
+}
+EXPORT_SYMBOL_GPL(debugfs_node_put);
+
+struct inode *debugfs_node_inode(struct debugfs_node *node)
+{
+	return d_inode(node);
+}
+EXPORT_SYMBOL_GPL(debugfs_node_inode);
+
+struct debugfs_node *debugfs_node_from_dentry(struct dentry *dentry)
+{
+	if (dentry->d_sb->s_op == &debugfs_super_operations)
+		return dentry;
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(debugfs_node_from_dentry);
+
+struct dentry *debugfs_node_dentry(struct debugfs_node *node)
+{
+	return node;
+}
+EXPORT_SYMBOL_GPL(debugfs_node_dentry);
+
 static struct dentry *start_creating(const char *name, struct dentry *parent)
 {
 	struct dentry *dentry;

@@ -79,6 +79,18 @@ struct debugfs_short_fops {
 
 struct dentry *debugfs_lookup(const char *name, struct dentry *parent);
 
+char *debugfs_node_path_raw(struct debugfs_node *node, char *buf, size_t buflen);
+
+struct debugfs_node *debugfs_node_get(struct debugfs_node *node);
+
+void debugfs_node_put(struct debugfs_node *node);
+
+struct inode *debugfs_node_inode(struct debugfs_node *node);
+
+struct debugfs_node *debugfs_node_from_dentry(struct dentry *dentry);
+
+struct dentry *debugfs_node_dentry(struct debugfs_node *node);
+
 struct dentry *debugfs_create_file_full(const char *name, umode_t mode,
 					struct dentry *parent, void *data,
 					const void *aux,
@@ -267,6 +279,35 @@ debugfs_leave_cancellation(struct file *file,
 
 static inline struct dentry *debugfs_lookup(const char *name,
 					    struct dentry *parent)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline char *debugfs_node_path_raw(struct debugfs_node *node, char *buf,
+					  size_t buflen)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+static inline struct debugfs_node *debugfs_node_get(struct debugfs_node *node)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+void debugfs_node_put(struct debugfs_node *node)
+{ }
+
+struct inode *debugfs_node_inode(struct debugfs_node *node)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+struct debugfs_node *debugfs_node_from_dentry(struct dentry *dentry)
+{
+	return ERR_PTR(-ENODEV);
+}
+
+struct dentry *debugfs_node_dentry(struct debugfs_node *node)
 {
 	return ERR_PTR(-ENODEV);
 }
