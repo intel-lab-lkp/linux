@@ -921,6 +921,24 @@ static void xgbe_phy_free_phy_device(struct xgbe_prv_data *pdata)
 	}
 }
 
+static bool xgbe_phy_broadcom_phy_quirks(struct xgbe_prv_data *pdata)
+{
+	struct xgbe_phy_data *phy_data = pdata->phy_data;
+	unsigned int phy_id = phy_data->phydev->phy_id;
+	unsigned int ver;
+
+	ver = XGMAC_GET_BITS(pdata->hw_feat.version, MAC_VR, SNPSVER);
+
+	/* For Broadcom PHY, use the extra AN flag */
+	if (ver == SNPS_MAC_VER_0x21 && (phy_id & 0xffffffff) == 0x600d8595) {
+		dev_dbg(pdata->dev, "Broadcom PHY quirk in place\n");
+		pdata->an_again = 1;
+		return true;
+	}
+
+	return false;
+}
+
 static bool xgbe_phy_finisar_phy_quirks(struct xgbe_prv_data *pdata)
 {
 	struct xgbe_phy_data *phy_data = pdata->phy_data;
@@ -1034,6 +1052,9 @@ static void xgbe_phy_external_phy_quirks(struct xgbe_prv_data *pdata)
 		return;
 
 	if (xgbe_phy_finisar_phy_quirks(pdata))
+		return;
+
+	if (xgbe_phy_broadcom_phy_quirks(pdata))
 		return;
 }
 

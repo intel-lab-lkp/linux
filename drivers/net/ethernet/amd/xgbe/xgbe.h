@@ -249,6 +249,9 @@
 
 #define XGBE_TC_MIN_QUANTUM	10
 
+/* SNPS MAC version */
+#define SNPS_MAC_VER_0x21	0x21
+
 /* Helper macro for descriptor handling
  *  Always use XGBE_GET_DESC_DATA to access the descriptor data
  *  since the index is free-running and needs to be and-ed
