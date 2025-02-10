@@ -1524,6 +1524,7 @@ static void tcp_eat_recv_skb(struct sock *sk, struct sk_buff *skb)
 		sock_rfree(skb);
 		skb->destructor = NULL;
 		skb->sk = NULL;
+		skb_ext_reset(skb);
 		return skb_attempt_defer_free(skb);
 	}
 	__kfree_skb(skb);
