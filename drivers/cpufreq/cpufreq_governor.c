@@ -147,6 +147,20 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 
 		idle_time = cur_idle_time - j_cdbs->prev_cpu_idle;
 		j_cdbs->prev_cpu_idle = cur_idle_time;
+		/*
+		 * idle_time can be negative if cur_idle_time is returned by
+		 * get_cpu_idle_time_jiffy() when NO_HZ is off.  In that case
+		 * idle_time is roughly equal to the difference between
+		 * time_elapsed and "busy time" obtained from CPU statistics.
+		 * Then, the "busy time" can end up being greater than
+		 * time_elapsed (for example, if jiffies_64 and the CPU
+		 * statistics are updated by different CPUs), so idle_time may
+		 * in fact be negative.  That means, though, that the CPU was
+		 * busy all the time (on the rough average) during the last
+		 * sampling interval, so idle_time should be regarded as 0 in
+		 * order to make the further process correct.
+		 */
+		idle_time = (int)idle_time < 0 ? 0 : idle_time;
 
 		if (ignore_nice) {
 			u64 cur_nice = kcpustat_field(&kcpustat_cpu(j), CPUTIME_NICE, j);
@@ -162,7 +176,7 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 			 * calls, so the previous load value can be used then.
 			 */
 			load = j_cdbs->prev_load;
-		} else if (unlikely((int)idle_time > 2 * sampling_rate &&
+		} else if (unlikely(idle_time > 2 * sampling_rate &&
 				    j_cdbs->prev_load)) {
 			/*
 			 * If the CPU had gone completely idle and a task has
@@ -189,30 +203,13 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 			load = j_cdbs->prev_load;
 			j_cdbs->prev_load = 0;
 		} else {
-			if (time_elapsed >= idle_time) {
-				load = 100 * (time_elapsed - idle_time) / time_elapsed;
-			} else {
-				/*
-				 * That can happen if idle_time is returned by
-				 * get_cpu_idle_time_jiffy().  In that case
-				 * idle_time is roughly equal to the difference
-				 * between time_elapsed and "busy time" obtained
-				 * from CPU statistics.  Then, the "busy time"
-				 * can end up being greater than time_elapsed
-				 * (for example, if jiffies_64 and the CPU
-				 * statistics are updated by different CPUs),
-				 * so idle_time may in fact be negative.  That
-				 * means, though, that the CPU was busy all
-				 * the time (on the rough average) during the
-				 * last sampling interval and 100 can be
-				 * returned as the load.
-				 */
-				load = (int)idle_time < 0 ? 100 : 0;
-			}
+			load = time_elapsed > idle_time ?
+			       100 * (time_elapsed - idle_time) / time_elapsed :
+			       0;
 			j_cdbs->prev_load = load;
 		}
 
-		if (unlikely((int)idle_time > 2 * sampling_rate)) {
+		if (unlikely(idle_time > 2 * sampling_rate)) {
 			unsigned int periods = idle_time / sampling_rate;
 
 			if (periods < idle_periods)
