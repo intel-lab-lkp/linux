@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/cml,cmx655d.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: CML Micro CMX655D codec
+
+maintainers:
+  - Richard Walton <rwalton@cmlmicro.com>
+  - Nikola Jelic <nikola.jelic83@gmail.com>
+
+description:
+  The CMX655D is an ultra-low power voice codec.
+
+allOf:
+  - $ref: dai-common.yaml#
+
+properties:
+  compatible:
+    enum:
+      - cml,cmx655d
+
+  reg:
+    description: Local bus address
+    maxItems: 1
+
+  "#sound-dai-cells":
+    description: The first cell indicating the audio interface
+    const: 0
+
+  reset-gpios:
+    description: GPIO used for codec reset, negative logic
+    maxItems: 1
+
+  interrupts:
+    description: Interrupt for the CMX655D IRQ line
+    maxItems: 1
+
+  interrupt-names:
+    description: Interrupt name for the CMX655D IRQ line
+    maxItems: 1
+
+  cml,classd-oc-reset-attempts:
+    description: Maximum number of times to reset CMX655 class-D
+      following a overcurrent event.
+      >10000 = disable limit.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 1
+    maximum: 10001
+    default: 5
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/gpio/gpio.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        status = "okay";
+        audio-codec@54 {
+            compatible = "cml,cmx655d";
+            #sound-dai-cells = <0>;
+            reg = <0x54>;
+            reset-gpios = <&gpio 24 GPIO_ACTIVE_LOW>;
+            interrupt-parent = <&gpio>;
+            interrupts = <25 IRQ_TYPE_EDGE_RISING>;
+            cml,classd-oc-reset-attempts = <5>;
+        };
+
+    };
+...
