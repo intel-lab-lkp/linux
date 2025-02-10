@@ -64,12 +64,9 @@ macros can be used to override the node containing the children.
 		__devm_of_phy_provider_register_full(dev, children,
 						     THIS_MODULE, xlate)
 
-	void devm_of_phy_provider_unregister(struct device *dev,
-		struct phy_provider *phy_provider);
 	void of_phy_provider_unregister(struct phy_provider *phy_provider);
 
-devm_of_phy_provider_unregister and of_phy_provider_unregister can be used to
-unregister the PHY.
+of_phy_provider_unregister can be used to unregister the PHY.
 
 Creating the PHY
 ================

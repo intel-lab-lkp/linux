@@ -288,8 +288,6 @@ struct phy_provider *__devm_of_phy_provider_register(struct device *dev,
 	struct phy * (*of_xlate)(struct device *dev,
 				 const struct of_phandle_args *args));
 void of_phy_provider_unregister(struct phy_provider *phy_provider);
-void devm_of_phy_provider_unregister(struct device *dev,
-	struct phy_provider *phy_provider);
 int phy_create_lookup(struct phy *phy, const char *con_id, const char *dev_id);
 void phy_remove_lookup(struct phy *phy, const char *con_id, const char *dev_id);
 #else
@@ -547,10 +545,6 @@ static inline void of_phy_provider_unregister(struct phy_provider *phy_provider)
 {
 }
 
-static inline void devm_of_phy_provider_unregister(struct device *dev,
-	struct phy_provider *phy_provider)
-{
-}
 static inline int
 phy_create_lookup(struct phy *phy, const char *con_id, const char *dev_id)
 {
