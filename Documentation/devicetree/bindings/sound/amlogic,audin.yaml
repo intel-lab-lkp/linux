@@ -1,0 +1,104 @@
+# SPDX-License-Identifier: GPL-2.0
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/amlogic,audin.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Amlogic AUDIN audio output controller
+
+maintainers:
+	- Valerio Setti <vsetti@baylibre.com>
+
+allOf:
+	- $ref: dai-common.yaml#
+
+properties:
+	$nodename:
+		pattern: "^audio-input-controller@.*"
+
+	"#sound-dai-cells":
+		const: 1
+
+	compatible:
+		items:
+			- enum:
+					- amlogic,audin-gxbb
+			- const: amlogic,audin
+
+	clocks:
+		items:
+      - description: AIU peripheral clock
+      - description: I2S peripheral clock
+      - description: I2S output clock
+      - description: I2S master clock
+      - description: I2S mixer clock
+			- description: AUDIN peripheral clock
+			- description: I2S bit clock gate
+			- description: I2S bit clock basic divider
+			- description: I2S bit clock more divider
+			- description: I2S L/R clock divider
+
+	clock-names:
+		items:
+			- const: pclk
+			- const: i2s_pclk
+			- const: i2s_aoclk
+			- const: i2s_mclk
+			- const: i2s_mixer
+			- const: i2s_input_clk
+			- const: i2s_aoclk_div_gate
+			- const: i2s_aoclk_basic_div
+			- const: i2s_aoclk_more_div
+			- const: i2s_lrclk_div
+
+	reg:
+		maxItems: 1
+
+	resets:
+		maxItems: 1
+
+	sound-name-prefix: true
+
+required:
+	- "#sound-dai-cells"
+	- compatible
+	- clocks
+	- clock-names
+	- reg
+	- resets
+
+additionalProperties: false
+
+examples:
+	- |
+		#include <dt-bindings/clock/gxbb-clkc.h>
+		#include <dt-bindings/sound/meson-gxbb.h>
+		#include <dt-bindings/reset/amlogic,meson-gxbb-reset.h>
+
+		audin: audio-input-controller@a000 {
+			compatible = "amlogic,audin-gxbb", "amlogic,audin";
+			#sound-dai-cells = <1>;
+			sound-name-prefix = "AUDIN";
+			reg = <0x0 0xa000 0x0 0x308>;
+			clocks = <&clkc CLKID_AIU_GLUE>,
+							 <&clkc CLKID_I2S_OUT>,
+							 <&clkc CLKID_AOCLK_GATE>,
+							 <&clkc CLKID_CTS_AMCLK>,
+							 <&clkc CLKID_MIXER_IFACE>,
+							 <&clkc CLKID_I2S_SPDIF>,
+							 <&aiu AIU_AOCLK_DIV_GATE>,
+							 <&aiu AIU_AOCLK_BASIC_DIV>,
+							 <&aiu AIU_AOCLK_MORE_DIV>,
+							 <&aiu AIU_LRCLK_DIV>;
+			clock-names = "pclk",
+										"i2s_pclk",
+										"i2s_aoclk",
+										"i2s_mclk",
+										"i2s_mixer",
+										"i2s_input_clk",
+										"i2s_aoclk_div_gate",
+										"i2s_aoclk_basic_div",
+										"i2s_aoclk_more_div",
+										"i2s_lrclk_div";
+			resets = <&reset RESET_AIU>;
+		};
