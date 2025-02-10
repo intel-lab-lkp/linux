@@ -1640,6 +1640,17 @@ static unsigned int scsi_mq_inline_sgl_size(struct Scsi_Host *shost)
 		sizeof(struct scatterlist);
 }
 
+static inline void scsi_clear_lld_private_data(struct scsi_cmnd *cmd,
+					       struct Scsi_Host *shost)
+{
+	/*
+	 * Only clear the driver-private command data if the LLD does not supply
+	 * a function to initialize that data.
+	 */
+	if (!shost->hostt->init_cmd_priv && shost->hostt->cmd_size)
+		memset(cmd + 1, 0, shost->hostt->cmd_size);
+}
+
 static blk_status_t scsi_prepare_cmd(struct request *req)
 {
 	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(req);
@@ -1664,12 +1675,7 @@ static blk_status_t scsi_prepare_cmd(struct request *req)
 	if (in_flight)
 		__set_bit(SCMD_STATE_INFLIGHT, &cmd->state);
 
-	/*
-	 * Only clear the driver-private command data if the LLD does not supply
-	 * a function to initialize that data.
-	 */
-	if (!shost->hostt->init_cmd_priv)
-		memset(cmd + 1, 0, shost->hostt->cmd_size);
+	scsi_clear_lld_private_data(cmd, shost);
 
 	cmd->prot_op = SCSI_PROT_NORMAL;
 	if (blk_rq_bytes(req))
@@ -1843,6 +1849,7 @@ static blk_status_t scsi_queue_rq(struct blk_mq_hw_ctx *hctx,
 			goto out_dec_host_busy;
 		req->rq_flags |= RQF_DONTPREP;
 	} else {
+		scsi_clear_lld_private_data(cmd, shost);
 		clear_bit(SCMD_STATE_COMPLETE, &cmd->state);
 	}
 
