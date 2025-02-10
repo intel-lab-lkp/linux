@@ -100,7 +100,6 @@ static int fan_alarm_init(struct gpio_fan_data *fan_data)
  * Control GPIOs.
  */
 
-/* Must be called with fan_data->lock held, except during initialization. */
 static void __set_fan_ctrl(struct gpio_fan_data *fan_data, int ctrl_val)
 {
 	int i;
