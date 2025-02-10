@@ -14,6 +14,7 @@
 			interrupts = <GIC_SPI 79 IRQ_TYPE_LEVEL_HIGH>;
 			resets = <&rcc DCMIPP_R>;
 			clocks = <&rcc DCMIPP_K>;
+			clock-names = "kclk";
 			status = "disabled";
 
 			port {
