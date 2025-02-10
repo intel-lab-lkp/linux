@@ -326,7 +326,7 @@ int hci_uart_register_device_priv(struct hci_uart *hu,
 	set_bit(HCI_UART_PROTO_READY, &hu->flags);
 
 	/* Initialize and register HCI device */
-	hdev = hci_alloc_dev_priv(sizeof_priv);
+	hdev = hci_alloc_dev_priv(sizeof_priv, /* add_isoc_alt_attr = */ false);
 	if (!hdev) {
 		BT_ERR("Can't allocate HCI device");
 		err = -ENOMEM;

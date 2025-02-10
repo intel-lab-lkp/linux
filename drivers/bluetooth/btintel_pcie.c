@@ -1514,7 +1514,8 @@ static int btintel_pcie_setup_hdev(struct btintel_pcie_data *data)
 	int err;
 	struct hci_dev *hdev;
 
-	hdev = hci_alloc_dev_priv(sizeof(struct btintel_data));
+	hdev = hci_alloc_dev_priv(sizeof(struct btintel_data),
+				  /* add_isoc_alt_attr = */ false);
 	if (!hdev)
 		return -ENOMEM;
 

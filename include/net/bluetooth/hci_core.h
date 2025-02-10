@@ -641,6 +641,8 @@ struct hci_dev {
 				     struct bt_codec *codec, __u8 *vnd_len,
 				     __u8 **vnd_data);
 	u8 (*classify_pkt_type)(struct hci_dev *hdev, struct sk_buff *skb);
+	int (*switch_usb_alt_setting)(struct hci_dev *hdev, int new_alts);
+	int (*read_usb_alt_setting)(struct hci_dev *hdev);
 };
 
 #define HCI_PHY_HANDLE(handle)	(handle & 0xff)
@@ -1686,11 +1688,11 @@ static inline void *hci_get_priv(struct hci_dev *hdev)
 struct hci_dev *hci_dev_get(int index);
 struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, u8 src_type);
 
-struct hci_dev *hci_alloc_dev_priv(int sizeof_priv);
+struct hci_dev *hci_alloc_dev_priv(int sizeof_priv, bool add_isoc_alt_attr);
 
 static inline struct hci_dev *hci_alloc_dev(void)
 {
-	return hci_alloc_dev_priv(0);
+	return hci_alloc_dev_priv(0, /* add_isoc_alt_attr = */ false);
 }
 
 void hci_free_dev(struct hci_dev *hdev);
@@ -1843,7 +1845,7 @@ int hci_get_adv_monitor_offload_ext(struct hci_dev *hdev);
 
 void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb);
 
-void hci_init_sysfs(struct hci_dev *hdev);
+void hci_init_sysfs(struct hci_dev *hdev, bool add_isoc_alt_attr);
 void hci_conn_init_sysfs(struct hci_conn *conn);
 void hci_conn_add_sysfs(struct hci_conn *conn);
 void hci_conn_del_sysfs(struct hci_conn *conn);

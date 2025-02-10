@@ -2405,7 +2405,7 @@ static int hci_suspend_notifier(struct notifier_block *nb, unsigned long action,
 }
 
 /* Alloc HCI device */
-struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
+struct hci_dev *hci_alloc_dev_priv(int sizeof_priv, bool add_isoc_alt_attr)
 {
 	struct hci_dev *hdev;
 	unsigned int alloc_size;
@@ -2530,7 +2530,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 
 	hci_devcd_setup(hdev);
 
-	hci_init_sysfs(hdev);
+	hci_init_sysfs(hdev, add_isoc_alt_attr);
 	discovery_init(hdev);
 
 	return hdev;

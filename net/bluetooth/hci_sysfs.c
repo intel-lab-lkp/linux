@@ -102,6 +102,38 @@ static ssize_t reset_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_WO(reset);
 
+static ssize_t isoc_alt_show(struct device *dev,
+			     struct device_attribute *attr,
+			     char *buf)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+
+	if (hdev->read_usb_alt_setting)
+		return sysfs_emit(buf, "%d\n", hdev->read_usb_alt_setting(hdev));
+
+	return -ENODEV;
+}
+
+static ssize_t isoc_alt_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct hci_dev *hdev = to_hci_dev(dev);
+	int alt;
+	int ret;
+
+	if (kstrtoint(buf, 10, &alt))
+		return -EINVAL;
+
+	if (hdev->switch_usb_alt_setting) {
+		ret = hdev->switch_usb_alt_setting(hdev, alt);
+		return ret < 0 ? ret : count;
+	}
+
+	return -ENODEV;
+}
+static DEVICE_ATTR_RW(isoc_alt);
+
 static struct attribute *bt_host_attrs[] = {
 	&dev_attr_reset.attr,
 	NULL,
@@ -114,11 +146,27 @@ static const struct device_type bt_host = {
 	.groups = bt_host_groups,
 };
 
-void hci_init_sysfs(struct hci_dev *hdev)
+static struct attribute *bt_host_isoc_alt_attrs[] = {
+	&dev_attr_reset.attr,
+	&dev_attr_isoc_alt.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(bt_host_isoc_alt);
+
+static const struct device_type bt_host_isoc_alt = {
+	.name    = "host",
+	.release = bt_host_release,
+	.groups  = bt_host_isoc_alt_groups,
+};
+
+void hci_init_sysfs(struct hci_dev *hdev, bool add_isoc_alt_attr)
 {
 	struct device *dev = &hdev->dev;
 
-	dev->type = &bt_host;
+	if (add_isoc_alt_attr)
+		dev->type = &bt_host_isoc_alt;
+	else
+		dev->type = &bt_host;
 	dev->class = &bt_class;
 
 	__module_get(THIS_MODULE);
