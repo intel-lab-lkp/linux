@@ -323,6 +323,8 @@ config ARCH_STM32
 	  STM32 family, including:
 		- STM32MP25:
 			- STM32MP251, STM32MP253, STM32MP255 and STM32MP257.
+		- STM32MP23:
+			- STM32MP231, STM32MP233, STM32MP235.
 
 config ARCH_SYNQUACER
 	bool "Socionext SynQuacer SoC Family"
