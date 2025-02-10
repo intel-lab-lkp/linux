@@ -240,7 +240,7 @@ static int aiu_encoder_i2s_hw_free(struct snd_pcm_substream *substream,
 	struct aiu *aiu = snd_soc_component_get_drvdata(dai->component);
 
 	clk_disable_unprepare(aiu->i2s_extra.clks[AOCLK_DIV_GATE].clk);
-	
+
 	return 0;
 }
 
