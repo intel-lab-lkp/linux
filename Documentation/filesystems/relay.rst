@@ -15,8 +15,8 @@ clients write into the channel buffers using efficient write
 functions; these automatically log into the current cpu's channel
 buffer.  User space applications mmap() or read() from the relay files
 and retrieve the data as it becomes available.  The relay files
-themselves are files created in a host filesystem, e.g. debugfs, and
-are associated with the channel buffers using the API described below.
+themselves are files created in debugfs and are associated with the
+channel buffers using the API described below.
 
 The format of the data logged into the channel buffers is completely
 up to the kernel client; the relay interface does however provide
@@ -185,7 +185,7 @@ TBD(curr. line MT:/API/)
     buf_mapped(buf, filp)
     buf_unmapped(buf, filp)
     create_buf_file(filename, parent, mode, buf, is_global)
-    remove_buf_file(dentry)
+    remove_buf_file(node)
 
   helper functions::
 
@@ -203,12 +203,10 @@ read from in user space.  The files are named basename0...basenameN-1
 where N is the number of online cpus, and by default will be created
 in the root of the filesystem (if the parent param is NULL).  If you
 want a directory structure to contain your relay files, you should
-create it using the host filesystem's directory creation function,
-e.g. debugfs_create_dir(), and pass the parent directory to
+create it using debugfs_create_dir(), and pass the parent directory to
 relay_open().  Users are responsible for cleaning up any directory
-structure they create, when the channel is closed - again the host
-filesystem's directory removal functions should be used for that,
-e.g. debugfs_remove().
+structure they create, when the channel is closed with
+debugfs_remove().
 
 In order for a channel to be created and the host filesystem's files
 associated with its channel buffers, the user must provide definitions
@@ -216,7 +214,7 @@ for two callback functions, create_buf_file() and remove_buf_file().
 create_buf_file() is called once for each per-cpu buffer from
 relay_open() and allows the user to create the file which will be used
 to represent the corresponding channel buffer.  The callback should
-return the dentry of the file created to represent the channel buffer.
+return the node of the file created to represent the channel buffer.
 remove_buf_file() must also be defined; it's responsible for deleting
 the file(s) created in create_buf_file() and is called during
 relay_close().
@@ -227,22 +225,22 @@ using debugfs::
     /*
     * create_buf_file() callback.  Creates relay file in debugfs.
     */
-    static struct dentry *create_buf_file_handler(const char *filename,
-						struct dentry *parent,
-						umode_t mode,
-						struct rchan_buf *buf,
-						int *is_global)
+    static struct debugfs_node *create_buf_file_handler(const char *filename,
+							struct debugfs_node *parent,
+							umode_t mode,
+							struct rchan_buf *buf,
+							int *is_global)
     {
 	    return debugfs_create_file(filename, mode, parent, buf,
-				    &relay_file_operations);
+				       &relay_file_operations);
     }
 
     /*
     * remove_buf_file() callback.  Removes relay file from debugfs.
     */
-    static int remove_buf_file_handler(struct dentry *dentry)
+    static int remove_buf_file_handler(struct debugfs_node *node)
     {
-	    debugfs_remove(dentry);
+	    debugfs_remove(node);
 
 	    return 0;
     }

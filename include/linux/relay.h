@@ -22,6 +22,7 @@
 #include <linux/poll.h>
 #include <linux/kref.h>
 #include <linux/percpu.h>
+#include <linux/debugfs.h>
 
 /*
  * Tracks changes to rchan/rchan_buf structs
@@ -41,7 +42,7 @@ struct rchan_buf
 	struct rchan *chan;		/* associated channel */
 	wait_queue_head_t read_wait;	/* reader wait queue */
 	struct irq_work wakeup_work;	/* reader wakeup */
-	struct dentry *dentry;		/* channel file dentry */
+	struct debugfs_node *node;	/* channel file node */
 	struct kref kref;		/* channel buffer refcount */
 	struct page **page_array;	/* array of current buffer pages */
 	unsigned int page_count;	/* number of current buffer pages */
@@ -69,7 +70,7 @@ struct rchan
 	struct rchan_buf * __percpu *buf; /* per-cpu channel buffers */
 	int is_global;			/* One global buffer ? */
 	struct list_head list;		/* for channel list */
-	struct dentry *parent;		/* parent dentry passed to open */
+	struct debugfs_node *parent;	/* parent node passed to open */
 	int has_base_filename;		/* has a filename associated? */
 	char base_filename[NAME_MAX];	/* saved base filename */
 };
@@ -117,7 +118,7 @@ struct rchan_callbacks
 	 * created outside of relay, the parent must also exist in
 	 * that filesystem.
 	 *
-	 * The callback should return the dentry of the file created
+	 * The callback should return the debugfs_node of the file created
 	 * to represent the relay buffer.
 	 *
 	 * Setting the is_global outparam to a non-zero value will
@@ -128,15 +129,15 @@ struct rchan_callbacks
 	 *
 	 * See Documentation/filesystems/relay.rst for more info.
 	 */
-	struct dentry *(*create_buf_file)(const char *filename,
-					  struct dentry *parent,
+	struct debugfs_node *(*create_buf_file)(const char *filename,
+					  struct debugfs_node *parent,
 					  umode_t mode,
 					  struct rchan_buf *buf,
 					  int *is_global);
 
 	/*
 	 * remove_buf_file - remove file representing a relay channel buffer
-	 * @dentry: the dentry of the file to remove
+	 * @node: the debugfs_node of the file to remove
 	 *
 	 * Called during relay_close(), once for each per-cpu buffer,
 	 * to allow the client to remove a file used to represent a
@@ -146,7 +147,7 @@ struct rchan_callbacks
 	 *
 	 * This callback is mandatory.
 	 */
-	int (*remove_buf_file)(struct dentry *dentry);
+	int (*remove_buf_file)(struct debugfs_node *node);
 };
 
 /*
@@ -154,14 +155,14 @@ struct rchan_callbacks
  */
 
 struct rchan *relay_open(const char *base_filename,
-			 struct dentry *parent,
+			 struct debugfs_node *parent,
 			 size_t subbuf_size,
 			 size_t n_subbufs,
 			 const struct rchan_callbacks *cb,
 			 void *private_data);
 extern int relay_late_setup_files(struct rchan *chan,
 				  const char *base_filename,
-				  struct dentry *parent);
+				  struct debugfs_node *parent);
 extern void relay_close(struct rchan *chan);
 extern void relay_flush(struct rchan *chan);
 extern void relay_subbufs_consumed(struct rchan *chan,

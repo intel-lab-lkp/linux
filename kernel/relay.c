@@ -337,18 +337,18 @@ void relay_reset(struct rchan *chan)
 }
 EXPORT_SYMBOL_GPL(relay_reset);
 
-static inline void relay_set_buf_dentry(struct rchan_buf *buf,
-					struct dentry *dentry)
+static inline void relay_set_buf_node(struct rchan_buf *buf,
+				      struct debugfs_node *node)
 {
-	buf->dentry = dentry;
-	d_inode(buf->dentry)->i_size = buf->early_bytes;
+	buf->node = node;
+	debugfs_node_inode(buf->node)->i_size = buf->early_bytes;
 }
 
-static struct dentry *relay_create_buf_file(struct rchan *chan,
-					    struct rchan_buf *buf,
-					    unsigned int cpu)
+static struct debugfs_node *relay_create_buf_file(struct rchan *chan,
+						  struct rchan_buf *buf,
+						  unsigned int cpu)
 {
-	struct dentry *dentry;
+	struct debugfs_node *node;
 	char *tmpname;
 
 	tmpname = kzalloc(NAME_MAX + 1, GFP_KERNEL);
@@ -357,15 +357,15 @@ static struct dentry *relay_create_buf_file(struct rchan *chan,
 	snprintf(tmpname, NAME_MAX, "%s%d", chan->base_filename, cpu);
 
 	/* Create file in fs */
-	dentry = chan->cb->create_buf_file(tmpname, chan->parent,
-					   S_IRUSR, buf,
-					   &chan->is_global);
-	if (IS_ERR(dentry))
-		dentry = NULL;
+	node = chan->cb->create_buf_file(tmpname, chan->parent,
+					 S_IRUSR, buf,
+					 &chan->is_global);
+	if (IS_ERR(node))
+		node = NULL;
 
 	kfree(tmpname);
 
-	return dentry;
+	return node;
 }
 
 /*
@@ -376,7 +376,7 @@ static struct dentry *relay_create_buf_file(struct rchan *chan,
 static struct rchan_buf *relay_open_buf(struct rchan *chan, unsigned int cpu)
 {
 	struct rchan_buf *buf;
-	struct dentry *dentry;
+	struct debugfs_node *node;
 
  	if (chan->is_global)
 		return *per_cpu_ptr(chan->buf, 0);
@@ -386,16 +386,16 @@ static struct rchan_buf *relay_open_buf(struct rchan *chan, unsigned int cpu)
 		return NULL;
 
 	if (chan->has_base_filename) {
-		dentry = relay_create_buf_file(chan, buf, cpu);
-		if (!dentry)
+		node = relay_create_buf_file(chan, buf, cpu);
+		if (!node)
 			goto free_buf;
-		relay_set_buf_dentry(buf, dentry);
+		relay_set_buf_node(buf, node);
 	} else {
 		/* Only retrieve global info, nothing more, nothing less */
-		dentry = chan->cb->create_buf_file(NULL, NULL,
-						   S_IRUSR, buf,
-						   &chan->is_global);
-		if (IS_ERR_OR_NULL(dentry))
+		node = chan->cb->create_buf_file(NULL, NULL,
+						 S_IRUSR, buf,
+						 &chan->is_global);
+		if (IS_ERR_OR_NULL(node))
 			goto free_buf;
 	}
 
@@ -426,7 +426,7 @@ static void relay_close_buf(struct rchan_buf *buf)
 {
 	buf->finalized = 1;
 	irq_work_sync(&buf->wakeup_work);
-	buf->chan->cb->remove_buf_file(buf->dentry);
+	buf->chan->cb->remove_buf_file(buf->node);
 	kref_put(&buf->kref, relay_remove_buf);
 }
 
@@ -454,7 +454,7 @@ int relay_prepare_cpu(unsigned int cpu)
 /**
  *	relay_open - create a new relay channel
  *	@base_filename: base name of files to create, %NULL for buffering only
- *	@parent: dentry of parent directory, %NULL for root directory or buffer
+ *	@parent: node of parent directory, %NULL for root directory or buffer
  *	@subbuf_size: size of sub-buffers
  *	@n_subbufs: number of sub-buffers
  *	@cb: client callback functions
@@ -468,11 +468,11 @@ int relay_prepare_cpu(unsigned int cpu)
  *	permissions will be %S_IRUSR.
  *
  *	If opening a buffer (@parent = NULL) that you later wish to register
- *	in a filesystem, call relay_late_setup_files() once the @parent dentry
+ *	in a filesystem, call relay_late_setup_files() once the @parent node
  *	is available.
  */
 struct rchan *relay_open(const char *base_filename,
-			 struct dentry *parent,
+			 struct debugfs_node *parent,
 			 size_t subbuf_size,
 			 size_t n_subbufs,
 			 const struct rchan_callbacks *cb,
@@ -538,40 +538,40 @@ EXPORT_SYMBOL_GPL(relay_open);
 
 struct rchan_percpu_buf_dispatcher {
 	struct rchan_buf *buf;
-	struct dentry *dentry;
+	struct debugfs_node *node;
 };
 
 /* Called in atomic context. */
-static void __relay_set_buf_dentry(void *info)
+static void __relay_set_buf_node(void *info)
 {
 	struct rchan_percpu_buf_dispatcher *p = info;
 
-	relay_set_buf_dentry(p->buf, p->dentry);
+	relay_set_buf_node(p->buf, p->node);
 }
 
 /**
  *	relay_late_setup_files - triggers file creation
  *	@chan: channel to operate on
  *	@base_filename: base name of files to create
- *	@parent: dentry of parent directory, %NULL for root directory
+ *	@parent: node of parent directory, %NULL for root directory
  *
  *	Returns 0 if successful, non-zero otherwise.
  *
  *	Use to setup files for a previously buffer-only channel created
- *	by relay_open() with a NULL parent dentry.
+ *	by relay_open() with a NULL parent node.
  *
  *	For example, this is useful for perfomring early tracing in kernel,
- *	before VFS is up and then exposing the early results once the dentry
+ *	before VFS is up and then exposing the early results once the node
  *	is available.
  */
 int relay_late_setup_files(struct rchan *chan,
 			   const char *base_filename,
-			   struct dentry *parent)
+			   struct debugfs_node *parent)
 {
 	int err = 0;
 	unsigned int i, curr_cpu;
 	unsigned long flags;
-	struct dentry *dentry;
+	struct debugfs_node *node;
 	struct rchan_buf *buf;
 	struct rchan_percpu_buf_dispatcher disp;
 
@@ -593,9 +593,9 @@ int relay_late_setup_files(struct rchan *chan,
 		err = -EINVAL;
 		buf = *per_cpu_ptr(chan->buf, 0);
 		if (!WARN_ON_ONCE(!buf)) {
-			dentry = relay_create_buf_file(chan, buf, 0);
-			if (dentry && !WARN_ON_ONCE(!chan->is_global)) {
-				relay_set_buf_dentry(buf, dentry);
+			node = relay_create_buf_file(chan, buf, 0);
+			if (node && !WARN_ON_ONCE(!chan->is_global)) {
+				relay_set_buf_node(buf, node);
 				err = 0;
 			}
 		}
@@ -617,23 +617,23 @@ int relay_late_setup_files(struct rchan *chan,
 			break;
 		}
 
-		dentry = relay_create_buf_file(chan, buf, i);
-		if (unlikely(!dentry)) {
+		node = relay_create_buf_file(chan, buf, i);
+		if (unlikely(!node)) {
 			err = -EINVAL;
 			break;
 		}
 
 		if (curr_cpu == i) {
 			local_irq_save(flags);
-			relay_set_buf_dentry(buf, dentry);
+			relay_set_buf_node(buf, node);
 			local_irq_restore(flags);
 		} else {
 			disp.buf = buf;
-			disp.dentry = dentry;
+			disp.node = node;
 			smp_mb();
 			/* relay_channels_mutex must be held, so wait. */
 			err = smp_call_function_single(i,
-						       __relay_set_buf_dentry,
+						       __relay_set_buf_node,
 						       &disp, 1);
 		}
 		if (unlikely(err))
@@ -669,8 +669,8 @@ size_t relay_switch_subbuf(struct rchan_buf *buf, size_t length)
 		old_subbuf = buf->subbufs_produced % buf->chan->n_subbufs;
 		buf->padding[old_subbuf] = buf->prev_padding;
 		buf->subbufs_produced++;
-		if (buf->dentry)
-			d_inode(buf->dentry)->i_size +=
+		if (buf->node)
+			debugfs_node_inode(buf->node)->i_size +=
 				buf->chan->subbuf_size -
 				buf->padding[old_subbuf];
 		else
