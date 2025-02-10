@@ -2510,6 +2510,21 @@ config PREFIX_SYMBOLS
 	def_bool y
 	depends on CALL_PADDING && !CFI_CLANG
 
+config FUNCTION_METADATA
+	bool "Enable function metadata support"
+	select CALL_PADDING
+	default y
+	help
+	  This feature allow us to set metadata for kernel functions, and
+	  get the metadata of the function by its address without any
+	  costing.
+
+	  The index of the metadata will be stored in the function padding,
+	  which will consume 5-bytes. The spare space of the padding
+	  is enough for us with CALL_PADDING and FUNCTION_ALIGNMENT_16B if
+	  CALL_THUNKS or CFI_CLANG not enabled. Or, we need extra 5-bytes
+	  in the function padding, which will increases text ~1%.
+
 menuconfig CPU_MITIGATIONS
 	bool "Mitigations for CPU vulnerabilities"
 	default y
