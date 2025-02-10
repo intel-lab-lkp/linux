@@ -532,8 +532,8 @@ static inline void filemap_nr_thps_dec(struct address_space *mapping)
 #endif
 }
 
-struct address_space *folio_mapping(struct folio *);
-struct address_space *swapcache_mapping(struct folio *);
+struct address_space *folio_mapping(const struct folio *);
+struct address_space *swapcache_mapping(const struct folio *);
 
 /**
  * folio_file_mapping - Find the mapping this folio belongs to.

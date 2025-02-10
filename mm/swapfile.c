@@ -3637,7 +3637,7 @@ struct swap_info_struct *swp_swap_info(swp_entry_t entry)
 /*
  * out-of-line methods to avoid include hell.
  */
-struct address_space *swapcache_mapping(struct folio *folio)
+struct address_space *swapcache_mapping(const struct folio *folio)
 {
 	return swp_swap_info(folio->swap)->swap_file->f_mapping;
 }
