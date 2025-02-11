@@ -12,8 +12,10 @@
 #include <linux/gpio/consumer.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+#include <linux/regulator/driver.h>
 #include <linux/sysfs.h>
 #include <linux/spi/spi.h>
 
@@ -80,8 +82,14 @@
 #define AD7768_CONV_MODE_MSK		GENMASK(2, 0)
 #define AD7768_CONV_MODE(x)		FIELD_PREP(AD7768_CONV_MODE_MSK, x)
 
+/* AD7768_REG_ANALOG2 */
+#define AD7768_REG_ANALOG2_VCM_MSK	GENMASK(2, 0)
+#define AD7768_REG_ANALOG2_VCM(x)	FIELD_PREP(AD7768_REG_ANALOG2_VCM_MSK, x)
+
 #define AD7768_RD_FLAG_MSK(x)		(BIT(6) | ((x) & 0x3F))
 #define AD7768_WR_FLAG_MSK(x)		((x) & 0x3F)
+
+#define AD7768_VCM_OFF			0x08
 
 enum ad7768_conv_mode {
 	AD7768_CONTINUOUS,
@@ -160,6 +168,7 @@ struct ad7768_state {
 	struct regmap *regmap;
 	struct regmap *regmap24;
 	struct regulator *vref;
+	struct regulator_dev *vcm_rdev;
 	struct clk *mclk;
 	unsigned int mclk_freq;
 	unsigned int samp_freq;
@@ -643,6 +652,130 @@ static int ad7768_triggered_buffer_alloc(struct iio_dev *indio_dev)
 					       &ad7768_buffer_ops);
 }
 
+static int ad7768_vcm_enable(struct regulator_dev *rdev)
+{
+	struct ad7768_state *st = rdev_get_drvdata(rdev);
+	int ret, val;
+
+	if (!st)
+		return -EINVAL;
+
+	ret = regmap_read(st->regmap, AD7768_REG_ANALOG2, &val);
+	if (ret)
+		return ret;
+
+	/* if regulator is off, turn it on */
+	if (FIELD_GET(AD7768_REG_ANALOG2_VCM_MSK, val) == AD7768_VCM_OFF)
+		return regmap_update_bits(st->regmap, AD7768_REG_ANALOG2,
+					  AD7768_REG_ANALOG2_VCM_MSK, 0x00);
+
+	return 0;
+}
+
+static int ad7768_vcm_disable(struct regulator_dev *rdev)
+{
+	struct ad7768_state *st = rdev_get_drvdata(rdev);
+
+	if (!st)
+		return -EINVAL;
+
+	return regmap_update_bits(st->regmap, AD7768_REG_ANALOG2,
+				  AD7768_REG_ANALOG2_VCM_MSK, AD7768_VCM_OFF);
+}
+
+static int ad7768_vcm_is_enabled(struct regulator_dev *rdev)
+{
+	struct ad7768_state *st = rdev_get_drvdata(rdev);
+	int ret, val;
+
+	if (!st)
+		return -EINVAL;
+
+	ret = regmap_read(st->regmap, AD7768_REG_ANALOG2, &val);
+	if (ret)
+		return ret;
+
+	if (FIELD_GET(AD7768_REG_ANALOG2_VCM_MSK, val) == AD7768_VCM_OFF)
+		return 0;
+
+	return 1;
+}
+
+static int ad7768_set_voltage_sel(struct regulator_dev *rdev,
+				  unsigned int selector)
+{
+	unsigned int regval = AD7768_REG_ANALOG2_VCM(selector + 1);
+	struct ad7768_state *st = rdev_get_drvdata(rdev);
+
+	if (!st)
+		return -EINVAL;
+
+	return regmap_update_bits(st->regmap, AD7768_REG_ANALOG2,
+				  AD7768_REG_ANALOG2_VCM_MSK, regval);
+}
+
+static int ad7768_get_voltage_sel(struct regulator_dev *rdev)
+{
+	struct ad7768_state *st = rdev_get_drvdata(rdev);
+	int ret, val;
+
+	if (!st)
+		return -EINVAL;
+
+	ret = regmap_read(st->regmap, AD7768_REG_ANALOG2, &val);
+	if (ret)
+		return ret;
+
+	val = FIELD_GET(AD7768_REG_ANALOG2_VCM_MSK, val) - 1;
+	val = clamp(val, 0, 8);
+
+	return val;
+}
+
+static const struct regulator_ops vcm_regulator_ops = {
+	.enable = ad7768_vcm_enable,
+	.disable = ad7768_vcm_disable,
+	.is_enabled = ad7768_vcm_is_enabled,
+	.list_voltage = regulator_list_voltage_table,
+	.set_voltage_sel = ad7768_set_voltage_sel,
+	.get_voltage_sel = ad7768_get_voltage_sel,
+};
+
+static const unsigned int vcm_voltage_table[] = {
+	2500000,
+	2050000,
+	1650000,
+	1900000,
+	1100000,
+	900000,
+};
+
+static const struct regulator_desc vcm_desc = {
+	.name = "vcm_output",
+	.of_match = of_match_ptr("vcm_output"),
+	.regulators_node = of_match_ptr("regulators"),
+	.n_voltages = ARRAY_SIZE(vcm_voltage_table),
+	.volt_table = vcm_voltage_table,
+	.ops = &vcm_regulator_ops,
+	.type = REGULATOR_VOLTAGE,
+	.owner = THIS_MODULE,
+};
+
+static int ad7768_register_regulators(struct device *dev, struct ad7768_state *st)
+{
+	struct regulator_config config = {
+		.dev = dev,
+		.driver_data = st,
+	};
+
+	st->vcm_rdev = devm_regulator_register(dev, &vcm_desc, &config);
+	if (IS_ERR(st->vcm_rdev))
+		return dev_err_probe(dev, PTR_ERR(st->vcm_rdev),
+				     "failed to register VCM regulator\n");
+
+	return 0;
+}
+
 static int ad7768_probe(struct spi_device *spi)
 {
 	struct ad7768_state *st;
@@ -706,6 +839,11 @@ static int ad7768_probe(struct spi_device *spi)
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->info = &ad7768_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
+
+	/* Register VCM output regulator */
+	ret = ad7768_register_regulators(&spi->dev, st);
+	if (ret)
+		return ret;
 
 	ret = ad7768_setup(st);
 	if (ret < 0) {
