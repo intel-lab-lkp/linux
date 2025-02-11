@@ -59,6 +59,19 @@ properties:
       in any way, for example if the filter decimation rate changes.
       As the line is active low, it should be marked GPIO_ACTIVE_LOW.
 
+  regulators:
+    type: object
+    description:
+      list of regulators provided by this controller.
+
+    properties:
+      vcm_output:
+        $ref: /schemas/regulator/regulator.yaml#
+        type: object
+        unevaluatedProperties: false
+
+    additionalProperties: false
+
   reset-gpios:
     maxItems: 1
 
@@ -151,6 +164,14 @@ examples:
             channel@0 {
                 reg = <0>;
                 label = "channel_0";
+            };
+
+            regulators {
+              vcm_reg: vcm_output {
+                regulator-name = "vcm_output";
+                regulator-min-microvolt = <900000>;
+                regulator-max-microvolt = <2500000>;
+              };
             };
         };
     };
