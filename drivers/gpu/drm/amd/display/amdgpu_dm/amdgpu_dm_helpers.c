@@ -974,6 +974,7 @@ enum dc_edid_status dm_helpers_read_local_edid(
 	enum dc_edid_status edid_status;
 	const struct drm_edid *drm_edid;
 	const struct edid *edid;
+	size_t edid_len;
 
 	if (link->aux_mode)
 		ddc = &aconnector->dm_dp_aux.aux.ddc;
@@ -1004,8 +1005,13 @@ enum dc_edid_status dm_helpers_read_local_edid(
 			return EDID_NO_RESPONSE;
 
 		edid = drm_edid_raw(drm_edid); // FIXME: Get rid of drm_edid_raw()
-		sink->dc_edid.length = EDID_LENGTH * (edid->extensions + 1);
-		memmove(sink->dc_edid.raw_edid, (uint8_t *)edid, sink->dc_edid.length);
+		if (!edid)
+			return EDID_BAD_INPUT;
+		edid_len = EDID_LENGTH * (edid->extensions + 1);
+		if (edid_len > sizeof(sink->dc_edid.raw_edid))
+			return EDID_BAD_INPUT;
+		sink->dc_edid.length = edid_len;
+		memmove(sink->dc_edid.raw_edid, (uint8_t *)edid, edid_len);
 
 		/* We don't need the original edid anymore */
 		drm_edid_free(drm_edid);
