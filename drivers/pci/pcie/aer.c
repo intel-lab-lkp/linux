@@ -993,7 +993,7 @@ static bool cxl_error_is_native(struct pci_dev *dev)
 static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 {
 	struct aer_err_info *info = (struct aer_err_info *)data;
-	const struct pci_error_handlers *err_handler;
+	const struct cxl_error_handlers *err_handler;
 
 	if (!is_cxl_mem_dev(dev) || !cxl_error_is_native(dev))
 		return 0;
@@ -1001,7 +1001,8 @@ static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 	/* protect dev->driver */
 	device_lock(&dev->dev);
 
-	err_handler = dev->driver ? dev->driver->err_handler : NULL;
+	err_handler = dev->driver ? dev->driver->cxl_err_handler : NULL;
+
 	if (!err_handler)
 		goto out;
 
@@ -1010,9 +1011,9 @@ static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 			err_handler->cor_error_detected(dev);
 	} else if (err_handler->error_detected) {
 		if (info->severity == AER_NONFATAL)
-			err_handler->error_detected(dev, pci_channel_io_normal);
+			err_handler->error_detected(dev);
 		else if (info->severity == AER_FATAL)
-			err_handler->error_detected(dev, pci_channel_io_frozen);
+			err_handler->error_detected(dev);
 
 		cxl_do_recovery(dev);
 	}
@@ -1070,7 +1071,7 @@ static bool handles_cxl_errors(struct pci_dev *dev)
 	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC)
 		pcie_walk_rcec(dev, handles_cxl_error_iter, &handles_cxl);
 	else
-		handles_cxl = pcie_is_cxl_port(dev);
+		handles_cxl = pcie_is_cxl(dev);
 
 	return handles_cxl;
 }

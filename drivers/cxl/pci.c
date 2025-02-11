@@ -1104,11 +1104,14 @@ static void cxl_reset_done(struct pci_dev *pdev)
 	}
 }
 
-static const struct pci_error_handlers cxl_error_handlers = {
+static const struct cxl_error_handlers cxl_ep_error_handlers = {
 	.error_detected	= cxl_error_detected,
+	.cor_error_detected = cxl_cor_error_detected,
+};
+
+static const struct pci_error_handlers pcie_ep_error_handlers = {
 	.slot_reset	= cxl_slot_reset,
 	.resume		= cxl_error_resume,
-	.cor_error_detected	= cxl_cor_error_detected,
 	.reset_done	= cxl_reset_done,
 };
 
@@ -1116,7 +1119,8 @@ static struct pci_driver cxl_pci_driver = {
 	.name			= KBUILD_MODNAME,
 	.id_table		= cxl_mem_pci_tbl,
 	.probe			= cxl_pci_probe,
-	.err_handler		= &cxl_error_handlers,
+	.err_handler		= &pcie_ep_error_handlers,
+	.cxl_err_handler	= &cxl_ep_error_handlers,
 	.dev_groups		= cxl_rcd_groups,
 	.driver	= {
 		.probe_type	= PROBE_PREFER_ASYNCHRONOUS,
