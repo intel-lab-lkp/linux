@@ -395,9 +395,13 @@ static ssize_t erofs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (IS_DAX(inode))
 		return dax_iomap_rw(iocb, to, &erofs_iomap_ops);
 #endif
-	if ((iocb->ki_flags & IOCB_DIRECT) && inode->i_sb->s_bdev)
-		return iomap_dio_rw(iocb, to, &erofs_iomap_ops,
-				    NULL, 0, NULL, 0);
+	if (iocb->ki_flags & IOCB_DIRECT) {
+		if (inode->i_sb->s_bdev)
+			return iomap_dio_rw(iocb, to, &erofs_iomap_ops,
+					    NULL, 0, NULL, 0);
+		if (erofs_is_fileio_mode(EROFS_SB(inode->i_sb)))
+			return generic_file_read_iter(iocb, to);
+	}
 	return filemap_read(iocb, to, 0);
 }
 
