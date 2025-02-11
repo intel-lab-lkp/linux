@@ -398,9 +398,20 @@ static void print_address_description(void *addr, u8 tag,
 		pr_err("\n");
 	}
 
-	if (is_vmalloc_addr(addr)) {
-		struct vm_struct *va = find_vm_area(addr);
+	if (!is_vmalloc_addr(addr))
+		goto print_page;
 
+	/*
+	 * RT kernel cannot call find_vm_area() in atomic context.
+	 * For !RT kernel, prevent spinlock_t inside raw_spinlock_t warning
+	 * by raising wait-type to WAIT_SLEEP.
+	 */
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT)) {
+		static DEFINE_WAIT_OVERRIDE_MAP(vmalloc_map, LD_WAIT_SLEEP);
+		struct vm_struct *va;
+
+		lock_map_acquire_try(&vmalloc_map);
+		va = find_vm_area(addr);
 		if (va) {
 			pr_err("The buggy address belongs to the virtual mapping at\n"
 			       " [%px, %px) created by:\n"
@@ -410,8 +421,13 @@ static void print_address_description(void *addr, u8 tag,
 
 			page = vmalloc_to_page(addr);
 		}
+		lock_map_release(&vmalloc_map);
+	} else {
+		pr_err("The buggy address %px belongs to a vmalloc virtual mapping\n",
+			addr);
 	}
 
+print_page:
 	if (page) {
 		pr_err("The buggy address belongs to the physical page:\n");
 		dump_page(page, "kasan: bad access detected");
