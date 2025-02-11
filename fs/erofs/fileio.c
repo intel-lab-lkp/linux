@@ -11,6 +11,7 @@ struct erofs_fileio_rq {
 	struct bio bio;
 	struct kiocb iocb;
 	struct super_block *sb;
+	ssize_t ret;
 };
 
 typedef void (fileio_rq_split_t)(void *data);
@@ -22,14 +23,15 @@ struct erofs_fileio {
 	struct inode *inode;
 	fileio_rq_split_t *split;
 	void *private;
+	bio_end_io_t *end;
 };
 
 static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
 {
 	struct erofs_fileio_rq *rq =
 			container_of(iocb, struct erofs_fileio_rq, iocb);
-	struct folio_iter fi;
 
+	rq->ret = ret;
 	if (ret > 0) {
 		if (ret != rq->bio.bi_iter.bi_size) {
 			bio_advance(&rq->bio, ret);
@@ -37,14 +39,8 @@ static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
 		}
 		ret = 0;
 	}
-	if (rq->bio.bi_end_io) {
+	if (rq->bio.bi_end_io)
 		rq->bio.bi_end_io(&rq->bio);
-	} else {
-		bio_for_each_folio_all(fi, &rq->bio) {
-			DBG_BUGON(folio_test_uptodate(fi.folio));
-			erofs_onlinefolio_end(fi.folio, ret);
-		}
-	}
 	bio_uninit(&rq->bio);
 	kfree(rq);
 }
@@ -52,6 +48,18 @@ static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
 static void erofs_folio_split(void *data)
 {
 	erofs_onlinefolio_split((struct folio *)data);
+}
+
+static void erofs_fileio_end_folio(struct bio *bio)
+{
+	struct erofs_fileio_rq *rq =
+			container_of(bio, struct erofs_fileio_rq, bio);
+	struct folio_iter fi;
+
+	bio_for_each_folio_all(fi, &rq->bio) {
+		DBG_BUGON(folio_test_uptodate(fi.folio));
+		erofs_onlinefolio_end(fi.folio, rq->ret >= 0 ? 0 : rq->ret);
+	}
 }
 
 static void erofs_fileio_rq_submit(struct erofs_fileio_rq *rq)
@@ -151,6 +159,7 @@ static int erofs_fileio_scan(struct erofs_fileio *io,
 					break;
 				io->rq = erofs_fileio_rq_alloc(&io->dev);
 				io->rq->bio.bi_iter.bi_sector = io->dev.m_pa >> 9;
+				io->rq->bio.bi_end_io = io->end;
 				attached = 0;
 			}
 			if (bio_iov_iter_get_pages(&io->rq->bio, iter)) {
@@ -177,6 +186,7 @@ static int erofs_fileio_read_folio(struct file *file, struct folio *folio)
 	folioq_append(&folioq, folio);
 	iov_iter_folio_queue(&iter, ITER_DEST, &folioq, 0, 0, folio_size(folio));
 	io.inode = folio_inode(folio);
+	io.end = erofs_fileio_end_folio;
 	io.split = erofs_folio_split;
 	io.private = folio;
 
@@ -199,6 +209,7 @@ static void erofs_fileio_readahead(struct readahead_control *rac)
 	int err;
 
 	io.inode = inode;
+	io.end = erofs_fileio_end_folio;
 	io.split = erofs_folio_split;
 	trace_erofs_readpages(inode, readahead_index(rac),
 			      readahead_count(rac), true);
