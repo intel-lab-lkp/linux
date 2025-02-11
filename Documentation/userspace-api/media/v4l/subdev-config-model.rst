@@ -262,3 +262,9 @@ space may obtain the size of the embedded data once the image data size on the
 source pad has been configured.
 
 Also see :ref:`media_using_camera_sensor_drivers_embedded_data`.
+
+MIPI Camera Command Set (CCS) model
+-----------------------------------
+
+The MIPI Camera Command Set configuration model is implemented by the :ref:`CCS
+driver <media-ccs-uapi>`.
