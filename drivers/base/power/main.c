@@ -929,6 +929,12 @@ static void device_resume(struct device *dev, pm_message_t state, bool async)
 	if (dev->power.syscore)
 		goto Complete;
 
+	/*
+	 * This is a fib.  But we'll allow new children to be added below
+	 * a resumed device, even if the device hasn't been completed yet.
+	 */
+	dev->power.is_prepared = false;
+
 	if (dev->power.direct_complete) {
 		/* Match the pm_runtime_disable() in device_suspend(). */
 		pm_runtime_enable(dev);
@@ -940,12 +946,6 @@ static void device_resume(struct device *dev, pm_message_t state, bool async)
 
 	dpm_watchdog_set(&wd, dev);
 	device_lock(dev);
-
-	/*
-	 * This is a fib.  But we'll allow new children to be added below
-	 * a resumed device, even if the device hasn't been completed yet.
-	 */
-	dev->power.is_prepared = false;
 
 	if (!dev->power.is_suspended)
 		goto Unlock;
