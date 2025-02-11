@@ -924,17 +924,10 @@ rtw89_debug_priv_mac_reg_dump_select(struct file *filp,
 	struct rtw89_debugfs_priv *debugfs_priv = m->private;
 	struct rtw89_dev *rtwdev = debugfs_priv->rtwdev;
 	const struct rtw89_chip_info *chip = rtwdev->chip;
-	char buf[32];
-	size_t buf_size;
 	int sel;
 	int ret;
 
-	buf_size = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, buf_size))
-		return -EFAULT;
-
-	buf[buf_size] = '\0';
-	ret = kstrtoint(buf, 0, &sel);
+	ret = kstrtoint_from_user(user_buf, count, 0, &sel);
 	if (ret)
 		return ret;
 
