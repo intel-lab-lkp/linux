@@ -5032,6 +5032,19 @@ static u16 cxl_port_dvsec(struct pci_dev *dev)
 					 PCI_DVSEC_CXL_PORT);
 }
 
+inline bool pcie_is_cxl(struct pci_dev *pci_dev)
+{
+	return pci_dev->is_cxl;
+}
+
+bool pcie_is_cxl_port(struct pci_dev *dev)
+{
+	if (!pcie_is_cxl(dev))
+		return false;
+
+	return (cxl_port_dvsec(dev) > 0);
+}
+
 static bool cxl_sbr_masked(struct pci_dev *dev)
 {
 	u16 dvsec, reg;
