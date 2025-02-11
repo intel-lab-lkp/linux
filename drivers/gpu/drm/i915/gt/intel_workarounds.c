@@ -1626,6 +1626,11 @@ static void gt_tuning_settings(struct intel_gt *gt, struct i915_wa_list *wal)
 		wa_mcr_write_or(wal, XEHP_L3SCQREG7, BLEND_FILL_CACHING_OPT_DIS);
 		wa_mcr_write_or(wal, XEHP_SQCM, EN_32B_ACCESS);
 	}
+
+	if (IS_GFX_GT_IP_RANGE(gt, IP_VER(12, 0), IP_VER(12, 70))) {
+		wa_mcr_write_or(wal, XEHP_WM_CHICKEN2,
+				WAIT_ON_DEPTH_STALL_DONE_DISABLE);
+	}
 }
 
 static void
