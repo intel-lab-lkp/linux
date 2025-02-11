@@ -1577,7 +1577,6 @@ int madvise_set_anon_name(struct mm_struct *mm, unsigned long start,
 
 static int madvise_lock(struct mm_struct *mm, int behavior)
 {
-
 #ifdef CONFIG_MEMORY_FAILURE
 	if (behavior == MADV_HWPOISON || behavior == MADV_SOFT_OFFLINE)
 		return 0;
@@ -1595,6 +1594,11 @@ static int madvise_lock(struct mm_struct *mm, int behavior)
 
 static void madvise_unlock(struct mm_struct *mm, int behavior)
 {
+#ifdef CONFIG_MEMORY_FAILURE
+	if (behavior == MADV_HWPOISON || behavior == MADV_SOFT_OFFLINE)
+		return;
+#endif
+
 	if (madvise_need_mmap_write(behavior))
 		mmap_write_unlock(mm);
 	else
