@@ -522,11 +522,15 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 		skb_dst_set(skb, dst);
 	}
 
-	/* avoid a lwtunnel_input() loop when dst_entry is the same */
-	if (lwtst == dst->lwtstate)
+	/* avoid a lwtunnel_input() loop when dst_entry is the same, and make
+	 * sure seg6_output() does not apply the transformation one more time
+	 */
+	if (lwtst == dst->lwtstate) {
+		skb_set_redirected_noclear(skb, true);
 		in_func = seg6_input_redirect_finish;
-	else
+	} else {
 		in_func = seg6_input_finish;
+	}
 
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
@@ -572,6 +576,12 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 	struct dst_entry *dst = NULL;
 	struct seg6_lwt *slwt;
 	int err;
+
+	/* Don't re-apply the transformation when seg6_input() already did it */
+	if (skb_is_redirected(skb)) {
+		skb_reset_redirect(skb);
+		return orig_dst->lwtstate->orig_output(net, sk, skb);
+	}
 
 	slwt = seg6_lwt_lwtunnel(orig_dst->lwtstate);
 
