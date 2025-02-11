@@ -763,7 +763,7 @@ static int cs_dsp_coeff_write_ctrl_raw(struct cs_dsp_coeff_ctl *ctl,
 	if (ret)
 		return ret;
 
-	scratch = kmemdup(buf, len, GFP_KERNEL | GFP_DMA);
+	scratch = kmemdup(buf, len, GFP_KERNEL);
 	if (!scratch)
 		return -ENOMEM;
 
@@ -868,7 +868,7 @@ static int cs_dsp_coeff_read_ctrl_raw(struct cs_dsp_coeff_ctl *ctl,
 	if (ret)
 		return ret;
 
-	scratch = kmalloc(len, GFP_KERNEL | GFP_DMA);
+	scratch = kmalloc(len, GFP_KERNEL);
 	if (!scratch)
 		return -ENOMEM;
 
@@ -1731,7 +1731,7 @@ static void *cs_dsp_read_algs(struct cs_dsp *dsp, size_t n_algs,
 	/* Convert length from DSP words to bytes */
 	len *= sizeof(u32);
 
-	alg = kzalloc(len, GFP_KERNEL | GFP_DMA);
+	alg = kzalloc(len, GFP_KERNEL);
 	if (!alg)
 		return ERR_PTR(-ENOMEM);
 
