@@ -12,6 +12,7 @@ struct erofs_fileio_rq {
 	struct kiocb iocb;
 	struct super_block *sb;
 	ssize_t ret;
+	void *private;
 };
 
 typedef void (fileio_rq_split_t)(void *data);
@@ -24,6 +25,11 @@ struct erofs_fileio {
 	fileio_rq_split_t *split;
 	void *private;
 	bio_end_io_t *end;
+	/* the following members control the sync call */
+	struct completion ctr;
+	refcount_t ref;
+	size_t total;
+	size_t done;
 };
 
 static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
@@ -50,6 +56,13 @@ static void erofs_folio_split(void *data)
 	erofs_onlinefolio_split((struct folio *)data);
 }
 
+static void erofs_iter_split(void *data)
+{
+	struct erofs_fileio *io = (struct erofs_fileio *)data;
+
+	refcount_inc(&io->ref);
+}
+
 static void erofs_fileio_end_folio(struct bio *bio)
 {
 	struct erofs_fileio_rq *rq =
@@ -60,6 +73,25 @@ static void erofs_fileio_end_folio(struct bio *bio)
 		DBG_BUGON(folio_test_uptodate(fi.folio));
 		erofs_onlinefolio_end(fi.folio, rq->ret >= 0 ? 0 : rq->ret);
 	}
+}
+
+static void erofs_fileio_iter_complete(struct erofs_fileio *io)
+{
+	if (!refcount_dec_and_test(&io->ref))
+		return;
+	complete(&io->ctr);
+}
+
+static void erofs_fileio_end_iter(struct bio *bio)
+{
+	struct erofs_fileio_rq *rq =
+			container_of(bio, struct erofs_fileio_rq, bio);
+	struct erofs_fileio *io = (struct erofs_fileio *)rq->private;
+
+	if (rq->ret > 0)
+		io->done += rq->ret;
+
+	erofs_fileio_iter_complete(io);
 }
 
 static void erofs_fileio_rq_submit(struct erofs_fileio_rq *rq)
@@ -158,6 +190,7 @@ static int erofs_fileio_scan(struct erofs_fileio *io,
 				if (err)
 					break;
 				io->rq = erofs_fileio_rq_alloc(&io->dev);
+				io->rq->private = io;
 				io->rq->bio.bi_iter.bi_sector = io->dev.m_pa >> 9;
 				io->rq->bio.bi_end_io = io->end;
 				attached = 0;
@@ -230,7 +263,45 @@ static void erofs_fileio_readahead(struct readahead_control *rac)
 	erofs_fileio_rq_submit(io.rq);
 }
 
+static ssize_t erofs_fileio_direct_io(struct kiocb *iocb, struct iov_iter *iter)
+{
+	struct file *file = iocb->ki_filp;
+	struct inode *inode = file_inode(file);
+	size_t i_size = i_size_read(inode);
+	struct erofs_fileio io = {};
+	int err;
+
+	if (unlikely(iocb->ki_pos >= i_size))
+		return 0;
+
+	iter->count = min_t(size_t, iter->count,
+			    max_t(size_t, 0, i_size - iocb->ki_pos));
+	io.total = iter->count;
+	if (!io.total)
+		return 0;
+
+	io.inode = inode;
+	io.done = 0;
+	io.split = erofs_iter_split;
+	io.private = &io;
+	io.end = erofs_fileio_end_iter;
+	init_completion(&io.ctr);
+	refcount_set(&io.ref, 1);
+	err = erofs_fileio_scan(&io, iocb->ki_pos, iter);
+	erofs_fileio_rq_submit(io.rq);
+
+	erofs_fileio_iter_complete(&io);
+	wait_for_completion(&io.ctr);
+	if (io.total != io.done) {
+		iov_iter_revert(iter, io.done);
+		return err ?: -EIO;
+	}
+
+	return io.done;
+}
+
 const struct address_space_operations erofs_fileio_aops = {
 	.read_folio = erofs_fileio_read_folio,
 	.readahead = erofs_fileio_readahead,
+	.direct_IO = erofs_fileio_direct_io,
 };
