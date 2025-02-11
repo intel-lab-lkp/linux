@@ -49,18 +49,22 @@
 )
 
 TRACE_EVENT(cxl_port_aer_uncorrectable_error,
-	TP_PROTO(struct device *dev, u32 status, u32 fe, u32 *hl),
-	TP_ARGS(dev, status, fe, hl),
+	TP_PROTO(struct device *cxl_dev, struct device *pcie_dev, u32 status, u32 fe, u32 *hl),
+	TP_ARGS(cxl_dev, pcie_dev, status, fe, hl),
 	TP_STRUCT__entry(
-		__string(devname, dev_name(dev))
-		__string(parent, dev_name(dev->parent))
+		__string(cxl_name, dev_name(cxl_dev))
+		__string(cxl_parent_name, dev_name(cxl_dev->parent))
+		__string(pcie_name, dev_name(pcie_dev))
+		__string(pcie_parent_name, dev_name(pcie_dev->parent))
 		__field(u32, status)
 		__field(u32, first_error)
 		__array(u32, header_log, CXL_HEADERLOG_SIZE_U32)
 	),
 	TP_fast_assign(
-		__assign_str(devname);
-		__assign_str(parent);
+		__assign_str(cxl_name);
+		__assign_str(cxl_parent_name);
+		__assign_str(pcie_name);
+		__assign_str(pcie_parent_name);
 		__entry->status = status;
 		__entry->first_error = fe;
 		/*
@@ -69,8 +73,9 @@ TRACE_EVENT(cxl_port_aer_uncorrectable_error,
 		 */
 		memcpy(__entry->header_log, hl, CXL_HEADERLOG_SIZE);
 	),
-	TP_printk("device=%s parent=%s status: '%s' first_error: '%s'",
-		__get_str(devname), __get_str(parent),
+	TP_printk("device=%s (%s) parent=%s (%s) status: '%s' first_error: '%s'",
+		__get_str(cxl_name), __get_str(pcie_name),
+		__get_str(cxl_parent_name), __get_str(pcie_parent_name),
 		show_uc_errs(__entry->status),
 		show_uc_errs(__entry->first_error)
 	)
@@ -125,20 +130,25 @@ TRACE_EVENT(cxl_aer_uncorrectable_error,
 )
 
 TRACE_EVENT(cxl_port_aer_correctable_error,
-	TP_PROTO(struct device *dev, u32 status),
-	TP_ARGS(dev, status),
+	TP_PROTO(struct device *cxl_dev, struct device *pcie_dev, u32 status),
+	TP_ARGS(cxl_dev, pcie_dev, status),
 	TP_STRUCT__entry(
-		__string(devname, dev_name(dev))
-		__string(parent, dev_name(dev->parent))
+		__string(cxl_name, dev_name(cxl_dev))
+		__string(cxl_parent_name, dev_name(cxl_dev->parent))
+		__string(pcie_name, dev_name(pcie_dev))
+		__string(pcie_parent_name, dev_name(pcie_dev->parent))
 		__field(u32, status)
 	),
 	TP_fast_assign(
-		__assign_str(devname);
-		__assign_str(parent);
+		__assign_str(cxl_name);
+		__assign_str(cxl_parent_name);
+		__assign_str(pcie_name);
+		__assign_str(pcie_parent_name);
 		__entry->status = status;
 	),
-	TP_printk("device=%s parent=%s status='%s'",
-		__get_str(devname), __get_str(parent),
+	TP_printk("device=%s (%s) parent=%s (%s) status='%s'",
+		__get_str(cxl_name), __get_str(pcie_name),
+		__get_str(cxl_parent_name), __get_str(pcie_parent_name),
 		show_ce_errs(__entry->status)
 	)
 );
