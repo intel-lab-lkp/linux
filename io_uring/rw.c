@@ -369,7 +369,7 @@ static int io_prep_rw_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe
 	io_req_assign_buf_node(req, node);
 
 	io = req->async_data;
-	ret = io_import_fixed(ddir, &io->iter, node->buf, rw->addr, rw->len);
+	ret = io_import_fixed(ddir, &io->iter, node, rw->addr, rw->len);
 	iov_iter_save_state(&io->iter, &io->iter_state);
 	return ret;
 }

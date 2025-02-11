@@ -1377,8 +1377,7 @@ static int io_send_zc_import(struct io_kiocb *req, unsigned int issue_flags)
 			return ret;
 
 		ret = io_import_fixed(ITER_SOURCE, &kmsg->msg.msg_iter,
-					node->buf, (u64)(uintptr_t)sr->buf,
-					sr->len);
+					node, (u64)(uintptr_t)sr->buf, sr->len);
 		if (unlikely(ret))
 			return ret;
 		kmsg->msg.sg_from_iter = io_sg_from_iter;

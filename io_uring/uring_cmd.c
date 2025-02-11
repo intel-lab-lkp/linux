@@ -274,7 +274,7 @@ int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 
 	/* Must have had rsrc_node assigned at prep time */
 	if (node)
-		return io_import_fixed(rw, iter, node->buf, ubuf, len);
+		return io_import_fixed(rw, iter, node, ubuf, len);
 
 	return -EFAULT;
 }
