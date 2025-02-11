@@ -232,6 +232,12 @@ properties:
       PHY's that have configurable TX internal delays. If this property is
       present then the PHY applies the TX delay.
 
+  tx-amplitude-100base-tx-percent:
+    description:
+      Transmit amplitude gain applied for 100BASE-TX. When omitted, the PHYs
+      default will be left as is.
+    default: 100
+
   leds:
     type: object
 
