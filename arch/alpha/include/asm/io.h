@@ -70,9 +70,11 @@ static inline unsigned long virt_to_phys(volatile void *address)
 {
         unsigned long phys = (unsigned long)address;
 
-	/* Sign-extend from bit 41.  */
-	phys <<= (64 - 41);
-	phys = (long)phys >> (64 - 41);
+	if (!address)
+		return 0;
+
+	/* Automatic Sign-extend  */
+	phys = (long)phys;
 
 	/* Crop to the physical address width of the processor.  */
         phys &= (1ul << hwrpb->pa_bits) - 1;
