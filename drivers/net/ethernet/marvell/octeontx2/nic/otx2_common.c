@@ -1909,7 +1909,7 @@ u16 otx2_get_max_mtu(struct otx2_nic *pfvf)
 {
 	struct nix_hw_info *rsp;
 	struct msg_req *req;
-	u16 max_mtu;
+	u16 max_mtu = 1500;
 	int rc;
 
 	mutex_lock(&pfvf->mbox.lock);
@@ -1948,7 +1948,6 @@ out:
 	if (rc) {
 		dev_warn(pfvf->dev,
 			 "Failed to get MTU from hardware setting default value(1500)\n");
-		max_mtu = 1500;
 	}
 	return max_mtu;
 }
