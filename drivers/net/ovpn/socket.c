@@ -48,14 +48,24 @@ static void ovpn_socket_put(struct ovpn_peer *peer, struct ovpn_socket *sock)
 {
 	RCU_INIT_POINTER(peer->sock, NULL);
 	kref_put(&sock->refcount, ovpn_socket_release_kref);
+
+	/* At this point we can tell the netlink code that the
+	 * peer_del_doit() can terminate.
+	 *
+	 * This is most important when the above put() brought
+	 * the refcounter to 0, thus triggering the socket detach
+	 * via ovpn_socket_release_kref(): peer deletion should
+	 * not terminate if the socket detach is still ongoing.
+	 */
+	complete(&peer->sock_detach);
 }
 
 /**
  * ovpn_socket_release - release resources owned by socket user
  * @peer: peer whose socket should be released
  *
- * This function should be invoked when the user is shutting
- * down and wants to drop its link to the socket.
+ * This function should be invoked when the peer is being removed
+ * and wants to drop its link to the socket.
  *
  * In case of UDP, the detach routine will drop a reference to the
  * ovpn netdev, pointed by the ovpn_socket.
