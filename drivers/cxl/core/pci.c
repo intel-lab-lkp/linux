@@ -671,6 +671,8 @@ static void __cxl_handle_cor_ras(struct device *dev,
 
 	if (is_cxl_memdev(dev))
 		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status);
+	else if (is_cxl_port(dev))
+		trace_cxl_port_aer_correctable_error(dev, status);
 }
 
 static void cxl_handle_endpoint_cor_ras(struct cxl_dev_state *cxlds)
@@ -730,6 +732,8 @@ static pci_ers_result_t __cxl_handle_ras(struct device *dev, void __iomem *ras_b
 	header_log_copy(ras_base, hl);
 	if (is_cxl_memdev(dev))
 		trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status, fe, hl);
+	else if (is_cxl_port(dev))
+		trace_cxl_port_aer_uncorrectable_error(dev, status, fe, hl);
 
 	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
 
