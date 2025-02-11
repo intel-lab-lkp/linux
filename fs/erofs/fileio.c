@@ -3,6 +3,7 @@
  * Copyright (C) 2024, Alibaba Cloud
  */
 #include "internal.h"
+#include <linux/folio_queue.h>
 #include <trace/events/erofs.h>
 
 struct erofs_fileio_rq {
@@ -12,10 +13,15 @@ struct erofs_fileio_rq {
 	struct super_block *sb;
 };
 
+typedef void (fileio_rq_split_t)(void *data);
+
 struct erofs_fileio {
 	struct erofs_map_blocks map;
 	struct erofs_map_dev dev;
 	struct erofs_fileio_rq *rq;
+	struct inode *inode;
+	fileio_rq_split_t *split;
+	void *private;
 };
 
 static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
@@ -41,6 +47,11 @@ static void erofs_fileio_ki_complete(struct kiocb *iocb, long ret)
 	}
 	bio_uninit(&rq->bio);
 	kfree(rq);
+}
+
+static void erofs_folio_split(void *data)
+{
+	erofs_onlinefolio_split((struct folio *)data);
 }
 
 static void erofs_fileio_rq_submit(struct erofs_fileio_rq *rq)
@@ -85,17 +96,15 @@ void erofs_fileio_submit_bio(struct bio *bio)
 						   bio));
 }
 
-static int erofs_fileio_scan_folio(struct erofs_fileio *io, struct folio *folio)
+static int erofs_fileio_scan(struct erofs_fileio *io,
+			     loff_t pos, struct iov_iter *iter)
 {
-	struct inode *inode = folio_inode(folio);
+	struct inode *inode = io->inode;
 	struct erofs_map_blocks *map = &io->map;
-	unsigned int cur = 0, end = folio_size(folio), len, attached = 0;
-	loff_t pos = folio_pos(folio), ofs;
-	struct iov_iter iter;
-	struct bio_vec bv;
+	unsigned int cur = 0, end = iov_iter_count(iter), len, attached = 0;
+	loff_t ofs;
 	int err = 0;
 
-	erofs_onlinefolio_init(folio);
 	while (cur < end) {
 		if (!in_range(pos + cur, map->m_la, map->m_llen)) {
 			map->m_la = pos + cur;
@@ -105,7 +114,7 @@ static int erofs_fileio_scan_folio(struct erofs_fileio *io, struct folio *folio)
 				break;
 		}
 
-		ofs = folio_pos(folio) + cur - map->m_la;
+		ofs = pos + cur - map->m_la;
 		len = min_t(loff_t, map->m_llen - ofs, end - cur);
 		if (map->m_flags & EROFS_MAP_META) {
 			struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
@@ -117,21 +126,17 @@ static int erofs_fileio_scan_folio(struct erofs_fileio *io, struct folio *folio)
 				err = PTR_ERR(src);
 				break;
 			}
-			bvec_set_folio(&bv, folio, len, cur);
-			iov_iter_bvec(&iter, ITER_DEST, &bv, 1, len);
-			if (copy_to_iter(src, len, &iter) != len) {
+			if (copy_to_iter(src, len, iter) != len) {
 				erofs_put_metabuf(&buf);
 				err = -EIO;
 				break;
 			}
 			erofs_put_metabuf(&buf);
 		} else if (!(map->m_flags & EROFS_MAP_MAPPED)) {
-			folio_zero_segment(folio, cur, cur + len);
-			attached = 0;
+			iov_iter_zero(len, iter);
 		} else {
 			if (io->rq && (map->m_pa + ofs != io->dev.m_pa ||
 				       map->m_deviceid != io->dev.m_deviceid)) {
-io_retry:
 				erofs_fileio_rq_submit(io->rq);
 				io->rq = NULL;
 			}
@@ -148,26 +153,39 @@ io_retry:
 				io->rq->bio.bi_iter.bi_sector = io->dev.m_pa >> 9;
 				attached = 0;
 			}
-			if (!attached++)
-				erofs_onlinefolio_split(folio);
-			if (!bio_add_folio(&io->rq->bio, folio, len, cur))
-				goto io_retry;
+			if (bio_iov_iter_get_pages(&io->rq->bio, iter)) {
+				err = -EIO;
+				break;
+			}
+			if (io->split && !attached++)
+				io->split(io->private);
 			io->dev.m_pa += len;
 		}
 		cur += len;
 	}
-	erofs_onlinefolio_end(folio, err);
 	return err;
 }
 
 static int erofs_fileio_read_folio(struct file *file, struct folio *folio)
 {
 	struct erofs_fileio io = {};
+	struct folio_queue folioq;
+	struct iov_iter iter;
 	int err;
 
+	folioq_init(&folioq, 0);
+	folioq_append(&folioq, folio);
+	iov_iter_folio_queue(&iter, ITER_DEST, &folioq, 0, 0, folio_size(folio));
+	io.inode = folio_inode(folio);
+	io.split = erofs_folio_split;
+	io.private = folio;
+
 	trace_erofs_read_folio(folio, true);
-	err = erofs_fileio_scan_folio(&io, folio);
+	erofs_onlinefolio_init(folio);
+	err = erofs_fileio_scan(&io, folio_pos(folio), &iter);
+	erofs_onlinefolio_end(folio, err);
 	erofs_fileio_rq_submit(io.rq);
+
 	return err;
 }
 
@@ -175,13 +193,25 @@ static void erofs_fileio_readahead(struct readahead_control *rac)
 {
 	struct inode *inode = rac->mapping->host;
 	struct erofs_fileio io = {};
+	struct folio_queue folioq;
+	struct iov_iter iter;
 	struct folio *folio;
 	int err;
 
+	io.inode = inode;
+	io.split = erofs_folio_split;
 	trace_erofs_readpages(inode, readahead_index(rac),
 			      readahead_count(rac), true);
 	while ((folio = readahead_folio(rac))) {
-		err = erofs_fileio_scan_folio(&io, folio);
+		folioq_init(&folioq, 0);
+		folioq_append(&folioq, folio);
+		iov_iter_folio_queue(&iter, ITER_DEST, &folioq, 0, 0, folio_size(folio));
+
+		io.private = folio;
+		erofs_onlinefolio_init(folio);
+		err = erofs_fileio_scan(&io, folio_pos(folio), &iter);
+		erofs_onlinefolio_end(folio, err);
+
 		if (err && err != -EINTR)
 			erofs_err(inode->i_sb, "readahead error at folio %lu @ nid %llu",
 				  folio->index, EROFS_I(inode)->nid);
