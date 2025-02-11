@@ -97,7 +97,6 @@ void xge_mdio_remove(struct net_device *ndev)
 
 int xge_mdio_config(struct net_device *ndev)
 {
-	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 	struct xge_pdata *pdata = netdev_priv(ndev);
 	struct device *dev = &pdata->pdev->dev;
 	struct mii_bus *mdio_bus;
@@ -137,17 +136,18 @@ int xge_mdio_config(struct net_device *ndev)
 		goto err;
 	}
 
-	linkmode_set_bit_array(phy_10_100_features_array,
-			       ARRAY_SIZE(phy_10_100_features_array),
-			       mask);
-	linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT, mask);
-	linkmode_set_bit(ETHTOOL_LINK_MODE_AUI_BIT, mask);
-	linkmode_set_bit(ETHTOOL_LINK_MODE_MII_BIT, mask);
-	linkmode_set_bit(ETHTOOL_LINK_MODE_FIBRE_BIT, mask);
-	linkmode_set_bit(ETHTOOL_LINK_MODE_BNC_BIT, mask);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_10baseT_Full_BIT,
+			   phydev->supported);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_10baseT_Half_BIT,
+			   phydev->supported);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT,
+			   phydev->supported);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_100baseT_Half_BIT,
+			   phydev->supported);
+	linkmode_clear_bit(ETHTOOL_LINK_MODE_1000baseT_Half_BIT,
+			   phydev->supported);
 
-	linkmode_andnot(phydev->supported, phydev->supported, mask);
-	linkmode_copy(phydev->advertising, phydev->supported);
+	phy_advertise_supported(phydev);
 	pdata->phy_speed = SPEED_UNKNOWN;
 
 	return 0;
