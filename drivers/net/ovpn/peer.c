@@ -258,6 +258,11 @@ static void ovpn_peer_remove_work(struct work_struct *work)
 	struct ovpn_peer *peer = container_of(work, struct ovpn_peer,
 					      remove_work);
 
+	/* the peer has been unhashed and is being deactivated - we can
+	 * now switch off the socket and drop its reference
+	 */
+	ovpn_socket_release(peer);
+
 	/* reference from ovpn->peer or hashtable dropped */
 	ovpn_peer_put(peer);
 }
