@@ -3207,13 +3207,18 @@ static struct cxl_root_decoder *
 cxl_find_root_decoder(struct cxl_endpoint_decoder *cxled)
 {
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
-	struct cxl_port *port = cxled_to_port(cxled);
-	struct cxl_root *cxl_root __free(put_cxl_root) = find_cxl_root(port);
+	struct cxl_port *iter = cxled_to_port(cxled);
 	struct cxl_decoder *cxld = &cxled->cxld;
 	struct range *hpa = &cxld->hpa_range;
 	struct device *cxlrd_dev;
 
-	cxlrd_dev = device_find_child(&cxl_root->port.dev, hpa,
+	while (iter && !is_cxl_root(iter))
+		iter = to_cxl_port(iter->dev.parent);
+
+	if (!iter)
+		return NULL;
+
+	cxlrd_dev = device_find_child(&iter->dev, hpa,
 				      match_root_decoder_by_range);
 	if (!cxlrd_dev) {
 		dev_err(cxlmd->dev.parent,
