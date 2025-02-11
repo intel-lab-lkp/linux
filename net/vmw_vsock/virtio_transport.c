@@ -716,14 +716,20 @@ static void virtio_vsock_vqs_start(struct virtio_vsock *vsock)
 	queue_work(virtio_vsock_workqueue, &vsock->send_pkt_work);
 }
 
-static void virtio_vsock_vqs_del(struct virtio_vsock *vsock)
+static void virtio_vsock_vqs_del(struct virtio_vsock *vsock, bool vsock_reset)
 {
 	struct virtio_device *vdev = vsock->vdev;
 	struct sk_buff *skb;
 
-	/* Reset all connected sockets when the VQs disappear */
-	vsock_for_each_connected_socket(&virtio_transport.transport,
-					virtio_vsock_reset_sock);
+	/* When driver is removed, reset all connected
+	 * sockets because the VQs disappear.
+	 * When driver is just freezed, don't do that because the connected
+	 * socket still need to use after restore.
+	 */
+	if (vsock_reset) {
+		vsock_for_each_connected_socket(&virtio_transport.transport,
+						virtio_vsock_reset_sock);
+	}
 
 	/* Stop all work handlers to make sure no one is accessing the device,
 	 * so we can safely call virtio_reset_device().
@@ -831,7 +837,7 @@ static void virtio_vsock_remove(struct virtio_device *vdev)
 	rcu_assign_pointer(the_virtio_vsock, NULL);
 	synchronize_rcu();
 
-	virtio_vsock_vqs_del(vsock);
+	virtio_vsock_vqs_del(vsock, true);
 
 	/* Other works can be queued before 'config->del_vqs()', so we flush
 	 * all works before to free the vsock object to avoid use after free.
@@ -856,7 +862,7 @@ static int virtio_vsock_freeze(struct virtio_device *vdev)
 	rcu_assign_pointer(the_virtio_vsock, NULL);
 	synchronize_rcu();
 
-	virtio_vsock_vqs_del(vsock);
+	virtio_vsock_vqs_del(vsock, false);
 
 	mutex_unlock(&the_virtio_vsock_mutex);
 
