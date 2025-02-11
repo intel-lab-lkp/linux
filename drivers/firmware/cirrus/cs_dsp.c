@@ -755,7 +755,6 @@ static int cs_dsp_coeff_write_ctrl_raw(struct cs_dsp_coeff_ctl *ctl,
 				       unsigned int off, const void *buf, size_t len)
 {
 	struct cs_dsp *dsp = ctl->dsp;
-	void *scratch;
 	int ret;
 	unsigned int reg;
 
@@ -763,21 +762,13 @@ static int cs_dsp_coeff_write_ctrl_raw(struct cs_dsp_coeff_ctl *ctl,
 	if (ret)
 		return ret;
 
-	scratch = kmemdup(buf, len, GFP_KERNEL);
-	if (!scratch)
-		return -ENOMEM;
-
-	ret = regmap_raw_write(dsp->regmap, reg, scratch,
-			       len);
+	ret = regmap_raw_write(dsp->regmap, reg, buf, len);
 	if (ret) {
 		cs_dsp_err(dsp, "Failed to write %zu bytes to %x: %d\n",
 			   len, reg, ret);
-		kfree(scratch);
 		return ret;
 	}
 	cs_dsp_dbg(dsp, "Wrote %zu bytes to %x\n", len, reg);
-
-	kfree(scratch);
 
 	return 0;
 }
