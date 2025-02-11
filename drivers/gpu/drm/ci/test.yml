@@ -1,6 +1,8 @@
 .lava-test:
   extends:
     - .container+build-rules
+  variables:
+    FF_USE_NEW_BASH_EVAL_STRATEGY: 'true'
   timeout: "1h30m"
   rules:
     - !reference [.scheduled_pipeline-rules, rules]
@@ -13,6 +15,9 @@
     - mv -n install/* artifacts/.
     # Override it with our lava-submit.sh script
     - ./artifacts/lava-submit.sh
+  allow_failure:
+    exit_codes:
+      - 101
 
 .lava-igt:arm32:
   extends:
@@ -88,9 +93,14 @@
     - igt:arm64
   tags:
     - $RUNNER_TAG
+  allow_failure:
+    exit_codes:
+      - 101
 
 .software-driver:
   stage: software-driver
+  variables:
+    FF_USE_NEW_BASH_EVAL_STRATEGY: 'true'
   timeout: "1h30m"
   rules:
     - !reference [.scheduled_pipeline-rules, rules]
@@ -108,6 +118,9 @@
     - debian/x86_64_test-gl
     - testing:x86_64
     - igt:x86_64
+  allow_failure:
+    exit_codes:
+      - 101
 
 .msm-sc7180:
   extends:
@@ -153,7 +166,7 @@ msm:apq8016:
     BM_KERNEL_EXTRA_ARGS: clk_ignore_unused
     RUNNER_TAG: google-freedreno-db410c
   script:
-    - ./install/bare-metal/fastboot.sh
+    - ./install/bare-metal/fastboot.sh || exit $?
 
 msm:apq8096:
   extends:
@@ -167,7 +180,7 @@ msm:apq8096:
     GPU_VERSION: apq8096
     RUNNER_TAG: google-freedreno-db820c
   script:
-    - ./install/bare-metal/fastboot.sh
+    - ./install/bare-metal/fastboot.sh || exit $?
 
 msm:sdm845:
   extends:
@@ -181,7 +194,7 @@ msm:sdm845:
     GPU_VERSION: sdm845
     RUNNER_TAG: google-freedreno-cheza
   script:
-    - ./install/bare-metal/cros-servo.sh
+    - ./install/bare-metal/cros-servo.sh || exit $?
 
 msm:sm8350-hdk:
   extends:
