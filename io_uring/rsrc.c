@@ -110,8 +110,9 @@ static void io_buffer_unmap(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 
 		if (!refcount_dec_and_test(&imu->refs))
 			return;
-		for (i = 0; i < imu->nr_bvecs; i++)
-			unpin_user_page(imu->bvec[i].bv_page);
+		if (node->type == IORING_RSRC_BUFFER)
+			for (i = 0; i < imu->nr_bvecs; i++)
+				unpin_user_page(imu->bvec[i].bv_page);
 		if (imu->acct_pages)
 			io_unaccount_mem(ctx, imu->acct_pages);
 		kvfree(imu);
@@ -240,6 +241,13 @@ static int __io_sqe_buffers_update(struct io_ring_ctx *ctx,
 		struct io_rsrc_node *node;
 		u64 tag = 0;
 
+		i = array_index_nospec(up->offset + done, ctx->buf_table.nr);
+		node = io_rsrc_node_lookup(&ctx->buf_table, i);
+		if (node && node->type != IORING_RSRC_BUFFER) {
+			err = -EBUSY;
+			break;
+		}
+
 		uvec = u64_to_user_ptr(user_data);
 		iov = iovec_from_user(uvec, 1, 1, &fast_iov, ctx->compat);
 		if (IS_ERR(iov)) {
@@ -265,7 +273,6 @@ static int __io_sqe_buffers_update(struct io_ring_ctx *ctx,
 			}
 			node->tag = tag;
 		}
-		i = array_index_nospec(up->offset + done, ctx->buf_table.nr);
 		io_reset_rsrc_node(ctx, &ctx->buf_table, i);
 		ctx->buf_table.nodes[i] = node;
 		if (ctx->compat)
@@ -452,6 +459,7 @@ void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 		if (io_slot_file(node))
 			fput(io_slot_file(node));
 		break;
+	case IORING_RSRC_KBUFFER:
 	case IORING_RSRC_BUFFER:
 		if (node->buf)
 			io_buffer_unmap(ctx, node);
@@ -862,6 +870,79 @@ int io_sqe_buffers_register(struct io_ring_ctx *ctx, void __user *arg,
 	return ret;
 }
 
+int io_buffer_register_bvec(struct io_ring_ctx *ctx, struct request *rq,
+			    void (*release)(void *), unsigned int index)
+{
+	struct io_rsrc_data *data = &ctx->buf_table;
+	struct req_iterator rq_iter;
+	struct io_mapped_ubuf *imu;
+	struct io_rsrc_node *node;
+	struct bio_vec bv;
+	u16 nr_bvecs;
+	int i = 0;
+
+	lockdep_assert_held(&ctx->uring_lock);
+
+	if (!data->nr)
+		return -EINVAL;
+	if (index >= data->nr)
+		return -EINVAL;
+
+	node = data->nodes[index];
+	if (node)
+		return -EBUSY;
+
+	node = io_rsrc_node_alloc(IORING_RSRC_KBUFFER);
+	if (!node)
+		return -ENOMEM;
+
+	node->release = release;
+	node->priv = rq;
+
+	nr_bvecs = blk_rq_nr_phys_segments(rq);
+	imu = kvmalloc(struct_size(imu, bvec, nr_bvecs), GFP_KERNEL);
+	if (!imu) {
+		kfree(node);
+		return -ENOMEM;
+	}
+
+	imu->ubuf = 0;
+	imu->len = blk_rq_bytes(rq);
+	imu->acct_pages = 0;
+	imu->nr_bvecs = nr_bvecs;
+	refcount_set(&imu->refs, 1);
+	node->buf = imu;
+
+	rq_for_each_bvec(bv, rq, rq_iter)
+		bvec_set_page(&node->buf->bvec[i++], bv.bv_page, bv.bv_len,
+			      bv.bv_offset);
+	data->nodes[index] = node;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(io_buffer_register_bvec);
+
+void io_buffer_unregister_bvec(struct io_ring_ctx *ctx, unsigned int index)
+{
+	struct io_rsrc_data *data = &ctx->buf_table;
+	struct io_rsrc_node *node;
+
+	lockdep_assert_held(&ctx->uring_lock);
+
+	if (!data->nr)
+		return;
+	if (index >= data->nr)
+		return;
+
+	node = data->nodes[index];
+	if (!node || !node->buf)
+		return;
+	if (node->type != IORING_RSRC_KBUFFER)
+		return;
+	io_reset_rsrc_node(ctx, data, index);
+}
+EXPORT_SYMBOL_GPL(io_buffer_unregister_bvec);
+
 int io_import_fixed(int ddir, struct iov_iter *iter, struct io_rsrc_node *node,
 		    u64 buf_addr, size_t len)
 {
@@ -888,8 +969,8 @@ int io_import_fixed(int ddir, struct iov_iter *iter, struct io_rsrc_node *node,
 		/*
 		 * Don't use iov_iter_advance() here, as it's really slow for
 		 * using the latter parts of a big fixed buffer - it iterates
-		 * over each segment manually. We can cheat a bit here, because
-		 * we know that:
+		 * over each segment manually. We can cheat a bit here for user
+		 * registered nodes, because we know that:
 		 *
 		 * 1) it's a BVEC iter, we set it up
 		 * 2) all bvecs are the same in size, except potentially the
@@ -903,8 +984,15 @@ int io_import_fixed(int ddir, struct iov_iter *iter, struct io_rsrc_node *node,
 		 */
 		const struct bio_vec *bvec = imu->bvec;
 
+		/*
+		 * Kernel buffer bvecs, on the other hand, don't necessarily
+		 * have the size property of user registered ones, so we have
+		 * to use the slow iter advance.
+		 */
 		if (offset < bvec->bv_len) {
 			iter->iov_offset = offset;
+		} else if (node->type == IORING_RSRC_KBUFFER) {
+			iov_iter_advance(iter, offset);
 		} else {
 			unsigned long seg_skip;
 
@@ -1004,7 +1092,7 @@ static int io_clone_buffers(struct io_ring_ctx *ctx, struct io_ring_ctx *src_ctx
 		if (!src_node) {
 			dst_node = NULL;
 		} else {
-			dst_node = io_rsrc_node_alloc(IORING_RSRC_BUFFER);
+			dst_node = io_rsrc_node_alloc(src_node->type);
 			if (!dst_node) {
 				ret = -ENOMEM;
 				goto out_free;

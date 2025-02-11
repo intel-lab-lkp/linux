@@ -13,6 +13,7 @@
 enum {
 	IORING_RSRC_FILE		= 0,
 	IORING_RSRC_BUFFER		= 1,
+	IORING_RSRC_KBUFFER		= 2,
 };
 
 struct io_rsrc_node {
