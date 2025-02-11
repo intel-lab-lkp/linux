@@ -21,8 +21,11 @@ struct ovpn_peer;
  * struct ovpn_socket - a kernel socket referenced in the ovpn code
  * @ovpn: ovpn instance owning this socket (UDP only)
  * @dev_tracker: reference tracker for associated dev (UDP only)
+ * @peer: unique peer transmitting over this socket (TCP only)
  * @sock: the low level sock object
  * @refcount: amount of contexts currently referencing this object
+ * @work: member used to schedule release routine (it may block)
+ * @tcp_tx_work: work for deferring outgoing packet processing (TCP only)
  * @rcu: member used to schedule RCU destructor callback
  */
 struct ovpn_socket {
@@ -31,10 +34,13 @@ struct ovpn_socket {
 			struct ovpn_priv *ovpn;
 			netdevice_tracker dev_tracker;
 		};
+		struct ovpn_peer *peer;
 	};
 
 	struct socket *sock;
 	struct kref refcount;
+	struct work_struct work;
+	struct work_struct tcp_tx_work;
 	struct rcu_head rcu;
 };
 

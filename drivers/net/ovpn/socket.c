@@ -16,6 +16,7 @@
 #include "io.h"
 #include "peer.h"
 #include "socket.h"
+#include "tcp.h"
 #include "udp.h"
 
 static void ovpn_socket_release_kref(struct kref *kref)
@@ -26,6 +27,9 @@ static void ovpn_socket_release_kref(struct kref *kref)
 	if (sock->sock->sk->sk_protocol == IPPROTO_UDP) {
 		ovpn_udp_socket_detach(sock);
 		netdev_put(sock->ovpn->dev, &sock->dev_tracker);
+	} else if (sock->sock->sk->sk_protocol == IPPROTO_TCP) {
+		ovpn_tcp_socket_detach(sock);
+		ovpn_peer_put(sock->peer);
 	}
 
 	sockfd_put(sock->sock);
@@ -91,6 +95,8 @@ static int ovpn_socket_attach(struct socket *sock, struct ovpn_peer *peer)
 
 	if (sock->sk->sk_protocol == IPPROTO_UDP)
 		return ovpn_udp_socket_attach(sock, peer->ovpn);
+	else if (sock->sk->sk_protocol == IPPROTO_TCP)
+		return ovpn_tcp_socket_attach(sock, peer);
 
 	return -EOPNOTSUPP;
 }
@@ -181,11 +187,17 @@ struct ovpn_socket *ovpn_socket_new(struct socket *sock, struct ovpn_peer *peer)
 		goto sock_release;
 	}
 
-	ovpn_sock->ovpn = peer->ovpn;
 	ovpn_sock->sock = sock;
 	kref_init(&ovpn_sock->refcount);
 
-	if (sock->sk->sk_protocol == IPPROTO_UDP) {
+	/* TCP sockets are per-peer, therefore they are linked to their unique
+	 * peer
+	 */
+	if (sock->sk->sk_protocol == IPPROTO_TCP) {
+		INIT_WORK(&ovpn_sock->tcp_tx_work, ovpn_tcp_tx_work);
+		ovpn_sock->peer = peer;
+		ovpn_peer_hold(peer);
+	} else if (sock->sk->sk_protocol == IPPROTO_UDP) {
 		/* in UDP we only link the ovpn instance since the socket is
 		 * shared among multiple peers
 		 */
