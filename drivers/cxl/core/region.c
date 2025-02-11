@@ -3345,7 +3345,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 		dev_name(&cxlr->dev), p->res, p->interleave_ways,
 		p->interleave_granularity);
 
-	/* ...to match put_device() in cxl_add_to_region() */
+	/* ...to match put_device() in cxl_endpoint_decoder_add() */
 	get_device(&cxlr->dev);
 	up_write(&cxl_region_rwsem);
 
@@ -3357,18 +3357,27 @@ err:
 	return ERR_PTR(rc);
 }
 
-int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
+static int cxl_endpoint_decoder_initialize(struct cxl_endpoint_decoder *cxled)
 {
-	struct range *hpa = &cxled->cxld.hpa_range;
 	struct cxl_root_decoder *cxlrd;
-	struct cxl_region_params *p;
-	struct cxl_region *cxlr;
-	bool attach = false;
-	int rc;
 
 	cxlrd = cxl_find_root_decoder(cxled);
 	if (!cxlrd)
 		return -ENXIO;
+
+	cxled->cxlrd = cxlrd;
+
+	return 0;
+}
+
+static int cxl_endpoint_decoder_add(struct cxl_endpoint_decoder *cxled)
+{
+	struct range *hpa = &cxled->cxld.hpa_range;
+	struct cxl_root_decoder *cxlrd = cxled->cxlrd;
+	struct cxl_region_params *p;
+	struct cxl_region *cxlr;
+	bool attach = false;
+	int rc;
 
 	/*
 	 * Ensure that if multiple threads race to construct_region() for @hpa
@@ -3406,7 +3415,18 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled)
 
 	return rc;
 }
-EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, "CXL");
+
+int cxl_endpoint_decoder_register(struct cxl_endpoint_decoder *cxled)
+{
+	int rc;
+
+	rc = cxl_endpoint_decoder_initialize(cxled);
+	if (rc)
+		return rc;
+
+	return cxl_endpoint_decoder_add(cxled);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_endpoint_decoder_register, "CXL");
 
 static int is_system_ram(struct resource *res, void *arg)
 {
