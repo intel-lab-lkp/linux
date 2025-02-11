@@ -6995,6 +6995,12 @@ sub process {
 #			}
 #		}
 
+# A new use of rtnl_lock() is discouraged as it's being converted to rtnl_net_lock(net).
+		if ($line =~ /^\+.*\brtnl_(try)?lock(_interruptible|_killable)?\(\)/) {
+			WARN("rtnl_lock()",
+			     "A new use of rtnl_lock() variants is discouraged, try to use rtnl_net_lock(net) variants\n" . $herecurr);
+		}
+
 # strcpy uses that should likely be strscpy
 		if ($line =~ /\bstrcpy\s*\(/) {
 			WARN("STRCPY",
