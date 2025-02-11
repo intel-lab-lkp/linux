@@ -212,20 +212,48 @@ int coresight_claim_device(struct coresight_device *csdev)
 EXPORT_SYMBOL_GPL(coresight_claim_device);
 
 /*
- * coresight_disclaim_device_unlocked : Clear the claim tag for the device.
+ * Clear the claim tag for the device.
+ * Returns an error if the device wasn't already claimed.
+ */
+int coresight_reset_claim(struct csdev_access *csa)
+{
+	int ret;
+
+	CS_UNLOCK(csa->base);
+	ret = coresight_reset_claim_unlocked(csa);
+	CS_LOCK(csa->base);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(coresight_reset_claim);
+
+/*
+ * Clear the claim tag for the device. Called with CS_UNLOCKed for the component.
+ * Returns an error if the device wasn't already claimed.
+ */
+int coresight_reset_claim_unlocked(struct csdev_access *csa)
+{
+	if (coresight_read_claim_tags(csa) == CORESIGHT_CLAIM_SELF_HOSTED) {
+		coresight_clear_self_claim_tag(csa);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(coresight_reset_claim_unlocked);
+
+/*
+ * coresight_disclaim_device_unlocked : Clear the claim tag for the device
+ * and warn if the device wasn't already claimed.
  * Called with CS_UNLOCKed for the component.
  */
 void coresight_disclaim_device_unlocked(struct csdev_access *csa)
 {
-	if (coresight_read_claim_tags(csa) == CORESIGHT_CLAIM_SELF_HOSTED)
-		coresight_clear_self_claim_tag(csa);
-	else
-		/*
-		 * The external agent may have not honoured our claim
-		 * and has manipulated it. Or something else has seriously
-		 * gone wrong in our driver.
-		 */
-		WARN_ON_ONCE(1);
+	/*
+	 * Warn if the external agent hasn't honoured our claim
+	 * and has manipulated it. Or something else has seriously
+	 * gone wrong in our driver.
+	 */
+	WARN_ON_ONCE(coresight_reset_claim_unlocked(csa));
 }
 EXPORT_SYMBOL_GPL(coresight_disclaim_device_unlocked);
 
