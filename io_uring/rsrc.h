@@ -24,6 +24,9 @@ struct io_rsrc_node {
 		unsigned long file_ptr;
 		struct io_mapped_ubuf *buf;
 	};
+
+	void (*release)(void *);
+	void *priv;
 };
 
 struct io_mapped_ubuf {

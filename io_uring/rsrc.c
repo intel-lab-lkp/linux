@@ -455,6 +455,8 @@ void io_free_rsrc_node(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 	case IORING_RSRC_BUFFER:
 		if (node->buf)
 			io_buffer_unmap(ctx, node);
+		if (node->release)
+			node->release(node->priv);
 		break;
 	default:
 		WARN_ON_ONCE(1);
