@@ -957,7 +957,7 @@ static void etm4_disable_hw(void *info)
 			etm4x_relaxed_read32(csa, TRCCNTVRn(i));
 	}
 
-	coresight_disclaim_device_unlocked(csdev);
+	coresight_disclaim_device_unlocked(&csdev->access);
 	etm4_cs_lock(drvdata, csa);
 
 	dev_dbg(&drvdata->csdev->dev,

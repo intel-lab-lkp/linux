@@ -344,7 +344,7 @@ static void etb_disable_hw(struct etb_drvdata *drvdata)
 {
 	__etb_disable_hw(drvdata);
 	etb_dump_hw(drvdata);
-	coresight_disclaim_device(drvdata->csdev);
+	coresight_disclaim_device(&drvdata->csdev->access);
 }
 
 static int etb_disable(struct coresight_device *csdev)

@@ -116,7 +116,7 @@ static void dynamic_funnel_disable_hw(struct funnel_drvdata *drvdata,
 
 	/* Disclaim the device if none of the slaves are now active */
 	if (!(functl & FUNNEL_ENSx_MASK))
-		coresight_disclaim_device_unlocked(csdev);
+		coresight_disclaim_device_unlocked(&csdev->access);
 
 	CS_LOCK(drvdata->base);
 }

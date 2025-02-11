@@ -54,7 +54,7 @@ static void dynamic_replicator_reset(struct replicator_drvdata *drvdata)
 	if (!coresight_claim_device_unlocked(csdev)) {
 		writel_relaxed(0xff, drvdata->base + REPLICATOR_IDFILTER0);
 		writel_relaxed(0xff, drvdata->base + REPLICATOR_IDFILTER1);
-		coresight_disclaim_device_unlocked(csdev);
+		coresight_disclaim_device_unlocked(&csdev->access);
 	}
 
 	CS_LOCK(drvdata->base);
@@ -167,7 +167,7 @@ static void dynamic_replicator_disable(struct replicator_drvdata *drvdata,
 
 	if ((readl_relaxed(drvdata->base + REPLICATOR_IDFILTER0) == 0xff) &&
 	    (readl_relaxed(drvdata->base + REPLICATOR_IDFILTER1) == 0xff))
-		coresight_disclaim_device_unlocked(csdev);
+		coresight_disclaim_device_unlocked(&csdev->access);
 	CS_LOCK(drvdata->base);
 }
 

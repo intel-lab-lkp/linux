@@ -127,31 +127,31 @@ coresight_find_out_connection(struct coresight_device *csdev,
 	return ERR_PTR(-ENODEV);
 }
 
-static inline u32 coresight_read_claim_tags(struct coresight_device *csdev)
+static inline u32 coresight_read_claim_tags(struct csdev_access *csa)
 {
-	return csdev_access_relaxed_read32(&csdev->access, CORESIGHT_CLAIMCLR);
+	return csdev_access_relaxed_read32(csa, CORESIGHT_CLAIMCLR);
 }
 
-static inline bool coresight_is_claimed_self_hosted(struct coresight_device *csdev)
+static inline bool coresight_is_claimed_self_hosted(struct csdev_access *csa)
 {
-	return coresight_read_claim_tags(csdev) == CORESIGHT_CLAIM_SELF_HOSTED;
+	return coresight_read_claim_tags(csa) == CORESIGHT_CLAIM_SELF_HOSTED;
 }
 
 static inline bool coresight_is_claimed_any(struct coresight_device *csdev)
 {
-	return coresight_read_claim_tags(csdev) != 0;
+	return coresight_read_claim_tags(&csdev->access) != 0;
 }
 
-static inline void coresight_set_self_claim_tag(struct coresight_device *csdev)
+static inline void coresight_set_self_claim_tag(struct csdev_access *csa)
 {
-	csdev_access_relaxed_write32(&csdev->access, CORESIGHT_CLAIM_SELF_HOSTED,
+	csdev_access_relaxed_write32(csa, CORESIGHT_CLAIM_SELF_HOSTED,
 				     CORESIGHT_CLAIMSET);
 	isb();
 }
 
-static inline void coresight_clear_self_claim_tag(struct coresight_device *csdev)
+static inline void coresight_clear_self_claim_tag(struct csdev_access *csa)
 {
-	csdev_access_relaxed_write32(&csdev->access, CORESIGHT_CLAIM_SELF_HOSTED,
+	csdev_access_relaxed_write32(csa, CORESIGHT_CLAIM_SELF_HOSTED,
 				     CORESIGHT_CLAIMCLR);
 	isb();
 }
@@ -174,11 +174,11 @@ int coresight_claim_device_unlocked(struct coresight_device *csdev)
 	if (coresight_is_claimed_any(csdev))
 		return -EBUSY;
 
-	coresight_set_self_claim_tag(csdev);
-	if (coresight_is_claimed_self_hosted(csdev))
+	coresight_set_self_claim_tag(&csdev->access);
+	if (coresight_is_claimed_self_hosted(&csdev->access))
 		return 0;
 	/* There was a race setting the tag, clean up and fail */
-	coresight_clear_self_claim_tag(csdev);
+	coresight_clear_self_claim_tag(&csdev->access);
 	return -EBUSY;
 }
 EXPORT_SYMBOL_GPL(coresight_claim_device_unlocked);
@@ -202,14 +202,10 @@ EXPORT_SYMBOL_GPL(coresight_claim_device);
  * coresight_disclaim_device_unlocked : Clear the claim tag for the device.
  * Called with CS_UNLOCKed for the component.
  */
-void coresight_disclaim_device_unlocked(struct coresight_device *csdev)
+void coresight_disclaim_device_unlocked(struct csdev_access *csa)
 {
-
-	if (WARN_ON(!csdev))
-		return;
-
-	if (coresight_is_claimed_self_hosted(csdev))
-		coresight_clear_self_claim_tag(csdev);
+	if (coresight_is_claimed_self_hosted(csa))
+		coresight_clear_self_claim_tag(csa);
 	else
 		/*
 		 * The external agent may have not honoured our claim
@@ -220,14 +216,11 @@ void coresight_disclaim_device_unlocked(struct coresight_device *csdev)
 }
 EXPORT_SYMBOL_GPL(coresight_disclaim_device_unlocked);
 
-void coresight_disclaim_device(struct coresight_device *csdev)
+void coresight_disclaim_device(struct csdev_access *csa)
 {
-	if (WARN_ON(!csdev))
-		return;
-
-	CS_UNLOCK(csdev->access.base);
-	coresight_disclaim_device_unlocked(csdev);
-	CS_LOCK(csdev->access.base);
+	CS_UNLOCK(csa->base);
+	coresight_disclaim_device_unlocked(csa);
+	CS_LOCK(csa->base);
 }
 EXPORT_SYMBOL_GPL(coresight_disclaim_device);
 

@@ -653,8 +653,8 @@ extern int coresight_timeout(struct csdev_access *csa, u32 offset,
 extern int coresight_claim_device(struct coresight_device *csdev);
 extern int coresight_claim_device_unlocked(struct coresight_device *csdev);
 
-extern void coresight_disclaim_device(struct coresight_device *csdev);
-extern void coresight_disclaim_device_unlocked(struct coresight_device *csdev);
+extern void coresight_disclaim_device(struct csdev_access *csa);
+extern void coresight_disclaim_device_unlocked(struct csdev_access *csa);
 extern char *coresight_alloc_device_name(struct coresight_dev_list *devs,
 					 struct device *dev);
 

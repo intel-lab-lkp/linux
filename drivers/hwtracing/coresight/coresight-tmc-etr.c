@@ -1066,7 +1066,7 @@ static int tmc_etr_enable_hw(struct tmc_drvdata *drvdata,
 		rc = __tmc_etr_enable_hw(drvdata);
 		if (rc) {
 			drvdata->etr_buf = NULL;
-			coresight_disclaim_device(drvdata->csdev);
+			coresight_disclaim_device(&drvdata->csdev->access);
 		}
 	}
 
@@ -1156,7 +1156,7 @@ static void __tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
 void tmc_etr_disable_hw(struct tmc_drvdata *drvdata)
 {
 	__tmc_etr_disable_hw(drvdata);
-	coresight_disclaim_device(drvdata->csdev);
+	coresight_disclaim_device(&drvdata->csdev->access);
 	/* Reset the ETR buf used by hardware */
 	drvdata->etr_buf = NULL;
 }
