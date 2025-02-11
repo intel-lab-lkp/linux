@@ -206,7 +206,7 @@ int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		struct io_rsrc_node *node;
 		u16 index = READ_ONCE(sqe->buf_index);
 
-		node = io_rsrc_node_lookup(&ctx->buf_table, index);
+		node = io_rsrc_node_lookup(&ctx->buf_table.data, index);
 		if (unlikely(!node))
 			return -EFAULT;
 		/*

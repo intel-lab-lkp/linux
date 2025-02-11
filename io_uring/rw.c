@@ -363,7 +363,7 @@ static int io_prep_rw_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe
 	if (unlikely(ret))
 		return ret;
 
-	node = io_rsrc_node_lookup(&ctx->buf_table, req->buf_index);
+	node = io_rsrc_node_lookup(&ctx->buf_table.data, req->buf_index);
 	if (!node)
 		return -EFAULT;
 	io_req_assign_buf_node(req, node);

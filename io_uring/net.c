@@ -1366,7 +1366,7 @@ static int io_send_zc_import(struct io_kiocb *req, unsigned int issue_flags)
 
 		ret = -EFAULT;
 		io_ring_submit_lock(ctx, issue_flags);
-		node = io_rsrc_node_lookup(&ctx->buf_table, sr->buf_index);
+		node = io_rsrc_node_lookup(&ctx->buf_table.data, sr->buf_index);
 		if (node) {
 			io_req_assign_buf_node(sr->notif, node);
 			ret = 0;
