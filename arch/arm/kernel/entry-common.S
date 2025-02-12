@@ -30,21 +30,6 @@ saved_pc	.req	lr
 
 	.section .entry.text,"ax",%progbits
 	.align	5
-/*
- * As we will need to call out to some C functions,
- * we save r0 first to avoid needing to save registers around each C function
- * call.
- */
-ret_fast_syscall:
- UNWIND(.fnstart	)
- UNWIND(.cantunwind	)
-	add	sp, sp, #(S_R0 + S_OFF)
-#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
-	bl	stackleak_erase_on_task_stack
-#endif
-	restore_user_regs
- UNWIND(.fnend		)
-ENDPROC(ret_fast_syscall)
 
 /*
  * "slow" syscall return path.  "why" tells us if this was a real syscall.
@@ -122,6 +107,8 @@ ENDPROC(vector_bhb_bpiall_swi)
 #endif
 	.align	5
 ENTRY(vector_swi)
+ UNWIND(.fnstart	)
+ UNWIND(.cantunwind	)
 #ifdef CONFIG_CPU_V7M
 	v7m_exception_entry
 #else
@@ -210,9 +197,9 @@ ENTRY(vector_swi)
 	mov	r0, tbl
 	mov	r2, scno			@ syscall number from r7
 	bl	invoke_syscall
-	b	ret_fast_syscall
-
 #if defined(CONFIG_OABI_COMPAT) || !defined(CONFIG_AEABI)
+	b	9002
+
 	/*
 	 * We failed to handle a fault trying to access the page
 	 * containing the swi instruction, but we're not really in a
@@ -225,8 +212,17 @@ ENTRY(vector_swi)
 	sub	lr, saved_pc, #4
 	str	lr, [sp, #S_PC]
 	get_thread_info tsk
-	b	ret_fast_syscall
+9002:
+	/* Exit !AEABI clause */
 #endif
+
+	/* Return from syscall */
+	add	sp, sp, #(S_R0 + S_OFF)
+#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
+	bl	stackleak_erase_on_task_stack
+#endif
+	restore_user_regs
+ UNWIND(.fnend		)
 ENDPROC(vector_swi)
 	.ltorg
 
