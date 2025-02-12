@@ -1688,12 +1688,17 @@ static void evsel__set_needs_uniquify(struct evsel *counter, const struct perf_s
 		return;
 	}
 
-	if  (counter->core.attr.type < PERF_TYPE_MAX && counter->core.attr.type != PERF_TYPE_RAW) {
+	if (!counter->pmu) {
+		/* evsel__uniquify_counter() uses counter->pmu for the name */
+		return;
+	}
+
+	if (counter->pmu->type < PERF_TYPE_MAX && counter->pmu->type != PERF_TYPE_RAW) {
 		/* Legacy event, don't uniquify. */
 		return;
 	}
 
-	if (counter->pmu && counter->pmu->is_core &&
+	if (counter->pmu->is_core &&
 	    counter->alternate_hw_config != PERF_COUNT_HW_MAX) {
 		/* A sysfs or json event replacing a legacy event, don't uniquify. */
 		return;
