@@ -481,4 +481,37 @@ l1_%=:	r0 = 42;					\
 	: __clobber_all);
 }
 
+SEC("socket")
+__description("PTR_TO_STACK max stack size > 512")
+__failure __msg("invalid write to stack R1 off=-520 size=8")
+__naked void stack_check_size_gt_512(void)
+{
+	asm volatile (
+	"r1 = r10;"
+	"r1 += -520;"
+	"r0 = 42;"
+	"*(u64*)(r1 + 0) = r0;"
+	"exit;"
+	::: __clobber_all);
+}
+
+#ifdef __BPF_FEATURE_MAY_GOTO
+SEC("socket")
+__description("PTR_TO_STACK max stack size 512 with may_goto")
+__success
+__retval(42)
+__naked void stack_check_size_512_with_may_goto(void)
+{
+	asm volatile (
+	"r1 = r10;"
+	"r1 += -512;"
+	"r0 = 42;"
+	"*(u32*)(r1 + 0) = r0;"
+	"may_goto end;"
+	"r2 = 100;"
+"end:	exit;"
+	::: __clobber_all);
+}
+#endif
+
 char _license[] SEC("license") = "GPL";
