@@ -1133,7 +1133,7 @@ __always_inline bool free_pages_prepare(struct page *page,
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
 
-	if (memcg_kmem_online() && PageMemcgKmem(page))
+	if (memcg_kmem_online())
 		__memcg_kmem_uncharge_page(page, order);
 
 	/*
