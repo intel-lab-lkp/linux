@@ -3388,13 +3388,21 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 		}
 	}
 
-	ret = xa_insert(&group->pasid_array, pasid, pasid_entry, GFP_KERNEL);
-	if (ret)
+	if (xa_load(&group->pasid_array, pasid)) {
+		ret = -EBUSY;
 		goto out_unlock;
+	}
 
 	ret = __iommu_set_group_pasid(domain, group, pasid);
 	if (ret)
-		xa_erase(&group->pasid_array, pasid);
+		goto out_unlock;
+
+	ret = xa_insert(&group->pasid_array, pasid, pasid_entry, GFP_KERNEL);
+	if (ret) {
+		WARN_ON(ret == -EBUSY);
+		__iommu_remove_group_pasid(group, pasid, domain);
+	}
+
 out_unlock:
 	mutex_unlock(&group->mutex);
 	return ret;
@@ -3510,19 +3518,26 @@ int iommu_attach_group_handle(struct iommu_domain *domain,
 	pasid_entry = iommu_make_pasid_entry(domain, handle);
 
 	mutex_lock(&group->mutex);
-	ret = xa_insert(&group->pasid_array,
-			IOMMU_NO_PASID, pasid_entry, GFP_KERNEL);
-	if (ret)
+	if (xa_load(&group->pasid_array, IOMMU_NO_PASID)) {
+		ret = -EBUSY;
 		goto err_unlock;
+	}
 
 	ret = __iommu_attach_group(domain, group);
 	if (ret)
-		goto err_erase;
+		goto err_unlock;
+
+	ret = xa_insert(&group->pasid_array,
+			IOMMU_NO_PASID, pasid_entry, GFP_KERNEL);
+	if (ret) {
+		WARN_ON(ret == -EBUSY);
+		goto err_remove;
+	}
 	mutex_unlock(&group->mutex);
 
 	return 0;
-err_erase:
-	xa_erase(&group->pasid_array, IOMMU_NO_PASID);
+err_remove:
+	__iommu_group_set_core_domain(group);
 err_unlock:
 	mutex_unlock(&group->mutex);
 	return ret;
