@@ -74,6 +74,7 @@ struct lm3533_platform_data {
 	enum lm3533_boost_freq boost_freq;
 
 	struct lm3533_als_platform_data *als;
+	int num_als;
 
 	struct lm3533_bl_platform_data *backlights;
 	int num_backlights;

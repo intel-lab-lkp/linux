@@ -11,7 +11,9 @@
 #include <linux/leds.h>
 #include <linux/mfd/core.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 
 #include <linux/mfd/lm3533.h>
@@ -644,6 +646,59 @@ static int lm3533_led_setup(struct lm3533_led *led,
 	return lm3533_ctrlbank_set_pwm(&led->cb, pdata->pwm);
 }
 
+static void lm3533_parse_led(struct platform_device *pdev,
+			     struct lm3533_led_platform_data *pdata)
+{
+	struct device *dev = &pdev->dev;
+	int val, ret;
+
+	ret = device_property_read_string(dev, "default-trigger",
+					  &pdata->default_trigger);
+	if (ret)
+		pdata->default_trigger = "none";
+
+	/* 5000 - 29800 uA (800 uA step) */
+	ret = device_property_read_u32(dev, "max-current-microamp", &val);
+	if (ret)
+		val = 5000;
+	pdata->max_current = val;
+
+	/* 0 - 0x3f */
+	ret = device_property_read_u32(dev, "pwm", &val);
+	if (ret)
+		val = 0;
+	pdata->pwm = val;
+}
+
+static int lm3533_pass_of_node(struct platform_device *pdev,
+			       struct lm3533_led_platform_data *pdata)
+{
+	struct device *parent_dev = pdev->dev.parent;
+	struct device *dev = &pdev->dev;
+	struct fwnode_handle *node;
+	const char *label;
+	int val, ret;
+
+	device_for_each_child_node(parent_dev, node) {
+		fwnode_property_read_string(node, "compatible", &label);
+
+		if (!strcmp(label, pdev->name)) {
+			ret = fwnode_property_read_u32(node, "reg", &val);
+			if (ret) {
+				dev_info(dev, "reg property is missing: ret %d\n", ret);
+				return ret;
+			}
+
+			if (val == pdev->id) {
+				dev->fwnode = node;
+				dev->of_node = to_of_node(node);
+			}
+		}
+	}
+
+	return 0;
+}
+
 static int lm3533_led_probe(struct platform_device *pdev)
 {
 	struct lm3533 *lm3533;
@@ -659,8 +714,16 @@ static int lm3533_led_probe(struct platform_device *pdev)
 
 	pdata = dev_get_platdata(&pdev->dev);
 	if (!pdata) {
-		dev_err(&pdev->dev, "no platform data\n");
-		return -EINVAL;
+		pdata = devm_kzalloc(&pdev->dev, sizeof(*pdata), GFP_KERNEL);
+		if (!pdata)
+			return -ENOMEM;
+
+		ret = lm3533_pass_of_node(pdev, pdata);
+		if (ret)
+			return dev_err_probe(&pdev->dev, ret,
+					     "failed to get led device node\n");
+
+		lm3533_parse_led(pdev, pdata);
 	}
 
 	if (pdev->id < 0 || pdev->id >= LM3533_LVCTRLBANK_COUNT) {
@@ -673,7 +736,7 @@ static int lm3533_led_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	led->lm3533 = lm3533;
-	led->cdev.name = pdata->name;
+	led->cdev.name = dev_name(&pdev->dev);
 	led->cdev.default_trigger = pdata->default_trigger;
 	led->cdev.brightness_set_blocking = lm3533_led_set;
 	led->cdev.brightness_get = lm3533_led_get;
