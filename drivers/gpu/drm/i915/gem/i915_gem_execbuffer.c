@@ -3252,6 +3252,12 @@ eb_fences_add(struct i915_execbuffer *eb, struct i915_request *rq,
 		struct dma_fence *fence;
 
 		fence = drm_syncobj_fence_get(eb->gem_context->syncobj);
+		if (!fence) {
+			drm_dbg(&eb->i915->drm,
+				"Syncobj handle has no fence\n");
+			return ERR_PTR(-EINVAL);
+		}
+
 		err = i915_request_await_dma_fence(rq, fence);
 		dma_fence_put(fence);
 		if (err)
