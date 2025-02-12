@@ -134,6 +134,19 @@ const_debug unsigned int sysctl_sched_features =
 	0;
 #undef SCHED_FEAT
 
+#ifdef CONFIG_SYSCTL
+/*
+ * Using the avg_vruntime, do the right thing and preserve lag across
+ * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
+ */
+__read_mostly unsigned int sysctl_sched_place_lag_enabled = 1;
+/*
+ * Inhibit (wakeup) preemption until the current task has either matched the
+ * 0-lag point or until it has exhausted its slice.
+ */
+__read_mostly unsigned int sysctl_sched_run_to_parity_enabled = 1;
+#endif
+
 /*
  * Print a warning if need_resched is set for the given duration (if
  * LATENCY_WARN is enabled).

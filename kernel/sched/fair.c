@@ -923,7 +923,8 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 	 * Once selected, run a task until it either becomes non-eligible or
 	 * until it gets a new slice. See the HACK in set_next_entity().
 	 */
-	if (sched_feat(RUN_TO_PARITY) && curr && curr->vlag == curr->deadline)
+	if (sysctl_sched_run_to_parity_enabled && curr &&
+	    curr->vlag == curr->deadline)
 		return curr;
 
 	/* Pick the leftmost entity if it's eligible */
@@ -5199,7 +5200,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 *
 	 * EEVDF: placement strategy #1 / #2
 	 */
-	if (sched_feat(PLACE_LAG) && cfs_rq->nr_queued && se->vlag) {
+	if (sysctl_sched_place_lag_enabled && cfs_rq->nr_queued && se->vlag) {
 		struct sched_entity *curr = cfs_rq->curr;
 		unsigned long load;
 
@@ -9327,7 +9328,7 @@ static inline int task_is_ineligible_on_dst_cpu(struct task_struct *p, int dest_
 #else
 	dst_cfs_rq = &cpu_rq(dest_cpu)->cfs;
 #endif
-	if (sched_feat(PLACE_LAG) && dst_cfs_rq->nr_queued &&
+	if (sysctl_sched_place_lag_enabled && dst_cfs_rq->nr_queued &&
 	    !entity_eligible(task_cfs_rq(p), &p->se))
 		return 1;
 
