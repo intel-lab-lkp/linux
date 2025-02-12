@@ -29,7 +29,7 @@
 
 int dst_discard_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	kfree_skb(skb);
+	kfree_skb_reason(skb, SKB_DROP_REASON_BLACKHOLE);
 	return 0;
 }
 EXPORT_SYMBOL(dst_discard_out);
