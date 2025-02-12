@@ -30,6 +30,7 @@ enum tool_pmu_event {
 	for ((ev) = TOOL_PMU__EVENT_DURATION_TIME; (ev) < TOOL_PMU__EVENT_MAX; ev++)
 
 const char *tool_pmu__event_to_str(enum tool_pmu_event ev);
+const char *tool_pmu__all_event_to_str(enum tool_pmu_event ev);
 enum tool_pmu_event tool_pmu__str_to_event(const char *str);
 bool tool_pmu__skip_event(const char *name);
 int tool_pmu__num_skip_events(void);

@@ -19,6 +19,18 @@ static int do_test(enum tool_pmu_event ev, bool with_pmu)
 		return TEST_FAIL;
 	}
 
+	/*
+	 * if tool_pmu__event_to_str returns NULL, Check if the event is
+	 * valid for the platform.
+	 * Example:
+	 * slots event is only on arm64.
+	 * system_tsc_freq event is only on x86.
+	 */
+	if (!tool_pmu__event_to_str(ev) && tool_pmu__skip_event(tool_pmu__all_event_to_str(ev))) {
+		ret = TEST_OK;
+		goto out;
+	}
+
 	if (with_pmu)
 		snprintf(str, sizeof(str), "tool/%s/", tool_pmu__event_to_str(ev));
 	else

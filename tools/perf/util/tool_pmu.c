@@ -60,10 +60,27 @@ int tool_pmu__num_skip_events(void)
 	return num;
 }
 
+/*
+ * tool_pmu__event_to_str returns only supported event names.
+ * For events which are supposed to be skipped in the platform,
+ * return NULL
+ *
+ * tool_pmu__all_event_to_str returns the name for all
+ * events mapping to the tool_pmu_event index including the
+ * skipped ones.
+ */
 const char *tool_pmu__event_to_str(enum tool_pmu_event ev)
 {
 	if ((ev > TOOL_PMU__EVENT_NONE && ev < TOOL_PMU__EVENT_MAX) &&
 	    !tool_pmu__skip_event(tool_pmu__event_names[ev]))
+		return tool_pmu__event_names[ev];
+
+	return NULL;
+}
+
+const char *tool_pmu__all_event_to_str(enum tool_pmu_event ev)
+{
+	if (ev > TOOL_PMU__EVENT_NONE && ev < TOOL_PMU__EVENT_MAX)
 		return tool_pmu__event_names[ev];
 
 	return NULL;
