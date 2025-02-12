@@ -214,6 +214,11 @@ xfs_update_last_ag_size(
 	return 0;
 }
 
+static struct backing_dev_info *xfs_mp_to_bdi(struct xfs_mount *mp)
+{
+	return mp->m_super->s_bdi;
+}
+
 static int
 xfs_perag_alloc(
 	struct xfs_mount	*mp,
@@ -221,12 +226,22 @@ xfs_perag_alloc(
 	xfs_agnumber_t		agcount,
 	xfs_rfsblock_t		dblocks)
 {
+	struct backing_dev_info *bdi = xfs_mp_to_bdi(mp);
+	struct bdi_writeback *wb = &bdi->wb;
+	struct wb_ctx *p_wb_ctx;
 	struct xfs_perag	*pag;
 	int			error;
 
 	pag = kzalloc(sizeof(*pag), GFP_KERNEL);
 	if (!pag)
 		return -ENOMEM;
+	spin_lock(&wb->list_lock);
+	if (wb->wb_idx >= NR_WB_CTX)
+		wb->wb_idx = 0;
+	p_wb_ctx = &wb->wb_ctx_list[wb->wb_idx];
+	wb->wb_idx++;
+	spin_unlock(&wb->list_lock);
+	pag->pag_wb_ctx = p_wb_ctx;
 
 #ifdef __KERNEL__
 	/* Place kernel structure only init below this point. */
@@ -260,6 +275,7 @@ out_free_perag:
 	kfree(pag);
 	return error;
 }
+
 
 int
 xfs_initialize_perag(

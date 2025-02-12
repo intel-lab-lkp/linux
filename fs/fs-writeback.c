@@ -2712,7 +2712,7 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		 */
 		if (!was_dirty) {
 			/* Schedule writeback on first wb_ctx */
-			struct wb_ctx *p_wb_ctx = ctx_wb_struct(wb, 0);
+			struct wb_ctx *p_wb_ctx;
 			struct list_head *dirty_list;
 			bool wakeup_bdi = false;
 
@@ -2720,17 +2720,27 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 			if (dirtytime)
 				inode->dirtied_time_when = jiffies;
 
+			if (!sb->s_op->get_wb_ctx) {
+				p_wb_ctx = ctx_wb_struct(wb, 0);
 
-			if (inode->i_state & I_DIRTY)
-				dirty_list = ctx_b_dirty_list(wb, 0);
-			else
-				dirty_list = ctx_b_dirty_time_list(wb,
-								   0);
-
-			wakeup_bdi = inode_io_list_move_locked_ctx(inode, wb,
-								   dirty_list,
-								   p_wb_ctx);
-
+				if (inode->i_state & I_DIRTY)
+					dirty_list = ctx_b_dirty_list(wb, 0);
+				else
+					dirty_list = ctx_b_dirty_time_list(wb,
+									   0);
+				wakeup_bdi = inode_io_list_move_locked_ctx(inode, wb,
+									   dirty_list,
+									   p_wb_ctx);
+			} else {
+				p_wb_ctx = sb->s_op->get_wb_ctx(inode);
+				if (inode->i_state & I_DIRTY)
+					dirty_list = &p_wb_ctx->pctx_b_dirty;
+				else
+					dirty_list = &p_wb_ctx->pctx_b_dirty_time;
+				wakeup_bdi = inode_io_list_move_locked_ctx(inode, wb,
+									   dirty_list,
+									   p_wb_ctx);
+			}
 			spin_unlock(&wb->list_lock);
 			spin_unlock(&inode->i_lock);
 			trace_writeback_dirty_inode_enqueue(inode);

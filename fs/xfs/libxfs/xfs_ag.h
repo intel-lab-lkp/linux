@@ -89,6 +89,7 @@ struct xfs_perag {
 
 	/* background prealloc block trimming */
 	struct delayed_work	pag_blockgc_work;
+	struct wb_ctx		*pag_wb_ctx;
 #endif /* __KERNEL__ */
 };
 

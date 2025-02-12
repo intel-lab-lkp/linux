@@ -2307,6 +2307,7 @@ struct super_operations {
 	long (*free_cached_objects)(struct super_block *,
 				    struct shrink_control *);
 	void (*shutdown)(struct super_block *sb);
+	struct wb_ctx *(*get_wb_ctx)(struct inode *);
 };
 
 /*

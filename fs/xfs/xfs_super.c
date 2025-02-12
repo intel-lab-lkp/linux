@@ -1210,6 +1210,25 @@ xfs_fs_shutdown(
 	xfs_force_shutdown(XFS_M(sb), SHUTDOWN_DEVICE_REMOVED);
 }
 
+static struct wb_ctx *
+		xfs_get_wb_ctx(
+		struct inode *inode)
+{
+	struct xfs_inode *xfs_inode = XFS_I(inode);
+	struct xfs_perag *pag = xfs_perag_get(xfs_inode->i_mount,
+			XFS_INO_TO_AGNO(xfs_inode->i_mount, xfs_inode->i_ino));
+	struct wb_ctx *p_wb_ctx;
+
+	if (!pag) {
+		/* There had better still be a perag structure! */
+		ASSERT(0);
+		return NULL;
+	}
+	p_wb_ctx = pag->pag_wb_ctx;
+	xfs_perag_put(pag);
+	return p_wb_ctx;
+}
+
 static const struct super_operations xfs_super_operations = {
 	.alloc_inode		= xfs_fs_alloc_inode,
 	.destroy_inode		= xfs_fs_destroy_inode,
@@ -1224,6 +1243,7 @@ static const struct super_operations xfs_super_operations = {
 	.nr_cached_objects	= xfs_fs_nr_cached_objects,
 	.free_cached_objects	= xfs_fs_free_cached_objects,
 	.shutdown		= xfs_fs_shutdown,
+	.get_wb_ctx		= xfs_get_wb_ctx,
 };
 
 static int
