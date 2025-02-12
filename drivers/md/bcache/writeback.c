@@ -825,8 +825,10 @@ static int bch_writeback_thread(void *arg)
 			while (delay &&
 			       !kthread_should_stop() &&
 			       !test_bit(CACHE_SET_IO_DISABLE, &c->flags) &&
-			       !test_bit(BCACHE_DEV_DETACHING, &dc->disk.flags))
+			       !test_bit(BCACHE_DEV_DETACHING, &dc->disk.flags)) {
 				delay = schedule_timeout_interruptible(delay);
+				delay = min(delay, dc->writeback_delay * HZ);
+			}
 
 			bch_ratelimit_reset(&dc->writeback_rate);
 		}
