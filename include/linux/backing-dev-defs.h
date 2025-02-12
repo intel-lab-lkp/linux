@@ -37,6 +37,7 @@ enum wb_stat_item {
 };
 
 #define WB_STAT_BATCH (8*(1+ilog2(nr_cpu_ids)))
+#define NR_WB_CTX 8
 
 /*
  * why some writeback work was initiated
@@ -79,6 +80,31 @@ struct wb_completion {
 
 #define DEFINE_WB_COMPLETION(cmpl, bdi)	\
 	struct wb_completion cmpl = WB_COMPLETION_INIT(bdi)
+
+struct wb_ctx {
+	struct delayed_work pctx_dwork;
+	struct list_head pctx_b_dirty;
+	struct list_head pctx_b_io;
+	struct list_head pctx_b_more_io;
+	struct list_head pctx_b_dirty_time;
+	struct bdi_writeback *b_wb;
+	unsigned long last_old_flush;	/* last old data flush */
+	unsigned long state;
+	unsigned long bw_time_stamp;	/* last time write bw is updated */
+	unsigned long dirtied_stamp;
+	unsigned long written_stamp;	/* pages written at bw_time_stamp */
+	unsigned long write_bandwidth;	/* the estimated write bandwidth */
+	unsigned long avg_write_bandwidth; /* further smoothed write bw, > 0 */
+
+	/*
+	 * The base dirty throttle rate, re-calculated on every 200ms.
+	 * All the bdi tasks' dirty rate will be curbed under it.
+	 * @dirty_ratelimit tracks the estimated @balanced_dirty_ratelimit
+	 * in small steps and is much more smooth/stable than the latter.
+	 */
+	unsigned long dirty_ratelimit;
+	unsigned long balanced_dirty_ratelimit;
+};
 
 /*
  * Each wb (bdi_writeback) can perform writeback operations, is measured
@@ -143,6 +169,8 @@ struct bdi_writeback {
 
 	struct list_head bdi_node;	/* anchored at bdi->wb_list */
 
+	int wb_idx;
+	struct wb_ctx wb_ctx_list[NR_WB_CTX];
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct percpu_ref refcnt;	/* used only for !root wb's */
 	struct fprop_local_percpu memcg_completions;
@@ -207,6 +235,39 @@ struct wb_lock_cookie {
 	bool locked;
 	unsigned long flags;
 };
+
+static struct wb_ctx *ctx_wb_struct(struct bdi_writeback *wb, int ctx_id)
+{
+	return &wb->wb_ctx_list[ctx_id];
+}
+
+static inline struct list_head *ctx_b_dirty_list(struct bdi_writeback *wb, int ctx_id)
+{
+	struct wb_ctx *p_wb = ctx_wb_struct(wb, ctx_id);
+
+	return &p_wb->pctx_b_dirty;
+}
+
+static inline struct list_head *ctx_b_dirty_time_list(struct bdi_writeback *wb, int ctx_id)
+{
+	struct wb_ctx *p_wb = ctx_wb_struct(wb, ctx_id);
+
+	return &p_wb->pctx_b_dirty_time;
+}
+
+static inline struct list_head *ctx_b_io_list(struct bdi_writeback *wb, int ctx_id)
+{
+	struct wb_ctx *p_wb = ctx_wb_struct(wb, ctx_id);
+
+	return &p_wb->pctx_b_io;
+}
+
+static inline struct list_head *ctx_b_more_io_list(struct bdi_writeback *wb, int ctx_id)
+{
+	struct wb_ctx *p_wb = ctx_wb_struct(wb, ctx_id);
+
+	return &p_wb->pctx_b_more_io;
+}
 
 #ifdef CONFIG_CGROUP_WRITEBACK
 

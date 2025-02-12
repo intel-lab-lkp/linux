@@ -515,7 +515,8 @@ static void wb_update_bandwidth_workfn(struct work_struct *work)
 static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 		   gfp_t gfp)
 {
-	int err;
+	int i, err;
+	struct wb_ctx *p_wb_ctx;
 
 	memset(wb, 0, sizeof(*wb));
 
@@ -533,12 +534,30 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 	wb->dirty_ratelimit = INIT_BW;
 	wb->write_bandwidth = INIT_BW;
 	wb->avg_write_bandwidth = INIT_BW;
+	wb->wb_idx = 0;
 
 	spin_lock_init(&wb->work_lock);
 	INIT_LIST_HEAD(&wb->work_list);
 	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
 	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
 
+	for (i = 0; i < NR_WB_CTX; i++) {
+		p_wb_ctx = &wb->wb_ctx_list[i];
+		p_wb_ctx->b_wb = wb;
+		p_wb_ctx->last_old_flush = jiffies;
+		p_wb_ctx->bw_time_stamp = jiffies;
+		p_wb_ctx->balanced_dirty_ratelimit = INIT_BW;
+		p_wb_ctx->dirty_ratelimit = INIT_BW;
+		p_wb_ctx->write_bandwidth = INIT_BW;
+		p_wb_ctx->avg_write_bandwidth = INIT_BW;
+
+		INIT_LIST_HEAD(ctx_b_dirty_list(wb, i));
+		INIT_LIST_HEAD(ctx_b_dirty_time_list(wb, i));
+		INIT_LIST_HEAD(ctx_b_io_list(wb, i));
+		INIT_LIST_HEAD(ctx_b_more_io_list(wb, i));
+
+		INIT_DELAYED_WORK(&p_wb_ctx->pctx_dwork, wb_workfn);
+	}
 	err = fprop_local_init_percpu(&wb->completions, gfp);
 	if (err)
 		return err;
