@@ -25,7 +25,7 @@ ENTRY(v5t_early_abort)
 	uaccess_disable ip			@ disable user access
 	bic	r1, r1, #1 << 11		@ clear bits 11 of FSR
 	teq_ldrd tmp=ip, insn=r3		@ insn was LDRD?
-	beq	do_DataAbort			@ yes
+	beq	arm_dabt_handler			@ yes
 	tst	r3, #1 << 20			@ check write
 	orreq	r1, r1, #1 << 11
-	b	do_DataAbort
+	b	arm_dabt_handler
