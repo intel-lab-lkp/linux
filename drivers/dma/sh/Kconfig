@@ -53,6 +53,7 @@ config RZ_DMAC
 	depends on ARCH_R7S72100 || ARCH_RZG2L || COMPILE_TEST
 	select RENESAS_DMA
 	select DMA_VIRTUAL_CHANNELS
+	select RENESAS_RZV2H_ICU
 	help
 	  This driver supports the general purpose DMA controller typically
 	  found in the Renesas RZ SoC variants.
