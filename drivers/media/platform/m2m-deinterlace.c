@@ -11,6 +11,7 @@
 #include <linux/interrupt.h>
 #include <linux/dmaengine.h>
 #include <linux/platform_device.h>
+#include <linux/module.h>
 
 #include <media/v4l2-mem2mem.h>
 #include <media/v4l2-device.h>
@@ -914,7 +915,6 @@ static int deinterlace_probe(struct platform_device *pdev)
 {
 	struct deinterlace_dev *pcdev;
 	struct video_device *vfd;
-	dma_cap_mask_t mask;
 	int ret = 0;
 
 	pcdev = devm_kzalloc(&pdev->dev, sizeof(*pcdev), GFP_KERNEL);
@@ -923,9 +923,16 @@ static int deinterlace_probe(struct platform_device *pdev)
 
 	spin_lock_init(&pcdev->irqlock);
 
-	dma_cap_zero(mask);
-	dma_cap_set(DMA_INTERLEAVE, mask);
-	pcdev->dma_chan = dma_request_channel(mask, NULL, pcdev);
+	if (pdev->dev.of_node) {
+		pcdev->dma_chan = dma_request_chan(&pdev->dev, "rxtx");
+	} else {
+		dma_cap_mask_t mask;
+
+		dma_cap_zero(mask);
+		dma_cap_set(DMA_INTERLEAVE, mask);
+		pcdev->dma_chan = dma_request_channel(mask, NULL, pcdev);
+	}
+
 	if (!pcdev->dma_chan)
 		return -ENODEV;
 
@@ -989,12 +996,18 @@ static void deinterlace_remove(struct platform_device *pdev)
 	dma_release_channel(pcdev->dma_chan);
 }
 
+static const struct of_device_id deinterlace_dt_match[] = {
+	{ .compatible = "m2m-deinterlace" },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, deinterlace_dt_match);
+
 static struct platform_driver deinterlace_pdrv = {
 	.probe		= deinterlace_probe,
 	.remove		= deinterlace_remove,
 	.driver		= {
-		.name	= MEM2MEM_NAME,
+		.name		= MEM2MEM_NAME,
+		.of_match_table = deinterlace_dt_match,
 	},
 };
 module_platform_driver(deinterlace_pdrv);
-
