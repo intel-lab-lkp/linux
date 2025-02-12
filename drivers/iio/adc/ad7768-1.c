@@ -211,6 +211,7 @@ struct ad7768_state {
 	struct iio_trigger *trig;
 	struct gpio_desc *gpio_sync_in;
 	struct gpio_desc *gpio_reset;
+	bool en_spi_sync;
 	const char *labels[ARRAY_SIZE(ad7768_channels)];
 	/*
 	 * DMA (thus cache coherency maintenance) may require the
@@ -290,6 +291,19 @@ static const struct regmap_config ad7768_regmap24_config = {
 	.wr_table = &ad7768_regmap24_wr_table,
 	.max_register = AD7768_REG_COEFF_DATA,
 };
+
+static int ad7768_send_sync_pulse(struct ad7768_state *st)
+{
+	if (st->en_spi_sync)
+		return regmap_write(st->regmap, AD7768_REG_SYNC_RESET, 0x00);
+
+	if (st->gpio_sync_in) {
+		gpiod_set_value_cansleep(st->gpio_sync_in, 1);
+		gpiod_set_value_cansleep(st->gpio_sync_in, 0);
+	}
+
+	return 0;
+}
 
 static int ad7768_set_mode(struct ad7768_state *st,
 			   enum ad7768_conv_mode mode)
@@ -387,10 +401,7 @@ static int ad7768_set_dig_fil(struct ad7768_state *st,
 		return ret;
 
 	/* A sync-in pulse is required every time the filter dec rate changes */
-	gpiod_set_value(st->gpio_sync_in, 1);
-	gpiod_set_value(st->gpio_sync_in, 0);
-
-	return 0;
+	return ad7768_send_sync_pulse(st);
 }
 
 static int ad7768_gpio_direction_input(struct gpio_chip *chip, unsigned int offset)
@@ -671,6 +682,60 @@ static const struct iio_info ad7768_info = {
 	.debugfs_reg_access = &ad7768_reg_access,
 };
 
+static int ad7768_setup_spi_sync(struct device *dev, struct ad7768_state *st)
+{
+	struct fwnode_reference_args args;
+	int ret;
+
+	ret = fwnode_property_get_reference_args(dev_fwnode(dev),
+						 "trigger-sources",
+						 "#trigger-source-cells",
+						 0, 0, &args);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get trigger-sources reference\n");
+
+	/*
+	 * Currently, the driver supports SPI-based synchronization only for
+	 * single-device setups, where the device's own SYNC_OUT is looped back
+	 * to its SYNC_IN. Only enable this feature if the trigger-sources
+	 * references the current device.
+	 */
+	st->en_spi_sync = args.fwnode->dev == dev;
+	fwnode_handle_put(args.fwnode);
+
+	return st->en_spi_sync ? 0 : -EOPNOTSUPP;
+}
+
+static int ad7768_set_sync_source(struct device *dev, struct ad7768_state *st)
+{
+	int ret;
+
+	/*
+	 * The AD7768-1 allows two primary methods for driving the SYNC_IN pin
+	 * to synchronize one or more devices:
+	 * 1. Using a GPIO to directly drive the SYNC_IN pin.
+	 * 2. Using a SPI command, where the SYNC_OUT pin generates a
+	 *    synchronization pulse that loops back to the SYNC_IN pin.
+	 */
+	st->gpio_sync_in = devm_gpiod_get_optional(dev, "adi,sync-in",
+						   GPIOD_OUT_LOW);
+	if (IS_ERR(st->gpio_sync_in))
+		return PTR_ERR(st->gpio_sync_in);
+
+	/*
+	 * If the SYNC_IN GPIO is not defined, fall back to synchronization
+	 * over SPI.
+	 */
+	if (!st->gpio_sync_in) {
+		ret = ad7768_setup_spi_sync(dev, st);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					      "No valid synchronization source provided\n");
+	}
+
+	return 0;
+}
+
 static int ad7768_setup(struct iio_dev *indio_dev)
 {
 	struct ad7768_state *st = iio_priv(indio_dev);
@@ -701,10 +766,9 @@ static int ad7768_setup(struct iio_dev *indio_dev)
 			return ret;
 	}
 
-	st->gpio_sync_in = devm_gpiod_get(&st->spi->dev, "adi,sync-in",
-					  GPIOD_OUT_LOW);
-	if (IS_ERR(st->gpio_sync_in))
-		return PTR_ERR(st->gpio_sync_in);
+	ret = ad7768_set_sync_source(&st->spi->dev, st);
+	if (ret)
+		return ret;
 
 	/* Only create a Chip GPIO if flagged for it */
 	if (device_property_read_bool(&st->spi->dev, "gpio-controller")) {
