@@ -3511,8 +3511,10 @@ int iommu_attach_group_handle(struct iommu_domain *domain,
 {
 	int ret;
 
-	if (handle)
-		handle->domain = domain;
+	if (!handle)
+		return -EINVAL;
+
+	handle->domain = domain;
 
 	mutex_lock(&group->mutex);
 	ret = xa_insert(&group->pasid_array, IOMMU_NO_PASID, handle, GFP_KERNEL);
@@ -3568,16 +3570,15 @@ int iommu_replace_group_handle(struct iommu_group *group,
 	void *curr;
 	int ret;
 
-	if (!new_domain)
+	if (!new_domain || !handle)
 		return -EINVAL;
 
+	handle->domain = new_domain;
+
 	mutex_lock(&group->mutex);
-	if (handle) {
-		ret = xa_reserve(&group->pasid_array, IOMMU_NO_PASID, GFP_KERNEL);
-		if (ret)
-			goto err_unlock;
-		handle->domain = new_domain;
-	}
+	ret = xa_reserve(&group->pasid_array, IOMMU_NO_PASID, GFP_KERNEL);
+	if (ret)
+		goto err_unlock;
 
 	ret = __iommu_group_set_domain(group, new_domain);
 	if (ret)
