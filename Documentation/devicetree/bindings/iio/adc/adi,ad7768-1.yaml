@@ -26,7 +26,19 @@ properties:
   clock-names:
     const: mclk
 
+  trigger-sources:
+    description:
+      Specifies the device responsible for driving the synchronization pin,
+      as an alternative to adi,sync-in-gpios. If the own device node is
+      referenced, The synchronization over SPI is enabled and the SYNC_OUT
+      output will drive the SYNC_IN pin.
+    maxItems: 2
+
   interrupts:
+    description:
+      Specifies the interrupt line associated with the ADC. This refers
+      to the DRDY (Data Ready) pin, which signals when conversion results are
+      available.
     maxItems: 1
 
   '#address-cells':
@@ -57,6 +69,9 @@ properties:
   "#io-channel-cells":
     const: 1
 
+  "#trigger-source-cells":
+    const: 0
+
 required:
   - compatible
   - reg
@@ -65,7 +80,6 @@ required:
   - vref-supply
   - spi-cpol
   - spi-cpha
-  - adi,sync-in-gpios
 
 patternProperties:
   "^channel@([0-9]|1[0-5])$":
@@ -89,6 +103,13 @@ patternProperties:
 allOf:
   - $ref: /schemas/spi/spi-peripheral-props.yaml#
 
+  - oneOf:
+      - required:
+          - trigger-sources
+          - "#trigger-source-cells"
+      - required:
+          - adi,sync-in-gpios
+
 unevaluatedProperties: false
 
 examples:
@@ -99,7 +120,7 @@ examples:
         #address-cells = <1>;
         #size-cells = <0>;
 
-        adc@0 {
+        adc0: adc@0 {
             compatible = "adi,ad7768-1";
             reg = <0>;
             spi-max-frequency = <2000000>;
@@ -108,7 +129,8 @@ examples:
             vref-supply = <&adc_vref>;
             interrupts = <25 IRQ_TYPE_EDGE_RISING>;
             interrupt-parent = <&gpio>;
-            adi,sync-in-gpios = <&gpio 22 GPIO_ACTIVE_LOW>;
+            trigger-sources = <&adc0 0>;
+            #trigger-source-cells = <0>;
             reset-gpios = <&gpio 27 GPIO_ACTIVE_LOW>;
             clocks = <&ad7768_mclk>;
             clock-names = "mclk";
