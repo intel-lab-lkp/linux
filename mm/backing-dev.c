@@ -65,15 +65,24 @@ static void collect_wb_stats(struct wb_stats *stats,
 	struct inode *inode;
 
 	spin_lock(&wb->list_lock);
-	list_for_each_entry(inode, &wb->b_dirty, i_io_list)
-		stats->nr_dirty++;
-	list_for_each_entry(inode, &wb->b_io, i_io_list)
-		stats->nr_io++;
-	list_for_each_entry(inode, &wb->b_more_io, i_io_list)
-		stats->nr_more_io++;
-	list_for_each_entry(inode, &wb->b_dirty_time, i_io_list)
-		if (inode->i_state & I_DIRTY_TIME)
-			stats->nr_dirty_time++;
+
+	for (int i = 0; i < NR_WB_CTX; i++) {
+		struct list_head *pctx_b_dirty = ctx_b_dirty_list(wb, i);
+		struct list_head *pctx_b_io = ctx_b_io_list(wb, i);
+		struct list_head *pctx_b_more_io = ctx_b_more_io_list(wb, i);
+		struct list_head *pctx_b_dirty_time =
+					ctx_b_dirty_time_list(wb, i);
+
+		list_for_each_entry(inode, pctx_b_dirty, i_io_list)
+			stats->nr_dirty++;
+		list_for_each_entry(inode, pctx_b_io, i_io_list)
+			stats->nr_io++;
+		list_for_each_entry(inode, pctx_b_more_io, i_io_list)
+			stats->nr_more_io++;
+		list_for_each_entry(inode, pctx_b_dirty_time, i_io_list)
+			if (inode->i_state & I_DIRTY_TIME)
+				stats->nr_dirty_time++;
+	}
 	spin_unlock(&wb->list_lock);
 
 	stats->nr_writeback += wb_stat(wb, WB_WRITEBACK);
@@ -522,10 +531,6 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 
 	wb->bdi = bdi;
 	wb->last_old_flush = jiffies;
-	INIT_LIST_HEAD(&wb->b_dirty);
-	INIT_LIST_HEAD(&wb->b_io);
-	INIT_LIST_HEAD(&wb->b_more_io);
-	INIT_LIST_HEAD(&wb->b_dirty_time);
 	spin_lock_init(&wb->list_lock);
 
 	atomic_set(&wb->writeback_inodes, 0);
@@ -538,7 +543,6 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 
 	spin_lock_init(&wb->work_lock);
 	INIT_LIST_HEAD(&wb->work_list);
-	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
 	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
 
 	for (i = 0; i < NR_WB_CTX; i++) {
@@ -556,8 +560,9 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 		INIT_LIST_HEAD(ctx_b_io_list(wb, i));
 		INIT_LIST_HEAD(ctx_b_more_io_list(wb, i));
 
-		INIT_DELAYED_WORK(&p_wb_ctx->pctx_dwork, wb_workfn);
+		INIT_DELAYED_WORK(&p_wb_ctx->pctx_dwork, wb_ctx_workfn);
 	}
+
 	err = fprop_local_init_percpu(&wb->completions, gfp);
 	if (err)
 		return err;
@@ -590,15 +595,23 @@ static void wb_shutdown(struct bdi_writeback *wb)
 	 * tells wb_workfn() that @wb is dying and its work_list needs to
 	 * be drained no matter what.
 	 */
-	mod_delayed_work(bdi_wq, &wb->dwork, 0);
-	flush_delayed_work(&wb->dwork);
+	for (int i = 0; i < NR_WB_CTX; i++) {
+		struct wb_ctx *p_wb_ctx = ctx_wb_struct(wb, i);
+
+		mod_delayed_work(bdi_wq, &p_wb_ctx->pctx_dwork, 0);
+		flush_delayed_work(&p_wb_ctx->pctx_dwork);
+	}
 	WARN_ON(!list_empty(&wb->work_list));
 	flush_delayed_work(&wb->bw_dwork);
 }
 
 static void wb_exit(struct bdi_writeback *wb)
 {
-	WARN_ON(delayed_work_pending(&wb->dwork));
+	for (int i = 0; i < NR_WB_CTX; i++) {
+		struct wb_ctx *p_wb_ctx = ctx_wb_struct(wb, i);
+
+		WARN_ON(delayed_work_pending(&p_wb_ctx->pctx_dwork));
+	}
 	percpu_counter_destroy_many(wb->stat, NR_WB_STAT_ITEMS);
 	fprop_local_destroy_percpu(&wb->completions);
 }

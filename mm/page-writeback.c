@@ -1255,54 +1255,60 @@ static void wb_position_ratio(struct dirty_throttle_control *dtc)
 	dtc->pos_ratio = pos_ratio;
 }
 
-static void wb_update_write_bandwidth(struct bdi_writeback *wb,
+static void wb_pctx_update_write_bandwidth(struct bdi_writeback *wb,
 				      unsigned long elapsed,
 				      unsigned long written)
 {
 	const unsigned long period = roundup_pow_of_two(3 * HZ);
-	unsigned long avg = wb->avg_write_bandwidth;
-	unsigned long old = wb->write_bandwidth;
 	u64 bw;
+	int i;
 
-	/*
-	 * bw = written * HZ / elapsed
-	 *
-	 *                   bw * elapsed + write_bandwidth * (period - elapsed)
-	 * write_bandwidth = ---------------------------------------------------
-	 *                                          period
-	 *
-	 * @written may have decreased due to folio_redirty_for_writepage().
-	 * Avoid underflowing @bw calculation.
-	 */
-	bw = written - min(written, wb->written_stamp);
-	bw *= HZ;
-	if (unlikely(elapsed > period)) {
-		bw = div64_ul(bw, elapsed);
-		avg = bw;
-		goto out;
-	}
-	bw += (u64)wb->write_bandwidth * (period - elapsed);
-	bw >>= ilog2(period);
+	for (i = 0; i < NR_WB_CTX; i++) {
+		unsigned long avg, old;
+		struct wb_ctx *p_wb_ctx = ctx_wb_struct(wb, i);
 
-	/*
-	 * one more level of smoothing, for filtering out sudden spikes
-	 */
-	if (avg > old && old >= (unsigned long)bw)
-		avg -= (avg - old) >> 3;
+		avg = p_wb_ctx->avg_write_bandwidth;
+		old = p_wb_ctx->write_bandwidth;
+		/*
+		 * bw = written * HZ / elapsed
+		 *
+		 *                   bw * elapsed + write_bandwidth * (period - elapsed)
+		 * write_bandwidth = ---------------------------------------------------
+		 *                                          period
+		 *
+		 * @written may have decreased due to folio_redirty_for_writepage().
+		 * Avoid underflowing @bw calculation.
+		 */
+		bw = written - min(written, wb->written_stamp);
+		bw *= HZ;
+		if (unlikely(elapsed > period)) {
+			bw = div64_ul(bw, elapsed);
+			avg = bw;
+			goto out;
+		}
+		bw += (u64)p_wb_ctx->write_bandwidth * (period - elapsed);
+		bw >>= ilog2(period);
 
-	if (avg < old && old <= (unsigned long)bw)
-		avg += (old - avg) >> 3;
+		/*
+		 * one more level of smoothing, for filtering out sudden spikes
+		 */
+		if (avg > old && old >= (unsigned long)bw)
+			avg -= (avg - old) >> 3;
 
+		if (avg < old && old <= (unsigned long)bw)
+			avg += (old - avg) >> 3;
 out:
-	/* keep avg > 0 to guarantee that tot > 0 if there are dirty wbs */
-	avg = max(avg, 1LU);
-	if (wb_has_dirty_io(wb)) {
-		long delta = avg - wb->avg_write_bandwidth;
-		WARN_ON_ONCE(atomic_long_add_return(delta,
-					&wb->bdi->tot_write_bandwidth) <= 0);
+		/* keep avg > 0 to guarantee that tot > 0 if there are dirty wbs */
+		avg = max(avg, 1LU);
+		if (wb_ctx_has_dirty_io(p_wb_ctx)) {
+			long delta = avg - p_wb_ctx->avg_write_bandwidth;
+
+			WARN_ON_ONCE(atomic_long_add_return(delta,
+						&wb->bdi->tot_write_bandwidth) <= 0);
+		}
+		p_wb_ctx->write_bandwidth = bw;
+		WRITE_ONCE(p_wb_ctx->avg_write_bandwidth, avg);
 	}
-	wb->write_bandwidth = bw;
-	WRITE_ONCE(wb->avg_write_bandwidth, avg);
 }
 
 static void update_dirty_limit(struct dirty_throttle_control *dtc)
@@ -1545,7 +1551,7 @@ static void __wb_update_bandwidth(struct dirty_throttle_control *gdtc,
 			wb_update_dirty_ratelimit(mdtc, dirtied, elapsed);
 		}
 	}
-	wb_update_write_bandwidth(wb, elapsed, written);
+	wb_pctx_update_write_bandwidth(wb, elapsed, written);
 
 	wb->dirtied_stamp = dirtied;
 	wb->written_stamp = written;

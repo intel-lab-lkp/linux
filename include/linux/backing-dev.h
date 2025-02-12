@@ -37,7 +37,7 @@ void bdi_unregister(struct backing_dev_info *bdi);
 struct backing_dev_info *bdi_alloc(int node_id);
 
 void wb_start_background_writeback(struct bdi_writeback *wb);
-void wb_workfn(struct work_struct *work);
+void wb_ctx_workfn(struct work_struct *work);
 
 void wb_wait_for_completion(struct wb_completion *done);
 
@@ -48,7 +48,21 @@ extern struct workqueue_struct *bdi_wq;
 
 static inline bool wb_has_dirty_io(struct bdi_writeback *wb)
 {
-	return test_bit(WB_has_dirty_io, &wb->state);
+	bool state;
+	struct wb_ctx *p_wb_ctx;
+
+	for (int i = 0; i < NR_WB_CTX; i++) {
+		p_wb_ctx = ctx_wb_struct(wb, i);
+		state =  test_bit(WB_has_dirty_io, &p_wb_ctx->state);
+		if (state)
+			return state;
+	}
+	return false;
+}
+
+static inline bool wb_ctx_has_dirty_io(struct wb_ctx *p_wb_ctx)
+{
+	return test_bit(WB_has_dirty_io, &p_wb_ctx->state);
 }
 
 static inline bool bdi_has_dirty_io(struct backing_dev_info *bdi)
@@ -138,7 +152,21 @@ int bdi_init(struct backing_dev_info *bdi);
  */
 static inline bool writeback_in_progress(struct bdi_writeback *wb)
 {
-	return test_bit(WB_writeback_running, &wb->state);
+	bool state;
+	struct wb_ctx *p_wb_ctx;
+
+	for (int i = 0; i < NR_WB_CTX; i++) {
+		p_wb_ctx = ctx_wb_struct(wb, i);
+		state =  test_bit(WB_writeback_running, &p_wb_ctx->state);
+		if (state)
+			return state;
+	}
+	return false;
+}
+
+static inline bool writeback_ctx_in_progress(struct wb_ctx *p_wb_ctx)
+{
+	return test_bit(WB_writeback_running, &p_wb_ctx->state);
 }
 
 struct backing_dev_info *inode_to_bdi(struct inode *inode);
