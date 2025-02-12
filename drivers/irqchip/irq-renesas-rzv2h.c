@@ -15,6 +15,7 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/irqchip.h>
+#include <linux/irqchip/irq-renesas-rzv2h.h>
 #include <linux/irqdomain.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
@@ -41,6 +42,8 @@
 #define ICU_TSCLR				0x24
 #define ICU_TITSR(k)				(0x28 + (k) * 4)
 #define ICU_TSSR(k)				(0x30 + (k) * 4)
+#define ICU_DMkSELy(k, y)			(0x420 + (k) * 0x20 + (y) * 4)
+#define ICU_DMACKSELk(k)			(0x500 + (k) * 4)
 
 /* NMI */
 #define ICU_NMI_EDGE_FALLING			0
@@ -80,6 +83,19 @@
 #define ICU_TINT_EXTRACT_GPIOINT(x)		FIELD_GET(GENMASK(31, 16), (x))
 #define ICU_PB5_TINT				0x55
 
+/* DMAC */
+#define ICU_DMAC_DkRQ_SEL_MASK			GENMASK(9, 0)
+
+#define ICU_DMAC_DMAREQ_SHIFT(up)		((up) * 16)
+#define ICU_DMAC_DMAREQ_MASK(up)		(ICU_DMAC_DkRQ_SEL_MASK \
+						 << ICU_DMAC_DMAREQ_SHIFT(up))
+#define ICU_DMAC_PREP_DMAREQ(sel, up)		(FIELD_PREP(ICU_DMAC_DkRQ_SEL_MASK, (sel)) \
+						 << ICU_DMAC_DMAREQ_SHIFT(up))
+
+#define ICU_DMAC_DACK_SEL_SHIFT(field_no)	((field_no) * 8)
+#define ICU_DMAC_DACK_SEL_MASK(field_no)	(GENMASK(6, 0) << ICU_DMAC_DACK_SEL_SHIFT(field_no))
+#define ICU_DMAC_PREP_DACK_SEL(sel, field_no)	((sel) << ICU_DMAC_DACK_SEL_SHIFT(field_no))
+
 /**
  * struct rzv2h_icu_priv - Interrupt Control Unit controller private data structure.
  * @base:	Controller's base address
@@ -93,6 +109,45 @@ struct rzv2h_icu_priv {
 	struct irq_fwspec		fwspec[ICU_NUM_IRQ];
 	raw_spinlock_t			lock;
 };
+
+void rzv2h_icu_register_dma_req_ack(struct platform_device *icu_dev, u8 dmac_index, u8 dmac_channel,
+				    u16 req_no, u8 ack_no)
+{
+	struct rzv2h_icu_priv *priv = platform_get_drvdata(icu_dev);
+	u32 icu_dmackselk, dmaack, dmaack_mask;
+	u32 icu_dmksely, dmareq, dmareq_mask;
+	u8 k, field_no;
+	u8 y, upper;
+
+	if (req_no >= RZV2H_ICU_DMAC_REQ_NO_MIN_FIX_OUTPUT)
+		req_no = RZV2H_ICU_DMAC_REQ_NO_DEFAULT;
+
+	if (ack_no >= RZV2H_ICU_DMAC_ACK_NO_MIN_FIX_OUTPUT)
+		ack_no = RZV2H_ICU_DMAC_ACK_NO_DEFAULT;
+
+	y = dmac_channel / 2;
+	upper = dmac_channel % 2;
+
+	dmareq = ICU_DMAC_PREP_DMAREQ(req_no, upper);
+	dmareq_mask = ICU_DMAC_DMAREQ_MASK(upper);
+
+	k  = ack_no / 4;
+	field_no = ack_no % 4;
+
+	dmaack_mask = ICU_DMAC_DACK_SEL_MASK(field_no);
+	dmaack = ICU_DMAC_PREP_DACK_SEL(ack_no, field_no);
+
+	guard(raw_spinlock_irqsave)(&priv->lock);
+
+	icu_dmksely = readl(priv->base + ICU_DMkSELy(dmac_index, y));
+	icu_dmksely = (icu_dmksely & ~dmareq_mask) | dmareq;
+	writel(icu_dmksely, priv->base + ICU_DMkSELy(dmac_index, y));
+
+	icu_dmackselk = readl(priv->base + ICU_DMACKSELk(k));
+	icu_dmackselk = (icu_dmackselk & ~dmaack_mask) | dmaack;
+	writel(icu_dmackselk, priv->base + ICU_DMACKSELk(k));
+}
+EXPORT_SYMBOL_GPL(rzv2h_icu_register_dma_req_ack);
 
 static inline struct rzv2h_icu_priv *irq_data_to_priv(struct irq_data *data)
 {
@@ -446,6 +501,7 @@ static int rzv2h_icu_init(struct device_node *node, struct device_node *parent)
 		goto put_dev;
 	}
 
+	platform_set_drvdata(pdev, rzv2h_icu_data);
 	rzv2h_icu_data->irqchip = &rzv2h_icu_chip;
 
 	rzv2h_icu_data->base = devm_of_iomap(&pdev->dev, pdev->dev.of_node, 0, NULL);
