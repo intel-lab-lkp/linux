@@ -2255,7 +2255,7 @@ static u64 PROG_NAME_ARGS(stack_size)(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5, \
 
 EVAL6(DEFINE_BPF_PROG_RUN, 32, 64, 96, 128, 160, 192);
 EVAL6(DEFINE_BPF_PROG_RUN, 224, 256, 288, 320, 352, 384);
-EVAL4(DEFINE_BPF_PROG_RUN, 416, 448, 480, 512);
+EVAL5(DEFINE_BPF_PROG_RUN, 416, 448, 480, 512, 544);
 
 EVAL6(DEFINE_BPF_PROG_RUN_ARGS, 32, 64, 96, 128, 160, 192);
 EVAL6(DEFINE_BPF_PROG_RUN_ARGS, 224, 256, 288, 320, 352, 384);
@@ -2267,8 +2267,11 @@ static unsigned int (*interpreters[])(const void *ctx,
 				      const struct bpf_insn *insn) = {
 EVAL6(PROG_NAME_LIST, 32, 64, 96, 128, 160, 192)
 EVAL6(PROG_NAME_LIST, 224, 256, 288, 320, 352, 384)
-EVAL4(PROG_NAME_LIST, 416, 448, 480, 512)
+EVAL5(PROG_NAME_LIST, 416, 448, 480, 512, 544)
 };
+
+#define MAX_INTERPRETERS_CALLBACK (sizeof(interpreters) / sizeof(*interpreters))
+
 #undef PROG_NAME_LIST
 #define PROG_NAME_LIST(stack_size) PROG_NAME_ARGS(stack_size),
 static __maybe_unused
@@ -2380,8 +2383,10 @@ static void bpf_prog_select_func(struct bpf_prog *fp)
 {
 #ifndef CONFIG_BPF_JIT_ALWAYS_ON
 	u32 stack_depth = max_t(u32, fp->aux->stack_depth, 1);
+	u32 idx = (round_up(stack_depth, 32) / 32) - 1;
 
-	fp->bpf_func = interpreters[(round_up(stack_depth, 32) / 32) - 1];
+	WARN_ON_ONCE(idx >= MAX_INTERPRETERS_CALLBACK);
+	fp->bpf_func = interpreters[idx];
 #else
 	fp->bpf_func = __bpf_prog_ret0_warn;
 #endif
