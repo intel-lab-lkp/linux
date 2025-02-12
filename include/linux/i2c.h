@@ -949,6 +949,16 @@ static inline u8 i2c_8bit_addr_from_msg(const struct i2c_msg *msg)
 	return (msg->addr << 1) | (msg->flags & I2C_M_RD);
 }
 
+static inline u8 i2c_10bit_addr_from_msg(const struct i2c_msg *msg)
+{
+	/*
+	 * 10-bit address
+	 *   addr_1: 5'b11110 | addr[9:8] | (R/nW)
+	 *   addr_2: addr[7:0]
+	 */
+	return 0xf0 | ((msg->addr & GENMASK(9, 8)) >> 7) | (msg->flags & I2C_M_RD);
+}
+
 u8 *i2c_get_dma_safe_msg_buf(struct i2c_msg *msg, unsigned int threshold);
 void i2c_put_dma_safe_msg_buf(u8 *buf, struct i2c_msg *msg, bool xferred);
 
