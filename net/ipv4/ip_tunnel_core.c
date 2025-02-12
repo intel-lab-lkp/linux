@@ -147,8 +147,7 @@ struct metadata_dst *iptunnel_metadata_reply(struct metadata_dst *md,
 		dst->key.u.ipv4.dst = src->key.u.ipv4.src;
 	ip_tunnel_flags_copy(dst->key.tun_flags, src->key.tun_flags);
 	dst->mode = src->mode | IP_TUNNEL_INFO_TX;
-	ip_tunnel_info_opts_set(dst, ip_tunnel_info_opts(src),
-				src->options_len, tun_flags);
+	ip_tunnel_info_opts_set(dst, src->options, src->options_len, tun_flags);
 
 	return res;
 }
@@ -490,7 +489,8 @@ static int ip_tun_parse_opts_geneve(struct nlattr *attr,
 		return -EINVAL;
 
 	if (info) {
-		struct geneve_opt *opt = ip_tunnel_info_opts(info) + opts_len;
+		struct geneve_opt *opt =
+			(struct geneve_opt *)(info->options + opts_len);
 
 		memcpy(opt->opt_data, nla_data(attr), data_len);
 		opt->length = data_len / 4;
@@ -521,7 +521,7 @@ static int ip_tun_parse_opts_vxlan(struct nlattr *attr,
 
 	if (info) {
 		struct vxlan_metadata *md =
-			ip_tunnel_info_opts(info) + opts_len;
+			(struct vxlan_metadata *)(info->options + opts_len);
 
 		attr = tb[LWTUNNEL_IP_OPT_VXLAN_GBP];
 		md->gbp = nla_get_u32(attr);
@@ -562,7 +562,7 @@ static int ip_tun_parse_opts_erspan(struct nlattr *attr,
 
 	if (info) {
 		struct erspan_metadata *md =
-			ip_tunnel_info_opts(info) + opts_len;
+			(struct erspan_metadata *)(info->options + opts_len);
 
 		md->version = ver;
 		if (ver == 1) {
@@ -746,7 +746,7 @@ static int ip_tun_fill_encap_opts_geneve(struct sk_buff *skb,
 		return -ENOMEM;
 
 	while (tun_info->options_len > offset) {
-		opt = ip_tunnel_info_opts(tun_info) + offset;
+		opt = (struct geneve_opt *)(tun_info->options + offset);
 		if (nla_put_be16(skb, LWTUNNEL_IP_OPT_GENEVE_CLASS,
 				 opt->opt_class) ||
 		    nla_put_u8(skb, LWTUNNEL_IP_OPT_GENEVE_TYPE, opt->type) ||
@@ -772,7 +772,7 @@ static int ip_tun_fill_encap_opts_vxlan(struct sk_buff *skb,
 	if (!nest)
 		return -ENOMEM;
 
-	md = ip_tunnel_info_opts(tun_info);
+	md = (struct vxlan_metadata *)tun_info->options;
 	if (nla_put_u32(skb, LWTUNNEL_IP_OPT_VXLAN_GBP, md->gbp)) {
 		nla_nest_cancel(skb, nest);
 		return -ENOMEM;
@@ -792,7 +792,7 @@ static int ip_tun_fill_encap_opts_erspan(struct sk_buff *skb,
 	if (!nest)
 		return -ENOMEM;
 
-	md = ip_tunnel_info_opts(tun_info);
+	md = (struct erspan_metadata *)tun_info->options;
 	if (nla_put_u8(skb, LWTUNNEL_IP_OPT_ERSPAN_VER, md->version))
 		goto err;
 
@@ -875,7 +875,7 @@ static int ip_tun_opts_nlsize(struct ip_tunnel_info *info)
 
 		opt_len += nla_total_size(0);	/* LWTUNNEL_IP_OPTS_GENEVE */
 		while (info->options_len > offset) {
-			opt = ip_tunnel_info_opts(info) + offset;
+			opt = (struct geneve_opt *)(info->options + offset);
 			opt_len += nla_total_size(2)	/* OPT_GENEVE_CLASS */
 				   + nla_total_size(1)	/* OPT_GENEVE_TYPE */
 				   + nla_total_size(opt->length * 4);
@@ -886,7 +886,8 @@ static int ip_tun_opts_nlsize(struct ip_tunnel_info *info)
 		opt_len += nla_total_size(0)	/* LWTUNNEL_IP_OPTS_VXLAN */
 			   + nla_total_size(4);	/* OPT_VXLAN_GBP */
 	} else if (test_bit(IP_TUNNEL_ERSPAN_OPT_BIT, info->key.tun_flags)) {
-		struct erspan_metadata *md = ip_tunnel_info_opts(info);
+		struct erspan_metadata *md =
+			(struct erspan_metadata *)info->options;
 
 		opt_len += nla_total_size(0)	/* LWTUNNEL_IP_OPTS_ERSPAN */
 			   + nla_total_size(1)	/* OPT_ERSPAN_VER */
@@ -920,8 +921,7 @@ static int ip_tun_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 	return memcmp(info_a, info_b, sizeof(info_a->key)) ||
 	       info_a->mode != info_b->mode ||
 	       info_a->options_len != info_b->options_len ||
-	       memcmp(ip_tunnel_info_opts(info_a),
-		      ip_tunnel_info_opts(info_b), info_a->options_len);
+	       memcmp(info_a->options, info_b->options, info_a->options_len);
 }
 
 static const struct lwtunnel_encap_ops ip_tun_lwt_ops = {

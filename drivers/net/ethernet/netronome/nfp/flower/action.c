@@ -333,7 +333,7 @@ nfp_fl_push_geneve_options(struct nfp_fl_payload *nfp_fl, int *list_len,
 {
 	struct ip_tunnel_info *ip_tun = (struct ip_tunnel_info *)act->tunnel;
 	int opt_len, opt_cnt, act_start, tot_push_len;
-	u8 *src = ip_tunnel_info_opts(ip_tun);
+	u8 *src = ip_tun->options;
 
 	/* We need to populate the options in reverse order for HW.
 	 * Therefore we go through the options, calculating the
@@ -370,7 +370,7 @@ nfp_fl_push_geneve_options(struct nfp_fl_payload *nfp_fl, int *list_len,
 
 	act_start = *list_len;
 	*list_len += tot_push_len;
-	src = ip_tunnel_info_opts(ip_tun);
+	src = ip_tun->options;
 	while (opt_cnt) {
 		struct geneve_opt *opt = (struct geneve_opt *)src;
 		struct nfp_fl_push_geneve *push;

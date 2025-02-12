@@ -100,7 +100,7 @@ static int mlx5e_gen_ip_tunnel_header_vxlan(char buf[],
 	vxh->vx_flags = VXLAN_HF_VNI;
 	vxh->vx_vni = vxlan_vni_field(tun_id);
 	if (test_bit(IP_TUNNEL_VXLAN_OPT_BIT, tun_key->tun_flags)) {
-		md = ip_tunnel_info_opts(e->tun_info);
+		md = (struct vxlan_metadata *)e->tun_info->options;
 		vxlan_build_gbp_hdr(vxh, md);
 	}
 

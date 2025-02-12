@@ -93,12 +93,6 @@ struct ip_tunnel_encap {
 	GENMASK((sizeof_field(struct ip_tunnel_info,		\
 			      options_len) * BITS_PER_BYTE) - 1, 0)
 
-#define ip_tunnel_info_opts(info)				\
-	_Generic(info,						\
-		 const struct ip_tunnel_info * : ((const void *)((info) + 1)),\
-		 struct ip_tunnel_info * : ((void *)((info) + 1))\
-	)
-
 struct ip_tunnel_info {
 	struct ip_tunnel_key	key;
 	struct ip_tunnel_encap	encap;
@@ -107,6 +101,7 @@ struct ip_tunnel_info {
 #endif
 	u8			options_len;
 	u8			mode;
+	u8			options[] __aligned(sizeof(void *)) __counted_by(options_len);
 };
 
 /* 6rd prefix/relay information */
@@ -650,7 +645,7 @@ static inline void iptunnel_xmit_stats(struct net_device *dev, int pkt_len)
 static inline void ip_tunnel_info_opts_get(void *to,
 					   const struct ip_tunnel_info *info)
 {
-	memcpy(to, info + 1, info->options_len);
+	memcpy(to, info->options, info->options_len);
 }
 
 static inline void ip_tunnel_info_opts_set(struct ip_tunnel_info *info,
@@ -659,7 +654,7 @@ static inline void ip_tunnel_info_opts_set(struct ip_tunnel_info *info,
 {
 	info->options_len = len;
 	if (len > 0) {
-		memcpy(ip_tunnel_info_opts(info), from, len);
+		memcpy(info->options, from, len);
 		ip_tunnel_flags_or(info->key.tun_flags, info->key.tun_flags,
 				   flags);
 	}

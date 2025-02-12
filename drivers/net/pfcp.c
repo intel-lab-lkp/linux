@@ -71,7 +71,7 @@ static int pfcp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	if (unlikely(!tun_dst))
 		goto drop;
 
-	md = ip_tunnel_info_opts(&tun_dst->u.tun_info);
+	md = (struct pfcp_metadata *)tun_dst->u.tun_info.options;
 	if (unlikely(!md))
 		goto drop;
 

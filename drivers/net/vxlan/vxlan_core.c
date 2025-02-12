@@ -1761,7 +1761,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 			goto drop;
 		}
 
-		md = ip_tunnel_info_opts(&tun_dst->u.tun_info);
+		md = (struct vxlan_metadata *)tun_dst->u.tun_info.options;
 
 		skb_dst_set(skb, (struct dst_entry *)tun_dst);
 	} else {
@@ -2463,7 +2463,7 @@ void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		if (test_bit(IP_TUNNEL_VXLAN_OPT_BIT, info->key.tun_flags)) {
 			if (info->options_len < sizeof(*md))
 				goto drop;
-			md = ip_tunnel_info_opts(info);
+			md = (struct vxlan_metadata *)info->options;
 		}
 		ttl = info->key.ttl;
 		tos = info->key.tos;

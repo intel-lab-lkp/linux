@@ -217,7 +217,7 @@ static int __psample_ip_tun_to_nlattr(struct sk_buff *skb,
 			      struct ip_tunnel_info *tun_info)
 {
 	unsigned short tun_proto = ip_tunnel_info_af(tun_info);
-	const void *tun_opts = ip_tunnel_info_opts(tun_info);
+	const void *tun_opts = tun_info->options;
 	const struct ip_tunnel_key *tun_key = &tun_info->key;
 	int tun_opts_len = tun_info->options_len;
 
