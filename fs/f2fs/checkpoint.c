@@ -751,6 +751,8 @@ int f2fs_recover_orphan_inodes(struct f2fs_sb_info *sbi)
 	if (is_sbi_flag_set(sbi, SBI_IS_WRITABLE))
 		f2fs_info(sbi, "orphan cleanup on readonly fs");
 
+	set_sbi_flag(sbi, SBI_ORPHAN_RECOVERY);
+
 	start_blk = __start_cp_addr(sbi) + 1 + __cp_payload(sbi);
 	orphan_blocks = __start_sum_addr(sbi) - 1 - __cp_payload(sbi);
 
@@ -778,9 +780,11 @@ int f2fs_recover_orphan_inodes(struct f2fs_sb_info *sbi)
 		}
 		f2fs_put_page(page, 1);
 	}
+
 	/* clear Orphan Flag */
 	clear_ckpt_flags(sbi, CP_ORPHAN_PRESENT_FLAG);
 out:
+	clear_sbi_flag(sbi, SBI_ORPHAN_RECOVERY);
 	set_sbi_flag(sbi, SBI_IS_RECOVERED);
 
 	return err;

@@ -1322,6 +1322,7 @@ enum {
 	SBI_IS_CLOSE,				/* specify unmounting */
 	SBI_NEED_FSCK,				/* need fsck.f2fs to fix */
 	SBI_POR_DOING,				/* recovery is doing or not */
+	SBI_ORPHAN_RECOVERY,			/* orphan inodes recovery is doing */
 	SBI_NEED_SB_WRITE,			/* need to recover superblock */
 	SBI_NEED_CP,				/* need to checkpoint */
 	SBI_IS_SHUTDOWN,			/* shutdown by ioctl */
