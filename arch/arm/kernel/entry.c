@@ -1,71 +1,71 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <asm/entry.h>
-#include <asm/ptrace.h>
-#include <asm/signal.h>
 #include <linux/context_tracking.h>
+#include <linux/entry-common.h>
+#include <linux/hardirq.h>
+#include <linux/irq.h>
 #include <linux/irqflags.h>
+#include <linux/percpu.h>
 #include <linux/rseq.h>
+#include <asm/stacktrace.h>
 
-long syscall_enter_from_user_mode(struct pt_regs *regs, long syscall)
+#include "irq.h"
+
+static void noinstr handle_arm_irq(void *data)
 {
-	trace_hardirqs_on();
-	local_irq_enable();
-	/* This context tracking call has inverse naming */
-	user_exit_callable();
+	struct pt_regs *regs = data;
+	struct pt_regs *old_regs;
 
-	/* This will optionally be modified later */
-	return syscall;
+	irq_enter_rcu();
+	old_regs = set_irq_regs(regs);
+
+	handle_arch_irq(regs);
+
+	set_irq_regs(old_regs);
+	irq_exit_rcu();
 }
 
-void syscall_exit_to_user_mode(struct pt_regs *regs)
+noinstr void arm_irq_handler(struct pt_regs *regs, int mode)
 {
-	unsigned long flags = read_thread_flags();
-
-	rseq_syscall(regs);
-	local_irq_disable();
-	/*
-	 * It really matters that we check for flags != 0 and not
-	 * just for pending work here!
-	 */
-	if (flags)
-		do_work_pending(regs, flags);
-
-	trace_hardirqs_on();
-	/* This context tracking call has inverse naming */
-	user_enter_callable();
-}
-
-noinstr void irqentry_enter_from_user_mode(struct pt_regs *regs)
-{
-	trace_hardirqs_off();
-	/* This context tracking call has inverse naming */
-	user_exit_callable();
-}
-
-noinstr void irqentry_exit_to_user_mode(struct pt_regs *regs)
-{
-	unsigned long flags = read_thread_flags();
+	irqentry_state_t state = irqentry_enter(regs);
 
 	/*
-	 * It really matters that we check for flags != 0 and not
-	 * just for pending work here!
+	 * If we are executing in usermode, or kernel process context
+	 * (on the thread stack) then switch to the IRQ stack. Else we
+	 * are already on the IRQ stack (or the overflow stack) and we
+	 * can just proceed to handle the IRQ.
 	 */
-	if (flags)
-		do_work_pending(regs, flags);
-	trace_hardirqs_on();
-	/* This context tracking call has inverse naming */
-	user_enter_callable();
-}
-
-noinstr void irqentry_enter_from_kernel_mode(struct pt_regs *regs)
-{
-	trace_hardirqs_off();
-}
-
-noinstr void irqentry_exit_to_kernel_mode(struct pt_regs *regs)
-{
-	if (interrupts_enabled(regs))
-		trace_hardirqs_on();
+	if (mode == 1)
+		call_on_irq_stack(handle_arm_irq, regs);
+	else if (on_thread_stack())
+		call_on_irq_stack(handle_arm_irq, regs);
 	else
-		trace_hardirqs_off();
+		handle_arm_irq(regs);
+
+	irqentry_exit(regs, state);
+}
+
+/*
+ * Handle FIQ similarly to NMI on x86 systems.
+ *
+ * The runtime environment for NMIs is extremely restrictive
+ * (NMIs can pre-empt critical sections meaning almost all locking is
+ * forbidden) meaning this default FIQ handling must only be used in
+ * circumstances where non-maskability improves robustness, such as
+ * watchdog or debug logic.
+ *
+ * This handler is not appropriate for general purpose use in drivers
+ * platform code and can be overrideen using set_fiq_handler.
+ */
+noinstr void arm_fiq_handler(struct pt_regs *regs)
+{
+	irqentry_state_t state = irqentry_nmi_enter(regs);
+
+	irqentry_nmi_exit(regs, state);
+}
+
+asmlinkage void arm_exit_to_user_mode(struct pt_regs *regs)
+{
+	local_irq_disable();
+	irqentry_exit_to_user_mode(regs);
 }
