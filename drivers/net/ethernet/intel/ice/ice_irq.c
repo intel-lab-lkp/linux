@@ -149,7 +149,7 @@ int ice_init_interrupt_scheme(struct ice_pf *pf)
 
 	vectors = pci_alloc_irq_vectors(pf->pdev, pf->msix.min, vectors,
 					PCI_IRQ_MSIX);
-	if (vectors < pf->msix.min)
+	if (vectors < 0)
 		return -ENOMEM;
 
 	ice_init_irq_tracker(pf, pf->msix.max, vectors);
