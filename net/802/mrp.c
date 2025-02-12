@@ -12,6 +12,7 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -858,6 +859,10 @@ int mrp_init_applicant(struct net_device *dev, struct mrp_application *appl)
 	int err;
 
 	ASSERT_RTNL();
+
+	err = -EINVAL;
+	if (dev->type != ARPHRD_ETHER || dev->addr_len != ETH_ALEN)
+		goto err1;
 
 	if (!rtnl_dereference(dev->mrp_port)) {
 		err = mrp_init_port(dev);

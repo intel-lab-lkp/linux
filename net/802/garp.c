@@ -9,6 +9,7 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/if_arp.h>
 #include <linux/rtnetlink.h>
 #include <linux/llc.h>
 #include <linux/slab.h>
@@ -573,6 +574,10 @@ int garp_init_applicant(struct net_device *dev, struct garp_application *appl)
 	int err;
 
 	ASSERT_RTNL();
+
+	err = -EINVAL;
+	if (dev->type != ARPHRD_ETHER || dev->addr_len != ETH_ALEN)
+		goto err1;
 
 	if (!rtnl_dereference(dev->garp_port)) {
 		err = garp_init_port(dev);
