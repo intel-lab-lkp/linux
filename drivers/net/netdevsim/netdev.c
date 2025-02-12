@@ -87,7 +87,9 @@ static netdev_tx_t nsim_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (unlikely(nsim_forward_skb(peer_dev, skb, rq) == NET_RX_DROP))
 		goto out_drop_cnt;
 
+	local_bh_disable();
 	napi_schedule(&rq->napi);
+	local_bh_enable();
 
 	rcu_read_unlock();
 	u64_stats_update_begin(&ns->syncp);
