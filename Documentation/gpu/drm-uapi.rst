@@ -583,3 +583,21 @@ dma-buf interoperability
 
 Please see Documentation/userspace-api/dma-buf-alloc-exchange.rst for
 information on how dma-buf is integrated and exposed within DRM.
+
+Low latency hint by user
+========================
+
+Allow users to provide a hint to kernel for cases demanding low latency
+profile. Please note it will have impact on power consumption. User can
+indicate low latency hint with flag while creating exec queue as
+mentioned below,
+
+     struct drm_xe_exec_queue_create exec_queue_create = {
+          .flags = DRM_XE_EXEC_QUEUE_LOW_LATENCY_HINT,
+          .extensions = 0,
+          .vm_id = vm,
+          .num_bb_per_exec = 1,
+          .num_eng_per_bb = 1,
+          .instances = to_user_pointer(&instance),
+     };
+     ioctl(fd, DRM_IOCTL_XE_EXEC_QUEUE_CREATE, &exec_queue_create);
