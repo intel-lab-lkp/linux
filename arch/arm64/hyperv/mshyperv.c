@@ -27,6 +27,36 @@ int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
 	return 0;
 }
 
+static bool hyperv_detect_via_acpi(void)
+{
+	if (acpi_disabled)
+		return false;
+#if IS_ENABLED(CONFIG_ACPI)
+	/* Hypervisor ID is only available in ACPI v6+. */
+	if (acpi_gbl_FADT.header.revision < 6)
+		return false;
+	return strncmp((char *)&acpi_gbl_FADT.hypervisor_id, "MsHyperV", 8) == 0;
+#else
+	return false;
+#endif
+}
+
+static bool hyperv_detect_via_smccc(void)
+{
+	struct arm_smccc_res res = {};
+
+	if (arm_smccc_1_1_get_conduit() != SMCCC_CONDUIT_HVC)
+		return false;
+	arm_smccc_1_1_hvc(ARM_SMCCC_VENDOR_HYP_CALL_UID_FUNC_ID, &res);
+	if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
+		return false;
+
+	return res.a0 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_0 &&
+		res.a1 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_1 &&
+		res.a2 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_2 &&
+		res.a3 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_3;
+}
+
 static int __init hyperv_init(void)
 {
 	struct hv_get_vp_registers_output	result;
@@ -35,13 +65,11 @@ static int __init hyperv_init(void)
 
 	/*
 	 * Allow for a kernel built with CONFIG_HYPERV to be running in
-	 * a non-Hyper-V environment, including on DT instead of ACPI.
+	 * a non-Hyper-V environment.
+	 *
 	 * In such cases, do nothing and return success.
 	 */
-	if (acpi_disabled)
-		return 0;
-
-	if (strncmp((char *)&acpi_gbl_FADT.hypervisor_id, "MsHyperV", 8))
+	if (!hyperv_detect_via_acpi() && !hyperv_detect_via_smccc())
 		return 0;
 
 	/* Setup the guest ID */
@@ -71,6 +99,11 @@ static int __init hyperv_init(void)
 		hv_common_free();
 		return ret;
 	}
+
+	ms_hyperv.vtl = get_vtl();
+	/* Report if non-default VTL */
+	if (ms_hyperv.vtl > 0)
+		pr_info("Linux runs in Hyper-V Virtual Trust Level\n");
 
 	ms_hyperv_late_init();
 

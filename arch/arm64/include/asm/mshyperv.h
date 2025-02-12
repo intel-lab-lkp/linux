@@ -50,4 +50,9 @@ static inline u64 hv_get_msr(unsigned int reg)
 
 #include <asm-generic/mshyperv.h>
 
+#define ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_0	0x4d32ba58U
+#define ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_1	0xcd244764U
+#define ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_2	0x8eef6c75U
+#define ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_3	0x16597024U
+
 #endif
