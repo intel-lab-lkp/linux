@@ -44,11 +44,22 @@ examples:
             #size-cells = <1>;
             ranges;
 
+            gic: intc@fe200000 {
+              compatible = "arm,gic-v3";
+              reg = <0x0 0xfe200000 0x0 0x10000>,   /* GIC Dist */
+                    <0x0 0xfe280000 0x0 0x200000>;  /* GICR */
+              interrupt-controller;
+              #interrupt-cells = <3>;
+            }
+
             vmbus@ff0000000 {
                 compatible = "microsoft,vmbus";
                 #address-cells = <2>;
                 #size-cells = <1>;
                 ranges = <0x0f 0xf0000000 0x0f 0xf0000000 0x10000000>;
+                dma-coherent;
+                interrupt-parent = <&gic>;
+                interrupts = <1 2 1>;
             };
         };
     };
