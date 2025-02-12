@@ -88,7 +88,7 @@ static int check_diff(struct timeval start, struct timeval end)
 	diff += (end.tv_sec - start.tv_sec) * USEC_PER_SEC;
 
 	if (llabs(diff - DELAY * USEC_PER_SEC) > USEC_PER_SEC / 2) {
-		printf("Diff too high: %lld..", diff);
+		printf("Time difference too high: %lld\n", diff);
 		return -1;
 	}
 
