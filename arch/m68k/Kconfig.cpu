@@ -31,6 +31,7 @@ config COLDFIRE
 	select GENERIC_CSUM
 	select GPIOLIB
 	select COMMON_CLK
+	select IRQ_DOMAIN
 	select HAVE_PAGE_SIZE_8KB if !MMU
 
 config SUN3

@@ -43,6 +43,8 @@ config M68K
 	select OLD_SIGSUSPEND3
 	select UACCESS_MEMCPY if !MMU
 	select ZONE_DMA
+	select OF if COLDFIRE
+	select OF_EARLY_FLATTREE if COLDFIRE
 
 config CPU_BIG_ENDIAN
 	def_bool y
