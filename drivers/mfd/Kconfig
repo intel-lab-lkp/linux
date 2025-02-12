@@ -2438,6 +2438,15 @@ config MFD_UPBOARD_FPGA
 
 	  To compile this driver as a module, choose M here: the module will be
 	  called upboard-fpga.
+config MFD_LS6000SE
+	tristate "Loongson Security Module Interface"
+	depends on LOONGARCH && ACPI
+	select MFD_CORE
+	help
+	  The Loongson security module provides the control for hardware
+	  encryption acceleration devices. Each device uses at least one
+	  channel to interact with security module, and each channel may
+	  have its own buffer provided by security module.
 
 endmenu
 endif
