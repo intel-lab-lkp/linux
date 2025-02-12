@@ -1134,8 +1134,8 @@ out:
  *	The returned device has not had its ref count increased
  *	and the caller must therefore be careful about locking
  *
+ *	Return: pointer to the net_device, or NULL if not found
  */
-
 struct net_device *dev_getbyhwaddr_rcu(struct net *net, unsigned short type,
 				       const char *ha)
 {
