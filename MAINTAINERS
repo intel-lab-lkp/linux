@@ -13484,6 +13484,7 @@ LOONGSON CRYPTO DRIVER
 M:	Qunqin Zhao <zhaoqunqin@loongson.com>
 L:	linux-crypto@vger.kernel.org
 S:	Maintained
+F:	drivers/char/tpm/tpm_lsse.c
 F:	drivers/crypto/loongson/
 
 LOONGSON-2 APB DMA DRIVER
