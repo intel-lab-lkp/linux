@@ -20,6 +20,7 @@ description: |
 properties:
   compatible:
     enum:
+      - qcom,qcm6490-lpassaudiocc
       - qcom,sc7280-lpassaoncc
       - qcom,sc7280-lpassaudiocc
       - qcom,sc7280-lpasscorecc
@@ -129,6 +130,19 @@ allOf:
 
         reg:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: qcom,qcm6490-lpassaudiocc
+
+    then:
+      properties:
+        reg:
+          items:
+            - description: lpass core cc register
+            - description: lpass audio csr register
 
 additionalProperties: false
 
