@@ -72,18 +72,36 @@ static inline dma_addr_t dma_range_map_max(const struct bus_dma_region *map)
 	return ret;
 }
 
+static inline dma_addr_t __phys_to_dma(struct device *dev, phys_addr_t paddr)
+{
+	if (dev->dma_range_map)
+		return translate_phys_to_dma(dev, paddr);
+	return paddr;
+}
+
+static inline phys_addr_t __dma_to_phys(struct device *dev, dma_addr_t dma_addr)
+{
+	phys_addr_t paddr;
+
+	if (dev->dma_range_map)
+		paddr = translate_dma_to_phys(dev, dma_addr);
+	else
+		paddr = dma_addr;
+
+	return paddr;
+}
+
 #ifdef CONFIG_ARCH_HAS_PHYS_TO_DMA
 #include <asm/dma-direct.h>
 #ifndef phys_to_dma_unencrypted
 #define phys_to_dma_unencrypted		phys_to_dma
 #endif
 #else
+
 static inline dma_addr_t phys_to_dma_unencrypted(struct device *dev,
 		phys_addr_t paddr)
 {
-	if (dev->dma_range_map)
-		return translate_phys_to_dma(dev, paddr);
-	return paddr;
+	return __phys_to_dma(dev, paddr);
 }
 
 /*
@@ -94,19 +112,12 @@ static inline dma_addr_t phys_to_dma_unencrypted(struct device *dev,
  */
 static inline dma_addr_t phys_to_dma(struct device *dev, phys_addr_t paddr)
 {
-	return __sme_set(phys_to_dma_unencrypted(dev, paddr));
+	return __sme_set(__phys_to_dma(dev, paddr));
 }
 
 static inline phys_addr_t dma_to_phys(struct device *dev, dma_addr_t dma_addr)
 {
-	phys_addr_t paddr;
-
-	if (dev->dma_range_map)
-		paddr = translate_dma_to_phys(dev, dma_addr);
-	else
-		paddr = dma_addr;
-
-	return __sme_clr(paddr);
+	return __sme_clr(__dma_to_phys(dev, dma_addr));
 }
 #endif /* !CONFIG_ARCH_HAS_PHYS_TO_DMA */
 
