@@ -45,6 +45,9 @@ static unsigned int iommu_def_domain_type __read_mostly;
 static bool iommu_dma_strict __read_mostly = IS_ENABLED(CONFIG_IOMMU_DEFAULT_DMA_STRICT);
 static u32 iommu_cmd_line __read_mostly;
 
+/* Tags used with xa_tag_pointer() in group->pasid_array */
+enum { IOMMU_PASID_ARRAY_DOMAIN = 0, IOMMU_PASID_ARRAY_HANDLE = 1 };
+
 struct iommu_group {
 	struct kobject kobj;
 	struct kobject *devices_kobj;
@@ -3331,6 +3334,17 @@ static void __iommu_remove_group_pasid(struct iommu_group *group,
 		iommu_remove_dev_pasid(device->dev, pasid, domain);
 }
 
+static void *iommu_make_pasid_entry(struct iommu_domain *domain,
+				    struct iommu_attach_handle *handle)
+{
+	if (handle) {
+		handle->domain = domain;
+		return xa_tag_pointer(handle, IOMMU_PASID_ARRAY_HANDLE);
+	}
+
+	return xa_tag_pointer(domain, IOMMU_PASID_ARRAY_DOMAIN);
+}
+
 /*
  * iommu_attach_device_pasid() - Attach a domain to pasid of device
  * @domain: the iommu domain.
@@ -3348,6 +3362,7 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 	struct iommu_group *group = dev->iommu_group;
 	struct group_device *device;
 	const struct iommu_ops *ops;
+	void *pasid_entry;
 	int ret;
 
 	if (!group)
@@ -3363,6 +3378,8 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 	if (ops != domain->owner || pasid == IOMMU_NO_PASID)
 		return -EINVAL;
 
+	pasid_entry = iommu_make_pasid_entry(domain, handle);
+
 	mutex_lock(&group->mutex);
 	for_each_group_device(group, device) {
 		if (pasid >= device->dev->iommu->max_pasids) {
@@ -3371,10 +3388,7 @@ int iommu_attach_device_pasid(struct iommu_domain *domain,
 		}
 	}
 
-	if (handle)
-		handle->domain = domain;
-
-	ret = xa_insert(&group->pasid_array, pasid, handle, GFP_KERNEL);
+	ret = xa_insert(&group->pasid_array, pasid, pasid_entry, GFP_KERNEL);
 	if (ret)
 		goto out_unlock;
 
@@ -3454,13 +3468,17 @@ struct iommu_attach_handle *
 iommu_attach_handle_get(struct iommu_group *group, ioasid_t pasid, unsigned int type)
 {
 	struct iommu_attach_handle *handle;
+	void *pasid_entry;
 
 	xa_lock(&group->pasid_array);
-	handle = xa_load(&group->pasid_array, pasid);
-	if (!handle)
+	pasid_entry = xa_load(&group->pasid_array, pasid);
+	if (xa_pointer_tag(pasid_entry) == IOMMU_PASID_ARRAY_HANDLE) {
+		handle = xa_untag_pointer(pasid_entry);
+		if (type && handle->domain->type != type)
+			handle = ERR_PTR(-EBUSY);
+	} else {
 		handle = ERR_PTR(-ENOENT);
-	else if (type && handle->domain->type != type)
-		handle = ERR_PTR(-EBUSY);
+	}
 	xa_unlock(&group->pasid_array);
 
 	return handle;
@@ -3483,15 +3501,17 @@ int iommu_attach_group_handle(struct iommu_domain *domain,
 			      struct iommu_group *group,
 			      struct iommu_attach_handle *handle)
 {
+	void *pasid_entry;
 	int ret;
 
 	if (!handle)
 		return -EINVAL;
 
-	handle->domain = domain;
+	pasid_entry = iommu_make_pasid_entry(domain, handle);
 
 	mutex_lock(&group->mutex);
-	ret = xa_insert(&group->pasid_array, IOMMU_NO_PASID, handle, GFP_KERNEL);
+	ret = xa_insert(&group->pasid_array,
+			IOMMU_NO_PASID, pasid_entry, GFP_KERNEL);
 	if (ret)
 		goto err_unlock;
 
@@ -3544,13 +3564,13 @@ int iommu_replace_group_handle(struct iommu_group *group,
 			       struct iommu_domain *new_domain,
 			       struct iommu_attach_handle *handle)
 {
-	void *curr;
+	void *curr, *pasid_entry;
 	int ret;
 
 	if (!new_domain || !handle)
 		return -EINVAL;
 
-	handle->domain = new_domain;
+	pasid_entry = iommu_make_pasid_entry(new_domain, handle);
 
 	mutex_lock(&group->mutex);
 	ret = xa_reserve(&group->pasid_array, IOMMU_NO_PASID, GFP_KERNEL);
@@ -3561,7 +3581,8 @@ int iommu_replace_group_handle(struct iommu_group *group,
 	if (ret)
 		goto err_release;
 
-	curr = xa_store(&group->pasid_array, IOMMU_NO_PASID, handle, GFP_KERNEL);
+	curr = xa_store(&group->pasid_array,
+			IOMMU_NO_PASID, pasid_entry, GFP_KERNEL);
 	WARN_ON(xa_is_err(curr));
 
 	mutex_unlock(&group->mutex);
