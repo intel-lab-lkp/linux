@@ -306,6 +306,7 @@ static void fill_sg_out(struct scatterlist sg_out[3], void *buf,
 {
 	const struct tls_cipher_desc *cipher_desc =
 		get_cipher_desc(tls_ctx->crypto_send.info.cipher_type);
+	DEBUG_NET_WARN_ON_ONCE(!cipher_desc || !cipher_desc->offloadable);
 
 	sg_set_buf(&sg_out[0], dummy_buf, sync_size);
 	sg_set_buf(&sg_out[1], nskb->data + tcp_payload_offset, payload_len);
