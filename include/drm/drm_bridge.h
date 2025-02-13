@@ -824,8 +824,14 @@ struct drm_bridge {
 	struct drm_private_obj base;
 	/** @dev: DRM device this bridge belongs to */
 	struct drm_device *dev;
-	/** @encoder: encoder to which this bridge is connected */
+
+	/** @encoder:
+	 *
+	 * encoder to which this bridge is connected. Only meaningful
+	 * for non-atomic drivers. Deprecated.
+	 */
 	struct drm_encoder *encoder;
+
 	/** @chain_node: used to form a bridge chain */
 	struct list_head chain_node;
 	/** @of_node: device node pointer to the bridge */
