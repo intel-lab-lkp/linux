@@ -1112,13 +1112,12 @@ static void page_pool_release_retry(struct work_struct *wq)
 	int inflight;
 
 	inflight = page_pool_release(pool);
-	if (!inflight)
-		return;
 
 	/* Periodic warning for page pools the user can't see */
 	netdev = READ_ONCE(pool->slow.netdev);
 	if (time_after_eq(jiffies, pool->defer_warn) &&
-	    (!netdev || netdev == NET_PTR_POISON)) {
+	    (!netdev || netdev == NET_PTR_POISON) &&
+	    inflight != 0) {
 		int sec = (s32)((u32)jiffies - (u32)pool->defer_start) / HZ;
 
 		pr_warn("%s() stalled pool shutdown: id %u, %d inflight %d sec\n",
@@ -1126,7 +1125,15 @@ static void page_pool_release_retry(struct work_struct *wq)
 		pool->defer_warn = jiffies + DEFER_WARN_INTERVAL;
 	}
 
-	/* Still not ready to be disconnected, retry later */
+	/* In rare cases, a driver bug may cause inflight to go negative.
+	 * Don't reschedule release if inflight is 0 or negative.
+	 * - If 0, the page_pool has been destroyed
+	 * - if negative, we will never recover
+	 *   in both cases no reschedule is necessary.
+	 */
+	if (inflight <= 0)
+		return;
+
 	schedule_delayed_work(&pool->release_dw, DEFER_TIME);
 }
 
