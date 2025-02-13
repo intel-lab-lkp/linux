@@ -1,0 +1,20 @@
+What:		/sys/kernel/tsm/<measurement_provider>/<register>
+Date:		February 2025
+Contact:	Cedric Xing <cedric.xing@intel.com>.
+Description:
+		This file contains the value of the measurement register
+		<register>. Depending on the CC architecture, this file may be
+		writable, in which case the value written will be the new value
+		of <register>. Each write must start at the beginning and be of
+		the same size as the file. Partial writes are not permitted.
+
+What:		/sys/kernel/tsm/<measurement_provider>/<register>/<hash>/digest
+Date:		February 2025
+Contact:	Cedric Xing <cedric.xing@intel.com>.
+Description:
+		This file contains the value of the measurement register
+		<register>. Depending on the CC architecture, this file may be
+		writable, in which case any value written may be extended to
+		<register> using <hash>. Each write must start at the beginning
+		and be of the same size as the file. Partial writes are not
+		permitted.
