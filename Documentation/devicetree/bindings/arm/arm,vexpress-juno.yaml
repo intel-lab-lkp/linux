@@ -122,6 +122,10 @@ properties:
         items:
           - const: arm,morello-sdp
           - const: arm,morello
+      - description: Arm Morello Fixed Virtual Platform
+        items:
+          - const: arm,morello-fvp
+          - const: arm,morello
 
   arm,vexpress,position:
     description: When daughterboards are stacked on one site, their position
