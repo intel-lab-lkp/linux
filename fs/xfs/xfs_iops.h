@@ -22,5 +22,4 @@ extern void xfs_diflags_to_iflags(struct xfs_inode *ip, bool init);
 void xfs_get_atomic_write_attr(struct xfs_inode *ip,
 		unsigned int *unit_min, unsigned int *unit_max);
 
-
 #endif /* __XFS_IOPS_H__ */

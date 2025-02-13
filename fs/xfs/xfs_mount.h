@@ -198,6 +198,7 @@ typedef struct xfs_mount {
 	bool			m_fail_unmount;
 	bool			m_finobt_nores; /* no per-AG finobt resv. */
 	bool			m_update_sb;	/* sb needs update in mount */
+	xfs_extlen_t		awu_max;	/* max atomic write */
 
 	/*
 	 * Bitsets of per-fs metadata that have been checked and/or are sick.
