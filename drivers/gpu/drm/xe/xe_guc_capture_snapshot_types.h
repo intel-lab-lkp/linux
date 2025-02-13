@@ -11,8 +11,12 @@
 
 struct guc_mmio_reg;
 
-enum xe_guc_capture_snapshot_source {
-	XE_ENGINE_CAPTURE_SOURCE_MANUAL,
+enum xe_engine_capture_source {
+	/* KMD captured engine registers when job timeout is detected */
+	XE_ENGINE_CAPTURE_SOURCE_MANUAL_JOB,
+	/* KMD captured raw engine registers without any job association */
+	XE_ENGINE_CAPTURE_SOURCE_MANUAL_RAW,
+	/* GUC-FW captured engine registers before workload was killed */
 	XE_ENGINE_CAPTURE_SOURCE_GUC
 };
 
@@ -40,7 +44,7 @@ struct xe_guc_capture_snapshot {
 	u32 lrca;
 	u32 type;
 	bool locked;
-	enum xe_guc_capture_snapshot_source source;
+	enum xe_engine_capture_source source;
 	struct gcap_reg_list_info {
 		u32 vfid;
 		u32 num_regs;
