@@ -11,10 +11,17 @@
 /* Minimum supported BW share value by the HW is 1 Mbit/sec */
 #define MLX5_MIN_BW_SHARE 1
 
-/* Holds rate nodes associated with an E-Switch. */
+/* Holds rate nodes associated with one or more E-Switches.
+ * If cross-esw scheduling is supported, this is shared between all
+ * E-Switches of a NIC.
+ */
 struct mlx5_qos_domain {
 	/* Serializes access to all qos changes in the qos domain. */
 	struct mutex lock;
+	/* Whether this domain is shared with other E-Switches. */
+	bool shared;
+	/* The reference count is only used for shared qos domains. */
+	refcount_t refcnt;
 	/* List of all mlx5_esw_sched_nodes. */
 	struct list_head nodes;
 };
@@ -34,7 +41,7 @@ static void esw_assert_qos_lock_held(struct mlx5_eswitch *esw)
 	lockdep_assert_held(&esw->qos.domain->lock);
 }
 
-static struct mlx5_qos_domain *esw_qos_domain_alloc(void)
+static struct mlx5_qos_domain *esw_qos_domain_alloc(bool shared)
 {
 	struct mlx5_qos_domain *qos_domain;
 
@@ -44,21 +51,75 @@ static struct mlx5_qos_domain *esw_qos_domain_alloc(void)
 
 	mutex_init(&qos_domain->lock);
 	INIT_LIST_HEAD(&qos_domain->nodes);
+	qos_domain->shared = shared;
+	if (shared)
+		refcount_set(&qos_domain->refcnt, 1);
 
 	return qos_domain;
 }
 
-static int esw_qos_domain_init(struct mlx5_eswitch *esw)
+static void esw_qos_devcom_lock(struct mlx5_devcom_comp_dev *devcom, bool shared)
 {
-	esw->qos.domain = esw_qos_domain_alloc();
+	if (shared)
+		mlx5_devcom_comp_lock(devcom);
+}
+
+static void esw_qos_devcom_unlock(struct mlx5_devcom_comp_dev *devcom, bool shared)
+{
+	if (shared)
+		mlx5_devcom_comp_unlock(devcom);
+}
+
+static int esw_qos_domain_init(struct mlx5_eswitch *esw, bool shared)
+{
+	struct mlx5_devcom_comp_dev *devcom = esw->dev->priv.hca_devcom_comp;
+
+	if (shared && IS_ERR_OR_NULL(devcom)) {
+		esw_info(esw->dev, "Cross-esw QoS cannot be initialized because devcom is unavailable.");
+		shared = false;
+	}
+
+	esw_qos_devcom_lock(devcom, shared);
+	if (shared) {
+		struct mlx5_devcom_comp_dev *pos;
+		struct mlx5_core_dev *peer_dev;
+
+		mlx5_devcom_for_each_peer_entry(devcom, peer_dev, pos) {
+			struct mlx5_eswitch *peer_esw = peer_dev->priv.eswitch;
+
+			if (peer_esw->qos.domain && peer_esw->qos.domain->shared) {
+				esw->qos.domain = peer_esw->qos.domain;
+				refcount_inc(&esw->qos.domain->refcnt);
+				goto unlock;
+			}
+		}
+	}
+
+	/* If no shared domain found, this esw will create one.
+	 * Doing it with the devcom comp lock held prevents races with other
+	 * eswitches doing concurrent init.
+	 */
+	esw->qos.domain = esw_qos_domain_alloc(shared);
+unlock:
+	esw_qos_devcom_unlock(devcom, shared);
 
 	return esw->qos.domain ? 0 : -ENOMEM;
 }
 
 static void esw_qos_domain_release(struct mlx5_eswitch *esw)
 {
-	kfree(esw->qos.domain);
+	struct mlx5_devcom_comp_dev *devcom = esw->dev->priv.hca_devcom_comp;
+	struct mlx5_qos_domain *domain = esw->qos.domain;
+	bool shared = domain->shared;
+
+	/* Shared domains are released with the devcom comp lock held to
+	 * prevent races with other eswitches doing concurrent init.
+	 */
+	esw_qos_devcom_lock(devcom, shared);
+	if (!shared || refcount_dec_and_test(&domain->refcnt))
+		kfree(domain);
 	esw->qos.domain = NULL;
+	esw_qos_devcom_unlock(devcom, shared);
 }
 
 enum sched_node_type {
@@ -829,7 +890,7 @@ int mlx5_esw_qos_init(struct mlx5_eswitch *esw)
 	if (esw->qos.domain)
 		return 0;  /* Nothing to change. */
 
-	return esw_qos_domain_init(esw);
+	return esw_qos_domain_init(esw, false);
 }
 
 void mlx5_esw_qos_cleanup(struct mlx5_eswitch *esw)
