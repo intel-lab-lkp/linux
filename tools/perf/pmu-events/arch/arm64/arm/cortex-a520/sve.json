@@ -1,0 +1,22 @@
+[
+    {
+        "ArchStdEvent": "SVE_INST_SPEC",
+        "PublicDescription": "Counts speculatively executed operations that are SVE operations."
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT8_SPEC",
+        "PublicDescription": "Counts speculatively executed Advanced SIMD or SVE integer operations with the largest data type an 8-bit integer."
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT16_SPEC",
+        "PublicDescription": "Counts speculatively executed Advanced SIMD or SVE integer operations with the largest data type a 16-bit integer."
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT32_SPEC",
+        "PublicDescription": "Counts speculatively executed Advanced SIMD or SVE integer operations with the largest data type a 32-bit integer."
+    },
+    {
+        "ArchStdEvent": "ASE_SVE_INT64_SPEC",
+        "PublicDescription": "Counts speculatively executed Advanced SIMD or SVE integer operations with the largest data type a 64-bit integer."
+    }
+]

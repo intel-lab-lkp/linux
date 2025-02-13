@@ -1340,6 +1340,11 @@
         "BriefDescription": "Instruction memory access"
     },
     {
+        "EventCode": "0x8125",
+        "EventName": "BUS_REQ_RD_PERCYC",
+        "BriefDescription": "Bus read transactions in progress"
+    },
+    {
         "EventCode": "0x8128",
         "EventName": "DTLB_WALK_PERCYC",
         "BriefDescription": "Data translation table walks in progress."
@@ -1540,6 +1545,11 @@
         "BriefDescription": "Level 2 data cache hardware prefetch."
     },
     {
+        "EventCode": "0x8156",
+        "EventName": "L3D_CACHE_HWPRF",
+        "BriefDescription": "Level 3 data cache hardware prefetch."
+    },
+    {
         "EventCode": "0x8158",
         "EventName": "STALL_FRONTEND_MEMBOUND",
         "BriefDescription": "Frontend stall cycles, memory bound."
@@ -1673,6 +1683,11 @@
         "EventCode": "0x818A",
         "EventName": "DTLB_WALK_PAGE",
         "BriefDescription": "Data TLB page translation table walk."
+    },
+    {
+        "EventCode": "0x818D",
+        "EventName": "BUS_REQ_RD",
+        "BriefDescription": "Bus request, read"
     },
     {
         "EventCode": "0x818B",

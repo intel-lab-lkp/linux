@@ -1,0 +1,14 @@
+[
+    {
+        "ArchStdEvent": "FP_HP_SPEC",
+        "PublicDescription": "Counts speculatively executed half precision floating point operations."
+    },
+    {
+        "ArchStdEvent": "FP_SP_SPEC",
+        "PublicDescription": "Counts speculatively executed single precision floating point operations."
+    },
+    {
+        "ArchStdEvent": "FP_DP_SPEC",
+        "PublicDescription": "Counts speculatively executed double precision floating point operations."
+    }
+]
