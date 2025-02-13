@@ -1879,18 +1879,6 @@ static void __mcheck_cpu_init_prepare_banks(void)
 
 static void apply_quirks_amd(struct cpuinfo_x86 *c)
 {
-	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
-
-	/* This should be disabled by the BIOS, but isn't always */
-	if (c->x86 == 15 && this_cpu_read(mce_num_banks) > 4) {
-		/*
-		 * disable GART TBL walk error reporting, which
-		 * trips off incorrectly with the IOMMU & 3ware
-		 * & Cerberus:
-		 */
-		clear_bit(10, (unsigned long *)&mce_banks[4].ctl);
-	}
-
 	if (c->x86 < 0x11 && mca_cfg.bootlog < 0) {
 		/*
 		 * Lots of broken BIOS around that don't clear them
@@ -1898,13 +1886,6 @@ static void apply_quirks_amd(struct cpuinfo_x86 *c)
 		 */
 		mca_cfg.bootlog = 0;
 	}
-
-	/*
-	 * Various K7s with broken bank 0 around. Always disable
-	 * by default.
-	 */
-	if (c->x86 == 6 && this_cpu_read(mce_num_banks))
-		mce_banks[0].ctl = 0;
 
 	/*
 	 * overflow_recov is supported for F15h Models 00h-0fh
@@ -1919,22 +1900,9 @@ static void apply_quirks_amd(struct cpuinfo_x86 *c)
 
 static void apply_quirks_intel(struct cpuinfo_x86 *c)
 {
-	struct mce_bank *mce_banks = this_cpu_ptr(mce_banks_array);
-
 	/* Older CPUs (prior to family 6) don't need quirks. */
 	if (c->x86_vfm < INTEL_PENTIUM_PRO)
 		return;
-
-	/*
-	 * SDM documents that on family 6 bank 0 should not be written
-	 * because it aliases to another special BIOS controlled
-	 * register.
-	 * But it's not aliased anymore on model 0x1a+
-	 * Don't ignore bank 0 completely because there could be a
-	 * valid event later, merely don't write CTL0.
-	 */
-	if (c->x86_vfm < INTEL_NEHALEM_EP && this_cpu_read(mce_num_banks))
-		mce_banks[0].init = false;
 
 	/*
 	 * All newer Intel systems support MCE broadcasting. Enable
@@ -2255,6 +2223,8 @@ void cpu_mca_init(struct cpuinfo_x86 *c)
 
 	if (cap & MCG_SER_P)
 		mca_cfg.ser = 1;
+
+	__mcheck_cpu_apply_quirks(c);
 }
 
 /*
@@ -2273,8 +2243,6 @@ void mcheck_cpu_init(struct cpuinfo_x86 *c)
 		return;
 
 	__mcheck_cpu_cap_init();
-
-	__mcheck_cpu_apply_quirks(c);
 
 	if (!mce_gen_pool_init()) {
 		mca_cfg.disabled = 1;
