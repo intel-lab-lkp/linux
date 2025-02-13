@@ -115,18 +115,18 @@ static int dsicm_dcs_read_1(struct panel_drv_data *ddata, u8 dcs_cmd, u8 *data)
 static int dsicm_dcs_write_1(struct panel_drv_data *ddata, u8 dcs_cmd, u8 param)
 {
 	return mipi_dsi_dcs_write(ddata->dsi, dcs_cmd, &param, 1);
+
 }
 
 static int dsicm_sleep_in(struct panel_drv_data *ddata)
 
 {
-	int r;
+	struct mipi_dsi_device *dsi = ddata->dsi;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 
 	hw_guard_wait(ddata);
 
-	r = mipi_dsi_dcs_enter_sleep_mode(ddata->dsi);
-	if (r)
-		return r;
+	mipi_dsi_dcs_enter_sleep_mode_multi(&dsi_ctx);
 
 	hw_guard_start(ddata, 120);
 
@@ -137,13 +137,12 @@ static int dsicm_sleep_in(struct panel_drv_data *ddata)
 
 static int dsicm_sleep_out(struct panel_drv_data *ddata)
 {
-	int r;
+	struct mipi_dsi_device *dsi = ddata->dsi;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 
 	hw_guard_wait(ddata);
 
-	r = mipi_dsi_dcs_exit_sleep_mode(ddata->dsi);
-	if (r)
-		return r;
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 
 	hw_guard_start(ddata, 120);
 
@@ -172,15 +171,12 @@ static int dsicm_get_id(struct panel_drv_data *ddata, u8 *id1, u8 *id2, u8 *id3)
 static int dsicm_set_update_window(struct panel_drv_data *ddata)
 {
 	struct mipi_dsi_device *dsi = ddata->dsi;
-	int r;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 
-	r = mipi_dsi_dcs_set_column_address(dsi, 0, ddata->mode.hdisplay - 1);
-	if (r < 0)
-		return r;
+	mipi_dsi_dcs_set_column_address_multi(&dsi_ctx, 0,
+					      ddata->mode.hdisplay - 1);
 
-	r = mipi_dsi_dcs_set_page_address(dsi, 0, ddata->mode.vdisplay - 1);
-	if (r < 0)
-		return r;
+	mipi_dsi_dcs_set_page_address_multi(&dsi_ctx, 0, ddata->mode.vdisplay - 1);
 
 	return 0;
 }
@@ -282,6 +278,8 @@ static void dsicm_hw_reset(struct panel_drv_data *ddata)
 
 static int dsicm_power_on(struct panel_drv_data *ddata)
 {
+	struct mipi_dsi_device *dsi = ddata->dsi;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 	u8 id1, id2, id3;
 	int r;
 
@@ -306,23 +304,16 @@ static int dsicm_power_on(struct panel_drv_data *ddata)
 	if (r)
 		goto err;
 
-	r = mipi_dsi_dcs_set_pixel_format(ddata->dsi, MIPI_DCS_PIXEL_FMT_24BIT);
-	if (r)
-		goto err;
+	mipi_dsi_dcs_set_pixel_format_multi(&dsi_ctx, MIPI_DCS_PIXEL_FMT_24BIT);
 
 	r = dsicm_set_update_window(ddata);
 	if (r)
 		goto err;
 
-	r = mipi_dsi_dcs_set_display_on(ddata->dsi);
-	if (r)
-		goto err;
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
 
-	if (ddata->panel_data->te_support) {
-		r = mipi_dsi_dcs_set_tear_on(ddata->dsi, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
-		if (r)
-			goto err;
-	}
+	if (ddata->panel_data->te_support)
+		mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 
 	/* possible panel bug */
 	msleep(100);
@@ -353,6 +344,7 @@ static int dsicm_power_off(struct panel_drv_data *ddata)
 	ddata->enabled = false;
 
 	r = mipi_dsi_dcs_set_display_off(ddata->dsi);
+
 	if (!r)
 		r = dsicm_sleep_in(ddata);
 
