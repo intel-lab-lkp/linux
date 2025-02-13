@@ -9,6 +9,7 @@
 #include <linux/types.h>
 #include "abi/guc_capture_abi.h"
 #include "xe_guc.h"
+#include "xe_guc_capture_snapshot_types.h"
 #include "xe_guc_fwif.h"
 
 struct xe_exec_queue;
@@ -50,12 +51,14 @@ size_t xe_guc_capture_ads_input_worst_size(struct xe_guc *guc);
 const struct __guc_mmio_reg_descr_group *
 xe_guc_capture_get_reg_desc_list(struct xe_gt *gt, u32 owner, u32 type,
 				 enum guc_capture_list_class_type capture_class, bool is_ext);
-struct xe_guc_capture_snapshot *xe_guc_capture_get_matching_and_lock(struct xe_exec_queue *q);
-void xe_engine_manual_capture(struct xe_hw_engine *hwe, struct xe_hw_engine_snapshot *snapshot);
+struct xe_guc_capture_snapshot *
+xe_guc_capture_get_matching_and_lock(struct xe_exec_queue *q,
+				     enum xe_guc_capture_snapshot_source srctype);
+void xe_guc_capture_snapshot_store_manual_job(struct xe_guc *guc, struct xe_exec_queue *q);
 void xe_engine_snapshot_print(struct xe_hw_engine_snapshot *snapshot, struct drm_printer *p);
 void xe_engine_snapshot_capture_for_queue(struct xe_exec_queue *q);
 void xe_guc_capture_steered_list_init(struct xe_guc *guc);
-void xe_guc_capture_put_matched_nodes(struct xe_guc *guc);
+void xe_guc_capture_put_matched_nodes(struct xe_guc *guc, struct xe_guc_capture_snapshot *n);
 int xe_guc_capture_init(struct xe_guc *guc);
 
 #endif
