@@ -544,7 +544,7 @@ EXPORT_SYMBOL_GPL(mt792x_get_et_stats);
 void mt792x_sta_statistics(struct ieee80211_hw *hw,
 			   struct ieee80211_vif *vif,
 			   struct ieee80211_sta *sta,
-			   struct station_info *sinfo)
+			   struct link_station_info *sinfo)
 {
 	struct mt792x_sta *msta = (struct mt792x_sta *)sta->drv_priv;
 	struct rate_info *txrate = &msta->deflink.wcid.rate;

@@ -995,7 +995,7 @@ DECLARE_EVENT_CLASS(sta_event,
 	)
 );
 
-DEFINE_EVENT(sta_event, drv_sta_statistics,
+DEFINE_EVENT(sta_event, drv_link_sta_statistics,
 	TP_PROTO(struct ieee80211_local *local,
 		 struct ieee80211_sub_if_data *sdata,
 		 struct ieee80211_sta *sta),

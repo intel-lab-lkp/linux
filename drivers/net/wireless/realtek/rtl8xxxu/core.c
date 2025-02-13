@@ -7138,7 +7138,7 @@ rtl8xxxu_ampdu_action(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 static void
 rtl8xxxu_sta_statistics(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			struct ieee80211_sta *sta, struct station_info *sinfo)
+			struct ieee80211_sta *sta, struct link_station_info *sinfo)
 {
 	struct rtl8xxxu_priv *priv = hw->priv;
 
@@ -7636,7 +7636,7 @@ static const struct ieee80211_ops rtl8xxxu_ops = {
 	.sw_scan_complete = rtl8xxxu_sw_scan_complete,
 	.set_key = rtl8xxxu_set_key,
 	.ampdu_action = rtl8xxxu_ampdu_action,
-	.sta_statistics = rtl8xxxu_sta_statistics,
+	.link_sta_statistics = rtl8xxxu_sta_statistics,
 	.get_antenna = rtl8xxxu_get_antenna,
 	.set_tim = rtl8xxxu_set_tim,
 	.sta_add = rtl8xxxu_sta_add,

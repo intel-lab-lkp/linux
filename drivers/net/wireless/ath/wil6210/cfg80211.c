@@ -476,7 +476,7 @@ int wil_cid_fill_sinfo(struct wil6210_vif *vif, int cid,
 
 	sinfo->generation = wil->sinfo_gen;
 
-	sinfo->filled = BIT_ULL(NL80211_STA_INFO_RX_BYTES) |
+	sinfo->links[0]->filled = BIT_ULL(NL80211_STA_INFO_RX_BYTES) |
 			BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
 			BIT_ULL(NL80211_STA_INFO_RX_PACKETS) |
 			BIT_ULL(NL80211_STA_INFO_TX_PACKETS) |
@@ -504,29 +504,29 @@ int wil_cid_fill_sinfo(struct wil6210_vif *vif, int cid,
 		rx_mcs = WIL_BASE_MCS_FOR_EXTENDED_26;
 	}
 
-	sinfo->txrate.flags = tx_rate_flag;
-	sinfo->rxrate.flags = rx_rate_flag;
-	sinfo->txrate.mcs = tx_mcs;
-	sinfo->rxrate.mcs = rx_mcs;
+	sinfo->links[0]->txrate.flags = tx_rate_flag;
+	sinfo->links[0]->rxrate.flags = rx_rate_flag;
+	sinfo->links[0]->txrate.mcs = tx_mcs;
+	sinfo->links[0]->rxrate.mcs = rx_mcs;
 
-	sinfo->txrate.n_bonded_ch =
+	sinfo->links[0]->txrate.n_bonded_ch =
 				  wil_tx_cb_mode_to_n_bonded(reply.evt.tx_mode);
-	sinfo->rxrate.n_bonded_ch =
+	sinfo->links[0]->rxrate.n_bonded_ch =
 			     wil_rx_cb_mode_to_n_bonded(stats->last_cb_mode_rx);
-	sinfo->rx_bytes = stats->rx_bytes;
-	sinfo->rx_packets = stats->rx_packets;
-	sinfo->rx_dropped_misc = stats->rx_dropped;
-	sinfo->tx_bytes = stats->tx_bytes;
-	sinfo->tx_packets = stats->tx_packets;
-	sinfo->tx_failed = stats->tx_errors;
+	sinfo->links[0]->rx_bytes = stats->rx_bytes;
+	sinfo->links[0]->rx_packets = stats->rx_packets;
+	sinfo->links[0]->rx_dropped_misc = stats->rx_dropped;
+	sinfo->links[0]->tx_bytes = stats->tx_bytes;
+	sinfo->links[0]->tx_packets = stats->tx_packets;
+	sinfo->links[0]->tx_failed = stats->tx_errors;
 
 	if (test_bit(wil_vif_fwconnected, vif->status)) {
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
 		if (test_bit(WMI_FW_CAPABILITY_RSSI_REPORTING,
 			     wil->fw_capabilities))
-			sinfo->signal = reply.evt.rssi;
+			sinfo->links[0]->signal = reply.evt.rssi;
 		else
-			sinfo->signal = reply.evt.sqi;
+			sinfo->links[0]->signal = reply.evt.sqi;
 	}
 
 	return rc;

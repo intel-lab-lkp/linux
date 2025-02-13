@@ -200,22 +200,23 @@
 		    __field(u16, llid)		    \
 		    __field(u16, plid)		    \
 		    __field(u8, plink_state)
-#define SINFO_ASSIGN						       \
-	do {							       \
-		__entry->generation = sinfo->generation;	       \
-		__entry->connected_time = sinfo->connected_time;       \
-		__entry->inactive_time = sinfo->inactive_time;	       \
-		__entry->rx_bytes = sinfo->rx_bytes;		       \
-		__entry->tx_bytes = sinfo->tx_bytes;		       \
-		__entry->rx_packets = sinfo->rx_packets;	       \
-		__entry->tx_packets = sinfo->tx_packets;	       \
-		__entry->tx_retries = sinfo->tx_retries;	       \
-		__entry->tx_failed = sinfo->tx_failed;		       \
-		__entry->rx_dropped_misc = sinfo->rx_dropped_misc;     \
-		__entry->beacon_loss_count = sinfo->beacon_loss_count; \
-		__entry->llid = sinfo->llid;			       \
-		__entry->plid = sinfo->plid;			       \
-		__entry->plink_state = sinfo->plink_state;	       \
+#define SINFO_ASSIGN							\
+	struct link_station_info *link_sinfo = sinfo->links[0];		\
+	do {								\
+		__entry->generation = sinfo->generation;		\
+		__entry->connected_time = link_sinfo->connected_time;	\
+		__entry->inactive_time = link_sinfo->inactive_time;	\
+		__entry->rx_bytes = link_sinfo->rx_bytes;		\
+		__entry->tx_bytes = link_sinfo->tx_bytes;		\
+		__entry->rx_packets = link_sinfo->rx_packets;		\
+		__entry->tx_packets = link_sinfo->tx_packets;		\
+		__entry->tx_retries = link_sinfo->tx_retries;		\
+		__entry->tx_failed = link_sinfo->tx_failed;		\
+		__entry->rx_dropped_misc = link_sinfo->rx_dropped_misc;	\
+		__entry->beacon_loss_count = link_sinfo->beacon_loss_count; \
+		__entry->llid = sinfo->llid;				\
+		__entry->plid = sinfo->plid;				\
+		__entry->plink_state = sinfo->plink_state;		\
 	} while (0)
 
 #define BOOL_TO_STR(bo) (bo) ? "true" : "false"
