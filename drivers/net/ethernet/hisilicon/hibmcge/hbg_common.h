@@ -37,6 +37,7 @@ enum hbg_nic_state {
 	HBG_NIC_STATE_RESETTING,
 	HBG_NIC_STATE_RESET_FAIL,
 	HBG_NIC_STATE_NEED_RESET, /* trigger a reset in scheduled task */
+	HBG_NIC_STATE_NP_LINK_FAIL,
 };
 
 enum hbg_reset_type {
@@ -82,7 +83,7 @@ enum hbg_hw_event_type {
 	HBG_HW_EVENT_NONE = 0,
 	HBG_HW_EVENT_INIT, /* driver is loading */
 	HBG_HW_EVENT_RESET,
-
+	HBG_HW_EVENT_CORE_RESET,
 	HBG_HW_EVENT_SERDES_LOOPBACK_ENABLE = 4,
 	HBG_HW_EVENT_SERDES_LOOPBACK_DISABLE = 5,
 };
@@ -257,6 +258,7 @@ struct hbg_stats {
 	u64 tx_dma_err_cnt;
 
 	u64 self_test_rx_pkt_cnt;
+	u64 np_link_fail_cnt;
 };
 
 typedef void (*self_test_pkt_recv)(struct net_device *ndev,

@@ -46,6 +46,16 @@ int hbg_rebuild(struct hbg_priv *priv)
 	return 0;
 }
 
+int hbg_reset_phy(struct hbg_priv *priv)
+{
+	struct phy_device *phydev = priv->mac.phydev;
+
+	if (phydev->drv->soft_reset)
+		return phydev->drv->soft_reset(phydev);
+
+	return genphy_soft_reset(phydev);
+}
+
 static int hbg_reset_prepare(struct hbg_priv *priv, enum hbg_reset_type type)
 {
 	int ret;
@@ -61,12 +71,22 @@ static int hbg_reset_prepare(struct hbg_priv *priv, enum hbg_reset_type type)
 	priv->reset_type = type;
 	set_bit(HBG_NIC_STATE_RESETTING, &priv->state);
 	clear_bit(HBG_NIC_STATE_RESET_FAIL, &priv->state);
-	ret = hbg_hw_event_notify(priv, HBG_HW_EVENT_RESET);
+
+	ret = hbg_reset_phy(priv);
 	if (ret) {
-		set_bit(HBG_NIC_STATE_RESET_FAIL, &priv->state);
-		clear_bit(HBG_NIC_STATE_RESETTING, &priv->state);
+		dev_err(&priv->pdev->dev, "failed to reset phy\n");
+		goto reset_fail;
 	}
 
+	ret = hbg_hw_event_notify(priv, HBG_HW_EVENT_RESET);
+	if (ret)
+		goto reset_fail;
+
+	return 0;
+
+reset_fail:
+	set_bit(HBG_NIC_STATE_RESET_FAIL, &priv->state);
+	clear_bit(HBG_NIC_STATE_RESETTING, &priv->state);
 	return ret;
 }
 

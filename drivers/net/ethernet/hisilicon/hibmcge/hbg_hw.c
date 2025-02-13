@@ -17,6 +17,7 @@
  */
 #define HBG_ENDIAN_CTRL_LE_DATA_BE	0x0
 #define HBG_PCU_FRAME_LEN_PLUS 4
+#define HBG_LINK_FAIL_RETRY_TIMES	5
 
 static bool hbg_hw_spec_is_valid(struct hbg_priv *priv)
 {
@@ -217,12 +218,38 @@ void hbg_hw_fill_buffer(struct hbg_priv *priv, u32 buffer_dma_addr)
 	hbg_reg_write(priv, HBG_REG_RX_CFF_ADDR_ADDR, buffer_dma_addr);
 }
 
-void hbg_hw_adjust_link(struct hbg_priv *priv, u32 speed, u32 duplex)
+int hbg_hw_adjust_link(struct hbg_priv *priv, u32 speed, u32 duplex)
 {
+	struct hbg_stats *stats = &priv->stats;
+	int ret;
+
+	clear_bit(HBG_NIC_STATE_NP_LINK_FAIL, &priv->state);
+	hbg_hw_mac_enable(priv, HBG_STATUS_DISABLE);
+
 	hbg_reg_write_field(priv, HBG_REG_PORT_MODE_ADDR,
 			    HBG_REG_PORT_MODE_M, speed);
 	hbg_reg_write_field(priv, HBG_REG_DUPLEX_TYPE_ADDR,
 			    HBG_REG_DUPLEX_B, duplex);
+
+	ret = hbg_hw_event_notify(priv, HBG_HW_EVENT_CORE_RESET);
+	if (ret)
+		return ret;
+
+	hbg_hw_mac_enable(priv, HBG_STATUS_ENABLE);
+
+	if (!hbg_reg_read_field(priv, HBG_REG_AN_NEG_STATE_ADDR,
+				HBG_REG_AN_NEG_STATE_NP_LINK_OK_B)) {
+		set_bit(HBG_NIC_STATE_NP_LINK_FAIL, &priv->state);
+
+		stats->np_link_fail_cnt++;
+		if (!(stats->np_link_fail_cnt % HBG_LINK_FAIL_RETRY_TIMES))
+			return -EFAULT;
+
+		return -ENOLINK;
+	}
+
+	stats->np_link_fail_cnt = 0;
+	return 0;
 }
 
 /* only support uc filter */

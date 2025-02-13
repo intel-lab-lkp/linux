@@ -3,6 +3,7 @@
 
 #include <linux/phy.h>
 #include "hbg_common.h"
+#include "hbg_err.h"
 #include "hbg_hw.h"
 #include "hbg_mdio.h"
 #include "hbg_reg.h"
@@ -132,6 +133,7 @@ static void hbg_phy_adjust_link(struct net_device *netdev)
 	struct hbg_priv *priv = netdev_priv(netdev);
 	struct phy_device *phydev = netdev->phydev;
 	u32 speed;
+	int ret;
 
 	if (phydev->link != priv->mac.link_status) {
 		if (phydev->link) {
@@ -152,7 +154,16 @@ static void hbg_phy_adjust_link(struct net_device *netdev)
 			priv->mac.speed = speed;
 			priv->mac.duplex = phydev->duplex;
 			priv->mac.autoneg = phydev->autoneg;
-			hbg_hw_adjust_link(priv, speed, phydev->duplex);
+			ret = hbg_hw_adjust_link(priv, speed, phydev->duplex);
+			if (ret == -ENOLINK) {
+				dev_err(&priv->pdev->dev,
+					"failed to link between MAC and PHY\n");
+				hbg_reset_phy(priv);
+			} else if (ret == -EFAULT) {
+				dev_err(&priv->pdev->dev,
+					"failed to fix the MAC link status\n");
+			}
+
 			hbg_flowctrl_cfg(priv);
 		}
 
