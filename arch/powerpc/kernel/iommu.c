@@ -14,6 +14,7 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/mm.h>
+#include <linux/delay.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/dma-mapping.h>
@@ -803,6 +804,7 @@ bool iommu_table_in_use(struct iommu_table *tbl)
 static void iommu_table_free(struct kref *kref)
 {
 	struct iommu_table *tbl;
+	unsigned long start_time;
 
 	tbl = container_of(kref, struct iommu_table, it_kref);
 
@@ -817,8 +819,24 @@ static void iommu_table_free(struct kref *kref)
 	iommu_debugfs_del(tbl);
 
 	/* verify that table contains no entries */
-	if (iommu_table_in_use(tbl))
-		pr_warn("%s: Unexpected TCEs\n", __func__);
+	start_time = jiffies;
+	while (iommu_table_in_use(tbl)) {
+		int sec;
+
+		pr_info("%s: Unexpected TCEs, wait for 50ms\n", __func__);
+		msleep(50);
+
+		/* Come out of the loop if we have already waited for 120 seconds
+		 * for the TCEs to be free'ed. TCE are being free'ed
+		 * asynchronously by some DMA buffer management API - like
+		 * page_pool.
+		 */
+		sec = (s32)((u32)jiffies - (u32)start_time) / HZ;
+		if (sec >= 120) {
+			pr_warn("%s: TCEs still mapped even after 120 seconds\n", __func__);
+			break;
+		}
+	}
 
 	/* free bitmap */
 	vfree(tbl->it_map);
