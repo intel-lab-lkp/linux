@@ -4307,7 +4307,7 @@ static inline ktime_t skb_get_ktime(const struct sk_buff *skb)
 static inline void skb_get_timestamp(const struct sk_buff *skb,
 				     struct __kernel_old_timeval *stamp)
 {
-	*stamp = ns_to_kernel_old_timeval(skb->tstamp);
+	*stamp = ns_to_kernel_old_timeval(ktime_to_ns(skb->tstamp));
 }
 
 static inline void skb_get_new_timestamp(const struct sk_buff *skb,
