@@ -905,22 +905,38 @@ guc_capture_init_node(struct xe_guc *guc, struct xe_guc_capture_snapshot *node)
  *                   list. This list is used for matchup and printout by xe_devcoredump_read
  *                   and xe_engine_snapshot_print, (when user invokes the devcoredump sysfs).
  *
- * GUC --> notify context reset:
- * -----------------------------
+ * DRM Scheduler job-timeout OR GuC-notify guc-id reset:
+ * -----------------------------------------------------
  *     --> guc_exec_queue_timedout_job
- *                   L--> xe_devcoredump
+ *               L--> xe_guc_capture_snapshot_store_manual_job (if GuC didn't report an
+ *                    error capture node for this job)
+ *               L--> xe_devcoredump
  *                          L--> devcoredump_snapshot
- *                               --> xe_hw_engine_snapshot_capture
- *                               --> xe_engine_manual_capture(For manual capture)
+ *                               --> xe_engine_snapshot_capture_for_queue
  *
- * User Sysfs / Debugfs
- * --------------------
- *      --> xe_devcoredump_read->
- *             L--> xxx_snapshot_print
- *                    L--> xe_hw_engine_print --> xe_hw_engine_snapshot_print
- *                          L--> xe_guc_capture_snapshot_print
- *                               Print register lists values saved in matching
- *                               node from guc->capture->outlist
+ * (Printing) User Devcoredump Sysfs
+ * ---------------------------------
+ *      --> xe_devcoredump_read-> (user cats devcoredump)
+ *              L--> xe_devcoredump_deferred_snap_work -> xe_devcoredump_deferred_snap_work
+ *                   L --> __xe_devcoredump_read -> xe_hw_engine_snapshot_print
+ *                         L--> xe_hw_engine_print -> xe_guc_capture_snapshot_print:
+ *                              Prints register list values saved in the matching node that
+ *                              was previously stored in guc->capture->outlist. However if
+ *                              devcoredump was triggered in response to a gt_reset, then it's
+ *                              possible job queues maybe lost or unavailable at the time of
+ *                              printing and a jobless capture would be taken.
+ *
+ *      --> xe_devcoredump_free (when user clears the dump)
+ *             L--> xe_devcoredump_snapshot_free --> xe_hw_engine_snapshot_free ->
+ *                  L--> xe_guc_capture_put_matched_nodes -> xe_guc_capture_put_matched_nodes
+ *
+ * (Printing) User Engine Dump via Debugfs
+ * ---------------------------------------
+ *      --> xe_gt_debugfs_simple_show -> hw_engines -> xe_hw_engine_print
+ *             L--> hw_engine_snapshot_capture -> xe_guc_capture_snapshot_manual_hwe
+ *             L--> xe_guc_capture_snapshot_print (no valid queue provided)
+ *                  (unlike sysfs path above, fallback to jobless immediate dump)
+ *             L--> xe_hw_engine_snapshot_free -> xe_guc_capture_put_matched_nodes
  *
  */
 
