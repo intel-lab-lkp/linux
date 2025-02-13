@@ -33,6 +33,7 @@
 0x00000000410fd4c0,v1,arm/cortex-x1,core
 0x00000000410fd460,v1,arm/cortex-a510,core
 0x00000000410fd470,v1,arm/cortex-a710,core
+0x00000000410fd810,v1,arm/cortex-a720,core
 0x00000000410fd480,v1,arm/cortex-x2,core
 0x00000000410fd490,v1,arm/neoverse-n2-v2,core
 0x00000000410fd4f0,v1,arm/neoverse-n2-v2,core
