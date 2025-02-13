@@ -246,3 +246,13 @@ int hbg_mdio_init(struct hbg_priv *priv)
 	hbg_mdio_init_hw(priv);
 	return hbg_phy_connect(priv);
 }
+
+int hbg_mdio_ioctl(struct hbg_priv *priv, struct ifreq *ifr, int cmd)
+{
+	struct hbg_mac *mac = &priv->mac;
+
+	if (!mac->phydev)
+		return -ENODEV;
+
+	return phy_mii_ioctl(mac->phydev, ifr, cmd);
+}

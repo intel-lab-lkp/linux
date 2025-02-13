@@ -9,4 +9,6 @@
 int hbg_mdio_init(struct hbg_priv *priv);
 void hbg_phy_start(struct hbg_priv *priv);
 void hbg_phy_stop(struct hbg_priv *priv);
+int hbg_mdio_ioctl(struct hbg_priv *priv, struct ifreq *ifr, int cmd);
+
 #endif

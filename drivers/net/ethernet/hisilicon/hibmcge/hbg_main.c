@@ -273,6 +273,23 @@ static netdev_features_t hbg_net_fix_features(struct net_device *netdev,
 	return features & HBG_SUPPORT_FEATURES;
 }
 
+static int hbg_net_eth_ioctl(struct net_device *dev, struct ifreq *ifr, s32 cmd)
+{
+	struct hbg_priv *priv = netdev_priv(dev);
+
+	if (test_bit(HBG_NIC_STATE_RESETTING, &priv->state))
+		return -EBUSY;
+
+	switch (cmd) {
+	case SIOCGMIIPHY:
+	case SIOCGMIIREG:
+	case SIOCSMIIREG:
+		return hbg_mdio_ioctl(priv, ifr, cmd);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_open		= hbg_net_open,
 	.ndo_stop		= hbg_net_stop,
@@ -284,6 +301,7 @@ static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_set_rx_mode	= hbg_net_set_rx_mode,
 	.ndo_get_stats64	= hbg_net_get_stats,
 	.ndo_fix_features	= hbg_net_fix_features,
+	.ndo_eth_ioctl		= hbg_net_eth_ioctl,
 };
 
 static void hbg_service_task(struct work_struct *work)
