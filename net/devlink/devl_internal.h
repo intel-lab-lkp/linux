@@ -121,6 +121,10 @@ static inline void devl_dev_unlock(struct devlink *devlink, bool dev_lock)
 		device_unlock(devlink->dev);
 }
 
+static inline void devl_rate_domain_lock(struct devlink *devlink) { }
+
+static inline void devl_rate_domain_unlock(struct devlink *devlink) { }
+
 typedef void devlink_rel_notify_cb_t(struct devlink *devlink, u32 obj_index);
 typedef void devlink_rel_cleanup_cb_t(struct devlink *devlink, u32 obj_index,
 				      u32 rel_index);
