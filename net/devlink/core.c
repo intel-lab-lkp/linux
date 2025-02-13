@@ -314,6 +314,7 @@ static void devlink_release(struct work_struct *work)
 	mutex_destroy(&devlink->lock);
 	lockdep_unregister_key(&devlink->lock_key);
 	put_device(devlink->dev);
+	kvfree(devlink->rate_domain);
 	kvfree(devlink);
 }
 
@@ -424,6 +425,11 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (!devlink)
 		return NULL;
 
+	devlink->rate_domain = kvzalloc(sizeof(*devlink->rate_domain), GFP_KERNEL);
+	if (!devlink->rate_domain)
+		goto err_rate_domain;
+	INIT_LIST_HEAD(&devlink->rate_domain->rate_list);
+
 	ret = xa_alloc_cyclic(&devlinks, &devlink->index, devlink, xa_limit_31b,
 			      &last_id, GFP_KERNEL);
 	if (ret < 0)
@@ -436,7 +442,6 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	xa_init_flags(&devlink->snapshot_ids, XA_FLAGS_ALLOC);
 	xa_init_flags(&devlink->nested_rels, XA_FLAGS_ALLOC);
 	write_pnet(&devlink->_net, net);
-	INIT_LIST_HEAD(&devlink->rate_list);
 	INIT_LIST_HEAD(&devlink->linecard_list);
 	INIT_LIST_HEAD(&devlink->sb_list);
 	INIT_LIST_HEAD_RCU(&devlink->dpipe_table_list);
@@ -455,6 +460,8 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	return devlink;
 
 err_xa_alloc:
+	kvfree(devlink->rate_domain);
+err_rate_domain:
 	kvfree(devlink);
 	return NULL;
 }
@@ -477,7 +484,7 @@ void devlink_free(struct devlink *devlink)
 	WARN_ON(!list_empty(&devlink->resource_list));
 	WARN_ON(!list_empty(&devlink->dpipe_table_list));
 	WARN_ON(!list_empty(&devlink->sb_list));
-	WARN_ON(!list_empty(&devlink->rate_list));
+	WARN_ON(!list_empty(&devlink->rate_domain->rate_list));
 	WARN_ON(!list_empty(&devlink->linecard_list));
 	WARN_ON(!xa_empty(&devlink->ports));
 

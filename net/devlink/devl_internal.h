@@ -30,10 +30,14 @@ struct devlink_dev_stats {
 	u32 remote_reload_stats[DEVLINK_RELOAD_STATS_ARRAY_SIZE];
 };
 
+/* Stores devlink rates associated with a rate domain. */
+struct devlink_rate_domain {
+	struct list_head rate_list;
+};
+
 struct devlink {
 	u32 index;
 	struct xarray ports;
-	struct list_head rate_list;
 	struct list_head sb_list;
 	struct list_head dpipe_table_list;
 	struct list_head resource_list;
@@ -55,6 +59,7 @@ struct devlink {
 	 */
 	struct mutex lock;
 	struct lock_class_key lock_key;
+	struct devlink_rate_domain *rate_domain;
 	u8 reload_failed:1;
 	refcount_t refcount;
 	struct rcu_work rwork;
