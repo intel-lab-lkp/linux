@@ -420,12 +420,14 @@ static irqreturn_t max_tcpci_isr(int irq, void *dev_id)
 	return IRQ_WAKE_THREAD;
 }
 
-static int max_tcpci_init_alert(struct max_tcpci_chip *chip, struct i2c_client *client)
+static int max_tcpci_init_alert(struct max_tcpci_chip *chip,
+				struct i2c_client *client,
+				const char *name)
 {
 	int ret;
 
 	ret = devm_request_threaded_irq(chip->dev, client->irq, max_tcpci_isr, max_tcpci_irq,
-					(IRQF_TRIGGER_LOW | IRQF_ONESHOT), dev_name(chip->dev),
+					(IRQF_TRIGGER_LOW | IRQF_ONESHOT), name,
 					chip);
 
 	if (ret < 0)
@@ -485,6 +487,7 @@ static int max_tcpci_probe(struct i2c_client *client)
 	int ret;
 	struct max_tcpci_chip *chip;
 	u8 power_status;
+	const char *name;
 
 	chip = devm_kzalloc(&client->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -531,7 +534,11 @@ static int max_tcpci_probe(struct i2c_client *client)
 
 	chip->port = tcpci_get_tcpm_port(chip->tcpci);
 
-	ret = max_tcpci_init_alert(chip, client);
+	name = devm_kasprintf(&client->dev, GFP_KERNEL, "%s-%s",
+			      dev_name(&client->dev), client->name);
+	if (!name)
+		return -ENOMEM;
+	ret = max_tcpci_init_alert(chip, client, name);
 	if (ret < 0)
 		return dev_err_probe(&client->dev, ret,
 				     "IRQ initialization failed\n");
