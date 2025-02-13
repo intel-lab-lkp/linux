@@ -9,17 +9,23 @@
 #include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/rtc.h>
 
+#define CTRL_UNLOCKKEY         0x0004
+#define CTRL0                  0x0008
 #define SEC_PULSE_GEN          0x1004
 #define ALARM_TIME             0x1008
 #define ALARM_ENABLE           0x100C
 #define SET_SEC_CNTR_VAL       0x1010
 #define SET_SEC_CNTR_TRIG      0x1014
 #define SEC_CNTR_VAL           0x1018
+#define EN_PWR_CYC_REQ         0x10C8
+#define EN_WARM_RST_REQ        0x10CC
 
 /*
  * When in VDDBKUP domain, this MACRO register
@@ -27,6 +33,10 @@
  */
 #define MACRO_RO_T             0x14A8
 #define MACRO_RG_SET_T         0x1498
+
+/* CTRL0 bits */
+#define REQ_PWR_CYC            BIT(3)
+#define REQ_WARM_RST           BIT(4)
 
 #define ALARM_ENABLE_MASK      BIT(0)
 #define SEL_SEC_PULSE          BIT(31)
@@ -160,6 +170,29 @@ static const struct rtc_class_ops cv1800_rtc_ops = {
 	.alarm_irq_enable = cv1800_rtc_alarm_irq_enable,
 };
 
+static int cv1800_restart_handler(struct sys_off_data *data)
+{
+	struct cv1800_rtc_priv *info = data->cb_data;
+	u32 reg_en = EN_WARM_RST_REQ;
+	u32 request = 0xFFFF0800;
+
+	if (data->mode == REBOOT_COLD) {
+		reg_en = EN_PWR_CYC_REQ;
+		request |= REQ_PWR_CYC;
+	} else {
+		request |= REQ_WARM_RST;
+	}
+
+	/* Enable reset request */
+	regmap_write(info->rtc_map, reg_en, 1);
+	/* Enable CTRL0 register access */
+	regmap_write(info->rtc_map, CTRL_UNLOCKKEY, 0xAB18);
+	/* Request reset */
+	regmap_write(info->rtc_map, CTRL0, request);
+
+	return NOTIFY_DONE;
+}
+
 static int cv1800_rtc_probe(struct platform_device *pdev)
 {
 	struct cv1800_rtc_priv *rtc;
@@ -205,7 +238,23 @@ static int cv1800_rtc_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, ret,
 				     "cannot register interrupt handler\n");
 
-	return devm_rtc_register_device(rtc->rtc_dev);
+	ret = devm_rtc_register_device(rtc->rtc_dev);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "cannot register RTC\n");
+
+	/*
+	 * SYS_OFF_PRIO_DEFAULT of 0 is desired here because both RiscV SBI SRST
+	 * (prio 192) and ARM PSCI (prio 129) will override this one; this
+	 * handler shall serve as a fallback in cases where firmware is not
+	 * present.
+	 */
+	ret = devm_register_restart_handler(&pdev->dev, cv1800_restart_handler,
+					    rtc);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "cannot register restart handler\n");
+
+	return 0;
 }
 
 static const struct of_device_id cv1800_dt_ids[] = {
