@@ -8,18 +8,21 @@ struct bpf_test_option {
 	__u8 flags;
 	__u8 max_delack_ms;
 	__u8 rand;
+	__u8 max_rto_sec;
 } __attribute__((packed));
 
 enum {
 	OPTION_RESEND,
 	OPTION_MAX_DELACK_MS,
 	OPTION_RAND,
+	OPTION_MAX_RTO_SEC,
 	__NR_OPTION_FLAGS,
 };
 
 #define OPTION_F_RESEND		(1 << OPTION_RESEND)
 #define OPTION_F_MAX_DELACK_MS	(1 << OPTION_MAX_DELACK_MS)
 #define OPTION_F_RAND		(1 << OPTION_RAND)
+#define OPTION_F_MAX_RTO_SEC	(1 << OPTION_MAX_RTO_SEC)
 #define OPTION_MASK		((1 << __NR_OPTION_FLAGS) - 1)
 
 #define TEST_OPTION_FLAGS(flags, option) (1 & ((flags) >> (option)))

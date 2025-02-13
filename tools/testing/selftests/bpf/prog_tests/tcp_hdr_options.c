@@ -60,8 +60,9 @@ static void print_hdr_stg(const struct hdr_stg *hdr_stg, const char *prefix)
 
 static void print_option(const struct bpf_test_option *opt, const char *prefix)
 {
-	fprintf(stderr, "%s{flags:0x%x, max_delack_ms:%u, rand:0x%x}\n",
-		prefix ? : "", opt->flags, opt->max_delack_ms, opt->rand);
+	fprintf(stderr, "%s{flags:0x%x, max_delack_ms:%u, rand:0x%x}, max_rto_sec:%u\n",
+		prefix ? : "", opt->flags, opt->max_delack_ms, opt->rand,
+		opt->max_rto_sec);
 }
 
 static void sk_fds_close(struct sk_fds *sk_fds)
@@ -300,13 +301,17 @@ static void fastopen_estab(void)
 	hdr_stg_map_fd = bpf_map__fd(skel->maps.hdr_stg_map);
 	lport_linum_map_fd = bpf_map__fd(skel->maps.lport_linum_map);
 
-	exp_passive_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS;
+	exp_passive_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS |
+				     OPTION_F_MAX_RTO_SEC;
 	exp_passive_estab_in.rand = 0xfa;
 	exp_passive_estab_in.max_delack_ms = 11;
+	exp_passive_estab_in.max_rto_sec = 1;
 
-	exp_active_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS;
+	exp_active_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS |
+				    OPTION_F_MAX_RTO_SEC;
 	exp_active_estab_in.rand = 0xce;
 	exp_active_estab_in.max_delack_ms = 22;
+	exp_active_estab_in.max_rto_sec = 2;
 
 	exp_passive_hdr_stg.fastopen = true;
 
@@ -337,14 +342,17 @@ static void syncookie_estab(void)
 	hdr_stg_map_fd = bpf_map__fd(skel->maps.hdr_stg_map);
 	lport_linum_map_fd = bpf_map__fd(skel->maps.lport_linum_map);
 
-	exp_passive_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS;
+	exp_passive_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS |
+				     OPTION_F_MAX_RTO_SEC;
 	exp_passive_estab_in.rand = 0xfa;
 	exp_passive_estab_in.max_delack_ms = 11;
+	exp_passive_estab_in.max_rto_sec = 1;
 
 	exp_active_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS |
-					OPTION_F_RESEND;
+				    OPTION_F_RESEND | OPTION_F_MAX_RTO_SEC;
 	exp_active_estab_in.rand = 0xce;
 	exp_active_estab_in.max_delack_ms = 22;
+	exp_active_estab_in.max_rto_sec = 2;
 
 	exp_passive_hdr_stg.syncookie = true;
 	exp_active_hdr_stg.resend_syn = true;
@@ -413,13 +421,17 @@ static void __simple_estab(bool exprm)
 	hdr_stg_map_fd = bpf_map__fd(skel->maps.hdr_stg_map);
 	lport_linum_map_fd = bpf_map__fd(skel->maps.lport_linum_map);
 
-	exp_passive_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS;
+	exp_passive_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS |
+				     OPTION_F_MAX_RTO_SEC;
 	exp_passive_estab_in.rand = 0xfa;
 	exp_passive_estab_in.max_delack_ms = 11;
+	exp_passive_estab_in.max_rto_sec = 1;
 
-	exp_active_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS;
+	exp_active_estab_in.flags = OPTION_F_RAND | OPTION_F_MAX_DELACK_MS |
+				    OPTION_F_MAX_RTO_SEC;
 	exp_active_estab_in.rand = 0xce;
 	exp_active_estab_in.max_delack_ms = 22;
+	exp_active_estab_in.max_rto_sec = 2;
 
 	prepare_out();
 

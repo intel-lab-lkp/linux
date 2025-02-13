@@ -80,6 +80,9 @@ static void write_test_option(const struct bpf_test_option *test_opt,
 
 	if (TEST_OPTION_FLAGS(test_opt->flags, OPTION_RAND))
 		data[offset++] = test_opt->rand;
+
+	if (TEST_OPTION_FLAGS(test_opt->flags, OPTION_MAX_RTO_SEC))
+		data[offset++] = test_opt->max_rto_sec;
 }
 
 static int store_option(struct bpf_sock_ops *skops,
@@ -123,6 +126,9 @@ static int parse_test_option(struct bpf_test_option *opt, const __u8 *start)
 
 	if (TEST_OPTION_FLAGS(opt->flags, OPTION_RAND))
 		opt->rand = *start++;
+
+	if (TEST_OPTION_FLAGS(opt->flags, OPTION_MAX_RTO_SEC))
+		opt->max_rto_sec = *start++;
 
 	return 0;
 }
@@ -411,6 +417,14 @@ static int set_rto_min(struct bpf_sock_ops *skops, __u8 peer_max_delack_ms)
 			      sizeof(min_rto_us));
 }
 
+static int set_rto_max(struct bpf_sock_ops *skops, __u8 max_rto_sec)
+{
+	__u32 max_rto_ms = max_rto_sec * 1000;
+
+	return bpf_setsockopt(skops, SOL_TCP, TCP_BPF_RTO_MAX, &max_rto_ms,
+			      sizeof(max_rto_ms));
+}
+
 static int handle_active_estab(struct bpf_sock_ops *skops)
 {
 	struct hdr_stg init_stg = {
@@ -455,6 +469,12 @@ static int handle_active_estab(struct bpf_sock_ops *skops)
 
 	if (active_estab_in.max_delack_ms) {
 		err = set_rto_min(skops, active_estab_in.max_delack_ms);
+		if (err)
+			RET_CG_ERR(err);
+	}
+
+	if (active_estab_in.max_rto_sec) {
+		err = set_rto_max(skops, active_estab_in.max_rto_sec);
 		if (err)
 			RET_CG_ERR(err);
 	}
@@ -521,6 +541,12 @@ static int handle_passive_estab(struct bpf_sock_ops *skops)
 
 	if (passive_estab_in.max_delack_ms) {
 		err = set_rto_min(skops, passive_estab_in.max_delack_ms);
+		if (err)
+			RET_CG_ERR(err);
+	}
+
+	if (passive_estab_in.max_rto_sec) {
+		err = set_rto_max(skops, passive_estab_in.max_rto_sec);
 		if (err)
 			RET_CG_ERR(err);
 	}
