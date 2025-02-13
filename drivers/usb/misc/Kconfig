@@ -318,7 +318,7 @@ config BRCM_USB_PINMAP
 
 config USB_ONBOARD_DEV
 	tristate "Onboard USB device support"
-	depends on OF
+	depends on (OF && !ACPI)
 	help
 	  Say Y here if you want to support discrete onboard USB devices
 	  that don't require an additional control bus for initialization,
