@@ -125,6 +125,8 @@ struct arm_pmu {
 
 	/* Only to be used by ACPI probing code */
 	unsigned long acpi_cpuid;
+	u8		hpmn; /* MDCR_EL2.HPMN: counter partition pivot */
+	bool		partitioned;
 };
 
 #define to_arm_pmu(p) (container_of(p, struct arm_pmu, pmu))

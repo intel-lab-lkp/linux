@@ -243,6 +243,8 @@ void kvm_host_pmu_init(struct arm_pmu *pmu)
 	entry->arm_pmu = pmu;
 	list_add_tail(&entry->entry, &arm_pmus);
 
+	kvm_pmu_partition(pmu);
+
 	if (list_is_singular(&arm_pmus))
 		static_branch_enable(&kvm_arm_pmu_available);
 

@@ -22,6 +22,10 @@ bool kvm_set_pmuserenr(u64 val);
 void kvm_vcpu_pmu_resync_el0(void);
 void kvm_host_pmu_init(struct arm_pmu *pmu);
 
+u8 kvm_pmu_get_reserved_counters(void);
+u8 kvm_pmu_hpmn(u8 nr_counters);
+void kvm_pmu_partition(struct arm_pmu *pmu);
+
 #else
 
 static inline void kvm_set_pmu_events(u64 set, struct perf_event_attr *attr) {}
