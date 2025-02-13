@@ -214,6 +214,7 @@ config DEBUG_WX
 	  If in doubt, say "Y".
 
 config GENERIC_PTDUMP
+	depends on MMU
 	bool
 
 config PTDUMP_CORE
