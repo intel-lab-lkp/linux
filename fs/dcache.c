@@ -2584,8 +2584,6 @@ retry:
 			goto mismatch;
 		if (unlikely(dentry->d_parent != parent))
 			goto mismatch;
-		if (unlikely(d_unhashed(dentry)))
-			goto mismatch;
 		if (unlikely(!d_same_name(dentry, parent, name)))
 			goto mismatch;
 		/* OK, it *is* a hashed match; return it */
