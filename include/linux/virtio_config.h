@@ -14,6 +14,7 @@ struct irq_affinity;
 struct virtio_shm_region {
 	u64 addr;
 	u64 len;
+	u16 page_size; /* PAGE_SIZE >> 12 */
 };
 
 typedef void vq_callback_t(struct virtqueue *);
