@@ -2224,7 +2224,7 @@ static const struct nla_policy ifla_policy[IFLA_MAX+1] = {
 	[IFLA_PROP_LIST]	= { .type = NLA_NESTED },
 	[IFLA_ALT_IFNAME]	= { .type = NLA_STRING,
 				    .len = ALTIFNAMSIZ - 1 },
-	[IFLA_PERM_ADDRESS]	= { .type = NLA_REJECT },
+	[IFLA_PERM_ADDRESS]	= { .type = NLA_BINARY, .len = MAX_ADDR_LEN },
 	[IFLA_PROTO_DOWN_REASON] = { .type = NLA_NESTED },
 	[IFLA_NEW_IFINDEX]	= NLA_POLICY_MIN(NLA_S32, 1),
 	[IFLA_PARENT_DEV_NAME]	= { .type = NLA_NUL_STRING },
@@ -2647,7 +2647,7 @@ static	int rtnl_set_vf_rate(struct net_device *dev, int vf, int min_tx_rate,
 }
 
 static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
-			    struct netlink_ext_ack *extack)
+			    struct netlink_ext_ack *extack, bool create)
 {
 	if (tb[IFLA_ADDRESS] &&
 	    nla_len(tb[IFLA_ADDRESS]) < dev->addr_len)
@@ -2656,6 +2656,17 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
 	if (tb[IFLA_BROADCAST] &&
 	    nla_len(tb[IFLA_BROADCAST]) < dev->addr_len)
 		return -EINVAL;
+
+	if (tb[IFLA_PERM_ADDRESS]) {
+		if (!create) {
+			NL_SET_ERR_MSG(extack,
+				       "can't change permanent address");
+			return -EINVAL;
+		}
+
+		if (nla_len(tb[IFLA_PERM_ADDRESS]) < dev->addr_len)
+			return -EINVAL;
+	}
 
 	if (tb[IFLA_GSO_MAX_SIZE] &&
 	    nla_get_u32(tb[IFLA_GSO_MAX_SIZE]) > dev->tso_max_size) {
@@ -3010,7 +3021,7 @@ static int do_setlink(const struct sk_buff *skb, struct net_device *dev,
 	char ifname[IFNAMSIZ];
 	int err;
 
-	err = validate_linkmsg(dev, tb, extack);
+	err = validate_linkmsg(dev, tb, extack, false);
 	if (err < 0)
 		goto errout;
 
@@ -3614,7 +3625,7 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
-	err = validate_linkmsg(dev, tb, extack);
+	err = validate_linkmsg(dev, tb, extack, true);
 	if (err < 0) {
 		free_netdev(dev);
 		return ERR_PTR(err);
@@ -3642,6 +3653,9 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 	if (tb[IFLA_BROADCAST])
 		memcpy(dev->broadcast, nla_data(tb[IFLA_BROADCAST]),
 				nla_len(tb[IFLA_BROADCAST]));
+	if (tb[IFLA_PERM_ADDRESS])
+		memcpy(dev->perm_addr, nla_data(tb[IFLA_PERM_ADDRESS]),
+		       nla_len(tb[IFLA_PERM_ADDRESS]));
 	if (tb[IFLA_TXQLEN])
 		dev->tx_queue_len = nla_get_u32(tb[IFLA_TXQLEN]);
 	if (tb[IFLA_OPERSTATE])
