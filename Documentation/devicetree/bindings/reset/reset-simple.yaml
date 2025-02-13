@@ -16,9 +16,13 @@ description:
 
 properties:
   compatible:
-    enum:
-      - reset-simple-high
-      - reset-simple-low
+    oneOf:
+      - items:
+          - enum:
+              - sophgo,sg2042-reset
+          - const: reset-simple-low
+      - const: reset-simple-high
+      - const: reset-simple-low
 
   reg:
     maxItems: 1
