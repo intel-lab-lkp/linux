@@ -89,7 +89,7 @@ void mctrl_gpio_enable_ms(struct mctrl_gpios *gpios);
 /*
  * Disable gpio interrupts to report status line changes.
  */
-void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios);
+void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios, bool sync);
 
 /*
  * Enable gpio wakeup interrupts to enable wake up source.
@@ -148,7 +148,7 @@ static inline void mctrl_gpio_enable_ms(struct mctrl_gpios *gpios)
 {
 }
 
-static inline void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios)
+static inline void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios, bool sync)
 {
 }
 

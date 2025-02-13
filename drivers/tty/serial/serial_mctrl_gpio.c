@@ -325,8 +325,10 @@ EXPORT_SYMBOL_GPL(mctrl_gpio_enable_ms);
 /**
  * mctrl_gpio_disable_ms - disable irqs and handling of changes to the ms lines
  * @gpios: gpios to disable
+ * @sync: true if function should block until any pending IRQ handler has
+ * executed
  */
-void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios)
+void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios, bool sync)
 {
 	enum mctrl_gpio_idx i;
 
@@ -342,7 +344,10 @@ void mctrl_gpio_disable_ms(struct mctrl_gpios *gpios)
 		if (!gpios->irq[i])
 			continue;
 
-		disable_irq(gpios->irq[i]);
+		if (sync)
+			disable_irq(gpios->irq[i]);
+		else
+			disable_irq_nosync(gpios->irq[i]);
 	}
 }
 EXPORT_SYMBOL_GPL(mctrl_gpio_disable_ms);
