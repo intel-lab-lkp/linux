@@ -311,6 +311,7 @@ static int rad_panel_enable(struct drm_panel *panel)
 {
 	struct rad_panel *rad = to_rad_panel(panel);
 	struct mipi_dsi_device *dsi = rad->dsi;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 	struct device *dev = &dsi->dev;
 	int color_format = color_format_from_dsi_format(dsi->format);
 	int ret;
@@ -329,11 +330,7 @@ static int rad_panel_enable(struct drm_panel *panel)
 		goto fail;
 
 	/* Software reset */
-	ret = mipi_dsi_dcs_soft_reset(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to do Software Reset (%d)\n", ret);
-		goto fail;
-	}
+	mipi_dsi_dcs_soft_reset_multi(&dsi_ctx);
 
 	usleep_range(15000, 17000);
 
@@ -344,38 +341,17 @@ static int rad_panel_enable(struct drm_panel *panel)
 		goto fail;
 	}
 	/* Set tear ON */
-	ret = mipi_dsi_dcs_set_tear_on(dsi, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set tear ON (%d)\n", ret);
-		goto fail;
-	}
+	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
 	/* Set tear scanline */
-	ret = mipi_dsi_dcs_set_tear_scanline(dsi, 0x380);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set tear scanline (%d)\n", ret);
-		goto fail;
-	}
+	mipi_dsi_dcs_set_tear_scanline_multi(&dsi_ctx, 0x380);
 	/* Set pixel format */
-	ret = mipi_dsi_dcs_set_pixel_format(dsi, color_format);
-	dev_dbg(dev, "Interface color format set to 0x%x\n", color_format);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set pixel format (%d)\n", ret);
-		goto fail;
-	}
+	mipi_dsi_dcs_set_pixel_format_multi(&dsi_ctx, color_format);
 	/* Exit sleep mode */
-	ret = mipi_dsi_dcs_exit_sleep_mode(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to exit sleep mode (%d)\n", ret);
-		goto fail;
-	}
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 
 	usleep_range(5000, 7000);
 
-	ret = mipi_dsi_dcs_set_display_on(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set display ON (%d)\n", ret);
-		goto fail;
-	}
+	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
 
 	backlight_enable(rad->backlight);
 
@@ -391,8 +367,7 @@ static int rad_panel_disable(struct drm_panel *panel)
 {
 	struct rad_panel *rad = to_rad_panel(panel);
 	struct mipi_dsi_device *dsi = rad->dsi;
-	struct device *dev = &dsi->dev;
-	int ret;
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
@@ -400,19 +375,11 @@ static int rad_panel_disable(struct drm_panel *panel)
 
 	usleep_range(10000, 12000);
 
-	ret = mipi_dsi_dcs_set_display_off(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set display OFF (%d)\n", ret);
-		return ret;
-	}
+	mipi_dsi_dcs_set_display_off_multi(&dsi_ctx);
 
 	usleep_range(5000, 10000);
 
-	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to enter sleep mode (%d)\n", ret);
-		return ret;
-	}
+	mipi_dsi_dcs_enter_sleep_mode_multi(&dsi_ctx);
 
 	return 0;
 }
@@ -468,17 +435,16 @@ static int rad_bl_get_brightness(struct backlight_device *bl)
 static int rad_bl_update_status(struct backlight_device *bl)
 {
 	struct mipi_dsi_device *dsi = bl_get_data(bl);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = dsi };
 	struct rad_panel *rad = mipi_dsi_get_drvdata(dsi);
-	int ret = 0;
 
 	if (!rad->prepared)
 		return 0;
 
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
-	ret = mipi_dsi_dcs_set_display_brightness(dsi, bl->props.brightness);
-	if (ret < 0)
-		return ret;
+	mipi_dsi_dcs_set_display_brightness_multi(&dsi_ctx,
+						  bl->props.brightness);
 
 	return 0;
 }
