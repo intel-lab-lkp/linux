@@ -814,6 +814,11 @@ static int drm_atomic_bridge_check(struct drm_bridge *bridge,
 		if (WARN_ON(!bridge_state))
 			return -EINVAL;
 
+		bridge_state->crtc = crtc_state->crtc;
+
+		drm_connector_get(conn_state->connector);
+		bridge_state->connector = conn_state->connector;
+
 		if (bridge->funcs->atomic_check) {
 			ret = bridge->funcs->atomic_check(bridge, bridge_state,
 							  crtc_state, conn_state);
