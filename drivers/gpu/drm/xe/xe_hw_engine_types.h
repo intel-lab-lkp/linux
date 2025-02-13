@@ -152,11 +152,6 @@ struct xe_hw_engine {
 	struct xe_hw_engine_group *hw_engine_group;
 };
 
-enum xe_hw_engine_snapshot_source_id {
-	XE_ENGINE_CAPTURE_SOURCE_MANUAL,
-	XE_ENGINE_CAPTURE_SOURCE_GUC
-};
-
 /**
  * struct xe_hw_engine_snapshot - Hardware engine snapshot
  *

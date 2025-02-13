@@ -843,7 +843,7 @@ struct xe_hw_engine_snapshot *
 xe_hw_engine_snapshot_capture(struct xe_hw_engine *hwe, struct xe_exec_queue *q)
 {
 	struct xe_hw_engine_snapshot *snapshot;
-	struct __guc_capture_parsed_output *node;
+	struct xe_guc_capture_snapshot *node;
 
 	if (!xe_hw_engine_is_valid(hwe))
 		return NULL;
