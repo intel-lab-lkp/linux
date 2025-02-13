@@ -795,6 +795,23 @@ imap_spans_range(
 	return true;
 }
 
+static bool
+imap_range_valid_for_atomic_write(
+	struct xfs_bmbt_irec	*imap,
+	xfs_fileoff_t		offset_fsb,
+	xfs_fileoff_t		end_fsb)
+{
+	/* Misaligned start block wrt size */
+	if (!IS_ALIGNED(imap->br_startblock, imap->br_blockcount))
+		return false;
+
+	/* Discontiguous or mixed extents */
+	if (!imap_spans_range(imap, offset_fsb, end_fsb))
+		return false;
+
+	return true;
+}
+
 static int
 xfs_direct_write_iomap_begin(
 	struct inode		*inode,
@@ -809,11 +826,19 @@ xfs_direct_write_iomap_begin(
 	struct xfs_bmbt_irec	imap, cmap;
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
+	bool			atomic_cow = flags & IOMAP_ATOMIC_COW;
+	bool			atomic_hw = flags & IOMAP_ATOMIC_HW;
 	int			nimaps = 1, error = 0;
 	bool			shared = false;
 	u16			iomap_flags = 0;
+	xfs_fileoff_t		orig_offset_fsb;
+	xfs_fileoff_t		orig_end_fsb;
+	bool			needs_alloc;
 	unsigned int		lockmode;
 	u64			seq;
+
+	orig_offset_fsb = offset_fsb;
+	orig_end_fsb = end_fsb;
 
 	ASSERT(flags & (IOMAP_WRITE | IOMAP_ZERO));
 
@@ -832,7 +857,7 @@ xfs_direct_write_iomap_begin(
 	 * COW writes may allocate delalloc space or convert unwritten COW
 	 * extents, so we need to make sure to take the lock exclusively here.
 	 */
-	if (xfs_is_cow_inode(ip))
+	if (xfs_is_cow_inode(ip) || atomic_cow)
 		lockmode = XFS_ILOCK_EXCL;
 	else
 		lockmode = XFS_ILOCK_SHARED;
@@ -857,6 +882,22 @@ relock:
 	if (error)
 		goto out_unlock;
 
+	if (flags & IOMAP_ATOMIC_COW) {
+		error = xfs_reflink_allocate_cow(ip, &imap, &cmap, &shared,
+				&lockmode,
+				(flags & IOMAP_DIRECT) || IS_DAX(inode), true);
+		/*
+		 * Don't check @shared. For atomic writes, we should error when
+		 * we don't get a CoW fork.
+		 */
+		if (error)
+			goto out_unlock;
+
+		end_fsb = imap.br_startoff + imap.br_blockcount;
+		length = XFS_FSB_TO_B(mp, end_fsb) - offset;
+		goto out_found_cow;
+	}
+
 	if (imap_needs_cow(ip, flags, &imap, nimaps)) {
 		error = -EAGAIN;
 		if (flags & IOMAP_NOWAIT)
@@ -868,13 +909,38 @@ relock:
 				(flags & IOMAP_DIRECT) || IS_DAX(inode), false);
 		if (error)
 			goto out_unlock;
-		if (shared)
+		if (shared) {
+			if (atomic_hw &&
+			    !imap_range_valid_for_atomic_write(&cmap,
+					orig_offset_fsb, orig_end_fsb)) {
+				error = -EAGAIN;
+				goto out_unlock;
+			}
 			goto out_found_cow;
+		}
 		end_fsb = imap.br_startoff + imap.br_blockcount;
 		length = XFS_FSB_TO_B(mp, end_fsb) - offset;
 	}
 
-	if (imap_needs_alloc(inode, flags, &imap, nimaps))
+	needs_alloc = imap_needs_alloc(inode, flags, &imap, nimaps);
+
+	if (atomic_hw) {
+		error = -EAGAIN;
+		/*
+		 * Use CoW method for when we need to alloc > 1 block,
+		 * otherwise we might allocate less than what we need here and
+		 * have multiple mappings.
+		*/
+		if (needs_alloc && orig_end_fsb - orig_offset_fsb > 1)
+			goto out_unlock;
+
+		if (!imap_range_valid_for_atomic_write(&imap, orig_offset_fsb,
+						orig_end_fsb)) {
+			goto out_unlock;
+		}
+	}
+
+	if (needs_alloc)
 		goto allocate_blocks;
 
 	/*
