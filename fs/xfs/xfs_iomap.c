@@ -865,7 +865,7 @@ relock:
 		/* may drop and re-acquire the ilock */
 		error = xfs_reflink_allocate_cow(ip, &imap, &cmap, &shared,
 				&lockmode,
-				(flags & IOMAP_DIRECT) || IS_DAX(inode));
+				(flags & IOMAP_DIRECT) || IS_DAX(inode), false);
 		if (error)
 			goto out_unlock;
 		if (shared)
