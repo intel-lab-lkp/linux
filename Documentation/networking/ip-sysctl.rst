@@ -1241,7 +1241,8 @@ tcp_rto_min_us - INTEGER
 
 tcp_rto_max_ms - INTEGER
 	Maximal TCP retransmission timeout (in ms).
-	Note that TCP_RTO_MAX_MS socket option has higher precedence.
+	Note that TCP_BPF_RTO_MAX and TCP_RTO_MAX_MS socket option have the
+	higher precedence for configuring this setting.
 
 	When changing tcp_rto_max_ms, it is important to understand
 	that tcp_retries2 might need a change.

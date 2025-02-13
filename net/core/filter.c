@@ -5303,6 +5303,12 @@ static int bpf_sol_tcp_setsockopt(struct sock *sk, int optname,
 			return -EINVAL;
 		tp->bpf_sock_ops_cb_flags = val;
 		break;
+	case TCP_BPF_RTO_MAX:
+		if (val > TCP_RTO_MAX_SEC * MSEC_PER_SEC ||
+		    val < TCP_RTO_MAX_MIN_SEC * MSEC_PER_SEC)
+			return -EINVAL;
+		inet_csk(sk)->icsk_rto_max = msecs_to_jiffies(val);
+		break;
 	default:
 		return -EINVAL;
 	}
