@@ -561,8 +561,7 @@ int devlink_nl_rate_del_doit(struct sk_buff *skb, struct genl_info *info)
 	return err;
 }
 
-int devlink_rate_nodes_check(struct devlink *devlink, u16 mode,
-			     struct netlink_ext_ack *extack)
+int devlink_rate_nodes_check(struct devlink *devlink, struct netlink_ext_ack *extack)
 {
 	struct devlink_rate *devlink_rate;
 
