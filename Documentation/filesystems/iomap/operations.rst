@@ -525,8 +525,19 @@ IOMAP_WRITE`` with any combination of the following enhancements:
    conversion or copy on write), all updates for the entire file range
    must be committed atomically as well.
    Only one space mapping is allowed per untorn write.
-   Untorn writes must be aligned to, and must not be longer than, a
-   single file block.
+   Untorn writes may be longer than a single file block. In all cases,
+   the mapping start disk block must have at least the same alignment as
+   the write offset.
+
+ * ``IOMAP_ATOMIC_COW``: This write is being issued with torn-write
+   protection based on CoW support.
+   All the length, alignment, and single bio restrictions which apply
+   to IOMAP_ATOMIC_HW do not apply here.
+   CoW-based atomic writes are intended as a fallback for when
+   HW-based atomic writes may not be issued, e.g. the range covered in
+   the atomic write covers multiple extents.
+   All filesystem metadata updates for the entire file range must be
+   committed atomically as well.
 
 Callers commonly hold ``i_rwsem`` in shared or exclusive mode before
 calling this function.
