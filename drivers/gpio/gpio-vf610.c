@@ -36,6 +36,7 @@ struct vf610_gpio_port {
 	struct clk *clk_port;
 	struct clk *clk_gpio;
 	int irq;
+	spinlock_t lock; /* protect gpio direction registers */
 };
 
 #define GPIO_PDOR		0x00
@@ -121,12 +122,15 @@ static int vf610_gpio_direction_input(struct gpio_chip *chip, unsigned int gpio)
 {
 	struct vf610_gpio_port *port = gpiochip_get_data(chip);
 	u32 mask = BIT(gpio);
+	unsigned long flags;
 	u32 val;
 
 	if (port->sdata->have_paddr) {
+		spin_lock_irqsave(&port->lock, flags);
 		val = vf610_gpio_readl(port->gpio_base + GPIO_PDDR);
 		val &= ~mask;
 		vf610_gpio_writel(val, port->gpio_base + GPIO_PDDR);
+		spin_unlock_irqrestore(&port->lock, flags);
 	}
 
 	return pinctrl_gpio_direction_input(chip, gpio);
@@ -137,14 +141,17 @@ static int vf610_gpio_direction_output(struct gpio_chip *chip, unsigned int gpio
 {
 	struct vf610_gpio_port *port = gpiochip_get_data(chip);
 	u32 mask = BIT(gpio);
+	unsigned long flags;
 	u32 val;
 
 	vf610_gpio_set(chip, gpio, value);
 
 	if (port->sdata->have_paddr) {
+		spin_lock_irqsave(&port->lock, flags);
 		val = vf610_gpio_readl(port->gpio_base + GPIO_PDDR);
 		val |= mask;
 		vf610_gpio_writel(val, port->gpio_base + GPIO_PDDR);
+		spin_unlock_irqrestore(&port->lock, flags);
 	}
 
 	return pinctrl_gpio_direction_output(chip, gpio);
@@ -297,6 +304,7 @@ static int vf610_gpio_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	port->sdata = device_get_match_data(dev);
+	spin_lock_init(&port->lock);
 
 	dual_base = port->sdata->have_dual_base;
 
