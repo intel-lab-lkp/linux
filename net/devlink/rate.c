@@ -125,10 +125,26 @@ static int devlink_nl_rate_fill(struct sk_buff *msg,
 			devlink_rate->tx_weight))
 		goto nla_put_failure;
 
-	if (devlink_rate->parent)
-		if (nla_put_string(msg, DEVLINK_ATTR_RATE_PARENT_NODE_NAME,
-				   devlink_rate->parent->name))
+	if (devlink_rate->parent) {
+		struct devlink_rate *parent = devlink_rate->parent;
+
+		if (nla_put_string(msg, DEVLINK_ATTR_RATE_PARENT_NODE_NAME, parent->name))
 			goto nla_put_failure;
+		if (parent->devlink != devlink) {
+			/* The parent devlink isn't locked, but a reference to
+			 * it is held so it cannot suddenly disappear.
+			 * And since there are rate nodes pointing to it,
+			 * the parent devlink is fully initialized and
+			 * the fields accessed here are valid and immutable.
+			 */
+			if (nla_put_string(msg, DEVLINK_ATTR_PARENT_DEV_BUS_NAME,
+					   parent->devlink->dev->bus->name))
+				goto nla_put_failure;
+			if (nla_put_string(msg, DEVLINK_ATTR_PARENT_DEV_NAME,
+					   dev_name(parent->devlink->dev)))
+				goto nla_put_failure;
+		}
+	}
 
 	genlmsg_end(msg, hdr);
 	return 0;
@@ -281,9 +297,18 @@ devlink_nl_rate_parent_node_set(struct devlink_rate *devlink_rate,
 	const char *parent_name = nla_data(nla_parent);
 	const struct devlink_ops *ops = devlink->ops;
 	size_t len = strlen(parent_name);
+	struct devlink *parent_devlink;
 	struct devlink_rate *parent;
 	int err = -EOPNOTSUPP;
 
+	parent_devlink = info->user_ptr[1] ? : devlink;
+	if (parent_devlink != devlink) {
+		if (parent_devlink->rate_domain != devlink->rate_domain) {
+			NL_SET_ERR_MSG(info->extack,
+				       "Cannot set parent to a rate from a different rate domain");
+			return -EINVAL;
+		}
+	}
 	parent = devlink_rate->parent;
 
 	if (parent && !len) {
@@ -301,7 +326,11 @@ devlink_nl_rate_parent_node_set(struct devlink_rate *devlink_rate,
 		refcount_dec(&parent->refcnt);
 		devlink_rate->parent = NULL;
 	} else if (len) {
-		parent = devlink_rate_node_get_by_name(devlink, parent_name);
+		/* parent_devlink (if != devlink) isn't locked, but the rate
+		 * domain, immutable once set, is already locked and the parent
+		 * is only used to determine node owner via pointer comparison.
+		 */
+		parent = devlink_rate_node_get_by_name(parent_devlink, parent_name);
 		if (IS_ERR(parent))
 			return -ENODEV;
 
@@ -762,8 +791,8 @@ EXPORT_SYMBOL_GPL(devl_rate_leaf_destroy);
  * devl_rate_nodes_destroy - destroy all devlink rate nodes on device
  * @devlink: devlink instance
  *
- * Unset parent for all rate objects and destroy all rate nodes
- * on specified device.
+ * Unset parent for all rate objects that involve this device and destroy all
+ * rate nodes on it.
  */
 void devl_rate_nodes_destroy(struct devlink *devlink)
 {
@@ -774,7 +803,9 @@ void devl_rate_nodes_destroy(struct devlink *devlink)
 	devl_rate_domain_lock(devlink);
 
 	list_for_each_entry(devlink_rate, &devlink->rate_domain->rate_list, list) {
-		if (!devlink_rate->parent || devlink_rate->devlink != devlink)
+		if (!devlink_rate->parent ||
+		    (devlink_rate->devlink != devlink &&
+		     devlink_rate->parent->devlink != devlink))
 			continue;
 
 		refcount_dec(&devlink_rate->parent->refcnt);
@@ -784,6 +815,7 @@ void devl_rate_nodes_destroy(struct devlink *devlink)
 		else if (devlink_rate_is_node(devlink_rate))
 			ops->rate_node_parent_set(devlink_rate, NULL, devlink_rate->priv,
 						  NULL, NULL);
+		devlink_rate->parent = NULL;
 	}
 	list_for_each_entry_safe(devlink_rate, tmp, &devlink->rate_domain->rate_list, list) {
 		if (devlink_rate->devlink == devlink && devlink_rate_is_node(devlink_rate)) {
