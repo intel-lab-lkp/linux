@@ -95,3 +95,4 @@ LOCK_EVENT(rtmutex_deadlock)	/* # of rt_mutex_handle_deadlock()'s	*/
 LOCK_EVENT(lockdep_acquire)
 LOCK_EVENT(lockdep_lock)
 LOCK_EVENT(lockdep_nocheck)
+LOCK_EVENT(lockdep_kasan_fail)
