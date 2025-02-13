@@ -25,6 +25,8 @@ void kvm_host_pmu_init(struct arm_pmu *pmu);
 u8 kvm_pmu_get_reserved_counters(void);
 u8 kvm_pmu_hpmn(u8 nr_counters);
 void kvm_pmu_partition(struct arm_pmu *pmu);
+void kvm_pmu_host_counters_enable(void);
+void kvm_pmu_host_counters_disable(void);
 
 #else
 
@@ -36,6 +38,9 @@ static inline bool kvm_set_pmuserenr(u64 val)
 }
 static inline void kvm_vcpu_pmu_resync_el0(void) {}
 static inline void kvm_host_pmu_init(struct arm_pmu *pmu) {}
+
+static inline void kvm_pmu_host_counters_enable(void) {}
+static inline void kvm_pmu_host_counters_disable(void) {}
 
 #endif
 

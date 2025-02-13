@@ -730,15 +730,19 @@ static void armv8pmu_disable_event_irq(struct perf_event *event)
 	armv8pmu_disable_intens(BIT(event->hw.idx));
 }
 
-static u64 armv8pmu_getreset_flags(void)
+static u64 armv8pmu_getreset_flags(struct arm_pmu *cpu_pmu)
 {
 	u64 value;
 
 	/* Read */
 	value = read_pmovsclr();
 
+	if (cpu_pmu->partitioned)
+		value &= ARMV8_PMU_HOST_CNT_PART(cpu_pmu->hpmn);
+	else
+		value &= ARMV8_PMU_OVERFLOWED_MASK;
+
 	/* Write to clear flags */
-	value &= ARMV8_PMU_OVERFLOWED_MASK;
 	write_pmovsclr(value);
 
 	return value;
@@ -765,6 +769,18 @@ static void armv8pmu_disable_user_access(void)
 	update_pmuserenr(0);
 }
 
+static bool armv8pmu_is_guest_part(struct arm_pmu *cpu_pmu, u8 idx)
+{
+	return cpu_pmu->partitioned &&
+		(BIT(idx) & ARMV8_PMU_GUEST_CNT_PART(cpu_pmu->hpmn));
+}
+
+static bool armv8pmu_is_host_part(struct arm_pmu *cpu_pmu, u8 idx)
+{
+	return !cpu_pmu->partitioned ||
+		(BIT(idx) & ARMV8_PMU_HOST_CNT_PART(cpu_pmu->hpmn));
+}
+
 static void armv8pmu_enable_user_access(struct arm_pmu *cpu_pmu)
 {
 	int i;
@@ -773,6 +789,8 @@ static void armv8pmu_enable_user_access(struct arm_pmu *cpu_pmu)
 	if (is_pmuv3p9(cpu_pmu->pmuver)) {
 		u64 mask = 0;
 		for_each_set_bit(i, cpuc->used_mask, ARMPMU_MAX_HWEVENTS) {
+			if (armv8pmu_is_guest_part(cpu_pmu, i))
+				continue;
 			if (armv8pmu_event_has_user_read(cpuc->events[i]))
 				mask |= BIT(i);
 		}
@@ -781,6 +799,8 @@ static void armv8pmu_enable_user_access(struct arm_pmu *cpu_pmu)
 		/* Clear any unused counters to avoid leaking their contents */
 		for_each_andnot_bit(i, cpu_pmu->cntr_mask, cpuc->used_mask,
 				    ARMPMU_MAX_HWEVENTS) {
+			if (armv8pmu_is_guest_part(cpu_pmu, i))
+				continue;
 			if (i == ARMV8_PMU_CYCLE_IDX)
 				write_pmccntr(0);
 			else if (i == ARMV8_PMU_INSTR_IDX)
@@ -825,8 +845,10 @@ static void armv8pmu_start(struct arm_pmu *cpu_pmu)
 	else
 		armv8pmu_disable_user_access();
 
-	/* Enable all counters */
-	armv8pmu_pmcr_write(armv8pmu_pmcr_read() | ARMV8_PMU_PMCR_E);
+	if (cpu_pmu->partitioned)
+		kvm_pmu_host_counters_enable();
+	else
+		armv8pmu_pmcr_write(armv8pmu_pmcr_read() | ARMV8_PMU_PMCR_E);
 
 	kvm_vcpu_pmu_resync_el0();
 }
@@ -834,7 +856,10 @@ static void armv8pmu_start(struct arm_pmu *cpu_pmu)
 static void armv8pmu_stop(struct arm_pmu *cpu_pmu)
 {
 	/* Disable all counters */
-	armv8pmu_pmcr_write(armv8pmu_pmcr_read() & ~ARMV8_PMU_PMCR_E);
+	if (cpu_pmu->partitioned)
+		kvm_pmu_host_counters_disable();
+	else
+		armv8pmu_pmcr_write(armv8pmu_pmcr_read() & ~ARMV8_PMU_PMCR_E);
 }
 
 static irqreturn_t armv8pmu_handle_irq(struct arm_pmu *cpu_pmu)
@@ -848,7 +873,7 @@ static irqreturn_t armv8pmu_handle_irq(struct arm_pmu *cpu_pmu)
 	/*
 	 * Get and reset the IRQ flags
 	 */
-	pmovsr = armv8pmu_getreset_flags();
+	pmovsr = armv8pmu_getreset_flags(cpu_pmu);
 
 	/*
 	 * Did an overflow occur?
@@ -906,6 +931,8 @@ static int armv8pmu_get_single_idx(struct pmu_hw_events *cpuc,
 	int idx;
 
 	for_each_set_bit(idx, cpu_pmu->cntr_mask, ARMV8_PMU_MAX_GENERAL_COUNTERS) {
+		if (armv8pmu_is_guest_part(cpu_pmu, idx))
+			continue;
 		if (!test_and_set_bit(idx, cpuc->used_mask))
 			return idx;
 	}
@@ -922,6 +949,8 @@ static int armv8pmu_get_chain_idx(struct pmu_hw_events *cpuc,
 	 * the lower idx must be even.
 	 */
 	for_each_set_bit(idx, cpu_pmu->cntr_mask, ARMV8_PMU_MAX_GENERAL_COUNTERS) {
+		if (armv8pmu_is_guest_part(cpu_pmu, idx))
+			continue;
 		if (!(idx & 0x1))
 			continue;
 		if (!test_and_set_bit(idx, cpuc->used_mask)) {
@@ -944,6 +973,7 @@ static int armv8pmu_get_event_idx(struct pmu_hw_events *cpuc,
 
 	/* Always prefer to place a cycle counter into the cycle counter. */
 	if ((evtype == ARMV8_PMUV3_PERFCTR_CPU_CYCLES) &&
+	    !cpu_pmu->partitioned &&
 	    !armv8pmu_event_get_threshold(&event->attr)) {
 		if (!test_and_set_bit(ARMV8_PMU_CYCLE_IDX, cpuc->used_mask))
 			return ARMV8_PMU_CYCLE_IDX;
@@ -959,6 +989,7 @@ static int armv8pmu_get_event_idx(struct pmu_hw_events *cpuc,
 	 * may not know how to handle it.
 	 */
 	if ((evtype == ARMV8_PMUV3_PERFCTR_INST_RETIRED) &&
+	    !cpu_pmu->partitioned &&
 	    !armv8pmu_event_get_threshold(&event->attr) &&
 	    test_bit(ARMV8_PMU_INSTR_IDX, cpu_pmu->cntr_mask) &&
 	    !armv8pmu_event_want_user_access(event)) {
@@ -970,7 +1001,7 @@ static int armv8pmu_get_event_idx(struct pmu_hw_events *cpuc,
 	 * Otherwise use events counters
 	 */
 	if (armv8pmu_event_is_chained(event))
-		return	armv8pmu_get_chain_idx(cpuc, cpu_pmu);
+		return armv8pmu_get_chain_idx(cpuc, cpu_pmu);
 	else
 		return armv8pmu_get_single_idx(cpuc, cpu_pmu);
 }
@@ -1062,12 +1093,25 @@ static int armv8pmu_set_event_filter(struct hw_perf_event *event,
 	return 0;
 }
 
+static void armv8pmu_reset_host_counters(struct arm_pmu *cpu_pmu)
+{
+	int idx;
+
+	for_each_set_bit(idx, cpu_pmu->cntr_mask, ARMV8_PMU_MAX_GENERAL_COUNTERS) {
+		if (armv8pmu_is_host_part(cpu_pmu, idx))
+			armv8pmu_write_evcntr(idx, 0);
+	}
+}
+
 static void armv8pmu_reset(void *info)
 {
 	struct arm_pmu *cpu_pmu = (struct arm_pmu *)info;
 	u64 pmcr, mask;
 
 	bitmap_to_arr64(&mask, cpu_pmu->cntr_mask, ARMPMU_MAX_HWEVENTS);
+
+	if (cpu_pmu->partitioned)
+		mask &= ARMV8_PMU_HOST_CNT_PART(cpu_pmu->hpmn);
 
 	/* The counter and interrupt enable registers are unknown at reset. */
 	armv8pmu_disable_counter(mask);
@@ -1076,11 +1120,20 @@ static void armv8pmu_reset(void *info)
 	/* Clear the counters we flip at guest entry/exit */
 	kvm_clr_pmu_events(mask);
 
+
+	pmcr = ARMV8_PMU_PMCR_LC;
+
 	/*
-	 * Initialize & Reset PMNC. Request overflow interrupt for
-	 * 64 bit cycle counter but cheat in armv8pmu_write_counter().
+	 * Initialize & Reset PMNC. Request overflow interrupt for 64
+	 * bit cycle counter but cheat in armv8pmu_write_counter().
+	 *
+	 * When partitioned, there is no single bit to reset only the
+	 * host counters. so reset them individually.
 	 */
-	pmcr = ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C | ARMV8_PMU_PMCR_LC;
+	if (cpu_pmu->partitioned)
+		armv8pmu_reset_host_counters(cpu_pmu);
+	else
+		pmcr = ARMV8_PMU_PMCR_P | ARMV8_PMU_PMCR_C;
 
 	/* Enable long event counter support where available */
 	if (armv8pmu_has_long_event(cpu_pmu))
