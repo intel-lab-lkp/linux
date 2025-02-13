@@ -9,3 +9,18 @@ config TDX_GUEST_DRIVER
 
 	  To compile this driver as module, choose M here. The module will
 	  be called tdx-guest.
+
+if TDX_GUEST_DRIVER
+
+config TDX_GUEST_DRIVER_TSM_REPORT
+	bool "tdx-guest: Enable TSM raw TDREPORT interface"
+	default y
+	help
+	  This option adds 2 files, namely report0 and reportdata, to the TSM
+	  sysfs directory tree (/sys/kernel/tsm/tdx/).
+
+	  To request a TDREPORT, set REPORTDATA by writing to
+	  /sys/kernel/tsm/tdx/reportdata, then read
+	  /sys/kernel/tsm/tdx/report0.
+
+endif

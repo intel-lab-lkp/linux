@@ -5,6 +5,8 @@
  * Copyright (C) 2022 Intel Corporation
  */
 
+#define pr_fmt(fmt)			KBUILD_MODNAME ": " fmt
+
 #include <linux/kernel.h>
 #include <linux/miscdevice.h>
 #include <linux/mm.h>
@@ -17,6 +19,8 @@
 #include <linux/delay.h>
 #include <linux/tsm.h>
 #include <linux/sizes.h>
+
+#include <crypto/hash_info.h>
 
 #include <uapi/linux/tdx-guest.h>
 
@@ -304,6 +308,114 @@ static const struct tsm_ops tdx_tsm_ops = {
 	.report_bin_attr_visible = tdx_report_bin_attr_visible,
 };
 
+enum {
+	TDREPORT_reportdata = 128,
+	TDREPORT_tdinfo = 512,
+	TDREPORT_mrtd = TDREPORT_tdinfo + 16,
+	TDREPORT_mrconfigid = TDREPORT_mrtd + 48,
+	TDREPORT_mrowner = TDREPORT_mrconfigid + 48,
+	TDREPORT_mrownerconfig = TDREPORT_mrowner + 48,
+	TDREPORT_rtmr0 = TDREPORT_mrownerconfig + 48,
+	TDREPORT_rtmr1 = TDREPORT_rtmr0 + 48,
+	TDREPORT_rtmr2 = TDREPORT_rtmr1 + 48,
+	TDREPORT_rtmr3 = TDREPORT_rtmr2 + 48,
+	TDREPORT_servtd_hash = TDREPORT_rtmr3 + 48,
+};
+
+static u8 tdx_mr_report[TDX_REPORT_LEN] __aligned(TDX_REPORT_LEN);
+
+#define TDX_MR_(r)	.mr_value = tdx_mr_report + TDREPORT_##r, TSM_MR_(r, SHA384)
+static const struct tsm_measurement_register tdx_mrs[] = {
+	{ TDX_MR_(rtmr0) | TSM_MR_F_RTMR | TSM_MR_F_W },
+	{ TDX_MR_(rtmr1) | TSM_MR_F_RTMR | TSM_MR_F_W },
+	{ TDX_MR_(rtmr2) | TSM_MR_F_RTMR | TSM_MR_F_W },
+	{ TDX_MR_(rtmr3) | TSM_MR_F_RTMR | TSM_MR_F_W },
+	{ TDX_MR_(mrtd) },
+	{ TDX_MR_(mrconfigid) },
+	{ TDX_MR_(mrowner) },
+	{ TDX_MR_(mrownerconfig) },
+	{ TDX_MR_(servtd_hash) },
+#ifdef CONFIG_TDX_GUEST_DRIVER_TSM_REPORT
+	{ .mr_value = tdx_mr_report, .mr_size = sizeof(tdx_mr_report),
+	  .mr_name = "report0", .mr_flags = TSM_MR_F_LIVE | TSM_MR_F_F },
+	{ .mr_value = tdx_mr_report + TDREPORT_reportdata,
+	  TSM_MR_(reportdata, SHA512) | TSM_MR_F_W | TSM_MR_F_F },
+#endif
+	{}
+};
+#undef TDX_MR_
+
+static int tdx_mr_refresh(struct tsm_measurement *tmr,
+			  const struct tsm_measurement_register *mr)
+{
+	u8 *reportdata, *tdreport;
+	int ret;
+
+	reportdata = tdx_mr_report + TDREPORT_reportdata;
+
+	/*
+	 * TDCALL requires a GPA as input. Depending on whether this module is
+	 * built as a built-in (Y) or a module (M), tdx_mr_report may or may
+	 * not be converted to a GPA using virt_to_phys. If not, a directly
+	 * mapped buffer must be allocated using kmalloc and used as an
+	 * intermediary.
+	 */
+	if (virt_addr_valid(tdx_mr_report))
+		tdreport = tdx_mr_report;
+	else {
+		tdreport = kmalloc(sizeof(tdx_mr_report), GFP_KERNEL);
+		if (!tdreport)
+			return -ENOMEM;
+
+		reportdata = memcpy(tdreport + TDREPORT_reportdata, reportdata,
+				    TDX_REPORTDATA_LEN);
+	}
+
+	ret = tdx_mcall_get_report0(reportdata, tdreport);
+	if (ret)
+		pr_err("GetReport call failed\n");
+
+	if (tdreport != tdx_mr_report) {
+		memcpy(tdx_mr_report, tdreport, sizeof(tdx_mr_report));
+		kfree(tdreport);
+	}
+
+	return ret;
+}
+
+static int tdx_mr_extend(struct tsm_measurement *tmr,
+			 const struct tsm_measurement_register *mr, const u8 *data)
+{
+	u8 *buf;
+	int ret;
+
+	if (virt_addr_valid(data))
+		buf = (u8 *)data;
+	else {
+		buf = kmalloc(64, GFP_KERNEL);
+		if (!buf)
+			return -ENOMEM;
+
+		memcpy(buf, data, mr->mr_size);
+	}
+
+	ret = tdx_mcall_rtmr_extend((u8)(mr - tmr->mrs), buf);
+	if (ret)
+		pr_err("Extending RTMR%ld failed\n", mr - tmr->mrs);
+
+	if (buf != data)
+		kfree(buf);
+
+	return ret;
+}
+
+static struct tsm_measurement tdx_measurement = {
+	.name = "tdx",
+	.mrs = tdx_mrs,
+	.refresh = tdx_mr_refresh,
+	.extend = tdx_mr_extend,
+};
+
 static int __init tdx_guest_init(void)
 {
 	int ret;
@@ -326,8 +438,14 @@ static int __init tdx_guest_init(void)
 	if (ret)
 		goto free_quote;
 
+	ret = tsm_register_measurement(&tdx_measurement);
+	if (ret)
+		goto unregister_tsm;
+
 	return 0;
 
+unregister_tsm:
+	tsm_unregister(&tdx_tsm_ops);
 free_quote:
 	free_quote_buf(quote_data);
 free_misc:
@@ -339,6 +457,7 @@ module_init(tdx_guest_init);
 
 static void __exit tdx_guest_exit(void)
 {
+	tsm_unregister_measurement(&tdx_measurement);
 	tsm_unregister(&tdx_tsm_ops);
 	free_quote_buf(quote_data);
 	misc_deregister(&tdx_misc_dev);
