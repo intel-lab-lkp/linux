@@ -733,6 +733,9 @@ int btbcm_setup_apple(struct hci_dev *hdev)
 	struct sk_buff *skb;
 	int err;
 
+	/* Waiting for hardware warmup */
+	msleep(200);
+
 	/* Reset */
 	err = btbcm_reset(hdev);
 	if (err)
