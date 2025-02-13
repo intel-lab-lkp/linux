@@ -28,7 +28,7 @@
 #include <linux/dma-mapping.h>
 #include "../tty/hvc/hvc_console.h"
 
-#define is_rproc_enabled IS_ENABLED(CONFIG_REMOTEPROC)
+#define is_rproc_enabled IS_REACHABLE(CONFIG_REMOTEPROC)
 #define VIRTCONS_MAX_PORTS 0x8000
 
 /*
@@ -2078,7 +2078,7 @@ static const unsigned int features[] = {
 };
 
 static const struct virtio_device_id rproc_serial_id_table[] = {
-#if IS_ENABLED(CONFIG_REMOTEPROC)
+#if IS_REACHABLE(CONFIG_REMOTEPROC)
 	{ VIRTIO_ID_RPROC_SERIAL, VIRTIO_DEV_ANY_ID },
 #endif
 	{ 0 },
