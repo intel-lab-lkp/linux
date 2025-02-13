@@ -190,7 +190,8 @@ static ssize_t fault_opcodes_read(struct file *file, char __user *buf,
 		bit = find_next_bit(fault->opcodes, bitsize, zero);
 	}
 	debugfs_file_put(file->f_path.dentry);
-	data[size - 1] = '\n';
+	if (size)
+		data[size - 1] = '\n';
 	data[size] = '\0';
 	ret = simple_read_from_buffer(buf, len, pos, data, size);
 free_data:
