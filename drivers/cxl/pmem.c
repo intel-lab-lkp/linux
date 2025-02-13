@@ -384,6 +384,13 @@ static int cxl_pmem_region_probe(struct device *dev)
 		};
 		info[i].offset = m->start;
 		info[i].serial = cxlds->serial;
+
+		if (info[i].serial == 0) {
+			dev_dbg(dev, "%s: invalid serial number\n",
+				dev_name(&cxlmd->dev));
+			rc = -ENXIO;
+			goto out_nvd;
+		}
 	}
 	ndr_desc.num_mappings = cxlr_pmem->nr_mappings;
 	ndr_desc.mapping = mappings;
