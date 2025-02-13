@@ -899,6 +899,20 @@ int mlx5_esw_qos_init(struct mlx5_eswitch *esw)
 	bool use_shared_domain = esw->mode == MLX5_ESWITCH_OFFLOADS &&
 		MLX5_CAP_QOS(esw->dev, esw_cross_esw_sched);
 
+	if (use_shared_domain) {
+		u64 guid = mlx5_query_nic_system_image_guid(esw->dev);
+		int err;
+
+		err = devlink_shared_rate_domain_init(priv_to_devlink(esw->dev), guid);
+		if (err) {
+			/* On failure, issue a warning and switch to using a private domain. */
+			esw_warn(esw->dev,
+				 "Shared devlink rate domain init failed (err %d), cross-esw QoS not available",
+				 err);
+			use_shared_domain = false;
+		}
+	}
+
 	if (esw->qos.domain) {
 		if (esw->qos.domain->shared == use_shared_domain)
 			return 0;  /* Nothing to change. */
