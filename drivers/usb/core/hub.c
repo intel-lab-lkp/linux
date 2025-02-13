@@ -3616,10 +3616,12 @@ static int finish_port_resume(struct usb_device *udev)
 		 * the device will be rediscovered.
 		 */
  retry_reset_resume:
-		if (udev->quirks & USB_QUIRK_RESET)
+		if (udev->quirks & USB_QUIRK_RESET) {
 			status = -ENODEV;
-		else
+		} else {
+			hub_disconnect_children(udev);
 			status = usb_reset_and_verify_device(udev);
+		}
 	}
 
 	/* 10.5.4.5 says be sure devices in the tree are still there.
