@@ -537,6 +537,7 @@ static bool vm_get_shm_region(struct virtio_device *vdev,
 			      struct virtio_shm_region *region, u8 id)
 {
 	struct virtio_mmio_device *vm_dev = to_virtio_mmio_device(vdev);
+	u16 page_size = 0;
 	u64 len, addr;
 
 	/* Select the region we're interested in */
@@ -560,7 +561,17 @@ static bool vm_get_shm_region(struct virtio_device *vdev,
 
 	region->addr = addr;
 
-	region->page_size = 4096 >> 12;
+	/* If supported by the device transport, read the region page size */
+	if (__virtio_test_bit(vdev, VIRTIO_F_SHM_PAGE_SIZE))
+		page_size = (u16) readl(vm_dev->base + VIRTIO_MMIO_SHM_PAGE_SIZE);
+
+	/* For backwards compatibility, if the device didn't specify a
+	 * page size, assume it to be 4096.
+	 */
+	if (page_size == 0)
+		page_size = 4096 >> 12;
+
+	region->page_size = page_size;
 
 	return true;
 }
