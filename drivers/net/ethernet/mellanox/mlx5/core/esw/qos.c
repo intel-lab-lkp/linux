@@ -147,7 +147,9 @@ struct mlx5_esw_sched_node {
 	enum sched_node_type type;
 	/* The eswitch this node belongs to. */
 	struct mlx5_eswitch *esw;
-	/* The children nodes of this node, empty list for leaf nodes. */
+	/* The children nodes of this node, empty list for leaf nodes.
+	 * Can be from multiple E-Switches.
+	 */
 	struct list_head children;
 	/* Valid only if this node is associated with a vport. */
 	struct mlx5_vport *vport;
@@ -398,6 +400,7 @@ static int esw_qos_vport_create_sched_element(struct mlx5_esw_sched_node *vport_
 {
 	u32 sched_ctx[MLX5_ST_SZ_DW(scheduling_context)] = {};
 	struct mlx5_core_dev *dev = vport_node->esw->dev;
+	struct mlx5_vport *vport = vport_node->vport;
 	void *attr;
 
 	if (!mlx5_qos_element_type_supported(dev,
@@ -408,7 +411,13 @@ static int esw_qos_vport_create_sched_element(struct mlx5_esw_sched_node *vport_
 	MLX5_SET(scheduling_context, sched_ctx, element_type,
 		 SCHEDULING_CONTEXT_ELEMENT_TYPE_VPORT);
 	attr = MLX5_ADDR_OF(scheduling_context, sched_ctx, element_attributes);
-	MLX5_SET(vport_element, attr, vport_number, vport_node->vport->vport);
+	MLX5_SET(vport_element, attr, vport_number, vport->vport);
+	if (vport->dev != dev) {
+		/* The port is assigned to a node on another eswitch. */
+		MLX5_SET(vport_element, attr, eswitch_owner_vhca_id_valid, true);
+		MLX5_SET(vport_element, attr, eswitch_owner_vhca_id,
+			 MLX5_CAP_GEN(vport->dev, vhca_id));
+	}
 	MLX5_SET(scheduling_context, sched_ctx, parent_element_id, vport_node->parent->ix);
 	MLX5_SET(scheduling_context, sched_ctx, max_average_bw, vport_node->max_rate);
 
@@ -887,10 +896,16 @@ static int esw_qos_devlink_rate_to_mbps(struct mlx5_core_dev *mdev, const char *
 
 int mlx5_esw_qos_init(struct mlx5_eswitch *esw)
 {
-	if (esw->qos.domain)
-		return 0;  /* Nothing to change. */
+	bool use_shared_domain = esw->mode == MLX5_ESWITCH_OFFLOADS &&
+		MLX5_CAP_QOS(esw->dev, esw_cross_esw_sched);
 
-	return esw_qos_domain_init(esw, false);
+	if (esw->qos.domain) {
+		if (esw->qos.domain->shared == use_shared_domain)
+			return 0;  /* Nothing to change. */
+		esw_qos_domain_release(esw);
+	}
+
+	return esw_qos_domain_init(esw, use_shared_domain);
 }
 
 void mlx5_esw_qos_cleanup(struct mlx5_eswitch *esw)
@@ -1021,16 +1036,40 @@ int mlx5_esw_devlink_rate_node_del(struct devlink_rate *rate_node, void *priv,
 	return 0;
 }
 
+static int mlx5_esw_validate_cross_esw_scheduling(struct mlx5_eswitch *esw,
+						  struct mlx5_esw_sched_node *parent,
+						  struct netlink_ext_ack *extack)
+{
+	if (!parent || esw == parent->esw)
+		return 0;
+
+	if (!MLX5_CAP_QOS(esw->dev, esw_cross_esw_sched)) {
+		NL_SET_ERR_MSG_MOD(extack, "Cross E-Switch scheduling is not supported");
+		return -EOPNOTSUPP;
+	}
+	if (esw->qos.domain != parent->esw->qos.domain) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Cannot add vport to a parent belonging to a different qos domain");
+		return -EOPNOTSUPP;
+	}
+	if (!mlx5_lag_is_active(esw->dev)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Cross E-Switch scheduling requires LAG to be activated");
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
+}
+
 int mlx5_esw_qos_vport_update_parent(struct mlx5_vport *vport, struct mlx5_esw_sched_node *parent,
 				     struct netlink_ext_ack *extack)
 {
 	struct mlx5_eswitch *esw = vport->dev->priv.eswitch;
-	int err = 0;
+	int err;
 
-	if (parent && parent->esw != esw) {
-		NL_SET_ERR_MSG_MOD(extack, "Cross E-Switch scheduling is not supported");
-		return -EOPNOTSUPP;
-	}
+	err = mlx5_esw_validate_cross_esw_scheduling(esw, parent, extack);
+	if (err)
+		return err;
 
 	esw_qos_lock(esw);
 	if (!vport->qos.sched_node && parent)
