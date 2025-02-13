@@ -43,7 +43,6 @@
 #include <asm/sections.h>
 
 #include <kvm/arm_hypercalls.h>
-#include <kvm/arm_pmu.h>
 #include <kvm/arm_psci.h>
 
 #include "sys_regs.h"
