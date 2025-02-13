@@ -8,6 +8,17 @@
 #include "hbg_err.h"
 #include "hbg_ethtool.h"
 #include "hbg_hw.h"
+#include "hbg_txrx.h"
+
+#define HBG_LOOP_DATA_SIZE		0x100
+#define HBG_LOOP_MAX_WAIT_TIME		2000
+#define HBG_LOOP_WAIT_TIME_STEP		100
+
+struct hibmcge_self_test {
+	char desc[ETH_GSTRING_LEN];
+	int (*enable)(struct hbg_priv *priv, bool enable);
+	int (*fn)(struct net_device *ndev);
+};
 
 struct hbg_ethtool_stats {
 	char name[ETH_GSTRING_LEN];
@@ -309,6 +320,167 @@ static int hbg_ethtool_reset(struct net_device *netdev, u32 *flags)
 	return hbg_reset(priv);
 }
 
+static int hbg_test_mac_loopback_enable(struct hbg_priv *priv, bool enable)
+{
+	hbg_hw_loop_enable(priv, enable);
+	return 0;
+}
+
+static int hbg_test_serdes_loopback_enable(struct hbg_priv *priv, bool enable)
+{
+	u32 event = enable ? HBG_HW_EVENT_SERDES_LOOPBACK_ENABLE :
+			     HBG_HW_EVENT_SERDES_LOOPBACK_DISABLE;
+
+	return hbg_hw_event_notify(priv, event);
+}
+
+static int hbg_test_phy_loopback_enable(struct hbg_priv *priv, bool enable)
+{
+	return phy_loopback(priv->mac.phydev, enable);
+}
+
+static int hbg_self_test_pkt_send(struct net_device *ndev)
+{
+	struct hbg_priv *priv = netdev_priv(ndev);
+	struct sk_buff *skb = NULL;
+	int ret;
+	u32 i;
+
+	skb = netdev_alloc_skb(priv->netdev, HBG_LOOP_DATA_SIZE + NET_SKB_PAD);
+	if (!skb)
+		return -ENOMEM;
+	skb_reset_mac_header(skb);
+
+	skb_put(skb, HBG_LOOP_DATA_SIZE);
+	for (i = 0; i < HBG_LOOP_DATA_SIZE; i++)
+		skb->data[i] = i & 0xFF;
+
+	ret = hbg_net_start_xmit(skb, ndev);
+	if (ret != NETDEV_TX_OK) {
+		dev_kfree_skb_any(skb);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static void hbg_self_test_pkt_recv(struct net_device *ndev, struct sk_buff *skb)
+{
+	struct hbg_priv *priv = netdev_priv(ndev);
+	u32 i;
+
+	skb_reserve(skb, HBG_PACKET_HEAD_SIZE + NET_IP_ALIGN);
+	if (skb_tailroom(skb) < HBG_LOOP_DATA_SIZE)
+		return;
+
+	skb_put(skb, HBG_LOOP_DATA_SIZE);
+
+	for (i = 0; i < HBG_LOOP_DATA_SIZE; i++)
+		if (skb->data[i] != (i & 0xFF))
+			return;
+
+	priv->stats.self_test_rx_pkt_cnt++;
+}
+
+static int hbg_test_loopback(struct net_device *ndev)
+{
+	struct hbg_priv *priv = netdev_priv(ndev);
+	u32 wait_time = 0;
+	int ret;
+
+	priv->stats.self_test_rx_pkt_cnt = 0;
+	ret = hbg_self_test_pkt_send(priv->netdev);
+	if (ret)
+		return ret;
+
+	do {
+		if (priv->stats.self_test_rx_pkt_cnt)
+			return 0;
+
+		msleep(HBG_LOOP_WAIT_TIME_STEP);
+		wait_time += HBG_LOOP_WAIT_TIME_STEP;
+	} while (wait_time < HBG_LOOP_MAX_WAIT_TIME);
+
+	return -ETIMEDOUT;
+}
+
+static int hbg_test_netif_carrier(struct net_device *ndev)
+{
+	return netif_carrier_ok(ndev) ? 0 : -ENOLINK;
+}
+
+/* Only support test in full duplex mode. */
+static int hbg_test_full_duplex(struct net_device *ndev)
+{
+	return ndev->phydev->duplex == DUPLEX_FULL ? 0 : -EINVAL;
+}
+
+const struct hibmcge_self_test hbg_selftests[] = {
+	{
+		.desc = "Carrier           ",
+		.fn = hbg_test_netif_carrier,
+	}, {
+		.desc = "Full Duplex       ",
+		.fn = hbg_test_full_duplex,
+	}, {
+		.desc = "MAC loopback      ",
+		.enable = hbg_test_mac_loopback_enable,
+		.fn = hbg_test_loopback,
+	}, {
+		.desc = "Serdes loopback   ",
+		.enable = hbg_test_serdes_loopback_enable,
+		.fn = hbg_test_loopback,
+	}, {
+		.desc = "Phy loopback      ",
+		.enable = hbg_test_phy_loopback_enable,
+		.fn = hbg_test_loopback,
+	},
+};
+
+static void hbg_ethtool_self_test(struct net_device *netdev,
+				  struct ethtool_test *etest, u64 *buf)
+{
+	struct hbg_priv *priv = netdev_priv(netdev);
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(hbg_selftests); i++)
+		buf[i] = -ENOEXEC;
+
+	if (!(etest->flags & ETH_TEST_FL_OFFLINE)) {
+		netdev_err(netdev, "Only offline tests are supported\n");
+		etest->flags |= ETH_TEST_FL_FAILED;
+		return;
+	}
+
+	if (!netif_running(netdev)) {
+		netdev_err(netdev, "port is down, can not do test\n");
+		etest->flags |= ETH_TEST_FL_FAILED;
+		return;
+	}
+
+	hbg_hw_set_mac_filter_enable(priv, false);
+	priv->self_test_pkt_recv_fn = hbg_self_test_pkt_recv;
+	for (i = 0; i < ARRAY_SIZE(hbg_selftests); i++) {
+		if (hbg_selftests[i].enable) {
+			buf[i] = hbg_selftests[i].enable(priv, true);
+			if (buf[i]) {
+				etest->flags |= ETH_TEST_FL_FAILED;
+				continue;
+			}
+		}
+
+		buf[i] = hbg_selftests[i].fn(netdev);
+		if (buf[i])
+			etest->flags |= ETH_TEST_FL_FAILED;
+
+		if (hbg_selftests[i].enable)
+			hbg_selftests[i].enable(priv, false);
+	}
+
+	priv->self_test_pkt_recv_fn = NULL;
+	hbg_hw_set_mac_filter_enable(priv, priv->filter.enabled);
+}
+
 static void hbg_update_stats_by_info(struct hbg_priv *priv,
 				     const struct hbg_ethtool_stats *info,
 				     u32 info_len)
@@ -340,10 +512,12 @@ void hbg_update_stats(struct hbg_priv *priv)
 
 static int hbg_ethtool_get_sset_count(struct net_device *netdev, int stringset)
 {
-	if (stringset != ETH_SS_STATS)
-		return -EOPNOTSUPP;
+	if (stringset == ETH_SS_STATS)
+		return ARRAY_SIZE(hbg_ethtool_stats_info);
+	else if (stringset == ETH_SS_TEST)
+		return ARRAY_SIZE(hbg_selftests);
 
-	return ARRAY_SIZE(hbg_ethtool_stats_info);
+	return -EOPNOTSUPP;
 }
 
 static void hbg_ethtool_get_strings(struct net_device *netdev,
@@ -351,11 +525,12 @@ static void hbg_ethtool_get_strings(struct net_device *netdev,
 {
 	u32 i;
 
-	if (stringset != ETH_SS_STATS)
-		return;
-
-	for (i = 0; i < ARRAY_SIZE(hbg_ethtool_stats_info); i++)
-		ethtool_puts(&data, hbg_ethtool_stats_info[i].name);
+	if (stringset == ETH_SS_STATS)
+		for (i = 0; i < ARRAY_SIZE(hbg_ethtool_stats_info); i++)
+			ethtool_puts(&data, hbg_ethtool_stats_info[i].name);
+	else if (stringset == ETH_SS_TEST)
+		for (i = 0; i < ARRAY_SIZE(hbg_selftests); i++)
+			ethtool_puts(&data, hbg_selftests[i].desc);
 }
 
 static void hbg_ethtool_get_stats(struct net_device *netdev,
@@ -487,6 +662,7 @@ static const struct ethtool_ops hbg_ethtool_ops = {
 	.get_eth_mac_stats	= hbg_ethtool_get_eth_mac_stats,
 	.get_eth_ctrl_stats	= hbg_ethtool_get_eth_ctrl_stats,
 	.get_rmon_stats		= hbg_ethtool_get_rmon_stats,
+	.self_test		= hbg_ethtool_self_test,
 };
 
 void hbg_ethtool_set_ops(struct net_device *netdev)

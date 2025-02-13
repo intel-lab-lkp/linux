@@ -177,6 +177,12 @@ void hbg_hw_set_mtu(struct hbg_priv *priv, u16 mtu)
 	hbg_hw_set_mac_max_frame_len(priv, frame_len);
 }
 
+void hbg_hw_loop_enable(struct hbg_priv *priv, u32 enable)
+{
+	hbg_reg_write_field(priv, HBG_REG_LOOP_REG_ADDR,
+			    HBG_REG_CF_CG2MI_LP_EN_B, enable);
+}
+
 void hbg_hw_mac_enable(struct hbg_priv *priv, u32 enable)
 {
 	hbg_reg_write_field(priv, HBG_REG_PORT_ENABLE_ADDR,

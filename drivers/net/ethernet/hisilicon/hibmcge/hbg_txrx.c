@@ -413,6 +413,12 @@ static int hbg_napi_rx_poll(struct napi_struct *napi, int budget)
 		rx_desc = (struct hbg_rx_desc *)buffer->skb->data;
 		pkt_len = FIELD_GET(HBG_RX_DESC_W2_PKT_LEN_M, rx_desc->word2);
 
+		if (unlikely(priv->self_test_pkt_recv_fn)) {
+			priv->self_test_pkt_recv_fn(priv->netdev, buffer->skb);
+			hbg_buffer_free(buffer);
+			goto next_buffer;
+		}
+
 		if (unlikely(!hbg_rx_pkt_check(priv, rx_desc))) {
 			hbg_buffer_free(buffer);
 			goto next_buffer;

@@ -81,6 +81,9 @@ enum hbg_hw_event_type {
 	HBG_HW_EVENT_NONE = 0,
 	HBG_HW_EVENT_INIT, /* driver is loading */
 	HBG_HW_EVENT_RESET,
+
+	HBG_HW_EVENT_SERDES_LOOPBACK_ENABLE = 4,
+	HBG_HW_EVENT_SERDES_LOOPBACK_DISABLE = 5,
 };
 
 struct hbg_dev_specs {
@@ -249,7 +252,12 @@ struct hbg_stats {
 
 	u64 tx_timeout_cnt;
 	u64 tx_dma_err_cnt;
+
+	u64 self_test_rx_pkt_cnt;
 };
+
+typedef void (*self_test_pkt_recv)(struct net_device *ndev,
+				   struct sk_buff *skb);
 
 struct hbg_priv {
 	struct net_device *netdev;
@@ -266,6 +274,8 @@ struct hbg_priv {
 	struct hbg_user_def user_def;
 	struct hbg_stats stats;
 	struct delayed_work service_task;
+
+	self_test_pkt_recv self_test_pkt_recv_fn;
 };
 
 #endif
