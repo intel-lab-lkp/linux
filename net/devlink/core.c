@@ -289,6 +289,80 @@ void devl_unlock(struct devlink *devlink)
 }
 EXPORT_SYMBOL_GPL(devl_unlock);
 
+/* A global data struct with all shared rate domains. */
+static struct {
+	struct mutex lock;    /* Acquired after the devlink lock. */
+	struct list_head rate_domains;
+} devlink_rate_domains = {
+	.lock = __MUTEX_INITIALIZER(devlink_rate_domains.lock),
+	.rate_domains = LIST_HEAD_INIT(devlink_rate_domains.rate_domains),
+};
+
+static bool devlink_rate_domain_eq(struct devlink_rate_domain *rate_domain,
+				   const struct devlink_ops *ops, u64 id)
+{
+	return rate_domain->ops == ops && rate_domain->id == id;
+}
+
+int devlink_shared_rate_domain_init(struct devlink *devlink, u64 id)
+{
+	struct devlink_rate_domain *rate_domain;
+	int err = 0;
+
+	devl_assert_locked(devlink);
+
+	if (devlink->rate_domain->shared) {
+		if (devlink_rate_domain_eq(devlink->rate_domain, devlink->ops, id))
+			return 0;
+		return -EEXIST;
+	}
+	if (!list_empty(&devlink->rate_domain->rate_list))
+		return -EINVAL;
+
+	mutex_lock(&devlink_rate_domains.lock);
+	list_for_each_entry(rate_domain, &devlink_rate_domains.rate_domains, list) {
+		if (devlink_rate_domain_eq(rate_domain, devlink->ops, id)) {
+			refcount_inc(&rate_domain->refcount);
+			goto replace_domain;
+		}
+	}
+
+	/* Shared domain not found, create one. */
+	rate_domain = kvzalloc(sizeof(*rate_domain), GFP_KERNEL);
+	if (!rate_domain) {
+		err = -ENOMEM;
+		goto unlock;
+	}
+	rate_domain->shared = true;
+	rate_domain->ops = devlink->ops;
+	rate_domain->id = id;
+	mutex_init(&rate_domain->lock);
+	INIT_LIST_HEAD(&rate_domain->rate_list);
+	refcount_set(&rate_domain->refcount, 1);
+	list_add_tail(&rate_domain->list, &devlink_rate_domains.rate_domains);
+replace_domain:
+	kvfree(devlink->rate_domain);
+	devlink->rate_domain = rate_domain;
+unlock:
+	mutex_unlock(&devlink_rate_domains.lock);
+	return err;
+}
+EXPORT_SYMBOL_GPL(devlink_shared_rate_domain_init);
+
+static void devlink_rate_domain_put(struct devlink_rate_domain *rate_domain)
+{
+	if (rate_domain->shared) {
+		if (!refcount_dec_and_test(&rate_domain->refcount))
+			return;
+
+		WARN_ON(!list_empty(&rate_domain->rate_list));
+		mutex_lock(&devlink_rate_domains.lock);
+		list_del(&rate_domain->list);
+		mutex_unlock(&devlink_rate_domains.lock);
+	}
+	kvfree(rate_domain);
+}
+
 /**
  * devlink_try_get() - try to obtain a reference on a devlink instance
  * @devlink: instance to reference
@@ -314,7 +388,7 @@ static void devlink_release(struct work_struct *work)
 	mutex_destroy(&devlink->lock);
 	lockdep_unregister_key(&devlink->lock_key);
 	put_device(devlink->dev);
-	kvfree(devlink->rate_domain);
+	devlink_rate_domain_put(devlink->rate_domain);
 	kvfree(devlink);
 }
 
@@ -428,6 +502,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	devlink->rate_domain = kvzalloc(sizeof(*devlink->rate_domain), GFP_KERNEL);
 	if (!devlink->rate_domain)
 		goto err_rate_domain;
+	devlink->rate_domain->shared = false;
 	INIT_LIST_HEAD(&devlink->rate_domain->rate_list);
 
 	ret = xa_alloc_cyclic(&devlinks, &devlink->index, devlink, xa_limit_31b,
@@ -484,7 +559,7 @@ void devlink_free(struct devlink *devlink)
 	WARN_ON(!list_empty(&devlink->resource_list));
 	WARN_ON(!list_empty(&devlink->dpipe_table_list));
 	WARN_ON(!list_empty(&devlink->sb_list));
-	WARN_ON(!list_empty(&devlink->rate_domain->rate_list));
+	WARN_ON(devlink_rates_check(devlink));
 	WARN_ON(!list_empty(&devlink->linecard_list));
 	WARN_ON(!xa_empty(&devlink->ports));
 

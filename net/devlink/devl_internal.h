@@ -30,9 +30,20 @@ struct devlink_dev_stats {
 	u32 remote_reload_stats[DEVLINK_RELOAD_STATS_ARRAY_SIZE];
 };
 
-/* Stores devlink rates associated with a rate domain. */
+/* Stores devlink rates associated with a rate domain.
+ * Multiple devlink objects may share the same domain (when 'shared' is true)
+ * and rate nodes can have members from multiple devices.
+ */
 struct devlink_rate_domain {
+	bool shared;
+	struct list_head list;
 	struct list_head rate_list;
+	/* Fields below are only used for shared rate domains. */
+	const struct devlink_ops *ops;
+	u64 id;
+	refcount_t refcount;
+	/* Serializes access to rates. */
+	struct mutex lock;
 };
 
 struct devlink {
@@ -121,9 +132,17 @@ static inline void devl_dev_unlock(struct devlink *devlink, bool dev_lock)
 		device_unlock(devlink->dev);
 }
 
-static inline void devl_rate_domain_lock(struct devlink *devlink) { }
+static inline void devl_rate_domain_lock(struct devlink *devlink)
+{
+	if (devlink->rate_domain->shared)
+		mutex_lock(&devlink->rate_domain->lock);
+}
 
-static inline void devl_rate_domain_unlock(struct devlink *devlink) { }
+static inline void devl_rate_domain_unlock(struct devlink *devlink)
+{
+	if (devlink->rate_domain->shared)
+		mutex_unlock(&devlink->rate_domain->lock);
+}
 
 typedef void devlink_rel_notify_cb_t(struct devlink *devlink, u32 obj_index);
 typedef void devlink_rel_cleanup_cb_t(struct devlink *devlink, u32 obj_index,
@@ -307,6 +326,7 @@ int devlink_resources_validate(struct devlink *devlink,
 
 /* Rates */
 int devlink_rate_nodes_check(struct devlink *devlink, struct netlink_ext_ack *extack);
+int devlink_rates_check(struct devlink *devlink);
 
 /* Linecards */
 unsigned int devlink_linecard_index(struct devlink_linecard *linecard);

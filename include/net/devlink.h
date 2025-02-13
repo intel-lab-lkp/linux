@@ -1561,6 +1561,14 @@ void devlink_register(struct devlink *devlink);
 void devlink_unregister(struct devlink *devlink);
 void devlink_free(struct devlink *devlink);
 
+/* Can be used to tell devlink that shared rate domains are supported.
+ * The same id needs to be provided for devlink objects that can share
+ * rate nodes in hw (e.g. contain nodes with parents in other devlink objects).
+ * This requires holding the devlink lock and can only be called once per object.
+ * Rate node relationships across different rate domains are not supported.
+ */
+int devlink_shared_rate_domain_init(struct devlink *devlink, u64 id);
+
 /**
  * struct devlink_port_ops - Port operations
  * @port_split: Callback used to split the port into multiple ones.

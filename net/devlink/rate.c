@@ -621,6 +621,21 @@ int devlink_rate_nodes_check(struct devlink *devlink, struct netlink_ext_ack *ex
 	return err;
 }
 
+int devlink_rates_check(struct devlink *devlink)
+{
+	struct devlink_rate *devlink_rate;
+	int err = 0;
+
+	devl_rate_domain_lock(devlink);
+	list_for_each_entry(devlink_rate, &devlink->rate_domain->rate_list, list)
+		if (devlink_rate->devlink == devlink) {
+			err = -EBUSY;
+			break;
+		}
+	devl_rate_domain_unlock(devlink);
+	return err;
+}
+
 /**
  * devl_rate_node_create - create devlink rate node
  * @devlink: devlink instance
