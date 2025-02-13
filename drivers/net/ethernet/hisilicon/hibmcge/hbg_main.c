@@ -14,6 +14,9 @@
 #include "hbg_txrx.h"
 #include "hbg_debugfs.h"
 
+#define HBG_SUPPORT_FEATURES (NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | \
+			     NETIF_F_RXCSUM)
+
 static void hbg_all_irq_enable(struct hbg_priv *priv, bool enabled)
 {
 	struct hbg_irq_info *info;
@@ -263,6 +266,12 @@ static void hbg_net_get_stats(struct net_device *netdev,
 	stats->rx_crc_errors += h_stats->rx_fcs_error_cnt;
 }
 
+static netdev_features_t hbg_net_fix_features(struct net_device *netdev,
+					      netdev_features_t features)
+{
+	return features & HBG_SUPPORT_FEATURES;
+}
+
 static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_open		= hbg_net_open,
 	.ndo_stop		= hbg_net_stop,
@@ -273,6 +282,7 @@ static const struct net_device_ops hbg_netdev_ops = {
 	.ndo_tx_timeout		= hbg_net_tx_timeout,
 	.ndo_set_rx_mode	= hbg_net_set_rx_mode,
 	.ndo_get_stats64	= hbg_net_get_stats,
+	.ndo_fix_features	= hbg_net_fix_features,
 };
 
 static void hbg_service_task(struct work_struct *work)
@@ -419,6 +429,9 @@ static int hbg_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (ret)
 		return ret;
 
+	/* set default features */
+	netdev->features |= HBG_SUPPORT_FEATURES;
+	netdev->hw_features |= HBG_SUPPORT_FEATURES;
 	netdev->priv_flags |= IFF_UNICAST_FLT;
 
 	netdev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
