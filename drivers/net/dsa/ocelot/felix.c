@@ -348,6 +348,8 @@ static int felix_update_tag_8021q_rx_rules(struct dsa_switch *ds, int port,
 
 		outer_tagging_rule = ocelot_vcap_block_find_filter_by_id(block_vcap_es0,
 									 cookie, false);
+		if (!outer_tagging_rule)
+			continue;
 
 		felix_update_tag_8021q_rx_rule(outer_tagging_rule, vlan_filtering);
 
