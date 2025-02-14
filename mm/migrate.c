@@ -1448,6 +1448,7 @@ static int unmap_and_move_huge_page(new_folio_t get_new_folio,
 	int page_was_mapped = 0;
 	struct anon_vma *anon_vma = NULL;
 	struct address_space *mapping = NULL;
+	unsigned long size;
 
 	if (folio_ref_count(src) == 1) {
 		/* page was freed from under us. So we are done. */
@@ -1533,9 +1534,20 @@ put_anon:
 out_unlock:
 	folio_unlock(src);
 out:
-	if (rc == MIGRATEPAGE_SUCCESS)
+	if (rc == MIGRATEPAGE_SUCCESS) {
+		size = folio_size(src);
 		folio_putback_hugetlb(src);
-	else if (rc != -EAGAIN)
+
+		/*
+		 * Due to the deferred freeing of HugeTLB folios, the hugepage 'src' may
+		 * not immediately release to the buddy system. This can lead to failure
+		 * in allocating memory through the cma_alloc() function. To ensure that
+		 * the hugepage folios are properly released back to the buddy system,
+		 * we invoke the wait_for_hugepage_folios_freed() function to wait for
+		 * the release to complete.
+		 */
+		wait_for_hugepage_folios_freed(size_to_hstate(size));
+	} else if (rc != -EAGAIN)
 		list_move_tail(&src->lru, ret);
 
 	/*

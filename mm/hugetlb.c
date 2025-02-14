@@ -2943,6 +2943,13 @@ int replace_free_hugepage_folios(unsigned long start_pfn, unsigned long end_pfn)
 	return ret;
 }
 
+void wait_for_hugepage_folios_freed(struct hstate *h)
+{
+	WARN_ON(!h);
+
+	flush_free_hpage_work(h);
+}
+
 typedef enum {
 	/*
 	 * For either 0/1: we checked the per-vma resv map, and one resv
