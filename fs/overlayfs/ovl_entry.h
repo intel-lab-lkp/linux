@@ -19,6 +19,7 @@ struct ovl_config {
 	bool metacopy;
 	bool userxattr;
 	bool ovl_volatile;
+	bool ovl_credentials;
 };
 
 struct ovl_sb {

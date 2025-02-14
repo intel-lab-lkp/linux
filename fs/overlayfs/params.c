@@ -59,6 +59,7 @@ enum ovl_opt {
 	Opt_metacopy,
 	Opt_verity,
 	Opt_volatile,
+	Opt_override_creds,
 };
 
 static const struct constant_table ovl_parameter_bool[] = {
@@ -155,6 +156,7 @@ const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_enum("metacopy",            Opt_metacopy, ovl_parameter_bool),
 	fsparam_enum("verity",              Opt_verity, ovl_parameter_verity),
 	fsparam_flag("volatile",            Opt_volatile),
+	fsparam_flag_no("override_creds",   Opt_override_creds),
 	{}
 };
 
@@ -662,6 +664,27 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_userxattr:
 		config->userxattr = true;
 		break;
+	case Opt_override_creds: {
+		const struct cred *cred = ofs->creator_cred;
+
+		if (!result.negated) {
+			if (fc->user_ns != current_user_ns()) {
+				err = -EINVAL;
+				break;
+			}
+
+			ofs->creator_cred = prepare_creds();
+			if (!ofs->creator_cred)
+				err = -EINVAL;
+			else
+				config->ovl_credentials = true;
+		} else {
+			ofs->creator_cred = NULL;
+			config->ovl_credentials = false;
+		}
+		put_cred(cred);
+		break;
+	}
 	default:
 		pr_err("unrecognized mount option \"%s\" or missing value\n",
 		       param->key);
@@ -1071,5 +1094,7 @@ int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	if (ofs->config.verity_mode != ovl_verity_mode_def())
 		seq_printf(m, ",verity=%s",
 			   ovl_verity_mode(&ofs->config));
+	if (ofs->config.ovl_credentials)
+		seq_puts(m, ",override_creds");
 	return 0;
 }

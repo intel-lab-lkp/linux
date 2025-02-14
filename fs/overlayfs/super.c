@@ -654,6 +654,7 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 			    const struct path *workpath)
 {
 	struct vfsmount *mnt = ovl_upper_mnt(ofs);
+	const struct cred *old_cred;
 	struct dentry *workdir;
 	struct file *tmpfile;
 	bool rename_whiteout;
@@ -664,6 +665,8 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 	err = mnt_want_write(mnt);
 	if (err)
 		return err;
+
+	old_cred = ovl_override_creds(sb);
 
 	workdir = ovl_workdir_create(ofs, OVL_WORKDIR_NAME, false);
 	err = PTR_ERR(workdir);
@@ -788,6 +791,7 @@ static int ovl_make_workdir(struct super_block *sb, struct ovl_fs *ofs,
 		ofs->config.nfs_export = false;
 	}
 out:
+	ovl_revert_creds(old_cred);
 	mnt_drop_write(mnt);
 	return err;
 }
@@ -830,6 +834,7 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 			    struct ovl_entry *oe, const struct path *upperpath)
 {
 	struct vfsmount *mnt = ovl_upper_mnt(ofs);
+	const struct cred *old_cred;
 	struct dentry *indexdir;
 	struct dentry *origin = ovl_lowerstack(oe)->dentry;
 	const struct ovl_fh *fh;
@@ -842,6 +847,8 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 	err = mnt_want_write(mnt);
 	if (err)
 		goto out_free_fh;
+
+	old_cred = ovl_override_creds(sb);
 
 	/* Verify lower root is upper root origin */
 	err = ovl_verify_origin_fh(ofs, upperpath->dentry, fh, true);
@@ -893,6 +900,7 @@ static int ovl_get_indexdir(struct super_block *sb, struct ovl_fs *ofs,
 		pr_warn("try deleting index dir or mounting with '-o index=off' to disable inodes index.\n");
 
 out:
+	ovl_revert_creds(old_cred);
 	mnt_drop_write(mnt);
 out_free_fh:
 	kfree(fh);
@@ -1318,7 +1326,10 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_d_op = &ovl_dentry_operations;
 
 	err = -ENOMEM;
-	ofs->creator_cred = cred = prepare_creds();
+	if (!ofs->creator_cred)
+		ofs->creator_cred = cred = prepare_creds();
+	else
+		cred = (struct cred *)ofs->creator_cred;
 	if (!cred)
 		goto out_err;
 
