@@ -63,6 +63,8 @@ struct hv_uio_private_data {
 	void	*send_buf;
 	struct vmbus_gpadl send_gpadl;
 	char	send_name[32];
+
+	struct work_struct sysfs_work;
 };
 
 /*
@@ -243,6 +245,29 @@ hv_uio_release(struct uio_info *info, struct inode *inode)
 	return ret;
 }
 
+static void hv_uio_sysfs_work(struct work_struct *work)
+{
+	struct hv_uio_private_data *pdata =
+		container_of(work, struct hv_uio_private_data, sysfs_work);
+	struct vmbus_channel *channel = pdata->device->channel;
+	int ret;
+
+	ret = pdata->device->channels_kset ||
+		wait_event_interruptible_timeout(pdata->device->wait_event,
+						 pdata->device->device_registered,
+						 msecs_to_jiffies(5));
+	if (!ret) {
+		dev_warn(&pdata->device->device,
+			 "kset taking too long to initialize; %d\n", ret);
+		return;
+	}
+
+	ret = sysfs_create_bin_file(&channel->kobj, &ring_buffer_bin_attr);
+	if (ret)
+		dev_notice(&pdata->device->device,
+			   "sysfs create ring bin file failed; %d\n", ret);
+}
+
 static int
 hv_uio_probe(struct hv_device *dev,
 	     const struct hv_vmbus_device_id *dev_id)
@@ -349,11 +374,8 @@ hv_uio_probe(struct hv_device *dev,
 		dev_err(&dev->device, "hv_uio register failed\n");
 		goto fail_close;
 	}
-
-	ret = sysfs_create_bin_file(&channel->kobj, &ring_buffer_bin_attr);
-	if (ret)
-		dev_notice(&dev->device,
-			   "sysfs create ring bin file failed; %d\n", ret);
+	INIT_WORK(&pdata->sysfs_work, hv_uio_sysfs_work);
+	schedule_work(&pdata->sysfs_work);
 
 	hv_set_drvdata(dev, pdata);
 
@@ -376,6 +398,7 @@ hv_uio_remove(struct hv_device *dev)
 		return;
 
 	sysfs_remove_bin_file(&dev->channel->kobj, &ring_buffer_bin_attr);
+	cancel_work_sync(&pdata->sysfs_work);
 	uio_unregister_device(&pdata->info);
 	hv_uio_cleanup(dev, pdata);
 

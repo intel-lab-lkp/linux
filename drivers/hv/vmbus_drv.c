@@ -835,6 +835,7 @@ static int vmbus_probe(struct device *child_device)
 	struct hv_device *dev = device_to_hv_device(child_device);
 	const struct hv_vmbus_device_id *dev_id;
 
+	dev->device_registered = false;
 	dev_id = hv_vmbus_get_id(drv, dev);
 	if (drv->probe) {
 		ret = drv->probe(dev, dev_id);
@@ -1927,6 +1928,7 @@ int vmbus_device_register(struct hv_device *child_device_obj)
 	child_device_obj->device.dma_mask = &child_device_obj->dma_mask;
 	dma_set_mask(&child_device_obj->device, DMA_BIT_MASK(64));
 
+	init_waitqueue_head(&child_device_obj->wait_event);
 	/*
 	 * Register with the LDM. This will kick off the driver/device
 	 * binding...which will eventually call vmbus_match() and vmbus_probe()
@@ -1951,6 +1953,11 @@ int vmbus_device_register(struct hv_device *child_device_obj)
 		pr_err("Unable to register primary channeln");
 		goto err_kset_unregister;
 	}
+
+	/* channel kobj allocated, now inform anyone waiting for it */
+	child_device_obj->device_registered = true;
+	wake_up_interruptible(&child_device_obj->wait_event);
+
 	hv_debug_add_dev_dir(child_device_obj);
 
 	return 0;

@@ -1302,6 +1302,10 @@ struct hv_device {
 	u16 vendor_id;
 	u16 device_id;
 
+	/* check for device registration completion */
+	bool			device_registered;
+	wait_queue_head_t	wait_event;
+
 	struct device device;
 	/*
 	 * Driver name to force a match.  Do not set directly, because core
