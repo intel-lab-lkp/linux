@@ -53,6 +53,8 @@ struct xe_drm_client {
 	 * Protected by @blame_lock;
 	 */
 	struct list_head blame_list;
+	/** @reset_count: number of times this drm client has seen an engine reset */
+	atomic_t reset_count;
 #endif
 };
 

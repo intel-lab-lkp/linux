@@ -492,6 +492,8 @@ static void show_blames(struct drm_printer *p, struct drm_file *file)
 
 	client = xef->client;
 
+	drm_printf(p, "drm-client-reset-count:%u\n",
+		   atomic_read(&client->reset_count));
 	drm_printf(p, "\n");
 	drm_printf(p, "- Exec queue ban list -\n");
 	spin_lock(&client->blame_lock);
