@@ -195,6 +195,12 @@ void *gpio_regmap_get_drvdata(struct gpio_regmap *gpio)
 }
 EXPORT_SYMBOL_GPL(gpio_regmap_get_drvdata);
 
+u16 gpio_regmap_get_ngpio(struct gpio_regmap *gpio)
+{
+	return gpio->gpio_chip.ngpio;
+}
+EXPORT_SYMBOL_GPL(gpio_regmap_get_ngpio);
+
 /**
  * gpio_regmap_register() - Register a generic regmap GPIO controller
  * @config: configuration for gpio_regmap
