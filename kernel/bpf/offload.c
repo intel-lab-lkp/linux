@@ -122,6 +122,7 @@ static int bpf_map_offload_ndo(struct bpf_offloaded_map *offmap,
 {
 	struct netdev_bpf data = {};
 	struct net_device *netdev;
+	int ret;
 
 	ASSERT_RTNL();
 
@@ -130,7 +131,11 @@ static int bpf_map_offload_ndo(struct bpf_offloaded_map *offmap,
 	/* Caller must make sure netdev is valid */
 	netdev = offmap->netdev;
 
-	return netdev->netdev_ops->ndo_bpf(netdev, &data);
+	netdev_lock_ops(netdev);
+	ret = netdev->netdev_ops->ndo_bpf(netdev, &data);
+	netdev_unlock_ops(netdev);
+
+	return ret;
 }
 
 static void __bpf_map_offload_destroy(struct bpf_offloaded_map *offmap)
