@@ -1015,7 +1015,7 @@ retry:
 		int num_ops = 0, op_idx;
 		unsigned i, nr_folios, max_pages, locked_pages = 0;
 		struct page **pages = NULL, **data_pages;
-		struct page *page;
+		struct folio *folio;
 		pgoff_t strip_unit_end = 0;
 		u64 offset = 0, len = 0;
 		bool from_pool = false;
@@ -1029,24 +1029,23 @@ get_more_pages:
 		if (!nr_folios && !locked_pages)
 			break;
 		for (i = 0; i < nr_folios && locked_pages < max_pages; i++) {
-			struct folio *folio = fbatch.folios[i];
+			folio = fbatch.folios[i];
 
-			page = &folio->page;
-			doutc(cl, "? %p idx %lu\n", page, page->index);
+			doutc(cl, "? %p idx %lu\n", folio, folio->index);
 			if (locked_pages == 0)
-				lock_page(page);  /* first page */
-			else if (!trylock_page(page))
+				folio_lock(folio);  /* first page */
+			else if (!folio_trylock(folio))
 				break;
 
 			/* only dirty pages, or our accounting breaks */
-			if (unlikely(!PageDirty(page)) ||
-			    unlikely(page->mapping != mapping)) {
-				doutc(cl, "!dirty or !mapping %p\n", page);
-				unlock_page(page);
+			if (unlikely(!folio_test_dirty(folio)) ||
+			    unlikely(folio->mapping != mapping)) {
+				doutc(cl, "!dirty or !mapping %p\n", folio);
+				folio_unlock(folio);
 				continue;
 			}
 			/* only if matching snap context */
-			pgsnapc = page_snap_context(page);
+			pgsnapc = page_snap_context(&folio->page);
 			if (pgsnapc != snapc) {
 				doutc(cl, "page snapc %p %lld != oldest %p %lld\n",
 				      pgsnapc, pgsnapc->seq, snapc, snapc->seq);
@@ -1054,10 +1053,10 @@ get_more_pages:
 				    !ceph_wbc.head_snapc &&
 				    wbc->sync_mode != WB_SYNC_NONE)
 					should_loop = true;
-				unlock_page(page);
+				folio_unlock(folio);
 				continue;
 			}
-			if (page_offset(page) >= ceph_wbc.i_size) {
+			if (folio_pos(folio) >= ceph_wbc.i_size) {
 				doutc(cl, "folio at %lu beyond eof %llu\n",
 				      folio->index, ceph_wbc.i_size);
 				if ((ceph_wbc.size_stable ||
@@ -1068,9 +1067,9 @@ get_more_pages:
 				folio_unlock(folio);
 				continue;
 			}
-			if (strip_unit_end && (page->index > strip_unit_end)) {
-				doutc(cl, "end of strip unit %p\n", page);
-				unlock_page(page);
+			if (strip_unit_end && (folio->index > strip_unit_end)) {
+				doutc(cl, "end of strip unit %p\n", folio);
+				folio_unlock(folio);
 				break;
 			}
 			if (folio_test_writeback(folio) ||
@@ -1085,9 +1084,9 @@ get_more_pages:
 				folio_wait_private_2(folio); /* [DEPRECATED] */
 			}
 
-			if (!clear_page_dirty_for_io(page)) {
-				doutc(cl, "%p !clear_page_dirty_for_io\n", page);
-				unlock_page(page);
+			if (!folio_clear_dirty_for_io(folio)) {
+				doutc(cl, "%p !clear_page_dirty_for_io\n", folio);
+				folio_unlock(folio);
 				continue;
 			}
 
@@ -1103,7 +1102,7 @@ get_more_pages:
 				u32 xlen;
 
 				/* prepare async write request */
-				offset = (u64)page_offset(page);
+				offset = folio_pos(folio);
 				ceph_calc_file_object_mapping(&ci->i_layout,
 							      offset, wsize,
 							      &objnum, &objoff,
@@ -1111,7 +1110,7 @@ get_more_pages:
 				len = xlen;
 
 				num_ops = 1;
-				strip_unit_end = page->index +
+				strip_unit_end = folio->index +
 					((len - 1) >> PAGE_SHIFT);
 
 				BUG_ON(pages);
@@ -1126,23 +1125,23 @@ get_more_pages:
 				}
 
 				len = 0;
-			} else if (page->index !=
+			} else if (folio->index !=
 				   (offset + len) >> PAGE_SHIFT) {
 				if (num_ops >= (from_pool ?  CEPH_OSD_SLAB_OPS :
 							     CEPH_OSD_MAX_OPS)) {
-					redirty_page_for_writepage(wbc, page);
-					unlock_page(page);
+					folio_redirty_for_writepage(wbc, folio);
+					folio_unlock(folio);
 					break;
 				}
 
 				num_ops++;
-				offset = (u64)page_offset(page);
+				offset = folio_pos(folio);
 				len = 0;
 			}
 
 			/* note position of first page in fbatch */
 			doutc(cl, "%llx.%llx will write page %p idx %lu\n",
-			      ceph_vinop(inode), page, page->index);
+			      ceph_vinop(inode), folio, folio->index);
 
 			if (atomic_long_inc_return(&fsc->writeback_count) >
 			    CONGESTION_ON_THRESH(
@@ -1151,7 +1150,7 @@ get_more_pages:
 
 			if (IS_ENCRYPTED(inode)) {
 				pages[locked_pages] =
-					fscrypt_encrypt_pagecache_blocks(page,
+					fscrypt_encrypt_pagecache_blocks(&folio->page,
 						PAGE_SIZE, 0,
 						locked_pages ? GFP_NOWAIT : GFP_NOFS);
 				if (IS_ERR(pages[locked_pages])) {
@@ -1162,17 +1161,17 @@ get_more_pages:
 					/* better not fail on first page! */
 					BUG_ON(locked_pages == 0);
 					pages[locked_pages] = NULL;
-					redirty_page_for_writepage(wbc, page);
-					unlock_page(page);
+					folio_redirty_for_writepage(wbc, folio);
+					folio_unlock(folio);
 					break;
 				}
 				++locked_pages;
 			} else {
-				pages[locked_pages++] = page;
+				pages[locked_pages++] = &folio->page;
 			}
 
 			fbatch.folios[i] = NULL;
-			len += thp_size(page);
+			len += folio_size(folio);
 		}
 
 		/* did we get anything? */
@@ -1279,7 +1278,7 @@ new_request:
 			/* writepages_finish() clears writeback pages
 			 * according to the data length, so make sure
 			 * data length covers all locked pages */
-			u64 min_len = len + 1 - thp_size(page);
+			u64 min_len = len + 1 - folio_size(folio);
 			len = get_writepages_data_length(inode, pages[i - 1],
 							 offset);
 			len = max(len, min_len);
