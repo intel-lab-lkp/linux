@@ -34,6 +34,9 @@ Here are examples of these different formats::
    4.18+ diskstats:
       3    0   hda 446216 784926 9550688 4382310 424847 312726 5922052 19310380 0 3376340 23705160 0 0 0 0
 
+   5.5+ diskstats:
+      3    0   hda 446216 784926 9550688 4382310 424847 312726 5922052 19310380 0 3376340 23705160 0 0 0 0 0 0
+
 On 2.4 you might execute ``grep 'hda ' /proc/partitions``. On 2.6+, you have
 a choice of ``cat /sys/block/hda/stat`` or ``grep 'hda ' /proc/diskstats``.
 
@@ -43,21 +46,21 @@ be a better choice if you are watching a large number of disks because
 you'll avoid the overhead of 50, 100, or 500 or more opens/closes with
 each snapshot of your disk statistics.
 
-In 2.4, the statistics fields are those after the device name. In
-the above example, the first field of statistics would be 446216.
-By contrast, in 2.6+ if you look at ``/sys/block/hda/stat``, you'll
-find just the 15 fields, beginning with 446216.  If you look at
-``/proc/diskstats``, the 15 fields will be preceded by the major and
-minor device numbers, and device name.  Each of these formats provides
-15 fields of statistics, each meaning exactly the same things.
-All fields except field 9 are cumulative since boot.  Field 9 should
-go to zero as I/Os complete; all others only increase (unless they
-overflow and wrap). Wrapping might eventually occur on a very busy
-or long-lived system; so applications should be prepared to deal with
-it. Regarding wrapping, the types of the fields are either unsigned
-int (32 bit) or unsigned long (32-bit or 64-bit, depending on your
-machine) as noted per-field below. Unless your observations are very
-spread in time, these fields should not wrap twice before you notice it.
+In ``/proc/diskstats``, the statistics fields are those after the device
+name. In the above example, the first field of statistics would
+be 446216. By contrast, in ``/sys/block/hda/stat`` you'll find just the
+17 fields, beginning with 446216. If you look at ``/proc/diskstats``,
+the 17 fields will be preceded by the major and minor device numbers,
+and device name. Each of these formats provides 17 fields of statistics,
+each meaning exactly the same things. All fields except field 9 are
+cumulative since boot. Field 9 should go to zero as I/Os complete; all
+others only increase (unless they overflow and wrap). Wrapping might
+eventually occur on a very busy or long-lived system; so applications
+should be prepared to deal with it. Regarding wrapping, the types of the
+fields are either unsigned int (32 bit) or unsigned long (32-bit or
+64-bit, depending on your machine) as noted per-field below. Unless your
+observations are very spread in time, these fields should not wrap twice
+before you notice it.
 
 Each set of stats only applies to the indicated device; if you want
 system-wide stats you'll have to find all the devices and sum them all up.
