@@ -17,6 +17,7 @@
 #include "xe_exec_queue.h"
 #include "xe_force_wake.h"
 #include "xe_gt.h"
+#include "xe_gt_pagefault.h"
 #include "xe_hw_engine.h"
 #include "xe_pm.h"
 #include "xe_trace.h"
@@ -70,6 +71,21 @@
  * 	drm-total-cycles-ccs:   7655183225
  * 	drm-engine-capacity-ccs:        4
  *
+ * 	- Exec queue ban list -
+ *
+ * 		Exec queue 1 banned:
+ * 			Associated pagefault:
+ * 			ASID: 9
+ * 			VFID: 0
+ * 			PDATA: 0x0450
+ * 			Faulted Address: 0x000001fff86a9000
+ * 			FaultType: NOT_PRESENT
+ * 			AccessType: ACCESS_TYPE_WRITE
+ * 			FaultLevel: 0
+ * 			EngineClass: 1 vcs
+ * 			EngineInstance: 0
+ *		
+ *
  * Possible `drm-cycles-` key names are: `rcs`, `ccs`, `bcs`, `vcs`, `vecs` and
  * "other".
  */
@@ -97,6 +113,8 @@ struct xe_drm_client *xe_drm_client_alloc(void)
 #ifdef CONFIG_PROC_FS
 	spin_lock_init(&client->bos_lock);
 	INIT_LIST_HEAD(&client->bos_list);
+	spin_lock_init(&client->blame_lock);
+	INIT_LIST_HEAD(&client->blame_list);
 #endif
 	return client;
 }
@@ -162,6 +180,72 @@ void xe_drm_client_remove_bo(struct xe_bo *bo)
 	spin_unlock(&client->bos_lock);
 
 	xe_drm_client_put(client);
+}
+
+static void free_blame(struct blame *b)
+{
+	list_del(&b->list);
+	kfree(b->pf);
+	kfree(b);
+}
+
+void xe_drm_client_add_blame(struct xe_drm_client *client,
+			     struct xe_exec_queue *q)
+{
+	struct blame *b = NULL;
+	struct list_head *h;
+	struct pagefault *pf = NULL;
+	struct xe_file *xef = q->xef;
+	struct xe_hw_engine *hwe = q->hwe;
+	unsigned long count;
+
+	b = kzalloc(sizeof(struct blame), GFP_KERNEL);
+	xe_assert(xef->xe, b);
+
+	spin_lock(&client->blame_lock);
+	list_add_tail(&b->list, &client->blame_list);
+	/**
+	 * Limit the number of blames in the blame list to prevent memory overuse.
+	 *
+	 * TODO: Parameterize max blame list size.
+	 */
+	count = 0;
+	list_for_each(h, &client->blame_list)
+		count++;
+	if (count >= 50) {
+		struct blame *rem = list_first_entry(&client->blame_list, struct blame, list);
+		free_blame(rem);
+	}
+	spin_unlock(&client->blame_lock);
+
+	/**
+	 * Duplicate pagefault on engine to blame, if one may have caused the
+	 * exec queue to be banned.
+	 */
+	b->pf = NULL;
+	spin_lock(&hwe->pf.lock);
+	if (hwe->pf.info) {
+		pf = kzalloc(sizeof(struct pagefault), GFP_KERNEL);
+		memcpy(pf, hwe->pf.info, sizeof(struct pagefault));
+	}
+	spin_unlock(&hwe->pf.lock);
+
+	/** Save blame data to list element */
+	b->exec_queue_id = q->id;
+	b->pf = pf;
+}
+
+void xe_drm_client_remove_blame(struct xe_drm_client *client,
+				struct xe_exec_queue *q)
+{
+	struct blame *b, *tmp;
+
+	spin_lock(&client->blame_lock);
+	list_for_each_entry_safe(b, tmp, &client->blame_list, list)
+		if (b->exec_queue_id == q->id)
+			free_blame(b);
+	spin_unlock(&client->blame_lock);
+
 }
 
 static void bo_meminfo(struct xe_bo *bo,
@@ -380,6 +464,49 @@ static void show_run_ticks(struct drm_printer *p, struct drm_file *file)
 	}
 }
 
+static void print_pagefault(struct drm_printer *p, struct pagefault *pf)
+{
+	drm_printf(p, "\n\t\tASID: %d\n"
+	 "\t\tVFID: %d\n"
+	 "\t\tPDATA: 0x%04x\n"
+	 "\t\tFaulted Address: 0x%08x%08x\n"
+	 "\t\tFaultType: %s\n"
+	 "\t\tAccessType: %s\n"
+	 "\t\tFaultLevel: %d\n"
+	 "\t\tEngineClass: %d %s\n"
+	 "\t\tEngineInstance: %d\n",
+	 pf->asid, pf->vfid, pf->pdata, upper_32_bits(pf->page_addr),
+	 lower_32_bits(pf->page_addr),
+	 fault_type_to_str(pf->fault_type),
+	 access_type_to_str(pf->access_type),
+	 pf->fault_level, pf->engine_class,
+	 xe_hw_engine_class_to_str(pf->engine_class),
+	 pf->engine_instance);
+}
+
+static void show_blames(struct drm_printer *p, struct drm_file *file)
+{
+	struct xe_file *xef = file->driver_priv;
+	struct xe_drm_client *client;
+	struct blame *b;
+
+	client = xef->client;
+
+	drm_printf(p, "\n");
+	drm_printf(p, "- Exec queue ban list -\n");
+	spin_lock(&client->blame_lock);
+	list_for_each_entry(b, &client->blame_list, list) {
+		struct pagefault *pf = b->pf;
+		drm_printf(p, "\n\tExec queue %u banned:\n", b->exec_queue_id);
+		drm_printf(p, "\t\tAssociated pagefault:\n");
+		if (pf)
+			print_pagefault(p, pf);
+		else
+			drm_printf(p, "\t\t- No associated pagefault -\n");
+	}
+	spin_unlock(&client->blame_lock);
+}
+
 /**
  * xe_drm_client_fdinfo() - Callback for fdinfo interface
  * @p: The drm_printer ptr
@@ -394,5 +521,6 @@ void xe_drm_client_fdinfo(struct drm_printer *p, struct drm_file *file)
 {
 	show_meminfo(p, file);
 	show_run_ticks(p, file);
+	show_blames(p, file);
 }
 #endif

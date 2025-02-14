@@ -15,7 +15,18 @@
 
 struct drm_file;
 struct drm_printer;
+struct pagefault;
 struct xe_bo;
+struct xe_exec_queue;
+
+struct blame {
+	/** @exec_queue_id: ID number of banned exec queue */
+	u32 exec_queue_id;
+	/** @pf: pagefault on engine of banned exec queue, if any at time */
+	struct pagefault *pf;
+	/** @list: link into @xe_drm_client.blame_list */
+	struct list_head list;
+};
 
 struct xe_drm_client {
 	struct kref kref;
@@ -31,6 +42,17 @@ struct xe_drm_client {
 	 * Protected by @bos_lock.
 	 */
 	struct list_head bos_list;
+	/**
+	 * @blame_lock: lock protecting @blame_list
+	 */
+	spinlock_t blame_lock;
+	/**
+	 * @blame_list: list of banned exec queues associated with this drm
+	 *		client, as well as any pagefaults at time of ban.
+	 *
+	 * Protected by @blame_lock;
+	 */
+	struct list_head blame_list;
 #endif
 };
 
@@ -57,6 +79,10 @@ void xe_drm_client_fdinfo(struct drm_printer *p, struct drm_file *file);
 void xe_drm_client_add_bo(struct xe_drm_client *client,
 			  struct xe_bo *bo);
 void xe_drm_client_remove_bo(struct xe_bo *bo);
+void xe_drm_client_add_blame(struct xe_drm_client *client,
+			     struct xe_exec_queue *q);
+void xe_drm_client_remove_blame(struct xe_drm_client *client,
+				struct xe_exec_queue *q);
 #else
 static inline void xe_drm_client_add_bo(struct xe_drm_client *client,
 					struct xe_bo *bo)
@@ -64,6 +90,16 @@ static inline void xe_drm_client_add_bo(struct xe_drm_client *client,
 }
 
 static inline void xe_drm_client_remove_bo(struct xe_bo *bo)
+{
+}
+
+static inline void xe_drm_client_add_blame(struct xe_drm_client *client,
+					   struct xe_exec_queue *q)
+{
+}
+
+static inline void xe_drm_client_remove_blame(struct xe_drm_client *client,
+					      struct xe_exec_queue *q)
 {
 }
 #endif

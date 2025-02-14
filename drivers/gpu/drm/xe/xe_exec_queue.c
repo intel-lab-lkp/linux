@@ -13,6 +13,7 @@
 #include <uapi/drm/xe_drm.h>
 
 #include "xe_device.h"
+#include "xe_drm_client.h"
 #include "xe_gt.h"
 #include "xe_hw_engine_class_sysfs.h"
 #include "xe_hw_engine_group.h"
@@ -713,6 +714,12 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 
 	q->id = id;
 	args->exec_queue_id = id;
+
+	/**
+	 * If an exec queue in the blame list shares the same exec queue
+	 * ID, remove it from the blame list to avoid confusion.
+	 */
+	xe_drm_client_remove_blame(q->xef->client, q);
 
 	return 0;
 

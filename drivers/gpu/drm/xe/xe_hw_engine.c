@@ -21,6 +21,7 @@
 #include "xe_gsc.h"
 #include "xe_gt.h"
 #include "xe_gt_ccs_mode.h"
+#include "xe_gt_pagefault.h"
 #include "xe_gt_printk.h"
 #include "xe_gt_mcr.h"
 #include "xe_gt_topology.h"
@@ -556,6 +557,9 @@ static void hw_engine_init_early(struct xe_gt *gt, struct xe_hw_engine *hwe,
 		/* Record default props */
 		hwe->eclass->defaults = hwe->eclass->sched_props;
 	}
+
+	hwe->pf.info = NULL;
+	spin_lock_init(&hwe->pf.lock);
 
 	xe_reg_sr_init(&hwe->reg_sr, hwe->name, gt_to_xe(gt));
 	xe_tuning_process_engine(hwe);

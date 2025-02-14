@@ -20,11 +20,13 @@
 #include "xe_assert.h"
 #include "xe_devcoredump.h"
 #include "xe_device.h"
+#include "xe_drm_client.h"
 #include "xe_exec_queue.h"
 #include "xe_force_wake.h"
 #include "xe_gpu_scheduler.h"
 #include "xe_gt.h"
 #include "xe_gt_clock.h"
+#include "xe_gt_pagefault.h"
 #include "xe_gt_printk.h"
 #include "xe_guc.h"
 #include "xe_guc_capture.h"
@@ -146,6 +148,7 @@ static bool exec_queue_banned(struct xe_exec_queue *q)
 static void set_exec_queue_banned(struct xe_exec_queue *q)
 {
 	atomic_or(EXEC_QUEUE_STATE_BANNED, &q->guc->state);
+	xe_drm_client_add_blame(q->xef->client, q);
 }
 
 static bool exec_queue_suspended(struct xe_exec_queue *q)
@@ -1971,6 +1974,7 @@ int xe_guc_deregister_done_handler(struct xe_guc *guc, u32 *msg, u32 len)
 int xe_guc_exec_queue_reset_handler(struct xe_guc *guc, u32 *msg, u32 len)
 {
 	struct xe_gt *gt = guc_to_gt(guc);
+	struct xe_hw_engine *hwe;
 	struct xe_exec_queue *q;
 	u32 guc_id;
 
@@ -1983,10 +1987,23 @@ int xe_guc_exec_queue_reset_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	if (unlikely(!q))
 		return -EPROTO;
 
+	hwe = q->hwe;
+
 	xe_gt_info(gt, "Engine reset: engine_class=%s, logical_mask: 0x%x, guc_id=%d",
 		   xe_hw_engine_class_to_str(q->class), q->logical_mask, guc_id);
 
 	trace_xe_exec_queue_reset(q);
+
+	/**
+	 * Clear last pagefault from engine.  Any future exec queue bans likely were
+	 * not caused by said pagefault now that the engine has reset.
+	 */
+	spin_lock(&hwe->pf.lock);
+	if (hwe->pf.info) {
+		kfree(hwe->pf.info);
+		hwe->pf.info = kzalloc(sizeof(struct pagefault), GFP_KERNEL);
+	}
+	spin_unlock(&hwe->pf.lock);
 
 	/*
 	 * A banned engine is a NOP at this point (came from
