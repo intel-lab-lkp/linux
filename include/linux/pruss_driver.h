@@ -118,6 +118,7 @@ int pruss_cfg_gpimode(struct pruss *pruss, enum pruss_pru_id pru_id,
 int pruss_cfg_miirt_enable(struct pruss *pruss, bool enable);
 int pruss_cfg_xfr_enable(struct pruss *pruss, enum pru_type pru_type,
 			 bool enable);
+int pruss_cfg_ocp_master_ports(struct pruss *pruss, bool enable);
 
 #else
 
@@ -168,6 +169,11 @@ static inline int pruss_cfg_miirt_enable(struct pruss *pruss, bool enable)
 static inline int pruss_cfg_xfr_enable(struct pruss *pruss,
 				       enum pru_type pru_type,
 				       bool enable)
+{
+	return -EOPNOTSUPP;
+}
+
+static int pruss_cfg_ocp_master_ports(struct pruss *pruss, bool enable)
 {
 	return -EOPNOTSUPP;
 }
