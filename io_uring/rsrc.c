@@ -103,19 +103,23 @@ static int io_buffer_validate(struct iovec *iov)
 
 static void io_buffer_unmap(struct io_ring_ctx *ctx, struct io_rsrc_node *node)
 {
-	unsigned int i;
+	struct io_mapped_ubuf *imu = node->buf;
 
-	if (node->buf) {
-		struct io_mapped_ubuf *imu = node->buf;
+	if (!refcount_dec_and_test(&imu->refs))
+		return;
 
-		if (!refcount_dec_and_test(&imu->refs))
-			return;
+	if (imu->release) {
+		imu->release(imu->priv);
+	} else {
+		unsigned int i;
+
 		for (i = 0; i < imu->nr_bvecs; i++)
 			unpin_user_page(imu->bvec[i].bv_page);
 		if (imu->acct_pages)
 			io_unaccount_mem(ctx, imu->acct_pages);
-		kvfree(imu);
 	}
+
+	kvfree(imu);
 }
 
 struct io_rsrc_node *io_rsrc_node_alloc(int type)
@@ -764,6 +768,8 @@ static struct io_rsrc_node *io_sqe_buffer_register(struct io_ring_ctx *ctx,
 	imu->len = iov->iov_len;
 	imu->nr_bvecs = nr_pages;
 	imu->folio_shift = PAGE_SHIFT;
+	imu->release = NULL;
+	imu->priv = NULL;
 	if (coalesced)
 		imu->folio_shift = data.folio_shift;
 	refcount_set(&imu->refs, 1);
@@ -860,6 +866,89 @@ int io_sqe_buffers_register(struct io_ring_ctx *ctx, void __user *arg,
 	return ret;
 }
 
+int io_buffer_register_bvec(struct io_ring_ctx *ctx, struct request *rq,
+			    void (*release)(void *), unsigned int index,
+			    unsigned int issue_flags)
+{
+	struct io_rsrc_data *data = &ctx->buf_table;
+	struct req_iterator rq_iter;
+	struct io_mapped_ubuf *imu;
+	struct io_rsrc_node *node;
+	int ret = 0, i = 0;
+	struct bio_vec bv;
+	u16 nr_bvecs;
+
+	io_ring_submit_lock(ctx, issue_flags);
+
+	if (index >= data->nr) {
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+	node = data->nodes[index];
+	if (node) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+
+	node = io_rsrc_node_alloc(IORING_RSRC_BUFFER);
+	if (!node) {
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	nr_bvecs = blk_rq_nr_phys_segments(rq);
+	imu = kvmalloc(struct_size(imu, bvec, nr_bvecs), GFP_KERNEL);
+	if (!imu) {
+		kfree(node);
+		ret = -ENOMEM;
+		goto unlock;
+	}
+
+	imu->ubuf = 0;
+	imu->len = blk_rq_bytes(rq);
+	imu->acct_pages = 0;
+	imu->nr_bvecs = nr_bvecs;
+	refcount_set(&imu->refs, 1);
+	imu->release = release;
+	imu->priv = rq;
+
+	rq_for_each_bvec(bv, rq, rq_iter)
+		bvec_set_page(&imu->bvec[i++], bv.bv_page, bv.bv_len,
+			      bv.bv_offset);
+
+	node->buf = imu;
+	data->nodes[index] = node;
+unlock:
+	io_ring_submit_unlock(ctx, issue_flags);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(io_buffer_register_bvec);
+
+void io_buffer_unregister_bvec(struct io_ring_ctx *ctx, unsigned int index,
+			       unsigned int issue_flags)
+{
+	struct io_rsrc_data *data = &ctx->buf_table;
+	struct io_rsrc_node *node;
+
+	io_ring_submit_lock(ctx, issue_flags);
+
+	if (!data->nr)
+		goto unlock;
+	if (index >= data->nr)
+		goto unlock;
+
+	node = data->nodes[index];
+	if (!node || !node->buf)
+		goto unlock;
+	if (!node->buf->release)
+		goto unlock;
+	io_reset_rsrc_node(ctx, data, index);
+unlock:
+	io_ring_submit_unlock(ctx, issue_flags);
+}
+EXPORT_SYMBOL_GPL(io_buffer_unregister_bvec);
+
 int io_import_fixed(int ddir, struct iov_iter *iter,
 			   struct io_mapped_ubuf *imu,
 			   u64 buf_addr, size_t len)
@@ -886,8 +975,8 @@ int io_import_fixed(int ddir, struct iov_iter *iter,
 		/*
 		 * Don't use iov_iter_advance() here, as it's really slow for
 		 * using the latter parts of a big fixed buffer - it iterates
-		 * over each segment manually. We can cheat a bit here, because
-		 * we know that:
+		 * over each segment manually. We can cheat a bit here for user
+		 * registered nodes, because we know that:
 		 *
 		 * 1) it's a BVEC iter, we set it up
 		 * 2) all bvecs are the same in size, except potentially the
@@ -901,8 +990,15 @@ int io_import_fixed(int ddir, struct iov_iter *iter,
 		 */
 		const struct bio_vec *bvec = imu->bvec;
 
+		/*
+		 * Kernel buffer bvecs, on the other hand, don't necessarily
+		 * have the size property of user registered ones, so we have
+		 * to use the slow iter advance.
+		 */
 		if (offset < bvec->bv_len) {
 			iter->iov_offset = offset;
+		} else if (imu->release) {
+			iov_iter_advance(iter, offset);
 		} else {
 			unsigned long seg_skip;
 
