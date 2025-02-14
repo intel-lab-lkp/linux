@@ -59,6 +59,7 @@ config BONDING
 
 config DUMMY
 	tristate "Dummy net driver support"
+	select NET_SHAPER
 	help
 	  This is essentially a bit-bucket device (i.e. traffic you send to
 	  this device is consigned into oblivion) with a configurable IP
