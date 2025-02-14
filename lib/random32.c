@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * WARNING: this API MUST NOT be used for cryptographic purposes!
+ *
  * This is a maximally equidistributed combined Tausworthe generator
  * based on code from GNU Scientific Library 1.5 (30 Jun 2004)
  *
@@ -48,6 +50,8 @@
  *
  *	This is used for pseudo-randomness with no outside seeding.
  *	For more random results, use get_random_u32().
+ *
+ *	WARNING: this API MUST NOT be used for cryptographic purposes!
  */
 u32 prandom_u32_state(struct rnd_state *state)
 {
@@ -70,6 +74,8 @@ EXPORT_SYMBOL(prandom_u32_state);
  *
  *	This is used for pseudo-randomness with no outside seeding.
  *	For more random results, use get_random_bytes().
+ *
+ *	WARNING: this API MUST NOT be used for cryptographic purposes!
  */
 void prandom_bytes_state(struct rnd_state *state, void *buf, size_t bytes)
 {
