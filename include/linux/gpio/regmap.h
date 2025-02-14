@@ -6,6 +6,7 @@
 struct device;
 struct fwnode_handle;
 struct gpio_regmap;
+struct gpio_chip;
 struct irq_domain;
 struct regmap;
 
@@ -40,6 +41,10 @@ struct regmap;
  * @drvdata:		(Optional) Pointer to driver specific data which is
  *			not used by gpio-remap but is provided "as is" to the
  *			driver callback(s).
+ * @request:		(Optional) Hook for chip-specific activation, such as
+ *			enabling module power and clock
+ * @free:		(Optional) Hook for chip-specific deactivation, such as
+ *			disabling module power and clock
  *
  * The ->reg_mask_xlate translates a given base address and GPIO offset to
  * register and mask pair. The base address is one of the given register
@@ -83,6 +88,8 @@ struct gpio_regmap_config {
 			      unsigned int *mask);
 
 	void *drvdata;
+	int (*request)(struct gpio_chip *gc, unsigned int offset);
+	void (*free)(struct gpio_chip *gc, unsigned int offset);
 };
 
 struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config);

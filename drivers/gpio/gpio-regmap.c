@@ -261,6 +261,8 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 	chip->names = config->names;
 	chip->label = config->label ?: dev_name(config->parent);
 	chip->can_sleep = regmap_might_sleep(config->regmap);
+	chip->request = config->request;
+	chip->free = config->free;
 
 	chip->request = gpiochip_generic_request;
 	chip->free = gpiochip_generic_free;
