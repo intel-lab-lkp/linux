@@ -372,12 +372,14 @@ enum rtl8366_ledgroup_mode {
 	__RTL8366RB_LEDGROUP_MODE_MAX
 };
 
+#if IS_ENABLED(CONFIG_LEDS_CLASS)
 struct rtl8366rb_led {
 	u8 port_num;
 	u8 led_group;
 	struct realtek_priv *priv;
 	struct led_classdev cdev;
 };
+#endif
 
 /**
  * struct rtl8366rb - RTL8366RB-specific data
@@ -388,7 +390,9 @@ struct rtl8366rb_led {
 struct rtl8366rb {
 	unsigned int max_mtu[RTL8366RB_NUM_PORTS];
 	bool pvid_enabled[RTL8366RB_NUM_PORTS];
+#if IS_ENABLED(CONFIG_LEDS_CLASS)
 	struct rtl8366rb_led leds[RTL8366RB_NUM_PORTS][RTL8366RB_NUM_LEDGROUPS];
+#endif
 };
 
 static struct rtl8366_mib_counter rtl8366rb_mib_counters[] = {
@@ -831,6 +835,7 @@ static int rtl8366rb_jam_table(const struct rtl8366rb_jam_tbl_entry *jam_table,
 	return 0;
 }
 
+/* This code is used also with LEDs disabled */
 static int rb8366rb_set_ledgroup_mode(struct realtek_priv *priv,
 				      u8 led_group,
 				      enum rtl8366_ledgroup_mode mode)
@@ -850,6 +855,7 @@ static int rb8366rb_set_ledgroup_mode(struct realtek_priv *priv,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_LEDS_CLASS)
 static inline u32 rtl8366rb_led_group_port_mask(u8 led_group, u8 port)
 {
 	switch (led_group) {
@@ -988,26 +994,6 @@ static int rtl8366rb_setup_led(struct realtek_priv *priv, struct dsa_port *dp,
 	return 0;
 }
 
-static int rtl8366rb_setup_all_leds_off(struct realtek_priv *priv)
-{
-	int ret = 0;
-	int i;
-
-	regmap_update_bits(priv->map,
-			   RTL8366RB_INTERRUPT_CONTROL_REG,
-			   RTL8366RB_P4_RGMII_LED,
-			   0);
-
-	for (i = 0; i < RTL8366RB_NUM_LEDGROUPS; i++) {
-		ret = rb8366rb_set_ledgroup_mode(priv, i,
-						 RTL8366RB_LEDGROUP_OFF);
-		if (ret)
-			return ret;
-	}
-
-	return ret;
-}
-
 static int rtl8366rb_setup_leds(struct realtek_priv *priv)
 {
 	struct dsa_switch *ds = &priv->ds;
@@ -1038,6 +1024,33 @@ static int rtl8366rb_setup_leds(struct realtek_priv *priv)
 			return ret;
 	}
 	return 0;
+}
+#else
+static int rtl8366rb_setup_leds(struct realtek_priv *priv)
+{
+	return 0;
+}
+#endif
+
+/* This code is used also with LEDs disabled */
+static int rtl8366rb_setup_all_leds_off(struct realtek_priv *priv)
+{
+	int ret = 0;
+	int i;
+
+	regmap_update_bits(priv->map,
+			   RTL8366RB_INTERRUPT_CONTROL_REG,
+			   RTL8366RB_P4_RGMII_LED,
+			   0);
+
+	for (i = 0; i < RTL8366RB_NUM_LEDGROUPS; i++) {
+		ret = rb8366rb_set_ledgroup_mode(priv, i,
+						 RTL8366RB_LEDGROUP_OFF);
+		if (ret)
+			return ret;
+	}
+
+	return ret;
 }
 
 static int rtl8366rb_setup(struct dsa_switch *ds)
