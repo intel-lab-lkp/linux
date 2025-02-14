@@ -15,6 +15,30 @@
 			#io-channel-cells = <1>;
 		};
 
+		accdet: accdet {
+			compatible = "mediatek,mt6359-accdet";
+			mediatek,mic-vol = <8>;
+			mediatek,mic-mode = <2>;
+			mediatek,pwm-width = <0x500>;
+			mediatek,pwm-thresh = <0x500>;
+			mediatek,pwm-fall-delay = <1>;
+			mediatek,pwm-rise-delay = <0x1f0>;
+			mediatek,debounce0 = <0x800>;
+			mediatek,debounce1 = <0x800>;
+			mediatek,debounce3 = <0x20>;
+			mediatek,debounce-auxadc = <0x44>;
+			mediatek,eint-cmpmen-pwm-width = <4>;
+			mediatek,eint-cmpmen-pwm-thresh = <1>;
+			mediatek,eint-debounce0 = <5>;
+			mediatek,eint-debounce1 = <3>;
+			mediatek,eint-debounce2 = <3>;
+			mediatek,eint-debounce3 = <5>;
+			mediatek,eint-inverter-debounce = <0xe>;
+			mediatek,eint-detect-mode = <4>;
+			mediatek,eint-num = <0>;
+			mediatek,eint-comp-vth = <2>;
+		};
+
 		mt6359codec: mt6359codec {
 		};
 
