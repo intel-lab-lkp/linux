@@ -12,6 +12,19 @@
 
 #include <linux/pm.h>
 
+#define GOODIX_BERLIN_FW_VERSION_INFO_ADDR_A	0x1000C
+#define GOODIX_BERLIN_FW_VERSION_INFO_ADDR_D	0x10014
+
+#define GOODIX_BERLIN_IC_INFO_ADDR_A		0x10068
+#define GOODIX_BERLIN_IC_INFO_ADDR_D		0x10070
+
+struct goodix_berlin_ic_data {
+	int fw_version_info_addr;
+	int ic_info_addr;
+	ssize_t read_dummy_len;
+	ssize_t read_prefix_len;
+};
+
 struct device;
 struct input_id;
 struct regmap;
