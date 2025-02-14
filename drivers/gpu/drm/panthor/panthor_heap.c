@@ -127,6 +127,8 @@ static void panthor_free_heap_chunk(struct panthor_vm *vm,
 	heap->chunk_count--;
 	mutex_unlock(&heap->lock);
 
+	panthor_vm_heaps_size_accumulate(vm, -heap->chunk_size);
+
 	panthor_kernel_bo_destroy(chunk->bo);
 	kfree(chunk);
 }
@@ -179,6 +181,8 @@ static int panthor_alloc_heap_chunk(struct panthor_device *ptdev,
 	list_add(&chunk->node, &heap->chunks);
 	heap->chunk_count++;
 	mutex_unlock(&heap->lock);
+
+	panthor_vm_heaps_size_accumulate(vm, heap->chunk_size);
 
 	return 0;
 
@@ -389,6 +393,7 @@ int panthor_heap_return_chunk(struct panthor_heap_pool *pool,
 			removed = chunk;
 			list_del(&chunk->node);
 			heap->chunk_count--;
+			panthor_vm_heaps_size_accumulate(chunk->bo->vm, -heap->chunk_size);
 			break;
 		}
 	}
@@ -560,6 +565,8 @@ panthor_heap_pool_create(struct panthor_device *ptdev, struct panthor_vm *vm)
 	if (ret)
 		goto err_destroy_pool;
 
+	panthor_vm_heaps_size_accumulate(vm, pool->gpu_contexts->obj->size);
+
 	return pool;
 
 err_destroy_pool:
@@ -594,38 +601,15 @@ void panthor_heap_pool_destroy(struct panthor_heap_pool *pool)
 	xa_for_each(&pool->xa, i, heap)
 		drm_WARN_ON(&pool->ptdev->base, panthor_heap_destroy_locked(pool, i));
 
-	if (!IS_ERR_OR_NULL(pool->gpu_contexts))
+	if (!IS_ERR_OR_NULL(pool->gpu_contexts)) {
+		panthor_vm_heaps_size_accumulate(pool->gpu_contexts->vm,
+					    -pool->gpu_contexts->obj->size);
 		panthor_kernel_bo_destroy(pool->gpu_contexts);
+	}
 
 	/* Reflects the fact the pool has been destroyed. */
 	pool->vm = NULL;
 	up_write(&pool->lock);
 
 	panthor_heap_pool_put(pool);
-}
-
-/**
- * panthor_heap_pool_size() - Calculate size of all chunks across all heaps in a pool
- * @pool: Pool whose total chunk size to calculate.
- *
- * This function adds the size of all heap chunks across all heaps in the
- * argument pool. It also adds the size of the gpu contexts kernel bo.
- * It is meant to be used by fdinfo for displaying the size of internal
- * driver BO's that aren't exposed to userspace through a GEM handle.
- *
- */
-size_t panthor_heap_pool_size(struct panthor_heap_pool *pool)
-{
-	struct panthor_heap *heap;
-	unsigned long i;
-	size_t size = 0;
-
-	down_read(&pool->lock);
-	xa_for_each(&pool->xa, i, heap)
-		size += heap->chunk_size * heap->chunk_count;
-	up_read(&pool->lock);
-
-	size += pool->gpu_contexts->obj->size;
-
-	return size;
 }

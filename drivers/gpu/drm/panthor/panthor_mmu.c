@@ -347,6 +347,14 @@ struct panthor_vm {
 		struct mutex lock;
 	} heaps;
 
+	/**
+	 * @fdinfo: VM-wide fdinfo fields.
+	 */
+	struct {
+		/** @fdinfo.heaps_size: Size of all chunks across all heaps in the pool. */
+		atomic_t heaps_size;
+	} fdinfo;
+
 	/** @node: Used to insert the VM in the panthor_mmu::vm::list. */
 	struct list_head node;
 
@@ -1541,6 +1549,8 @@ static void panthor_vm_destroy(struct panthor_vm *vm)
 	vm->heaps.pool = NULL;
 	mutex_unlock(&vm->heaps.lock);
 
+	atomic_set(&vm->fdinfo.heaps_size, 0);
+
 	drm_WARN_ON(&vm->ptdev->base,
 		    panthor_vm_unmap_range(vm, vm->base.mm_start, vm->base.mm_range));
 	panthor_vm_put(vm);
@@ -1963,18 +1973,17 @@ void panthor_vm_heaps_sizes(struct panthor_file *pfile, struct drm_memory_stats 
 
 	xa_lock(&pfile->vms->xa);
 	xa_for_each(&pfile->vms->xa, i, vm) {
-		size_t size = 0;
-
-		mutex_lock(&vm->heaps.lock);
-		if (vm->heaps.pool)
-			size = panthor_heap_pool_size(vm->heaps.pool);
-		mutex_unlock(&vm->heaps.lock);
-
+		size_t size = atomic_read(&vm->fdinfo.heaps_size);
 		stats->resident += size;
 		if (vm->as.id >= 0)
 			stats->active += size;
 	}
 	xa_unlock(&pfile->vms->xa);
+}
+
+void panthor_vm_heaps_size_accumulate(struct panthor_vm *vm, ssize_t acc)
+{
+	atomic_add(acc, &vm->fdinfo.heaps_size);
 }
 
 static u64 mair_to_memattr(u64 mair, bool coherent)
