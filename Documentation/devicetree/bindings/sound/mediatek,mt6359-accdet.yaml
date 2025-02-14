@@ -1,0 +1,293 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/mediatek,mt6359-accdet.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MT6359 Accessory Detection
+
+maintainers:
+  - Nícolas F. R. A. Prado <nfraprado@collabora.com>
+
+description: |
+  The MT6359 Accessory Detection block is part of the MT6359 PMIC and allows
+  detecting audio jack insertion and removal, as well as identifying the type of
+  events connected to the jack.
+
+properties:
+  compatible:
+    const: mediatek,mt6359-accdet
+
+  mediatek,mic-vol:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: MIC bias1 output voltage setting
+    enum:
+      - 0 # 1.7V
+      - 1 # 1.8V
+      - 2 # 1.9V
+      - 3 # 2.0V
+      - 4 # 2.1V
+      - 5 # 2.5V
+      - 6 # 2.6V
+      - 7 # 2.7V
+      - 8 # 2.8V
+      - 9 # 2.85V
+
+  mediatek,mic-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Mic mode setting
+    enum:
+      - 1 # ACC
+      - 2 # DCC mode. Low cost mode without internal bias
+      - 6 # DCC mode. Low cost mode with internal bias
+
+  mediatek,eint-cmpmen-pwm-width:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: EINT CMPMEN PWM width
+    enum:
+      - 0 # 50ms
+      - 1 # 80ms
+      - 2 # 100ms
+      - 3 # 200ms
+      - 4 # 400ms
+      - 5 # 500ms
+      - 6 # 800ms
+      - 7 # 1000ms
+
+  mediatek,eint-cmpmen-pwm-thresh:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: EINT CMPMEN PWM threshold
+    enum:
+      - 0 # 1ms
+      - 1 # 2ms
+      - 2 # 4ms
+      - 3 # 5ms
+      - 4 # 8ms
+      - 5 # 10ms
+      - 6 # 20ms
+      - 7 # 30ms
+
+  mediatek,pwm-width:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: PWM width
+    minimum: 0
+    maximum: 65535
+
+  mediatek,pwm-thresh:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: PWM threshold
+    minimum: 0
+    maximum: 65535
+
+  mediatek,pwm-rise-delay:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Rise delay for PWM
+    minimum: 0
+    maximum: 65535
+
+  mediatek,pwm-fall-delay:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Fall delay for PWM
+    minimum: 0
+    maximum: 65535
+
+  mediatek,debounce0:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for state 0
+    minimum: 0
+    maximum: 65535
+
+  mediatek,debounce1:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for state 1
+    minimum: 0
+    maximum: 65535
+
+  mediatek,debounce3:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for state 3
+    minimum: 0
+    maximum: 65535
+
+  mediatek,debounce-auxadc:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for AUXADC
+    minimum: 0
+    maximum: 65535
+
+  mediatek,eint-debounce0:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for EINT state 0
+    enum:
+      - 0 # 0ms
+      - 1 # 0.12ms
+      - 2 # 0.25ms
+      - 3 # 0.5ms
+      - 4 # 0.75ms
+      - 5 # 1ms
+      - 6 # 2ms
+      - 7 # 4ms
+      - 8 # 8ms
+      - 9 # 16ms
+      - 10 # 32ms
+      - 11 # 48ms
+      - 12 # 64ms
+      - 13 # 128ms
+      - 14 # 256ms
+      - 15 # 512ms
+
+  mediatek,eint-debounce1:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for EINT state 1
+    enum:
+      - 0 # 0ms
+      - 1 # 0.5ms
+      - 2 # 0.75ms
+      - 3 # 0.9ms
+      - 4 # 1.5ms
+      - 5 # 1.8ms
+      - 6 # 3ms
+      - 7 # 3.5ms
+      - 8 # 3.8ms
+      - 9 # 16ms
+      - 10 # 32ms
+      - 11 # 48ms
+      - 12 # 64ms
+      - 13 # 128ms
+      - 14 # 256ms
+      - 15 # 512ms
+
+  mediatek,eint-debounce2:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for EINT state 2
+    enum:
+      - 0 # 0ms
+      - 1 # 0.5ms
+      - 2 # 0.75ms
+      - 3 # 0.9ms
+      - 4 # 1.5ms
+      - 5 # 1.8ms
+      - 6 # 3ms
+      - 7 # 3.5ms
+      - 8 # 3.8ms
+      - 9 # 4ms
+      - 10 # 4.5ms
+      - 11 # 5ms
+      - 12 # 7ms
+      - 13 # 9ms
+      - 14 # 19ms
+      - 15 # 25ms
+
+  mediatek,eint-debounce3:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for EINT state 3
+    enum:
+      - 0 # 0ms
+      - 1 # 0.12ms
+      - 2 # 0.25ms
+      - 3 # 0.5ms
+      - 4 # 0.75ms
+      - 5 # 1ms
+      - 6 # 2ms
+      - 7 # 4ms
+      - 8 # 8ms
+      - 9 # 16ms
+      - 10 # 32ms
+      - 11 # 48ms
+      - 12 # 64ms
+      - 13 # 128ms
+      - 14 # 256ms
+      - 15 # 512ms
+
+  mediatek,eint-inverter-debounce:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Debounce time for EINT inverter
+    enum:
+      - 0 # 0ms
+      - 1 # 0.12ms
+      - 2 # 0.25ms
+      - 3 # 0.5ms
+      - 4 # 0.75ms
+      - 5 # 1ms
+      - 6 # 2ms
+      - 7 # 4ms
+      - 8 # 8ms
+      - 9 # 16ms
+      - 10 # 32ms
+      - 11 # 48ms
+      - 12 # 64ms
+      - 13 # 128ms
+      - 14 # 256ms
+      - 15 # 512ms
+
+  mediatek,eint-detect-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: EINT detection mode
+    enum:
+      - 0 # Higher detection power
+      - 1 # Lower detection power
+      - 2 # SW moisture detection mode1
+      - 3 # HW moisture detection mode1
+      - 4 # HW moisture detection mode2
+
+  mediatek,eint-num:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: EINT interrupt that should be enabled
+    enum:
+      - 0 # EINT0
+      - 1 # EINT1
+      - 2 # EINT0 | EINT1
+
+  mediatek,eint-use-ext-res:
+    type: boolean
+    description:
+      Whether an external resistor should be used for the HP_EINT signal.
+      By default an internal pull-up resistor is used.
+
+  mediatek,eint-comp-vth:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: EINT comparator threshold
+    enum:
+      - 0 # 2.4V
+      - 1 # 2V
+      - 2 # 1.6V
+      - 3 # 1.2V
+      - 4 # 0.8V
+
+  mediatek,eint-level-pol:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: EINT interrupt polarity
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    accdet: accdet {
+        compatible = "mediatek,mt6359-accdet";
+        mediatek,mic-vol = <8>;
+        mediatek,mic-mode = <2>;
+        mediatek,pwm-width = <0x500>;
+        mediatek,pwm-thresh = <0x500>;
+        mediatek,pwm-fall-delay = <1>;
+        mediatek,pwm-rise-delay = <0x1f0>;
+        mediatek,debounce0 = <0x800>;
+        mediatek,debounce1 = <0x800>;
+        mediatek,debounce3 = <0x20>;
+        mediatek,debounce-auxadc = <0x44>;
+        mediatek,eint-cmpmen-pwm-width = <4>;
+        mediatek,eint-cmpmen-pwm-thresh = <1>;
+        mediatek,eint-debounce0 = <5>;
+        mediatek,eint-debounce1 = <3>;
+        mediatek,eint-debounce2 = <3>;
+        mediatek,eint-debounce3 = <5>;
+        mediatek,eint-inverter-debounce = <0xe>;
+        mediatek,eint-detect-mode = <4>;
+        mediatek,eint-num = <0>;
+        mediatek,eint-comp-vth = <2>;
+        mediatek,eint-level-pol = <IRQ_TYPE_LEVEL_LOW>;
+    };
