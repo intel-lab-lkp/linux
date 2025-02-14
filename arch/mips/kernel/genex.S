@@ -104,18 +104,16 @@ handle_vcei:
 
 	__FINIT
 
-	.align	5	/* 32 byte rollback region */
+	.align	5
 LEAF(__r4k_wait)
 	.set	push
 	.set	noreorder
-	/* start of rollback region */
-	LONG_L	t0, TI_FLAGS($28)
-	nop
-	andi	t0, _TIF_NEED_RESCHED
-	bnez	t0, 1f
-	 nop
-	nop
-	nop
+	/* start of idle interrupt region */
+	MFC0	k0, CP0_STATUS
+	/* Enable Interrupt */
+	ori 	k0, 0x1f
+	xori	k0, 0x1e
+	MTC0	k0, CP0_STATUS
 #ifdef CONFIG_CPU_MICROMIPS
 	nop
 	nop
@@ -123,11 +121,17 @@ LEAF(__r4k_wait)
 	nop
 #endif
 	.set	MIPS_ISA_ARCH_LEVEL_RAW
+	/*
+	 * If an interrupt lands here, between enabling interrupts above and
+	 * going idle on the next instruction, we must *NOT* go idle since the
+	 * interrupt could have set TIF_NEED_RESCHED or caused a timer to need
+	 * resched. Fall through -- see rollback_handler below -- and have
+	 * the idle loop take care of things.
+	 */
 	wait
-	/* end of rollback region (the region size must be power of two) */
-1:
+	/* end of idle interrupt region (the region size must be power of two) */
+SYM_INNER_LABEL(__r4k_wait_exit, SYM_L_LOCAL)
 	jr	ra
-	 nop
 	.set	pop
 	END(__r4k_wait)
 
@@ -136,10 +140,10 @@ LEAF(__r4k_wait)
 	.set	push
 	.set	noat
 	MFC0	k0, CP0_EPC
-	PTR_LA	k1, __r4k_wait
-	ori	k0, 0x1f	/* 32 byte rollback region */
-	xori	k0, 0x1f
-	bne	k0, k1, \handler
+	PTR_LA	k1, __r4k_wait_exit
+	/* 3 instructions rollback region */
+	ori 	k0, k0, 0x0c
+	bne 	k0, k1, \handler
 	MTC0	k0, CP0_EPC
 	.set pop
 	.endm
