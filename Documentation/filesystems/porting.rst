@@ -1157,3 +1157,14 @@ in normal case it points into the pathname being looked up.
 NOTE: if you need something like full path from the root of filesystem,
 you are still on your own - this assists with simple cases, but it's not
 magic.
+
+---
+
+** mandatory**
+
+->mkdir() now returns a 'struct dentry *'.  If the created inode is
+found to already be in cache and have a dentry (often IS_ROOT), it will
+need to be spliced into the given name in place of the given dentry.
+That dentry now needs to be returned.  If the original dentry is used,
+it should be returned otherwise.  Any error should be returned with
+ERR_PTR().

@@ -503,8 +503,8 @@ out_lock:
 	return rc;
 }
 
-static int ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-			  struct dentry *dentry, umode_t mode)
+static struct dentry *ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+				     struct dentry *dentry, umode_t mode)
 {
 	int rc;
 	struct dentry *lower_dentry;
@@ -526,7 +526,10 @@ out:
 	inode_unlock(lower_dir);
 	if (d_really_is_negative(dentry))
 		d_drop(dentry);
-	return rc;
+	if (rc)
+		return ERR_PTR(rc);
+	else
+		return dentry;
 }
 
 static int ecryptfs_rmdir(struct inode *dir, struct dentry *dentry)

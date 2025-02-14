@@ -104,15 +104,15 @@ static int minix_link(struct dentry * old_dentry, struct inode * dir,
 	return add_nondir(dentry, inode);
 }
 
-static int minix_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-		       struct dentry *dentry, umode_t mode)
+static struct dentry *minix_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+				  struct dentry *dentry, umode_t mode)
 {
 	struct inode * inode;
 	int err;
 
 	inode = minix_new_inode(dir, S_IFDIR | mode);
 	if (IS_ERR(inode))
-		return PTR_ERR(inode);
+		return ERR_CAST(inode);
 
 	inode_inc_link_count(dir);
 	minix_set_inode(inode, 0);
@@ -128,7 +128,10 @@ static int minix_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 
 	d_instantiate(dentry, inode);
 out:
-	return err;
+	if (err)
+		return ERR_PTR(err);
+	else
+		return dentry;
 
 out_fail:
 	inode_dec_link_count(inode);

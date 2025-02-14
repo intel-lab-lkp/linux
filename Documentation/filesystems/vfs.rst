@@ -495,7 +495,7 @@ As of kernel 2.6.22, the following members are defined:
 		int (*link) (struct dentry *,struct inode *,struct dentry *);
 		int (*unlink) (struct inode *,struct dentry *);
 		int (*symlink) (struct mnt_idmap *, struct inode *,struct dentry *,const char *);
-		int (*mkdir) (struct mnt_idmap *, struct inode *,struct dentry *,umode_t);
+		struct dentry *(*mkdir) (struct mnt_idmap *, struct inode *,struct dentry *,umode_t);
 		int (*rmdir) (struct inode *,struct dentry *);
 		int (*mknod) (struct mnt_idmap *, struct inode *,struct dentry *,umode_t,dev_t);
 		int (*rename) (struct mnt_idmap *, struct inode *, struct dentry *,
@@ -562,7 +562,10 @@ otherwise noted.
 ``mkdir``
 	called by the mkdir(2) system call.  Only required if you want
 	to support creating subdirectories.  You will probably need to
-	call d_instantiate() just as you would in the create() method
+	call d_instantiate() just as you would in the create() method.
+	If some dentry other than the one given is spliced in, then it
+	much be returned.  In any case the final dentry of the directory
+	must be returned, or an ERR_PTR().
 
 ``rmdir``
 	called by the rmdir(2) system call.  Only required if you want

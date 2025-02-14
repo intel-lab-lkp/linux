@@ -679,8 +679,8 @@ static int hostfs_symlink(struct mnt_idmap *idmap, struct inode *ino,
 	return err;
 }
 
-static int hostfs_mkdir(struct mnt_idmap *idmap, struct inode *ino,
-			struct dentry *dentry, umode_t mode)
+static struct dentry *hostfs_mkdir(struct mnt_idmap *idmap, struct inode *ino,
+				   struct dentry *dentry, umode_t mode)
 {
 	char *file;
 	int err;
@@ -689,7 +689,10 @@ static int hostfs_mkdir(struct mnt_idmap *idmap, struct inode *ino,
 		return -ENOMEM;
 	err = do_mkdir(file, mode);
 	__putname(file);
-	return err;
+	if (err)
+		return ERR_PTR(err);
+	else
+		return dentry;
 }
 
 static int hostfs_rmdir(struct inode *ino, struct dentry *dentry)

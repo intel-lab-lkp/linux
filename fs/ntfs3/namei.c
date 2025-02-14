@@ -201,11 +201,17 @@ static int ntfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 /*
  * ntfs_mkdir- inode_operations::mkdir
  */
-static int ntfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-		      struct dentry *dentry, umode_t mode)
+static struct dentry *ntfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+				 struct dentry *dentry, umode_t mode)
 {
-	return ntfs_create_inode(idmap, dir, dentry, NULL, S_IFDIR | mode, 0,
-				 NULL, 0, NULL);
+	int err;
+
+	err = ntfs_create_inode(idmap, dir, dentry, NULL, S_IFDIR | mode, 0,
+				NULL, 0, NULL);
+	if (err)
+		return ERR_PTR(err);
+	else
+		return dentry;
 }
 
 /*

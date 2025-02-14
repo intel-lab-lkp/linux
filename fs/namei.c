@@ -4288,6 +4288,7 @@ int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 {
 	int error;
 	unsigned max_links = dir->i_sb->s_max_links;
+	struct dentry *de;
 
 	error = may_create(idmap, dir, dentry);
 	if (error)
@@ -4304,9 +4305,14 @@ int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (max_links && dir->i_nlink >= max_links)
 		return -EMLINK;
 
-	error = dir->i_op->mkdir(idmap, dir, dentry, mode);
-	if (!error)
-		fsnotify_mkdir(dir, dentry);
+	de = dir->i_op->mkdir(idmap, dir, dentry, mode);
+	error = PTR_ERR_OR_ZERO(de);
+	if (!error) {
+		fsnotify_mkdir(dir, de);
+		if (de != dentry)
+			/* Cannot return de yet */
+			dput(de);
+	}
 	return error;
 }
 EXPORT_SYMBOL(vfs_mkdir);

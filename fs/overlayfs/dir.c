@@ -687,10 +687,16 @@ static int ovl_create(struct mnt_idmap *idmap, struct inode *dir,
 	return ovl_create_object(dentry, (mode & 07777) | S_IFREG, 0, NULL);
 }
 
-static int ovl_mkdir(struct mnt_idmap *idmap, struct inode *dir,
-		     struct dentry *dentry, umode_t mode)
+static struct dentry *ovl_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+				struct dentry *dentry, umode_t mode)
 {
-	return ovl_create_object(dentry, (mode & 07777) | S_IFDIR, 0, NULL);
+	int err;
+
+	err = ovl_create_object(dentry, (mode & 07777) | S_IFDIR, 0, NULL);
+	if (err)
+		return ERR_PTR(err);
+	else
+		return dentry;
 }
 
 static int ovl_mknod(struct mnt_idmap *idmap, struct inode *dir,
