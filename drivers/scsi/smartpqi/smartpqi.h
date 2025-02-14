@@ -1359,6 +1359,7 @@ struct pqi_ctrl_info {
 
 	struct mutex	scan_mutex;
 	struct mutex	lun_reset_mutex;
+	struct lock_class_key lun_reset_key;
 	bool		controller_online;
 	bool		block_requests;
 	bool		scan_blocked;

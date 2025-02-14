@@ -8789,8 +8789,10 @@ static struct pqi_ctrl_info *pqi_alloc_ctrl_info(int numa_node)
 		return NULL;
 
 	mutex_init(&ctrl_info->scan_mutex);
-	mutex_init(&ctrl_info->lun_reset_mutex);
 	mutex_init(&ctrl_info->ofa_mutex);
+
+	lockdep_register_key(&ctrl_info->lun_reset_key);
+	mutex_init_with_key(&ctrl_info->lun_reset_mutex, &ctrl_info->lun_reset_key);
 
 	INIT_LIST_HEAD(&ctrl_info->scsi_device_list);
 	spin_lock_init(&ctrl_info->scsi_device_list_lock);
@@ -8830,6 +8832,10 @@ static struct pqi_ctrl_info *pqi_alloc_ctrl_info(int numa_node)
 
 static inline void pqi_free_ctrl_info(struct pqi_ctrl_info *ctrl_info)
 {
+	mutex_destroy(&ctrl_info->scan_mutex);
+	mutex_destroy(&ctrl_info->ofa_mutex);
+	mutex_destroy(&ctrl_info->lun_reset_mutex);
+	lockdep_unregister_key(&ctrl_info->lun_reset_key);
 	kfree(ctrl_info);
 }
 
