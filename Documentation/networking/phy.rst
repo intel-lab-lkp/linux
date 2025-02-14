@@ -73,8 +73,16 @@ The Reduced Gigabit Medium Independent Interface (RGMII) is a 12-pin
 electrical signal interface using a synchronous 125Mhz clock signal and several
 data lines. Due to this design decision, a 1.5ns to 2ns delay must be added
 between the clock line (RXC or TXC) and the data lines to let the PHY (clock
-sink) have a large enough setup and hold time to sample the data lines correctly. The
-PHY library offers different types of PHY_INTERFACE_MODE_RGMII* values to let
+sink) have a large enough setup and hold time to sample the data lines correctly.
+
+The device tree property phy-mode describes the hardware. When used
+with RGMII, its value indicates if the hardware, i.e. the PCB,
+provides the 2ns delay required for RGMII. A phy-mode of 'rgmii'
+indicates the PCB is adding the 2ns delay. For other values, the
+MAC/PHY pair must insert the needed 2ns delay, with the strong
+preference the PHY adds the delay.
+
+The PHY library offers different types of PHY_INTERFACE_MODE_RGMII* values to let
 the PHY driver and optionally the MAC driver, implement the required delay. The
 values of phy_interface_t must be understood from the perspective of the PHY
 device itself, leading to the following:
@@ -106,14 +114,22 @@ Whenever possible, use the PHY side RGMII delay for these reasons:
   configure correctly a specified delay enables more designs with similar delay
   requirements to be operated correctly
 
-For cases where the PHY is not capable of providing this delay, but the
-Ethernet MAC driver is capable of doing so, the correct phy_interface_t value
-should be PHY_INTERFACE_MODE_RGMII, and the Ethernet MAC driver should be
-configured correctly in order to provide the required transmit and/or receive
-side delay from the perspective of the PHY device. Conversely, if the Ethernet
-MAC driver looks at the phy_interface_t value, for any other mode but
-PHY_INTERFACE_MODE_RGMII, it should make sure that the MAC-level delays are
-disabled.
+The MAC driver may fine tune the delays. This can be configured
+based on firmware "rx-internal-delay-ps" and "tx-internal-delay-ps"
+properties. These values are expected to be small, not the full 2ns
+delay.
+
+A MAC driver inserting these fine tuning delays should always do so
+when these properties are present and non-zero, regardless of the
+RGMII mode specified.
+
+For cases where the PHY is not capable of providing the 2ns delay,
+the MAC must provide it, if the phy-mode indicates the PCB is not
+providing the delays. The MAC driver must adjust the
+PHY_INTERFACE_MODE_RGMII_* mode it passes to the connected PHY
+device (through :c:func:`phy_connect <phy_connect>` for example) to
+account for MAC-side delay insertion, so that the PHY device
+does not add additional delays.
 
 In case neither the Ethernet MAC, nor the PHY are capable of providing the
 required delays, as defined per the RGMII standard, several options may be
