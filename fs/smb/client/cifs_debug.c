@@ -147,8 +147,16 @@ cifs_dump_channel(struct seq_file *m, int i, struct cifs_chan *chan)
 		   "\n\t\tNumber of credits: %d,%d,%d Dialect 0x%x"
 		   "\n\t\tTCP status: %d Instance: %d"
 		   "\n\t\tLocal Users To Server: %d SecMode: 0x%x Req On Wire: %d"
-		   "\n\t\tIn Send: %d In MaxReq Wait: %d",
-		   i+1, server->conn_id,
+		   "\n\t\tIn Send: %d In MaxReq Wait: %d"
+		   "\n\t\tCompression Requested: %s"
+		   "\n\t\tdfs_conn: %s"
+		   "\n\t\tIgnore Signature: %s"
+		   "\n\t\tretrans: %d"
+		   "\n\t\tUse non-blocking connect: %s"
+		   "\n\t\tUse non-blocking sendmsg: %s"
+		   "\n\t\tSigning Enabled: %s"
+		   "\n\t\tMin Offload: %d Max Credits: %d",
+		   i, server->conn_id,
 		   server->credits,
 		   server->echo_credits,
 		   server->oplock_credits,
@@ -159,7 +167,22 @@ cifs_dump_channel(struct seq_file *m, int i, struct cifs_chan *chan)
 		   server->sec_mode,
 		   in_flight(server),
 		   atomic_read(&server->in_send),
-		   atomic_read(&server->num_waiters));
+		   atomic_read(&server->num_waiters),
+		   str_yes_no(server->compression.requested),
+		   str_yes_no(server->dfs_conn),
+		   str_yes_no(server->ignore_signature),
+		   server->retrans,
+		   str_yes_no(server->noblockcnt),
+		   str_yes_no(server->noblocksnd),
+		   str_yes_no(server->sign),
+		   server->min_offload,
+		   server->max_credits);
+
+	if (server->leaf_fullpath) {
+		seq_printf(m, "\n\t\tDFS leaf full path: %s",
+			   server->leaf_fullpath);
+	}
+
 #ifdef CONFIG_NET_NS
 	if (server->net)
 		seq_printf(m, " Net namespace: %u ", server->net->ns.inum);
@@ -486,6 +509,24 @@ skip_rdma:
 			seq_printf(m, "enabled (%s)", compression_alg_str(server->compression.alg));
 		else
 			seq_puts(m, "disabled (not supported by this server)");
+
+		seq_printf(m, "\nCompression Requested: %s"
+		   "\ndfs_conn: %s"
+		   "\nIgnore Signature: %s"
+		   "\nretrans: %d"
+		   "\nUse non-blocking connect: %s"
+		   "\nUse non-blocking sendmsg: %s"
+		   "\nSigning Enabled: %s"
+		   "\nMin Offload: %d Max Credits: %d",
+		   str_yes_no(server->compression.requested),
+		   str_yes_no(server->dfs_conn),
+		   str_yes_no(server->ignore_signature),
+		   server->retrans,
+		   str_yes_no(server->noblockcnt),
+		   str_yes_no(server->noblocksnd),
+		   str_yes_no(server->sign),
+		   server->min_offload,
+		   server->max_credits);
 
 		seq_printf(m, "\n\n\tSessions: ");
 		i = 0;
