@@ -1081,6 +1081,9 @@ static void macb_tx_error_task(struct work_struct *work)
 						      tx_error_task);
 	bool			halt_timeout = false;
 	struct macb		*bp = queue->bp;
+	u32			queue_index = queue - bp->queues;
+	u32			packets = 0;
+	u32			bytes = 0;
 	struct macb_tx_skb	*tx_skb;
 	struct macb_dma_desc	*desc;
 	struct sk_buff		*skb;
@@ -1088,8 +1091,7 @@ static void macb_tx_error_task(struct work_struct *work)
 	unsigned long		flags;
 
 	netdev_vdbg(bp->dev, "macb_tx_error_task: q = %u, t = %u, h = %u\n",
-		    (unsigned int)(queue - bp->queues),
-		    queue->tx_tail, queue->tx_head);
+		    queue_index, queue->tx_tail, queue->tx_head);
 
 	/* Prevent the queue NAPI TX poll from running, as it calls
 	 * macb_tx_complete(), which in turn may call netif_wake_subqueue().
@@ -1142,8 +1144,10 @@ static void macb_tx_error_task(struct work_struct *work)
 					    skb->data);
 				bp->dev->stats.tx_packets++;
 				queue->stats.tx_packets++;
+				packets++;
 				bp->dev->stats.tx_bytes += skb->len;
 				queue->stats.tx_bytes += skb->len;
+				bytes += skb->len;
 			}
 		} else {
 			/* "Buffers exhausted mid-frame" errors may only happen
@@ -1159,6 +1163,9 @@ static void macb_tx_error_task(struct work_struct *work)
 
 		macb_tx_unmap(bp, tx_skb, 0);
 	}
+
+	netdev_tx_completed_queue(netdev_get_tx_queue(bp->dev, queue_index),
+				  packets, bytes);
 
 	/* Set end of TX queue */
 	desc = macb_tx_desc(queue, 0);
@@ -1230,6 +1237,7 @@ static int macb_tx_complete(struct macb_queue *queue, int budget)
 	unsigned int tail;
 	unsigned int head;
 	int packets = 0;
+	u32 bytes = 0;
 
 	spin_lock(&queue->tx_ptr_lock);
 	head = queue->tx_head;
@@ -1271,6 +1279,7 @@ static int macb_tx_complete(struct macb_queue *queue, int budget)
 				bp->dev->stats.tx_bytes += skb->len;
 				queue->stats.tx_bytes += skb->len;
 				packets++;
+				bytes += skb->len;
 			}
 
 			/* Now we can safely release resources */
@@ -1284,6 +1293,9 @@ static int macb_tx_complete(struct macb_queue *queue, int budget)
 				break;
 		}
 	}
+
+	netdev_tx_completed_queue(netdev_get_tx_queue(bp->dev, queue_index),
+				  packets, bytes);
 
 	queue->tx_tail = tail;
 	if (__netif_subqueue_stopped(bp->dev, queue_index) &&
@@ -2386,6 +2398,8 @@ static netdev_tx_t macb_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Make newly initialized descriptor visible to hardware */
 	wmb();
 	skb_tx_timestamp(skb);
+	netdev_tx_sent_queue(netdev_get_tx_queue(bp->dev, queue_index),
+			     skb->len);
 
 	spin_lock_irq(&bp->lock);
 	macb_writel(bp, NCR, macb_readl(bp, NCR) | MACB_BIT(TSTART));
@@ -3019,6 +3033,7 @@ static int macb_close(struct net_device *dev)
 	netif_tx_stop_all_queues(dev);
 
 	for (q = 0, queue = bp->queues; q < bp->num_queues; ++q, ++queue) {
+		netdev_tx_reset_queue(netdev_get_tx_queue(dev, q));
 		napi_disable(&queue->napi_rx);
 		napi_disable(&queue->napi_tx);
 	}
