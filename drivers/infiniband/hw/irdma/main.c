@@ -256,6 +256,8 @@ static void irdma_remove(struct auxiliary_device *aux_dev)
 	irdma_ib_unregister_device(iwdev);
 	irdma_deinit_interrupts(iwdev->rf, cdev_info);
 
+	kfree(iwdev->rf);
+
 	pr_debug("INIT: Gen2 PF[%d] device remove success\n", PCI_FUNC(cdev_info->pdev->devfn));
 }
 
