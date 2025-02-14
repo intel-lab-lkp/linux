@@ -4415,6 +4415,7 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	else
 		slot->sl_flags &= ~NFSD4_SLOT_CACHETHIS;
 
+	cstate->slot_idx = seq->slotid;
 	cstate->slot = slot;
 	cstate->session = session;
 	cstate->clp = clp;

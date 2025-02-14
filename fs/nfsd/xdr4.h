@@ -186,6 +186,7 @@ struct nfsd4_compound_state {
 	/* For sessions DRC */
 	struct nfsd4_session	*session;
 	struct nfsd4_slot	*slot;
+	int			slot_idx;
 	int			data_offset;
 	bool                    spo_must_allowed;
 	size_t			iovlen;

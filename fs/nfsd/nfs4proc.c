@@ -2792,6 +2792,7 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 
 	resp->xdr = &rqstp->rq_res_stream;
 	resp->statusp = resp->xdr->p;
+	cstate->slot_idx = -1;
 
 	/* reserve space for: NFS status code */
 	xdr_reserve_space(resp->xdr, XDR_UNIT);
