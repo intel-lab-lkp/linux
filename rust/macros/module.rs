@@ -94,7 +94,7 @@ struct ModuleInfo {
     type_: String,
     license: String,
     name: String,
-    author: Option<String>,
+    author: Option<Vec<String>>,
     description: Option<String>,
     alias: Option<Vec<String>>,
     firmware: Option<Vec<String>>,
@@ -135,7 +135,7 @@ impl ModuleInfo {
             match key.as_str() {
                 "type" => info.type_ = expect_ident(it),
                 "name" => info.name = expect_string_ascii(it),
-                "author" => info.author = Some(expect_string(it)),
+                "author" => info.author = Some(expect_string_array(it)),
                 "description" => info.description = Some(expect_string(it)),
                 "license" => info.license = expect_string_ascii(it),
                 "alias" => info.alias = Some(expect_string_array(it)),
@@ -184,7 +184,9 @@ pub(crate) fn module(ts: TokenStream) -> TokenStream {
 
     let mut modinfo = ModInfoBuilder::new(info.name.as_ref());
     if let Some(author) = info.author {
-        modinfo.emit("author", &author);
+        for author in author {
+            modinfo.emit("author", &author);
+        }
     }
     if let Some(description) = info.description {
         modinfo.emit("description", &description);
