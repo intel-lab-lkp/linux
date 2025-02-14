@@ -76,7 +76,7 @@ struct dts_data {
 	struct pwm_deb_settings *pwm_deb;
 	unsigned int moisture_detect_enable;
 	unsigned int eint_detect_mode;
-	unsigned int eint_use_ext_res;
+	bool eint_use_ext_res;
 	unsigned int eint_comp_vth;
 	unsigned int moisture_detect_mode;
 	unsigned int moisture_comp_vth;
