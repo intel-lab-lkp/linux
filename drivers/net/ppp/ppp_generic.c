@@ -1134,28 +1134,38 @@ static __net_init int ppp_init_net(struct net *net)
 	return 0;
 }
 
-static __net_exit void ppp_exit_net(struct net *net)
+static void ppp_nl_dellink(struct net_device *dev, struct list_head *head);
+
+static __net_exit void ppp_destroy_links(struct net *net,
+					 struct list_head *dev_kill_list)
 {
 	struct ppp_net *pn = net_generic(net, ppp_net_id);
-	struct net_device *dev;
-	struct net_device *aux;
+	struct net_device *dev, *aux;
 	struct ppp *ppp;
-	LIST_HEAD(list);
 	int id;
 
-	rtnl_lock();
-	for_each_netdev_safe(net, dev, aux) {
+	for_each_netdev_safe(net, dev, aux)
 		if (dev->netdev_ops == &ppp_netdev_ops)
-			unregister_netdevice_queue(dev, &list);
-	}
+			ppp_nl_dellink(dev, dev_kill_list);
 
 	idr_for_each_entry(&pn->units_idr, ppp, id)
 		/* Skip devices already unregistered by previous loop */
 		if (!net_eq(dev_net(ppp->dev), net))
-			unregister_netdevice_queue(ppp->dev, &list);
+			ppp_nl_dellink(ppp->dev, dev_kill_list);
+}
 
-	unregister_netdevice_many(&list);
-	rtnl_unlock();
+static __net_exit void ppp_exit_net_batch_rtnl(struct list_head *net_exit_list,
+					       struct list_head *dev_kill_list)
+{
+	struct net *net;
+
+	list_for_each_entry(net, net_exit_list, exit_list)
+		ppp_destroy_links(net, dev_kill_list);
+}
+
+static __net_exit void ppp_exit_net(struct net *net)
+{
+	struct ppp_net *pn = net_generic(net, ppp_net_id);
 
 	mutex_destroy(&pn->all_ppp_mutex);
 	idr_destroy(&pn->units_idr);
@@ -1165,6 +1175,7 @@ static __net_exit void ppp_exit_net(struct net *net)
 
 static struct pernet_operations ppp_net_ops = {
 	.init = ppp_init_net,
+	.exit_batch_rtnl = ppp_exit_net_batch_rtnl,
 	.exit = ppp_exit_net,
 	.id   = &ppp_net_id,
 	.size = sizeof(struct ppp_net),
