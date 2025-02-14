@@ -244,30 +244,35 @@ static int __net_init pfcp_net_init(struct net *net)
 	return 0;
 }
 
-static void __net_exit pfcp_net_exit(struct net *net)
+static void __net_exit pfcp_destroy_links(struct net *net,
+					  struct list_head *dev_kill_list)
 {
 	struct pfcp_net *pn = net_generic(net, pfcp_net_id);
 	struct pfcp_dev *pfcp, *pfcp_next;
 	struct net_device *dev;
-	LIST_HEAD(list);
 
-	rtnl_lock();
 	for_each_netdev(net, dev)
 		if (dev->rtnl_link_ops == &pfcp_link_ops)
-			pfcp_dellink(dev, &list);
+			pfcp_dellink(dev, dev_kill_list);
 
 	list_for_each_entry_safe(pfcp, pfcp_next, &pn->pfcp_dev_list, list)
-		pfcp_dellink(pfcp->dev, &list);
+		pfcp_dellink(pfcp->dev, dev_kill_list);
+}
 
-	unregister_netdevice_many(&list);
-	rtnl_unlock();
+static void __net_exit pfcp_net_exit_batch_rtnl(struct list_head *net_exit_list,
+						struct list_head *dev_kill_list)
+{
+	struct net *net;
+
+	list_for_each_entry(net, net_exit_list, exit_list)
+		pfcp_destroy_links(net, dev_kill_list);
 }
 
 static struct pernet_operations pfcp_net_ops = {
-	.init	= pfcp_net_init,
-	.exit	= pfcp_net_exit,
-	.id	= &pfcp_net_id,
-	.size	= sizeof(struct pfcp_net),
+	.init = pfcp_net_init,
+	.exit_batch_rtnl = pfcp_net_exit_batch_rtnl,
+	.id = &pfcp_net_id,
+	.size = sizeof(struct pfcp_net),
 };
 
 static int __init pfcp_init(void)
