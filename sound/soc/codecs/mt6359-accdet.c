@@ -501,8 +501,12 @@ static int mt6359_accdet_parse_dt(struct mt6359_accdet *priv)
 	int ret;
 	struct device *dev = priv->dev;
 	struct device_node *node = NULL;
-	int pwm_deb[15] = {0};
+	struct pwm_deb_settings *pwm_deb;
 	unsigned int tmp = 0;
+
+	pwm_deb = devm_kzalloc(dev, sizeof(struct pwm_deb_settings), GFP_KERNEL);
+	if (!pwm_deb)
+		return -ENOMEM;
 
 	node = of_get_child_by_name(dev->parent->of_node, "accdet");
 	if (!node)
@@ -518,11 +522,33 @@ static int mt6359_accdet_parse_dt(struct mt6359_accdet *priv)
 	if (ret)
 		priv->data->mic_mode = 2;
 
-	ret = of_property_read_u32_array(node, "mediatek,pwm-deb-setting",
-					 pwm_deb, ARRAY_SIZE(pwm_deb));
-	/* debounce8(auxadc debounce) is default, needn't get from dts */
-	if (!ret)
-		memcpy(priv->data->pwm_deb, pwm_deb, sizeof(pwm_deb));
+	of_property_read_u32(node, "mediatek,pwm-width", &pwm_deb->pwm_width);
+	of_property_read_u32(node, "mediatek,pwm-thresh", &pwm_deb->pwm_thresh);
+	of_property_read_u32(node, "mediatek,pwm-rise-delay",
+			     &pwm_deb->rise_delay);
+	of_property_read_u32(node, "mediatek,pwm-fall-delay",
+			     &pwm_deb->fall_delay);
+	of_property_read_u32(node, "mediatek,debounce0", &pwm_deb->debounce0);
+	of_property_read_u32(node, "mediatek,debounce1", &pwm_deb->debounce1);
+	of_property_read_u32(node, "mediatek,debounce3", &pwm_deb->debounce3);
+	of_property_read_u32(node, "mediatek,debounce-auxadc",
+			     &pwm_deb->debounce4);
+	of_property_read_u32(node, "mediatek,eint-cmpmen-pwm-width",
+			     &pwm_deb->eint_pwm_width);
+	of_property_read_u32(node, "mediatek,eint-cmpmen-pwm-thresh",
+			     &pwm_deb->eint_pwm_thresh);
+	of_property_read_u32(node, "mediatek,eint-debounce0",
+			     &pwm_deb->eint_debounce0);
+	of_property_read_u32(node, "mediatek,eint-debounce1",
+			     &pwm_deb->eint_debounce1);
+	of_property_read_u32(node, "mediatek,eint-debounce2",
+			     &pwm_deb->eint_debounce2);
+	of_property_read_u32(node, "mediatek,eint-debounce3",
+			     &pwm_deb->eint_debounce3);
+	of_property_read_u32(node, "mediatek,eint-inverter-debounce",
+			     &pwm_deb->eint_inverter_debounce);
+
+	priv->data->pwm_deb = pwm_deb;
 
 	ret = of_property_read_u32(node, "mediatek,eint-level-pol",
 				   &priv->data->eint_pol);
@@ -832,12 +858,6 @@ static int mt6359_accdet_probe(struct platform_device *pdev)
 	priv->data = devm_kzalloc(&pdev->dev, sizeof(struct dts_data),
 				  GFP_KERNEL);
 	if (!priv->data)
-		return -ENOMEM;
-
-	priv->data->pwm_deb = devm_kzalloc(&pdev->dev,
-					   sizeof(struct pwm_deb_settings),
-					   GFP_KERNEL);
-	if (!priv->data->pwm_deb)
 		return -ENOMEM;
 
 	priv->regmap = mt6397->regmap;
