@@ -95,7 +95,6 @@ struct dentry *cachefiles_get_directory(struct cachefiles_cache *cache,
 	/* search the current directory for the element name */
 	inode_lock_nested(d_inode(dir), I_MUTEX_PARENT);
 
-retry:
 	ret = cachefiles_inject_read_error();
 	if (ret == 0)
 		subdir = lookup_one_len(dirname, dir, strlen(dirname));
@@ -129,8 +128,10 @@ retry:
 		if (ret < 0)
 			goto mkdir_error;
 		ret = cachefiles_inject_write_error();
-		if (ret == 0)
-			ret = vfs_mkdir(&nop_mnt_idmap, d_inode(dir), subdir, 0700);
+		if (ret == 0) {
+			subdir = vfs_mkdir(&nop_mnt_idmap, d_inode(dir), subdir, 0700);
+			ret = PTR_ERR_OR_ZERO(subdir);
+		}
 		if (ret < 0) {
 			trace_cachefiles_vfs_error(NULL, d_inode(dir), ret,
 						   cachefiles_trace_mkdir_error);
@@ -138,10 +139,6 @@ retry:
 		}
 		trace_cachefiles_mkdir(dir, subdir);
 
-		if (unlikely(d_unhashed(subdir))) {
-			cachefiles_put_directory(subdir);
-			goto retry;
-		}
 		ASSERT(d_backing_inode(subdir));
 
 		_debug("mkdir -> %pd{ino=%lu}",

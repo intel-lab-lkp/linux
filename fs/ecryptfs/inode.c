@@ -511,9 +511,11 @@ static struct dentry *ecryptfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	struct inode *lower_dir;
 
 	rc = lock_parent(dentry, &lower_dentry, &lower_dir);
-	if (!rc)
-		rc = vfs_mkdir(&nop_mnt_idmap, lower_dir,
-			       lower_dentry, mode);
+	if (!rc) {
+		lower_dentry = vfs_mkdir(&nop_mnt_idmap, lower_dir,
+					 lower_dentry, mode);
+		rc = PTR_ERR_OR_ZERO(lower_dentry);
+	}
 	if (rc || d_really_is_negative(lower_dentry))
 		goto out;
 	rc = ecryptfs_interpose(lower_dentry, dentry, dir->i_sb);
