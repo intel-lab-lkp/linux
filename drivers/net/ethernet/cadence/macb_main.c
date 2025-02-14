@@ -990,8 +990,8 @@ err_out:
 
 static void macb_update_stats(struct macb *bp)
 {
-	u32 *p = &bp->hw_stats.macb.rx_pause_frames;
-	u32 *end = &bp->hw_stats.macb.tx_pause_frames + 1;
+	u64 *p = &bp->hw_stats.macb.rx_pause_frames;
+	u64 *end = &bp->hw_stats.macb.tx_pause_frames + 1;
 	int offset = MACB_PFR;
 
 	WARN_ON((unsigned long)(end - p - 1) != (MACB_TPF - MACB_PFR) / 4);
@@ -3071,7 +3071,7 @@ static void gem_update_stats(struct macb *bp)
 	unsigned int i, q, idx;
 	unsigned long *stat;
 
-	u32 *p = &bp->hw_stats.gem.tx_octets_31_0;
+	u64 *p = &bp->hw_stats.gem.tx_octets_31_0;
 
 	for (i = 0; i < GEM_STATS_LEN; ++i, ++p) {
 		u32 offset = gem_statistics[i].offset;
@@ -3094,15 +3094,12 @@ static void gem_update_stats(struct macb *bp)
 			bp->ethtool_stats[idx++] = *stat;
 }
 
-static struct net_device_stats *gem_get_stats(struct macb *bp)
+static void gem_get_stats(struct macb *bp, struct rtnl_link_stats64 *nstat)
 {
 	struct gem_stats *hwstat = &bp->hw_stats.gem;
-	struct net_device_stats *nstat = &bp->dev->stats;
 
-	if (!netif_running(bp->dev))
-		return nstat;
-
-	gem_update_stats(bp);
+	if (netif_running(bp->dev))
+		gem_update_stats(bp);
 
 	nstat->rx_errors = (hwstat->rx_frame_check_sequence_errors +
 			    hwstat->rx_alignment_errors +
@@ -3131,8 +3128,6 @@ static struct net_device_stats *gem_get_stats(struct macb *bp)
 	nstat->tx_aborted_errors = hwstat->tx_excessive_collisions;
 	nstat->tx_carrier_errors = hwstat->tx_carrier_sense_errors;
 	nstat->tx_fifo_errors = hwstat->tx_underrun;
-
-	return nstat;
 }
 
 static void gem_get_ethtool_stats(struct net_device *dev,
@@ -3183,14 +3178,17 @@ static void gem_get_ethtool_strings(struct net_device *dev, u32 sset, u8 *p)
 	}
 }
 
-static struct net_device_stats *macb_get_stats(struct net_device *dev)
+static void macb_get_stats(struct net_device *dev,
+			   struct rtnl_link_stats64 *nstat)
 {
 	struct macb *bp = netdev_priv(dev);
-	struct net_device_stats *nstat = &bp->dev->stats;
 	struct macb_stats *hwstat = &bp->hw_stats.macb;
 
-	if (macb_is_gem(bp))
-		return gem_get_stats(bp);
+	netdev_stats_to_stats64(nstat, &bp->dev->stats);
+	if (macb_is_gem(bp)) {
+		gem_get_stats(bp, nstat);
+		return;
+	}
 
 	/* read stats from hardware */
 	macb_update_stats(bp);
@@ -3226,8 +3224,6 @@ static struct net_device_stats *macb_get_stats(struct net_device *dev)
 	nstat->tx_carrier_errors = hwstat->tx_carrier_errors;
 	nstat->tx_fifo_errors = hwstat->tx_underruns;
 	/* Don't know about heartbeat or window errors... */
-
-	return nstat;
 }
 
 static int macb_get_regs_len(struct net_device *netdev)
@@ -3910,7 +3906,7 @@ static const struct net_device_ops macb_netdev_ops = {
 	.ndo_stop		= macb_close,
 	.ndo_start_xmit		= macb_start_xmit,
 	.ndo_set_rx_mode	= macb_set_rx_mode,
-	.ndo_get_stats		= macb_get_stats,
+	.ndo_get_stats64	= macb_get_stats,
 	.ndo_eth_ioctl		= macb_ioctl,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_change_mtu		= macb_change_mtu,
@@ -4571,7 +4567,7 @@ static const struct net_device_ops at91ether_netdev_ops = {
 	.ndo_open		= at91ether_open,
 	.ndo_stop		= at91ether_close,
 	.ndo_start_xmit		= at91ether_start_xmit,
-	.ndo_get_stats		= macb_get_stats,
+	.ndo_get_stats64	= macb_get_stats,
 	.ndo_set_rx_mode	= macb_set_rx_mode,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_eth_ioctl		= macb_ioctl,
