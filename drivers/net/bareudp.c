@@ -780,7 +780,7 @@ static void bareudp_destroy_tunnels(struct net *net, struct list_head *head)
 	struct bareudp_dev *bareudp, *next;
 
 	list_for_each_entry_safe(bareudp, next, &bn->bareudp_list, next)
-		unregister_netdevice_queue(bareudp->dev, head);
+		bareudp_dellink(bareudp->dev, head);
 }
 
 static void __net_exit bareudp_exit_batch_rtnl(struct list_head *net_list,
