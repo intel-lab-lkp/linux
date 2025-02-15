@@ -1303,6 +1303,15 @@ config NVIDIA_CARMEL_CNP_ERRATUM
 
 	  If unsure, say Y.
 
+config ROCKCHIP_ERRATUM_3568002
+	bool "Rockchip 3568002: can not support DDR addresses higher than 4G"
+	default y
+	help
+	  The Rockchip RK3566 and RK3568 GIC600 SoC integrations have DDR
+	  addressing limited to first 4GB.
+
+	  If unsure, say Y.
+
 config ROCKCHIP_ERRATUM_3588001
 	bool "Rockchip 3588001: GIC600 can not support shareability attributes"
 	default y
