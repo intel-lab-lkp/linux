@@ -114,21 +114,25 @@
 		cb_intosc_hs_div2_clk: cb-intosc-hs-div2-clk {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			status = "disabled";
 		};
 
 		cb_intosc_ls_clk: cb-intosc-ls-clk {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			status = "disabled";
 		};
 
 		f2s_free_clk: f2s-free-clk {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			status = "disabled";
 		};
 
 		osc1: osc1 {
 			#clock-cells = <0>;
 			compatible = "fixed-clock";
+			status = "disabled";
 		};
 
 		qspi_clk: qspi-clk {
