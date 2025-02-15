@@ -1456,7 +1456,7 @@ static int exynos5_usbdrd_setup_notifiers(struct exynos5_usbdrd_phy *phy_drd)
 {
 	int ret;
 
-	if (!IS_ENABLED(CONFIG_TYPEC))
+	if (!IS_REACHABLE(CONFIG_TYPEC))
 		return 0;
 
 	if (device_property_present(phy_drd->dev, "orientation-switch")) {
