@@ -100,7 +100,6 @@ struct amd_cpudata {
 	bool	hw_prefcore;
 
 	/* EPP feature related attributes*/
-	u8	epp_cached;
 	u32	policy;
 	bool	suspended;
 	u8	epp_default;
