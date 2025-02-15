@@ -261,8 +261,8 @@ check_mptcp_disabled()
 
 	# mainly to cover more code
 	if ! ip netns exec ${disabled_ns} sysctl net.mptcp >/dev/null; then
-		mptcp_lib_pr_fail "not able to list net.mptcp sysctl knobs"
-		mptcp_lib_result_fail "not able to list net.mptcp sysctl knobs"
+		mptcp_lib_pr_fail "Unable to list net.mptcp sysctl knobs"
+		mptcp_lib_result_fail "Unable to list net.mptcp sysctl knobs"
 		ret=${KSFT_FAIL}
 		return 1
 	fi
