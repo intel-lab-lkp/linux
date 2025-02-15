@@ -10,6 +10,8 @@ use crate::{device, init::PinInit, of, str::CStr, try_pin_init, types::Opaque, T
 use core::pin::Pin;
 use macros::{pin_data, pinned_drop};
 
+/// Generic interface for subsystem driver registrations.
+///
 /// The [`RegistrationOps`] trait serves as generic interface for subsystems (e.g., PCI, Platform,
 /// Amba, etc.) to provide the corresponding subsystem specific implementation to register /
 /// unregister a driver of the particular type (`RegType`).
