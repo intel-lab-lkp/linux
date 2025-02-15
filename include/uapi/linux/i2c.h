@@ -25,8 +25,8 @@
  *   not set, the action is taken to be write data (from slave to master)
  *
  *   Optional:
- *   %I2C_M_DMA_SAFE: the buffer of this message is DMA safe. Makes only sense
- *     in kernelspace, because userspace buffers are copied anyway
+ *   %I2C_M_DMA_SAFE: the buffer of this message is DMA safe. Makes sense only
+ *	in kernelspace, because userspace buffers are copied anyway
  *
  *   Only if I2C_FUNC_10BIT_ADDR is set:
  *   %I2C_M_TEN: this is a 10 bit chip address
@@ -67,7 +67,7 @@
  * @i2c_msg transaction segment, beginning with a (repeated) START.
  *
  * Alternatively, when the adapter supports %I2C_FUNC_PROTOCOL_MANGLING then
- * passing certain @flags may have changed those standard protocol behaviors.
+ * passing certain @flags may alter the expected behavior.
  * Those flags are only for use with broken/nonconforming slaves, and with
  * adapters which are known to support the specific mangling options they need.
  */
