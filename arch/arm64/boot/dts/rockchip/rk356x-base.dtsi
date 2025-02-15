@@ -284,6 +284,7 @@
 		mbi-alias = <0x0 0xfd410000>;
 		mbi-ranges = <296 24>;
 		msi-controller;
+		dma-noncoherent;
 	};
 
 	usb_host0_ehci: usb@fd800000 {
