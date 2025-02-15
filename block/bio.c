@@ -870,6 +870,7 @@ struct bio *bio_alloc_clone(struct block_device *bdev, struct bio *bio_src,
 		return NULL;
 	}
 	bio->bi_io_vec = bio_src->bi_io_vec;
+	bio->bi_vcnt = bio_src->bi_vcnt;
 
 	return bio;
 }
