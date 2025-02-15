@@ -342,6 +342,10 @@
 	};
 };
 
+&apps_smmu {
+	/delete-property/ dma-coherent;
+};
+
 &cdsp_pas {
 	firmware-name = "qcom/sdm850/LENOVO/81JL/qccdsp850.mbn";
 	status = "okay";
