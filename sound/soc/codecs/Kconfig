@@ -1965,6 +1965,7 @@ config SND_SOC_TAS2562
 config SND_SOC_TAS2764
 	tristate "Texas Instruments TAS2764 Mono Audio amplifier"
 	depends on I2C
+	depends on OF
 
 config SND_SOC_TAS2770
 	tristate "Texas Instruments TAS2770 speaker amplifier"
