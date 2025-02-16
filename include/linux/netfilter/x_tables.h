@@ -269,9 +269,20 @@ struct xt_table_info {
 
 struct xt_counters_k {
 	/* Packet and byte counter */
-	__u64 pcnt;
-	__u64 bcnt;
+	u64_stats_t pcnt;
+	u64_stats_t bcnt;
 };
+
+DECLARE_PER_CPU(struct u64_stats_sync, xt_syncp);
+
+static inline void xt_counter_add(struct xt_counters_k *xt_counter,
+				  unsigned int bytes, unsigned int packets)
+{
+	u64_stats_update_begin(this_cpu_ptr(&xt_syncp));
+	u64_stats_add(&xt_counter->pcnt, packets);
+	u64_stats_add(&xt_counter->bcnt, bytes);
+	u64_stats_update_end(this_cpu_ptr(&xt_syncp));
+}
 
 union xt_counter_k {
 	struct xt_counters_k __percpu *pcpu;
@@ -346,16 +357,6 @@ void xt_proto_fini(struct net *net, u_int8_t af);
 struct xt_table_info *xt_alloc_table_info(unsigned int size);
 void xt_free_table_info(struct xt_table_info *info);
 
-/**
- * xt_recseq - recursive seqcount for netfilter use
- *
- * Packet processing changes the seqcount only if no recursion happened
- * get_counters() can use read_seqcount_begin()/read_seqcount_retry(),
- * because we use the normal seqcount convention :
- * Low order bit set to 1 if a writer is active.
- */
-DECLARE_PER_CPU(seqcount_t, xt_recseq);
-
 bool xt_af_lock_held(u_int8_t af);
 static inline struct xt_table_info *nf_table_private(const struct xt_table *table)
 {
@@ -367,52 +368,6 @@ static inline struct xt_table_info *nf_table_private(const struct xt_table *tabl
  * Enabled if current ip(6)tables ruleset has at least one -j TEE rule.
  */
 extern struct static_key xt_tee_enabled;
-
-/**
- * xt_write_recseq_begin - start of a write section
- *
- * Begin packet processing : all readers must wait the end
- * 1) Must be called with preemption disabled
- * 2) softirqs must be disabled too (or we should use this_cpu_add())
- * Returns:
- *  1 if no recursion on this cpu
- *  0 if recursion detected
- */
-static inline unsigned int xt_write_recseq_begin(void)
-{
-	unsigned int addend;
-
-	/*
-	 * Low order bit of sequence is set if we already
-	 * called xt_write_recseq_begin().
-	 */
-	addend = (__this_cpu_read(xt_recseq.sequence) + 1) & 1;
-
-	/*
-	 * This is kind of a write_seqcount_begin(), but addend is 0 or 1
-	 * We dont check addend value to avoid a test and conditional jump,
-	 * since addend is most likely 1
-	 */
-	__this_cpu_add(xt_recseq.sequence, addend);
-	smp_mb();
-
-	return addend;
-}
-
-/**
- * xt_write_recseq_end - end of a write section
- * @addend: return value from previous xt_write_recseq_begin()
- *
- * End packet processing : all readers can proceed
- * 1) Must be called with preemption disabled
- * 2) softirqs must be disabled too (or we should use this_cpu_add())
- */
-static inline void xt_write_recseq_end(unsigned int addend)
-{
-	/* this is kind of a write_seqcount_end(), but addend is 0 or 1 */
-	smp_wmb();
-	__this_cpu_add(xt_recseq.sequence, addend);
-}
 
 /*
  * This helper is performance critical and must be inlined
