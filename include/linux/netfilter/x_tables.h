@@ -267,6 +267,17 @@ struct xt_table_info {
 	unsigned char entries[] __aligned(8);
 };
 
+struct xt_counters_k {
+	/* Packet and byte counter */
+	__u64 pcnt;
+	__u64 bcnt;
+};
+
+union xt_counter_k {
+	struct xt_counters_k __percpu *pcpu;
+	struct xt_counters_k local;
+};
+
 int xt_register_target(struct xt_target *target);
 void xt_unregister_target(struct xt_target *target);
 int xt_register_targets(struct xt_target *target, unsigned int n);
@@ -428,29 +439,32 @@ static inline unsigned long ifname_compare_aligned(const char *_a,
 
 struct xt_percpu_counter_alloc_state {
 	unsigned int off;
-	const char __percpu *mem;
+	void __percpu *mem;
 };
 
 bool xt_percpu_counter_alloc(struct xt_percpu_counter_alloc_state *state,
-			     struct xt_counters *counter);
-void xt_percpu_counter_free(struct xt_counters *cnt);
+			     struct xt_counter_pad *xt_pad);
+void xt_percpu_counter_free(struct xt_counter_pad *xt_pad);
 
-static inline struct xt_counters *
-xt_get_this_cpu_counter(struct xt_counters *cnt)
+static inline struct xt_counters_k *xt_get_this_cpu_counter(struct xt_counter_pad *xt_pad)
 {
-	if (nr_cpu_ids > 1)
-		return this_cpu_ptr((void __percpu *) (unsigned long) cnt->pcnt);
+	union xt_counter_k *xt_cnt = (union xt_counter_k *)xt_pad;
 
-	return cnt;
+	if (nr_cpu_ids > 1)
+		return this_cpu_ptr(xt_cnt->pcpu);
+
+	return &xt_cnt->local;
 }
 
-static inline struct xt_counters *
-xt_get_per_cpu_counter(struct xt_counters *cnt, unsigned int cpu)
+static inline struct xt_counters_k *xt_get_per_cpu_counter(struct xt_counter_pad *xt_pad,
+							   unsigned int cpu)
 {
-	if (nr_cpu_ids > 1)
-		return per_cpu_ptr((void __percpu *) (unsigned long) cnt->pcnt, cpu);
+	union xt_counter_k *xt_cnt = (union xt_counter_k *)xt_pad;
 
-	return cnt;
+	if (nr_cpu_ids > 1)
+		return per_cpu_ptr(xt_cnt->pcpu, cpu);
+
+	return &xt_cnt->local;
 }
 
 struct nf_hook_ops *xt_hook_ops_alloc(const struct xt_table *, nf_hookfn *);
