@@ -43,7 +43,7 @@ const struct fsverity_hash_alg *fsverity_get_hash_alg(const struct inode *inode,
 						      unsigned int num)
 {
 	struct fsverity_hash_alg *alg;
-	struct crypto_shash *tfm;
+	struct crypto_sync_hash *tfm;
 	int err;
 
 	if (num >= ARRAY_SIZE(fsverity_hash_algs) ||
@@ -62,7 +62,7 @@ const struct fsverity_hash_alg *fsverity_get_hash_alg(const struct inode *inode,
 	if (alg->tfm != NULL)
 		goto out_unlock;
 
-	tfm = crypto_alloc_shash(alg->name, 0, 0);
+	tfm = crypto_alloc_sync_hash(alg->name, 0, 0);
 	if (IS_ERR(tfm)) {
 		if (PTR_ERR(tfm) == -ENOENT) {
 			fsverity_warn(inode,
@@ -79,20 +79,20 @@ const struct fsverity_hash_alg *fsverity_get_hash_alg(const struct inode *inode,
 	}
 
 	err = -EINVAL;
-	if (WARN_ON_ONCE(alg->digest_size != crypto_shash_digestsize(tfm)))
+	if (WARN_ON_ONCE(alg->digest_size != crypto_sync_hash_digestsize(tfm)))
 		goto err_free_tfm;
-	if (WARN_ON_ONCE(alg->block_size != crypto_shash_blocksize(tfm)))
+	if (WARN_ON_ONCE(alg->block_size != crypto_sync_hash_blocksize(tfm)))
 		goto err_free_tfm;
 
 	pr_info("%s using implementation \"%s\"\n",
-		alg->name, crypto_shash_driver_name(tfm));
+		alg->name, crypto_sync_hash_driver_name(tfm));
 
 	/* pairs with smp_load_acquire() above */
 	smp_store_release(&alg->tfm, tfm);
 	goto out_unlock;
 
 err_free_tfm:
-	crypto_free_shash(tfm);
+	crypto_free_sync_hash(tfm);
 	alg = ERR_PTR(err);
 out_unlock:
 	mutex_unlock(&fsverity_hash_alg_init_mutex);
@@ -112,17 +112,15 @@ const u8 *fsverity_prepare_hash_state(const struct fsverity_hash_alg *alg,
 				      const u8 *salt, size_t salt_size)
 {
 	u8 *hashstate = NULL;
-	SHASH_DESC_ON_STACK(desc, alg->tfm);
+	SYNC_HASH_REQUEST_ON_STACK(req, alg->tfm);
 	u8 *padded_salt = NULL;
 	size_t padded_salt_size;
 	int err;
 
-	desc->tfm = alg->tfm;
-
 	if (salt_size == 0)
 		return NULL;
 
-	hashstate = kmalloc(crypto_shash_statesize(alg->tfm), GFP_KERNEL);
+	hashstate = kmalloc(crypto_sync_hash_statesize(alg->tfm), GFP_KERNEL);
 	if (!hashstate)
 		return ERR_PTR(-ENOMEM);
 
@@ -140,15 +138,19 @@ const u8 *fsverity_prepare_hash_state(const struct fsverity_hash_alg *alg,
 		goto err_free;
 	}
 	memcpy(padded_salt, salt, salt_size);
-	err = crypto_shash_init(desc);
+
+	ahash_request_set_callback(req, CRYPTO_TFM_REQ_MAY_SLEEP, NULL, NULL);
+
+	err = crypto_ahash_init(req);
 	if (err)
 		goto err_free;
 
-	err = crypto_shash_update(desc, padded_salt, padded_salt_size);
+	ahash_request_set_virt(req, padded_salt, NULL, padded_salt_size);
+	err = crypto_ahash_update(req);
 	if (err)
 		goto err_free;
 
-	err = crypto_shash_export(desc, hashstate);
+	err = crypto_ahash_export(req, hashstate);
 	if (err)
 		goto err_free;
 out:
@@ -176,21 +178,22 @@ err_free:
 int fsverity_hash_block(const struct merkle_tree_params *params,
 			const struct inode *inode, const void *data, u8 *out)
 {
-	SHASH_DESC_ON_STACK(desc, params->hash_alg->tfm);
+	SYNC_HASH_REQUEST_ON_STACK(req, params->hash_alg->tfm);
 	int err;
 
-	desc->tfm = params->hash_alg->tfm;
+	ahash_request_set_callback(req, CRYPTO_TFM_REQ_MAY_SLEEP, NULL, NULL);
+	ahash_request_set_virt(req, data, out, params->block_size);
 
 	if (params->hashstate) {
-		err = crypto_shash_import(desc, params->hashstate);
+		err = crypto_ahash_import(req, params->hashstate);
 		if (err) {
 			fsverity_err(inode,
 				     "Error %d importing hash state", err);
 			return err;
 		}
-		err = crypto_shash_finup(desc, data, params->block_size, out);
+		err = crypto_ahash_finup(req);
 	} else {
-		err = crypto_shash_digest(desc, data, params->block_size, out);
+		err = crypto_ahash_digest(req);
 	}
 	if (err)
 		fsverity_err(inode, "Error %d computing block hash", err);
@@ -209,7 +212,7 @@ int fsverity_hash_block(const struct merkle_tree_params *params,
 int fsverity_hash_buffer(const struct fsverity_hash_alg *alg,
 			 const void *data, size_t size, u8 *out)
 {
-	return crypto_shash_tfm_digest(alg->tfm, data, size, out);
+	return crypto_sync_hash_digest(alg->tfm, data, size, out);
 }
 
 void __init fsverity_check_hash_algs(void)
