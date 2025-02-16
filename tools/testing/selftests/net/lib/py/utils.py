@@ -123,6 +123,13 @@ def ethtool(args, json=None, ns=None, host=None):
     return tool('ethtool', args, json=json, ns=ns, host=host)
 
 
+def check_port_available_remote(port, host):
+    """
+    Check if a port is available on remote host.
+    Raise exception if not available.
+    """
+    cmd(f"python3 -c 'import socket; s=socket.socket(socket.AF_INET6, socket.SOCK_STREAM); s.bind((\"\", {port}))'", host=host)
+
 def rand_port():
     """
     Get a random unprivileged port.
