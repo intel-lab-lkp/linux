@@ -8,6 +8,7 @@
 #ifndef _CRYPTO_HASH_H
 #define _CRYPTO_HASH_H
 
+#include <linux/align.h>
 #include <linux/atomic.h>
 #include <linux/crypto.h>
 #include <linux/string.h>
@@ -162,6 +163,8 @@ struct shash_desc {
 	void *__ctx[] __aligned(ARCH_SLAB_MINALIGN);
 };
 
+struct sync_hash_requests;
+
 #define HASH_MAX_DIGESTSIZE	 64
 
 /*
@@ -169,11 +172,29 @@ struct shash_desc {
  * containing a 'struct sha3_state'.
  */
 #define HASH_MAX_DESCSIZE	(sizeof(struct shash_desc) + 360)
+#define MAX_SYNC_HASH_REQSIZE	HASH_MAX_DESCSIZE
 
 #define SHASH_DESC_ON_STACK(shash, ctx)					     \
 	char __##shash##_desc[sizeof(struct shash_desc) + HASH_MAX_DESCSIZE] \
 		__aligned(__alignof__(struct shash_desc));		     \
 	struct shash_desc *shash = (struct shash_desc *)__##shash##_desc
+
+#define SYNC_HASH_REQUEST_ON_STACK(name, _tfm) \
+	char __##name##_req[sizeof(struct ahash_request) + \
+			     MAX_SYNC_HASH_REQSIZE \
+			    ] CRYPTO_MINALIGN_ATTR; \
+	struct ahash_request *name = \
+		(((struct ahash_request *)__##name##_req)->base.tfm = \
+			crypto_sync_hash_tfm((_tfm)), \
+		 (void *)__##name##_req)
+
+#define SYNC_HASH_REQUESTS_ON_STACK(name, _n, _tfm) \
+	char __##name##_req[(_n) * ALIGN(sizeof(struct ahash_request) + \
+					  MAX_SYNC_HASH_REQSIZE, \
+					  CRYPTO_MINALIGN) \
+			    ] CRYPTO_MINALIGN_ATTR; \
+	struct sync_hash_requests *name = sync_hash_requests_on_stack_init( \
+		__##name##_req, sizeof(__##name##_req), (_tfm))
 
 /**
  * struct shash_alg - synchronous message digest definition
@@ -241,6 +262,10 @@ struct crypto_shash {
 	struct crypto_tfm base;
 };
 
+struct crypto_sync_hash {
+	struct crypto_ahash base;
+};
+
 /**
  * DOC: Asynchronous Message Digest API
  *
@@ -273,11 +298,20 @@ static inline struct crypto_ahash *__crypto_ahash_cast(struct crypto_tfm *tfm)
 struct crypto_ahash *crypto_alloc_ahash(const char *alg_name, u32 type,
 					u32 mask);
 
+struct crypto_sync_hash *crypto_alloc_sync_hash(const char *alg_name,
+						u32 type, u32 mask);
+
 struct crypto_ahash *crypto_clone_ahash(struct crypto_ahash *tfm);
 
 static inline struct crypto_tfm *crypto_ahash_tfm(struct crypto_ahash *tfm)
 {
 	return &tfm->base;
+}
+
+static inline struct crypto_tfm *crypto_sync_hash_tfm(
+	struct crypto_sync_hash *tfm)
+{
+	return crypto_ahash_tfm(&tfm->base);
 }
 
 /**
@@ -289,6 +323,11 @@ static inline struct crypto_tfm *crypto_ahash_tfm(struct crypto_ahash *tfm)
 static inline void crypto_free_ahash(struct crypto_ahash *tfm)
 {
 	crypto_destroy_tfm(tfm, crypto_ahash_tfm(tfm));
+}
+
+static inline void crypto_free_sync_hash(struct crypto_sync_hash *tfm)
+{
+	crypto_free_ahash(&tfm->base);
 }
 
 /**
@@ -313,6 +352,12 @@ static inline const char *crypto_ahash_driver_name(struct crypto_ahash *tfm)
 	return crypto_tfm_alg_driver_name(crypto_ahash_tfm(tfm));
 }
 
+static inline const char *crypto_sync_hash_driver_name(
+	struct crypto_sync_hash *tfm)
+{
+	return crypto_ahash_driver_name(&tfm->base);
+}
+
 /**
  * crypto_ahash_blocksize() - obtain block size for cipher
  * @tfm: cipher handle
@@ -325,6 +370,12 @@ static inline const char *crypto_ahash_driver_name(struct crypto_ahash *tfm)
 static inline unsigned int crypto_ahash_blocksize(struct crypto_ahash *tfm)
 {
 	return crypto_tfm_alg_blocksize(crypto_ahash_tfm(tfm));
+}
+
+static inline unsigned int crypto_sync_hash_blocksize(
+	struct crypto_sync_hash *tfm)
+{
+	return crypto_ahash_blocksize(&tfm->base);
 }
 
 static inline struct hash_alg_common *__crypto_hash_alg_common(
@@ -354,6 +405,12 @@ static inline unsigned int crypto_ahash_digestsize(struct crypto_ahash *tfm)
 	return crypto_hash_alg_common(tfm)->digestsize;
 }
 
+static inline unsigned int crypto_sync_hash_digestsize(
+	struct crypto_sync_hash *tfm)
+{
+	return crypto_ahash_digestsize(&tfm->base);
+}
+
 /**
  * crypto_ahash_statesize() - obtain size of the ahash state
  * @tfm: cipher handle
@@ -367,6 +424,12 @@ static inline unsigned int crypto_ahash_digestsize(struct crypto_ahash *tfm)
 static inline unsigned int crypto_ahash_statesize(struct crypto_ahash *tfm)
 {
 	return tfm->statesize;
+}
+
+static inline unsigned int crypto_sync_hash_statesize(
+	struct crypto_sync_hash *tfm)
+{
+	return crypto_ahash_statesize(&tfm->base);
 }
 
 static inline u32 crypto_ahash_get_flags(struct crypto_ahash *tfm)
@@ -877,6 +940,9 @@ int crypto_shash_digest(struct shash_desc *desc, const u8 *data,
 int crypto_shash_tfm_digest(struct crypto_shash *tfm, const u8 *data,
 			    unsigned int len, u8 *out);
 
+int crypto_sync_hash_digest(struct crypto_sync_hash *tfm, const u8 *data,
+			    unsigned int len, u8 *out);
+
 /**
  * crypto_shash_export() - extract operational state for message digest
  * @desc: reference to the operational state handle whose state is exported
@@ -982,6 +1048,13 @@ static inline void shash_desc_zero(struct shash_desc *desc)
 			 sizeof(*desc) + crypto_shash_descsize(desc->tfm));
 }
 
+static inline void ahash_request_zero(struct ahash_request *req)
+{
+	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
+
+	memzero_explicit(req, sizeof(*req) + crypto_ahash_reqsize(tfm));
+}
+
 static inline int ahash_request_err(struct ahash_request *req)
 {
 	return req->base.err;
@@ -990,6 +1063,33 @@ static inline int ahash_request_err(struct ahash_request *req)
 static inline bool ahash_is_async(struct crypto_ahash *tfm)
 {
 	return crypto_tfm_is_async(&tfm->base);
+}
+
+static inline struct ahash_request *sync_hash_requests(
+	struct sync_hash_requests *reqs, int i)
+{
+	unsigned unit = sizeof(struct ahash_request) + MAX_SYNC_HASH_REQSIZE;
+	unsigned alunit = ALIGN(unit, CRYPTO_MINALIGN);
+
+	return (void *)((char *)reqs + i * alunit);
+}
+
+static inline struct sync_hash_requests *sync_hash_requests_on_stack_init(
+	char *buf, unsigned len, struct crypto_sync_hash *tfm)
+{
+	unsigned unit = sizeof(struct ahash_request) + MAX_SYNC_HASH_REQSIZE;
+	unsigned alunit = ALIGN(unit, CRYPTO_MINALIGN);
+	struct sync_hash_requests *reqs = (void *)buf;
+	int n = len / alunit;
+	int i;
+
+	for (i = 0; i < n; i++) {
+		struct ahash_request *req = sync_hash_requests(reqs, i);
+
+		req->base.tfm = crypto_sync_hash_tfm(tfm);
+	}
+
+	return reqs;
 }
 
 #endif	/* _CRYPTO_HASH_H */

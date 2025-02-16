@@ -949,6 +949,27 @@ struct crypto_ahash *crypto_alloc_ahash(const char *alg_name, u32 type,
 }
 EXPORT_SYMBOL_GPL(crypto_alloc_ahash);
 
+struct crypto_sync_hash *crypto_alloc_sync_hash(const char *alg_name,
+						u32 type, u32 mask)
+{
+	struct crypto_ahash *tfm;
+
+	/* Only sync algorithms allowed. */
+	mask |= CRYPTO_ALG_ASYNC;
+	type &= ~CRYPTO_ALG_ASYNC;
+
+	tfm = crypto_alloc_ahash(alg_name, type, mask);
+
+	if (!IS_ERR(tfm) && WARN_ON(crypto_ahash_reqsize(tfm) >
+				    MAX_SYNC_HASH_REQSIZE)) {
+		crypto_free_ahash(tfm);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return container_of(tfm, struct crypto_sync_hash, base);
+}
+EXPORT_SYMBOL_GPL(crypto_alloc_sync_hash);
+
 int crypto_has_ahash(const char *alg_name, u32 type, u32 mask)
 {
 	return crypto_type_has_alg(alg_name, &crypto_ahash_type, type, mask);
@@ -1122,6 +1143,22 @@ void ahash_request_free(struct ahash_request *req)
 	kfree_sensitive(req);
 }
 EXPORT_SYMBOL_GPL(ahash_request_free);
+
+int crypto_sync_hash_digest(struct crypto_sync_hash *tfm, const u8 *data,
+			    unsigned int len, u8 *out)
+{
+	SYNC_HASH_REQUEST_ON_STACK(req, tfm);
+	int err;
+
+	ahash_request_set_callback(req, 0, NULL, NULL);
+	ahash_request_set_virt(req, data, out, len);
+	err = crypto_ahash_digest(req);
+
+	ahash_request_zero(req);
+
+	return err;
+}
+EXPORT_SYMBOL_GPL(crypto_shash_tfm_digest);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Asynchronous cryptographic hash type");
