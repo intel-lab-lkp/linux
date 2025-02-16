@@ -98,13 +98,16 @@ EXPORT_SYMBOL(bin2hex);
  * hex_dump_to_buffer - convert a blob of data to "hex ASCII" in memory
  * @buf: data blob to dump
  * @len: number of bytes in the @buf
- * @rowsize: number of bytes to print per line; must be 16 or 32
- * @groupsize: number of bytes to print at a time (1, 2, 4, 8; default = 1)
+ * @rowsize: number of bytes to print per line
+ * @groupsize: number of bytes to print at a time
  * @linebuf: where to put the converted data
  * @linebuflen: total size of @linebuf, including space for terminating NUL
  * @ascii: include ASCII after the hex output
  *
- * hex_dump_to_buffer() works on one "line" of output at a time, i.e.,
+ * If @groupsize isn't a power of 2 that divides into both @len and @rowsize
+ * the it is set to 1.
+ *
+ * hex_dump_to_buffer() works on one "line" of output at a time, e.g.,
  * 16 or 32 bytes of input data converted to hex + ASCII output.
  *
  * Given a buffer of u8 data, hex_dump_to_buffer() converts the input data
@@ -124,105 +127,101 @@ EXPORT_SYMBOL(bin2hex);
  * (excluding the terminating NUL) which would have been written to the final
  * string if enough space had been available.
  */
-int hex_dump_to_buffer(const void *buf, size_t len, int rowsize, int groupsize,
-		       char *linebuf, size_t linebuflen, bool ascii)
+size_t hex_dump_to_buffer(const void *buf, size_t len, size_t rowsize,
+		       size_t groupsize, char *linebuf, size_t linebuflen,
+		       bool ascii)
 {
+	char *dst_end = linebuf + linebuflen;
+	size_t out_len, pad_len;
+	char *dst = linebuf;
 	const u8 *ptr = buf;
-	int ngroups;
+	unsigned int j;
 	u8 ch;
-	int j, lx = 0;
-	int ascii_column;
-	int ret;
 
-	if (rowsize != 16 && rowsize != 32)
-		rowsize = 16;
+	if (!len) {
+		if (linebuflen)
+			linebuf[0] = 0;
+		return 0;
+	}
 
-	if (len > rowsize)		/* limit to one line at a time */
-		len = rowsize;
-	if (!is_power_of_2(groupsize) || groupsize > 8)
+	if (len > rowsize) {
+		if (rowsize == 0)
+			rowsize = 16;
+		if (len > rowsize)
+			len = rowsize;
+	}
+
+	if ((groupsize & (groupsize - 1)) || (rowsize & (groupsize - 1)) ||
+	    (len & (groupsize - 1)))
 		groupsize = 1;
-	if ((len % groupsize) != 0)	/* no mixed size output */
-		groupsize = 1;
 
-	ngroups = len / groupsize;
-	ascii_column = rowsize * 2 + rowsize / groupsize + 1;
-
-	if (!linebuflen)
-		goto overflow1;
-
-	if (!len)
-		goto nil;
-
-	if (groupsize == 8) {
-		const u64 *ptr8 = buf;
-
-		for (j = 0; j < ngroups; j++) {
-			ret = snprintf(linebuf + lx, linebuflen - lx,
-				       "%s%16.16llx", j ? " " : "",
-				       get_unaligned(ptr8 + j));
-			if (ret >= linebuflen - lx)
-				goto overflow1;
-			lx += ret;
-		}
-	} else if (groupsize == 4) {
-		const u32 *ptr4 = buf;
-
-		for (j = 0; j < ngroups; j++) {
-			ret = snprintf(linebuf + lx, linebuflen - lx,
-				       "%s%8.8x", j ? " " : "",
-				       get_unaligned(ptr4 + j));
-			if (ret >= linebuflen - lx)
-				goto overflow1;
-			lx += ret;
-		}
-	} else if (groupsize == 2) {
-		const u16 *ptr2 = buf;
-
-		for (j = 0; j < ngroups; j++) {
-			ret = snprintf(linebuf + lx, linebuflen - lx,
-				       "%s%4.4x", j ? " " : "",
-				       get_unaligned(ptr2 + j));
-			if (ret >= linebuflen - lx)
-				goto overflow1;
-			lx += ret;
-		}
-	} else {
-		for (j = 0; j < len; j++) {
-			if (linebuflen < lx + 2)
-				goto overflow2;
+	if (groupsize == 1 && len * 3 <= linebuflen) {
+		for (j = 0; j < len; j++, dst += 3) {
 			ch = ptr[j];
-			linebuf[lx++] = hex_asc_hi(ch);
-			if (linebuflen < lx + 2)
-				goto overflow2;
-			linebuf[lx++] = hex_asc_lo(ch);
-			if (linebuflen < lx + 2)
-				goto overflow2;
-			linebuf[lx++] = ' ';
+			dst[0] = hex_asc_hi(ch);
+			dst[1] = hex_asc_lo(ch);
+			dst[2] = ' ';
 		}
-		if (j)
-			lx--;
-	}
-	if (!ascii)
-		goto nil;
 
-	while (lx < ascii_column) {
-		if (linebuflen < lx + 2)
-			goto overflow2;
-		linebuf[lx++] = ' ';
+		pad_len = (rowsize - len) * 3;
+	} else {
+		unsigned int mask = groupsize - 1;
+		unsigned int byteswap;
+
+		byteswap = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? 0 : mask;
+
+		for (j = 0; j < len; j++) {
+			if (dst + 2 > dst_end)
+				goto hex_truncated;
+			ch = ptr[j ^ byteswap];
+			dst[0] = hex_asc_hi(ch);
+			dst[1] = hex_asc_lo(ch);
+			dst += 2;
+
+			if ((j & mask) != mask)
+				continue;
+			if (dst >= dst_end)
+				goto hex_truncated;
+			*dst++ = ' ';
+		}
+
+		pad_len = rowsize - len;
+		pad_len = pad_len * 2 + pad_len / groupsize;
 	}
+	dst--;
+	out_len = dst - linebuf;
+
+	if (!ascii) {
+		*dst = 0;
+		return out_len;
+	}
+
+	pad_len += 2;
+	out_len += pad_len + len;
+	if (dst + pad_len >= dst_end)
+		pad_len = dst_end - dst - 1;
+	while (pad_len--)
+		*dst++ = ' ';
+
+	if (dst + len >= dst_end)
+		len = dst_end - dst - 1;
+
 	for (j = 0; j < len; j++) {
-		if (linebuflen < lx + 2)
-			goto overflow2;
 		ch = ptr[j];
-		linebuf[lx++] = (isascii(ch) && isprint(ch)) ? ch : '.';
+		*dst++ = ch >= ' ' && ch < 0x7f ? ch : '.';
 	}
-nil:
-	linebuf[lx] = '\0';
-	return lx;
-overflow2:
-	linebuf[lx++] = '\0';
-overflow1:
-	return ascii ? ascii_column + len : (groupsize * 2 + 1) * ngroups - 1;
+	*dst = 0;
+
+	return out_len;
+
+hex_truncated:
+	if (dst_end != linebuf)
+		dst_end[-1] = 0;
+
+	out_len = ascii ? rowsize : len;
+	out_len = out_len * 2 + out_len / groupsize;
+	out_len += ascii ? 1 + len : -1;
+	return out_len;
 }
 EXPORT_SYMBOL(hex_dump_to_buffer);
 
