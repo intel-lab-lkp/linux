@@ -115,7 +115,7 @@ Description:	The "pubek" property will return the TPM's public endorsement
 		is version 1.2, the pubek will not be available without the
 		owner's authorization. Since the TPM driver doesn't store any
 		secrets, it can't authorize its own request for the pubek,
-		making it unaccessible. The public endorsement key is gener-
+		making it inaccessible. The public endorsement key is gener-
 		ated at TPM manufacture time and exists for the life of the
 		chip.
 
