@@ -41,8 +41,24 @@
 #include <asm/cpu_device_id.h>
 #include <asm/simd.h>
 
+struct sha256_x8_mbctx {
+	u32 state[8][8];
+	const u8 *input[8];
+};
+
+struct sha256_reqctx {
+	struct sha256_state state;
+	struct crypto_hash_walk walk;
+	const u8 *input;
+	int total;
+	unsigned int next;
+};
+
 asmlinkage void sha256_transform_ssse3(struct sha256_state *state,
 				       const u8 *data, int blocks);
+asmlinkage void sha256_transform_rorx(struct sha256_state *state,
+				      const u8 *data, int blocks);
+asmlinkage void sha256_x8_avx2(struct sha256_x8_mbctx *mbctx, int blocks);
 
 static const struct x86_cpu_id module_cpu_ids[] = {
 #ifdef CONFIG_AS_SHA256_NI
@@ -55,14 +71,69 @@ static const struct x86_cpu_id module_cpu_ids[] = {
 };
 MODULE_DEVICE_TABLE(x86cpu, module_cpu_ids);
 
-static int _sha256_update(struct shash_desc *desc, const u8 *data,
-			  unsigned int len, sha256_block_fn *sha256_xform)
+static int sha256_import(struct ahash_request *req, const void *in)
 {
-	struct sha256_state *sctx = shash_desc_ctx(desc);
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
 
+	memcpy(&rctx->state, in, sizeof(rctx->state));
+	return 0;
+}
+
+static int sha256_export(struct ahash_request *req, void *out)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+
+	memcpy(out, &rctx->state, sizeof(rctx->state));
+	return 0;
+}
+
+static int sha256_ahash_init(struct ahash_request *req)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct ahash_request *r2;
+
+	sha256_init(&rctx->state);
+
+	if (!ahash_request_chained(req))
+		return 0;
+
+	req->base.err = 0;
+	list_for_each_entry(r2, &req->base.list, base.list) {
+		r2->base.err = 0;
+		rctx = ahash_request_ctx(r2);
+		sha256_init(&rctx->state);
+	}
+
+	return 0;
+}
+
+static int sha224_ahash_init(struct ahash_request *req)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct ahash_request *r2;
+
+	sha224_init(&rctx->state);
+
+	if (!ahash_request_chained(req))
+		return 0;
+
+	req->base.err = 0;
+	list_for_each_entry(r2, &req->base.list, base.list) {
+		rctx = ahash_request_ctx(r2);
+		sha224_init(&rctx->state);
+	}
+
+	return 0;
+}
+
+static void __sha256_update(struct sha256_state *sctx, const u8 *data,
+			   unsigned int len, sha256_block_fn *sha256_xform)
+{
 	if (!crypto_simd_usable() ||
-	    (sctx->count % SHA256_BLOCK_SIZE) + len < SHA256_BLOCK_SIZE)
-		return crypto_sha256_update(desc, data, len);
+	    (sctx->count % SHA256_BLOCK_SIZE) + len < SHA256_BLOCK_SIZE) {
+		sha256_update(sctx, data, len);
+		return;
+	}
 
 	/*
 	 * Make sure struct sha256_state begins directly with the SHA256
@@ -71,25 +142,97 @@ static int _sha256_update(struct shash_desc *desc, const u8 *data,
 	BUILD_BUG_ON(offsetof(struct sha256_state, state) != 0);
 
 	kernel_fpu_begin();
-	sha256_base_do_update(desc, data, len, sha256_xform);
+	lib_sha256_base_do_update(sctx, data, len, sha256_xform);
+	kernel_fpu_end();
+}
+
+static int _sha256_update(struct shash_desc *desc, const u8 *data,
+			  unsigned int len, sha256_block_fn *sha256_xform)
+{
+	__sha256_update(shash_desc_ctx(desc), data, len, sha256_xform);
+	return 0;
+}
+
+static int sha256_ahash_update(struct ahash_request *req,
+			       sha256_block_fn *sha256_xform)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct crypto_hash_walk *walk = &rctx->walk;
+	struct sha256_state *state = &rctx->state;
+	int nbytes;
+
+	/*
+	 * Make sure struct sha256_state begins directly with the SHA256
+	 * 256-bit internal state, as this is what the asm functions expect.
+	 */
+	BUILD_BUG_ON(offsetof(struct sha256_state, state) != 0);
+
+	for (nbytes = crypto_hash_walk_first(req, walk); nbytes > 0;
+	     nbytes = crypto_hash_walk_done(walk, 0))
+		__sha256_update(state, walk->data, nbytes, sha256_xform);
+
+	return nbytes;
+}
+
+static void _sha256_finup(struct sha256_state *state, const u8 *data,
+			  unsigned int len, u8 *out, unsigned int ds,
+			  sha256_block_fn *sha256_xform)
+{
+	if (!crypto_simd_usable()) {
+		sha256_update(state, data, len);
+		if (ds == SHA224_DIGEST_SIZE)
+			sha224_final(state, out);
+		else
+			sha256_final(state, out);
+		return;
+	}
+
+	kernel_fpu_begin();
+	if (len)
+		lib_sha256_base_do_update(state, data, len, sha256_xform);
+	lib_sha256_base_do_finalize(state, sha256_xform);
 	kernel_fpu_end();
 
-	return 0;
+	lib_sha256_base_finish(state, out, ds);
+}
+
+static int sha256_ahash_finup(struct ahash_request *req, bool nodata,
+			      sha256_block_fn *sha256_xform)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct crypto_hash_walk *walk = &rctx->walk;
+	struct sha256_state *state = &rctx->state;
+	unsigned int ds;
+	int nbytes;
+
+	ds = crypto_ahash_digestsize(crypto_ahash_reqtfm(req));
+	if (nodata || !req->nbytes) {
+		_sha256_finup(state, NULL, 0, req->result,
+			      ds, sha256_xform);
+		return 0;
+	}
+
+	for (nbytes = crypto_hash_walk_first(req, walk); nbytes > 0;
+	     nbytes = crypto_hash_walk_done(walk, 0)) {
+		if (crypto_hash_walk_last(walk)) {
+			_sha256_finup(state, walk->data, nbytes, req->result,
+				      ds, sha256_xform);
+			continue;
+		}
+
+		__sha256_update(state, walk->data, nbytes, sha256_xform);
+	}
+
+	return nbytes;
 }
 
 static int sha256_finup(struct shash_desc *desc, const u8 *data,
 	      unsigned int len, u8 *out, sha256_block_fn *sha256_xform)
 {
-	if (!crypto_simd_usable())
-		return crypto_sha256_finup(desc, data, len, out);
+	unsigned int ds = crypto_shash_digestsize(desc->tfm);
 
-	kernel_fpu_begin();
-	if (len)
-		sha256_base_do_update(desc, data, len, sha256_xform);
-	sha256_base_do_finalize(desc, sha256_xform);
-	kernel_fpu_end();
-
-	return sha256_base_finish(desc, out);
+	_sha256_finup(shash_desc_ctx(desc), data, len, out, ds, sha256_xform);
+	return 0;
 }
 
 static int sha256_ssse3_update(struct shash_desc *desc, const u8 *data,
@@ -247,61 +390,374 @@ static void unregister_sha256_avx(void)
 				ARRAY_SIZE(sha256_avx_algs));
 }
 
-asmlinkage void sha256_transform_rorx(struct sha256_state *state,
-				      const u8 *data, int blocks);
-
-static int sha256_avx2_update(struct shash_desc *desc, const u8 *data,
-			 unsigned int len)
+static int sha256_pad2(unsigned int partial, struct ahash_request *req)
 {
-	return _sha256_update(desc, data, len, sha256_transform_rorx);
+	const int bit_offset = SHA256_BLOCK_SIZE - sizeof(__be64);
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct sha256_state *state = &rctx->state;
+	__be64 *bits;
+
+	if (rctx->total)
+		return 0;
+
+	rctx->total = -1;
+
+	memset(state->buf + partial, 0, bit_offset - partial);
+	bits = (__be64 *)(state->buf + bit_offset);
+	*bits = cpu_to_be64(state->count << 3);
+
+	return SHA256_BLOCK_SIZE;
 }
 
-static int sha256_avx2_finup(struct shash_desc *desc, const u8 *data,
-		      unsigned int len, u8 *out)
+static int sha256_pad1(struct ahash_request *req, bool final)
 {
-	return sha256_finup(desc, data, len, out, sha256_transform_rorx);
+	const int bit_offset = SHA256_BLOCK_SIZE - sizeof(__be64);
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct sha256_state *state = &rctx->state;
+	unsigned int partial = state->count;
+
+	if (!final)
+		return 0;
+
+	rctx->total = 0;
+	rctx->input = state->buf;
+
+	partial %= SHA256_BLOCK_SIZE;
+	state->buf[partial++] = 0x80;
+
+	if (partial > bit_offset) {
+		memset(state->buf + partial, 0, SHA256_BLOCK_SIZE - partial);
+		return SHA256_BLOCK_SIZE;
+	}
+
+	return sha256_pad2(partial, req);
 }
 
-static int sha256_avx2_final(struct shash_desc *desc, u8 *out)
+static int sha256_mb_fill(struct ahash_request *req, bool final)
 {
-	return sha256_avx2_finup(desc, NULL, 0, out);
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct sha256_state *state = &rctx->state;
+	int nbytes = rctx->total;
+	unsigned int partial;
+
+	partial = state->count % SHA256_BLOCK_SIZE;
+	while (partial + nbytes < SHA256_BLOCK_SIZE) {
+		memcpy(state->buf + partial, rctx->input, nbytes);
+		state->count += nbytes;
+		partial += nbytes;
+
+		nbytes = crypto_hash_walk_done(&rctx->walk, 0);
+		if (!nbytes)
+			return sha256_pad1(req, final);
+
+		rctx->input = rctx->walk.data;
+		rctx->total = nbytes;
+	}
+
+	if (partial) {
+		unsigned int offset = SHA256_BLOCK_SIZE - partial;
+
+		memcpy(state->buf + partial, rctx->input, offset);
+		rctx->input = state->buf;
+
+		return SHA256_BLOCK_SIZE;
+	}
+
+	return nbytes;
 }
 
-static int sha256_avx2_digest(struct shash_desc *desc, const u8 *data,
-		      unsigned int len, u8 *out)
+static int sha256_mb_start(struct ahash_request *req, bool nodata, bool final)
 {
-	return sha256_base_init(desc) ?:
-	       sha256_avx2_finup(desc, data, len, out);
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	int nbytes;
+
+	nbytes = nodata ? 0 : crypto_hash_walk_first(req, &rctx->walk);
+	if (!nbytes)
+		return sha256_pad1(req, final);
+
+	rctx->input = rctx->walk.data;
+	rctx->total = nbytes;
+
+	return sha256_mb_fill(req, final);
 }
 
-static struct shash_alg sha256_avx2_algs[] = { {
-	.digestsize	=	SHA256_DIGEST_SIZE,
-	.init		=	sha256_base_init,
+static int sha256_mb_next(struct ahash_request *req, unsigned int len,
+			  bool final)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct sha256_state *state = &rctx->state;
+
+	if (rctx->input != state->buf)
+		;
+	else if (rctx->total <= 0)
+		return sha256_pad2(0, req);
+	else {
+		len = SHA256_BLOCK_SIZE - state->count % SHA256_BLOCK_SIZE;
+		rctx->input = rctx->walk.data;
+	}
+
+	rctx->input += len;
+	rctx->total -= len;
+	state->count += len;
+
+	return sha256_mb_fill(req, final);
+}
+
+static struct ahash_request *sha256_update_x8x1(
+	struct list_head *list, struct ahash_request *r2,
+	struct ahash_request *reqs[8], bool nodata, bool final)
+{
+	struct sha256_state *states[8];
+	struct sha256_x8_mbctx mbctx;
+	unsigned int len = 0;
+	int i = 0;
+
+	do {
+		struct sha256_reqctx *rctx = ahash_request_ctx(reqs[i]);
+		unsigned int nbytes;
+
+		nbytes = rctx->next;
+		if (!i || nbytes < len)
+			len = nbytes;
+
+		states[i] = &rctx->state;
+		mbctx.input[i] = rctx->input;
+	} while (++i < 8 && reqs[i]);
+
+	len &= ~(SHA256_BLOCK_SIZE - 1);
+
+	/* 3 is the break-even point for x8. */
+	if (i < 3) {
+		do {
+			i--;
+			sha256_transform_rorx(states[i], mbctx.input[i],
+					      len / SHA256_BLOCK_SIZE);
+		} while (i);
+		goto done;
+	}
+
+	for (; i < 8; i++) {
+		mbctx.input[i] = mbctx.input[0];
+		states[i] = NULL;
+	}
+
+	for (i = 0; i < 8; i++) {
+		int j;
+
+		for (j = 0; j < 8; j++)
+			mbctx.state[i][j] = states[j] ? states[j]->state[i] : 0;
+	}
+
+	sha256_x8_avx2(&mbctx, len / SHA256_BLOCK_SIZE);
+
+	for (i = 0; i < 8 && states[i]; i++) {
+		int j;
+
+		for (j = 0; j < 8; j++)
+			states[i]->state[j] = mbctx.state[j][i];
+	}
+
+done:
+	i = 0;
+	do {
+		struct sha256_reqctx *rctx = ahash_request_ctx(reqs[i]);
+
+		rctx->next = sha256_mb_next(reqs[i], len, final);
+
+		if (rctx->next) {
+			if (++i >= 8)
+				break;
+			continue;
+		}
+
+		if (i < 7 && reqs[i + 1]) {
+			memmove(reqs + i, reqs + i + 1, sizeof(r2) * (7 - i));
+			reqs[7] = NULL;
+			continue;
+		}
+
+		reqs[i] = NULL;
+
+		do {
+			while (!list_is_last(&r2->base.list, list)) {
+				r2 = list_next_entry(r2, base.list);
+				r2->base.err = 0;
+
+				rctx = ahash_request_ctx(r2);
+				rctx->next = sha256_mb_start(r2, nodata, final);
+				if (rctx->next) {
+					reqs[i] = r2;
+					break;
+				}
+			}
+		} while (reqs[i] && ++i < 8);
+
+		break;
+	} while (reqs[i]);
+
+	return r2;
+}
+
+static void sha256_update_x8(struct list_head *list,
+			     struct ahash_request *reqs[8], int i,
+			     bool nodata, bool final)
+{
+	struct ahash_request *r2 = reqs[i - 1];
+
+	do {
+		r2 = sha256_update_x8x1(list, r2, reqs, nodata, final);
+	} while (reqs[0]);
+}
+
+static void sha256_chain(struct ahash_request *req, bool nodata, bool final)
+{
+	struct sha256_reqctx *rctx = ahash_request_ctx(req);
+	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
+	unsigned int ds = crypto_ahash_digestsize(tfm);
+	struct ahash_request *reqs[8] = {};
+	struct ahash_request *r2;
+	int i;
+
+	req->base.err = 0;
+	reqs[0] = req;
+	rctx->next = sha256_mb_start(req, nodata, final);
+	i = !!rctx->next;
+	list_for_each_entry(r2, &req->base.list, base.list) {
+		struct sha256_reqctx *r2ctx = ahash_request_ctx(r2);
+
+		r2->base.err = 0;
+
+		r2ctx = ahash_request_ctx(r2);
+		r2ctx->next = sha256_mb_start(r2, nodata, final);
+		if (!r2ctx->next)
+			continue;
+
+		reqs[i++] = r2;
+		if (i >= 8)
+			break;
+	}
+
+	if (i)
+		sha256_update_x8(&req->base.list, reqs, i, nodata, final);
+
+	if (!final)
+		return;
+
+	lib_sha256_base_finish(&rctx->state, req->result, ds);
+	list_for_each_entry(r2, &req->base.list, base.list) {
+		struct sha256_reqctx *r2ctx = ahash_request_ctx(r2);
+
+		lib_sha256_base_finish(&r2ctx->state, r2->result, ds);
+	}
+}
+
+static int sha256_avx2_update(struct ahash_request *req)
+{
+	struct ahash_request *r2;
+	int err;
+
+	if (ahash_request_chained(req) && crypto_simd_usable()) {
+		sha256_chain(req, false, false);
+		return 0;
+	}
+
+	err = sha256_ahash_update(req, sha256_transform_rorx);
+	if (!ahash_request_chained(req))
+		return err;
+
+	req->base.err = err;
+
+	list_for_each_entry(r2, &req->base.list, base.list) {
+		err = sha256_ahash_update(r2, sha256_transform_rorx);
+		r2->base.err = err;
+	}
+
+	return 0;
+}
+
+static int _sha256_avx2_finup(struct ahash_request *req, bool nodata)
+{
+	struct ahash_request *r2;
+	int err;
+
+	if (ahash_request_chained(req) && crypto_simd_usable()) {
+		sha256_chain(req, nodata, true);
+		return 0;
+	}
+
+	err = sha256_ahash_finup(req, nodata, sha256_transform_rorx);
+	if (!ahash_request_chained(req))
+		return err;
+
+	req->base.err = err;
+
+	list_for_each_entry(r2, &req->base.list, base.list) {
+		err = sha256_ahash_finup(r2, nodata, sha256_transform_rorx);
+		r2->base.err = err;
+	}
+
+	return 0;
+}
+
+static int sha256_avx2_finup(struct ahash_request *req)
+{
+	return _sha256_avx2_finup(req, false);
+}
+
+static int sha256_avx2_final(struct ahash_request *req)
+{
+	return _sha256_avx2_finup(req, true);
+}
+
+static int sha256_avx2_digest(struct ahash_request *req)
+{
+	return sha256_ahash_init(req) ?:
+	       sha256_avx2_finup(req);
+}
+
+static int sha224_avx2_digest(struct ahash_request *req)
+{
+	return sha224_ahash_init(req) ?:
+	       sha256_avx2_finup(req);
+}
+
+static struct ahash_alg sha256_avx2_algs[] = { {
+	.halg.digestsize =	SHA256_DIGEST_SIZE,
+	.halg.statesize	=	sizeof(struct sha256_state),
+	.reqsize	=	sizeof(struct sha256_reqctx),
+	.init		=	sha256_ahash_init,
 	.update		=	sha256_avx2_update,
 	.final		=	sha256_avx2_final,
 	.finup		=	sha256_avx2_finup,
 	.digest		=	sha256_avx2_digest,
-	.descsize	=	sizeof(struct sha256_state),
-	.base		=	{
+	.import		=	sha256_import,
+	.export		=	sha256_export,
+	.halg.base	=	{
 		.cra_name	=	"sha256",
 		.cra_driver_name =	"sha256-avx2",
 		.cra_priority	=	170,
 		.cra_blocksize	=	SHA256_BLOCK_SIZE,
 		.cra_module	=	THIS_MODULE,
+		.cra_flags	=	CRYPTO_ALG_REQ_CHAIN,
 	}
 }, {
-	.digestsize	=	SHA224_DIGEST_SIZE,
-	.init		=	sha224_base_init,
+	.halg.digestsize =	SHA224_DIGEST_SIZE,
+	.halg.statesize	=	sizeof(struct sha256_state),
+	.reqsize	=	sizeof(struct sha256_reqctx),
+	.init		=	sha224_ahash_init,
 	.update		=	sha256_avx2_update,
 	.final		=	sha256_avx2_final,
 	.finup		=	sha256_avx2_finup,
-	.descsize	=	sizeof(struct sha256_state),
-	.base		=	{
+	.digest		=	sha224_avx2_digest,
+	.import		=	sha256_import,
+	.export		=	sha256_export,
+	.halg.base	=	{
 		.cra_name	=	"sha224",
 		.cra_driver_name =	"sha224-avx2",
 		.cra_priority	=	170,
 		.cra_blocksize	=	SHA224_BLOCK_SIZE,
 		.cra_module	=	THIS_MODULE,
+		.cra_flags	=	CRYPTO_ALG_REQ_CHAIN,
 	}
 } };
 
@@ -317,7 +773,7 @@ static bool avx2_usable(void)
 static int register_sha256_avx2(void)
 {
 	if (avx2_usable())
-		return crypto_register_shashes(sha256_avx2_algs,
+		return crypto_register_ahashes(sha256_avx2_algs,
 				ARRAY_SIZE(sha256_avx2_algs));
 	return 0;
 }
@@ -325,7 +781,7 @@ static int register_sha256_avx2(void)
 static void unregister_sha256_avx2(void)
 {
 	if (avx2_usable())
-		crypto_unregister_shashes(sha256_avx2_algs,
+		crypto_unregister_ahashes(sha256_avx2_algs,
 				ARRAY_SIZE(sha256_avx2_algs));
 }
 
