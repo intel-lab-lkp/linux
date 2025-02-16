@@ -152,6 +152,8 @@ static inline void fsverity_init_signature(void)
 
 /* verify.c */
 
+#define FS_VERITY_MAX_PENDING_DATA_BLOCKS	2
+
 void __init fsverity_init_workqueue(void);
 
 #endif /* _FSVERITY_PRIVATE_H */
