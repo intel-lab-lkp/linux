@@ -27,6 +27,8 @@
 #include <linux/gpio/driver.h>
 #include <linux/gpio/machine.h>
 
+#include "gpio-pseudo.h"
+
 #define AGGREGATOR_MAX_GPIOS 512
 
 /*
@@ -34,8 +36,8 @@
  */
 
 struct gpio_aggregator {
+	struct pseudo_gpio_common common;
 	struct gpiod_lookup_table *lookups;
-	struct platform_device *pdev;
 	char args[];
 };
 
@@ -492,7 +494,7 @@ static ssize_t new_device_store(struct device_driver *driver, const char *buf,
 		goto remove_table;
 	}
 
-	aggr->pdev = pdev;
+	aggr->common.pdev = pdev;
 	module_put(THIS_MODULE);
 	return count;
 
@@ -517,7 +519,7 @@ static DRIVER_ATTR_WO(new_device);
 
 static void gpio_aggregator_free(struct gpio_aggregator *aggr)
 {
-	platform_device_unregister(aggr->pdev);
+	platform_device_unregister(aggr->common.pdev);
 	gpiod_remove_lookup_table(aggr->lookups);
 	kfree(aggr->lookups->dev_id);
 	kfree(aggr->lookups);
