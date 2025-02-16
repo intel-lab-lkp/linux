@@ -58,6 +58,9 @@ module_param(fuzz_iterations, uint, 0644);
 MODULE_PARM_DESC(fuzz_iterations, "number of fuzz test iterations");
 #endif
 
+/* Multibuffer hashing is unlimited.  Set arbitrary limit for testing. */
+#define HASH_TEST_MAX_MB_MSGS	16
+
 #ifdef CONFIG_CRYPTO_MANAGER_DISABLE_TESTS
 
 /* a perfect nop */
@@ -299,6 +302,11 @@ struct test_sg_division {
  * @key_offset_relative_to_alignmask: if true, add the algorithm's alignmask to
  *				      the @key_offset
  * @finalization_type: what finalization function to use for hashes
+ * @multibuffer: test with multibuffer
+ * @multibuffer_index: random number used to generate the message index to use
+ *		       for multibuffer.
+ * @multibuffer_count: random number used to generate the num_msgs parameter
+ *		       for multibuffer
  * @nosimd: execute with SIMD disabled?  Requires !CRYPTO_TFM_REQ_MAY_SLEEP.
  *	    This applies to the parts of the operation that aren't controlled
  *	    individually by @nosimd_setkey or @src_divs[].nosimd.
@@ -318,6 +326,9 @@ struct testvec_config {
 	enum finalization_type finalization_type;
 	bool nosimd;
 	bool nosimd_setkey;
+	bool multibuffer;
+	unsigned int multibuffer_index;
+	unsigned int multibuffer_count;
 };
 
 #define TESTVEC_CONFIG_NAMELEN	192
@@ -1146,6 +1157,13 @@ static void generate_random_testvec_config(struct rnd_state *rng,
 		break;
 	}
 
+	if (prandom_bool(rng)) {
+		cfg->multibuffer = true;
+		cfg->multibuffer_index = prandom_u32_state(rng);
+		cfg->multibuffer_count = prandom_u32_state(rng);
+		p += scnprintf(p, end - p, " multibuffer");
+	}
+
 	if (!(cfg->req_flags & CRYPTO_TFM_REQ_MAY_SLEEP)) {
 		if (prandom_bool(rng)) {
 			cfg->nosimd = true;
@@ -1446,16 +1464,61 @@ result_ready:
 				 driver, cfg);
 }
 
-static int do_ahash_op(int (*op)(struct ahash_request *req),
-		       struct ahash_request *req,
-		       struct crypto_wait *wait, bool nosimd)
+static int do_ahash_op_multibuffer(
+	int (*op)(struct ahash_request *req),
+	struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS],
+	struct crypto_wait *wait,
+	const struct testvec_config *cfg)
 {
+	struct ahash_request *req = reqs[0];
+	u8 trash[HASH_MAX_DIGESTSIZE];
+	unsigned int num_msgs;
+	unsigned int msg_idx;
+	int err;
+	int i;
+
+	num_msgs = 1 + (cfg->multibuffer_count % HASH_TEST_MAX_MB_MSGS);
+	if (num_msgs == 1)
+		return op(req);
+
+	msg_idx = cfg->multibuffer_index % num_msgs;
+	for (i = 1; i < num_msgs; i++) {
+		struct ahash_request *r2 = reqs[i];
+
+		ahash_request_set_callback(r2, req->base.flags, NULL, NULL);
+		ahash_request_set_crypt(r2, req->src, trash, req->nbytes);
+		ahash_request_chain(r2, req);
+	}
+
+	if (msg_idx) {
+		reqs[msg_idx]->result = req->result;
+		req->result = trash;
+	}
+
+	err = op(req);
+
+	if (msg_idx)
+		req->result = reqs[msg_idx]->result;
+
+	return err;
+}
+
+static int do_ahash_op(int (*op)(struct ahash_request *req),
+		       struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS],
+		       struct crypto_wait *wait,
+		       const struct testvec_config *cfg,
+		       bool nosimd)
+{
+	struct ahash_request *req = reqs[0];
 	int err;
 
 	if (nosimd)
 		crypto_disable_simd_for_test();
 
-	err = op(req);
+	if (cfg->multibuffer)
+		err = do_ahash_op_multibuffer(op, reqs, wait, cfg);
+	else
+		err = op(req);
 
 	if (nosimd)
 		crypto_reenable_simd_for_test();
@@ -1485,10 +1548,11 @@ static int check_nonfinal_ahash_op(const char *op, int err,
 static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 			      const char *vec_name,
 			      const struct testvec_config *cfg,
-			      struct ahash_request *req,
+			      struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS],
 			      struct test_sglist *tsgl,
 			      u8 *hashstate)
 {
+	struct ahash_request *req = reqs[0];
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
 	const unsigned int digestsize = crypto_ahash_digestsize(tfm);
 	const unsigned int statesize = crypto_ahash_statesize(tfm);
@@ -1540,7 +1604,7 @@ static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 		ahash_request_set_callback(req, req_flags, crypto_req_done,
 					   &wait);
 		ahash_request_set_crypt(req, tsgl->sgl, result, vec->psize);
-		err = do_ahash_op(crypto_ahash_digest, req, &wait, cfg->nosimd);
+		err = do_ahash_op(crypto_ahash_digest, reqs, &wait, cfg, cfg->nosimd);
 		if (err) {
 			if (err == vec->digest_error)
 				return 0;
@@ -1561,7 +1625,7 @@ static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 
 	ahash_request_set_callback(req, req_flags, crypto_req_done, &wait);
 	ahash_request_set_crypt(req, NULL, result, 0);
-	err = do_ahash_op(crypto_ahash_init, req, &wait, cfg->nosimd);
+	err = do_ahash_op(crypto_ahash_init, reqs, &wait, cfg, cfg->nosimd);
 	err = check_nonfinal_ahash_op("init", err, result, digestsize,
 				      driver, vec_name, cfg);
 	if (err)
@@ -1577,8 +1641,8 @@ static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 						   crypto_req_done, &wait);
 			ahash_request_set_crypt(req, pending_sgl, result,
 						pending_len);
-			err = do_ahash_op(crypto_ahash_update, req, &wait,
-					  divs[i]->nosimd);
+			err = do_ahash_op(crypto_ahash_update, reqs, &wait,
+					  cfg, divs[i]->nosimd);
 			err = check_nonfinal_ahash_op("update", err,
 						      result, digestsize,
 						      driver, vec_name, cfg);
@@ -1621,12 +1685,13 @@ static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 	ahash_request_set_crypt(req, pending_sgl, result, pending_len);
 	if (cfg->finalization_type == FINALIZATION_TYPE_FINAL) {
 		/* finish with update() and final() */
-		err = do_ahash_op(crypto_ahash_update, req, &wait, cfg->nosimd);
+		err = do_ahash_op(crypto_ahash_update, reqs, &wait, cfg, cfg->nosimd);
 		err = check_nonfinal_ahash_op("update", err, result, digestsize,
 					      driver, vec_name, cfg);
 		if (err)
 			return err;
-		err = do_ahash_op(crypto_ahash_final, req, &wait, cfg->nosimd);
+		ahash_request_set_callback(req, req_flags, crypto_req_done, &wait);
+		err = do_ahash_op(crypto_ahash_final, reqs, &wait, cfg, cfg->nosimd);
 		if (err) {
 			pr_err("alg: ahash: %s final() failed with err %d on test vector %s, cfg=\"%s\"\n",
 			       driver, err, vec_name, cfg->name);
@@ -1634,7 +1699,7 @@ static int test_ahash_vec_cfg(const struct hash_testvec *vec,
 		}
 	} else {
 		/* finish with finup() */
-		err = do_ahash_op(crypto_ahash_finup, req, &wait, cfg->nosimd);
+		err = do_ahash_op(crypto_ahash_finup, reqs, &wait, cfg, cfg->nosimd);
 		if (err) {
 			pr_err("alg: ahash: %s finup() failed with err %d on test vector %s, cfg=\"%s\"\n",
 			       driver, err, vec_name, cfg->name);
@@ -1650,7 +1715,7 @@ result_ready:
 static int test_hash_vec_cfg(const struct hash_testvec *vec,
 			     const char *vec_name,
 			     const struct testvec_config *cfg,
-			     struct ahash_request *req,
+			     struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS],
 			     struct shash_desc *desc,
 			     struct test_sglist *tsgl,
 			     u8 *hashstate)
@@ -1670,11 +1735,12 @@ static int test_hash_vec_cfg(const struct hash_testvec *vec,
 			return err;
 	}
 
-	return test_ahash_vec_cfg(vec, vec_name, cfg, req, tsgl, hashstate);
+	return test_ahash_vec_cfg(vec, vec_name, cfg, reqs, tsgl, hashstate);
 }
 
 static int test_hash_vec(const struct hash_testvec *vec, unsigned int vec_num,
-			 struct ahash_request *req, struct shash_desc *desc,
+			 struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS],
+			 struct shash_desc *desc,
 			 struct test_sglist *tsgl, u8 *hashstate)
 {
 	char vec_name[16];
@@ -1686,7 +1752,7 @@ static int test_hash_vec(const struct hash_testvec *vec, unsigned int vec_num,
 	for (i = 0; i < ARRAY_SIZE(default_hash_testvec_configs); i++) {
 		err = test_hash_vec_cfg(vec, vec_name,
 					&default_hash_testvec_configs[i],
-					req, desc, tsgl, hashstate);
+					reqs, desc, tsgl, hashstate);
 		if (err)
 			return err;
 	}
@@ -1703,7 +1769,7 @@ static int test_hash_vec(const struct hash_testvec *vec, unsigned int vec_num,
 			generate_random_testvec_config(&rng, &cfg, cfgname,
 						       sizeof(cfgname));
 			err = test_hash_vec_cfg(vec, vec_name, &cfg,
-						req, desc, tsgl, hashstate);
+						reqs, desc, tsgl, hashstate);
 			if (err)
 				return err;
 			cond_resched();
@@ -1762,11 +1828,12 @@ done:
  */
 static int test_hash_vs_generic_impl(const char *generic_driver,
 				     unsigned int maxkeysize,
-				     struct ahash_request *req,
+				     struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS],
 				     struct shash_desc *desc,
 				     struct test_sglist *tsgl,
 				     u8 *hashstate)
 {
+	struct ahash_request *req = reqs[0];
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
 	const unsigned int digestsize = crypto_ahash_digestsize(tfm);
 	const unsigned int blocksize = crypto_ahash_blocksize(tfm);
@@ -1864,7 +1931,7 @@ static int test_hash_vs_generic_impl(const char *generic_driver,
 					       sizeof(cfgname));
 
 		err = test_hash_vec_cfg(&vec, vec_name, cfg,
-					req, desc, tsgl, hashstate);
+					reqs, desc, tsgl, hashstate);
 		if (err)
 			goto out;
 		cond_resched();
@@ -1929,8 +1996,8 @@ static int __alg_test_hash(const struct hash_testvec *vecs,
 			   u32 type, u32 mask,
 			   const char *generic_driver, unsigned int maxkeysize)
 {
+	struct ahash_request *reqs[HASH_TEST_MAX_MB_MSGS] = {};
 	struct crypto_ahash *atfm = NULL;
-	struct ahash_request *req = NULL;
 	struct crypto_shash *stfm = NULL;
 	struct shash_desc *desc = NULL;
 	struct test_sglist *tsgl = NULL;
@@ -1954,12 +2021,14 @@ static int __alg_test_hash(const struct hash_testvec *vecs,
 	}
 	driver = crypto_ahash_driver_name(atfm);
 
-	req = ahash_request_alloc(atfm, GFP_KERNEL);
-	if (!req) {
-		pr_err("alg: hash: failed to allocate request for %s\n",
-		       driver);
-		err = -ENOMEM;
-		goto out;
+	for (i = 0; i < HASH_TEST_MAX_MB_MSGS; i++) {
+		reqs[i] = ahash_request_alloc(atfm, GFP_KERNEL);
+		if (!reqs[i]) {
+			pr_err("alg: hash: failed to allocate request for %s\n",
+			       driver);
+			err = -ENOMEM;
+			goto out;
+		}
 	}
 
 	/*
@@ -1995,12 +2064,12 @@ static int __alg_test_hash(const struct hash_testvec *vecs,
 		if (fips_enabled && vecs[i].fips_skip)
 			continue;
 
-		err = test_hash_vec(&vecs[i], i, req, desc, tsgl, hashstate);
+		err = test_hash_vec(&vecs[i], i, reqs, desc, tsgl, hashstate);
 		if (err)
 			goto out;
 		cond_resched();
 	}
-	err = test_hash_vs_generic_impl(generic_driver, maxkeysize, req,
+	err = test_hash_vs_generic_impl(generic_driver, maxkeysize, reqs,
 					desc, tsgl, hashstate);
 out:
 	kfree(hashstate);
@@ -2010,7 +2079,12 @@ out:
 	}
 	kfree(desc);
 	crypto_free_shash(stfm);
-	ahash_request_free(req);
+	if (reqs[0]) {
+		ahash_request_set_callback(reqs[0], 0, NULL, NULL);
+		for (i = 1; i < HASH_TEST_MAX_MB_MSGS && reqs[i]; i++)
+			ahash_request_chain(reqs[i], reqs[0]);
+		ahash_request_free(reqs[0]);
+	}
 	crypto_free_ahash(atfm);
 	return err;
 }
