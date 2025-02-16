@@ -57,7 +57,7 @@ int drop_caches_sysctl_handler(const struct ctl_table *table, int write,
 	if (ret)
 		return ret;
 	if (write) {
-		static int stfu;
+		static bool stfu;
 
 		if (sysctl_drop_caches & 1) {
 			lru_add_drain_all();
@@ -73,7 +73,10 @@ int drop_caches_sysctl_handler(const struct ctl_table *table, int write,
 				current->comm, task_pid_nr(current),
 				sysctl_drop_caches);
 		}
-		stfu |= sysctl_drop_caches & 4;
+		if (sysctl_drop_caches == 0)
+			stfu = false;
+		else if (sysctl_drop_caches == 4)
+			stfu = true;
 	}
 	return 0;
 }
