@@ -1888,6 +1888,8 @@ sg_build_indirect(Sg_scatter_hold * schp, Sg_fd * sfp, int buff_size)
 		if (num < PAGE_SIZE) {
 			scatter_elem_sz = PAGE_SIZE;
 			scatter_elem_sz_prev = PAGE_SIZE;
+			if (!num)
+				num = PAGE_SIZE;
 		} else
 			scatter_elem_sz_prev = num;
 	}
