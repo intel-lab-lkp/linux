@@ -5,7 +5,7 @@ import time
 from lib.py import ksft_pr, cmd, ip, rand_port, wait_port_listen, bkg
 
 class GenerateTraffic:
-    def __init__(self, env, port=None):
+    def __init__(self, env, port=None, cport=None, parallel=16):
         env.require_cmd("iperf3", remote=True)
 
         self.env = env
@@ -15,7 +15,10 @@ class GenerateTraffic:
         self._iperf_server = cmd(f"iperf3 -s -1 -p {port}", background=True)
         wait_port_listen(port)
         time.sleep(0.1)
-        self._iperf_client = cmd(f"iperf3 -c {env.addr} -P 16 -p {port} -t 86400",
+        client_cmd = f"iperf3 -c {env.addr} -P {parallel} -p {port} -t 86400"
+        if cport and parallel == 1:
+            client_cmd = f"{client_cmd} --cport {cport}"
+        self._iperf_client = cmd(client_cmd,
                                  background=True, host=env.remote)
 
         # Wait for traffic to ramp up
