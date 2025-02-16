@@ -1863,6 +1863,10 @@ config GPIO_MPSSE
 
 endmenu
 
+# This symbol is selected by some pseudo gpio device implementations
+config GPIO_PSEUDO
+	bool
+
 menu "Virtual GPIO drivers"
 
 config GPIO_AGGREGATOR
