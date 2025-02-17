@@ -426,9 +426,10 @@ static void free_srq_db(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq,
 		uctx = rdma_udata_to_drv_context(udata,
 						 struct hns_roce_ucontext,
 						 ibucontext);
-		hns_roce_db_unmap_user(uctx, &srq->rdb);
+		hns_roce_db_unmap_user(uctx, &srq->rdb,
+				       srq->delayed_destroy_flag);
 	} else {
-		hns_roce_free_db(hr_dev, &srq->rdb);
+		hns_roce_free_db(hr_dev, &srq->rdb, srq->delayed_destroy_flag);
 	}
 }
 

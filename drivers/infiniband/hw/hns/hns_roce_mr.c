@@ -1246,3 +1246,28 @@ void hns_roce_free_unfree_mtr(struct hns_roce_dev *hr_dev)
 	}
 	mutex_unlock(&hr_dev->mtr_unfree_list_mutex);
 }
+
+void hns_roce_add_unfree_db(struct hns_roce_db_pg_node *db_node,
+			    struct hns_roce_dev *hr_dev)
+{
+	mutex_lock(&hr_dev->db_unfree_list_mutex);
+	list_add_tail(&db_node->list, &hr_dev->db_unfree_list);
+	mutex_unlock(&hr_dev->db_unfree_list_mutex);
+}
+
+void hns_roce_free_unfree_db(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_db_pg_node *pos, *next;
+
+	mutex_lock(&hr_dev->db_unfree_list_mutex);
+	list_for_each_entry_safe(pos, next, &hr_dev->db_unfree_list, list) {
+		list_del(&pos->list);
+		if (pos->umem)
+			ib_umem_release(pos->umem);
+		else
+			dma_free_coherent(hr_dev->dev, PAGE_SIZE,
+					  pos->kdb.page, pos->kdb.db_dma);
+		kvfree(pos);
+	}
+	mutex_unlock(&hr_dev->db_unfree_list_mutex);
+}
