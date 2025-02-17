@@ -410,6 +410,9 @@ static void free_qpc(struct hns_roce_dev *hr_dev, struct hns_roce_qp *hr_qp)
 {
 	struct hns_roce_qp_table *qp_table = &hr_dev->qp_table;
 
+	if (hr_qp->delayed_destroy_flag)
+		return;
+
 	if (hr_dev->caps.trrl_entry_sz)
 		hns_roce_table_put(hr_dev, &qp_table->trrl_table, hr_qp->qpn);
 	hns_roce_table_put(hr_dev, &qp_table->irrl_table, hr_qp->qpn);
@@ -801,7 +804,10 @@ err_inline:
 
 static void free_qp_buf(struct hns_roce_dev *hr_dev, struct hns_roce_qp *hr_qp)
 {
-	hns_roce_mtr_destroy(hr_dev, hr_qp->mtr);
+	if (hr_qp->delayed_destroy_flag)
+		hns_roce_add_unfree_mtr(hr_dev, hr_qp->mtr);
+	else
+		hns_roce_mtr_destroy(hr_dev, hr_qp->mtr);
 }
 
 static inline bool user_qp_has_sdb(struct hns_roce_dev *hr_dev,

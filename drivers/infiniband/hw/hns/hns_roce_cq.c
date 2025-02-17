@@ -178,9 +178,11 @@ static void free_cqc(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 
 	ret = hns_roce_destroy_hw_ctx(hr_dev, HNS_ROCE_CMD_DESTROY_CQC,
 				      hr_cq->cqn);
-	if (ret)
+	if (ret) {
+		hr_cq->delayed_destroy_flag = true;
 		dev_err_ratelimited(dev, "DESTROY_CQ failed (%d) for CQN %06lx\n",
 				    ret, hr_cq->cqn);
+	}
 
 	xa_erase_irq(&cq_table->array, hr_cq->cqn);
 
@@ -192,7 +194,8 @@ static void free_cqc(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 		complete(&hr_cq->free);
 	wait_for_completion(&hr_cq->free);
 
-	hns_roce_table_put(hr_dev, &cq_table->table, hr_cq->cqn);
+	if (!hr_cq->delayed_destroy_flag)
+		hns_roce_table_put(hr_dev, &cq_table->table, hr_cq->cqn);
 }
 
 static int alloc_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,
@@ -220,7 +223,10 @@ static int alloc_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,
 
 static void free_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 {
-	hns_roce_mtr_destroy(hr_dev, hr_cq->mtr);
+	if (hr_cq->delayed_destroy_flag)
+		hns_roce_add_unfree_mtr(hr_dev, hr_cq->mtr);
+	else
+		hns_roce_mtr_destroy(hr_dev, hr_cq->mtr);
 }
 
 static int alloc_cq_db(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,

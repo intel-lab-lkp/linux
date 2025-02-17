@@ -150,9 +150,11 @@ static void free_srqc(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq)
 
 	ret = hns_roce_destroy_hw_ctx(hr_dev, HNS_ROCE_CMD_DESTROY_SRQ,
 				      srq->srqn);
-	if (ret)
+	if (ret) {
+		srq->delayed_destroy_flag = true;
 		dev_err_ratelimited(hr_dev->dev, "DESTROY_SRQ failed (%d) for SRQN %06lx\n",
 				    ret, srq->srqn);
+	}
 
 	xa_erase_irq(&srq_table->xa, srq->srqn);
 
@@ -160,7 +162,8 @@ static void free_srqc(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq)
 		complete(&srq->free);
 	wait_for_completion(&srq->free);
 
-	hns_roce_table_put(hr_dev, &srq_table->table, srq->srqn);
+	if (!srq->delayed_destroy_flag)
+		hns_roce_table_put(hr_dev, &srq_table->table, srq->srqn);
 }
 
 static int alloc_srq_idx(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq,
@@ -213,7 +216,10 @@ static void free_srq_idx(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq)
 
 	bitmap_free(idx_que->bitmap);
 	idx_que->bitmap = NULL;
-	hns_roce_mtr_destroy(hr_dev, idx_que->mtr);
+	if (srq->delayed_destroy_flag)
+		hns_roce_add_unfree_mtr(hr_dev, idx_que->mtr);
+	else
+		hns_roce_mtr_destroy(hr_dev, idx_que->mtr);
 }
 
 static int alloc_srq_wqe_buf(struct hns_roce_dev *hr_dev,
@@ -248,7 +254,10 @@ static int alloc_srq_wqe_buf(struct hns_roce_dev *hr_dev,
 static void free_srq_wqe_buf(struct hns_roce_dev *hr_dev,
 			     struct hns_roce_srq *srq)
 {
-	hns_roce_mtr_destroy(hr_dev, srq->buf_mtr);
+	if (srq->delayed_destroy_flag)
+		hns_roce_add_unfree_mtr(hr_dev, srq->buf_mtr);
+	else
+		hns_roce_mtr_destroy(hr_dev, srq->buf_mtr);
 }
 
 static int alloc_srq_wrid(struct hns_roce_srq *srq)

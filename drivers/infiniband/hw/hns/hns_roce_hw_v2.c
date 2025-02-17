@@ -5587,10 +5587,12 @@ static int hns_roce_v2_destroy_qp_common(struct hns_roce_dev *hr_dev,
 		/* Modify qp to reset before destroying qp */
 		ret = hns_roce_v2_modify_qp(&hr_qp->ibqp, NULL, 0,
 					    hr_qp->state, IB_QPS_RESET, udata);
-		if (ret)
+		if (ret) {
+			hr_qp->delayed_destroy_flag = true;
 			ibdev_err_ratelimited(ibdev,
 					      "failed to modify QP to RST, ret = %d.\n",
 					      ret);
+		}
 	}
 
 	send_cq = hr_qp->ibqp.send_cq ? to_hr_cq(hr_qp->ibqp.send_cq) : NULL;

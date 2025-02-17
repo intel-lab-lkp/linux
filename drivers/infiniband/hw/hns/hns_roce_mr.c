@@ -83,7 +83,8 @@ static void free_mr_key(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr)
 {
 	unsigned long obj = key_to_hw_index(mr->key);
 
-	hns_roce_table_put(hr_dev, &hr_dev->mr_table.mtpt_table, obj);
+	if (!mr->delayed_destroy_flag)
+		hns_roce_table_put(hr_dev, &hr_dev->mr_table.mtpt_table, obj);
 	ida_free(&hr_dev->mr_table.mtpt_ida.ida, (int)obj);
 }
 
@@ -125,7 +126,10 @@ static int alloc_mr_pbl(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr,
 
 static void free_mr_pbl(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr)
 {
-	hns_roce_mtr_destroy(hr_dev, mr->pbl_mtr);
+	if (mr->delayed_destroy_flag && mr->type != MR_TYPE_DMA)
+		hns_roce_add_unfree_mtr(hr_dev, mr->pbl_mtr);
+	else
+		hns_roce_mtr_destroy(hr_dev, mr->pbl_mtr);
 }
 
 static void hns_roce_mr_free(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr)
@@ -137,9 +141,11 @@ static void hns_roce_mr_free(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr
 		ret = hns_roce_destroy_hw_ctx(hr_dev, HNS_ROCE_CMD_DESTROY_MPT,
 					      key_to_hw_index(mr->key) &
 					      (hr_dev->caps.num_mtpts - 1));
-		if (ret)
+		if (ret) {
+			mr->delayed_destroy_flag = true;
 			ibdev_warn_ratelimited(ibdev, "failed to destroy mpt, ret = %d.\n",
 					       ret);
+		}
 	}
 
 	free_mr_pbl(hr_dev, mr);
@@ -1219,4 +1225,24 @@ void hns_roce_mtr_destroy(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr)
 	/* free buffers */
 	mtr_free_bufs(hr_dev, mtr);
 	kvfree(mtr);
+}
+
+void hns_roce_add_unfree_mtr(struct hns_roce_dev *hr_dev,
+			     struct hns_roce_mtr *mtr)
+{
+	mutex_lock(&hr_dev->mtr_unfree_list_mutex);
+	list_add_tail(&mtr->node, &hr_dev->mtr_unfree_list);
+	mutex_unlock(&hr_dev->mtr_unfree_list_mutex);
+}
+
+void hns_roce_free_unfree_mtr(struct hns_roce_dev *hr_dev)
+{
+	struct hns_roce_mtr *mtr, *next;
+
+	mutex_lock(&hr_dev->mtr_unfree_list_mutex);
+	list_for_each_entry_safe(mtr, next, &hr_dev->mtr_unfree_list, node) {
+		list_del(&mtr->node);
+		hns_roce_mtr_destroy(hr_dev, mtr);
+	}
+	mutex_unlock(&hr_dev->mtr_unfree_list_mutex);
 }

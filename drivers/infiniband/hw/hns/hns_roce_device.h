@@ -314,6 +314,7 @@ struct hns_roce_mtr {
 	struct ib_umem		*umem; /* user space buffer */
 	struct hns_roce_buf	*kmem; /* kernel space buffer */
 	struct hns_roce_hem_cfg  hem_cfg; /* config for hardware addressing */
+	struct list_head	 node; /* list node for delay-destruction */
 };
 
 struct hns_roce_mw {
@@ -339,6 +340,11 @@ struct hns_roce_mr {
 	struct hns_roce_mtr	*pbl_mtr;
 	u32			npages;
 	dma_addr_t		*page_list;
+	/* When this is true, the free and destruction of the related
+	 * resources will be delayed until the device is uninited, ensuring
+	 * no memory leak.
+	 */
+	bool delayed_destroy_flag;
 };
 
 struct hns_roce_mr_table {
@@ -442,6 +448,11 @@ struct hns_roce_cq {
 	struct list_head		rq_list; /* all qps on this recv cq */
 	int				is_armed; /* cq is armed */
 	struct list_head		node; /* all armed cqs are on a list */
+	/* When this is true, the free and destruction of the related
+	 * resources will be delayed until the device is uninited, ensuring
+	 * no memory leak.
+	 */
+	bool delayed_destroy_flag;
 };
 
 struct hns_roce_idx_que {
@@ -475,6 +486,11 @@ struct hns_roce_srq {
 	void (*event)(struct hns_roce_srq *srq, enum hns_roce_event event);
 	struct hns_roce_db	rdb;
 	u32			cap_flags;
+	/* When this is true, the free and destruction of the related
+	 * resources will be delayed until the device is uninited, ensuring
+	 * no memory leak.
+	 */
+	bool delayed_destroy_flag;
 };
 
 struct hns_roce_uar_table {
@@ -642,6 +658,11 @@ struct hns_roce_qp {
 
 	/* 0: flush needed, 1: unneeded */
 	unsigned long		flush_flag;
+	/* When this is true, the free and destruction of the related
+	 * resources will be delayed until the device is uninited, ensuring
+	 * no memory leak.
+	 */
+	bool delayed_destroy_flag;
 	struct hns_roce_work	flush_work;
 	struct list_head	node; /* all qps are on a list */
 	struct list_head	rq_node; /* all recv qps are on a list */
@@ -1025,6 +1046,8 @@ struct hns_roce_dev {
 	u64 dwqe_page;
 	struct hns_roce_dev_debugfs dbgfs;
 	atomic64_t *dfx_cnt;
+	struct list_head mtr_unfree_list; /* list of unfree mtr on this dev */
+	struct mutex mtr_unfree_list_mutex; /* protect mtr_unfree_list */
 };
 
 static inline struct hns_roce_dev *to_hr_dev(struct ib_device *ib_dev)
@@ -1296,6 +1319,9 @@ int hns_roce_fill_res_qp_entry(struct sk_buff *msg, struct ib_qp *ib_qp);
 int hns_roce_fill_res_qp_entry_raw(struct sk_buff *msg, struct ib_qp *ib_qp);
 int hns_roce_fill_res_mr_entry(struct sk_buff *msg, struct ib_mr *ib_mr);
 int hns_roce_fill_res_mr_entry_raw(struct sk_buff *msg, struct ib_mr *ib_mr);
+void hns_roce_add_unfree_mtr(struct hns_roce_dev *hr_dev,
+			     struct hns_roce_mtr *mtr);
+void hns_roce_free_unfree_mtr(struct hns_roce_dev *hr_dev);
 int hns_roce_fill_res_srq_entry(struct sk_buff *msg, struct ib_srq *ib_srq);
 int hns_roce_fill_res_srq_entry_raw(struct sk_buff *msg, struct ib_srq *ib_srq);
 struct hns_user_mmap_entry *
