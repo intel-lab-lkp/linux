@@ -135,7 +135,7 @@ static int alloc_cqc(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 	u64 mtts[MTT_MIN_COUNT] = {};
 	int ret;
 
-	ret = hns_roce_mtr_find(hr_dev, &hr_cq->mtr, 0, mtts, ARRAY_SIZE(mtts));
+	ret = hns_roce_mtr_find(hr_dev, hr_cq->mtr, 0, mtts, ARRAY_SIZE(mtts));
 	if (ret) {
 		ibdev_err(ibdev, "failed to find CQ mtr, ret = %d.\n", ret);
 		return ret;
@@ -156,7 +156,7 @@ static int alloc_cqc(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 	}
 
 	ret = hns_roce_create_cqc(hr_dev, hr_cq, mtts,
-				  hns_roce_get_mtr_ba(&hr_cq->mtr));
+				  hns_roce_get_mtr_ba(hr_cq->mtr));
 	if (ret)
 		goto err_xa;
 
@@ -200,25 +200,27 @@ static int alloc_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,
 {
 	struct ib_device *ibdev = &hr_dev->ib_dev;
 	struct hns_roce_buf_attr buf_attr = {};
-	int ret;
+	int ret = 0;
 
 	buf_attr.page_shift = hr_dev->caps.cqe_buf_pg_sz + PAGE_SHIFT;
 	buf_attr.region[0].size = hr_cq->cq_depth * hr_cq->cqe_size;
 	buf_attr.region[0].hopnum = hr_dev->caps.cqe_hop_num;
 	buf_attr.region_count = 1;
 
-	ret = hns_roce_mtr_create(hr_dev, &hr_cq->mtr, &buf_attr,
-				  hr_dev->caps.cqe_ba_pg_sz + PAGE_SHIFT,
-				  udata, addr);
-	if (ret)
+	hr_cq->mtr = hns_roce_mtr_create(hr_dev, &buf_attr,
+					 hr_dev->caps.cqe_ba_pg_sz + PAGE_SHIFT,
+					 udata, addr);
+	if (IS_ERR(hr_cq->mtr)) {
+		ret = PTR_ERR(hr_cq->mtr);
 		ibdev_err(ibdev, "failed to alloc CQ mtr, ret = %d.\n", ret);
+	}
 
 	return ret;
 }
 
 static void free_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq)
 {
-	hns_roce_mtr_destroy(hr_dev, &hr_cq->mtr);
+	hns_roce_mtr_destroy(hr_dev, hr_cq->mtr);
 }
 
 static int alloc_cq_db(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,

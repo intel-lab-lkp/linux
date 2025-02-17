@@ -336,7 +336,7 @@ struct hns_roce_mr {
 	int			enabled; /* MR's active status */
 	int			type; /* MR's register type */
 	u32			pbl_hop_num; /* multi-hop number */
-	struct hns_roce_mtr	pbl_mtr;
+	struct hns_roce_mtr	*pbl_mtr;
 	u32			npages;
 	dma_addr_t		*page_list;
 };
@@ -424,7 +424,7 @@ struct hns_roce_db {
 
 struct hns_roce_cq {
 	struct ib_cq			ib_cq;
-	struct hns_roce_mtr		mtr;
+	struct hns_roce_mtr		*mtr;
 	struct hns_roce_db		db;
 	u32				flags;
 	spinlock_t			lock;
@@ -445,7 +445,7 @@ struct hns_roce_cq {
 };
 
 struct hns_roce_idx_que {
-	struct hns_roce_mtr		mtr;
+	struct hns_roce_mtr		*mtr;
 	u32				entry_shift;
 	unsigned long			*bitmap;
 	u32				head;
@@ -466,7 +466,7 @@ struct hns_roce_srq {
 	refcount_t		refcount;
 	struct completion	free;
 
-	struct hns_roce_mtr	buf_mtr;
+	struct hns_roce_mtr	*buf_mtr;
 
 	u64		       *wrid;
 	struct hns_roce_idx_que idx_que;
@@ -614,7 +614,7 @@ struct hns_roce_qp {
 	enum ib_sig_type	sq_signal_bits;
 	struct hns_roce_wq	sq;
 
-	struct hns_roce_mtr	mtr;
+	struct hns_roce_mtr	*mtr;
 
 	u32			buff_size;
 	struct mutex		mutex;
@@ -712,7 +712,7 @@ struct hns_roce_eq {
 	int				coalesce;
 	int				arm_st;
 	int				hop_num;
-	struct hns_roce_mtr		mtr;
+	struct hns_roce_mtr		*mtr;
 	u16				eq_max_cnt;
 	u32				eq_period;
 	int				shift;
@@ -1179,10 +1179,11 @@ static inline dma_addr_t hns_roce_get_mtr_ba(struct hns_roce_mtr *mtr)
 
 int hns_roce_mtr_find(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,
 		      u32 offset, u64 *mtt_buf, int mtt_max);
-int hns_roce_mtr_create(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,
-			struct hns_roce_buf_attr *buf_attr,
-			unsigned int page_shift, struct ib_udata *udata,
-			unsigned long user_addr);
+struct hns_roce_mtr *hns_roce_mtr_create(struct hns_roce_dev *hr_dev,
+					 struct hns_roce_buf_attr *buf_attr,
+					 unsigned int ba_page_shift,
+					 struct ib_udata *udata,
+					 unsigned long user_addr);
 void hns_roce_mtr_destroy(struct hns_roce_dev *hr_dev,
 			  struct hns_roce_mtr *mtr);
 int hns_roce_mtr_map(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,

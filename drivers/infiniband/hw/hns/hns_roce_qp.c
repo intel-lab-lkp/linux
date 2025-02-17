@@ -780,10 +780,11 @@ static int alloc_qp_buf(struct hns_roce_dev *hr_dev, struct hns_roce_qp *hr_qp,
 		ibdev_err(ibdev, "failed to split WQE buf, ret = %d.\n", ret);
 		goto err_inline;
 	}
-	ret = hns_roce_mtr_create(hr_dev, &hr_qp->mtr, &buf_attr,
-				  PAGE_SHIFT + hr_dev->caps.mtt_ba_pg_sz,
-				  udata, addr);
-	if (ret) {
+	hr_qp->mtr = hns_roce_mtr_create(hr_dev, &buf_attr,
+					 PAGE_SHIFT + hr_dev->caps.mtt_ba_pg_sz,
+					 udata, addr);
+	if (IS_ERR(hr_qp->mtr)) {
+		ret = PTR_ERR(hr_qp->mtr);
 		ibdev_err(ibdev, "failed to create WQE mtr, ret = %d.\n", ret);
 		goto err_inline;
 	}
@@ -800,7 +801,7 @@ err_inline:
 
 static void free_qp_buf(struct hns_roce_dev *hr_dev, struct hns_roce_qp *hr_qp)
 {
-	hns_roce_mtr_destroy(hr_dev, &hr_qp->mtr);
+	hns_roce_mtr_destroy(hr_dev, hr_qp->mtr);
 }
 
 static inline bool user_qp_has_sdb(struct hns_roce_dev *hr_dev,
@@ -1531,7 +1532,7 @@ void hns_roce_unlock_cqs(struct hns_roce_cq *send_cq,
 
 static inline void *get_wqe(struct hns_roce_qp *hr_qp, u32 offset)
 {
-	return hns_roce_buf_offset(hr_qp->mtr.kmem, offset);
+	return hns_roce_buf_offset(hr_qp->mtr->kmem, offset);
 }
 
 void *hns_roce_get_recv_wqe(struct hns_roce_qp *hr_qp, unsigned int n)

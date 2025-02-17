@@ -179,10 +179,10 @@ static int alloc_srq_idx(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq,
 	buf_attr.region[0].hopnum = hr_dev->caps.idx_hop_num;
 	buf_attr.region_count = 1;
 
-	ret = hns_roce_mtr_create(hr_dev, &idx_que->mtr, &buf_attr,
-				  hr_dev->caps.idx_ba_pg_sz + PAGE_SHIFT,
-				  udata, addr);
-	if (ret) {
+	idx_que->mtr = hns_roce_mtr_create(hr_dev, &buf_attr,
+		hr_dev->caps.idx_ba_pg_sz + PAGE_SHIFT, udata, addr);
+	if (IS_ERR(idx_que->mtr)) {
+		ret = PTR_ERR(idx_que->mtr);
 		ibdev_err(ibdev,
 			  "failed to alloc SRQ idx mtr, ret = %d.\n", ret);
 		return ret;
@@ -202,7 +202,7 @@ static int alloc_srq_idx(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq,
 
 	return 0;
 err_idx_mtr:
-	hns_roce_mtr_destroy(hr_dev, &idx_que->mtr);
+	hns_roce_mtr_destroy(hr_dev, idx_que->mtr);
 
 	return ret;
 }
@@ -213,7 +213,7 @@ static void free_srq_idx(struct hns_roce_dev *hr_dev, struct hns_roce_srq *srq)
 
 	bitmap_free(idx_que->bitmap);
 	idx_que->bitmap = NULL;
-	hns_roce_mtr_destroy(hr_dev, &idx_que->mtr);
+	hns_roce_mtr_destroy(hr_dev, idx_que->mtr);
 }
 
 static int alloc_srq_wqe_buf(struct hns_roce_dev *hr_dev,
@@ -222,7 +222,7 @@ static int alloc_srq_wqe_buf(struct hns_roce_dev *hr_dev,
 {
 	struct ib_device *ibdev = &hr_dev->ib_dev;
 	struct hns_roce_buf_attr buf_attr = {};
-	int ret;
+	int ret = 0;
 
 	srq->wqe_shift = ilog2(roundup_pow_of_two(max(HNS_ROCE_SGE_SIZE,
 						      HNS_ROCE_SGE_SIZE *
@@ -234,12 +234,13 @@ static int alloc_srq_wqe_buf(struct hns_roce_dev *hr_dev,
 	buf_attr.region[0].hopnum = hr_dev->caps.srqwqe_hop_num;
 	buf_attr.region_count = 1;
 
-	ret = hns_roce_mtr_create(hr_dev, &srq->buf_mtr, &buf_attr,
-				  hr_dev->caps.srqwqe_ba_pg_sz + PAGE_SHIFT,
-				  udata, addr);
-	if (ret)
+	srq->buf_mtr = hns_roce_mtr_create(hr_dev, &buf_attr,
+		hr_dev->caps.srqwqe_ba_pg_sz + PAGE_SHIFT, udata, addr);
+	if (IS_ERR(srq->buf_mtr)) {
+		ret = PTR_ERR(srq->buf_mtr);
 		ibdev_err(ibdev,
 			  "failed to alloc SRQ buf mtr, ret = %d.\n", ret);
+	}
 
 	return ret;
 }
@@ -247,7 +248,7 @@ static int alloc_srq_wqe_buf(struct hns_roce_dev *hr_dev,
 static void free_srq_wqe_buf(struct hns_roce_dev *hr_dev,
 			     struct hns_roce_srq *srq)
 {
-	hns_roce_mtr_destroy(hr_dev, &srq->buf_mtr);
+	hns_roce_mtr_destroy(hr_dev, srq->buf_mtr);
 }
 
 static int alloc_srq_wrid(struct hns_roce_srq *srq)
