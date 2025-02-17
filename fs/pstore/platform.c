@@ -453,11 +453,22 @@ static void pstore_register_kmsg(void)
 	kmsg_dump_register(&pstore_dumper);
 }
 
+static int pstore_register_kmsg_dmapped(void)
+{
+	return pstore_register_core_area("dmesg", log_buf_addr_get(),
+					 log_buf_len_get());
+}
+
 static void pstore_unregister_kmsg(void)
 {
 	kmsg_dump_unregister(&pstore_dumper);
 }
 
+static int pstore_unregister_kmsg_dmapped(void)
+{
+	return pstore_unregister_core_area("dmesg", log_buf_addr_get(),
+					   log_buf_len_get());
+}
 #ifdef CONFIG_PSTORE_CONSOLE
 static void pstore_console_write(struct console *con, const char *s, unsigned c)
 {
@@ -583,6 +594,9 @@ int pstore_register(struct pstore_info *psi)
 		pstore_dumper.max_reason = psinfo->max_reason;
 		pstore_register_kmsg();
 	}
+	if (psi->flags & PSTORE_FLAGS_DMAPPED)
+		if (pstore_register_kmsg_dmapped())
+			pr_warn("Registering kmsg as dmapped failed.\n");
 	if (psi->flags & PSTORE_FLAGS_CONSOLE)
 		pstore_register_console();
 	if (psi->flags & PSTORE_FLAGS_FTRACE)
@@ -629,6 +643,8 @@ void pstore_unregister(struct pstore_info *psi)
 		pstore_unregister_console();
 	if (psi->flags & PSTORE_FLAGS_DMESG)
 		pstore_unregister_kmsg();
+	if (psi->flags & PSTORE_FLAGS_DMAPPED)
+		pstore_unregister_kmsg_dmapped();
 
 	/* Stop timer and make sure all work has finished. */
 	del_timer_sync(&pstore_timer);
