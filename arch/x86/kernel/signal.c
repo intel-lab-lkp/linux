@@ -28,6 +28,7 @@
 #include <linux/entry-common.h>
 #include <linux/syscalls.h>
 #include <linux/rseq.h>
+#include <linux/pkeys.h>
 
 #include <asm/processor.h>
 #include <asm/ucontext.h>
@@ -58,24 +59,6 @@ static inline int is_x32_frame(struct ksignal *ksig)
 {
 	return IS_ENABLED(CONFIG_X86_X32_ABI) &&
 		ksig->ka.sa.sa_flags & SA_X32_ABI;
-}
-
-/*
- * Enable all pkeys temporarily, so as to ensure that both the current
- * execution stack as well as the alternate signal stack are writeable.
- * The application can use any of the available pkeys to protect the
- * alternate signal stack, and we don't know which one it is, so enable
- * all. The PKRU register will be reset to init_pkru later in the flow,
- * in fpu__clear_user_states(), and it is the application's responsibility
- * to enable the appropriate pkey as the first step in the signal handler
- * so that the handler does not segfault.
- */
-static inline u32 sig_prepare_pkru(void)
-{
-	u32 orig_pkru = read_pkru();
-
-	write_pkru(0);
-	return orig_pkru;
 }
 
 /*
@@ -157,8 +140,18 @@ get_sigframe(struct ksignal *ksig, struct pt_regs *regs, size_t frame_size,
 		return (void __user *)-1L;
 	}
 
-	/* Update PKRU to enable access to the alternate signal stack. */
-	pkru = sig_prepare_pkru();
+	/*
+	 * Enable all pkeys temporarily, so as to ensure that both the current
+	 * execution stack as well as the alternate signal stack are
+	 * writeable. The application can use any of the available pkeys to
+	 * protect the alternate signal stack, and we don't know which one it
+	 * is, so enable all. The PKRU register will be reset to init_pkru
+	 * later in the flow, in fpu__clear_user_states(), and it is the
+	 * application's responsibility to enable the appropriate pkey as the
+	 * first step in the signal handler so that the handler does not
+	 * segfault.
+	 */
+	pkru = switch_to_permissive_pkey_reg();
 	/* save i387 and extended state */
 	if (!copy_fpstate_to_sigframe(*fpstate, (void __user *)buf_fx, math_size, pkru)) {
 		/*
