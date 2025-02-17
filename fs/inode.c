@@ -939,6 +939,7 @@ again:
 
 	dispose_list(&dispose);
 }
+EXPORT_SYMBOL(invalidate_inodes);
 
 /*
  * Isolate the inode from the LRU in preparation for freeing it.
