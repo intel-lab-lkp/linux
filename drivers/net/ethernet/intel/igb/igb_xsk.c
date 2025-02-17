@@ -45,6 +45,7 @@ static void igb_txrx_ring_disable(struct igb_adapter *adapter, u16 qid)
 	synchronize_net();
 
 	/* Rx/Tx share the same napi context. */
+	igb_set_queue_napi(adapter, qid, NULL);
 	napi_disable(&rx_ring->q_vector->napi);
 
 	igb_clean_tx_ring(tx_ring);
@@ -78,6 +79,7 @@ static void igb_txrx_ring_enable(struct igb_adapter *adapter, u16 qid)
 
 	/* Rx/Tx share the same napi context. */
 	napi_enable(&rx_ring->q_vector->napi);
+	igb_set_queue_napi(adapter, qid, &rx_ring->q_vector->napi);
 }
 
 struct xsk_buff_pool *igb_xsk_pool(struct igb_adapter *adapter,
