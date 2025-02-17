@@ -266,7 +266,16 @@ used::
 	cat (1234): drop_caches: 3
 
 These are informational only.  They do not mean that anything is wrong
-with your system.  To disable them, echo 4 (bit 2) into drop_caches.
+with your system.
+
+To disable informational::
+
+    echo 4 > /proc/sys/vm/drop_caches
+
+To enable informational::
+
+    echo 0 > /proc/sys/vm/drop_caches
+
 
 enable_soft_offline
 ===================
