@@ -759,6 +759,7 @@ dma_err:
 static int enetc_map_tx_tso_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(tx_ring->ndev);
+	bool ext_bd = skb_vlan_tag_present(skb);
 	int hdr_len, total_len, data_len;
 	struct enetc_tx_swbd *tx_swbd;
 	union enetc_tx_bd *txbd;
@@ -792,7 +793,7 @@ static int enetc_map_tx_tso_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb
 		csum = enetc_tso_hdr_csum(&tso, skb, hdr, hdr_len, &pos);
 		enetc_map_tx_tso_hdr(tx_ring, skb, tx_swbd, txbd, &i, hdr_len, data_len);
 		bd_data_num = 0;
-		count++;
+		count += ext_bd ? 2 : 1;
 
 		while (data_len > 0) {
 			int size;
