@@ -57,6 +57,10 @@ static struct tty_driver *ttynull_device(struct console *c, int *index)
 static struct console ttynull_console = {
 	.name = "ttynull",
 	.device = ttynull_device,
+#ifdef CONFIG_NULL_TTY_CONSOLE
+	.index = -1,
+	.flags = CON_PRINTBUFFER,
+#endif
 };
 
 static int __init ttynull_init(void)
@@ -90,10 +94,20 @@ static int __init ttynull_init(void)
 	}
 
 	ttynull_driver = driver;
-	register_console(&ttynull_console);
+	if (!console_is_registered(&ttynull_console))
+		register_console(&ttynull_console);
 
 	return 0;
 }
+
+#ifdef CONFIG_NULL_TTY_CONSOLE
+static int __init ttynull_register(void)
+{
+	register_console(&ttynull_console);
+	return 0;
+}
+console_initcall(ttynull_register);
+#endif
 
 static void __exit ttynull_exit(void)
 {
