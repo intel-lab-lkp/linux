@@ -320,65 +320,85 @@ void ieee80211_handle_wake_tx_queue(struct ieee80211_hw *hw,
 }
 EXPORT_SYMBOL(ieee80211_handle_wake_tx_queue);
 
+__releases(&local->fq->lock)
+__acquires(&local->fq->lock)
+static void __ieee80211_wake_txq(struct ieee80211_local *local,
+				 struct ieee80211_txq *txq)
+{
+	struct txq_info *txqi = to_txq_info(txq);
+	struct fq *fq = &local->fq;
+
+	if (WARN_ON(!txq))
+		return;
+	if (test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags)) {
+		/* ieee80211_tx_dequeue() also takes fq->lock */
+		spin_unlock(&fq->lock);
+		drv_wake_tx_queue(local, txqi);
+		spin_lock(&fq->lock);
+	}
+}
+
 static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 {
 	struct ieee80211_local *local = sdata->local;
-	struct ieee80211_vif *vif = &sdata->vif;
-	struct ieee80211_txq *txq_mc = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	struct fq *fq = &local->fq;
 	struct ps_data *ps = NULL;
-	struct txq_info *txqi;
 	struct sta_info *sta;
+	struct ieee80211_vif *vif;
+	struct ieee80211_txq *txq_mc, *txq_fb;
 	int i;
 
 	local_bh_disable();
 	spin_lock(&fq->lock);
 
+	if (WARN_ON(!sdata))
+		goto out;
 	if (!test_bit(SDATA_STATE_RUNNING, &sdata->state))
 		goto out;
+
+	sdata = ieee80211_get_tx_sdata(sdata);
+	vif = &sdata->vif;
+	txq_mc = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
+	txq_fb = vif->txq[IEEE80211_VIF_TXQ_FALLBACK];
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP)
 		ps = &sdata->bss->ps;
 
+	/*
+	 * Start with vif TXQs.
+	 * Don't check IEEE80211_TID_NOQUEUE for IEEE80211_VIF_TXQ_NOQUEUE.
+	 * It can't get dirty or queue frames
+	 */
+
+	if (ac == txq_fb->ac)
+		__ieee80211_wake_txq(local, txq_fb);
+
+	if (txq_mc && ac == txq_mc->ac &&
+	    (!ps || !atomic_read(&ps->num_sta_ps)))
+		__ieee80211_wake_txq(local, txq_mc);
+
+	/* STA TXQs */
 	list_for_each_entry_rcu(sta, &local->sta_list, list) {
 		if (sdata != sta->sdata)
 			continue;
 
-		for (i = 0; i < ARRAY_SIZE(sta->sta.txq); i++) {
+		/*
+		 * Don't check IEEE80211_TID_NOQUEUE for sta's
+		 * They can't get dirty or queue frames
+		 */
+		for (i = 0; i <= IEEE80211_NUM_TIDS; i++) {
 			struct ieee80211_txq *txq = sta->sta.txq[i];
 
 			if (!txq)
 				continue;
 
-			txqi = to_txq_info(txq);
-
 			if (ac != txq->ac)
 				continue;
 
-			if (!test_and_clear_bit(IEEE80211_TXQ_DIRTY,
-						&txqi->flags))
-				continue;
-
-			spin_unlock(&fq->lock);
-			drv_wake_tx_queue(local, txqi);
-			spin_lock(&fq->lock);
+			/* releases and retakes fq->lock */
+			__ieee80211_wake_txq(local, txq);
 		}
 	}
-
-	if (!txq_mc)
-		goto out;
-
-	txqi = to_txq_info(txq_mc);
-
-	if (!test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags) ||
-	    (ps && atomic_read(&ps->num_sta_ps)) || ac != txq_mc->ac)
-		goto out;
-
-	spin_unlock(&fq->lock);
-
-	drv_wake_tx_queue(local, txqi);
-	local_bh_enable();
-	return;
 out:
 	spin_unlock(&fq->lock);
 	local_bh_enable();

@@ -1360,21 +1360,26 @@ static inline void drv_wake_tx_queue(struct ieee80211_local *local,
 		return;
 	}
 
-	if (!check_sdata_in_driver(sdata))
-		return;
-
 	trace_drv_wake_tx_queue(local, sdata, txq);
 
-	/* Driver support for MPDU TXQ support is optional */
-	if (unlikely(txq->txq.tid == IEEE80211_NUM_TIDS &&
-		     ((sdata->vif.type == NL80211_IFTYPE_STATION &&
-		       !ieee80211_hw_check(&sdata->local->hw, STA_MMPDU_TXQ)) ||
-		      (sdata->vif.type != NL80211_IFTYPE_STATION &&
-		       !ieee80211_hw_check(&sdata->local->hw,
-					   BUFF_MMPDU_TXQ))))) {
+	/*
+	 * Driver support for MPDU TXQ support is optional.
+	 * IEEE80211_NUM_TIDS (fallback) TXQs are mac80211 internal and not
+	 * intended to be handled by the drivers.
+	 */
+	if (WARN_ON(txq->txq.tid == IEEE80211_TID_NOQUEUE) ||
+	    (txq->txq.tid == IEEE80211_NUM_TIDS &&
+	     (!txq->txq.sta ||
+	      (sdata->vif.type == NL80211_IFTYPE_STATION &&
+	       !ieee80211_hw_check(&sdata->local->hw, STA_MMPDU_TXQ)) ||
+	      (sdata->vif.type != NL80211_IFTYPE_STATION &&
+	       !ieee80211_hw_check(&sdata->local->hw, BUFF_MMPDU_TXQ))))) {
 		ieee80211_handle_wake_tx_queue(&local->hw, &txq->txq);
 		return;
 	}
+
+	if (WARN_ON_ONCE(!check_sdata_in_driver(sdata)))
+		return;
 
 	local->ops->wake_tx_queue(&local->hw, &txq->txq);
 }

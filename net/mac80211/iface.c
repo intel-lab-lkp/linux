@@ -1145,9 +1145,36 @@ static void ieee80211_sdata_init(struct ieee80211_local *local,
 	}
 }
 
+static void ieee80211_vif_txq_init(struct ieee80211_sub_if_data *sdata,
+				   int txq_offset, int txq_size, int num_queues)
+{
+	void *buffer = (char *)sdata + txq_offset;
+
+	/* IEEE80211_VIF_TXQ_FALLBACK */
+	ieee80211_txq_init(sdata, NULL, buffer, IEEE80211_NUM_TIDS);
+
+	if (num_queues == 1)
+		return;
+
+	/* IEEE80211_VIF_TXQ_NOQUEUE */
+	buffer += txq_size;
+	ieee80211_txq_init(sdata, NULL, buffer, IEEE80211_TID_NOQUEUE);
+
+	if (num_queues == 2)
+		return;
+
+	/* IEEE80211_VIF_TXQ_MULTICAST */
+	buffer += txq_size;
+	ieee80211_txq_init(sdata, NULL, buffer, 0);
+}
+
 int ieee80211_add_virtual_monitor(struct ieee80211_local *local)
 {
 	struct ieee80211_sub_if_data *sdata;
+	int size = ALIGN(sizeof(*sdata) + local->hw.vif_data_size,
+			 sizeof(void *));
+	int txq_size = ALIGN(sizeof(struct txq_info) + local->hw.txq_data_size,
+			     sizeof(void *));
 	int ret;
 
 	ASSERT_RTNL();
@@ -1157,7 +1184,7 @@ int ieee80211_add_virtual_monitor(struct ieee80211_local *local)
 	    ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR))
 		return 0;
 
-	sdata = kzalloc(sizeof(*sdata) + local->hw.vif_data_size, GFP_KERNEL);
+	sdata = kzalloc(size + txq_size, GFP_KERNEL);
 	if (!sdata)
 		return -ENOMEM;
 
@@ -1169,7 +1196,7 @@ int ieee80211_add_virtual_monitor(struct ieee80211_local *local)
 	sdata->wdev.wiphy = local->hw.wiphy;
 
 	ieee80211_sdata_init(local, sdata);
-
+	ieee80211_vif_txq_init(sdata, size, txq_size, 1);
 	ieee80211_set_default_queues(sdata);
 
 	if (ieee80211_hw_check(&local->hw, WANT_MONITOR_VIF)) {
@@ -2099,7 +2126,11 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 {
 	struct net_device *ndev = NULL;
 	struct ieee80211_sub_if_data *sdata = NULL;
-	struct txq_info *txqi;
+	int size = ALIGN(sizeof(*sdata) + local->hw.vif_data_size,
+			 sizeof(void *));
+	int txq_size = ALIGN(sizeof(struct txq_info) + local->hw.txq_data_size,
+			     sizeof(void *));
+	int num_txqs = 2;
 	int ret;
 
 	ASSERT_RTNL();
@@ -2108,8 +2139,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 	if (type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN) {
 		struct wireless_dev *wdev;
 
-		sdata = kzalloc(sizeof(*sdata) + local->hw.vif_data_size,
-				GFP_KERNEL);
+		sdata = kzalloc(size + 2 * txq_size, GFP_KERNEL);
 		if (!sdata)
 			return -ENOMEM;
 		wdev = &sdata->wdev;
@@ -2120,17 +2150,14 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 		memcpy(sdata->vif.addr, wdev->address, ETH_ALEN);
 		ether_addr_copy(sdata->vif.bss_conf.addr, sdata->vif.addr);
 	} else {
-		int size = ALIGN(sizeof(*sdata) + local->hw.vif_data_size,
-				 sizeof(void *));
-		int txq_size = 0;
+		if (type == NL80211_IFTYPE_AP_VLAN)
+			num_txqs = 0;
+		else if (type == NL80211_IFTYPE_MONITOR)
+			num_txqs = 1;
+		else
+			num_txqs = 3;
 
-		if (type != NL80211_IFTYPE_AP_VLAN &&
-		    (type != NL80211_IFTYPE_MONITOR ||
-		     (params->flags & MONITOR_FLAG_ACTIVE)))
-			txq_size += sizeof(struct txq_info) +
-				    local->hw.txq_data_size;
-
-		ndev = alloc_netdev_mqs(size + txq_size,
+		ndev = alloc_netdev_mqs(size + num_txqs * txq_size,
 					name, name_assign_type,
 					ieee80211_if_setup, 1, 1);
 		if (!ndev)
@@ -2169,13 +2196,11 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 		ether_addr_copy(sdata->vif.bss_conf.addr, sdata->vif.addr);
 		memcpy(sdata->name, ndev->name, IFNAMSIZ);
 
-		if (txq_size) {
-			txqi = netdev_priv(ndev) + size;
-			ieee80211_txq_init(sdata, NULL, txqi, 0);
-		}
-
 		sdata->dev = ndev;
 	}
+
+	if (num_txqs)
+		ieee80211_vif_txq_init(sdata, size, txq_size, num_txqs);
 
 	/* initialise type-independent data */
 	sdata->wdev.wiphy = local->hw.wiphy;
@@ -2235,10 +2260,27 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 	return 0;
 }
 
+static void ieee80211_purge_txqs(struct ieee80211_sub_if_data *sdata)
+{
+	struct sta_info *sta;
+
+	list_for_each_entry(sta, &sdata->local->sta_list, list) {
+		if (sdata != sta->sdata)
+			continue;
+		ieee80211_purge_sta_txqs(sta);
+	}
+
+	for (int i = IEEE80211_VIF_TXQ_MULTICAST;
+	     i <= IEEE80211_VIF_TXQ_FALLBACK;
+	     i++) {
+		if (sdata->vif.txq[i])
+			ieee80211_txq_purge(sdata->local,
+					    to_txq_info(sdata->vif.txq[i]));
+	}
+}
+
 void ieee80211_if_remove(struct ieee80211_sub_if_data *sdata)
 {
-	struct ieee80211_txq *txq = sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST];
-
 	ASSERT_RTNL();
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
@@ -2246,9 +2288,7 @@ void ieee80211_if_remove(struct ieee80211_sub_if_data *sdata)
 	list_del_rcu(&sdata->list);
 	mutex_unlock(&sdata->local->iflist_mtx);
 
-	if (txq)
-		ieee80211_txq_purge(sdata->local, to_txq_info(txq));
-
+	ieee80211_purge_txqs(sdata);
 	synchronize_rcu();
 
 	cfg80211_unregister_wdev(&sdata->wdev);
@@ -2298,6 +2338,8 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 	list_for_each_entry_safe(sdata, tmp, &unreg_list, list) {
 		bool netdev = sdata->dev;
 
+		ieee80211_purge_txqs(sdata);
+
 		/*
 		 * Remove IP addresses explicitly, since the notifier will
 		 * skip the callbacks if wdev->registered is false, since
@@ -2316,6 +2358,7 @@ void ieee80211_remove_interfaces(struct ieee80211_local *local)
 		if (!netdev)
 			kfree(sdata);
 	}
+	synchronize_rcu();
 }
 
 static int netdev_notify(struct notifier_block *nb,

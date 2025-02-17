@@ -1640,6 +1640,24 @@ IEEE80211_WDEV_TO_SUB_IF(struct wireless_dev *wdev)
 	return container_of(wdev, struct ieee80211_sub_if_data, wdev);
 }
 
+static inline struct ieee80211_sub_if_data *
+ieee80211_get_tx_sdata(struct ieee80211_sub_if_data *sdata)
+{
+	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
+		sdata = container_of(sdata->bss,
+				     struct ieee80211_sub_if_data, u.ap);
+	/*
+	 * local->monitor_sdata can only be set without
+	 * IEEE80211_HW_NO_VIRTUAL_MONITOR, no need to check it here.
+	 */
+	else if (unlikely(sdata->vif.type == NL80211_IFTYPE_MONITOR) &&
+		 sdata->local->monitor_sdata &&
+		 !(sdata->u.mntr.flags & MONITOR_FLAG_ACTIVE))
+		sdata = rcu_dereference(sdata->local->monitor_sdata);
+
+	return sdata;
+}
+
 static inline struct ieee80211_supported_band *
 ieee80211_get_sband(struct ieee80211_sub_if_data *sdata)
 {

@@ -1301,31 +1301,37 @@ static struct txq_info *ieee80211_get_txq(struct ieee80211_local *local,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_txq *txq = NULL;
 
-	if ((info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM) ||
-	    (info->control.flags & IEEE80211_TX_CTRL_PS_RESPONSE))
+	if (unlikely(info->flags & IEEE80211_TX_INTFL_OFFCHAN_TX_OK))
+		/* Offchannel queue can't be used, yet */
 		return NULL;
 
-	if (!(info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) &&
-	    unlikely(!ieee80211_is_data_present(hdr->frame_control))) {
+	if (unlikely(vif->type == NL80211_IFTYPE_MONITOR ||
+		     info->flags & IEEE80211_TX_CTL_SEND_AFTER_DTIM ||
+		     info->control.flags & IEEE80211_TX_CTRL_PS_RESPONSE))
+		goto out;
+
+	if (unlikely(!(info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) &&
+		     !ieee80211_is_data_present(hdr->frame_control))) {
 		if ((!ieee80211_is_mgmt(hdr->frame_control) ||
 		     ieee80211_is_bufferable_mmpdu(skb) ||
 		     vif->type == NL80211_IFTYPE_STATION) &&
 		    sta && sta->uploaded) {
 			txq = sta->sta.txq[IEEE80211_NUM_TIDS];
 		}
-	} else if (sta) {
+	} else if (likely(sta)) {
 		u8 tid = skb->priority & IEEE80211_QOS_CTL_TID_MASK;
 
-		if (!sta->uploaded)
-			return NULL;
+		if (unlikely(!sta->uploaded))
+			goto out;
 
 		txq = sta->sta.txq[tid];
 	} else {
 		txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	}
 
+out:
 	if (!txq)
-		return NULL;
+		txq = vif->txq[IEEE80211_VIF_TXQ_FALLBACK];
 
 	return to_txq_info(txq);
 }
@@ -1447,12 +1453,13 @@ static void ieee80211_txq_enqueue(struct ieee80211_local *local,
 
 	spin_lock_bh(&fq->lock);
 	/*
-	 * For management frames, don't really apply codel etc.,
+	 * For management frames (tid set to IEEE80211_NUM_TIDS
+	 * or IEEE80211_TID_NOQUEUE), don't really apply codel etc.,
 	 * we don't want to apply any shaping or anything we just
-	 * want to simplify the driver API by having them on the
-	 * txqi.
+	 * want to simplify the driver API and mac80211 internal
+	 * handling by having them on the txqi.
 	 */
-	if (unlikely(txqi->txq.tid == IEEE80211_NUM_TIDS)) {
+	if (unlikely(txqi->txq.tid >= IEEE80211_NUM_TIDS)) {
 		IEEE80211_SKB_CB(skb)->control.flags |=
 			IEEE80211_TX_INTCFL_NEED_TXPROCESSING;
 		__skb_queue_tail(&txqi->frags, skb);
@@ -1510,14 +1517,26 @@ void ieee80211_txq_init(struct ieee80211_sub_if_data *sdata,
 	txqi->txq.vif = &sdata->vif;
 
 	if (!sta) {
-		sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST] = &txqi->txq;
-		txqi->txq.tid = 0;
-		txqi->txq.ac = IEEE80211_AC_BE;
+		if (tid == IEEE80211_TID_NOQUEUE) {
+			sdata->vif.txq[IEEE80211_VIF_TXQ_NOQUEUE] =
+				&txqi->txq;
+			txqi->txq.ac = IEEE80211_AC_VO;
+		} else if (tid == IEEE80211_NUM_TIDS) {
+			sdata->vif.txq[IEEE80211_VIF_TXQ_FALLBACK] =
+				&txqi->txq;
+			txqi->txq.ac = IEEE80211_AC_VO;
+		} else {
+			sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST] =
+				&txqi->txq;
+			txqi->txq.ac = IEEE80211_AC_BE;
+		}
 
+		txqi->txq.tid = tid;
 		return;
 	}
 
-	if (tid == IEEE80211_NUM_TIDS)
+	/* for %IEEE80211_NUM_TIDS and %IEEE80211_TID_NOQUEUE */
+	if (tid >= IEEE80211_NUM_TIDS)
 		txqi->txq.ac = IEEE80211_AC_VO;
 	else
 		txqi->txq.ac = ieee80211_ac_from_tid(tid);
@@ -1629,16 +1648,13 @@ static bool ieee80211_queue_skb(struct ieee80211_local *local,
 				struct sta_info *sta,
 				struct sk_buff *skb)
 {
-	struct ieee80211_vif *vif;
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+	struct ieee80211_vif *vif = &sdata->vif;
 	struct txq_info *txqi;
 
-	if (sdata->vif.type == NL80211_IFTYPE_MONITOR)
-		return false;
+	info->control.vif = vif;
 
-	if (sdata->vif.type == NL80211_IFTYPE_AP_VLAN)
-		sdata = container_of(sdata->bss,
-				     struct ieee80211_sub_if_data, u.ap);
-
+	sdata = ieee80211_get_tx_sdata(sdata);
 	vif = &sdata->vif;
 	txqi = ieee80211_get_txq(local, vif, sta, skb);
 
@@ -3795,7 +3811,7 @@ struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
 	struct ieee80211_local *local = hw_to_local(hw);
 	struct txq_info *txqi = container_of(txq, struct txq_info, txq);
 	struct ieee80211_hdr *hdr;
-	struct sk_buff *skb = NULL;
+	struct sk_buff *skb;
 	struct fq *fq = &local->fq;
 	struct fq_tin *tin = &txqi->tin;
 	struct ieee80211_tx_info *info;
@@ -3804,7 +3820,7 @@ struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
 	struct ieee80211_vif *vif = txq->vif;
 	int q = vif->hw_queue[txq->ac];
 	unsigned long flags;
-	bool q_stopped;
+	unsigned long qsr;
 
 	WARN_ON_ONCE(softirq_count() == 0);
 
@@ -3813,10 +3829,22 @@ struct sk_buff *ieee80211_tx_dequeue(struct ieee80211_hw *hw,
 
 begin:
 	spin_lock_irqsave(&local->queue_stop_reason_lock, flags);
-	q_stopped = local->queue_stop_reasons[q];
+	qsr = local->queue_stop_reasons[q];
 	spin_unlock_irqrestore(&local->queue_stop_reason_lock, flags);
 
-	if (unlikely(q_stopped)) {
+	if (unlikely(qsr &&
+		     (txq->tid != IEEE80211_TID_NOQUEUE ||
+		      (qsr & ~BIT(IEEE80211_QUEUE_STOP_REASON_OFFCHANNEL))))) {
+		/*
+		 * Drop noqueue (includes off-channel) frames if queues are
+		 * stopped for any other reason than off-channel operation.
+		 */
+		if (WARN_ONCE(txq->tid == IEEE80211_TID_NOQUEUE,
+			      "mac80211: Drop noqueue TX. qsr=%lu\n", qsr)) {
+			ieee80211_txq_purge(local, txqi);
+			return NULL;
+		}
+
 		/* mark for waking later */
 		set_bit(IEEE80211_TXQ_DIRTY, &txqi->flags);
 		return NULL;
@@ -3935,36 +3963,6 @@ begin:
 			ieee80211_free_txskb(&local->hw, skb);
 			goto begin;
 		}
-	}
-
-	switch (tx.sdata->vif.type) {
-	case NL80211_IFTYPE_MONITOR:
-		if ((tx.sdata->u.mntr.flags & MONITOR_FLAG_ACTIVE) ||
-		    ieee80211_hw_check(&local->hw, NO_VIRTUAL_MONITOR)) {
-			vif = &tx.sdata->vif;
-			break;
-		}
-		tx.sdata = rcu_dereference(local->monitor_sdata);
-		if (tx.sdata &&
-		    ieee80211_hw_check(&local->hw, WANT_MONITOR_VIF)) {
-			vif = &tx.sdata->vif;
-			info->hw_queue =
-				vif->hw_queue[skb_get_queue_mapping(skb)];
-		} else if (ieee80211_hw_check(&local->hw, QUEUE_CONTROL)) {
-			ieee80211_free_txskb(&local->hw, skb);
-			goto begin;
-		} else {
-			info->control.vif = NULL;
-			return skb;
-		}
-		break;
-	case NL80211_IFTYPE_AP_VLAN:
-		tx.sdata = container_of(tx.sdata->bss,
-					struct ieee80211_sub_if_data, u.ap);
-		fallthrough;
-	default:
-		vif = &tx.sdata->vif;
-		break;
 	}
 
 encap_out:
@@ -4144,7 +4142,7 @@ bool ieee80211_txq_airtime_check(struct ieee80211_hw *hw,
 	if (!txq->sta)
 		return true;
 
-	if (unlikely(txq->tid == IEEE80211_NUM_TIDS))
+	if (unlikely(txq->tid >= IEEE80211_NUM_TIDS))
 		return true;
 
 	sta = container_of(txq->sta, struct sta_info, sta);
@@ -4637,7 +4635,6 @@ static void ieee80211_8023_xmit(struct ieee80211_sub_if_data *sdata,
 				     struct ieee80211_sub_if_data, u.ap);
 
 	info->flags |= IEEE80211_TX_CTL_HW_80211_ENCAP;
-	info->control.vif = &sdata->vif;
 
 	if (key)
 		info->control.hw_key = &key->conf;
