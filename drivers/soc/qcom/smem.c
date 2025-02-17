@@ -1236,11 +1236,21 @@ static int qcom_smem_probe(struct platform_device *pdev)
 	if (IS_ERR(smem->socinfo))
 		dev_dbg(&pdev->dev, "failed to register socinfo device\n");
 
+	ret = qcom_smem_md_init(&pdev->dev);
+	if (ret)
+		dev_info(&pdev->dev, "smem minidump backend init failed\n");
+
+	ret = qcom_register_pstore_smem(&pdev->dev);
+	if (ret)
+		dev_info(&pdev->dev, "smem pstore backend registration failed\n");
+
 	return 0;
 }
 
 static void qcom_smem_remove(struct platform_device *pdev)
 {
+	qcom_unregister_pstore_smem();
+
 	platform_device_unregister(__smem->socinfo);
 
 	hwspin_lock_free(__smem->hwlock);
