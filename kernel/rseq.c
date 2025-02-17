@@ -10,6 +10,7 @@
 
 #include <linux/sched.h>
 #include <linux/uaccess.h>
+#include <linux/pkeys.h>
 #include <linux/syscalls.h>
 #include <linux/rseq.h>
 #include <linux/types.h>
@@ -403,10 +404,13 @@ void __rseq_handle_notify_resume(struct ksignal *ksig, struct pt_regs *regs)
 {
 	struct task_struct *t = current;
 	int ret, sig;
+	pkey_reg_t saved;
+	bool switched_pkey_reg = false;
 
 	if (unlikely(t->flags & PF_EXITING))
 		return;
 
+retry:
 	/*
 	 * regs is NULL if and only if the caller is in a syscall path.  Skip
 	 * fixup and leave rseq_cs as is so that rseq_sycall() will detect and
@@ -419,9 +423,41 @@ void __rseq_handle_notify_resume(struct ksignal *ksig, struct pt_regs *regs)
 	}
 	if (unlikely(rseq_update_cpu_node_id(t)))
 		goto error;
+	if (switched_pkey_reg)
+		write_pkey_reg(saved);
 	return;
 
 error:
+	/*
+	 * If the application registers rseq, and ever switches to another
+	 * pkey protection (such that the rseq becomes inaccessible), then
+	 * any context switch will cause failure here attempting to read/write
+	 * struct rseq and/or rseq_cs. Since context switches are
+	 * asynchronous and are outside of the application control
+	 * (not part of the restricted code scope), we temporarily switch
+	 * to premissive pkey register to read/write rseq/rseq_cs,
+	 * similarly to signal delivery accesses to altstack.
+	 *
+	 * We don't bother to check if the failure really happened due to
+	 * pkeys or not, since it does not matter (performance-wise and
+	 * otherwise).
+	 *
+	 * If the restricted code installs rseq_cs in inaccessible to it
+	 * due to pkeys memory, we still let this function read the rseq_cs.
+	 * It's unclear what benefits the resticted code gets by doing this
+	 * (it probably already hijacked control flow at this point), and
+	 * presumably any sane sandbox should prohibit restricted code
+	 * from accessing struct rseq, and this is still better than
+	 * terminating the app unconditionally (it always has a choice
+	 * of not using rseq and pkeys together).
+	 */
+	if (!switched_pkey_reg) {
+		switched_pkey_reg = true;
+		saved = switch_to_permissive_pkey_reg();
+		goto retry;
+	} else {
+		write_pkey_reg(saved);
+	}
 	sig = ksig ? ksig->sig : 0;
 	force_sigsegv(sig);
 }
