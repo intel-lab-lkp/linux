@@ -205,7 +205,7 @@ static gpib_interface_t hp82335_interface = {
 
 static int hp82335_allocate_private(gpib_board_t *board)
 {
-	board->private_data = kzalloc(sizeof(struct hp82335_priv), GFP_KERNEL);
+	board->private_data = kzalloc(sizeof(*board->private_data), GFP_KERNEL);
 	if (!board->private_data)
 		return -1;
 	return 0;
