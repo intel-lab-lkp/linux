@@ -208,6 +208,20 @@
 #define MHI_RSCTRE_DATA_DWORD1		cpu_to_le32(FIELD_PREP(GENMASK(23, 16), \
 							       MHI_PKT_TYPE_COALESCING))
 
+/* MHI Bandwidth scaling offsets */
+#define BW_SCALE_CFG_OFFSET		(0x04)
+#define BW_SCALE_CFG_CHAN_DB_ID_SHIFT	(25)
+#define BW_SCALE_CFG_ENABLED_MASK	BIT(24)
+#define BW_SCALE_CFG_ENABLED_SHIFT	(24)
+#define BW_SCALE_CFG_ER_ID_SHIFT	(19)
+
+#define BW_SCALE_CAP_ID			(3)
+#define MHI_TRE_GET_EV_BW_REQ_SEQ(tre)	(((tre)->dword[0] >> 8) & 0xFF)
+
+#define MHI_BW_SCALE_RESULT(status, seq)	(((status) & 0xF) << 8 | \
+						((seq) & 0xFF))
+#define	MHI_BW_SCALE_NACK			0xF
+
 enum mhi_pkt_type {
 	MHI_PKT_TYPE_INVALID = 0x0,
 	MHI_PKT_TYPE_NOOP_CMD = 0x1,
