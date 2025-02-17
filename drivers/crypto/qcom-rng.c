@@ -7,6 +7,7 @@
 #include <linux/acpi.h>
 #include <linux/clk.h>
 #include <linux/crypto.h>
+#include <linux/devcoredump.h>
 #include <linux/hw_random.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -32,11 +33,13 @@
 #define QCOM_TRNG_QUALITY	1024
 
 struct qcom_rng {
+	char start[10];
 	struct mutex lock;
 	void __iomem *base;
 	struct clk *clk;
 	struct hwrng hwrng;
 	struct qcom_rng_match_data *match_data;
+	char end[10];
 };
 
 struct qcom_rng_ctx {
@@ -192,6 +195,10 @@ static int qcom_rng_probe(struct platform_device *pdev)
 	if (IS_ERR(rng->base))
 		return PTR_ERR(rng->base);
 
+	/* Setting some markers to easily recognize them afterwards */
+	strcpy(rng->start, "MD_RNG_ST");
+	strcpy(rng->end, "MD_RNG_en");
+
 	rng->clk = devm_clk_get_optional(&pdev->dev, "core");
 	if (IS_ERR(rng->clk))
 		return PTR_ERR(rng->clk);
@@ -218,6 +225,8 @@ static int qcom_rng_probe(struct platform_device *pdev)
 		}
 	}
 
+	devcd_register_core_area(&pdev->dev, rng, sizeof(*rng));
+
 	return ret;
 fail:
 	crypto_unregister_rng(&qcom_rng_alg);
@@ -228,6 +237,8 @@ static void qcom_rng_remove(struct platform_device *pdev)
 {
 	crypto_unregister_rng(&qcom_rng_alg);
 
+	devcd_unregister_core_area(&pdev->dev, qcom_rng_dev,
+				   sizeof(*qcom_rng_dev));
 	qcom_rng_dev = NULL;
 }
 
