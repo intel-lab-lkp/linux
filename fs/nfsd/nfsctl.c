@@ -2027,7 +2027,7 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 		xprt = svc_find_listener(serv, xcl_name, net, sa);
 		if (xprt) {
 			if (delete)
-				WARN_ONCE("Transport type=%s already exists\n",
+				WARN_ONCE(1, "Transport type=%s already exists\n",
 					  xcl_name);
 			svc_xprt_put(xprt);
 			continue;
