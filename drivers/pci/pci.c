@@ -5148,6 +5148,7 @@ static void pci_dev_save_and_disable(struct pci_dev *dev)
 {
 	const struct pci_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
+	struct pci_dev *bridge = pci_upstream_bridge(dev);
 
 	/*
 	 * dev->driver->err_handler->reset_prepare() is protected against
@@ -5166,6 +5167,9 @@ static void pci_dev_save_and_disable(struct pci_dev *dev)
 	 */
 	pci_set_power_state(dev, PCI_D0);
 
+	if (bridge)
+		pcie_bwnotif_disable(bridge);
+
 	pci_save_state(dev);
 	/*
 	 * Disable the device by clearing the Command register, except for
@@ -5181,8 +5185,12 @@ static void pci_dev_restore(struct pci_dev *dev)
 {
 	const struct pci_error_handlers *err_handler =
 			dev->driver ? dev->driver->err_handler : NULL;
+	struct pci_dev *bridge = pci_upstream_bridge(dev);
 
 	pci_restore_state(dev);
+
+	if (bridge)
+		pcie_bwnotif_enable(bridge);
 
 	/*
 	 * dev->driver->err_handler->reset_done() is protected against

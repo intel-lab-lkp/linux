@@ -759,12 +759,16 @@ static inline void pcie_ecrc_get_policy(char *str) { }
 #ifdef CONFIG_PCIEPORTBUS
 void pcie_reset_lbms_count(struct pci_dev *port);
 int pcie_lbms_count(struct pci_dev *port, unsigned long *val);
+void pcie_bwnotif_enable(struct pci_dev *port);
+void pcie_bwnotif_disable(struct pci_dev *port);
 #else
 static inline void pcie_reset_lbms_count(struct pci_dev *port) {}
 static inline int pcie_lbms_count(struct pci_dev *port, unsigned long *val)
 {
 	return -EOPNOTSUPP;
 }
+static inline void pcie_bwnotif_enable(struct pci_dev *port) {}
+static inline void pcie_bwnotif_disable(struct pci_dev *port) {}
 #endif
 
 struct pci_dev_reset_methods {
