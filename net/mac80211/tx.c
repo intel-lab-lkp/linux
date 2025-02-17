@@ -1693,7 +1693,6 @@ static int invoke_tx_handlers_early(struct ieee80211_tx_data *tx)
 	CALL_TXH(ieee80211_tx_h_check_assoc);
 	CALL_TXH(ieee80211_tx_h_ps_buf);
 	CALL_TXH(ieee80211_tx_h_check_control_port_protocol);
-	CALL_TXH(ieee80211_tx_h_select_key);
 
  txh_done:
 	if (unlikely(res == TX_DROP)) {
@@ -1761,6 +1760,17 @@ static int invoke_tx_handlers(struct ieee80211_tx_data *tx)
 
 	if (r)
 		return r;
+
+	r = ieee80211_tx_h_select_key(tx);
+	if (unlikely(r != TX_CONTINUE)) {
+		I802_DEBUG_INC(tx->local->tx_handlers_drop);
+		if (tx->skb)
+			ieee80211_free_txskb(&tx->local->hw, tx->skb);
+		else
+			ieee80211_purge_tx_queue(&tx->local->hw, &tx->skbs);
+		return -1;
+	}
+
 	return invoke_tx_handlers_late(tx);
 }
 
