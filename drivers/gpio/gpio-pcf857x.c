@@ -20,6 +20,7 @@
 static const struct i2c_device_id pcf857x_id[] = {
 	{ "pcf8574", 8 },
 	{ "pcf8574a", 8 },
+	{ "pcf8574t", 8 },
 	{ "pca8574", 8 },
 	{ "pca9670", 8 },
 	{ "pca9672", 8 },
@@ -38,6 +39,7 @@ MODULE_DEVICE_TABLE(i2c, pcf857x_id);
 static const struct of_device_id pcf857x_of_table[] = {
 	{ .compatible = "nxp,pcf8574", (void *)8 },
 	{ .compatible = "nxp,pcf8574a", (void *)8 },
+	{ .compatible = "nxp,pcf8574t", (void *)8 },
 	{ .compatible = "nxp,pca8574", (void *)8 },
 	{ .compatible = "nxp,pca9670", (void *)8 },
 	{ .compatible = "nxp,pca9672", (void *)8 },

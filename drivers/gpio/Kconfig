@@ -1193,7 +1193,7 @@ config GPIO_PCF857X
 	  Most of these parts are from NXP, though TI is a second source for
 	  some of them.  Compatible models include:
 
-	  8 bits:   pcf8574, pcf8574a, pca8574, pca8574a,
+	  8 bits:   pcf8574, pcf8574a, pcf8574t, pca8574, pca8574a,
 	            pca9670, pca9672, pca9674, pca9674a,
 	            max7328, max7329
 
