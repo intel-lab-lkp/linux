@@ -852,11 +852,12 @@ static void intel_ddi_get_encoder_pipes(struct intel_encoder *encoder,
 
 	for_each_pipe(dev_priv, p) {
 		enum transcoder cpu_transcoder = (enum transcoder)p;
+		enum intel_display_power_domain power_domain;
 		u32 port_mask, ddi_select, ddi_mode;
 		intel_wakeref_t trans_wakeref;
 
-		trans_wakeref = intel_display_power_get_if_enabled(display,
-								   POWER_DOMAIN_TRANSCODER(cpu_transcoder));
+		power_domain = intel_display_power_transcoder_domain(display, cpu_transcoder);
+		trans_wakeref = intel_display_power_get_if_enabled(display, power_domain);
 		if (!trans_wakeref)
 			continue;
 
@@ -870,8 +871,7 @@ static void intel_ddi_get_encoder_pipes(struct intel_encoder *encoder,
 
 		tmp = intel_de_read(dev_priv,
 				    TRANS_DDI_FUNC_CTL(dev_priv, cpu_transcoder));
-		intel_display_power_put(display, POWER_DOMAIN_TRANSCODER(cpu_transcoder),
-					trans_wakeref);
+		intel_display_power_put(display, power_domain, trans_wakeref);
 
 		if ((tmp & port_mask) != ddi_select)
 			continue;
@@ -3950,7 +3950,7 @@ static void bdw_get_trans_port_sync_config(struct intel_crtc_state *crtc_state)
 		enum intel_display_power_domain power_domain;
 		intel_wakeref_t trans_wakeref;
 
-		power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
+		power_domain = intel_display_power_transcoder_domain(display, cpu_transcoder);
 		trans_wakeref = intel_display_power_get_if_enabled(display,
 								   power_domain);
 

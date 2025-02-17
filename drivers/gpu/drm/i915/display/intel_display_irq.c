@@ -1617,10 +1617,14 @@ void gen8_display_irq_reset(struct drm_i915_private *dev_priv)
 	intel_de_write(display, EDP_PSR_IMR, 0xffffffff);
 	intel_de_write(display, EDP_PSR_IIR, 0xffffffff);
 
-	for_each_pipe(dev_priv, pipe)
-		if (intel_display_power_is_enabled(display,
-						   POWER_DOMAIN_PIPE(pipe)))
+	for_each_pipe(dev_priv, pipe) {
+		enum intel_display_power_domain power_domain;
+
+		power_domain = intel_display_power_pipe_domain(display, pipe);
+
+		if (intel_display_power_is_enabled(display, power_domain))
 			intel_display_irq_regs_reset(display, GEN8_DE_PIPE_IRQ_REGS(pipe));
+	}
 
 	intel_display_irq_regs_reset(display, GEN8_DE_PORT_IRQ_REGS);
 	intel_display_irq_regs_reset(display, GEN8_DE_MISC_IRQ_REGS);
@@ -1644,7 +1648,7 @@ void gen11_display_irq_reset(struct drm_i915_private *dev_priv)
 		for_each_cpu_transcoder_masked(dev_priv, trans, trans_mask) {
 			enum intel_display_power_domain domain;
 
-			domain = POWER_DOMAIN_TRANSCODER(trans);
+			domain = intel_display_power_transcoder_domain(display, trans);
 			if (!intel_display_power_is_enabled(display, domain))
 				continue;
 
@@ -1662,7 +1666,7 @@ void gen11_display_irq_reset(struct drm_i915_private *dev_priv)
 
 	for_each_pipe(dev_priv, pipe)
 		if (intel_display_power_is_enabled(display,
-						   POWER_DOMAIN_PIPE(pipe)))
+						   intel_display_power_pipe_domain(display, pipe)))
 			intel_display_irq_regs_reset(display, GEN8_DE_PIPE_IRQ_REGS(pipe));
 
 	intel_display_irq_regs_reset(display, GEN8_DE_PORT_IRQ_REGS);
@@ -1887,7 +1891,7 @@ void gen8_de_irq_postinstall(struct drm_i915_private *dev_priv)
 		for_each_cpu_transcoder_masked(dev_priv, trans, trans_mask) {
 			enum intel_display_power_domain domain;
 
-			domain = POWER_DOMAIN_TRANSCODER(trans);
+			domain = intel_display_power_transcoder_domain(display, trans);
 			if (!intel_display_power_is_enabled(display, domain))
 				continue;
 
@@ -1902,7 +1906,7 @@ void gen8_de_irq_postinstall(struct drm_i915_private *dev_priv)
 		dev_priv->display.irq.de_irq_mask[pipe] = ~de_pipe_masked;
 
 		if (intel_display_power_is_enabled(display,
-						   POWER_DOMAIN_PIPE(pipe)))
+						   intel_display_power_pipe_domain(display, pipe)))
 			intel_display_irq_regs_init(display, GEN8_DE_PIPE_IRQ_REGS(pipe),
 						    dev_priv->display.irq.de_irq_mask[pipe],
 						    de_pipe_enables);

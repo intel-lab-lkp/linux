@@ -429,7 +429,7 @@ void assert_transcoder(struct intel_display *display,
 	if (display->platform.i830)
 		state = true;
 
-	power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
+	power_domain = intel_display_power_transcoder_domain(display, cpu_transcoder);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (wakeref) {
 		u32 val = intel_de_read(display,
@@ -2013,6 +2013,7 @@ intel_aux_power_domain(struct intel_digital_port *dig_port)
 static void get_crtc_power_domains(struct intel_crtc_state *crtc_state,
 				   struct intel_power_domain_mask *mask)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
@@ -2024,11 +2025,11 @@ static void get_crtc_power_domains(struct intel_crtc_state *crtc_state,
 	if (!crtc_state->hw.active)
 		return;
 
-	set_bit(POWER_DOMAIN_PIPE(pipe), mask->bits);
-	set_bit(POWER_DOMAIN_TRANSCODER(cpu_transcoder), mask->bits);
+	set_bit(intel_display_power_pipe_domain(display, pipe), mask->bits);
+	set_bit(intel_display_power_transcoder_domain(display, cpu_transcoder), mask->bits);
 	if (crtc_state->pch_pfit.enabled ||
 	    crtc_state->pch_pfit.force_thru)
-		set_bit(POWER_DOMAIN_PIPE_PANEL_FITTER(pipe), mask->bits);
+		set_bit(intel_display_power_pipe_panel_fitter_domain(display, pipe), mask->bits);
 
 	drm_for_each_encoder_mask(encoder, &dev_priv->drm,
 				  crtc_state->uapi.encoder_mask) {
@@ -3113,7 +3114,7 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 	u32 tmp;
 	bool ret;
 
-	power_domain = POWER_DOMAIN_PIPE(crtc->pipe);
+	power_domain = intel_display_power_pipe_domain(display, crtc->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
@@ -3497,7 +3498,7 @@ static bool ilk_get_pipe_config(struct intel_crtc *crtc,
 	u32 tmp;
 	bool ret;
 
-	power_domain = POWER_DOMAIN_PIPE(crtc->pipe);
+	power_domain = intel_display_power_pipe_domain(display, crtc->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
@@ -3590,7 +3591,7 @@ static bool transcoder_ddi_func_is_enabled(struct drm_i915_private *dev_priv,
 	intel_wakeref_t wakeref;
 	u32 tmp = 0;
 
-	power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
+	power_domain = intel_display_power_transcoder_domain(display, cpu_transcoder);
 
 	with_intel_display_power_if_enabled(display, power_domain, wakeref)
 		tmp = intel_de_read(dev_priv,
@@ -3617,7 +3618,7 @@ static void enabled_uncompressed_joiner_pipes(struct intel_display *display,
 		enum pipe pipe = crtc->pipe;
 		intel_wakeref_t wakeref;
 
-		power_domain = POWER_DOMAIN_PIPE(pipe);
+		power_domain = intel_display_power_pipe_domain(display, pipe);
 		with_intel_display_power_if_enabled(display, power_domain, wakeref) {
 			u32 tmp = intel_de_read(display, ICL_PIPE_DSS_CTL1(pipe));
 
@@ -3884,7 +3885,7 @@ static u8 hsw_enabled_transcoders(struct intel_crtc *crtc)
 		enum pipe trans_pipe;
 		u32 tmp = 0;
 
-		power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
+		power_domain = intel_display_power_transcoder_domain(display, cpu_transcoder);
 		with_intel_display_power_if_enabled(display, power_domain, wakeref)
 			tmp = intel_de_read(dev_priv,
 					    TRANS_DDI_FUNC_CTL(dev_priv, cpu_transcoder));
@@ -3973,6 +3974,7 @@ static bool hsw_get_transcoder_state(struct intel_crtc *crtc,
 	struct intel_display *display = to_intel_display(crtc);
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	enum intel_display_power_domain power_domain;
 	unsigned long enabled_transcoders;
 	u32 tmp;
 
@@ -3989,8 +3991,9 @@ static bool hsw_get_transcoder_state(struct intel_crtc *crtc,
 	 */
 	pipe_config->cpu_transcoder = ffs(enabled_transcoders) - 1;
 
-	if (!intel_display_power_get_in_set_if_enabled(display, power_domain_set,
-						       POWER_DOMAIN_TRANSCODER(pipe_config->cpu_transcoder)))
+	power_domain = intel_display_power_transcoder_domain(display, pipe_config->cpu_transcoder);
+
+	if (!intel_display_power_get_in_set_if_enabled(display, power_domain_set, power_domain))
 		return false;
 
 	if (hsw_panel_transcoders(dev_priv) & BIT(pipe_config->cpu_transcoder)) {
@@ -4013,6 +4016,7 @@ static bool bxt_get_dsi_transcoder_state(struct intel_crtc *crtc,
 {
 	struct intel_display *display = to_intel_display(crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	enum intel_display_power_domain power_domain;
 	enum transcoder cpu_transcoder;
 	enum port port;
 	u32 tmp;
@@ -4023,8 +4027,10 @@ static bool bxt_get_dsi_transcoder_state(struct intel_crtc *crtc,
 		else
 			cpu_transcoder = TRANSCODER_DSI_C;
 
+		power_domain = intel_display_power_transcoder_domain(display, cpu_transcoder);
+
 		if (!intel_display_power_get_in_set_if_enabled(display, power_domain_set,
-							       POWER_DOMAIN_TRANSCODER(cpu_transcoder)))
+							       power_domain))
 			continue;
 
 		/*
@@ -4073,11 +4079,14 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 {
 	struct intel_display *display = to_intel_display(crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
+	enum intel_display_power_domain power_domain;
 	bool active;
 	u32 tmp;
 
+	power_domain = intel_display_power_pipe_domain(display, crtc->pipe);
+
 	if (!intel_display_power_get_in_set_if_enabled(display, &crtc->hw_readout_power_domains,
-						       POWER_DOMAIN_PIPE(crtc->pipe)))
+						       power_domain))
 		return false;
 
 	pipe_config->shared_dpll = NULL;
@@ -4128,8 +4137,10 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 		pipe_config->ips_linetime =
 			REG_FIELD_GET(HSW_IPS_LINETIME_MASK, tmp);
 
+	power_domain = intel_display_power_pipe_panel_fitter_domain(display, crtc->pipe);
+
 	if (intel_display_power_get_in_set_if_enabled(display, &crtc->hw_readout_power_domains,
-						      POWER_DOMAIN_PIPE_PANEL_FITTER(crtc->pipe))) {
+						      power_domain)) {
 		if (DISPLAY_VER(dev_priv) >= 9)
 			skl_scaler_get_config(pipe_config);
 		else

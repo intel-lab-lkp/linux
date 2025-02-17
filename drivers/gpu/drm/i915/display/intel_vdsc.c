@@ -357,6 +357,7 @@ enum intel_display_power_domain
 intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
+	struct intel_display *display = &i915->display;
 	enum pipe pipe = crtc->pipe;
 
 	/*
@@ -373,7 +374,7 @@ intel_dsc_power_domain(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 	if (DISPLAY_VER(i915) == 12 && !IS_ROCKETLAKE(i915) && pipe == PIPE_A)
 		return POWER_DOMAIN_TRANSCODER_VDSC_PW2;
 	else if (is_pipe_dsc(crtc, cpu_transcoder))
-		return POWER_DOMAIN_PIPE(pipe);
+		return intel_display_power_pipe_domain(display, pipe);
 	else
 		return POWER_DOMAIN_TRANSCODER_VDSC_PW2;
 }

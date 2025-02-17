@@ -12,7 +12,9 @@
 #include "intel_wakeref.h"
 
 enum aux_ch;
+enum pipe;
 enum port;
+enum transcoder;
 struct i915_power_well;
 struct intel_display;
 struct intel_encoder;
@@ -116,14 +118,6 @@ enum intel_display_power_domain {
 	POWER_DOMAIN_NUM,
 	POWER_DOMAIN_INVALID = POWER_DOMAIN_NUM,
 };
-
-#define POWER_DOMAIN_PIPE(pipe) \
-	((enum intel_display_power_domain)((pipe) - PIPE_A + POWER_DOMAIN_PIPE_A))
-#define POWER_DOMAIN_PIPE_PANEL_FITTER(pipe) \
-	((enum intel_display_power_domain)((pipe) - PIPE_A + POWER_DOMAIN_PIPE_PANEL_FITTER_A))
-#define POWER_DOMAIN_TRANSCODER(tran) \
-	((tran) == TRANSCODER_EDP ? POWER_DOMAIN_TRANSCODER_EDP : \
-	 (enum intel_display_power_domain)((tran) - TRANSCODER_A + POWER_DOMAIN_TRANSCODER_A))
 
 struct intel_power_domain_mask {
 	DECLARE_BITMAP(bits, POWER_DOMAIN_NUM);
@@ -270,6 +264,12 @@ intel_display_power_put_all_in_set(struct intel_display *display,
 
 void intel_display_power_debug(struct intel_display *display, struct seq_file *m);
 
+enum intel_display_power_domain
+intel_display_power_pipe_domain(struct intel_display *display, enum pipe pipe);
+enum intel_display_power_domain
+intel_display_power_pipe_panel_fitter_domain(struct intel_display *display, enum pipe pipe);
+enum intel_display_power_domain
+intel_display_power_transcoder_domain(struct intel_display *display, enum transcoder trans);
 enum intel_display_power_domain
 intel_display_power_ddi_lanes_domain(struct intel_display *display, enum port port);
 enum intel_display_power_domain

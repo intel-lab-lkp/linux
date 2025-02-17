@@ -598,7 +598,7 @@ int intel_crtc_set_crc_source(struct drm_crtc *_crtc, const char *source_name)
 		return -EINVAL;
 	}
 
-	power_domain = POWER_DOMAIN_PIPE(pipe);
+	power_domain = intel_display_power_pipe_domain(display, pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref) {
 		drm_dbg_kms(&dev_priv->drm,

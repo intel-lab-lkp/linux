@@ -697,7 +697,7 @@ static bool i9xx_plane_get_hw_state(struct intel_plane *plane,
 	 * but that's only the case for gen2-4 which don't have any
 	 * display power wells.
 	 */
-	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
+	power_domain = intel_display_power_pipe_domain(display, plane->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;

@@ -92,7 +92,7 @@ static bool intel_cmtg_transcoder_is_secondary(struct intel_display *display,
 	if (!HAS_TRANSCODER(display, trans))
 		return false;
 
-	power_domain = POWER_DOMAIN_TRANSCODER(trans);
+	power_domain = intel_display_power_transcoder_domain(display, trans);
 
 	with_intel_display_power_if_enabled(display, power_domain, wakeref)
 		val = intel_de_read(display, TRANS_DDI_FUNC_CTL2(display, trans));

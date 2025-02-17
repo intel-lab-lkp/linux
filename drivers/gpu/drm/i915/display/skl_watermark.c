@@ -843,7 +843,7 @@ static void skl_pipe_ddb_get_hw_state(struct intel_crtc *crtc,
 	intel_wakeref_t wakeref;
 	enum plane_id plane_id;
 
-	power_domain = POWER_DOMAIN_PIPE(pipe);
+	power_domain = intel_display_power_pipe_domain(display, pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return;

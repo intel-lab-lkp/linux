@@ -457,7 +457,7 @@ vlv_sprite_get_hw_state(struct intel_plane *plane,
 	intel_wakeref_t wakeref;
 	bool ret;
 
-	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
+	power_domain = intel_display_power_pipe_domain(display, plane->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
@@ -881,7 +881,7 @@ ivb_sprite_get_hw_state(struct intel_plane *plane,
 	intel_wakeref_t wakeref;
 	bool ret;
 
-	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
+	power_domain = intel_display_power_pipe_domain(display, plane->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
@@ -1216,7 +1216,7 @@ g4x_sprite_get_hw_state(struct intel_plane *plane,
 	intel_wakeref_t wakeref;
 	bool ret;
 
-	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
+	power_domain = intel_display_power_pipe_domain(display, plane->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;

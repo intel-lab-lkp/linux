@@ -2476,6 +2476,27 @@ intel_port_domains_for_platform(struct intel_display *display,
 	}
 }
 
+enum intel_display_power_domain
+intel_display_power_pipe_domain(struct intel_display *display, enum pipe pipe)
+{
+	return pipe - PIPE_A + POWER_DOMAIN_PIPE_A;
+}
+
+enum intel_display_power_domain
+intel_display_power_pipe_panel_fitter_domain(struct intel_display *display, enum pipe pipe)
+{
+	return pipe - PIPE_A + POWER_DOMAIN_PIPE_PANEL_FITTER_A;
+}
+
+enum intel_display_power_domain
+intel_display_power_transcoder_domain(struct intel_display *display, enum transcoder trans)
+{
+	if (trans == TRANSCODER_EDP)
+		return POWER_DOMAIN_TRANSCODER_EDP;
+
+	return trans - TRANSCODER_A + POWER_DOMAIN_TRANSCODER_A;
+}
+
 static const struct intel_ddi_port_domains *
 intel_port_domains_for_port(struct intel_display *display, enum port port)
 {

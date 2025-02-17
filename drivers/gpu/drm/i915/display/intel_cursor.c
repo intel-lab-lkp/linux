@@ -336,7 +336,7 @@ static bool i845_cursor_get_hw_state(struct intel_plane *plane,
 	intel_wakeref_t wakeref;
 	bool ret;
 
-	power_domain = POWER_DOMAIN_PIPE(PIPE_A);
+	power_domain = intel_display_power_pipe_domain(display, PIPE_A);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
@@ -746,7 +746,7 @@ static bool i9xx_cursor_get_hw_state(struct intel_plane *plane,
 	 * but that's only the case for gen2-3 which don't have any
 	 * display power wells.
 	 */
-	power_domain = POWER_DOMAIN_PIPE(plane->pipe);
+	power_domain = intel_display_power_pipe_domain(display, plane->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
