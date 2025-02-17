@@ -36,15 +36,15 @@ static int __register_pstore_device(struct pstore_device_info *dev)
 		pr_err("NULL device info\n");
 		return -EINVAL;
 	}
-	if (!dev->zone.total_size) {
+	if (!dev->zone.total_size && !dev->zone.dmapped_cnt) {
 		pr_err("zero sized device\n");
 		return -EINVAL;
 	}
-	if (!dev->zone.read) {
+	if (!dev->zone.read && !dev->zone.dmapped_cnt) {
 		pr_err("no read handler for device\n");
 		return -EINVAL;
 	}
-	if (!dev->zone.write) {
+	if (!dev->zone.write && !dev->zone.dmapped_cnt) {
 		pr_err("no write handler for device\n");
 		return -EINVAL;
 	}

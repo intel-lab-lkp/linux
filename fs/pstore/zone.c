@@ -113,6 +113,7 @@ struct psz_context {
 	struct pstore_zone *ppsz;
 	struct pstore_zone *cpsz;
 	struct pstore_zone **fpszs;
+	struct pstore_zone **dmszs;
 	unsigned int kmsg_max_cnt;
 	unsigned int kmsg_read_cnt;
 	unsigned int kmsg_write_cnt;
@@ -120,6 +121,7 @@ struct psz_context {
 	unsigned int console_read_cnt;
 	unsigned int ftrace_max_cnt;
 	unsigned int ftrace_read_cnt;
+	unsigned int dmapped_max_cnt;
 	/*
 	 * These counters should be calculated during recovery.
 	 * It records the oops/panic times after crashes rather than boots.
@@ -1147,6 +1149,8 @@ static void psz_free_all_zones(struct psz_context *cxt)
 		psz_free_zone(&cxt->cpsz);
 	if (cxt->fpszs)
 		psz_free_zones(&cxt->fpszs, &cxt->ftrace_max_cnt);
+	if (cxt->dmszs)
+		psz_free_zones(&cxt->dmszs, &cxt->dmapped_max_cnt);
 }
 
 static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
@@ -1159,9 +1163,9 @@ static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
 	if (!size)
 		return NULL;
 
-	if (*off + size > info->total_size) {
-		pr_err("no room for %s (0x%zx@0x%llx over 0x%lx)\n",
-			name, size, *off, info->total_size);
+	if (*off + size > info->total_size && type != PSTORE_TYPE_DMAPPED) {
+		pr_err("no room for %s type %d (0x%zx@0x%llx over 0x%lx)\n",
+			name, type, size, *off, info->total_size);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -1169,7 +1173,8 @@ static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
 	if (!zone)
 		return ERR_PTR(-ENOMEM);
 
-	zone->buffer = kmalloc(size, GFP_KERNEL);
+	zone->buffer = kmalloc(type == PSTORE_TYPE_DMAPPED ?
+			       sizeof(struct psz_buffer) : size, GFP_KERNEL);
 	if (!zone->buffer) {
 		kfree(zone);
 		return ERR_PTR(-ENOMEM);
@@ -1178,7 +1183,10 @@ static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
 	zone->off = *off;
 	zone->name = name;
 	zone->type = type;
-	zone->buffer_size = size - sizeof(struct psz_buffer);
+	if (zone->type == PSTORE_TYPE_DMAPPED)
+		zone->buffer_size = 0;
+	else
+		zone->buffer_size = size - sizeof(struct psz_buffer);
 	zone->buffer->sig = type ^ PSZ_SIG;
 	zone->oldbuf = NULL;
 	atomic_set(&zone->dirty, 0);
@@ -1187,8 +1195,9 @@ static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
 
 	*off += size;
 
-	pr_debug("pszone %s: off 0x%llx, %zu header, %zu data\n", zone->name,
-			zone->off, sizeof(*zone->buffer), zone->buffer_size);
+	pr_debug("pszone %s: off 0x%llx, %zu header, %zu data %s\n", zone->name,
+			zone->off, sizeof(*zone->buffer), zone->buffer_size,
+			zone->type == PSTORE_TYPE_DMAPPED ? " dmapped " : "");
 	return zone;
 }
 
@@ -1205,7 +1214,7 @@ static struct pstore_zone **psz_init_zones(enum pstore_type_id type,
 	if (!total_size || !record_size)
 		return NULL;
 
-	if (*off + total_size > info->total_size) {
+	if (*off + total_size > info->total_size && type != PSTORE_TYPE_DMAPPED) {
 		pr_err("no room for zones %s (0x%zx@0x%llx over 0x%lx)\n",
 			name, total_size, *off, info->total_size);
 		return ERR_PTR(-ENOMEM);
@@ -1243,6 +1252,15 @@ static int psz_alloc_zones(struct psz_context *cxt)
 	loff_t off = 0;
 	int err;
 	size_t off_size = 0;
+
+	cxt->dmszs = psz_init_zones(PSTORE_TYPE_DMAPPED, &off,
+			info->dmapped_cnt,
+			1, &cxt->dmapped_max_cnt);
+	if (IS_ERR(cxt->dmszs)) {
+		err = PTR_ERR(cxt->dmszs);
+		cxt->dmszs = NULL;
+		goto free_out;
+	}
 
 	off_size += info->pmsg_size;
 	cxt->ppsz = psz_init_zone(PSTORE_TYPE_PMSG, &off, info->pmsg_size);
@@ -1301,7 +1319,7 @@ int register_pstore_zone(struct pstore_zone_info *info)
 	int err = -EINVAL;
 	struct psz_context *cxt = &pstore_zone_cxt;
 
-	if (info->total_size < 4096) {
+	if (info->total_size < 4096 && !info->dmapped_cnt) {
 		pr_warn("total_size must be >= 4096\n");
 		return -EINVAL;
 	}
@@ -1311,7 +1329,7 @@ int register_pstore_zone(struct pstore_zone_info *info)
 	}
 
 	if (!info->kmsg_size && !info->pmsg_size && !info->console_size &&
-	    !info->ftrace_size) {
+	    !info->ftrace_size && !info->dmapped_cnt) {
 		pr_warn("at least one record size must be non-zero\n");
 		return -EINVAL;
 	}
@@ -1344,7 +1362,7 @@ int register_pstore_zone(struct pstore_zone_info *info)
 	 * if no @read, pstore may mount failed.
 	 * if no @write, pstore do not support to remove record file.
 	 */
-	if (!info->read || !info->write) {
+	if (!info->dmapped_cnt && (!info->read || !info->write)) {
 		pr_err("no valid general read/write interface\n");
 		return -EINVAL;
 	}
@@ -1364,6 +1382,7 @@ int register_pstore_zone(struct pstore_zone_info *info)
 	pr_debug("\tpmsg size : %ld Bytes\n", info->pmsg_size);
 	pr_debug("\tconsole size : %ld Bytes\n", info->console_size);
 	pr_debug("\tftrace size : %ld Bytes\n", info->ftrace_size);
+	pr_debug("\tdmapped areas : %ld\n", info->dmapped_cnt);
 
 	err = psz_alloc_zones(cxt);
 	if (err) {
@@ -1404,6 +1423,10 @@ int register_pstore_zone(struct pstore_zone_info *info)
 	if (info->ftrace_size) {
 		cxt->pstore.flags |= PSTORE_FLAGS_FTRACE;
 		pr_cont(" ftrace");
+	}
+	if (info->dmapped_cnt) {
+		cxt->pstore.flags |= PSTORE_FLAGS_DMAPPED;
+		pr_cont(" dmapped");
 	}
 	pr_cont("\n");
 

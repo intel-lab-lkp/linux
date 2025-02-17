@@ -48,10 +48,13 @@ struct pstore_zone_info {
 	unsigned long pmsg_size;
 	unsigned long console_size;
 	unsigned long ftrace_size;
+	unsigned long dmapped_cnt;
 	pstore_zone_read_op read;
 	pstore_zone_write_op write;
 	pstore_zone_erase_op erase;
 	pstore_zone_write_op panic_write;
+	int (*register_dmr)(char *, int, void *, size_t);
+	int (*unregister_dmr)(void *, size_t);
 };
 
 /**

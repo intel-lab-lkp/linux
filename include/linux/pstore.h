@@ -39,6 +39,7 @@ enum pstore_type_id {
 	PSTORE_TYPE_PMSG	= 7,
 	PSTORE_TYPE_PPC_OPAL	= 8,
 
+	PSTORE_TYPE_DMAPPED	= 9,
 	/* End of the list */
 	PSTORE_TYPE_MAX
 };
@@ -199,6 +200,8 @@ struct pstore_info {
 	int		(*write_user)(struct pstore_record *record,
 				      const char __user *buf);
 	int		(*erase)(struct pstore_record *record);
+	int		(*register_dmr)(struct pstore_record *record);
+	int		(*unregister_dmr)(struct pstore_record *record);
 };
 
 /* Supported frontends */
@@ -206,6 +209,7 @@ struct pstore_info {
 #define PSTORE_FLAGS_CONSOLE	BIT(1)
 #define PSTORE_FLAGS_FTRACE	BIT(2)
 #define PSTORE_FLAGS_PMSG	BIT(3)
+#define PSTORE_FLAGS_DMAPPED	BIT(4)
 
 extern int pstore_register(struct pstore_info *);
 extern void pstore_unregister(struct pstore_info *);
