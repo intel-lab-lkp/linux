@@ -1597,12 +1597,12 @@ int iwl_mvm_post_channel_switch(struct ieee80211_hw *hw,
 		}
 	} else if (vif->type == NL80211_IFTYPE_AP && mvmvif->csa_blocks_tx) {
 		struct iwl_mvm_txq *mvmtxq =
-			iwl_mvm_txq_from_mac80211(vif->txq);
+			iwl_mvm_txq_from_mac80211(vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 		clear_bit(IWL_MVM_TXQ_STATE_STOP_AP_CSA, &mvmtxq->state);
 
 		local_bh_disable();
-		iwl_mvm_mac_itxq_xmit(hw, vif->txq);
+		iwl_mvm_mac_itxq_xmit(hw, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 		ieee80211_iterate_stations_atomic(hw, iwl_mvm_post_csa_tx, hw);
 		local_bh_enable();
 
@@ -5712,7 +5712,7 @@ int iwl_mvm_pre_channel_switch(struct iwl_mvm *mvm,
 			break;
 
 		mvmvif->csa_blocks_tx = true;
-		mvmtxq = iwl_mvm_txq_from_mac80211(vif->txq);
+		mvmtxq = iwl_mvm_txq_from_mac80211(vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 		set_bit(IWL_MVM_TXQ_STATE_STOP_AP_CSA, &mvmtxq->state);
 		ieee80211_iterate_stations_atomic(mvm->hw,
 						  iwl_mvm_csa_block_txqs,

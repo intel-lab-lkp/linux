@@ -356,6 +356,7 @@ static int mt7925_mac_link_bss_add(struct mt792x_dev *dev,
 {
 	struct mt792x_bss_conf *mconf = mt792x_link_conf_to_mconf(link_conf);
 	struct ieee80211_vif *vif = link_conf->vif;
+	struct ieee80211_txq *txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	struct mt792x_vif *mvif = mconf->vif;
 	struct mt76_txq *mtxq;
 	int idx, ret = 0;
@@ -398,8 +399,8 @@ static int mt7925_mac_link_bss_add(struct mt792x_dev *dev,
 	if (ret)
 		goto out;
 
-	if (vif->txq) {
-		mtxq = (struct mt76_txq *)vif->txq->drv_priv;
+	if (txq) {
+		mtxq = (struct mt76_txq *)txq->drv_priv;
 		mtxq->wcid = idx;
 	}
 

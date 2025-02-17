@@ -1967,6 +1967,17 @@ enum ieee80211_neg_ttlm_res {
 };
 
 /**
+ * enum ieee80211_vif_txq - per-vif intermediate queues (txqi)
+ *
+ * @IEEE80211_VIF_TXQ_MULTICAST: queue for broadcast/multicast data frames.
+ * @IEEE80211_VIF_TXQ_NUM: max number of available vif TXQs.
+ */
+enum ieee80211_vif_txq {
+	IEEE80211_VIF_TXQ_MULTICAST,
+	IEEE80211_VIF_TXQ_NUM,
+};
+
+/**
  * struct ieee80211_vif - per-interface data
  *
  * Data in this structure is continually present for driver
@@ -2020,7 +2031,7 @@ enum ieee80211_neg_ttlm_res {
  *	for this interface.
  * @drv_priv: data area for driver use, will always be aligned to
  *	sizeof(void \*).
- * @txq: the multicast data TX queue
+ * @txq: per-vif iTXQs (see enum ieee80211_vif_txq for available queues)
  * @offload_flags: 802.3 -> 802.11 enapsulation offload flags, see
  *	&enum ieee80211_offload_flags.
  * @mbssid_tx_vif: Pointer to the transmitting interface if MBSSID is enabled.
@@ -2039,7 +2050,7 @@ struct ieee80211_vif {
 	u8 cab_queue;
 	u8 hw_queue[IEEE80211_NUM_ACS];
 
-	struct ieee80211_txq *txq;
+	struct ieee80211_txq *txq[IEEE80211_VIF_TXQ_NUM];
 
 	netdev_features_t netdev_features;
 	u32 driver_flags;

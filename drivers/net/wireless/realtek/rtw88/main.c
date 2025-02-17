@@ -626,7 +626,7 @@ static void rtw_reset_vif_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 
 	rtw_bf_disassoc(rtwdev, vif, NULL);
 	rtw_vif_assoc_changed(rtwvif, NULL);
-	rtw_txq_cleanup(rtwdev, vif->txq);
+	rtw_txq_cleanup(rtwdev, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 	rtw_release_macid(rtwdev, rtwvif->mac_id);
 }

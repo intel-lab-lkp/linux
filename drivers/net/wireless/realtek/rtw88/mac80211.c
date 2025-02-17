@@ -162,7 +162,7 @@ static int rtw_ops_add_interface(struct ieee80211_hw *hw,
 	rtwvif->stats.rx_cnt = 0;
 	rtwvif->scan_req = NULL;
 	memset(&rtwvif->bfee, 0, sizeof(struct rtw_bfee));
-	rtw_txq_init(rtwdev, vif->txq);
+	rtw_txq_init(rtwdev, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 	INIT_LIST_HEAD(&rtwvif->rsvd_page_list);
 
 	mutex_lock(&rtwdev->mutex);
@@ -239,7 +239,7 @@ static void rtw_ops_remove_interface(struct ieee80211_hw *hw,
 
 	rtw_leave_lps_deep(rtwdev);
 
-	rtw_txq_cleanup(rtwdev, vif->txq);
+	rtw_txq_cleanup(rtwdev, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 	rtw_remove_rsvd_page(rtwdev, rtwvif);
 
 	eth_zero_addr(rtwvif->mac_addr);

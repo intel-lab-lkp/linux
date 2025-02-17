@@ -619,10 +619,10 @@ static ssize_t ieee80211_if_fmt_aqm(
 	struct txq_info *txqi;
 	int len;
 
-	if (!sdata->vif.txq)
+	if (!sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST])
 		return 0;
 
-	txqi = to_txq_info(sdata->vif.txq);
+	txqi = to_txq_info(sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 	spin_lock_bh(&local->fq.lock);
 	rcu_read_lock();
