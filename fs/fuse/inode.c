@@ -547,6 +547,37 @@ struct inode *fuse_ilookup(struct fuse_conn *fc, u64 nodeid,
 	return NULL;
 }
 
+static int fuse_reverse_inval_all(struct fuse_conn *fc)
+{
+	struct fuse_mount *fm;
+	struct inode *inode;
+
+	inode = fuse_ilookup(fc, FUSE_ROOT_ID, &fm);
+	if (!inode || !fm)
+		return -ENOENT;
+	iput(inode);
+
+	/* Remove all possible active references to cached inodes */
+	shrink_dcache_sb(fm->sb);
+
+	/* Remove all unreferenced inodes from cache */
+	invalidate_inodes(fm->sb);
+
+	return 0;
+}
+
+/*
+ * Notify to invalidate inodes cache.  It can be called with @nodeid set to
+ * either:
+ *
+ * - An inode number - Any pending writebacks within the rage [@offset @len]
+ *   will be triggered and the inode will be validated.  To invalidate the whole
+ *   cache @offset has to be set to '0' and @len needs to be <= '0'; if @offset
+ *   is negative, only the inode attributes are invalidated.
+ *
+ * - FUSE_INVAL_ALL_INODES - All the inodes in the superblock are invalidated
+ *   and the whole dcache is shrinked.
+ */
 int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 			     loff_t offset, loff_t len)
 {
@@ -554,6 +585,9 @@ int fuse_reverse_inval_inode(struct fuse_conn *fc, u64 nodeid,
 	struct inode *inode;
 	pgoff_t pg_start;
 	pgoff_t pg_end;
+
+	if (nodeid == FUSE_INVAL_ALL_INODES)
+		return fuse_reverse_inval_all(fc);
 
 	inode = fuse_ilookup(fc, nodeid, NULL);
 	if (!inode)
