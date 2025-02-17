@@ -668,7 +668,7 @@ static void ieee80211_scan_state_send_probe(struct ieee80211_local *local,
 	scan_req = rcu_dereference_protected(local->scan_req,
 					     lockdep_is_held(&local->hw.wiphy->mtx));
 
-	tx_flags = IEEE80211_TX_INTFL_OFFCHAN_TX_OK;
+	tx_flags = IEEE80211_TX_INTFL_NOQUEUE_TX;
 	if (scan_req->no_cck)
 		tx_flags |= IEEE80211_TX_CTL_NO_CCK_RATE;
 	if (scan_req->flags & NL80211_SCAN_FLAG_MIN_PREQ_CONTENT)

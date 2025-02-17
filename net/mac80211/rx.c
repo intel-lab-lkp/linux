@@ -3998,7 +3998,7 @@ ieee80211_rx_h_action_return(struct ieee80211_rx_data *rx)
 			struct ieee80211_tx_info *info = IEEE80211_SKB_CB(nskb);
 
 			info->flags = IEEE80211_TX_CTL_TX_OFFCHAN |
-				      IEEE80211_TX_INTFL_OFFCHAN_TX_OK |
+				      IEEE80211_TX_INTFL_NOQUEUE_TX |
 				      IEEE80211_TX_CTL_NO_CCK_RATE;
 			if (ieee80211_hw_check(&local->hw, QUEUE_CONTROL))
 				info->hw_queue =

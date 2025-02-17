@@ -230,7 +230,7 @@ ieee80211_tx_h_dynamic_ps(struct ieee80211_tx_data *tx)
 	if (tx->sdata->vif.type != NL80211_IFTYPE_STATION)
 		return TX_CONTINUE;
 
-	if (unlikely(info->flags & IEEE80211_TX_INTFL_OFFCHAN_TX_OK))
+	if (unlikely(info->flags & IEEE80211_TX_INTFL_NOQUEUE_TX))
 		return TX_CONTINUE;
 
 	ifmgd = &tx->sdata->u.mgd;
@@ -1301,7 +1301,7 @@ static struct txq_info *ieee80211_get_txq(struct ieee80211_local *local,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	struct ieee80211_txq *txq = NULL;
 
-	if (unlikely(info->flags & IEEE80211_TX_INTFL_OFFCHAN_TX_OK)) {
+	if (unlikely(info->flags & IEEE80211_TX_INTFL_NOQUEUE_TX)) {
 		if (sta)
 			txq = sta->sta.txq[IEEE80211_TID_NOQUEUE];
 		else
@@ -1819,7 +1819,7 @@ static void ieee80211_tx(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_tx_data tx;
 	ieee80211_tx_result res_prepare;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-	bool noqueue = info->flags & IEEE80211_TX_INTFL_OFFCHAN_TX_OK;
+	bool noqueue = info->flags & IEEE80211_TX_INTFL_NOQUEUE_TX;
 	struct ieee80211_tx_control control;
 	struct txq_info *txqi;
 

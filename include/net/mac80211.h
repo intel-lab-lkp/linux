@@ -898,9 +898,9 @@ struct ieee80211_bss_conf {
  * @IEEE80211_TX_CTL_RATE_CTRL_PROBE: internal to mac80211, can be
  *	set by rate control algorithms to indicate probe rate, will
  *	be cleared for fragmented frames (except on the last fragment)
- * @IEEE80211_TX_INTFL_OFFCHAN_TX_OK: Internal to mac80211. Used to indicate
- *	that a frame can be transmitted while the queues are stopped for
- *	off-channel operation.
+ * @IEEE80211_TX_INTFL_NOQUEUE_TX: Internal to mac80211. Indicates that a frame
+ *	can't be queued and must be transmitted immediately. Frames with this
+ *	flag ignore offchannel queue stops and bypass wake_tx_queue().
  * @IEEE80211_TX_CTL_HW_80211_ENCAP: This frame uses hardware encapsulation
  *	(header conversion)
  * @IEEE80211_TX_INTFL_RETRIED: completely internal to mac80211,
@@ -970,7 +970,7 @@ enum mac80211_tx_info_flags {
 	IEEE80211_TX_STAT_AMPDU			= BIT(10),
 	IEEE80211_TX_STAT_AMPDU_NO_BACK		= BIT(11),
 	IEEE80211_TX_CTL_RATE_CTRL_PROBE	= BIT(12),
-	IEEE80211_TX_INTFL_OFFCHAN_TX_OK	= BIT(13),
+	IEEE80211_TX_INTFL_NOQUEUE_TX		= BIT(13),
 	IEEE80211_TX_CTL_HW_80211_ENCAP		= BIT(14),
 	IEEE80211_TX_INTFL_RETRIED		= BIT(15),
 	IEEE80211_TX_INTFL_DONT_ENCRYPT		= BIT(16),
