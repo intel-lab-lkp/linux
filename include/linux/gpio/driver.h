@@ -528,6 +528,13 @@ struct gpio_chip {
 	 */
 	int (*of_xlate)(struct gpio_chip *gc,
 			const struct of_phandle_args *gpiospec, u32 *flags);
+
+	/**
+	 * @of_add_pin_range:
+	 *
+	 * Callback to add pin ranges from pinctrl
+	 */
+	int (*of_add_pin_range)(struct gpio_chip *chip);
 #endif /* CONFIG_OF_GPIO */
 };
 

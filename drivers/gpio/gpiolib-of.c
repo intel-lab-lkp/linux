@@ -1170,7 +1170,10 @@ int of_gpiochip_add(struct gpio_chip *chip)
 	if (chip->of_gpio_n_cells > MAX_PHANDLE_ARGS)
 		return -EINVAL;
 
-	ret = of_gpiochip_add_pin_range(chip);
+	if (!chip->of_add_pin_range)
+		chip->of_add_pin_range = of_gpiochip_add_pin_range;
+
+	ret = chip->of_add_pin_range(chip);
 	if (ret)
 		return ret;
 
