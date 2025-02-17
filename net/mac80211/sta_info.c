@@ -178,9 +178,6 @@ static void __cleanup_single_sta(struct sta_info *sta)
 	for (i = 0; i < IEEE80211_NUM_TIDS; i++) {
 		kfree(sta->ampdu_mlme.tid_start_tx[i]);
 		tid_tx = rcu_dereference_raw(sta->ampdu_mlme.tid_tx[i]);
-		if (!tid_tx)
-			continue;
-		ieee80211_purge_tx_queue(&local->hw, &tid_tx->pending);
 		kfree(tid_tx);
 	}
 }

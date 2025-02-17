@@ -753,11 +753,9 @@ bool ieee80211_mesh_xmit_fast(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_mesh_fast_tx *entry;
 	struct ieee80211s_hdr *meshhdr;
 	u8 sa[ETH_ALEN] __aligned(2);
-	struct tid_ampdu_tx *tid_tx;
 	struct sta_info *sta;
 	bool copy_sa = false;
 	u16 ethertype;
-	u8 tid;
 
 	if (ctrl_flags & IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP)
 		return false;
@@ -799,15 +797,6 @@ bool ieee80211_mesh_xmit_fast(struct ieee80211_sub_if_data *sdata,
 	if (!sta)
 		return false;
 
-	tid = skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK;
-	tid_tx = rcu_dereference(sta->ampdu_mlme.tid_tx[tid]);
-	if (tid_tx) {
-		if (!test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state))
-			return false;
-		if (tid_tx->timeout)
-			tid_tx->last_tx = jiffies;
-	}
-
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (!skb)
 		return true;
@@ -832,7 +821,7 @@ bool ieee80211_mesh_xmit_fast(struct ieee80211_sub_if_data *sdata,
 	    ether_addr_copy(meshhdr->eaddr2, sa);
 
 	skb_push(skb, 2 * ETH_ALEN);
-	__ieee80211_xmit_fast(sdata, sta, &entry->fast_tx, skb, tid_tx,
+	__ieee80211_xmit_fast(sdata, sta, &entry->fast_tx, skb,
 			      entry->mpath->dst, sdata->vif.addr);
 
 	return true;

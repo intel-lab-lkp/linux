@@ -1265,7 +1265,6 @@ enum queue_stop_reason {
 	IEEE80211_QUEUE_STOP_REASON_DRIVER,
 	IEEE80211_QUEUE_STOP_REASON_PS,
 	IEEE80211_QUEUE_STOP_REASON_CSA,
-	IEEE80211_QUEUE_STOP_REASON_AGGREGATION,
 	IEEE80211_QUEUE_STOP_REASON_SUSPEND,
 	IEEE80211_QUEUE_STOP_REASON_SKB_ADD,
 	IEEE80211_QUEUE_STOP_REASON_OFFCHANNEL,
@@ -1482,8 +1481,6 @@ struct ieee80211_local {
 	struct sk_buff_head pending[IEEE80211_MAX_QUEUES];
 	struct tasklet_struct tx_pending_tasklet;
 	struct tasklet_struct wake_txqs_tasklet;
-
-	atomic_t agg_queue_stop[IEEE80211_MAX_QUEUES];
 
 	/* number of interfaces with allmulti RX */
 	atomic_t iff_allmultis;
@@ -2127,7 +2124,7 @@ int ieee80211_probe_mesh_link(struct wiphy *wiphy, struct net_device *dev,
 void __ieee80211_xmit_fast(struct ieee80211_sub_if_data *sdata,
 			   struct sta_info *sta,
 			   struct ieee80211_fast_tx *fast_tx,
-			   struct sk_buff *skb, bool ampdu,
+			   struct sk_buff *skb,
 			   const u8 *da, const u8 *sa);
 void ieee80211_aggr_check(struct ieee80211_sub_if_data *sdata,
 			  struct sta_info *sta, struct sk_buff *skb);

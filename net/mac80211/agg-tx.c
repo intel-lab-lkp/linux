@@ -138,45 +138,6 @@ void ieee80211_assign_tid_tx(struct sta_info *sta, int tid,
 	rcu_assign_pointer(sta->ampdu_mlme.tid_tx[tid], tid_tx);
 }
 
-/*
- * When multiple aggregation sessions on multiple stations
- * are being created/destroyed simultaneously, we need to
- * refcount the global queue stop caused by that in order
- * to not get into a situation where one of the aggregation
- * setup or teardown re-enables queues before the other is
- * ready to handle that.
- *
- * These two functions take care of this issue by keeping
- * a global "agg_queue_stop" refcount.
- */
-static void __acquires(agg_queue)
-ieee80211_stop_queue_agg(struct ieee80211_sub_if_data *sdata, int tid)
-{
-	int queue = sdata->vif.hw_queue[ieee80211_ac_from_tid(tid)];
-
-	/* we do refcounting here, so don't use the queue reason refcounting */
-
-	if (atomic_inc_return(&sdata->local->agg_queue_stop[queue]) == 1)
-		ieee80211_stop_queue_by_reason(
-			&sdata->local->hw, queue,
-			IEEE80211_QUEUE_STOP_REASON_AGGREGATION,
-			false);
-	__acquire(agg_queue);
-}
-
-static void __releases(agg_queue)
-ieee80211_wake_queue_agg(struct ieee80211_sub_if_data *sdata, int tid)
-{
-	int queue = sdata->vif.hw_queue[ieee80211_ac_from_tid(tid)];
-
-	if (atomic_dec_return(&sdata->local->agg_queue_stop[queue]) == 0)
-		ieee80211_wake_queue_by_reason(
-			&sdata->local->hw, queue,
-			IEEE80211_QUEUE_STOP_REASON_AGGREGATION,
-			false);
-	__release(agg_queue);
-}
-
 static void
 ieee80211_agg_stop_txq(struct sta_info *sta, int tid)
 {
@@ -224,40 +185,6 @@ ieee80211_agg_start_txq(struct sta_info *sta, int tid, bool enable)
 	local_bh_enable();
 }
 
-/*
- * splice packets from the STA's pending to the local pending,
- * requires a call to ieee80211_agg_splice_finish later
- */
-static void __acquires(agg_queue)
-ieee80211_agg_splice_packets(struct ieee80211_sub_if_data *sdata,
-			     struct tid_ampdu_tx *tid_tx, u16 tid)
-{
-	struct ieee80211_local *local = sdata->local;
-	int queue = sdata->vif.hw_queue[ieee80211_ac_from_tid(tid)];
-	unsigned long flags;
-
-	ieee80211_stop_queue_agg(sdata, tid);
-
-	if (WARN(!tid_tx,
-		 "TID %d gone but expected when splicing aggregates from the pending queue\n",
-		 tid))
-		return;
-
-	if (!skb_queue_empty(&tid_tx->pending)) {
-		spin_lock_irqsave(&local->queue_stop_reason_lock, flags);
-		/* copy over remaining packets */
-		skb_queue_splice_tail_init(&tid_tx->pending,
-					   &local->pending[queue]);
-		spin_unlock_irqrestore(&local->queue_stop_reason_lock, flags);
-	}
-}
-
-static void __releases(agg_queue)
-ieee80211_agg_splice_finish(struct ieee80211_sub_if_data *sdata, u16 tid)
-{
-	ieee80211_wake_queue_agg(sdata, tid);
-}
-
 static void ieee80211_remove_tid_tx(struct sta_info *sta, int tid)
 {
 	struct tid_ampdu_tx *tid_tx;
@@ -267,23 +194,8 @@ static void ieee80211_remove_tid_tx(struct sta_info *sta, int tid)
 
 	tid_tx = rcu_dereference_protected_tid_tx(sta, tid);
 
-	/*
-	 * When we get here, the TX path will not be lockless any more wrt.
-	 * aggregation, since the OPERATIONAL bit has long been cleared.
-	 * Thus it will block on getting the lock, if it occurs. So if we
-	 * stop the queue now, we will not get any more packets, and any
-	 * that might be being processed will wait for us here, thereby
-	 * guaranteeing that no packets go to the tid_tx pending queue any
-	 * more.
-	 */
-
-	ieee80211_agg_splice_packets(sta->sdata, tid_tx, tid);
-
 	/* future packets must not find the tid_tx struct any more */
 	ieee80211_assign_tid_tx(sta, tid, NULL);
-
-	ieee80211_agg_splice_finish(sta->sdata, tid);
-
 	kfree_rcu(tid_tx, rcu_head);
 }
 
@@ -355,6 +267,10 @@ int __ieee80211_stop_tx_ba_session(struct sta_info *sta, u16 tid,
 
 	set_bit(HT_AGG_STATE_STOPPING, &tid_tx->state);
 
+	/*
+	 * After this packets are no longer handed through
+	 * to the driver
+	 */
 	ieee80211_agg_stop_txq(sta, tid);
 
 	spin_unlock_bh(&sta->lock);
@@ -364,13 +280,6 @@ int __ieee80211_stop_tx_ba_session(struct sta_info *sta, u16 tid,
 
 	del_timer_sync(&tid_tx->addba_resp_timer);
 	del_timer_sync(&tid_tx->session_timer);
-
-	/*
-	 * After this packets are no longer handed right through
-	 * to the driver but are put onto tid_tx->pending instead,
-	 * with locking to ensure proper access.
-	 */
-	clear_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state);
 
 	/*
 	 * There might be a few packets being processed right now (on
@@ -395,12 +304,7 @@ int __ieee80211_stop_tx_ba_session(struct sta_info *sta, u16 tid,
 	ret = drv_ampdu_action(local, sta->sdata, &params);
 
 	/* HW shall not deny going back to legacy */
-	if (WARN_ON(ret)) {
-		/*
-		 * We may have pending packets get stuck in this case...
-		 * Not bothering with a workaround for now.
-		 */
-	}
+	WARN_ON(ret);
 
 	/*
 	 * In the case of AGG_STOP_DESTROY_STA, the driver won't
@@ -537,9 +441,7 @@ void ieee80211_tx_ba_session_handle_start(struct sta_info *sta, int tid)
 		       "BA request denied - HW unavailable for %pM tid %d\n",
 		       sta->sta.addr, tid);
 		spin_lock_bh(&sta->lock);
-		ieee80211_agg_splice_packets(sdata, tid_tx, tid);
 		ieee80211_assign_tid_tx(sta, tid, NULL);
-		ieee80211_agg_splice_finish(sdata, tid);
 		spin_unlock_bh(&sta->lock);
 
 		ieee80211_agg_start_txq(sta, tid, false);
@@ -713,7 +615,6 @@ int ieee80211_start_tx_ba_session(struct ieee80211_sta *pubsta, u16 tid,
 		goto err_unlock_sta;
 	}
 
-	skb_queue_head_init(&tid_tx->pending);
 	__set_bit(HT_AGG_STATE_WANT_START, &tid_tx->state);
 
 	tid_tx->timeout = timeout;
@@ -768,24 +669,6 @@ static void ieee80211_agg_tx_operational(struct ieee80211_local *local,
 	       sta->sta.addr, tid);
 
 	drv_ampdu_action(local, sta->sdata, &params);
-
-	/*
-	 * synchronize with TX path, while splicing the TX path
-	 * should block so it won't put more packets onto pending.
-	 */
-	spin_lock_bh(&sta->lock);
-
-	ieee80211_agg_splice_packets(sta->sdata, tid_tx, tid);
-	/*
-	 * Now mark as operational. This will be visible
-	 * in the TX path, and lets it go lock-free in
-	 * the common case.
-	 */
-	set_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state);
-	ieee80211_agg_splice_finish(sta->sdata, tid);
-
-	spin_unlock_bh(&sta->lock);
-
 	ieee80211_agg_start_txq(sta, tid, true);
 }
 

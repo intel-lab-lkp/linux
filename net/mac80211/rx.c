@@ -2801,13 +2801,6 @@ ieee80211_rx_mesh_fast_forward(struct ieee80211_sub_if_data *sdata,
 
 	tid = skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK;
 	tid_tx = rcu_dereference(sta->ampdu_mlme.tid_tx[tid]);
-	if (tid_tx) {
-		if (!test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state))
-			return false;
-
-		if (tid_tx->timeout)
-			tid_tx->last_tx = jiffies;
-	}
 
 	ieee80211_aggr_check(sdata, sta, skb);
 
@@ -2821,7 +2814,7 @@ ieee80211_rx_mesh_fast_forward(struct ieee80211_sub_if_data *sdata,
 	skb->dev = sdata->dev;
 	memcpy(&eth, skb->data, ETH_HLEN - 2);
 	skb_pull(skb, 2);
-	__ieee80211_xmit_fast(sdata, sta, &entry->fast_tx, skb, tid_tx,
+	__ieee80211_xmit_fast(sdata, sta, &entry->fast_tx, skb,
 			      eth.h_dest, eth.h_source);
 	IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, fwded_unicast);
 	IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, fwded_frames);
