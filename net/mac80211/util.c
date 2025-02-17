@@ -353,8 +353,6 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 
 	if (WARN_ON(!sdata))
 		goto out;
-	if (!test_bit(SDATA_STATE_RUNNING, &sdata->state))
-		goto out;
 
 	sdata = ieee80211_get_tx_sdata(sdata);
 	vif = &sdata->vif;
@@ -428,6 +426,9 @@ _ieee80211_wake_txqs(struct ieee80211_local *local, unsigned long *flags)
 
 			for (ac = 0; ac < n_acs; ac++) {
 				int ac_queue = sdata->vif.hw_queue[ac];
+
+				if (unlikely(!ieee80211_sdata_running(sdata)))
+					continue;
 
 				if (ac_queue == i ||
 				    sdata->vif.cab_queue == i)
@@ -1189,8 +1190,13 @@ void ieee80211_send_deauth_disassoc(struct ieee80211_sub_if_data *sdata,
 
 		if (sdata->vif.type != NL80211_IFTYPE_STATION ||
 		    !(sdata->u.mgd.flags & IEEE80211_STA_MFP_ENABLED))
+			/*
+			 * Use offchannel txq and tx to avoid raceing
+			 * the frame with tearing down sta txq's
+			 */
 			IEEE80211_SKB_CB(skb)->flags |=
-				IEEE80211_TX_INTFL_DONT_ENCRYPT;
+				IEEE80211_TX_INTFL_DONT_ENCRYPT |
+				IEEE80211_TX_INTFL_OFFCHAN_TX_OK;
 
 		ieee80211_tx_skb(sdata, skb);
 	}
