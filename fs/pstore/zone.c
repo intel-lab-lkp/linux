@@ -35,6 +35,7 @@ struct psz_buffer {
 	uint32_t sig;
 	atomic_t datalen;
 	atomic_t start;
+	void *data_ptr;
 	uint8_t data[];
 };
 
@@ -822,6 +823,38 @@ static int notrace psz_kmsg_write(struct psz_context *cxt,
 	return 0;
 }
 
+static int notrace psz_register_dmr_record(struct pstore_zone *zone,
+			struct pstore_record *record)
+{
+	struct pstore_zone_info *info = pstore_zone_cxt.pstore_zone_info;
+	int ret;
+
+	if (!info->register_dmr)
+		return -ENOTSUPP;
+
+	zone->buffer->data_ptr = record->buf;
+	atomic_set(&zone->buffer->datalen, record->size);
+
+	ret = info->register_dmr(record->priv, record->id, record->buf,
+				 record->size);
+	if (!ret)
+		atomic_set(&zone->dirty, true);
+	return ret;
+}
+
+static int psz_unregister_dmr_zone(struct pstore_zone *zone)
+{
+	struct pstore_zone_info *info = pstore_zone_cxt.pstore_zone_info;
+	if (!info->unregister_dmr)
+		return -ENOTSUPP;
+
+	info->unregister_dmr(zone->buffer->data_ptr,
+			     atomic_read(&zone->buffer->datalen));
+
+	atomic_set(&zone->dirty, false);
+	return 0;
+}
+
 static int notrace psz_record_write(struct pstore_zone *zone,
 		struct pstore_record *record)
 {
@@ -903,6 +936,48 @@ static int notrace psz_pstore_write(struct pstore_record *record)
 	default:
 		return -EINVAL;
 	}
+}
+
+static int pstore_unregister_dmr(struct pstore_record *record)
+{
+	struct psz_context *cxt = record->psi->data;
+	int c = 0;
+
+	if (!cxt->dmszs)
+		return -ENODEV;
+
+	while (c < cxt->dmapped_max_cnt) {
+		if (!atomic_read(&cxt->dmszs[c]->dirty))
+			continue;
+
+		if (cxt->dmszs[c]->buffer->data_ptr == record->buf)
+			return psz_unregister_dmr_zone(cxt->dmszs[c]);
+		c++;
+	}
+
+	return -ENOENT;
+}
+
+static int pstore_register_dmr(struct pstore_record *record)
+{
+	struct psz_context *cxt = record->psi->data;
+	int c = 0;
+
+	if (!cxt->dmszs)
+		return -ENODEV;
+
+	while (c < cxt->dmapped_max_cnt) {
+		if (!atomic_read(&cxt->dmszs[c]->dirty))
+			break;
+		c++;
+	}
+
+	if (c == cxt->dmapped_max_cnt)
+		return -ENOSPC;
+
+	record->id = c;
+
+	return psz_register_dmr_record(cxt->dmszs[c], record);
 }
 
 static struct pstore_zone *psz_read_next_zone(struct psz_context *cxt)
@@ -1109,6 +1184,8 @@ static struct psz_context pstore_zone_cxt = {
 		.read = psz_pstore_read,
 		.write = psz_pstore_write,
 		.erase = psz_pstore_erase,
+		.register_dmr = pstore_register_dmr,
+		.unregister_dmr = pstore_unregister_dmr,
 	},
 };
 

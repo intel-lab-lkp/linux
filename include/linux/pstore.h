@@ -290,4 +290,20 @@ pstore_ftrace_write_timestamp(struct pstore_ftrace_record *rec, u64 val)
 }
 #endif
 
+#ifdef CONFIG_PSTORE
+int pstore_register_core_area(const char *handle, void *area, size_t size);
+int pstore_unregister_core_area(const char *handle, void *area, size_t size);
+#else
+static inline int pstore_register_core_area(const char *handle, void *area,
+					    size_t size)
+{
+	return 0;
+}
+static inline int pstore_unregister_core_area(const char *handle, void *area,
+				       size_t size)
+{
+	return 0;
+}
+#endif
+
 #endif /*_LINUX_PSTORE_H*/

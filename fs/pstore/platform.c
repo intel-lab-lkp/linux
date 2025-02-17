@@ -68,6 +68,7 @@ static DECLARE_WORK(pstore_work, pstore_dowork);
  * the filesystem mount/unmount routines.
  */
 static DEFINE_MUTEX(psinfo_lock);
+static DEFINE_MUTEX(ps_dmr_lock);
 struct pstore_info *psinfo;
 
 static char *backend;
@@ -98,6 +99,12 @@ module_param(kmsg_bytes, uint, 0444);
 MODULE_PARM_DESC(kmsg_bytes, "amount of kernel log to snapshot (in bytes)");
 
 static void *compress_workspace;
+
+static LIST_HEAD(rec_list);
+struct rec_list_t {
+	struct pstore_record rec;
+	struct list_head list;
+};
 
 /*
  * Compression is only used for dmesg output, which consists of low-entropy
@@ -270,6 +277,66 @@ void pstore_record_init(struct pstore_record *record,
 	/* Report zeroed timestamp if called before timekeeping has resumed. */
 	record->time = ns_to_timespec64(ktime_get_real_fast_ns());
 }
+
+int pstore_register_core_area(const char *handle, void *area, size_t size)
+{
+	struct rec_list_t *rec_element = kzalloc(sizeof (*rec_element), GFP_KERNEL);
+	struct pstore_record *record = &rec_element->rec;
+	int ret;
+
+	if (!psinfo || !psinfo->register_dmr) {
+		pr_err("No pstore available ! Bailing out.\n");
+		return -EAGAIN;
+	}
+
+	pstore_record_init(record, psinfo);
+	record->type = PSTORE_TYPE_DMAPPED;
+	record->buf = area;
+	record->size = size;
+
+	if (handle) {
+		record->priv = kmalloc(8, GFP_KERNEL);
+		strncpy(record->priv, handle, 8);
+	}
+
+	mutex_lock(&ps_dmr_lock);
+
+	ret = psinfo->register_dmr(record);
+	if (!ret)
+		list_add(&rec_element->list, &rec_list);
+
+	mutex_unlock(&ps_dmr_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pstore_register_core_area);
+
+int pstore_unregister_core_area(const char *handle, void *area, size_t size)
+{
+	struct rec_list_t *rec_element, *tmp;
+	int ret;
+
+	if (!psinfo || !psinfo->unregister_dmr)
+		return -EAGAIN;
+
+	mutex_lock(&ps_dmr_lock);
+	list_for_each_entry_safe(rec_element, tmp, &rec_list, list) {
+		struct pstore_record *record;
+
+		record = &rec_element->rec;
+
+		if (record->buf == area) {
+			ret = psinfo->unregister_dmr(record);
+			list_del(&rec_element->list);
+			mutex_unlock(&ps_dmr_lock);
+			return 0;
+		}
+	}
+
+	mutex_unlock(&ps_dmr_lock);
+	return 0;
+
+}
+EXPORT_SYMBOL_GPL(pstore_unregister_core_area);
 
 /*
  * callback from kmsg_dump. Save as much as we can (up to kmsg_bytes) from the
