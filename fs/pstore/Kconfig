@@ -81,6 +81,19 @@ config PSTORE_RAM
 
 	  For more information, see Documentation/admin-guide/ramoops.rst.
 
+config PSTORE_SMEM
+	tristate "Log panic/oops to a shared memory buffer"
+	depends on PSTORE
+	select PSTORE_ZONE
+	help
+	  This enables panic and oops messages to be logged to memory
+	  that is shared between different hardware blocks in the system.
+	  This shared memory can be a static ram, a part of dynamic RAM,
+	  a dedicated cache or memory area specific for crash dumps,
+	  or even a memory on an attached device.
+
+	  if unsure, say N.
+
 config PSTORE_ZONE
 	tristate
 	depends on PSTORE

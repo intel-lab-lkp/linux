@@ -18,3 +18,6 @@ obj-$(CONFIG_PSTORE_ZONE)	+= pstore_zone.o
 
 pstore_blk-objs += blk.o
 obj-$(CONFIG_PSTORE_BLK)	+= pstore_blk.o
+
+pstore_smem-objs += smem.o
+obj-$(CONFIG_PSTORE_SMEM)	+= pstore_smem.o
