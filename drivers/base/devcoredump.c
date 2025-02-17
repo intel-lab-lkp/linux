@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/devcoredump.h>
 #include <linux/list.h>
+#include <linux/pstore.h>
 #include <linux/slab.h>
 #include <linux/fs.h>
 #include <linux/workqueue.h>
@@ -75,6 +76,18 @@ static struct devcd_entry *dev_to_devcd(struct device *dev)
 {
 	return container_of(dev, struct devcd_entry, devcd_dev);
 }
+
+int devcd_register_core_area(struct device *dev, void *area, size_t size)
+{
+	return pstore_register_core_area(dev->driver->name, area, size);
+}
+EXPORT_SYMBOL_GPL(devcd_register_core_area);
+
+int devcd_unregister_core_area(struct device *dev, void *area, size_t size)
+{
+	return pstore_unregister_core_area(dev->driver->name, area, size);
+}
+EXPORT_SYMBOL_GPL(devcd_unregister_core_area);
 
 static void devcd_dev_release(struct device *dev)
 {

@@ -69,6 +69,9 @@ void dev_coredumpsg(struct device *dev, struct scatterlist *table,
 		    size_t datalen, gfp_t gfp);
 
 void dev_coredump_put(struct device *dev);
+
+int devcd_register_core_area(struct device *, void *, size_t);
+int devcd_unregister_core_area(struct device *, void *, size_t);
 #else
 static inline void dev_coredumpv(struct device *dev, void *data,
 				 size_t datalen, gfp_t gfp)
