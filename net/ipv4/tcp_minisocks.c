@@ -878,6 +878,10 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	sock_rps_save_rxhash(child, skb);
 	tcp_synack_rtt_meas(child, req);
 	*req_stolen = !own_req;
+	if (own_req && tcp_sk(child)->rx_opt.tstamp_ok &&
+	    unlikely(tcp_sk(child)->rx_opt.ts_recent != tmp_opt.rcv_tsval))
+		tcp_sk(child)->rx_opt.ts_recent = tmp_opt.rcv_tsval;
+
 	return inet_csk_complete_hashdance(sk, child, req, own_req);
 
 listen_overflow:
