@@ -40,6 +40,17 @@ static const struct samsung_pin_bank_type exynos5433_bank_type_alive = {
 	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, },
 };
 
+/* Exynos7870 has the 3bit widths for PINCFG_TYPE_DRV bitfields. */
+static const struct samsung_pin_bank_type exynos7870_bank_type_off = {
+	.fld_width = { 4, 1, 2, 3, 2, 2, },
+	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, 0x10, 0x14, },
+};
+
+static const struct samsung_pin_bank_type exynos7870_bank_type_alive = {
+	.fld_width = { 4, 1, 2, 3, },
+	.reg_offset = { 0x00, 0x04, 0x08, 0x0c, },
+};
+
 /*
  * Bank type for non-alive type. Bit fields:
  * CON: 4, DAT: 1, PUD: 4, DRV: 4, CONPDN: 2, PUDPDN: 4
@@ -448,6 +459,136 @@ static const struct samsung_pin_ctrl exynos7_pin_ctrl[] __initconst = {
 const struct samsung_pinctrl_of_match_data exynos7_of_data __initconst = {
 	.ctrl		= exynos7_pin_ctrl,
 	.num_ctrl	= ARRAY_SIZE(exynos7_pin_ctrl),
+};
+
+/* pin banks of exynos7870 pin-controller 0 (ALIVE) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks0[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTN(6, 0x000, "etc0"),
+	EXYNOS7870_PIN_BANK_EINTN(3, 0x020, "etc1"),
+	EXYNOS7870_PIN_BANK_EINTW(8, 0x040, "gpa0", 0x00),
+	EXYNOS7870_PIN_BANK_EINTW(8, 0x060, "gpa1", 0x04),
+	EXYNOS7870_PIN_BANK_EINTW(8, 0x080, "gpa2", 0x08),
+	EXYNOS7870_PIN_BANK_EINTN(2, 0x0c0, "gpq0"),
+};
+
+/* pin banks of exynos7870 pin-controller 1 (DISPAUD) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks1[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x000, "gpz0", 0x00),
+	EXYNOS7870_PIN_BANK_EINTG(6, 0x020, "gpz1", 0x04),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x040, "gpz2", 0x08),
+};
+
+/* pin banks of exynos7870 pin-controller 2 (ESE) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks2[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(5, 0x000, "gpc7", 0x00),
+};
+
+/* pin banks of exynos7870 pin-controller 3 (FSYS) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks3[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(3, 0x000, "gpr0", 0x00),
+	EXYNOS7870_PIN_BANK_EINTG(8, 0x020, "gpr1", 0x04),
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x040, "gpr2", 0x08),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x060, "gpr3", 0x0c),
+	EXYNOS7870_PIN_BANK_EINTG(6, 0x080, "gpr4", 0x10),
+};
+
+/* pin banks of exynos7870 pin-controller 4 (MIF) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks4[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x000, "gpm0", 0x00),
+};
+
+/* pin banks of exynos7870 pin-controller 5 (NFC) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks5[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x000, "gpc2", 0x00),
+};
+
+/* pin banks of exynos7870 pin-controller 6 (TOP) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks6[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x000, "gpb0", 0x00),
+	EXYNOS7870_PIN_BANK_EINTG(3, 0x020, "gpc0", 0x04),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x040, "gpc1", 0x08),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x060, "gpc4", 0x0c),
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x080, "gpc5", 0x10),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x0a0, "gpc6", 0x14),
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x0c0, "gpc8", 0x18),
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x0e0, "gpc9", 0x1c),
+	EXYNOS7870_PIN_BANK_EINTG(7, 0x100, "gpd1", 0x20),
+	EXYNOS7870_PIN_BANK_EINTG(6, 0x120, "gpd2", 0x24),
+	EXYNOS7870_PIN_BANK_EINTG(8, 0x140, "gpd3", 0x28),
+	EXYNOS7870_PIN_BANK_EINTG(7, 0x160, "gpd4", 0x2c),
+	EXYNOS7870_PIN_BANK_EINTG(3, 0x1a0, "gpe0", 0x34),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x1c0, "gpf0", 0x38),
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x1e0, "gpf1", 0x3c),
+	EXYNOS7870_PIN_BANK_EINTG(2, 0x200, "gpf2", 0x40),
+	EXYNOS7870_PIN_BANK_EINTG(4, 0x220, "gpf3", 0x44),
+	EXYNOS7870_PIN_BANK_EINTG(5, 0x240, "gpf4", 0x48),
+};
+
+/* pin banks of exynos7870 pin-controller 7 (TOUCH) */
+static const struct samsung_pin_bank_data exynos7870_pin_banks7[] __initconst = {
+	EXYNOS7870_PIN_BANK_EINTG(3, 0x000, "gpc3", 0x00),
+};
+
+static const struct samsung_pin_ctrl exynos7870_pin_ctrl[] __initconst = {
+	{
+		/* pin-controller instance 0 Alive data */
+		.pin_banks	= exynos7870_pin_banks0,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks0),
+		.eint_wkup_init = exynos_eint_wkup_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	}, {
+		/* pin-controller instance 1 DISPAUD data */
+		.pin_banks	= exynos7870_pin_banks1,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks1),
+	}, {
+		/* pin-controller instance 2 ESE data */
+		.pin_banks	= exynos7870_pin_banks2,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks2),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	}, {
+		/* pin-controller instance 3 FSYS data */
+		.pin_banks	= exynos7870_pin_banks3,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks3),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	}, {
+		/* pin-controller instance 4 MIF data */
+		.pin_banks	= exynos7870_pin_banks4,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks4),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	}, {
+		/* pin-controller instance 5 NFC data */
+		.pin_banks	= exynos7870_pin_banks5,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks5),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	}, {
+		/* pin-controller instance 6 TOP data */
+		.pin_banks	= exynos7870_pin_banks6,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks6),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	}, {
+		/* pin-controller instance 7 TOUCH data */
+		.pin_banks	= exynos7870_pin_banks7,
+		.nr_banks	= ARRAY_SIZE(exynos7870_pin_banks7),
+		.eint_gpio_init = exynos_eint_gpio_init,
+		.suspend	= exynos_pinctrl_suspend,
+		.resume		= exynos_pinctrl_resume,
+	},
+};
+
+const struct samsung_pinctrl_of_match_data exynos7870_of_data __initconst = {
+	.ctrl		= exynos7870_pin_ctrl,
+	.num_ctrl	= ARRAY_SIZE(exynos7870_pin_ctrl),
 };
 
 /* pin banks of exynos7885 pin-controller 0 (ALIVE) */
