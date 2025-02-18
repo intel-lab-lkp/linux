@@ -1373,6 +1373,10 @@ int io_send_zc_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 #endif
 	if (unlikely(!io_msg_alloc_async(req)))
 		return -ENOMEM;
+	if (zc->flags & IORING_RECVSEND_FIXED_BUF) {
+		req->buf_index = zc->buf_index;
+		req->flags |= REQ_F_FIXED_BUFFER;
+	}
 	if (req->opcode != IORING_OP_SENDMSG_ZC)
 		return io_send_setup(req, sqe);
 	return io_sendmsg_setup(req, sqe);
@@ -1434,25 +1438,10 @@ static int io_send_zc_import(struct io_kiocb *req, unsigned int issue_flags)
 	struct io_async_msghdr *kmsg = req->async_data;
 	int ret;
 
-	if (sr->flags & IORING_RECVSEND_FIXED_BUF) {
-		struct io_ring_ctx *ctx = req->ctx;
-		struct io_rsrc_node *node;
-
-		ret = -EFAULT;
-		io_ring_submit_lock(ctx, issue_flags);
-		node = io_rsrc_node_lookup(&ctx->buf_table, sr->buf_index);
-		if (node) {
-			io_req_assign_buf_node(sr->notif, node);
-			ret = 0;
-		}
-		io_ring_submit_unlock(ctx, issue_flags);
-
-		if (unlikely(ret))
-			return ret;
-
+	if (req->flags & REQ_F_FIXED_BUFFER) {
 		ret = io_import_fixed(ITER_SOURCE, &kmsg->msg.msg_iter,
-					node->buf, (u64)(uintptr_t)sr->buf,
-					sr->len);
+					req->buf_node->buf,
+					(u64)(uintptr_t)sr->buf, sr->len);
 		if (unlikely(ret))
 			return ret;
 		kmsg->msg.sg_from_iter = io_sg_from_iter;

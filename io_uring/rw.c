@@ -353,25 +353,14 @@ int io_prep_writev(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 static int io_prep_rw_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe,
 			    int ddir)
 {
-	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
-	struct io_ring_ctx *ctx = req->ctx;
-	struct io_rsrc_node *node;
-	struct io_async_rw *io;
 	int ret;
 
 	ret = io_prep_rw(req, sqe, ddir, false);
 	if (unlikely(ret))
 		return ret;
 
-	node = io_rsrc_node_lookup(&ctx->buf_table, req->buf_index);
-	if (!node)
-		return -EFAULT;
-	io_req_assign_buf_node(req, node);
-
-	io = req->async_data;
-	ret = io_import_fixed(ddir, &io->iter, node->buf, rw->addr, rw->len);
-	iov_iter_save_state(&io->iter, &io->iter_state);
-	return ret;
+	req->flags |= REQ_F_FIXED_BUFFER;
+	return 0;
 }
 
 int io_prep_read_fixed(struct io_kiocb *req, const struct io_uring_sqe *sqe)
@@ -954,9 +943,35 @@ done:
 	return ret;
 }
 
+static int io_import_fixed_buffer(struct io_kiocb *req, int ddir)
+{
+	struct io_rw *rw = io_kiocb_to_cmd(req, struct io_rw);
+	struct io_async_rw *io;
+	int ret;
+
+	if (!(req->flags & REQ_F_FIXED_BUFFER))
+		return 0;
+
+	io = req->async_data;
+	if (io->bytes_done)
+		return 0;
+
+	ret = io_import_fixed(ddir, &io->iter, req->buf_node->buf, rw->addr,
+			      rw->len);
+	if (ret)
+		return ret;
+
+	iov_iter_save_state(&io->iter, &io->iter_state);
+	return 0;
+}
+
 int io_read(struct io_kiocb *req, unsigned int issue_flags)
 {
 	int ret;
+
+	ret = io_import_fixed_buffer(req, READ);
+	if (unlikely(ret))
+		return ret;
 
 	ret = __io_read(req, issue_flags);
 	if (ret >= 0)
@@ -1061,6 +1076,10 @@ int io_write(struct io_kiocb *req, unsigned int issue_flags)
 	struct kiocb *kiocb = &rw->kiocb;
 	ssize_t ret, ret2;
 	loff_t *ppos;
+
+	ret = io_import_fixed_buffer(req, WRITE);
+	if (unlikely(ret))
+		return ret;
 
 	ret = io_rw_init_file(req, FMODE_WRITE, WRITE);
 	if (unlikely(ret))

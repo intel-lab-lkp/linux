@@ -16,7 +16,6 @@ struct io_nop {
 	struct file     *file;
 	int             result;
 	int		fd;
-	int		buffer;
 	unsigned int	flags;
 };
 
@@ -39,10 +38,10 @@ int io_nop_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		nop->fd = READ_ONCE(sqe->fd);
 	else
 		nop->fd = -1;
-	if (nop->flags & IORING_NOP_FIXED_BUFFER)
-		nop->buffer = READ_ONCE(sqe->buf_index);
-	else
-		nop->buffer = -1;
+	if (nop->flags & IORING_NOP_FIXED_BUFFER) {
+		req->buf_index = READ_ONCE(sqe->buf_index);
+		req->flags |= REQ_F_FIXED_BUFFER;
+	}
 	return 0;
 }
 
@@ -62,19 +61,6 @@ int io_nop(struct io_kiocb *req, unsigned int issue_flags)
 			ret = -EBADF;
 			goto done;
 		}
-	}
-	if (nop->flags & IORING_NOP_FIXED_BUFFER) {
-		struct io_ring_ctx *ctx = req->ctx;
-		struct io_rsrc_node *node;
-
-		ret = -EFAULT;
-		io_ring_submit_lock(ctx, issue_flags);
-		node = io_rsrc_node_lookup(&ctx->buf_table, nop->buffer);
-		if (node) {
-			io_req_assign_buf_node(req, node);
-			ret = 0;
-		}
-		io_ring_submit_unlock(ctx, issue_flags);
 	}
 done:
 	if (ret < 0)

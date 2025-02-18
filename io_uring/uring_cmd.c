@@ -200,19 +200,8 @@ int io_uring_cmd_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 		return -EINVAL;
 
 	if (ioucmd->flags & IORING_URING_CMD_FIXED) {
-		struct io_ring_ctx *ctx = req->ctx;
-		struct io_rsrc_node *node;
-		u16 index = READ_ONCE(sqe->buf_index);
-
-		node = io_rsrc_node_lookup(&ctx->buf_table, index);
-		if (unlikely(!node))
-			return -EFAULT;
-		/*
-		 * Pi node upfront, prior to io_uring_cmd_import_fixed()
-		 * being called. This prevents destruction of the mapped buffer
-		 * we'll need at actual import time.
-		 */
-		io_req_assign_buf_node(req, node);
+		req->buf_index = READ_ONCE(sqe->buf_index);
+		req->flags |= REQ_F_FIXED_BUFFER;
 	}
 	ioucmd->cmd_op = READ_ONCE(sqe->cmd_op);
 
@@ -262,7 +251,6 @@ int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
 	struct io_rsrc_node *node = req->buf_node;
 
-	/* Must have had rsrc_node assigned at prep time */
 	if (node)
 		return io_import_fixed(rw, iter, node->buf, ubuf, len);
 
