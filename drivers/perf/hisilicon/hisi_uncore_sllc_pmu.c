@@ -58,7 +58,6 @@
 #define SLLC_V3_SRCID_CMD_MSK		GENMASK(9, 1)
 #define SLLC_V3_SRCID_MSK_MSK		GENMASK(18, 10)
 
-#define SLLC_NR_EVENTS			0x80
 #define SLLC_EVENT_CNTn(cnt0, n)	((cnt0) + (n) * 8)
 #define SLLC_FIRST_BIT(_mask)		(find_first_bit((const unsigned long *)&(_mask), 32))
 #define SLLC_FIELD_PREP(_mask, _val)	(_mask & (_val << SLLC_FIRST_BIT(_mask)))
@@ -476,7 +475,7 @@ static int hisi_sllc_pmu_dev_probe(struct platform_device *pdev,
 
 	sllc_pmu->pmu_events.attr_groups = hisi_sllc_pmu_v2_attr_groups;
 	sllc_pmu->ops = &hisi_uncore_sllc_ops;
-	sllc_pmu->check_event = SLLC_NR_EVENTS;
+	sllc_pmu->check_event = SLLC_EVTYPE_MASK;
 	sllc_pmu->counter_bits = 64;
 	sllc_pmu->num_counters = 8;
 	sllc_pmu->dev = &pdev->dev;
