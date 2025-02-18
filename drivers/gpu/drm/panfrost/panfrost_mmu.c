@@ -441,14 +441,11 @@ out:
 static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 				       u64 addr)
 {
-	int ret, i;
 	struct panfrost_gem_mapping *bomapping;
 	struct panfrost_gem_object *bo;
-	struct address_space *mapping;
-	struct drm_gem_object *obj;
 	pgoff_t page_offset;
 	struct sg_table *sgt;
-	struct page **pages;
+	int ret = 0;
 
 	bomapping = addr_to_mapping(pfdev, as, addr);
 	if (!bomapping)
@@ -459,94 +456,44 @@ static int panfrost_mmu_map_fault_addr(struct panfrost_device *pfdev, int as,
 		dev_WARN(pfdev->dev, "matching BO is not heap type (GPU VA = %llx)",
 			 bomapping->mmnode.start << PAGE_SHIFT);
 		ret = -EINVAL;
-		goto err_bo;
+		goto fault_out;
 	}
 	WARN_ON(bomapping->mmu->as != as);
 
 	/* Assume 2MB alignment and size multiple */
 	addr &= ~((u64)SZ_2M - 1);
-	page_offset = addr >> PAGE_SHIFT;
-	page_offset -= bomapping->mmnode.start;
+	page_offset = (addr >> PAGE_SHIFT) - bomapping->mmnode.start;
 
-	obj = &bo->base.base;
-
-	dma_resv_lock(obj->resv, NULL);
-
-	if (!bo->base.pages) {
+	if (!bo->sgts) {
 		bo->sgts = kvmalloc_array(bo->base.base.size / SZ_2M,
-				     sizeof(struct sg_table), GFP_KERNEL | __GFP_ZERO);
+					  sizeof(struct sg_table *), GFP_KERNEL | __GFP_ZERO);
 		if (!bo->sgts) {
 			ret = -ENOMEM;
-			goto err_unlock;
-		}
-
-		pages = kvmalloc_array(bo->base.base.size >> PAGE_SHIFT,
-				       sizeof(struct page *), GFP_KERNEL | __GFP_ZERO);
-		if (!pages) {
-			kvfree(bo->sgts);
-			bo->sgts = NULL;
-			ret = -ENOMEM;
-			goto err_unlock;
-		}
-		bo->base.pages = pages;
-		bo->base.pages_use_count = 1;
-	} else {
-		pages = bo->base.pages;
-		if (pages[page_offset]) {
-			/* Pages are already mapped, bail out. */
-			goto out;
+			goto fault_out;
 		}
 	}
 
-	mapping = bo->base.base.filp->f_mapping;
-	mapping_set_unevictable(mapping);
+	sgt = drm_gem_shmem_get_sparse_pages_sgt(&bo->base, NUM_FAULT_PAGES, page_offset);
+	if (IS_ERR(sgt)) {
+		if (WARN_ON(PTR_ERR(sgt) != -EEXIST))
+			ret = PTR_ERR(sgt);
+		else
+			ret = 0;
 
-	for (i = page_offset; i < page_offset + NUM_FAULT_PAGES; i++) {
-		/* Can happen if the last fault only partially filled this
-		 * section of the pages array before failing. In that case
-		 * we skip already filled pages.
-		 */
-		if (pages[i])
-			continue;
-
-		pages[i] = shmem_read_mapping_page(mapping, i);
-		if (IS_ERR(pages[i])) {
-			ret = PTR_ERR(pages[i]);
-			pages[i] = NULL;
-			goto err_unlock;
-		}
+		goto fault_out;
 	}
-
-	sgt = &bo->sgts[page_offset / (SZ_2M / PAGE_SIZE)];
-	ret = sg_alloc_table_from_pages(sgt, pages + page_offset,
-					NUM_FAULT_PAGES, 0, SZ_2M, GFP_KERNEL);
-	if (ret)
-		goto err_unlock;
-
-	ret = dma_map_sgtable(pfdev->dev, sgt, DMA_BIDIRECTIONAL, 0);
-	if (ret)
-		goto err_map;
 
 	mmu_map_sg(pfdev, bomapping->mmu, addr,
 		   IOMMU_WRITE | IOMMU_READ | IOMMU_NOEXEC, sgt);
+
+	bo->sgts[page_offset / (SZ_2M / PAGE_SIZE)] = sgt;
 
 	bomapping->active = true;
 	bo->heap_rss_size += SZ_2M;
 
 	dev_dbg(pfdev->dev, "mapped page fault @ AS%d %llx", as, addr);
 
-out:
-	dma_resv_unlock(obj->resv);
-
-	panfrost_gem_mapping_put(bomapping);
-
-	return 0;
-
-err_map:
-	sg_free_table(sgt);
-err_unlock:
-	dma_resv_unlock(obj->resv);
-err_bo:
+fault_out:
 	panfrost_gem_mapping_put(bomapping);
 	return ret;
 }

@@ -40,10 +40,10 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 		int n_sgt = bo->base.base.size / SZ_2M;
 
 		for (i = 0; i < n_sgt; i++) {
-			if (bo->sgts[i].sgl) {
-				dma_unmap_sgtable(pfdev->dev, &bo->sgts[i],
+			if (bo->sgts[i]) {
+				dma_unmap_sgtable(pfdev->dev, bo->sgts[i],
 						  DMA_BIDIRECTIONAL, 0);
-				sg_free_table(&bo->sgts[i]);
+				sg_free_table(bo->sgts[i]);
 			}
 		}
 		kvfree(bo->sgts);
@@ -274,7 +274,11 @@ panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags)
 	if (flags & PANFROST_BO_HEAP)
 		size = roundup(size, SZ_2M);
 
-	shmem = drm_gem_shmem_create(dev, size);
+	if (flags & PANFROST_BO_HEAP)
+		shmem = drm_gem_shmem_create_sparse(dev, size);
+	else
+		shmem = drm_gem_shmem_create(dev, size);
+
 	if (IS_ERR(shmem))
 		return ERR_CAST(shmem);
 

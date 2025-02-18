@@ -11,7 +11,7 @@ struct panfrost_mmu;
 
 struct panfrost_gem_object {
 	struct drm_gem_shmem_object base;
-	struct sg_table *sgts;
+	struct sg_table **sgts;
 
 	/*
 	 * Use a list for now. If searching a mapping ever becomes the
