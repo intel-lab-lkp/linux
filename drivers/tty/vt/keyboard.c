@@ -885,7 +885,7 @@ static void k_shift(struct vc_data *vc, unsigned char value, char up_flag)
 		if (kbd->kbdmode == VC_UNICODE)
 			to_utf8(vc, npadch_value);
 		else
-			put_queue(vc, npadch_value & 0xff);
+			put_queue(vc, KVAL(npadch_value));
 		npadch_active = false;
 	}
 }
@@ -1519,7 +1519,7 @@ static void kbd_keycode(unsigned int keycode, int down, bool hw_raw)
 	if ((raw_mode || kbd->kbdmode == VC_OFF) && type != KT_SPEC && type != KT_SHIFT)
 		return;
 
-	(*k_handler[type])(vc, keysym & 0xff, !down);
+	(*k_handler[type])(vc, KVAL(keysym), !down);
 
 	param.ledstate = kbd->ledflagstate;
 	atomic_notifier_call_chain(&keyboard_notifier_list, KBD_POST_KEYSYM, &param);
