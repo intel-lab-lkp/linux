@@ -32,15 +32,6 @@
 #include "md.h"
 #include "md-bitmap.h"
 
-#define BITMAP_MAJOR_LO 3
-/* version 4 insists the bitmap is in little-endian order
- * with version 3, it is host-endian which is non-portable
- * Version 5 is currently set only for clustered devices
- */
-#define BITMAP_MAJOR_HI 4
-#define BITMAP_MAJOR_CLUSTERED 5
-#define	BITMAP_MAJOR_HOSTENDIAN 3
-
 /*
  * in-memory bitmap:
  *
@@ -673,7 +664,7 @@ static void md_bitmap_wait_writes(struct bitmap *bitmap)
 /* update the event counter and sync the superblock to disk */
 static void bitmap_update_sb(void *data)
 {
-	bitmap_super_t *sb;
+	struct bitmap_super *sb;
 	struct bitmap *bitmap = data;
 
 	if (!bitmap || !bitmap->mddev) /* no bitmap for this array */
@@ -713,7 +704,7 @@ static void bitmap_update_sb(void *data)
 
 static void bitmap_print_sb(struct bitmap *bitmap)
 {
-	bitmap_super_t *sb;
+	struct bitmap_super *sb;
 
 	if (!bitmap || !bitmap->storage.sb_page)
 		return;
@@ -752,7 +743,7 @@ static void bitmap_print_sb(struct bitmap *bitmap)
  */
 static int md_bitmap_new_disk_sb(struct bitmap *bitmap)
 {
-	bitmap_super_t *sb;
+	struct bitmap_super *sb;
 	unsigned long chunksize, daemon_sleep, write_behind;
 
 	bitmap->storage.sb_page = alloc_page(GFP_KERNEL | __GFP_ZERO);
@@ -812,7 +803,7 @@ static int md_bitmap_new_disk_sb(struct bitmap *bitmap)
 static int md_bitmap_read_sb(struct bitmap *bitmap)
 {
 	char *reason = NULL;
-	bitmap_super_t *sb;
+	struct bitmap_super *sb;
 	unsigned long chunksize, daemon_sleep, write_behind;
 	unsigned long long events;
 	int nodes = 0;
@@ -843,7 +834,7 @@ re_read:
 		bm_blocks = DIV_ROUND_UP_SECTOR_T(bm_blocks,
 			   (bitmap->mddev->bitmap_info.chunksize >> 9));
 		/* bits to bytes */
-		bm_blocks = ((bm_blocks+7) >> 3) + sizeof(bitmap_super_t);
+		bm_blocks = ((bm_blocks+7) >> 3) + sizeof(struct bitmap_super);
 		/* to 4k blocks */
 		bm_blocks = DIV_ROUND_UP_SECTOR_T(bm_blocks, 4096);
 		offset = bitmap->cluster_slot * (bm_blocks << 3);
@@ -859,7 +850,7 @@ re_read:
 				bitmap, bytes, sb_page);
 	} else {
 		err = read_sb_page(bitmap->mddev, offset, sb_page, 0,
-				   sizeof(bitmap_super_t));
+				   sizeof(struct bitmap_super));
 	}
 	if (err)
 		return err;
@@ -980,7 +971,7 @@ static inline unsigned long file_page_index(struct bitmap_storage *store,
 					    unsigned long chunk)
 {
 	if (store->sb_page)
-		chunk += sizeof(bitmap_super_t) << 3;
+		chunk += sizeof(struct bitmap_super) << 3;
 	return chunk >> PAGE_BIT_SHIFT;
 }
 
@@ -989,7 +980,7 @@ static inline unsigned long file_page_offset(struct bitmap_storage *store,
 					     unsigned long chunk)
 {
 	if (store->sb_page)
-		chunk += sizeof(bitmap_super_t) << 3;
+		chunk += sizeof(struct bitmap_super) << 3;
 	return chunk & (PAGE_BITS - 1);
 }
 
@@ -1015,7 +1006,7 @@ static int md_bitmap_storage_alloc(struct bitmap_storage *store,
 
 	bytes = DIV_ROUND_UP(chunks, 8);
 	if (with_super)
-		bytes += sizeof(bitmap_super_t);
+		bytes += sizeof(struct bitmap_super);
 
 	num_pages = DIV_ROUND_UP(bytes, PAGE_SIZE);
 	offset = slot_number * num_pages;
@@ -1382,7 +1373,7 @@ static int md_bitmap_init_from_disk(struct bitmap *bitmap, sector_t start)
 			void *paddr;
 
 			if (i == 0 && !mddev->bitmap_info.external)
-				offset = sizeof(bitmap_super_t);
+				offset = sizeof(struct bitmap_super);
 
 			/*
 			 * If the bitmap is out of date, dirty the whole page
@@ -1543,7 +1534,7 @@ static void bitmap_daemon_work(struct mddev *mddev)
 	    mddev->bitmap_info.external == 0) {
 		/* Arrange for superblock update as well as
 		 * other changes */
-		bitmap_super_t *sb;
+		struct bitmap_super *sb;
 		bitmap->need_sync = 0;
 		if (bitmap->storage.filemap) {
 			sb = kmap_local_page(bitmap->storage.sb_page);
@@ -2123,7 +2114,7 @@ static struct bitmap *__bitmap_create(struct mddev *mddev, int slot)
 	int err;
 	struct kernfs_node *bm = NULL;
 
-	BUILD_BUG_ON(sizeof(bitmap_super_t) != 256);
+	BUILD_BUG_ON(sizeof(struct bitmap_super) != 256);
 
 	BUG_ON(file && mddev->bitmap_info.offset);
 
@@ -2351,7 +2342,7 @@ static int bitmap_get_stats(void *data, struct md_bitmap_stats *stats)
 	struct bitmap_storage *storage;
 	struct bitmap_counts *counts;
 	struct bitmap *bitmap = data;
-	bitmap_super_t *sb;
+	struct bitmap_super *sb;
 
 	if (!bitmap)
 		return -ENOENT;
@@ -2418,7 +2409,7 @@ static int __bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 			 */
 			bytes = DIV_ROUND_UP(bitmap->counts.chunks, 8);
 			if (!bitmap->mddev->bitmap_info.external)
-				bytes += sizeof(bitmap_super_t);
+				bytes += sizeof(struct bitmap_super);
 			space = DIV_ROUND_UP(bytes, 512);
 			bitmap->mddev->bitmap_info.space = space;
 		}
@@ -2430,9 +2421,9 @@ static int __bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 			chunks = DIV_ROUND_UP_SECTOR_T(blocks, 1 << chunkshift);
 			bytes = DIV_ROUND_UP(chunks, 8);
 			if (!bitmap->mddev->bitmap_info.external)
-				bytes += sizeof(bitmap_super_t);
+				bytes += sizeof(struct bitmap_super);
 		} while (bytes > (space << 9) && (chunkshift + BITMAP_BLOCK_SHIFT) <
-			(BITS_PER_BYTE * sizeof(((bitmap_super_t *)0)->chunksize) - 1));
+			(BITS_PER_BYTE * sizeof(((struct bitmap_super *)0)->chunksize) - 1));
 	} else
 		chunkshift = ffz(~chunksize) - BITMAP_BLOCK_SHIFT;
 
@@ -2466,7 +2457,7 @@ static int __bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 	if (store.sb_page && bitmap->storage.sb_page)
 		memcpy(page_address(store.sb_page),
 		       page_address(bitmap->storage.sb_page),
-		       sizeof(bitmap_super_t));
+		       sizeof(struct bitmap_super));
 	spin_lock_irq(&bitmap->counts.lock);
 	md_bitmap_file_unmap(&bitmap->storage);
 	bitmap->storage = store;
@@ -2862,7 +2853,7 @@ chunksize_store(struct mddev *mddev, const char *buf, size_t len)
 	    !is_power_of_2(csize))
 		return -EINVAL;
 	if (BITS_PER_LONG > 32 && csize >= (1ULL << (BITS_PER_BYTE *
-		sizeof(((bitmap_super_t *)0)->chunksize))))
+		sizeof(((struct bitmap_super *)0)->chunksize))))
 		return -EOVERFLOW;
 	mddev->bitmap_info.chunksize = csize;
 	return len;
