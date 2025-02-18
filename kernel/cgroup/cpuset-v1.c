@@ -109,7 +109,7 @@ static int fmeter_getrate(struct fmeter *fmp)
 	fmeter_update(fmp);
 	val = fmp->val;
 	spin_unlock(&fmp->lock);
-	return val;
+	return cpuset_memory_pressure_enabled ? val : 0;
 }
 
 /*
