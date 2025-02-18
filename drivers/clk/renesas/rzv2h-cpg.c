@@ -56,6 +56,10 @@
 
 #define CPG_CLKSTATUS0		(0x700)
 
+#define PLL_CLK_ACCESS(n)	(!!((n) & BIT(31)))
+#define PLL_CLK1_OFFSET(n)	FIELD_GET(GENMASK(15, 0), (n))
+#define PLL_CLK2_OFFSET(n)	(PLL_CLK1_OFFSET(n) + (0x4))
+
 /**
  * struct rzv2h_cpg_priv - Clock Pulse Generator Private Data
  *

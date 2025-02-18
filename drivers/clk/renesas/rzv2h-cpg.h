@@ -87,9 +87,6 @@ enum clk_types {
 
 /* BIT(31) indicates if CLK1/2 are accessible or not */
 #define PLL_CONF(n)		(BIT(31) | ((n) & ~GENMASK(31, 16)))
-#define PLL_CLK_ACCESS(n)	((n) & BIT(31) ? 1 : 0)
-#define PLL_CLK1_OFFSET(n)	((n) & ~GENMASK(31, 16))
-#define PLL_CLK2_OFFSET(n)	(((n) & ~GENMASK(31, 16)) + (0x4))
 
 #define DEF_TYPE(_name, _id, _type...) \
 	{ .name = _name, .id = _id, .type = _type }
