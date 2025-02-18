@@ -2559,7 +2559,8 @@ static int arm_cmn_probe(struct platform_device *pdev)
 	cmn->part = (unsigned long)device_get_match_data(cmn->dev);
 	platform_set_drvdata(pdev, cmn);
 
-	if (cmn->part == PART_CMN600 && has_acpi_companion(cmn->dev)) {
+	if (((cmn->part == PART_CMN600) || (cmn->part == PART_CMN700)) &&
+			has_acpi_companion(cmn->dev)) {
 		rootnode = arm_cmn600_acpi_probe(pdev, cmn);
 	} else {
 		rootnode = 0;
@@ -2649,7 +2650,7 @@ MODULE_DEVICE_TABLE(of, arm_cmn_of_match);
 static const struct acpi_device_id arm_cmn_acpi_match[] = {
 	{ "ARMHC600", PART_CMN600 },
 	{ "ARMHC650" },
-	{ "ARMHC700" },
+	{ "ARMHC700", PART_CMN700 },
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, arm_cmn_acpi_match);
