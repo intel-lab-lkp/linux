@@ -23,7 +23,7 @@ def nl_get_queues(cfg, nl, qtype='rx'):
         return len([q for q in queues if q['type'] == qtype])
     return None
 
-def check_xdp(cfg, nl, xdp_queue_id=0) -> None:
+def check_xsk(cfg, nl, xdp_queue_id=0) -> None:
     with bkg(f'{cfg.rpath("xdp_helper")} {cfg.ifindex} {xdp_queue_id}',
              wait_init=3):
 
@@ -109,7 +109,8 @@ def check_down(cfg, nl) -> None:
 
 def main() -> None:
     with NetDrvEnv(__file__, queue_count=100) as cfg:
-        ksft_run([get_queues, addremove_queues, check_down, check_xdp], args=(cfg, NetdevFamily()))
+        ksft_run([get_queues, addremove_queues, check_down, check_xsk],
+                 args=(cfg, NetdevFamily()))
     ksft_exit()
 
 
