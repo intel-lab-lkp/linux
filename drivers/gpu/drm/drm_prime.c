@@ -837,6 +837,7 @@ struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 				       struct page **pages, unsigned int nr_pages)
 {
 	struct sg_table *sg;
+	struct page_array parray = PAGE_ARRAY(pages);
 	size_t max_segment = 0;
 	int err;
 
@@ -848,9 +849,9 @@ struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 		max_segment = dma_max_mapping_size(dev->dev);
 	if (max_segment == 0)
 		max_segment = UINT_MAX;
-	err = sg_alloc_table_from_pages_segment(sg, pages, nr_pages, 0,
-						(unsigned long)nr_pages << PAGE_SHIFT,
-						max_segment, GFP_KERNEL);
+	err = sg_alloc_table_from_page_array_segment(sg, parray, 0, nr_pages, 0,
+						     (unsigned long)nr_pages << PAGE_SHIFT,
+						     max_segment, GFP_KERNEL);
 	if (err) {
 		kfree(sg);
 		sg = ERR_PTR(err);
