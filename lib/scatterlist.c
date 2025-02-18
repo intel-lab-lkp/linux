@@ -553,6 +553,115 @@ out:
 }
 EXPORT_SYMBOL(sg_alloc_append_table_from_pages);
 
+static inline int
+sg_alloc_append_table_from_page_array(struct sg_append_table *sgt_append,
+				      struct page_array pages,
+				      unsigned int first_page,
+				      unsigned int n_pages,
+				      unsigned int offset, unsigned long size,
+				      unsigned int max_segment,
+				      unsigned int left_pages, gfp_t gfp_mask)
+{
+	unsigned int chunks, seg_len, i, prv_len = 0;
+	unsigned int added_nents = 0;
+	struct scatterlist *s = sgt_append->prv;
+	unsigned int cur_pg_index = first_page;
+	unsigned int last_pg_index = first_page + n_pages - 1;
+	struct page *last_pg;
+
+	/*
+	 * The algorithm below requires max_segment to be aligned to PAGE_SIZE
+	 * otherwise it can overshoot.
+	 */
+	max_segment = ALIGN_DOWN(max_segment, PAGE_SIZE);
+	if (WARN_ON(max_segment < PAGE_SIZE))
+		return -EINVAL;
+
+	if (IS_ENABLED(CONFIG_ARCH_NO_SG_CHAIN) && sgt_append->prv)
+		return -EOPNOTSUPP;
+
+	if (sgt_append->prv) {
+		unsigned long next_pfn;
+		struct page *page;
+
+		if (WARN_ON(offset))
+			return -EINVAL;
+
+		/* Merge contiguous pages into the last SG */
+		page = pages.get_page(pages, cur_pg_index);
+		prv_len = sgt_append->prv->length;
+		next_pfn = (sg_phys(sgt_append->prv) + prv_len) / PAGE_SIZE;
+		if (page_to_pfn(page) == next_pfn) {
+			last_pg = pfn_to_page(next_pfn - 1);
+			while (cur_pg_index <= last_pg_index &&
+			       pages_are_mergeable(page, last_pg)) {
+				if (sgt_append->prv->length + PAGE_SIZE > max_segment)
+					break;
+				sgt_append->prv->length += PAGE_SIZE;
+				last_pg = page;
+				cur_pg_index++;
+			}
+			if (cur_pg_index > last_pg_index)
+				goto out;
+		}
+	}
+
+	/* compute number of contiguous chunks */
+	chunks = 1;
+	seg_len = 0;
+	for (i = cur_pg_index + 1; i <= last_pg_index; i++) {
+		seg_len += PAGE_SIZE;
+		if (seg_len >= max_segment ||
+		    !pages_are_mergeable(pages.get_page(pages, i),
+					 pages.get_page(pages, i - 1))) {
+			chunks++;
+			seg_len = 0;
+		}
+	}
+
+	/* merging chunks and putting them into the scatterlist */
+	for (i = 0; i < chunks; i++) {
+		unsigned int j, chunk_size;
+
+		/* look for the end of the current chunk */
+		seg_len = 0;
+		for (j = cur_pg_index + 1; j <= last_pg_index; j++) {
+			seg_len += PAGE_SIZE;
+			if (seg_len >= max_segment ||
+			    !pages_are_mergeable(pages.get_page(pages, j),
+						 pages.get_page(pages, j - 1)))
+				break;
+		}
+
+		/* Pass how many chunks might be left */
+		s = get_next_sg(sgt_append, s, chunks - i + left_pages,
+				gfp_mask);
+		if (IS_ERR(s)) {
+			/*
+			 * Adjust entry length to be as before function was
+			 * called.
+			 */
+			if (sgt_append->prv)
+				sgt_append->prv->length = prv_len;
+			return PTR_ERR(s);
+		}
+		chunk_size = ((j - cur_pg_index) << PAGE_SHIFT) - offset;
+		sg_set_page(s, pages.get_page(pages, cur_pg_index),
+			    min_t(unsigned long, size, chunk_size), offset);
+		added_nents++;
+		size -= chunk_size;
+		offset = 0;
+		cur_pg_index = j;
+	}
+	sgt_append->sgt.nents += added_nents;
+	sgt_append->sgt.orig_nents = sgt_append->sgt.nents;
+	sgt_append->prv = s;
+out:
+	if (!left_pages)
+		sg_mark_end(s);
+	return 0;
+}
+
 /**
  * sg_alloc_table_from_pages_segment - Allocate and initialize an sg table from
  *                                     an array of pages and given maximum
@@ -595,6 +704,25 @@ int sg_alloc_table_from_pages_segment(struct sg_table *sgt, struct page **pages,
 	return 0;
 }
 EXPORT_SYMBOL(sg_alloc_table_from_pages_segment);
+
+int sg_alloc_table_from_page_array_segment(struct sg_table *sgt, struct page_array pages,
+					   unsigned int idx, unsigned int n_pages, unsigned int offset,
+					   unsigned long size, unsigned int max_segment, gfp_t gfp_mask)
+{
+	struct sg_append_table append = {};
+	int err;
+
+	err = sg_alloc_append_table_from_page_array(&append, pages, idx, n_pages, offset,
+						    size, max_segment, 0, gfp_mask);
+	if (err) {
+		sg_free_append_table(&append);
+		return err;
+	}
+	memcpy(sgt, &append.sgt, sizeof(*sgt));
+	WARN_ON(append.total_nents != sgt->orig_nents);
+	return 0;
+}
+EXPORT_SYMBOL(sg_alloc_table_from_page_array_segment);
 
 #ifdef CONFIG_SGL_ALLOC
 

@@ -48,6 +48,39 @@ struct sg_append_table {
 	unsigned int total_nents;	/* Total entries in the table */
 };
 
+struct page_array {
+	union {
+		struct page **array;
+		struct xarray *xarray;
+	};
+
+	struct page *(*get_page)(struct page_array, unsigned int);
+};
+
+static inline struct page *page_array_get_page(struct page_array a,
+					       unsigned int index)
+{
+	return a.array[index];
+}
+
+static inline struct page *page_xarray_get_page(struct page_array a,
+						unsigned int index)
+{
+	return xa_load(a.xarray, index);
+}
+
+#define PAGE_ARRAY(pages)				\
+	((struct page_array) {				\
+		.array = pages,				\
+		.get_page = page_array_get_page,	\
+	})
+
+#define PAGE_XARRAY(pages)				\
+	((struct page_array) {				\
+		.xarray = pages,			\
+		.get_page = page_xarray_get_page,	\
+	})
+
 /*
  * Notes on SG table design.
  *
@@ -447,6 +480,20 @@ int sg_alloc_table_from_pages_segment(struct sg_table *sgt, struct page **pages,
 				      unsigned int n_pages, unsigned int offset,
 				      unsigned long size,
 				      unsigned int max_segment, gfp_t gfp_mask);
+
+int sg_alloc_table_from_page_array_segment(struct sg_table *sgt, struct page_array pages,
+					   unsigned int idx, unsigned int n_pages, unsigned int offset,
+					   unsigned long size, unsigned int max_segment, gfp_t gfp_mask);
+
+static inline int sg_alloc_table_from_page_xarray(struct sg_table *sgt, struct xarray *pages,
+						  unsigned int idx, unsigned int n_pages, unsigned int offset,
+						  unsigned long size, gfp_t gfp_mask)
+{
+	struct page_array parray = PAGE_XARRAY(pages);
+
+	return sg_alloc_table_from_page_array_segment(sgt, parray, idx, n_pages, offset,
+						      size, UINT_MAX, gfp_mask);
+}
 
 /**
  * sg_alloc_table_from_pages - Allocate and initialize an sg table from
