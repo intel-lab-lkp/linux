@@ -56,9 +56,16 @@
 
 #define CPG_CLKSTATUS0		(0x700)
 
+#define PLL_STBY_RESETB		BIT(0)
+#define PLL_STBY_RESETB_WEN	BIT(16)
+#define PLL_MON_RESETB		BIT(0)
+#define PLL_MON_LOCK		BIT(4)
+
 #define PLL_CLK_ACCESS(n)	(!!((n) & BIT(31)))
 #define PLL_CLK1_OFFSET(n)	FIELD_GET(GENMASK(15, 0), (n))
 #define PLL_CLK2_OFFSET(n)	(PLL_CLK1_OFFSET(n) + (0x4))
+#define PLL_STBY_OFFSET(n)	(PLL_CLK1_OFFSET(n) - (0x4))
+#define PLL_MON_OFFSET(n)	(PLL_STBY_OFFSET(n) + (0x10))
 
 /**
  * struct rzv2h_cpg_priv - Clock Pulse Generator Private Data
@@ -144,6 +151,54 @@ struct ddiv_clk {
 
 #define to_ddiv_clock(_div) container_of(_div, struct ddiv_clk, div)
 
+static int rzv2h_cpg_pll_clk_is_enabled(struct clk_hw *hw)
+{
+	struct pll_clk *pll_clk = to_pll(hw);
+	struct rzv2h_cpg_priv *priv = pll_clk->priv;
+	u32 mon_offset = PLL_MON_OFFSET(pll_clk->conf);
+	u32 val;
+
+	val = readl(priv->base + mon_offset);
+
+	/* Ensure both RESETB and LOCK bits are set */
+	return (val & (PLL_MON_RESETB | PLL_MON_LOCK)) ==
+	       (PLL_MON_RESETB | PLL_MON_LOCK);
+}
+
+static int rzv2h_cpg_pll_clk_enable(struct clk_hw *hw)
+{
+	bool enabled = rzv2h_cpg_pll_clk_is_enabled(hw);
+	struct pll_clk *pll_clk = to_pll(hw);
+	struct rzv2h_cpg_priv *priv = pll_clk->priv;
+	u32 conf = pll_clk->conf;
+	unsigned long flags = 0;
+	u32 stby_offset;
+	u32 mon_offset;
+	u32 val;
+	int ret;
+
+	if (enabled)
+		return 0;
+
+	stby_offset = PLL_STBY_OFFSET(conf);
+	mon_offset = PLL_MON_OFFSET(conf);
+
+	val = PLL_STBY_RESETB_WEN | PLL_STBY_RESETB;
+	spin_lock_irqsave(&priv->rmw_lock, flags);
+	writel(val, priv->base + stby_offset);
+	spin_unlock_irqrestore(&priv->rmw_lock, flags);
+
+	/* ensure PLL is in normal mode */
+	ret = readl_poll_timeout(priv->base + mon_offset, val,
+				 (val & (PLL_MON_RESETB | PLL_MON_LOCK)) ==
+				 (PLL_MON_RESETB | PLL_MON_LOCK), 0, 250000);
+	if (ret)
+		dev_err(priv->dev, "Failed to enable PLL 0x%x/%pC\n",
+			stby_offset, hw->clk);
+
+	return ret;
+}
+
 static unsigned long rzv2h_cpg_pll_clk_recalc_rate(struct clk_hw *hw,
 						   unsigned long parent_rate)
 {
@@ -165,6 +220,8 @@ static unsigned long rzv2h_cpg_pll_clk_recalc_rate(struct clk_hw *hw,
 }
 
 static const struct clk_ops rzv2h_cpg_pll_ops = {
+	.is_enabled = rzv2h_cpg_pll_clk_is_enabled,
+	.enable = rzv2h_cpg_pll_clk_enable,
 	.recalc_rate = rzv2h_cpg_pll_clk_recalc_rate,
 };
 
