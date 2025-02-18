@@ -173,7 +173,7 @@ static void __init acpi_process_madt(void)
 
 int pptt_enabled;
 
-int __init parse_acpi_topology(void)
+void __init parse_acpi_topology(void)
 {
 	int cpu, topology_id;
 
@@ -181,7 +181,6 @@ int __init parse_acpi_topology(void)
 		topology_id = find_acpi_cpu_topology(cpu, 0);
 		if (topology_id < 0) {
 			pr_warn("Invalid BIOS PPTT\n");
-			return -ENOENT;
 		}
 
 		if (acpi_pptt_cpu_is_thread(cpu) <= 0)
@@ -189,15 +188,13 @@ int __init parse_acpi_topology(void)
 		else {
 			topology_id = find_acpi_cpu_topology(cpu, 1);
 			if (topology_id < 0)
-				return -ENOENT;
+				pr_warn("Invalid BIOS PPTT\n");
 
 			cpu_data[cpu].core = topology_id;
 		}
 	}
 
 	pptt_enabled = 1;
-
-	return 0;
 }
 
 #ifndef CONFIG_SUSPEND
