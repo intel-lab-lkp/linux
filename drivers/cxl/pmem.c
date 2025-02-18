@@ -383,6 +383,14 @@ static int cxl_pmem_region_probe(struct device *dev)
 			.position = i,
 		};
 		info[i].offset = m->start;
+
+		if (cxlds->serial == 0) {
+			/* include missing alongside invalid in this error message. */
+			dev_err(dev, "%s: invalid or missing serial number\n",
+				dev_name(&cxlmd->dev));
+			rc = -ENXIO;
+			goto out_nvd;
+		}
 		info[i].serial = cxlds->serial;
 	}
 	ndr_desc.num_mappings = cxlr_pmem->nr_mappings;
