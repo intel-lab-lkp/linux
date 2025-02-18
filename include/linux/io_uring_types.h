@@ -709,4 +709,10 @@ static inline bool io_ctx_cqe32(struct io_ring_ctx *ctx)
 	return ctx->flags & IORING_SETUP_CQE32;
 }
 
+int io_buffer_register_bvec(struct io_ring_ctx *ctx, struct request *rq,
+			    void (*release)(void *), unsigned int index,
+			    unsigned int issue_flags);
+void io_buffer_unregister_bvec(struct io_ring_ctx *ctx, unsigned int index,
+			       unsigned int issue_flags);
+
 #endif

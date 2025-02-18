@@ -5,6 +5,7 @@
 #include <linux/sched.h>
 #include <linux/xarray.h>
 #include <uapi/linux/io_uring.h>
+#include <linux/blk-mq.h>
 
 #if defined(CONFIG_IO_URING)
 void __io_uring_cancel(bool cancel_all);
