@@ -27,7 +27,10 @@ struct cgroup_rstat_cpu;
  * resource statistics on top of it - bsync, bstat and last_bstat.
  */
 struct cgroup_rstat {
-	struct cgroup_rstat_cpu __percpu *rstat_cpu;
+	union {
+		struct cgroup_rstat_cpu __percpu *rstat_cpu;
+		struct cgroup_rstat_base_cpu __percpu *rstat_base_cpu;
+	};
 
 	/*
 	 * Add padding to separate the read mostly rstat_cpu and
@@ -60,7 +63,10 @@ struct cgroup_rstat_cpu {
 	 */
 	struct cgroup_rstat *updated_children;	/* terminated by self */
 	struct cgroup_rstat *updated_next;		/* NULL if not on the list */
+};
 
+struct cgroup_rstat_base_cpu {
+	struct cgroup_rstat_cpu self;
 	/*
 	 * ->bsync protects ->bstat.  These are the only fields which get
 	 * updated in the hot path.

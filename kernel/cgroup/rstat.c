@@ -33,6 +33,12 @@ static struct cgroup_rstat_cpu *rstat_cpu(struct cgroup_rstat *rstat, int cpu)
 	return per_cpu_ptr(rstat->rstat_cpu, cpu);
 }
 
+static struct cgroup_rstat_base_cpu *rstat_base_cpu(
+		struct cgroup_rstat *rstat, int cpu)
+{
+	return per_cpu_ptr(rstat->rstat_base_cpu, cpu);
+}
+
 static inline bool is_base_css(struct cgroup_subsys_state *css)
 {
 	/* css for base stats has no subsystem */
@@ -597,6 +603,18 @@ static void __cgroup_rstat_init(struct cgroup_rstat *rstat)
 		struct cgroup_rstat_cpu *rstatc = rstat_cpu(rstat, cpu);
 
 		rstatc->updated_children = rstat;
+	}
+}
+
+static void __cgroup_rstat_base_init(struct cgroup_rstat *rstat)
+{
+	int cpu;
+
+	/* ->updated_children list is self terminated */
+	for_each_possible_cpu(cpu) {
+		struct cgroup_rstat_base_cpu *rstatc = rstat_base_cpu(rstat, cpu);
+
+		rstatc->self.updated_children = rstat;
 		u64_stats_init(&rstatc->bsync);
 	}
 }
@@ -607,12 +625,20 @@ int cgroup_rstat_init(struct cgroup_subsys_state *css)
 
 	/* the root cgrp has rstat_cpu preallocated */
 	if (!rstat->rstat_cpu) {
-		rstat->rstat_cpu = alloc_percpu(struct cgroup_rstat_cpu);
-		if (!rstat->rstat_cpu)
-			return -ENOMEM;
-	}
+		if (is_base_css(css)) {
+			rstat->rstat_base_cpu = alloc_percpu(struct cgroup_rstat_base_cpu);
+			if (!rstat->rstat_base_cpu)
+				return -ENOMEM;
 
-	__cgroup_rstat_init(rstat);
+			__cgroup_rstat_base_init(rstat);
+		} else {
+			rstat->rstat_cpu = alloc_percpu(struct cgroup_rstat_cpu);
+			if (!rstat->rstat_cpu)
+				return -ENOMEM;
+
+			__cgroup_rstat_init(rstat);
+		}
+	}
 
 	return 0;
 }
@@ -718,9 +744,10 @@ static void cgroup_base_stat_sub(struct cgroup_base_stat *dst_bstat,
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 {
-	struct cgroup_rstat_cpu *rstatc = rstat_cpu(&(cgrp->self.rstat), cpu);
+	struct cgroup_rstat_base_cpu *rstatc = rstat_base_cpu(
+			&(cgrp->self.rstat), cpu);
 	struct cgroup *parent = cgroup_parent(cgrp);
-	struct cgroup_rstat_cpu *prstatc;
+	struct cgroup_rstat_base_cpu *prstatc;
 	struct cgroup_base_stat delta;
 	unsigned seq;
 
@@ -748,25 +775,25 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 		cgroup_base_stat_add(&cgrp->last_bstat, &delta);
 
 		delta = rstatc->subtree_bstat;
-		prstatc = rstat_cpu(&(parent->self.rstat), cpu);
+		prstatc = rstat_base_cpu(&(parent->self.rstat), cpu);
 		cgroup_base_stat_sub(&delta, &rstatc->last_subtree_bstat);
 		cgroup_base_stat_add(&prstatc->subtree_bstat, &delta);
 		cgroup_base_stat_add(&rstatc->last_subtree_bstat, &delta);
 	}
 }
 
-static struct cgroup_rstat_cpu *
+static struct cgroup_rstat_base_cpu *
 cgroup_base_stat_cputime_account_begin(struct cgroup *cgrp, unsigned long *flags)
 {
-	struct cgroup_rstat_cpu *rstatc;
+	struct cgroup_rstat_base_cpu *rstatc;
 
-	rstatc = get_cpu_ptr(cgrp->self.rstat.rstat_cpu);
+	rstatc = get_cpu_ptr(cgrp->self.rstat.rstat_base_cpu);
 	*flags = u64_stats_update_begin_irqsave(&rstatc->bsync);
 	return rstatc;
 }
 
 static void cgroup_base_stat_cputime_account_end(struct cgroup *cgrp,
-						 struct cgroup_rstat_cpu *rstatc,
+						 struct cgroup_rstat_base_cpu *rstatc,
 						 unsigned long flags)
 {
 	u64_stats_update_end_irqrestore(&rstatc->bsync, flags);
@@ -776,7 +803,7 @@ static void cgroup_base_stat_cputime_account_end(struct cgroup *cgrp,
 
 void __cgroup_account_cputime(struct cgroup *cgrp, u64 delta_exec)
 {
-	struct cgroup_rstat_cpu *rstatc;
+	struct cgroup_rstat_base_cpu *rstatc;
 	unsigned long flags;
 
 	rstatc = cgroup_base_stat_cputime_account_begin(cgrp, &flags);
@@ -787,7 +814,7 @@ void __cgroup_account_cputime(struct cgroup *cgrp, u64 delta_exec)
 void __cgroup_account_cputime_field(struct cgroup *cgrp,
 				    enum cpu_usage_stat index, u64 delta_exec)
 {
-	struct cgroup_rstat_cpu *rstatc;
+	struct cgroup_rstat_base_cpu *rstatc;
 	unsigned long flags;
 
 	rstatc = cgroup_base_stat_cputime_account_begin(cgrp, &flags);
