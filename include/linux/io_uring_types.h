@@ -69,8 +69,18 @@ struct io_file_table {
 	unsigned int alloc_hint;
 };
 
+struct io_alloc_cache {
+	void			**entries;
+	unsigned int		nr_cached;
+	unsigned int		max_cached;
+	size_t			elem_size;
+	unsigned int		init_clear;
+};
+
 struct io_buf_table {
 	struct io_rsrc_data	data;
+	struct io_alloc_cache	node_cache;
+	struct io_alloc_cache	imu_cache;
 };
 
 struct io_hash_bucket {
@@ -222,14 +232,6 @@ struct io_submit_state {
 	bool			cq_flush;
 	unsigned short		submit_nr;
 	struct blk_plug		plug;
-};
-
-struct io_alloc_cache {
-	void			**entries;
-	unsigned int		nr_cached;
-	unsigned int		max_cached;
-	unsigned int		elem_size;
-	unsigned int		init_clear;
 };
 
 struct io_ring_ctx {
