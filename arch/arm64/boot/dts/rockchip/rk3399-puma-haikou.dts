@@ -185,6 +185,9 @@
 	};
 };
 
+&i2s0 {
+	status = "okay";
+};
 
 &pcie_phy {
 	status = "okay";
