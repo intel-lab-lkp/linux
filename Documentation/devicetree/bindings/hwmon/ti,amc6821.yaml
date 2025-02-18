@@ -28,6 +28,14 @@ properties:
   i2c-mux:
     type: object
 
+  ti,pwm-inverted:
+    type: boolean
+    description:
+      Set to make the PWM-Out pin go high (with an external pull-up resistor)
+      for 100% duty cycle (suitable for driving the fan using a NMOS device),
+      when not set the PWM-Out pin goes low for 100% duty cycle (suitable for
+      driving the fan using a PMOS device).
+
 required:
   - compatible
   - reg
