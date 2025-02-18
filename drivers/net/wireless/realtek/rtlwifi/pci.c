@@ -520,7 +520,7 @@ static void _rtl_pci_tx_isr(struct ieee80211_hw *hw, int prio)
 			rtl_tx_ackqueue(hw, skb);
 		}
 
-		if ((ring->entries - skb_queue_len(&ring->queue)) <= 4) {
+		if ((ring->entries - skb_queue_len(&ring->queue)) >= 4) {
 			rtl_dbg(rtlpriv, COMP_ERR, DBG_DMESG,
 				"more desc left, wake skb_queue@%d, ring->idx = %d, skb_queue_len = 0x%x\n",
 				prio, ring->idx,
