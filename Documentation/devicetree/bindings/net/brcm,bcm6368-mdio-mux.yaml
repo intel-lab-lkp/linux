@@ -24,6 +24,11 @@ properties:
   reg:
     maxItems: 1
 
+properties:
+  brcm,gphy-ctrl:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description: A phandle to the gphy control register
+
 required:
   - compatible
   - reg
@@ -42,6 +47,8 @@ examples:
         #address-cells = <1>;
         #size-cells = <0>;
         reg = <0>;
+
+        brcm,gphy-ctrl = <&gphy_ctrl>;
       };
 
       mdio_ext: mdio@1 {
