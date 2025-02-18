@@ -177,7 +177,7 @@ void _cgroup_rstat_cpu_unlock(raw_spinlock_t *lock, int cpu,
 }
 
 static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
-		struct cgroup_rstat_ops *ops)
+		struct cgroup_rstat_ops *ops, raw_spinlock_t *cpu_lock)
 {
 	struct cgroup *cgrp;
 	unsigned long flags;
@@ -194,7 +194,7 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
 		return;
 
 	cgrp = ops->cgroup_fn(rstat);
-	flags = _cgroup_rstat_cpu_lock(&cgroup_rstat_cpu_lock, cpu, cgrp, true);
+	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, true);
 
 	/* put @rstat and all ancestors on the corresponding updated lists */
 	while (true) {
@@ -222,7 +222,7 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
 		rstat = parent;
 	}
 
-	_cgroup_rstat_cpu_unlock(&cgroup_rstat_cpu_lock, cpu, cgrp, flags, true);
+	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, cgrp, flags, true);
 }
 
 /**
@@ -236,13 +236,15 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
  */
 void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 {
-	__cgroup_rstat_updated(&css->rstat, cpu, &rstat_css_ops);
+	__cgroup_rstat_updated(&css->rstat, cpu, &rstat_css_ops,
+			&cgroup_rstat_cpu_lock);
 }
 
 #ifdef CONFIG_CGROUP_BPF
 __bpf_kfunc void bpf_cgroup_rstat_updated(struct cgroup *cgroup, int cpu)
 {
-	__cgroup_rstat_updated(&(cgroup->bpf.rstat), cpu, &rstat_bpf_ops);
+	__cgroup_rstat_updated(&(cgroup->bpf.rstat), cpu, &rstat_bpf_ops,
+			&cgroup_rstat_cpu_lock);
 }
 #endif /* CONFIG_CGROUP_BPF */
 
@@ -319,7 +321,8 @@ next_level:
  * here is the cgroup root whose updated_next can be self terminated.
  */
 static struct cgroup_rstat *cgroup_rstat_updated_list(
-		struct cgroup_rstat *root, int cpu, struct cgroup_rstat_ops *ops)
+		struct cgroup_rstat *root, int cpu, struct cgroup_rstat_ops *ops,
+		raw_spinlock_t *cpu_lock)
 {
 	struct cgroup_rstat_cpu *rstatc = rstat_cpu(root, cpu);
 	struct cgroup_rstat *head = NULL, *parent, *child;
@@ -327,7 +330,7 @@ static struct cgroup_rstat *cgroup_rstat_updated_list(
 	unsigned long flags;
 
 	cgrp = ops->cgroup_fn(root);
-	flags = _cgroup_rstat_cpu_lock(&cgroup_rstat_cpu_lock, cpu, cgrp, false);
+	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, false);
 
 	/* Return NULL if this subtree is not on-list */
 	if (!rstatc->updated_next)
@@ -364,7 +367,7 @@ static struct cgroup_rstat *cgroup_rstat_updated_list(
 	if (child != root)
 		head = cgroup_rstat_push_children(head, child, cpu, ops);
 unlock_ret:
-	_cgroup_rstat_cpu_unlock(&cgroup_rstat_cpu_lock, cpu, cgrp, flags, false);
+	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, cgrp, flags, false);
 	return head;
 }
 
@@ -422,43 +425,46 @@ static inline void __cgroup_rstat_unlock(spinlock_t *lock,
 
 /* see cgroup_rstat_flush() */
 static void cgroup_rstat_flush_locked(struct cgroup_rstat *rstat,
-		struct cgroup_rstat_ops *ops)
-	__releases(&cgroup_rstat_lock) __acquires(&cgroup_rstat_lock)
+		struct cgroup_rstat_ops *ops, spinlock_t *lock,
+		raw_spinlock_t *cpu_lock)
+	__releases(lock) __acquires(lock)
 {
 	int cpu;
 
-	lockdep_assert_held(&cgroup_rstat_lock);
+	lockdep_assert_held(lock);
 
 	for_each_possible_cpu(cpu) {
 		struct cgroup_rstat *pos = cgroup_rstat_updated_list(
-				rstat, cpu, ops);
+				rstat, cpu, ops, cpu_lock);
 
 		for (; pos; pos = pos->rstat_flush_next)
 			ops->flush_fn(pos, cpu);
 
 		/* play nice and yield if necessary */
-		if (need_resched() || spin_needbreak(&cgroup_rstat_lock)) {
+		if (need_resched() || spin_needbreak(lock)) {
 			struct cgroup *cgrp;
 
 			cgrp = ops->cgroup_fn(rstat);
-			__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, cpu);
+			__cgroup_rstat_unlock(lock, cgrp, cpu);
 			if (!cond_resched())
 				cpu_relax();
-			__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, cpu);
+			__cgroup_rstat_lock(lock, cgrp, cpu);
 		}
 	}
 }
 
 static void __cgroup_rstat_flush(struct cgroup_rstat *rstat,
-		struct cgroup_rstat_ops *ops)
+		struct cgroup_rstat_ops *ops, spinlock_t *lock,
+		raw_spinlock_t *cpu_lock)
+	__acquires(lock) __releases(lock)
 {
 	struct cgroup *cgrp;
 
 	might_sleep();
 	cgrp = ops->cgroup_fn(rstat);
-	__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, -1);
-	cgroup_rstat_flush_locked(rstat, ops);
-	__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, -1);
+	__cgroup_rstat_lock(lock, cgrp, -1);
+	cgroup_rstat_flush_locked(rstat, ops, lock, cpu_lock);
+	__cgroup_rstat_unlock(lock, cgrp, -1);
 }
 
 /**
@@ -476,26 +482,29 @@ static void __cgroup_rstat_flush(struct cgroup_rstat *rstat,
  */
 void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 {
-	__cgroup_rstat_flush(&css->rstat, &rstat_css_ops);
+	__cgroup_rstat_flush(&css->rstat, &rstat_css_ops,
+			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
 }
 
 #ifdef CONFIG_CGROUP_BPF
 __bpf_kfunc void bpf_cgroup_rstat_flush(struct cgroup *cgroup)
 {
-	__cgroup_rstat_flush(&(cgroup->bpf.rstat), &rstat_bpf_ops);
+	__cgroup_rstat_flush(&(cgroup->bpf.rstat), &rstat_bpf_ops,
+			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
 }
 #endif /* CONFIG_CGROUP_BPF */
 
 static void __cgroup_rstat_flush_hold(struct cgroup_rstat *rstat,
-		struct cgroup_rstat_ops *ops)
-	__acquires(&cgroup_rstat_lock)
+		struct cgroup_rstat_ops *ops, spinlock_t *lock,
+		raw_spinlock_t *cpu_lock)
+	__acquires(lock)
 {
 	struct cgroup *cgrp;
 
 	might_sleep();
 	cgrp = ops->cgroup_fn(rstat);
-	__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, -1);
-	cgroup_rstat_flush_locked(rstat, ops);
+	__cgroup_rstat_lock(lock, cgrp, -1);
+	cgroup_rstat_flush_locked(rstat, ops, lock, cpu_lock);
 }
 
 /**
@@ -509,7 +518,8 @@ static void __cgroup_rstat_flush_hold(struct cgroup_rstat *rstat,
  */
 void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
 {
-	__cgroup_rstat_flush_hold(&css->rstat, &rstat_css_ops);
+	__cgroup_rstat_flush_hold(&css->rstat, &rstat_css_ops,
+			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
 }
 
 /**
@@ -517,13 +527,13 @@ void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
  * @rstat: rstat node used to find associated cgroup used by tracepoint
  */
 static void __cgroup_rstat_flush_release(struct cgroup_rstat *rstat,
-		struct cgroup_rstat_ops *ops)
-	__releases(&cgroup_rstat_lock)
+		struct cgroup_rstat_ops *ops, spinlock_t *lock)
+	__releases(lock)
 {
 	struct cgroup *cgrp;
 
 	cgrp = ops->cgroup_fn(rstat);
-	__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, -1);
+	__cgroup_rstat_unlock(lock, cgrp, -1);
 }
 
 /**
@@ -532,7 +542,8 @@ static void __cgroup_rstat_flush_release(struct cgroup_rstat *rstat,
  */
 void cgroup_rstat_flush_release(struct cgroup_subsys_state *css)
 {
-	__cgroup_rstat_flush_release(&css->rstat, &rstat_css_ops);
+	__cgroup_rstat_flush_release(&css->rstat, &rstat_css_ops,
+			&cgroup_rstat_lock);
 }
 
 static void __cgroup_rstat_init(struct cgroup_rstat *rstat)
@@ -605,7 +616,8 @@ int bpf_cgroup_rstat_init(struct cgroup_bpf *bpf)
 
 void bpf_cgroup_rstat_exit(struct cgroup_bpf *bpf)
 {
-	__cgroup_rstat_flush(&bpf->rstat, &rstat_bpf_ops);
+	__cgroup_rstat_flush(&bpf->rstat, &rstat_bpf_ops,
+			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
 	__cgroup_rstat_exit(&bpf->rstat);
 }
 #endif /* CONFIG_CGROUP_BPF */
