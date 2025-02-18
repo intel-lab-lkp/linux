@@ -166,6 +166,15 @@ static const struct ctl_table trace_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= tracepoint_printk_sysctl,
 	},
+#ifdef CONFIG_STACK_TRACER
+	{
+		.procname	= "stack_tracer_enabled",
+		.data		= &stack_tracer_enabled,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= stack_trace_sysctl,
+	},
+#endif
 };
 
 static int __init init_trace_sysctls(void)
