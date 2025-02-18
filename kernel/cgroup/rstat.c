@@ -115,7 +115,12 @@ static struct cgroup_rstat_ops rstat_bpf_ops = {
 #endif /* CONFIG_CGROUP_BPF */
 
 /*
- * Helper functions for rstat per CPU lock (cgroup_rstat_cpu_lock).
+ * Helper functions for rstat per-cpu locks.
+ * @lock: pointer to per-cpu lock variable
+ * @cpu: the cpu to use for getting the cpu-specific lock
+ * @cgrp: the associated cgroup
+ * @fast_path: whether this function is called while updating
+ *	in the fast path or flushing in the NON-fast path
  *
  * This makes it easier to diagnose locking issues and contention in
  * production environments. The parameter @fast_path determine the
@@ -123,19 +128,20 @@ static struct cgroup_rstat_ops rstat_bpf_ops = {
  * operations without handling high-frequency fast-path "update" events.
  */
 static __always_inline
-unsigned long _cgroup_rstat_cpu_lock(raw_spinlock_t *cpu_lock, int cpu,
+unsigned long _cgroup_rstat_cpu_lock(raw_spinlock_t *lock, int cpu,
 				     struct cgroup *cgrp, const bool fast_path)
 {
+	raw_spinlock_t *cpu_lock = per_cpu_ptr(lock, cpu);
 	unsigned long flags;
 	bool contended;
 
 	/*
-	 * The _irqsave() is needed because cgroup_rstat_lock is
-	 * spinlock_t which is a sleeping lock on PREEMPT_RT. Acquiring
-	 * this lock with the _irq() suffix only disables interrupts on
-	 * a non-PREEMPT_RT kernel. The raw_spinlock_t below disables
-	 * interrupts on both configurations. The _irqsave() ensures
-	 * that interrupts are always disabled and later restored.
+	 * The _irqsave() is needed because the locks used for flushing
+	 * are spinlock_t which is a sleeping lock on PREEMPT_RT.
+	 * Acquiring this lock with the _irq() suffix only disables
+	 * interrupts on a non-PREEMPT_RT kernel. The raw_spinlock_t below
+	 * disables interrupts on both configurations. The _irqsave()
+	 * ensures that interrupts are always disabled and later restored.
 	 */
 	contended = !raw_spin_trylock_irqsave(cpu_lock, flags);
 	if (contended) {
@@ -156,10 +162,12 @@ unsigned long _cgroup_rstat_cpu_lock(raw_spinlock_t *cpu_lock, int cpu,
 }
 
 static __always_inline
-void _cgroup_rstat_cpu_unlock(raw_spinlock_t *cpu_lock, int cpu,
+void _cgroup_rstat_cpu_unlock(raw_spinlock_t *lock, int cpu,
 			      struct cgroup *cgrp, unsigned long flags,
 			      const bool fast_path)
 {
+	raw_spinlock_t *cpu_lock = per_cpu_ptr(lock, cpu);
+
 	if (fast_path)
 		trace_cgroup_rstat_cpu_unlock_fastpath(cgrp, cpu, false);
 	else
@@ -172,8 +180,6 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
 		struct cgroup_rstat_ops *ops)
 {
 	struct cgroup *cgrp;
-
-	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
 	unsigned long flags;
 
 	/*
@@ -188,7 +194,7 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
 		return;
 
 	cgrp = ops->cgroup_fn(rstat);
-	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, true);
+	flags = _cgroup_rstat_cpu_lock(&cgroup_rstat_cpu_lock, cpu, cgrp, true);
 
 	/* put @rstat and all ancestors on the corresponding updated lists */
 	while (true) {
@@ -216,7 +222,7 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
 		rstat = parent;
 	}
 
-	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, cgrp, flags, true);
+	_cgroup_rstat_cpu_unlock(&cgroup_rstat_cpu_lock, cpu, cgrp, flags, true);
 }
 
 /**
@@ -315,14 +321,13 @@ next_level:
 static struct cgroup_rstat *cgroup_rstat_updated_list(
 		struct cgroup_rstat *root, int cpu, struct cgroup_rstat_ops *ops)
 {
-	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
 	struct cgroup_rstat_cpu *rstatc = rstat_cpu(root, cpu);
 	struct cgroup_rstat *head = NULL, *parent, *child;
 	struct cgroup *cgrp;
 	unsigned long flags;
 
 	cgrp = ops->cgroup_fn(root);
-	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, false);
+	flags = _cgroup_rstat_cpu_lock(&cgroup_rstat_cpu_lock, cpu, cgrp, false);
 
 	/* Return NULL if this subtree is not on-list */
 	if (!rstatc->updated_next)
@@ -359,7 +364,7 @@ static struct cgroup_rstat *cgroup_rstat_updated_list(
 	if (child != root)
 		head = cgroup_rstat_push_children(head, child, cpu, ops);
 unlock_ret:
-	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, cgrp, flags, false);
+	_cgroup_rstat_cpu_unlock(&cgroup_rstat_cpu_lock, cpu, cgrp, flags, false);
 	return head;
 }
 
