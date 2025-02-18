@@ -105,9 +105,9 @@ static ssize_t queue_ra_show(struct gendisk *disk, char *page)
 {
 	int ret;
 
-	mutex_lock(&disk->queue->sysfs_lock);
+	mutex_lock(&disk->queue->limits_lock);
 	ret = queue_var_show(disk->bdi->ra_pages << (PAGE_SHIFT - 10), page);
-	mutex_unlock(&disk->queue->sysfs_lock);
+	mutex_unlock(&disk->queue->limits_lock);
 
 	return ret;
 }
@@ -119,17 +119,24 @@ queue_ra_store(struct gendisk *disk, const char *page, size_t count)
 	ssize_t ret;
 	unsigned int memflags;
 	struct request_queue *q = disk->queue;
-
-	mutex_lock(&q->sysfs_lock);
+	/*
+	 * We don't use atomic update helper queue_limits_start_update() and
+	 * queue_limits_commit_update() here for updaing ra_pages bacause
+	 * blk_apply_bdi_limits() which is invoked from  queue_limits_commit_
+	 * update() can overwrite the ra_pages value which user actaully wants
+	 * to store here. The blk_apply_bdi_limits() sets value of ra_pages
+	 * based on the optimal I/O size(io_opt).
+	 */
+	mutex_lock(&q->limits_lock);
 	memflags = blk_mq_freeze_queue(q);
-
 	ret = queue_var_store(&ra_kb, page, count);
 	if (ret < 0)
 		goto out;
 	disk->bdi->ra_pages = ra_kb >> (PAGE_SHIFT - 10);
 out:
+	mutex_unlock(&q->limits_lock);
 	blk_mq_unfreeze_queue(q, memflags);
-	mutex_unlock(&q->sysfs_lock);
+
 	return ret;
 }
 
