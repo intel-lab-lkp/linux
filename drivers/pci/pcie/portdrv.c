@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/aer.h>
+#include <linux/iopoll.h>
 
 #include "../pci.h"
 #include "portdrv.h"
@@ -205,6 +206,40 @@ intx_irq:
 	return 0;
 }
 
+static int pcie_wait_sltctl_cmd_raw(struct pci_dev *dev)
+{
+	u16 slot_status = 0;
+	int ret, ret1, timeout_us;
+
+	/* 1 second, according to PCIe spec 6.1, section 6.7.3.2 */
+	timeout_us = 1000000;
+	ret = read_poll_timeout(pcie_capability_read_word, ret1,
+				(slot_status & PCI_EXP_SLTSTA_CC), 10000,
+				timeout_us, true, dev, PCI_EXP_SLTSTA,
+				&slot_status);
+	if (!ret)
+		pcie_capability_write_word(dev, PCI_EXP_SLTSTA,
+						PCI_EXP_SLTSTA_CC);
+
+	return  ret;
+}
+
+void pcie_disable_hp_interrupts_early(struct pci_dev *dev)
+{
+	u16 slot_ctrl = 0;
+
+	pcie_capability_read_word(dev, PCI_EXP_SLTCTL, &slot_ctrl);
+	/* Bail out early if it is already disabled */
+	if (!(slot_ctrl & (PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE)))
+		return;
+
+	pcie_capability_clear_word(dev, PCI_EXP_SLTCTL,
+		  PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE);
+
+	if (pcie_wait_sltctl_cmd_raw(dev))
+		pci_info(dev, "Timeout on disabling PCIE hot-plug interrupt\n");
+}
+
 /**
  * get_port_device_capability - discover capabilities of a PCI Express port
  * @dev: PCI Express port to examine
@@ -222,16 +257,15 @@ static int get_port_device_capability(struct pci_dev *dev)
 
 	if (dev->is_hotplug_bridge &&
 	    (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
-	     pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM) &&
-	    (pcie_ports_native || host->native_pcie_hotplug)) {
-		services |= PCIE_PORT_SERVICE_HP;
+	     pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM)) {
+		if (pcie_ports_native || host->native_pcie_hotplug)
+			services |= PCIE_PORT_SERVICE_HP;
 
 		/*
 		 * Disable hot-plug interrupts in case they have been enabled
 		 * by the BIOS and the hot-plug service driver is not loaded.
 		 */
-		pcie_capability_clear_word(dev, PCI_EXP_SLTCTL,
-			  PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE);
+		pcie_disable_hp_interrupts_early(dev);
 	}
 
 #ifdef CONFIG_PCIEAER
