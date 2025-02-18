@@ -2441,7 +2441,6 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 			err = put_cmsg(msg, SOL_SOCKET, SO_DEVMEM_LINEAR,
 				       sizeof(dmabuf_cmsg), &dmabuf_cmsg);
 			if (err || msg->msg_flags & MSG_CTRUNC) {
-				msg->msg_flags &= ~MSG_CTRUNC;
 				if (!err)
 					err = -ETOOSMALL;
 				goto out;
@@ -2504,7 +2503,6 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 					       sizeof(dmabuf_cmsg),
 					       &dmabuf_cmsg);
 				if (err || msg->msg_flags & MSG_CTRUNC) {
-					msg->msg_flags &= ~MSG_CTRUNC;
 					if (!err)
 						err = -ETOOSMALL;
 					goto out;
