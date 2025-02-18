@@ -845,7 +845,7 @@ static int amc6821_detect(struct i2c_client *client, struct i2c_board_info *info
 	return 0;
 }
 
-static int amc6821_init_client(struct amc6821_data *data)
+static int amc6821_init_client(struct i2c_client *client, struct amc6821_data *data)
 {
 	struct regmap *regmap = data->regmap;
 	int err;
@@ -863,6 +863,9 @@ static int amc6821_init_client(struct amc6821_data *data)
 					AMC6821_CONF2_RTOIE);
 		if (err)
 			return err;
+
+		if (of_property_read_bool(client->dev.of_node, "ti,pwm-inverted"))
+			pwminv = 1;
 
 		err = regmap_update_bits(regmap, AMC6821_REG_CONF1,
 					 AMC6821_CONF1_THERMOVIE | AMC6821_CONF1_FANIE |
@@ -916,7 +919,7 @@ static int amc6821_probe(struct i2c_client *client)
 				     "Failed to initialize regmap\n");
 	data->regmap = regmap;
 
-	err = amc6821_init_client(data);
+	err = amc6821_init_client(client, data);
 	if (err)
 		return err;
 
