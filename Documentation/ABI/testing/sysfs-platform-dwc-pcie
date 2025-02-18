@@ -1,0 +1,70 @@
+What:		/sys/devices/platform/*/dwc/ptm/ptm_local_clock
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RO) PTM local clock in nanoseconds. Applicable for both Root
+		Complex and Endpoint mode.
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_master_clock
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RO) PTM master clock in nanoseconds. Applicable only for
+		Endpoint mode.
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_t1
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RO) PTM T1 timestamp in nanoseconds. Applicable only for
+		Endpoint mode.
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_t2
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RO) PTM T2 timestamp in nanoseconds. Applicable only for
+		Root Complex mode.
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_t3
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RO) PTM T3 timestamp in nanoseconds. Applicable only for
+		Root Complex mode.
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_t4
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RO) PTM T4 timestamp in nanoseconds. Applicable only for
+		Endpoint mode.
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_context_update
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RW) Control the PTM context update mode. Applicable only for
+		Endpoint mode.
+
+		Following values are supported:
+
+		* auto = PTM context auto update trigger for every 10ms
+
+		* manual = PTM context manual update. Writing 'manual' to this
+			   file triggers PTM context update (default)
+
+What:		/sys/devices/platform/*/dwc/ptm/ptm_context_valid
+Date:		February 2025
+Contact:	Manivannan Sadhasivam <manivannan.sadhasivam@linaro.org>
+Description:
+		(RW) Control the PTM context validity (local clock timing).
+		Applicable only for Root Complex mode. PTM context is
+		invalidated by hardware if the Root Complex enters low power
+		mode or changes link frequency.
+
+		Following values are supported:
+
+		* 0 = PTM context invalid (default)
+
+		* 1 = PTM context valid
