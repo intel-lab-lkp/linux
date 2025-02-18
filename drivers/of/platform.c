@@ -44,11 +44,21 @@ EXPORT_SYMBOL(of_find_device_by_node);
 
 int of_device_add(struct platform_device *ofdev)
 {
+	char *new_name;
+
 	BUG_ON(ofdev->dev.of_node == NULL);
+
+	new_name = kstrdup(dev_name(&ofdev->dev), GFP_KERNEL);
+	if (!new_name)
+		return -ENOMEM;
+
+	if (ofdev->flags & PLATFORM_DEVICE_FLAG_FREE_NAME)
+		kfree(ofdev->name);
 
 	/* name and id have to be set so that the platform bus doesn't get
 	 * confused on matching */
-	ofdev->name = dev_name(&ofdev->dev);
+	ofdev->name = new_name;
+	ofdev->flags |= PLATFORM_DEVICE_FLAG_FREE_NAME;
 	ofdev->id = PLATFORM_DEVID_NONE;
 
 	/*

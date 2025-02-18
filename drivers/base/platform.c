@@ -563,6 +563,8 @@ static void platform_device_release(struct device *dev)
 	kfree(pa->pdev.mfd_cell);
 	kfree(pa->pdev.resource);
 	kfree(pa->pdev.driver_override);
+	if (pa->pdev.flags & PLATFORM_DEVICE_FLAG_FREE_NAME)
+		kfree(pa->pdev.name);
 	kfree(pa);
 }
 

@@ -25,6 +25,7 @@ struct platform_device {
 	int		id;
 	u8		flags;
 #define PLATFORM_DEVICE_FLAG_ID_AUTO	BIT(0)
+#define PLATFORM_DEVICE_FLAG_FREE_NAME	BIT(1)
 	struct device	dev;
 	u64		platform_dma_mask;
 	struct device_dma_parameters dma_parms;
