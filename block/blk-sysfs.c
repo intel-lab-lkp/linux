@@ -58,7 +58,13 @@ queue_var_store(unsigned long *var, const char *page, size_t count)
 
 static ssize_t queue_requests_show(struct gendisk *disk, char *page)
 {
-	return queue_var_show(disk->queue->nr_requests, page);
+	int ret;
+
+	mutex_lock(&disk->queue->sysfs_lock);
+	ret = queue_var_show(disk->queue->nr_requests, page);
+	mutex_unlock(&disk->queue->sysfs_lock);
+
+	return ret;
 }
 
 static ssize_t
@@ -66,27 +72,42 @@ queue_requests_store(struct gendisk *disk, const char *page, size_t count)
 {
 	unsigned long nr;
 	int ret, err;
+	unsigned int memflags;
+	struct request_queue *q = disk->queue;
 
-	if (!queue_is_mq(disk->queue))
-		return -EINVAL;
+	mutex_lock(&q->sysfs_lock);
+	memflags = blk_mq_freeze_queue(q);
+
+	if (!queue_is_mq(disk->queue)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	ret = queue_var_store(&nr, page, count);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	if (nr < BLKDEV_MIN_RQ)
 		nr = BLKDEV_MIN_RQ;
 
 	err = blk_mq_update_nr_requests(disk->queue, nr);
 	if (err)
-		return err;
-
+		ret = err;
+out:
+	blk_mq_unfreeze_queue(q, memflags);
+	mutex_unlock(&q->sysfs_lock);
 	return ret;
 }
 
 static ssize_t queue_ra_show(struct gendisk *disk, char *page)
 {
-	return queue_var_show(disk->bdi->ra_pages << (PAGE_SHIFT - 10), page);
+	int ret;
+
+	mutex_lock(&disk->queue->sysfs_lock);
+	ret = queue_var_show(disk->bdi->ra_pages << (PAGE_SHIFT - 10), page);
+	mutex_unlock(&disk->queue->sysfs_lock);
+
+	return ret;
 }
 
 static ssize_t
@@ -94,11 +115,19 @@ queue_ra_store(struct gendisk *disk, const char *page, size_t count)
 {
 	unsigned long ra_kb;
 	ssize_t ret;
+	unsigned int memflags;
+	struct request_queue *q = disk->queue;
+
+	mutex_lock(&q->sysfs_lock);
+	memflags = blk_mq_freeze_queue(q);
 
 	ret = queue_var_store(&ra_kb, page, count);
 	if (ret < 0)
-		return ret;
+		goto out;
 	disk->bdi->ra_pages = ra_kb >> (PAGE_SHIFT - 10);
+out:
+	blk_mq_unfreeze_queue(q, memflags);
+	mutex_unlock(&q->sysfs_lock);
 	return ret;
 }
 
@@ -534,14 +563,24 @@ static ssize_t queue_var_store64(s64 *var, const char *page)
 
 static ssize_t queue_wb_lat_show(struct gendisk *disk, char *page)
 {
-	if (!wbt_rq_qos(disk->queue))
-		return -EINVAL;
+	int ret;
+
+	mutex_lock(&disk->queue->sysfs_lock);
+
+	if (!wbt_rq_qos(disk->queue)) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	if (wbt_disabled(disk->queue))
-		return sysfs_emit(page, "0\n");
+		ret = sysfs_emit(page, "0\n");
+	else
+		ret = sysfs_emit(page, "%llu\n",
+				div_u64(wbt_get_min_lat(disk->queue), 1000));
 
-	return sysfs_emit(page, "%llu\n",
-		div_u64(wbt_get_min_lat(disk->queue), 1000));
+out:
+	mutex_unlock(&disk->queue->sysfs_lock);
+	return ret;
 }
 
 static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
@@ -551,18 +590,24 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 	struct rq_qos *rqos;
 	ssize_t ret;
 	s64 val;
+	unsigned int memflags;
+
+	mutex_lock(&q->sysfs_lock);
+	memflags = blk_mq_freeze_queue(q);
 
 	ret = queue_var_store64(&val, page);
 	if (ret < 0)
-		return ret;
-	if (val < -1)
-		return -EINVAL;
+		goto out;
+	if (val < -1) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	rqos = wbt_rq_qos(q);
 	if (!rqos) {
 		ret = wbt_init(disk);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
 	if (val == -1)
@@ -570,8 +615,10 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 	else if (val >= 0)
 		val *= 1000ULL;
 
-	if (wbt_get_min_lat(q) == val)
-		return count;
+	if (wbt_get_min_lat(q) == val) {
+		ret = count;
+		goto out;
+	}
 
 	/*
 	 * Ensure that the queue is idled, in case the latency update
@@ -584,7 +631,10 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 
 	blk_mq_unquiesce_queue(q);
 
-	return count;
+out:
+	blk_mq_unfreeze_queue(q, memflags);
+	mutex_unlock(&q->sysfs_lock);
+	return ret;
 }
 
 QUEUE_RW_ENTRY(queue_wb_lat, "wbt_lat_usec");
@@ -593,7 +643,7 @@ QUEUE_RW_ENTRY(queue_wb_lat, "wbt_lat_usec");
 /* Common attributes for bio-based and request-based queues. */
 static struct attribute *queue_attrs[] = {
 	/*
-	 * attributes protected with q->sysfs_lock
+	 * attributes which require some form of locking
 	 */
 	&queue_ra_entry.attr,
 
@@ -652,10 +702,10 @@ static struct attribute *queue_attrs[] = {
 /* Request-based queue attributes that are not relevant for bio-based queues. */
 static struct attribute *blk_mq_queue_attrs[] = {
 	/*
-	 * attributes protected with q->sysfs_lock
+	 * attributes which require some form of locking
 	 */
-	&queue_requests_entry.attr,
 	&elv_iosched_entry.attr,
+	&queue_requests_entry.attr,
 #ifdef CONFIG_BLK_WBT
 	&queue_wb_lat_entry.attr,
 #endif
@@ -729,10 +779,7 @@ queue_attr_show(struct kobject *kobj, struct attribute *attr, char *page)
 		return res;
 	}
 
-	mutex_lock(&disk->queue->sysfs_lock);
-	res = entry->show(disk, page);
-	mutex_unlock(&disk->queue->sysfs_lock);
-	return res;
+	return entry->show(disk, page);
 }
 
 static ssize_t
@@ -778,12 +825,7 @@ queue_attr_store(struct kobject *kobj, struct attribute *attr,
 		return length;
 	}
 
-	mutex_lock(&q->sysfs_lock);
-	memflags = blk_mq_freeze_queue(q);
-	res = entry->store(disk, page, length);
-	blk_mq_unfreeze_queue(q, memflags);
-	mutex_unlock(&q->sysfs_lock);
-	return res;
+	return entry->store(disk, page, length);
 }
 
 static const struct sysfs_ops queue_sysfs_ops = {
@@ -852,15 +894,19 @@ int blk_register_queue(struct gendisk *disk)
 	if (ret)
 		goto out_debugfs_remove;
 
-	if (q->elevator) {
-		ret = elv_register_queue(q, false);
-		if (ret)
-			goto out_unregister_ia_ranges;
-	}
-
 	ret = blk_crypto_sysfs_register(disk);
 	if (ret)
-		goto out_elv_unregister;
+		goto out_unregister_ia_ranges;
+
+	mutex_lock(&q->elevator_lock);
+	if (q->elevator) {
+		ret = elv_register_queue(q, false);
+		if (ret) {
+			mutex_unlock(&q->elevator_lock);
+			goto out_crypto_sysfs_unregister;
+		}
+	}
+	mutex_unlock(&q->elevator_lock);
 
 	blk_queue_flag_set(QUEUE_FLAG_REGISTERED, q);
 	wbt_enable_default(disk);
@@ -885,8 +931,8 @@ int blk_register_queue(struct gendisk *disk)
 
 	return ret;
 
-out_elv_unregister:
-	elv_unregister_queue(q);
+out_crypto_sysfs_unregister:
+	blk_crypto_sysfs_unregister(disk);
 out_unregister_ia_ranges:
 	disk_unregister_independent_access_ranges(disk);
 out_debugfs_remove:
@@ -932,8 +978,11 @@ void blk_unregister_queue(struct gendisk *disk)
 		blk_mq_sysfs_unregister(disk);
 	blk_crypto_sysfs_unregister(disk);
 
-	mutex_lock(&q->sysfs_lock);
+	mutex_lock(&q->elevator_lock);
 	elv_unregister_queue(q);
+	mutex_unlock(&q->elevator_lock);
+
+	mutex_lock(&q->sysfs_lock);
 	disk_unregister_independent_access_ranges(disk);
 	mutex_unlock(&q->sysfs_lock);
 

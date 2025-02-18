@@ -562,6 +562,7 @@ struct request_queue {
 
 	struct mutex		sysfs_lock;
 	struct mutex		limits_lock;
+	struct mutex		elevator_lock;
 
 	/*
 	 * for reusing dead hctx instance in case of updating
