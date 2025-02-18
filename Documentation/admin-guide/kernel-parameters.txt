@@ -4843,6 +4843,9 @@
 
 				Note: this may remove isolation between devices
 				and may put more devices in an IOMMU group.
+		reset_wait=nn	The number of seconds to wait after a reset
+				while seeing Request Retry Status.  Default is
+				60 (1 minute).
 		force_floating	[S390] Force usage of floating interrupts.
 		nomio		[S390] Do not use MIO instructions.
 		norid		[S390] ignore the RID field and force use of

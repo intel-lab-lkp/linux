@@ -75,7 +75,7 @@ struct pci_pme_device {
  * limit, but 60 sec ought to be enough for any device to become
  * responsive.
  */
-#define PCIE_RESET_READY_POLL_MS 60000 /* msec */
+static int pci_reset_ready_poll_ms = 60000;
 
 static void pci_dev_d3_sleep(struct pci_dev *dev)
 {
@@ -4549,7 +4549,7 @@ int pcie_flr(struct pci_dev *dev)
 	 */
 	msleep(100);
 
-	return pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
+	return pci_dev_wait(dev, "FLR", pci_reset_ready_poll_ms);
 }
 EXPORT_SYMBOL_GPL(pcie_flr);
 
@@ -4616,7 +4616,7 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 	 */
 	msleep(100);
 
-	return pci_dev_wait(dev, "AF_FLR", PCIE_RESET_READY_POLL_MS);
+	return pci_dev_wait(dev, "AF_FLR", pci_reset_ready_poll_ms);
 }
 
 /**
@@ -4661,7 +4661,7 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
 	pci_dev_d3_sleep(dev);
 
-	return pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
+	return pci_dev_wait(dev, "PM D3hot->D0", pci_reset_ready_poll_ms);
 }
 
 /**
@@ -4928,7 +4928,7 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 			return -ENOTTY;
 
 		return pci_dev_wait(child, reset_type,
-				    PCIE_RESET_READY_POLL_MS - PCI_RESET_WAIT);
+				    pci_reset_ready_poll_ms - PCI_RESET_WAIT);
 	}
 
 	pci_dbg(dev, "waiting %d ms for downstream link, after activation\n",
@@ -4940,7 +4940,7 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 	}
 
 	return pci_dev_wait(child, reset_type,
-			    PCIE_RESET_READY_POLL_MS - delay);
+			    pci_reset_ready_poll_ms - delay);
 }
 
 void pci_reset_secondary_bus(struct pci_dev *dev)
@@ -6841,6 +6841,12 @@ static int __init pci_setup(char *str)
 				disable_acs_redir_param = str + 18;
 			} else if (!strncmp(str, "config_acs=", 11)) {
 				config_acs_param = str + 11;
+			} else if (!strncmp(str, "reset_wait=", 11)) {
+				unsigned long val;
+
+				val = clamp(simple_strtoul(str + 11, &str, 0),
+					    1, INT_MAX / MSEC_PER_SEC);
+				pci_reset_ready_poll_ms = val * MSEC_PER_SEC;
 			} else {
 				pr_err("PCI: Unknown option `%s'\n", str);
 			}
