@@ -14,10 +14,13 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/mfd/core.h>
+#include <linux/mod_devicetable.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/units.h>
 
 #include <linux/mfd/lm3533.h>
 
@@ -41,44 +44,6 @@
 #define LM3533_REG_BOOST_PWM		0x2c
 
 #define LM3533_REG_MAX			0xb2
-
-
-static struct mfd_cell lm3533_als_devs[] = {
-	{
-		.name	= "lm3533-als",
-		.id	= -1,
-	},
-};
-
-static struct mfd_cell lm3533_bl_devs[] = {
-	{
-		.name	= "lm3533-backlight",
-		.id	= 0,
-	},
-	{
-		.name	= "lm3533-backlight",
-		.id	= 1,
-	},
-};
-
-static struct mfd_cell lm3533_led_devs[] = {
-	{
-		.name	= "lm3533-leds",
-		.id	= 0,
-	},
-	{
-		.name	= "lm3533-leds",
-		.id	= 1,
-	},
-	{
-		.name	= "lm3533-leds",
-		.id	= 2,
-	},
-	{
-		.name	= "lm3533-leds",
-		.id	= 3,
-	},
-};
 
 int lm3533_read(struct lm3533 *lm3533, u8 reg, u8 *val)
 {
@@ -376,136 +341,113 @@ static struct attribute_group lm3533_attribute_group = {
 	.attrs		= lm3533_attributes
 };
 
-static int lm3533_device_als_init(struct lm3533 *lm3533)
-{
-	struct lm3533_platform_data *pdata = dev_get_platdata(lm3533->dev);
-	int ret;
-
-	if (!pdata->als)
-		return 0;
-
-	lm3533_als_devs[0].platform_data = pdata->als;
-	lm3533_als_devs[0].pdata_size = sizeof(*pdata->als);
-
-	ret = mfd_add_devices(lm3533->dev, 0, lm3533_als_devs, 1, NULL,
-			      0, NULL);
-	if (ret) {
-		dev_err(lm3533->dev, "failed to add ALS device\n");
-		return ret;
-	}
-
-	lm3533->have_als = 1;
-
-	return 0;
-}
-
-static int lm3533_device_bl_init(struct lm3533 *lm3533)
-{
-	struct lm3533_platform_data *pdata = dev_get_platdata(lm3533->dev);
-	int i;
-	int ret;
-
-	if (!pdata->backlights || pdata->num_backlights == 0)
-		return 0;
-
-	if (pdata->num_backlights > ARRAY_SIZE(lm3533_bl_devs))
-		pdata->num_backlights = ARRAY_SIZE(lm3533_bl_devs);
-
-	for (i = 0; i < pdata->num_backlights; ++i) {
-		lm3533_bl_devs[i].platform_data = &pdata->backlights[i];
-		lm3533_bl_devs[i].pdata_size = sizeof(pdata->backlights[i]);
-	}
-
-	ret = mfd_add_devices(lm3533->dev, 0, lm3533_bl_devs,
-			      pdata->num_backlights, NULL, 0, NULL);
-	if (ret) {
-		dev_err(lm3533->dev, "failed to add backlight devices\n");
-		return ret;
-	}
-
-	lm3533->have_backlights = 1;
-
-	return 0;
-}
-
-static int lm3533_device_led_init(struct lm3533 *lm3533)
-{
-	struct lm3533_platform_data *pdata = dev_get_platdata(lm3533->dev);
-	int i;
-	int ret;
-
-	if (!pdata->leds || pdata->num_leds == 0)
-		return 0;
-
-	if (pdata->num_leds > ARRAY_SIZE(lm3533_led_devs))
-		pdata->num_leds = ARRAY_SIZE(lm3533_led_devs);
-
-	for (i = 0; i < pdata->num_leds; ++i) {
-		lm3533_led_devs[i].platform_data = &pdata->leds[i];
-		lm3533_led_devs[i].pdata_size = sizeof(pdata->leds[i]);
-	}
-
-	ret = mfd_add_devices(lm3533->dev, 0, lm3533_led_devs,
-			      pdata->num_leds, NULL, 0, NULL);
-	if (ret) {
-		dev_err(lm3533->dev, "failed to add LED devices\n");
-		return ret;
-	}
-
-	lm3533->have_leds = 1;
-
-	return 0;
-}
-
-static int lm3533_device_setup(struct lm3533 *lm3533,
-					struct lm3533_platform_data *pdata)
+static int lm3533_device_setup(struct lm3533 *lm3533)
 {
 	int ret;
 
-	ret = lm3533_set_boost_freq(lm3533, pdata->boost_freq);
+	ret = lm3533_set_boost_freq(lm3533, lm3533->boost_freq);
 	if (ret)
 		return ret;
 
-	return lm3533_set_boost_ovp(lm3533, pdata->boost_ovp);
+	return lm3533_set_boost_ovp(lm3533, lm3533->boost_ovp);
+}
+
+static void lm3533_remove_subdev(void *subdev)
+{
+	platform_device_unregister(subdev);
+}
+
+static int lm3533_init_components(struct lm3533 *lm3533)
+{
+	struct device *dev = lm3533->dev;
+	struct platform_device_info subdev_info;
+	struct platform_device *subdev;
+	struct fwnode_handle *child;
+	const char *comatible;
+	u32 id = PLATFORM_DEVID_AUTO;
+	int ret;
+
+	memset(&subdev_info, 0, sizeof(subdev_info));
+	subdev_info.parent = dev;
+
+	device_for_each_child_node(dev, child) {
+		if (!fwnode_device_is_available(child))
+			continue;
+
+		/* Fill up children flags used for attributes */
+		fwnode_property_read_string(child, "compatible", &comatible);
+		fwnode_property_read_u32(child, "reg", &id);
+
+		if (!strcmp(comatible, "ti,lm3533-als"))
+			lm3533->have_als = 1;
+
+		if (!strcmp(comatible, "ti,lm3533-backlight"))
+			lm3533->have_backlights = 1;
+
+		if (!strcmp(comatible, "ti,lm3533-leds"))
+			lm3533->have_leds = 1;
+
+		subdev_info.id = id;
+		subdev_info.fwnode = child;
+		subdev_info.name = fwnode_get_name(child);
+		subdev = platform_device_register_full(&subdev_info);
+		if (IS_ERR(subdev))
+			return dev_err_probe(dev, PTR_ERR(subdev),
+					     "register subdev for %s",
+					     subdev_info.name);
+
+		ret = devm_add_action_or_reset(dev, lm3533_remove_subdev, subdev);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "register subdev cleanup action for %s",
+					     subdev_info.name);
+	}
+
+	return 0;
 }
 
 static int lm3533_device_init(struct lm3533 *lm3533)
 {
-	struct lm3533_platform_data *pdata = dev_get_platdata(lm3533->dev);
+	u32 val;
 	int ret;
 
-	dev_dbg(lm3533->dev, "%s\n", __func__);
-
-	if (!pdata) {
-		dev_err(lm3533->dev, "no platform data\n");
-		return -EINVAL;
-	}
-
-	lm3533->hwen = devm_gpiod_get(lm3533->dev, NULL, GPIOD_OUT_LOW);
+	lm3533->hwen = devm_gpiod_get(lm3533->dev, "enable", GPIOD_OUT_LOW);
 	if (IS_ERR(lm3533->hwen))
-		return dev_err_probe(lm3533->dev, PTR_ERR(lm3533->hwen), "failed to request HWEN GPIO\n");
-	gpiod_set_consumer_name(lm3533->hwen, "lm3533-hwen");
+		return dev_err_probe(lm3533->dev, PTR_ERR(lm3533->hwen),
+				     "failed to request HWEN GPIO\n");
+
+	val = 16 * MICRO; /* 16V */
+	device_property_read_u32(lm3533->dev, "ti,boost-ovp-microvolt", &val);
+
+	/* boost_ovp is defined in microvolts, convert to enum value */
+	lm3533->boost_ovp = val / (8 * MICRO) - 2;
+
+	val = 500 * KILO; /* 500kHz */
+	device_property_read_u32(lm3533->dev, "ti,boost-freq-hz", &val);
+
+	/* boost_freq is defined in Hz, convert to enum value */
+	lm3533->boost_freq = val / (500 * KILO) - 1;
 
 	lm3533_enable(lm3533);
 
-	ret = lm3533_device_setup(lm3533, pdata);
+	ret = lm3533_device_setup(lm3533);
 	if (ret)
 		goto err_disable;
 
-	lm3533_device_als_init(lm3533);
-	lm3533_device_bl_init(lm3533);
-	lm3533_device_led_init(lm3533);
+	ret = lm3533_init_components(lm3533);
+	if (ret) {
+		dev_err(lm3533->dev, "failed to init components\n");
+		goto err_disable;
+	}
 
 	ret = sysfs_create_group(&lm3533->dev->kobj, &lm3533_attribute_group);
 	if (ret < 0) {
 		dev_err(lm3533->dev, "failed to create sysfs attributes\n");
-		goto err_unregister;
+		goto err_disable;
 	}
 
 	return 0;
 
-err_unregister:
-	mfd_remove_devices(lm3533->dev);
 err_disable:
 	lm3533_disable(lm3533);
 
@@ -517,8 +459,6 @@ static void lm3533_device_exit(struct lm3533 *lm3533)
 	dev_dbg(lm3533->dev, "%s\n", __func__);
 
 	sysfs_remove_group(&lm3533->dev->kobj, &lm3533_attribute_group);
-
-	mfd_remove_devices(lm3533->dev);
 	lm3533_disable(lm3533);
 }
 
@@ -603,6 +543,12 @@ static void lm3533_i2c_remove(struct i2c_client *i2c)
 	lm3533_device_exit(lm3533);
 }
 
+static const struct of_device_id lm3533_match_table[] = {
+	{ .compatible = "ti,lm3533" },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, lm3533_match_table);
+
 static const struct i2c_device_id lm3533_i2c_ids[] = {
 	{ "lm3533" },
 	{ }
@@ -612,6 +558,7 @@ MODULE_DEVICE_TABLE(i2c, lm3533_i2c_ids);
 static struct i2c_driver lm3533_i2c_driver = {
 	.driver = {
 		   .name = "lm3533",
+		   .of_match_table = lm3533_match_table,
 	},
 	.id_table	= lm3533_i2c_ids,
 	.probe		= lm3533_i2c_probe,

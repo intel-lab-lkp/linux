@@ -27,6 +27,9 @@ struct lm3533 {
 	struct gpio_desc *hwen;
 	int irq;
 
+	u32 boost_ovp;
+	u32 boost_freq;
+
 	unsigned have_als:1;
 	unsigned have_backlights:1;
 	unsigned have_leds:1;
@@ -36,25 +39,6 @@ struct lm3533_ctrlbank {
 	struct lm3533 *lm3533;
 	struct device *dev;
 	int id;
-};
-
-struct lm3533_als_platform_data {
-	unsigned pwm_mode:1;		/* PWM input mode (default analog) */
-	u8 r_select;			/* 1 - 127 (ignored in PWM-mode) */
-};
-
-struct lm3533_bl_platform_data {
-	char *name;
-	u16 max_current;		/* 5000 - 29800 uA (800 uA step) */
-	u8 default_brightness;		/* 0 - 255 */
-	u8 pwm;				/* 0 - 0x3f */
-};
-
-struct lm3533_led_platform_data {
-	char *name;
-	const char *default_trigger;
-	u16 max_current;		/* 5000 - 29800 uA (800 uA step) */
-	u8 pwm;				/* 0 - 0x3f */
 };
 
 enum lm3533_boost_freq {
@@ -67,19 +51,6 @@ enum lm3533_boost_ovp {
 	LM3533_BOOST_OVP_24V,
 	LM3533_BOOST_OVP_32V,
 	LM3533_BOOST_OVP_40V,
-};
-
-struct lm3533_platform_data {
-	enum lm3533_boost_ovp boost_ovp;
-	enum lm3533_boost_freq boost_freq;
-
-	struct lm3533_als_platform_data *als;
-
-	struct lm3533_bl_platform_data *backlights;
-	int num_backlights;
-
-	struct lm3533_led_platform_data *leds;
-	int num_leds;
 };
 
 extern int lm3533_ctrlbank_enable(struct lm3533_ctrlbank *cb);
