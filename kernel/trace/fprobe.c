@@ -681,6 +681,8 @@ int unregister_fprobe(struct fprobe *fp)
 
 	if (count)
 		fprobe_graph_remove_ips(addrs, count);
+	else
+		fprobe_graph_active--;
 
 	kfree_rcu(hlist_array, rcu);
 	fp->hlist_array = NULL;
