@@ -1,0 +1,27 @@
+// SPDX-License-Identifier:     GPL-2.0
+/*
+ * Copyright (C) 2025, Altera Corporation
+ */
+#include "socfpga_agilex5_socdk.dts"
+
+/ {
+	model = "SoCFPGA Agilex5 SoCDK - TB";
+	compatible = "intel,socfpga-agilex5-socdk-tb", "intel,socfpga-agilex5";
+
+	leds {
+		led-0 {
+			label = "hps_led0";
+			gpios = <&portb 12 GPIO_ACTIVE_HIGH>;
+		};
+	};
+};
+
+&spi0 {
+	status = "okay";
+
+	spidev@0{
+		compatible = "rohm,dh2228fv";
+		reg = <0>;
+		spi-max-frequency = <10000000>;
+	};
+};
