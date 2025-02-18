@@ -36,7 +36,7 @@ struct cgroup_rstat {
 	 * frequent updates.
 	 */
 	CACHELINE_PADDING(_pad_);
-	struct cgroup *rstat_flush_next;
+	struct cgroup_rstat *rstat_flush_next;
 };
 
 struct cgroup_base_stat {
@@ -58,8 +58,8 @@ struct cgroup_rstat_cpu {
 	 * to the cgroup makes it unnecessary for each per-cpu struct to
 	 * point back to the associated cgroup.
 	 */
-	struct cgroup *updated_children;	/* terminated by self */
-	struct cgroup *updated_next;		/* NULL if not on the list */
+	struct cgroup_rstat *updated_children;	/* terminated by self */
+	struct cgroup_rstat *updated_next;		/* NULL if not on the list */
 
 	/*
 	 * ->bsync protects ->bstat.  These are the only fields which get

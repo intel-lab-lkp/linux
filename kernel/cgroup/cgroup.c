@@ -1359,7 +1359,7 @@ static void cgroup_destroy_root(struct cgroup_root *root)
 
 	cgroup_unlock();
 
-	cgroup_rstat_exit(cgrp);
+	cgroup_rstat_exit(&cgrp->rstat);
 	kernfs_destroy_root(root->kf_root);
 	cgroup_free_root(root);
 }
@@ -2133,7 +2133,7 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	if (ret)
 		goto destroy_root;
 
-	ret = cgroup_rstat_init(root_cgrp);
+	ret = cgroup_rstat_init(&root_cgrp->rstat);
 	if (ret)
 		goto destroy_root;
 
@@ -2175,7 +2175,7 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	goto out;
 
 exit_stats:
-	cgroup_rstat_exit(root_cgrp);
+	cgroup_rstat_exit(&root_cgrp->rstat);
 destroy_root:
 	kernfs_destroy_root(root->kf_root);
 	root->kf_root = NULL;
@@ -5432,7 +5432,7 @@ static void css_free_rwork_fn(struct work_struct *work)
 			cgroup_put(cgroup_parent(cgrp));
 			kernfs_put(cgrp->kn);
 			psi_cgroup_free(cgrp);
-			cgroup_rstat_exit(cgrp);
+			cgroup_rstat_exit(&cgrp->rstat);
 			kfree(cgrp);
 		} else {
 			/*
@@ -5683,7 +5683,7 @@ static struct cgroup *cgroup_create(struct cgroup *parent, const char *name,
 	if (ret)
 		goto out_free_cgrp;
 
-	ret = cgroup_rstat_init(cgrp);
+	ret = cgroup_rstat_init(&cgrp->rstat);
 	if (ret)
 		goto out_cancel_ref;
 
@@ -5776,7 +5776,7 @@ out_psi_free:
 out_kernfs_remove:
 	kernfs_remove(cgrp->kn);
 out_stat_exit:
-	cgroup_rstat_exit(cgrp);
+	cgroup_rstat_exit(&cgrp->rstat);
 out_cancel_ref:
 	percpu_ref_exit(&cgrp->self.refcnt);
 out_free_cgrp:

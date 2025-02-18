@@ -14,9 +14,20 @@ static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
-static struct cgroup_rstat_cpu *cgroup_rstat_cpu(struct cgroup *cgrp, int cpu)
+static struct cgroup_rstat_cpu *rstat_cpu(struct cgroup_rstat *rstat, int cpu)
 {
-	return per_cpu_ptr(cgrp->rstat.rstat_cpu, cpu);
+	return per_cpu_ptr(rstat->rstat_cpu, cpu);
+}
+
+static struct cgroup_rstat *rstat_parent(struct cgroup_rstat *rstat)
+{
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
+	struct cgroup *parent = cgroup_parent(cgrp);
+
+	if (!parent)
+		return NULL;
+
+	return &parent->rstat;
 }
 
 /*
@@ -73,17 +84,9 @@ void _cgroup_rstat_cpu_unlock(raw_spinlock_t *cpu_lock, int cpu,
 	raw_spin_unlock_irqrestore(cpu_lock, flags);
 }
 
-/**
- * cgroup_rstat_updated - keep track of updated rstat_cpu
- * @cgrp: target cgroup
- * @cpu: cpu on which rstat_cpu was updated
- *
- * @cgrp's rstat_cpu on @cpu was updated.  Put it on the parent's matching
- * rstat_cpu->updated_children list.  See the comment on top of
- * cgroup_rstat_cpu definition for details.
- */
-__bpf_kfunc void cgroup_rstat_updated(struct cgroup *cgrp, int cpu)
+static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu)
 {
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
 	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
 	unsigned long flags;
 
@@ -95,15 +98,15 @@ __bpf_kfunc void cgroup_rstat_updated(struct cgroup *cgrp, int cpu)
 	 * instead of NULL, we can tell whether @cgrp is on the list by
 	 * testing the next pointer for NULL.
 	 */
-	if (data_race(cgroup_rstat_cpu(cgrp, cpu)->updated_next))
+	if (data_race(rstat_cpu(rstat, cpu)->updated_next))
 		return;
 
 	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, true);
 
 	/* put @cgrp and all ancestors on the corresponding updated lists */
 	while (true) {
-		struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(cgrp, cpu);
-		struct cgroup *parent = cgroup_parent(cgrp);
+		struct cgroup_rstat_cpu *rstatc = rstat_cpu(rstat, cpu);
+		struct cgroup_rstat *parent = rstat_parent(rstat);
 		struct cgroup_rstat_cpu *prstatc;
 
 		/*
@@ -115,18 +118,32 @@ __bpf_kfunc void cgroup_rstat_updated(struct cgroup *cgrp, int cpu)
 
 		/* Root has no parent to link it to, but mark it busy */
 		if (!parent) {
-			rstatc->updated_next = cgrp;
+			rstatc->updated_next = rstat;
 			break;
 		}
 
-		prstatc = cgroup_rstat_cpu(parent, cpu);
+		prstatc = rstat_cpu(parent, cpu);
 		rstatc->updated_next = prstatc->updated_children;
-		prstatc->updated_children = cgrp;
+		prstatc->updated_children = rstat;
 
-		cgrp = parent;
+		rstat = parent;
 	}
 
 	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, cgrp, flags, true);
+}
+
+/**
+ * cgroup_rstat_updated - keep track of updated rstat_cpu
+ * @cgrp: target cgroup
+ * @cpu: cpu on which rstat_cpu was updated
+ *
+ * @cgrp's rstat_cpu on @cpu was updated.  Put it on the parent's matching
+ * rstat_cpu->updated_children list.  See the comment on top of
+ * cgroup_rstat_cpu definition for details.
+ */
+__bpf_kfunc void cgroup_rstat_updated(struct cgroup *cgrp, int cpu)
+{
+	__cgroup_rstat_updated(&cgrp->rstat, cpu);
 }
 
 /**
@@ -141,32 +158,32 @@ __bpf_kfunc void cgroup_rstat_updated(struct cgroup *cgrp, int cpu)
  * into a singly linked list built from the tail backward like "pushing"
  * cgroups into a stack. The root is pushed by the caller.
  */
-static struct cgroup *cgroup_rstat_push_children(struct cgroup *head,
-						 struct cgroup *child, int cpu)
+static struct cgroup_rstat *cgroup_rstat_push_children(
+	struct cgroup_rstat *head, struct cgroup_rstat *child, int cpu)
 {
-	struct cgroup *chead = child;	/* Head of child cgroup level */
-	struct cgroup *ghead = NULL;	/* Head of grandchild cgroup level */
-	struct cgroup *parent, *grandchild;
+	struct cgroup_rstat *chead = child;	/* Head of child cgroup level */
+	struct cgroup_rstat *ghead = NULL;	/* Head of grandchild cgroup level */
+	struct cgroup_rstat *parent, *grandchild;
 	struct cgroup_rstat_cpu *crstatc;
 
-	child->rstat.rstat_flush_next = NULL;
+	child->rstat_flush_next = NULL;
 
 next_level:
 	while (chead) {
 		child = chead;
-		chead = child->rstat.rstat_flush_next;
-		parent = cgroup_parent(child);
+		chead = child->rstat_flush_next;
+		parent = rstat_parent(child);
 
 		/* updated_next is parent cgroup terminated */
 		while (child != parent) {
-			child->rstat.rstat_flush_next = head;
+			child->rstat_flush_next = head;
 			head = child;
-			crstatc = cgroup_rstat_cpu(child, cpu);
+			crstatc = rstat_cpu(child, cpu);
 			grandchild = crstatc->updated_children;
 			if (grandchild != child) {
 				/* Push the grand child to the next level */
 				crstatc->updated_children = child;
-				grandchild->rstat.rstat_flush_next = ghead;
+				grandchild->rstat_flush_next = ghead;
 				ghead = grandchild;
 			}
 			child = crstatc->updated_next;
@@ -200,14 +217,16 @@ next_level:
  * within the children list and terminated by the parent cgroup. An exception
  * here is the cgroup root whose updated_next can be self terminated.
  */
-static struct cgroup *cgroup_rstat_updated_list(struct cgroup *root, int cpu)
+static struct cgroup_rstat *cgroup_rstat_updated_list(
+		struct cgroup_rstat *root, int cpu)
 {
+	struct cgroup *cgrp = container_of(root, typeof(*cgrp), rstat);
 	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
-	struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(root, cpu);
-	struct cgroup *head = NULL, *parent, *child;
+	struct cgroup_rstat_cpu *rstatc = rstat_cpu(root, cpu);
+	struct cgroup_rstat *head = NULL, *parent, *child;
 	unsigned long flags;
 
-	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, root, false);
+	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, false);
 
 	/* Return NULL if this subtree is not on-list */
 	if (!rstatc->updated_next)
@@ -217,17 +236,17 @@ static struct cgroup *cgroup_rstat_updated_list(struct cgroup *root, int cpu)
 	 * Unlink @root from its parent. As the updated_children list is
 	 * singly linked, we have to walk it to find the removal point.
 	 */
-	parent = cgroup_parent(root);
+	parent = rstat_parent(root);
 	if (parent) {
 		struct cgroup_rstat_cpu *prstatc;
-		struct cgroup **nextp;
+		struct cgroup_rstat **nextp;
 
-		prstatc = cgroup_rstat_cpu(parent, cpu);
+		prstatc = rstat_cpu(parent, cpu);
 		nextp = &prstatc->updated_children;
 		while (*nextp != root) {
 			struct cgroup_rstat_cpu *nrstatc;
 
-			nrstatc = cgroup_rstat_cpu(*nextp, cpu);
+			nrstatc = rstat_cpu(*nextp, cpu);
 			WARN_ON_ONCE(*nextp == parent);
 			nextp = &nrstatc->updated_next;
 		}
@@ -238,13 +257,13 @@ static struct cgroup *cgroup_rstat_updated_list(struct cgroup *root, int cpu)
 
 	/* Push @root to the list first before pushing the children */
 	head = root;
-	root->rstat.rstat_flush_next = NULL;
+	root->rstat_flush_next = NULL;
 	child = rstatc->updated_children;
 	rstatc->updated_children = root;
 	if (child != root)
 		head = cgroup_rstat_push_children(head, child, cpu);
 unlock_ret:
-	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, root, flags, false);
+	_cgroup_rstat_cpu_unlock(cpu_lock, cpu, cgrp, flags, false);
 	return head;
 }
 
@@ -300,24 +319,26 @@ static inline void __cgroup_rstat_unlock(struct cgroup *cgrp, int cpu_in_loop)
 }
 
 /* see cgroup_rstat_flush() */
-static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
+static void cgroup_rstat_flush_locked(struct cgroup_rstat *rstat)
 	__releases(&cgroup_rstat_lock) __acquires(&cgroup_rstat_lock)
 {
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
 	int cpu;
 
 	lockdep_assert_held(&cgroup_rstat_lock);
 
 	for_each_possible_cpu(cpu) {
-		struct cgroup *pos = cgroup_rstat_updated_list(cgrp, cpu);
+		struct cgroup_rstat *pos = cgroup_rstat_updated_list(rstat, cpu);
 
-		for (; pos; pos = pos->rstat.rstat_flush_next) {
+		for (; pos; pos = pos->rstat_flush_next) {
+			struct cgroup *pos_cgroup = container_of(pos, struct cgroup, rstat);
 			struct cgroup_subsys_state *css;
 
-			cgroup_base_stat_flush(pos, cpu);
-			bpf_rstat_flush(pos, cgroup_parent(pos), cpu);
+			cgroup_base_stat_flush(pos_cgroup, cpu);
+			bpf_rstat_flush(pos_cgroup, cgroup_parent(pos_cgroup), cpu);
 
 			rcu_read_lock();
-			list_for_each_entry_rcu(css, &pos->rstat_css_list,
+			list_for_each_entry_rcu(css, &pos_cgroup->rstat_css_list,
 						rstat_css_node)
 				css->ss->css_rstat_flush(css, cpu);
 			rcu_read_unlock();
@@ -331,6 +352,17 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 			__cgroup_rstat_lock(cgrp, cpu);
 		}
 	}
+}
+
+static void __cgroup_rstat_flush(struct cgroup_rstat *rstat)
+{
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
+
+	might_sleep();
+
+	__cgroup_rstat_lock(cgrp, -1);
+	cgroup_rstat_flush_locked(rstat);
+	__cgroup_rstat_unlock(cgrp, -1);
 }
 
 /**
@@ -348,11 +380,17 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
  */
 __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
 {
-	might_sleep();
+	__cgroup_rstat_flush(&cgrp->rstat);
+}
 
+static void __cgroup_rstat_flush_hold(struct cgroup_rstat *rstat)
+	__acquires(&cgroup_rstat_lock)
+{
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
+
+	might_sleep();
 	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
-	__cgroup_rstat_unlock(cgrp, -1);
+	cgroup_rstat_flush_locked(rstat);
 }
 
 /**
@@ -365,11 +403,20 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup *cgrp)
  * This function may block.
  */
 void cgroup_rstat_flush_hold(struct cgroup *cgrp)
-	__acquires(&cgroup_rstat_lock)
 {
-	might_sleep();
-	__cgroup_rstat_lock(cgrp, -1);
-	cgroup_rstat_flush_locked(cgrp);
+	__cgroup_rstat_flush_hold(&cgrp->rstat);
+}
+
+/**
+ * cgroup_rstat_flush_release - release cgroup_rstat_flush_hold()
+ * @cgrp: cgroup used by tracepoint
+ */
+static void __cgroup_rstat_flush_release(struct cgroup_rstat *rstat)
+	__releases(&cgroup_rstat_lock)
+{
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
+
+	__cgroup_rstat_unlock(cgrp, -1);
 }
 
 /**
@@ -377,51 +424,60 @@ void cgroup_rstat_flush_hold(struct cgroup *cgrp)
  * @cgrp: cgroup used by tracepoint
  */
 void cgroup_rstat_flush_release(struct cgroup *cgrp)
-	__releases(&cgroup_rstat_lock)
 {
-	__cgroup_rstat_unlock(cgrp, -1);
+	__cgroup_rstat_flush_release(&cgrp->rstat);
 }
 
-int cgroup_rstat_init(struct cgroup *cgrp)
+static void __cgroup_rstat_init(struct cgroup_rstat *rstat)
 {
 	int cpu;
 
+	/* ->updated_children list is self terminated */
+	for_each_possible_cpu(cpu) {
+		struct cgroup_rstat_cpu *rstatc = rstat_cpu(rstat, cpu);
+
+		rstatc->updated_children = rstat;
+		u64_stats_init(&rstatc->bsync);
+	}
+}
+
+int cgroup_rstat_init(struct cgroup_rstat *rstat)
+{
 	/* the root cgrp has rstat_cpu preallocated */
-	if (!cgrp->rstat.rstat_cpu) {
-		cgrp->rstat.rstat_cpu = alloc_percpu(
-				struct cgroup_rstat_cpu);
-		if (!cgrp->rstat.rstat_cpu)
+	if (!rstat->rstat_cpu) {
+		rstat->rstat_cpu = alloc_percpu(struct cgroup_rstat_cpu);
+		if (!rstat->rstat_cpu)
 			return -ENOMEM;
 	}
 
-	/* ->updated_children list is self terminated */
-	for_each_possible_cpu(cpu) {
-		struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(cgrp, cpu);
-
-		rstatc->updated_children = cgrp;
-		u64_stats_init(&rstatc->bsync);
-	}
+	__cgroup_rstat_init(rstat);
 
 	return 0;
 }
 
-void cgroup_rstat_exit(struct cgroup *cgrp)
+static void __cgroup_rstat_exit(struct cgroup_rstat *rstat)
 {
 	int cpu;
 
-	cgroup_rstat_flush(cgrp);
-
 	/* sanity check */
 	for_each_possible_cpu(cpu) {
-		struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(cgrp, cpu);
+		struct cgroup_rstat_cpu *rstatc = rstat_cpu(rstat, cpu);
 
-		if (WARN_ON_ONCE(rstatc->updated_children != cgrp) ||
+		if (WARN_ON_ONCE(rstatc->updated_children != rstat) ||
 		    WARN_ON_ONCE(rstatc->updated_next))
 			return;
 	}
 
-	free_percpu(cgrp->rstat.rstat_cpu);
-	cgrp->rstat.rstat_cpu = NULL;
+	free_percpu(rstat->rstat_cpu);
+	rstat->rstat_cpu = NULL;
+}
+
+void cgroup_rstat_exit(struct cgroup_rstat *rstat)
+{
+	struct cgroup *cgrp = container_of(rstat, typeof(*cgrp), rstat);
+
+	cgroup_rstat_flush(cgrp);
+	__cgroup_rstat_exit(rstat);
 }
 
 void __init cgroup_rstat_boot(void)
@@ -462,7 +518,7 @@ static void cgroup_base_stat_sub(struct cgroup_base_stat *dst_bstat,
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 {
-	struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(cgrp, cpu);
+	struct cgroup_rstat_cpu *rstatc = rstat_cpu(&cgrp->rstat, cpu);
 	struct cgroup *parent = cgroup_parent(cgrp);
 	struct cgroup_rstat_cpu *prstatc;
 	struct cgroup_base_stat delta;
@@ -492,7 +548,7 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu)
 		cgroup_base_stat_add(&cgrp->last_bstat, &delta);
 
 		delta = rstatc->subtree_bstat;
-		prstatc = cgroup_rstat_cpu(parent, cpu);
+		prstatc = rstat_cpu(&parent->rstat, cpu);
 		cgroup_base_stat_sub(&delta, &rstatc->last_subtree_bstat);
 		cgroup_base_stat_add(&prstatc->subtree_bstat, &delta);
 		cgroup_base_stat_add(&rstatc->last_subtree_bstat, &delta);
