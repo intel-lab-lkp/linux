@@ -1664,6 +1664,15 @@ void set_pcie_hotplug_bridge(struct pci_dev *pdev)
 	pcie_capability_read_dword(pdev, PCI_EXP_SLTCAP, &reg32);
 	if (reg32 & PCI_EXP_SLTCAP_HPC)
 		pdev->is_hotplug_bridge = 1;
+
+	/*
+	 * When MSI is disabled, root port will use legacy INTX, and likely
+	 * share INTX interrupt line with other devices like NIC/NVME. There
+	 * was real world issue that the CCIE IRQ is asserted afer boot, but
+	 * will not be handled well and cause IRQ storm. So disable it early.
+	 */
+	if (!pci_msi_enabled())
+		pcie_disable_hp_interrupts_early(pdev);
 }
 
 static void set_pcie_thunderbolt(struct pci_dev *dev)
