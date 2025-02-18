@@ -167,6 +167,13 @@ static inline struct page *shmem_read_mapping_page(
 					mapping_gfp_mask(mapping));
 }
 
+static inline struct page *shmem_read_mapping_page_nonblocking(
+				struct address_space *mapping, pgoff_t index)
+{
+	return shmem_read_mapping_page_gfp(mapping, index,
+					mapping_gfp_mask(mapping) | GFP_NOWAIT);
+}
+
 static inline bool shmem_file(struct file *file)
 {
 	if (!IS_ENABLED(CONFIG_SHMEM))
