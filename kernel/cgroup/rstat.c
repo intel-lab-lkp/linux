@@ -15,8 +15,11 @@ struct cgroup_rstat_ops {
 	void (*flush_fn)(struct cgroup_rstat *, int);
 };
 
-static DEFINE_SPINLOCK(cgroup_rstat_lock);
-static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
+static DEFINE_SPINLOCK(cgroup_rstat_base_lock);
+static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_base_cpu_lock);
+
+static spinlock_t cgroup_rstat_subsys_lock[CGROUP_SUBSYS_COUNT];
+static raw_spinlock_t __percpu cgroup_rstat_subsys_cpu_lock[CGROUP_SUBSYS_COUNT];
 
 #ifdef CONFIG_CGROUP_BPF
 static DEFINE_SPINLOCK(cgroup_rstat_bpf_lock);
@@ -241,8 +244,14 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
  */
 void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 {
-	__cgroup_rstat_updated(&css->rstat, cpu, &rstat_css_ops,
-			&cgroup_rstat_cpu_lock);
+	raw_spinlock_t *cpu_lock;
+
+	if (is_base_css(css))
+		cpu_lock = &cgroup_rstat_base_cpu_lock;
+	else
+		cpu_lock = &cgroup_rstat_subsys_cpu_lock[css->ss->id];
+
+	__cgroup_rstat_updated(&css->rstat, cpu, &rstat_css_ops, cpu_lock);
 }
 
 #ifdef CONFIG_CGROUP_BPF
@@ -487,8 +496,19 @@ static void __cgroup_rstat_flush(struct cgroup_rstat *rstat,
  */
 void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 {
+	spinlock_t *lock;
+	raw_spinlock_t *cpu_lock;
+
+	if (is_base_css(css)) {
+		lock = &cgroup_rstat_base_lock;
+		cpu_lock = &cgroup_rstat_base_cpu_lock;
+	} else {
+		lock = &cgroup_rstat_subsys_lock[css->ss->id];
+		cpu_lock = &cgroup_rstat_subsys_cpu_lock[css->ss->id];
+	}
+
 	__cgroup_rstat_flush(&css->rstat, &rstat_css_ops,
-			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
+			lock, cpu_lock);
 }
 
 #ifdef CONFIG_CGROUP_BPF
@@ -523,8 +543,19 @@ static void __cgroup_rstat_flush_hold(struct cgroup_rstat *rstat,
  */
 void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
 {
+	spinlock_t *lock;
+	raw_spinlock_t *cpu_lock;
+
+	if (is_base_css(css)) {
+		lock = &cgroup_rstat_base_lock;
+		cpu_lock = &cgroup_rstat_base_cpu_lock;
+	} else {
+		lock = &cgroup_rstat_subsys_lock[css->ss->id];
+		cpu_lock = &cgroup_rstat_subsys_cpu_lock[css->ss->id];
+	}
+
 	__cgroup_rstat_flush_hold(&css->rstat, &rstat_css_ops,
-			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
+			lock, cpu_lock);
 }
 
 /**
@@ -547,8 +578,14 @@ static void __cgroup_rstat_flush_release(struct cgroup_rstat *rstat,
  */
 void cgroup_rstat_flush_release(struct cgroup_subsys_state *css)
 {
-	__cgroup_rstat_flush_release(&css->rstat, &rstat_css_ops,
-			&cgroup_rstat_lock);
+	spinlock_t *lock;
+
+	if (is_base_css(css))
+		lock = &cgroup_rstat_base_lock;
+	else
+		lock = &cgroup_rstat_subsys_lock[css->ss->id];
+
+	__cgroup_rstat_flush_release(&css->rstat, &rstat_css_ops, lock);
 }
 
 static void __cgroup_rstat_init(struct cgroup_rstat *rstat)
@@ -629,10 +666,21 @@ void bpf_cgroup_rstat_exit(struct cgroup_bpf *bpf)
 
 void __init cgroup_rstat_boot(void)
 {
-	int cpu;
+	struct cgroup_subsys *ss;
+	int cpu, ssid;
+
+	for_each_subsys(ss, ssid) {
+		spin_lock_init(&cgroup_rstat_subsys_lock[ssid]);
+
+		for_each_possible_cpu(cpu) {
+			raw_spinlock_t *cpu_lock =
+				per_cpu_ptr(&cgroup_rstat_subsys_cpu_lock[ssid], cpu);
+			raw_spin_lock_init(cpu_lock);
+		}
+	}
 
 	for_each_possible_cpu(cpu) {
-		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu));
+		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu));
 
 #ifdef CONFIG_CGROUP_BPF
 		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_bpf_cpu_lock, cpu));
