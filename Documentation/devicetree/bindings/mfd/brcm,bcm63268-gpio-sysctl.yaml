@@ -50,6 +50,15 @@ patternProperties:
       should follow the bindings specified in
       Documentation/devicetree/bindings/pinctrl/brcm,bcm63268-pinctrl.yaml.
 
+  "^gphy_ctrl@[0-9a-f]+$":
+    # Child node
+    type: object
+    $ref: /schemas/mfd/syscon.yaml
+    description:
+      Control register for GPHY modes. This child node definition
+      should follow the bindings specified in
+      Documentation/devicetree/bindings/mfd/syscon.yaml
+
 required:
   - "#address-cells"
   - compatible
@@ -190,5 +199,9 @@ examples:
           function = "dsl_gpio9";
           pins = "dsl_gpio9";
         };
+      };
+      gphy_ctrl: gphy_ctrl@54 {
+      compatible = "brcm,bcm63268-gphy-ctrl", "syscon";
+      reg = <0x54 0x4>;
       };
     };
