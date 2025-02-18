@@ -422,6 +422,7 @@ extern "C" {
 #define DRM_FORMAT_MOD_VENDOR_ALLWINNER 0x09
 #define DRM_FORMAT_MOD_VENDOR_AMLOGIC 0x0a
 #define DRM_FORMAT_MOD_VENDOR_MTK     0x0b
+#define DRM_FORMAT_MOD_VENDOR_APPLE   0x0c
 
 /* add more to the end as needed */
 
@@ -1493,6 +1494,36 @@ drm_fourcc_canonicalize_nvidia_format_mod(__u64 modifier)
 
 /* alias for the most common tiling format */
 #define DRM_FORMAT_MOD_MTK_16L_32S_TILE  DRM_FORMAT_MOD_MTK(MTK_FMT_MOD_TILE_16L32S)
+
+/*
+ * Apple twiddled layout.
+ *
+ * This is the most "general" image layout supported on Apple GPUs.
+ *
+ * Twiddled images are divided into tiles. Tiles are always 16KiB, with
+ * dimensions depending on the base-format. Within a tile, pixels are fully
+ * interleaved (Morton order). Tiles themselves are raster-order.
+ *
+ * Images must be 16-byte aligned.
+ *
+ * For more information see
+ * https://docs.mesa3d.org/drivers/asahi.html#image-layouts
+ */
+#define DRM_FORMAT_MOD_APPLE_TWIDDLED fourcc_mod_code(APPLE, 1)
+
+/*
+ * Apple twiddled and compressed layout.
+ *
+ * This is the main lossless image compression layout supported by Apple GPUs.
+ *
+ * The image is divided into tiles that are internally twiddled.  In addition to
+ * the body, there is also a metadata section containing 8 bytes for each 16x16
+ * compression subtile. By convention, the metadata immediately follows the
+ * body, after padding to 128-bytes.
+ *
+ * Images must be 16-byte aligned.
+ */
+#define DRM_FORMAT_MOD_APPLE_TWIDDLED_COMPRESSED fourcc_mod_code(APPLE, 2)
 
 /*
  * AMD modifiers
