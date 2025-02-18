@@ -647,6 +647,12 @@ static int mv88q2xxx_hwmon_read(struct device *dev,
 	struct phy_device *phydev = dev_get_drvdata(dev);
 	int ret;
 
+	/* If the PHYs reset is asserted it returns 0xffff for any read
+	 * operation. Return with an I/O error in this case.
+	 */
+	if (phydev->mdio.reset_state == 1)
+		return -EIO;
+
 	switch (attr) {
 	case hwmon_temp_input:
 		ret = phy_read_mmd(phydev, MDIO_MMD_PCS,
