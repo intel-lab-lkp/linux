@@ -187,6 +187,13 @@ static int aspeed_wdt_set_pretimeout(struct watchdog_device *wdd,
 	u32 actual = pretimeout * WDT_RATE_1MHZ;
 	u32 s = wdt->cfg->irq_shift;
 	u32 m = wdt->cfg->irq_mask;
+	u32 reload = readl(wdt->base + WDT_RELOAD_VALUE);
+
+	if (actual >= reload)
+		return -EINVAL;
+
+	/* watchdog timer is counting down */
+	actual = reload - actual;
 
 	wdd->pretimeout = pretimeout;
 	wdt->ctrl &= ~m;
