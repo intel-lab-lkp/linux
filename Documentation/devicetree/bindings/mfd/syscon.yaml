@@ -54,6 +54,7 @@ select:
           - atmel,sama5d4-sfrbu
           - axis,artpec6-syscon
           - brcm,cru-clkset
+          - brcm,bcm63268-gphy-ctrl
           - brcm,sr-cdru
           - brcm,sr-mhb
           - cirrus,ep7209-syscon1
@@ -153,6 +154,7 @@ properties:
           - atmel,sama5d4-sfrbu
           - axis,artpec6-syscon
           - brcm,cru-clkset
+          - brcm,bcm63268-gphy-ctrl
           - brcm,sr-cdru
           - brcm,sr-mhb
           - cirrus,ep7209-syscon1
