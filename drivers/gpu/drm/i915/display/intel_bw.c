@@ -809,13 +809,16 @@ static int intel_bw_crtc_min_cdclk(const struct intel_crtc_state *crtc_state)
 static void intel_bw_crtc_update(struct intel_bw_state *bw_state,
 				 const struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *i915 = to_i915(crtc->base.dev);
 
-	bw_state->data_rate[crtc->pipe] =
-		intel_bw_crtc_data_rate(crtc_state);
-	bw_state->num_active_planes[crtc->pipe] =
-		intel_bw_crtc_num_active_planes(crtc_state);
+	if (DISPLAY_VER(display) >= 11) {
+		bw_state->data_rate[crtc->pipe] =
+			intel_bw_crtc_data_rate(crtc_state);
+		bw_state->num_active_planes[crtc->pipe] =
+			intel_bw_crtc_num_active_planes(crtc_state);
+	}
 	bw_state->force_check_qgv = true;
 
 	drm_dbg_kms(&i915->drm, "pipe %c data rate %u num active planes %u\n",
