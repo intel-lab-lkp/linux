@@ -161,6 +161,9 @@ void link_set_all_streams_dpms_off_for_link(struct dc_link *link)
 	link_get_master_pipes_with_dpms_on(link, state, &count, pipes);
 
 	for (i = 0; i < count; i++) {
+		if (!pipes[i]->stream)
+			continue;
+
 		stream_update.stream = pipes[i]->stream;
 		dc_commit_updates_for_stream(link->ctx->dc, NULL, 0,
 				pipes[i]->stream, &stream_update,
