@@ -16,6 +16,7 @@ properties:
       - samsung,exynos5250-dwusb3
       - samsung,exynos5433-dwusb3
       - samsung,exynos7-dwusb3
+      - samsung,exynos7870-dwusb3
       - samsung,exynos850-dwusb3
 
   '#address-cells':
@@ -52,7 +53,6 @@ required:
   - clock-names
   - ranges
   - '#size-cells'
-  - vdd10-supply
   - vdd33-supply
 
 allOf:
@@ -72,6 +72,8 @@ allOf:
             - const: susp_clk
             - const: link_aclk
             - const: link_pclk
+      required:
+        - vdd10-supply
 
   - if:
       properties:
@@ -86,6 +88,8 @@ allOf:
         clock-names:
           items:
             - const: usbdrd30
+      required:
+        - vdd10-supply
 
   - if:
       properties:
@@ -103,6 +107,8 @@ allOf:
             - const: susp_clk
             - const: phyclk
             - const: pipe_pclk
+      required:
+        - vdd10-supply
 
   - if:
       properties:
@@ -119,6 +125,24 @@ allOf:
             - const: usbdrd30
             - const: usbdrd30_susp_clk
             - const: usbdrd30_axius_clk
+      required:
+        - vdd10-supply
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: samsung,exynos7870-dwusb3
+    then:
+      properties:
+        clocks:
+          minItems: 3
+          maxItems: 3
+        clock-names:
+          items:
+            - const: bus_early
+            - const: ctrl
+            - const: ref
 
   - if:
       properties:
@@ -134,6 +158,8 @@ allOf:
           items:
             - const: bus_early
             - const: ref
+      required:
+        - vdd10-supply
 
 additionalProperties: false
 
