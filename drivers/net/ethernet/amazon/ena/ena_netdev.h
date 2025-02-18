@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
+#include <linux/ethtool.h>
 #include <net/xdp.h>
 #include <uapi/linux/bpf.h>
 
@@ -387,6 +388,11 @@ struct ena_adapter {
 	struct bpf_prog *xdp_bpf_prog;
 	u32 xdp_first_ring;
 	u32 xdp_num_queues;
+};
+
+struct ena_stats {
+	char name[ETH_GSTRING_LEN];
+	int stat_offset;
 };
 
 void ena_set_ethtool_ops(struct net_device *netdev);

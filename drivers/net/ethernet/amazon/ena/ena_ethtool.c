@@ -11,11 +11,6 @@
 #include "ena_xdp.h"
 #include "ena_phc.h"
 
-struct ena_stats {
-	char name[ETH_GSTRING_LEN];
-	int stat_offset;
-};
-
 struct ena_hw_metrics {
 	char name[ETH_GSTRING_LEN];
 };

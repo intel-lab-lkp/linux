@@ -65,12 +65,61 @@ static ssize_t ena_phc_enable_get(struct device *dev,
 static DEVICE_ATTR(phc_enable, S_IRUGO | S_IWUSR, ena_phc_enable_get,
 		   ena_phc_enable_set);
 
+#define ENA_STAT_ENA_COM_PHC_ENTRY(stat) { \
+	.name = #stat, \
+	.stat_offset = offsetof(struct ena_com_stats_phc, stat) / sizeof(u64) \
+}
+
+const struct ena_stats ena_stats_ena_com_phc_strings[] = {
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_cnt),
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_exp),
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_skp),
+	ENA_STAT_ENA_COM_PHC_ENTRY(phc_err),
+};
+
+u16 ena_stats_array_ena_com_phc_size = ARRAY_SIZE(ena_stats_ena_com_phc_strings);
+
+static ssize_t ena_phc_stats_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct ena_adapter *adapter = dev_get_drvdata(dev);
+	int i, rc, chars_written = 0;
+
+	if (!ena_phc_is_active(adapter))
+		return 0;
+
+	for (i = 0; i < ena_stats_array_ena_com_phc_size; i++) {
+		const struct ena_stats *ena_stats;
+		u64 *ptr;
+
+		ena_stats = &ena_stats_ena_com_phc_strings[i];
+		ptr = (u64 *)&adapter->ena_dev->phc.stats +
+		      ena_stats->stat_offset;
+		rc = snprintf(buf,
+			      ETH_GSTRING_LEN + sizeof(u64),
+			      "%s: %llu\n",
+			      ena_stats->name,
+			      *ptr);
+
+		buf += rc;
+		chars_written += rc;
+	}
+
+	return chars_written;
+}
+
+static DEVICE_ATTR(phc_stats, S_IRUGO, ena_phc_stats_show, NULL);
+
 /******************************************************************************
  *****************************************************************************/
 int ena_sysfs_init(struct device *dev)
 {
 	if (device_create_file(dev, &dev_attr_phc_enable))
 		dev_err(dev, "Failed to create phc_enable sysfs entry");
+
+	if (device_create_file(dev, &dev_attr_phc_stats))
+		dev_err(dev, "Failed to create phc_stats sysfs entry");
 
 	return 0;
 }
@@ -80,4 +129,5 @@ int ena_sysfs_init(struct device *dev)
 void ena_sysfs_terminate(struct device *dev)
 {
 	device_remove_file(dev, &dev_attr_phc_enable);
+	device_remove_file(dev, &dev_attr_phc_stats);
 }
