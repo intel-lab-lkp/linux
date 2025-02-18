@@ -33,6 +33,9 @@
 	switch0: switch@1b000000 {
 		compatible = "realtek,rtl9301-switch", "syscon", "simple-mfd";
 		reg = <0x1b000000 0x10000>;
+		interrupt-parent = <&intc>;
+		interrupts = <23>, <24>;
+		interrupt-names = "switch", "nic";
 		#address-cells = <1>;
 		#size-cells = <1>;
 
