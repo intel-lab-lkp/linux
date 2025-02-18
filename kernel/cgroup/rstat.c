@@ -18,6 +18,11 @@ struct cgroup_rstat_ops {
 static DEFINE_SPINLOCK(cgroup_rstat_lock);
 static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
 
+#ifdef CONFIG_CGROUP_BPF
+static DEFINE_SPINLOCK(cgroup_rstat_bpf_lock);
+static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_bpf_cpu_lock);
+#endif /* CONFIG_CGROUP_BPF */
+
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
 static struct cgroup_rstat_cpu *rstat_cpu(struct cgroup_rstat *rstat, int cpu)
@@ -244,7 +249,7 @@ void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 __bpf_kfunc void bpf_cgroup_rstat_updated(struct cgroup *cgroup, int cpu)
 {
 	__cgroup_rstat_updated(&(cgroup->bpf.rstat), cpu, &rstat_bpf_ops,
-			&cgroup_rstat_cpu_lock);
+			&cgroup_rstat_bpf_cpu_lock);
 }
 #endif /* CONFIG_CGROUP_BPF */
 
@@ -490,7 +495,7 @@ void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 __bpf_kfunc void bpf_cgroup_rstat_flush(struct cgroup *cgroup)
 {
 	__cgroup_rstat_flush(&(cgroup->bpf.rstat), &rstat_bpf_ops,
-			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
+			&cgroup_rstat_bpf_lock, &cgroup_rstat_bpf_cpu_lock);
 }
 #endif /* CONFIG_CGROUP_BPF */
 
@@ -617,7 +622,7 @@ int bpf_cgroup_rstat_init(struct cgroup_bpf *bpf)
 void bpf_cgroup_rstat_exit(struct cgroup_bpf *bpf)
 {
 	__cgroup_rstat_flush(&bpf->rstat, &rstat_bpf_ops,
-			&cgroup_rstat_lock, &cgroup_rstat_cpu_lock);
+			&cgroup_rstat_bpf_lock, &cgroup_rstat_bpf_cpu_lock);
 	__cgroup_rstat_exit(&bpf->rstat);
 }
 #endif /* CONFIG_CGROUP_BPF */
@@ -626,8 +631,13 @@ void __init cgroup_rstat_boot(void)
 {
 	int cpu;
 
-	for_each_possible_cpu(cpu)
+	for_each_possible_cpu(cpu) {
 		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu));
+
+#ifdef CONFIG_CGROUP_BPF
+		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_bpf_cpu_lock, cpu));
+#endif /* CONFIG_CGROUP_BPF */
+	}
 }
 
 /*
