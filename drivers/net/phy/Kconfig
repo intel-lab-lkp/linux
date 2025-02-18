@@ -156,10 +156,10 @@ config BCM54140_PHY
 
 config BCM63XX_PHY
 	tristate "Broadcom 63xx SOCs internal PHY"
-	depends on BCM63XX || COMPILE_TEST
+	depends on BCM63XX || BMIPS_GENERIC || COMPILE_TEST
 	select BCM_NET_PHYLIB
 	help
-	  Currently supports the 6348 and 6358 PHYs.
+	  Currently supports the 6348, 6358 and 63268 PHYs.
 
 config BCM7XXX_PHY
 	tristate "Broadcom 7xxx SOCs internal PHYs"
