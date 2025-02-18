@@ -185,10 +185,6 @@
 	};
 };
 
-&i2c6 {
-	status = "okay";
-	clock-frequency = <400000>;
-};
 
 &pcie_phy {
 	status = "okay";
