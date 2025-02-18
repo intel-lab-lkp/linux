@@ -2,8 +2,10 @@
 
 import errno
 import json as _json
+import os
 import random
 import re
+import select
 import socket
 import subprocess
 import time
@@ -15,8 +17,22 @@ class CmdExitFailure(Exception):
         self.cmd = cmd_obj
 
 
+def fd_read_timeout(fd, timeout):
+    rlist, _, _ = select.select([fd], [], [], timeout)
+    if rlist:
+        return os.read(fd, 1024)
+    else:
+        raise TimeoutError("Timeout waiting for fd read")
+
+
 class cmd:
-    def __init__(self, comm, shell=True, fail=True, ns=None, background=False, host=None, timeout=5):
+    """
+    Execute a command on local or remote host.
+
+    Use bkg() instead to run a command in the background.
+    """
+    def __init__(self, comm, shell=True, fail=True, ns=None, background=False,
+                 host=None, timeout=5, wait_init=None):
         if ns:
             comm = f'ip netns exec {ns} ' + comm
 
@@ -28,8 +44,23 @@ class cmd:
         if host:
             self.proc = host.cmd(comm)
         else:
+            # wait_init lets us wait for the background process to fully start,
+            # we pass an FD to the child process, and wait for it to write back
+            pass_fds = ()
+            env = os.environ.copy()
+            if wait_init is not None:
+                rfd, wfd = os.pipe()
+                pass_fds = (wfd, )
+                env["KSFT_READY_FD"] = str(wfd)
             self.proc = subprocess.Popen(comm, shell=shell, stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE)
+                                         stderr=subprocess.PIPE, pass_fds=pass_fds,
+                                         env=env)
+            if wait_init is not None:
+                os.close(wfd)
+                msg = fd_read_timeout(rfd, wait_init)
+                os.close(rfd)
+                if not msg:
+                    raise Exception("Did not receive ready message")
         if not background:
             self.process(terminate=False, fail=fail, timeout=timeout)
 
@@ -54,10 +85,29 @@ class cmd:
 
 
 class bkg(cmd):
+    """
+    Run a command in the background.
+
+    Examples usage:
+
+    Run a command on remote host, and wait for it to finish.
+    This is usually paired with wait_port_listen() to make sure
+    the command has initialized:
+
+        with bkg("socat ...", exit_wait=True, host=cfg.remote) as nc:
+            ...
+
+    Run a command and expect it to let us know that it's ready
+    by writing to a special file decriptor passed via KSFT_READY_FD.
+    Command will be terminated when we exit the context manager:
+
+        with bkg("my_binary", wait_init=5):
+    """
     def __init__(self, comm, shell=True, fail=None, ns=None, host=None,
-                 exit_wait=False):
+                 exit_wait=False, wait_init=None):
         super().__init__(comm, background=True,
-                         shell=shell, fail=fail, ns=ns, host=host)
+                         shell=shell, fail=fail, ns=ns, host=host,
+                         wait_init=wait_init)
         self.terminate = not exit_wait
         self.check_fail = fail
 

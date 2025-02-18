@@ -14,6 +14,25 @@
 #define UMEM_SZ (1U << 16)
 #define NUM_DESC (UMEM_SZ / 2048)
 
+/* Move this to a common header when reused! */
+static void ksft_ready(void)
+{
+	const char msg[7] = "ready\n";
+	char *env_str;
+	int fd;
+
+	env_str = getenv("KSFT_READY_FD");
+	if (!env_str)
+		return;
+
+	fd = atoi(env_str);
+	if (!fd)
+		return;
+
+	write(fd, msg, sizeof(msg));
+	close(fd);
+}
+
 /* this is a simple helper program that creates an XDP socket and does the
  * minimum necessary to get bind() to succeed.
  *
@@ -85,8 +104,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	/* give the parent program some data when the socket is ready*/
-	fprintf(stdout, "%d\n", sock_fd);
+	ksft_ready();
 
 	/* parent program will write a byte to stdin when its ready for this
 	 * helper to exit
