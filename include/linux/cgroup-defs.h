@@ -177,9 +177,6 @@ struct cgroup_subsys_state {
 	struct list_head sibling;
 	struct list_head children;
 
-	/* flush target list anchored at cgrp->rstat_css_list */
-	struct list_head rstat_css_node;
-
 	/*
 	 * PI: Subsys-unique ID.  0 is unused and root is always 1.  The
 	 * matching css can be looked up using css_from_id().
@@ -219,6 +216,9 @@ struct cgroup_subsys_state {
 	 * Protected by cgroup_mutex.
 	 */
 	int nr_descendants;
+
+	/* per-cpu recursive resource statistics */
+	struct cgroup_rstat rstat;
 };
 
 /*
@@ -443,10 +443,6 @@ struct cgroup {
 	 */
 	struct cgroup *dom_cgrp;
 	struct cgroup *old_dom_cgrp;		/* used while enabling threaded */
-
-	/* per-cpu recursive resource statistics */
-	struct cgroup_rstat rstat;
-	struct list_head rstat_css_list;
 
 	/* cgroup basic resource statistics */
 	struct cgroup_base_stat last_bstat;

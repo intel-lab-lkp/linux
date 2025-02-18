@@ -687,10 +687,10 @@ static inline void cgroup_path_from_kernfs_id(u64 id, char *buf, size_t buflen)
 /*
  * cgroup scalable recursive statistics.
  */
-void cgroup_rstat_updated(struct cgroup *cgrp, int cpu);
-void cgroup_rstat_flush(struct cgroup *cgrp);
-void cgroup_rstat_flush_hold(struct cgroup *cgrp);
-void cgroup_rstat_flush_release(struct cgroup *cgrp);
+void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu);
+void cgroup_rstat_flush(struct cgroup_subsys_state *css);
+void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css);
+void cgroup_rstat_flush_release(struct cgroup_subsys_state *css);
 
 /*
  * Basic resource stats.
