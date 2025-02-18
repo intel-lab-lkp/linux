@@ -10,6 +10,7 @@
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include <linux/xarray.h>
 
 #ifdef CONFIG_X86
 #include <asm/set_memory.h>
@@ -50,7 +51,7 @@ static const struct drm_gem_object_funcs drm_gem_shmem_funcs = {
 
 static struct drm_gem_shmem_object *
 __drm_gem_shmem_create(struct drm_device *dev, size_t size, bool private,
-		       struct vfsmount *gemfs)
+		       bool sparse, struct vfsmount *gemfs)
 {
 	struct drm_gem_shmem_object *shmem;
 	struct drm_gem_object *obj;
@@ -90,6 +91,11 @@ __drm_gem_shmem_create(struct drm_device *dev, size_t size, bool private,
 
 	INIT_LIST_HEAD(&shmem->madv_list);
 
+	if (unlikely(sparse))
+		xa_init_flags(&shmem->xapages, XA_FLAGS_ALLOC);
+
+	shmem->sparse = sparse;
+
 	if (!private) {
 		/*
 		 * Our buffers are kept pinned, so allocating them
@@ -124,9 +130,15 @@ err_free:
  */
 struct drm_gem_shmem_object *drm_gem_shmem_create(struct drm_device *dev, size_t size)
 {
-	return __drm_gem_shmem_create(dev, size, false, NULL);
+	return __drm_gem_shmem_create(dev, size, false, false, NULL);
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_create);
+
+struct drm_gem_shmem_object *drm_gem_shmem_create_sparse(struct drm_device *dev, size_t size)
+{
+	return __drm_gem_shmem_create(dev, size, false, true, NULL);
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_create_sparse);
 
 /**
  * drm_gem_shmem_create_with_mnt - Allocate an object with the given size in a
@@ -145,7 +157,7 @@ struct drm_gem_shmem_object *drm_gem_shmem_create_with_mnt(struct drm_device *de
 							   size_t size,
 							   struct vfsmount *gemfs)
 {
-	return __drm_gem_shmem_create(dev, size, false, gemfs);
+	return __drm_gem_shmem_create(dev, size, false, false, gemfs);
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_create_with_mnt);
 
@@ -173,7 +185,9 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
 			sg_free_table(shmem->sgt);
 			kfree(shmem->sgt);
 		}
-		if (shmem->pages)
+
+		if ((!shmem->sparse && shmem->pages) ||
+		    (shmem->sparse && !xa_empty(&shmem->xapages)))
 			drm_gem_shmem_put_pages(shmem);
 
 		drm_WARN_ON(obj->dev, shmem->pages_use_count);
@@ -191,10 +205,18 @@ static int drm_gem_shmem_get_pages(struct drm_gem_shmem_object *shmem)
 	struct drm_gem_object *obj = &shmem->base;
 	struct page **pages;
 
+	if (drm_WARN_ON(obj->dev, shmem->sparse))
+		return -EINVAL;
+
 	dma_resv_assert_held(shmem->base.resv);
 
 	if (shmem->pages_use_count++ > 0)
 		return 0;
+
+	/* We only allow increasing the user count in the case of
+	  sparse shmem objects with some backed pages for now */
+	if (shmem->sparse && xa_empty(&shmem->xapages))
+		return -EINVAL;
 
 	pages = drm_gem_get_pages(obj);
 	if (IS_ERR(pages)) {
@@ -541,6 +563,8 @@ static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 	struct page *page;
 	pgoff_t page_offset;
 
+	drm_WARN_ON(obj->dev, shmem->sparse);
+
 	/* We don't use vmf->pgoff since that has the fake offset */
 	page_offset = (vmf->address - vma->vm_start) >> PAGE_SHIFT;
 
@@ -567,6 +591,7 @@ static void drm_gem_shmem_vm_open(struct vm_area_struct *vma)
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
 
 	drm_WARN_ON(obj->dev, obj->import_attach);
+	drm_WARN_ON(obj->dev, shmem->sparse);
 
 	dma_resv_lock(shmem->base.resv, NULL);
 
@@ -666,6 +691,9 @@ void drm_gem_shmem_print_info(const struct drm_gem_shmem_object *shmem,
 	if (shmem->base.import_attach)
 		return;
 
+	if (drm_WARN_ON(shmem->base.dev, shmem->sparse))
+		return;
+
 	drm_printf_indent(p, indent, "pages_use_count=%u\n", shmem->pages_use_count);
 	drm_printf_indent(p, indent, "vmap_use_count=%u\n", shmem->vmap_use_count);
 	drm_printf_indent(p, indent, "vaddr=%p\n", shmem->vaddr);
@@ -691,6 +719,7 @@ struct sg_table *drm_gem_shmem_get_sg_table(struct drm_gem_shmem_object *shmem)
 	struct drm_gem_object *obj = &shmem->base;
 
 	drm_WARN_ON(obj->dev, obj->import_attach);
+	drm_WARN_ON(obj->dev, shmem->sparse);
 
 	return drm_prime_pages_to_sg(obj->dev, shmem->pages, obj->size >> PAGE_SHIFT);
 }
@@ -701,6 +730,9 @@ static struct sg_table *drm_gem_shmem_get_pages_sgt_locked(struct drm_gem_shmem_
 	struct drm_gem_object *obj = &shmem->base;
 	int ret;
 	struct sg_table *sgt;
+
+	if (drm_WARN_ON(obj->dev, shmem->sparse))
+		return ERR_PTR(-EINVAL);
 
 	if (shmem->sgt)
 		return shmem->sgt;
@@ -787,7 +819,7 @@ drm_gem_shmem_prime_import_sg_table(struct drm_device *dev,
 	size_t size = PAGE_ALIGN(attach->dmabuf->size);
 	struct drm_gem_shmem_object *shmem;
 
-	shmem = __drm_gem_shmem_create(dev, size, true, NULL);
+	shmem = __drm_gem_shmem_create(dev, size, true, false, NULL);
 	if (IS_ERR(shmem))
 		return ERR_CAST(shmem);
 

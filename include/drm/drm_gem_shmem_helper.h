@@ -6,6 +6,7 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/mutex.h>
+#include <linux/xarray.h>
 
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
@@ -29,7 +30,11 @@ struct drm_gem_shmem_object {
 	/**
 	 * @pages: Page table
 	 */
-	struct page **pages;
+	union {
+
+		struct page **pages;
+		struct xarray xapages;
+	};
 
 	/**
 	 * @pages_use_count:
@@ -91,6 +96,11 @@ struct drm_gem_shmem_object {
 	 * @map_wc: map object write-combined (instead of using shmem defaults).
 	 */
 	bool map_wc : 1;
+
+	/**
+	 * @sparse: the object's virtual memory space is only partially backed by pages
+	 */
+	bool sparse : 1;
 };
 
 #define to_drm_gem_shmem_obj(obj) \
@@ -229,6 +239,9 @@ static inline int drm_gem_shmem_object_vmap(struct drm_gem_object *obj,
 {
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
 
+	if (shmem->sparse)
+		return -EACCES;
+
 	return drm_gem_shmem_vmap(shmem, map);
 }
 
@@ -262,6 +275,9 @@ static inline void drm_gem_shmem_object_vunmap(struct drm_gem_object *obj,
 static inline int drm_gem_shmem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 {
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
+
+	if (shmem->sparse)
+		return -EACCES;
 
 	return drm_gem_shmem_mmap(shmem, vma);
 }
