@@ -373,8 +373,8 @@ void nec7210_release_rfd_holdoff(gpib_board_t *board, struct nec7210_priv *priv)
 }
 EXPORT_SYMBOL(nec7210_release_rfd_holdoff);
 
-unsigned int nec7210_t1_delay(gpib_board_t *board, struct nec7210_priv *priv,
-			      unsigned int nano_sec)
+int nec7210_t1_delay(gpib_board_t *board, struct nec7210_priv *priv,
+		     unsigned int nano_sec)
 {
 	unsigned int retval;
 

@@ -1120,8 +1120,7 @@ static uint8_t usb_gpib_serial_poll_status(gpib_board_t *board)
 }
 
 /* t1_delay */
-
-static unsigned int usb_gpib_t1_delay(gpib_board_t *board, unsigned int nano_sec)
+static int usb_gpib_t1_delay(gpib_board_t *board, unsigned int nano_sec)
 {
 	dev_alert(board->gpib_dev, "%s:%s - currently a NOP\n", NAME, __func__);
 	return 0;
