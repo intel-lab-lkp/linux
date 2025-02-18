@@ -385,7 +385,7 @@ void bpf_rstat_flush(struct cgroup *cgrp, struct cgroup *parent, int cpu)
 __bpf_hook_end();
 
 /*
- * Helper functions for locking cgroup_rstat_lock.
+ * Helper functions for locking.
  *
  * This makes it easier to diagnose locking issues and contention in
  * production environments.  The parameter @cpu_in_loop indicate lock
@@ -393,24 +393,26 @@ __bpf_hook_end();
  * value -1 is used when obtaining the main lock else this is the CPU
  * number processed last.
  */
-static inline void __cgroup_rstat_lock(struct cgroup *cgrp, int cpu_in_loop)
-	__acquires(&cgroup_rstat_lock)
+static inline void __cgroup_rstat_lock(spinlock_t *lock,
+		struct cgroup *cgrp, int cpu_in_loop)
+	__acquires(lock)
 {
 	bool contended;
 
-	contended = !spin_trylock_irq(&cgroup_rstat_lock);
+	contended = !spin_trylock_irq(lock);
 	if (contended) {
 		trace_cgroup_rstat_lock_contended(cgrp, cpu_in_loop, contended);
-		spin_lock_irq(&cgroup_rstat_lock);
+		spin_lock_irq(lock);
 	}
 	trace_cgroup_rstat_locked(cgrp, cpu_in_loop, contended);
 }
 
-static inline void __cgroup_rstat_unlock(struct cgroup *cgrp, int cpu_in_loop)
-	__releases(&cgroup_rstat_lock)
+static inline void __cgroup_rstat_unlock(spinlock_t *lock,
+		struct cgroup *cgrp, int cpu_in_loop)
+	__releases(lock)
 {
 	trace_cgroup_rstat_unlock(cgrp, cpu_in_loop, false);
-	spin_unlock_irq(&cgroup_rstat_lock);
+	spin_unlock_irq(lock);
 }
 
 /* see cgroup_rstat_flush() */
@@ -434,10 +436,10 @@ static void cgroup_rstat_flush_locked(struct cgroup_rstat *rstat,
 			struct cgroup *cgrp;
 
 			cgrp = ops->cgroup_fn(rstat);
-			__cgroup_rstat_unlock(cgrp, cpu);
+			__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, cpu);
 			if (!cond_resched())
 				cpu_relax();
-			__cgroup_rstat_lock(cgrp, cpu);
+			__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, cpu);
 		}
 	}
 }
@@ -449,9 +451,9 @@ static void __cgroup_rstat_flush(struct cgroup_rstat *rstat,
 
 	might_sleep();
 	cgrp = ops->cgroup_fn(rstat);
-	__cgroup_rstat_lock(cgrp, -1);
+	__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, -1);
 	cgroup_rstat_flush_locked(rstat, ops);
-	__cgroup_rstat_unlock(cgrp, -1);
+	__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, -1);
 }
 
 /**
@@ -487,7 +489,7 @@ static void __cgroup_rstat_flush_hold(struct cgroup_rstat *rstat,
 
 	might_sleep();
 	cgrp = ops->cgroup_fn(rstat);
-	__cgroup_rstat_lock(cgrp, -1);
+	__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, -1);
 	cgroup_rstat_flush_locked(rstat, ops);
 }
 
@@ -516,7 +518,7 @@ static void __cgroup_rstat_flush_release(struct cgroup_rstat *rstat,
 	struct cgroup *cgrp;
 
 	cgrp = ops->cgroup_fn(rstat);
-	__cgroup_rstat_unlock(cgrp, -1);
+	__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, -1);
 }
 
 /**
