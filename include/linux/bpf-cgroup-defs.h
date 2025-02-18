@@ -75,6 +75,9 @@ struct cgroup_bpf {
 
 	/* cgroup_bpf is released using a work queue */
 	struct work_struct release_work;
+
+	/* per-cpu recursive resource statistics */
+	struct cgroup_rstat rstat;
 };
 
 #else /* CONFIG_CGROUP_BPF */

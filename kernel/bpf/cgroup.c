@@ -210,6 +210,7 @@ void cgroup_bpf_offline(struct cgroup *cgrp)
 {
 	cgroup_get(cgrp);
 	percpu_ref_kill(&cgrp->bpf.refcnt);
+	bpf_cgroup_rstat_exit(&cgrp->bpf);
 }
 
 static void bpf_cgroup_storages_free(struct bpf_cgroup_storage *storages[])
@@ -490,6 +491,10 @@ int cgroup_bpf_inherit(struct cgroup *cgrp)
 	if (ret)
 		return ret;
 
+	ret = bpf_cgroup_rstat_init(&cgrp->bpf);
+	if (ret)
+		goto cleanup_ref;
+
 	for (p = cgroup_parent(cgrp); p; p = cgroup_parent(p))
 		cgroup_bpf_get(p);
 
@@ -513,6 +518,7 @@ cleanup:
 	for (p = cgroup_parent(cgrp); p; p = cgroup_parent(p))
 		cgroup_bpf_put(p);
 
+cleanup_ref:
 	percpu_ref_exit(&cgrp->bpf.refcnt);
 
 	return -ENOMEM;

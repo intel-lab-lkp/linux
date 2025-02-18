@@ -836,6 +836,9 @@ static inline bool cgroup_task_frozen(struct task_struct *task)
 #endif /* !CONFIG_CGROUPS */
 
 #ifdef CONFIG_CGROUP_BPF
+void bpf_cgroup_rstat_updated(struct cgroup *cgrp, int cpu);
+void bpf_cgroup_rstat_flush(struct cgroup *cgrp);
+
 static inline void cgroup_bpf_get(struct cgroup *cgrp)
 {
 	percpu_ref_get(&cgrp->bpf.refcnt);

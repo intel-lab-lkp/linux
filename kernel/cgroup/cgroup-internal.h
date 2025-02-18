@@ -274,6 +274,11 @@ void cgroup_rstat_exit(struct cgroup_subsys_state *css);
 void cgroup_rstat_boot(void);
 void cgroup_base_stat_cputime_show(struct seq_file *seq);
 
+#ifdef CONFIG_CGROUP_BPF
+int bpf_cgroup_rstat_init(struct cgroup_bpf *bpf);
+void bpf_cgroup_rstat_exit(struct cgroup_bpf *bpf);
+#endif /* CONFIG_CGROUP_BPF */
+
 /*
  * namespace.c
  */

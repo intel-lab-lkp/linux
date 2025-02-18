@@ -73,6 +73,47 @@ static struct cgroup_rstat_ops rstat_css_ops = {
 	.flush_fn = rstat_flush_via_css,
 };
 
+#ifdef CONFIG_CGROUP_BPF
+__weak noinline void bpf_rstat_flush(struct cgroup *cgrp,
+				     struct cgroup *parent, int cpu);
+
+static struct cgroup *rstat_cgroup_via_bpf(struct cgroup_rstat *rstat)
+{
+	struct cgroup_bpf *bpf = container_of(rstat, typeof(*bpf), rstat);
+	struct cgroup *cgrp = container_of(bpf, typeof(*cgrp), bpf);
+
+	return cgrp;
+}
+
+static struct cgroup_rstat *rstat_parent_via_bpf(
+		struct cgroup_rstat *rstat)
+{
+	struct cgroup *cgrp, *cgrp_parent;
+
+	cgrp = rstat_cgroup_via_bpf(rstat);
+	cgrp_parent = cgroup_parent(cgrp);
+	if (!cgrp_parent)
+		return NULL;
+
+	return &(cgrp_parent->bpf.rstat);
+}
+
+static void rstat_flush_via_bpf(struct cgroup_rstat *rstat, int cpu)
+{
+	struct cgroup *cgrp, *cgrp_parent;
+
+	cgrp = rstat_cgroup_via_bpf(rstat);
+	cgrp_parent = cgroup_parent(cgrp);
+	bpf_rstat_flush(cgrp, cgrp_parent, cpu);
+}
+
+static struct cgroup_rstat_ops rstat_bpf_ops = {
+	.parent_fn = rstat_parent_via_bpf,
+	.cgroup_fn = rstat_cgroup_via_bpf,
+	.flush_fn = rstat_flush_via_bpf,
+};
+#endif /* CONFIG_CGROUP_BPF */
+
 /*
  * Helper functions for rstat per CPU lock (cgroup_rstat_cpu_lock).
  *
@@ -187,10 +228,17 @@ static void __cgroup_rstat_updated(struct cgroup_rstat *rstat, int cpu,
  * rstat_cpu->updated_children list.  See the comment on top of
  * cgroup_rstat_cpu definition for details.
  */
-__bpf_kfunc void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
+void cgroup_rstat_updated(struct cgroup_subsys_state *css, int cpu)
 {
 	__cgroup_rstat_updated(&css->rstat, cpu, &rstat_css_ops);
 }
+
+#ifdef CONFIG_CGROUP_BPF
+__bpf_kfunc void bpf_cgroup_rstat_updated(struct cgroup *cgroup, int cpu)
+{
+	__cgroup_rstat_updated(&(cgroup->bpf.rstat), cpu, &rstat_bpf_ops);
+}
+#endif /* CONFIG_CGROUP_BPF */
 
 /**
  * cgroup_rstat_push_children - push children cgroups into the given list
@@ -330,8 +378,7 @@ unlock_ret:
 
 __bpf_hook_start();
 
-__weak noinline void bpf_rstat_flush(struct cgroup *cgrp,
-				     struct cgroup *parent, int cpu)
+void bpf_rstat_flush(struct cgroup *cgrp, struct cgroup *parent, int cpu)
 {
 }
 
@@ -379,12 +426,8 @@ static void cgroup_rstat_flush_locked(struct cgroup_rstat *rstat,
 		struct cgroup_rstat *pos = cgroup_rstat_updated_list(
 				rstat, cpu, ops);
 
-		for (; pos; pos = pos->rstat_flush_next) {
-			struct cgroup *pos_cgroup = ops->cgroup_fn(pos);
-
+		for (; pos; pos = pos->rstat_flush_next)
 			ops->flush_fn(pos, cpu);
-			bpf_rstat_flush(pos_cgroup, cgroup_parent(pos_cgroup), cpu);
-		}
 
 		/* play nice and yield if necessary */
 		if (need_resched() || spin_needbreak(&cgroup_rstat_lock)) {
@@ -424,10 +467,17 @@ static void __cgroup_rstat_flush(struct cgroup_rstat *rstat,
  *
  * This function may block.
  */
-__bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
+void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 {
 	__cgroup_rstat_flush(&css->rstat, &rstat_css_ops);
 }
+
+#ifdef CONFIG_CGROUP_BPF
+__bpf_kfunc void bpf_cgroup_rstat_flush(struct cgroup *cgroup)
+{
+	__cgroup_rstat_flush(&(cgroup->bpf.rstat), &rstat_bpf_ops);
+}
+#endif /* CONFIG_CGROUP_BPF */
 
 static void __cgroup_rstat_flush_hold(struct cgroup_rstat *rstat,
 		struct cgroup_rstat_ops *ops)
@@ -531,6 +581,27 @@ void cgroup_rstat_exit(struct cgroup_subsys_state *css)
 	cgroup_rstat_flush(css);
 	__cgroup_rstat_exit(rstat);
 }
+
+#ifdef CONFIG_CGROUP_BPF
+int bpf_cgroup_rstat_init(struct cgroup_bpf *bpf)
+{
+	struct cgroup_rstat *rstat = &bpf->rstat;
+
+	rstat->rstat_cpu = alloc_percpu(struct cgroup_rstat_cpu);
+	if (!rstat->rstat_cpu)
+		return -ENOMEM;
+
+	__cgroup_rstat_init(rstat);
+
+	return 0;
+}
+
+void bpf_cgroup_rstat_exit(struct cgroup_bpf *bpf)
+{
+	__cgroup_rstat_flush(&bpf->rstat, &rstat_bpf_ops);
+	__cgroup_rstat_exit(&bpf->rstat);
+}
+#endif /* CONFIG_CGROUP_BPF */
 
 void __init cgroup_rstat_boot(void)
 {
@@ -753,10 +824,11 @@ void cgroup_base_stat_cputime_show(struct seq_file *seq)
 	cgroup_force_idle_show(seq, &cgrp->bstat);
 }
 
+#ifdef CONFIG_CGROUP_BPF
 /* Add bpf kfuncs for cgroup_rstat_updated() and cgroup_rstat_flush() */
 BTF_KFUNCS_START(bpf_rstat_kfunc_ids)
-BTF_ID_FLAGS(func, cgroup_rstat_updated)
-BTF_ID_FLAGS(func, cgroup_rstat_flush, KF_SLEEPABLE)
+BTF_ID_FLAGS(func, bpf_cgroup_rstat_updated)
+BTF_ID_FLAGS(func, bpf_cgroup_rstat_flush, KF_SLEEPABLE)
 BTF_KFUNCS_END(bpf_rstat_kfunc_ids)
 
 static const struct btf_kfunc_id_set bpf_rstat_kfunc_set = {
@@ -770,3 +842,4 @@ static int __init bpf_rstat_kfunc_init(void)
 					 &bpf_rstat_kfunc_set);
 }
 late_initcall(bpf_rstat_kfunc_init);
+#endif /* CONFIG_CGROUP_BPF */
