@@ -321,7 +321,14 @@ static int mdp_path_config_subfrm(struct mdp_cmdq_cmd *cmd,
 	/* Enable mux settings */
 	for (index = 0; index < ctrl->num_sets; index++) {
 		set = &ctrl->sets[index];
-		cmdq_pkt_write(&cmd->pkt, set->subsys_id, set->reg, set->value);
+		if (set->subsys_id != CMDQ_SUBSYS_INVALID) {
+			cmdq_pkt_write(&cmd->pkt, set->subsys_id, set->reg, set->value);
+		} else {
+			/* only MMIO access, no need to check mminfro_offset */
+			cmdq_pkt_assign(&cmd->pkt, CMDQ_THR_SPR_IDX0, CMDQ_ADDR_HIGH(set->reg));
+			cmdq_pkt_write_s_value(&cmd->pkt, CMDQ_THR_SPR_IDX0,
+					       CMDQ_ADDR_LOW(set->reg), set->value);
+		}
 	}
 	/* Config sub-frame information */
 	for (index = (num_comp - 1); index >= 0; index--) {
@@ -376,7 +383,14 @@ static int mdp_path_config_subfrm(struct mdp_cmdq_cmd *cmd,
 	/* Disable mux settings */
 	for (index = 0; index < ctrl->num_sets; index++) {
 		set = &ctrl->sets[index];
-		cmdq_pkt_write(&cmd->pkt, set->subsys_id, set->reg, 0);
+		if (set->subsys_id != CMDQ_SUBSYS_INVALID) {
+			cmdq_pkt_write(&cmd->pkt, set->subsys_id, set->reg, 0);
+		} else {
+			/* only MMIO access, no need to check mminfro_offset */
+			cmdq_pkt_assign(&cmd->pkt, CMDQ_THR_SPR_IDX0, CMDQ_ADDR_HIGH(set->reg));
+			cmdq_pkt_write_s_value(&cmd->pkt, CMDQ_THR_SPR_IDX0,
+					       CMDQ_ADDR_LOW(set->reg), 0);
+		}
 	}
 
 	return 0;
