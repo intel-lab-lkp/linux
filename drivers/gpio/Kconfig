@@ -1866,7 +1866,7 @@ endmenu
 # This symbol is selected by drivers that need synchronous fake device creation
 config DEV_SYNC_PROBE
 	tristate "Utilities for synchronous fake device creation"
-	depends on GPIO_SIM
+	depends on GPIO_SIM || GPIO_VIRTUSER
 	help
 	  Common helper functions for drivers that need synchronous fake
 	  device creation.
@@ -1946,6 +1946,7 @@ config GPIO_VIRTUSER
 	select DEBUG_FS
 	select CONFIGFS_FS
 	select IRQ_WORK
+	select DEV_SYNC_PROBE
 	help
 	  Say Y here to enable the configurable, configfs-based virtual GPIO
 	  consumer testing driver.
