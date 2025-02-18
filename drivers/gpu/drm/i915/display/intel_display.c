@@ -3109,25 +3109,24 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 	struct intel_display *display = to_intel_display(crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
 	enum intel_display_power_domain power_domain;
+	enum transcoder cpu_transcoder = (enum transcoder)crtc->pipe;
 	intel_wakeref_t wakeref;
+	bool ret = false;
 	u32 tmp;
-	bool ret;
 
 	power_domain = POWER_DOMAIN_PIPE(crtc->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
 
-	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
-	pipe_config->sink_format = pipe_config->output_format;
-	pipe_config->cpu_transcoder = (enum transcoder) crtc->pipe;
-
-	ret = false;
-
-	tmp = intel_de_read(dev_priv,
-			    TRANSCONF(dev_priv, pipe_config->cpu_transcoder));
+	tmp = intel_de_read(dev_priv, TRANSCONF(dev_priv, cpu_transcoder));
 	if (!(tmp & TRANSCONF_ENABLE))
 		goto out;
+
+	pipe_config->cpu_transcoder = cpu_transcoder;
+
+	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
+	pipe_config->sink_format = pipe_config->output_format;
 
 	if (IS_G4X(dev_priv) || IS_VALLEYVIEW(dev_priv) ||
 	    IS_CHERRYVIEW(dev_priv)) {
@@ -3492,22 +3491,21 @@ static bool ilk_get_pipe_config(struct intel_crtc *crtc,
 	struct drm_device *dev = crtc->base.dev;
 	struct drm_i915_private *dev_priv = to_i915(dev);
 	enum intel_display_power_domain power_domain;
+	enum transcoder cpu_transcoder = (enum transcoder)crtc->pipe;
 	intel_wakeref_t wakeref;
+	bool ret = false;
 	u32 tmp;
-	bool ret;
 
 	power_domain = POWER_DOMAIN_PIPE(crtc->pipe);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
 	if (!wakeref)
 		return false;
 
-	pipe_config->cpu_transcoder = (enum transcoder) crtc->pipe;
-
-	ret = false;
-	tmp = intel_de_read(dev_priv,
-			    TRANSCONF(dev_priv, pipe_config->cpu_transcoder));
+	tmp = intel_de_read(dev_priv, TRANSCONF(dev_priv, cpu_transcoder));
 	if (!(tmp & TRANSCONF_ENABLE))
 		goto out;
+
+	pipe_config->cpu_transcoder = cpu_transcoder;
 
 	switch (tmp & TRANSCONF_BPC_MASK) {
 	case TRANSCONF_BPC_6:
