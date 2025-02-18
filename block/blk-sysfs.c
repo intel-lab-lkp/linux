@@ -567,7 +567,7 @@ static ssize_t queue_wb_lat_show(struct gendisk *disk, char *page)
 {
 	int ret;
 
-	mutex_lock(&disk->queue->sysfs_lock);
+	mutex_lock(&disk->queue->elevator_lock);
 
 	if (!wbt_rq_qos(disk->queue)) {
 		ret = -EINVAL;
@@ -581,7 +581,7 @@ static ssize_t queue_wb_lat_show(struct gendisk *disk, char *page)
 				div_u64(wbt_get_min_lat(disk->queue), 1000));
 
 out:
-	mutex_unlock(&disk->queue->sysfs_lock);
+	mutex_unlock(&disk->queue->elevator_lock);
 	return ret;
 }
 
@@ -594,8 +594,8 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 	s64 val;
 	unsigned int memflags;
 
-	mutex_lock(&q->sysfs_lock);
 	memflags = blk_mq_freeze_queue(q);
+	mutex_lock(&q->elevator_lock);
 
 	ret = queue_var_store64(&val, page);
 	if (ret < 0)
@@ -634,8 +634,8 @@ static ssize_t queue_wb_lat_store(struct gendisk *disk, const char *page,
 	blk_mq_unquiesce_queue(q);
 
 out:
+	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
-	mutex_unlock(&q->sysfs_lock);
 	return ret;
 }
 
@@ -907,11 +907,11 @@ int blk_register_queue(struct gendisk *disk)
 			mutex_unlock(&q->elevator_lock);
 			goto out_crypto_sysfs_unregister;
 		}
+		wbt_enable_default(disk);
 	}
 	mutex_unlock(&q->elevator_lock);
 
 	blk_queue_flag_set(QUEUE_FLAG_REGISTERED, q);
-	wbt_enable_default(disk);
 
 	/* Now everything is ready and send out KOBJ_ADD uevent */
 	kobject_uevent(&disk->queue_kobj, KOBJ_ADD);
