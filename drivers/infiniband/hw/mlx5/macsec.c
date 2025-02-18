@@ -354,6 +354,11 @@ void mlx5r_del_gid_macsec_operations(const struct ib_gid_attr *attr)
 		}
 	}
 	macsec_device = get_macsec_device(ndev, &dev->macsec.macsec_devices_list);
+	if (!macsec_device) {
+		dev_put(ndev);
+		mutex_unlock(&dev->macsec.lock);
+		return;
+	}
 	mlx5_macsec_del_roce_rule(attr->index, dev->mdev->macsec_fs,
 				  &macsec_device->tx_rules_list, &macsec_device->rx_rules_list);
 	mlx5_macsec_del_roce_gid(macsec_device, attr->index);
