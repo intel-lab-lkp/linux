@@ -1459,12 +1459,16 @@ static void nfsd4_cb_done(struct rpc_task *task, void *calldata)
 static void nfsd4_cb_release(void *calldata)
 {
 	struct nfsd4_callback *cb = calldata;
+	struct nfs4_client *clp = cb->cb_clp;
+	int queued;
 
 	trace_nfsd_cb_rpc_release(cb->cb_clp);
 
-	if (cb->cb_need_restart)
-		nfsd4_queue_cb(cb);
-	else
+	if (cb->cb_need_restart) {
+		queued = nfsd4_queue_cb(cb);
+		if (!queued)
+			nfsd41_cb_inflight_end(clp);
+	} else
 		nfsd41_destroy_cb(cb);
 
 }
