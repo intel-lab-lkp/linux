@@ -10,7 +10,6 @@
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
-#include <linux/xarray.h>
 
 #ifdef CONFIG_X86
 #include <asm/set_memory.h>
@@ -161,6 +160,18 @@ struct drm_gem_shmem_object *drm_gem_shmem_create_with_mnt(struct drm_device *de
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_create_with_mnt);
 
+static void drm_gem_shmem_put_pages_sparse(struct drm_gem_shmem_object *shmem)
+{
+	unsigned int n_pages = shmem->rss_size / PAGE_SIZE;
+
+	drm_WARN_ON(shmem->base.dev, (shmem->rss_size & (PAGE_SIZE - 1)) != 0);
+	drm_WARN_ON(shmem->base.dev, !shmem->sparse);
+
+	drm_gem_put_sparse_xarray(&shmem->xapages, 0, n_pages,
+				   shmem->pages_mark_dirty_on_put,
+				   shmem->pages_mark_accessed_on_put);
+}
+
 /**
  * drm_gem_shmem_free - Free resources associated with a shmem GEM object
  * @shmem: shmem GEM object to free
@@ -264,10 +275,15 @@ void drm_gem_shmem_put_pages(struct drm_gem_shmem_object *shmem)
 		set_pages_array_wb(shmem->pages, obj->size >> PAGE_SHIFT);
 #endif
 
-	drm_gem_put_pages(obj, shmem->pages,
-			  shmem->pages_mark_dirty_on_put,
-			  shmem->pages_mark_accessed_on_put);
-	shmem->pages = NULL;
+	if (!shmem->sparse) {
+		drm_gem_put_pages(obj, shmem->pages,
+				  shmem->pages_mark_dirty_on_put,
+				  shmem->pages_mark_accessed_on_put);
+		shmem->pages = NULL;
+	} else {
+		drm_gem_shmem_put_pages_sparse(shmem);
+		xa_destroy(&shmem->xapages);
+	}
 }
 EXPORT_SYMBOL(drm_gem_shmem_put_pages);
 
@@ -765,6 +781,81 @@ err_put_pages:
 	return ERR_PTR(ret);
 }
 
+static struct sg_table *drm_gem_shmem_get_sparse_pages_locked(struct drm_gem_shmem_object *shmem,
+							       unsigned int n_pages,
+							       pgoff_t page_offset)
+{
+	struct drm_gem_object *obj = &shmem->base;
+	gfp_t mask = GFP_KERNEL | GFP_NOWAIT;
+	size_t size = n_pages * PAGE_SIZE;
+	struct address_space *mapping;
+	struct sg_table *sgt;
+	struct page *page;
+	bool first_alloc;
+	int ret, i;
+
+	if (!shmem->sparse)
+		return ERR_PTR(-EINVAL);
+
+	/* If the mapping exists, then bail out immediately */
+	if (xa_load(&shmem->xapages, page_offset) != NULL)
+		return ERR_PTR(-EEXIST);
+
+	dma_resv_assert_held(shmem->base.resv);
+
+	first_alloc = xa_empty(&shmem->xapages);
+
+	mapping = shmem->base.filp->f_mapping;
+	mapping_set_unevictable(mapping);
+
+	for (i = 0; i < n_pages; i++) {
+		page = shmem_read_mapping_page_nonblocking(mapping, page_offset + i);
+		if (IS_ERR(page)) {
+			ret = PTR_ERR(page);
+			goto err_free_pages;
+		}
+
+		/* Add the page into the xarray */
+		ret = xa_err(xa_store(&shmem->xapages, page_offset + i, page, mask));
+		if (ret) {
+			put_page(page);
+			goto err_free_pages;
+		}
+	}
+
+	sgt = kzalloc(sizeof(*sgt), mask);
+	if (!sgt) {
+		ret = -ENOMEM;
+		goto err_free_pages;
+	}
+
+	ret = sg_alloc_table_from_page_xarray(sgt, &shmem->xapages, page_offset, n_pages, 0, size, mask);
+	if (ret)
+		goto err_free_sgtable;
+
+	ret = dma_map_sgtable(obj->dev->dev, sgt, DMA_BIDIRECTIONAL, 0);
+	if (ret)
+		goto err_free_sgtable;
+
+	if (first_alloc)
+		shmem->pages_use_count = 1;
+
+	shmem->rss_size += size;
+
+	return sgt;
+
+err_free_sgtable:
+	kfree(sgt);
+err_free_pages:
+	while (--i) {
+		page = xa_erase(&shmem->xapages, page_offset + i);
+		if (drm_WARN_ON(obj->dev, !page))
+			continue;
+		put_page(page);
+	}
+	return ERR_PTR(ret);
+}
+
 /**
  * drm_gem_shmem_get_pages_sgt - Pin pages, dma map them, and return a
  *				 scatter/gather table for a shmem GEM object.
@@ -795,6 +886,28 @@ struct sg_table *drm_gem_shmem_get_pages_sgt(struct drm_gem_shmem_object *shmem)
 	return sgt;
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_get_pages_sgt);
+
+struct sg_table *drm_gem_shmem_get_sparse_pages_sgt(struct drm_gem_shmem_object *shmem,
+						     unsigned int n_pages, pgoff_t page_offset)
+{
+	struct drm_gem_object *obj = &shmem->base;
+	struct sg_table *sgt;
+	int ret;
+
+	if (drm_WARN_ON(obj->dev, !shmem->sparse))
+		return ERR_PTR(-EINVAL);
+
+	ret = dma_resv_lock(shmem->base.resv, NULL);
+	if (ret)
+		return ERR_PTR(ret);
+
+	sgt = drm_gem_shmem_get_sparse_pages_locked(shmem, n_pages, page_offset);
+
+	dma_resv_unlock(shmem->base.resv);
+
+	return sgt;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_get_sparse_pages_sgt);
 
 /**
  * drm_gem_shmem_prime_import_sg_table - Produce a shmem GEM object from

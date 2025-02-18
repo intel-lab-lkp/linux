@@ -679,6 +679,38 @@ void drm_gem_put_pages(struct drm_gem_object *obj, struct page **pages,
 }
 EXPORT_SYMBOL(drm_gem_put_pages);
 
+void drm_gem_put_sparse_xarray(struct xarray *pa, unsigned long idx,
+				unsigned int npages, bool dirty, bool accessed)
+{
+	struct folio_batch fbatch;
+	struct page *page;
+
+	folio_batch_init(&fbatch);
+
+	xa_for_each(pa, idx, page) {
+		struct folio *folio = page_folio(page);
+
+		if (dirty)
+			folio_mark_dirty(folio);
+		if (accessed)
+			folio_mark_accessed(folio);
+
+		/* Undo the reference we took when populating the table */
+		if (!folio_batch_add(&fbatch, folio))
+			drm_gem_check_release_batch(&fbatch);
+
+		xa_erase(pa, idx);
+
+		idx += folio_nr_pages(folio) - 1;
+	}
+
+	if (folio_batch_count(&fbatch))
+		drm_gem_check_release_batch(&fbatch);
+
+	WARN_ON((idx+1) != npages);
+}
+EXPORT_SYMBOL(drm_gem_put_sparse_xarray);
+
 static int objects_lookup(struct drm_file *filp, u32 *handle, int count,
 			  struct drm_gem_object **objs)
 {

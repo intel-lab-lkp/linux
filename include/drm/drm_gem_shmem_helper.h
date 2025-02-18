@@ -45,6 +45,14 @@ struct drm_gem_shmem_object {
 	unsigned int pages_use_count;
 
 	/**
+	 * @rss_size:
+	 *
+	 * Size of the object RSS, in bytes.
+	 * lifetime.
+	 */
+	size_t rss_size;
+
+	/**
 	 * @madv: State for madvise
 	 *
 	 * 0 is active/inuse.
@@ -107,6 +115,7 @@ struct drm_gem_shmem_object {
 	container_of(obj, struct drm_gem_shmem_object, base)
 
 struct drm_gem_shmem_object *drm_gem_shmem_create(struct drm_device *dev, size_t size);
+struct drm_gem_shmem_object *drm_gem_shmem_create_sparse(struct drm_device *dev, size_t size);
 struct drm_gem_shmem_object *drm_gem_shmem_create_with_mnt(struct drm_device *dev,
 							   size_t size,
 							   struct vfsmount *gemfs);
@@ -137,6 +146,9 @@ void drm_gem_shmem_purge(struct drm_gem_shmem_object *shmem);
 
 struct sg_table *drm_gem_shmem_get_sg_table(struct drm_gem_shmem_object *shmem);
 struct sg_table *drm_gem_shmem_get_pages_sgt(struct drm_gem_shmem_object *shmem);
+
+struct sg_table *drm_gem_shmem_get_sparse_pages_sgt(struct drm_gem_shmem_object *shmem,
+						     unsigned int n_pages, pgoff_t page_offset);
 
 void drm_gem_shmem_print_info(const struct drm_gem_shmem_object *shmem,
 			      struct drm_printer *p, unsigned int indent);
