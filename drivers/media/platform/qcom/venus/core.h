@@ -168,6 +168,7 @@ struct venus_format {
  * @root:	debugfs root directory
  * @venus_ver:	the venus firmware version
  * @dump_core:	a flag indicating that a core dump is required
+ * @hwmode_dev:	a flag indicating that HW_CTRL_TRIGGER is used in clock driver
  */
 struct venus_core {
 	void __iomem *base;
@@ -230,6 +231,7 @@ struct venus_core {
 		u32 rev;
 	} venus_ver;
 	unsigned long dump_core;
+	bool hwmode_dev;
 };
 
 struct vdec_controls {
