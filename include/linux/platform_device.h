@@ -23,7 +23,8 @@ struct platform_device_id;
 struct platform_device {
 	const char	*name;
 	int		id;
-	bool		id_auto;
+	u8		flags;
+#define PLATFORM_DEVICE_FLAG_ID_AUTO	BIT(0)
 	struct device	dev;
 	u64		platform_dma_mask;
 	struct device_dma_parameters dma_parms;

@@ -682,7 +682,7 @@ int platform_device_add(struct platform_device *pdev)
 		if (ret < 0)
 			return ret;
 		pdev->id = ret;
-		pdev->id_auto = true;
+		pdev->flags |= PLATFORM_DEVICE_FLAG_ID_AUTO;
 		dev_set_name(dev, "%s.%d.auto", pdev->name, pdev->id);
 		break;
 	}
@@ -720,7 +720,7 @@ int platform_device_add(struct platform_device *pdev)
 	return 0;
 
  failed:
-	if (pdev->id_auto) {
+	if (pdev->flags & PLATFORM_DEVICE_FLAG_ID_AUTO) {
 		ida_free(&platform_devid_ida, pdev->id);
 		pdev->id = PLATFORM_DEVID_AUTO;
 	}
@@ -750,7 +750,7 @@ void platform_device_del(struct platform_device *pdev)
 	if (!IS_ERR_OR_NULL(pdev)) {
 		device_del(&pdev->dev);
 
-		if (pdev->id_auto) {
+		if (pdev->flags & PLATFORM_DEVICE_FLAG_ID_AUTO) {
 			ida_free(&platform_devid_ida, pdev->id);
 			pdev->id = PLATFORM_DEVID_AUTO;
 		}
