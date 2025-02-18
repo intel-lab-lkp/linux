@@ -400,9 +400,9 @@ out:
 
 void gfs2_recover_func(struct work_struct *work)
 {
-	struct gfs2_jdesc *jd = container_of(work, struct gfs2_jdesc, jd_work);
-	struct gfs2_inode *ip = GFS2_I(jd->jd_inode);
-	struct gfs2_sbd *sdp = GFS2_SB(jd->jd_inode);
+	struct gfs2_jdesc *jd = NULL;
+	struct gfs2_inode *ip = NULL;
+	struct gfs2_sbd *sdp = NULL;
 	struct gfs2_log_header_host head;
 	struct gfs2_holder j_gh, ji_gh;
 	ktime_t t_start, t_jlck, t_jhd, t_tlck, t_rep;
@@ -416,6 +416,11 @@ void gfs2_recover_func(struct work_struct *work)
 		       jd->jd_jid);
 		goto fail;
 	}
+
+	jd = container_of(work, struct gfs2_jdesc, jd_work);
+	ip = GFS2_I(jd->jd_inode);
+	sdp = GFS2_SB(jd->jd_inode);
+
 	t_start = ktime_get();
 	if (sdp->sd_args.ar_spectator)
 		goto fail;
