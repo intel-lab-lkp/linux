@@ -16,7 +16,7 @@ static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
 static struct cgroup_rstat_cpu *cgroup_rstat_cpu(struct cgroup *cgrp, int cpu)
 {
-	return per_cpu_ptr(cgrp->rstat_cpu, cpu);
+	return per_cpu_ptr(cgrp->rstat.rstat_cpu, cpu);
 }
 
 /*
@@ -149,24 +149,24 @@ static struct cgroup *cgroup_rstat_push_children(struct cgroup *head,
 	struct cgroup *parent, *grandchild;
 	struct cgroup_rstat_cpu *crstatc;
 
-	child->rstat_flush_next = NULL;
+	child->rstat.rstat_flush_next = NULL;
 
 next_level:
 	while (chead) {
 		child = chead;
-		chead = child->rstat_flush_next;
+		chead = child->rstat.rstat_flush_next;
 		parent = cgroup_parent(child);
 
 		/* updated_next is parent cgroup terminated */
 		while (child != parent) {
-			child->rstat_flush_next = head;
+			child->rstat.rstat_flush_next = head;
 			head = child;
 			crstatc = cgroup_rstat_cpu(child, cpu);
 			grandchild = crstatc->updated_children;
 			if (grandchild != child) {
 				/* Push the grand child to the next level */
 				crstatc->updated_children = child;
-				grandchild->rstat_flush_next = ghead;
+				grandchild->rstat.rstat_flush_next = ghead;
 				ghead = grandchild;
 			}
 			child = crstatc->updated_next;
@@ -238,7 +238,7 @@ static struct cgroup *cgroup_rstat_updated_list(struct cgroup *root, int cpu)
 
 	/* Push @root to the list first before pushing the children */
 	head = root;
-	root->rstat_flush_next = NULL;
+	root->rstat.rstat_flush_next = NULL;
 	child = rstatc->updated_children;
 	rstatc->updated_children = root;
 	if (child != root)
@@ -310,7 +310,7 @@ static void cgroup_rstat_flush_locked(struct cgroup *cgrp)
 	for_each_possible_cpu(cpu) {
 		struct cgroup *pos = cgroup_rstat_updated_list(cgrp, cpu);
 
-		for (; pos; pos = pos->rstat_flush_next) {
+		for (; pos; pos = pos->rstat.rstat_flush_next) {
 			struct cgroup_subsys_state *css;
 
 			cgroup_base_stat_flush(pos, cpu);
@@ -387,9 +387,10 @@ int cgroup_rstat_init(struct cgroup *cgrp)
 	int cpu;
 
 	/* the root cgrp has rstat_cpu preallocated */
-	if (!cgrp->rstat_cpu) {
-		cgrp->rstat_cpu = alloc_percpu(struct cgroup_rstat_cpu);
-		if (!cgrp->rstat_cpu)
+	if (!cgrp->rstat.rstat_cpu) {
+		cgrp->rstat.rstat_cpu = alloc_percpu(
+				struct cgroup_rstat_cpu);
+		if (!cgrp->rstat.rstat_cpu)
 			return -ENOMEM;
 	}
 
@@ -419,8 +420,8 @@ void cgroup_rstat_exit(struct cgroup *cgrp)
 			return;
 	}
 
-	free_percpu(cgrp->rstat_cpu);
-	cgrp->rstat_cpu = NULL;
+	free_percpu(cgrp->rstat.rstat_cpu);
+	cgrp->rstat.rstat_cpu = NULL;
 }
 
 void __init cgroup_rstat_boot(void)
@@ -503,7 +504,7 @@ cgroup_base_stat_cputime_account_begin(struct cgroup *cgrp, unsigned long *flags
 {
 	struct cgroup_rstat_cpu *rstatc;
 
-	rstatc = get_cpu_ptr(cgrp->rstat_cpu);
+	rstatc = get_cpu_ptr(cgrp->rstat.rstat_cpu);
 	*flags = u64_stats_update_begin_irqsave(&rstatc->bsync);
 	return rstatc;
 }
