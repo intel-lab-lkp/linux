@@ -21,8 +21,7 @@ CLIENT_GW6="2001:db8:1::2"
 MAX_SIZE=128000
 CHK_SIZE=65535
 
-# Kselftest framework requirement - SKIP code is 4.
-ksft_skip=4
+source lib.sh
 
 setup() {
 	ip netns add $CLIENT_NS
@@ -143,21 +142,20 @@ do_test() {
 	start_counter link3 $SERVER_NS
 	do_netperf $CLIENT_NS
 
-	if check_counter link1 $ROUTER_NS; then
-		check_counter link3 $SERVER_NS || ret="FAIL_on_link3"
-	else
-		ret="FAIL_on_link1"
-	fi
+	check_counter link1 $ROUTER_NS
+	check_err $? "fail on link1"
+	check_counter link3 $SERVER_NS
+	check_err $? "fail on link3"
 
 	stop_counter link1 $ROUTER_NS
 	stop_counter link3 $SERVER_NS
-	printf "%-9s %-8s %-8s %-8s: [%s]\n" \
-		$cli_tso $gw_gro $gw_tso $ser_gro $ret
+	log_test "$(printf "%-9s %-8s %-8s %-8s" \
+			$cli_tso $gw_gro $gw_tso $ser_gro)"
 	test $ret = "PASS"
 }
 
 testup() {
-	echo "CLI GSO | GW GRO | GW GSO | SER GRO" && \
+	echo "      CLI GSO | GW GRO | GW GSO | SER GRO" && \
 	do_test "on"  "on"  "on"  "on"  && \
 	do_test "on"  "off" "on"  "off" && \
 	do_test "off" "on"  "on"  "on"  && \
@@ -176,7 +174,8 @@ if ! ip link help 2>&1 | grep gso_ipv4_max_size &> /dev/null; then
 fi
 
 trap cleanup EXIT
+xfail_on_slow
 setup && echo "Testing for BIG TCP:" && \
 NF=4 testup && echo "***v4 Tests Done***" && \
 NF=6 testup && echo "***v6 Tests Done***"
-exit $?
+exit $EXIT_STATUS
