@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/emc2305.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: EMC2305 i2c pwm fan controller
+
+maintainers:
+  - Michael Shych <michaelsh@nvidia.com>
+
+description: |
+  The driver implements support for Microchip EMC2301/2/3/5 PWM Fan Controller.
+  The EMC2301 Fan Controller supports only one controlled PWM fan channel.
+  The EMC2305 Fan Controller supports up to 5 independently
+  controlled PWM fan drives.
+
+properties:
+  compatible:
+    enum:
+      - hwmon,emc2301
+      - hwmon,emc2302
+      - hwmon,emc2303
+      - hwmon,emc2305
+
+  reg:
+    description: I2C address of the emc2305 device
+
+  pwm_output:
+    description: "PWM output type Push-Pull/ Open Drain"
+    maxItems: 1
+
+  pwm_polarity:
+    description: "PWM polarity"
+    maxItems: 1
+
+  '#cooling-cells':
+    description: "cooling state range"
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    thermal_zones {
+        a55-thermal {
+                trips {
+                        atrip0: trip0 {
+                                temperature = <55000>;
+                                hysteresis = <2000>;
+                                type = "active";
+                        };
+
+                        atrip1: trip1 {
+                                temperature = <65000>;
+                                hysteresis = <2000>;
+                                type = "active";
+                        };
+
+                        atrip2: trip2 {
+                                temperature = <75000>;
+                                hysteresis = <2000>;
+                                type = "active";
+                        };
+                };
+
+                cooling-maps {
+                        map1 {
+                                trip = <&atrip0>;
+                                cooling-device = <&emc2301 4 6>;
+                        };
+
+                        map2 {
+                                trip = <&atrip1>;
+                                cooling-device = <&emc2301 6 8>;
+                        };
+
+                        map3 {
+                                trip = <&atrip2>;
+                                cooling-device = <&emc2301 8 10>;
+                        };
+                };
+        };
+
+    }
+    emc2301: pwm@2f {
+       compatible = "hwmon,emc2301";
+       reg = <0x2f>;
+       #cooling-cells = <2>;
+       pwm_output = <0x1>;
+       pwm_polarity = <0x1>;
+    };
