@@ -15,6 +15,7 @@
 #include <linux/property.h>
 #include <linux/reset.h>
 
+#include <linux/iio/adc-helpers.h>
 #include <linux/iio/iio.h>
 
 #define SUN20I_GPADC_DRIVER_NAME	"sun20i-gpadc"
@@ -149,36 +150,31 @@ static void sun20i_gpadc_reset_assert(void *data)
 	reset_control_assert(rst);
 }
 
+static const struct iio_chan_spec sun20i_gpadc_chan_template = {
+	.type = IIO_VOLTAGE,
+	.indexed = 1,
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),
+};
+
+static const struct iio_adc_props sun20i_gpadc_chan_props = {
+	.required = IIO_ADC_CHAN_PROP_TYPE_REG,
+};
+
 static int sun20i_gpadc_alloc_channels(struct iio_dev *indio_dev,
 				       struct device *dev)
 {
-	unsigned int channel;
-	int num_channels, i, ret;
+	int num_channels;
 	struct iio_chan_spec *channels;
 
-	num_channels = device_get_child_node_count(dev);
+	num_channels = devm_iio_adc_device_alloc_chaninfo(dev,
+					&sun20i_gpadc_chan_template, &channels,
+					&sun20i_gpadc_chan_props);
+	if (num_channels < 0)
+		return num_channels;
+
 	if (num_channels == 0)
 		return dev_err_probe(dev, -ENODEV, "no channel children\n");
-
-	channels = devm_kcalloc(dev, num_channels, sizeof(*channels),
-				GFP_KERNEL);
-	if (!channels)
-		return -ENOMEM;
-
-	i = 0;
-	device_for_each_child_node_scoped(dev, node) {
-		ret = fwnode_property_read_u32(node, "reg", &channel);
-		if (ret)
-			return dev_err_probe(dev, ret, "invalid channel number\n");
-
-		channels[i].type = IIO_VOLTAGE;
-		channels[i].indexed = 1;
-		channels[i].channel = channel;
-		channels[i].info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
-		channels[i].info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
-
-		i++;
-	}
 
 	indio_dev->channels = channels;
 	indio_dev->num_channels = num_channels;
