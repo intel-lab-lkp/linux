@@ -180,6 +180,8 @@ struct kvm_vcpu_arch {
 	unsigned long host_sp;
 	unsigned long host_tp;
 	unsigned long host_pgd;
+	/* physical address about pgd for secondary mmu */
+	unsigned long kvm_pgd;
 
 	/* Host CSRs are used when handling exits from guest */
 	unsigned long badi;
