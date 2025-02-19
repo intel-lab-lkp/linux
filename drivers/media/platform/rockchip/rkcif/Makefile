@@ -4,4 +4,5 @@ rockchip-cif-objs += rkcif-dev.o \
 	rkcif-capture-dvp.o \
 	rkcif-capture-mipi.o \
 	rkcif-interface.o \
+	rkcif-mipi-csi-host.o \
 	rkcif-stream.o
