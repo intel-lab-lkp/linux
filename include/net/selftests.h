@@ -7,9 +7,13 @@
 /**
  * enum net_selftest_set - selftest set ID
  * @NET_SELFTEST_CARRIER: Loopback tests based on carrier speed
+ * @NET_SELFTEST_100: Loopback tests with 100 Mbps
+ * @NET_SELFTEST_1000: Loopback tests with 1000 Mbps
  */
 enum net_selftest_set {
 	NET_TEST_LOOPBACK_CARRIER = 0,
+	NET_TEST_LOOPBACK_100,
+	NET_TEST_LOOPBACK_1000,
 };
 
 #if IS_ENABLED(CONFIG_NET_SELFTESTS)

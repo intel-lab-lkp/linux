@@ -324,6 +324,26 @@ static int net_test_phy_loopback_enable_fn(struct net_device *ndev)
 
 static const NET_TEST(phy_loopback_enable, "PHY loopback enable");
 
+static int net_test_phy_loopback_100_enable_fn(struct net_device *ndev)
+{
+	if (!ndev->phydev)
+		return -EOPNOTSUPP;
+
+	return phy_loopback(ndev->phydev, true, 100);
+}
+
+static const NET_TEST(phy_loopback_100_enable, "PHY loopback 100 Mbps");
+
+static int net_test_phy_loopback_1000_enable_fn(struct net_device *ndev)
+{
+	if (!ndev->phydev)
+		return -EOPNOTSUPP;
+
+	return phy_loopback(ndev->phydev, true, 1000);
+}
+
+static const NET_TEST(phy_loopback_1000_enable, "PHY loopback 1000 Mbps");
+
 static int net_test_phy_loopback_disable_fn(struct net_device *ndev)
 {
 	if (!ndev->phydev)
@@ -376,11 +396,33 @@ static const struct net_test *net_selftests_carrier[] = {
 	&net_test_phy_loopback_disable,
 };
 
+static const struct net_test *net_selftests_100[] = {
+	&net_test_phy_phydev,
+	&net_test_phy_loopback_100_enable,
+	&net_test_phy_loopback_udp,
+	&net_test_phy_loopback_udp_mtu,
+	&net_test_phy_loopback_tcp,
+	&net_test_phy_loopback_disable,
+};
+
+static const struct net_test *net_selftests_1000[] = {
+	&net_test_phy_phydev,
+	&net_test_phy_loopback_1000_enable,
+	&net_test_phy_loopback_udp,
+	&net_test_phy_loopback_udp_mtu,
+	&net_test_phy_loopback_tcp,
+	&net_test_phy_loopback_disable,
+};
+
 static const struct net_test **net_selftests_set_get(int set)
 {
 	switch (set) {
 	case NET_TEST_LOOPBACK_CARRIER:
 		return net_selftests_carrier;
+	case NET_TEST_LOOPBACK_100:
+		return net_selftests_100;
+	case NET_TEST_LOOPBACK_1000:
+		return net_selftests_1000;
 	}
 
 	return NULL;
@@ -415,6 +457,10 @@ int net_selftest_set_get_count(int set)
 	switch (set) {
 	case NET_TEST_LOOPBACK_CARRIER:
 		return ARRAY_SIZE(net_selftests_carrier);
+	case NET_TEST_LOOPBACK_100:
+		return ARRAY_SIZE(net_selftests_100);
+	case NET_TEST_LOOPBACK_1000:
+		return ARRAY_SIZE(net_selftests_1000);
 	default:
 		return -EINVAL;
 	}
