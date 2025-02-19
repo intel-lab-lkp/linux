@@ -105,13 +105,14 @@ static int posix_timer_add(struct k_itimer *timer)
 	 * a plan to handle the resulting CRIU regression gracefully.
 	 */
 	for (cnt = 0; cnt <= INT_MAX; cnt++) {
-		spin_lock(&hash_lock);
-		id = sig->next_posix_timer_id;
+		id = atomic_inc_return(&sig->next_posix_timer_id) - 1;
 
-		/* Write the next ID back. Clamp it to the positive space */
-		sig->next_posix_timer_id = (id + 1) & INT_MAX;
+		/* Clamp id to the positive space */
+		id &= INT_MAX;
 
 		head = &posix_timers_hashtable[hash(sig, id)];
+
+		spin_lock(&hash_lock);
 		if (!__posix_timers_find(head, sig, id)) {
 			hlist_add_head_rcu(&timer->t_hash, head);
 			spin_unlock(&hash_lock);
