@@ -4,6 +4,7 @@
 #include "tsnep.h"
 
 #include <net/pkt_sched.h>
+#include <net/selftests.h>
 
 enum tsnep_test {
 	TSNEP_TEST_ENABLE = 0,
@@ -756,27 +757,36 @@ failed:
 
 int tsnep_ethtool_get_test_count(void)
 {
-	return TSNEP_TEST_COUNT;
+	int count = TSNEP_TEST_COUNT;
+
+	count += net_selftest_set_get_count(NET_TEST_LOOPBACK_100);
+	count += net_selftest_set_get_count(NET_TEST_LOOPBACK_1000);
+
+	return count;
 }
 
 void tsnep_ethtool_get_test_strings(u8 *data)
 {
 	memcpy(data, tsnep_test_strings, sizeof(tsnep_test_strings));
+	data += sizeof(tsnep_test_strings);
+
+	net_selftest_set_get_strings(NET_TEST_LOOPBACK_100, &data);
+	net_selftest_set_get_strings(NET_TEST_LOOPBACK_1000, &data);
 }
 
 void tsnep_ethtool_self_test(struct net_device *netdev,
 			     struct ethtool_test *eth_test, u64 *data)
 {
 	struct tsnep_adapter *adapter = netdev_priv(netdev);
+	int count = tsnep_ethtool_get_test_count();
+	int i;
 
-	eth_test->len = TSNEP_TEST_COUNT;
+	eth_test->len = count;
 
 	if (eth_test->flags != ETH_TEST_FL_OFFLINE) {
 		/* no tests are done online */
-		data[TSNEP_TEST_ENABLE] = 0;
-		data[TSNEP_TEST_TAPRIO] = 0;
-		data[TSNEP_TEST_TAPRIO_CHANGE] = 0;
-		data[TSNEP_TEST_TAPRIO_EXTENSION] = 0;
+		for (i = 0; i < count; i++)
+			data[i] = 0;
 
 		return;
 	}
@@ -808,4 +818,10 @@ void tsnep_ethtool_self_test(struct net_device *netdev,
 		eth_test->flags |= ETH_TEST_FL_FAILED;
 		data[TSNEP_TEST_TAPRIO_EXTENSION] = 1;
 	}
+
+	data += TSNEP_TEST_COUNT;
+	net_selftest_set(NET_TEST_LOOPBACK_100, netdev, eth_test, data);
+
+	data += net_selftest_set_get_count(NET_TEST_LOOPBACK_100);
+	net_selftest_set(NET_TEST_LOOPBACK_1000, netdev, eth_test, data);
 }
