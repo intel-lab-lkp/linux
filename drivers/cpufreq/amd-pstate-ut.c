@@ -186,10 +186,10 @@ static int amd_pstate_ut_check_perf(u32 index)
 static int amd_pstate_ut_check_freq(u32 index)
 {
 	int cpu = 0;
-	struct amd_cpudata *cpudata = NULL;
 
 	for_each_online_cpu(cpu) {
 		struct cpufreq_policy *policy __free(put_cpufreq_policy) = NULL;
+		struct amd_cpudata *cpudata;
 
 		policy = cpufreq_cpu_get(cpu);
 		if (!policy)
