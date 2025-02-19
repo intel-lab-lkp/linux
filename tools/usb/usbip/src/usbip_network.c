@@ -79,6 +79,7 @@ void usbip_net_pack_usb_device(int pack, struct usbip_usb_device *udev)
 	udev->busnum = usbip_net_pack_uint32_t(pack, udev->busnum);
 	udev->devnum = usbip_net_pack_uint32_t(pack, udev->devnum);
 	udev->speed = usbip_net_pack_uint32_t(pack, udev->speed);
+	udev->dma_bits = usbip_net_pack_uint32_t(pack, udev->dma_bits);
 
 	udev->idVendor = usbip_net_pack_uint16_t(pack, udev->idVendor);
 	udev->idProduct = usbip_net_pack_uint16_t(pack, udev->idProduct);

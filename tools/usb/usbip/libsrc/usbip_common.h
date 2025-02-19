@@ -115,6 +115,7 @@ struct usbip_usb_device {
 	uint32_t busnum;
 	uint32_t devnum;
 	uint32_t speed;
+	uint32_t dma_bits;
 
 	uint16_t idVendor;
 	uint16_t idProduct;

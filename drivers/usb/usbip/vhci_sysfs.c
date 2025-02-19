@@ -12,6 +12,7 @@
 
 /* Hardening for Spectre-v1 */
 #include <linux/nospec.h>
+#include <linux/dma-mapping.h>
 
 #include "usbip_common.h"
 #include "vhci.h"
@@ -311,7 +312,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 {
 	struct socket *socket;
 	int sockfd = 0;
-	__u32 port = 0, pdev_nr = 0, rhport = 0, devid = 0, speed = 0;
+	__u32 port = 0, pdev_nr = 0, rhport = 0, devid = 0, speed = 0, dma_bits = 0;
 	struct usb_hcd *hcd;
 	struct vhci_hcd *vhci_hcd;
 	struct vhci_device *vdev;
@@ -327,15 +328,15 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	 * @devid: unique device identifier in a remote host
 	 * @speed: usb device speed in a remote host
 	 */
-	if (sscanf(buf, "%u %u %u %u", &port, &sockfd, &devid, &speed) != 4)
+	if (sscanf(buf, "%u %u %u %u %u", &port, &sockfd, &devid, &speed, &dma_bits) != 5)
 		return -EINVAL;
 	pdev_nr = port_to_pdev_nr(port);
 	rhport = port_to_rhport(port);
 
 	usbip_dbg_vhci_sysfs("port(%u) pdev(%d) rhport(%u)\n",
 			     port, pdev_nr, rhport);
-	usbip_dbg_vhci_sysfs("sockfd(%u) devid(%u) speed(%u)\n",
-			     sockfd, devid, speed);
+	usbip_dbg_vhci_sysfs("sockfd(%u) devid(%u) speed(%u) dma_bits(%u)\n",
+			     sockfd, devid, speed, dma_bits);
 
 	/* check received parameters */
 	if (!valid_args(&pdev_nr, &rhport, speed))
@@ -346,6 +347,8 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 		dev_err(dev, "port %d is not ready\n", port);
 		return -EAGAIN;
 	}
+	/* Set the real USB controller's dma mask to vhci-hcd driver. */
+	dma_set_mask(dev, DMA_BIT_MASK(dma_bits));
 
 	vhci_hcd = hcd_to_vhci_hcd(hcd);
 	vhci = vhci_hcd->vhci;

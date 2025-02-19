@@ -7,6 +7,7 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/module.h>
+#include <linux/dma-mapping.h>
 
 #include "usbip_common.h"
 #include "stub.h"
@@ -33,6 +34,46 @@ static ssize_t usbip_status_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", status);
 }
 static DEVICE_ATTR_RO(usbip_status);
+
+/*
+ * The real USB controllers may support larger than 32-bit address memory pointers actually.
+ * But vhci-hcd driver use the default platform device dma mask set(32-bit),
+ * and usbip device's max_sectors will be limited by dma max mapping size.
+ * usbip_dma_bits shows the real dma mask bit of the real usb controller
+ * which usbip device is bound to.
+ */
+static unsigned int mask_convert_to_bits(u64 dma_mask)
+{
+	unsigned int bits = 0;
+
+	while (dma_mask & 0x1) {
+		dma_mask >>= 1;
+		bits++;
+	}
+	return bits;
+}
+
+static ssize_t usbip_dma_bits_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct stub_device *sdev = dev_get_drvdata(dev);
+	struct device *sys_dev = sdev->udev->bus->sysdev;
+	u64 dma_mask = 0;
+	unsigned int dma_bits = 0;
+
+	if (!sdev || !sys_dev) {
+		dev_err(dev, "sdev or sys_dev is null\n");
+		return -ENODEV;
+	}
+
+	spin_lock_irq(&sdev->ud.lock);
+	dma_mask = dma_get_mask(sys_dev);
+	dma_bits = mask_convert_to_bits(dma_mask);
+	spin_unlock_irq(&sdev->ud.lock);
+
+	return sysfs_emit(buf, "%d\n", dma_bits);
+}
+static DEVICE_ATTR_RO(usbip_dma_bits);
 
 /*
  * usbip_sockfd gets a socket descriptor of an established TCP connection that
@@ -144,6 +185,7 @@ static DEVICE_ATTR_WO(usbip_sockfd);
 
 static struct attribute *usbip_attrs[] = {
 	&dev_attr_usbip_status.attr,
+	&dev_attr_usbip_dma_bits.attr,
 	&dev_attr_usbip_sockfd.attr,
 	&dev_attr_usbip_debug.attr,
 	NULL,

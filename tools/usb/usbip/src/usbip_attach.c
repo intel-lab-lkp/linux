@@ -100,7 +100,7 @@ static int import_device(int sockfd, struct usbip_usb_device *udev)
 		dbg("got free port %d", port);
 
 		rc = usbip_vhci_attach_device(port, sockfd, udev->busnum,
-					      udev->devnum, udev->speed);
+					      udev->devnum, udev->speed, udev->dma_bits);
 		if (rc < 0 && errno != EBUSY) {
 			err("import device");
 			goto err_driver_close;

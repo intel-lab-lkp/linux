@@ -61,6 +61,38 @@ static int32_t read_attr_usbip_status(struct usbip_usb_device *udev)
 	return value;
 }
 
+static int32_t read_attr_usbip_dma_bits(struct usbip_usb_device *udev)
+{
+	char dma_bits_attr_path[SYSFS_PATH_MAX];
+	int size;
+	int fd;
+	int length;
+	char dma_bits[3] = { 0 };
+
+	size = snprintf(dma_bits_attr_path, sizeof(dma_bits_attr_path),
+			"%s/usbip_dma_bits", udev->path);
+	if (size < 0 || (unsigned int)size >= sizeof(dma_bits_attr_path)) {
+		err("usbip_dma_bits path length %i >= %lu or < 0", size,
+		    (unsigned long)sizeof(dma_bits_attr_path));
+		return -1;
+	}
+
+	fd = open(dma_bits_attr_path, O_RDONLY);
+	if (fd < 0) {
+		err("error opening attribute %s", dma_bits_attr_path);
+		return -1;
+	}
+	length = read(fd, dma_bits, 2);
+	if (length < 0) {
+		err("error reading attribute %s", dma_bits_attr_path);
+		close(fd);
+		return -1;
+	}
+	udev->dma_bits = atoi(dma_bits);
+	close(fd);
+	return 0;
+}
+
 static
 struct usbip_exported_device *usbip_exported_device_new(
 		struct usbip_host_driver *hdriver, const char *sdevpath)
@@ -81,6 +113,8 @@ struct usbip_exported_device *usbip_exported_device_new(
 
 	if (hdriver->ops.read_device(edev->sudev, &edev->udev) < 0)
 		goto err;
+
+	read_attr_usbip_dma_bits(&edev->udev);
 
 	edev->status = read_attr_usbip_status(&edev->udev);
 	if (edev->status < 0)

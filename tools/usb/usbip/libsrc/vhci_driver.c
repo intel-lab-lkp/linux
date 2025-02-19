@@ -355,15 +355,15 @@ int usbip_vhci_get_free_port(uint32_t speed)
 }
 
 int usbip_vhci_attach_device2(uint8_t port, int sockfd, uint32_t devid,
-		uint32_t speed) {
+		uint32_t speed, uint32_t dma_bits) {
 	char buff[200]; /* what size should be ? */
 	char attach_attr_path[SYSFS_PATH_MAX];
 	char attr_attach[] = "attach";
 	const char *path;
 	int ret;
 
-	snprintf(buff, sizeof(buff), "%u %d %u %u",
-			port, sockfd, devid, speed);
+	snprintf(buff, sizeof(buff), "%u %d %u %u %u",
+			port, sockfd, devid, speed, dma_bits);
 	dbg("writing: %s", buff);
 
 	path = udev_device_get_syspath(vhci_driver->hc_device);
@@ -389,11 +389,11 @@ static unsigned long get_devid(uint8_t busnum, uint8_t devnum)
 
 /* will be removed */
 int usbip_vhci_attach_device(uint8_t port, int sockfd, uint8_t busnum,
-		uint8_t devnum, uint32_t speed)
+		uint8_t devnum, uint32_t speed, uint32_t dma_bits)
 {
 	int devid = get_devid(busnum, devnum);
 
-	return usbip_vhci_attach_device2(port, sockfd, devid, speed);
+	return usbip_vhci_attach_device2(port, sockfd, devid, speed, dma_bits);
 }
 
 int usbip_vhci_detach_device(uint8_t port)
