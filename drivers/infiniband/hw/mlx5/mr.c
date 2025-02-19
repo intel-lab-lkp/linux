@@ -2033,7 +2033,7 @@ static int mlx5_revoke_mr(struct mlx5_ib_mr *mr)
 		spin_lock_irq(&ent->mkeys_queue.lock);
 		if (ent->is_tmp && !ent->tmp_cleanup_scheduled) {
 			mod_delayed_work(ent->dev->cache.wq, &ent->dwork,
-					 msecs_to_jiffies(30 * 1000));
+					 secs_to_jiffies(30));
 			ent->tmp_cleanup_scheduled = true;
 		}
 		spin_unlock_irq(&ent->mkeys_queue.lock);
