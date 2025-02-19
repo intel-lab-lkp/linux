@@ -254,14 +254,20 @@ impl<T, F: FnOnce(T)> Drop for ScopeGuard<T, F> {
 /// [`Opaque<T>`] is meant to be used with FFI objects that are never interpreted by Rust code.
 ///
 /// It is used to wrap structs from the C side, like for example `Opaque<bindings::mutex>`.
-/// It gets rid of all the usual assumptions that Rust has for a value of type `T`:
+/// This is useful for C structs that are not fully initialized (yet) or might change their
+/// content from C side at runtime. [`Opaque<T>`] gets rid of all the usual assumptions that
+/// Rust has for a value of type `T`:
 ///
-/// * The value is allowed to be uninitialized (for example have invalid bit patterns: `3` for a
-///   [`bool`]).
+/// * The value is allowed to be uninitialized or invalid (for example have invalid bit patterns:
+///   `3` for a [`bool`]).
+/// * By dereferencing a raw pointer to the value you are unsafely asserting that the value is
+///   valid *right now*.
 /// * The value is allowed to be mutated, when a `&Opaque<T>` exists on the Rust side.
 /// * No uniqueness for mutable references: it is fine to have multiple `&mut Opaque<T>` point to
 ///   the same value.
 /// * The value is not allowed to be shared with other threads (i.e. it is `!Sync`).
+/// * The destructor of [`Opaque<T>`] does *not* run the destructor of `T`, as `T` may
+///   be uninitialized, as described above.
 ///
 /// This has to be used for all values that the C side has access to, because it can't be ensured
 /// that the C side is adhering to the usual constraints that Rust needs.
