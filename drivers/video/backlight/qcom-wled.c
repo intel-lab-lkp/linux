@@ -1409,6 +1409,11 @@ static int wled_configure(struct wled *wled)
 	if (rc)
 		wled->name = devm_kasprintf(dev, GFP_KERNEL, "%pOFn", dev->of_node);
 
+	if (!wled->name) {
+		dev_err(wled->dev, "Fail to initialize wled name\n");
+		return -EINVAL;
+	}
+
 	switch (wled->version) {
 	case 3:
 		u32_opts = wled3_opts;
