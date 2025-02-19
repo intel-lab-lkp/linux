@@ -312,7 +312,8 @@ static bool thermal_of_should_bind(struct thermal_zone_device *tz,
 				break;
 		}
 
-		break;
+		if (result)
+			break;
 	}
 
 	of_node_put(cm_np);
