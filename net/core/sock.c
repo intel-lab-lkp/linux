@@ -2933,6 +2933,8 @@ int __sock_cmsg_send(struct sock *sk, struct cmsghdr *cmsg,
 		tsflags = *(u32 *)CMSG_DATA(cmsg);
 		if (tsflags & ~SOF_TIMESTAMPING_TX_RECORD_MASK)
 			return -EINVAL;
+		if (tsflags & SOF_TIMESTAMPING_TX_COMPLETION)
+			return -EINVAL;
 
 		sockc->tsflags &= ~SOF_TIMESTAMPING_TX_RECORD_MASK;
 		sockc->tsflags |= tsflags;
