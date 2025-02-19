@@ -18,6 +18,7 @@
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include "internal.h"
+#include "swap.h"
 
 static __always_inline
 bool validate_dst_vma(struct vm_area_struct *dst_vma, unsigned long dst_end)
@@ -1079,8 +1080,18 @@ static int move_swap_pte(struct mm_struct *mm,
 			 pmd_t *dst_pmd, pmd_t dst_pmdval,
 			 spinlock_t *dst_ptl, spinlock_t *src_ptl)
 {
+	struct folio *folio;
+	swp_entry_t entry;
+
 	if (!pte_swp_exclusive(orig_src_pte))
 		return -EBUSY;
+
+	entry = pte_to_swp_entry(orig_src_pte);
+	folio = filemap_get_folio(swap_address_space(entry), swap_cache_index(entry));
+	if (!IS_ERR(folio)) {
+		folio_put(folio);
+		return -EBUSY;
+	}
 
 	double_pt_lock(dst_ptl, src_ptl);
 
