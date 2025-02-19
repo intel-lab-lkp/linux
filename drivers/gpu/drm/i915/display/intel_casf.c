@@ -17,6 +17,9 @@
 #define FILTER_COEFF_0_0 0
 #define SET_POSITIVE_SIGN(x) ((x) & (~SIGN))
 
+#define MAX_PIXELS_FOR_3_TAP_FILTER (1920 * 1080)
+#define MAX_PIXELS_FOR_5_TAP_FILTER (3840 * 2160)
+
 /**
  * DOC: Content Adaptive Sharpness Filter (CASF)
  *
@@ -64,6 +67,64 @@ static u16 casf_coeff(struct intel_crtc_state *crtc_state, int t)
 	return coeff;
 }
 
+/* Default LUT values to be loaded one time. */
+static const u16 lut_data[] = {
+	4095, 2047, 1364, 1022, 816, 678, 579,
+	504, 444, 397, 357, 323, 293, 268, 244, 224,
+	204, 187, 170, 154, 139, 125, 111, 98, 85,
+	73, 60, 48, 36, 24, 12, 0
+};
+
+void intel_filter_lut_load(struct intel_crtc *crtc,
+			   const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	int i;
+
+	intel_de_write(display, SHRPLUT_INDEX(crtc->pipe),
+		       INDEX_AUTO_INCR | INDEX_VALUE(0));
+
+	for (i = 0; i < ARRAY_SIZE(lut_data); i++)
+		intel_de_write(display, SHRPLUT_DATA(crtc->pipe),
+			       lut_data[i]);
+}
+
+static void intel_casf_size_compute(struct intel_crtc_state *crtc_state)
+{
+	const struct drm_display_mode *mode = &crtc_state->hw.adjusted_mode;
+	u16 total_pixels = mode->hdisplay * mode->vdisplay;
+
+	if (total_pixels <= MAX_PIXELS_FOR_3_TAP_FILTER)
+		crtc_state->hw.casf_params.win_size = 0;
+	else if (total_pixels <= MAX_PIXELS_FOR_5_TAP_FILTER)
+		crtc_state->hw.casf_params.win_size = 1;
+	else
+		crtc_state->hw.casf_params.win_size = 2;
+}
+
+void intel_casf_update_strength(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	u32 sharpness_ctl;
+
+	sharpness_ctl = FILTER_EN | FILTER_STRENGTH(crtc_state->hw.casf_params.strength);
+
+	switch (crtc_state->hw.casf_params.win_size) {
+	case 0:
+		sharpness_ctl |= SHARPNESS_FILTER_SIZE_3X3;
+		break;
+	case 1:
+		sharpness_ctl |= SHARPNESS_FILTER_SIZE_5X5;
+		break;
+	default:
+		sharpness_ctl |= SHARPNESS_FILTER_SIZE_7X7;
+		break;
+	}
+
+	intel_de_write(display, SHARPNESS_CTL(crtc->pipe), sharpness_ctl);
+}
+
 /*
  * 17 phase of 7 taps requires 119 coefficients in 60 dwords per set.
  * To enable casf:  program scaler coefficients with the coeffients
@@ -108,6 +169,8 @@ static void intel_casf_write_coeff(struct intel_crtc_state *crtc_state)
 
 void intel_casf_enable(struct intel_crtc_state *crtc_state)
 {
+	intel_casf_update_strength(crtc_state);
+
 	intel_casf_write_coeff(crtc_state);
 
 	skl_scaler_setup_casf(crtc_state);
@@ -128,7 +191,32 @@ int intel_casf_compute_config(struct intel_crtc_state *crtc_state)
 	if (!HAS_CASF(display))
 		return -EINVAL;
 
+	if (crtc_state->uapi.sharpness_strength == 0) {
+		crtc_state->hw.casf_params.casf_enable = false;
+		crtc_state->hw.casf_params.strength = 0;
+		return 0;
+	}
+
+	/* If panel fitting enabled casf cannot be enabled */
+	if (crtc_state->pch_pfit.enabled)
+		return -EINVAL;
+
 	crtc_state->hw.casf_params.casf_enable = true;
+
+	/*
+	 * HW takes a value in form (1.0 + strength) in 4.4 fixed format.
+	 * Strength is from 0.0-14.9375 ie from 0-239.
+	 * User can give value from 0-255 but is clamped to 239.
+	 * Ex. User gives 85 which is 5.3125 and adding 1.0 gives 6.3125.
+	 * 6.3125 in 4.4 format is b01100101 which is equal to 101.
+	 * Also 85 + 16 = 101.
+	 */
+	crtc_state->hw.casf_params.strength =
+		 min(crtc_state->uapi.sharpness_strength, 0xEF) + 0x10;
+
+	intel_casf_size_compute(crtc_state);
+
+	intel_casf_scaler_compute_config(crtc_state);
 
 	return 0;
 }
@@ -173,4 +261,12 @@ void intel_casf_scaler_compute_config(struct intel_crtc_state *crtc_state)
 		convert_sharpness_coef_binary(&crtc_state->hw.casf_params.coeff[i],
 					      filter_coeff[i]);
 	}
+}
+
+void intel_casf_disable(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+
+	intel_de_write(display, SHARPNESS_CTL(crtc->pipe), 0);
 }

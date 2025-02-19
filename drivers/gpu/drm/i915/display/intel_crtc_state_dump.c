@@ -372,6 +372,11 @@ void intel_crtc_state_dump(const struct intel_crtc_state *pipe_config,
 
 	intel_vdsc_state_dump(&p, 0, pipe_config);
 
+	if (HAS_CASF(i915)) {
+		drm_printf(&p, "sharpness strength : %d\n",  pipe_config->hw.casf_params.strength);
+		drm_printf(&p, "sharpness tap size : %d\n",  pipe_config->hw.casf_params.win_size);
+	}
+
 dump_planes:
 	if (!state)
 		return;
