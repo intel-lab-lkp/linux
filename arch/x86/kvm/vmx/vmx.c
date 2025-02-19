@@ -1478,7 +1478,7 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu,
 		 * may switch the active VMCS multiple times).
 		 */
 		if (!buddy || WARN_ON_ONCE(buddy->vmcs != prev))
-			if (cpu_feature_enabled(X86_FEATURE_USE_IBPB))
+			if (static_branch_likely(&vcpu_load_ibpb))
 				indirect_branch_prediction_barrier();
 	}
 
