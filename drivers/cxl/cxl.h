@@ -901,4 +901,6 @@ bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port);
 #define __mock static
 #endif
 
+int cxl_gpf_get_dvsec(struct device *dev, bool port);
+
 #endif /* __CXL_H__ */
