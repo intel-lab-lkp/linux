@@ -1614,6 +1614,7 @@ static struct symbol *find_call_destination(struct section *sec, unsigned long o
  */
 static int add_call_destinations(struct objtool_file *file)
 {
+	struct instruction *next_insn;
 	struct instruction *insn;
 	unsigned long dest_off;
 	struct symbol *dest;
@@ -1626,6 +1627,11 @@ static int add_call_destinations(struct objtool_file *file)
 		reloc = insn_reloc(file, insn);
 		if (!reloc) {
 			dest_off = arch_jump_destination(insn);
+
+			next_insn = next_insn_same_func(file, insn);
+			if (next_insn && dest_off == next_insn->offset)
+				continue;
+
 			dest = find_call_destination(insn->sec, dest_off);
 
 			add_call_dest(file, insn, dest, false);
