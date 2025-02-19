@@ -503,8 +503,9 @@ config HT16K33
 config MAX6959
 	tristate "Maxim MAX6958/6959 7-segment LED controller"
 	depends on I2C
-	select REGMAP_I2C
+	select BITREVERSE
 	select LINEDISP
+	select REGMAP_I2C
 	help
 	  If you say yes here you get support for the following Maxim chips
 	  (I2C 7-segment LED display controller):
