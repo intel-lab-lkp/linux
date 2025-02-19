@@ -125,7 +125,19 @@ static int posix_timer_add(struct k_itimer *timer)
 
 		head = &posix_timers_hashtable[hash(sig, id)];
 
+		rcu_read_lock();
+		if (posix_timers_find(head, sig, id)) {
+			rcu_read_unlock();
+			cond_resched();
+			continue;
+		}
+		rcu_read_unlock();
 		spin_lock(&hash_lock);
+		/*
+		 * We must perform the lookup under hash_lock protection
+		 * because another thread could have used the same id.
+		 * This is very unlikely, but possible.
+		 */
 		if (!posix_timers_find(head, sig, id)) {
 			timer->it_id = (timer_t)id;
 			timer->it_signal = (struct signal_struct *)((unsigned long)sig | 1UL);
