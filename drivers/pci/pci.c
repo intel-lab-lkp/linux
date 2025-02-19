@@ -3763,12 +3763,13 @@ static int pci_rebar_find_pos(struct pci_dev *pdev, int bar)
  * @bar: BAR to query
  *
  * Get the possible sizes of a resizable BAR as bitmask defined in the spec
- * (bit 0=1MB, bit 19=512GB). Returns 0 if BAR isn't resizable.
+ * (bit 0=1MB, bit 43=8EB). Returns 0 if BAR isn't resizable.
  */
-u32 pci_rebar_get_possible_sizes(struct pci_dev *pdev, int bar)
+u64 pci_rebar_get_possible_sizes(struct pci_dev *pdev, int bar)
 {
 	int pos;
-	u32 cap;
+	u64 cap;
+	u32 cap2;
 
 	pos = pci_rebar_find_pos(pdev, bar);
 	if (pos < 0)
@@ -3776,6 +3777,11 @@ u32 pci_rebar_get_possible_sizes(struct pci_dev *pdev, int bar)
 
 	pci_read_config_dword(pdev, pos + PCI_REBAR_CAP, &cap);
 	cap = FIELD_GET(PCI_REBAR_CAP_SIZES, cap);
+
+	pci_read_config_dword(pdev, pos + PCI_REBAR_CTRL, &cap2);
+	cap2 = FIELD_GET(PCI_REBAR_CTRL_CAP_SIZES, cap2);
+
+	cap |= (cap2 << 32);
 
 	/* Sapphire RX 5600 XT Pulse has an invalid cap dword for BAR 0 */
 	if (pdev->vendor == PCI_VENDOR_ID_ATI && pdev->device == 0x731f &&
@@ -3811,7 +3817,7 @@ int pci_rebar_get_current_size(struct pci_dev *pdev, int bar)
  * pci_rebar_set_size - set a new size for a BAR
  * @pdev: PCI device
  * @bar: BAR to set size to
- * @size: new size as defined in the spec (0=1MB, 19=512GB)
+ * @size: new size as defined in the spec (0=1MB, 43=8EB)
  *
  * Set the new size of a BAR as defined in the spec.
  * Returns zero if resizing was successful, error code otherwise.
