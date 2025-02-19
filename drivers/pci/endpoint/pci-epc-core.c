@@ -649,7 +649,7 @@ EXPORT_SYMBOL_GPL(pci_epc_set_bar);
 int pci_epc_bar_size_to_rebar_cap(size_t size, u32 *cap)
 {
 	/*
-	 * According to PCIe base spec, min size for a resizable BAR is 1 MB,
+	 * As per PCIe r6.0, sec 7.8.6.2, min size for a resizable BAR is 1 MB,
 	 * thus disallow a requested BAR size smaller than 1 MB.
 	 * Disallow a requested BAR size larger than 128 TB.
 	 */
