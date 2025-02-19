@@ -23,6 +23,8 @@
 #define EMC2305_TACH_REGS_UNUSE_BITS	3
 #define EMC2305_TACH_CNT_MULTIPLIER	0x02
 #define EMC2305_TACH_RANGE_MIN		480
+#define EMC2305_REG_DRIVE_PWM_OUT_CONFIG 0x2b
+#define EMC2305_REG_POLARITY 0x2a
 
 #define EMC2305_PWM_DUTY2STATE(duty, max_state, pwm_max) \
 	DIV_ROUND_CLOSEST((duty) * (max_state), (pwm_max))
@@ -523,6 +525,8 @@ static int emc2305_probe(struct i2c_client *client)
 	int vendor;
 	int ret;
 	int i;
+	int pwm_polarity;
+	int pwm_output;
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA))
 		return -ENODEV;
@@ -574,6 +578,29 @@ static int emc2305_probe(struct i2c_client *client)
 		ret = emc2305_set_tz(dev);
 		if (ret != 0)
 			return ret;
+	}
+
+	if (!of_property_read_u32(dev->of_node, "pwm_output", &pwm_output)) {
+		dev_dbg(dev, "Configuring pwm output\n");
+		if (pwm_output >= 0 && pwm_output <= ((1 << data->pwm_num) - 1)) {
+			ret = i2c_smbus_write_byte_data(client, EMC2305_REG_DRIVE_PWM_OUT_CONFIG,
+							 pwm_output);
+			if (ret < 0)
+				dev_err(dev, "Failed to configure pwm output, using default\n");
+		} else {
+			dev_err(dev, "Wrong PWM output config provided: %u\n", pwm_output);
+		}
+	}
+
+	if (!of_property_read_u32(dev->of_node, "pwm_polarity", &pwm_polarity)) {
+		dev_dbg(dev, "Configuring pwm polarity\n");
+		if (pwm_polarity >= 0 && pwm_polarity  <= ((1 << data->pwm_num) - 1)) {
+			ret = i2c_smbus_write_byte_data(client, EMC2305_REG_POLARITY, pwm_polarity);
+			if (ret < 0)
+				dev_err(dev, "Failed to configure pwm polarity, using default\n");
+		} else {
+			dev_err(dev, "Wrong PWM polarity config provided: %u\n", pwm_polarity);
+		}
 	}
 
 	for (i = 0; i < data->pwm_num; i++) {
