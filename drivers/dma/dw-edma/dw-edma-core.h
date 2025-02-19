@@ -58,6 +58,7 @@ struct dw_edma_chunk {
 
 	u8				cb;
 	struct dw_edma_region		ll_region;	/* Linked list */
+	bool				non_ll_en;
 };
 
 struct dw_edma_desc {

@@ -596,6 +596,43 @@ dw_edma_device_prep_interleaved_dma(struct dma_chan *dchan,
 	return dw_edma_device_transfer(&xfer);
 }
 
+static struct dma_async_tx_descriptor *
+dw_edma_device_prep_dma_memcpy(struct dma_chan *dchan,
+			       dma_addr_t dst,
+			       dma_addr_t src, size_t len,
+			       unsigned long flags)
+{
+	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
+	struct dw_edma_chunk *chunk;
+	struct dw_edma_burst *burst;
+	struct dw_edma_desc *desc;
+
+	desc = dw_edma_alloc_desc(chan);
+	if (unlikely(!desc))
+		return NULL;
+
+	chunk = dw_edma_alloc_chunk(desc);
+	if (unlikely(!chunk))
+		goto err_alloc;
+
+	burst = dw_edma_alloc_burst(chunk);
+	if (unlikely(!burst))
+		goto err_alloc;
+
+	burst->sar = src;
+	burst->dar = dst;
+	burst->sz = len;
+	chunk->non_ll_en = true;
+
+	desc->alloc_sz += burst->sz;
+
+	return vchan_tx_prep(&chan->vc, &desc->vd, flags);
+
+err_alloc:
+	dw_edma_free_desc(desc);
+	return NULL;
+}
+
 static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 {
 	struct dw_edma_desc *desc;
@@ -808,6 +845,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 	dma->device_prep_slave_sg = dw_edma_device_prep_slave_sg;
 	dma->device_prep_dma_cyclic = dw_edma_device_prep_dma_cyclic;
 	dma->device_prep_interleaved_dma = dw_edma_device_prep_interleaved_dma;
+	dma->device_prep_dma_memcpy = dw_edma_device_prep_dma_memcpy;
 
 	dma_set_max_seg_size(dma->dev, U32_MAX);
 
