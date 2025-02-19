@@ -549,3 +549,44 @@ void page_ext_put(struct page_ext *page_ext)
 
 	rcu_read_unlock();
 }
+
+/**
+ * page_ext_iter_begin() - Prepare for iterating through page extensions.
+ * @iter: page extension iterator.
+ * @page: The page we're interested in.
+ *
+ * Must be called with RCU read lock taken.
+ *
+ * Return: NULL if no page_ext exists for this page.
+ */
+struct page_ext *page_ext_iter_begin(struct page_ext_iter *iter, struct page *page)
+{
+	iter->pfn = page_to_pfn(page);
+	iter->page_ext = lookup_page_ext(page);
+
+	return iter->page_ext;
+}
+
+/**
+ * page_ext_iter_next() - Get next page extension
+ * @iter: page extension iterator.
+ *
+ * Must be called with RCU read lock taken.
+ *
+ * Return: NULL if no next page_ext exists.
+ */
+struct page_ext *page_ext_iter_next(struct page_ext_iter *iter)
+{
+	if (WARN_ON_ONCE(!iter->page_ext))
+		return NULL;
+
+	iter->pfn++;
+
+	if (page_ext_iter_next_fast_possible(iter->pfn)) {
+		iter->page_ext = page_ext_next(iter->page_ext);
+	} else {
+		iter->page_ext = lookup_page_ext(pfn_to_page(iter->pfn));
+	}
+
+	return iter->page_ext;
+}

@@ -3,6 +3,7 @@
 #define __LINUX_PAGE_EXT_H
 
 #include <linux/types.h>
+#include <linux/mmzone.h>
 #include <linux/stacktrace.h>
 
 struct pglist_data;
@@ -69,11 +70,25 @@ extern void page_ext_init(void);
 static inline void page_ext_init_flatmem_late(void)
 {
 }
+
+static inline bool page_ext_iter_next_fast_possible(unsigned long next_pfn)
+{
+	/*
+	 * page_ext is allocated per memory section. Once we cross a
+	 * memory section, we have to fetch the new pointer.
+	 */
+	return next_pfn % PAGES_PER_SECTION;
+}
 #else
 extern void page_ext_init_flatmem(void);
 extern void page_ext_init_flatmem_late(void);
 static inline void page_ext_init(void)
 {
+}
+
+static inline bool page_ext_iter_next_fast_possible(unsigned long next_pfn)
+{
+	return true;
 }
 #endif
 
@@ -92,6 +107,57 @@ static inline struct page_ext *page_ext_next(struct page_ext *curr)
 	next += page_ext_size;
 	return next;
 }
+
+struct page_ext_iter {
+	unsigned long pfn;
+	unsigned long index;
+	struct page_ext *page_ext;
+};
+
+struct page_ext *page_ext_iter_begin(struct page_ext_iter *iter, struct page *page);
+struct page_ext *page_ext_iter_next(struct page_ext_iter *iter);
+
+/**
+ * page_ext_iter_get() - Get current page extension
+ * @iter: page extension iterator.
+ *
+ * Return: NULL if no page_ext exists for this iterator.
+ */
+static inline struct page_ext *page_ext_iter_get(const struct page_ext_iter *iter)
+{
+	return iter->page_ext;
+}
+
+/**
+ * for_each_page_ext(): iterate through page_ext objects.
+ * @__page: the page we're interested in
+ * @__pgcount: how many pages to iterate through
+ * @__page_ext: struct page_ext pointer where the current page_ext
+ *              object is returned
+ * @__iter: struct page_ext_iter object (defined in the stack)
+ *
+ * IMPORTANT: must be called with RCU read lock taken.
+ */
+#define for_each_page_ext(__page, __pgcount, __page_ext, __iter) \
+	__page_ext = page_ext_iter_begin(&__iter, __page);     \
+	for (__iter.index = 0;                                 \
+		__page_ext && __iter.index < __pgcount;        \
+		__page_ext = page_ext_iter_next(&__iter),      \
+		__iter.index++)
+
+/**
+ * for_each_page_ext_order(): iterate through page_ext objects
+ *                            for a given page order
+ * @__page: the page we're interested in
+ * @__order: page order to iterate through
+ * @__page_ext: struct page_ext pointer where the current page_ext
+ *              object is returned
+ * @__iter: struct page_ext_iter object (defined in the stack)
+ *
+ * IMPORTANT: must be called with RCU read lock taken.
+ */
+#define for_each_page_ext_order(__page, __order, __page_ext, __iter) \
+	for_each_page_ext(__page, (1UL << __order), __page_ext, __iter)
 
 #else /* !CONFIG_PAGE_EXTENSION */
 struct page_ext;
