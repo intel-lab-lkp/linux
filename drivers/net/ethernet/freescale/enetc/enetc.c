@@ -832,6 +832,7 @@ static int enetc_map_tx_tso_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb
 			txbd = ENETC_TXBD(*tx_ring, i);
 			tx_swbd = &tx_ring->tx_swbd[i];
 			prefetchw(txbd);
+			count++;
 
 			/* Compute the checksum over this segment of data and
 			 * add it to the csum already computed (over the L4
@@ -848,7 +849,6 @@ static int enetc_map_tx_tso_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb
 				goto err_map_data;
 
 			data_len -= size;
-			count++;
 			bd_data_num++;
 			tso_build_data(skb, &tso, size);
 
@@ -874,13 +874,13 @@ err_map_data:
 	dev_err(tx_ring->dev, "DMA map error");
 
 err_chained_bd:
-	do {
+	while (count--) {
 		tx_swbd = &tx_ring->tx_swbd[i];
 		enetc_free_tx_frame(tx_ring, tx_swbd);
 		if (i == 0)
 			i = tx_ring->bd_count;
 		i--;
-	} while (count--);
+	}
 
 	return 0;
 }
