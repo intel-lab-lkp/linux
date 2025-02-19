@@ -59,6 +59,7 @@
 #define   SVC_I3C_MSTATUS_STATE(x) FIELD_GET(GENMASK(2, 0), (x))
 #define   SVC_I3C_MSTATUS_STATE_DAA(x) (SVC_I3C_MSTATUS_STATE(x) == 5)
 #define   SVC_I3C_MSTATUS_STATE_IDLE(x) (SVC_I3C_MSTATUS_STATE(x) == 0)
+#define   SVC_I3C_MSTATUS_STATE_SLVREQ(x) (SVC_I3C_MSTATUS_STATE(x) == 1)
 #define   SVC_I3C_MSTATUS_BETWEEN(x) FIELD_GET(BIT(4), (x))
 #define   SVC_I3C_MSTATUS_NACKED(x) FIELD_GET(BIT(5), (x))
 #define   SVC_I3C_MSTATUS_IBITYPE(x) FIELD_GET(GENMASK(7, 6), (x))
@@ -143,6 +144,12 @@
  * Fill the FIFO in advance to prevent FIFO from becoming empty.
  */
 #define SVC_I3C_QUIRK_FIFO_EMPTY	BIT(0)
+/*
+ * SVC_I3C_QUIRK_FLASE_SLVSTART:
+ * I3C HW may generate an invalid SlvStart event when emitting a STOP.
+ * If it is a true SlvStart, the MSTATUS state should be SLVREQ.
+ */
+#define SVC_I3C_QUIRK_FALSE_SLVSTART	BIT(1)
 
 struct svc_i3c_cmd {
 	u8 addr;
@@ -575,6 +582,11 @@ static irqreturn_t svc_i3c_master_irq_handler(int irq, void *dev_id)
 
 	/* Clear the interrupt status */
 	writel(SVC_I3C_MINT_SLVSTART, master->regs + SVC_I3C_MSTATUS);
+
+	/* Ignore the false event */
+	if ((master->quirks & SVC_I3C_QUIRK_FIFO_EMPTY) &&
+	    !SVC_I3C_MSTATUS_STATE_SLVREQ(active))
+		return IRQ_HANDLED;
 
 	svc_i3c_master_disable_interrupts(master);
 
@@ -1915,7 +1927,8 @@ static int svc_i3c_master_probe(struct platform_device *pdev)
 	svc_i3c_master_reset(master);
 
 	if (device_is_compatible(master->dev, "nuvoton,npcm845-i3c"))
-		master->quirks = SVC_I3C_QUIRK_FIFO_EMPTY;
+		master->quirks = SVC_I3C_QUIRK_FIFO_EMPTY |
+				 SVC_I3C_QUIRK_FALSE_SLVSTART;
 
 	/* Register the master */
 	ret = i3c_master_register(&master->base, &pdev->dev,
