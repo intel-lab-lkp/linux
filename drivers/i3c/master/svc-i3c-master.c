@@ -102,6 +102,7 @@
 #define   SVC_I3C_MDATACTRL_TXTRIG_FIFO_NOT_FULL GENMASK(5, 4)
 #define   SVC_I3C_MDATACTRL_RXTRIG_FIFO_NOT_EMPTY 0
 #define   SVC_I3C_MDATACTRL_RXCOUNT(x) FIELD_GET(GENMASK(28, 24), (x))
+#define   SVC_I3C_MDATACTRL_TXCOUNT(x) FIELD_GET(GENMASK(20, 16), (x))
 #define   SVC_I3C_MDATACTRL_TXFULL BIT(30)
 #define   SVC_I3C_MDATACTRL_RXEMPTY BIT(31)
 
@@ -132,6 +133,16 @@
 
 #define SVC_I3C_EVENT_IBI	GENMASK(7, 0)
 #define SVC_I3C_EVENT_HOTJOIN	BIT(31)
+
+/*
+ * SVC_I3C_QUIRK_FIFO_EMPTY:
+ * I3C HW stalls the write transfer if the transmit FIFO becomes empty,
+ * when new data is written to FIFO, I3C HW resumes the transfer but
+ * the first transmitted data bit may have the wrong value.
+ * Workaround:
+ * Fill the FIFO in advance to prevent FIFO from becoming empty.
+ */
+#define SVC_I3C_QUIRK_FIFO_EMPTY	BIT(0)
 
 struct svc_i3c_cmd {
 	u8 addr;
@@ -216,6 +227,7 @@ struct svc_i3c_master {
 	struct mutex lock;
 	u32 enabled_events;
 	u32 mctrl_config;
+	u32 quirks;
 };
 
 /**
@@ -891,6 +903,7 @@ static int svc_i3c_master_do_daa_locked(struct svc_i3c_master *master,
 	unsigned int dev_nb = 0, last_addr = 0;
 	u32 reg;
 	int ret, i;
+	u32 dyn_addr;
 
 	while (true) {
 		/* clean SVC_I3C_MINT_IBIWON w1c bits */
@@ -930,6 +943,15 @@ static int svc_i3c_master_do_daa_locked(struct svc_i3c_master *master,
 
 		if (SVC_I3C_MSTATUS_RXPEND(reg)) {
 			u8 data[6];
+
+			/*
+			 * SVC_I3C_QUIRK_FIFO_EMPTY fix:
+			 * The TX FIFO should be ready before the TX transmission is starting.
+			 */
+			dyn_addr = i3c_master_get_free_addr(&master->base, last_addr + 1);
+			if (dyn_addr < 0)
+				return dyn_addr;
+			writel(dyn_addr, master->regs + SVC_I3C_MWDATAB);
 
 			/*
 			 * We only care about the 48-bit provisioned ID yet to
@@ -1009,21 +1031,20 @@ static int svc_i3c_master_do_daa_locked(struct svc_i3c_master *master,
 		if (ret)
 			break;
 
-		/* Give the slave device a suitable dynamic address */
-		ret = i3c_master_get_free_addr(&master->base, last_addr + 1);
-		if (ret < 0)
-			break;
-
-		addrs[dev_nb] = ret;
+		addrs[dev_nb] = dyn_addr;
 		dev_dbg(master->dev, "DAA: device %d assigned to 0x%02x\n",
 			dev_nb, addrs[dev_nb]);
-
-		writel(addrs[dev_nb], master->regs + SVC_I3C_MWDATAB);
 		last_addr = addrs[dev_nb++];
 	}
 
 	/* Need manual issue STOP except for Complete condition */
 	svc_i3c_master_emit_stop(master);
+	/*
+	 * Dynamic address is written to FIFO in advance for SVC_I3C_QUIRK_FIFO_EMPTY fix.
+	 * Flush FIFO in the failed case.
+	 */
+	if (ret)
+		svc_i3c_master_flush_fifo(master);
 	return ret;
 }
 
@@ -1210,7 +1231,6 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 	/* clean SVC_I3C_MINT_IBIWON w1c bits */
 	writel(SVC_I3C_MINT_IBIWON, master->regs + SVC_I3C_MSTATUS);
 
-
 	while (retry--) {
 		writel(SVC_I3C_MCTRL_REQUEST_START_ADDR |
 		       xfer_type |
@@ -1219,6 +1239,22 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 		       SVC_I3C_MCTRL_ADDR(addr) |
 		       SVC_I3C_MCTRL_RDTERM(*actual_len),
 		       master->regs + SVC_I3C_MCTRL);
+
+		if ((master->quirks & SVC_I3C_QUIRK_FIFO_EMPTY) && !rnw && xfer_len) {
+			int i, count, space;
+
+			reg = readl(master->regs + SVC_I3C_MDATACTRL);
+			space = SVC_I3C_FIFO_SIZE - SVC_I3C_MDATACTRL_TXCOUNT(reg);
+			count = xfer_len > space ? space : xfer_len;
+			for (i = 0; i < count; i++) {
+				if (i == xfer_len - 1)
+					writel(out[0], master->regs + SVC_I3C_MWDATABE);
+				else
+					writel(out[0], master->regs + SVC_I3C_MWDATAB);
+				out++;
+			}
+			xfer_len -= count;
+		}
 
 		ret = readl_poll_timeout(master->regs + SVC_I3C_MSTATUS, reg,
 				 SVC_I3C_MSTATUS_MCTRLDONE(reg), 0, 1000);
@@ -1308,6 +1344,7 @@ static int svc_i3c_master_xfer(struct svc_i3c_master *master,
 emit_stop:
 	svc_i3c_master_emit_stop(master);
 	svc_i3c_master_clear_merrwarn(master);
+	svc_i3c_master_flush_fifo(master);
 
 	return ret;
 }
@@ -1876,6 +1913,9 @@ static int svc_i3c_master_probe(struct platform_device *pdev)
 	pm_runtime_enable(&pdev->dev);
 
 	svc_i3c_master_reset(master);
+
+	if (device_is_compatible(master->dev, "nuvoton,npcm845-i3c"))
+		master->quirks = SVC_I3C_QUIRK_FIFO_EMPTY;
 
 	/* Register the master */
 	ret = i3c_master_register(&master->base, &pdev->dev,
