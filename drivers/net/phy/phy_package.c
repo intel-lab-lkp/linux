@@ -6,6 +6,18 @@
 #include <linux/of.h>
 #include <linux/phy.h>
 
+struct device_node *phy_package_shared_get_node(struct phy_device *phydev)
+{
+	return phydev->shared->np;
+}
+EXPORT_SYMBOL_GPL(phy_package_shared_get_node);
+
+void *phy_package_shared_get_priv(struct phy_device *phydev)
+{
+	return phydev->shared->priv;
+}
+EXPORT_SYMBOL_GPL(phy_package_shared_get_priv);
+
 int phy_package_address(struct phy_device *phydev, unsigned int addr_offset)
 {
 	struct phy_package_shared *shared = phydev->shared;
