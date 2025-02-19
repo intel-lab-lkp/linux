@@ -2,7 +2,7 @@
 //
 // TAS2563/TAS2781 Common functions for HDA and ASoC Audio drivers
 //
-// Copyright 2023 - 2024 Texas Instruments, Inc.
+// Copyright 2023 - 2025 Texas Instruments, Inc.
 //
 // Author: Shenghao Ding <shenghao-ding@ti.com>
 
@@ -429,6 +429,7 @@ void tasdevice_dsp_remove(void *context)
 	if (tas_fmw->configs)
 		tasdev_dsp_cfg_remove(tas_fmw->configs,
 			tas_fmw->nr_configurations);
+	kfree(tas_fmw->fct_par_addr.data);
 	kfree(tas_fmw);
 	tas_dev->fmw = NULL;
 }
