@@ -114,6 +114,7 @@ static int posix_timer_add(struct k_itimer *timer)
 
 		spin_lock(&hash_lock);
 		if (!__posix_timers_find(head, sig, id)) {
+			timer->it_id = (timer_t)id;
 			hlist_add_head_rcu(&timer->t_hash, head);
 			spin_unlock(&hash_lock);
 			return id;
@@ -407,8 +408,7 @@ static int do_timer_create(clockid_t which_clock, struct sigevent *event,
 
 	/*
 	 * Add the timer to the hash table. The timer is not yet valid
-	 * because new_timer::it_signal is still NULL. The timer id is also
-	 * not yet visible to user space.
+	 * because new_timer::it_signal is still NULL.
 	 */
 	new_timer_id = posix_timer_add(new_timer);
 	if (new_timer_id < 0) {
@@ -416,7 +416,6 @@ static int do_timer_create(clockid_t which_clock, struct sigevent *event,
 		return new_timer_id;
 	}
 
-	new_timer->it_id = (timer_t) new_timer_id;
 	new_timer->it_clock = which_clock;
 	new_timer->kclock = kc;
 	new_timer->it_overrun = -1LL;
