@@ -372,13 +372,13 @@ static int enetc_map_tx_buffs(struct enetc_bdr *tx_ring, struct sk_buff *skb)
 dma_err:
 	dev_err(tx_ring->dev, "DMA map error");
 
-	do {
+	while (count--) {
 		tx_swbd = &tx_ring->tx_swbd[i];
 		enetc_free_tx_frame(tx_ring, tx_swbd);
 		if (i == 0)
 			i = tx_ring->bd_count;
 		i--;
-	} while (count--);
+	}
 
 	return 0;
 }
