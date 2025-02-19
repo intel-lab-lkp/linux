@@ -30,6 +30,9 @@ properties:
   io-channel-names:
     const: sensor-channel
 
+  '#io-channel-cells':
+    const: 1
+
   temperature-lookup-table:
     description: |
       Lookup table to map the relation between ADC value and temperature.
@@ -60,6 +63,7 @@ examples:
         #thermal-sensor-cells = <0>;
         io-channels = <&ads1015 1>;
         io-channel-names = "sensor-channel";
+        #io-channel-cells = <1>;
         temperature-lookup-table = <
               (-40000) 2578
               (-39000) 2577
