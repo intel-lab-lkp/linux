@@ -262,8 +262,8 @@ then
 	for lib in $test_libs; do
 
 	let total_cnt+=1
-	$CC -o $tmp_file.bin $lib $tmp_file > /dev/null 2>&1
-	if [ $? -ne 0 ]; then
+	if ! $CC -o $tmp_file.bin $lib $tmp_file > /dev/null 2>&1
+	then
 		echo "FAIL: $test dependency check: $lib" >> $fail
 		let fail_cnt+=1
 		fail_libs+="$lib "
