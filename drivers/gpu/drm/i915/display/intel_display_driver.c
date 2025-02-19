@@ -245,6 +245,11 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 						WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
 	display->wq.cleanup = alloc_workqueue("i915_cleanup", WQ_HIGHPRI, 0);
 
+	if (!display->wq.modeset || !display->wq.flip || !display->wq.cleanup) {
+		ret = -ENOMEM;
+		goto cleanup_vga_client_pw_domain_dmc;
+	}
+
 	intel_mode_config_init(display);
 
 	ret = intel_cdclk_init(display);
