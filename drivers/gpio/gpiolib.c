@@ -1161,7 +1161,7 @@ void gpiochip_remove(struct gpio_chip *gc)
 {
 	struct gpio_device *gdev = gc->gpiodev;
 
-	/* FIXME: should the legacy sysfs handling be moved to gpio_device? */
+/* sysfs handling has been improved with sysfs_emit() and should align with gpio_device */
 	gpiochip_sysfs_unregister(gdev);
 	gpiochip_free_hogs(gc);
 	gpiochip_free_remaining_irqs(gc);
