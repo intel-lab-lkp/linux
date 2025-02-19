@@ -229,21 +229,21 @@ static ssize_t ipw_write(struct tty_struct *linux_tty, const u8 *buf,
 
 static unsigned int ipw_write_room(struct tty_struct *linux_tty)
 {
-	struct ipw_tty *tty = linux_tty->driver_data;
-	int room;
+    struct ipw_tty *tty = linux_tty->driver_data;
+    int room = 0;
 
-	/* FIXME: Exactly how is the tty object locked here .. */
-	if (!tty)
-		return 0;
+    if (!tty)
+        return 0;
 
-	if (!tty->port.count)
-		return 0;
+    mutex_lock(&tty->ipw_tty_mutex); // Lock added
+    if (!tty->port.count) {
+        mutex_unlock(&tty->ipw_tty_mutex);
+        return 0;
+    }
 
-	room = IPWIRELESS_TX_QUEUE_SIZE - tty->tx_bytes_queued;
-	if (room < 0)
-		room = 0;
-
-	return room;
+    room = IPWIRELESS_TX_QUEUE_SIZE - tty->tx_bytes_queued;
+    mutex_unlock(&tty->ipw_tty_mutex); // Unlock added
+    return room < 0 ? 0 : room;
 }
 
 static int ipwireless_get_serial_info(struct tty_struct *linux_tty,
@@ -351,85 +351,107 @@ static int set_control_lines(struct ipw_tty *tty, unsigned int set,
 
 static int ipw_tiocmget(struct tty_struct *linux_tty)
 {
-	struct ipw_tty *tty = linux_tty->driver_data;
-	/* FIXME: Exactly how is the tty object locked here .. */
+    struct ipw_tty *tty = linux_tty->driver_data;
+    int ret;
 
-	if (!tty)
-		return -ENODEV;
+    if (!tty)
+        return -ENODEV;
 
-	if (!tty->port.count)
-		return -EINVAL;
+    mutex_lock(&tty->ipw_tty_mutex); // Lock added
+    if (!tty->port.count) {
+        mutex_unlock(&tty->ipw_tty_mutex);
+        return -EINVAL;
+    }
 
-	return get_control_lines(tty);
+    ret = get_control_lines(tty);
+    mutex_unlock(&tty->ipw_tty_mutex); // Unlock added
+    return ret;
 }
 
-static int
-ipw_tiocmset(struct tty_struct *linux_tty,
-	     unsigned int set, unsigned int clear)
+static int ipw_tiocmset(struct tty_struct *linux_tty,
+             unsigned int set, unsigned int clear)
 {
-	struct ipw_tty *tty = linux_tty->driver_data;
-	/* FIXME: Exactly how is the tty object locked here .. */
+    struct ipw_tty *tty = linux_tty->driver_data;
+    int ret;
 
-	if (!tty)
-		return -ENODEV;
+    if (!tty)
+        return -ENODEV;
 
-	if (!tty->port.count)
-		return -EINVAL;
+    mutex_lock(&tty->ipw_tty_mutex); // Lock added
+    if (!tty->port.count) {
+        mutex_unlock(&tty->ipw_tty_mutex);
+        return -EINVAL;
+    }
 
-	return set_control_lines(tty, set, clear);
+    ret = set_control_lines(tty, set, clear);
+    mutex_unlock(&tty->ipw_tty_mutex); // Unlock added
+    return ret;
 }
 
 static int ipw_ioctl(struct tty_struct *linux_tty,
-		     unsigned int cmd, unsigned long arg)
+                     unsigned int cmd, unsigned long arg)
 {
-	struct ipw_tty *tty = linux_tty->driver_data;
+        struct ipw_tty *tty = linux_tty->driver_data;
+        int ret = -ENOIOCTLCMD; // Default return value
 
-	if (!tty)
-		return -ENODEV;
+        if (!tty)
+                return -ENODEV;
 
-	if (!tty->port.count)
-		return -EINVAL;
+        if (!tty->port.count)
+                return -EINVAL;
 
-	/* FIXME: Exactly how is the tty object locked here .. */
-	if (tty->tty_type == TTYTYPE_MODEM) {
-		switch (cmd) {
-		case PPPIOCGCHAN:
-			{
-				int chan = ipwireless_ppp_channel_index(
-							tty->network);
+        // Acquire the mutex to lock the tty object
+        mutex_lock(&tty->ipw_tty_mutex);
 
-				if (chan < 0)
-					return -ENODEV;
-				if (put_user(chan, (int __user *) arg))
-					return -EFAULT;
-			}
-			return 0;
+        if (tty->tty_type == TTYTYPE_MODEM) {
+                switch (cmd) {
+                case PPPIOCGCHAN: {
+                        int chan = ipwireless_ppp_channel_index(tty->network);
 
-		case PPPIOCGUNIT:
-			{
-				int unit = ipwireless_ppp_unit_number(
-						tty->network);
+                        if (chan < 0) {
+                                ret = -ENODEV;
+                                break;
+                        }
+                        if (put_user(chan, (int __user *) arg)) {
+                                ret = -EFAULT;
+                                break;
+                        }
+                        ret = 0;
+                        break;
+                }
+                case PPPIOCGUNIT: {
+                        int unit = ipwireless_ppp_unit_number(tty->network);
 
-				if (unit < 0)
-					return -ENODEV;
-				if (put_user(unit, (int __user *) arg))
-					return -EFAULT;
-			}
-			return 0;
+                        if (unit < 0) {
+                                ret = -ENODEV;
+                                break;
+                        }
+                        if (put_user(unit, (int __user *) arg)) {
+                                ret = -EFAULT;
+                                break;
+                        }
+                        ret = 0;
+                        break;
+                }
+                case FIONREAD: {
+                        int val = 0;
 
-		case FIONREAD:
-			{
-				int val = 0;
+                        if (put_user(val, (int __user *) arg)) {
+                                ret = -EFAULT;
+                                break;
+                        }
+                        ret = 0;
+                        break;
+                }
+                case TCFLSH:
+                        ret = tty_perform_flush(linux_tty, arg);
+                        break;
+                }
+        }
 
-				if (put_user(val, (int __user *) arg))
-					return -EFAULT;
-			}
-			return 0;
-		case TCFLSH:
-			return tty_perform_flush(linux_tty, arg);
-		}
-	}
-	return -ENOIOCTLCMD;
+        // Release the mutex before returning
+        mutex_unlock(&tty->ipw_tty_mutex);
+        return ret;
 }
 
 static int add_tty(int j,
