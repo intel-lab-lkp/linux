@@ -525,7 +525,7 @@ static int max732x_irq_setup(struct max732x_chip *chip,
 		girq->default_type = IRQ_TYPE_NONE;
 		girq->handler = handle_simple_irq;
 		girq->threaded = true;
-		girq->first = irq_base; /* FIXME: get rid of this */
+		/* FIXME: get rid of this */
 	}
 
 	return 0;
