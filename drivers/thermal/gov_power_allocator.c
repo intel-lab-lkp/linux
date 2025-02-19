@@ -656,11 +656,10 @@ static void power_allocator_update_tz(struct thermal_zone_device *tz,
 			if (power_actor_is_valid(instance))
 				num_actors++;
 
-		if (num_actors == params->num_actors)
-			return;
+		if (num_actors != params->num_actors)
+			allocate_actors_buffer(params, num_actors);
 
-		allocate_actors_buffer(params, num_actors);
-		break;
+		fallthrough;
 	case THERMAL_INSTANCE_WEIGHT_CHANGED:
 		params->total_weight = 0;
 		list_for_each_entry(instance, &td->thermal_instances, trip_node)
@@ -730,6 +729,8 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 	reset_pid_controller(params);
 
 	tz->governor_data = params;
+
+	power_allocator_update_tz(tz, THERMAL_INSTANCE_WEIGHT_CHANGED);
 
 	return 0;
 
