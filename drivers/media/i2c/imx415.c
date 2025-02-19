@@ -1076,6 +1076,18 @@ static int imx415_init_state(struct v4l2_subdev *sd,
 	return 0;
 }
 
+static int imx415_get_mbus_config(struct v4l2_subdev *sd, unsigned int pad_id,
+				  struct v4l2_mbus_config *config)
+{
+	struct imx415 *sensor = to_imx415(sd);
+
+	config->type = V4L2_MBUS_CSI2_DPHY;
+	config->bus.mipi_csi2.flags = 0;
+	config->bus.mipi_csi2.num_data_lanes = sensor->num_data_lanes;
+
+	return 0;
+}
+
 static const struct v4l2_subdev_video_ops imx415_subdev_video_ops = {
 	.s_stream = imx415_s_stream,
 };
@@ -1086,6 +1098,7 @@ static const struct v4l2_subdev_pad_ops imx415_subdev_pad_ops = {
 	.get_fmt = v4l2_subdev_get_fmt,
 	.set_fmt = imx415_set_format,
 	.get_selection = imx415_get_selection,
+	.get_mbus_config = imx415_get_mbus_config,
 };
 
 static const struct v4l2_subdev_ops imx415_subdev_ops = {
