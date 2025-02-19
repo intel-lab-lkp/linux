@@ -21,4 +21,26 @@ static inline bool force_dma_unencrypted(struct device *dev)
 	return is_realm_world();
 }
 
+static inline dma_addr_t dma_decrypted(dma_addr_t daddr)
+{
+	if (is_realm_world())
+		daddr |= prot_ns_shared;
+	return daddr;
+}
+#define dma_decrypted dma_decrypted
+
+static inline dma_addr_t dma_encrypted(dma_addr_t daddr)
+{
+	if (is_realm_world())
+		daddr &= prot_ns_shared - 1;
+	return daddr;
+}
+#define dma_encrypted dma_encrypted
+
+static inline dma_addr_t dma_clear_encryption(dma_addr_t daddr)
+{
+	return dma_encrypted(daddr);
+}
+#define dma_clear_encryption dma_clear_encryption
+
 #endif	/* __ASM_MEM_ENCRYPT_H */
