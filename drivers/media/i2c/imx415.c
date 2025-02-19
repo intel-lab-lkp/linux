@@ -505,6 +505,19 @@ static const struct cci_reg_sequence imx415_linkrate_1440mbps[] = {
 	{ IMX415_TLPX, 0x004F },
 };
 
+/* 1485 Mbps CSI configuration */
+static const struct cci_reg_sequence imx415_linkrate_1485mbps[] = {
+	{ IMX415_TCLKPOST, 0x00A7 },
+	{ IMX415_TCLKPREPARE, 0x0057 },
+	{ IMX415_TCLKTRAIL, 0x005F },
+	{ IMX415_TCLKZERO, 0x0197 },
+	{ IMX415_THSPREPARE, 0x005F },
+	{ IMX415_THSZERO, 0x00AF },
+	{ IMX415_THSTRAIL, 0x005F },
+	{ IMX415_THSEXIT, 0x009F },
+	{ IMX415_TLPX, 0x004F },
+};
+
 /* 1782 Mbps CSI configuration */
 static const struct cci_reg_sequence imx415_linkrate_1782mbps[] = {
 	{ IMX415_TCLKPOST, 0x00B7 },
@@ -529,6 +542,19 @@ static const struct cci_reg_sequence imx415_linkrate_2079mbps[] = {
 	{ IMX415_THSTRAIL, 0x0087 },
 	{ IMX415_THSEXIT, 0x00DF },
 	{ IMX415_TLPX, 0x006F },
+};
+
+/* 2376 Mbps CSI configuration */
+static const struct cci_reg_sequence imx415_linkrate_2376mbps[] = {
+	{ IMX415_TCLKPOST, 0x00E7 },
+	{ IMX415_TCLKPREPARE, 0x008F },
+	{ IMX415_TCLKTRAIL, 0x008F },
+	{ IMX415_TCLKZERO, 0x027F },
+	{ IMX415_THSPREPARE, 0x0097 },
+	{ IMX415_THSZERO, 0x010F },
+	{ IMX415_THSTRAIL, 0x0097 },
+	{ IMX415_THSEXIT, 0x00F7 },
+	{ IMX415_TLPX, 0x007F },
 };
 
 struct imx415_mode_reg_list {
@@ -577,6 +603,14 @@ static const struct imx415_mode supported_modes[] = {
 		},
 	},
 	{
+		.lane_rate = 1485000000,
+		.hmax_min = { 0, 550 },
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_linkrate_1485mbps),
+			.regs = imx415_linkrate_1485mbps,
+		},
+	},
+	{
 		.lane_rate = 1782000000,
 		.hmax_min = { 1100, 550 },
 		.reg_list = {
@@ -590,6 +624,14 @@ static const struct imx415_mode supported_modes[] = {
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(imx415_linkrate_2079mbps),
 			.regs = imx415_linkrate_2079mbps,
+		},
+	},
+	{
+		.lane_rate = 2376000000,
+		.hmax_min = { 0, 366 },
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_linkrate_2376mbps),
+			.regs = imx415_linkrate_2376mbps,
 		},
 	},
 };
@@ -1375,8 +1417,12 @@ static int imx415_parse_hw_config(struct imx415 *sensor)
 		}
 
 		for (j = 0; j < ARRAY_SIZE(supported_modes); ++j) {
+			int lanes_idx = sensor->num_data_lanes == 2 ? 0 : 1;
+
 			if (bus_cfg.link_frequencies[i] * 2 !=
 			    supported_modes[j].lane_rate)
+				continue;
+			if (!supported_modes[j].hmax_min[lanes_idx])
 				continue;
 			sensor->cur_mode = j;
 			break;
