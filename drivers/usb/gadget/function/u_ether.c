@@ -233,6 +233,7 @@ static void rx_complete(struct usb_ep *ep, struct usb_request *req)
 		if (dev->unwrap) {
 			unsigned long	flags;
 
+			local_bh_disable();
 			spin_lock_irqsave(&dev->lock, flags);
 			if (dev->port_usb) {
 				status = dev->unwrap(dev->port_usb,
@@ -243,6 +244,7 @@ static void rx_complete(struct usb_ep *ep, struct usb_request *req)
 				status = -ENOTCONN;
 			}
 			spin_unlock_irqrestore(&dev->lock, flags);
+			local_bh_enable();
 		} else {
 			skb_queue_tail(&dev->rx_frames, skb);
 		}
