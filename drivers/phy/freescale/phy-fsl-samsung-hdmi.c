@@ -337,7 +337,7 @@ fsl_samsung_hdmi_phy_configure_pll_lock_det(struct fsl_samsung_hdmi_phy *phy,
 	/* Find int_pllclk speed */
 	for (div = 0; div < 4; div++) {
 		int_pllclk = pclk / (1 << div);
-		if (int_pllclk < (50 * MHZ))
+		if (int_pllclk < (50 * MHZ) || div == 3)
 			break;
 	}
 
