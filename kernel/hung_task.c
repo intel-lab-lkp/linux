@@ -25,6 +25,8 @@
 
 #include <trace/events/sched.h>
 
+#include "locking/mutex.h"
+
 /*
  * The number of tasks checked:
  */
@@ -93,6 +95,41 @@ static struct notifier_block panic_block = {
 	.notifier_call = hung_task_panic,
 };
 
+
+#ifdef CONFIG_DEBUG_MUTEXES
+static void debug_show_blocker(struct task_struct *task)
+{
+	struct task_struct *g, *t;
+	unsigned long owner;
+	struct mutex *lock;
+
+	if (!task->blocked_on)
+		return;
+
+	lock = task->blocked_on->mutex;
+	if (unlikely(!lock)) {
+		pr_err("INFO: task %s:%d is blocked on a mutex, but the mutex is not found.\n",
+			task->comm, task->pid);
+		return;
+	}
+	owner = debug_mutex_get_owner(lock);
+	if (likely(owner)) {
+		/* Ensure the owner information is correct. */
+		for_each_process_thread(g, t)
+			if ((unsigned long)t == owner) {
+				pr_err("INFO: task %s:%d is blocked on a mutex owned by task %s:%d.\n",
+					task->comm, task->pid, t->comm, t->pid);
+				sched_show_task(t);
+				return;
+			}
+	}
+	pr_err("INFO: task %s:%d is blocked on a mutex, but the owner is not found.\n",
+		task->comm, task->pid);
+}
+#else
+#define debug_show_blocker(t)	do {} while (0)
+#endif
+
 static void check_hung_task(struct task_struct *t, unsigned long timeout)
 {
 	unsigned long switch_count = t->nvcsw + t->nivcsw;
@@ -152,6 +189,7 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 		pr_err("\"echo 0 > /proc/sys/kernel/hung_task_timeout_secs\""
 			" disables this message.\n");
 		sched_show_task(t);
+		debug_show_blocker(t);
 		hung_task_show_lock = true;
 
 		if (sysctl_hung_task_all_cpu_backtrace)

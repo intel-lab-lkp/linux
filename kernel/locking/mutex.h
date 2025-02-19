@@ -16,6 +16,7 @@ struct mutex_waiter {
 	struct task_struct	*task;
 	struct ww_acquire_ctx	*ww_ctx;
 #ifdef CONFIG_DEBUG_MUTEXES
+	struct mutex		*mutex;
 	void			*magic;
 #endif
 };
@@ -61,6 +62,7 @@ extern void debug_mutex_remove_waiter(struct mutex *lock, struct mutex_waiter *w
 extern void debug_mutex_unlock(struct mutex *lock);
 extern void debug_mutex_init(struct mutex *lock, const char *name,
 			     struct lock_class_key *key);
+extern unsigned long debug_mutex_get_owner(struct mutex *lock);
 #else /* CONFIG_DEBUG_MUTEXES */
 # define debug_mutex_lock_common(lock, waiter)		do { } while (0)
 # define debug_mutex_wake_waiter(lock, waiter)		do { } while (0)
@@ -69,4 +71,8 @@ extern void debug_mutex_init(struct mutex *lock, const char *name,
 # define debug_mutex_remove_waiter(lock, waiter, ti)	do { } while (0)
 # define debug_mutex_unlock(lock)			do { } while (0)
 # define debug_mutex_init(lock, name, key)		do { } while (0)
+static inline unsigned long debug_mutex_get_owner(struct mutex *lock)
+{
+	return 0;
+}
 #endif /* !CONFIG_DEBUG_MUTEXES */

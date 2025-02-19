@@ -72,6 +72,15 @@ static inline unsigned long __owner_flags(unsigned long owner)
 	return owner & MUTEX_FLAGS;
 }
 
+#ifdef CONFIG_DEBUG_MUTEXES
+/* Do not use the return value as a pointer directly. */
+unsigned long debug_mutex_get_owner(struct mutex *lock)
+{
+	unsigned long owner = atomic_long_read(&lock->owner);
+
+	return (unsigned long)__owner_task(owner);
+}
+#endif
 /*
  * Returns: __mutex_owner(lock) on failure or NULL on success.
  */
