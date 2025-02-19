@@ -11,6 +11,7 @@
 #include <linux/clk.h>
 #include <linux/completion.h>
 #include <linux/delay.h>
+#include <linux/iio/adc-helpers.h>
 #include <linux/iio/iio.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
@@ -299,20 +300,34 @@ static irqreturn_t rzg2l_adc_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static const struct iio_chan_spec rzg2l_adc_chan_template = {
+	.type = IIO_VOLTAGE,
+	.indexed = 1,
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
+};
+
+static const struct iio_adc_props rzg2l_adc_chan_props = {
+	.required = IIO_ADC_CHAN_PROP_TYPE_REG,
+};
+
 static int rzg2l_adc_parse_properties(struct platform_device *pdev, struct rzg2l_adc *adc)
 {
 	struct iio_chan_spec *chan_array;
 	struct rzg2l_adc_data *data;
-	unsigned int channel;
 	int num_channels;
-	int ret;
 	u8 i;
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
-	num_channels = device_get_child_node_count(&pdev->dev);
+	num_channels = devm_iio_adc_device_alloc_chaninfo(&pdev->dev,
+					&rzg2l_adc_chan_template, &chan_array,
+					&rzg2l_adc_chan_props);
+
+	if (num_channels < 0)
+		return num_channels;
+
 	if (!num_channels) {
 		dev_err(&pdev->dev, "no channel children\n");
 		return -ENODEV;
@@ -323,26 +338,10 @@ static int rzg2l_adc_parse_properties(struct platform_device *pdev, struct rzg2l
 		return -EINVAL;
 	}
 
-	chan_array = devm_kcalloc(&pdev->dev, num_channels, sizeof(*chan_array),
-				  GFP_KERNEL);
-	if (!chan_array)
-		return -ENOMEM;
+	for (i = 0; i < num_channels; i++) {
+		int channel = chan_array[i].channel;
 
-	i = 0;
-	device_for_each_child_node_scoped(&pdev->dev, fwnode) {
-		ret = fwnode_property_read_u32(fwnode, "reg", &channel);
-		if (ret)
-			return ret;
-
-		if (channel >= RZG2L_ADC_MAX_CHANNELS)
-			return -EINVAL;
-
-		chan_array[i].type = IIO_VOLTAGE;
-		chan_array[i].indexed = 1;
-		chan_array[i].channel = channel;
-		chan_array[i].info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
 		chan_array[i].datasheet_name = rzg2l_adc_channel_name[channel];
-		i++;
 	}
 
 	data->num_channels = num_channels;
