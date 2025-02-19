@@ -2394,6 +2394,16 @@ static int tcp_xa_pool_refill(struct sock *sk, struct tcp_xa_pool *p,
 	return k ? 0 : err;
 }
 
+static int put_devmem_cmsg(struct msghdr *msg, int level, int type, int len,
+			   void *data)
+{
+	/* Don't produce truncated CMSGs */
+	if (msg->msg_controllen < CMSG_LEN(len))
+		return -ETOOSMALL;
+
+	return put_cmsg(msg, level, type, len, data);
+}
+
 /* On error, returns the -errno. On success, returns number of bytes sent to the
  * user. May not consume all of @remaining_len.
  */
@@ -2438,10 +2448,10 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 			 */
 			memset(&dmabuf_cmsg, 0, sizeof(dmabuf_cmsg));
 			dmabuf_cmsg.frag_size = copy;
-			err = put_cmsg(msg, SOL_SOCKET, SO_DEVMEM_LINEAR,
-				       sizeof(dmabuf_cmsg), &dmabuf_cmsg);
+			err = put_devmem_cmsg(msg, SOL_SOCKET, SO_DEVMEM_LINEAR,
+					      sizeof(dmabuf_cmsg),
+					      &dmabuf_cmsg);
 			if (err || msg->msg_flags & MSG_CTRUNC) {
-				msg->msg_flags &= ~MSG_CTRUNC;
 				if (!err)
 					err = -ETOOSMALL;
 				goto out;
@@ -2499,12 +2509,11 @@ static int tcp_recvmsg_dmabuf(struct sock *sk, const struct sk_buff *skb,
 				offset += copy;
 				remaining_len -= copy;
 
-				err = put_cmsg(msg, SOL_SOCKET,
-					       SO_DEVMEM_DMABUF,
-					       sizeof(dmabuf_cmsg),
-					       &dmabuf_cmsg);
+				err = put_devmem_cmsg(msg, SOL_SOCKET,
+						      SO_DEVMEM_DMABUF,
+						      sizeof(dmabuf_cmsg),
+						      &dmabuf_cmsg);
 				if (err || msg->msg_flags & MSG_CTRUNC) {
-					msg->msg_flags &= ~MSG_CTRUNC;
 					if (!err)
 						err = -ETOOSMALL;
 					goto out;
