@@ -16,10 +16,12 @@
 #include "regs/xe_gt_regs.h"
 #include "xe_bo.h"
 #include "xe_device.h"
+#include "xe_drm_client.h"
 #include "xe_exec_queue.h"
 #include "xe_force_wake.h"
 #include "xe_ggtt.h"
 #include "xe_gt.h"
+#include "xe_gt_pagefault.h"
 #include "xe_guc_hwconfig.h"
 #include "xe_macros.h"
 #include "xe_mmio.h"
@@ -740,6 +742,73 @@ static int query_pxp_status(struct xe_device *xe,
 	return 0;
 }
 
+static size_t calc_reset_stats_size(struct xe_drm_client *client)
+{
+	size_t size = sizeof(struct drm_xe_query_reset_stats);
+#ifdef CONFIG_PROC_FS
+	spin_lock(&client->blame_lock);
+	size += sizeof(struct drm_xe_exec_queue_ban) * client->blame_len;
+	spin_lock(&client->blame_lock);
+#endif
+	return size;
+}
+
+static int query_reset_stats(struct xe_device *xe,
+			     struct drm_xe_device_query *query,
+			     struct drm_file *file)
+{
+	void __user *query_ptr = u64_to_user_ptr(query->data);
+	struct drm_xe_query_reset_stats resp;
+	struct xe_file *xef = to_xe_file(file);
+	struct xe_drm_client *client = xef->client;
+	struct blame *b;
+	size_t size = calc_reset_stats_size(client);
+	int i = 0;
+
+#ifdef CONFIG_PROC_FS
+	if (query->size == 0) {
+		query->size = size;
+		return 0;
+	} else if (XE_IOCTL_DBG(xe, query->size != size)) {
+		return -EINVAL;
+	}
+
+	if (copy_from_user(&resp, query_ptr, size))
+		return -EFAULT;
+
+	resp.reset_count = atomic_read(&client->reset_count);
+
+	spin_lock(&client->blame_lock);
+	resp.ban_count = client->blame_len;
+	list_for_each_entry(b, &client->blame_list, list) {
+		struct drm_xe_exec_queue_ban *ban = &resp.ban_list[i++];
+		struct pagefault *pf = b->pf;
+
+		ban->exec_queue_id = b->exec_queue_id;
+		ban->pf_found = pf ? 1 : 0;
+		if (!pf)
+			continue;
+
+		ban->access_type = pf->access_type;
+		ban->fault_type = pf->fault_type;
+		ban->vfid = pf->vfid;
+		ban->asid = pf->asid;
+		ban->pdata = pf->pdata;
+		ban->engine_class = xe_to_user_engine_class[pf->engine_class];
+		ban->engine_instance = pf->engine_instance;
+		ban->fault_addr = pf->page_addr;
+	}
+	spin_unlock(&client->blame_lock);
+
+	if (copy_to_user(query_ptr, &resp, size))
+		return -EFAULT;
+
+	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif
+}
+
 static int (* const xe_query_funcs[])(struct xe_device *xe,
 				      struct drm_xe_device_query *query,
 				      struct drm_file *file) = {
@@ -753,6 +822,7 @@ static int (* const xe_query_funcs[])(struct xe_device *xe,
 	query_uc_fw_version,
 	query_oa_units,
 	query_pxp_status,
+	query_reset_stats,
 };
 
 int xe_query_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
