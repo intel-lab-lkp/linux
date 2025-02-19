@@ -109,8 +109,8 @@ static const char *const imx415_supply_names[] = {
  * and converts them to link frequencies by a factor of two when needed.
  */
 static const s64 link_freq_menu_items[] = {
-	594000000 / 2,	720000000 / 2,	891000000 / 2,
-	1440000000 / 2, 1485000000 / 2,
+	594000000 / 2,	720000000 / 2,	891000000 / 2,	1440000000 / 2,
+	1485000000 / 2,	1782000000 / 2,	2079000000 / 2,	2376000000 / 2,
 };
 
 struct imx415_clk_params {
@@ -453,6 +453,19 @@ static const struct imx415_clk_params imx415_clk_params[] = {
 	},
 };
 
+/* 594 Mbps CSI configuration */
+static const struct cci_reg_sequence imx415_linkrate_594mbps[] = {
+	{ IMX415_TCLKPOST, 0x0067 },
+	{ IMX415_TCLKPREPARE, 0x0027 },
+	{ IMX415_TCLKTRAIL, 0x0027 },
+	{ IMX415_TCLKZERO, 0x00B7 },
+	{ IMX415_THSPREPARE, 0x002F },
+	{ IMX415_THSZERO, 0x004F },
+	{ IMX415_THSTRAIL, 0x002F },
+	{ IMX415_THSEXIT, 0x0047 },
+	{ IMX415_TLPX, 0x0027 },
+};
+
 /* 720 Mbps CSI configuration */
 static const struct cci_reg_sequence imx415_linkrate_720mbps[] = {
 	{ IMX415_TCLKPOST, 0x006F },
@@ -464,6 +477,19 @@ static const struct cci_reg_sequence imx415_linkrate_720mbps[] = {
 	{ IMX415_THSTRAIL, 0x002F },
 	{ IMX415_THSEXIT, 0x004F },
 	{ IMX415_TLPX, 0x0027 },
+};
+
+/* 891 Mbps CSI configuration */
+static const struct cci_reg_sequence imx415_linkrate_891mbps[] = {
+	{ IMX415_TCLKPOST, 0x007F },
+	{ IMX415_TCLKPREPARE, 0x0037 },
+	{ IMX415_TCLKTRAIL, 0x0037 },
+	{ IMX415_TCLKZERO, 0x00F7 },
+	{ IMX415_THSPREPARE, 0x003F },
+	{ IMX415_THSZERO, 0x006F },
+	{ IMX415_THSTRAIL, 0x003F },
+	{ IMX415_THSEXIT, 0x005F },
+	{ IMX415_TLPX, 0x002F },
 };
 
 /* 1440 Mbps CSI configuration */
@@ -479,17 +505,30 @@ static const struct cci_reg_sequence imx415_linkrate_1440mbps[] = {
 	{ IMX415_TLPX, 0x004F },
 };
 
-/* 891 Mbps CSI configuration */
-static const struct cci_reg_sequence imx415_linkrate_891mbps[] = {
-	{ IMX415_TCLKPOST, 0x007F },
-	{ IMX415_TCLKPREPARE, 0x0037 },
-	{ IMX415_TCLKTRAIL, 0x0037 },
-	{ IMX415_TCLKZERO, 0x00F7 },
-	{ IMX415_THSPREPARE, 0x003F },
-	{ IMX415_THSZERO, 0x006F },
-	{ IMX415_THSTRAIL, 0x003F },
-	{ IMX415_THSEXIT, 0x005F },
-	{ IMX415_TLPX, 0x002F },
+/* 1782 Mbps CSI configuration */
+static const struct cci_reg_sequence imx415_linkrate_1782mbps[] = {
+	{ IMX415_TCLKPOST, 0x00B7 },
+	{ IMX415_TCLKPREPARE, 0x0067 },
+	{ IMX415_TCLKTRAIL, 0x006F },
+	{ IMX415_TCLKZERO, 0x01DF },
+	{ IMX415_THSPREPARE, 0x006F },
+	{ IMX415_THSZERO, 0x00CF },
+	{ IMX415_THSTRAIL, 0x006F },
+	{ IMX415_THSEXIT, 0x00B7 },
+	{ IMX415_TLPX, 0x005F },
+};
+
+/* 2079 Mbps CSI configuration */
+static const struct cci_reg_sequence imx415_linkrate_2079mbps[] = {
+	{ IMX415_TCLKPOST, 0x00D7 },
+	{ IMX415_TCLKPREPARE, 0x007F },
+	{ IMX415_TCLKTRAIL, 0x007F },
+	{ IMX415_TCLKZERO, 0x0237 },
+	{ IMX415_THSPREPARE, 0x0087 },
+	{ IMX415_THSZERO, 0x00EF },
+	{ IMX415_THSTRAIL, 0x0087 },
+	{ IMX415_THSEXIT, 0x00DF },
+	{ IMX415_TLPX, 0x006F },
 };
 
 struct imx415_mode_reg_list {
@@ -506,11 +545,27 @@ struct imx415_mode {
 /* mode configs */
 static const struct imx415_mode supported_modes[] = {
 	{
+		.lane_rate = 594000000,
+		.hmax_min = { 3300, 1320 },
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_linkrate_594mbps),
+			.regs = imx415_linkrate_594mbps,
+		},
+	},
+	{
 		.lane_rate = 720000000,
 		.hmax_min = { 2032, 1066 },
 		.reg_list = {
 			.num_of_regs = ARRAY_SIZE(imx415_linkrate_720mbps),
 			.regs = imx415_linkrate_720mbps,
+		},
+	},
+	{
+		.lane_rate = 891000000,
+		.hmax_min = { 2200, 1100 },
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_linkrate_891mbps),
+			.regs = imx415_linkrate_891mbps,
 		},
 	},
 	{
@@ -522,11 +577,19 @@ static const struct imx415_mode supported_modes[] = {
 		},
 	},
 	{
-		.lane_rate = 891000000,
-		.hmax_min = { 2200, 1100 },
+		.lane_rate = 1782000000,
+		.hmax_min = { 1100, 550 },
 		.reg_list = {
-			.num_of_regs = ARRAY_SIZE(imx415_linkrate_891mbps),
-			.regs = imx415_linkrate_891mbps,
+			.num_of_regs = ARRAY_SIZE(imx415_linkrate_1782mbps),
+			.regs = imx415_linkrate_1782mbps,
+		},
+	},
+	{
+		.lane_rate = 2079000000,
+		.hmax_min = { 1100, 550 },
+		.reg_list = {
+			.num_of_regs = ARRAY_SIZE(imx415_linkrate_2079mbps),
+			.regs = imx415_linkrate_2079mbps,
 		},
 	},
 };
