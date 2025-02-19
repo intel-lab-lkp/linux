@@ -72,15 +72,22 @@ static int hash(struct signal_struct *sig, unsigned int nr)
 	return hash_32(hash32_ptr(sig) ^ nr, HASH_BITS(posix_timers_hashtable));
 }
 
-static struct k_itimer *__posix_timers_find(struct hlist_head *head,
+static struct signal_struct *posix_sig_owner(const struct k_itimer *timer)
+{
+	/* timer->it_signal can be set concurrently */
+	unsigned long val = (unsigned long)READ_ONCE(timer->it_signal);
+
+	return (struct signal_struct *)(val & ~1UL);
+}
+
+static struct k_itimer *posix_timers_find(struct hlist_head *head,
 					    struct signal_struct *sig,
 					    timer_t id)
 {
 	struct k_itimer *timer;
 
 	hlist_for_each_entry_rcu(timer, head, t_hash, lockdep_is_held(&hash_lock)) {
-		/* timer->it_signal can be set concurrently */
-		if ((READ_ONCE(timer->it_signal) == sig) && (timer->it_id == id))
+		if ((posix_sig_owner(timer) == sig) && (timer->it_id == id))
 			return timer;
 	}
 	return NULL;
@@ -90,8 +97,14 @@ static struct k_itimer *posix_timer_by_id(timer_t id)
 {
 	struct signal_struct *sig = current->signal;
 	struct hlist_head *head = &posix_timers_hashtable[hash(sig, id)];
+	struct k_itimer *timer;
 
-	return __posix_timers_find(head, sig, id);
+	hlist_for_each_entry_rcu(timer, head, t_hash) {
+		/* timer->it_signal can be set concurrently */
+		if ((READ_ONCE(timer->it_signal) == sig) && (timer->it_id == id))
+			return timer;
+	}
+	return NULL;
 }
 
 static int posix_timer_add(struct k_itimer *timer)
@@ -113,8 +126,9 @@ static int posix_timer_add(struct k_itimer *timer)
 		head = &posix_timers_hashtable[hash(sig, id)];
 
 		spin_lock(&hash_lock);
-		if (!__posix_timers_find(head, sig, id)) {
+		if (!posix_timers_find(head, sig, id)) {
 			timer->it_id = (timer_t)id;
+			timer->it_signal = (struct signal_struct *)((unsigned long)sig | 1UL);
 			hlist_add_head_rcu(&timer->t_hash, head);
 			spin_unlock(&hash_lock);
 			return id;
@@ -453,7 +467,7 @@ static int do_timer_create(clockid_t which_clock, struct sigevent *event,
 	}
 	/*
 	 * After succesful copy out, the timer ID is visible to user space
-	 * now but not yet valid because new_timer::signal is still NULL.
+	 * now but not yet valid because new_timer::signal low order bit is 1.
 	 *
 	 * Complete the initialization with the clock specific create
 	 * callback.
@@ -463,7 +477,7 @@ static int do_timer_create(clockid_t which_clock, struct sigevent *event,
 		goto out;
 
 	spin_lock_irq(&current->sighand->siglock);
-	/* This makes the timer valid in the hash table */
+	/* This makes the timer valid in the hash table, clearing low order bit. */
 	WRITE_ONCE(new_timer->it_signal, current->signal);
 	hlist_add_head(&new_timer->list, &current->signal->posix_timers);
 	spin_unlock_irq(&current->sighand->siglock);
