@@ -23,6 +23,7 @@ description: |
 properties:
   compatible:
     enum:
+      - ti,ucd90160
       - ti,ucd90320
 
   reg:
