@@ -109,6 +109,8 @@ struct sci_suspend_regs {
 	u16 scscr;
 	u16 scfcr;
 	u16 scsptr;
+	u16 scdl;
+	u16 sccks;
 	u8 scbrr;
 	u8 semr;
 };
@@ -3572,6 +3574,10 @@ static void sci_console_save(struct sci_port *s)
 		regs->scfcr = sci_serial_in(port, SCFCR);
 	if (sci_getreg(port, SCSPTR)->size)
 		regs->scsptr = sci_serial_in(port, SCSPTR);
+	if (sci_getreg(port, SCDL)->size)
+		regs->scdl = sci_serial_in(port, SCDL);
+	if (sci_getreg(port, SCCKS)->size)
+		regs->sccks = sci_serial_in(port, SCCKS);
 	if (sci_getreg(port, SCBRR)->size)
 		regs->scbrr = sci_serial_in(port, SCBRR);
 	if (sci_getreg(port, SEMR)->size)
@@ -3591,6 +3597,10 @@ static void sci_console_restore(struct sci_port *s)
 		sci_serial_out(port, SCFCR, regs->scfcr);
 	if (sci_getreg(port, SCSPTR)->size)
 		sci_serial_out(port, SCSPTR, regs->scsptr);
+	if (sci_getreg(port, SCDL)->size)
+		sci_serial_out(port, SCDL, regs->scdl);
+	if (sci_getreg(port, SCCKS)->size)
+		sci_serial_out(port, SCCKS, regs->sccks);
 	if (sci_getreg(port, SCBRR)->size)
 		sci_serial_out(port, SCBRR, regs->scbrr);
 	if (sci_getreg(port, SEMR)->size)
