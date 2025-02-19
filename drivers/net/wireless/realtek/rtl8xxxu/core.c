@@ -7576,6 +7576,12 @@ static int rtl8xxxu_sta_add(struct ieee80211_hw *hw,
 	mutex_lock(&priv->sta_mutex);
 	ewma_rssi_init(&sta_info->avg_rssi);
 	if (vif->type == NL80211_IFTYPE_AP) {
+		struct rtl8xxxu_ra_report *rarpt = &priv->ra_report;
+		u32 ramask;
+		int sgi = 0;
+		u8 highest_rate;
+		u8 bw;
+
 		sta_info->rssi_level = RTL8XXXU_RATR_STA_INIT;
 		sta_info->macid = rtl8xxxu_acquire_macid(priv);
 		if (sta_info->macid >= RTL8XXXU_MAX_MAC_ID_NUM) {
@@ -7584,6 +7590,24 @@ static int rtl8xxxu_sta_add(struct ieee80211_hw *hw,
 		}
 
 		rtl8xxxu_refresh_rate_mask(priv, 0, sta, true);
+
+		/* TODO: Set bits 28-31 for rate adaptive id */
+		ramask = (sta->deflink.supp_rates[0] & 0xfff) |
+			sta->deflink.ht_cap.mcs.rx_mask[0] << 12 |
+			sta->deflink.ht_cap.mcs.rx_mask[1] << 20;
+		if (sta->deflink.ht_cap.cap &
+		    (IEEE80211_HT_CAP_SGI_40 | IEEE80211_HT_CAP_SGI_20))
+			sgi = 1;
+
+		highest_rate = fls(ramask) - 1;
+		if (rtl8xxxu_ht40_2g &&
+		    (sta->deflink.ht_cap.cap & IEEE80211_HT_CAP_SUP_WIDTH_20_40))
+			bw = RATE_INFO_BW_40;
+		else
+			bw = RATE_INFO_BW_20;
+
+		rtl8xxxu_update_ra_report(rarpt, highest_rate, sgi, bw);
+
 		priv->fops->report_connect(priv, sta_info->macid, H2C_MACID_ROLE_STA, true);
 	} else {
 		switch (rtlvif->port_num) {
