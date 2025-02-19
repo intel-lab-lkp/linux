@@ -1072,6 +1072,27 @@ int cxl_pci_get_bandwidth(struct pci_dev *pdev, struct access_coordinate *c)
 #define GPF_TIMEOUT_BASE_MAX 2
 #define GPF_TIMEOUT_SCALE_MAX 7 /* 10 seconds */
 
+int cxl_gpf_get_dvsec(struct device *dev, bool port)
+{
+	struct pci_dev *pdev;
+	int dvsec;
+
+	if (!dev_is_pci(dev))
+		return -EINVAL;
+
+	pdev = to_pci_dev(dev);
+	if (!pdev)
+		return -EINVAL;
+
+	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
+			port ? CXL_DVSEC_PORT_GPF : CXL_DVSEC_DEVICE_GPF);
+	if (!dvsec)
+		pci_warn(pdev, "%s GPF DVSEC not present\n",
+			 port ? "Port" : "Device");
+	return dvsec;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_gpf_get_dvsec, "CXL");
+
 static int update_gpf_port_dvsec(struct pci_dev *pdev, int dvsec, int phase)
 {
 	u64 base, scale;
@@ -1116,25 +1137,22 @@ int cxl_gpf_port_setup(struct device *dport_dev, struct cxl_port *port)
 {
 	struct pci_dev *pdev;
 
-	if (!dev_is_pci(dport_dev))
-		return 0;
-
-	pdev = to_pci_dev(dport_dev);
-	if (!pdev || !port)
+	if (!port)
 		return -EINVAL;
 
 	if (!port->gpf_dvsec) {
 		int dvsec;
 
-		dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
-						  CXL_DVSEC_PORT_GPF);
-		if (!dvsec) {
-			pci_warn(pdev, "Port GPF DVSEC not present\n");
+		dvsec = cxl_gpf_get_dvsec(dport_dev, true);
+		if (dvsec <= 0)
 			return -EINVAL;
-		}
 
 		port->gpf_dvsec = dvsec;
 	}
+
+	pdev = to_pci_dev(dport_dev);
+	if (!pdev)
+		return -EINVAL;
 
 	update_gpf_port_dvsec(pdev, port->gpf_dvsec, 1);
 	update_gpf_port_dvsec(pdev, port->gpf_dvsec, 2);
