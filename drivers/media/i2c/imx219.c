@@ -74,7 +74,8 @@
 #define IMX219_FLL_MAX			0xffff
 #define IMX219_VBLANK_MIN		32
 #define IMX219_REG_LINE_LENGTH_A	CCI_REG16(0x0162)
-#define IMX219_LLP_MIN			0x0de8
+#define IMX219_LLP_MIN			0x0d78
+#define IMX219_BINNED_LLP_MIN		0x0de8
 #define IMX219_LLP_MAX			0x7ff0
 
 #define IMX219_REG_X_ADD_STA_A		CCI_REG16(0x0164)
@@ -317,13 +318,13 @@ static const struct imx219_mode supported_modes[] = {
 		/* 8MPix 15fps mode */
 		.width = 3280,
 		.height = 2464,
-		.fll_def = 3415,
+		.fll_def = 3526,
 	},
 	{
 		/* 1080P 30fps cropped */
 		.width = 1920,
 		.height = 1080,
-		.fll_def = 1707,
+		.fll_def = 1763,
 	},
 	{
 		/* 2x2 binned 60fps mode */
@@ -901,7 +902,7 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
 		int exposure_max;
 		int exposure_def;
-		int hblank;
+		int hblank, llp_min;
 		int pixel_rate;
 
 		/* Update limits and set FPS to default */
@@ -918,6 +919,17 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 					 imx219->exposure->minimum,
 					 exposure_max, imx219->exposure->step,
 					 exposure_def);
+
+		/*
+		 * With analog binning the default minimum line length of 3448
+		 * can cause artefacts because the ADC operates on two lines
+		 * together. Switch to higher minimum of 3560 if we are binning.
+		 */
+		llp_min = (bin_h || bin_v) ? IMX219_BINNED_LLP_MIN :
+					     IMX219_LLP_MIN;
+		__v4l2_ctrl_modify_range(imx219->hblank, llp_min - mode->width,
+					 IMX219_LLP_MAX - mode->width, 1,
+					 llp_min - mode->width);
 		/*
 		 * Retain PPL setting from previous mode so that the
 		 * line time does not change on a mode change.
@@ -926,10 +938,6 @@ static int imx219_set_pad_format(struct v4l2_subdev *sd,
 		 * mode width subtracted.
 		 */
 		hblank = prev_line_len - mode->width;
-		__v4l2_ctrl_modify_range(imx219->hblank,
-					 IMX219_LLP_MIN - mode->width,
-					 IMX219_LLP_MAX - mode->width, 1,
-					 IMX219_LLP_MIN - mode->width);
 		__v4l2_ctrl_s_ctrl(imx219->hblank, hblank);
 
 		/* Scale the pixel rate based on the mode specific factor */
