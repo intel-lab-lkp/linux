@@ -1591,6 +1591,7 @@ s_next(struct seq_file *m, void *v, loff_t *pos)
 		return iter;
 #endif
 
+	kfree(iter);
 	return NULL;
 }
 
