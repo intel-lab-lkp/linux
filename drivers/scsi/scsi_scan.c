@@ -151,8 +151,12 @@ int scsi_complete_async_scans(void)
 	struct async_scan_data *data;
 
 	do {
-		if (list_empty(&scanning_hosts))
+		spin_lock(&async_scan_lock);
+		if (list_empty(&scanning_hosts)) {
+			spin_unlock(&async_scan_lock);
 			return 0;
+		}
+		spin_unlock(&async_scan_lock);
 		/* If we can't get memory immediately, that's OK.  Just
 		 * sleep a little.  Even if we never get memory, the async
 		 * scans will finish eventually.
