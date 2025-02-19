@@ -330,6 +330,21 @@ int xe_guc_pagefault_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	return full ? -ENOSPC : 0;
 }
 
+static void save_pagefault_to_engine(struct xe_gt *gt, struct pagefault *pf)
+{
+	struct xe_hw_engine *hwe;
+
+	hwe = xe_gt_hw_engine(gt, pf->engine_class, pf->engine_instance, false);
+	if (hwe) {
+		spin_lock(&hwe->pf.lock);
+		/** Info initializes as NULL, so alloc if first pagefault */
+		if (!hwe->pf.info)
+			hwe->pf.info = kzalloc(sizeof(*pf), GFP_KERNEL);
+		memcpy(hwe->pf.info, pf, sizeof(*pf));
+		spin_unlock(&hwe->pf.lock);
+	}
+}
+
 #define USM_QUEUE_MAX_RUNTIME_MS	20
 
 static void pf_queue_work_func(struct work_struct *w)
@@ -351,6 +366,8 @@ static void pf_queue_work_func(struct work_struct *w)
 			pf.fault_unsuccessful = 1;
 			drm_dbg(&xe->drm, "Fault response: Unsuccessful %d\n", ret);
 		}
+
+		save_pagefault_to_engine(gt, &pf);
 
 		reply.dw0 = FIELD_PREP(PFR_VALID, 1) |
 			FIELD_PREP(PFR_SUCCESS, pf.fault_unsuccessful) |

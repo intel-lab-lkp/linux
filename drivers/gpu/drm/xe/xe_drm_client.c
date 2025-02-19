@@ -17,6 +17,7 @@
 #include "xe_exec_queue.h"
 #include "xe_force_wake.h"
 #include "xe_gt.h"
+#include "xe_gt_pagefault.h"
 #include "xe_hw_engine.h"
 #include "xe_pm.h"
 #include "xe_trace.h"
@@ -97,6 +98,8 @@ struct xe_drm_client *xe_drm_client_alloc(void)
 #ifdef CONFIG_PROC_FS
 	spin_lock_init(&client->bos_lock);
 	INIT_LIST_HEAD(&client->bos_list);
+	spin_lock_init(&client->blame_lock);
+	INIT_LIST_HEAD(&client->blame_list);
 #endif
 	return client;
 }
@@ -162,6 +165,71 @@ void xe_drm_client_remove_bo(struct xe_bo *bo)
 	spin_unlock(&client->bos_lock);
 
 	xe_drm_client_put(client);
+}
+
+static void free_blame(struct blame *b)
+{
+	list_del(&b->list);
+	kfree(b->pf);
+	kfree(b);
+}
+
+void xe_drm_client_add_blame(struct xe_drm_client *client,
+			     struct xe_exec_queue *q)
+{
+	struct blame *b = NULL;
+	struct pagefault *pf = NULL;
+	struct xe_file *xef = q->xef;
+	struct xe_hw_engine *hwe = q->hwe;
+
+	b = kzalloc(sizeof(*b), GFP_KERNEL);
+	xe_assert(xef->xe, b);
+
+	spin_lock(&client->blame_lock);
+	list_add_tail(&b->list, &client->blame_list);
+	client->blame_len++;
+	/**
+	 * Limit the number of blames in the blame list to prevent memory overuse.
+	 */
+	if (client->blame_len > MAX_BLAME_LEN) {
+		struct blame *rem = list_first_entry(&client->blame_list, struct blame, list);
+
+		free_blame(rem);
+		client->blame_len--;
+	}
+	spin_unlock(&client->blame_lock);
+
+	/**
+	 * Duplicate pagefault on engine to blame, if one may have caused the
+	 * exec queue to be ban.
+	 */
+	b->pf = NULL;
+	pf = kzalloc(sizeof(*pf), GFP_KERNEL);
+	spin_lock(&hwe->pf.lock);
+	if (hwe->pf.info) {
+		memcpy(pf, hwe->pf.info, sizeof(struct pagefault));
+		b->pf = pf;
+	} else {
+		kfree(pf);
+	}
+	spin_unlock(&hwe->pf.lock);
+
+	/** Save blame data to list element */
+	b->exec_queue_id = q->id;
+}
+
+void xe_drm_client_remove_blame(struct xe_drm_client *client,
+				struct xe_exec_queue *q)
+{
+	struct blame *b, *tmp;
+
+	spin_lock(&client->blame_lock);
+	list_for_each_entry_safe(b, tmp, &client->blame_list, list)
+		if (b->exec_queue_id == q->id) {
+			free_blame(b);
+			client->blame_len--;
+		}
+	spin_unlock(&client->blame_lock);
 }
 
 static void bo_meminfo(struct xe_bo *bo,
