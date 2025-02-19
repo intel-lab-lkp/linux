@@ -682,6 +682,7 @@ struct drm_xe_query_pxp_status {
  *  - %DRM_XE_DEVICE_QUERY_GT_TOPOLOGY
  *  - %DRM_XE_DEVICE_QUERY_ENGINE_CYCLES
  *  - %DRM_XE_DEVICE_QUERY_PXP_STATUS
+ *  - %DRM_XE_DEVICE_QUERY_RESET_STATS
  *
  * If size is set to 0, the driver fills it with the required size for
  * the requested type of data to query. If size is equal to the required
@@ -735,6 +736,7 @@ struct drm_xe_device_query {
 #define DRM_XE_DEVICE_QUERY_UC_FW_VERSION	7
 #define DRM_XE_DEVICE_QUERY_OA_UNITS		8
 #define DRM_XE_DEVICE_QUERY_PXP_STATUS		9
+#define DRM_XE_DEVICE_QUERY_RESET_STATS		10
 	/** @query: The type of data to query */
 	__u32 query;
 
@@ -1843,6 +1845,54 @@ enum drm_xe_pxp_session_type {
 	 * up on the display.
 	 */
 	DRM_XE_PXP_TYPE_HWDRM = 1,
+};
+
+/**
+ * struct drm_xe_exec_queue_ban - Per drm client exec queue ban info returned
+ * from @DRM_XE_DEVICE_QUERY_RESET_STATS query.  Includes the exec queue ID and
+ * all associated pagefault information, if relevant.
+ */
+struct drm_xe_exec_queue_ban {
+	/** @exec_queue_id: ID of banned exec queue */
+	__u32 exec_queue_id;
+	/**
+	 * @pf_found: whether or not the ban is associated with a pagefault.
+	 * If not, all pagefault data will default to 0 and will not be relevant.
+	 */
+	__u8 pf_found;
+	/** @access_type: access type of associated pagefault */
+	__u8 access_type;
+	/** @fault_type: fault type of associated pagefault */
+	__u8 fault_type;
+	/** @vfid: VFID of associated pagefault */
+	__u8 vfid;
+	/** @asid: ASID of associated pagefault */
+	__u32 asid;
+	/** @pdata: PDATA of associated pagefault */
+	__u16 pdata;
+	/** @engine_class: engine class of associated pagefault */
+	__u8 engine_class;
+	/** @engine_instance: engine instance of associated pagefault */
+	__u8 engine_instance;
+	/** @fault_addr: faulted address of associated pagefault */
+	__u64 fault_addr;
+};
+
+/**
+ * struct drm_xe_query_reset_stats - Per drm client reset stats query.
+ */
+struct drm_xe_query_reset_stats {
+	/** @extensions: Pointer to the first extension struct, if any */
+	__u64 extensions;
+	/** @reset_count: Number of times the drm client has observed an engine reset */
+	__u64 reset_count;
+	/** @ban_count: number of exec queue bans saved by the drm client */
+	__u64 ban_count;
+	/**
+	 * @ban_list: flexible array of struct drm_xe_exec_queue_ban, reporting all
+	 * observed exec queue bans on the drm client.
+	 */
+	struct drm_xe_exec_queue_ban ban_list[];
 };
 
 /* ID of the protected content session managed by Xe when PXP is active */
