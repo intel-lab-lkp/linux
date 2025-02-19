@@ -22,6 +22,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 
+#include <linux/iio/adc-helpers.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/types.h>
 
@@ -119,15 +120,12 @@
 #define ADS7924_TOTAL_CONVTIME_US (ADS7924_PWRUPTIME_US + ADS7924_ACQTIME_US + \
 				   ADS7924_CONVTIME_US)
 
-#define ADS7924_V_CHAN(_chan, _addr) {				\
-	.type = IIO_VOLTAGE,					\
-	.indexed = 1,						\
-	.channel = _chan,					\
-	.address = _addr,					\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW), 		\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
-	.datasheet_name = "AIN"#_chan,				\
-}
+static const struct iio_chan_spec ads7924_chan_template = {
+	.type = IIO_VOLTAGE,
+	.indexed = 1,
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),
+};
 
 struct ads7924_data {
 	struct device *dev;
@@ -180,13 +178,6 @@ static const struct regmap_config ads7924_regmap_config = {
 	.val_bits = 8,
 	.max_register = ADS7924_RESET_REG,
 	.writeable_reg = ads7924_is_writeable_reg,
-};
-
-static const struct iio_chan_spec ads7924_channels[] = {
-	ADS7924_V_CHAN(0, ADS7924_DATA0_U_REG),
-	ADS7924_V_CHAN(1, ADS7924_DATA1_U_REG),
-	ADS7924_V_CHAN(2, ADS7924_DATA2_U_REG),
-	ADS7924_V_CHAN(3, ADS7924_DATA3_U_REG),
 };
 
 static int ads7924_get_adc_result(struct ads7924_data *data,
@@ -251,32 +242,38 @@ static const struct iio_info ads7924_info = {
 	.read_raw = ads7924_read_raw,
 };
 
-static int ads7924_get_channels_config(struct device *dev)
+static const struct iio_adc_props ads7924_chan_props = {
+	.required = IIO_ADC_CHAN_PROP_TYPE_REG,
+};
+
+static int ads7924_get_channels_config(struct iio_dev *indio_dev,
+				       struct device *dev)
 {
-	struct fwnode_handle *node;
-	int num_channels = 0;
+	struct iio_chan_spec *chan_array;
+	int num_channels = 0, i;
 
-	device_for_each_child_node(dev, node) {
-		u32 pval;
-		unsigned int channel;
+	num_channels = devm_iio_adc_device_alloc_chaninfo(dev,
+					&ads7924_chan_template, &chan_array,
+					&ads7924_chan_props);
 
-		if (fwnode_property_read_u32(node, "reg", &pval)) {
-			dev_err(dev, "invalid reg on %pfw\n", node);
-			continue;
-		}
-
-		channel = pval;
-		if (channel >= ADS7924_CHANNELS) {
-			dev_err(dev, "invalid channel index %d on %pfw\n",
-				channel, node);
-			continue;
-		}
-
-		num_channels++;
-	}
+	if (num_channels < 0)
+		return num_channels;
 
 	if (!num_channels)
 		return -EINVAL;
+
+	for (i = 0; i < num_channels; i++) {
+		static const char * const datasheet_names[] = {
+			"AIN0", "AIN1", "AIN2", "AIN3"
+		};
+		int ch_id = chan_array[i].channel;
+
+		chan_array[i].address = ADS7924_DATA0_U_REG + ch_id;
+		chan_array[i].datasheet_name = datasheet_names[ch_id];
+	}
+
+	indio_dev->channels = chan_array;
+	indio_dev->num_channels = num_channels;
 
 	return 0;
 }
@@ -370,17 +367,14 @@ static int ads7924_probe(struct i2c_client *client)
 
 	mutex_init(&data->lock);
 
-	indio_dev->name = "ads7924";
-	indio_dev->modes = INDIO_DIRECT_MODE;
-
-	indio_dev->channels = ads7924_channels;
-	indio_dev->num_channels = ARRAY_SIZE(ads7924_channels);
-	indio_dev->info = &ads7924_info;
-
-	ret = ads7924_get_channels_config(dev);
+	ret = ads7924_get_channels_config(indio_dev, dev);
 	if (ret < 0)
 		return dev_err_probe(dev, ret,
 				     "failed to get channels configuration\n");
+
+	indio_dev->name = "ads7924";
+	indio_dev->modes = INDIO_DIRECT_MODE;
+	indio_dev->info = &ads7924_info;
 
 	data->regmap = devm_regmap_init_i2c(client, &ads7924_regmap_config);
 	if (IS_ERR(data->regmap))
