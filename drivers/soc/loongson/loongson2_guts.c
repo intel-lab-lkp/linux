@@ -117,6 +117,8 @@ static int loongson2_guts_probe(struct platform_device *pdev)
 	if (machine)
 		soc_dev_attr.machine = devm_kstrdup(dev, machine, GFP_KERNEL);
 
+	if (!soc_dev_attr.machine)
+		return -ENOMEM;
 	svr = loongson2_guts_get_svr();
 	soc_die = loongson2_soc_die_match(svr, loongson2_soc_die);
 	if (soc_die) {
