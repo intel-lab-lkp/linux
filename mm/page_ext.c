@@ -567,6 +567,13 @@ struct page_ext *page_ext_iter_begin(struct page_ext_iter *iter, struct page *pa
 	return iter->page_ext;
 }
 
+static struct page_ext *page_ext_next(struct page_ext *curr)
+{
+	void *next = curr;
+	next += page_ext_size;
+	return next;
+}
+
 /**
  * page_ext_iter_next() - Get next page extension
  * @iter: page extension iterator.

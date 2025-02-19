@@ -101,13 +101,6 @@ static inline void *page_ext_data(struct page_ext *page_ext,
 	return (void *)(page_ext) + ops->offset;
 }
 
-static inline struct page_ext *page_ext_next(struct page_ext *curr)
-{
-	void *next = curr;
-	next += page_ext_size;
-	return next;
-}
-
 struct page_ext_iter {
 	unsigned long pfn;
 	unsigned long index;
