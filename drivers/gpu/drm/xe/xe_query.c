@@ -110,7 +110,8 @@ hwe_read_timestamp(struct xe_hw_engine *hwe, u64 *engine_ts, u64 *cpu_ts,
 
 static int
 query_engine_cycles(struct xe_device *xe,
-		    struct drm_xe_device_query *query)
+		    struct drm_xe_device_query *query,
+		    struct drm_file *file)
 {
 	struct drm_xe_query_engine_cycles __user *query_ptr;
 	struct drm_xe_engine_class_instance *eci;
@@ -179,7 +180,8 @@ query_engine_cycles(struct xe_device *xe,
 }
 
 static int query_engines(struct xe_device *xe,
-			 struct drm_xe_device_query *query)
+			 struct drm_xe_device_query *query,
+			 struct drm_file *file)
 {
 	size_t size = calc_hw_engine_info_size(xe);
 	struct drm_xe_query_engines __user *query_ptr =
@@ -240,7 +242,8 @@ static size_t calc_mem_regions_size(struct xe_device *xe)
 }
 
 static int query_mem_regions(struct xe_device *xe,
-			    struct drm_xe_device_query *query)
+			     struct drm_xe_device_query *query,
+			     struct drm_file *file)
 {
 	size_t size = calc_mem_regions_size(xe);
 	struct drm_xe_query_mem_regions *mem_regions;
@@ -310,7 +313,9 @@ static int query_mem_regions(struct xe_device *xe,
 	return ret;
 }
 
-static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
+static int query_config(struct xe_device *xe,
+			struct drm_xe_device_query *query,
+			struct drm_file *file)
 {
 	const u32 num_params = DRM_XE_QUERY_CONFIG_MAX_EXEC_QUEUE_PRIORITY + 1;
 	size_t size =
@@ -351,7 +356,9 @@ static int query_config(struct xe_device *xe, struct drm_xe_device_query *query)
 	return 0;
 }
 
-static int query_gt_list(struct xe_device *xe, struct drm_xe_device_query *query)
+static int query_gt_list(struct xe_device *xe,
+			 struct drm_xe_device_query *query,
+			 struct drm_file *file)
 {
 	struct xe_gt *gt;
 	size_t size = sizeof(struct drm_xe_query_gt_list) +
@@ -422,7 +429,8 @@ static int query_gt_list(struct xe_device *xe, struct drm_xe_device_query *query
 }
 
 static int query_hwconfig(struct xe_device *xe,
-			  struct drm_xe_device_query *query)
+			  struct drm_xe_device_query *query,
+			  struct drm_file *file)
 {
 	struct xe_gt *gt = xe_root_mmio_gt(xe);
 	size_t size = xe_guc_hwconfig_size(&gt->uc.guc);
@@ -490,7 +498,8 @@ static int copy_mask(void __user **ptr,
 }
 
 static int query_gt_topology(struct xe_device *xe,
-			     struct drm_xe_device_query *query)
+			     struct drm_xe_device_query *query,
+			     struct drm_file *file)
 {
 	void __user *query_ptr = u64_to_user_ptr(query->data);
 	size_t size = calc_topo_query_size(xe);
@@ -549,7 +558,9 @@ static int query_gt_topology(struct xe_device *xe,
 }
 
 static int
-query_uc_fw_version(struct xe_device *xe, struct drm_xe_device_query *query)
+query_uc_fw_version(struct xe_device *xe,
+		    struct drm_xe_device_query *query,
+		    struct drm_file *file)
 {
 	struct drm_xe_query_uc_fw_version __user *query_ptr = u64_to_user_ptr(query->data);
 	size_t size = sizeof(struct drm_xe_query_uc_fw_version);
@@ -639,7 +650,8 @@ static size_t calc_oa_unit_query_size(struct xe_device *xe)
 }
 
 static int query_oa_units(struct xe_device *xe,
-			  struct drm_xe_device_query *query)
+			  struct drm_xe_device_query *query,
+			  struct drm_file *file)
 {
 	void __user *query_ptr = u64_to_user_ptr(query->data);
 	size_t size = calc_oa_unit_query_size(xe);
@@ -699,7 +711,9 @@ static int query_oa_units(struct xe_device *xe,
 	return ret ? -EFAULT : 0;
 }
 
-static int query_pxp_status(struct xe_device *xe, struct drm_xe_device_query *query)
+static int query_pxp_status(struct xe_device *xe,
+			    struct drm_xe_device_query *query,
+			    struct drm_file *file)
 {
 	struct drm_xe_query_pxp_status __user *query_ptr = u64_to_user_ptr(query->data);
 	size_t size = sizeof(struct drm_xe_query_pxp_status);
@@ -727,7 +741,8 @@ static int query_pxp_status(struct xe_device *xe, struct drm_xe_device_query *qu
 }
 
 static int (* const xe_query_funcs[])(struct xe_device *xe,
-				      struct drm_xe_device_query *query) = {
+				      struct drm_xe_device_query *query,
+				      struct drm_file *file) = {
 	query_engines,
 	query_mem_regions,
 	query_config,
@@ -757,5 +772,5 @@ int xe_query_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	if (XE_IOCTL_DBG(xe, !xe_query_funcs[idx]))
 		return -EINVAL;
 
-	return xe_query_funcs[idx](xe, query);
+	return xe_query_funcs[idx](xe, query, file);
 }
