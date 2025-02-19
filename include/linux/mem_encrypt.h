@@ -26,9 +26,32 @@
  */
 #define __sme_set(x)		((x) | sme_me_mask)
 #define __sme_clr(x)		((x) & ~sme_me_mask)
+
+#define dma_encrypted(x)	__sme_set(x)
+#define dma_clear_encryption(x)	__sme_clr(x)
+
 #else
 #define __sme_set(x)		(x)
 #define __sme_clr(x)		(x)
+#endif
+
+/*
+ * dma_encrypted() and dma_decrypted() are for converting a given DMA
+ * address to the respective type of addressing.
+ *
+ * dma_clear_encryption() is used to reverse the conversion back to "normal"
+ * DMA address.
+ */
+#ifndef dma_encrypted
+#define dma_encrypted(x)	(x)
+#endif
+
+#ifndef dma_decrypted
+#define dma_decrypted(x)	(x)
+#endif
+
+#ifndef dma_clear_encryption
+#define dma_clear_encryption(x)	(x)
 #endif
 
 #endif	/* __ASSEMBLY__ */
