@@ -5,6 +5,7 @@
 
 #include "i915_reg.h"
 #include "i915_utils.h"
+#include "intel_casf.h"
 #include "intel_display_core.h"
 #include "intel_display_driver.h"
 #include "intel_display_types.h"
@@ -183,6 +184,9 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	struct intel_display *display = to_intel_display(crtc_state);
 	const struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
+	struct intel_atomic_state *state = to_intel_atomic_state(conn_state->state);
+	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_crtc_state *old_crtc_state = intel_atomic_get_old_crtc_state(state, crtc);
 	int pipe_src_w = drm_rect_width(&crtc_state->pipe_src);
 	int pipe_src_h = drm_rect_height(&crtc_state->pipe_src);
 	int ret, x, y, width, height;
@@ -192,6 +196,10 @@ static int pch_panel_fitting(struct intel_crtc_state *crtc_state,
 	    adjusted_mode->crtc_vdisplay == pipe_src_h &&
 	    crtc_state->output_format != INTEL_OUTPUT_FORMAT_YCBCR420)
 		return 0;
+
+	/* If CASF enabled then pfit cannot be enabled */
+	if (intel_casf_needs_scaler(old_crtc_state))
+		return -EINVAL;
 
 	switch (conn_state->scaling_mode) {
 	case DRM_MODE_SCALE_CENTER:

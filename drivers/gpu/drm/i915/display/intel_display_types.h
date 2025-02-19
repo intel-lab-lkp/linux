@@ -936,6 +936,7 @@ struct intel_casf {
 #define SCALER_FILTER_NUM_TAPS 7
 	struct scaler_filter_coeff coeff[SCALER_FILTER_NUM_TAPS];
 	u8 win_size;
+	bool casf_enable;
 };
 
 void intel_io_mmio_fw_write(void *ctx, i915_reg_t reg, u32 val);

@@ -190,6 +190,7 @@ struct intel_display_platforms {
 #define HAS_VRR(__display)		(DISPLAY_VER(__display) >= 11)
 #define HAS_AS_SDP(__display)		(DISPLAY_VER(__display) >= 13)
 #define HAS_CMRR(__display)		(DISPLAY_VER(__display) >= 20)
+#define HAS_CASF(__display)             (DISPLAY_VER(__display) >= 20)
 #define INTEL_NUM_PIPES(__display)	(hweight8(DISPLAY_RUNTIME_INFO(__display)->pipe_mask))
 #define I915_HAS_HOTPLUG(__display)	(DISPLAY_INFO(__display)->has_hotplug)
 #define OVERLAY_NEEDS_PHYSICAL(__display)	(DISPLAY_INFO(__display)->overlay_needs_physical)

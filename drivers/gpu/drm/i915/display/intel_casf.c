@@ -113,6 +113,26 @@ void intel_casf_enable(struct intel_crtc_state *crtc_state)
 	skl_scaler_setup_casf(crtc_state);
 }
 
+bool intel_casf_needs_scaler(const struct intel_crtc_state *crtc_state)
+{
+	if (crtc_state->hw.casf_params.casf_enable)
+		return true;
+
+	return false;
+}
+
+int intel_casf_compute_config(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (!HAS_CASF(display))
+		return -EINVAL;
+
+	crtc_state->hw.casf_params.casf_enable = true;
+
+	return 0;
+}
+
 static void convert_sharpness_coef_binary(struct scaler_filter_coeff *coeff,
 					  u16 coefficient)
 {
