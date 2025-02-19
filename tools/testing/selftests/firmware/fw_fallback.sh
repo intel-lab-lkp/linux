@@ -173,13 +173,13 @@ test_syfs_timeout()
 		echo ""
 		echo "This might be a distribution udev rule setup by your distribution"
 		echo "to immediately cancel all fallback requests, this must be"
-		echo "removed before running these tests. To confirm look for"
+		echo "removed before running these tests. To confirm, look for"
 		echo "a firmware rule like /lib/udev/rules.d/50-firmware.rules"
 		echo "and see if you have something like this:"
 		echo ""
 		echo "SUBSYSTEM==\"firmware\", ACTION==\"add\", ATTR{loading}=\"-1\""
 		echo ""
-		echo "If you do remove this file or comment out this line before"
+		echo "If you do, remove this file or comment out this line before"
 		echo "proceeding with these tests."
 		exit 1
 	fi
