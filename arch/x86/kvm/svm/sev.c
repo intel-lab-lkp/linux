@@ -3877,6 +3877,7 @@ void sev_snp_init_protected_guest_state(struct kvm_vcpu *vcpu)
 		return;
 
 	gfn = gpa_to_gfn(svm->sev_es.snp_vmsa_gpa);
+	svm->sev_es.snp_vmsa_gpa = INVALID_PAGE;
 
 	slot = gfn_to_memslot(vcpu->kvm, gfn);
 	if (!slot)
@@ -3905,8 +3906,6 @@ void sev_snp_init_protected_guest_state(struct kvm_vcpu *vcpu)
 
 	/* Mark the vCPU as runnable */
 	kvm_set_mp_state(vcpu, KVM_MP_STATE_RUNNABLE);
-
-	svm->sev_es.snp_vmsa_gpa = INVALID_PAGE;
 
 	/*
 	 * gmem pages aren't currently migratable, but if this ever changes
