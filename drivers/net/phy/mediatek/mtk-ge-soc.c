@@ -1278,8 +1278,10 @@ static int mt798x_phy_led_hw_control_set(struct phy_device *phydev, u8 index,
 
 static bool mt7988_phy_led_get_polarity(struct phy_device *phydev, int led_num)
 {
-	struct mtk_socphy_shared *priv = phydev->shared->priv;
+	struct mtk_socphy_shared *priv;
 	u32 polarities;
+
+	priv = phy_package_shared_get_priv(phydev);
 
 	if (led_num == 0)
 		polarities = ~(priv->boottrap);
@@ -1317,10 +1319,12 @@ static int mt7988_phy_fix_leds_polarities(struct phy_device *phydev)
 static int mt7988_phy_probe_shared(struct phy_device *phydev)
 {
 	struct device_node *np = dev_of_node(&phydev->mdio.bus->dev);
-	struct mtk_socphy_shared *shared = phydev->shared->priv;
+	struct mtk_socphy_shared *shared;
 	struct regmap *regmap;
 	u32 reg;
 	int ret;
+
+	shared = phy_package_shared_get_priv(phydev);
 
 	/* The LED0 of the 4 PHYs in MT7988 are wired to SoC pins LED_A, LED_B,
 	 * LED_C and LED_D respectively. At the same time those pins are used to
@@ -1368,7 +1372,7 @@ static int mt7988_phy_probe(struct phy_device *phydev)
 			return err;
 	}
 
-	shared = phydev->shared->priv;
+	shared = phy_package_shared_get_priv(phydev);
 	priv = &shared->priv[phydev->mdio.addr];
 
 	phydev->priv = priv;
