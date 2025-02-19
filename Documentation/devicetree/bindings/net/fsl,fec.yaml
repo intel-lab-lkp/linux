@@ -24,6 +24,8 @@ properties:
           - fsl,imx6q-fec
           - fsl,mvf600-fec
           - fsl,s32v234-fec
+          - fsl,m5272-fec
+          - fsl,m5208-fec
       - items:
           - enum:
               - fsl,imx53-fec
