@@ -4606,7 +4606,7 @@ void rtl8xxxu_update_rate_mask(struct rtl8xxxu_priv *priv,
 	h2c.ramask.mask_lo = cpu_to_le16(ramask & 0xffff);
 	h2c.ramask.mask_hi = cpu_to_le16(ramask >> 16);
 
-	h2c.ramask.arg = 0x80;
+	h2c.ramask.arg = macid | 0x80;
 	if (sgi)
 		h2c.ramask.arg |= 0x20;
 
