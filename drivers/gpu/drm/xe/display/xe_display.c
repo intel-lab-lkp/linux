@@ -30,6 +30,7 @@
 #include "intel_hotplug.h"
 #include "intel_opregion.h"
 #include "skl_watermark.h"
+#include "xe_fb_pin.h"
 #include "xe_module.h"
 
 /* Xe device functions */
@@ -492,8 +493,11 @@ void xe_display_pm_resume(struct xe_device *xe)
 		intel_display_driver_enable_user_access(display);
 	}
 
-	if (has_display(xe))
+	if (has_display(xe)) {
+		xe_fb_pin_resume(xe);
+
 		intel_hpd_poll_disable(xe);
+	}
 
 	intel_opregion_resume(display);
 

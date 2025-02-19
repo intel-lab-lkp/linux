@@ -12,6 +12,7 @@
 #include "intel_fbdev.h"
 #include "xe_bo.h"
 #include "xe_device.h"
+#include "xe_fb_pin.h"
 #include "xe_ggtt.h"
 #include "xe_pm.h"
 
@@ -398,7 +399,8 @@ static bool reuse_vma(struct intel_plane_state *new_plane_state,
 		goto found;
 	}
 
-	if (fb == intel_fbdev_framebuffer(xe->display.fbdev.fbdev)) {
+	if (fb == intel_fbdev_framebuffer(xe->display.fbdev.fbdev) &&
+	    new_plane_state->view.gtt.type == I915_GTT_VIEW_NORMAL) {
 		vma = intel_fbdev_vma_pointer(xe->display.fbdev.fbdev);
 		if (vma)
 			goto found;
@@ -442,6 +444,26 @@ void intel_plane_unpin_fb(struct intel_plane_state *old_plane_state)
 {
 	__xe_unpin_fb_vma(old_plane_state->ggtt_vma);
 	old_plane_state->ggtt_vma = NULL;
+}
+
+void xe_fb_pin_resume(struct xe_device *xe)
+{
+	struct xe_ggtt *ggtt = xe_device_get_root_tile(xe)->mem.ggtt;
+	struct i915_vma *vma = intel_fbdev_vma_pointer(xe->display.fbdev.fbdev);
+	struct xe_bo *bo;
+
+	if (!vma)
+		return;
+
+	vma = vma->bo;
+
+	mutex_lock(&ggtt->lock);
+	for (u32 x = 0; x < bo->ttm.base.size; x += XE_PAGE_SIZE) {
+		u64 pte = ggtt->pt_ops->pte_encode_bo(bo, x, xe->pat.idx[XE_CACHE_NONE]);
+
+		ggtt->pt_ops->ggtt_set_pte(ggtt, vma->node->base.start + x, pte);
+	}
+	mutex_unlock(&ggtt->lock);
 }
 
 /*
