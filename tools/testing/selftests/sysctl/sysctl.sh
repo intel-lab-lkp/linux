@@ -891,11 +891,11 @@ usage()
 	echo "    -l      List all test ID list"
 	echo " -h|--help  Help"
 	echo
-	echo "If an error every occurs execution will immediately terminate."
+	echo "If an error occurs, every execution will immediately terminate."
 	echo "If you are adding a new test try using -w <test-ID> first to"
 	echo "make sure the test passes a series of tests."
 	echo
-	echo Example uses:
+	echo Example usage:
 	echo
 	echo "$TEST_NAME.sh            -- executes all tests"
 	echo "$TEST_NAME.sh -t 0002    -- Executes test ID 0002 number of times is recomended"
