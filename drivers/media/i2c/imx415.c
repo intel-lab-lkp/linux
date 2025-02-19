@@ -77,6 +77,7 @@
 #define IMX415_INCKSEL5		  CCI_REG8(0x311e)
 #define IMX415_DIG_CLP_MODE	  CCI_REG8(0x32c8)
 #define IMX415_WRJ_OPEN		  CCI_REG8(0x3390)
+#define IMX415_ADBIT1		  CCI_REG8(0x3701)
 #define IMX415_SENSOR_INFO	  CCI_REG16_LE(0x3f12)
 #define IMX415_SENSOR_INFO_MASK	  0xfff
 #define IMX415_CHIP_ID		  0x514
@@ -581,6 +582,7 @@ static const struct cci_reg_sequence imx415_init_table[] = {
 	{ IMX415_REVERSE, 0x00 },
 	/* use RAW 10-bit mode */
 	{ IMX415_ADBIT, 0x00 },
+	{ IMX415_ADBIT1, 0x00 },
 	{ IMX415_MDBIT, 0x00 },
 	/* output VSYNC on XVS and low on XHS */
 	{ IMX415_OUTSEL, 0x22 },
