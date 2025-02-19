@@ -397,26 +397,25 @@ void devlink_unregister(struct devlink *devlink)
 EXPORT_SYMBOL_GPL(devlink_unregister);
 
 /**
- *	devlink_alloc_ns - Allocate new devlink instance resources
- *	in specific namespace
+ *	devlink_alloc_wrapper - Allocate a new devlink instance resources
+ *	for a SW wrapper over multiple HW devlink instances
  *
  *	@ops: ops
  *	@priv_size: size of user private data
- *	@net: net namespace
- *	@dev: parent device
+ *	@bus_name: user visible bus name
+ *	@dev_name: user visible device name
  *
- *	Allocate new devlink instance resources, including devlink index
- *	and name.
+ *	Allocate new devlink instance resources, including devlink index.
  */
-struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
-				 size_t priv_size, struct net *net,
-				 struct device *dev)
+struct devlink *devlink_alloc_wrapper(const struct devlink_ops *ops,
+				      size_t priv_size, const char *bus_name,
+				      const char *dev_name)
 {
 	struct devlink *devlink;
 	static u32 last_id;
 	int ret;
 
-	WARN_ON(!ops || !dev);
+	WARN_ON(!ops);
 	if (!devlink_reload_actions_valid(ops))
 		return NULL;
 
@@ -429,13 +428,14 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (ret < 0)
 		goto err_xa_alloc;
 
-	devlink->dev = get_device(dev);
 	devlink->ops = ops;
+	devlink->bus_name = bus_name;
+	devlink->dev_name = dev_name;
 	xa_init_flags(&devlink->ports, XA_FLAGS_ALLOC);
 	xa_init_flags(&devlink->params, XA_FLAGS_ALLOC);
 	xa_init_flags(&devlink->snapshot_ids, XA_FLAGS_ALLOC);
 	xa_init_flags(&devlink->nested_rels, XA_FLAGS_ALLOC);
-	write_pnet(&devlink->_net, net);
+	write_pnet(&devlink->_net, &init_net);
 	INIT_LIST_HEAD(&devlink->rate_list);
 	INIT_LIST_HEAD(&devlink->linecard_list);
 	INIT_LIST_HEAD(&devlink->sb_list);
@@ -457,6 +457,40 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 err_xa_alloc:
 	kvfree(devlink);
 	return NULL;
+}
+EXPORT_SYMBOL_GPL(devlink_alloc_wrapper);
+
+/**
+ *	devlink_alloc_ns - Allocate new devlink instance resources
+ *	in specific namespace
+ *
+ *	@ops: ops
+ *	@priv_size: size of user private data
+ *	@net: net namespace
+ *	@dev: parent device
+ *
+ *	Allocate new devlink instance resources, including devlink index
+ *	and name.
+ */
+struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
+				 size_t priv_size, struct net *net,
+				 struct device *dev)
+{
+	struct devlink *devlink;
+
+	if (WARN_ON(!dev))
+		return NULL;
+
+	dev = get_device(dev);
+	devlink = devlink_alloc_wrapper(ops, priv_size, dev->bus->name,
+					dev_name(dev));
+	if (!devlink) {
+		put_device(dev);
+		return NULL;
+	}
+	devlink->dev = dev;
+	write_pnet(&devlink->_net, net);
+	return devlink;
 }
 EXPORT_SYMBOL_GPL(devlink_alloc_ns);
 
