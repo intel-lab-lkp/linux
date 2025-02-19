@@ -154,6 +154,14 @@ end:
 }
 EXPORT_SYMBOL_GPL(enetc_pf_netdev_setup);
 
+static int enetc_get_mdio_base(struct enetc_si *si)
+{
+	if (is_enetc_rev1(si))
+		return ENETC_EMDIO_BASE;
+
+	return ENETC4_EMDIO_BASE;
+}
+
 static int enetc_mdio_probe(struct enetc_pf *pf, struct device_node *np)
 {
 	struct device *dev = &pf->si->pdev->dev;
@@ -173,7 +181,7 @@ static int enetc_mdio_probe(struct enetc_pf *pf, struct device_node *np)
 	bus->parent = dev;
 	mdio_priv = bus->priv;
 	mdio_priv->hw = &pf->si->hw;
-	mdio_priv->mdio_base = ENETC_EMDIO_BASE;
+	mdio_priv->mdio_base = enetc_get_mdio_base(pf->si);
 	snprintf(bus->id, MII_BUS_ID_SIZE, "%s", dev_name(dev));
 
 	err = of_mdiobus_register(bus, np);
