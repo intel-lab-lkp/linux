@@ -9407,6 +9407,38 @@ pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf
 	struct task_struct *p;
 	int new_tasks;
 
+#ifdef CONFIG_CFS_BANDWIDTH
+	se = &prev->se;
+
+	/*
+	 * A task on throttled hierarchy was forced into running state.
+	 * Recheck throttle status when the task hits schedule since the
+	 * "kernel_cs_count" is stable now. If task is preempted in
+	 * kernel mode, partially unthrottle the hierarchy now for it to
+	 * be reachable for pick_task_fair() that follows later.
+	 */
+	if (prev->sched_class == &fair_sched_class &&
+	    task_on_rq_queued(prev) &&
+	    se_in_kernel(se) &&
+	    throttled_hierarchy(cfs_rq_of(se))) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+
+		for_each_sched_entity(se) {
+			cfs_rq = cfs_rq_of(se);
+
+			/* There is at least one fully throttled cfs_rq */
+			if (cfs_rq_h_throttled(cfs_rq))
+				break;
+		}
+
+		/*
+		 * Only unthrottle; Do not adjust "kernel_cs_count" yet
+		 * since account_kcs_enqueue() below will adjust it.
+		 */
+		unthrottle_throttled(cfs_rq, false);
+	}
+#endif
+
 again:
 	p = pick_task_fair(rq);
 	if (!p)
