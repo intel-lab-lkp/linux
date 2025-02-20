@@ -646,7 +646,7 @@ static atomic_long_t luf_ugen = ATOMIC_LONG_INIT(LUF_UGEN_INIT);
 /*
  * Don't return invalid luf_ugen, zero.
  */
-static unsigned long __maybe_unused new_luf_ugen(void)
+static unsigned long new_luf_ugen(void)
 {
 	unsigned long ugen = atomic_long_inc_return(&luf_ugen);
 
@@ -723,7 +723,7 @@ static atomic_t luf_kgen = ATOMIC_INIT(1);
 /*
  * Don't return invalid luf_key, zero.
  */
-static unsigned short __maybe_unused new_luf_key(void)
+static unsigned short new_luf_key(void)
 {
 	unsigned short luf_key = atomic_inc_return(&luf_kgen);
 
@@ -776,6 +776,7 @@ void try_to_unmap_flush_takeoff(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
 
 	if (!tlb_ubc_takeoff->flush_required)
@@ -793,8 +794,71 @@ void try_to_unmap_flush_takeoff(void)
 	if (arch_tlbbatch_done(&tlb_ubc_ro->arch, &tlb_ubc_takeoff->arch))
 		reset_batch(tlb_ubc_ro);
 
+	if (arch_tlbbatch_done(&tlb_ubc_luf->arch, &tlb_ubc_takeoff->arch))
+		reset_batch(tlb_ubc_luf);
+
 	reset_batch(tlb_ubc_takeoff);
 }
+
+/*
+ * Should be called just before try_to_unmap_flush() to optimize the tlb
+ * shootdown using arch_tlbbatch_done().
+ */
+unsigned short fold_unmap_luf(void)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
+	struct luf_batch *lb;
+	unsigned long new_ugen;
+	unsigned short new_key;
+	unsigned long flags;
+
+	if (!tlb_ubc_luf->flush_required)
+		return 0;
+
+	/*
+	 * fold_unmap_luf() is always followed by try_to_unmap_flush().
+	 */
+	if (arch_tlbbatch_done(&tlb_ubc_luf->arch, &tlb_ubc->arch)) {
+		tlb_ubc_luf->flush_required = false;
+		tlb_ubc_luf->writable = false;
+	}
+
+	/*
+	 * Check again after shrinking.
+	 */
+	if (!tlb_ubc_luf->flush_required)
+		return 0;
+
+	new_ugen = new_luf_ugen();
+	new_key = new_luf_key();
+
+	/*
+	 * Update the next entry of luf_batch table, that is the oldest
+	 * entry among the candidate, hopefully tlb flushes have been
+	 * done for all of the CPUs.
+	 */
+	lb = &luf_batch[new_key];
+	write_lock_irqsave(&lb->lock, flags);
+	__fold_luf_batch(lb, tlb_ubc_luf, new_ugen);
+	write_unlock_irqrestore(&lb->lock, flags);
+
+	reset_batch(tlb_ubc_luf);
+	return new_key;
+}
+
+void luf_flush(unsigned short luf_key)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct luf_batch *lb = &luf_batch[luf_key];
+	unsigned long flags;
+
+	read_lock_irqsave(&lb->lock, flags);
+	fold_batch(tlb_ubc, &lb->batch, false);
+	read_unlock_irqrestore(&lb->lock, flags);
+	try_to_unmap_flush();
+}
+EXPORT_SYMBOL(luf_flush);
 
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
@@ -806,8 +870,10 @@ void try_to_unmap_flush(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 
 	fold_batch(tlb_ubc, tlb_ubc_ro, true);
+	fold_batch(tlb_ubc, tlb_ubc_luf, true);
 	if (!tlb_ubc->flush_required)
 		return;
 
@@ -820,8 +886,9 @@ void try_to_unmap_flush_dirty(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 
-	if (tlb_ubc->writable || tlb_ubc_ro->writable)
+	if (tlb_ubc->writable || tlb_ubc_ro->writable || tlb_ubc_luf->writable)
 		try_to_unmap_flush();
 }
 
@@ -836,7 +903,8 @@ void try_to_unmap_flush_dirty(void)
 	(TLB_FLUSH_BATCH_PENDING_MASK / 2)
 
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
-				      unsigned long uaddr)
+				      unsigned long uaddr,
+				      struct vm_area_struct *vma)
 {
 	struct tlbflush_unmap_batch *tlb_ubc;
 	int batch;
@@ -845,13 +913,37 @@ static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 	if (!pte_accessible(mm, pteval))
 		return;
 
-	if (pte_write(pteval))
+	if (can_luf_test()) {
+		/*
+		 * luf cannot work with the folio once it found a
+		 * writable or dirty mapping on it.
+		 */
+		if (pte_write(pteval) || !can_luf_vma(vma))
+			can_luf_fail();
+	}
+
+	if (!can_luf_test())
 		tlb_ubc = &current->tlb_ubc;
 	else
 		tlb_ubc = &current->tlb_ubc_ro;
 
 	arch_tlbbatch_add_pending(&tlb_ubc->arch, mm, uaddr);
 	tlb_ubc->flush_required = true;
+
+	if (can_luf_test()) {
+		struct luf_batch *lb;
+		unsigned long flags;
+
+		/*
+		 * Accumulate to the 0th entry right away so that
+		 * luf_flush(0) can be uesed to properly perform pending
+		 * TLB flush once this unmapping is observed.
+		 */
+		lb = &luf_batch[0];
+		write_lock_irqsave(&lb->lock, flags);
+		__fold_luf_batch(lb, tlb_ubc, new_luf_ugen());
+		write_unlock_irqrestore(&lb->lock, flags);
+	}
 
 	/*
 	 * Ensure compiler does not re-order the setting of tlb_flush_batched
@@ -907,6 +999,8 @@ static bool should_defer_flush(struct mm_struct *mm, enum ttu_flags flags)
  * This must be called under the PTL so that an access to tlb_flush_batched
  * that is potentially a "reclaim vs mprotect/munmap/etc" race will synchronise
  * via the PTL.
+ *
+ * LUF(Lazy Unmap Flush) also relies on this for mprotect/munmap/etc.
  */
 void flush_tlb_batched_pending(struct mm_struct *mm)
 {
@@ -916,6 +1010,7 @@ void flush_tlb_batched_pending(struct mm_struct *mm)
 
 	if (pending != flushed) {
 		arch_flush_tlb_batched_pending(mm);
+
 		/*
 		 * If the new TLB flushing is pending during flushing, leave
 		 * mm->tlb_flush_batched as is, to avoid losing flushing.
@@ -926,7 +1021,8 @@ void flush_tlb_batched_pending(struct mm_struct *mm)
 }
 #else
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
-				      unsigned long uaddr)
+				      unsigned long uaddr,
+				      struct vm_area_struct *vma)
 {
 }
 
@@ -1291,6 +1387,11 @@ int folio_mkclean(struct folio *folio)
 		return 0;
 
 	rmap_walk(folio, &rwc);
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
 
 	return cleaned;
 }
@@ -1961,7 +2062,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				 */
 				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 
-				set_tlb_ubc_flush_pending(mm, pteval, address);
+				set_tlb_ubc_flush_pending(mm, pteval, address, vma);
 			} else {
 				pteval = ptep_clear_flush(vma, address, pvmw.pte);
 			}
@@ -2132,6 +2233,8 @@ walk_done:
 
 	mmu_notifier_invalidate_range_end(&range);
 
+	if (!ret)
+		can_luf_fail();
 	return ret;
 }
 
@@ -2164,11 +2267,21 @@ void try_to_unmap(struct folio *folio, enum ttu_flags flags)
 		.done = folio_not_mapped,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
+
+	can_luf_init(folio);
 
 	if (flags & TTU_RMAP_LOCKED)
 		rmap_walk_locked(folio, &rwc);
 	else
 		rmap_walk(folio, &rwc);
+
+	if (can_luf_test())
+		fold_batch(tlb_ubc_luf, tlb_ubc_ro, true);
+	else
+		fold_batch(tlb_ubc, tlb_ubc_ro, true);
 }
 
 /*
@@ -2338,7 +2451,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				 */
 				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 
-				set_tlb_ubc_flush_pending(mm, pteval, address);
+				set_tlb_ubc_flush_pending(mm, pteval, address, vma);
 			} else {
 				pteval = ptep_clear_flush(vma, address, pvmw.pte);
 			}
@@ -2494,6 +2607,8 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 
 	mmu_notifier_invalidate_range_end(&range);
 
+	if (!ret)
+		can_luf_fail();
 	return ret;
 }
 
@@ -2513,6 +2628,9 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 		.done = folio_not_mapped,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
+	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 
 	/*
 	 * Migration always ignores mlock and only supports TTU_RMAP_LOCKED and
@@ -2537,10 +2655,17 @@ void try_to_migrate(struct folio *folio, enum ttu_flags flags)
 	if (!folio_test_ksm(folio) && folio_test_anon(folio))
 		rwc.invalid_vma = invalid_migration_vma;
 
+	can_luf_init(folio);
+
 	if (flags & TTU_RMAP_LOCKED)
 		rmap_walk_locked(folio, &rwc);
 	else
 		rmap_walk(folio, &rwc);
+
+	if (can_luf_test())
+		fold_batch(tlb_ubc_luf, tlb_ubc_ro, true);
+	else
+		fold_batch(tlb_ubc, tlb_ubc_ro, true);
 }
 
 #ifdef CONFIG_DEVICE_PRIVATE

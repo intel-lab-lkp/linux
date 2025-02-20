@@ -1382,6 +1382,15 @@ struct task_struct {
 	struct tlbflush_unmap_batch	tlb_ubc;
 	struct tlbflush_unmap_batch	tlb_ubc_takeoff;
 	struct tlbflush_unmap_batch	tlb_ubc_ro;
+	struct tlbflush_unmap_batch	tlb_ubc_luf;
+
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+	/*
+	 * whether all the mappings of a folio during unmap are read-only
+	 * so that luf can work on the folio
+	 */
+	bool				can_luf;
+#endif
 
 	/* Cache last used pipe for splice(): */
 	struct pipe_inode_info		*splice_pipe;
