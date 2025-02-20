@@ -751,6 +751,7 @@ int inv_icm42600_core_probe(struct regmap *regmap, int chip, int irq,
 	mutex_init(&st->lock);
 	st->chip = chip;
 	st->map = regmap;
+	st->irq = irq;
 
 	ret = iio_read_mount_matrix(dev, &st->orientation);
 	if (ret) {
@@ -829,44 +830,56 @@ EXPORT_SYMBOL_NS_GPL(inv_icm42600_core_probe, "IIO_ICM42600");
 static int inv_icm42600_suspend(struct device *dev)
 {
 	struct inv_icm42600_state *st = dev_get_drvdata(dev);
+	struct device *accel_dev;
+	bool wakeup;
+	int accel_conf;
 	int ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 
 	st->suspended.gyro = st->conf.gyro.mode;
 	st->suspended.accel = st->conf.accel.mode;
 	st->suspended.temp = st->conf.temp_en;
-	if (pm_runtime_suspended(dev)) {
-		ret = 0;
-		goto out_unlock;
-	}
+	if (pm_runtime_suspended(dev))
+		return 0;
 
 	/* disable FIFO data streaming */
 	if (st->fifo.on) {
 		ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
 				   INV_ICM42600_FIFO_CONFIG_BYPASS);
 		if (ret)
-			goto out_unlock;
+			return ret;
 	}
 
-	/* disable APEX features */
-	if (st->apex.wom.enable) {
-		ret = inv_icm42600_set_wom(st, false);
-		if (ret)
-			goto out_unlock;
+	/* keep chip on and wake-up capable if APEX and wakeup on */
+	accel_dev = &st->indio_accel->dev;
+	wakeup = (st->apex.on && device_may_wakeup(accel_dev)) ? true : false;
+
+	if (!wakeup) {
+		/* disable APEX features and accel if wakeup disabled */
+		if (st->apex.wom.enable) {
+			ret = inv_icm42600_set_wom(st, false);
+			if (ret)
+				return ret;
+		}
+		accel_conf = INV_ICM42600_SENSOR_MODE_OFF;
+	} else {
+		/* keep accel on and setup irq for wakeup */
+		accel_conf = st->conf.accel.mode;
+		enable_irq_wake(st->irq);
+		disable_irq(st->irq);
 	}
 
 	ret = inv_icm42600_set_pwr_mgmt0(st, INV_ICM42600_SENSOR_MODE_OFF,
-					 INV_ICM42600_SENSOR_MODE_OFF, false,
-					 NULL);
+					 accel_conf, false, NULL);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
-	regulator_disable(st->vddio_supply);
+	/* disable vddio regulator if chip is sleeping */
+	if (!wakeup)
+		regulator_disable(st->vddio_supply);
 
-out_unlock:
-	mutex_unlock(&st->lock);
-	return ret;
+	return 0;
 }
 
 /*
@@ -878,13 +891,25 @@ static int inv_icm42600_resume(struct device *dev)
 	struct inv_icm42600_state *st = dev_get_drvdata(dev);
 	struct inv_icm42600_sensor_state *gyro_st = iio_priv(st->indio_gyro);
 	struct inv_icm42600_sensor_state *accel_st = iio_priv(st->indio_accel);
+	struct device *accel_dev;
+	bool wakeup;
 	int ret;
 
-	mutex_lock(&st->lock);
+	guard(mutex)(&st->lock);
 
-	ret = inv_icm42600_enable_regulator_vddio(st);
-	if (ret)
-		goto out_unlock;
+	/* check wakeup capability */
+	accel_dev = &st->indio_accel->dev;
+	wakeup = (st->apex.on && device_may_wakeup(accel_dev)) ? true : false;
+
+	/* restore vddio if cut off or irq state */
+	if (!wakeup) {
+		ret = inv_icm42600_enable_regulator_vddio(st);
+		if (ret)
+			return ret;
+	} else {
+		enable_irq(st->irq);
+		disable_irq_wake(st->irq);
+	}
 
 	pm_runtime_disable(dev);
 	pm_runtime_set_active(dev);
@@ -895,13 +920,15 @@ static int inv_icm42600_resume(struct device *dev)
 					 st->suspended.accel,
 					 st->suspended.temp, NULL);
 	if (ret)
-		goto out_unlock;
+		return ret;
 
-	/* restore APEX features */
-	if (st->apex.wom.enable) {
-		ret = inv_icm42600_set_wom(st, true);
-		if (ret)
-			goto out_unlock;
+	/* restore APEX features if disabled */
+	if (!wakeup) {
+		if (st->apex.wom.enable) {
+			ret = inv_icm42600_set_wom(st, true);
+			if (ret)
+				return ret;
+		}
 	}
 
 	/* restore FIFO data streaming */
@@ -910,11 +937,11 @@ static int inv_icm42600_resume(struct device *dev)
 		inv_sensors_timestamp_reset(&accel_st->ts);
 		ret = regmap_write(st->map, INV_ICM42600_REG_FIFO_CONFIG,
 				   INV_ICM42600_FIFO_CONFIG_STREAM);
+		if (ret)
+			return ret;
 	}
 
-out_unlock:
-	mutex_unlock(&st->lock);
-	return ret;
+	return 0;
 }
 
 /* Runtime suspend will turn off sensors that are enabled by iio devices. */
