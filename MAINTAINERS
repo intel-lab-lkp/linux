@@ -10355,6 +10355,13 @@ F:	kernel/time/timer_list.c
 F:	kernel/time/timer_migration.*
 F:	tools/testing/selftests/timers/
 
+DELAY AND SLEEP API [RUST]
+M:	FUJITA Tomonori <fujita.tomonori@gmail.com>
+L:	rust-for-linux@vger.kernel.org
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	rust/kernel/time/delay.rs
+
 HIGH-SPEED SCC DRIVER FOR AX.25
 L:	linux-hams@vger.kernel.org
 S:	Orphan
@@ -23853,6 +23860,13 @@ F:	kernel/time/timecounter.c
 F:	kernel/time/timekeeping*
 F:	kernel/time/time_test.c
 F:	tools/testing/selftests/timers/
+
+TIMEKEEPING API [RUST]
+M:	FUJITA Tomonori <fujita.tomonori@gmail.com>
+L:	rust-for-linux@vger.kernel.org
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	rust/kernel/time.rs
 
 TIPC NETWORK LAYER
 M:	Jon Maloy <jmaloy@redhat.com>
