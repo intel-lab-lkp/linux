@@ -1377,6 +1377,7 @@ struct task_struct {
 #if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
 	int luf_no_shootdown;
 	int luf_takeoff_started;
+	unsigned long luf_ugen;
 #endif
 
 	struct tlbflush_unmap_batch	tlb_ubc;
