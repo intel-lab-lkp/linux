@@ -3339,6 +3339,12 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 {
 	struct page *page;
 
+	/*
+	 * give up taking page from pcp if it fails to take pcp page
+	 * 3 times due to the tlb shootdownable issue.
+	 */
+	int try_luf_pages = 3;
+
 	do {
 		if (list_empty(list)) {
 			int batch = nr_pcp_alloc(pcp, zone, order);
@@ -3353,11 +3359,21 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 				return NULL;
 		}
 
-		page = list_first_entry(list, struct page, pcp_list);
-		if (!luf_takeoff_check_and_fold(page))
+		list_for_each_entry(page, list, pcp_list) {
+			if (luf_takeoff_check_and_fold(page)) {
+				list_del(&page->pcp_list);
+				pcp->count -= 1 << order;
+				break;
+			}
+			if (!--try_luf_pages)
+				return NULL;
+		}
+
+		/*
+		 * If all the pages in the list fails...
+		 */
+		if (list_entry_is_head(page, list, pcp_list))
 			return NULL;
-		list_del(&page->pcp_list);
-		pcp->count -= 1 << order;
 	} while (check_new_pages(page, order));
 
 	return page;
