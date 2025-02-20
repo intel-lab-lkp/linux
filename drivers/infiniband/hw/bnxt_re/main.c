@@ -2016,6 +2016,12 @@ static void bnxt_re_free_nqr_mem(struct bnxt_re_dev *rdev)
 
 static void bnxt_re_clean_qdump(struct bnxt_re_dev *rdev)
 {
+	struct bnxt_qplib_rcfw *rcfw = &rdev->rcfw;
+
+	vfree(rcfw->qp_ctxm_data);
+	vfree(rcfw->cq_ctxm_data);
+	vfree(rcfw->srq_ctxm_data);
+	vfree(rcfw->mrw_ctxm_data);
 	vfree(rdev->qdump_head.qdump);
 }
 
@@ -2075,14 +2081,40 @@ static void bnxt_re_worker(struct work_struct *work)
 	schedule_delayed_work(&rdev->worker, msecs_to_jiffies(30000));
 }
 
+static void bnxt_re_init_ctxm_size(struct bnxt_re_dev *rdev)
+{
+	struct bnxt_qplib_rcfw *rcfw = &rdev->rcfw;
+
+	if (bnxt_qplib_is_chip_gen_p7(rdev->chip_ctx)) {
+		rcfw->qp_ctxm_size = BNXT_RE_CONTEXT_TYPE_QPC_SIZE_P7;
+		rcfw->cq_ctxm_size = BNXT_RE_CONTEXT_TYPE_CQ_SIZE_P7;
+		rcfw->srq_ctxm_size = BNXT_RE_CONTEXT_TYPE_SRQ_SIZE_P7;
+		rcfw->mrw_ctxm_size = BNXT_RE_CONTEXT_TYPE_MRW_SIZE_P7;
+
+	} else if (bnxt_qplib_is_chip_gen_p5(rdev->chip_ctx)) {
+		rcfw->qp_ctxm_size = BNXT_RE_CONTEXT_TYPE_QPC_SIZE_P5;
+		rcfw->cq_ctxm_size = BNXT_RE_CONTEXT_TYPE_CQ_SIZE_P5;
+		rcfw->srq_ctxm_size = BNXT_RE_CONTEXT_TYPE_SRQ_SIZE_P5;
+		rcfw->mrw_ctxm_size = BNXT_RE_CONTEXT_TYPE_MRW_SIZE_P5;
+	}
+}
+
 static void bnxt_re_init_qdump(struct bnxt_re_dev *rdev)
 {
+	struct bnxt_qplib_rcfw *rcfw = &rdev->rcfw;
+
 	rdev->qdump_head.max_elements = BNXT_RE_MAX_QDUMP_ENTRIES;
 	rdev->qdump_head.index = 0;
 	rdev->snapdump_dbg_lvl = BNXT_RE_SNAPDUMP_ERR;
 	mutex_init(&rdev->qdump_head.lock);
 	rdev->qdump_head.qdump = vzalloc(rdev->qdump_head.max_elements *
 					 sizeof(struct qdump_array));
+	/* Setup Context cache information */
+	bnxt_re_init_ctxm_size(rdev);
+	rcfw->qp_ctxm_data = vzalloc(BNXT_RE_MAX_QDUMP_ENTRIES * rcfw->qp_ctxm_size);
+	rcfw->cq_ctxm_data = vzalloc(BNXT_RE_MAX_QDUMP_ENTRIES * rcfw->cq_ctxm_size);
+	rcfw->srq_ctxm_data = vzalloc(BNXT_RE_MAX_QDUMP_ENTRIES * rcfw->srq_ctxm_size);
+	rcfw->mrw_ctxm_data = vzalloc(BNXT_RE_MAX_QDUMP_ENTRIES * rcfw->mrw_ctxm_size);
 }
 
 static int bnxt_re_dev_init(struct bnxt_re_dev *rdev, u8 op_type)

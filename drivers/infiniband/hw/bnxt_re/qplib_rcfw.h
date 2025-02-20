@@ -228,6 +228,18 @@ struct bnxt_qplib_rcfw {
 	struct bnxt_qplib_qp_node *qp_tbl;
 	/* To synchronize the qp-handle hash table */
 	spinlock_t			tbl_lock;
+	u32 qp_ctxm_data_index;
+	u32 cq_ctxm_data_index;
+	u32 mrw_ctxm_data_index;
+	u32 srq_ctxm_data_index;
+	u16 qp_ctxm_size;
+	u16 cq_ctxm_size;
+	u16 mrw_ctxm_size;
+	u16 srq_ctxm_size;
+	void *qp_ctxm_data;
+	void *cq_ctxm_data;
+	void *mrw_ctxm_data;
+	void *srq_ctxm_data;
 	u64 oos_prev;
 	u32 init_oos_stats;
 	u32 cmdq_depth;
