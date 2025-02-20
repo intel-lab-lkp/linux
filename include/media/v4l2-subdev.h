@@ -1605,20 +1605,6 @@ u64 v4l2_subdev_routing_xlate_streams(const struct v4l2_subdev_krouting *routing
 				      u32 pad0, u32 pad1, u64 *streams);
 
 /**
- * v4l2_subdev_state_xlate_streams() - Translate streams from one pad to another
- *
- * @state: Subdevice state
- * @pad0: The first pad
- * @pad1: The second pad
- * @streams: Streams bitmask on the first pad
- *
- * This is the same as v4l2_subdev_routing_xlate_streams, but takes subdevice
- * state as parameter
- */
-u64 v4l2_subdev_state_xlate_streams(const struct v4l2_subdev_state *state,
-				    u32 pad0, u32 pad1, u64 *streams);
-
-/**
  * enum v4l2_subdev_routing_restriction - Subdevice internal routing restrictions
  *
  * @V4L2_SUBDEV_ROUTING_NO_1_TO_N:
