@@ -343,8 +343,6 @@ static ssize_t sta_agg_status_do_read(struct wiphy *wiphy, struct file *file,
 		p += scnprintf(p, bufsz + buf - p, "\t\t%x", !!tid_tx);
 		p += scnprintf(p, bufsz + buf - p, "\t%#.2x",
 				tid_tx ? tid_tx->dialog_token : 0);
-		p += scnprintf(p, bufsz + buf - p, "\t%03d",
-				tid_tx ? skb_queue_len(&tid_tx->pending) : 0);
 		p += scnprintf(p, bufsz + buf - p, "\n");
 	}
 

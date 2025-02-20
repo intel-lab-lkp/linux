@@ -113,15 +113,17 @@ enum ieee80211_sta_info_flags {
 #define HT_AGG_BURST_RETRIES		3
 #define HT_AGG_RETRIES_PERIOD		(15 * HZ)
 
-#define HT_AGG_STATE_DRV_READY		0
-#define HT_AGG_STATE_RESPONSE_RECEIVED	1
-#define HT_AGG_STATE_OPERATIONAL	2
-#define HT_AGG_STATE_STOPPING		3
-#define HT_AGG_STATE_WANT_START		4
-#define HT_AGG_STATE_WANT_STOP		5
-#define HT_AGG_STATE_START_CB		6
-#define HT_AGG_STATE_STOP_CB		7
-#define HT_AGG_STATE_SENT_ADDBA		8
+/* TXQs using aggregation have %IEEE80211_TXQ_AMPDU set */
+enum ieee80211_ht_agg_state {
+	HT_AGG_STATE_DRV_READY,
+	HT_AGG_STATE_RESPONSE_RECEIVED,
+	HT_AGG_STATE_STOPPING,
+	HT_AGG_STATE_WANT_START,
+	HT_AGG_STATE_WANT_STOP,
+	HT_AGG_STATE_START_CB,
+	HT_AGG_STATE_STOP_CB,
+	HT_AGG_STATE_SENT_ADDBA,
+};
 
 DECLARE_EWMA(avg_signal, 10, 8)
 enum ieee80211_agg_stop_reason {
@@ -157,7 +159,6 @@ struct sta_info;
  * @rcu_head: rcu head for freeing structure
  * @session_timer: check if we keep Tx-ing on the TID (by timeout value)
  * @addba_resp_timer: timer for peer's response to addba request
- * @pending: pending frames queue -- use sta's spinlock to protect
  * @sta: station we are attached to
  * @dialog_token: dialog token for aggregation session
  * @timeout: session timeout value to be filled in ADDBA requests
@@ -176,16 +177,15 @@ struct sta_info;
  * the array holding it must hold the aggregation mutex.
  *
  * The TX path can access it under RCU lock-free if, and
- * only if, the state has the flag %HT_AGG_STATE_OPERATIONAL
- * set. Otherwise, the TX path must also acquire the spinlock
- * and re-check the state, see comments in the tx code
- * touching it.
+ * only if, the aggregation is operational (txq has the flag
+ * %IEEE80211_TXQ_AMPDU set). Otherwise, the TX path must also
+ * acquire the spinlock and re-check the state, see comments
+ * in the tx code touching it.
  */
 struct tid_ampdu_tx {
 	struct rcu_head rcu_head;
 	struct timer_list session_timer;
 	struct timer_list addba_resp_timer;
-	struct sk_buff_head pending;
 	struct sta_info *sta;
 	unsigned long state;
 	unsigned long last_tx;

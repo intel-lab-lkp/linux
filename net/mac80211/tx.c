@@ -1102,77 +1102,6 @@ ieee80211_tx_h_calculate_duration(struct ieee80211_tx_data *tx)
 
 /* actual transmit path */
 
-static bool ieee80211_tx_prep_agg(struct ieee80211_tx_data *tx,
-				  struct sk_buff *skb,
-				  struct ieee80211_tx_info *info,
-				  struct tid_ampdu_tx *tid_tx,
-				  int tid)
-{
-	bool queued = false;
-	bool reset_agg_timer = false;
-	struct sk_buff *purge_skb = NULL;
-
-	if (test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state)) {
-		reset_agg_timer = true;
-	} else if (test_bit(HT_AGG_STATE_WANT_START, &tid_tx->state)) {
-		/*
-		 * nothing -- this aggregation session is being started
-		 * but that might still fail with the driver
-		 */
-	} else if (!tx->sta->sta.txq[tid]) {
-		spin_lock(&tx->sta->lock);
-		/*
-		 * Need to re-check now, because we may get here
-		 *
-		 *  1) in the window during which the setup is actually
-		 *     already done, but not marked yet because not all
-		 *     packets are spliced over to the driver pending
-		 *     queue yet -- if this happened we acquire the lock
-		 *     either before or after the splice happens, but
-		 *     need to recheck which of these cases happened.
-		 *
-		 *  2) during session teardown, if the OPERATIONAL bit
-		 *     was cleared due to the teardown but the pointer
-		 *     hasn't been assigned NULL yet (or we loaded it
-		 *     before it was assigned) -- in this case it may
-		 *     now be NULL which means we should just let the
-		 *     packet pass through because splicing the frames
-		 *     back is already done.
-		 */
-		tid_tx = rcu_dereference_protected_tid_tx(tx->sta, tid);
-
-		if (!tid_tx) {
-			/* do nothing, let packet pass through */
-		} else if (test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state)) {
-			reset_agg_timer = true;
-		} else {
-			queued = true;
-			if (info->flags & IEEE80211_TX_CTL_NO_PS_BUFFER) {
-				clear_sta_flag(tx->sta, WLAN_STA_SP);
-				ps_dbg(tx->sta->sdata,
-				       "STA %pM aid %d: SP frame queued, close the SP w/o telling the peer\n",
-				       tx->sta->sta.addr, tx->sta->sta.aid);
-			}
-			info->control.vif = &tx->sdata->vif;
-			info->control.flags |= IEEE80211_TX_INTCFL_NEED_TXPROCESSING;
-			info->flags &= ~IEEE80211_TX_TEMPORARY_FLAGS;
-			__skb_queue_tail(&tid_tx->pending, skb);
-			if (skb_queue_len(&tid_tx->pending) > STA_MAX_TX_BUFFER)
-				purge_skb = __skb_dequeue(&tid_tx->pending);
-		}
-		spin_unlock(&tx->sta->lock);
-
-		if (purge_skb)
-			ieee80211_free_txskb(&tx->local->hw, purge_skb);
-	}
-
-	/* reset session timer */
-	if (reset_agg_timer)
-		tid_tx->last_tx = jiffies;
-
-	return queued;
-}
-
 void ieee80211_aggr_check(struct ieee80211_sub_if_data *sdata,
 			  struct sta_info *sta, struct sk_buff *skb)
 {
@@ -1208,8 +1137,6 @@ ieee80211_tx_prepare(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_hdr *hdr;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
-	bool aggr_check = false;
-	int tid;
 
 	memset(tx, 0, sizeof(*tx));
 	tx->skb = skb;
@@ -1237,34 +1164,8 @@ ieee80211_tx_prepare(struct ieee80211_sub_if_data *sdata,
 		} else if (tx->sdata->control_port_protocol == tx->skb->protocol) {
 			tx->sta = sta_info_get_bss(sdata, hdr->addr1);
 		}
-		if (!tx->sta && !is_multicast_ether_addr(hdr->addr1)) {
+		if (!tx->sta && !is_multicast_ether_addr(hdr->addr1))
 			tx->sta = sta_info_get(sdata, hdr->addr1);
-			aggr_check = true;
-		}
-	}
-
-	if (tx->sta && ieee80211_is_data_qos(hdr->frame_control) &&
-	    !ieee80211_is_qos_nullfunc(hdr->frame_control) &&
-	    ieee80211_hw_check(&local->hw, AMPDU_AGGREGATION) &&
-	    !ieee80211_hw_check(&local->hw, TX_AMPDU_SETUP_IN_HW)) {
-		struct tid_ampdu_tx *tid_tx;
-
-		tid = ieee80211_get_tid(hdr);
-		tid_tx = rcu_dereference(tx->sta->ampdu_mlme.tid_tx[tid]);
-		if (!tid_tx && aggr_check) {
-			ieee80211_aggr_check(sdata, tx->sta, skb);
-			tid_tx = rcu_dereference(tx->sta->ampdu_mlme.tid_tx[tid]);
-		}
-
-		if (tid_tx) {
-			bool queued;
-
-			queued = ieee80211_tx_prep_agg(tx, skb, info,
-						       tid_tx, tid);
-
-			if (unlikely(queued))
-				return TX_QUEUED;
-		}
 	}
 
 	if (is_multicast_ether_addr(hdr->addr1)) {
@@ -3558,7 +3459,7 @@ free:
 void __ieee80211_xmit_fast(struct ieee80211_sub_if_data *sdata,
 			   struct sta_info *sta,
 			   struct ieee80211_fast_tx *fast_tx,
-			   struct sk_buff *skb, bool ampdu,
+			   struct sk_buff *skb,
 			   const u8 *da, const u8 *sa)
 {
 	struct ieee80211_local *local = sdata->local;
@@ -3633,11 +3534,8 @@ static bool ieee80211_xmit_fast(struct ieee80211_sub_if_data *sdata,
 				struct sk_buff *skb)
 {
 	u16 ethertype = (skb->data[12] << 8) | skb->data[13];
-	struct ieee80211_hdr *hdr = (void *)fast_tx->hdr;
-	struct tid_ampdu_tx *tid_tx = NULL;
 	struct sk_buff *next;
 	struct ethhdr eth;
-	u8 tid = IEEE80211_NUM_TIDS;
 
 	/* control port protocol needs a lot of special handling */
 	if (cpu_to_be16(ethertype) == sdata->control_port_protocol)
@@ -3651,17 +3549,6 @@ static bool ieee80211_xmit_fast(struct ieee80211_sub_if_data *sdata,
 	if (skb->sk && skb_shinfo(skb)->tx_flags & SKBTX_WIFI_STATUS)
 		return false;
 
-	if (hdr->frame_control & cpu_to_le16(IEEE80211_STYPE_QOS_DATA)) {
-		tid = skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK;
-		tid_tx = rcu_dereference(sta->ampdu_mlme.tid_tx[tid]);
-		if (tid_tx) {
-			if (!test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state))
-				return false;
-			if (tid_tx->timeout)
-				tid_tx->last_tx = jiffies;
-		}
-	}
-
 	memcpy(&eth, skb->data, ETH_HLEN - 2);
 
 	/* after this point (skb is modified) we cannot return false */
@@ -3671,7 +3558,7 @@ static bool ieee80211_xmit_fast(struct ieee80211_sub_if_data *sdata,
 
 	skb_list_walk_safe(skb, skb, next) {
 		skb_mark_not_on_list(skb);
-		__ieee80211_xmit_fast(sdata, sta, fast_tx, skb, tid_tx,
+		__ieee80211_xmit_fast(sdata, sta, fast_tx, skb,
 				      eth.h_dest, eth.h_source);
 	}
 
@@ -3786,9 +3673,19 @@ begin:
 		goto begin;
 	}
 
-	if (test_bit(IEEE80211_TXQ_AMPDU, &txqi->flags))
-		info->flags |= (IEEE80211_TX_CTL_AMPDU |
-				IEEE80211_TX_CTL_DONTFRAG);
+	ieee80211_aggr_check(tx.sdata, tx.sta, skb);
+
+	if (test_bit(IEEE80211_TXQ_AMPDU, &txqi->flags)) {
+		struct tid_ampdu_tx *tid_tx;
+
+		tid_tx = rcu_dereference(tx.sta->ampdu_mlme.tid_tx[txq->tid]);
+		if (!WARN_ON_ONCE(!tid_tx)) {
+			tid_tx->last_tx = jiffies;
+
+			info->flags |= (IEEE80211_TX_CTL_AMPDU |
+					IEEE80211_TX_CTL_DONTFRAG);
+		}
+	}
 
 	if (info->flags & IEEE80211_TX_CTL_HW_80211_ENCAP) {
 		if (!ieee80211_hw_check(&local->hw, HAS_RATE_CONTROL)) {
@@ -4156,7 +4053,6 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 		sta = NULL;
 
 	skb_set_queue_mapping(skb, ieee80211_select_queue(sdata, sta, skb));
-	ieee80211_aggr_check(sdata, sta, skb);
 
 	if (sta) {
 		struct ieee80211_fast_tx *fast_tx;
@@ -4401,11 +4297,9 @@ static void ieee80211_8023_xmit(struct ieee80211_sub_if_data *sdata,
 {
 	struct ieee80211_tx_info *info;
 	struct ieee80211_local *local = sdata->local;
-	struct tid_ampdu_tx *tid_tx;
 	struct sk_buff *seg, *next;
 	unsigned int skbs = 0, len = 0;
 	u16 queue;
-	u8 tid;
 
 	queue = ieee80211_select_queue(sdata, sta, skb);
 	skb_set_queue_mapping(skb, queue);
@@ -4419,22 +4313,6 @@ static void ieee80211_8023_xmit(struct ieee80211_sub_if_data *sdata,
 		return;
 
 	ieee80211_aggr_check(sdata, sta, skb);
-
-	tid = skb->priority & IEEE80211_QOS_CTL_TAG1D_MASK;
-	tid_tx = rcu_dereference(sta->ampdu_mlme.tid_tx[tid]);
-	if (tid_tx) {
-		if (!test_bit(HT_AGG_STATE_OPERATIONAL, &tid_tx->state)) {
-			/* fall back to non-offload slow path */
-			__ieee80211_subif_start_xmit(skb, dev, 0,
-						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,
-						     NULL);
-			return;
-		}
-
-		if (tid_tx->timeout)
-			tid_tx->last_tx = jiffies;
-	}
-
 	skb = ieee80211_tx_skb_fixup(skb, ieee80211_sdata_netdev_features(sdata));
 	if (!skb)
 		return;
