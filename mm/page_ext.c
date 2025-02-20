@@ -89,6 +89,9 @@ static struct page_ext_operations *page_ext_ops[] __initdata = {
 #ifdef CONFIG_PAGE_TABLE_CHECK
 	&page_table_check_ops,
 #endif
+#ifdef CONFIG_LUF_DEBUG
+	&luf_debug_ops,
+#endif
 };
 
 unsigned long page_ext_size;
