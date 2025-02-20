@@ -3564,11 +3564,19 @@ static void hci_sched_sco(struct hci_dev *hdev)
 			BT_DBG("skb %p len %d", skb, skb->len);
 			hci_send_frame(hdev, skb);
 
+
+			hdev->sco_cnt--;
 			conn->sent++;
 			if (conn->sent == ~0)
 				conn->sent = 0;
 		}
 	}
+
+	/* Restore sco_cnt if flow control has not been enabled as
+	 * HCI_EV_NUM_COMP_PKTS won't be generated.
+	 */
+	if (hci_dev_test_flag(hdev, HCI_SCO_FLOWCTL))
+		hdev->sco_cnt = hdev->sco_pkts;
 }
 
 static void hci_sched_esco(struct hci_dev *hdev)
@@ -3588,11 +3596,18 @@ static void hci_sched_esco(struct hci_dev *hdev)
 			BT_DBG("skb %p len %d", skb, skb->len);
 			hci_send_frame(hdev, skb);
 
+			hdev->sco_cnt--;
 			conn->sent++;
 			if (conn->sent == ~0)
 				conn->sent = 0;
 		}
 	}
+
+	/* Restore sco_cnt if flow control has not been enabled as
+	 * HCI_EV_NUM_COMP_PKTS won't be generated.
+	 */
+	if (hci_dev_test_flag(hdev, HCI_SCO_FLOWCTL))
+		hdev->sco_cnt = hdev->sco_pkts;
 }
 
 static void hci_sched_acl_pkt(struct hci_dev *hdev)
