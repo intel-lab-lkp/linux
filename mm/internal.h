@@ -1239,6 +1239,7 @@ extern struct workqueue_struct *mm_percpu_wq;
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
 void try_to_unmap_flush(void);
 void try_to_unmap_flush_dirty(void);
+void try_to_unmap_flush_takeoff(void);
 void flush_tlb_batched_pending(struct mm_struct *mm);
 void fold_batch(struct tlbflush_unmap_batch *dst, struct tlbflush_unmap_batch *src, bool reset);
 void fold_luf_batch(struct luf_batch *dst, struct luf_batch *src);
@@ -1247,6 +1248,9 @@ static inline void try_to_unmap_flush(void)
 {
 }
 static inline void try_to_unmap_flush_dirty(void)
+{
+}
+static inline void try_to_unmap_flush_takeoff(void)
 {
 }
 static inline void flush_tlb_batched_pending(struct mm_struct *mm)
