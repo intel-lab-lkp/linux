@@ -6320,6 +6320,17 @@ static bool distribute_cfs_runtime(struct cfs_bandwidth *cfs_b)
 
 		/* we check whether we're throttled above */
 		if (cfs_rq->runtime_remaining > 0) {
+			/*
+			 * Partially throttled cfs_rq is cheap to unthrottle
+			 * since they only require updating the throttled
+			 * status of cfs_rq. Save the need for reacquiring the
+			 * rq_lock and a possible IPI by unthrottling it here.
+			 */
+			if (!cfs_rq_h_throttled(cfs_rq)) {
+				unthrottle_cfs_rq(cfs_rq, false);
+				goto next;
+			}
+
 			if (cpu_of(rq) != this_cpu) {
 				unthrottle_cfs_rq_async(cfs_rq);
 			} else {
