@@ -6302,7 +6302,9 @@ int usb_reset_device(struct usb_device *udev)
 	noio_flag = memalloc_noio_save();
 
 	/* Prevent autosuspend during the reset */
-	usb_autoresume_device(udev);
+	ret = usb_autoresume_device(udev);
+	if (ret < 0)
+		goto error_autoresume;
 
 	if (config) {
 		for (i = 0; i < config->desc.bNumInterfaces; ++i) {
@@ -6351,6 +6353,7 @@ int usb_reset_device(struct usb_device *udev)
 	}
 
 	usb_autosuspend_device(udev);
+error_autoresume:
 	memalloc_noio_restore(noio_flag);
 	udev->reset_in_progress = 0;
 	return ret;
