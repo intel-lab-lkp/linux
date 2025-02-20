@@ -144,6 +144,8 @@ struct inomap {
  */
 #define	im_diskblock	im_imap.in_diskblock
 #define	im_maxag	im_imap.in_maxag
+#define	im_enuminos	im_imap.in_numinos
+#define	im_enumfree	im_imap.in_numfree
 
 extern int diFree(struct inode *);
 extern int diAlloc(struct inode *, bool, struct inode *);

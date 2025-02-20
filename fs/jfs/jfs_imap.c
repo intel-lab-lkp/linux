@@ -134,6 +134,10 @@ int diMount(struct inode *ipimap)
 		imap->im_agctl[index].numfree =
 		    le32_to_cpu(dinom_le->in_agctl[index].numfree);
 	}
+	imap->im_diskblock = 0;
+	imap->im_maxag = 0;
+	imap->im_enuminos = 0;
+	imap->im_enumfree = 0;
 
 	/* release the buffer. */
 	release_metapage(mp);
