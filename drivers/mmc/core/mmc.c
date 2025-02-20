@@ -2104,8 +2104,8 @@ static int _mmc_flush_cache(struct mmc_host *host)
 	return err;
 }
 
-static int _mmc_suspend(struct mmc_host *host, bool is_suspend,
-			bool is_undervoltage)
+static int __mmc_suspend(struct mmc_host *host, bool is_suspend,
+			 bool is_undervoltage)
 {
 	unsigned int notify_type;
 	int err = 0;
@@ -2114,8 +2114,6 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend,
 		notify_type = EXT_CSD_POWER_OFF_SHORT;
 	else
 		notify_type = EXT_CSD_POWER_OFF_LONG;
-
-	mmc_claim_host(host);
 
 	if (mmc_card_suspended(host->card))
 		goto out;
@@ -2140,7 +2138,18 @@ static int _mmc_suspend(struct mmc_host *host, bool is_suspend,
 		mmc_card_set_suspended(host->card);
 	}
 out:
+	return err;
+}
+
+static int _mmc_suspend(struct mmc_host *host, bool is_suspend,
+			bool is_undervoltage)
+{
+	int err;
+
+	mmc_claim_host(host);
+	err = __mmc_suspend(host, is_suspend, is_undervoltage);
 	mmc_release_host(host);
+
 	return err;
 }
 
@@ -2160,6 +2169,20 @@ static int mmc_suspend(struct mmc_host *host)
 	return err;
 }
 
+static int __mmc_resume(struct mmc_host *host)
+{
+	int err;
+
+	if (!mmc_card_suspended(host->card))
+		return 0;
+
+	mmc_power_up(host, host->card->ocr);
+	err = mmc_init_card(host, host->card->ocr, host->card);
+	mmc_card_clr_suspended(host->card);
+
+	return err;
+}
+
 /*
  * This function tries to determine if the same card is still present
  * and, if so, restore all state to it.
@@ -2169,16 +2192,9 @@ static int _mmc_resume(struct mmc_host *host)
 	int err = 0;
 
 	mmc_claim_host(host);
-
-	if (!mmc_card_suspended(host->card))
-		goto out;
-
-	mmc_power_up(host, host->card->ocr);
-	err = mmc_init_card(host, host->card->ocr, host->card);
-	mmc_card_clr_suspended(host->card);
-
-out:
+	err = __mmc_resume(host);
 	mmc_release_host(host);
+
 	return err;
 }
 
@@ -2188,6 +2204,9 @@ out:
 static int mmc_shutdown(struct mmc_host *host)
 {
 	int err = 0;
+
+	if (host->undervoltage)
+		return 0;
 
 	/*
 	 * In a specific case for poweroff notify, we need to resume the card
@@ -2280,6 +2299,41 @@ static int _mmc_hw_reset(struct mmc_host *host)
 	return mmc_init_card(host, card->ocr, card);
 }
 
+static int _mmc_handle_undervoltage(struct mmc_host *host)
+{
+	struct mmc_card *card = host->card;
+	int err = 0;
+
+	mmc_claim_host(host);
+
+	if (!host->card)
+		goto out;
+
+	if (mmc_can_poweroff_notify(host->card) &&
+		!(host->caps2 & MMC_CAP2_FULL_PWR_CYCLE))
+		err = __mmc_resume(host);
+
+	if (!err) {
+		err = mmc_interrupt_hpi(card);
+		if (err)
+			pr_err("%s: Interrupt HPI failed, error %d\n",
+				mmc_hostname(host), err);
+
+		err = __mmc_suspend(host, false, true);
+	}
+
+	if (err)
+		pr_err("%s: Undervoltage emergency stop failed\n",
+			mmc_hostname(host));
+
+	mmc_card_set_removed(host->card);
+
+out:
+	mmc_release_host(host);
+
+	return err;
+}
+
 static const struct mmc_bus_ops mmc_ops = {
 	.remove = mmc_remove,
 	.detect = mmc_detect,
@@ -2292,6 +2346,7 @@ static const struct mmc_bus_ops mmc_ops = {
 	.hw_reset = _mmc_hw_reset,
 	.cache_enabled = _mmc_cache_enabled,
 	.flush_cache = _mmc_flush_cache,
+	.handle_undervoltage = _mmc_handle_undervoltage,
 };
 
 /*
