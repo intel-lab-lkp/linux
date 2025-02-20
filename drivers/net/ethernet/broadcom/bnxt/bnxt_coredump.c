@@ -14,6 +14,7 @@
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "bnxt_coredump.h"
+#include "bnxt_ulp.h"
 
 static const u16 bnxt_bstore_to_seg_id[] = {
 	[BNXT_CTX_QP]			= BNXT_CTX_MEM_SEG_QP,
@@ -414,13 +415,20 @@ static int __bnxt_get_coredump(struct bnxt *bp, u16 dump_type, void *buf,
 	}
 
 	if (dump_type == BNXT_DUMP_DRIVER) {
-		u32 drv_len, segs = 0;
+		u32 drv_len, drv_segs, segs = 0;
+		void *drv_buf = NULL;
 
 		drv_len = bnxt_get_ctx_coredump(bp, buf, offset, &segs);
+		drv_segs = segs;
+		segs = 0;
+		if (buf)
+			drv_buf = buf + offset + drv_len;
+		drv_len += bnxt_get_ulp_dump(bp, dump_type, drv_buf, &segs);
+		drv_segs += segs;
 		*dump_len += drv_len;
 		offset += drv_len;
 		if (buf)
-			coredump.total_segs += segs;
+			coredump.total_segs += drv_segs;
 		goto err;
 	}
 

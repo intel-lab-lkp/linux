@@ -29,11 +29,31 @@ struct bnxt_msix_entry {
 	u32	db_offset;
 };
 
+#define BNXT_ULP_MAX_DUMP_SEGS	8
+
+/**
+ * struct bnxt_ulp_dump - bnxt ULP aux device coredump info
+ * @segs:	number of coredump segments with info in the seg_tbl
+ * @seg_tbl:	coredump segment table
+ * @seg_tbl.seg_id:	coredump segment ID
+ * @seg_tbl.seg_len:	coredump segment len
+ */
+struct bnxt_ulp_dump {
+	u32	segs;
+	struct bnxt_ulp_dump_tbl {
+		u32	seg_id;
+		u32	seg_len;
+	} seg_tbl[BNXT_ULP_MAX_DUMP_SEGS];
+};
+
 struct bnxt_ulp_ops {
 	/* async_notifier() cannot sleep (in BH context) */
 	void (*ulp_async_notifier)(void *, struct hwrm_async_event_cmpl *);
 	void (*ulp_irq_stop)(void *, bool);
 	void (*ulp_irq_restart)(void *, struct bnxt_msix_entry *);
+	void (*ulp_get_dump_info)(void *handle, u32 dump_flags,
+				  struct bnxt_ulp_dump *dump);
+	void (*ulp_get_dump_data)(void *handle, u32 seg_id, void *buf, u32 len);
 };
 
 struct bnxt_fw_msg {
@@ -51,6 +71,7 @@ struct bnxt_ulp {
 	u16		max_async_event_id;
 	u16		msix_requested;
 	atomic_t	ref_count;
+	struct bnxt_ulp_dump	ulp_dump;
 };
 
 struct bnxt_en_dev {
@@ -119,6 +140,7 @@ void bnxt_ulp_start(struct bnxt *bp, int err);
 void bnxt_ulp_sriov_cfg(struct bnxt *bp, int num_vfs);
 void bnxt_ulp_irq_stop(struct bnxt *bp);
 void bnxt_ulp_irq_restart(struct bnxt *bp, int err);
+u32 bnxt_get_ulp_dump(struct bnxt *bp, u32 dump_flag, void *buf, u32 *segs);
 void bnxt_ulp_async_events(struct bnxt *bp, struct hwrm_async_event_cmpl *cmpl);
 void bnxt_rdma_aux_device_uninit(struct bnxt *bp);
 void bnxt_rdma_aux_device_del(struct bnxt *bp);

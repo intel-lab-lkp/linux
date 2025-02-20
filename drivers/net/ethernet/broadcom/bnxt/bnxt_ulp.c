@@ -25,6 +25,7 @@
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 #include "bnxt_ulp.h"
+#include "bnxt_coredump.h"
 
 static DEFINE_IDA(bnxt_aux_dev_ids);
 
@@ -392,6 +393,62 @@ void bnxt_register_async_events(struct bnxt_en_dev *edev,
 	bnxt_hwrm_func_drv_rgtr(bp, events_bmap, max_id + 1, true);
 }
 EXPORT_SYMBOL(bnxt_register_async_events);
+
+static void bnxt_ulp_fill_dump_hdr(struct bnxt *bp, void *buf, u32 seg_id,
+				   u32 seg_len)
+{
+	struct bnxt_coredump_segment_hdr seg_hdr;
+
+	bnxt_fill_coredump_seg_hdr(bp, &seg_hdr, NULL, seg_len, 0, 0, 0,
+				   BNXT_DRV_COMP_ID, seg_id);
+	memcpy(buf, &seg_hdr, sizeof(seg_hdr));
+}
+
+u32 bnxt_get_ulp_dump(struct bnxt *bp, u32 dump_flag, void *buf, u32 *segs)
+{
+	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_ulp_dump *dump;
+	struct bnxt_ulp_ops *ops;
+	struct bnxt_ulp *ulp;
+	u32 i, dump_len = 0;
+
+	*segs = 0;
+	if (!edev || !bnxt_ulp_registered(edev))
+		return 0;
+
+	ulp = edev->ulp_tbl;
+	ops = rtnl_dereference(ulp->ulp_ops);
+	if (!ops || !ops->ulp_get_dump_info || !ops->ulp_get_dump_data)
+		return 0;
+
+	dump = &ulp->ulp_dump;
+	if (!buf) {
+		memset(dump, 0, sizeof(*dump));
+		ops->ulp_get_dump_info(ulp->handle, dump_flag, dump);
+		if (dump->segs > BNXT_ULP_MAX_DUMP_SEGS)
+			return 0;
+		for (i = 0; i < dump->segs; i++) {
+			dump_len += dump->seg_tbl[i].seg_len;
+			dump_len += BNXT_SEG_HDR_LEN;
+		}
+	} else {
+		for (i = 0; i < dump->segs; i++) {
+			struct bnxt_ulp_dump_tbl *tbl = &dump->seg_tbl[i];
+			u32 seg_len = tbl->seg_len;
+			u32 seg_id = tbl->seg_id;
+
+			bnxt_ulp_fill_dump_hdr(bp, buf, seg_id, seg_len);
+			buf += BNXT_SEG_HDR_LEN;
+			dump_len += BNXT_SEG_HDR_LEN;
+			ops->ulp_get_dump_data(ulp->handle, seg_id, buf,
+					       seg_len);
+			buf += seg_len;
+			dump_len += seg_len;
+		}
+	}
+	*segs = dump->segs;
+	return dump_len;
+}
 
 void bnxt_rdma_aux_device_uninit(struct bnxt *bp)
 {
