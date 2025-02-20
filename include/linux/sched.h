@@ -597,6 +597,9 @@ struct sched_entity {
 	 *   is accounted at key decision points.
 	 */
 	int				kernel_cs_count;
+
+	/* Entity picked on a throttled hierarchy */
+	unsigned char			sched_throttled;
 					/* hole */
 
 	/*

@@ -6856,6 +6856,17 @@ static __always_inline int se_in_kernel(struct sched_entity *se)
 	return se->kernel_cs_count;
 }
 
+/* se picked on a partially throttled hierarchy. */
+static inline void task_mark_throttled(struct task_struct *p)
+{
+	p->se.sched_throttled = 1;
+}
+
+static inline void task_clear_throttled(struct task_struct *p)
+{
+	p->se.sched_throttled = 0;
+}
+
 /*
  * Same as avg_vruntime_add() except avg_kcs_vruntime_add() only adjusts the avg_kcs_vruntime
  * and avg_kcs_load of kernel mode preempted entity when it joins the rbtree.
@@ -7171,6 +7182,8 @@ static __always_inline int se_in_kernel(struct sched_entity *se)
 	return false;
 }
 
+static __always_inline void task_mark_throttled(struct task_struct *p) {}
+static __always_inline void task_clear_throttled(struct task_struct *p) {}
 static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta) {}
@@ -9281,6 +9294,7 @@ preempt:
 
 static struct task_struct *pick_task_fair(struct rq *rq)
 {
+	struct task_struct *next;
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
 	bool h_throttled;
@@ -9307,7 +9321,11 @@ again:
 		cfs_rq = group_cfs_rq(se);
 	} while (cfs_rq);
 
-	return task_of(se);
+	next = task_of(se);
+	if (h_throttled)
+		task_mark_throttled(next);
+
+	return next;
 }
 
 static void __set_next_task_fair(struct rq *rq, struct task_struct *p, bool first);
@@ -9348,6 +9366,8 @@ again:
 		bool prev_in_kernel = task_on_rq_queued(prev) && se_in_kernel(pse);
 		bool next_in_kernel = se_in_kernel(se);
 		struct cfs_rq *cfs_rq;
+
+		task_clear_throttled(prev);
 
 		while (!(cfs_rq = is_same_group(se, pse))) {
 			int se_depth = se->depth;
@@ -9456,6 +9476,14 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 	 */
 	bool task_in_kernel = next && task_on_rq_queued(prev) && se_in_kernel(se);
 	struct cfs_rq *cfs_rq;
+
+	/*
+	 * Clear the pick on throttled indicator only if
+	 * another task was picked and not for a save /
+	 * restore operation for the task.
+	 */
+	if (next)
+		task_clear_throttled(prev);
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
