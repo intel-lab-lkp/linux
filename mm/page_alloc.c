@@ -758,6 +758,8 @@ out:
 		VM_WARN_ON(current->zone_ugen);
 		VM_WARN_ON(current->wait_zone_ugen);
 	}
+
+	lufd_check_queued_pages();
 }
 
 /*
@@ -853,8 +855,10 @@ bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page)
 		struct luf_batch *lb;
 		unsigned long lb_ugen;
 
-		if (!luf_key)
+		if (!luf_key) {
+			lufd_check_pages(page, buddy_order(page));
 			return true;
+		}
 
 		lb = &luf_batch[luf_key];
 		read_lock_irqsave(&lb->lock, flags);
@@ -875,12 +879,15 @@ bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page)
 
 		if (!current->luf_ugen || ugen_before(current->luf_ugen, lb_ugen))
 			current->luf_ugen = lb_ugen;
+		lufd_queue_page_for_check(page, buddy_order(page));
 		return true;
 	}
 
 	zone_ugen = page_zone_ugen(zone, page);
-	if (!zone_ugen)
+	if (!zone_ugen) {
+		lufd_check_pages(page, buddy_order(page));
 		return true;
+	}
 
 	/*
 	 * Should not be zero since zone-zone_ugen has been updated in
@@ -888,17 +895,23 @@ bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page)
 	 */
 	VM_WARN_ON(!zone->zone_ugen);
 
-	if (!ugen_before(READ_ONCE(zone->zone_ugen_done), zone_ugen))
+	if (!ugen_before(READ_ONCE(zone->zone_ugen_done), zone_ugen)) {
+		lufd_check_pages(page, buddy_order(page));
 		return true;
+	}
 
 	if (current->luf_no_shootdown)
 		return false;
 
+	lufd_check_zone_pages(zone, page, buddy_order(page));
+
 	/*
 	 * zone batched flush has been already set.
 	 */
-	if (current->zone_ugen)
+	if (current->zone_ugen) {
+		lufd_queue_page_for_check(page, buddy_order(page));
 		return true;
+	}
 
 	/*
 	 * Others are already performing tlb shootdown for us.  All we
@@ -933,6 +946,7 @@ bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page)
 		atomic_long_set(&zone->nr_luf_pages, 0);
 		fold_batch(tlb_ubc_takeoff, &zone->zone_batch, true);
 	}
+	lufd_queue_page_for_check(page, buddy_order(page));
 	return true;
 }
 #endif
@@ -1238,6 +1252,11 @@ static inline void __free_one_page(struct page *page,
 	} else
 		zone_ugen = page_zone_ugen(zone, page);
 
+	if (!zone_ugen)
+		lufd_check_pages(page, order);
+	else
+		lufd_check_zone_pages(zone, page, order);
+
 	while (order < MAX_PAGE_ORDER) {
 		int buddy_mt = migratetype;
 		unsigned long buddy_zone_ugen;
@@ -1299,6 +1318,10 @@ static inline void __free_one_page(struct page *page,
 		set_page_zone_ugen(page, zone_ugen);
 		pfn = combined_pfn;
 		order++;
+		if (!zone_ugen)
+			lufd_check_pages(page, order);
+		else
+			lufd_check_zone_pages(zone, page, order);
 	}
 
 done_merging:
@@ -3201,6 +3224,8 @@ void free_unref_page(struct page *page, unsigned int order,
 	unsigned long pfn = page_to_pfn(page);
 	int migratetype;
 
+	lufd_mark_pages(page, order, luf_key);
+
 	if (!pcp_allowed_order(order)) {
 		__free_pages_ok(page, order, FPI_NONE, luf_key);
 		return;
@@ -3253,6 +3278,7 @@ void free_unref_folios(struct folio_batch *folios, unsigned short luf_key)
 		unsigned long pfn = folio_pfn(folio);
 		unsigned int order = folio_order(folio);
 
+		lufd_mark_folio(folio, luf_key);
 		if (!free_pages_prepare(&folio->page, order))
 			continue;
 		/*

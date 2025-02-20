@@ -576,6 +576,7 @@ void *__kmap_local_page_prot(struct page *page, pgprot_t prot)
 {
 	void *kmap;
 
+	lufd_check_pages(page, 0);
 	/*
 	 * To broaden the usage of the actual kmap_local() machinery always map
 	 * pages when debugging is enabled and the architecture has no problems

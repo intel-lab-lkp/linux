@@ -695,12 +695,22 @@ static inline pud_t pud_mkyoung(pud_t pud)
 	return pud_set_flags(pud, _PAGE_ACCESSED);
 }
 
+#ifdef CONFIG_LUF_DEBUG
+pud_t pud_mkwrite(pud_t pud);
+static inline pud_t __pud_mkwrite(pud_t pud)
+{
+	pud = pud_set_flags(pud, _PAGE_RW);
+
+	return pud_clear_saveddirty(pud);
+}
+#else
 static inline pud_t pud_mkwrite(pud_t pud)
 {
 	pud = pud_set_flags(pud, _PAGE_RW);
 
 	return pud_clear_saveddirty(pud);
 }
+#endif
 
 #ifdef CONFIG_HAVE_ARCH_SOFT_DIRTY
 static inline int pte_soft_dirty(pte_t pte)

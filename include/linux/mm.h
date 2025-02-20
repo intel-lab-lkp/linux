@@ -44,6 +44,24 @@ extern int sysctl_page_lock_unfairness;
 void mm_core_init(void);
 void init_mm_internals(void);
 
+#ifdef CONFIG_LUF_DEBUG
+void lufd_check_folio(struct folio *f);
+void lufd_check_pages(const struct page *p, unsigned int order);
+void lufd_check_zone_pages(struct zone *zone, struct page *page, unsigned int order);
+void lufd_check_queued_pages(void);
+void lufd_queue_page_for_check(struct page *page, int order);
+void lufd_mark_folio(struct folio *f, unsigned short luf_key);
+void lufd_mark_pages(struct page *p, unsigned int order, unsigned short luf_key);
+#else
+static inline void lufd_check_folio(struct folio *f) {}
+static inline void lufd_check_pages(const struct page *p, unsigned int order) {}
+static inline void lufd_check_zone_pages(struct zone *zone, struct page *page, unsigned int order) {}
+static inline void lufd_check_queued_pages(void) {}
+static inline void lufd_queue_page_for_check(struct page *page, int order) {}
+static inline void lufd_mark_folio(struct folio *f, unsigned short luf_key) {}
+static inline void lufd_mark_pages(struct page *p, unsigned int order, unsigned short luf_key) {}
+#endif
+
 #ifndef CONFIG_NUMA		/* Don't use mapnrs, do it properly */
 extern unsigned long max_mapnr;
 
@@ -113,7 +131,7 @@ extern int mmap_rnd_compat_bits __read_mostly;
 #endif
 
 #ifndef page_to_virt
-#define page_to_virt(x)	__va(PFN_PHYS(page_to_pfn(x)))
+#define page_to_virt(x)	({ lufd_check_pages(x, 0); __va(PFN_PHYS(page_to_pfn(x)));})
 #endif
 
 #ifndef lm_alias

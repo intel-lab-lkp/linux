@@ -41,6 +41,7 @@ static inline void *kmap(struct page *page)
 {
 	void *addr;
 
+	lufd_check_pages(page, 0);
 	might_sleep();
 	if (!PageHighMem(page))
 		addr = page_address(page);
@@ -161,6 +162,7 @@ static inline struct page *kmap_to_page(void *addr)
 
 static inline void *kmap(struct page *page)
 {
+	lufd_check_pages(page, 0);
 	might_sleep();
 	return page_address(page);
 }
@@ -177,11 +179,13 @@ static inline void kunmap(struct page *page)
 
 static inline void *kmap_local_page(struct page *page)
 {
+	lufd_check_pages(page, 0);
 	return page_address(page);
 }
 
 static inline void *kmap_local_folio(struct folio *folio, size_t offset)
 {
+	lufd_check_folio(folio);
 	return page_address(&folio->page) + offset;
 }
 
@@ -204,6 +208,7 @@ static inline void __kunmap_local(const void *addr)
 
 static inline void *kmap_atomic(struct page *page)
 {
+	lufd_check_pages(page, 0);
 	if (IS_ENABLED(CONFIG_PREEMPT_RT))
 		migrate_disable();
 	else

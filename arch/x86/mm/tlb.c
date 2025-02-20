@@ -1253,6 +1253,25 @@ static int __init luf_init_arch(void)
 }
 early_initcall(luf_init_arch);
 
+#ifdef CONFIG_LUF_DEBUG
+static DEFINE_SPINLOCK(luf_debug_lock);
+#define lufd_lock(f) spin_lock_irqsave(&luf_debug_lock, (f))
+#define lufd_unlock(f) spin_unlock_irqrestore(&luf_debug_lock, (f))
+
+void print_lufd_arch(void)
+{
+	int cpu;
+
+	pr_cont("LUFD ARCH:");
+	for_each_cpu(cpu, cpu_possible_mask)
+		pr_cont(" %lu", atomic_long_read(per_cpu_ptr(&ugen_done, cpu)));
+	pr_cont("\n");
+}
+#else
+#define lufd_lock(f) do { (void)(f); } while(0)
+#define lufd_unlock(f) do { (void)(f); } while(0)
+#endif
+
 /*
  * batch will not be updated.
  */
@@ -1260,17 +1279,22 @@ bool arch_tlbbatch_check_done(struct arch_tlbflush_unmap_batch *batch,
 			unsigned long ugen)
 {
 	int cpu;
+	unsigned long flags;
 
 	if (!ugen)
 		goto out;
 
+	lufd_lock(flags);
 	for_each_cpu(cpu, &batch->cpumask) {
 		unsigned long done;
 
 		done = atomic_long_read(per_cpu_ptr(&ugen_done, cpu));
-		if (ugen_before(done, ugen))
+		if (ugen_before(done, ugen)) {
+			lufd_unlock(flags);
 			return false;
+		}
 	}
+	lufd_unlock(flags);
 	return true;
 out:
 	return cpumask_empty(&batch->cpumask);
@@ -1280,10 +1304,12 @@ bool arch_tlbbatch_diet(struct arch_tlbflush_unmap_batch *batch,
 			unsigned long ugen)
 {
 	int cpu;
+	unsigned long flags;
 
 	if (!ugen)
 		goto out;
 
+	lufd_lock(flags);
 	for_each_cpu(cpu, &batch->cpumask) {
 		unsigned long done;
 
@@ -1291,6 +1317,7 @@ bool arch_tlbbatch_diet(struct arch_tlbflush_unmap_batch *batch,
 		if (!ugen_before(done, ugen))
 			cpumask_clear_cpu(cpu, &batch->cpumask);
 	}
+	lufd_unlock(flags);
 out:
 	return cpumask_empty(&batch->cpumask);
 }
@@ -1299,10 +1326,12 @@ void arch_tlbbatch_mark_ugen(struct arch_tlbflush_unmap_batch *batch,
 			     unsigned long ugen)
 {
 	int cpu;
+	unsigned long flags;
 
 	if (!ugen)
 		return;
 
+	lufd_lock(flags);
 	for_each_cpu(cpu, &batch->cpumask) {
 		atomic_long_t *done = per_cpu_ptr(&ugen_done, cpu);
 		unsigned long old = atomic_long_read(done);
@@ -1320,15 +1349,18 @@ void arch_tlbbatch_mark_ugen(struct arch_tlbflush_unmap_batch *batch,
 		 */
 		atomic_long_cmpxchg(done, old, ugen);
 	}
+	lufd_unlock(flags);
 }
 
 void arch_mm_mark_ugen(struct mm_struct *mm, unsigned long ugen)
 {
 	int cpu;
+	unsigned long flags;
 
 	if (!ugen)
 		return;
 
+	lufd_lock(flags);
 	for_each_cpu(cpu, mm_cpumask(mm)) {
 		atomic_long_t *done = per_cpu_ptr(&ugen_done, cpu);
 		unsigned long old = atomic_long_read(done);
@@ -1346,6 +1378,7 @@ void arch_mm_mark_ugen(struct mm_struct *mm, unsigned long ugen)
 		 */
 		atomic_long_cmpxchg(done, old, ugen);
 	}
+	lufd_unlock(flags);
 }
 
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)

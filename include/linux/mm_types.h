@@ -22,6 +22,10 @@
 
 #include <asm/mmu.h>
 
+#ifdef CONFIG_LUF_DEBUG
+extern struct page_ext_operations luf_debug_ops;
+#endif
+
 #ifndef AT_VECTOR_SIZE_ARCH
 #define AT_VECTOR_SIZE_ARCH 0
 #endif
@@ -31,18 +35,6 @@
 
 struct address_space;
 struct mem_cgroup;
-
-#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
-struct luf_batch {
-	struct tlbflush_unmap_batch batch;
-	unsigned long ugen;
-	rwlock_t lock;
-};
-void luf_batch_init(struct luf_batch *lb);
-#else
-struct luf_batch {};
-static inline void luf_batch_init(struct luf_batch *lb) {}
-#endif
 
 /*
  * Each physical page in the system has a struct page associated with

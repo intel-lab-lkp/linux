@@ -6124,6 +6124,18 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 			mapping = vma->vm_file->f_mapping;
 	}
 
+#ifdef CONFIG_LUF_DEBUG
+	if (luf_flush) {
+		/*
+		 * If it has a VM_SHARED mapping, all the mms involved
+		 * in the struct address_space should be luf_flush'ed.
+		 */
+		if (mapping)
+			luf_flush_mapping(mapping);
+		luf_flush_mm(mm);
+	}
+#endif
+
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
 	else

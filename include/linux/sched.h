@@ -1380,6 +1380,11 @@ struct task_struct {
 	unsigned long luf_ugen;
 	unsigned long zone_ugen;
 	unsigned long wait_zone_ugen;
+#if defined(CONFIG_LUF_DEBUG)
+	struct page *lufd_pages[NR_LUFD_PAGES];
+	int lufd_pages_order[NR_LUFD_PAGES];
+	int lufd_pages_nr;
+#endif
 #endif
 
 	struct tlbflush_unmap_batch	tlb_ubc;

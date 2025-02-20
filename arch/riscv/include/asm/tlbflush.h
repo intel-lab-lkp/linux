@@ -69,6 +69,9 @@ bool arch_tlbbatch_check_done(struct arch_tlbflush_unmap_batch *batch, unsigned 
 bool arch_tlbbatch_diet(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen);
 void arch_tlbbatch_mark_ugen(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen);
 void arch_mm_mark_ugen(struct mm_struct *mm, unsigned long ugen);
+#ifdef CONFIG_LUF_DEBUG
+extern void print_lufd_arch(void);
+#endif
 
 static inline void arch_tlbbatch_clear(struct arch_tlbflush_unmap_batch *batch)
 {

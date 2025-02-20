@@ -1161,6 +1161,235 @@ static bool should_defer_flush(struct mm_struct *mm, enum ttu_flags flags)
 }
 #endif /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
 
+#ifdef CONFIG_LUF_DEBUG
+
+static bool need_luf_debug(void)
+{
+	return true;
+}
+
+static void init_luf_debug(void)
+{
+	/* Do nothing */
+}
+
+struct page_ext_operations luf_debug_ops = {
+	.size = sizeof(struct luf_batch),
+	.need = need_luf_debug,
+	.init = init_luf_debug,
+	.need_shared_flags = false,
+};
+
+static bool __lufd_check_zone_pages(struct page *page, int nr,
+		struct tlbflush_unmap_batch *batch, unsigned long ugen)
+{
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		struct page_ext *page_ext;
+		struct luf_batch *lb;
+		unsigned long lb_ugen;
+		unsigned long flags;
+		bool ret;
+
+		page_ext = page_ext_get(page + i);
+		if (!page_ext)
+			continue;
+
+		lb = (struct luf_batch *)page_ext_data(page_ext, &luf_debug_ops);
+		write_lock_irqsave(&lb->lock, flags);
+		lb_ugen = lb->ugen;
+		ret = arch_tlbbatch_done(&lb->batch.arch, &batch->arch);
+		write_unlock_irqrestore(&lb->lock, flags);
+		page_ext_put(page_ext);
+
+		if (!ret || ugen_before(ugen, lb_ugen))
+			return false;
+	}
+	return true;
+}
+
+void lufd_check_zone_pages(struct zone *zone, struct page *page, unsigned int order)
+{
+	bool warn;
+	static bool once = false;
+
+	if (!page || !zone)
+		return;
+
+	warn = !__lufd_check_zone_pages(page, 1 << order,
+			&zone->zone_batch, zone->luf_ugen);
+
+	if (warn && !READ_ONCE(once)) {
+		WRITE_ONCE(once, true);
+		VM_WARN(1, "LUFD: ugen(%lu) page(%p) order(%u)\n",
+				atomic_long_read(&luf_ugen), page, order);
+		print_lufd_arch();
+	}
+}
+
+static bool __lufd_check_pages(const struct page *page, int nr)
+{
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		struct page_ext *page_ext;
+		struct luf_batch *lb;
+		unsigned long lb_ugen;
+		unsigned long flags;
+		bool ret;
+
+		page_ext = page_ext_get(page + i);
+		if (!page_ext)
+			continue;
+
+		lb = (struct luf_batch *)page_ext_data(page_ext, &luf_debug_ops);
+		write_lock_irqsave(&lb->lock, flags);
+		lb_ugen = lb->ugen;
+		ret = arch_tlbbatch_diet(&lb->batch.arch, lb_ugen);
+		write_unlock_irqrestore(&lb->lock, flags);
+		page_ext_put(page_ext);
+
+		if (!ret)
+			return false;
+	}
+	return true;
+}
+
+void lufd_queue_page_for_check(struct page *page, int order)
+{
+	struct page **parray = current->lufd_pages;
+	int *oarray = current->lufd_pages_order;
+
+	if (!page)
+		return;
+
+	if (current->lufd_pages_nr >= NR_LUFD_PAGES) {
+		VM_WARN_ONCE(1, "LUFD: NR_LUFD_PAGES is too small.\n");
+		return;
+	}
+
+	*(parray + current->lufd_pages_nr) = page;
+	*(oarray + current->lufd_pages_nr) = order;
+	current->lufd_pages_nr++;
+}
+
+void lufd_check_queued_pages(void)
+{
+	struct page **parray = current->lufd_pages;
+	int *oarray = current->lufd_pages_order;
+	int i;
+
+	for (i = 0; i < current->lufd_pages_nr; i++)
+		lufd_check_pages(*(parray + i), *(oarray + i));
+	current->lufd_pages_nr = 0;
+}
+
+void lufd_check_folio(struct folio *folio)
+{
+	struct page *page;
+	int nr;
+	bool warn;
+	static bool once = false;
+
+	if (!folio)
+		return;
+
+	page = folio_page(folio, 0);
+	nr = folio_nr_pages(folio);
+
+	warn = !__lufd_check_pages(page, nr);
+
+	if (warn && !READ_ONCE(once)) {
+		WRITE_ONCE(once, true);
+		VM_WARN(1, "LUFD: ugen(%lu) page(%p) nr(%d)\n",
+				atomic_long_read(&luf_ugen), page, nr);
+		print_lufd_arch();
+	}
+}
+EXPORT_SYMBOL(lufd_check_folio);
+
+void lufd_check_pages(const struct page *page, unsigned int order)
+{
+	bool warn;
+	static bool once = false;
+
+	if (!page)
+		return;
+
+	warn = !__lufd_check_pages(page, 1 << order);
+
+	if (warn && !READ_ONCE(once)) {
+		WRITE_ONCE(once, true);
+		VM_WARN(1, "LUFD: ugen(%lu) page(%p) order(%u)\n",
+				atomic_long_read(&luf_ugen), page, order);
+		print_lufd_arch();
+	}
+}
+EXPORT_SYMBOL(lufd_check_pages);
+
+static void __lufd_mark_pages(struct page *page, int nr, unsigned short luf_key)
+{
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		struct page_ext *page_ext;
+		struct luf_batch *lb;
+
+		page_ext = page_ext_get(page + i);
+		if (!page_ext)
+			continue;
+
+		lb = (struct luf_batch *)page_ext_data(page_ext, &luf_debug_ops);
+		fold_luf_batch(lb, &luf_batch[luf_key]);
+		page_ext_put(page_ext);
+	}
+}
+
+void lufd_mark_folio(struct folio *folio, unsigned short luf_key)
+{
+	struct page *page;
+	int nr;
+	bool warn;
+	static bool once = false;
+
+	if (!luf_key)
+		return;
+
+	page = folio_page(folio, 0);
+	nr = folio_nr_pages(folio);
+
+	warn = !__lufd_check_pages(page, nr);
+	__lufd_mark_pages(page, nr, luf_key);
+
+	if (warn && !READ_ONCE(once)) {
+		WRITE_ONCE(once, true);
+		VM_WARN(1, "LUFD: ugen(%lu) page(%p) nr(%d)\n",
+				atomic_long_read(&luf_ugen), page, nr);
+		print_lufd_arch();
+	}
+}
+
+void lufd_mark_pages(struct page *page, unsigned int order, unsigned short luf_key)
+{
+	bool warn;
+	static bool once = false;
+
+	if (!luf_key)
+		return;
+
+	warn = !__lufd_check_pages(page, 1 << order);
+	__lufd_mark_pages(page, 1 << order, luf_key);
+
+	if (warn && !READ_ONCE(once)) {
+		WRITE_ONCE(once, true);
+		VM_WARN(1, "LUFD: ugen(%lu) page(%p) order(%u)\n",
+				atomic_long_read(&luf_ugen), page, order);
+		print_lufd_arch();
+	}
+}
+#endif
+
 /**
  * page_address_in_vma - The virtual address of a page in this VMA.
  * @folio: The folio containing the page.
