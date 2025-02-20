@@ -729,14 +729,14 @@ static unsigned long tg_within_bps_limit(struct throtl_grp *tg, struct bio *bio,
 	extra_bytes = tg->bytes_disp[rw] + bio_size - bytes_allowed;
 	jiffy_wait = div64_u64(extra_bytes * HZ, bps_limit);
 
-	if (!jiffy_wait)
-		jiffy_wait = 1;
-
 	/*
 	 * This wait time is without taking into consideration the rounding
 	 * up we did. Add that time also.
 	 */
 	jiffy_wait = jiffy_wait + (jiffy_elapsed_rnd - jiffy_elapsed);
+	if (!jiffy_wait)
+		jiffy_wait = 1;
+
 	return jiffy_wait;
 }
 
