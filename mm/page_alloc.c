@@ -299,11 +299,6 @@ int page_group_by_mobility_disabled __read_mostly;
  */
 DEFINE_STATIC_KEY_TRUE(deferred_pages);
 
-static inline bool deferred_pages_enabled(void)
-{
-	return static_branch_unlikely(&deferred_pages);
-}
-
 /*
  * deferred_grow_zone() is __init, but it is called from
  * get_page_from_freelist() during early boot until deferred_pages permanently
@@ -316,11 +311,6 @@ _deferred_grow_zone(struct zone *zone, unsigned int order)
 	return deferred_grow_zone(zone, order);
 }
 #else
-static inline bool deferred_pages_enabled(void)
-{
-	return false;
-}
-
 static inline bool _deferred_grow_zone(struct zone *zone, unsigned int order)
 {
 	return false;
@@ -991,43 +981,6 @@ out:
 	page->mapping = NULL;
 	clear_compound_head(page);
 	return ret;
-}
-
-/*
- * Skip KASAN memory poisoning when either:
- *
- * 1. For generic KASAN: deferred memory initialization has not yet completed.
- *    Tag-based KASAN modes skip pages freed via deferred memory initialization
- *    using page tags instead (see below).
- * 2. For tag-based KASAN modes: the page has a match-all KASAN tag, indicating
- *    that error detection is disabled for accesses via the page address.
- *
- * Pages will have match-all tags in the following circumstances:
- *
- * 1. Pages are being initialized for the first time, including during deferred
- *    memory init; see the call to page_kasan_tag_reset in __init_single_page.
- * 2. The allocation was not unpoisoned due to __GFP_SKIP_KASAN, with the
- *    exception of pages unpoisoned by kasan_unpoison_vmalloc.
- * 3. The allocation was excluded from being checked due to sampling,
- *    see the call to kasan_unpoison_pages.
- *
- * Poisoning pages during deferred memory init will greatly lengthen the
- * process and cause problem in large memory systems as the deferred pages
- * initialization is done with interrupt disabled.
- *
- * Assuming that there will be no reference to those newly initialized
- * pages before they are ever allocated, this should have no effect on
- * KASAN memory tracking as the poison will be properly inserted at page
- * allocation time. The only corner case is when pages are allocated by
- * on-demand allocation and then freed again before the deferred pages
- * initialization is done, but this is not likely to happen.
- */
-static inline bool should_skip_kasan_poison(struct page *page)
-{
-	if (IS_ENABLED(CONFIG_KASAN_GENERIC))
-		return deferred_pages_enabled();
-
-	return page_kasan_tag(page) == KASAN_TAG_KERNEL;
 }
 
 static void kernel_init_pages(struct page *page, int numpages)
