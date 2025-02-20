@@ -555,14 +555,16 @@ int bnxt_qplib_modify_srq(struct bnxt_qplib_res *res,
 int bnxt_qplib_query_srq(struct bnxt_qplib_res *res,
 			 struct bnxt_qplib_srq *srq);
 void bnxt_qplib_destroy_srq(struct bnxt_qplib_res *res,
-			    struct bnxt_qplib_srq *srq);
+			    struct bnxt_qplib_srq *srq,
+			    u16 sb_resp_size, void *sb_resp_va);
 int bnxt_qplib_post_srq_recv(struct bnxt_qplib_srq *srq,
 			     struct bnxt_qplib_swqe *wqe);
 int bnxt_qplib_create_qp1(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp);
 int bnxt_qplib_create_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp);
 int bnxt_qplib_modify_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp);
 int bnxt_qplib_query_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp);
-int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp);
+int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res, struct bnxt_qplib_qp *qp,
+			  u16 ctx_size, void *ctx_sb_data);
 void bnxt_qplib_clean_qp(struct bnxt_qplib_qp *qp);
 void bnxt_qplib_free_qp_res(struct bnxt_qplib_res *res,
 			    struct bnxt_qplib_qp *qp);
@@ -584,7 +586,8 @@ int bnxt_qplib_resize_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq,
 			 int new_cqes);
 void bnxt_qplib_resize_cq_complete(struct bnxt_qplib_res *res,
 				   struct bnxt_qplib_cq *cq);
-int bnxt_qplib_destroy_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq);
+int bnxt_qplib_destroy_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq,
+			  u16 sb_resp_size, void *sb_resp_v);
 int bnxt_qplib_poll_cq(struct bnxt_qplib_cq *cq, struct bnxt_qplib_cqe *cqe,
 		       int num, struct bnxt_qplib_qp **qp);
 bool bnxt_qplib_is_cq_empty(struct bnxt_qplib_cq *cq);

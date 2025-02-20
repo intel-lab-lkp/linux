@@ -537,7 +537,7 @@ static void bnxt_re_destroy_fence_mr(struct bnxt_re_pd *pd)
 			bnxt_qplib_dereg_mrw(&rdev->qplib_res, &mr->qplib_mr,
 					     true);
 		if (mr->ib_mr.lkey)
-			bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr);
+			bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr, 0, NULL);
 		kfree(mr);
 		fence->mr = NULL;
 	}
@@ -886,6 +886,55 @@ int bnxt_re_query_ah(struct ib_ah *ib_ah, struct rdma_ah_attr *ah_attr)
 	return 0;
 }
 
+static inline void bnxt_re_save_resource_context(struct bnxt_re_dev *rdev,
+						 void *ctx_sb_data,
+						 u8 res_type, bool do_snapdump)
+{
+	void *drv_ctx_data;
+	u32 *ctx_index;
+	u16 ctx_size;
+
+	if (!ctx_sb_data)
+		return;
+
+	switch (res_type) {
+	case BNXT_RE_RES_TYPE_QP:
+		drv_ctx_data = rdev->rcfw.qp_ctxm_data;
+		ctx_index = &rdev->rcfw.qp_ctxm_data_index;
+		ctx_size = rdev->rcfw.qp_ctxm_size;
+		break;
+	case BNXT_RE_RES_TYPE_CQ:
+		drv_ctx_data = rdev->rcfw.cq_ctxm_data;
+		ctx_index = &rdev->rcfw.cq_ctxm_data_index;
+		ctx_size = rdev->rcfw.cq_ctxm_size;
+		break;
+	case BNXT_RE_RES_TYPE_MR:
+		drv_ctx_data = rdev->rcfw.mrw_ctxm_data;
+		ctx_index = &rdev->rcfw.mrw_ctxm_data_index;
+		ctx_size = rdev->rcfw.mrw_ctxm_size;
+		break;
+	case BNXT_RE_RES_TYPE_SRQ:
+		drv_ctx_data = rdev->rcfw.srq_ctxm_data;
+		ctx_index = &rdev->rcfw.srq_ctxm_data_index;
+		ctx_size = rdev->rcfw.srq_ctxm_size;
+		break;
+	default:
+		return;
+	}
+
+	if (rdev->snapdump_dbg_lvl == BNXT_RE_SNAPDUMP_ALL ||
+	    (rdev->snapdump_dbg_lvl == BNXT_RE_SNAPDUMP_ERR && do_snapdump)) {
+		memcpy(drv_ctx_data + (*ctx_index * ctx_size),
+		       ctx_sb_data, ctx_size);
+		*ctx_index = *ctx_index + 1;
+		*ctx_index = *ctx_index % BNXT_RE_MAX_QDUMP_ENTRIES;
+		dev_dbg(rdev_to_dev(rdev),
+			"%s : res_type %d ctx_index %d 0x%lx\n", __func__,
+			res_type, *ctx_index,
+			(unsigned long)drv_ctx_data + (*ctx_index * ctx_size));
+	}
+}
+
 unsigned long bnxt_re_lock_cqs(struct bnxt_re_qp *qp)
 	__acquires(&qp->scq->cq_lock) __acquires(&qp->rcq->cq_lock)
 {
@@ -930,7 +979,7 @@ static int bnxt_re_destroy_gsi_sqp(struct bnxt_re_qp *qp)
 	bnxt_qplib_clean_qp(&qp->qplib_qp);
 
 	ibdev_dbg(&rdev->ibdev, "Destroy the shadow QP\n");
-	rc = bnxt_qplib_destroy_qp(&rdev->qplib_res, &gsi_sqp->qplib_qp);
+	rc = bnxt_qplib_destroy_qp(&rdev->qplib_res, &gsi_sqp->qplib_qp, 0, NULL);
 	if (rc) {
 		ibdev_err(&rdev->ibdev, "Destroy Shadow QP failed");
 		goto fail;
@@ -1029,17 +1078,28 @@ int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 	struct bnxt_qplib_nq *scq_nq = NULL;
 	struct bnxt_qplib_nq *rcq_nq = NULL;
 	unsigned int flags;
+	void  *ctx_sb_data = NULL;
+	bool do_snapdump;
+	u16 ctx_size;
 	int rc;
 
 	bnxt_re_capture_qpdump(qp);
 	bnxt_re_debug_rem_qpinfo(rdev, qp);
 
 	bnxt_qplib_flush_cqn_wq(&qp->qplib_qp);
+	ctx_size = qplib_qp->ctx_size_sb;
+	if (ctx_size)
+		ctx_sb_data = vzalloc(ctx_size);
+	do_snapdump = test_bit(QP_FLAGS_CAPTURE_SNAPDUMP, &qplib_qp->flags);
 
-	rc = bnxt_qplib_destroy_qp(&rdev->qplib_res, &qp->qplib_qp);
+	rc = bnxt_qplib_destroy_qp(&rdev->qplib_res, &qp->qplib_qp, ctx_size, ctx_sb_data);
 	if (rc)
 		ibdev_err(&rdev->ibdev, "Failed to destroy HW QP");
+	else
+		bnxt_re_save_resource_context(rdev, ctx_sb_data,
+					      BNXT_RE_RES_TYPE_QP, do_snapdump);
 
+	vfree(ctx_sb_data);
 	if (rdma_is_kernel_res(&qp->ib_qp.res)) {
 		flags = bnxt_re_lock_cqs(qp);
 		bnxt_qplib_clean_qp(&qp->qplib_qp);
@@ -1599,7 +1659,7 @@ static int bnxt_re_create_shadow_gsi(struct bnxt_re_qp *qp,
 					  &qp->qplib_qp);
 	if (!sah) {
 		bnxt_qplib_destroy_qp(&rdev->qplib_res,
-				      &sqp->qplib_qp);
+				      &sqp->qplib_qp, 0, NULL);
 		rc = -ENODEV;
 		ibdev_err(&rdev->ibdev,
 			  "Failed to create AH entry for ShadowQP");
@@ -1747,7 +1807,7 @@ int bnxt_re_create_qp(struct ib_qp *ib_qp, struct ib_qp_init_attr *qp_init_attr,
 
 	return 0;
 qp_destroy:
-	bnxt_qplib_destroy_qp(&rdev->qplib_res, &qp->qplib_qp);
+	bnxt_qplib_destroy_qp(&rdev->qplib_res, &qp->qplib_qp, 0, NULL);
 free_umem:
 	ib_umem_release(qp->rumem);
 	ib_umem_release(qp->sumem);
@@ -1841,6 +1901,9 @@ int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 	struct bnxt_re_dev *rdev = srq->rdev;
 	struct bnxt_qplib_srq *qplib_srq = &srq->qplib_srq;
 	struct bnxt_qplib_nq *nq = NULL;
+	void  *ctx_sb_data = NULL;
+	bool do_snapdump;
+	u16 ctx_size;
 
 	if (qplib_srq->cq)
 		nq = qplib_srq->cq->nq;
@@ -1848,7 +1911,18 @@ int bnxt_re_destroy_srq(struct ib_srq *ib_srq, struct ib_udata *udata)
 		free_page((unsigned long)srq->uctx_srq_page);
 		hash_del(&srq->hash_entry);
 	}
-	bnxt_qplib_destroy_srq(&rdev->qplib_res, qplib_srq);
+	ctx_size = rdev->rcfw.srq_ctxm_size;
+	if (ctx_size)
+		ctx_sb_data = vzalloc(ctx_size);
+
+	bnxt_qplib_destroy_srq(&rdev->qplib_res, qplib_srq, ctx_size, ctx_sb_data);
+
+	do_snapdump = test_bit(SRQ_FLAGS_CAPTURE_SNAPDUMP, &qplib_srq->flags);
+	bnxt_re_save_resource_context(rdev, ctx_sb_data,
+				      BNXT_RE_RES_TYPE_SRQ, do_snapdump);
+
+	vfree(ctx_sb_data);
+
 	ib_umem_release(srq->umem);
 	atomic_dec(&rdev->stats.res.srq_count);
 	if (nq)
@@ -1968,7 +2042,7 @@ int bnxt_re_create_srq(struct ib_srq *ib_srq,
 		if (rc) {
 			ibdev_err(&rdev->ibdev, "SRQ copy to udata failed!");
 			bnxt_qplib_destroy_srq(&rdev->qplib_res,
-					       &srq->qplib_srq);
+					       &srq->qplib_srq, 0, NULL);
 			goto fail;
 		}
 	}
@@ -3127,6 +3201,9 @@ int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 	struct bnxt_qplib_nq *nq;
 	struct bnxt_re_dev *rdev;
 	struct bnxt_re_cq *cq;
+	void *ctx_sb_data = NULL;
+	bool do_snapdump;
+	u16 ctx_size;
 
 	cq = container_of(ib_cq, struct bnxt_re_cq, ib_cq);
 	rdev = cq->rdev;
@@ -3137,7 +3214,15 @@ int bnxt_re_destroy_cq(struct ib_cq *ib_cq, struct ib_udata *udata)
 		free_page((unsigned long)cq->uctx_cq_page);
 		hash_del(&cq->hash_entry);
 	}
-	bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq);
+	ctx_size = rdev->rcfw.cq_ctxm_size;
+	if (ctx_size)
+		ctx_sb_data = vzalloc(ctx_size);
+	bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq, ctx_size, ctx_sb_data);
+	do_snapdump = test_bit(CQ_FLAGS_CAPTURE_SNAPDUMP, &cq->qplib_cq.flags);
+	bnxt_re_save_resource_context(rdev, ctx_sb_data,
+				      BNXT_RE_RES_TYPE_CQ, do_snapdump);
+
+	vfree(ctx_sb_data);
 
 	bnxt_re_put_nq(rdev, nq);
 	ib_umem_release(cq->umem);
@@ -3247,7 +3332,7 @@ int bnxt_re_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		rc = ib_copy_to_udata(udata, &resp, min(sizeof(resp), udata->outlen));
 		if (rc) {
 			ibdev_err(&rdev->ibdev, "Failed to copy CQ udata");
-			bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq);
+			bnxt_qplib_destroy_cq(&rdev->qplib_res, &cq->qplib_cq, 0, NULL);
 			goto free_mem;
 		}
 	}
@@ -4070,7 +4155,7 @@ struct ib_mr *bnxt_re_get_dma_mr(struct ib_pd *ib_pd, int mr_access_flags)
 	return &mr->ib_mr;
 
 fail_mr:
-	bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr);
+	bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr, 0, NULL);
 fail:
 	kfree(mr);
 	return ERR_PTR(rc);
@@ -4080,13 +4165,20 @@ int bnxt_re_dereg_mr(struct ib_mr *ib_mr, struct ib_udata *udata)
 {
 	struct bnxt_re_mr *mr = container_of(ib_mr, struct bnxt_re_mr, ib_mr);
 	struct bnxt_re_dev *rdev = mr->rdev;
+	void *ctx_sb_data = NULL;
+	u16 ctx_size;
 	int rc;
 
-	rc = bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr);
+	ctx_size = rdev->rcfw.mrw_ctxm_size;
+	if (ctx_size)
+		ctx_sb_data = vzalloc(ctx_size);
+	rc = bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr, ctx_size, ctx_sb_data);
 	if (rc) {
 		ibdev_err(&rdev->ibdev, "Dereg MR failed: %#x\n", rc);
 		return rc;
 	}
+	bnxt_re_save_resource_context(rdev, ctx_sb_data, BNXT_RE_RES_TYPE_MR, 0);
+	vfree(ctx_sb_data);
 
 	if (mr->pages) {
 		rc = bnxt_qplib_free_fast_reg_page_list(&rdev->qplib_res,
@@ -4175,7 +4267,7 @@ struct ib_mr *bnxt_re_alloc_mr(struct ib_pd *ib_pd, enum ib_mr_type type,
 fail_mr:
 	kfree(mr->pages);
 fail:
-	bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr);
+	bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr, 0, NULL);
 bail:
 	kfree(mr);
 	return ERR_PTR(rc);
@@ -4222,7 +4314,7 @@ int bnxt_re_dealloc_mw(struct ib_mw *ib_mw)
 	struct bnxt_re_dev *rdev = mw->rdev;
 	int rc;
 
-	rc = bnxt_qplib_free_mrw(&rdev->qplib_res, &mw->qplib_mw);
+	rc = bnxt_qplib_free_mrw(&rdev->qplib_res, &mw->qplib_mw, 0, NULL);
 	if (rc) {
 		ibdev_err(&rdev->ibdev, "Free MW failed: %#x\n", rc);
 		return rc;
@@ -4301,7 +4393,7 @@ static struct ib_mr *__bnxt_re_user_reg_mr(struct ib_pd *ib_pd, u64 length, u64 
 	return &mr->ib_mr;
 
 free_mrw:
-	bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr);
+	bnxt_qplib_free_mrw(&rdev->qplib_res, &mr->qplib_mr, 0, NULL);
 free_mr:
 	kfree(mr);
 	return ERR_PTR(rc);

@@ -504,10 +504,12 @@ int bnxt_qplib_destroy_ah(struct bnxt_qplib_res *res, struct bnxt_qplib_ah *ah,
 }
 
 /* MRW */
-int bnxt_qplib_free_mrw(struct bnxt_qplib_res *res, struct bnxt_qplib_mrw *mrw)
+int bnxt_qplib_free_mrw(struct bnxt_qplib_res *res, struct bnxt_qplib_mrw *mrw,
+			u16 sb_resp_size, void *sb_resp_va)
 {
 	struct creq_deallocate_key_resp resp = {};
 	struct bnxt_qplib_rcfw *rcfw = res->rcfw;
+	struct bnxt_qplib_rcfw_sbuf sbuf = {};
 	struct cmdq_deallocate_key req = {};
 	struct bnxt_qplib_cmdqmsg msg = {};
 	int rc;
@@ -517,6 +519,11 @@ int bnxt_qplib_free_mrw(struct bnxt_qplib_res *res, struct bnxt_qplib_mrw *mrw)
 		return 0;
 	}
 
+	if (sb_resp_size && sb_resp_va) {
+		sbuf.size = sb_resp_size;
+		sbuf.sb = dma_alloc_coherent(&rcfw->pdev->dev, sbuf.size,
+					     &sbuf.dma_addr, GFP_KERNEL);
+	}
 	bnxt_qplib_rcfw_cmd_prep((struct cmdq_base *)&req,
 				 CMDQ_BASE_OPCODE_DEALLOCATE_KEY,
 				 sizeof(req));
@@ -530,12 +537,18 @@ int bnxt_qplib_free_mrw(struct bnxt_qplib_res *res, struct bnxt_qplib_mrw *mrw)
 	else
 		req.key = cpu_to_le32(mrw->lkey);
 
+	req.resp_addr = cpu_to_le64(sbuf.dma_addr);
+	req.resp_size = sb_resp_size / BNXT_QPLIB_CMDQE_UNITS;
 	bnxt_qplib_fill_cmdqmsg(&msg, &req, &resp, NULL, sizeof(req),
 				sizeof(resp), 0);
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);
 	if (rc)
 		return rc;
 
+	if (sbuf.sb) {
+		memcpy(sb_resp_va, sbuf.sb, sb_resp_size);
+		dma_free_coherent(&rcfw->pdev->dev, sbuf.size, sbuf.sb, sbuf.dma_addr);
+	}
 	/* Free the qplib's MRW memory */
 	if (mrw->hwq.max_elements)
 		bnxt_qplib_free_hwq(res, &mrw->hwq);

@@ -175,6 +175,15 @@ static inline bool bnxt_re_chip_gen_p7(u16 chip_num)
 
 #define BNXT_RE_MAX_QDUMP_ENTRIES 1024
 
+enum {
+	BNXT_RE_RES_TYPE_CQ = 0,
+	BNXT_RE_RES_TYPE_UCTX,
+	BNXT_RE_RES_TYPE_QP,
+	BNXT_RE_RES_TYPE_SRQ,
+	BNXT_RE_RES_TYPE_MR,
+	BNXT_RE_RES_TYPE_MAX
+};
+
 struct qdump_qpinfo {
 	u32 id;
 	u32 dest_qpid;

@@ -616,13 +616,20 @@ int bnxt_qplib_alloc_nq(struct bnxt_qplib_res *res, struct bnxt_qplib_nq *nq)
 
 /* SRQ */
 void bnxt_qplib_destroy_srq(struct bnxt_qplib_res *res,
-			   struct bnxt_qplib_srq *srq)
+			   struct bnxt_qplib_srq *srq, u16 sb_resp_size, void *sb_resp_va)
 {
 	struct bnxt_qplib_rcfw *rcfw = res->rcfw;
 	struct creq_destroy_srq_resp resp = {};
+	struct bnxt_qplib_rcfw_sbuf sbuf = {};
 	struct bnxt_qplib_cmdqmsg msg = {};
 	struct cmdq_destroy_srq req = {};
 	int rc;
+
+	if (sb_resp_size && sb_resp_va) {
+		sbuf.size = sb_resp_size;
+		sbuf.sb = dma_alloc_coherent(&rcfw->pdev->dev, sbuf.size,
+					     &sbuf.dma_addr, GFP_KERNEL);
+	}
 
 	bnxt_qplib_rcfw_cmd_prep((struct cmdq_base *)&req,
 				 CMDQ_BASE_OPCODE_DESTROY_SRQ,
@@ -632,7 +639,13 @@ void bnxt_qplib_destroy_srq(struct bnxt_qplib_res *res,
 	req.srq_cid = cpu_to_le32(srq->id);
 
 	bnxt_qplib_fill_cmdqmsg(&msg, &req, &resp, NULL, sizeof(req), sizeof(resp), 0);
+	req.resp_addr = cpu_to_le64(sbuf.dma_addr);
+	req.resp_size = sb_resp_size / BNXT_QPLIB_CMDQE_UNITS;
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);
+	if (sbuf.sb) {
+		memcpy(sb_resp_va, sbuf.sb, sb_resp_size);
+		dma_free_coherent(&rcfw->pdev->dev, sbuf.size, sbuf.sb, sbuf.dma_addr);
+	}
 	kfree(srq->swq);
 	if (rc)
 		return;
@@ -1593,15 +1606,22 @@ static void __clean_cq(struct bnxt_qplib_cq *cq, u64 qp)
 }
 
 int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
-			  struct bnxt_qplib_qp *qp)
+			  struct bnxt_qplib_qp *qp,
+			  u16 sb_resp_size, void *sb_resp_va)
 {
 	struct bnxt_qplib_rcfw *rcfw = res->rcfw;
+	struct bnxt_qplib_rcfw_sbuf sbuf = {};
 	struct creq_destroy_qp_resp resp = {};
 	struct bnxt_qplib_cmdqmsg msg = {};
 	struct cmdq_destroy_qp req = {};
 	u32 tbl_indx;
 	int rc;
 
+	if (sb_resp_size && sb_resp_va) {
+		sbuf.size = sb_resp_size;
+		sbuf.sb = dma_alloc_coherent(&rcfw->pdev->dev, sbuf.size,
+					     &sbuf.dma_addr, GFP_KERNEL);
+	}
 	spin_lock_bh(&rcfw->tbl_lock);
 	tbl_indx = map_qp_id_to_tbl_indx(qp->id, rcfw);
 	rcfw->qp_tbl[tbl_indx].qp_id = BNXT_QPLIB_QP_ID_INVALID;
@@ -1613,6 +1633,8 @@ int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
 				 sizeof(req));
 
 	req.qp_cid = cpu_to_le32(qp->id);
+	req.resp_addr = cpu_to_le64(sbuf.dma_addr);
+	req.resp_size = sb_resp_size / BNXT_QPLIB_CMDQE_UNITS;
 	bnxt_qplib_fill_cmdqmsg(&msg, &req, &resp, NULL, sizeof(req),
 				sizeof(resp), 0);
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);
@@ -1622,6 +1644,10 @@ int bnxt_qplib_destroy_qp(struct bnxt_qplib_res *res,
 		rcfw->qp_tbl[tbl_indx].qp_handle = qp;
 		spin_unlock_bh(&rcfw->tbl_lock);
 		return rc;
+	}
+	if (sbuf.sb) {
+		memcpy(sb_resp_va, sbuf.sb, sb_resp_size);
+		dma_free_coherent(&rcfw->pdev->dev, sbuf.size, sbuf.sb, sbuf.dma_addr);
 	}
 
 	return 0;
@@ -2355,18 +2381,29 @@ int bnxt_qplib_resize_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq,
 	return rc;
 }
 
-int bnxt_qplib_destroy_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq)
+int bnxt_qplib_destroy_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq,
+			  u16 sb_resp_size, void *sb_resp_va)
 {
 	struct bnxt_qplib_rcfw *rcfw = res->rcfw;
+	struct bnxt_qplib_rcfw_sbuf sbuf = {};
 	struct creq_destroy_cq_resp resp = {};
 	struct bnxt_qplib_cmdqmsg msg = {};
 	struct cmdq_destroy_cq req = {};
 	u16 total_cnq_events;
 	int rc;
 
+	if (sb_resp_size && sb_resp_va) {
+		sbuf.size = sb_resp_size;
+		sbuf.sb = dma_alloc_coherent(&rcfw->pdev->dev, sbuf.size,
+					     &sbuf.dma_addr, GFP_KERNEL);
+	}
+
 	bnxt_qplib_rcfw_cmd_prep((struct cmdq_base *)&req,
 				 CMDQ_BASE_OPCODE_DESTROY_CQ,
 				 sizeof(req));
+
+	req.resp_addr = cpu_to_le64(sbuf.dma_addr);
+	req.resp_size = sb_resp_size / BNXT_QPLIB_CMDQE_UNITS;
 
 	req.cq_cid = cpu_to_le32(cq->id);
 	bnxt_qplib_fill_cmdqmsg(&msg, &req, &resp, NULL, sizeof(req),
@@ -2374,6 +2411,10 @@ int bnxt_qplib_destroy_cq(struct bnxt_qplib_res *res, struct bnxt_qplib_cq *cq)
 	rc = bnxt_qplib_rcfw_send_message(rcfw, &msg);
 	if (rc)
 		return rc;
+	if (sbuf.sb) {
+		memcpy(sb_resp_va, sbuf.sb, sb_resp_size);
+		dma_free_coherent(&rcfw->pdev->dev, sbuf.size, sbuf.sb, sbuf.dma_addr);
+	}
 	total_cnq_events = le16_to_cpu(resp.total_cnq_events);
 	__wait_for_all_nqes(cq, total_cnq_events);
 	bnxt_qplib_free_hwq(res, &cq->hwq);
