@@ -307,16 +307,14 @@ void ieee80211_handle_wake_tx_queue(struct ieee80211_hw *hw,
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(txq->vif);
 	struct ieee80211_txq *queue;
 
-	spin_lock(&local->handle_wake_tx_queue_lock);
-
 	/* Use ieee80211_next_txq() for airtime fairness accounting */
 	ieee80211_txq_schedule_start(hw, txq->ac);
-	while ((queue = ieee80211_next_txq(hw, txq->ac))) {
+	queue = ieee80211_next_txq(hw, txq->ac);
+	if (queue) {
 		wake_tx_push_queue(local, sdata, queue);
 		ieee80211_return_txq(hw, queue, false);
 	}
 	ieee80211_txq_schedule_end(hw, txq->ac);
-	spin_unlock(&local->handle_wake_tx_queue_lock);
 }
 EXPORT_SYMBOL(ieee80211_handle_wake_tx_queue);
 
@@ -328,12 +326,10 @@ static void __ieee80211_wake_txq(struct ieee80211_local *local,
 	struct txq_info *txqi = to_txq_info(txq);
 	struct fq *fq = &local->fq;
 
-	if (WARN_ON(!txq))
-		return;
 	if (test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags)) {
 		/* ieee80211_tx_dequeue() also takes fq->lock */
 		spin_unlock(&fq->lock);
-		drv_wake_tx_queue(local, txqi);
+		ieee80211_schedule_txq(&local->hw, txq);
 		spin_lock(&fq->lock);
 	}
 }
@@ -441,17 +437,6 @@ _ieee80211_wake_txqs(struct ieee80211_local *local, unsigned long *flags)
 	rcu_read_unlock();
 }
 
-void ieee80211_wake_txqs(struct tasklet_struct *t)
-{
-	struct ieee80211_local *local = from_tasklet(local, t,
-						     wake_txqs_tasklet);
-	unsigned long flags;
-
-	spin_lock_irqsave(&local->queue_stop_reason_lock, flags);
-	_ieee80211_wake_txqs(local, &flags);
-	spin_unlock_irqrestore(&local->queue_stop_reason_lock, flags);
-}
-
 static void __ieee80211_wake_queue(struct ieee80211_hw *hw, int queue,
 				   enum queue_stop_reason reason,
 				   bool refcounted,
@@ -493,10 +478,56 @@ static void __ieee80211_wake_queue(struct ieee80211_hw *hw, int queue,
 	 * release someone's lock, but it is fine because all the callers of
 	 * __ieee80211_wake_queue call it right before releasing the lock.
 	 */
-	if (reason == IEEE80211_QUEUE_STOP_REASON_DRIVER)
-		tasklet_schedule(&local->wake_txqs_tasklet);
-	else
-		_ieee80211_wake_txqs(local, flags);
+	_ieee80211_wake_txqs(local, flags);
+}
+
+static int ac_has_active_txq(struct ieee80211_local *local)
+{
+	for (int ac = 0; ac < IEEE80211_NUM_ACS; ac++) {
+		guard(spinlock)(&local->active_txq_lock[ac]);
+
+		if (!list_empty(&local->active_txqs[ac]))
+			return ac;
+	}
+	return IEEE80211_NUM_ACS;
+}
+
+int mac80211_thread(void *data)
+{
+	struct ieee80211_local *local = data;
+	struct txq_info *txqi, *tmp;
+	unsigned int ac = IEEE80211_NUM_ACS;
+
+	while (1) {
+		wait_event_interruptible(local->mac80211_tsk_wq,
+					 (ac = ac_has_active_txq(local))
+					 != IEEE80211_NUM_ACS);
+		if (kthread_should_stop())
+			break;
+
+		rcu_read_lock();
+
+		list_for_each_entry_safe(txqi, tmp,
+					 &local->active_txqs[ac],
+					 schedule_order) {
+			local->txq_scheduler_used = false;
+			local_bh_disable();
+			drv_wake_tx_queue(local, txqi);
+			local_bh_enable();
+			if (!local->txq_scheduler_used) {
+				/* Driver is not using
+				 * ieee80211_txq_schedule_start().
+				 * Take over cleaning up the schedule.
+				 */
+				spin_lock_bh(&local->active_txq_lock[ac]);
+				list_del_init(&txqi->schedule_order);
+				spin_unlock_bh(&local->active_txq_lock[ac]);
+			}
+		}
+
+		rcu_read_unlock();
+	}
+	return 0;
 }
 
 void ieee80211_wake_queue_by_reason(struct ieee80211_hw *hw, int queue,

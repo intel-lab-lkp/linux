@@ -1735,7 +1735,7 @@ void ieee80211_sta_ps_deliver_wakeup(struct sta_info *sta)
 		if (!sta->sta.txq[i] || !txq_has_queue(sta->sta.txq[i]))
 			continue;
 
-		schedule_and_wake_txq(local, to_txq_info(sta->sta.txq[i]));
+		ieee80211_schedule_txq(&local->hw, sta->sta.txq[i]);
 	}
 
 	skb_queue_head_init(&pending);

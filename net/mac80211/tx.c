@@ -1566,7 +1566,7 @@ static struct txq_info *ieee80211_queue_skb(struct ieee80211_local *local,
 	ieee80211_txq_enqueue(local, txqi, skb);
 
 	if (likely(txqi->txq.tid != IEEE80211_TID_NOQUEUE))
-		schedule_and_wake_txq(local, txqi);
+		ieee80211_schedule_txq(&local->hw, &txqi->txq);
 
 	return txqi;
 }
@@ -3823,6 +3823,11 @@ struct ieee80211_txq *ieee80211_next_txq(struct ieee80211_hw *hw, u8 ac)
 			found_eligible_txq = false;
 	}
 
+	if (test_bit(IEEE80211_TXQ_DIRTY, &txqi->flags)) {
+		list_del_init(&txqi->schedule_order);
+		goto begin;
+	}
+
 	if (!head)
 		head = txqi;
 
@@ -3889,8 +3894,9 @@ void __ieee80211_schedule_txq(struct ieee80211_hw *hw,
 				      &local->active_txqs[txq->ac]);
 		if (has_queue)
 			ieee80211_txq_set_active(txqi);
-	}
 
+		wake_up_interruptible(&local->mac80211_tsk_wq);
+	}
 	spin_unlock_bh(&local->active_txq_lock[txq->ac]);
 }
 EXPORT_SYMBOL(__ieee80211_schedule_txq);
@@ -4006,6 +4012,8 @@ void ieee80211_txq_schedule_start(struct ieee80211_hw *hw, u8 ac)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 
+	local->txq_scheduler_used = true;
+
 	spin_lock_bh(&local->active_txq_lock[ac]);
 
 	if (ieee80211_txq_schedule_airtime_check(local, ac)) {
@@ -4031,6 +4039,8 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 	struct sta_info *sta;
 	struct sk_buff *next;
 	int len = skb->len;
+
+	skb->dev = dev;
 
 	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
 		kfree_skb(skb);
