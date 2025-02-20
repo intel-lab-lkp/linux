@@ -6161,10 +6161,10 @@ out:
 	if (flush) {
 		/*
 		 * If it has a VM_SHARED mapping, all the mms involved
-		 * should be luf_flush'ed.
+		 * in the struct address_space should be luf_flush'ed.
 		 */
 		if (mapping)
-			luf_flush(0);
+			luf_flush_mapping(mapping);
 		luf_flush_mm(mm);
 	}
 
