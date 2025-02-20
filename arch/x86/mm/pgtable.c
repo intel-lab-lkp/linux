@@ -901,6 +901,7 @@ int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 
 pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
 {
+	lufd_check_pages(pte_page(pte), 0);
 	if (vma->vm_flags & VM_SHADOW_STACK)
 		return pte_mkwrite_shstk(pte);
 
@@ -911,6 +912,7 @@ pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
 
 pmd_t pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
 {
+	lufd_check_pages(pmd_page(pmd), PMD_ORDER);
 	if (vma->vm_flags & VM_SHADOW_STACK)
 		return pmd_mkwrite_shstk(pmd);
 
@@ -918,6 +920,14 @@ pmd_t pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
 
 	return pmd_clear_saveddirty(pmd);
 }
+
+#ifdef CONFIG_LUF_DEBUG
+pud_t pud_mkwrite(pud_t pud)
+{
+	lufd_check_pages(pud_page(pud), PUD_ORDER);
+	return __pud_mkwrite(pud);
+}
+#endif
 
 void arch_check_zapped_pte(struct vm_area_struct *vma, pte_t pte)
 {

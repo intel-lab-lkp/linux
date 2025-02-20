@@ -9,6 +9,7 @@
  */
 
 #include <linux/types.h>
+#include <linux/spinlock_types.h>
 
 #include <asm/page.h>
 
@@ -67,4 +68,19 @@ struct tlbflush_unmap_batch {
 #endif
 };
 
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+struct luf_batch {
+	struct tlbflush_unmap_batch batch;
+	unsigned long ugen;
+	rwlock_t lock;
+};
+void luf_batch_init(struct luf_batch *lb);
+#else
+struct luf_batch {};
+static inline void luf_batch_init(struct luf_batch *lb) {}
+#endif
+
+#if defined(CONFIG_LUF_DEBUG)
+#define NR_LUFD_PAGES 512
+#endif
 #endif /* _LINUX_MM_TYPES_TASK_H */
