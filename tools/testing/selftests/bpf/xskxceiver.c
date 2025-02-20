@@ -2575,6 +2575,31 @@ static int testapp_xdp_adjust_tail(struct test_spec *test, int count)
 	return testapp_validate_traffic(test);
 }
 
+static int testapp_adjust_tail(struct test_spec *test, u32 value, u32 pkt_len)
+{
+	u32 pkt_cnt = DEFAULT_BATCH_SIZE;
+	int ret;
+
+	test->adjust_tail_support = true;
+	test->adjust_tail = true;
+	test->total_steps = 1;
+
+	pkt_stream_replace(test->ifobj_tx, pkt_cnt, pkt_len);
+	pkt_stream_replace(test->ifobj_rx, pkt_cnt, pkt_len + value);
+
+	ret = testapp_xdp_adjust_tail(test, value);
+	if (ret)
+		return ret;
+
+	if (!test->adjust_tail_support) {
+		ksft_test_result_skip("%s %sResize pkt with bpf_xdp_adjust_tail() not supported\n",
+				      mode_string(test), busy_poll_string(test));
+	return TEST_SKIP;
+	}
+
+	return 0;
+}
+
 static void run_pkt_test(struct test_spec *test)
 {
 	int ret;
