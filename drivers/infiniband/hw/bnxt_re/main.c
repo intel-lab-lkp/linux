@@ -508,6 +508,106 @@ static void bnxt_re_dump_ctx(struct bnxt_re_dev *rdev, u32 seg_id, void *buf,
 {
 }
 
+/*
+ * bnxt_re_snapdump_qp - Log QP dump to the coredump buffer
+ * @rdev	-	Pointer to RoCE device instance
+ * @buf		-	Pointer to dump buffer
+ * @buf_len	-	Buffer length
+ *
+ * This function will invoke ULP logger to capture snapshot of
+ * SQ/RQ/SCQ/RCQ of a QP in ASCII format.
+ *
+ * Returns: Buffer length
+ */
+static u32 bnxt_re_snapdump_qp(struct bnxt_re_dev *rdev, void *buf, u32 buf_len)
+{
+	u32 index, len = 0, count = 0;
+	struct qdump_qpinfo *qpinfo;
+	struct qdump_array *qdump;
+
+	if (!rdev->qdump_head.qdump)
+		return 0;
+
+	mutex_lock(&rdev->qdump_head.lock);
+	index = rdev->qdump_head.index;
+	while (count < rdev->qdump_head.max_elements) {
+		count++;
+		index = (!index) ? (rdev->qdump_head.max_elements - 1) : (index - 1);
+		qdump = &rdev->qdump_head.qdump[index];
+		if (!qdump->valid || qdump->is_mr)
+			continue;
+
+		qpinfo = &qdump->qpinfo;
+		len += snprintf(buf + len, buf_len - len,
+				"qp_handle 0x%.8x 0x%.8x (xid %d) dest_qp %d type %s state %s ",
+				(u32)(qpinfo->qp_handle >> 32),
+				(u32)(qpinfo->qp_handle & 0xFFFFFFFF),
+				qpinfo->id, qpinfo->dest_qpid,
+				__to_qp_type_str(qpinfo->type),
+				__to_qp_state_str(qpinfo->state));
+		len += snprintf(buf + len, buf_len - len,
+				"is_usr %d scq_handle 0x%llx rcq_handle 0x%llx",
+				qpinfo->is_user, qpinfo->scq_handle, qpinfo->rcq_handle);
+		len += snprintf(buf + len, buf_len - len,
+				"scq_id %d rcq_id %d\n",
+				qpinfo->scq_id, qpinfo->rcq_id);
+		if (len >= buf_len)
+			goto dump_full;
+
+		if (len >= buf_len)
+			goto dump_full;
+	}
+	mutex_unlock(&rdev->qdump_head.lock);
+	return len;
+
+dump_full:
+	mutex_unlock(&rdev->qdump_head.lock);
+	return buf_len;
+}
+
+/*
+ * bnxt_re_snapdump_mr - Log PBL of MR to the coredump buffer
+ * @rdev	-	Pointer to RoCE device instance
+ * @buf		-	Pointer to dump buffer
+ * @buf_len	-	Buffer length
+ *
+ * This function will invoke ULP logger to capture PBL list of
+ * Memory Region in ASCII format.
+ *
+ * Returns: Buffer length
+ */
+static u32 bnxt_re_snapdump_mr(struct bnxt_re_dev *rdev, void *buf, u32 buf_len)
+{
+	u32 index, count = 0, len = 0;
+	struct qdump_array *qdump;
+
+	if (!rdev->qdump_head.qdump)
+		return 0;
+
+	mutex_lock(&rdev->qdump_head.lock);
+	index = rdev->qdump_head.index;
+	while (count < rdev->qdump_head.max_elements) {
+		count++;
+		index = (!index) ? (rdev->qdump_head.max_elements - 1) : (index - 1);
+		qdump = &rdev->qdump_head.qdump[index];
+		if (!qdump->valid || !qdump->is_mr)
+			continue;
+
+		len += snprintf(buf + len, buf_len - len,
+				"**MemoryRegion: type %d lkey 0x%x rkey 0x%x tot_sz %llu **\n",
+				qdump->mrinfo.type, qdump->mrinfo.lkey,
+				qdump->mrinfo.rkey, qdump->mrinfo.total_size);
+		if (len >= buf_len)
+			goto dump_full;
+	}
+	mutex_unlock(&rdev->qdump_head.lock);
+	return len;
+
+dump_full:
+	mutex_unlock(&rdev->qdump_head.lock);
+	return buf_len;
+}
+
 /* bnxt_re_snapdump - Collect RoCE debug data for coredump.
  * @rdev	-   rdma device instance
  * @buf		-	Pointer to dump buffer
@@ -520,6 +620,15 @@ static void bnxt_re_dump_ctx(struct bnxt_re_dev *rdev, u32 seg_id, void *buf,
  */
 static void bnxt_re_snapdump(struct bnxt_re_dev *rdev, void *buf, u32 buf_len)
 {
+	u32 len = 0;
+
+	len += bnxt_re_snapdump_qp(rdev, buf + len, buf_len - len);
+	if (len >= buf_len)
+		return;
+
+	len += bnxt_re_snapdump_mr(rdev, buf + len, buf_len - len);
+	if (len >= buf_len)
+		return;
 }
 
 #define BNXT_RE_TRACE_DUMP_SIZE	0x2000000
