@@ -593,6 +593,12 @@ struct sched_entity {
 	 */
 	int				kernel_cs_count;
 					/* hole */
+
+	/*
+	 * min_vruntime of the kernel mode preempted entities
+	 * in the subtree of this sched entity.
+	 */
+	s64				min_kcs_vruntime;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 

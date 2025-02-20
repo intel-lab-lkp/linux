@@ -828,6 +828,9 @@ static inline void __min_slice_update(struct sched_entity *se, struct rb_node *n
 	}
 }
 
+static __always_inline void init_se_kcs_stats(struct sched_entity *se);
+static inline bool min_kcs_vruntime_update(struct sched_entity *se);
+
 /*
  * se->min_vruntime = min(se->vruntime, {left,right}->min_vruntime)
  */
@@ -836,6 +839,7 @@ static inline bool min_vruntime_update(struct sched_entity *se, bool exit)
 	u64 old_min_vruntime = se->min_vruntime;
 	u64 old_min_slice = se->min_slice;
 	struct rb_node *node = &se->run_node;
+	bool kcs_stats_unchanged = min_kcs_vruntime_update(se);
 
 	se->min_vruntime = se->vruntime;
 	__min_vruntime_update(se, node->rb_right);
@@ -846,7 +850,8 @@ static inline bool min_vruntime_update(struct sched_entity *se, bool exit)
 	__min_slice_update(se, node->rb_left);
 
 	return se->min_vruntime == old_min_vruntime &&
-	       se->min_slice == old_min_slice;
+	       se->min_slice == old_min_slice &&
+	       kcs_stats_unchanged;
 }
 
 RB_DECLARE_CALLBACKS(static, min_vruntime_cb, struct sched_entity,
@@ -858,6 +863,7 @@ RB_DECLARE_CALLBACKS(static, min_vruntime_cb, struct sched_entity,
 static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	avg_vruntime_add(cfs_rq, se);
+	init_se_kcs_stats(se);
 	se->min_vruntime = se->vruntime;
 	se->min_slice = se->slice;
 	rb_add_augmented_cached(&se->run_node, &cfs_rq->tasks_timeline,
@@ -6778,6 +6784,39 @@ static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 d
 	cfs_rq->avg_kcs_vruntime -= cfs_rq->avg_kcs_load * delta;
 }
 
+static __always_inline void init_se_kcs_stats(struct sched_entity *se)
+{
+	/*
+	 * With the introduction of EEVDF, the vruntime of entities can go negative when
+	 * a lagging entity joins a runqueue with avg_vruntime < vlag. Use LLONG_MAX as
+	 * the upper bound to differentiate the case where no kernel mode preempted
+	 * entities are queued on the subtree.
+	 */
+	se->min_kcs_vruntime = (se_in_kernel(se)) ? se->vruntime : LLONG_MAX;
+}
+
+static inline void __min_kcs_vruntime_update(struct sched_entity *se, struct rb_node *node)
+{
+	if (node) {
+		struct sched_entity *rse = __node_2_se(node);
+
+		if (rse->min_kcs_vruntime < se->min_kcs_vruntime)
+			se->min_kcs_vruntime = rse->min_kcs_vruntime;
+	}
+}
+
+static inline bool min_kcs_vruntime_update(struct sched_entity *se)
+{
+	u64 old_min_kcs_vruntime = se->min_kcs_vruntime;
+	struct rb_node *node = &se->run_node;
+
+	init_se_kcs_stats(se);
+	__min_kcs_vruntime_update(se, node->rb_right);
+	__min_kcs_vruntime_update(se, node->rb_left);
+
+	return se->min_kcs_vruntime == old_min_kcs_vruntime;
+}
+
 #ifdef CONFIG_NO_HZ_FULL
 /* called from pick_next_task_fair() */
 static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
@@ -6853,6 +6892,12 @@ __always_inline void sched_notify_critical_section_exit(void) {}
 static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta) {}
+static __always_inline void init_se_kcs_stats(struct sched_entity *se) {}
+
+static inline bool min_kcs_vruntime_update(struct sched_entity *se)
+{
+	return true;
+}
 
 #endif /* CONFIG_CFS_BANDWIDTH */
 
