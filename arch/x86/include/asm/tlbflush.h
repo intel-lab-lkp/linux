@@ -293,6 +293,10 @@ static inline void arch_flush_tlb_batched_pending(struct mm_struct *mm)
 }
 
 extern void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch);
+extern bool arch_tlbbatch_check_done(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen);
+extern bool arch_tlbbatch_diet(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen);
+extern void arch_tlbbatch_mark_ugen(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen);
+extern void arch_mm_mark_ugen(struct mm_struct *mm, unsigned long ugen);
 
 static inline void arch_tlbbatch_clear(struct arch_tlbflush_unmap_batch *batch)
 {

@@ -354,6 +354,32 @@ static inline void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	dsb(ish);
 }
 
+static inline bool arch_tlbbatch_check_done(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen)
+{
+	/*
+	 * Nothing is needed in this architecture.
+	 */
+	return true;
+}
+
+static inline bool arch_tlbbatch_diet(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen)
+{
+	/*
+	 * Nothing is needed in this architecture.
+	 */
+	return true;
+}
+
+static inline void arch_tlbbatch_mark_ugen(struct arch_tlbflush_unmap_batch *batch, unsigned long ugen)
+{
+	/* nothing to do */
+}
+
+static inline void arch_mm_mark_ugen(struct mm_struct *mm, unsigned long ugen)
+{
+	/* nothing to do */
+}
+
 static inline void arch_tlbbatch_clear(struct arch_tlbflush_unmap_batch *batch)
 {
 	/* nothing to do */

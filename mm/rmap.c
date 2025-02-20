@@ -656,7 +656,7 @@ static unsigned long new_luf_ugen(void)
 	return ugen;
 }
 
-static void reset_batch(struct tlbflush_unmap_batch *batch)
+void reset_batch(struct tlbflush_unmap_batch *batch)
 {
 	arch_tlbbatch_clear(&batch->arch);
 	batch->flush_required = false;
@@ -743,8 +743,14 @@ static void __fold_luf_batch(struct luf_batch *dst_lb,
 	 * more tlb shootdown might be needed to fulfill the newer
 	 * request.  Conservertively keep the newer one.
 	 */
-	if (!dst_lb->ugen || ugen_before(dst_lb->ugen, src_ugen))
+	if (!dst_lb->ugen || ugen_before(dst_lb->ugen, src_ugen)) {
+		/*
+		 * Good chance to shrink the batch using the old ugen.
+		 */
+		if (dst_lb->ugen && arch_tlbbatch_diet(&dst_lb->batch.arch, dst_lb->ugen))
+			reset_batch(&dst_lb->batch);
 		dst_lb->ugen = src_ugen;
+	}
 	fold_batch(&dst_lb->batch, src_batch, false);
 }
 
@@ -772,17 +778,45 @@ void fold_luf_batch(struct luf_batch *dst, struct luf_batch *src)
 	read_unlock_irqrestore(&src->lock, flags);
 }
 
+static unsigned long tlb_flush_start(void)
+{
+	/*
+	 * Memory barrier implied in the atomic operation prevents
+	 * reading luf_ugen from happening after the following
+	 * tlb flush.
+	 */
+	return new_luf_ugen();
+}
+
+static void tlb_flush_end(struct arch_tlbflush_unmap_batch *arch,
+		struct mm_struct *mm, unsigned long ugen)
+{
+	/*
+	 * Prevent the following marking from placing prior to the
+	 * actual tlb flush.
+	 */
+	smp_mb();
+
+	if (arch)
+		arch_tlbbatch_mark_ugen(arch, ugen);
+	if (mm)
+		arch_mm_mark_ugen(mm, ugen);
+}
+
 void try_to_unmap_flush_takeoff(void)
 {
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
 	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
 	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
+	unsigned long ugen;
 
 	if (!tlb_ubc_takeoff->flush_required)
 		return;
 
+	ugen = tlb_flush_start();
 	arch_tlbbatch_flush(&tlb_ubc_takeoff->arch);
+	tlb_flush_end(&tlb_ubc_takeoff->arch, NULL, ugen);
 
 	/*
 	 * Now that tlb shootdown of tlb_ubc_takeoff has been performed,
@@ -871,13 +905,17 @@ void try_to_unmap_flush(void)
 	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
 	struct tlbflush_unmap_batch *tlb_ubc_ro = &current->tlb_ubc_ro;
 	struct tlbflush_unmap_batch *tlb_ubc_luf = &current->tlb_ubc_luf;
+	unsigned long ugen;
 
 	fold_batch(tlb_ubc, tlb_ubc_ro, true);
 	fold_batch(tlb_ubc, tlb_ubc_luf, true);
 	if (!tlb_ubc->flush_required)
 		return;
 
+	ugen = tlb_flush_start();
 	arch_tlbbatch_flush(&tlb_ubc->arch);
+	tlb_flush_end(&tlb_ubc->arch, NULL, ugen);
+
 	reset_batch(tlb_ubc);
 }
 
@@ -1009,7 +1047,11 @@ void flush_tlb_batched_pending(struct mm_struct *mm)
 	int flushed = batch >> TLB_FLUSH_BATCH_FLUSHED_SHIFT;
 
 	if (pending != flushed) {
+		unsigned long ugen;
+
+		ugen = tlb_flush_start();
 		arch_flush_tlb_batched_pending(mm);
+		tlb_flush_end(NULL, mm, ugen);
 
 		/*
 		 * If the new TLB flushing is pending during flushing, leave

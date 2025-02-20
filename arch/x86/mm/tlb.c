@@ -1240,6 +1240,114 @@ void __flush_tlb_all(void)
 }
 EXPORT_SYMBOL_GPL(__flush_tlb_all);
 
+static DEFINE_PER_CPU(atomic_long_t, ugen_done);
+
+static int __init luf_init_arch(void)
+{
+	int cpu;
+
+	for_each_cpu(cpu, cpu_possible_mask)
+		atomic_long_set(per_cpu_ptr(&ugen_done, cpu), LUF_UGEN_INIT - 1);
+
+	return 0;
+}
+early_initcall(luf_init_arch);
+
+/*
+ * batch will not be updated.
+ */
+bool arch_tlbbatch_check_done(struct arch_tlbflush_unmap_batch *batch,
+			unsigned long ugen)
+{
+	int cpu;
+
+	if (!ugen)
+		goto out;
+
+	for_each_cpu(cpu, &batch->cpumask) {
+		unsigned long done;
+
+		done = atomic_long_read(per_cpu_ptr(&ugen_done, cpu));
+		if (ugen_before(done, ugen))
+			return false;
+	}
+	return true;
+out:
+	return cpumask_empty(&batch->cpumask);
+}
+
+bool arch_tlbbatch_diet(struct arch_tlbflush_unmap_batch *batch,
+			unsigned long ugen)
+{
+	int cpu;
+
+	if (!ugen)
+		goto out;
+
+	for_each_cpu(cpu, &batch->cpumask) {
+		unsigned long done;
+
+		done = atomic_long_read(per_cpu_ptr(&ugen_done, cpu));
+		if (!ugen_before(done, ugen))
+			cpumask_clear_cpu(cpu, &batch->cpumask);
+	}
+out:
+	return cpumask_empty(&batch->cpumask);
+}
+
+void arch_tlbbatch_mark_ugen(struct arch_tlbflush_unmap_batch *batch,
+			     unsigned long ugen)
+{
+	int cpu;
+
+	if (!ugen)
+		return;
+
+	for_each_cpu(cpu, &batch->cpumask) {
+		atomic_long_t *done = per_cpu_ptr(&ugen_done, cpu);
+		unsigned long old = atomic_long_read(done);
+
+		/*
+		 * It's racy.  The race results in unnecessary tlb flush
+		 * because of the smaller ugen_done than it should be.
+		 * However, it's okay in terms of correctness.
+		 */
+		if (!ugen_before(old, ugen))
+			continue;
+
+		/*
+		 * It's for optimization.  Just skip on fail than retry.
+		 */
+		atomic_long_cmpxchg(done, old, ugen);
+	}
+}
+
+void arch_mm_mark_ugen(struct mm_struct *mm, unsigned long ugen)
+{
+	int cpu;
+
+	if (!ugen)
+		return;
+
+	for_each_cpu(cpu, mm_cpumask(mm)) {
+		atomic_long_t *done = per_cpu_ptr(&ugen_done, cpu);
+		unsigned long old = atomic_long_read(done);
+
+		/*
+		 * It's racy.  The race results in unnecessary tlb flush
+		 * because of the smaller ugen_done than it should be.
+		 * However, it's okay in terms of correctness.
+		 */
+		if (!ugen_before(old, ugen))
+			continue;
+
+		/*
+		 * It's for optimization.  Just skip on fail than retry.
+		 */
+		atomic_long_cmpxchg(done, old, ugen);
+	}
+}
+
 void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 {
 	struct flush_tlb_info *info;

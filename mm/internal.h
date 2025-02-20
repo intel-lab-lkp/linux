@@ -1246,6 +1246,7 @@ void try_to_unmap_flush(void);
 void try_to_unmap_flush_dirty(void);
 void try_to_unmap_flush_takeoff(void);
 void flush_tlb_batched_pending(struct mm_struct *mm);
+void reset_batch(struct tlbflush_unmap_batch *batch);
 void fold_batch(struct tlbflush_unmap_batch *dst, struct tlbflush_unmap_batch *src, bool reset);
 void fold_luf_batch(struct luf_batch *dst, struct luf_batch *src);
 #else
@@ -1259,6 +1260,9 @@ static inline void try_to_unmap_flush_takeoff(void)
 {
 }
 static inline void flush_tlb_batched_pending(struct mm_struct *mm)
+{
+}
+static inline void reset_batch(struct tlbflush_unmap_batch *batch)
 {
 }
 static inline void fold_batch(struct tlbflush_unmap_batch *dst, struct tlbflush_unmap_batch *src, bool reset)

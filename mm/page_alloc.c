@@ -668,9 +668,11 @@ bool luf_takeoff_start(void)
  */
 void luf_takeoff_end(void)
 {
+	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
 	unsigned long flags;
 	bool no_shootdown;
 	bool outmost = false;
+	unsigned long cur_luf_ugen;
 
 	local_irq_save(flags);
 	VM_WARN_ON(!current->luf_takeoff_started);
@@ -697,10 +699,19 @@ void luf_takeoff_end(void)
 	if (no_shootdown)
 		goto out;
 
+	cur_luf_ugen = current->luf_ugen;
+
+	current->luf_ugen = 0;
+
+	if (cur_luf_ugen && arch_tlbbatch_diet(&tlb_ubc_takeoff->arch, cur_luf_ugen))
+		reset_batch(tlb_ubc_takeoff);
+
 	try_to_unmap_flush_takeoff();
 out:
-	if (outmost)
+	if (outmost) {
 		VM_WARN_ON(current->luf_no_shootdown);
+		VM_WARN_ON(current->luf_ugen);
+	}
 }
 
 /*
@@ -757,6 +768,7 @@ bool luf_takeoff_check_and_fold(struct page *page)
 	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
 	unsigned short luf_key = page_luf_key(page);
 	struct luf_batch *lb;
+	unsigned long lb_ugen;
 	unsigned long flags;
 
 	/*
@@ -770,13 +782,25 @@ bool luf_takeoff_check_and_fold(struct page *page)
 	if (!luf_key)
 		return true;
 
-	if (current->luf_no_shootdown)
-		return false;
-
 	lb = &luf_batch[luf_key];
 	read_lock_irqsave(&lb->lock, flags);
+	lb_ugen = lb->ugen;
+
+	if (arch_tlbbatch_check_done(&lb->batch.arch, lb_ugen)) {
+		read_unlock_irqrestore(&lb->lock, flags);
+		return true;
+	}
+
+	if (current->luf_no_shootdown) {
+		read_unlock_irqrestore(&lb->lock, flags);
+		return false;
+	}
+
 	fold_batch(tlb_ubc_takeoff, &lb->batch, false);
 	read_unlock_irqrestore(&lb->lock, flags);
+
+	if (!current->luf_ugen || ugen_before(current->luf_ugen, lb_ugen))
+		current->luf_ugen = lb_ugen;
 	return true;
 }
 #endif
