@@ -506,6 +506,44 @@ static void bnxt_re_start_irq(void *handle, struct bnxt_msix_entry *ent)
 static void bnxt_re_dump_ctx(struct bnxt_re_dev *rdev, u32 seg_id, void *buf,
 			     u32 buf_len)
 {
+	int ctx_index, i;
+	void *ctx_data;
+	u16 ctx_size;
+
+	switch (seg_id) {
+	case BNXT_SEGMENT_QP_CTX:
+		ctx_data = rdev->rcfw.qp_ctxm_data;
+		ctx_size = rdev->rcfw.qp_ctxm_size;
+		ctx_index = rdev->rcfw.qp_ctxm_data_index;
+		break;
+	case BNXT_SEGMENT_CQ_CTX:
+		ctx_data = rdev->rcfw.cq_ctxm_data;
+		ctx_size = rdev->rcfw.cq_ctxm_size;
+		ctx_index = rdev->rcfw.cq_ctxm_data_index;
+		break;
+	case BNXT_SEGMENT_MR_CTX:
+		ctx_data = rdev->rcfw.mrw_ctxm_data;
+		ctx_size = rdev->rcfw.mrw_ctxm_size;
+		ctx_index = rdev->rcfw.mrw_ctxm_data_index;
+		break;
+	case BNXT_SEGMENT_SRQ_CTX:
+		ctx_data = rdev->rcfw.srq_ctxm_data;
+		ctx_size = rdev->rcfw.srq_ctxm_size;
+		ctx_index = rdev->rcfw.srq_ctxm_data_index;
+		break;
+	default:
+		return;
+	}
+
+	if (!ctx_data || (ctx_size * BNXT_RE_MAX_QDUMP_ENTRIES) > buf_len)
+		return;
+
+	for (i = ctx_index; i < BNXT_RE_MAX_QDUMP_ENTRIES + ctx_index; i++) {
+		memcpy(buf, ctx_data + ((i % BNXT_RE_MAX_QDUMP_ENTRIES) * ctx_size),
+		       ctx_size);
+		buf += ctx_size;
+	}
+
 }
 
 /*

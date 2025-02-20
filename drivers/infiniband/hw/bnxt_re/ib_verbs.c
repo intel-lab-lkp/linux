@@ -1079,7 +1079,7 @@ int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 	struct bnxt_qplib_nq *rcq_nq = NULL;
 	unsigned int flags;
 	void  *ctx_sb_data = NULL;
-	bool do_snapdump;
+	bool do_snapdump = false;
 	u16 ctx_size;
 	int rc;
 
@@ -1087,17 +1087,15 @@ int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 	bnxt_re_debug_rem_qpinfo(rdev, qp);
 
 	bnxt_qplib_flush_cqn_wq(&qp->qplib_qp);
-	ctx_size = qplib_qp->ctx_size_sb;
+	ctx_size = rdev->rcfw.qp_ctxm_size;
 	if (ctx_size)
 		ctx_sb_data = vzalloc(ctx_size);
-	do_snapdump = test_bit(QP_FLAGS_CAPTURE_SNAPDUMP, &qplib_qp->flags);
 
 	rc = bnxt_qplib_destroy_qp(&rdev->qplib_res, &qp->qplib_qp, ctx_size, ctx_sb_data);
 	if (rc)
 		ibdev_err(&rdev->ibdev, "Failed to destroy HW QP");
-	else
-		bnxt_re_save_resource_context(rdev, ctx_sb_data,
-					      BNXT_RE_RES_TYPE_QP, do_snapdump);
+	do_snapdump = test_bit(QP_FLAGS_CAPTURE_SNAPDUMP, &qplib_qp->flags);
+	bnxt_re_save_resource_context(rdev, ctx_sb_data,  BNXT_RE_RES_TYPE_QP, do_snapdump);
 
 	vfree(ctx_sb_data);
 	if (rdma_is_kernel_res(&qp->ib_qp.res)) {
