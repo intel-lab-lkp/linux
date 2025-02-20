@@ -569,14 +569,14 @@ struct sched_entity {
 	u64				nr_migrations;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	int				depth;
 	struct sched_entity		*parent;
 	/* rq on which this entity is (to be) queued: */
 	struct cfs_rq			*cfs_rq;
 	/* rq "owned" by this entity/group: */
 	struct cfs_rq			*my_q;
 	/* cached value of my_q->h_nr_running */
-	unsigned long			runnable_weight;
+	unsigned int			runnable_weight;
+	int				depth;
 #endif
 
 #ifdef CONFIG_SMP
