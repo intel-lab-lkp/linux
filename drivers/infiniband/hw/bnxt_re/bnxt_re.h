@@ -304,6 +304,8 @@ struct bnxt_re_dev {
 	struct workqueue_struct		*dcb_wq;
 	/* Head to track all QP dump */
 	struct bnxt_re_qdump_head qdump_head;
+	struct dentry                   *tunables;
+	struct dentry                   *snapdump_dbg;
 	u8 snapdump_dbg_lvl;
 	struct dentry                   *cc_config;
 	struct bnxt_re_dbg_cc_config_params *cc_config_params;

@@ -306,6 +306,52 @@ static const struct file_operations bnxt_re_cc_config_ops = {
 	.write = bnxt_re_cc_config_set,
 };
 
+static ssize_t bnxt_re_snapdump_dbg_lvl_set(struct file *filp, const char __user *buffer,
+					    size_t count, loff_t *ppos)
+{
+	struct bnxt_re_dev *rdev = filp->private_data;
+	char buf[16];
+	u32 val;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+
+	buf[count] = '\0';
+	if (kstrtou32(buf, 0, &val))
+		return -EINVAL;
+
+	if (val > BNXT_RE_SNAPDUMP_ALL)
+		return -EINVAL;
+
+	rdev->snapdump_dbg_lvl = val;
+
+	return count;
+}
+
+static ssize_t bnxt_re_snapdump_dbg_lvl_get(struct file *filp, char __user *buffer,
+					    size_t usr_buf_len, loff_t *ppos)
+{
+	struct bnxt_re_dev *rdev = filp->private_data;
+	char buf[16];
+	int rc;
+
+	rc = snprintf(buf, sizeof(buf), "%d\n", rdev->snapdump_dbg_lvl);
+	if (rc < 0)
+		return rc;
+
+	return simple_read_from_buffer(buffer, usr_buf_len, ppos, (u8 *)(buf), rc);
+}
+
+static const struct file_operations bnxt_re_snapdump_dbg_lvl = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = bnxt_re_snapdump_dbg_lvl_get,
+	.write = bnxt_re_snapdump_dbg_lvl_set,
+};
+
 void bnxt_re_debugfs_add_pdev(struct bnxt_re_dev *rdev)
 {
 	struct pci_dev *pdev = rdev->en_dev->pdev;
@@ -329,6 +375,9 @@ void bnxt_re_debugfs_add_pdev(struct bnxt_re_dev *rdev)
 							 rdev->cc_config, tmp_params,
 							 &bnxt_re_cc_config_ops);
 	}
+	rdev->tunables = debugfs_create_dir("tunables", rdev->dbg_root);
+	rdev->snapdump_dbg = debugfs_create_file("snapdump_dbg_lvl", 0400,  rdev->tunables, rdev,
+						 &bnxt_re_snapdump_dbg_lvl);
 }
 
 void bnxt_re_debugfs_rem_pdev(struct bnxt_re_dev *rdev)
