@@ -5894,6 +5894,16 @@ static inline int throttled_lb_pair(struct task_group *tg,
 	       throttled_hierarchy(dest_cfs_rq);
 }
 
+static enum throttle_state
+determine_throttle_state(struct cfs_rq *gcfs_rq, struct sched_entity *se)
+{
+	/*
+	 * TODO: Implement rest once plumbing for
+	 * CFS_THROTTLED_PARTIAL is done.
+	 */
+	return CFS_THROTTLED;
+}
+
 static int tg_unthrottle_up(struct task_group *tg, void *data)
 {
 	struct rq *rq = data;
@@ -5946,9 +5956,25 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 {
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
-	struct sched_entity *se;
 	long queued_delta, runnable_delta, idle_delta, dequeue = 1;
+	struct sched_entity *se = cfs_rq->tg->se[cpu_of(rq)];
 	long rq_h_nr_queued = rq->cfs.h_nr_queued;
+	int new_state = determine_throttle_state(cfs_rq, se);
+	int prev_state = cfs_rq->throttled;
+
+	/* Fully throttled cfs_rq should not reach here */
+	SCHED_WARN_ON(cfs_rq_h_throttled(cfs_rq));
+
+	/* Nothing to do */
+	if (new_state == prev_state)
+		return false;
+
+	/*
+	 * We've been upgraded! Just dequeue since we are already on the
+	 * throttled_list. Let distribution unthrottle us.
+	 */
+	if (prev_state)
+		goto throttle_dequeue;
 
 	raw_spin_lock(&cfs_b->lock);
 	/* This will start the period timer if necessary */
@@ -5969,10 +5995,13 @@ static bool throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	raw_spin_unlock(&cfs_b->lock);
 
 	if (!dequeue)
-		return false;  /* Throttle no longer required. */
+		new_state = CFS_UNTHROTTLED;
 
-	se = cfs_rq->tg->se[cpu_of(rq_of(cfs_rq))];
+	/* If the cfs_rq is only partially throttled, we are done. */
+	if (new_state < CFS_THROTTLED)
+		goto done;
 
+throttle_dequeue:
 	/* freeze hierarchy runnable averages while throttled */
 	rcu_read_lock();
 	walk_tg_tree_from(cfs_rq->tg, tg_throttle_down, tg_nop, (void *)rq);
@@ -6041,11 +6070,16 @@ done:
 	 * Note: distribution will already see us throttled via the
 	 * throttled-list.  rq->lock protects completion.
 	 */
-	cfs_rq->throttled = CFS_THROTTLED;
-	SCHED_WARN_ON(cfs_rq->throttled_clock);
-	if (cfs_rq->nr_queued)
-		cfs_rq->throttled_clock = rq_clock(rq);
-	return true;
+	cfs_rq->throttled = new_state;
+	if (new_state == CFS_THROTTLED) {
+		SCHED_WARN_ON(cfs_rq->throttled_clock);
+		if (cfs_rq->nr_queued)
+			cfs_rq->throttled_clock = rq_clock(rq);
+
+		return true;
+	}
+
+	return false;
 }
 
 void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
@@ -6536,6 +6570,11 @@ static bool check_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 	if (cfs_rq_h_throttled(cfs_rq))
 		return true;
 
+	/*
+	 * throttle_cfs_rq() will reevaluate the throttle status for
+	 * partially throttled hierarchy and upgrade to a full throttle
+	 * once all the kernel mode entities leave or exit to user mode.
+	 */
 	return throttle_cfs_rq(cfs_rq);
 }
 
