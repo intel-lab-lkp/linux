@@ -60,6 +60,7 @@
 #include <linux/file.h>
 #include <linux/generic-radix-tree.h>
 #include <linux/string.h>
+#include <linux/string_choices.h>
 #include <linux/seq_file.h>
 #include <linux/namei.h>
 #include <linux/mnt_namespace.h>
@@ -3280,14 +3281,14 @@ static int proc_pid_ksm_stat(struct seq_file *m, struct pid_namespace *ns,
 		seq_printf(m, "ksm_merging_pages %lu\n", mm->ksm_merging_pages);
 		seq_printf(m, "ksm_process_profit %ld\n", ksm_process_profit(mm));
 		seq_printf(m, "ksm_merge_any: %s\n",
-				test_bit(MMF_VM_MERGE_ANY, &mm->flags) ? "yes" : "no");
+				str_yes_no(test_bit(MMF_VM_MERGE_ANY, &mm->flags)));
 		ret = mmap_read_lock_killable(mm);
 		if (ret) {
 			mmput(mm);
 			return ret;
 		}
 		seq_printf(m, "ksm_mergeable: %s\n",
-				ksm_process_mergeable(mm) ? "yes" : "no");
+				str_yes_no(ksm_process_mergeable(mm)));
 		mmap_read_unlock(mm);
 		mmput(mm);
 	}
