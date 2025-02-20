@@ -1374,6 +1374,11 @@ struct task_struct {
 	struct callback_head		cid_work;
 #endif
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+	int luf_no_shootdown;
+	int luf_takeoff_started;
+#endif
+
 	struct tlbflush_unmap_batch	tlb_ubc;
 	struct tlbflush_unmap_batch	tlb_ubc_takeoff;
 

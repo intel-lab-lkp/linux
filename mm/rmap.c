@@ -693,7 +693,7 @@ void fold_batch(struct tlbflush_unmap_batch *dst,
 /*
  * Use 0th entry as accumulated batch.
  */
-static struct luf_batch luf_batch[NR_LUF_BATCH];
+struct luf_batch luf_batch[NR_LUF_BATCH];
 
 static void luf_batch_init(struct luf_batch *lb)
 {

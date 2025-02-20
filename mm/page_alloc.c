@@ -622,6 +622,165 @@ compaction_capture(struct capture_control *capc, struct page *page,
 }
 #endif /* CONFIG_COMPACTION */
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+static bool no_shootdown_context(void)
+{
+	/*
+	 * If it performs with irq disabled, that might cause a deadlock.
+	 * Avoid tlb shootdown in this case.
+	 */
+	return !(!irqs_disabled() && in_task());
+}
+
+/*
+ * Can be called with zone lock released and irq enabled.
+ */
+bool luf_takeoff_start(void)
+{
+	unsigned long flags;
+	bool no_shootdown = no_shootdown_context();
+
+	local_irq_save(flags);
+
+	/*
+	 * It's the outmost luf_takeoff_start().
+	 */
+	if (!current->luf_takeoff_started)
+		VM_WARN_ON(current->luf_no_shootdown);
+
+	/*
+	 * current->luf_no_shootdown > 0 doesn't mean tlb shootdown is
+	 * not allowed at all.  However, it guarantees tlb shootdown is
+	 * possible once current->luf_no_shootdown == 0.  It might look
+	 * too conservative but for now do this way for simplity.
+	 */
+	if (no_shootdown || current->luf_no_shootdown)
+		current->luf_no_shootdown++;
+
+	current->luf_takeoff_started++;
+	local_irq_restore(flags);
+
+	return !no_shootdown;
+}
+
+/*
+ * Should be called within the same context of luf_takeoff_start().
+ */
+void luf_takeoff_end(void)
+{
+	unsigned long flags;
+	bool no_shootdown;
+	bool outmost = false;
+
+	local_irq_save(flags);
+	VM_WARN_ON(!current->luf_takeoff_started);
+
+	/*
+	 * Assume the context and irq flags are same as those at
+	 * luf_takeoff_start().
+	 */
+	if (current->luf_no_shootdown)
+		current->luf_no_shootdown--;
+
+	no_shootdown = !!current->luf_no_shootdown;
+
+	current->luf_takeoff_started--;
+
+	/*
+	 * It's the outmost luf_takeoff_end().
+	 */
+	if (!current->luf_takeoff_started)
+		outmost = true;
+
+	local_irq_restore(flags);
+
+	if (no_shootdown)
+		goto out;
+
+	try_to_unmap_flush_takeoff();
+out:
+	if (outmost)
+		VM_WARN_ON(current->luf_no_shootdown);
+}
+
+/*
+ * Can be called with zone lock released and irq enabled.
+ */
+bool luf_takeoff_no_shootdown(void)
+{
+	bool no_shootdown = true;
+	unsigned long flags;
+
+	local_irq_save(flags);
+
+	/*
+	 * No way.  Delimit using luf_takeoff_{start,end}().
+	 */
+	if (unlikely(!current->luf_takeoff_started)) {
+		VM_WARN_ON(1);
+		goto out;
+	}
+	no_shootdown = current->luf_no_shootdown;
+out:
+	local_irq_restore(flags);
+	return no_shootdown;
+}
+
+/*
+ * Should be called with either zone lock held and irq disabled or pcp
+ * lock held.
+ */
+bool luf_takeoff_check(struct page *page)
+{
+	unsigned short luf_key = page_luf_key(page);
+
+	/*
+	 * No way.  Delimit using luf_takeoff_{start,end}().
+	 */
+	if (unlikely(!current->luf_takeoff_started)) {
+		VM_WARN_ON(1);
+		return false;
+	}
+
+	if (!luf_key)
+		return true;
+
+	return !current->luf_no_shootdown;
+}
+
+/*
+ * Should be called with either zone lock held and irq disabled or pcp
+ * lock held.
+ */
+bool luf_takeoff_check_and_fold(struct page *page)
+{
+	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
+	unsigned short luf_key = page_luf_key(page);
+	struct luf_batch *lb;
+	unsigned long flags;
+
+	/*
+	 * No way.  Delimit using luf_takeoff_{start,end}().
+	 */
+	if (unlikely(!current->luf_takeoff_started)) {
+		VM_WARN_ON(1);
+		return false;
+	}
+
+	if (!luf_key)
+		return true;
+
+	if (current->luf_no_shootdown)
+		return false;
+
+	lb = &luf_batch[luf_key];
+	read_lock_irqsave(&lb->lock, flags);
+	fold_batch(tlb_ubc_takeoff, &lb->batch, false);
+	read_unlock_irqrestore(&lb->lock, flags);
+	return true;
+}
+#endif
+
 static inline void account_freepages(struct zone *zone, int nr_pages,
 				     int migratetype)
 {
