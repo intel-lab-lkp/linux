@@ -589,7 +589,12 @@ struct sched_entity {
 	 * - For task: It represents if the task is currently
 	 *   running in kernel mode. It is always 0 or 1.
 	 *
-	 * TODO: Describe for sched_entity when implementing.
+	 * - For cfs_rq: It represents the sum of the
+	 *   kernel_cs_count of the entities queued below it
+	 *   except for the "current". Since the current task can
+	 *   frequently switch in and out of kernel mode, its
+	 *   hierarchy is treated  special and its contribution
+	 *   is accounted at key decision points.
 	 */
 	int				kernel_cs_count;
 					/* hole */

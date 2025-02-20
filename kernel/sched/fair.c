@@ -6732,7 +6732,7 @@ __always_inline void sched_notify_critical_section_exit(void)
 	current->se.kernel_cs_count--;
 }
 
-static inline int se_in_kernel(struct sched_entity *se)
+static __always_inline int se_in_kernel(struct sched_entity *se)
 {
 	return se->kernel_cs_count;
 }
@@ -6817,6 +6817,76 @@ static inline bool min_kcs_vruntime_update(struct sched_entity *se)
 	return se->min_kcs_vruntime == old_min_kcs_vruntime;
 }
 
+static inline void account_kcs_enqueue(struct cfs_rq *gcfs_rq, bool in_kernel)
+{
+	struct sched_entity *se;
+	struct cfs_rq *cfs_rq;
+
+	if (!in_kernel)
+		return;
+
+	se = gcfs_rq->tg->se[cpu_of(rq_of(gcfs_rq))];
+	if (!se)
+		return;
+
+	cfs_rq = cfs_rq_of(se);
+	se->kernel_cs_count++;
+
+	/* se has transitioned into a kernel mode preempted entity */
+	if (se->kernel_cs_count == 1 && se != cfs_rq->curr && se->on_rq) {
+		/*
+		 * Must be done after "kernel_cs_count" has been
+		 * incremented since avg_kcs_vruntime_add() only
+		 * adjusts the stats if it believes the entity is in
+		 * the kernel mode.
+		 */
+		avg_kcs_vruntime_add(cfs_rq, se);
+
+		/* Propagate min_kcs_vruntime_update() till rb_root */
+		min_vruntime_cb_propagate(&se->run_node, NULL);
+	}
+
+	/* Sanity check */
+	SCHED_WARN_ON(se->kernel_cs_count > gcfs_rq->h_nr_queued);
+}
+
+static inline void account_kcs_dequeue(struct cfs_rq *gcfs_rq, bool in_kernel)
+{
+	struct sched_entity *se;
+	struct cfs_rq *cfs_rq;
+	bool transition_out;
+
+	if (!in_kernel)
+		return;
+
+	se = gcfs_rq->tg->se[cpu_of(rq_of(gcfs_rq))];
+	if (!se)
+		return;
+
+	cfs_rq = cfs_rq_of(se);
+	transition_out = se->kernel_cs_count == 1;
+
+	/*
+	 * Discount the load and avg_kcs_vruntime contribution if the
+	 * entity is transitioning out. Must be done before
+	 * "kernel_cs_count" is decremented as avg_kcs_vruntime_sub()
+	 * should still consider it to be in kernel mode to adjust
+	 * the stats.
+	 */
+	if (transition_out && se != cfs_rq->curr && se->on_rq)
+		avg_kcs_vruntime_sub(cfs_rq, se);
+
+	se->kernel_cs_count--;
+
+	/* Propagate min_kcs_vruntime_update() till rb_root */
+	if (transition_out && se != cfs_rq->curr && se->on_rq)
+		min_vruntime_cb_propagate(&se->run_node, NULL);
+
+	/* Sanity checks */
+	SCHED_WARN_ON(se->kernel_cs_count > gcfs_rq->h_nr_queued);
+	SCHED_WARN_ON(se->kernel_cs_count < 0);
+}
+
 #ifdef CONFIG_NO_HZ_FULL
 /* called from pick_next_task_fair() */
 static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
@@ -6889,6 +6959,11 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 __always_inline void sched_notify_critical_section_entry(void) {}
 __always_inline void sched_notify_critical_section_exit(void) {}
 
+static __always_inline int se_in_kernel(struct sched_entity *se)
+{
+	return false;
+}
+
 static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta) {}
@@ -6898,6 +6973,9 @@ static inline bool min_kcs_vruntime_update(struct sched_entity *se)
 {
 	return true;
 }
+
+static inline void account_kcs_enqueue(struct cfs_rq *gcfs_rq, bool in_kernel) {}
+static inline void account_kcs_dequeue(struct cfs_rq *gcfs_rq, bool in_kernel) {}
 
 #endif /* CONFIG_CFS_BANDWIDTH */
 
@@ -7056,6 +7134,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct cfs_rq *cfs_rq;
 	struct sched_entity *se = &p->se;
+	/* A task on CPU has its in-kernel stats discounted */
+	bool task_in_kernel = !task_on_cpu(rq, p) && se_in_kernel(se);
 	int h_nr_idle = task_has_idle_policy(p);
 	int h_nr_runnable = 1;
 	int task_new = !(flags & ENQUEUE_WAKEUP);
@@ -7110,6 +7190,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		cfs_rq->h_nr_runnable += h_nr_runnable;
 		cfs_rq->h_nr_queued++;
 		cfs_rq->h_nr_idle += h_nr_idle;
+		account_kcs_enqueue(cfs_rq, task_in_kernel);
 
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = 1;
@@ -7136,6 +7217,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		cfs_rq->h_nr_runnable += h_nr_runnable;
 		cfs_rq->h_nr_queued++;
 		cfs_rq->h_nr_idle += h_nr_idle;
+		account_kcs_enqueue(cfs_rq, task_in_kernel);
 
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = 1;
@@ -7196,6 +7278,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	bool task_sleep = flags & DEQUEUE_SLEEP;
 	bool task_delayed = flags & DEQUEUE_DELAYED;
 	struct task_struct *p = NULL;
+	bool task_in_kernel = false;
 	int h_nr_idle = 0;
 	int h_nr_queued = 0;
 	int h_nr_runnable = 0;
@@ -7205,6 +7288,8 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	if (entity_is_task(se)) {
 		p = task_of(se);
 		h_nr_queued = 1;
+		/* A task on CPU has its in-kernel stats discounted */
+		task_in_kernel = !task_on_cpu(rq, p) && se_in_kernel(se);
 		h_nr_idle = task_has_idle_policy(p);
 		if (task_sleep || task_delayed || !se->sched_delayed)
 			h_nr_runnable = 1;
@@ -7226,6 +7311,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		cfs_rq->h_nr_runnable -= h_nr_runnable;
 		cfs_rq->h_nr_queued -= h_nr_queued;
 		cfs_rq->h_nr_idle -= h_nr_idle;
+		account_kcs_dequeue(cfs_rq, task_in_kernel);
 
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = h_nr_queued;
@@ -7267,6 +7353,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		cfs_rq->h_nr_runnable -= h_nr_runnable;
 		cfs_rq->h_nr_queued -= h_nr_queued;
 		cfs_rq->h_nr_idle -= h_nr_idle;
+		account_kcs_dequeue(cfs_rq, task_in_kernel);
 
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = h_nr_queued;
@@ -9029,6 +9116,8 @@ again:
 	 */
 	if (prev != p) {
 		struct sched_entity *pse = &prev->se;
+		bool prev_in_kernel = task_on_rq_queued(prev) && se_in_kernel(pse);
+		bool next_in_kernel = se_in_kernel(se);
 		struct cfs_rq *cfs_rq;
 
 		while (!(cfs_rq = is_same_group(se, pse))) {
@@ -9036,17 +9125,34 @@ again:
 			int pse_depth = pse->depth;
 
 			if (se_depth <= pse_depth) {
-				put_prev_entity(cfs_rq_of(pse), pse);
+				cfs_rq = cfs_rq_of(pse);
+
+				account_kcs_enqueue(cfs_rq, prev_in_kernel);
+				put_prev_entity(cfs_rq, pse);
 				pse = parent_entity(pse);
 			}
 			if (se_depth >= pse_depth) {
-				set_next_entity(cfs_rq_of(se), se);
+				cfs_rq = cfs_rq_of(se);
+
+				set_next_entity(cfs_rq, se);
 				se = parent_entity(se);
+				account_kcs_dequeue(cfs_rq, next_in_kernel);
 			}
 		}
 
 		put_prev_entity(cfs_rq, pse);
 		set_next_entity(cfs_rq, se);
+
+		if (prev_in_kernel != next_in_kernel) {
+			for_each_sched_entity(se) {
+				cfs_rq = cfs_rq_of(se);
+
+				if (prev_in_kernel)
+					account_kcs_enqueue(cfs_rq, prev_in_kernel);
+				else
+					account_kcs_dequeue(cfs_rq, next_in_kernel);
+			}
+		}
 
 		__set_next_task_fair(rq, p, true);
 	}
@@ -9114,10 +9220,17 @@ void fair_server_init(struct rq *rq)
 static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct task_struct *next)
 {
 	struct sched_entity *se = &prev->se;
+	/*
+	 * When next is NULL, it is a save-restore operation. If the task is no
+	 * longer queued on the rq, the stats have been already discounted at
+	 * pick and should not be adjusted here.
+	 */
+	bool task_in_kernel = next && task_on_rq_queued(prev) && se_in_kernel(se);
 	struct cfs_rq *cfs_rq;
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
+		account_kcs_enqueue(cfs_rq, task_in_kernel);
 		put_prev_entity(cfs_rq, se);
 	}
 }
@@ -13424,11 +13537,13 @@ static void __set_next_task_fair(struct rq *rq, struct task_struct *p, bool firs
 static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 {
 	struct sched_entity *se = &p->se;
+	bool task_in_kernel = !task_on_cpu(rq, p) && se_in_kernel(se);
 
 	for_each_sched_entity(se) {
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 		set_next_entity(cfs_rq, se);
+		account_kcs_dequeue(cfs_rq, task_in_kernel);
 		/* ensure bandwidth has been allocated on our new cfs_rq */
 		account_cfs_rq_runtime(cfs_rq, 0);
 	}
