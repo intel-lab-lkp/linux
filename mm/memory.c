@@ -6081,6 +6081,7 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	struct mm_struct *mm = vma->vm_mm;
 	vm_fault_t ret;
 	bool is_droppable;
+	struct address_space *mapping = NULL;
 	bool flush = false;
 
 	__set_current_state(TASK_RUNNING);
@@ -6112,8 +6113,16 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	 * should be considered.
 	 */
 	if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE) ||
-			flags & FAULT_FLAG_WRITE)
+			flags & FAULT_FLAG_WRITE) {
 		flush = true;
+
+		/*
+		 * Doesn't care the !VM_SHARED cases because it won't
+		 * update the pages that might be shared with others.
+		 */
+		if (vma->vm_flags & VM_SHARED && vma->vm_file)
+			mapping = vma->vm_file->f_mapping;
+	}
 
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
@@ -6149,8 +6158,15 @@ out:
 	/*
 	 * Ensure to clean stale tlb entries for this vma.
 	 */
-	if (flush)
-		luf_flush(0);
+	if (flush) {
+		/*
+		 * If it has a VM_SHARED mapping, all the mms involved
+		 * should be luf_flush'ed.
+		 */
+		if (mapping)
+			luf_flush(0);
+		luf_flush_mm(mm);
+	}
 
 	return ret;
 }

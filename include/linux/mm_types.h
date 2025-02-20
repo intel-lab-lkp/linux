@@ -38,8 +38,10 @@ struct luf_batch {
 	unsigned long ugen;
 	rwlock_t lock;
 };
+void luf_batch_init(struct luf_batch *lb);
 #else
 struct luf_batch {};
+static inline void luf_batch_init(struct luf_batch *lb) {}
 #endif
 
 /*
@@ -1022,6 +1024,9 @@ struct mm_struct {
 		 * moving a PROT_NONE mapped page.
 		 */
 		atomic_t tlb_flush_pending;
+
+		/* luf batch for this mm */
+		struct luf_batch luf_batch;
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
 		/* See flush_tlb_batched_pending() */
 		atomic_t tlb_flush_batched;
@@ -1272,8 +1277,12 @@ extern void tlb_finish_mmu(struct mmu_gather *tlb);
 
 #if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
 void luf_flush(unsigned short luf_key);
+void luf_flush_mm(struct mm_struct *mm);
+void luf_flush_vma(struct vm_area_struct *vma);
 #else
 static inline void luf_flush(unsigned short luf_key) {}
+static inline void luf_flush_mm(struct mm_struct *mm) {}
+static inline void luf_flush_vma(struct vm_area_struct *vma) {}
 #endif
 
 struct vm_fault;
