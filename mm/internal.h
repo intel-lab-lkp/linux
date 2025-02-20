@@ -836,11 +836,16 @@ void init_cma_reserved_pageblock(struct page *page);
 int find_suitable_fallback(struct free_area *area, unsigned int order,
 			int migratetype, bool only_stealable, bool *can_steal);
 
-static inline bool free_area_empty(struct free_area *area, int migratetype)
+static inline bool free_list_empty(struct free_area *area, int migratetype)
 {
 	return list_empty(&area->free_list[migratetype]);
 }
 
+static inline bool free_area_empty(struct free_area *area, int migratetype)
+{
+	return list_empty(&area->free_list[migratetype]) &&
+	       list_empty(&area->pend_list[migratetype]);
+}
 /* mm/util.c */
 struct anon_vma *folio_anon_vma(const struct folio *folio);
 
@@ -1590,12 +1595,22 @@ void luf_takeoff_end(void);
 bool luf_takeoff_no_shootdown(void);
 bool luf_takeoff_check(struct page *page);
 bool luf_takeoff_check_and_fold(struct page *page);
+
+static inline bool non_luf_pages_ok(struct zone *zone)
+{
+	unsigned long nr_free = zone_page_state(zone, NR_FREE_PAGES);
+	unsigned long min_wm = min_wmark_pages(zone);
+	unsigned long nr_luf_pages = atomic_long_read(&zone->nr_luf_pages);
+
+	return nr_free - nr_luf_pages > min_wm;
+}
 #else
 static inline bool luf_takeoff_start(void) { return false; }
 static inline void luf_takeoff_end(void) {}
 static inline bool luf_takeoff_no_shootdown(void) { return true; }
 static inline bool luf_takeoff_check(struct page *page) { return true; }
 static inline bool luf_takeoff_check_and_fold(struct page *page) { return true; }
+static inline bool non_luf_pages_ok(struct zone *zone) { return true; }
 #endif
 
 /* pagewalk.c */
