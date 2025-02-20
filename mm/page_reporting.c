@@ -167,6 +167,7 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 	if (list_empty(list))
 		return err;
 
+	luf_takeoff_start();
 	spin_lock_irq(&zone->lock);
 
 	/*
@@ -191,6 +192,11 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		if (PageReported(page))
 			continue;
 
+		if (!luf_takeoff_check(page)) {
+			VM_WARN_ON(1);
+			continue;
+		}
+
 		/*
 		 * If we fully consumed our budget then update our
 		 * state to indicate that we are requesting additional
@@ -204,7 +210,7 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 
 		/* Attempt to pull page from list and place in scatterlist */
 		if (*offset) {
-			if (!__isolate_free_page(page, order)) {
+			if (!__isolate_free_page(page, order, false)) {
 				next = page;
 				break;
 			}
@@ -227,6 +233,11 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		/* release lock before waiting on report processing */
 		spin_unlock_irq(&zone->lock);
 
+		/*
+		 * Check and flush before using the pages taken off.
+		 */
+		luf_takeoff_end();
+
 		/* begin processing pages in local list */
 		err = prdev->report(prdev, sgl, PAGE_REPORTING_CAPACITY);
 
@@ -235,6 +246,8 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 
 		/* update budget to reflect call to report function */
 		budget--;
+
+		luf_takeoff_start();
 
 		/* reacquire zone lock and resume processing */
 		spin_lock_irq(&zone->lock);
@@ -258,6 +271,11 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		list_rotate_to_front(&next->lru, list);
 
 	spin_unlock_irq(&zone->lock);
+
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 
 	return err;
 }

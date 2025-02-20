@@ -605,6 +605,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 
 	page = pfn_to_page(blockpfn);
 
+	luf_takeoff_start();
 	/* Isolate free pages. */
 	for (; blockpfn < end_pfn; blockpfn += stride, page += stride) {
 		int isolated;
@@ -652,9 +653,12 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 				goto isolate_fail;
 		}
 
+		if (!luf_takeoff_check(page))
+			goto isolate_fail;
+
 		/* Found a free page, will break it into order-0 pages */
 		order = buddy_order(page);
-		isolated = __isolate_free_page(page, order);
+		isolated = __isolate_free_page(page, order, false);
 		if (!isolated)
 			break;
 		set_page_private(page, order);
@@ -681,6 +685,11 @@ isolate_fail:
 
 	if (locked)
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
+
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 
 	/*
 	 * Be careful to not go outside of the pageblock.
@@ -1589,6 +1598,7 @@ static void fast_isolate_freepages(struct compact_control *cc)
 		if (!area->nr_free)
 			continue;
 
+		luf_takeoff_start();
 		spin_lock_irqsave(&cc->zone->lock, flags);
 		freelist = &area->free_list[MIGRATE_MOVABLE];
 		list_for_each_entry_reverse(freepage, freelist, buddy_list) {
@@ -1596,6 +1606,10 @@ static void fast_isolate_freepages(struct compact_control *cc)
 
 			order_scanned++;
 			nr_scanned++;
+
+			if (!luf_takeoff_check(freepage))
+				goto scan_next;
+
 			pfn = page_to_pfn(freepage);
 
 			if (pfn >= highest)
@@ -1615,7 +1629,7 @@ static void fast_isolate_freepages(struct compact_control *cc)
 				/* Shorten the scan if a candidate is found */
 				limit >>= 1;
 			}
-
+scan_next:
 			if (order_scanned >= limit)
 				break;
 		}
@@ -1633,7 +1647,7 @@ static void fast_isolate_freepages(struct compact_control *cc)
 
 		/* Isolate the page if available */
 		if (page) {
-			if (__isolate_free_page(page, order)) {
+			if (__isolate_free_page(page, order, false)) {
 				set_page_private(page, order);
 				nr_isolated = 1 << order;
 				nr_scanned += nr_isolated - 1;
@@ -1649,6 +1663,11 @@ static void fast_isolate_freepages(struct compact_control *cc)
 		}
 
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
+
+		/*
+		 * Check and flush before using the pages taken off.
+		 */
+		luf_takeoff_end();
 
 		/* Skip fast search if enough freepages isolated */
 		if (cc->nr_freepages >= cc->nr_migratepages)
@@ -2369,7 +2388,14 @@ static enum compact_result compact_finished(struct compact_control *cc)
 {
 	int ret;
 
+	/*
+	 * luf_takeoff_{start,end}() is required to identify whether
+	 * this compaction context is tlb shootdownable for luf'd pages.
+	 */
+	luf_takeoff_start();
 	ret = __compact_finished(cc);
+	luf_takeoff_end();
+
 	trace_mm_compaction_finished(cc->zone, cc->order, ret);
 	if (ret == COMPACT_NO_SUITABLE_PAGE)
 		ret = COMPACT_CONTINUE;
