@@ -422,7 +422,6 @@ shmem_pwrite(struct drm_i915_gem_object *obj,
 	     const struct drm_i915_gem_pwrite *arg)
 {
 	struct address_space *mapping = obj->base.filp->f_mapping;
-	const struct address_space_operations *aops = mapping->a_ops;
 	char __user *user_data = u64_to_user_ptr(arg->data_ptr);
 	u64 remain;
 	loff_t pos;
@@ -481,7 +480,7 @@ shmem_pwrite(struct drm_i915_gem_object *obj,
 		if (err)
 			return err;
 
-		err = aops->write_begin(obj->base.filp, mapping, pos, len,
+		err = mapping_write_begin(obj->base.filp, mapping, pos, len,
 					&folio, &data);
 		if (err < 0)
 			return err;
@@ -492,7 +491,7 @@ shmem_pwrite(struct drm_i915_gem_object *obj,
 		pagefault_enable();
 		kunmap_local(vaddr);
 
-		err = aops->write_end(obj->base.filp, mapping, pos, len,
+		err = mapping_write_end(obj->base.filp, mapping, pos, len,
 				      len - unwritten, folio, data);
 		if (err < 0)
 			return err;
@@ -658,7 +657,6 @@ i915_gem_object_create_shmem_from_data(struct drm_i915_private *i915,
 {
 	struct drm_i915_gem_object *obj;
 	struct file *file;
-	const struct address_space_operations *aops;
 	loff_t pos;
 	int err;
 
@@ -670,21 +668,20 @@ i915_gem_object_create_shmem_from_data(struct drm_i915_private *i915,
 	GEM_BUG_ON(obj->write_domain != I915_GEM_DOMAIN_CPU);
 
 	file = obj->base.filp;
-	aops = file->f_mapping->a_ops;
 	pos = 0;
 	do {
 		unsigned int len = min_t(typeof(size), size, PAGE_SIZE);
 		struct folio *folio;
 		void *fsdata;
 
-		err = aops->write_begin(file, file->f_mapping, pos, len,
+		err = mapping_write_begin(file, file->f_mapping, pos, len,
 					&folio, &fsdata);
 		if (err < 0)
 			goto fail;
 
 		memcpy_to_folio(folio, offset_in_folio(folio, pos), data, len);
 
-		err = aops->write_end(file, file->f_mapping, pos, len, len,
+		err = mapping_write_end(file, file->f_mapping, pos, len, len,
 				      folio, fsdata);
 		if (err < 0)
 			goto fail;

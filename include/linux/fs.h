@@ -494,6 +494,24 @@ struct address_space {
 #define PAGECACHE_TAG_WRITEBACK	XA_MARK_1
 #define PAGECACHE_TAG_TOWRITE	XA_MARK_2
 
+static inline int mapping_write_begin(struct file *file,
+				struct address_space *mapping,
+				loff_t pos, unsigned len,
+				struct folio **foliop, void **fsdata)
+{
+	return mapping->a_ops->write_begin(file, mapping, pos, len, foliop,
+			fsdata);
+}
+
+static inline int mapping_write_end(struct file *file,
+				struct address_space *mapping,
+				loff_t pos, unsigned len, unsigned copied,
+				struct folio *folio, void *fsdata)
+{
+	return mapping->a_ops->write_end(file, mapping, pos, len, copied,
+			folio, fsdata);
+}
+
 /*
  * Returns true if any of the pages in the mapping are marked with the tag.
  */
