@@ -757,14 +757,15 @@ static struct pkt_stream *pkt_stream_clone(struct pkt_stream *pkt_stream)
 	return pkt_stream_generate(pkt_stream->nb_pkts, pkt_stream->pkts[0].len);
 }
 
-static void pkt_stream_replace(struct test_spec *test, u32 nb_pkts, u32 pkt_len)
+static void pkt_stream_replace(struct ifobject *ifobj, u32 nb_pkts, u32 pkt_len)
 {
-	struct pkt_stream *pkt_stream;
+	ifobj->xsk->pkt_stream = pkt_stream_generate(nb_pkts, pkt_len);
+}
 
-	pkt_stream = pkt_stream_generate(nb_pkts, pkt_len);
-	test->ifobj_tx->xsk->pkt_stream = pkt_stream;
-	pkt_stream = pkt_stream_generate(nb_pkts, pkt_len);
-	test->ifobj_rx->xsk->pkt_stream = pkt_stream;
+static void pkt_stream_replace_both(struct test_spec *test, u32 nb_pkts, u32 pkt_len)
+{
+	pkt_stream_replace(test->ifobj_tx, nb_pkts, pkt_len);
+	pkt_stream_replace(test->ifobj_rx, nb_pkts, pkt_len);
 }
 
 static void __pkt_stream_replace_half(struct ifobject *ifobj, u32 pkt_len,
@@ -2052,7 +2053,8 @@ static int testapp_stats_tx_invalid_descs(struct test_spec *test)
 
 static int testapp_stats_rx_full(struct test_spec *test)
 {
-	pkt_stream_replace(test, DEFAULT_UMEM_BUFFERS + DEFAULT_UMEM_BUFFERS / 2, MIN_PKT_SIZE);
+	pkt_stream_replace_both(test, DEFAULT_UMEM_BUFFERS + DEFAULT_UMEM_BUFFERS / 2,
+				MIN_PKT_SIZE);
 	test->ifobj_rx->xsk->pkt_stream = pkt_stream_generate(DEFAULT_UMEM_BUFFERS, MIN_PKT_SIZE);
 
 	test->ifobj_rx->xsk->rxqsize = DEFAULT_UMEM_BUFFERS;
@@ -2063,7 +2065,8 @@ static int testapp_stats_rx_full(struct test_spec *test)
 
 static int testapp_stats_fill_empty(struct test_spec *test)
 {
-	pkt_stream_replace(test, DEFAULT_UMEM_BUFFERS + DEFAULT_UMEM_BUFFERS / 2, MIN_PKT_SIZE);
+	pkt_stream_replace_both(test, DEFAULT_UMEM_BUFFERS + DEFAULT_UMEM_BUFFERS / 2,
+				MIN_PKT_SIZE);
 	test->ifobj_rx->xsk->pkt_stream = pkt_stream_generate(DEFAULT_UMEM_BUFFERS, MIN_PKT_SIZE);
 
 	test->ifobj_rx->use_fill_ring = false;
@@ -2086,7 +2089,7 @@ static int testapp_send_receive_unaligned_mb(struct test_spec *test)
 	test->mtu = MAX_ETH_JUMBO_SIZE;
 	test->ifobj_tx->umem->unaligned_mode = true;
 	test->ifobj_rx->umem->unaligned_mode = true;
-	pkt_stream_replace(test, DEFAULT_PKT_CNT, MAX_ETH_JUMBO_SIZE);
+	pkt_stream_replace_both(test, DEFAULT_PKT_CNT, MAX_ETH_JUMBO_SIZE);
 	return testapp_validate_traffic(test);
 }
 
@@ -2101,7 +2104,7 @@ static int testapp_single_pkt(struct test_spec *test)
 static int testapp_send_receive_mb(struct test_spec *test)
 {
 	test->mtu = MAX_ETH_JUMBO_SIZE;
-	pkt_stream_replace(test, DEFAULT_PKT_CNT, MAX_ETH_JUMBO_SIZE);
+	pkt_stream_replace_both(test, DEFAULT_PKT_CNT, MAX_ETH_JUMBO_SIZE);
 
 	return testapp_validate_traffic(test);
 }
@@ -2252,7 +2255,7 @@ static int testapp_poll_txq_tmout(struct test_spec *test)
 	test->ifobj_tx->use_poll = true;
 	/* create invalid frame by set umem frame_size and pkt length equal to 2048 */
 	test->ifobj_tx->umem->frame_size = 2048;
-	pkt_stream_replace(test, 2 * DEFAULT_PKT_CNT, 2048);
+	pkt_stream_replace_both(test, 2 * DEFAULT_PKT_CNT, 2048);
 	return testapp_validate_traffic_single_thread(test, test->ifobj_tx);
 }
 
@@ -2389,7 +2392,7 @@ static int testapp_send_receive_2k_frame(struct test_spec *test)
 {
 	test->ifobj_tx->umem->frame_size = 2048;
 	test->ifobj_rx->umem->frame_size = 2048;
-	pkt_stream_replace(test, DEFAULT_PKT_CNT, MIN_PKT_SIZE);
+	pkt_stream_replace_both(test, DEFAULT_PKT_CNT, MIN_PKT_SIZE);
 	return testapp_validate_traffic(test);
 }
 
@@ -2511,7 +2514,7 @@ static int testapp_hw_sw_max_ring_size(struct test_spec *test)
 	 */
 	test->ifobj_tx->xsk->batch_size = test->ifobj_tx->ring.tx_max_pending - 8;
 	test->ifobj_rx->xsk->batch_size = test->ifobj_tx->ring.tx_max_pending - 8;
-	pkt_stream_replace(test, max_descs, MIN_PKT_SIZE);
+	pkt_stream_replace_both(test, max_descs, MIN_PKT_SIZE);
 	return testapp_validate_traffic(test);
 }
 
