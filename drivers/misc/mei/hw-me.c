@@ -1415,6 +1415,8 @@ irqreturn_t mei_me_irq_thread_handler(int irq, void *dev_id)
 	if (dev->pg_event != MEI_PG_EVENT_WAIT &&
 	    dev->pg_event != MEI_PG_EVENT_RECEIVED) {
 		rets = mei_irq_write_handler(dev, &cmpl_list);
+		if (rets)
+			dev_err(dev->dev, "mei_irq_write_handler ret = %d.\n", rets);
 		dev->hbuf_is_ready = mei_hbuf_is_ready(dev);
 	}
 
