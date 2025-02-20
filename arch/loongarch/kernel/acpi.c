@@ -256,11 +256,6 @@ static __init int setup_node(int pxm)
  */
 unsigned int numa_distance_cnt;
 
-static inline unsigned int get_numa_distances_cnt(struct acpi_table_slit *slit)
-{
-	return slit->locality_count;
-}
-
 void __init numa_set_distance(int from, int to, int distance)
 {
 	if ((u8)distance != distance || (from == to && distance != LOCAL_DISTANCE)) {

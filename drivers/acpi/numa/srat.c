@@ -283,6 +283,11 @@ acpi_table_print_srat_entry(struct acpi_subtable_header *header)
 	}
 }
 
+static inline u64 get_numa_distances_cnt(struct acpi_table_slit *slit)
+{
+	return slit->locality_count;
+}
+
 /*
  * A lot of BIOS fill in 10 (= no distance) everywhere. This messes
  * up the NUMA heuristics which wants the local node to have a smaller
@@ -292,7 +297,7 @@ acpi_table_print_srat_entry(struct acpi_subtable_header *header)
 static int __init slit_valid(struct acpi_table_slit *slit)
 {
 	int i, j;
-	int d = slit->locality_count;
+	u64 d = get_numa_distances_cnt(slit);
 	for (i = 0; i < d; i++) {
 		for (j = 0; j < d; j++) {
 			u8 val = slit->entry[d*i + j];
@@ -337,20 +342,20 @@ static int __init acpi_parse_slit(struct acpi_table_header *table)
 		return -EINVAL;
 	}
 
-	for (i = 0; i < slit->locality_count; i++) {
+	for (i = 0; i < get_numa_distances_cnt(slit); i++) {
 		const int from_node = pxm_to_node(i);
 
 		if (from_node == NUMA_NO_NODE)
 			continue;
 
-		for (j = 0; j < slit->locality_count; j++) {
+		for (j = 0; j < get_numa_distances_cnt(slit); j++) {
 			const int to_node = pxm_to_node(j);
 
 			if (to_node == NUMA_NO_NODE)
 				continue;
 
 			numa_set_distance(from_node, to_node,
-				slit->entry[slit->locality_count * i + j]);
+				slit->entry[get_numa_distances_cnt(slit) * i + j]);
 		}
 	}
 
