@@ -4493,7 +4493,11 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	p->se.cfs_rq			= NULL;
-#endif
+#ifdef CONFIG_CFS_BANDWIDTH
+	/* Only the arch that select GENERIC_ENTRY can defer throttling */
+	p->se.kernel_cs_count		= (IS_ENABLED(CONFIG_GENERIC_ENTRY)) ? 1 : 0;
+#endif /* CONFIG_CFS_BANDWIDTH */
+#endif /* CONFIG_FAIR_GROUP_SCHED */
 
 #ifdef CONFIG_SCHEDSTATS
 	/* Even if schedstat is disabled, there should not be garbage */
