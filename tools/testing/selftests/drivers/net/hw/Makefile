@@ -16,6 +16,7 @@ TEST_PROGS = \
 	pp_alloc_fail.py \
 	rss_ctx.py \
 	tso.py \
+	rss_input_xfrm.py \
 	#
 
 TEST_FILES := \
