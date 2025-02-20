@@ -10,6 +10,22 @@
 # checksyscalls.sh gcc gcc-options
 #
 
+usage() {
+cat << EOF
+Usage: $0 <compiler> [compiler-options]
+
+Example:
+  $0 gcc
+EOF
+
+exit 1
+}
+
+if [ $# -eq 0 ]; then
+	echo "Error: No compiler provided."
+	usage
+fi
+
 ignore_list() {
 cat << EOF
 #include <asm/types.h>
