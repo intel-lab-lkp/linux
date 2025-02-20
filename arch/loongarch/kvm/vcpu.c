@@ -5,6 +5,7 @@
 
 #include <linux/kvm_host.h>
 #include <linux/entry-kvm.h>
+#include <asm/exception.h>
 #include <asm/fpu.h>
 #include <asm/lbt.h>
 #include <asm/loongarch.h>
@@ -304,6 +305,17 @@ static int kvm_pre_enter_guest(struct kvm_vcpu *vcpu)
 	return ret;
 }
 
+static void kvm_handle_irq(struct kvm_vcpu *vcpu)
+{
+	struct pt_regs regs;
+
+	/* Construct pseudo pt_regs, only necessary registers is added */
+	regs.csr_prmd = CSR_PRMD_PIE;
+	regs.csr_era = vcpu->arch.pc;
+	regs.regs[3] = vcpu->arch.host_sp;
+	do_vint(&regs, (unsigned long)&regs);
+}
+
 /*
  * Return 1 for resume guest and "<= 0" for resume host.
  */
@@ -323,6 +335,12 @@ static int kvm_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 
 	guest_timing_exit_irqoff();
 	guest_state_exit_irqoff();
+	/*
+	 * VM exit because of host interrupt
+	 * Handle irq directly before enabling irq
+	 */
+	if (!ecode && intr)
+		kvm_handle_irq(vcpu);
 	local_irq_enable();
 
 	trace_kvm_exit(vcpu, ecode);
