@@ -273,6 +273,12 @@
 					 <&CP11X_LABEL(clk) 1 17>;
 				status = "disabled";
 			};
+
+			CP11X_LABEL(unit_swrst): reset-controller@268 {
+				compatible = "marvell,armada8k-reset";
+				offset = <0x268>;
+				#reset-cells = <1>;
+			};
 		};
 
 		CP11X_LABEL(syscon1): system-controller@400000 {
