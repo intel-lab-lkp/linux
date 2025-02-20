@@ -1052,14 +1052,17 @@ static unsigned int shrink_folio_list(struct list_head *folio_list,
 		struct reclaim_stat *stat, bool ignore_references)
 {
 	struct folio_batch free_folios;
+	struct folio_batch free_folios_luf;
 	LIST_HEAD(ret_folios);
 	LIST_HEAD(demote_folios);
 	unsigned int nr_reclaimed = 0;
 	unsigned int pgactivate = 0;
 	bool do_demote_pass;
 	struct swap_iocb *plug = NULL;
+	unsigned short luf_key;
 
 	folio_batch_init(&free_folios);
+	folio_batch_init(&free_folios_luf);
 	memset(stat, 0, sizeof(*stat));
 	cond_resched();
 	do_demote_pass = can_demote(pgdat->node_id, sc);
@@ -1071,6 +1074,7 @@ retry:
 		enum folio_references references = FOLIOREF_RECLAIM;
 		bool dirty, writeback;
 		unsigned int nr_pages;
+		bool can_luf = false;
 
 		cond_resched();
 
@@ -1309,7 +1313,7 @@ retry:
 			if (folio_test_large(folio))
 				flags |= TTU_SYNC;
 
-			try_to_unmap(folio, flags);
+			can_luf = try_to_unmap(folio, flags);
 			if (folio_mapped(folio)) {
 				stat->nr_unmap_fail += nr_pages;
 				if (!was_swapbacked &&
@@ -1453,6 +1457,8 @@ retry:
 					 * leave it off the LRU).
 					 */
 					nr_reclaimed += nr_pages;
+					if (can_luf)
+						luf_flush(fold_unmap_luf());
 					continue;
 				}
 			}
@@ -1485,6 +1491,19 @@ free_it:
 		nr_reclaimed += nr_pages;
 
 		folio_unqueue_deferred_split(folio);
+
+		if (can_luf) {
+			if (folio_batch_add(&free_folios_luf, folio) == 0) {
+				mem_cgroup_uncharge_folios(&free_folios);
+				mem_cgroup_uncharge_folios(&free_folios_luf);
+				luf_key = fold_unmap_luf();
+				try_to_unmap_flush();
+				free_unref_folios(&free_folios, 0);
+				free_unref_folios(&free_folios_luf, luf_key);
+			}
+			continue;
+		}
+
 		if (folio_batch_add(&free_folios, folio) == 0) {
 			mem_cgroup_uncharge_folios(&free_folios);
 			try_to_unmap_flush();
@@ -1519,8 +1538,20 @@ keep:
 		list_add(&folio->lru, &ret_folios);
 		VM_BUG_ON_FOLIO(folio_test_lru(folio) ||
 				folio_test_unevictable(folio), folio);
+		if (can_luf)
+			luf_flush(fold_unmap_luf());
 	}
 	/* 'folio_list' is always empty here */
+
+	/*
+	 * Finalize this turn before demote_folio_list().
+	 */
+	mem_cgroup_uncharge_folios(&free_folios);
+	mem_cgroup_uncharge_folios(&free_folios_luf);
+	luf_key = fold_unmap_luf();
+	try_to_unmap_flush();
+	free_unref_folios(&free_folios, 0);
+	free_unref_folios(&free_folios_luf, luf_key);
 
 	/* Migrate folios selected for demotion */
 	stat->nr_demoted = demote_folio_list(&demote_folios, pgdat);
@@ -1553,10 +1584,6 @@ keep:
 	}
 
 	pgactivate = stat->nr_activate[0] + stat->nr_activate[1];
-
-	mem_cgroup_uncharge_folios(&free_folios);
-	try_to_unmap_flush();
-	free_unref_folios(&free_folios, 0);
 
 	list_splice(&ret_folios, folio_list);
 	count_vm_events(PGACTIVATE, pgactivate);
