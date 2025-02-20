@@ -13,6 +13,7 @@
 #define __RESET_SIMPLE_H__
 
 #include <linux/io.h>
+#include <linux/regmap.h>
 #include <linux/reset-controller.h>
 #include <linux/spinlock.h>
 
@@ -37,6 +38,8 @@
 struct reset_simple_data {
 	spinlock_t			lock;
 	void __iomem			*membase;
+	struct regmap			*regmap;
+	u32				reg_offset;
 	struct reset_controller_dev	rcdev;
 	bool				active_low;
 	bool				status_active_low;
