@@ -259,6 +259,8 @@ struct komeda_dev *komeda_dev_create(struct device *dev)
 		goto err_cleanup;
 	}
 
+	mdev->sysfs_attr_enabled = true;
+
 	mdev->err_verbosity = KOMEDA_DEV_PRINT_ERR_EVENTS;
 
 	komeda_debugfs_init(mdev);
@@ -278,7 +280,10 @@ void komeda_dev_destroy(struct komeda_dev *mdev)
 	const struct komeda_dev_funcs *funcs = mdev->funcs;
 	int i;
 
-	sysfs_remove_group(&dev->kobj, &komeda_sysfs_attr_group);
+	if (mdev->sysfs_attr_enabled) {
+		sysfs_remove_group(&dev->kobj, &komeda_sysfs_attr_group);
+		mdev->sysfs_attr_enabled = false;
+	}
 
 	debugfs_remove_recursive(mdev->debugfs_root);
 

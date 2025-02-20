@@ -216,6 +216,8 @@ struct komeda_dev {
 #define KOMEDA_DEV_PRINT_DUMP_STATE_ON_EVENT BIT(8)
 	/* Disable rate limiting of event prints (normally one per commit) */
 #define KOMEDA_DEV_PRINT_DISABLE_RATELIMIT BIT(12)
+
+	bool sysfs_attr_enabled;
 };
 
 static inline bool
