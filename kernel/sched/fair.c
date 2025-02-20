@@ -5340,7 +5340,11 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 }
 
 static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
+
+/* cfs_rq is throttled either completely or partially */
 static inline int cfs_rq_throttled(struct cfs_rq *cfs_rq);
+/* cfs_rq is throttled completely and the hierarchy is frozen */
+static inline int cfs_rq_h_throttled(struct cfs_rq *cfs_rq);
 
 static void
 requeue_delayed_entity(struct sched_entity *se);
@@ -5404,7 +5408,7 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 #ifdef CONFIG_CFS_BANDWIDTH
 			struct rq *rq = rq_of(cfs_rq);
 
-			if (cfs_rq_throttled(cfs_rq) && !cfs_rq->throttled_clock)
+			if (cfs_rq_h_throttled(cfs_rq) && !cfs_rq->throttled_clock)
 				cfs_rq->throttled_clock = rq_clock(rq);
 			if (!cfs_rq->throttled_clock_self)
 				cfs_rq->throttled_clock_self = rq_clock(rq);
@@ -5448,7 +5452,7 @@ static void set_delayed(struct sched_entity *se)
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 		cfs_rq->h_nr_runnable--;
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq))
 			break;
 	}
 }
@@ -5470,7 +5474,7 @@ static void clear_delayed(struct sched_entity *se)
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 		cfs_rq->h_nr_runnable++;
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq))
 			break;
 	}
 }
@@ -5817,7 +5821,7 @@ static void __account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec)
 	if (likely(cfs_rq->runtime_remaining > 0))
 		return;
 
-	if (cfs_rq->throttled)
+	if (cfs_rq_throttled(cfs_rq))
 		return;
 	/*
 	 * if we're unable to extend our runtime we resched so that the active
@@ -5836,9 +5840,35 @@ void account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec)
 	__account_cfs_rq_runtime(cfs_rq, delta_exec);
 }
 
+/* cfs_rq->throttled states */
+enum throttle_state {
+	/*
+	 * cfs_rq is unthrottled; All the queued entities
+	 * can be picked to run.
+	 */
+	CFS_UNTHROTTLED = 0,
+	/*
+	 * cfs_rq is only marked throttled. There are kernel
+	 * mode preempted entities that are still runnable.
+	 * PELT is not frozen yet.
+	 */
+	CFS_THROTTLED_PARTIAL,
+	/*
+	 * cfs_rq is fully throttled with PELT frozen. There
+	 * are no entities that are considered runnable under
+	 * throttle.
+	 */
+	CFS_THROTTLED
+};
+
 static inline int cfs_rq_throttled(struct cfs_rq *cfs_rq)
 {
 	return cfs_bandwidth_used() && cfs_rq->throttled;
+}
+
+static inline int cfs_rq_h_throttled(struct cfs_rq *cfs_rq)
+{
+	return cfs_bandwidth_used() && (cfs_rq->throttled == CFS_THROTTLED);
 }
 
 /* check whether cfs_rq, or any parent, is throttled */
@@ -6011,7 +6041,7 @@ done:
 	 * Note: distribution will already see us throttled via the
 	 * throttled-list.  rq->lock protects completion.
 	 */
-	cfs_rq->throttled = 1;
+	cfs_rq->throttled = CFS_THROTTLED;
 	SCHED_WARN_ON(cfs_rq->throttled_clock);
 	if (cfs_rq->nr_queued)
 		cfs_rq->throttled_clock = rq_clock(rq);
@@ -6028,7 +6058,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
-	cfs_rq->throttled = 0;
+	cfs_rq->throttled = CFS_UNTHROTTLED;
 
 	update_rq_clock(rq);
 
@@ -6080,7 +6110,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->h_nr_idle += idle_delta;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(qcfs_rq))
+		if (cfs_rq_h_throttled(qcfs_rq))
 			goto unthrottle_throttle;
 	}
 
@@ -6098,7 +6128,7 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		qcfs_rq->h_nr_idle += idle_delta;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(qcfs_rq))
+		if (cfs_rq_h_throttled(qcfs_rq))
 			goto unthrottle_throttle;
 	}
 
@@ -6503,7 +6533,7 @@ static bool check_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 	 * it's possible for a throttled entity to be forced into a running
 	 * state (e.g. set_curr_task), in this case we're finished.
 	 */
-	if (cfs_rq_throttled(cfs_rq))
+	if (cfs_rq_h_throttled(cfs_rq))
 		return true;
 
 	return throttle_cfs_rq(cfs_rq);
@@ -7029,6 +7059,11 @@ static inline int cfs_rq_throttled(struct cfs_rq *cfs_rq)
 	return 0;
 }
 
+static inline int cfs_rq_h_throttled(struct cfs_rq *cfs_rq)
+{
+	return 0;
+}
+
 static inline int throttled_hierarchy(struct cfs_rq *cfs_rq)
 {
 	return 0;
@@ -7310,7 +7345,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq))
 			goto enqueue_throttle;
 
 		flags = ENQUEUE_WAKEUP;
@@ -7337,7 +7372,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq))
 			goto enqueue_throttle;
 	}
 
@@ -7431,7 +7466,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 			h_nr_idle = h_nr_queued;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq))
 			return 0;
 
 		/* Don't dequeue parent if it has other entities besides us */
@@ -7472,8 +7507,8 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = h_nr_queued;
 
-		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(cfs_rq))
+		/* end evaluation on encountering a throttled cfs_rq hierarchy */
+		if (cfs_rq_h_throttled(cfs_rq))
 			return 0;
 	}
 
@@ -13519,7 +13554,7 @@ static void propagate_entity_cfs_rq(struct sched_entity *se)
 {
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
-	if (cfs_rq_throttled(cfs_rq))
+	if (cfs_rq_h_throttled(cfs_rq))
 		return;
 
 	if (!throttled_hierarchy(cfs_rq))
@@ -13533,7 +13568,7 @@ static void propagate_entity_cfs_rq(struct sched_entity *se)
 
 		update_load_avg(cfs_rq, se, UPDATE_TG);
 
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq))
 			break;
 
 		if (!throttled_hierarchy(cfs_rq))
