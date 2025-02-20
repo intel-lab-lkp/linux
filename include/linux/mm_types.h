@@ -106,13 +106,27 @@ struct page {
 				pgoff_t index;		/* Our offset within mapping. */
 				unsigned long share;	/* share count for fsdax */
 			};
-			/**
-			 * @private: Mapping-private opaque data.
-			 * Usually used for buffer_heads if PagePrivate.
-			 * Used for swp_entry_t if swapcache flag set.
-			 * Indicates order in the buddy system if PageBuddy.
-			 */
-			unsigned long private;
+			union {
+				/**
+				 * @private: Mapping-private opaque data.
+				 * Usually used for buffer_heads if PagePrivate.
+				 * Used for swp_entry_t if swapcache flag set.
+				 * Indicates order in the buddy system if PageBuddy.
+				 */
+				unsigned long private;
+				struct {
+					/*
+					 * Indicates order in the buddy system if PageBuddy.
+					 */
+					unsigned short order;
+
+					/*
+					 * For tracking need of tlb flush,
+					 * by luf(lazy unmap flush).
+					 */
+					unsigned short luf_key;
+				};
+			};
 		};
 		struct {	/* page_pool used by netstack */
 			/**
@@ -535,6 +549,20 @@ static_assert(sizeof(struct ptdesc) <= sizeof(struct page));
 static inline void set_page_private(struct page *page, unsigned long private)
 {
 	page->private = private;
+}
+
+#define page_buddy_order(page)		((page)->order)
+
+static inline void set_page_buddy_order(struct page *page, unsigned int order)
+{
+	page->order = (unsigned short)order;
+}
+
+#define page_luf_key(page)		((page)->luf_key)
+
+static inline void set_page_luf_key(struct page *page, unsigned short luf_key)
+{
+	page->luf_key = luf_key;
 }
 
 static inline void *folio_get_private(struct folio *folio)
