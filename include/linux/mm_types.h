@@ -1279,10 +1279,12 @@ extern void tlb_finish_mmu(struct mmu_gather *tlb);
 void luf_flush(unsigned short luf_key);
 void luf_flush_mm(struct mm_struct *mm);
 void luf_flush_vma(struct vm_area_struct *vma);
+void luf_flush_mapping(struct address_space *mapping);
 #else
 static inline void luf_flush(unsigned short luf_key) {}
 static inline void luf_flush_mm(struct mm_struct *mm) {}
 static inline void luf_flush_vma(struct vm_area_struct *vma) {}
+static inline void luf_flush_mapping(struct address_space *mapping) {}
 #endif
 
 struct vm_fault;

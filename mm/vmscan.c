@@ -836,7 +836,7 @@ long remove_mapping(struct address_space *mapping, struct folio *folio)
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 
 	return ret;
 }

@@ -691,7 +691,7 @@ void fold_batch(struct tlbflush_unmap_batch *dst,
 #define NR_LUF_BATCH (1 << (sizeof(short) * 8))
 
 /*
- * Use 0th entry as accumulated batch.
+ * XXX: Reserve the 0th entry for later use.
  */
 struct luf_batch luf_batch[NR_LUF_BATCH];
 
@@ -936,7 +936,7 @@ void luf_flush_vma(struct vm_area_struct *vma)
 		mapping = vma->vm_file->f_mapping;
 
 	if (mapping)
-		luf_flush(0);
+		luf_flush_mapping(mapping);
 	luf_flush_mm(mm);
 }
 
@@ -961,6 +961,29 @@ void luf_flush_mm(struct mm_struct *mm)
 
 	try_to_unmap_flush();
 }
+
+void luf_flush_mapping(struct address_space *mapping)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct luf_batch *lb;
+	unsigned long flags;
+	unsigned long lb_ugen;
+
+	if (!mapping)
+		return;
+
+	lb = &mapping->luf_batch;
+	read_lock_irqsave(&lb->lock, flags);
+	fold_batch(tlb_ubc, &lb->batch, false);
+	lb_ugen = lb->ugen;
+	read_unlock_irqrestore(&lb->lock, flags);
+
+	if (arch_tlbbatch_diet(&tlb_ubc->arch, lb_ugen))
+		return;
+
+	try_to_unmap_flush();
+}
+EXPORT_SYMBOL(luf_flush_mapping);
 
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
@@ -1010,7 +1033,8 @@ void try_to_unmap_flush_dirty(void)
 
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 				      unsigned long uaddr,
-				      struct vm_area_struct *vma)
+				      struct vm_area_struct *vma,
+				      struct address_space *mapping)
 {
 	struct tlbflush_unmap_batch *tlb_ubc;
 	int batch;
@@ -1032,26 +1056,14 @@ static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 		tlb_ubc = &current->tlb_ubc;
 	else {
 		tlb_ubc = &current->tlb_ubc_ro;
+
 		fold_luf_batch_mm(&mm->luf_batch, mm);
+		if (mapping)
+			fold_luf_batch_mm(&mapping->luf_batch, mm);
 	}
 
 	arch_tlbbatch_add_pending(&tlb_ubc->arch, mm, uaddr);
 	tlb_ubc->flush_required = true;
-
-	if (can_luf_test()) {
-		struct luf_batch *lb;
-		unsigned long flags;
-
-		/*
-		 * Accumulate to the 0th entry right away so that
-		 * luf_flush(0) can be uesed to properly perform pending
-		 * TLB flush once this unmapping is observed.
-		 */
-		lb = &luf_batch[0];
-		write_lock_irqsave(&lb->lock, flags);
-		__fold_luf_batch(lb, tlb_ubc, new_luf_ugen());
-		write_unlock_irqrestore(&lb->lock, flags);
-	}
 
 	/*
 	 * Ensure compiler does not re-order the setting of tlb_flush_batched
@@ -1134,7 +1146,8 @@ void flush_tlb_batched_pending(struct mm_struct *mm)
 #else
 static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 				      unsigned long uaddr,
-				      struct vm_area_struct *vma)
+				      struct vm_area_struct *vma,
+				      struct address_space *mapping)
 {
 }
 
@@ -1503,7 +1516,7 @@ int folio_mkclean(struct folio *folio)
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 
 	return cleaned;
 }
@@ -2037,6 +2050,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
 	unsigned long pfn;
 	unsigned long hsz = 0;
+	struct address_space *mapping = folio_mapping(folio);
 
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
@@ -2174,7 +2188,7 @@ static bool try_to_unmap_one(struct folio *folio, struct vm_area_struct *vma,
 				 */
 				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 
-				set_tlb_ubc_flush_pending(mm, pteval, address, vma);
+				set_tlb_ubc_flush_pending(mm, pteval, address, vma, mapping);
 			} else {
 				pteval = ptep_clear_flush(vma, address, pvmw.pte);
 			}
@@ -2414,6 +2428,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	enum ttu_flags flags = (enum ttu_flags)(long)arg;
 	unsigned long pfn;
 	unsigned long hsz = 0;
+	struct address_space *mapping = folio_mapping(folio);
 
 	/*
 	 * When racing against e.g. zap_pte_range() on another cpu,
@@ -2563,7 +2578,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 				 */
 				pteval = ptep_get_and_clear(mm, address, pvmw.pte);
 
-				set_tlb_ubc_flush_pending(mm, pteval, address, vma);
+				set_tlb_ubc_flush_pending(mm, pteval, address, vma, mapping);
 			} else {
 				pteval = ptep_clear_flush(vma, address, pvmw.pte);
 			}

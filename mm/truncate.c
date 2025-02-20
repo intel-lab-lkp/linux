@@ -128,7 +128,7 @@ void folio_invalidate(struct folio *folio, size_t offset, size_t length)
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(folio->mapping);
 }
 EXPORT_SYMBOL_GPL(folio_invalidate);
 
@@ -170,7 +170,7 @@ int truncate_inode_folio(struct address_space *mapping, struct folio *folio)
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 	return 0;
 }
 
@@ -220,7 +220,7 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(folio->mapping);
 
 	if (!folio_test_large(folio))
 		return true;
@@ -282,7 +282,7 @@ out:
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 
 	return ret;
 }
@@ -417,7 +417,7 @@ out:
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 }
 EXPORT_SYMBOL(truncate_inode_pages_range);
 
@@ -537,7 +537,7 @@ unsigned long mapping_try_invalidate(struct address_space *mapping,
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 	return count;
 }
 
@@ -704,7 +704,7 @@ out:
 	/*
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
-	luf_flush(0);
+	luf_flush_mapping(mapping);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(invalidate_inode_pages2_range);

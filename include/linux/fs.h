@@ -461,6 +461,7 @@ extern const struct address_space_operations empty_aops;
  * @i_private_lock: For use by the owner of the address_space.
  * @i_private_list: For use by the owner of the address_space.
  * @i_private_data: For use by the owner of the address_space.
+ * @luf_batch: Data to track need of tlb flush by luf.
  */
 struct address_space {
 	struct inode		*host;
@@ -482,6 +483,7 @@ struct address_space {
 	struct list_head	i_private_list;
 	struct rw_semaphore	i_mmap_rwsem;
 	void *			i_private_data;
+	struct luf_batch	luf_batch;
 } __attribute__((aligned(sizeof(long)))) __randomize_layout;
 	/*
 	 * On most architectures that alignment is already the case; but
@@ -508,7 +510,7 @@ static inline int mapping_write_begin(struct file *file,
 	 * Ensure to clean stale tlb entries for this mapping.
 	 */
 	if (!ret)
-		luf_flush(0);
+		luf_flush_mapping(mapping);
 
 	return ret;
 }
