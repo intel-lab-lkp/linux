@@ -4016,7 +4016,6 @@ ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 	struct file *file = iocb->ki_filp;
 	loff_t pos = iocb->ki_pos;
 	struct address_space *mapping = file->f_mapping;
-	const struct address_space_operations *a_ops = mapping->a_ops;
 	size_t chunk = mapping_max_folio_size(mapping);
 	long status = 0;
 	ssize_t written = 0;
@@ -4050,7 +4049,7 @@ retry:
 			break;
 		}
 
-		status = a_ops->write_begin(file, mapping, pos, bytes,
+		status = mapping_write_begin(file, mapping, pos, bytes,
 						&folio, &fsdata);
 		if (unlikely(status < 0))
 			break;
@@ -4065,7 +4064,7 @@ retry:
 		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
 		flush_dcache_folio(folio);
 
-		status = a_ops->write_end(file, mapping, pos, bytes, copied,
+		status = mapping_write_end(file, mapping, pos, bytes, copied,
 						folio, fsdata);
 		if (unlikely(status != copied)) {
 			iov_iter_revert(i, copied - max(status, 0L));

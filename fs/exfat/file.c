@@ -539,7 +539,6 @@ static int exfat_extend_valid_size(struct file *file, loff_t new_valid_size)
 	struct inode *inode = file_inode(file);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
 	struct address_space *mapping = inode->i_mapping;
-	const struct address_space_operations *ops = mapping->a_ops;
 
 	pos = ei->valid_size;
 	while (pos < new_valid_size) {
@@ -550,11 +549,11 @@ static int exfat_extend_valid_size(struct file *file, loff_t new_valid_size)
 		if (pos + len > new_valid_size)
 			len = new_valid_size - pos;
 
-		err = ops->write_begin(file, mapping, pos, len, &folio, NULL);
+		err = mapping_write_begin(file, mapping, pos, len, &folio, NULL);
 		if (err)
 			goto out;
 
-		err = ops->write_end(file, mapping, pos, len, len, folio, NULL);
+		err = mapping_write_end(file, mapping, pos, len, len, folio, NULL);
 		if (err < 0)
 			goto out;
 		pos += len;

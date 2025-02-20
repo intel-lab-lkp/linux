@@ -2456,7 +2456,6 @@ EXPORT_SYMBOL(block_read_full_folio);
 int generic_cont_expand_simple(struct inode *inode, loff_t size)
 {
 	struct address_space *mapping = inode->i_mapping;
-	const struct address_space_operations *aops = mapping->a_ops;
 	struct folio *folio;
 	void *fsdata = NULL;
 	int err;
@@ -2465,11 +2464,11 @@ int generic_cont_expand_simple(struct inode *inode, loff_t size)
 	if (err)
 		goto out;
 
-	err = aops->write_begin(NULL, mapping, size, 0, &folio, &fsdata);
+	err = mapping_write_begin(NULL, mapping, size, 0, &folio, &fsdata);
 	if (err)
 		goto out;
 
-	err = aops->write_end(NULL, mapping, size, 0, 0, folio, fsdata);
+	err = mapping_write_end(NULL, mapping, size, 0, 0, folio, fsdata);
 	BUG_ON(err > 0);
 
 out:
@@ -2481,7 +2480,6 @@ static int cont_expand_zero(struct file *file, struct address_space *mapping,
 			    loff_t pos, loff_t *bytes)
 {
 	struct inode *inode = mapping->host;
-	const struct address_space_operations *aops = mapping->a_ops;
 	unsigned int blocksize = i_blocksize(inode);
 	struct folio *folio;
 	void *fsdata = NULL;
@@ -2501,12 +2499,12 @@ static int cont_expand_zero(struct file *file, struct address_space *mapping,
 		}
 		len = PAGE_SIZE - zerofrom;
 
-		err = aops->write_begin(file, mapping, curpos, len,
+		err = mapping_write_begin(file, mapping, curpos, len,
 					    &folio, &fsdata);
 		if (err)
 			goto out;
 		folio_zero_range(folio, offset_in_folio(folio, curpos), len);
-		err = aops->write_end(file, mapping, curpos, len, len,
+		err = mapping_write_end(file, mapping, curpos, len, len,
 						folio, fsdata);
 		if (err < 0)
 			goto out;
@@ -2534,12 +2532,12 @@ static int cont_expand_zero(struct file *file, struct address_space *mapping,
 		}
 		len = offset - zerofrom;
 
-		err = aops->write_begin(file, mapping, curpos, len,
+		err = mapping_write_begin(file, mapping, curpos, len,
 					    &folio, &fsdata);
 		if (err)
 			goto out;
 		folio_zero_range(folio, offset_in_folio(folio, curpos), len);
-		err = aops->write_end(file, mapping, curpos, len, len,
+		err = mapping_write_end(file, mapping, curpos, len, len,
 						folio, fsdata);
 		if (err < 0)
 			goto out;

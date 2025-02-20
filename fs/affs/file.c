@@ -885,9 +885,9 @@ affs_truncate(struct inode *inode)
 		loff_t isize = inode->i_size;
 		int res;
 
-		res = mapping->a_ops->write_begin(NULL, mapping, isize, 0, &folio, &fsdata);
+		res = mapping_write_begin(NULL, mapping, isize, 0, &folio, &fsdata);
 		if (!res)
-			res = mapping->a_ops->write_end(NULL, mapping, isize, 0, 0, folio, fsdata);
+			res = mapping_write_end(NULL, mapping, isize, 0, 0, folio, fsdata);
 		else
 			inode->i_size = AFFS_I(inode)->mmu_private;
 		mark_inode_dirty(inode);

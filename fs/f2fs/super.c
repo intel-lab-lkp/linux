@@ -2678,7 +2678,6 @@ static ssize_t f2fs_quota_write(struct super_block *sb, int type,
 {
 	struct inode *inode = sb_dqopt(sb)->files[type];
 	struct address_space *mapping = inode->i_mapping;
-	const struct address_space_operations *a_ops = mapping->a_ops;
 	int offset = off & (sb->s_blocksize - 1);
 	size_t towrite = len;
 	struct folio *folio;
@@ -2690,7 +2689,7 @@ static ssize_t f2fs_quota_write(struct super_block *sb, int type,
 		tocopy = min_t(unsigned long, sb->s_blocksize - offset,
 								towrite);
 retry:
-		err = a_ops->write_begin(NULL, mapping, off, tocopy,
+		err = mapping_write_begin(NULL, mapping, off, tocopy,
 							&folio, &fsdata);
 		if (unlikely(err)) {
 			if (err == -ENOMEM) {
@@ -2703,7 +2702,7 @@ retry:
 
 		memcpy_to_folio(folio, offset_in_folio(folio, off), data, tocopy);
 
-		a_ops->write_end(NULL, mapping, off, tocopy, tocopy,
+		mapping_write_end(NULL, mapping, off, tocopy, tocopy,
 						folio, fsdata);
 		offset = 0;
 		towrite -= tocopy;
