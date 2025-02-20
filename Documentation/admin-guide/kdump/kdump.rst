@@ -213,8 +213,7 @@ Dump-capture kernel config options (Arch Dependent, i386 and x86_64)
    kernel.
 
    Otherwise it should be the start of memory region reserved for
-   second kernel using boot parameter "crashkernel=Y@X". Here X is
-   start of memory region reserved for dump-capture kernel.
+   second kernel using boot parameter "crashkernel=Y@X". Here X is start of memory region reserved for dump-capture kernel.
    Generally X is 16MB (0x1000000). So you can set
    CONFIG_PHYSICAL_START=0x1000000
 
@@ -314,6 +313,22 @@ crashkernel syntax
       3) Specified value 0 will disable low memory allocation::
 
             crashkernel=0,low
+
+4) crashkernel=size,cma
+
+   Reserves additional memory from CMA. A standard crashkernel reservation, as
+   described above, is still needed, but can be just big enough to hold the
+   kernel and initrd. All the memory the crash kernel needs for its runtime and
+   for running the kdump userspace processes can be provided by this CMA
+   reservation, re-using memory available to the production system's userspace.
+   Because of this, the CMA reservation should not be used if kdump is configured
+   to dump userspace memory - the re-used memory ranges won't be in the vmcore.
+
+   This option increases the risk of a kdump failure: DMA transfers configured
+   by the first kernel may end up corrupting the second kernel's memory. This
+   reservation method is intended for systems that can't afford to sacrifice
+   enough memory for standard crashkernel reservation and where less reliable
+   kdump is preferrable to no kdump at all.
 
 Boot into System Kernel
 -----------------------
