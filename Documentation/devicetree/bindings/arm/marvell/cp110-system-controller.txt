@@ -164,6 +164,43 @@ Required properties:
 
 - offset: offset address inside the syscon block
 
+Reset Controller:
+-----------------
+
+For common binding part and usage, refer to
+Documentation/devicetree/bindings/reset/marvell,armada8k-reset.yaml.
+
+The Device Tree node representing this System Controller 0 provides a
+number of reset lines:
+
+The following reset lines are available:
+
+-  0: Audio Software RESETn
+-  1: TDM Software RESETn
+-  2: Interrupt controller unit Software RESETn
+-  3: Packet processor Software RESETn
+-  4: SDIO Software RESETn
+-  7: XOR-1 engine Software RESETn
+-  8: XOR-0 engine Software RESETn
+- 11: PCIe-0 Gen.3 x1 Software RESETn
+- 12: PCIe-1 Gen.3 x1 Software RESETn
+- 13: PCIe Gen.3 x4 Software RESETn
+- 15: SATA port 0 and port 1 Software RESETn
+- 22: USB3 Host 0 Software RESETn
+- 23: USB3 Host 1 Software RESETn
+- 24: USB3 Device Software RESETn
+- 25: EIP150F Software RESETn
+- 26: EIP197 Software RESETn
+- 29: MSS Software RESETn
+
+Required properties:
+
+ - compatible: "marvell,armada8k-reset"
+
+ - offset: offset address inside the syscon block
+
+ - #reset-cells: must be set to 1
+
 Example:
 
 CP110_LABEL(syscon0): system-controller@440000 {
@@ -186,6 +223,12 @@ CP110_LABEL(syscon0): system-controller@440000 {
 		gpio-controller;
 		#gpio-cells = <2>;
 		gpio-ranges = <&CP110_LABEL(pinctrl) 0 0 32>;
+	};
+
+	CP11X_LABEL(unit_swrst): reset-controller@268 {
+		compatible = "marvell,armada8k-reset";
+		offset = <0x268>;
+		#reset-cells = <1>;
 	};
 
 };
