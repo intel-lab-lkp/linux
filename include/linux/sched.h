@@ -577,7 +577,24 @@ struct sched_entity {
 	/* cached value of my_q->h_nr_running */
 	unsigned int			runnable_weight;
 	int				depth;
-#endif
+
+#ifdef CONFIG_CFS_BANDWIDTH
+	/*
+	 * Keep track of tasks, and cfs_rq(s) that contains tasks
+	 * running in kernel mode. Any throttling event for the
+	 * cfs_rq will be deferred until this count hits 0.
+	 *
+	 * Semantics:
+	 *
+	 * - For task: It represents if the task is currently
+	 *   running in kernel mode. It is always 0 or 1.
+	 *
+	 * TODO: Describe for sched_entity when implementing.
+	 */
+	int				kernel_cs_count;
+					/* hole */
+#endif /* CONFIG_CFS_BANDWIDTH */
+#endif /* CONFIG_FAIR_GROUP_SCHED */
 
 #ifdef CONFIG_SMP
 	/*

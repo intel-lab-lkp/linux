@@ -83,6 +83,8 @@ __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *regs, lon
 {
 	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
 
+	sched_notify_critical_section_entry();
+
 	if (work & SYSCALL_WORK_ENTER)
 		syscall = syscall_trace_enter(regs, syscall, work);
 
@@ -214,6 +216,11 @@ static __always_inline void __syscall_exit_to_user_mode_work(struct pt_regs *reg
 {
 	syscall_exit_to_user_mode_prepare(regs);
 	local_irq_disable_exit_to_user();
+	/*
+	 * Notify scheduler that the task is exiting to userspace after a
+	 * syscall. Must be called before checking for NEED_RESCHED work.
+	 */
+	sched_notify_critical_section_exit();
 	exit_to_user_mode_prepare(regs);
 }
 

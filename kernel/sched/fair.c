@@ -58,6 +58,8 @@
 #include "stats.h"
 #include "autogroup.h"
 
+#include "../entry/common.h" /* critical section entry / exit notifiers */
+
 /*
  * The initial- and re-scaling of tunables is configurable
  *
@@ -6704,6 +6706,20 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 	return false;
 }
 
+__always_inline void sched_notify_critical_section_entry(void)
+{
+	current->se.kernel_cs_count++;
+	/*
+	 * Post this point, the task is considered to be in a kernel
+	 * critical section and will defer bandwidth throttling.
+	 */
+}
+
+__always_inline void sched_notify_critical_section_exit(void)
+{
+	current->se.kernel_cs_count--;
+}
+
 #ifdef CONFIG_NO_HZ_FULL
 /* called from pick_next_task_fair() */
 static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
@@ -6772,6 +6788,10 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 	return false;
 }
 #endif
+
+__always_inline void sched_notify_critical_section_entry(void) {}
+__always_inline void sched_notify_critical_section_exit(void) {}
+
 #endif /* CONFIG_CFS_BANDWIDTH */
 
 #if !defined(CONFIG_CFS_BANDWIDTH) || !defined(CONFIG_NO_HZ_FULL)
