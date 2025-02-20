@@ -1364,6 +1364,18 @@ static inline void drv_wake_tx_queue(struct ieee80211_local *local,
 		return;
 
 	trace_drv_wake_tx_queue(local, sdata, txq);
+
+	/* Driver support for MPDU TXQ support is optional */
+	if (unlikely(txq->txq.tid == IEEE80211_NUM_TIDS &&
+		     ((sdata->vif.type == NL80211_IFTYPE_STATION &&
+		       !ieee80211_hw_check(&sdata->local->hw, STA_MMPDU_TXQ)) ||
+		      (sdata->vif.type != NL80211_IFTYPE_STATION &&
+		       !ieee80211_hw_check(&sdata->local->hw,
+					   BUFF_MMPDU_TXQ))))) {
+		ieee80211_handle_wake_tx_queue(&local->hw, &txq->txq);
+		return;
+	}
+
 	local->ops->wake_tx_queue(&local->hw, &txq->txq);
 }
 
