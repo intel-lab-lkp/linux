@@ -15,6 +15,9 @@ struct task_struct;
 struct pcpu_hot {
 	union {
 		struct {
+#ifdef CONFIG_STACKPROTECTOR
+			unsigned long		stack_canary;
+#endif
 			struct task_struct	*current_task;
 			int			preempt_count;
 			int			cpu_number;
@@ -34,6 +37,16 @@ struct pcpu_hot {
 	};
 };
 static_assert(sizeof(struct pcpu_hot) == 64);
+
+/*
+ * stack_canary should be at the beginning of struct pcpu_hot to avoid:
+ *
+ * Invalid absolute R_X86_64_32S relocation: __stack_chk_guard
+ *
+ * error when aliasing __stack_chk_guard to struct pcpu_hot
+ * - see arch/x86/kernel/vmlinux.lds.S.
+ */
+static_assert(offsetof(struct pcpu_hot, stack_canary) == 0);
 
 DECLARE_PER_CPU_ALIGNED(struct pcpu_hot, pcpu_hot);
 
