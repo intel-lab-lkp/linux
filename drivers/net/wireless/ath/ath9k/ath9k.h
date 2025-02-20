@@ -437,7 +437,7 @@ ath_node_to_tid(struct ath_node *an, u8 tidno)
 	if (sta)
 		txq = sta->txq[tidno % ARRAY_SIZE(sta->txq)];
 	else
-		txq = vif->txq;
+		txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 
 	return (struct ath_atx_tid *) txq->drv_priv;
 }

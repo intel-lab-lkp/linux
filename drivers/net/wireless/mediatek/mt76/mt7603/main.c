@@ -35,6 +35,7 @@ mt7603_stop(struct ieee80211_hw *hw, bool suspend)
 static int
 mt7603_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 {
+	struct ieee80211_txq *txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	struct mt7603_vif *mvif = (struct mt7603_vif *)vif->drv_priv;
 	struct mt7603_dev *dev = hw->priv;
 	struct mt76_txq *mtxq;
@@ -73,7 +74,7 @@ mt7603_add_interface(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	eth_broadcast_addr(bc_addr);
 	mt7603_wtbl_init(dev, idx, mvif->idx, bc_addr);
 
-	mtxq = (struct mt76_txq *)vif->txq->drv_priv;
+	mtxq = (struct mt76_txq *)txq->drv_priv;
 	mtxq->wcid = idx;
 	rcu_assign_pointer(dev->mt76.wcid[idx], &mvif->sta.wcid);
 

@@ -324,6 +324,7 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 {
 	struct ieee80211_local *local = sdata->local;
 	struct ieee80211_vif *vif = &sdata->vif;
+	struct ieee80211_txq *txq_mc = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	struct fq *fq = &local->fq;
 	struct ps_data *ps = NULL;
 	struct txq_info *txqi;
@@ -364,13 +365,13 @@ static void __ieee80211_wake_txqs(struct ieee80211_sub_if_data *sdata, int ac)
 		}
 	}
 
-	if (!vif->txq)
+	if (!txq_mc)
 		goto out;
 
-	txqi = to_txq_info(vif->txq);
+	txqi = to_txq_info(txq_mc);
 
 	if (!test_and_clear_bit(IEEE80211_TXQ_DIRTY, &txqi->flags) ||
-	    (ps && atomic_read(&ps->num_sta_ps)) || ac != vif->txq->ac)
+	    (ps && atomic_read(&ps->num_sta_ps)) || ac != txq_mc->ac)
 		goto out;
 
 	spin_unlock(&fq->lock);

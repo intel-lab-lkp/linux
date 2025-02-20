@@ -204,6 +204,7 @@ static void mt7915_init_bitrate_mask(struct ieee80211_vif *vif)
 static int mt7915_add_interface(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif)
 {
+	struct ieee80211_txq *txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	struct mt7915_vif *mvif = (struct mt7915_vif *)vif->drv_priv;
 	struct mt7915_dev *dev = mt7915_hw_dev(hw);
 	struct mt7915_phy *phy = mt7915_hw_phy(hw);
@@ -259,9 +260,8 @@ static int mt7915_add_interface(struct ieee80211_hw *hw,
 
 	mt7915_mac_wtbl_update(dev, idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
-
-	if (vif->txq) {
-		mtxq = (struct mt76_txq *)vif->txq->drv_priv;
+	if (txq) {
+		mtxq = (struct mt76_txq *)txq->drv_priv;
 		mtxq->wcid = idx;
 	}
 

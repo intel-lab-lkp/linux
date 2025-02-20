@@ -4634,12 +4634,16 @@ static int ieee80211_get_txq_stats(struct wiphy *wiphy,
 	rcu_read_lock();
 
 	if (wdev) {
+		struct ieee80211_txq *txq;
+
 		sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
-		if (!sdata->vif.txq) {
+		txq = sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST];
+
+		if (!txq) {
 			ret = 1;
 			goto out;
 		}
-		ieee80211_fill_txq_stats(txqstats, to_txq_info(sdata->vif.txq));
+		ieee80211_fill_txq_stats(txqstats, to_txq_info(txq));
 	} else {
 		/* phy stats */
 		txqstats->filled |= BIT(NL80211_TXQ_STATS_BACKLOG_PACKETS) |

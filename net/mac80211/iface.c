@@ -2237,6 +2237,8 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 
 void ieee80211_if_remove(struct ieee80211_sub_if_data *sdata)
 {
+	struct ieee80211_txq *txq = sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST];
+
 	ASSERT_RTNL();
 	lockdep_assert_wiphy(sdata->local->hw.wiphy);
 
@@ -2244,8 +2246,8 @@ void ieee80211_if_remove(struct ieee80211_sub_if_data *sdata)
 	list_del_rcu(&sdata->list);
 	mutex_unlock(&sdata->local->iflist_mtx);
 
-	if (sdata->vif.txq)
-		ieee80211_txq_purge(sdata->local, to_txq_info(sdata->vif.txq));
+	if (txq)
+		ieee80211_txq_purge(sdata->local, to_txq_info(txq));
 
 	synchronize_rcu();
 

@@ -181,7 +181,7 @@ static int rtw89_ops_add_interface(struct ieee80211_hw *hw,
 
 	rtw89_init_vif(rtwdev, rtwvif, mac_id, port);
 
-	rtw89_core_txq_init(rtwdev, vif->txq);
+	rtw89_core_txq_init(rtwdev, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 	if (!rtw89_rtwvif_in_list(rtwdev, rtwvif)) {
 		list_add_tail(&rtwvif->list, &rtwdev->rtwvifs_list);

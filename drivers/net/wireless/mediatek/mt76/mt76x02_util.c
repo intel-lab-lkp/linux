@@ -280,6 +280,7 @@ static void
 mt76x02_vif_init(struct mt76x02_dev *dev, struct ieee80211_vif *vif,
 		 unsigned int idx)
 {
+	struct ieee80211_txq *txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	struct mt76x02_vif *mvif = (struct mt76x02_vif *)vif->drv_priv;
 	struct mt76_txq *mtxq;
 
@@ -289,7 +290,7 @@ mt76x02_vif_init(struct mt76x02_dev *dev, struct ieee80211_vif *vif,
 	mvif->group_wcid.idx = MT_VIF_WCID(idx);
 	mt76_wcid_init(&mvif->group_wcid, 0);
 
-	mtxq = (struct mt76_txq *)vif->txq->drv_priv;
+	mtxq = (struct mt76_txq *)txq->drv_priv;
 	rcu_assign_pointer(dev->mt76.wcid[MT_VIF_WCID(idx)], &mvif->group_wcid);
 	mtxq->wcid = MT_VIF_WCID(idx);
 }

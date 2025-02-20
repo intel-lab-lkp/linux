@@ -1321,7 +1321,7 @@ static struct txq_info *ieee80211_get_txq(struct ieee80211_local *local,
 
 		txq = sta->sta.txq[tid];
 	} else {
-		txq = vif->txq;
+		txq = vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	}
 
 	if (!txq)
@@ -1485,10 +1485,10 @@ void ieee80211_txq_remove_vlan(struct ieee80211_local *local,
 
 	ap = container_of(sdata->bss, struct ieee80211_sub_if_data, u.ap);
 
-	if (!ap->vif.txq)
+	if (!ap->vif.txq[IEEE80211_VIF_TXQ_MULTICAST])
 		return;
 
-	txqi = to_txq_info(ap->vif.txq);
+	txqi = to_txq_info(ap->vif.txq[IEEE80211_VIF_TXQ_MULTICAST]);
 	tin = &txqi->tin;
 
 	spin_lock_bh(&fq->lock);
@@ -1510,7 +1510,7 @@ void ieee80211_txq_init(struct ieee80211_sub_if_data *sdata,
 	txqi->txq.vif = &sdata->vif;
 
 	if (!sta) {
-		sdata->vif.txq = &txqi->txq;
+		sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST] = &txqi->txq;
 		txqi->txq.tid = 0;
 		txqi->txq.ac = IEEE80211_AC_BE;
 

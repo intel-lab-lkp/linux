@@ -4297,7 +4297,7 @@ struct ieee80211_txq *ath10k_mac_txq_lookup(struct ath10k *ar,
 	if (peer->sta)
 		return peer->sta->txq[tid];
 	else if (peer->vif)
-		return peer->vif->txq;
+		return peer->vif->txq[IEEE80211_VIF_TXQ_MULTICAST];
 	else
 		return NULL;
 }
@@ -5539,7 +5539,7 @@ static int ath10k_add_interface(struct ieee80211_hw *hw,
 	mutex_lock(&ar->conf_mutex);
 
 	memset(arvif, 0, sizeof(*arvif));
-	ath10k_mac_txq_init(vif->txq);
+	ath10k_mac_txq_init(vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 	arvif->ar = ar;
 	arvif->vif = vif;
@@ -5985,7 +5985,7 @@ static void ath10k_remove_interface(struct ieee80211_hw *hw,
 	spin_unlock_bh(&ar->data_lock);
 
 	ath10k_peer_cleanup(ar, arvif->vdev_id);
-	ath10k_mac_txq_unref(ar, vif->txq);
+	ath10k_mac_txq_unref(ar, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 	if (vif->type == NL80211_IFTYPE_MONITOR) {
 		ar->monitor_arvif = NULL;
@@ -6002,7 +6002,7 @@ static void ath10k_remove_interface(struct ieee80211_hw *hw,
 	ath10k_mac_vif_tx_unlock_all(arvif);
 	spin_unlock_bh(&ar->htt.tx_lock);
 
-	ath10k_mac_txq_unref(ar, vif->txq);
+	ath10k_mac_txq_unref(ar, vif->txq[IEEE80211_VIF_TXQ_MULTICAST]);
 
 out:
 	mutex_unlock(&ar->conf_mutex);
