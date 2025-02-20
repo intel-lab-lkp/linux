@@ -523,6 +523,9 @@ static int se_is_idle(struct sched_entity *se)
 
 static __always_inline
 void account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec);
+static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se);
+static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se);
+static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta);
 
 /**************************************************************
  * Scheduling class tree data structure manipulation methods:
@@ -630,6 +633,7 @@ avg_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	cfs_rq->avg_vruntime += key * weight;
 	cfs_rq->avg_load += weight;
+	avg_kcs_vruntime_add(cfs_rq, se);
 }
 
 static void
@@ -640,6 +644,7 @@ avg_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 	cfs_rq->avg_vruntime -= key * weight;
 	cfs_rq->avg_load -= weight;
+	avg_kcs_vruntime_sub(cfs_rq, se);
 }
 
 static inline
@@ -649,6 +654,7 @@ void avg_vruntime_update(struct cfs_rq *cfs_rq, s64 delta)
 	 * v' = v + d ==> avg_vruntime' = avg_runtime - d*avg_load
 	 */
 	cfs_rq->avg_vruntime -= cfs_rq->avg_load * delta;
+	avg_kcs_vruntime_update(cfs_rq, delta);
 }
 
 /*
@@ -6720,6 +6726,58 @@ __always_inline void sched_notify_critical_section_exit(void)
 	current->se.kernel_cs_count--;
 }
 
+static inline int se_in_kernel(struct sched_entity *se)
+{
+	return se->kernel_cs_count;
+}
+
+/*
+ * Same as avg_vruntime_add() except avg_kcs_vruntime_add() only adjusts the avg_kcs_vruntime
+ * and avg_kcs_load of kernel mode preempted entity when it joins the rbtree.
+ */
+static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight;
+	s64 key;
+
+	if (!se_in_kernel(se))
+		return;
+
+	weight = scale_load_down(se->load.weight);
+	key = entity_key(cfs_rq, se);
+
+	cfs_rq->avg_kcs_vruntime += key * weight;
+	cfs_rq->avg_kcs_load += weight;
+}
+
+/*
+ * Same as avg_vruntime_sub() except avg_kcs_vruntime_sub() only adjusts the avg_kcs_vruntime
+ * and avg_kcs_load of kernel mode preempted entity when it leaves the rbtree.
+ */
+static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	unsigned long weight;
+	s64 key;
+
+	if (!se_in_kernel(se))
+		return;
+
+	weight = scale_load_down(se->load.weight);
+	key = entity_key(cfs_rq, se);
+
+	cfs_rq->avg_kcs_vruntime -= key * weight;
+	cfs_rq->avg_kcs_load -= weight;
+}
+
+/*
+ * Same as avg_vruntime_update() except it adjusts avg_kcs_vruntime based on avg_kcs_load
+ * when min_vruntime of the cfs_rq changes.
+ */
+static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta)
+{
+	cfs_rq->avg_kcs_vruntime -= cfs_rq->avg_kcs_load * delta;
+}
+
 #ifdef CONFIG_NO_HZ_FULL
 /* called from pick_next_task_fair() */
 static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
@@ -6791,6 +6849,10 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 
 __always_inline void sched_notify_critical_section_entry(void) {}
 __always_inline void sched_notify_critical_section_exit(void) {}
+
+static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
+static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
+static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta) {}
 
 #endif /* CONFIG_CFS_BANDWIDTH */
 
