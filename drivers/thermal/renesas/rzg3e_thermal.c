@@ -83,6 +83,19 @@
 #define TSU_TIMEOUT_US		10000
 #define TSU_MIN_CLOCK_RATE	24000000
 
+/*
+ * Number of consecutive errors before shutdown
+ *
+ * While simulating thermal sensor failure, we have noticed that the thermal
+ * core tries to fetch the temperature a couple times and then disable the
+ * thermal zone device. In case of extreme heat, this might lead to SoC
+ * destruction.
+ *
+ * Let's prevent this by limitating the number of failure and panic in
+ * case it happens.
+ */
+#define MAX_TEMP_READ_ERRORS       10
+
 /**
  * struct rzg3e_thermal_priv - RZ/G3E thermal private data structure
  * @base: TSU base address
@@ -93,6 +106,7 @@
  * @conv_complete: ADC conversion completion
  * @reg_lock: protect shared register access
  * @cached_temp: last computed temperature (milliCelsius)
+ * @error_count: Track consecutive errors
  * @trmval: trim (calibration) values
  */
 struct rzg3e_thermal_priv {
@@ -104,6 +118,7 @@ struct rzg3e_thermal_priv {
 	struct completion conv_complete;
 	spinlock_t reg_lock;
 	int cached_temp;
+	atomic_t error_count;
 	u32 trmval[2];
 };
 
@@ -200,6 +215,7 @@ static irqreturn_t rzg3e_thermal_adc_irq(int irq, void *dev_id)
 static int rzg3e_thermal_get_temp(struct thermal_zone_device *zone, int *temp)
 {
 	struct rzg3e_thermal_priv *priv = thermal_zone_device_priv(zone);
+	int error_count;
 	u32 val;
 	int ret;
 
@@ -217,7 +233,7 @@ static int rzg3e_thermal_get_temp(struct thermal_zone_device *zone, int *temp)
 					TSU_POLL_DELAY_US, TSU_TIMEOUT_US);
 	if (ret) {
 		dev_err(priv->dev, "ADC conversion timed out\n");
-		return ret;
+		goto handle_error;
 	}
 
 	/* Start conversion */
@@ -225,15 +241,33 @@ static int rzg3e_thermal_get_temp(struct thermal_zone_device *zone, int *temp)
 
 	if (!wait_for_completion_timeout(&priv->conv_complete,
 					 msecs_to_jiffies(100))) {
+		ret = -ETIMEDOUT;
 		dev_err(priv->dev, "ADC conversion completion timeout\n");
-		return -ETIMEDOUT;
+		goto handle_error;
 	}
 
 	scoped_guard(spinlock_irqsave, &priv->reg_lock) {
 		*temp = priv->cached_temp;
 	}
 
+	/* Reset error count on successful read */
+	atomic_set(&priv->error_count, 0);
 	return 0;
+
+handle_error:
+	error_count = atomic_inc_return(&priv->error_count);
+	if (error_count >= MAX_TEMP_READ_ERRORS) {
+		dev_emerg(priv->dev,
+			"Failed to read temperature %d times, initiating emergency shutdown\n",
+			error_count);
+		mdelay(100);
+		panic("Temperature sensor failure - emergency shutdown");
+	}
+
+	dev_err(priv->dev, "Failed to read temperature (error %d), attempt %d/%d\n",
+		ret, error_count, MAX_TEMP_READ_ERRORS);
+
+	return ret;
 }
 
 /* Convert temperature in milliCelsius to raw sensor code */
