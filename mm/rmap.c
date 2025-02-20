@@ -634,6 +634,28 @@ out:
 }
 
 #ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+
+/*
+ * This generation number is primarily used as a global timestamp to
+ * determine whether tlb flush required has been done on each CPU.  The
+ * function, ugen_before(), should be used to evaluate the temporal
+ * sequence of events because the number is designed to wraparound.
+ */
+static atomic_long_t __maybe_unused luf_ugen = ATOMIC_LONG_INIT(LUF_UGEN_INIT);
+
+/*
+ * Don't return invalid luf_ugen, zero.
+ */
+static unsigned long __maybe_unused new_luf_ugen(void)
+{
+	unsigned long ugen = atomic_long_inc_return(&luf_ugen);
+
+	if (!ugen)
+		ugen = atomic_long_inc_return(&luf_ugen);
+
+	return ugen;
+}
+
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
  * important if a PTE was dirty when it was unmapped that it's flushed

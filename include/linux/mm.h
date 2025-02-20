@@ -4161,4 +4161,38 @@ static inline int do_mseal(unsigned long start, size_t len_in, unsigned long fla
 }
 #endif
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+/*
+ * luf_ugen will start with 2 so that 1 can be regarded as a passed one.
+ */
+#define LUF_UGEN_INIT 2
+
+static inline bool ugen_before(unsigned long a, unsigned long b)
+{
+	/*
+	 * Consider wraparound.
+	 */
+	return (long)(a - b) < 0;
+}
+
+static inline unsigned long next_ugen(unsigned long ugen)
+{
+	if (ugen + 1)
+		return ugen + 1;
+	/*
+	 * Avoid invalid ugen, zero.
+	 */
+	return ugen + 2;
+}
+
+static inline unsigned long prev_ugen(unsigned long ugen)
+{
+	if (ugen - 1)
+		return ugen - 1;
+	/*
+	 * Avoid invalid ugen, zero.
+	 */
+	return ugen - 2;
+}
+#endif
 #endif /* _LINUX_MM_H */
