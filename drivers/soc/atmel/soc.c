@@ -26,6 +26,7 @@
 #define AT91_CIDR_VERSION_MASK_SAMA7G5	GENMASK(3, 0)
 #define AT91_CIDR_EXT			BIT(31)
 #define AT91_CIDR_MATCH_MASK		GENMASK(30, 5)
+#define AT91_CIDR_VALUE_MASK		GENMASK(30, 0)
 #define AT91_CIDR_MASK_SAMA7G5		GENMASK(27, 5)
 
 static const struct at91_soc socs[] __initconst = {
@@ -102,26 +103,26 @@ static const struct at91_soc socs[] __initconst = {
 		 "sam9x60 8MiB SDRAM SiP", "sam9x60"),
 #endif
 #ifdef CONFIG_SOC_SAM9X7
-	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_MATCH_MASK,
-		 AT91_CIDR_VERSION_MASK, SAM9X70_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X70_EXID_MATCH,
 		 "sam9x70", "sam9x7"),
-	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_MATCH_MASK,
-		 AT91_CIDR_VERSION_MASK, SAM9X72_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X72_EXID_MATCH,
 		 "sam9x72", "sam9x7"),
-	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_MATCH_MASK,
-		 AT91_CIDR_VERSION_MASK, SAM9X75_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X75_EXID_MATCH,
 		 "sam9x75", "sam9x7"),
-	AT91_SOC(SAM9X7_CIDR_MATCH, SAM9X75_D1M_EXID_MATCH,
-		 AT91_CIDR_VERSION_MASK, SAM9X75_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X75_D1M_EXID_MATCH,
 		 "sam9x75 16MB DDR2 SiP", "sam9x7"),
-	AT91_SOC(SAM9X7_CIDR_MATCH, SAM9X75_D5M_EXID_MATCH,
-		 AT91_CIDR_VERSION_MASK, SAM9X75_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X75_D5M_EXID_MATCH,
 		 "sam9x75 64MB DDR2 SiP", "sam9x7"),
-	AT91_SOC(SAM9X7_CIDR_MATCH, SAM9X75_D1G_EXID_MATCH,
-		 AT91_CIDR_VERSION_MASK, SAM9X75_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X75_D1G_EXID_MATCH,
 		 "sam9x75 125MB DDR3L SiP ", "sam9x7"),
-	AT91_SOC(SAM9X7_CIDR_MATCH, SAM9X75_D2G_EXID_MATCH,
-		 AT91_CIDR_VERSION_MASK, SAM9X75_EXID_MATCH,
+	AT91_SOC(SAM9X7_CIDR_MATCH, AT91_CIDR_VALUE_MASK,
+		 0, SAM9X75_D2G_EXID_MATCH,
 		 "sam9x75 250MB DDR3L SiP", "sam9x7"),
 #endif
 #ifdef CONFIG_SOC_SAMA5
@@ -370,8 +371,10 @@ struct soc_device * __init at91_soc_init(const struct at91_soc *socs)
 
 	soc_dev_attr->family = soc->family;
 	soc_dev_attr->soc_id = soc->name;
-	soc_dev_attr->revision = kasprintf(GFP_KERNEL, "%X",
-					   AT91_CIDR_VERSION(cidr, soc->version_mask));
+	if (soc->version_mask)
+		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "%X",
+						   AT91_CIDR_VERSION(cidr, soc->version_mask));
+
 	soc_dev = soc_device_register(soc_dev_attr);
 	if (IS_ERR(soc_dev)) {
 		kfree(soc_dev_attr->revision);
@@ -382,8 +385,11 @@ struct soc_device * __init at91_soc_init(const struct at91_soc *socs)
 
 	if (soc->family)
 		pr_info("Detected SoC family: %s\n", soc->family);
-	pr_info("Detected SoC: %s, revision %X\n", soc->name,
-		AT91_CIDR_VERSION(cidr, soc->version_mask));
+	if (soc->version_mask)
+		pr_info("Detected SoC: %s, revision %X\n", soc->name,
+			AT91_CIDR_VERSION(cidr, soc->version_mask));
+	else
+		pr_info("Detected SoC: %s\n", soc->name);
 
 	return soc_dev;
 }
