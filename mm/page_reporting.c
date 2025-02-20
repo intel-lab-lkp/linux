@@ -170,7 +170,7 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 	if (free_area_empty(area, mt))
 		return err;
 
-	can_shootdown = luf_takeoff_start();
+	can_shootdown = luf_takeoff_start(zone);
 	spin_lock_irq(&zone->lock);
 
 	/*
@@ -250,7 +250,7 @@ retry:
 		/* update budget to reflect call to report function */
 		budget--;
 
-		luf_takeoff_start();
+		luf_takeoff_start(zone);
 
 		/* reacquire zone lock and resume processing */
 		spin_lock_irq(&zone->lock);

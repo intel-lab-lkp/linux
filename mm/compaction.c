@@ -605,7 +605,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 
 	page = pfn_to_page(blockpfn);
 
-	luf_takeoff_start();
+	luf_takeoff_start(cc->zone);
 	/* Isolate free pages. */
 	for (; blockpfn < end_pfn; blockpfn += stride, page += stride) {
 		int isolated;
@@ -1601,7 +1601,7 @@ static void fast_isolate_freepages(struct compact_control *cc)
 		if (!area->nr_free)
 			continue;
 
-		can_shootdown = luf_takeoff_start();
+		can_shootdown = luf_takeoff_start(cc->zone);
 		spin_lock_irqsave(&cc->zone->lock, flags);
 		freelist = &area->free_list[MIGRATE_MOVABLE];
 retry:
@@ -2413,7 +2413,7 @@ static enum compact_result compact_finished(struct compact_control *cc)
 	 * luf_takeoff_{start,end}() is required to identify whether
 	 * this compaction context is tlb shootdownable for luf'd pages.
 	 */
-	luf_takeoff_start();
+	luf_takeoff_start(cc->zone);
 	ret = __compact_finished(cc);
 	luf_takeoff_end(cc->zone);
 

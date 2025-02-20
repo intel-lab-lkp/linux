@@ -623,22 +623,25 @@ compaction_capture(struct capture_control *capc, struct page *page,
 #endif /* CONFIG_COMPACTION */
 
 #if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
-static bool no_shootdown_context(void)
+static bool no_shootdown_context(struct zone *zone)
 {
 	/*
-	 * If it performs with irq disabled, that might cause a deadlock.
-	 * Avoid tlb shootdown in this case.
+	 * Tries to avoid tlb shootdown if !preemptible().  However, it
+	 * should be allowed under heavy memory pressure.
 	 */
+	if (zone && non_luf_pages_ok(zone))
+		return !(preemptible() && in_task());
+
 	return !(!irqs_disabled() && in_task());
 }
 
 /*
  * Can be called with zone lock released and irq enabled.
  */
-bool luf_takeoff_start(void)
+bool luf_takeoff_start(struct zone *zone)
 {
 	unsigned long flags;
-	bool no_shootdown = no_shootdown_context();
+	bool no_shootdown = no_shootdown_context(zone);
 
 	local_irq_save(flags);
 
@@ -2588,7 +2591,7 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 		 * luf_takeoff_{start,end}() is required for
 		 * get_page_from_free_area() to use luf_takeoff_check().
 		 */
-		luf_takeoff_start();
+		luf_takeoff_start(zone);
 		spin_lock_irqsave(&zone->lock, flags);
 		for (order = 0; order < NR_PAGE_ORDERS; order++) {
 			struct free_area *area = &(zone->free_area[order]);
@@ -2829,7 +2832,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	unsigned long flags;
 	int i;
 
-	luf_takeoff_start();
+	luf_takeoff_start(zone);
 	spin_lock_irqsave(&zone->lock, flags);
 	for (i = 0; i < count; ++i) {
 		struct page *page = __rmqueue(zone, order, migratetype,
@@ -3455,7 +3458,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 
 	do {
 		page = NULL;
-		luf_takeoff_start();
+		luf_takeoff_start(zone);
 		spin_lock_irqsave(&zone->lock, flags);
 		if (alloc_flags & ALLOC_HIGHATOMIC)
 			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
@@ -3600,7 +3603,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	struct page *page;
 	unsigned long __maybe_unused UP_flags;
 
-	luf_takeoff_start();
+	luf_takeoff_start(NULL);
 	/* spin_trylock may fail due to a parallel drain or IRQ reentrancy. */
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
@@ -5229,7 +5232,7 @@ retry_this_zone:
 	if (unlikely(!zone))
 		goto failed;
 
-	luf_takeoff_start();
+	luf_takeoff_start(NULL);
 	/* spin_trylock may fail due to a parallel drain or IRQ reentrancy. */
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
@@ -7418,7 +7421,7 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 
 	offline_mem_sections(pfn, end_pfn);
 	zone = page_zone(pfn_to_page(pfn));
-	luf_takeoff_start();
+	luf_takeoff_start(zone);
 	spin_lock_irqsave(&zone->lock, flags);
 	while (pfn < end_pfn) {
 		page = pfn_to_page(pfn);
@@ -7536,7 +7539,7 @@ bool take_page_off_buddy(struct page *page)
 	unsigned int order;
 	bool ret = false;
 
-	luf_takeoff_start();
+	luf_takeoff_start(zone);
 	spin_lock_irqsave(&zone->lock, flags);
 	for (order = 0; order < NR_PAGE_ORDERS; order++) {
 		struct page *page_head = page - (pfn & ((1 << order) - 1));
