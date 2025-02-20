@@ -103,7 +103,7 @@ static const unsigned long long freq_range_lpf[4][2] = {
 	{2050000000ULL, 3850000000ULL},
 	{3350000000ULL, 7250000000ULL},
 	{7000000000, 13000000000},
-	{12550000000, 18500000000}
+	{12550000000, 18850000000}
 };
 
 static const struct regmap_config admv8818_regmap_config = {
@@ -122,41 +122,57 @@ static const char * const admv8818_modes[] = {
 static int __admv8818_hpf_select(struct admv8818_state *st, u64 freq)
 {
 	unsigned int hpf_step = 0, hpf_band = 0, i, j;
+	u64 freq_error;
+	u64 min_freq_error;
+	u64 freq_corner;
 	u64 freq_step;
 	int ret;
 
 	if (freq < freq_range_hpf[0][0])
 		goto hpf_write;
 
-	if (freq > freq_range_hpf[3][1]) {
+	if (freq >= freq_range_hpf[3][1]) {
 		hpf_step = 15;
 		hpf_band = 4;
 
 		goto hpf_write;
 	}
 
+	/* Close HPF frequency gap between 12 and 12.5 GHz */
+	if (freq >= 12000 * HZ_PER_MHZ && freq < 12500 * HZ_PER_MHZ) {
+		hpf_step = 15;
+		hpf_band = 3;
+
+		goto hpf_write;
+	}
+
+	min_freq_error = U64_MAX;
 	for (i = 0; i < 4; i++) {
+		/* This (and therefore all other ranges) have a corner
+		 * frequency higher than the target frequency.
+		 */
+		if (freq_range_hpf[i][0] > freq)
+			break;
+
 		freq_step = div_u64((freq_range_hpf[i][1] -
 			freq_range_hpf[i][0]), 15);
 
-		if (freq > freq_range_hpf[i][0] &&
-		    (freq < freq_range_hpf[i][1] + freq_step)) {
-			hpf_band = i + 1;
+		for (j = 0; j <= 15; j++) {
+			freq_corner = freq_range_hpf[i][0] + (freq_step * j);
 
-			for (j = 1; j <= 16; j++) {
-				if (freq < (freq_range_hpf[i][0] + (freq_step * j))) {
-					hpf_step = j - 1;
-					break;
-				}
+			/* This (and therefore all other steps) have a corner
+			 * frequency higher than the target frequency.
+			 */
+			if (freq_corner > freq)
+				break;
+
+			freq_error = freq - freq_corner;
+			if (freq_error < min_freq_error) {
+				min_freq_error = freq_error;
+				hpf_step = j;
+				hpf_band = i + 1;
 			}
-			break;
 		}
-	}
-
-	/* Close HPF frequency gap between 12 and 12.5 GHz */
-	if (freq >= 12000 * HZ_PER_MHZ && freq <= 12500 * HZ_PER_MHZ) {
-		hpf_band = 3;
-		hpf_step = 15;
 	}
 
 hpf_write:
@@ -186,7 +202,11 @@ static int admv8818_hpf_select(struct admv8818_state *st, u64 freq)
 
 static int __admv8818_lpf_select(struct admv8818_state *st, u64 freq)
 {
-	unsigned int lpf_step = 0, lpf_band = 0, i, j;
+	int i, j;
+	unsigned int lpf_step = 0, lpf_band = 0;
+	u64 freq_error;
+	u64 min_freq_error;
+	u64 freq_corner;
 	u64 freq_step;
 	int ret;
 
@@ -199,18 +219,34 @@ static int __admv8818_lpf_select(struct admv8818_state *st, u64 freq)
 		goto lpf_write;
 	}
 
-	for (i = 0; i < 4; i++) {
-		if (freq > freq_range_lpf[i][0] && freq < freq_range_lpf[i][1]) {
-			lpf_band = i + 1;
-			freq_step = div_u64((freq_range_lpf[i][1] - freq_range_lpf[i][0]), 15);
-
-			for (j = 0; j <= 15; j++) {
-				if (freq < (freq_range_lpf[i][0] + (freq_step * j))) {
-					lpf_step = j;
-					break;
-				}
-			}
+	min_freq_error = U64_MAX;
+	for (i = 3; i >= 0; --i) {
+		/* At this point the highest corner frequency of
+		 * all remaining ranges is below the target.
+		 * LPF corner should be >= the target.
+		 */
+		if (freq > freq_range_lpf[i][1])
 			break;
+
+		freq_step = div_u64((freq_range_lpf[i][1] - freq_range_lpf[i][0]), 15);
+
+		for (j = 15; j >= 0; --j) {
+
+			freq_corner = freq_range_lpf[i][0] + j*freq_step;
+
+			/* At this point all other steps in range will
+			 * place the corner frequency below the target
+			 * LPF corner should >= the target.
+			 */
+			if (freq > freq_corner)
+				break;
+
+			freq_error = freq_corner - freq;
+			if (freq_error < min_freq_error) {
+				min_freq_error = freq_error;
+				lpf_step = j;
+				lpf_band = i + 1;
+			}
 		}
 	}
 
