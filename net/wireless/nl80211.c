@@ -1873,6 +1873,12 @@ nl80211_send_iftype_data(struct sk_buff *msg,
 		return -ENOBUFS;
 
 	if (he_cap->has_he) {
+		u8 mcs_nss_size, ppe_thresh_size;
+
+		mcs_nss_size = ieee80211_he_mcs_nss_size(&he_cap->he_cap_elem);
+		ppe_thresh_size = ieee80211_he_ppe_size(he_cap->ppe_thres[0],
+					he_cap->he_cap_elem.phy_cap_info);
+
 		if (nla_put(msg, NL80211_BAND_IFTYPE_ATTR_HE_CAP_MAC,
 			    sizeof(he_cap->he_cap_elem.mac_cap_info),
 			    he_cap->he_cap_elem.mac_cap_info) ||
@@ -1880,10 +1886,9 @@ nl80211_send_iftype_data(struct sk_buff *msg,
 			    sizeof(he_cap->he_cap_elem.phy_cap_info),
 			    he_cap->he_cap_elem.phy_cap_info) ||
 		    nla_put(msg, NL80211_BAND_IFTYPE_ATTR_HE_CAP_MCS_SET,
-			    sizeof(he_cap->he_mcs_nss_supp),
-			    &he_cap->he_mcs_nss_supp) ||
+			    mcs_nss_size, &he_cap->he_mcs_nss_supp) ||
 		    nla_put(msg, NL80211_BAND_IFTYPE_ATTR_HE_CAP_PPE,
-			    sizeof(he_cap->ppe_thres), he_cap->ppe_thres))
+			    ppe_thresh_size, he_cap->ppe_thres))
 			return -ENOBUFS;
 	}
 
