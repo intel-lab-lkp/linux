@@ -499,8 +499,18 @@ static inline int mapping_write_begin(struct file *file,
 				loff_t pos, unsigned len,
 				struct folio **foliop, void **fsdata)
 {
-	return mapping->a_ops->write_begin(file, mapping, pos, len, foliop,
+	int ret;
+
+	ret = mapping->a_ops->write_begin(file, mapping, pos, len, foliop,
 			fsdata);
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	if (!ret)
+		luf_flush(0);
+
+	return ret;
 }
 
 static inline int mapping_write_end(struct file *file,

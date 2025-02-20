@@ -6081,6 +6081,7 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	struct mm_struct *mm = vma->vm_mm;
 	vm_fault_t ret;
 	bool is_droppable;
+	bool flush = false;
 
 	__set_current_state(TASK_RUNNING);
 
@@ -6105,6 +6106,14 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 		mem_cgroup_enter_user_fault();
 
 	lru_gen_enter_fault(vma);
+
+	/*
+	 * Any potential cases that make pte writable even forcely
+	 * should be considered.
+	 */
+	if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE) ||
+			flags & FAULT_FLAG_WRITE)
+		flush = true;
 
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
@@ -6136,6 +6145,12 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	}
 out:
 	mm_account_fault(mm, regs, address, flags, ret);
+
+	/*
+	 * Ensure to clean stale tlb entries for this vma.
+	 */
+	if (flush)
+		luf_flush(0);
 
 	return ret;
 }

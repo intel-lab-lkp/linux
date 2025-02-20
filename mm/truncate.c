@@ -124,6 +124,11 @@ void folio_invalidate(struct folio *folio, size_t offset, size_t length)
 
 	if (aops->invalidate_folio)
 		aops->invalidate_folio(folio, offset, length);
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
 }
 EXPORT_SYMBOL_GPL(folio_invalidate);
 
@@ -161,6 +166,11 @@ int truncate_inode_folio(struct address_space *mapping, struct folio *folio)
 
 	truncate_cleanup_folio(folio);
 	filemap_remove_folio(folio);
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
 	return 0;
 }
 
@@ -206,6 +216,12 @@ bool truncate_inode_partial_folio(struct folio *folio, loff_t start, loff_t end)
 
 	if (folio_needs_release(folio))
 		folio_invalidate(folio, offset, length);
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
+
 	if (!folio_test_large(folio))
 		return true;
 	if (split_folio(folio) == 0)
@@ -247,19 +263,28 @@ EXPORT_SYMBOL(generic_error_remove_folio);
  */
 long mapping_evict_folio(struct address_space *mapping, struct folio *folio)
 {
+	long ret = 0;
+
 	/* The page may have been truncated before it was locked */
 	if (!mapping)
-		return 0;
+		goto out;
 	if (folio_test_dirty(folio) || folio_test_writeback(folio))
-		return 0;
+		goto out;
 	/* The refcount will be elevated if any page in the folio is mapped */
 	if (folio_ref_count(folio) >
 			folio_nr_pages(folio) + folio_has_private(folio) + 1)
-		return 0;
+		goto out;
 	if (!filemap_release_folio(folio, 0))
-		return 0;
+		goto out;
 
-	return remove_mapping(mapping, folio);
+	ret = remove_mapping(mapping, folio);
+out:
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
+
+	return ret;
 }
 
 /**
@@ -299,7 +324,7 @@ void truncate_inode_pages_range(struct address_space *mapping,
 	bool		same_folio;
 
 	if (mapping_empty(mapping))
-		return;
+		goto out;
 
 	/*
 	 * 'start' and 'end' always covers the range of pages to be fully
@@ -387,6 +412,12 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		truncate_folio_batch_exceptionals(mapping, &fbatch, indices);
 		folio_batch_release(&fbatch);
 	}
+
+out:
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
 }
 EXPORT_SYMBOL(truncate_inode_pages_range);
 
@@ -502,6 +533,11 @@ unsigned long mapping_try_invalidate(struct address_space *mapping,
 		folio_batch_release(&fbatch);
 		cond_resched();
 	}
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
 	return count;
 }
 
@@ -594,7 +630,7 @@ int invalidate_inode_pages2_range(struct address_space *mapping,
 	int did_range_unmap = 0;
 
 	if (mapping_empty(mapping))
-		return 0;
+		goto out;
 
 	folio_batch_init(&fbatch);
 	index = start;
@@ -664,6 +700,11 @@ int invalidate_inode_pages2_range(struct address_space *mapping,
 	if (dax_mapping(mapping)) {
 		unmap_mapping_pages(mapping, start, end - start + 1, false);
 	}
+out:
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(invalidate_inode_pages2_range);

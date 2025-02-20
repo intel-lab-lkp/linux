@@ -549,6 +549,11 @@ static inline void tlb_start_vma(struct mmu_gather *tlb, struct vm_area_struct *
 
 static inline void tlb_end_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
 {
+	/*
+	 * Don't leave stale tlb entries for this vma.
+	 */
+	luf_flush(0);
+
 	if (tlb->fullmm)
 		return;
 

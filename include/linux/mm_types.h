@@ -1270,6 +1270,12 @@ extern void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm);
 extern void tlb_gather_mmu_fullmm(struct mmu_gather *tlb, struct mm_struct *mm);
 extern void tlb_finish_mmu(struct mmu_gather *tlb);
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+void luf_flush(unsigned short luf_key);
+#else
+static inline void luf_flush(unsigned short luf_key) {}
+#endif
+
 struct vm_fault;
 
 /**
