@@ -869,8 +869,13 @@ static inline void del_page_from_free_list(struct page *page, struct zone *zone,
 static inline struct page *get_page_from_free_area(struct free_area *area,
 					    int migratetype)
 {
-	return list_first_entry_or_null(&area->free_list[migratetype],
+	struct page *page = list_first_entry_or_null(&area->free_list[migratetype],
 					struct page, buddy_list);
+
+	if (page && luf_takeoff_check(page))
+		return page;
+
+	return NULL;
 }
 
 /*
@@ -1579,6 +1584,8 @@ static __always_inline void page_del_and_expand(struct zone *zone,
 	int nr_pages = 1 << high;
 
 	__del_page_from_free_list(page, zone, high, migratetype);
+	if (unlikely(!luf_takeoff_check_and_fold(page)))
+		VM_WARN_ON(1);
 	nr_pages -= expand(zone, page, low, high, migratetype);
 	account_freepages(zone, -nr_pages, migratetype);
 }
@@ -1950,6 +1957,13 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(buddy, zone, order,
 					get_pfnblock_migratetype(buddy, pfn));
+
+		/*
+		 * No need to luf_takeoff_check_and_fold() since it's
+		 * going back to buddy. luf_key will be handed over in
+		 * split_large_buddy().
+		 */
+
 		set_pageblock_migratetype(page, migratetype);
 		split_large_buddy(zone, buddy, pfn, order, FPI_NONE);
 		return true;
@@ -1961,6 +1975,13 @@ bool move_freepages_block_isolate(struct zone *zone, struct page *page,
 
 		del_page_from_free_list(page, zone, order,
 					get_pfnblock_migratetype(page, pfn));
+
+		/*
+		 * No need to luf_takeoff_check_and_fold() since it's
+		 * going back to buddy. luf_key will be handed over in
+		 * split_large_buddy().
+		 */
+
 		set_pageblock_migratetype(page, migratetype);
 		split_large_buddy(zone, page, pfn, order, FPI_NONE);
 		return true;
@@ -2085,6 +2106,8 @@ steal_suitable_fallback(struct zone *zone, struct page *page,
 		unsigned int nr_added;
 
 		del_page_from_free_list(page, zone, current_order, block_type);
+		if (unlikely(!luf_takeoff_check_and_fold(page)))
+			VM_WARN_ON(1);
 		change_pageblock_range(page, current_order, start_type);
 		nr_added = expand(zone, page, order, current_order, start_type);
 		account_freepages(zone, nr_added, start_type);
@@ -2163,6 +2186,9 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 	for (i = 0; i < MIGRATE_PCPTYPES - 1 ; i++) {
 		fallback_mt = fallbacks[migratetype][i];
 		if (free_area_empty(area, fallback_mt))
+			continue;
+
+		if (luf_takeoff_no_shootdown())
 			continue;
 
 		if (can_steal_fallback(order, migratetype))
@@ -2256,6 +2282,11 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 					pageblock_nr_pages)
 			continue;
 
+		/*
+		 * luf_takeoff_{start,end}() is required for
+		 * get_page_from_free_area() to use luf_takeoff_check().
+		 */
+		luf_takeoff_start();
 		spin_lock_irqsave(&zone->lock, flags);
 		for (order = 0; order < NR_PAGE_ORDERS; order++) {
 			struct free_area *area = &(zone->free_area[order]);
@@ -2313,10 +2344,12 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 			WARN_ON_ONCE(ret == -1);
 			if (ret > 0) {
 				spin_unlock_irqrestore(&zone->lock, flags);
+				luf_takeoff_end();
 				return ret;
 			}
 		}
 		spin_unlock_irqrestore(&zone->lock, flags);
+		luf_takeoff_end();
 	}
 
 	return false;
@@ -2494,6 +2527,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	unsigned long flags;
 	int i;
 
+	luf_takeoff_start();
 	spin_lock_irqsave(&zone->lock, flags);
 	for (i = 0; i < count; ++i) {
 		struct page *page = __rmqueue(zone, order, migratetype,
@@ -2518,6 +2552,10 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 		list_add_tail(&page->pcp_list, list);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 
 	return i;
 }
@@ -3012,7 +3050,7 @@ void split_page(struct page *page, unsigned int order)
 }
 EXPORT_SYMBOL_GPL(split_page);
 
-int __isolate_free_page(struct page *page, unsigned int order)
+int __isolate_free_page(struct page *page, unsigned int order, bool willputback)
 {
 	struct zone *zone = page_zone(page);
 	int mt = get_pageblock_migratetype(page);
@@ -3031,6 +3069,8 @@ int __isolate_free_page(struct page *page, unsigned int order)
 	}
 
 	del_page_from_free_list(page, zone, order, mt);
+	if (unlikely(!willputback && !luf_takeoff_check_and_fold(page)))
+		VM_WARN_ON(1);
 
 	/*
 	 * Set the pageblock if the isolated page is at least half of a
@@ -3110,6 +3150,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 
 	do {
 		page = NULL;
+		luf_takeoff_start();
 		spin_lock_irqsave(&zone->lock, flags);
 		if (alloc_flags & ALLOC_HIGHATOMIC)
 			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
@@ -3127,10 +3168,15 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 
 			if (!page) {
 				spin_unlock_irqrestore(&zone->lock, flags);
+				luf_takeoff_end();
 				return NULL;
 			}
 		}
 		spin_unlock_irqrestore(&zone->lock, flags);
+		/*
+		 * Check and flush before using the pages taken off.
+		 */
+		luf_takeoff_end();
 	} while (check_new_pages(page, order));
 
 	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
@@ -3214,6 +3260,8 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 		}
 
 		page = list_first_entry(list, struct page, pcp_list);
+		if (!luf_takeoff_check_and_fold(page))
+			return NULL;
 		list_del(&page->pcp_list);
 		pcp->count -= 1 << order;
 	} while (check_new_pages(page, order));
@@ -3231,11 +3279,13 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	struct page *page;
 	unsigned long __maybe_unused UP_flags;
 
+	luf_takeoff_start();
 	/* spin_trylock may fail due to a parallel drain or IRQ reentrancy. */
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 	if (!pcp) {
 		pcp_trylock_finish(UP_flags);
+		luf_takeoff_end();
 		return NULL;
 	}
 
@@ -3249,6 +3299,10 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	page = __rmqueue_pcplist(zone, order, migratetype, alloc_flags, pcp, list);
 	pcp_spin_unlock(pcp);
 	pcp_trylock_finish(UP_flags);
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 	if (page) {
 		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
 		zone_statistics(preferred_zone, zone, 1);
@@ -4853,6 +4907,7 @@ retry_this_zone:
 	if (unlikely(!zone))
 		goto failed;
 
+	luf_takeoff_start();
 	/* spin_trylock may fail due to a parallel drain or IRQ reentrancy. */
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
@@ -4891,6 +4946,10 @@ retry_this_zone:
 
 	pcp_spin_unlock(pcp);
 	pcp_trylock_finish(UP_flags);
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 
 	__count_zid_vm_events(PGALLOC, zone_idx(zone), nr_account);
 	zone_statistics(zonelist_zone(ac.preferred_zoneref), zone, nr_account);
@@ -4900,6 +4959,7 @@ out:
 
 failed_irq:
 	pcp_trylock_finish(UP_flags);
+	luf_takeoff_end();
 
 failed:
 	page = __alloc_pages_noprof(gfp, 0, preferred_nid, nodemask);
@@ -7036,6 +7096,7 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 
 	offline_mem_sections(pfn, end_pfn);
 	zone = page_zone(pfn_to_page(pfn));
+	luf_takeoff_start();
 	spin_lock_irqsave(&zone->lock, flags);
 	while (pfn < end_pfn) {
 		page = pfn_to_page(pfn);
@@ -7064,9 +7125,15 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 		VM_WARN_ON(get_pageblock_migratetype(page) != MIGRATE_ISOLATE);
 		order = buddy_order(page);
 		del_page_from_free_list(page, zone, order, MIGRATE_ISOLATE);
+		if (unlikely(!luf_takeoff_check_and_fold(page)))
+			VM_WARN_ON(1);
 		pfn += (1 << order);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 
 	return end_pfn - start_pfn - already_offline;
 }
@@ -7142,6 +7209,7 @@ bool take_page_off_buddy(struct page *page)
 	unsigned int order;
 	bool ret = false;
 
+	luf_takeoff_start();
 	spin_lock_irqsave(&zone->lock, flags);
 	for (order = 0; order < NR_PAGE_ORDERS; order++) {
 		struct page *page_head = page - (pfn & ((1 << order) - 1));
@@ -7154,6 +7222,8 @@ bool take_page_off_buddy(struct page *page)
 
 			del_page_from_free_list(page_head, zone, page_order,
 						migratetype);
+			if (unlikely(!luf_takeoff_check_and_fold(page_head)))
+				VM_WARN_ON(1);
 			break_down_buddy_pages(zone, page_head, page, 0,
 						page_order, migratetype);
 			SetPageHWPoisonTakenOff(page);
@@ -7164,6 +7234,11 @@ bool take_page_off_buddy(struct page *page)
 			break;
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
+
+	/*
+	 * Check and flush before using the pages taken off.
+	 */
+	luf_takeoff_end();
 	return ret;
 }
 
