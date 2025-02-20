@@ -695,7 +695,7 @@ void fold_batch(struct tlbflush_unmap_batch *dst,
  */
 struct luf_batch luf_batch[NR_LUF_BATCH];
 
-static void luf_batch_init(struct luf_batch *lb)
+void luf_batch_init(struct luf_batch *lb)
 {
 	rwlock_init(&lb->lock);
 	reset_batch(&lb->batch);
@@ -776,6 +776,31 @@ void fold_luf_batch(struct luf_batch *dst, struct luf_batch *src)
 
 	write_unlock(&dst->lock);
 	read_unlock_irqrestore(&src->lock, flags);
+}
+
+static void fold_luf_batch_mm(struct luf_batch *dst,
+		struct mm_struct *mm)
+{
+	unsigned long flags;
+	bool need_fold = false;
+
+	read_lock_irqsave(&dst->lock, flags);
+	if (arch_tlbbatch_need_fold(&dst->batch.arch, mm))
+		need_fold = true;
+	read_unlock(&dst->lock);
+
+	write_lock(&dst->lock);
+	if (unlikely(need_fold))
+		arch_tlbbatch_add_pending(&dst->batch.arch, mm, 0);
+
+	/*
+	 * dst->ugen represents sort of request for tlb shootdown.  The
+	 * newer it is, the more tlb shootdown might be needed to
+	 * fulfill the newer request.  Keep the newest one not to miss
+	 * necessary tlb shootdown.
+	 */
+	dst->ugen = new_luf_ugen();
+	write_unlock_irqrestore(&dst->lock, flags);
 }
 
 static unsigned long tlb_flush_start(void)
@@ -894,6 +919,49 @@ void luf_flush(unsigned short luf_key)
 }
 EXPORT_SYMBOL(luf_flush);
 
+void luf_flush_vma(struct vm_area_struct *vma)
+{
+	struct mm_struct *mm;
+	struct address_space *mapping = NULL;
+
+	if (!vma)
+		return;
+
+	mm = vma->vm_mm;
+	/*
+	 * Doesn't care the !VM_SHARED cases because it won't
+	 * update the pages that might be shared with others.
+	 */
+	if (vma->vm_flags & VM_SHARED && vma->vm_file)
+		mapping = vma->vm_file->f_mapping;
+
+	if (mapping)
+		luf_flush(0);
+	luf_flush_mm(mm);
+}
+
+void luf_flush_mm(struct mm_struct *mm)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct luf_batch *lb;
+	unsigned long flags;
+	unsigned long lb_ugen;
+
+	if (!mm)
+		return;
+
+	lb = &mm->luf_batch;
+	read_lock_irqsave(&lb->lock, flags);
+	fold_batch(tlb_ubc, &lb->batch, false);
+	lb_ugen = lb->ugen;
+	read_unlock_irqrestore(&lb->lock, flags);
+
+	if (arch_tlbbatch_diet(&tlb_ubc->arch, lb_ugen))
+		return;
+
+	try_to_unmap_flush();
+}
+
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
  * important if a PTE was dirty when it was unmapped that it's flushed
@@ -962,8 +1030,10 @@ static void set_tlb_ubc_flush_pending(struct mm_struct *mm, pte_t pteval,
 
 	if (!can_luf_test())
 		tlb_ubc = &current->tlb_ubc;
-	else
+	else {
 		tlb_ubc = &current->tlb_ubc_ro;
+		fold_luf_batch_mm(&mm->luf_batch, mm);
+	}
 
 	arch_tlbbatch_add_pending(&tlb_ubc->arch, mm, uaddr);
 	tlb_ubc->flush_required = true;
