@@ -309,6 +309,7 @@ void sas_free_device(struct kref *kref)
 
 	kfree(dev);
 }
+EXPORT_SYMBOL_GPL(sas_free_device);
 
 static void sas_unregister_common_dev(struct asd_sas_port *port, struct domain_device *dev)
 {

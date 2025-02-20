@@ -98,7 +98,6 @@ int sas_get_phy_attached_dev(struct domain_device *dev, int phy_id,
 			     u8 *sas_addr, enum sas_device_type *type);
 int sas_try_ata_reset(struct asd_sas_phy *phy);
 
-void sas_free_device(struct kref *kref);
 void sas_destruct_devices(struct asd_sas_port *port);
 
 extern const work_func_t sas_phy_event_fns[PHY_NUM_EVENTS];
@@ -215,11 +214,6 @@ static inline struct domain_device *sas_alloc_device(void)
 		spin_lock_init(&dev->done_lock);
 	}
 	return dev;
-}
-
-static inline void sas_put_device(struct domain_device *dev)
-{
-	kref_put(&dev->kref, sas_free_device);
 }
 
 #endif /* _SAS_INTERNAL_H_ */

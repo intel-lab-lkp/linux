@@ -425,6 +425,12 @@ static inline void sas_put_local_phy(struct sas_phy *phy)
 	put_device(&phy->dev);
 }
 
+void sas_free_device(struct kref *kref);
+static inline void sas_put_device(struct domain_device *dev)
+{
+	kref_put(&dev->kref, sas_free_device);
+}
+
 #ifdef CONFIG_SCSI_SAS_HOST_SMP
 int try_test_sas_gpio_gp_bit(unsigned int od, u8 *data, u8 index, u8 count);
 #else
