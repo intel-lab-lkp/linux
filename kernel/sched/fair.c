@@ -5894,13 +5894,37 @@ static inline int throttled_lb_pair(struct task_group *tg,
 	       throttled_hierarchy(dest_cfs_rq);
 }
 
+static __always_inline int se_in_kernel(struct sched_entity *se);
+static inline int ignore_task_kcs_stats(struct task_struct *p);
+
 static enum throttle_state
 determine_throttle_state(struct cfs_rq *gcfs_rq, struct sched_entity *se)
 {
+	struct sched_entity *curr = gcfs_rq->curr;
+
+	if (se_in_kernel(se))
+		return CFS_THROTTLED_PARTIAL;
+
 	/*
-	 * TODO: Implement rest once plumbing for
-	 * CFS_THROTTLED_PARTIAL is done.
+	 * Check if current task's hierarchy needs throttle deferral.
+	 * For save / restore operations, cfs_rq->curr could still be
+	 * set but the task has already been dequeued by the time
+	 * put_prev_task() is called. Only check if gcfs_rq->curr is
+	 * set to check the current task's indicator. If the hierarchy
+	 * leads to a queued task executing in kernel or is having its
+	 * stats ignored, request a partial throttle.
+	 *
+	 * set_nex_task_fair() will request resched if throttle status
+	 * changes once stats are reconsidred.
 	 */
+	if (curr) {
+		struct task_struct *p = rq_of(gcfs_rq)->curr;
+
+		if (task_on_rq_queued(p) &&
+		    (ignore_task_kcs_stats(p) || se_in_kernel(&p->se)))
+			return CFS_THROTTLED_PARTIAL;
+	}
+
 	return CFS_THROTTLED;
 }
 
@@ -7180,9 +7204,6 @@ static void unthrottle_throttled(struct cfs_rq *gcfs_rq, bool in_kernel)
 {
 	struct rq *rq = rq_of(gcfs_rq);
 	struct sched_entity *se = gcfs_rq->tg->se[cpu_of(rq)];
-
-	/* TODO: Remove this early return once plumbing is done */
-	return;
 
 	/*
 	 * Demoting a cfs_rq to partial throttle will trigger a
