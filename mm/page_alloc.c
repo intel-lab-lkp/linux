@@ -212,7 +212,7 @@ unsigned int pageblock_order __read_mostly;
 #endif
 
 static void __free_pages_ok(struct page *page, unsigned int order,
-			    fpi_t fpi_flags);
+			    fpi_t fpi_flags, unsigned short luf_key);
 
 /*
  * results with 256, 32 in the lowmem_reserve sysctl:
@@ -850,8 +850,13 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 
 	list_del(&page->buddy_list);
 	__ClearPageBuddy(page);
-	set_page_private(page, 0);
 	zone->free_area[order].nr_free--;
+
+	/*
+	 * Keep head page's private until post_alloc_hook().
+	 *
+	 * XXX: Tail pages' private doesn't get cleared.
+	 */
 }
 
 static inline void del_page_from_free_list(struct page *page, struct zone *zone,
@@ -920,7 +925,7 @@ buddy_merge_likely(unsigned long pfn, unsigned long buddy_pfn,
 static inline void __free_one_page(struct page *page,
 		unsigned long pfn,
 		struct zone *zone, unsigned int order,
-		int migratetype, fpi_t fpi_flags)
+		int migratetype, fpi_t fpi_flags, unsigned short luf_key)
 {
 	struct capture_control *capc = task_capc(zone);
 	unsigned long buddy_pfn = 0;
@@ -937,10 +942,21 @@ static inline void __free_one_page(struct page *page,
 
 	account_freepages(zone, 1 << order, migratetype);
 
+	/*
+	 * Use the page's luf_key unchanged if luf_key == 0.  Worth
+	 * noting that page_luf_key() will be 0 in most cases since it's
+	 * initialized at free_pages_prepare().
+	 */
+	if (luf_key)
+		set_page_luf_key(page, luf_key);
+	else
+		luf_key = page_luf_key(page);
+
 	while (order < MAX_PAGE_ORDER) {
 		int buddy_mt = migratetype;
+		unsigned short buddy_luf_key;
 
-		if (compaction_capture(capc, page, order, migratetype)) {
+		if (!luf_key && compaction_capture(capc, page, order, migratetype)) {
 			account_freepages(zone, -(1 << order), migratetype);
 			return;
 		}
@@ -973,6 +989,18 @@ static inline void __free_one_page(struct page *page,
 		else
 			__del_page_from_free_list(buddy, zone, order, buddy_mt);
 
+		/*
+		 * !buddy_luf_key && !luf_key : do nothing
+		 *  buddy_luf_key && !luf_key : luf_key = buddy_luf_key
+		 * !buddy_luf_key &&  luf_key : do nothing
+		 *  buddy_luf_key &&  luf_key : merge two into luf_key
+		 */
+		buddy_luf_key = page_luf_key(buddy);
+		if (buddy_luf_key && !luf_key)
+			luf_key = buddy_luf_key;
+		else if (buddy_luf_key && luf_key)
+			fold_luf_batch(&luf_batch[luf_key], &luf_batch[buddy_luf_key]);
+
 		if (unlikely(buddy_mt != migratetype)) {
 			/*
 			 * Match buddy type. This ensures that an
@@ -984,6 +1012,7 @@ static inline void __free_one_page(struct page *page,
 
 		combined_pfn = buddy_pfn & pfn;
 		page = page + (combined_pfn - pfn);
+		set_page_luf_key(page, luf_key);
 		pfn = combined_pfn;
 		order++;
 	}
@@ -1164,6 +1193,11 @@ __always_inline bool free_pages_prepare(struct page *page,
 
 	VM_BUG_ON_PAGE(PageTail(page), page);
 
+	/*
+	 * Ensure private is zero before using it inside allocator.
+	 */
+	set_page_private(page, 0);
+
 	trace_mm_page_free(page, order);
 	kmsan_free_page(page, order);
 
@@ -1329,7 +1363,8 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 			count -= nr_pages;
 			pcp->count -= nr_pages;
 
-			__free_one_page(page, pfn, zone, order, mt, FPI_NONE);
+			__free_one_page(page, pfn, zone, order, mt, FPI_NONE, 0);
+
 			trace_mm_page_pcpu_drain(page, order, mt);
 		} while (count > 0 && !list_empty(list));
 	}
@@ -1353,7 +1388,7 @@ static void split_large_buddy(struct zone *zone, struct page *page,
 	while (pfn != end) {
 		int mt = get_pfnblock_migratetype(page, pfn);
 
-		__free_one_page(page, pfn, zone, order, mt, fpi);
+		__free_one_page(page, pfn, zone, order, mt, fpi, 0);
 		pfn += 1 << order;
 		page = pfn_to_page(pfn);
 	}
@@ -1361,11 +1396,18 @@ static void split_large_buddy(struct zone *zone, struct page *page,
 
 static void free_one_page(struct zone *zone, struct page *page,
 			  unsigned long pfn, unsigned int order,
-			  fpi_t fpi_flags)
+			  fpi_t fpi_flags, unsigned short luf_key)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&zone->lock, flags);
+
+	/*
+	 * valid luf_key can be passed only if order == 0.
+	 */
+	VM_WARN_ON(luf_key && order);
+	set_page_luf_key(page, luf_key);
+
 	split_large_buddy(zone, page, pfn, order, fpi_flags);
 	spin_unlock_irqrestore(&zone->lock, flags);
 
@@ -1373,13 +1415,13 @@ static void free_one_page(struct zone *zone, struct page *page,
 }
 
 static void __free_pages_ok(struct page *page, unsigned int order,
-			    fpi_t fpi_flags)
+			    fpi_t fpi_flags, unsigned short luf_key)
 {
 	unsigned long pfn = page_to_pfn(page);
 	struct zone *zone = page_zone(page);
 
 	if (free_pages_prepare(page, order))
-		free_one_page(zone, page, pfn, order, fpi_flags);
+		free_one_page(zone, page, pfn, order, fpi_flags, luf_key);
 }
 
 void __meminit __free_pages_core(struct page *page, unsigned int order,
@@ -1433,7 +1475,7 @@ void __meminit __free_pages_core(struct page *page, unsigned int order,
 	 * Bypass PCP and place fresh pages right to the tail, primarily
 	 * relevant for memory onlining.
 	 */
-	__free_pages_ok(page, order, FPI_TO_TAIL);
+	__free_pages_ok(page, order, FPI_TO_TAIL, 0);
 }
 
 /*
@@ -2460,6 +2502,10 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 			break;
 
 		/*
+		 * Keep the page's luf_key.
+		 */
+
+		/*
 		 * Split buddy pages returned by expand() are received here in
 		 * physical page order. The page is added to the tail of
 		 * caller's list. From the callers perspective, the linked list
@@ -2740,11 +2786,13 @@ static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
 
 static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 				   struct page *page, int migratetype,
-				   unsigned int order)
+				   unsigned int order, unsigned short luf_key)
 {
 	int high, batch;
 	int pindex;
 	bool free_high = false;
+
+	set_page_luf_key(page, luf_key);
 
 	/*
 	 * On freeing, reduce the number of pages that are batch allocated.
@@ -2754,7 +2802,16 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 	pcp->alloc_factor >>= 1;
 	__count_vm_events(PGFREE, 1 << order);
 	pindex = order_to_pindex(migratetype, order);
-	list_add(&page->pcp_list, &pcp->lists[pindex]);
+
+	/*
+	 * Defer tlb shootdown as much as possible by putting luf'd
+	 * pages to the tail.
+	 */
+	if (luf_key)
+		list_add_tail(&page->pcp_list, &pcp->lists[pindex]);
+	else
+		list_add(&page->pcp_list, &pcp->lists[pindex]);
+
 	pcp->count += 1 << order;
 
 	batch = READ_ONCE(pcp->batch);
@@ -2789,7 +2846,8 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 /*
  * Free a pcp page
  */
-void free_unref_page(struct page *page, unsigned int order)
+void free_unref_page(struct page *page, unsigned int order,
+		     unsigned short luf_key)
 {
 	unsigned long __maybe_unused UP_flags;
 	struct per_cpu_pages *pcp;
@@ -2798,7 +2856,7 @@ void free_unref_page(struct page *page, unsigned int order)
 	int migratetype;
 
 	if (!pcp_allowed_order(order)) {
-		__free_pages_ok(page, order, FPI_NONE);
+		__free_pages_ok(page, order, FPI_NONE, luf_key);
 		return;
 	}
 
@@ -2815,7 +2873,7 @@ void free_unref_page(struct page *page, unsigned int order)
 	migratetype = get_pfnblock_migratetype(page, pfn);
 	if (unlikely(migratetype >= MIGRATE_PCPTYPES)) {
 		if (unlikely(is_migrate_isolate(migratetype))) {
-			free_one_page(page_zone(page), page, pfn, order, FPI_NONE);
+			free_one_page(page_zone(page), page, pfn, order, FPI_NONE, luf_key);
 			return;
 		}
 		migratetype = MIGRATE_MOVABLE;
@@ -2825,10 +2883,10 @@ void free_unref_page(struct page *page, unsigned int order)
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 	if (pcp) {
-		free_unref_page_commit(zone, pcp, page, migratetype, order);
+		free_unref_page_commit(zone, pcp, page, migratetype, order, luf_key);
 		pcp_spin_unlock(pcp);
 	} else {
-		free_one_page(zone, page, pfn, order, FPI_NONE);
+		free_one_page(zone, page, pfn, order, FPI_NONE, luf_key);
 	}
 	pcp_trylock_finish(UP_flags);
 }
@@ -2836,7 +2894,7 @@ void free_unref_page(struct page *page, unsigned int order)
 /*
  * Free a batch of folios
  */
-void free_unref_folios(struct folio_batch *folios)
+void free_unref_folios(struct folio_batch *folios, unsigned short luf_key)
 {
 	unsigned long __maybe_unused UP_flags;
 	struct per_cpu_pages *pcp = NULL;
@@ -2857,7 +2915,7 @@ void free_unref_folios(struct folio_batch *folios)
 		 */
 		if (!pcp_allowed_order(order)) {
 			free_one_page(folio_zone(folio), &folio->page,
-				      pfn, order, FPI_NONE);
+				      pfn, order, FPI_NONE, luf_key);
 			continue;
 		}
 		folio->private = (void *)(unsigned long)order;
@@ -2893,7 +2951,7 @@ void free_unref_folios(struct folio_batch *folios)
 			 */
 			if (is_migrate_isolate(migratetype)) {
 				free_one_page(zone, &folio->page, pfn,
-					      order, FPI_NONE);
+					      order, FPI_NONE, luf_key);
 				continue;
 			}
 
@@ -2906,7 +2964,7 @@ void free_unref_folios(struct folio_batch *folios)
 			if (unlikely(!pcp)) {
 				pcp_trylock_finish(UP_flags);
 				free_one_page(zone, &folio->page, pfn,
-					      order, FPI_NONE);
+					      order, FPI_NONE, luf_key);
 				continue;
 			}
 			locked_zone = zone;
@@ -2921,7 +2979,7 @@ void free_unref_folios(struct folio_batch *folios)
 
 		trace_mm_page_free_batched(&folio->page);
 		free_unref_page_commit(zone, pcp, &folio->page, migratetype,
-				order);
+				order, luf_key);
 	}
 
 	if (pcp) {
@@ -3013,7 +3071,7 @@ void __putback_isolated_page(struct page *page, unsigned int order, int mt)
 
 	/* Return isolated page to tail of freelist. */
 	__free_one_page(page, page_to_pfn(page), zone, order, mt,
-			FPI_SKIP_REPORT_NOTIFY | FPI_TO_TAIL);
+			FPI_SKIP_REPORT_NOTIFY | FPI_TO_TAIL, 0);
 }
 
 /*
@@ -4983,11 +5041,11 @@ void __free_pages(struct page *page, unsigned int order)
 	struct alloc_tag *tag = pgalloc_tag_get(page);
 
 	if (put_page_testzero(page))
-		free_unref_page(page, order);
+		free_unref_page(page, order, 0);
 	else if (!head) {
 		pgalloc_tag_sub_pages(tag, (1 << order) - 1);
 		while (order-- > 0)
-			free_unref_page(page + (1 << order), order);
+			free_unref_page(page + (1 << order), order, 0);
 	}
 }
 EXPORT_SYMBOL(__free_pages);
@@ -5049,7 +5107,7 @@ void __page_frag_cache_drain(struct page *page, unsigned int count)
 	VM_BUG_ON_PAGE(page_ref_count(page) == 0, page);
 
 	if (page_ref_sub_and_test(page, count))
-		free_unref_page(page, compound_order(page));
+		free_unref_page(page, compound_order(page), 0);
 }
 EXPORT_SYMBOL(__page_frag_cache_drain);
 
@@ -5090,7 +5148,7 @@ refill:
 			goto refill;
 
 		if (unlikely(nc->pfmemalloc)) {
-			free_unref_page(page, compound_order(page));
+			free_unref_page(page, compound_order(page), 0);
 			goto refill;
 		}
 
@@ -5134,7 +5192,7 @@ void page_frag_free(void *addr)
 	struct page *page = virt_to_head_page(addr);
 
 	if (unlikely(put_page_testzero(page)))
-		free_unref_page(page, compound_order(page));
+		free_unref_page(page, compound_order(page), 0);
 }
 EXPORT_SYMBOL(page_frag_free);
 
@@ -5154,7 +5212,7 @@ static void *make_alloc_exact(unsigned long addr, unsigned int order,
 
 		last = page + (1UL << order);
 		for (page += nr; page < last; page++)
-			__free_pages_ok(page, 0, FPI_TO_TAIL);
+			__free_pages_ok(page, 0, FPI_TO_TAIL, 0);
 	}
 	return (void *)addr;
 }
@@ -7124,7 +7182,7 @@ bool put_page_back_buddy(struct page *page)
 		int migratetype = get_pfnblock_migratetype(page, pfn);
 
 		ClearPageHWPoisonTakenOff(page);
-		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE);
+		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE, 0);
 		if (TestClearPageHWPoison(page)) {
 			ret = true;
 		}
@@ -7193,7 +7251,7 @@ static void __accept_page(struct zone *zone, unsigned long *flags,
 
 	accept_memory(page_to_phys(page), PAGE_SIZE << MAX_PAGE_ORDER);
 
-	__free_pages_ok(page, MAX_PAGE_ORDER, FPI_TO_TAIL);
+	__free_pages_ok(page, MAX_PAGE_ORDER, FPI_TO_TAIL, 0);
 
 	if (last)
 		static_branch_dec(&zones_with_unaccepted_pages);
