@@ -161,15 +161,7 @@ long syscall_trace_enter(struct pt_regs *regs, long syscall,
  *     ptrace_report_syscall_entry(), __secure_computing(), trace_sys_enter()
  *  2) Invocation of audit_syscall_entry()
  */
-static __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *regs, long syscall)
-{
-	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
-
-	if (work & SYSCALL_WORK_ENTER)
-		syscall = syscall_trace_enter(regs, syscall, work);
-
-	return syscall;
-}
+long syscall_enter_from_user_mode_work(struct pt_regs *regs, long syscall);
 
 /**
  * syscall_enter_from_user_mode - Establish state and check and handle work
