@@ -4161,12 +4161,16 @@ static inline int do_mseal(unsigned long start, size_t len_in, unsigned long fla
 }
 #endif
 
-#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
 /*
  * luf_ugen will start with 2 so that 1 can be regarded as a passed one.
  */
 #define LUF_UGEN_INIT 2
+/*
+ * zone_ugen will start with 2 so that 1 can be regarded as done.
+ */
+#define ZONE_UGEN_INIT 2
 
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
 static inline bool ugen_before(unsigned long a, unsigned long b)
 {
 	/*
@@ -4177,7 +4181,11 @@ static inline bool ugen_before(unsigned long a, unsigned long b)
 
 static inline unsigned long next_ugen(unsigned long ugen)
 {
-	if (ugen + 1)
+	/*
+	 * Avoid zero even in unsigned short range so as to treat
+	 * '(unsigned short)ugen == 0' as invalid.
+	 */
+	if ((unsigned short)(ugen + 1))
 		return ugen + 1;
 	/*
 	 * Avoid invalid ugen, zero.
@@ -4187,7 +4195,11 @@ static inline unsigned long next_ugen(unsigned long ugen)
 
 static inline unsigned long prev_ugen(unsigned long ugen)
 {
-	if (ugen - 1)
+	/*
+	 * Avoid zero even in unsigned short range so as to treat
+	 * '(unsigned short)ugen == 0' as invalid.
+	 */
+	if ((unsigned short)(ugen - 1))
 		return ugen - 1;
 	/*
 	 * Avoid invalid ugen, zero.
@@ -4195,4 +4207,30 @@ static inline unsigned long prev_ugen(unsigned long ugen)
 	return ugen - 2;
 }
 #endif
+
+/*
+ * return the biggest ugen but it should be before the real zone_ugen.
+ */
+static inline unsigned long page_zone_ugen(struct zone *zone, struct page *page)
+{
+	unsigned long zone_ugen = zone->zone_ugen;
+	unsigned short short_zone_ugen = page->zone_ugen;
+	unsigned long cand1, cand2;
+
+	if (!short_zone_ugen)
+		return 0;
+
+	cand1 = (zone_ugen & ~(unsigned long)USHRT_MAX) | short_zone_ugen;
+	cand2 = cand1 - USHRT_MAX - 1;
+
+	if (!ugen_before(zone_ugen, cand1))
+		return cand1;
+
+	return cand2;
+}
+
+static inline void set_page_zone_ugen(struct page *page, unsigned short zone_ugen)
+{
+	page->zone_ugen = zone_ugen;
+}
 #endif /* _LINUX_MM_H */

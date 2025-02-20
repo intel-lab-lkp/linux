@@ -132,11 +132,20 @@ struct page {
 					 */
 					unsigned short order;
 
-					/*
-					 * For tracking need of tlb flush,
-					 * by luf(lazy unmap flush).
-					 */
-					unsigned short luf_key;
+					union {
+						/*
+						 * For tracking need of
+						 * tlb flush, by
+						 * luf(lazy unmap flush).
+						 */
+						unsigned short luf_key;
+
+						/*
+						 * Casted zone_ugen with
+						 * unsigned short.
+						 */
+						unsigned short zone_ugen;
+					};
 				};
 			};
 		};
