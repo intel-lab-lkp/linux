@@ -663,16 +663,29 @@ bool luf_takeoff_start(void)
 	return !no_shootdown;
 }
 
+static void wait_zone_ugen_done(struct zone *zone, unsigned long zone_ugen)
+{
+	while (ugen_before(READ_ONCE(zone->zone_ugen_done), zone_ugen))
+		cond_resched();
+}
+
+static void set_zone_ugen_done(struct zone *zone, unsigned long zone_ugen)
+{
+	WRITE_ONCE(zone->zone_ugen_done, zone_ugen);
+}
+
 /*
  * Should be called within the same context of luf_takeoff_start().
  */
-void luf_takeoff_end(void)
+void luf_takeoff_end(struct zone *zone)
 {
 	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
 	unsigned long flags;
 	bool no_shootdown;
 	bool outmost = false;
 	unsigned long cur_luf_ugen;
+	unsigned long cur_zone_ugen;
+	unsigned long cur_wait_zone_ugen;
 
 	local_irq_save(flags);
 	VM_WARN_ON(!current->luf_takeoff_started);
@@ -700,6 +713,8 @@ void luf_takeoff_end(void)
 		goto out;
 
 	cur_luf_ugen = current->luf_ugen;
+	cur_zone_ugen = current->zone_ugen;
+	cur_wait_zone_ugen = current->wait_zone_ugen;
 
 	current->luf_ugen = 0;
 
@@ -707,10 +722,38 @@ void luf_takeoff_end(void)
 		reset_batch(tlb_ubc_takeoff);
 
 	try_to_unmap_flush_takeoff();
+
+	if (cur_wait_zone_ugen || cur_zone_ugen) {
+		/*
+		 * pcp(zone == NULL) doesn't work with zone batch.
+		 */
+		if (zone) {
+			current->zone_ugen = 0;
+			current->wait_zone_ugen = 0;
+
+			/*
+			 * Guarantee that tlb shootdown required for the
+			 * zone_ugen has been completed once observing
+			 * 'zone_ugen_done'.
+			 */
+			smp_mb();
+
+			/*
+			 * zone->zone_ugen_done should be updated
+			 * sequentially.
+			 */
+			if (cur_wait_zone_ugen)
+				wait_zone_ugen_done(zone, cur_wait_zone_ugen);
+			if (cur_zone_ugen)
+				set_zone_ugen_done(zone, cur_zone_ugen);
+		}
+	}
 out:
 	if (outmost) {
 		VM_WARN_ON(current->luf_no_shootdown);
 		VM_WARN_ON(current->luf_ugen);
+		VM_WARN_ON(current->zone_ugen);
+		VM_WARN_ON(current->wait_zone_ugen);
 	}
 }
 
@@ -741,9 +784,9 @@ out:
  * Should be called with either zone lock held and irq disabled or pcp
  * lock held.
  */
-bool luf_takeoff_check(struct page *page)
+bool luf_takeoff_check(struct zone *zone, struct page *page)
 {
-	unsigned short luf_key = page_luf_key(page);
+	unsigned long zone_ugen;
 
 	/*
 	 * No way.  Delimit using luf_takeoff_{start,end}().
@@ -753,7 +796,29 @@ bool luf_takeoff_check(struct page *page)
 		return false;
 	}
 
-	if (!luf_key)
+	if (!zone) {
+		unsigned short luf_key = page_luf_key(page);
+
+		if (!luf_key)
+			return true;
+
+		if (current->luf_no_shootdown)
+			return false;
+
+		return true;
+	}
+
+	zone_ugen = page_zone_ugen(zone, page);
+	if (!zone_ugen)
+		return true;
+
+	/*
+	 * Should not be zero since zone-zone_ugen has been updated in
+	 * __free_one_page() -> update_zone_batch().
+	 */
+	VM_WARN_ON(!zone->zone_ugen);
+
+	if (!ugen_before(READ_ONCE(zone->zone_ugen_done), zone_ugen))
 		return true;
 
 	return !current->luf_no_shootdown;
@@ -763,13 +828,11 @@ bool luf_takeoff_check(struct page *page)
  * Should be called with either zone lock held and irq disabled or pcp
  * lock held.
  */
-bool luf_takeoff_check_and_fold(struct page *page)
+bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page)
 {
 	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
-	unsigned short luf_key = page_luf_key(page);
-	struct luf_batch *lb;
-	unsigned long lb_ugen;
 	unsigned long flags;
+	unsigned long zone_ugen;
 
 	/*
 	 * No way.  Delimit using luf_takeoff_{start,end}().
@@ -779,28 +842,94 @@ bool luf_takeoff_check_and_fold(struct page *page)
 		return false;
 	}
 
-	if (!luf_key)
-		return true;
+	/*
+	 * pcp case
+	 */
+	if (!zone) {
+		unsigned short luf_key = page_luf_key(page);
+		struct luf_batch *lb;
+		unsigned long lb_ugen;
 
-	lb = &luf_batch[luf_key];
-	read_lock_irqsave(&lb->lock, flags);
-	lb_ugen = lb->ugen;
+		if (!luf_key)
+			return true;
 
-	if (arch_tlbbatch_check_done(&lb->batch.arch, lb_ugen)) {
+		lb = &luf_batch[luf_key];
+		read_lock_irqsave(&lb->lock, flags);
+		lb_ugen = lb->ugen;
+
+		if (arch_tlbbatch_check_done(&lb->batch.arch, lb_ugen)) {
+			read_unlock_irqrestore(&lb->lock, flags);
+			return true;
+		}
+
+		if (current->luf_no_shootdown) {
+			read_unlock_irqrestore(&lb->lock, flags);
+			return false;
+		}
+
+		fold_batch(tlb_ubc_takeoff, &lb->batch, false);
 		read_unlock_irqrestore(&lb->lock, flags);
+
+		if (!current->luf_ugen || ugen_before(current->luf_ugen, lb_ugen))
+			current->luf_ugen = lb_ugen;
 		return true;
 	}
 
-	if (current->luf_no_shootdown) {
-		read_unlock_irqrestore(&lb->lock, flags);
+	zone_ugen = page_zone_ugen(zone, page);
+	if (!zone_ugen)
+		return true;
+
+	/*
+	 * Should not be zero since zone-zone_ugen has been updated in
+	 * __free_one_page() -> update_zone_batch().
+	 */
+	VM_WARN_ON(!zone->zone_ugen);
+
+	if (!ugen_before(READ_ONCE(zone->zone_ugen_done), zone_ugen))
+		return true;
+
+	if (current->luf_no_shootdown)
 		return false;
+
+	/*
+	 * zone batched flush has been already set.
+	 */
+	if (current->zone_ugen)
+		return true;
+
+	/*
+	 * Others are already performing tlb shootdown for us.  All we
+	 * need is to wait for those to complete.
+	 */
+	if (zone_ugen != zone->zone_ugen) {
+		if (!current->wait_zone_ugen ||
+		    ugen_before(current->wait_zone_ugen, zone_ugen))
+			current->wait_zone_ugen = zone_ugen;
+	/*
+	 * It's the first time that zone->zone_ugen has been set to
+	 * current->zone_ugen.  current->luf_ugen also get set.
+	 */
+	} else {
+		current->wait_zone_ugen = prev_ugen(zone->zone_ugen);
+		current->zone_ugen = zone->zone_ugen;
+		current->luf_ugen = zone->luf_ugen;
+
+		/*
+		 * Now that tlb shootdown for the zone_ugen will be
+		 * performed at luf_takeoff_end(), advance it so that
+		 * the next zone->lock holder can efficiently avoid
+		 * unnecessary tlb shootdown.
+		 */
+		zone->zone_ugen = next_ugen(zone->zone_ugen);
+
+		/*
+		 * All the luf pages will eventually become non-luf
+		 * pages by tlb flushing at luf_takeoff_end() and,
+		 * flush_pend_list_if_done() will empty pend_list.
+		 */
+		atomic_long_set(&zone->nr_luf_pages, 0);
+		fold_batch(tlb_ubc_takeoff, &zone->zone_batch, true);
 	}
-
-	fold_batch(tlb_ubc_takeoff, &lb->batch, false);
-	read_unlock_irqrestore(&lb->lock, flags);
-
-	if (!current->luf_ugen || ugen_before(current->luf_ugen, lb_ugen))
-		current->luf_ugen = lb_ugen;
 	return true;
 }
 #endif
@@ -822,6 +951,42 @@ static inline void account_freepages(struct zone *zone, int nr_pages,
 			   zone->nr_free_highatomic + nr_pages);
 }
 
+static void flush_pend_list_if_done(struct zone *zone,
+		struct free_area *area, int migratetype)
+{
+	unsigned long zone_ugen_done = READ_ONCE(zone->zone_ugen_done);
+
+	/*
+	 * tlb shootdown required for the zone_ugen already has been
+	 * done.  Thus, let's move pages in pend_list to free_list to
+	 * secure more non-luf pages.
+	 */
+	if (!ugen_before(zone_ugen_done, area->pend_zone_ugen[migratetype]))
+		list_splice_init(&area->pend_list[migratetype],
+				 &area->free_list[migratetype]);
+}
+
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+/*
+ * Should be called with zone->lock held and irq disabled.
+ */
+static void update_zone_batch(struct zone *zone, unsigned short luf_key)
+{
+	unsigned long lb_ugen;
+	struct luf_batch *lb = &luf_batch[luf_key];
+
+	read_lock(&lb->lock);
+	fold_batch(&zone->zone_batch, &lb->batch, false);
+	lb_ugen = lb->ugen;
+	read_unlock(&lb->lock);
+
+	if (ugen_before(zone->luf_ugen, lb_ugen))
+		zone->luf_ugen = lb_ugen;
+}
+#else
+static void update_zone_batch(struct zone *zone, unsigned short luf_key) {}
+#endif
+
 /* Used for pages not on another list */
 static inline void __add_to_free_list(struct page *page, struct zone *zone,
 				      unsigned int order, int migratetype,
@@ -829,6 +994,12 @@ static inline void __add_to_free_list(struct page *page, struct zone *zone,
 {
 	struct free_area *area = &zone->free_area[order];
 	struct list_head *list;
+
+	/*
+	 * Good chance to flush pend_list just before updating the
+	 * {free,pend}_list.
+	 */
+	flush_pend_list_if_done(zone, area, migratetype);
 
 	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
 		     "page type is %lu, passed migratetype is %d (nr=%d)\n",
@@ -839,8 +1010,9 @@ static inline void __add_to_free_list(struct page *page, struct zone *zone,
 	 * positive is okay because it will cause just additional tlb
 	 * shootdown.
 	 */
-	if (page_luf_key(page)) {
+	if (page_zone_ugen(zone, page)) {
 		list = &area->pend_list[migratetype];
+		area->pend_zone_ugen[migratetype] = zone->zone_ugen;
 		atomic_long_add(1 << order, &zone->nr_luf_pages);
 	} else
 		list = &area->free_list[migratetype];
@@ -862,6 +1034,7 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 				     unsigned int order, int old_mt, int new_mt)
 {
 	struct free_area *area = &zone->free_area[order];
+	unsigned long zone_ugen = page_zone_ugen(zone, page);
 
 	/* Free page moving can fail, so it happens before the type update */
 	VM_WARN_ONCE(get_pageblock_migratetype(page) != old_mt,
@@ -878,9 +1051,12 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 	 * positive is okay because it will cause just additional tlb
 	 * shootdown.
 	 */
-	if (page_luf_key(page))
+	if (zone_ugen) {
 		list_move_tail(&page->buddy_list, &area->pend_list[new_mt]);
-	else
+		if (!area->pend_zone_ugen[new_mt] ||
+		    ugen_before(area->pend_zone_ugen[new_mt], zone_ugen))
+			area->pend_zone_ugen[new_mt] = zone_ugen;
+	} else
 		list_move_tail(&page->buddy_list, &area->free_list[new_mt]);
 
 	account_freepages(zone, -(1 << order), old_mt);
@@ -898,7 +1074,7 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 	if (page_reported(page))
 		__ClearPageReported(page);
 
-	if (page_luf_key(page))
+	if (page_zone_ugen(zone, page))
 		atomic_long_sub(1 << order, &zone->nr_luf_pages);
 
 	list_del(&page->buddy_list);
@@ -936,29 +1112,39 @@ static inline struct page *get_page_from_free_area(struct zone *zone,
 	 */
 	pend_first = !non_luf_pages_ok(zone);
 
+	/*
+	 * Good chance to flush pend_list just before updating the
+	 * {free,pend}_list.
+	 */
+	flush_pend_list_if_done(zone, area, migratetype);
+
 	if (pend_first) {
 		page = list_first_entry_or_null(&area->pend_list[migratetype],
 				struct page, buddy_list);
 
-		if (page && luf_takeoff_check(page))
+		if (page && luf_takeoff_check(zone, page))
 			return page;
 
 		page = list_first_entry_or_null(&area->free_list[migratetype],
 				struct page, buddy_list);
 
-		if (page)
+		if (page) {
+			set_page_zone_ugen(page, 0);
 			return page;
+		}
 	} else {
 		page = list_first_entry_or_null(&area->free_list[migratetype],
 				struct page, buddy_list);
 
-		if (page)
+		if (page) {
+			set_page_zone_ugen(page, 0);
 			return page;
+		}
 
 		page = list_first_entry_or_null(&area->pend_list[migratetype],
 				struct page, buddy_list);
 
-		if (page && luf_takeoff_check(page))
+		if (page && luf_takeoff_check(zone, page))
 			return page;
 	}
 	return NULL;
@@ -1023,6 +1209,7 @@ static inline void __free_one_page(struct page *page,
 	unsigned long combined_pfn;
 	struct page *buddy;
 	bool to_tail;
+	unsigned long zone_ugen;
 
 	VM_BUG_ON(!zone_is_initialized(zone));
 	VM_BUG_ON_PAGE(page->flags & PAGE_FLAGS_CHECK_AT_PREP, page);
@@ -1034,20 +1221,25 @@ static inline void __free_one_page(struct page *page,
 	account_freepages(zone, 1 << order, migratetype);
 
 	/*
-	 * Use the page's luf_key unchanged if luf_key == 0.  Worth
-	 * noting that page_luf_key() will be 0 in most cases since it's
-	 * initialized at free_pages_prepare().
+	 * Use the page's zone_ugen unchanged if luf_key == 0.  Worth
+	 * noting that page_zone_ugen() will be 0 in most cases since
+	 * it's initialized at free_pages_prepare().
+	 *
+	 * Update page's zone_ugen and zone's batch only if a valid
+	 * luf_key was passed.
 	 */
-	if (luf_key)
-		set_page_luf_key(page, luf_key);
-	else
-		luf_key = page_luf_key(page);
+	if (luf_key) {
+		zone_ugen = zone->zone_ugen;
+		set_page_zone_ugen(page, (unsigned short)zone_ugen);
+		update_zone_batch(zone, luf_key);
+	} else
+		zone_ugen = page_zone_ugen(zone, page);
 
 	while (order < MAX_PAGE_ORDER) {
 		int buddy_mt = migratetype;
-		unsigned short buddy_luf_key;
+		unsigned long buddy_zone_ugen;
 
-		if (!luf_key && compaction_capture(capc, page, order, migratetype)) {
+		if (!zone_ugen && compaction_capture(capc, page, order, migratetype)) {
 			account_freepages(zone, -(1 << order), migratetype);
 			return;
 		}
@@ -1080,17 +1272,15 @@ static inline void __free_one_page(struct page *page,
 		else
 			__del_page_from_free_list(buddy, zone, order, buddy_mt);
 
+		buddy_zone_ugen = page_zone_ugen(zone, buddy);
+
 		/*
-		 * !buddy_luf_key && !luf_key : do nothing
-		 *  buddy_luf_key && !luf_key : luf_key = buddy_luf_key
-		 * !buddy_luf_key &&  luf_key : do nothing
-		 *  buddy_luf_key &&  luf_key : merge two into luf_key
+		 * if (!zone_ugen && !buddy_zone_ugen) : nothing to do
+		 * if ( zone_ugen && !buddy_zone_ugen) : nothing to do
 		 */
-		buddy_luf_key = page_luf_key(buddy);
-		if (buddy_luf_key && !luf_key)
-			luf_key = buddy_luf_key;
-		else if (buddy_luf_key && luf_key)
-			fold_luf_batch(&luf_batch[luf_key], &luf_batch[buddy_luf_key]);
+		if ((!zone_ugen && buddy_zone_ugen) ||
+		    ( zone_ugen && buddy_zone_ugen && ugen_before(zone_ugen, buddy_zone_ugen)))
+			zone_ugen = buddy_zone_ugen;
 
 		if (unlikely(buddy_mt != migratetype)) {
 			/*
@@ -1103,7 +1293,7 @@ static inline void __free_one_page(struct page *page,
 
 		combined_pfn = buddy_pfn & pfn;
 		page = page + (combined_pfn - pfn);
-		set_page_luf_key(page, luf_key);
+		set_page_zone_ugen(page, zone_ugen);
 		pfn = combined_pfn;
 		order++;
 	}
@@ -1446,6 +1636,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		do {
 			unsigned long pfn;
 			int mt;
+			unsigned short luf_key;
 
 			page = list_last_entry(list, struct page, pcp_list);
 			pfn = page_to_pfn(page);
@@ -1456,7 +1647,16 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 			count -= nr_pages;
 			pcp->count -= nr_pages;
 
-			__free_one_page(page, pfn, zone, order, mt, FPI_NONE, 0);
+			/*
+			 * page private in pcp stores luf_key while it
+			 * stores zone_ugen in buddy.  Thus, the private
+			 * needs to be cleared and the luf_key needs to
+			 * be passed to buddy.
+			 */
+			luf_key = page_luf_key(page);
+			set_page_private(page, 0);
+
+			__free_one_page(page, pfn, zone, order, mt, FPI_NONE, luf_key);
 
 			trace_mm_page_pcpu_drain(page, order, mt);
 		} while (count > 0 && !list_empty(list));
@@ -1499,7 +1699,15 @@ static void free_one_page(struct zone *zone, struct page *page,
 	 * valid luf_key can be passed only if order == 0.
 	 */
 	VM_WARN_ON(luf_key && order);
-	set_page_luf_key(page, luf_key);
+
+	/*
+	 * Update page's zone_ugen and zone's batch only if a valid
+	 * luf_key was passed.
+	 */
+	if (luf_key) {
+		set_page_zone_ugen(page, (unsigned short)zone->zone_ugen);
+		update_zone_batch(zone, luf_key);
+	}
 
 	split_large_buddy(zone, page, pfn, order, fpi_flags);
 	spin_unlock_irqrestore(&zone->lock, flags);
@@ -1659,7 +1867,7 @@ static inline unsigned int expand(struct zone *zone, struct page *page, int low,
 		if (set_page_guard(zone, &page[size], high))
 			continue;
 
-		if (page_luf_key(&page[size]))
+		if (page_zone_ugen(zone, &page[size]))
 			tail = true;
 
 		__add_to_free_list(&page[size], zone, high, migratetype, tail);
@@ -1677,7 +1885,7 @@ static __always_inline void page_del_and_expand(struct zone *zone,
 	int nr_pages = 1 << high;
 
 	__del_page_from_free_list(page, zone, high, migratetype);
-	if (unlikely(!luf_takeoff_check_and_fold(page)))
+	if (unlikely(!luf_takeoff_check_and_fold(zone, page)))
 		VM_WARN_ON(1);
 	nr_pages -= expand(zone, page, low, high, migratetype);
 	account_freepages(zone, -nr_pages, migratetype);
@@ -2199,7 +2407,7 @@ steal_suitable_fallback(struct zone *zone, struct page *page,
 		unsigned int nr_added;
 
 		del_page_from_free_list(page, zone, current_order, block_type);
-		if (unlikely(!luf_takeoff_check_and_fold(page)))
+		if (unlikely(!luf_takeoff_check_and_fold(zone, page)))
 			VM_WARN_ON(1);
 		change_pageblock_range(page, current_order, start_type);
 		nr_added = expand(zone, page, order, current_order, start_type);
@@ -2438,12 +2646,12 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 			WARN_ON_ONCE(ret == -1);
 			if (ret > 0) {
 				spin_unlock_irqrestore(&zone->lock, flags);
-				luf_takeoff_end();
+				luf_takeoff_end(zone);
 				return ret;
 			}
 		}
 		spin_unlock_irqrestore(&zone->lock, flags);
-		luf_takeoff_end();
+		luf_takeoff_end(zone);
 	}
 
 	return false;
@@ -2644,12 +2852,15 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 		 * pages are ordered properly.
 		 */
 		list_add_tail(&page->pcp_list, list);
+
+		/*
+		 * Reset all the luf fields.  tlb shootdown will be
+		 * performed at luf_takeoff_end() below if needed.
+		 */
+		set_page_private(page, 0);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
-	/*
-	 * Check and flush before using the pages taken off.
-	 */
-	luf_takeoff_end();
+	luf_takeoff_end(zone);
 
 	return i;
 }
@@ -3163,7 +3374,7 @@ int __isolate_free_page(struct page *page, unsigned int order, bool willputback)
 	}
 
 	del_page_from_free_list(page, zone, order, mt);
-	if (unlikely(!willputback && !luf_takeoff_check_and_fold(page)))
+	if (unlikely(!willputback && !luf_takeoff_check_and_fold(zone, page)))
 		VM_WARN_ON(1);
 
 	/*
@@ -3262,7 +3473,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 
 			if (!page) {
 				spin_unlock_irqrestore(&zone->lock, flags);
-				luf_takeoff_end();
+				luf_takeoff_end(zone);
 				return NULL;
 			}
 		}
@@ -3270,7 +3481,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 		/*
 		 * Check and flush before using the pages taken off.
 		 */
-		luf_takeoff_end();
+		luf_takeoff_end(zone);
 	} while (check_new_pages(page, order));
 
 	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
@@ -3360,7 +3571,7 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 		}
 
 		list_for_each_entry(page, list, pcp_list) {
-			if (luf_takeoff_check_and_fold(page)) {
+			if (luf_takeoff_check_and_fold(NULL, page)) {
 				list_del(&page->pcp_list);
 				pcp->count -= 1 << order;
 				break;
@@ -3395,7 +3606,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 	if (!pcp) {
 		pcp_trylock_finish(UP_flags);
-		luf_takeoff_end();
+		luf_takeoff_end(NULL);
 		return NULL;
 	}
 
@@ -3412,7 +3623,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	/*
 	 * Check and flush before using the pages taken off.
 	 */
-	luf_takeoff_end();
+	luf_takeoff_end(NULL);
 	if (page) {
 		__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
 		zone_statistics(preferred_zone, zone, 1);
@@ -3451,6 +3662,7 @@ struct page *rmqueue(struct zone *preferred_zone,
 							migratetype);
 
 out:
+
 	/* Separate test+clear to avoid unnecessary atomics */
 	if ((alloc_flags & ALLOC_KSWAPD) &&
 	    unlikely(test_bit(ZONE_BOOSTED_WATERMARK, &zone->flags))) {
@@ -5059,7 +5271,7 @@ retry_this_zone:
 	/*
 	 * Check and flush before using the pages taken off.
 	 */
-	luf_takeoff_end();
+	luf_takeoff_end(NULL);
 
 	__count_zid_vm_events(PGALLOC, zone_idx(zone), nr_account);
 	zone_statistics(zonelist_zone(ac.preferred_zoneref), zone, nr_account);
@@ -5069,7 +5281,7 @@ out:
 
 failed_irq:
 	pcp_trylock_finish(UP_flags);
-	luf_takeoff_end();
+	luf_takeoff_end(NULL);
 
 failed:
 	page = __alloc_pages_noprof(gfp, 0, preferred_nid, nodemask);
@@ -7235,7 +7447,7 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 		VM_WARN_ON(get_pageblock_migratetype(page) != MIGRATE_ISOLATE);
 		order = buddy_order(page);
 		del_page_from_free_list(page, zone, order, MIGRATE_ISOLATE);
-		if (unlikely(!luf_takeoff_check_and_fold(page)))
+		if (unlikely(!luf_takeoff_check_and_fold(zone, page)))
 			VM_WARN_ON(1);
 		pfn += (1 << order);
 	}
@@ -7243,7 +7455,7 @@ unsigned long __offline_isolated_pages(unsigned long start_pfn,
 	/*
 	 * Check and flush before using the pages taken off.
 	 */
-	luf_takeoff_end();
+	luf_takeoff_end(zone);
 
 	return end_pfn - start_pfn - already_offline;
 }
@@ -7305,7 +7517,7 @@ static void break_down_buddy_pages(struct zone *zone, struct page *page,
 		if (set_page_guard(zone, current_buddy, high))
 			continue;
 
-		if (page_luf_key(current_buddy))
+		if (page_zone_ugen(zone, current_buddy))
 			tail = true;
 
 		add_to_free_list(current_buddy, zone, high, migratetype, tail);
@@ -7337,7 +7549,7 @@ bool take_page_off_buddy(struct page *page)
 
 			del_page_from_free_list(page_head, zone, page_order,
 						migratetype);
-			if (unlikely(!luf_takeoff_check_and_fold(page_head)))
+			if (unlikely(!luf_takeoff_check_and_fold(zone, page_head)))
 				VM_WARN_ON(1);
 			break_down_buddy_pages(zone, page_head, page, 0,
 						page_order, migratetype);
@@ -7353,7 +7565,7 @@ bool take_page_off_buddy(struct page *page)
 	/*
 	 * Check and flush before using the pages taken off.
 	 */
-	luf_takeoff_end();
+	luf_takeoff_end(zone);
 	return ret;
 }
 
@@ -7372,6 +7584,13 @@ bool put_page_back_buddy(struct page *page)
 		int migratetype = get_pfnblock_migratetype(page, pfn);
 
 		ClearPageHWPoisonTakenOff(page);
+
+		/*
+		 * Reset all the luf fields.  tlb shootdown has already
+		 * been performed by take_page_off_buddy().
+		 */
+		set_page_private(page, 0);
+
 		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE, 0);
 		if (TestClearPageHWPoison(page)) {
 			ret = true;

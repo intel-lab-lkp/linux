@@ -1378,6 +1378,8 @@ struct task_struct {
 	int luf_no_shootdown;
 	int luf_takeoff_started;
 	unsigned long luf_ugen;
+	unsigned long zone_ugen;
+	unsigned long wait_zone_ugen;
 #endif
 
 	struct tlbflush_unmap_batch	tlb_ubc;

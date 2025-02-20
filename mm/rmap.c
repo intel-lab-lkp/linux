@@ -650,7 +650,11 @@ static unsigned long new_luf_ugen(void)
 {
 	unsigned long ugen = atomic_long_inc_return(&luf_ugen);
 
-	if (!ugen)
+	/*
+	 * Avoid zero even in unsigned short range so as to treat
+	 * '(unsigned short)ugen == 0' as invalid.
+	 */
+	if (!(unsigned short)ugen)
 		ugen = atomic_long_inc_return(&luf_ugen);
 
 	return ugen;
