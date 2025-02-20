@@ -106,6 +106,8 @@ struct bnxt_qplib_srq {
 	u16				eventq_hw_ring_id;
 	spinlock_t			lock; /* protect SRQE link list */
 	u8				toggle;
+	unsigned long			flags;
+#define SRQ_FLAGS_CAPTURE_SNAPDUMP	1
 };
 
 struct bnxt_qplib_sge {
@@ -279,6 +281,8 @@ struct bnxt_qplib_qp {
 	u8				wqe_mode;
 	u8				state;
 	u8				cur_qp_state;
+	u16				ctx_size_sb;
+	u8				is_user;
 	u64				modify_flags;
 	u32				max_inline_data;
 	u32				mtu;
@@ -344,6 +348,8 @@ struct bnxt_qplib_qp {
 	u32				msn_tbl_sz;
 	bool				is_host_msn_tbl;
 	u8				tos_dscp;
+	unsigned long			flags;
+#define QP_FLAGS_CAPTURE_SNAPDUMP	1
 };
 
 #define BNXT_QPLIB_MAX_CQE_ENTRY_SIZE	sizeof(struct cq_base)
@@ -448,6 +454,7 @@ struct bnxt_qplib_cq {
 #define CQ_RESIZE_WAIT_TIME_MS		500
 	unsigned long			flags;
 #define CQ_FLAGS_RESIZE_IN_PROG		1
+#define CQ_FLAGS_CAPTURE_SNAPDUMP	2
 	wait_queue_head_t		waitq;
 	struct list_head		sqf_head, rqf_head;
 	atomic_t			arm_state;

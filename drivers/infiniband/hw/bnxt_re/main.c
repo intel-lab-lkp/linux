@@ -1420,9 +1420,15 @@ static int bnxt_re_handle_qp_async_event(struct creq_qp_event *qp_event,
 	struct ib_event event = {};
 	unsigned int flags;
 
-	if (qp->qplib_qp.srq)
+	if (qp->qplib_qp.srq) {
 		srq =  container_of(qp->qplib_qp.srq, struct bnxt_re_srq,
 				    qplib_srq);
+		set_bit(SRQ_FLAGS_CAPTURE_SNAPDUMP, &srq->qplib_srq.flags);
+	}
+
+	set_bit(QP_FLAGS_CAPTURE_SNAPDUMP, &qp->qplib_qp.flags);
+	set_bit(CQ_FLAGS_CAPTURE_SNAPDUMP, &qp->scq->qplib_cq.flags);
+	set_bit(CQ_FLAGS_CAPTURE_SNAPDUMP, &qp->rcq->qplib_cq.flags);
 
 	if (qp->qplib_qp.state == CMDQ_MODIFY_QP_NEW_STATE_ERR &&
 	    rdma_is_kernel_res(&qp->ib_qp.res)) {

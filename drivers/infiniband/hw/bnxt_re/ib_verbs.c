@@ -41,6 +41,7 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/if_ether.h>
+#include <linux/vmalloc.h>
 #include <net/addrconf.h>
 
 #include <rdma/ib_verbs.h>
@@ -954,6 +955,71 @@ fail:
 	return rc;
 }
 
+static struct qdump_array *bnxt_re_get_next_qpdump(struct bnxt_re_dev *rdev)
+{
+	struct qdump_array *qdump;
+	u32 index;
+
+	index = rdev->qdump_head.index;
+	qdump = &rdev->qdump_head.qdump[index];
+	memset(qdump, 0, sizeof(*qdump));
+
+	index++;
+	index %= rdev->qdump_head.max_elements;
+	rdev->qdump_head.index = index;
+
+	return qdump;
+}
+
+/*
+ * bnxt_re_capture_qpdump - Capture snapshot of various queues of a QP.
+ * @qp	-	Pointer to QP for which data has to be collected
+ *
+ * This function will capture info about SQ/RQ/SCQ/RCQ of a QP which
+ * can be used to debug any issue
+ *
+ */
+void bnxt_re_capture_qpdump(struct bnxt_re_qp *qp)
+{
+	struct bnxt_qplib_qp *qpl = &qp->qplib_qp;
+	struct bnxt_re_dev *rdev = qp->rdev;
+	struct qdump_qpinfo *qpinfo;
+	struct qdump_array *qdump;
+	bool capture_snapdump;
+
+	if (rdev->snapdump_dbg_lvl == BNXT_RE_SNAPDUMP_NONE)
+		return;
+
+	capture_snapdump = test_bit(QP_FLAGS_CAPTURE_SNAPDUMP, &qpl->flags);
+	if (rdev->snapdump_dbg_lvl == BNXT_RE_SNAPDUMP_ERR &&
+	    !capture_snapdump)
+		return;
+
+	if (qp->is_snapdump_captured || !rdev->qdump_head.qdump)
+		return;
+
+	mutex_lock(&rdev->qdump_head.lock);
+	qdump = bnxt_re_get_next_qpdump(rdev);
+
+	qpinfo = &qdump->qpinfo;
+	qpinfo->id = qpl->id;
+	qpinfo->dest_qpid = qpl->dest_qpn;
+	qpinfo->is_user = qpl->is_user;
+	qpinfo->mtu = qpl->mtu;
+	qpinfo->state = qpl->state;
+	qpinfo->type = qpl->type;
+	qpinfo->wqe_mode = qpl->wqe_mode;
+	qpinfo->qp_handle = qpl->qp_handle;
+	qpinfo->scq_handle = qp->scq->qplib_cq.cq_handle;
+	qpinfo->rcq_handle = qp->rcq->qplib_cq.cq_handle;
+	qpinfo->scq_id = qp->scq->qplib_cq.id;
+	qpinfo->rcq_id = qp->rcq->qplib_cq.id;
+
+	qdump->valid = true;
+	qp->is_snapdump_captured = true;
+	mutex_unlock(&rdev->qdump_head.lock);
+}
+
 /* Queue Pairs */
 int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 {
@@ -965,6 +1031,7 @@ int bnxt_re_destroy_qp(struct ib_qp *ib_qp, struct ib_udata *udata)
 	unsigned int flags;
 	int rc;
 
+	bnxt_re_capture_qpdump(qp);
 	bnxt_re_debug_rem_qpinfo(rdev, qp);
 
 	bnxt_qplib_flush_cqn_wq(&qp->qplib_qp);

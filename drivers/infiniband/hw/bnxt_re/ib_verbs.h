@@ -96,6 +96,7 @@ struct bnxt_re_qp {
 	struct bnxt_re_cq	*scq;
 	struct bnxt_re_cq	*rcq;
 	struct dentry		*dentry;
+	bool			is_snapdump_captured;
 };
 
 struct bnxt_re_cq {
@@ -113,6 +114,7 @@ struct bnxt_re_cq {
 	int			resize_cqe;
 	void			*uctx_cq_page;
 	struct hlist_node	hash_entry;
+	bool			is_snapdump_captured;
 };
 
 struct bnxt_re_mr {
@@ -267,6 +269,46 @@ int bnxt_re_alloc_ucontext(struct ib_ucontext *ctx, struct ib_udata *udata);
 void bnxt_re_dealloc_ucontext(struct ib_ucontext *context);
 int bnxt_re_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
 void bnxt_re_mmap_free(struct rdma_user_mmap_entry *rdma_entry);
+void bnxt_re_capture_qpdump(struct bnxt_re_qp *qp);
+
+static inline const char *__to_qp_type_str(u8 type)
+{
+	switch (type) {
+	case CMDQ_CREATE_QP1_TYPE_GSI:
+	case CMDQ_CREATE_QP_TYPE_GSI:
+		return "GSI";
+	case CMDQ_CREATE_QP_TYPE_RC:
+		return "RC";
+	case CMDQ_CREATE_QP_TYPE_UD:
+		return "UD";
+	case CMDQ_CREATE_QP_TYPE_RAW_ETHERTYPE:
+		return "RAW_ETH";
+	default:
+		return "NotSupp";
+	}
+}
+
+static inline const char  *__to_qp_state_str(u8 state)
+{
+	switch (state) {
+	case CMDQ_MODIFY_QP_NEW_STATE_RESET:
+		return "RESET";
+	case CMDQ_MODIFY_QP_NEW_STATE_INIT:
+		return "INIT";
+	case CMDQ_MODIFY_QP_NEW_STATE_RTR:
+		return "RTR";
+	case CMDQ_MODIFY_QP_NEW_STATE_RTS:
+		return "RTS";
+	case CMDQ_MODIFY_QP_NEW_STATE_SQD:
+		return "SQD";
+	case CMDQ_MODIFY_QP_NEW_STATE_SQE:
+		return "SQE";
+	case CMDQ_MODIFY_QP_NEW_STATE_ERR:
+		return "ERR";
+	default:
+		return "NotSupp";
+	}
+}
 
 static inline u32 __to_ib_port_num(u16 port_id)
 {
