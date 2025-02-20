@@ -619,28 +619,38 @@ static ssize_t ieee80211_if_fmt_aqm(
 	struct txq_info *txqi;
 	int len;
 
-	if (!sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST])
-		return 0;
-
-	txqi = to_txq_info(sdata->vif.txq[IEEE80211_VIF_TXQ_MULTICAST]);
+	len = scnprintf(buf,
+			buflen,
+			"id ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets flags\n");
 
 	spin_lock_bh(&local->fq.lock);
 	rcu_read_lock();
 
-	len = scnprintf(buf,
-			buflen,
-			"ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets\n"
-			"%u %u %u %u %u %u %u %u %u %u\n",
-			txqi->txq.ac,
-			txqi->tin.backlog_bytes,
-			txqi->tin.backlog_packets,
-			txqi->tin.flows,
-			txqi->cstats.drop_count,
-			txqi->cstats.ecn_mark,
-			txqi->tin.overlimit,
-			txqi->tin.collisions,
-			txqi->tin.tx_bytes,
-			txqi->tin.tx_packets);
+	for (int i = 0; i < IEEE80211_VIF_TXQ_NUM; i++) {
+		if (!sdata->vif.txq[i])
+			break;
+
+		txqi = to_txq_info(sdata->vif.txq[i]);
+		len += scnprintf(buf + len,
+				 buflen - len,
+				 "%u %u %u %u %u %u %u %u %u %u %u 0x%lx(%s%s%s%s)\n",
+				 txqi->txq.tid,
+				 txqi->txq.ac,
+				 txqi->tin.backlog_bytes,
+				 txqi->tin.backlog_packets,
+				 txqi->tin.flows,
+				 txqi->cstats.drop_count,
+				 txqi->cstats.ecn_mark,
+				 txqi->tin.overlimit,
+				 txqi->tin.collisions,
+				 txqi->tin.tx_bytes,
+				 txqi->tin.tx_packets,
+				 txqi->flags,
+				 test_bit(IEEE80211_TXQ_STOP, &txqi->flags) ? "STOP" : "RUN",
+				 test_bit(IEEE80211_TXQ_AMPDU, &txqi->flags) ? " AMPDU" : "",
+				 test_bit(IEEE80211_TXQ_NO_AMSDU, &txqi->flags) ? " NO-AMSDU" : "",
+				 test_bit(IEEE80211_TXQ_DIRTY, &txqi->flags) ? " DIRTY" : "");
+	}
 
 	rcu_read_unlock();
 	spin_unlock_bh(&local->fq.lock);

@@ -97,9 +97,14 @@
  * linking it to ieee80211_handle_wake_tx_queue() or implementing a custom
  * handler.
  *
- * Intermediate queues (struct ieee80211_txq) are kept per-sta per-tid, with
- * another per-sta for non-data/non-mgmt and bufferable management frames, and
- * a single per-vif queue for multicast data frames.
+ * Intermediate queues (struct ieee80211_txq) are kept for:
+ *  - per-sta per-tid
+ *  - per-sta for non-data/non-mgmt and bufferable management frames
+ *  - per-sta "noqueue" helper queue for sta (mac80211 internal only)
+ *  - per-vif queue for broadcast/multicast data frames
+ *  - per-vif fallback queue (mac80211 internal only)
+ *  - per-vif "noqueue" helper queue (mac80211 internal only)
+ * The "mac80211 internal only" queues must be ignored by drivers.
  *
  * The driver is expected to initialize its private per-queue data for stations
  * and interfaces in the .add_interface and .sta_add ops.
@@ -1970,10 +1975,19 @@ enum ieee80211_neg_ttlm_res {
  * enum ieee80211_vif_txq - per-vif intermediate queues (txqi)
  *
  * @IEEE80211_VIF_TXQ_MULTICAST: queue for broadcast/multicast data frames.
+ * @IEEE80211_VIF_TXQ_FALLBACK: last resort queue for frames unable to use any
+ *	other queue.
+ * @IEEE80211_VIF_TXQ_NOQUEUE: "queue" for non-sta frames which must be
+ *	send out immediately, like  offchannel, null-func and disassoc frames.
+ *	(Queued frames will be transmitted by the queueing process and not wait
+ *	for a queue run like normal iTXQs.)
  * @IEEE80211_VIF_TXQ_NUM: max number of available vif TXQs.
+ *
  */
 enum ieee80211_vif_txq {
 	IEEE80211_VIF_TXQ_MULTICAST,
+	IEEE80211_VIF_TXQ_FALLBACK,
+	IEEE80211_VIF_TXQ_NOQUEUE,
 	IEEE80211_VIF_TXQ_NUM,
 };
 
@@ -2465,6 +2479,12 @@ struct ieee80211_link_sta {
 	struct ieee80211_sta_txpwr txpwr;
 };
 
+/* To identify the NOQUEUE iTXQs vif->txq[IEEE80211_VIF_TXQ_NOQUEUE] and
+ * sta->txq[IEEE80211_TID_NOQUEUE] we set the tid for these queues to
+ * IEEE80211_TID_NOQUEUE (IEEE80211_NUM_TIDS + 1)
+ */
+#define IEEE80211_TID_NOQUEUE	(IEEE80211_NUM_TIDS + 1)
+
 /**
  * struct ieee80211_sta - station table entry
  *
@@ -2503,8 +2523,10 @@ struct ieee80211_link_sta {
  *	For non MLO STA it will point to the deflink data. For MLO STA
  *	ieee80211_sta_recalc_aggregates() must be called to update it.
  * @support_p2p_ps: indicates whether the STA supports P2P PS mechanism or not.
- * @txq: per-TID data TX queues; note that the last entry (%IEEE80211_NUM_TIDS)
- *	is used for non-data frames
+ * @txq: per-TID data TX queues; note that the last two queues are not for TIDs:
+ *	%IEEE80211_NUM_TIDS is used for non-data frames and
+ *	%IEEE80211_TID_NOQUEUE is for frames which can't wait in any of the
+ *	other queues and must be send out immediately.
  * @deflink: This holds the default link STA information, for non MLO STA all link
  *	specific STA information is accessed through @deflink or through
  *	link[0] which points to address of @deflink. For MLO Link STA
@@ -2538,7 +2560,7 @@ struct ieee80211_sta {
 
 	bool support_p2p_ps;
 
-	struct ieee80211_txq *txq[IEEE80211_NUM_TIDS + 1];
+	struct ieee80211_txq *txq[IEEE80211_TID_NOQUEUE + 1];
 
 	u16 valid_links;
 	struct ieee80211_link_sta deflink;
@@ -2600,7 +2622,8 @@ struct ieee80211_tx_control {
  * @vif: &struct ieee80211_vif pointer from the add_interface callback.
  * @sta: station table entry, %NULL for per-vif queue
  * @tid: the TID for this queue (unused for per-vif queue),
- *	%IEEE80211_NUM_TIDS for non-data (if enabled)
+ *	%IEEE80211_NUM_TIDS for non-data (if enabled) and
+ *	%IEEE80211_TID_NOQUEUE for non-queueable frames.
  * @ac: the AC for this queue
  * @drv_priv: driver private area, sized by hw->txq_data_size
  *
