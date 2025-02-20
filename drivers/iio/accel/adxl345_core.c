@@ -35,6 +35,7 @@
 
 #define ADXL345_REG_TAP_AXIS_MSK	GENMASK(2, 0)
 #define ADXL345_REG_TAP_SUPPRESS_MSK	BIT(3)
+#define ADXL345_REG_ACT_AXIS_MSK	GENMASK(6, 4)
 
 enum adxl345_axis {
 	ADXL345_Z_EN = BIT(0),
@@ -65,6 +66,23 @@ static const unsigned int adxl345_tap_time_reg[] = {
 	[ADXL345_TAP_TIME_LATENT] = ADXL345_REG_LATENT,
 	[ADXL345_TAP_TIME_WINDOW] = ADXL345_REG_WINDOW,
 	[ADXL345_TAP_TIME_DUR] = ADXL345_REG_DUR,
+};
+
+/* activity/inactivity */
+enum adxl345_activity_type {
+	ADXL345_ACTIVITY,
+};
+
+static const unsigned int adxl345_act_int_reg[] = {
+	[ADXL345_ACTIVITY] = ADXL345_INT_ACTIVITY,
+};
+
+static const unsigned int adxl345_act_thresh_reg[] = {
+	[ADXL345_ACTIVITY] = ADXL345_REG_THRESH_ACT,
+};
+
+static const unsigned int adxl345_act_axis_msk[] = {
+	[ADXL345_ACTIVITY] = ADXL345_REG_ACT_AXIS_MSK,
 };
 
 enum adxl345_odr {
@@ -148,6 +166,7 @@ struct adxl345_state {
 	u8 watermark;
 	u8 fifo_mode;
 
+	u32 act_axis_ctrl;
 	u32 tap_axis_ctrl;
 	u32 tap_duration_us;
 	u32 tap_latent_us;
@@ -158,6 +177,13 @@ struct adxl345_state {
 };
 
 static struct iio_event_spec adxl345_events[] = {
+	{
+		/* activity */
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_RISING,
+		.mask_shared_by_type = BIT(IIO_EV_INFO_ENABLE) |
+			BIT(IIO_EV_INFO_VALUE),
+	},
 	{
 		.type = IIO_EV_TYPE_GESTURE,
 		.dir = IIO_EV_DIR_SINGLETAP,
@@ -256,6 +282,73 @@ static int adxl345_set_measure_en(struct adxl345_state *st, bool en)
 	unsigned int val = en ? ADXL345_POWER_CTL_MEASURE : ADXL345_POWER_CTL_STANDBY;
 
 	return regmap_write(st->regmap, ADXL345_REG_POWER_CTL, val);
+}
+
+/* act/inact */
+
+static int adxl345_write_act_axis(struct adxl345_state *st,
+				  enum adxl345_activity_type type, bool en)
+{
+	int ret;
+
+	/*
+	 * The ADXL345 allows for individually enabling/disabling axis for
+	 * activity and inactivity detection, respectively. Here both axis are
+	 * kept in sync, i.e. an axis will be generally enabled or disabled for
+	 * both equally, activity and inactivity detection.
+	 */
+	if (type == ADXL345_ACTIVITY) {
+		st->act_axis_ctrl = en
+			? st->act_axis_ctrl | ADXL345_REG_ACT_AXIS_MSK
+			: st->act_axis_ctrl & ~ADXL345_REG_ACT_AXIS_MSK;
+
+		ret = regmap_update_bits(st->regmap, ADXL345_REG_ACT_INACT_CTRL,
+					 adxl345_act_axis_msk[type],
+					 st->act_axis_ctrl);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static int adxl345_is_act_inact_en(struct adxl345_state *st,
+				   enum adxl345_activity_type type, bool *en)
+{
+	int ret;
+	unsigned int regval;
+
+	ret = regmap_read(st->regmap, ADXL345_REG_INT_ENABLE, &regval);
+	if (ret)
+		return ret;
+
+	*en = (adxl345_act_int_reg[type] & regval) > 0;
+
+	return 0;
+}
+
+static int adxl345_set_act_inact_en(struct adxl345_state *st,
+				    enum adxl345_activity_type type, bool cmd_en)
+{
+	bool axis_en, en = false;
+	unsigned int threshold;
+	int ret;
+
+	ret = adxl345_write_act_axis(st, type, cmd_en);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(st->regmap, adxl345_act_thresh_reg[type], &threshold);
+	if (ret)
+		return ret;
+
+	if (type == ADXL345_ACTIVITY) {
+		axis_en = FIELD_GET(ADXL345_REG_ACT_AXIS_MSK, st->act_axis_ctrl) > 0;
+		en = axis_en && threshold > 0;
+	}
+
+	return regmap_update_bits(st->regmap, ADXL345_REG_INT_ENABLE,
+				  adxl345_act_int_reg[type],
+				  en ? adxl345_act_int_reg[type] : 0);
 }
 
 /* tap */
@@ -685,6 +778,16 @@ static int adxl345_read_event_config(struct iio_dev *indio_dev,
 	int ret = -EFAULT;
 
 	switch (type) {
+	case IIO_EV_TYPE_THRESH:
+		switch (dir) {
+		case IIO_EV_DIR_RISING:
+			ret = adxl345_is_act_inact_en(st, ADXL345_ACTIVITY, &int_en);
+			if (ret)
+				return ret;
+			return int_en;
+		default:
+			return -EINVAL;
+		}
 	case IIO_EV_TYPE_GESTURE:
 		switch (chan->channel2) {
 		case IIO_MOD_X:
@@ -735,6 +838,13 @@ static int adxl345_write_event_config(struct iio_dev *indio_dev,
 	enum adxl345_axis axis;
 
 	switch (type) {
+	case IIO_EV_TYPE_THRESH:
+		switch (dir) {
+		case IIO_EV_DIR_RISING:
+			return adxl345_set_act_inact_en(st, ADXL345_ACTIVITY, state);
+		default:
+			return -EINVAL;
+		}
 	case IIO_EV_TYPE_GESTURE:
 		switch (chan->channel2) {
 		case IIO_MOD_X:
@@ -776,9 +886,29 @@ static int adxl345_read_event_value(struct iio_dev *indio_dev,
 	struct adxl345_state *st = iio_priv(indio_dev);
 	unsigned int tap_threshold;
 	unsigned int ff_threshold;
+	unsigned int act_threshold;
 	int ret;
 
 	switch (type) {
+	case IIO_EV_TYPE_THRESH:
+		switch (info) {
+		case IIO_EV_INFO_VALUE:
+			switch (dir) {
+			case IIO_EV_DIR_RISING:
+				ret = regmap_read(st->regmap,
+						  adxl345_act_thresh_reg[ADXL345_ACTIVITY],
+						  &act_threshold);
+				if (ret)
+					return ret;
+
+				*val = act_threshold;
+				return IIO_VAL_INT;
+			default:
+				return -EINVAL;
+			}
+		default:
+			return -EINVAL;
+		}
 	case IIO_EV_TYPE_GESTURE:
 		switch (info) {
 		case IIO_EV_INFO_VALUE:
@@ -842,6 +972,23 @@ static int adxl345_write_event_value(struct iio_dev *indio_dev,
 		return ret;
 
 	switch (type) {
+	case IIO_EV_TYPE_THRESH:
+		switch (info) {
+		case IIO_EV_INFO_VALUE:
+			switch (dir) {
+			case IIO_EV_DIR_RISING:
+				ret = regmap_write(st->regmap,
+						   adxl345_act_thresh_reg[ADXL345_ACTIVITY],
+						   val);
+				break;
+			default:
+				ret = -EINVAL;
+			}
+			break;
+		default:
+			ret = -EINVAL;
+		}
+		break;
 	case IIO_EV_TYPE_GESTURE:
 		switch (info) {
 		case IIO_EV_INFO_VALUE:
@@ -1124,6 +1271,17 @@ static int adxl345_push_event(struct iio_dev *indio_dev, int int_stat,
 			return ret;
 	}
 
+	if (FIELD_GET(ADXL345_INT_ACTIVITY, int_stat)) {
+		ret = iio_push_event(indio_dev,
+				     IIO_MOD_EVENT_CODE(IIO_ACCEL, 0,
+							act_tap_dir,
+							IIO_EV_TYPE_THRESH,
+							IIO_EV_DIR_RISING),
+				     ts);
+		if (ret)
+			return ret;
+	}
+
 	if (FIELD_GET(ADXL345_INT_FREE_FALL, int_stat)) {
 		ret = iio_push_event(indio_dev,
 				     IIO_MOD_EVENT_CODE(IIO_ACCEL, 0,
@@ -1157,11 +1315,25 @@ static irqreturn_t adxl345_irq_handler(int irq, void *p)
 		ret = regmap_read(st->regmap, ADXL345_REG_ACT_TAP_STATUS, &regval);
 		if (ret)
 			return ret;
+		/* tap direction */
 		if (FIELD_GET(ADXL345_Z_EN, regval) > 0)
 			act_tap_dir = IIO_MOD_Z;
 		else if (FIELD_GET(ADXL345_Y_EN, regval) > 0)
 			act_tap_dir = IIO_MOD_Y;
 		else if (FIELD_GET(ADXL345_X_EN, regval) > 0)
+			act_tap_dir = IIO_MOD_X;
+	}
+
+	if (FIELD_GET(ADXL345_REG_ACT_AXIS_MSK, st->act_axis_ctrl) > 0) {
+		ret = regmap_read(st->regmap, ADXL345_REG_ACT_TAP_STATUS, &regval);
+		if (ret)
+			return ret;
+		/* activity direction */
+		if (FIELD_GET(ADXL345_Z_EN, regval >> 4) > 0)
+			act_tap_dir = IIO_MOD_Z;
+		else if (FIELD_GET(ADXL345_Y_EN, regval >> 4) > 0)
+			act_tap_dir = IIO_MOD_Y;
+		else if (FIELD_GET(ADXL345_X_EN, regval >> 4) > 0)
 			act_tap_dir = IIO_MOD_X;
 	}
 
@@ -1248,6 +1420,13 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 		return -ENODEV;
 	st->fifo_delay = fifo_delay_default;
 
+	/*
+	 * If the feature is enabled, scan all axis for activity and or
+	 * inactivity, and set activity and inactivity to the same ac / dc
+	 * setup.
+	 */
+	st->act_axis_ctrl = ADXL345_REG_ACT_AXIS_MSK;
+
 	/* Init with reasonable values */
 	tap_threshold = 48;			/*   48 [0x30] -> ~3g     */
 	st->tap_duration_us = 16;		/*   16 [0x10] -> .010    */
@@ -1270,6 +1449,10 @@ int adxl345_core_probe(struct device *dev, struct regmap *regmap,
 	 * undesired behavior.
 	 */
 	ret = adxl345_set_odr(st, ADXL345_ODR_200HZ);
+	if (ret)
+		return ret;
+
+	ret = adxl345_set_range(st, ADXL345_16G_RANGE);
 	if (ret)
 		return ret;
 
