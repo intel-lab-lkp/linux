@@ -6082,17 +6082,26 @@ done:
 	return false;
 }
 
-void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
+void unthrottle_cfs_rq(struct cfs_rq *cfs_rq, bool demote_to_partial)
 {
 	struct rq *rq = rq_of(cfs_rq);
 	struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
 	struct sched_entity *se;
 	long queued_delta, runnable_delta, idle_delta;
 	long rq_h_nr_queued = rq->cfs.h_nr_queued;
+	int throttled_state = cfs_rq->throttled;
 
 	se = cfs_rq->tg->se[cpu_of(rq)];
 
-	cfs_rq->throttled = CFS_UNTHROTTLED;
+	if (demote_to_partial) {
+		/*
+		 * A demotion to partially throttled state can only be
+		 * requested on a fully throttled hierarchy.
+		 */
+		SCHED_WARN_ON(!cfs_rq_h_throttled(cfs_rq));
+		cfs_rq->throttled = CFS_THROTTLED_PARTIAL;
+	} else
+		cfs_rq->throttled = CFS_UNTHROTTLED;
 
 	update_rq_clock(rq);
 
@@ -6101,8 +6110,15 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 		cfs_b->throttled_time += rq_clock(rq) - cfs_rq->throttled_clock;
 		cfs_rq->throttled_clock = 0;
 	}
-	list_del_rcu(&cfs_rq->throttled_list);
+
+	/* Partial throttle should retain itself in the throttled_list */
+	if (!demote_to_partial)
+		list_del_rcu(&cfs_rq->throttled_list);
 	raw_spin_unlock(&cfs_b->lock);
+
+	/* If cfs_rq was partially throttled, we have nothing to do */
+	if (throttled_state == CFS_THROTTLED_PARTIAL)
+		goto unthrottle_throttle;
 
 	/* update hierarchical throttle state */
 	walk_tg_tree_from(cfs_rq->tg, tg_nop, tg_unthrottle_up, (void *)rq);
@@ -6176,8 +6192,11 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 unthrottle_throttle:
 	assert_list_leaf_cfs_rq(rq);
 
-	/* Determine whether we need to wake up potentially idle CPU: */
-	if (rq->curr == rq->idle && rq->cfs.nr_queued)
+	/*
+	 * Determine whether we need to wake up potentially idle CPU or
+	 * reevalutate our pick on the throttled hierarchy.
+	 */
+	if (cfs_rq->curr || (rq->curr == rq->idle && rq->cfs.nr_queued))
 		resched_curr(rq);
 }
 
@@ -6212,7 +6231,7 @@ static void __cfsb_csd_unthrottle(void *arg)
 		list_del_init(&cursor->throttled_csd_list);
 
 		if (cfs_rq_throttled(cursor))
-			unthrottle_cfs_rq(cursor);
+			unthrottle_cfs_rq(cursor, false);
 	}
 
 	rcu_read_unlock();
@@ -6227,7 +6246,7 @@ static inline void __unthrottle_cfs_rq_async(struct cfs_rq *cfs_rq)
 	bool first;
 
 	if (rq == this_rq()) {
-		unthrottle_cfs_rq(cfs_rq);
+		unthrottle_cfs_rq(cfs_rq, false);
 		return;
 	}
 
@@ -6243,7 +6262,7 @@ static inline void __unthrottle_cfs_rq_async(struct cfs_rq *cfs_rq)
 #else
 static inline void __unthrottle_cfs_rq_async(struct cfs_rq *cfs_rq)
 {
-	unthrottle_cfs_rq(cfs_rq);
+	unthrottle_cfs_rq(cfs_rq, false);
 }
 #endif
 
@@ -6329,7 +6348,7 @@ next:
 		list_del_init(&cfs_rq->throttled_csd_list);
 
 		if (cfs_rq_throttled(cfs_rq))
-			unthrottle_cfs_rq(cfs_rq);
+			unthrottle_cfs_rq(cfs_rq, false);
 
 		rq_unlock_irqrestore(rq, &rf);
 	}
@@ -6786,7 +6805,7 @@ static void __maybe_unused unthrottle_offline_cfs_rqs(struct rq *rq)
 		 * there's some valid quota amount
 		 */
 		cfs_rq->runtime_remaining = 1;
-		unthrottle_cfs_rq(cfs_rq);
+		unthrottle_cfs_rq(cfs_rq, false);
 	}
 	rcu_read_unlock();
 

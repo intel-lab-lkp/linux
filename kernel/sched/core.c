@@ -9488,7 +9488,7 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota,
 		cfs_rq->runtime_remaining = 0;
 
 		if (cfs_rq->throttled)
-			unthrottle_cfs_rq(cfs_rq);
+			unthrottle_cfs_rq(cfs_rq, false);
 	}
 
 	if (runtime_was_enabled && !runtime_enabled)
