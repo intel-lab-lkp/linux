@@ -1307,3 +1307,4 @@ module_platform_driver(omap_dm_timer_driver);
 
 MODULE_DESCRIPTION("OMAP Dual-Mode Timer Driver");
 MODULE_AUTHOR("Texas Instruments Inc");
+MODULE_LICENSE("GPL");
