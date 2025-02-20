@@ -635,9 +635,9 @@ static u64 xhci_get_hw_deq(struct xhci_hcd *xhci, struct xhci_virt_device *vdev,
 	return le64_to_cpu(ep_ctx->deq);
 }
 
-static int xhci_move_dequeue_past_td(struct xhci_hcd *xhci,
-				unsigned int slot_id, unsigned int ep_index,
-				unsigned int stream_id, struct xhci_td *td)
+/* Move HW dequeue to the first pending TD or to our enqueue if there are no TDs */
+static int set_ring_dequeue(struct xhci_hcd *xhci, unsigned int slot_id,
+				unsigned int ep_index, unsigned int stream_id)
 {
 	struct xhci_virt_device *dev = xhci->devs[slot_id];
 	struct xhci_virt_ep *ep = &dev->eps[ep_index];
@@ -645,58 +645,31 @@ static int xhci_move_dequeue_past_td(struct xhci_hcd *xhci,
 	struct xhci_command *cmd;
 	struct xhci_segment *new_seg;
 	union xhci_trb *new_deq;
+	struct xhci_td *td;
 	int new_cycle;
 	dma_addr_t addr;
-	u64 hw_dequeue;
-	bool cycle_found = false;
-	bool td_last_trb_found = false;
 	u32 trb_sct = 0;
 	int ret;
 
-	ep_ring = xhci_triad_to_transfer_ring(xhci, slot_id,
-			ep_index, stream_id);
+	ep_ring = xhci_triad_to_transfer_ring(xhci, slot_id, ep_index, stream_id);
+
 	if (!ep_ring) {
 		xhci_warn(xhci, "WARN can't find new dequeue, invalid stream ID %u\n",
 			  stream_id);
 		return -ENODEV;
 	}
 
-	hw_dequeue = xhci_get_hw_deq(xhci, dev, ep_index, stream_id);
-	new_seg = ep_ring->deq_seg;
-	new_deq = ep_ring->dequeue;
-	new_cycle = hw_dequeue & 0x1;
+	if (!list_empty(&ep_ring->td_list)) {
+		td = list_first_entry(&ep_ring->td_list, struct xhci_td, td_list);
+		new_seg = td->start_seg;
+		new_deq = td->start_trb;
+		new_cycle = le32_to_cpu(new_deq->generic.field[3]) & TRB_CYCLE;
+	} else {
+		new_seg = ep_ring->enq_seg;
+		new_deq = ep_ring->enqueue;
+		new_cycle = ep_ring->cycle_state;
+	}
 
-	/*
-	 * We want to find the pointer, segment and cycle state of the new trb
-	 * (the one after current TD's end_trb). We know the cycle state at
-	 * hw_dequeue, so walk the ring until both hw_dequeue and end_trb are
-	 * found.
-	 */
-	do {
-		if (!cycle_found && xhci_trb_virt_to_dma(new_seg, new_deq)
-		    == (dma_addr_t)(hw_dequeue & ~0xf)) {
-			cycle_found = true;
-			if (td_last_trb_found)
-				break;
-		}
-		if (new_deq == td->end_trb)
-			td_last_trb_found = true;
-
-		if (cycle_found && trb_is_link(new_deq) &&
-		    link_trb_toggles_cycle(new_deq))
-			new_cycle ^= 0x1;
-
-		next_trb(&new_seg, &new_deq);
-
-		/* Search wrapped around, bail out */
-		if (new_deq == ep->ring->dequeue) {
-			xhci_err(xhci, "Error: Failed finding new dequeue state\n");
-			return -EINVAL;
-		}
-
-	} while (!cycle_found || !td_last_trb_found);
-
-	/* Don't update the ring cycle state for the producer (us). */
 	addr = xhci_trb_virt_to_dma(new_seg, new_deq);
 	if (addr == 0) {
 		xhci_warn(xhci, "Can't find dma of new dequeue ptr\n");
@@ -1060,9 +1033,8 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 	if (!cached_td)
 		return 0;
 
-	err = xhci_move_dequeue_past_td(xhci, slot_id, ep->ep_index,
-					cached_td->urb->stream_id,
-					cached_td);
+	err = set_ring_dequeue(xhci, slot_id, ep->ep_index, cached_td->urb->stream_id);
+
 	if (err) {
 		/* Failed to move past cached td, just set cached TDs to no-op */
 		list_for_each_entry_safe(td, tmp_td, &ep->cancelled_td_list, cancelled_td_list) {
