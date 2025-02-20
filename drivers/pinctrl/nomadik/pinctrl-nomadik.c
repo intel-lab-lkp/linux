@@ -985,7 +985,7 @@ static int nmk_gpio_request_enable(struct pinctrl_dev *pctldev,
 				   unsigned int pin)
 {
 	struct nmk_pinctrl *npct = pinctrl_dev_get_drvdata(pctldev);
-	struct nmk_gpio_chip *nmk_chip;
+	struct nmk_gpio_chip *nmk_chip, *r;
 	struct gpio_chip *chip;
 	unsigned int bit;
 
@@ -1002,7 +1002,12 @@ static int nmk_gpio_request_enable(struct pinctrl_dev *pctldev,
 
 	dev_dbg(npct->dev, "enable pin %u as GPIO\n", pin);
 
-	find_nmk_gpio_from_pin(pin, &bit);
+	r = find_nmk_gpio_from_pin(pin, &bit);
+	if (!r) {
+		dev_err(npct->dev,
+			"invalid pin offset %d\n", pin);
+		return -EINVAL;
+	}
 
 	clk_enable(nmk_chip->clk);
 	/* There is no glitch when converting any pin to GPIO */
