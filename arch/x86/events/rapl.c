@@ -592,6 +592,14 @@ static struct perf_msr intel_rapl_spr_msrs[] = {
 	[PERF_RAPL_PSYS] = { MSR_PLATFORM_ENERGY_STATUS, &rapl_events_psys_group,  test_msr, true, RAPL_MSR_MASK },
 };
 
+static struct perf_msr intel_rapl_mtl_msrs[] = {
+	[PERF_RAPL_PP0]  = { MSR_PP0_ENERGY_STATUS,      &rapl_events_cores_group, test_msr, false, RAPL_MSR_MASK },
+	[PERF_RAPL_PKG]  = { MSR_PKG_ENERGY_STATUS,      &rapl_events_pkg_group,   test_msr, false, RAPL_MSR_MASK },
+	[PERF_RAPL_RAM]  = { MSR_DRAM_ENERGY_STATUS,     &rapl_events_ram_group,   test_msr, false, RAPL_MSR_MASK },
+	[PERF_RAPL_PP1]  = { MSR_PP1_ENERGY_STATUS,      &rapl_events_gpu_group,   test_msr, true,  RAPL_MSR_MASK },
+	[PERF_RAPL_PSYS] = { MSR_PLATFORM_ENERGY_STATUS, &rapl_events_psys_group,  test_msr, false, RAPL_MSR_MASK },
+};
+
 /*
  * Force to PERF_RAPL_PKG_EVENTS_MAX size due to:
  * - perf_msr_probe(PERF_RAPL_PKG_EVENTS_MAX)
@@ -830,6 +838,16 @@ static struct rapl_model model_spr = {
 	.rapl_pkg_msrs	= intel_rapl_spr_msrs,
 };
 
+static struct rapl_model model_rpl = {
+	.pkg_events	= BIT(PERF_RAPL_PP0) |
+			  BIT(PERF_RAPL_PKG) |
+			  BIT(PERF_RAPL_RAM) |
+			  BIT(PERF_RAPL_PP1) |
+			  BIT(PERF_RAPL_PSYS),
+	.msr_power_unit = MSR_RAPL_POWER_UNIT,
+	.rapl_pkg_msrs  = intel_rapl_mtl_msrs,
+};
+
 static struct rapl_model model_amd_hygon = {
 	.pkg_events	= BIT(PERF_RAPL_PKG),
 	.core_events	= BIT(PERF_RAPL_CORE),
@@ -877,13 +895,13 @@ static const struct x86_cpu_id rapl_model_match[] __initconst = {
 	X86_MATCH_VFM(INTEL_SAPPHIRERAPIDS_X,	&model_spr),
 	X86_MATCH_VFM(INTEL_EMERALDRAPIDS_X,	&model_spr),
 	X86_MATCH_VFM(INTEL_RAPTORLAKE,		&model_skl),
-	X86_MATCH_VFM(INTEL_RAPTORLAKE_P,	&model_skl),
+	X86_MATCH_VFM(INTEL_RAPTORLAKE_P,	&model_rpl),
 	X86_MATCH_VFM(INTEL_RAPTORLAKE_S,	&model_skl),
-	X86_MATCH_VFM(INTEL_METEORLAKE,		&model_skl),
-	X86_MATCH_VFM(INTEL_METEORLAKE_L,	&model_skl),
+	X86_MATCH_VFM(INTEL_METEORLAKE,		&model_rpl),
+	X86_MATCH_VFM(INTEL_METEORLAKE_L,	&model_rpl),
 	X86_MATCH_VFM(INTEL_ARROWLAKE_H,	&model_skl),
 	X86_MATCH_VFM(INTEL_ARROWLAKE,		&model_skl),
-	X86_MATCH_VFM(INTEL_LUNARLAKE_M,	&model_skl),
+	X86_MATCH_VFM(INTEL_LUNARLAKE_M,	&model_rpl),
 	{},
 };
 MODULE_DEVICE_TABLE(x86cpu, rapl_model_match);
