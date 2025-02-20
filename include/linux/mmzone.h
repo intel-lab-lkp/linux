@@ -116,6 +116,7 @@ extern int page_group_by_mobility_disabled;
 			MIGRATETYPE_MASK)
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
+	struct list_head	pend_list[MIGRATE_TYPES];
 	unsigned long		nr_free;
 };
 
@@ -995,6 +996,8 @@ struct zone {
 	/* Zone statistics */
 	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
 	atomic_long_t		vm_numa_event[NR_VM_NUMA_EVENT_ITEMS];
+	/* Count pages that need tlb shootdown on allocation */
+	atomic_long_t		nr_luf_pages;
 } ____cacheline_internodealigned_in_smp;
 
 enum pgdat_flags {
