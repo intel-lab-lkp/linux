@@ -6839,6 +6839,7 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 
 __always_inline void sched_notify_critical_section_entry(void)
 {
+	SCHED_WARN_ON(current->se.kernel_cs_count);
 	current->se.kernel_cs_count++;
 	/*
 	 * Post this point, the task is considered to be in a kernel
@@ -6848,7 +6849,23 @@ __always_inline void sched_notify_critical_section_entry(void)
 
 __always_inline void sched_notify_critical_section_exit(void)
 {
+	lockdep_assert_irqs_disabled();
+
 	current->se.kernel_cs_count--;
+	SCHED_WARN_ON(current->se.kernel_cs_count);
+
+	/*
+	 * XXX: Can we get away with using set_thread_flag()
+	 * and not grabbing the rq_lock since we'll call
+	 * schedule() soon after enabling interrupts again in
+	 * exit_to_user_mode_loop()?
+	 */
+	if (!current->se.kernel_cs_count && current->se.sched_throttled) {
+		struct rq *rq = this_rq();
+
+		guard(rq_lock_irqsave)(rq);
+		resched_curr(rq);
+	}
 }
 
 static __always_inline int se_in_kernel(struct sched_entity *se)
