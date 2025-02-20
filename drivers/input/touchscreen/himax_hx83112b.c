@@ -42,6 +42,11 @@
 
 #define HIMAX_INVALID_COORD		0xffff
 
+/* default resolution in points/mm */
+#define HIMAX_RESOLUTION		10
+
+#define HIMAX_SENSING_CHANNELS		1600
+
 struct himax_event_point {
 	__be16 x;
 	__be16 y;
@@ -54,9 +59,32 @@ struct himax_event {
 	u8 num_points;
 	u8 pad1[2];
 	u8 checksum_fix;
+	__be16 p_x;
+	__be16 p_y;
+	__be16 p_w;
+	union {
+		struct {
+			s8 tilt_x;
+			u8 hover;
+			u8 btn;
+			u8 btn2;
+			s8 tilt_y;
+			u8 pad;
+		} p_v1;
+		struct {
+			s8 tilt_x;
+			s8 tilt_y;
+			u8 status;
+			u8 pad[3];
+		} p_v2;
+	};
 } __packed;
 
-static_assert(sizeof(struct himax_event) == 56);
+#define HIMAX_PEN_HOVER		BIT(0)
+#define HIMAX_PEN_BTN		BIT(1)
+#define HIMAX_PEN_BTN2		BIT(2)
+
+static_assert(sizeof(struct himax_event) == 68);
 
 struct himax_ts_data;
 struct himax_chip {
@@ -70,9 +98,12 @@ struct himax_ts_data {
 	const struct himax_chip *chip;
 	struct gpio_desc *gpiod_rst;
 	struct input_dev *input_dev;
+	struct input_dev *pen_input_dev;
 	struct i2c_client *client;
 	struct regmap *regmap;
+	u32 pen;
 	struct touchscreen_properties props;
+	struct touchscreen_properties pen_props;
 };
 
 static const struct regmap_config himax_regmap_config = {
@@ -214,6 +245,52 @@ static int himax_input_register(struct himax_ts_data *ts)
 	return 0;
 }
 
+static int himax_pen_input_register(struct himax_ts_data *ts)
+{
+	struct input_dev *input;
+	int error;
+	u32 x_mm, y_mm;
+
+	input = devm_input_allocate_device(&ts->client->dev);
+	if (!input) {
+		dev_err(&ts->client->dev, "Failed to allocate input device\n");
+		return -ENOMEM;
+	}
+	ts->pen_input_dev = input;
+
+	input->name = "Himax Pen Input";
+
+	if (device_property_read_u32(&ts->client->dev, "touchscreen-x-mm", &x_mm) ||
+	    device_property_read_u32(&ts->client->dev, "touchscreen-y-mm", &y_mm)) {
+		input_abs_set_res(input, ABS_X, HIMAX_RESOLUTION);
+		input_abs_set_res(input, ABS_Y, HIMAX_RESOLUTION);
+	} else {
+		input_abs_set_res(input, ABS_X, HIMAX_SENSING_CHANNELS / x_mm);
+		input_abs_set_res(input, ABS_Y, HIMAX_SENSING_CHANNELS / y_mm);
+	}
+
+	input_set_capability(input, EV_ABS, ABS_X);
+	input_set_capability(input, EV_ABS, ABS_Y);
+	input_set_abs_params(input, ABS_PRESSURE, 0, 4095, 0, 0);
+	input_set_abs_params(input, ABS_TILT_X, -60, 60, 0, 0);
+	input_set_abs_params(input, ABS_TILT_Y, -60, 60, 0, 0);
+	input_set_capability(input, EV_KEY, BTN_TOUCH);
+	input_set_capability(input, EV_KEY, BTN_STYLUS);
+	input_set_capability(input, EV_KEY, BTN_STYLUS2);
+	input_set_capability(input, EV_KEY, BTN_TOOL_PEN);
+
+	touchscreen_parse_properties_prefix(ts->pen_input_dev, false, &ts->pen_props, "pen");
+
+	error = input_register_device(input);
+	if (error) {
+		dev_err(&ts->client->dev,
+			"Failed to register input device: %d\n", error);
+		return error;
+	}
+
+	return 0;
+}
+
 static u8 himax_event_get_num_points(const struct himax_event *event)
 {
 	if (event->num_points == 0xff)
@@ -257,6 +334,45 @@ static void himax_process_event(struct himax_ts_data *ts,
 	input_sync(ts->input_dev);
 }
 
+static void himax_process_pen(struct himax_ts_data *ts,
+			      const struct himax_event *event)
+{
+	struct input_dev *dev = ts->pen_input_dev;
+	s8 tilt_x, tilt_y;
+	bool hover, btn, btn2;
+	u16 x = be16_to_cpu(event->p_x);
+	u16 y = be16_to_cpu(event->p_y);
+	bool valid = x < ts->pen_props.max_x && y < ts->pen_props.max_y;
+
+	if (ts->pen == 2) {
+		tilt_x = event->p_v2.tilt_x;
+		tilt_y = event->p_v2.tilt_y;
+		hover = event->p_v2.status & HIMAX_PEN_HOVER;
+		btn = event->p_v2.status & HIMAX_PEN_BTN;
+		btn2 = event->p_v2.status & HIMAX_PEN_BTN2;
+	} else {
+		tilt_x = event->p_v1.tilt_x;
+		tilt_y = event->p_v1.tilt_y;
+		hover = event->p_v1.hover;
+		btn = event->p_v1.btn;
+		btn2 = event->p_v1.btn2;
+	}
+
+	input_report_key(dev, BTN_TOOL_PEN, valid);
+
+	if (valid) {
+		input_report_key(dev, BTN_TOUCH, !hover);
+		touchscreen_report_pos(dev, &ts->pen_props, x, y, false);
+		input_report_abs(dev, ABS_PRESSURE, be16_to_cpu(event->p_w));
+		input_report_abs(dev, ABS_TILT_X, tilt_x);
+		input_report_abs(dev, ABS_TILT_Y, tilt_y);
+		input_report_key(dev, BTN_STYLUS, btn);
+		input_report_key(dev, BTN_STYLUS2, btn2);
+	}
+
+	input_sync(dev);
+}
+
 static bool himax_verify_checksum(struct himax_ts_data *ts,
 				  const struct himax_event *event)
 {
@@ -264,7 +380,7 @@ static bool himax_verify_checksum(struct himax_ts_data *ts,
 	int i;
 	u16 checksum = 0;
 
-	for (i = 0; i < sizeof(*event); i++)
+	for (i = 0; i <= offsetof(struct himax_event, checksum_fix); i++)
 		checksum += data[i];
 
 	if ((checksum & 0x00ff) != 0) {
@@ -293,8 +409,9 @@ static int himax_handle_input(struct himax_ts_data *ts)
 {
 	int error;
 	struct himax_event event;
+	size_t length = ts->pen ? sizeof(event) : offsetof(struct himax_event, p_x);
 
-	error = ts->chip->read_events(ts, &event, sizeof(event));
+	error = ts->chip->read_events(ts, &event, length);
 	if (error) {
 		dev_err(&ts->client->dev, "Failed to read input event: %d\n",
 			error);
@@ -305,8 +422,11 @@ static int himax_handle_input(struct himax_ts_data *ts)
 	 * Only process the current event when it has a valid checksum but
 	 * don't consider it a fatal error when it doesn't.
 	 */
-	if (himax_verify_checksum(ts, &event))
+	if (himax_verify_checksum(ts, &event)) {
 		himax_process_event(ts, &event);
+		if (ts->pen)
+			himax_process_pen(ts, &event);
+	}
 
 	return 0;
 }
@@ -367,6 +487,13 @@ static int himax_probe(struct i2c_client *client)
 	error = himax_input_register(ts);
 	if (error)
 		return error;
+
+	device_property_read_u32(dev, "pen-present", &ts->pen);
+	if (ts->pen) {
+		error = himax_pen_input_register(ts);
+		if (error)
+			return error;
+	}
 
 	error = devm_request_threaded_irq(dev, client->irq, NULL,
 					  himax_irq_handler, IRQF_ONESHOT,
