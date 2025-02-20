@@ -117,6 +117,7 @@ extern int page_group_by_mobility_disabled;
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
 	struct list_head	pend_list[MIGRATE_TYPES];
+	unsigned long		pend_zone_ugen[MIGRATE_TYPES];
 	unsigned long		nr_free;
 };
 
@@ -998,6 +999,14 @@ struct zone {
 	atomic_long_t		vm_numa_event[NR_VM_NUMA_EVENT_ITEMS];
 	/* Count pages that need tlb shootdown on allocation */
 	atomic_long_t		nr_luf_pages;
+	/* Generation number for that tlb shootdown has been done */
+	unsigned long		zone_ugen_done;
+	/* Generation number to control zone batched tlb shootdown */
+	unsigned long		zone_ugen;
+	/* Approximate latest luf_ugen that have ever entered */
+	unsigned long		luf_ugen;
+	/* Accumulated tlb batch for this zone */
+	struct tlbflush_unmap_batch zone_batch;
 } ____cacheline_internodealigned_in_smp;
 
 enum pgdat_flags {

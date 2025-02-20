@@ -1595,10 +1595,10 @@ static inline void accept_page(struct page *page)
 #if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
 extern struct luf_batch luf_batch[];
 bool luf_takeoff_start(void);
-void luf_takeoff_end(void);
+void luf_takeoff_end(struct zone *zone);
 bool luf_takeoff_no_shootdown(void);
-bool luf_takeoff_check(struct page *page);
-bool luf_takeoff_check_and_fold(struct page *page);
+bool luf_takeoff_check(struct zone *zone, struct page *page);
+bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page);
 
 static inline bool non_luf_pages_ok(struct zone *zone)
 {
@@ -1608,7 +1608,6 @@ static inline bool non_luf_pages_ok(struct zone *zone)
 
 	return nr_free - nr_luf_pages > min_wm;
 }
-
 unsigned short fold_unmap_luf(void);
 
 /*
@@ -1696,10 +1695,10 @@ static inline bool can_luf_vma(struct vm_area_struct *vma)
 }
 #else /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
 static inline bool luf_takeoff_start(void) { return false; }
-static inline void luf_takeoff_end(void) {}
+static inline void luf_takeoff_end(struct zone *zone) {}
 static inline bool luf_takeoff_no_shootdown(void) { return true; }
-static inline bool luf_takeoff_check(struct page *page) { return true; }
-static inline bool luf_takeoff_check_and_fold(struct page *page) { return true; }
+static inline bool luf_takeoff_check(struct zone *zone, struct page *page) { return true; }
+static inline bool luf_takeoff_check_and_fold(struct zone *zone, struct page *page) { return true; }
 static inline bool non_luf_pages_ok(struct zone *zone) { return true; }
 static inline unsigned short fold_unmap_luf(void) { return 0; }
 

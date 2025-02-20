@@ -118,7 +118,8 @@ page_reporting_drain(struct page_reporting_dev_info *prdev,
 
 		/*
 		 * Ensure private is zero before putting into the
-		 * allocator.
+		 * allocator.  tlb shootdown has already been performed
+		 * at isolation.
 		 */
 		set_page_private(page, 0);
 
@@ -194,7 +195,7 @@ retry:
 		if (PageReported(page))
 			continue;
 
-		if (unlikely(consider_pend && !luf_takeoff_check(page))) {
+		if (unlikely(consider_pend && !luf_takeoff_check(zone, page))) {
 			VM_WARN_ON(1);
 			continue;
 		}
@@ -238,7 +239,7 @@ retry:
 		/*
 		 * Check and flush before using the pages taken off.
 		 */
-		luf_takeoff_end();
+		luf_takeoff_end(zone);
 
 		/* begin processing pages in local list */
 		err = prdev->report(prdev, sgl, PAGE_REPORTING_CAPACITY);
@@ -283,7 +284,7 @@ done:
 	/*
 	 * Check and flush before using the pages taken off.
 	 */
-	luf_takeoff_end();
+	luf_takeoff_end(zone);
 
 	return err;
 }

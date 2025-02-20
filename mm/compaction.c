@@ -653,7 +653,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 				goto isolate_fail;
 		}
 
-		if (!luf_takeoff_check(page))
+		if (!luf_takeoff_check(cc->zone, page))
 			goto isolate_fail;
 
 		/* Found a free page, will break it into order-0 pages */
@@ -689,7 +689,7 @@ isolate_fail:
 	/*
 	 * Check and flush before using the pages taken off.
 	 */
-	luf_takeoff_end();
+	luf_takeoff_end(cc->zone);
 
 	/*
 	 * Be careful to not go outside of the pageblock.
@@ -1611,7 +1611,7 @@ retry:
 			order_scanned++;
 			nr_scanned++;
 
-			if (unlikely(consider_pend && !luf_takeoff_check(freepage)))
+			if (unlikely(consider_pend && !luf_takeoff_check(cc->zone, freepage)))
 				goto scan_next;
 
 			pfn = page_to_pfn(freepage);
@@ -1679,7 +1679,7 @@ done:
 		/*
 		 * Check and flush before using the pages taken off.
 		 */
-		luf_takeoff_end();
+		luf_takeoff_end(cc->zone);
 
 		/* Skip fast search if enough freepages isolated */
 		if (cc->nr_freepages >= cc->nr_migratepages)
@@ -2415,7 +2415,7 @@ static enum compact_result compact_finished(struct compact_control *cc)
 	 */
 	luf_takeoff_start();
 	ret = __compact_finished(cc);
-	luf_takeoff_end();
+	luf_takeoff_end(cc->zone);
 
 	trace_mm_compaction_finished(cc->zone, cc->order, ret);
 	if (ret == COMPACT_NO_SUITABLE_PAGE)
