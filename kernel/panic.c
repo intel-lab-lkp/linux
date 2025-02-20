@@ -372,8 +372,6 @@ void panic(const char *fmt, ...)
 	if (!_crash_kexec_post_notifiers)
 		__crash_kexec(NULL);
 
-	panic_other_cpus_shutdown(_crash_kexec_post_notifiers);
-
 	printk_legacy_allow_panic_sync();
 
 	/*
@@ -381,6 +379,8 @@ void panic(const char *fmt, ...)
 	 * add information to the kmsg dump output.
 	 */
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
+
+	panic_other_cpus_shutdown(_crash_kexec_post_notifiers);
 
 	panic_print_sys_info(false);
 
