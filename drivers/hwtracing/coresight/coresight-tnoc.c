@@ -112,10 +112,107 @@ static ssize_t flag_type_show(struct device *dev,
 }
 static DEVICE_ATTR_RW(flag_type);
 
+static ssize_t freq_type_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", drvdata->freq_type);
+}
+
+static ssize_t freq_type_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t size)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	if (val != 1 && val != 0)
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	if (val)
+		drvdata->freq_type = FREQ_TS;
+	else
+		drvdata->freq_type = FREQ;
+	spin_unlock(&drvdata->spinlock);
+
+	return size;
+}
+static DEVICE_ATTR_RW(freq_type);
+
+static ssize_t freq_req_val_show(struct device *dev,
+				 struct device_attribute *attr,
+				char *buf)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", drvdata->freq_req_val);
+}
+
+static ssize_t freq_req_val_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf,
+				  size_t size)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	if (val) {
+		spin_lock(&drvdata->spinlock);
+		drvdata->freq_req_val = val;
+		spin_unlock(&drvdata->spinlock);
+	}
+
+	return size;
+}
+static DEVICE_ATTR_RW(freq_req_val);
+
+static ssize_t freq_ts_req_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf,
+				 size_t size)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct coresight_device	*csdev = drvdata->csdev;
+	unsigned long val;
+	u32 reg;
+
+	if (kstrtoul(buf, 0, &val))
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	if (csdev->refcnt == 0) {
+		spin_unlock(&drvdata->spinlock);
+		return -EPERM;
+	}
+
+	if (val) {
+		reg = readl_relaxed(drvdata->base + TRACE_NOC_CTRL);
+		reg = reg | TRACE_NOC_CTRL_FREQTSREQ;
+		writel_relaxed(reg, drvdata->base + TRACE_NOC_CTRL);
+	}
+	spin_unlock(&drvdata->spinlock);
+
+	return size;
+}
+static DEVICE_ATTR_WO(freq_ts_req);
+
 static struct attribute *trace_noc_attrs[] = {
 	&dev_attr_flush_req.attr,
 	&dev_attr_flush_status.attr,
 	&dev_attr_flag_type.attr,
+	&dev_attr_freq_type.attr,
+	&dev_attr_freq_req_val.attr,
+	&dev_attr_freq_ts_req.attr,
 	NULL,
 };
 
