@@ -33,15 +33,18 @@ int live_rc6_manual(void *arg)
 {
 	struct intel_gt *gt = arg;
 	struct intel_rc6 *rc6 = &gt->rc6;
+	struct intel_uncore *uncore = rc6_to_uncore(rc6);
 	u64 rc0_power, rc6_power;
 	intel_wakeref_t wakeref;
 	bool has_power;
+	u32 pg_enable;
 	ktime_t dt;
 	u64 res[2];
 	int err = 0;
 	u32 rc0_freq = 0;
 	u32 rc6_freq = 0;
 	struct intel_rps *rps = &gt->rps;
+	int i;
 
 	/*
 	 * Our claim is that we can "encourage" the GPU to enter rc6 at will.
@@ -129,6 +132,39 @@ int live_rc6_manual(void *arg)
 	intel_rc6_unpark(rc6);
 
 out_unlock:
+	if (GRAPHICS_VER(gt->i915) >= 9) {
+		if (!intel_guc_rc_enable(gt_to_guc(gt)))
+			rc6->ctl_enable = GEN6_RC_CTL_RC6_ENABLE;
+		else
+			rc6->ctl_enable =
+				GEN6_RC_CTL_HW_ENABLE |
+				GEN6_RC_CTL_RC6_ENABLE |
+				GEN6_RC_CTL_EI_MODE(1);
+
+		if (IS_GFX_GT_IP_RANGE(gt, IP_VER(12, 70), IP_VER(12, 74)))
+			pg_enable =
+				GEN9_MEDIA_PG_ENABLE |
+				GEN11_MEDIA_SAMPLER_PG_ENABLE;
+		else
+			pg_enable =
+				GEN9_RENDER_PG_ENABLE |
+				GEN9_MEDIA_PG_ENABLE |
+				GEN11_MEDIA_SAMPLER_PG_ENABLE;
+
+		if (GRAPHICS_VER(gt->i915) >= 12 && !IS_DG1(gt->i915)) {
+			for (i = 0; i < I915_MAX_VCS; i++)
+				if (HAS_ENGINE(gt, _VCS(i)))
+					pg_enable |= (VDN_HCP_POWERGATE_ENABLE(i) |
+								VDN_MFX_POWERGATE_ENABLE(i));
+		}
+
+		if (!NEEDS_WaRsDisableCoarsePowerGating(rc6_to_i915(rc6)) &&
+		    GRAPHICS_VER(gt->i915) < 11)
+			intel_uncore_write_fw(uncore, GEN9_PG_ENABLE,
+					      GEN9_RENDER_PG_ENABLE | GEN9_MEDIA_PG_ENABLE);
+		else
+			intel_uncore_write_fw(uncore, GEN9_PG_ENABLE, pg_enable);
+	}
 	intel_runtime_pm_put(gt->uncore->rpm, wakeref);
 	return err;
 }
