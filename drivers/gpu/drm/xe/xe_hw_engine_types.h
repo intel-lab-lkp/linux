@@ -64,6 +64,7 @@ enum xe_hw_engine_id {
 struct xe_bo;
 struct xe_execlist_port;
 struct xe_gt;
+struct pagefault;
 
 /**
  * struct xe_hw_engine_class_intf - per hw engine class struct interface
@@ -150,6 +151,13 @@ struct xe_hw_engine {
 	struct xe_oa_unit *oa_unit;
 	/** @hw_engine_group: the group of hw engines this one belongs to */
 	struct xe_hw_engine_group *hw_engine_group;
+	/** @pf: the last pagefault seen on this engine */
+	struct {
+		/** @pf.info: info containing last seen pagefault details */
+		struct pagefault *info;
+		/** @pf.lock: lock protecting @pf.info */
+		spinlock_t lock;
+	} pf;
 };
 
 enum xe_hw_engine_snapshot_source_id {
