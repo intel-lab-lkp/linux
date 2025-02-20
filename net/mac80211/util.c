@@ -1196,7 +1196,7 @@ void ieee80211_send_deauth_disassoc(struct ieee80211_sub_if_data *sdata,
 			 */
 			IEEE80211_SKB_CB(skb)->flags |=
 				IEEE80211_TX_INTFL_DONT_ENCRYPT |
-				IEEE80211_TX_INTFL_OFFCHAN_TX_OK;
+				IEEE80211_TX_INTFL_NOQUEUE_TX;
 
 		ieee80211_tx_skb(sdata, skb);
 	}
