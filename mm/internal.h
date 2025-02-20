@@ -1594,7 +1594,7 @@ static inline void accept_page(struct page *page)
 #endif /* CONFIG_UNACCEPTED_MEMORY */
 #if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
 extern struct luf_batch luf_batch[];
-bool luf_takeoff_start(void);
+bool luf_takeoff_start(struct zone *zone);
 void luf_takeoff_end(struct zone *zone);
 bool luf_takeoff_no_shootdown(void);
 bool luf_takeoff_check(struct zone *zone, struct page *page);
@@ -1608,6 +1608,7 @@ static inline bool non_luf_pages_ok(struct zone *zone)
 
 	return nr_free - nr_luf_pages > min_wm;
 }
+
 unsigned short fold_unmap_luf(void);
 
 /*
@@ -1694,7 +1695,7 @@ static inline bool can_luf_vma(struct vm_area_struct *vma)
 	return true;
 }
 #else /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
-static inline bool luf_takeoff_start(void) { return false; }
+static inline bool luf_takeoff_start(struct zone *zone) { return false; }
 static inline void luf_takeoff_end(struct zone *zone) {}
 static inline bool luf_takeoff_no_shootdown(void) { return true; }
 static inline bool luf_takeoff_check(struct zone *zone, struct page *page) { return true; }
