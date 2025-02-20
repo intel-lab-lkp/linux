@@ -7117,6 +7117,43 @@ static inline void account_kcs_dequeue(struct cfs_rq *gcfs_rq, bool in_kernel)
 	SCHED_WARN_ON(se->kernel_cs_count < 0);
 }
 
+/*
+ * Unthrottle a fully throttled hierarchy when a kernel mode task
+ * joins the hierarchy.
+ */
+static void unthrottle_throttled(struct cfs_rq *gcfs_rq, bool in_kernel)
+{
+	struct rq *rq = rq_of(gcfs_rq);
+	struct sched_entity *se = gcfs_rq->tg->se[cpu_of(rq)];
+
+	/* TODO: Remove this early return once plumbing is done */
+	return;
+
+	/*
+	 * Demoting a cfs_rq to partial throttle will trigger a
+	 * rq_clock update. Skip all the updates and use the
+	 * last updated time.
+	 */
+	rq_clock_start_loop_update(rq);
+	unthrottle_cfs_rq(gcfs_rq, true);
+
+	for_each_sched_entity(se) {
+		struct cfs_rq *cfs_rq = cfs_rq_of(se);
+
+		/*
+		 * Fixup what is missed by unthrottle_cfs_rq() that
+		 * enqueue_task_fair() would have done.
+		 */
+		update_cfs_group(se);
+		account_kcs_enqueue(cfs_rq, in_kernel);
+
+		if (cfs_rq_h_throttled(cfs_rq))
+			unthrottle_cfs_rq(cfs_rq, true);
+	}
+
+	rq_clock_stop_loop_update(rq);
+}
+
 #ifdef CONFIG_NO_HZ_FULL
 /* called from pick_next_task_fair() */
 static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
@@ -7224,6 +7261,7 @@ static inline bool min_kcs_vruntime_update(struct sched_entity *se)
 
 static inline void account_kcs_enqueue(struct cfs_rq *gcfs_rq, bool in_kernel) {}
 static inline void account_kcs_dequeue(struct cfs_rq *gcfs_rq, bool in_kernel) {}
+static __always_inline void unthrottle_throttled(struct cfs_rq *cfs_rq, bool in_kernel) {}
 
 #endif /* CONFIG_CFS_BANDWIDTH */
 
@@ -7444,8 +7482,18 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_h_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq)) {
+			/*
+			 * Since a kernel mode preempted entity has
+			 * joined a fully throttled hierarchy, unfreeze
+			 * it. Since unthrottle_cfs_rq() adjusts the
+			 * h_nr_* stats and the averages internally,
+			 * skip to the end.
+			 */
+			if (task_in_kernel)
+				unthrottle_throttled(cfs_rq, task_in_kernel);
 			goto enqueue_throttle;
+		}
 
 		flags = ENQUEUE_WAKEUP;
 	}
@@ -7471,8 +7519,12 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_h_throttled(cfs_rq))
+		if (cfs_rq_h_throttled(cfs_rq)) {
+			/* Ditto as above */
+			if (task_in_kernel)
+				unthrottle_throttled(cfs_rq, task_in_kernel);
 			goto enqueue_throttle;
+		}
 	}
 
 	if (!rq_h_nr_queued && rq->cfs.h_nr_queued) {
