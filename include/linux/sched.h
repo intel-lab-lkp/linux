@@ -549,8 +549,18 @@ struct sched_entity {
 	struct load_weight		load;
 	struct rb_node			run_node;
 	u64				deadline;
-	u64				min_vruntime;
-	u64				min_slice;
+	struct {
+		u64			vruntime;
+		u64			slice;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+		/*
+		 * min_vruntime of the kernel mode preempted
+		 * entities in the subtree of this sched entity.
+		 */
+		s64			kcs_vruntime;
+#endif
+	} min;
 
 	struct list_head		group_node;
 	unsigned char			on_rq;
@@ -601,12 +611,6 @@ struct sched_entity {
 	/* Entity picked on a throttled hierarchy */
 	unsigned char			sched_throttled;
 					/* hole */
-
-	/*
-	 * min_vruntime of the kernel mode preempted entities
-	 * in the subtree of this sched entity.
-	 */
-	s64				min_kcs_vruntime;
 #endif /* CONFIG_CFS_BANDWIDTH */
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 

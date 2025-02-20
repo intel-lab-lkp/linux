@@ -768,7 +768,7 @@ int pick_subtree(struct cfs_rq *cfs_rq, struct sched_entity *se, bool h_throttle
 	if (unlikely(h_throttled))
 		return pick_subtree_on_throttled(cfs_rq, se);
 
-	return vruntime_eligible(cfs_rq, se->min_vruntime);
+	return vruntime_eligible(cfs_rq, se->min.vruntime);
 }
 
 static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
@@ -800,9 +800,9 @@ static void update_min_vruntime(struct cfs_rq *cfs_rq)
 
 	if (se) {
 		if (!curr)
-			vruntime = se->min_vruntime;
+			vruntime = se->min.vruntime;
 		else
-			vruntime = min_vruntime(vruntime, se->min_vruntime);
+			vruntime = min_vruntime(vruntime, se->min.vruntime);
 	}
 
 	/* ensure we never gain time by being placed backwards. */
@@ -819,7 +819,7 @@ static inline u64 cfs_rq_min_slice(struct cfs_rq *cfs_rq)
 		min_slice = curr->slice;
 
 	if (root)
-		min_slice = min(min_slice, root->min_slice);
+		min_slice = min(min_slice, root->min.slice);
 
 	return min_slice;
 }
@@ -835,8 +835,8 @@ static inline void __min_vruntime_update(struct sched_entity *se, struct rb_node
 {
 	if (node) {
 		struct sched_entity *rse = __node_2_se(node);
-		if (vruntime_gt(min_vruntime, se, rse))
-			se->min_vruntime = rse->min_vruntime;
+		if (vruntime_gt(min.vruntime, se, rse))
+			se->min.vruntime = rse->min.vruntime;
 	}
 }
 
@@ -844,8 +844,8 @@ static inline void __min_slice_update(struct sched_entity *se, struct rb_node *n
 {
 	if (node) {
 		struct sched_entity *rse = __node_2_se(node);
-		if (rse->min_slice < se->min_slice)
-			se->min_slice = rse->min_slice;
+		if (rse->min.slice < se->min.slice)
+			se->min.slice = rse->min.slice;
 	}
 }
 
@@ -853,30 +853,30 @@ static __always_inline void init_se_kcs_stats(struct sched_entity *se);
 static inline bool min_kcs_vruntime_update(struct sched_entity *se);
 
 /*
- * se->min_vruntime = min(se->vruntime, {left,right}->min_vruntime)
+ * se->min.vruntime = min(se->vruntime, {left,right}->min_vruntime)
  */
 static inline bool min_vruntime_update(struct sched_entity *se, bool exit)
 {
-	u64 old_min_vruntime = se->min_vruntime;
-	u64 old_min_slice = se->min_slice;
+	u64 old_min_vruntime = se->min.vruntime;
+	u64 old_min_slice = se->min.slice;
 	struct rb_node *node = &se->run_node;
 	bool kcs_stats_unchanged = min_kcs_vruntime_update(se);
 
-	se->min_vruntime = se->vruntime;
+	se->min.vruntime = se->vruntime;
 	__min_vruntime_update(se, node->rb_right);
 	__min_vruntime_update(se, node->rb_left);
 
-	se->min_slice = se->slice;
+	se->min.slice = se->slice;
 	__min_slice_update(se, node->rb_right);
 	__min_slice_update(se, node->rb_left);
 
-	return se->min_vruntime == old_min_vruntime &&
-	       se->min_slice == old_min_slice &&
+	return se->min.vruntime == old_min_vruntime &&
+	       se->min.slice == old_min_slice &&
 	       kcs_stats_unchanged;
 }
 
 RB_DECLARE_CALLBACKS(static, min_vruntime_cb, struct sched_entity,
-		     run_node, min_vruntime, min_vruntime_update);
+		     run_node, min, min_vruntime_update);
 
 /*
  * Enqueue an entity into the rb-tree:
@@ -885,8 +885,8 @@ static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	avg_vruntime_add(cfs_rq, se);
 	init_se_kcs_stats(se);
-	se->min_vruntime = se->vruntime;
-	se->min_slice = se->slice;
+	se->min.vruntime = se->vruntime;
+	se->min.slice = se->slice;
 	rb_add_augmented_cached(&se->run_node, &cfs_rq->tasks_timeline,
 				__entity_less, &min_vruntime_cb);
 }
@@ -953,7 +953,7 @@ static inline void cancel_protect_slice(struct sched_entity *se)
  * tree keeps the entries sorted on deadline, but also functions as a
  * heap based on the vruntime by keeping:
  *
- *  se->min_vruntime = min(se->vruntime, se->{left,right}->min_vruntime)
+ *  se->min.vruntime = min(se->vruntime, se->{left,right}->min_vruntime)
  *
  * Which allows tree pruning through eligibility.
  */
@@ -7018,7 +7018,7 @@ static __always_inline void init_se_kcs_stats(struct sched_entity *se)
 	 * the upper bound to differentiate the case where no kernel mode preempted
 	 * entities are queued on the subtree.
 	 */
-	se->min_kcs_vruntime = (se_in_kernel(se)) ? se->vruntime : LLONG_MAX;
+	se->min.kcs_vruntime = (se_in_kernel(se)) ? se->vruntime : LLONG_MAX;
 }
 
 /*
@@ -7096,11 +7096,11 @@ static __always_inline
 int pick_subtree_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	/* There are no kernel mode preempted entities in the subtree. */
-	if (se->min_kcs_vruntime == LLONG_MAX)
+	if (se->min.kcs_vruntime == LLONG_MAX)
 		return false;
 
 	return throttled_vruntime_eligible(cfs_rq,
-					   se->min_kcs_vruntime,
+					   se->min.kcs_vruntime,
 					   curr_h_is_throttled(cfs_rq));
 }
 
@@ -7109,21 +7109,21 @@ static inline void __min_kcs_vruntime_update(struct sched_entity *se, struct rb_
 	if (node) {
 		struct sched_entity *rse = __node_2_se(node);
 
-		if (rse->min_kcs_vruntime < se->min_kcs_vruntime)
-			se->min_kcs_vruntime = rse->min_kcs_vruntime;
+		if (rse->min.kcs_vruntime < se->min.kcs_vruntime)
+			se->min.kcs_vruntime = rse->min.kcs_vruntime;
 	}
 }
 
 static inline bool min_kcs_vruntime_update(struct sched_entity *se)
 {
-	u64 old_min_kcs_vruntime = se->min_kcs_vruntime;
+	u64 old_min_kcs_vruntime = se->min.kcs_vruntime;
 	struct rb_node *node = &se->run_node;
 
 	init_se_kcs_stats(se);
 	__min_kcs_vruntime_update(se, node->rb_right);
 	__min_kcs_vruntime_update(se, node->rb_left);
 
-	return se->min_kcs_vruntime == old_min_kcs_vruntime;
+	return se->min.kcs_vruntime == old_min_kcs_vruntime;
 }
 
 static inline void account_kcs_enqueue(struct cfs_rq *gcfs_rq, bool in_kernel)
@@ -7341,7 +7341,7 @@ static __always_inline int pick_se_on_throttled(struct cfs_rq *cfs_rq, struct sc
 static __always_inline
 int pick_subtree_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
-	return vruntime_eligible(cfs_rq, se->min_vruntime);
+	return vruntime_eligible(cfs_rq, se->min.vruntime);
 }
 
 static inline bool min_kcs_vruntime_update(struct sched_entity *se)

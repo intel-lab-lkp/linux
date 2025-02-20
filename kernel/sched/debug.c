@@ -821,7 +821,7 @@ void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq)
 	raw_spin_rq_lock_irqsave(rq, flags);
 	root = __pick_root_entity(cfs_rq);
 	if (root)
-		left_vruntime = root->min_vruntime;
+		left_vruntime = root->min.vruntime;
 	first = __pick_first_entity(cfs_rq);
 	if (first)
 		left_deadline = first->deadline;
