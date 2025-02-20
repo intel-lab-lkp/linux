@@ -116,6 +116,12 @@ page_reporting_drain(struct page_reporting_dev_info *prdev,
 		int mt = get_pageblock_migratetype(page);
 		unsigned int order = get_order(sg->length);
 
+		/*
+		 * Ensure private is zero before putting into the
+		 * allocator.
+		 */
+		set_page_private(page, 0);
+
 		__putback_isolated_page(page, order, mt);
 
 		/* If the pages were not reported due to error skip flagging */

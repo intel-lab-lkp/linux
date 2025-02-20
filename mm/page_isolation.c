@@ -258,6 +258,12 @@ static void unset_migratetype_isolate(struct page *page, int migratetype)
 		WARN_ON_ONCE(!move_freepages_block_isolate(zone, page, migratetype));
 	} else {
 		set_pageblock_migratetype(page, migratetype);
+
+		/*
+		 * Do not clear the page's private to keep its luf_key
+		 * unchanged.
+		 */
+
 		__putback_isolated_page(page, order, migratetype);
 	}
 	zone->nr_isolate_pageblock--;
