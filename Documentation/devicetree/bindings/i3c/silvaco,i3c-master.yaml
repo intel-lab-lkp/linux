@@ -14,7 +14,9 @@ allOf:
 
 properties:
   compatible:
-    const: silvaco,i3c-master-v1
+    enum:
+      - silvaco,i3c-master-v1
+      - nuvoton,npcm845-i3c
 
   reg:
     maxItems: 1
