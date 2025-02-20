@@ -5225,6 +5225,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	if (mm) {
 		membarrier_mm_sync_core_before_usermode(mm);
 		mmdrop_lazy_tlb_sched(mm);
+		luf_flush(0);
 	}
 
 	if (unlikely(prev_state == TASK_DEAD)) {

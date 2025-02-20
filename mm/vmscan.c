@@ -821,6 +821,8 @@ cannot_free:
  */
 long remove_mapping(struct address_space *mapping, struct folio *folio)
 {
+	long ret = 0;
+
 	if (__remove_mapping(mapping, folio, false, NULL)) {
 		/*
 		 * Unfreezing the refcount with 1 effectively
@@ -828,9 +830,15 @@ long remove_mapping(struct address_space *mapping, struct folio *folio)
 		 * atomic operation.
 		 */
 		folio_ref_unfreeze(folio, 1);
-		return folio_nr_pages(folio);
+		ret = folio_nr_pages(folio);
 	}
-	return 0;
+
+	/*
+	 * Ensure to clean stale tlb entries for this mapping.
+	 */
+	luf_flush(0);
+
+	return ret;
 }
 
 /**

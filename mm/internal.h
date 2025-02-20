@@ -1604,13 +1604,105 @@ static inline bool non_luf_pages_ok(struct zone *zone)
 
 	return nr_free - nr_luf_pages > min_wm;
 }
-#else
+
+unsigned short fold_unmap_luf(void);
+
+/*
+ * Reset the indicator indicating there are no writable mappings at the
+ * beginning of every rmap traverse for unmap.  luf can work only when
+ * all the mappings are read-only.
+ */
+static inline void can_luf_init(struct folio *f)
+{
+	if (IS_ENABLED(CONFIG_DEBUG_PAGEALLOC))
+		current->can_luf = false;
+	/*
+	 * Pages might get updated inside buddy.
+	 */
+	else if (want_init_on_free())
+		current->can_luf = false;
+	/*
+	 * Pages might get updated inside buddy.
+	 */
+	else if (!should_skip_kasan_poison(folio_page(f, 0)))
+		current->can_luf = false;
+	/*
+	 * XXX: Remove the constraint once luf handles zone device folio.
+	 */
+	else if (unlikely(folio_is_zone_device(f)))
+		current->can_luf = false;
+	/*
+	 * XXX: Remove the constraint once luf handles hugetlb folio.
+	 */
+	else if (unlikely(folio_test_hugetlb(f)))
+		current->can_luf = false;
+	/*
+	 * XXX: Remove the constraint once luf handles large folio.
+	 */
+	else if (unlikely(folio_test_large(f)))
+		current->can_luf = false;
+	/*
+	 * Can track write of anon folios through fault handler.
+	 */
+	else if (folio_test_anon(f))
+		current->can_luf = true;
+	/*
+	 * Can track write of file folios through page cache or truncation.
+	 */
+	else if (folio_mapping(f))
+		current->can_luf = true;
+	/*
+	 * For niehter anon nor file folios, do not apply luf.
+	 */
+	else
+		current->can_luf = false;
+}
+
+/*
+ * Mark the folio is not applicable to luf once it found a writble or
+ * dirty pte during rmap traverse for unmap.
+ */
+static inline void can_luf_fail(void)
+{
+	current->can_luf = false;
+}
+
+/*
+ * Check if all the mappings are read-only.
+ */
+static inline bool can_luf_test(void)
+{
+	return current->can_luf;
+}
+
+static inline bool can_luf_vma(struct vm_area_struct *vma)
+{
+	/*
+	 * Shared region requires a medium like file to keep all the
+	 * associated mm_struct.  luf makes use of strcut address_space
+	 * for that purpose.
+	 */
+	if (vma->vm_flags & VM_SHARED)
+		return !!vma->vm_file;
+
+	/*
+	 * Private region can be handled through its mm_struct.
+	 */
+	return true;
+}
+#else /* CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH */
 static inline bool luf_takeoff_start(void) { return false; }
 static inline void luf_takeoff_end(void) {}
 static inline bool luf_takeoff_no_shootdown(void) { return true; }
 static inline bool luf_takeoff_check(struct page *page) { return true; }
 static inline bool luf_takeoff_check_and_fold(struct page *page) { return true; }
 static inline bool non_luf_pages_ok(struct zone *zone) { return true; }
+static inline unsigned short fold_unmap_luf(void) { return 0; }
+
+static inline void can_luf_init(struct folio *f) {}
+static inline void can_luf_fail(void) {}
+static inline bool can_luf_test(void) { return false; }
+static inline bool can_luf_vma(struct vm_area_struct *vma) { return false; }
 #endif
 
 /* pagewalk.c */
