@@ -201,7 +201,12 @@ static int veml6075_read_int_time_index(struct veml6075_data *data)
 	if (ret < 0)
 		return ret;
 
-	return FIELD_GET(VEML6075_CONF_IT, conf);
+	int int_index = FIELD_GET(VEML6075_CONF_IT, conf);
+
+	if (int_index >= ARRAY_SIZE(veml6075_it_ms))
+		return -EINVAL;
+
+	return int_index;
 }
 
 static int veml6075_read_int_time_ms(struct veml6075_data *data, int *val)
