@@ -2600,6 +2600,34 @@ static int testapp_adjust_tail(struct test_spec *test, u32 value, u32 pkt_len)
 	return 0;
 }
 
+static int testapp_adjust_tail_common(struct test_spec *test, int adjust_value, u32 len,
+				      bool set_mtu)
+{
+	if (set_mtu)
+		test->mtu = MAX_ETH_JUMBO_SIZE;
+	return testapp_adjust_tail(test, adjust_value, len);
+}
+
+static int testapp_adjust_tail_shrink(struct test_spec *test)
+{
+	return testapp_adjust_tail_common(test, -4, MIN_PKT_SIZE, false);
+}
+
+static int testapp_adjust_tail_shrink_mb(struct test_spec *test)
+{
+	return testapp_adjust_tail_common(test, -4, XSK_RING_PROD__DEFAULT_NUM_DESCS * 3, true);
+}
+
+static int testapp_adjust_tail_grow(struct test_spec *test)
+{
+	return testapp_adjust_tail_common(test, 4, MIN_PKT_SIZE, false);
+}
+
+static int testapp_adjust_tail_grow_mb(struct test_spec *test)
+{
+	return testapp_adjust_tail_common(test, 4, XSK_RING_PROD__DEFAULT_NUM_DESCS * 3, true);
+}
+
 static void run_pkt_test(struct test_spec *test)
 {
 	int ret;
@@ -2706,6 +2734,10 @@ static const struct test_spec tests[] = {
 	{.name = "TOO_MANY_FRAGS", .test_func = testapp_too_many_frags},
 	{.name = "HW_SW_MIN_RING_SIZE", .test_func = testapp_hw_sw_min_ring_size},
 	{.name = "HW_SW_MAX_RING_SIZE", .test_func = testapp_hw_sw_max_ring_size},
+	{.name = "XDP_ADJUST_TAIL_SHRINK", .test_func = testapp_adjust_tail_shrink},
+	{.name = "XDP_ADJUST_TAIL_SHRINK_MULTI_BUFF", .test_func = testapp_adjust_tail_shrink_mb},
+	{.name = "XDP_ADJUST_TAIL_GROW", .test_func = testapp_adjust_tail_grow},
+	{.name = "XDP_ADJUST_TAIL_GROW_MULTI_BUFF", .test_func = testapp_adjust_tail_grow_mb},
 	};
 
 static void print_tests(void)
