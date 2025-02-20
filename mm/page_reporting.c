@@ -159,15 +159,17 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 	struct page *page, *next;
 	long budget;
 	int err = 0;
+	bool consider_pend = false;
+	bool can_shootdown;
 
 	/*
 	 * Perform early check, if free area is empty there is
 	 * nothing to process so we can skip this free_list.
 	 */
-	if (list_empty(list))
+	if (free_area_empty(area, mt))
 		return err;
 
-	luf_takeoff_start();
+	can_shootdown = luf_takeoff_start();
 	spin_lock_irq(&zone->lock);
 
 	/*
@@ -185,14 +187,14 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 	 * should always be a power of 2.
 	 */
 	budget = DIV_ROUND_UP(area->nr_free, PAGE_REPORTING_CAPACITY * 16);
-
+retry:
 	/* loop through free list adding unreported pages to sg list */
 	list_for_each_entry_safe(page, next, list, lru) {
 		/* We are going to skip over the reported pages. */
 		if (PageReported(page))
 			continue;
 
-		if (!luf_takeoff_check(page)) {
+		if (unlikely(consider_pend && !luf_takeoff_check(page))) {
 			VM_WARN_ON(1);
 			continue;
 		}
@@ -205,14 +207,14 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		if (budget < 0) {
 			atomic_set(&prdev->state, PAGE_REPORTING_REQUESTED);
 			next = page;
-			break;
+			goto done;
 		}
 
 		/* Attempt to pull page from list and place in scatterlist */
 		if (*offset) {
 			if (!__isolate_free_page(page, order, false)) {
 				next = page;
-				break;
+				goto done;
 			}
 
 			/* Add page to scatter list */
@@ -263,9 +265,15 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 
 		/* exit on error */
 		if (err)
-			break;
+			goto done;
 	}
 
+	if (!consider_pend && can_shootdown) {
+		consider_pend = true;
+		list = &area->pend_list[mt];
+		goto retry;
+	}
+done:
 	/* Rotate any leftover pages to the head of the freelist */
 	if (!list_entry_is_head(next, list, lru) && !list_is_first(&next->lru, list))
 		list_rotate_to_front(&next->lru, list);

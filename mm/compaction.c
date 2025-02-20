@@ -1590,24 +1590,28 @@ static void fast_isolate_freepages(struct compact_control *cc)
 	     order = next_search_order(cc, order)) {
 		struct free_area *area = &cc->zone->free_area[order];
 		struct list_head *freelist;
+		struct list_head *high_pfn_list;
 		struct page *freepage;
 		unsigned long flags;
 		unsigned int order_scanned = 0;
 		unsigned long high_pfn = 0;
+		bool consider_pend = false;
+		bool can_shootdown;
 
 		if (!area->nr_free)
 			continue;
 
-		luf_takeoff_start();
+		can_shootdown = luf_takeoff_start();
 		spin_lock_irqsave(&cc->zone->lock, flags);
 		freelist = &area->free_list[MIGRATE_MOVABLE];
+retry:
 		list_for_each_entry_reverse(freepage, freelist, buddy_list) {
 			unsigned long pfn;
 
 			order_scanned++;
 			nr_scanned++;
 
-			if (!luf_takeoff_check(freepage))
+			if (unlikely(consider_pend && !luf_takeoff_check(freepage)))
 				goto scan_next;
 
 			pfn = page_to_pfn(freepage);
@@ -1620,26 +1624,34 @@ static void fast_isolate_freepages(struct compact_control *cc)
 				cc->fast_search_fail = 0;
 				cc->search_order = order;
 				page = freepage;
-				break;
+				goto done;
 			}
 
 			if (pfn >= min_pfn && pfn > high_pfn) {
 				high_pfn = pfn;
+				high_pfn_list = freelist;
 
 				/* Shorten the scan if a candidate is found */
 				limit >>= 1;
 			}
 scan_next:
 			if (order_scanned >= limit)
-				break;
+				goto done;
 		}
 
+		if (!consider_pend && can_shootdown) {
+			consider_pend = true;
+			freelist = &area->pend_list[MIGRATE_MOVABLE];
+			goto retry;
+		}
+done:
 		/* Use a maximum candidate pfn if a preferred one was not found */
 		if (!page && high_pfn) {
 			page = pfn_to_page(high_pfn);
 
 			/* Update freepage for the list reorder below */
 			freepage = page;
+			freelist = high_pfn_list;
 		}
 
 		/* Reorder to so a future search skips recent pages */
@@ -2036,18 +2048,20 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 		struct list_head *freelist;
 		unsigned long flags;
 		struct page *freepage;
+		bool consider_pend = false;
 
 		if (!area->nr_free)
 			continue;
 
 		spin_lock_irqsave(&cc->zone->lock, flags);
 		freelist = &area->free_list[MIGRATE_MOVABLE];
+retry:
 		list_for_each_entry(freepage, freelist, buddy_list) {
 			unsigned long free_pfn;
 
 			if (nr_scanned++ >= limit) {
 				move_freelist_tail(freelist, freepage);
-				break;
+				goto done;
 			}
 
 			free_pfn = page_to_pfn(freepage);
@@ -2070,9 +2084,16 @@ static unsigned long fast_find_migrateblock(struct compact_control *cc)
 					pfn = cc->zone->zone_start_pfn;
 				cc->fast_search_fail = 0;
 				found_block = true;
-				break;
+				goto done;
 			}
 		}
+
+		if (!consider_pend) {
+			consider_pend = true;
+			freelist = &area->pend_list[MIGRATE_MOVABLE];
+			goto retry;
+		}
+done:
 		spin_unlock_irqrestore(&cc->zone->lock, flags);
 	}
 

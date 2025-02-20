@@ -1396,12 +1396,14 @@ static void __meminit zone_init_free_lists(struct zone *zone)
 	unsigned int order, t;
 	for_each_migratetype_order(order, t) {
 		INIT_LIST_HEAD(&zone->free_area[order].free_list[t]);
+		INIT_LIST_HEAD(&zone->free_area[order].pend_list[t]);
 		zone->free_area[order].nr_free = 0;
 	}
 
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	INIT_LIST_HEAD(&zone->unaccepted_pages);
 #endif
+	atomic_long_set(&zone->nr_luf_pages, 0);
 }
 
 void __meminit init_currently_empty_zone(struct zone *zone,

@@ -804,15 +804,28 @@ static inline void __add_to_free_list(struct page *page, struct zone *zone,
 				      bool tail)
 {
 	struct free_area *area = &zone->free_area[order];
+	struct list_head *list;
 
 	VM_WARN_ONCE(get_pageblock_migratetype(page) != migratetype,
 		     "page type is %lu, passed migratetype is %d (nr=%d)\n",
 		     get_pageblock_migratetype(page), migratetype, 1 << order);
 
+	/*
+	 * When identifying whether a page requires tlb shootdown, false
+	 * positive is okay because it will cause just additional tlb
+	 * shootdown.
+	 */
+	if (page_luf_key(page)) {
+		list = &area->pend_list[migratetype];
+		atomic_long_add(1 << order, &zone->nr_luf_pages);
+	} else
+		list = &area->free_list[migratetype];
+
 	if (tail)
-		list_add_tail(&page->buddy_list, &area->free_list[migratetype]);
+		list_add_tail(&page->buddy_list, list);
 	else
-		list_add(&page->buddy_list, &area->free_list[migratetype]);
+		list_add(&page->buddy_list, list);
+
 	area->nr_free++;
 }
 
@@ -831,7 +844,20 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 		     "page type is %lu, passed migratetype is %d (nr=%d)\n",
 		     get_pageblock_migratetype(page), old_mt, 1 << order);
 
-	list_move_tail(&page->buddy_list, &area->free_list[new_mt]);
+	/*
+	 * The page might have been taken from a pfn where it's not
+	 * clear which list was used.  Therefore, conservatively
+	 * consider it as pend_list, not to miss any true ones that
+	 * require tlb shootdown.
+	 *
+	 * When identifying whether a page requires tlb shootdown, false
+	 * positive is okay because it will cause just additional tlb
+	 * shootdown.
+	 */
+	if (page_luf_key(page))
+		list_move_tail(&page->buddy_list, &area->pend_list[new_mt]);
+	else
+		list_move_tail(&page->buddy_list, &area->free_list[new_mt]);
 
 	account_freepages(zone, -(1 << order), old_mt);
 	account_freepages(zone, 1 << order, new_mt);
@@ -847,6 +873,9 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 	/* clear reported state and update reported page count */
 	if (page_reported(page))
 		__ClearPageReported(page);
+
+	if (page_luf_key(page))
+		atomic_long_sub(1 << order, &zone->nr_luf_pages);
 
 	list_del(&page->buddy_list);
 	__ClearPageBuddy(page);
@@ -866,15 +895,48 @@ static inline void del_page_from_free_list(struct page *page, struct zone *zone,
 	account_freepages(zone, -(1 << order), migratetype);
 }
 
-static inline struct page *get_page_from_free_area(struct free_area *area,
-					    int migratetype)
+static inline struct page *get_page_from_free_area(struct zone *zone,
+		struct free_area *area, int migratetype)
 {
-	struct page *page = list_first_entry_or_null(&area->free_list[migratetype],
-					struct page, buddy_list);
+	struct page *page;
+	bool pend_first;
 
-	if (page && luf_takeoff_check(page))
-		return page;
+	/*
+	 * XXX: Make the decision preciser if needed e.g. using
+	 * zone_watermark_ok() or its family, but for now, don't want to
+	 * make it heavier.
+	 *
+	 * Try free_list, holding non-luf pages, first if there are
+	 * enough non-luf pages to aggressively defer tlb flush, but
+	 * should try pend_list first instead if not.
+	 */
+	pend_first = !non_luf_pages_ok(zone);
 
+	if (pend_first) {
+		page = list_first_entry_or_null(&area->pend_list[migratetype],
+				struct page, buddy_list);
+
+		if (page && luf_takeoff_check(page))
+			return page;
+
+		page = list_first_entry_or_null(&area->free_list[migratetype],
+				struct page, buddy_list);
+
+		if (page)
+			return page;
+	} else {
+		page = list_first_entry_or_null(&area->free_list[migratetype],
+				struct page, buddy_list);
+
+		if (page)
+			return page;
+
+		page = list_first_entry_or_null(&area->pend_list[migratetype],
+				struct page, buddy_list);
+
+		if (page && luf_takeoff_check(page))
+			return page;
+	}
 	return NULL;
 }
 
@@ -1026,6 +1088,8 @@ done_merging:
 	set_buddy_order(page, order);
 
 	if (fpi_flags & FPI_TO_TAIL)
+		to_tail = true;
+	else if (page_luf_key(page))
 		to_tail = true;
 	else if (is_shuffle_order(order))
 		to_tail = shuffle_pick_tail();
@@ -1556,6 +1620,8 @@ static inline unsigned int expand(struct zone *zone, struct page *page, int low,
 	unsigned int nr_added = 0;
 
 	while (high > low) {
+		bool tail = false;
+
 		high--;
 		size >>= 1;
 		VM_BUG_ON_PAGE(bad_range(zone, &page[size]), &page[size]);
@@ -1569,7 +1635,10 @@ static inline unsigned int expand(struct zone *zone, struct page *page, int low,
 		if (set_page_guard(zone, &page[size], high))
 			continue;
 
-		__add_to_free_list(&page[size], zone, high, migratetype, false);
+		if (page_luf_key(&page[size]))
+			tail = true;
+
+		__add_to_free_list(&page[size], zone, high, migratetype, tail);
 		set_buddy_order(&page[size], high);
 		nr_added += size;
 	}
@@ -1754,7 +1823,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	/* Find a page of the appropriate size in the preferred list */
 	for (current_order = order; current_order < NR_PAGE_ORDERS; ++current_order) {
 		area = &(zone->free_area[current_order]);
-		page = get_page_from_free_area(area, migratetype);
+		page = get_page_from_free_area(zone, area, migratetype);
 		if (!page)
 			continue;
 
@@ -2188,7 +2257,8 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 		if (free_area_empty(area, fallback_mt))
 			continue;
 
-		if (luf_takeoff_no_shootdown())
+		if (free_list_empty(area, fallback_mt) &&
+		    luf_takeoff_no_shootdown())
 			continue;
 
 		if (can_steal_fallback(order, migratetype))
@@ -2292,7 +2362,7 @@ static bool unreserve_highatomic_pageblock(const struct alloc_context *ac,
 			struct free_area *area = &(zone->free_area[order]);
 			int mt;
 
-			page = get_page_from_free_area(area, MIGRATE_HIGHATOMIC);
+			page = get_page_from_free_area(zone, area, MIGRATE_HIGHATOMIC);
 			if (!page)
 				continue;
 
@@ -2430,7 +2500,7 @@ find_smallest:
 	VM_BUG_ON(current_order > MAX_PAGE_ORDER);
 
 do_steal:
-	page = get_page_from_free_area(area, fallback_mt);
+	page = get_page_from_free_area(zone, area, fallback_mt);
 
 	/* take off list, maybe claim block, expand remainder */
 	page = steal_suitable_fallback(zone, page, current_order, order,
@@ -7180,6 +7250,8 @@ static void break_down_buddy_pages(struct zone *zone, struct page *page,
 	struct page *current_buddy;
 
 	while (high > low) {
+		bool tail = false;
+
 		high--;
 		size >>= 1;
 
@@ -7193,7 +7265,10 @@ static void break_down_buddy_pages(struct zone *zone, struct page *page,
 		if (set_page_guard(zone, current_buddy, high))
 			continue;
 
-		add_to_free_list(current_buddy, zone, high, migratetype, false);
+		if (page_luf_key(current_buddy))
+			tail = true;
+
+		add_to_free_list(current_buddy, zone, high, migratetype, tail);
 		set_buddy_order(current_buddy, high);
 	}
 }
