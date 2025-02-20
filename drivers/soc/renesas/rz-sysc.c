@@ -120,6 +120,7 @@ static int rz_sysc_probe(struct platform_device *pdev)
 static struct platform_driver rz_sysc_driver = {
 	.driver = {
 		.name = "renesas-rz-sysc",
+		.suppress_bind_attrs = true,
 		.of_match_table = rz_sysc_match
 	},
 	.probe = rz_sysc_probe
