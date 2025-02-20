@@ -65,11 +65,34 @@ static void touchscreen_set_params(struct input_dev *dev,
 void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 				  struct touchscreen_properties *prop)
 {
+	touchscreen_parse_properties_prefix(input, multitouch, prop, "touchscreen");
+}
+EXPORT_SYMBOL(touchscreen_parse_properties);
+
+static char *prefix_prop(const char *property, const char *prefix, char *buf, size_t len)
+{
+	ssize_t n, ret;
+
+	n = strscpy(buf, prefix, len);
+	if (n > 0) {
+		ret = strscpy(buf + n, "-", len - n);
+		if (ret > 0) {
+			n += ret;
+			strscpy(buf + n, property, len - n);
+		}
+	}
+	return buf;
+}
+
+void touchscreen_parse_properties_prefix(struct input_dev *input, bool multitouch,
+					 struct touchscreen_properties *prop, const char *prefix)
+{
 	struct device *dev = input->dev.parent;
 	struct input_absinfo *absinfo;
 	unsigned int axis, axis_x, axis_y;
 	unsigned int minimum, maximum, fuzz;
 	bool data_present;
+	char buf[64];
 
 	input_alloc_absinfo(input);
 	if (!input->absinfo)
@@ -78,41 +101,37 @@ void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 	axis_x = multitouch ? ABS_MT_POSITION_X : ABS_X;
 	axis_y = multitouch ? ABS_MT_POSITION_Y : ABS_Y;
 
-	data_present = touchscreen_get_prop_u32(dev, "touchscreen-min-x",
-						input_abs_get_min(input, axis_x),
-						&minimum);
-	data_present |= touchscreen_get_prop_u32(dev, "touchscreen-size-x",
-						 input_abs_get_max(input,
-								   axis_x) + 1,
-						 &maximum);
-	data_present |= touchscreen_get_prop_u32(dev, "touchscreen-fuzz-x",
-						 input_abs_get_fuzz(input, axis_x),
-						 &fuzz);
+	data_present =
+	    touchscreen_get_prop_u32(dev, prefix_prop("min-x", prefix, buf, sizeof(buf)),
+				     input_abs_get_min(input, axis_x), &minimum);
+	data_present |=
+	    touchscreen_get_prop_u32(dev, prefix_prop("size-x", prefix, buf, sizeof(buf)),
+				     input_abs_get_max(input, axis_x) + 1, &maximum);
+	data_present |=
+	    touchscreen_get_prop_u32(dev, prefix_prop("fuzz-x", prefix, buf, sizeof(buf)),
+				     input_abs_get_fuzz(input, axis_x), &fuzz);
 	if (data_present)
 		touchscreen_set_params(input, axis_x, minimum, maximum - 1, fuzz);
 
-	data_present = touchscreen_get_prop_u32(dev, "touchscreen-min-y",
-						input_abs_get_min(input, axis_y),
-						&minimum);
-	data_present |= touchscreen_get_prop_u32(dev, "touchscreen-size-y",
-						 input_abs_get_max(input,
-								   axis_y) + 1,
-						 &maximum);
-	data_present |= touchscreen_get_prop_u32(dev, "touchscreen-fuzz-y",
-						 input_abs_get_fuzz(input, axis_y),
-						 &fuzz);
+	data_present =
+	    touchscreen_get_prop_u32(dev, prefix_prop("min-y", prefix, buf, sizeof(buf)),
+				     input_abs_get_min(input, axis_y), &minimum);
+	data_present |=
+	    touchscreen_get_prop_u32(dev, prefix_prop("size-y", prefix, buf, sizeof(buf)),
+				     input_abs_get_max(input, axis_y) + 1, &maximum);
+	data_present |=
+	    touchscreen_get_prop_u32(dev, prefix_prop("fuzz-y", prefix, buf, sizeof(buf)),
+				     input_abs_get_fuzz(input, axis_y), &fuzz);
 	if (data_present)
 		touchscreen_set_params(input, axis_y, minimum, maximum - 1, fuzz);
 
 	axis = multitouch ? ABS_MT_PRESSURE : ABS_PRESSURE;
-	data_present = touchscreen_get_prop_u32(dev,
-						"touchscreen-max-pressure",
-						input_abs_get_max(input, axis),
-						&maximum);
-	data_present |= touchscreen_get_prop_u32(dev,
-						 "touchscreen-fuzz-pressure",
-						 input_abs_get_fuzz(input, axis),
-						 &fuzz);
+	data_present =
+	    touchscreen_get_prop_u32(dev, prefix_prop("max-pressure", prefix, buf, sizeof(buf)),
+				     input_abs_get_max(input, axis), &maximum);
+	data_present |=
+	    touchscreen_get_prop_u32(dev, prefix_prop("fuzz-pressure", prefix, buf, sizeof(buf)),
+				     input_abs_get_fuzz(input, axis), &fuzz);
 	if (data_present)
 		touchscreen_set_params(input, axis, 0, maximum, fuzz);
 
@@ -123,7 +142,7 @@ void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 	prop->max_y = input_abs_get_max(input, axis_y);
 
 	prop->invert_x =
-		device_property_read_bool(dev, "touchscreen-inverted-x");
+	    device_property_read_bool(dev, prefix_prop("inverted-x", prefix, buf, sizeof(buf)));
 	if (prop->invert_x) {
 		absinfo = &input->absinfo[axis_x];
 		absinfo->maximum -= absinfo->minimum;
@@ -131,7 +150,7 @@ void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 	}
 
 	prop->invert_y =
-		device_property_read_bool(dev, "touchscreen-inverted-y");
+	    device_property_read_bool(dev, prefix_prop("inverted-y", prefix, buf, sizeof(buf)));
 	if (prop->invert_y) {
 		absinfo = &input->absinfo[axis_y];
 		absinfo->maximum -= absinfo->minimum;
@@ -139,11 +158,11 @@ void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 	}
 
 	prop->swap_x_y =
-		device_property_read_bool(dev, "touchscreen-swapped-x-y");
+	    device_property_read_bool(dev, prefix_prop("swapped-x-y", prefix, buf, sizeof(buf)));
 	if (prop->swap_x_y)
 		swap(input->absinfo[axis_x], input->absinfo[axis_y]);
 }
-EXPORT_SYMBOL(touchscreen_parse_properties);
+EXPORT_SYMBOL(touchscreen_parse_properties_prefix);
 
 static void
 touchscreen_apply_prop_to_x_y(const struct touchscreen_properties *prop,

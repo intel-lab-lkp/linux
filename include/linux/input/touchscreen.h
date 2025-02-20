@@ -20,6 +20,9 @@ struct touchscreen_properties {
 void touchscreen_parse_properties(struct input_dev *input, bool multitouch,
 				  struct touchscreen_properties *prop);
 
+void touchscreen_parse_properties_prefix(struct input_dev *input, bool multitouch,
+					 struct touchscreen_properties *prop, const char *prefix);
+
 void touchscreen_set_mt_pos(struct input_mt_pos *pos,
 			    const struct touchscreen_properties *prop,
 			    unsigned int x, unsigned int y);
