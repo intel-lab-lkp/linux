@@ -772,6 +772,26 @@ void fold_luf_batch(struct luf_batch *dst, struct luf_batch *src)
 	read_unlock_irqrestore(&src->lock, flags);
 }
 
+void try_to_unmap_flush_takeoff(void)
+{
+	struct tlbflush_unmap_batch *tlb_ubc = &current->tlb_ubc;
+	struct tlbflush_unmap_batch *tlb_ubc_takeoff = &current->tlb_ubc_takeoff;
+
+	if (!tlb_ubc_takeoff->flush_required)
+		return;
+
+	arch_tlbbatch_flush(&tlb_ubc_takeoff->arch);
+
+	/*
+	 * Now that tlb shootdown of tlb_ubc_takeoff has been performed,
+	 * it's good chance to shrink tlb_ubc if possible.
+	 */
+	if (arch_tlbbatch_done(&tlb_ubc->arch, &tlb_ubc_takeoff->arch))
+		reset_batch(tlb_ubc);
+
+	reset_batch(tlb_ubc_takeoff);
+}
+
 /*
  * Flush TLB entries for recently unmapped pages from remote CPUs. It is
  * important if a PTE was dirty when it was unmapped that it's flushed
