@@ -2326,6 +2326,7 @@ static int _mmc_handle_undervoltage(struct mmc_host *host)
 		pr_err("%s: Undervoltage emergency stop failed\n",
 			mmc_hostname(host));
 
+	host->emergency_stop = 1;
 	mmc_card_set_removed(host->card);
 
 out:

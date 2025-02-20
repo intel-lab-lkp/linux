@@ -1658,6 +1658,15 @@ static bool sdhci_send_command(struct sdhci_host *host, struct mmc_command *cmd)
 
 	WARN_ON(host->cmd);
 
+	if (host->mmc->emergency_stop) {
+		pr_warn("%s: Ignoring normal request, emergency stop is active\n",
+			mmc_hostname(host->mmc));
+		WARN_ON_ONCE(1);
+
+		cmd->error = -EBUSY;
+		return true;
+	}
+
 	/* Initially, a command has no error */
 	cmd->error = 0;
 
