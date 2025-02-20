@@ -576,7 +576,7 @@ void prep_compound_page(struct page *page, unsigned int order)
 
 static inline void set_buddy_order(struct page *page, unsigned int order)
 {
-	set_page_private(page, order);
+	set_page_buddy_order(page, order);
 	__SetPageBuddy(page);
 }
 
