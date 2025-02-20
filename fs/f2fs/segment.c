@@ -1661,12 +1661,20 @@ retry:
 				f2fs_time_over(sbi, UMOUNT_DISCARD_TIMEOUT))
 			break;
 
-		if (i + 1 < dpolicy->granularity)
-			break;
+		/*
+		 * Do not granularity control for segment or section
+		 * unit discard, since we have only one type of discard length.
+		 */
+		if (f2fs_block_unit_discard(sbi)) {
+			if (i + 1 < dpolicy->granularity)
+				break;
 
-		if (i + 1 < dcc->max_ordered_discard && dpolicy->ordered) {
-			__issue_discard_cmd_orderly(sbi, dpolicy, &issued);
-			return issued;
+			if (i + 1 < dcc->max_ordered_discard &&
+					dpolicy->ordered) {
+				__issue_discard_cmd_orderly(sbi, dpolicy,
+						&issued);
+				return issued;
+			}
 		}
 
 		pend_list = &dcc->pend_list[i];
@@ -1700,6 +1708,13 @@ next:
 		mutex_unlock(&dcc->cmd_lock);
 
 		if (issued >= dpolicy->max_requests || io_interrupted)
+			break;
+
+		/*
+		 * We only use the largest discard unit for segment or
+		 * section unit discard.
+		 */
+		if (!f2fs_block_unit_discard(sbi))
 			break;
 	}
 
@@ -2320,10 +2335,6 @@ static int create_discard_cmd_control(struct f2fs_sb_info *sbi)
 	dcc->discard_granularity = DEFAULT_DISCARD_GRANULARITY;
 	dcc->max_ordered_discard = DEFAULT_MAX_ORDERED_DISCARD_GRANULARITY;
 	dcc->discard_io_aware = DPOLICY_IO_AWARE_ENABLE;
-	if (F2FS_OPTION(sbi).discard_unit == DISCARD_UNIT_SEGMENT)
-		dcc->discard_granularity = BLKS_PER_SEG(sbi);
-	else if (F2FS_OPTION(sbi).discard_unit == DISCARD_UNIT_SECTION)
-		dcc->discard_granularity = BLKS_PER_SEC(sbi);
 
 	INIT_LIST_HEAD(&dcc->entry_list);
 	for (i = 0; i < MAX_PLIST_NUM; i++)
