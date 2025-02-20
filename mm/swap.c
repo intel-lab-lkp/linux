@@ -84,7 +84,7 @@ static void __page_cache_release(struct folio *folio, struct lruvec **lruvecp,
  * This path almost never happens for VM activity - pages are normally freed
  * in batches.  But it gets used by networking - and for compound pages.
  */
-static void page_cache_release(struct folio *folio)
+void page_cache_release(struct folio *folio)
 {
 	struct lruvec *lruvec = NULL;
 	unsigned long flags;

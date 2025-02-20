@@ -1476,6 +1476,8 @@ static inline void folio_put(struct folio *folio)
 		__folio_put(folio);
 }
 
+void page_cache_release(struct folio *folio);
+
 /**
  * folio_put_refs - Reduce the reference count on a folio.
  * @folio: The folio.
