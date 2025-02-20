@@ -641,7 +641,7 @@ out:
  * function, ugen_before(), should be used to evaluate the temporal
  * sequence of events because the number is designed to wraparound.
  */
-static atomic_long_t __maybe_unused luf_ugen = ATOMIC_LONG_INIT(LUF_UGEN_INIT);
+static atomic_long_t luf_ugen = ATOMIC_LONG_INIT(LUF_UGEN_INIT);
 
 /*
  * Don't return invalid luf_ugen, zero.
@@ -654,6 +654,122 @@ static unsigned long __maybe_unused new_luf_ugen(void)
 		ugen = atomic_long_inc_return(&luf_ugen);
 
 	return ugen;
+}
+
+static void reset_batch(struct tlbflush_unmap_batch *batch)
+{
+	arch_tlbbatch_clear(&batch->arch);
+	batch->flush_required = false;
+	batch->writable = false;
+}
+
+void fold_batch(struct tlbflush_unmap_batch *dst,
+		struct tlbflush_unmap_batch *src, bool reset)
+{
+	if (!src->flush_required)
+		return;
+
+	/*
+	 * Fold src to dst.
+	 */
+	arch_tlbbatch_fold(&dst->arch, &src->arch);
+	dst->writable = dst->writable || src->writable;
+	dst->flush_required = true;
+
+	if (!reset)
+		return;
+
+	/*
+	 * Reset src.
+	 */
+	reset_batch(src);
+}
+
+/*
+ * The range that luf_key covers, which is 'unsigned short' type.
+ */
+#define NR_LUF_BATCH (1 << (sizeof(short) * 8))
+
+/*
+ * Use 0th entry as accumulated batch.
+ */
+static struct luf_batch luf_batch[NR_LUF_BATCH];
+
+static void luf_batch_init(struct luf_batch *lb)
+{
+	rwlock_init(&lb->lock);
+	reset_batch(&lb->batch);
+	lb->ugen = atomic_long_read(&luf_ugen) - 1;
+}
+
+static int __init luf_init(void)
+{
+	int i;
+
+	for (i = 0; i < NR_LUF_BATCH; i++)
+		luf_batch_init(&luf_batch[i]);
+
+	return 0;
+}
+early_initcall(luf_init);
+
+/*
+ * key to point an entry of the luf_batch array
+ *
+ * note: zero means invalid key
+ */
+static atomic_t luf_kgen = ATOMIC_INIT(1);
+
+/*
+ * Don't return invalid luf_key, zero.
+ */
+static unsigned short __maybe_unused new_luf_key(void)
+{
+	unsigned short luf_key = atomic_inc_return(&luf_kgen);
+
+	if (!luf_key)
+		luf_key = atomic_inc_return(&luf_kgen);
+
+	return luf_key;
+}
+
+static void __fold_luf_batch(struct luf_batch *dst_lb,
+		struct tlbflush_unmap_batch *src_batch,
+		unsigned long src_ugen)
+{
+	/*
+	 * dst_lb->ugen represents one that requires tlb shootdown for
+	 * it, that is, sort of request number.  The newer it is, the
+	 * more tlb shootdown might be needed to fulfill the newer
+	 * request.  Conservertively keep the newer one.
+	 */
+	if (!dst_lb->ugen || ugen_before(dst_lb->ugen, src_ugen))
+		dst_lb->ugen = src_ugen;
+	fold_batch(&dst_lb->batch, src_batch, false);
+}
+
+void fold_luf_batch(struct luf_batch *dst, struct luf_batch *src)
+{
+	unsigned long flags;
+
+	/*
+	 * Exactly same.  Nothing to fold.
+	 */
+	if (dst == src)
+		return;
+
+	if (&src->lock < &dst->lock) {
+		read_lock_irqsave(&src->lock, flags);
+		write_lock(&dst->lock);
+	} else {
+		write_lock_irqsave(&dst->lock, flags);
+		read_lock(&src->lock);
+	}
+
+	__fold_luf_batch(dst, &src->batch, src->ugen);
+
+	write_unlock(&dst->lock);
+	read_unlock_irqrestore(&src->lock, flags);
 }
 
 /*
@@ -670,9 +786,7 @@ void try_to_unmap_flush(void)
 		return;
 
 	arch_tlbbatch_flush(&tlb_ubc->arch);
-	arch_tlbbatch_clear(&tlb_ubc->arch);
-	tlb_ubc->flush_required = false;
-	tlb_ubc->writable = false;
+	reset_batch(tlb_ubc);
 }
 
 /* Flush iff there are potentially writable TLB entries that can race with IO */
