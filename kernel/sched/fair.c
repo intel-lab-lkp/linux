@@ -5610,6 +5610,78 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags);
 
+static void debug_print_se(int cpu, struct sched_entity *se, bool h_throttled)
+{
+	struct cfs_rq *cfs_rq = cfs_rq_of(se);
+
+	pr_warn("CPU%d: se: load(%lu) vruntime(%lld) entity_key(%lld) deadline(%lld) min_vruntime(%lld) on_rq(%d)\n", cpu, scale_load_down(se->load.weight), se->vruntime, entity_key(cfs_rq, se), se->deadline, se->min.vruntime, se->on_rq);
+	pr_warn("CPU%d: se kcs: kernel_cs_count(%d) min_kcs_vruntime(%lld) pick_entity(%d)\n", cpu, se->kernel_cs_count, se->min.kcs_vruntime, pick_entity(cfs_rq, se, h_throttled));
+}
+
+static void debug_print_cfs_rq(int cpu, struct cfs_rq *cfs_rq, struct sched_entity *se, bool h_throttled)
+{
+	pr_warn("CPU%d: ----- cfs_rq ----\n", cpu);
+	pr_warn("CPU%d: cfs_rq: throttled?(%d) cfs_rq->throttled(%d) h_nr_queued(%d) h_nr_runnable(%d) nr_queued(%d) gse->kernel_cs_count(%d)\n", cpu, h_throttled, cfs_rq->throttled, cfs_rq->h_nr_queued, cfs_rq->h_nr_runnable, cfs_rq->nr_queued, (se)? se->kernel_cs_count: -1);
+	pr_warn("CPU%d: cfs_rq EEVDF: avg_vruntime(%lld) avg_load(%lld) avg_kcs_vruntime(%lld) avg_kcs_load(%lld) \n", cpu, cfs_rq->avg_vruntime, cfs_rq->avg_load, cfs_rq->avg_kcs_vruntime, cfs_rq->avg_kcs_load);
+
+	if (cfs_rq->curr) {
+		pr_warn("CPU%d: ----- cfs_rq->curr ----\n", cpu);
+		debug_print_se(cpu, cfs_rq->curr, h_throttled);
+	}
+	pr_warn("CPU%d: ----- cfs_rq done ----\n", cpu);
+}
+
+static void debug_recursive(int cpu, struct rb_node *node, bool h_throttled)
+{
+	debug_print_se(cpu, __node_2_se(node), h_throttled);
+
+	if (node->rb_left) {
+		pr_warn("CPU%d: ----- Left Subtree ----\n", cpu);
+		debug_recursive(cpu, node->rb_left, h_throttled);
+		pr_warn("CPU%d: ----- Left Subtree Done ----\n", cpu);
+	}
+
+	if (node->rb_right) {
+		pr_warn("CPU%d: ----- Right Subtree ----\n", cpu);
+		debug_recursive(cpu, node->rb_right, h_throttled);
+		pr_warn("CPU%d: ----- Right Subtree Done ----\n", cpu);
+	}
+}
+
+static void debug_pick_next_entity(struct cfs_rq *cfs_rq, bool h_throttled)
+{
+	struct sched_entity *se = cfs_rq->tg->se[cpu_of(rq_of(cfs_rq))];
+	struct rb_node *node = cfs_rq->tasks_timeline.rb_root.rb_node;
+	struct task_struct *p = rq_of(cfs_rq)->curr;
+	int cpu = smp_processor_id();
+
+	if (p) {
+		pr_warn("CPU%d: ----- current task ----\n", cpu);
+		pr_warn("CPU%d: pid(%d) comm(%s) task_cpu(%d) task_on_rq_queued(%d) task_on_rq_migrating(%d) normal_policy(%d) idle_policy(%d)\n", cpu, p->pid, p->comm, task_cpu(p), task_on_rq_queued(p), task_on_rq_migrating(p), normal_policy(p->policy), idle_policy(p->policy));
+		pr_warn("CPU%d: ----- current task done ----\n", cpu);
+	}
+
+	debug_print_cfs_rq(cpu, cfs_rq, se, h_throttled);
+
+	if (node) {
+		pr_warn("CPU%d: ----- rbtree traversal: root ----\n", cpu);
+		debug_recursive(cpu, node, h_throttled);
+		pr_warn("CPU%d: ----- rbtree done ----\n", cpu);
+	}
+
+	cfs_rq = cfs_rq_of(se);
+	se = parent_entity(se);
+
+	for_each_sched_entity(se) {
+		pr_warn("CPU%d: ----- parent cfs_rq ----\n", cpu);
+		debug_print_cfs_rq(cpu, cfs_rq, se, h_throttled);
+
+		cfs_rq = cfs_rq_of(se);
+	}
+
+	debug_print_cfs_rq(cpu, cfs_rq, NULL, false);
+}
+
 /*
  * Pick the next process, keeping these things in mind, in this order:
  * 1) keep things fair between processes/task groups
@@ -5633,6 +5705,9 @@ pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq, bool h_throttled)
 	}
 
 	se = pick_eevdf(cfs_rq, h_throttled);
+	if (!se)
+		debug_pick_next_entity(cfs_rq, h_throttled);
+
 	if (se->sched_delayed) {
 		dequeue_entities(rq, se, DEQUEUE_SLEEP | DEQUEUE_DELAYED);
 		/*
