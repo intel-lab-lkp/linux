@@ -497,10 +497,93 @@ static void bnxt_re_start_irq(void *handle, struct bnxt_msix_entry *ent)
 	}
 }
 
+#define BNXT_SEGMENT_ROCE	255
+#define BNXT_SEGMENT_QP_CTX	256
+#define BNXT_SEGMENT_SRQ_CTX	257
+#define BNXT_SEGMENT_CQ_CTX	258
+#define BNXT_SEGMENT_MR_CTX	270
+
+static void bnxt_re_dump_ctx(struct bnxt_re_dev *rdev, u32 seg_id, void *buf,
+			     u32 buf_len)
+{
+}
+
+/* bnxt_re_snapdump - Collect RoCE debug data for coredump.
+ * @rdev	-   rdma device instance
+ * @buf		-	Pointer to dump buffer
+ * @buf_len	-	Buffer length
+ *
+ * This function will dump RoCE debug data to the coredump.
+ *
+ * Returns: Nothing
+ *
+ */
+static void bnxt_re_snapdump(struct bnxt_re_dev *rdev, void *buf, u32 buf_len)
+{
+}
+
+#define BNXT_RE_TRACE_DUMP_SIZE	0x2000000
+
+/* bnxt_re_get_dump_info - ULP callback from L2 driver to collect dump info
+ * @handle	- en_dev information. L2 and RoCE device information
+ * @dump_flags	- ethtool dump flags
+ * @dump	- ulp structure containing all coredump segment info
+ *
+ * This function is the callback from the L2 driver to provide the list of
+ * dump segments for the ethtool coredump.
+ *
+ * Returns: Nothing
+ *
+ */
+static void bnxt_re_get_dump_info(void *handle, u32 dump_flags,
+				  struct bnxt_ulp_dump *dump)
+{
+	struct bnxt_re_en_dev_info *en_info = auxiliary_get_drvdata(handle);
+	struct bnxt_ulp_dump_tbl *tbl = dump->seg_tbl;
+	struct bnxt_re_dev *rdev = en_info->rdev;
+
+	dump->segs = 5;
+	tbl[0].seg_id = BNXT_SEGMENT_QP_CTX;
+	tbl[0].seg_len = rdev->rcfw.qp_ctxm_size * BNXT_RE_MAX_QDUMP_ENTRIES;
+	tbl[1].seg_id = BNXT_SEGMENT_CQ_CTX;
+	tbl[1].seg_len = rdev->rcfw.cq_ctxm_size * BNXT_RE_MAX_QDUMP_ENTRIES;
+	tbl[2].seg_id = BNXT_SEGMENT_MR_CTX;
+	tbl[2].seg_len = rdev->rcfw.mrw_ctxm_size * BNXT_RE_MAX_QDUMP_ENTRIES;
+	tbl[3].seg_id = BNXT_SEGMENT_SRQ_CTX;
+	tbl[3].seg_len = rdev->rcfw.srq_ctxm_size * BNXT_RE_MAX_QDUMP_ENTRIES;
+	tbl[4].seg_id = BNXT_SEGMENT_ROCE;
+	tbl[4].seg_len = BNXT_RE_TRACE_DUMP_SIZE;
+}
+
+/* bnxt_re_get_dump_data - ULP callback from L2 driver to collect dump data
+ * @handle	- en_dev information. L2 and RoCE device information
+ * @seg_id	- segment ID of the dump
+ * @buf		- dump buffer pointer
+ * @len		- length of the buffer
+ *
+ * This function is the callback from the L2 driver to fill the buffer with
+ * coredump data for each segment.
+ *
+ * Returns: Nothing
+ *
+ */
+static void bnxt_re_get_dump_data(void *handle, u32 seg_id, void *buf, u32 len)
+{
+	struct bnxt_re_en_dev_info *en_info = auxiliary_get_drvdata(handle);
+	struct bnxt_re_dev *rdev = en_info->rdev;
+
+	if (seg_id == BNXT_SEGMENT_ROCE)
+		return bnxt_re_snapdump(rdev, buf, len);
+
+	bnxt_re_dump_ctx(rdev, seg_id, buf, len);
+}
+
 static struct bnxt_ulp_ops bnxt_re_ulp_ops = {
 	.ulp_async_notifier = bnxt_re_async_notifier,
 	.ulp_irq_stop = bnxt_re_stop_irq,
-	.ulp_irq_restart = bnxt_re_start_irq
+	.ulp_irq_restart = bnxt_re_start_irq,
+	.ulp_get_dump_info = bnxt_re_get_dump_info,
+	.ulp_get_dump_data = bnxt_re_get_dump_data,
 };
 
 /* RoCE -> Net driver */
