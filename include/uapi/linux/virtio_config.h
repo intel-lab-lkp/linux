@@ -52,7 +52,7 @@
  * rest are per-device feature bits.
  */
 #define VIRTIO_TRANSPORT_F_START	28
-#define VIRTIO_TRANSPORT_F_END		42
+#define VIRTIO_TRANSPORT_F_END		43
 
 #ifndef VIRTIO_CONFIG_NO_LEGACY
 /* Do we get callbacks when the ring is completely used, even if we've
@@ -119,5 +119,10 @@
  * This feature indicates that the device support administration virtqueues.
  */
 #define VIRTIO_F_ADMIN_VQ		41
+
+/*
+ * This feature indicates that the transport provides the SHM page size.
+ */
+#define VIRTIO_F_SHM_PAGE_SIZE		42
 
 #endif /* _UAPI_LINUX_VIRTIO_CONFIG_H */
