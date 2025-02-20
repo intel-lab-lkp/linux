@@ -776,21 +776,46 @@ static void __init fwnode_pointer(void)
 	software_node_unregister_node_group(group);
 }
 
+struct fourcc_struct {
+	u32 code;
+	const char *str;
+};
+
+static void __init fourcc_pointer_test(const struct fourcc_struct *fc, size_t n,
+				       const char *fmt)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++)
+		test(fc[i].str, fmt, &fc[i].code);
+}
+
 static void __init fourcc_pointer(void)
 {
-	struct {
-		u32 code;
-		char *str;
-	} const try[] = {
+	struct fourcc_struct const try_cc[] = {
 		{ 0x3231564e, "NV12 little-endian (0x3231564e)", },
 		{ 0xb231564e, "NV12 big-endian (0xb231564e)", },
 		{ 0x10111213, ".... little-endian (0x10111213)", },
 		{ 0x20303159, "Y10  little-endian (0x20303159)", },
 	};
-	unsigned int i;
+	struct fourcc_struct const try_ch = {
+		0x41424344, "ABCD (0x41424344)",
+	};
+	struct fourcc_struct const try_cr = {
+		0x41424344, "DCBA (0x44434241)",
+	};
+	struct fourcc_struct const try_cl = {
+		le32_to_cpu(0x41424344), "ABCD (0x41424344)",
+	};
+	struct fourcc_struct const try_cb = {
+		be32_to_cpu(0x41424344), "ABCD (0x41424344)",
+	};
 
-	for (i = 0; i < ARRAY_SIZE(try); i++)
-		test(try[i].str, "%p4cc", &try[i].code);
+	fourcc_pointer_test(try_cc, ARRAY_SIZE(try_cc), "%p4cc");
+	fourcc_pointer_test(&try_ch, 1, "%p4ch");
+	fourcc_pointer_test(&try_cr, 1, "%p4cr");
+	fourcc_pointer_test(&try_cl, 1, "%p4cl");
+	fourcc_pointer_test(&try_cb, 1, "%p4cb");
 }
 
 static void __init
