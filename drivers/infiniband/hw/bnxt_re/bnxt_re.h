@@ -173,6 +173,67 @@ static inline bool bnxt_re_chip_gen_p7(u16 chip_num)
 		chip_num == CHIP_NUM_57608);
 }
 
+#define BNXT_RE_MAX_QDUMP_ENTRIES 1024
+
+struct qdump_qpinfo {
+	u32 id;
+	u32 dest_qpid;
+	u64 qp_handle;
+	u32 mtu;
+	u8  type;
+	u8  wqe_mode;
+	u8  state;
+	u8  is_user;
+	u64 scq_handle;
+	u64 rcq_handle;
+	u32 scq_id;
+	u32 rcq_id;
+};
+
+struct qdump_mrinfo {
+	int type;
+	u32 lkey;
+	u32 rkey;
+	u64 total_size;
+	u64 mr_handle;
+};
+
+struct qdump_element {
+	struct bnxt_qplib_pbl pbl[PBL_LVL_MAX];
+	enum bnxt_qplib_pbl_lvl level;
+	struct bnxt_qplib_hwq *hwq;
+	struct bnxt_re_dev *rdev;
+	struct ib_umem *umem;
+	bool is_user_qp;
+	char des[32];
+	char *buf;
+	size_t len;
+	u16 stride;
+	u32 prod;
+	u32 cons;
+};
+
+struct qdump_array {
+	struct qdump_qpinfo qpinfo;
+	struct qdump_mrinfo mrinfo;
+	bool valid;
+	bool is_mr;
+};
+
+struct bnxt_re_qdump_head {
+	struct qdump_array *qdump;
+	u32 max_elements;
+	struct mutex lock; /* lock qdump array elements */
+	u32 index;
+};
+
+enum {
+	BNXT_RE_SNAPDUMP_NONE = 0,
+	BNXT_RE_SNAPDUMP_ERR,
+	/* Add new entry before this */
+	BNXT_RE_SNAPDUMP_ALL
+};
+
 struct bnxt_re_dev {
 	struct ib_device		ibdev;
 	struct list_head		list;
@@ -232,6 +293,9 @@ struct bnxt_re_dev {
 	unsigned long			event_bitmap;
 	struct bnxt_qplib_cc_param	cc_param;
 	struct workqueue_struct		*dcb_wq;
+	/* Head to track all QP dump */
+	struct bnxt_re_qdump_head qdump_head;
+	u8 snapdump_dbg_lvl;
 	struct dentry                   *cc_config;
 	struct bnxt_re_dbg_cc_config_params *cc_config_params;
 };

@@ -2008,6 +2008,11 @@ static void bnxt_re_free_nqr_mem(struct bnxt_re_dev *rdev)
 	rdev->nqr = NULL;
 }
 
+static void bnxt_re_clean_qdump(struct bnxt_re_dev *rdev)
+{
+	vfree(rdev->qdump_head.qdump);
+}
+
 static void bnxt_re_dev_uninit(struct bnxt_re_dev *rdev, u8 op_type)
 {
 	u8 type;
@@ -2018,6 +2023,7 @@ static void bnxt_re_dev_uninit(struct bnxt_re_dev *rdev, u8 op_type)
 	bnxt_re_net_unregister_async_event(rdev);
 	bnxt_re_uninit_dcb_wq(rdev);
 
+	bnxt_re_clean_qdump(rdev);
 	if (test_and_clear_bit(BNXT_RE_FLAG_QOS_WORK_REG, &rdev->flags))
 		cancel_delayed_work_sync(&rdev->worker);
 
@@ -2061,6 +2067,16 @@ static void bnxt_re_worker(struct work_struct *work)
 
 	bnxt_re_setup_qos(rdev);
 	schedule_delayed_work(&rdev->worker, msecs_to_jiffies(30000));
+}
+
+static void bnxt_re_init_qdump(struct bnxt_re_dev *rdev)
+{
+	rdev->qdump_head.max_elements = BNXT_RE_MAX_QDUMP_ENTRIES;
+	rdev->qdump_head.index = 0;
+	rdev->snapdump_dbg_lvl = BNXT_RE_SNAPDUMP_ERR;
+	mutex_init(&rdev->qdump_head.lock);
+	rdev->qdump_head.qdump = vzalloc(rdev->qdump_head.max_elements *
+					 sizeof(struct qdump_array));
 }
 
 static int bnxt_re_dev_init(struct bnxt_re_dev *rdev, u8 op_type)
@@ -2235,6 +2251,8 @@ static int bnxt_re_dev_init(struct bnxt_re_dev *rdev, u8 op_type)
 		hash_init(rdev->srq_hash);
 
 	bnxt_re_debugfs_add_pdev(rdev);
+	if (bnxt_qplib_is_chip_gen_p5_p7(rdev->chip_ctx))
+		bnxt_re_init_qdump(rdev);
 
 	bnxt_re_init_dcb_wq(rdev);
 	bnxt_re_net_register_async_event(rdev);
