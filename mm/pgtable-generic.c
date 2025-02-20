@@ -100,7 +100,7 @@ pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long address,
 	if (pte_accessible(mm, pte))
 		flush_tlb_page(vma, address);
 	else
-		luf_flush(0);
+		luf_flush_vma(vma);
 	return pte;
 }
 #endif
