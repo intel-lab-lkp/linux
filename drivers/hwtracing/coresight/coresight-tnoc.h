@@ -10,6 +10,10 @@
 
 /* Enable generation of output ATB traffic.*/
 #define TRACE_NOC_CTRL_PORTEN	BIT(0)
+/* Writing 1 to initiate a flush sequence.*/
+#define TRACE_NOC_CTRL_FLUSHREQ	BIT(1)
+/* 0: sequence in progress; 1: sequence has been completed.*/
+#define TRACE_NOC_CTRL_FLUSHSTATUS	BIT(2)
 /* Writing 1 to issue a FREQ or FREQ_TS packet*/
 #define TRACE_NOC_CTRL_FREQTSREQ	BIT(5)
 /* Sets the type of issued ATB FLAG packets. 0: 'FLAG' packets; 1: 'FLAG_TS' packets.*/

@@ -16,6 +16,78 @@
 #include "coresight-tnoc.h"
 #include "coresight-trace-id.h"
 
+static ssize_t flush_req_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t size)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct coresight_device	*csdev = drvdata->csdev;
+	unsigned long val;
+	u32 reg;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	if (val != 1)
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	if (csdev->refcnt == 0) {
+		spin_unlock(&drvdata->spinlock);
+		return -EPERM;
+	}
+
+	reg = readl_relaxed(drvdata->base + TRACE_NOC_CTRL);
+	reg = reg | TRACE_NOC_CTRL_FLUSHREQ;
+	writel_relaxed(reg, drvdata->base + TRACE_NOC_CTRL);
+
+	spin_unlock(&drvdata->spinlock);
+
+	return size;
+}
+static DEVICE_ATTR_WO(flush_req);
+
+/*
+ * flush-sequence status:
+ * value 0: sequence in progress;
+ * value 1: sequence has been completed.
+ */
+static ssize_t flush_status_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	struct coresight_device	*csdev = drvdata->csdev;
+	u32 val;
+
+	spin_lock(&drvdata->spinlock);
+	if (csdev->refcnt == 0) {
+		spin_unlock(&drvdata->spinlock);
+		return -EPERM;
+	}
+
+	val = readl_relaxed(drvdata->base + TRACE_NOC_CTRL);
+	spin_unlock(&drvdata->spinlock);
+	return sysfs_emit(buf, "%u\n", BMVAL(val, 2, 2));
+}
+static DEVICE_ATTR_RO(flush_status);
+
+static struct attribute *trace_noc_attrs[] = {
+	&dev_attr_flush_req.attr,
+	&dev_attr_flush_status.attr,
+	NULL,
+};
+
+static struct attribute_group trace_noc_attr_grp = {
+	.attrs = trace_noc_attrs,
+};
+
+static const struct attribute_group *trace_noc_attr_grps[] = {
+	&trace_noc_attr_grp,
+	NULL,
+};
+
 static void trace_noc_enable_hw(struct trace_noc_drvdata *drvdata)
 {
 	u32 val;
@@ -142,6 +214,7 @@ static int trace_noc_probe(struct amba_device *adev, const struct amba_id *id)
 		return ret;
 
 	desc.ops = &trace_noc_cs_ops;
+	desc.groups = trace_noc_attr_grps;
 	desc.type = CORESIGHT_DEV_TYPE_LINK;
 	desc.subtype.link_subtype = CORESIGHT_DEV_SUBTYPE_LINK_MERG;
 	desc.pdata = adev->dev.platform_data;
