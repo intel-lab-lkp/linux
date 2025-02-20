@@ -152,6 +152,56 @@ void hisi_sas_stop_phys(struct hisi_hba *hisi_hba)
 }
 EXPORT_SYMBOL_GPL(hisi_sas_stop_phys);
 
+static void hisi_sas_update_itct(void *data, async_cookie_t cookie)
+{
+	struct domain_device *device = data;
+	struct hisi_sas_device *sas_dev = device->lldd_dev;
+	struct hisi_hba *hisi_hba = sas_dev->hisi_hba;
+
+	hisi_hba->hw->clear_itct(hisi_hba, sas_dev);
+	hisi_hba->hw->setup_itct(hisi_hba, sas_dev);
+	sas_put_device(device);
+}
+
+static void hisi_sas_update_port_id(struct hisi_hba *hisi_hba, int phy_no)
+{
+	struct hisi_sas_phy *phy = &hisi_hba->phy[phy_no];
+	struct asd_sas_phy *sas_phy = &phy->sas_phy;
+	struct device *dev = hisi_hba->dev;
+	struct asd_sas_port *sas_port;
+	struct domain_device *device;
+	struct hisi_sas_port *port;
+	ASYNC_DOMAIN_EXCLUSIVE(async);
+
+	if (test_bit(HISI_SAS_RESETTING_BIT, &hisi_hba->flags) ||
+	    !sas_phy->port)
+		return;
+
+	sas_port = sas_phy->port;
+	port = to_hisi_sas_port(sas_port);
+	if (phy->port_id == port->id)
+		return;
+
+	dev_info(dev, "phy%d's hw port id changed from %d to %llu\n",
+		 phy_no, port->id, phy->port_id);
+	port->id = phy->port_id;
+	spin_lock(&sas_port->dev_list_lock);
+	list_for_each_entry(device, &sas_port->dev_list, dev_list_node) {
+		if (!device->parent)
+			device->linkrate = phy->sas_phy.linkrate;
+
+		/*
+		 * Update itct may trigger scheduling, it cannot be within
+		 * an atomic context, so use asynchronous scheduling and
+		 * hold a reference to avoid racing with final remove.
+		 */
+		kref_get(&device->kref);
+		async_schedule_domain(hisi_sas_update_itct, device, &async);
+	}
+	spin_unlock(&sas_port->dev_list_lock);
+	async_synchronize_full_domain(&async);
+}
+
 static void hisi_sas_slot_index_clear(struct hisi_hba *hisi_hba, int slot_idx)
 {
 	void *bitmap = hisi_hba->slot_index_tags;
@@ -913,6 +963,7 @@ static void hisi_sas_phyup_work_common(struct work_struct *work,
 	struct asd_sas_phy *sas_phy = &phy->sas_phy;
 	int phy_no = sas_phy->id;
 
+	hisi_sas_update_port_id(hisi_hba, phy_no);
 	phy->wait_phyup_cnt = 0;
 	if (phy->identify.target_port_protocols == SAS_PROTOCOL_SSP)
 		hisi_hba->hw->sl_notify_ssp(hisi_hba, phy_no);
