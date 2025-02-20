@@ -526,6 +526,9 @@ void account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec);
 static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se);
 static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se);
 static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta);
+static __always_inline int pick_se_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se);
+static __always_inline
+int pick_subtree_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
 /**************************************************************
  * Scheduling class tree data structure manipulation methods:
@@ -750,6 +753,24 @@ int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	return vruntime_eligible(cfs_rq, se->vruntime);
 }
 
+static __always_inline
+int pick_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, bool h_throttled)
+{
+	if (unlikely(h_throttled))
+		return pick_se_on_throttled(cfs_rq, se);
+
+	return vruntime_eligible(cfs_rq, se->vruntime);
+}
+
+static __always_inline
+int pick_subtree(struct cfs_rq *cfs_rq, struct sched_entity *se, bool h_throttled)
+{
+	if (unlikely(h_throttled))
+		return pick_subtree_on_throttled(cfs_rq, se);
+
+	return vruntime_eligible(cfs_rq, se->min_vruntime);
+}
+
 static u64 __update_min_vruntime(struct cfs_rq *cfs_rq, u64 vruntime)
 {
 	u64 min_vruntime = cfs_rq->min_vruntime;
@@ -936,7 +957,7 @@ static inline void cancel_protect_slice(struct sched_entity *se)
  *
  * Which allows tree pruning through eligibility.
  */
-static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
+static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq, bool h_throttled)
 {
 	struct rb_node *node = cfs_rq->tasks_timeline.rb_root.rb_node;
 	struct sched_entity *se = __pick_first_entity(cfs_rq);
@@ -950,14 +971,14 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 	if (cfs_rq->nr_queued == 1)
 		return curr && curr->on_rq ? curr : se;
 
-	if (curr && (!curr->on_rq || !entity_eligible(cfs_rq, curr)))
+	if (curr && (!curr->on_rq || !pick_entity(cfs_rq, curr, h_throttled)))
 		curr = NULL;
 
 	if (sched_feat(RUN_TO_PARITY) && curr && protect_slice(curr))
 		return curr;
 
 	/* Pick the leftmost entity if it's eligible */
-	if (se && entity_eligible(cfs_rq, se)) {
+	if (se && pick_entity(cfs_rq, se, h_throttled)) {
 		best = se;
 		goto found;
 	}
@@ -970,8 +991,7 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 		 * Eligible entities in left subtree are always better
 		 * choices, since they have earlier deadlines.
 		 */
-		if (left && vruntime_eligible(cfs_rq,
-					__node_2_se(left)->min_vruntime)) {
+		if (left && pick_subtree(cfs_rq, __node_2_se(left), h_throttled)) {
 			node = left;
 			continue;
 		}
@@ -983,7 +1003,7 @@ static struct sched_entity *pick_eevdf(struct cfs_rq *cfs_rq)
 		 * entity, so check the current node since it is the one
 		 * with earliest deadline that might be eligible.
 		 */
-		if (entity_eligible(cfs_rq, se)) {
+		if (pick_entity(cfs_rq, se, h_throttled)) {
 			best = se;
 			break;
 		}
@@ -5601,14 +5621,14 @@ pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq)
 	/*
 	 * Picking the ->next buddy will affect latency but not fairness.
 	 */
-	if (sched_feat(PICK_BUDDY) &&
-	    cfs_rq->next && entity_eligible(cfs_rq, cfs_rq->next)) {
+	if (sched_feat(PICK_BUDDY) && cfs_rq->next &&
+	    pick_entity(cfs_rq, cfs_rq->next, throttled_hierarchy(cfs_rq))) {
 		/* ->next will never be delayed */
 		SCHED_WARN_ON(cfs_rq->next->sched_delayed);
 		return cfs_rq->next;
 	}
 
-	se = pick_eevdf(cfs_rq);
+	se = pick_eevdf(cfs_rq, throttled_hierarchy(cfs_rq));
 	if (se->sched_delayed) {
 		dequeue_entities(rq, se, DEQUEUE_SLEEP | DEQUEUE_DELAYED);
 		/*
@@ -6795,6 +6815,89 @@ static __always_inline void init_se_kcs_stats(struct sched_entity *se)
 	se->min_kcs_vruntime = (se_in_kernel(se)) ? se->vruntime : LLONG_MAX;
 }
 
+/*
+ * Current task is outside the hierarchy during pick_eevdf(). Since
+ * "kernel_cs_count" has not been adjusted yet with put_prev_entity(),
+ * its preempted status is not accounted to the hierarchy. Check the
+ * status of current task too when accounting the contribution of
+ * cfs_rq->curr during the pick.
+ */
+static inline bool curr_h_is_throttled(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	struct task_struct *p;
+
+	/* Current hierarchy has been dequeued. */
+	if (!curr || !curr->on_rq)
+		return false;
+
+	/*
+	 * There are kernel mode preempted tasks
+	 * queued below this cfs_rq.
+	 */
+	if (se_in_kernel(cfs_rq->curr))
+		return true;
+
+	p = rq_of(cfs_rq)->curr;
+	/* Current task has been dequeued. */
+	if (!task_on_rq_queued(p))
+		return false;
+
+	/* Current task is still in kernel mode. */
+	return se_in_kernel(&p->se);
+}
+
+/* Same as vruntime eligible except this works with avg_kcs_vruntime and avg_kcs_load. */
+static __always_inline
+int throttled_vruntime_eligible(struct cfs_rq *cfs_rq, u64 vruntime, bool account_curr)
+{
+	s64 avg = cfs_rq->avg_kcs_vruntime;
+	long load = cfs_rq->avg_kcs_load;
+
+	if (account_curr) {
+		struct sched_entity *curr = cfs_rq->curr;
+		unsigned long weight = scale_load_down(curr->load.weight);
+
+		avg += entity_key(cfs_rq, curr) * weight;
+		load += weight;
+	}
+
+	return avg >= (s64)(vruntime - cfs_rq->min_vruntime) * load;
+}
+
+/* Same as entity_eligible() but for throttled hierarchy. */
+static __always_inline int pick_se_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	bool account_curr = curr_h_is_throttled(cfs_rq);
+
+	if (se == cfs_rq->curr) {
+		/*
+		 * If cfs_rq->curr is not accountable, it implies there
+		 * are no more kernel mode preempted tasks below it.
+		 */
+		if (!account_curr)
+			return false;
+	} else if (!se_in_kernel(se))
+		return false;
+
+	return throttled_vruntime_eligible(cfs_rq,
+					   se->vruntime,
+					   account_curr);
+}
+
+/* Similar to entity_eligible(cfs_rq, se->min_vruntime) but for throttled hierarchy. */
+static __always_inline
+int pick_subtree_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	/* There are no kernel mode preempted entities in the subtree. */
+	if (se->min_kcs_vruntime == LLONG_MAX)
+		return false;
+
+	return throttled_vruntime_eligible(cfs_rq,
+					   se->min_kcs_vruntime,
+					   curr_h_is_throttled(cfs_rq));
+}
+
 static inline void __min_kcs_vruntime_update(struct sched_entity *se, struct rb_node *node)
 {
 	if (node) {
@@ -6968,6 +7071,17 @@ static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct s
 static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta) {}
 static __always_inline void init_se_kcs_stats(struct sched_entity *se) {}
+
+static __always_inline int pick_se_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	return vruntime_eligible(cfs_rq, se->vruntime);
+}
+
+static __always_inline
+int pick_subtree_on_throttled(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	return vruntime_eligible(cfs_rq, se->min_vruntime);
+}
 
 static inline bool min_kcs_vruntime_update(struct sched_entity *se)
 {
@@ -9045,7 +9159,7 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	/*
 	 * If @p has become the most eligible task, force preemption.
 	 */
-	if (pick_eevdf(cfs_rq) == pse)
+	if (pick_eevdf(cfs_rq, throttled_hierarchy(cfs_rq)) == pse)
 		goto preempt;
 
 	return;
