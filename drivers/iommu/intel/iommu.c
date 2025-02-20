@@ -2871,7 +2871,8 @@ void intel_iommu_shutdown(void)
 	if (no_iommu || dmar_disabled)
 		return;
 
-	down_write(&dmar_global_lock);
+	if (!down_write_trylock(&dmar_global_lock))
+		return;
 
 	/* Disable PMRs explicitly here. */
 	for_each_iommu(iommu, drhd)
