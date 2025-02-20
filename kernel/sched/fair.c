@@ -5618,7 +5618,7 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags);
  * 4) do not run the "skip" process, if something else is available
  */
 static struct sched_entity *
-pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq)
+pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq, bool h_throttled)
 {
 	struct sched_entity *se;
 
@@ -5626,13 +5626,13 @@ pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq)
 	 * Picking the ->next buddy will affect latency but not fairness.
 	 */
 	if (sched_feat(PICK_BUDDY) && cfs_rq->next &&
-	    pick_entity(cfs_rq, cfs_rq->next, throttled_hierarchy(cfs_rq))) {
+	    pick_entity(cfs_rq, cfs_rq->next, h_throttled)) {
 		/* ->next will never be delayed */
 		SCHED_WARN_ON(cfs_rq->next->sched_delayed);
 		return cfs_rq->next;
 	}
 
-	se = pick_eevdf(cfs_rq, throttled_hierarchy(cfs_rq));
+	se = pick_eevdf(cfs_rq, h_throttled);
 	if (se->sched_delayed) {
 		dequeue_entities(rq, se, DEQUEUE_SLEEP | DEQUEUE_DELAYED);
 		/*
@@ -9187,6 +9187,7 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	struct sched_entity *se = &donor->se, *pse = &p->se;
 	struct cfs_rq *cfs_rq = task_cfs_rq(donor);
 	int cse_is_idle, pse_is_idle;
+	bool h_throttled = false;
 
 	if (unlikely(se == pse))
 		return;
@@ -9260,10 +9261,16 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	if (do_preempt_short(cfs_rq, pse, se))
 		cancel_protect_slice(se);
 
+	for_each_sched_entity(se) {
+		h_throttled = h_throttled || cfs_rq_throttled(cfs_rq_of(se));
+		if (h_throttled)
+			break;
+	}
+
 	/*
 	 * If @p has become the most eligible task, force preemption.
 	 */
-	if (pick_eevdf(cfs_rq, throttled_hierarchy(cfs_rq)) == pse)
+	if (pick_eevdf(cfs_rq, h_throttled) == pse)
 		goto preempt;
 
 	return;
@@ -9276,11 +9283,14 @@ static struct task_struct *pick_task_fair(struct rq *rq)
 {
 	struct sched_entity *se;
 	struct cfs_rq *cfs_rq;
+	bool h_throttled;
 
 again:
 	cfs_rq = &rq->cfs;
 	if (!cfs_rq->nr_queued)
 		return NULL;
+
+	h_throttled = false;
 
 	do {
 		/* Might not have done put_prev_entity() */
@@ -9290,7 +9300,8 @@ again:
 		if (unlikely(check_cfs_rq_runtime(cfs_rq)))
 			goto again;
 
-		se = pick_next_entity(rq, cfs_rq);
+		h_throttled = h_throttled || cfs_rq_throttled(cfs_rq);
+		se = pick_next_entity(rq, cfs_rq, h_throttled);
 		if (!se)
 			goto again;
 		cfs_rq = group_cfs_rq(se);
