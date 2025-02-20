@@ -6837,6 +6837,21 @@ bool cfs_task_bw_constrained(struct task_struct *p)
 	return false;
 }
 
+/* se->sched_throttled states: Modifications are serialized by rq_lock */
+enum sched_throttled_states {
+	/* No throttle status */
+	PICK_ON_UNTHROTTLED	= 0x0,
+	/* Task was picked on a throttled hierarchy */
+	PICK_ON_THROTTLED	= 0x1,
+	/*
+	 * Ignore tasks's "kernel_cs_count". Used for save / restore
+	 * operations on running tasks from a remote CPU. Prevents
+	 * enqueue and set_next_entity() from adjusting the stats and
+	 * puts it off until schedule() is called on the CPU.
+	 */
+	PICK_IGNORE		= 0x2,
+};
+
 __always_inline void sched_notify_critical_section_entry(void)
 {
 	SCHED_WARN_ON(current->se.kernel_cs_count);
@@ -6846,6 +6861,8 @@ __always_inline void sched_notify_critical_section_entry(void)
 	 * critical section and will defer bandwidth throttling.
 	 */
 }
+
+static inline int task_picked_on_throttled(struct task_struct *p);
 
 __always_inline void sched_notify_critical_section_exit(void)
 {
@@ -6860,7 +6877,7 @@ __always_inline void sched_notify_critical_section_exit(void)
 	 * schedule() soon after enabling interrupts again in
 	 * exit_to_user_mode_loop()?
 	 */
-	if (!current->se.kernel_cs_count && current->se.sched_throttled) {
+	if (!current->se.kernel_cs_count && task_picked_on_throttled(current)) {
 		struct rq *rq = this_rq();
 
 		guard(rq_lock_irqsave)(rq);
@@ -6873,15 +6890,40 @@ static __always_inline int se_in_kernel(struct sched_entity *se)
 	return se->kernel_cs_count;
 }
 
-/* se picked on a partially throttled hierarchy. */
+/* task picked on a partially throttled hierarchy. */
 static inline void task_mark_throttled(struct task_struct *p)
 {
-	p->se.sched_throttled = 1;
+	WRITE_ONCE(p->se.sched_throttled, PICK_ON_THROTTLED);
+}
+
+static inline void task_mark_ignore(struct task_struct *p)
+{
+	WRITE_ONCE(p->se.sched_throttled, READ_ONCE(p->se.sched_throttled) | PICK_IGNORE);
 }
 
 static inline void task_clear_throttled(struct task_struct *p)
 {
-	p->se.sched_throttled = 0;
+	WRITE_ONCE(p->se.sched_throttled, PICK_ON_UNTHROTTLED);
+}
+
+static inline void task_clear_ignore(struct task_struct *p)
+{
+	WRITE_ONCE(p->se.sched_throttled, READ_ONCE(p->se.sched_throttled) & ~PICK_IGNORE);
+}
+
+static inline int __kcs_ignore_entity(struct sched_entity *se)
+{
+	return READ_ONCE(se->sched_throttled) & PICK_IGNORE;
+}
+
+static inline int task_picked_on_throttled(struct task_struct *p)
+{
+	return READ_ONCE(p->se.sched_throttled) & PICK_ON_THROTTLED;
+}
+
+static inline int ignore_task_kcs_stats(struct task_struct *p)
+{
+	return __kcs_ignore_entity(&p->se);
 }
 
 /*
@@ -6892,6 +6934,10 @@ static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct s
 {
 	unsigned long weight;
 	s64 key;
+
+	/* See avg_kcs_vruntime_sub() */
+	if (__kcs_ignore_entity(se))
+		return;
 
 	if (!se_in_kernel(se))
 		return;
@@ -6911,6 +6957,15 @@ static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct s
 {
 	unsigned long weight;
 	s64 key;
+
+	/*
+	 * A remote running task in being enqueued for a restore operation.
+	 * Since it has an unstable "kernel_cs_count" being in a running state,
+	 * do not account its stats yet. A set_next_task() -> schedule() will
+	 * follow on the CPU to adjust it.
+	 */
+	if (__kcs_ignore_entity(se))
+		return;
 
 	if (!se_in_kernel(se))
 		return;
@@ -7238,6 +7293,20 @@ static __always_inline int se_in_kernel(struct sched_entity *se)
 
 static __always_inline void task_mark_throttled(struct task_struct *p) {}
 static __always_inline void task_clear_throttled(struct task_struct *p) {}
+static __always_inline void task_mark_ignore(struct task_struct *p) {}
+static __always_inline void task_clear_ignore(struct task_struct *p) {}
+
+static inline int task_picked_on_throttled(struct task_struct *p)
+{
+	return 0;
+}
+
+static inline int ignore_task_kcs_stats(struct task_struct *p)
+{
+	return 0;
+}
+
+
 static __always_inline void avg_kcs_vruntime_add(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_sub(struct cfs_rq *cfs_rq, struct sched_entity *se) {}
 static __always_inline void avg_kcs_vruntime_update(struct cfs_rq *cfs_rq, s64 delta) {}
@@ -7436,6 +7505,13 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	if (!(p->se.sched_delayed && (task_on_rq_migrating(p) || (flags & ENQUEUE_RESTORE))))
 		util_est_enqueue(&rq->cfs, p);
+
+	/*
+	 * Running task has just moved to the fair class.
+	 * Ignore "kernel_cs_count" until set_next_task_fair()
+	 */
+	if (task_on_cpu(rq, p) && (flags & ENQUEUE_MOVE))
+		task_mark_ignore(p);
 
 	if (flags & ENQUEUE_DELAYED) {
 		requeue_delayed_entity(se);
@@ -9582,9 +9658,23 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 	 * Clear the pick on throttled indicator only if
 	 * another task was picked and not for a save /
 	 * restore operation for the task.
+	 *
+	 * For a save / restore operation of a running task,
+	 * mark the task to be ignored for "kernel_cs_stats"
+	 * adjustment. Either set_next_task_fair() or
+	 * switched_from_fair() will clear these idicators.
 	 */
 	if (next)
 		task_clear_throttled(prev);
+	else {
+		/*
+		 * put_prev_task_fair() is only called with next as NULL
+		 * during save / restore operations. Since idle thread
+		 * is always runnable, all other cases will have a valid
+		 * prev task set.
+		 */
+		task_mark_ignore(prev);
+	}
 
 	for_each_sched_entity(se) {
 		cfs_rq = cfs_rq_of(se);
@@ -13897,6 +13987,7 @@ static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 {
 	struct sched_entity *se = &p->se;
 	bool task_in_kernel = !task_on_cpu(rq, p) && se_in_kernel(se);
+	bool h_throttled = false;
 
 	for_each_sched_entity(se) {
 		struct cfs_rq *cfs_rq = cfs_rq_of(se);
@@ -13905,6 +13996,22 @@ static void set_next_task_fair(struct rq *rq, struct task_struct *p, bool first)
 		account_kcs_dequeue(cfs_rq, task_in_kernel);
 		/* ensure bandwidth has been allocated on our new cfs_rq */
 		account_cfs_rq_runtime(cfs_rq, 0);
+		/* Check if task is on a partially throttled hierarchy */
+		h_throttled = h_throttled || cfs_rq_throttled(cfs_rq);
+	}
+
+	/* Mark the end of save / restore operation. */
+	if (ignore_task_kcs_stats(p)) {
+		task_clear_ignore(p);
+
+		/*
+		 * If the hierarchy is throttled but the task was not picked on
+		 * a throttled hierarchy, the hierarchy was throttled during the
+		 * course of a save / restore operation. Request a resched for
+		 * pick_next_task_fair() to reevaluate the throttle status.
+		 */
+		if (h_throttled && !task_picked_on_throttled(p))
+			resched_curr(rq);
 	}
 
 	__set_next_task_fair(rq, p, first);
