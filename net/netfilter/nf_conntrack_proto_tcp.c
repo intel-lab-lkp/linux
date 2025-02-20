@@ -480,6 +480,39 @@ static void tcp_init_sender(struct ip_ct_tcp_state *sender,
 	}
 }
 
+static void nf_ct_tcp_state_annotate(struct nf_conn *ct,
+				     const struct sk_buff *skb,
+				     const struct tcphdr *th,
+				     unsigned int dataoff,
+				     enum ip_conntrack_dir dir,
+				     unsigned int index)
+{
+	ct->proto.tcp.last_index = index;
+	ct->proto.tcp.last_dir = dir;
+	ct->proto.tcp.last_seq = ntohl(th->seq);
+	ct->proto.tcp.last_end =
+	    segment_seq_plus_len(ntohl(th->seq), skb->len, dataoff, th);
+	ct->proto.tcp.last_win = ntohs(th->window);
+}
+
+static void nf_ct_tcp_state_syn_annotate(struct nf_conn *ct,
+					 const struct sk_buff *skb,
+					 const struct tcphdr *th,
+					 unsigned int dataoff)
+{
+	struct ip_ct_tcp_state seen = {};
+
+	ct->proto.tcp.last_flags = 0;
+	ct->proto.tcp.last_wscale = 0;
+	tcp_options(skb, dataoff, th, &seen);
+	if (seen.flags & IP_CT_TCP_FLAG_WINDOW_SCALE) {
+		ct->proto.tcp.last_flags |= IP_CT_TCP_FLAG_WINDOW_SCALE;
+		ct->proto.tcp.last_wscale = seen.td_scale;
+	}
+	if (seen.flags & IP_CT_TCP_FLAG_SACK_PERM)
+		ct->proto.tcp.last_flags |= IP_CT_TCP_FLAG_SACK_PERM;
+}
+
 __printf(6, 7)
 static enum nf_ct_tcp_action nf_tcp_log_invalid(const struct sk_buff *skb,
 						const struct nf_conn *ct,
@@ -574,7 +607,6 @@ tcp_in_window(struct nf_conn *ct, enum ip_conntrack_dir dir,
 
 		}
 	} else if (tcph->syn &&
-		   after(end, sender->td_end) &&
 		   (state->state == TCP_CONNTRACK_SYN_SENT ||
 		    state->state == TCP_CONNTRACK_SYN_RECV)) {
 		/*
@@ -584,13 +616,30 @@ tcp_in_window(struct nf_conn *ct, enum ip_conntrack_dir dir,
 		 *
 		 * Re-init state for this direction, just like for the first
 		 * syn(-ack) reply, it might differ in seq, ack or tcp options.
+		 *
+		 * However, if the sequence number is smaller than expected,
+		 * then let the packet go through and wait for server to reply
+		 * with a syn-ack to confirm this is legitimate.
+		 *
+		 * Note that syn retransmissions do not fall under either of
+		 * the following two conditions.
 		 */
-		tcp_init_sender(sender, receiver,
-				skb, dataoff, tcph,
-				end, win, dir);
+		if (after(end, sender->td_end)) {
+			tcp_init_sender(sender, receiver,
+					skb, dataoff, tcph,
+					end, win, dir);
 
-		if (dir == IP_CT_DIR_REPLY && !tcph->ack)
-			return NFCT_TCP_ACCEPT;
+			if (dir == IP_CT_DIR_REPLY && !tcph->ack)
+				return NFCT_TCP_ACCEPT;
+		} else if (before(end, sender->td_end) &&
+			   dir == IP_CT_DIR_ORIGINAL && !tcph->ack) {
+			nf_ct_tcp_state_annotate(ct, skb, tcph, dataoff, dir, index);
+			nf_ct_tcp_state_syn_annotate(ct, skb, tcph, dataoff);
+			ct->proto.tcp.last_flags |= IP_CT_TCP_REINIT;
+
+			return nf_tcp_log_invalid(skb, ct, hook_state, sender, NFCT_TCP_IGNORE,
+						  "ignored SYN with SEQ before the previous one");
+		}
 	}
 
 	if (!(tcph->ack)) {
@@ -959,6 +1008,24 @@ static void nf_ct_tcp_state_reset(struct ip_ct_tcp_state *state)
 	state->flags		&= IP_CT_TCP_FLAG_BE_LIBERAL;
 }
 
+static void nf_ct_tcp_state_resync(struct nf_conn *ct,
+				   enum ip_conntrack_dir dir)
+{
+	ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_end =
+					ct->proto.tcp.last_end;
+	ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_maxend =
+					ct->proto.tcp.last_end;
+	ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_maxwin =
+					ct->proto.tcp.last_win == 0 ?
+						1 : ct->proto.tcp.last_win;
+	ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_scale =
+					ct->proto.tcp.last_wscale;
+	ct->proto.tcp.last_flags &= ~IP_CT_EXP_CHALLENGE_ACK;
+	ct->proto.tcp.seen[ct->proto.tcp.last_dir].flags =
+					ct->proto.tcp.last_flags;
+	nf_ct_tcp_state_reset(&ct->proto.tcp.seen[dir]);
+}
+
 /* Returns verdict for packet, or -1 for invalid. */
 int nf_conntrack_tcp_packet(struct nf_conn *ct,
 			    struct sk_buff *skb,
@@ -1052,27 +1119,11 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 			 */
 			old_state = TCP_CONNTRACK_SYN_SENT;
 			new_state = TCP_CONNTRACK_SYN_RECV;
-			ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_end =
-				ct->proto.tcp.last_end;
-			ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_maxend =
-				ct->proto.tcp.last_end;
-			ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_maxwin =
-				ct->proto.tcp.last_win == 0 ?
-					1 : ct->proto.tcp.last_win;
-			ct->proto.tcp.seen[ct->proto.tcp.last_dir].td_scale =
-				ct->proto.tcp.last_wscale;
-			ct->proto.tcp.last_flags &= ~IP_CT_EXP_CHALLENGE_ACK;
-			ct->proto.tcp.seen[ct->proto.tcp.last_dir].flags =
-				ct->proto.tcp.last_flags;
-			nf_ct_tcp_state_reset(&ct->proto.tcp.seen[dir]);
+			nf_ct_tcp_state_resync(ct, dir);
 			break;
 		}
-		ct->proto.tcp.last_index = index;
-		ct->proto.tcp.last_dir = dir;
-		ct->proto.tcp.last_seq = ntohl(th->seq);
-		ct->proto.tcp.last_end =
-		    segment_seq_plus_len(ntohl(th->seq), skb->len, dataoff, th);
-		ct->proto.tcp.last_win = ntohs(th->window);
+
+		nf_ct_tcp_state_annotate(ct, skb, th, dataoff, dir, index);
 
 		/* a) This is a SYN in ORIGINAL. The client and the server
 		 * may be in sync but we are not. In that case, we annotate
@@ -1082,20 +1133,8 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 		 * responds with a challenge ACK if implementing RFC5961.
 		 */
 		if (index == TCP_SYN_SET && dir == IP_CT_DIR_ORIGINAL) {
-			struct ip_ct_tcp_state seen = {};
+			nf_ct_tcp_state_syn_annotate(ct, skb, th, dataoff);
 
-			ct->proto.tcp.last_flags =
-			ct->proto.tcp.last_wscale = 0;
-			tcp_options(skb, dataoff, th, &seen);
-			if (seen.flags & IP_CT_TCP_FLAG_WINDOW_SCALE) {
-				ct->proto.tcp.last_flags |=
-					IP_CT_TCP_FLAG_WINDOW_SCALE;
-				ct->proto.tcp.last_wscale = seen.td_scale;
-			}
-			if (seen.flags & IP_CT_TCP_FLAG_SACK_PERM) {
-				ct->proto.tcp.last_flags |=
-					IP_CT_TCP_FLAG_SACK_PERM;
-			}
 			/* Mark the potential for RFC5961 challenge ACK,
 			 * this pose a special problem for LAST_ACK state
 			 * as ACK is intrepretated as ACKing last FIN.
@@ -1164,6 +1203,31 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 		ct->proto.tcp.last_flags |= IP_CT_TCP_SIMULTANEOUS_OPEN;
 		break;
 	case TCP_CONNTRACK_SYN_RECV:
+		if (ct->proto.tcp.last_flags & IP_CT_TCP_REINIT) {
+			/* b) This SYN/ACK acknowledges a SYN that we earlier
+			 * ignored as invalid. This means that the client and
+			 * the server are both in sync, while the firewall is
+			 * not. We get in sync from the previously annotated
+			 * values.
+			 */
+			if (ntohl(th->ack_seq) == ct->proto.tcp.last_end) {
+				/* expected SYN/ACK acknowledges a SYN, get
+				 * in sync from last state.
+				 */
+				nf_ct_tcp_state_resync(ct, dir);
+			} else {
+				/* unexpected SYN/ACK acknowledges a SYN,
+				 * a late SYN has overridden last state.
+				 * Maybe under SYN flood? Its history is lost
+				 * for us, enable liberal tracking mode.
+				 */
+				ct->proto.tcp.seen[dir].flags |= IP_CT_TCP_FLAG_BE_LIBERAL;
+				ct->proto.tcp.seen[!dir].flags |= IP_CT_TCP_FLAG_BE_LIBERAL;
+				nf_ct_l4proto_log_invalid(skb, ct, state,
+							  "SYN-ACK with unexpected ACK number after a TCP reinitialization");
+			}
+		}
+
 		if (dir == IP_CT_DIR_REPLY && index == TCP_ACK_SET &&
 		    ct->proto.tcp.last_flags & IP_CT_TCP_SIMULTANEOUS_OPEN)
 			new_state = TCP_CONNTRACK_ESTABLISHED;

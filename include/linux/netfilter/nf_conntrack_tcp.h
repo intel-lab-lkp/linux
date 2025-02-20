@@ -14,6 +14,9 @@ struct ip_ct_tcp_state {
 	u_int8_t	flags;		/* per direction options */
 };
 
+/* unexpected SYN packet with smaller sequence number while in SYN_SENT. */
+#define IP_CT_TCP_REINIT		0x100
+
 struct ip_ct_tcp {
 	struct ip_ct_tcp_state seen[2];	/* connection parameters per direction */
 	u_int8_t	state;		/* state of the connection (enum tcp_conntrack) */
@@ -26,8 +29,8 @@ struct ip_ct_tcp {
 	u_int32_t	last_end;	/* Last seq + len */
 	u_int16_t	last_win;	/* Last window advertisement seen in dir */
 	/* For SYN packets while we may be out-of-sync */
+	u_int16_t	last_flags;	/* Last flags set */
 	u_int8_t	last_wscale;	/* Last window scaling factor seen */
-	u_int8_t	last_flags;	/* Last flags set */
 };
 
 #endif /* _NF_CONNTRACK_TCP_H */
