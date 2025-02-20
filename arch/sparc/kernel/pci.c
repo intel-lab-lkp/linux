@@ -971,6 +971,8 @@ static void pci_bus_slot_names(struct device_node *node, struct pci_bus *bus)
 		mask &= ~this_bit;
 		i++;
 	}
+
+	kfree(prop);
 }
 
 static int __init of_pci_slot_init(void)
