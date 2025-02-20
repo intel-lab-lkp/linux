@@ -1498,6 +1498,54 @@ static long __meminitdata addr_start, addr_end;
 static void __meminitdata *p_start, *p_end;
 static int __meminitdata node_start;
 
+static void * __meminit vmemmap_alloc_block_zero(unsigned long size, int node)
+{
+	void *p = vmemmap_alloc_block(size, node);
+
+	if (!p)
+		return NULL;
+	memset(p, 0, size);
+
+	return p;
+}
+
+p4d_t * __meminit vmemmap_p4d_populate(pgd_t *pgd, unsigned long addr, int node)
+{
+	p4d_t *p4d = p4d_offset(pgd, addr);
+
+	if (p4d_none(*p4d)) {
+		void *p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
+
+		if (!p)
+			return NULL;
+
+		pud_init(p);
+		p4d_populate(&init_mm, p4d, p);
+
+		if (!pgtable_l5_enabled())
+			sync_global_pgds(addr, addr);
+	}
+
+	return p4d;
+}
+
+pgd_t * __meminit vmemmap_pgd_populate(unsigned long addr, int node)
+{
+	pgd_t *pgd = pgd_offset_k(addr);
+
+	if (pgd_none(*pgd)) {
+		void *p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
+
+		if (!p)
+			return NULL;
+
+		pgd_populate(&init_mm, pgd, p);
+		sync_global_pgds(addr, addr);
+	}
+
+	return pgd;
+}
+
 void __meminit vmemmap_set_pmd(pmd_t *pmd, void *p, int node,
 			       unsigned long addr, unsigned long next)
 {
