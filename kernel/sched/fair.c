@@ -13805,6 +13805,7 @@ static void attach_task_cfs_rq(struct task_struct *p)
 
 static void switched_from_fair(struct rq *rq, struct task_struct *p)
 {
+	task_clear_throttled(p);
 	detach_task_cfs_rq(p);
 }
 
