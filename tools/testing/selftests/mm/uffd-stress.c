@@ -453,6 +453,10 @@ int main(int argc, char **argv)
 	}
 
 	nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	if (nr_cpus > 32) {
+		/* Don't let calculation below go to zero. */
+		nr_cpus = 32;
+	}
 
 	nr_pages_per_cpu = bytes / page_size / nr_cpus;
 	if (!nr_pages_per_cpu) {
