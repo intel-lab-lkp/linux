@@ -11,10 +11,12 @@
 #include <linux/pci.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/ethtool_netlink.h>
 #include <linux/if_vlan.h>
 #include <linux/bpf.h>
 #include <linux/bpf_trace.h>
 #include <linux/filter.h>
+#include <net/netdev_queues.h>
 #include <net/page_pool/helpers.h>
 #include "bnxt_hsi.h"
 #include "bnxt.h"
@@ -395,7 +397,7 @@ static int bnxt_xdp_set(struct bnxt *bp, struct bpf_prog *prog)
 			    bp->dev->mtu, BNXT_MAX_PAGE_MODE_MTU);
 		return -EOPNOTSUPP;
 	}
-	if (prog && bp->flags & BNXT_FLAG_HDS) {
+	if (prog && dev->cfg->hds_config == ETHTOOL_TCP_DATA_SPLIT_ENABLED) {
 		netdev_warn(dev, "XDP is disallowed when HDS is enabled.\n");
 		return -EOPNOTSUPP;
 	}
