@@ -1103,12 +1103,22 @@ static int imx219_probe(struct i2c_client *client)
 				     "failed to initialize CCI\n");
 
 	/* Get system clock (xclk) */
-	imx219->xclk = devm_clk_get(dev, NULL);
+	imx219->xclk = devm_clk_get_optional(dev, NULL);
 	if (IS_ERR(imx219->xclk))
 		return dev_err_probe(dev, PTR_ERR(imx219->xclk),
 				     "failed to get xclk\n");
 
-	imx219->xclk_freq = clk_get_rate(imx219->xclk);
+	if (imx219->xclk) {
+		imx219->xclk_freq = clk_get_rate(imx219->xclk);
+	} else {
+		ret = fwnode_property_read_u32(dev_fwnode(dev),
+					       "clock-frequency",
+					       &imx219->xclk_freq);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "failed to get clock frequency");
+	}
+
 	if (imx219->xclk_freq != IMX219_XCLK_FREQ)
 		return dev_err_probe(dev, -EINVAL,
 				     "xclk frequency not supported: %d Hz\n",
