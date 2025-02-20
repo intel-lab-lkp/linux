@@ -404,6 +404,7 @@ static void __address_space_init_once(struct address_space *mapping)
 	init_rwsem(&mapping->i_mmap_rwsem);
 	INIT_LIST_HEAD(&mapping->i_private_list);
 	spin_lock_init(&mapping->i_private_lock);
+	luf_batch_init(&mapping->luf_batch);
 	mapping->i_mmap = RB_ROOT_CACHED;
 }
 
