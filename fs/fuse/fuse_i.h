@@ -611,6 +611,9 @@ struct fuse_conn {
 	/** Number of fuse_dev's */
 	atomic_t dev_count;
 
+	/** Current epoch for up-to-date dentries */
+	atomic_t epoch;
+
 	struct rcu_head rcu;
 
 	/** The user id for this mount */
