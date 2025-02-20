@@ -204,7 +204,7 @@ static void r420_clock_resume(struct radeon_device *rdev)
 	WREG32_PLL(R_00000D_SCLK_CNTL, sclk_cntl);
 }
 
-static void r420_cp_errata_init(struct radeon_device *rdev)
+static int r420_cp_errata_init(struct radeon_device *rdev)
 {
 	int r;
 	struct radeon_ring *ring = &rdev->ring[RADEON_RING_TYPE_GFX_INDEX];
@@ -215,7 +215,11 @@ static void r420_cp_errata_init(struct radeon_device *rdev)
 	 * The proper workaround is to queue a RESYNC at the beginning
 	 * of the CP init, apparently.
 	 */
-	radeon_scratch_get(rdev, &rdev->config.r300.resync_scratch);
+	r = radeon_scratch_get(rdev, &rdev->config.r300.resync_scratch);
+	if (r) {
+		DRM_ERROR("failed to get scratch reg (%d).\n", r);
+		return r;
+	}
 	r = radeon_ring_lock(rdev, ring, 8);
 	WARN_ON(r);
 	radeon_ring_write(ring, PACKET0(R300_CP_RESYNC_ADDR, 1));
@@ -290,8 +294,11 @@ static int r420_startup(struct radeon_device *rdev)
 		dev_err(rdev->dev, "failed initializing CP (%d).\n", r);
 		return r;
 	}
-	r420_cp_errata_init(rdev);
-
+	r = r420_cp_errata_init(rdev);
+	if (r) {
+		dev_err(rdev->dev, "failed initializing CP errata workaround (%d).\n", r);
+		return r;
+	}
 	r = radeon_ib_pool_init(rdev);
 	if (r) {
 		dev_err(rdev->dev, "IB initialization failed (%d).\n", r);
