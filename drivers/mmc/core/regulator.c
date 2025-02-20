@@ -7,6 +7,7 @@
 #include <linux/err.h>
 #include <linux/log2.h>
 #include <linux/regulator/consumer.h>
+#include <linux/workqueue.h>
 
 #include <linux/mmc/host.h>
 
@@ -262,6 +263,98 @@ static inline int mmc_regulator_get_ocrmask(struct regulator *supply)
 
 #endif /* CONFIG_REGULATOR */
 
+static void mmc_undervoltage_workfn(struct work_struct *work)
+{
+	struct mmc_supply *supply;
+	struct mmc_host *mmc;
+
+	supply = container_of(work, struct mmc_supply, uv_work);
+	mmc = container_of(supply, struct mmc_host, supply);
+
+	mmc_handle_undervoltage(mmc);
+}
+
+static int mmc_handle_regulator_event(struct mmc_host *mmc,
+				      const char *regulator_name,
+				      unsigned long event)
+{
+	switch (event) {
+	case REGULATOR_EVENT_UNDER_VOLTAGE:
+		if (mmc->undervoltage)
+			return NOTIFY_OK;
+
+		mmc->undervoltage = true;
+		queue_work(system_highpri_wq, &mmc->supply.uv_work);
+		break;
+	default:
+		return NOTIFY_DONE;
+	}
+
+	return NOTIFY_OK;
+}
+
+static int mmc_vmmc_notifier_callback(struct notifier_block *nb,
+				      unsigned long event, void *data)
+{
+	struct mmc_supply *supply;
+	struct mmc_host *mmc;
+
+	supply = container_of(nb, struct mmc_supply, vmmc_nb);
+	mmc = container_of(supply, struct mmc_host, supply);
+
+	return mmc_handle_regulator_event(mmc, "vmmc", event);
+}
+
+static int mmc_vqmmc_notifier_callback(struct notifier_block *nb,
+				       unsigned long event, void *data)
+{
+	struct mmc_supply *supply;
+	struct mmc_host *mmc;
+
+	supply = container_of(nb, struct mmc_supply, vqmmc_nb);
+	mmc = container_of(supply, struct mmc_host, supply);
+
+	return mmc_handle_regulator_event(mmc, "vqmmc", event);
+}
+
+static int mmc_vqmmc2_notifier_callback(struct notifier_block *nb,
+					unsigned long event, void *data)
+{
+	struct mmc_supply *supply;
+	struct mmc_host *mmc;
+
+	supply = container_of(nb, struct mmc_supply, vqmmc2_nb);
+	mmc = container_of(supply, struct mmc_host, supply);
+
+	return mmc_handle_regulator_event(mmc, "vqmmc2", event);
+}
+
+static void
+mmc_register_regulator_notifier(struct mmc_host *mmc,
+				struct regulator *regulator,
+				struct notifier_block *nb,
+				int (*callback)(struct notifier_block *,
+						unsigned long, void *),
+				const char *name)
+{
+	struct device *dev = mmc_dev(mmc);
+	int ret;
+
+	nb->notifier_call = callback;
+	ret = devm_regulator_register_notifier(regulator, nb);
+	if (ret)
+		dev_warn(dev, "Failed to register %s notifier: %pe\n", name,
+			 ERR_PTR(ret));
+}
+
+static void mmc_undervoltage_work_cleanup(void *data)
+{
+	struct mmc_supply *supply = data;
+
+	/* Ensure the work is canceled or flushed here */
+	cancel_work_sync(&supply->uv_work);
+}
+
 /**
  * mmc_regulator_get_supply - try to get VMMC and VQMMC regulators for a host
  * @mmc: the host to regulate
@@ -281,6 +374,13 @@ int mmc_regulator_get_supply(struct mmc_host *mmc)
 	mmc->supply.vqmmc = devm_regulator_get_optional(dev, "vqmmc");
 	mmc->supply.vqmmc2 = devm_regulator_get_optional(dev, "vqmmc2");
 
+	INIT_WORK(&mmc->supply.uv_work, mmc_undervoltage_workfn);
+
+	ret = devm_add_action_or_reset(dev, mmc_undervoltage_work_cleanup,
+				       &mmc->supply);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to add cleanup action\n");
+
 	if (IS_ERR(mmc->supply.vmmc)) {
 		if (PTR_ERR(mmc->supply.vmmc) == -EPROBE_DEFER)
 			return dev_err_probe(dev, -EPROBE_DEFER,
@@ -293,6 +393,11 @@ int mmc_regulator_get_supply(struct mmc_host *mmc)
 			mmc->ocr_avail = ret;
 		else
 			dev_warn(dev, "Failed getting OCR mask: %d\n", ret);
+
+		mmc_register_regulator_notifier(mmc, mmc->supply.vmmc,
+						&mmc->supply.vmmc_nb,
+						mmc_vmmc_notifier_callback,
+						"vmmc");
 	}
 
 	if (IS_ERR(mmc->supply.vqmmc)) {
@@ -301,12 +406,22 @@ int mmc_regulator_get_supply(struct mmc_host *mmc)
 					     "vqmmc regulator not available\n");
 
 		dev_dbg(dev, "No vqmmc regulator found\n");
+	} else {
+		mmc_register_regulator_notifier(mmc, mmc->supply.vqmmc,
+						&mmc->supply.vqmmc_nb,
+						mmc_vqmmc_notifier_callback,
+						"vqmmc");
 	}
 
 	if (IS_ERR(mmc->supply.vqmmc2)) {
 		if (PTR_ERR(mmc->supply.vqmmc2) == -EPROBE_DEFER)
 			return -EPROBE_DEFER;
 		dev_dbg(dev, "No vqmmc2 regulator found\n");
+	} else {
+		mmc_register_regulator_notifier(mmc, mmc->supply.vqmmc2,
+						&mmc->supply.vqmmc2_nb,
+						mmc_vqmmc2_notifier_callback,
+						"vqmmc2");
 	}
 
 	return 0;
