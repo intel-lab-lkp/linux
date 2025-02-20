@@ -374,34 +374,6 @@ static int q6apm_dai_open(struct snd_soc_component *component,
 	else if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
 		runtime->hw = q6apm_dai_hardware_capture;
 
-	/* Ensure that buffer size is a multiple of period size */
-	ret = snd_pcm_hw_constraint_integer(runtime, SNDRV_PCM_HW_PARAM_PERIODS);
-	if (ret < 0) {
-		dev_err(dev, "snd_pcm_hw_constraint_integer failed\n");
-		goto err;
-	}
-
-	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-		ret = snd_pcm_hw_constraint_minmax(runtime, SNDRV_PCM_HW_PARAM_BUFFER_BYTES,
-						   BUFFER_BYTES_MIN, BUFFER_BYTES_MAX);
-		if (ret < 0) {
-			dev_err(dev, "constraint for buffer bytes min max ret = %d\n", ret);
-			goto err;
-		}
-	}
-
-	ret = snd_pcm_hw_constraint_step(runtime, 0, SNDRV_PCM_HW_PARAM_PERIOD_BYTES, 32);
-	if (ret < 0) {
-		dev_err(dev, "constraint for period bytes step ret = %d\n", ret);
-		goto err;
-	}
-
-	ret = snd_pcm_hw_constraint_step(runtime, 0, SNDRV_PCM_HW_PARAM_BUFFER_BYTES, 32);
-	if (ret < 0) {
-		dev_err(dev, "constraint for buffer bytes step ret = %d\n", ret);
-		goto err;
-	}
-
 	runtime->private_data = prtd;
 	runtime->dma_bytes = BUFFER_BYTES_MAX;
 	if (pdata->sid < 0)
