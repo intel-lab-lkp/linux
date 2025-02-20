@@ -334,9 +334,9 @@ struct dev_pm_ops {
 	.restore_noirq = pm_sleep_ptr(resume_fn),
 
 #define RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
-	.runtime_suspend = suspend_fn, \
-	.runtime_resume = resume_fn, \
-	.runtime_idle = idle_fn,
+	.runtime_suspend = pm_ptr(suspend_fn), \
+	.runtime_resume = pm_ptr(resume_fn), \
+	.runtime_idle = pm_ptr(idle_fn),
 
 #ifdef CONFIG_PM_SLEEP
 #define SET_SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
@@ -359,12 +359,8 @@ struct dev_pm_ops {
 #define SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn)
 #endif
 
-#ifdef CONFIG_PM
 #define SET_RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
 	RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn)
-#else
-#define SET_RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn)
-#endif
 
 #define _DEFINE_DEV_PM_OPS(name, \
 			   suspend_fn, resume_fn, \
