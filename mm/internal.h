@@ -1583,6 +1583,20 @@ static inline void accept_page(struct page *page)
 {
 }
 #endif /* CONFIG_UNACCEPTED_MEMORY */
+#if defined(CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH)
+extern struct luf_batch luf_batch[];
+bool luf_takeoff_start(void);
+void luf_takeoff_end(void);
+bool luf_takeoff_no_shootdown(void);
+bool luf_takeoff_check(struct page *page);
+bool luf_takeoff_check_and_fold(struct page *page);
+#else
+static inline bool luf_takeoff_start(void) { return false; }
+static inline void luf_takeoff_end(void) {}
+static inline bool luf_takeoff_no_shootdown(void) { return true; }
+static inline bool luf_takeoff_check(struct page *page) { return true; }
+static inline bool luf_takeoff_check_and_fold(struct page *page) { return true; }
+#endif
 
 /* pagewalk.c */
 int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
