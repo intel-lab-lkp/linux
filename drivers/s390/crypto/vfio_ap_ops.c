@@ -2056,6 +2056,7 @@ static void vfio_ap_mdev_request(struct vfio_device *vdev, unsigned int count)
 	struct ap_matrix_mdev *matrix_mdev;
 
 	matrix_mdev = container_of(vdev, struct ap_matrix_mdev, vdev);
+	mutex_lock(&matrix_dev->mdevs_lock);
 
 	if (matrix_mdev->req_trigger) {
 		if (!(count % 10))
@@ -2068,6 +2069,8 @@ static void vfio_ap_mdev_request(struct vfio_device *vdev, unsigned int count)
 		dev_notice(dev,
 			   "No device request registered, blocked until released by user\n");
 	}
+
+	mutex_unlock(&matrix_dev->mdevs_lock);
 }
 
 static int vfio_ap_mdev_get_device_info(unsigned long arg)
