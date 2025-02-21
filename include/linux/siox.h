@@ -70,7 +70,7 @@ static inline int siox_driver_register(struct siox_driver *sdriver)
 
 static inline void siox_driver_unregister(struct siox_driver *sdriver)
 {
-	return driver_unregister(&sdriver->driver);
+	driver_unregister(&sdriver->driver);
 }
 
 /*
