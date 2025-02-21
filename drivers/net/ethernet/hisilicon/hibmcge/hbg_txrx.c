@@ -202,8 +202,11 @@ static int hbg_napi_tx_recycle(struct napi_struct *napi, int budget)
 }
 
 static bool hbg_rx_check_l3l4_error(struct hbg_priv *priv,
-				    struct hbg_rx_desc *desc)
+				    struct hbg_rx_desc *desc,
+				    struct sk_buff *skb)
 {
+	bool rx_checksum_offload = !!(priv->netdev->features & NETIF_F_RXCSUM);
+
 	if (likely(!FIELD_GET(HBG_RX_DESC_W4_L3_ERR_CODE_M, desc->word4) &&
 		   !FIELD_GET(HBG_RX_DESC_W4_L4_ERR_CODE_M, desc->word4)))
 		return true;
@@ -215,6 +218,10 @@ static bool hbg_rx_check_l3l4_error(struct hbg_priv *priv,
 		priv->stats.rx_desc_l3_wrong_head_cnt++;
 		return false;
 	case HBG_L3_CSUM_ERR:
+		if (!rx_checksum_offload) {
+			skb->ip_summed = CHECKSUM_NONE;
+			break;
+		}
 		priv->stats.rx_desc_l3_csum_err_cnt++;
 		return false;
 	case HBG_L3_LEN_ERR:
@@ -238,6 +245,10 @@ static bool hbg_rx_check_l3l4_error(struct hbg_priv *priv,
 		priv->stats.rx_desc_l4_len_err_cnt++;
 		return false;
 	case HBG_L4_CSUM_ERR:
+		if (!rx_checksum_offload) {
+			skb->ip_summed = CHECKSUM_NONE;
+			break;
+		}
 		priv->stats.rx_desc_l4_csum_err_cnt++;
 		return false;
 	case HBG_L4_ZERO_PORT_NUM:
@@ -322,7 +333,8 @@ static void hbg_update_rx_protocol_stats(struct hbg_priv *priv,
 	hbg_update_rx_ip_protocol_stats(priv, desc);
 }
 
-static bool hbg_rx_pkt_check(struct hbg_priv *priv, struct hbg_rx_desc *desc)
+static bool hbg_rx_pkt_check(struct hbg_priv *priv, struct hbg_rx_desc *desc,
+			     struct sk_buff *skb)
 {
 	if (unlikely(FIELD_GET(HBG_RX_DESC_W2_PKT_LEN_M, desc->word2) >
 		     priv->dev_specs.max_frame_len)) {
@@ -342,7 +354,7 @@ static bool hbg_rx_pkt_check(struct hbg_priv *priv, struct hbg_rx_desc *desc)
 		return false;
 	}
 
-	if (unlikely(!hbg_rx_check_l3l4_error(priv, desc))) {
+	if (unlikely(!hbg_rx_check_l3l4_error(priv, desc, skb))) {
 		priv->stats.rx_desc_l3l4_err_cnt++;
 		return false;
 	}
@@ -413,7 +425,7 @@ static int hbg_napi_rx_poll(struct napi_struct *napi, int budget)
 		rx_desc = (struct hbg_rx_desc *)buffer->skb->data;
 		pkt_len = FIELD_GET(HBG_RX_DESC_W2_PKT_LEN_M, rx_desc->word2);
 
-		if (unlikely(!hbg_rx_pkt_check(priv, rx_desc))) {
+		if (unlikely(!hbg_rx_pkt_check(priv, rx_desc, buffer->skb))) {
 			hbg_buffer_free(buffer);
 			goto next_buffer;
 		}
