@@ -573,6 +573,16 @@ config HAVE_SCHED_AVG_IRQ
 	depends on IRQ_TIME_ACCOUNTING || PARAVIRT_TIME_ACCOUNTING
 	depends on SMP
 
+config SCHED_PREDICT_LOAD
+	bool "Predict the load of se"
+	depends on SMP
+	help
+	  Select this option to enable the load prediction, the load at the
+	  time of dequeue will be predicted according the load at the time
+	  of enqueue.
+
+	  Say N if unsure.
+
 config SCHED_HW_PRESSURE
 	bool
 	default y if ARM && ARM_CPU_TOPOLOGY

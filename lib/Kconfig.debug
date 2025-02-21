@@ -1310,6 +1310,18 @@ config SCHED_DEBUG
 	  that can help debug the scheduler. The runtime overhead of this
 	  option is minimal.
 
+config SCHED_PREDICT_LOAD_DEBUG
+	bool "Debug for SCHED_PREDICT_LOAD"
+	depends on SMP && SCHED_PREDICT_LOAD && SCHED_DEBUG
+	default y
+	help
+	  If you say Y here, the /proc/$pid/predict_load file will be provided
+	  the information of task se that can help debug the SCHED_PREDICT_LOAD.
+	  The /sys/kernel/debug/sched/debug file can also see the information
+	  of group se, but compared with task se, there is less information.
+
+	  Say N if unsure.
+
 config SCHED_INFO
 	bool
 	default n
