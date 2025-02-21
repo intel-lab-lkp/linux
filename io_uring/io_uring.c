@@ -1214,13 +1214,16 @@ static inline void io_req_local_work_add(struct io_kiocb *req,
 	wake_up_state(ctx->submitter_task, TASK_INTERRUPTIBLE);
 }
 
-static void io_req_normal_work_add(struct io_kiocb *req)
+void io_req_normal_work_add(struct io_kiocb *first_req,
+			    struct io_kiocb *last_req)
 {
-	struct io_uring_task *tctx = req->tctx;
-	struct io_ring_ctx *ctx = req->ctx;
+	struct io_uring_task *tctx = first_req->tctx;
+	struct io_ring_ctx *ctx = first_req->ctx;
 
 	/* task_work already pending, we're done */
-	if (!llist_add(&req->io_task_work.node, &tctx->task_list))
+	if (!llist_add_batch(&first_req->io_task_work.node,
+			     &last_req->io_task_work.node,
+			     &tctx->task_list))
 		return;
 
 	if (ctx->flags & IORING_SETUP_TASKRUN_FLAG)
@@ -1243,7 +1246,7 @@ void __io_req_task_work_add(struct io_kiocb *req, unsigned flags)
 	if (req->ctx->flags & IORING_SETUP_DEFER_TASKRUN)
 		io_req_local_work_add(req, req->ctx, flags);
 	else
-		io_req_normal_work_add(req);
+		io_req_normal_work_add(req, req);
 }
 
 void io_req_task_work_add_remote(struct io_kiocb *req, struct io_ring_ctx *ctx,
