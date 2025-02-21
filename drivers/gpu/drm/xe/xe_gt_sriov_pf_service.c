@@ -173,7 +173,6 @@ static const struct xe_reg ver_2000_runtime_regs[] = {
 	XE2_GT_GEOMETRY_DSS_2,		/* _MMIO(0x9154) */
 	CTC_MODE,			/* _MMIO(0xa26c) */
 	HUC_KERNEL_LOAD_INFO,		/* _MMIO(0xc1dc) */
-	TIMESTAMP_OVERRIDE,		/* _MMIO(0x44074) */
 };
 
 static const struct xe_reg ver_3000_runtime_regs[] = {
