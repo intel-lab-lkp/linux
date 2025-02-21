@@ -1258,6 +1258,9 @@ static void update_curr(struct cfs_rq *cfs_rq)
 
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
 	resched = update_deadline(cfs_rq, curr);
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	resched |= predict_error_should_resched(curr);
+#endif
 	update_min_vruntime(cfs_rq);
 
 	if (entity_is_task(curr)) {
@@ -8884,6 +8887,60 @@ static void set_next_buddy(struct sched_entity *se)
 	}
 }
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+static bool predict_se_will_end_soon(struct sched_entity *se)
+{
+	struct predict_load_data *pldp = se->pldp;
+
+	if (pldp == NULL)
+		return false;
+	if (pldp->predict_load_normalized == NO_PREDICT_LOAD)
+		return false;
+	if (pldp->predict_load_normalized > pldp->load_normalized_when_enqueue)
+		return false;
+	if (se->avg.load_avg >= get_predict_load(se))
+		return false;
+	return true;
+}
+
+void set_in_predict_no_preempt(struct sched_entity *se, bool in_predict_no_preempt)
+{
+	struct predict_load_data *pldp = se->pldp;
+
+	if (pldp == NULL)
+		return;
+	pldp->in_predict_no_preempt = in_predict_no_preempt;
+}
+
+static bool get_in_predict_no_preempt(struct sched_entity *se)
+{
+	struct predict_load_data *pldp = se->pldp;
+
+	if (pldp == NULL)
+		return false;
+	return pldp->in_predict_no_preempt;
+}
+
+static bool predict_right(struct sched_entity *se)
+{
+	struct predict_load_data *pldp = se->pldp;
+
+	if (pldp == NULL)
+		return false;
+	if (pldp->predict_load_normalized == NO_PREDICT_LOAD)
+		return false;
+	if (se->avg.load_avg <= get_predict_load(se))
+		return true;
+	return false;
+}
+
+bool predict_error_should_resched(struct sched_entity *se)
+{
+	return get_in_predict_no_preempt(se) && !predict_right(se);
+}
+
+#endif
+
 /*
  * Preempt the current task with a newly woken task if needed:
  */
@@ -8893,6 +8950,10 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	struct sched_entity *se = &donor->se, *pse = &p->se;
 	struct cfs_rq *cfs_rq = task_cfs_rq(donor);
 	int cse_is_idle, pse_is_idle;
+	bool if_best_se;
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	bool predict_no_preempt = false;
+#endif
 
 	if (unlikely(se == pse))
 		return;
@@ -8954,6 +9015,21 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	if (unlikely(!normal_policy(p->policy)))
 		return;
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	/*
+	 * If If we predict that se will end soon, it's better not to preempt it,
+	 * but wait for it to exit by itself. This is undoubtedly a grievance for
+	 * pse, so if pse should preempt se, we will give it some compensation.
+	 */
+	if (sched_feat(PREDICT_NO_PREEMPT)) {
+		if (predict_error_should_resched(se))
+			goto preempt;
+
+		if (predict_se_will_end_soon(se))
+			predict_no_preempt = true;
+	}
+#endif
+
 	cfs_rq = cfs_rq_of(se);
 	update_curr(cfs_rq);
 	/*
@@ -8966,10 +9042,18 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	if (do_preempt_short(cfs_rq, pse, se))
 		cancel_protect_slice(se);
 
-	/*
-	 * If @p has become the most eligible task, force preemption.
-	 */
-	if (pick_eevdf(cfs_rq) == pse)
+	if_best_se = (pick_eevdf(cfs_rq) == pse);
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	if (predict_no_preempt) {
+		if (if_best_se && !pse->sched_delayed) {
+			set_next_buddy(pse);
+			set_in_predict_no_preempt(se, true);
+			return;
+		}
+	}
+#endif
+	if (if_best_se)
 		goto preempt;
 
 	return;
