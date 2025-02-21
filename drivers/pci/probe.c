@@ -706,6 +706,40 @@ void pci_free_host_bridge(struct pci_host_bridge *bridge)
 }
 EXPORT_SYMBOL(pci_free_host_bridge);
 
+void pci_host_bridge_handle_link_down(struct pci_host_bridge *bridge)
+{
+	struct pci_bus *bus = bridge->bus;
+	struct device *dev = &bridge->dev;
+	struct pci_dev *child, *tmp;
+	int ret;
+
+	pci_lock_rescan_remove();
+
+	/* Knock the devices off root bus since we cannot access them */
+	dev_warn(dev, "Removing devices from root bus due to link down\n");
+	list_for_each_entry_safe(child, tmp, &bus->devices, bus_list)
+		pci_stop_and_remove_bus_device(child);
+
+	/* Now retrain the link in a vendor specific way to bring it back */
+	if (bus->ops->retrain_link) {
+		dev_info(dev, "Starting link retraining\n");
+		ret = bus->ops->retrain_link(bus);
+		if (ret) {
+			dev_err(dev, "Failed to retrain the link\n");
+			pci_unlock_rescan_remove();
+			return;
+		}
+		dev_info(dev, "Link retraining completed\n");
+	} else {
+		dev_warn(dev, "retrain_link() callback not implemented!\n");
+	}
+
+	/* Finally, rescan the bus to bring the devices back */
+	pci_rescan_bus(bus);
+	pci_unlock_rescan_remove();
+}
+EXPORT_SYMBOL(pci_host_bridge_handle_link_down);
+
 /* Indexed by PCI_X_SSTATUS_FREQ (secondary bus mode and frequency) */
 static const unsigned char pcix_bus_speed[] = {
 	PCI_SPEED_UNKNOWN,		/* 0 */
