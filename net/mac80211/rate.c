@@ -217,7 +217,9 @@ ieee80211_rate_control_ops_get(const char *name)
 	const struct rate_control_ops *ops;
 	const char *alg_name;
 
-	kernel_param_lock(THIS_MODULE);
+	if (!kernel_param_trylock(THIS_MODULE))
+		return NULL;
+
 	if (!name)
 		alg_name = ieee80211_default_rc_algo;
 	else

@@ -306,9 +306,13 @@ struct kparam_array
 
 #ifdef CONFIG_SYSFS
 extern void kernel_param_lock(struct module *mod);
+extern int kernel_param_trylock(struct module *mod);
 extern void kernel_param_unlock(struct module *mod);
 #else
 static inline void kernel_param_lock(struct module *mod)
+{
+}
+static inline int kernel_param_trylock(struct module *mod)
 {
 }
 static inline void kernel_param_unlock(struct module *mod)
