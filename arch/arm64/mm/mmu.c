@@ -952,7 +952,6 @@ static void unmap_hotplug_p4d_range(pgd_t *pgdp, unsigned long addr,
 		if (p4d_none(p4d))
 			continue;
 
-		WARN_ON(!p4d_present(p4d));
 		unmap_hotplug_pud_range(p4dp, addr, next, free_mapped, altmap);
 	} while (addr = next, addr < end);
 }
@@ -978,7 +977,6 @@ static void unmap_hotplug_range(unsigned long addr, unsigned long end,
 		if (pgd_none(pgd))
 			continue;
 
-		WARN_ON(!pgd_present(pgd));
 		unmap_hotplug_p4d_range(pgdp, addr, next, free_mapped, altmap);
 	} while (addr = next, addr < end);
 }
@@ -1114,7 +1112,6 @@ static void free_empty_p4d_table(pgd_t *pgdp, unsigned long addr,
 		if (p4d_none(p4d))
 			continue;
 
-		WARN_ON(!p4d_present(p4d));
 		free_empty_pud_table(p4dp, addr, next, floor, ceiling);
 	} while (addr = next, addr < end);
 
@@ -1153,7 +1150,6 @@ static void free_empty_tables(unsigned long addr, unsigned long end,
 		if (pgd_none(pgd))
 			continue;
 
-		WARN_ON(!pgd_present(pgd));
 		free_empty_p4d_table(pgdp, addr, next, floor, ceiling);
 	} while (addr = next, addr < end);
 }
