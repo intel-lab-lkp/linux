@@ -915,6 +915,8 @@ static void virtio_fs_vq_done(struct virtqueue *vq)
 
 	dev_dbg(&vq->vdev->dev, "%s %s\n", __func__, fsvq->name);
 
+	/* Shceduled, don't send more notifications */
+	virtqueue_disable_cb(vq);
 	schedule_work(&fsvq->done_work);
 }
 
