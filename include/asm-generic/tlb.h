@@ -501,7 +501,7 @@ static __always_inline bool __tlb_remove_page(struct mmu_gather *tlb,
  */
 static inline void tlb_remove_page(struct mmu_gather *tlb, struct page *page)
 {
-	return tlb_remove_page_size(tlb, page, PAGE_SIZE);
+	tlb_remove_page_size(tlb, page, PAGE_SIZE);
 }
 
 static inline void tlb_remove_ptdesc(struct mmu_gather *tlb, void *pt)
