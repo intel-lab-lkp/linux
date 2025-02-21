@@ -675,6 +675,8 @@ struct sk_buff *napi_get_frags(struct napi_struct *napi)
 			napi->skb = skb;
 			skb_mark_napi_id(skb, napi);
 		}
+	} else {
+		skb->ip_summed = CHECKSUM_NONE;
 	}
 	return skb;
 }
