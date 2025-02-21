@@ -266,6 +266,8 @@ static const char* l4proto_name(u16 proto)
 	case IPPROTO_SCTP: return "sctp";
 	case IPPROTO_UDPLITE: return "udplite";
 	case IPPROTO_ICMPV6: return "icmpv6";
+	case IPPROTO_ESP: return "esp";
+	case IPPROTO_AH: return "ah";
 	}
 
 	return "unknown";
