@@ -583,7 +583,9 @@ static ssize_t param_attr_store(struct module_attribute *mattr,
 	if (!attribute->param->ops->set)
 		return -EPERM;
 
-	kernel_param_lock(mk->mod);
+	if (!kernel_param_trylock(mk->mod))
+		return -EPERM;
+
 	if (param_check_unsafe(attribute->param))
 		err = attribute->param->ops->set(buf, attribute->param);
 	else
@@ -605,6 +607,11 @@ static ssize_t param_attr_store(struct module_attribute *mattr,
 void kernel_param_lock(struct module *mod)
 {
 	mutex_lock(KPARAM_MUTEX(mod));
+}
+
+int kernel_param_trylock(struct module *mod)
+{
+	return mutex_trylock(KPARAM_MUTEX(mod));
 }
 
 void kernel_param_unlock(struct module *mod)
