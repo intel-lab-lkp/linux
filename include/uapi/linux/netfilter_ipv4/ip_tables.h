@@ -118,7 +118,10 @@ struct ipt_entry {
 	unsigned int comefrom;
 
 	/* Packet and byte counters. */
-	struct xt_counters counters;
+	union {
+		struct xt_counters counters;
+		struct xt_counter_pad counter_pad;
+	};
 
 	/* The matches (if any), then the target. */
 	unsigned char elems[];

@@ -111,6 +111,10 @@ struct xt_counters {
 	__u64 pcnt, bcnt;			/* Packet and byte counters */
 };
 
+struct xt_counter_pad {
+	__u8 pad[16];
+};
+
 /* The argument to IPT_SO_ADD_COUNTERS. */
 struct xt_counters_info {
 	/* Which table. */

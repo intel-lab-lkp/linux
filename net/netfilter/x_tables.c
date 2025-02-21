@@ -1889,7 +1889,7 @@ EXPORT_SYMBOL_GPL(xt_proto_fini);
  * xt_percpu_counter_alloc - allocate x_tables rule counter
  *
  * @state: pointer to xt_percpu allocation state
- * @counter: pointer to counter struct inside the ip(6)/arpt_entry struct
+ * @xt_pad: pointer to the counter padding inside the ip(6)/arpt_entry struct
  *
  * On SMP, the packet counter [ ip(6)t_entry->counters.pcnt ] will then
  * contain the address of the real (percpu) counter.
@@ -1908,9 +1908,13 @@ EXPORT_SYMBOL_GPL(xt_proto_fini);
  * returns false on error.
  */
 bool xt_percpu_counter_alloc(struct xt_percpu_counter_alloc_state *state,
-			     struct xt_counters *counter)
+			     struct xt_counter_pad *xt_pad)
 {
-	BUILD_BUG_ON(XT_PCPU_BLOCK_SIZE < (sizeof(*counter) * 2));
+	union xt_counter_k *xt_cnt = (union xt_counter_k *)xt_pad;
+
+	BUILD_BUG_ON(XT_PCPU_BLOCK_SIZE < (sizeof(struct xt_counters_k) * 2));
+	BUILD_BUG_ON(sizeof(struct xt_counters_k) != sizeof(struct xt_counters));
+	BUILD_BUG_ON(sizeof(struct xt_counters_k) != sizeof(struct xt_counter_pad));
 
 	if (nr_cpu_ids <= 1)
 		return true;
@@ -1921,9 +1925,9 @@ bool xt_percpu_counter_alloc(struct xt_percpu_counter_alloc_state *state,
 		if (!state->mem)
 			return false;
 	}
-	counter->pcnt = (__force unsigned long)(state->mem + state->off);
-	state->off += sizeof(*counter);
-	if (state->off > (XT_PCPU_BLOCK_SIZE - sizeof(*counter))) {
+	xt_cnt->pcpu = state->mem + state->off;
+	state->off += sizeof(struct xt_counters_k);
+	if (state->off > (XT_PCPU_BLOCK_SIZE - sizeof(struct xt_counters_k))) {
 		state->mem = NULL;
 		state->off = 0;
 	}
@@ -1931,12 +1935,13 @@ bool xt_percpu_counter_alloc(struct xt_percpu_counter_alloc_state *state,
 }
 EXPORT_SYMBOL_GPL(xt_percpu_counter_alloc);
 
-void xt_percpu_counter_free(struct xt_counters *counters)
+void xt_percpu_counter_free(struct xt_counter_pad *xt_pad)
 {
-	unsigned long pcnt = counters->pcnt;
+	union xt_counter_k *xt_cnt = (union xt_counter_k *)xt_pad;
+	unsigned long pcnt = (unsigned long)xt_cnt->pcpu;
 
 	if (nr_cpu_ids > 1 && (pcnt & (XT_PCPU_BLOCK_SIZE - 1)) == 0)
-		free_percpu((void __percpu *)pcnt);
+		free_percpu(xt_cnt->pcpu);
 }
 EXPORT_SYMBOL_GPL(xt_percpu_counter_free);
 

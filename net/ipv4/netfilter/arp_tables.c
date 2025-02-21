@@ -221,14 +221,14 @@ unsigned int arpt_do_table(void *priv,
 	arp = arp_hdr(skb);
 	do {
 		const struct xt_entry_target *t;
-		struct xt_counters *counter;
+		struct xt_counters_k *counter;
 
 		if (!arp_packet_match(arp, skb->dev, indev, outdev, &e->arp)) {
 			e = arpt_next_entry(e);
 			continue;
 		}
 
-		counter = xt_get_this_cpu_counter(&e->counters);
+		counter = xt_get_this_cpu_counter(&e->counter_pad);
 		ADD_COUNTER(*counter, arp_hdr_len(skb->dev), 1);
 
 		t = arpt_get_target_c(e);
@@ -412,7 +412,7 @@ find_check_entry(struct arpt_entry *e, struct net *net, const char *name,
 	struct xt_target *target;
 	int ret;
 
-	if (!xt_percpu_counter_alloc(alloc_state, &e->counters))
+	if (!xt_percpu_counter_alloc(alloc_state, &e->counter_pad))
 		return -ENOMEM;
 
 	t = arpt_get_target(e);
@@ -431,7 +431,7 @@ find_check_entry(struct arpt_entry *e, struct net *net, const char *name,
 err:
 	module_put(t->u.kernel.target->me);
 out:
-	xt_percpu_counter_free(&e->counters);
+	xt_percpu_counter_free(&e->counter_pad);
 
 	return ret;
 }
@@ -512,7 +512,7 @@ static void cleanup_entry(struct arpt_entry *e, struct net *net)
 	if (par.target->destroy != NULL)
 		par.target->destroy(&par);
 	module_put(par.target->me);
-	xt_percpu_counter_free(&e->counters);
+	xt_percpu_counter_free(&e->counter_pad);
 }
 
 /* Checks and translates the user-supplied table segment (held in
@@ -611,11 +611,11 @@ static void get_counters(const struct xt_table_info *t,
 
 		i = 0;
 		xt_entry_foreach(iter, t->entries, t->size) {
-			struct xt_counters *tmp;
+			struct xt_counters_k *tmp;
 			u64 bcnt, pcnt;
 			unsigned int start;
 
-			tmp = xt_get_per_cpu_counter(&iter->counters, cpu);
+			tmp = xt_get_per_cpu_counter(&iter->counter_pad, cpu);
 			do {
 				start = read_seqcount_begin(s);
 				bcnt = tmp->bcnt;
@@ -638,9 +638,9 @@ static void get_old_counters(const struct xt_table_info *t,
 	for_each_possible_cpu(cpu) {
 		i = 0;
 		xt_entry_foreach(iter, t->entries, t->size) {
-			struct xt_counters *tmp;
+			struct xt_counters_k *tmp;
 
-			tmp = xt_get_per_cpu_counter(&iter->counters, cpu);
+			tmp = xt_get_per_cpu_counter(&iter->counter_pad, cpu);
 			ADD_COUNTER(counters[i], tmp->bcnt, tmp->pcnt);
 			++i;
 		}
@@ -1035,9 +1035,9 @@ static int do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 
 	addend = xt_write_recseq_begin();
 	xt_entry_foreach(iter,  private->entries, private->size) {
-		struct xt_counters *tmp;
+		struct xt_counters_k *tmp;
 
-		tmp = xt_get_this_cpu_counter(&iter->counters);
+		tmp = xt_get_this_cpu_counter(&iter->counter_pad);
 		ADD_COUNTER(*tmp, paddc[i].bcnt, paddc[i].pcnt);
 		++i;
 	}
