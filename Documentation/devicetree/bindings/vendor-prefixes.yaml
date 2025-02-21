@@ -882,6 +882,8 @@ patternProperties:
     description: Shenzhen Lunzn Technology Co., Ltd.
   "^luxul,.*":
     description: Lagrand | AV
+  "^lwe,.*":
+    description: Liebherr-Werk Ehingen GmbH
   "^lwn,.*":
     description: Liebherr-Werk Nenzing GmbH
   "^lxa,.*":
