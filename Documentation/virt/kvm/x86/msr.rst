@@ -294,8 +294,14 @@ data:
 
 	steal:
 		the amount of time in which this vCPU did not run, in
-		nanoseconds. Time during which the vcpu is idle, will not be
-		reported as steal time.
+		nanoseconds. This includes the time during which the host is
+		suspended. Time during which the vcpu is idle, might not be
+		reported as steal time. The case where the host suspends
+		during a VM migration might not be accounted if VCPUs aren't
+		entered post-resume, because KVM does not currently support
+		suspend/resuming the associated metadata. A workaround would
+		be for the VMM to ensure that the guest is entered with
+		KVM_RUN after resuming from suspend.
 
 	preempted:
 		indicate the vCPU who owns this struct is running or

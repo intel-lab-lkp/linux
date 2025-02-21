@@ -124,6 +124,7 @@
 #define KVM_REQ_HV_TLB_FLUSH \
 	KVM_ARCH_REQ_FLAGS(32, KVM_REQUEST_WAIT | KVM_REQUEST_NO_WAKEUP)
 #define KVM_REQ_UPDATE_PROTECTED_GUEST_STATE	KVM_ARCH_REQ(34)
+#define KVM_REQ_WAIT_FOR_RESUME		KVM_ARCH_REQ(35)
 
 #define CR0_RESERVED_BITS                                               \
 	(~(unsigned long)(X86_CR0_PE | X86_CR0_MP | X86_CR0_EM | X86_CR0_TS \
@@ -916,8 +917,13 @@ struct kvm_vcpu_arch {
 
 	struct {
 		u8 preempted;
+		bool host_suspended;
 		u64 msr_val;
 		u64 last_steal;
+		u64 last_suspend;
+		u64 suspend_ns;
+		u64 last_suspend_ns;
+		wait_queue_head_t resume_waitq;
 		struct gfn_to_hva_cache cache;
 	} st;
 

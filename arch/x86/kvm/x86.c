@@ -3717,6 +3717,8 @@ static void record_steal_time(struct kvm_vcpu *vcpu)
 	steal += current->sched_info.run_delay -
 		vcpu->arch.st.last_steal;
 	vcpu->arch.st.last_steal = current->sched_info.run_delay;
+	steal += vcpu->arch.st.suspend_ns - vcpu->arch.st.last_suspend_ns;
+	vcpu->arch.st.last_suspend_ns = vcpu->arch.st.suspend_ns;
 	unsafe_put_user(steal, &st->steal, out);
 
 	version += 1;
@@ -6930,6 +6932,19 @@ long kvm_arch_vm_compat_ioctl(struct file *filp, unsigned int ioctl,
 }
 #endif
 
+static void wait_for_resume(struct kvm_vcpu *vcpu)
+{
+	wait_event_interruptible(vcpu->arch.st.resume_waitq,
+	    vcpu->arch.st.host_suspended == 0);
+
+	/*
+	 * This might happen if we blocked here before the freezing of tasks
+	 * and we get woken up by the freezer.
+	 */
+	if (vcpu->arch.st.host_suspended)
+		kvm_make_request(KVM_REQ_WAIT_FOR_RESUME, vcpu);
+}
+
 #ifdef CONFIG_HAVE_KVM_PM_NOTIFIER
 static int kvm_arch_suspend_notifier(struct kvm *kvm)
 {
@@ -6939,6 +6954,19 @@ static int kvm_arch_suspend_notifier(struct kvm *kvm)
 
 	mutex_lock(&kvm->lock);
 	kvm_for_each_vcpu(i, vcpu, kvm) {
+		vcpu->arch.st.last_suspend = ktime_get_boottime_ns();
+		/*
+		 * Tasks get thawed before the resume notifier has been called
+		 * so we need to block vCPUs until the resume notifier has run.
+		 * Otherwise, suspend steal time might get applied too late,
+		 * and get accounted to the wrong guest task.
+		 * This also ensures that the guest paused bit set below
+		 * doesn't get checked and cleared before the host actually
+		 * suspends.
+		 */
+		vcpu->arch.st.host_suspended = 1;
+		kvm_make_request(KVM_REQ_WAIT_FOR_RESUME, vcpu);
+
 		if (!vcpu->arch.pv_time.active)
 			continue;
 
@@ -6954,12 +6982,32 @@ static int kvm_arch_suspend_notifier(struct kvm *kvm)
 	return ret ? NOTIFY_BAD : NOTIFY_DONE;
 }
 
+static int kvm_arch_resume_notifier(struct kvm *kvm)
+{
+	struct kvm_vcpu *vcpu;
+	unsigned long i;
+
+	mutex_lock(&kvm->lock);
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		vcpu->arch.st.host_suspended = 0;
+		vcpu->arch.st.suspend_ns += ktime_get_boottime_ns() -
+		    vcpu->arch.st.last_suspend;
+		wake_up_interruptible(&vcpu->arch.st.resume_waitq);
+	}
+	mutex_unlock(&kvm->lock);
+
+	return NOTIFY_DONE;
+}
+
 int kvm_arch_pm_notifier(struct kvm *kvm, unsigned long state)
 {
 	switch (state) {
 	case PM_HIBERNATION_PREPARE:
 	case PM_SUSPEND_PREPARE:
 		return kvm_arch_suspend_notifier(kvm);
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		return kvm_arch_resume_notifier(kvm);
 	}
 
 	return NOTIFY_DONE;
@@ -10813,6 +10861,8 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 			r = 1;
 			goto out;
 		}
+		if (kvm_check_request(KVM_REQ_WAIT_FOR_RESUME, vcpu))
+			wait_for_resume(vcpu);
 		if (kvm_check_request(KVM_REQ_STEAL_UPDATE, vcpu))
 			record_steal_time(vcpu);
 		if (kvm_check_request(KVM_REQ_PMU, vcpu))
@@ -12341,6 +12391,7 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	if (r)
 		goto free_guest_fpu;
 
+	init_waitqueue_head(&vcpu->arch.st.resume_waitq);
 	kvm_xen_init_vcpu(vcpu);
 	vcpu_load(vcpu);
 	kvm_vcpu_after_set_cpuid(vcpu);
