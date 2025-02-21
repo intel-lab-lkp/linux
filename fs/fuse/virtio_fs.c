@@ -836,7 +836,18 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 
 	/* End requests */
 	list_for_each_entry_safe(req, next, &reqs, list) {
+		unsigned int total_sgs = req->out_sgs + req->in_sgs;
+
 		list_del_init(&req->list);
+
+		for (unsigned int i = 0; i < total_sgs; ++i) {
+			enum dma_data_direction dir = (i < req->out_sgs) ?
+				DMA_TO_DEVICE : DMA_FROM_DEVICE;
+			dma_unmap_page(vq->vdev->dev.parent,
+				       sg_dma_address(&req->sg[i]),
+				       sg_dma_len(&req->sg[i]), dir);
+
+		}
 
 		/* blocking async request completes in a worker context */
 		if (req->args->may_block) {
@@ -1426,6 +1437,24 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 		sgs[i] = &req->sg[i];
 	WARN_ON(req->out_sgs + req->in_sgs != total_sgs);
 
+	// TODO can we change this ptr out of the lock?
+	vq = fsvq->vq;
+	// TODO handle this and following errors
+	for (i = 0; i < total_sgs; i++) {
+		struct page *page = sg_page(&req->sg[i]);
+		enum dma_data_direction dir = (i < req->out_sgs) ?
+			DMA_TO_DEVICE : DMA_FROM_DEVICE;
+		dma_addr_t dma_addr = dma_map_page(vq->vdev->dev.parent, page,
+						   req->sg[i].offset, req->sg[i].length, dir);
+
+		if (dma_mapping_error(vq->vdev->dev.parent, dma_addr)) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		sg_dma_address(&req->sg[i]) = dma_addr;
+		sg_dma_len(&req->sg[i]) = req->sg[i].length;
+	}
+
 	spin_lock(&fsvq->lock);
 
 	if (!fsvq->connected) {
@@ -1434,8 +1463,8 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 		goto out;
 	}
 
-	vq = fsvq->vq;
-	ret = virtqueue_add_sgs(vq, sgs, req->out_sgs, req->in_sgs, req, GFP_ATOMIC);
+	ret = virtqueue_add_sgs_premapped(vq, sgs, req->out_sgs,
+					  req->in_sgs, req, GFP_ATOMIC);
 	if (ret < 0) {
 		spin_unlock(&fsvq->lock);
 		goto out;
@@ -1460,6 +1489,13 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 		virtqueue_notify(vq);
 
 out:
+	for (unsigned int j = 0; ret && j < total_sgs; ++j) {
+		enum dma_data_direction dir = (j < req->out_sgs) ?
+			DMA_TO_DEVICE : DMA_FROM_DEVICE;
+		dma_unmap_page(vq->vdev->dev.parent,
+			       sg_dma_address(&req->sg[j]),
+			       sg_dma_len(&req->sg[j]), dir);
+	}
 	if (ret < 0 && req->argbuf) {
 		kfree(req->argbuf);
 		req->argbuf = NULL;
