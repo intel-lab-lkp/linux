@@ -6116,6 +6116,51 @@ nfs4_delegation_stat(struct nfs4_delegation *dp, struct svc_fh *currentfh,
 }
 
 /*
+ * Upgrade file access mode to include FMODE_READ. This is called only when
+ * a write delegation is granted for an OPEN with OPEN4_SHARE_ACCESS_WRITE.
+ */
+static void
+nfs4_upgrade_rdwr_file_access(struct nfs4_ol_stateid *stp)
+{
+	struct nfs4_file *fp = stp->st_stid.sc_file;
+	struct nfsd_file *nflp;
+	struct file *file;
+
+	spin_lock(&fp->fi_lock);
+	nflp = fp->fi_fds[O_WRONLY];
+	file = nflp->nf_file;
+	file->f_mode |= FMODE_READ;
+	swap(fp->fi_fds[O_RDWR], fp->fi_fds[O_WRONLY]);
+	clear_access(NFS4_SHARE_ACCESS_WRITE, stp);
+	set_access(NFS4_SHARE_ACCESS_BOTH, stp);
+	__nfs4_file_get_access(fp, NFS4_SHARE_ACCESS_READ);	/* incr fi_access[O_RDONLY] */
+	spin_unlock(&fp->fi_lock);
+}
+
+/*
+ * Downgrade file access mode to remove FMODE_READ. This is called when
+ * a write delegation, granted for an OPEN with OPEN4_SHARE_ACCESS_WRITE,
+ * is returned.
+ */
+static void
+nfs4_downgrade_wronly_file_access(struct nfs4_ol_stateid *stp)
+{
+	struct nfs4_file *fp = stp->st_stid.sc_file;
+	struct nfsd_file *nflp;
+	struct file *file;
+
+	spin_lock(&fp->fi_lock);
+	nflp = fp->fi_fds[O_RDWR];
+	file = nflp->nf_file;
+	file->f_mode &= ~FMODE_READ;
+	swap(fp->fi_fds[O_WRONLY], fp->fi_fds[O_RDWR]);
+	clear_access(NFS4_SHARE_ACCESS_BOTH, stp);
+	set_access(NFS4_SHARE_ACCESS_WRITE, stp);
+	spin_unlock(&fp->fi_lock);
+	nfs4_file_put_access(fp, NFS4_SHARE_ACCESS_READ);	/* decr. fi_access[O_RDONLY] */
+}
+
+/*
  * The Linux NFS server does not offer write delegations to NFSv4.0
  * clients in order to avoid conflicts between write delegations and
  * GETATTRs requesting CHANGE or SIZE attributes.
@@ -6196,6 +6241,11 @@ nfs4_open_delegation(struct nfsd4_open *open, struct nfs4_ol_stateid *stp,
 		dp->dl_cb_fattr.ncf_cur_fsize = stat.size;
 		dp->dl_cb_fattr.ncf_initial_cinfo = nfsd4_change_attribute(&stat);
 		trace_nfsd_deleg_write(&dp->dl_stid.sc_stateid);
+
+		if ((open->op_share_access & NFS4_SHARE_ACCESS_BOTH) == NFS4_SHARE_ACCESS_WRITE) {
+			dp->dl_stateid = stp->st_stid.sc_stateid;
+			nfs4_upgrade_rdwr_file_access(stp);
+		}
 	} else {
 		open->op_delegate_type = deleg_ts ? OPEN_DELEGATE_READ_ATTRS_DELEG :
 						    OPEN_DELEGATE_READ;
@@ -7694,6 +7744,8 @@ nfsd4_delegreturn(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_stid *s;
 	__be32 status;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+	struct nfs4_ol_stateid *stp;
+	struct nfs4_stid *stid;
 
 	if ((status = fh_verify(rqstp, &cstate->current_fh, S_IFREG, 0)))
 		return status;
@@ -7710,6 +7762,16 @@ nfsd4_delegreturn(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	trace_nfsd_deleg_return(stateid);
 	destroy_delegation(dp);
+
+	if (dp->dl_stateid.si_generation && dp->dl_stateid.si_opaque.so_id) {
+		if (!nfsd4_lookup_stateid(cstate, &dp->dl_stateid,
+				SC_TYPE_OPEN, 0, &stid, nn)) {
+			stp = openlockstateid(stid);
+			nfs4_downgrade_wronly_file_access(stp);
+			nfs4_put_stid(stid);
+		}
+	}
+
 	smp_mb__after_atomic();
 	wake_up_var(d_inode(cstate->current_fh.fh_dentry));
 put_stateid:

@@ -207,6 +207,8 @@ struct nfs4_delegation {
 
 	/* for CB_GETATTR */
 	struct nfs4_cb_fattr    dl_cb_fattr;
+
+	stateid_t		dl_stateid;  /* open stateid */
 };
 
 static inline bool deleg_is_read(u32 dl_type)
