@@ -863,8 +863,10 @@ static inline void nanddev_pos_next_target(struct nand_device *nand,
 static inline void nanddev_pos_next_lun(struct nand_device *nand,
 					struct nand_pos *pos)
 {
-	if (pos->lun >= nand->memorg.luns_per_target - 1)
-		return nanddev_pos_next_target(nand, pos);
+	if (pos->lun >= nand->memorg.luns_per_target - 1) {
+		nanddev_pos_next_target(nand, pos);
+		return;
+	}
 
 	pos->lun++;
 	pos->page = 0;
@@ -883,8 +885,10 @@ static inline void nanddev_pos_next_lun(struct nand_device *nand,
 static inline void nanddev_pos_next_eraseblock(struct nand_device *nand,
 					       struct nand_pos *pos)
 {
-	if (pos->eraseblock >= nand->memorg.eraseblocks_per_lun - 1)
-		return nanddev_pos_next_lun(nand, pos);
+	if (pos->eraseblock >= nand->memorg.eraseblocks_per_lun - 1) {
+		nanddev_pos_next_lun(nand, pos);
+		return;
+	}
 
 	pos->eraseblock++;
 	pos->page = 0;
@@ -902,8 +906,10 @@ static inline void nanddev_pos_next_eraseblock(struct nand_device *nand,
 static inline void nanddev_pos_next_page(struct nand_device *nand,
 					 struct nand_pos *pos)
 {
-	if (pos->page >= nand->memorg.pages_per_eraseblock - 1)
-		return nanddev_pos_next_eraseblock(nand, pos);
+	if (pos->page >= nand->memorg.pages_per_eraseblock - 1) {
+		nanddev_pos_next_eraseblock(nand, pos);
+		return;
+	}
 
 	pos->page++;
 }
