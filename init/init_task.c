@@ -89,6 +89,9 @@ struct task_struct init_task __aligned(L1_CACHE_BYTES) = {
 	},
 	.se		= {
 		.group_node 	= LIST_HEAD_INIT(init_task.se.group_node),
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+		.pldp			= NULL,
+#endif
 	},
 	.rt		= {
 		.run_list	= LIST_HEAD_INIT(init_task.rt.run_list),

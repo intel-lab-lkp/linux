@@ -491,6 +491,42 @@ struct sched_avg {
 	unsigned int			util_est;
 } ____cacheline_aligned;
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+
+#define NO_PREDICT_LOAD ULONG_MAX
+#define CONFIDENCE_THRESHOLD 4
+
+#define PREDICT_LOAD_MAX 1024
+#define LOAD_GRAN_SHIFT 4
+#define LOAD_GRAN (1 << LOAD_GRAN_SHIFT)
+
+struct record_load {
+	u8 load_after_offset;
+	u8 confidence;
+};
+
+extern struct kmem_cache *predict_load_data_cachep;
+
+#endif
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+
+	struct predict_load_data {
+		//1024 Special processing, index does not need +1.
+		struct record_load record_load_array[PREDICT_LOAD_MAX >> LOAD_GRAN_SHIFT];
+		unsigned long		load_normalized_when_enqueue;
+		unsigned long		predict_load_normalized;
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+		unsigned long predict_count;
+		unsigned long predict_correct_count;
+		unsigned long no_predict_count;
+#endif
+		bool in_predict_no_preempt;
+	};
+
+#endif
+
 /*
  * The UTIL_AVG_UNCHANGED flag is used to synchronize util_est with util_avg
  * updates. When a task is dequeued, its util_est should not be updated if its
@@ -587,8 +623,18 @@ struct sched_entity {
 	 * collide with read-mostly values above.
 	 */
 	struct sched_avg		avg;
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	struct predict_load_data *pldp;
+#endif
 #endif
 };
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+unsigned long get_predict_load(struct sched_entity *se);
+void set_in_predict_no_preempt(struct sched_entity *se, bool in_predict_no_preempt);
+bool predict_error_should_resched(struct sched_entity *se);
+#endif
 
 struct sched_rt_entity {
 	struct list_head		run_list;

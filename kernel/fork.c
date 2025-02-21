@@ -182,6 +182,10 @@ static inline struct task_struct *alloc_task_struct_node(int node)
 
 static inline void free_task_struct(struct task_struct *tsk)
 {
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	if (tsk->se.pldp != NULL && predict_load_data_cachep != NULL)
+		kmem_cache_free(predict_load_data_cachep, tsk->se.pldp);
+#endif
 	kmem_cache_free(task_struct_cachep, tsk);
 }
 
@@ -2370,7 +2374,7 @@ __latent_entropy struct task_struct *copy_process(
 #endif
 
 	/* Perform scheduler related setup. Assign this task to a CPU. */
-	retval = sched_fork(clone_flags, p);
+	retval = sched_fork(clone_flags, p, node);
 	if (retval)
 		goto bad_fork_cleanup_policy;
 

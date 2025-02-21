@@ -1068,6 +1068,23 @@ void init_entity_runnable_average(struct sched_entity *se)
 	/* when this task is enqueued, it will contribute to its cfs_rq's load_avg */
 }
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+void init_entity_predict_load_data(struct sched_entity *se, int node)
+{
+	if (predict_load_data_cachep == NULL) {
+		se->pldp = NULL;
+		return;
+	}
+
+	struct predict_load_data *pldp = kmem_cache_alloc_node(predict_load_data_cachep,
+										 GFP_KERNEL, node);
+
+	memset(pldp, 0, sizeof(*(pldp)));
+	pldp->predict_load_normalized = NO_PREDICT_LOAD;
+	se->pldp = pldp;
+}
+#endif
+
 /*
  * With new tasks being created, their initial util_avgs are extrapolated
  * based on the cfs_rq's current util_avg:
@@ -4701,6 +4718,114 @@ static void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 	trace_pelt_cfs_tp(cfs_rq);
 }
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+
+static unsigned long get_load_after_offset(unsigned long load)
+{
+	if (load >= PREDICT_LOAD_MAX)
+		load = PREDICT_LOAD_MAX - 1;
+	return load >> LOAD_GRAN_SHIFT;
+}
+
+/*
+ * Here I don't want the weight of se to affect the load, because
+ * the predict_load_data is designed to record load form 0 to 1024,
+ * so normalized it, we can restore it as needed by restore_normalized_load.
+ */
+static unsigned long get_normalized_load(struct sched_entity *se)
+{
+	unsigned long normalized_load, load = se->avg.load_avg;
+
+	//Prevent arithmetic overflow
+	WARN_ON_ONCE(load > 4000000);
+	if (se_weight(se) == PREDICT_LOAD_MAX)
+		return load;
+	normalized_load = div_u64(load * PREDICT_LOAD_MAX, se_weight(se));
+	return min(normalized_load, PREDICT_LOAD_MAX);
+}
+
+static unsigned long restore_normalized_load(unsigned long normalized_load, unsigned long weight)
+{
+	unsigned long load;
+
+	//Prevent arithmetic overflow
+	WARN_ON_ONCE(normalized_load > 4000000);
+	if (weight == PREDICT_LOAD_MAX)
+		return normalized_load;
+	load = div_u64(load * weight, PREDICT_LOAD_MAX);
+	return load;
+}
+
+//This is a useful API.
+unsigned long get_predict_load(struct sched_entity *se)
+{
+	if (se->pldp == NULL)
+		return NO_PREDICT_LOAD;
+	struct predict_load_data *pldp = se->pldp;
+	unsigned long predict_load_normalized = pldp->predict_load_normalized;
+	unsigned long predict_load;
+
+	if (predict_load_normalized == NO_PREDICT_LOAD)
+		return NO_PREDICT_LOAD;
+
+	predict_load = restore_normalized_load(predict_load_normalized + LOAD_GRAN, se_weight(se));
+	return predict_load;
+}
+
+
+static void record_predict_load_data(struct sched_entity *se)
+{
+	if (se->pldp == NULL)
+		return;
+	struct predict_load_data *pldp = se->pldp;
+	struct record_load *rla = pldp->record_load_array;
+	unsigned long load_normalized_when_dequeue = get_normalized_load(se);
+	unsigned long load_normalized_when_enqueue = se->pldp->load_normalized_when_enqueue;
+	unsigned long index = get_load_after_offset(load_normalized_when_enqueue);
+	unsigned long val = get_load_after_offset(load_normalized_when_dequeue);
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+	if (pldp->predict_load_normalized != NO_PREDICT_LOAD) {
+		pldp->predict_count++;
+		if (load_normalized_when_dequeue >= pldp->predict_load_normalized
+		&& load_normalized_when_dequeue <= pldp->predict_load_normalized + LOAD_GRAN)
+			pldp->predict_correct_count++;
+	} else {
+		pldp->no_predict_count++;
+	}
+#endif
+
+	if (rla[index].load_after_offset == val) {
+		if (rla[index].confidence < 255)
+			rla[index].confidence++;
+	} else {
+		if (rla[index].confidence <= 1) {
+			rla[index].load_after_offset = val;
+			rla[index].confidence = 1;
+		} else {
+			rla[index].confidence--;
+		}
+	}
+}
+
+static void se_do_predict_load(struct sched_entity *se)
+{
+	if (se->pldp == NULL)
+		return;
+	unsigned long index, predict_load_normalized = NO_PREDICT_LOAD;
+	struct predict_load_data *pldp = se->pldp;
+	struct record_load *rla = pldp->record_load_array;
+
+	pldp->load_normalized_when_enqueue = get_normalized_load(se);
+	index = get_load_after_offset(pldp->load_normalized_when_enqueue);
+
+	if (rla[index].confidence >= CONFIDENCE_THRESHOLD)
+		predict_load_normalized = rla[index].load_after_offset << LOAD_GRAN_SHIFT;
+	pldp->predict_load_normalized = predict_load_normalized;
+}
+
+#endif
+
 /**
  * detach_entity_load_avg - detach this entity from its cfs_rq load avg
  * @cfs_rq: cfs_rq to detach from
@@ -5336,6 +5461,11 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	 */
 	update_load_avg(cfs_rq, se, UPDATE_TG | DO_ATTACH);
 	se_update_runnable(se);
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	se_do_predict_load(se);
+#endif
+
 	/*
 	 * XXX update_load_avg() above will have attached us to the pelt sum;
 	 * but update_cfs_group() here will re-adjust the weight and have to
@@ -5493,6 +5623,11 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_load_avg(cfs_rq, se, action);
 	se_update_runnable(se);
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	record_predict_load_data(se);
+	set_in_predict_no_preempt(se, false);
+#endif
+
 	update_stats_dequeue_fair(cfs_rq, se, flags);
 
 	update_entity_lag(cfs_rq, se);
@@ -5628,6 +5763,9 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 	}
 	SCHED_WARN_ON(cfs_rq->curr != prev);
 	cfs_rq->curr = NULL;
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	set_in_predict_no_preempt(prev, false);
+#endif
 }
 
 static void
@@ -13345,8 +13483,13 @@ void free_fair_sched_group(struct task_group *tg)
 	for_each_possible_cpu(i) {
 		if (tg->cfs_rq)
 			kfree(tg->cfs_rq[i]);
-		if (tg->se)
+		if (tg->se) {
 			kfree(tg->se[i]);
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+			if (tg->se[i]->pldp != NULL && predict_load_data_cachep != NULL)
+				kmem_cache_free(predict_load_data_cachep, tg->se[i]->pldp);
+#endif
+		}
 	}
 
 	kfree(tg->cfs_rq);
@@ -13384,6 +13527,9 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 		init_cfs_rq(cfs_rq);
 		init_tg_cfs_entry(tg, cfs_rq, se, i, parent->se[i]);
 		init_entity_runnable_average(se);
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+		init_entity_predict_load_data(se, cpu_to_node(i));
+#endif
 	}
 
 	return 1;

@@ -4712,7 +4712,7 @@ late_initcall(sched_core_sysctl_init);
 /*
  * fork()/clone()-time setup:
  */
-int sched_fork(unsigned long clone_flags, struct task_struct *p)
+int sched_fork(unsigned long clone_flags, struct task_struct *p, int node)
 {
 	__sched_fork(clone_flags, p);
 	/*
@@ -4768,7 +4768,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	}
 
 	init_entity_runnable_average(&p->se);
-
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	init_entity_predict_load_data(&p->se, node);
+#endif
 
 #ifdef CONFIG_SCHED_INFO
 	if (likely(sched_info_on()))
@@ -8472,10 +8474,19 @@ LIST_HEAD(task_groups);
 static struct kmem_cache *task_group_cache __ro_after_init;
 #endif
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+struct kmem_cache *predict_load_data_cachep;
+#endif
+
 void __init sched_init(void)
 {
 	unsigned long ptr = 0;
 	int i;
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD
+	predict_load_data_cachep = kmem_cache_create("predict_load_data",
+		sizeof(struct predict_load_data), 0, SLAB_PANIC|SLAB_ACCOUNT, NULL);
+#endif
 
 	/* Make sure the linker didn't screw up */
 #ifdef CONFIG_SMP
