@@ -108,7 +108,7 @@ int apparmor_secctx_to_secid(const char *secdata, u32 seclen, u32 *secid)
 
 void apparmor_release_secctx(struct lsm_context *cp)
 {
-	if (cp->id == LSM_ID_APPARMOR) {
+	if (cp->id == LSM_ID_APPARMOR || cp->id == LSM_ID_UNDEF) {
 		kfree(cp->context);
 		cp->context = NULL;
 		cp->id = LSM_ID_UNDEF;
