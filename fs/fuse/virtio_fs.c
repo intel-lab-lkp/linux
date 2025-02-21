@@ -1377,14 +1377,10 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 {
 	/* requests need at least 4 elements */
 	struct scatterlist *stack_sgs[6];
-	struct scatterlist stack_sg[ARRAY_SIZE(stack_sgs)];
 	struct scatterlist **sgs = stack_sgs;
-	struct scatterlist *sg = stack_sg;
 	struct virtqueue *vq;
 	struct fuse_args *args = req->args;
 	unsigned int argbuf_used = 0;
-	unsigned int out_sgs = 0;
-	unsigned int in_sgs = 0;
 	unsigned int total_sgs;
 	unsigned int i;
 	int ret;
@@ -1392,11 +1388,13 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 	struct fuse_pqueue *fpq;
 
 	/* Does the sglist fit on the stack? */
+	/* TODO replace magic 6 by a macro */
+	req->sg = req->sg_inline_data;
 	total_sgs = sg_count_fuse_req(req);
-	if (total_sgs > ARRAY_SIZE(stack_sgs)) {
+	if (total_sgs > 6) {
 		sgs = kmalloc_array(total_sgs, sizeof(sgs[0]), gfp);
-		sg = kmalloc_array(total_sgs, sizeof(sg[0]), gfp);
-		if (!sgs || !sg) {
+		req->sg = kmalloc_array(total_sgs, sizeof(req->sg[0]), gfp);
+		if (!sgs || !req->sg) {
 			ret = -ENOMEM;
 			goto out;
 		}
@@ -1408,26 +1406,25 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 		goto out;
 
 	/* Request elements */
-	sg_init_one(&sg[out_sgs++], &req->in.h, sizeof(req->in.h));
-	out_sgs += sg_init_fuse_args(&sg[out_sgs], req,
-				     (struct fuse_arg *)args->in_args,
-				     args->in_numargs, args->in_pages,
-				     req->argbuf, &argbuf_used);
+	sg_init_one(&req->sg[req->out_sgs++], &req->in.h, sizeof(req->in.h));
+	req->out_sgs += sg_init_fuse_args(&req->sg[req->out_sgs], req,
+					  (struct fuse_arg *)args->in_args,
+					  args->in_numargs, args->in_pages,
+					  req->argbuf, &argbuf_used);
 
 	/* Reply elements */
 	if (test_bit(FR_ISREPLY, &req->flags)) {
-		sg_init_one(&sg[out_sgs + in_sgs++],
+		sg_init_one(&req->sg[req->out_sgs + req->in_sgs++],
 			    &req->out.h, sizeof(req->out.h));
-		in_sgs += sg_init_fuse_args(&sg[out_sgs + in_sgs], req,
-					    args->out_args, args->out_numargs,
-					    args->out_pages,
-					    req->argbuf + argbuf_used, NULL);
+		req->in_sgs += sg_init_fuse_args(&req->sg[req->out_sgs + req->in_sgs], req,
+						 args->out_args, args->out_numargs,
+						 args->out_pages,
+						 req->argbuf + argbuf_used, NULL);
 	}
 
-	WARN_ON(out_sgs + in_sgs != total_sgs);
-
 	for (i = 0; i < total_sgs; i++)
-		sgs[i] = &sg[i];
+		sgs[i] = &req->sg[i];
+	WARN_ON(req->out_sgs + req->in_sgs != total_sgs);
 
 	spin_lock(&fsvq->lock);
 
@@ -1438,7 +1435,7 @@ static int virtio_fs_enqueue_req(struct virtio_fs_vq *fsvq,
 	}
 
 	vq = fsvq->vq;
-	ret = virtqueue_add_sgs(vq, sgs, out_sgs, in_sgs, req, GFP_ATOMIC);
+	ret = virtqueue_add_sgs(vq, sgs, req->out_sgs, req->in_sgs, req, GFP_ATOMIC);
 	if (ret < 0) {
 		spin_unlock(&fsvq->lock);
 		goto out;
@@ -1467,10 +1464,10 @@ out:
 		kfree(req->argbuf);
 		req->argbuf = NULL;
 	}
-	if (sgs != stack_sgs) {
+	if (ret < 0 && req->sg != req->sg_inline_data)
+		kfree(req->sg);
+	if (sgs != stack_sgs)
 		kfree(sgs);
-		kfree(sg);
-	}
 
 	return ret;
 }

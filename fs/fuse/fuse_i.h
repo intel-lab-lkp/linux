@@ -18,6 +18,7 @@
 #include <linux/mount.h>
 #include <linux/wait.h>
 #include <linux/list.h>
+#include <linux/scatterlist.h>
 #include <linux/spinlock.h>
 #include <linux/mm.h>
 #include <linux/backing-dev.h>
@@ -434,6 +435,12 @@ struct fuse_req {
 #if IS_ENABLED(CONFIG_VIRTIO_FS)
 	/** virtio-fs's physically contiguous buffer for in and out args */
 	void *argbuf;
+
+	/** virtio-fs's pre-mapped stuff */
+	struct scatterlist sg_inline_data[6]; /* optimization for short requests */
+	struct scatterlist *sg;
+	unsigned int out_sgs;
+	unsigned int in_sgs;
 #endif
 
 	/** fuse_mount this request belongs to */
