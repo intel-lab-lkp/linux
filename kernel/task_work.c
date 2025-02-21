@@ -194,7 +194,7 @@ bool task_work_cancel(struct task_struct *task, struct callback_head *cb)
 void task_work_run(void)
 {
 	struct task_struct *task = current;
-	struct callback_head *work, *head, *next;
+	struct callback_head *work, *head;
 
 	for (;;) {
 		/*
@@ -202,17 +202,7 @@ void task_work_run(void)
 		 * work_exited unless the list is empty.
 		 */
 		work = READ_ONCE(task->task_works);
-		do {
-			head = NULL;
-			if (!work) {
-				if (task->flags & PF_EXITING)
-					head = &work_exited;
-				else
-					break;
-			}
-		} while (!try_cmpxchg(&task->task_works, &work, head));
-
-		if (!work)
+		if (!work && !(task->flags & PF_EXITING))
 			break;
 		/*
 		 * Synchronize with task_work_cancel_match(). It can not remove
@@ -220,13 +210,24 @@ void task_work_run(void)
 		 * But it can remove another entry from the ->next list.
 		 */
 		raw_spin_lock_irq(&task->pi_lock);
+		do {
+			head = NULL;
+			if (work) {
+				head = READ_ONCE(work->next);
+			} else {
+				if (task->flags & PF_EXITING)
+					head = &work_exited;
+				else
+					break;
+			}
+		} while (!try_cmpxchg(&task->task_works, &work, head));
 		raw_spin_unlock_irq(&task->pi_lock);
 
-		do {
-			next = work->next;
-			work->func(work);
-			work = next;
+		if (!work)
+			break;
+		work->func(work);
+
+		if (head)
 			cond_resched();
-		} while (work);
 	}
 }
