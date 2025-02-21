@@ -138,25 +138,6 @@ struct nvmem_config {
 };
 
 /**
- * struct nvmem_cell_table - NVMEM cell definitions for given provider
- *
- * @nvmem_name:		Provider name.
- * @cells:		Array of cell definitions.
- * @ncells:		Number of cell definitions in the array.
- * @node:		List node.
- *
- * This structure together with related helper functions is provided for users
- * that don't can't access the nvmem provided structure but wish to register
- * cell definitions for it e.g. board files registering an EEPROM device.
- */
-struct nvmem_cell_table {
-	const char		*nvmem_name;
-	const struct nvmem_cell_info	*cells;
-	size_t			ncells;
-	struct list_head	node;
-};
-
-/**
  * struct nvmem_layout - NVMEM layout definitions
  *
  * @dev:		Device-model layout device.
