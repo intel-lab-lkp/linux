@@ -1352,6 +1352,14 @@ int sev_platform_init(struct sev_platform_init_args *args)
 }
 EXPORT_SYMBOL_GPL(sev_platform_init);
 
+bool snp_initialized(void)
+{
+	struct sev_device *sev = psp_master->sev_data;
+
+	return sev->snp_initialized;
+}
+EXPORT_SYMBOL_GPL(snp_initialized);
+
 static int __sev_platform_shutdown_locked(int *error)
 {
 	struct psp_device *psp = psp_master;
