@@ -1296,7 +1296,7 @@ void consume_skb(struct sk_buff *skb);
 #else
 static inline void consume_skb(struct sk_buff *skb)
 {
-	return kfree_skb(skb);
+	kfree_skb(skb);
 }
 #endif
 
