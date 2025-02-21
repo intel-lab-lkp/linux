@@ -1541,6 +1541,39 @@ static const struct file_operations proc_pid_sched_operations = {
 
 #endif
 
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+
+static int predict_load_show(struct seq_file *m, void *v)
+{
+	struct inode *inode = m->private;
+	struct pid_namespace *ns = proc_pid_ns(inode->i_sb);
+	struct task_struct *p;
+
+	p = get_proc_task(inode);
+	if (!p)
+		return -ESRCH;
+	proc_predict_load_show_task(p, ns, m);
+
+	put_task_struct(p);
+
+	return 0;
+}
+
+static int predict_load_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, predict_load_show, inode);
+}
+
+static const struct file_operations proc_pid_predict_load_operations = {
+	.open		= predict_load_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+#endif
+
 #ifdef CONFIG_SCHED_AUTOGROUP
 /*
  * Print out autogroup related information:
@@ -3334,6 +3367,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 #ifdef CONFIG_SCHED_DEBUG
 	REG("sched",      S_IRUGO|S_IWUSR, proc_pid_sched_operations),
 #endif
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+	REG("predict_load",      S_IRUGO, proc_pid_predict_load_operations),
+#endif
 #ifdef CONFIG_SCHED_AUTOGROUP
 	REG("autogroup",  S_IRUGO|S_IWUSR, proc_pid_sched_autogroup_operations),
 #endif
@@ -3684,6 +3720,9 @@ static const struct pid_entry tid_base_stuff[] = {
 	ONE("limits",	 S_IRUGO, proc_pid_limits),
 #ifdef CONFIG_SCHED_DEBUG
 	REG("sched",     S_IRUGO|S_IWUSR, proc_pid_sched_operations),
+#endif
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+	REG("predict_load",      S_IRUGO, proc_pid_predict_load_operations),
 #endif
 	NOD("comm",      S_IFREG|S_IRUGO|S_IWUSR,
 			 &proc_tid_comm_inode_operations,

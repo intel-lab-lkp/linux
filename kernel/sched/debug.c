@@ -690,6 +690,12 @@ static void print_cfs_group_stats(struct seq_file *m, int cpu, struct task_group
 	P(se->avg.runnable_avg);
 #endif
 
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+	P(se->pldp->predict_correct_count);
+	P(se->pldp->predict_count);
+	P(se->pldp->no_predict_count);
+#endif
+
 #undef PN_SCHEDSTAT
 #undef PN
 #undef P_SCHEDSTAT
@@ -1159,6 +1165,39 @@ static void sched_show_numa(struct task_struct *p, struct seq_file *m)
 	show_numa_stats(p, m);
 #endif
 }
+
+#ifdef CONFIG_SCHED_PREDICT_LOAD_DEBUG
+
+void proc_predict_load_show_task(struct task_struct *p, struct pid_namespace *ns,
+						  struct seq_file *m)
+{
+	struct predict_load_data *pldp = p->se.pldp;
+
+	if (pldp == NULL)
+		return;
+	struct record_load *rla = pldp->record_load_array;
+
+	unsigned long index, enqueue_load_normalized, dequeue_load_normalized, confidence;
+
+	P(se.pldp->predict_correct_count);
+	P(se.pldp->predict_count);
+	P(se.pldp->no_predict_count);
+
+
+	for (index = 0; index < (PREDICT_LOAD_MAX >> LOAD_GRAN_SHIFT); index++) {
+		enqueue_load_normalized = index << LOAD_GRAN_SHIFT;
+		dequeue_load_normalized = rla[index].load_after_offset << LOAD_GRAN_SHIFT;
+		confidence = rla[index].confidence;
+		if (confidence) {
+			SEQ_printf(m, "enqueue_load_normalized: %ld, ", enqueue_load_normalized);
+			SEQ_printf(m, "dequeue_load_normalized: %ld, ", dequeue_load_normalized);
+			SEQ_printf(m, "confidence:%ld\n", confidence);
+		}
+	}
+
+}
+
+#endif
 
 void proc_sched_show_task(struct task_struct *p, struct pid_namespace *ns,
 						  struct seq_file *m)
