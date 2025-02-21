@@ -33,7 +33,6 @@ struct most_video_dev {
 	bool mute;
 
 	struct list_head pending_mbos;
-	spinlock_t list_lock;
 
 	struct v4l2_device v4l2_dev;
 	atomic_t access_ref;
