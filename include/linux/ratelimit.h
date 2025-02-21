@@ -18,8 +18,8 @@ static inline void ratelimit_state_init(struct ratelimit_state *rs,
 
 static inline void ratelimit_default_init(struct ratelimit_state *rs)
 {
-	return ratelimit_state_init(rs, DEFAULT_RATELIMIT_INTERVAL,
-					DEFAULT_RATELIMIT_BURST);
+	ratelimit_state_init(rs, DEFAULT_RATELIMIT_INTERVAL,
+			     DEFAULT_RATELIMIT_BURST);
 }
 
 static inline void ratelimit_state_exit(struct ratelimit_state *rs)
