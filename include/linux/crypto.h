@@ -446,7 +446,7 @@ void crypto_destroy_tfm(void *mem, struct crypto_tfm *tfm);
 
 static inline void crypto_free_tfm(struct crypto_tfm *tfm)
 {
-	return crypto_destroy_tfm(tfm, tfm);
+	crypto_destroy_tfm(tfm, tfm);
 }
 
 /*
