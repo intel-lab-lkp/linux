@@ -1330,8 +1330,8 @@ void xt_compat_unlock(u_int8_t af)
 EXPORT_SYMBOL_GPL(xt_compat_unlock);
 #endif
 
-DEFINE_PER_CPU(seqcount_t, xt_recseq);
-EXPORT_PER_CPU_SYMBOL_GPL(xt_recseq);
+DEFINE_PER_CPU(struct u64_stats_sync, xt_syncp);
+EXPORT_PER_CPU_SYMBOL_GPL(xt_syncp);
 
 struct static_key xt_tee_enabled __read_mostly;
 EXPORT_SYMBOL_GPL(xt_tee_enabled);
@@ -1977,7 +1977,7 @@ static int __init xt_init(void)
 	int rv;
 
 	for_each_possible_cpu(i) {
-		seqcount_init(&per_cpu(xt_recseq, i));
+		u64_stats_init(&per_cpu(xt_syncp, i));
 	}
 
 	xt = kcalloc(NFPROTO_NUMPROTO, sizeof(struct xt_af), GFP_KERNEL);

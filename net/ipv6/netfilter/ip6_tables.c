@@ -259,7 +259,6 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 	unsigned int stackidx, cpu;
 	const struct xt_table_info *private;
 	struct xt_action_param acpar;
-	unsigned int addend;
 
 	/* Initialization */
 	stackidx = 0;
@@ -280,7 +279,6 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 	local_bh_disable();
 	rcu_read_lock();
 	private = rcu_dereference(table->priv_info);
-	addend = xt_write_recseq_begin();
 	cpu        = smp_processor_id();
 	table_base = private->entries;
 	jumpstack  = (struct ip6t_entry **)private->jumpstack[cpu];
@@ -319,7 +317,7 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 		}
 
 		counter = xt_get_this_cpu_counter(&e->counter_pad);
-		ADD_COUNTER(*counter, skb->len, 1);
+		xt_counter_add(counter, skb->len, 1);
 
 		t = ip6t_get_target_c(e);
 		WARN_ON(!t->u.kernel.target);
@@ -372,7 +370,6 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 			break;
 	} while (!acpar.hotdrop);
 
-	xt_write_recseq_end(addend);
 	rcu_read_unlock();
 	local_bh_enable();
 
@@ -763,7 +760,7 @@ get_counters(const struct xt_table_info *t,
 	unsigned int i;
 
 	for_each_possible_cpu(cpu) {
-		seqcount_t *s = &per_cpu(xt_recseq, cpu);
+		struct u64_stats_sync *syncp = &per_cpu(xt_syncp, cpu);
 
 		i = 0;
 		xt_entry_foreach(iter, t->entries, t->size) {
@@ -773,10 +770,10 @@ get_counters(const struct xt_table_info *t,
 
 			tmp = xt_get_per_cpu_counter(&iter->counter_pad, cpu);
 			do {
-				start = read_seqcount_begin(s);
-				bcnt = tmp->bcnt;
-				pcnt = tmp->pcnt;
-			} while (read_seqcount_retry(s, start));
+				start = u64_stats_fetch_begin(syncp);
+				bcnt = u64_stats_read(&tmp->bcnt);
+				pcnt = u64_stats_read(&tmp->pcnt);
+			} while (u64_stats_fetch_retry(syncp, start));
 
 			ADD_COUNTER(counters[i], bcnt, pcnt);
 			++i;
@@ -797,7 +794,8 @@ static void get_old_counters(const struct xt_table_info *t,
 			const struct xt_counters_k *tmp;
 
 			tmp = xt_get_per_cpu_counter(&iter->counter_pad, cpu);
-			ADD_COUNTER(counters[i], tmp->bcnt, tmp->pcnt);
+			ADD_COUNTER(counters[i], u64_stats_read(&tmp->bcnt),
+				    u64_stats_read(&tmp->pcnt));
 			++i;
 		}
 		cond_resched();
@@ -1181,7 +1179,6 @@ do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 	const struct xt_table_info *private;
 	int ret = 0;
 	struct ip6t_entry *iter;
-	unsigned int addend;
 
 	paddc = xt_copy_counters(arg, len, &tmp);
 	if (IS_ERR(paddc))
@@ -1201,15 +1198,13 @@ do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 	}
 
 	i = 0;
-	addend = xt_write_recseq_begin();
 	xt_entry_foreach(iter, private->entries, private->size) {
 		struct xt_counters_k *tmp;
 
 		tmp = xt_get_this_cpu_counter(&iter->counter_pad);
-		ADD_COUNTER(*tmp, paddc[i].bcnt, paddc[i].pcnt);
+		xt_counter_add(tmp, paddc[i].bcnt, paddc[i].pcnt);
 		++i;
 	}
-	xt_write_recseq_end(addend);
  unlock_up_free:
 	rcu_read_unlock();
 	local_bh_enable();
