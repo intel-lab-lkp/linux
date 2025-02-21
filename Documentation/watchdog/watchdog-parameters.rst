@@ -523,6 +523,9 @@ sbsa_gwdt:
     nowayout:
 	Watchdog cannot be stopped once started
 	(default=kernel config parameter)
+    panicnotify:
+	Watchdog to be stopped after kernel panic
+	(default=0, don't stop watchdog on panic)
 
 -------------------------------------------------
 
