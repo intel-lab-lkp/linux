@@ -40,8 +40,6 @@ struct most_video_dev {
 	struct video_device *vdev;
 	unsigned int ctrl_input;
 
-	struct mutex lock;
-
 	wait_queue_head_t wait_data;
 };
 
