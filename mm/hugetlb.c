@@ -3428,6 +3428,9 @@ static unsigned long __init hugetlb_pages_alloc_boot(struct hstate *h)
 		.numa_aware	= true
 	};
 
+	unsigned long jiffies_start;
+	unsigned long jiffies_end;
+
 	job.thread_fn	= hugetlb_pages_alloc_boot_node;
 	job.start	= 0;
 	job.size	= h->max_huge_pages;
@@ -3450,7 +3453,13 @@ static unsigned long __init hugetlb_pages_alloc_boot(struct hstate *h)
 	 */
 	job.max_threads	= num_node_state(N_MEMORY) * allocation_threads_per_node;
 	job.min_chunk	= h->max_huge_pages / num_node_state(N_MEMORY) / allocation_threads_per_node;
+
+	jiffies_start = jiffies;
 	padata_do_multithreaded(&job);
+	jiffies_end = jiffies;
+
+	printk(KERN_DEBUG "HugeTLB: allocation took %dms\n",
+	    jiffies_to_msecs(jiffies_end - jiffies_start));
 
 	return h->nr_huge_pages;
 }
