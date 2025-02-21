@@ -95,6 +95,8 @@ EXPORT_SYMBOL(__num_cores_per_package);
 unsigned int __num_threads_per_package __ro_after_init = 1;
 EXPORT_SYMBOL(__num_threads_per_package);
 
+u16 invlpgb_count_max __ro_after_init;
+
 static struct ppin_info {
 	int	feature;
 	int	msr_ppin_ctl;
@@ -1030,6 +1032,7 @@ void get_cpu_cap(struct cpuinfo_x86 *c)
 	if (c->extended_cpuid_level >= 0x80000008) {
 		cpuid(0x80000008, &eax, &ebx, &ecx, &edx);
 		c->x86_capability[CPUID_8000_0008_EBX] = ebx;
+		invlpgb_count_max = (edx & 0xffff) + 1;
 	}
 
 	if (c->extended_cpuid_level >= 0x8000000a)
