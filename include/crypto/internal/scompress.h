@@ -79,7 +79,7 @@ static inline void *crypto_scomp_alloc_ctx(struct crypto_scomp *tfm)
 static inline void crypto_scomp_free_ctx(struct crypto_scomp *tfm,
 					 void *ctx)
 {
-	return crypto_scomp_alg(tfm)->free_ctx(tfm, ctx);
+	crypto_scomp_alg(tfm)->free_ctx(tfm, ctx);
 }
 
 static inline int crypto_scomp_compress(struct crypto_scomp *tfm,
