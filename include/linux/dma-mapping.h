@@ -388,21 +388,21 @@ static inline dma_addr_t dma_map_single_attrs(struct device *dev, void *ptr,
 static inline void dma_unmap_single_attrs(struct device *dev, dma_addr_t addr,
 		size_t size, enum dma_data_direction dir, unsigned long attrs)
 {
-	return dma_unmap_page_attrs(dev, addr, size, dir, attrs);
+	dma_unmap_page_attrs(dev, addr, size, dir, attrs);
 }
 
 static inline void dma_sync_single_range_for_cpu(struct device *dev,
 		dma_addr_t addr, unsigned long offset, size_t size,
 		enum dma_data_direction dir)
 {
-	return dma_sync_single_for_cpu(dev, addr + offset, size, dir);
+	dma_sync_single_for_cpu(dev, addr + offset, size, dir);
 }
 
 static inline void dma_sync_single_range_for_device(struct device *dev,
 		dma_addr_t addr, unsigned long offset, size_t size,
 		enum dma_data_direction dir)
 {
-	return dma_sync_single_for_device(dev, addr + offset, size, dir);
+	dma_sync_single_for_device(dev, addr + offset, size, dir);
 }
 
 /**
@@ -478,7 +478,7 @@ static inline void *dma_alloc_coherent(struct device *dev, size_t size,
 static inline void dma_free_coherent(struct device *dev, size_t size,
 		void *cpu_addr, dma_addr_t dma_handle)
 {
-	return dma_free_attrs(dev, size, cpu_addr, dma_handle, 0);
+	dma_free_attrs(dev, size, cpu_addr, dma_handle, 0);
 }
 
 
@@ -606,8 +606,8 @@ static inline void *dma_alloc_wc(struct device *dev, size_t size,
 static inline void dma_free_wc(struct device *dev, size_t size,
 			       void *cpu_addr, dma_addr_t dma_addr)
 {
-	return dma_free_attrs(dev, size, cpu_addr, dma_addr,
-			      DMA_ATTR_WRITE_COMBINE);
+	dma_free_attrs(dev, size, cpu_addr, dma_addr,
+		       DMA_ATTR_WRITE_COMBINE);
 }
 
 static inline int dma_mmap_wc(struct device *dev,
