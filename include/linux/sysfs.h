@@ -491,7 +491,7 @@ int __must_check sysfs_init(void);
 
 static inline void sysfs_enable_ns(struct kernfs_node *kn)
 {
-	return kernfs_enable_ns(kn);
+	kernfs_enable_ns(kn);
 }
 
 int sysfs_file_change_owner(struct kobject *kobj, const char *name, kuid_t kuid,
