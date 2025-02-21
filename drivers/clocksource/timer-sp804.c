@@ -21,6 +21,11 @@
 #include <linux/of_irq.h>
 #include <linux/sched_clock.h>
 
+#ifdef CONFIG_ARM
+#include <linux/delay.h>
+#include "timer-of.h"
+#endif
+
 #include "timer-sp.h"
 
 /* Hisilicon 64-bit timer(a variant of ARM SP804) */
@@ -58,6 +63,10 @@ static struct sp804_timer hisi_sp804_timer __initdata = {
 };
 
 static struct sp804_clkevt sp804_clkevt[NR_TIMERS];
+
+#ifdef CONFIG_ARM
+	struct delay_timer delay;
+#endif
 
 static long __init sp804_get_clock_rate(struct clk *clk, const char *name)
 {
@@ -101,6 +110,13 @@ static u64 notrace sp804_read(void)
 {
 	return ~readl_relaxed(sched_clkevt->value);
 }
+
+#ifdef CONFIG_ARM
+static unsigned long sp804_read_delay_timer_read(void)
+{
+	return sp804_read();
+}
+#endif
 
 static int __init sp804_clocksource_and_sched_clock_init(void __iomem *base,
 							 const char *name,
@@ -259,6 +275,10 @@ static int __init sp804_of_init(struct device_node *np, struct sp804_timer *time
 	struct clk *clk1, *clk2;
 	const char *name = of_get_property(np, "compatible", NULL);
 
+#ifdef CONFIG_ARM
+	struct timer_of to = { .flags = TIMER_OF_CLOCK };
+#endif
+
 	if (initialized) {
 		pr_debug("%pOF: skipping further SP804 timer device\n", np);
 		return 0;
@@ -318,6 +338,22 @@ static int __init sp804_of_init(struct device_node *np, struct sp804_timer *time
 		if (ret)
 			goto err;
 	}
+
+#ifdef CONFIG_ARM
+	ret = timer_of_init(np, &to);
+	if (ret) {
+		pr_err("Failed to initialize the Timer device tree: %d\n", ret);
+		return ret;
+	}
+
+	delay.read_current_timer = sp804_read_delay_timer_read;
+	delay.freq = timer_of_rate(&to);
+	if (delay.freq <= 0)
+		pr_warn("Failed to obtain the freq of the clock source: %d\n", ret);
+
+	register_current_timer_delay(&delay);
+#endif
+
 	initialized = true;
 
 	return 0;
