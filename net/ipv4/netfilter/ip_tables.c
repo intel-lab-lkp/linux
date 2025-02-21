@@ -256,8 +256,9 @@ ipt_do_table(void *priv,
 
 	WARN_ON(!(table->valid_hooks & (1 << hook)));
 	local_bh_disable();
+	rcu_read_lock();
+	private = rcu_dereference(table->priv_info);
 	addend = xt_write_recseq_begin();
-	private = READ_ONCE(table->private); /* Address dependency. */
 	cpu        = smp_processor_id();
 	table_base = private->entries;
 	jumpstack  = (struct ipt_entry **)private->jumpstack[cpu];
@@ -354,6 +355,7 @@ ipt_do_table(void *priv,
 	} while (!acpar.hotdrop);
 
 	xt_write_recseq_end(addend);
+	rcu_read_unlock();
 	local_bh_enable();
 
 	if (acpar.hotdrop)
@@ -788,9 +790,9 @@ static void get_old_counters(const struct xt_table_info *t,
 
 static struct xt_counters *alloc_counters(const struct xt_table *table)
 {
+	const struct xt_table_info *private = nf_table_private(table);
 	unsigned int countersize;
 	struct xt_counters *counters;
-	const struct xt_table_info *private = table->private;
 
 	/* We need atomic snapshot of counters: rest doesn't change
 	   (other than comefrom, which userspace doesn't care
@@ -811,10 +813,10 @@ copy_entries_to_user(unsigned int total_size,
 		     const struct xt_table *table,
 		     void __user *userptr)
 {
+	const struct xt_table_info *private = nf_table_private(table);
 	unsigned int off, num;
 	const struct ipt_entry *e;
 	struct xt_counters *counters;
-	const struct xt_table_info *private = table->private;
 	int ret = 0;
 	const void *loc_cpu_entry;
 
@@ -963,7 +965,7 @@ static int get_info(struct net *net, void __user *user, const int *len)
 	t = xt_request_find_table_lock(net, AF_INET, name);
 	if (!IS_ERR(t)) {
 		struct ipt_getinfo info;
-		const struct xt_table_info *private = t->private;
+		const struct xt_table_info *private = nf_table_private(t);
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 		struct xt_table_info tmp;
 
@@ -1017,7 +1019,7 @@ get_entries(struct net *net, struct ipt_get_entries __user *uptr,
 
 	t = xt_find_table_lock(net, AF_INET, get.name);
 	if (!IS_ERR(t)) {
-		const struct xt_table_info *private = t->private;
+		const struct xt_table_info *private = nf_table_private(t);
 		if (get.size == private->size)
 			ret = copy_entries_to_user(private->size,
 						   t, uptr->entrytable);
@@ -1175,7 +1177,8 @@ do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 	}
 
 	local_bh_disable();
-	private = t->private;
+	rcu_read_lock();
+	private = rcu_dereference(t->priv_info);
 	if (private->number != tmp.num_counters) {
 		ret = -EINVAL;
 		goto unlock_up_free;
@@ -1192,6 +1195,7 @@ do_add_counters(struct net *net, sockptr_t arg, unsigned int len)
 	}
 	xt_write_recseq_end(addend);
  unlock_up_free:
+	rcu_read_unlock();
 	local_bh_enable();
 	xt_table_unlock(t);
 	module_put(t->me);
@@ -1550,8 +1554,8 @@ static int
 compat_copy_entries_to_user(unsigned int total_size, struct xt_table *table,
 			    void __user *userptr)
 {
+	const struct xt_table_info *private = nf_table_private(table);
 	struct xt_counters *counters;
-	const struct xt_table_info *private = table->private;
 	void __user *pos;
 	unsigned int size;
 	int ret = 0;
@@ -1597,7 +1601,7 @@ compat_get_entries(struct net *net, struct compat_ipt_get_entries __user *uptr,
 	xt_compat_lock(AF_INET);
 	t = xt_find_table_lock(net, AF_INET, get.name);
 	if (!IS_ERR(t)) {
-		const struct xt_table_info *private = t->private;
+		const struct xt_table_info *private = nf_table_private(t);
 		struct xt_table_info info;
 		ret = compat_table_info(private, &info);
 		if (!ret && get.size == info.size)

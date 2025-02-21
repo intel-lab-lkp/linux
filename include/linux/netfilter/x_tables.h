@@ -227,7 +227,7 @@ struct xt_table {
 	unsigned int valid_hooks;
 
 	/* Man behind the curtain... */
-	struct xt_table_info *private;
+	struct xt_table_info __rcu *priv_info;
 
 	/* hook ops that register the table with the netfilter core */
 	struct nf_hook_ops *ops;
@@ -344,6 +344,12 @@ void xt_free_table_info(struct xt_table_info *info);
  * Low order bit set to 1 if a writer is active.
  */
 DECLARE_PER_CPU(seqcount_t, xt_recseq);
+
+bool xt_af_lock_held(u_int8_t af);
+static inline struct xt_table_info *nf_table_private(const struct xt_table *table)
+{
+	return rcu_dereference_check(table->priv_info, xt_af_lock_held(table->af));
+}
 
 /* xt_tee_enabled - true if x_tables needs to handle reentrancy
  *

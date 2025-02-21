@@ -85,6 +85,19 @@ static const char *const xt_prefix[NFPROTO_NUMPROTO] = {
 	[NFPROTO_IPV6]   = "ip6",
 };
 
+#ifdef CONFIG_LOCKDEP
+bool xt_af_lock_held(u_int8_t af)
+{
+	return lockdep_is_held(&xt[af].mutex) ||
+#ifdef CONFIG_NETFILTER_XTABLES_COMPAT
+		lockdep_is_held(&xt[af].compat_mutex);
+#else
+		false;
+#endif
+}
+EXPORT_SYMBOL_GPL(xt_af_lock_held);
+#endif
+
 /* Registration hooks for targets. */
 int xt_register_target(struct xt_target *target)
 {
@@ -1388,7 +1401,6 @@ xt_replace_table(struct xt_table *table,
 	      int *error)
 {
 	struct xt_table_info *private;
-	unsigned int cpu;
 	int ret;
 
 	ret = xt_jumpstack_alloc(newinfo);
@@ -1397,48 +1409,24 @@ xt_replace_table(struct xt_table *table,
 		return NULL;
 	}
 
-	/* Do the substitution. */
-	local_bh_disable();
-	private = table->private;
+	private = nf_table_private(table);
 
 	/* Check inside lock: is the old number correct? */
 	if (num_counters != private->number) {
 		pr_debug("num_counters != table->private->number (%u/%u)\n",
 			 num_counters, private->number);
-		local_bh_enable();
 		*error = -EAGAIN;
 		return NULL;
 	}
 
 	newinfo->initial_entries = private->initial_entries;
-	/*
-	 * Ensure contents of newinfo are visible before assigning to
-	 * private.
-	 */
-	smp_wmb();
-	table->private = newinfo;
 
-	/* make sure all cpus see new ->private value */
-	smp_mb();
-
+	rcu_assign_pointer(table->priv_info, newinfo);
 	/*
 	 * Even though table entries have now been swapped, other CPU's
 	 * may still be using the old entries...
 	 */
-	local_bh_enable();
-
-	/* ... so wait for even xt_recseq on all cpus */
-	for_each_possible_cpu(cpu) {
-		seqcount_t *s = &per_cpu(xt_recseq, cpu);
-		u32 seq = raw_read_seqcount(s);
-
-		if (seq & 1) {
-			do {
-				cond_resched();
-				cpu_relax();
-			} while (seq == raw_read_seqcount(s));
-		}
-	}
+	synchronize_rcu();
 
 	audit_log_nfcfg(table->name, table->af, private->number,
 			!private->number ? AUDIT_XT_OP_REGISTER :
@@ -1475,12 +1463,12 @@ struct xt_table *xt_register_table(struct net *net,
 	}
 
 	/* Simplifies replace_table code. */
-	table->private = bootstrap;
+	rcu_assign_pointer(table->priv_info, bootstrap);
 
 	if (!xt_replace_table(table, 0, newinfo, &ret))
 		goto unlock;
 
-	private = table->private;
+	private = nf_table_private(table);
 	pr_debug("table->private->number = %u\n", private->number);
 
 	/* save number of initial entries */
@@ -1503,7 +1491,7 @@ void *xt_unregister_table(struct xt_table *table)
 	struct xt_table_info *private;
 
 	mutex_lock(&xt[table->af].mutex);
-	private = table->private;
+	private = nf_table_private(table);
 	list_del(&table->list);
 	mutex_unlock(&xt[table->af].mutex);
 	audit_log_nfcfg(table->name, table->af, private->number,
