@@ -68,6 +68,7 @@ static unsigned long __initdata default_hstate_max_huge_pages;
 static bool __initdata parsed_valid_hugepagesz = true;
 static bool __initdata parsed_default_hugepagesz;
 static unsigned int default_hugepages_in_node[MAX_NUMNODES] __initdata;
+static unsigned long allocation_threads_per_node __initdata = 2;
 
 /*
  * Protects updates to hugepage_freelists, hugepage_activelist, nr_huge_pages,
@@ -3432,26 +3433,23 @@ static unsigned long __init hugetlb_pages_alloc_boot(struct hstate *h)
 	job.size	= h->max_huge_pages;
 
 	/*
-	 * job.max_threads is twice the num_node_state(N_MEMORY),
+	 * job.max_threads is twice the num_node_state(N_MEMORY) by default.
 	 *
-	 * Tests below indicate that a multiplier of 2 significantly improves
-	 * performance, and although larger values also provide improvements,
-	 * the gains are marginal.
+	 * On large servers with terabytes of memory, huge page allocation
+	 * can consume a considerably amount of time.
 	 *
-	 * Therefore, choosing 2 as the multiplier strikes a good balance between
-	 * enhancing parallel processing capabilities and maintaining efficient
-	 * resource management.
+	 * Tests below show how long it takes to allocate 1 TiB of memory with 2MiB huge pages.
+	 * 2MiB huge pages. Using more threads can significantly improve allocation time.
 	 *
-	 * +------------+-------+-------+-------+-------+-------+
-	 * | multiplier |   1   |   2   |   3   |   4   |   5   |
-	 * +------------+-------+-------+-------+-------+-------+
-	 * | 256G 2node | 358ms | 215ms | 157ms | 134ms | 126ms |
-	 * | 2T   4node | 979ms | 679ms | 543ms | 489ms | 481ms |
-	 * | 50G  2node | 71ms  | 44ms  | 37ms  | 30ms  | 31ms  |
-	 * +------------+-------+-------+-------+-------+-------+
+	 * +--------------------+-------+-------+-------+-------+-------+
+	 * | threads per node   |   2   |   4   |   8   |   16  |    32 |
+	 * +--------------------+-------+-------+-------+-------+-------+
+	 * | skylake 4node      |   44s |   22s |   16s |   19s |   20s |
+	 * | cascade lake 4node |   39s |   20s |   11s |   10s |    9s |
+	 * +--------------------+-------+-------+-------+-------+-------+
 	 */
-	job.max_threads	= num_node_state(N_MEMORY) * 2;
-	job.min_chunk	= h->max_huge_pages / num_node_state(N_MEMORY) / 2;
+	job.max_threads	= num_node_state(N_MEMORY) * allocation_threads_per_node;
+	job.min_chunk	= h->max_huge_pages / num_node_state(N_MEMORY) / allocation_threads_per_node;
 	padata_do_multithreaded(&job);
 
 	return h->nr_huge_pages;
@@ -4763,6 +4761,26 @@ static int __init default_hugepagesz_setup(char *s)
 	return 1;
 }
 __setup("default_hugepagesz=", default_hugepagesz_setup);
+
+/* hugepage_alloc_threads command line parsing
+ * When set, use this specific number of threads per NUMA node for the boot
+ * allocation of hugepages.
+ */
+static int __init hugepage_alloc_threads_setup(char *s)
+{
+	unsigned long threads_per_node;
+
+	if (kstrtoul(s, 0, &threads_per_node) != 0)
+		return 1;
+
+	if (threads_per_node == 0)
+		return 1;
+
+	allocation_threads_per_node = threads_per_node;
+
+	return 1;
+}
+__setup("hugepage_alloc_threads=", hugepage_alloc_threads_setup);
 
 static unsigned int allowed_mems_nr(struct hstate *h)
 {
