@@ -148,7 +148,7 @@ static ssize_t hw_stat_device_show(struct device *dev,
 {
 	struct hw_stats_device_attribute *stat_attr =
 		container_of(attr, struct hw_stats_device_attribute, attr);
-	struct ib_device *ibdev = container_of(dev, struct ib_device, dev);
+	struct ib_device *ibdev = rdma_device_to_ibdev(dev);
 
 	return stat_attr->show(ibdev, ibdev->hw_stats_data->stats,
 			       stat_attr - ibdev->hw_stats_data->attrs, 0, buf);
@@ -160,7 +160,7 @@ static ssize_t hw_stat_device_store(struct device *dev,
 {
 	struct hw_stats_device_attribute *stat_attr =
 		container_of(attr, struct hw_stats_device_attribute, attr);
-	struct ib_device *ibdev = container_of(dev, struct ib_device, dev);
+	struct ib_device *ibdev = rdma_device_to_ibdev(dev);
 
 	return stat_attr->store(ibdev, ibdev->hw_stats_data->stats,
 				stat_attr - ibdev->hw_stats_data->attrs, 0, buf,
