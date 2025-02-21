@@ -78,7 +78,7 @@ void qdisc_watchdog_schedule_range_ns(struct qdisc_watchdog *wd, u64 expires,
 static inline void qdisc_watchdog_schedule_ns(struct qdisc_watchdog *wd,
 					      u64 expires)
 {
-	return qdisc_watchdog_schedule_range_ns(wd, expires, 0ULL);
+	qdisc_watchdog_schedule_range_ns(wd, expires, 0ULL);
 }
 
 static inline void qdisc_watchdog_schedule(struct qdisc_watchdog *wd,
