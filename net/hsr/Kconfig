@@ -38,3 +38,17 @@ config HSR
 	  relying on this code in a safety critical system!
 
 	  If unsure, say N.
+
+config PRP_DUP_DISCARD_KUNIT_TEST
+	bool "PRP duplicate discard KUnit tests" if !KUNIT_ALL_TESTS
+	depends on HSR = y && KUNIT = y
+	default KUNIT_ALL_TESTS
+	help
+	  Covers the PRP duplicate discard algorithm.
+	  Only useful for kernel devs running KUnit test harness and are not
+	  for inclusion into a production build.
+
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
