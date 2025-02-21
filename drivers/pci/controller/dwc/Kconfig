@@ -6,6 +6,16 @@ menu "DesignWare-based PCIe controllers"
 config PCIE_DW
 	bool
 
+config PCIE_DW_DEBUGFS
+	default y
+	depends on DEBUG_FS
+	depends on PCIE_DW_HOST || PCIE_DW_EP
+	bool "DWC PCIe debugfs entries"
+	help
+	  Enables debugfs entries for the DW PCIe Controller. These entries
+	  provide all debug features related to DW controller including the RAS
+	  DES features to help in debug, error injection and statistical counters.
+
 config PCIE_DW_HOST
 	bool
 	select PCIE_DW
