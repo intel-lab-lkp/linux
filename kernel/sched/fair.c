@@ -6111,10 +6111,10 @@ static void __cfsb_csd_unthrottle(void *arg)
 
 	list_for_each_entry_safe(cursor, tmp, &rq->cfsb_csd_list,
 				 throttled_csd_list) {
-		list_del_init(&cursor->throttled_csd_list);
-
 		if (cfs_rq_throttled(cursor))
 			unthrottle_cfs_rq(cursor);
+
+		list_del_init(&cursor->throttled_csd_list);
 	}
 
 	rcu_read_unlock();
@@ -6228,10 +6228,10 @@ next:
 
 		rq_lock_irqsave(rq, &rf);
 
-		list_del_init(&cfs_rq->throttled_csd_list);
-
 		if (cfs_rq_throttled(cfs_rq))
 			unthrottle_cfs_rq(cfs_rq);
+
+		list_del_init(&cfs_rq->throttled_csd_list);
 
 		rq_unlock_irqrestore(rq, &rf);
 	}
