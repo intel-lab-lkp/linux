@@ -29,6 +29,7 @@
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
+#include <linux/pci-tph.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -1510,6 +1511,165 @@ static int vfio_pci_core_feature_token(struct vfio_device *device, u32 flags,
 	return 0;
 }
 
+static ssize_t vfio_pci_tph_uinfo_dup(struct vfio_pci_tph *tph,
+				      void __user *arg, size_t argsz,
+				      struct vfio_pci_tph_info **info)
+{
+	size_t minsz;
+
+	if (tph->count > VFIO_TPH_INFO_MAX)
+		return -EINVAL;
+	if (!tph->count)
+		return 0;
+
+	minsz = tph->count * sizeof(struct vfio_pci_tph_info);
+	if (minsz < argsz)
+		return -EINVAL;
+
+	*info = memdup_user(arg, minsz);
+	if (IS_ERR(info))
+		return PTR_ERR(info);
+
+	return minsz;
+}
+
+static int vfio_pci_feature_tph_st_op(struct vfio_pci_core_device *vdev,
+				      struct vfio_pci_tph *tph,
+				      void __user *arg, size_t argsz)
+{
+	int i, mtype, err = 0;
+	u32 cpu_uid;
+	struct vfio_pci_tph_info *info = NULL;
+	ssize_t data_size = vfio_pci_tph_uinfo_dup(tph, arg, argsz, &info);
+
+	if (data_size <= 0)
+		return data_size;
+
+	for (i = 0; i < tph->count; i++) {
+		if (!(info[i].cpu_id < nr_cpu_ids && cpu_present(info[i].cpu_id))) {
+			info[i].err = -EINVAL;
+			continue;
+		}
+		cpu_uid = topology_core_id(info[i].cpu_id);
+		mtype = (info[i].flags & VFIO_TPH_MEM_TYPE_MASK) >>
+			VFIO_TPH_MEM_TYPE_SHIFT;
+
+		/* processing hints are always ignored */
+		info[i].ph_ignore = 1;
+
+		info[i].err = pcie_tph_get_cpu_st(vdev->pdev, mtype, cpu_uid,
+						  &info[i].st);
+		if (info[i].err)
+			continue;
+
+		if (tph->flags & VFIO_DEVICE_FEATURE_TPH_SET_ST) {
+			info[i].err = pcie_tph_set_st_entry(vdev->pdev,
+							    info[i].index,
+							    info[i].st);
+		}
+	}
+
+	if (copy_to_user(arg, info, data_size))
+		err = -EFAULT;
+
+	kfree(info);
+	return err;
+}
+
+
+static int vfio_pci_feature_tph_enable(struct vfio_pci_core_device *vdev,
+				       struct vfio_pci_tph *arg)
+{
+	int mode = arg->flags & VFIO_TPH_ST_MODE_MASK;
+
+	switch (mode) {
+	case VFIO_TPH_ST_NS_MODE:
+		return pcie_enable_tph(vdev->pdev, PCI_TPH_ST_NS_MODE);
+
+	case VFIO_TPH_ST_IV_MODE:
+		return pcie_enable_tph(vdev->pdev, PCI_TPH_ST_IV_MODE);
+
+	case VFIO_TPH_ST_DS_MODE:
+		return pcie_enable_tph(vdev->pdev, PCI_TPH_ST_DS_MODE);
+
+	default:
+		return -EINVAL;
+	}
+
+}
+
+static int vfio_pci_feature_tph_disable(struct vfio_pci_core_device *vdev)
+{
+	pcie_disable_tph(vdev->pdev);
+	return 0;
+}
+
+static int vfio_pci_feature_tph_prepare(struct vfio_pci_tph __user *arg,
+					size_t argsz, u32 flags,
+					struct vfio_pci_tph *tph)
+{
+	u32 op;
+	int err = vfio_check_feature(flags, argsz,
+				 VFIO_DEVICE_FEATURE_SET |
+				 VFIO_DEVICE_FEATURE_GET,
+				 sizeof(struct vfio_pci_tph));
+	if (err != 1)
+		return err;
+
+	if (copy_from_user(tph, arg, sizeof(struct vfio_pci_tph)))
+		return -EFAULT;
+
+	op = tph->flags & VFIO_DEVICE_FEATURE_TPH_OP_MASK;
+
+	switch (op) {
+	case VFIO_DEVICE_FEATURE_TPH_ENABLE:
+	case VFIO_DEVICE_FEATURE_TPH_DISABLE:
+	case VFIO_DEVICE_FEATURE_TPH_SET_ST:
+		return (flags & VFIO_DEVICE_FEATURE_SET) ? 0 : -EINVAL;
+
+	case VFIO_DEVICE_FEATURE_TPH_GET_ST:
+		return (flags & VFIO_DEVICE_FEATURE_GET) ? 0 : -EINVAL;
+
+	default:
+		return -EINVAL;
+	}
+}
+
+static int vfio_pci_core_feature_tph(struct vfio_device *device, u32 flags,
+				     struct vfio_pci_tph __user *arg,
+				     size_t argsz)
+{
+	u32 op;
+	struct vfio_pci_tph tph;
+	void __user *uinfo;
+	size_t infosz;
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
+	int err = vfio_pci_feature_tph_prepare(arg, argsz, flags, &tph);
+
+	if (err)
+		return err;
+
+	op = tph.flags & VFIO_DEVICE_FEATURE_TPH_OP_MASK;
+
+	switch (op) {
+	case VFIO_DEVICE_FEATURE_TPH_ENABLE:
+		return vfio_pci_feature_tph_enable(vdev, &tph);
+
+	case VFIO_DEVICE_FEATURE_TPH_DISABLE:
+		return vfio_pci_feature_tph_disable(vdev);
+
+	case VFIO_DEVICE_FEATURE_TPH_GET_ST:
+	case VFIO_DEVICE_FEATURE_TPH_SET_ST:
+		uinfo = (u8 *)(arg) + offsetof(struct vfio_pci_tph, info);
+		infosz = argsz - sizeof(struct vfio_pci_tph);
+		return vfio_pci_feature_tph_st_op(vdev, &tph, uinfo, infosz);
+
+	default:
+		return -EINVAL;
+	}
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1523,6 +1683,9 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_pm_exit(device, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_PCI_VF_TOKEN:
 		return vfio_pci_core_feature_token(device, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_PCI_TPH:
+		return vfio_pci_core_feature_tph(device, flags,
+						 arg, argsz);
 	default:
 		return -ENOTTY;
 	}
