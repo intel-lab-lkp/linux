@@ -23,6 +23,7 @@
 #include <sys/eventfd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 #include <sched.h>
 #include <sys/prctl.h>
 #include <unistd.h>
@@ -109,6 +110,30 @@ static void handle_usage(int rc, char *msg)
 	exit(rc);
 }
 
+static void check_core_sched_support(void)
+{
+	char config[128] = "/proc/config.gz";
+	char cmd[128];
+	struct utsname kernel;
+
+	printf("## Checking for CONFIG_SCHED_CORE support\n");
+
+	if (access(config, F_OK) != 0)
+		if (uname(&kernel) == 0)
+			snprintf(config, sizeof(config), "/boot/config-%s", kernel.release);
+
+	if (access(config, F_OK) != 0) {
+		printf("Cannot find kernel config in /proc or /boot\n");
+		exit(EXIT_FAILURE);
+	}
+
+	snprintf(cmd, sizeof(cmd), "zgrep CONFIG_SCHED_CORE=[ym] %s", config);
+	if (system(cmd)) {
+		printf("Core scheduling not enabled in kernel, hence skipping tests\n");
+		exit(4);
+	}
+}
+
 static unsigned long get_cs_cookie(int pid)
 {
 	unsigned long long cookie;
@@ -117,7 +142,7 @@ static unsigned long get_cs_cookie(int pid)
 	ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, pid, PIDTYPE_PID,
 		    (unsigned long)&cookie);
 	if (ret) {
-		printf("Not a core sched system\n");
+		printf("Failed to get cookie\n");
 		return -1UL;
 	}
 
@@ -269,6 +294,8 @@ int main(int argc, char *argv[])
 
 	if (keypress)
 		delay = -1;
+
+	check_core_sched_support();
 
 	srand(time(NULL));
 
