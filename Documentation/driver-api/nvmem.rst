@@ -76,8 +76,6 @@ nvmem_cell_table struct::
 	.ncells			= ARRAY_SIZE(foo_nvmem_cells),
   };
 
-  nvmem_add_cell_table(&foo_nvmem_cell_table);
-
 Additionally it is possible to create nvmem cell lookup entries and register
 them with the nvmem framework from machine code as shown in the example below::
 
