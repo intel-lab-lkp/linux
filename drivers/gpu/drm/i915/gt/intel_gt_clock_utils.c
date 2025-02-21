@@ -11,23 +11,6 @@
 #include "intel_gt_regs.h"
 #include "soc/intel_dram.h"
 
-static u32 read_reference_ts_freq(struct intel_uncore *uncore)
-{
-	u32 ts_override = intel_uncore_read(uncore, GEN9_TIMESTAMP_OVERRIDE);
-	u32 base_freq, frac_freq;
-
-	base_freq = ((ts_override & GEN9_TIMESTAMP_OVERRIDE_US_COUNTER_DIVIDER_MASK) >>
-		     GEN9_TIMESTAMP_OVERRIDE_US_COUNTER_DIVIDER_SHIFT) + 1;
-	base_freq *= 1000000;
-
-	frac_freq = ((ts_override &
-		      GEN9_TIMESTAMP_OVERRIDE_US_COUNTER_DENOMINATOR_MASK) >>
-		     GEN9_TIMESTAMP_OVERRIDE_US_COUNTER_DENOMINATOR_SHIFT);
-	frac_freq = 1000000 / (frac_freq + 1);
-
-	return base_freq + frac_freq;
-}
-
 static u32 gen11_get_crystal_clock_freq(struct intel_uncore *uncore,
 					u32 rpm_config_reg)
 {
@@ -64,12 +47,14 @@ static u32 gen11_read_clock_frequency(struct intel_uncore *uncore)
 	 * We do not, and we assume nobody else does.
 	 *
 	 * First figure out the reference frequency. There are 2 ways
-	 * we can compute the frequency, either through the
-	 * TIMESTAMP_OVERRIDE register or through RPM_CONFIG. CTC_MODE
-	 * tells us which one we should use.
+	 * we can compute the frequency, either from the display reference
+	 * clock or through RPM_CONFIG. CTC_MODE tells us which one we should
+	 * use.
 	 */
 	if ((ctc_reg & CTC_SOURCE_PARAMETER_MASK) == CTC_SOURCE_DIVIDE_LOGIC) {
-		freq = read_reference_ts_freq(uncore);
+		struct intel_display *display = &uncore->i915->display;
+
+		freq = intel_display_get_refclk(display) * 1000;
 	} else {
 		u32 c0 = intel_uncore_read(uncore, RPM_CONFIG0);
 
@@ -93,7 +78,9 @@ static u32 gen9_read_clock_frequency(struct intel_uncore *uncore)
 	u32 freq = 0;
 
 	if ((ctc_reg & CTC_SOURCE_PARAMETER_MASK) == CTC_SOURCE_DIVIDE_LOGIC) {
-		freq = read_reference_ts_freq(uncore);
+		struct intel_display *display = &uncore->i915->display;
+
+		freq = intel_display_get_refclk(display) * 1000;
 	} else {
 		freq = IS_GEN9_LP(uncore->i915) ? 19200000 : 24000000;
 
