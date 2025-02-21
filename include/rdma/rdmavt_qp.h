@@ -735,7 +735,7 @@ static inline void rvt_mod_retry_timer_ext(struct rvt_qp *qp, u8 shift)
 
 static inline void rvt_mod_retry_timer(struct rvt_qp *qp)
 {
-	return rvt_mod_retry_timer_ext(qp, 0);
+	rvt_mod_retry_timer_ext(qp, 0);
 }
 
 /**
