@@ -132,10 +132,6 @@ To facilitate such consumers NVMEM framework provides below apis::
 		      size_t bytes, void *buf);
   int nvmem_device_write(struct nvmem_device *nvmem, unsigned int offset,
 		       size_t bytes, void *buf);
-  int nvmem_device_cell_read(struct nvmem_device *nvmem,
-			   struct nvmem_cell_info *info, void *buf);
-  int nvmem_device_cell_write(struct nvmem_device *nvmem,
-			    struct nvmem_cell_info *info, void *buf);
 
 Before the consumers can read/write NVMEM directly, it should get hold
 of nvmem_controller from one of the `*nvmem_device_get()` api.
