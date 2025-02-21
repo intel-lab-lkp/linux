@@ -863,7 +863,7 @@ static void unmap_hotplug_pte_range(pmd_t *pmdp, unsigned long addr,
 		if (pte_none(pte))
 			continue;
 
-		WARN_ON(!pte_present(pte));
+		WARN_ON(!pte_valid(pte));
 		__pte_clear(&init_mm, addr, ptep);
 		flush_tlb_kernel_range(addr, addr + PAGE_SIZE);
 		if (free_mapped)
@@ -886,7 +886,7 @@ static void unmap_hotplug_pmd_range(pud_t *pudp, unsigned long addr,
 		if (pmd_none(pmd))
 			continue;
 
-		WARN_ON(!pmd_present(pmd));
+		WARN_ON(!pmd_valid(pmd));
 		if (pmd_sect(pmd)) {
 			pmd_clear(pmdp);
 
@@ -919,7 +919,7 @@ static void unmap_hotplug_pud_range(p4d_t *p4dp, unsigned long addr,
 		if (pud_none(pud))
 			continue;
 
-		WARN_ON(!pud_present(pud));
+		WARN_ON(!pud_valid(pud));
 		if (pud_sect(pud)) {
 			pud_clear(pudp);
 
@@ -1032,7 +1032,7 @@ static void free_empty_pmd_table(pud_t *pudp, unsigned long addr,
 		if (pmd_none(pmd))
 			continue;
 
-		WARN_ON(!pmd_present(pmd) || !pmd_table(pmd) || pmd_sect(pmd));
+		WARN_ON(!pmd_valid(pmd) || !pmd_table(pmd) || pmd_sect(pmd));
 		free_empty_pte_table(pmdp, addr, next, floor, ceiling);
 	} while (addr = next, addr < end);
 
@@ -1072,7 +1072,7 @@ static void free_empty_pud_table(p4d_t *p4dp, unsigned long addr,
 		if (pud_none(pud))
 			continue;
 
-		WARN_ON(!pud_present(pud) || !pud_table(pud) || pud_sect(pud));
+		WARN_ON(!pud_valid(pud) || !pud_table(pud) || pud_sect(pud));
 		free_empty_pmd_table(pudp, addr, next, floor, ceiling);
 	} while (addr = next, addr < end);
 
