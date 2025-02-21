@@ -65,6 +65,7 @@ void intel_init_cdclk_hooks(struct intel_display *display);
 void intel_update_max_cdclk(struct intel_display *display);
 void intel_update_cdclk(struct intel_display *display);
 u32 intel_read_rawclk(struct intel_display *display);
+u32 intel_display_get_refclk(struct intel_display *display);
 bool intel_cdclk_clock_changed(const struct intel_cdclk_config *a,
 			       const struct intel_cdclk_config *b);
 int intel_mdclk_cdclk_ratio(struct intel_display *display,

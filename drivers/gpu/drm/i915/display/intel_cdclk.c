@@ -1636,25 +1636,40 @@ static u8 xe3lpd_calc_voltage_level(int cdclk)
 	return 0;
 }
 
-static void icl_readout_refclk(struct intel_display *display,
-			       struct intel_cdclk_config *cdclk_config)
+static u32 icl_readout_refclk(struct intel_display *display)
 {
 	u32 dssm = intel_de_read(display, SKL_DSSM) & ICL_DSSM_CDCLK_PLL_REFCLK_MASK;
 
 	switch (dssm) {
+	case ICL_DSSM_CDCLK_PLL_REFCLK_24MHz:
+		return 24000;
+	case ICL_DSSM_CDCLK_PLL_REFCLK_19_2MHz:
+		return 19200;
+	case ICL_DSSM_CDCLK_PLL_REFCLK_38_4MHz:
+		return 38400;
 	default:
 		MISSING_CASE(dssm);
-		fallthrough;
-	case ICL_DSSM_CDCLK_PLL_REFCLK_24MHz:
-		cdclk_config->ref = 24000;
-		break;
-	case ICL_DSSM_CDCLK_PLL_REFCLK_19_2MHz:
-		cdclk_config->ref = 19200;
-		break;
-	case ICL_DSSM_CDCLK_PLL_REFCLK_38_4MHz:
-		cdclk_config->ref = 38400;
-		break;
+		return DISPLAY_VER(display) >= 14 ? 38400 : 24000;
 	}
+}
+
+/**
+ * intel_display_get_refclk - Returns the display reference clock
+ * @display: display instance
+ *
+ * Returns the display reference clock in KHz.  The display reference clock
+ * is defined by the SoC; on some platforms the proper value should be read
+ * from a hardware strap register, while on others there's only a single
+ * possible value.
+ */
+u32 intel_display_get_refclk(struct intel_display *display)
+{
+	if (display->platform.dg2)
+		return 38400;
+	else if (DISPLAY_VER(display) >= 11)
+		return icl_readout_refclk(display);
+	else
+		return 19200;
 }
 
 static void bxt_de_pll_readout(struct intel_display *display,
@@ -1662,12 +1677,7 @@ static void bxt_de_pll_readout(struct intel_display *display,
 {
 	u32 val, ratio;
 
-	if (display->platform.dg2)
-		cdclk_config->ref = 38400;
-	else if (DISPLAY_VER(display) >= 11)
-		icl_readout_refclk(display, cdclk_config);
-	else
-		cdclk_config->ref = 19200;
+	cdclk_config->ref = intel_display_get_refclk(display);
 
 	val = intel_de_read(display, BXT_DE_PLL_ENABLE);
 	if ((val & BXT_DE_PLL_PLL_ENABLE) == 0 ||
