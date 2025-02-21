@@ -44,12 +44,16 @@ struct rzg2l_cru_buffer {
  */
 static void rzg2l_cru_write(struct rzg2l_cru_dev *cru, u32 offset, u32 value)
 {
-	iowrite32(value, cru->base + offset);
+	const u16 *regs = cru->info->regs;
+
+	iowrite32(value, cru->base + regs[offset]);
 }
 
 static u32 rzg2l_cru_read(struct rzg2l_cru_dev *cru, u32 offset)
 {
-	return ioread32(cru->base + offset);
+	const u16 *regs = cru->info->regs;
+
+	return ioread32(cru->base + regs[offset]);
 }
 
 /* Need to hold qlock before calling */
@@ -132,8 +136,8 @@ static void rzg2l_cru_set_slot_addr(struct rzg2l_cru_dev *cru,
 		return;
 
 	/* Currently, we just use the buffer in 32 bits address */
-	rzg2l_cru_write(cru, AMnMBxADDRL(slot), addr);
-	rzg2l_cru_write(cru, AMnMBxADDRH(slot), 0);
+	rzg2l_cru_write(cru, AMnMBxADDRL(AMnMB1ADDRL, slot), addr);
+	rzg2l_cru_write(cru, AMnMBxADDRH(AMnMB1ADDRH, slot), 0);
 }
 
 /*
