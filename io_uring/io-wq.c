@@ -544,6 +544,20 @@ static void io_assign_current_work(struct io_worker *worker,
 	raw_spin_unlock(&worker->lock);
 }
 
+static void flush_req_free_list(struct llist_head *free_list,
+				struct llist_node *tail)
+{
+	struct io_kiocb *first_req, *last_req;
+
+	first_req = container_of(free_list->first, struct io_kiocb,
+				 io_task_work.node);
+	last_req = container_of(tail, struct io_kiocb,
+				io_task_work.node);
+
+	io_req_normal_work_add(first_req, last_req);
+	init_llist_head(free_list);
+}
+
 /*
  * Called with acct->lock held, drops it before returning
  */
@@ -553,6 +567,10 @@ static void io_worker_handle_work(struct io_wq_acct *acct,
 {
 	struct io_wq *wq = worker->wq;
 	bool do_kill = test_bit(IO_WQ_BIT_EXIT, &wq->state);
+	LLIST_HEAD(free_list);
+	int free_req = 0;
+	struct llist_node *tail = NULL;
+	struct io_ring_ctx *last_added_ctx = NULL;
 
 	do {
 		struct io_wq_work *work;
@@ -592,6 +610,9 @@ static void io_worker_handle_work(struct io_wq_acct *acct,
 		do {
 			struct io_wq_work *next_hashed, *linked;
 			unsigned int hash = io_get_work_hash(work);
+			struct io_kiocb *req = container_of(work,
+						struct io_kiocb, work);
+			bool did_free = false;
 
 			next_hashed = wq_next_work(work);
 
@@ -601,7 +622,41 @@ static void io_worker_handle_work(struct io_wq_acct *acct,
 			wq->do_work(work);
 			io_assign_current_work(worker, NULL);
 
-			linked = wq->free_work(work);
+			/*
+			 * All requests in free list must have the same
+			 * io_ring_ctx.
+			 */
+			if (last_added_ctx && last_added_ctx != req->ctx) {
+				flush_req_free_list(&free_list, tail);
+				tail = NULL;
+				last_added_ctx = NULL;
+				free_req = 0;
+			}
+
+			/*
+			 * Try to batch free work when
+			 * !IORING_SETUP_DEFER_TASKRUN to reduce contention
+			 * on tctx->task_list.
+			 */
+			if (req->ctx->flags & IORING_SETUP_DEFER_TASKRUN)
+				linked = wq->free_work(work, NULL, NULL);
+			else
+				linked = wq->free_work(work, &free_list, &did_free);
+
+			if (did_free) {
+				if (!tail)
+					tail = free_list.first;
+
+				last_added_ctx = req->ctx;
+				free_req++;
+				if (free_req == IO_REQ_ALLOC_BATCH) {
+					flush_req_free_list(&free_list, tail);
+					tail = NULL;
+					last_added_ctx = NULL;
+					free_req = 0;
+				}
+			}
+
 			work = next_hashed;
 			if (!work && linked && !io_wq_is_hashed(linked)) {
 				work = linked;
@@ -626,6 +681,9 @@ static void io_worker_handle_work(struct io_wq_acct *acct,
 			break;
 		raw_spin_lock(&acct->lock);
 	} while (1);
+
+	if (free_list.first)
+		flush_req_free_list(&free_list, tail);
 }
 
 static int io_wq_worker(void *data)
@@ -899,7 +957,7 @@ static void io_run_cancel(struct io_wq_work *work, struct io_wq *wq)
 	do {
 		atomic_or(IO_WQ_WORK_CANCEL, &work->flags);
 		wq->do_work(work);
-		work = wq->free_work(work);
+		work = wq->free_work(work, NULL, NULL);
 	} while (work);
 }
 

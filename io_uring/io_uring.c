@@ -120,7 +120,6 @@
 #define IO_TCTX_REFS_CACHE_NR	(1U << 10)
 
 #define IO_COMPL_BATCH			32
-#define IO_REQ_ALLOC_BATCH		8
 #define IO_LOCAL_TW_DEFAULT_MAX		20
 
 struct io_defer_entry {
@@ -985,13 +984,18 @@ __cold bool __io_alloc_req_refill(struct io_ring_ctx *ctx)
 	return true;
 }
 
-__cold void io_free_req(struct io_kiocb *req)
+static __cold void io_set_req_free(struct io_kiocb *req)
 {
 	/* refs were already put, restore them for io_req_task_complete() */
 	req->flags &= ~REQ_F_REFCOUNT;
 	/* we only want to free it, don't post CQEs */
 	req->flags |= REQ_F_CQE_SKIP;
 	req->io_task_work.func = io_req_task_complete;
+}
+
+__cold void io_free_req(struct io_kiocb *req)
+{
+	io_set_req_free(req);
 	io_req_task_work_add(req);
 }
 
@@ -1772,16 +1776,27 @@ int io_poll_issue(struct io_kiocb *req, struct io_tw_state *ts)
 				 IO_URING_F_COMPLETE_DEFER);
 }
 
-struct io_wq_work *io_wq_free_work(struct io_wq_work *work)
+struct io_wq_work *io_wq_free_work(struct io_wq_work *work,
+				   struct llist_head *free_list,
+				   bool *did_free)
 {
 	struct io_kiocb *req = container_of(work, struct io_kiocb, work);
 	struct io_kiocb *nxt = NULL;
+	bool free_req = false;
 
 	if (req_ref_put_and_test(req)) {
 		if (req->flags & IO_REQ_LINK_FLAGS)
 			nxt = io_req_find_next(req);
-		io_free_req(req);
+		io_set_req_free(req);
+		if (free_list)
+			__llist_add(&req->io_task_work.node, free_list);
+		else
+			io_req_task_work_add(req);
+		free_req = true;
 	}
+	if (did_free)
+		*did_free = free_req;
+
 	return nxt ? &nxt->work : NULL;
 }
 

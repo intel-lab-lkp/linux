@@ -21,7 +21,9 @@ enum io_wq_cancel {
 	IO_WQ_CANCEL_NOTFOUND,	/* work not found */
 };
 
-typedef struct io_wq_work *(free_work_fn)(struct io_wq_work *);
+typedef struct io_wq_work *(free_work_fn)(struct io_wq_work *,
+					  struct llist_head *,
+					  bool *did_free);
 typedef void (io_wq_work_fn)(struct io_wq_work *);
 
 struct io_wq_hash {
