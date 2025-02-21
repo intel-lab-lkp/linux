@@ -2370,6 +2370,13 @@ static int _mmc_handle_undervoltage(struct mmc_host *host)
 	 */
 	mmc_card_set_removed(card);
 
+	/*
+	 * Signal the host controller driver that we are in emergency stop mode.
+	 * This prevents any new storage requests from being issued, ensuring
+	 * that no further operations take place while in this state.
+	 */
+	host->emergency_stop = true;
+
 	return err;
 }
 

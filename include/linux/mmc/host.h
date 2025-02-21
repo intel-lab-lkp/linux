@@ -501,6 +501,7 @@ struct mmc_host {
 	unsigned int		can_dma_map_merge:1; /* merging can be used */
 	unsigned int		vqmmc_enabled:1; /* vqmmc regulator is enabled */
 	unsigned int		undervoltage:1;	 /* Undervoltage state */
+	unsigned int		emergency_stop:1; /* Emergency stop. No transfers are allowed. */
 
 	int			rescan_disable;	/* disable card detection */
 	int			rescan_entered;	/* used with nonremovable devices */
