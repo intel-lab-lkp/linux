@@ -41,6 +41,8 @@ void xe_display_pm_runtime_suspend(struct xe_device *xe);
 void xe_display_pm_runtime_suspend_late(struct xe_device *xe);
 void xe_display_pm_runtime_resume(struct xe_device *xe);
 
+u32 xe_display_get_refclk(struct xe_device *xe);
+
 #else
 
 static inline int xe_display_driver_probe_defer(struct pci_dev *pdev) { return 0; }
@@ -71,6 +73,8 @@ static inline void xe_display_pm_resume(struct xe_device *xe) {}
 static inline void xe_display_pm_runtime_suspend(struct xe_device *xe) {}
 static inline void xe_display_pm_runtime_suspend_late(struct xe_device *xe) {}
 static inline void xe_display_pm_runtime_resume(struct xe_device *xe) {}
+
+static u32 xe_display_get_refclk(struct xe_device *xe) { return 38400; }
 
 #endif /* CONFIG_DRM_XE_DISPLAY */
 #endif /* _XE_DISPLAY_H_ */

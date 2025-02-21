@@ -17,6 +17,7 @@
 #include "intel_acpi.h"
 #include "intel_audio.h"
 #include "intel_bw.h"
+#include "intel_cdclk.h"
 #include "intel_display.h"
 #include "intel_display_driver.h"
 #include "intel_display_irq.h"
@@ -547,4 +548,9 @@ no_display:
 	xe->info.probe_display = false;
 	unset_display_features(xe);
 	return 0;
+}
+
+u32 xe_display_get_refclk(struct xe_device *xe)
+{
+	return intel_display_get_refclk(&xe->display);
 }

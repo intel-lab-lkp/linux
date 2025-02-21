@@ -7,6 +7,7 @@
 
 #include "xe_gt_clock.h"
 
+#include "display/xe_display.h"
 #include "regs/xe_gt_regs.h"
 #include "regs/xe_regs.h"
 #include "xe_assert.h"
@@ -14,22 +15,6 @@
 #include "xe_gt.h"
 #include "xe_macros.h"
 #include "xe_mmio.h"
-
-static u32 read_reference_ts_freq(struct xe_gt *gt)
-{
-	u32 ts_override = xe_mmio_read32(&gt->mmio, TIMESTAMP_OVERRIDE);
-	u32 base_freq, frac_freq;
-
-	base_freq = REG_FIELD_GET(TIMESTAMP_OVERRIDE_US_COUNTER_DIVIDER_MASK,
-				  ts_override) + 1;
-	base_freq *= 1000000;
-
-	frac_freq = REG_FIELD_GET(TIMESTAMP_OVERRIDE_US_COUNTER_DENOMINATOR_MASK,
-				  ts_override);
-	frac_freq = 1000000 / (frac_freq + 1);
-
-	return base_freq + frac_freq;
-}
 
 static u32 get_crystal_clock_freq(u32 rpm_config_reg)
 {
@@ -57,14 +42,19 @@ static u32 get_crystal_clock_freq(u32 rpm_config_reg)
 
 int xe_gt_clock_init(struct xe_gt *gt)
 {
+	struct xe_device *xe = gt_to_xe(gt);
 	u32 ctc_reg = xe_mmio_read32(&gt->mmio, CTC_MODE);
 	u32 freq = 0;
 
 	/* Assuming gen11+ so assert this assumption is correct */
-	xe_gt_assert(gt, GRAPHICS_VER(gt_to_xe(gt)) >= 11);
+	xe_gt_assert(gt, GRAPHICS_VER(xe) >= 11);
 
-	if (ctc_reg & CTC_SOURCE_DIVIDE_LOGIC) {
-		freq = read_reference_ts_freq(gt);
+	/*
+	 * Use of the display reference clock to determine GT CS frequency
+	 * is only relevant to pre-Xe2 platforms.
+	 */
+	if (GRAPHICS_VER(xe) < 20 && ctc_reg & CTC_SOURCE_DIVIDE_LOGIC) {
+		freq = xe_display_get_refclk(xe);
 	} else {
 		u32 c0 = xe_mmio_read32(&gt->mmio, RPM_CONFIG0);
 
