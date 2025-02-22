@@ -39,6 +39,9 @@ static int __init debug_thunks(char *str)
 }
 __setup("debug-callthunks", debug_thunks);
 
+DEFINE_PER_CPU_HOT(u64, __x86_call_depth);
+EXPORT_PER_CPU_SYMBOL(__x86_call_depth);
+
 #ifdef CONFIG_CALL_THUNKS_DEBUG
 DEFINE_PER_CPU(u64, __x86_call_count);
 DEFINE_PER_CPU(u64, __x86_ret_count);
