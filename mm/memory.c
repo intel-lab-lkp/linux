@@ -4400,8 +4400,15 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 
 	/* Prevent swapoff from happening to us. */
 	si = get_swap_device(entry);
-	if (unlikely(!si))
+	if (unlikely(!si)) {
+		if (unlikely(!_swap_info_get(entry)))
+			/*
+			 * return VM_FAULT_SIGBUS for invalid swap entry to
+			 * avoid infinite #PF.
+			 */
+			ret = VM_FAULT_SIGBUS;
 		goto out;
+	}
 
 	folio = swap_cache_get_folio(entry, vma, vmf->address);
 	if (folio)
