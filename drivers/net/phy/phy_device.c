@@ -3368,7 +3368,12 @@ static int of_phy_led(struct phy_device *phydev,
 
 	cdev->hw_control_get_device = phy_led_hw_control_get_device;
 #endif
-	cdev->max_brightness = 1;
+	if (phydev->drv->led_max_brightness)
+		cdev->max_brightness =
+			phydev->drv->led_max_brightness(phydev, index);
+	else
+		cdev->max_brightness = 1;
+
 	init_data.devicename = dev_name(&phydev->mdio.dev);
 	init_data.fwnode = of_fwnode_handle(led);
 	init_data.devname_mandatory = true;
