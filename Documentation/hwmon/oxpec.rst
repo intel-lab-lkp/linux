@@ -1,35 +1,41 @@
 .. SPDX-License-Identifier: GPL-2.0-or-later
 
-Kernel driver oxp-sensors
+Kernel driver oxpec
 =========================
 
 Authors:
     - Derek John Clark <derekjohn.clark@gmail.com>
     - Joaquín Ignacio Aramendía <samsagax@gmail.com>
+    - Antheas Kapenekakis <lkml@antheas.dev>
 
 Description:
 ------------
 
-Handheld devices from OneNetbook, AOKZOE, AYANEO, And OrangePi provide fan
-readings and fan control through their embedded controllers.
+Handheld devices from OneXPlayer and AOKZOE provide fan readings and fan
+control through their embedded controllers, which can be accessed via this
+module. If the device has the platform `tt_toggle` attribute (see
+Documentation/ABI/testing/sysfs-platform-oxp), controlling these attributes
+without having it engaged is undefined behavior.
 
-Currently supports OneXPlayer devices, AOKZOE, AYANEO, and OrangePi
-handheld devices. AYANEO devices preceding the AIR and OneXPlayer devices
-preceding the Mini A07 are not supportable as the EC model is different
-and do not have manual control capabilities.
-
-Some OneXPlayer and AOKZOE models have a toggle for changing the behaviour
-of the "Turbo/Silent" button of the device. It will change the key event
-that it triggers with a flip of the `tt_toggle` attribute. See below for
-boards that support this function.
+In addition, for legacy reasons, this driver provides hwmon functionality
+to Ayaneo devices, and the OrangePi Neo (AOKZOE is a sister company of
+OneXPlayer and uses the same EC).
 
 Supported devices
 -----------------
 
 Currently the driver supports the following handhelds:
-
  - AOKZOE A1
  - AOKZOE A1 PRO
+ - OneXPlayer 2/2 Pro
+ - OneXPlayer AMD
+ - OneXPlayer mini AMD
+ - OneXPlayer mini AMD PRO
+ - OneXPlayer OneXFly variants
+ - OneXPlayer X1 variants
+
+In addition, until a driver is upstreamed for the following, the driver
+also supports controlling them:
  - AYANEO 2
  - AYANEO 2S
  - AYANEO AIR
@@ -41,28 +47,7 @@ Currently the driver supports the following handhelds:
  - AYANEO Geek
  - AYANEO Geek 1S
  - AYANEO KUN
- - OneXPlayer 2
- - OneXPlayer 2 Pro
- - OneXPlayer AMD
- - OneXPlayer mini AMD
- - OneXPlayer mini AMD PRO
- - OneXPlayer OneXFly
- - OneXPlayer X1 A
- - OneXPlayer X1 i
- - OneXPlayer X1 mini
  - OrangePi NEO-01
-
-"Turbo/Silent" button behaviour toggle is only supported on:
- - AOK ZOE A1
- - AOK ZOE A1 PRO
- - OneXPlayer 2
- - OneXPlayer 2 Pro
- - OneXPlayer mini AMD (only with updated alpha BIOS)
- - OneXPlayer mini AMD PRO
- - OneXPlayer OneXFly
- - OneXPlayer X1 A
- - OneXPlayer X1 i
- - OneXPlayer X1 mini
 
 Sysfs entries
 -------------
@@ -80,10 +65,3 @@ pwm1
   Read Write. Read this attribute to see current duty cycle in the range [0-255].
   When pwm1_enable is set to "1" (manual) write any value in the range [0-255]
   to set fan speed.
-
-tt_toggle
-  Read Write. Read this attribute to check the status of the turbo/silent
-  button behaviour function. Write "1" to activate the switch and "0" to
-  deactivate it. The specific keycodes and behaviour is specific to the device
-  both with this function on and off. This attribute is attached to the platform
-  driver and not to the hwmon driver (/sys/devices/platform/oxp-platform/tt_toggle)
