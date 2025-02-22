@@ -31,6 +31,9 @@
 DEFINE_PER_CPU_SHARED_ALIGNED(irq_cpustat_t, irq_stat);
 EXPORT_PER_CPU_SYMBOL(irq_stat);
 
+DEFINE_PER_CPU_HOT(u16, softirq_pending);
+EXPORT_PER_CPU_SYMBOL(softirq_pending);
+
 atomic_t irq_err_count;
 
 /*
