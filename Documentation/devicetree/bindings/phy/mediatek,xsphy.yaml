@@ -49,6 +49,7 @@ properties:
       - enum:
           - mediatek,mt3611-xsphy
           - mediatek,mt3612-xsphy
+          - mediatek,mt8196-xsphy
       - const: mediatek,xsphy
 
   reg:
@@ -128,6 +129,13 @@ patternProperties:
         $ref: /schemas/types.yaml#/definitions/uint32
         minimum: 1
         maximum: 7
+
+      mediatek,disconnect-threshold:
+        description:
+          The selection of disconnect threshold (U2 phy)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 1
+        maximum: 15
 
       mediatek,efuse-intr:
         description:
