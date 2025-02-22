@@ -362,7 +362,7 @@ while processing each item:
 
 Due to the additional locking and atomic operations, drivers that *can*
 avoid accessing the gpu_vm's list outside of the dma_resv lock
-might want to avoid also this iteration scheme. Particularly, if the
+might also want to avoid this iteration scheme. Particularly, if the
 driver anticipates a large number of list items. For lists where the
 anticipated number of list items is small, where list iteration doesn't
 happen very often or if there is a significant additional cost
