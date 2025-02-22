@@ -289,13 +289,11 @@ static int sco_chan_add(struct sco_conn *conn, struct sock *sk,
 {
 	int err = 0;
 
-	sco_conn_lock(conn);
 	if (conn->sk)
 		err = -EBUSY;
 	else
 		__sco_chan_add(conn, sk, parent);
 
-	sco_conn_unlock(conn);
 	return err;
 }
 
@@ -343,11 +341,13 @@ static int sco_connect(struct sock *sk)
 		goto unlock;
 	}
 
+	sco_conn_lock(conn);
 	lock_sock(sk);
 
 	err = sco_chan_add(conn, sk, NULL);
 	if (err) {
 		release_sock(sk);
+		sco_conn_unlock(conn);
 		goto unlock;
 	}
 
@@ -363,6 +363,7 @@ static int sco_connect(struct sock *sk)
 	}
 
 	release_sock(sk);
+	sco_conn_unlock(conn);
 
 unlock:
 	hci_dev_unlock(hdev);
