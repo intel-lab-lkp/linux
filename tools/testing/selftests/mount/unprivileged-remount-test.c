@@ -45,6 +45,8 @@
 # define MS_STRICTATIME (1 << 24)
 #endif
 
+#define MAX_BUF_SIZE 4096
+
 static void die(char *fmt, ...)
 {
 	va_list ap;
@@ -56,7 +58,7 @@ static void die(char *fmt, ...)
 
 static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list ap)
 {
-	char buf[4096];
+	char buf[MAX_BUF_SIZE];
 	int fd;
 	ssize_t written;
 	int buf_len;
