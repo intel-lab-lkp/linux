@@ -41,6 +41,8 @@
 #include <linux/uaccess.h>
 #include <linux/unistd.h>
 
+#include "phy-caps.h"
+
 MODULE_DESCRIPTION("PHY library");
 MODULE_AUTHOR("Andy Fleming");
 MODULE_LICENSE("GPL");
@@ -3793,6 +3795,7 @@ static int __init phy_init(void)
 	if (rc)
 		goto err_ethtool_phy_ops;
 
+	phy_caps_init();
 	features_init();
 
 	rc = phy_driver_register(&genphy_c45_driver, THIS_MODULE);
