@@ -110,10 +110,14 @@ struct throtl_grp {
 	unsigned int last_io_disp[2];
 
 	/*
-	 * The following two fields are updated when new configuration is
-	 * submitted while some bios are still throttled, they record how many
-	 * bytes/ios are waited already in previous configuration, and they will
-	 * be used to calculate wait time under new configuration.
+	 * The following two fields are updated when:
+	 * 1) new configuration is submitted while some bios are still
+	 * throttled, they record how many bytes/ios are waited already in
+	 * previous configuration;
+	 * 2) IOs which may cause priority inversions are dispatched while tg is
+	 * over limit, these IOs will be dispatched directly;
+	 * 3) While calculating wait_time for IO, extra_bytes * HZ is not
+	 * divisible by bps_limit, the remainder will be recorded;
 	 */
 	long long carryover_bytes[2];
 	int carryover_ios[2];

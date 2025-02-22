@@ -703,9 +703,10 @@ static unsigned long tg_within_iops_limit(struct throtl_grp *tg, struct bio *bio
 }
 
 static unsigned long tg_within_bps_limit(struct throtl_grp *tg, struct bio *bio,
-				u64 bps_limit)
+				u64 bps_limit, bool *has_debt)
 {
 	bool rw = bio_data_dir(bio);
+	long long carryover_bytes;
 	long long bytes_allowed;
 	u64 extra_bytes;
 	unsigned long jiffy_elapsed, jiffy_wait, jiffy_elapsed_rnd;
@@ -730,10 +731,16 @@ static unsigned long tg_within_bps_limit(struct throtl_grp *tg, struct bio *bio,
 
 	/* Calc approx time to dispatch */
 	extra_bytes = tg->bytes_disp[rw] + bio_size - bytes_allowed;
-	jiffy_wait = div64_u64(extra_bytes * HZ, bps_limit);
-
-	if (!jiffy_wait)
-		jiffy_wait = 1;
+	jiffy_wait = div64_u64_rem(extra_bytes * HZ, bps_limit, &carryover_bytes);
+	if (carryover_bytes) {
+		/*
+		 * If extra_bytes is not divisible, the remainder is recorded as
+		 * debt. Caller must ensure the current slice has at least 1
+		 * more jiffies to repay the debt.
+		 */
+		*has_debt = true;
+		tg->carryover_bytes[rw] -= div64_u64(carryover_bytes, HZ);
+	}
 
 	/*
 	 * This wait time is without taking into consideration the rounding
@@ -754,6 +761,7 @@ static bool tg_may_dispatch(struct throtl_grp *tg, struct bio *bio,
 	unsigned long bps_wait = 0, iops_wait = 0, max_wait = 0;
 	u64 bps_limit = tg_bps_limit(tg, rw);
 	u32 iops_limit = tg_iops_limit(tg, rw);
+	bool has_debt = false;
 
 	/*
  	 * Currently whole state machine of group depends on first bio
@@ -784,18 +792,20 @@ static bool tg_may_dispatch(struct throtl_grp *tg, struct bio *bio,
 	else
 		throtl_extend_slice(tg, rw, jiffies + tg->td->throtl_slice);
 
-	bps_wait = tg_within_bps_limit(tg, bio, bps_limit);
+	bps_wait = tg_within_bps_limit(tg, bio, bps_limit, &has_debt);
 	iops_wait = tg_within_iops_limit(tg, bio, iops_limit);
 	if (bps_wait + iops_wait == 0) {
 		if (wait)
 			*wait = 0;
+		if (has_debt)
+			throtl_extend_slice(tg, rw, jiffies + 1);
 		return true;
 	}
 
 	max_wait = max(bps_wait, iops_wait);
 	if (wait)
 		*wait = max_wait;
-	throtl_extend_slice(tg, rw, jiffies + max_wait);
+	throtl_extend_slice(tg, rw, jiffies + max_wait + has_debt);
 
 	return false;
 }
