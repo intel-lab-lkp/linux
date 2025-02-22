@@ -524,6 +524,9 @@ static inline void throtl_set_slice_end(struct throtl_grp *tg, bool rw,
 static inline void throtl_extend_slice(struct throtl_grp *tg, bool rw,
 				       unsigned long jiffy_end)
 {
+	if (!time_before(tg->slice_end[rw], jiffy_end))
+		return;
+
 	throtl_set_slice_end(tg, rw, jiffy_end);
 	throtl_log(&tg->service_queue,
 		   "[%c] extend slice start=%lu end=%lu jiffies=%lu",
@@ -778,12 +781,8 @@ static bool tg_may_dispatch(struct throtl_grp *tg, struct bio *bio,
 	 */
 	if (throtl_slice_used(tg, rw) && !(tg->service_queue.nr_queued[rw]))
 		throtl_start_new_slice(tg, rw, true);
-	else {
-		if (time_before(tg->slice_end[rw],
-		    jiffies + tg->td->throtl_slice))
-			throtl_extend_slice(tg, rw,
-				jiffies + tg->td->throtl_slice);
-	}
+	else
+		throtl_extend_slice(tg, rw, jiffies + tg->td->throtl_slice);
 
 	bps_wait = tg_within_bps_limit(tg, bio, bps_limit);
 	iops_wait = tg_within_iops_limit(tg, bio, iops_limit);
@@ -794,12 +793,9 @@ static bool tg_may_dispatch(struct throtl_grp *tg, struct bio *bio,
 	}
 
 	max_wait = max(bps_wait, iops_wait);
-
 	if (wait)
 		*wait = max_wait;
-
-	if (time_before(tg->slice_end[rw], jiffies + max_wait))
-		throtl_extend_slice(tg, rw, jiffies + max_wait);
+	throtl_extend_slice(tg, rw, jiffies + max_wait);
 
 	return false;
 }
