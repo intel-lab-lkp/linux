@@ -12,17 +12,6 @@
 
 struct task_struct;
 
-struct pcpu_hot {
-		u8	pad[64];
-};
-static_assert(sizeof(struct pcpu_hot) == 64);
-
-DECLARE_PER_CPU_ALIGNED(struct pcpu_hot, pcpu_hot);
-
-/* const-qualified alias to pcpu_hot, aliased by linker. */
-DECLARE_PER_CPU_ALIGNED(const struct pcpu_hot __percpu_seg_override,
-			const_pcpu_hot);
-
 DECLARE_PER_CPU_HOT(struct task_struct *, current_task);
 /* const-qualified alias provided by the linker. */
 DECLARE_PER_CPU_HOT(struct task_struct * const, const_current_task);
