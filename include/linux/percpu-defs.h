@@ -113,6 +113,16 @@
 	DEFINE_PER_CPU_SECTION(type, name, "")
 
 /*
+ * Declaration/definition used for per-CPU variables that are frequently
+ * accessed and should be in a single cacheline.
+ */
+#define DECLARE_PER_CPU_HOT(type, name)					\
+	DECLARE_PER_CPU_SECTION(type, name, "..hot.." #name)
+
+#define DEFINE_PER_CPU_HOT(type, name)					\
+	DEFINE_PER_CPU_SECTION(type, name, "..hot.." #name)
+
+/*
  * Declaration/definition used for per-CPU variables that must be cacheline
  * aligned under SMP conditions so that, whilst a particular instance of the
  * data corresponds to a particular CPU, inefficiencies due to direct access by
