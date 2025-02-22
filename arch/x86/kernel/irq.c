@@ -34,6 +34,11 @@ EXPORT_PER_CPU_SYMBOL(irq_stat);
 DEFINE_PER_CPU_HOT(u16, softirq_pending);
 EXPORT_PER_CPU_SYMBOL(softirq_pending);
 
+DEFINE_PER_CPU_HOT(struct irq_stack *, hardirq_stack_ptr);
+#ifdef CONFIG_X86_64
+DEFINE_PER_CPU_HOT(bool, hardirq_stack_inuse);
+#endif
+
 atomic_t irq_err_count;
 
 /*

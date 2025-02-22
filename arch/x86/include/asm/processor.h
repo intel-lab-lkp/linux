@@ -420,6 +420,13 @@ struct irq_stack {
 	char		stack[IRQ_STACK_SIZE];
 } __aligned(IRQ_STACK_SIZE);
 
+DECLARE_PER_CPU_HOT(struct irq_stack *, hardirq_stack_ptr);
+#ifdef CONFIG_X86_64
+DECLARE_PER_CPU_HOT(bool, hardirq_stack_inuse);
+#else
+DECLARE_PER_CPU_HOT(struct irq_stack *, softirq_stack_ptr);
+#endif
+
 DECLARE_PER_CPU_HOT(unsigned long, cpu_current_top_of_stack);
 /* const-qualified alias provided by the linker. */
 DECLARE_PER_CPU_HOT(const unsigned long, const_cpu_current_top_of_stack);

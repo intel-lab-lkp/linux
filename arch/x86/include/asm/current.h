@@ -13,17 +13,7 @@
 struct task_struct;
 
 struct pcpu_hot {
-	union {
-		struct {
-			void			*hardirq_stack_ptr;
-#ifdef CONFIG_X86_64
-			bool			hardirq_stack_inuse;
-#else
-			void			*softirq_stack_ptr;
-#endif
-		};
 		u8	pad[64];
-	};
 };
 static_assert(sizeof(struct pcpu_hot) == 64);
 
