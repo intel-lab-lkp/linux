@@ -58,6 +58,18 @@ unsigned int lock_system_sleep(void)
 }
 EXPORT_SYMBOL_GPL(lock_system_sleep);
 
+unsigned int trylock_system_sleep(void)
+{
+	unsigned int flags = current->flags;
+	current->flags |= PF_NOFREEZE;
+	if (!mutex_trylock(&system_transition_mutex)) {
+		current->flags &= ~PF_NOFREEZE;
+		return 0;
+	}
+	return flags;
+}
+EXPORT_SYMBOL_GPL(trylock_system_sleep);
+
 void unlock_system_sleep(unsigned int flags)
 {
 	if (!(flags & PF_NOFREEZE))

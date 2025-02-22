@@ -1449,7 +1449,9 @@ static int hibernate_compressor_param_set(const char *compressor,
 	unsigned int sleep_flags;
 	int index, ret;
 
-	sleep_flags = lock_system_sleep();
+	sleep_flags = trylock_system_sleep();
+	if (!sleep_flags)
+		return -EBUSY;
 
 	index = sysfs_match_string(comp_alg_enabled, compressor);
 	if (index >= 0) {
