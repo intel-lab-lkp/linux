@@ -54,6 +54,14 @@ static void die(char *fmt, ...)
 	exit(EXIT_FAILURE);
 }
 
+static void close_or_die(char *filename, int fd)
+{
+	if (close(fd) != 0) {
+		die("close of %s failed: %s\n",
+		filename, strerror(errno));
+	}
+}
+
 static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list ap)
 {
 	char buf[4096];
@@ -79,6 +87,7 @@ static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list
 	}
 	written = write(fd, buf, buf_len);
 	if (written != buf_len) {
+		close_or_die(filename, fd);
 		if (written >= 0) {
 			die("short write to %s\n", filename);
 		} else {
@@ -86,10 +95,7 @@ static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list
 				filename, strerror(errno));
 		}
 	}
-	if (close(fd) != 0) {
-		die("close of %s failed: %s\n",
-			filename, strerror(errno));
-	}
+	close_or_die(filename, fd);
 }
 
 static void maybe_write_file(char *filename, char *fmt, ...)
