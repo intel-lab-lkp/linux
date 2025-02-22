@@ -21,4 +21,7 @@ void linkmode_from_caps(unsigned long *linkmode, unsigned long caps);
 unsigned long phy_interface_caps(phy_interface_t interface);
 int phy_interface_max_speed(phy_interface_t interface);
 
+size_t phy_caps_speeds(unsigned int *speeds, size_t size,
+		       unsigned long *linkmodes);
+
 #endif /* __PHY_CAPS_H */
