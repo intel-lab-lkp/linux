@@ -146,6 +146,19 @@ void phy_caps_linkmode_max_speed(u32 max_speed, unsigned long *linkmodes)
 }
 
 /**
+ * phy_caps_valid() - Validate a linkmodes set agains given speed and duplex
+ */
+bool phy_caps_valid(int speed, int duplex, const unsigned long *linkmodes)
+{
+	int capa = speed_duplex_to_capa(speed, duplex);
+
+	if (capa < 0)
+		return false;
+
+	return linkmode_intersects(link_caps[capa].linkmodes, linkmodes);
+}
+
+/**
  * linkmode_from_caps() - Convert capabilities to ethtool link modes
  * @linkmodes: ethtool linkmode mask (must be already initialised)
  * @caps: bitmask of MAC capabilities
