@@ -9,4 +9,6 @@
 
 void linkmode_from_caps(unsigned long *linkmode, unsigned long caps);
 
+unsigned long phy_interface_caps(phy_interface_t interface);
+
 #endif /* __PHY_CAPS_H */
