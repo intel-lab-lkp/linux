@@ -1605,7 +1605,8 @@ void mm_unaccount_pinned_pages(struct mmpin *mmp)
 }
 EXPORT_SYMBOL_GPL(mm_unaccount_pinned_pages);
 
-static struct ubuf_info *msg_zerocopy_alloc(struct sock *sk, size_t size)
+static struct ubuf_info *msg_zerocopy_alloc(struct sock *sk, size_t size,
+					    bool devmem)
 {
 	struct ubuf_info_msgzc *uarg;
 	struct sk_buff *skb;
@@ -1620,7 +1621,7 @@ static struct ubuf_info *msg_zerocopy_alloc(struct sock *sk, size_t size)
 	uarg = (void *)skb->cb;
 	uarg->mmp.user = NULL;
 
-	if (mm_account_pinned_pages(&uarg->mmp, size)) {
+	if (likely(!devmem) && mm_account_pinned_pages(&uarg->mmp, size)) {
 		kfree_skb(skb);
 		return NULL;
 	}
@@ -1643,7 +1644,7 @@ static inline struct sk_buff *skb_from_uarg(struct ubuf_info_msgzc *uarg)
 }
 
 struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
-				       struct ubuf_info *uarg)
+				       struct ubuf_info *uarg, bool devmem)
 {
 	if (uarg) {
 		struct ubuf_info_msgzc *uarg_zc;
@@ -1673,7 +1674,8 @@ struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
 
 		next = (u32)atomic_read(&sk->sk_zckey);
 		if ((u32)(uarg_zc->id + uarg_zc->len) == next) {
-			if (mm_account_pinned_pages(&uarg_zc->mmp, size))
+			if (likely(!devmem) &&
+			    mm_account_pinned_pages(&uarg_zc->mmp, size))
 				return NULL;
 			uarg_zc->len++;
 			uarg_zc->bytelen = bytelen;
@@ -1688,7 +1690,7 @@ struct ubuf_info *msg_zerocopy_realloc(struct sock *sk, size_t size,
 	}
 
 new_alloc:
-	return msg_zerocopy_alloc(sk, size);
+	return msg_zerocopy_alloc(sk, size, devmem);
 }
 EXPORT_SYMBOL_GPL(msg_zerocopy_realloc);
 
@@ -1792,7 +1794,8 @@ EXPORT_SYMBOL_GPL(msg_zerocopy_ubuf_ops);
 
 int skb_zerocopy_iter_stream(struct sock *sk, struct sk_buff *skb,
 			     struct msghdr *msg, int len,
-			     struct ubuf_info *uarg)
+			     struct ubuf_info *uarg,
+			     struct net_devmem_dmabuf_binding *binding)
 {
 	int err, orig_len = skb->len;
 
@@ -1811,7 +1814,8 @@ int skb_zerocopy_iter_stream(struct sock *sk, struct sk_buff *skb,
 			return -EEXIST;
 	}
 
-	err = __zerocopy_sg_from_iter(msg, sk, skb, &msg->msg_iter, len);
+	err = __zerocopy_sg_from_iter(msg, sk, skb, &msg->msg_iter, len,
+				      binding);
 	if (err == -EFAULT || (err == -EMSGSIZE && skb->len == orig_len)) {
 		struct sock *save_sk = skb->sk;
 
