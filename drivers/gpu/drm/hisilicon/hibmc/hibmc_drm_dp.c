@@ -9,9 +9,12 @@
 #include <drm/drm_modes.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_client.h>
 
 #include "hibmc_drm_drv.h"
 #include "dp/dp_hw.h"
+
+#define DP_MASKED_SINK_HPD_PLUG_INT	BIT(2)
 
 static int hibmc_dp_connector_get_modes(struct drm_connector *connector)
 {
@@ -98,6 +101,58 @@ static const struct drm_encoder_helper_funcs hibmc_dp_encoder_helper_funcs = {
 	.atomic_disable = hibmc_dp_encoder_disable,
 };
 
+irqreturn_t hibmc_dp_hpd_isr(int irq, void *arg)
+{
+	struct drm_device *dev = (struct drm_device *)arg;
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(dev);
+	int idx;
+
+	if (!drm_dev_enter(dev, &idx))
+		return -ENODEV;
+
+	if (priv->dp.irq_status & DP_MASKED_SINK_HPD_PLUG_INT) {
+		drm_dbg_dp(&priv->dev, "HPD IN isr occur!\n");
+		priv->dp.hpd_status = 1;
+	} else {
+		drm_dbg_dp(&priv->dev, "HPD OUT isr occur!\n");
+		priv->dp.hpd_status = 0;
+	}
+
+	if (dev->registered)
+		drm_connector_helper_hpd_irq_event(&priv->dp.connector);
+
+	drm_dev_exit(idx);
+
+	return IRQ_HANDLED;
+}
+
+static int hibmc_dp_hpd_event(struct drm_client_dev *client)
+{
+	struct hibmc_dp *dp = container_of(client, struct hibmc_dp, client);
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(dp->drm_dev);
+	struct drm_display_mode *mode = &priv->crtc.state->adjusted_mode;
+	int ret;
+
+	if (dp->hpd_status) {
+		hibmc_dp_hpd_cfg(&priv->dp);
+		ret = hibmc_dp_prepare(dp, mode);
+		if (ret)
+			return ret;
+
+		hibmc_dp_display_en(dp, true);
+	} else {
+		hibmc_dp_display_en(dp, false);
+		hibmc_dp_reset_link(&priv->dp);
+	}
+
+	return 0;
+}
+
+static const struct drm_client_funcs hibmc_dp_client_funcs = {
+	.hotplug = hibmc_dp_hpd_event,
+	.unregister = drm_client_release,
+};
+
 int hibmc_dp_init(struct hibmc_drm_private *priv)
 {
 	struct drm_device *dev = &priv->dev;
@@ -137,6 +192,12 @@ int hibmc_dp_init(struct hibmc_drm_private *priv)
 	drm_connector_helper_add(connector, &hibmc_dp_conn_helper_funcs);
 
 	drm_connector_attach_encoder(connector, encoder);
+
+	ret = drm_client_init(dev, &dp->client, "hibmc-DP-HPD", &hibmc_dp_client_funcs);
+	if (ret)
+		return ret;
+
+	drm_client_register(&dp->client);
 
 	return 0;
 }
