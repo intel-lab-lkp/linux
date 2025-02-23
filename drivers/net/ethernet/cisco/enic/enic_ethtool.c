@@ -4,6 +4,7 @@
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
 #include <linux/net_tstamp.h>
+#include <net/addrconf.h>
 
 #include "enic_res.h"
 #include "enic.h"
@@ -235,10 +236,12 @@ static int enic_set_ringparam(struct net_device *netdev,
 {
 	struct enic *enic = netdev_priv(netdev);
 	struct vnic_enet_config *c = &enic->config;
+	struct inet6_dev *idev = NULL;
 	int running = netif_running(netdev);
 	unsigned int rx_pending;
 	unsigned int tx_pending;
 	int err = 0;
+	__s32 old_keep_addr_on_down = 0;
 
 	if (ring->rx_mini_max_pending || ring->rx_mini_pending) {
 		netdev_info(netdev,
@@ -266,8 +269,25 @@ static int enic_set_ringparam(struct net_device *netdev,
 			    ENIC_MAX_WQ_DESCS);
 		return -EINVAL;
 	}
-	if (running)
+	if (running) {
+		/* Temporarily store the old value of keep_addr_on_down for this specific
+		 * device and set it to 1. This ensures that the IPv6 stack call triggered
+		 * by the dev_close function in the next line will not remove the IPv6
+		 * addresses. The keep_addr_on_down value will be restored to its original
+		 * value before calling dev_open, ensuring that this temporary change does
+		 * not affect any future device changes.
+		 *
+		 * The rtnl lock was already acquired in the caller of this function,
+		 * so it is safe to call the function below.
+		 */
+		idev = __in6_dev_get(netdev);
+		if (idev) {
+			old_keep_addr_on_down = idev->cnf.keep_addr_on_down;
+			idev->cnf.keep_addr_on_down = 1;
+		}
 		dev_close(netdev);
+	}
+
 	c->rq_desc_count =
 		ring->rx_pending & 0xffffffe0; /* must be aligned to groups of 32 */
 	c->wq_desc_count =
@@ -282,6 +302,9 @@ static int enic_set_ringparam(struct net_device *netdev,
 	}
 	enic_init_vnic_resources(enic);
 	if (running) {
+		if (idev)
+			idev->cnf.keep_addr_on_down = old_keep_addr_on_down;
+
 		err = dev_open(netdev, NULL);
 		if (err)
 			goto err_out;
@@ -290,6 +313,8 @@ static int enic_set_ringparam(struct net_device *netdev,
 err_out:
 	c->rq_desc_count = rx_pending;
 	c->wq_desc_count = tx_pending;
+	if (idev)
+		idev->cnf.keep_addr_on_down = old_keep_addr_on_down;
 	return err;
 }
 
