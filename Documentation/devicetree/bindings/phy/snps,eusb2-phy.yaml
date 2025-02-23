@@ -23,6 +23,7 @@ properties:
               - qcom,x1e80100-snps-eusb2-phy
           - const: qcom,sm8550-snps-eusb2-phy
       - const: qcom,sm8550-snps-eusb2-phy
+      - const: samsung,exynos2200-snps-eusb2-phy
 
   reg:
     maxItems: 1
@@ -31,12 +32,12 @@ properties:
     const: 0
 
   clocks:
-    items:
-      - description: ref
+    minItems: 1
+    maxItems: 3
 
   clock-names:
-    items:
-      - const: ref
+    minItems: 1
+    maxItems: 3
 
   resets:
     maxItems: 1
@@ -58,11 +59,60 @@ required:
   - compatible
   - reg
   - "#phy-cells"
-  - clocks
-  - clock-names
   - vdd-supply
   - vdda12-supply
-  - resets
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,sm8550-snps-eusb2-phy
+
+    then:
+      properties:
+        reg:
+          maxItems: 1
+
+        clocks:
+          items:
+            - description: ref
+
+        clock-names:
+          items:
+            - const: ref
+
+      required:
+        - clocks
+        - clock-names
+        - resets
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - samsung,exynos2200-snps-eusb2-phy
+
+    then:
+      properties:
+
+        clocks:
+          items:
+            - description: Reference clock
+            - description: Bus (APB) clock
+            - description: Control clock
+
+        clock-names:
+          items:
+            - const: ref
+            - const: bus
+            - const: ctrl
+
+      required:
+        - clocks
+        - clock-names
 
 additionalProperties: false
 
