@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
 %YAML 1.2
 ---
-$id: http://devicetree.org/schemas/phy/qcom,snps-eusb2-phy.yaml#
+$id: http://devicetree.org/schemas/phy/snps,eusb2-phy.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Qualcomm SNPS eUSB2 phy controller
+title: SNPS eUSB2 phy controller
 
 maintainers:
   - Abel Vesa <abel.vesa@linaro.org>
 
 description:
-  eUSB2 controller supports LS/FS/HS usb connectivity on Qualcomm chipsets.
+  eUSB2 controller supports LS/FS/HS usb connectivity.
 
 properties:
   compatible:
