@@ -185,6 +185,7 @@ static int kvm_ptdump_guest_close(struct inode *m, struct file *file)
 }
 
 static const struct file_operations kvm_ptdump_guest_fops = {
+	.owner		= THIS_MODULE,
 	.open		= kvm_ptdump_guest_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -244,6 +245,7 @@ static int kvm_pgtable_debugfs_close(struct inode *m, struct file *file)
 }
 
 static const struct file_operations kvm_pgtable_range_fops = {
+	.owner		= THIS_MODULE,
 	.open		= kvm_pgtable_range_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -251,6 +253,7 @@ static const struct file_operations kvm_pgtable_range_fops = {
 };
 
 static const struct file_operations kvm_pgtable_levels_fops = {
+	.owner		= THIS_MODULE,
 	.open		= kvm_pgtable_levels_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
