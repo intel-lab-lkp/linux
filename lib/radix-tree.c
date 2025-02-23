@@ -292,6 +292,9 @@ void radix_tree_node_rcu_free(struct rcu_head *head)
 	struct radix_tree_node *node =
 			container_of(head, struct radix_tree_node, rcu_head);
 
+	if (unlikely(!node))
+		return; //Prevent NULL deref
+
 	/*
 	 * Must only free zeroed nodes into the slab.  We can be left with
 	 * non-NULL entries by radix_tree_free_nodes, so clear the entries
