@@ -17,6 +17,7 @@ arch/x86/include/asm/emulate_prefix.h
 arch/x86/lib/x86-opcode-map.txt
 arch/x86/tools/gen-insn-attr-x86.awk
 include/linux/static_call_types.h
+tools/objtool/noreturns.h
 "
 
 SYNC_CHECK_FILES='
@@ -24,6 +25,7 @@ arch/x86/include/asm/inat.h
 arch/x86/include/asm/insn.h
 arch/x86/lib/inat.c
 arch/x86/lib/insn.c
+include/linux/noreturns.h
 '
 fi
 
