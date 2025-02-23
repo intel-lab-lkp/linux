@@ -475,7 +475,8 @@ err_package_label:
 err_panel_label:
 	kfree(dst->board_label);
 err_board_label:
-	kfree(dst->freq_supported);
+	if (src->freq_supported_num)
+		kfree(dst->freq_supported);
 	return -ENOMEM;
 }
 
