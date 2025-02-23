@@ -1975,8 +1975,15 @@ no_page:
 
 		if (err == -EEXIST)
 			goto repeat;
-		if (err)
+		if (err) {
+			/*
+			 * Presumably ENOMEM, either from when allocating or
+			 * adding folio (this one for xarray node)
+			 */
+			if (fgp_flags & FGP_NOWAIT)
+				err = -EAGAIN;
 			return ERR_PTR(err);
+		}
 		/*
 		 * filemap_add_folio locks the page, and for mmap
 		 * we expect an unlocked page.
