@@ -5,6 +5,7 @@
 #include <linux/livepatch.h>
 
 extern struct klp_patch *klp_transition_patch;
+extern int klp_target_state;
 
 void klp_init_transition(struct klp_patch *patch, int state);
 void klp_cancel_transition(void);

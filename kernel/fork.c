@@ -2544,7 +2544,7 @@ __latent_entropy struct task_struct *copy_process(
 		p->exit_signal = args->exit_signal;
 	}
 
-	klp_copy_process(p);
+	klp_init_process(p);
 
 	sched_core_fork(p);
 

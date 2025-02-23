@@ -95,7 +95,12 @@ static void notrace klp_ftrace_handler(unsigned long ip,
 
 		patch_state = current->patch_state;
 
-		WARN_ON_ONCE(patch_state == KLP_TRANSITION_IDLE);
+		/* If the patch_state is KLP_TRANSITION_IDLE, it indicates the
+		 * task was forked after klp_init_transition(). For this newly
+		 * forked task, it is safe to switch it to klp_target_state.
+		 */
+		if (patch_state == KLP_TRANSITION_IDLE)
+			current->patch_state = klp_target_state;
 
 		if (patch_state == KLP_TRANSITION_UNPATCHED) {
 			/*

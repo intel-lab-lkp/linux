@@ -23,7 +23,7 @@ static DEFINE_PER_CPU(unsigned long[MAX_STACK_ENTRIES], klp_stack_entries);
 
 struct klp_patch *klp_transition_patch;
 
-static int klp_target_state = KLP_TRANSITION_IDLE;
+int klp_target_state = KLP_TRANSITION_IDLE;
 
 static unsigned int klp_signals_cnt;
 
@@ -294,6 +294,13 @@ static int klp_check_and_switch_task(struct task_struct *task, void *arg)
 {
 	int ret;
 
+	/* If the patch_state remains KLP_TRANSITION_IDLE at this point, it
+	 * indicates that the task was forked after klp_init_transition(). For
+	 * this newly forked task, it is now safe to perform the switch.
+	 */
+	if (task->patch_state == KLP_TRANSITION_IDLE)
+		goto out;
+
 	if (task_curr(task) && task != current)
 		return -EBUSY;
 
@@ -301,6 +308,7 @@ static int klp_check_and_switch_task(struct task_struct *task, void *arg)
 	if (ret)
 		return ret;
 
+out:
 	clear_tsk_thread_flag(task, TIF_PATCH_PENDING);
 	task->patch_state = klp_target_state;
 	return 0;
@@ -466,11 +474,11 @@ void klp_try_complete_transition(void)
 	 * Usually this will transition most (or all) of the tasks on a system
 	 * unless the patch includes changes to a very common function.
 	 */
-	read_lock(&tasklist_lock);
+	rcu_read_lock();
 	for_each_process_thread(g, task)
 		if (!klp_try_switch_task(task))
 			complete = false;
-	read_unlock(&tasklist_lock);
+	rcu_read_unlock();
 
 	/*
 	 * Ditto for the idle "swapper" tasks.
@@ -694,25 +702,10 @@ void klp_reverse_transition(void)
 }
 
 /* Called from copy_process() during fork */
-void klp_copy_process(struct task_struct *child)
+void klp_init_process(struct task_struct *child)
 {
-
-	/*
-	 * The parent process may have gone through a KLP transition since
-	 * the thread flag was copied in setup_thread_stack earlier. Bring
-	 * the task flag up to date with the parent here.
-	 *
-	 * The operation is serialized against all klp_*_transition()
-	 * operations by the tasklist_lock. The only exceptions are
-	 * klp_update_patch_state(current) and __klp_sched_try_switch(), but we
-	 * cannot race with them because we are current.
-	 */
-	if (test_tsk_thread_flag(current, TIF_PATCH_PENDING))
-		set_tsk_thread_flag(child, TIF_PATCH_PENDING);
-	else
-		clear_tsk_thread_flag(child, TIF_PATCH_PENDING);
-
-	child->patch_state = current->patch_state;
+	clear_tsk_thread_flag(child, TIF_PATCH_PENDING);
+	child->patch_state = KLP_TRANSITION_IDLE;
 }
 
 /*

@@ -198,7 +198,7 @@ int klp_enable_patch(struct klp_patch *);
 int klp_module_coming(struct module *mod);
 void klp_module_going(struct module *mod);
 
-void klp_copy_process(struct task_struct *child);
+void klp_init_process(struct task_struct *child);
 void klp_update_patch_state(struct task_struct *task);
 
 static inline bool klp_patch_pending(struct task_struct *task)
@@ -241,7 +241,7 @@ static inline int klp_module_coming(struct module *mod) { return 0; }
 static inline void klp_module_going(struct module *mod) {}
 static inline bool klp_patch_pending(struct task_struct *task) { return false; }
 static inline void klp_update_patch_state(struct task_struct *task) {}
-static inline void klp_copy_process(struct task_struct *child) {}
+static inline void klp_init_process(struct task_struct *child) {}
 
 static inline
 int klp_apply_section_relocs(struct module *pmod, Elf_Shdr *sechdrs,
