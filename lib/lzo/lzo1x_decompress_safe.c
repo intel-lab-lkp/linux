@@ -21,7 +21,6 @@
 #include "lzodefs.h"
 
 #define HAVE_IP(x)      ((size_t)(ip_end - ip) >= (size_t)(x))
-#define HAVE_OP(x)      ((size_t)(op_end - op) >= (size_t)(x))
 #define NEED_IP(x)      if (!HAVE_IP(x)) goto input_overrun
 #define NEED_OP(x)      if (!HAVE_OP(x)) goto output_overrun
 #define TEST_LB(m_pos)  if ((m_pos) < out) goto lookbehind_overrun

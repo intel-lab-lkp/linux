@@ -19,6 +19,7 @@
  */
 #define LZO_VERSION 1
 
+#define HAVE_OP(x)      ((size_t)(op_end - op) >= (size_t)(x))
 #define COPY4(dst, src)	\
 		put_unaligned(get_unaligned((const u32 *)(src)), (u32 *)(dst))
 #if defined(CONFIG_X86_64) || defined(CONFIG_ARM64)
