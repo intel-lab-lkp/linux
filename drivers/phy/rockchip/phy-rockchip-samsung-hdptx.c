@@ -1042,14 +1042,13 @@ static int rk_hdptx_ropll_tmds_cmn_config(struct rk_hdptx_phy *hdptx,
 	return rk_hdptx_post_enable_pll(hdptx);
 }
 
-static int rk_hdptx_ropll_tmds_mode_config(struct rk_hdptx_phy *hdptx,
-					   unsigned int rate)
+static int rk_hdptx_ropll_tmds_mode_config(struct rk_hdptx_phy *hdptx)
 {
 	rk_hdptx_multi_reg_write(hdptx, rk_hdtpx_common_sb_init_seq);
 
 	regmap_write(hdptx->regmap, LNTOP_REG(0200), 0x06);
 
-	if (rate > HDMI14_MAX_RATE / 100) {
+	if (hdptx->tmds_char_rate > HDMI14_MAX_RATE) {
 		/* For 1/40 bitrate clk */
 		rk_hdptx_multi_reg_write(hdptx, rk_hdtpx_tmds_lntop_highbr_seq);
 	} else {
@@ -1101,10 +1100,10 @@ static void rk_hdptx_dp_reset(struct rk_hdptx_phy *hdptx)
 		     HDPTX_I_BGR_EN << 16 | FIELD_PREP(HDPTX_I_BGR_EN, 0x0));
 }
 
-static int rk_hdptx_phy_consumer_get(struct rk_hdptx_phy *hdptx,
-				     unsigned int rate)
+static int rk_hdptx_phy_consumer_get(struct rk_hdptx_phy *hdptx)
 {
 	enum phy_mode mode = phy_get_mode(hdptx->phy);
+	unsigned long rate;
 	u32 status;
 	int ret;
 
@@ -1121,8 +1120,9 @@ static int rk_hdptx_phy_consumer_get(struct rk_hdptx_phy *hdptx,
 	if (mode == PHY_MODE_DP) {
 		rk_hdptx_dp_reset(hdptx);
 	} else {
+		rate = hdptx->tmds_char_rate ?: hdptx->rate;
 		if (rate) {
-			ret = rk_hdptx_ropll_tmds_cmn_config(hdptx, rate);
+			ret = rk_hdptx_ropll_tmds_cmn_config(hdptx, rate / 100);
 			if (ret)
 				goto dec_usage;
 		}
@@ -1420,23 +1420,24 @@ static int rk_hdptx_dp_aux_init(struct rk_hdptx_phy *hdptx)
 static int rk_hdptx_phy_power_on(struct phy *phy)
 {
 	struct rk_hdptx_phy *hdptx = phy_get_drvdata(phy);
-	unsigned int rate = hdptx->tmds_char_rate / 100;
 	enum phy_mode mode = phy_get_mode(phy);
 	int ret, lane;
 
-	if (rate == 0) {
+	if (!hdptx->tmds_char_rate) {
 		/*
 		 * FIXME: Temporary workaround to setup TMDS char rate
 		 * from the RK HDMI bridge driver.
 		 * Will be removed as soon the switch to the HDMI PHY
 		 * configuration API has been completed on both ends.
 		 */
-		rate = phy_get_bus_width(hdptx->phy) & 0xfffffff;
+		hdptx->tmds_char_rate = phy_get_bus_width(hdptx->phy) & 0xfffffff;
+		hdptx->tmds_char_rate *= 100;
 	}
 
-	dev_dbg(hdptx->dev, "%s rate=%u bpc=%u\n", __func__, rate, hdptx->bpc);
+	dev_dbg(hdptx->dev, "%s tmds_rate=%lu bpc=%u\n", __func__,
+		hdptx->tmds_char_rate, hdptx->bpc);
 
-	ret = rk_hdptx_phy_consumer_get(hdptx, rate);
+	ret = rk_hdptx_phy_consumer_get(hdptx);
 	if (ret)
 		return ret;
 
@@ -1467,7 +1468,7 @@ static int rk_hdptx_phy_power_on(struct phy *phy)
 		regmap_write(hdptx->grf, GRF_HDPTX_CON0,
 			     HDPTX_MODE_SEL << 16 | FIELD_PREP(HDPTX_MODE_SEL, 0x0));
 
-		ret = rk_hdptx_ropll_tmds_mode_config(hdptx, rate);
+		ret = rk_hdptx_ropll_tmds_mode_config(hdptx);
 		if (ret)
 			rk_hdptx_phy_consumer_put(hdptx, true);
 	}
@@ -1811,7 +1812,7 @@ static int rk_hdptx_phy_clk_prepare(struct clk_hw *hw)
 {
 	struct rk_hdptx_phy *hdptx = to_rk_hdptx_phy(hw);
 
-	return rk_hdptx_phy_consumer_get(hdptx, hdptx->rate / 100);
+	return rk_hdptx_phy_consumer_get(hdptx);
 }
 
 static void rk_hdptx_phy_clk_unprepare(struct clk_hw *hw)
