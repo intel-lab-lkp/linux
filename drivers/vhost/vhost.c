@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/kthread.h>
+#include <linux/cgroup.h>
 #include <linux/module.h>
 #include <linux/sort.h>
 #include <linux/sched/mm.h>
@@ -269,11 +270,12 @@ EXPORT_SYMBOL_GPL(vhost_vq_work_queue);
  *
  * The worker's flush_mutex must be held.
  */
-static void __vhost_worker_flush(struct vhost_worker *worker)
+static void __vhost_worker_flush(struct vhost_worker *worker,
+				 bool ignore_attachment)
 {
 	struct vhost_flush_struct flush;
 
-	if (!worker->attachment_cnt || worker->killed)
+	if ((!ignore_attachment && !worker->attachment_cnt) || worker->killed)
 		return;
 
 	init_completion(&flush.wait_event);
@@ -292,7 +294,7 @@ static void __vhost_worker_flush(struct vhost_worker *worker)
 static void vhost_worker_flush(struct vhost_worker *worker)
 {
 	mutex_lock(&worker->mutex);
-	__vhost_worker_flush(worker);
+	__vhost_worker_flush(worker, false);
 	mutex_unlock(&worker->mutex);
 }
 
@@ -620,6 +622,36 @@ long vhost_dev_check_owner(struct vhost_dev *dev)
 }
 EXPORT_SYMBOL_GPL(vhost_dev_check_owner);
 
+struct vhost_attach_cgroups_struct {
+	struct vhost_work work;
+	struct task_struct *owner;
+	int ret;
+};
+
+static void vhost_attach_cgroups_work(struct vhost_work *work)
+{
+	struct vhost_attach_cgroups_struct *s;
+
+	s = container_of(work, struct vhost_attach_cgroups_struct, work);
+	s->ret = cgroup_attach_task_all(s->owner, current);
+}
+
+static int vhost_attach_task_to_cgroups(struct vhost_worker *worker)
+{
+	struct vhost_attach_cgroups_struct attach;
+
+	attach.owner = current;
+
+	vhost_work_init(&attach.work, vhost_attach_cgroups_work);
+	vhost_worker_queue(worker, &attach.work);
+
+	mutex_lock(&worker->mutex);
+	__vhost_worker_flush(worker, true);
+	mutex_unlock(&worker->mutex);
+
+	return attach.ret;
+}
+
 /* Caller should have device mutex */
 bool vhost_dev_has_owner(struct vhost_dev *dev)
 {
@@ -793,7 +825,7 @@ static void __vhost_vq_attach_worker(struct vhost_virtqueue *vq,
 	/* Make sure new vq queue/flush/poll calls see the new worker */
 	synchronize_rcu();
 	/* Make sure whatever was queued gets run */
-	__vhost_worker_flush(old_worker);
+	__vhost_worker_flush(old_worker, false);
 	old_worker->attachment_cnt--;
 	mutex_unlock(&old_worker->mutex);
 }
@@ -852,7 +884,7 @@ static int vhost_free_worker(struct vhost_dev *dev,
 	 * to zero. Make sure flushes are flushed from the queue before
 	 * freeing.
 	 */
-	__vhost_worker_flush(worker);
+	__vhost_worker_flush(worker, false);
 	mutex_unlock(&worker->mutex);
 
 	vhost_worker_destroy(dev, worker);
