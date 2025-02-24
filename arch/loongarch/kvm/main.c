@@ -387,6 +387,7 @@ static int kvm_loongarch_env_init(void)
 	}
 
 	kvm_init_gcsr_flag();
+	kvm_register_perf_callbacks(NULL);
 
 	/* Register LoongArch IPI interrupt controller interface. */
 	ret = kvm_loongarch_register_ipi_device();
@@ -408,6 +409,7 @@ static void kvm_loongarch_env_exit(void)
 {
 	unsigned long addr;
 
+	kvm_unregister_perf_callbacks();
 	if (vmcs)
 		free_percpu(vmcs);
 
