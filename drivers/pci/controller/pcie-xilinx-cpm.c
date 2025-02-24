@@ -583,8 +583,10 @@ static int xilinx_cpm_pcie_probe(struct platform_device *pdev)
 		return err;
 
 	bus = resource_list_first_type(&bridge->windows, IORESOURCE_BUS);
-	if (!bus)
+	if (!bus) {
+		xilinx_cpm_free_irq_domains(port);
 		return -ENODEV;
+	}
 
 	port->variant = of_device_get_match_data(dev);
 
