@@ -2232,7 +2232,7 @@ ALLOW_ERROR_INJECTION(btrfs_search_slot, ERRNO);
 int btrfs_search_old_slot(struct btrfs_root *root, const struct btrfs_key *key,
 			  struct btrfs_path *p, u64 time_seq)
 {
-	struct btrfs_fs_info *fs_info = root->fs_info;
+	struct btrfs_fs_info *fs_info;
 	struct extent_buffer *b;
 	int slot;
 	int ret;
@@ -2241,6 +2241,10 @@ int btrfs_search_old_slot(struct btrfs_root *root, const struct btrfs_key *key,
 	int lowest_unlock = 1;
 	u8 lowest_level = 0;
 
+	if (!root)
+		return -EINVAL;
+
+	fs_info = root->fs_info;
 	lowest_level = p->lowest_level;
 	WARN_ON(p->nodes[0] != NULL);
 	ASSERT(!p->nowait);
