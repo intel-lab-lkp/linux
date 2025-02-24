@@ -35,4 +35,7 @@ bool xe_rpm_reclaim_safe(const struct xe_device *xe);
 struct task_struct *xe_pm_read_callback_task(struct xe_device *xe);
 int xe_pm_module_init(void);
 
+int xe_pm_init_vrsr(struct xe_device *xe);
+int xe_pm_enable_vrsr(struct xe_device *xe, bool enable);
+
 #endif

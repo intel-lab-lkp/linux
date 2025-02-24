@@ -23,6 +23,7 @@
 #include "xe_guc.h"
 #include "xe_irq.h"
 #include "xe_mmio.h"
+#include "xe_pcode_api.h"
 #include "xe_pcode.h"
 #include "xe_pxp.h"
 #include "regs/xe_regs.h"
@@ -84,6 +85,92 @@ static struct lockdep_map xe_pm_runtime_nod3cold_map = {
 	.name = "xe_rpm_nod3cold_map"
 };
 #endif
+
+/**
+ * xe_pm_init_vrsr - Initialize VRAM self refresh
+ * @xe: The xe device
+ *
+ * This function reads the AUX power and PERST assertion delay from pcode.
+ * Then request host BIOS via ACPI _DSM to grant required AUX power and PERST
+ * assertion delay.
+ *
+ * Return: returns 0 on success and errno on failure
+ */
+int xe_pm_init_vrsr(struct xe_device *xe)
+{
+	struct xe_tile *root_tile = xe_device_get_root_tile(xe);
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
+	struct pci_dev *root_pdev;
+	int ret;
+	u32 uval;
+	u32 aux_pwr_limit;
+	u32 perst_delay;
+
+	root_pdev = pcie_find_root_port(pdev);
+	if (!root_pdev)
+		return -EINVAL;
+
+	/* Avoid Illegal Subcommand error */
+	if (xe->info.platform != XE_BATTLEMAGE)
+		return -ENXIO;
+
+	ret = xe_pcode_read(root_tile, PCODE_MBOX(PCODE_D3_VRAM_SELF_REFRESH,
+			    PCODE_D3_VRSR_SC_AUX_PL_AND_PERST_DELAY, 0),
+			    &uval, NULL);
+
+	if (ret)
+		return ret;
+
+	aux_pwr_limit = REG_FIELD_GET(POWER_D3_VRSR_AUX_PL_MASK, uval);
+	perst_delay = REG_FIELD_GET(POWER_D3_VRSR_PSERST_MASK, uval);
+
+	drm_dbg(&xe->drm, "AUX POWER LIMIT =%d\n", aux_pwr_limit);
+	drm_dbg(&xe->drm, "PERST Assertion delay =%d\n", perst_delay);
+
+	ret = pci_acpi_request_d3cold_aux_power(root_pdev, aux_pwr_limit);
+	if (ret)
+		goto vrsr;
+
+	ret = pci_acpi_add_perst_assertion_delay(root_pdev, perst_delay);
+	if (ret)
+		goto vrsr;
+
+	return ret;
+
+vrsr:
+	drm_err(&xe->drm, "ACPI DSM failed, VRSR is not capable\n");
+	xe->d3cold.vrsr_capable = false;
+	return ret;
+}
+
+/**
+ * xe_pm_enable_vrsr - Enable VRAM self refresh
+ * @xe: The xe device.
+ * @enable: true: Enable, false: Disable
+ *
+ * This function enables the VRSR feature in D3Cold path.
+ *
+ * Return: It returns 0 on success and errno on failure.
+ */
+int xe_pm_enable_vrsr(struct xe_device *xe, bool enable)
+{
+	struct xe_tile *root_tile = xe_device_get_root_tile(xe);
+	int ret;
+	u32 uval = 0;
+
+	/* Avoid Illegal Subcommand error */
+	if (xe->info.platform != XE_BATTLEMAGE)
+		return -ENXIO;
+
+	if (enable)
+		ret = xe_pcode_write(root_tile, PCODE_MBOX(PCODE_D3_VRAM_SELF_REFRESH,
+				     PCODE_D3_VRSR_SC_ENABLE, 0), uval);
+	else
+		ret = xe_pcode_write(root_tile, PCODE_MBOX(PCODE_D3_VRAM_SELF_REFRESH,
+				     PCODE_D3_VRSR_SC_DISABLE, 0), uval);
+
+	return ret;
+}
 
 /**
  * xe_rpm_reclaim_safe() - Whether runtime resume can be done from reclaim context
@@ -330,6 +417,10 @@ int xe_pm_init(struct xe_device *xe)
 			return err;
 
 		xe->d3cold.vrsr_capable = xe_pm_vrsr_capable(xe);
+		if (xe->d3cold.vrsr_capable) {
+			drm_dbg(&xe->drm, "vram sr capable\n");
+			xe_pm_init_vrsr(xe);
+		}
 	}
 
 	xe_pm_runtime_init(xe);
