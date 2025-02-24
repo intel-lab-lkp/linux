@@ -2735,6 +2735,12 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		error = (current->flags & PR_IO_FLUSHER) == PR_IO_FLUSHER;
 		break;
 	case PR_SET_SYSCALL_USER_DISPATCH:
+		/*
+		 * Sign-extend len for 32-bit processes to allow region
+		 * wrap-around.
+		 */
+		if (in_compat_syscall())
+			arg4 = (long)(s32)arg4;
 		error = set_syscall_user_dispatch(arg2, arg3, arg4,
 						  (char __user *) arg5);
 		break;

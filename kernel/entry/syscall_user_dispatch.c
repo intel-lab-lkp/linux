@@ -37,6 +37,7 @@ bool syscall_user_dispatch(struct pt_regs *regs)
 	struct syscall_user_dispatch *sd = &current->syscall_dispatch;
 	char state;
 
+	/* Note: this check form allows for range wrap-around. */
 	if (likely(instruction_pointer(regs) - sd->offset < sd->len))
 		return false;
 
@@ -80,13 +81,9 @@ static int task_set_syscall_user_dispatch(struct task_struct *task, unsigned lon
 		break;
 	case PR_SYS_DISPATCH_ON:
 		/*
-		 * Validate the direct dispatcher region just for basic
-		 * sanity against overflow and a 0-sized dispatcher
-		 * region.  If the user is able to submit a syscall from
-		 * an address, that address is obviously valid.
+		 * Note: we don't check and allow arbitrary values for
+		 * offset/len in particular to allow range wrap-around.
 		 */
-		if (offset && offset + len <= offset)
-			return -EINVAL;
 
 		/*
 		 * access_ok() will clear memory tags for tagged addresses
