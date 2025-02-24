@@ -5,7 +5,22 @@
 
 config TSM_REPORTS
 	select CONFIGFS_FS
-	tristate
+	select CRYPTO_HASH_INFO
+	select CRYPTO
+	tristate "Trusted Security Module (TSM) support"
+
+if TSM_REPORTS
+
+config TSM_MR_MAXBANKS
+	int "Max number of banks of Measurement Registers"
+	range 1 8
+	default 1
+	help
+	  A "bank" is a group of MRs that use the same hash algorithm. This
+	  option specifies the maximal number of banks each Measurement
+	  Register (MR) can support.
+
+endif
 
 source "drivers/virt/coco/efi_secret/Kconfig"
 
