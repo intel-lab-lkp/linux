@@ -114,23 +114,41 @@ static void rvin_group_release(struct kref *kref)
 	mutex_unlock(&rvin_group_lock);
 }
 
+static int rvin_group_get_id(struct rvin_dev *vin)
+{
+	struct device_node *np;
+	unsigned int count;
+	u32 id;
+
+	switch (vin->info->model) {
+	case RCAR_GEN3:
+		if (!of_property_read_u32(vin->dev->of_node, "renesas,id", &id))
+			return id;
+		break;
+	default:
+		count = 0;
+		for_each_matching_node(np, vin->dev->driver->of_match_table) {
+			if (np == vin->dev->of_node)
+				return count;
+			count++;
+		}
+		break;
+	}
+
+	vin_err(vin, "Can't figure out group id\n");
+
+	return -EINVAL;
+}
+
 static int rvin_group_get(struct rvin_dev *vin,
 			  int (*link_setup)(struct rvin_group *),
 			  const struct media_device_ops *ops)
 {
 	struct rvin_group *group;
-	u32 id;
-	int ret;
+	int id, ret;
 
-	/* Make sure VIN id is present and sane */
-	ret = of_property_read_u32(vin->dev->of_node, "renesas,id", &id);
-	if (ret) {
-		vin_err(vin, "%pOF: No renesas,id property found\n",
-			vin->dev->of_node);
-		return -EINVAL;
-	}
-
-	if (id >= RCAR_VIN_NUM) {
+	id = rvin_group_get_id(vin);
+	if (id < 0 || id >= RCAR_VIN_NUM) {
 		vin_err(vin, "%pOF: Invalid renesas,id '%u'\n",
 			vin->dev->of_node, id);
 		return -EINVAL;
