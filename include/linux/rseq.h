@@ -7,6 +7,8 @@
 #include <linux/preempt.h>
 #include <linux/sched.h>
 
+#define RSEQ_UNPREEMPTED_THRESHOLD	(100ULL * 1000000)	/* 100ms */
+
 /*
  * Map the event mask on the user-space ABI enum rseq_cs_flags
  * for direct mask checks.
