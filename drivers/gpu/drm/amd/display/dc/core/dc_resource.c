@@ -1452,6 +1452,9 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	struct scaling_taps temp = {0};
 	bool res = false;
 
+	if (!plane_state)
+		return false;
+
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 
 	/* Invalid input */
