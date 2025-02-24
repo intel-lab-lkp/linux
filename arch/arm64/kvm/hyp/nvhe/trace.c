@@ -262,7 +262,7 @@ void tracing_commit_entry(void)
 	smp_store_release(&cpu_buffer->status, HYP_RB_READY);
 }
 
-static void hyp_rb_disable_writing(struct hyp_rb_per_cpu *cpu_buffer)
+static u32 hyp_rb_disable_writing(struct hyp_rb_per_cpu *cpu_buffer)
 {
 	u32 prev_status;
 
@@ -272,6 +272,8 @@ static void hyp_rb_disable_writing(struct hyp_rb_per_cpu *cpu_buffer)
 					      HYP_RB_READY,
 					      HYP_RB_UNAVAILABLE);
 	} while (prev_status == HYP_RB_WRITING);
+
+	return prev_status;
 }
 
 static int hyp_rb_enable_writing(struct hyp_rb_per_cpu *cpu_buffer)
@@ -280,6 +282,44 @@ static int hyp_rb_enable_writing(struct hyp_rb_per_cpu *cpu_buffer)
 		return -ENODEV;
 
 	cmpxchg(&cpu_buffer->status, HYP_RB_UNAVAILABLE, HYP_RB_READY);
+
+	return 0;
+}
+
+static int hyp_rb_reset(struct hyp_rb_per_cpu *cpu_buffer)
+{
+	struct hyp_buffer_page *bpage;
+	u32 prev_status;
+
+	if (!hyp_rb_loaded(cpu_buffer))
+		return -ENODEV;
+
+	prev_status = hyp_rb_disable_writing(cpu_buffer);
+
+	while (!hyp_bpage_is_head(cpu_buffer->head_page))
+		cpu_buffer->head_page = hyp_bpage_next_page(cpu_buffer->head_page);
+
+	bpage = cpu_buffer->tail_page = cpu_buffer->head_page;
+	do {
+		hyp_bpage_reset(bpage);
+		bpage = hyp_bpage_next_page(bpage);
+	} while (bpage != cpu_buffer->head_page);
+
+	hyp_bpage_reset(cpu_buffer->reader_page);
+
+	cpu_buffer->last_overrun = 0;
+	cpu_buffer->write_stamp = 0;
+
+	cpu_buffer->meta->reader.read = 0;
+	cpu_buffer->meta->reader.lost_events = 0;
+	cpu_buffer->meta->entries = 0;
+	cpu_buffer->meta->overrun = 0;
+	cpu_buffer->meta->read = 0;
+	meta_pages_lost(cpu_buffer->meta) = 0;
+	meta_pages_touched(cpu_buffer->meta) = 0;
+
+	if (prev_status == HYP_RB_READY)
+		hyp_rb_enable_writing(cpu_buffer);
 
 	return 0;
 }
@@ -568,6 +608,20 @@ int __pkvm_enable_tracing(bool enable)
 		}
 
 	}
+	hyp_spin_unlock(&trace_rb_lock);
+
+	return ret;
+}
+
+int __pkvm_reset_tracing(unsigned int cpu)
+{
+	int ret = 0;
+
+	if (cpu >= hyp_nr_cpus)
+		return -EINVAL;
+
+	hyp_spin_lock(&trace_rb_lock);
+	ret = hyp_rb_reset(per_cpu_ptr(&trace_rb, cpu));
 	hyp_spin_unlock(&trace_rb_lock);
 
 	return ret;
