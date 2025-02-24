@@ -107,6 +107,7 @@ struct ti_csi2rx_dev {
 	struct mutex			mutex; /* To serialize ioctls. */
 	struct v4l2_format		v_fmt;
 	struct ti_csi2rx_dma		dma;
+	struct notifier_block		pm_notifier;
 	u32				sequence;
 };
 
@@ -1121,6 +1122,105 @@ static int ti_csi2rx_runtime_resume(struct device *dev)
 	return ti_csi2rx_dma_request_chan(csi);
 }
 
+static int ti_csi2rx_suspend(struct device *dev)
+{
+	struct ti_csi2rx_dev *csi = dev_get_drvdata(dev);
+	enum ti_csi2rx_dma_state state;
+	struct ti_csi2rx_dma *dma = &csi->dma;
+	unsigned long flags = 0;
+	int ret = 0;
+
+	/* If device was not in use we can simply suspend */
+	if (pm_runtime_status_suspended(dev))
+		return 0;
+
+	/* Acquire the lock used for video dev/queue operations */
+	mutex_lock(&csi->mutex);
+
+	/* Stop any on-going streams */
+	writel(0, csi->shim + SHIM_CNTL);
+	writel(0, csi->shim + SHIM_DMACNTX);
+
+	spin_lock_irqsave(&dma->lock, flags);
+	state = dma->state;
+	spin_unlock_irqrestore(&dma->lock, flags);
+
+	if (state != TI_CSI2RX_DMA_STOPPED) {
+		/* Disable source */
+		ret = v4l2_subdev_call(csi->source, video, s_stream, 0);
+		if (ret)
+			dev_err(csi->dev, "Failed to stop subdev stream\n");
+	}
+
+	/* Drain DMA */
+	ti_csi2rx_drain_dma(csi);
+
+	/* Terminate DMA */
+	ret = dmaengine_terminate_sync(csi->dma.chan);
+	if (ret)
+		dev_err(csi->dev, "Failed to stop DMA\n");
+
+	return ret;
+}
+
+static int ti_csi2rx_resume(struct device *dev)
+{
+	struct ti_csi2rx_dev *csi = dev_get_drvdata(dev);
+	struct ti_csi2rx_dma *dma = &csi->dma;
+	struct ti_csi2rx_buffer *buf;
+	unsigned long flags = 0;
+	int ret = 0;
+
+	/* If device was not in use, we can simply wakeup */
+	if (pm_runtime_status_suspended(dev))
+		return 0;
+
+	spin_lock_irqsave(&dma->lock, flags);
+	if (dma->state != TI_CSI2RX_DMA_STOPPED) {
+		/* Re-submit all previously submitted buffers to DMA */
+		list_for_each_entry(buf, &csi->dma.submitted, list) {
+			ti_csi2rx_start_dma(csi, buf);
+		}
+		spin_unlock_irqrestore(&dma->lock, flags);
+
+		/* Restore stream config */
+		ti_csi2rx_setup_shim(csi);
+
+		ret = v4l2_subdev_call(csi->source, video, s_stream, 1);
+		if (ret)
+			dev_err(csi->dev, "Failed to start subdev\n");
+	} else {
+		spin_unlock_irqrestore(&dma->lock, flags);
+	}
+
+	/* Release the lock used for video dev/queue operations */
+	mutex_unlock(&csi->mutex);
+
+	return ret;
+}
+
+static int ti_csi2rx_pm_notifier(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	struct ti_csi2rx_dev *csi =
+		container_of(nb, struct ti_csi2rx_dev, pm_notifier);
+
+	switch (action) {
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+	case PM_RESTORE_PREPARE:
+		ti_csi2rx_suspend(csi->dev);
+		break;
+	case PM_POST_SUSPEND:
+	case PM_POST_HIBERNATION:
+	case PM_POST_RESTORE:
+		ti_csi2rx_resume(csi->dev);
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static const struct dev_pm_ops ti_csi2rx_pm_ops = {
 	RUNTIME_PM_OPS(ti_csi2rx_runtime_suspend, ti_csi2rx_runtime_resume,
 		       NULL)
@@ -1167,6 +1267,13 @@ static int ti_csi2rx_probe(struct platform_device *pdev)
 		goto err_subdev;
 	}
 
+	csi->pm_notifier.notifier_call = ti_csi2rx_pm_notifier;
+	ret = register_pm_notifier(&csi->pm_notifier);
+	if (ret) {
+		dev_err(csi->dev, "Failed to create PM notifier: %d\n", ret);
+		goto err_subdev;
+	}
+
 	pm_runtime_set_active(csi->dev);
 	pm_runtime_enable(csi->dev);
 	pm_request_idle(csi->dev);
@@ -1191,6 +1298,8 @@ static void ti_csi2rx_remove(struct platform_device *pdev)
 	struct ti_csi2rx_dev *csi = platform_get_drvdata(pdev);
 
 	video_unregister_device(&csi->vdev);
+
+	unregister_pm_notifier(&csi->pm_notifier);
 
 	ti_csi2rx_cleanup_vb2q(csi);
 	ti_csi2rx_cleanup_subdev(csi);
