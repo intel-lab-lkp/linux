@@ -198,6 +198,14 @@ static void xe_rpm_lockmap_release(const struct xe_device *xe)
 			 &xe_pm_runtime_d3cold_map);
 }
 
+static void xe_pm_suspend_prepare(struct xe_device *xe)
+{
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+		xe_pm_d3cold_allowed_toggle(xe);
+	else
+		xe->d3cold.allowed = XE_D3COLD_OFF;
+}
+
 /**
  * xe_pm_suspend - Helper for System suspend, i.e. S0->S3 / S0->S2idle
  * @xe: xe device instance
@@ -212,6 +220,8 @@ int xe_pm_suspend(struct xe_device *xe)
 
 	drm_dbg(&xe->drm, "Suspending device\n");
 	trace_xe_pm_suspend(xe, __builtin_return_address(0));
+
+	xe_pm_suspend_prepare(xe);
 
 	err = xe_pxp_pm_suspend(xe->pxp);
 	if (err)
@@ -875,6 +885,8 @@ void xe_pm_d3cold_allowed_toggle(struct xe_device *xe)
 
 	if (total_vram_used_mb < xe->d3cold.vram_threshold)
 		xe->d3cold.allowed = XE_D3COLD_OFF;
+	else if (xe->d3cold.vrsr_capable && xe_display_connected(xe))
+		xe->d3cold.allowed = XE_D3COLD_VRSR;
 	else
 		xe->d3cold.allowed = XE_D3HOT;
 
