@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 
 #include <media/mipi-csi2.h>
 #include <media/v4l2-device.h>
@@ -808,12 +809,16 @@ static int ti_csi2rx_start_streaming(struct vb2_queue *vq, unsigned int count)
 	unsigned long flags;
 	int ret = 0;
 
+	ret = pm_runtime_resume_and_get(csi->dev);
+	if (ret)
+		return ret;
+
 	spin_lock_irqsave(&dma->lock, flags);
 	if (list_empty(&dma->queue))
 		ret = -EIO;
 	spin_unlock_irqrestore(&dma->lock, flags);
 	if (ret)
-		return ret;
+		goto err;
 
 	ret = video_device_pipeline_start(&csi->vdev, &csi->pipe);
 	if (ret)
@@ -851,6 +856,8 @@ err_pipeline:
 	writel(0, csi->shim + SHIM_DMACNTX);
 err:
 	ti_csi2rx_cleanup_buffers(csi, VB2_BUF_STATE_QUEUED);
+	pm_runtime_put(csi->dev);
+
 	return ret;
 }
 
@@ -870,6 +877,7 @@ static void ti_csi2rx_stop_streaming(struct vb2_queue *vq)
 
 	ti_csi2rx_stop_dma(csi);
 	ti_csi2rx_cleanup_buffers(csi, VB2_BUF_STATE_ERROR);
+	pm_runtime_put(csi->dev);
 }
 
 static const struct vb2_ops csi_vb2_qops = {
@@ -963,18 +971,12 @@ static const struct media_entity_operations ti_csi2rx_video_entity_ops = {
 	.link_validate = ti_csi2rx_link_validate,
 };
 
-static int ti_csi2rx_init_dma(struct ti_csi2rx_dev *csi)
+static int ti_csi2rx_dma_request_chan(struct ti_csi2rx_dev *csi)
 {
 	struct dma_slave_config cfg = {
 		.src_addr_width = DMA_SLAVE_BUSWIDTH_16_BYTES,
 	};
 	int ret;
-
-	INIT_LIST_HEAD(&csi->dma.queue);
-	INIT_LIST_HEAD(&csi->dma.submitted);
-	spin_lock_init(&csi->dma.lock);
-
-	csi->dma.state = TI_CSI2RX_DMA_STOPPED;
 
 	csi->dma.chan = dma_request_chan(csi->dev, "rx0");
 	if (IS_ERR(csi->dma.chan))
@@ -983,8 +985,24 @@ static int ti_csi2rx_init_dma(struct ti_csi2rx_dev *csi)
 	ret = dmaengine_slave_config(csi->dma.chan, &cfg);
 	if (ret) {
 		dma_release_channel(csi->dma.chan);
-		return ret;
 	}
+
+	return ret;
+}
+
+static int ti_csi2rx_init_dma(struct ti_csi2rx_dev *csi)
+{
+	int ret;
+
+	INIT_LIST_HEAD(&csi->dma.queue);
+	INIT_LIST_HEAD(&csi->dma.submitted);
+	spin_lock_init(&csi->dma.lock);
+
+	csi->dma.state = TI_CSI2RX_DMA_STOPPED;
+
+	ret = ti_csi2rx_dma_request_chan(csi);
+	if (ret)
+		return ret;
 
 	csi->dma.drain.len = DRAIN_BUFFER_SIZE;
 	csi->dma.drain.vaddr = dma_alloc_coherent(csi->dev, csi->dma.drain.len,
@@ -1062,7 +1080,9 @@ static void ti_csi2rx_cleanup_dma(struct ti_csi2rx_dev *csi)
 	dma_free_coherent(csi->dev, csi->dma.drain.len,
 			  csi->dma.drain.vaddr, csi->dma.drain.paddr);
 	csi->dma.drain.vaddr = NULL;
-	dma_release_channel(csi->dma.chan);
+
+	if (!pm_runtime_status_suspended(csi->dev))
+		dma_release_channel(csi->dma.chan);
 }
 
 static void ti_csi2rx_cleanup_v4l2(struct ti_csi2rx_dev *csi)
@@ -1082,6 +1102,29 @@ static void ti_csi2rx_cleanup_vb2q(struct ti_csi2rx_dev *csi)
 {
 	vb2_queue_release(&csi->vidq);
 }
+
+static int ti_csi2rx_runtime_suspend(struct device *dev)
+{
+	struct ti_csi2rx_dev *csi = dev_get_drvdata(dev);
+
+	/* DMA channel pairing is lost when device is powered off */
+	dma_release_channel(csi->dma.chan);
+
+	return 0;
+}
+
+static int ti_csi2rx_runtime_resume(struct device *dev)
+{
+	struct ti_csi2rx_dev *csi = dev_get_drvdata(dev);
+
+	/* Re-acquire DMA channel */
+	return ti_csi2rx_dma_request_chan(csi);
+}
+
+static const struct dev_pm_ops ti_csi2rx_pm_ops = {
+	RUNTIME_PM_OPS(ti_csi2rx_runtime_suspend, ti_csi2rx_runtime_resume,
+		       NULL)
+};
 
 static int ti_csi2rx_probe(struct platform_device *pdev)
 {
@@ -1124,6 +1167,10 @@ static int ti_csi2rx_probe(struct platform_device *pdev)
 		goto err_subdev;
 	}
 
+	pm_runtime_set_active(csi->dev);
+	pm_runtime_enable(csi->dev);
+	pm_request_idle(csi->dev);
+
 	return 0;
 
 err_subdev:
@@ -1150,6 +1197,9 @@ static void ti_csi2rx_remove(struct platform_device *pdev)
 	ti_csi2rx_cleanup_v4l2(csi);
 	ti_csi2rx_cleanup_dma(csi);
 
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+
 	mutex_destroy(&csi->mutex);
 }
 
@@ -1165,6 +1215,7 @@ static struct platform_driver ti_csi2rx_pdrv = {
 	.driver = {
 		.name = TI_CSI2RX_MODULE_NAME,
 		.of_match_table = ti_csi2rx_of_match,
+		.pm		= &ti_csi2rx_pm_ops,
 	},
 };
 
