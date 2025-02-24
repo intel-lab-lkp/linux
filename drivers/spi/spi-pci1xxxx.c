@@ -12,6 +12,7 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/msi.h>
+#include <linux/of.h>
 #include <linux/pci_regs.h>
 #include <linux/pci.h>
 #include <linux/spinlock.h>
@@ -407,6 +408,68 @@ static void pci1xxxx_start_spi_xfer(struct pci1xxxx_spi_internal *p, u8 hw_inst)
 	writel(regval, p->parent->reg_base + SPI_MST_CTL_REG_OFFSET(hw_inst));
 }
 
+static void pci1xxxx_spi_write_to_io(void __iomem *to, const void *from,
+				     size_t count, size_t size)
+{
+	while (count) {
+		if (size == 8 && (IS_ALIGNED((unsigned long)to, 8)) &&
+		    count >= 8) {
+			__raw_writeq(*(u64 *)from, to);
+			from += 8;
+			to += 8;
+			count -= 8;
+		} else if (size >= 4 && (IS_ALIGNED((unsigned long)to, 4)) &&
+			   count >= 4) {
+			__raw_writel(*(u32 *)from, to);
+			from += 4;
+			to += 4;
+			count -= 4;
+		} else if (size >= 2 && (IS_ALIGNED((unsigned long)to, 2)) &&
+			   count >= 2) {
+			__raw_writew(*(u16 *)from, to);
+			from += 2;
+			to += 2;
+			count -= 2;
+		} else {
+			__raw_writeb(*(u8 *)from, to);
+			from += 1;
+			to += 1;
+			count -= 1;
+		}
+	}
+}
+
+static void pci1xxxx_spi_read_from_io(void *to, const void __iomem *from,
+				      size_t count, size_t size)
+{
+	while (count) {
+		if (size == 8 && (IS_ALIGNED((unsigned long)from, 8)) &&
+		    count >= 8) {
+			*(u64 *)to = __raw_readq(from);
+			from += 8;
+			to += 8;
+			count -= 8;
+		} else if (size >= 4 && (IS_ALIGNED((unsigned long)from, 4)) &&
+			   count >= 4) {
+			*(u32 *)to = __raw_readl(from);
+			from += 4;
+			to += 4;
+			count -= 4;
+		} else if (size >= 2 && (IS_ALIGNED((unsigned long)from, 2)) &&
+			   count >= 2) {
+			*(u16 *)to = __raw_readw(from);
+			from += 2;
+			to += 2;
+			count -= 2;
+		} else {
+			*(u8 *)to = __raw_readb(from);
+			from += 1;
+			to += 1;
+			count -= 1;
+		}
+	}
+}
+
 static int pci1xxxx_spi_transfer_with_io(struct spi_controller *spi_ctlr,
 					 struct spi_device *spi, struct spi_transfer *xfer)
 {
@@ -444,8 +507,23 @@ static int pci1xxxx_spi_transfer_with_io(struct spi_controller *spi_ctlr,
 				len = transfer_len % SPI_MAX_DATA_LEN;
 
 			reinit_completion(&p->spi_xfer_done);
-			memcpy_toio(par->reg_base + SPI_MST_CMD_BUF_OFFSET(p->hw_inst),
-				    &tx_buf[bytes_transfered], len);
+			/*
+			 * Raspberry Pi CM4 BCM2711 doesn't support 64-bit
+			 * accesses.
+			 */
+			if (of_machine_is_compatible("brcm,bcm2711")) {
+				pci1xxxx_spi_write_to_io(par->reg_base +
+							 SPI_MST_CMD_BUF_OFFSET
+							 (p->hw_inst),
+							 &tx_buf[bytes_transfered],
+							 len, 4);
+			} else {
+				pci1xxxx_spi_write_to_io(par->reg_base +
+							 SPI_MST_CMD_BUF_OFFSET
+							 (p->hw_inst),
+							 &tx_buf[bytes_transfered],
+							 len, 8);
+			}
 			bytes_transfered += len;
 			pci1xxxx_spi_setup(par, p->hw_inst, spi->mode, clkdiv, len);
 			pci1xxxx_start_spi_xfer(p, p->hw_inst);
@@ -457,8 +535,17 @@ static int pci1xxxx_spi_transfer_with_io(struct spi_controller *spi_ctlr,
 				return -ETIMEDOUT;
 
 			if (rx_buf) {
-				memcpy_fromio(&rx_buf[bytes_recvd], par->reg_base +
-					      SPI_MST_RSP_BUF_OFFSET(p->hw_inst), len);
+				if (of_machine_is_compatible("brcm,bcm2711")) {
+					pci1xxxx_spi_read_from_io(&rx_buf[bytes_recvd],
+								  par->reg_base +
+								  SPI_MST_RSP_BUF_OFFSET
+								  (p->hw_inst), len, 4);
+				} else {
+					pci1xxxx_spi_read_from_io(&rx_buf[bytes_recvd],
+								  par->reg_base +
+								  SPI_MST_RSP_BUF_OFFSET
+								  (p->hw_inst), len, 8);
+				}
 				bytes_recvd += len;
 			}
 		}
