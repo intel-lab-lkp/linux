@@ -2099,6 +2099,8 @@ restart_locked:
 		if (!msg->msg_namelen) {
 			err = -ECONNRESET;
 			goto out_sock_put;
+		} else {
+			sock_put(other);
 		}
 
 		goto lookup;
