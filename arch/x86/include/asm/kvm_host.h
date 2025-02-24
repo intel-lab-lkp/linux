@@ -2409,7 +2409,7 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
 #define KVM_CLOCK_VALID_FLAGS						\
 	(KVM_CLOCK_TSC_STABLE | KVM_CLOCK_REALTIME | KVM_CLOCK_HOST_TSC)
 
-#define KVM_X86_VALID_QUIRKS			\
+#define KVM_X86_VALID_QUIRKS_COMMON		\
 	(KVM_X86_QUIRK_LINT0_REENABLED |	\
 	 KVM_X86_QUIRK_CD_NW_CLEARED |		\
 	 KVM_X86_QUIRK_LAPIC_MMIO_HOLE |	\

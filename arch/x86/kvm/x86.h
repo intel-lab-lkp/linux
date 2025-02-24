@@ -32,6 +32,7 @@ struct kvm_caps {
 	u64 supported_xcr0;
 	u64 supported_xss;
 	u64 supported_perf_cap;
+	u64 supported_quirks;
 };
 
 struct kvm_host_values {
@@ -352,11 +353,6 @@ static inline void kvm_register_write(struct kvm_vcpu *vcpu,
 	return kvm_register_write_raw(vcpu, reg, val);
 }
 
-static inline bool kvm_check_has_quirk(struct kvm *kvm, u64 quirk)
-{
-	return !(kvm->arch.disabled_quirks & quirk);
-}
-
 void kvm_inject_realmode_interrupt(struct kvm_vcpu *vcpu, int irq, int inc_eip);
 
 u64 get_kvmclock_ns(struct kvm *kvm);
@@ -391,6 +387,12 @@ extern struct kvm_caps kvm_caps;
 extern struct kvm_host_values kvm_host;
 
 extern bool enable_pmu;
+
+static inline bool kvm_check_has_quirk(struct kvm *kvm, u64 quirk)
+{
+	return (kvm_caps.supported_quirks & quirk) &&
+	       !(kvm->arch.disabled_quirks & quirk);
+}
 
 /*
  * Get a filtered version of KVM's supported XCR0 that strips out dynamic
