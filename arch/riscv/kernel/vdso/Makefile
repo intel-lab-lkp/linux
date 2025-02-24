@@ -12,9 +12,10 @@ vdso-syms += getcpu
 vdso-syms += flush_icache
 vdso-syms += hwprobe
 vdso-syms += sys_hwprobe
+vdso-syms += getrandom
 
 # Files to link into the vdso
-obj-vdso = $(patsubst %, %.o, $(vdso-syms)) note.o
+obj-vdso = $(patsubst %, %.o, $(vdso-syms)) note.o vgetrandom-chacha.o
 
 ccflags-y := -fno-stack-protector
 ccflags-y += -DDISABLE_BRANCH_PROFILING
@@ -22,6 +23,10 @@ ccflags-y += -fno-builtin
 
 ifneq ($(c-gettimeofday-y),)
   CFLAGS_vgettimeofday.o += -fPIC -include $(c-gettimeofday-y)
+endif
+
+ifneq ($(c-getrandom-y),)
+  CFLAGS_getrandom.o += -fPIC -include $(c-getrandom-y)
 endif
 
 CFLAGS_hwprobe.o += -fPIC

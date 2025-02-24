@@ -9,6 +9,8 @@
 #include "../../../../arch/arm64/kernel/vdso/vgetrandom-chacha.S"
 #elif defined(__loongarch__)
 #include "../../../../arch/loongarch/vdso/vgetrandom-chacha.S"
+#elif defined(__riscv)
+#include "../../../../arch/riscv/kernel/vdso/vgetrandom-chacha.S"
 #elif defined(__powerpc__) || defined(__powerpc64__)
 #include "../../../../arch/powerpc/kernel/vdso/vgetrandom-chacha.S"
 #elif defined(__s390x__)
