@@ -227,20 +227,10 @@ static int stmmac_pci_probe(struct pci_dev *pdev,
  *
  * @pdev: platform device pointer
  * Description: this function calls the main to free the net resources
- * and releases the PCI resources.
  */
 static void stmmac_pci_remove(struct pci_dev *pdev)
 {
-	int i;
-
 	stmmac_dvr_remove(&pdev->dev);
-
-	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
-		if (pci_resource_len(pdev, i) == 0)
-			continue;
-		pcim_iounmap_regions(pdev, BIT(i));
-		break;
-	}
 }
 
 static int __maybe_unused stmmac_pci_suspend(struct device *dev)
