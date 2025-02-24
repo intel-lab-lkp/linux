@@ -297,9 +297,6 @@ static void __noreturn resume_play_dead(void)
 
 int hibernate_resume_nonboot_cpu_disable(void)
 {
-	void (*play_dead)(void) = smp_ops.play_dead;
-	int ret;
-
 	/*
 	 * Ensure that MONITOR/MWAIT will not be used in the "play dead" loop
 	 * during hibernate image restoration, because it is likely that the
@@ -316,13 +313,11 @@ int hibernate_resume_nonboot_cpu_disable(void)
 	 * resume) sleep afterwards, and the resumed kernel will decide itself
 	 * what to do with them.
 	 */
-	ret = cpuhp_smt_enable();
+	int ret = cpuhp_smt_enable();
 	if (ret)
 		return ret;
 	smp_ops.play_dead = resume_play_dead;
-	ret = freeze_secondary_cpus(0);
-	smp_ops.play_dead = play_dead;
-	return ret;
+	return freeze_secondary_cpus(0);
 }
 #endif
 
