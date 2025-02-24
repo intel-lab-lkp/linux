@@ -31,7 +31,7 @@
  * https://github.com/ClangBuiltLinux/linux/issues/1609
  */
 #ifdef CONFIG_LD_IS_LLD
-#define NOCROSSREFS
+#define NOCROSSREFS(...)
 #endif
 
 /* Set start/end symbol names to the LMA for the section */
@@ -123,16 +123,19 @@
  */
 #define ARM_VECTORS							\
 	__vectors_lma = .;						\
-	OVERLAY 0xffff0000 : NOCROSSREFS AT(__vectors_lma) {		\
-		.vectors {						\
+	/* Note: The LLD linker seems not to support marking input */	\
+	/* sections with KEEP() inside a OVERLAY statement */		\
+	.vectors 0xffff0000 : AT (__vectors_lma) {			\
 			*(.vectors)					\
-		}							\
-		.vectors.bhb.loop8 {					\
+	}								\
+	.vectors.bhb.loop8 0xffff0000 : AT (__vectors_lma +		\
+		SIZEOF(.vectors)) {					\
 			*(.vectors.bhb.loop8)				\
-		}							\
-		.vectors.bhb.bpiall {					\
+	}								\
+	.vectors.bhb.bpiall 0xffff0000 : AT (__vectors_lma +		\
+		SIZEOF(.vectors) +					\
+		SIZEOF(.vectors.bhb.loop8)) {				\
 			*(.vectors.bhb.bpiall)				\
-		}							\
 	}								\
 	ARM_LMA(__vectors, .vectors);					\
 	ARM_LMA(__vectors_bhb_loop8, .vectors.bhb.loop8);		\
@@ -149,6 +152,8 @@
 	. = __stubs_lma + SIZEOF(.stubs);				\
 									\
 	PROVIDE(vector_fiq_offset = vector_fiq - ADDR(.vectors));
+
+#define ARM_NOCROSSREFS NOCROSSREFS(.vectors .vectors.bhb.loop8 .vectors.bhb.bpiall)
 
 #define ARM_TCM								\
 	__itcm_start = ALIGN(4);					\

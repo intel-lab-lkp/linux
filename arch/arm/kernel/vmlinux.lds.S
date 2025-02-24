@@ -158,6 +158,8 @@ SECTIONS
 	ARM_ASSERTS
 }
 
+ARM_NOCROSSREFS
+
 #ifdef CONFIG_STRICT_KERNEL_RWX
 /*
  * Without CONFIG_DEBUG_ALIGN_RODATA, __start_rodata_section_aligned will

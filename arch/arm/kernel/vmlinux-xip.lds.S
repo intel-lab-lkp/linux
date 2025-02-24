@@ -159,6 +159,8 @@ SECTIONS
 	ARM_ASSERTS
 }
 
+ARM_NOCROSSREFS
+
 /*
  * These must never be empty
  * If you have to comment these two assert statements out, your
