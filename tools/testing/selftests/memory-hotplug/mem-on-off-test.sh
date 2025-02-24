@@ -143,6 +143,11 @@ online_all_offline_memory()
 	done
 }
 
+print_status()
+{
+	printf '\t\t%-37s   %12s\n' "$1" "$2"
+}
+
 error=-12
 priority=0
 # Run with default of ratio=2 for Kselftest run
@@ -184,16 +189,16 @@ echo "Test scope: $ratio% hotplug memory"
 # Online all hot-pluggable memory
 #
 hotpluggable_num=`hotpluggable_offline_memory | wc -l`
-echo -e "\t online all hot-pluggable memory in offline state:"
+echo -e "Changing all OFFLINE hot-pluggable memory blocks to ONLINE:\n"
 if [ "$hotpluggable_num" -gt 0 ]; then
 	for memory in `hotpluggable_offline_memory`; do
-		echo "offline->online memory$memory"
+		echo -e "\t\tOFFLINE -> ONLINE memory block ($memory)"
 		if ! online_memory_expect_success $memory; then
 			retval=1
 		fi
 	done
 else
-	echo -e "\t\t SKIPPED - no hot-pluggable memory in offline state"
+	echo -e "\t\t SKIPPED - no hot-pluggable memory in OFFLINE state"
 fi
 
 #
@@ -201,16 +206,16 @@ fi
 #
 hotpluggable_num=`hotpluggable_online_memory | wc -l`
 target=`echo "a=$hotpluggable_num*$ratio; if ( a%100 ) a/100+1 else a/100" | bc`
-echo -e "\t offline $ratio% hot-pluggable memory in online state"
-echo -e "\t trying to offline $target out of $hotpluggable_num memory block(s):"
+echo -e "\nOFFLINE $ratio% hot-pluggable memory in ONLINE state ($target memory block(s))"
+echo -e "Changing $target out of $hotpluggable_num OFFLINE memory block(s) to ONLINE:\n"
 for memory in `hotpluggable_online_memory`; do
 	if [ "$target" -gt 0 ]; then
-		echo "online->offline memory$memory"
+		tmp="ONLINE -> OFFLINE memory block (${memory})"
 		if offline_memory_expect_success $memory &>/dev/null; then
 			target=$(($target - 1))
-			echo "-> Success"
+			print_status "$tmp" "[SUCCESS]"
 		else
-			echo "-> Failure"
+			print_status "$tmp" "[FAILURE]"
 		fi
 	fi
 done
