@@ -2266,7 +2266,7 @@ EXPORT_SYMBOL(fault_in_readable);
  *
  * Called without mmap_lock (takes and releases the mmap_lock by itself).
  */
-#ifdef CONFIG_ELF_CORE
+#ifdef CONFIG_COREDUMP
 struct page *get_dump_page(unsigned long addr, int *locked)
 {
 	struct page *page;
@@ -2276,7 +2276,7 @@ struct page *get_dump_page(unsigned long addr, int *locked)
 				      FOLL_FORCE | FOLL_DUMP | FOLL_GET);
 	return (ret == 1) ? page : NULL;
 }
-#endif /* CONFIG_ELF_CORE */
+#endif /* CONFIG_COREDUMP */
 
 #ifdef CONFIG_MIGRATION
 
