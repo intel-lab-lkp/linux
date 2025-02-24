@@ -560,6 +560,11 @@ struct request_queue {
 	struct blk_flush_queue	*fq;
 	struct list_head	flush_list;
 
+	/*
+	 * protects elevator switch/update
+	 */
+	struct mutex		elevator_lock;
+
 	struct mutex		sysfs_lock;
 	struct mutex		limits_lock;
 
