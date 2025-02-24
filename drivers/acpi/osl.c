@@ -1193,6 +1193,12 @@ acpi_status acpi_hotplug_schedule(struct acpi_device *adev, u32 src)
 {
 	struct acpi_hp_work *hpw;
 
+	if (src == ACPI_NOTIFY_EJECT_REQUEST && adev->flags.should_dedup_eject
+			&& atomic_xchg(&adev->hp->ejecting, 1)) {
+		put_device(&adev->dev);
+		return AE_OK;
+	}
+
 	acpi_handle_debug(adev->handle,
 			  "Scheduling hotplug event %u for deferred handling\n",
 			   src);

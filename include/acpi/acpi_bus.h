@@ -151,6 +151,7 @@ typedef void (*acpi_hp_fixup) (struct acpi_device *);
 
 struct acpi_hotplug_context {
 	struct acpi_device *self;
+	atomic_t ejecting;
 	acpi_hp_notify notify;
 	acpi_hp_uevent uevent;
 	acpi_hp_fixup fixup;
@@ -215,7 +216,8 @@ struct acpi_device_flags {
 	u32 cca_seen:1;
 	u32 enumeration_by_parent:1;
 	u32 honor_deps:1;
-	u32 reserved:18;
+	u32 should_dedup_eject:1;
+	u32 reserved:17;
 };
 
 /* File System */

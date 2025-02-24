@@ -68,6 +68,7 @@ static struct acpiphp_context *acpiphp_init_context(struct acpi_device *adev)
 	context->hp.notify = acpiphp_hotplug_notify;
 	context->hp.fixup = acpiphp_post_dock_fixup;
 	acpi_set_hp_context(adev, &context->hp);
+	adev->flags.should_dedup_eject = true;
 	return context;
 }
 
@@ -778,7 +779,8 @@ void acpiphp_check_host_bridge(struct acpi_device *adev)
 	}
 }
 
-static int acpiphp_disable_and_eject_slot(struct acpiphp_slot *slot);
+static int
+acpiphp_disable_and_eject_slot(struct acpi_hotplug_context *hp, struct acpiphp_slot *slot);
 
 static void hotplug_event(u32 type, struct acpiphp_context *context)
 {
@@ -825,7 +827,7 @@ static void hotplug_event(u32 type, struct acpiphp_context *context)
 	case ACPI_NOTIFY_EJECT_REQUEST:
 		/* request device eject */
 		acpi_handle_debug(handle, "Eject request in %s()\n", __func__);
-		acpiphp_disable_and_eject_slot(slot);
+		acpiphp_disable_and_eject_slot(&context->hp, slot);
 		break;
 	}
 
@@ -999,9 +1001,11 @@ int acpiphp_enable_slot(struct acpiphp_slot *slot)
 
 /**
  * acpiphp_disable_and_eject_slot - power off and eject slot
+ * @hp: the context that received eject notification, can be NULL
  * @slot: ACPI PHP slot
  */
-static int acpiphp_disable_and_eject_slot(struct acpiphp_slot *slot)
+static int
+acpiphp_disable_and_eject_slot(struct acpi_hotplug_context *hp, struct acpiphp_slot *slot)
 {
 	struct acpiphp_func *func;
 
@@ -1010,6 +1014,9 @@ static int acpiphp_disable_and_eject_slot(struct acpiphp_slot *slot)
 
 	/* unconfigure all functions */
 	disable_slot(slot);
+
+	if (hp)
+		atomic_set(&hp->ejecting, 0);
 
 	list_for_each_entry(func, &slot->funcs, sibling)
 		if (func->flags & FUNC_HAS_EJ0) {
@@ -1034,7 +1041,7 @@ int acpiphp_disable_slot(struct acpiphp_slot *slot)
 	 */
 	acpi_scan_lock_acquire();
 	pci_lock_rescan_remove();
-	ret = acpiphp_disable_and_eject_slot(slot);
+	ret = acpiphp_disable_and_eject_slot(NULL, slot);
 	pci_unlock_rescan_remove();
 	acpi_scan_lock_release();
 	return ret;
