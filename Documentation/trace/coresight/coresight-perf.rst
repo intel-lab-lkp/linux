@@ -78,6 +78,56 @@ enabled like::
 
 Please refer to the kernel configuration help for more information.
 
+Fine-grained tracing with AUX pause and resume
+----------------------------------------------
+
+Arm CoreSight may generate a large amount of hardware trace data, which
+will lead to overhead in recording and distract users when reviewing
+profiling result. To mitigate the issue of excessive trace data, Perf
+provides AUX pause and resume functionality for fine-grained tracing.
+
+The AUX pause and resume can be triggered by associated events. These
+events can be ftrace tracepoints (including static and dynamic
+tracepoints) or PMU events (e.g. CPU PMU cycle event). To create a perf
+session with AUX pause / resume, three configuration terms are
+introduced:
+
+- "aux-action=start-paused": it is specified for the cs_etm PMU event to
+  launch in a paused state.
+- "aux-action=pause": an associated event is specified with this term
+  to pause AUX trace.
+- "aux-action=resume": an associated event is specified with this term
+  to resume AUX trace.
+
+Some Arm CoreSight sinks (e.g., ETR, ETB) do not support interrupt
+mechanism. As a result, trace data might be lost if it cannot be copied
+to the user space tool in a timely manner. To mitigate trace data lose,
+a configuration term "update_buf_on_pause" can be used for the cs_etm
+PMU event. As its name suggests, it directs the driver to update the
+buffer when the AUX trace is paused. By default, this feature is
+disabled until users explicitly specify "update_buf_on_pause=1".
+
+TRBE has interrupt handling.  To avoid the race condition between the
+AUX pause or resume invoked in NMI and TRBE interrupt handler, the
+driver reports a failure if users try to use "update_buf_on_pause=1" on
+TRBE.
+
+Example for triggering AUX pause and resume with ftrace tracepoints::
+
+  perf record -e cs_etm/aux-action=start-paused/k,syscalls:sys_enter_openat/aux-action=resume/,syscalls:sys_exit_openat/aux-action=pause/ ls
+
+Example for triggering AUX pause and resume with PMU event::
+
+  perf record -a -e cs_etm/aux-action=start-paused/k \
+        -e cycles/aux-action=pause,period=10000000/ \
+        -e cycles/aux-action=resume,period=1050000/ -- sleep 1
+
+Example for updating buffer on AUX pause::
+
+  perf record -a -e cs_etm/aux-action=start-paused,update_buf_on_pause=1/ \
+        -e cycles/aux-action=pause,period=10000000/ \
+        -e cycles/aux-action=resume,period=1050000/ -- sleep 1
+
 Perf test - Verify kernel and userspace perf CoreSight work
 -----------------------------------------------------------
 
