@@ -217,30 +217,6 @@ static struct attribute *bt1_axi_sysfs_attrs[] = {
 };
 ATTRIBUTE_GROUPS(bt1_axi_sysfs);
 
-static void bt1_axi_remove_sysfs(void *data)
-{
-	struct bt1_axi *axi = data;
-
-	device_remove_groups(axi->dev, bt1_axi_sysfs_groups);
-}
-
-static int bt1_axi_init_sysfs(struct bt1_axi *axi)
-{
-	int ret;
-
-	ret = device_add_groups(axi->dev, bt1_axi_sysfs_groups);
-	if (ret) {
-		dev_err(axi->dev, "Failed to add sysfs files group\n");
-		return ret;
-	}
-
-	ret = devm_add_action_or_reset(axi->dev, bt1_axi_remove_sysfs, axi);
-	if (ret)
-		dev_err(axi->dev, "Can't add AXI EHB sysfs remove action\n");
-
-	return ret;
-}
-
 static int bt1_axi_probe(struct platform_device *pdev)
 {
 	struct bt1_axi *axi;
@@ -266,10 +242,6 @@ static int bt1_axi_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = bt1_axi_init_sysfs(axi);
-	if (ret)
-		return ret;
-
 	return 0;
 }
 
@@ -283,7 +255,8 @@ static struct platform_driver bt1_axi_driver = {
 	.probe = bt1_axi_probe,
 	.driver = {
 		.name = "bt1-axi",
-		.of_match_table = bt1_axi_of_match
+		.of_match_table = bt1_axi_of_match,
+		.dev_groups =  bt1_axi_sysfs_groups,
 	}
 };
 module_platform_driver(bt1_axi_driver);
