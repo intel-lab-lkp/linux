@@ -26,6 +26,139 @@
 	}									\
 })
 
+#define EXPECT_WITHIN_ZONE(test, page, zone) ({					\
+	unsigned long pfn = page_to_pfn(page);					\
+	unsigned long start_pfn = zone->zone_start_pfn;				\
+	unsigned long end_pfn = start_pfn + zone->spanned_pages;		\
+										\
+	KUNIT_EXPECT_TRUE_MSG(test,						\
+		pfn >= start_pfn && pfn < end_pfn,				\
+		"Wanted PFN 0x%lx - 0x%lx, got 0x%lx",				\
+		start_pfn, end_pfn, pfn);					\
+	KUNIT_EXPECT_PTR_EQ_MSG(test, page_zone(page), zone,			\
+		"Wanted %px (%s), got %px (%s)",				\
+		zone, zone->name, page_zone(page), page_zone(page)->name);	\
+})
+
+static void action_nodemask_free(void *ctx)
+{
+	NODEMASK_FREE(ctx);
+}
+
+/*
+ * Call __alloc_pages_noprof with a nodemask containing only the nid.
+ *
+ * Never returns NULL.
+ */
+static inline struct page *alloc_pages_force_nid(struct kunit *test,
+						 gfp_t gfp, int order, int nid)
+{
+	NODEMASK_ALLOC(nodemask_t, nodemask, GFP_KERNEL);
+	struct page *page;
+
+	KUNIT_ASSERT_NOT_NULL(test, nodemask);
+	kunit_add_action(test, action_nodemask_free, &nodemask);
+	nodes_clear(*nodemask);
+	node_set(nid, *nodemask);
+
+	page = __alloc_pages_noprof(GFP_KERNEL, 0, nid, nodemask);
+	KUNIT_ASSERT_NOT_NULL(test, page);
+	return page;
+}
+
+static inline bool page_on_buddy_list(struct page *want_page, struct list_head *head)
+{
+	struct page *found_page;
+
+	list_for_each_entry(found_page, head, buddy_list) {
+		if (found_page == want_page)
+			return true;
+	}
+
+	return false;
+}
+
+/* Test case parameters that are independent of alloc order.  */
+static const struct {
+	gfp_t gfp_flags;
+	enum zone_type want_zone;
+} alloc_fresh_gfps[] = {
+	/*
+	 * The way we currently set up the isolated node, everything ends up in
+	 * ZONE_NORMAL.
+	 */
+	{ .gfp_flags = GFP_KERNEL,	.want_zone = ZONE_NORMAL },
+	{ .gfp_flags = GFP_ATOMIC,	.want_zone = ZONE_NORMAL },
+	{ .gfp_flags = GFP_USER,	.want_zone = ZONE_NORMAL },
+	{ .gfp_flags = GFP_DMA32,	.want_zone = ZONE_NORMAL },
+};
+
+struct alloc_fresh_test_case {
+	int order;
+	int gfp_idx;
+};
+
+/* Generate test cases as the cross product of orders and alloc_fresh_gfps.  */
+static const void *alloc_fresh_gen_params(const void *prev, char *desc)
+{
+	/* Buffer to avoid allocations. */
+	static struct alloc_fresh_test_case tc;
+
+	if (!prev) {
+		/* First call */
+		tc.order = 0;
+		tc.gfp_idx = 0;
+		return &tc;
+	}
+
+	tc.gfp_idx++;
+	if (tc.gfp_idx >= ARRAY_SIZE(alloc_fresh_gfps)) {
+		tc.gfp_idx = 0;
+		tc.order++;
+	}
+	if (tc.order > MAX_PAGE_ORDER)
+		/* Finished. */
+		return NULL;
+
+	snprintf(desc, KUNIT_PARAM_DESC_SIZE, "order %d %pGg\n",
+		tc.order, &alloc_fresh_gfps[tc.gfp_idx].gfp_flags);
+	return &tc;
+}
+
+/* Smoke test: allocate from a node where everything is in a pristine state. */
+static void test_alloc_fresh(struct kunit *test)
+{
+	const struct alloc_fresh_test_case *tc = test->param_value;
+	gfp_t gfp_flags = alloc_fresh_gfps[tc->gfp_idx].gfp_flags;
+	enum zone_type want_zone_type = alloc_fresh_gfps[tc->gfp_idx].want_zone;
+	struct zone *want_zone = &NODE_DATA(isolated_node)->node_zones[want_zone_type];
+	struct list_head *buddy_list;
+	struct per_cpu_pages *pcp;
+	struct page *page, *merged_page;
+	int cpu;
+
+	page = alloc_pages_force_nid(test, gfp_flags, tc->order, isolated_node);
+
+	EXPECT_WITHIN_ZONE(test, page, want_zone);
+
+	cpu = get_cpu();
+	__free_pages(page, 0);
+	pcp = per_cpu_ptr(want_zone->per_cpu_pageset, cpu);
+	put_cpu();
+
+	/*
+	 * Should end up back in the free area when drained. Because everything
+	 * is free, it should get buddy-merged up to the maximum order.
+	 */
+	drain_zone_pages(want_zone, pcp);
+	KUNIT_EXPECT_TRUE(test, PageBuddy(page));
+	KUNIT_EXPECT_EQ(test, buddy_order(page), MAX_PAGE_ORDER);
+	KUNIT_EXPECT_TRUE(test, list_empty(&pcp->lists[MIGRATE_UNMOVABLE]));
+	merged_page = pfn_to_page(round_down(page_to_pfn(page), 1 << MAX_PAGE_ORDER));
+	buddy_list = &want_zone->free_area[MAX_PAGE_ORDER].free_list[MIGRATE_UNMOVABLE];
+	KUNIT_EXPECT_TRUE(test, page_on_buddy_list(merged_page, buddy_list));
+}
+
 static void action_drain_pages_all(void *unused)
 {
 	int cpu;
@@ -144,7 +277,11 @@ static void depopulate_isolated_node(struct kunit_suite *suite)
 	WARN_ON(add_memory(0, start, size, MMOP_ONLINE));
 	WARN_ON(walk_memory_blocks(start, size, NULL, memory_block_online_cb));
 }
-static struct kunit_case test_cases[] = { {} };
+
+static struct kunit_case test_cases[] = {
+	KUNIT_CASE_PARAM(test_alloc_fresh, alloc_fresh_gen_params),
+	{}
+};
 
 struct kunit_suite page_alloc_test_suite = {
 	.name = "page_alloc",
