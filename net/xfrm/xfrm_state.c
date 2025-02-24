@@ -162,8 +162,8 @@ static void xfrm_hash_resize(struct work_struct *work)
 {
 	struct net *net = container_of(work, struct net, xfrm.state_hash_work);
 	struct hlist_head *ndst, *nsrc, *nspi, *nseq, *odst, *osrc, *ospi, *oseq;
-	unsigned long nsize, osize;
 	unsigned int nhashmask, ohashmask;
+	unsigned long nsize;
 	int i;
 
 	nsize = xfrm_hash_new_size(net->xfrm.state_hmask);
@@ -172,20 +172,20 @@ static void xfrm_hash_resize(struct work_struct *work)
 		return;
 	nsrc = xfrm_hash_alloc(nsize);
 	if (!nsrc) {
-		xfrm_hash_free(ndst, nsize);
+		xfrm_hash_free(ndst);
 		return;
 	}
 	nspi = xfrm_hash_alloc(nsize);
 	if (!nspi) {
-		xfrm_hash_free(ndst, nsize);
-		xfrm_hash_free(nsrc, nsize);
+		xfrm_hash_free(ndst);
+		xfrm_hash_free(nsrc);
 		return;
 	}
 	nseq = xfrm_hash_alloc(nsize);
 	if (!nseq) {
-		xfrm_hash_free(ndst, nsize);
-		xfrm_hash_free(nsrc, nsize);
-		xfrm_hash_free(nspi, nsize);
+		xfrm_hash_free(ndst);
+		xfrm_hash_free(nsrc);
+		xfrm_hash_free(nspi);
 		return;
 	}
 
@@ -211,14 +211,12 @@ static void xfrm_hash_resize(struct work_struct *work)
 	write_seqcount_end(&net->xfrm.xfrm_state_hash_generation);
 	spin_unlock_bh(&net->xfrm.xfrm_state_lock);
 
-	osize = (ohashmask + 1) * sizeof(struct hlist_head);
-
 	synchronize_rcu();
 
-	xfrm_hash_free(odst, osize);
-	xfrm_hash_free(osrc, osize);
-	xfrm_hash_free(ospi, osize);
-	xfrm_hash_free(oseq, osize);
+	xfrm_hash_free(odst);
+	xfrm_hash_free(osrc);
+	xfrm_hash_free(ospi);
+	xfrm_hash_free(oseq);
 }
 
 static DEFINE_SPINLOCK(xfrm_state_afinfo_lock);
@@ -3277,36 +3275,33 @@ int __net_init xfrm_state_init(struct net *net)
 	return 0;
 
 out_state_cache_input:
-	xfrm_hash_free(net->xfrm.state_byseq, sz);
+	xfrm_hash_free(net->xfrm.state_byseq);
 out_byseq:
-	xfrm_hash_free(net->xfrm.state_byspi, sz);
+	xfrm_hash_free(net->xfrm.state_byspi);
 out_byspi:
-	xfrm_hash_free(net->xfrm.state_bysrc, sz);
+	xfrm_hash_free(net->xfrm.state_bysrc);
 out_bysrc:
-	xfrm_hash_free(net->xfrm.state_bydst, sz);
+	xfrm_hash_free(net->xfrm.state_bydst);
 out_bydst:
 	return -ENOMEM;
 }
 
 void xfrm_state_fini(struct net *net)
 {
-	unsigned int sz;
-
 	flush_work(&net->xfrm.state_hash_work);
 	flush_work(&xfrm_state_gc_work);
 	xfrm_state_flush(net, 0, false, true);
 
 	WARN_ON(!list_empty(&net->xfrm.state_all));
 
-	sz = (net->xfrm.state_hmask + 1) * sizeof(struct hlist_head);
 	WARN_ON(!hlist_empty(net->xfrm.state_byseq));
-	xfrm_hash_free(net->xfrm.state_byseq, sz);
+	xfrm_hash_free(net->xfrm.state_byseq);
 	WARN_ON(!hlist_empty(net->xfrm.state_byspi));
-	xfrm_hash_free(net->xfrm.state_byspi, sz);
+	xfrm_hash_free(net->xfrm.state_byspi);
 	WARN_ON(!hlist_empty(net->xfrm.state_bysrc));
-	xfrm_hash_free(net->xfrm.state_bysrc, sz);
+	xfrm_hash_free(net->xfrm.state_bysrc);
 	WARN_ON(!hlist_empty(net->xfrm.state_bydst));
-	xfrm_hash_free(net->xfrm.state_bydst, sz);
+	xfrm_hash_free(net->xfrm.state_bydst);
 	free_percpu(net->xfrm.state_cache_input);
 }
 

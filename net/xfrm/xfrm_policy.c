@@ -655,7 +655,7 @@ static void xfrm_bydst_resize(struct net *net, int dir)
 
 	synchronize_rcu();
 
-	xfrm_hash_free(odst, (hmask + 1) * sizeof(struct hlist_head));
+	xfrm_hash_free(odst);
 }
 
 static void xfrm_byidx_resize(struct net *net)
@@ -680,7 +680,7 @@ static void xfrm_byidx_resize(struct net *net)
 
 	spin_unlock_bh(&net->xfrm.xfrm_policy_lock);
 
-	xfrm_hash_free(oidx, (hmask + 1) * sizeof(struct hlist_head));
+	xfrm_hash_free(oidx);
 }
 
 static inline int xfrm_bydst_should_resize(struct net *net, int dir, int *total)
@@ -4253,9 +4253,9 @@ out_bydst:
 		struct xfrm_policy_hash *htab;
 
 		htab = &net->xfrm.policy_bydst[dir];
-		xfrm_hash_free(htab->table, sz);
+		xfrm_hash_free(htab->table);
 	}
-	xfrm_hash_free(net->xfrm.policy_byidx, sz);
+	xfrm_hash_free(net->xfrm.policy_byidx);
 out_byidx:
 	return -ENOMEM;
 }
@@ -4263,7 +4263,6 @@ out_byidx:
 static void xfrm_policy_fini(struct net *net)
 {
 	struct xfrm_pol_inexact_bin *b, *t;
-	unsigned int sz;
 	int dir;
 
 	flush_work(&net->xfrm.policy_hash_work);
@@ -4278,14 +4277,12 @@ static void xfrm_policy_fini(struct net *net)
 		struct xfrm_policy_hash *htab;
 
 		htab = &net->xfrm.policy_bydst[dir];
-		sz = (htab->hmask + 1) * sizeof(struct hlist_head);
 		WARN_ON(!hlist_empty(htab->table));
-		xfrm_hash_free(htab->table, sz);
+		xfrm_hash_free(htab->table);
 	}
 
-	sz = (net->xfrm.policy_idx_hmask + 1) * sizeof(struct hlist_head);
 	WARN_ON(!hlist_empty(net->xfrm.policy_byidx));
-	xfrm_hash_free(net->xfrm.policy_byidx, sz);
+	xfrm_hash_free(net->xfrm.policy_byidx);
 
 	spin_lock_bh(&net->xfrm.xfrm_policy_lock);
 	list_for_each_entry_safe(b, t, &net->xfrm.inexact_bins, inexact_bins)
