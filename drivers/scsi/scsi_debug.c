@@ -409,12 +409,6 @@ struct sdebug_defer {
 	enum sdeb_defer_type defer_t;
 };
 
-struct sdebug_device_access_info {
-	bool atomic_write;
-	u64 lba;
-	u32 num;
-	struct scsi_cmnd *self;
-};
 
 struct sdebug_queued_cmd {
 	/* corresponding bit set in in_use_bm[] in owning struct sdebug_queue
@@ -422,7 +416,6 @@ struct sdebug_queued_cmd {
 	 */
 	struct sdebug_defer sd_dp;
 	struct scsi_cmnd *scmd;
-	struct sdebug_device_access_info *i;
 };
 
 struct sdebug_scsi_cmd {
