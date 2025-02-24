@@ -230,6 +230,22 @@ int pcie_poll_sltctl_cmd(struct pci_dev *dev, int timeout_ms)
 	return  ret;
 }
 
+void pcie_disable_hp_interrupts_early(struct pci_dev *dev)
+{
+	u16 slot_ctrl = 0;
+
+	pcie_capability_read_word(dev, PCI_EXP_SLTCTL, &slot_ctrl);
+	/* Bail out early if it is already disabled */
+	if (!(slot_ctrl & (PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE)))
+		return;
+
+	pcie_capability_clear_word(dev, PCI_EXP_SLTCTL,
+		  PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE);
+
+	if (pcie_poll_sltctl_cmd(dev, 1000))
+		pci_info(dev, "Timeout on disabling PCIe hot-plug interrupt\n");
+}
+
 /**
  * get_port_device_capability - discover capabilities of a PCI Express port
  * @dev: PCI Express port to examine
@@ -255,8 +271,7 @@ static int get_port_device_capability(struct pci_dev *dev)
 		 * Disable hot-plug interrupts in case they have been enabled
 		 * by the BIOS and the hot-plug service driver is not loaded.
 		 */
-		pcie_capability_clear_word(dev, PCI_EXP_SLTCTL,
-			  PCI_EXP_SLTCTL_CCIE | PCI_EXP_SLTCTL_HPIE);
+		pcie_disable_hp_interrupts_early(dev);
 	}
 
 #ifdef CONFIG_PCIEAER

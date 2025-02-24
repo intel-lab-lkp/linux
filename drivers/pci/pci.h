@@ -794,6 +794,7 @@ static inline void pcie_ecrc_get_policy(char *str) { }
 void pcie_reset_lbms_count(struct pci_dev *port);
 int pcie_lbms_count(struct pci_dev *port, unsigned long *val);
 int pcie_poll_sltctl_cmd(struct pci_dev *dev, int timeout_ms);
+void pcie_disable_hp_interrupts_early(struct pci_dev *dev);
 #else
 static inline void pcie_reset_lbms_count(struct pci_dev *port) {}
 static inline int pcie_lbms_count(struct pci_dev *port, unsigned long *val)
@@ -804,6 +805,7 @@ static inline int pcie_poll_sltctl_cmd(struct pci_dev *dev, int timeout_ms)
 {
 	return 0;
 }
+static inline void pcie_disable_hp_interrupts_early(struct pci_dev *dev) {}
 #endif
 
 struct pci_dev_reset_methods {
