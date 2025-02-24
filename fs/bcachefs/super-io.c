@@ -366,7 +366,6 @@ static int bch2_sb_validate(struct bch_sb_handle *disk_sb,
 	struct bch_sb *sb = disk_sb->sb;
 	struct bch_sb_field_members_v1 *mi;
 	enum bch_opt_id opt_id;
-	u16 block_size;
 	int ret;
 
 	ret = bch2_sb_compatible(sb, out);
@@ -384,8 +383,6 @@ static int bch2_sb_validate(struct bch_sb_handle *disk_sb,
 		prt_printf(out, "Filesystem has incompatible version");
 		return -BCH_ERR_invalid_sb_features;
 	}
-
-	block_size = le16_to_cpu(sb->block_size);
 
 	if (bch2_is_zero(sb->user_uuid.b, sizeof(sb->user_uuid))) {
 		prt_printf(out, "Bad user UUID (got zeroes)");
