@@ -20,6 +20,11 @@ struct io_rsrc_node {
 	};
 };
 
+enum {
+	IO_IMU_READABLE		= 1 << 0,
+	IO_IMU_WRITEABLE	= 1 << 1,
+};
+
 struct io_mapped_ubuf {
 	u64		ubuf;
 	unsigned int	len;
@@ -27,6 +32,9 @@ struct io_mapped_ubuf {
 	unsigned int    folio_shift;
 	refcount_t	refs;
 	unsigned long	acct_pages;
+	void		(*release)(void *);
+	void		*priv;
+	u8		perm;
 	struct bio_vec	bvec[] __counted_by(nr_bvecs);
 };
 
