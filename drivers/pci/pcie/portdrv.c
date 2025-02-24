@@ -263,9 +263,9 @@ static int get_port_device_capability(struct pci_dev *dev)
 
 	if (dev->is_hotplug_bridge &&
 	    (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
-	     pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM) &&
-	    (pcie_ports_native || host->native_pcie_hotplug)) {
-		services |= PCIE_PORT_SERVICE_HP;
+	     pci_pcie_type(dev) == PCI_EXP_TYPE_DOWNSTREAM)) {
+		if  (pcie_ports_native || host->native_pcie_hotplug)
+			services |= PCIE_PORT_SERVICE_HP;
 
 		/*
 		 * Disable hot-plug interrupts in case they have been enabled
