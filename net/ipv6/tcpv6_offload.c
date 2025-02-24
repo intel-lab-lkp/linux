@@ -113,24 +113,36 @@ static struct sk_buff *__tcpv6_gso_segment_list_csum(struct sk_buff *segs)
 	struct sk_buff *seg;
 	struct tcphdr *th2;
 	struct ipv6hdr *iph2;
+	bool addr_equal;
 
 	seg = segs;
 	th = tcp_hdr(seg);
 	iph = ipv6_hdr(seg);
 	th2 = tcp_hdr(seg->next);
 	iph2 = ipv6_hdr(seg->next);
+	addr_equal = ipv6_addr_equal(&iph->saddr, &iph2->saddr) &&
+		     ipv6_addr_equal(&iph->daddr, &iph2->daddr);
 
 	if (!(*(const u32 *)&th->source ^ *(const u32 *)&th2->source) &&
-	    ipv6_addr_equal(&iph->saddr, &iph2->saddr) &&
-	    ipv6_addr_equal(&iph->daddr, &iph2->daddr))
+	    addr_equal)
 		return segs;
 
 	while ((seg = seg->next)) {
 		th2 = tcp_hdr(seg);
 		iph2 = ipv6_hdr(seg);
 
-		iph2->saddr = iph->saddr;
-		iph2->daddr = iph->daddr;
+		if (!addr_equal) {
+			inet_proto_csum_replace16(&th2->check, seg,
+						  iph2->saddr.s6_addr32,
+						  iph->saddr.s6_addr32,
+						  true);
+			inet_proto_csum_replace16(&th2->check, seg,
+						  iph2->daddr.s6_addr32,
+						  iph->daddr.s6_addr32,
+						  true);
+			iph2->saddr = iph->saddr;
+			iph2->daddr = iph->daddr;
+		}
 		__tcpv6_gso_segment_csum(seg, &th2->source, th->source);
 		__tcpv6_gso_segment_csum(seg, &th2->dest, th->dest);
 	}
