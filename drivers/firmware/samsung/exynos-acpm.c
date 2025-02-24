@@ -12,7 +12,6 @@
 #include <linux/container_of.h>
 #include <linux/delay.h>
 #include <linux/device.h>
-#include <linux/firmware/samsung/exynos-acpm-protocol.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/mailbox/exynos-message.h>
@@ -27,7 +26,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 
-#include "exynos-acpm-xfer.h"
+#include "exynos-acpm.h"
 #include "exynos-acpm-pmic.h"
 
 #define ACPM_PROTOCOL_SEQNUM		GENMASK(21, 16)
@@ -37,20 +36,6 @@
 #define ACPM_TX_TIMEOUT_US		500000
 
 #define ACPM_GS101_INITDATA_BASE	0xa000
-
-/**
- * struct acpm_shmem - shared memory configuration information.
- * @reserved:	unused fields.
- * @chans:	offset to array of struct acpm_chan_shmem.
- * @reserved1:	unused fields.
- * @num_chans:	number of channels.
- */
-struct acpm_shmem {
-	u32 reserved[2];
-	u32 chans;
-	u32 reserved1[3];
-	u32 num_chans;
-};
 
 /**
  * struct acpm_chan_shmem - descriptor of a shared memory channel.
@@ -83,19 +68,6 @@ struct acpm_chan_shmem {
 	u32 mlen;
 	u32 reserved2[2];
 	u32 poll_completion;
-};
-
-/**
- * struct acpm_queue - exynos acpm queue.
- *
- * @rear:	rear address of the queue.
- * @front:	front address of the queue.
- * @base:	base address of the queue.
- */
-struct acpm_queue {
-	void __iomem *rear;
-	void __iomem *front;
-	void __iomem *base;
 };
 
 /**
@@ -153,24 +125,6 @@ struct acpm_chan {
 
 	DECLARE_BITMAP(bitmap_seqnum, ACPM_SEQNUM_MAX - 1);
 	struct acpm_rx_data rx_data[ACPM_SEQNUM_MAX];
-};
-
-/**
- * struct acpm_info - driver's private data.
- * @shmem:	pointer to the SRAM configuration data.
- * @sram_base:	base address of SRAM.
- * @chans:	pointer to the ACPM channel parameters retrieved from SRAM.
- * @dev:	pointer to the exynos-acpm device.
- * @handle:	instance of acpm_handle to send to clients.
- * @num_chans:	number of channels available for this controller.
- */
-struct acpm_info {
-	struct acpm_shmem __iomem *shmem;
-	void __iomem *sram_base;
-	struct acpm_chan *chans;
-	struct device *dev;
-	struct acpm_handle handle;
-	u32 num_chans;
 };
 
 /**
