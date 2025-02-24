@@ -1421,6 +1421,129 @@ static void pci_acpi_optimize_delay(struct pci_dev *pdev,
 	ACPI_FREE(obj);
 }
 
+/**
+ * pci_acpi_request_d3cold_aux_power - Request D3cold auxiliary power via ACPI DSM
+ * @dev: PCI device instance
+ * @requested_power: Requested auxiliary power in milliwatts
+ *
+ * This function sends a request to the host BIOS via ACPI _DSM Function 9 to grant
+ * the required D3Cold Auxiliary power for the specified PCI device.
+ * It evaluates the _DSM (Device Specific Method) to request the Auxiliary power and
+ * handles the response accordingly.
+ *
+ * This function shall be only called by 1st non-bridge Endpoint driver on Function 0.
+ * For a Multi-Function Device, the driver for Function 0 is required to report an
+ * aggregate power requirement covering all functions contained within the device.
+ *
+ * Return: Returns 0 on success and errno on failure.
+ */
+int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_power)
+{
+	union acpi_object in_obj = {
+		.integer.type = ACPI_TYPE_INTEGER,
+		.integer.value = requested_power,
+	};
+
+	union acpi_object *out_obj;
+	acpi_handle handle;
+	int result, ret = -EINVAL;
+
+	if (!dev || !ACPI_HANDLE(&dev->dev))
+		return -EINVAL;
+
+	handle = ACPI_HANDLE(&dev->dev);
+
+	out_obj = acpi_evaluate_dsm_typed(handle,
+					  &pci_acpi_dsm_guid,
+					  4,
+					  DSM_PCI_D3COLD_AUX_POWER_LIMIT,
+					  &in_obj,
+					  ACPI_TYPE_INTEGER);
+	if (!out_obj)
+		return -EINVAL;
+
+	result = out_obj->integer.value;
+
+	switch (result) {
+	case 0x0:
+		dev_dbg(&dev->dev, "D3cold Aux Power request denied.\n");
+		break;
+	case 0x1:
+		dev_info(&dev->dev, "D3cold Aux Power request granted: %u mW.\n", requested_power);
+		ret = 0;
+		break;
+	case 0x2:
+		dev_info(&dev->dev, "D3cold Aux Power: Main power will not be removed.\n");
+		ret = -EBUSY;
+		break;
+	default:
+		if (result >= 0x11 && result <= 0x1F) {
+			int retry_interval = result & 0xF;
+
+			dev_warn(&dev->dev,
+				 "D3cold Aux Power request needs retry. Interval: %d seconds.\n", retry_interval);
+			msleep(retry_interval * 1000);
+			ret = -EAGAIN;
+		} else {
+			dev_err(&dev->dev, "D3cold Aux Power: Reserved or unsupported response: 0x%x.\n", result);
+		}
+		break;
+	}
+
+	ACPI_FREE(out_obj);
+	return ret;
+}
+EXPORT_SYMBOL(pci_acpi_request_d3cold_aux_power);
+
+/**
+ * pci_acpi_add_perst_assertion_delay - Request PERST delay via ACPI DSM
+ * @dev: PCI device instance
+ * @delay_us: Requested delay_us
+ *
+ * This function sends a request to the host BIOS via ACPI _DSM to grant the required
+ * PERST dealy for the specified PCI device. It evaluates the _DSM (Device
+ * Specific Method) to request the PERST delay and handles the response accordingly.
+ *
+ * Return: returns 0 on success and errno on failure.
+ */
+int pci_acpi_add_perst_assertion_delay(struct pci_dev *dev, u32 delay_us)
+{
+	union acpi_object in_obj = {
+		.integer.type = ACPI_TYPE_INTEGER,
+		.integer.value = delay_us,
+	};
+
+	union acpi_object *out_obj;
+	acpi_handle handle;
+	int result, ret = -EINVAL;
+
+	if (!dev || !ACPI_HANDLE(&dev->dev))
+		return -EINVAL;
+
+	handle = ACPI_HANDLE(&dev->dev);
+
+	out_obj = acpi_evaluate_dsm_typed(handle, &pci_acpi_dsm_guid, 4,
+					  DSM_PCI_PERST_ASSERTION_DELAY, &in_obj, ACPI_TYPE_INTEGER);
+	if (!out_obj)
+		return -EINVAL;
+
+	result = out_obj->integer.value;
+
+	if (result == delay_us) {
+		dev_info(&dev->dev, "PERST# Assertion Delay set to %u microseconds.\n", delay_us);
+		ret = 0;
+	} else if (result == 0) {
+		dev_warn(&dev->dev, "PERST# Assertion Delay request failed, no previous valid request.\n");
+	} else {
+		dev_warn(&dev->dev,
+			 "PERST# Assertion Delay request failed. Previous valid delay: %u microseconds.\n", result);
+	}
+
+	ACPI_FREE(out_obj);
+	return ret;
+}
+EXPORT_SYMBOL(pci_acpi_add_perst_assertion_delay);
+
 static void pci_acpi_set_external_facing(struct pci_dev *dev)
 {
 	u8 val;
