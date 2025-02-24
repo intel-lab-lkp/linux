@@ -232,10 +232,12 @@ int xe_pm_suspend(struct xe_device *xe)
 
 	xe_display_pm_suspend(xe);
 
-	/* FIXME: Super racey... */
-	err = xe_bo_evict_all(xe);
-	if (err)
-		goto err_pxp;
+	if (xe->d3cold.allowed == XE_D3COLD_OFF) {
+		/* FIXME: Super racey... */
+		err = xe_bo_evict_all(xe);
+		if (err)
+			goto err_pxp;
+	}
 
 	for_each_gt(gt, xe, id) {
 		err = xe_gt_suspend(gt);
@@ -246,6 +248,12 @@ int xe_pm_suspend(struct xe_device *xe)
 	xe_irq_suspend(xe);
 
 	xe_display_pm_suspend_late(xe);
+
+	if (xe->d3cold.allowed == XE_D3COLD_VRSR) {
+		err = xe_pm_enable_vrsr(xe, true);
+			if (err)
+				goto err_display;
+	}
 
 	drm_dbg(&xe->drm, "Device suspended\n");
 	return 0;
@@ -288,9 +296,11 @@ int xe_pm_resume(struct xe_device *xe)
 	 * This only restores pinned memory which is the memory required for the
 	 * GT(s) to resume.
 	 */
-	err = xe_bo_restore_kernel(xe);
-	if (err)
-		goto err;
+	if (xe->d3cold.allowed == XE_D3COLD_OFF) {
+		err = xe_bo_restore_kernel(xe);
+		if (err)
+			goto err;
+	}
 
 	xe_irq_resume(xe);
 
@@ -299,9 +309,11 @@ int xe_pm_resume(struct xe_device *xe)
 
 	xe_display_pm_resume(xe);
 
-	err = xe_bo_restore_user(xe);
-	if (err)
-		goto err;
+	if (xe->d3cold.allowed == XE_D3COLD_OFF) {
+		err = xe_bo_restore_user(xe);
+		if (err)
+			goto err;
+	}
 
 	xe_pxp_pm_resume(xe->pxp);
 
@@ -543,7 +555,7 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 
 	xe_display_pm_runtime_suspend(xe);
 
-	if (xe->d3cold.allowed) {
+	if (xe->d3cold.allowed == XE_D3COLD_OFF) {
 		err = xe_bo_evict_all(xe);
 		if (err)
 			goto out_resume;
@@ -558,6 +570,14 @@ int xe_pm_runtime_suspend(struct xe_device *xe)
 	xe_irq_suspend(xe);
 
 	xe_display_pm_runtime_suspend_late(xe);
+
+	if (xe->d3cold.allowed == XE_D3COLD_VRSR) {
+		err = xe_pm_enable_vrsr(xe, true);
+			if (err) {
+				drm_err(&xe->drm, "Failed to enable VRSR: %d\n", err);
+				goto out_resume;
+			}
+	}
 
 	xe_rpm_lockmap_release(xe);
 	xe_pm_write_callback_task(xe, NULL);
@@ -590,7 +610,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 
 	xe_rpm_lockmap_acquire(xe);
 
-	if (xe->d3cold.allowed) {
+	if (xe->d3cold.allowed == XE_D3COLD_OFF) {
 		err = xe_pcode_ready(xe, true);
 		if (err)
 			goto out;
@@ -606,6 +626,9 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 			goto out;
 	}
 
+	if (xe->d3cold.allowed == XE_D3COLD_VRSR)
+		xe_display_pm_resume_early(xe);
+
 	xe_irq_resume(xe);
 
 	for_each_gt(gt, xe, id)
@@ -613,7 +636,7 @@ int xe_pm_runtime_resume(struct xe_device *xe)
 
 	xe_display_pm_runtime_resume(xe);
 
-	if (xe->d3cold.allowed) {
+	if (xe->d3cold.allowed == XE_D3COLD_OFF) {
 		err = xe_bo_restore_user(xe);
 		if (err)
 			goto out;
