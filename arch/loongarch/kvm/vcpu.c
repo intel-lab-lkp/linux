@@ -361,8 +361,34 @@ int kvm_arch_vcpu_should_kick(struct kvm_vcpu *vcpu)
 
 bool kvm_arch_vcpu_in_kernel(struct kvm_vcpu *vcpu)
 {
+	unsigned long val;
+
+	preempt_disable();
+	val = gcsr_read(LOONGARCH_CSR_CRMD);
+	preempt_enable();
+
+	return (val & CSR_PRMD_PPLV) == 0;
+}
+
+#ifdef CONFIG_GUEST_PERF_EVENTS
+unsigned long kvm_arch_vcpu_get_ip(struct kvm_vcpu *vcpu)
+{
+	return vcpu->arch.pc;
+}
+
+/*
+ * Returns true if a Performance Monitoring Interrupt (PMI), a.k.a. perf event,
+ * arrived in guest context.  For loongarch64, if pmu is not passthrough to VM,
+ * any event that arrives while a vCPU is loaded is considered to be "in guest".
+ */
+bool kvm_arch_pmi_in_guest(struct kvm_vcpu *vcpu)
+{
+	if (vcpu && !(vcpu->arch.aux_inuse & KVM_LARCH_PMU))
+		return true;
+
 	return false;
 }
+#endif
 
 bool kvm_arch_vcpu_preempted_in_kernel(struct kvm_vcpu *vcpu)
 {
