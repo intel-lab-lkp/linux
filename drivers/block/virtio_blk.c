@@ -331,6 +331,20 @@ static inline u8 virtblk_vbr_status(struct virtblk_req *vbr)
 	return *((u8 *)&vbr->in_hdr + vbr->in_hdr_len - 1);
 }
 
+static inline void virtblk_vbr_set_err_status_upon_len_err(struct virtblk_req *vbr,
+		struct request *req, unsigned int len)
+{
+	unsigned int expected_len = vbr->in_hdr_len;
+
+	if (rq_dma_dir(req) == DMA_FROM_DEVICE)
+		expected_len += blk_rq_payload_bytes(req);
+
+	if (unlikely(len < expected_len)) {
+		u8 *status_ptr = (u8 *)&vbr->in_hdr + vbr->in_hdr_len - 1;
+		*status_ptr = VIRTIO_BLK_S_IOERR;
+	}
+}
+
 static inline void virtblk_request_done(struct request *req)
 {
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
@@ -361,6 +375,9 @@ static void virtblk_done(struct virtqueue *vq)
 		virtqueue_disable_cb(vq);
 		while ((vbr = virtqueue_get_buf(vblk->vqs[qid].vq, &len)) != NULL) {
 			struct request *req = blk_mq_rq_from_pdu(vbr);
+
+			/* Check device writable portion length, and fail upon error */
+			virtblk_vbr_set_err_status_upon_len_err(vbr, req, len);
 
 			if (likely(!blk_should_fake_timeout(req->q)))
 				blk_mq_complete_request(req);
@@ -1207,6 +1224,9 @@ static int virtblk_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 
 	while ((vbr = virtqueue_get_buf(vq->vq, &len)) != NULL) {
 		struct request *req = blk_mq_rq_from_pdu(vbr);
+
+		/* Check device writable portion length, and fail upon error */
+		virtblk_vbr_set_err_status_upon_len_err(vbr, req, len);
 
 		found++;
 		if (!blk_mq_complete_request_remote(req) &&
