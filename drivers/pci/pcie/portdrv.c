@@ -18,6 +18,7 @@
 #include <linux/string.h>
 #include <linux/slab.h>
 #include <linux/aer.h>
+#include <linux/iopoll.h>
 
 #include "../pci.h"
 #include "portdrv.h"
@@ -203,6 +204,30 @@ intx_irq:
 		irqs[i] = pci_irq_vector(dev, 0);
 
 	return 0;
+}
+
+/* Return 0 on command completed on time, otherwise return -ETIMEOUT */
+int pcie_poll_sltctl_cmd(struct pci_dev *dev, int timeout_ms)
+{
+	u16 slot_status = 0;
+	u32 slot_cap;
+	int ret = 0;
+	int __maybe_unused ret1;
+
+	/* Don't wait if the command complete event is not well supported */
+	pcie_capability_read_dword(dev, PCI_EXP_SLTCAP, &slot_cap);
+	if (!(slot_cap & PCI_EXP_SLTCAP_HPC) || slot_cap & PCI_EXP_SLTCAP_NCCS)
+		return ret;
+
+	ret = read_poll_timeout(pcie_capability_read_word, ret1,
+				(slot_status & PCI_EXP_SLTSTA_CC), 10000,
+				timeout_ms * 1000, true, dev, PCI_EXP_SLTSTA,
+				&slot_status);
+	if (!ret)
+		pcie_capability_write_word(dev, PCI_EXP_SLTSTA,
+						PCI_EXP_SLTSTA_CC);
+
+	return  ret;
 }
 
 /**

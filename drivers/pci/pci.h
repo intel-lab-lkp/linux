@@ -793,11 +793,16 @@ static inline void pcie_ecrc_get_policy(char *str) { }
 #ifdef CONFIG_PCIEPORTBUS
 void pcie_reset_lbms_count(struct pci_dev *port);
 int pcie_lbms_count(struct pci_dev *port, unsigned long *val);
+int pcie_poll_sltctl_cmd(struct pci_dev *dev, int timeout_ms);
 #else
 static inline void pcie_reset_lbms_count(struct pci_dev *port) {}
 static inline int pcie_lbms_count(struct pci_dev *port, unsigned long *val)
 {
 	return -EOPNOTSUPP;
+}
+static inline int pcie_poll_sltctl_cmd(struct pci_dev *dev, int timeout_ms)
+{
+	return 0;
 }
 #endif
 

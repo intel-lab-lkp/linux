@@ -83,32 +83,6 @@ static inline void pciehp_free_irq(struct controller *ctrl)
 		free_irq(ctrl->pcie->irq, ctrl);
 }
 
-static int pcie_poll_cmd(struct controller *ctrl, int timeout)
-{
-	struct pci_dev *pdev = ctrl_dev(ctrl);
-	u16 slot_status;
-
-	do {
-		pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &slot_status);
-		if (PCI_POSSIBLE_ERROR(slot_status)) {
-			ctrl_info(ctrl, "%s: no response from device\n",
-				  __func__);
-			return 0;
-		}
-
-		if (slot_status & PCI_EXP_SLTSTA_CC) {
-			pcie_capability_write_word(pdev, PCI_EXP_SLTSTA,
-						   PCI_EXP_SLTSTA_CC);
-			ctrl->cmd_busy = 0;
-			smp_mb();
-			return 1;
-		}
-		msleep(10);
-		timeout -= 10;
-	} while (timeout >= 0);
-	return 0;	/* timeout */
-}
-
 static void pcie_wait_cmd(struct controller *ctrl)
 {
 	unsigned int msecs = pciehp_poll_mode ? 2500 : 1000;
@@ -138,10 +112,16 @@ static void pcie_wait_cmd(struct controller *ctrl)
 		timeout = cmd_timeout - now;
 
 	if (ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE &&
-	    ctrl->slot_ctrl & PCI_EXP_SLTCTL_CCIE)
+	    ctrl->slot_ctrl & PCI_EXP_SLTCTL_CCIE) {
 		rc = wait_event_timeout(ctrl->queue, !ctrl->cmd_busy, timeout);
-	else
-		rc = pcie_poll_cmd(ctrl, jiffies_to_msecs(timeout));
+	} else {
+		rc = pcie_poll_sltctl_cmd(ctrl_dev(ctrl), jiffies_to_msecs(timeout));
+		if (!rc) {
+			ctrl->cmd_busy = 0;
+			smp_mb();
+			rc = 1;
+		}
+	}
 
 	if (!rc)
 		ctrl_info(ctrl, "Timeout on hotplug command %#06x (issued %u msec ago)\n",
