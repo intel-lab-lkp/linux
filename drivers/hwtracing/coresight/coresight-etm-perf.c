@@ -62,6 +62,8 @@ PMU_FORMAT_ATTR(contextid1,	"config:" __stringify(ETM_OPT_CTXTID));
 PMU_FORMAT_ATTR(contextid2,	"config:" __stringify(ETM_OPT_CTXTID2));
 PMU_FORMAT_ATTR(timestamp,	"config:" __stringify(ETM_OPT_TS));
 PMU_FORMAT_ATTR(retstack,	"config:" __stringify(ETM_OPT_RETSTK));
+PMU_FORMAT_ATTR(update_buf_on_pause,
+		"config:" __stringify(ETM_OPT_UPDATE_BUF_ON_PAUSE));
 /* preset - if sink ID is used as a configuration selector */
 PMU_FORMAT_ATTR(preset,		"config:0-3");
 /* Sink ID - same for all ETMs */
@@ -103,6 +105,7 @@ static struct attribute *etm_config_formats_attr[] = {
 	&format_attr_configid.attr,
 	&format_attr_branch_broadcast.attr,
 	&format_attr_cc_threshold.attr,
+	&format_attr_update_buf_on_pause.attr,
 	NULL,
 };
 
@@ -433,6 +436,23 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 	/* no sink found for any CPU - cannot trace */
 	if (!sink)
 		goto err;
+
+	/* Populate the flag for updating buffer on AUX pause */
+	event_data->update_buf_on_pause =
+		!!(event->attr.config & BIT(ETM_OPT_UPDATE_BUF_ON_PAUSE));
+
+	if (event_data->update_buf_on_pause) {
+		/*
+		 * The per CPU sink has own interrupt handling, it might have
+		 * race condition with updating buffer on AUX trace pause if
+		 * it is invoked from NMI.  To avoid the race condition,
+		 * disallows updating buffer for the per CPU sink case.
+		 */
+		if (coresight_is_percpu_sink(sink)) {
+			dev_err(&sink->dev, "update_buf_on_pause is not permitted.\n");
+			goto err;
+		}
+	}
 
 	/* If we don't have any CPUs ready for tracing, abort */
 	cpu = cpumask_first(mask);
