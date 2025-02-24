@@ -16,6 +16,10 @@
 struct rcu_synchronize {
 	struct rcu_head head;
 	struct completion completion;
+#ifdef CONFIG_PROVE_RCU
+	/* This is for testing. */
+	struct rcu_gp_oldstate oldstate;
+#endif
 };
 void wakeme_after_rcu(struct rcu_head *head);
 
