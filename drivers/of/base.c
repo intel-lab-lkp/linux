@@ -1646,9 +1646,6 @@ int __of_add_property(struct device_node *np, struct property *prop)
 
 	raw_spin_lock_irqsave(&devtree_lock, flags);
 
-	__of_remove_property_from_list(&np->deadprops, prop);
-
-	prop->next = NULL;
 	next = &np->properties;
 	while (*next) {
 		if (of_prop_cmp(prop->name, (*next)->name) == 0) {
@@ -1659,6 +1656,9 @@ int __of_add_property(struct device_node *np, struct property *prop)
 		next = &(*next)->next;
 	}
 	*next = prop;
+
+	__of_remove_property_from_list(&np->deadprops, prop);
+	prop->next = NULL;
 
 out_unlock:
 	raw_spin_unlock_irqrestore(&devtree_lock, flags);
