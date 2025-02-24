@@ -36,6 +36,7 @@
 #define ACPM_TX_TIMEOUT_US		500000
 
 #define ACPM_GS101_INITDATA_BASE	0xa000
+#define ACPM_GS101_MBOX_DBG_CHAN	4
 
 /**
  * struct acpm_chan_shmem - descriptor of a shared memory channel.
@@ -130,9 +131,11 @@ struct acpm_chan {
 /**
  * struct acpm_match_data - of_device_id data.
  * @initdata_base:	offset in SRAM where the channels configuration resides.
+ * @mbox_dbg_chan:	mailbox channel number used for ACPM debug.
  */
 struct acpm_match_data {
 	loff_t initdata_base;
+	unsigned int mbox_dbg_chan;
 };
 
 #define client_to_acpm_chan(c) container_of(c, struct acpm_chan, cl)
@@ -577,9 +580,14 @@ static int acpm_probe(struct platform_device *pdev)
 				     "Failed to get match data.\n");
 
 	acpm->shmem = acpm->sram_base + match_data->initdata_base;
+	acpm->mbox_dbg_chan = match_data->mbox_dbg_chan;
 	acpm->dev = dev;
 
 	ret = acpm_channels_init(acpm);
+	if (ret)
+		return ret;
+
+	ret = acpm_debugfs_register(acpm);
 	if (ret)
 		return ret;
 
@@ -588,6 +596,11 @@ static int acpm_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, acpm);
 
 	return 0;
+}
+
+static void acpm_remove(struct platform_device *pdev)
+{
+	acpm_debugfs_remove();
 }
 
 /**
@@ -698,6 +711,7 @@ const struct acpm_handle *devm_acpm_get_by_phandle(struct device *dev,
 
 static const struct acpm_match_data acpm_gs101 = {
 	.initdata_base = ACPM_GS101_INITDATA_BASE,
+	.mbox_dbg_chan = ACPM_GS101_MBOX_DBG_CHAN,
 };
 
 static const struct of_device_id acpm_match[] = {
@@ -711,6 +725,7 @@ MODULE_DEVICE_TABLE(of, acpm_match);
 
 static struct platform_driver acpm_driver = {
 	.probe	= acpm_probe,
+	.remove = acpm_remove,
 	.driver	= {
 		.name = "exynos-acpm-protocol",
 		.of_match_table	= acpm_match,
