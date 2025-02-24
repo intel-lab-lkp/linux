@@ -1318,12 +1318,16 @@ static int mtdswap_init(struct mtdswap_dev *d, unsigned int eblocks,
 
 oob_buf_fail:
 	kfree(d->page_buf);
+	d->page_buf = NULL;
 page_buf_fail:
 	vfree(d->eb_data);
+	d->eb_data = NULL;
 eb_data_fail:
 	vfree(d->revmap);
+	d->revmap = NULL;
 revmap_fail:
 	vfree(d->page_data);
+	d->page_data = NULL;
 page_data_fail:
 	printk(KERN_ERR "%s: init failed (%d)\n", MTDSWAP_PREFIX, ret);
 	return ret;
