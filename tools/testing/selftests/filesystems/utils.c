@@ -3,7 +3,6 @@
 #define _GNU_SOURCE
 #endif
 #include <fcntl.h>
-#include <sys/types.h>
 #include <dirent.h>
 #include <grp.h>
 #include <linux/limits.h>
