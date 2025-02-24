@@ -7599,6 +7599,34 @@ int vmx_vm_init(struct kvm *kvm)
 	return 0;
 }
 
+/*
+ * Ignore guest PAT when the CPU doesn't support self-snoop to safely honor
+ * guest PAT, or quirk KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT is turned on.  Always
+ * honor guest PAT when there's non-coherent DMA device attached.
+ *
+ * Honoring guest PAT means letting the guest control memory types.
+ * - On Intel CPUs that lack self-snoop feature, honoring guest PAT may result
+ *   in unexpected behavior. So always ignore guest PAT on those CPUs.
+ *
+ * - KVM's ABI is to trust the guest for attached non-coherent DMA devices to
+ *   function correctly (non-coherent DMA devices need the guest to flush CPU
+ *   caches properly). So honoring guest PAT to avoid breaking existing ABI.
+ *
+ * - On certain Intel CPUs (e.g. SPR, ICX), though self-snoop feature is
+ *   supported, UC is slow enough to cause issues with some older guests (e.g.
+ *   an old version of bochs driver uses ioremap() instead of ioremap_wc() to
+ *   map the video RAM, causing wayland desktop to fail to get started
+ *   correctly). To avoid breaking those old guests that rely on KVM to force
+ *   memory type to WB, only honoring guest PAT when quirk
+ *   KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT is disabled.
+ */
+static inline bool vmx_ignore_guest_pat(struct kvm *kvm)
+{
+	return !kvm_arch_has_noncoherent_dma(kvm) &&
+	       (kvm_check_has_quirk(kvm, KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT) ||
+		!static_cpu_has(X86_FEATURE_SELFSNOOP));
+}
+
 u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
 {
 	/*
@@ -7608,13 +7636,8 @@ u8 vmx_get_mt_mask(struct kvm_vcpu *vcpu, gfn_t gfn, bool is_mmio)
 	if (is_mmio)
 		return MTRR_TYPE_UNCACHABLE << VMX_EPT_MT_EPTE_SHIFT;
 
-	/*
-	 * Force WB and ignore guest PAT if the VM does NOT have a non-coherent
-	 * device attached.  Letting the guest control memory types on Intel
-	 * CPUs may result in unexpected behavior, and so KVM's ABI is to trust
-	 * the guest to behave only as a last resort.
-	 */
-	if (!kvm_arch_has_noncoherent_dma(vcpu->kvm))
+	/* Force WB if ignoring guest PAT */
+	if (vmx_ignore_guest_pat(vcpu->kvm))
 		return (MTRR_TYPE_WRBACK << VMX_EPT_MT_EPTE_SHIFT) | VMX_EPT_IPAT_BIT;
 
 	return (MTRR_TYPE_WRBACK << VMX_EPT_MT_EPTE_SHIFT);
@@ -8497,6 +8520,8 @@ __init int vmx_hardware_setup(void)
 		if (r)
 			return r;
 	}
+
+	kvm_caps.supported_quirks |= KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT;
 
 	vmx_set_cpu_caps();
 
