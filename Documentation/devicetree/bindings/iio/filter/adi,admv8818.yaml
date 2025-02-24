@@ -44,6 +44,16 @@ properties:
   '#clock-cells':
     const: 0
 
+  adi,lpf-margin-hz:
+    description:
+      Sets minimum low-pass corner frequency to the frequency of rf_in plus this value when in auto mode.
+    default: 0
+
+  adi,hpf-margin-hz:
+    description:
+      Sets maximum high-pass corner frequency to the frequency of rf_in minus this value when in auto mode.
+    default: 0
+
 required:
   - compatible
   - reg
@@ -61,6 +71,8 @@ examples:
         spi-max-frequency = <10000000>;
         clocks = <&admv8818_rfin>;
         clock-names = "rf_in";
+        adi,lpf-margin-hz = /bits/ 64 <30000000>;
+        adi,hpf-margin-hz = /bits/ 64 <30000000>;
       };
     };
 ...
