@@ -7,6 +7,8 @@
 #include <linux/numa.h>
 #include <linux/numa_memblks.h>
 
+#include "internal.h"
+
 int numa_distance_cnt;
 static u8 *numa_distance;
 
@@ -371,6 +373,24 @@ static void __init numa_clear_kernel_node_hotplug(void)
 	}
 }
 
+#ifdef CONFIG_PAGE_ALLOC_KUNIT_TEST
+static inline void make_isolated_node(void)
+{
+	int node;
+
+	node = num_possible_nodes();
+	if (!numa_valid_node(node)) {
+		pr_err("All node IDs used, can't fake another.\n");
+	} else {
+		node_set(num_possible_nodes(), node_possible_map);
+		node_set_isolated(node);
+	}
+}
+#else
+static inline void make_isolated_node(void) { }
+#endif
+
+
 static int __init numa_register_meminfo(struct numa_meminfo *mi)
 {
 	int i;
@@ -380,6 +400,8 @@ static int __init numa_register_meminfo(struct numa_meminfo *mi)
 	numa_nodemask_from_meminfo(&node_possible_map, mi);
 	if (WARN_ON(nodes_empty(node_possible_map)))
 		return -EINVAL;
+
+	make_isolated_node();
 
 	for (i = 0; i < mi->nr_blks; i++) {
 		struct numa_memblk *mb = &mi->blk[i];

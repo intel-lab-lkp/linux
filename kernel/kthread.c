@@ -9,6 +9,7 @@
  */
 #include <uapi/linux/sched/types.h>
 #include <linux/mm.h>
+#include <linux/mmdebug.h>
 #include <linux/mmu_context.h>
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
@@ -510,6 +511,8 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 	struct task_struct *task;
 	struct kthread_create_info *create = kmalloc(sizeof(*create),
 						     GFP_KERNEL);
+
+	VM_WARN_ON(node != NUMA_NO_NODE && node_isolated(node));
 
 	if (!create)
 		return ERR_PTR(-ENOMEM);

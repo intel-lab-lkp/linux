@@ -1360,7 +1360,7 @@ config PT_RECLAIM
 
 config PAGE_ALLOC_KUNIT_TEST
 	tristate "KUnit test for page allocator" if !KUNIT_ALL_TESTS
-	depends on KUNIT
+	depends on KUNIT && NUMA && MEMORY_HOTREMOVE
 	default KUNIT_ALL_TESTS
 	help
 	  Builds unit tests for page allocator.

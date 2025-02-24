@@ -536,6 +536,19 @@ static __always_inline int node_random(const nodemask_t *maskp)
 #define for_each_node(node)	   for_each_node_state(node, N_POSSIBLE)
 #define for_each_online_node(node) for_each_node_state(node, N_ONLINE)
 
+
+#ifdef CONFIG_PAGE_ALLOC_KUNIT_TEST
+/*
+ * An isolated node is a fake node for testing, that boots with no memory and no
+ * attached CPUs, and nothing should touch it except for test code.
+ */
+extern bool node_isolated(int node);
+/* Only one isolated node is supported at present and it cannot be un-isolated. */
+extern void node_set_isolated(int node);
+#else
+static inline bool node_isolated(int node) { return false; }
+#endif /* CONFIG_PAGE_ALLOC_KUNIT_TEST */
+
 /*
  * For nodemask scratch area.
  * NODEMASK_ALLOC(type, name) allocates an object with a specified type and

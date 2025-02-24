@@ -56,6 +56,7 @@
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
 #include <asm/div64.h>
+#include <kunit/visibility.h>
 #include "internal.h"
 #include "shuffle.h"
 #include "page_reporting.h"
@@ -290,6 +291,26 @@ static bool cond_accept_memory(struct zone *zone, unsigned int order);
 static bool __free_unaccepted(struct page *page);
 
 int page_group_by_mobility_disabled __read_mostly;
+
+/*
+ * Test harness for KUnit - pick a node that we will never allocate from, except
+ * for in the page allocator tests.
+ */
+#ifdef CONFIG_PAGE_ALLOC_KUNIT_TEST
+int isolated_node = NUMA_NO_NODE;
+EXPORT_SYMBOL(isolated_node);
+
+void node_set_isolated(int node)
+{
+	WARN_ON(isolated_node != NUMA_NO_NODE);
+	isolated_node = node;
+}
+
+bool node_isolated(int node)
+{
+	return node == isolated_node;
+}
+#endif /* CONFIG_POAGE_ALLOC_KUNIT_TEST */
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 /*
@@ -2410,7 +2431,7 @@ static void drain_pages_zone(unsigned int cpu, struct zone *zone)
 /*
  * Drain pcplists of all zones on the indicated processor.
  */
-static void drain_pages(unsigned int cpu)
+VISIBLE_IF_KUNIT void drain_pages(unsigned int cpu)
 {
 	struct zone *zone;
 
@@ -2418,6 +2439,7 @@ static void drain_pages(unsigned int cpu)
 		drain_pages_zone(cpu, zone);
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(drain_pages);
 
 /*
  * Spill all of this CPU's per-cpu pages back into the buddy allocator.
@@ -5087,6 +5109,8 @@ int find_next_best_node(int node, nodemask_t *used_node_mask)
 	}
 
 	for_each_node_state(n, N_MEMORY) {
+		if (node_isolated(n))
+			continue;
 
 		/* Don't want a node to appear more than once */
 		if (node_isset(n, *used_node_mask))
@@ -5134,8 +5158,17 @@ static void build_zonelists_in_node_order(pg_data_t *pgdat, int *node_order,
 
 	for (i = 0; i < nr_nodes; i++) {
 		int nr_zones;
+		int other_nid = node_order[i];
+		pg_data_t *node = NODE_DATA(other_nid);
 
-		pg_data_t *node = NODE_DATA(node_order[i]);
+		/*
+		 * Never fall back to the isolated node. The isolated node has
+		 * to be able to fall back to other nodes because that fallback
+		 * is relied on for allocating data structures that describe the
+		 * node.
+		 */
+		if (node_isolated(other_nid) && other_nid != pgdat->node_id)
+			continue;
 
 		nr_zones = build_zonerefs_node(node, zonerefs);
 		zonerefs += nr_zones;

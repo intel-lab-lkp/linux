@@ -1545,5 +1545,16 @@ static inline bool reclaim_pt_is_enabled(unsigned long start, unsigned long end,
 }
 #endif /* CONFIG_PT_RECLAIM */
 
+#ifdef CONFIG_PAGE_ALLOC_KUNIT_TEST
+/*
+ * Note that node_isolated() is separate, that's a "public API". But only
+ * test code needs to look up which node is isolated.
+ */
+extern int isolated_node;
+#endif
+
+#ifdef CONFIG_KUNIT
+void drain_pages(unsigned int cpu);
+#endif
 
 #endif	/* __MM_INTERNAL_H */

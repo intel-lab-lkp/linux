@@ -1,2 +1,10 @@
 CONFIG_KUNIT=y
 CONFIG_PAGE_ALLOC_KUNIT_TEST=y
+
+# Required for NUMA
+CONFIG_SMP=y
+# Used by tests to carve out fake node for isolating page_alloc data.
+CONFIG_NUMA=y
+CONFIG_NUMA_EMU=y
+CONFIG_MEMORY_HOTPLUG=y
+CONFIG_MEMORY_HOTREMOVE=y

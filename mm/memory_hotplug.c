@@ -1198,10 +1198,12 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	arg.nr_pages = nr_pages;
 	node_states_check_changes_online(nr_pages, zone, &arg);
 
-	ret = memory_notify(MEM_GOING_ONLINE, &arg);
-	ret = notifier_to_errno(ret);
-	if (ret)
-		goto failed_addition;
+	if (!node_isolated(nid)) {
+		ret = memory_notify(MEM_GOING_ONLINE, &arg);
+		ret = notifier_to_errno(ret);
+		if (ret)
+			goto failed_addition;
+	}
 
 	/*
 	 * Fixup the number of isolated pageblocks before marking the sections
@@ -1242,19 +1244,27 @@ int online_pages(unsigned long pfn, unsigned long nr_pages,
 	/* reinitialise watermarks and update pcp limits */
 	init_per_zone_wmark_min();
 
-	kswapd_run(nid);
-	kcompactd_run(nid);
+	/*
+	 * Don't run daemons on the special test node, if that needs to be
+	 * tested the test should run it.
+	 */
+	if (!node_isolated(nid)) {
+		kswapd_run(nid);
+		kcompactd_run(nid);
+	}
 
 	writeback_set_ratelimit();
 
-	memory_notify(MEM_ONLINE, &arg);
+	if (!node_isolated(nid))
+		memory_notify(MEM_ONLINE, &arg);
 	return 0;
 
 failed_addition:
 	pr_debug("online_pages [mem %#010llx-%#010llx] failed\n",
 		 (unsigned long long) pfn << PAGE_SHIFT,
 		 (((unsigned long long) pfn + nr_pages) << PAGE_SHIFT) - 1);
-	memory_notify(MEM_CANCEL_ONLINE, &arg);
+	if (!node_isolated(nid))
+		memory_notify(MEM_CANCEL_ONLINE, &arg);
 	remove_pfn_range_from_zone(zone, pfn, nr_pages);
 	return ret;
 }
