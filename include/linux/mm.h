@@ -4155,4 +4155,14 @@ int arch_get_shadow_stack_status(struct task_struct *t, unsigned long __user *st
 int arch_set_shadow_stack_status(struct task_struct *t, unsigned long status);
 int arch_lock_shadow_stack_status(struct task_struct *t, unsigned long status);
 
+
+/*
+ * mseal of userspace process's system mappings.
+ */
+#ifdef CONFIG_MSEAL_SYSTEM_MAPPINGS
+#define MSEAL_SYSTEM_MAPPINGS_VM_FLAG	VM_SEALED
+#else
+#define MSEAL_SYSTEM_MAPPINGS_VM_FLAG	VM_NONE
+#endif
+
 #endif /* _LINUX_MM_H */
