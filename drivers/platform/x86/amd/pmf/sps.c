@@ -397,6 +397,7 @@ static int amd_pmf_profile_probe(void *drvdata, unsigned long *choices)
 }
 
 static const struct platform_profile_ops amd_pmf_profile_ops = {
+	.secondary = true,
 	.probe = amd_pmf_profile_probe,
 	.profile_get = amd_pmf_profile_get,
 	.profile_set = amd_pmf_profile_set,

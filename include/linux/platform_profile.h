@@ -30,6 +30,12 @@ enum platform_profile_option {
 
 /**
  * struct platform_profile_ops - platform profile operations
+ * @secondary: Set the platform handler as a secondary. Secondary handlers
+ *		 should be able to accept all profile options. This way, they do
+ *		 not obscure the primary handler's profile options (such as amdpmf
+ *		 having cool and asus-wmi having quiet). When a secondary handler
+ *		 is the only handler available, its probe function is still used
+ *		 to avoid showing all profiles.
  * @probe: Callback to setup choices available to the new class device. These
  *	   choices will only be enforced when setting a new profile, not when
  *	   getting the current one.
@@ -39,6 +45,7 @@ enum platform_profile_option {
  *		 profile in sysfs.
  */
 struct platform_profile_ops {
+	bool secondary;
 	int (*probe)(void *drvdata, unsigned long *choices);
 	int (*profile_get)(struct device *dev, enum platform_profile_option *profile);
 	int (*profile_set)(struct device *dev, enum platform_profile_option profile);
