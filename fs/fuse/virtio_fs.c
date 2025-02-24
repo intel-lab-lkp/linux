@@ -827,6 +827,15 @@ static void virtio_fs_requests_done_work(struct work_struct *work)
 		virtqueue_disable_cb(vq);
 
 		while ((req = virtqueue_get_buf(vq, &len)) != NULL) {
+
+			/*
+			 * Check device writable portion length, and fail upon
+			 * error.
+			 */
+			if (unlikely(len < sizeof(req->out.h) ||
+			    len < req->out.h.len))
+				req->out.h.error = -EIO;
+
 			spin_lock(&fpq->lock);
 			list_move_tail(&req->list, &reqs);
 			spin_unlock(&fpq->lock);
