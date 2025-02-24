@@ -365,6 +365,13 @@ static void reset_prepare(struct intel_engine_cs *engine)
 			     ENGINE_READ_FW(engine, RING_HEAD),
 			     ENGINE_READ_FW(engine, RING_TAIL),
 			     ENGINE_READ_FW(engine, RING_START));
+		/*
+		 * Sometimes engine head failed to set to zero even after writing into it.
+		 * Use 20ms delay to let engine resumes from correct RING_HEAD.
+		 * Experimented different values and determined that 20ms works best
+		 * based on testing.
+		 */
+		mdelay(20);
 		if (!stop_ring(engine)) {
 			drm_err(&engine->i915->drm,
 				"failed to set %s head to zero "
