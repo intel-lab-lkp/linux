@@ -123,7 +123,7 @@ static int hyp_rb_swap_reader(struct hyp_rb_per_cpu *cpu_buffer)
 		reader->list.prev = head->list.prev;
 
 		/* The last page before the head */
-		last = hyp_bpage_from_link(reader->list.next);
+		last = hyp_bpage_from_link(head->list.prev);
 
 		/* The reader page points to the new header page */
 		hyp_bpage_set_link_flag(reader, HYP_BPAGE_LINK_HEAD);
