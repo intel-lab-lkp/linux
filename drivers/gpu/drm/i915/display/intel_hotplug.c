@@ -1008,33 +1008,6 @@ void intel_hpd_cancel_work(struct drm_i915_private *dev_priv)
 		drm_dbg_kms(&dev_priv->drm, "Hotplug detection work still active\n");
 }
 
-bool intel_hpd_disable(struct drm_i915_private *dev_priv, enum hpd_pin pin)
-{
-	bool ret = false;
-
-	if (pin == HPD_NONE)
-		return false;
-
-	spin_lock_irq(&dev_priv->irq_lock);
-	if (dev_priv->display.hotplug.stats[pin].state == HPD_ENABLED) {
-		dev_priv->display.hotplug.stats[pin].state = HPD_DISABLED;
-		ret = true;
-	}
-	spin_unlock_irq(&dev_priv->irq_lock);
-
-	return ret;
-}
-
-void intel_hpd_enable(struct drm_i915_private *dev_priv, enum hpd_pin pin)
-{
-	if (pin == HPD_NONE)
-		return;
-
-	spin_lock_irq(&dev_priv->irq_lock);
-	dev_priv->display.hotplug.stats[pin].state = HPD_ENABLED;
-	spin_unlock_irq(&dev_priv->irq_lock);
-}
-
 static void queue_work_for_missed_irqs(struct drm_i915_private *i915)
 {
 	struct intel_display *display = to_intel_display(&i915->drm);
@@ -1088,7 +1061,8 @@ static void queue_work_for_missed_irqs(struct drm_i915_private *i915)
  *   userspace connector probing, or DRM core's connector polling.
  *
  * A nested call of this function on the same encoder is not allowed. The call
- * must be followed by calling intel_hpd_resume().
+ * must be followed by calling intel_hpd_resume(), or
+ * intel_hpd_clear_and_resume().
  *
  * Note that the handling of HPD IRQs for another encoder using the same HPD
  * pin as that of @encoder will be also suspended.
@@ -1145,6 +1119,35 @@ void intel_hpd_resume(struct intel_encoder *encoder)
 
 	spin_lock_irq(&i915->irq_lock);
 	resume_hpd(encoder);
+	spin_unlock_irq(&i915->irq_lock);
+}
+
+/**
+ * intel_hpd_clear_and_resume - Resume handling of new HPD IRQs on an HPD pin
+ * @encoder: Encoder to resume the HPD handling for
+ *
+ * Resume the handling of HPD IRQs on the HPD pin of @encoder, which was
+ * previously suspended by intel_hpd_suspend(). Any HPD IRQ raised on the
+ * HPD pin while it was suspended will be cleared, handling only new IRQs.
+ */
+void intel_hpd_clear_and_resume(struct intel_encoder *encoder)
+{
+	struct intel_display *display = to_intel_display(encoder);
+	struct drm_i915_private *i915 = to_i915(display->drm);
+	struct intel_hotplug *hotplug = &display->hotplug;
+
+	if (encoder->hpd_pin == HPD_NONE)
+		return;
+
+	spin_lock_irq(&i915->irq_lock);
+
+	hotplug->event_bits &= ~BIT(encoder->hpd_pin);
+	hotplug->retry_bits &= ~BIT(encoder->hpd_pin);
+	hotplug->short_port_mask &= ~BIT(encoder->port);
+	hotplug->long_port_mask &= ~BIT(encoder->port);
+
+	resume_hpd(encoder);
+
 	spin_unlock_irq(&i915->irq_lock);
 }
 
