@@ -10,6 +10,8 @@
 #include <sys/sysinfo.h>
 #include <sys/syscall.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
 #include <asm/unistd.h>
 #include "../kselftest_harness.h"
@@ -110,31 +112,15 @@ TEST(bad_prctl_param)
 	/* PR_SYS_DISPATCH_ON */
 	op = PR_SYS_DISPATCH_ON;
 
-	/* Dispatcher region is bad (offset > 0 && len == 0) */
-	EXPECT_EQ(-1, prctl(PR_SET_SYSCALL_USER_DISPATCH, op, 0x1, 0x0, &sel));
-	EXPECT_EQ(EINVAL, errno);
-	EXPECT_EQ(-1, prctl(PR_SET_SYSCALL_USER_DISPATCH, op, -1L, 0x0, &sel));
-	EXPECT_EQ(EINVAL, errno);
+	/* All ranges are allowed */
+	EXPECT_EQ(0, prctl(PR_SET_SYSCALL_USER_DISPATCH, op, 0x1, 0x0, &sel));
+	EXPECT_EQ(0, prctl(PR_SET_SYSCALL_USER_DISPATCH, op, -1L, 0x0, &sel));
+	EXPECT_EQ(0, prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_ON, 1, -1L, &sel));
+	EXPECT_EQ(0, prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_ON, -1L, 0x1, &sel));
 
 	/* Invalid selector */
 	EXPECT_EQ(-1, prctl(PR_SET_SYSCALL_USER_DISPATCH, op, 0x0, 0x1, (void *) -1));
 	EXPECT_EQ(EFAULT, errno);
-
-	/*
-	 * Dispatcher range overflows unsigned long
-	 */
-	EXPECT_EQ(-1, prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_ON, 1, -1L, &sel));
-	EXPECT_EQ(EINVAL, errno) {
-		TH_LOG("Should reject bad syscall range");
-	}
-
-	/*
-	 * Allowed range overflows usigned long
-	 */
-	EXPECT_EQ(-1, prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_ON, -1L, 0x1, &sel));
-	EXPECT_EQ(EINVAL, errno) {
-		TH_LOG("Should reject bad syscall range");
-	}
 }
 
 /*
@@ -145,11 +131,13 @@ char glob_sel;
 int nr_syscalls_emulated;
 int si_code;
 int si_errno;
+unsigned long syscall_addr;
 
 static void handle_sigsys(int sig, siginfo_t *info, void *ucontext)
 {
 	si_code = info->si_code;
 	si_errno = info->si_errno;
+	syscall_addr = (unsigned long)info->si_call_addr;
 
 	if (info->si_syscall == MAGIC_SYSCALL_1)
 		nr_syscalls_emulated++;
@@ -172,26 +160,29 @@ static void handle_sigsys(int sig, siginfo_t *info, void *ucontext)
 #endif
 }
 
+int setup_sigsys_handler(void)
+{
+	struct sigaction act;
+	sigset_t mask;
+
+	memset(&act, 0, sizeof(act));
+	sigemptyset(&mask);
+	act.sa_sigaction = handle_sigsys;
+	act.sa_flags = SA_SIGINFO;
+	act.sa_mask = mask;
+	return sigaction(SIGSYS, &act, NULL);
+}
+
 TEST(dispatch_and_return)
 {
 	long ret;
-	struct sigaction act;
-	sigset_t mask;
 
 	glob_sel = 0;
 	nr_syscalls_emulated = 0;
 	si_code = 0;
 	si_errno = 0;
 
-	memset(&act, 0, sizeof(act));
-	sigemptyset(&mask);
-
-	act.sa_sigaction = handle_sigsys;
-	act.sa_flags = SA_SIGINFO;
-	act.sa_mask = mask;
-
-	ret = sigaction(SIGSYS, &act, NULL);
-	ASSERT_EQ(0, ret);
+	ASSERT_EQ(0, setup_sigsys_handler());
 
 	/* Make sure selector is good prior to prctl. */
 	SYSCALL_DISPATCH_OFF(glob_sel);
@@ -319,6 +310,38 @@ TEST(direct_dispatch_range)
 	ASSERT_EQ(0, ret) {
 		TH_LOG("Dispatch triggered unexpectedly");
 	}
+}
+
+bool test_range(unsigned long offset, unsigned long length)
+{
+	nr_syscalls_emulated = 0;
+	SYSCALL_DISPATCH_OFF(glob_sel);
+	if (prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_ON, offset, length, &glob_sel))
+		abort();
+	SYSCALL_DISPATCH_ON(glob_sel);
+	return syscall(MAGIC_SYSCALL_1) == MAGIC_SYSCALL_1 && nr_syscalls_emulated == 1;
+}
+
+TEST(dispatch_range)
+{
+	ASSERT_EQ(0, setup_sigsys_handler());
+	ASSERT_EQ(0, prctl(PR_SET_SYSCALL_USER_DISPATCH, PR_SYS_DISPATCH_ON, 0, 0, &glob_sel));
+	SYSCALL_DISPATCH_ON(glob_sel);
+	ASSERT_EQ(MAGIC_SYSCALL_1, syscall(MAGIC_SYSCALL_1));
+	TH_LOG("syscall_addr=0x%lx", syscall_addr);
+	EXPECT_FALSE(test_range(syscall_addr, 1));
+	EXPECT_FALSE(test_range(syscall_addr-100, 200));
+	EXPECT_TRUE(test_range(syscall_addr+1, 100));
+	EXPECT_TRUE(test_range(syscall_addr-100, 100));
+	/* Wrap-around tests for everything except for a single PC. */
+	EXPECT_TRUE(test_range(syscall_addr+1, -1));
+	EXPECT_FALSE(test_range(syscall_addr, -1));
+	EXPECT_FALSE(test_range(syscall_addr+2, -1));
+	/* 0-size range does not match anything. */
+	EXPECT_TRUE(test_range(syscall_addr-1, 0));
+	EXPECT_TRUE(test_range(syscall_addr, 0));
+	EXPECT_TRUE(test_range(syscall_addr+1, 0));
+	SYSCALL_DISPATCH_OFF(glob_sel);
 }
 
 TEST_HARNESS_MAIN
