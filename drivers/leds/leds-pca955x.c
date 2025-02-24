@@ -4,7 +4,7 @@
  *
  * Author: Nate Case <ncase@xes-inc.com>
  *
- * LED driver for various PCA955x I2C LED drivers
+ * LED driver for various PCA955x and CAT9532 I2C LED drivers
  *
  * Supported devices:
  *
@@ -145,6 +145,11 @@ static inline u8 pca955x_ledsel(u8 oldval, int led_num, int state)
 		((state & 0x3) << (led_num << 1));
 }
 
+static inline int pca955x_ledstate(u8 ls, int led_num)
+{
+	return (ls >> (led_num << 1)) & 0x3;
+}
+
 /*
  * Write to frequency prescaler register, used to program the
  * period of the PWM output.  period = (PSCx + 1) / 38
@@ -235,6 +240,21 @@ static int pca955x_read_pwm(struct i2c_client *client, int n, u8 *val)
 	return 0;
 }
 
+static int pca955x_read_input_bit(struct pca955x *pca955x, int led_num)
+{
+	u8 cmd = led_num / 8;
+	int input_state;
+
+	input_state= i2c_smbus_read_byte_data(pca955x->client, cmd);
+	if (input_state < 0) {
+		dev_err(&pca955x->client->dev, "%s: reg 0x%x, err %d\n", 
+				__func__, led_num, input_state);
+		return input_state;
+	}
+	return (input_state >> (led_num % 8)) & 1;
+
+}
+
 static enum led_brightness pca955x_led_get(struct led_classdev *led_cdev)
 {
 	struct pca955x_led *pca955x_led = container_of(led_cdev,
@@ -251,10 +271,11 @@ static enum led_brightness pca955x_led_get(struct led_classdev *led_cdev)
 	ls = (ls >> ((pca955x_led->led_num % 4) << 1)) & 0x3;
 	switch (ls) {
 	case PCA955X_LS_LED_ON:
-		ret = LED_FULL;
-		break;
 	case PCA955X_LS_LED_OFF:
-		ret = LED_OFF;
+		if (pca955x_read_input_bit(pca955x, pca955x_led->led_num))
+			ret = LED_FULL;
+		else
+			ret = LED_OFF;
 		break;
 	case PCA955X_LS_BLINK0:
 		ret = LED_HALF;
@@ -276,6 +297,8 @@ static int pca955x_led_set(struct led_classdev *led_cdev,
 	struct pca955x_led *pca955x_led;
 	struct pca955x *pca955x;
 	u8 ls;
+	u8 ls_last_state;
+	int input_bit;
 	int chip_ls;	/* which LSx to use (0-3 potentially) */
 	int ls_led;	/* which set of bits within LSx to use (0-3) */
 	int ret;
@@ -292,12 +315,18 @@ static int pca955x_led_set(struct led_classdev *led_cdev,
 	if (ret)
 		goto out;
 
+	ls_last_state = pca955x_ledstate(ls, ls_led);
+	input_bit = pca955x_read_input_bit(pca955x, pca955x_led->led_num);
 	switch (value) {
 	case LED_FULL:
-		ls = pca955x_ledsel(ls, ls_led, PCA955X_LS_LED_ON);
+		ls = pca955x_ledsel(ls, ls_led,
+				(ls_last_state == input_bit) ? 
+				PCA955X_LS_LED_ON : PCA955X_LS_LED_OFF);
 		break;
 	case LED_OFF:
-		ls = pca955x_ledsel(ls, ls_led, PCA955X_LS_LED_OFF);
+		ls = pca955x_ledsel(ls, ls_led,
+				(ls_last_state == input_bit) ? 
+				PCA955X_LS_LED_OFF : PCA955X_LS_LED_ON);
 		break;
 	case LED_HALF:
 		ls = pca955x_ledsel(ls, ls_led, PCA955X_LS_BLINK0);
