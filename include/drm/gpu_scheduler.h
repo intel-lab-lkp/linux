@@ -447,6 +447,7 @@ struct drm_sched_backend_ops {
 	 * * On success: dma_fence the driver must signal once the hardware has
 	 * completed the job ("hardware fence").
 	 * * On failure: NULL or an ERR_PTR.
+	 *
 	 */
 	struct dma_fence *(*run_job)(struct drm_sched_job *sched_job);
 
