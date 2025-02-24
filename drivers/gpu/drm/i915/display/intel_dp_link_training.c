@@ -778,6 +778,13 @@ static u32 intel_dp_training_pattern(struct intel_dp *intel_dp,
 	source_tps4 = intel_dp_source_supports_tps4(display);
 	sink_tps4 = dp_phy != DP_PHY_DPRX ||
 		    drm_dp_tps4_supported(intel_dp->dpcd);
+
+	/* hax */
+	if (dp_phy == DP_PHY_DPRX &&
+	    drm_dp_post_lt_adj_req_supported(intel_dp->dpcd) &&
+	    crtc_state->port_clock != 810000)
+		sink_tps4 = false;
+
 	if (source_tps4 && sink_tps4) {
 		return DP_TRAINING_PATTERN_4;
 	} else if (crtc_state->port_clock == 810000) {
