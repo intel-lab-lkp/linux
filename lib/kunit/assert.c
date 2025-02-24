@@ -101,7 +101,7 @@ VISIBLE_IF_KUNIT bool is_literal(const char *text, long long value)
 	if (strlen(text) != len)
 		return false;
 
-	buffer = kmalloc(len+1, GFP_KERNEL);
+	buffer = kmalloc(len+1, GFP_ATOMIC);
 	if (!buffer)
 		return false;
 
