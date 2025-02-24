@@ -104,8 +104,8 @@ const struct io_issue_def io_issue_defs[] = {
 		.iopoll			= 1,
 		.iopoll_queue		= 1,
 		.async_size		= sizeof(struct io_async_rw),
-		.prep			= io_prep_read_fixed,
-		.issue			= io_read,
+		.prep			= io_prep_read,
+		.issue			= io_read_fixed,
 	},
 	[IORING_OP_WRITE_FIXED] = {
 		.needs_file		= 1,
@@ -118,8 +118,8 @@ const struct io_issue_def io_issue_defs[] = {
 		.iopoll			= 1,
 		.iopoll_queue		= 1,
 		.async_size		= sizeof(struct io_async_rw),
-		.prep			= io_prep_write_fixed,
-		.issue			= io_write,
+		.prep			= io_prep_write,
+		.issue			= io_write_fixed,
 	},
 	[IORING_OP_POLL_ADD] = {
 		.needs_file		= 1,
