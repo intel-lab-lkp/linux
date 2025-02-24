@@ -37,7 +37,7 @@ static const unsigned short normal_i2c[] = {0x18, 0x19, 0x1a, 0x2c, 0x2d, 0x2e,
  * Insmod parameters
  */
 
-static int pwminv;	/*Inverted PWM output. */
+static int pwminv = -1; /*Inverted PWM output. */
 module_param(pwminv, int, 0444);
 
 static int init = 1; /*Power-on initialization.*/
@@ -845,9 +845,10 @@ static int amc6821_detect(struct i2c_client *client, struct i2c_board_info *info
 	return 0;
 }
 
-static int amc6821_init_client(struct amc6821_data *data)
+static int amc6821_init_client(struct i2c_client *client, struct amc6821_data *data)
 {
 	struct regmap *regmap = data->regmap;
+	u32 regval;
 	int err;
 
 	if (init) {
@@ -864,11 +865,15 @@ static int amc6821_init_client(struct amc6821_data *data)
 		if (err)
 			return err;
 
+		regval = AMC6821_CONF1_START;
+		if ((pwminv < 0 && of_property_read_bool(client->dev.of_node, "ti,pwm-inverted")) ||
+		    pwminv > 0)
+			regval |= AMC6821_CONF1_PWMINV;
+
 		err = regmap_update_bits(regmap, AMC6821_REG_CONF1,
 					 AMC6821_CONF1_THERMOVIE | AMC6821_CONF1_FANIE |
 					 AMC6821_CONF1_START | AMC6821_CONF1_PWMINV,
-					 AMC6821_CONF1_START |
-					 (pwminv ? AMC6821_CONF1_PWMINV : 0));
+					 regval);
 		if (err)
 			return err;
 	}
@@ -916,7 +921,7 @@ static int amc6821_probe(struct i2c_client *client)
 				     "Failed to initialize regmap\n");
 	data->regmap = regmap;
 
-	err = amc6821_init_client(data);
+	err = amc6821_init_client(client, data);
 	if (err)
 		return err;
 
