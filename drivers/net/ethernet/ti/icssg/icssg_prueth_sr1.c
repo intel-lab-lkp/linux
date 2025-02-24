@@ -274,10 +274,12 @@ static struct sk_buff *prueth_process_rx_mgm(struct prueth_emac *emac,
 	struct prueth_rx_chn *rx_chn = &emac->rx_mgm_chn;
 	struct net_device *ndev = emac->ndev;
 	struct cppi5_host_desc_t *desc_rx;
-	struct sk_buff *skb, *new_skb;
+	struct page *page, *new_page;
 	dma_addr_t desc_dma, buf_dma;
 	u32 buf_dma_len, pkt_len;
+	struct sk_buff *skb;
 	void **swdata;
+	void *pa;
 	int ret;
 
 	ret = k3_udma_glue_pop_rx_chn(rx_chn->rx_chn, flow_id, &desc_dma);
@@ -299,32 +301,35 @@ static struct sk_buff *prueth_process_rx_mgm(struct prueth_emac *emac,
 	}
 
 	swdata = cppi5_hdesc_get_swdata(desc_rx);
-	skb = *swdata;
+	page = *swdata;
 	cppi5_hdesc_get_obuf(desc_rx, &buf_dma, &buf_dma_len);
 	pkt_len = cppi5_hdesc_get_pktlen(desc_rx);
 
 	dma_unmap_single(rx_chn->dma_dev, buf_dma, buf_dma_len, DMA_FROM_DEVICE);
 	k3_cppi_desc_pool_free(rx_chn->desc_pool, desc_rx);
 
-	new_skb = netdev_alloc_skb_ip_align(ndev, PRUETH_MAX_PKT_SIZE);
+	new_page = page_pool_dev_alloc_pages(rx_chn->pg_pool);
 	/* if allocation fails we drop the packet but push the
 	 * descriptor back to the ring with old skb to prevent a stall
 	 */
-	if (!new_skb) {
+	if (!new_page) {
 		netdev_err(ndev,
-			   "skb alloc failed, dropped mgm pkt from flow %d\n",
+			   "page alloc failed, dropped mgm pkt from flow %d\n",
 			   flow_id);
-		new_skb = skb;
+		new_page = page;
 		skb = NULL;	/* return NULL */
 	} else {
 		/* return the filled skb */
+		pa = page_address(page);
+		skb = napi_build_skb(pa, PAGE_SIZE);
 		skb_put(skb, pkt_len);
 	}
 
 	/* queue another DMA */
-	ret = prueth_dma_rx_push(emac, new_skb, &emac->rx_mgm_chn);
+	ret = prueth_dma_rx_push_mapped(emac, &emac->rx_chns, new_page,
+					PRUETH_MAX_PKT_SIZE);
 	if (WARN_ON(ret < 0))
-		dev_kfree_skb_any(new_skb);
+		page_pool_recycle_direct(rx_chn->pg_pool, new_page);
 
 	return skb;
 }
