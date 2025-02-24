@@ -1174,8 +1174,24 @@ static void mmc_blk_issue_drv_op(struct mmc_queue *mq, struct request *req)
 				break;
 		}
 		/* Always switch back to main area after RPMB access */
-		if (rpmb_ioctl)
-			mmc_blk_part_switch(card, 0);
+		if (rpmb_ioctl) {
+			if (mmc_blk_part_switch(card, 0)) {
+				pr_warn("%s: failed to switch back to main area, will reset and switch again\n",
+						md->disk->disk_name);
+
+				/*
+				 * Reset eMMC device if partition switch fails.
+				 * Some eMMC devices may get stuck by write CRC error in RPMB,
+				 * preventing switch back to main partition. This workaround
+				 * helps recover from this error state.
+				 */
+				mmc_hw_reset(card);
+
+				if (mmc_blk_part_switch(card, 0))
+					pr_err("%s: failed to switch back to main area even after reset\n",
+						   md->disk->disk_name);
+			}
+		}
 		else if (card->reenable_cmdq && !card->ext_csd.cmdq_en)
 			mmc_cmdq_enable(card);
 		break;
