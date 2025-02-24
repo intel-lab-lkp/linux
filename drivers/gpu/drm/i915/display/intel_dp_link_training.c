@@ -813,8 +813,7 @@ static u32 intel_dp_training_pattern(struct intel_dp *intel_dp,
 static bool intel_dp_use_post_lt_adj_req(struct intel_dp *intel_dp,
 					 const struct intel_crtc_state *crtc_state)
 {
-	return intel_dp->set_idle_link_train &&
-		drm_dp_post_lt_adj_req_supported(intel_dp->dpcd) &&
+	return drm_dp_post_lt_adj_req_supported(intel_dp->dpcd) &&
 		intel_dp_training_pattern(intel_dp, crtc_state, DP_PHY_DPRX) != DP_TRAINING_PATTERN_4;
 }
 
@@ -1234,9 +1233,6 @@ void intel_dp_stop_link_train(struct intel_dp *intel_dp,
 {
 	intel_dp->link_trained = true;
 
-	if (!intel_dp->set_idle_link_train)
-		intel_dp_disable_dpcd_training_pattern(intel_dp, DP_PHY_DPRX);
-
 	intel_dp_program_link_training_pattern(intel_dp, crtc_state, DP_PHY_DPRX,
 					       DP_TRAINING_PATTERN_DISABLE);
 
@@ -1468,10 +1464,8 @@ intel_dp_link_train_all_phys(struct intel_dp *intel_dp,
 	if (ret)
 		ret = intel_dp_link_train_phy(intel_dp, crtc_state, DP_PHY_DPRX);
 
-	if (intel_dp->set_idle_link_train) {
-		intel_dp_disable_dpcd_training_pattern(intel_dp, DP_PHY_DPRX);
-		intel_dp->set_idle_link_train(intel_dp, crtc_state);
-	}
+	intel_dp_disable_dpcd_training_pattern(intel_dp, DP_PHY_DPRX);
+	intel_dp->set_idle_link_train(intel_dp, crtc_state);
 
 	if (ret)
 		ret = intel_dp_post_lt_adj_req(intel_dp, crtc_state);
