@@ -126,16 +126,16 @@
 	/* Note: The LLD linker seems not to support marking input */	\
 	/* sections with KEEP() inside a OVERLAY statement */		\
 	.vectors 0xffff0000 : AT (__vectors_lma) {			\
-			*(.vectors)					\
+			KEEP(*(.vectors))				\
 	}								\
 	.vectors.bhb.loop8 0xffff0000 : AT (__vectors_lma +		\
 		SIZEOF(.vectors)) {					\
-			*(.vectors.bhb.loop8)				\
+			KEEP(*(.vectors.bhb.loop8))			\
 	}								\
 	.vectors.bhb.bpiall 0xffff0000 : AT (__vectors_lma +		\
 		SIZEOF(.vectors) +					\
 		SIZEOF(.vectors.bhb.loop8)) {				\
-			*(.vectors.bhb.bpiall)				\
+			KEEP(*(.vectors.bhb.bpiall))			\
 	}								\
 	ARM_LMA(__vectors, .vectors);					\
 	ARM_LMA(__vectors_bhb_loop8, .vectors.bhb.loop8);		\
