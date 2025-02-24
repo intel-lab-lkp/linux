@@ -826,6 +826,11 @@ struct qca_dump_info {
 #define BTUSB_ALT6_CONTINUOUS_TX	16
 #define BTUSB_HW_SSR_ACTIVE	17
 
+struct sco_handle_list {
+	struct list_head list;
+	u16 handle;
+};
+
 struct btusb_data {
 	struct hci_dev       *hdev;
 	struct usb_device    *udev;
@@ -892,6 +897,9 @@ struct btusb_data {
 	int oob_wake_irq;   /* irq for out-of-band wake-on-bt */
 
 	struct qca_dump_info qca_dump;
+
+	/* Records the exsiting SCO handles for HCI_USER_CHANNEL */
+	struct list_head sco_handle_list;
 };
 
 static void btusb_reset(struct hci_dev *hdev)
@@ -1085,12 +1093,141 @@ static inline void btusb_free_frags(struct btusb_data *data)
 	spin_unlock_irqrestore(&data->rxlock, flags);
 }
 
+static void btusb_sco_handle_list_clear(struct list_head *list)
+{
+	struct sco_handle_list *entry, *n;
+
+	list_for_each_entry_safe(entry, n, list, list) {
+		list_del(&entry->list);
+		kfree(entry);
+	}
+}
+
+static struct sco_handle_list *btusb_sco_handle_list_find(
+	struct list_head *list,
+	u16 handle)
+{
+	struct sco_handle_list *entry;
+
+	list_for_each_entry(entry, list, list)
+		if (entry->handle == handle)
+			return entry;
+
+	return NULL;
+}
+
+static int btusb_sco_handle_list_add(struct list_head *list, u16 handle)
+{
+	struct sco_handle_list *entry;
+
+	if (btusb_sco_handle_list_find(list, handle))
+		return -EEXIST;
+
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
+	if (!entry)
+		return -ENOMEM;
+
+	entry->handle = handle;
+	list_add(&entry->list, list);
+
+	return 0;
+}
+
+static int btusb_sco_handle_list_del(struct list_head *list, u16 handle)
+{
+	struct sco_handle_list *entry;
+
+	entry = btusb_sco_handle_list_find(list, handle);
+	if (!entry)
+		return -ENOENT;
+
+	list_del(&entry->list);
+	kfree(entry);
+
+	return 0;
+}
+
+static void btusb_sco_conn_change(struct btusb_data *data, struct sk_buff *skb)
+{
+	struct hci_event_hdr *hdr = (void *) skb->data;
+	struct hci_dev *hdev = data->hdev;
+
+	if (hci_skb_pkt_type(skb) != HCI_EVENT_PKT || skb->len < sizeof(*hdr))
+		return;
+
+	switch (hdr->evt) {
+	case HCI_EV_DISCONN_COMPLETE: {
+		struct hci_ev_disconn_complete *ev =
+			(void *) skb->data + sizeof(*hdr);
+		u16 handle;
+
+		if (skb->len != sizeof(*hdr) + sizeof(*ev) || ev->status)
+			return;
+
+		handle = __le16_to_cpu(ev->handle);
+		if (btusb_sco_handle_list_del(&data->sco_handle_list,
+					      handle) < 0)
+			return;
+
+		bt_dev_info(hdev, "disabling SCO");
+		data->sco_num--;
+		data->air_mode = HCI_NOTIFY_DISABLE_SCO;
+		schedule_work(&data->work);
+
+		break;
+	}
+	case HCI_EV_SYNC_CONN_COMPLETE: {
+		struct hci_ev_sync_conn_complete *ev =
+			(void *) skb->data + sizeof(*hdr);
+		unsigned int notify_air_mode;
+		u16 handle;
+
+		if (skb->len != sizeof(*hdr) + sizeof(*ev) || ev->status)
+			return;
+
+		switch (ev->air_mode) {
+		case BT_CODEC_CVSD:
+			notify_air_mode = HCI_NOTIFY_ENABLE_SCO_CVSD;
+			break;
+
+		case BT_CODEC_TRANSPARENT:
+			notify_air_mode = HCI_NOTIFY_ENABLE_SCO_TRANSP;
+			break;
+
+		default:
+			return;
+		}
+
+		handle = __le16_to_cpu(ev->handle);
+		if (btusb_sco_handle_list_add(&data->sco_handle_list,
+					      handle) < 0) {
+			bt_dev_err(hdev, "failed to add the new SCO handle");
+			return;
+		}
+
+		bt_dev_info(hdev, "enabling SCO with air mode %u",
+			    ev->air_mode);
+		data->sco_num++;
+		data->air_mode = notify_air_mode;
+		schedule_work(&data->work);
+
+		break;
+	}
+	default:
+		break;
+	}
+}
+
 static int btusb_recv_event(struct btusb_data *data, struct sk_buff *skb)
 {
 	if (data->intr_interval) {
 		/* Trigger dequeue immediately if an event is received */
 		schedule_delayed_work(&data->rx_work, 0);
 	}
+
+	/* Configure altsetting for HCI_USER_CHANNEL on SCO dis/connected */
+	if (hci_dev_test_flag(data->hdev, HCI_USER_CHANNEL))
+		btusb_sco_conn_change(data, skb);
 
 	return data->recv_event(data->hdev, skb);
 }
@@ -1891,44 +2028,6 @@ static void btusb_stop_traffic(struct btusb_data *data)
 	usb_kill_anchored_urbs(&data->ctrl_anchor);
 }
 
-static int btusb_close(struct hci_dev *hdev)
-{
-	struct btusb_data *data = hci_get_drvdata(hdev);
-	int err;
-
-	BT_DBG("%s", hdev->name);
-
-	cancel_delayed_work(&data->rx_work);
-	cancel_work_sync(&data->work);
-	cancel_work_sync(&data->waker);
-
-	skb_queue_purge(&data->acl_q);
-
-	clear_bit(BTUSB_ISOC_RUNNING, &data->flags);
-	clear_bit(BTUSB_BULK_RUNNING, &data->flags);
-	clear_bit(BTUSB_INTR_RUNNING, &data->flags);
-	clear_bit(BTUSB_DIAG_RUNNING, &data->flags);
-
-	btusb_stop_traffic(data);
-	btusb_free_frags(data);
-
-	err = usb_autopm_get_interface(data->intf);
-	if (err < 0)
-		goto failed;
-
-	data->intf->needs_remote_wakeup = 0;
-
-	/* Enable remote wake up for auto-suspend */
-	if (test_bit(BTUSB_WAKEUP_AUTOSUSPEND, &data->flags))
-		data->intf->needs_remote_wakeup = 1;
-
-	usb_autopm_put_interface(data->intf);
-
-failed:
-	usb_scuttle_anchored_urbs(&data->deferred);
-	return 0;
-}
-
 static int btusb_flush(struct hci_dev *hdev)
 {
 	struct btusb_data *data = hci_get_drvdata(hdev);
@@ -2297,6 +2396,51 @@ static void btusb_work(struct work_struct *work)
 		if (test_and_clear_bit(BTUSB_DID_ISO_RESUME, &data->flags))
 			usb_autopm_put_interface(data->isoc ? data->isoc : data->intf);
 	}
+}
+
+static int btusb_close(struct hci_dev *hdev)
+{
+	struct btusb_data *data = hci_get_drvdata(hdev);
+	int err;
+
+	BT_DBG("%s", hdev->name);
+
+	if (hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
+		btusb_sco_handle_list_clear(&data->sco_handle_list);
+		data->sco_num = 0;
+		if (data->isoc_altsetting != 0)
+			btusb_switch_alt_setting(hdev, 0);
+	}
+
+	cancel_delayed_work(&data->rx_work);
+	cancel_work_sync(&data->work);
+	cancel_work_sync(&data->waker);
+
+	skb_queue_purge(&data->acl_q);
+
+	clear_bit(BTUSB_ISOC_RUNNING, &data->flags);
+	clear_bit(BTUSB_BULK_RUNNING, &data->flags);
+	clear_bit(BTUSB_INTR_RUNNING, &data->flags);
+	clear_bit(BTUSB_DIAG_RUNNING, &data->flags);
+
+	btusb_stop_traffic(data);
+	btusb_free_frags(data);
+
+	err = usb_autopm_get_interface(data->intf);
+	if (err < 0)
+		goto failed;
+
+	data->intf->needs_remote_wakeup = 0;
+
+	/* Enable remote wake up for auto-suspend */
+	if (test_bit(BTUSB_WAKEUP_AUTOSUSPEND, &data->flags))
+		data->intf->needs_remote_wakeup = 1;
+
+	usb_autopm_put_interface(data->intf);
+
+failed:
+	usb_scuttle_anchored_urbs(&data->deferred);
+	return 0;
 }
 
 static void btusb_waker(struct work_struct *work)
@@ -3754,6 +3898,8 @@ static int btusb_probe(struct usb_interface *intf,
 	data->udev = interface_to_usbdev(intf);
 	data->intf = intf;
 
+	INIT_LIST_HEAD(&data->sco_handle_list);
+
 	INIT_WORK(&data->work, btusb_work);
 	INIT_WORK(&data->waker, btusb_waker);
 	INIT_DELAYED_WORK(&data->rx_work, btusb_rx_work);
@@ -4088,6 +4234,8 @@ static void btusb_disconnect(struct usb_interface *intf)
 
 	hdev = data->hdev;
 	usb_set_intfdata(data->intf, NULL);
+
+	btusb_sco_handle_list_clear(&data->sco_handle_list);
 
 	if (data->isoc) {
 		device_remove_file(&intf->dev, &dev_attr_isoc_alt);
