@@ -1476,6 +1476,7 @@ config TI_ADS7924
 	tristate "Texas Instruments ADS7924 ADC"
 	depends on I2C
 	select REGMAP_I2C
+	select IIO_ADC_HELPER
 	help
 	  If you say yes here you get support for Texas Instruments ADS7924
 	  4 channels, 12-bit I2C ADC chip.
