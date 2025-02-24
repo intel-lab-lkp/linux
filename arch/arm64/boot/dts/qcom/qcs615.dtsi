@@ -973,6 +973,11 @@
 			};
 		};
 
+		rng@793000 {
+			compatible = "qcom,qcs615-trng", "qcom,trng";
+			reg = <0x0 0x00793000 0x0 0x1000>;
+		};
+
 		config_noc: interconnect@1500000 {
 			reg = <0x0 0x01500000 0x0 0x5080>;
 			compatible = "qcom,qcs615-config-noc";
