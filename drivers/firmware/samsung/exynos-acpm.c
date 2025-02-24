@@ -27,7 +27,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 
-#include "exynos-acpm.h"
+#include "exynos-acpm-xfer.h"
 #include "exynos-acpm-pmic.h"
 
 #define ACPM_PROTOCOL_SEQNUM		GENMASK(21, 16)

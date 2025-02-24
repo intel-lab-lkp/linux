@@ -9,7 +9,7 @@
 #include <linux/ktime.h>
 #include <linux/types.h>
 
-#include "exynos-acpm.h"
+#include "exynos-acpm-xfer.h"
 #include "exynos-acpm-pmic.h"
 
 #define ACPM_PMIC_CHANNEL		GENMASK(15, 12)

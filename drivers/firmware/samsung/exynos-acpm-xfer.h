@@ -4,8 +4,8 @@
  * Copyright 2020 Google LLC.
  * Copyright 2024 Linaro Ltd.
  */
-#ifndef __EXYNOS_ACPM_H__
-#define __EXYNOS_ACPM_H__
+#ifndef __EXYNOS_ACPM_XFER_H__
+#define __EXYNOS_ACPM_XFER_H__
 
 struct acpm_xfer {
 	const u32 *txd;
@@ -20,4 +20,4 @@ struct acpm_handle;
 int acpm_do_xfer(const struct acpm_handle *handle,
 		 const struct acpm_xfer *xfer);
 
-#endif /* __EXYNOS_ACPM_H__ */
+#endif /* __EXYNOS_ACPM_XFER_H__ */
