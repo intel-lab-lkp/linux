@@ -1624,11 +1624,17 @@ int usb_resume(struct device *dev, pm_message_t msg)
 	status = usb_resume_both(udev, msg);
 	if (status == 0) {
 		pm_runtime_disable(dev);
-		pm_runtime_set_active(dev);
+		status = pm_runtime_set_active(dev);
+		if (status) {
+			pm_runtime_enable(dev);
+			goto out;
+		}
+
 		pm_runtime_enable(dev);
 		unbind_marked_interfaces(udev);
 	}
 
+out:
 	/* Avoid PM error messages for devices disconnected while suspended
 	 * as we'll display regular disconnect messages just a bit later.
 	 */
