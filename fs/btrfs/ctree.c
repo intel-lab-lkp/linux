@@ -4790,13 +4790,17 @@ int btrfs_next_old_leaf(struct btrfs_root *root, struct btrfs_path *path,
 	int level;
 	struct extent_buffer *c;
 	struct extent_buffer *next;
-	struct btrfs_fs_info *fs_info = root->fs_info;
+	struct btrfs_fs_info *fs_info;
 	struct btrfs_key key;
 	bool need_commit_sem = false;
 	u32 nritems;
 	int ret;
 	int i;
 
+	if (!root)
+		return -EINVAL;
+
+	fs_info = root->fs_info;
 	/*
 	 * The nowait semantics are used only for write paths, where we don't
 	 * use the tree mod log and sequence numbers.
