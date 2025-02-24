@@ -276,6 +276,9 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 	int waketime_in_lines, first_sdp_position;
 	int context_latency, guardband;
 
+	if (intel_dp->alpm_parameters.lobf_debug & INTEL_LOBF_DEBUG_DISABLE)
+		return;
+
 	if (!intel_dp_is_edp(intel_dp))
 		return;
 
@@ -449,6 +452,51 @@ out:
 
 DEFINE_SHOW_ATTRIBUTE(i915_edp_lobf_info);
 
+static int
+i915_edp_lobf_debug_get(void *data, u64 *val)
+{
+	struct intel_display *display = data;
+	struct intel_encoder *encoder;
+	int ret = -ENODEV;
+
+	for_each_intel_dp(display->drm, encoder) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
+		if (!intel_dp_is_edp(intel_dp))
+			return ret;
+
+		// TODO: split to each edp transcoder.
+		*val = READ_ONCE(intel_dp->alpm_parameters.lobf_debug);
+		ret = 0;
+	}
+
+	return ret;
+}
+
+static int
+i915_edp_lobf_debug_set(void *data, u64 val)
+{
+	struct intel_display *display = data;
+	struct intel_encoder *encoder;
+	int ret = -ENODEV;
+
+	for_each_intel_dp(display->drm, encoder) {
+		struct intel_dp *intel_dp = enc_to_intel_dp(encoder);
+
+		if (!intel_dp_is_edp(intel_dp))
+			return ret;
+
+		// TODO: split to each edp transcoder.
+		intel_dp->alpm_parameters.lobf_debug = val;
+	}
+
+	return ret;
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(i915_edp_lobf_debug_fops,
+			i915_edp_lobf_debug_get, i915_edp_lobf_debug_set,
+			"%llu\n");
+
 void intel_alpm_lobf_debugfs_add(struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(connector);
@@ -457,6 +505,9 @@ void intel_alpm_lobf_debugfs_add(struct intel_connector *connector)
 	if (DISPLAY_VER(display) < 20 ||
 	    connector->base.connector_type != DRM_MODE_CONNECTOR_eDP)
 		return;
+
+	debugfs_create_file("i915_edp_lobf_debug", 0644, root,
+			    connector, &i915_edp_lobf_debug_fops);
 
 	debugfs_create_file("i915_edp_lobf_info", 0444, root,
 			    connector, &i915_edp_lobf_info_fops);
