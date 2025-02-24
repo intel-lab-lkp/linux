@@ -1358,6 +1358,14 @@ config PT_RECLAIM
 
 	  Note: now only empty user PTE page table pages will be reclaimed.
 
+config PAGE_ALLOC_KUNIT_TEST
+	tristate "KUnit test for page allocator" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Builds unit tests for page allocator.
+
+	  If unsure, say N.
 
 source "mm/damon/Kconfig"
 
