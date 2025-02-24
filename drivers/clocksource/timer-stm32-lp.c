@@ -197,6 +197,7 @@ out_clk_disable:
 
 static const struct of_device_id stm32_clkevent_lp_of_match[] = {
 	{ .compatible = "st,stm32-lptimer-timer", },
+	{ .compatible = "st,stm32mp25-lptimer-timer", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, stm32_clkevent_lp_of_match);
