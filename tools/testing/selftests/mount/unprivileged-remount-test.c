@@ -54,7 +54,7 @@ static void die(char *fmt, ...)
 	exit(EXIT_FAILURE);
 }
 
-static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list ap)
+static void vmaybe_write_file(bool enoent_ok, const char *filename, char *fmt, va_list ap)
 {
 	char buf[4096];
 	int fd;
@@ -92,7 +92,7 @@ static void vmaybe_write_file(bool enoent_ok, char *filename, char *fmt, va_list
 	}
 }
 
-static void maybe_write_file(char *filename, char *fmt, ...)
+static void maybe_write_file(const char *filename, char *fmt, ...)
 {
 	va_list ap;
 
@@ -102,7 +102,7 @@ static void maybe_write_file(char *filename, char *fmt, ...)
 
 }
 
-static void write_file(char *filename, char *fmt, ...)
+static void write_file(const char *filename, char *fmt, ...)
 {
 	va_list ap;
 
