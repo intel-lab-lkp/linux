@@ -69,7 +69,8 @@ static irqreturn_t vsp1_irq_handler(int irq, void *data)
 				i, wpf->entity.pipe->underrun_count);
 		}
 
-		if (status & VI6_WPF_IRQ_STA_DFE) {
+		if (status & VI6_WPF_IRQ_STA_DFE ||
+		    status & VI6_WPF_IRQ_STA_FRE) {
 			vsp1_pipeline_frame_end(wpf->entity.pipe);
 			ret = IRQ_HANDLED;
 		}
