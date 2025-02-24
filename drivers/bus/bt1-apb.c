@@ -321,30 +321,6 @@ static struct attribute *bt1_apb_sysfs_attrs[] = {
 };
 ATTRIBUTE_GROUPS(bt1_apb_sysfs);
 
-static void bt1_apb_remove_sysfs(void *data)
-{
-	struct bt1_apb *apb = data;
-
-	device_remove_groups(apb->dev, bt1_apb_sysfs_groups);
-}
-
-static int bt1_apb_init_sysfs(struct bt1_apb *apb)
-{
-	int ret;
-
-	ret = device_add_groups(apb->dev, bt1_apb_sysfs_groups);
-	if (ret) {
-		dev_err(apb->dev, "Failed to create EHB APB sysfs nodes\n");
-		return ret;
-	}
-
-	ret = devm_add_action_or_reset(apb->dev, bt1_apb_remove_sysfs, apb);
-	if (ret)
-		dev_err(apb->dev, "Can't add APB EHB sysfs remove action\n");
-
-	return ret;
-}
-
 static int bt1_apb_probe(struct platform_device *pdev)
 {
 	struct bt1_apb *apb;
@@ -370,10 +346,6 @@ static int bt1_apb_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = bt1_apb_init_sysfs(apb);
-	if (ret)
-		return ret;
-
 	return 0;
 }
 
@@ -387,7 +359,8 @@ static struct platform_driver bt1_apb_driver = {
 	.probe = bt1_apb_probe,
 	.driver = {
 		.name = "bt1-apb",
-		.of_match_table = bt1_apb_of_match
+		.of_match_table = bt1_apb_of_match,
+		.dev_groups = bt1_apb_sysfs_groups,
 	}
 };
 module_platform_driver(bt1_apb_driver);
