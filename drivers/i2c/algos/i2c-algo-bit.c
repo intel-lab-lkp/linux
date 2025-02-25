@@ -29,7 +29,7 @@
 #define bit_dbg(level, dev, format, args...) \
 	do {} while (0)
 #endif /* DEBUG */
-
+#define RETRY_PULSE_CNT 9
 /* ----- global variables ---------------------------------------------	*/
 
 static int bit_test;	/* see if the line-setting functions work	*/
@@ -223,6 +223,27 @@ static int i2c_inb(struct i2c_adapter *i2c_adap)
 	return indata;
 }
 
+static void recover_bus(struct i2c_algo_bit_data *adap)
+{
+	int i;
+
+	pr_warn("Attempting I2C bus recovery...\n");
+
+	/* Toggle SCL 9 times to attempt recovery */
+	for (i = 0; i < RETRY_PULSE_CNT; i++) {
+		sclhi(adap);
+		udelay(adap->udelay);
+		scllo(adap);
+		udelay(adap->udelay);
+	}
+
+	/* Generate a STOP condition */
+	i2c_stop(adap);
+	udelay(adap->udelay);
+
+	pr_warn("I2C bus recovery completed.\n");
+}
+
 /*
  * Sanity check for the adapter hardware - check the reaction of
  * the bus lines only if it seems to be idle.
@@ -248,7 +269,16 @@ static int test_bus(struct i2c_adapter *i2c_adap)
 	scl = adap->getscl ? getscl(adap) : 1;
 	if (!scl || !sda) {
 		pr_warn("%s: bus seems to be busy (scl=%d, sda=%d)\n", name, scl, sda);
-		goto bailout;
+		recover_bus(adap);
+
+		/* Recheck bus status after recovery attempt */
+		sda =  adap->getsda ? getsda(adap) : 1;
+		scl =  adap->getscl ? getscl(adap) : 1;
+
+		if (!scl || !sda) {
+			pr_err("%s: bus recovery failed (scl=%d, sda=%d)\n", name, scl, sda);
+			goto bailout;
+		}
 	}
 
 	sdalo(adap);
