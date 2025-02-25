@@ -3,8 +3,6 @@
  * Copyright © 2022 Intel Corporation
  */
 
-#include "i915_drv.h"
-
 #include "intel_de.h"
 #include "intel_display.h"
 #include "intel_dkl_phy.h"
@@ -12,11 +10,11 @@
 
 /**
  * intel_dkl_phy_init - initialize Dekel PHY
- * @i915: i915 device instance
+ * @display: display device instance
  */
-void intel_dkl_phy_init(struct drm_i915_private *i915)
+void intel_dkl_phy_init(struct intel_display *display)
 {
-	spin_lock_init(&i915->display.dkl.phy_lock);
+	spin_lock_init(&display->dkl.phy_lock);
 }
 
 static void
