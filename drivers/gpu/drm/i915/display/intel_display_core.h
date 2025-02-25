@@ -125,8 +125,8 @@ struct intel_audio {
 struct intel_dpll {
 	struct mutex lock;
 
-	int num_shared_dpll;
-	struct intel_shared_dpll shared_dplls[I915_NUM_PLLS];
+	int num_global_dpll;
+	struct intel_global_dpll global_dplls[I915_NUM_PLLS];
 	const struct intel_dpll_mgr *mgr;
 
 	struct {

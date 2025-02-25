@@ -921,7 +921,7 @@ void hsw_fdi_link_train(struct intel_encoder *encoder,
 	intel_de_write(dev_priv, FDI_RX_CTL(PIPE_A), rx_ctl_val);
 
 	/* Configure Port Clock Select */
-	drm_WARN_ON(&dev_priv->drm, crtc_state->shared_dpll->info->id != DPLL_ID_SPLL);
+	drm_WARN_ON(&dev_priv->drm, crtc_state->global_dpll->info->id != DPLL_ID_SPLL);
 	intel_ddi_enable_clock(encoder, crtc_state);
 
 	/* Start the training iterating through available voltages and emphasis,

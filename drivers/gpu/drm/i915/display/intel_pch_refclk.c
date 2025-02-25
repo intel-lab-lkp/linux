@@ -494,7 +494,7 @@ static void ilk_init_pch_refclk(struct drm_i915_private *dev_priv)
 {
 	struct intel_display *display = &dev_priv->display;
 	struct intel_encoder *encoder;
-	struct intel_shared_dpll *pll;
+	struct intel_global_dpll *pll;
 	int i;
 	u32 val, final;
 	bool has_lvds = false;

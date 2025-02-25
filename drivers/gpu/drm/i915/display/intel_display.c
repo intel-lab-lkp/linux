@@ -1350,7 +1350,7 @@ static void intel_encoders_update_prepare(struct intel_atomic_state *state)
 			if (intel_crtc_needs_modeset(new_crtc_state))
 				continue;
 
-			new_crtc_state->shared_dpll = old_crtc_state->shared_dpll;
+			new_crtc_state->global_dpll = old_crtc_state->global_dpll;
 			new_crtc_state->dpll_hw_state = old_crtc_state->dpll_hw_state;
 		}
 	}
@@ -1694,7 +1694,7 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 		const struct intel_crtc_state *pipe_crtc_state =
 			intel_atomic_get_new_crtc_state(state, pipe_crtc);
 
-		if (pipe_crtc_state->shared_dpll)
+		if (pipe_crtc_state->global_dpll)
 			intel_enable_shared_dpll(pipe_crtc_state);
 	}
 
@@ -2040,7 +2040,7 @@ static void get_crtc_power_domains(struct intel_crtc_state *crtc_state,
 	if (HAS_DDI(dev_priv) && crtc_state->has_audio)
 		set_bit(POWER_DOMAIN_AUDIO_MMIO, mask->bits);
 
-	if (crtc_state->shared_dpll)
+	if (crtc_state->global_dpll)
 		set_bit(POWER_DOMAIN_DISPLAY_CORE, mask->bits);
 
 	if (crtc_state->dsc.compression_enable)
@@ -3121,7 +3121,7 @@ static bool i9xx_get_pipe_config(struct intel_crtc *crtc,
 	pipe_config->output_format = INTEL_OUTPUT_FORMAT_RGB;
 	pipe_config->sink_format = pipe_config->output_format;
 	pipe_config->cpu_transcoder = (enum transcoder) crtc->pipe;
-	pipe_config->shared_dpll = NULL;
+	pipe_config->global_dpll = NULL;
 
 	ret = false;
 
@@ -3503,7 +3503,7 @@ static bool ilk_get_pipe_config(struct intel_crtc *crtc,
 		return false;
 
 	pipe_config->cpu_transcoder = (enum transcoder) crtc->pipe;
-	pipe_config->shared_dpll = NULL;
+	pipe_config->global_dpll = NULL;
 
 	ret = false;
 	tmp = intel_de_read(dev_priv,
@@ -4080,7 +4080,7 @@ static bool hsw_get_pipe_config(struct intel_crtc *crtc,
 						       POWER_DOMAIN_PIPE(crtc->pipe)))
 		return false;
 
-	pipe_config->shared_dpll = NULL;
+	pipe_config->global_dpll = NULL;
 
 	active = hsw_get_transcoder_state(crtc, pipe_config, &crtc->hw_readout_power_domains);
 
@@ -4663,7 +4663,7 @@ copy_joiner_crtc_state_modeset(struct intel_atomic_state *state,
 	/* preserve some things from the slave's original crtc state */
 	saved_state->uapi = secondary_crtc_state->uapi;
 	saved_state->scaler_state = secondary_crtc_state->scaler_state;
-	saved_state->shared_dpll = secondary_crtc_state->shared_dpll;
+	saved_state->global_dpll = secondary_crtc_state->global_dpll;
 	saved_state->crc_enabled = secondary_crtc_state->crc_enabled;
 
 	intel_crtc_free_hw_state(secondary_crtc_state);
@@ -4726,7 +4726,7 @@ intel_crtc_prepare_cleared_state(struct intel_atomic_state *state,
 	saved_state->uapi = crtc_state->uapi;
 	saved_state->inherited = crtc_state->inherited;
 	saved_state->scaler_state = crtc_state->scaler_state;
-	saved_state->shared_dpll = crtc_state->shared_dpll;
+	saved_state->global_dpll = crtc_state->global_dpll;
 	saved_state->dpll_hw_state = crtc_state->dpll_hw_state;
 	memcpy(saved_state->icl_port_dplls, crtc_state->icl_port_dplls,
 	       sizeof(saved_state->icl_port_dplls));
@@ -5479,7 +5479,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_BOOL(double_wide);
 
 	if (dev_priv->display.dpll.mgr)
-		PIPE_CONF_CHECK_P(shared_dpll);
+		PIPE_CONF_CHECK_P(global_dpll);
 
 	/* FIXME convert everything over the dpll_mgr */
 	if (dev_priv->display.dpll.mgr || HAS_GMCH(dev_priv))

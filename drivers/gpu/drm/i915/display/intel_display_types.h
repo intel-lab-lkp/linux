@@ -1072,8 +1072,8 @@ struct intel_crtc_state {
 	 * haswell. */
 	struct dpll dpll;
 
-	/* Selected dpll when shared or NULL. */
-	struct intel_shared_dpll *shared_dpll;
+	/* Selected dpll. */
+	struct intel_global_dpll *global_dpll;
 
 	/* Actual register state of the dpll, for shared dpll cross-checking. */
 	struct intel_dpll_hw_state dpll_hw_state;
@@ -1083,7 +1083,7 @@ struct intel_crtc_state {
 	 * setting shared_dpll and dpll_hw_state to one of these reserved ones.
 	 */
 	struct icl_port_dpll {
-		struct intel_shared_dpll *pll;
+		struct intel_global_dpll *pll;
 		struct intel_dpll_hw_state hw_state;
 	} icl_port_dplls[ICL_PORT_DPLL_COUNT];
 

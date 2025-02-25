@@ -19,7 +19,7 @@ struct intel_display;
 struct intel_dp;
 struct intel_dpll_hw_state;
 struct intel_encoder;
-struct intel_shared_dpll;
+struct intel_global_dpll;
 enum pipe;
 enum port;
 enum transcoder;
@@ -41,7 +41,7 @@ void intel_ddi_enable_clock(struct intel_encoder *encoder,
 void intel_ddi_disable_clock(struct intel_encoder *encoder);
 void intel_ddi_get_clock(struct intel_encoder *encoder,
 			 struct intel_crtc_state *crtc_state,
-			 struct intel_shared_dpll *pll);
+			 struct intel_global_dpll *pll);
 void hsw_ddi_enable_clock(struct intel_encoder *encoder,
 			  const struct intel_crtc_state *crtc_state);
 void hsw_ddi_disable_clock(struct intel_encoder *encoder);
@@ -51,7 +51,7 @@ intel_ddi_port_pll_type(struct intel_encoder *encoder,
 			const struct intel_crtc_state *crtc_state);
 void hsw_ddi_get_config(struct intel_encoder *encoder,
 			struct intel_crtc_state *crtc_state);
-struct intel_shared_dpll *icl_ddi_combo_get_pll(struct intel_encoder *encoder);
+struct intel_global_dpll *icl_ddi_combo_get_pll(struct intel_encoder *encoder);
 void hsw_prepare_dp_ddi_buffers(struct intel_encoder *encoder,
 				const struct intel_crtc_state *crtc_state);
 void intel_wait_ddi_buf_idle(struct drm_i915_private *dev_priv,
