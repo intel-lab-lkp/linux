@@ -6,6 +6,22 @@
  */
 
 /* This file must be included after sc7180-trogdor.dtsi to modify cros_ec */
+
+/ {
+	pogo_pins: keyboard-connector {
+		compatible = "google,usb-pogo-keyboard";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* Detachable keyboard filled in by board */
+		port {
+			pogo_pins_in: endpoint {
+				/* Endpoint filled in by board */
+			};
+		};
+	};
+};
+
 &cros_ec {
 	keyboard-controller {
 		compatible = "google,cros-ec-keyb-switches";
