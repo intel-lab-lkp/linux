@@ -5033,6 +5033,8 @@ int ice_load(struct ice_pf *pf)
 
 	devl_assert_locked(priv_to_devlink(pf));
 
+	libie_fwlog_reregister(&pf->hw.fwlog);
+
 	vsi = ice_get_main_vsi(pf);
 
 	/* init channel list */
@@ -7663,6 +7665,8 @@ static void ice_rebuild(struct ice_pf *pf, enum ice_reset_req reset_type)
 		dev_err(dev, "control queues init failed %d\n", err);
 		goto err_init_ctrlq;
 	}
+
+	libie_fwlog_reregister(&hw->fwlog);
 
 	/* if DDP was previously loaded successfully */
 	if (!ice_is_safe_mode(pf)) {
