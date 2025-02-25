@@ -517,9 +517,128 @@
 
 &i2c18 {
 	clock-frequency = <400000>;
-	pinctrl-0 = <&qup_i2c18_default>;
+	pinctrl-0 = <&qup_i2c18_default>,
+			<&io_expander_intr_active>,
+			<&io_expander_reset_active>;
 	pinctrl-names = "default";
+
 	status = "okay";
+
+	io_expander: gpio@74 {
+		compatible = "ti,tca9539";
+		reg = <0x74>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <98 IRQ_TYPE_EDGE_BOTH>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		pinctrl-0 = <&dsi0_int_pin>,
+				<&dsi0_cbl_det_pin>,
+				<&dsi1_int_pin>,
+				<&dsi1_cbl_det_pin>;
+		pinctrl-names = "default";
+
+		dsi0_int_pin: gpio2_cfg {
+			pins = "gpio2";
+			input-enable;
+			bias-disable;
+		};
+
+		dsi0_cbl_det_pin: gpio3_cfg {
+			pins = "gpio3";
+			bias-pull-down;
+		};
+
+		dsi1_int_pin: gpio10_cfg {
+			pins = "gpio10";
+			input-enable;
+			bias-disable;
+		};
+
+		dsi1_cbl_det_pin: gpio11_cfg {
+			pins = "gpio11";
+			bias-pull-down;
+		};
+	};
+
+	i2c-mux@70 {
+		compatible = "nxp,pca9543";
+		#address-cells = <1>;
+
+		#size-cells = <0>;
+		reg = <0x70>;
+
+		i2c@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			anx_bridge_1: anx7625@58 {
+				compatible = "analogix,anx7625";
+				reg = <0x58>;
+				interrupt-parent = <&io_expander>;
+				interrupts = <2 IRQ_TYPE_EDGE_FALLING>;
+				enable-gpios = <&io_expander 1 0>;
+				reset-gpios = <&io_expander 0 0>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dsi2dp_bridge_1_in: port@0 {
+						reg = <0>;
+
+						anx7625_1_in: endpoint {
+							remote-endpoint = <&mdss0_dsi0_out>;
+						};
+					};
+
+					dsi2dp_bridge_1_out: port@1 {
+						reg = <1>;
+
+						anx7625_1_out: endpoint { };
+					};
+				};
+			};
+		};
+
+		i2c@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			anx_bridge_2: anx7625@58 {
+				compatible = "analogix,anx7625";
+				reg = <0x58>;
+				interrupt-parent = <&io_expander>;
+				interrupts = <10 IRQ_TYPE_EDGE_FALLING>;
+				enable-gpios = <&io_expander 9 0>;
+				reset-gpios = <&io_expander 8 0>;
+
+				ports {
+					#address-cells = <1>;
+					#size-cells = <0>;
+
+					dsi2dp_bridge_2_in: port@0 {
+						reg = <0>;
+
+						anx7625_2_in: endpoint {
+							remote-endpoint = <&mdss0_dsi1_out>;
+						};
+					};
+
+					dsi2dp_bridge_2_out: port@1 {
+						reg = <1>;
+
+						anx7625_2_out: endpoint { };
+					};
+				};
+			};
+		};
+	};
+
 };
 
 &mdss0 {
@@ -712,6 +831,21 @@
 			drive-strength = <16>;
 			bias-pull-up;
 		};
+	};
+
+	io_expander_intr_active: io-expander-intr-active-state {
+		pins = "gpio98";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	io_expander_reset_active: io-expander-reset-active-state {
+		pins = "gpio97";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+		output-high;
 	};
 
 	qup_uart10_default: qup-uart10-state {
