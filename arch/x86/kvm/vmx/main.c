@@ -698,6 +698,7 @@ static int __init vt_init(void)
 				sizeof(struct vcpu_tdx));
 		vcpu_align = max_t(unsigned, vcpu_align,
 				__alignof__(struct vcpu_tdx));
+		kvm_caps.supported_quirks &= ~KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT;
 	}
 
 	/*

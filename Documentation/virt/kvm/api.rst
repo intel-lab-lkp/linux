@@ -8158,9 +8158,11 @@ KVM_X86_QUIRK_STUFF_FEATURE_MSRS    By default, at vCPU creation, KVM sets the
                                     be set by userspace (KVM sets them based on
                                     guest CPUID, for safety purposes).
 
-KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT  By default, on Intel platforms, KVM ignores
-                                    guest PAT and forces the effective memory
-                                    type to WB in EPT.  The quirk has no effect
+KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT  By default, on Intel platforms except TDX,
+                                    KVM ignores guest PAT and forces the
+                                    effective memory type to WB in EPT. The
+                                    quirk only affects the memory type of
+                                    KVM-managed EPTs.  The quirk has no effect
                                     when KVM runs on Intel platforms which are
                                     incapable of safely honoring guest PAT
                                     (i.e., without CPU feature self-snoop, KVM
@@ -8177,14 +8179,14 @@ KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT  By default, on Intel platforms, KVM ignores
                                     map the video RAM, causing wayland desktop
                                     to fail to start correctly). To prevent
                                     breaking older guest software, KVM enables
-                                    the quirk by default on Intel platforms.
-                                    Userspace can disable the quirk to honor
-                                    guest PAT when there is no older
+                                    the quirk by default on Intel platforms
+                                    except TDX. Userspace can disable the quirk
+                                    to honor guest PAT when there is no older
                                     unmodifiable guest software that relies on
                                     KVM to force memory type to WB.  Note, the
-                                    quirk is not visible on AMD's platforms,
-                                    i.e., KVM always honors guest PAT when
-                                    running on AMD.
+                                    quirk is not visible on Intel TDX or AMD's
+                                    platforms, i.e., KVM always honors guest PAT
+                                    when running on Intel TDX or AMD.
 =================================== ============================================
 
 7.32 KVM_CAP_MAX_VCPU_ID
