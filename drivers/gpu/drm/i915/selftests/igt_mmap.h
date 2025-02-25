@@ -18,4 +18,7 @@ unsigned long igt_mmap_offset(struct drm_i915_private *i915,
 			      unsigned long prot,
 			      unsigned long flags);
 
+int igt_mmap_enable_current(void);
+void igt_mmap_disable_current(void);
+
 #endif /* IGT_MMAP_H */

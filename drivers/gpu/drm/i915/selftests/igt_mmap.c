@@ -50,3 +50,22 @@ out_file:
 	fput(file);
 	return addr;
 }
+
+
+int igt_mmap_enable_current(void)
+{
+	if (current->flags & PF_KTHREAD) {
+		if (!current->active_mm) {
+			pr_info("Couldn't get userspace mm in kthread\n");
+			return -ENODATA;
+		}
+		kthread_use_mm(current->active_mm);
+	}
+	return 0;
+}
+
+void igt_mmap_disable_current(void)
+{
+	if (current->flags & PF_KTHREAD)
+		kthread_unuse_mm(current->active_mm);
+}

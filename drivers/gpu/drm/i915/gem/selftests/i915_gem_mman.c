@@ -974,6 +974,11 @@ static int igt_mmap(void *arg)
 	struct drm_i915_private *i915 = arg;
 	struct intel_memory_region *mr;
 	enum intel_region_id id;
+	int err;
+
+	err = igt_mmap_enable_current();
+	if (err)
+		return err;
 
 	for_each_memory_region(mr, i915, id) {
 		unsigned long sizes[] = {
@@ -988,7 +993,6 @@ static int igt_mmap(void *arg)
 
 		for (i = 0; i < ARRAY_SIZE(sizes); i++) {
 			struct drm_i915_gem_object *obj;
-			int err;
 
 			obj = __i915_gem_object_create_user(i915, sizes[i], &mr, 1);
 			if (obj == ERR_PTR(-ENODEV))
@@ -1005,11 +1009,13 @@ static int igt_mmap(void *arg)
 
 			i915_gem_object_put(obj);
 			if (err)
-				return err;
+				goto out_disable_current;
 		}
 	}
 
-	return 0;
+out_disable_current:
+	igt_mmap_disable_current();
+	return err;
 }
 
 static void igt_close_objects(struct drm_i915_private *i915,
@@ -1310,13 +1316,17 @@ static int igt_mmap_migrate(void *arg)
 	struct intel_memory_region *system = i915->mm.regions[INTEL_REGION_SMEM];
 	struct intel_memory_region *mr;
 	enum intel_region_id id;
+	int err;
+
+	err = igt_mmap_enable_current();
+	if (err)
+		return err;
 
 	for_each_memory_region(mr, i915, id) {
 		struct intel_memory_region *mixed[] = { mr, system };
 		struct intel_memory_region *single[] = { mr };
 		struct ttm_resource_manager *man = mr->region_private;
 		struct resource saved_io;
-		int err;
 
 		if (mr->private)
 			continue;
@@ -1400,10 +1410,12 @@ out_io_size:
 		i915_ttm_buddy_man_force_visible_size(man,
 						      resource_size(&mr->io) >> PAGE_SHIFT);
 		if (err)
-			return err;
+			goto out_disable_current;
 	}
 
-	return 0;
+out_disable_current:
+	igt_mmap_disable_current();
+	return err;
 }
 
 static const char *repr_mmap_type(enum i915_mmap_type type)
@@ -1506,10 +1518,14 @@ static int igt_mmap_access(void *arg)
 	struct drm_i915_private *i915 = arg;
 	struct intel_memory_region *mr;
 	enum intel_region_id id;
+	int err;
+
+	err = igt_mmap_enable_current();
+	if (err)
+		return err;
 
 	for_each_memory_region(mr, i915, id) {
 		struct drm_i915_gem_object *obj;
-		int err;
 
 		if (mr->private)
 			continue;
@@ -1533,10 +1549,12 @@ static int igt_mmap_access(void *arg)
 
 		i915_gem_object_put(obj);
 		if (err)
-			return err;
+			goto out_disable_current;
 	}
 
-	return 0;
+out_disable_current:
+	igt_mmap_disable_current();
+	return err;
 }
 
 static int __igt_mmap_gpu(struct drm_i915_private *i915,
@@ -1652,10 +1670,14 @@ static int igt_mmap_gpu(void *arg)
 	struct drm_i915_private *i915 = arg;
 	struct intel_memory_region *mr;
 	enum intel_region_id id;
+	int err;
+
+	err = igt_mmap_enable_current();
+	if (err)
+		return err;
 
 	for_each_memory_region(mr, i915, id) {
 		struct drm_i915_gem_object *obj;
-		int err;
 
 		if (mr->private)
 			continue;
@@ -1675,10 +1697,12 @@ static int igt_mmap_gpu(void *arg)
 
 		i915_gem_object_put(obj);
 		if (err)
-			return err;
+			goto out_disable_current;
 	}
 
-	return 0;
+out_disable_current:
+	igt_mmap_disable_current();
+	return err;
 }
 
 static int check_present_pte(pte_t *pte, unsigned long addr, void *data)
@@ -1806,10 +1830,14 @@ static int igt_mmap_revoke(void *arg)
 	struct drm_i915_private *i915 = arg;
 	struct intel_memory_region *mr;
 	enum intel_region_id id;
+	int err;
+
+	err = igt_mmap_enable_current();
+	if (err)
+		return err;
 
 	for_each_memory_region(mr, i915, id) {
 		struct drm_i915_gem_object *obj;
-		int err;
 
 		if (mr->private)
 			continue;
@@ -1829,10 +1857,12 @@ static int igt_mmap_revoke(void *arg)
 
 		i915_gem_object_put(obj);
 		if (err)
-			return err;
+			goto out_disable_current;
 	}
 
-	return 0;
+out_disable_current:
+	igt_mmap_disable_current();
+	return err;
 }
 
 int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
@@ -1847,6 +1877,5 @@ int i915_gem_mman_live_selftests(struct drm_i915_private *i915)
 		SUBTEST(igt_mmap_revoke),
 		SUBTEST(igt_mmap_gpu),
 	};
-
 	return i915_live_subtests(tests, i915);
 }
