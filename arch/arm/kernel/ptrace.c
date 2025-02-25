@@ -27,9 +27,6 @@
 #include <asm/syscall.h>
 #include <asm/traps.h>
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/syscalls.h>
-
 #define REG_PC	15
 #define REG_PSR	16
 /*
@@ -737,6 +734,11 @@ long arch_ptrace(struct task_struct *child, long request,
 			ret = ptrace_write_user(child, addr, data);
 			break;
 
+		case PTRACE_SYSEMU:
+		case PTRACE_SYSEMU_SINGLESTEP:
+			ret = -EIO;
+			break;
+
 		case PTRACE_GETREGS:
 			ret = copy_regset_to_user(child,
 						  &user_arm_view, REGSET_GPR,
@@ -820,91 +822,4 @@ long arch_ptrace(struct task_struct *child, long request,
 	}
 
 	return ret;
-}
-
-enum ptrace_syscall_dir {
-	PTRACE_SYSCALL_ENTER = 0,
-	PTRACE_SYSCALL_EXIT,
-};
-
-static void report_syscall_enter(struct pt_regs *regs)
-{
-	unsigned long ip;
-
-	/*
-	 * IP is used to denote syscall entry/exit:
-	 * IP = 0 -> entry
-	 */
-	ip = regs->ARM_ip;
-	regs->ARM_ip = PTRACE_SYSCALL_ENTER;
-
-	if (ptrace_report_syscall_entry(regs))
-		current_thread_info()->abi_syscall = -1;
-
-	regs->ARM_ip = ip;
-}
-
-static void report_syscall_exit(struct pt_regs *regs)
-{
-	unsigned long ip;
-
-	/*
-	 * IP is used to denote syscall entry/exit:
-	 * IP = 1 -> exit
-	 */
-	ip = regs->ARM_ip;
-	regs->ARM_ip = PTRACE_SYSCALL_EXIT;
-
-	ptrace_report_syscall_exit(regs, 0);
-
-	regs->ARM_ip = ip;
-}
-
-asmlinkage int syscall_trace_enter(struct pt_regs *regs)
-{
-	int scno;
-
-	if (test_thread_flag(TIF_SYSCALL_TRACE))
-		report_syscall_enter(regs);
-
-	/* Do seccomp after ptrace; syscall may have changed. */
-#ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
-	if (secure_computing() == -1)
-		return -1;
-#else
-	/* XXX: remove this once OABI gets fixed */
-	secure_computing_strict(syscall_get_nr(current, regs));
-#endif
-
-	/* Tracer or seccomp may have changed syscall. */
-	scno = syscall_get_nr(current, regs);
-
-	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
-		trace_sys_enter(regs, scno);
-
-	audit_syscall_entry(scno, regs->ARM_r0, regs->ARM_r1, regs->ARM_r2,
-			    regs->ARM_r3);
-
-	return scno;
-}
-
-void syscall_trace_exit(struct pt_regs *regs)
-{
-	/*
-	 * Audit the syscall before anything else, as a debugger may
-	 * come in and change the current registers.
-	 */
-	audit_syscall_exit(regs);
-
-	/*
-	 * Note that we haven't updated the ->syscall field for the
-	 * current thread. This isn't a problem because it will have
-	 * been set on syscall entry and there hasn't been an opportunity
-	 * for a PTRACE_SET_SYSCALL since then.
-	 */
-	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
-		trace_sys_exit(regs, regs_return_value(regs));
-
-	if (test_thread_flag(TIF_SYSCALL_TRACE))
-		report_syscall_exit(regs);
 }

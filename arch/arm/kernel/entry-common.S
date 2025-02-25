@@ -39,10 +39,6 @@ ret_fast_syscall:
  UNWIND(.fnstart	)
  UNWIND(.cantunwind	)
 	add	sp, sp, #(S_R0 + S_OFF)
-	/* do_rseq_syscall needs interrupts enabled. */
-	mov	r0, sp				@ 'regs'
-	bl	syscall_exit_to_user_mode
-
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	bl	stackleak_erase_on_task_stack
 #endif
@@ -60,7 +56,7 @@ ENTRY(ret_to_user)
 	/* do_rseq_syscall needs interrupts enabled. */
 	enable_irq_notrace			@ enable interrupts
 	mov	r0, sp				@ 'regs'
-	bl	syscall_exit_to_user_mode
+	bl	arm_exit_to_user_mode
 
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	bl	stackleak_erase_on_task_stack
@@ -69,8 +65,6 @@ ENTRY(ret_to_user)
 ENDPROC(ret_to_user)
 
 ENTRY(ret_to_user_from_irq)
-	asm_irqentry_exit_to_user_mode
-
 #ifdef CONFIG_GCC_PLUGIN_STACKLEAK
 	bl	stackleak_erase_on_task_stack
 #endif
@@ -92,9 +86,10 @@ SYM_TYPED_FUNC_START(ret_from_fork_asm)
 	mov	r2, r5
 	mov	r3, r4
 	bl	ret_from_fork
-	mov	r0, #0
-1:	get_thread_info tsk
-	b	ret_to_user
+#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
+	bl	stackleak_erase_on_task_stack
+#endif
+	restore_user_regs
 SYM_FUNC_END(ret_from_fork_asm)
 
 /*=============================================================================
@@ -210,29 +205,12 @@ ENTRY(vector_swi)
 #else
 	str	scno, [tsk, #TI_ABI_SYSCALL]
 #endif
-
-	/*
-	 * Calling out to C to be careful to save and restore registers.
-	 * This call could modify the syscall number. scno is r7 so we
-	 * do not save and restore r7.
-	 */
-	mov	r0, sp				@ regs
-	mov	r1, scno
-	push	{r4 - r6, r8 - r10, lr}
-	bl	syscall_enter_from_user_mode
-	pop	{r4 - r6, r8 - r10, lr}
-	mov	scno, r0
-
 	mov	r1, sp				@ put regs into r1
 	stmdb	sp!, {r4, r5}			@ push fifth and sixth args
 	mov	r0, tbl
 	mov	r2, scno			@ syscall number from r7
 	bl	invoke_syscall
-	cmp	r0, #0
-	beq	ret_fast_syscall
-	/* This path taken when tracing */
-	add	sp, sp, #(S_R0 + S_OFF)
-	b	ret_to_user
+	b	ret_fast_syscall
 
 #if defined(CONFIG_OABI_COMPAT) || !defined(CONFIG_AEABI)
 	/*

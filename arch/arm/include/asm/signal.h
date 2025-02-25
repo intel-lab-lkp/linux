@@ -23,6 +23,4 @@ typedef struct {
 
 #include <asm/sigcontext.h>
 
-void do_work_pending(struct pt_regs *regs, unsigned int thread_flags);
-
 #endif
