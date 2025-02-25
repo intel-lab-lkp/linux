@@ -433,7 +433,8 @@ static int bochs_primary_plane_helper_atomic_check(struct drm_plane *plane,
 						  false, false);
 	if (ret)
 		return ret;
-	else if (!new_plane_state->visible)
+
+	if (!new_plane_state->visible)
 		return 0;
 
 	return 0;
