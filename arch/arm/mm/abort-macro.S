@@ -20,7 +20,7 @@
 	orreq	\tmp, \tmp, #1 << 11		@ Set L-bit if yes
 	tst	\tmp, #1 << 11			@ L = 0 -> write
 	orreq	\fsr, \fsr, #1 << 11		@ yes.
-	b	do_DataAbort
+	b	arm_dabt_handler
 not_thumb:
 	.endm
 

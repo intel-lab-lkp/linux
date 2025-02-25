@@ -8,8 +8,39 @@
 #include <linux/percpu.h>
 #include <linux/rseq.h>
 #include <asm/stacktrace.h>
+#include <asm/traps.h>
 
 #include "irq.h"
+#include "../mm/fault.h"
+
+noinstr asmlinkage void arm_und_handler(struct pt_regs *regs)
+{
+	irqentry_state_t state = irqentry_enter(regs);
+
+	do_undefinstr(regs);
+
+	irqentry_exit(regs, state);
+}
+
+noinstr asmlinkage void arm_dabt_handler(unsigned long addr, unsigned int fsr,
+					 struct pt_regs *regs)
+{
+	irqentry_state_t state = irqentry_enter(regs);
+
+	do_DataAbort(addr, fsr, regs);
+
+	irqentry_exit(regs, state);
+}
+
+noinstr asmlinkage void arm_pabt_handler(unsigned long addr, unsigned int ifsr,
+					 struct pt_regs *regs)
+{
+	irqentry_state_t state = irqentry_enter(regs);
+
+	do_PrefetchAbort(addr, ifsr, regs);
+
+	irqentry_exit(regs, state);
+}
 
 static void noinstr handle_arm_irq(void *data)
 {

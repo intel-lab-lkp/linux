@@ -46,8 +46,8 @@ ENTRY(v4t_late_abort)
 /* 9 */	b	.data_arm_ldmstm		@ ldm*b	rn, <rlist>
 /* a */	b	.data_unknown
 /* b */	b	.data_unknown
-/* c */	b	do_DataAbort			@ ldc	rd, [rn], #m	@ Same as ldr	rd, [rn], #m
-/* d */	b	do_DataAbort			@ ldc	rd, [rn, #m]
+/* c */	b	arm_dabt_handler		@ ldc	rd, [rn], #m	@ Same as ldr	rd, [rn], #m
+/* d */	b	arm_dabt_handler		@ ldc	rd, [rn, #m]
 /* e */	b	.data_unknown
 /* f */	b	.data_unknown
 
@@ -60,7 +60,7 @@ ENTRY(v4t_late_abort)
 
 .data_arm_ldmstm:
 	tst	r8, #1 << 21			@ check writeback bit
-	beq	do_DataAbort			@ no writeback -> no fixup
+	beq	arm_dabt_handler		@ no writeback -> no fixup
 	str	r9, [sp, #-4]!
 	mov	r7, #0x11
 	orr	r7, r7, #0x1100
@@ -81,11 +81,11 @@ ENTRY(v4t_late_abort)
 	addeq	r7, r7, r6, lsl #2		@ Undo decrement
 	str	r7, [r2, r9, lsr #14]		@ Put register 'Rn'
 	ldr	r9, [sp], #4
-	b	do_DataAbort
+	b	arm_dabt_handler
 
 .data_arm_lateldrhpre:
 	tst	r8, #1 << 21			@ Check writeback bit
-	beq	do_DataAbort			@ No writeback -> no fixup
+	beq	arm_dabt_handler		@ No writeback -> no fixup
 .data_arm_lateldrhpost:
 	str	r9, [sp, #-4]!
 	and	r9, r8, #0x00f			@ get Rm / low nibble of immediate value
@@ -101,14 +101,14 @@ ENTRY(v4t_late_abort)
 	addeq	r7, r7, r6			@ Undo decrement
 	str	r7, [r2, r9, lsr #14]		@ Put register 'Rn'
 	ldr	r9, [sp], #4
-	b	do_DataAbort
+	b	arm_dabt_handler
 
 .data_arm_lateldrpreconst:
 	tst	r8, #1 << 21			@ check writeback bit
-	beq	do_DataAbort			@ no writeback -> no fixup
+	beq	arm_dabt_handler		@ no writeback -> no fixup
 .data_arm_lateldrpostconst:
 	movs	r6, r8, lsl #20			@ Get offset
-	beq	do_DataAbort			@ zero -> no fixup
+	beq	arm_dabt_handler		@ zero -> no fixup
 	str	r9, [sp, #-4]!
 	and	r9, r8, #15 << 16		@ Extract 'n' from instruction
 	ldr	r7, [r2, r9, lsr #14]		@ Get register 'Rn'
@@ -117,11 +117,11 @@ ENTRY(v4t_late_abort)
 	addeq	r7, r7, r6, lsr #20		@ Undo decrement
 	str	r7, [r2, r9, lsr #14]		@ Put register 'Rn'
 	ldr	r9, [sp], #4
-	b	do_DataAbort
+	b	arm_dabt_handler
 
 .data_arm_lateldrprereg:
 	tst	r8, #1 << 21			@ check writeback bit
-	beq	do_DataAbort			@ no writeback -> no fixup
+	beq	arm_dabt_handler		@ no writeback -> no fixup
 .data_arm_lateldrpostreg:
 	and	r7, r8, #15			@ Extract 'm' from instruction
 	ldr	r6, [r2, r7, lsl #2]		@ Get register 'Rm'
@@ -180,10 +180,10 @@ ENTRY(v4t_late_abort)
 /* 3 */	b	.data_unknown
 /* 4 */	b	.data_unknown
 /* 5 */	b	.data_thumb_reg
-/* 6 */	b	do_DataAbort
-/* 7 */	b	do_DataAbort
-/* 8 */	b	do_DataAbort
-/* 9 */	b	do_DataAbort
+/* 6 */	b	arm_dabt_handler
+/* 7 */	b	arm_dabt_handler
+/* 8 */	b	arm_dabt_handler
+/* 9 */	b	arm_dabt_handler
 /* A */	b	.data_unknown
 /* B */	b	.data_thumb_pushpop
 /* C */	b	.data_thumb_ldmstm
@@ -193,10 +193,10 @@ ENTRY(v4t_late_abort)
 
 .data_thumb_reg:
 	tst	r8, #1 << 9
-	beq	do_DataAbort
+	beq	arm_dabt_handler
 	tst	r8, #1 << 10			@ If 'S' (signed) bit is set
 	movne	r1, #0				@ it must be a load instr
-	b	do_DataAbort
+	b	arm_dabt_handler
 
 .data_thumb_pushpop:
 	tst	r8, #1 << 10
@@ -217,7 +217,7 @@ ENTRY(v4t_late_abort)
 	subne	r7, r7, r6, lsl #2		@ decrement SP if POP
 	str	r7, [r2, #13 << 2]
 	ldr	r9, [sp], #4
-	b	do_DataAbort
+	b	arm_dabt_handler
 
 .data_thumb_ldmstm:
 	str	r9, [sp, #-4]!
@@ -234,4 +234,4 @@ ENTRY(v4t_late_abort)
 	sub	r7, r7, r6, lsl #2		@ always decrement
 	str	r7, [r2, r9, lsr #6]
 	ldr	r9, [sp], #4
-	b	do_DataAbort
+	b	arm_dabt_handler
