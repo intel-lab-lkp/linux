@@ -1087,6 +1087,8 @@ void drm_bridge_hpd_enable(struct drm_bridge *bridge,
 void drm_bridge_hpd_disable(struct drm_bridge *bridge);
 void drm_bridge_hpd_notify(struct drm_bridge *bridge,
 			   enum drm_connector_status status);
+int drm_bridge_reset_crtc(struct drm_bridge *bridge,
+			  struct drm_modeset_acquire_ctx *ctx);
 
 #ifdef CONFIG_DRM_PANEL_BRIDGE
 bool drm_bridge_is_panel(const struct drm_bridge *bridge);
