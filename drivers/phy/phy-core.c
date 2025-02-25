@@ -1108,23 +1108,6 @@ void phy_destroy(struct phy *phy)
 EXPORT_SYMBOL_GPL(phy_destroy);
 
 /**
- * devm_phy_destroy() - destroy the PHY
- * @dev: device that wants to release this phy
- * @phy: the phy returned by devm_phy_get()
- *
- * destroys the devres associated with this phy and invokes phy_destroy
- * to destroy the phy.
- */
-void devm_phy_destroy(struct device *dev, struct phy *phy)
-{
-	int r;
-
-	r = devres_release(dev, devm_phy_consume, devm_phy_match, phy);
-	dev_WARN_ONCE(dev, r, "couldn't find PHY resource\n");
-}
-EXPORT_SYMBOL_GPL(devm_phy_destroy);
-
-/**
  * __of_phy_provider_register() - create/register phy provider with the framework
  * @dev: struct device of the phy provider
  * @children: device node containing children (if different from dev->of_node)

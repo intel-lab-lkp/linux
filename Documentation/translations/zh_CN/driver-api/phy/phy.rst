@@ -164,14 +164,11 @@ PHY 关联的设备资源。
 销毁 PHY
 ========
 
-当创建 PHY 的驱动程序被卸载时，它应该使用以下 2 个 API 之一销毁其创
-建的 PHY::
+当创建 PHY 的驱动程序被卸载时，它应该使用以下 API 销毁其创建的 PHY::
 
 	void phy_destroy(struct phy *phy);
-	void devm_phy_destroy(struct device *dev, struct phy *phy);
 
-这两个 API 都会销毁 PHY，并且 devm_phy_destroy 会销毁与此 PHY 关
-联的 devres。
+这个 API 会销毁 PHY。
 
 PM Runtime
 ==========
