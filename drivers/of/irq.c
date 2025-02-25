@@ -357,7 +357,7 @@ EXPORT_SYMBOL_GPL(of_irq_parse_raw);
  */
 int of_irq_parse_one(struct device_node *device, int index, struct of_phandle_args *out_irq)
 {
-	struct device_node __free(device_node) *p;
+	struct device_node *p __free(device_node) = NULL;
 	const __be32 *addr;
 	u32 intsize;
 	int i, res, addr_len;
