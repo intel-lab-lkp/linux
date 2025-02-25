@@ -70,6 +70,12 @@ struct intel_global_dpll_funcs {
 		       struct intel_encoder *encoder);
 
 	/*
+	 * Hook for disabling the individual pll, used from DISPLAY_VER() >= 14
+	 */
+	void (*disable)(struct intel_display *display,
+			struct intel_global_dpll *pll);
+
+	/*
 	 * Hook for disabling the shared pll, called from intel_disable_global_dpll()
 	 * only when it is safe to disable the pll, i.e., there are no more
 	 * tracked users for it.
