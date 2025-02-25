@@ -44,6 +44,7 @@ struct ppp_channel {
 	int		speed;		/* transfer rate (bytes/second) */
 	/* the following is not used at present */
 	int		latency;	/* overhead time in milliseconds */
+	bool		direct_xmit;	/* no qdisc, xmit directly */
 };
 
 #ifdef __KERNEL__
