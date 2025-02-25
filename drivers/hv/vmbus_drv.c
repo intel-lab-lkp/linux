@@ -1802,6 +1802,39 @@ static ssize_t subchannel_id_show(struct vmbus_channel *channel,
 }
 static VMBUS_CHAN_ATTR_RO(subchannel_id);
 
+/* Functions to create sysfs interface to allow mmap of the ring buffers.
+ * The ring buffer is allocated as contiguous memory by vmbus_open
+ */
+static int hv_mmap_ring_buffer(struct vmbus_channel *channel, struct vm_area_struct *vma)
+{
+	void *ring_buffer = page_address(channel->ringbuffer_page);
+
+	if (channel->state != CHANNEL_OPENED_STATE)
+		return -ENODEV;
+
+	return vm_iomap_memory(vma, virt_to_phys(ring_buffer),
+			       channel->ringbuffer_pagecount << PAGE_SHIFT);
+}
+
+static int hv_mmap_ring_buffer_wrapper(struct file *filp, struct kobject *kobj,
+				       const struct bin_attribute *attr,
+				       struct vm_area_struct *vma)
+{
+	struct vmbus_channel *channel = container_of(kobj, struct vmbus_channel, kobj);
+
+	if (!channel->mmap_ring_buffer)
+		return -ENODEV;
+	return channel->mmap_ring_buffer(channel, vma);
+}
+
+static struct bin_attribute chan_attr_ring_buffer = {
+	.attr = {
+		.name = "ring",
+		.mode = 0600,
+	},
+	.size = 2 * SZ_2M,
+	.mmap = hv_mmap_ring_buffer_wrapper,
+};
 static struct attribute *vmbus_chan_attrs[] = {
 	&chan_attr_out_mask.attr,
 	&chan_attr_in_mask.attr,
@@ -1818,6 +1851,7 @@ static struct attribute *vmbus_chan_attrs[] = {
 	&chan_attr_out_full_total.attr,
 	&chan_attr_monitor_id.attr,
 	&chan_attr_subchannel_id.attr,
+	&chan_attr_ring_buffer.attr,
 	NULL
 };
 
@@ -1838,6 +1872,10 @@ static umode_t vmbus_chan_attr_is_visible(struct kobject *kobj,
 	     attr == &chan_attr_monitor_id.attr))
 		return 0;
 
+	/* Hide ring attribute if channel's mmap_ring_buffer function is not yet initialised */
+	if (attr ==  &chan_attr_ring_buffer.attr && !channel->mmap_ring_buffer)
+		return 0;
+
 	return attr->mode;
 }
 
@@ -1850,6 +1888,30 @@ static const struct kobj_type vmbus_chan_ktype = {
 	.sysfs_ops = &vmbus_chan_sysfs_ops,
 	.release = vmbus_chan_release,
 };
+
+/*
+ * hv_create_ring_sysfs - create ring sysfs entry corresponding to ring buffers for a channel
+ */
+int hv_create_ring_sysfs(struct vmbus_channel *channel)
+{
+	struct kobject *kobj = &channel->kobj;
+
+	channel->mmap_ring_buffer = hv_mmap_ring_buffer;
+	return sysfs_update_group(kobj, &vmbus_chan_group);
+}
+EXPORT_SYMBOL_GPL(hv_create_ring_sysfs);
+
+/*
+ * hv_remove_ring_sysfs - remove ring sysfs entry corresponding to ring buffers for a channel
+ */
+int hv_remove_ring_sysfs(struct vmbus_channel *channel)
+{
+	struct kobject *kobj = &channel->kobj;
+
+	channel->mmap_ring_buffer = NULL;
+	return sysfs_update_group(kobj, &vmbus_chan_group);
+}
+EXPORT_SYMBOL_GPL(hv_remove_ring_sysfs);
 
 /*
  * vmbus_add_channel_kobj - setup a sub-directory under device/channels
