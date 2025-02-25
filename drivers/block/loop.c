@@ -14,8 +14,6 @@
 #include <linux/wait.h>
 #include <linux/blkpg.h>
 #include <linux/init.h>
-#include <linux/swap.h>
-#include <linux/slab.h>
 #include <linux/compat.h>
 #include <linux/suspend.h>
 #include <linux/freezer.h>
@@ -32,9 +30,7 @@
 #include <linux/blk-cgroup.h>
 #include <linux/sched/mm.h>
 #include <linux/statfs.h>
-#include <linux/uaccess.h>
 #include <linux/blk-mq.h>
-#include <linux/spinlock.h>
 #include <uapi/linux/loop.h>
 
 /* Possible states of device */
