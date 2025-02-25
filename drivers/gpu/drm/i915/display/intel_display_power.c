@@ -2335,6 +2335,9 @@ void intel_display_power_debug(struct drm_i915_private *i915, struct seq_file *m
 
 	mutex_lock(&power_domains->lock);
 
+	seq_printf(m, "Runtime power status: %s\n",
+		   str_enabled_disabled(!power_domains->init_wakeref));
+
 	seq_printf(m, "%-25s %s\n", "Power well/domain", "Use count");
 	for (i = 0; i < power_domains->power_well_count; i++) {
 		struct i915_power_well *power_well;
