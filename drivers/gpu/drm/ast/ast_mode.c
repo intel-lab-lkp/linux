@@ -610,9 +610,10 @@ static int ast_primary_plane_helper_atomic_check(struct drm_plane *plane,
 						  DRM_PLANE_NO_SCALING,
 						  DRM_PLANE_NO_SCALING,
 						  false, true);
-	if (ret) {
+	if (ret)
 		return ret;
-	} else if (!new_plane_state->visible) {
+
+	if (!new_plane_state->visible) {
 		if (drm_WARN_ON(dev, new_plane_state->crtc)) /* cannot legally happen */
 			return -EINVAL;
 		else
