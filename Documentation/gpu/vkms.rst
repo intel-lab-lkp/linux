@@ -147,6 +147,15 @@ module. Use/Test-cases:
 - Change output configuration: Plug/unplug screens, change EDID, allow changing
   the refresh rate.
 
+- Emulating Hardware Limitations with eBPF for MST and Atomic Checks
+  Hardware limitations can often prevent valid DRM configurations during
+  atomic checks. Examples of such limitations include bandwidth constraints in
+  MST and limited clock signals for multiple CRTCs.
+  These limitations are dynamic and require extensive checks, making them
+  difficult to describe statically. To address this, we propose creating an
+  eBPF interface for atomic checks. This interface will allow userspace applications
+  to simulate and enforce custom hardware limitations.
+
 The currently proposed solution is to expose vkms configuration through
 configfs. All existing module options should be supported through configfs
 too.
