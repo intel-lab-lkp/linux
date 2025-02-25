@@ -109,6 +109,36 @@ static void handle_usage(int rc, char *msg)
 	exit(rc);
 }
 
+static void check_core_sched(void)
+{
+	unsigned long long cookie;
+	int ret, num_max_process;
+	char buffer[32];
+
+	FILE *fp = fopen("/proc/sys/kernel/pid_max", "r");
+
+	if (fp == NULL) {
+		perror("Failed to obtain max process number");
+		exit(EXIT_FAILURE);
+	}
+
+	if (fgets(buffer, sizeof(buffer), fp) == NULL) {
+		fclose(fp);
+		exit(EXIT_FAILURE);
+	}
+
+	num_max_process = atoi(buffer);
+	fclose(fp);
+
+	ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, num_max_process+1, PIDTYPE_PID,
+			(unsigned long)&cookie);
+	if (ret == -1 && errno != ESRCH) {
+		perror("prctl failed");
+		printf("Core sched not supported, hence skipping tests\n");
+		exit(4);
+	}
+}
+
 static unsigned long get_cs_cookie(int pid)
 {
 	unsigned long long cookie;
@@ -117,7 +147,7 @@ static unsigned long get_cs_cookie(int pid)
 	ret = prctl(PR_SCHED_CORE, PR_SCHED_CORE_GET, pid, PIDTYPE_PID,
 		    (unsigned long)&cookie);
 	if (ret) {
-		printf("Not a core sched system\n");
+		printf("Failed to get cookie\n");
 		return -1UL;
 	}
 
@@ -269,6 +299,8 @@ int main(int argc, char *argv[])
 
 	if (keypress)
 		delay = -1;
+
+	check_core_sched();
 
 	srand(time(NULL));
 
