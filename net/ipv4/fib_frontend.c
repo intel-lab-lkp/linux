@@ -1615,9 +1615,15 @@ static int __net_init fib_net_init(struct net *net)
 	error = ip_fib_net_init(net);
 	if (error < 0)
 		goto out;
+
+	error = fib4_semantics_init(net);
+	if (error)
+		goto out_semantics;
+
 	error = nl_fib_lookup_init(net);
 	if (error < 0)
 		goto out_nlfl;
+
 	error = fib_proc_init(net);
 	if (error < 0)
 		goto out_proc;
@@ -1627,6 +1633,8 @@ out:
 out_proc:
 	nl_fib_lookup_exit(net);
 out_nlfl:
+	fib4_semantics_init(net);
+out_semantics:
 	rtnl_lock();
 	ip_fib_net_exit(net);
 	rtnl_unlock();
@@ -1637,6 +1645,7 @@ static void __net_exit fib_net_exit(struct net *net)
 {
 	fib_proc_exit(net);
 	nl_fib_lookup_exit(net);
+	fib4_semantics_init(net);
 }
 
 static void __net_exit fib_net_exit_batch(struct list_head *net_list)
