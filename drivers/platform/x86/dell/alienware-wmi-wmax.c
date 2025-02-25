@@ -13,8 +13,11 @@
 #include <linux/bits.h>
 #include <linux/dmi.h>
 #include <linux/hwmon.h>
+#include <linux/hwmon-sysfs.h>
+#include <linux/minmax.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_profile.h>
+#include <linux/pm.h>
 #include <linux/units.h>
 #include <linux/wmi.h>
 #include "alienware-wmi.h"
@@ -178,10 +181,12 @@ enum AWCC_THERMAL_INFORMATION_OPERATIONS {
 	AWCC_OP_GET_FAN_MIN_RPM			= 0x08,
 	AWCC_OP_GET_FAN_MAX_RPM			= 0x09,
 	AWCC_OP_GET_CURRENT_PROFILE		= 0x0B,
+	AWCC_OP_GET_FAN_BOOST			= 0x0C,
 };
 
 enum AWCC_THERMAL_CONTROL_OPERATIONS {
 	AWCC_OP_ACTIVATE_PROFILE		= 0x01,
+	AWCC_OP_SET_FAN_BOOST			= 0x02,
 };
 
 enum AWCC_GAME_SHIFT_STATUS_OPERATIONS {
@@ -247,6 +252,7 @@ struct awcc_fan_data {
 	u32 total_temps;
 	u32 min_rpm;
 	u32 max_rpm;
+	u8 suspend_cache;
 	u8 id;
 };
 
@@ -560,12 +566,13 @@ static inline int awcc_thermal_information(struct wmi_device *wdev, u8 operation
 	return __awcc_wmi_command(wdev, AWCC_METHOD_THERMAL_INFORMATION, &args, out);
 }
 
-static inline int awcc_thermal_control(struct wmi_device *wdev, u8 profile)
+static inline int awcc_thermal_control(struct wmi_device *wdev, u8 operation,
+				       u8 arg1, u8 arg2)
 {
 	struct wmax_u32_args args = {
-		.operation = AWCC_OP_ACTIVATE_PROFILE,
-		.arg1 = profile,
-		.arg2 = 0,
+		.operation = operation,
+		.arg1 = arg1,
+		.arg2 = arg2,
 		.arg3 = 0,
 	};
 	u32 out;
@@ -815,6 +822,77 @@ static const struct hwmon_chip_info awcc_hwmon_chip_info = {
 	.info = awcc_hwmon_info,
 };
 
+static ssize_t pwm_boost_show(struct device *dev, struct device_attribute *attr,
+			      char *buf)
+{
+	int ret, index = to_sensor_dev_attr(attr)->index;
+	struct awcc_priv *priv = dev_get_drvdata(dev);
+	struct awcc_fan_data *data = priv->fan_data[index];
+	u32 boost;
+
+	ret = awcc_thermal_information(priv->wdev, AWCC_OP_GET_FAN_BOOST, data->id,
+				       &boost);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%u\n", boost);
+}
+
+static ssize_t pwm_boost_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int ret, index = to_sensor_dev_attr(attr)->index;
+	struct awcc_priv *priv = dev_get_drvdata(dev);
+	struct awcc_fan_data *data = priv->fan_data[index];
+	unsigned long val;
+
+	ret = kstrtoul(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	ret = awcc_thermal_control(priv->wdev, AWCC_OP_SET_FAN_BOOST, data->id,
+				   clamp_val(val, 0, 255));
+
+	return ret ? ret : count;
+}
+
+static SENSOR_DEVICE_ATTR_RW(pwm1_boost, pwm_boost, 0);
+static SENSOR_DEVICE_ATTR_RW(pwm2_boost, pwm_boost, 1);
+static SENSOR_DEVICE_ATTR_RW(pwm3_boost, pwm_boost, 2);
+static SENSOR_DEVICE_ATTR_RW(pwm4_boost, pwm_boost, 3);
+
+static umode_t pwm_boost_attr_visible(struct kobject *kobj, struct attribute *attr, int n)
+{
+	struct awcc_priv *priv = dev_get_drvdata(kobj_to_dev(kobj));
+
+	return n < priv->fan_count ? attr->mode : 0;
+}
+
+static bool pwm_boost_group_visible(struct kobject *kobj)
+{
+	return true;
+}
+
+DEFINE_SYSFS_GROUP_VISIBLE(pwm_boost);
+
+static struct attribute *fan_boost_attrs[] = {
+	&sensor_dev_attr_pwm1_boost.dev_attr.attr,
+	&sensor_dev_attr_pwm2_boost.dev_attr.attr,
+	&sensor_dev_attr_pwm3_boost.dev_attr.attr,
+	&sensor_dev_attr_pwm4_boost.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group pwm_boost_group = {
+	.attrs = fan_boost_attrs,
+	.is_visible = SYSFS_GROUP_VISIBLE(pwm_boost),
+};
+
+static const struct attribute_group *awcc_hwmon_groups[] = {
+	&pwm_boost_group,
+	NULL
+};
+
 static int awcc_hwmon_temps_init(struct wmi_device *wdev)
 {
 	struct awcc_priv *priv = dev_get_drvdata(&wdev->dev);
@@ -948,10 +1026,49 @@ static int awcc_hwmon_init(struct wmi_device *wdev)
 	if (ret)
 		return ret;
 
-	priv->hwdev = devm_hwmon_device_register_with_info(&wdev->dev, "alienware_wmi", priv,
-							   &awcc_hwmon_chip_info, NULL);
+	priv->hwdev = devm_hwmon_device_register_with_info(&wdev->dev, "alienware_wmi",
+							   priv, &awcc_hwmon_chip_info,
+							   awcc_hwmon_groups);
 
 	return PTR_ERR_OR_ZERO(priv->hwdev);
+}
+
+static void awcc_hwmon_suspend(struct device *dev)
+{
+	struct awcc_priv *priv = dev_get_drvdata(dev);
+	struct awcc_fan_data *fan;
+	unsigned int i;
+	u32 boost;
+	int ret;
+
+	for (i = 0; i < priv->fan_count; i++) {
+		fan = priv->fan_data[i];
+
+		ret = awcc_thermal_information(priv->wdev, AWCC_OP_GET_FAN_BOOST,
+					       fan->id, &boost);
+		if (ret)
+			fan->suspend_cache = 0;
+		else
+			fan->suspend_cache = clamp_val(boost, 0, 255);
+
+		awcc_thermal_control(priv->wdev, AWCC_OP_SET_FAN_BOOST, fan->id, 0);
+	}
+}
+
+static void awcc_hwmon_resume(struct device *dev)
+{
+
+	struct awcc_priv *priv = dev_get_drvdata(dev);
+	struct awcc_fan_data *fan;
+	unsigned int i;
+
+	for (i = 0; i < priv->fan_count; i++) {
+		fan = priv->fan_data[i];
+
+		if (fan->suspend_cache)
+			awcc_thermal_control(priv->wdev, AWCC_OP_SET_FAN_BOOST,
+					     fan->id, fan->suspend_cache);
+	}
 }
 
 /*
@@ -1018,8 +1135,8 @@ static int awcc_platform_profile_set(struct device *dev,
 		}
 	}
 
-	return awcc_thermal_control(priv->wdev,
-				    priv->supported_profiles[profile]);
+	return awcc_thermal_control(priv->wdev, AWCC_OP_ACTIVATE_PROFILE,
+				    priv->supported_profiles[profile], 0);
 }
 
 static int awcc_platform_profile_probe(void *drvdata, unsigned long *choices)
@@ -1187,6 +1304,24 @@ static int wmax_wmi_probe(struct wmi_device *wdev, const void *context)
 	return ret;
 }
 
+static int wmax_wmi_suspend(struct device *dev)
+{
+	if (awcc->hwmon)
+		awcc_hwmon_suspend(dev);
+
+	return 0;
+}
+
+static int wmax_wmi_resume(struct device *dev)
+{
+	if (awcc->hwmon)
+		awcc_hwmon_resume(dev);
+
+	return 0;
+}
+
+DEFINE_SIMPLE_DEV_PM_OPS(wmax_wmi_pm_ops, wmax_wmi_suspend, wmax_wmi_resume);
+
 static const struct wmi_device_id alienware_wmax_device_id_table[] = {
 	{ WMAX_CONTROL_GUID, NULL },
 	{ },
@@ -1197,6 +1332,7 @@ static struct wmi_driver alienware_wmax_wmi_driver = {
 	.driver = {
 		.name = "alienware-wmi-wmax",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+		.pm = pm_sleep_ptr(&wmax_wmi_pm_ops),
 	},
 	.id_table = alienware_wmax_device_id_table,
 	.probe = wmax_wmi_probe,
