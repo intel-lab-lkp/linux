@@ -61,6 +61,19 @@ struct capdata01 {
 	u32 max_value;
 };
 
+/* other method structs */
+struct lenovo_wmi_om {
+	struct component_master_ops *ops;
+	struct lenovo_wmi_cd01 *cd01;
+	struct capdata01 **capdata;
+	struct device *fw_attr_dev;
+	struct kset *fw_attr_kset;
+	struct notifier_block nb;
+	struct wmi_device *wdev;
+	enum thermal_mode mode;
+	int instance_count;
+};
+
 /* wmidev_evaluate_method helper functions */
 int lenovo_wmidev_evaluate_method_2(struct wmi_device *wdev, u8 instance,
 				    u32 method_id, u32 arg0, u32 arg1,
