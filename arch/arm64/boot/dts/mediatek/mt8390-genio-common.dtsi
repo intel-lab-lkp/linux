@@ -218,6 +218,13 @@
 		regulator-max-microvolt = <5000000>;
 		enable-active-high;
 	};
+
+	dmic_codec: dmic-codec {
+		#sound-dai-cells = <0>;
+		compatible = "dmic-codec";
+		num-channels = <2>;
+		wakeup-delay-ms = <30>;
+	};
 };
 
 &adsp {
@@ -972,6 +979,14 @@
 
 		codec {
 			sound-dai = <&pmic 0>;
+		};
+	};
+
+	dai-link-1 {
+		link-name = "DMIC_BE";
+
+		codec {
+			sound-dai = <&dmic_codec>;
 		};
 	};
 };
