@@ -209,6 +209,12 @@ struct bond_ipsec {
 	struct xfrm_state *xs;
 };
 
+struct bond_xfrm_work {
+	struct work_struct work;
+	struct bonding *bond;
+	struct xfrm_state *xs;
+};
+
 /*
  * Here are the locking policies for the two bonding locks:
  * Get rcu_read_lock when reading or RTNL when writing slave list.

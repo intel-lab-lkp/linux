@@ -551,6 +551,25 @@ out:
 	mutex_unlock(&bond->ipsec_lock);
 }
 
+static void bond_xfrm_state_gc_work(struct work_struct *work)
+{
+	struct bond_xfrm_work *xfrm_work = container_of(work, struct bond_xfrm_work, work);
+	struct bonding *bond = xfrm_work->bond;
+	struct xfrm_state *xs = xfrm_work->xs;
+	struct bond_ipsec *ipsec;
+
+	mutex_lock(&bond->ipsec_lock);
+	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
+		if (ipsec->xs == xs) {
+			list_del(&ipsec->list);
+			kfree(ipsec);
+			xfrm_state_put(xs);
+			break;
+		}
+	}
+	mutex_unlock(&bond->ipsec_lock);
+}
+
 /**
  * bond_ipsec_del_sa - clear out this specific SA
  * @xs: pointer to transformer state struct
@@ -558,9 +577,9 @@ out:
 static void bond_ipsec_del_sa(struct xfrm_state *xs)
 {
 	struct net_device *bond_dev = xs->xso.dev;
+	struct bond_xfrm_work *xfrm_work;
 	struct net_device *real_dev;
 	netdevice_tracker tracker;
-	struct bond_ipsec *ipsec;
 	struct bonding *bond;
 	struct slave *slave;
 
@@ -592,15 +611,17 @@ static void bond_ipsec_del_sa(struct xfrm_state *xs)
 	real_dev->xfrmdev_ops->xdo_dev_state_delete(xs);
 out:
 	netdev_put(real_dev, &tracker);
-	mutex_lock(&bond->ipsec_lock);
-	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
-		if (ipsec->xs == xs) {
-			list_del(&ipsec->list);
-			kfree(ipsec);
-			break;
-		}
-	}
-	mutex_unlock(&bond->ipsec_lock);
+
+	xfrm_work = kmalloc(sizeof(*xfrm_work), GFP_ATOMIC);
+	if (!xfrm_work)
+		return;
+
+	INIT_WORK(&xfrm_work->work, bond_xfrm_state_gc_work);
+	xfrm_work->bond = bond;
+	xfrm_work->xs = xs;
+	xfrm_state_hold(xs);
+
+	queue_work(bond->wq, &xfrm_work->work);
 }
 
 static void bond_ipsec_del_sa_all(struct bonding *bond)
