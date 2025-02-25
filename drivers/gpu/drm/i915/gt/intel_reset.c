@@ -1434,7 +1434,7 @@ static void display_reset_finish(struct intel_gt *gt)
 	if (!test_bit(I915_RESET_MODESET, &gt->reset.flags))
 		return;
 
-	intel_display_reset_finish(display);
+	intel_display_reset_finish(display, !gt_reset_clobbers_display(gt));
 
 	clear_bit_unlock(I915_RESET_MODESET, &gt->reset.flags);
 }
