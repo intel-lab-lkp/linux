@@ -5683,7 +5683,7 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 
 	target_nid = numa_migrate_check(folio, vmf, vmf->address, &flags,
 					writable, &last_cpupid);
-	if (target_nid == NUMA_NO_NODE)
+	if (target_nid == NUMA_NO_NODE || target_nid == NUMA_TASK_MIG)
 		goto out_map;
 	if (migrate_misplaced_folio_prepare(folio, vma, target_nid)) {
 		flags |= TNF_MIGRATE_FAIL;

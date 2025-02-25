@@ -14,6 +14,7 @@
 
 #define	NUMA_NO_NODE	(-1)
 #define	NUMA_NO_MEMBLK	(-1)
+#define	NUMA_TASK_MIG	(1)
 
 static inline bool numa_valid_node(int nid)
 {

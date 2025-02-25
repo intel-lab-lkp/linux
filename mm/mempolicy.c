@@ -1510,6 +1510,8 @@ static inline int sanitize_mpol_flags(int *mode, unsigned short *flags)
 	if (*flags & MPOL_F_NUMA_BALANCING) {
 		if (*mode == MPOL_BIND || *mode == MPOL_PREFERRED_MANY)
 			*flags |= (MPOL_F_MOF | MPOL_F_MORON);
+		else if (*mode == MPOL_INTERLEAVE)
+			*flags |= (MPOL_F_MOF | MPOL_F_MOFT);
 		else
 			return -EINVAL;
 	}
@@ -2778,6 +2780,11 @@ int mpol_misplaced(struct folio *folio, struct vm_fault *vmf,
 	pol = get_vma_policy(vma, addr, folio_order(folio), &ilx);
 	if (!(pol->flags & MPOL_F_MOF))
 		goto out;
+
+	if (pol->flags & MPOL_F_MOFT) {
+		ret = NUMA_TASK_MIG;
+		goto out;
+	}
 
 	switch (pol->mode) {
 	case MPOL_INTERLEAVE:

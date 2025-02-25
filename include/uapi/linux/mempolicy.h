@@ -64,6 +64,7 @@ enum {
 #define MPOL_F_SHARED  (1 << 0)	/* identify shared policies */
 #define MPOL_F_MOF	(1 << 3) /* this policy wants migrate on fault */
 #define MPOL_F_MORON	(1 << 4) /* Migrate On protnone Reference On Node */
+#define MPOL_F_MOFT	(1 << 5) /* allow task but no page migrate on fault */
 
 /*
  * These bit locations are exposed in the vm.zone_reclaim_mode sysctl
