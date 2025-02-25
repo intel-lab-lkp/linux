@@ -503,7 +503,8 @@ struct gpio_chip {
 	 * @valid_mask:
 	 *
 	 * If not %NULL, holds bitmask of GPIOs which are valid to be used
-	 * from the chip.
+	 * from the chip. Internal to GPIO core. Chip drivers should populate
+	 * init_valid_mask instead.
 	 */
 	unsigned long *valid_mask;
 
