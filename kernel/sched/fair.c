@@ -3162,6 +3162,18 @@ void task_numa_free(struct task_struct *p, bool final)
 	}
 }
 
+/* return true if the task group has enabled the numa balance */
+static bool tg_numa_balance_enabled(struct task_struct *p)
+{
+	struct task_group *tg = task_group(p);
+
+	if (tg && (sysctl_numa_balancing_mode & NUMA_BALANCING_CGROUP) &&
+	    !tg->nlb_enabled)
+		return false;
+
+	return true;
+}
+
 /*
  * Got a PROT_NONE fault for a page on @node.
  */
@@ -3188,6 +3200,9 @@ void task_numa_fault(int last_cpupid, int mem_node, int pages, int flags)
 	if (!node_is_toptier(mem_node) &&
 	    (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING ||
 	     !cpupid_valid(last_cpupid)))
+		return;
+
+	if (!tg_numa_balance_enabled(p))
 		return;
 
 	/* Allocate buffer to track faults on a per-node basis */
@@ -3610,6 +3625,9 @@ static void task_tick_numa(struct rq *rq, struct task_struct *curr)
 	 * We don't care about NUMA placement if we don't have memory.
 	 */
 	if (!curr->mm || (curr->flags & (PF_EXITING | PF_KTHREAD)) || work->next != work)
+		return;
+
+	if (!tg_numa_balance_enabled(curr))
 		return;
 
 	/*
