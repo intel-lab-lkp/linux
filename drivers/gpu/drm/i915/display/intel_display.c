@@ -7352,6 +7352,7 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 {
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+	struct intel_display *display = to_intel_display(state);
 
 	if (!new_crtc_state->use_dsb && !new_crtc_state->dsb_color_vblank)
 		return;
@@ -7408,7 +7409,8 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 
 	if (new_crtc_state->dsb_color_vblank)
 		intel_dsb_chain(state, new_crtc_state->dsb_commit,
-				new_crtc_state->dsb_color_vblank, true);
+				new_crtc_state->dsb_color_vblank,
+				HAS_DOUBLE_BUFFERED_LUT(display) ? false : true);
 
 	intel_dsb_finish(new_crtc_state->dsb_commit);
 }
