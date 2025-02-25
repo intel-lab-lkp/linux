@@ -2168,12 +2168,18 @@ static int anx7625_bridge_attach(struct drm_bridge *bridge,
 
 	ctx->bridge_attached = 1;
 
+	if (ctx->pdata.panel_bridge->type == DRM_MODE_CONNECTOR_DisplayPort)
+		pm_runtime_get_sync(dev);
+
 	return 0;
 }
 
 static void anx7625_bridge_detach(struct drm_bridge *bridge)
 {
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
+
+	if (ctx->pdata.panel_bridge->type == DRM_MODE_CONNECTOR_DisplayPort)
+		pm_runtime_put_sync(ctx->dev);
 
 	drm_dp_aux_unregister(&ctx->aux);
 }
