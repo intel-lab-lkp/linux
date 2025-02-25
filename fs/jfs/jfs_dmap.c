@@ -4044,7 +4044,7 @@ s64 dbMapFileSizeToMapSize(struct inode * ipbmap)
 		factor =
 		    (i == 2) ? MAXL1PAGES : ((i == 1) ? MAXL0PAGES : 1);
 		complete = (u32) npages / factor;
-		ndmaps += complete * ((i == 2) ? LPERCTL * LPERCTL :
+		ndmaps += (s64)complete * ((i == 2) ? LPERCTL * LPERCTL :
 				      ((i == 1) ? LPERCTL : 1));
 
 		/* pages in last/incomplete child */
