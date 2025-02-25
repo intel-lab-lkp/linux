@@ -27,7 +27,7 @@
 struct intel_dpll_funcs {
 	int (*crtc_compute_clock)(struct intel_atomic_state *state,
 				  struct intel_crtc *crtc);
-	int (*crtc_get_shared_dpll)(struct intel_atomic_state *state,
+	int (*crtc_get_global_dpll)(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc);
 };
 
@@ -1183,7 +1183,7 @@ static int hsw_crtc_compute_clock(struct intel_atomic_state *state,
 	return 0;
 }
 
-static int hsw_crtc_get_shared_dpll(struct intel_atomic_state *state,
+static int hsw_crtc_get_global_dpll(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc)
 {
 	struct drm_i915_private *dev_priv = to_i915(state->base.dev);
@@ -1416,7 +1416,7 @@ static int ilk_crtc_compute_clock(struct intel_atomic_state *state,
 	return ret;
 }
 
-static int ilk_crtc_get_shared_dpll(struct intel_atomic_state *state,
+static int ilk_crtc_get_global_dpll(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc)
 {
 	struct intel_crtc_state *crtc_state =
@@ -1716,12 +1716,12 @@ static const struct intel_dpll_funcs dg2_dpll_funcs = {
 
 static const struct intel_dpll_funcs hsw_dpll_funcs = {
 	.crtc_compute_clock = hsw_crtc_compute_clock,
-	.crtc_get_shared_dpll = hsw_crtc_get_shared_dpll,
+	.crtc_get_global_dpll = hsw_crtc_get_global_dpll,
 };
 
 static const struct intel_dpll_funcs ilk_dpll_funcs = {
 	.crtc_compute_clock = ilk_crtc_compute_clock,
-	.crtc_get_shared_dpll = ilk_crtc_get_shared_dpll,
+	.crtc_get_global_dpll = ilk_crtc_get_global_dpll,
 };
 
 static const struct intel_dpll_funcs chv_dpll_funcs = {
@@ -1774,7 +1774,7 @@ int intel_dpll_crtc_compute_clock(struct intel_atomic_state *state,
 	return 0;
 }
 
-int intel_dpll_crtc_get_shared_dpll(struct intel_atomic_state *state,
+int intel_dpll_crtc_get_global_dpll(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc)
 {
 	struct drm_i915_private *i915 = to_i915(state->base.dev);
@@ -1788,10 +1788,10 @@ int intel_dpll_crtc_get_shared_dpll(struct intel_atomic_state *state,
 	if (!crtc_state->hw.enable || crtc_state->global_dpll)
 		return 0;
 
-	if (!i915->display.funcs.dpll->crtc_get_shared_dpll)
+	if (!i915->display.funcs.dpll->crtc_get_global_dpll)
 		return 0;
 
-	ret = i915->display.funcs.dpll->crtc_get_shared_dpll(state, crtc);
+	ret = i915->display.funcs.dpll->crtc_get_global_dpll(state, crtc);
 	if (ret) {
 		drm_dbg_kms(&i915->drm, "[CRTC:%d:%s] Couldn't get a shared DPLL\n",
 			    crtc->base.base.id, crtc->base.name);
