@@ -1277,6 +1277,7 @@ static int rk_udphy_orien_sw_set(struct typec_switch_dev *sw,
 				 enum typec_orientation orien)
 {
 	struct rk_udphy *udphy = typec_switch_get_drvdata(sw);
+	int ret = 0;
 
 	mutex_lock(&udphy->mutex);
 
@@ -1291,6 +1292,12 @@ static int rk_udphy_orien_sw_set(struct typec_switch_dev *sw,
 	udphy->flip = (orien == TYPEC_ORIENTATION_REVERSE) ? true : false;
 	rk_udphy_set_typec_default_mapping(udphy);
 	rk_udphy_usb_bvalid_enable(udphy, true);
+
+	/* re-init the phy if already on */
+	if (udphy->status != UDPHY_MODE_NONE) {
+		rk_udphy_disable(udphy);
+		ret = rk_udphy_setup(udphy);
+	}
 
 unlock_ret:
 	mutex_unlock(&udphy->mutex);
