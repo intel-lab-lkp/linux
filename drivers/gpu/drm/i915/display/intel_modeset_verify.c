@@ -254,5 +254,5 @@ void intel_modeset_verify_disabled(struct intel_atomic_state *state)
 {
 	verify_encoder_state(state);
 	verify_connector_state(state, NULL);
-	intel_shared_dpll_verify_disabled(state);
+	intel_global_dpll_verify_disabled(state);
 }

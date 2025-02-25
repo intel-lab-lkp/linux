@@ -250,7 +250,7 @@ static void intel_pre_enable_lvds(struct intel_atomic_state *state,
 
 	if (HAS_PCH_SPLIT(i915)) {
 		assert_fdi_rx_pll_disabled(display, pipe);
-		assert_shared_dpll_disabled(display, crtc_state->global_dpll);
+		assert_global_dpll_disabled(display, crtc_state->global_dpll);
 	} else {
 		assert_pll_disabled(display, pipe);
 	}

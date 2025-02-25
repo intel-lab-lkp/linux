@@ -1695,7 +1695,7 @@ static void hsw_crtc_enable(struct intel_atomic_state *state,
 			intel_atomic_get_new_crtc_state(state, pipe_crtc);
 
 		if (pipe_crtc_state->global_dpll)
-			intel_enable_shared_dpll(pipe_crtc_state);
+			intel_enable_global_dpll(pipe_crtc_state);
 	}
 
 	intel_encoders_pre_enable(state, crtc);
@@ -1824,7 +1824,7 @@ static void ilk_crtc_disable(struct intel_atomic_state *state,
 	intel_set_cpu_fifo_underrun_reporting(display, pipe, true);
 	intel_set_pch_fifo_underrun_reporting(display, pipe, true);
 
-	intel_disable_shared_dpll(old_crtc_state);
+	intel_disable_global_dpll(old_crtc_state);
 }
 
 static void hsw_crtc_disable(struct intel_atomic_state *state,
@@ -1847,7 +1847,7 @@ static void hsw_crtc_disable(struct intel_atomic_state *state,
 		const struct intel_crtc_state *old_pipe_crtc_state =
 			intel_atomic_get_old_crtc_state(state, pipe_crtc);
 
-		intel_disable_shared_dpll(old_pipe_crtc_state);
+		intel_disable_global_dpll(old_pipe_crtc_state);
 	}
 
 	intel_encoders_post_pll_disable(state, crtc);
@@ -6593,7 +6593,7 @@ int intel_atomic_check(struct drm_device *dev,
 
 		any_ms = true;
 
-		intel_release_shared_dplls(state, crtc);
+		intel_release_global_dplls(state, crtc);
 	}
 
 	if (any_ms && !check_digital_port_conflicts(state)) {
@@ -7685,7 +7685,7 @@ static int intel_atomic_swap_state(struct intel_atomic_state *state)
 
 	intel_atomic_swap_global_state(state);
 
-	intel_shared_dpll_swap_state(state);
+	intel_dpll_swap_state(state);
 
 	intel_atomic_track_fbs(state);
 

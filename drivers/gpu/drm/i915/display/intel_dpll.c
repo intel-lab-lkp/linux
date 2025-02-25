@@ -1168,7 +1168,7 @@ static int hsw_crtc_compute_clock(struct intel_atomic_state *state,
 	    intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DSI))
 		return 0;
 
-	ret = intel_compute_shared_dplls(state, crtc, encoder);
+	ret = intel_compute_global_dplls(state, crtc, encoder);
 	if (ret)
 		return ret;
 
@@ -1196,7 +1196,7 @@ static int hsw_crtc_get_shared_dpll(struct intel_atomic_state *state,
 	    intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DSI))
 		return 0;
 
-	return intel_reserve_shared_dplls(state, crtc, encoder);
+	return intel_reserve_global_dplls(state, crtc, encoder);
 }
 
 static int dg2_crtc_compute_clock(struct intel_atomic_state *state,
@@ -1230,7 +1230,7 @@ static int mtl_crtc_compute_clock(struct intel_atomic_state *state,
 	if (ret)
 		return ret;
 
-	/* TODO: Do the readback via intel_compute_shared_dplls() */
+	/* TODO: Do the readback via intel_compute_global_dplls() */
 	crtc_state->port_clock = intel_cx0pll_calc_port_clock(encoder, &crtc_state->dpll_hw_state.cx0pll);
 
 	crtc_state->hw.adjusted_mode.crtc_clock = intel_crtc_dotclock(crtc_state);
@@ -1406,7 +1406,7 @@ static int ilk_crtc_compute_clock(struct intel_atomic_state *state,
 	ilk_compute_dpll(crtc_state, &crtc_state->dpll,
 			 &crtc_state->dpll);
 
-	ret = intel_compute_shared_dplls(state, crtc, NULL);
+	ret = intel_compute_global_dplls(state, crtc, NULL);
 	if (ret)
 		return ret;
 
@@ -1426,7 +1426,7 @@ static int ilk_crtc_get_shared_dpll(struct intel_atomic_state *state,
 	if (!crtc_state->has_pch_encoder)
 		return 0;
 
-	return intel_reserve_shared_dplls(state, crtc, NULL);
+	return intel_reserve_global_dplls(state, crtc, NULL);
 }
 
 static u32 vlv_dpll(const struct intel_crtc_state *crtc_state)

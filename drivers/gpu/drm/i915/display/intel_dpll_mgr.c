@@ -49,21 +49,21 @@
  * share a PLL if their configurations match.
  *
  * This file provides an abstraction over display PLLs. The function
- * intel_shared_dpll_init() initializes the PLLs for the given platform.  The
+ * intel_global_dpll_init() initializes the PLLs for the given platform.  The
  * users of a PLL are tracked and that tracking is integrated with the atomic
  * modset interface. During an atomic operation, required PLLs can be reserved
  * for a given CRTC and encoder configuration by calling
- * intel_reserve_shared_dplls() and previously reserved PLLs can be released
- * with intel_release_shared_dplls().
+ * intel_reserve_global_dplls() and previously reserved PLLs can be released
+ * with intel_release_global_dplls().
  * Changes to the users are first staged in the atomic state, and then made
- * effective by calling intel_shared_dpll_swap_state() during the atomic
+ * effective by calling intel_dpll_swap_state() during the atomic
  * commit phase.
  */
 
 /* platform specific hooks for managing DPLLs */
 struct intel_global_dpll_funcs {
 	/*
-	 * Hook for enabling the pll, called from intel_enable_shared_dpll() if
+	 * Hook for enabling the pll, called from intel_enable_global_dpll() if
 	 * the pll is not already enabled.
 	 */
 	void (*enable)(struct intel_display *display,
@@ -71,7 +71,7 @@ struct intel_global_dpll_funcs {
 		       const struct intel_dpll_hw_state *dpll_hw_state);
 
 	/*
-	 * Hook for disabling the pll, called from intel_disable_shared_dpll()
+	 * Hook for disabling the pll, called from intel_disable_global_dpll()
 	 * only when it is safe to disable the pll, i.e., there are no more
 	 * tracked users for it.
 	 */
@@ -130,7 +130,7 @@ intel_atomic_duplicate_dpll_state(struct intel_display *display,
 }
 
 static struct intel_dpll_state *
-intel_atomic_get_shared_dpll_state(struct drm_atomic_state *s)
+intel_atomic_get_global_dpll_state(struct drm_atomic_state *s)
 {
 	struct intel_atomic_state *state = to_intel_atomic_state(s);
 	struct intel_display *display = to_intel_display(state);
@@ -148,7 +148,7 @@ intel_atomic_get_shared_dpll_state(struct drm_atomic_state *s)
 }
 
 /**
- * intel_get_shared_dpll_by_id - get a DPLL given its id
+ * intel_get_global_dpll_by_id - get a DPLL given its id
  * @display: intel_display device instance
  * @id: pll id
  *
@@ -156,7 +156,7 @@ intel_atomic_get_shared_dpll_state(struct drm_atomic_state *s)
  * A pointer to the DPLL with @id
  */
 struct intel_global_dpll *
-intel_get_shared_dpll_by_id(struct intel_display *display,
+intel_get_global_dpll_by_id(struct intel_display *display,
 			    enum intel_dpll_id id)
 {
 	struct intel_global_dpll *pll;
@@ -172,7 +172,7 @@ intel_get_shared_dpll_by_id(struct intel_display *display,
 }
 
 /* For ILK+ */
-void assert_shared_dpll(struct intel_display *display,
+void assert_global_dpll(struct intel_display *display,
 			struct intel_global_dpll *pll,
 			bool state)
 {
@@ -247,12 +247,12 @@ static void _intel_disable_shared_dpll(struct intel_display *display,
 }
 
 /**
- * intel_enable_shared_dpll - enable a CRTC's shared DPLL
- * @crtc_state: CRTC, and its state, which has a shared DPLL
+ * intel_enable_global_dpll - enable a CRTC's global DPLL
+ * @crtc_state: CRTC, and its state, which has a DPLL
  *
- * Enable the shared DPLL used by @crtc.
+ * Enable DPLL used by @crtc.
  */
-void intel_enable_shared_dpll(const struct intel_crtc_state *crtc_state)
+void intel_enable_global_dpll(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -279,7 +279,7 @@ void intel_enable_shared_dpll(const struct intel_crtc_state *crtc_state)
 
 	if (old_mask) {
 		drm_WARN_ON(display->drm, !pll->on);
-		assert_shared_dpll_enabled(display, pll);
+		assert_global_dpll_enabled(display, pll);
 		goto out;
 	}
 	drm_WARN_ON(display->drm, pll->on);
@@ -293,12 +293,12 @@ out:
 }
 
 /**
- * intel_disable_shared_dpll - disable a CRTC's shared DPLL
+ * intel_disable_global_dpll - disable a CRTC's shared DPLL
  * @crtc_state: CRTC, and its state, which has a shared DPLL
  *
- * Disable the shared DPLL used by @crtc.
+ * Disable DPLL used by @crtc.
  */
-void intel_disable_shared_dpll(const struct intel_crtc_state *crtc_state)
+void intel_disable_global_dpll(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
@@ -323,7 +323,7 @@ void intel_disable_shared_dpll(const struct intel_crtc_state *crtc_state)
 		    pll->info->name, pll->active_mask, pll->on,
 		    crtc->base.base.id, crtc->base.name);
 
-	assert_shared_dpll_enabled(display, pll);
+	assert_global_dpll_enabled(display, pll);
 	drm_WARN_ON(display->drm, !pll->on);
 
 	pll->active_mask &= ~pipe_mask;
@@ -355,7 +355,7 @@ intel_dpll_mask_all(struct intel_display *display)
 }
 
 static struct intel_global_dpll *
-intel_find_shared_dpll(struct intel_atomic_state *state,
+intel_find_global_dpll(struct intel_atomic_state *state,
 		       const struct intel_crtc *crtc,
 		       const struct intel_dpll_hw_state *dpll_hw_state,
 		       unsigned long dpll_mask)
@@ -366,14 +366,14 @@ intel_find_shared_dpll(struct intel_atomic_state *state,
 	struct intel_global_dpll *unused_pll = NULL;
 	enum intel_dpll_id id;
 
-	dpll_state = intel_atomic_get_shared_dpll_state(&state->base);
+	dpll_state = intel_atomic_get_global_dpll_state(&state->base);
 
 	drm_WARN_ON(display->drm, dpll_mask & ~dpll_mask_all);
 
 	for_each_set_bit(id, &dpll_mask, fls(dpll_mask_all)) {
 		struct intel_global_dpll *pll;
 
-		pll = intel_get_shared_dpll_by_id(display, id);
+		pll = intel_get_global_dpll_by_id(display, id);
 		if (!pll)
 			continue;
 
@@ -409,7 +409,7 @@ intel_find_shared_dpll(struct intel_atomic_state *state,
 }
 
 /**
- * intel_reference_shared_dpll_crtc - Get a DPLL reference for a CRTC
+ * intel_reference_global_dpll_crtc - Get a DPLL reference for a CRTC
  * @crtc: CRTC on which behalf the reference is taken
  * @pll: DPLL for which the reference is taken
  * @dpll_state: the DPLL atomic state in which the reference is tracked
@@ -417,7 +417,7 @@ intel_find_shared_dpll(struct intel_atomic_state *state,
  * Take a reference for @pll tracking the use of it by @crtc.
  */
 static void
-intel_reference_shared_dpll_crtc(const struct intel_crtc *crtc,
+intel_reference_global_dpll_crtc(const struct intel_crtc *crtc,
 				 const struct intel_global_dpll *pll,
 				 struct intel_dpll_state *dpll_state)
 {
@@ -432,23 +432,23 @@ intel_reference_shared_dpll_crtc(const struct intel_crtc *crtc,
 }
 
 static void
-intel_reference_shared_dpll(struct intel_atomic_state *state,
+intel_reference_global_dpll(struct intel_atomic_state *state,
 			    const struct intel_crtc *crtc,
 			    const struct intel_global_dpll *pll,
 			    const struct intel_dpll_hw_state *dpll_hw_state)
 {
 	struct intel_dpll_state *dpll_state;
 
-	dpll_state = intel_atomic_get_shared_dpll_state(&state->base);
+	dpll_state = intel_atomic_get_global_dpll_state(&state->base);
 
 	if (dpll_state[pll->index].pipe_mask == 0)
 		dpll_state[pll->index].hw_state = *dpll_hw_state;
 
-	intel_reference_shared_dpll_crtc(crtc, pll, &dpll_state[pll->index]);
+	intel_reference_global_dpll_crtc(crtc, pll, &dpll_state[pll->index]);
 }
 
 /**
- * intel_unreference_shared_dpll_crtc - Drop a DPLL reference for a CRTC
+ * intel_unreference_global_dpll_crtc - Drop a DPLL reference for a CRTC
  * @crtc: CRTC on which behalf the reference is dropped
  * @pll: DPLL for which the reference is dropped
  * @dpll_state: the DPLL atomic state in which the reference is tracked
@@ -456,7 +456,7 @@ intel_reference_shared_dpll(struct intel_atomic_state *state,
  * Drop a reference for @pll tracking the end of use of it by @crtc.
  */
 void
-intel_unreference_shared_dpll_crtc(const struct intel_crtc *crtc,
+intel_unreference_global_dpll_crtc(const struct intel_crtc *crtc,
 				   const struct intel_global_dpll *pll,
 				   struct intel_dpll_state *dpll_state)
 {
@@ -470,15 +470,15 @@ intel_unreference_shared_dpll_crtc(const struct intel_crtc *crtc,
 		    crtc->base.base.id, crtc->base.name, pll->info->name);
 }
 
-static void intel_unreference_shared_dpll(struct intel_atomic_state *state,
+static void intel_unreference_global_dpll(struct intel_atomic_state *state,
 					  const struct intel_crtc *crtc,
 					  const struct intel_global_dpll *pll)
 {
 	struct intel_dpll_state *dpll_state;
 
-	dpll_state = intel_atomic_get_shared_dpll_state(&state->base);
+	dpll_state = intel_atomic_get_global_dpll_state(&state->base);
 
-	intel_unreference_shared_dpll_crtc(crtc, pll, &dpll_state[pll->index]);
+	intel_unreference_global_dpll_crtc(crtc, pll, &dpll_state[pll->index]);
 }
 
 static void intel_put_dpll(struct intel_atomic_state *state,
@@ -494,11 +494,11 @@ static void intel_put_dpll(struct intel_atomic_state *state,
 	if (!old_crtc_state->global_dpll)
 		return;
 
-	intel_unreference_shared_dpll(state, crtc, old_crtc_state->global_dpll);
+	intel_unreference_global_dpll(state, crtc, old_crtc_state->global_dpll);
 }
 
 /**
- * intel_shared_dpll_swap_state - make atomic DPLL configuration effective
+ * intel_dpll_swap_state - make atomic DPLL configuration effective
  * @state: atomic state
  *
  * This is the dpll version of drm_atomic_helper_swap_state() since the
@@ -508,7 +508,7 @@ static void intel_put_dpll(struct intel_atomic_state *state,
  * i.e. it also puts the current state into @state, even though there is no
  * need for that at this moment.
  */
-void intel_shared_dpll_swap_state(struct intel_atomic_state *state)
+void intel_dpll_swap_state(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
 	struct intel_dpll_state *dpll_state = state->dpll_state;
@@ -618,14 +618,14 @@ static int ibx_get_dpll(struct intel_atomic_state *state,
 	if (HAS_PCH_IBX(i915)) {
 		/* Ironlake PCH has a fixed PLL->PCH pipe mapping. */
 		id = (enum intel_dpll_id) crtc->pipe;
-		pll = intel_get_shared_dpll_by_id(display, id);
+		pll = intel_get_global_dpll_by_id(display, id);
 
 		drm_dbg_kms(display->drm,
 			    "[CRTC:%d:%s] using pre-allocated %s\n",
 			    crtc->base.base.id, crtc->base.name,
 			    pll->info->name);
 	} else {
-		pll = intel_find_shared_dpll(state, crtc,
+		pll = intel_find_global_dpll(state, crtc,
 					     &crtc_state->dpll_hw_state,
 					     BIT(DPLL_ID_PCH_PLL_B) |
 					     BIT(DPLL_ID_PCH_PLL_A));
@@ -635,7 +635,7 @@ static int ibx_get_dpll(struct intel_atomic_state *state,
 		return -EINVAL;
 
 	/* reference the pll */
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    pll, &crtc_state->dpll_hw_state);
 
 	crtc_state->global_dpll = pll;
@@ -1066,7 +1066,7 @@ hsw_ddi_wrpll_get_dpll(struct intel_atomic_state *state,
 	struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
-	return intel_find_shared_dpll(state, crtc,
+	return intel_find_global_dpll(state, crtc,
 				      &crtc_state->dpll_hw_state,
 				      BIT(DPLL_ID_WRPLL2) |
 				      BIT(DPLL_ID_WRPLL1));
@@ -1113,7 +1113,7 @@ hsw_ddi_lcpll_get_dpll(struct intel_crtc_state *crtc_state)
 		return NULL;
 	}
 
-	pll = intel_get_shared_dpll_by_id(display, pll_id);
+	pll = intel_get_global_dpll_by_id(display, pll_id);
 
 	if (!pll)
 		return NULL;
@@ -1169,7 +1169,7 @@ hsw_ddi_spll_get_dpll(struct intel_atomic_state *state,
 	struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
 
-	return intel_find_shared_dpll(state, crtc, &crtc_state->dpll_hw_state,
+	return intel_find_global_dpll(state, crtc, &crtc_state->dpll_hw_state,
 				      BIT(DPLL_ID_SPLL));
 }
 
@@ -1233,7 +1233,7 @@ static int hsw_get_dpll(struct intel_atomic_state *state,
 	if (!pll)
 		return -EINVAL;
 
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    pll, &crtc_state->dpll_hw_state);
 
 	crtc_state->global_dpll = pll;
@@ -1942,11 +1942,11 @@ static int skl_get_dpll(struct intel_atomic_state *state,
 	struct intel_global_dpll *pll;
 
 	if (intel_crtc_has_type(crtc_state, INTEL_OUTPUT_EDP))
-		pll = intel_find_shared_dpll(state, crtc,
+		pll = intel_find_global_dpll(state, crtc,
 					     &crtc_state->dpll_hw_state,
 					     BIT(DPLL_ID_SKL_DPLL0));
 	else
-		pll = intel_find_shared_dpll(state, crtc,
+		pll = intel_find_global_dpll(state, crtc,
 					     &crtc_state->dpll_hw_state,
 					     BIT(DPLL_ID_SKL_DPLL3) |
 					     BIT(DPLL_ID_SKL_DPLL2) |
@@ -1954,7 +1954,7 @@ static int skl_get_dpll(struct intel_atomic_state *state,
 	if (!pll)
 		return -EINVAL;
 
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    pll, &crtc_state->dpll_hw_state);
 
 	crtc_state->global_dpll = pll;
@@ -2434,12 +2434,12 @@ static int bxt_get_dpll(struct intel_atomic_state *state,
 
 	/* 1:1 mapping between ports and PLLs */
 	id = (enum intel_dpll_id) encoder->port;
-	pll = intel_get_shared_dpll_by_id(display, id);
+	pll = intel_get_global_dpll_by_id(display, id);
 
 	drm_dbg_kms(display->drm, "[CRTC:%d:%s] using pre-allocated %s\n",
 		    crtc->base.base.id, crtc->base.name, pll->info->name);
 
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    pll, &crtc_state->dpll_hw_state);
 
 	crtc_state->global_dpll = pll;
@@ -3390,13 +3390,13 @@ static int icl_get_combo_phy_dpll(struct intel_atomic_state *state,
 	/* Eliminate DPLLs from consideration if reserved by HTI */
 	dpll_mask &= ~intel_hti_dpll_mask(display);
 
-	port_dpll->pll = intel_find_shared_dpll(state, crtc,
+	port_dpll->pll = intel_find_global_dpll(state, crtc,
 						&port_dpll->hw_state,
 						dpll_mask);
 	if (!port_dpll->pll)
 		return -EINVAL;
 
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    port_dpll->pll, &port_dpll->hw_state);
 
 	icl_update_active_dpll(state, crtc, encoder);
@@ -3454,25 +3454,25 @@ static int icl_get_tc_phy_dplls(struct intel_atomic_state *state,
 	int ret;
 
 	port_dpll = &crtc_state->icl_port_dplls[ICL_PORT_DPLL_DEFAULT];
-	port_dpll->pll = intel_find_shared_dpll(state, crtc,
+	port_dpll->pll = intel_find_global_dpll(state, crtc,
 						&port_dpll->hw_state,
 						BIT(DPLL_ID_ICL_TBTPLL));
 	if (!port_dpll->pll)
 		return -EINVAL;
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    port_dpll->pll, &port_dpll->hw_state);
 
 
 	port_dpll = &crtc_state->icl_port_dplls[ICL_PORT_DPLL_MG_PHY];
 	dpll_id = icl_tc_port_to_pll_id(intel_encoder_to_tc(encoder));
-	port_dpll->pll = intel_find_shared_dpll(state, crtc,
+	port_dpll->pll = intel_find_global_dpll(state, crtc,
 						&port_dpll->hw_state,
 						BIT(dpll_id));
 	if (!port_dpll->pll) {
 		ret = -EINVAL;
 		goto err_unreference_tbt_pll;
 	}
-	intel_reference_shared_dpll(state, crtc,
+	intel_reference_global_dpll(state, crtc,
 				    port_dpll->pll, &port_dpll->hw_state);
 
 	icl_update_active_dpll(state, crtc, encoder);
@@ -3481,7 +3481,7 @@ static int icl_get_tc_phy_dplls(struct intel_atomic_state *state,
 
 err_unreference_tbt_pll:
 	port_dpll = &crtc_state->icl_port_dplls[ICL_PORT_DPLL_DEFAULT];
-	intel_unreference_shared_dpll(state, crtc, port_dpll->pll);
+	intel_unreference_global_dpll(state, crtc, port_dpll->pll);
 
 	return ret;
 }
@@ -3536,7 +3536,7 @@ static void icl_put_dplls(struct intel_atomic_state *state,
 		if (!old_port_dpll->pll)
 			continue;
 
-		intel_unreference_shared_dpll(state, crtc, old_port_dpll->pll);
+		intel_unreference_global_dpll(state, crtc, old_port_dpll->pll);
 	}
 }
 
@@ -4302,12 +4302,12 @@ static const struct intel_dpll_mgr adlp_pll_mgr = {
 };
 
 /**
- * intel_shared_dpll_init - Initialize shared DPLLs
+ * intel_global_dpll_init - Initialize DPLLs
  * @display: intel_display device
  *
- * Initialize shared DPLLs for @display.
+ * Initialize DPLLs for @display.
  */
-void intel_shared_dpll_init(struct intel_display *display)
+void intel_global_dpll_init(struct intel_display *display)
 {
 	struct drm_i915_private *i915 = to_i915(display->drm);
 	const struct intel_dpll_mgr *dpll_mgr = NULL;
@@ -4365,7 +4365,7 @@ void intel_shared_dpll_init(struct intel_display *display)
 }
 
 /**
- * intel_compute_shared_dplls - compute DPLL state CRTC and encoder combination
+ * intel_compute_global_dplls - compute DPLL state CRTC and encoder combination
  * @state: atomic state
  * @crtc: CRTC to compute DPLLs for
  * @encoder: encoder
@@ -4373,12 +4373,12 @@ void intel_shared_dpll_init(struct intel_display *display)
  * This function computes the DPLL state for the given CRTC and encoder.
  *
  * The new configuration in the atomic commit @state is made effective by
- * calling intel_shared_dpll_swap_state().
+ * calling intel_dpll_swap_state().
  *
  * Returns:
  * 0 on success, negative error code on failure.
  */
-int intel_compute_shared_dplls(struct intel_atomic_state *state,
+int intel_compute_global_dplls(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc,
 			       struct intel_encoder *encoder)
 {
@@ -4392,7 +4392,7 @@ int intel_compute_shared_dplls(struct intel_atomic_state *state,
 }
 
 /**
- * intel_reserve_shared_dplls - reserve DPLLs for CRTC and encoder combination
+ * intel_reserve_global_dplls - reserve DPLLs for CRTC and encoder combination
  * @state: atomic state
  * @crtc: CRTC to reserve DPLLs for
  * @encoder: encoder
@@ -4402,16 +4402,16 @@ int intel_compute_shared_dplls(struct intel_atomic_state *state,
  * state.
  *
  * The new configuration in the atomic commit @state is made effective by
- * calling intel_shared_dpll_swap_state().
+ * calling intel_dpll_swap_state().
  *
  * The reserved DPLLs should be released by calling
- * intel_release_shared_dplls().
+ * intel_release_global_dplls().
  *
  * Returns:
  * 0 if all required DPLLs were successfully reserved,
  * negative error code otherwise.
  */
-int intel_reserve_shared_dplls(struct intel_atomic_state *state,
+int intel_reserve_global_dplls(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc,
 			       struct intel_encoder *encoder)
 {
@@ -4425,17 +4425,17 @@ int intel_reserve_shared_dplls(struct intel_atomic_state *state,
 }
 
 /**
- * intel_release_shared_dplls - end use of DPLLs by CRTC in atomic state
+ * intel_release_global_dplls - end use of DPLLs by CRTC in atomic state
  * @state: atomic state
  * @crtc: crtc from which the DPLLs are to be released
  *
- * This function releases all DPLLs reserved by intel_reserve_shared_dplls()
+ * This function releases all DPLLs reserved by intel_reserve_global_dplls()
  * from the current atomic commit @state and the old @crtc atomic state.
  *
  * The new configuration in the atomic commit @state is made effective by
- * calling intel_shared_dpll_swap_state().
+ * calling intel_dpll_swap_state().
  */
-void intel_release_shared_dplls(struct intel_atomic_state *state,
+void intel_release_global_dplls(struct intel_atomic_state *state,
 				struct intel_crtc *crtc)
 {
 	struct intel_display *display = to_intel_display(state);
@@ -4444,7 +4444,7 @@ void intel_release_shared_dplls(struct intel_atomic_state *state,
 	/*
 	 * FIXME: this function is called for every platform having a
 	 * compute_clock hook, even though the platform doesn't yet support
-	 * the shared DPLL framework and intel_reserve_shared_dplls() is not
+	 * the global DPLL framework and intel_reserve_global_dplls() is not
 	 * called on those.
 	 */
 	if (!dpll_mgr)
@@ -4460,7 +4460,7 @@ void intel_release_shared_dplls(struct intel_atomic_state *state,
  * @encoder: encoder determining the type of port DPLL
  *
  * Update the active DPLL for the given @crtc/@encoder in @crtc's atomic state,
- * from the port DPLLs reserved previously by intel_reserve_shared_dplls(). The
+ * from the port DPLLs reserved previously by intel_reserve_global_dplls(). The
  * DPLL selected will be based on the current mode of the encoder's port.
  */
 void intel_update_active_dpll(struct intel_atomic_state *state,
@@ -4525,7 +4525,7 @@ static void readout_dpll_hw_state(struct intel_display *display,
 			to_intel_crtc_state(crtc->base.state);
 
 		if (crtc_state->hw.active && crtc_state->global_dpll == pll)
-			intel_reference_shared_dpll_crtc(crtc, pll, &pll->state);
+			intel_reference_global_dpll_crtc(crtc, pll, &pll->state);
 	}
 	pll->active_mask = pll->state.pipe_mask;
 
@@ -4717,7 +4717,7 @@ void intel_dpll_state_verify(struct intel_atomic_state *state,
 	}
 }
 
-void intel_shared_dpll_verify_disabled(struct intel_atomic_state *state)
+void intel_global_dpll_verify_disabled(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
 	struct intel_global_dpll *pll;

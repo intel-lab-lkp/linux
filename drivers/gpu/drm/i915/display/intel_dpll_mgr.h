@@ -387,24 +387,24 @@ struct intel_global_dpll {
 #define SKL_DPLL2 2
 #define SKL_DPLL3 3
 
-/* shared dpll functions */
+/* global dpll functions */
 struct intel_global_dpll *
-intel_get_shared_dpll_by_id(struct intel_display *display,
+intel_get_global_dpll_by_id(struct intel_display *display,
 			    enum intel_dpll_id id);
-void assert_shared_dpll(struct intel_display *display,
+void assert_global_dpll(struct intel_display *display,
 			struct intel_global_dpll *pll,
 			bool state);
-#define assert_shared_dpll_enabled(d, p) assert_shared_dpll(d, p, true)
-#define assert_shared_dpll_disabled(d, p) assert_shared_dpll(d, p, false)
-int intel_compute_shared_dplls(struct intel_atomic_state *state,
+#define assert_global_dpll_enabled(d, p) assert_global_dpll(d, p, true)
+#define assert_global_dpll_disabled(d, p) assert_global_dpll(d, p, false)
+int intel_compute_global_dplls(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc,
 			       struct intel_encoder *encoder);
-int intel_reserve_shared_dplls(struct intel_atomic_state *state,
+int intel_reserve_global_dplls(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc,
 			       struct intel_encoder *encoder);
-void intel_release_shared_dplls(struct intel_atomic_state *state,
+void intel_release_global_dplls(struct intel_atomic_state *state,
 				struct intel_crtc *crtc);
-void intel_unreference_shared_dpll_crtc(const struct intel_crtc *crtc,
+void intel_unreference_global_dpll_crtc(const struct intel_crtc *crtc,
 					const struct intel_global_dpll *pll,
 					struct intel_dpll_state *shared_dpll_state);
 void icl_set_active_port_dpll(struct intel_crtc_state *crtc_state,
@@ -418,10 +418,10 @@ int intel_dpll_get_freq(struct intel_display *display,
 bool intel_dpll_get_hw_state(struct intel_display *display,
 			     struct intel_global_dpll *pll,
 			     struct intel_dpll_hw_state *dpll_hw_state);
-void intel_enable_shared_dpll(const struct intel_crtc_state *crtc_state);
-void intel_disable_shared_dpll(const struct intel_crtc_state *crtc_state);
-void intel_shared_dpll_swap_state(struct intel_atomic_state *state);
-void intel_shared_dpll_init(struct intel_display *display);
+void intel_enable_global_dpll(const struct intel_crtc_state *crtc_state);
+void intel_disable_global_dpll(const struct intel_crtc_state *crtc_state);
+void intel_dpll_swap_state(struct intel_atomic_state *state);
+void intel_global_dpll_init(struct intel_display *display);
 void intel_dpll_update_ref_clks(struct intel_display *display);
 void intel_dpll_readout_hw_state(struct intel_display *display);
 void intel_dpll_sanitize_state(struct intel_display *display);
@@ -437,6 +437,6 @@ bool intel_dpll_is_combophy(enum intel_dpll_id id);
 
 void intel_dpll_state_verify(struct intel_atomic_state *state,
 			     struct intel_crtc *crtc);
-void intel_shared_dpll_verify_disabled(struct intel_atomic_state *state);
+void intel_global_dpll_verify_disabled(struct intel_atomic_state *state);
 
 #endif /* _INTEL_DPLL_MGR_H_ */

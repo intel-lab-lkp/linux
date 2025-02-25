@@ -92,7 +92,7 @@ static void intel_crtc_disable_noatomic_begin(struct intel_crtc *crtc,
 	crtc->base.enabled = false;
 
 	if (crtc_state->global_dpll)
-		intel_unreference_shared_dpll_crtc(crtc,
+		intel_unreference_global_dpll_crtc(crtc,
 						   crtc_state->global_dpll,
 						   &crtc_state->global_dpll->state);
 }
