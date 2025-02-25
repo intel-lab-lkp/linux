@@ -2871,16 +2871,12 @@ void intel_iommu_shutdown(void)
 	if (no_iommu || dmar_disabled)
 		return;
 
-	down_write(&dmar_global_lock);
-
 	/* Disable PMRs explicitly here. */
 	for_each_iommu(iommu, drhd)
 		iommu_disable_protect_mem_regions(iommu);
 
 	/* Make sure the IOMMUs are switched off */
 	intel_disable_iommus();
-
-	up_write(&dmar_global_lock);
 }
 
 static struct intel_iommu *dev_to_intel_iommu(struct device *dev)
