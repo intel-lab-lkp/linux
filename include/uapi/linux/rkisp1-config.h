@@ -89,6 +89,11 @@
 #define RKISP1_CIF_ISP_AWB_MAX_FRAMES              7
 
 /*
+ * Automatic white balance extended block (AWB64)
+ */
+#define RKISP1_CIF_ISP_AWB64_MAX_ELLIPSE           8
+
+/*
  * Gamma out
  */
 /* Maximum number of color samples supported */
@@ -183,6 +188,7 @@
 #define RKISP1_CIF_ISP_STAT_AUTOEXP       (1U << 1)
 #define RKISP1_CIF_ISP_STAT_AFM           (1U << 2)
 #define RKISP1_CIF_ISP_STAT_HIST          (1U << 3)
+#define RKISP1_CIF_ISP_STAT_AWB64         (1U << 4)
 
 /**
  * enum rkisp1_cif_isp_version - ISP variants
@@ -524,6 +530,61 @@ struct rkisp1_cif_isp_awb_gain_config {
 	__u16 gain_green_r;
 	__u16 gain_blue;
 	__u16 gain_green_b;
+};
+
+/**
+ * struct rkisp1_cif_isp_awb64_ellip - Ellipse configuration for AWB64 measurement
+ *
+ * @rmax: Points within rmax (24-bit) squared distance from center are
+ *        considered for white point calculations
+ * @cen_x: X coordinate of the center of ellipse, 10-bit signed fixed-point
+ *         number with 9 bits fractional part
+ * @cen_y: Y coordinate of the center of ellipse, 10-bit signed fixed-point
+ *         number with 9 bits fractional part
+ * @ctm: Coordinate transformation matrix,
+ *       ctm[0] and ctm[2] are 12-bit signed fixed-point with 8-bit fractional
+ *       part ranging from -8 (0x800) to 7.996 (0x7ff),
+ *       ctm[1] and ctm[3] are 9-bit signed fixed-point with 8-bit fractional
+ *       part ranging from -1 (0x100) to 0.996 (0x0ff)
+ */
+struct rkisp1_cif_isp_awb64_ellip {
+	__u32 rmax;
+	__u16 cen_x;
+	__u16 cen_y;
+	__u16 ctm[4];
+};
+
+/**
+ * struct rkisp1_cif_isp_awb64_meas_config - Configuration for the AWB64 stats
+ *
+ * @awb_wnd: White balance measurement window (in pixels)
+ * @ellip: Ellipse regions used for measurement
+ * @cc_coeff: Colorspace matrix (all coefficient values are 11-bit)
+ * @min_div: Minimum divider, if input is less than this don't do division
+ *           (unsigned 10-bit fixed-point value with 10 fractional bits)
+ * @min_max_r: Only pixels with min_r < R < max_r contribute to measurement,
+ *             bits 0:7 are min_r and bits 8:15 are max_r
+ * @min_max_g: Only pixels with min_g < G < max_g contribute to measurement,
+ *             bits 0:7 are min_g and bits 8:15 are max_g
+ * @min_max_b: Only pixels with min_b < B < max_b contribute to measurement,
+ *             bits 0:7 are min_b and bits 8:15 are max_b
+ * @enable_median_filter: Enable median filter before AWB measurement
+ * @ellip_unite: Bitmask to select which regions should be combined for measurement,
+ *               bits 0:2 to combine ellipse 0 with ellipse 1,2,3 and
+ *               bits 3:5 to combine ellipse 4 with ellipse 5,6,7
+ * @chrom_switch: Accumulate Q1, Q2 chromaticities instead of R, G, B
+ */
+struct rkisp1_cif_isp_awb64_meas_config {
+	struct rkisp1_cif_isp_window awb_wnd;
+	struct rkisp1_cif_isp_awb64_ellip ellip[RKISP1_CIF_ISP_AWB64_MAX_ELLIPSE];
+	__u16 cc_coeff[3][3];
+	__u16 min_div;
+	__u16 min_max_r;
+	__u16 min_max_g;
+	__u16 min_max_b;
+	__u8 enable_median_filter;
+	__u8 ellip_unite;
+	__u8 chrom_switch;
 };
 
 /**
@@ -1089,18 +1150,45 @@ struct rkisp1_cif_isp_hist_stat {
 };
 
 /**
+ * struct rkisp1_cif_isp_awb64_meas - AWB64 measured values
+ *
+ * @cnt: White pixel count, number of "white pixels" found during last
+ *	 measurement
+ * @accu_r: Total value of Red within elliptical region
+ * @accu_g: Total value of Green within elliptical region
+ * @accu_b: Total value of Blue within elliptical region
+ */
+struct rkisp1_cif_isp_awb64_meas {
+	__u32 cnt;
+	__u32 accu_r;
+	__u32 accu_g;
+	__u32 accu_b;
+};
+
+/**
+ * struct rkisp1_cif_isp_awb64_stat - statistics AWB64 data
+ *
+ * @count: Measured pixel accumulator data for elliptical regions
+ */
+struct rkisp1_cif_isp_awb64_stat {
+	struct rkisp1_cif_isp_awb64_meas count[RKISP1_CIF_ISP_AWB64_MAX_ELLIPSE];
+};
+
+/**
  * struct rkisp1_cif_isp_stat - Rockchip ISP1 Statistics Data
  *
  * @awb: statistics data for automatic white balance
  * @ae: statistics data for auto exposure
  * @af: statistics data for auto focus
  * @hist: statistics histogram data
+ * @awb64: statistics data for automatic white balance 64
  */
 struct rkisp1_cif_isp_stat {
 	struct rkisp1_cif_isp_awb_stat awb;
 	struct rkisp1_cif_isp_ae_stat ae;
 	struct rkisp1_cif_isp_af_stat af;
 	struct rkisp1_cif_isp_hist_stat hist;
+	struct rkisp1_cif_isp_awb64_stat awb64;
 };
 
 /**
@@ -1142,6 +1230,7 @@ struct rkisp1_stat_buffer {
  * @RKISP1_EXT_PARAMS_BLOCK_TYPE_COMPAND_EXPAND: Companding expand curve
  * @RKISP1_EXT_PARAMS_BLOCK_TYPE_COMPAND_COMPRESS: Companding compress curve
  * @RKISP1_EXT_PARAMS_BLOCK_TYPE_WDR: Wide dynamic range
+ * @RKISP1_EXT_PARAMS_BLOCK_TYPE_AWB64_MEAS: Auto white balance 64 statistics
  */
 enum rkisp1_ext_params_block_type {
 	RKISP1_EXT_PARAMS_BLOCK_TYPE_BLS,
@@ -1165,6 +1254,7 @@ enum rkisp1_ext_params_block_type {
 	RKISP1_EXT_PARAMS_BLOCK_TYPE_COMPAND_EXPAND,
 	RKISP1_EXT_PARAMS_BLOCK_TYPE_COMPAND_COMPRESS,
 	RKISP1_EXT_PARAMS_BLOCK_TYPE_WDR,
+	RKISP1_EXT_PARAMS_BLOCK_TYPE_AWB64_MEAS,
 };
 
 #define RKISP1_EXT_PARAMS_FL_BLOCK_DISABLE	(1U << 0)
@@ -1458,6 +1548,23 @@ struct rkisp1_ext_params_ie_config {
 struct rkisp1_ext_params_awb_meas_config {
 	struct rkisp1_ext_params_block_header header;
 	struct rkisp1_cif_isp_awb_meas_config config;
+} __attribute__((aligned(8)));
+
+/**
+ * struct rkisp1_ext_params_awb64_meas_config - RkISP1 extensible params AWB64
+ *						Meas config
+ *
+ * RkISP1 extensible parameters Auto-White Balance 64 Measurement configuration
+ * block. Identified by :c:type:`RKISP1_EXT_PARAMS_BLOCK_TYPE_AWB64_MEAS`.
+ *
+ * @header: The RkISP1 extensible parameters header, see
+ *	    :c:type:`rkisp1_ext_params_block_header`
+ * @config: Auto-White Balance 64 measure configuration, see
+ *	    :c:type:`rkisp1_cif_isp_awb64_meas_config`
+ */
+struct rkisp1_ext_params_awb64_meas_config {
+	struct rkisp1_ext_params_block_header header;
+	struct rkisp1_cif_isp_awb64_meas_config config;
 } __attribute__((aligned(8)));
 
 /**

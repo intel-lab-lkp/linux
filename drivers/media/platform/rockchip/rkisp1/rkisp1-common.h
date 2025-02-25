@@ -118,6 +118,7 @@ enum rkisp1_isp_pad {
  * @RKISP1_FEATURE_DMA_34BIT: The ISP uses 34-bit DMA addresses
  * @RKISP1_FEATURE_BLS: The ISP has a dedicated BLS block
  * @RKISP1_FEATURE_COMPAND: The ISP has a companding block
+ * @RKISP1_FEATURE_AWB64: The ISP has an AWB64 block
  *
  * The ISP features are stored in a bitmask in &rkisp1_info.features and allow
  * the driver to implement support for features present in some ISP versions
@@ -131,6 +132,7 @@ enum rkisp1_feature {
 	RKISP1_FEATURE_DMA_34BIT = BIT(4),
 	RKISP1_FEATURE_BLS = BIT(5),
 	RKISP1_FEATURE_COMPAND = BIT(6),
+	RKISP1_FEATURE_AWB64 = BIT(7),
 };
 
 #define rkisp1_has_feature(rkisp1, feature) \
