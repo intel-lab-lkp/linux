@@ -614,6 +614,9 @@ static void validate_mcu_fw_version(struct hid_device *hdev, int idProduct)
 			 "The MCU firmware version must be %d or greater\n"
 			 "Please update your MCU with official ASUS firmware release\n",
 			 min_version);
+	} else {
+		set_ally_mcu_hack(false);
+		set_ally_mcu_powersave(true);
 	}
 }
 
@@ -1420,4 +1423,5 @@ static struct hid_driver asus_driver = {
 };
 module_hid_driver(asus_driver);
 
+MODULE_IMPORT_NS("ASUS_WMI");
 MODULE_LICENSE("GPL");
