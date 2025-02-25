@@ -1066,6 +1066,15 @@ static inline bool cpu_has_lpa2(void)
 #endif
 }
 
+static inline u64 cpu_get_parange(void)
+{
+	u64 mmfr0 = read_cpuid(ID_AA64MMFR0_EL1);
+
+	return arm64_apply_feature_override(mmfr0,
+					    ID_AA64MMFR0_EL1_PARANGE_SHIFT, 4,
+					    &id_aa64mmfr0_override);
+}
+
 #endif /* __ASSEMBLY__ */
 
 #endif
