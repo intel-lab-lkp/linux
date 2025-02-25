@@ -1403,6 +1403,22 @@ int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
 	return err;
 }
 
+static void display_reset_prepare(struct intel_gt *gt)
+{
+	struct drm_i915_private *i915 = gt->i915;
+	struct intel_display *display = &i915->display;
+
+	intel_display_reset_prepare(display);
+}
+
+static void display_reset_finish(struct intel_gt *gt)
+{
+	struct drm_i915_private *i915 = gt->i915;
+	struct intel_display *display = &i915->display;
+
+	intel_display_reset_finish(display);
+}
+
 static void intel_gt_reset_global(struct intel_gt *gt,
 				  u32 engine_mask,
 				  const char *reason)
@@ -1420,14 +1436,11 @@ static void intel_gt_reset_global(struct intel_gt *gt,
 
 	/* Use a watchdog to ensure that our reset completes */
 	intel_wedge_on_timeout(&w, gt, 60 * HZ) {
-		struct drm_i915_private *i915 = gt->i915;
-		struct intel_display *display = &i915->display;
-
-		intel_display_reset_prepare(display);
+		display_reset_prepare(gt);
 
 		intel_gt_reset(gt, engine_mask, reason);
 
-		intel_display_reset_finish(display);
+		display_reset_finish(gt);
 	}
 
 	if (!test_bit(I915_WEDGED, &gt->reset.flags))
