@@ -483,7 +483,8 @@ int mgag200_primary_plane_helper_atomic_check(struct drm_plane *plane,
 						  false, true);
 	if (ret)
 		return ret;
-	else if (!new_plane_state->visible)
+
+	if (!new_plane_state->visible)
 		return 0;
 
 	if (plane->state)
