@@ -198,8 +198,8 @@ struct drm_sched_entity {
 	 * @last_scheduled:
 	 *
 	 * Points to the finished fence of the last scheduled job. Only written
-	 * by the scheduler thread, can be accessed locklessly from
-	 * drm_sched_job_arm() if the queue is empty.
+	 * by &struct drm_gpu_scheduler.submit_wq. Can be accessed locklessly
+	 * from drm_sched_job_arm() if the queue is empty.
 	 */
 	struct dma_fence __rcu		*last_scheduled;
 
@@ -436,14 +436,14 @@ struct drm_sched_backend_ops {
 	 * Drivers typically issue a reset to recover from GPU hangs, and this
 	 * procedure usually follows the following workflow:
 	 *
-	 * 1. Stop the scheduler using drm_sched_stop(). This will park the
-	 *    scheduler thread and cancel the timeout work, guaranteeing that
-	 *    nothing is queued while we reset the hardware queue
+	 * 1. Stop the scheduler using drm_sched_stop(). This will stop the
+	 *    scheduler's workqueues and cancel the timeout work, guaranteeing
+	 *    that  nothing is queued while we reset the hardware queue
 	 * 2. Try to gracefully stop non-faulty jobs (optional)
 	 * 3. Issue a GPU reset (driver-specific)
 	 * 4. Re-submit jobs using drm_sched_resubmit_jobs()
 	 * 5. Restart the scheduler using drm_sched_start(). At that point, new
-	 *    jobs can be queued, and the scheduler thread is unblocked
+	 *    jobs can be queued, and the scheduler's workqueues be started again.
 	 *
 	 * Note that some GPUs have distinct hardware queues but need to reset
 	 * the GPU globally, which requires extra synchronization between the
