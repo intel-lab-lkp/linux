@@ -2022,6 +2022,10 @@ static bool intel_can_preload_luts(struct intel_atomic_state *state,
 {
 	const struct intel_crtc_state *old_crtc_state =
 		intel_atomic_get_old_crtc_state(state, crtc);
+	struct intel_display *display = to_intel_display(crtc);
+
+	if (HAS_DOUBLE_BUFFERED_LUT(display))
+		return false;
 
 	return !old_crtc_state->post_csc_lut &&
 		!old_crtc_state->pre_csc_lut;

@@ -6879,8 +6879,12 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 
 	if (!modeset &&
 	    intel_crtc_needs_color_update(new_crtc_state) &&
-	    !new_crtc_state->use_dsb)
+	    !new_crtc_state->use_dsb) {
 		intel_color_commit_noarm(NULL, new_crtc_state);
+
+		if (HAS_DOUBLE_BUFFERED_LUT(display))
+			intel_color_load_luts(new_crtc_state);
+	}
 
 	if (!new_crtc_state->use_dsb)
 		intel_crtc_planes_update_noarm(NULL, state, crtc);
