@@ -63,12 +63,9 @@ devm_of_phy_provider_register_full() 宏来覆盖包含子节点的节点。
 		__devm_of_phy_provider_register_full(dev, children,
 						     THIS_MODULE, xlate)
 
-	void devm_of_phy_provider_unregister(struct device *dev,
-		struct phy_provider *phy_provider);
 	void of_phy_provider_unregister(struct phy_provider *phy_provider);
 
-devm_of_phy_provider_unregister 和 of_phy_provider_unregister
-可以被用来注销PHY.
+of_phy_provider_unregister() 可以被用来注销PHY.
 
 创建PHY
 =======
