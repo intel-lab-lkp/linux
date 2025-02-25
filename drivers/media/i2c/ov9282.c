@@ -54,11 +54,11 @@
 #define OV9282_AEC_MANUAL_DEFAULT	0x00
 
 /* Analog gain control */
-#define OV9282_REG_AGAIN	0x3509
-#define OV9282_AGAIN_MIN	0x10
-#define OV9282_AGAIN_MAX	0xff
-#define OV9282_AGAIN_STEP	1
-#define OV9282_AGAIN_DEFAULT	0x10
+#define OV9282_REG_AGAIN	0x3508
+#define OV9282_AGAIN_MIN	0x0010
+#define OV9282_AGAIN_MAX	0x1fff
+#define OV9282_AGAIN_STEP	0x0001
+#define OV9282_AGAIN_DEFAULT	0x0010
 
 /* Group hold register */
 #define OV9282_REG_HOLD		0x3308
@@ -226,7 +226,6 @@ static const struct ov9282_reg common_regs[] = {
 	{OV9282_REG_AEC_MANUAL, OV9282_GAIN_PREC16_EN},
 	{0x3505, 0x8c},
 	{0x3507, 0x03},
-	{0x3508, 0x00},
 	{0x3610, 0x80},
 	{0x3611, 0xa0},
 	{0x3620, 0x6e},
@@ -605,7 +604,11 @@ static int ov9282_update_exp_gain(struct ov9282 *ov9282, u32 exposure, u32 gain)
 	if (ret)
 		goto error_release_group_hold;
 
-	ret = ov9282_write_reg(ov9282, OV9282_REG_AGAIN, 1, gain);
+	ret = ov9282_write_reg(ov9282, OV9282_REG_AGAIN, 1, (gain >> 8) & 0x1f);
+	if (ret)
+		goto error_release_group_hold;
+
+	ret = ov9282_write_reg(ov9282, OV9282_REG_AGAIN + 1, 1, gain & 0xff);
 
 error_release_group_hold:
 	ov9282_write_reg(ov9282, OV9282_REG_HOLD, 1, 0);
