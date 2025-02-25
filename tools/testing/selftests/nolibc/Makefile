@@ -52,6 +52,10 @@ ARCH_ppc64       = powerpc
 ARCH_ppc64le     = powerpc
 ARCH_mips32le    = mips
 ARCH_mips32be    = mips
+ARCH_mipsn32le   = mips
+ARCH_mipsn32be   = mips
+ARCH_mips64le    = mips
+ARCH_mips64be    = mips
 ARCH_riscv32     = riscv
 ARCH_riscv64     = riscv
 ARCH_s390x       = s390
@@ -65,6 +69,10 @@ IMAGE_arm64      = arch/arm64/boot/Image
 IMAGE_arm        = arch/arm/boot/zImage
 IMAGE_mips32le   = vmlinuz
 IMAGE_mips32be   = vmlinuz
+IMAGE_mipsn32le  = vmlinuz
+IMAGE_mipsn32be  = vmlinuz
+IMAGE_mips64le   = vmlinuz
+IMAGE_mips64be   = vmlinuz
 IMAGE_ppc        = vmlinux
 IMAGE_ppc64      = vmlinux
 IMAGE_ppc64le    = arch/powerpc/boot/zImage
@@ -85,6 +93,10 @@ DEFCONFIG_arm64      = defconfig
 DEFCONFIG_arm        = multi_v7_defconfig
 DEFCONFIG_mips32le   = malta_defconfig
 DEFCONFIG_mips32be   = malta_defconfig generic/eb.config
+DEFCONFIG_mipsn32le  = malta_defconfig generic/64r2.config
+DEFCONFIG_mipsn32be  = malta_defconfig generic/64r6.config generic/eb.config
+DEFCONFIG_mips64le   = malta_defconfig generic/64r6.config
+DEFCONFIG_mips64be   = malta_defconfig generic/64r2.config generic/eb.config
 DEFCONFIG_ppc        = pmac32_defconfig
 DEFCONFIG_ppc64      = powernv_be_defconfig
 DEFCONFIG_ppc64le    = powernv_defconfig
@@ -108,7 +120,11 @@ QEMU_ARCH_x86        = x86_64
 QEMU_ARCH_arm64      = aarch64
 QEMU_ARCH_arm        = arm
 QEMU_ARCH_mips32le   = mipsel  # works with malta_defconfig
-QEMU_ARCH_mips32be  = mips
+QEMU_ARCH_mips32be   = mips
+QEMU_ARCH_mipsn32le  = mips64el
+QEMU_ARCH_mipsn32be  = mips64
+QEMU_ARCH_mips64le   = mips64el
+QEMU_ARCH_mips64be   = mips64
 QEMU_ARCH_ppc        = ppc
 QEMU_ARCH_ppc64      = ppc64
 QEMU_ARCH_ppc64le    = ppc64
@@ -121,6 +137,8 @@ QEMU_ARCH_loongarch  = loongarch64
 QEMU_ARCH            = $(QEMU_ARCH_$(XARCH))
 
 QEMU_ARCH_USER_ppc64le = ppc64le
+QEMU_ARCH_USER_mipsn32le = mipsn32el
+QEMU_ARCH_USER_mipsn32be = mipsn32
 QEMU_ARCH_USER         = $(or $(QEMU_ARCH_USER_$(XARCH)),$(QEMU_ARCH_$(XARCH)))
 
 QEMU_BIOS_DIR = /usr/share/edk2/
@@ -138,6 +156,10 @@ QEMU_ARGS_arm64      = -M virt -cpu cortex-a53 -append "panic=-1 $(TEST:%=NOLIBC
 QEMU_ARGS_arm        = -M virt -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
 QEMU_ARGS_mips32le   = -M malta -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
 QEMU_ARGS_mips32be   = -M malta -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
+QEMU_ARGS_mipsn32le  = -M malta -cpu 5KEc -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
+QEMU_ARGS_mipsn32be  = -M malta -cpu I6400 -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
+QEMU_ARGS_mips64le   = -M malta -cpu I6400 -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
+QEMU_ARGS_mips64be   = -M malta -cpu 5KEc -append "panic=-1 $(TEST:%=NOLIBC_TEST=%)"
 QEMU_ARGS_ppc        = -M g3beige -append "console=ttyS0 panic=-1 $(TEST:%=NOLIBC_TEST=%)"
 QEMU_ARGS_ppc64      = -M powernv -append "console=hvc0 panic=-1 $(TEST:%=NOLIBC_TEST=%)"
 QEMU_ARGS_ppc64le    = -M powernv -append "console=hvc0 panic=-1 $(TEST:%=NOLIBC_TEST=%)"
@@ -167,6 +189,10 @@ CFLAGS_s390x = -m64
 CFLAGS_s390 = -m31
 CFLAGS_mips32le = -EL -mabi=32 -fPIC
 CFLAGS_mips32be = -EB -mabi=32
+CFLAGS_mipsn32le = -EL -mabi=n32 -fPIC -march=mips64r2
+CFLAGS_mipsn32be = -EB -mabi=n32 -march=mips64r6
+CFLAGS_mips64le = -EL -mabi=64 -march=mips64r6
+CFLAGS_mips64be = -EB -mabi=64 -march=mips64r2
 CFLAGS_STACKPROTECTOR ?= $(call cc-option,-mstack-protector-guard=global $(call cc-option,-fstack-protector-all))
 CFLAGS  ?= -Os -fno-ident -fno-asynchronous-unwind-tables -std=c89 -W -Wall -Wextra \
 		$(call cc-option,-fno-stack-protector) $(call cc-option,-Wmissing-prototypes) \
