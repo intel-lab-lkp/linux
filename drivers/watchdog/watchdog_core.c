@@ -34,6 +34,7 @@
 #include <linux/idr.h>		/* For ida_* macros */
 #include <linux/err.h>		/* For IS_ERR macros */
 #include <linux/of.h>		/* For of_get_timeout_sec */
+#include <linux/panic_notifier.h> /* For panic handler */
 #include <linux/suspend.h>
 
 #include "watchdog_core.h"	/* For watchdog_dev_register/... */
@@ -47,6 +48,9 @@ static int stop_on_reboot = -1;
 module_param(stop_on_reboot, int, 0444);
 MODULE_PARM_DESC(stop_on_reboot, "Stop watchdogs on reboot (0=keep watching, 1=stop)");
 
+static int stop_on_panic = -1;
+module_param(stop_on_panic, int, 0444);
+MODULE_PARM_DESC(stop_on_panic, "Stop watchdogs on panic (0=keep watching, 1=stop)");
 /*
  * Deferred Registration infrastructure.
  *
@@ -154,6 +158,23 @@ int watchdog_init_timeout(struct watchdog_device *wdd,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(watchdog_init_timeout);
+
+static int watchdog_panic_notify(struct notifier_block *nb,
+				 unsigned long action, void *data)
+{
+	struct watchdog_device *wdd;
+
+	wdd = container_of(nb, struct watchdog_device, panic_nb);
+	if (watchdog_active(wdd)) {
+		int ret;
+
+		ret = wdd->ops->stop(wdd);
+		if (ret)
+			return NOTIFY_BAD;
+	}
+
+	return NOTIFY_DONE;
+}
 
 static int watchdog_reboot_notifier(struct notifier_block *nb,
 				    unsigned long code, void *data)
@@ -299,6 +320,14 @@ static int ___watchdog_register_device(struct watchdog_device *wdd)
 			clear_bit(WDOG_STOP_ON_REBOOT, &wdd->status);
 	}
 
+	/* Module parameter to force watchdog policy on panic. */
+	if (stop_on_panic != -1) {
+		if (stop_on_panic &&  !test_bit(WDOG_NO_WAY_OUT, &wdd->status))
+			set_bit(WDOG_STOP_ON_PANIC, &wdd->status);
+		else
+			clear_bit(WDOG_STOP_ON_PANIC, &wdd->status);
+	}
+
 	if (test_bit(WDOG_STOP_ON_REBOOT, &wdd->status)) {
 		if (!wdd->ops->stop)
 			pr_warn("watchdog%d: stop_on_reboot not supported\n", wdd->id);
@@ -332,6 +361,16 @@ static int ___watchdog_register_device(struct watchdog_device *wdd)
 		if (ret)
 			pr_warn("watchdog%d: Cannot register pm handler (%d)\n",
 				wdd->id, ret);
+	}
+
+	if (test_bit(WDOG_STOP_ON_PANIC, &wdd->status)) {
+		if (!wdd->ops->stop) {
+			pr_warn("watchdog%d: stop_on_panic not supported\n", wdd->id);
+		} else {
+			wdd->panic_nb.notifier_call = watchdog_panic_notify;
+			atomic_notifier_chain_register(&panic_notifier_list,
+						       &wdd->panic_nb);
+		}
 	}
 
 	return 0;
@@ -390,6 +429,9 @@ static void __watchdog_unregister_device(struct watchdog_device *wdd)
 	if (test_bit(WDOG_STOP_ON_REBOOT, &wdd->status))
 		unregister_reboot_notifier(&wdd->reboot_nb);
 
+	if (test_bit(WDOG_STOP_ON_PANIC, &wdd->status))
+		atomic_notifier_chain_unregister(&panic_notifier_list,
+						 &wdd->panic_nb);
 	watchdog_dev_unregister(wdd);
 	ida_free(&watchdog_ida, wdd->id);
 }
