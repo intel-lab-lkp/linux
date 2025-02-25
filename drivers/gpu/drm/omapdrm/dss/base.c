@@ -73,18 +73,6 @@ void omapdss_device_put(struct omap_dss_device *dssdev)
 	put_device(dssdev->dev);
 }
 
-struct omap_dss_device *omapdss_find_device_by_node(struct device_node *node)
-{
-	struct omap_dss_device *dssdev;
-
-	list_for_each_entry(dssdev, &omapdss_devices_list, list) {
-		if (dssdev->dev->of_node == node)
-			return omapdss_device_get(dssdev);
-	}
-
-	return NULL;
-}
-
 /*
  * Search for the next output device starting at @from. Release the reference to
  * the @from device, and acquire a reference to the returned device if found.
