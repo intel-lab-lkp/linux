@@ -43,6 +43,7 @@
 #include <asm/mach/irq.h>
 #include <asm/mach/time.h>
 
+#include "irq.h"
 #include "reboot.h"
 
 unsigned long irq_err_count;
@@ -69,6 +70,11 @@ static void __init init_irq_stacks(void)
 			break;
 		per_cpu(irq_stack_ptr, cpu) = &stack[THREAD_SIZE];
 	}
+}
+
+void call_on_irq_stack(void (*fn)(void *), void *arg)
+{
+	call_with_stack(fn, arg, __this_cpu_read(irq_stack_ptr));
 }
 
 #ifdef CONFIG_SOFTIRQ_ON_OWN_STACK
