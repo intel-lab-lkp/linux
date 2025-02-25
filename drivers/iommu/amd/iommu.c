@@ -2064,8 +2064,17 @@ static void set_dte_entry(struct amd_iommu *iommu,
 	if (domain->dirty_tracking)
 		new.data[0] |= DTE_FLAG_HAD;
 
-	if (dev_data->ats_enabled)
+	if (dev_data->ats_enabled) {
 		new.data[1] |= DTE_FLAG_IOTLB;
+
+		/* Secure ATS is supported when DTE[mode] != 0 */
+		if (amd_iommu_sats && domain->iop.mode != PAGE_MODE_NONE)
+			new.data[1] |= DTE_FLAG_SATS;
+		else if (amd_iommu_sats) {
+			pr_devel("Secure ATS not enabled for dev 0x%x as "
+				 "DTE[mode]=0\n", dev_data->devid);
+		}
+	}
 
 	old_domid = READ_ONCE(dte->data[1]) & DEV_DOMID_MASK;
 	new.data[1] |= domid;

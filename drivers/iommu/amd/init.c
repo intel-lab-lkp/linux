@@ -156,6 +156,9 @@ enum protection_domain_mode amd_iommu_pgtable = PD_MODE_V1;
 /* Guest page table level */
 int amd_iommu_gpt_level = PAGE_MODE_4_LEVEL;
 
+/* Secure ATS support */
+bool amd_iommu_sats;
+
 int amd_iommu_guest_ir = AMD_IOMMU_GUEST_IR_VAPIC;
 static int amd_iommu_xt_mode = IRQ_REMAP_XAPIC_MODE;
 
@@ -3093,6 +3096,15 @@ static int __init early_amd_iommu_init(void)
 		}
 	}
 
+	/* Secure ATS supported when DTE[mode] != 0 */
+	if (amd_iommu_sats) {
+		if (!check_feature(FEATURE_SATSSUP) ||
+		    (amd_iommu_pgtable != PD_MODE_V1)) {
+			pr_info("Secure ATS is not supported");
+			amd_iommu_sats = false;
+		}
+	}
+
 	/* Disable any previously enabled IOMMUs */
 	if (!is_kdump_kernel() || amd_iommu_disabled)
 		disable_iommus();
@@ -3230,6 +3242,9 @@ static __init void iommu_snp_enable(void)
 		pr_warn("SNP: RMP initialization failed, SNP cannot be supported.\n");
 		goto disable_snp;
 	}
+
+	if (check_feature(FEATURE_SATSSUP))
+		amd_iommu_sats = true;
 
 	pr_info("IOMMU SNP support enabled.\n");
 	return;
@@ -3526,6 +3541,8 @@ static int __init parse_amd_iommu_options(char *str)
 		} else if (strncmp(str, "v2_pgsizes_only", 15) == 0) {
 			pr_info("Restricting V1 page-sizes to 4KiB/2MiB/1GiB");
 			amd_iommu_pgsize_bitmap = AMD_IOMMU_PGSIZES_V2;
+		} else if (strncmp(str, "sats", 4) == 0) {
+			amd_iommu_sats = true;
 		} else {
 			pr_notice("Unknown option - '%s'\n", str);
 		}
