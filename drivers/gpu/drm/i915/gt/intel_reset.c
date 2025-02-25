@@ -1408,6 +1408,11 @@ static bool gt_reset_clobbers_display(struct intel_gt *gt)
 	return intel_gt_gpu_reset_clobbers_display(gt) && intel_has_gpu_reset(gt);
 }
 
+static void display_reset_modeset_stuck(void *gt)
+{
+	intel_gt_set_wedged(gt);
+}
+
 static void display_reset_prepare(struct intel_gt *gt)
 {
 	struct drm_i915_private *i915 = gt->i915;
@@ -1422,7 +1427,7 @@ static void display_reset_prepare(struct intel_gt *gt)
 	smp_mb__after_atomic();
 	wake_up_bit(&gt->reset.flags, I915_RESET_MODESET);
 
-	intel_display_reset_prepare(display);
+	intel_display_reset_prepare(display, display_reset_modeset_stuck, gt);
 }
 
 static void display_reset_finish(struct intel_gt *gt)
