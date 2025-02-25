@@ -33,12 +33,11 @@ enum fixed_addresses {
 
 	FIX_BTMAP_END = __end_of_permanent_fixed_addresses,
 	FIX_BTMAP_BEGIN = FIX_BTMAP_END + TOTAL_FIX_BTMAPS - 1,
-	__end_of_early_ioremap_region
-};
+	__end_of_early_ioremap_region,
 
-static const enum fixed_addresses __end_of_fixed_addresses =
-	__end_of_fixmap_region > __end_of_early_ioremap_region ?
-	__end_of_fixmap_region : __end_of_early_ioremap_region;
+	__end_of_fixed_addresses = __end_of_fixmap_region > __end_of_early_ioremap_region ?
+				   __end_of_fixmap_region : __end_of_early_ioremap_region,
+};
 
 #define FIXMAP_PAGE_COMMON	(L_PTE_YOUNG | L_PTE_PRESENT | L_PTE_XN | L_PTE_DIRTY)
 
