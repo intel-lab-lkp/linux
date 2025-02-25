@@ -1505,8 +1505,7 @@ out:
 	 * delalloc_end is already one less than the total length, so
 	 * we don't subtract one from folio_size().
 	 */
-	delalloc_to_write +=
-		DIV_ROUND_UP(delalloc_end + 1 - page_start, folio_size(folio));
+	delalloc_to_write += (delalloc_end + 1 - page_start + folio_size(folio) - 1) >> folio_order(folio);
 
 	/*
 	 * If all ranges are submitted asynchronously, we just need to account
