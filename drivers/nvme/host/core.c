@@ -1799,6 +1799,7 @@ static bool nvme_init_integrity(struct nvme_ns_head *head,
 
 	memset(bi, 0, sizeof(*bi));
 
+	bi->flags = BLK_INTEGRITY_NOGENERATE | BLK_INTEGRITY_NOVERIFY;
 	if (!head->ms)
 		return true;
 
@@ -1850,6 +1851,9 @@ static bool nvme_init_integrity(struct nvme_ns_head *head,
 		break;
 	}
 
+	if (bi->flags & BLK_INTEGRITY_DEVICE_CAPABLE)
+		bi->flags &= ~(BLK_INTEGRITY_NOGENERATE |
+			       BLK_INTEGRITY_NOVERIFY);
 	bi->tuple_size = head->ms;
 	bi->pi_offset = info->pi_offset;
 	return true;
