@@ -475,6 +475,11 @@ config LENOVO_WMI_GAMEZONE
 	  To compile this driver as a module, choose M here: the module will
 	  be called lenovo-wmi-gamezone.
 
+config LENOVO_WMI_DATA01
+	tristate
+	depends on ACPI_WMI
+	select LENOVO_WMI
+
 config IDEAPAD_LAPTOP
 	tristate "Lenovo IdeaPad Laptop Extras"
 	depends on ACPI

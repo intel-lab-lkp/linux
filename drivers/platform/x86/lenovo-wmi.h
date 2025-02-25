@@ -45,12 +45,31 @@ enum lenovo_wmi_action {
 	THERMAL_MODE_EVENT = 1,
 };
 
+/* capdata01 structs */
+struct lenovo_wmi_cd01 {
+	struct capdata01 **capdata;
+	struct wmi_device *wdev;
+	int instance_count;
+};
+
+struct capdata01 {
+	u32 id;
+	u32 supported;
+	u32 default_value;
+	u32 step;
+	u32 min_value;
+	u32 max_value;
+};
+
 /* wmidev_evaluate_method helper functions */
 int lenovo_wmidev_evaluate_method_2(struct wmi_device *wdev, u8 instance,
 				    u32 method_id, u32 arg0, u32 arg1,
 				    u32 *retval);
 int lenovo_wmidev_evaluate_method_1(struct wmi_device *wdev, u8 instance,
 				    u32 method_id, u32 arg0, u32 *retval);
+
+/* lenovo_wmi_cd01_driver match function */
+int lenovo_wmi_cd01_match(struct device *dev, void *data);
 
 /* lenovo_wmi_gz_driver notifier functions */
 int lenovo_wmi_gz_notifier_call(struct notifier_block *nb, unsigned long action,
