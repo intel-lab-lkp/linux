@@ -10,3 +10,9 @@ config PCI_PWRCTL_PWRSEQ
 	tristate
 	select POWER_SEQUENCING
 	select PCI_PWRCTL
+
+config PCI_PWRCTRL_TC956X
+	tristate "PCI Power Control driver for TC956x PCIe switch"
+	select PCI_PWRCTL
+	help
+	  Say Y here to enable the pwrctrl driver for TC956x PCIe switch.
