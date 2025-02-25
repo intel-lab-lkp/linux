@@ -349,11 +349,11 @@ if __name__ == '__main__':
 
     try:
         # Use git to get the valid license expressions
-        repo = git.Repo(os.getcwd())
-        assert not repo.bare
+        with git.Repo(os.getcwd()) as repo:
+            assert not repo.bare
 
-        # Initialize SPDX data
-        spdx = read_spdxdata(repo)
+            # Initialize SPDX data
+            spdx = read_spdxdata(repo)
 
         # Initialize the parser
         parser = id_parser(spdx)
