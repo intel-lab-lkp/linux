@@ -1403,10 +1403,24 @@ int intel_engine_reset(struct intel_engine_cs *engine, const char *msg)
 	return err;
 }
 
+static bool gt_reset_clobbers_display(struct intel_gt *gt)
+{
+	return intel_gt_gpu_reset_clobbers_display(gt) && intel_has_gpu_reset(gt);
+}
+
 static void display_reset_prepare(struct intel_gt *gt)
 {
 	struct drm_i915_private *i915 = gt->i915;
 	struct intel_display *display = &i915->display;
+
+	/* reset doesn't touch the display */
+	if (!intel_display_reset_test(display) && !gt_reset_clobbers_display(gt))
+		return;
+
+	/* We have a modeset vs reset deadlock, defensively unbreak it. */
+	set_bit(I915_RESET_MODESET, &gt->reset.flags);
+	smp_mb__after_atomic();
+	wake_up_bit(&gt->reset.flags, I915_RESET_MODESET);
 
 	intel_display_reset_prepare(display);
 }
@@ -1416,7 +1430,13 @@ static void display_reset_finish(struct intel_gt *gt)
 	struct drm_i915_private *i915 = gt->i915;
 	struct intel_display *display = &i915->display;
 
+	/* reset doesn't touch the display */
+	if (!test_bit(I915_RESET_MODESET, &gt->reset.flags))
+		return;
+
 	intel_display_reset_finish(display);
+
+	clear_bit_unlock(I915_RESET_MODESET, &gt->reset.flags);
 }
 
 static void intel_gt_reset_global(struct intel_gt *gt,

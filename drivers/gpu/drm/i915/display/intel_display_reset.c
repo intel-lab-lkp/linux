@@ -36,15 +36,6 @@ void intel_display_reset_prepare(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return;
 
-	/* reset doesn't touch the display */
-	if (!intel_display_reset_test(display) &&
-	    !gpu_reset_clobbers_display(display))
-		return;
-
-	/* We have a modeset vs reset deadlock, defensively unbreak it. */
-	set_bit(I915_RESET_MODESET, &to_gt(dev_priv)->reset.flags);
-	smp_mb__after_atomic();
-	wake_up_bit(&to_gt(dev_priv)->reset.flags, I915_RESET_MODESET);
 	if (atomic_read(&display->restore.pending_fb_pin)) {
 		drm_dbg_kms(display->drm,
 			    "Modeset potentially stuck, unbreaking through wedging\n");
@@ -98,10 +89,6 @@ void intel_display_reset_finish(struct intel_display *display)
 	if (!HAS_DISPLAY(display))
 		return;
 
-	/* reset doesn't touch the display */
-	if (!test_bit(I915_RESET_MODESET, &to_gt(i915)->reset.flags))
-		return;
-
 	state = fetch_and_zero(&display->restore.modeset_state);
 	if (!state)
 		goto unlock;
@@ -138,6 +125,4 @@ unlock:
 	drm_modeset_drop_locks(ctx);
 	drm_modeset_acquire_fini(ctx);
 	mutex_unlock(&display->drm->mode_config.mutex);
-
-	clear_bit_unlock(I915_RESET_MODESET, &to_gt(i915)->reset.flags);
 }
