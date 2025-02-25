@@ -320,7 +320,7 @@ static struct platform_driver ftm_rtc_driver = {
 	.driver		= {
 		.name	= "ftm-alarm",
 		.of_match_table = ftm_rtc_match,
-		.acpi_match_table = ACPI_PTR(ftm_imx_acpi_ids),
+		.acpi_match_table = ftm_imx_acpi_ids,
 	},
 };
 
