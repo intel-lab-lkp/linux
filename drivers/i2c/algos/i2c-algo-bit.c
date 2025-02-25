@@ -31,7 +31,7 @@
 #endif /* DEBUG */
 
 /* ----- global variables ---------------------------------------------	*/
-
+static DEFINE_MUTEX(i2c_bus_lock);
 static int bit_test;	/* see if the line-setting functions work	*/
 module_param(bit_test, int, S_IRUGO);
 MODULE_PARM_DESC(bit_test, "lines testing - 0 off; 1 report; 2 fail if stuck");
@@ -349,6 +349,8 @@ static int sendbytes(struct i2c_adapter *i2c_adap, struct i2c_msg *msg)
 	int retval;
 	int wrcount = 0;
 
+	/* Aquire the lock before accessing the I2C bus */
+	mutex_lock(&i2c_bus_lock);
 	while (count > 0) {
 		retval = i2c_outb(i2c_adap, *temp);
 
@@ -379,6 +381,7 @@ static int sendbytes(struct i2c_adapter *i2c_adap, struct i2c_msg *msg)
 			return retval;
 		}
 	}
+	mutex_unlock(&i2c_bus_lock);
 	return wrcount;
 }
 
