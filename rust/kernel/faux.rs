@@ -23,11 +23,17 @@ pub struct Registration(NonNull<bindings::faux_device>);
 
 impl Registration {
     /// Create and register a new faux device with the given name.
-    pub fn new(name: &CStr) -> Result<Self> {
+    pub fn new(name: &CStr, parent: Option<&device::Device>) -> Result<Self> {
         // SAFETY:
         // - `name` is copied by this function into its own storage
         // - `faux_ops` is safe to leave NULL according to the C API
-        let dev = unsafe { bindings::faux_device_create(name.as_char_ptr(), null_mut(), null()) };
+        let dev = unsafe {
+            bindings::faux_device_create(
+                name.as_char_ptr(),
+                parent.map_or(null_mut(), |p| p.as_raw()),
+                null(),
+            )
+        };
 
         // The above function will return either a valid device, or NULL on failure
         // INVARIANT: The device will remain registered until faux_device_destroy() is called, which
