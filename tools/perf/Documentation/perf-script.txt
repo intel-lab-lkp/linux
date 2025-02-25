@@ -239,13 +239,15 @@ OPTIONS
 	i.e., -F "" is not allowed.
 
 	The brstack output includes branch related information with raw addresses using the
-	/v/v/v/v/cycles syntax in the following order:
-	FROM: branch source instruction
-	TO  : branch target instruction
-        M/P/-: M=branch target mispredicted or branch direction was mispredicted, P=target predicted or direction predicted, -=not supported
-	X/- : X=branch inside a transactional region, -=not in transaction region or not supported
-	A/- : A=TSX abort entry, -=not aborted region or not supported
-	cycles
+	FROM/TO/PRED/INTX/ABORT/CYCLES/TYPE/SPEC syntax in the following order:
+	FROM  : branch source instruction
+	TO    : branch target instruction
+	PRED  : M=branch target mispredicted or branch direction was mispredicted, P=target predicted or direction predicted, -=not supported
+	INTX  : X=branch inside a transactional region, -=not in transaction region or not supported
+	ABORT : A=TSX abort entry, -=not aborted region or not supported
+	CYCLES: the number of cycles that have elapsed since the last branch was recorded
+	TYPE  : branch type
+	SPEC  : branch speculation info
 
 	The brstacksym is identical to brstack, except that the FROM and TO addresses are printed in a symbolic form if possible.
 
