@@ -359,7 +359,8 @@ static int cirrus_primary_plane_helper_atomic_check(struct drm_plane *plane,
 						  false, false);
 	if (ret)
 		return ret;
-	else if (!new_plane_state->visible)
+
+	if (!new_plane_state->visible)
 		return 0;
 
 	pitch = cirrus_pitch(fb);
@@ -367,7 +368,8 @@ static int cirrus_primary_plane_helper_atomic_check(struct drm_plane *plane,
 	/* validate size constraints */
 	if (pitch > CIRRUS_MAX_PITCH)
 		return -EINVAL;
-	else if (pitch * fb->height > CIRRUS_VRAM_SIZE)
+
+	if (pitch * fb->height > CIRRUS_VRAM_SIZE)
 		return -EINVAL;
 
 	new_primary_plane_state->format = cirrus_format(fb);
