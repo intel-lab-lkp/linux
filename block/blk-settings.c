@@ -861,7 +861,8 @@ bool queue_limits_stack_integrity(struct queue_limits *t,
 
 	if (!ti->tuple_size) {
 		/* inherit the settings from the first underlying device */
-		if (!(ti->flags & BLK_INTEGRITY_STACKED)) {
+		if (!(ti->flags & BLK_INTEGRITY_STACKED) &&
+		    (bi->flags & BLK_INTEGRITY_DEVICE_CAPABLE)) {
 			ti->flags = BLK_INTEGRITY_DEVICE_CAPABLE |
 				(bi->flags & BLK_INTEGRITY_REF_TAG);
 			ti->csum_type = bi->csum_type;
@@ -871,8 +872,11 @@ bool queue_limits_stack_integrity(struct queue_limits *t,
 			ti->tag_size = bi->tag_size;
 			goto done;
 		}
-		if (!bi->tuple_size)
+		if (!bi->tuple_size) {
+			ti->flags |= BLK_INTEGRITY_NOGENERATE |
+				     BLK_INTEGRITY_NOVERIFY;
 			goto done;
+		}
 	}
 
 	if (ti->tuple_size != bi->tuple_size)
@@ -893,6 +897,7 @@ done:
 
 incompatible:
 	memset(ti, 0, sizeof(*ti));
+	ti->flags |= BLK_INTEGRITY_NOGENERATE | BLK_INTEGRITY_NOVERIFY;
 	return false;
 }
 EXPORT_SYMBOL_GPL(queue_limits_stack_integrity);
