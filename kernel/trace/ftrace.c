@@ -7004,7 +7004,7 @@ static int ftrace_process_locs(struct module *mod,
 	unsigned long count;
 	unsigned long *p;
 	unsigned long addr;
-	unsigned long kaslr;
+	unsigned long kaslr = 0;
 	unsigned long flags = 0; /* Shut up gcc */
 	unsigned long pages;
 	int ret = -ENOMEM;
@@ -7056,8 +7056,10 @@ static int ftrace_process_locs(struct module *mod,
 		ftrace_pages->next = start_pg;
 	}
 
+#ifdef CONFIG_RANDOMIZE_BASE
 	/* For zeroed locations that were shifted for core kernel */
 	kaslr = !mod ? kaslr_offset() : 0;
+#endif
 
 	p = start;
 	pg = start_pg;
