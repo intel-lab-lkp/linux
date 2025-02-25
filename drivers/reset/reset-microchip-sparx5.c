@@ -8,6 +8,7 @@
  */
 #include <linux/mfd/syscon.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -26,6 +27,7 @@ struct mchp_reset_context {
 	struct regmap *gcb_ctrl;
 	struct reset_controller_dev rcdev;
 	const struct reset_props *props;
+	void __iomem *base;
 };
 
 static struct regmap_config sparx5_reset_regmap_config = {
@@ -69,23 +71,27 @@ static const struct regmap_config mchp_lan966x_syscon_regmap_config = {
 };
 
 static struct regmap *mchp_lan966x_syscon_to_regmap(struct device *dev,
-						    struct device_node *syscon_np)
+						    struct device_node *syscon_np,
+						    struct mchp_reset_context *ctx)
 {
 	struct regmap_config regmap_config = mchp_lan966x_syscon_regmap_config;
-	resource_size_t size;
-	void __iomem *base;
+	struct resource res;
 
-	base = devm_of_iomap(dev, syscon_np, 0, &size);
-	if (IS_ERR(base))
-		return ERR_CAST(base);
+	if (of_address_to_resource(syscon_np, 0, &res))
+		return ERR_PTR(-ENOMEM);
 
-	regmap_config.max_register = size - 4;
+	ctx->base = of_iomap(syscon_np, 0);
+	if (!ctx->base)
+		return ERR_PTR(-ENOMEM);
 
-	return devm_regmap_init_mmio(dev, base, &regmap_config);
+	regmap_config.max_register =  resource_size(&res) - 4;
+
+	return devm_regmap_init_mmio(dev, ctx->base, &regmap_config);
 }
 
 static int mchp_sparx5_map_syscon(struct platform_device *pdev, char *name,
-				  struct regmap **target)
+				  struct regmap **target,
+				  struct mchp_reset_context *ctx)
 {
 	struct device_node *syscon_np;
 	struct regmap *regmap;
@@ -103,7 +109,8 @@ static int mchp_sparx5_map_syscon(struct platform_device *pdev, char *name,
 	 * device removal.
 	 */
 	if (of_device_is_compatible(pdev->dev.of_node, "microchip,lan966x-switch-reset"))
-		regmap = mchp_lan966x_syscon_to_regmap(&pdev->dev, syscon_np);
+		regmap = mchp_lan966x_syscon_to_regmap(&pdev->dev, syscon_np,
+						       ctx);
 	else
 		regmap = syscon_node_to_regmap(syscon_np);
 	of_node_put(syscon_np);
@@ -146,7 +153,7 @@ static int mchp_sparx5_reset_probe(struct platform_device *pdev)
 	if (!ctx)
 		return -ENOMEM;
 
-	err = mchp_sparx5_map_syscon(pdev, "cpu-syscon", &ctx->cpu_ctrl);
+	err = mchp_sparx5_map_syscon(pdev, "cpu-syscon", &ctx->cpu_ctrl, ctx);
 	if (err)
 		return err;
 	err = mchp_sparx5_map_io(pdev, 0, &ctx->gcb_ctrl);
@@ -165,7 +172,17 @@ static int mchp_sparx5_reset_probe(struct platform_device *pdev)
 	if (err)
 		return err;
 
+	dev_set_drvdata(&pdev->dev, ctx);
+
 	return devm_reset_controller_register(&pdev->dev, &ctx->rcdev);
+}
+
+static void mchp_sparx5_reset_remove(struct platform_device *pdev)
+{
+	struct mchp_reset_context *ctx = dev_get_drvdata(&pdev->dev);
+
+	if (ctx->base != NULL)
+		iounmap(ctx->base);
 }
 
 static const struct reset_props reset_props_sparx5 = {
@@ -196,6 +213,7 @@ MODULE_DEVICE_TABLE(of, mchp_sparx5_reset_of_match);
 
 static struct platform_driver mchp_sparx5_reset_driver = {
 	.probe = mchp_sparx5_reset_probe,
+	.remove = mchp_sparx5_reset_remove,
 	.driver = {
 		.name = "sparx5-switch-reset",
 		.of_match_table = mchp_sparx5_reset_of_match,
