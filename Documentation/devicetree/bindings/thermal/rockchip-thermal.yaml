@@ -11,6 +11,23 @@ maintainers:
 
 $ref: thermal-sensor.yaml#
 
+definitions:
+  channel:
+    type: object
+    properties:
+      reg:
+        maxItems: 1
+        description: sensor ID, a.k.a. channel number
+      nvmem-cells:
+        items:
+          - description: handle of cell containing the calibration data
+      nvmem-cell-names:
+        items:
+          - const: trim
+    required:
+      - reg
+    unevaluatedProperties: false
+
 properties:
   compatible:
     enum:
@@ -51,6 +68,12 @@ properties:
       - const: tsadc
       - const: tsadc-phy
 
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
   "#thermal-sensor-cells":
     const: 1
 
@@ -79,6 +102,47 @@ required:
   - clocks
   - clock-names
   - resets
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: rockchip,rk3568-tsadc
+    then:
+      properties:
+        nvmem-cells:
+          items:
+            - description: cell handle to where the trim's base temperature is stored
+            - description:
+                cell handle to where the trim's tenths of Celsius base value is stored
+        nvmem-cell-names:
+          items:
+            - const: trim_base
+            - const: trim_base_frac
+        cpu@0:
+          $ref: "#/definitions/channel"
+        gpu@1:
+          $ref: "#/definitions/channel"
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: rockchip,rk3576-tsadc
+    then:
+      properties:
+        soc@0:
+          $ref: "#/definitions/channel"
+        bigcores@1:
+          $ref: "#/definitions/channel"
+        littlecores@2:
+          $ref: "#/definitions/channel"
+        ddr@3:
+          $ref: "#/definitions/channel"
+        npu@4:
+          $ref: "#/definitions/channel"
+        gpu@5:
+          $ref: "#/definitions/channel"
 
 unevaluatedProperties: false
 
