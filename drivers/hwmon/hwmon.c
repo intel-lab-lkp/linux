@@ -483,12 +483,19 @@ static ssize_t hwmon_attr_store(struct device *dev,
 	return count;
 }
 
+static bool power_is_string_attr(u32 attr)
+{
+	return attr == hwmon_power_label || attr == hwmon_power_accuracy ||
+		attr == hwmon_power_cap_hyst || attr == hwmon_power_average_min ||
+		attr == hwmon_power_average_max;
+}
+
 static bool is_string_attr(enum hwmon_sensor_types type, u32 attr)
 {
 	return (type == hwmon_temp && attr == hwmon_temp_label) ||
 	       (type == hwmon_in && attr == hwmon_in_label) ||
 	       (type == hwmon_curr && attr == hwmon_curr_label) ||
-	       (type == hwmon_power && attr == hwmon_power_label) ||
+	       (type == hwmon_power && power_is_string_attr(attr)) ||
 	       (type == hwmon_energy && attr == hwmon_energy_label) ||
 	       (type == hwmon_humidity && attr == hwmon_humidity_label) ||
 	       (type == hwmon_fan && attr == hwmon_fan_label);
@@ -646,8 +653,8 @@ static const char * const hwmon_power_attr_templates[] = {
 	[hwmon_power_enable] = "power%d_enable",
 	[hwmon_power_average] = "power%d_average",
 	[hwmon_power_average_interval] = "power%d_average_interval",
-	[hwmon_power_average_interval_max] = "power%d_interval_max",
-	[hwmon_power_average_interval_min] = "power%d_interval_min",
+	[hwmon_power_average_interval_max] = "power%d_average_interval_max",
+	[hwmon_power_average_interval_min] = "power%d_average_interval_min",
 	[hwmon_power_average_highest] = "power%d_average_highest",
 	[hwmon_power_average_lowest] = "power%d_average_lowest",
 	[hwmon_power_average_max] = "power%d_average_max",
