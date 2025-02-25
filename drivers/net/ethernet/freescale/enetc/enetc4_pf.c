@@ -622,10 +622,20 @@ static int enetc4_pf_netdev_create(struct enetc_si *si)
 	struct device *dev = &si->pdev->dev;
 	struct enetc_ndev_priv *priv;
 	struct net_device *ndev;
+	char ifname[IFNAMSIZ];
 	int err;
 
-	ndev = alloc_etherdev_mqs(sizeof(struct enetc_ndev_priv),
-				  si->num_tx_rings, si->num_rx_rings);
+	err = of_alias_get_id(dev->of_node, "ethernet");
+	if (err >= 0) {
+		snprintf(ifname, IFNAMSIZ, "eth%d", err);
+		ndev = alloc_netdev_mqs(sizeof(struct enetc_ndev_priv),
+					ifname, NET_NAME_PREDICTABLE, ether_setup,
+					si->num_tx_rings, si->num_rx_rings);
+	} else {
+		ndev = alloc_etherdev_mqs(sizeof(struct enetc_ndev_priv),
+					  si->num_tx_rings, si->num_rx_rings);
+	}
+
 	if (!ndev)
 		return  -ENOMEM;
 
