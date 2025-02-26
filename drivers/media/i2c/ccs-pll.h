@@ -32,6 +32,7 @@
 #define CCS_PLL_FLAG_DUAL_PLL					BIT(8)
 #define CCS_PLL_FLAG_OP_SYS_DDR					BIT(9)
 #define CCS_PLL_FLAG_OP_PIX_DDR					BIT(10)
+#define CCS_PLL_FLAG_EVEN_PLL_MULTIPLIER			BIT(11)
 
 /**
  * struct ccs_pll_branch_fr - CCS PLL configuration (front)
