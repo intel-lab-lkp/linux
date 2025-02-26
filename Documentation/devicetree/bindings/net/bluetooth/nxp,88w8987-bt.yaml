@@ -50,6 +50,9 @@ properties:
     description:
       The GPIO number of the NXP chipset used for BT_WAKE_OUT.
 
+  vin-supply:
+    description: Input supply phandle (1.8V)
+
 required:
   - compatible
 
