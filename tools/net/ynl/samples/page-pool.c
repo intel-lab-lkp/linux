@@ -16,6 +16,7 @@ struct stat {
 	struct {
 		unsigned int cnt;
 		size_t refs, bytes;
+		size_t item_mem_resident, item_mem_used;
 	} live[2];
 
 	size_t alloc_slow, alloc_fast, recycle_ring, recycle_cache;
@@ -52,6 +53,12 @@ static void count(struct stat *s, unsigned int l,
 		s->live[l].refs += pp->inflight;
 	if (pp->_present.inflight_mem)
 		s->live[l].bytes += pp->inflight_mem;
+
+	if (pp->_present.item_mem_resident)
+		s->live[l].item_mem_resident += pp->item_mem_resident;
+
+	if (pp->_present.item_mem_used)
+		s->live[l].item_mem_used += pp->item_mem_used;
 }
 
 int main(int argc, char **argv)
@@ -126,6 +133,10 @@ int main(int argc, char **argv)
 		printf("\t\trefs: %zu bytes: %zu (refs: %zu bytes: %zu)\n",
 		       s->live[1].refs, s->live[1].bytes,
 		       s->live[0].refs, s->live[0].bytes);
+
+		printf("\t\titem_mem_resident: %zu item_mem_used: %zu (item_mem_resident: %zu item_mem_used: %zu)\n",
+		       s->live[1].item_mem_resident, s->live[1].item_mem_used,
+		       s->live[0].item_mem_resident, s->live[0].item_mem_used);
 
 		/* We don't know how many pages are sitting in cache and ring
 		 * so we will under-count the recycling rate a bit.
