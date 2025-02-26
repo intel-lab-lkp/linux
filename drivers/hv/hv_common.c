@@ -717,6 +717,7 @@ int hv_result_to_errno(u64 status)
 	}
 	return -EIO;
 }
+EXPORT_SYMBOL_GPL(hv_result_to_errno);
 
 void hv_identify_partition_type(void)
 {
