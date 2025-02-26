@@ -6,7 +6,7 @@
 V4L2_META_FMT_UVC ('UVCH')
 *******************************
 
-UVC Payload Header Data
+UVC Partial Payload Header Data (formerly known as UVC Payload Header Data).
 
 
 Description
@@ -44,7 +44,9 @@ Each individual block contains the following fields:
         them
     * - :cspan:`1` *The rest is an exact copy of the UVC payload header:*
     * - __u8 length;
-      - length of the rest of the block, including this field
+      - length of the rest of the block, including this field (please note that
+        regardless of this value, the driver will never copy more than 12
+        bytes).
     * - __u8 flags;
       - Flags, indicating presence of other standard UVC fields
     * - __u8 buf[];

@@ -6,11 +6,22 @@
 V4L2_META_FMT_D4XX ('D4XX')
 *******************************
 
-Intel D4xx UVC Cameras Metadata
+UVC Full Payload Header Data (formerly known as Intel D4xx UVC Cameras
+Metadata).
 
 
 Description
 ===========
+
+V4L2_META_FMT_D4XX buffers follow the metadata buffer layout of
+V4L2_META_FMT_UVC with the only difference, that it also includes proprietary
+payload header data. It was originally implemented for Intel D4xx cameras, and
+thus the name, but now it can be used by any UVC device, when userspace wants
+full access to the UVC Metadata.
+
+
+Intel D4xx Metadata
+===================
 
 Intel D4xx (D435, D455 and others) cameras include per-frame metadata in their UVC
 payload headers, following the Microsoft(R) UVC extension proposal [1_]. That
@@ -21,10 +32,8 @@ types are MetadataId_CaptureStats (ID 3), MetadataId_CameraExtrinsics (ID 4),
 and MetadataId_CameraIntrinsics (ID 5). For their description see [1_]. This
 document describes proprietary metadata types, used by D4xx cameras.
 
-V4L2_META_FMT_D4XX buffers follow the metadata buffer layout of
-V4L2_META_FMT_UVC with the only difference, that it also includes proprietary
-payload header data. D4xx cameras use bulk transfers and only send one payload
-per frame, therefore their headers cannot be larger than 255 bytes.
+D4xx cameras use bulk transfers and only send one payload per frame, therefore
+their headers cannot be larger than 255 bytes.
 
 This document implements Intel Configuration version 3 [9_].
 
