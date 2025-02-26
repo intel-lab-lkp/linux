@@ -1,0 +1,68 @@
+ES8389 audio CODEC
+
+This device supports I2C only.
+
+Required properties:
+
+- compatible : "everest,es8389"
+
+- reg : The I2C address of the device.
+ It depends on The Voltage level on Chip Address Pin(AD1 = PIN11,AD0 = PIN1)
+
+- "#sound-dai-cells"
+
+Optional properties:
+
+- everest,adc-slot:
+ This property is used to set the slots of recording data when multiple codecs
+ are connected in PTDM mode. please do not set this property if you are setting
+ STDM mode.
+ minimum: 0x00
+ maximum: 0x07
+ default: 0x00
+
+- everest,dac-slot:
+ This property is used to set the slots of playing data when multiple codecs
+ are connected in TDM mode.
+ minimum: 0x00
+ maximum: 0x07
+ default: 0x00
+
+- prefix_name:
+ To set the prefix_name of kcontorls and dapm.
+
+- everest,dmic-enabled
+ The property selects the PDM interface of ES8389
+
+Example for single codec:
+
+ es8389: es8389@10 {
+                compatible = "everest,es8389";
+                status = "okay";
+                reg = <0x10>;
+                everest,adc-slot = [00];
+                everest,dac-slot = [00];
+                prefix_name = "es8389_0";
+                #sound-dai-cells = <0>;
+        };
+
+Example for multiple codecs:
+ es8389_0: es8389@10 {
+                compatible = "everest,es8389";
+                status = "okay";
+                reg = <0x10>;
+                everest,adc-slot = [00];
+                everest,dac-slot = [00];
+                prefix_name = "es8389_0";
+                #sound-dai-cells = <0>;
+        };
+es8389_1: es8389@11 {
+                compatible = "everest,es8389";
+                status = "okay";
+                reg = <0x11>;
+                everest,adc-slot = [01];
+                everest,dac-slot = [01];
+                prefix_name = "es8389_1";
+                clock-names = "mclk";
+                #sound-dai-cells = <0>;
+        };
