@@ -861,7 +861,8 @@ bool queue_limits_stack_integrity(struct queue_limits *t,
 
 	if (!ti->tuple_size) {
 		/* inherit the settings from the first underlying device */
-		if (!(ti->flags & BLK_INTEGRITY_STACKED)) {
+		if (!(ti->flags & BLK_INTEGRITY_STACKED) &&
+		    (bi->flags & BLK_INTEGRITY_DEVICE_CAPABLE)) {
 			ti->flags = BLK_INTEGRITY_DEVICE_CAPABLE |
 				(bi->flags & BLK_INTEGRITY_REF_TAG);
 			ti->csum_type = bi->csum_type;
