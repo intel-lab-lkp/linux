@@ -2669,7 +2669,7 @@ static int insert_dev_extent(struct btrfs_trans_handle *trans,
 {
 	struct btrfs_fs_info *fs_info = device->fs_info;
 	struct btrfs_root *root = fs_info->dev_root;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_dev_extent *extent;
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
@@ -2686,7 +2686,7 @@ static int insert_dev_extent(struct btrfs_trans_handle *trans,
 	key.offset = start;
 	ret = btrfs_insert_empty_item(trans, root, path, &key, sizeof(*extent));
 	if (ret)
-		goto out;
+		return ret;
 
 	leaf = path->nodes[0];
 	extent = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_dev_extent);
@@ -2694,10 +2694,8 @@ static int insert_dev_extent(struct btrfs_trans_handle *trans,
 	btrfs_set_dev_extent_chunk_objectid(leaf, extent,
 					    BTRFS_FIRST_CHUNK_TREE_OBJECTID);
 	btrfs_set_dev_extent_chunk_offset(leaf, extent, chunk_offset);
-
 	btrfs_set_dev_extent_length(leaf, extent, num_bytes);
-out:
-	btrfs_free_path(path);
+
 	return ret;
 }
 
