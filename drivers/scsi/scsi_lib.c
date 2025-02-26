@@ -2661,8 +2661,8 @@ void sdev_evt_send(struct scsi_device *sdev, struct scsi_event *evt)
 
 	spin_lock_irqsave(&sdev->list_lock, flags);
 	list_add_tail(&evt->node, &sdev->event_list);
-	schedule_work(&sdev->event_work);
 	spin_unlock_irqrestore(&sdev->list_lock, flags);
+	schedule_work(&sdev->event_work);
 }
 EXPORT_SYMBOL_GPL(sdev_evt_send);
 
