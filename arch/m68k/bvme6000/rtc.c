@@ -16,7 +16,8 @@
 #include <linux/init.h>
 #include <linux/poll.h>
 #include <linux/module.h>
-#include <linux/rtc.h>	/* For struct rtc_time and ioctls, etc */
+#include <linux/rtc.h>	/* For struct rtc_time and etc */
+#include <linux/platform_device.h>
 #include <linux/bcd.h>
 #include <asm/bvme6000hw.h>
 
@@ -24,19 +25,10 @@
 #include <linux/uaccess.h>
 #include <asm/setup.h>
 
-/*
- *	We sponge a minor off of the misc major. No need slurping
- *	up another valuable major dev number for this. If you add
- *	an ioctl, make sure you don't conflict with SPARC's RTC
- *	ioctls.
- */
-
 static unsigned char days_in_mo[] =
 {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 
-static atomic_t rtc_status = ATOMIC_INIT(1);
-
-static int dp8570a_rtc_read_time(struct rtc_time *wtime)
+static int dp8570a_rtc_read_time(struct device *dev, struct rtc_time *wtime)
 {
 	volatile RtcPtr_t rtc = (RtcPtr_t)BVME_RTC_BASE;
 	unsigned char msr;
@@ -63,7 +55,7 @@ static int dp8570a_rtc_read_time(struct rtc_time *wtime)
 	return 0;
 }
 
-static int dp8570a_rtc_set_time(struct rtc_time *rtc_tm)
+static int dp8570a_rtc_set_time(struct device *dev, struct rtc_time *rtc_tm)
 {
 	volatile RtcPtr_t rtc = (RtcPtr_t)BVME_RTC_BASE;
 	unsigned char msr;
@@ -117,77 +109,24 @@ static int dp8570a_rtc_set_time(struct rtc_time *rtc_tm)
 	return 0;
 }
 
-static long rtc_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
-	void __user *argp = (void __user *)arg;
-
-	switch (cmd) {
-	case RTC_RD_TIME:	/* Read the time/date from RTC	*/
-	{
-		struct rtc_time wtime;
-
-		dp8570a_rtc_read_time(&wtime);
-		return copy_to_user(argp, &wtime, sizeof wtime) ?
-								-EFAULT : 0;
-	}
-	case RTC_SET_TIME:	/* Set the RTC */
-	{
-		struct rtc_time rtc_tm;
-
-		if (!capable(CAP_SYS_ADMIN))
-			return -EACCES;
-
-		if (copy_from_user(&rtc_tm, argp, sizeof(struct rtc_time)))
-			return -EFAULT;
-
-		return dp8570a_rtc_set_time(&rtc_tm);
-	}
-	default:
-		return -EINVAL;
-	}
-}
-
-/*
- * We enforce only one user at a time here with the open/close.
- */
-static int rtc_open(struct inode *inode, struct file *file)
-{
-	if (!atomic_dec_and_test(&rtc_status)) {
-		atomic_inc(&rtc_status);
-		return -EBUSY;
-	}
-	return 0;
-}
-
-static int rtc_release(struct inode *inode, struct file *file)
-{
-	atomic_inc(&rtc_status);
-	return 0;
-}
-
-/*
- *	The various file operations we support.
- */
-
-static const struct file_operations rtc_fops = {
-	.unlocked_ioctl	= rtc_ioctl,
-	.open		= rtc_open,
-	.release	= rtc_release,
-	.llseek		= noop_llseek,
-};
-
-static struct miscdevice rtc_dev = {
-	.minor =	RTC_MINOR,
-	.name =		"rtc",
-	.fops =		&rtc_fops
+static const struct rtc_class_ops dp8570a_rtc_ops = {
+	.read_time	= dp8570a_rtc_read_time,
+	.set_time	= dp8570a_rtc_set_time,
 };
 
 static int __init rtc_DP8570A_init(void)
 {
+	struct platform_device *pdev;
+
 	if (!MACH_IS_BVME6000)
 		return -ENODEV;
 
 	pr_info("DP8570A Real Time Clock Driver v%s\n", RTC_VERSION);
-	return misc_register(&rtc_dev);
+
+	pdev = platform_device_register_data(NULL, "rtc-generic", -1,
+					     &dp8570a_rtc_ops,
+					     sizeof(dp8570a_rtc_ops));
+
+	return PTR_ERR_OR_ZERO(pdev);
 }
 module_init(rtc_DP8570A_init);
