@@ -2192,6 +2192,8 @@ enum ethtool_link_mode_bit_indices {
 #define SPEED_800000		800000
 
 #define SPEED_UNKNOWN		-1
+#define LANES_UNKNOWN		 0
+#define MAX_LANES		 8
 
 static inline int ethtool_validate_speed(__u32 speed)
 {
