@@ -30,7 +30,12 @@ description: |
 
 properties:
   compatible:
-    const: reset-simple
+    oneOf:
+      - items:
+          - enum:
+              - sophgo,sg2042-reset
+          - const: reset-simple
+      - const: reset-simple
 
   reg:
     maxItems: 1
