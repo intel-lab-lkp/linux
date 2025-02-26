@@ -37,6 +37,10 @@ static int debug = -1;
 module_param(debug, int, 0);
 MODULE_PARM_DESC(debug, "Debug level (0=none,...,16=all)");
 
+static int false_irp_workaround;
+module_param(false_irp_workaround, int, 0);
+MODULE_PARM_DESC(false_irp_workaround, "Enable workaround for rare false IRP event causing link flap");
+
 static const struct e1000_info *e1000_info_tbl[] = {
 	[board_82571]		= &e1000_82571_info,
 	[board_82572]		= &e1000_82572_info,
@@ -1757,6 +1761,21 @@ static irqreturn_t e1000_intr_msi(int __always_unused irq, void *data)
 	/* read ICR disables interrupts using IAM */
 	if (icr & E1000_ICR_LSC) {
 		hw->mac.get_link_status = true;
+
+		/*
+		 * False IRP workaround
+		 * Issue seen on Lenovo P5 and P7 workstations where if there
+		 * are different link speeds in the network a false IRP event
+		 * is received, leading to a link flap.
+		 * Intel unable to determine root cause. This read prevents
+		 * the issue occurring
+		 */
+		if (false_irp_workaround) {
+			u16 phy_data;
+
+			e1e_rphy(hw, PHY_REG(772, 26), &phy_data);
+		}
+
 		/* ICH8 workaround-- Call gig speed drop workaround on cable
 		 * disconnect (LSC) before accessing any PHY registers
 		 */
