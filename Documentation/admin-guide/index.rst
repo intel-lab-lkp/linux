@@ -120,6 +120,7 @@ Block-layer and filesystem administration
    :maxdepth: 1
 
    bcache
+   binder_netlink
    binderfs
    blockdev/index
    cifs/index
