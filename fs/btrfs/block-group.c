@@ -584,7 +584,7 @@ static int sample_block_group_extent_item(struct btrfs_caching_control *caching_
 	struct btrfs_root *extent_root;
 	u64 search_offset;
 	u64 search_end = block_group->start + block_group->length;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_key search_key;
 	int ret = 0;
 
@@ -626,7 +626,6 @@ static int sample_block_group_extent_item(struct btrfs_caching_control *caching_
 
 	lockdep_assert_held(&caching_ctl->mutex);
 	lockdep_assert_held_read(&fs_info->commit_root_sem);
-	btrfs_free_path(path);
 	return ret;
 }
 
