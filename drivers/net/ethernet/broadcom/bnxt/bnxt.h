@@ -880,7 +880,10 @@ struct bnxt_sw_tx_bd {
 	struct page		*page;
 	DEFINE_DMA_UNMAP_ADDR(mapping);
 	DEFINE_DMA_UNMAP_LEN(len);
-	u16			extra_segs;
+	union {
+		u16			extra_segs;
+		u16			xdp_len;
+	};
 	u8			hdr_size;
 	u8			is_ts_pkt;
 	u8			is_push;
@@ -1134,6 +1137,8 @@ struct bnxt_tx_sw_stats {
 	/* non-ethtool stats follow */
 	u64			tx_packets;
 	u64			tx_bytes;
+	u64			xdp_packets; /* under rx syncp */
+	u64			xdp_bytes;  /* under rx syncp */
 	struct u64_stats_sync	syncp;
 };
 
