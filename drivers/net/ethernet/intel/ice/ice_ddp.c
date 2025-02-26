@@ -2324,8 +2324,6 @@ enum ice_ddp_state ice_copy_and_init_pkg(struct ice_hw *hw, const u8 *buf,
  * @flags: pointer to descriptor flags
  * @set: 0-get, 1-set topology
  *
- * The function will get or set Tx topology
- *
  * Return: zero when set was successful, negative values otherwise.
  */
 static int
