@@ -11,6 +11,8 @@
 #include <linux/cc_platform.h>
 #include <linux/percpu-defs.h>
 #include <linux/align.h>
+#include <linux/sizes.h>
+#include <linux/llist.h>
 
 #include <asm/apic.h>
 #include <asm/sev.h>
@@ -18,6 +20,16 @@
 #include "local.h"
 
 static DEFINE_PER_CPU(void *, apic_backing_page);
+
+struct apic_id_node {
+	 struct llist_node node;
+	 u32 apic_id;
+	 int cpu;
+};
+
+static DEFINE_PER_CPU(struct apic_id_node, apic_id_node);
+
+static struct llist_head *apic_id_map;
 
 static int x2apic_savic_acpi_madt_oem_check(char *oem_id, char *oem_table_id)
 {
@@ -180,6 +192,44 @@ static void x2apic_savic_send_IPI_mask_allbutself(const struct cpumask *mask, in
 	__send_IPI_mask(mask, vector, APIC_DEST_ALLBUT);
 }
 
+static void init_backing_page(void *backing_page)
+{
+	struct apic_id_node *next_node, *this_cpu_node;
+	unsigned int apic_map_slot;
+	u32 apic_id;
+	int cpu;
+
+	/*
+	 * Before Secure AVIC is enabled, APIC msr reads are
+	 * intercepted. APIC_ID msr read returns the value
+	 * from hv.
+	 */
+	apic_id = native_apic_msr_read(APIC_ID);
+	set_reg(backing_page, APIC_ID, apic_id);
+
+	if (!apic_id_map)
+		return;
+
+	cpu = smp_processor_id();
+	this_cpu_node = &per_cpu(apic_id_node, cpu);
+	this_cpu_node->apic_id = apic_id;
+	this_cpu_node->cpu = cpu;
+	/*
+	 * In common case, apic_ids for CPUs are sequentially numbered.
+	 * So, each CPU should hash to a different slot in the apic id
+	 * map.
+	 */
+	apic_map_slot = apic_id % nr_cpu_ids;
+	llist_add(&this_cpu_node->node, &apic_id_map[apic_map_slot]);
+	/* Each CPU checks only its next nodes for duplicates. */
+	llist_for_each_entry(next_node, this_cpu_node->node.next, node) {
+		if (WARN_ONCE(next_node->apic_id == apic_id,
+			      "Duplicate APIC %u for cpu %d and cpu %d. IPI handling will suffer!",
+			      apic_id, cpu, next_node->cpu))
+			break;
+	}
+}
+
 static void x2apic_savic_setup(void)
 {
 	void *backing_page;
@@ -193,6 +243,7 @@ static void x2apic_savic_setup(void)
 	if (!backing_page)
 		snp_abort();
 	this_cpu_write(apic_backing_page, backing_page);
+	init_backing_page(backing_page);
 	gpa = __pa(backing_page);
 
 	/*
@@ -212,6 +263,8 @@ static void x2apic_savic_setup(void)
 
 static int x2apic_savic_probe(void)
 {
+	int i;
+
 	if (!cc_platform_has(CC_ATTR_SNP_SECURE_AVIC))
 		return 0;
 
@@ -219,6 +272,12 @@ static int x2apic_savic_probe(void)
 		pr_err("Secure AVIC enabled in non x2APIC mode\n");
 		snp_abort();
 	}
+
+	apic_id_map = kvmalloc(nr_cpu_ids * sizeof(*apic_id_map), GFP_KERNEL);
+
+	if (apic_id_map)
+		for (i = 0; i < nr_cpu_ids; i++)
+			init_llist_head(&apic_id_map[i]);
 
 	pr_info("Secure AVIC Enabled\n");
 
