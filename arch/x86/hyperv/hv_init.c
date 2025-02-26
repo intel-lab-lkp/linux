@@ -400,13 +400,10 @@ static u8 __init get_vtl(void)
 	u64 ret;
 
 	local_irq_save(flags);
-	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-	output = *this_cpu_ptr(hyperv_pcpu_output_arg);
 
-	memset(input, 0, struct_size(input, names, 1));
+	hv_hvcall_inout(&input, sizeof(*input), &output, sizeof(*output));
 	input->partition_id = HV_PARTITION_ID_SELF;
 	input->vp_index = HV_VP_INDEX_SELF;
-	input->input_vtl.as_uint8 = 0;
 	input->names[0] = HV_REGISTER_VSM_VP_STATUS;
 
 	ret = hv_do_hypercall(control, input, output);

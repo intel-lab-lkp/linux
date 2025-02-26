@@ -94,8 +94,7 @@ static int hv_vtl_bringup_vcpu(u32 target_vp_index, int cpu, u64 eip_ignored)
 
 	local_irq_save(irq_flags);
 
-	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-	memset(input, 0, sizeof(*input));
+	hv_hvcall_in(&input, sizeof(*input));
 
 	input->partition_id = HV_PARTITION_ID_SELF;
 	input->vp_index = target_vp_index;
@@ -185,12 +184,9 @@ static int hv_vtl_apicid_to_vp_id(u32 apic_id)
 
 	local_irq_save(irq_flags);
 
-	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-	memset(input, 0, sizeof(*input));
+	hv_hvcall_inout(&input, sizeof(*input), &output, sizeof(*output));
 	input->partition_id = HV_PARTITION_ID_SELF;
 	input->apic_ids[0] = apic_id;
-
-	output = *this_cpu_ptr(hyperv_pcpu_output_arg);
 
 	control = HV_HYPERCALL_REP_COMP_1 | HVCALL_GET_VP_ID_FROM_APIC_ID;
 	status = hv_do_hypercall(control, input, output);

@@ -115,14 +115,12 @@ static bool __send_ipi_mask_ex(const struct cpumask *mask, int vector,
 		return false;
 
 	local_irq_save(flags);
-	ipi_arg = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
+	hv_hvcall_in_array(&ipi_arg, sizeof(*ipi_arg),
+				sizeof(ipi_arg->vp_set.bank_contents[0]));
 	if (unlikely(!ipi_arg))
 		goto ipi_mask_ex_done;
 
 	ipi_arg->vector = vector;
-	ipi_arg->reserved = 0;
-	ipi_arg->vp_set.valid_bank_mask = 0;
 
 	/*
 	 * Use HV_GENERIC_SET_ALL and avoid converting cpumask to VP_SET
