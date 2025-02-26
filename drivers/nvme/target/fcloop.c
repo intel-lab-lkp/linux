@@ -1071,16 +1071,11 @@ fcloop_remoteport_delete(struct nvme_fc_remote_port *remoteport)
 	struct fcloop_rport *rport = remoteport->private;
 
 	flush_work(&rport->ls_work);
-	fcloop_nport_put(rport->nport);
 }
 
 static void
 fcloop_targetport_delete(struct nvmet_fc_target_port *targetport)
 {
-	struct fcloop_tport *tport = targetport->private;
-
-	flush_work(&tport->ls_work);
-	fcloop_nport_put(tport->nport);
 }
 
 #define	FCLOOP_HW_QUEUES		4
@@ -1358,6 +1353,7 @@ fcloop_create_remote_port(struct device *dev, struct device_attribute *attr,
 	struct nvme_fc_port_info pinfo;
 	int ret;
 
+	/* nport ref get: rport */
 	nport = fcloop_alloc_nport(buf, count, true);
 	if (!nport)
 		return -EIO;
@@ -1374,6 +1370,9 @@ fcloop_create_remote_port(struct device *dev, struct device_attribute *attr,
 		fcloop_nport_put(nport);
 		return ret;
 	}
+
+	/* nport ref get: remoteport */
+	fcloop_nport_get(nport);
 
 	/* success */
 	rport = remoteport->private;
@@ -1403,16 +1402,27 @@ __unlink_remote_port(struct fcloop_nport *nport)
 		nport->tport->remoteport = NULL;
 	nport->rport = NULL;
 
+	/* nport ref put: rport */
+	fcloop_nport_put(nport);
+
 	return rport;
 }
 
 static int
 __remoteport_unreg(struct fcloop_nport *nport, struct fcloop_rport *rport)
 {
-	if (!rport)
-		return -EALREADY;
+	int ret;
 
-	return nvme_fc_unregister_remoteport(rport->remoteport);
+	if (!rport) {
+		ret = -EALREADY;
+		goto out;
+	}
+
+	ret = nvme_fc_unregister_remoteport(rport->remoteport);
+out:
+	/* nport ref put: remoteport */
+	fcloop_nport_put(nport);
+	return ret;
 }
 
 static ssize_t
@@ -1434,6 +1444,9 @@ fcloop_delete_remote_port(struct device *dev, struct device_attribute *attr,
 	list_for_each_entry(tmpport, &fcloop_nports, nport_list) {
 		if (tmpport->node_name == nodename &&
 		    tmpport->port_name == portname && tmpport->rport) {
+
+			if (!fcloop_nport_get(tmpport))
+				break;
 			nport = tmpport;
 			rport = __unlink_remote_port(nport);
 			break;
@@ -1446,6 +1459,8 @@ fcloop_delete_remote_port(struct device *dev, struct device_attribute *attr,
 		return -ENOENT;
 
 	ret = __remoteport_unreg(nport, rport);
+
+	fcloop_nport_put(nport);
 
 	return ret ? ret : count;
 }
@@ -1460,6 +1475,7 @@ fcloop_create_target_port(struct device *dev, struct device_attribute *attr,
 	struct nvmet_fc_port_info tinfo;
 	int ret;
 
+	/* nport ref get: tport */
 	nport = fcloop_alloc_nport(buf, count, false);
 	if (!nport)
 		return -EIO;
@@ -1474,6 +1490,9 @@ fcloop_create_target_port(struct device *dev, struct device_attribute *attr,
 		fcloop_nport_put(nport);
 		return ret;
 	}
+
+	/* nport ref get: targetport */
+	fcloop_nport_get(nport);
 
 	/* success */
 	tport = targetport->private;
@@ -1501,16 +1520,27 @@ __unlink_target_port(struct fcloop_nport *nport)
 		nport->rport->targetport = NULL;
 	nport->tport = NULL;
 
+	/* nport ref put: tport */
+	fcloop_nport_put(nport);
+
 	return tport;
 }
 
 static int
 __targetport_unreg(struct fcloop_nport *nport, struct fcloop_tport *tport)
 {
-	if (!tport)
-		return -EALREADY;
+	int ret;
 
-	return nvmet_fc_unregister_targetport(tport->targetport);
+	if (!tport) {
+		ret = -EALREADY;
+		goto out;
+	}
+
+	ret = nvmet_fc_unregister_targetport(tport->targetport);
+out:
+	/* nport ref put: targetport */
+	fcloop_nport_put(nport);
+	return ret;
 }
 
 static ssize_t
@@ -1532,6 +1562,9 @@ fcloop_delete_target_port(struct device *dev, struct device_attribute *attr,
 	list_for_each_entry(tmpport, &fcloop_nports, nport_list) {
 		if (tmpport->node_name == nodename &&
 		    tmpport->port_name == portname && tmpport->tport) {
+
+			if (!fcloop_nport_get(tmpport))
+				break;
 			nport = tmpport;
 			tport = __unlink_target_port(nport);
 			break;
@@ -1544,6 +1577,8 @@ fcloop_delete_target_port(struct device *dev, struct device_attribute *attr,
 		return -ENOENT;
 
 	ret = __targetport_unreg(nport, tport);
+
+	fcloop_nport_put(nport);
 
 	return ret ? ret : count;
 }
