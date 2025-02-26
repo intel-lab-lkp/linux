@@ -418,6 +418,7 @@ int iommu_get_dma_cookie(struct iommu_domain *domain)
  * number of PAGE_SIZE mappings necessary to cover every MSI doorbell address
  * used by the devices attached to @domain.
  */
+#if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
 int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 {
 	struct iommu_dma_cookie *cookie;
@@ -438,6 +439,17 @@ int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 	return 0;
 }
 EXPORT_SYMBOL(iommu_get_msi_cookie);
+
+/**
+ * iommu_put_msi_cookie - Release a domain's MSI remapping resources
+ * @domain: IOMMU domain previously prepared by iommu_get_msi_cookie()
+ */
+void iommu_put_msi_cookie(struct iommu_domain *domain)
+{
+	iommu_put_dma_cookie(domain);
+}
+EXPORT_SYMBOL_GPL(iommu_put_msi_cookie);
+#endif
 
 /**
  * iommu_put_dma_cookie - Release a domain's DMA mapping resources

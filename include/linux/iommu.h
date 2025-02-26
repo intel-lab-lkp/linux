@@ -1534,12 +1534,16 @@ void iommu_debugfs_setup(void);
 static inline void iommu_debugfs_setup(void) {}
 #endif
 
-#ifdef CONFIG_IOMMU_DMA
+#if defined(CONFIG_IOMMU_DMA) && IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
 int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base);
-#else /* CONFIG_IOMMU_DMA */
+void iommu_put_msi_cookie(struct iommu_domain *domain);
+#else /* CONFIG_IOMMU_DMA && CONFIG_IRQ_MSI_IOMMU */
 static inline int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 {
-	return -ENODEV;
+	return 0;
+}
+static inline void iommu_put_msi_cookie(struct iommu_domain *domain)
+{
 }
 #endif	/* CONFIG_IOMMU_DMA */
 
