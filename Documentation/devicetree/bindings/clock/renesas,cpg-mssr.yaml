@@ -52,9 +52,10 @@ properties:
       - renesas,r8a779f0-cpg-mssr # R-Car S4-8
       - renesas,r8a779g0-cpg-mssr # R-Car V4H
       - renesas,r8a779h0-cpg-mssr # R-Car V4M
+      - renesas,r9a09g077-cpg-mssr # RZ/T2H
 
   reg:
-    maxItems: 1
+    maxItems: 2
 
   clocks:
     minItems: 1
@@ -68,6 +69,7 @@ properties:
         - extal     # All
         - extalr    # Most R-Car Gen3 and RZ/G2
         - usb_extal # Most R-Car Gen2 and RZ/G1
+        - loco      # RZ/T2H
 
   '#clock-cells':
     description: |
