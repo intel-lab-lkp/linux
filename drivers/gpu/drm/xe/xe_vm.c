@@ -746,6 +746,62 @@ int xe_vm_userptr_check_repin(struct xe_vm *vm)
 		list_empty_careful(&vm->userptr.invalidated)) ? 0 : -EAGAIN;
 }
 
+static void free_ban_entry(struct xe_exec_queue_ban_entry *b)
+{
+	list_del(&b->list);
+	kfree(b->pf);
+	kfree(b);
+}
+
+void xe_vm_add_ban_entry(struct xe_vm *vm, struct xe_exec_queue *q)
+{
+	struct xe_exec_queue_ban_entry *b = NULL;
+	struct xe_file *xef = q->xef;
+
+	b = kzalloc(sizeof(*b), GFP_KERNEL);
+	xe_assert(xef->xe, b);
+
+	spin_lock(&vm->bans.lock);
+	list_add_tail(&b->list, &vm->bans.list);
+	vm->bans.len++;
+	/**
+	 * Limit the number of bans in the bans list to prevent memory overuse.
+	 */
+	if (vm->bans.len > MAX_BANS) {
+		struct xe_exec_queue_ban_entry *rem =
+			list_first_entry(&vm->bans.list, struct xe_exec_queue_ban_entry, list);
+
+		free_ban_entry(rem);
+		vm->bans.len--;
+	}
+	spin_unlock(&vm->bans.lock);
+
+	/**
+	 * Associate the current pagefault saved to the VM to the ban entry, and clear
+	 * the VM pagefault cache.  This is still valid if vm->pf.info is NULL.
+	 */
+	spin_lock(&vm->pf.lock);
+	b->pf = vm->pf.info;
+	vm->pf.info = NULL;
+	spin_unlock(&vm->pf.lock);
+
+	/** Save blame data to list element */
+	b->exec_queue_id = q->id;
+}
+
+void xe_vm_remove_ban_entry(struct xe_vm *vm, struct xe_exec_queue *q)
+{
+	struct xe_exec_queue_ban_entry *b, *tmp;
+
+	spin_lock(&vm->bans.lock);
+	list_for_each_entry_safe(b, tmp, &vm->bans.list, list)
+		if (b->exec_queue_id == q->id) {
+			free_ban_entry(b);
+			vm->bans.len--;
+		}
+	spin_unlock(&vm->bans.lock);
+}
+
 static int xe_vma_ops_alloc(struct xe_vma_ops *vops, bool array_of_binds)
 {
 	int i;
@@ -1448,6 +1504,10 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 	init_rwsem(&vm->userptr.notifier_lock);
 	spin_lock_init(&vm->userptr.invalidated_lock);
 
+	INIT_LIST_HEAD(&vm->bans.list);
+	spin_lock_init(&vm->bans.lock);
+	spin_lock_init(&vm->pf.lock);
+
 	ttm_lru_bulk_move_init(&vm->lru_bulk_move);
 
 	INIT_WORK(&vm->destroy_work, vm_destroy_work_func);
@@ -1671,6 +1731,15 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		xe_assert(xe, lookup == vm);
 	}
 	up_write(&xe->usm.lock);
+
+	if (vm->bans.len) {
+		struct xe_exec_queue_ban_entry *b, *tmp;
+
+		spin_lock(&vm->bans.lock);
+		list_for_each_entry_safe(b, tmp, &vm->bans.list, list)
+			free_ban_entry(b);
+		spin_unlock(&vm->bans.lock);
+	}
 
 	for_each_tile(tile, xe, id)
 		xe_range_fence_tree_fini(&vm->rftree[id]);

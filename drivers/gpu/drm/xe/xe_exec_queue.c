@@ -712,6 +712,12 @@ int xe_exec_queue_create_ioctl(struct drm_device *dev, void *data,
 	q->id = id;
 	args->exec_queue_id = id;
 
+	/**
+	 * If an exec queue in the ban list shares the same exec queue
+	 * ID, remove it from the ban list to avoid confusion.
+	 */
+	xe_vm_remove_ban_entry(q->vm, q);
+
 	return 0;
 
 kill_exec_queue:
