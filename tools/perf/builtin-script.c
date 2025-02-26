@@ -398,10 +398,28 @@ static inline int output_type(unsigned int type)
 	return OUTPUT_TYPE_OTHER;
 }
 
+static bool output_type_check_core_pmus(unsigned int type)
+{
+	struct perf_pmu *pmu = NULL;
+
+	if (perf_pmus__num_core_pmus() > 1) {
+		while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
+			if (pmu->type == type)
+				return true;
+		}
+	}
+	return false;
+}
+
 static inline int evsel__output_type(struct evsel *evsel)
 {
-	if (evsel->script_output_type == OUTPUT_TYPE_UNSET)
-		evsel->script_output_type = output_type(evsel->core.attr.type);
+	if (evsel->script_output_type == OUTPUT_TYPE_UNSET) {
+		if (output_type(evsel->core.attr.type) == OUTPUT_TYPE_OTHER &&
+		    output_type_check_core_pmus(evsel->core.attr.type))
+			evsel->script_output_type = PERF_TYPE_RAW;
+		else
+			evsel->script_output_type = output_type(evsel->core.attr.type);
+	}
 
 	return evsel->script_output_type;
 }
