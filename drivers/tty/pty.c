@@ -110,12 +110,10 @@ static void pty_unthrottle(struct tty_struct *tty)
 
 static ssize_t pty_write(struct tty_struct *tty, const u8 *buf, size_t c)
 {
-	struct tty_struct *to = tty->link;
-
 	if (tty->flow.stopped || !c)
 		return 0;
 
-	return tty_insert_flip_string_and_push_buffer(to->port, buf, c);
+	return tty_insert_flip_string_and_push_buffer(tty->link->port, buf, c);
 }
 
 /**
