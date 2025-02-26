@@ -6,6 +6,8 @@
  */
 
 #include <linux/bitfield.h>
+#include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
@@ -568,7 +570,28 @@ static int xilinx_cpm_pcie_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct pci_host_bridge *bridge;
 	struct resource_entry *bus;
+	struct gpio_desc *reset_gpio;
 	int err;
+
+	/* Request the GPIO for PCIe reset signal */
+	reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(reset_gpio)) {
+		dev_err(dev, "Failed to request reset GPIO\n");
+		return PTR_ERR(reset_gpio);
+	}
+
+	/* Assert the reset signal */
+	gpiod_set_value(reset_gpio, 1);
+
+	/*
+	 * As per section 2.2 of the PCI Express Card Electromechanical
+	 * Specification (Revision 6.0), the deassertion of the PERST# signal
+	 * should be delayed by 100 ms (TPVPERL).
+	 */
+	msleep(100);
+
+	/* Deassert the reset signal */
+	gpiod_set_value(reset_gpio, 0);
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*port));
 	if (!bridge)
