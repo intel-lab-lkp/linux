@@ -789,36 +789,19 @@ static int mt9m114_initialize(struct mt9m114 *sensor)
 	return 0;
 }
 
-static int mt9m114_configure(struct mt9m114 *sensor,
-			     struct v4l2_subdev_state *pa_state,
-			     struct v4l2_subdev_state *ifp_state)
+static int mt9m114_configure_pa(struct mt9m114 *sensor, struct v4l2_subdev_state *pa_state)
 {
 	const struct v4l2_mbus_framefmt *pa_format;
 	const struct v4l2_rect *pa_crop;
-	const struct mt9m114_format_info *ifp_info;
-	const struct v4l2_mbus_framefmt *ifp_format;
-	const struct v4l2_rect *ifp_crop;
-	const struct v4l2_rect *ifp_compose;
-	unsigned int hratio, vratio;
-	u64 output_format;
 	u64 read_mode;
+	unsigned int hratio, vratio;
 	int ret = 0;
 
 	pa_format = v4l2_subdev_state_get_format(pa_state, 0);
 	pa_crop = v4l2_subdev_state_get_crop(pa_state, 0);
 
-	ifp_format = v4l2_subdev_state_get_format(ifp_state, 1);
-	ifp_info = mt9m114_format_info(sensor, 1, ifp_format->code);
-	ifp_crop = v4l2_subdev_state_get_crop(ifp_state, 0);
-	ifp_compose = v4l2_subdev_state_get_compose(ifp_state, 0);
-
 	ret = cci_read(sensor->regmap, MT9M114_CAM_SENSOR_CONTROL_READ_MODE,
 		       &read_mode, NULL);
-	if (ret < 0)
-		return ret;
-
-	ret = cci_read(sensor->regmap, MT9M114_CAM_OUTPUT_FORMAT,
-		       &output_format, NULL);
 	if (ret < 0)
 		return ret;
 
@@ -852,6 +835,34 @@ static int mt9m114_configure(struct mt9m114 *sensor,
 
 	cci_write(sensor->regmap, MT9M114_CAM_SENSOR_CONTROL_READ_MODE,
 		  read_mode, &ret);
+
+	return ret;
+}
+
+static int mt9m114_configure(struct mt9m114 *sensor,
+			     struct v4l2_subdev_state *pa_state,
+			     struct v4l2_subdev_state *ifp_state)
+{
+	const struct mt9m114_format_info *ifp_info;
+	const struct v4l2_mbus_framefmt *ifp_format;
+	const struct v4l2_rect *ifp_crop;
+	const struct v4l2_rect *ifp_compose;
+	u64 output_format;
+	int ret = 0;
+
+	ifp_format = v4l2_subdev_state_get_format(ifp_state, 1);
+	ifp_info = mt9m114_format_info(sensor, 1, ifp_format->code);
+	ifp_crop = v4l2_subdev_state_get_crop(ifp_state, 0);
+	ifp_compose = v4l2_subdev_state_get_compose(ifp_state, 0);
+
+	ret = cci_read(sensor->regmap, MT9M114_CAM_OUTPUT_FORMAT,
+		       &output_format, NULL);
+	if (ret < 0)
+		return ret;
+
+	ret = mt9m114_configure_pa(sensor, pa_state);
+	if (ret < 0)
+		return ret;
 
 	/*
 	 * Color pipeline (IFP) cropping and scaling. Subtract 4 from the left
