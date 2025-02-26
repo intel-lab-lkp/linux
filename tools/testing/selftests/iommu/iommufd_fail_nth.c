@@ -665,6 +665,9 @@ TEST_FAIL_NTH(basic_fail_nth, device)
 				 IOMMU_HWPT_DATA_NONE, 0, 0))
 		return -1;
 
+	if (_test_cmd_mixed_replace(self->fd, stdev_id, hwpt_id))
+		return -1;
+
 	if (_test_cmd_mock_domain_replace(self->fd, stdev_id, ioas_id2, NULL))
 		return -1;
 

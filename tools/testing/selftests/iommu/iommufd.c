@@ -1951,6 +1951,8 @@ TEST_F(iommufd_mock_domain, alloc_hwpt)
 		test_cmd_hwpt_alloc(self->idev_ids[i], self->ioas_id,
 				    IOMMU_HWPT_ALLOC_NEST_PARENT, &hwpt_id[1]);
 
+		test_cmd_mixed_replace(self->stdev_ids[i], hwpt_id[0]);
+
 		/* Do a hw_pagetable rotation test */
 		test_cmd_mock_domain_replace(self->stdev_ids[i], hwpt_id[0]);
 		EXPECT_ERRNO(EBUSY, _test_ioctl_destroy(self->fd, hwpt_id[0]));

@@ -936,3 +936,21 @@ static int _test_cmd_vdevice_alloc(int fd, __u32 viommu_id, __u32 idev_id,
 	EXPECT_ERRNO(_errno,                                                 \
 		     _test_cmd_vdevice_alloc(self->fd, viommu_id, idev_id,   \
 					     virt_id, vdev_id))
+
+static int _test_cmd_mixed_replace(int fd, __u32 stdev_id, __u32 pt_id)
+{
+	struct iommu_test_cmd test_mixed_replace = {
+		.size = sizeof(test_mixed_replace),
+		.op = IOMMU_TEST_OP_MIX_REPLACE_HANDLE,
+		.id = stdev_id,
+		.mix_replace_handle = {
+			.pt_id = pt_id,
+		},
+	};
+
+	return ioctl(fd, _IOMMU_TEST_CMD(IOMMU_TEST_OP_MIX_REPLACE_HANDLE),
+		     &test_mixed_replace);
+}
+
+#define test_cmd_mixed_replace(stdev_id, hwpt_id)                         \
+	ASSERT_EQ(0, _test_cmd_mixed_replace(self->fd, stdev_id, hwpt_id))

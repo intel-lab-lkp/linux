@@ -1607,6 +1607,105 @@ static int iommufd_test_trigger_iopf(struct iommufd_ucmd *ucmd,
 	return 0;
 }
 
+static inline struct iommufd_hw_pagetable *
+iommufd_get_hwpt(struct iommufd_ucmd *ucmd, u32 id)
+{
+	struct iommufd_object *pt_obj;
+
+	pt_obj = iommufd_get_object(ucmd->ictx, id, IOMMUFD_OBJ_ANY);
+	if (IS_ERR(pt_obj))
+		return ERR_CAST(pt_obj);
+
+	if (pt_obj->type != IOMMUFD_OBJ_HWPT_NESTED &&
+	    pt_obj->type != IOMMUFD_OBJ_HWPT_PAGING) {
+		iommufd_put_object(ucmd->ictx, pt_obj);
+		return ERR_PTR(-EINVAL);
+	}
+
+	return container_of(pt_obj, struct iommufd_hw_pagetable, obj);
+}
+
+static int iommufd_test_mixed_group_replace(struct iommufd_device *idev,
+					    struct iommu_domain *domain)
+{
+	struct iommu_domain *old_domain = iommu_get_domain_for_dev(idev->dev);
+	struct iommu_group *group = idev->igroup->group;
+	struct iommu_attach_handle *handle, *old_handle;
+	int ret;
+
+	/*
+	 * The test device should have been attached by the _handle API,
+	 * hence there should be an entry in the group->pasid_array.
+	 */
+	old_handle = iommu_attach_handle_get(group, IOMMU_NO_PASID, 0);
+	if (IS_ERR(old_handle))
+		return PTR_ERR(old_handle);
+
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
+	if (!handle)
+		return -ENOMEM;
+
+	mutex_lock(&idev->igroup->lock);
+	iommu_detach_group(domain, group);
+
+	/* attach without handle */
+	ret = iommu_attach_group(domain, group);
+	if (ret)
+		goto out_revert;
+
+	/* replace with handle should succeed */
+	ret = iommu_replace_group_handle(group, domain, handle);
+	if (ret)
+		goto out_revert;
+
+	if (iommu_get_domain_for_dev(idev->dev) != domain) {
+		ret = -ENODEV;
+		goto out_revert;
+	}
+
+	/* replace with the same handle/domain should succeed */
+	ret = iommu_replace_group_handle(group, domain, handle);
+
+out_revert:
+	WARN_ON(iommu_replace_group_handle(group, old_domain, old_handle));
+	mutex_unlock(&idev->igroup->lock);
+	kfree(handle);
+	return ret;
+}
+
+static int iommufd_test_mixed_handle_replace(struct iommufd_ucmd *ucmd,
+					     unsigned int device_id,
+					     u32 pt_id)
+{
+	struct iommufd_hw_pagetable *hwpt;
+	struct iommufd_device *idev;
+	struct iommu_domain *domain;
+	struct selftest_obj *sobj;
+	int rc;
+
+	sobj = iommufd_test_get_self_test_device(ucmd->ictx, device_id);
+	if (IS_ERR(sobj))
+		return PTR_ERR(sobj);
+
+	idev = sobj->idev.idev;
+
+	hwpt = iommufd_get_hwpt(ucmd, pt_id);
+	if (IS_ERR(hwpt)) {
+		rc = PTR_ERR(hwpt);
+		goto out_dev_obj;
+	}
+
+	domain = hwpt->domain;
+
+	rc = iommufd_test_mixed_group_replace(idev, domain);
+
+	iommufd_put_object(ucmd->ictx, &hwpt->obj);
+
+out_dev_obj:
+	iommufd_put_object(ucmd->ictx, &sobj->obj);
+	return rc;
+}
+
 void iommufd_selftest_destroy(struct iommufd_object *obj)
 {
 	struct selftest_obj *sobj = to_selftest_obj(obj);
@@ -1688,6 +1787,9 @@ int iommufd_test(struct iommufd_ucmd *ucmd)
 					  cmd->dirty.flags);
 	case IOMMU_TEST_OP_TRIGGER_IOPF:
 		return iommufd_test_trigger_iopf(ucmd, cmd);
+	case IOMMU_TEST_OP_MIX_REPLACE_HANDLE:
+		return iommufd_test_mixed_handle_replace(ucmd, cmd->id,
+						cmd->mix_replace_handle.pt_id);
 	default:
 		return -EOPNOTSUPP;
 	}

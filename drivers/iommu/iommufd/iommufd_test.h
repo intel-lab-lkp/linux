@@ -24,6 +24,7 @@ enum {
 	IOMMU_TEST_OP_MD_CHECK_IOTLB,
 	IOMMU_TEST_OP_TRIGGER_IOPF,
 	IOMMU_TEST_OP_DEV_CHECK_CACHE,
+	IOMMU_TEST_OP_MIX_REPLACE_HANDLE,
 };
 
 enum {
@@ -145,6 +146,10 @@ struct iommu_test_cmd {
 			__u32 id;
 			__u32 cache;
 		} check_dev_cache;
+		struct {
+			__u32 pt_id;
+			/* @id is stdev_id */
+		} mix_replace_handle;
 	};
 	__u32 last;
 };
