@@ -5,8 +5,6 @@
  * Copyright (C) 2024 Intel Corporation
  */
 
-#include <linux/bitfield.h>
-#include <linux/bits.h>
 #include <linux/cleanup.h>
 #include <linux/container_of.h>
 #include <linux/device.h>
@@ -21,33 +19,7 @@
 
 #include <asm/cpu_device_id.h>
 
-#define TIOCTL			0x00
-#define TIOCOMPV		0x10
-#define TIOEC			0x30
-
-/* Control Register */
-#define TIOCTL_EN			BIT(0)
-#define TIOCTL_DIR			BIT(1)
-#define TIOCTL_EP			GENMASK(3, 2)
-#define TIOCTL_EP_RISING_EDGE		FIELD_PREP(TIOCTL_EP, 0)
-#define TIOCTL_EP_FALLING_EDGE		FIELD_PREP(TIOCTL_EP, 1)
-#define TIOCTL_EP_TOGGLE_EDGE		FIELD_PREP(TIOCTL_EP, 2)
-
-/* Safety time to set hrtimer early */
-#define SAFE_TIME_NS			(10 * NSEC_PER_MSEC)
-
-#define MAGIC_CONST			(NSEC_PER_SEC - SAFE_TIME_NS)
-#define ART_HW_DELAY_CYCLES		2
-
-struct pps_tio {
-	struct pps_gen_source_info gen_info;
-	struct pps_gen_device *pps_gen;
-	struct hrtimer timer;
-	void __iomem *base;
-	u32 prev_count;
-	spinlock_t lock;
-	struct device *dev;
-};
+#include "pps_gen_tio.h"
 
 static inline u32 pps_tio_read(u32 offset, struct pps_tio *tio)
 {
