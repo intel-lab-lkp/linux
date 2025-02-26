@@ -280,7 +280,7 @@ struct scmi_proto_helpers_ops {
 				 u32 valid_size, u32 domain,
 				 void __iomem **p_addr,
 				 struct scmi_fc_db_info **p_db,
-				 u32 *rate_limit);
+				 u32 *rate_limit, bool skip_check);
 	void (*fastchannel_db_ring)(struct scmi_fc_db_info *db);
 	int (*get_max_msg_size)(const struct scmi_protocol_handle *ph);
 };

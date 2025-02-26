@@ -48,6 +48,10 @@ enum {
 	PERF_FC_MAX,
 };
 
+enum {
+	PERF_QUIRK_SKIP_FASTCHANNEL_LEVEL_GET,
+};
+
 struct scmi_opp {
 	u32 perf;
 	u32 power;
@@ -183,6 +187,7 @@ struct scmi_perf_info {
 	enum scmi_power_scale power_scale;
 	u64 stats_addr;
 	u32 stats_size;
+	u32 quirks;
 	bool notify_lvl_cmd;
 	bool notify_lim_cmd;
 	struct perf_dom_info *dom_info;
@@ -838,9 +843,10 @@ static int scmi_perf_level_limits_notify(const struct scmi_protocol_handle *ph,
 }
 
 static void scmi_perf_domain_init_fc(const struct scmi_protocol_handle *ph,
-				     struct perf_dom_info *dom)
+				     struct perf_dom_info *dom, u32 quirks)
 {
 	struct scmi_fc_info *fc;
+	bool quirk_level_get = !!(quirks & BIT(PERF_QUIRK_SKIP_FASTCHANNEL_LEVEL_GET));
 
 	fc = devm_kcalloc(ph->dev, PERF_FC_MAX, sizeof(*fc), GFP_KERNEL);
 	if (!fc)
@@ -849,26 +855,26 @@ static void scmi_perf_domain_init_fc(const struct scmi_protocol_handle *ph,
 	ph->hops->fastchannel_init(ph, PERF_DESCRIBE_FASTCHANNEL,
 				   PERF_LEVEL_GET, 4, dom->id,
 				   &fc[PERF_FC_LEVEL].get_addr, NULL,
-				   &fc[PERF_FC_LEVEL].rate_limit);
+				   &fc[PERF_FC_LEVEL].rate_limit, quirk_level_get);
 
 	ph->hops->fastchannel_init(ph, PERF_DESCRIBE_FASTCHANNEL,
 				   PERF_LIMITS_GET, 8, dom->id,
 				   &fc[PERF_FC_LIMIT].get_addr, NULL,
-				   &fc[PERF_FC_LIMIT].rate_limit);
+				   &fc[PERF_FC_LIMIT].rate_limit, false);
 
 	if (dom->info.set_perf)
 		ph->hops->fastchannel_init(ph, PERF_DESCRIBE_FASTCHANNEL,
 					   PERF_LEVEL_SET, 4, dom->id,
 					   &fc[PERF_FC_LEVEL].set_addr,
 					   &fc[PERF_FC_LEVEL].set_db,
-					   &fc[PERF_FC_LEVEL].rate_limit);
+					   &fc[PERF_FC_LEVEL].rate_limit, false);
 
 	if (dom->set_limits)
 		ph->hops->fastchannel_init(ph, PERF_DESCRIBE_FASTCHANNEL,
 					   PERF_LIMITS_SET, 8, dom->id,
 					   &fc[PERF_FC_LIMIT].set_addr,
 					   &fc[PERF_FC_LIMIT].set_db,
-					   &fc[PERF_FC_LIMIT].rate_limit);
+					   &fc[PERF_FC_LIMIT].rate_limit, false);
 
 	dom->fc_info = fc;
 }
@@ -1282,6 +1288,7 @@ static int scmi_perf_protocol_init(const struct scmi_protocol_handle *ph)
 {
 	int domain, ret;
 	u32 version;
+	struct device_node *np;
 	struct scmi_perf_info *pinfo;
 
 	ret = ph->xops->version_get(ph, &version);
@@ -1296,6 +1303,17 @@ static int scmi_perf_protocol_init(const struct scmi_protocol_handle *ph)
 		return -ENOMEM;
 
 	pinfo->version = version;
+
+	/*
+	 * Some X1E devices support fastchannel for LEVEL_GET but erroneously
+	 * says otherwise in the protocol message attributes. Add a quirk to
+	 * force fastchannel on LEVEL_GET to prevent crashes on such devices.
+	 */
+	np = of_find_compatible_node(NULL, NULL, "qcom,x1e80100");
+	if (np) {
+		pinfo->quirks = BIT(PERF_QUIRK_SKIP_FASTCHANNEL_LEVEL_GET);
+		of_node_put(np);
+	}
 
 	ret = scmi_perf_attributes_get(ph, pinfo);
 	if (ret)
@@ -1315,7 +1333,7 @@ static int scmi_perf_protocol_init(const struct scmi_protocol_handle *ph)
 		scmi_perf_describe_levels_get(ph, dom, version);
 
 		if (dom->perf_fastchannels)
-			scmi_perf_domain_init_fc(ph, dom);
+			scmi_perf_domain_init_fc(ph, dom, pinfo->quirks);
 	}
 
 	ret = devm_add_action_or_reset(ph->dev, scmi_perf_xa_destroy, pinfo);

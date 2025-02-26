@@ -1903,7 +1903,8 @@ static void
 scmi_common_fastchannel_init(const struct scmi_protocol_handle *ph,
 			     u8 describe_id, u32 message_id, u32 valid_size,
 			     u32 domain, void __iomem **p_addr,
-			     struct scmi_fc_db_info **p_db, u32 *rate_limit)
+			     struct scmi_fc_db_info **p_db, u32 *rate_limit,
+			     bool skip_check)
 {
 	int ret;
 	u32 flags;
@@ -1919,7 +1920,7 @@ scmi_common_fastchannel_init(const struct scmi_protocol_handle *ph,
 
 	/* Check if the MSG_ID supports fastchannel */
 	ret = scmi_protocol_msg_check(ph, message_id, &attributes);
-	if (!ret && !MSG_SUPPORTS_FASTCHANNEL(attributes))
+	if (!ret && !MSG_SUPPORTS_FASTCHANNEL(attributes) && !skip_check)
 		return;
 
 	if (!p_addr) {
