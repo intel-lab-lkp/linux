@@ -26,7 +26,7 @@ static ssize_t flush_req_store(struct device *dev,
 	unsigned long val;
 	u32 reg;
 
-	if (kstrtoul(buf, 10, &val))
+	if (kstrtoul(buf, 0, &val))
 		return -EINVAL;
 
 	if (val != 1)
@@ -73,9 +73,49 @@ static ssize_t flush_status_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(flush_status);
 
+/*
+ * Sets the type of issued ATB FLAG packets:
+ * 0: 'FLAG' packets;
+ * 1: 'FLAG_TS' packets.
+ */
+static ssize_t flag_type_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf,
+			       size_t size)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+	unsigned long val;
+
+	if (kstrtoul(buf, 10, &val))
+		return -EINVAL;
+
+	if (val != 1 && val != 0)
+		return -EINVAL;
+
+	spin_lock(&drvdata->spinlock);
+	if (val)
+		drvdata->flag_type = FLAG_TS;
+	else
+		drvdata->flag_type = FLAG;
+	spin_unlock(&drvdata->spinlock);
+
+	return size;
+}
+
+static ssize_t flag_type_show(struct device *dev,
+			      struct device_attribute *attr,
+			      char *buf)
+{
+	struct trace_noc_drvdata *drvdata = dev_get_drvdata(dev->parent);
+
+	return sysfs_emit(buf, "%u\n", drvdata->flag_type);
+}
+static DEVICE_ATTR_RW(flag_type);
+
 static struct attribute *trace_noc_attrs[] = {
 	&dev_attr_flush_req.attr,
 	&dev_attr_flush_status.attr,
+	&dev_attr_flag_type.attr,
 	NULL,
 };
 
