@@ -2056,6 +2056,14 @@ static void vfio_ap_mdev_request(struct vfio_device *vdev, unsigned int count)
 
 	matrix_mdev = container_of(vdev, struct ap_matrix_mdev, vdev);
 
+	if (matrix_mdev->kvm) {
+		get_update_locks_for_kvm(matrix_mdev->kvm);
+		kvm_arch_crypto_clear_masks(matrix_mdev->kvm);
+		signal_guest_ap_cfg_changed(matrix_mdev);
+	} else {
+		mutex_lock(&matrix_dev->mdevs_lock);
+	}
+
 	if (matrix_mdev->req_trigger) {
 		if (!(count % 10))
 			dev_notice_ratelimited(dev,
@@ -2067,6 +2075,12 @@ static void vfio_ap_mdev_request(struct vfio_device *vdev, unsigned int count)
 		dev_notice(dev,
 			   "No device request registered, blocked until released by user\n");
 	}
+
+	if (matrix_mdev->kvm)
+		release_update_locks_for_kvm(matrix_mdev->kvm);
+	else
+		mutex_unlock(&matrix_dev->mdevs_lock);
+
 }
 
 static int vfio_ap_mdev_get_device_info(unsigned long arg)
