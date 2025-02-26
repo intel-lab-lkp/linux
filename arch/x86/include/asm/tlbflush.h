@@ -240,6 +240,11 @@ static inline bool is_dyn_asid(u16 asid)
 	return asid < TLB_NR_DYN_ASIDS;
 }
 
+static inline bool is_global_asid(u16 asid)
+{
+	return !is_dyn_asid(asid);
+}
+
 #ifdef CONFIG_X86_BROADCAST_TLB_FLUSH
 static inline u16 mm_global_asid(struct mm_struct *mm)
 {
@@ -266,6 +271,14 @@ static inline void mm_assign_global_asid(struct mm_struct *mm, u16 asid)
 	mm->context.asid_transition = true;
 	smp_store_release(&mm->context.global_asid, asid);
 }
+
+static inline bool in_asid_transition(struct mm_struct *mm)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_INVLPGB))
+		return false;
+
+	return mm && READ_ONCE(mm->context.asid_transition);
+}
 #else
 static inline u16 mm_global_asid(struct mm_struct *mm)
 {
@@ -274,6 +287,11 @@ static inline u16 mm_global_asid(struct mm_struct *mm)
 
 static inline void mm_assign_global_asid(struct mm_struct *mm, u16 asid)
 {
+}
+
+static inline bool in_asid_transition(struct mm_struct *mm)
+{
+	return false;
 }
 #endif
 
