@@ -101,7 +101,7 @@ struct hv_input_post_message {
 	u32 reserved;
 	u32 message_type;
 	u32 payload_size;
-	u64 payload[HV_MESSAGE_PAYLOAD_QWORD_COUNT];
+	u64 payload[];
 };
 
 

@@ -66,7 +66,8 @@ int hv_post_message(union hv_connection_id connection_id,
 	if (hv_isolation_type_tdx() && ms_hyperv.paravisor_present)
 		aligned_msg = this_cpu_ptr(hv_context.cpu_context)->post_msg_page;
 	else
-		aligned_msg = *this_cpu_ptr(hyperv_pcpu_input_arg);
+		hv_hvcall_in_array(&aligned_msg, sizeof(*aligned_msg),
+					sizeof(aligned_msg->payload[0]));
 
 	aligned_msg->connectionid = connection_id;
 	aligned_msg->reserved = 0;
@@ -80,8 +81,9 @@ int hv_post_message(union hv_connection_id connection_id,
 						  virt_to_phys(aligned_msg), 0);
 		else if (hv_isolation_type_snp())
 			status = hv_ghcb_hypercall(HVCALL_POST_MESSAGE,
-						   aligned_msg, NULL,
-						   sizeof(*aligned_msg));
+					aligned_msg, NULL,
+					struct_size(aligned_msg, payload,
+					      HV_MESSAGE_PAYLOAD_QWORD_COUNT));
 		else
 			status = HV_STATUS_INVALID_PARAMETER;
 	} else {

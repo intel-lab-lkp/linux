@@ -293,7 +293,7 @@ void __init hv_get_partition_id(void)
 	u64 status, pt_id;
 
 	local_irq_save(flags);
-	output = *this_cpu_ptr(hyperv_pcpu_input_arg);
+	hv_hvcall_inout(NULL, 0, &output, sizeof(*output));
 	status = hv_do_hypercall(HVCALL_GET_PARTITION_ID, NULL, &output);
 	pt_id = output->partition_id;
 	local_irq_restore(flags);
