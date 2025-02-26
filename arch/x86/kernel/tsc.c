@@ -9,6 +9,7 @@
 #include <linux/timer.h>
 #include <linux/acpi_pmtmr.h>
 #include <linux/cpufreq.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/clocksource.h>
 #include <linux/percpu.h>
@@ -1602,3 +1603,24 @@ unsigned long calibrate_delay_is_known(void)
 	return 0;
 }
 #endif
+
+#ifdef CONFIG_DEBUG_FS
+static ssize_t tsc_debugfs_write(struct file *f, const char __user *ubuf,
+				 size_t count, loff_t *ppos)
+{
+	mark_tsc_unstable("debugfs write");
+	return count;
+}
+
+static const struct file_operations tsc_debugfs_fops = {
+	.write	= tsc_debugfs_write,
+};
+
+static __init int tsc_debugfs_init(void)
+{
+	debugfs_create_file("mark_tsc_unstable", 0200, /* write only */
+			    arch_debugfs_dir, NULL, &tsc_debugfs_fops);
+	return 0;
+}
+late_initcall(tsc_debugfs_init);
+#endif /* CONFIG_DEBUG_FS */
