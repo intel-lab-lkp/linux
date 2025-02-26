@@ -5459,7 +5459,7 @@ static int check_ref_exists(struct btrfs_trans_handle *trans,
 {
 	struct btrfs_delayed_ref_root *delayed_refs;
 	struct btrfs_delayed_ref_head *head;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_extent_inline_ref *iref;
 	int ret;
 	bool exists = false;
@@ -5476,7 +5476,6 @@ again:
 		 * If we get 0 then we found our reference, return 1, else
 		 * return the error if it's not -ENOENT;
 		 */
-		btrfs_free_path(path);
 		return (ret < 0 ) ? ret : 1;
 	}
 
@@ -5511,7 +5510,6 @@ again:
 	mutex_unlock(&head->mutex);
 out:
 	spin_unlock(&delayed_refs->lock);
-	btrfs_free_path(path);
 	return exists ? 1 : 0;
 }
 
