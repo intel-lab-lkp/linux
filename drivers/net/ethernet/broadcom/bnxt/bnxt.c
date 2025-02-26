@@ -886,6 +886,24 @@ static bool bnxt_separate_head_pool(void)
 	return PAGE_SIZE > BNXT_RX_PAGE_SIZE;
 }
 
+static void bnxt_rx_pkt_cnt(struct bnxt *bp, struct bnxt_napi *bnapi,
+			    struct net_device *dev,
+			    int segs, int len, int payload_off)
+{
+	struct bnxt_sw_stats *sw_stats = bnapi->cp_ring.sw_stats;
+
+	/* Packet is for a representor */
+	if (bp->dev != dev)
+		return;
+
+	u64_stats_update_begin(&sw_stats->rx.syncp);
+	sw_stats->rx.rx_packets	+= segs;
+	sw_stats->rx.rx_bytes	+= len;
+	if (segs > 1)
+		sw_stats->rx.rx_bytes += (segs - 1) * payload_off;
+	u64_stats_update_end(&sw_stats->rx.syncp);
+}
+
 static struct page *__bnxt_alloc_rx_page(struct bnxt *bp, dma_addr_t *mapping,
 					 struct bnxt_rx_ring_info *rxr,
 					 unsigned int *offset,
@@ -1735,6 +1753,7 @@ static struct sk_buff *bnxt_gro_func_5730x(struct bnxt_tpa_info *tpa_info,
 }
 
 static inline struct sk_buff *bnxt_gro_skb(struct bnxt *bp,
+					   struct bnxt_napi *bnapi,
 					   bool gro,
 					   struct bnxt_tpa_info *tpa_info,
 					   struct rx_tpa_end_cmp *tpa_end,
@@ -1742,11 +1761,15 @@ static inline struct sk_buff *bnxt_gro_skb(struct bnxt *bp,
 					   struct sk_buff *skb)
 {
 	int payload_off;
+	int full_len;
 	u16 segs;
 
+	full_len = skb->len - skb_mac_offset(skb);
 	segs = TPA_END_TPA_SEGS(tpa_end);
-	if (!gro || segs == 1 || !IS_ENABLED(CONFIG_INET))
+	if (!gro || segs == 1 || !IS_ENABLED(CONFIG_INET)) {
+		bnxt_rx_pkt_cnt(bp, bnapi, skb->dev, 1, full_len, 0);
 		return skb;
+	}
 
 	NAPI_GRO_CB(skb)->count = segs;
 	skb_shinfo(skb)->gso_size =
@@ -1757,8 +1780,11 @@ static inline struct sk_buff *bnxt_gro_skb(struct bnxt *bp,
 	else
 		payload_off = TPA_END_PAYLOAD_OFF(tpa_end);
 	skb = bp->gro_func(tpa_info, payload_off, TPA_END_GRO_TS(tpa_end), skb);
-	if (likely(skb))
+	if (likely(skb)) {
 		tcp_gro_complete(skb);
+		bnxt_rx_pkt_cnt(bp, bnapi, skb->dev,
+				segs, full_len, payload_off);
+	}
 	return skb;
 }
 
@@ -1918,7 +1944,7 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 			(tpa_info->flags2 & RX_CMP_FLAGS2_T_L4_CS_CALC) >> 3;
 	}
 
-	return bnxt_gro_skb(bp, gro, tpa_info, tpa_end, tpa_end1, skb);
+	return bnxt_gro_skb(bp, bnapi, gro, tpa_info, tpa_end, tpa_end1, skb);
 }
 
 static void bnxt_tpa_agg(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
@@ -2045,6 +2071,7 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	struct sk_buff *skb;
 	struct xdp_buff xdp;
 	u32 flags, misc;
+	u32 frag_len;
 	u32 cmpl_ts;
 	void *data;
 	int rc = 0;
@@ -2162,16 +2189,19 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	if (bnxt_xdp_attached(bp, rxr)) {
 		bnxt_xdp_buff_init(bp, rxr, cons, data_ptr, len, &xdp);
 		if (agg_bufs) {
-			u32 frag_len = bnxt_rx_agg_pages_xdp(bp, cpr, &xdp,
-							     cp_cons, agg_bufs,
-							     false);
+			frag_len = bnxt_rx_agg_pages_xdp(bp, cpr, &xdp,
+							 cp_cons, agg_bufs,
+							 false);
 			if (!frag_len)
 				goto oom_next_rx;
+		} else {
+			frag_len = 0;
 		}
 		xdp_active = true;
 	}
 
 	if (xdp_active && dev == bp->dev) {
+		bnxt_rx_pkt_cnt(bp, bnapi, dev, 1, len + frag_len, 0);
 		if (bnxt_rx_xdp(bp, rxr, cons, &xdp, data, &data_ptr, &len, event)) {
 			rc = 1;
 			goto next_rx;
@@ -2274,6 +2304,10 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 			}
 		}
 	}
+
+	if (!xdp_active) /* XDP packets counted before calling XDP */
+		bnxt_rx_pkt_cnt(bp, bnapi, dev,
+				1, skb->len - skb_mac_offset(skb), 0);
 	bnxt_deliver_skb(bp, bnapi, skb);
 	rc = 1;
 
@@ -5113,6 +5147,8 @@ static int bnxt_alloc_stats(struct bnxt *bp)
 		cpr->sw_stats = kzalloc(sizeof(*cpr->sw_stats), GFP_KERNEL);
 		if (!cpr->sw_stats)
 			return -ENOMEM;
+
+		u64_stats_init(&cpr->sw_stats->rx.syncp);
 
 		cpr->stats.len = size;
 		rc = bnxt_alloc_stats_mem(bp, &cpr->stats, !i);
@@ -13091,7 +13127,14 @@ static int bnxt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 static void bnxt_drv_stat_snapshot(const struct bnxt_sw_stats *sw_stats,
 				   struct bnxt_sw_stats *snapshot)
 {
-	memcpy(snapshot, sw_stats, sizeof(*snapshot));
+	unsigned int seq_rx;
+
+	do {
+		seq_rx = u64_stats_fetch_begin(&sw_stats->rx.syncp);
+
+		memcpy(snapshot, sw_stats, sizeof(*snapshot));
+
+	} while (u64_stats_fetch_retry(&sw_stats->rx.syncp, seq_rx));
 }
 
 static void bnxt_get_ring_stats(struct bnxt *bp,
@@ -13107,17 +13150,12 @@ static void bnxt_get_ring_stats(struct bnxt *bp,
 
 		bnxt_drv_stat_snapshot(cpr->sw_stats, &sw_stats);
 
-		stats->rx_packets += BNXT_GET_RING_STATS64(sw, rx_ucast_pkts);
-		stats->rx_packets += BNXT_GET_RING_STATS64(sw, rx_mcast_pkts);
-		stats->rx_packets += BNXT_GET_RING_STATS64(sw, rx_bcast_pkts);
+		stats->rx_packets += sw_stats.rx.rx_packets;
+		stats->rx_bytes += sw_stats.rx.rx_bytes;
 
 		stats->tx_packets += BNXT_GET_RING_STATS64(sw, tx_ucast_pkts);
 		stats->tx_packets += BNXT_GET_RING_STATS64(sw, tx_mcast_pkts);
 		stats->tx_packets += BNXT_GET_RING_STATS64(sw, tx_bcast_pkts);
-
-		stats->rx_bytes += BNXT_GET_RING_STATS64(sw, rx_ucast_bytes);
-		stats->rx_bytes += BNXT_GET_RING_STATS64(sw, rx_mcast_bytes);
-		stats->rx_bytes += BNXT_GET_RING_STATS64(sw, rx_bcast_bytes);
 
 		stats->tx_bytes += BNXT_GET_RING_STATS64(sw, tx_ucast_bytes);
 		stats->tx_bytes += BNXT_GET_RING_STATS64(sw, tx_mcast_bytes);
@@ -13209,6 +13247,8 @@ static void bnxt_get_one_ring_drv_stats(struct bnxt *bp,
 	stats->rx_total_buf_errors += sw_stats.rx.rx_buf_errors;
 	stats->rx_total_oom_discards += sw_stats.rx.rx_oom_discards;
 	stats->rx_total_netpoll_discards += sw_stats.rx.rx_netpoll_discards;
+	stats->rx_total_packets += sw_stats.rx.rx_packets;
+	stats->rx_total_bytes += sw_stats.rx.rx_bytes;
 	stats->rx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, rx_discard_pkts);
 	stats->tx_total_resets += sw_stats.tx.tx_resets;
@@ -15601,23 +15641,17 @@ static void bnxt_get_queue_stats_rx(struct net_device *dev, int i,
 				    struct netdev_queue_stats_rx *stats)
 {
 	struct bnxt *bp = netdev_priv(dev);
-	struct bnxt_cp_ring_info *cpr;
-	u64 *sw;
+	struct bnxt_sw_stats *sw_stats;
+	unsigned int seq;
 
-	cpr = &bp->bnapi[i]->cp_ring;
-	sw = cpr->stats.sw_stats;
+	sw_stats = bp->bnapi[i]->cp_ring.sw_stats;
 
-	stats->packets = 0;
-	stats->packets += BNXT_GET_RING_STATS64(sw, rx_ucast_pkts);
-	stats->packets += BNXT_GET_RING_STATS64(sw, rx_mcast_pkts);
-	stats->packets += BNXT_GET_RING_STATS64(sw, rx_bcast_pkts);
-
-	stats->bytes = 0;
-	stats->bytes += BNXT_GET_RING_STATS64(sw, rx_ucast_bytes);
-	stats->bytes += BNXT_GET_RING_STATS64(sw, rx_mcast_bytes);
-	stats->bytes += BNXT_GET_RING_STATS64(sw, rx_bcast_bytes);
-
-	stats->alloc_fail = cpr->sw_stats->rx.rx_oom_discards;
+	do {
+		seq = u64_stats_fetch_begin(&sw_stats->rx.syncp);
+		stats->packets = sw_stats->rx.rx_packets;
+		stats->bytes = sw_stats->rx.rx_bytes;
+		stats->alloc_fail = sw_stats->rx.rx_oom_discards;
+	} while (u64_stats_fetch_retry(&sw_stats->rx.syncp, seq));
 }
 
 static void bnxt_get_queue_stats_tx(struct net_device *dev, int i,
@@ -15647,8 +15681,8 @@ static void bnxt_get_base_stats(struct net_device *dev,
 {
 	struct bnxt *bp = netdev_priv(dev);
 
-	rx->packets = bp->net_stats_prev.rx_packets;
-	rx->bytes = bp->net_stats_prev.rx_bytes;
+	rx->packets = bp->ring_drv_stats_prev.rx_total_packets;
+	rx->bytes = bp->ring_drv_stats_prev.rx_total_bytes;
 	rx->alloc_fail = bp->ring_drv_stats_prev.rx_total_oom_discards;
 
 	tx->packets = bp->net_stats_prev.tx_packets;

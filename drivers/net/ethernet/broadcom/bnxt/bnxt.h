@@ -1118,8 +1118,12 @@ struct bnxt_rx_sw_stats {
 	u64			rx_l4_csum_errors;
 	u64			rx_resets;
 	u64			rx_buf_errors;
+	/* non-ethtool stats follow */
 	u64			rx_oom_discards;
 	u64			rx_netpoll_discards;
+	u64			rx_packets;
+	u64			rx_bytes;
+	struct u64_stats_sync	syncp;
 };
 
 struct bnxt_tx_sw_stats {
@@ -1146,6 +1150,9 @@ struct bnxt_total_ring_drv_stats {
 	u64			tx_total_resets;
 	u64			tx_total_ring_discards;
 	u64			total_missed_irqs;
+	/* non-ethtool stats follow */
+	u64			rx_total_packets;
+	u64			rx_total_bytes;
 };
 
 struct bnxt_stats_mem {
