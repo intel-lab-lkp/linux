@@ -377,6 +377,13 @@ static void init_backing_page(void *backing_page)
 	}
 }
 
+static void x2apic_savic_teardown(void)
+{
+	/* Disable Secure AVIC */
+	native_wrmsr(MSR_AMD64_SECURE_AVIC_CONTROL, 0, 0);
+	savic_unregister_gpa(-1ULL, NULL);
+}
+
 static void x2apic_savic_setup(void)
 {
 	void *backing_page;
@@ -489,6 +496,7 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 	.probe				= x2apic_savic_probe,
 	.acpi_madt_oem_check		= x2apic_savic_acpi_madt_oem_check,
 	.setup				= x2apic_savic_setup,
+	.teardown			= x2apic_savic_teardown,
 
 	.dest_mode_logical		= false,
 

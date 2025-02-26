@@ -1596,6 +1596,40 @@ enum es_result savic_register_gpa(u64 apic_id, u64 gpa)
 	return ret;
 }
 
+/*
+ * Unregister GPA of the Secure AVIC backing page.
+ *
+ * @apic_id: APIC ID of the vCPU. Use -1ULL for the current vCPU
+ *           doing the call.
+ *
+ * On success, returns previously registered GPA of the Secure AVIC
+ * backing page in gpa arg.
+ */
+enum es_result savic_unregister_gpa(u64 apic_id, u64 *gpa)
+{
+	struct ghcb_state state;
+	struct es_em_ctxt ctxt;
+	unsigned long flags;
+	struct ghcb *ghcb;
+	int ret = 0;
+
+	local_irq_save(flags);
+
+	ghcb = __sev_get_ghcb(&state);
+
+	vc_ghcb_invalidate(ghcb);
+
+	ghcb_set_rax(ghcb, apic_id);
+	ret = sev_es_ghcb_hv_call(ghcb, &ctxt, SVM_VMGEXIT_SECURE_AVIC,
+			SVM_VMGEXIT_SECURE_AVIC_UNREGISTER_GPA, 0);
+	if (gpa && ret == ES_OK)
+		*gpa = ghcb->save.rbx;
+	__sev_put_ghcb(&state);
+
+	local_irq_restore(flags);
+	return ret;
+}
+
 static void snp_register_per_cpu_ghcb(void)
 {
 	struct sev_es_runtime_data *data;
