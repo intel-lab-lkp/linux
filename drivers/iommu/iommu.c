@@ -458,6 +458,7 @@ err_free:
 
 static void iommu_default_domain_free(struct iommu_domain *domain)
 {
+	iommu_put_dma_cookie(domain);
 	iommu_domain_free(domain);
 }
 
@@ -2028,7 +2029,6 @@ void iommu_domain_free(struct iommu_domain *domain)
 {
 	if (domain->type == IOMMU_DOMAIN_SVA)
 		mmdrop(domain->mm);
-	iommu_put_dma_cookie(domain);
 	if (domain->ops->free)
 		domain->ops->free(domain);
 }

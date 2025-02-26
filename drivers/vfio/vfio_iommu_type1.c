@@ -2271,6 +2271,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 			if (!iommu_attach_group(d->domain,
 						group->iommu_group)) {
 				list_add(&group->next, &d->group_list);
+				iommu_put_msi_cookie(domain->domain);
 				iommu_domain_free(domain->domain);
 				kfree(domain);
 				goto done;
@@ -2316,6 +2317,7 @@ done:
 out_detach:
 	iommu_detach_group(domain->domain, group->iommu_group);
 out_domain:
+	iommu_put_msi_cookie(domain->domain);
 	iommu_domain_free(domain->domain);
 	vfio_iommu_iova_free(&iova_copy);
 	vfio_iommu_resv_free(&group_resv_regions);
@@ -2496,6 +2498,7 @@ static void vfio_iommu_type1_detach_group(void *iommu_data,
 					vfio_iommu_unmap_unpin_reaccount(iommu);
 				}
 			}
+			iommu_put_msi_cookie(domain->domain);
 			iommu_domain_free(domain->domain);
 			list_del(&domain->next);
 			kfree(domain);
@@ -2567,6 +2570,7 @@ static void vfio_release_domain(struct vfio_domain *domain)
 		kfree(group);
 	}
 
+	iommu_put_msi_cookie(domain->domain);
 	iommu_domain_free(domain->domain);
 }
 
