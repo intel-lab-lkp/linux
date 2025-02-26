@@ -528,9 +528,6 @@ void kmem_cache_destroy(struct kmem_cache *s)
 	kasan_cache_shutdown(s);
 
 	err = __kmem_cache_shutdown(s);
-	if (!slab_in_kunit_test())
-		WARN(err, "%s %s: Slab cache still has objects when called from %pS",
-		     __func__, s->name, (void *)_RET_IP_);
 
 	list_del(&s->list);
 
