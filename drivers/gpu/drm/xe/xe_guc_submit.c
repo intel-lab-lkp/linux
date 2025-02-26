@@ -1990,6 +1990,8 @@ int xe_guc_exec_queue_reset_handler(struct xe_guc *guc, u32 *msg, u32 len)
 
 	trace_xe_exec_queue_reset(q);
 
+	atomic_inc(&q->vm->reset_count);
+
 	/*
 	 * A banned engine is a NOP at this point (came from
 	 * guc_exec_queue_timedout_job). Otherwise, kick drm scheduler to cancel
