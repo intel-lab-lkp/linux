@@ -70,6 +70,10 @@ properties:
           - bus-type
           - link-frequencies
 
+  onnn,bypass-pll:
+    description: Bypass the internal PLL of the sensor to use EXTCLK directly as SYSCLK.
+    type: boolean
+
 required:
   - compatible
   - reg
