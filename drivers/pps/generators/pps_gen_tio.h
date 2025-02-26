@@ -14,6 +14,11 @@
 #include <linux/pps_gen_kernel.h>
 #include <linux/spinlock_types.h>
 
+/* EHL PSE Registers */
+#define TIOCTL_PSE			0x00
+#define TIOCOMPV_PSE			0x04
+#define TIOEC_PSE			0x24
+
 /* PMC Registers */
 #define TIOCTL_PMC			0x00
 #define TIOCOMPV_PMC			0x10
