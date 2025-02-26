@@ -4616,7 +4616,7 @@ SYSCALL_DEFINE5(move_mount,
 	struct path from_path __free(path_put) = {};
 	struct filename *to_name __free(putname) = NULL;
 	struct filename *from_name __free(putname) = NULL;
-	unsigned int lflags, uflags;
+	unsigned int lflags, uflags = 0;
 	enum mnt_tree_flags_t mflags = 0;
 	int ret = 0;
 
