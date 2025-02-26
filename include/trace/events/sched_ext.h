@@ -26,6 +26,27 @@ TRACE_EVENT(sched_ext_dump,
 	)
 );
 
+TRACE_EVENT(sched_ext_add_event,
+	    TP_PROTO(const char *name, int offset, __u64 added),
+	    TP_ARGS(name, offset, added),
+
+	TP_STRUCT__entry(
+		__string(name, name)
+		__field(	int,		offset		)
+		__field(	__u64,		added		)
+	),
+
+	TP_fast_assign(
+		__assign_str(name);
+		__entry->offset		= offset;
+		__entry->added		= added;
+	),
+
+	TP_printk("name %s offset %d added %llu",
+		  __get_str(name), __entry->offset, __entry->added
+	)
+);
+
 #endif /* _TRACE_SCHED_EXT_H */
 
 /* This part must be outside protection */
