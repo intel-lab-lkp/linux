@@ -403,7 +403,8 @@ finish:
  * guest kernel, a corresponding bit should be added to the mask.
  */
 #define SNP_FEATURES_PRESENT	(MSR_AMD64_SNP_DEBUG_SWAP |	\
-				 MSR_AMD64_SNP_SECURE_TSC)
+				 MSR_AMD64_SNP_SECURE_TSC |	\
+				 MSR_AMD64_SNP_SECURE_AVIC)
 
 u64 snp_get_unsupported_features(u64 status)
 {
