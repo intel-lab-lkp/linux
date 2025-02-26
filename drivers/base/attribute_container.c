@@ -5,7 +5,7 @@
  * Copyright (c) 2005 - James Bottomley <James.Bottomley@steeleye.com>
  *
  * The basic idea here is to enable a device to be attached to an
- * aritrary numer of classes without having to allocate storage for them.
+ * aritrary number of classes without having to allocate storage for them.
  * Instead, the contained classes select the devices they need to attach
  * to via a matching function.
  */
@@ -21,7 +21,8 @@
 #include "base.h"
 
 /* This is a private structure used to tie the classdev and the
- * container .. it should never be visible outside this file */
+ * container .. it should never be visible outside this file
+ */
 struct internal_container {
 	struct klist_node node;
 	struct attribute_container *cont;
@@ -41,7 +42,6 @@ static void internal_container_klist_put(struct klist_node *n)
 		container_of(n, struct internal_container, node);
 	put_device(&ic->classdev);
 }
-
 
 /**
  * attribute_container_classdev_to_container - given a classdev, return the container
@@ -449,7 +449,7 @@ attribute_container_remove_attrs(struct device *classdev)
 
 	if (cont->grp) {
 		sysfs_remove_group(&classdev->kobj, cont->grp);
-		return ;
+		return;
 	}
 
 	for (i = 0; attrs[i]; i++)
@@ -491,12 +491,11 @@ attribute_container_find_class_device(struct attribute_container *cont,
 	klist_for_each_entry(ic, &cont->containers, node, &iter) {
 		if (ic->classdev.parent == dev) {
 			cdev = &ic->classdev;
-			/* FIXME: must exit iterator then break */
-			klist_iter_exit(&iter);
-			break;
+			goto out;
 		}
 	}
-
+out:
+	klist_iter_exit(&iter);
 	return cdev;
 }
 EXPORT_SYMBOL_GPL(attribute_container_find_class_device);
