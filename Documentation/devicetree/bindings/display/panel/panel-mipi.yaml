@@ -1,0 +1,121 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/panel/panel-mipi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Generic MIPI-DSI/DPI Panels Requiring Initialization
+
+maintainers:
+  - Hironori KIKUCHI <kikuchan98@gmail.com>
+
+description: This is a binding for generic MIPI-DSI/DPI panels that require
+  initialization with a simple command sequence before use.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - enum:
+              # Unknown 3.35" 720x480 24-bit IPS LCD panel
+              # used in Anbernic RG 34XX
+              - anbernic,rg34xx-panel
+              # Unknown 4.00" 640x480 24-bit IPS LCD panel (YLM-LBV0400001X-V1)
+              # used in Anbernic RG40XX series
+              - anbernic,rg40xx-panel
+              # Unknown 3.95" 720x720 24-bit IPS LCD panel (YLM-LBN0395004H-V1)
+              # used in Anbernic RG CubeXX
+              - anbernic,rgcubexx-panel
+          - const: panel-mipi-dpi-spi
+      - items:
+          - enum:
+              # HOTHMI TFT-H028B23VGIST7G40-V1 2.80" 480x640 TFT LCD panel
+              - hothmi,tft-h028b23vgist7g40-v1
+          - const: panel-mipi-dsi
+
+  reg:
+    description: DSI / SPI channel used by that screen
+    maxItems: 1
+
+  power-supply: true
+
+  io-supply:
+    description: I/O system regulator.
+      No need to set if this is the same as polwer-supply.
+
+  dc-gpios:
+    maxItems: 1
+    description: Controller data/command selection (D/CX) in 4-line SPI mode.
+      If not set, the controller is in 3-line SPI mode.
+      Disallowed for DSI.
+
+  port: true
+  reset-gpios: true
+
+  backlight: true
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: panel-common.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - panel-mipi-dpi-spi
+    then:
+      # SPI mode
+      $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - panel-mipi-dsi
+    then:
+      # DSI mode
+      properties:
+        dc-gpios: false
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    dsi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        panel@0 {
+            compatible = "hothmi,tft-h028b23vgist7g40-v1", "panel-mipi-dsi";
+            reg = <0>;
+
+            port {
+                mipi_in_panel: endpoint {
+                    remote-endpoint = <&mipi_out_panel>;
+                };
+            };
+        };
+    };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        panel@0 {
+            compatible = "anbernic,rg40xx-panel", "panel-mipi-dpi-spi";
+            reg = <0>;
+
+            spi-max-frequency = <40000000>;
+
+            dc-gpios = <&gpio 24 GPIO_ACTIVE_HIGH>;
+            reset-gpios = <&gpio 25 GPIO_ACTIVE_LOW>;
+
+            backlight = <&backlight>;
+        };
+    };
