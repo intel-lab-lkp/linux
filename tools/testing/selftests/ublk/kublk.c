@@ -42,6 +42,10 @@
 #define UBLK_MAX_QUEUES                 4
 #define UBLK_QUEUE_DEPTH                128
 
+#define UBLK_IO_TGT_NORMAL       0
+#define UBLK_IO_TGT_ZC_BUF       1
+#define UBLK_IO_TGT_ZC_OP        2
+
 #define UBLK_DBG_DEV            (1U << 0)
 #define UBLK_DBG_QUEUE          (1U << 1)
 #define UBLK_DBG_IO_CMD         (1U << 2)
@@ -124,6 +128,7 @@ struct ublk_queue {
 #define UBLKSRV_QUEUE_STOPPING	(1U << 0)
 #define UBLKSRV_QUEUE_IDLE	(1U << 1)
 #define UBLKSRV_NO_BUF		(1U << 2)
+#define UBLKSRV_ZC		(1U << 3)
 	unsigned state;
 	pid_t tid;
 	pthread_t thread;
@@ -180,6 +185,11 @@ static inline unsigned int user_data_to_op(__u64 user_data)
 	return (user_data >> 16) & 0xff;
 }
 
+static inline unsigned int user_data_to_tgt_data(__u64 user_data)
+{
+	return (user_data >> 24) & 0xffff;
+}
+
 static void ublk_err(const char *fmt, ...)
 {
 	va_list ap;
@@ -219,6 +229,16 @@ static struct io_uring_sqe *ublk_queue_alloc_sqe(struct ublk_queue *q)
 static inline void *ublk_get_sqe_cmd(const struct io_uring_sqe *sqe)
 {
 	return (void *)&sqe->cmd;
+}
+
+static inline void ublk_set_io_res(struct ublk_queue *q, int tag, int res)
+{
+	q->ios[tag].result = res;
+}
+
+static inline int ublk_get_io_res(const struct ublk_queue *q, unsigned tag)
+{
+	return q->ios[tag].result;
 }
 
 static inline void ublk_mark_io_done(struct ublk_io *io, int res)
@@ -497,10 +517,17 @@ static int ublk_queue_cmd_buf_sz(struct ublk_queue *q)
 	return __ublk_queue_cmd_buf_sz(q->q_depth);
 }
 
+static int ublk_queue_use_zc(const struct ublk_queue *q)
+{
+	return q->state & UBLKSRV_ZC;
+}
+
 static void ublk_queue_deinit(struct ublk_queue *q)
 {
 	int i;
 	int nr_ios = q->q_depth;
+
+	io_uring_unregister_buffers(&q->ring);
 
 	io_uring_unregister_ring_fd(&q->ring);
 
@@ -531,6 +558,11 @@ static int ublk_queue_init(struct ublk_queue *q)
 	q->q_depth = depth;
 	q->cmd_inflight = 0;
 	q->tid = gettid();
+
+	if (dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+		q->state |= UBLKSRV_NO_BUF;
+		q->state |= UBLKSRV_ZC;
+	}
 
 	cmd_buf_size = ublk_queue_cmd_buf_sz(q);
 	off = UBLKSRV_CMD_BUF_OFFSET + q->q_id * ublk_queue_max_cmd_buf_sz();
@@ -564,6 +596,15 @@ static int ublk_queue_init(struct ublk_queue *q)
 		ublk_err("ublk dev %d queue %d setup io_uring failed %d\n",
 				q->dev->dev_info.dev_id, q->q_id, ret);
 		goto fail;
+	}
+
+	if (dev->dev_info.flags & UBLK_F_SUPPORT_ZERO_COPY) {
+		ret = io_uring_register_buffers_sparse(&q->ring, q->q_depth);
+		if (ret) {
+			ublk_err("ublk dev %d queue %d register spare buffers failed %d",
+					dev->dev_info.dev_id, q->q_id, ret);
+			goto fail;
+		}
 	}
 
 	io_uring_register_ring_fd(&q->ring);
@@ -733,9 +774,10 @@ static void ublk_handle_cqe(struct io_uring *r,
 		ublk_err("%s: res %d userdata %llx queue state %x\n", __func__,
 				cqe->res, cqe->user_data, q->state);
 
-	ublk_dbg(UBLK_DBG_IO_CMD, "%s: res %d (qid %d tag %u cmd_op %u target %d) stopping %d\n",
+	ublk_dbg(UBLK_DBG_IO_CMD, "%s: res %d (qid %d tag %u cmd_op %u target %d/%d) stopping %d\n",
 			__func__, cqe->res, q->q_id, tag, cmd_op,
 			is_target_io(cqe->user_data),
+			user_data_to_tgt_data(cqe->user_data),
 			(q->state & UBLKSRV_QUEUE_STOPPING));
 
 	/* Don't retrieve io in case of target io */
@@ -1245,6 +1287,52 @@ static int cmd_dev_help(char *exe)
 
 /****************** part 2: target implementation ********************/
 
+static inline void ublk_queue_alloc_sqe3(struct ublk_queue *q,
+		struct io_uring_sqe **sqe1, struct io_uring_sqe **sqe2,
+		struct io_uring_sqe **sqe3)
+{
+	struct io_uring *r = &q->ring;
+	unsigned left = io_uring_sq_space_left(r);
+
+	if (left < 3)
+		io_uring_submit(r);
+
+	*sqe1 = io_uring_get_sqe(r);
+	*sqe2 = io_uring_get_sqe(r);
+	*sqe3 = io_uring_get_sqe(r);
+}
+
+static inline void io_uring_prep_buf_register(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, __u64 index)
+{
+	struct ublksrv_io_cmd *cmd = (struct ublksrv_io_cmd *)sqe->cmd;
+
+	io_uring_prep_read(sqe, dev_fd, 0, 0, 0);
+	sqe->opcode		= IORING_OP_URING_CMD;
+	sqe->flags		|= IOSQE_FIXED_FILE;
+	sqe->cmd_op		= UBLK_U_IO_REGISTER_IO_BUF;
+
+	cmd->tag		= tag;
+	cmd->addr		= index;
+	cmd->q_id		= q_id;
+}
+
+static inline void io_uring_prep_buf_unregister(struct io_uring_sqe *sqe,
+		int dev_fd, int tag, int q_id, __u64 index)
+{
+	struct ublksrv_io_cmd *cmd = (struct ublksrv_io_cmd *)sqe->cmd;
+
+	io_uring_prep_read(sqe, dev_fd, 0, 0, 0);
+	sqe->opcode		= IORING_OP_URING_CMD;
+	sqe->flags		|= IOSQE_FIXED_FILE;
+	sqe->cmd_op		= UBLK_U_IO_UNREGISTER_IO_BUF;
+
+	cmd->tag		= tag;
+	cmd->addr		= index;
+	cmd->q_id		= q_id;
+}
+
+
 static int ublk_null_tgt_init(struct ublk_dev *dev)
 {
 	const struct ublksrv_ctrl_dev_info *info = &dev->dev_info;
@@ -1326,47 +1414,94 @@ static int backing_file_tgt_init(struct ublk_dev *dev)
 	return 0;
 }
 
+static enum io_uring_op ublk_to_uring_op(const struct ublksrv_io_desc *iod, int zc)
+{
+	unsigned ublk_op = ublksrv_get_op(iod);
+
+	if (ublk_op == UBLK_IO_OP_READ)
+		return zc ? IORING_OP_READ_FIXED: IORING_OP_READ;
+	else if (ublk_op == UBLK_IO_OP_WRITE)
+		return zc ? IORING_OP_WRITE_FIXED: IORING_OP_WRITE;
+	else
+		assert(0);
+}
+
+static int loop_queue_tgt_rw_io(struct ublk_queue *q, const struct ublksrv_io_desc *iod, int tag)
+{
+	int zc = ublk_queue_use_zc(q);
+	enum io_uring_op op = ublk_to_uring_op(iod, zc);
+	struct io_uring_sqe *reg;
+	struct io_uring_sqe *rw;
+	struct io_uring_sqe *ureg;
+
+	if (!zc) {
+		rw = ublk_queue_alloc_sqe(q);
+		if (!rw)
+			return -ENOMEM;
+
+		io_uring_prep_rw(op, rw, 1 /*fds[1]*/,
+				(void *)iod->addr,
+				iod->nr_sectors << 9,
+				iod->start_sector << 9);
+		io_uring_sqe_set_flags(rw, IOSQE_FIXED_FILE);
+		q->io_inflight++;
+		/* bit63 marks us as tgt io */
+		rw->user_data = build_user_data(tag, op, UBLK_IO_TGT_NORMAL, 1);
+		return 0;
+	}
+
+	ublk_queue_alloc_sqe3(q, &reg, &rw, &ureg);
+
+	io_uring_prep_buf_register(reg, 0, tag, q->q_id, tag);
+	reg->user_data = build_user_data(tag, 0xfe, 1, 1);
+	reg->flags |= IOSQE_CQE_SKIP_SUCCESS;
+	reg->flags |= IOSQE_IO_LINK;
+
+	io_uring_prep_rw(op, rw, 1 /*fds[1]*/, 0,
+		iod->nr_sectors << 9,
+		iod->start_sector << 9);
+	rw->buf_index = tag;
+	rw->flags |= IOSQE_FIXED_FILE;
+	rw->flags |= IOSQE_IO_LINK;
+	rw->user_data = build_user_data(tag, op, UBLK_IO_TGT_ZC_OP, 1);
+	q->io_inflight++;
+
+	io_uring_prep_buf_unregister(ureg, 0, tag, q->q_id, tag);
+	ureg->user_data = build_user_data(tag, 0xff, UBLK_IO_TGT_ZC_BUF, 1);
+	q->io_inflight++;
+
+	return 0;
+}
+
 static int loop_queue_tgt_io(struct ublk_queue *q, int tag)
 {
 	const struct ublksrv_io_desc *iod = ublk_get_iod(q, tag);
-	struct io_uring_sqe *sqe = ublk_queue_alloc_sqe(q);
 	unsigned ublk_op = ublksrv_get_op(iod);
-
-	if (!sqe)
-		return -ENOMEM;
+	struct io_uring_sqe *sqe;
 
 	switch (ublk_op) {
 	case UBLK_IO_OP_FLUSH:
+		sqe = ublk_queue_alloc_sqe(q);
+		if (!sqe)
+			return -ENOMEM;
 		io_uring_prep_sync_file_range(sqe, 1 /*fds[1]*/,
 				iod->nr_sectors << 9,
 				iod->start_sector << 9,
 				IORING_FSYNC_DATASYNC);
 		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		q->io_inflight++;
+		sqe->user_data = build_user_data(tag, ublk_op, UBLK_IO_TGT_NORMAL, 1);
 		break;
 	case UBLK_IO_OP_WRITE_ZEROES:
 	case UBLK_IO_OP_DISCARD:
 		return -ENOTSUP;
 	case UBLK_IO_OP_READ:
-		io_uring_prep_read(sqe, 1 /*fds[1]*/,
-				(void *)iod->addr,
-				iod->nr_sectors << 9,
-				iod->start_sector << 9);
-		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
-		break;
 	case UBLK_IO_OP_WRITE:
-		io_uring_prep_write(sqe, 1 /*fds[1]*/,
-				(void *)iod->addr,
-				iod->nr_sectors << 9,
-				iod->start_sector << 9);
-		io_uring_sqe_set_flags(sqe, IOSQE_FIXED_FILE);
+		loop_queue_tgt_rw_io(q, iod, tag);
 		break;
 	default:
 		return -EINVAL;
 	}
-
-	q->io_inflight++;
-	/* bit63 marks us as tgt io */
-	sqe->user_data = build_user_data(tag, ublk_op, 0, 1);
 
 	ublk_dbg(UBLK_DBG_IO, "%s: tag %d ublk io %x %llx %u\n", __func__, tag,
 			iod->op_flags, iod->start_sector, iod->nr_sectors << 9);
@@ -1387,9 +1522,22 @@ static void ublk_loop_io_done(struct ublk_queue *q, int tag,
 		const struct io_uring_cqe *cqe)
 {
 	int cqe_tag = user_data_to_tag(cqe->user_data);
+	unsigned tgt_data = user_data_to_tgt_data(cqe->user_data);
+	int res = cqe->res;
 
+	if (res < 0 || tgt_data == UBLK_IO_TGT_NORMAL)
+		goto complete;
+
+	if (tgt_data == UBLK_IO_TGT_ZC_OP) {
+		ublk_set_io_res(q, tag, cqe->res);
+		goto exit;
+	}
+	assert(tgt_data == UBLK_IO_TGT_ZC_BUF);
+	res = ublk_get_io_res(q, tag);
+complete:
 	assert(tag == cqe_tag);
-	ublk_complete_io(q, tag, cqe->res);
+	ublk_complete_io(q, tag, res);
+exit:
 	q->io_inflight--;
 }
 
@@ -1460,6 +1608,7 @@ int main(int argc, char *argv[])
 		{ "depth",		1,	NULL, 'd' },
 		{ "debug_mask",		1,	NULL,  0  },
 		{ "quiet",		0,	NULL,  0  },
+		{ "zero_copy",          1,      NULL, 'z' },
 		{ 0, 0, 0, 0 }
 	};
 	int option_idx, opt;
@@ -1476,7 +1625,7 @@ int main(int argc, char *argv[])
 		return ret;
 
 	optind = 2;
-	while ((opt = getopt_long(argc, argv, "t:n:d:q:a",
+	while ((opt = getopt_long(argc, argv, "t:n:d:q:a:z",
 				  longopts, &option_idx)) != -1) {
 		switch (opt) {
 		case 'a':
@@ -1494,6 +1643,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':
 			ctx.queue_depth = strtol(optarg, NULL, 10);
+			break;
+		case 'z':
+			ctx.flags |= UBLK_F_SUPPORT_ZERO_COPY | UBLK_F_USER_COPY;
 			break;
 		case 0:
 			if (!strcmp(longopts[option_idx].name, "debug_mask"))
