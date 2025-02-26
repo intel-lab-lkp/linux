@@ -102,6 +102,7 @@ struct page_pool_params {
  * @refill:	an allocation which triggered a refill of the cache
  * @waive:	pages obtained from the ptr ring that cannot be added to
  *		the cache due to a NUMA mismatch
+ * @item_fast_empty: pre-allocated item cache is empty
  */
 struct page_pool_alloc_stats {
 	u64 fast;
@@ -110,6 +111,7 @@ struct page_pool_alloc_stats {
 	u64 empty;
 	u64 refill;
 	u64 waive;
+	u64 item_fast_empty;
 };
 
 /**
@@ -142,6 +144,30 @@ struct page_pool_stats {
 };
 #endif
 
+struct page_pool_item {
+	unsigned long state;
+
+	union {
+		netmem_ref pp_netmem;
+		struct llist_node lentry;
+	};
+};
+
+/* The size of item_block is always PAGE_SIZE, so that the address of item_block
+ * for a specific item can be calculated using 'item & PAGE_MASK'
+ */
+struct page_pool_item_block {
+	struct page_pool *pp;
+	struct list_head list;
+	struct page_pool_item items[];
+};
+
+/* Ensure the offset of 'pp' field for both 'page_pool_item_block' and
+ * 'netmem_item_block' are the same.
+ */
+static_assert(offsetof(struct page_pool_item_block, pp) == \
+	      offsetof(struct netmem_item_block, pp));
+
 /* The whole frag API block must stay within one cacheline. On 32-bit systems,
  * sizeof(long) == sizeof(int), so that the block size is ``3 * sizeof(long)``.
  * On 64-bit systems, the actual size is ``2 * sizeof(long) + sizeof(int)``.
@@ -164,6 +190,7 @@ struct page_pool {
 
 	int cpuid;
 	u32 pages_state_hold_cnt;
+	struct llist_head hold_items;
 
 	bool has_init_callback:1;	/* slow::init_callback is set */
 	bool dma_map:1;			/* Perform DMA mapping */
@@ -227,13 +254,20 @@ struct page_pool {
 #endif
 	atomic_t pages_state_release_cnt;
 
+	/* Synchronizate dma unmapping operation in page_pool_return_page() with
+	 * page_pool_destory() when destroy_cnt is non-zero.
+	 */
+	spinlock_t item_lock;
+	struct list_head item_blocks;
+	struct llist_head release_items;
+
 	/* A page_pool is strictly tied to a single RX-queue being
 	 * protected by NAPI, due to above pp_alloc_cache. This
 	 * refcnt serves purpose is to simplify drivers error handling.
 	 */
 	refcount_t user_cnt;
 
-	u64 destroy_cnt;
+	unsigned long destroy_cnt;
 
 	/* Slow/Control-path information follows */
 	struct page_pool_params_slow slow;

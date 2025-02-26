@@ -83,9 +83,19 @@ static inline u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 }
 #endif
 
+static inline struct page_pool_item_block *
+page_pool_item_to_block(struct page_pool_item *item)
+{
+	return (struct page_pool_item_block *)((unsigned long)item & PAGE_MASK);
+}
+
 static inline struct page_pool *page_pool_get_pp(struct page *page)
 {
-	return page->pp;
+	/* The size of item_block is always PAGE_SIZE, the address of item_block
+	 * for a specific item can be calculated using 'item & PAGE_MASK', so
+	 * that we can find the page_pool object it belongs to.
+	 */
+	return page_pool_item_to_block(page->pp_item)->pp;
 }
 
 /**
