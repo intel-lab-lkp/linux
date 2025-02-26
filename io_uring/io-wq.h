@@ -43,6 +43,7 @@ struct io_wq_data {
 	free_work_fn *free_work;
 };
 
+void io_wq_cancel_tw_create(struct io_wq *wq);
 struct io_wq *io_wq_create(unsigned bounded, struct io_wq_data *data);
 void io_wq_exit_start(struct io_wq *wq);
 void io_wq_put_and_exit(struct io_wq *wq);

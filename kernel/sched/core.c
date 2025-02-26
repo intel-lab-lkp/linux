@@ -6788,6 +6788,7 @@ static inline void sched_submit_work(struct task_struct *tsk)
 {
 	static DEFINE_WAIT_OVERRIDE_MAP(sched_map, LD_WAIT_CONFIG);
 	unsigned int task_flags;
+	struct io_uring_task *io_uring = tsk->io_uring;
 
 	/*
 	 * Establish LD_WAIT_CONFIG context to ensure none of the code called
@@ -6804,6 +6805,11 @@ static inline void sched_submit_work(struct task_struct *tsk)
 		wq_worker_sleeping(tsk);
 	else if (task_flags & PF_IO_WORKER)
 		io_wq_worker_sleeping(tsk);
+	else if ((task_flags & PF_DUMPCORE) && io_uring) {
+		struct io_wq *wq = io_uring->io_wq;
+
+		io_wq_cancel_tw_create(wq);
+	}
 
 	/*
 	 * spinlock and rwlock must not flush block requests.  This will
