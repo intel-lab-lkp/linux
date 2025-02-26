@@ -3258,6 +3258,112 @@ free_objs:
 	return err;
 }
 
+static u32 xe_vm_get_property_size(struct xe_vm *vm, u32 property)
+{
+	u32 size = -EINVAL;
+
+	switch (property) {
+	case DRM_XE_VM_GET_PROPERTY_FAULTS:
+		spin_lock(&vm->bans.lock);
+		size = vm->bans.len * sizeof(struct drm_xe_ban);
+		spin_unlock(&vm->bans.lock);
+		size += sizeof(struct drm_xe_faults);
+		break;
+	case DRM_XE_VM_GET_PROPERTY_NUM_RESETS:
+		size = sizeof(u64);
+		break;
+	default:
+		break;
+	}
+
+	return size;
+}
+
+static enum drm_xe_fault_address_type
+xe_pagefault_access_type_to_address_type(struct xe_vm *vm, struct xe_pagefault *pf)
+{
+	if (!pf)
+		return 0;
+
+	vma = lookup_vma(vm, pf->page_addr);
+	if (!vma)
+		return DRM_XE_FAULT_ADDRESS_TYPE_NONE_EXT;
+	if (xe_vma_read_only(vma) && pf->access_type != XE_PAGEFAULT_ACCESS_TYPE_READ)
+		return DRM_XE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT;
+	return 0;
+}
+
+int xe_vm_get_property_ioctl(struct drm_device *drm, void *data,
+			     struct drm_file *file)
+{
+	struct xe_device *xe = to_xe_device(drm);
+	struct xe_file *xef = to_xe_file(file);
+	struct drm_xe_vm_get_property *args = data;
+	struct xe_vm *vm;
+	u32 size;
+
+	if (XE_IOCTL_DBG(xe, args->reserved[0] || args->reserved[1]))
+		return -EINVAL;
+
+	vm = xe_vm_lookup(xef, args->vm_id);
+	if (XE_IOCTL_DBG(xe, !vm))
+		return -ENOENT;
+
+	size = xe_vm_get_property_size(vm, args->property);
+	if (size < 0) {
+		return size;
+	} else if (!args->size) {
+		args->size = size;
+		return 0;
+	} else if (args->size != size) {
+		return -EINVAL;
+	}
+
+	if (args->property == DRM_XE_VM_GET_PROPERTY_FAULTS) {
+		struct drm_xe_faults __user *usr_ptr = u64_to_user_ptr(args->data);
+		struct drm_xe_faults fault_list;
+		struct drm_xe_ban *ban;
+		struct xe_exec_queue_ban_entry *entry;
+		int i = 0;
+
+		if (copy_from_user(&fault_list, usr_ptr, size))
+			return -EFAULT;
+
+		fault_list.num_faults = 0;
+
+		spin_lock(&vm->bans.lock);
+		list_for_each_entry(entry, &vm->bans.list, list) {
+			struct xe_pagefault *pf = entry->pf;
+
+			ban = &fault_list.list[i++];
+			ban->exec_queue_id = entry->exec_queue_id;
+			ban->faulted = !!pf ? 1 : 0;
+			ban->address = pf ? pf->page_addr : 0;
+			ban->address_type = xe_pagefault_access_type_to_address_type(vm, pf);
+			ban->address_type = pf ? pf->fault_type : 0;
+			fault_list.num_faults += ban->faulted;
+		}
+		spin_unlock(&vm->bans.lock);
+
+		fault_list.num_bans = i;
+
+		if (copy_to_user(usr_ptr, &fault_list, size))
+			return -EFAULT;
+
+	} else if (args->property == DRM_XE_VM_GET_PROPERTY_NUM_RESETS) {
+		u64 __user *usr_ptr = u64_to_user_ptr(args->data);
+		u64 num_resets = atomic_read(&vm->reset_count);
+
+		if (copy_to_user(usr_ptr, &num_resets, size))
+			return -EFAULT;
+
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 /**
  * xe_vm_bind_kernel_bo - bind a kernel BO to a VM
  * @vm: VM to bind the BO to

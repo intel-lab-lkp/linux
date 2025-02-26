@@ -81,6 +81,7 @@ extern "C" {
  *  - &DRM_IOCTL_XE_EXEC
  *  - &DRM_IOCTL_XE_WAIT_USER_FENCE
  *  - &DRM_IOCTL_XE_OBSERVATION
+ *  - &DRM_IOCTL_XE_VM_GET_BANS
  */
 
 /*
@@ -102,6 +103,7 @@ extern "C" {
 #define DRM_XE_EXEC			0x09
 #define DRM_XE_WAIT_USER_FENCE		0x0a
 #define DRM_XE_OBSERVATION		0x0b
+#define DRM_XE_VM_GET_PROPERTY		0x0c
 
 /* Must be kept compact -- no holes */
 
@@ -117,6 +119,7 @@ extern "C" {
 #define DRM_IOCTL_XE_EXEC			DRM_IOW(DRM_COMMAND_BASE + DRM_XE_EXEC, struct drm_xe_exec)
 #define DRM_IOCTL_XE_WAIT_USER_FENCE		DRM_IOWR(DRM_COMMAND_BASE + DRM_XE_WAIT_USER_FENCE, struct drm_xe_wait_user_fence)
 #define DRM_IOCTL_XE_OBSERVATION		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_OBSERVATION, struct drm_xe_observation_param)
+#define DRM_IOCTL_XE_VM_GET_PROPERTY		DRM_IOW(DRM_COMMAND_BASE + DRM_XE_VM_GET_PROPERTY, struct drm_xe_vm_get_property)
 
 /**
  * DOC: Xe IOCTL Extensions
@@ -1164,6 +1167,76 @@ struct drm_xe_vm_bind {
 
 	/** @reserved: Reserved */
 	__u64 reserved[2];
+};
+
+/** Types of fault address */
+enum drm_xe_fault_address_type {
+	DRM_XE_FAULT_ADDRESS_TYPE_NONE_EXT,
+	DRM_XE_FAULT_ADDRESS_TYPE_READ_INVALID_EXT,
+	DRM_XE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT,
+};
+
+struct drm_xe_ban {
+	/** @exec_queue_id: ID of banned exec queue */
+	__u32 exec_queue_id;
+	/** @faulted: Whether or not the ban has an associated pagefault.  0 is no, 1 is yes */
+	__u32 faulted;
+	/** @address: Address of the fault, if relevant */
+	__u64 address;
+	/** @address_type: enum drm_xe_fault_address_type, if relevant */
+	__u32 address_type;
+	/** @pad: MBZ */
+	__u32 pad;
+	/** @reserved: MBZ */
+	__u64 reserved[3];
+};
+
+struct drm_xe_faults {
+	/** @num_faults: Number of faults observed on the VM */
+	__u32 num_faults;
+	/** @num_bans: Number of bans observed on the VM */
+	__u32 num_bans;
+	/** @reserved: MBZ */
+	__u64 reserved[2];
+	/** @list: Dynamic sized array of drm_xe_ban bans */
+	struct drm_xe_ban list[];
+};
+
+/**
+ * struct drm_xe_vm_get_property - Input of &DRM_IOCTL_XE_VM_GET_PROPERTY
+ *
+ * The user provides a VM ID and a property to query to this ioctl,
+ * and the ioctl returns the size of the return value.  Calling the
+ * ioctl again with memory reserved for the data will save the
+ * requested property data to the data pointer.
+ *
+ * The valid properties are:
+ *  - %DRM_XE_VM_GET_PROPERTY_FAULTS : Property is a drm_xe_faults struct of dynamic size
+ *  - %DRM_XE_VM_GET_PROPERTY_NUM_RESETS: Property is a scalar
+ */
+struct drm_xe_vm_get_property {
+	/** @extensions: Pointer to the first extension struct, if any */
+	__u64 extensions;
+
+	/** @vm_id: The ID of the VM to query the properties of */
+	__u32 vm_id;
+
+#define DRM_XE_VM_GET_PROPERTY_FAULTS		0
+#define DRM_XE_VM_GET_PROPERTY_NUM_RESETS	1
+	/** @property: The property to get */
+	__u32 property;
+
+	/** @size: Size of returned property @data */
+	__u32 size;
+
+	/** @pad: MBZ */
+	__u32 pad;
+
+	/** @reserved: MBZ */
+	__u64 reserved[2];
+
+	/** @data: Pointer storing return data */
+	__u64 data;
 };
 
 /**
