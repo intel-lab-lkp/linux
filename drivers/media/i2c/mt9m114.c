@@ -1977,6 +1977,24 @@ static int mt9m114_ifp_registered(struct v4l2_subdev *sd)
 		v4l2_device_unregister_subdev(&sensor->pa.sd);
 		return ret;
 	}
+	return 0;
+}
+
+static int mt9m114_ifp_get_mbus_config(struct v4l2_subdev *sd,
+				   unsigned int pad,
+				   struct v4l2_mbus_config *cfg)
+{
+	struct mt9m114 *sensor = ifp_to_mt9m114(sd);
+
+	if (sensor->bus_cfg.bus_type == V4L2_MBUS_CSI2_DPHY) {
+		cfg->type = V4L2_MBUS_CSI2_DPHY;
+	} else {
+		cfg->type = V4L2_MBUS_PARALLEL;
+		cfg->bus.parallel.flags = V4L2_MBUS_MASTER |
+					  V4L2_MBUS_PCLK_SAMPLE_RISING |
+					  V4L2_MBUS_DATA_ACTIVE_HIGH;
+		cfg->bus.parallel.bus_width = 8;
+	}
 
 	return 0;
 }
@@ -1993,6 +2011,7 @@ static const struct v4l2_subdev_pad_ops mt9m114_ifp_pad_ops = {
 	.set_fmt = mt9m114_ifp_set_fmt,
 	.get_selection = mt9m114_ifp_get_selection,
 	.set_selection = mt9m114_ifp_set_selection,
+	.get_mbus_config = mt9m114_ifp_get_mbus_config,
 	.get_frame_interval = mt9m114_ifp_get_frame_interval,
 	.set_frame_interval = mt9m114_ifp_set_frame_interval,
 };
