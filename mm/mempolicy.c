@@ -3721,7 +3721,7 @@ static int add_weighted_interleave_group(struct kobject *root_kobj)
 		return err;
 	}
 
-	for_each_node_state(nid, N_POSSIBLE) {
+	for_each_node_state(nid, N_MEMORY) {
 		err = add_weight_node(nid, wi_kobj);
 		if (err) {
 			pr_err("failed to add sysfs [node%d]\n", nid);
