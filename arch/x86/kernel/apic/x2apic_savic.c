@@ -432,6 +432,57 @@ static int x2apic_savic_probe(void)
 	return 1;
 }
 
+static int find_highest_isr(void *backing_page)
+{
+	int vec_per_reg = 32;
+	int max_vec = 256;
+	u32 reg;
+	int vec;
+
+	for (vec = max_vec - 32; vec >= 0; vec -= vec_per_reg) {
+		reg = get_reg(backing_page, APIC_ISR + REG_POS(vec));
+		if (reg)
+			return __fls(reg) + vec;
+	}
+
+	return -1;
+}
+
+static void x2apic_savic_eoi(void)
+{
+	void *backing_page;
+	int reg_off;
+	int vec_pos;
+	u32 tmr;
+	int vec;
+
+	backing_page = this_cpu_read(apic_backing_page);
+
+	vec = find_highest_isr(backing_page);
+	if (WARN_ONCE(vec == -1, "EOI write without any active interrupt in APIC_ISR"))
+		return;
+
+	reg_off = REG_POS(vec);
+	vec_pos = VEC_POS(vec);
+	tmr = get_reg(backing_page, APIC_TMR + reg_off);
+	if (tmr & BIT(vec_pos)) {
+		clear_bit(vec_pos, backing_page + APIC_ISR + reg_off);
+		/*
+		 * Propagate the EOI write to hv for level-triggered interrupts.
+		 * Return to guest from GHCB protocol event takes care of
+		 * re-evaluating interrupt state.
+		 */
+		savic_ghcb_msr_write(APIC_EOI, 0);
+	} else {
+		/*
+		 * Hardware clears APIC_ISR and re-evaluates the interrupt state
+		 * to determine if there is any pending interrupt which can be
+		 * delivered to CPU.
+		 */
+		native_apic_msr_eoi();
+	}
+}
+
 static struct apic apic_x2apic_savic __ro_after_init = {
 
 	.name				= "secure avic x2apic",
@@ -461,7 +512,7 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 
 	.read				= x2apic_savic_read,
 	.write				= x2apic_savic_write,
-	.eoi				= native_apic_msr_eoi,
+	.eoi				= x2apic_savic_eoi,
 	.icr_read			= native_x2apic_icr_read,
 	.icr_write			= x2apic_savic_icr_write,
 
