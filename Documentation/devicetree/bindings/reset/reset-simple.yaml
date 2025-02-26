@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/reset-simple.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Generic Bit Reset Controller
+
+maintainers:
+  - Inochi Amaoto <inochiama@gmail.com>
+
+description: |
+  This document defines device tree properties common to reset
+  controller devices that perform assert/deassert by simply
+  toggling bit.
+
+  All devices in this binding should satisfy the following requirement:
+  - There is a single, contiguous range of 32-bit registers.
+  - All bits in each register directly control a reset line.
+     - There are no self-deasserting resets.
+     - There are no timing requirements.
+     - The bits are exclusively resets, nothing else.
+  - All bits behave the same, so all reset bits are either
+    active-high or all are active-low.
+  - The bits can be read back, but the read status may
+    be active-low independently from the writes.
+
+  If the device is not meet the requirement, it should use its
+  own binding to describe the device.
+
+properties:
+  compatible:
+    const: reset-simple
+
+  reg:
+    maxItems: 1
+
+  "#reset-cells":
+    const: 1
+
+  active-low:
+    type: boolean
+    description:
+      If true, bits are cleared to assert the reset. Otherwise,
+      bits are set to assert the reset. This also applies to
+      read back.
+
+required:
+  - compatible
+  - reg
+  - "#reset-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    reset-controller@1000000 {
+        compatible = "reset-simple";
+        reg = <0x1000000 0x1000>;
+        #reset-cells = <1>;
+    };
