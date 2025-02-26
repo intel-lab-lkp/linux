@@ -240,6 +240,9 @@ static int pcistub_get_gsi_from_sbdf(unsigned int sbdf)
 	if (!psdev)
 		return -ENODEV;
 
+	if (psdev->gsi == -1)
+		return -ENOENT;
+
 	return psdev->gsi;
 }
 #endif
@@ -475,14 +478,14 @@ static int pcistub_init_device(struct pcistub_device *psdev)
 #ifdef CONFIG_XEN_ACPI
 	if (xen_initial_domain() && xen_pvh_domain()) {
 		err = xen_acpi_get_gsi_info(dev, &gsi, &trigger, &polarity);
-		if (err) {
-			dev_err(&dev->dev, "Fail to get gsi info!\n");
-			goto config_release;
+		if (err && err != -ENOENT) {
+			dev_err(&dev->dev, "Failed to get gsi info! %d\n", err);
+		} else if (!err) {
+			err = xen_pvh_setup_gsi(gsi, trigger, polarity);
+			if (err)
+				goto config_release;
+			psdev->gsi = gsi;
 		}
-		err = xen_pvh_setup_gsi(gsi, trigger, polarity);
-		if (err)
-			goto config_release;
-		psdev->gsi = gsi;
 	}
 #endif
 

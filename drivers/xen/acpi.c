@@ -101,7 +101,7 @@ int xen_acpi_get_gsi_info(struct pci_dev *dev,
 
 	pin = dev->pin;
 	if (!pin)
-		return -EINVAL;
+		return -ENOENT;
 
 	entry = acpi_pci_irq_lookup(dev, pin);
 	if (entry) {
@@ -116,7 +116,7 @@ int xen_acpi_get_gsi_info(struct pci_dev *dev,
 		gsi = -1;
 
 	if (gsi < 0)
-		return -EINVAL;
+		return -ENOENT;
 
 	*gsi_out = gsi;
 	*trigger_out = trigger;
