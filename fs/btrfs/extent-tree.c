@@ -1483,7 +1483,7 @@ static int __btrfs_inc_extent_ref(struct btrfs_trans_handle *trans,
 				  struct btrfs_delayed_ref_node *node,
 				  struct btrfs_delayed_extent_op *extent_op)
 {
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct extent_buffer *leaf;
 	struct btrfs_extent_item *item;
 	struct btrfs_key key;
@@ -1504,7 +1504,7 @@ static int __btrfs_inc_extent_ref(struct btrfs_trans_handle *trans,
 					   node->parent, node->ref_root, owner,
 					   offset, refs_to_add, extent_op);
 	if ((ret < 0 && ret != -EAGAIN) || !ret)
-		goto out;
+		return ret;
 
 	/*
 	 * Ok we had -EAGAIN which means we didn't have space to insert and
@@ -1529,8 +1529,7 @@ static int __btrfs_inc_extent_ref(struct btrfs_trans_handle *trans,
 
 	if (ret)
 		btrfs_abort_transaction(trans, ret);
-out:
-	btrfs_free_path(path);
+
 	return ret;
 }
 
