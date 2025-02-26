@@ -1517,6 +1517,7 @@ static void exynos_ufs_exit(struct ufs_hba *hba)
 {
 	struct exynos_ufs *ufs = ufshcd_get_variant(hba);
 
+	hci_writel(ufs, 0 << 0, HCI_GPIO_OUT);
 	phy_power_off(ufs->phy);
 	phy_exit(ufs->phy);
 }
@@ -1699,6 +1700,8 @@ static int exynos_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op,
 
 	if (status == PRE_CHANGE)
 		return 0;
+
+	hci_writel(ufs, 0 << 0, HCI_GPIO_OUT);
 
 	if (!ufshcd_is_link_active(hba))
 		phy_power_off(ufs->phy);
