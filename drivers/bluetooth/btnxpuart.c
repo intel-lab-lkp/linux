@@ -1273,6 +1273,9 @@ static int nxp_shutdown(struct hci_dev *hdev)
 			set_bit(BTNXPUART_FW_DOWNLOADING, &nxpdev->tx_state);
 		}
 		kfree_skb(skb);
+	} else if (nxpdev->current_baudrate != nxpdev->fw_init_baudrate) {
+		nxpdev->new_baudrate = nxpdev->fw_init_baudrate;
+		nxp_set_baudrate_cmd(hdev, NULL);
 	}
 
 	return 0;
@@ -1572,6 +1575,8 @@ static int nxp_serdev_probe(struct serdev_device *serdev)
 	hdev->wakeup = nxp_wakeup;
 	SET_HCIDEV_DEV(hdev, &serdev->dev);
 
+	set_bit(HCI_QUIRK_NON_PERSISTENT_SETUP, &hdev->quirks);
+
 	if (hci_register_dev(hdev) < 0) {
 		dev_err(&serdev->dev, "Can't register HCI device\n");
 		goto probe_fail;
@@ -1597,16 +1602,15 @@ static void nxp_serdev_remove(struct serdev_device *serdev)
 		clear_bit(BTNXPUART_FW_DOWNLOADING, &nxpdev->tx_state);
 		wake_up_interruptible(&nxpdev->check_boot_sign_wait_q);
 		wake_up_interruptible(&nxpdev->fw_dnld_done_wait_q);
-	} else {
-		/* Restore FW baudrate to fw_init_baudrate if changed.
-		 * This will ensure FW baudrate is in sync with
-		 * driver baudrate in case this driver is re-inserted.
-		 */
-		if (nxpdev->current_baudrate != nxpdev->fw_init_baudrate) {
-			nxpdev->new_baudrate = nxpdev->fw_init_baudrate;
-			nxp_set_baudrate_cmd(hdev, NULL);
-		}
 	}
+
+	if (test_bit(HCI_RUNNING, &hdev->flags)) {
+		/* Ensure shutdown callback is executed before unregistering, so
+		 * that baudrate is reset to initial value.
+		 */
+		nxp_shutdown(hdev);
+	}
+
 	ps_cleanup(nxpdev);
 	hci_unregister_dev(hdev);
 	hci_free_dev(hdev);
