@@ -70,9 +70,8 @@ static int block_group_bits(struct btrfs_block_group *cache, u64 bits)
 int btrfs_lookup_data_extent(struct btrfs_fs_info *fs_info, u64 start, u64 len)
 {
 	struct btrfs_root *root = btrfs_extent_root(fs_info, start);
-	int ret;
 	struct btrfs_key key;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -81,9 +80,7 @@ int btrfs_lookup_data_extent(struct btrfs_fs_info *fs_info, u64 start, u64 len)
 	key.objectid = start;
 	key.type = BTRFS_EXTENT_ITEM_KEY;
 	key.offset = len;
-	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
-	btrfs_free_path(path);
-	return ret;
+	return btrfs_search_slot(NULL, root, &key, path, 0, 0);
 }
 
 /*
