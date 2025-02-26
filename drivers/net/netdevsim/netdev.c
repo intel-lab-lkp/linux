@@ -836,7 +836,8 @@ nsim_pp_hold_write(struct file *file, const char __user *data,
 		if (!ns->page)
 			ret = -ENOMEM;
 	} else {
-		page_pool_put_full_page(ns->page->pp, ns->page, false);
+		page_pool_put_full_page(page_pool_get_pp(ns->page), ns->page,
+					false);
 		ns->page = NULL;
 	}
 
@@ -1048,7 +1049,8 @@ void nsim_destroy(struct netdevsim *ns)
 
 	/* Put this intentionally late to exercise the orphaning path */
 	if (ns->page) {
-		page_pool_put_full_page(ns->page->pp, ns->page, false);
+		page_pool_put_full_page(page_pool_get_pp(ns->page), ns->page,
+					false);
 		ns->page = NULL;
 	}
 
