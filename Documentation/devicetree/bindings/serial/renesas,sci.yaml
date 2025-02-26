@@ -9,9 +9,6 @@ title: Renesas Serial Communication Interface
 maintainers:
   - Geert Uytterhoeven <geert+renesas@glider.be>
 
-allOf:
-  - $ref: serial.yaml#
-
 properties:
   compatible:
     oneOf:
@@ -21,6 +18,8 @@ properties:
               - renesas,r9a07g044-sci     # RZ/G2{L,LC}
               - renesas,r9a07g054-sci     # RZ/V2L
           - const: renesas,sci            # generic SCI compatible UART
+
+      - const: renesas,r9a09g077-sci      # RZ/T2H
 
       - items:
           - const: renesas,sci            # generic SCI compatible UART
@@ -54,8 +53,6 @@ properties:
         - fck # UART functional clock
         - sck # optional external clock input
 
-  uart-has-rtscts: false
-
 required:
   - compatible
   - reg
@@ -63,25 +60,44 @@ required:
   - clocks
   - clock-names
 
-if:
-  properties:
-    compatible:
-      contains:
-        enum:
-          - renesas,r9a07g043-sci
-          - renesas,r9a07g044-sci
-          - renesas,r9a07g054-sci
-then:
-  properties:
-    resets:
-      maxItems: 1
+allOf:
+  - $ref: serial.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: renesas,r9a09g077-sci
+    then:
+      properties:
+        uart-has-rtscts: true
+        power-domains:
+          maxItems: 1
+      required:
+        - power-domains
 
-    power-domains:
-      maxItems: 1
+    else:
+      properties:
+        uart-has-rtscts: false
 
-  required:
-    - resets
-    - power-domains
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - renesas,r9a07g043-sci
+              - renesas,r9a07g044-sci
+              - renesas,r9a07g054-sci
+    then:
+      properties:
+        resets:
+          maxItems: 1
+
+        power-domains:
+          maxItems: 1
+
+      required:
+        - resets
+        - power-domains
 
 unevaluatedProperties: false
 
