@@ -646,7 +646,7 @@ static void rkisp1_isp_set_src_fmt(struct rkisp1_isp *isp,
 
 	/*
 	 * Copy the color space for the sink pad. When converting from Bayer to
-	 * YUV, default to a limited quantization range.
+	 * YUV, default to the default quantization range of the color space.
 	 */
 	src_fmt->colorspace = sink_fmt->colorspace;
 	src_fmt->xfer_func = sink_fmt->xfer_func;
@@ -654,7 +654,8 @@ static void rkisp1_isp_set_src_fmt(struct rkisp1_isp *isp,
 
 	if (sink_info->pixel_enc == V4L2_PIXEL_ENC_BAYER &&
 	    src_info->pixel_enc == V4L2_PIXEL_ENC_YUV)
-		src_fmt->quantization = V4L2_QUANTIZATION_LIM_RANGE;
+		src_fmt->quantization = V4L2_MAP_QUANTIZATION_DEFAULT(
+			false, sink_fmt->colorspace, sink_fmt->ycbcr_enc);
 	else
 		src_fmt->quantization = sink_fmt->quantization;
 
