@@ -650,6 +650,8 @@ patternProperties:
     description: Shenzhen Hope Microelectronics Co., Ltd.
   "^hoperun,.*":
     description: Jiangsu HopeRun Software Co., Ltd.
+  "^hothmi,.*":
+    description: Hotdisplay Technology Co.Ltd
   "^hp,.*":
     description: Hewlett Packard Inc.
   "^hpe,.*":
