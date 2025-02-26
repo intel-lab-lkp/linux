@@ -134,7 +134,7 @@ static bool is_ghes_assist_struct(struct acpi_hest_header *hest_hdr)
 
 typedef int (*apei_hest_func_t)(struct acpi_hest_header *hest_hdr, void *data);
 
-static int apei_hest_parse(apei_hest_func_t func, void *data)
+int apei_hest_parse(apei_hest_func_t func, void *data)
 {
 	struct acpi_hest_header *hest_hdr;
 	int i, rc, len;
