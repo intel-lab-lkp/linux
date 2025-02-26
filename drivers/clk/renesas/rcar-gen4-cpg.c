@@ -418,9 +418,11 @@ static const struct clk_div_table cpg_rpcsrc_div_table[] = {
 
 struct clk * __init rcar_gen4_cpg_clk_register(struct device *dev,
 	const struct cpg_core_clk *core, const struct cpg_mssr_info *info,
-	struct clk **clks, void __iomem *base,
-	struct raw_notifier_head *notifiers)
+	struct cpg_mssr_pub *pub)
 {
+	struct raw_notifier_head *notifiers = &pub->notifiers;
+	void __iomem *base = pub->base0;
+	struct clk **clks = pub->clks;
 	const struct clk *parent;
 	unsigned int mult = 1;
 	unsigned int div = 1;
@@ -517,7 +519,7 @@ struct clk * __init rcar_gen4_cpg_clk_register(struct device *dev,
 
 	case CLK_TYPE_GEN4_RPC:
 		return cpg_rpc_clk_register(core->name, base + CPG_RPCCKCR,
-					    __clk_get_name(parent), notifiers);
+					    __clk_get_name(parent), &pub->notifiers);
 
 	case CLK_TYPE_GEN4_RPCD2:
 		return cpg_rpcd2_clk_register(core->name, base + CPG_RPCCKCR,
