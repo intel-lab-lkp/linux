@@ -233,7 +233,11 @@ struct fcloop_tport {
 	spinlock_t			lock;
 	struct list_head		ls_list;
 	struct work_struct		ls_work;
+	struct kref			ref;
 };
+
+static int fcloop_tport_get(struct fcloop_tport *tport);
+static void fcloop_tport_put(struct fcloop_tport *tport);
 
 struct fcloop_nport {
 	struct fcloop_rport *rport;
@@ -426,6 +430,7 @@ fcloop_tport_lsrqst_work(struct work_struct *work)
 		spin_lock(&tport->lock);
 	}
 	spin_unlock(&tport->lock);
+	fcloop_tport_put(tport);
 }
 
 static int
@@ -444,12 +449,16 @@ fcloop_t2h_ls_req(struct nvmet_fc_target_port *targetport, void *hosthandle,
 	tls_req->lsreq = lsreq;
 	INIT_LIST_HEAD(&tls_req->ls_list);
 
+	if (!tport)
+		return -ECONNABORTED;
+
 	if (!tport->remoteport) {
 		tls_req->status = -ECONNREFUSED;
 		spin_lock(&tport->lock);
 		list_add_tail(&tls_req->ls_list, &tport->ls_list);
 		spin_unlock(&tport->lock);
-		queue_work(nvmet_wq, &tport->ls_work);
+		if (queue_work(nvmet_wq, &tport->ls_work))
+			fcloop_tport_get(tport);
 		return ret;
 	}
 
@@ -481,7 +490,8 @@ fcloop_t2h_xmt_ls_rsp(struct nvme_fc_local_port *localport,
 		spin_lock(&tport->lock);
 		list_add_tail(&tport->ls_list, &tls_req->ls_list);
 		spin_unlock(&tport->lock);
-		queue_work(nvmet_wq, &tport->ls_work);
+		if (queue_work(nvmet_wq, &tport->ls_work))
+			fcloop_tport_get(tport);
 	}
 
 	return 0;
@@ -1496,6 +1506,8 @@ fcloop_create_target_port(struct device *dev, struct device_attribute *attr,
 
 	/* success */
 	tport = targetport->private;
+	kref_init(&tport->ref);
+
 	tport->targetport = targetport;
 	tport->remoteport = (nport->rport) ?  nport->rport->remoteport : NULL;
 	if (nport->rport)
@@ -1526,21 +1538,30 @@ __unlink_target_port(struct fcloop_nport *nport)
 	return tport;
 }
 
-static int
-__targetport_unreg(struct fcloop_nport *nport, struct fcloop_tport *tport)
+static void
+fcloop_targetport_unreg(struct kref *ref)
 {
-	int ret;
+	struct fcloop_tport *tport =
+		container_of(ref, struct fcloop_tport, ref);
+	struct fcloop_nport *nport;
 
-	if (!tport) {
-		ret = -EALREADY;
-		goto out;
-	}
+	nport = tport->nport;
+	nvmet_fc_unregister_targetport(tport->targetport);
 
-	ret = nvmet_fc_unregister_targetport(tport->targetport);
-out:
 	/* nport ref put: targetport */
 	fcloop_nport_put(nport);
-	return ret;
+}
+
+static int
+fcloop_tport_get(struct fcloop_tport *tport)
+{
+	return kref_get_unless_zero(&tport->ref);
+}
+
+static void
+fcloop_tport_put(struct fcloop_tport *tport)
+{
+	kref_put(&tport->ref, fcloop_targetport_unreg);
 }
 
 static ssize_t
@@ -1576,8 +1597,7 @@ fcloop_delete_target_port(struct device *dev, struct device_attribute *attr,
 	if (!nport)
 		return -ENOENT;
 
-	ret = __targetport_unreg(nport, tport);
-
+	fcloop_tport_put(tport);
 	fcloop_nport_put(nport);
 
 	return ret ? ret : count;
@@ -1696,9 +1716,7 @@ static void __exit fcloop_exit(void)
 
 		spin_unlock_irqrestore(&fcloop_lock, flags);
 
-		ret = __targetport_unreg(nport, tport);
-		if (ret)
-			pr_warn("%s: Failed deleting target port\n", __func__);
+		fcloop_tport_put(tport);
 
 		ret = __remoteport_unreg(nport, rport);
 		if (ret)
