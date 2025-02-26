@@ -499,7 +499,7 @@ static int tsens_read_irq_state(struct tsens_priv *priv, u32 hw_id,
 	ret = regmap_field_read(priv->rf[LOW_INT_CLEAR_0 + hw_id], &d->low_irq_clear);
 	if (ret)
 		return ret;
-	if (tsens_version(priv) > VER_1_X) {
+	if (tsens_version(priv) > VER_1_X_NO_RPM) {
 		ret = regmap_field_read(priv->rf[UP_INT_MASK_0 + hw_id], &d->up_irq_mask);
 		if (ret)
 			return ret;
@@ -975,10 +975,16 @@ int __init init_common(struct tsens_priv *priv)
 	ret = regmap_field_read(priv->rf[TSENS_EN], &enabled);
 	if (ret)
 		goto err_put_device;
-	if (!enabled && (tsens_version(priv) != VER_2_X_NO_RPM)) {
-		dev_err(dev, "%s: device not enabled\n", __func__);
-		ret = -ENODEV;
-		goto err_put_device;
+	if (!enabled) {
+		switch (tsens_version(priv)) {
+		case VER_1_X_NO_RPM:
+		case VER_2_X_NO_RPM:
+			break;
+		default:
+			dev_err(dev, "%s: device not enabled\n", __func__);
+			ret = -ENODEV;
+			goto err_put_device;
+		}
 	}
 
 	priv->rf[SENSOR_EN] = devm_regmap_field_alloc(dev, priv->srot_map,
