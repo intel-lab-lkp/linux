@@ -1,35 +1,104 @@
 --- drivers/net/wireless/mediatek/mt76/mt7925/mcu.c
 +++ drivers/net/wireless/mediatek/mt76/mt7925/mcu.c
-@@ -2176,13 +2178,26 @@ void mt7925_mcu_bss_rlm_tlv(struct sk_buff *skb, struct mt76_phy *phy,
+@@ -1771,49 +1771,6 @@ mt7925_mcu_sta_mld_tlv(struct sk_buff *skb,
+ 	}
+ }
  
- 	tlv = mt76_connac_mcu_add_tlv(skb, UNI_BSS_INFO_RLM, sizeof(*req));
- 	req = (struct bss_rlm_tlv *)tlv;
--	req->control_channel = chandef->chan->hw_value,
--	req->center_chan = ieee80211_frequency_to_channel(freq1),
--	req->center_chan2 = ieee80211_frequency_to_channel(freq2),
--	req->tx_streams = hweight8(phy->antenna_mask),
-+	req->control_channel = chandef->chan->hw_value;
-+	req->center_chan = ieee80211_frequency_to_channel(freq1);
-+	req->center_chan2 = 0;
-+	req->tx_streams = hweight8(phy->antenna_mask);
- 	req->ht_op_info = 4, /* set HT 40M allowed */
--	req->rx_streams = hweight8(phy->antenna_mask),
--	req->band = band;
-+	req->rx_streams = hweight8(phy->antenna_mask);
-+	req->center_chan2 = 0;
-+	req->sco = 0;
-+
-+	switch (band) {
-+	case NL80211_BAND_2GHZ:
-+		req->band = 1;
-+		break;
-+	case NL80211_BAND_5GHZ:
-+		req->band = 2;
-+		break;
-+	case NL80211_BAND_6GHZ:
-+		req->band = 3;
-+		break;
-+	}
+-static int
+-mt7925_mcu_sta_cmd(struct mt76_phy *phy,
+-		   struct mt76_sta_cmd_info *info)
+-{
+-	struct mt76_vif *mvif = (struct mt76_vif *)info->vif->drv_priv;
+-	struct mt76_dev *dev = phy->dev;
+-	struct sk_buff *skb;
+-	int conn_state;
+-
+-	skb = __mt76_connac_mcu_alloc_sta_req(dev, mvif, info->wcid,
+-					      MT7925_STA_UPDATE_MAX_SIZE);
+-	if (IS_ERR(skb))
+-		return PTR_ERR(skb);
+-
+-	conn_state = info->enable ? CONN_STATE_PORT_SECURE :
+-				    CONN_STATE_DISCONNECT;
+-	if (info->link_sta)
+-		mt76_connac_mcu_sta_basic_tlv(dev, skb, info->vif,
+-					      info->link_sta,
+-					      conn_state, info->newly);
+-	if (info->link_sta && info->enable) {
+-		mt7925_mcu_sta_phy_tlv(skb, info->vif, info->link_sta);
+-		mt7925_mcu_sta_ht_tlv(skb, info->link_sta);
+-		mt7925_mcu_sta_vht_tlv(skb, info->link_sta);
+-		mt76_connac_mcu_sta_uapsd(skb, info->vif, info->link_sta->sta);
+-		mt7925_mcu_sta_amsdu_tlv(skb, info->vif, info->link_sta);
+-		mt7925_mcu_sta_he_tlv(skb, info->link_sta);
+-		mt7925_mcu_sta_he_6g_tlv(skb, info->link_sta);
+-		mt7925_mcu_sta_eht_tlv(skb, info->link_sta);
+-		mt7925_mcu_sta_rate_ctrl_tlv(skb, info->vif,
+-					     info->link_sta);
+-		mt7925_mcu_sta_state_v2_tlv(phy, skb, info->link_sta,
+-					    info->vif, info->rcpi,
+-					    info->state);
+-		mt7925_mcu_sta_mld_tlv(skb, info->vif, info->link_sta->sta);
+-	}
+-
+-	if (info->enable)
+-		mt7925_mcu_sta_hdr_trans_tlv(skb, info->vif, info->link_sta);
+-
+-	return mt76_mcu_skb_send_msg(dev, skb, info->cmd, true);
+-}
+-
+ static void
+ mt7925_mcu_sta_remove_tlv(struct sk_buff *skb)
+ {
+@@ -1826,8 +1783,8 @@ mt7925_mcu_sta_remove_tlv(struct sk_buff *skb)
+ }
  
- 	switch (chandef->width) {
- 	case NL80211_CHAN_WIDTH_40:
+ static int
+-mt7925_mcu_mlo_sta_cmd(struct mt76_phy *phy,
+-		       struct mt76_sta_cmd_info *info)
++mt7925_mcu_sta_cmd(struct mt76_phy *phy,
++		  struct mt76_sta_cmd_info *info)
+ {
+ 	struct mt792x_vif *mvif = (struct mt792x_vif *)info->vif->drv_priv;
+ 	struct mt76_dev *dev = phy->dev;
+@@ -1841,12 +1798,10 @@ mt7925_mcu_mlo_sta_cmd(struct mt76_phy *phy,
+ 	if (IS_ERR(skb))
+ 		return PTR_ERR(skb);
+ 
+-	if (info->enable)
++	if (info->enable && info->link_sta) {
+ 		mt76_connac_mcu_sta_basic_tlv(dev, skb, info->vif,
+ 					      info->link_sta,
+ 					      info->enable, info->newly);
+-
+-	if (info->enable && info->link_sta) {
+ 		mt7925_mcu_sta_phy_tlv(skb, info->vif, info->link_sta);
+ 		mt7925_mcu_sta_ht_tlv(skb, info->link_sta);
+ 		mt7925_mcu_sta_vht_tlv(skb, info->link_sta);
+@@ -1896,7 +1851,6 @@ int mt7925_mcu_sta_update(struct mt792x_dev *dev,
+ 	};
+ 	struct mt792x_sta *msta;
+ 	struct mt792x_link_sta *mlink;
+-	int err;
+ 
+ 	if (link_sta) {
+ 		msta = (struct mt792x_sta *)link_sta->sta->drv_priv;
+@@ -1904,17 +1858,7 @@ int mt7925_mcu_sta_update(struct mt792x_dev *dev,
+ 	}
+ 	info.wcid = link_sta ? &mlink->wcid : &mvif->sta.deflink.wcid;
+ 
+-	if (link_sta)
+-		info.newly = state != MT76_STA_INFO_STATE_ASSOC;
+-	else
+-		info.newly = state == MT76_STA_INFO_STATE_ASSOC ? false : true;
+-
+-	if (ieee80211_vif_is_mld(vif))
+-		err = mt7925_mcu_mlo_sta_cmd(&dev->mphy, &info);
+-	else
+-		err = mt7925_mcu_sta_cmd(&dev->mphy, &info);
+-
+-	return err;
++	return mt7925_mcu_sta_cmd(&dev->mphy, &info);
+ }
+ 
+ int mt7925_mcu_set_beacon_filter(struct mt792x_dev *dev,
