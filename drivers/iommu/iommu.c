@@ -456,6 +456,11 @@ err_free:
 	return ret;
 }
 
+static void iommu_default_domain_free(struct iommu_domain *domain)
+{
+	iommu_domain_free(domain);
+}
+
 static void iommu_deinit_device(struct device *dev)
 {
 	struct iommu_group *group = dev->iommu_group;
@@ -494,7 +499,7 @@ static void iommu_deinit_device(struct device *dev)
 	 */
 	if (list_empty(&group->devices)) {
 		if (group->default_domain) {
-			iommu_domain_free(group->default_domain);
+			iommu_default_domain_free(group->default_domain);
 			group->default_domain = NULL;
 		}
 		if (group->blocking_domain) {
@@ -3000,7 +3005,7 @@ static int iommu_setup_default_domain(struct iommu_group *group,
 
 out_free_old:
 	if (old_dom)
-		iommu_domain_free(old_dom);
+		iommu_default_domain_free(old_dom);
 	return ret;
 
 err_restore_domain:
@@ -3009,7 +3014,7 @@ err_restore_domain:
 			group, old_dom, IOMMU_SET_DOMAIN_MUST_SUCCEED);
 err_restore_def_domain:
 	if (old_dom) {
-		iommu_domain_free(dom);
+		iommu_default_domain_free(dom);
 		group->default_domain = old_dom;
 	}
 	return ret;
