@@ -665,8 +665,10 @@ static int parse_symbols(const char *fname)
 
 		addr = strtoull(addr_str, NULL, 16);
 		size = strtoull(size_str, NULL, 16);
-		if (add_field(addr, size) < 0)
+		if (add_field(addr, size) < 0) {
+			fclose(fp);
 			return -1;
+		}
 	}
 	fclose(fp);
 
