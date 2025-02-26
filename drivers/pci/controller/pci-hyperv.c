@@ -638,8 +638,8 @@ static void hv_arch_irq_unmask(struct irq_data *data)
 
 	local_irq_save(flags);
 
-	params = *this_cpu_ptr(hyperv_pcpu_input_arg);
-	memset(params, 0, sizeof(*params));
+	hv_hvcall_in_array(&params, sizeof(*params),
+			sizeof(params->int_target.vp_set.bank_contents[0]));
 	params->partition_id = HV_PARTITION_ID_SELF;
 	params->int_entry.source = HV_INTERRUPT_SOURCE_MSI;
 	params->int_entry.msi_entry.address.as_uint32 = int_desc->address & 0xffffffff;
@@ -1034,11 +1034,9 @@ static void hv_pci_read_mmio(struct device *dev, phys_addr_t gpa, int size, u32 
 
 	/*
 	 * Must be called with interrupts disabled so it is safe
-	 * to use the per-cpu input argument page.  Use it for
-	 * both input and output.
+	 * to use the per-cpu argument page.
 	 */
-	in = *this_cpu_ptr(hyperv_pcpu_input_arg);
-	out = *this_cpu_ptr(hyperv_pcpu_input_arg) + sizeof(*in);
+	hv_hvcall_inout(&in, sizeof(*in), &out, sizeof(*out));
 	in->gpa = gpa;
 	in->size = size;
 
@@ -1067,9 +1065,9 @@ static void hv_pci_write_mmio(struct device *dev, phys_addr_t gpa, int size, u32
 
 	/*
 	 * Must be called with interrupts disabled so it is safe
-	 * to use the per-cpu input argument memory.
+	 * to use the per-cpu argument page.
 	 */
-	in = *this_cpu_ptr(hyperv_pcpu_input_arg);
+	hv_hvcall_in_array(&in, sizeof(*in), sizeof(in->data[0]));
 	in->gpa = gpa;
 	in->size = size;
 	switch (size) {

@@ -1342,7 +1342,7 @@ struct hv_mmio_write_input {
 	u64 gpa;
 	u32 size;
 	u32 reserved;
-	u8 data[HV_HYPERCALL_MMIO_MAX_DATA_LENGTH];
+	u8 data[];
 } __packed;
 
 #endif /* _HV_HVGDK_MINI_H */
