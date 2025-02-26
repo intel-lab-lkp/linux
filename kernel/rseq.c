@@ -402,6 +402,7 @@ static int rseq_ip_fixup(struct pt_regs *regs)
 void __rseq_handle_notify_resume(struct ksignal *ksig, struct pt_regs *regs)
 {
 	struct task_struct *t = current;
+	unsigned long now = jiffies;
 	int ret, sig;
 
 	if (unlikely(t->flags & PF_EXITING))
@@ -419,6 +420,8 @@ void __rseq_handle_notify_resume(struct ksignal *ksig, struct pt_regs *regs)
 	}
 	if (unlikely(rseq_update_cpu_node_id(t)))
 		goto error;
+	if (t->mm && !time_before(now, READ_ONCE(t->mm->mm_cid_next_scan)))
+		task_queue_mm_cid(t);
 	return;
 
 error:
