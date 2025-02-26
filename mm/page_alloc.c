@@ -273,6 +273,7 @@ int min_free_kbytes = 1024;
 int user_min_free_kbytes = -1;
 static int watermark_boost_factor __read_mostly = 15000;
 static int watermark_scale_factor = 10;
+static int highatomic_reserve_ratio = 10;
 
 /* movable_zone is the "real" zone pages in ZONE_MOVABLE are taken from */
 int movable_zone;
@@ -3034,7 +3035,8 @@ static void reserve_highatomic_pageblock(struct page *page, int order,
 	 */
 	if ((zone_managed_pages(zone) / 100) < pageblock_nr_pages)
 		return;
-	max_managed = ALIGN((zone_managed_pages(zone) / 100), pageblock_nr_pages);
+	max_managed = ALIGN((zone_managed_pages(zone) * highatomic_reserve_ratio / 1000),
+		      pageblock_nr_pages);
 	if (zone->nr_reserved_highatomic >= max_managed)
 		return;
 
@@ -6255,6 +6257,13 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.maxlen		= sizeof(percpu_pagelist_high_fraction),
 		.mode		= 0644,
 		.proc_handler	= percpu_pagelist_high_fraction_sysctl_handler,
+		.extra1		= SYSCTL_ZERO,
+	},
+		.procname	= "highatomic_reserve_ratio",
+		.data		= &highatomic_reserve_ratio,
+		.maxlen		= sizeof(highatomic_reserve_ratio),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 	},
 	{
