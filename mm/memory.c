@@ -5293,9 +5293,22 @@ vm_fault_t finish_fault(struct vm_fault *vmf)
 		ret = VM_FAULT_NOPAGE;
 		goto unlock;
 	} else if (nr_pages > 1 && !pte_range_none(vmf->pte, nr_pages)) {
-		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
-		ret = VM_FAULT_NOPAGE;
-		goto unlock;
+		/*
+		 * We encountered a set pte, let's just try to install the
+		 * pte for the original fault if that pte is still pte none.
+		 */
+		pgoff_t idx = (vmf->address - addr) / PAGE_SIZE;
+
+		if (!pte_none(ptep_get_lockless(vmf->pte + idx))) {
+			update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
+			ret = VM_FAULT_NOPAGE;
+			goto unlock;
+		}
+
+		vmf->pte = vmf->pte + idx;
+		page = folio_page(folio, idx);
+		addr = vmf->address;
+		nr_pages = 1;
 	}
 
 	folio_ref_add(folio, nr_pages - 1);
