@@ -13,6 +13,10 @@ maintainers:
 allOf:
   - $ref: /schemas/pinctrl/pinctrl.yaml
 
+properties:
+  compatible:
+    const: nxp,imx95-scmi-pinctrl
+
 patternProperties:
   'grp$':
     type: object

@@ -156,6 +156,207 @@ properties:
     description:
       Channel specifier required when using OP-TEE transport.
 
+  scmi-clock:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-clock
+
+      '#clock-cells':
+        const: 1
+
+    required:
+      - '#clock-cells'
+      - compatible
+
+  scmi-cpufreq:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-cpufreq
+
+      '#clock-cells':
+        const: 1
+
+      '#power-domain-cells':
+        const: 1
+
+    oneOf:
+      - required:
+          - '#clock-cells'
+          - compatible
+
+      - required:
+          - '#power-domain-cells'
+          - compatible
+
+  scmi-hwmon:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-hwmon
+
+      '#thermal-sensor-cells':
+        const: 1
+
+    required:
+      - '#thermal-sensor-cells'
+      - compatible
+
+  scmi-iiodev:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-iiodev
+
+    required:
+      - compatible
+
+  scmi-pinctrl:
+    type: object
+    allOf:
+      - $ref: '#/$defs/protocol-node'
+      - anyOf:
+          - $ref: /schemas/pinctrl/pinctrl.yaml
+          - $ref: /schemas/firmware/nxp,imx95-scmi-pinctrl.yaml
+
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-pinctrl
+
+    patternProperties:
+      '-pins$':
+        type: object
+        allOf:
+          - $ref: /schemas/pinctrl/pincfg-node.yaml#
+          - $ref: /schemas/pinctrl/pinmux-node.yaml#
+        unevaluatedProperties: false
+
+        description:
+          A pin multiplexing sub-node describes how to configure a
+          set of pins in some desired function.
+          A single sub-node may define several pin configurations.
+          This sub-node is using the default pinctrl bindings to configure
+          pin multiplexing and using SCMI protocol to apply a specified
+          configuration.
+
+    required:
+      - reg
+
+  scmi-power-domain:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-power-domain
+
+      '#power-domain-cells':
+        const: 1
+
+    required:
+      - compatible
+      - '#power-domain-cells'
+
+  scmi-perf:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-perf
+
+      '#power-domain-cells':
+        const: 1
+
+    required:
+      - '#power-domain-cells'
+      - compatible
+
+  scmi-powercap:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-powercap
+
+    required:
+      - compatible
+
+  scmi-regulator:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-regulator
+
+      regulators:
+        type: object
+        additionalProperties: false
+        description:
+          The list of all regulators provided by this SCMI controller.
+
+        properties:
+          '#address-cells':
+            const: 1
+
+          '#size-cells':
+            const: 0
+
+        patternProperties:
+          '^regulator@[0-9a-f]+$':
+            type: object
+            $ref: /schemas/regulator/regulator.yaml#
+            unevaluatedProperties: false
+
+            properties:
+              reg:
+                maxItems: 1
+                description: Identifier for the voltage regulator.
+
+            required:
+              - reg
+    required:
+      - compatible
+
+  scmi-reset:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-reset
+
+      '#reset-cells':
+        const: 1
+
+    required:
+      - '#reset-cells'
+      - compatible
+
+  scmi-syspower:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      compatible:
+        const: arm,scmi-syspower
+
+    required:
+      - compatible
+
   protocol@11:
     $ref: '#/$defs/protocol-node'
     unevaluatedProperties: false
@@ -169,6 +370,7 @@ properties:
 
     required:
       - '#power-domain-cells'
+      - reg
 
   protocol@12:
     $ref: '#/$defs/protocol-node'
@@ -177,6 +379,9 @@ properties:
     properties:
       reg:
         const: 0x12
+
+    required:
+      - reg
 
   protocol@13:
     $ref: '#/$defs/protocol-node'
@@ -195,9 +400,11 @@ properties:
     oneOf:
       - required:
           - '#clock-cells'
+          - reg
 
       - required:
           - '#power-domain-cells'
+          - reg
 
   protocol@14:
     $ref: '#/$defs/protocol-node'
@@ -212,6 +419,7 @@ properties:
 
     required:
       - '#clock-cells'
+      - reg
 
   protocol@15:
     $ref: '#/$defs/protocol-node'
@@ -226,6 +434,7 @@ properties:
 
     required:
       - '#thermal-sensor-cells'
+      - reg
 
   protocol@16:
     $ref: '#/$defs/protocol-node'
@@ -240,6 +449,7 @@ properties:
 
     required:
       - '#reset-cells'
+      - reg
 
   protocol@17:
     $ref: '#/$defs/protocol-node'
@@ -275,6 +485,8 @@ properties:
 
             required:
               - reg
+    required:
+      - reg
 
   protocol@18:
     $ref: '#/$defs/protocol-node'
@@ -283,6 +495,9 @@ properties:
     properties:
       reg:
         const: 0x18
+
+    required:
+      - reg
 
   protocol@19:
     type: object
@@ -358,49 +573,64 @@ $defs:
           Channel specifier required when using OP-TEE transport and
           protocol has a dedicated communication channel.
 
-    required:
-      - reg
-
 required:
   - compatible
 
-if:
-  properties:
-    compatible:
-      contains:
-        const: arm,scmi
-then:
-  properties:
-    interrupts: false
-    interrupt-names: false
-
-  required:
-    - mboxes
-    - shmem
-
-else:
-  if:
-    properties:
-      compatible:
-        contains:
-          enum:
-            - arm,scmi-smc
-            - arm,scmi-smc-param
-            - qcom,scmi-smc
-  then:
-    required:
-      - arm,smc-id
-      - shmem
-
-  else:
-    if:
+allOf:
+  - if:
       properties:
         compatible:
           contains:
-            const: linaro,scmi-optee
+            const: arm,scmi
     then:
+      properties:
+        interrupts: false
+        interrupt-names: false
+
       required:
-        - linaro,optee-channel-id
+        - mboxes
+        - shmem
+
+    else:
+      if:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - arm,scmi-smc
+                - arm,scmi-smc-param
+                - qcom,scmi-smc
+      then:
+        required:
+          - arm,smc-id
+          - shmem
+
+      else:
+        if:
+          properties:
+            compatible:
+              contains:
+                const: linaro,scmi-optee
+        then:
+          required:
+            - linaro,optee-channel-id
+
+  - if:
+      anyOf:
+        - required: [ scmi-clock ]
+        - required: [ scmi-cpufreq ]
+        - required: [ scmi-hwmon ]
+        - required: [ scmi-iiodev ]
+        - required: [ scmi-regulator ]
+        - required: [ scmi-perf ]
+        - required: [ scmi-powercap ]
+        - required: [ scmi-power-domain ]
+        - required: [ scmi-pinctrl ]
+        - required: [ scmi-reset ]
+        - required: [ scmi-syspower]
+    then:
+      patternProperties:
+        protocol@[0-9a-f]+$: false
 
 examples:
   - |

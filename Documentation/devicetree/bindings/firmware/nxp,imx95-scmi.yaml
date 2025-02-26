@@ -19,6 +19,9 @@ properties:
       reg:
         const: 0x81
 
+    required:
+      - reg
+
   protocol@84:
     $ref: '/schemas/firmware/arm,scmi.yaml#/$defs/protocol-node'
     unevaluatedProperties: false
@@ -39,5 +42,8 @@ properties:
         minItems: 1
         maxItems: 16
         $ref: /schemas/types.yaml#/definitions/uint32-matrix
+
+    required:
+      - reg
 
 additionalProperties: true
