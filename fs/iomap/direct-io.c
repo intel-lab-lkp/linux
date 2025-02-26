@@ -81,6 +81,9 @@ static void iomap_dio_submit_bio(const struct iomap_iter *iter,
 		WRITE_ONCE(iocb->private, bio);
 	}
 
+	if (iocb->ki_flags & IOCB_NOWAIT)
+		bio->bi_opf |= REQ_NOWAIT;
+
 	if (dio->dops && dio->dops->submit_io)
 		dio->dops->submit_io(iter, bio, pos);
 	else
