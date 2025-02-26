@@ -9,7 +9,7 @@
 #include <dt-bindings/clock/qcom,camcc-sdm845.h>
 #include <dt-bindings/gpio/gpio.h>
 
-/ {
+&{/} {
 	reserved-memory {
 		linux,cma {
 			compatible = "shared-dma-pool";
