@@ -6277,7 +6277,7 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 			struct extent_buffer *parent)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct walk_control *wc;
 	int level;
 	int parent_level;
@@ -6290,10 +6290,8 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 		return -ENOMEM;
 
 	wc = kzalloc(sizeof(*wc), GFP_NOFS);
-	if (!wc) {
-		btrfs_free_path(path);
+	if (!wc)
 		return -ENOMEM;
-	}
 
 	btrfs_assert_tree_write_locked(parent);
 	parent_level = btrfs_header_level(parent);
@@ -6330,7 +6328,6 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 	}
 
 	kfree(wc);
-	btrfs_free_path(path);
 	return ret;
 }
 
