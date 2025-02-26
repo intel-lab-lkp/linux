@@ -74,6 +74,12 @@ properties:
     description: Bypass the internal PLL of the sensor to use EXTCLK directly as SYSCLK.
     type: boolean
 
+  onnn,slew-rate:
+    $ref: /schemas/types.yaml#/definitions/uint8
+    description: Slew rate ot the output pads DOUT[7:0], LINE_VALID, FRAME_VALID and PIXCLK
+    minimum: 0
+    maximum: 7
+
 required:
   - compatible
   - reg
