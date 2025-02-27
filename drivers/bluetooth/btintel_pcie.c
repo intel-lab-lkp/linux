@@ -138,8 +138,8 @@ static int btintel_pcie_setup_dbgc(struct btintel_pcie_data *data)
 		buf = &data->dbgc.bufs[i];
 		buf->data_p_addr = data->dbgc.buf_p_addr + i * BTINTEL_PCIE_DBGC_BUFFER_SIZE;
 		buf->data = data->dbgc.buf_v_addr + i * BTINTEL_PCIE_DBGC_BUFFER_SIZE;
-		db_frag.bufs[i].buf_addr_lsb = (u32)(buf->data_p_addr & 0xffffffff);
-		db_frag.bufs[i].buf_addr_msb = (u32)((buf->data_p_addr >> 32) & 0xffffffff);
+		db_frag.bufs[i].buf_addr_lsb = lower_32_bits(buf->data_p_addr);
+		db_frag.bufs[i].buf_addr_msb = upper_32_bits(buf->data_p_addr);
 		db_frag.bufs[i].buf_size = BTINTEL_PCIE_DBGC_BUFFER_SIZE;
 	}
 
