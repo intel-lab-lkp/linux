@@ -50,6 +50,10 @@ properties:
     $ref: /schemas/types.yaml#/definitions/uint32
     description: TDM TX voltage sense time slot.
 
+  ti,sdout-force-zero-mask:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Mask of TDM slots to zero-fill on a shared I2S bus.
+
   '#sound-dai-cells':
     # The codec has a single DAI, the #sound-dai-cells=<1>; case is left in for backward
     # compatibility but is deprecated.
