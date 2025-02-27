@@ -251,7 +251,8 @@ struct tmonitor_ctx;
 
 #ifdef TRAFFIC_MONITOR
 struct tmonitor_ctx *traffic_monitor_start(const char *netns, const char *test_name,
-					   const char *subtest_name);
+					   const char *subtest_name,
+					   pthread_mutex_t *stdout_lock);
 void traffic_monitor_stop(struct tmonitor_ctx *ctx);
 #else
 static inline struct tmonitor_ctx *traffic_monitor_start(const char *netns, const char *test_name,
