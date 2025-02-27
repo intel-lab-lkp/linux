@@ -128,7 +128,7 @@ struct mot_status {
 	__u32 channel;
 	pos_raw_t position;
 	speed_raw_t speed;
-	__u32 reserved;
+	__u32 local_inputs;
 };
 
 struct mot_input {

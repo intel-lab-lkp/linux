@@ -11,6 +11,18 @@ menuconfig MOTION
 
 if MOTION
 
+
+config TMC5240
+	tristate "TMC5240 stepper motor driver"
+	depends on SPI
+	select REGMAP_SPI
+	help
+	  Say Y here if you have an Analog Devices TMC5240 stepper
+	  motor controller.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called tmc5240.
+
 config MOTION_HELPERS
 	bool
 	depends on MOTION

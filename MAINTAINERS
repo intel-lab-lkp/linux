@@ -1628,6 +1628,11 @@ F:	drivers/iio/amplifiers/hmc425a.c
 F:	drivers/staging/iio/*/ad*
 X:	drivers/iio/*/adjd*
 
+ANALOG DEVICES INC TMC5240 MOTION DRIVER
+M:	David Jander <david@protonic>
+S:	Maintained
+F:	drivers/motion/tmc5240.c
+
 ANALOGBITS PLL LIBRARIES
 M:	Paul Walmsley <paul.walmsley@sifive.com>
 M:	Samuel Holland <samuel.holland@sifive.com>
