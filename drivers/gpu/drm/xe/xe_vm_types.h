@@ -18,6 +18,7 @@
 #include "xe_range_fence.h"
 
 struct xe_bo;
+struct xe_pagefault;
 struct xe_sync_entry;
 struct xe_user_fence;
 struct xe_vm;
@@ -134,6 +135,15 @@ struct xe_userptr_vma {
 };
 
 struct xe_device;
+
+struct xe_exec_queue_ban_entry {
+	/** @exec_queue_id: ID number of banned exec queue */
+	u32 exec_queue_id;
+	/** @pf: pagefault on engine of banned exec queue, if any at time */
+	struct xe_pagefault *pf;
+	/** @list: link into @xe_vm.bans.list */
+	struct list_head list;
+};
 
 struct xe_vm {
 	/** @gpuvm: base GPUVM used to track VMAs */
@@ -273,6 +283,27 @@ struct xe_vm {
 		/** @capture_once: capture only one error per VM */
 		bool capture_once;
 	} error_capture;
+
+	/**
+	 * @ban_list: List of relevant banned exec queues associated with this
+	 * vm, as well as any pagefaults at time of ban.
+	 */
+	struct {
+		/** @lock: lock protecting @bans.list */
+		spinlock_t lock;
+		/** @list: list of xe_exec_queue_ban_entry entries */
+		struct list_head list;
+		/** @len: length of @bans.list */
+		unsigned int len;
+	} bans;
+
+	/** @pf: the last pagefault seen on this VM */
+	struct {
+		/** @pf.info: info containing last seen pagefault details */
+		struct xe_pagefault *info;
+		/** @pf.lock: lock protecting @pf.info */
+		spinlock_t lock;
+	} pf;
 
 	/**
 	 * @tlb_flush_seqno: Required TLB flush seqno for the next exec.

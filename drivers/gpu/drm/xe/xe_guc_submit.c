@@ -2066,6 +2066,8 @@ int xe_guc_exec_queue_memory_cat_error_handler(struct xe_guc *guc, u32 *msg,
 	if (!exec_queue_banned(q) && !exec_queue_check_timeout(q))
 		xe_guc_exec_queue_trigger_cleanup(q);
 
+	xe_vm_add_ban_entry(q->vm, q);
+
 	return 0;
 }
 
