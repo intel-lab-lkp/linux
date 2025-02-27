@@ -1448,31 +1448,10 @@ out:
 	return ret;
 }
 
-static noinline int key_in_sk(struct btrfs_key *key,
-			      struct btrfs_ioctl_search_key *sk)
-{
-	struct btrfs_key test;
-	int ret;
-
-	test.objectid = sk->min_objectid;
-	test.type = sk->min_type;
-	test.offset = sk->min_offset;
-
-	ret = btrfs_comp_cpu_keys(key, &test);
-	if (ret < 0)
-		return 0;
-
-	test.objectid = sk->max_objectid;
-	test.type = sk->max_type;
-	test.offset = sk->max_offset;
-
-	ret = btrfs_comp_cpu_keys(key, &test);
-	if (ret > 0)
-		return 0;
-	return 1;
-}
-
-static noinline int copy_to_sk(struct btrfs_path *path,
+/*
+ * This is a helper function only used by search_ioctl()
+ */
+static int copy_to_sk(struct btrfs_path *path,
 			       struct btrfs_key *key,
 			       struct btrfs_ioctl_search_key *sk,
 			       u64 *buf_size,
@@ -1491,6 +1470,9 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 	int slot;
 	int ret = 0;
 
+	test.objectid = sk->max_objectid;
+	test.type = sk->max_type;
+	test.offset = sk->max_offset;
 	leaf = path->nodes[0];
 	slot = path->slots[0];
 	nritems = btrfs_header_nritems(leaf);
@@ -1506,8 +1488,22 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 		item_len = btrfs_item_size(leaf, i);
 
 		btrfs_item_key_to_cpu(leaf, key, i);
-		if (!key_in_sk(key, sk))
-			continue;
+		/*
+		 * The btrfs_search_forward() ensures that the key of
+		 * the returned slot should be no less than the min_key.
+		 * This guarantees that no keys below the minimum threshold
+		 * will be encountered during the traversal.
+		 * So we only need to check the max key here.
+		 *
+		 * If a key greater than max_key is found,
+		 * no more keys in range can be found in following slots
+		 * and all keys in range have been found and copied to
+		 * the buffer. So we should return 1 here.
+		 */
+		if (btrfs_comp_cpu_keys(key, &test) > 0) {
+			ret = 1;
+			goto out;
+		}
 
 		if (sizeof(sh) + item_len > *buf_size) {
 			if (*num_found) {
@@ -1576,12 +1572,7 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 	}
 advance_key:
 	ret = 0;
-	test.objectid = sk->max_objectid;
-	test.type = sk->max_type;
-	test.offset = sk->max_offset;
-	if (btrfs_comp_cpu_keys(key, &test) >= 0)
-		ret = 1;
-	else if (key->offset < (u64)-1)
+	if (key->offset < (u64)-1)
 		key->offset++;
 	else if (key->type < (u8)-1) {
 		key->offset = 0;
