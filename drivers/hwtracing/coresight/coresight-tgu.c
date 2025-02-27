@@ -34,6 +34,9 @@ static int calculate_array_location(struct tgu_drvdata *drvdata, int step_index,
 	case TGU_CONDITION_DECODE:
 		ret = step_index * (drvdata->max_condition_decode) + reg_index;
 		break;
+	case TGU_CONDITION_SELECT:
+		ret = step_index * (drvdata->max_condition_select) + reg_index;
+		break;
 	default:
 		break;
 	}
@@ -62,6 +65,11 @@ static ssize_t tgu_dataset_show(struct device *dev,
 				  drvdata->value_table->condition_decode[calculate_array_location(
 				  drvdata, tgu_attr->step_index, tgu_attr->operation_index,
 				  tgu_attr->reg_num)]);
+	case TGU_CONDITION_SELECT:
+		return sysfs_emit(buf, "0x%x\n",
+			drvdata->value_table->condition_select[calculate_array_location(
+				drvdata, tgu_attr->step_index, tgu_attr->operation_index,
+				tgu_attr->reg_num)]);
 
 	}
 	return -EINVAL;
@@ -99,6 +107,12 @@ static ssize_t tgu_dataset_store(struct device *dev,
 			tgu_attr->reg_num)] = val;
 		ret = size;
 		break;
+	case TGU_CONDITION_SELECT:
+		tgu_drvdata->value_table->condition_select[calculate_array_location(
+			tgu_drvdata, tgu_attr->step_index, tgu_attr->operation_index,
+			tgu_attr->reg_num)] = val;
+		ret = size;
+		break;
 	default:
 		break;
 	}
@@ -129,6 +143,14 @@ static umode_t tgu_node_visible(struct kobject *kobject, struct attribute *attr,
 		case TGU_CONDITION_DECODE:
 			ret = (tgu_attr->reg_num <
 					drvdata->max_condition_decode) ?
+						attr->mode : 0;
+			break;
+		case TGU_CONDITION_SELECT:
+			/* 'default' register is at the end of 'select' region */
+			if (tgu_attr->reg_num == drvdata->max_condition_select-1)
+				attr->name = "default";
+			ret = (tgu_attr->reg_num <
+					drvdata->max_condition_select) ?
 						attr->mode : 0;
 			break;
 		default:
@@ -165,6 +187,16 @@ static void tgu_write_all_hw_regs(struct tgu_drvdata *drvdata)
 						   drvdata, i,
 						   TGU_CONDITION_DECODE, j)],
 				   CONDITION_DECODE_STEP(i, j));
+		}
+	}
+
+	for (i = 0; i < drvdata->max_step; i++) {
+		for (j = 0; j < drvdata->max_condition_select; j++) {
+			tgu_writel(drvdata,
+				drvdata->value_table->condition_select
+					[calculate_array_location(drvdata, i,
+						TGU_CONDITION_SELECT, j)],
+				CONDITION_SELECT_STEP(i, j));
 		}
 	}
 
@@ -318,6 +350,14 @@ static const struct attribute_group *tgu_attr_groups[] = {
 	CONDITION_DECODE_ATTRIBUTE_GROUP_INIT(5),
 	CONDITION_DECODE_ATTRIBUTE_GROUP_INIT(6),
 	CONDITION_DECODE_ATTRIBUTE_GROUP_INIT(7),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(0),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(1),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(2),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(3),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(4),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(5),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(6),
+	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(7),
 	NULL,
 };
 
@@ -368,6 +408,8 @@ static int tgu_probe(struct amba_device *adev, const struct amba_id *id)
 		return -EINVAL;
 
 	drvdata->max_condition_decode = drvdata->max_condition;
+	/* select region has an additional 'default' register */
+	drvdata->max_condition_select = drvdata->max_condition + 1;
 
 	drvdata->value_table =
 		devm_kzalloc(dev, sizeof(*drvdata->value_table), GFP_KERNEL);
@@ -390,6 +432,15 @@ static int tgu_probe(struct amba_device *adev, const struct amba_id *id)
 		GFP_KERNEL);
 
 	if (!drvdata->value_table->condition_decode)
+		return -ENOMEM;
+
+	drvdata->value_table->condition_select = devm_kzalloc(
+		dev,
+		drvdata->max_condition_select * drvdata->max_step *
+			sizeof(*(drvdata->value_table->condition_select)),
+		GFP_KERNEL);
+
+	if (!drvdata->value_table->condition_select)
 		return -ENOMEM;
 
 	drvdata->enable = false;
