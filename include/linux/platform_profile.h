@@ -37,11 +37,16 @@ enum platform_profile_option {
  *		 profile in sysfs.
  * @profile_set: Callback that will be called when storing a new platform
  *		 profile in sysfs.
+ * @secondary: Set the platform handler as a secondary. Secondary handlers
+ *		 accept all profile options and are not considered in choosing
+ *		 which options to show under the legacy sysfs. This way, they do
+ *		 not occlude the primary handler's choices.
  */
 struct platform_profile_ops {
 	int (*probe)(void *drvdata, unsigned long *choices);
 	int (*profile_get)(struct device *dev, enum platform_profile_option *profile);
 	int (*profile_set)(struct device *dev, enum platform_profile_option profile);
+	bool secondary;
 };
 
 struct device *platform_profile_register(struct device *dev, const char *name,

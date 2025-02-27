@@ -63,17 +63,18 @@ static ssize_t _commmon_choices_show(unsigned long *choices, char *buf)
  * _store_class_profile - Set the profile for a class device
  * @dev: The class device
  * @data: The profile to set
+ * @enforce_valid: For secondary handlers, enforce that the profile is valid
  *
  * Return: 0 on success, -errno on failure
  */
-static int _store_class_profile(struct device *dev, void *data)
+static int _store_class_profile(struct device *dev, void *data, bool enforce_valid)
 {
 	struct platform_profile_handler *handler;
 	int *bit = (int *)data;
 
 	lockdep_assert_held(&profile_lock);
 	handler = to_pprof_handler(dev);
-	if (!test_bit(*bit, handler->choices))
+	if ((enforce_valid || !handler->ops->secondary) && !test_bit(*bit, handler->choices))
 		return -EOPNOTSUPP;
 
 	return handler->ops->profile_set(dev, *bit);
@@ -204,7 +205,7 @@ static ssize_t profile_store(struct device *dev,
 		return -EINVAL;
 
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
-		ret = _store_class_profile(dev, &index);
+		ret = _store_class_profile(dev, &index, true);
 		if (ret)
 			return ret;
 	}
@@ -243,19 +244,35 @@ static const struct class platform_profile_class = {
  *
  * Return: 0 on success, -errno on failure
  */
-static int _aggregate_choices(struct device *dev, void *data)
+static int _aggregate_choices(struct device *dev, void *data, bool secondary)
 {
 	struct platform_profile_handler *handler;
 	unsigned long *aggregate = data;
 
 	lockdep_assert_held(&profile_lock);
 	handler = to_pprof_handler(dev);
+
+	if (handler->ops->secondary != secondary)
+		return 0;
+
 	if (test_bit(PLATFORM_PROFILE_LAST, aggregate))
 		bitmap_copy(aggregate, handler->choices, PLATFORM_PROFILE_LAST);
+	else if (handler->ops->secondary)
+		bitmap_or(aggregate, handler->choices, aggregate, PLATFORM_PROFILE_LAST);
 	else
 		bitmap_and(aggregate, handler->choices, aggregate, PLATFORM_PROFILE_LAST);
 
 	return 0;
+}
+
+static int _aggregate_choices_primary(struct device *dev, void *data)
+{
+	return _aggregate_choices(dev, data, false);
+}
+
+static int _aggregate_choices_secondary(struct device *dev, void *data)
+{
+	return _aggregate_choices(dev, data, true);
 }
 
 /**
@@ -276,9 +293,16 @@ static ssize_t platform_profile_choices_show(struct device *dev,
 	set_bit(PLATFORM_PROFILE_LAST, aggregate);
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
 		err = class_for_each_device(&platform_profile_class, NULL,
-					    aggregate, _aggregate_choices);
+					    aggregate, _aggregate_choices_primary);
 		if (err)
 			return err;
+
+		if (test_bit(PLATFORM_PROFILE_LAST, aggregate)) {
+			err = class_for_each_device(&platform_profile_class, NULL,
+							aggregate, _aggregate_choices_secondary);
+			if (err)
+				return err;
+		}
 	}
 
 	/* no profile handler registered any more */
@@ -325,7 +349,7 @@ static int _store_and_notify(struct device *dev, void *data)
 	enum platform_profile_option *profile = data;
 	int err;
 
-	err = _store_class_profile(dev, profile);
+	err = _store_class_profile(dev, profile, false);
 	if (err)
 		return err;
 	return _notify_class_profile(dev, NULL);
@@ -384,9 +408,18 @@ static ssize_t platform_profile_store(struct device *dev,
 	set_bit(PLATFORM_PROFILE_LAST, choices);
 	scoped_cond_guard(mutex_intr, return -ERESTARTSYS, &profile_lock) {
 		ret = class_for_each_device(&platform_profile_class, NULL,
-					    choices, _aggregate_choices);
+					    choices, _aggregate_choices_primary);
 		if (ret)
 			return ret;
+
+		if (test_bit(PLATFORM_PROFILE_LAST, choices)) {
+			ret = class_for_each_device(
+				&platform_profile_class, NULL, choices,
+				_aggregate_choices_secondary);
+			if (ret)
+				return ret;
+		}
+
 		if (!test_bit(i, choices))
 			return -EOPNOTSUPP;
 
@@ -470,9 +503,17 @@ int platform_profile_cycle(void)
 			return -EINVAL;
 
 		err = class_for_each_device(&platform_profile_class, NULL,
-					    choices, _aggregate_choices);
+					    choices, _aggregate_choices_primary);
 		if (err)
 			return err;
+
+		if (test_bit(PLATFORM_PROFILE_LAST, choices)) {
+			err = class_for_each_device(
+				&platform_profile_class, NULL, choices,
+				_aggregate_choices_secondary);
+			if (err)
+				return err;
+		}
 
 		/* never iterate into a custom if all drivers supported it */
 		clear_bit(PLATFORM_PROFILE_CUSTOM, choices);
