@@ -138,6 +138,34 @@ static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
 	return true;
 }
 
+static int cxlhdm_decoder_caps_verify(struct cxl_hdm *cxlhdm)
+{
+	/*
+	 * CXL r3.2 section 8.2.4.20.1
+	 * CXL devices shall not advertise more than 10 decoders,
+	 * CXL switches and HBs may advertise up to 32 decoders.
+	 */
+	if (is_cxl_endpoint(cxlhdm->port) && cxlhdm->decoder_count > 10)
+		return -EINVAL;
+	else if (cxlhdm->decoder_count > 32)
+		return -EINVAL;
+
+	/*
+	 * CXL r3.2 section 8.2.4.20.1
+	 * target count is applicable only to CXL upstream port and HB.
+	 * The number of target ports each decoder supports should be
+	 * one of the numbers 1, 2, 4 or 8.
+	 */
+	if (!is_cxl_endpoint(cxlhdm->port) &&
+	    cxlhdm->target_count != 1 &&
+	    cxlhdm->target_count != 2 &&
+	    cxlhdm->target_count != 4 &&
+	    cxlhdm->target_count != 8)
+		return -EINVAL;
+
+	return 0;
+}
+
 /**
  * devm_cxl_setup_hdm - map HDM decoder component registers
  * @port: cxl_port to map
@@ -182,7 +210,8 @@ struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 	}
 
 	parse_hdm_decoder_caps(cxlhdm);
-	if (cxlhdm->decoder_count == 0) {
+	rc = cxlhdm_decoder_caps_verify(cxlhdm);
+	if (rc) {
 		dev_err(dev, "Spec violation. Caps invalid\n");
 		return ERR_PTR(-ENXIO);
 	}
