@@ -37,6 +37,10 @@ static int calculate_array_location(struct tgu_drvdata *drvdata, int step_index,
 	case TGU_CONDITION_SELECT:
 		ret = step_index * (drvdata->max_condition_select) + reg_index;
 		break;
+	case TGU_COUNTER:
+	case TGU_TIMER:
+		ret = step_index * (drvdata->max_timer_counter) + reg_index;
+		break;
 	default:
 		break;
 	}
@@ -70,7 +74,16 @@ static ssize_t tgu_dataset_show(struct device *dev,
 			drvdata->value_table->condition_select[calculate_array_location(
 				drvdata, tgu_attr->step_index, tgu_attr->operation_index,
 				tgu_attr->reg_num)]);
-
+	case TGU_TIMER:
+		return sysfs_emit(buf, "0x%x\n",
+			drvdata->value_table->timer[calculate_array_location(
+				drvdata, tgu_attr->step_index, tgu_attr->operation_index,
+				tgu_attr->reg_num)]);
+	case TGU_COUNTER:
+		return sysfs_emit(buf, "0x%x\n",
+			drvdata->value_table->counter[calculate_array_location(
+				drvdata, tgu_attr->step_index, tgu_attr->operation_index,
+				tgu_attr->reg_num)]);
 	}
 	return -EINVAL;
 
@@ -109,6 +122,18 @@ static ssize_t tgu_dataset_store(struct device *dev,
 		break;
 	case TGU_CONDITION_SELECT:
 		tgu_drvdata->value_table->condition_select[calculate_array_location(
+			tgu_drvdata, tgu_attr->step_index, tgu_attr->operation_index,
+			tgu_attr->reg_num)] = val;
+		ret = size;
+		break;
+	case TGU_TIMER:
+		tgu_drvdata->value_table->timer[calculate_array_location(
+			tgu_drvdata, tgu_attr->step_index, tgu_attr->operation_index,
+			tgu_attr->reg_num)] = val;
+		ret = size;
+		break;
+	case TGU_COUNTER:
+		tgu_drvdata->value_table->counter[calculate_array_location(
 			tgu_drvdata, tgu_attr->step_index, tgu_attr->operation_index,
 			tgu_attr->reg_num)] = val;
 		ret = size;
@@ -152,6 +177,15 @@ static umode_t tgu_node_visible(struct kobject *kobject, struct attribute *attr,
 			ret = (tgu_attr->reg_num <
 					drvdata->max_condition_select) ?
 						attr->mode : 0;
+			break;
+		case TGU_COUNTER:
+		case TGU_TIMER:
+			if (drvdata->max_timer_counter == 0)
+				ret = SYSFS_GROUP_INVISIBLE;
+			else
+				ret = (tgu_attr->reg_num <
+					drvdata->max_timer_counter) ?
+					attr->mode : 0;
 			break;
 		default:
 			break;
@@ -197,6 +231,26 @@ static void tgu_write_all_hw_regs(struct tgu_drvdata *drvdata)
 					[calculate_array_location(drvdata, i,
 						TGU_CONDITION_SELECT, j)],
 				CONDITION_SELECT_STEP(i, j));
+		}
+	}
+
+	for (i = 0; i < drvdata->max_step; i++) {
+		for (j = 0; j < drvdata->max_timer_counter; j++) {
+			tgu_writel(drvdata,
+				drvdata->value_table->timer
+					[calculate_array_location(drvdata, i,
+							TGU_TIMER, j)],
+						TIMER0_COMPARE_STEP(i, j));
+		}
+	}
+
+	for (i = 0; i < drvdata->max_step; i++) {
+		for (j = 0; j < drvdata->max_timer_counter; j++) {
+			tgu_writel(drvdata,
+				drvdata->value_table->counter
+					[calculate_array_location(drvdata, i,
+						TGU_COUNTER, j)],
+				COUNTER0_COMPARE_STEP(i, j));
 		}
 	}
 
@@ -358,6 +412,22 @@ static const struct attribute_group *tgu_attr_groups[] = {
 	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(5),
 	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(6),
 	CONDITION_SELECT_ATTRIBUTE_GROUP_INIT(7),
+	TIMER_ATTRIBUTE_GROUP_INIT(0),
+	TIMER_ATTRIBUTE_GROUP_INIT(1),
+	TIMER_ATTRIBUTE_GROUP_INIT(2),
+	TIMER_ATTRIBUTE_GROUP_INIT(3),
+	TIMER_ATTRIBUTE_GROUP_INIT(4),
+	TIMER_ATTRIBUTE_GROUP_INIT(5),
+	TIMER_ATTRIBUTE_GROUP_INIT(6),
+	TIMER_ATTRIBUTE_GROUP_INIT(7),
+	COUNTER_ATTRIBUTE_GROUP_INIT(0),
+	COUNTER_ATTRIBUTE_GROUP_INIT(1),
+	COUNTER_ATTRIBUTE_GROUP_INIT(2),
+	COUNTER_ATTRIBUTE_GROUP_INIT(3),
+	COUNTER_ATTRIBUTE_GROUP_INIT(4),
+	COUNTER_ATTRIBUTE_GROUP_INIT(5),
+	COUNTER_ATTRIBUTE_GROUP_INIT(6),
+	COUNTER_ATTRIBUTE_GROUP_INIT(7),
 	NULL,
 };
 
@@ -407,6 +477,11 @@ static int tgu_probe(struct amba_device *adev, const struct amba_id *id)
 	if (ret)
 		return -EINVAL;
 
+	ret = of_property_read_u32(adev->dev.of_node, "tgu-timer-counters",
+				   &drvdata->max_timer_counter);
+	if (ret)
+		return -EINVAL;
+
 	drvdata->max_condition_decode = drvdata->max_condition;
 	/* select region has an additional 'default' register */
 	drvdata->max_condition_select = drvdata->max_condition + 1;
@@ -441,6 +516,24 @@ static int tgu_probe(struct amba_device *adev, const struct amba_id *id)
 		GFP_KERNEL);
 
 	if (!drvdata->value_table->condition_select)
+		return -ENOMEM;
+
+	drvdata->value_table->timer = devm_kzalloc(
+		dev,
+		drvdata->max_step * drvdata->max_timer_counter *
+			sizeof(*(drvdata->value_table->timer)),
+		GFP_KERNEL);
+
+	if (!drvdata->value_table->timer)
+		return -ENOMEM;
+
+	drvdata->value_table->counter = devm_kzalloc(
+		dev,
+		drvdata->max_step * drvdata->max_timer_counter *
+			sizeof(*(drvdata->value_table->counter)),
+		GFP_KERNEL);
+
+	if (!drvdata->value_table->counter)
 		return -ENOMEM;
 
 	drvdata->enable = false;
