@@ -56,6 +56,17 @@ config BT_HCIBTUSB_POLL_SYNC
 	  Say Y here to enable USB poll_sync for Bluetooth USB devices by
 	  default.
 
+config BT_HCIBTUSB_AUTO_SET_ISOC_ALT
+	bool "Auto set isoc_altsetting for HCI_USER_CHANNEL when SCO connected"
+	depends on BT_HCIBTUSB
+	default y if CHROME_PLATFORMS
+	help
+	  Say Y here to enable auto set isoc_altsetting for HCI_USER_CHANNEL
+	  when SCO connected
+
+	  When enabled, btusb intercepts the HCI_EV_SYNC_CONN_COMPLETE packets
+	  and configures isoc_altsetting automatically for HCI_USER_CHANNEL.
+
 config BT_HCIBTUSB_BCM
 	bool "Broadcom protocol support"
 	depends on BT_HCIBTUSB
