@@ -10,6 +10,7 @@
  * Flags for xfs_reflink_allocate_cow()
  */
 #define XFS_REFLINK_CONVERT	(1u << 0) /* convert unwritten extents now */
+#define XFS_REFLINK_ATOMIC_SW	(1u << 1) /* alloc for SW-based atomic write */
 
 /*
  * Check whether it is safe to free COW fork blocks from an inode. It is unsafe
