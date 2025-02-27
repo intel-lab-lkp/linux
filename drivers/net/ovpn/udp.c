@@ -448,9 +448,16 @@ static void ovpn_udp_close(struct sock *sk, long timeout)
 	ovpn = sock->ovpn;
 	rcu_read_unlock();
 
-	if (ovpn->mode == OVPN_MODE_P2P)
+	switch (ovpn->mode) {
+	case OVPN_MODE_MP:
+		ovpn_peers_free(ovpn, sk,
+				OVPN_DEL_PEER_REASON_TRANSPORT_DISCONNECT);
+		break;
+	case OVPN_MODE_P2P:
 		ovpn_peer_release_p2p(ovpn, sk,
 				      OVPN_DEL_PEER_REASON_TRANSPORT_DISCONNECT);
+		break;
+	}
 	sock->udp_prot->close(sk, timeout);
 }
 
