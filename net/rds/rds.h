@@ -134,6 +134,8 @@ struct rds_conn_path {
 	unsigned int		cp_unacked_packets;
 	unsigned int		cp_unacked_bytes;
 	unsigned int		cp_index;
+
+	wait_queue_head_t       cp_up_waitq;    /* start up waitq */
 };
 
 /* One rds_connection per RDS address pair */
@@ -607,10 +609,11 @@ struct rds_sock {
 	struct rds_transport    *rs_transport;
 
 	/*
-	 * rds_sendmsg caches the conn it used the last time around.
-	 * This helps avoid costly lookups.
+	 * rds_sendmsg caches the conn and conn_path it used the last time
+	 * around. This helps avoid costly lookups.
 	 */
 	struct rds_connection	*rs_conn;
+	struct rds_conn_path	*rs_conn_path;
 
 	/* flag indicating we were congested or not */
 	int			rs_congested;

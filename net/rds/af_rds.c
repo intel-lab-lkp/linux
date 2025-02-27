@@ -685,6 +685,7 @@ static int __rds_create(struct socket *sock, struct sock *sk, int protocol)
 	rs->rs_rx_traces = 0;
 	rs->rs_tos = 0;
 	rs->rs_conn = NULL;
+	rs->rs_conn_path = NULL;
 
 	spin_lock_bh(&rds_sock_lock);
 	list_add_tail(&rs->rs_item, &rds_sock_list);

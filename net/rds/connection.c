@@ -147,6 +147,7 @@ static void __rds_conn_path_init(struct rds_connection *conn,
 	INIT_WORK(&cp->cp_down_w, rds_shutdown_worker);
 	mutex_init(&cp->cp_cm_lock);
 	cp->cp_flags = 0;
+	init_waitqueue_head(&cp->cp_up_waitq);
 }
 
 /*
@@ -913,7 +914,7 @@ void rds_conn_path_connect_if_down(struct rds_conn_path *cp)
 		rcu_read_unlock();
 		return;
 	}
-	if (rds_conn_path_state(cp) == RDS_CONN_DOWN)
+	if (rds_conn_path_down(cp))
 		rds_queue_reconnect(cp);
 	rcu_read_unlock();
 }
