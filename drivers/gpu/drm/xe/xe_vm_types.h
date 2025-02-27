@@ -305,6 +305,9 @@ struct xe_vm {
 		spinlock_t lock;
 	} pf;
 
+	/** @reset_count: number of times this VM has seen an engine reset */
+	atomic_t reset_count;
+
 	/**
 	 * @tlb_flush_seqno: Required TLB flush seqno for the next exec.
 	 * protected by the vm resv.
