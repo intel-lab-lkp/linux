@@ -20,7 +20,7 @@
 
 int sbf_port __initdata = -1;	/* set via acpi_boot_init() */
 
-static int __init parity(u8 v)
+static bool __init parity(u8 v)
 {
 	int x = 0;
 	int i;
@@ -30,7 +30,7 @@ static int __init parity(u8 v)
 		v >>= 1;
 	}
 
-	return x;
+	return !!x;
 }
 
 static void __init sbf_write(u8 v)
@@ -38,9 +38,8 @@ static void __init sbf_write(u8 v)
 	unsigned long flags;
 
 	if (sbf_port != -1) {
-		v &= ~SBF_PARITY;
 		if (!parity(v))
-			v |= SBF_PARITY;
+			v ^= SBF_PARITY;
 
 		printk(KERN_INFO "Simple Boot Flag at 0x%x set to 0x%x\n",
 			sbf_port, v);
@@ -66,14 +65,14 @@ static u8 __init sbf_read(void)
 	return v;
 }
 
-static int __init sbf_value_valid(u8 v)
+static bool __init sbf_value_valid(u8 v)
 {
 	if (v & SBF_RESERVED)		/* Reserved bits */
-		return 0;
+		return false;
 	if (!parity(v))
-		return 0;
+		return false;
 
-	return 1;
+	return true;
 }
 
 static int __init sbf_init(void)
