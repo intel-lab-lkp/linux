@@ -231,7 +231,6 @@ extern void warn_bogus_irq_restore(void);
 		raw_safe_halt();		\
 	} while (0)
 
-
 #else /* !CONFIG_TRACE_IRQFLAGS */
 
 #define local_irq_enable()	do { raw_local_irq_enable(); } while (0)
