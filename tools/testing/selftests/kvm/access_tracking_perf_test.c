@@ -65,6 +65,8 @@ static int vcpu_last_completed_iteration[KVM_MAX_VCPUS];
 /* Whether to overlap the regions of memory vCPUs access. */
 static bool overlap_memory_access;
 
+static bool skip_sanity_check;
+
 struct test_params {
 	/* The backing source for the region of memory. */
 	enum vm_mem_backing_src_type backing_src;
@@ -185,7 +187,7 @@ static void mark_vcpu_memory_idle(struct kvm_vm *vm,
 	 */
 	if (still_idle >= pages / 10) {
 #ifdef __x86_64__
-		TEST_ASSERT(this_cpu_has(X86_FEATURE_HYPERVISOR),
+		TEST_ASSERT(skip_sanity_check,
 			    "vCPU%d: Too many pages still idle (%lu out of %lu)",
 			    vcpu_idx, still_idle, pages);
 #endif
@@ -342,6 +344,8 @@ static void help(char *name)
 	printf(" -v: specify the number of vCPUs to run.\n");
 	printf(" -o: Overlap guest memory accesses instead of partitioning\n"
 	       "     them into a separate region of memory for each vCPU.\n");
+	printf(" -u: Skip check that after dirtying the guest memory, most (90%%) of\n"
+	       "it is reported as dirty again");
 	backing_src_help("-s");
 	puts("");
 	exit(0);
@@ -359,7 +363,7 @@ int main(int argc, char *argv[])
 
 	guest_modes_append_default();
 
-	while ((opt = getopt(argc, argv, "hm:b:v:os:")) != -1) {
+	while ((opt = getopt(argc, argv, "hm:b:v:os:u")) != -1) {
 		switch (opt) {
 		case 'm':
 			guest_modes_cmdline(optarg);
@@ -376,6 +380,9 @@ int main(int argc, char *argv[])
 		case 's':
 			params.backing_src = parse_backing_src_type(optarg);
 			break;
+		case 'u':
+			skip_sanity_check = true;
+			break;
 		case 'h':
 		default:
 			help(argv[0]);
@@ -386,6 +393,18 @@ int main(int argc, char *argv[])
 	page_idle_fd = open("/sys/kernel/mm/page_idle/bitmap", O_RDWR);
 	__TEST_REQUIRE(page_idle_fd >= 0,
 		       "CONFIG_IDLE_PAGE_TRACKING is not enabled");
+
+
+	if (skip_sanity_check == false) {
+		if (this_cpu_has(X86_FEATURE_HYPERVISOR)) {
+			printf("Skipping idle page count sanity check, because the test is run nested\n");
+			skip_sanity_check = true;
+		} else if (is_numa_balancing_enabled()) {
+			printf("Skipping idle page count sanity check, because NUMA balance is enabled\n");
+			skip_sanity_check = true;
+		}
+	}
+
 	close(page_idle_fd);
 
 	for_each_guest_mode(run_test, &params);

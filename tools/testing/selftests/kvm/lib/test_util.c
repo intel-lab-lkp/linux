@@ -163,6 +163,28 @@ size_t get_trans_hugepagesz(void)
 	return size;
 }
 
+
+bool is_numa_balancing_enabled(void)
+{
+	int ret;
+	int val;
+	struct stat statbuf;
+	FILE *f;
+
+	ret = stat("/proc/sys/kernel/numa_balancing", &statbuf);
+	TEST_ASSERT(ret == 0 || (ret == -1 && errno == ENOENT),
+			"Error in stating /proc/sys/kernel/numa_balancing");
+
+	if (ret != 0)
+		return false;
+
+	f = fopen("/proc/sys/kernel/numa_balancing", "r");
+	ret = fscanf(f, "%d", &val);
+
+	TEST_ASSERT(val == 0 || val == 1, "Unexpected value in /proc/sys/kernel/numa_balancing");
+	return val == 1;
+}
+
 size_t get_def_hugetlb_pagesz(void)
 {
 	char buf[64];
