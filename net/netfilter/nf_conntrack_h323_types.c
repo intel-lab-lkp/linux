@@ -1108,7 +1108,7 @@ static const struct field_t _SecurityCapabilities[] = {	/* SEQUENCE */
 	 _NonStandardParameter},
 	{FNAME("encryption") CHOICE, 2, 3, 3, SKIP | EXT, 0,
 	 _SecurityServiceMode},
-	{FNAME("authenticaton") CHOICE, 2, 3, 3, SKIP | EXT, 0,
+	{FNAME("authentication") CHOICE, 2, 3, 3, SKIP | EXT, 0,
 	 _SecurityServiceMode},
 	{FNAME("integrity") CHOICE, 2, 3, 3, SKIP | EXT, 0,
 	 _SecurityServiceMode},
