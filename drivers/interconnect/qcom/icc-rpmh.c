@@ -285,13 +285,25 @@ int qcom_icc_rpmh_probe(struct platform_device *pdev)
 			ret = PTR_ERR(node);
 			goto err_remove_nodes;
 		}
+		qn->id = node->id;
 
 		node->name = qn->name;
 		node->data = qn;
 		icc_node_add(node, provider);
 
-		for (j = 0; j < qn->num_links; j++)
-			icc_link_create(node, qn->links[j]);
+		for (j = 0; j < qn->num_links; j++) {
+			struct qcom_icc_node *qn_link_node = qn->link_nodes[j];
+			struct icc_node *link_node;
+
+			if (qn_link_node) {
+				link_node = icc_node_create(qn_link_node->id);
+				qn_link_node->id = link_node->id;
+				icc_link_create(node, qn_link_node->id);
+			} else {
+				/* backward compatibility for target using static IDs */
+				icc_link_create(node, qn->links[j]);
+			}
+		}
 
 		data->nodes[i] = node;
 	}

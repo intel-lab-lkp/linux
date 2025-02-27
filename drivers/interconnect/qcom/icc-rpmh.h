@@ -95,7 +95,8 @@ struct qcom_icc_qosbox {
 struct qcom_icc_node {
 	const char *name;
 	u16 links[MAX_LINKS];
-	u16 id;
+	struct qcom_icc_node *link_nodes[MAX_LINKS];
+	int id;
 	u16 num_links;
 	u16 channels;
 	u16 buswidth;
