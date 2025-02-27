@@ -606,12 +606,23 @@ xfs_get_atomic_write_attr(
 	unsigned int		*unit_min,
 	unsigned int		*unit_max)
 {
+	struct xfs_buftarg	*target = xfs_inode_buftarg(ip);
+	struct xfs_mount	*mp = ip->i_mount;
+
 	if (!xfs_inode_can_atomicwrite(ip)) {
 		*unit_min = *unit_max = 0;
 		return;
 	}
 
-	*unit_min = *unit_max = ip->i_mount->m_sb.sb_blocksize;
+	*unit_min = ip->i_mount->m_sb.sb_blocksize;
+
+	if (XFS_IS_REALTIME_INODE(ip)) {
+		/* For now, set limit at 1x block */
+		*unit_max = ip->i_mount->m_sb.sb_blocksize;
+	} else {
+		*unit_max =  min_t(unsigned int, XFS_FSB_TO_B(mp, mp->awu_max),
+					target->bt_bdev_awu_max);
+	}
 }
 
 static void
