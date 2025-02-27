@@ -104,6 +104,10 @@ static int coarse_adjust_tod_clock(struct dfl_tod *dt, s64 delta)
 	if (delta == 0)
 		return 0;
 
+	/*
+	 * Caution: Split access lo/hi, which has a small race
+	 * when the low half overflows while we read it.
+	 */
 	nanosec = readl(base + TOD_NANOSEC);
 	seconds_lsb = readl(base + TOD_SECONDSL);
 	seconds_msb = readl(base + TOD_SECONDSH);

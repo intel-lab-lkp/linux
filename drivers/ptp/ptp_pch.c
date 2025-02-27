@@ -147,6 +147,10 @@ static u64 pch_systime_read(struct pch_ts_regs __iomem *regs)
 {
 	u64 ns;
 
+	/*
+	 * Caution: Split access lo/hi, which has a small race
+	 * when the low half overflows while we read it.
+	 */
 	ns = ioread64_lo_hi(&regs->systime_lo);
 
 	return ns << TICKS_NS_SHIFT;
@@ -154,6 +158,10 @@ static u64 pch_systime_read(struct pch_ts_regs __iomem *regs)
 
 static void pch_systime_write(struct pch_ts_regs __iomem *regs, u64 ns)
 {
+	/*
+	 * This can equally overflow when the low half of the new
+	 * nanosecond value is close to 0xffffffff.
+	 */
 	iowrite64_lo_hi(ns >> TICKS_NS_SHIFT, &regs->systime_lo);
 }
 

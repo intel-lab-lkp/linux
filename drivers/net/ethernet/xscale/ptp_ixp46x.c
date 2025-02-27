@@ -43,6 +43,10 @@ static u64 ixp_systime_read(struct ixp46x_ts_regs *regs)
 	u64 ns;
 	u32 lo, hi;
 
+	/*
+	 * Caution: Split access lo/hi, which has a small race
+	 * when the low half overflows while we read it.
+	 */
 	lo = __raw_readl(&regs->systime_lo);
 	hi = __raw_readl(&regs->systime_hi);
 
@@ -61,6 +65,10 @@ static void ixp_systime_write(struct ixp46x_ts_regs *regs, u64 ns)
 	hi = ns >> 32;
 	lo = ns & 0xffffffff;
 
+	/*
+	 * This can equally overflow when the low half of the new
+	 * nanosecond value is close to 0xffffffff.
+	 */
 	__raw_writel(lo, &regs->systime_lo);
 	__raw_writel(hi, &regs->systime_hi);
 }

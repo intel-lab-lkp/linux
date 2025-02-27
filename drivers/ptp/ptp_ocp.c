@@ -1229,6 +1229,10 @@ __ptp_ocp_gettime_locked(struct ptp_ocp *bp, struct timespec64 *ts,
 		sts->post_ts = ns_to_timespec64(ns - bp->ts_window_adjust);
 	}
 
+	/*
+	 * Caution: Split access to nanoseconds/seconds, which has a small
+	 * race when the low half overflows while we read it.
+	 */
 	time_ns = ioread32(&bp->reg->time_ns);
 	time_sec = ioread32(&bp->reg->time_sec);
 
