@@ -67,6 +67,7 @@ struct panthor_model {
 }
 
 static const struct panthor_model gpu_models[] = {
+	GPU_MODEL(g310, 0, 0),	/* NXP i.MX95 */
 	GPU_MODEL(g610, 10, 7),
 	{},
 };
