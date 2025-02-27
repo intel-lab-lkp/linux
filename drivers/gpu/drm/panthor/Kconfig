@@ -14,6 +14,7 @@ config DRM_PANTHOR
 	select IOMMU_IO_PGTABLE_LPAE
 	select IOMMU_SUPPORT
 	select PM_DEVFREQ
+	select RESET_SIMPLE if SOC_IMX9
 	help
 	  DRM driver for ARM Mali CSF-based GPUs.
 
