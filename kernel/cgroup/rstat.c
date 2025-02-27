@@ -9,8 +9,12 @@
 
 #include <trace/events/cgroup.h>
 
-static DEFINE_SPINLOCK(cgroup_rstat_lock);
-static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_cpu_lock);
+static DEFINE_SPINLOCK(cgroup_rstat_base_lock);
+static DEFINE_PER_CPU(raw_spinlock_t, cgroup_rstat_base_cpu_lock);
+
+static spinlock_t cgroup_rstat_subsys_lock[CGROUP_SUBSYS_COUNT];
+static DEFINE_PER_CPU(raw_spinlock_t,
+		cgroup_rstat_subsys_cpu_lock[CGROUP_SUBSYS_COUNT]);
 
 static void cgroup_base_stat_flush(struct cgroup *cgrp, int cpu);
 
@@ -20,8 +24,13 @@ static struct cgroup_rstat_cpu *cgroup_rstat_cpu(
 	return per_cpu_ptr(css->rstat_cpu, cpu);
 }
 
+static inline bool is_base_css(struct cgroup_subsys_state *css)
+{
+	return css->ss == NULL;
+}
+
 /*
- * Helper functions for rstat per CPU lock (cgroup_rstat_cpu_lock).
+ * Helper functions for rstat per CPU locks.
  *
  * This makes it easier to diagnose locking issues and contention in
  * production environments. The parameter @fast_path determine the
@@ -36,12 +45,12 @@ unsigned long _cgroup_rstat_cpu_lock(raw_spinlock_t *cpu_lock, int cpu,
 	bool contended;
 
 	/*
-	 * The _irqsave() is needed because cgroup_rstat_lock is
-	 * spinlock_t which is a sleeping lock on PREEMPT_RT. Acquiring
-	 * this lock with the _irq() suffix only disables interrupts on
-	 * a non-PREEMPT_RT kernel. The raw_spinlock_t below disables
-	 * interrupts on both configurations. The _irqsave() ensures
-	 * that interrupts are always disabled and later restored.
+	 * The _irqsave() is needed because the locks used for flushing are
+	 * spinlock_t which is a sleeping lock on PREEMPT_RT. Acquiring this lock
+	 * with the _irq() suffix only disables interrupts on a non-PREEMPT_RT
+	 * kernel. The raw_spinlock_t below disables interrupts on both
+	 * configurations. The _irqsave() ensures that interrupts are always
+	 * disabled and later restored.
 	 */
 	contended = !raw_spin_trylock_irqsave(cpu_lock, flags);
 	if (contended) {
@@ -87,7 +96,7 @@ __bpf_kfunc void cgroup_rstat_updated(
 		struct cgroup_subsys_state *css, int cpu)
 {
 	struct cgroup *cgrp = css->cgroup;
-	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
+	raw_spinlock_t *cpu_lock;
 	unsigned long flags;
 
 	/*
@@ -100,6 +109,12 @@ __bpf_kfunc void cgroup_rstat_updated(
 	 */
 	if (data_race(cgroup_rstat_cpu(css, cpu)->updated_next))
 		return;
+
+	if (is_base_css(css))
+		cpu_lock = per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu);
+	else
+		cpu_lock = per_cpu_ptr(cgroup_rstat_subsys_cpu_lock, cpu) +
+			css->ss->id;
 
 	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, true);
 
@@ -208,10 +223,16 @@ static struct cgroup_subsys_state *cgroup_rstat_updated_list(
 		struct cgroup_subsys_state *root, int cpu)
 {
 	struct cgroup *cgrp = root->cgroup;
-	raw_spinlock_t *cpu_lock = per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu);
 	struct cgroup_rstat_cpu *rstatc = cgroup_rstat_cpu(root, cpu);
 	struct cgroup_subsys_state *head = NULL, *parent, *child;
+	raw_spinlock_t *cpu_lock;
 	unsigned long flags;
+
+	if (is_base_css(root))
+		cpu_lock = per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu);
+	else
+		cpu_lock = per_cpu_ptr(cgroup_rstat_subsys_cpu_lock, cpu) +
+			root->ss->id;
 
 	flags = _cgroup_rstat_cpu_lock(cpu_lock, cpu, cgrp, false);
 
@@ -315,7 +336,7 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css,
 	struct cgroup *cgrp = css->cgroup;
 	int cpu;
 
-	lockdep_assert_held(&cgroup_rstat_lock);
+	lockdep_assert_held(&lock);
 
 	for_each_possible_cpu(cpu) {
 		struct cgroup_subsys_state *pos;
@@ -356,12 +377,18 @@ static void cgroup_rstat_flush_locked(struct cgroup_subsys_state *css,
 __bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 {
 	struct cgroup *cgrp = css->cgroup;
+	spinlock_t *lock;
+
+	if (is_base_css(css))
+		lock = &cgroup_rstat_base_lock;
+	else
+		lock = &cgroup_rstat_subsys_lock[css->ss->id];
 
 	might_sleep();
 
-	__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, -1);
-	cgroup_rstat_flush_locked(css, &cgroup_rstat_lock);
-	__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, -1);
+	__cgroup_rstat_lock(lock, cgrp, -1);
+	cgroup_rstat_flush_locked(css, lock);
+	__cgroup_rstat_unlock(lock, cgrp, -1);
 }
 
 /**
@@ -376,10 +403,16 @@ __bpf_kfunc void cgroup_rstat_flush(struct cgroup_subsys_state *css)
 void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
 {
 	struct cgroup *cgrp = css->cgroup;
+	spinlock_t *lock;
+
+	if (is_base_css(css))
+		lock = &cgroup_rstat_base_lock;
+	else
+		lock = &cgroup_rstat_subsys_lock[css->ss->id];
 
 	might_sleep();
-	__cgroup_rstat_lock(&cgroup_rstat_lock, cgrp, -1);
-	cgroup_rstat_flush_locked(css, &cgroup_rstat_lock);
+	__cgroup_rstat_lock(lock, cgrp, -1);
+	cgroup_rstat_flush_locked(css, lock);
 }
 
 /**
@@ -389,7 +422,14 @@ void cgroup_rstat_flush_hold(struct cgroup_subsys_state *css)
 void cgroup_rstat_flush_release(struct cgroup_subsys_state *css)
 {
 	struct cgroup *cgrp = css->cgroup;
-	__cgroup_rstat_unlock(&cgroup_rstat_lock, cgrp, -1);
+	spinlock_t *lock;
+
+	if (is_base_css(css))
+		lock = &cgroup_rstat_base_lock;
+	else
+		lock = &cgroup_rstat_subsys_lock[css->ss->id];
+
+	__cgroup_rstat_unlock(lock, cgrp, -1);
 }
 
 int cgroup_rstat_init(struct cgroup_subsys_state *css)
@@ -435,10 +475,21 @@ void cgroup_rstat_exit(struct cgroup_subsys_state *css)
 
 void __init cgroup_rstat_boot(void)
 {
-	int cpu;
+	struct cgroup_subsys *ss;
+	int cpu, ssid;
 
-	for_each_possible_cpu(cpu)
-		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_cpu_lock, cpu));
+	for_each_subsys(ss, ssid) {
+		spin_lock_init(&cgroup_rstat_subsys_lock[ssid]);
+	}
+
+	for_each_possible_cpu(cpu) {
+		raw_spin_lock_init(per_cpu_ptr(&cgroup_rstat_base_cpu_lock, cpu));
+
+		for_each_subsys(ss, ssid) {
+			raw_spin_lock_init(
+					per_cpu_ptr(cgroup_rstat_subsys_cpu_lock, cpu) + ssid);
+		}
+	}
 }
 
 /*
