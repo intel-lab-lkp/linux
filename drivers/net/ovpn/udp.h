@@ -15,6 +15,8 @@ struct ovpn_peer;
 struct ovpn_priv;
 struct socket;
 
+void __init ovpn_udp_init(void);
+
 int ovpn_udp_socket_attach(struct ovpn_socket *ovpn_sock,
 			   struct ovpn_priv *ovpn);
 void ovpn_udp_socket_detach(struct ovpn_socket *ovpn_sock);
