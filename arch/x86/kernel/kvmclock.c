@@ -192,8 +192,18 @@ static unsigned long kvm_get_tsc_khz(void)
 {
 	struct cpuid_tsc_info info;
 
-	if (!cpuid_get_tsc_freq(&info))
+	/*
+	 * Prefer CPUID over kvmclock when possible, as CPUID also includes the
+	 * core crystal frequency, i.e. the APIC timer frequency.  When the core
+	 * crystal frequency is enumerated in CPUID.0x15, KVM's ABI is that the
+	 * (virtual) APIC BUS runs at the same frequency.
+	 */
+	if (!cpuid_get_tsc_freq(&info)) {
+#ifdef CONFIG_X86_LOCAL_APIC
+		lapic_timer_period = info.crystal_khz * 1000 / HZ;
+#endif
 		return info.tsc_khz;
+	}
 
 	return pvclock_tsc_khz(this_cpu_pvti());
 }
