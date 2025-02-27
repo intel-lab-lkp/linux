@@ -2661,6 +2661,9 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 	WARN_ON(ret < 0);
 
 	pci_npem_create(dev);
+
+	ret = pci_doe_sysfs_init(dev);
+	WARN_ON(ret < 0);
 }
 
 struct pci_dev *pci_scan_single_device(struct pci_bus *bus, int devfn)
