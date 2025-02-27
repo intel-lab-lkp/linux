@@ -13424,6 +13424,14 @@ F:	Documentation/litmus-tests/
 F:	Documentation/memory-barriers.txt
 F:	tools/memory-model/
 
+LINUX MOTION CONTROL
+M:	David Jander <david@protonic.nl>
+L:	linux-kernel@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/motion/
+F:	Documentation/motion/
+F:	drivers/motion/
+
 LINUX-NEXT TREE
 M:	Stephen Rothwell <sfr@canb.auug.org.au>
 L:	linux-next@vger.kernel.org

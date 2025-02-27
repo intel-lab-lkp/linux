@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0
+
+menuconfig MOTION
+	bool "Linux Motion Control support"
+	select IIO
+	help
+	  The Linux Motion Control subsystem contains drivers for different
+	  types of motion control hardware, like (stepper-)motor drivers and
+	  linear actuators.
+	  Say Y here if you want to chose motion control devices.
+
+if MOTION
+
+config MOTION_HELPERS
+	bool
+	depends on MOTION
+
+endif # MOTION
+
