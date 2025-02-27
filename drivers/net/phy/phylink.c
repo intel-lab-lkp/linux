@@ -2637,6 +2637,30 @@ void phylink_suspend(struct phylink *pl, bool mac_wol)
 EXPORT_SYMBOL_GPL(phylink_suspend);
 
 /**
+ * phylink_prepare_resume() - prepare to resume a network device
+ * @pl: a pointer to a &struct phylink returned from phylink_create()
+ *
+ * Optional, thus must be called prior to phylink_resume().
+ *
+ * Prepare to resume a network device, preparing the PHY as necessary.
+ */
+void phylink_prepare_resume(struct phylink *pl)
+{
+	ASSERT_RTNL();
+
+	/* If the MAC requires the receive clock, but receive clock
+	 * stop was enabled at the PHY, we need to ensure that the
+	 * receive clock is running. Disable receive clock stop.
+	 * phylink_resume() will re-enable it if necessary.
+	 */
+	if (pl->mac_supports_eee_ops && pl->phydev &&
+	    pl->config->mac_requires_rxc &&
+	    pl->config->eee_rx_clk_stop_enable)
+		phy_eee_rx_clock_stop(pl->phydev, false);
+}
+EXPORT_SYMBOL_GPL(phylink_prepare_resume);
+
+/**
  * phylink_resume() - handle a network device resume event
  * @pl: a pointer to a &struct phylink returned from phylink_create()
  *
