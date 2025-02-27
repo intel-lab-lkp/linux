@@ -29,19 +29,22 @@ DECLARE_STATIC_CALL(pv_steal_clock, dummy_steal_clock);
 DECLARE_STATIC_CALL(pv_sched_clock, dummy_sched_clock);
 
 int __init __paravirt_set_sched_clock(u64 (*func)(void), bool stable,
-				      void (*save)(void), void (*restore)(void));
+				      void (*save)(void), void (*restore)(void),
+				      void (*start_secondary));
 
 static __always_inline void paravirt_set_sched_clock(u64 (*func)(void),
 						     void (*save)(void),
 						     void (*restore)(void))
 {
-	(void)__paravirt_set_sched_clock(func, true, save, restore);
+	(void)__paravirt_set_sched_clock(func, true, save, restore, NULL);
 }
 
 static __always_inline u64 paravirt_sched_clock(void)
 {
 	return static_call(pv_sched_clock)();
 }
+
+void paravirt_sched_clock_start_secondary(void);
 
 struct static_key;
 extern struct static_key paravirt_steal_enabled;
@@ -754,6 +757,9 @@ void native_pv_lock_init(void) __init;
 
 #ifndef __ASSEMBLY__
 static inline void native_pv_lock_init(void)
+{
+}
+static inline void paravirt_sched_clock_start_secondary(void)
 {
 }
 #endif
