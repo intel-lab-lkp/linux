@@ -318,6 +318,37 @@ static int idpf_ptp_gettimex64(struct ptp_clock_info *info,
 }
 
 /**
+ * idpf_ptp_update_cached_phctime - Update the cached PHC time values
+ * @adapter: Driver specific private structure
+ *
+ * This function updates the system time values which are cached in the adapter
+ * structure.
+ *
+ * This function must be called periodically to ensure that the cached value
+ * is never more than 2 seconds old.
+ *
+ * Return: 0 on success, negative otherwise.
+ */
+static int idpf_ptp_update_cached_phctime(struct idpf_adapter *adapter)
+{
+	u64 systime;
+	int err;
+
+	err = idpf_ptp_read_src_clk_reg(adapter, &systime, NULL);
+	if (err)
+		return -EACCES;
+
+	/* Update the cached PHC time stored in the adapter structure.
+	 * These values are used to extend Tx timestamp values to 64 bit
+	 * expected by the stack.
+	 */
+	WRITE_ONCE(adapter->ptp->cached_phc_time, systime);
+	WRITE_ONCE(adapter->ptp->cached_phc_jiffies, jiffies);
+
+	return 0;
+}
+
+/**
  * idpf_ptp_settime64 - Set the time of the clock
  * @info: the driver's PTP info structure
  * @ts: timespec64 structure that holds the new time value
@@ -346,6 +377,11 @@ static int idpf_ptp_settime64(struct ptp_clock_info *info,
 		pci_err(adapter->pdev, "Failed to set the time, err: %pe\n", ERR_PTR(err));
 		return err;
 	}
+
+	err = idpf_ptp_update_cached_phctime(adapter);
+	if (err)
+		pci_warn(adapter->pdev,
+			 "Unable to immediately update cached PHC time\n");
 
 	return 0;
 }
@@ -401,6 +437,11 @@ static int idpf_ptp_adjtime(struct ptp_clock_info *info, s64 delta)
 		pci_err(adapter->pdev, "Failed to adjust the clock with delta %lld err: %pe\n", delta, ERR_PTR(err));
 		return err;
 	}
+
+	err = idpf_ptp_update_cached_phctime(adapter);
+	if (err)
+		pci_warn(adapter->pdev,
+			 "Unable to immediately update cached PHC time\n");
 
 	return 0;
 }
@@ -466,6 +507,159 @@ static int idpf_ptp_gpio_enable(struct ptp_clock_info *info,
 }
 
 /**
+ * idpf_ptp_tstamp_extend_32b_to_64b - Convert a 32b nanoseconds Tx or Rx
+ *				       timestamp value to 64b.
+ * @cached_phc_time: recently cached copy of PHC time
+ * @in_timestamp: Ingress/egress 32b nanoseconds timestamp value
+ *
+ * Hardware captures timestamps which contain only 32 bits of nominal
+ * nanoseconds, as opposed to the 64bit timestamps that the stack expects.
+ *
+ * Return: Tx timestamp value extended to 64 bits based on cached PHC time.
+ */
+u64 idpf_ptp_tstamp_extend_32b_to_64b(u64 cached_phc_time, u32 in_timestamp)
+{
+	s64 delta;
+
+	delta = in_timestamp - lower_32_bits(cached_phc_time);
+
+	return cached_phc_time + delta;
+}
+
+/**
+ * idpf_ptp_extend_ts - Convert a 40b timestamp to 64b nanoseconds
+ * @vport: Virtual port structure
+ * @in_tstamp: Ingress/egress timestamp value
+ *
+ * It is assumed that the caller verifies the timestamp is valid prior to
+ * calling this function.
+ *
+ * Extract the 32bit nominal nanoseconds and extend them. Use the cached PHC
+ * time stored in the device private PTP structure as the basis for timestamp
+ * extension.
+ *
+ * Return: Tx timestamp value extended to 64 bits.
+ */
+u64 idpf_ptp_extend_ts(struct idpf_vport *vport, u64 in_tstamp)
+{
+	struct idpf_ptp *ptp = vport->adapter->ptp;
+	unsigned long discard_time;
+
+	discard_time = ptp->cached_phc_jiffies + 2 * HZ;
+
+	if (time_is_before_jiffies(discard_time)) {
+		mutex_lock(&vport->tstamp_stats.tx_hwtstamp_lock);
+		vport->tstamp_stats.tx_hwtstamp_discarded++;
+		mutex_unlock(&vport->tstamp_stats.tx_hwtstamp_lock);
+
+		return 0;
+	}
+
+	return idpf_ptp_tstamp_extend_32b_to_64b(ptp->cached_phc_time,
+						 lower_32_bits(in_tstamp));
+}
+
+/**
+ * idpf_ptp_request_ts - Request an available Tx timestamp index
+ * @tx_q: Transmit queue on which the Tx timestamp is requested
+ * @skb: The SKB to associate with this timestamp request
+ * @idx: Index of the Tx timestamp latch
+ *
+ * Request tx timestamp index negotiated during PTP init that will be set into
+ * Tx descriptor.
+ *
+ * Return: 0 and the index that can be provided to Tx descriptor on success,
+ * -errno otherwise.
+ */
+int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
+			u32 *idx)
+{
+	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp;
+	struct list_head *head;
+
+	/* Get the index from the free latches list */
+	spin_lock_bh(&tx_q->cached_tstamp_caps->lock_free);
+
+	head = &tx_q->cached_tstamp_caps->latches_free;
+	if (list_empty(head)) {
+		spin_unlock_bh(&tx_q->cached_tstamp_caps->lock_free);
+		return -ENOBUFS;
+	}
+
+	ptp_tx_tstamp = list_first_entry(head, struct idpf_ptp_tx_tstamp,
+					 list_member);
+	list_del(&ptp_tx_tstamp->list_member);
+	spin_unlock_bh(&tx_q->cached_tstamp_caps->lock_free);
+
+	ptp_tx_tstamp->skb = skb_get(skb);
+	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+
+	/* Move the element to the used latches list */
+	spin_lock_bh(&tx_q->cached_tstamp_caps->lock_in_use);
+	list_add(&ptp_tx_tstamp->list_member,
+		 &tx_q->cached_tstamp_caps->latches_in_use);
+	spin_unlock_bh(&tx_q->cached_tstamp_caps->lock_in_use);
+
+	*idx = ptp_tx_tstamp->idx;
+
+	return 0;
+}
+
+/**
+ * idpf_ptp_set_timestamp_mode - Setup driver for requested timestamp mode
+ * @vport: Virtual port structure
+ * @config: Hwtstamp settings requested or saved
+ *
+ * Return: 0 on success, -errno otherwise.
+ */
+int idpf_ptp_set_timestamp_mode(struct idpf_vport *vport,
+				struct kernel_hwtstamp_config *config)
+{
+	switch (config->tx_type) {
+	case HWTSTAMP_TX_OFF:
+		break;
+	case HWTSTAMP_TX_ON:
+		if (!idpf_ptp_is_vport_tx_tstamp_ena(vport))
+			return -EINVAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	vport->tstamp_config.tx_type = config->tx_type;
+
+	return 0;
+}
+
+/**
+ * idpf_tstamp_task - Delayed task to handle Tx tstamps
+ * @work: work_struct handle
+ */
+void idpf_tstamp_task(struct work_struct *work)
+{
+	struct idpf_vport *vport;
+
+	vport = container_of(work, struct idpf_vport, tstamp_task);
+
+	idpf_ptp_get_tx_tstamp(vport);
+}
+
+/**
+ * idpf_ptp_do_aux_work - Do PTP periodic work
+ * @info: Driver's PTP info structure
+ *
+ * Return: Number of jiffies to periodic work.
+ */
+static long idpf_ptp_do_aux_work(struct ptp_clock_info *info)
+{
+	struct idpf_adapter *adapter = idpf_ptp_info_to_adapter(info);
+
+	idpf_ptp_update_cached_phctime(adapter);
+
+	return msecs_to_jiffies(500);
+}
+
+/**
  * idpf_ptp_set_caps - Set PTP capabilities
  * @adapter: Driver specific private structure
  *
@@ -486,6 +680,7 @@ static void idpf_ptp_set_caps(const struct idpf_adapter *adapter)
 	info->adjtime = idpf_ptp_adjtime;
 	info->verify = idpf_ptp_verify_pin;
 	info->enable = idpf_ptp_gpio_enable;
+	info->do_aux_work = idpf_ptp_do_aux_work;
 
 #if IS_ENABLED(CONFIG_ARM_ARCH_TIMER)
 	info->getcrosststamp = idpf_ptp_get_crosststamp;
@@ -537,6 +732,8 @@ static void idpf_ptp_release_vport_tstamp(struct idpf_vport *vport)
 	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp, *tmp;
 	struct list_head *head;
 
+	cancel_work_sync(&vport->tstamp_task);
+
 	/* Remove list with free latches */
 	spin_lock(&vport->tx_tstamp_caps->lock_free);
 
@@ -549,15 +746,20 @@ static void idpf_ptp_release_vport_tstamp(struct idpf_vport *vport)
 	spin_unlock(&vport->tx_tstamp_caps->lock_free);
 
 	/* Remove list with latches in use */
+	mutex_lock(&vport->tstamp_stats.tx_hwtstamp_lock);
 	spin_lock(&vport->tx_tstamp_caps->lock_in_use);
 
 	head = &vport->tx_tstamp_caps->latches_in_use;
 	list_for_each_entry_safe(ptp_tx_tstamp, tmp, head, list_member) {
+		vport->tstamp_stats.tx_hwtstamp_flushed++;
 		list_del(&ptp_tx_tstamp->list_member);
 		kfree(ptp_tx_tstamp);
 	}
 
 	spin_unlock(&vport->tx_tstamp_caps->lock_in_use);
+
+	mutex_unlock(&vport->tstamp_stats.tx_hwtstamp_lock);
+	mutex_destroy(&vport->tstamp_stats.tx_hwtstamp_lock);
 
 	kfree(vport->tx_tstamp_caps);
 	vport->tx_tstamp_caps = NULL;
@@ -577,6 +779,27 @@ static void idpf_ptp_release_tstamp(struct idpf_adapter *adapter)
 
 		idpf_ptp_release_vport_tstamp(vport);
 	}
+}
+
+/**
+ * idpf_ptp_get_txq_tstamp_capability - Verify the timestamping capability
+ *					for a given tx queue.
+ * @txq: Transmit queue
+ *
+ * Since performing timestamp flows requires reading the device clock value and
+ * the support in the Control Plane, the function checks both factors and
+ * summarizes the support for the timestamping.
+ *
+ * Return: true if the timestamping is supported, false otherwise.
+ */
+bool idpf_ptp_get_txq_tstamp_capability(struct idpf_tx_queue *txq)
+{
+	if (!txq || !txq->cached_tstamp_caps)
+		return false;
+	else if (txq->cached_tstamp_caps->access)
+		return true;
+	else
+		return false;
 }
 
 /**
@@ -619,6 +842,9 @@ int idpf_ptp_init(struct idpf_adapter *adapter)
 	if (err)
 		goto free_ptp;
 
+	if (adapter->ptp->get_dev_clk_time_access != IDPF_PTP_NONE)
+		ptp_schedule_worker(adapter->ptp->clock, 0);
+
 	/* Write the default increment time value if the clock adjustments
 	 * are enabled.
 	 */
@@ -642,6 +868,9 @@ int idpf_ptp_init(struct idpf_adapter *adapter)
 	return 0;
 
 remove_clock:
+	if (adapter->ptp->get_dev_clk_time_access != IDPF_PTP_NONE)
+		ptp_cancel_worker_sync(adapter->ptp->clock);
+
 	ptp_clock_unregister(adapter->ptp->clock);
 	adapter->ptp->clock = NULL;
 
@@ -663,11 +892,16 @@ void idpf_ptp_release(struct idpf_adapter *adapter)
 	if (!ptp)
 		return;
 
-	if (ptp->tx_tstamp_access != IDPF_PTP_NONE)
+	if (ptp->tx_tstamp_access != IDPF_PTP_NONE &&
+	    ptp->get_dev_clk_time_access != IDPF_PTP_NONE)
 		idpf_ptp_release_tstamp(adapter);
 
-	if (ptp->clock)
+	if (ptp->clock) {
+		if (adapter->ptp->get_dev_clk_time_access != IDPF_PTP_NONE)
+			ptp_cancel_worker_sync(adapter->ptp->clock);
+
 		ptp_clock_unregister(ptp->clock);
+	}
 
 	kfree(ptp);
 	adapter->ptp = NULL;
