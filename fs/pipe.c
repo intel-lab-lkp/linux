@@ -112,20 +112,47 @@ void pipe_double_lock(struct pipe_inode_info *pipe1,
 	pipe_lock(pipe2);
 }
 
+static struct page *anon_pipe_get_page(struct pipe_inode_info *pipe)
+{
+	struct page *page;
+
+	if (pipe->tmp_page[0]) {
+		page = pipe->tmp_page[0];
+		pipe->tmp_page[0] = NULL;
+	} else if (pipe->tmp_page[1]) {
+		page = pipe->tmp_page[1];
+		pipe->tmp_page[1] = NULL;
+	} else {
+		page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
+	}
+
+	return page;
+}
+
+static void anon_pipe_put_page(struct pipe_inode_info *pipe,
+			       struct page *page)
+{
+	if (page_count(page) == 1) {
+		if (!pipe->tmp_page[0]) {
+			pipe->tmp_page[0] = page;
+			return;
+		}
+
+		if (!pipe->tmp_page[1]) {
+			pipe->tmp_page[1] = page;
+			return;
+		}
+	}
+
+	put_page(page);
+}
+
 static void anon_pipe_buf_release(struct pipe_inode_info *pipe,
 				  struct pipe_buffer *buf)
 {
 	struct page *page = buf->page;
 
-	/*
-	 * If nobody else uses this page, and we don't already have a
-	 * temporary page, let's keep track of it as a one-deep
-	 * allocation cache. (Otherwise just release our reference to it)
-	 */
-	if (page_count(page) == 1 && !pipe->tmp_page)
-		pipe->tmp_page = page;
-	else
-		put_page(page);
+	anon_pipe_put_page(pipe, page);
 }
 
 static bool anon_pipe_buf_try_steal(struct pipe_inode_info *pipe,
@@ -493,27 +520,25 @@ anon_pipe_write(struct kiocb *iocb, struct iov_iter *from)
 		if (!pipe_full(head, pipe->tail, pipe->max_usage)) {
 			unsigned int mask = pipe->ring_size - 1;
 			struct pipe_buffer *buf;
-			struct page *page = pipe->tmp_page;
+			struct page *page;
 			int copied;
 
-			if (!page) {
-				page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
-				if (unlikely(!page)) {
-					ret = ret ? : -ENOMEM;
-					break;
-				}
-				pipe->tmp_page = page;
+			page = anon_pipe_get_page(pipe);
+			if (unlikely(!page)) {
+				if (!ret)
+					ret = -ENOMEM;
+				break;
 			}
 
 			copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);
 			if (unlikely(copied < PAGE_SIZE && iov_iter_count(from))) {
+				anon_pipe_put_page(pipe, page);
 				if (!ret)
 					ret = -EFAULT;
 				break;
 			}
 
 			pipe->head = head + 1;
-			pipe->tmp_page = NULL;
 			/* Insert it into the buffer array */
 			buf = &pipe->bufs[head & mask];
 			buf->page = page;
@@ -847,8 +872,10 @@ void free_pipe_info(struct pipe_inode_info *pipe)
 	if (pipe->watch_queue)
 		put_watch_queue(pipe->watch_queue);
 #endif
-	if (pipe->tmp_page)
-		__free_page(pipe->tmp_page);
+	if (pipe->tmp_page[0])
+		__free_page(pipe->tmp_page[0]);
+	if (pipe->tmp_page[1])
+		__free_page(pipe->tmp_page[1]);
 	kfree(pipe->bufs);
 	kfree(pipe);
 }
