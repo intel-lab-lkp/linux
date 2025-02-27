@@ -839,6 +839,15 @@ static struct ctl_table ipv4_net_table[] = {
 		.extra2         = SYSCTL_ONE,
 	},
 	{
+		.procname	= "ip_reuse_exact_match",
+		.data		= &init_net.ipv4.sysctl_ip_reuse_exact_match,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= proc_dou8vec_minmax,
+		.extra1         = SYSCTL_ZERO,
+		.extra2         = SYSCTL_ONE,
+	},
+	{
 		.procname	= "fwmark_reflect",
 		.data		= &init_net.ipv4.sysctl_fwmark_reflect,
 		.maxlen		= sizeof(u8),

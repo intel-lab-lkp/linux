@@ -142,6 +142,7 @@ struct netns_ipv4 {
 	u8 sysctl_ip_fwd_update_priority;
 	u8 sysctl_ip_nonlocal_bind;
 	u8 sysctl_ip_autobind_reuse;
+	u8 sysctl_ip_reuse_exact_match;
 	/* Shall we try to damage output packets if routing dev changes? */
 	u8 sysctl_ip_dynaddr;
 #ifdef CONFIG_NET_L3_MASTER_DEV

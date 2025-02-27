@@ -157,18 +157,32 @@ static struct sock *inet6_lhash2_lookup(const struct net *net,
 	struct sock *sk, *result = NULL;
 	struct hlist_nulls_node *node;
 	int score, hiscore = 0;
+	bool reuse_exact_match;
 
+	reuse_exact_match = READ_ONCE(net->ipv4.sysctl_ip_reuse_exact_match);
 	sk_nulls_for_each_rcu(sk, node, &ilb2->nulls_head) {
 		score = compute_score(sk, net, hnum, daddr, dif, sdif);
 		if (score > hiscore) {
-			result = inet6_lookup_reuseport(net, sk, skb, doff,
-							saddr, sport, daddr, hnum, inet6_ehashfn);
-			if (result)
-				return result;
+			if (!reuse_exact_match) {
+				result = inet6_lookup_reuseport(net, sk, skb,
+								doff, saddr,
+								sport, daddr,
+								hnum, inet6_ehashfn);
+				if (result)
+					return result;
+			}
 
 			result = sk;
 			hiscore = score;
 		}
+	}
+
+	if (reuse_exact_match) {
+		sk = inet6_lookup_reuseport(net, result, skb, doff, saddr,
+					    sport, daddr, hnum,
+					    inet6_ehashfn);
+		if (sk)
+			return sk;
 	}
 
 	return result;
