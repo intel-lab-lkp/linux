@@ -226,6 +226,8 @@
 		CP11X_LABEL(syscon0): system-controller@440000 {
 			compatible = "syscon", "simple-mfd";
 			reg = <0x440000 0x2000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
 
 			CP11X_LABEL(clk): clock {
 				compatible = "marvell,cp110-clock";
@@ -272,6 +274,12 @@
 				clocks = <&CP11X_LABEL(clk) 1 21>,
 					 <&CP11X_LABEL(clk) 1 17>;
 				status = "disabled";
+			};
+
+			CP11X_LABEL(swrst): reset-controller@268 {
+				compatible = "marvell,armada8k-reset";
+				reg = <0x268 0x4>;
+				#reset-cells = <1>;
 			};
 		};
 
