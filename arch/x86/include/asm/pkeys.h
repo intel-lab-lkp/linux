@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_PKEYS_H
 #define _ASM_X86_PKEYS_H
 
+#include "pkru.h"
+
 /*
  * If more than 16 keys are ever supported, a thorough audit
  * will be necessary to ensure that the types that store key
@@ -121,6 +123,34 @@ static inline int vma_pkey(struct vm_area_struct *vma)
 				      VM_PKEY_BIT2 | VM_PKEY_BIT3;
 
 	return (vma->vm_flags & vma_pkey_mask) >> VM_PKEY_SHIFT;
+}
+
+typedef u32 pkey_reg_t;
+
+static inline pkey_reg_t write_permissive_pkey_val(void)
+{
+	return write_pkru(0);
+}
+
+static inline pkey_reg_t enable_zero_pkey_val(void)
+{
+	u32 pkru;
+
+	if (!cpu_feature_enabled(X86_FEATURE_OSPKE))
+		return 0;
+	/*
+	 * WRPKRU is relatively expensive compared to RDPKRU,
+	 * avoid it if possible.
+	 */
+	pkru = rdpkru();
+	if ((pkru & (PKRU_AD_BIT|PKRU_WD_BIT)) != 0)
+		wrpkru(pkru & ~(PKRU_AD_BIT|PKRU_WD_BIT));
+	return pkru;
+}
+
+static inline void write_pkey_val(pkey_reg_t val)
+{
+	write_pkru(val);
 }
 
 #endif /*_ASM_X86_PKEYS_H */
