@@ -7882,6 +7882,8 @@ int stmmac_resume(struct device *dev)
 	}
 
 	rtnl_lock();
+	phylink_prepare_resume(priv->phylink);
+
 	mutex_lock(&priv->lock);
 
 	stmmac_reset_queues_param(priv);
