@@ -1857,6 +1857,7 @@ static int intel_dp_dsc_compute_params(const struct intel_connector *connector,
 {
 	struct intel_display *display = to_intel_display(connector);
 	struct drm_dsc_config *vdsc_cfg = &crtc_state->dsc.config;
+	struct intel_encoder *encoder = connector->encoder;
 	int ret;
 
 	/*
@@ -1870,7 +1871,7 @@ static int intel_dp_dsc_compute_params(const struct intel_connector *connector,
 
 	vdsc_cfg->slice_height = intel_dp_get_slice_height(vdsc_cfg->pic_height);
 
-	ret = intel_dsc_compute_params(crtc_state);
+	ret = intel_dsc_compute_params(crtc_state, encoder);
 	if (ret)
 		return ret;
 

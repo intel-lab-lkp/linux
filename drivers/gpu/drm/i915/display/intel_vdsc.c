@@ -260,7 +260,8 @@ static int intel_dsc_slice_dimensions_valid(struct intel_crtc_state *pipe_config
 	return 0;
 }
 
-int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
+int intel_dsc_compute_params(struct intel_crtc_state *pipe_config,
+			     struct intel_encoder *encoder)
 {
 	struct intel_crtc *crtc = to_intel_crtc(pipe_config->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
@@ -320,7 +321,9 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 	 * upto uncompressed bpp-1, hence add calculations for all the rc
 	 * parameters
 	 */
-	if (DISPLAY_VER(dev_priv) >= 13) {
+	if (DISPLAY_VER(dev_priv) >= 13 &&
+	    (vdsc_cfg->dsc_version_minor != 1 ||
+	     encoder->type != INTEL_OUTPUT_DSI)) {
 		calculate_rc_params(vdsc_cfg);
 	} else {
 		if ((compressed_bpp == 8 ||

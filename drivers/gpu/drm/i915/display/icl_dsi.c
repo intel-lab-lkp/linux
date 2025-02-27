@@ -1612,7 +1612,7 @@ static int gen11_dsi_dsc_compute_config(struct intel_encoder *encoder,
 
 	vdsc_cfg->pic_height = crtc_state->hw.adjusted_mode.crtc_vdisplay;
 
-	ret = intel_dsc_compute_params(crtc_state);
+	ret = intel_dsc_compute_params(crtc_state, encoder);
 	if (ret)
 		return ret;
 
