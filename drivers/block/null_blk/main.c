@@ -1301,7 +1301,7 @@ static inline blk_status_t null_handle_badblocks(struct nullb_cmd *cmd,
 {
 	struct badblocks *bb = &cmd->nq->dev->badblocks;
 	sector_t first_bad;
-	int bad_sectors;
+	sector_t bad_sectors;
 
 	if (badblocks_check(bb, sector, nr_sectors, &first_bad, &bad_sectors))
 		return BLK_STS_IOERR;
