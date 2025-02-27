@@ -58,6 +58,10 @@ struct rseq_cs {
  * contained within a single cache-line.
  *
  * A single struct rseq per thread is allowed.
+ *
+ * If struct rseq or struct rseq_cs is used with Memory Protection Keys,
+ * then the assigned pkey should either be accessible whenever these structs
+ * are registered/installed, or they should be protected with pkey 0.
  */
 struct rseq {
 	/*
