@@ -13,12 +13,6 @@ variables:
   FDO_UPSTREAM_REPO: helen.fornazier/linux   # The repo where the git-archive daily runs
   MESA_TEMPLATES_COMMIT: &ci-templates-commit d5aa3941aa03c2f716595116354fb81eb8012acb
   DRM_CI_PROJECT_URL: https://gitlab.freedesktop.org/${DRM_CI_PROJECT_PATH}
-  CI_PRE_CLONE_SCRIPT: |-
-          set -o xtrace
-          curl -L --retry 4 -f --retry-all-errors --retry-delay 60 -s ${DRM_CI_PROJECT_URL}/-/raw/${DRM_CI_COMMIT_SHA}/.gitlab-ci/download-git-cache.sh -o download-git-cache.sh
-          bash download-git-cache.sh
-          rm download-git-cache.sh
-          set +o xtrace
   S3_JWT_FILE: /s3_jwt
   S3_JWT_FILE_SCRIPT: |-
       echo -n '${S3_JWT}' > '${S3_JWT_FILE}' &&
