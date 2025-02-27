@@ -7,6 +7,8 @@
 #include <linux/preempt.h>
 #include <linux/sched.h>
 
+#define RSEQ_UNPREEMPTED_THRESHOLD	(100ULL * 1000000)	/* 100ms */
+
 /*
  * Map the event mask on the user-space ABI enum rseq_cs_flags
  * for direct mask checks.
@@ -52,6 +54,14 @@ static inline void rseq_preempt(struct task_struct *t)
 {
 	__set_bit(RSEQ_EVENT_PREEMPT_BIT, &t->rseq_event_mask);
 	rseq_set_notify_resume(t);
+}
+
+static inline void rseq_preempt_from_tick(struct task_struct *t)
+{
+	u64 rtime = t->se.sum_exec_runtime - t->se.prev_sum_exec_runtime;
+
+	if (rtime > RSEQ_UNPREEMPTED_THRESHOLD)
+		rseq_preempt(t);
 }
 
 /* rseq_migrate() requires preemption to be disabled. */
@@ -102,6 +112,9 @@ static inline void rseq_signal_deliver(struct ksignal *ksig,
 {
 }
 static inline void rseq_preempt(struct task_struct *t)
+{
+}
+static inline void rseq_preempt_from_tick(struct task_struct *t)
 {
 }
 static inline void rseq_migrate(struct task_struct *t)
