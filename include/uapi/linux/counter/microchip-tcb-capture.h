@@ -12,6 +12,9 @@
  * Count 0
  * \__  Synapse 0 -- Signal 0 (Channel A, i.e. TIOA)
  * \__  Synapse 1 -- Signal 1 (Channel B, i.e. TIOB)
+ * \__  Extension capture0    (RA register)
+ * \__  Extension capture1    (RB register)
+ * \__  Extension capture2    (RC register)
  *
  * It also supports the following events:
  *
@@ -28,6 +31,12 @@
 enum counter_mchp_signals {
 	COUNTER_MCHP_SIG_TIOA,
 	COUNTER_MCHP_SIG_TIOB,
+};
+
+enum counter_mchp_capture_extensions {
+	COUNTER_MCHP_EXCAP_RA,
+	COUNTER_MCHP_EXCAP_RB,
+	COUNTER_MCHP_EXCAP_RC,
 };
 
 enum counter_mchp_event_channels {
