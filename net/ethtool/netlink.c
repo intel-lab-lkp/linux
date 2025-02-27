@@ -663,8 +663,17 @@ static int ethnl_default_done(struct netlink_callback *cb)
 	return 0;
 }
 
+/* Structure to store context information between a ->set request and the
+ * follow-up notification. Used only for the ethnl_default ops.
+ * @phy_index: If the original ->set request had a PHY index, store it in ctx.
+ */
+struct ethnl_default_notify_ctx {
+	u32 phy_index;
+};
+
 static int ethnl_default_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
+	struct ethnl_default_notify_ctx ctx = {0};
 	const struct ethnl_request_ops *ops;
 	struct ethnl_req_info req_info = {};
 	const u8 cmd = info->genlhdr->cmd;
@@ -691,6 +700,7 @@ static int ethnl_default_set_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	dev = req_info.dev;
+	ctx.phy_index = req_info.phy_index;
 
 	rtnl_lock();
 	dev->cfg_pending = kmemdup(dev->cfg, sizeof(*dev->cfg),
@@ -711,7 +721,7 @@ static int ethnl_default_set_doit(struct sk_buff *skb, struct genl_info *info)
 	swap(dev->cfg, dev->cfg_pending);
 	if (!ret)
 		goto out_ops;
-	ethtool_notify(dev, ops->set_ntf_cmd, NULL);
+	ethtool_notify(dev, ops->set_ntf_cmd, &ctx);
 
 	ret = 0;
 out_ops:
@@ -749,6 +759,7 @@ ethnl_default_notify_ops[ETHTOOL_MSG_KERNEL_MAX + 1] = {
 static void ethnl_default_notify(struct net_device *dev, unsigned int cmd,
 				 const void *data)
 {
+	const struct ethnl_default_notify_ctx *ctx = data;
 	struct ethnl_reply_data *reply_data;
 	const struct ethnl_request_ops *ops;
 	struct ethnl_req_info *req_info;
@@ -776,6 +787,8 @@ static void ethnl_default_notify(struct net_device *dev, unsigned int cmd,
 
 	req_info->dev = dev;
 	req_info->flags |= ETHTOOL_FLAG_COMPACT_BITSETS;
+	if (ctx)
+		req_info->phy_index = ctx->phy_index;
 
 	ethnl_init_reply_data(reply_data, ops, dev);
 	ret = ops->prepare_data(req_info, reply_data, &info);
