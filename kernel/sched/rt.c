@@ -1471,6 +1471,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
 
+	uclamp_rq_inc(rq, p);
+
 	if (flags & ENQUEUE_WAKEUP)
 		rt_se->timeout = 0;
 
@@ -1486,6 +1488,8 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 static bool dequeue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
+
+	uclamp_rq_dec(rq, p);
 
 	update_curr_rt(rq);
 	dequeue_rt_entity(rt_se, flags);
@@ -2648,10 +2652,6 @@ DEFINE_SCHED_CLASS(rt) = {
 
 #ifdef CONFIG_SCHED_CORE
 	.task_is_throttled	= task_is_throttled_rt,
-#endif
-
-#ifdef CONFIG_UCLAMP_TASK
-	.uclamp_enabled		= 1,
 #endif
 };
 

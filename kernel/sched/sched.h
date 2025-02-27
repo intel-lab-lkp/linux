@@ -2410,10 +2410,6 @@ extern s64 update_curr_common(struct rq *rq);
 
 struct sched_class {
 
-#ifdef CONFIG_UCLAMP_TASK
-	int uclamp_enabled;
-#endif
-
 	void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);
 	bool (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);
 	void (*yield_task)   (struct rq *rq);
@@ -3393,6 +3389,8 @@ static inline bool update_other_load_avgs(struct rq *rq) { return false; }
 #ifdef CONFIG_UCLAMP_TASK
 
 unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id);
+void uclamp_rq_inc(struct rq *rq, struct task_struct *p);
+void uclamp_rq_dec(struct rq *rq, struct task_struct *p);
 
 static inline unsigned long uclamp_rq_get(struct rq *rq,
 					  enum uclamp_id clamp_id)
@@ -3469,6 +3467,9 @@ uclamp_se_set(struct uclamp_se *uc_se, unsigned int value, bool user_defined)
 }
 
 #else /* !CONFIG_UCLAMP_TASK: */
+
+static inline void uclamp_rq_inc(struct rq *rq, struct task_struct *p) { };
+static inline void uclamp_rq_dec(struct rq *rq, struct task_struct *p) { };
 
 static inline unsigned long
 uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
