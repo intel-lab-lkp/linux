@@ -3258,6 +3258,108 @@ free_objs:
 	return err;
 }
 
+static u32 xe_vm_get_property_size(struct xe_vm *vm, u32 property)
+{
+	u32 size = 0;
+
+	switch (property) {
+	case DRM_XE_VM_GET_PROPERTY_FAULTS:
+		struct xe_exec_queue_ban_entry *entry;
+
+		spin_lock(&vm->bans.lock);
+		list_for_each_entry(entry, &vm->bans.list, list) {
+			struct xe_pagefault *pf = entry->pf;
+
+			size += pf ? sizeof(struct drm_xe_ban) : 0;
+		}
+		spin_unlock(&vm->bans.lock);
+		return size;
+	case DRM_XE_VM_GET_PROPERTY_BANS:
+		spin_lock(&vm->bans.lock);
+		size = vm->bans.len * sizeof(struct drm_xe_ban);
+		spin_unlock(&vm->bans.lock);
+		return size;
+	case DRM_XE_VM_GET_PROPERTY_NUM_RESETS:
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int fill_property_bans(struct xe_vm *vm,
+			      struct drm_xe_vm_get_property *args,
+			      u32 size, bool faults_only)
+{
+	struct drm_xe_ban __user *usr_ptr = u64_to_user_ptr(args->ptr);
+	struct drm_xe_ban *ban_list;
+	struct drm_xe_ban *ban;
+	struct xe_exec_queue_ban_entry *entry;
+	int i = 0;
+
+	if (copy_from_user(&ban_list, usr_ptr, size))
+		return -EFAULT;
+
+	spin_lock(&vm->bans.lock);
+	list_for_each_entry(entry, &vm->bans.list, list) {
+		struct xe_pagefault *pf = entry->pf;
+
+		if (!pf && faults_only)
+			continue;
+
+		ban = &ban_list[i++];
+		ban->exec_queue_id = entry->exec_queue_id;
+		ban->faulted = !pf ? 0 : 1;
+		ban->address = pf ? pf->page_addr : 0;
+		ban->address_type = pf ? pf->address_type : 0;
+		ban->address_precision = SZ_4K;
+	}
+	spin_unlock(&vm->bans.lock);
+
+	if (copy_to_user(usr_ptr, &ban_list, size))
+		return -EFAULT;
+
+	return 0;
+}
+
+int xe_vm_get_property_ioctl(struct drm_device *drm, void *data,
+			     struct drm_file *file)
+{
+	struct xe_device *xe = to_xe_device(drm);
+	struct xe_file *xef = to_xe_file(file);
+	struct drm_xe_vm_get_property *args = data;
+	struct xe_vm *vm;
+	u32 size;
+
+	if (XE_IOCTL_DBG(xe, args->reserved[0] || args->reserved[1]))
+		return -EINVAL;
+
+	vm = xe_vm_lookup(xef, args->vm_id);
+	if (XE_IOCTL_DBG(xe, !vm))
+		return -ENOENT;
+
+	size = xe_vm_get_property_size(vm, args->property);
+	if (size < 0) {
+		return size;
+	} else if (args->size != size) {
+		if (args->size)
+			return -EINVAL;
+		args->size = size;
+		return 0;
+	}
+
+	switch (args->property) {
+	case DRM_XE_VM_GET_PROPERTY_FAULTS:
+		return fill_property_bans(vm, args, size, true);
+	case DRM_XE_VM_GET_PROPERTY_BANS:
+		return fill_property_bans(vm, args, size, false);
+	case DRM_XE_VM_GET_PROPERTY_NUM_RESETS:
+		args->data = atomic_read(&vm->reset_count);
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 /**
  * xe_vm_bind_kernel_bo - bind a kernel BO to a VM
  * @vm: VM to bind the BO to
