@@ -57,6 +57,18 @@ properties:
       - 0 # Rising edge
       - 1 # Falling edge
 
+  ti,sdout-pull-down:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      If present, SDOUT will be pulled low when not
+      transmitting.
+
+  ti,sdout-zero-fill:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      If present, SDOUT will be zero-filled when not
+      transmitting.
+
   '#sound-dai-cells':
     # The codec has a single DAI, the #sound-dai-cells=<1>; case is left in for backward
     # compatibility but is deprecated.
