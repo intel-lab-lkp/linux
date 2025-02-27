@@ -297,12 +297,15 @@ int amd_pmf_get_pprof_modes(struct amd_pmf_dev *pmf)
 
 	switch (pmf->current_profile) {
 	case PLATFORM_PROFILE_PERFORMANCE:
+	case PLATFORM_PROFILE_BALANCED_PERFORMANCE:
 		mode = POWER_MODE_PERFORMANCE;
 		break;
 	case PLATFORM_PROFILE_BALANCED:
 		mode = POWER_MODE_BALANCED_POWER;
 		break;
 	case PLATFORM_PROFILE_LOW_POWER:
+	case PLATFORM_PROFILE_COOL:
+	case PLATFORM_PROFILE_QUIET:
 		mode = POWER_MODE_POWER_SAVER;
 		break;
 	default:
@@ -369,6 +372,10 @@ static int amd_pmf_profile_set(struct device *dev,
 	struct amd_pmf_dev *pmf = dev_get_drvdata(dev);
 	int ret = 0;
 
+	/* If the profile is custom, bail without an error. */
+	if (profile == PLATFORM_PROFILE_CUSTOM)
+		return 0;
+
 	pmf->current_profile = profile;
 
 	/* Notify EC about the slider position change */
@@ -400,6 +407,7 @@ static const struct platform_profile_ops amd_pmf_profile_ops = {
 	.probe = amd_pmf_profile_probe,
 	.profile_get = amd_pmf_profile_get,
 	.profile_set = amd_pmf_profile_set,
+	.secondary = true,
 };
 
 int amd_pmf_init_sps(struct amd_pmf_dev *dev)
