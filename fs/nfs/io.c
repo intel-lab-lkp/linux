@@ -80,7 +80,7 @@ nfs_end_io_read(struct inode *inode)
  * nfs_start_io_write - declare the file is being used for buffered writes
  * @inode: file inode
  *
- * Declare that a buffered read operation is about to start, and ensure
+ * Declare that a buffered write operation is about to start, and ensure
  * that we block all direct I/O.
  */
 int
