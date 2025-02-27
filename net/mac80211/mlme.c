@@ -4414,6 +4414,10 @@ static void ieee80211_report_disconnect(struct ieee80211_sub_if_data *sdata,
 		.u.mlme.data = tx ? DEAUTH_TX_EVENT : DEAUTH_RX_EVENT,
 		.u.mlme.reason = reason,
 	};
+	struct sta_info *ap_sta = sta_info_get(sdata, sdata->vif.cfg.ap_addr);
+
+	if (WARN_ON(!ap_sta))
+		return;
 
 	if (tx)
 		cfg80211_tx_mlme_mgmt(sdata->dev, buf, len, reconnect);
@@ -8070,7 +8074,7 @@ static void ieee80211_sta_timer(struct timer_list *t)
 void ieee80211_sta_connection_lost(struct ieee80211_sub_if_data *sdata,
 				   u8 reason, bool tx)
 {
-	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN];
+	u8 frame_buf[IEEE80211_DEAUTH_FRAME_LEN] = {0};
 
 	ieee80211_set_disassoc(sdata, IEEE80211_STYPE_DEAUTH, reason,
 			       tx, frame_buf);
