@@ -9841,9 +9841,9 @@ EXPORT_SYMBOL(md_finish_reshape);
 
 /* Bad block management */
 
-/* Returns 1 on success, 0 on failure */
-int rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
-		       int is_new)
+/* Returns true on success, false on failure */
+bool rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
+			int is_new)
 {
 	struct mddev *mddev = rdev->mddev;
 
@@ -9855,7 +9855,7 @@ int rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 	 * avoid it.
 	 */
 	if (test_bit(Faulty, &rdev->flags))
-		return 1;
+		return true;
 
 	if (is_new)
 		s += rdev->new_data_offset;
@@ -9863,7 +9863,7 @@ int rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 		s += rdev->data_offset;
 
 	if (!badblocks_set(&rdev->badblocks, s, sectors, 0))
-		return 0;
+		return false;
 
 	/* Make sure they get written out promptly */
 	if (test_bit(ExternalBbl, &rdev->flags))
@@ -9872,12 +9872,12 @@ int rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 	set_mask_bits(&mddev->sb_flags, 0,
 		      BIT(MD_SB_CHANGE_CLEAN) | BIT(MD_SB_CHANGE_PENDING));
 	md_wakeup_thread(rdev->mddev->thread);
-	return 1;
+	return true;
 }
 EXPORT_SYMBOL_GPL(rdev_set_badblocks);
 
-int rdev_clear_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
-			 int is_new)
+void rdev_clear_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
+			  int is_new)
 {
 	if (is_new)
 		s += rdev->new_data_offset;
@@ -9885,11 +9885,10 @@ int rdev_clear_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 		s += rdev->data_offset;
 
 	if (!badblocks_clear(&rdev->badblocks, s, sectors))
-		return 0;
+		return;
 
 	if (test_bit(ExternalBbl, &rdev->flags))
 		sysfs_notify_dirent_safe(rdev->sysfs_badblocks);
-	return 1;
 }
 EXPORT_SYMBOL_GPL(rdev_clear_badblocks);
 
