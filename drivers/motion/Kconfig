@@ -11,7 +11,6 @@ menuconfig MOTION
 
 if MOTION
 
-
 config TMC5240
 	tristate "TMC5240 stepper motor driver"
 	depends on SPI
@@ -22,6 +21,18 @@ config TMC5240
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called tmc5240.
+
+config MOTION_SIMPLE_PWM
+	tristate "Simple PWM base DC motor driver"
+	depends on PWM
+	select MOTION_HELPERS
+	help
+	  Say Y here is you have a DC motor driver you wish to control
+	  with 1 or 2 PWM outputs. Typically this is an H-bridge or similar
+	  driver, like the TI DRV8873 for example.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called "motion-simple-pwm".
 
 config MOTION_HELPERS
 	bool
