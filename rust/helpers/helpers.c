@@ -15,6 +15,7 @@
 #include "device.c"
 #include "err.c"
 #include "fs.c"
+#include "interrupt.c"
 #include "io.c"
 #include "jump_label.c"
 #include "kunit.c"

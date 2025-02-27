@@ -50,6 +50,7 @@ pub mod error;
 pub mod firmware;
 pub mod fs;
 pub mod init;
+pub mod interrupt;
 pub mod io;
 pub mod ioctl;
 pub mod jump_label;
