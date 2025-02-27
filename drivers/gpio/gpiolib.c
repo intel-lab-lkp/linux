@@ -3764,6 +3764,9 @@ int gpiod_set_array_value_complex(bool raw, bool can_sleep,
  *
  * This function can be called from contexts where we cannot sleep, and will
  * complain if the GPIO chip functions potentially sleep.
+ *
+ * Returns:
+ * 0 on success, negative error number on failure.
  */
 int gpiod_set_raw_value(struct gpio_desc *desc, int value)
 {
@@ -3782,6 +3785,9 @@ EXPORT_SYMBOL_GPL(gpiod_set_raw_value);
  * This sets the value of a GPIO line backing a descriptor, applying
  * different semantic quirks like active low and open drain/source
  * handling.
+ *
+ * Returns:
+ * 0 on success, negative error number on failure.
  */
 static int gpiod_set_value_nocheck(struct gpio_desc *desc, int value)
 {
@@ -3806,6 +3812,9 @@ static int gpiod_set_value_nocheck(struct gpio_desc *desc, int value)
  *
  * This function can be called from contexts where we cannot sleep, and will
  * complain if the GPIO chip functions potentially sleep.
+ *
+ * Returns:
+ * 0 on success, negative error number on failure.
  */
 int gpiod_set_value(struct gpio_desc *desc, int value)
 {
@@ -4230,6 +4239,9 @@ EXPORT_SYMBOL_GPL(gpiod_get_array_value_cansleep);
  * regard for its ACTIVE_LOW status.
  *
  * This function is to be called from contexts that can sleep.
+ *
+ * Returns:
+ * 0 on success, negative error number on failure.
  */
 int gpiod_set_raw_value_cansleep(struct gpio_desc *desc, int value)
 {
@@ -4248,6 +4260,9 @@ EXPORT_SYMBOL_GPL(gpiod_set_raw_value_cansleep);
  * account
  *
  * This function is to be called from contexts that can sleep.
+ *
+ * Returns:
+ * 0 on success, negative error number on failure.
  */
 int gpiod_set_value_cansleep(struct gpio_desc *desc, int value)
 {
