@@ -16,6 +16,7 @@
 
 struct net_test_ctx {
 	u8 next_id;
+	int speed;
 };
 
 struct net_packet_attrs {
@@ -291,6 +292,7 @@ cleanup:
 struct net_test {
 	const char *name;
 	int (*fn)(struct net_test_ctx *ctx, struct net_device *ndev);
+	int loopback_speed;
 };
 
 /**
@@ -302,6 +304,16 @@ struct net_test {
 	struct net_test net_test_##_name = {	\
 		.name = _string,		\
 		.fn = net_test_##_name##_fn,	\
+	}
+
+/**
+ * NET_SELFTEST_LOOPBACK_SPEED - Define a selftest which enables loopback with a fixed speed.
+ * @_name: Selftest name.
+ */
+#define NET_SELFTEST_LOOPBACK_SPEED(_name)	\
+	struct net_test net_test_##_name = {	\
+		.fn = net_test_##_name##_fn,	\
+		.loopback_speed = true,		\
 	}
 
 static int net_test_netif_carrier_fn(struct net_test_ctx *ctx,
@@ -330,6 +342,17 @@ static int net_test_phy_loopback_enable_fn(struct net_test_ctx *ctx,
 }
 
 static const NET_SELFTEST(phy_loopback_enable, "PHY loopback enable");
+
+static int net_test_phy_loopback_speed_enable_fn(struct net_test_ctx *ctx,
+						 struct net_device *ndev)
+{
+	if (!ndev->phydev)
+		return -EOPNOTSUPP;
+
+	return phy_loopback(ndev->phydev, true, ctx->speed);
+}
+
+static const NET_SELFTEST_LOOPBACK_SPEED(phy_loopback_speed_enable);
 
 static int net_test_phy_loopback_disable_fn(struct net_test_ctx *ctx,
 					    struct net_device *ndev)
@@ -387,11 +410,22 @@ static const struct net_test *net_selftests_carrier[] = {
 	&net_test_phy_loopback_disable,
 };
 
+static const struct net_test *net_selftests_speed[] = {
+	&net_test_phy_phydev,
+	&net_test_phy_loopback_speed_enable,
+	&net_test_phy_loopback_udp,
+	&net_test_phy_loopback_udp_mtu,
+	&net_test_phy_loopback_tcp,
+	&net_test_phy_loopback_disable,
+};
+
 static const struct net_test **net_selftests_set_get(int set)
 {
 	switch (set) {
 	case NET_SELFTEST_LOOPBACK_CARRIER:
 		return net_selftests_carrier;
+	case NET_SELFTEST_LOOPBACK_SPEED:
+		return net_selftests_speed;
 	}
 
 	return NULL;
@@ -402,7 +436,7 @@ void net_selftest_set(int set, int speed, struct net_device *ndev,
 {
 	const struct net_test **selftests = net_selftests_set_get(set);
 	int count = net_selftest_set_get_count(set);
-	struct net_test_ctx ctx = { 0 };
+	struct net_test_ctx ctx = { .speed = speed };
 	int i;
 
 	memset(buf, 0, sizeof(*buf) * count);
@@ -426,6 +460,8 @@ int net_selftest_set_get_count(int set)
 	switch (set) {
 	case NET_SELFTEST_LOOPBACK_CARRIER:
 		return ARRAY_SIZE(net_selftests_carrier);
+	case NET_SELFTEST_LOOPBACK_SPEED:
+		return ARRAY_SIZE(net_selftests_speed);
 	default:
 		return -EINVAL;
 	}
@@ -439,8 +475,13 @@ void net_selftest_set_get_strings(int set, int speed, u8 **data)
 	int i;
 
 	/* right pad strings for aligned ethtool output */
-	for (i = 0; i < count; i++)
-		ethtool_sprintf(data, "%-30s", selftests[i]->name);
+	for (i = 0; i < count; i++) {
+		if (selftests[i]->loopback_speed)
+			ethtool_sprintf(data, "PHY loopback %-17s",
+					phy_speed_to_str(speed));
+		else
+			ethtool_sprintf(data, "%-30s", selftests[i]->name);
+	}
 }
 EXPORT_SYMBOL_GPL(net_selftest_set_get_strings);
 
