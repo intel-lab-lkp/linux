@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* NXP C45 PHY driver
- * Copyright 2021-2023 NXP
+ * Copyright 2021-2025 NXP
  * Author: Radu Pirea <radu-nicolae.pirea@oss.nxp.com>
  */
 
@@ -19,7 +19,9 @@
 
 #include "nxp-c45-tja11xx.h"
 
+/* Same id: TJA1103, TJA1104 */
 #define PHY_ID_TJA_1103			0x001BB010
+/* Same id: TJA1120, TJA1121 */
 #define PHY_ID_TJA_1120			0x001BB031
 
 #define VEND1_DEVICE_CONTROL		0x0040
@@ -1959,7 +1961,7 @@ static const struct nxp_c45_phy_data tja1120_phy_data = {
 static struct phy_driver nxp_c45_driver[] = {
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA_1103),
-		.name			= "NXP C45 TJA1103",
+		.name			= "NXP C45 TJA1103 or TJA1104",
 		.get_features		= nxp_c45_get_features,
 		.driver_data		= &tja1103_phy_data,
 		.probe			= nxp_c45_probe,
@@ -1983,7 +1985,7 @@ static struct phy_driver nxp_c45_driver[] = {
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA_1120),
-		.name			= "NXP C45 TJA1120",
+		.name			= "NXP C45 TJA1120 or TJA1121",
 		.get_features		= nxp_c45_get_features,
 		.driver_data		= &tja1120_phy_data,
 		.probe			= nxp_c45_probe,
