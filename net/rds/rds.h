@@ -794,6 +794,21 @@ void __rds_conn_path_error(struct rds_conn_path *cp, const char *, ...);
 	__rds_conn_path_error(cp, KERN_WARNING "RDS: " fmt)
 
 extern struct workqueue_struct *rds_wq;
+static inline void rds_cond_queue_reconnect_work(struct rds_conn_path *cp, unsigned long delay)
+{
+	if (!test_and_set_bit(RDS_RECONNECT_PENDING, &cp->cp_flags))
+		queue_delayed_work(rds_wq, &cp->cp_conn_w, delay);
+}
+
+static inline void rds_clear_reconnect_pending_work_bit(struct rds_conn_path *cp)
+{
+	/* clear_bit() does not imply a memory barrier */
+	smp_mb__before_atomic();
+	clear_bit(RDS_RECONNECT_PENDING, &cp->cp_flags);
+	/* clear_bit() does not imply a memory barrier */
+	smp_mb__after_atomic();
+}
+
 static inline void rds_cond_queue_send_work(struct rds_conn_path *cp, unsigned long delay)
 {
 	if (!test_and_set_bit(RDS_SEND_WORK_QUEUED, &cp->cp_flags))
