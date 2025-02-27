@@ -109,6 +109,8 @@ Contact:	Martin K. Petersen <martin.petersen@oracle.com>
 Description:
 		Indicates whether a storage device is capable of storing
 		integrity metadata. Set if the device is T10 PI-capable.
+		This flag is set if a PI profile is enabled.
+		It is not set when non-PI metadata are used.
 
 
 What:		/sys/block/<disk>/integrity/format
@@ -117,6 +119,8 @@ Contact:	Martin K. Petersen <martin.petersen@oracle.com>
 Description:
 		Metadata format for integrity capable block device.
 		E.g. T10-DIF-TYPE1-CRC.
+		If the storage device supports metadata but no PI
+		is used, this field will contain "nop".
 
 
 What:		/sys/block/<disk>/integrity/protection_interval_bytes
@@ -142,7 +146,10 @@ Date:		June 2008
 Contact:	Martin K. Petersen <martin.petersen@oracle.com>
 Description:
 		Number of bytes of integrity tag space available per
-		512 bytes of data.
+		protection_interval_bytes, which is typically
+		the device's logical block size.
+		If the storage device supports metadata but no PI
+		is used, this field will contain 0.
 
 
 What:		/sys/block/<disk>/integrity/write_generate
