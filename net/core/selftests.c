@@ -14,6 +14,10 @@
 #include <net/tcp.h>
 #include <net/udp.h>
 
+struct net_test_ctx {
+	u8 next_id;
+};
+
 struct net_packet_attrs {
 	const unsigned char *src;
 	const unsigned char *dst;
@@ -44,14 +48,13 @@ struct netsfhdr {
 	u8 id;
 } __packed;
 
-static u8 net_test_next_id;
-
 #define NET_TEST_PKT_SIZE (sizeof(struct ethhdr) + sizeof(struct iphdr) + \
 			   sizeof(struct netsfhdr))
 #define NET_TEST_PKT_MAGIC	0xdeadcafecafedeadULL
 #define NET_LB_TIMEOUT		msecs_to_jiffies(200)
 
-static struct sk_buff *net_test_get_skb(struct net_device *ndev,
+static struct sk_buff *net_test_get_skb(struct net_test_ctx *ctx,
+					struct net_device *ndev,
 					struct net_packet_attrs *attr)
 {
 	struct sk_buff *skb = NULL;
@@ -141,8 +144,8 @@ static struct sk_buff *net_test_get_skb(struct net_device *ndev,
 	shdr = skb_put(skb, sizeof(*shdr));
 	shdr->version = 0;
 	shdr->magic = cpu_to_be64(NET_TEST_PKT_MAGIC);
-	attr->id = net_test_next_id;
-	shdr->id = net_test_next_id++;
+	attr->id = ctx->next_id;
+	shdr->id = ctx->next_id++;
 
 	if (attr->size)
 		skb_put(skb, attr->size);
@@ -237,7 +240,8 @@ out:
 	return 0;
 }
 
-static int __net_test_loopback(struct net_device *ndev,
+static int __net_test_loopback(struct net_test_ctx *ctx,
+			       struct net_device *ndev,
 			       struct net_packet_attrs *attr)
 {
 	struct net_test_priv *tpriv;
@@ -258,7 +262,7 @@ static int __net_test_loopback(struct net_device *ndev,
 	tpriv->packet = attr;
 	dev_add_pack(&tpriv->pt);
 
-	skb = net_test_get_skb(ndev, attr);
+	skb = net_test_get_skb(ctx, ndev, attr);
 	if (!skb) {
 		ret = -ENOMEM;
 		goto cleanup;
@@ -284,17 +288,40 @@ cleanup:
 	return ret;
 }
 
-static int net_test_netif_carrier(struct net_device *ndev)
+struct net_test {
+	const char *name;
+	int (*fn)(struct net_test_ctx *ctx, struct net_device *ndev);
+};
+
+/**
+ * NET_SELFTEST - Define a selftest.
+ * @_name: Selftest name.
+ * @_string: Selftest string.
+ */
+#define NET_SELFTEST(_name, _string)		\
+	struct net_test net_test_##_name = {	\
+		.name = _string,		\
+		.fn = net_test_##_name##_fn,	\
+	}
+
+static int net_test_netif_carrier_fn(struct net_test_ctx *ctx,
+				     struct net_device *ndev)
 {
 	return netif_carrier_ok(ndev) ? 0 : -ENOLINK;
 }
 
-static int net_test_phy_phydev(struct net_device *ndev)
+static const NET_SELFTEST(netif_carrier, "Carrier");
+
+static int net_test_phy_phydev_fn(struct net_test_ctx *ctx,
+				  struct net_device *ndev)
 {
 	return ndev->phydev ? 0 : -EOPNOTSUPP;
 }
 
-static int net_test_phy_loopback_enable(struct net_device *ndev)
+static const NET_SELFTEST(phy_phydev, "PHY dev is present");
+
+static int net_test_phy_loopback_enable_fn(struct net_test_ctx *ctx,
+					   struct net_device *ndev)
 {
 	if (!ndev->phydev)
 		return -EOPNOTSUPP;
@@ -302,7 +329,10 @@ static int net_test_phy_loopback_enable(struct net_device *ndev)
 	return phy_loopback(ndev->phydev, true, 0);
 }
 
-static int net_test_phy_loopback_disable(struct net_device *ndev)
+static const NET_SELFTEST(phy_loopback_enable, "PHY loopback enable");
+
+static int net_test_phy_loopback_disable_fn(struct net_test_ctx *ctx,
+					    struct net_device *ndev)
 {
 	if (!ndev->phydev)
 		return -EOPNOTSUPP;
@@ -310,98 +340,125 @@ static int net_test_phy_loopback_disable(struct net_device *ndev)
 	return phy_loopback(ndev->phydev, false, 0);
 }
 
-static int net_test_phy_loopback_udp(struct net_device *ndev)
+static const NET_SELFTEST(phy_loopback_disable, "PHY loopback disable");
+
+static int net_test_phy_loopback_udp_fn(struct net_test_ctx *ctx,
+					struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
-	return __net_test_loopback(ndev, &attr);
+	return __net_test_loopback(ctx, ndev, &attr);
 }
 
-static int net_test_phy_loopback_udp_mtu(struct net_device *ndev)
+static const NET_SELFTEST(phy_loopback_udp, "PHY loopback UDP");
+
+static int net_test_phy_loopback_udp_mtu_fn(struct net_test_ctx *ctx,
+					    struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
 	attr.max_size = ndev->mtu;
-	return __net_test_loopback(ndev, &attr);
+	return __net_test_loopback(ctx, ndev, &attr);
 }
 
-static int net_test_phy_loopback_tcp(struct net_device *ndev)
+static const NET_SELFTEST(phy_loopback_udp_mtu, "PHY loopback MTU");
+
+static int net_test_phy_loopback_tcp_fn(struct net_test_ctx *ctx,
+					struct net_device *ndev)
 {
 	struct net_packet_attrs attr = { };
 
 	attr.dst = ndev->dev_addr;
 	attr.tcp = true;
-	return __net_test_loopback(ndev, &attr);
+	return __net_test_loopback(ctx, ndev, &attr);
 }
 
-static const struct net_test {
-	char name[ETH_GSTRING_LEN];
-	int (*fn)(struct net_device *ndev);
-} net_selftests[] = {
-	{
-		.name = "Carrier                       ",
-		.fn = net_test_netif_carrier,
-	}, {
-		.name = "PHY dev is present            ",
-		.fn = net_test_phy_phydev,
-	}, {
-		/* This test should be done before all PHY loopback test */
-		.name = "PHY internal loopback, enable ",
-		.fn = net_test_phy_loopback_enable,
-	}, {
-		.name = "PHY internal loopback, UDP    ",
-		.fn = net_test_phy_loopback_udp,
-	}, {
-		.name = "PHY internal loopback, MTU    ",
-		.fn = net_test_phy_loopback_udp_mtu,
-	}, {
-		.name = "PHY internal loopback, TCP    ",
-		.fn = net_test_phy_loopback_tcp,
-	}, {
-		/* This test should be done after all PHY loopback test */
-		.name = "PHY internal loopback, disable",
-		.fn = net_test_phy_loopback_disable,
-	},
+static const NET_SELFTEST(phy_loopback_tcp, "PHY loopback TCP");
+
+static const struct net_test *net_selftests_carrier[] = {
+	&net_test_netif_carrier,
+	&net_test_phy_phydev,
+	&net_test_phy_loopback_enable,
+	&net_test_phy_loopback_udp,
+	&net_test_phy_loopback_udp_mtu,
+	&net_test_phy_loopback_tcp,
+	&net_test_phy_loopback_disable,
 };
 
-void net_selftest(struct net_device *ndev, struct ethtool_test *etest, u64 *buf)
+static const struct net_test **net_selftests_set_get(int set)
 {
-	int count = net_selftest_get_count();
+	switch (set) {
+	case NET_SELFTEST_LOOPBACK_CARRIER:
+		return net_selftests_carrier;
+	}
+
+	return NULL;
+}
+
+void net_selftest_set(int set, int speed, struct net_device *ndev,
+		      struct ethtool_test *etest, u64 *buf)
+{
+	const struct net_test **selftests = net_selftests_set_get(set);
+	int count = net_selftest_set_get_count(set);
+	struct net_test_ctx ctx = { 0 };
 	int i;
 
 	memset(buf, 0, sizeof(*buf) * count);
-	net_test_next_id = 0;
 
-	if (etest->flags != ETH_TEST_FL_OFFLINE) {
+	if (!(etest->flags & ETH_TEST_FL_OFFLINE)) {
 		netdev_err(ndev, "Only offline tests are supported\n");
 		etest->flags |= ETH_TEST_FL_FAILED;
 		return;
 	}
 
-
 	for (i = 0; i < count; i++) {
-		buf[i] = net_selftests[i].fn(ndev);
+		buf[i] = selftests[i]->fn(&ctx, ndev);
 		if (buf[i] && (buf[i] != -EOPNOTSUPP))
 			etest->flags |= ETH_TEST_FL_FAILED;
 	}
+}
+EXPORT_SYMBOL_GPL(net_selftest_set);
+
+int net_selftest_set_get_count(int set)
+{
+	switch (set) {
+	case NET_SELFTEST_LOOPBACK_CARRIER:
+		return ARRAY_SIZE(net_selftests_carrier);
+	default:
+		return -EINVAL;
+	}
+}
+EXPORT_SYMBOL_GPL(net_selftest_set_get_count);
+
+void net_selftest_set_get_strings(int set, int speed, u8 **data)
+{
+	const struct net_test **selftests = net_selftests_set_get(set);
+	int count = net_selftest_set_get_count(set);
+	int i;
+
+	/* right pad strings for aligned ethtool output */
+	for (i = 0; i < count; i++)
+		ethtool_sprintf(data, "%-30s", selftests[i]->name);
+}
+EXPORT_SYMBOL_GPL(net_selftest_set_get_strings);
+
+void net_selftest(struct net_device *ndev, struct ethtool_test *etest, u64 *buf)
+{
+	net_selftest_set(NET_SELFTEST_LOOPBACK_CARRIER, 0, ndev, etest, buf);
 }
 EXPORT_SYMBOL_GPL(net_selftest);
 
 int net_selftest_get_count(void)
 {
-	return ARRAY_SIZE(net_selftests);
+	return net_selftest_set_get_count(NET_SELFTEST_LOOPBACK_CARRIER);
 }
 EXPORT_SYMBOL_GPL(net_selftest_get_count);
 
 void net_selftest_get_strings(u8 *data)
 {
-	int i;
-
-	for (i = 0; i < net_selftest_get_count(); i++)
-		ethtool_sprintf(&data, "%2d. %s", i + 1,
-				net_selftests[i].name);
+	net_selftest_set_get_strings(NET_SELFTEST_LOOPBACK_CARRIER, 0, &data);
 }
 EXPORT_SYMBOL_GPL(net_selftest_get_strings);
 
