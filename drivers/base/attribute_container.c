@@ -492,12 +492,11 @@ attribute_container_find_class_device(struct attribute_container *cont,
 	klist_for_each_entry(ic, &cont->containers, node, &iter) {
 		if (ic->classdev.parent == dev) {
 			cdev = &ic->classdev;
-			/* FIXME: must exit iterator then break */
-			klist_iter_exit(&iter);
-			break;
+			goto out;
 		}
 	}
-
+out:
+	klist_iter_exit(&iter);
 	return cdev;
 }
 EXPORT_SYMBOL_GPL(attribute_container_find_class_device);
