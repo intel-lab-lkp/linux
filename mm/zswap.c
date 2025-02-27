@@ -925,27 +925,20 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 			   struct zswap_pool *pool)
 {
 	struct crypto_acomp_ctx *acomp_ctx;
-	struct scatterlist input, output;
 	int comp_ret = 0, alloc_ret = 0;
 	unsigned int dlen = PAGE_SIZE;
 	unsigned long handle;
 	struct zpool *zpool;
+	const u8 *src;
 	char *buf;
 	gfp_t gfp;
 	u8 *dst;
 
 	acomp_ctx = acomp_ctx_get_cpu_lock(pool);
+	src = kmap_local_page(page);
 	dst = acomp_ctx->buffer;
-	sg_init_table(&input, 1);
-	sg_set_page(&input, page, PAGE_SIZE, 0);
 
-	/*
-	 * We need PAGE_SIZE * 2 here since there maybe over-compression case,
-	 * and hardware-accelerators may won't check the dst buffer size, so
-	 * giving the dst buffer with enough length to avoid buffer overflow.
-	 */
-	sg_init_one(&output, dst, PAGE_SIZE * 2);
-	acomp_request_set_params(acomp_ctx->req, &input, &output, PAGE_SIZE, dlen);
+	acomp_request_set_virt(acomp_ctx->req, src, dst, PAGE_SIZE, dlen);
 
 	/*
 	 * it maybe looks a little bit silly that we send an asynchronous request,
@@ -960,6 +953,7 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 	 * acomp instance, so multiple threads can do (de)compression in parallel.
 	 */
 	comp_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req), &acomp_ctx->wait);
+	kunmap_local(src);
 	dlen = acomp_ctx->req->dlen;
 	if (comp_ret)
 		goto unlock;
@@ -994,9 +988,9 @@ unlock:
 static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 {
 	struct zpool *zpool = entry->pool->zpool;
-	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
 	u8 *src;
+	u8 *dst;
 
 	acomp_ctx = acomp_ctx_get_cpu_lock(entry->pool);
 	src = zpool_map_handle(zpool, entry->handle, ZPOOL_MM_RO);
@@ -1016,11 +1010,10 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 		zpool_unmap_handle(zpool, entry->handle);
 	}
 
-	sg_init_one(&input, src, entry->length);
-	sg_init_table(&output, 1);
-	sg_set_folio(&output, folio, PAGE_SIZE, 0);
-	acomp_request_set_params(acomp_ctx->req, &input, &output, entry->length, PAGE_SIZE);
+	dst = kmap_local_folio(folio, 0);
+	acomp_request_set_virt(acomp_ctx->req, src, dst, entry->length, PAGE_SIZE);
 	BUG_ON(crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait));
+	kunmap_local(dst);
 	BUG_ON(acomp_ctx->req->dlen != PAGE_SIZE);
 
 	if (src != acomp_ctx->buffer)
