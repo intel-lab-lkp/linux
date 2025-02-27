@@ -62,6 +62,8 @@ static u64 zswap_reject_reclaim_fail;
 static u64 zswap_reject_compress_fail;
 /* Compressed page was too big for the allocator to (optimally) store */
 static u64 zswap_reject_compress_poor;
+/* Load or writeback failed due to decompression failure */
+static u64 zswap_decompress_fail;
 /* Store failed because underlying allocator could not get memory */
 static u64 zswap_reject_alloc_fail;
 /* Store failed because the entry metadata could not be allocated (rare) */
@@ -996,11 +998,13 @@ unlock:
 	return comp_ret == 0 && alloc_ret == 0;
 }
 
-static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
+static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 {
 	struct zpool *zpool = entry->pool->zpool;
 	struct scatterlist input, output;
 	struct crypto_acomp_ctx *acomp_ctx;
+	int decomp_ret;
+	bool ret = true;
 	u8 *src;
 
 	acomp_ctx = acomp_ctx_get_cpu_lock(entry->pool);
@@ -1025,12 +1029,25 @@ static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
 	sg_init_table(&output, 1);
 	sg_set_folio(&output, folio, PAGE_SIZE, 0);
 	acomp_request_set_params(acomp_ctx->req, &input, &output, entry->length, PAGE_SIZE);
-	BUG_ON(crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait));
-	BUG_ON(acomp_ctx->req->dlen != PAGE_SIZE);
+	decomp_ret = crypto_wait_req(crypto_acomp_decompress(acomp_ctx->req), &acomp_ctx->wait);
+	if (decomp_ret || acomp_ctx->req->dlen != PAGE_SIZE) {
+		ret = false;
+		zswap_decompress_fail++;
+		pr_alert_ratelimited(
+			"decompression failed with returned value %d on zswap entry with swap entry value %08lx, swap type %d, and swap offset %lu. compression algorithm is %s. compressed size is %u bytes, and decompressed size is %u bytes.\n",
+			decomp_ret,
+			entry->swpentry.val,
+			swp_type(entry->swpentry),
+			swp_offset(entry->swpentry),
+			entry->pool->tfm_name,
+			entry->length,
+			acomp_ctx->req->dlen);
+	}
 
 	if (src != acomp_ctx->buffer)
 		zpool_unmap_handle(zpool, entry->handle);
 	acomp_ctx_put_unlock(acomp_ctx);
+	return ret;
 }
 
 /*********************************
@@ -1060,6 +1077,7 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	struct writeback_control wbc = {
 		.sync_mode = WB_SYNC_NONE,
 	};
+	int ret = 0;
 
 	/* try to allocate swap cache folio */
 	si = get_swap_device(swpentry);
@@ -1081,8 +1099,8 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	 * and freed when invalidated by the concurrent shrinker anyway.
 	 */
 	if (!folio_was_allocated) {
-		folio_put(folio);
-		return -EEXIST;
+		ret = -EEXIST;
+		goto put_folio;
 	}
 
 	/*
@@ -1095,14 +1113,17 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 	 * be dereferenced.
 	 */
 	tree = swap_zswap_tree(swpentry);
-	if (entry != xa_cmpxchg(tree, offset, entry, NULL, GFP_KERNEL)) {
-		delete_from_swap_cache(folio);
-		folio_unlock(folio);
-		folio_put(folio);
-		return -ENOMEM;
+	if (entry != xa_load(tree, offset)) {
+		ret = -ENOMEM;
+		goto delete_unlock;
 	}
 
-	zswap_decompress(entry, folio);
+	if (!zswap_decompress(entry, folio)) {
+		ret = -EIO;
+		goto delete_unlock;
+	}
+
+	xa_erase(tree, offset);
 
 	count_vm_event(ZSWPWB);
 	if (entry->objcg)
@@ -1118,9 +1139,14 @@ static int zswap_writeback_entry(struct zswap_entry *entry,
 
 	/* start writeback */
 	__swap_writepage(folio, &wbc);
-	folio_put(folio);
 
-	return 0;
+put_folio:
+	folio_put(folio);
+	return ret;
+delete_unlock:
+	delete_from_swap_cache(folio);
+	folio_unlock(folio);
+	goto put_folio;
 }
 
 /*********************************
@@ -1620,6 +1646,20 @@ check_old:
 	return ret;
 }
 
+/**
+ * zswap_load() - load a page from zswap
+ * @folio: folio to load
+ *
+ * Returns: true if zswap owns the swapped out contents, false otherwise.
+ *
+ * Note that the zswap_load() return value doesn't indicate success or failure,
+ * but whether zswap owns the swapped out contents. This MUST return true if
+ * zswap does own the swapped out contents, even if it fails to write the
+ * contents to the folio. Otherwise, the caller will try to read garbage from
+ * the backend.
+ *
+ * Success is signaled by marking the folio uptodate.
+ */
 bool zswap_load(struct folio *folio)
 {
 	swp_entry_t swp = folio->swap;
@@ -1644,6 +1684,17 @@ bool zswap_load(struct folio *folio)
 	if (WARN_ON_ONCE(folio_test_large(folio)))
 		return true;
 
+	entry = xa_load(tree, offset);
+	if (!entry)
+		return false;
+
+	if (!zswap_decompress(entry, folio))
+		return true;
+
+	count_vm_event(ZSWPIN);
+	if (entry->objcg)
+		count_objcg_events(entry->objcg, ZSWPIN, 1);
+
 	/*
 	 * When reading into the swapcache, invalidate our entry. The
 	 * swapcache can be the authoritative owner of the page and
@@ -1656,21 +1707,8 @@ bool zswap_load(struct folio *folio)
 	 * files, which reads into a private page and may free it if
 	 * the fault fails. We remain the primary owner of the entry.)
 	 */
-	if (swapcache)
-		entry = xa_erase(tree, offset);
-	else
-		entry = xa_load(tree, offset);
-
-	if (!entry)
-		return false;
-
-	zswap_decompress(entry, folio);
-
-	count_vm_event(ZSWPIN);
-	if (entry->objcg)
-		count_objcg_events(entry->objcg, ZSWPIN, 1);
-
 	if (swapcache) {
+		xa_erase(tree, offset);
 		zswap_entry_free(entry);
 		folio_mark_dirty(folio);
 	}
@@ -1771,6 +1809,8 @@ static int zswap_debugfs_init(void)
 			   zswap_debugfs_root, &zswap_reject_compress_fail);
 	debugfs_create_u64("reject_compress_poor", 0444,
 			   zswap_debugfs_root, &zswap_reject_compress_poor);
+	debugfs_create_u64("decompress_fail", 0444,
+			   zswap_debugfs_root, &zswap_decompress_fail);
 	debugfs_create_u64("written_back_pages", 0444,
 			   zswap_debugfs_root, &zswap_written_back_pages);
 	debugfs_create_file("pool_total_size", 0444,
