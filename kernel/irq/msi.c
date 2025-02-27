@@ -503,8 +503,18 @@ static ssize_t msi_mode_show(struct device *dev, struct device_attribute *attr,
 {
 	/* MSI vs. MSIX is per device not per interrupt */
 	bool is_msix = dev_is_pci(dev) ? to_pci_dev(dev)->msix_enabled : false;
+	struct msi_desc *desc;
+	u32 irq;
 
-	return sysfs_emit(buf, "%s\n", is_msix ? "msix" : "msi");
+	if (kstrtoint(attr->attr.name, 10, &irq) < 0)
+		return 0;
+
+	desc = irq_get_msi_desc(irq);
+	return sysfs_emit(
+		buf,
+		"%s\n address_hi: 0x%08x\n address_lo: 0x%08x\n msg_data: 0x%08x\n",
+		is_msix ? "msix" : "msi", desc->msg.address_hi,
+		desc->msg.address_lo, desc->msg.data);
 }
 
 static void msi_sysfs_remove_desc(struct device *dev, struct msi_desc *desc)
