@@ -1822,23 +1822,11 @@ int cmd_top(int argc, const char **argv)
 		goto out_delete_evlist;
 	}
 
-#ifdef HAVE_LIBBPF_SUPPORT
-	if (!top.record_opts.no_bpf_event) {
-		top.sb_evlist = evlist__new();
-
-		if (top.sb_evlist == NULL) {
-			pr_err("Couldn't create side band evlist.\n.");
-			status = -EINVAL;
-			goto out_delete_evlist;
-		}
-
-		if (evlist__add_bpf_sb_event(top.sb_evlist, &perf_env)) {
-			pr_err("Couldn't ask for PERF_RECORD_BPF_EVENT side band events.\n.");
-			status = -EINVAL;
-			goto out_delete_evlist;
-		}
+	top.sb_evlist = evlist__setup_sb_evlist(top.evlist, &top.record_opts, &perf_env);
+	if (IS_ERR(top.sb_evlist)) {
+		status = PTR_ERR(top.sb_evlist);
+		goto out_delete_evlist;
 	}
-#endif
 
 	if (evlist__start_sb_thread(top.sb_evlist, target)) {
 		pr_debug("Couldn't start the BPF side band thread:\nBPF programs starting from now on won't be annotatable\n");

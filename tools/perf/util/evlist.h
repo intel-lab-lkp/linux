@@ -19,6 +19,7 @@
 struct pollfd;
 struct thread_map;
 struct perf_cpu_map;
+struct perf_env;
 struct record_opts;
 struct target;
 
@@ -117,6 +118,8 @@ struct evsel *evlist__add_sched_switch(struct evlist *evlist, bool system_wide);
 int evlist__add_sb_event(struct evlist *evlist, struct perf_event_attr *attr,
 			 evsel__sb_cb_t cb, void *data);
 void evlist__set_cb(struct evlist *evlist, evsel__sb_cb_t cb, void *data);
+struct evlist *evlist__setup_sb_evlist(struct evlist *evlist, struct record_opts *opts,
+				       struct perf_env *env);
 int evlist__start_sb_thread(struct evlist *evlist, struct target *target);
 void evlist__stop_sb_thread(struct evlist *evlist);
 
@@ -435,5 +438,6 @@ void evlist__check_mem_load_aux(struct evlist *evlist);
 void evlist__warn_user_requested_cpus(struct evlist *evlist, const char *cpu_list);
 void evlist__uniquify_name(struct evlist *evlist);
 bool evlist__has_bpf_output(struct evlist *evlist);
+bool evlist__needs_bpf_sb_event(struct evlist *evlist);
 
 #endif /* __PERF_EVLIST_H */

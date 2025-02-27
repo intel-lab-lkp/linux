@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
+#include "util/bpf-event.h"
 #include "util/debug.h"
 #include "util/evlist.h"
 #include "util/evsel.h"
 #include "util/mmap.h"
 #include "util/perf_api_probe.h"
+#include "util/record.h"
 #include <perf/mmap.h>
+#include <linux/err.h>
 #include <linux/perf_event.h>
 #include <limits.h>
 #include <pthread.h>
@@ -92,6 +95,34 @@ void evlist__set_cb(struct evlist *evlist, evsel__sb_cb_t cb, void *data)
 		evsel->side_band.cb   = cb;
 		evsel->side_band.data = data;
       }
+}
+
+struct evlist *evlist__setup_sb_evlist(struct evlist *evlist, struct record_opts *opts,
+				       struct perf_env *env)
+{
+	struct evlist *sb_evlist = NULL;
+
+	if (!evlist__needs_bpf_sb_event(evlist))
+		opts->no_bpf_event = true;
+
+	if (opts->no_bpf_event)
+		return NULL;
+
+#ifdef HAVE_LIBBPF_SUPPORT
+	sb_evlist = evlist__new();
+	if (sb_evlist == NULL) {
+		pr_err("Couldn't create side band evlist.\n.");
+		return ERR_PTR(-ENOMEM);
+	}
+
+	if (evlist__add_bpf_sb_event(sb_evlist, env)) {
+		pr_err("Couldn't ask for PERF_RECORD_BPF_EVENT side band events.\n.");
+		evlist__delete(sb_evlist);
+		return ERR_PTR(-EINVAL);
+	}
+#endif
+
+	return sb_evlist;
 }
 
 int evlist__start_sb_thread(struct evlist *evlist, struct target *target)

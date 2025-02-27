@@ -2166,23 +2166,14 @@ static int record__setup_sb_evlist(struct record *rec)
 		evlist__set_cb(rec->sb_evlist, record__process_signal_event, rec);
 		rec->thread_id = pthread_self();
 	}
-#ifdef HAVE_LIBBPF_SUPPORT
-	if (!opts->no_bpf_event) {
-		if (rec->sb_evlist == NULL) {
-			rec->sb_evlist = evlist__new();
 
-			if (rec->sb_evlist == NULL) {
-				pr_err("Couldn't create side band evlist.\n.");
-				return -1;
-			}
-		}
-
-		if (evlist__add_bpf_sb_event(rec->sb_evlist, &rec->session->header.env)) {
-			pr_err("Couldn't ask for PERF_RECORD_BPF_EVENT side band events.\n.");
-			return -1;
-		}
+	if (rec->sb_evlist == NULL) {
+		rec->sb_evlist = evlist__setup_sb_evlist(rec->evlist, opts,
+							 &rec->session->header.env);
+		if (IS_ERR(rec->sb_evlist))
+			return PTR_ERR(rec->sb_evlist);
 	}
-#endif
+
 	if (evlist__start_sb_thread(rec->sb_evlist, &rec->opts.target)) {
 		pr_debug("Couldn't start the BPF side band thread:\nBPF programs starting from now on won't be annotatable\n");
 		opts->no_bpf_event = true;
@@ -2534,6 +2525,9 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		       "Use --no-buildid to profile anyway.\n");
 		goto out_free_threads;
 	}
+
+	if (!evlist__needs_bpf_sb_event(rec->evlist))
+		opts->no_bpf_event = true;
 
 	err = record__setup_sb_evlist(rec);
 	if (err)
