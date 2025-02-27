@@ -22,6 +22,7 @@ enum pkvm_page_state {
 	/* Meta-states which aren't encoded directly in the PTE's SW bits */
 	PKVM_NOPAGE			= BIT(0) | BIT(1),
 };
+#define PKVM_PAGE_STATE_MASK		(BIT(0) | BIT(1))
 
 #define PKVM_PAGE_STATE_PROT_MASK	(KVM_PGTABLE_PROT_SW0 | KVM_PGTABLE_PROT_SW1)
 static inline enum kvm_pgtable_prot pkvm_mkstate(enum kvm_pgtable_prot prot,
@@ -42,7 +43,14 @@ struct hyp_page {
 	u8 order;
 
 	/* Host (non-meta) state. Guarded by the host stage-2 lock. */
-	unsigned __host_state : 8;
+	unsigned __host_state : 4;
+
+	/*
+	 * Complement of the hyp (non-meta) state. Guarded by the hyp stage-1 lock. We use the
+	 * complement so that the initial 0 in __hyp_state_comp (due to the entire vmemmap starting
+	 * off zeroed) encodes PKVM_NOPAGE.
+	 */
+	unsigned __hyp_state_comp : 4;
 
 	u32 host_share_guest_count;
 };
@@ -87,6 +95,16 @@ static inline enum pkvm_page_state get_host_state(phys_addr_t phys)
 static inline void set_host_state(phys_addr_t phys, enum pkvm_page_state state)
 {
 	hyp_phys_to_page(phys)->__host_state = state;
+}
+
+static inline enum pkvm_page_state get_hyp_state(phys_addr_t phys)
+{
+	return hyp_phys_to_page(phys)->__hyp_state_comp ^ PKVM_PAGE_STATE_MASK;
+}
+
+static inline void set_hyp_state(phys_addr_t phys, enum pkvm_page_state state)
+{
+	hyp_phys_to_page(phys)->__hyp_state_comp = state ^ PKVM_PAGE_STATE_MASK;
 }
 
 /*
