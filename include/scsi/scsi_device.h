@@ -287,6 +287,18 @@ struct scsi_device {
 	unsigned long		sdev_data[];
 } __attribute__((aligned(sizeof(unsigned long))));
 
+struct vpd_page_info {
+	u8 page_code;
+	u16 offset; /* offset in struct scsi_device of vpd_pg... member */
+};
+
+#define SCSI_BUILD_BUG_ON(cond) (sizeof(char[1 - 2 * !!(cond)]) - sizeof(char))
+
+#define VPD_PAGE_INFO(vpd_page)							\
+	{ 0x##vpd_page, offsetof(struct scsi_device, vpd_pg##vpd_page) + \
+		SCSI_BUILD_BUG_ON(!__same_type(&((struct scsi_device *)NULL)->vpd_pg##vpd_page, \
+				struct scsi_vpd __rcu **))} \
+
 #define	to_scsi_device(d)	\
 	container_of(d, struct scsi_device, sdev_gendev)
 #define	class_to_sdev(d)	\

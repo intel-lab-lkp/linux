@@ -498,8 +498,18 @@ static void scsi_update_vpd_page(struct scsi_device *sdev, u8 page,
  */
 void scsi_attach_vpd(struct scsi_device *sdev)
 {
-	int i;
+	int i, j;
 	struct scsi_vpd *vpd_buf;
+	static const struct vpd_page_info cached_page[] = {
+		VPD_PAGE_INFO(0),
+		VPD_PAGE_INFO(80),
+		VPD_PAGE_INFO(83),
+		VPD_PAGE_INFO(89),
+		VPD_PAGE_INFO(b0),
+		VPD_PAGE_INFO(b1),
+		VPD_PAGE_INFO(b2),
+		VPD_PAGE_INFO(b7),
+	};
 
 	if (!scsi_device_supports_vpd(sdev))
 		return;
@@ -510,22 +520,17 @@ void scsi_attach_vpd(struct scsi_device *sdev)
 		return;
 
 	for (i = 4; i < vpd_buf->len; i++) {
-		if (vpd_buf->data[i] == 0x0)
-			scsi_update_vpd_page(sdev, 0x0, &sdev->vpd_pg0);
-		if (vpd_buf->data[i] == 0x80)
-			scsi_update_vpd_page(sdev, 0x80, &sdev->vpd_pg80);
-		if (vpd_buf->data[i] == 0x83)
-			scsi_update_vpd_page(sdev, 0x83, &sdev->vpd_pg83);
-		if (vpd_buf->data[i] == 0x89)
-			scsi_update_vpd_page(sdev, 0x89, &sdev->vpd_pg89);
-		if (vpd_buf->data[i] == 0xb0)
-			scsi_update_vpd_page(sdev, 0xb0, &sdev->vpd_pgb0);
-		if (vpd_buf->data[i] == 0xb1)
-			scsi_update_vpd_page(sdev, 0xb1, &sdev->vpd_pgb1);
-		if (vpd_buf->data[i] == 0xb2)
-			scsi_update_vpd_page(sdev, 0xb2, &sdev->vpd_pgb2);
-		if (vpd_buf->data[i] == 0xb7)
-			scsi_update_vpd_page(sdev, 0xb7, &sdev->vpd_pgb7);
+		for (j = 0; j < ARRAY_SIZE(cached_page); j++) {
+			const u8 page_code = cached_page[j].page_code;
+			const u16 offset = cached_page[j].offset;
+			struct scsi_vpd __rcu **vpd_data =
+				(void *)&sdev + offset;
+
+			if (vpd_buf->data[i] == page_code) {
+				scsi_update_vpd_page(sdev, page_code, vpd_data);
+				break;
+			}
+		}
 	}
 	kfree(vpd_buf);
 }
