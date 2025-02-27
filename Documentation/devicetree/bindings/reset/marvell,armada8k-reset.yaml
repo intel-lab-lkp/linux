@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+# Copyright 2025 Wilson Ding <dingwei@marvell.com>
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/reset/marvell,armada8k-reset.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Marvell Armada8K reset controller
+
+maintainers:
+  - Wilson Ding <dingwei@marvell.com>
+
+description: The reset controller node must be a sub-node of the system
+  controller node on Armada7K/8K or CN913x SoCs.
+
+properties:
+  compatible:
+    const: marvell,armada8k-reset
+
+  reg:
+    description:
+      The register offset (to syscon register address) and size
+    maxItems: 1
+
+  "#reset-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - "#reset-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    syscon0: system-controller@440000 {
+        compatible = "syscon", "simple-mfd";
+        reg = <0x440000 0x2000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        swrst: reset-controller@268 {
+            compatible = "marvell,armada8k-reset";
+            reg = <0x268 0x4>;
+            #reset-cells = <1>;
+        };
+    };

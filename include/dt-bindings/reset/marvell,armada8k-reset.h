@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+/*
+ * Copyright (c) 2025, Marvell. All Rights Reserved.
+ */
+
+#ifndef _DT_BINDINGS_MARVELL_ARMADA8K_RESET_H_
+#define _DT_BINDINGS_MARVELL_ARMADA8K_RESET_H_
+
+#define CP110_RESET_AUDIO		0
+#define CP110_RESET_TDM			1
+#define CP110_RESET_ICU			2
+#define CP110_RESET_PP2			3
+#define CP110_RESET_SDIO		4
+#define CP110_RESET_XOR1		7
+#define CP110_RESET_XOR0		8
+#define CP110_RESET_PCIE0_X1		11
+#define CP110_RESET_PCIE1_X1		12
+#define CP110_RESET_PCIE_X4		13
+#define CP110_RESET_SATA		15
+#define CP110_RESET_USB3_HOST0		22
+#define CP110_RESET_USB3_HOST1		23
+#define CP110_RESET_USB3_DEV		24
+#define CP110_RESET_EIP150F		25
+#define CP110_RESET_EIP197		26
+#define CP110_RESET_MSS			29
+
+#endif /* _DT_BINDINGS_MARVELL_ARMADA8K_RESET_H_ */
