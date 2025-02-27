@@ -2807,11 +2807,13 @@ int gpiod_direction_input_nonotify(struct gpio_desc *desc)
 		ret = gpiochip_direction_input(guard.gc,
 					       gpio_chip_hwgpio(desc));
 	} else if (guard.gc->get_direction) {
-		ret = gpiochip_get_direction(guard.gc, gpio_chip_hwgpio(desc));
-		if (ret < 0)
-			return ret;
+		int dir;
 
-		if (ret != GPIO_LINE_DIRECTION_IN) {
+		dir = gpiochip_get_direction(guard.gc, gpio_chip_hwgpio(desc));
+		if (dir < 0)
+			return dir;
+
+		if (dir != GPIO_LINE_DIRECTION_IN) {
 			gpiod_warn(desc,
 				   "%s: missing direction_input() operation and line is output\n",
 				    __func__);
@@ -2875,12 +2877,14 @@ static int gpiod_direction_output_raw_commit(struct gpio_desc *desc, int value)
 	} else {
 		/* Check that we are in output mode if we can */
 		if (guard.gc->get_direction) {
-			ret = gpiochip_get_direction(guard.gc,
-						     gpio_chip_hwgpio(desc));
-			if (ret < 0)
-				return ret;
+			int dir;
 
-			if (ret != GPIO_LINE_DIRECTION_OUT) {
+			dir = gpiochip_get_direction(guard.gc,
+						     gpio_chip_hwgpio(desc));
+			if (dir < 0)
+				return dir;
+
+			if (dir != GPIO_LINE_DIRECTION_OUT) {
 				gpiod_warn(desc,
 					   "%s: missing direction_output() operation\n",
 					   __func__);
