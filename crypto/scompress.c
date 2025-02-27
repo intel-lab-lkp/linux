@@ -58,7 +58,8 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 	void **ctx = acomp_request_ctx(req);
 	unsigned int slen = req->slen;
 	unsigned int dlen = req->dlen;
-	void *src, *dst;
+	const u8 *src;
+	u8 *dst;
 	int ret;
 
 	if (!req->src || !slen)
@@ -70,20 +71,24 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 	if (!req->dst || !dlen)
 		return -ENOSYS;
 
-	if (sg_nents(req->src) > 1 || req->src->offset + slen > PAGE_SIZE)
+	if (acomp_request_isvirt(req)) {
+		src = req->svirt;
+		dst = req->dvirt;
+	} else if (sg_nents(req->src) > 1 ||
+		   req->src->offset + slen > PAGE_SIZE)
 		return -ENOSYS;
-
-	if (sg_nents(req->dst) > 1)
+	else if (sg_nents(req->dst) > 1)
 		return -ENOSYS;
-
-	if (req->dst->offset >= PAGE_SIZE)
+	else if (req->dst->offset >= PAGE_SIZE)
 		return -ENOSYS;
+	else {
 
-	if (req->dst->offset + dlen > PAGE_SIZE)
-		dlen = PAGE_SIZE - req->dst->offset;
+		if (req->dst->offset + dlen > PAGE_SIZE)
+			dlen = PAGE_SIZE - req->dst->offset;
 
-	src = kmap_local_page(sg_page(req->src)) + req->src->offset;
-	dst = kmap_local_page(sg_page(req->dst)) + req->dst->offset;
+		src = kmap_local_page(sg_page(req->src)) + req->src->offset;
+		dst = kmap_local_page(sg_page(req->dst)) + req->dst->offset;
+	}
 
 	if (dir)
 		ret = crypto_scomp_compress(scomp, src, slen,
@@ -92,21 +97,37 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 		ret = crypto_scomp_decompress(scomp, src, slen,
 					      dst, &req->dlen, *ctx);
 
-	kunmap_local(src);
-	kunmap_local(dst);
-	flush_dcache_page(sg_page(req->dst));
+	if (!acomp_request_isvirt(req)) {
+		kunmap_local(src);
+		kunmap_local(dst);
+		flush_dcache_page(sg_page(req->dst));
+	}
 
 	return ret;
 }
 
+static int scomp_acomp_chain(struct acomp_req *req, int dir)
+{
+	struct acomp_req *r2;
+	int err;
+
+	err = scomp_acomp_comp_decomp(req, dir);
+	req->base.err = err;
+
+	list_for_each_entry(r2, &req->base.list, base.list)
+		r2->base.err = scomp_acomp_comp_decomp(r2, dir);
+
+	return err;
+}
+
 static int scomp_acomp_compress(struct acomp_req *req)
 {
-	return scomp_acomp_comp_decomp(req, 1);
+	return scomp_acomp_chain(req, 1);
 }
 
 static int scomp_acomp_decompress(struct acomp_req *req)
 {
-	return scomp_acomp_comp_decomp(req, 0);
+	return scomp_acomp_chain(req, 0);
 }
 
 static void crypto_exit_scomp_ops_async(struct crypto_tfm *tfm)
@@ -188,11 +209,20 @@ static const struct crypto_type crypto_scomp_type = {
 	.tfmsize = offsetof(struct crypto_scomp, base),
 };
 
-int crypto_register_scomp(struct scomp_alg *alg)
+static void scomp_prepare_alg(struct scomp_alg *alg)
 {
 	struct crypto_alg *base = &alg->calg.base;
 
 	comp_prepare_alg(&alg->calg);
+
+	base->cra_flags |= CRYPTO_ALG_REQ_CHAIN;
+}
+
+int crypto_register_scomp(struct scomp_alg *alg)
+{
+	struct crypto_alg *base = &alg->calg.base;
+
+	scomp_prepare_alg(alg);
 
 	base->cra_type = &crypto_scomp_type;
 	base->cra_flags |= CRYPTO_ALG_TYPE_SCOMPRESS;
