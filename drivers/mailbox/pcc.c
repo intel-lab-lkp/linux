@@ -333,10 +333,20 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	if (pcc_chan_reg_read_modify_write(&pchan->plat_irq_ack))
 		return IRQ_NONE;
 
+	/*
+	 * The mbox_chan_received_data() will call Rx callback of mbox
+	 * client driver using type3 to set the flag of command completion.
+	 * Then driver can continue to do something like sending a new
+	 * command. In this case, the rest of the interrupt handler
+	 * function may be concurrent with pcc_send_data().
+	 * To avoid the 'chan_in_use' flag of new command being cleared by
+	 * interrupt handler, clear this flag immediately after clearing
+	 * interrupt ack register.
+	 */
+	pchan->chan_in_use = false;
 	mbox_chan_received_data(chan, NULL);
 
 	check_and_ack(pchan, chan);
-	pchan->chan_in_use = false;
 
 	return IRQ_HANDLED;
 }
