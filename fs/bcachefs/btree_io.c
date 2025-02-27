@@ -1919,7 +1919,7 @@ err:
 	}
 
 	printbuf_exit(&err);
-	bch2_bkey_buf_exit(&scrub->key, c);;
+	bch2_bkey_buf_exit(&scrub->key, c);
 	btree_bounce_free(c, c->opts.btree_node_size, scrub->used_mempool, scrub->buf);
 	percpu_ref_put(&scrub->ca->io_ref);
 	kfree(scrub);
