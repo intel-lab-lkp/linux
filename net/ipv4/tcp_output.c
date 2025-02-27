@@ -1173,7 +1173,7 @@ void tcp_release_cb(struct sock *sk)
 	if ((flags & TCPF_ACK_DEFERRED) && inet_csk_ack_scheduled(sk))
 		tcp_send_ack(sk);
 }
-EXPORT_IPV6_MOD(tcp_release_cb);
+EXPORT_SYMBOL(tcp_release_cb);
 
 void __init tcp_tasklet_init(void)
 {

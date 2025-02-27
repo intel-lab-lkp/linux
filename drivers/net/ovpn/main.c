@@ -22,6 +22,7 @@
 #include "io.h"
 #include "peer.h"
 #include "proto.h"
+#include "tcp.h"
 #include "udp.h"
 
 static int ovpn_net_init(struct net_device *dev)
@@ -239,6 +240,7 @@ static int __init ovpn_init(void)
 	}
 
 	ovpn_udp_init();
+	ovpn_tcp_init();
 
 	return 0;
 
