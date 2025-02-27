@@ -34,6 +34,9 @@
  * Added Gerd Knorrs v4l1 enhancements (Justin Schoeman)
  */
 
+#include <linux/clk.h>
+#include <linux/clkdev.h>
+#include <linux/clk-provider.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -636,3 +639,38 @@ int v4l2_link_freq_to_bitmap(struct device *dev, const u64 *fw_link_freqs,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(v4l2_link_freq_to_bitmap);
+
+struct clk *devm_v4l2_sensor_clk_get(struct device *dev, const char *id)
+{
+	struct clk_hw *clk_hw;
+	struct clk *clk;
+	char *clk_name;
+	u32 rate;
+	int ret;
+
+	clk = devm_clk_get_optional(dev, id);
+	if (clk || IS_ERR(clk))
+		return clk;
+
+	if (!is_acpi_node(dev_fwnode(dev)))
+		return ERR_PTR(-EINVAL);
+
+	ret = device_property_read_u32(dev, "clock-frequency", &rate);
+	if (ret)
+		return ERR_PTR(ret);
+
+	if (!id) {
+		clk_name = devm_kasprintf(dev, GFP_KERNEL, "clk-%s",
+					  dev_name(dev));
+		if (!clk_name)
+			return ERR_PTR(-ENOMEM);
+	}
+
+	clk_hw = devm_clk_hw_register_fixed_rate(dev, id ? id : clk_name, NULL,
+						 0, rate);
+	if (IS_ERR(clk_hw))
+		return ERR_CAST(clk_hw);
+
+	return clk_hw->clk;
+}
+EXPORT_SYMBOL_GPL(devm_v4l2_sensor_clk_get);
