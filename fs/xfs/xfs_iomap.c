@@ -810,6 +810,7 @@ xfs_direct_write_iomap_begin(
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 	int			nimaps = 1, error = 0;
+	unsigned int		reflink_flags = 0;
 	bool			shared = false;
 	u16			iomap_flags = 0;
 	unsigned int		lockmode;
@@ -819,6 +820,9 @@ xfs_direct_write_iomap_begin(
 
 	if (xfs_is_shutdown(mp))
 		return -EIO;
+
+	if (flags & IOMAP_DIRECT || IS_DAX(inode))
+		reflink_flags |= XFS_REFLINK_CONVERT;
 
 	/*
 	 * Writes that span EOF might trigger an IO size update on completion,
@@ -864,8 +868,7 @@ relock:
 
 		/* may drop and re-acquire the ilock */
 		error = xfs_reflink_allocate_cow(ip, &imap, &cmap, &shared,
-				&lockmode,
-				(flags & IOMAP_DIRECT) || IS_DAX(inode));
+				&lockmode, reflink_flags);
 		if (error)
 			goto out_unlock;
 		if (shared)
