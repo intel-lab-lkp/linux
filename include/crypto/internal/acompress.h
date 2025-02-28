@@ -84,6 +84,16 @@ static inline void __acomp_request_free(struct acomp_req *req)
 	kfree_sensitive(req);
 }
 
+static inline bool acomp_request_chained(struct acomp_req *req)
+{
+	return crypto_request_chained(&req->base);
+}
+
+static inline bool crypto_acomp_req_chain(struct crypto_acomp *tfm)
+{
+	return crypto_tfm_req_chain(&tfm->base);
+}
+
 /**
  * crypto_register_acomp() -- Register asynchronous compression algorithm
  *
