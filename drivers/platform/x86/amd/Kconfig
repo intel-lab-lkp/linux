@@ -32,3 +32,14 @@ config AMD_WBRF
 
 	  This mechanism will only be activated on platforms that advertise a
 	  need for it.
+
+config AMD_ISP_PLATFORM
+	bool "AMD platform with ISP4 that supports Camera sensor device"
+	depends on I2C && X86_64 && AMD_ISP4
+	help
+	  For AMD platform that support Image signal processor generation 4, it
+	  is necessary to add platform specific camera sensor module board info
+	  which includes the sensor driver device id and the i2c address.
+
+	  If you have a AMD platform that support ISP4 and with a sensor
+	  connected to it, say Y here
