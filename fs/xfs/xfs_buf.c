@@ -109,7 +109,7 @@ xfs_buf_stale(
 	spin_unlock(&bp->b_lock);
 }
 
-static int
+static void
 xfs_buf_get_maps(
 	struct xfs_buf		*bp,
 	int			map_count)
@@ -119,12 +119,11 @@ xfs_buf_get_maps(
 
 	if (map_count == 1) {
 		bp->b_maps = &bp->__b_map;
-		return 0;
+		return;
 	}
 
 	bp->b_maps = kzalloc(map_count * sizeof(struct xfs_buf_map),
 			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
-	return 0;
 }
 
 static void
@@ -178,11 +177,7 @@ _xfs_buf_alloc(
 	bp->b_mount = target->bt_mount;
 	bp->b_flags = flags;
 
-	error = xfs_buf_get_maps(bp, nmaps);
-	if (error)  {
-		kmem_cache_free(xfs_buf_cache, bp);
-		return error;
-	}
+	xfs_buf_get_maps(bp, nmaps);
 
 	bp->b_rhash_key = map[0].bm_bn;
 	bp->b_length = 0;
