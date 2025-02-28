@@ -6806,6 +6806,14 @@ static inline void sched_submit_work(struct task_struct *tsk)
 		wq_worker_sleeping(tsk);
 	else if (task_flags & PF_IO_WORKER)
 		io_wq_worker_sleeping(tsk);
+#ifdef CONFIG_IO_URING
+	else if (task_flags & PF_DUMPCORE) {
+		struct io_uring_task *io_uring = tsk->io_uring;
+
+		if (io_uring)
+			io_wq_cancel_tw_create(io_uring->io_wq);
+	}
+#endif
 
 	/*
 	 * spinlock and rwlock must not flush block requests.  This will

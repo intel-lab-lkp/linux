@@ -42,6 +42,7 @@
 #include <linux/path.h>
 #include <linux/timekeeping.h>
 #include <linux/sysctl.h>
+#include <linux/sched/sysctl.h>
 #include <linux/elf.h>
 
 #include <linux/uaccess.h>
@@ -406,6 +407,7 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 {
 	struct task_struct *tsk = current;
 	int core_waiters = -EBUSY;
+	unsigned long hang_check = sysctl_hung_task_timeout_secs;
 
 	init_completion(&core_state->startup);
 	core_state->dumper.task = tsk;
@@ -415,8 +417,8 @@ static int coredump_wait(int exit_code, struct core_state *core_state)
 	if (core_waiters > 0) {
 		struct core_thread *ptr;
 
-		wait_for_completion_state(&core_state->startup,
-					  TASK_UNINTERRUPTIBLE|TASK_FREEZABLE);
+		wait_for_completion_state_timeout(&core_state->startup, TASK_UNINTERRUPTIBLE|TASK_FREEZABLE,
+						  hang_check * (HZ/2));
 		/*
 		 * Wait for all the threads to become inactive, so that
 		 * all the thread context (extended register state, like
