@@ -13160,6 +13160,8 @@ static void bnxt_get_ring_stats(struct bnxt *bp,
 
 		stats->tx_packets += sw_stats.tx.tx_packets;
 		stats->tx_bytes += sw_stats.tx.tx_bytes;
+		stats->tx_packets += sw_stats.tx.xdp_packets;
+		stats->tx_bytes += sw_stats.tx.xdp_bytes;
 
 		stats->rx_missed_errors +=
 			BNXT_GET_RING_STATS64(sw, rx_discard_pkts);
@@ -13251,8 +13253,9 @@ static void bnxt_get_one_ring_drv_stats(struct bnxt *bp,
 	stats->rx_total_bytes += sw_stats.rx.rx_bytes;
 	stats->rx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, rx_discard_pkts);
-	stats->tx_total_packets += sw_stats.tx.tx_packets;
-	stats->tx_total_bytes += sw_stats.tx.tx_bytes;
+	stats->tx_total_packets +=
+		sw_stats.tx.tx_packets + sw_stats.tx.xdp_packets;
+	stats->tx_total_bytes += sw_stats.tx.tx_bytes + sw_stats.tx.xdp_bytes;
 	stats->tx_total_resets += sw_stats.tx.tx_resets;
 	stats->tx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, tx_discard_pkts);
@@ -15677,6 +15680,7 @@ static void bnxt_get_base_stats(struct net_device *dev,
 				struct netdev_queue_stats_tx *tx)
 {
 	struct bnxt *bp = netdev_priv(dev);
+	int i;
 
 	rx->packets = bp->ring_drv_stats_prev.rx_total_packets;
 	rx->bytes = bp->ring_drv_stats_prev.rx_total_bytes;
@@ -15684,6 +15688,21 @@ static void bnxt_get_base_stats(struct net_device *dev,
 
 	tx->packets = bp->ring_drv_stats_prev.tx_total_packets;
 	tx->bytes = bp->ring_drv_stats_prev.tx_total_bytes;
+
+	for (i = 0; i < bp->cp_nr_rings; i++) {
+		struct bnxt_sw_stats *sw_stats = bp->bnapi[i]->cp_ring.sw_stats;
+		unsigned int seq;
+		u64 pkts, bytes;
+
+		do {
+			seq = u64_stats_fetch_begin(&sw_stats->rx.syncp);
+			pkts = sw_stats->tx.xdp_packets;
+			bytes = sw_stats->tx.xdp_bytes;
+		} while (u64_stats_fetch_retry(&sw_stats->rx.syncp, seq));
+
+		tx->packets += pkts;
+		tx->bytes += bytes;
+	}
 }
 
 static const struct netdev_stat_ops bnxt_stat_ops = {
