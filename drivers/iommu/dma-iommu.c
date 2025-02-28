@@ -443,12 +443,13 @@ EXPORT_SYMBOL(iommu_get_msi_cookie);
  */
 void iommu_put_dma_cookie(struct iommu_domain *domain)
 {
-	struct iommu_dma_cookie *cookie = domain->iova_cookie;
 	struct iommu_dma_msi_page *msi, *tmp;
+	struct iommu_dma_cookie *cookie;
 
 	if (domain->private_data_owner != IOMMU_DOMAIN_DATA_OWNER_DMA)
 		return;
 
+	cookie = domain->iova_cookie;
 	if (!cookie)
 		return;
 
