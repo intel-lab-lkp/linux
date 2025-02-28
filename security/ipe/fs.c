@@ -141,12 +141,16 @@ static ssize_t new_policy(struct file *f, const char __user *data,
 	char *copy = NULL;
 	int rc = 0;
 
-	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN))
-		return -EPERM;
+	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN)) {
+		rc = -EPERM;
+		goto out;
+	}
 
 	copy = memdup_user_nul(data, len);
-	if (IS_ERR(copy))
-		return PTR_ERR(copy);
+	if (IS_ERR(copy)) {
+		rc = PTR_ERR(copy);
+		goto out;
+	}
 
 	p = ipe_new_policy(NULL, 0, copy, len);
 	if (IS_ERR(p)) {
@@ -161,8 +165,10 @@ static ssize_t new_policy(struct file *f, const char __user *data,
 	ipe_audit_policy_load(p);
 
 out:
-	if (rc < 0)
+	if (rc < 0) {
 		ipe_free_policy(p);
+		ipe_audit_policy_load(ERR_PTR(rc));
+	}
 	kfree(copy);
 	return (rc < 0) ? rc : len;
 }
