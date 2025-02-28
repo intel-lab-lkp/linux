@@ -76,3 +76,30 @@ void phy_caps_init(void)
 		__set_bit(i, link_caps[capa].linkmodes);
 	}
 }
+
+/**
+ * phy_caps_speeds() - Fill an array of supported SPEED_* values for given modes
+ * @speeds: Output array to store the speeds list into
+ * @size: Size of the output array
+ * @linkmodes: Linkmodes to get the speeds from
+ *
+ * Fills the speeds array with all possible speeds that can be achieved with
+ * the specified linkmodes.
+ *
+ * Returns: The number of speeds filled into the array. If the input array isn't
+ *	    big enough to store all speeds, fill it as much as possible.
+ */
+size_t phy_caps_speeds(unsigned int *speeds, size_t size,
+		       unsigned long *linkmodes)
+{
+	size_t count;
+	int capa;
+
+	for (capa = 0, count = 0; capa < __LINK_CAPA_MAX && count < size; capa++) {
+		if (linkmode_intersects(link_caps[capa].linkmodes, linkmodes) &&
+		    (count == 0 || speeds[count - 1] != link_caps[capa].speed))
+			speeds[count++] = link_caps[capa].speed;
+	}
+
+	return count;
+}
