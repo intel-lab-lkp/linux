@@ -8,6 +8,7 @@
 #include "fs_core.h"
 #include "eswitch.h"
 #include "esw/qos.h"
+#include "lib/nv_param.h"
 #include "sf/dev/dev.h"
 #include "sf/sf.h"
 #include "lib/nv_param.h"
