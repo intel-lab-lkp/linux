@@ -1057,7 +1057,6 @@ static inline int ra_has_index(struct file_ra_state *ra, pgoff_t index)
 
 /**
  * struct file - Represents a file
- * @f_ref: reference count
  * @f_lock: Protects f_ep, f_flags. Must not be taken from IRQ context.
  * @f_mode: FMODE_* flags often used in hotpaths
  * @f_op: file operations
@@ -1080,9 +1079,9 @@ static inline int ra_has_index(struct file_ra_state *ra, pgoff_t index)
  * @f_llist: work queue entrypoint
  * @f_ra: file's readahead state
  * @f_freeptr: Pointer used by SLAB_TYPESAFE_BY_RCU file cache (don't touch.)
+ * @f_ref: reference count
  */
 struct file {
-	file_ref_t			f_ref;
 	spinlock_t			f_lock;
 	fmode_t				f_mode;
 	const struct file_operations	*f_op;
@@ -1092,6 +1091,7 @@ struct file {
 	unsigned int			f_flags;
 	unsigned int			f_iocb_flags;
 	const struct cred		*f_cred;
+	u8				padding[8];
 	/* --- cacheline 1 boundary (64 bytes) --- */
 	struct path			f_path;
 	union {
@@ -1117,6 +1117,7 @@ struct file {
 		struct file_ra_state	f_ra;
 		freeptr_t		f_freeptr;
 	};
+	file_ref_t			f_ref;
 	/* --- cacheline 3 boundary (192 bytes) --- */
 } __randomize_layout
   __attribute__((aligned(4)));	/* lest something weird decides that 2 is OK */
