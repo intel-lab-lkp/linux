@@ -69,6 +69,7 @@
 #include <linux/sysfs.h>
 #include <linux/user_events.h>
 #include <linux/uaccess.h>
+#include <linux/pidfs.h>
 
 #include <uapi/linux/wait.h>
 
@@ -948,6 +949,7 @@ void __noreturn do_exit(long code)
 
 	sched_autogroup_exit_task(tsk);
 	cgroup_exit(tsk);
+	pidfs_exit(tsk);
 
 	/*
 	 * FIXME: do that only when needed, using sched_exit tracepoint
