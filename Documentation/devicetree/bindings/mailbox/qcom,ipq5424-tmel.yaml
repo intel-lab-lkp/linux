@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/qcom,ipq5424-tmel.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm TMEL IPCC channel
+
+maintainers:
+  - Sricharan Ramabadhran <quic_srichara@quicinc.com>
+
+description:
+  TMEL SS provides different kinds of services like secureboot, remote image authentication,
+  key management, crypto, OEM provisioning etc. This patch adds support for remote image
+  authentication. Support for rest of the services can be added.
+
+  The QMP mailbox is the primary means of communication between TMEL SS and other subsystem on
+  the SoC. A dedicated pair of inbound and outbound mailboxes is implemented for each
+  subsystem/external execution environment which needs to communicate with TMEL for security
+  services. The inbound mailboxes are used to send IPC requests to TMEL, which are then processed
+  by TMEL firmware and accordingly the responses are sent back via outbound mailboxes.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - qcom,ipq5424-tmel
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  mboxes:
+    maxItems: 1
+
+  "#mbox-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - mboxes
+  - "#mbox-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    mailbox@32090000 {
+        compatible = "qcom,ipq5424-tmel";
+        reg = <0x32090000 0x2000>;
+        interrupts = <GIC_SPI 126 IRQ_TYPE_EDGE_RISING>;
+        mboxes = <&apcs_glb 20>;
+        #mbox-cells = <1>;
+    };
+
+...
