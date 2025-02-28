@@ -54,6 +54,7 @@ struct nvmem_cell *nvmem_cell_get(struct device *dev, const char *id);
 struct nvmem_cell *devm_nvmem_cell_get(struct device *dev, const char *id);
 void nvmem_cell_put(struct nvmem_cell *cell);
 void devm_nvmem_cell_put(struct device *dev, struct nvmem_cell *cell);
+size_t nvmem_cell_size(struct nvmem_cell *cell);
 void *nvmem_cell_read(struct nvmem_cell *cell, size_t *len);
 int nvmem_cell_write(struct nvmem_cell *cell, void *buf, size_t len);
 int nvmem_cell_read_u8(struct device *dev, const char *cell_id, u8 *val);
@@ -115,6 +116,11 @@ static inline void devm_nvmem_cell_put(struct device *dev,
 }
 static inline void nvmem_cell_put(struct nvmem_cell *cell)
 {
+}
+
+static inline size_t nvmem_cell_size(struct nvmem_cell *cell)
+{
+	return 0;
 }
 
 static inline void *nvmem_cell_read(struct nvmem_cell *cell, size_t *len)

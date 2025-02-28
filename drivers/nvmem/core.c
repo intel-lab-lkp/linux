@@ -1624,6 +1624,24 @@ void nvmem_cell_put(struct nvmem_cell *cell)
 }
 EXPORT_SYMBOL_GPL(nvmem_cell_put);
 
+/**
+ * nvmem_cell_size() - Get nvmem cell size in bytes.
+ *
+ * @cell: nvmem cell.
+ *
+ * Return: size of the nvmem cell.
+ */
+size_t nvmem_cell_size(struct nvmem_cell *cell)
+{
+	struct nvmem_cell_entry *entry = cell->entry;
+
+	if (!entry)
+		return 0;
+
+	return entry->bytes;
+}
+EXPORT_SYMBOL_GPL(nvmem_cell_size);
+
 static void nvmem_shift_read_buffer_in_place(struct nvmem_cell_entry *cell, void *buf)
 {
 	u8 *p, *b;
