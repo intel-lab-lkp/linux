@@ -515,9 +515,25 @@ static bool s390_iommu_capable(struct device *dev, enum iommu_cap cap)
 	}
 }
 
+static inline u64 max_tbl_size(struct s390_domain *domain)
+{
+	switch (domain->origin_type) {
+	case ZPCI_TABLE_TYPE_RTX:
+		return ZPCI_TABLE_SIZE_RT - 1;
+	case ZPCI_TABLE_TYPE_RSX:
+		return ZPCI_TABLE_SIZE_RS - 1;
+	case ZPCI_TABLE_TYPE_RFX:
+		return U64_MAX;
+	default:
+		return 0;
+	}
+}
+
 static struct iommu_domain *s390_domain_alloc_paging(struct device *dev)
 {
+	struct zpci_dev *zdev = to_zpci_dev(dev);
 	struct s390_domain *s390_domain;
+	u64 aperture_size;
 
 	s390_domain = kzalloc(sizeof(*s390_domain), GFP_KERNEL);
 	if (!s390_domain)
@@ -528,10 +544,26 @@ static struct iommu_domain *s390_domain_alloc_paging(struct device *dev)
 		kfree(s390_domain);
 		return NULL;
 	}
+
+	aperture_size = min(s390_iommu_aperture,
+			    zdev->end_dma - zdev->start_dma + 1);
+	if (aperture_size <= (ZPCI_TABLE_SIZE_RT - zdev->start_dma)) {
+		s390_domain->origin_type = ZPCI_TABLE_TYPE_RTX;
+	} else if (aperture_size <= (ZPCI_TABLE_SIZE_RS - zdev->start_dma) &&
+		  (zdev->dtsm & ZPCI_IOTA_DT_RS)) {
+		s390_domain->origin_type = ZPCI_TABLE_TYPE_RSX;
+	} else if (zdev->dtsm & ZPCI_IOTA_DT_RF) {
+		s390_domain->origin_type = ZPCI_TABLE_TYPE_RFX;
+	} else {
+		/* Assume RTX available */
+		s390_domain->origin_type = ZPCI_TABLE_TYPE_RTX;
+		aperture_size = ZPCI_TABLE_SIZE_RT - zdev->start_dma;
+	}
+	zdev->end_dma = zdev->start_dma + aperture_size - 1;
+
 	s390_domain->domain.geometry.force_aperture = true;
 	s390_domain->domain.geometry.aperture_start = 0;
-	s390_domain->domain.geometry.aperture_end = ZPCI_TABLE_SIZE_RT - 1;
-	s390_domain->origin_type = ZPCI_TABLE_TYPE_RTX;
+	s390_domain->domain.geometry.aperture_end = max_tbl_size(s390_domain);
 
 	spin_lock_init(&s390_domain->list_lock);
 	INIT_LIST_HEAD_RCU(&s390_domain->devices);
@@ -684,6 +716,9 @@ static void s390_iommu_get_resv_regions(struct device *dev,
 {
 	struct zpci_dev *zdev = to_zpci_dev(dev);
 	struct iommu_resv_region *region;
+	struct s390_domain *s390_domain;
+	unsigned long flags;
+	u64 end_resv;
 
 	if (zdev->start_dma) {
 		region = iommu_alloc_resv_region(0, zdev->start_dma, 0,
@@ -693,14 +728,23 @@ static void s390_iommu_get_resv_regions(struct device *dev,
 		list_add_tail(&region->list, list);
 	}
 
-	if (zdev->end_dma < ZPCI_TABLE_SIZE_RT - 1) {
-		region = iommu_alloc_resv_region(zdev->end_dma + 1,
-						 ZPCI_TABLE_SIZE_RT - zdev->end_dma - 1,
-						 0, IOMMU_RESV_RESERVED, GFP_KERNEL);
+	spin_lock_irqsave(&zdev->dom_lock, flags);
+	if (zdev->s390_domain->type == IOMMU_DOMAIN_BLOCKED ||
+	    zdev->s390_domain->type == IOMMU_DOMAIN_IDENTITY)
+		goto out;
+
+	s390_domain = to_s390_domain(zdev->s390_domain);
+	if (zdev->end_dma < max_tbl_size(s390_domain)) {
+		end_resv = max_tbl_size(s390_domain) - zdev->end_dma;
+		region = iommu_alloc_resv_region(zdev->end_dma + 1, end_resv,
+						 0, IOMMU_RESV_RESERVED,
+						 GFP_KERNEL);
 		if (!region)
-			return;
+			goto out;
 		list_add_tail(&region->list, list);
 	}
+out:
+	spin_unlock_irqrestore(&zdev->dom_lock, flags);
 }
 
 static struct iommu_device *s390_iommu_probe_device(struct device *dev)
@@ -712,12 +756,8 @@ static struct iommu_device *s390_iommu_probe_device(struct device *dev)
 
 	zdev = to_zpci_dev(dev);
 
-	if (zdev->start_dma > zdev->end_dma ||
-	    zdev->start_dma > ZPCI_TABLE_SIZE_RT - 1)
+	if (zdev->start_dma > zdev->end_dma)
 		return ERR_PTR(-EINVAL);
-
-	if (zdev->end_dma > ZPCI_TABLE_SIZE_RT - 1)
-		zdev->end_dma = ZPCI_TABLE_SIZE_RT - 1;
 
 	if (zdev->tlb_refresh)
 		dev->iommu->shadow_on_flush = 1;
@@ -995,7 +1035,6 @@ struct zpci_iommu_ctrs *zpci_get_iommu_ctrs(struct zpci_dev *zdev)
 
 int zpci_init_iommu(struct zpci_dev *zdev)
 {
-	u64 aperture_size;
 	int rc = 0;
 
 	rc = iommu_device_sysfs_add(&zdev->iommu_dev, NULL, NULL,
@@ -1012,12 +1051,6 @@ int zpci_init_iommu(struct zpci_dev *zdev)
 	}
 	if (rc)
 		goto out_sysfs;
-
-	zdev->start_dma = PAGE_ALIGN(zdev->start_dma);
-	aperture_size = min3(s390_iommu_aperture,
-			     ZPCI_TABLE_SIZE_RT - zdev->start_dma,
-			     zdev->end_dma - zdev->start_dma + 1);
-	zdev->end_dma = zdev->start_dma + aperture_size - 1;
 
 	return 0;
 
