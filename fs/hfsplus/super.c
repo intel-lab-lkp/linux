@@ -322,8 +322,8 @@ static int hfsplus_statfs(struct dentry *dentry, struct kstatfs *buf)
 
 	buf->f_type = HFSPLUS_SUPER_MAGIC;
 	buf->f_bsize = sb->s_blocksize;
-	buf->f_blocks = sbi->total_blocks << sbi->fs_shift;
-	buf->f_bfree = sbi->free_blocks << sbi->fs_shift;
+	buf->f_blocks = (u64)sbi->total_blocks << sbi->fs_shift;
+	buf->f_bfree = (u64)sbi->free_blocks << sbi->fs_shift;
 	buf->f_bavail = buf->f_bfree;
 	buf->f_files = 0xFFFFFFFF;
 	buf->f_ffree = 0xFFFFFFFF - sbi->next_cnid;
