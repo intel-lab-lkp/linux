@@ -375,7 +375,7 @@ typedef u64 acpi_physical_address;
 
 /* Names within the namespace are 4 bytes long */
 
-#define ACPI_NAMESEG_SIZE               4	/* Fixed by ACPI spec */
+#define ACPI_NAMESEG_SIZE               5	/* Fixed by ACPI spec */
 #define ACPI_PATH_SEGMENT_LENGTH        5	/* 4 chars for name + 1 char for separator */
 #define ACPI_PATH_SEPARATOR             '.'
 
