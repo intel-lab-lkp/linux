@@ -2321,7 +2321,7 @@ static int struct_ep_setup(struct fsl_udc *udc, unsigned char index,
 	struct fsl_ep *ep = &udc->eps[index];
 
 	ep->udc = udc;
-	strcpy(ep->name, name);
+	strscpy(ep->name, name);
 	ep->ep.name = ep->name;
 
 	ep->ep.ops = &fsl_ep_ops;
