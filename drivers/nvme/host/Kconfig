@@ -28,6 +28,21 @@ config NVME_MULTIPATH
 
 	  If unsure, say Y.
 
+config NVME_MULTIPATH_PARAM
+	bool "NVMe multipath param"
+	depends on NVME_CORE && NVME_MULTIPATH
+	help
+	  This option enables configurable support for multipath access with
+	  NVMe subsystems. If this option is enabled NVMe multipath support is
+	  configured by the nvme core module parameter named "multipath". If
+	  this option is disabled the nvme core module "multipath" parameter
+	  is removed and support for NVMe multipath access can not be
+	  configured. When this option is disabled a single /dev/nvmeXnY
+	  device entry will be seen for each NVMe namespace, even if the
+	  namespace is accessible through multiple controllers.
+
+	  If unsure, say Y.
+
 config NVME_VERBOSE_ERRORS
 	bool "NVMe verbose error reporting"
 	depends on NVME_CORE
