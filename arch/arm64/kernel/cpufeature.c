@@ -2223,8 +2223,6 @@ static bool has_bbml2_noabort(const struct arm64_cpu_capabilities *caps, int sco
 			if (!cpu_has_bbml2_noabort(__cpu_read_midr(cpu)))
 				return false;
 		}
-
-		return true;
 	} else if (scope & SCOPE_LOCAL_CPU) {
 		/* We are a hot-plugged CPU, so only need to check our MIDR.
 		 * If we have the correct MIDR, but the kernel booted on an
@@ -2232,10 +2230,11 @@ static bool has_bbml2_noabort(const struct arm64_cpu_capabilities *caps, int sco
 		 * we have an incorrect MIDR, but the kernel booted on a
 		 * sufficient CPU, we will not bring up this CPU.
 		 */
-		return cpu_has_bbml2_noabort(read_cpuid_id());
+		if (!cpu_has_bbml2_noabort(read_cpuid_id()))
+			return false;
 	}
 
-	return false;
+	return has_cpuid_feature(caps, scope);
 }
 
 #ifdef CONFIG_ARM64_PAN
