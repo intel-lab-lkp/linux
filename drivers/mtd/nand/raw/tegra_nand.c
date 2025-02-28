@@ -793,8 +793,8 @@ static void tegra_nand_setup_timing(struct tegra_nand_controller *ctrl,
 				timings->tRC_min), period);
 	reg |= TIMING_TCR_TAR_TRR(OFFSET(val, 3));
 
-	val = DIV_ROUND_UP(max(max(timings->tCS_min, timings->tCH_min),
-			       max(timings->tALS_min, timings->tALH_min)),
+	val = DIV_ROUND_UP(max3(timings->tCS_min, timings->tCH_min,
+				max(timings->tALS_min, timings->tALH_min)),
 			   period);
 	reg |= TIMING_TCS(OFFSET(val, 2));
 
