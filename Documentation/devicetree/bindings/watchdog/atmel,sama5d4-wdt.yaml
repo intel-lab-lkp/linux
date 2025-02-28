@@ -23,6 +23,10 @@ properties:
           - const: microchip,sam9x7-wdt
           - const: microchip,sam9x60-wdt
 
+      - items:
+          - const: microchip,sama7d65-wdt
+          - const: microchip,sama7g5-wdt
+
   reg:
     maxItems: 1
 
