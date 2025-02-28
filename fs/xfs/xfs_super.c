@@ -2075,8 +2075,6 @@ xfs_init_fs_context(
 	int			i;
 
 	mp = kzalloc(sizeof(struct xfs_mount), GFP_KERNEL | __GFP_NOFAIL);
-	if (!mp)
-		return -ENOMEM;
 
 	spin_lock_init(&mp->m_sb_lock);
 	for (i = 0; i < XG_TYPE_MAX; i++)

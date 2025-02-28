@@ -124,8 +124,6 @@ xfs_buf_get_maps(
 
 	bp->b_maps = kzalloc(map_count * sizeof(struct xfs_buf_map),
 			GFP_KERNEL | __GFP_NOLOCKDEP | __GFP_NOFAIL);
-	if (!bp->b_maps)
-		return -ENOMEM;
 	return 0;
 }
 
@@ -268,8 +266,6 @@ xfs_buf_alloc_kmem(
 		gfp_mask |= __GFP_ZERO;
 
 	bp->b_addr = kmalloc(size, gfp_mask);
-	if (!bp->b_addr)
-		return -ENOMEM;
 
 	if (((unsigned long)(bp->b_addr + size - 1) & PAGE_MASK) !=
 	    ((unsigned long)bp->b_addr & PAGE_MASK)) {

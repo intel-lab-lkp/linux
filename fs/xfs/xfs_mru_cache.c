@@ -333,17 +333,11 @@ xfs_mru_cache_create(
 		return -EINVAL;
 
 	mru = kzalloc(sizeof(*mru), GFP_KERNEL | __GFP_NOFAIL);
-	if (!mru)
-		return -ENOMEM;
 
 	/* An extra list is needed to avoid reaping up to a grp_time early. */
 	mru->grp_count = grp_count + 1;
 	mru->lists = kzalloc(mru->grp_count * sizeof(*mru->lists),
 				GFP_KERNEL | __GFP_NOFAIL);
-	if (!mru->lists) {
-		err = -ENOMEM;
-		goto exit;
-	}
 
 	for (grp = 0; grp < mru->grp_count; grp++)
 		INIT_LIST_HEAD(mru->lists + grp);
