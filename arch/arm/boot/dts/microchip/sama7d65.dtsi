@@ -76,6 +76,13 @@
 			clock-names = "td_slck", "md_slck", "main_xtal";
 		};
 
+		ps_wdt: watchdog@e001d000 {
+			compatible = "microchip,sama7d65-wdt", "microchip,sama7g5-wdt";
+			reg = <0xe001d000 0x30>;
+			interrupts = <GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&clk32k 0>;
+		};
+
 		clk32k: clock-controller@e001d500 {
 			compatible = "microchip,sama7d65-sckc", "microchip,sam9x60-sckc";
 			reg = <0xe001d500 0x4>;
