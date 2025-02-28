@@ -18,6 +18,7 @@
 #include <linux/errno.h>
 #include <linux/host1x_context_bus.h>
 #include <linux/iommu.h>
+#include <linux/iommufd.h>
 #include <linux/idr.h>
 #include <linux/err.h>
 #include <linux/pci.h>
@@ -3619,8 +3620,19 @@ int iommu_dma_prepare_msi(struct msi_desc *desc, phys_addr_t msi_addr)
 		return 0;
 
 	mutex_lock(&group->mutex);
-	if (group->domain && group->domain->sw_msi)
-		ret = group->domain->sw_msi(group->domain, desc, msi_addr);
+	if (group->domain) {
+		switch (group->domain->private_data_owner) {
+		case IOMMU_DOMAIN_DATA_OWNER_DMA:
+			ret = iommu_dma_sw_msi(group->domain, desc, msi_addr);
+			break;
+		case IOMMU_DOMAIN_DATA_OWNER_IOMMUFD:
+			ret = iommufd_sw_msi(group->domain, desc, msi_addr);
+			break;
+		default:
+			ret = -EOPNOTSUPP;
+			break;
+		}
+	}
 	mutex_unlock(&group->mutex);
 	return ret;
 }

@@ -156,7 +156,6 @@ iommufd_hwpt_paging_alloc(struct iommufd_ctx *ictx, struct iommufd_ioas *ioas,
 			goto out_abort;
 		}
 	}
-	iommu_domain_set_sw_msi(hwpt->domain, iommufd_sw_msi);
 	hwpt->domain->private_data_owner = IOMMU_DOMAIN_DATA_OWNER_IOMMUFD;
 
 	/*
@@ -253,7 +252,6 @@ iommufd_hwpt_nested_alloc(struct iommufd_ctx *ictx,
 		goto out_abort;
 	}
 	hwpt->domain->owner = ops;
-	iommu_domain_set_sw_msi(hwpt->domain, iommufd_sw_msi);
 	hwpt->domain->private_data_owner = IOMMU_DOMAIN_DATA_OWNER_IOMMUFD;
 
 	if (WARN_ON_ONCE(hwpt->domain->type != IOMMU_DOMAIN_NESTED)) {
@@ -311,7 +309,6 @@ iommufd_viommu_alloc_hwpt_nested(struct iommufd_viommu *viommu, u32 flags,
 		goto out_abort;
 	}
 	hwpt->domain->owner = viommu->iommu_dev->ops;
-	iommu_domain_set_sw_msi(hwpt->domain, iommufd_sw_msi);
 	hwpt->domain->private_data_owner = IOMMU_DOMAIN_DATA_OWNER_IOMMUFD;
 
 	if (WARN_ON_ONCE(hwpt->domain->type != IOMMU_DOMAIN_NESTED)) {

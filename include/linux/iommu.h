@@ -224,11 +224,6 @@ struct iommu_domain {
 	struct iommu_dma_cookie *iova_cookie;
 	int (*iopf_handler)(struct iopf_group *group);
 
-#if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
-	int (*sw_msi)(struct iommu_domain *domain, struct msi_desc *desc,
-		      phys_addr_t msi_addr);
-#endif
-
 	union { /* Pointer usable by owner of the domain */
 		struct iommufd_hw_pagetable *iommufd_hwpt; /* iommufd */
 	};
@@ -248,16 +243,6 @@ struct iommu_domain {
 		};
 	};
 };
-
-static inline void iommu_domain_set_sw_msi(
-	struct iommu_domain *domain,
-	int (*sw_msi)(struct iommu_domain *domain, struct msi_desc *desc,
-		      phys_addr_t msi_addr))
-{
-#if IS_ENABLED(CONFIG_IRQ_MSI_IOMMU)
-	domain->sw_msi = sw_msi;
-#endif
-}
 
 static inline bool iommu_is_dma_domain(struct iommu_domain *domain)
 {
