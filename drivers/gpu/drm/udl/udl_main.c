@@ -311,8 +311,8 @@ int udl_init(struct udl_device *udl)
 
 	DRM_DEBUG("\n");
 
-	udl->dmadev = usb_intf_get_dma_device(to_usb_interface(dev->dev));
-	if (!udl->dmadev)
+	dev->dma_dev = usb_intf_get_dma_device(to_usb_interface(dev->dev));
+	if (!dev->dma_dev)
 		drm_warn(dev, "buffer sharing not supported"); /* not an error */
 
 	mutex_init(&udl->gem_lock);
@@ -343,18 +343,13 @@ int udl_init(struct udl_device *udl)
 err:
 	if (udl->urbs.count)
 		udl_free_urb_list(dev);
-	put_device(udl->dmadev);
 	DRM_ERROR("%d\n", ret);
 	return ret;
 }
 
 int udl_drop_usb(struct drm_device *dev)
 {
-	struct udl_device *udl = to_udl(dev);
-
 	udl_free_urb_list(dev);
-	put_device(udl->dmadev);
-	udl->dmadev = NULL;
 
 	return 0;
 }
