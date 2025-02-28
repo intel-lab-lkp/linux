@@ -259,6 +259,15 @@ static int intel_dsc_slice_dimensions_valid(struct intel_crtc_state *pipe_config
 	return 0;
 }
 
+static bool is_dsi_dsc_1_1(struct intel_crtc_state *crtc_state)
+{
+	struct drm_dsc_config *vdsc_cfg = &crtc_state->dsc.config;
+
+	return vdsc_cfg->dsc_version_major == 1 &&
+		vdsc_cfg->dsc_version_minor == 1 &&
+		intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DSI);
+}
+
 int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 {
 	struct intel_display *display = to_intel_display(pipe_config);
@@ -317,8 +326,14 @@ int intel_dsc_compute_params(struct intel_crtc_state *pipe_config)
 	 * From XE_LPD onwards we supports compression bpps in steps of 1
 	 * upto uncompressed bpp-1, hence add calculations for all the rc
 	 * parameters
+	 *
+	 * We also don't want to calculate all rc parameters when the panel
+	 * is MIPI DSI and it's using DSC 1.1. The reason being that some
+	 * DSI panels vendors have hardcoded PPS params in the VBT causing
+	 * the parameters sent from the source to be ignore. This causes a
+	 * noise in the display.
 	 */
-	if (DISPLAY_VER(display) >= 13) {
+	if (DISPLAY_VER(display) >= 13 && !is_dsi_dsc_1_1(pipe_config)) {
 		calculate_rc_params(vdsc_cfg);
 	} else {
 		if ((compressed_bpp == 8 ||
