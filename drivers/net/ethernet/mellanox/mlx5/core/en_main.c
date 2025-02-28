@@ -6486,7 +6486,7 @@ err_profile_cleanup:
 err_destroy_netdev:
 	mlx5e_destroy_netdev(priv);
 err_devlink_port_unregister:
-	mlx5e_devlink_port_unregister(mlx5e_dev);
+	mlx5e_devlink_port_unregister(mlx5e_dev, mdev);
 err_devlink_unregister:
 	mlx5e_destroy_devlink(mlx5e_dev);
 	return err;
@@ -6540,7 +6540,7 @@ static void _mlx5e_remove(struct auxiliary_device *adev)
 	if (priv->profile)
 		priv->profile->cleanup(priv);
 	mlx5e_destroy_netdev(priv);
-	mlx5e_devlink_port_unregister(mlx5e_dev);
+	mlx5e_devlink_port_unregister(mlx5e_dev, mdev);
 	mlx5e_destroy_devlink(mlx5e_dev);
 }
 
