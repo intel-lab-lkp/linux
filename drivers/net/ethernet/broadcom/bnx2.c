@@ -2887,7 +2887,7 @@ bnx2_tx_int(struct bnx2 *bp, struct bnx2_napi *bnapi, int budget)
 		last = tx_buf->nr_frags;
 
 		for (i = 0; i < last; i++) {
-			struct bnx2_sw_tx_bd *tx_buf;
+			struct bnx2_sw_tx_bd *tx_buf __maybe_unused;
 
 			sw_cons = BNX2_NEXT_TX_BD(sw_cons);
 
@@ -2994,7 +2994,7 @@ static inline void
 bnx2_reuse_rx_data(struct bnx2 *bp, struct bnx2_rx_ring_info *rxr,
 		   u8 *data, u16 cons, u16 prod)
 {
-	struct bnx2_sw_bd *cons_rx_buf, *prod_rx_buf;
+	struct bnx2_sw_bd *cons_rx_buf __maybe_unused, *prod_rx_buf;
 	struct bnx2_rx_bd *cons_bd, *prod_bd;
 
 	cons_rx_buf = &rxr->rx_buf_ring[cons];
