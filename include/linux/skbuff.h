@@ -4843,6 +4843,9 @@ enum skb_ext_id {
 #if IS_ENABLED(CONFIG_MCTP_FLOWS)
 	SKB_EXT_MCTP,
 #endif
+#if IS_ENABLED(CONFIG_TUN)
+	SKB_EXT_TUN_VNET_HASH,
+#endif
 	SKB_EXT_NUM, /* must be last */
 };
 
