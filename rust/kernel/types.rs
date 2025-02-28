@@ -527,11 +527,164 @@ impl<T: AlwaysRefCounted> From<&T> for ARef<T> {
     }
 }
 
+impl<T: UniqueRefCounted> From<UniqueRef<T>> for ARef<T> {
+    fn from(b: UniqueRef<T>) -> Self {
+        UniqueRefCounted::unique_to_shared(b)
+    }
+}
+
 impl<T: AlwaysRefCounted> Drop for ARef<T> {
     fn drop(&mut self) {
         // SAFETY: The type invariants guarantee that the `ARef` owns the reference we're about to
         // decrement.
         unsafe { T::dec_ref(self.ptr) };
+    }
+}
+
+/// Types that are [`AlwaysRefCounted`] and can be safely converted to an [`UniqueRef`]
+///
+/// # Safety
+///
+/// Implementers must ensure that the methods of the trait
+/// change the reference count of the underlying object such that:
+/// - the uniqueness invariant is upheld, i.e. it is not possible
+///   to obtain another reference by any means (other than through the [`UniqueRef`])
+///   until the [`UniqueRef`] is dropped or converted to an [`ARef`].
+/// - [`UniqueRefCounted::dec_ref`] correctly frees the underlying object.
+/// - [`UniqueRefCounted::unique_to_shared`] set the reference count to the value
+/// - that the returned [`ARef`] expects for an object with a single reference
+///   in existence.
+pub unsafe trait UniqueRefCounted: AlwaysRefCounted + Sized {
+    /// Checks if the [`ARef`] is unique and convert it
+    /// to an [`UniqueRef`] it that is that case.
+    /// Otherwise it returns again an [`ARef`] to the same
+    /// underlying object.
+    fn try_shared_to_unique(this: ARef<Self>) -> Result<UniqueRef<Self>, ARef<Self>>;
+    /// Converts the [`UniqueRef`] into an [`ARef`].
+    fn unique_to_shared(this: UniqueRef<Self>) -> ARef<Self>;
+    /// Decrements the reference count on the object when the [`UniqueRef`] is dropped.
+    ///
+    /// Frees the object when the count reaches zero.
+    ///
+    /// It defaults to [`AlwaysRefCounted::dec_ref`],
+    /// but overriding it may be useful, e.g. in case of non-standard refcounting
+    /// schemes.
+    ///
+    /// # Safety
+    ///
+    /// The same safety constraints as for [`AlwaysRefCounted::dec_ref`] apply,
+    /// but as the reference is unique, it can be assumed that the function
+    /// will not be called twice. In case the default implementation is not
+    /// overridden, it has to be ensured that the call to [`AlwaysRefCounted::dec_ref`]
+    /// can be used for an [`UniqueRef`], too.
+    unsafe fn dec_ref(obj: NonNull<Self>) {
+        // SAFETY: correct by function safety requirements
+        unsafe { AlwaysRefCounted::dec_ref(obj) };
+    }
+}
+
+/// An unique, owned reference to an [`AlwaysRefCounted`] object.
+///
+/// It works the same ways as [`ARef`] but ensures that the reference is unique
+/// and thus can be dereferenced mutably.
+///
+/// # Invariants
+///
+/// - The pointer stored in `ptr` is non-null and valid for the lifetime of the [`UniqueRef`]
+///   instance. In particular, the [`UniqueRef`] instance owns an increment
+///   on the underlying object's reference count.
+/// - No other references to the underlying object exist while the [`UniqueRef`] is live.
+pub struct UniqueRef<T: UniqueRefCounted> {
+    ptr: NonNull<T>,
+    _p: PhantomData<T>,
+}
+
+// SAFETY: It is safe to send `UniqueRef<T>` to another thread
+// when the underlying `T` is `Sync` because
+// it effectively means sharing `&T` (which is safe because `T` is `Sync`); additionally, it needs
+// `T` to be `Send` because any thread that has an `UniqueRef<T>` may ultimately access `T` using a
+// mutable reference, for example, when the reference count reaches zero and `T` is dropped.
+unsafe impl<T: UniqueRefCounted + Sync + Send> Send for UniqueRef<T> {}
+
+// SAFETY: It is safe to send `&UniqueRef<T>` to another thread when the underlying `T` is `Sync`
+// because it effectively means sharing `&T` (which is safe because `T` is `Sync`); additionally,
+// it needs `T` to be `Send` because any thread that has a `&UniqueRef<T>` may clone it and get an
+// `UniqueRef<T>` on that thread, so the thread may ultimately access `T`
+// using a mutable reference, for example, when the reference count reaches zero and `T` is dropped.
+unsafe impl<T: UniqueRefCounted + Sync + Send> Sync for UniqueRef<T> {}
+
+impl<T: UniqueRefCounted> UniqueRef<T> {
+    /// Creates a new instance of [`UniqueRef`].
+    ///
+    /// It takes over an increment of the reference count on the underlying object.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that the reference count is set to such a value
+    /// that a call to [`UniqueRefCounted::dec_ref`] will release the underlying object
+    /// in the way which is expected when the last reference is dropped.
+    /// Callers must not use the underlying object anymore --
+    /// it is only safe to do so via the newly created [`UniqueRef`].
+    pub unsafe fn from_raw(ptr: NonNull<T>) -> Self {
+        // INVARIANT: The safety requirements guarantee that the new instance now owns the
+        // increment on the refcount.
+        Self {
+            ptr,
+            _p: PhantomData,
+        }
+    }
+
+    /// Consumes the [`UniqueRef`], returning a raw pointer.
+    ///
+    /// This function does not change the refcount. After calling this function, the caller is
+    /// responsible for the refcount previously managed by the [`UniqueRef`].
+    pub fn into_raw(me: Self) -> NonNull<T> {
+        ManuallyDrop::new(me).ptr
+    }
+}
+
+impl<T: UniqueRefCounted> Deref for UniqueRef<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        // SAFETY: The type invariants guarantee that the object is valid.
+        unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<T: UniqueRefCounted> DerefMut for UniqueRef<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: The type invariants guarantee that the object is valid.
+        unsafe { self.ptr.as_mut() }
+    }
+}
+
+impl<T: UniqueRefCounted> From<&T> for UniqueRef<T> {
+    /// Converts the [`UniqueRef`] into an [`ARef`]
+    /// by calling [`UniqueRefCounted::unique_to_shared`] on it.
+    fn from(b: &T) -> Self {
+        b.inc_ref();
+        // SAFETY: We just incremented the refcount above.
+        unsafe { Self::from_raw(NonNull::from(b)) }
+    }
+}
+
+impl<T: UniqueRefCounted> TryFrom<ARef<T>> for UniqueRef<T> {
+    type Error = ARef<T>;
+    /// Tries to convert the [`ARef`] to an [`UniqueRef`]
+    /// by calling [`UniqueRefCounted::try_shared_to_unique`].
+    /// In case the [`ARef`] is not unique it returns again an [`ARef`] to the same
+    /// underlying object.
+    fn try_from(b: ARef<T>) -> Result<UniqueRef<T>, Self::Error> {
+        UniqueRefCounted::try_shared_to_unique(b)
+    }
+}
+
+impl<T: UniqueRefCounted> Drop for UniqueRef<T> {
+    fn drop(&mut self) {
+        // SAFETY: The type invariants guarantee that the [`UniqueRef`] owns the reference
+        // we're about to decrement.
+        unsafe { UniqueRefCounted::dec_ref(self.ptr) };
     }
 }
 
