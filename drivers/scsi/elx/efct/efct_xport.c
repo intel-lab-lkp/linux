@@ -830,10 +830,10 @@ efct_get_stats(struct Scsi_Host *shost)
 		stats.stats.link_stats.crc_error_count;
 	/* mbox returns kbyte count so we need to convert to words */
 	vport->fc_host_stats.tx_words =
-		stats.stats.host_stats.transmit_kbyte_count * 256;
+		(u64)stats.stats.host_stats.transmit_kbyte_count * 256;
 	/* mbox returns kbyte count so we need to convert to words */
 	vport->fc_host_stats.rx_words =
-		stats.stats.host_stats.receive_kbyte_count * 256;
+		(u64)stats.stats.host_stats.receive_kbyte_count * 256;
 	vport->fc_host_stats.tx_frames =
 		stats.stats.host_stats.transmit_frame_count;
 	vport->fc_host_stats.rx_frames =
