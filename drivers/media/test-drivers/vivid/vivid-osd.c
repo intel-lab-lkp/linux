@@ -333,7 +333,7 @@ static int vivid_fb_init_vidmode(struct vivid_dev *dev)
 }
 
 /* Release any memory we've grabbed */
-void vivid_fb_release_buffers(struct vivid_dev *dev)
+static void vivid_fb_release_buffers(struct vivid_dev *dev)
 {
 	if (dev->video_vbase == NULL)
 		return;
@@ -380,6 +380,17 @@ int vivid_fb_init(struct vivid_dev *dev)
 
 	/* Set the card to the requested mode */
 	vivid_fb_set_par(&dev->fb_info);
+
+	v4l2_info(&dev->v4l2_dev, "Framebuffer device registered as fb%d\n",
+		  dev->fb_info.node);
+
 	return 0;
 
+}
+
+void vivid_fb_deinit(struct vivid_dev *dev)
+{
+	v4l2_info(&dev->v4l2_dev, "unregistering fb%d\n", dev->fb_info.node);
+	unregister_framebuffer(&dev->fb_info);
+	vivid_fb_release_buffers(dev);
 }
