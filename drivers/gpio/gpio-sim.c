@@ -38,7 +38,7 @@
 #include <linux/types.h>
 
 #define GPIO_SIM_NGPIO_MAX	1024
-#define GPIO_SIM_PROP_MAX	4 /* Max 3 properties + sentinel. */
+#define GPIO_SIM_PROP_MAX	5 /* Max 4 properties + sentinel. */
 #define GPIO_SIM_NUM_ATTRS	3 /* value, pull and sentinel */
 
 static DEFINE_IDA(gpio_sim_ida);
@@ -419,14 +419,20 @@ static int gpio_sim_add_bank(struct fwnode_handle *swnode, struct device *dev)
 	struct gpio_chip *gc;
 	const char *label;
 	u32 num_lines;
+	u32 base;
 	int ret;
 
 	ret = fwnode_property_read_u32(swnode, "ngpios", &num_lines);
 	if (ret)
 		return ret;
 
+
 	if (num_lines > GPIO_SIM_NGPIO_MAX)
 		return -ERANGE;
+
+	ret = fwnode_property_read_u32(swnode, "base", &base);
+	if (ret)
+		return ret;
 
 	ret = fwnode_property_read_string(swnode, "gpio-sim,label", &label);
 	if (ret) {
@@ -474,7 +480,7 @@ static int gpio_sim_add_bank(struct fwnode_handle *swnode, struct device *dev)
 		return ret;
 
 	gc = &chip->gc;
-	gc->base = -1;
+	gc->base = base;
 	gc->ngpio = num_lines;
 	gc->label = label;
 	gc->owner = THIS_MODULE;
@@ -629,6 +635,9 @@ struct gpio_sim_bank {
 	struct list_head siblings;
 
 	char *label;
+
+	//base is treated as unsigned as there is no read_prop_s32
+	unsigned int base;
 	unsigned int num_lines;
 
 	struct list_head line_list;
@@ -885,6 +894,7 @@ gpio_sim_make_bank_swnode(struct gpio_sim_bank *bank,
 
 	memset(properties, 0, sizeof(properties));
 
+	properties[prop_idx++] = PROPERTY_ENTRY_U32("base", bank->base);
 	properties[prop_idx++] = PROPERTY_ENTRY_U32("ngpios", bank->num_lines);
 
 	if (gpio_sim_bank_has_label(bank))
@@ -1202,10 +1212,48 @@ gpio_sim_bank_config_num_lines_store(struct config_item *item,
 
 CONFIGFS_ATTR(gpio_sim_bank_config_, num_lines);
 
+static ssize_t
+gpio_sim_bank_config_base_show(struct config_item *item, char *page)
+{
+	struct gpio_sim_bank *bank = to_gpio_sim_bank(item);
+	struct gpio_sim_device *dev = gpio_sim_bank_get_device(bank);
+
+	guard(mutex)(&dev->lock);
+
+	return sprintf(page, "%i\n", bank->base);
+}
+
+static ssize_t
+gpio_sim_bank_config_base_store(struct config_item *item,
+				     const char *page, size_t count)
+{
+	struct gpio_sim_bank *bank = to_gpio_sim_bank(item);
+	struct gpio_sim_device *dev = gpio_sim_bank_get_device(bank);
+	unsigned int base;
+	int ret;
+
+	ret = kstrtoint(page, 0, &base);
+	if (ret)
+		return ret;
+
+
+	guard(mutex)(&dev->lock);
+
+	if (gpio_sim_device_is_live(dev))
+		return -EBUSY;
+
+	bank->base = base;
+
+	return count;
+}
+
+CONFIGFS_ATTR(gpio_sim_bank_config_, base);
+
 static struct configfs_attribute *gpio_sim_bank_config_attrs[] = {
 	&gpio_sim_bank_config_attr_chip_name,
 	&gpio_sim_bank_config_attr_label,
 	&gpio_sim_bank_config_attr_num_lines,
+	&gpio_sim_bank_config_attr_base,
 	NULL
 };
 
@@ -1505,6 +1553,7 @@ gpio_sim_device_config_make_bank_group(struct config_group *group,
 	config_group_init_type_name(&bank->group, name,
 				    &gpio_sim_bank_config_group_type);
 	bank->num_lines = 1;
+	bank->base = -1;
 	bank->parent = dev;
 	INIT_LIST_HEAD(&bank->line_list);
 	list_add_tail(&bank->siblings, &dev->bank_list);
