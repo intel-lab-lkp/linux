@@ -877,11 +877,14 @@ struct bnxt_sw_tx_bd {
 		struct sk_buff		*skb;
 		struct xdp_frame	*xdpf;
 	};
+	struct page		*page;
 	DEFINE_DMA_UNMAP_ADDR(mapping);
 	DEFINE_DMA_UNMAP_LEN(len);
-	struct page		*page;
+	u16			extra_segs;
+	u8			hdr_size;
 	u8			is_ts_pkt;
 	u8			is_push;
+	u8			is_vfr;
 	u8			action;
 	unsigned short		nr_frags;
 	union {
@@ -1128,6 +1131,10 @@ struct bnxt_rx_sw_stats {
 
 struct bnxt_tx_sw_stats {
 	u64			tx_resets;
+	/* non-ethtool stats follow */
+	u64			tx_packets;
+	u64			tx_bytes;
+	struct u64_stats_sync	syncp;
 };
 
 struct bnxt_cmn_sw_stats {
@@ -1153,6 +1160,8 @@ struct bnxt_total_ring_drv_stats {
 	/* non-ethtool stats follow */
 	u64			rx_total_packets;
 	u64			rx_total_bytes;
+	u64			tx_total_packets;
+	u64			tx_total_bytes;
 };
 
 struct bnxt_stats_mem {
