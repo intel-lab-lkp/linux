@@ -1807,6 +1807,185 @@ static void compression_ctx_init(struct iaa_compression_ctx *ctx)
 	ctx->use_irq = use_irq;
 }
 
+static int iaa_comp_poll(struct acomp_req *req)
+{
+	struct idxd_desc *idxd_desc;
+	struct idxd_device *idxd;
+	struct iaa_wq *iaa_wq;
+	struct pci_dev *pdev;
+	struct device *dev;
+	struct idxd_wq *wq;
+	bool compress_op;
+	int ret;
+
+	idxd_desc = req->base.data;
+	if (!idxd_desc)
+		return -EAGAIN;
+
+	compress_op = (idxd_desc->iax_hw->opcode == IAX_OPCODE_COMPRESS);
+	wq = idxd_desc->wq;
+	iaa_wq = idxd_wq_get_private(wq);
+	idxd = iaa_wq->iaa_device->idxd;
+	pdev = idxd->pdev;
+	dev = &pdev->dev;
+
+	ret = check_completion(dev, idxd_desc->iax_completion, true, true);
+	if (ret == -EAGAIN)
+		return ret;
+	if (ret)
+		goto out;
+
+	req->dlen = idxd_desc->iax_completion->output_size;
+
+	/* Update stats */
+	if (compress_op) {
+		update_total_comp_bytes_out(req->dlen);
+		update_wq_comp_bytes(wq, req->dlen);
+	} else {
+		update_total_decomp_bytes_in(req->slen);
+		update_wq_decomp_bytes(wq, req->slen);
+	}
+
+	if (iaa_verify_compress && (idxd_desc->iax_hw->opcode == IAX_OPCODE_COMPRESS)) {
+		struct crypto_tfm *tfm = req->base.tfm;
+		dma_addr_t src_addr, dst_addr;
+		u32 compression_crc;
+
+		compression_crc = idxd_desc->iax_completion->crc;
+
+		dma_sync_sg_for_device(dev, req->dst, 1, DMA_FROM_DEVICE);
+		dma_sync_sg_for_device(dev, req->src, 1, DMA_TO_DEVICE);
+
+		src_addr = sg_dma_address(req->src);
+		dst_addr = sg_dma_address(req->dst);
+
+		ret = iaa_compress_verify(tfm, req, wq, src_addr, req->slen,
+					  dst_addr, &req->dlen, compression_crc);
+	}
+out:
+	/* caller doesn't call crypto_wait_req, so no acomp_request_complete() */
+
+	dma_unmap_sg(dev, req->dst, sg_nents(req->dst), DMA_FROM_DEVICE);
+	dma_unmap_sg(dev, req->src, sg_nents(req->src), DMA_TO_DEVICE);
+
+	idxd_free_desc(idxd_desc->wq, idxd_desc);
+
+	dev_dbg(dev, "%s: returning ret=%d\n", __func__, ret);
+
+	return ret;
+}
+
+static unsigned int iaa_comp_get_batch_size(void)
+{
+	return IAA_CRYPTO_MAX_BATCH_SIZE;
+}
+
+static void iaa_set_reqchain_poll(
+	struct acomp_req *req0,
+	bool set_flag)
+{
+	struct acomp_req *req;
+
+	set_flag ? (req0->flags |= CRYPTO_ACOMP_REQ_POLL) :
+		   (req0->flags &= ~CRYPTO_ACOMP_REQ_POLL);
+
+	list_for_each_entry(req, &req0->base.list, base.list)
+		set_flag ? (req->flags |= CRYPTO_ACOMP_REQ_POLL) :
+			   (req->flags &= ~CRYPTO_ACOMP_REQ_POLL);
+}
+
+/**
+ * This API provides IAA compress batching functionality for use by swap
+ * modules. Batching is implemented using request chaining.
+ *
+ * @req:  The head asynchronous compress request in the chain.
+ *
+ * Returns the compression error status (0 or -errno) of the last
+ * request that finishes. Caller should call acomp_request_err()
+ * for each request in the chain, to get its error status.
+ */
+static int iaa_comp_acompress_batch(struct acomp_req *req)
+{
+	bool async = (async_mode && !use_irq);
+	int err = 0;
+
+	if (likely(async))
+		iaa_set_reqchain_poll(req, true);
+	else
+		iaa_set_reqchain_poll(req, false);
+
+
+	if (likely(async))
+		/* Process the request chain in parallel. */
+		err = acomp_do_async_req_chain(req, iaa_comp_acompress, iaa_comp_poll);
+	else
+		/* Process the request chain in series. */
+		err = acomp_do_req_chain(req, iaa_comp_acompress);
+
+	/*
+	 * For the same request chain to be usable by
+	 * iaa_comp_acompress()/iaa_comp_adecompress() in synchronous mode,
+	 * clear the CRYPTO_ACOMP_REQ_POLL bit on all acomp_reqs.
+	 */
+	iaa_set_reqchain_poll(req, false);
+
+	return err;
+}
+
+/**
+ * This API provides IAA decompress batching functionality for use by swap
+ * modules. Batching is implemented using request chaining.
+ *
+ * @req:  The head asynchronous decompress request in the chain.
+ *
+ * Returns the decompression error status (0 or -errno) of the last
+ * request that finishes. Caller should call acomp_request_err()
+ * for each request in the chain, to get its error status.
+ */
+static int iaa_comp_adecompress_batch(struct acomp_req *req)
+{
+	bool async = (async_mode && !use_irq);
+	int err = 0;
+
+	if (likely(async))
+		iaa_set_reqchain_poll(req, true);
+	else
+		iaa_set_reqchain_poll(req, false);
+
+
+	if (likely(async))
+		/* Process the request chain in parallel. */
+		err = acomp_do_async_req_chain(req, iaa_comp_adecompress, iaa_comp_poll);
+	else
+		/* Process the request chain in series. */
+		err = acomp_do_req_chain(req, iaa_comp_adecompress);
+
+	/*
+	 * For the same request chain to be usable by
+	 * iaa_comp_acompress()/iaa_comp_adecompress() in synchronous mode,
+	 * clear the CRYPTO_ACOMP_REQ_POLL bit on all acomp_reqs.
+	 */
+	iaa_set_reqchain_poll(req, false);
+
+	return err;
+}
+
+static int iaa_compress_main(struct acomp_req *req)
+{
+	if (acomp_is_reqchain(req))
+		return iaa_comp_acompress_batch(req);
+
+	return iaa_comp_acompress(req);
+}
+
+static int iaa_decompress_main(struct acomp_req *req)
+{
+	if (acomp_is_reqchain(req))
+		return iaa_comp_adecompress_batch(req);
+
+	return iaa_comp_adecompress(req);
+}
+
 static int iaa_comp_init_fixed(struct crypto_acomp *acomp_tfm)
 {
 	struct crypto_tfm *tfm = crypto_acomp_tfm(acomp_tfm);
@@ -1829,13 +2008,14 @@ static void dst_free(struct scatterlist *sgl)
 
 static struct acomp_alg iaa_acomp_fixed_deflate = {
 	.init			= iaa_comp_init_fixed,
-	.compress		= iaa_comp_acompress,
-	.decompress		= iaa_comp_adecompress,
+	.compress		= iaa_compress_main,
+	.decompress		= iaa_decompress_main,
 	.dst_free               = dst_free,
+	.get_batch_size		= iaa_comp_get_batch_size,
 	.base			= {
 		.cra_name		= "deflate",
 		.cra_driver_name	= "deflate-iaa",
-		.cra_flags		= CRYPTO_ALG_ASYNC,
+		.cra_flags		= CRYPTO_ALG_ASYNC | CRYPTO_ALG_REQ_CHAIN,
 		.cra_ctxsize		= sizeof(struct iaa_compression_ctx),
 		.cra_module		= THIS_MODULE,
 		.cra_priority		= IAA_ALG_PRIORITY,
