@@ -1118,8 +1118,12 @@ struct bnxt_rx_sw_stats {
 	u64			rx_l4_csum_errors;
 	u64			rx_resets;
 	u64			rx_buf_errors;
+	/* non-ethtool stats follow */
 	u64			rx_oom_discards;
 	u64			rx_netpoll_discards;
+	u64			rx_packets;
+	u64			rx_bytes;
+	struct u64_stats_sync	syncp;
 };
 
 struct bnxt_tx_sw_stats {
@@ -1146,6 +1150,9 @@ struct bnxt_total_ring_drv_stats {
 	u64			tx_total_resets;
 	u64			tx_total_ring_discards;
 	u64			total_missed_irqs;
+	/* non-ethtool stats follow */
+	u64			rx_total_packets;
+	u64			rx_total_bytes;
 };
 
 struct bnxt_stats_mem {
@@ -2795,6 +2802,24 @@ static inline u32 bnxt_tx_avail(struct bnxt *bp,
 	u32 used = READ_ONCE(txr->tx_prod) - READ_ONCE(txr->tx_cons);
 
 	return bp->tx_ring_size - (used & bp->tx_ring_mask);
+}
+
+static inline void bnxt_rx_pkt_cnt(struct bnxt *bp, struct bnxt_napi *bnapi,
+				   struct net_device *dev,
+				   int segs, int len, int payload_off)
+{
+	struct bnxt_sw_stats *sw_stats = bnapi->cp_ring.sw_stats;
+
+	/* Packet is for a representor */
+	if (bp->dev != dev)
+		return;
+
+	u64_stats_update_begin(&sw_stats->rx.syncp);
+	sw_stats->rx.rx_packets	+= segs;
+	sw_stats->rx.rx_bytes	+= len;
+	if (segs > 1)
+		sw_stats->rx.rx_bytes += (segs - 1) * payload_off;
+	u64_stats_update_end(&sw_stats->rx.syncp);
 }
 
 static inline void bnxt_writeq(struct bnxt *bp, u64 val,

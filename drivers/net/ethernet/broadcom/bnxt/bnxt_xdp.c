@@ -247,10 +247,20 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct net_device *dev,
 	/* BNXT_RX_PAGE_MODE(bp) when XDP enabled */
 	orig_data = xdp->data;
 
-	if (bp->dev == dev)
+	if (bp->dev == dev) {
+		struct skb_shared_info *sinfo;
+		int stat_len = *len;
+
+		if (unlikely(xdp_buff_has_frags(xdp))) {
+			sinfo = xdp_get_shared_info_from_buff(xdp);
+			stat_len += sinfo->xdp_frags_size;
+		}
+
+		bnxt_rx_pkt_cnt(bp, rxr->bnapi, dev, 1, stat_len, 0);
 		act = bpf_prog_run_xdp(xdp_prog, xdp);
-	else /* packet is for a VF representor */
+	} else { /* packet is for a VF representor */
 		act = XDP_PASS;
+	}
 
 	tx_avail = bnxt_tx_avail(bp, txr);
 	/* If the tx ring is not full, we must not update the rx producer yet
