@@ -21,7 +21,7 @@
 
 struct lifebook_data {
 	struct input_dev *dev2;		/* Relative device */
-	char phys[32];
+	char phys[40];
 };
 
 static bool lifebook_present;
