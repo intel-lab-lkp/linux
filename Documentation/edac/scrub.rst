@@ -264,3 +264,76 @@ Sysfs files are documented in
 `Documentation/ABI/testing/sysfs-edac-scrub`
 
 `Documentation/ABI/testing/sysfs-edac-ecs`
+
+Examples
+--------
+
+The usage takes the form shown in these examples:
+
+1. ACPI RAS2
+
+1.1 On demand scrubbing for a specific memory region.
+
+1.1.1. Query what is device default/current scrub cycle setting.
+
+       Applicable to both on-demand and background scrubbing.
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/current_cycle_duration
+
+36000
+
+1.1.2 Query the range of device supported scrub cycle for a memory region.
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/min_cycle_duration
+
+3600
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/max_cycle_duration
+
+86400
+
+1.1.3. Program scrubbing for the memory region in RAS2 device to repeat every 43200 seconds (half a day).
+
+# echo 43200 > /sys/bus/edac/devices/acpi_ras_mem0/scrub0/current_cycle_duration
+
+1.1.4. Program address and size of the memory region to scrub
+
+Readback 'addr', non-zero - demand scrub is in progress, zero - scrub is finished.
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/addr
+
+0
+
+Write 'size' of the memory region to scrub.
+
+# echo 0x300000 > /sys/bus/edac/devices/acpi_ras_mem0/scrub0/size
+
+Write 'addr' starts demand scrubbing, please make sure other attributes are set prior to that.
+
+# echo 0x200000 > /sys/bus/edac/devices/acpi_ras_mem0/scrub0/addr
+
+Readback 'addr', non-zero - demand scrub is in progress, zero - scrub is finished.
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/addr
+
+0x200000
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/addr
+
+0
+
+1.2 Background scrubbing the entire memory
+
+1.2.3 Query the status of background scrubbing.
+
+# cat /sys/bus/edac/devices/acpi_ras_mem0/scrub0/enable_background
+
+0
+
+1.2.4. Program background scrubbing for RAS2 device to repeat in every 21600 seconds (quarter of a day).
+
+# echo 21600 > /sys/bus/edac/devices/acpi_ras_mem0/scrub0/current_cycle_duration
+
+1.2.5. Start 'background scrubbing'.
+
+# echo 1 > /sys/bus/edac/devices/acpi_ras_mem0/scrub0/enable_background
