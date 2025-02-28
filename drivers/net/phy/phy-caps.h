@@ -8,6 +8,7 @@
 #define __PHY_CAPS_H
 
 #include <linux/ethtool.h>
+#include <linux/phy.h>
 
 enum {
 	LINK_CAPA_10HD = 0,
@@ -46,6 +47,7 @@ size_t phy_caps_speeds(unsigned int *speeds, size_t size,
 void phy_caps_linkmode_max_speed(u32 max_speed, unsigned long *linkmodes);
 bool phy_caps_valid(int speed, int duplex, const unsigned long *linkmodes);
 void phy_caps_linkmodes(unsigned long caps, unsigned long *linkmodes);
+unsigned long phy_caps_from_interface(phy_interface_t interface);
 
 const struct link_capabilities *
 phy_caps_lookup_by_linkmode(const unsigned long *linkmodes);
