@@ -57,6 +57,23 @@ struct drm_device {
 	struct device *dev;
 
 	/**
+	 * @dma_dev:
+	 *
+	 * Device for DMA operations. Only required if the device @dev
+	 * cannot perform DMA by itself. Should be NULL otherwise.
+	 *
+	 * Devices on USB and other peripheral busses cannot perform DMA
+	 * by themselves. The @dma_dev field should point the bus controller
+	 * that does DMA on behalve of such a device. Required for importing
+	 * buffers via dma-buf.
+	 *
+	 * If set, the DRM driver has to acquire a reference on the DMA
+	 * device, which will be owned and released automatically by the
+	 * DRM core.
+	 */
+	struct device *dma_dev;
+
+	/**
 	 * @managed:
 	 *
 	 * Managed resources linked to the lifetime of this &drm_device as
@@ -318,5 +335,25 @@ struct drm_device {
 	 */
 	struct dentry *debugfs_root;
 };
+
+/**
+ * drm_dev_dma_dev - returns the DMA device for a DRM device
+ * @dev: DRM device
+ *
+ * Returns the DMA device of the given DRM device. This is usually
+ * the same as the DRM device's parent. Devices on some peripheral
+ * busses, such as USB, are incapable of performing DMA by themselves.
+ * Drivers should set struct &drm_device.dma_dev to the bus controller
+ * to make DMA work. Required for PRIME buffer import.
+ *
+ * Returns:
+ * A DMA-capable device for the DRM device.
+ */
+static inline struct device *drm_dev_dma_dev(struct drm_device *dev)
+{
+	if (dev->dma_dev)
+		return dev->dma_dev;
+	return dev->dev;
+}
 
 #endif

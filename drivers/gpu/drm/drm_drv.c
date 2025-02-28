@@ -586,6 +586,8 @@ static void drm_dev_init_release(struct drm_device *dev, void *res)
 {
 	drm_fs_inode_free(dev->anon_inode);
 
+	put_device(dev->dma_dev);
+	dev->dma_dev = NULL;
 	put_device(dev->dev);
 	/* Prevent use-after-free in drm_managed_release when debugging is
 	 * enabled. Slightly awkward, but can't really be helped. */
