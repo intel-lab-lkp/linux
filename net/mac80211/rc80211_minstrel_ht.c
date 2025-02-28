@@ -1010,7 +1010,7 @@ minstrel_ht_refill_sample_rates(struct minstrel_ht_sta *mi)
 	u32 prob_dur = minstrel_get_duration(mi->max_prob_rate);
 	u32 tp_dur = minstrel_get_duration(mi->max_tp_rate[0]);
 	u32 tp2_dur = minstrel_get_duration(mi->max_tp_rate[1]);
-	u32 fast_rate_dur = min(min(tp_dur, tp2_dur), prob_dur);
+	u32 fast_rate_dur = min3(tp_dur, tp2_dur, prob_dur);
 	u32 slow_rate_dur = max(max(tp_dur, tp2_dur), prob_dur);
 	u16 *rates;
 	int i, j;
