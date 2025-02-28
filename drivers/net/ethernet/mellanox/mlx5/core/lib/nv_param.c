@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB
 /* Copyright (c) 2024, NVIDIA CORPORATION & AFFILIATES. All rights reserved. */
 
+#include <net/dcbnl.h>
+
 #include "nv_param.h"
 #include "mlx5_core.h"
 #include "en.h"
 
 enum {
+	MLX5_CLASS_0_CTRL_ID_NV_INTERNAL_HAIRPIN_CONF         = 0x13,
+	MLX5_CLASS_0_CTRL_ID_NV_INTERNAL_HAIRPIN_CAP          = 0x14,
 	MLX5_CLASS_0_CTRL_ID_NV_GLOBAL_PCI_CONF               = 0x80,
 	MLX5_CLASS_0_CTRL_ID_NV_GLOBAL_PCI_CAP                = 0x81,
 	MLX5_CLASS_0_CTRL_ID_NV_SW_OFFLOAD_CONFIG             = 0x10a,
@@ -143,6 +147,19 @@ struct mlx5_ifc_nv_keep_link_up_bits {
 	u8    keep_link_up_on_boot[0x1];
 	u8    keep_ib_link_up[0x1];
 	u8    keep_eth_link_up[0x1];
+};
+
+struct mlx5_ifc_nv_internal_hairpin_cap_bits {
+	u8    log_max_hpin_total_num_descriptors[0x8];
+	u8    log_max_hpin_total_data_size[0x8];
+	u8    log_max_hpin_num_descriptor_per_prio[0x8];
+	u8    log_max_hpin_data_size_per_prio[0x8];
+};
+
+struct mlx5_ifc_nv_internal_hairpin_conf_bits {
+	u8    log_hpin_num_descriptor[8][0x8];
+
+	u8    log_hpin_data_size[8][0x8];
 };
 
 #define MNVDA_HDR_SZ \
@@ -531,6 +548,247 @@ static int mlx5_devlink_total_vfs_validate(struct devlink *devlink, u32 id,
 	return 0;
 }
 
+static int
+mlx5_nv_param_read_internal_hairpin_conf(struct mlx5_core_dev *dev,
+					 void *mnvda, size_t len)
+{
+	MLX5_SET_CONFIG_ITEM_TYPE(global, mnvda, type_class, 0);
+	MLX5_SET_CONFIG_ITEM_TYPE(global, mnvda, parameter_index,
+				  MLX5_CLASS_0_CTRL_ID_NV_INTERNAL_HAIRPIN_CONF);
+	MLX5_SET_CONFIG_HDR_LEN(mnvda, nv_internal_hairpin_conf);
+
+	return mlx5_nv_param_read(dev, mnvda, len);
+}
+
+static int
+mlx5_nv_param_read_internal_hairpin_cap(struct mlx5_core_dev *dev,
+					void *mnvda, size_t len)
+{
+	MLX5_SET_CONFIG_ITEM_TYPE(global, mnvda, type_class, 0);
+	MLX5_SET_CONFIG_ITEM_TYPE(global, mnvda, parameter_index,
+				  MLX5_CLASS_0_CTRL_ID_NV_INTERNAL_HAIRPIN_CAP);
+
+	return mlx5_nv_param_read(dev, mnvda, len);
+}
+
+static int
+mlx5_nv_param_esw_hairpin_descriptors_get(struct devlink *devlink, u32 id,
+					  struct devlink_param_gset_ctx *ctx)
+
+{
+	struct mlx5_core_dev *dev = devlink_priv(devlink);
+	u32 mnvda[MLX5_ST_SZ_DW(mnvda_reg)] = {};
+	void *data;
+	int err, i;
+
+	BUILD_BUG_ON(IEEE_8021QAZ_MAX_TCS > __DEVLINK_PARAM_MAX_ARRAY_SIZE);
+
+	err = mlx5_nv_param_read_internal_hairpin_conf(dev, mnvda, sizeof(mnvda));
+	if (err)
+		return err;
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+
+	ctx->val.arr.size = IEEE_8021QAZ_MAX_TCS;
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		ctx->val.arr.vu32[i] = MLX5_GET(nv_internal_hairpin_conf, data,
+						log_hpin_num_descriptor[i]);
+	return 0;
+}
+
+static int
+mlx5_nv_param_esw_hairpin_descriptors_set(struct devlink *devlink, u32 id,
+					  struct devlink_param_gset_ctx *ctx,
+					  struct netlink_ext_ack *extack)
+{
+	struct mlx5_core_dev *dev = devlink_priv(devlink);
+	u32 mnvda[MLX5_ST_SZ_DW(mnvda_reg)] = {};
+	void *data;
+	int err, i;
+
+	err = mlx5_nv_param_read_internal_hairpin_conf(dev, mnvda, sizeof(mnvda));
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to query internal hairpin conf");
+		return err;
+	}
+
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		MLX5_SET(nv_internal_hairpin_conf, data,
+			 log_hpin_num_descriptor[i], ctx->val.arr.vu32[i]);
+
+	return mlx5_nv_param_write(dev, mnvda,  sizeof(mnvda));
+}
+
+static int
+mlx5_nv_param_esw_hairpin_descriptors_validate(struct devlink *devlink, u32 id,
+					       union devlink_param_value val,
+					       struct netlink_ext_ack *extack)
+{
+	u8 log_max_num_descriptors, log_max_total_descriptors;
+	u32 mnvda[MLX5_ST_SZ_DW(mnvda_reg)] = {};
+	u16 total = 0;
+	void *data;
+	int err, i;
+
+	if (val.arr.size != IEEE_8021QAZ_MAX_TCS) {
+		NL_SET_ERR_MSG_FMT_MOD(extack, "Array size must be %d",
+				       IEEE_8021QAZ_MAX_TCS);
+		return -EINVAL;
+	}
+	err = mlx5_nv_param_read_internal_hairpin_cap(devlink_priv(devlink),
+						      mnvda, sizeof(mnvda));
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to query internal hairpin cap");
+		return err;
+	}
+
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+	log_max_total_descriptors = MLX5_GET(nv_internal_hairpin_cap, data,
+					     log_max_hpin_total_num_descriptors);
+	log_max_num_descriptors = MLX5_GET(nv_internal_hairpin_cap, data,
+					   log_max_hpin_num_descriptor_per_prio);
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		if (val.arr.vu32[i] <= log_max_num_descriptors)
+			continue;
+
+		NL_SET_ERR_MSG_FMT_MOD(extack,
+				       "Max allowed value per prio is %d",
+				       log_max_num_descriptors);
+		return -ERANGE;
+	}
+
+	/* Validate total number of descriptors */
+	memset(mnvda, 0, sizeof(mnvda));
+	err = mlx5_nv_param_read_internal_hairpin_conf(devlink_priv(devlink),
+						       mnvda, sizeof(mnvda));
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to query internal hairpin conf");
+		return err;
+	}
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		total += 1 << val.arr.vu32[i];
+
+	if (total > (1 << log_max_total_descriptors)) {
+		NL_SET_ERR_MSG_FMT_MOD(extack,
+				       "Log max total value allowed is %d",
+				       log_max_total_descriptors);
+		return -ERANGE;
+	}
+
+	return 0;
+}
+
+static int
+mlx5_nv_param_esw_hairpin_data_size_get(struct devlink *devlink, u32 id,
+					struct devlink_param_gset_ctx *ctx)
+{
+	struct mlx5_core_dev *dev = devlink_priv(devlink);
+	u32 mnvda[MLX5_ST_SZ_DW(mnvda_reg)] = {};
+	void *data;
+	int err, i;
+
+	err = mlx5_nv_param_read_internal_hairpin_conf(dev, mnvda, sizeof(mnvda));
+	if (err)
+		return err;
+
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+	ctx->val.arr.size = IEEE_8021QAZ_MAX_TCS;
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		ctx->val.arr.vu32[i] = MLX5_GET(nv_internal_hairpin_conf, data,
+						log_hpin_data_size[i]);
+	return 0;
+}
+
+static int
+mlx5_nv_param_esw_hairpin_data_size_set(struct devlink *devlink, u32 id,
+					struct devlink_param_gset_ctx *ctx,
+					struct netlink_ext_ack *extack)
+{
+	struct mlx5_core_dev *dev = devlink_priv(devlink);
+	u32 mnvda[MLX5_ST_SZ_DW(mnvda_reg)] = {};
+	int err, i;
+	void *data;
+
+	err = mlx5_nv_param_read_internal_hairpin_conf(dev, mnvda, sizeof(mnvda));
+	if (err)
+		return err;
+
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		MLX5_SET(nv_internal_hairpin_conf, data, log_hpin_data_size[i],
+			 ctx->val.arr.vu32[i]);
+
+	return mlx5_nv_param_write(dev, mnvda,  sizeof(mnvda));
+}
+
+static int
+mlx5_nv_param_esw_hairpin_data_size_validate(struct devlink *devlink, u32 id,
+					     union devlink_param_value val,
+					     struct netlink_ext_ack *extack)
+{
+	u8 log_max_data_size, log_max_total_data_size;
+	u32 mnvda[MLX5_ST_SZ_DW(mnvda_reg)] = {};
+	unsigned long total = 0;
+	void *data;
+	int err, i;
+
+	if (val.arr.size != IEEE_8021QAZ_MAX_TCS) {
+		NL_SET_ERR_MSG_FMT_MOD(extack, "Array size must be %d",
+				       IEEE_8021QAZ_MAX_TCS);
+		return -EINVAL;
+	}
+
+	err = mlx5_nv_param_read_internal_hairpin_cap(devlink_priv(devlink),
+						      mnvda, sizeof(mnvda));
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to query internal hairpin cap");
+		return err;
+	}
+
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+	log_max_data_size = MLX5_GET(nv_internal_hairpin_cap, data,
+				     log_max_hpin_data_size_per_prio);
+	log_max_total_data_size = MLX5_GET(nv_internal_hairpin_cap, data,
+					   log_max_hpin_total_data_size);
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++) {
+		if (val.arr.vu32[i] <= log_max_data_size)
+			continue;
+
+		NL_SET_ERR_MSG_FMT_MOD(extack,
+				       "Max allowed value per prio is %d",
+				       log_max_data_size);
+		return -ERANGE;
+	}
+
+	/* Validate total data size */
+	memset(mnvda, 0, sizeof(mnvda));
+	err = mlx5_nv_param_read_internal_hairpin_conf(devlink_priv(devlink),
+						       mnvda, sizeof(mnvda));
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Unable to query internal hairpin conf");
+		return err;
+	}
+
+	data = MLX5_ADDR_OF(mnvda_reg, mnvda, configuration_item_data);
+
+	for (i = 0; i < IEEE_8021QAZ_MAX_TCS; i++)
+		total += 1 << val.arr.vu32[i];
+
+	if (total > (1 << log_max_total_data_size)) {
+		NL_SET_ERR_MSG_FMT_MOD(extack,
+				       "Log max total value allowed is %d",
+				       log_max_total_data_size);
+		return -ERANGE;
+	}
+
+	return 0;
+}
+
 static const struct devlink_param mlx5_nv_param_devlink_params[] = {
 	DEVLINK_PARAM_GENERIC(ENABLE_SRIOV, BIT(DEVLINK_PARAM_CMODE_PERMANENT),
 			      mlx5_devlink_enable_sriov_get,
@@ -544,6 +802,20 @@ static const struct devlink_param mlx5_nv_param_devlink_params[] = {
 			     mlx5_nv_param_devlink_cqe_compress_get,
 			     mlx5_nv_param_devlink_cqe_compress_set,
 			     mlx5_nv_param_devlink_cqe_compress_validate),
+	DEVLINK_PARAM_DRIVER(MLX5_DEVLINK_PARAM_ID_ESW_HAIRPIN_DESCRIPTORS,
+			     "esw_hairpin_per_prio_log_queue_size",
+			     DEVLINK_PARAM_TYPE_ARR_U32,
+			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			     mlx5_nv_param_esw_hairpin_descriptors_get,
+			     mlx5_nv_param_esw_hairpin_descriptors_set,
+			     mlx5_nv_param_esw_hairpin_descriptors_validate),
+	DEVLINK_PARAM_DRIVER(MLX5_DEVLINK_PARAM_ID_ESW_HAIRPIN_DATA_SIZE,
+			     "esw_hairpin_per_prio_log_buf_size",
+			     DEVLINK_PARAM_TYPE_ARR_U32,
+			     BIT(DEVLINK_PARAM_CMODE_PERMANENT),
+			     mlx5_nv_param_esw_hairpin_data_size_get,
+			     mlx5_nv_param_esw_hairpin_data_size_set,
+			     mlx5_nv_param_esw_hairpin_data_size_validate),
 };
 
 int mlx5_nv_param_register_dl_params(struct devlink *devlink)
