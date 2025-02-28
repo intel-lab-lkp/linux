@@ -32,8 +32,9 @@ struct iommufd_sw_msi_maps {
 	DECLARE_BITMAP(bitmap, 64);
 };
 
-int iommufd_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
-		   phys_addr_t msi_addr);
+int iommufd_sw_msi_install(struct iommufd_ctx *ictx,
+			   struct iommufd_hwpt_paging *hwpt_paging,
+			   struct iommufd_sw_msi_map *msi_map);
 
 struct iommufd_ctx {
 	struct file *file;
