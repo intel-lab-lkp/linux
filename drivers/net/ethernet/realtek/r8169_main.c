@@ -89,6 +89,7 @@
 #define JUMBO_6K	(6 * SZ_1K - VLAN_ETH_HLEN - ETH_FCS_LEN)
 #define JUMBO_7K	(7 * SZ_1K - VLAN_ETH_HLEN - ETH_FCS_LEN)
 #define JUMBO_9K	(9 * SZ_1K - VLAN_ETH_HLEN - ETH_FCS_LEN)
+#define JUMBO_16K	(16 * SZ_1K - VLAN_ETH_HLEN - ETH_FCS_LEN)
 
 static const struct {
 	const char *name;
@@ -5326,6 +5327,9 @@ static int rtl_jumbo_max(struct rtl8169_private *tp)
 	/* RTL8168c */
 	case RTL_GIGA_MAC_VER_18 ... RTL_GIGA_MAC_VER_24:
 		return JUMBO_6K;
+	/* RTL8125B */
+	case RTL_GIGA_MAC_VER_63:
+		return JUMBO_16K;
 	default:
 		return JUMBO_9K;
 	}
