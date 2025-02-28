@@ -597,7 +597,7 @@ static void sun6i_dsi_setup_timings(struct sun6i_dsi *dsi,
 	}
 
 	/* How many bytes do we need to send all payloads? */
-	bytes = max_t(size_t, max(max(hfp, hblk), max(hsa, hbp)), vblk);
+	bytes = max_t(size_t, max3(hfp, hblk, max(hsa, hbp)), vblk);
 	buffer = kmalloc(bytes, GFP_KERNEL);
 	if (WARN_ON(!buffer))
 		return;
