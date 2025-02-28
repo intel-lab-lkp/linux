@@ -184,6 +184,13 @@ msm_fence_alloc(void)
 	return &f->base;
 }
 
+void msm_fence_free(struct dma_fence *fence)
+{
+	struct msm_fence *f = to_msm_fence(fence);
+
+	kfree(f);
+}
+
 void
 msm_fence_init(struct dma_fence *fence, struct msm_fence_context *fctx)
 {
