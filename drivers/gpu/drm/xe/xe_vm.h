@@ -12,6 +12,8 @@
 #include "xe_map.h"
 #include "xe_vm_types.h"
 
+#define MAX_PFS 50
+
 struct drm_device;
 struct drm_printer;
 struct drm_file;
@@ -243,6 +245,10 @@ static inline void xe_vm_reactivate_rebind(struct xe_vm *vm)
 int xe_vma_userptr_pin_pages(struct xe_userptr_vma *uvma);
 
 int xe_vma_userptr_check_repin(struct xe_userptr_vma *uvma);
+
+void xe_vm_add_pf_entry(struct xe_vm *vm, struct xe_pagefault *pf);
+
+void xe_vm_remove_pf_entries(struct xe_vm *vm);
 
 bool xe_vm_validate_should_retry(struct drm_exec *exec, int err, ktime_t *end);
 

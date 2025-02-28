@@ -746,6 +746,46 @@ int xe_vm_userptr_check_repin(struct xe_vm *vm)
 		list_empty_careful(&vm->userptr.invalidated)) ? 0 : -EAGAIN;
 }
 
+static void free_pf_entry(struct xe_vm *vm, struct xe_vm_pf_entry *e)
+{
+	list_del(&e->list);
+	kfree(e->pf);
+	kfree(e);
+	vm->pfs.len--;
+}
+
+void xe_vm_add_pf_entry(struct xe_vm *vm, struct xe_pagefault *pf)
+{
+	struct xe_vm_pf_entry *e = NULL;
+
+	e = kzalloc(sizeof(*e), GFP_KERNEL);
+	xe_assert(vm->xe, e);
+
+	spin_lock(&vm->pfs.lock);
+	list_add_tail(&e->list, &vm->pfs.list);
+	vm->pfs.len++;
+	/**
+	 * Limit the number of pfs in the pf list to prevent memory overuse.
+	 */
+	if (vm->pfs.len > MAX_PFS) {
+		struct xe_vm_pf_entry *rem =
+			list_first_entry(&vm->pfs.list, struct xe_vm_pf_entry, list);
+
+		free_pf_entry(vm, rem);
+	}
+	spin_unlock(&vm->pfs.lock);
+}
+
+void xe_vm_remove_pf_entries(struct xe_vm *vm)
+{
+	struct xe_vm_pf_entry *e, *tmp;
+
+	spin_lock(&vm->pfs.lock);
+	list_for_each_entry_safe(e, tmp, &vm->pfs.list, list)
+		free_pf_entry(vm, e);
+	spin_unlock(&vm->pfs.lock);
+}
+
 static int xe_vma_ops_alloc(struct xe_vma_ops *vops, bool array_of_binds)
 {
 	int i;
@@ -1448,6 +1488,9 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 	init_rwsem(&vm->userptr.notifier_lock);
 	spin_lock_init(&vm->userptr.invalidated_lock);
 
+	INIT_LIST_HEAD(&vm->pfs.list);
+	spin_lock_init(&vm->pfs.lock);
+
 	ttm_lru_bulk_move_init(&vm->lru_bulk_move);
 
 	INIT_WORK(&vm->destroy_work, vm_destroy_work_func);
@@ -1671,6 +1714,8 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		xe_assert(xe, lookup == vm);
 	}
 	up_write(&xe->usm.lock);
+
+	xe_vm_remove_pf_entries(vm);
 
 	for_each_tile(tile, xe, id)
 		xe_range_fence_tree_fini(&vm->rftree[id]);
