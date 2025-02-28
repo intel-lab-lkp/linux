@@ -1007,7 +1007,7 @@ static void viommu_get_resv_regions(struct device *dev, struct list_head *head)
 	iommu_dma_get_resv_regions(dev, head);
 }
 
-static struct iommu_ops viommu_ops;
+static const struct iommu_ops viommu_ops;
 static struct virtio_driver virtio_iommu_drv;
 
 static int viommu_match_node(struct device *dev, const void *data)
@@ -1095,8 +1095,7 @@ static bool viommu_capable(struct device *dev, enum iommu_cap cap)
 	}
 }
 
-static struct iommu_ops viommu_ops = {
-	.identity_domain	= &viommu_identity_domain.domain,
+static const struct iommu_ops viommu_ops = {
 	.capable		= viommu_capable,
 	.domain_alloc		= viommu_domain_alloc,
 	.probe_device		= viommu_probe_device,
@@ -1224,12 +1223,6 @@ static int viommu_probe(struct virtio_device *vdev)
 	if (virtio_has_feature(viommu->vdev, VIRTIO_IOMMU_F_BYPASS_CONFIG)) {
 		viommu->identity_domain_id = viommu->first_domain;
 		viommu->first_domain++;
-	} else {
-		/*
-		 * Assume the VMM is sensible and it either supports bypass on
-		 * all instances or no instances.
-		 */
-		viommu_ops.identity_domain = NULL;
 	}
 
 	viommu_ops.pgsize_bitmap = viommu->pgsize_bitmap;
