@@ -1676,6 +1676,7 @@ static bool evlist__disable_uniquify(const struct evlist *evlist)
 
 static void evsel__set_needs_uniquify(struct evsel *counter, const struct perf_stat_config *config)
 {
+	bool hybrid = (!config->hybrid_merge && evsel__is_hybrid(counter));
 	struct evsel *evsel;
 
 	if (counter->merged_stat) {
@@ -1688,7 +1689,8 @@ static void evsel__set_needs_uniquify(struct evsel *counter, const struct perf_s
 		return;
 	}
 
-	if  (counter->core.attr.type < PERF_TYPE_MAX && counter->core.attr.type != PERF_TYPE_RAW) {
+	if (!hybrid && counter->core.attr.type < PERF_TYPE_MAX &&
+		counter->core.attr.type != PERF_TYPE_RAW) {
 		/* Legacy event, don't uniquify. */
 		return;
 	}
@@ -1705,7 +1707,7 @@ static void evsel__set_needs_uniquify(struct evsel *counter, const struct perf_s
 		return;
 	}
 
-	if (!config->hybrid_merge && evsel__is_hybrid(counter)) {
+	if (hybrid) {
 		/* Unique hybrid counters necessary. */
 		counter->needs_uniquify = true;
 		return;
