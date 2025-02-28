@@ -20,11 +20,18 @@ static int nvmem_reboot_mode_write(struct reboot_mode_driver *reboot,
 				    unsigned int magic)
 {
 	int ret;
+	u8 *magic_ptr = (u8 *) &magic;
+	size_t cell_size;
 	struct nvmem_reboot_mode *nvmem_rbm;
 
 	nvmem_rbm = container_of(reboot, struct nvmem_reboot_mode, reboot);
+	cell_size = nvmem_cell_size(nvmem_rbm->cell);
 
-	ret = nvmem_cell_write(nvmem_rbm->cell, &magic, sizeof(magic));
+	/* Use magic's low-order bytes when writing to a smaller cell. */
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) && cell_size < sizeof(magic))
+		magic_ptr += sizeof(magic) - cell_size;
+
+	ret = nvmem_cell_write(nvmem_rbm->cell, magic_ptr, MIN(cell_size, sizeof(magic)));
 	if (ret < 0)
 		dev_err(reboot->dev, "update reboot mode bits failed\n");
 
