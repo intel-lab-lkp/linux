@@ -2326,6 +2326,10 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	if (!guard.gc)
 		return -ENODEV;
 
+	offset = gpio_chip_hwgpio(desc);
+	if (!gpiochip_line_is_valid(guard.gc, offset))
+		return -EINVAL;
+
 	if (test_and_set_bit(FLAG_REQUESTED, &desc->flags))
 		return -EBUSY;
 
@@ -2334,11 +2338,7 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	 */
 
 	if (guard.gc->request) {
-		offset = gpio_chip_hwgpio(desc);
-		if (gpiochip_line_is_valid(guard.gc, offset))
-			ret = guard.gc->request(guard.gc, offset);
-		else
-			ret = -EINVAL;
+		ret = guard.gc->request(guard.gc, offset);
 		if (ret)
 			goto out_clear_bit;
 	}
