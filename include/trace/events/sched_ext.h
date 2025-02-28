@@ -26,6 +26,25 @@ TRACE_EVENT(sched_ext_dump,
 	)
 );
 
+TRACE_EVENT(sched_ext_event,
+	    TP_PROTO(const char *name, __u64 delta),
+	    TP_ARGS(name, delta),
+
+	TP_STRUCT__entry(
+		__string(name, name)
+		__field(	__u64,		delta		)
+	),
+
+	TP_fast_assign(
+		__assign_str(name);
+		__entry->delta		= delta;
+	),
+
+	TP_printk("name %s delta %llu",
+		  __get_str(name), __entry->delta
+	)
+);
+
 #endif /* _TRACE_SCHED_EXT_H */
 
 /* This part must be outside protection */
