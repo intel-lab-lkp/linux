@@ -209,8 +209,13 @@ struct iommu_domain_geometry {
 #define IOMMU_DOMAIN_PLATFORM	(__IOMMU_DOMAIN_PLATFORM)
 #define IOMMU_DOMAIN_NESTED	(__IOMMU_DOMAIN_NESTED)
 
+#define IOMMU_DOMAIN_DATA_OWNER_NONE (0U)
+#define IOMMU_DOMAIN_DATA_OWNER_DMA (1U)
+#define IOMMU_DOMAIN_DATA_OWNER_IOMMUFD (2U)
+
 struct iommu_domain {
-	unsigned type;
+	u32 type : 30;
+	u32 private_data_owner : 2;
 	const struct iommu_domain_ops *ops;
 	const struct iommu_dirty_ops *dirty_ops;
 	const struct iommu_ops *owner; /* Whose domain_alloc we came from */

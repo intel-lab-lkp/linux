@@ -403,6 +403,7 @@ int iommu_get_dma_cookie(struct iommu_domain *domain)
 
 	mutex_init(&domain->iova_cookie->mutex);
 	iommu_domain_set_sw_msi(domain, iommu_dma_sw_msi);
+	domain->private_data_owner = IOMMU_DOMAIN_DATA_OWNER_DMA;
 	return 0;
 }
 
@@ -435,6 +436,7 @@ int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 	cookie->msi_iova = base;
 	domain->iova_cookie = cookie;
 	iommu_domain_set_sw_msi(domain, iommu_dma_sw_msi);
+	domain->private_data_owner = IOMMU_DOMAIN_DATA_OWNER_DMA;
 	return 0;
 }
 EXPORT_SYMBOL(iommu_get_msi_cookie);
