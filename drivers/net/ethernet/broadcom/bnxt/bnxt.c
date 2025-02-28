@@ -13093,6 +13093,12 @@ static int bnxt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	return -EOPNOTSUPP;
 }
 
+static void bnxt_drv_stat_snapshot(const struct bnxt_sw_stats *sw_stats,
+				   struct bnxt_sw_stats *snapshot)
+{
+	memcpy(snapshot, sw_stats, sizeof(*snapshot));
+}
+
 static void bnxt_get_ring_stats(struct bnxt *bp,
 				struct rtnl_link_stats64 *stats)
 {
@@ -13101,7 +13107,10 @@ static void bnxt_get_ring_stats(struct bnxt *bp,
 	for (i = 0; i < bp->cp_nr_rings; i++) {
 		struct bnxt_napi *bnapi = bp->bnapi[i];
 		struct bnxt_cp_ring_info *cpr = &bnapi->cp_ring;
+		struct bnxt_sw_stats sw_stats;
 		u64 *sw = cpr->stats.sw_stats;
+
+		bnxt_drv_stat_snapshot(cpr->sw_stats, &sw_stats);
 
 		stats->rx_packets += BNXT_GET_RING_STATS64(sw, rx_ucast_pkts);
 		stats->rx_packets += BNXT_GET_RING_STATS64(sw, rx_mcast_pkts);
@@ -13127,8 +13136,8 @@ static void bnxt_get_ring_stats(struct bnxt *bp,
 		stats->tx_dropped += BNXT_GET_RING_STATS64(sw, tx_error_pkts);
 
 		stats->rx_dropped +=
-			cpr->sw_stats->rx.rx_netpoll_discards +
-			cpr->sw_stats->rx.rx_oom_discards;
+			sw_stats.rx.rx_netpoll_discards +
+			sw_stats.rx.rx_oom_discards;
 	}
 }
 
@@ -13195,20 +13204,22 @@ static void bnxt_get_one_ring_drv_stats(struct bnxt *bp,
 					struct bnxt_total_ring_drv_stats *stats,
 					struct bnxt_cp_ring_info *cpr)
 {
-	struct bnxt_sw_stats *sw_stats = cpr->sw_stats;
 	u64 *hw_stats = cpr->stats.sw_stats;
+	struct bnxt_sw_stats sw_stats;
 
-	stats->rx_total_l4_csum_errors += sw_stats->rx.rx_l4_csum_errors;
-	stats->rx_total_resets += sw_stats->rx.rx_resets;
-	stats->rx_total_buf_errors += sw_stats->rx.rx_buf_errors;
-	stats->rx_total_oom_discards += sw_stats->rx.rx_oom_discards;
-	stats->rx_total_netpoll_discards += sw_stats->rx.rx_netpoll_discards;
+	bnxt_drv_stat_snapshot(cpr->sw_stats, &sw_stats);
+
+	stats->rx_total_l4_csum_errors += sw_stats.rx.rx_l4_csum_errors;
+	stats->rx_total_resets += sw_stats.rx.rx_resets;
+	stats->rx_total_buf_errors += sw_stats.rx.rx_buf_errors;
+	stats->rx_total_oom_discards += sw_stats.rx.rx_oom_discards;
+	stats->rx_total_netpoll_discards += sw_stats.rx.rx_netpoll_discards;
 	stats->rx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, rx_discard_pkts);
-	stats->tx_total_resets += sw_stats->tx.tx_resets;
+	stats->tx_total_resets += sw_stats.tx.tx_resets;
 	stats->tx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, tx_discard_pkts);
-	stats->total_missed_irqs += sw_stats->cmn.missed_irqs;
+	stats->total_missed_irqs += sw_stats.cmn.missed_irqs;
 }
 
 void bnxt_get_ring_drv_stats(struct bnxt *bp,
