@@ -105,6 +105,51 @@ size_t phy_caps_speeds(unsigned int *speeds, size_t size,
 }
 
 /**
+ * phy_caps_lookup_by_linkmode() - Lookup the fastest matching link_capabilities
+ * @linkmodes: Linkmodes to match against
+ *
+ * Returns: The highest-speed link_capabilities that intersects the given
+ *	    linkmodes. In case several DUPLEX_ options exist at that speed,
+ *	    DUPLEX_FULL is matched first. NULL is returned if no match.
+ */
+const struct link_capabilities *
+phy_caps_lookup_by_linkmode(const unsigned long *linkmodes)
+{
+	int capa;
+
+	for (capa = __LINK_CAPA_LAST; capa >= 0; capa--)
+		if (linkmode_intersects(link_caps[capa].linkmodes, linkmodes))
+			return &link_caps[capa];
+
+	return NULL;
+}
+
+/**
+ * phy_caps_lookup_by_linkmode_rev() - Lookup the slowest matching link_capabilities
+ * @linkmodes: Linkmodes to match against
+ * @fdx_only: Full duplex match only when set
+ *
+ * Returns: The lowest-speed link_capabilities that intersects the given
+ *	    linkmodes. When set, fdx_only will ignore half-duplex matches.
+ *	    NULL is returned if no match.
+ */
+const struct link_capabilities *
+phy_caps_lookup_by_linkmode_rev(const unsigned long *linkmodes, bool fdx_only)
+{
+	int capa;
+
+	for (capa = 0; capa < __LINK_CAPA_MAX; capa++) {
+		if (fdx_only && link_caps[capa].duplex != DUPLEX_FULL)
+			continue;
+
+		if (linkmode_intersects(link_caps[capa].linkmodes, linkmodes))
+			return &link_caps[capa];
+	}
+
+	return NULL;
+}
+
+/**
  * phy_caps_linkmode_max_speed() - Clamp a linkmodes set to a max speed
  * @max_speed: Speed limit for the linkmode set
  * @linkmodes: Linkmodes to limit
