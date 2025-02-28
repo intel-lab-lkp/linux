@@ -2204,6 +2204,7 @@ static int netvsc_vf_join(struct net_device *vf_netdev,
 		goto rx_handler_failed;
 	}
 
+	ndev->flags |= IFF_MASTER;
 	ret = netdev_master_upper_dev_link(vf_netdev, ndev,
 					   NULL, NULL, NULL);
 	if (ret != 0) {
@@ -2484,7 +2485,12 @@ static int netvsc_unregister_vf(struct net_device *vf_netdev)
 
 	reinit_completion(&net_device_ctx->vf_add);
 	netdev_rx_handler_unregister(vf_netdev);
+
+	/* Unlink the slave device and clear flag */
+	vf_netdev->flags &= ~IFF_SLAVE;
+	ndev->flags &= ~IFF_MASTER;
 	netdev_upper_dev_unlink(vf_netdev, ndev);
+
 	RCU_INIT_POINTER(net_device_ctx->vf_netdev, NULL);
 	dev_put(vf_netdev);
 
