@@ -1740,12 +1740,11 @@ static inline struct sk_buff *bnxt_gro_skb(struct bnxt *bp,
 					   struct rx_tpa_end_cmp_ext *tpa_end1,
 					   struct sk_buff *skb)
 {
-#ifdef CONFIG_INET
 	int payload_off;
 	u16 segs;
 
 	segs = TPA_END_TPA_SEGS(tpa_end);
-	if (segs == 1)
+	if (segs == 1 || !IS_ENABLED(CONFIG_INET))
 		return skb;
 
 	NAPI_GRO_CB(skb)->count = segs;
@@ -1759,7 +1758,6 @@ static inline struct sk_buff *bnxt_gro_skb(struct bnxt *bp,
 	skb = bp->gro_func(tpa_info, payload_off, TPA_END_GRO_TS(tpa_end), skb);
 	if (likely(skb))
 		tcp_gro_complete(skb);
-#endif
 	return skb;
 }
 
