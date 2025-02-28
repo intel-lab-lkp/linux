@@ -231,6 +231,12 @@ test_cgroup() {
 
 test_leader_sampling() {
   echo "Basic leader sampling test"
+  if [ "$(uname -m)" = s390x ]
+  then
+    echo "Leader sampling skipped"
+    ((skipped+=1))
+    return
+  fi
   if ! perf record -o "${perfdata}" -e "{cycles,cycles}:Su" -- \
     perf test -w brstack 2> /dev/null
   then
