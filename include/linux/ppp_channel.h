@@ -42,6 +42,7 @@ struct ppp_channel {
 	int		hdrlen;		/* amount of headroom channel needs */
 	void		*ppp;		/* opaque to channel */
 	int		speed;		/* transfer rate (bytes/second) */
+	bool		direct_xmit;	/* no qdisc, xmit directly */
 	/* the following is not used at present */
 	int		latency;	/* overhead time in milliseconds */
 };
