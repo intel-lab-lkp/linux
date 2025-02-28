@@ -400,6 +400,7 @@ enum devlink_dyn_attr_type {
 	DEVLINK_DYN_ATTR_TYPE_BINARY,
 	__DEVLINK_DYN_ATTR_TYPE_CUSTOM_BASE = 0x80,
 	/* Any possible custom types, unrelated to NLA_* values go below */
+	DEVLINK_DYN_ATTR_TYPE_U32_ARRAY,
 };
 
 enum devlink_attr {
