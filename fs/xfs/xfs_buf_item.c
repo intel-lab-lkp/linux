@@ -880,6 +880,8 @@ xfs_buf_item_init(
 	}
 
 	bip = kmem_cache_zalloc(xfs_buf_item_cache, GFP_KERNEL | __GFP_NOFAIL);
+	if (!bip)
+		return -ENOMEM;
 	xfs_log_item_init(mp, &bip->bli_item, XFS_LI_BUF, &xfs_buf_item_ops);
 	bip->bli_buf = bp;
 
