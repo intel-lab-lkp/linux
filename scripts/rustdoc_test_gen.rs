@@ -48,7 +48,7 @@ use std::{
 fn find_real_path<'a>(srctree: &Path, valid_paths: &'a mut Vec<PathBuf>, file: &str) -> &'a str {
     valid_paths.clear();
 
-    let potential_components: Vec<&str> = file.strip_suffix("_rs").unwrap().split('_').collect();
+    let potential_components: Vec<&str> = file.split('_').collect();
 
     find_candidates(srctree, valid_paths, Path::new(""), &potential_components);
     fn find_candidates(
@@ -88,7 +88,7 @@ fn find_real_path<'a>(srctree: &Path, valid_paths: &'a mut Vec<PathBuf>, file: &
     assert!(
         valid_paths.len() > 0,
         "No path candidates found. This is likely a bug in the build system, or some files went \
-        away while compiling."
+        away while compiling.",
     );
 
     if valid_paths.len() > 1 {
@@ -126,12 +126,13 @@ fn main() {
     let mut valid_paths: Vec<PathBuf> = Vec::new();
     let mut real_path: &str = "";
     for path in paths {
-        // The `name` follows the `{file}_{line}_{number}` pattern (see description in
+        // The `name` follows the `{file}_{line}` pattern (see description in
         // `scripts/rustdoc_test_builder.rs`). Discard the `number`.
         let name = path.file_name().unwrap().to_str().unwrap().to_string();
 
-        // Extract the `file` and the `line`, discarding the `number`.
-        let (file, line) = name.rsplit_once('_').unwrap().0.rsplit_once('_').unwrap();
+        // Extract the `file` and the `line`, discarding the extension.
+        let (file, line) = name.rsplit_once('-').unwrap();
+        let line = line.split('.').next().unwrap();
 
         // Generate an ID sequence ("test number") for each one in the file.
         if file == last_file {

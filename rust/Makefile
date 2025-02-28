@@ -171,14 +171,14 @@ quiet_cmd_rustdoc_test_kernel = RUSTDOC TK $<
 	rm -rf $(objtree)/$(obj)/test/doctests/kernel; \
 	mkdir -p $(objtree)/$(obj)/test/doctests/kernel; \
 	OBJTREE=$(abspath $(objtree)) \
-	$(RUSTDOC) --test $(rust_flags) \
+	$(RUSTDOC) --output-format=doctest $(rust_flags) \
 		-L$(objtree)/$(obj) --extern ffi --extern kernel \
 		--extern build_error --extern macros \
 		--extern bindings --extern uapi \
-		--no-run --crate-name kernel -Zunstable-options \
+		--crate-name kernel -Zunstable-options \
 		--sysroot=/dev/null \
-		--test-builder $(objtree)/scripts/rustdoc_test_builder \
-		$< $(rustdoc_test_kernel_quiet); \
+		$< $(rustdoc_test_kernel_quiet) > rustdoc.json; \
+	cat rustdoc.json | $(objtree)/scripts/rustdoc_test_builder; \
 	$(objtree)/scripts/rustdoc_test_gen
 
 %/doctests_kernel_generated.rs %/doctests_kernel_generated_kunit.c: \
