@@ -572,7 +572,8 @@ EXPORT_SYMBOL_GPL(component_master_del);
 static void component_unbind(struct component *component,
 	struct aggregate_device *adev, void *data)
 {
-	WARN_ON(!component->bound);
+	if (WARN_ON(!component->bound))
+		return;
 
 	if (component->ops && component->ops->unbind)
 		component->ops->unbind(component->dev, adev->parent, data);
