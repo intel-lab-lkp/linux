@@ -287,8 +287,8 @@ struct alps_data {
 	struct psmouse *psmouse;
 	struct input_dev *dev2;
 	struct input_dev *dev3;
-	char phys2[32];
-	char phys3[32];
+	char phys2[40];
+	char phys3[40];
 	struct delayed_work dev3_register_work;
 
 	/* these are autodetected when the device is identified */
