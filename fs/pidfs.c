@@ -32,11 +32,12 @@ static struct kmem_cache *pidfs_cachep __ro_after_init;
  */
 struct pidfs_exit_info {
 	__u64 cgroupid;
-	__u64 exit_code;
+	__s32 exit_code;
 };
 
 struct pidfs_inode {
-	struct pidfs_exit_info exit_info;
+	struct pidfs_exit_info __pei;
+	struct pidfs_exit_info *exit_info;
 	struct inode vfs_inode;
 };
 
@@ -228,11 +229,14 @@ static __poll_t pidfd_poll(struct file *file, struct poll_table_struct *pts)
 	return poll_flags;
 }
 
-static long pidfd_info(struct task_struct *task, unsigned int cmd, unsigned long arg)
+static long pidfd_info(struct file *file, struct task_struct *task,
+		       unsigned int cmd, unsigned long arg)
 {
 	struct pidfd_info __user *uinfo = (struct pidfd_info __user *)arg;
 	size_t usize = _IOC_SIZE(cmd);
 	struct pidfd_info kinfo = {};
+	struct pidfs_exit_info *exit_info;
+	struct inode *inode = file_inode(file);
 	struct user_namespace *user_ns;
 	const struct cred *c;
 	__u64 mask;
@@ -247,6 +251,39 @@ static long pidfd_info(struct task_struct *task, unsigned int cmd, unsigned long
 
 	if (copy_from_user(&mask, &uinfo->mask, sizeof(mask)))
 		return -EFAULT;
+
+	exit_info = READ_ONCE(pidfs_i(inode)->exit_info);
+	if (exit_info) {
+		/*
+		 * TODO: Oleg, I didn't see a reason for putting
+		 * retrieval of the exit status of a task behind some
+		 * form of permission check. Maybe there's some
+		 * potential concerns with seeing the exit status of a
+		 * SIGKILLed suid binary or something but even then I'm
+		 * not sure that's a problem.
+		 *
+		 * If we want this we could put this behind some *uid
+		 * check similar to what ptrace access does by recording
+		 * parts of the creds we'd need for checking this. But
+		 * only if we really need it.
+		 */
+		kinfo.exit_code = exit_info->exit_code;
+#ifdef CONFIG_CGROUPS
+		kinfo.cgroupid = exit_info->cgroupid;
+		kinfo.mask |= PIDFD_INFO_EXIT | PIDFD_INFO_CGROUPID;
+#endif
+	}
+
+	/*
+	 * If the task has already been reaped only exit information
+	 * can be provided. It's entirely possible that the task has
+	 * already been reaped but we managed to grab a reference to it
+	 * before that. So a full set of information about @task doesn't
+	 * mean it hasn't been waited upon. Similarly, a full set of
+	 * information doesn't mean that the task hasn't already exited.
+	 */
+	if (!task)
+		goto copy_out;
 
 	c = get_task_cred(task);
 	if (!c)
@@ -267,11 +304,13 @@ static long pidfd_info(struct task_struct *task, unsigned int cmd, unsigned long
 	put_cred(c);
 
 #ifdef CONFIG_CGROUPS
-	rcu_read_lock();
-	cgrp = task_dfl_cgroup(task);
-	kinfo.cgroupid = cgroup_id(cgrp);
-	kinfo.mask |= PIDFD_INFO_CGROUPID;
-	rcu_read_unlock();
+	if (!kinfo.cgroupid) {
+		rcu_read_lock();
+		cgrp = task_dfl_cgroup(task);
+		kinfo.cgroupid = cgroup_id(cgrp);
+		kinfo.mask |= PIDFD_INFO_CGROUPID;
+		rcu_read_unlock();
+	}
 #endif
 
 	/*
@@ -291,6 +330,7 @@ static long pidfd_info(struct task_struct *task, unsigned int cmd, unsigned long
 	if (kinfo.pid == 0 || kinfo.tgid == 0 || (kinfo.ppid == 0 && kinfo.pid != 1))
 		return -ESRCH;
 
+copy_out:
 	/*
 	 * If userspace and the kernel have the same struct size it can just
 	 * be copied. If userspace provides an older struct, only the bits that
@@ -341,12 +381,13 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 
 	task = get_pid_task(pid, PIDTYPE_PID);
-	if (!task)
-		return -ESRCH;
 
 	/* Extensible IOCTL that does not open namespace FDs, take a shortcut */
 	if (_IOC_NR(cmd) == _IOC_NR(PIDFD_GET_INFO))
-		return pidfd_info(task, cmd, arg);
+		return pidfd_info(file, task, cmd, arg);
+
+	if (!task)
+		return -ESRCH;
 
 	if (arg)
 		return -EINVAL;
@@ -486,7 +527,7 @@ void pidfs_exit(struct task_struct *tsk)
 		struct cgroup *cgrp;
 #endif
 		inode = d_inode(dentry);
-		exit_info = &pidfs_i(inode)->exit_info;
+		exit_info = &pidfs_i(inode)->__pei;
 
 		/* TODO: Annoy Oleg to tell me how to do this correctly. */
 		if (tsk->signal->flags & SIGNAL_GROUP_EXIT)
@@ -501,6 +542,8 @@ void pidfs_exit(struct task_struct *tsk)
 		rcu_read_unlock();
 #endif
 
+		/* Ensure that PIDFD_GET_INFO sees either all or nothing. */
+		smp_store_release(&pidfs_i(inode)->exit_info, &pidfs_i(inode)->__pei);
 		dput(dentry);
 	}
 }
@@ -568,7 +611,8 @@ static struct inode *pidfs_alloc_inode(struct super_block *sb)
 	if (!pi)
 		return NULL;
 
-	memset(&pi->exit_info, 0, sizeof(pi->exit_info));
+	memset(&pi->__pei, 0, sizeof(pi->__pei));
+	pi->exit_info = NULL;
 
 	return &pi->vfs_inode;
 }
