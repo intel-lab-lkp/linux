@@ -329,8 +329,8 @@ int ocfs2_group_extend(struct inode * inode, int new_clusters)
 	group = (struct ocfs2_group_desc *)group_bh->b_data;
 
 	cl_bpc = le16_to_cpu(fe->id2.i_chain.cl_bpc);
-	if (le16_to_cpu(group->bg_bits) / cl_bpc + new_clusters >
-		le16_to_cpu(fe->id2.i_chain.cl_cpg)) {
+	if (!cl_bpc || le16_to_cpu(group->bg_bits) / cl_bpc + new_clusters >
+		       le16_to_cpu(fe->id2.i_chain.cl_cpg)) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
