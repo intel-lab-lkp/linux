@@ -775,8 +775,10 @@ static int usb_gadget_disconnect_locked(struct usb_gadget *gadget)
 	}
 
 	ret = gadget->ops->pullup(gadget, 0);
-	if (!ret)
+	if (!ret) {
 		gadget->connected = 0;
+		usb_gadget_set_state(gadget, USB_STATE_NOTATTACHED);
+	}
 
 	mutex_lock(&udc_lock);
 	if (gadget->udc->driver)
@@ -1669,6 +1671,7 @@ static void gadget_unbind_driver(struct device *dev)
 		synchronize_irq(gadget->irq);
 	mutex_unlock(&udc->connect_lock);
 
+	flush_work(&gadget->work);
 	udc->driver->unbind(gadget);
 
 	mutex_lock(&udc->connect_lock);
