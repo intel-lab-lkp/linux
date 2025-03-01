@@ -946,7 +946,7 @@ static inline __alloc_size(1, 2) void *kmalloc_array_noprof(size_t n, size_t siz
 		return NULL;
 	if (__builtin_constant_p(n) && __builtin_constant_p(size))
 		return kmalloc_noprof(bytes, flags);
-	return kmalloc_noprof(bytes, flags);
+	return __kmalloc_noprof(bytes, flags);
 }
 #define kmalloc_array(...)			alloc_hooks(kmalloc_array_noprof(__VA_ARGS__))
 
