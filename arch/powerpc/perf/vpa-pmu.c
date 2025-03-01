@@ -10,6 +10,8 @@
 #include <linux/perf_event.h>
 #include <asm/kvm_ppc.h>
 #include <asm/kvm_book3s_64.h>
+#include <asm/fadump.h>
+#include <asm/kexec.h>
 
 #define MODULE_VERS "1.0"
 #define MODULE_NAME "pseries_vpa_pmu"
@@ -182,6 +184,9 @@ static int __init pseries_vpa_pmu_init(void)
 	 */
 	if (!firmware_has_feature(FW_FEATURE_LPAR) || is_kvm_guest())
 		return -ENODEV;
+
+	if (is_kdump_kernel() || is_fadump_active())
+		return 0;
 
 	perf_pmu_register(&vpa_pmu, vpa_pmu.name, -1);
 	pr_info("Virtual Processor Area PMU registered.\n");
