@@ -229,6 +229,27 @@ static inline int get_count_order_long(unsigned long l)
 	return (int)fls_long(--l);
 }
 
+#define _parity_const(val)	\
+({				\
+	u64 __v = (val);	\
+	int __ret;		\
+	__v ^= __v >> 32;	\
+	__v ^= __v >> 16;	\
+	__v ^= __v >> 8;	\
+	__v ^= __v >> 4;	\
+	__v ^= __v >> 2;	\
+	__v ^= __v >> 1;	\
+	__ret = __v & 1;	\
+	__ret;			\
+})
+
+#ifndef _parity8
+static inline __attribute_const__ int _parity8(u8 val)
+{
+	return __builtin_parity(val);
+}
+#endif
+
 /**
  * parity8 - get the parity of an u8 value
  * @value: the value to be examined
@@ -250,14 +271,9 @@ static inline int get_count_order_long(unsigned long l)
  *	if (parity8(val) == 0)
  *		val ^= BIT(7);
  */
-static inline int parity8(u8 val)
+static inline __attribute_const__ int parity8(u8 val)
 {
-	/*
-	 * One explanation of this algorithm:
-	 * https://funloop.org/codex/problem/parity/README.html
-	 */
-	val ^= val >> 4;
-	return (0x6996 >> (val & 0xf)) & 1;
+	return __builtin_constant_p(val) ? _parity_const(val) : _parity8(val);
 }
 
 /**
