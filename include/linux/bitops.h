@@ -276,6 +276,69 @@ static inline __attribute_const__ int parity8(u8 val)
 	return __builtin_constant_p(val) ? _parity_const(val) : _parity8(val);
 }
 
+#ifndef _parity16
+static inline __attribute_const__ int _parity16(u16 val)
+{
+	return __builtin_parity(val);
+}
+#endif
+
+/**
+ * parity16 - get the parity of an u16 value
+ * @value: the value to be examined
+ *
+ * Determine the parity of the u16 argument.
+ *
+ * Returns:
+ * 0 for even parity, 1 for odd parity
+ */
+static inline __attribute_const__ int parity16(u16 val)
+{
+	return __builtin_constant_p(val) ? _parity_const(val) : _parity16(val);
+}
+
+#ifndef _parity32
+static inline __attribute_const__ int _parity32(u32 val)
+{
+	return __builtin_parity(val);
+}
+#endif
+
+/**
+ * parity32 - get the parity of an u32 value
+ * @value: the value to be examined
+ *
+ * Determine the parity of the u32 argument.
+ *
+ * Returns:
+ * 0 for even parity, 1 for odd parity
+ */
+static inline __attribute_const__ int parity32(u32 val)
+{
+	return __builtin_constant_p(val) ? _parity_const(val) : _parity32(val);
+}
+
+#ifndef _parity64
+static inline __attribute_const__ int _parity64(u64 val)
+{
+	return __builtin_parityll(val);
+}
+#endif
+
+/**
+ * parity64 - get the parity of an u64 value
+ * @value: the value to be examined
+ *
+ * Determine the parity of the u64 argument.
+ *
+ * Returns:
+ * 0 for even parity, 1 for odd parity
+ */
+static inline __attribute_const__ int parity64(u64 val)
+{
+	return __builtin_constant_p(val) ? _parity_const(val) : _parity64(val);
+}
+
 /**
  * __ffs64 - find first set bit in a 64 bit word
  * @word: The 64 bit word
