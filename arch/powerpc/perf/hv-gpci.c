@@ -989,6 +989,9 @@ static int hv_gpci_init(void)
 	struct hv_perf_caps caps;
 	struct hv_gpci_request_buffer *arg;
 
+	if (is_kdump_kernel() || is_fadump_active())
+		return 0;
+
 	hv_gpci_assert_offsets_correct();
 
 	if (!firmware_has_feature(FW_FEATURE_LPAR)) {
