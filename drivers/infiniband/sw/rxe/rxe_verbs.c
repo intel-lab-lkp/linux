@@ -1549,6 +1549,20 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name,
 	if (err)
 		return err;
 
+	if (ndev->addr_len) {
+		memcpy(rxe->raw_gid, ndev->dev_addr,
+			min_t(unsigned int, ndev->addr_len, ETH_ALEN));
+	} else {
+		/*
+		 * This device does not have a HW address, but
+		 * connection mangagement requires a unique gid.
+		 */
+		eth_random_addr(rxe->raw_gid);
+	}
+
+	addrconf_addr_eui48((unsigned char *)&rxe->attr.sys_image_guid,
+				rxe->raw_gid);
+
 	err = ib_register_device(dev, ibdev_name, NULL);
 	if (err)
 		rxe_dbg_dev(rxe, "failed with error %d\n", err);
