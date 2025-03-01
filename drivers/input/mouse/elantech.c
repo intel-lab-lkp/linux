@@ -45,6 +45,30 @@ static int synaptics_send_cmd(struct psmouse *psmouse, unsigned char c,
 }
 
 /*
+ * A retrying version of synaptics_send_cmd
+ */
+static int synaptics_send_cmd_retry(struct psmouse *psmouse, unsigned char c,
+				unsigned char *param)
+{
+	int rc;
+	int tries = ETP_PS2_COMMAND_TRIES;
+
+	do {
+		rc = synaptics_send_cmd(psmouse, c, param);
+		if (rc == 0)
+			break;
+		tries--;
+		psmouse_dbg(psmouse, "%s retrying query 0x%02x (%d).\n", __func__, c, tries);
+		msleep(ETP_PS2_COMMAND_DELAY);
+	} while (tries > 0);
+
+	if (rc)
+		psmouse_err(psmouse, "%s query 0x%02x with retry failed.\n", __func__, c);
+
+	return rc;
+}
+
+/*
  * V3 and later support this fast command
  */
 static int elantech_send_cmd(struct psmouse *psmouse, unsigned char c,
@@ -1432,7 +1456,7 @@ int elantech_detect(struct psmouse *psmouse, bool set_properties)
 	 * value to avoid mis-detection. Logitech mice are known to respond
 	 * to Elantech magic knock and there might be more.
 	 */
-	if (synaptics_send_cmd(psmouse, ETP_FW_VERSION_QUERY, param)) {
+	if (synaptics_send_cmd_retry(psmouse, ETP_FW_VERSION_QUERY, param)) {
 		psmouse_dbg(psmouse, "failed to query firmware version.\n");
 		return -1;
 	}
@@ -1718,7 +1742,7 @@ static int elantech_query_info(struct psmouse *psmouse,
 	/*
 	 * Do the version query again so we can store the result
 	 */
-	if (synaptics_send_cmd(psmouse, ETP_FW_VERSION_QUERY, param)) {
+	if (synaptics_send_cmd_retry(psmouse, ETP_FW_VERSION_QUERY, param)) {
 		psmouse_err(psmouse, "failed to query firmware version.\n");
 		return -EINVAL;
 	}
