@@ -1698,6 +1698,9 @@ static int hv_24x7_init(void)
 	unsigned int pvr = mfspr(SPRN_PVR);
 	struct hv_perf_caps caps;
 
+	if (is_kdump_kernel() || is_fadump_active())
+		return 0;
+
 	if (!firmware_has_feature(FW_FEATURE_LPAR)) {
 		pr_debug("not a virtualized system, not enabling\n");
 		return -ENODEV;

@@ -4,6 +4,8 @@
 
 #include <linux/perf_event.h>
 #include <linux/types.h>
+#include <asm/fadump.h>
+#include <asm/kexec.h>
 
 struct hv_perf_caps {
 	u16 version;
