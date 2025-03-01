@@ -644,6 +644,11 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 		return inode;
 	}
 
+	if (!pde_is_permanent(de) && !use_pde(de)) {
+		pde_put(de);
+		return NULL;
+	}
+
 	if (de->mode) {
 		inode->i_mode = de->mode;
 		inode->i_uid = de->uid;
@@ -677,5 +682,9 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 	} else {
 		BUG();
 	}
+
+	if (!pde_is_permanent(de))
+		unuse_pde(de);
+
 	return inode;
 }
