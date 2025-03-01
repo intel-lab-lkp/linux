@@ -2153,7 +2153,8 @@ static int shmem_split_large_entry(struct inode *inode, pgoff_t index,
 {
 	struct address_space *mapping = inode->i_mapping;
 	XA_STATE_ORDER(xas, &mapping->i_pages, index, 0);
-	int split_order = 0, entry_order;
+	int split_order = 0;
+	int entry_order = 0;
 	int i;
 
 	/* Convert user data gfp flags to xarray node gfp flags */
