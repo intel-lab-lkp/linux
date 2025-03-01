@@ -1021,7 +1021,7 @@ static enum hrtimer_restart cec_pin_timer(struct hrtimer *timer)
 		pin->wait_usecs = 0;
 		pin->timer_ts = ktime_add_us(ts, usecs);
 		hrtimer_forward_now(timer,
-				ns_to_ktime(usecs * 1000));
+				ns_to_ktime((u64)usecs * 1000));
 		return HRTIMER_RESTART;
 	}
 	pin->wait_usecs = usecs - 100;
