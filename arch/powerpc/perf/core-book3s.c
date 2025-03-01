@@ -22,6 +22,8 @@
 
 #ifdef CONFIG_PPC64
 #include "internal.h"
+#include <asm/fadump.h>
+#include <asm/kexec.h>
 #endif
 
 #define BHRB_MAX_ENTRIES	32
@@ -2590,6 +2592,12 @@ static int __init init_ppc64_pmu(void)
 		on_each_cpu(do_pmu_override, NULL, 1);
 		return 0;
 	}
+
+	/*
+	 * If the dump kernel is active, skip loading these drivers
+	 */
+	if (is_kdump_kernel() || is_fadump_active())
+		return 0;
 
 	/* run through all the pmu drivers one at a time */
 	if (!init_power5_pmu())
