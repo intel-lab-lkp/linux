@@ -382,7 +382,7 @@ xrep_calc_ag_resblks(
 			refcbt_sz);
 	xfs_perag_put(pag);
 
-	return max(max(bnobt_sz, inobt_sz), max(rmapbt_sz, refcbt_sz));
+	return max3(bnobt_sz, inobt_sz, max(rmapbt_sz, refcbt_sz));
 }
 
 #ifdef CONFIG_XFS_RT
