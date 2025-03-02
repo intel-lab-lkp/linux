@@ -563,7 +563,10 @@ void workingset_refault(struct folio *folio, void *shadow)
 
 	mod_lruvec_state(lruvec, WORKINGSET_REFAULT_BASE + file, nr);
 
-	if (!workingset_test_recent(shadow, file, &workingset, true))
+	if (!workingset_test_recent(shadow, file, &workingset, true)) {
+		if (file && folio->mapping)
+			__folio_set_dropbehind(folio);
+	}
 		return;
 
 	folio_set_active(folio);

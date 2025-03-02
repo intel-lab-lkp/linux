@@ -585,7 +585,7 @@ static int folio_launder(struct address_space *mapping, struct folio *folio)
  * sitting in the folio_add_lru() caches.
  */
 int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
-			   gfp_t gfp)
+			   gfp_t gfp, void *shadow)
 {
 	int ret;
 
@@ -611,7 +611,7 @@ int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
 		goto failed;
 
 	BUG_ON(folio_has_private(folio));
-	__filemap_remove_folio(folio, NULL);
+	__filemap_remove_folio(folio, shadow);
 	xa_unlock_irq(&mapping->i_pages);
 	if (mapping_shrinkable(mapping))
 		inode_add_lru(mapping->host);
@@ -686,7 +686,7 @@ int invalidate_inode_pages2_range(struct address_space *mapping,
 			}
 			VM_BUG_ON_FOLIO(!folio_contains(folio, indices[i]), folio);
 			folio_wait_writeback(folio);
-			ret2 = folio_unmap_invalidate(mapping, folio, GFP_KERNEL);
+			ret2 = folio_unmap_invalidate(mapping, folio, GFP_KERNEL, NULL);
 			if (ret2 < 0)
 				ret = ret2;
 			folio_unlock(folio);

@@ -1594,7 +1594,7 @@ static void folio_end_dropbehind_write(struct folio *folio)
 	 */
 	if (in_task() && folio_trylock(folio)) {
 		if (folio->mapping)
-			folio_unmap_invalidate(folio->mapping, folio, 0);
+			folio_unmap_invalidate(folio->mapping, folio, 0, NULL);
 		folio_unlock(folio);
 	}
 }
@@ -2613,15 +2613,21 @@ static inline bool pos_same_folio(loff_t pos1, loff_t pos2, struct folio *folio)
 }
 
 static void filemap_end_dropbehind_read(struct address_space *mapping,
-					struct folio *folio)
+					struct folio *folio, int ki_flags)
 {
+	void *shadow = NULL;
+
 	if (!folio_test_dropbehind(folio))
 		return;
 	if (folio_test_writeback(folio) || folio_test_dirty(folio))
 		return;
 	if (folio_trylock(folio)) {
-		if (folio_test_clear_dropbehind(folio))
-			folio_unmap_invalidate(mapping, folio, 0);
+		if (folio_test_clear_dropbehind(folio)) {
+			/* If this foio is dropped by preadv2(), do not record eviction*/
+			if (!(ki_flags & IOCB_DONTCACHE))
+				shadow = workingset_eviction(folio, folio_memcg(folio));
+			folio_unmap_invalidate(mapping, folio, 0, shadow);
+		}
 		folio_unlock(folio);
 	}
 }
@@ -2742,7 +2748,7 @@ put_folios:
 		for (i = 0; i < folio_batch_count(&fbatch); i++) {
 			struct folio *folio = fbatch.folios[i];
 
-			filemap_end_dropbehind_read(mapping, folio);
+			filemap_end_dropbehind_read(mapping, folio, iocb->ki_flags);
 			folio_put(folio);
 		}
 		folio_batch_init(&fbatch);
@@ -3443,7 +3449,7 @@ retry_find:
 			mapping_locked = true;
 		}
 		folio = __filemap_get_folio(mapping, index,
-					  FGP_CREAT|FGP_FOR_MMAP,
+					  FGP_CREAT|FGP_FOR_MMAP|FGP_DONTCACHE,
 					  vmf->gfp_mask);
 		if (IS_ERR(folio)) {
 			if (fpin)

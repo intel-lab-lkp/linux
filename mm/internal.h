@@ -393,7 +393,7 @@ void unmap_page_range(struct mmu_gather *tlb,
 			     unsigned long addr, unsigned long end,
 			     struct zap_details *details);
 int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
-			   gfp_t gfp);
+			   gfp_t gfp, void *shadow);
 
 void page_cache_ra_order(struct readahead_control *, struct file_ra_state *,
 		unsigned int order);
