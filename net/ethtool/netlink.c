@@ -582,6 +582,7 @@ static int ethnl_default_dumpit(struct sk_buff *skb,
 		dev_hold(dev);
 		rcu_read_unlock();
 
+		ctx->req_info->dev = dev;
 		ret = ethnl_default_dump_one(skb, dev, ctx, genl_info_dump(cb));
 
 		rcu_read_lock();
