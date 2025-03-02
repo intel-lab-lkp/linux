@@ -110,6 +110,8 @@ properties:
 
   interrupts:
     minItems: 1
+    maxItems: 11
+    additionalItems: true
     items:
       - description: Combined signal for various interrupt events
       - description: The interrupt to manage the remote wake-up packet detection
@@ -118,10 +120,10 @@ properties:
 
   interrupt-names:
     minItems: 1
+    maxItems: 11
+    additionalItems: true
     items:
       - const: macirq
-      - enum: [eth_wake_irq, eth_lpi, sfty]
-      - enum: [eth_wake_irq, eth_lpi, sfty]
       - enum: [eth_wake_irq, eth_lpi, sfty]
 
   clocks:
