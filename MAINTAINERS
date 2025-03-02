@@ -22101,6 +22101,7 @@ M:	Inochi Amaoto <inochiama@outlook.com>
 T:	git https://github.com/sophgo/linux.git
 S:	Maintained
 F:	drivers/mfd/cv1800-rtcsys.c
+F:	drivers/rtc/rtc-cv1800.c
 N:	sophgo
 K:	sophgo
 
