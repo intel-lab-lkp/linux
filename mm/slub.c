@@ -1292,7 +1292,7 @@ static int on_freelist(struct kmem_cache *s, struct slab *slab, void *search)
 	int max_objects;
 
 	fp = slab->freelist;
-	while (fp && nr <= slab->objects) {
+	while (fp && nr < slab->objects) {
 		if (fp == search)
 			return 1;
 		if (!check_valid_pointer(s, slab, fp)) {
@@ -1330,7 +1330,7 @@ static int on_freelist(struct kmem_cache *s, struct slab *slab, void *search)
 		slab->inuse = slab->objects - nr;
 		slab_fix(s, "Object count adjusted");
 	}
-	return search == NULL;
+	return fp == search;
 }
 
 static void trace(struct kmem_cache *s, struct slab *slab, void *object,
