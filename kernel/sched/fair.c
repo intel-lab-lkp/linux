@@ -8508,6 +8508,8 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 			target_stat.runnable = cpu_runnable(cpu_rq(cpu));
 			target_stat.capa = capacity_of(cpu);
 			target_stat.nr_running = cpu_rq(cpu)->cfs.h_nr_runnable;
+			if ((p->on_rq) && (!p->se.sched_delayed) && (cpu == prev_cpu))
+				target_stat.nr_running--;
 
 			/* If the target needs a lower OPP, then look up for
 			 * the corresponding OPP and its associated cost.
@@ -8613,6 +8615,9 @@ static inline bool sched_energy_push_task(struct task_struct *p, struct rq *rq)
 	if (p->nr_cpus_allowed == 1)
 		return false;
 
+	if (!task_fits_cpu(p, cpu_of(rq)))
+		return true;
+
 	if (is_rd_overutilized(rq->rd))
 		return false;
 
@@ -8624,33 +8629,33 @@ static inline bool sched_energy_push_task(struct task_struct *p, struct rq *rq)
 
 static int active_load_balance_cpu_stop(void *data);
 
-static inline void check_pushable_task(struct task_struct *p, struct rq *rq)
+static inline bool check_pushable_task(struct task_struct *p, struct rq *rq)
 {
 	int new_cpu, cpu = cpu_of(rq);
 
 	if (!sched_energy_enabled())
-		return;
+		return false;
 
 	if (WARN_ON(!p))
-		return;
+		return false;
 
 	if (WARN_ON(!task_current(rq, p)))
-		return;
+		return false;
 
 	if (is_migration_disabled(p))
-		return;
+		return false;
 
 	/* If there are several task, wait for being put back */
 	if (rq->nr_running > 1)
-		return;
+		return false;
 
 	if (!sched_energy_push_task(p, rq))
-		return;
+		return false;
 
 	new_cpu = find_energy_efficient_cpu(p, cpu);
 
 	if (new_cpu == cpu)
-		return;
+		return false;
 
 	/*
 	 * ->active_balance synchronizes accesses to
@@ -8661,13 +8666,15 @@ static inline void check_pushable_task(struct task_struct *p, struct rq *rq)
 		rq->active_balance = 1;
 		rq->push_cpu = new_cpu;
 	} else
-		return;
+		return false;
 
 	raw_spin_rq_unlock(rq);
 	stop_one_cpu_nowait(cpu,
 		active_load_balance_cpu_stop, rq,
 		&rq->active_balance_work);
 	raw_spin_rq_lock(rq);
+
+	return true;
 }
 
 static inline int has_pushable_tasks(struct rq *rq)
@@ -8952,7 +8959,11 @@ balance_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	return sched_balance_newidle(rq, rf) != 0;
 }
 #else
-static inline void check_pushable_task(struct task_struct *p, struct rq *rq) {}
+static inline bool check_pushable_task(struct task_struct *p, struct rq *rq)
+{
+	return false;
+}
+
 static inline void fair_queue_pushable_tasks(struct rq *rq) {}
 static void fair_remove_pushable_task(struct rq *rq, struct task_struct *p) {}
 static inline void fair_add_pushable_task(struct rq *rq, struct task_struct *p) {}
@@ -13362,9 +13373,10 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, curr);
 
-	check_pushable_task(curr, rq);
-	update_misfit_status(curr, rq);
-	check_update_overutilized_status(task_rq(curr));
+	if (!check_pushable_task(curr, rq)) {
+		update_misfit_status(curr, rq);
+		check_update_overutilized_status(task_rq(curr));
+	}
 
 	task_tick_core(rq, curr);
 }
