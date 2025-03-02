@@ -234,10 +234,8 @@ static int gpio_mdio_probe(struct platform_device *ofdev)
 	priv->mdio_pin = *prop;
 
 	new_bus->parent = dev;
-	dev_set_drvdata(dev, new_bus);
 
-	err = of_mdiobus_register(new_bus, np);
-
+	err = devm_of_mdiobus_register(dev, new_bus, np);
 	if (err != 0) {
 		pr_err("%s: Cannot register as MDIO bus, err %d\n",
 				new_bus->name, err);
@@ -245,16 +243,6 @@ static int gpio_mdio_probe(struct platform_device *ofdev)
 	}
 
 	return 0;
-}
-
-
-static void gpio_mdio_remove(struct platform_device *dev)
-{
-	struct mii_bus *bus = dev_get_drvdata(&dev->dev);
-
-	mdiobus_unregister(bus);
-
-	dev_set_drvdata(&dev->dev, NULL);
 }
 
 static const struct of_device_id gpio_mdio_match[] =
@@ -269,7 +257,6 @@ MODULE_DEVICE_TABLE(of, gpio_mdio_match);
 static struct platform_driver gpio_mdio_driver =
 {
 	.probe		= gpio_mdio_probe,
-	.remove		= gpio_mdio_remove,
 	.driver = {
 		.name = "gpio-mdio-bitbang",
 		.of_match_table = gpio_mdio_match,
