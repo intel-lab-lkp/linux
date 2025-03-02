@@ -86,8 +86,7 @@ static struct mtd_info *allocate_partition(struct mtd_info *parent,
 	 * parent conditional on that option. Note, this is a way to
 	 * distinguish between the parent and its partitions in sysfs.
 	 */
-	child->dev.parent = IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER) || mtd_is_partition(parent) ?
-			    &parent->dev : parent->dev.parent;
+	child->dev.parent = &parent->dev;
 	child->dev.of_node = part->of_node;
 	child->parent = parent;
 	child->part.offset = part->offset;
@@ -276,7 +275,7 @@ int mtd_add_partition(struct mtd_info *parent, const char *name,
 	list_add_tail(&child->part.node, &parent->partitions);
 	mutex_unlock(&master->master.partitions_lock);
 
-	ret = add_mtd_device(child);
+	ret = add_mtd_device(child, true);
 	if (ret)
 		goto err_remove_part;
 
@@ -402,6 +401,12 @@ int add_mtd_partitions(struct mtd_info *parent,
 	printk(KERN_NOTICE "Creating %d MTD partitions on \"%s\":\n",
 	       nbparts, parent->name);
 
+	if (!mtd_is_partition(parent)) {
+		ret = add_mtd_device(parent, IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER));
+		if (ret)
+			return ret;
+	}
+
 	for (i = 0; i < nbparts; i++) {
 		child = allocate_partition(parent, parts + i, i, cur_offset);
 		if (IS_ERR(child)) {
@@ -413,7 +418,7 @@ int add_mtd_partitions(struct mtd_info *parent,
 		list_add_tail(&child->part.node, &parent->partitions);
 		mutex_unlock(&master->master.partitions_lock);
 
-		ret = add_mtd_device(child);
+		ret = add_mtd_device(child, true);
 		if (ret) {
 			mutex_lock(&master->master.partitions_lock);
 			list_del(&child->part.node);
@@ -590,9 +595,6 @@ static int mtd_part_of_parse(struct mtd_info *master,
 	int ret, err = 0;
 
 	dev = &master->dev;
-	/* Use parent device (controller) if the top level MTD is not registered */
-	if (!IS_ENABLED(CONFIG_MTD_PARTITIONED_MASTER) && !mtd_is_partition(master))
-		dev = master->dev.parent;
 
 	np = mtd_get_of_node(master);
 	if (mtd_is_partition(master))
@@ -712,6 +714,7 @@ int parse_mtd_partitions(struct mtd_info *master, const char *const *types,
 		if (ret < 0 && !err)
 			err = ret;
 	}
+
 	return err;
 }
 
