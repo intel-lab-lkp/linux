@@ -213,15 +213,11 @@ static int gpio_mdio_probe(struct platform_device *ofdev)
 	const unsigned int *prop;
 	int err;
 
-	err = -ENOMEM;
-	priv = kzalloc(sizeof(struct gpio_priv), GFP_KERNEL);
-	if (!priv)
-		goto out;
-
-	new_bus = mdiobus_alloc();
-
+	new_bus = devm_mdiobus_alloc_size(dev, sizeof(*priv));
 	if (!new_bus)
-		goto out_free_priv;
+		return -ENOMEM;
+
+	priv = new_bus->priv;
 
 	new_bus->name = "pasemi gpio mdio bus";
 	new_bus->read = &gpio_mdio_read;
@@ -230,7 +226,6 @@ static int gpio_mdio_probe(struct platform_device *ofdev)
 
 	prop = of_get_property(np, "reg", NULL);
 	snprintf(new_bus->id, MII_BUS_ID_SIZE, "%x", *prop);
-	new_bus->priv = priv;
 
 	prop = of_get_property(np, "mdc-pin", NULL);
 	priv->mdc_pin = *prop;
@@ -246,17 +241,10 @@ static int gpio_mdio_probe(struct platform_device *ofdev)
 	if (err != 0) {
 		pr_err("%s: Cannot register as MDIO bus, err %d\n",
 				new_bus->name, err);
-		goto out_free_irq;
+		return err;
 	}
 
 	return 0;
-
-out_free_irq:
-	kfree(new_bus);
-out_free_priv:
-	kfree(priv);
-out:
-	return err;
 }
 
 
@@ -267,10 +255,6 @@ static void gpio_mdio_remove(struct platform_device *dev)
 	mdiobus_unregister(bus);
 
 	dev_set_drvdata(&dev->dev, NULL);
-
-	kfree(bus->priv);
-	bus->priv = NULL;
-	mdiobus_free(bus);
 }
 
 static const struct of_device_id gpio_mdio_match[] =
