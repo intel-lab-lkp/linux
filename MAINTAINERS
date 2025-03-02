@@ -22100,6 +22100,7 @@ M:	Chen Wang <unicorn_wang@outlook.com>
 M:	Inochi Amaoto <inochiama@outlook.com>
 T:	git https://github.com/sophgo/linux.git
 S:	Maintained
+F:	drivers/mfd/cv1800-rtcsys.c
 N:	sophgo
 K:	sophgo
 
