@@ -766,6 +766,7 @@ void uvc_status_put(struct uvc_device *dev);
 /* PM */
 int uvc_pm_get(struct uvc_device *dev);
 void uvc_pm_put(struct uvc_device *dev);
+DEFINE_GUARD(uvc_pm, struct uvc_device *, uvc_pm_get(_T), uvc_pm_put(_T))
 
 /* Controls */
 extern const struct v4l2_subscribed_event_ops uvc_ctrl_sub_ev_ops;
