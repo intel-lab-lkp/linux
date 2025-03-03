@@ -627,9 +627,9 @@ struct iio_dev {
 	void				*__private priv;
 };
 
-int iio_device_id(struct iio_dev *indio_dev);
-int iio_device_get_current_mode(struct iio_dev *indio_dev);
-bool iio_buffer_enabled(struct iio_dev *indio_dev);
+int iio_device_id(const struct iio_dev *indio_dev);
+int iio_device_get_current_mode(const struct iio_dev *indio_dev);
+bool iio_buffer_enabled(const struct iio_dev *indio_dev);
 
 const struct iio_chan_spec
 *iio_find_channel_from_si(struct iio_dev *indio_dev, int si);

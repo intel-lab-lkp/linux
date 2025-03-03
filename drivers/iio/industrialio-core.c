@@ -197,7 +197,7 @@ static const char * const iio_chan_info_postfix[] = {
  *
  * Returns: Unique ID for the device.
  */
-int iio_device_id(struct iio_dev *indio_dev)
+int iio_device_id(const struct iio_dev *indio_dev)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 
@@ -211,7 +211,7 @@ EXPORT_SYMBOL_GPL(iio_device_id);
  *
  * Returns: True, if the buffer is enabled.
  */
-bool iio_buffer_enabled(struct iio_dev *indio_dev)
+bool iio_buffer_enabled(const struct iio_dev *indio_dev)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 
@@ -2227,7 +2227,7 @@ EXPORT_SYMBOL_GPL(iio_device_release_buffer_mode);
  *				   the opaque @currentmode variable
  * @indio_dev:			   IIO device structure for device
  */
-int iio_device_get_current_mode(struct iio_dev *indio_dev)
+int iio_device_get_current_mode(const struct iio_dev *indio_dev)
 {
 	struct iio_dev_opaque *iio_dev_opaque = to_iio_dev_opaque(indio_dev);
 
