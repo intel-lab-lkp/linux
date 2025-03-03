@@ -26,6 +26,7 @@
 	dev_dbg(&(vdev)->pdev->dev, fmt, ##args)
 
 struct versal_pci_device;
+struct rm_cmd;
 
 struct axlf_header {
 	__u64				length;
