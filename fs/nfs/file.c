@@ -590,6 +590,7 @@ static vm_fault_t nfs_vm_page_mkwrite(struct vm_fault *vmf)
 	struct file *filp = vmf->vma->vm_file;
 	struct inode *inode = file_inode(filp);
 	unsigned pagelen;
+	int r;
 	vm_fault_t ret = VM_FAULT_NOPAGE;
 	struct address_space *mapping;
 	struct folio *folio = page_folio(vmf->page);
@@ -607,9 +608,13 @@ static vm_fault_t nfs_vm_page_mkwrite(struct vm_fault *vmf)
 		goto out;
 	}
 
-	wait_on_bit_action(&NFS_I(inode)->flags, NFS_INO_INVALIDATING,
+	r = wait_on_bit_action(&NFS_I(inode)->flags, NFS_INO_INVALIDATING,
 			   nfs_wait_bit_killable,
 			   TASK_KILLABLE|TASK_FREEZABLE_UNSAFE);
+	if (r) {
+		ret = VM_FAULT_SIGBUS;
+		goto out;
+	}
 
 	folio_lock(folio);
 	mapping = folio->mapping;
