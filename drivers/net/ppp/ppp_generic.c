@@ -118,7 +118,7 @@ struct ppp {
 	struct file	*owner;		/* file that owns this unit 48 */
 	struct list_head channels;	/* list of attached channels 4c */
 	int		n_channels;	/* how many channels are attached 54 */
-	spinlock_t	rlock;		/* lock for receive side 58 */
+	rwlock_t	rlock;		/* lock for receive side 58 */
 	spinlock_t	wlock;		/* lock for transmit side 5c */
 	int __percpu	*xmit_recursion; /* xmit recursion detect */
 	int		mru;		/* max receive unit 60 */
@@ -372,12 +372,14 @@ static const int npindex_to_ethertype[NUM_NP] = {
  */
 #define ppp_xmit_lock(ppp)	spin_lock_bh(&(ppp)->wlock)
 #define ppp_xmit_unlock(ppp)	spin_unlock_bh(&(ppp)->wlock)
-#define ppp_recv_lock(ppp)	spin_lock_bh(&(ppp)->rlock)
-#define ppp_recv_unlock(ppp)	spin_unlock_bh(&(ppp)->rlock)
+#define ppp_recv_lock(ppp)	write_lock_bh(&(ppp)->rlock)
+#define ppp_recv_unlock(ppp)	write_unlock_bh(&(ppp)->rlock)
 #define ppp_lock(ppp)		do { ppp_xmit_lock(ppp); \
 				     ppp_recv_lock(ppp); } while (0)
 #define ppp_unlock(ppp)		do { ppp_recv_unlock(ppp); \
 				     ppp_xmit_unlock(ppp); } while (0)
+#define ppp_recv_read_lock(ppp)		read_lock_bh(&(ppp)->rlock)
+#define ppp_recv_read_unlock(ppp)	read_unlock_bh(&(ppp)->rlock)
 
 /*
  * /dev/ppp device routines.
@@ -1252,7 +1254,7 @@ static int ppp_dev_configure(struct net *src_net, struct net_device *dev,
 	for (indx = 0; indx < NUM_NP; ++indx)
 		ppp->npmode[indx] = NPMODE_PASS;
 	INIT_LIST_HEAD(&ppp->channels);
-	spin_lock_init(&ppp->rlock);
+	rwlock_init(&ppp->rlock);
 	spin_lock_init(&ppp->wlock);
 
 	ppp->xmit_recursion = alloc_percpu(int);
@@ -2210,12 +2212,12 @@ struct ppp_mp_skb_parm {
 static inline void
 ppp_do_recv(struct ppp *ppp, struct sk_buff *skb, struct channel *pch)
 {
-	ppp_recv_lock(ppp);
+	ppp_recv_read_lock(ppp);
 	if (!ppp->closing)
 		ppp_receive_frame(ppp, skb, pch);
 	else
 		kfree_skb(skb);
-	ppp_recv_unlock(ppp);
+	ppp_recv_read_unlock(ppp);
 }
 
 /**
