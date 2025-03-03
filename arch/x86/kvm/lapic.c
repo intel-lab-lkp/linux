@@ -1466,6 +1466,19 @@ static void kvm_ioapic_send_eoi(struct kvm_lapic *apic, int vector)
 	if (!kvm_ioapic_handles_vector(apic, vector))
 		return;
 
+	/*
+	 * When there are instances where ioapic_handled_vectors is
+	 * set due to pending interrupts, clean up the record and do
+	 * a full KVM_REQ_SCAN_IOAPIC.
+	 * This ensures the vector is cleared in the vCPU's ioapic_handled_vectors,
+	 * if the vector is reused by non-IOAPIC interrupts, avoiding unnecessary
+	 * EOI-induced VMEXITs for that vector.
+	 */
+	if (apic->vcpu->arch.last_pending_vector == vector) {
+		apic->vcpu->arch.last_pending_vector = 0;
+		kvm_make_request(KVM_REQ_SCAN_IOAPIC, apic->vcpu);
+	}
+
 	/* Request a KVM exit to inform the userspace IOAPIC. */
 	if (irqchip_split(apic->vcpu->kvm)) {
 		apic->vcpu->arch.pending_ioapic_eoi = vector;
