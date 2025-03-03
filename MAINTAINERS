@@ -1215,6 +1215,11 @@ L:	linux-spi@vger.kernel.org
 S:	Supported
 F:	drivers/spi/spi-amd.c
 
+AMD VERSAL PCI DRIVER
+M:	Yidong Zhang <yidong.zhang@amd.com>
+S:	Supported
+F:	drivers/misc/amd/
+
 AMD XDNA DRIVER
 M:	Min Ma <min.ma@amd.com>
 M:	Lizhi Hou <lizhi.hou@amd.com>
