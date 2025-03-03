@@ -38,6 +38,10 @@ struct apml_message {
 		__u32 mb_in[2];
 		__u8 reg_in[8];
 	} data_in;
+	/*
+	 * Error code is returned in case of soft mailbox
+	 */
+	__u32 fw_ret_code;
 } __attribute__((packed));
 
 /*
@@ -60,6 +64,7 @@ struct apml_message {
  * The APML RMI module checks whether the cmd is
  * - Mailbox message read/write(0x0~0x999)
  * - returning "-EFAULT" if none of the above
+ * "-EPROTOTYPE" error is returned to provide additional error details
  */
 #define SBRMI_IOCTL_CMD		_IOWR(SB_BASE_IOCTL_NR, 0, struct apml_message)
 
