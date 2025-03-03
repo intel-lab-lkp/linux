@@ -2236,14 +2236,17 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 	if (hstate_is_gigantic(h))
 		return NULL;
 
+	mutex_lock(&h->resize_lock);
 	spin_lock_irq(&hugetlb_lock);
 	if (h->surplus_huge_pages >= h->nr_overcommit_huge_pages)
 		goto out_unlock;
 	spin_unlock_irq(&hugetlb_lock);
 
 	folio = alloc_fresh_hugetlb_folio(h, gfp_mask, nid, nmask);
-	if (!folio)
+	if (!folio) {
+		mutex_unlock(&h->resize_lock);
 		return NULL;
+	}
 
 	spin_lock_irq(&hugetlb_lock);
 	/*
@@ -2256,6 +2259,7 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 	if (h->surplus_huge_pages >= h->nr_overcommit_huge_pages) {
 		folio_set_hugetlb_temporary(folio);
 		spin_unlock_irq(&hugetlb_lock);
+		mutex_unlock(&h->resize_lock);
 		free_huge_folio(folio);
 		return NULL;
 	}
@@ -2265,6 +2269,7 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 
 out_unlock:
 	spin_unlock_irq(&hugetlb_lock);
+	mutex_unlock(&h->resize_lock);
 
 	return folio;
 }
