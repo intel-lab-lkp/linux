@@ -91,6 +91,7 @@ struct iaa_device {
 	struct list_head		wqs;
 
 	struct wq_table_entry		*iaa_local_wqs;
+	struct wq_table_entry		*iaa_global_wqs;
 
 	atomic64_t			comp_calls;
 	atomic64_t			comp_bytes;
