@@ -631,6 +631,46 @@ static void xhci_debugfs_create_ports(struct xhci_hcd *xhci,
 	}
 }
 
+static int xhci_port_bw_show(struct seq_file *s, void *unused)
+{
+	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
+	unsigned int		num_ports;
+	unsigned int		i;
+	int			ret;
+	u8			bw_table[MAX_HC_PORTS] = {0};
+
+	num_ports = HCS_MAX_PORTS(xhci->hcs_params1);
+
+	/* get roothub port bandwidth */
+	ret = xhci_get_port_bandwidth(xhci, bw_table);
+	if (ret)
+		return ret;
+
+	/* print all roothub ports available bandwidth */
+	for (i = 1; i < num_ports+1; i++)
+		seq_printf(s, "port[%d] available bw: %d%%.\n", i, bw_table[i]);
+
+	return ret;
+}
+
+static int bw_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, xhci_port_bw_show, inode->i_private);
+}
+
+static const struct file_operations bw_fops = {
+	.open			= bw_open,
+	.read			= seq_read,
+	.llseek			= seq_lseek,
+	.release		= single_release,
+};
+
+static void xhci_debugfs_create_bandwidth(struct xhci_hcd *xhci,
+					struct dentry *parent)
+{
+	debugfs_create_file("port_bandwidth", 0644, parent, xhci, &bw_fops);
+}
+
 void xhci_debugfs_init(struct xhci_hcd *xhci)
 {
 	struct device		*dev = xhci_to_hcd(xhci)->self.controller;
@@ -681,6 +721,8 @@ void xhci_debugfs_init(struct xhci_hcd *xhci)
 	xhci->debugfs_slots = debugfs_create_dir("devices", xhci->debugfs_root);
 
 	xhci_debugfs_create_ports(xhci, xhci->debugfs_root);
+
+	xhci_debugfs_create_bandwidth(xhci, xhci->debugfs_root);
 }
 
 void xhci_debugfs_exit(struct xhci_hcd *xhci)
