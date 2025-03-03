@@ -14,6 +14,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pps_gen_kernel.h>
+#include <linux/property.h>
 #include <linux/timekeeping.h>
 #include <linux/types.h>
 
@@ -28,7 +29,7 @@ static inline u32 pps_tio_read(u32 offset, struct pps_tio *tio)
 
 static inline void pps_ctl_write(u32 value, struct pps_tio *tio)
 {
-	writel(value, tio->base + TIOCTL);
+	writel(value, tio->base + tio->regs.ctl);
 }
 
 /*
@@ -37,7 +38,7 @@ static inline void pps_ctl_write(u32 value, struct pps_tio *tio)
  */
 static inline void pps_compv_write(u64 value, struct pps_tio *tio)
 {
-	hi_lo_writeq(value, tio->base + TIOCOMPV);
+	hi_lo_writeq(value, tio->base + tio->regs.compv);
 }
 
 static inline ktime_t first_event(struct pps_tio *tio)
@@ -49,7 +50,7 @@ static u32 pps_tio_disable(struct pps_tio *tio)
 {
 	u32 ctrl;
 
-	ctrl = pps_tio_read(TIOCTL, tio);
+	ctrl = pps_tio_read(tio->regs.ctl, tio);
 	pps_compv_write(0, tio);
 
 	ctrl &= ~TIOCTL_EN;
@@ -63,7 +64,7 @@ static void pps_tio_enable(struct pps_tio *tio)
 {
 	u32 ctrl;
 
-	ctrl = pps_tio_read(TIOCTL, tio);
+	ctrl = pps_tio_read(tio->regs.ctl, tio);
 	ctrl |= TIOCTL_EN;
 	pps_ctl_write(ctrl, tio);
 	tio->pps_gen->enabled = true;
@@ -112,7 +113,7 @@ static enum hrtimer_restart hrtimer_callback(struct hrtimer *timer)
 	 * Check if any event is missed.
 	 * If an event is missed, TIO will be disabled.
 	 */
-	event_count = pps_tio_read(TIOEC, tio);
+	event_count = pps_tio_read(tio->regs.ec, tio);
 	if (tio->prev_count && tio->prev_count == event_count)
 		goto err;
 	tio->prev_count = event_count;
@@ -172,6 +173,7 @@ static int pps_tio_get_time(struct pps_gen_device *pps_gen,
 static int pps_gen_tio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	const struct pps_tio_data *data;
 	struct pps_tio *tio;
 
 	if (!(cpu_feature_enabled(X86_FEATURE_TSC_KNOWN_FREQ) &&
@@ -184,6 +186,11 @@ static int pps_gen_tio_probe(struct platform_device *pdev)
 	if (!tio)
 		return -ENOMEM;
 
+	data = device_get_match_data(dev);
+	if (!data)
+		return -ENODEV;
+
+	tio->regs = data->regs;
 	tio->gen_info.use_system_clock = true;
 	tio->gen_info.enable = pps_tio_gen_enable;
 	tio->gen_info.get_time = pps_tio_get_time;
@@ -216,11 +223,19 @@ static void pps_gen_tio_remove(struct platform_device *pdev)
 	pps_gen_unregister_source(tio->pps_gen);
 }
 
+static const struct pps_tio_data pmc_data = {
+	.regs = {
+		.ctl = TIOCTL_PMC,
+		.compv = TIOCOMPV_PMC,
+		.ec = TIOEC_PMC,
+	},
+};
+
 static const struct acpi_device_id intel_pmc_tio_acpi_match[] = {
-	{ "INTC1021" },
-	{ "INTC1022" },
-	{ "INTC1023" },
-	{ "INTC1024" },
+	{ "INTC1021", (kernel_ulong_t)&pmc_data },
+	{ "INTC1022", (kernel_ulong_t)&pmc_data },
+	{ "INTC1023", (kernel_ulong_t)&pmc_data },
+	{ "INTC1024", (kernel_ulong_t)&pmc_data },
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, intel_pmc_tio_acpi_match);
