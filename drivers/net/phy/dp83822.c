@@ -197,6 +197,7 @@ struct dp83822_private {
 	bool set_gpio2_clk_out;
 	u32 gpio2_clk_out;
 	bool led_pin_enable[DP83822_MAX_LED_PINS];
+	int sor1;
 };
 
 static int dp83822_config_wol(struct phy_device *phydev,
@@ -620,6 +621,7 @@ static int dp83822_config_init(struct phy_device *phydev)
 static int dp8382x_config_rmii_mode(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
+	struct dp83822_private *dp83822 = phydev->priv;
 	const char *of_val;
 	int ret;
 
@@ -634,6 +636,17 @@ static int dp8382x_config_rmii_mode(struct phy_device *phydev)
 			phydev_err(phydev, "Invalid value for ti,rmii-mode property (%s)\n",
 				   of_val);
 			ret = -EINVAL;
+		}
+
+		if (ret)
+			return ret;
+	} else {
+		if (dp83822->sor1 & BIT(5)) {
+			ret = phy_set_bits_mmd(phydev, MDIO_MMD_VEND2, MII_DP83822_RCSR,
+					       DP83822_RMII_MODE_SEL);
+		} else {
+			ret = phy_clear_bits_mmd(phydev, MDIO_MMD_VEND2, MII_DP83822_RCSR,
+						 DP83822_RMII_MODE_SEL);
 		}
 
 		if (ret)
@@ -888,6 +901,48 @@ static int dp83822_read_straps(struct phy_device *phydev)
 	return 0;
 }
 
+static int dp83826_read_straps(struct phy_device *phydev)
+{
+	struct dp83822_private *dp83822 = phydev->priv;
+	int val;
+
+	val = phy_read_mmd(phydev, MDIO_MMD_VEND2, MII_DP83822_SOR1);
+	if (val < 0)
+		return val;
+
+	phydev_dbg(phydev, "SOR1 strap register: 0x%04x\n", val);
+
+	/* Bit 10: MDIX mode */
+	if (val & BIT(10))
+		phydev_dbg(phydev, "MDIX mode enabled\n");
+
+	/* Bit 9: auto-MDIX disable */
+	if (val & BIT(9))
+		phydev_dbg(phydev, "Auto-MDIX disabled\n");
+
+	/* Bit 8: RMII */
+	if (val & BIT(8)) {
+		phydev_dbg(phydev, "RMII mode enabled\n");
+		phydev->interface = PHY_INTERFACE_MODE_RMII;
+	}
+
+	/* Bit 5: Slave mode */
+	if (val & BIT(5))
+		phydev_dbg(phydev, "RMII slave mode enabled\n");
+
+	/* Bit 0: autoneg disable */
+	if (val & BIT(0)) {
+		phydev_dbg(phydev, "Auto-negotiation disabled\n");
+		phydev->autoneg = AUTONEG_DISABLE;
+		phydev->speed = SPEED_100;
+		phydev->duplex = DUPLEX_FULL;
+	}
+
+	dp83822->sor1 = val;
+
+	return 0;
+}
+
 static int dp8382x_probe(struct phy_device *phydev)
 {
 	struct dp83822_private *dp83822;
@@ -932,6 +987,10 @@ static int dp83826_probe(struct phy_device *phydev)
 	int ret;
 
 	ret = dp8382x_probe(phydev);
+	if (ret)
+		return ret;
+
+	ret = dp83826_read_straps(phydev);
 	if (ret)
 		return ret;
 
