@@ -185,8 +185,10 @@ examples:
                 };
 
                 port@4 {
+                    /* PHY-to-PHY CPU link */
                     reg = <4>;
-                    label = "lan4";
+                    ethernet = <&gmac2>;
+                    phy-mode = "gmii";
                     phy-handle = <&external_phy_port4>;
                 };
 
@@ -266,8 +268,9 @@ examples:
                 };
 
                 port@4 {
+                    /* PHY-to-PHY CPU link */
                     reg = <4>;
-                    label = "lan4";
+                    ethernet = <&gmac2>;
                     phy-mode = "internal";
                     phy-handle = <&internal_phy_port4>;
                 };
