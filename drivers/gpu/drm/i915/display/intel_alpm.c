@@ -312,6 +312,24 @@ void intel_alpm_lobf_compute_config(struct intel_dp *intel_dp,
 		(first_sdp_position + waketime_in_lines);
 }
 
+void intel_alpm_lobf_update(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	u32 alpm_ctl;
+
+	if (DISPLAY_VER(display) < 20)
+		return;
+
+	if (!crtc_state->has_lobf) {
+		alpm_ctl = intel_de_read(display, ALPM_CTL(display, cpu_transcoder));
+		if (alpm_ctl & ALPM_CTL_LOBF_ENABLE) {
+			alpm_ctl &= ~ALPM_CTL_LOBF_ENABLE;
+			intel_de_write(display, ALPM_CTL(display, cpu_transcoder), alpm_ctl);
+		}
+	}
+}
+
 static void lnl_alpm_configure(struct intel_dp *intel_dp,
 			       const struct intel_crtc_state *crtc_state)
 {
