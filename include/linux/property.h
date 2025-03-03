@@ -209,6 +209,10 @@ int fwnode_irq_get(const struct fwnode_handle *fwnode, unsigned int index);
 int fwnode_irq_get_byname(const struct fwnode_handle *fwnode, const char *name);
 
 unsigned int device_get_child_node_count(const struct device *dev);
+unsigned int fwnode_get_child_node_count_named(const struct fwnode_handle *fwnode,
+					       const char *name);
+unsigned int device_get_child_node_count_named(const struct device *dev,
+					       const char *name);
 
 static inline int device_property_read_u8(const struct device *dev,
 					  const char *propname, u8 *val)
