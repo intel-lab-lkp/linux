@@ -3799,7 +3799,6 @@ void *__vmalloc_node_range_noprof(unsigned long size, unsigned long align,
 			shift = arch_vmap_pte_supported_shift(size);
 
 		align = max(real_align, 1UL << shift);
-		size = ALIGN(real_size, 1UL << shift);
 	}
 
 again:
