@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 
 #define TH1520_PLL_POSTDIV2	GENMASK(26, 24)
 #define TH1520_PLL_POSTDIV1	GENMASK(22, 20)
@@ -862,17 +863,70 @@ static CCU_GATE(CLK_SRAM1, sram1_clk, "sram1", axi_aclk_pd, 0x20c, BIT(3), 0);
 static CCU_GATE(CLK_SRAM2, sram2_clk, "sram2", axi_aclk_pd, 0x20c, BIT(2), 0);
 static CCU_GATE(CLK_SRAM3, sram3_clk, "sram3", axi_aclk_pd, 0x20c, BIT(1), 0);
 
+static struct reset_control *gpu_reset;
+static DEFINE_SPINLOCK(gpu_reset_lock); /* protect GPU reset sequence */
+
+static void ccu_gpu_clk_disable(struct clk_hw *hw);
+static int ccu_gpu_clk_enable(struct clk_hw *hw);
+
+static const struct clk_ops ccu_gate_gpu_ops = {
+	.disable	= ccu_gpu_clk_disable,
+	.enable		= ccu_gpu_clk_enable
+};
+
 static const struct clk_ops clk_nop_ops = {};
 
 static CCU_GATE_CLK_OPS(CLK_GPU_MEM, gpu_mem_clk, "gpu-mem-clk",
 			video_pll_clk_pd, 0x0, BIT(2), 0, clk_nop_ops);
+static CCU_GATE_CLK_OPS(CLK_GPU_CORE, gpu_core_clk, "gpu-core-clk",
+			video_pll_clk_pd, 0x0, BIT(3), 0, ccu_gate_gpu_ops);
+static CCU_GATE_CLK_OPS(CLK_GPU_CFG_ACLK, gpu_cfg_aclk, "gpu-cfg-aclk",
+			video_pll_clk_pd, 0x0, BIT(4), 0, ccu_gate_gpu_ops);
+
+static void ccu_gpu_clk_disable(struct clk_hw *hw)
+{
+	struct ccu_gate *cg = hw_to_ccu_gate(hw);
+	unsigned long flags;
+
+	spin_lock_irqsave(&gpu_reset_lock, flags);
+
+	ccu_disable_helper(&cg->common, cg->enable);
+
+	if ((cg == &gpu_core_clk &&
+	     !clk_hw_is_enabled(&gpu_cfg_aclk.common.hw)) ||
+	    (cg == &gpu_cfg_aclk &&
+	     !clk_hw_is_enabled(&gpu_core_clk.common.hw)))
+		reset_control_assert(gpu_reset);
+
+	spin_unlock_irqrestore(&gpu_reset_lock, flags);
+}
+
+static int ccu_gpu_clk_enable(struct clk_hw *hw)
+{
+	struct ccu_gate *cg = hw_to_ccu_gate(hw);
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&gpu_reset_lock, flags);
+
+	ret = ccu_enable_helper(&cg->common, cg->enable);
+	if (ret) {
+		spin_unlock_irqrestore(&gpu_reset_lock, flags);
+		return ret;
+	}
+
+	if ((cg == &gpu_core_clk &&
+	     clk_hw_is_enabled(&gpu_cfg_aclk.common.hw)) ||
+	    (cg == &gpu_cfg_aclk && clk_hw_is_enabled(&gpu_core_clk.common.hw)))
+		ret = reset_control_deassert(gpu_reset);
+
+	spin_unlock_irqrestore(&gpu_reset_lock, flags);
+
+	return ret;
+}
 
 static CCU_GATE(CLK_AXI4_VO_ACLK, axi4_vo_aclk, "axi4-vo-aclk",
 		video_pll_clk_pd, 0x0, BIT(0), 0);
-static CCU_GATE(CLK_GPU_CORE, gpu_core_clk, "gpu-core-clk", video_pll_clk_pd,
-		0x0, BIT(3), 0);
-static CCU_GATE(CLK_GPU_CFG_ACLK, gpu_cfg_aclk, "gpu-cfg-aclk",
-		video_pll_clk_pd, 0x0, BIT(4), 0);
 static CCU_GATE(CLK_DPU_PIXELCLK0, dpu0_pixelclk, "dpu0-pixelclk",
 		video_pll_clk_pd, 0x0, BIT(5), 0);
 static CCU_GATE(CLK_DPU_PIXELCLK1, dpu1_pixelclk, "dpu1-pixelclk",
@@ -1046,8 +1100,6 @@ static struct ccu_common *th1520_gate_clks[] = {
 
 static struct ccu_common *th1520_vo_gate_clks[] = {
 	&axi4_vo_aclk.common,
-	&gpu_core_clk.common,
-	&gpu_cfg_aclk.common,
 	&dpu0_pixelclk.common,
 	&dpu1_pixelclk.common,
 	&dpu_hclk.common,
@@ -1150,6 +1202,13 @@ static int th1520_clk_probe(struct platform_device *pdev)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
+	if (plat_data == &th1520_vo_platdata) {
+		gpu_reset = devm_reset_control_get_exclusive(dev, NULL);
+		if (IS_ERR(gpu_reset))
+			return dev_err_probe(dev, PTR_ERR(gpu_reset),
+					     "GPU reset is required for VO clock controller\n");
+	}
+
 	for (i = 0; i < plat_data->nr_pll_clks; i++) {
 		struct ccu_pll *cp = hw_to_ccu_pll(&plat_data->th1520_pll_clks[i]->hw);
 
@@ -1226,11 +1285,27 @@ static int th1520_clk_probe(struct platform_device *pdev)
 		if (ret)
 			return ret;
 	} else if (plat_data == &th1520_vo_platdata) {
+		/* GPU clocks need to be treated differently, as MEM clock
+		 * is non-configurable, and the reset needs to be de-asserted
+		 * after enabling CORE and CFG clocks.
+		 */
 		ret = devm_clk_hw_register(dev, &gpu_mem_clk.common.hw);
 		if (ret)
 			return ret;
 		gpu_mem_clk.common.map = map;
 		priv->hws[CLK_GPU_MEM] = &gpu_mem_clk.common.hw;
+
+		ret = devm_clk_hw_register(dev, &gpu_core_clk.common.hw);
+		if (ret)
+			return ret;
+		gpu_core_clk.common.map = map;
+		priv->hws[CLK_GPU_CORE] = &gpu_core_clk.common.hw;
+
+		ret = devm_clk_hw_register(dev, &gpu_cfg_aclk.common.hw);
+		if (ret)
+			return ret;
+		gpu_cfg_aclk.common.map = map;
+		priv->hws[CLK_GPU_CFG_ACLK] = &gpu_cfg_aclk.common.hw;
 	}
 
 	ret = devm_of_clk_add_hw_provider(dev, of_clk_hw_onecell_get, priv);
