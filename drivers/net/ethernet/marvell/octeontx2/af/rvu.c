@@ -591,7 +591,7 @@ static void rvu_check_min_msix_vec(struct rvu *rvu, int nvecs, int pf, int vf)
 
 check_pf:
 	if (pf == 0)
-		min_vecs = RVU_AF_INT_VEC_CNT + RVU_PF_INT_VEC_CNT;
+		min_vecs = (int)RVU_AF_INT_VEC_CNT + (int)RVU_PF_INT_VEC_CNT;
 	else
 		min_vecs = RVU_PF_INT_VEC_CNT;
 
@@ -819,13 +819,14 @@ static int rvu_fwdata_init(struct rvu *rvu)
 		goto fail;
 
 	BUILD_BUG_ON(offsetof(struct rvu_fwdata, cgx_fw_data) > FWDATA_CGX_LMAC_OFFSET);
-	rvu->fwdata = ioremap_wc(fwdbase, sizeof(struct rvu_fwdata));
+	rvu->fwdata = (__force struct rvu_fwdata *)
+		ioremap_wc(fwdbase, sizeof(struct rvu_fwdata));
 	if (!rvu->fwdata)
 		goto fail;
 	if (!is_rvu_fwdata_valid(rvu)) {
 		dev_err(rvu->dev,
 			"Mismatch in 'fwdata' struct btw kernel and firmware\n");
-		iounmap(rvu->fwdata);
+		iounmap((void __iomem *)rvu->fwdata);
 		rvu->fwdata = NULL;
 		return -EINVAL;
 	}
@@ -838,7 +839,7 @@ fail:
 static void rvu_fwdata_exit(struct rvu *rvu)
 {
 	if (rvu->fwdata)
-		iounmap(rvu->fwdata);
+		iounmap((void __iomem *)rvu->fwdata);
 }
 
 static int rvu_setup_nix_hw_resource(struct rvu *rvu, int blkaddr)
@@ -2384,7 +2385,8 @@ static int rvu_get_mbox_regions(struct rvu *rvu, void **mbox_addr,
 				bar4 = rvupf_read64(rvu, RVU_PF_VF_BAR4_ADDR);
 				bar4 += region * MBOX_SIZE;
 			}
-			mbox_addr[region] = (void *)ioremap_wc(bar4, MBOX_SIZE);
+			mbox_addr[region] = (__force void *)
+				ioremap_wc(bar4, MBOX_SIZE);
 			if (!mbox_addr[region])
 				goto error;
 		}
@@ -2407,7 +2409,7 @@ static int rvu_get_mbox_regions(struct rvu *rvu, void **mbox_addr,
 					  RVU_AF_PF_BAR4_ADDR);
 			bar4 += region * MBOX_SIZE;
 		}
-		mbox_addr[region] = (void *)ioremap_wc(bar4, MBOX_SIZE);
+		mbox_addr[region] = (__force void *)ioremap_wc(bar4, MBOX_SIZE);
 		if (!mbox_addr[region])
 			goto error;
 	}
