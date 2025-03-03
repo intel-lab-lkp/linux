@@ -77,11 +77,12 @@ static inline u64 hv_do_hypercall(u64 control, void *input, void *output)
 		return hv_tdx_hypercall(control, input_address, output_address);
 
 	if (hv_isolation_type_snp() && !hyperv_paravisor_present) {
-		__asm__ __volatile__("mov %4, %%r8\n"
+		__asm__ __volatile__("mov %[output_address], %%r8\n"
 				     "vmmcall"
-				     : "=a" (hv_status), ASM_CALL_CONSTRAINT,
-				       "+c" (control), "+d" (input_address)
-				     :  "r" (output_address)
+				     : "=a" (hv_status), "+c" (control),
+				       "+d" (input_address)
+				     : [output_address] "r" (output_address)
+				       COMMA(ASM_CALL_CONSTRAINT)
 				     : "cc", "memory", "r8", "r9", "r10", "r11");
 		return hv_status;
 	}
@@ -89,12 +90,13 @@ static inline u64 hv_do_hypercall(u64 control, void *input, void *output)
 	if (!hv_hypercall_pg)
 		return U64_MAX;
 
-	__asm__ __volatile__("mov %4, %%r8\n"
+	__asm__ __volatile__("mov %[output_address], %%r8\n"
 			     CALL_NOSPEC
-			     : "=a" (hv_status), ASM_CALL_CONSTRAINT,
-			       "+c" (control), "+d" (input_address)
-			     :  "r" (output_address),
-				THUNK_TARGET(hv_hypercall_pg)
+			     : "=a" (hv_status), "+c" (control),
+			       "+d" (input_address)
+			     : [output_address] "r" (output_address),
+			       THUNK_TARGET(hv_hypercall_pg)
+			       COMMA(ASM_CALL_CONSTRAINT)
 			     : "cc", "memory", "r8", "r9", "r10", "r11");
 #else
 	u32 input_address_hi = upper_32_bits(input_address);
@@ -106,12 +108,11 @@ static inline u64 hv_do_hypercall(u64 control, void *input, void *output)
 		return U64_MAX;
 
 	__asm__ __volatile__(CALL_NOSPEC
-			     : "=A" (hv_status),
-			       "+c" (input_address_lo), ASM_CALL_CONSTRAINT
-			     : "A" (control),
-			       "b" (input_address_hi),
-			       "D"(output_address_hi), "S"(output_address_lo),
+			     : "=A" (hv_status), "+c" (input_address_lo)
+			     : "A" (control), "b" (input_address_hi),
+			       "D" (output_address_hi), "S"(output_address_lo),
 			       THUNK_TARGET(hv_hypercall_pg)
+			       COMMA(ASM_CALL_CONSTRAINT)
 			     : "cc", "memory");
 #endif /* !x86_64 */
 	return hv_status;
@@ -135,14 +136,16 @@ static inline u64 _hv_do_fast_hypercall8(u64 control, u64 input1)
 	if (hv_isolation_type_snp() && !hyperv_paravisor_present) {
 		__asm__ __volatile__(
 				"vmmcall"
-				: "=a" (hv_status), ASM_CALL_CONSTRAINT,
-				"+c" (control), "+d" (input1)
-				:: "cc", "r8", "r9", "r10", "r11");
+				: "=a" (hv_status), "+c" (control),
+				  "+d" (input1)
+				: ASM_CALL_CONSTRAINT
+				: "cc", "r8", "r9", "r10", "r11");
 	} else {
 		__asm__ __volatile__(CALL_NOSPEC
-				     : "=a" (hv_status), ASM_CALL_CONSTRAINT,
-				       "+c" (control), "+d" (input1)
+				     : "=a" (hv_status), "+c" (control),
+				       "+d" (input1)
 				     : THUNK_TARGET(hv_hypercall_pg)
+				       COMMA(ASM_CALL_CONSTRAINT)
 				     : "cc", "r8", "r9", "r10", "r11");
 	}
 #else
@@ -151,12 +154,10 @@ static inline u64 _hv_do_fast_hypercall8(u64 control, u64 input1)
 		u32 input1_lo = lower_32_bits(input1);
 
 		__asm__ __volatile__ (CALL_NOSPEC
-				      : "=A"(hv_status),
-					"+c"(input1_lo),
-					ASM_CALL_CONSTRAINT
-				      :	"A" (control),
-					"b" (input1_hi),
+				      : "=A"(hv_status), "+c"(input1_lo)
+				      :	"A" (control), "b" (input1_hi),
 					THUNK_TARGET(hv_hypercall_pg)
+					COMMA(ASM_CALL_CONSTRAINT)
 				      : "cc", "edi", "esi");
 	}
 #endif
@@ -187,19 +188,21 @@ static inline u64 _hv_do_fast_hypercall16(u64 control, u64 input1, u64 input2)
 		return hv_tdx_hypercall(control, input1, input2);
 
 	if (hv_isolation_type_snp() && !hyperv_paravisor_present) {
-		__asm__ __volatile__("mov %4, %%r8\n"
+		__asm__ __volatile__("mov %[input2], %%r8\n"
 				     "vmmcall"
-				     : "=a" (hv_status), ASM_CALL_CONSTRAINT,
-				       "+c" (control), "+d" (input1)
-				     : "r" (input2)
+				     : "=a" (hv_status), "+c" (control),
+				       "+d" (input1)
+				     : [input2] "r" (input2)
+				       COMMA(ASM_CALL_CONSTRAINT)
 				     : "cc", "r8", "r9", "r10", "r11");
 	} else {
-		__asm__ __volatile__("mov %4, %%r8\n"
+		__asm__ __volatile__("mov %[input2], %%r8\n"
 				     CALL_NOSPEC
-				     : "=a" (hv_status), ASM_CALL_CONSTRAINT,
-				       "+c" (control), "+d" (input1)
-				     : "r" (input2),
+				     : "=a" (hv_status), "+c" (control),
+				       "+d" (input1)
+				     : [input2] "r" (input2),
 				       THUNK_TARGET(hv_hypercall_pg)
+				       COMMA(ASM_CALL_CONSTRAINT)
 				     : "cc", "r8", "r9", "r10", "r11");
 	}
 #else
@@ -210,11 +213,11 @@ static inline u64 _hv_do_fast_hypercall16(u64 control, u64 input1, u64 input2)
 		u32 input2_lo = lower_32_bits(input2);
 
 		__asm__ __volatile__ (CALL_NOSPEC
-				      : "=A"(hv_status),
-					"+c"(input1_lo), ASM_CALL_CONSTRAINT
+				      : "=A"(hv_status), "+c" (input1_lo)
 				      :	"A" (control), "b" (input1_hi),
-					"D"(input2_hi), "S"(input2_lo),
+					"D" (input2_hi), "S" (input2_lo),
 					THUNK_TARGET(hv_hypercall_pg)
+					COMMA(ASM_CALL_CONSTRAINT)
 				      : "cc");
 	}
 #endif
