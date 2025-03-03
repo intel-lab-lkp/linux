@@ -105,6 +105,7 @@ static struct iaa_compression_mode *iaa_compression_modes[IAA_COMP_MODES_MAX];
 
 LIST_HEAD(iaa_devices);
 DEFINE_MUTEX(iaa_devices_lock);
+DEFINE_MUTEX(deflate_generic_tfm_lock);
 
 /* If enabled, IAA hw crypto algos are registered, unavailable otherwise */
 static bool iaa_crypto_enabled;
@@ -1407,6 +1408,9 @@ static int deflate_generic_decompress(struct acomp_req *req)
 	int ret;
 
 	req->dlen = PAGE_SIZE;
+
+	mutex_lock(&deflate_generic_tfm_lock);
+
 	src = kmap_local_page(sg_page(req->src)) + req->src->offset;
 	dst = kmap_local_page(sg_page(req->dst)) + req->dst->offset;
 
@@ -1415,6 +1419,8 @@ static int deflate_generic_decompress(struct acomp_req *req)
 
 	kunmap_local(src);
 	kunmap_local(dst);
+
+	mutex_unlock(&deflate_generic_tfm_lock);
 
 	update_total_sw_decomp_calls();
 
