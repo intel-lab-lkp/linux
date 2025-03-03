@@ -92,8 +92,9 @@
 									\
 	"popq	%%rsp					\n"		\
 									\
-	: "+r" (tos), ASM_CALL_CONSTRAINT				\
+	: "+r" (tos)							\
 	: [__func] "i" (func), [tos] "r" (tos) argconstr		\
+	  COMMA(ASM_CALL_CONSTRAINT)					\
 	: "cc", "rax", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10",	\
 	  "memory"							\
 	);								\

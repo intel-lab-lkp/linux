@@ -101,7 +101,7 @@ DECLARE_STATIC_CALL(xen_hypercall, xen_hypercall_func);
 	__ADDRESSABLE_xen_hypercall			\
 	"call __SCT__xen_hypercall"
 
-#define __HYPERCALL_ENTRY(x)	"a" (x)
+#define __HYPERCALL_ENTRY(x)	"a" (x) COMMA(ASM_CALL_CONSTRAINT)
 
 #ifdef CONFIG_X86_32
 #define __HYPERCALL_RETREG	"eax"
@@ -127,7 +127,7 @@ DECLARE_STATIC_CALL(xen_hypercall, xen_hypercall_func);
 	register unsigned long __arg4 asm(__HYPERCALL_ARG4REG) = __arg4; \
 	register unsigned long __arg5 asm(__HYPERCALL_ARG5REG) = __arg5;
 
-#define __HYPERCALL_0PARAM	"=r" (__res), ASM_CALL_CONSTRAINT
+#define __HYPERCALL_0PARAM	"=r" (__res)
 #define __HYPERCALL_1PARAM	__HYPERCALL_0PARAM, "+r" (__arg1)
 #define __HYPERCALL_2PARAM	__HYPERCALL_1PARAM, "+r" (__arg2)
 #define __HYPERCALL_3PARAM	__HYPERCALL_2PARAM, "+r" (__arg3)

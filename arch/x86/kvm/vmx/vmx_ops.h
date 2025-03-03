@@ -144,8 +144,9 @@ do_exception:
 		     /* VMREAD faulted.  As above, except push '1' for @fault. */
 		     _ASM_EXTABLE_TYPE_REG(1b, 2b, EX_TYPE_ONE_REG, %[output])
 
-		     : ASM_CALL_CONSTRAINT, [output] "=&r" (value)
+		     : [output] "=&r" (value)
 		     : [field] "r" (field)
+		       COMMA(ASM_CALL_CONSTRAINT)
 		     : "cc");
 	return value;
 

@@ -16,7 +16,7 @@ static __always_inline void iret_to_self(void)
 		"pushl $1f\n\t"
 		"iret\n\t"
 		"1:"
-		: ASM_CALL_CONSTRAINT : : "memory");
+		: : ASM_CALL_CONSTRAINT : "memory");
 }
 #else
 static __always_inline void iret_to_self(void)
@@ -34,7 +34,9 @@ static __always_inline void iret_to_self(void)
 		"pushq $1f\n\t"
 		"iretq\n\t"
 		"1:"
-		: "=&r" (tmp), ASM_CALL_CONSTRAINT : : "cc", "memory");
+		: "=&r" (tmp)
+		: ASM_CALL_CONSTRAINT
+		: "cc", "memory");
 }
 #endif /* CONFIG_X86_32 */
 

@@ -239,9 +239,10 @@ static inline int alternatives_text_reserved(void *start, void *end)
  */
 #define alternative_call(oldfunc, newfunc, ft_flags, output, input, clobbers...)	\
 	asm_inline volatile(ALTERNATIVE("call %c[old]", "call %c[new]", ft_flags)	\
-		: ALT_OUTPUT_SP(output)							\
+		: output								\
 		: [old] "i" (oldfunc), [new] "i" (newfunc)				\
 		  COMMA(input)								\
+		  COMMA(ASM_CALL_CONSTRAINT)						\
 		: clobbers)
 
 /*
@@ -254,13 +255,12 @@ static inline int alternatives_text_reserved(void *start, void *end)
 			   output, input, clobbers...)					\
 	asm_inline volatile(ALTERNATIVE_2("call %c[old]", "call %c[new1]", ft_flags1,	\
 		"call %c[new2]", ft_flags2)						\
-		: ALT_OUTPUT_SP(output)							\
+		: output								\
 		: [old] "i" (oldfunc), [new1] "i" (newfunc1),				\
 		  [new2] "i" (newfunc2)							\
 		  COMMA(input)								\
+		  COMMA(ASM_CALL_CONSTRAINT)						\
 		: clobbers)
-
-#define ALT_OUTPUT_SP(...) ASM_CALL_CONSTRAINT, ## __VA_ARGS__
 
 /* Macro for creating assembler functions avoiding any C magic. */
 #define DEFINE_ASM_FUNC(func, instr, sec)		\

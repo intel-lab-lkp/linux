@@ -323,10 +323,10 @@ do {									\
 	asm_inline qual (						\
 		ALTERNATIVE("call this_cpu_cmpxchg8b_emu",		\
 			    "cmpxchg8b " __percpu_arg([var]), X86_FEATURE_CX8) \
-		: ALT_OUTPUT_SP([var] "+m" (__my_cpu_var(_var)),	\
-				"+a" (old__.low), "+d" (old__.high))	\
-		: "b" (new__.low), "c" (new__.high),			\
-		  "S" (&(_var))						\
+		: [var] "+m" (__my_cpu_var(_var)), "+a" (old__.low),	\
+		   "+d" (old__.high)					\
+		: "b" (new__.low), "c" (new__.high), "S" (&(_var))	\
+		  COMMA(ASM_CALL_CONSTRAINT)				\
 		: "memory");						\
 									\
 	old__.var;							\
@@ -353,11 +353,10 @@ do {									\
 		ALTERNATIVE("call this_cpu_cmpxchg8b_emu",		\
 			    "cmpxchg8b " __percpu_arg([var]), X86_FEATURE_CX8) \
 		CC_SET(z)						\
-		: ALT_OUTPUT_SP(CC_OUT(z) (success),			\
-				[var] "+m" (__my_cpu_var(_var)),	\
-				"+a" (old__.low), "+d" (old__.high))	\
-		: "b" (new__.low), "c" (new__.high),			\
-		  "S" (&(_var))						\
+		: CC_OUT(z) (success), [var] "+m" (__my_cpu_var(_var)),	\
+		  "+a" (old__.low), "+d" (old__.high)			\
+		: "b" (new__.low), "c" (new__.high), "S" (&(_var))	\
+		  COMMA(ASM_CALL_CONSTRAINT)				\
 		: "memory");						\
 	if (unlikely(!success))						\
 		*_oval = old__.var;					\
@@ -392,10 +391,10 @@ do {									\
 	asm_inline qual (						\
 		ALTERNATIVE("call this_cpu_cmpxchg16b_emu",		\
 			    "cmpxchg16b " __percpu_arg([var]), X86_FEATURE_CX16) \
-		: ALT_OUTPUT_SP([var] "+m" (__my_cpu_var(_var)),	\
-				"+a" (old__.low), "+d" (old__.high))	\
-		: "b" (new__.low), "c" (new__.high),			\
-		  "S" (&(_var))						\
+		: [var] "+m" (__my_cpu_var(_var)), "+a" (old__.low),	\
+		   "+d" (old__.high)					\
+		: "b" (new__.low), "c" (new__.high), "S" (&(_var))	\
+		  COMMA(ASM_CALL_CONSTRAINT)				\
 		: "memory");						\
 									\
 	old__.var;							\
@@ -422,11 +421,10 @@ do {									\
 		ALTERNATIVE("call this_cpu_cmpxchg16b_emu",		\
 			    "cmpxchg16b " __percpu_arg([var]), X86_FEATURE_CX16) \
 		CC_SET(z)						\
-		: ALT_OUTPUT_SP(CC_OUT(z) (success),			\
-				[var] "+m" (__my_cpu_var(_var)),	\
-				"+a" (old__.low), "+d" (old__.high))	\
-		: "b" (new__.low), "c" (new__.high),			\
-		  "S" (&(_var))						\
+		: CC_OUT(z) (success), [var] "+m" (__my_cpu_var(_var)),	\
+		  "+a" (old__.low), "+d" (old__.high)			\
+		: "b" (new__.low), "c" (new__.high), "S" (&(_var))	\
+		  COMMA(ASM_CALL_CONSTRAINT)				\
 		: "memory");						\
 	if (unlikely(!success))						\
 		*_oval = old__.var;					\
