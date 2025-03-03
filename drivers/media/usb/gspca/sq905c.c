@@ -183,7 +183,9 @@ static void sq905c_dostream(struct work_struct *work)
 quit_stream:
 	if (gspca_dev->present) {
 		mutex_lock(&gspca_dev->usb_lock);
-		sq905c_command(gspca_dev, SQ905C_CLEAR, 0);
+		ret = sq905c_command(gspca_dev, SQ905C_CLEAR, 0);
+		if (ret)
+			gspca_dbg(gspca_dev, D_STREAM, "Clear command failed\n");
 		mutex_unlock(&gspca_dev->usb_lock);
 	}
 	kfree(buffer);
