@@ -59,6 +59,7 @@ static void call_on_stack(void *func, void *stack)
 		     "movl %[sp], %%esp"
 		     : [sp] "+b" (stack)
 		     : [thunk_target] "D" (func)
+		       COMMA(ASM_CALL_CONSTRAINT)
 		     : "memory", "cc", "edx", "ecx", "eax");
 }
 
@@ -98,6 +99,7 @@ static inline int execute_on_irq_stack(int overflow, struct irq_desc *desc)
 		     "movl %[sp], %%esp"
 		     : "+a" (desc), [sp] "+b" (isp)
 		     : [thunk_target] "D" (desc->handle_irq)
+		       COMMA(ASM_CALL_CONSTRAINT)
 		     : "memory", "cc", "edx", "ecx");
 	return 1;
 }
