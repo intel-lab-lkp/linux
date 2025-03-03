@@ -3088,6 +3088,80 @@ void xhci_reset_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 }
 EXPORT_SYMBOL_GPL(xhci_reset_bandwidth);
 
+/* Get the available bandwidth of the ports under the xhci roothub,
+ * including USB 2.0 port and USB 3.0 port.
+ */
+int xhci_get_port_bandwidth(struct xhci_hcd *xhci, u8 *bw_table)
+{
+	unsigned int		num_ports;
+	unsigned int		i;
+	struct xhci_command	*cmd;
+	dma_addr_t		dma_handle;
+	void			*dma_buf;
+	int			ret;
+	unsigned long		flags;
+	struct device		*dev  = xhci_to_hcd(xhci)->self.sysdev;
+
+	num_ports = HCS_MAX_PORTS(xhci->hcs_params1);
+
+	cmd = xhci_alloc_command(xhci, true, GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	dma_buf = dma_alloc_coherent(dev, xhci->page_size, &dma_handle,
+					GFP_KERNEL);
+	if (!dma_buf) {
+		xhci_free_command(xhci, cmd);
+		return -ENOMEM;
+	}
+
+	/* get xhci hub usb3 port bandwidth */
+	/* refer to xhci rev1_2 protocol 4.6.15*/
+	spin_unlock_irqrestore(&xhci->lock, flags);
+	ret = xhci_queue_get_rh_port_bw(xhci, cmd, dma_handle, USB_SPEED_SUPER,
+					0, false);
+	if (ret < 0) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		goto out;
+	}
+	xhci_ring_cmd_db(xhci);
+	spin_unlock_irqrestore(&xhci->lock, flags);
+
+	wait_for_completion(cmd->completion);
+
+	/* refer to xhci rev1_2 protocol 6.2.6 , byte 0 is reserved */
+	for (i = 1; i < num_ports+1; i++) {
+		if (((u8 *)dma_buf)[i])
+			bw_table[i] = ((u8 *)dma_buf)[i];
+	}
+
+	/* get xhci hub usb2 port bandwidth */
+	/* refer to xhci rev1_2 protocol 4.6.15*/
+	spin_unlock_irqrestore(&xhci->lock, flags);
+	ret = xhci_queue_get_rh_port_bw(xhci, cmd, dma_handle, USB_SPEED_HIGH,
+					0, false);
+	if (ret < 0) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		goto out;
+	}
+	xhci_ring_cmd_db(xhci);
+	spin_unlock_irqrestore(&xhci->lock, flags);
+
+	wait_for_completion(cmd->completion);
+
+	/* refer to xhci rev1_2 protocol 6.2.6 , byte 0 is reserved */
+	for (i = 1; i < num_ports+1; i++) {
+		if (((u8 *)dma_buf)[i])
+			bw_table[i] = ((u8 *)dma_buf)[i];
+	}
+
+out:
+	dma_free_coherent(dev, xhci->page_size, dma_buf, dma_handle);
+	xhci_free_command(xhci, cmd);
+
+	return ret;
+}
+
 static void xhci_setup_input_ctx_for_config_ep(struct xhci_hcd *xhci,
 		struct xhci_container_ctx *in_ctx,
 		struct xhci_container_ctx *out_ctx,
