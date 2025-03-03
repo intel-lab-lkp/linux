@@ -12,8 +12,12 @@ CLANG_TARGET_FLAGS_riscv	:= riscv64-linux-gnu
 CLANG_TARGET_FLAGS_s390		:= s390x-linux-gnu
 CLANG_TARGET_FLAGS_sparc	:= sparc64-linux-gnu
 CLANG_TARGET_FLAGS_x86		:= x86_64-linux-gnu
+ifeq ($(SRCARCH):$(SUBARCH),um:i386)
+CLANG_TARGET_FLAGS		:= i386-linux-gnu
+else
 CLANG_TARGET_FLAGS_um		:= $(CLANG_TARGET_FLAGS_$(SUBARCH))
 CLANG_TARGET_FLAGS		:= $(CLANG_TARGET_FLAGS_$(SRCARCH))
+endif
 
 ifeq ($(CLANG_TARGET_FLAGS),)
 $(error add '--target=' option to scripts/Makefile.clang)
