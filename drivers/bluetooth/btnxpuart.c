@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  NXP Bluetooth driver
- *  Copyright 2023 NXP
+ *  Copyright 2023-2025 NXP
  */
 
 #include <linux/module.h>
@@ -98,13 +98,16 @@
 #define PS_STATE_AWAKE          0
 #define PS_STATE_SLEEP          1
 
-/* Bluetooth vendor command : Sleep mode */
+/* NXP Vendor Commands. Refer user manual UM11628 on nxp.com */
+/* Set custom BD Address */
+#define HCI_NXP_SET_BD_ADDR	0xfc22
+/* Set Auto-Sleep mode */
 #define HCI_NXP_AUTO_SLEEP_MODE	0xfc23
-/* Bluetooth vendor command : Wakeup method */
+/* Set Wakeup method */
 #define HCI_NXP_WAKEUP_METHOD	0xfc53
-/* Bluetooth vendor command : Set operational baudrate */
+/* Set operational baudrate */
 #define HCI_NXP_SET_OPER_SPEED	0xfc09
-/* Bluetooth vendor command: Independent Reset */
+/* Independent Reset (Soft Reset) */
 #define HCI_NXP_IND_RESET	0xfcfc
 
 /* Bluetooth Power State : Vendor cmd params */
@@ -308,6 +311,15 @@ struct nxp_v3_rx_timeout_nak {
 union nxp_v3_rx_timeout_nak_u {
 	struct nxp_v3_rx_timeout_nak pkt;
 	u8 buf[6];
+};
+
+union nxp_set_bd_addr_payload {
+	struct {
+		u8 param_id;
+		u8 param_len;
+		u8 param[6];
+	} __packed data;
+	u8 buf[8];
 };
 
 static u8 crc8_table[CRC8_TABLE_SIZE];
@@ -1209,6 +1221,33 @@ static int nxp_set_ind_reset(struct hci_dev *hdev, void *data)
 	return hci_recv_frame(hdev, skb);
 }
 
+static int nxp_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
+{
+	union nxp_set_bd_addr_payload pcmd;
+	int err;
+
+	pcmd.data.param_id = 0xfe;
+	pcmd.data.param_len = 6;
+	memcpy(pcmd.data.param, bdaddr, 6);
+
+	/* BD address can be assigned only after first reset command. */
+	err = __hci_cmd_sync_status(hdev, HCI_OP_RESET, 0, NULL, HCI_INIT_TIMEOUT);
+	if (err) {
+		bt_dev_err(hdev, "Reset before setting local-bd-addr failed (%ld)",
+			   PTR_ERR(skb));
+		return err;
+	}
+
+	err = __hci_cmd_sync_status(hdev, HCI_NXP_SET_BD_ADDR, sizeof(pcmd),
+			     pcmd.buf, HCI_CMD_TIMEOUT);
+	if (err) {
+		bt_dev_err(hdev, "Changing device address failed (%d)", err);
+		return err;
+	}
+
+	return 0;
+}
+
 /* NXP protocol */
 static int nxp_setup(struct hci_dev *hdev)
 {
@@ -1522,6 +1561,7 @@ static int nxp_serdev_probe(struct serdev_device *serdev)
 {
 	struct hci_dev *hdev;
 	struct btnxpuart_dev *nxpdev;
+	bdaddr_t ba = {0};
 
 	nxpdev = devm_kzalloc(&serdev->dev, sizeof(*nxpdev), GFP_KERNEL);
 	if (!nxpdev)
@@ -1570,7 +1610,15 @@ static int nxp_serdev_probe(struct serdev_device *serdev)
 	hdev->hw_error = nxp_hw_err;
 	hdev->shutdown = nxp_shutdown;
 	hdev->wakeup = nxp_wakeup;
+	hdev->set_bdaddr = nxp_set_bdaddr;
+
 	SET_HCIDEV_DEV(hdev, &serdev->dev);
+
+	device_property_read_u8_array(&nxpdev->serdev->dev,
+				      "local-bd-address",
+				      (u8 *)&ba, sizeof(ba));
+	if (bacmp(&ba, BDADDR_ANY))
+		set_bit(HCI_QUIRK_USE_BDADDR_PROPERTY, &hdev->quirks);
 
 	if (hci_register_dev(hdev) < 0) {
 		dev_err(&serdev->dev, "Can't register HCI device\n");
