@@ -8528,9 +8528,8 @@ S:	Maintained
 F:	drivers/media/rc/ene_ir.*
 
 EPAPR HYPERVISOR BYTE CHANNEL DEVICE DRIVER
-M:	Laurentiu Tudor <laurentiu.tudor@nxp.com>
 L:	linuxppc-dev@lists.ozlabs.org
-S:	Maintained
+S:	Orphan
 F:	drivers/tty/ehv_bytechan.c
 
 EPSON S1D13XXX FRAMEBUFFER DRIVER
