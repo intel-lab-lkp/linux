@@ -37,9 +37,7 @@ properties:
       - description: Sleep clock source
 
   power-domains:
-    maxItems: 1
-    description:
-      A phandle and PM domain specifier for the MMCX power domain.
+    maxItems: 2
 
   required-opps:
     maxItems: 1
