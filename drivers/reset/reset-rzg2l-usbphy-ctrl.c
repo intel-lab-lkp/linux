@@ -88,7 +88,7 @@ static int rzg2l_usbphy_ctrl_status(struct reset_controller_dev *rcdev,
 
 	port_mask = id ? PHY_RESET_PORT2 : PHY_RESET_PORT1;
 
-	return !!(readl(priv->base + RESET) & port_mask);
+	return (readl(priv->base + RESET) & port_mask) == port_mask;
 }
 
 static const struct of_device_id rzg2l_usbphy_ctrl_match_table[] = {
