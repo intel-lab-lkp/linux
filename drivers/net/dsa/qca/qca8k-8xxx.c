@@ -1014,7 +1014,7 @@ qca8k_setup_mdio_bus(struct qca8k_priv *priv)
 			return ret;
 		}
 
-		if (!dsa_is_user_port(priv->ds, reg))
+		if (reg == 0 || reg == 6)
 			continue;
 
 		of_get_phy_mode(port, &mode);
@@ -1089,16 +1089,18 @@ qca8k_setup_mac_pwr_sel(struct qca8k_priv *priv)
 
 static int qca8k_find_cpu_port(struct dsa_switch *ds)
 {
-	struct qca8k_priv *priv = ds->priv;
+	int i;
 
-	/* Find the connected cpu port. Valid port are 0 or 6 */
 	if (dsa_is_cpu_port(ds, 0))
 		return 0;
 
-	dev_dbg(priv->dev, "port 0 is not the CPU port. Checking port 6");
-
 	if (dsa_is_cpu_port(ds, 6))
 		return 6;
+
+	/* PHY-to-PHY link */
+	for (i = 1; i <= 5; i++)
+		if (dsa_is_cpu_port(ds, i))
+			return i;
 
 	return -EINVAL;
 }
