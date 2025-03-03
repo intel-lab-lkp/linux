@@ -18,6 +18,7 @@
 #include "xe_range_fence.h"
 
 struct xe_bo;
+struct xe_pagefault;
 struct xe_sync_entry;
 struct xe_user_fence;
 struct xe_vm;
@@ -134,6 +135,13 @@ struct xe_userptr_vma {
 };
 
 struct xe_device;
+
+struct xe_vm_pf_entry {
+	/** @pf: observed pagefault */
+	struct xe_pagefault *pf;
+	/** @list: link into @xe_vm.pfs.list */
+	struct list_head list;
+};
 
 struct xe_vm {
 	/** @gpuvm: base GPUVM used to track VMAs */
@@ -273,6 +281,18 @@ struct xe_vm {
 		/** @capture_once: capture only one error per VM */
 		bool capture_once;
 	} error_capture;
+
+	/**
+	 * @pfs: List of all pagefaults associated with this VM
+	 */
+	struct {
+		/** @lock: lock protecting @bans.list */
+		spinlock_t lock;
+		/** @list: list of xe_exec_queue_ban_entry entries */
+		struct list_head list;
+		/** @len: length of @bans.list */
+		unsigned int len;
+	} pfs;
 
 	/**
 	 * @tlb_flush_seqno: Required TLB flush seqno for the next exec.
