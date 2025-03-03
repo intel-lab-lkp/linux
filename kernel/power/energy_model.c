@@ -447,7 +447,7 @@ static int em_create_pd(struct device *dev, int nr_states,
 	return 0;
 
 free_pd_table:
-	kfree(em_table);
+	em_table_free(em_table);
 free_pd:
 	kfree(pd);
 	return -EINVAL;
