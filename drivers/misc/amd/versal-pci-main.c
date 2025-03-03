@@ -8,6 +8,8 @@
 #include <linux/pci.h>
 
 #include "versal-pci.h"
+#include "versal-pci-rm-service.h"
+#include "versal-pci-rm-queue.h"
 
 #define DRV_NAME			"amd-versal-pci"
 
@@ -19,6 +21,29 @@ static inline u32 versal_pci_devid(struct versal_pci_device *vdev)
 {
 	return ((pci_domain_nr(vdev->pdev->bus) << 16) |
 		PCI_DEVID(vdev->pdev->bus->number, vdev->pdev->devfn));
+}
+
+static int versal_pci_upload_fw(struct versal_pci_device *vdev,
+				enum rm_queue_opcode opcode,
+				const char *data,
+				size_t size)
+{
+	struct rm_cmd *cmd;
+	int ret;
+
+	ret = rm_queue_create_cmd(vdev->rdev, opcode, &cmd);
+	if (ret)
+		return ret;
+
+	ret = rm_queue_data_init(cmd, data, size);
+	if (ret)
+		goto done;
+
+	ret = rm_queue_send_cmd(cmd, RM_CMD_WAIT_DOWNLOAD_TIMEOUT);
+
+done:
+	rm_queue_destroy_cmd(cmd);
+	return ret;
 }
 
 static int versal_pci_load_shell(struct versal_pci_device *vdev, char *fw_name)
@@ -57,7 +82,8 @@ static int versal_pci_load_shell(struct versal_pci_device *vdev, char *fw_name)
 		goto release_firmware;
 	}
 
-	/* TODO upload fw to card */
+	ret = versal_pci_upload_fw(vdev, RM_QUEUE_OP_LOAD_FW,
+				   (char *)xsabin, xsabin->header.length);
 	if (ret) {
 		vdev_err(vdev, "failed to load xsabin %s : %d", fw_name, ret);
 		goto release_firmware;
@@ -159,6 +185,7 @@ static void versal_pci_device_teardown(struct versal_pci_device *vdev)
 {
 	versal_pci_cfs_fini(&vdev->cfs_subsys);
 	versal_pci_fw_fini(vdev);
+	versal_pci_rm_fini(vdev->rdev);
 }
 
 static void versal_pci_uuid_parse(struct versal_pci_device *vdev, uuid_t *uuid)
@@ -180,7 +207,13 @@ static void versal_pci_uuid_parse(struct versal_pci_device *vdev, uuid_t *uuid)
 
 static int versal_pci_fw_init(struct versal_pci_device *vdev)
 {
-	/* TODO request compatible fw_id from card */
+	int ret;
+
+	ret = rm_queue_get_fw_id(vdev->rdev);
+	if (ret) {
+		vdev_warn(vdev, "Failed to get fw_id");
+		return -EINVAL;
+	}
 
 	versal_pci_uuid_parse(vdev, &vdev->intf_uuid);
 
@@ -190,6 +223,13 @@ static int versal_pci_fw_init(struct versal_pci_device *vdev)
 static int versal_pci_device_setup(struct versal_pci_device *vdev)
 {
 	int ret;
+
+	vdev->rdev = versal_pci_rm_init(vdev);
+	if (IS_ERR(vdev->rdev)) {
+		ret = PTR_ERR(vdev->rdev);
+		vdev_err(vdev, "Failed to init remote queue, err %d", ret);
+		return ret;
+	}
 
 	ret = versal_pci_fw_init(vdev);
 	if (ret) {
@@ -206,6 +246,7 @@ static int versal_pci_device_setup(struct versal_pci_device *vdev)
 	return 0;
 
 comm_chan_fini:
+	versal_pci_rm_fini(vdev->rdev);
 
 	return ret;
 }

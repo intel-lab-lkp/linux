@@ -51,6 +51,7 @@ struct fw_info {
 struct versal_pci_device {
 	struct pci_dev			*pdev;
 
+	struct rm_device		*rdev;
 	struct fw_info			fw;
 
 	void __iomem			*io_regs;
