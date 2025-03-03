@@ -1051,74 +1051,141 @@ static void acomp_ctx_put_unlock(struct crypto_acomp_ctx *acomp_ctx)
 	mutex_unlock(&acomp_ctx->mutex);
 }
 
-static bool zswap_compress(struct page *page, struct zswap_entry *entry,
-			   struct zswap_pool *pool)
+/*
+ * Unified code paths for compressors that do and do not support
+ * batching. This procedure will compress multiple @nr_pages in @folio,
+ * starting from @index.
+ * If @batching is set to true, it will create a request chain for
+ * compression batching. It is assumed that the caller has verified
+ * that the acomp_ctx->nr_reqs is at least @nr_pages.
+ * If @batching is set to false, it will process each page sequentially.
+ * In both cases, if all compressions were successful, it will proceed
+ * to store the compressed buffers in zpool.
+ */
+static bool zswap_batch_compress(struct folio *folio,
+				 long index,
+				 unsigned int nr_pages,
+				 struct zswap_entry *entries[],
+				 struct zswap_pool *pool,
+				 struct crypto_acomp_ctx *acomp_ctx,
+				 bool batching)
 {
-	struct crypto_acomp_ctx *acomp_ctx;
-	struct scatterlist input, output;
-	int comp_ret = 0, alloc_ret = 0;
-	unsigned int dlen = PAGE_SIZE;
-	unsigned long handle;
-	struct zpool *zpool;
-	char *buf;
+	struct scatterlist inputs[ZSWAP_MAX_BATCH_SIZE];
+	struct scatterlist outputs[ZSWAP_MAX_BATCH_SIZE];
+	struct zpool *zpool = pool->zpool;
+	int acomp_idx = 0, nr_to_store = 1;
+	unsigned int i, j;
+	int err = 0;
 	gfp_t gfp;
-	u8 *dst;
 
-	acomp_ctx = acomp_ctx_get_cpu_lock(pool);
-	dst = acomp_ctx->buffers[0];
-	sg_init_table(&input, 1);
-	sg_set_page(&input, page, PAGE_SIZE, 0);
+	lockdep_assert_held(&acomp_ctx->mutex);
 
-	/*
-	 * We need PAGE_SIZE * 2 here since there maybe over-compression case,
-	 * and hardware-accelerators may won't check the dst buffer size, so
-	 * giving the dst buffer with enough length to avoid buffer overflow.
-	 */
-	sg_init_one(&output, dst, PAGE_SIZE * 2);
-	acomp_request_set_params(acomp_ctx->reqs[0], &input, &output, PAGE_SIZE, dlen);
-
-	/*
-	 * it maybe looks a little bit silly that we send an asynchronous request,
-	 * then wait for its completion synchronously. This makes the process look
-	 * synchronous in fact.
-	 * Theoretically, acomp supports users send multiple acomp requests in one
-	 * acomp instance, then get those requests done simultaneously. but in this
-	 * case, zswap actually does store and load page by page, there is no
-	 * existing method to send the second page before the first page is done
-	 * in one thread doing zwap.
-	 * but in different threads running on different cpu, we have different
-	 * acomp instance, so multiple threads can do (de)compression in parallel.
-	 */
-	comp_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->reqs[0]), &acomp_ctx->wait);
-	dlen = acomp_ctx->reqs[0]->dlen;
-	if (comp_ret)
-		goto unlock;
-
-	zpool = pool->zpool;
 	gfp = __GFP_NORETRY | __GFP_NOWARN | __GFP_KSWAPD_RECLAIM;
 	if (zpool_malloc_support_movable(zpool))
 		gfp |= __GFP_HIGHMEM | __GFP_MOVABLE;
-	alloc_ret = zpool_malloc(zpool, dlen, gfp, &handle);
-	if (alloc_ret)
-		goto unlock;
 
-	buf = zpool_map_handle(zpool, handle, ZPOOL_MM_WO);
-	memcpy(buf, dst, dlen);
-	zpool_unmap_handle(zpool, handle);
+	for (i = 0; i < nr_pages; ++i) {
+		struct page *page = folio_page(folio, index + i);
 
-	entry->handle = handle;
-	entry->length = dlen;
+		sg_init_table(&inputs[acomp_idx], 1);
+		sg_set_page(&inputs[acomp_idx], page, PAGE_SIZE, 0);
 
-unlock:
-	if (comp_ret == -ENOSPC || alloc_ret == -ENOSPC)
-		zswap_reject_compress_poor++;
-	else if (comp_ret)
-		zswap_reject_compress_fail++;
-	else if (alloc_ret)
-		zswap_reject_alloc_fail++;
+		/*
+		 * Each dst buffer should be of size (PAGE_SIZE * 2).
+		 * Reflect same in sg_list.
+		 */
+		sg_init_one(&outputs[acomp_idx], acomp_ctx->buffers[acomp_idx], PAGE_SIZE * 2);
+		acomp_request_set_params(acomp_ctx->reqs[acomp_idx], &inputs[acomp_idx],
+					 &outputs[acomp_idx], PAGE_SIZE, PAGE_SIZE);
 
-	acomp_ctx_put_unlock(acomp_ctx);
-	return comp_ret == 0 && alloc_ret == 0;
+		if (batching) {
+			/* Add the acomp request to the chain. */
+			if (likely(i))
+				acomp_request_chain(acomp_ctx->reqs[acomp_idx], acomp_ctx->reqs[0]);
+			else
+				acomp_reqchain_init(acomp_ctx->reqs[0], 0, crypto_req_done,
+						    &acomp_ctx->wait);
+
+			if (i == (nr_pages - 1)) {
+				/* Process the request chain. */
+				err = crypto_wait_req(crypto_acomp_compress(acomp_ctx->reqs[0]), &acomp_ctx->wait);
+
+				/*
+				 * Get the individual compress errors from request chaining.
+				 */
+				for (j = 0; j < nr_pages; ++j) {
+					if (unlikely(acomp_request_err(acomp_ctx->reqs[j]))) {
+						err = -EINVAL;
+						if (acomp_request_err(acomp_ctx->reqs[j]) == -ENOSPC)
+							zswap_reject_compress_poor++;
+						else
+							zswap_reject_compress_fail++;
+					}
+				}
+				/*
+				 * Request chaining cleanup:
+				 *
+				 * - Clear the CRYPTO_TFM_REQ_CHAIN bit on acomp_ctx->reqs[0].
+				 * - Reset the acomp_ctx->wait to notify acomp_ctx->reqs[0].
+				 */
+				acomp_reqchain_clear(acomp_ctx->reqs[0], &acomp_ctx->wait);
+				if (unlikely(err))
+					return false;
+				j = 0;
+				nr_to_store = nr_pages;
+				goto store_zpool;
+			}
+
+			++acomp_idx;
+			continue;
+		} else {
+			err = crypto_wait_req(crypto_acomp_compress(acomp_ctx->reqs[0]), &acomp_ctx->wait);
+
+			if (unlikely(err)) {
+				if (err == -ENOSPC)
+					zswap_reject_compress_poor++;
+				else
+					zswap_reject_compress_fail++;
+				return false;
+			}
+			j = i;
+			nr_to_store = 1;
+		}
+
+store_zpool:
+		/*
+		 * All batch pages were successfully compressed.
+		 * Store the pages in zpool.
+		 */
+		acomp_idx = -1;
+		while (nr_to_store--) {
+			unsigned long handle;
+			char *buf;
+
+			++acomp_idx;
+			prefetchw(entries[j]);
+			err = zpool_malloc(zpool, acomp_ctx->reqs[acomp_idx]->dlen, gfp, &handle);
+
+			if (unlikely(err)) {
+				if (err == -ENOSPC)
+					zswap_reject_compress_poor++;
+				else
+					zswap_reject_alloc_fail++;
+
+				return false;
+			}
+
+			buf = zpool_map_handle(zpool, handle, ZPOOL_MM_WO);
+			memcpy(buf, acomp_ctx->buffers[acomp_idx], acomp_ctx->reqs[acomp_idx]->dlen);
+			zpool_unmap_handle(zpool, handle);
+
+			entries[j]->handle = handle;
+			entries[j]->length = acomp_ctx->reqs[acomp_idx]->dlen;
+			++j;
+		}
+	}
+
+	return true;
 }
 
 static void zswap_decompress(struct zswap_entry *entry, struct folio *folio)
@@ -1581,82 +1648,163 @@ resched:
 * main API
 **********************************/
 
-static bool zswap_store_page(struct page *page,
-			     struct obj_cgroup *objcg,
-			     struct zswap_pool *pool)
+/*
+ * Store multiple pages in @folio, starting from the page at index @si up to
+ * and including the page at index @ei.
+ *
+ * The error handling from all failure points is consolidated to the
+ * "store_pages_failed" label, based on the initialization of the zswap entries'
+ * handles to ERR_PTR(-EINVAL) at allocation time, and the fact that the
+ * entry's handle is subsequently modified only upon a successful zpool_malloc()
+ * after the page is compressed.
+ */
+static bool zswap_store_pages(struct folio *folio,
+			      long si,
+			      long ei,
+			      struct obj_cgroup *objcg,
+			      struct zswap_pool *pool,
+			      struct crypto_acomp_ctx *acomp_ctx,
+			      bool batching)
 {
-	swp_entry_t page_swpentry = page_swap_entry(page);
-	struct zswap_entry *entry, *old;
+	struct zswap_entry *entries[ZSWAP_MAX_BATCH_SIZE];
+	int node_id = folio_nid(folio);
+	u8 i, from_i = 0, nr_pages = ei - si + 1;
 
-	/* allocate entry */
-	entry = zswap_entry_cache_alloc(GFP_KERNEL, page_to_nid(page));
-	if (!entry) {
-		zswap_reject_kmemcache_fail++;
-		return false;
+	for (i = 0; i < nr_pages; ++i) {
+		entries[i] = zswap_entry_cache_alloc(GFP_KERNEL, node_id);
+
+		if (unlikely(!entries[i])) {
+			zswap_reject_kmemcache_fail++;
+			nr_pages = i;
+			goto store_pages_failed;
+		}
+
+		entries[i]->handle = (unsigned long)ERR_PTR(-EINVAL);
 	}
 
-	if (!zswap_compress(page, entry, pool))
-		goto compress_failed;
+	if (!zswap_batch_compress(folio, si, nr_pages, entries, pool, acomp_ctx, batching))
+		goto store_pages_failed;
 
-	old = xa_store(swap_zswap_tree(page_swpentry),
-		       swp_offset(page_swpentry),
-		       entry, GFP_KERNEL);
-	if (xa_is_err(old)) {
-		int err = xa_err(old);
+	for (i = 0; i < nr_pages; ++i) {
+		swp_entry_t page_swpentry = page_swap_entry(folio_page(folio, si + i));
+		struct zswap_entry *old, *entry = entries[i];
 
-		WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
-		zswap_reject_alloc_fail++;
-		goto store_failed;
-	}
+		old = xa_store(swap_zswap_tree(page_swpentry),
+			       swp_offset(page_swpentry),
+			       entry, GFP_KERNEL);
+		if (unlikely(xa_is_err(old))) {
+			int err = xa_err(old);
 
-	/*
-	 * We may have had an existing entry that became stale when
-	 * the folio was redirtied and now the new version is being
-	 * swapped out. Get rid of the old.
-	 */
-	if (old)
-		zswap_entry_free(old);
+			WARN_ONCE(err != -ENOMEM, "unexpected xarray error: %d\n", err);
+			zswap_reject_alloc_fail++;
+			from_i = i;
+			goto store_pages_failed;
+		}
 
-	/*
-	 * The entry is successfully compressed and stored in the tree, there is
-	 * no further possibility of failure. Grab refs to the pool and objcg,
-	 * charge zswap memory, and increment zswap_stored_pages.
-	 * The opposite actions will be performed by zswap_entry_free()
-	 * when the entry is removed from the tree.
-	 */
-	zswap_pool_get(pool);
-	if (objcg) {
-		obj_cgroup_get(objcg);
-		obj_cgroup_charge_zswap(objcg, entry->length);
-	}
-	atomic_long_inc(&zswap_stored_pages);
+		/*
+		 * We may have had an existing entry that became stale when
+		 * the folio was redirtied and now the new version is being
+		 * swapped out. Get rid of the old.
+		 */
+		if (unlikely(old))
+			zswap_entry_free(old);
 
-	/*
-	 * We finish initializing the entry while it's already in xarray.
-	 * This is safe because:
-	 *
-	 * 1. Concurrent stores and invalidations are excluded by folio lock.
-	 *
-	 * 2. Writeback is excluded by the entry not being on the LRU yet.
-	 *    The publishing order matters to prevent writeback from seeing
-	 *    an incoherent entry.
-	 */
-	entry->pool = pool;
-	entry->swpentry = page_swpentry;
-	entry->objcg = objcg;
-	entry->referenced = true;
-	if (entry->length) {
-		INIT_LIST_HEAD(&entry->lru);
-		zswap_lru_add(&zswap_list_lru, entry);
+		/*
+		 * The entry is successfully compressed and stored in the tree, there is
+		 * no further possibility of failure. Grab refs to the pool and objcg,
+		 * charge zswap memory, and increment zswap_stored_pages.
+		 * The opposite actions will be performed by zswap_entry_free()
+		 * when the entry is removed from the tree.
+		 */
+		zswap_pool_get(pool);
+		if (objcg) {
+			obj_cgroup_get(objcg);
+			obj_cgroup_charge_zswap(objcg, entry->length);
+		}
+		atomic_long_inc(&zswap_stored_pages);
+
+		/*
+		 * We finish initializing the entry while it's already in xarray.
+		 * This is safe because:
+		 *
+		 * 1. Concurrent stores and invalidations are excluded by folio lock.
+		 *
+		 * 2. Writeback is excluded by the entry not being on the LRU yet.
+		 *    The publishing order matters to prevent writeback from seeing
+		 *    an incoherent entry.
+		 */
+		entry->pool = pool;
+		entry->swpentry = page_swpentry;
+		entry->objcg = objcg;
+		entry->referenced = true;
+		if (likely(entry->length)) {
+			INIT_LIST_HEAD(&entry->lru);
+			zswap_lru_add(&zswap_list_lru, entry);
+		}
 	}
 
 	return true;
 
-store_failed:
-	zpool_free(pool->zpool, entry->handle);
-compress_failed:
-	zswap_entry_cache_free(entry);
+store_pages_failed:
+	for (i = from_i; i < nr_pages; ++i) {
+		if (!IS_ERR_VALUE(entries[i]->handle))
+			zpool_free(pool->zpool, entries[i]->handle);
+
+		zswap_entry_cache_free(entries[i]);
+	}
+
 	return false;
+}
+
+/*
+ * Store all pages in a folio by calling zswap_batch_compress().
+ * If the compressor supports batching, i.e., has multiple acomp requests,
+ * the folio will be compressed in batches of "acomp_ctx->nr_reqs" using
+ * request chaining.
+ * If the compressor has only one acomp request, the folio will be compressed
+ * in batches of ZSWAP_MAX_BATCH_SIZE pages, where each page in the batch is
+ * compressed sequentially.
+ */
+static bool zswap_store_folio(struct folio *folio,
+			      struct obj_cgroup *objcg,
+			      struct zswap_pool *pool)
+{
+	long nr_pages = folio_nr_pages(folio);
+	struct crypto_acomp_ctx *acomp_ctx;
+	unsigned int batch_size;
+	bool ret = true, batching;
+	long si, ei;
+
+	acomp_ctx = acomp_ctx_get_cpu_lock(pool);
+
+	batching = ((acomp_ctx->nr_reqs > 1) && (nr_pages > 1));
+
+	batch_size = batching ? acomp_ctx->nr_reqs : ZSWAP_MAX_BATCH_SIZE;
+
+	if (!batching)
+		acomp_ctx_put_unlock(acomp_ctx);
+
+	/* Store the folio in batches of "batch_size" pages. */
+	for (si = 0, ei = min(si + batch_size - 1, nr_pages - 1);
+	     ((si < nr_pages) && (ei < nr_pages));
+	     si = ei + 1, ei = min(si + batch_size - 1, nr_pages - 1)) {
+
+		if (!batching)
+			acomp_ctx = acomp_ctx_get_cpu_lock(pool);
+
+		if (!zswap_store_pages(folio, si, ei, objcg, pool, acomp_ctx, batching)) {
+			ret = false;
+			break;
+		}
+
+		if (!batching)
+			acomp_ctx_put_unlock(acomp_ctx);
+	}
+
+	if (batching || !ret)
+		acomp_ctx_put_unlock(acomp_ctx);
+
+	return ret;
 }
 
 bool zswap_store(struct folio *folio)
@@ -1667,7 +1815,6 @@ bool zswap_store(struct folio *folio)
 	struct mem_cgroup *memcg = NULL;
 	struct zswap_pool *pool;
 	bool ret = false;
-	long index;
 
 	VM_WARN_ON_ONCE(!folio_test_locked(folio));
 	VM_WARN_ON_ONCE(!folio_test_swapcache(folio));
@@ -1701,12 +1848,8 @@ bool zswap_store(struct folio *folio)
 		mem_cgroup_put(memcg);
 	}
 
-	for (index = 0; index < nr_pages; ++index) {
-		struct page *page = folio_page(folio, index);
-
-		if (!zswap_store_page(page, objcg, pool))
-			goto put_pool;
-	}
+	if (!zswap_store_folio(folio, objcg, pool))
+		goto put_pool;
 
 	if (objcg)
 		count_objcg_events(objcg, ZSWPOUT, nr_pages);
@@ -1733,6 +1876,7 @@ check_old:
 		pgoff_t offset = swp_offset(swp);
 		struct zswap_entry *entry;
 		struct xarray *tree;
+		long index;
 
 		for (index = 0; index < nr_pages; ++index) {
 			tree = swap_zswap_tree(swp_entry(type, offset + index));
