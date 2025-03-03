@@ -7325,9 +7325,6 @@ again:
 			 * We have just replayed everything, and the highest
 			 * objectid of fs roots probably has changed in case
 			 * some inode_item's got replayed.
-			 *
-			 * root->objectid_mutex is not acquired as log replay
-			 * could only happen during mount.
 			 */
 			ret = btrfs_init_root_free_objectid(root);
 			if (ret)

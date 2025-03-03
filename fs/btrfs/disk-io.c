@@ -657,7 +657,7 @@ static void __setup_root(struct btrfs_root *root, struct btrfs_fs_info *fs_info,
 	RB_CLEAR_NODE(&root->rb_node);
 
 	btrfs_set_root_last_trans(root, 0);
-	root->free_objectid = 0;
+	atomic64_set(&root->free_objectid, 0);
 	root->nr_delalloc_inodes = 0;
 	root->nr_ordered_extents = 0;
 	xa_init(&root->inodes);
@@ -676,7 +676,6 @@ static void __setup_root(struct btrfs_root *root, struct btrfs_fs_info *fs_info,
 	spin_lock_init(&root->ordered_extent_lock);
 	spin_lock_init(&root->accounting_lock);
 	spin_lock_init(&root->qgroup_meta_rsv_lock);
-	mutex_init(&root->objectid_mutex);
 	mutex_init(&root->log_mutex);
 	mutex_init(&root->ordered_extent_mutex);
 	mutex_init(&root->delalloc_mutex);
@@ -1132,16 +1131,12 @@ static int btrfs_init_fs_root(struct btrfs_root *root, dev_t anon_dev)
 		}
 	}
 
-	mutex_lock(&root->objectid_mutex);
 	ret = btrfs_init_root_free_objectid(root);
-	if (ret) {
-		mutex_unlock(&root->objectid_mutex);
+	if (ret)
 		return ret;
-	}
 
-	ASSERT(root->free_objectid <= BTRFS_LAST_FREE_OBJECTID);
-
-	mutex_unlock(&root->objectid_mutex);
+	ASSERT((u64)atomic64_read(&root->free_objectid) <=
+		BTRFS_LAST_FREE_OBJECTID);
 
 	return 0;
 }
@@ -2725,8 +2720,9 @@ static int __cold init_tree_roots(struct btrfs_fs_info *fs_info)
 		}
 
 		/*
-		 * No need to hold btrfs_root::objectid_mutex since the fs
-		 * hasn't been fully initialised and we are the only user
+		 * No need to worry about atomic ordering of btrfs_root::free_objectid
+		 * since the fs hasn't been fully initialised and we are the
+		 * only user
 		 */
 		ret = btrfs_init_root_free_objectid(tree_root);
 		if (ret < 0) {
@@ -2734,7 +2730,8 @@ static int __cold init_tree_roots(struct btrfs_fs_info *fs_info)
 			continue;
 		}
 
-		ASSERT(tree_root->free_objectid <= BTRFS_LAST_FREE_OBJECTID);
+		ASSERT((u64)atomic64_read(&tree_root->free_objectid) <=
+			BTRFS_LAST_FREE_OBJECTID);
 
 		ret = btrfs_read_roots(fs_info);
 		if (ret < 0) {
@@ -4924,10 +4921,11 @@ int btrfs_init_root_free_objectid(struct btrfs_root *root)
 		slot = path->slots[0] - 1;
 		l = path->nodes[0];
 		btrfs_item_key_to_cpu(l, &found_key, slot);
-		root->free_objectid = max_t(u64, found_key.objectid + 1,
-					    BTRFS_FIRST_FREE_OBJECTID);
+		atomic64_set(&root->free_objectid,
+			     max_t(u64, found_key.objectid + 1,
+				   BTRFS_FIRST_FREE_OBJECTID));
 	} else {
-		root->free_objectid = BTRFS_FIRST_FREE_OBJECTID;
+		atomic64_set(&root->free_objectid, BTRFS_FIRST_FREE_OBJECTID);
 	}
 
 	return 0;
@@ -4935,20 +4933,15 @@ int btrfs_init_root_free_objectid(struct btrfs_root *root)
 
 int btrfs_get_free_objectid(struct btrfs_root *root, u64 *objectid)
 {
-	int ret;
-	mutex_lock(&root->objectid_mutex);
+	u64 val = atomic64_inc_return(&root->free_objectid) - 1;
 
-	if (unlikely(root->free_objectid >= BTRFS_LAST_FREE_OBJECTID)) {
+	if (unlikely(val >= BTRFS_LAST_FREE_OBJECTID)) {
 		btrfs_warn(root->fs_info,
 			   "the objectid of root %llu reaches its highest value",
 			   btrfs_root_id(root));
-		ret = -ENOSPC;
-		goto out;
+		return -ENOSPC;
 	}
 
-	*objectid = root->free_objectid++;
-	ret = 0;
-out:
-	mutex_unlock(&root->objectid_mutex);
-	return ret;
+	*objectid = val;
+	return 0;
 }

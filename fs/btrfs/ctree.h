@@ -179,8 +179,6 @@ struct btrfs_root {
 	struct btrfs_fs_info *fs_info;
 	struct extent_io_tree dirty_log_pages;
 
-	struct mutex objectid_mutex;
-
 	spinlock_t accounting_lock;
 	struct btrfs_block_rsv *block_rsv;
 
@@ -214,7 +212,7 @@ struct btrfs_root {
 
 	u64 last_trans;
 
-	u64 free_objectid;
+	atomic64_t free_objectid;
 
 	struct btrfs_key defrag_progress;
 	struct btrfs_key defrag_max;
