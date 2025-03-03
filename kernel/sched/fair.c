@@ -7198,11 +7198,6 @@ static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	return true;
 }
 
-static inline unsigned int cfs_h_nr_delayed(struct rq *rq)
-{
-	return (rq->cfs.h_nr_queued - rq->cfs.h_nr_runnable);
-}
-
 #ifdef CONFIG_SMP
 
 /* Working cpumask for: sched_balance_rq(), sched_balance_newidle(). */

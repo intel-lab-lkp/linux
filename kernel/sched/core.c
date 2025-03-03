@@ -3961,7 +3961,7 @@ static inline bool ttwu_queue_cond(struct task_struct *p, int cpu)
 	 * p->on_cpu can be whatever, we've done the dequeue, so
 	 * the wakee has been accounted out of ->nr_running.
 	 */
-	if (!cpu_rq(cpu)->nr_running)
+	if (!(cpu_rq(cpu)->nr_running - cfs_h_nr_delayed(cpu_rq(cpu))))
 		return true;
 
 	return false;
