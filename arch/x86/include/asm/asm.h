@@ -232,7 +232,11 @@ register unsigned long current_stack_pointer asm(_ASM_SP);
  * gets set up by the containing function.  If you forget to do this, objtool
  * may print a "call without frame pointer save/setup" warning.
  */
+#ifdef CONFIG_UNWINDER_FRAME_POINTER
 #define ASM_CALL_CONSTRAINT "r" (__builtin_frame_address(0))
+#else
+#define ASM_CALL_CONSTRAINT
+#endif
 
 #endif /* __ASSEMBLY__ */
 
