@@ -1994,14 +1994,16 @@ static int alps_poll(struct psmouse *psmouse)
 	unsigned char buf[sizeof(psmouse->packet)];
 	bool poll_failed;
 
-	if (priv->flags & ALPS_PASS)
-		alps_passthrough_mode_v2(psmouse, true);
+	if ((priv->flags & ALPS_PASS) &&
+		alps_passthrough_mode_v2(psmouse, true))
+		return -1;
 
 	poll_failed = ps2_command(&psmouse->ps2dev, buf,
 				  PSMOUSE_CMD_POLL | (psmouse->pktsize << 8)) < 0;
 
-	if (priv->flags & ALPS_PASS)
-		alps_passthrough_mode_v2(psmouse, false);
+	if ((priv->flags & ALPS_PASS) &&
+		alps_passthrough_mode_v2(psmouse, false))
+		return -1;
 
 	if (poll_failed || (buf[0] & priv->mask0) != priv->byte0)
 		return -1;
