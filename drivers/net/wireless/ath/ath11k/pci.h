@@ -65,9 +65,9 @@ struct ath11k_pci {
 	struct mhi_controller *mhi_ctrl;
 	const struct ath11k_msi_config *msi_config;
 	enum mhi_callback mhi_pre_cb;
-	u32 register_window;
+	u32 window1_page;
 
-	/* protects register_window above */
+	/* protects window1_page above */
 	spinlock_t window_lock;
 
 	/* enum ath11k_pci_flags */

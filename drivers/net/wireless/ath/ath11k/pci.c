@@ -56,74 +56,77 @@ static void ath11k_pci_bus_release(struct ath11k_base *ab)
 	mhi_device_put(ab_pci->mhi_ctrl->mhi_dev);
 }
 
-static u32 ath11k_pci_get_window_start(struct ath11k_base *ab, u32 offset)
+static u32 ath11k_pci_get_window(struct ath11k_base *ab, u32 regaddr)
 {
-	if (!ab->hw_params.static_window_map)
-		return ATH11K_PCI_WINDOW_START;
+	u32 page = ATH11K_PCI_REGADDR_PAGE(regaddr);
 
-	if ((offset ^ HAL_SEQ_WCSS_UMAC_OFFSET) < ATH11K_PCI_WINDOW_RANGE_MASK)
-		/* if offset lies within DP register range, use 3rd window */
-		return 3 * ATH11K_PCI_WINDOW_START;
-	else if ((offset ^ HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab)) <
-		 ATH11K_PCI_WINDOW_RANGE_MASK)
-		 /* if offset lies within CE register range, use 2nd window */
-		return 2 * ATH11K_PCI_WINDOW_START;
-	else
-		return ATH11K_PCI_WINDOW_START;
+	if (!ab->hw_params.static_window_map)
+		return 1;
+
+	/* If offset lies within DP register range, use 3rd window */
+	if (page == ATH11K_PCI_REGADDR_PAGE(HAL_SEQ_WCSS_UMAC_OFFSET))
+		return 3;
+	/* If offset lies within CE register range, use 2nd window */
+	else if (page == ATH11K_PCI_REGADDR_PAGE(HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab)))
+		return 2;
+	else {
+		WARN_ON(1); /* In current code, we don't access any other page. */
+		return 1;
+	}
 }
 
-static inline void ath11k_pci_select_window(struct ath11k_pci *ab_pci, u32 offset)
+static inline void ath11k_pci_window1_select(struct ath11k_pci *ab_pci, u32 regaddr)
 {
 	struct ath11k_base *ab = ab_pci->ab;
 
-	u32 window = FIELD_GET(ATH11K_PCI_WINDOW_VALUE_MASK, offset);
+	u32 page = ATH11K_PCI_REGADDR_PAGE(regaddr);
 
 	lockdep_assert_held(&ab_pci->window_lock);
 
-	if (window != ab_pci->register_window) {
-		iowrite32(ATH11K_PCI_WINDOW_ENABLE_BIT | window,
-			  ab->mem + ATH11K_PCI_WINDOW_REG_ADDRESS);
-		ioread32(ab->mem + ATH11K_PCI_WINDOW_REG_ADDRESS);
-		ab_pci->register_window = window;
+	if (page != ab_pci->window1_page) {
+		iowrite32((ATH11K_PCI_WINDOW_CONFIG_ENABLE |
+			   ATH11K_PCI_WINDOW_MAP(1, page)),
+			  (ab->mem + ATH11K_PCI_WINDOW_CONFIG));
+		ioread32(ab->mem + ATH11K_PCI_WINDOW_CONFIG);
+		ab_pci->window1_page = page;
 	}
 }
 
 static void
-ath11k_pci_window_write32(struct ath11k_base *ab, u32 offset, u32 value)
+ath11k_pci_window_write32(struct ath11k_base *ab, u32 regaddr, u32 value)
 {
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
-	u32 window_start;
+	u32 window, offset;
 
-	window_start = ath11k_pci_get_window_start(ab, offset);
+	window = ath11k_pci_get_window(ab, regaddr);
+	offset = ATH11K_PCI_REGADDR_OFFSET(regaddr);
 
-	if (window_start == ATH11K_PCI_WINDOW_START) {
+	if (window == 1) {
 		spin_lock_bh(&ab_pci->window_lock);
-		ath11k_pci_select_window(ab_pci, offset);
-		iowrite32(value, ab->mem + window_start +
-			  (offset & ATH11K_PCI_WINDOW_RANGE_MASK));
+		ath11k_pci_window1_select(ab_pci, regaddr);
+		iowrite32(value, ATH11K_PCI_BARADDR(ab, 1, offset));
 		spin_unlock_bh(&ab_pci->window_lock);
 	} else {
-		iowrite32(value, ab->mem + window_start +
-			  (offset & ATH11K_PCI_WINDOW_RANGE_MASK));
+		iowrite32(value, ATH11K_PCI_BARADDR(ab, window, offset));
 	}
 }
 
-static u32 ath11k_pci_window_read32(struct ath11k_base *ab, u32 offset)
+static u32 ath11k_pci_window_read32(struct ath11k_base *ab, u32 regaddr)
 {
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
-	u32 window_start, val;
+	u32 window, offset;
+	u32 val;
 
-	window_start = ath11k_pci_get_window_start(ab, offset);
+	window = ath11k_pci_get_window(ab, regaddr);
+	offset = ATH11K_PCI_REGADDR_OFFSET(regaddr);
 
-	if (window_start == ATH11K_PCI_WINDOW_START) {
+	if (window == 1) {
 		spin_lock_bh(&ab_pci->window_lock);
-		ath11k_pci_select_window(ab_pci, offset);
-		val = ioread32(ab->mem + window_start +
-			       (offset & ATH11K_PCI_WINDOW_RANGE_MASK));
+		ath11k_pci_window1_select(ab_pci, offset);
+		val = ioread32(ATH11K_PCI_BARADDR(ab, 1, offset));
 		spin_unlock_bh(&ab_pci->window_lock);
 	} else {
-		val = ioread32(ab->mem + window_start +
-			       (offset & ATH11K_PCI_WINDOW_RANGE_MASK));
+		val = ioread32(ATH11K_PCI_BARADDR(ab, window, offset));
 	}
 
 	return val;
@@ -165,16 +168,16 @@ static const struct ath11k_msi_config msi_config_one_msi = {
 
 static inline void ath11k_pci_select_static_window(struct ath11k_pci *ab_pci)
 {
-	u32 umac_window;
-	u32 ce_window;
-	u32 window;
+	u32 umac_page;
+	u32 ce_page;
 
-	umac_window = FIELD_GET(ATH11K_PCI_WINDOW_VALUE_MASK, HAL_SEQ_WCSS_UMAC_OFFSET);
-	ce_window = FIELD_GET(ATH11K_PCI_WINDOW_VALUE_MASK, HAL_CE_WFSS_CE_REG_BASE);
-	window = (umac_window << 12) | (ce_window << 6);
+	umac_page = ATH11K_PCI_REGADDR_PAGE(HAL_SEQ_WCSS_UMAC_OFFSET);
+	ce_page = ATH11K_PCI_REGADDR_PAGE(HAL_CE_WFSS_CE_REG_BASE);
 
-	iowrite32(ATH11K_PCI_WINDOW_ENABLE_BIT | window,
-		  ab_pci->ab->mem + ATH11K_PCI_WINDOW_REG_ADDRESS);
+	iowrite32((ATH11K_PCI_WINDOW_CONFIG_ENABLE |
+		   ATH11K_PCI_WINDOW_MAP(2, ce_page) |
+		   ATH11K_PCI_WINDOW_MAP(3, umac_page)),
+		  (ab_pci->ab->mem + ATH11K_PCI_WINDOW_CONFIG));
 }
 
 static void ath11k_pci_soc_global_reset(struct ath11k_base *ab)
@@ -798,7 +801,7 @@ static int ath11k_pci_power_up(struct ath11k_base *ab)
 	struct ath11k_pci *ab_pci = ath11k_pci_priv(ab);
 	int ret;
 
-	ab_pci->register_window = 0;
+	ab_pci->window1_page = 0;
 	clear_bit(ATH11K_FLAG_DEVICE_INIT_DONE, &ab->dev_flags);
 	ath11k_pci_sw_reset(ab_pci->ab, true);
 

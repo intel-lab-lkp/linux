@@ -148,43 +148,45 @@ ath11k_ahb_get_msi_irq_wcn6750(struct ath11k_base *ab, unsigned int vector)
 }
 
 static inline u32
-ath11k_ahb_get_window_start_wcn6750(struct ath11k_base *ab, u32 offset)
+ath11k_ahb_get_window_wcn6750(struct ath11k_base *ab, u32 regaddr)
 {
-	u32 window_start = 0;
+	u32 page = ATH11K_PCI_REGADDR_PAGE(regaddr);
+	u32 window = 0;
 
 	/* If offset lies within DP register range, use 1st window */
-	if ((offset ^ HAL_SEQ_WCSS_UMAC_OFFSET) < ATH11K_PCI_WINDOW_RANGE_MASK)
-		window_start = ATH11K_PCI_WINDOW_START;
+	if (page == ATH11K_PCI_REGADDR_PAGE(HAL_SEQ_WCSS_UMAC_OFFSET))
+		window = 1;
 	/* If offset lies within CE register range, use 2nd window */
-	else if ((offset ^ HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab)) <
-		 ATH11K_PCI_WINDOW_RANGE_MASK)
-		window_start = 2 * ATH11K_PCI_WINDOW_START;
+	else if (page == ATH11K_PCI_REGADDR_PAGE(HAL_SEQ_WCSS_UMAC_CE0_SRC_REG(ab)))
+		window = 2;
+	else
+		WARN_ON(1);
 
-	return window_start;
+	return window;
 }
 
 static void
-ath11k_ahb_window_write32_wcn6750(struct ath11k_base *ab, u32 offset, u32 value)
+ath11k_ahb_window_write32_wcn6750(struct ath11k_base *ab, u32 regaddr, u32 value)
 {
-	u32 window_start;
+	u32 window, offset;
 
 	/* WCN6750 uses static window based register access*/
-	window_start = ath11k_ahb_get_window_start_wcn6750(ab, offset);
+	window = ath11k_ahb_get_window_wcn6750(ab, regaddr);
+	offset = ATH11K_PCI_REGADDR_OFFSET(regaddr);
 
-	iowrite32(value, ab->mem + window_start +
-		  (offset & ATH11K_PCI_WINDOW_RANGE_MASK));
+	iowrite32(value, ATH11K_PCI_BARADDR(ab, window, offset));
 }
 
-static u32 ath11k_ahb_window_read32_wcn6750(struct ath11k_base *ab, u32 offset)
+static u32 ath11k_ahb_window_read32_wcn6750(struct ath11k_base *ab, u32 regaddr)
 {
-	u32 window_start;
+	u32 window, offset;
 	u32 val;
 
 	/* WCN6750 uses static window based register access */
-	window_start = ath11k_ahb_get_window_start_wcn6750(ab, offset);
+	window = ath11k_ahb_get_window_wcn6750(ab, regaddr);
+	offset = ATH11K_PCI_REGADDR_OFFSET(regaddr);
 
-	val = ioread32(ab->mem + window_start +
-		       (offset & ATH11K_PCI_WINDOW_RANGE_MASK));
+	val = ioread32(ATH11K_PCI_BARADDR(ab, window, offset));
 	return val;
 }
 

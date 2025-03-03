@@ -164,7 +164,7 @@ EXPORT_SYMBOL(ath11k_pcic_init_msi_config);
 
 static void __ath11k_pcic_write32(struct ath11k_base *ab, u32 offset, u32 value)
 {
-	if (offset < ATH11K_PCI_WINDOW_START)
+	if (ATH11K_PCI_REGADDR_PAGE(offset) == 0)
 		iowrite32(value, ab->mem  + offset);
 	else
 		ab->pci.ops->window_write32(ab, offset, value);
@@ -194,7 +194,7 @@ static u32 __ath11k_pcic_read32(struct ath11k_base *ab, u32 offset)
 {
 	u32 val;
 
-	if (offset < ATH11K_PCI_WINDOW_START)
+	if (ATH11K_PCI_REGADDR_PAGE(offset) == 0)
 		val = ioread32(ab->mem + offset);
 	else
 		val = ab->pci.ops->window_read32(ab, offset);
