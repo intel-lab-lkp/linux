@@ -854,6 +854,10 @@ static int dp83822_of_init(struct phy_device *phydev)
 
 static void dp83826_of_init(struct phy_device *phydev)
 {
+	struct dp83822_private *dp83822 = phydev->priv;
+
+	dp83822->cfg_dac_minus = DP83826_CFG_DAC_MINUS_DEFAULT;
+	dp83822->cfg_dac_plus = DP83826_CFG_DAC_PLUS_DEFAULT;
 }
 #endif /* CONFIG_OF_MDIO */
 
