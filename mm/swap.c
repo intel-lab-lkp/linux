@@ -38,6 +38,10 @@
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
 
+#ifdef CONFIG_KVM_GMEM_SHARED_MEM
+#include <linux/kvm_host.h>
+#endif
+
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -100,6 +104,11 @@ static void free_typed_folio(struct folio *folio)
 #ifdef CONFIG_HUGETLBFS
 	case PGTY_hugetlb:
 		free_huge_folio(folio);
+		return;
+#endif
+#ifdef CONFIG_KVM_GMEM_SHARED_MEM
+	case PGTY_guestmem:
+		kvm_gmem_handle_folio_put(folio);
 		return;
 #endif
 	default:
