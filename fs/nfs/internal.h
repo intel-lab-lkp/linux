@@ -565,7 +565,7 @@ int  nfs_statfs(struct dentry *, struct kstatfs *);
 int  nfs_show_options(struct seq_file *, struct dentry *);
 int  nfs_show_devname(struct seq_file *, struct dentry *);
 int  nfs_show_path(struct seq_file *, struct dentry *);
-int  nfs_show_stats(struct seq_file *, struct dentry *);
+int  nfs_show_stats(struct seq_file *, struct vfsmount *);
 int  nfs_reconfigure(struct fs_context *);
 
 /* write.c */

@@ -836,7 +836,7 @@ static int cifs_freeze(struct super_block *sb)
 }
 
 #ifdef CONFIG_CIFS_STATS2
-static int cifs_show_stats(struct seq_file *s, struct dentry *root)
+static int cifs_show_stats(struct seq_file *s, struct vfsmount *mnt)
 {
 	/* BB FIXME */
 	return 0;

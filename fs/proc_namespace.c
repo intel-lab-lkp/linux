@@ -227,7 +227,7 @@ static int show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
 	/* optional statistics */
 	if (sb->s_op->show_stats) {
 		seq_putc(m, ' ');
-		err = sb->s_op->show_stats(m, mnt_path.dentry);
+		err = sb->s_op->show_stats(m, mnt);
 	}
 
 	seq_putc(m, '\n');
