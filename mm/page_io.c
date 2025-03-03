@@ -511,7 +511,21 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 	mempool_free(sio, sio_pool);
 }
 
-static bool swap_read_folio_zeromap(struct folio *folio)
+/*
+ * Return: one of the following error codes:
+ *
+ *  0: the folio is zero-filled (and was populated as such and marked
+ *  up-to-date and unlocked).
+ *
+ *  -ENOENT: the folio was not zero-filled.
+ *
+ *  -EINVAL: some of the subpages in the folio are zero-filled, but not all of
+ *  them. This is an error because we don't currently support a large folio
+ *  that is partially in the zeromap. The folio is unlocked, but NOT marked
+ *  up-to-date, so that an IO error is emitted (e.g. do_swap_page() will
+ *  sigbus).
+ */
+static int swap_read_folio_zeromap(struct folio *folio)
 {
 	int nr_pages = folio_nr_pages(folio);
 	struct obj_cgroup *objcg;
@@ -523,11 +537,13 @@ static bool swap_read_folio_zeromap(struct folio *folio)
 	 * that an IO error is emitted (e.g. do_swap_page() will sigbus).
 	 */
 	if (WARN_ON_ONCE(swap_zeromap_batch(folio->swap, nr_pages,
-			&is_zeromap) != nr_pages))
-		return true;
+			&is_zeromap) != nr_pages)) {
+		folio_unlock(folio);
+		return -EINVAL;
+	}
 
 	if (!is_zeromap)
-		return false;
+		return -ENOENT;
 
 	objcg = get_obj_cgroup_from_folio(folio);
 	count_vm_events(SWPIN_ZERO, nr_pages);
@@ -538,7 +554,8 @@ static bool swap_read_folio_zeromap(struct folio *folio)
 
 	folio_zero_range(folio, 0, folio_size(folio));
 	folio_mark_uptodate(folio);
-	return true;
+	folio_unlock(folio);
+	return 0;
 }
 
 static void swap_read_folio_fs(struct folio *folio, struct swap_iocb **plug)
@@ -635,13 +652,11 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 	}
 	delayacct_swapin_start();
 
-	if (swap_read_folio_zeromap(folio)) {
-		folio_unlock(folio);
+	if (swap_read_folio_zeromap(folio) != -ENOENT)
 		goto finish;
-	} else if (zswap_load(folio)) {
-		folio_unlock(folio);
+
+	if (zswap_load(folio) != -ENOENT)
 		goto finish;
-	}
 
 	/* We have to read from slower devices. Increase zswap protection. */
 	zswap_folio_swapin(folio);
