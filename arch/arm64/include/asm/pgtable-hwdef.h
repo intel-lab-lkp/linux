@@ -99,6 +99,7 @@
 #define PGD_TYPE_TABLE		(_AT(pgdval_t, 3) << 0)
 #define PGD_TABLE_BIT		(_AT(pgdval_t, 1) << 1)
 #define PGD_TYPE_MASK		(_AT(pgdval_t, 3) << 0)
+#define PGD_TYPE_SECT		(_AT(pgdval_t, 1) << 0)
 #define PGD_TABLE_AF		(_AT(pgdval_t, 1) << 10)	/* Ignored if no FEAT_HAFT */
 #define PGD_TABLE_PXN		(_AT(pgdval_t, 1) << 59)
 #define PGD_TABLE_UXN		(_AT(pgdval_t, 1) << 60)
