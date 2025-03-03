@@ -49,8 +49,7 @@ static struct irq_chip dw_pcie_msi_irq_chip = {
 
 static struct msi_domain_info dw_pcie_msi_domain_info = {
 	.flags	= MSI_FLAG_USE_DEF_DOM_OPS | MSI_FLAG_USE_DEF_CHIP_OPS |
-		  MSI_FLAG_NO_AFFINITY | MSI_FLAG_PCI_MSIX |
-		  MSI_FLAG_MULTI_PCI_MSI,
+		  MSI_FLAG_PCI_MSIX | MSI_FLAG_MULTI_PCI_MSI,
 	.chip	= &dw_pcie_msi_irq_chip,
 };
 
@@ -117,6 +116,125 @@ static void dw_pci_setup_msi_msg(struct irq_data *d, struct msi_msg *msg)
 		(int)d->hwirq, msg->address_hi, msg->address_lo);
 }
 
+/*
+ * The algo here honor if there is any intersection of mask of
+ * the existing MSI vectors and the requesting MSI vector. So we
+ * could handle both narrow (1 bit set mask) and wide (0xffff...)
+ * cases, return -EINVAL and reject the request if the result of
+ * cpumask is empty, otherwise return 0 and have the calculated
+ * result on the mask_to_check to pass down to the irq_chip.
+ */
+static int dw_pci_check_mask_compatibility(struct dw_pcie_rp *pp,
+					   unsigned long ctrl,
+					   unsigned long hwirq_to_check,
+					   struct cpumask *mask_to_check)
+{
+	unsigned long end, hwirq;
+	const struct cpumask *mask;
+	unsigned int virq;
+
+	hwirq = ctrl * MAX_MSI_IRQS_PER_CTRL;
+	end = hwirq + MAX_MSI_IRQS_PER_CTRL;
+	for_each_set_bit_from(hwirq, pp->msi_irq_in_use, end) {
+		if (hwirq == hwirq_to_check)
+			continue;
+		virq = irq_find_mapping(pp->irq_domain, hwirq);
+		if (!virq)
+			continue;
+		mask = irq_get_affinity_mask(virq);
+		if (!cpumask_and(mask_to_check, mask, mask_to_check))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void dw_pci_update_effective_affinity(struct dw_pcie_rp *pp,
+					     unsigned long ctrl,
+					     const struct cpumask *effective_mask,
+					     unsigned long hwirq_to_check)
+{
+	struct irq_desc *desc_downstream;
+	unsigned int virq_downstream;
+	unsigned long end, hwirq;
+
+	/*
+	 * Update all the irq_data's effective mask
+	 * bind to this MSI controller, so the correct
+	 * affinity would reflect on
+	 * /proc/irq/XXX/effective_affinity
+	 */
+	hwirq = ctrl * MAX_MSI_IRQS_PER_CTRL;
+	end = hwirq + MAX_MSI_IRQS_PER_CTRL;
+	for_each_set_bit_from(hwirq, pp->msi_irq_in_use, end) {
+		virq_downstream = irq_find_mapping(pp->irq_domain, hwirq);
+		if (!virq_downstream)
+			continue;
+		desc_downstream = irq_to_desc(virq_downstream);
+		irq_data_update_effective_affinity(&desc_downstream->irq_data,
+						   effective_mask);
+	}
+}
+
+static int dw_pci_msi_set_affinity(struct irq_data *d,
+				   const struct cpumask *mask, bool force)
+{
+	struct dw_pcie_rp *pp = irq_data_get_irq_chip_data(d);
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	int ret;
+	int virq_parent;
+	unsigned long hwirq = d->hwirq;
+	unsigned long flags, ctrl;
+	struct irq_desc *desc_parent;
+	const struct cpumask *effective_mask;
+	cpumask_var_t mask_result;
+
+	ctrl = hwirq / MAX_MSI_IRQS_PER_CTRL;
+	if (!alloc_cpumask_var(&mask_result, GFP_ATOMIC))
+		return -ENOMEM;
+
+	/*
+	 * Loop through all possible MSI vector to check if the
+	 * requested one is compatible with all of them
+	 */
+	raw_spin_lock_irqsave(&pp->lock, flags);
+	cpumask_copy(mask_result, mask);
+	ret = dw_pci_check_mask_compatibility(pp, ctrl, hwirq, mask_result);
+	if (ret) {
+		dev_dbg(pci->dev, "Incompatible mask, request %*pbl, irq num %u\n",
+			cpumask_pr_args(mask), d->irq);
+		goto unlock;
+	}
+
+	dev_dbg(pci->dev, "Final mask, request %*pbl, irq num %u\n",
+		cpumask_pr_args(mask_result), d->irq);
+
+	virq_parent = pp->msi_irq[ctrl];
+	desc_parent = irq_to_desc(virq_parent);
+	ret = desc_parent->irq_data.chip->irq_set_affinity(&desc_parent->irq_data,
+							   mask_result, force);
+
+	if (ret < 0)
+		goto unlock;
+
+	switch (ret) {
+	case IRQ_SET_MASK_OK:
+	case IRQ_SET_MASK_OK_DONE:
+		cpumask_copy(desc_parent->irq_common_data.affinity, mask);
+		fallthrough;
+	case IRQ_SET_MASK_OK_NOCOPY:
+		break;
+	}
+
+	effective_mask = irq_data_get_effective_affinity_mask(&desc_parent->irq_data);
+	dw_pci_update_effective_affinity(pp, ctrl, effective_mask, hwirq);
+
+unlock:
+	free_cpumask_var(mask_result);
+	raw_spin_unlock_irqrestore(&pp->lock, flags);
+	return ret < 0 ? ret : IRQ_SET_MASK_OK_NOCOPY;
+}
+
 static void dw_pci_bottom_mask(struct irq_data *d)
 {
 	struct dw_pcie_rp *pp = irq_data_get_irq_chip_data(d);
@@ -172,9 +290,13 @@ static struct irq_chip dw_pci_msi_bottom_irq_chip = {
 	.name = "DWPCI-MSI",
 	.irq_ack = dw_pci_bottom_ack,
 	.irq_compose_msi_msg = dw_pci_setup_msi_msg,
+	.irq_set_affinity = dw_pci_msi_set_affinity,
 	.irq_mask = dw_pci_bottom_mask,
 	.irq_unmask = dw_pci_bottom_unmask,
 };
+
+static struct lock_class_key dw_pci_irq_lock_class;
+static struct lock_class_key dw_pci_irq_request_class;
 
 static int dw_pcie_irq_domain_alloc(struct irq_domain *domain,
 				    unsigned int virq, unsigned int nr_irqs,
@@ -195,11 +317,14 @@ static int dw_pcie_irq_domain_alloc(struct irq_domain *domain,
 	if (bit < 0)
 		return -ENOSPC;
 
-	for (i = 0; i < nr_irqs; i++)
+	for (i = 0; i < nr_irqs; i++) {
+		irq_set_lockdep_class(virq + i, &dw_pci_irq_lock_class,
+				      &dw_pci_irq_request_class);
 		irq_domain_set_info(domain, virq + i, bit + i,
 				    pp->msi_irq_chip,
 				    pp, handle_edge_irq,
 				    NULL, NULL);
+	}
 
 	return 0;
 }
