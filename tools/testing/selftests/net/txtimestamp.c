@@ -86,6 +86,7 @@ static struct timespec ts_usr;
 
 static int saved_tskey = -1;
 static int saved_tskey_type = -1;
+static int saved_num_pkts;
 
 struct timing_event {
 	int64_t min;
@@ -131,9 +132,12 @@ static void add_timing_event(struct timing_event *te,
 	te->total += ts_delta;
 }
 
-static void validate_key(int tskey, int tstype)
+static bool validate_key(int tskey, int tstype)
 {
 	int stepsize;
+
+	if (tskey <= saved_tskey)
+		return false;
 
 	/* compare key for each subsequent request
 	 * must only test for one type, the first one requested
@@ -141,7 +145,7 @@ static void validate_key(int tskey, int tstype)
 	if (saved_tskey == -1 || cfg_use_cmsg_opt_id)
 		saved_tskey_type = tstype;
 	else if (saved_tskey_type != tstype)
-		return;
+		return true;
 
 	stepsize = cfg_proto == SOCK_STREAM ? cfg_payload_len : 1;
 	stepsize = cfg_use_cmsg_opt_id ? 0 : stepsize;
@@ -152,6 +156,7 @@ static void validate_key(int tskey, int tstype)
 	}
 
 	saved_tskey = tskey;
+	return true;
 }
 
 static void validate_timestamp(struct timespec *cur, int min_delay)
@@ -219,7 +224,8 @@ static void print_timestamp(struct scm_timestamping *tss, int tstype,
 {
 	const char *tsname;
 
-	validate_key(tskey, tstype);
+	if (!validate_key(tskey, tstype))
+		return;
 
 	switch (tstype) {
 	case SCM_TSTAMP_SCHED:
@@ -242,6 +248,7 @@ static void print_timestamp(struct scm_timestamping *tss, int tstype,
 		tstype);
 	}
 	__print_timestamp(tsname, &tss->ts[0], tskey, payload_len);
+	saved_num_pkts++;
 }
 
 static void print_timing_event(char *name, struct timing_event *te)
@@ -582,6 +589,7 @@ static void do_test(int family, unsigned int report_opt)
 		       (char *) &sock_opt, sizeof(sock_opt)))
 		error(1, 0, "setsockopt timestamping");
 
+	saved_num_pkts = 0;
 	for (i = 0; i < cfg_num_pkts; i++) {
 		memset(&msg, 0, sizeof(msg));
 		memset(buf, 'a' + i, total_len);
@@ -671,6 +679,12 @@ static void do_test(int family, unsigned int report_opt)
 		}
 
 		while (!recv_errmsg(fd)) {}
+	}
+
+	if (cfg_num_pkts != saved_num_pkts) {
+		fprintf(stderr, "ERROR: num_pkts received %d, expected %d\n",
+				saved_num_pkts, cfg_num_pkts);
+		test_failed = true;
 	}
 
 	print_timing_event("USR-ENQ", &usr_enq);
