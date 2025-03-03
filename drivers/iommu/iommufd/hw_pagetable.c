@@ -413,6 +413,7 @@ int iommufd_hwpt_alloc(struct iommufd_ucmd *ucmd)
 		iommufd_put_object(ucmd->ictx, &fault->obj);
 	}
 	hwpt->domain->iommufd_hwpt = hwpt;
+	hwpt->domain->cookie_type = IOMMU_COOKIE_IOMMUFD;
 
 	cmd->out_hwpt_id = hwpt->obj.id;
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
