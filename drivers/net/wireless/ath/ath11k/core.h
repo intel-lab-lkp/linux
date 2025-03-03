@@ -159,6 +159,9 @@ enum ath11k_firmware_mode {
 	/* factory tests etc */
 	ATH11K_FIRMWARE_MODE_FTM,
 
+	/* power off */
+	ATH11K_FIRMWARE_MODE_OFF = 4,
+
 	/* Cold boot calibration */
 	ATH11K_FIRMWARE_MODE_COLD_BOOT = 7,
 };
