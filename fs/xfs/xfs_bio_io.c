@@ -22,12 +22,15 @@ xfs_rw_bdev(
 	unsigned int		left = count;
 	int			error;
 	struct bio		*bio;
+	blk_opf_t		opf = op | REQ_META | REQ_SYNC;
 
 	if (is_vmalloc && op == REQ_OP_WRITE)
 		flush_kernel_vmap_range(data, count);
 
-	bio = bio_alloc(bdev, bio_max_vecs(left), op | REQ_META | REQ_SYNC,
-			GFP_KERNEL);
+	if (op == REQ_OP_WRITE)
+		opf |= REQ_IDLE;
+
+	bio = bio_alloc(bdev, bio_max_vecs(left), opf, GFP_KERNEL);
 	bio->bi_iter.bi_sector = sector;
 
 	do {
