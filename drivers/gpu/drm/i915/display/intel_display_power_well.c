@@ -17,6 +17,7 @@
 #include "intel_dkl_phy.h"
 #include "intel_dkl_phy_regs.h"
 #include "intel_dmc.h"
+#include "intel_dmc_regs.h"
 #include "intel_dmc_wl.h"
 #include "intel_dp_aux_regs.h"
 #include "intel_dpio_phy.h"
@@ -729,6 +730,22 @@ void gen9_sanitize_dc_state(struct intel_display *display)
 	power_domains->dc_state = val;
 }
 
+void update_dc6_count(struct intel_display *display, bool dc6_en_dis)
+{
+	u32 dc5_cur_count;
+
+	if (DISPLAY_VER(display) < 14)
+		return;
+
+	dc5_cur_count = intel_de_read(display, DG1_DMC_DEBUG_DC5_COUNT);
+
+	if (dc6_en_dis) {
+		display->power.dc6_count += dc5_cur_count - display->power.dc5_start_count;
+		display->power.dc5_start_count = dc5_cur_count;
+	} else
+		display->power.dc5_start_count = dc5_cur_count;
+}
+
 /**
  * gen9_set_dc_state - set target display C power state
  * @display: display instance
@@ -757,6 +774,7 @@ void gen9_set_dc_state(struct intel_display *display, u32 state)
 	struct i915_power_domains *power_domains = &display->power.domains;
 	u32 val;
 	u32 mask;
+	bool dc6_was_enabled, enable_dc6;
 
 	if (!HAS_DISPLAY(display))
 		return;
@@ -775,10 +793,18 @@ void gen9_set_dc_state(struct intel_display *display, u32 state)
 		drm_err(display->drm, "DC state mismatch (0x%x -> 0x%x)\n",
 			power_domains->dc_state, val & mask);
 
+	enable_dc6 = state & DC_STATE_EN_UPTO_DC6;
+	dc6_was_enabled = val & DC_STATE_EN_UPTO_DC6;
+	if (!dc6_was_enabled && enable_dc6)
+		update_dc6_count(display, false);
+
 	val &= ~mask;
 	val |= state;
 
 	gen9_write_dc_state(display, val);
+
+	if (!enable_dc6)
+		update_dc6_count(display, true);
 
 	power_domains->dc_state = val & mask;
 }

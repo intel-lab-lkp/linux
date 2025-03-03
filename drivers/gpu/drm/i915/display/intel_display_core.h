@@ -490,6 +490,8 @@ struct intel_display {
 
 		/* perform PHY state sanity checks? */
 		bool chv_phy_assert[2];
+		unsigned int dc6_count;
+		unsigned int dc5_start_count;
 	} power;
 
 	struct {

@@ -28,9 +28,11 @@
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_de.h"
+#include "intel_display_power_well.h"
 #include "intel_dmc.h"
 #include "intel_dmc_regs.h"
 #include "intel_step.h"
+
 
 /**
  * DOC: DMC Firmware Support
@@ -1240,8 +1242,10 @@ static int intel_dmc_debugfs_status_show(struct seq_file *m, void *unused)
 	struct intel_display *display = m->private;
 	struct drm_i915_private *i915 = to_i915(display->drm);
 	struct intel_dmc *dmc = display_to_dmc(display);
+	struct i915_power_domains *power_domains = &display->power.domains;
 	intel_wakeref_t wakeref;
 	i915_reg_t dc5_reg, dc6_reg = INVALID_MMIO_REG;
+	u32 dc6_was_enabled;
 
 	if (!HAS_DMC(display))
 		return -ENODEV;
@@ -1290,9 +1294,20 @@ static int intel_dmc_debugfs_status_show(struct seq_file *m, void *unused)
 	}
 
 	seq_printf(m, "DC3 -> DC5 count: %d\n", intel_de_read(display, dc5_reg));
-	if (i915_mmio_reg_valid(dc6_reg))
-		seq_printf(m, "DC5 -> DC6 count: %d\n",
-			   intel_de_read(display, dc6_reg));
+
+	if (DISPLAY_VER(display) >= 14) {
+		dc6_was_enabled = DC_STATE_EN_UPTO_DC6 &
+				  intel_de_read(display, DC_STATE_EN);
+		if (dc6_was_enabled) {
+			mutex_lock(&power_domains->lock);
+			update_dc6_count(display, true);
+			mutex_unlock(&power_domains->lock);
+		}
+	} else
+		display->power.dc6_count = i915_mmio_reg_valid(dc6_reg) ?
+					   intel_de_read(display, dc6_reg) : 0;
+
+	seq_printf(m, "DC5 -> DC6 count: %d\n", display->power.dc6_count);
 
 	seq_printf(m, "program base: 0x%08x\n",
 		   intel_de_read(display, DMC_PROGRAM(dmc->dmc_info[DMC_FW_MAIN].start_mmioaddr, 0)));
