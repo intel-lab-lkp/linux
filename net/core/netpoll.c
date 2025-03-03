@@ -326,6 +326,7 @@ static netdev_tx_t __netpoll_send_skb(struct netpoll *np, struct sk_buff *skb)
 
 	lockdep_assert_irqs_disabled();
 
+	guard(rcu)();
 	dev = np->dev;
 	npinfo = rcu_dereference_bh(dev->npinfo);
 
