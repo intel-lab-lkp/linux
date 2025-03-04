@@ -1990,8 +1990,8 @@ static noinline void __init int3_selftest(void)
 	asm volatile ("int3_selftest_ip:\n\t"
 		      ANNOTATE_NOENDBR
 		      "    int3; nop; nop; nop; nop\n\t"
-		      : ASM_CALL_CONSTRAINT
-		      : __ASM_SEL_RAW(a, D) (&val)
+		      : : __ASM_SEL_RAW(a, D) (&val)
+			  COMMA(ASM_CALL_CONSTRAINT)
 		      : "memory");
 
 	BUG_ON(val != 1);
@@ -2023,8 +2023,8 @@ static noinline void __init alt_reloc_selftest(void)
 	 */
 	asm_inline volatile (
 		ALTERNATIVE("", "lea %[mem], %%" _ASM_ARG1 "; call __alt_reloc_selftest;", X86_FEATURE_ALWAYS)
-		: ASM_CALL_CONSTRAINT
-		: [mem] "m" (__alt_reloc_selftest_addr)
+		: : [mem] "m" (__alt_reloc_selftest_addr)
+		    COMMA(ASM_CALL_CONSTRAINT)
 		: _ASM_ARG1
 	);
 }

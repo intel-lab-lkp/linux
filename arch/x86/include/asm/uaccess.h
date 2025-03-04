@@ -79,9 +79,9 @@ extern int __get_user_bad(void);
 	register __inttype(*(ptr)) __val_gu asm("%"_ASM_DX);		\
 	__chk_user_ptr(ptr);						\
 	asm volatile("call __" #fn "_%c[size]"				\
-		     : "=a" (__ret_gu), "=r" (__val_gu),		\
-			ASM_CALL_CONSTRAINT				\
-		     : "0" (ptr), [size] "i" (sizeof(*(ptr))));		\
+		     : "=a" (__ret_gu), "=r" (__val_gu)			\
+		     : "0" (ptr), [size] "i" (sizeof(*(ptr)))		\
+		       COMMA(ASM_CALL_CONSTRAINT));			\
 	instrument_get_user(__val_gu);					\
 	(x) = (__force __typeof__(*(ptr))) __val_gu;			\
 	__builtin_expect(__ret_gu, 0);					\
@@ -178,12 +178,12 @@ extern void __put_user_nocheck_8(void);
 	__ptr_pu = __ptr;						\
 	__val_pu = __x;							\
 	asm volatile("call __" #fn "_%c[size]"				\
-		     : "=c" (__ret_pu),					\
-			ASM_CALL_CONSTRAINT				\
+		     : "=c" (__ret_pu)					\
 		     : "0" (__ptr_pu),					\
 		       "r" (__val_pu),					\
 		       [size] "i" (sizeof(*(ptr)))			\
-		     :"ebx");						\
+		       COMMA(ASM_CALL_CONSTRAINT)			\
+		     : "ebx");						\
 	instrument_put_user(__x, __ptr, sizeof(*(ptr)));		\
 	__builtin_expect(__ret_pu, 0);					\
 })
