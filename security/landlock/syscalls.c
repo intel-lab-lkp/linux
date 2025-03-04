@@ -170,6 +170,17 @@ static ssize_t fop_dummy_write(struct file *const filp,
 	return -EINVAL;
 }
 
+static void fop_ruleset_fdinfo(struct seq_file *const m, struct file *const f)
+{
+	struct landlock_ruleset *const ruleset = f->private_data;
+
+	seq_printf(m, "num_rules: %d\n", ruleset->num_rules);
+	if (ruleset->layer_stack[0].supervisor)
+		seq_puts(m, "supervisor: yes\n");
+	else
+		seq_puts(m, "supervisor: no\n");
+}
+
 /*
  * A ruleset file descriptor enables to build a ruleset by adding (i.e.
  * writing) rule after rule, without relying on the task's context.  This
@@ -180,6 +191,7 @@ static const struct file_operations ruleset_fops = {
 	.release = fop_ruleset_release,
 	.read = fop_dummy_read,
 	.write = fop_dummy_write,
+	.show_fdinfo = fop_ruleset_fdinfo,
 };
 
 static int fop_supervisor_release(struct inode *const inode,
@@ -191,11 +203,145 @@ static int fop_supervisor_release(struct inode *const inode,
 	return 0;
 }
 
+static const char *
+event_state_to_string(enum landlock_supervise_event_state state)
+{
+	switch (state) {
+	case LANDLOCK_SUPERVISE_EVENT_NEW:
+		return "new";
+	case LANDLOCK_SUPERVISE_EVENT_NOTIFIED:
+		return "notified";
+	case LANDLOCK_SUPERVISE_EVENT_ALLOWED:
+		return "allowed";
+	case LANDLOCK_SUPERVISE_EVENT_DENIED:
+		return "denied";
+	default:
+		WARN_ONCE(1, "unknown event state\n");
+		return "unknown";
+	}
+}
+
+static void
+access_request_to_string(const landlock_supervise_event_type_t access_type,
+			 const access_mask_t access_request, struct seq_file *m)
+{
+	switch (access_type) {
+	case LANDLOCK_SUPERVISE_EVENT_TYPE_FS_ACCESS:
+		if (access_request & LANDLOCK_ACCESS_FS_EXECUTE)
+			seq_puts(m, "FS_EXECUTE ");
+		if (access_request & LANDLOCK_ACCESS_FS_WRITE_FILE)
+			seq_puts(m, "FS_WRITE_FILE ");
+		if (access_request & LANDLOCK_ACCESS_FS_READ_FILE)
+			seq_puts(m, "FS_READ_FILE ");
+		if (access_request & LANDLOCK_ACCESS_FS_READ_DIR)
+			seq_puts(m, "FS_READ_DIR ");
+		if (access_request & LANDLOCK_ACCESS_FS_REMOVE_DIR)
+			seq_puts(m, "FS_REMOVE_DIR ");
+		if (access_request & LANDLOCK_ACCESS_FS_REMOVE_FILE)
+			seq_puts(m, "FS_REMOVE_FILE ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_CHAR)
+			seq_puts(m, "FS_MAKE_CHAR ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_DIR)
+			seq_puts(m, "FS_MAKE_DIR ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_REG)
+			seq_puts(m, "FS_MAKE_REG ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_SOCK)
+			seq_puts(m, "FS_MAKE_SOCK ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_FIFO)
+			seq_puts(m, "FS_MAKE_FIFO ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_BLOCK)
+			seq_puts(m, "FS_MAKE_BLOCK ");
+		if (access_request & LANDLOCK_ACCESS_FS_MAKE_SYM)
+			seq_puts(m, "FS_MAKE_SYM ");
+		if (access_request & LANDLOCK_ACCESS_FS_REFER)
+			seq_puts(m, "FS_REFER ");
+		if (access_request & LANDLOCK_ACCESS_FS_TRUNCATE)
+			seq_puts(m, "FS_TRUNCATE ");
+		if (access_request & LANDLOCK_ACCESS_FS_IOCTL_DEV)
+			seq_puts(m, "FS_IOCTL_DEV ");
+		break;
+	case LANDLOCK_SUPERVISE_EVENT_TYPE_NET_ACCESS:
+		if (access_request & LANDLOCK_ACCESS_NET_BIND_TCP)
+			seq_puts(m, "NET_BIND_TCP ");
+		if (access_request & LANDLOCK_ACCESS_NET_CONNECT_TCP)
+			seq_puts(m, "NET_CONNECT_TCP ");
+		break;
+	}
+}
+
+static void fop_supervisor_fdinfo(struct seq_file *m, struct file *f)
+{
+	struct landlock_supervisor *const supervisor = f->private_data;
+	struct landlock_supervise_event_kernel *event;
+
+	spin_lock(&supervisor->lock);
+
+	size_t cnt = list_count_nodes(&supervisor->event_queue);
+	seq_printf(m, "num_events: %zu\n", cnt);
+	list_for_each_entry(event, &supervisor->event_queue, node) {
+		struct task_struct *task =
+			get_pid_task(event->accessor, PIDTYPE_PID);
+
+		seq_puts(m, "event:\n");
+		if (task) {
+			seq_printf(m, "\taccessor: %s[%d]\n", task->comm,
+				   task->pid);
+			put_task_struct(task);
+		} else {
+			seq_puts(m, "\taccessor: defunct\n");
+		}
+
+		if (event->type == LANDLOCK_SUPERVISE_EVENT_TYPE_FS_ACCESS) {
+			seq_puts(m, "\taccess: filesystem\n");
+			seq_printf(m, "\taccess_request: %llu ",
+				   (unsigned long long)event->access_request);
+			access_request_to_string(event->type,
+						 event->access_request, m);
+			seq_puts(m, "\n");
+			if (event->target_1.dentry) {
+				/*
+				 * ok to access since event owns a ref to the
+				 * path, and we have event list spin lock.
+				 */
+				if (event->target_1_is_new) {
+					seq_puts(m, "\ttarget_1 (new): ");
+				} else {
+					seq_puts(m, "\ttarget_1: ");
+				}
+				seq_path(m, &event->target_1, "");
+				seq_puts(m, "\n");
+			}
+			if (event->target_2.dentry) {
+				if (event->target_2_is_new) {
+					seq_puts(m, "\ttarget_2 (new): ");
+				} else {
+					seq_puts(m, "\ttarget_2: ");
+				}
+				seq_path(m, &event->target_2, "");
+				seq_puts(m, "\n");
+			}
+		} else if (event->type ==
+			   LANDLOCK_SUPERVISE_EVENT_TYPE_NET_ACCESS) {
+			seq_puts(m, "\taccess: network\n");
+			seq_printf(m, "\tport: %u\n",
+				   (unsigned int)event->port);
+		} else {
+			WARN(1, "unknown event key type\n");
+		}
+
+		seq_printf(m, "\tstate: %s\n",
+			   event_state_to_string(event->state));
+	}
+
+	spin_unlock(&supervisor->lock);
+}
+
 static const struct file_operations supervisor_fops = {
 	.release = fop_supervisor_release,
 	/* TODO: read, write, poll, dup */
 	.read = fop_dummy_read,
 	.write = fop_dummy_write,
+	.show_fdinfo = fop_supervisor_fdinfo,
 };
 
 static int

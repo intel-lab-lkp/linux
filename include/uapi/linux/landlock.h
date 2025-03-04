@@ -270,6 +270,7 @@ struct landlock_net_port_attr {
 #define LANDLOCK_ACCESS_FS_TRUNCATE			(1ULL << 14)
 #define LANDLOCK_ACCESS_FS_IOCTL_DEV			(1ULL << 15)
 /* clang-format on */
+/* Add extra entries to access_request_to_string too */
 
 /**
  * DOC: net_access
@@ -292,6 +293,7 @@ struct landlock_net_port_attr {
 #define LANDLOCK_ACCESS_NET_BIND_TCP			(1ULL << 0)
 #define LANDLOCK_ACCESS_NET_CONNECT_TCP			(1ULL << 1)
 /* clang-format on */
+/* Add extra entries to access_request_to_string too */
 
 /**
  * DOC: scope
