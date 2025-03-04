@@ -201,6 +201,13 @@ kimage_validate_signature(struct kimage *image)
 }
 #endif
 
+static void kimage_file_post_load(struct kimage *image)
+{
+#ifdef CONFIG_IMA_KEXEC
+	ima_kexec_post_load(image);
+#endif
+}
+
 /*
  * In file mode list of segments is prepared by kernel. Copy relevant
  * data from user space, do error checking, prepare segment list
@@ -427,6 +434,9 @@ SYSCALL_DEFINE5(kexec_file_load, int, kernel_fd, int, initrd_fd,
 	}
 
 	kimage_terminate(image);
+
+	if (!(flags & KEXEC_FILE_ON_CRASH))
+		kimage_file_post_load(image);
 
 	ret = machine_kexec_post_load(image);
 	if (ret)
