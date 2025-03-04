@@ -85,6 +85,7 @@
 #include <asm/insn.h>
 #include <asm/kvm_host.h>
 #include <asm/mmu_context.h>
+#include <asm/mmu.h>
 #include <asm/mte.h>
 #include <asm/processor.h>
 #include <asm/smp.h>
@@ -1972,6 +1973,28 @@ static int __init __kpti_install_ng_mappings(void *__unused)
 	return 0;
 }
 
+static void __init repaint_linear_mappings(void)
+{
+	struct cpumask bbml2_cpus;
+
+	if (!block_mapping)
+		return;
+
+	if (!rodata_full)
+		return;
+
+	if (system_supports_bbml2_noabort())
+		return;
+
+	/*
+	 * Need to guarantee repainting linear mapping is called on the
+	 * boot CPU since boot CPU supports BBML2.
+	 */
+	cpumask_clear(&bbml2_cpus);
+	cpumask_set_cpu(smp_processor_id(), &bbml2_cpus);
+	stop_machine(__repaint_linear_mappings, NULL, &bbml2_cpus);
+}
+
 static void __init kpti_install_ng_mappings(void)
 {
 	/* Check whether KPTI is going to be used */
@@ -3814,6 +3837,7 @@ void __init setup_system_features(void)
 {
 	setup_system_capabilities();
 
+	repaint_linear_mappings();
 	kpti_install_ng_mappings();
 
 	sve_setup();

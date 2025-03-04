@@ -209,6 +209,8 @@ static int split_pmd(pmd_t *pmdp, pmd_t pmdval,
 	/* It must be naturally aligned if PMD is leaf */
 	if ((flags & NO_CONT_MAPPINGS) == 0)
 		prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+	else
+		prot = __pgprot(pgprot_val(prot) & ~PTE_CONT);
 
 	for (i = 0; i < PTRS_PER_PTE; i++, ptep++)
 		__set_pte_nosync(ptep, pfn_pte(pfn + i, prot));
@@ -258,6 +260,8 @@ static int split_pud(pud_t *pudp, pud_t pudval,
 	/* It must be naturally aligned if PUD is leaf */
 	if ((flags & NO_CONT_MAPPINGS) == 0)
 		prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+	else
+		prot = __pgprot(pgprot_val(prot) & ~PTE_CONT);
 
 	for (int i = 0; i < PTRS_PER_PMD; i++, pmdp++) {
 		__set_pmd_nosync(pmdp, pfn_pmd(pfn, prot));
@@ -806,6 +810,37 @@ void __init mark_linear_text_alias_ro(void)
 			    PAGE_KERNEL_RO);
 }
 
+int __init __repaint_linear_mappings(void *__unused)
+{
+	phys_addr_t kernel_start = __pa_symbol(_stext);
+	phys_addr_t kernel_end = __pa_symbol(__init_begin);
+	phys_addr_t start, end;
+	unsigned long vstart, vend;
+	u64 i;
+	int ret;
+
+	memblock_mark_nomap(kernel_start, kernel_end - kernel_start);
+	/* Split the whole linear mapping */
+	for_each_mem_range(i, &start, &end) {
+		if (start >= end)
+			return -EINVAL;
+
+		vstart = __phys_to_virt(start);
+		vend = __phys_to_virt(end);
+		ret = __create_pgd_mapping_locked(init_mm.pgd, start,
+					vstart, (end - start), __pgprot(0),
+					__pgd_pgtable_alloc,
+					NO_CONT_MAPPINGS | SPLIT_MAPPINGS);
+		if (ret)
+			panic("Failed to split linear mappings\n");
+
+		flush_tlb_kernel_range(vstart, vend);
+	}
+	memblock_clear_nomap(kernel_start, kernel_end - kernel_start);
+
+	return 0;
+}
+
 #ifdef CONFIG_KFENCE
 
 bool __ro_after_init kfence_early_init = !!CONFIG_KFENCE_SAMPLE_INTERVAL;
@@ -860,6 +895,8 @@ static inline void arm64_kfence_map_pool(phys_addr_t kfence_pool, pgd_t *pgdp) {
 
 #endif /* CONFIG_KFENCE */
 
+bool block_mapping;
+
 static inline bool force_pte_mapping(void)
 {
 	/*
@@ -888,6 +925,8 @@ static void __init map_mem(pgd_t *pgdp)
 	int flags = NO_EXEC_MAPPINGS;
 	u64 i;
 
+	block_mapping = true;
+
 	/*
 	 * Setting hierarchical PXNTable attributes on table entries covering
 	 * the linear region is only possible if it is guaranteed that no table
@@ -903,8 +942,10 @@ static void __init map_mem(pgd_t *pgdp)
 
 	early_kfence_pool = arm64_kfence_alloc_pool();
 
-	if (force_pte_mapping())
+	if (force_pte_mapping()) {
+		block_mapping = false;
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+	}
 
 	/*
 	 * Take care not to create a writable alias for the
