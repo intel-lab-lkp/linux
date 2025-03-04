@@ -73,8 +73,20 @@ static int _store_class_profile(struct device *dev, void *data)
 
 	lockdep_assert_held(&profile_lock);
 	handler = to_pprof_handler(dev);
-	if (!test_bit(*bit, handler->choices))
-		return -EOPNOTSUPP;
+	if (!test_bit(*bit, handler->choices)) {
+		switch (*bit) {
+		case PLATFORM_PROFILE_QUIET:
+			*bit = PLATFORM_PROFILE_LOW_POWER;
+			break;
+		case PLATFORM_PROFILE_LOW_POWER:
+			*bit = PLATFORM_PROFILE_QUIET;
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		if (!test_bit(*bit, handler->choices))
+			return -EOPNOTSUPP;
+	}
 
 	return handler->ops->profile_set(dev, *bit);
 }
@@ -252,8 +264,16 @@ static int _aggregate_choices(struct device *dev, void *data)
 	handler = to_pprof_handler(dev);
 	if (test_bit(PLATFORM_PROFILE_LAST, aggregate))
 		bitmap_copy(aggregate, handler->choices, PLATFORM_PROFILE_LAST);
-	else
+	else {
+		/* treat quiet and low power the same for aggregation purposes */
+		if (test_bit(PLATFORM_PROFILE_QUIET, handler->choices) &&
+		    test_bit(PLATFORM_PROFILE_LOW_POWER, aggregate))
+			set_bit(PLATFORM_PROFILE_QUIET, aggregate);
+		else if (test_bit(PLATFORM_PROFILE_LOW_POWER, handler->choices) &&
+			 test_bit(PLATFORM_PROFILE_QUIET, aggregate))
+			set_bit(PLATFORM_PROFILE_LOW_POWER, aggregate);
 		bitmap_and(aggregate, handler->choices, aggregate, PLATFORM_PROFILE_LAST);
+	}
 
 	return 0;
 }
@@ -304,6 +324,13 @@ static int _aggregate_profiles(struct device *dev, void *data)
 	err = get_class_profile(dev, &val);
 	if (err)
 		return err;
+
+	/* treat low-power and quiet as the same */
+	if ((*profile == PLATFORM_PROFILE_LOW_POWER &&
+	     val == PLATFORM_PROFILE_QUIET) ||
+	    (*profile == PLATFORM_PROFILE_QUIET &&
+	     val == PLATFORM_PROFILE_LOW_POWER))
+		*profile = val;
 
 	if (*profile != PLATFORM_PROFILE_LAST && *profile != val)
 		*profile = PLATFORM_PROFILE_CUSTOM;
@@ -529,6 +556,11 @@ struct device *platform_profile_register(struct device *dev, const char *name,
 
 	if (bitmap_empty(pprof->choices, PLATFORM_PROFILE_LAST)) {
 		dev_err(dev, "Failed to register platform_profile class device with empty choices\n");
+		return ERR_PTR(-EINVAL);
+	}
+	if (test_bit(PLATFORM_PROFILE_QUIET, pprof->choices) &&
+	    test_bit(PLATFORM_PROFILE_LOW_POWER, pprof->choices)) {
+		dev_err(dev, "Failed to register platform_profile class device with both quiet and low-power\n");
 		return ERR_PTR(-EINVAL);
 	}
 
