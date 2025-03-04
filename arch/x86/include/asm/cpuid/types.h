@@ -161,4 +161,13 @@ extern const struct leaf_0x2_table cpuid_0x2_table[256];
  */
 #define TLB_0x63_2M_4M_ENTRIES	32
 
+/*
+ * CPUID(0x80000006) parsing helpers
+ */
+
+static inline bool amd_hygon_cpu_has_l3_cache(void)
+{
+	return cpuid_edx(0x80000006);
+}
+
 #endif /* _ASM_X86_CPUID_TYPES_H */
