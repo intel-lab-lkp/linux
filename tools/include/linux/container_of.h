@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _TOOLS_LINUX_CONTAINER_OF_H
+#define _TOOLS_LINUX_CONTAINER_OF_H
+
+#endif	/* _TOOLS_LINUX_CONTAINER_OF_H */
