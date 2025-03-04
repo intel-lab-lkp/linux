@@ -11,7 +11,6 @@
 #include <linux/init.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
-#include <linux/irqchip/irq-davinci-cp-intc.h>
 #include <linux/irqdomain.h>
 #include <linux/io.h>
 #include <linux/of.h>
@@ -155,23 +154,21 @@ static const struct irq_domain_ops davinci_cp_intc_irq_domain_ops = {
 };
 
 static int __init
-davinci_cp_intc_do_init(const struct davinci_cp_intc_config *config,
+davinci_cp_intc_do_init(struct resource *res, unsigned int num_irqs,
 			struct device_node *node)
 {
-	unsigned int num_regs = BITS_TO_LONGS(config->num_irqs);
+	unsigned int num_regs = BITS_TO_LONGS(num_irqs);
 	int offset, irq_base;
 	void __iomem *req;
 
-	req = request_mem_region(config->reg.start,
-				 resource_size(&config->reg),
+	req = request_mem_region(res->start, resource_size(res),
 				 "davinci-cp-intc");
 	if (!req) {
 		pr_err("%s: register range busy\n", __func__);
 		return -EBUSY;
 	}
 
-	davinci_cp_intc_base = ioremap(config->reg.start,
-				       resource_size(&config->reg));
+	davinci_cp_intc_base = ioremap(res->start, resource_size(res));
 	if (!davinci_cp_intc_base) {
 		pr_err("%s: unable to ioremap register range\n", __func__);
 		return -EINVAL;
@@ -200,12 +197,12 @@ davinci_cp_intc_do_init(const struct davinci_cp_intc_config *config,
 	davinci_cp_intc_write(1, DAVINCI_CP_INTC_HOST_ENABLE_IDX_SET);
 
 	/* Default all priorities to channel 7. */
-	num_regs = (config->num_irqs + 3) >> 2;	/* 4 channels per register */
+	num_regs = (num_irqs + 3) >> 2; /* 4 channels per register */
 	for (offset = 0; offset < num_regs; offset++)
 		davinci_cp_intc_write(0x07070707,
 			DAVINCI_CP_INTC_CHAN_MAP(offset));
 
-	irq_base = irq_alloc_descs(-1, 0, config->num_irqs, 0);
+	irq_base = irq_alloc_descs(-1, 0, num_irqs, 0);
 	if (irq_base < 0) {
 		pr_err("%s: unable to allocate interrupt descriptors: %d\n",
 		       __func__, irq_base);
@@ -213,7 +210,7 @@ davinci_cp_intc_do_init(const struct davinci_cp_intc_config *config,
 	}
 
 	davinci_cp_intc_irq_domain = irq_domain_add_legacy(
-					node, config->num_irqs, irq_base, 0,
+					node, num_irqs, irq_base, 0,
 					&davinci_cp_intc_irq_domain_ops, NULL);
 
 	if (!davinci_cp_intc_irq_domain) {
@@ -229,31 +226,27 @@ davinci_cp_intc_do_init(const struct davinci_cp_intc_config *config,
 	return 0;
 }
 
-int __init davinci_cp_intc_init(const struct davinci_cp_intc_config *config)
-{
-	return davinci_cp_intc_do_init(config, NULL);
-}
-
 static int __init davinci_cp_intc_of_init(struct device_node *node,
 					  struct device_node *parent)
 {
-	struct davinci_cp_intc_config config = { };
+	unsigned int num_irqs;
+	struct resource res;
 	int ret;
 
-	ret = of_address_to_resource(node, 0, &config.reg);
+	ret = of_address_to_resource(node, 0, &res);
 	if (ret) {
 		pr_err("%s: unable to get the register range from device-tree\n",
 		       __func__);
 		return ret;
 	}
 
-	ret = of_property_read_u32(node, "ti,intc-size", &config.num_irqs);
+	ret = of_property_read_u32(node, "ti,intc-size", &num_irqs);
 	if (ret) {
 		pr_err("%s: unable to read the 'ti,intc-size' property\n",
 		       __func__);
 		return ret;
 	}
 
-	return davinci_cp_intc_do_init(&config, node);
+	return davinci_cp_intc_do_init(&res, num_irqs, node);
 }
 IRQCHIP_DECLARE(cp_intc, "ti,cp-intc", davinci_cp_intc_of_init);
