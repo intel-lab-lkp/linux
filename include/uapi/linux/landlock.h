@@ -50,6 +50,15 @@ struct landlock_ruleset_attr {
 	 * resources (e.g. IPCs).
 	 */
 	__u64 scoped;
+	/**
+	 * @supervisor_fd: Placeholder to store the supervisor file
+	 * descriptor when %LANDLOCK_CREATE_RULESET_SUPERVISE is set.
+	 */
+	__s32 supervisor_fd;
+	/**
+	 * @pad: Unused, must be zero.
+	 */
+	__u32 pad;
 };
 
 /*
@@ -60,6 +69,7 @@ struct landlock_ruleset_attr {
  */
 /* clang-format off */
 #define LANDLOCK_CREATE_RULESET_VERSION			(1U << 0)
+#define LANDLOCK_CREATE_RULESET_SUPERVISE		(1U << 1)
 /* clang-format on */
 
 /**

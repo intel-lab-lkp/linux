@@ -32,6 +32,7 @@
 #include "limits.h"
 #include "net.h"
 #include "ruleset.h"
+#include "supervise.h"
 #include "setup.h"
 
 static bool is_initialized(void)
@@ -99,8 +100,10 @@ static void build_check_abi(void)
 	ruleset_size = sizeof(ruleset_attr.handled_access_fs);
 	ruleset_size += sizeof(ruleset_attr.handled_access_net);
 	ruleset_size += sizeof(ruleset_attr.scoped);
+	ruleset_size += sizeof(ruleset_attr.supervisor_fd);
+	ruleset_size += sizeof(ruleset_attr.pad);
 	BUILD_BUG_ON(sizeof(ruleset_attr) != ruleset_size);
-	BUILD_BUG_ON(sizeof(ruleset_attr) != 24);
+	BUILD_BUG_ON(sizeof(ruleset_attr) != 32);
 
 	path_beneath_size = sizeof(path_beneath_attr.allowed_access);
 	path_beneath_size += sizeof(path_beneath_attr.parent_fd);
@@ -151,16 +154,42 @@ static const struct file_operations ruleset_fops = {
 	.write = fop_dummy_write,
 };
 
-#define LANDLOCK_ABI_VERSION 6
+static int fop_supervisor_release(struct inode *const inode,
+				  struct file *const filp)
+{
+	struct landlock_supervisor *supervisor = filp->private_data;
+
+	landlock_put_supervisor(supervisor);
+	return 0;
+}
+
+static const struct file_operations supervisor_fops = {
+	.release = fop_supervisor_release,
+	/* TODO: read, write, poll, dup */
+	.read = fop_dummy_read,
+	.write = fop_dummy_write,
+};
+
+static int
+landlock_supervisor_open_fd(struct landlock_supervisor *const supervisor,
+			    const fmode_t mode)
+{
+	landlock_get_supervisor(supervisor);
+	return anon_inode_getfd("[landlock-supervisor]", &supervisor_fops,
+				supervisor, O_RDWR | O_CLOEXEC);
+}
+
+#define LANDLOCK_ABI_VERSION 7
 
 /**
  * sys_landlock_create_ruleset - Create a new ruleset
  *
- * @attr: Pointer to a &struct landlock_ruleset_attr identifying the scope of
- *        the new ruleset.
- * @size: Size of the pointed &struct landlock_ruleset_attr (needed for
- *        backward and forward compatibility).
- * @flags: Supported value: %LANDLOCK_CREATE_RULESET_VERSION.
+ * @attr:  Pointer to a &struct landlock_ruleset_attr identifying the scope of
+ *         the new ruleset.
+ * @size:  Size of the pointed &struct landlock_ruleset_attr (needed for
+ *         backward and forward compatibility).
+ * @flags: Supported value: %LANDLOCK_CREATE_RULESET_VERSION,
+ * 	       %LANDLOCK_CREATE_RULESET_SUPERVISE.
  *
  * This system call enables to create a new Landlock ruleset, and returns the
  * related file descriptor on success.
@@ -172,18 +201,21 @@ static const struct file_operations ruleset_fops = {
  * Possible returned errors are:
  *
  * - %EOPNOTSUPP: Landlock is supported by the kernel but disabled at boot time;
- * - %EINVAL: unknown @flags, or unknown access, or unknown scope, or too small @size;
+ * - %EINVAL: unknown @flags, or unknown access, or unknown
+ * 	          scope, or too small @size, or non-zero @pad;
  * - %E2BIG: @attr or @size inconsistencies;
  * - %EFAULT: @attr or @size inconsistencies;
  * - %ENOMSG: empty &landlock_ruleset_attr.handled_access_fs.
  */
 SYSCALL_DEFINE3(landlock_create_ruleset,
-		const struct landlock_ruleset_attr __user *const, attr,
-		const size_t, size, const __u32, flags)
+		struct landlock_ruleset_attr __user *const, attr, const size_t,
+		size, const __u32, flags)
 {
 	struct landlock_ruleset_attr ruleset_attr;
 	struct landlock_ruleset *ruleset;
+	struct landlock_supervisor *supervisor;
 	int err, ruleset_fd;
+	bool supervise = false;
 
 	/* Build-time checks. */
 	build_check_abi();
@@ -192,10 +224,16 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 		return -EOPNOTSUPP;
 
 	if (flags) {
-		if ((flags == LANDLOCK_CREATE_RULESET_VERSION) && !attr &&
-		    !size)
+		if (flags == LANDLOCK_CREATE_RULESET_VERSION) {
+			if (attr || size)
+				return -EINVAL;
 			return LANDLOCK_ABI_VERSION;
-		return -EINVAL;
+		}
+		if (flags == LANDLOCK_CREATE_RULESET_SUPERVISE) {
+			supervise = true;
+		} else {
+			return -EINVAL;
+		}
 	}
 
 	/* Copies raw user space buffer. */
@@ -205,6 +243,13 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 					attr, size);
 	if (err)
 		return err;
+
+	if (supervise && size < offsetofend(typeof(ruleset_attr), pad))
+		return -EINVAL;
+
+	if (size >= offsetofend(typeof(ruleset_attr), pad) &&
+	    ruleset_attr.pad != 0)
+		return -EINVAL;
 
 	/* Checks content (and 32-bits cast). */
 	if ((ruleset_attr.handled_access_fs | LANDLOCK_MASK_ACCESS_FS) !=
@@ -227,11 +272,40 @@ SYSCALL_DEFINE3(landlock_create_ruleset,
 	if (IS_ERR(ruleset))
 		return PTR_ERR(ruleset);
 
+	if (supervise) {
+		supervisor = landlock_create_supervisor();
+		if (IS_ERR(supervisor)) {
+			landlock_put_ruleset(ruleset);
+			return -ENOMEM;
+		}
+		/* Pass ownership of supervisor to ruleset struct */
+		ruleset->layer_stack[0].supervisor = supervisor;
+	}
+
 	/* Creates anonymous FD referring to the ruleset. */
 	ruleset_fd = anon_inode_getfd("[landlock-ruleset]", &ruleset_fops,
 				      ruleset, O_RDWR | O_CLOEXEC);
-	if (ruleset_fd < 0)
+	if (ruleset_fd < 0) {
 		landlock_put_ruleset(ruleset);
+		return ruleset_fd;
+	}
+
+	if (supervise) {
+		int supervisor_fd;
+
+		supervisor_fd = landlock_supervisor_open_fd(
+			ruleset->layer_stack[0].supervisor, O_RDWR | O_CLOEXEC);
+		if (supervisor_fd < 0) {
+			landlock_put_ruleset(ruleset);
+			return supervisor_fd;
+		}
+		if (copy_to_user(&attr->supervisor_fd, &supervisor_fd,
+				 sizeof(supervisor_fd))) {
+			landlock_put_ruleset(ruleset);
+			return -EFAULT;
+		}
+	}
+
 	return ruleset_fd;
 }
 
