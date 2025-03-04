@@ -15,6 +15,7 @@
 
 #define NR_DEVSEC_BUSES 1
 #define NR_DEVSEC_ROOT_PORTS 1
+#define NR_PLATFORM_STREAMS 4
 #define NR_PORT_STREAMS 1
 #define NR_ADDR_ASSOC 1
 #define NR_DEVSEC_DEVS 1
@@ -589,6 +590,7 @@ static int __init devsec_bus_probe(struct platform_device *pdev)
 	struct devsec *devsec;
 	struct pci_sysdata *sd;
 	u64 mmio_size = SZ_64G;
+	struct pci_host_bridge *hb;
 	struct device *dev = &pdev->dev;
 	u64 mmio_start = iomem_resource.end + 1 - SZ_64G;
 
@@ -649,6 +651,9 @@ static int __init devsec_bus_probe(struct platform_device *pdev)
 	if (rc)
 		return rc;
 
+	hb = pci_find_host_bridge(devsec->bus);
+	pci_ide_init_nr_streams(hb, NR_PLATFORM_STREAMS);
+
 	pci_scan_child_bus(devsec->bus);
 
 	return 0;
@@ -688,5 +693,6 @@ static void __exit devsec_bus_exit(void)
 }
 module_exit(devsec_bus_exit);
 
+MODULE_IMPORT_NS("PCI_IDE");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Device Security Sample Infrastructure: TDISP Device Emulation");
