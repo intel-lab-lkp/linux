@@ -1250,8 +1250,7 @@ static inline void mwait_play_dead(void)
 	unsigned int highest_subcstate = 0;
 	int i;
 
-	if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-	    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+	if (x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 		return;
 	if (!this_cpu_has(X86_FEATURE_MWAIT))
 		return;

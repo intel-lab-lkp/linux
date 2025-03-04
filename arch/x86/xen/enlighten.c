@@ -82,11 +82,9 @@ void xen_hypercall_setfunc(void)
 	if (static_call_query(xen_hypercall) != xen_hypercall_hvm)
 		return;
 
-	if ((boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-	     boot_cpu_data.x86_vendor == X86_VENDOR_HYGON))
-		static_call_update(xen_hypercall, xen_hypercall_amd);
-	else
-		static_call_update(xen_hypercall, xen_hypercall_intel);
+	static_call_update(xen_hypercall,
+			   x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor) ?
+			   xen_hypercall_amd : xen_hypercall_intel);
 }
 
 /*
@@ -118,11 +116,8 @@ noinstr void *__xen_hypercall_setfunc(void)
 	if (!boot_cpu_has(X86_FEATURE_CPUID))
 		xen_get_vendor();
 
-	if ((boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-	     boot_cpu_data.x86_vendor == X86_VENDOR_HYGON))
-		func = xen_hypercall_amd;
-	else
-		func = xen_hypercall_intel;
+	func = x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor) ?
+		xen_hypercall_amd : xen_hypercall_intel;
 
 	static_call_update_early(xen_hypercall, func);
 

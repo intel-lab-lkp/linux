@@ -130,8 +130,7 @@ static inline uint32_t get_fam15h_addr(u32 addr)
 
 static inline bool is_amd_pmu_msr(unsigned int msr)
 {
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 		return false;
 
 	if ((msr >= MSR_F15H_PERF_CTL &&

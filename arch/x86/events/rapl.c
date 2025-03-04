@@ -123,8 +123,7 @@ static struct perf_pmu_events_attr event_attr_##v = {				\
  *	     them as die-scope.
  */
 #define rapl_pkg_pmu_is_pkg_scope()				\
-	(boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||	\
-	 boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
+	x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor)
 
 struct rapl_pmu {
 	raw_spinlock_t		lock;

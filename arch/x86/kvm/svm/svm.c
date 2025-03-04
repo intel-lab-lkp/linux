@@ -523,8 +523,7 @@ static bool __kvm_is_svm_supported(void)
 	int cpu = smp_processor_id();
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
-	if (c->x86_vendor != X86_VENDOR_AMD &&
-	    c->x86_vendor != X86_VENDOR_HYGON) {
+	if (!x86_vendor_amd_or_hygon(c->x86_vendor)) {
 		pr_err("CPU %d isn't AMD or Hygon\n", cpu);
 		return false;
 	}

@@ -203,6 +203,11 @@ struct cpuinfo_x86 {
 
 #define X86_VENDOR_UNKNOWN	0xff
 
+static inline bool x86_vendor_amd_or_hygon(u8 vendor)
+{
+	return (vendor == X86_VENDOR_AMD || vendor == X86_VENDOR_HYGON);
+}
+
 /*
  * capabilities of CPUs
  */
