@@ -5856,7 +5856,7 @@ int mddev_stack_new_rdev(struct mddev *mddev, struct md_rdev *rdev)
 		pr_err("%s: incompatible integrity profile for %pg\n",
 		       mdname(mddev), rdev->bdev);
 		queue_limits_cancel_update(mddev->gendisk->queue);
-		return -ENXIO;
+		return -EINVAL;
 	}
 
 	return queue_limits_commit_update(mddev->gendisk->queue, &lim);
