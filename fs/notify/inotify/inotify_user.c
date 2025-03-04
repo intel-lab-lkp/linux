@@ -87,6 +87,13 @@ static struct ctl_table inotify_table[] = {
 	},
 };
 
+static const unsigned long unwatchable_fs[] = {
+	PROC_SUPER_MAGIC,      SYSFS_MAGIC,	  TRACEFS_MAGIC,
+	DEBUGFS_MAGIC,	      CGROUP_SUPER_MAGIC, SECURITYFS_MAGIC,
+	RAMFS_MAGIC,	      DEVPTS_SUPER_MAGIC, BPF_FS_MAGIC,
+	OVERLAYFS_SUPER_MAGIC, FUSE_SUPER_MAGIC,   NFS_SUPER_MAGIC
+};
+
 static void __init inotify_sysctls_init(void)
 {
 	register_sysctl("fs/inotify", inotify_table);
@@ -690,6 +697,14 @@ static struct fsnotify_group *inotify_new_group(unsigned int max_events)
 }
 
 
+static inline bool is_unwatchable_fs(struct inode *inode)
+{
+	for (int i = 0; i < ARRAY_SIZE(unwatchable_fs); i++)
+		if (inode->i_sb->s_magic == unwatchable_fs[i])
+			return true;
+	return false;
+}
+
 /* inotify syscalls */
 static int do_inotify_init(int flags)
 {
@@ -776,6 +791,13 @@ SYSCALL_DEFINE3(inotify_add_watch, int, fd, const char __user *, pathname,
 	/* inode held in place by reference to path; group by fget on fd */
 	inode = path.dentry->d_inode;
 	group = fd_file(f)->private_data;
+
+	/* ensure that inotify is only used on supported filesystems */
+	if (is_unwatchable_fs(inode)) {
+		pr_debug("%s: inotify is not supported on filesystem with s_magic=0x%lx\n",
+				__func__, inode->i_sb->s_magic);
+		return -EOPNOTSUPP;
+	}
 
 	/* create/update an inode mark */
 	ret = inotify_update_watch(group, inode, mask);
