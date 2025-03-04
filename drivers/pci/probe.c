@@ -2342,7 +2342,11 @@ static void pci_configure_serr(struct pci_dev *dev)
 
 static void pci_configure_device(struct pci_dev *dev)
 {
+	struct pci_host_bridge *host_bridge = pci_find_host_bridge(dev->bus);
+
 	pci_configure_mps(dev);
+	if (host_bridge && host_bridge->only_128b_mrrs)
+		pcie_set_readrq(dev, 128);
 	pci_configure_extended_tags(dev, NULL);
 	pci_configure_relaxed_ordering(dev);
 	pci_configure_ltr(dev);
@@ -2851,13 +2855,15 @@ static void pcie_write_mps(struct pci_dev *dev, int mps)
 
 static void pcie_write_mrrs(struct pci_dev *dev)
 {
+	struct pci_host_bridge *host_bridge = pci_find_host_bridge(dev->bus);
 	int rc, mrrs;
 
 	/*
 	 * In the "safe" case, do not configure the MRRS.  There appear to be
 	 * issues with setting MRRS to 0 on a number of devices.
 	 */
-	if (pcie_bus_config != PCIE_BUS_PERFORMANCE)
+	if (pcie_bus_config != PCIE_BUS_PERFORMANCE &&
+	    (!host_bridge || !host_bridge->only_128b_mrrs))
 		return;
 
 	/*
