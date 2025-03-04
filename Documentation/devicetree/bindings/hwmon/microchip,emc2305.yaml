@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/hwmon/microchip,emc2305.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip EMC2305 SMBus compliant PWM fan controller
+
+maintainers:
+  - Michael Shych <michaelsh@nvidia.com>
+
+description: |
+  Microchip EMC2301/2/3/5 pwm controller which supports up
+  to five programmable fan control circuits
+
+properties:
+  compatible:
+    enum:
+      - microchip,emc2301
+      - microchip,emc2302
+      - microchip,emc2303
+      - microchip,emc2305
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        emc2301: pwm@2f {
+            compatible = "microchip,emc2301";
+            reg = <0x2f>;
+        };
+    };
