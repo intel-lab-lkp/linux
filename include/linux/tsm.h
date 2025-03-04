@@ -116,4 +116,8 @@ struct tsm_core_dev *tsm_register(struct device *parent,
 				  const struct attribute_group **groups,
 				  const struct pci_tsm_ops *ops);
 void tsm_unregister(struct tsm_core_dev *tsm_core);
+struct pci_dev;
+struct pci_ide;
+int tsm_ide_stream_register(struct pci_dev *pdev, struct pci_ide *ide);
+void tsm_ide_stream_unregister(struct pci_ide *ide);
 #endif /* __TSM_H */
