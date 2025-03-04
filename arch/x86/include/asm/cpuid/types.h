@@ -56,28 +56,6 @@ static inline void get_leaf_0x2_regs(union leaf_0x2_regs *regs)
 	}
 }
 
-/**
- * for_each_leaf_0x2_desc() - Iterator for leaf 0x2 descriptors
- * @regs:	Leaf 0x2 register output, as returned by get_leaf_0x2_regs()
- * @desc:	Pointer to the returned descriptor for each iteration
- *
- * Loop over the 1-byte descriptors in the passed leaf 0x2 output registers
- * @regs.  Provide each descriptor through @desc.
- *
- * Sample usage::
- *
- *	union leaf_0x2_regs regs;
- *	u8 *desc;
- *
- *	get_leaf_0x2_regs(&regs);
- *	for_each_leaf_0x2_desc(regs, desc) {
- *		// Handle *desc value
- *	}
- */
-#define for_each_leaf_0x2_desc(regs, desc)				\
-	/* Skip the first byte as it is not a descriptor */		\
-	for (desc = &(regs).desc[1]; desc < &(regs).desc[16]; desc++)
-
 /*
  * Leaf 0x2 1-byte descriptors' cache types
  * To be used for their mappings at cpuid_0x2_table[].
@@ -103,7 +81,7 @@ static_assert(sizeof(enum _cache_table_type) == 1);
 
 /*
  * Leaf 0x2 1-byte descriptors' TLB types
- * To be used for their mappings at intel_tlb_table[]
+ * To be used for their mappings at cpuid_0x2_table[]
  */
 enum _tlb_table_type {
 	TLB_INST_4K	= __TLB_TABLE_TYPE_BEGIN,
@@ -173,5 +151,14 @@ extern const struct leaf_0x2_table cpuid_0x2_table[256];
 	for (__ptr = &(regs).desc[1], entry = &cpuid_0x2_table[*__ptr];		\
 	     __ptr < &(regs).desc[16];						\
 	     __ptr++, entry = &cpuid_0x2_table[*__ptr])
+
+/*
+ * All of leaf 0x2's one-byte TLB descriptors implies the same number of entries
+ * for their respective TLB types.  TLB descriptor 0x63 is an exception: it
+ * implies 4 dTLB entries for 1GB pages and 32 dTLB entries for 2MB or 4MB pages.
+ * Encode that descriptor's dTLB entry count for 2MB/4MB pages here, as the entry
+ * count for dTLB 1GB pages is already encoded at the cpuid_0x2_table[]'s mapping.
+ */
+#define TLB_0x63_2M_4M_ENTRIES	32
 
 #endif /* _ASM_X86_CPUID_TYPES_H */
