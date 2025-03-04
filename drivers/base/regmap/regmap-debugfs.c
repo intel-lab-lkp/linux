@@ -20,7 +20,7 @@ struct regmap_debugfs_node {
 	struct list_head link;
 };
 
-static unsigned int dummy_index;
+static atomic_t dummy_index = ATOMIC_INIT(0);
 static struct dentry *regmap_debugfs_root;
 static LIST_HEAD(regmap_debugfs_early_list);
 static DEFINE_MUTEX(regmap_debugfs_early_lock);
@@ -596,11 +596,11 @@ void regmap_debugfs_init(struct regmap *map)
 	if (!strcmp(name, "dummy")) {
 		kfree(map->debugfs_name);
 		map->debugfs_name = kasprintf(GFP_KERNEL, "dummy%d",
-						dummy_index);
+						atomic_read(&dummy_index));
 		if (!map->debugfs_name)
 			return;
 		name = map->debugfs_name;
-		dummy_index++;
+		atomic_inc(&dummy_index);
 	}
 
 	map->debugfs = debugfs_create_dir(name, regmap_debugfs_root);
