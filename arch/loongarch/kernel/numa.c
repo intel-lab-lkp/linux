@@ -356,7 +356,7 @@ int __init init_numa_memory(void)
 		node_mem_init(node);
 		node_set_online(node);
 	}
-	max_low_pfn = PHYS_PFN(memblock_end_of_DRAM());
+	max_low_pfn = max_pfn = PHYS_PFN(memblock_end_of_DRAM());
 
 	setup_nr_node_ids();
 	loongson_sysconf.nr_nodes = nr_node_ids;

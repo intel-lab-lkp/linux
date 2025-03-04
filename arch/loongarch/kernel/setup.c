@@ -294,7 +294,7 @@ static void __init fdt_setup(void)
 	early_init_dt_scan(fdt_pointer, __pa(fdt_pointer));
 	early_init_fdt_reserve_self();
 
-	max_low_pfn = PFN_PHYS(memblock_end_of_DRAM());
+	max_low_pfn = max_pfn = PFN_PHYS(memblock_end_of_DRAM());
 #endif
 }
 
