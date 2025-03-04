@@ -159,6 +159,9 @@ static void __bch2_folio_set(struct folio *folio,
 	struct bch_folio *s = bch2_folio(folio);
 	unsigned i, sectors = folio_sectors(folio);
 
+	if (!s)
+		return;
+
 	BUG_ON(pg_offset >= sectors);
 	BUG_ON(pg_offset + pg_len > sectors);
 
