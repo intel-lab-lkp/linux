@@ -317,10 +317,12 @@ static void gred_offload(struct Qdisc *sch, enum tc_gred_command command)
 	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
 		return;
 
-	memset(opt, 0, sizeof(*opt));
-	opt->command = command;
-	opt->handle = sch->handle;
-	opt->parent = sch->parent;
+	if (opt) {
+		memset(opt, 0, sizeof(*opt));
+		opt->command = command;
+		opt->handle = sch->handle;
+		opt->parent = sch->parent;
+	}
 
 	if (command == TC_GRED_REPLACE) {
 		unsigned int i;
