@@ -1086,6 +1086,8 @@ struct rq {
 	u64			nr_switches;
 
 #ifdef CONFIG_UCLAMP_TASK
+	u64			max_uclamp_factor;
+	pid_t			max_uclamp_factor_pid;
 #endif
 
 	struct cfs_rq		cfs;

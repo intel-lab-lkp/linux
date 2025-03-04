@@ -7159,6 +7159,18 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	if (p) {
 		util_bias_dequeue(rq, p);
 		propagate_negative_bias(p);
+		if (p->pid == rq->max_uclamp_factor_pid) {
+			/*
+			 * If the task with the highest uclamp_factor gets
+			 * dequeued, the correct thing to do is to set pid and
+			 * factor to the second highest. However, the overhead
+			 * isn't really necessary because the second highest
+			 * will set these fields the next time it gets updated
+			 * anyway.
+			 */
+			rq->max_uclamp_factor_pid = -1;
+			rq->max_uclamp_factor = 0;
+		}
 	}
 
 	if (rq_h_nr_queued && !rq->cfs.h_nr_queued)

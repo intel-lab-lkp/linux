@@ -271,8 +271,8 @@ ___update_load_avg(struct sched_avg *sa, unsigned long load)
 static void util_bias_update(struct task_struct *p)
 {
 	unsigned int util, uclamp_min, uclamp_max;
-	struct rq *rq;
-	int old, new;
+	struct rq *rq = task_rq(p);
+	int old, new, clamped_util, prio = p->prio - MAX_RT_PRIO;
 
 	util = READ_ONCE(p->se.avg.util_avg);
 	uclamp_min = uclamp_eff_value(p, UCLAMP_MIN);
@@ -284,12 +284,37 @@ static void util_bias_update(struct task_struct *p)
 	if (uclamp_max == SCHED_CAPACITY_SCALE)
 		uclamp_max = UINT_MAX;
 	old = READ_ONCE(p->se.avg.util_avg_bias);
-	new = (int)clamp(util, uclamp_min, uclamp_max) - (int)util;
+	clamped_util = (int)clamp(util, uclamp_min, uclamp_max);
+	if (p->se.on_rq && prio >= 0) {
+		/* We only do this for fair class priorities. */
+		u64 uclamp_factor = sched_prio_to_wmult[prio];
+
+		/* This has to be a 64-bit multiplication. */
+		uclamp_factor *= clamped_util;
+		if (rq->max_uclamp_factor_pid == p->pid) {
+			rq->max_uclamp_factor = uclamp_factor;
+		} else if (uclamp_factor > rq->max_uclamp_factor) {
+			rq->max_uclamp_factor = uclamp_factor;
+			rq->max_uclamp_factor_pid = p->pid;
+		} else {
+			u32 weight = sched_prio_to_weight[prio];
+
+			/*
+			 * We cannot throttle too much if some other task is
+			 * running at high utilization. We should prioritize
+			 * giving that task enough utilization and respect
+			 * task priority, before enforcing uclamp_max.
+			 */
+			uclamp_max = max(uclamp_max,
+				(rq->max_uclamp_factor * weight) >> 32);
+			clamped_util = (int)clamp(util, uclamp_min, uclamp_max);
+		}
+	}
+	new = clamped_util - (int)util;
 
 	WRITE_ONCE(p->se.avg.util_avg_bias, new);
 	if (!p->se.on_rq)
 		return;
-	rq = task_rq(p);
 	WRITE_ONCE(rq->cfs.avg.util_avg_bias,
 		   READ_ONCE(rq->cfs.avg.util_avg_bias) + new - old);
 }
