@@ -516,6 +516,7 @@ int cmd_list(int argc, const char **argv)
 		.print_event = default_print_event,
 		.print_metric = default_print_metric,
 		.skip_duplicate_pmus = default_skip_duplicate_pmus,
+		.collapse_events = true
 	};
 	const char *cputype = NULL;
 	const char *unit_name = NULL;
@@ -574,6 +575,7 @@ int cmd_list(int argc, const char **argv)
 			.print_event = json_print_event,
 			.print_metric = json_print_metric,
 			.skip_duplicate_pmus = json_skip_duplicate_pmus,
+			.collapse_events = false
 		};
 		ps = &json_ps;
 	} else {

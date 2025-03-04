@@ -453,17 +453,50 @@ static int cmp_sevent(const void *a, const void *b)
 	/* Order by PMU name. */
 	if (as->pmu == bs->pmu)
 		return 0;
-	return strcmp(as->pmu_name ?: "", bs->pmu_name ?: "");
+	ret = strcmp(as->pmu_name ?: "", bs->pmu_name ?: "");
+	if (ret)
+		return ret;
+
+	/* Order by remaining displayed fields for purposes of deduplication later */
+	ret = strcmp(as->scale_unit ?: "", bs->scale_unit ?: "");
+	if (ret)
+		return ret;
+	ret = !!as->deprecated - !!bs->deprecated;
+	if (ret)
+		return ret;
+	ret = strcmp(as->desc ?: "", bs->desc ?: "");
+	if (ret)
+		return ret;
+	return strcmp(as->long_desc ?: "", bs->long_desc ?: "");
 }
 
-static bool pmu_alias_is_duplicate(struct sevent *a, struct sevent *b)
+enum dup_type {
+	UNIQUE,
+	DUPLICATE,
+	SAME_TEXT
+};
+
+static enum dup_type pmu_alias_duplicate_type(struct sevent *a, struct sevent *b)
 {
 	/* Different names -> never duplicates */
 	if (strcmp(a->name ?: "//", b->name ?: "//"))
-		return false;
+		return UNIQUE;
 
-	/* Don't remove duplicates for different PMUs */
-	return strcmp(a->pmu_name, b->pmu_name) == 0;
+	/* Duplicate PMU name and event name -> hide completely */
+	if (strcmp(a->pmu_name, b->pmu_name) == 0)
+		return DUPLICATE;
+
+	/* Any other different display text -> not duplicate */
+	if (strcmp(a->topic ?: "", b->topic ?: "") ||
+	    strcmp(a->scale_unit ?: "", b->scale_unit ?: "") ||
+	    a->deprecated != b->deprecated ||
+	    strcmp(a->desc ?: "", b->desc ?: "") ||
+	    strcmp(a->long_desc ?: "", b->long_desc ?: "")) {
+		return UNIQUE;
+	}
+
+	/* Same display text but different PMU -> collapse */
+	return SAME_TEXT;
 }
 
 struct events_callback_state {
@@ -501,6 +534,21 @@ static int perf_pmus__print_pmu_events__callback(void *vstate,
 	return 0;
 }
 
+static void concat_pmu_names(char *pmu_names, size_t size, const char *a, const char *b)
+{
+	size_t len = strlen(pmu_names);
+	size_t added;
+
+	if (len)
+		added = snprintf(pmu_names + len, size - len, ",%s", b);
+	else
+		added = snprintf(pmu_names, size, "%s,%s", a, b);
+
+	/* Truncate with ... */
+	if (added > 0 && added + len >= size)
+		sprintf(pmu_names + size - 4, "...");
+}
+
 void perf_pmus__print_pmu_events(const struct print_callbacks *print_cb, void *print_state)
 {
 	struct perf_pmu *pmu;
@@ -510,6 +558,7 @@ void perf_pmus__print_pmu_events(const struct print_callbacks *print_cb, void *p
 	struct events_callback_state state;
 	bool skip_duplicate_pmus = print_cb->skip_duplicate_pmus(print_state);
 	struct perf_pmu *(*scan_fn)(struct perf_pmu *);
+	char pmu_names[128] = {0};
 
 	if (skip_duplicate_pmus)
 		scan_fn = perf_pmus__scan_skip_duplicates;
@@ -539,12 +588,21 @@ void perf_pmus__print_pmu_events(const struct print_callbacks *print_cb, void *p
 	qsort(aliases, len, sizeof(struct sevent), cmp_sevent);
 	for (int j = 0; j < len; j++) {
 		/* Skip duplicates */
-		if (j < len - 1 && pmu_alias_is_duplicate(&aliases[j], &aliases[j + 1]))
-			goto free;
+		if (j < len - 1) {
+			enum dup_type dt = pmu_alias_duplicate_type(&aliases[j], &aliases[j + 1]);
+
+			if (dt == DUPLICATE) {
+				goto free;
+			} else if (print_cb->collapse_events && dt == SAME_TEXT) {
+				concat_pmu_names(pmu_names, sizeof(pmu_names),
+						 aliases[j].pmu_name, aliases[j+1].pmu_name);
+				goto free;
+			}
+		}
 
 		print_cb->print_event(print_state,
 				aliases[j].topic,
-				aliases[j].pmu_name,
+				pmu_names[0] ? pmu_names : aliases[j].pmu_name,
 				aliases[j].name,
 				aliases[j].alias,
 				aliases[j].scale_unit,
@@ -553,6 +611,7 @@ void perf_pmus__print_pmu_events(const struct print_callbacks *print_cb, void *p
 				aliases[j].desc,
 				aliases[j].long_desc,
 				aliases[j].encoding_desc);
+		pmu_names[0] = '\0';
 free:
 		zfree(&aliases[j].name);
 		zfree(&aliases[j].alias);

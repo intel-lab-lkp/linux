@@ -27,6 +27,7 @@ struct print_callbacks {
 			const char *threshold,
 			const char *unit);
 	bool (*skip_duplicate_pmus)(void *print_state);
+	bool collapse_events;
 };
 
 /** Print all events, the default when no options are specified. */
