@@ -78,6 +78,10 @@ module_param(debug, int, 0644);
 			dev_dbg(board->gpib_dev, format, ## __VA_ARGS__); } \
 	while (0)
 
+#define WQT wait_queue_entry_t
+#define WQH head
+#define WQE entry
+
 /* standard and extended command sets of the usb-gpib adapter */
 
 #define USB_GPIB_ON	 "\nIB\n"
@@ -130,6 +134,7 @@ module_param(debug, int, 0644);
 #define IB_BUS_SRQ  0x80
 
 #define INBUF_SIZE 128
+
 
 struct char_buf {		/* used by one_char() routine */
 	char *inbuf;
@@ -644,17 +649,12 @@ static void usb_gpib_interface_clear(gpib_board_t *board, int assert)
 }
 
 /**
- * line_status() - Read the status of the bus lines.
+ * usb_gpib_line_status() - Read the status of the bus lines.
  *
  *  @board:    the gpib_board data area for this gpib interface
  *
  *    We can read all lines.
  */
-
-#define WQT wait_queue_entry_t
-#define WQH head
-#define WQE entry
-
 static int usb_gpib_line_status(const gpib_board_t *board)
 {
 	int buffer;
