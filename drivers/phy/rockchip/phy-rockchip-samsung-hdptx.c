@@ -1027,6 +1027,9 @@ static int rk_hdptx_ropll_tmds_cmn_config(struct rk_hdptx_phy *hdptx,
 	regmap_update_bits(hdptx->regmap, CMN_REG(0086), PLL_PCG_POSTDIV_SEL_MASK,
 			   FIELD_PREP(PLL_PCG_POSTDIV_SEL_MASK, cfg->pms_sdiv));
 
+	regmap_update_bits(hdptx->regmap, CMN_REG(0086), PLL_PCG_CLK_SEL_MASK,
+			   FIELD_PREP(PLL_PCG_CLK_SEL_MASK, (hdptx->hdmi_cfg.bpc - 8) >> 1));
+
 	regmap_update_bits(hdptx->regmap, CMN_REG(0086), PLL_PCG_CLK_EN_MASK,
 			   FIELD_PREP(PLL_PCG_CLK_EN_MASK, 0x1));
 
@@ -1428,7 +1431,8 @@ static int rk_hdptx_phy_power_on(struct phy *phy)
 		} else {
 			rate = hdptx->hdmi_cfg.tmds_char_rate / 100;
 		}
-		dev_dbg(hdptx->dev, "%s rate=%u\n", __func__, rate);
+		dev_dbg(hdptx->dev, "%s rate=%u bpc=%u\n",
+			__func__, rate, hdptx->hdmi_cfg.bpc);
 	}
 
 	ret = rk_hdptx_phy_consumer_get(hdptx, rate);
@@ -1480,11 +1484,11 @@ static int rk_hdptx_phy_power_off(struct phy *phy)
 static int rk_hdptx_phy_verify_hdmi_config(struct rk_hdptx_phy *hdptx,
 					   struct phy_configure_opts_hdmi *hdmi)
 {
-	if (!hdmi->tmds_char_rate || hdmi->tmds_char_rate > HDMI20_MAX_RATE)
-		return -EINVAL;
-
 	u32 bit_rate = hdmi->tmds_char_rate / 100;
 	int i;
+
+	if (!hdmi->tmds_char_rate || hdmi->tmds_char_rate > HDMI20_MAX_RATE)
+		return -EINVAL;
 
 	for (i = 0; i < ARRAY_SIZE(ropll_tmds_cfg); i++)
 		if (bit_rate == ropll_tmds_cfg[i].bit_rate)
@@ -1493,6 +1497,19 @@ static int rk_hdptx_phy_verify_hdmi_config(struct rk_hdptx_phy *hdptx,
 	if (i == ARRAY_SIZE(ropll_tmds_cfg) &&
 	    !rk_hdptx_phy_clk_pll_calc(bit_rate, NULL))
 		return -EINVAL;
+
+	if (!hdmi->bpc)
+		hdmi->bpc = 8;
+
+	switch (hdmi->bpc) {
+	case 8:
+	case 10:
+	case 12:
+	case 16:
+		break;
+	default:
+		return -EINVAL;
+	};
 
 	return 0;
 }
@@ -1766,6 +1783,9 @@ static int rk_hdptx_phy_configure(struct phy *phy, union phy_configure_opts *opt
 			hdptx->hdmi_cfg = opts->hdmi;
 			hdptx->restrict_rate_change = true;
 		}
+
+		dev_dbg(hdptx->dev, "%s tmds_rate=%llu bpc=%u\n", __func__,
+			hdptx->hdmi_cfg.tmds_char_rate, hdptx->hdmi_cfg.bpc);
 		return ret;
 	}
 
@@ -1974,6 +1994,7 @@ static int rk_hdptx_phy_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	hdptx->dev = dev;
+	hdptx->hdmi_cfg.bpc = 8;
 
 	regs = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(regs))
