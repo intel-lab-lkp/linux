@@ -591,8 +591,7 @@ static int pcf85063_probe(struct i2c_client *client)
 
 	err = regmap_read(pcf85063->regmap, PCF85063_REG_CTRL1, &tmp);
 	if (err) {
-		dev_err(&client->dev, "RTC chip is not present\n");
-		return err;
+		return dev_err_probe(&client->dev, err, "RTC chip is not present\n");
 	}
 
 	pcf85063->rtc = devm_rtc_allocate_device(&client->dev);
