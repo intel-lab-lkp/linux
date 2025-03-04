@@ -26,6 +26,7 @@
 #include "limits.h"
 #include "object.h"
 #include "ruleset.h"
+#include "supervise.h"
 
 static struct landlock_ruleset *create_ruleset(const u32 num_layers)
 {
@@ -387,9 +388,14 @@ static int merge_ruleset(struct landlock_ruleset *const dst,
 		err = -EINVAL;
 		goto out_unlock;
 	}
-	dst->layer_stack[dst->num_layers - 1].access_masks =
-		landlock_upgrade_handled_access_masks(
-			src->layer_stack[0].access_masks);
+	dst->layer_stack[dst->num_layers - 1] = (struct landlock_ruleset_layer){
+		.access_masks = landlock_upgrade_handled_access_masks(
+			src->layer_stack[0].access_masks),
+		.supervisor = src->layer_stack[0].supervisor,
+	};
+	if (dst->layer_stack[dst->num_layers - 1].supervisor)
+		landlock_get_supervisor(
+			dst->layer_stack[dst->num_layers - 1].supervisor);
 
 	/* Merges the @src inode tree. */
 	err = merge_tree(dst, src, LANDLOCK_KEY_INODE);
@@ -445,6 +451,7 @@ static int inherit_ruleset(struct landlock_ruleset *const parent,
 			   struct landlock_ruleset *const child)
 {
 	int err = 0;
+	int layer;
 
 	might_sleep();
 	if (!parent)
@@ -473,6 +480,12 @@ static int inherit_ruleset(struct landlock_ruleset *const parent,
 	/* Copies the parent layer stack and leaves a space for the new layer. */
 	memcpy(child->layer_stack, parent->layer_stack,
 	       flex_array_size(parent, layer_stack, parent->num_layers));
+	/* Get the refcount of any supervisor copied over */
+	for (layer = 0; layer < child->num_layers; layer++) {
+		if (child->layer_stack[layer].supervisor)
+			landlock_get_supervisor(
+				child->layer_stack[layer].supervisor);
+	}
 
 	if (WARN_ON_ONCE(!parent->hierarchy)) {
 		err = -EINVAL;
@@ -490,6 +503,7 @@ out_unlock:
 static void free_ruleset(struct landlock_ruleset *const ruleset)
 {
 	struct landlock_rule *freeme, *next;
+	int layer;
 
 	might_sleep();
 	rbtree_postorder_for_each_entry_safe(freeme, next, &ruleset->root_inode,
@@ -503,6 +517,12 @@ static void free_ruleset(struct landlock_ruleset *const ruleset)
 #endif /* IS_ENABLED(CONFIG_INET) */
 
 	put_hierarchy(ruleset->hierarchy);
+	for (layer = 0; layer < ruleset->num_layers; layer++) {
+		struct landlock_supervisor *const supervisor =
+			ruleset->layer_stack[layer].supervisor;
+		if (supervisor)
+			landlock_put_supervisor(supervisor);
+	}
 	kfree(ruleset);
 }
 

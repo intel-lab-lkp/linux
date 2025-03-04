@@ -136,6 +136,13 @@ struct landlock_ruleset_layer {
 	 * network actions that are restricted by a layer.
 	 */
 	struct access_masks access_masks;
+	/**
+	 * @supervisor: If not null, this layer is operating in
+	 * supervisor mode.  Access denied by only supervised layers
+	 * are forwarded to the supervisor(s), who can then make a
+	 * decision whether to actually deny the access, or allow it.
+	 */
+	struct landlock_supervisor *supervisor;
 };
 
 /**

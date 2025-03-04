@@ -16,6 +16,12 @@
 #include "access.h"
 #include "ruleset.h"
 
+/**
+ * Each supervisor is associated with one active layer in a
+ * domain (or associated with a not-yet-active layer in a struct
+ * landlock_ruleset).  User-space interact with the event queue
+ * through a landlock_supervise_fd.
+ */
 struct landlock_supervisor {
 	refcount_t usage;
 	spinlock_t lock;
