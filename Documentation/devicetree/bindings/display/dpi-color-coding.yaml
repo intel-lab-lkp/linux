@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/dpi-color-coding.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MIPI DPI Interface Color Coding
+
+maintainers:
+  - Liu Ying <victor.liu@nxp.com>
+
+description:
+  MIPI Alliance Standard for Display Pixel Interface(DPI-2) Version 2.00(15
+  September 2005) specifies color codings at the DPI interface.
+
+properties:
+  dpi-color-coding:
+    enum:
+      - 16bit-configuration1
+      - 16bit-configuration2
+      - 16bit-configuration3
+      - 18bit-configuration1
+      - 18bit-configuration2
+      - 24bit
+    description: |
+      This table specifies the mapping of data bits, as components of primary
+      pixel color values red(R), green(G) and blue(B), to signal lines at the
+      interface.
+
+      +--------+--------------------------+-----------------+--------+
+      | Signal |          16-bit          |      18-bit     |        |
+      |        +--------+--------+--------+--------+--------+ 24-bit |
+      | Line   |  cfg1  |  cfg2  |  cfg3  |  cfg1  |  cfg2  |        |
+      +========+========+========+========+========+========+========+
+      |   D23  | unused | unused | unused | unused | unused |   R7   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D22  | unused | unused | unused | unused | unused |   R6   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D21  | unused | unused |   R4   | unused |   R5   |   R5   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D20  | unused |   R4   |   R3   | unused |   R4   |   R4   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D19  | unused |   R3   |   R2   | unused |   R3   |   R3   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D18  | unused |   R2   |   R1   | unused |   R2   |   R2   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D17  | unused |   R1   |   R0   |   R5   |   R1   |   R1   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D16  | unused |   R0   | unused |   R4   |   R0   |   R0   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D15  |   R4   | unused | unused |   R3   | unused |   G7   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D14  |   R3   | unused | unused |   R2   | unused |   G6   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D13  |   R2   |   G5   |   G5   |   R1   |   G5   |   G5   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D12  |   R1   |   G4   |   G4   |   R0   |   G4   |   G4   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D11  |   R0   |   G3   |   G3   |   G5   |   G3   |   G3   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D10  |   G5   |   G2   |   G2   |   G4   |   G2   |   G2   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D9   |   G4   |   G1   |   G1   |   G3   |   G1   |   G1   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D8   |   G3   |   G0   |   G0   |   G2   |   G0   |   G0   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D7   |   G2   | unused | unused |   G1   | unused |   B7   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D6   |   G1   | unused | unused |   G0   | unused |   B6   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D5   |   G0   | unused |   B4   |   B5   |   B5   |   B5   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D4   |   B4   |   B4   |   B3   |   B4   |   B4   |   B4   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D3   |   B3   |   B3   |   B2   |   B3   |   B3   |   B3   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D2   |   B2   |   B2   |   B1   |   B2   |   B2   |   B2   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D1   |   B1   |   B1   |   B0   |   B1   |   B1   |   B1   |
+      +--------+--------+--------+--------+--------+--------+--------+
+      |   D0   |   B0   |   B0   | unused |   B0   |   B0   |   B0   |
+      +--------+--------+--------+--------+--------+--------+--------+
+
+      There are three mappings for 16-bit pixels to data signals, two mappings
+      for 18-bit pixels to data signals, and one mapping for 24-bit pixels to
+      data signals.
+
+additionalProperties: true
+
+...
