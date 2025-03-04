@@ -19,7 +19,6 @@
 #include "pm8350c.dtsi"
 #include "pmk8350.dtsi"
 
-/delete-node/ &ipa_fw_mem;
 /delete-node/ &rmtfs_mem;
 /delete-node/ &adsp_mem;
 /delete-node/ &cdsp_mem;
@@ -513,6 +512,13 @@
 
 &gpu_zap_shader {
 	firmware-name = "qcom/qcm6490/a660_zap.mbn";
+};
+
+&ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
+	firmware-name = "qcom/qcm6490/ipa_fws.mdt";
+	status = "okay";
 };
 
 &mdss {
