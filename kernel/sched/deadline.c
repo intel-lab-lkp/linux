@@ -448,7 +448,7 @@ static void task_non_contending(struct sched_dl_entity *dl_se)
 	if (dl_entity_is_special(dl_se))
 		return;
 
-	WARN_ON(dl_se->dl_non_contending);
+	WARN_ON(dl_se->dl_non_contending && rt_bandwidth_enabled());
 
 	zerolag_time = dl_se->deadline -
 		 div64_long((dl_se->runtime * dl_se->dl_period),
@@ -1647,6 +1647,13 @@ void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
 void dl_server_start(struct sched_dl_entity *dl_se)
 {
 	struct rq *rq = dl_se->rq;
+
+	/*
+	 * Prevent dl_server from starting if RT bandwidth is not enabled.
+	 * This is used by test code to test RCU boosting.
+	 */
+	if (!rt_bandwidth_enabled())
+		return;
 
 	/*
 	 * XXX: the apply do not work fine at the init phase for the
