@@ -2,6 +2,8 @@
 #ifndef _ASM_X86_CPUID_TYPES_H
 #define _ASM_X86_CPUID_TYPES_H
 
+#include <linux/build_bug.h>
+#include <linux/compiler_attributes.h>
 #include <linux/types.h>
 
 #include <asm/cpuid.h>
@@ -75,5 +77,17 @@ static inline void get_leaf_0x2_regs(union leaf_0x2_regs *regs)
 #define for_each_leaf_0x2_desc(regs, desc)				\
 	/* Skip the first byte as it is not a descriptor */		\
 	for (desc = &(regs).desc[1]; desc < &(regs).desc[16]; desc++)
+
+/*
+ * Leaf 0x2 1-byte descriptors' cache types
+ * To be used for their mappings at cache_table[]
+ */
+enum _cache_table_type {
+	CACHE_L1_INST,
+	CACHE_L1_DATA,
+	CACHE_L2,
+	CACHE_L3,
+} __packed;
+static_assert(sizeof(enum _cache_table_type) == 1);
 
 #endif /* _ASM_X86_CPUID_TYPES_H */
