@@ -408,8 +408,13 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	 */
 	if (need_zeroout ||
 	    ((dio->flags & IOMAP_DIO_NEED_SYNC) && !use_fua) ||
-	    ((dio->flags & IOMAP_DIO_WRITE) && pos >= i_size_read(inode)))
+	    ((dio->flags & IOMAP_DIO_WRITE) && pos >= i_size_read(inode))) {
 		dio->flags &= ~IOMAP_DIO_CALLER_COMP;
+
+		if (!is_sync_kiocb(dio->iocb) &&
+		    (dio->iocb->ki_flags & IOCB_NOWAIT))
+			return -EAGAIN;
+	}
 
 	/*
 	 * The rules for polled IO completions follow the guidelines as the
@@ -419,6 +424,23 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	if (!(dio->flags & (IOMAP_DIO_INLINE_COMP|IOMAP_DIO_CALLER_COMP)))
 		dio->iocb->ki_flags &= ~IOCB_HIPRI;
 
+	bio_opf = iomap_dio_bio_opflags(dio, iomap, use_fua, atomic);
+
+	if (!is_sync_kiocb(dio->iocb) && (dio->iocb->ki_flags & IOCB_NOWAIT)) {
+		/*
+		 * This is nonblocking IO, and we might need to allocate
+		 * multiple bios. In this case, as we cannot guarantee that
+		 * one of the sub bios will not fail getting issued FOR NOWAIT
+		 * and as error results are coalesced across all of them, ask
+		 * for a retry of this from blocking context.
+		 */
+		if (bio_iov_vecs_to_alloc(dio->submit.iter, BIO_MAX_VECS + 1) >
+					  BIO_MAX_VECS)
+			return -EAGAIN;
+
+		bio_opf |= REQ_NOWAIT;
+	}
+
 	if (need_zeroout) {
 		/* zero out from the start of the block to the write offset */
 		pad = pos & (fs_block_size - 1);
@@ -427,8 +449,6 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 		if (ret)
 			goto out;
 	}
-
-	bio_opf = iomap_dio_bio_opflags(dio, iomap, use_fua, atomic);
 
 	nr_pages = bio_iov_vecs_to_alloc(dio->submit.iter, BIO_MAX_VECS);
 	do {
