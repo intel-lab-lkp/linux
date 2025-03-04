@@ -2398,10 +2398,12 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 		dwc3_gadget_suspend(dwc);
 		synchronize_irq(dwc->irq_gadget);
 		dwc3_core_exit(dwc);
+		pinctrl_pm_select_sleep_state(dwc->dev);
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
 		if (!PMSG_IS_AUTO(msg) && !device_may_wakeup(dwc->dev)) {
 			dwc3_core_exit(dwc);
+			pinctrl_pm_select_sleep_state(dwc->dev);
 			break;
 		}
 
@@ -2436,6 +2438,7 @@ static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 
 		dwc3_otg_exit(dwc);
 		dwc3_core_exit(dwc);
+		pinctrl_pm_select_sleep_state(dwc->dev);
 		break;
 	default:
 		/* do nothing */
@@ -2453,6 +2456,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 
 	switch (dwc->current_dr_role) {
 	case DWC3_GCTL_PRTCAP_DEVICE:
+		pinctrl_pm_select_default_state(dwc->dev);
 		ret = dwc3_core_init_for_resume(dwc);
 		if (ret)
 			return ret;
@@ -2462,6 +2466,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		break;
 	case DWC3_GCTL_PRTCAP_HOST:
 		if (!PMSG_IS_AUTO(msg) && !device_may_wakeup(dwc->dev)) {
+			pinctrl_pm_select_default_state(dwc->dev);
 			ret = dwc3_core_init_for_resume(dwc);
 			if (ret)
 				return ret;
@@ -2490,6 +2495,7 @@ static int dwc3_resume_common(struct dwc3 *dwc, pm_message_t msg)
 		if (PMSG_IS_AUTO(msg))
 			break;
 
+		pinctrl_pm_select_default_state(dwc->dev);
 		ret = dwc3_core_init_for_resume(dwc);
 		if (ret)
 			return ret;
@@ -2608,8 +2614,6 @@ static int dwc3_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	pinctrl_pm_select_sleep_state(dev);
-
 	return 0;
 }
 
@@ -2617,8 +2621,6 @@ static int dwc3_resume(struct device *dev)
 {
 	struct dwc3	*dwc = dev_get_drvdata(dev);
 	int		ret = 0;
-
-	pinctrl_pm_select_default_state(dev);
 
 	pm_runtime_disable(dev);
 	ret = pm_runtime_set_active(dev);
@@ -2647,14 +2649,29 @@ static void dwc3_complete(struct device *dev)
 		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);
 	}
 }
+
+static int dwc3_prepare(struct device *dev)
+{
+	struct dwc3	*dwc = dev_get_drvdata(dev);
+
+	/*
+	 * Indicate to the PM core that it may safely leave the device in
+	 * runtime suspend if runtime-suspended already in device mode.
+	 */
+	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_DEVICE)
+		return 1;
+
+	return 0;
+}
 #else
 #define dwc3_complete NULL
+#define dwc3_prepare NULL
 #endif /* CONFIG_PM_SLEEP */
 
 static const struct dev_pm_ops dwc3_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_suspend, dwc3_resume)
 	.complete = dwc3_complete,
-
+	.prepare = dwc3_prepare,
 	/*
 	 * Runtime suspend halts the controller on disconnection. It relies on
 	 * platforms with custom connection notification to start the controller
