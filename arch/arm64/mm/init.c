@@ -290,6 +290,17 @@ void __init arm64_memblock_init(void)
 		s64 range = linear_region_size -
 			    BIT(id_aa64mmfr0_parange_to_phys_shift(parange));
 
+		if (range < 0) {
+			if (IS_ENABLED(CONFIG_MEMORY_HOTPLUG)) {
+				WARN(true, "linear region is not randomized due to bigger parange\n");
+			} else {
+				pr_warn("falling back to the range considering on-boot DRAM size\n");
+				range = linear_region_size -
+					(memblock_end_of_DRAM() -
+					 memblock_start_of_DRAM());
+			}
+		}
+
 		/*
 		 * If the size of the linear region exceeds, by a sufficient
 		 * margin, the size of the region that the physical memory can
