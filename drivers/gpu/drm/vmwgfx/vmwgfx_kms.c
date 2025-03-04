@@ -1221,7 +1221,20 @@ static void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
 {
 	struct vmw_framebuffer_surface *vfbs =
 		vmw_framebuffer_to_vfbs(framebuffer);
+	struct vmw_bo *bo = vmw_user_object_buffer(&vfbs->uo);
+	struct vmw_surface *surf = vmw_user_object_surface(&vfbs->uo);
 
+	if (bo) {
+		vmw_bo_dirty_release(bo);
+		/*
+		 * bo->dirty is reference counted so it being NULL
+		 * means that the surface wasn't coherent to begin
+		 * with and so we have to free the dirty tracker
+		 * in the vmw_resource
+		 */
+		if (!bo->dirty && surf && surf->res.dirty)
+			surf->res.func->dirty_free(&surf->res);
+	}
 	drm_framebuffer_cleanup(framebuffer);
 	vmw_user_object_unref(&vfbs->uo);
 
