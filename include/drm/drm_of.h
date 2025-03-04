@@ -50,6 +50,7 @@ int drm_of_find_panel_or_bridge(const struct device_node *np,
 				int port, int endpoint,
 				struct drm_panel **panel,
 				struct drm_bridge **bridge);
+int drm_of_dpi_get_color_coding(const struct device_node *endpoint);
 int drm_of_lvds_get_dual_link_pixel_order(const struct device_node *port1,
 					  const struct device_node *port2);
 int drm_of_lvds_get_dual_link_pixel_order_sink(struct device_node *port1,
@@ -100,6 +101,12 @@ static inline int drm_of_find_panel_or_bridge(const struct device_node *np,
 					      int port, int endpoint,
 					      struct drm_panel **panel,
 					      struct drm_bridge **bridge)
+{
+	return -EINVAL;
+}
+
+static inline int
+drm_of_dpi_get_color_coding(const struct device_node *endpoint)
 {
 	return -EINVAL;
 }

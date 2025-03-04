@@ -285,6 +285,49 @@ int drm_of_find_panel_or_bridge(const struct device_node *np,
 }
 EXPORT_SYMBOL_GPL(drm_of_find_panel_or_bridge);
 
+/**
+ * drm_of_dpi_get_color_coding - Get DPI color coding
+ * @endpoint: DT endpoint node of the DPI source or sink
+ *
+ * Convert DT "dpi-color-coding" property string value into media bus format
+ * value.
+ *
+ * Return:
+ * * MEDIA_BUS_FMT_RGB565_1X16 - dpi-color-coding is "16bit-configuration1"
+ * * MEDIA_BUS_FMT_RGB565_1X24_CPADHI - dpi-color-coding is
+ *                                      "16bit-configuration2"
+ * * MEDIA_BUS_FMT_RGB666_1X18 - dpi-color-coding is "18bit-configuration1"
+ * * MEDIA_BUS_FMT_BGR666_1X24_CPADHI - dpi-color-coding is
+ *                                      "18bit-configuration2"
+ * * MEDIA_BUS_FMT_RGB888_1X24 - dpi-color-coding is "24bit"
+ * * -EINVAL - the "dpi-color-coding" property is unsupported
+ * * -ENODEV - the "dpi-color-coding" property is missing
+ */
+int drm_of_dpi_get_color_coding(const struct device_node *endpoint)
+{
+	const char *coding;
+	int ret;
+
+	ret = of_property_read_string(endpoint, "dpi-color-coding", &coding);
+	if (ret < 0)
+		return -ENODEV;
+
+	/* TODO: Add 16bit-configuration3 support. */
+	if (!strcmp(coding, "16bit-configuration1"))
+		return MEDIA_BUS_FMT_RGB565_1X16;
+	if (!strcmp(coding, "16bit-configuration2"))
+		return MEDIA_BUS_FMT_RGB565_1X24_CPADHI;
+	if (!strcmp(coding, "18bit-configuration1"))
+		return MEDIA_BUS_FMT_RGB666_1X18;
+	if (!strcmp(coding, "18bit-configuration2"))
+		return MEDIA_BUS_FMT_BGR666_1X24_CPADHI;
+	if (!strcmp(coding, "24bit"))
+		return MEDIA_BUS_FMT_RGB888_1X24;
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL_GPL(drm_of_dpi_get_color_coding);
+
 enum drm_of_lvds_pixels {
 	DRM_OF_LVDS_EVEN = BIT(0),
 	DRM_OF_LVDS_ODD = BIT(1),
