@@ -335,6 +335,22 @@ int xe_guc_pagefault_handler(struct xe_guc *guc, u32 *msg, u32 len)
 	return full ? -ENOSPC : 0;
 }
 
+static void save_pagefault_to_vm(struct xe_device *xe, struct xe_pagefault *pf)
+{
+	struct xe_vm *vm;
+	struct xe_pagefault *store;
+
+	vm = asid_to_vm(xe, pf->asid);
+	if (IS_ERR(vm))
+		return;
+
+	spin_lock(&vm->pfs.lock);
+	store = kzalloc(sizeof(*pf), GFP_KERNEL);
+	memcpy(store, pf, sizeof(*pf));
+	xe_vm_add_pf_entry(vm, store);
+	spin_unlock(&vm->pfs.lock);
+}
+
 #define USM_QUEUE_MAX_RUNTIME_MS	20
 
 static void pf_queue_work_func(struct work_struct *w)
@@ -353,6 +369,7 @@ static void pf_queue_work_func(struct work_struct *w)
 		ret = handle_pagefault(gt, &pf);
 		if (unlikely(ret)) {
 			print_pagefault(xe, &pf);
+			save_pagefault_to_vm(xe, &pf);
 			pf.fault_unsuccessful = 1;
 			drm_dbg(&xe->drm, "Fault response: Unsuccessful %d\n", ret);
 		}
