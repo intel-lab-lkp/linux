@@ -2208,9 +2208,20 @@ mv88e6xxx_port_vlan_prepare(struct dsa_switch *ds, int port,
 	return err;
 }
 
+static int mv88e6xxx_port_db_get(struct mv88e6xxx_chip *chip,
+				 struct mv88e6xxx_atu_entry *entry,
+				 u16 fid, const unsigned char *addr)
+{
+	entry->state = 0;
+	ether_addr_copy(entry->mac, addr);
+	eth_addr_dec(entry->mac);
+
+	return mv88e6xxx_g1_atu_getnext(chip, fid, entry);
+}
+
 static int mv88e6xxx_port_db_load_purge(struct mv88e6xxx_chip *chip, int port,
 					const unsigned char *addr, u16 vid,
-					u8 state)
+					u8 state, bool verify)
 {
 	struct mv88e6xxx_atu_entry entry;
 	struct mv88e6xxx_vtu_entry vlan;
@@ -2238,11 +2249,7 @@ static int mv88e6xxx_port_db_load_purge(struct mv88e6xxx_chip *chip, int port,
 		fid = vlan.fid;
 	}
 
-	entry.state = 0;
-	ether_addr_copy(entry.mac, addr);
-	eth_addr_dec(entry.mac);
-
-	err = mv88e6xxx_g1_atu_getnext(chip, fid, &entry);
+	err = mv88e6xxx_port_db_get(chip, &entry, fid, addr);
 	if (err)
 		return err;
 
@@ -2266,7 +2273,20 @@ static int mv88e6xxx_port_db_load_purge(struct mv88e6xxx_chip *chip, int port,
 		entry.state = state;
 	}
 
-	return mv88e6xxx_g1_atu_loadpurge(chip, fid, &entry);
+	err = mv88e6xxx_g1_atu_loadpurge(chip, fid, &entry);
+	if (err)
+		return err;
+
+	if (!!state && verify) {
+		err = mv88e6xxx_port_db_get(chip, &entry, fid, addr);
+		if (err)
+			return err;
+
+		if (!entry.state || !ether_addr_equal(entry.mac, addr))
+			return -ENOSPC;
+	}
+
+	return 0;
 }
 
 static int mv88e6xxx_policy_apply(struct mv88e6xxx_chip *chip, int port,
@@ -2298,7 +2318,7 @@ static int mv88e6xxx_policy_apply(struct mv88e6xxx_chip *chip, int port,
 			return -EOPNOTSUPP;
 
 		err = mv88e6xxx_port_db_load_purge(chip, port, addr, vid,
-						   state);
+						   state, false);
 		if (err)
 			return err;
 		break;
@@ -2487,7 +2507,8 @@ static int mv88e6xxx_port_add_broadcast(struct mv88e6xxx_chip *chip, int port,
 
 	eth_broadcast_addr(broadcast);
 
-	return mv88e6xxx_port_db_load_purge(chip, port, broadcast, vid, state);
+	return mv88e6xxx_port_db_load_purge(chip, port, broadcast, vid, state,
+					    false);
 }
 
 static int mv88e6xxx_broadcast_setup(struct mv88e6xxx_chip *chip, u16 vid)
@@ -2539,7 +2560,7 @@ mv88e6xxx_port_broadcast_sync_vlan(struct mv88e6xxx_chip *chip,
 	eth_broadcast_addr(broadcast);
 
 	return mv88e6xxx_port_db_load_purge(chip, ctx->port, broadcast,
-					    vlan->vid, state);
+					    vlan->vid, state, false);
 }
 
 static int mv88e6xxx_port_broadcast_sync(struct mv88e6xxx_chip *chip, int port,
@@ -2845,7 +2866,8 @@ static int mv88e6xxx_port_fdb_add(struct dsa_switch *ds, int port,
 
 	mv88e6xxx_reg_lock(chip);
 	err = mv88e6xxx_port_db_load_purge(chip, port, addr, vid,
-					   MV88E6XXX_G1_ATU_DATA_STATE_UC_STATIC);
+					   MV88E6XXX_G1_ATU_DATA_STATE_UC_STATIC,
+					   true);
 	mv88e6xxx_reg_unlock(chip);
 
 	return err;
@@ -2859,7 +2881,7 @@ static int mv88e6xxx_port_fdb_del(struct dsa_switch *ds, int port,
 	int err;
 
 	mv88e6xxx_reg_lock(chip);
-	err = mv88e6xxx_port_db_load_purge(chip, port, addr, vid, 0);
+	err = mv88e6xxx_port_db_load_purge(chip, port, addr, vid, 0, false);
 	mv88e6xxx_reg_unlock(chip);
 
 	return err;
@@ -6613,7 +6635,8 @@ static int mv88e6xxx_port_mdb_add(struct dsa_switch *ds, int port,
 
 	mv88e6xxx_reg_lock(chip);
 	err = mv88e6xxx_port_db_load_purge(chip, port, mdb->addr, mdb->vid,
-					   MV88E6XXX_G1_ATU_DATA_STATE_MC_STATIC);
+					   MV88E6XXX_G1_ATU_DATA_STATE_MC_STATIC,
+					   true);
 	mv88e6xxx_reg_unlock(chip);
 
 	return err;
@@ -6627,7 +6650,8 @@ static int mv88e6xxx_port_mdb_del(struct dsa_switch *ds, int port,
 	int err;
 
 	mv88e6xxx_reg_lock(chip);
-	err = mv88e6xxx_port_db_load_purge(chip, port, mdb->addr, mdb->vid, 0);
+	err = mv88e6xxx_port_db_load_purge(chip, port, mdb->addr, mdb->vid, 0,
+					   false);
 	mv88e6xxx_reg_unlock(chip);
 
 	return err;
