@@ -385,6 +385,19 @@ static int evsel_script__fprintf(struct evsel_script *es, FILE *fp)
 		       st.st_size / 1024.0 / 1024.0, es->filename, es->samples);
 }
 
+static bool is_core_pmu_type(unsigned int type)
+{
+	struct perf_pmu *pmu = NULL;
+
+	if (perf_pmus__num_core_pmus() > 1) {
+		while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
+			if (pmu->type == type)
+				return true;
+		}
+	}
+	return type == PERF_TYPE_RAW;
+}
+
 static inline int output_type(unsigned int type)
 {
 	switch (type) {
@@ -394,6 +407,9 @@ static inline int output_type(unsigned int type)
 		if (type < PERF_TYPE_MAX)
 			return type;
 	}
+
+	if (is_core_pmu_type(type))
+		return PERF_TYPE_RAW;
 
 	return OUTPUT_TYPE_OTHER;
 }
