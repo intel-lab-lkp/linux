@@ -136,7 +136,7 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 				cb->ext_hdr = kzalloc(sizeof(*gsc_f2h), GFP_KERNEL);
 				if (!cb->ext_hdr) {
 					cb->status = -ENOMEM;
-					goto discard;
+					goto move_tail;
 				}
 				break;
 			case MEI_EXT_HDR_NONE:
@@ -153,7 +153,7 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 		if (!vtag_hdr && !gsc_f2h) {
 			cl_dbg(dev, cl, "no vtag or gsc found in extended header.\n");
 			cb->status = -EPROTO;
-			goto discard;
+			goto move_tail;
 		}
 	}
 
@@ -163,7 +163,7 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 			cl_err(dev, cl, "mismatched tag: %d != %d\n",
 			       cb->vtag, vtag_hdr->vtag);
 			cb->status = -EPROTO;
-			goto discard;
+			goto move_tail;
 		}
 		cb->vtag = vtag_hdr->vtag;
 	}
@@ -174,18 +174,18 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 		if (!dev->hbm_f_gsc_supported) {
 			cl_err(dev, cl, "gsc extended header is not supported\n");
 			cb->status = -EPROTO;
-			goto discard;
+			goto move_tail;
 		}
 
 		if (length) {
 			cl_err(dev, cl, "no data allowed in cb with gsc\n");
 			cb->status = -EPROTO;
-			goto discard;
+			goto move_tail;
 		}
 		if (ext_hdr_len > sizeof(*gsc_f2h)) {
 			cl_err(dev, cl, "gsc extended header is too big %u\n", ext_hdr_len);
 			cb->status = -EPROTO;
-			goto discard;
+			goto move_tail;
 		}
 		memcpy(cb->ext_hdr, gsc_f2h, ext_hdr_len);
 	}
@@ -193,7 +193,7 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 	if (!mei_cl_is_connected(cl)) {
 		cl_dbg(dev, cl, "not connected\n");
 		cb->status = -ENODEV;
-		goto discard;
+		goto move_tail;
 	}
 
 	if (mei_hdr->dma_ring)
@@ -205,14 +205,14 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 		cl_err(dev, cl, "message is too big len %d idx %zu\n",
 		       length, cb->buf_idx);
 		cb->status = -EMSGSIZE;
-		goto discard;
+		goto move_tail;
 	}
 
 	if (cb->buf.size < buf_sz) {
 		cl_dbg(dev, cl, "message overflow. size %zu len %d idx %zu\n",
 			cb->buf.size, length, cb->buf_idx);
 		cb->status = -EMSGSIZE;
-		goto discard;
+		goto move_tail;
 	}
 
 	if (mei_hdr->dma_ring) {
@@ -235,9 +235,9 @@ static int mei_cl_irq_read_msg(struct mei_cl *cl,
 
 	return 0;
 
+move_tail:
+	list_move_tail(&cb->list, cmpl_list);
 discard:
-	if (cb)
-		list_move_tail(&cb->list, cmpl_list);
 	mei_irq_discard_msg(dev, mei_hdr, length);
 	return 0;
 }
