@@ -426,7 +426,7 @@ static int ovs_ct_set_labels(struct nf_conn *ct, struct sw_flow_key *key,
 	struct nf_conn_labels *cl;
 	int err;
 
-	cl = ovs_ct_get_conn_labels(ct);
+	cl = nf_ct_labels_find(ct);
 	if (!cl)
 		return -ENOSPC;
 
