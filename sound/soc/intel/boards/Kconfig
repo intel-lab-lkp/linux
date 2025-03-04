@@ -346,6 +346,21 @@ config SND_SOC_INTEL_SOF_RT5682_MACH
 	   Say Y if you have such a device.
 	   If unsure select "N".
 
+config SND_SOC_INTEL_SOF_CS35L56_MACH
+	tristate "SOF with cs35l56 codec on SSP"
+	depends on I2C || SPI_MASTER
+	depends on ACPI
+	depends on (MFD_INTEL_LPSS || COMPILE_TEST)
+	select SND_SOC_CS35L56_I2C if I2C
+	select SND_SOC_CS35L56_SPI if SPI_MASTER
+	select SND_SOC_INTEL_HDA_DSP_COMMON
+	select SND_SOC_INTEL_SOF_BOARD_HELPERS
+	help
+	   This adds support for ASoC machine driver for SOF platforms
+	   with cs35l56 Smart Amp on SSP port.
+	   Say Y if you have such a device.
+	   If unsure select "N".
+
 config SND_SOC_INTEL_SOF_CS42L42_MACH
 	tristate "SOF with cs42l42 codec in I2S Mode"
 	depends on I2C && ACPI

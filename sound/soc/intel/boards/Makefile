@@ -17,6 +17,7 @@ snd-soc-sst-byt-cht-da7213-y := bytcht_da7213.o
 snd-soc-sst-byt-cht-es8316-y := bytcht_es8316.o
 snd-soc-sst-byt-cht-nocodec-y := bytcht_nocodec.o
 snd-soc-sof_rt5682-y := sof_rt5682.o
+snd-soc-sof_cs35l56-y := sof_cs35l56.o
 snd-soc-sof_cs42l42-y := sof_cs42l42.o
 snd-soc-sof_es8336-y := sof_es8336.o
 snd-soc-sof_nau8825-y := sof_nau8825.o
@@ -27,6 +28,7 @@ snd-soc-sof-ssp-amp-y := sof_ssp_amp.o
 snd-soc-sof-sdw-y += sof_sdw.o				\
 			sof_sdw_hdmi.o
 obj-$(CONFIG_SND_SOC_INTEL_SOF_RT5682_MACH) += snd-soc-sof_rt5682.o
+obj-$(CONFIG_SND_SOC_INTEL_SOF_CS35L56_MACH) += snd-soc-sof_cs35l56.o
 obj-$(CONFIG_SND_SOC_INTEL_SOF_CS42L42_MACH) += snd-soc-sof_cs42l42.o
 obj-$(CONFIG_SND_SOC_INTEL_SOF_ES8336_MACH) += snd-soc-sof_es8336.o
 obj-$(CONFIG_SND_SOC_INTEL_SOF_NAU8825_MACH) += snd-soc-sof_nau8825.o
