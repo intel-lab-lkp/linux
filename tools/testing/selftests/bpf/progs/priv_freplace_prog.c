@@ -6,8 +6,8 @@
 
 char _license[] SEC("license") = "GPL";
 
-SEC("kprobe")
-int kprobe_prog(struct pt_regs *ctx)
+SEC("freplace/kprobe_prog")
+int new_kprobe_prog(struct pt_regs *ctx)
 {
 	return 1;
 }
