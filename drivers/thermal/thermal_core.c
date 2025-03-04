@@ -16,6 +16,7 @@
 #include <linux/kdev_t.h>
 #include <linux/idr.h>
 #include <linux/thermal.h>
+#include <linux/pscrr.h>
 #include <linux/reboot.h>
 #include <linux/string.h>
 #include <linux/of.h>
@@ -379,6 +380,8 @@ static void thermal_zone_device_halt(struct thermal_zone_device *tz, bool shutdo
 	const char *msg = "Temperature too high";
 
 	dev_emerg(&tz->device, "%s: critical temperature reached\n", tz->type);
+
+	set_power_state_change_reason(PSCR_OVERTEMPERATURE);
 
 	if (shutdown)
 		hw_protection_shutdown(msg, poweroff_delay_ms);
