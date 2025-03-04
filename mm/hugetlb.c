@@ -2255,11 +2255,19 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 		goto out_unlock;
 	spin_unlock_irq(&hugetlb_lock);
 
-	folio = alloc_fresh_hugetlb_folio(h, gfp_mask, nid, nmask);
+	folio = only_alloc_fresh_hugetlb_folio(h, gfp_mask, nid, nmask, NULL);
 	if (!folio)
 		return NULL;
 
+	hugetlb_vmemmap_optimize_folio(h, folio);
+
 	spin_lock_irq(&hugetlb_lock);
+	/*
+	 * Update nr_huge_pages and surplus_huge_pages together,
+	 * otherwise it might confuse persistent_huge_pages() momentarily.
+	 */
+	__prep_account_new_huge_page(h, nid);
+
 	/*
 	 * We could have raced with the pool size change.
 	 * Double check that and simply deallocate the new page
