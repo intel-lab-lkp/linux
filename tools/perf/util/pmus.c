@@ -445,15 +445,15 @@ static int cmp_sevent(const void *a, const void *b)
 	if (a_iscpu != b_iscpu)
 		return a_iscpu ? -1 : 1;
 
-	/* Order by PMU name. */
-	if (as->pmu != bs->pmu) {
-		ret = strcmp(as->pmu_name ?: "", bs->pmu_name ?: "");
-		if (ret)
-			return ret;
-	}
-
 	/* Order by event name. */
-	return strcmp(as->name, bs->name);
+	ret = strcmp(as->name, bs->name);
+	if (ret)
+		return ret;
+
+	/* Order by PMU name. */
+	if (as->pmu == bs->pmu)
+		return 0;
+	return strcmp(as->pmu_name ?: "", bs->pmu_name ?: "");
 }
 
 static bool pmu_alias_is_duplicate(struct sevent *a, struct sevent *b)
