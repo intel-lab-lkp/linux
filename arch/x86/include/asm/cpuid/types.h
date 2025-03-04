@@ -80,7 +80,7 @@ static inline void get_leaf_0x2_regs(union leaf_0x2_regs *regs)
 
 /*
  * Leaf 0x2 1-byte descriptors' cache types
- * To be used for their mappings at cache_table[]
+ * To be used for their mappings at cpuid_0x2_table[].
  *
  * Start at 1 since type 0 is reserved for HW byte descriptors which are
  * not recognized by the kernel; i.e., those without an explicit mapping
