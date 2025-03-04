@@ -1631,7 +1631,7 @@ static int raid10_handle_discard(struct mddev *mddev, struct bio *bio)
 	if (test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery))
 		return -EAGAIN;
 
-	if (WARN_ON_ONCE(bio->bi_opf & REQ_NOWAIT)) {
+	if (bio->bi_opf & REQ_NOWAIT) {
 		bio_wouldblock_error(bio);
 		return 0;
 	}
