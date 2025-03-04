@@ -1107,7 +1107,7 @@ struct perf_pmu *perf_pmu__lookup(struct list_head *pmus, int dirfd, const char 
 
 	pmu->name = strdup(name);
 	if (!pmu->name)
-		goto err;
+		goto free_pmu;
 
 	/*
 	 * Read type early to fail fast if a lookup name isn't a PMU. Ensure
@@ -1155,6 +1155,7 @@ struct perf_pmu *perf_pmu__lookup(struct list_head *pmus, int dirfd, const char 
 	return pmu;
 err:
 	zfree(&pmu->name);
+free_pmu:
 	free(pmu);
 	return NULL;
 }
