@@ -4448,6 +4448,11 @@ static void hci_num_comp_pkts_evt(struct hci_dev *hdev, void *data,
 			hdev->sco_cnt += count;
 			if (hdev->sco_cnt > hdev->sco_pkts)
 				hdev->sco_cnt = hdev->sco_pkts;
+
+			/* Enable HCI_SCO_FLOWCTL so sco_cnt is used instead of
+			 * sco_pkts.
+			 */
+			hci_dev_set_flag(hdev, HCI_SCO_FLOWCTL);
 			break;
 
 		case ISO_LINK:
