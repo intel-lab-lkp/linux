@@ -4886,6 +4886,48 @@ static inline unsigned long root_cfs_util_uclamp(struct rq *rq)
 
 	return max(ret, 0L);
 }
+
+/*
+ * Negative biases are tricky. If we remove them right away then dequeuing a
+ * uclamp_max task has the interesting effect that dequeuing results in a higher
+ * rq utilization. Solve this by applying PELT decay to the bias itself.
+ *
+ * Keeping track of a PELT-decayed negative bias is extra overhead. However, we
+ * observe this interesting math property, where y is the decay factor and p is
+ * the number of periods elapsed:
+ *
+ *	util_new = util_old * y^p - neg_bias * y^p
+ *		 = (util_old - neg_bias) * y^p
+ *
+ * Therefore, we simply subtract the negative bias from util_avg the moment we
+ * dequeue, then the PELT signal itself is the total of util_avg and the decayed
+ * negative bias, and we no longer need to track the decayed bias separately.
+ */
+static void propagate_negative_bias(struct task_struct *p)
+{
+	if (task_util_bias(p) < 0 && !task_on_rq_migrating(p)) {
+		unsigned long neg_bias = -task_util_bias(p);
+		struct sched_entity *se = &p->se;
+
+		p->se.avg.util_avg_bias = 0;
+
+		for_each_sched_entity(se) {
+			struct sched_avg *sa = &se->avg;
+			u32 divider = get_pelt_divider(sa);
+
+			sub_positive(&sa->util_avg, neg_bias);
+			sub_positive(&sa->util_sum, neg_bias * divider);
+			sa->util_sum = max_t(u32, sa->util_sum,
+					     sa->util_avg * PELT_MIN_DIVIDER);
+			sa = &cfs_rq_of(se)->avg;
+			divider = get_pelt_divider(sa);
+			sub_positive(&sa->util_avg, neg_bias);
+			sub_positive(&sa->util_sum, neg_bias * divider);
+			sa->util_sum = max_t(u32, sa->util_sum,
+					     sa->util_avg * PELT_MIN_DIVIDER);
+		}
+	}
+}
 #else
 static inline long task_util_bias(struct task_struct *p)
 {
@@ -7114,8 +7156,10 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	}
 
 	sub_nr_running(rq, h_nr_queued);
-	if (p)
+	if (p) {
 		util_bias_dequeue(rq, p);
+		propagate_negative_bias(p);
+	}
 
 	if (rq_h_nr_queued && !rq->cfs.h_nr_queued)
 		dl_server_stop(&rq->fair_server);
