@@ -6116,6 +6116,30 @@ nfs4_delegation_stat(struct nfs4_delegation *dp, struct svc_fh *currentfh,
 }
 
 /*
+ * Add NFS4_SHARE_ACCESS_READ to the write delegation granted on OPEN
+ * with NFS4_SHARE_ACCESS_READ by allocating separate nfsd_file and
+ * struct file to be used for read with delegation stateid.
+ *
+ */
+static void
+nfs4_add_rdaccess_to_wrdeleg(struct svc_rqst *rqstp, struct svc_fh *fh,
+			     struct nfs4_ol_stateid *stp)
+{
+	struct nfs4_file *fp;
+	struct nfsd_file *nf = NULL;
+
+	if (nfsd_file_acquire_opened(rqstp, fh, NFSD_MAY_READ, NULL, &nf))
+		return;
+	fp = stp->st_stid.sc_file;
+	spin_lock(&fp->fi_lock);
+	__nfs4_file_get_access(fp, NFS4_SHARE_ACCESS_READ);
+	set_access(NFS4_SHARE_ACCESS_READ, stp);
+	fp = stp->st_stid.sc_file;
+	fp->fi_fds[O_RDONLY] = nf;
+	spin_unlock(&fp->fi_lock);
+}
+
+/*
  * The Linux NFS server does not offer write delegations to NFSv4.0
  * clients in order to avoid conflicts between write delegations and
  * GETATTRs requesting CHANGE or SIZE attributes.
@@ -6140,8 +6164,9 @@ nfs4_delegation_stat(struct nfs4_delegation *dp, struct svc_fh *currentfh,
  * open or lock state.
  */
 static void
-nfs4_open_delegation(struct nfsd4_open *open, struct nfs4_ol_stateid *stp,
-		     struct svc_fh *currentfh)
+nfs4_open_delegation(struct svc_rqst *rqstp, struct nfsd4_open *open,
+		     struct nfs4_ol_stateid *stp, struct svc_fh *currentfh,
+		     struct svc_fh *fh)
 {
 	bool deleg_ts = open->op_deleg_want & OPEN4_SHARE_ACCESS_WANT_DELEG_TIMESTAMPS;
 	struct nfs4_openowner *oo = openowner(stp->st_stateowner);
@@ -6196,6 +6221,10 @@ nfs4_open_delegation(struct nfsd4_open *open, struct nfs4_ol_stateid *stp,
 		dp->dl_cb_fattr.ncf_cur_fsize = stat.size;
 		dp->dl_cb_fattr.ncf_initial_cinfo = nfsd4_change_attribute(&stat);
 		trace_nfsd_deleg_write(&dp->dl_stid.sc_stateid);
+
+		if ((open->op_share_access & NFS4_SHARE_ACCESS_BOTH) ==
+					NFS4_SHARE_ACCESS_WRITE)
+			nfs4_add_rdaccess_to_wrdeleg(rqstp, fh, stp);
 	} else {
 		open->op_delegate_type = deleg_ts ? OPEN_DELEGATE_READ_ATTRS_DELEG :
 						    OPEN_DELEGATE_READ;
@@ -6342,7 +6371,8 @@ nfsd4_process_open2(struct svc_rqst *rqstp, struct svc_fh *current_fh, struct nf
 	* Attempt to hand out a delegation. No error return, because the
 	* OPEN succeeds even if we fail.
 	*/
-	nfs4_open_delegation(open, stp, &resp->cstate.current_fh);
+	nfs4_open_delegation(rqstp, open, stp,
+		&resp->cstate.current_fh, current_fh);
 
 	/*
 	 * If there is an existing open stateid, it must be updated and
@@ -7082,10 +7112,6 @@ nfs4_find_file(struct nfs4_stid *s, int flags)
 
 	switch (s->sc_type) {
 	case SC_TYPE_DELEG:
-		spin_lock(&s->sc_file->fi_lock);
-		ret = nfsd_file_get(s->sc_file->fi_deleg_file);
-		spin_unlock(&s->sc_file->fi_lock);
-		break;
 	case SC_TYPE_OPEN:
 	case SC_TYPE_LOCK:
 		if (flags & RD_STATE)
@@ -7261,6 +7287,7 @@ nfs4_preprocess_stateid_op(struct svc_rqst *rqstp,
 		status = find_cpntf_state(nn, stateid, &s);
 	if (status)
 		return status;
+
 	status = nfsd4_stid_check_stateid_generation(stateid, s,
 			nfsd4_has_session(cstate));
 	if (status)
