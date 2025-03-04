@@ -51,19 +51,21 @@ int hp_get_integer_from_buffer(u8 **buffer, u32 *buffer_size, u32 *integer)
 
 int hp_get_string_from_buffer(u8 **buffer, u32 *buffer_size, char *dst, u32 dst_size)
 {
-	u16 *src = (u16 *)*buffer;
+	u16 *src = PTR_ALIGN((u16 *)*buffer, sizeof(u16));
 	u16 src_size;
 
-	u16 size;
-	int i;
+	u16 length;
 	int conv_dst_size;
+	int result;
 
 	if (*buffer_size < sizeof(u16))
 		return -EINVAL;
 
+	/* String size is in the first two bytes of the buffer */
 	src_size = *(src++);
-	/* size value in u16 chars */
-	size = src_size / sizeof(u16);
+
+	/* Get the string length considering it is u16 */
+	length = src_size / sizeof(u16);
 
 	/* Ensure there is enough space remaining to read and convert
 	 * the string
@@ -71,54 +73,22 @@ int hp_get_string_from_buffer(u8 **buffer, u32 *buffer_size, char *dst, u32 dst_
 	if (*buffer_size < src_size)
 		return -EINVAL;
 
-	for (i = 0; i < size; i++)
-		if (src[i] == '\\' ||
-		    src[i] == '\r' ||
-		    src[i] == '\n' ||
-		    src[i] == '\t')
-			size++;
+	conv_dst_size = length;
+	if (dst_size < conv_dst_size)
+		return -EINVAL;
 
 	/*
-	 * Conversion is limited to destination string max number of
-	 * bytes.
+	 * Convert from UTF-16 unicode to UTF-8 and ensure
+	 * the string is null terminated
 	 */
-	conv_dst_size = size;
-	if (size > dst_size)
-		conv_dst_size = dst_size - 1;
+	result = utf16s_to_utf8s(src, src_size, UTF16_HOST_ENDIAN, dst, conv_dst_size);
+	dst[result] = 0;
 
-	/*
-	 * convert from UTF-16 unicode to ASCII
-	 */
-	utf16s_to_utf8s(src, src_size, UTF16_HOST_ENDIAN, dst, conv_dst_size);
-	dst[conv_dst_size] = 0;
+	/* Update buffer to point to the next position */
+	*buffer = (u8 *)src + src_size;
+	*buffer_size -= src_size;
 
-	for (i = 0; i < conv_dst_size; i++) {
-		if (*src == '\\' ||
-		    *src == '\r' ||
-		    *src == '\n' ||
-		    *src == '\t') {
-			dst[i++] = '\\';
-			if (i == conv_dst_size)
-				break;
-		}
-
-		if (*src == '\r')
-			dst[i] = 'r';
-		else if (*src == '\n')
-			dst[i] = 'n';
-		else if (*src == '\t')
-			dst[i] = 't';
-		else if (*src == '"')
-			dst[i] = '\'';
-		else
-			dst[i] = *src;
-		src++;
-	}
-
-	*buffer = (u8 *)src;
-	*buffer_size -= size * sizeof(u16);
-
-	return size;
+	return result;
 }
 
 int hp_get_common_data_from_buffer(u8 **buffer_ptr, u32 *buffer_size,
@@ -999,37 +969,37 @@ static int __init hp_init(void)
 	 */
 	ret = create_attributes_level_sysfs_files();
 	if (ret)
-		pr_debug("Failed to create sysfs level attributes\n");
+		pr_warn("Failed to create sysfs level attributes\n");
 
 	ret = hp_init_bios_attributes(HPWMI_STRING_TYPE, HP_WMI_BIOS_STRING_GUID);
 	if (ret)
-		pr_debug("Failed to populate string type attributes\n");
+		pr_warn("Failed to populate string type attributes\n");
 
 	ret = hp_init_bios_attributes(HPWMI_INTEGER_TYPE, HP_WMI_BIOS_INTEGER_GUID);
 	if (ret)
-		pr_debug("Failed to populate integer type attributes\n");
+		pr_warn("Failed to populate integer type attributes\n");
 
 	ret = hp_init_bios_attributes(HPWMI_ENUMERATION_TYPE, HP_WMI_BIOS_ENUMERATION_GUID);
 	if (ret)
-		pr_debug("Failed to populate enumeration type attributes\n");
+		pr_warn("Failed to populate enumeration type attributes\n");
 
 	ret = hp_init_bios_attributes(HPWMI_ORDERED_LIST_TYPE, HP_WMI_BIOS_ORDERED_LIST_GUID);
 	if (ret)
-		pr_debug("Failed to populate ordered list object type attributes\n");
+		pr_warn("Failed to populate ordered list object type attributes\n");
 
 	ret = hp_init_bios_attributes(HPWMI_PASSWORD_TYPE, HP_WMI_BIOS_PASSWORD_GUID);
 	if (ret)
-		pr_debug("Failed to populate password object type attributes\n");
+		pr_warn("Failed to populate password object type attributes\n");
 
 	bioscfg_drv.spm_data.attr_name_kobj = NULL;
 	ret = hp_add_other_attributes(HPWMI_SECURE_PLATFORM_TYPE);
 	if (ret)
-		pr_debug("Failed to populate secure platform object type attribute\n");
+		pr_warn("Failed to populate secure platform object type attribute\n");
 
 	bioscfg_drv.sure_start_attr_kobj = NULL;
 	ret = hp_add_other_attributes(HPWMI_SURE_START_TYPE);
 	if (ret)
-		pr_debug("Failed to populate sure start object type attribute\n");
+		pr_warn("Failed to populate sure start object type attribute\n");
 
 	return 0;
 

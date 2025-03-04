@@ -17,11 +17,11 @@
 
 #define DRIVER_NAME		"hp-bioscfg"
 
+#define MAX_STRING_BUFF_SIZE	1024
 #define MAX_BUFF_SIZE		512
 #define MAX_KEY_MOD_SIZE	256
 #define MAX_PASSWD_SIZE		64
 #define MAX_PREREQUISITES_SIZE	20
-#define MAX_REQ_ELEM_SIZE	128
 #define MAX_VALUES_SIZE		16
 #define MAX_ENCODINGS_SIZE	16
 #define MAX_ELEMENTS_SIZE	16
@@ -131,8 +131,8 @@ struct common_data {
 struct string_data {
 	struct common_data common;
 	struct kobject *attr_name_kobj;
-	u8 current_value[MAX_BUFF_SIZE];
-	u8 new_value[MAX_BUFF_SIZE];
+	u8 current_value[MAX_STRING_BUFF_SIZE];
+	u8 new_value[MAX_STRING_BUFF_SIZE];
 	u32 min_length;
 	u32 max_length;
 };

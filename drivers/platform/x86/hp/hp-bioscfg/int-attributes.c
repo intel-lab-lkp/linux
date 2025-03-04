@@ -38,7 +38,7 @@ static int validate_integer_input(int instance_id, char *buf)
 	if (integer_data->common.is_readonly)
 		return -EIO;
 
-	ret = kstrtoint(buf, 10, &in_val);
+	ret = kstrtouint(buf, 10, &in_val);
 	if (ret < 0)
 		return ret;
 
@@ -55,7 +55,7 @@ static void update_integer_value(int instance_id, char *attr_value)
 	int ret;
 	struct integer_data *integer_data = &bioscfg_drv.integer_data[instance_id];
 
-	ret = kstrtoint(attr_value, 10, &in_val);
+	ret = kstrtouint(attr_value, 10, &in_val);
 	if (ret == 0)
 		integer_data->current_value = in_val;
 	else
@@ -185,7 +185,7 @@ static int hp_populate_integer_elements_from_package(union acpi_object *integer_
 		/* Assign appropriate element value to corresponding field*/
 		switch (eloc) {
 		case VALUE:
-			ret = kstrtoint(str_value, 10, &int_value);
+			ret = kstrtouint(str_value, 10, &int_value);
 			if (ret)
 				continue;
 
@@ -328,7 +328,7 @@ static int hp_populate_integer_elements_from_buffer(u8 *buffer_ptr, u32 *buffer_
 	integer_data->current_value = 0;
 
 	hp_get_string_from_buffer(&buffer_ptr, buffer_size, dst, dst_size);
-	ret = kstrtoint(dst, 10, &integer_data->current_value);
+	ret = kstrtouint(dst, 10, &integer_data->current_value);
 	if (ret)
 		pr_warn("Unable to convert string to integer: %s\n", dst);
 	kfree(dst);
