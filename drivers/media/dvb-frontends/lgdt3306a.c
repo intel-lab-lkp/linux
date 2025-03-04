@@ -1500,6 +1500,9 @@ static u32 lgdt3306a_calculate_snr_x100(struct lgdt3306a_state *state)
 	snr_x100 = log10_x1000((pwr * 10000) / mse) - 3000;
 	dbg_info("mse=%u, pwr=%u, snr_x100=%d\n", mse, pwr, snr_x100);
 
+	if ((s32)snr_x100 < 0)
+		return 0;
+
 	return snr_x100;
 }
 
