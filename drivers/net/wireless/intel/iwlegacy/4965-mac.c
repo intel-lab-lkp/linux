@@ -5591,6 +5591,8 @@ __il4965_up(struct il_priv *il)
 	__il4965_down(il);
 	clear_bit(S_EXIT_PENDING, &il->status);
 
+	il4965_cancel_deferred_work(il);
+
 	/* tried to restart and config the device for as long as our
 	 * patience could withstand */
 	IL_ERR("Unable to initialize device after %d attempts.\n", i);
