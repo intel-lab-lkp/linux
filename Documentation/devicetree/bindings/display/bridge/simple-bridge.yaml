@@ -27,6 +27,7 @@ properties:
           - const: adi,adv7123
       - enum:
           - adi,adv7123
+          - dpi-color-encoder
           - dumb-vga-dac
           - ti,opa362
           - ti,ths8134
@@ -37,12 +38,30 @@ properties:
 
     properties:
       port@0:
-        $ref: /schemas/graph.yaml#/properties/port
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        unevaluatedProperties: false
         description: The bridge input
 
+        properties:
+          endpoint:
+            $ref: /schemas/media/video-interfaces.yaml#
+            unevaluatedProperties: false
+
+            properties:
+              dpi-color-coding: true
+
       port@1:
-        $ref: /schemas/graph.yaml#/properties/port
+        $ref: /schemas/graph.yaml#/$defs/port-base
+        unevaluatedProperties: false
         description: The bridge output
+
+        properties:
+          endpoint:
+            $ref: /schemas/media/video-interfaces.yaml#
+            unevaluatedProperties: false
+
+            properties:
+              dpi-color-coding: true
 
     required:
       - port@0
@@ -60,6 +79,44 @@ required:
   - ports
 
 additionalProperties: false
+
+allOf:
+  - $ref: /schemas/display/dpi-color-coding.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: dpi-color-encoder
+    then:
+      properties:
+        ports:
+          properties:
+            port@0:
+              properties:
+                endpoint:
+                  required:
+                    - dpi-color-coding
+
+            port@1:
+              properties:
+                endpoint:
+                  required:
+                    - dpi-color-coding
+    else:
+      properties:
+        ports:
+          properties:
+            port@0:
+              properties:
+                endpoint:
+                  properties:
+                    dpi-color-coding: false
+
+            port@1:
+              properties:
+                endpoint:
+                  properties:
+                    dpi-color-coding: false
 
 examples:
   - |
@@ -83,6 +140,34 @@ examples:
 
                 vga_bridge_out: endpoint {
                     remote-endpoint = <&vga_con_in>;
+                };
+            };
+        };
+    };
+
+  - |
+    bridge {
+        compatible = "dpi-color-enoder";
+
+        ports {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            port@0 {
+                reg = <0>;
+
+                dpi_in: endpoint {
+                    remote-endpoint = <&dc_out>;
+                    dpi-color-coding = "18bit-configuration1";
+                };
+            };
+
+            port@1 {
+                reg = <1>;
+
+                dpi_out: endpoint {
+                    remote-endpoint = <&panel_in>;
+                    dpi-color-coding = "24bit";
                 };
             };
         };
