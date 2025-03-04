@@ -21,9 +21,10 @@
 #include "object.h"
 
 /**
- * struct landlock_layer - Access rights for a given layer
+ * struct landlock_rule_layer - Stores the access rights for a
+ * given layer in a rule.
  */
-struct landlock_layer {
+struct landlock_rule_layer {
 	/**
 	 * @level: Position of this layer in the layer stack.
 	 */
@@ -102,10 +103,11 @@ struct landlock_rule {
 	 */
 	u32 num_layers;
 	/**
-	 * @layers: Stack of layers, from the latest to the newest, implemented
-	 * as a flexible array member (FAM).
+	 * @layers: Stack of layers, from the latest to the newest,
+	 * implemented as a flexible array member (FAM). Only
+	 * contains layers that has a rule for this object.
 	 */
-	struct landlock_layer layers[] __counted_by(num_layers);
+	struct landlock_rule_layer layers[] __counted_by(num_layers);
 };
 
 /**
@@ -122,6 +124,18 @@ struct landlock_hierarchy {
 	 * domain.
 	 */
 	refcount_t usage;
+};
+
+/**
+ * struct landlock_ruleset_layer - Store per-layer information
+ * within a domain (or a non-merged ruleset)
+ */
+struct landlock_ruleset_layer {
+	/**
+	 * @access_masks: Contains the subset of filesystem and
+	 * network actions that are restricted by a layer.
+	 */
+	struct access_masks access_masks;
 };
 
 /**
@@ -187,18 +201,17 @@ struct landlock_ruleset {
 			 */
 			u32 num_layers;
 			/**
-			 * @access_masks: Contains the subset of filesystem and
-			 * network actions that are restricted by a ruleset.
-			 * A domain saves all layers of merged rulesets in a
-			 * stack (FAM), starting from the first layer to the
-			 * last one.  These layers are used when merging
-			 * rulesets, for user space backward compatibility
-			 * (i.e. future-proof), and to properly handle merged
-			 * rulesets without overlapping access rights.  These
-			 * layers are set once and never changed for the
-			 * lifetime of the ruleset.
+			 * @layer_stack: A domain saves all layers of merged
+			 * rulesets in a stack (FAM), starting from the first
+			 * layer to the last one.  These layers are used when
+			 * merging rulesets, for user space backward
+			 * compatibility (i.e. future-proof), and to properly
+			 * handle merged rulesets without overlapping access
+			 * rights.  These layers are set once and never
+			 * changed for the lifetime of the ruleset.
 			 */
-			struct access_masks access_masks[];
+			struct landlock_ruleset_layer
+				layer_stack[] __counted_by(num_layers);
 		};
 	};
 };
@@ -248,7 +261,7 @@ landlock_union_access_masks(const struct landlock_ruleset *const domain)
 
 	for (layer_level = 0; layer_level < domain->num_layers; layer_level++) {
 		union access_masks_all layer = {
-			.masks = domain->access_masks[layer_level],
+			.masks = domain->layer_stack[layer_level].access_masks,
 		};
 
 		matches.all |= layer.all;
@@ -296,7 +309,7 @@ landlock_add_fs_access_mask(struct landlock_ruleset *const ruleset,
 
 	/* Should already be checked in sys_landlock_create_ruleset(). */
 	WARN_ON_ONCE(fs_access_mask != fs_mask);
-	ruleset->access_masks[layer_level].fs |= fs_mask;
+	ruleset->layer_stack[layer_level].access_masks.fs |= fs_mask;
 }
 
 static inline void
@@ -308,7 +321,7 @@ landlock_add_net_access_mask(struct landlock_ruleset *const ruleset,
 
 	/* Should already be checked in sys_landlock_create_ruleset(). */
 	WARN_ON_ONCE(net_access_mask != net_mask);
-	ruleset->access_masks[layer_level].net |= net_mask;
+	ruleset->layer_stack[layer_level].access_masks.net |= net_mask;
 }
 
 static inline void
@@ -319,7 +332,7 @@ landlock_add_scope_mask(struct landlock_ruleset *const ruleset,
 
 	/* Should already be checked in sys_landlock_create_ruleset(). */
 	WARN_ON_ONCE(scope_mask != mask);
-	ruleset->access_masks[layer_level].scope |= mask;
+	ruleset->layer_stack[layer_level].access_masks.scope |= mask;
 }
 
 static inline access_mask_t
@@ -327,7 +340,7 @@ landlock_get_fs_access_mask(const struct landlock_ruleset *const ruleset,
 			    const u16 layer_level)
 {
 	/* Handles all initially denied by default access rights. */
-	return ruleset->access_masks[layer_level].fs |
+	return ruleset->layer_stack[layer_level].access_masks.fs |
 	       _LANDLOCK_ACCESS_FS_INITIALLY_DENIED;
 }
 
@@ -335,14 +348,14 @@ static inline access_mask_t
 landlock_get_net_access_mask(const struct landlock_ruleset *const ruleset,
 			     const u16 layer_level)
 {
-	return ruleset->access_masks[layer_level].net;
+	return ruleset->layer_stack[layer_level].access_masks.net;
 }
 
 static inline access_mask_t
 landlock_get_scope_mask(const struct landlock_ruleset *const ruleset,
 			const u16 layer_level)
 {
-	return ruleset->access_masks[layer_level].scope;
+	return ruleset->layer_stack[layer_level].access_masks.scope;
 }
 
 bool landlock_unmask_layers(const struct landlock_rule *const rule,
