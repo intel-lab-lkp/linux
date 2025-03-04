@@ -2176,7 +2176,7 @@ static bool hvhe_possible(const struct arm64_cpu_capabilities *entry,
 	return arm64_test_sw_feature_override(ARM64_SW_FEATURE_OVERRIDE_HVHE);
 }
 
-static bool cpu_has_bbml2_noabort(unsigned int cpu_midr)
+bool cpu_has_bbml2_noabort(unsigned int cpu_midr)
 {
 	/* We want to allow usage of bbml2 in as wide a range of kernel contexts
 	 * as possible. This list is therefore an allow-list of known-good

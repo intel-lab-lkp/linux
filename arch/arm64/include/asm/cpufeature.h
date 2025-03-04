@@ -871,6 +871,16 @@ static inline bool system_supports_bbml2_noabort(void)
 	return alternative_has_cap_unlikely(ARM64_HAS_BBML2_NOABORT);
 }
 
+bool cpu_has_bbml2_noabort(unsigned int cpu_midr);
+/*
+ * Called at early boot stage on boot CPU before cpu info and cpu feature
+ * are ready.
+ */
+static inline bool bbml2_noabort_available(void)
+{
+	return cpu_has_bbml2_noabort(read_cpuid_id());
+}
+
 int do_emulate_mrs(struct pt_regs *regs, u32 sys_reg, u32 rt);
 bool try_emulate_mrs(struct pt_regs *regs, u32 isn);
 

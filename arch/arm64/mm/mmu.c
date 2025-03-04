@@ -45,6 +45,7 @@
 #define NO_BLOCK_MAPPINGS	BIT(0)
 #define NO_CONT_MAPPINGS	BIT(1)
 #define NO_EXEC_MAPPINGS	BIT(2)	/* assumes FEAT_HPDS is not used */
+#define SPLIT_MAPPINGS		BIT(3)
 
 u64 kimage_voffset __ro_after_init;
 EXPORT_SYMBOL(kimage_voffset);
@@ -166,6 +167,73 @@ static void init_clear_pgtable(void *table)
 	dsb(ishst);
 }
 
+static int split_pmd(pmd_t *pmdp, pmd_t pmdval,
+		     phys_addr_t (*pgtable_alloc)(int))
+{
+	unsigned long pfn;
+	pgprot_t prot;
+	phys_addr_t pte_phys;
+	pte_t *ptep;
+
+	if (!pmd_leaf(pmdval))
+		return 0;
+
+	pfn = pmd_pfn(pmdval);
+	prot = pmd_pgprot(pmdval);
+
+	pte_phys = pgtable_alloc(PAGE_SHIFT);
+	if (!pte_phys)
+		return -ENOMEM;
+
+	ptep = (pte_t *)phys_to_virt(pte_phys);
+	init_clear_pgtable(ptep);
+	prot = __pgprot(pgprot_val(prot) | PTE_TYPE_PAGE);
+	for (int i = 0; i < PTRS_PER_PTE; i++, ptep++)
+		__set_pte_nosync(ptep, pfn_pte(pfn + i, prot));
+
+	dsb(ishst);
+
+	set_pmd(pmdp, pfn_pmd(__phys_to_pfn(pte_phys),
+		__pgprot(PMD_TYPE_TABLE)));
+
+	return 0;
+}
+
+static int split_pud(pud_t *pudp, pud_t pudval,
+		     phys_addr_t (*pgtable_alloc)(int))
+{
+	unsigned long pfn;
+	pgprot_t prot;
+	pmd_t *pmdp;
+	phys_addr_t pmd_phys;
+	unsigned int step;
+
+	if (!pud_leaf(pudval))
+		return 0;
+
+	pfn = pud_pfn(pudval);
+	prot = pud_pgprot(pudval);
+	step = PMD_SIZE >> PAGE_SHIFT;
+
+	pmd_phys = pgtable_alloc(PMD_SHIFT);
+	if (!pmd_phys)
+		return -ENOMEM;
+
+	pmdp = (pmd_t *)phys_to_virt(pmd_phys);
+	init_clear_pgtable(pmdp);
+	for (int i = 0; i < PTRS_PER_PMD; i++, pmdp++) {
+		__set_pmd_nosync(pmdp, pfn_pmd(pfn, prot));
+		pfn += step;
+	}
+
+	dsb(ishst);
+
+	set_pud(pudp, pfn_pud(__phys_to_pfn(pmd_phys),
+		__pgprot(PUD_TYPE_TABLE)));
+
+	return 0;
+}
+
 static void init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
 		     phys_addr_t phys, pgprot_t prot)
 {
@@ -251,11 +319,20 @@ static int init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 {
 	unsigned long next;
 	int ret = 0;
+	bool split = flags & SPLIT_MAPPINGS;
 
 	do {
 		pmd_t old_pmd = READ_ONCE(*pmdp);
 
 		next = pmd_addr_end(addr, end);
+
+		if (split) {
+			ret = split_pmd(pmdp, old_pmd, pgtable_alloc);
+			if (ret)
+				break;
+
+			continue;
+		}
 
 		/* try section mapping first */
 		if (((addr | next | phys) & ~PMD_MASK) == 0 &&
@@ -292,11 +369,19 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 	int ret = 0;
 	pud_t pud = READ_ONCE(*pudp);
 	pmd_t *pmdp;
+	bool split = flags & SPLIT_MAPPINGS;
 
 	/*
 	 * Check for initial section mappings in the pgd/pud.
 	 */
 	BUG_ON(pud_sect(pud));
+
+	if (split) {
+		BUG_ON(pud_none(pud));
+		pmdp = pmd_offset(pudp, addr);
+		goto split_pgtable;
+	}
+
 	if (pud_none(pud)) {
 		pudval_t pudval = PUD_TYPE_TABLE | PUD_TABLE_UXN | PUD_TABLE_AF;
 		phys_addr_t pmd_phys;
@@ -316,6 +401,7 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		pmdp = pmd_set_fixmap_offset(pudp, addr);
 	}
 
+split_pgtable:
 	do {
 		pgprot_t __prot = prot;
 
@@ -334,7 +420,8 @@ static int alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		phys += next - addr;
 	} while (addr = next, addr != end);
 
-	pmd_clear_fixmap();
+	if (!split)
+		pmd_clear_fixmap();
 
 	return ret;
 }
@@ -348,6 +435,13 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 	int ret = 0;
 	p4d_t p4d = READ_ONCE(*p4dp);
 	pud_t *pudp;
+	bool split = flags & SPLIT_MAPPINGS;
+
+	if (split) {
+		BUG_ON(p4d_none(p4d));
+		pudp = pud_offset(p4dp, addr);
+		goto split_pgtable;
+	}
 
 	if (p4d_none(p4d)) {
 		p4dval_t p4dval = P4D_TYPE_TABLE | P4D_TABLE_UXN | P4D_TABLE_AF;
@@ -368,10 +462,24 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		pudp = pud_set_fixmap_offset(p4dp, addr);
 	}
 
+split_pgtable:
 	do {
 		pud_t old_pud = READ_ONCE(*pudp);
 
 		next = pud_addr_end(addr, end);
+
+		if (split) {
+			ret = split_pud(pudp, old_pud, pgtable_alloc);
+			if (ret)
+				break;
+
+			ret = alloc_init_cont_pmd(pudp, addr, next, phys, prot,
+						  pgtable_alloc, flags);
+			if (ret)
+				break;
+
+			continue;
+		}
 
 		/*
 		 * For 4K granule only, attempt to put down a 1GB block
@@ -399,7 +507,8 @@ static int alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		phys += next - addr;
 	} while (pudp++, addr = next, addr != end);
 
-	pud_clear_fixmap();
+	if (!split)
+		pud_clear_fixmap();
 
 	return ret;
 }
@@ -413,6 +522,13 @@ static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 	int ret = 0;
 	pgd_t pgd = READ_ONCE(*pgdp);
 	p4d_t *p4dp;
+	bool split = flags & SPLIT_MAPPINGS;
+
+	if (split) {
+		BUG_ON(pgd_none(pgd));
+		p4dp = p4d_offset(pgdp, addr);
+		goto split_pgtable;
+	}
 
 	if (pgd_none(pgd)) {
 		pgdval_t pgdval = PGD_TYPE_TABLE | PGD_TABLE_UXN | PGD_TABLE_AF;
@@ -433,6 +549,7 @@ static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		p4dp = p4d_set_fixmap_offset(pgdp, addr);
 	}
 
+split_pgtable:
 	do {
 		p4d_t old_p4d = READ_ONCE(*p4dp);
 
@@ -449,7 +566,8 @@ static int alloc_init_p4d(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		phys += next - addr;
 	} while (p4dp++, addr = next, addr != end);
 
-	p4d_clear_fixmap();
+	if (!split)
+		p4d_clear_fixmap();
 
 	return ret;
 }
@@ -544,6 +662,23 @@ static phys_addr_t pgd_pgtable_alloc(int shift)
 
 out:
 	return pa;
+}
+
+int split_linear_mapping(unsigned long start, unsigned long end)
+{
+	int ret = 0;
+
+	if (!system_supports_bbml2_noabort())
+		return 0;
+
+	mmap_write_lock(&init_mm);
+	ret = __create_pgd_mapping_locked(init_mm.pgd, virt_to_phys((void *)start),
+					  start, (end - start), __pgprot(0),
+					  __pgd_pgtable_alloc, SPLIT_MAPPINGS);
+	mmap_write_unlock(&init_mm);
+	flush_tlb_kernel_range(start, end);
+
+	return ret;
 }
 
 /*
@@ -665,6 +800,24 @@ static inline void arm64_kfence_map_pool(phys_addr_t kfence_pool, pgd_t *pgdp) {
 
 #endif /* CONFIG_KFENCE */
 
+static inline bool force_pte_mapping(void)
+{
+	/*
+	 * Can't use cpufeature API to determine whether BBML2 supported
+	 * or not since cpufeature have not been finalized yet.
+	 *
+	 * Checking the boot CPU only for now.  If the boot CPU has
+	 * BBML2, paint linear mapping with block mapping.  If it turns
+	 * out the secondary CPUs don't support BBML2 once cpufeature is
+	 * fininalized, the linear mapping will be repainted with PTE
+	 * mapping.
+	 */
+	return (rodata_full && !bbml2_noabort_available()) ||
+		debug_pagealloc_enabled() ||
+		arm64_kfence_can_set_direct_map() ||
+		is_realm_world();
+}
+
 static void __init map_mem(pgd_t *pgdp)
 {
 	static const u64 direct_map_end = _PAGE_END(VA_BITS_MIN);
@@ -690,8 +843,11 @@ static void __init map_mem(pgd_t *pgdp)
 
 	early_kfence_pool = arm64_kfence_alloc_pool();
 
-	if (can_set_direct_map())
+	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+
+	if (rodata_full)
+		flags |= NO_CONT_MAPPINGS;
 
 	/*
 	 * Take care not to create a writable alias for the
@@ -1388,8 +1544,11 @@ int arch_add_memory(int nid, u64 start, u64 size,
 
 	VM_BUG_ON(!mhp_range_allowed(start, size, true));
 
-	if (can_set_direct_map())
+	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
+
+	if (rodata_full)
+		flags |= NO_CONT_MAPPINGS;
 
 	__create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
 			     size, params->pgprot, __pgd_pgtable_alloc,
