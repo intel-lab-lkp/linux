@@ -1070,7 +1070,9 @@ static __always_inline u8 test_cc(unsigned int condition, unsigned long flags)
 
 	flags = (flags & EFLAGS_MASK) | X86_EFLAGS_IF;
 	asm("push %[flags]; popf; " CALL_NOSPEC
-	    : "=a"(rc), ASM_CALL_CONSTRAINT : [thunk_target]"r"(fop), [flags]"r"(flags));
+	    : "=a" (rc)
+	    : [thunk_target] "r" (fop), [flags] "r" (flags)
+	      COMMA(ASM_CALL_CONSTRAINT));
 	return rc;
 }
 
@@ -5079,9 +5081,10 @@ static int fastop(struct x86_emulate_ctxt *ctxt, fastop_t fop)
 		fop += __ffs(ctxt->dst.bytes) * FASTOP_SIZE;
 
 	asm("push %[flags]; popf; " CALL_NOSPEC " ; pushf; pop %[flags]\n"
-	    : "+a"(ctxt->dst.val), "+d"(ctxt->src.val), [flags]"+D"(flags),
-	      [thunk_target]"+S"(fop), ASM_CALL_CONSTRAINT
-	    : "c"(ctxt->src2.val));
+	    : "+a" (ctxt->dst.val), "+d" (ctxt->src.val), [flags] "+D" (flags),
+	      [thunk_target] "+S" (fop)
+	    : "c" (ctxt->src2.val)
+	      COMMA(ASM_CALL_CONSTRAINT));
 
 	ctxt->eflags = (ctxt->eflags & ~EFLAGS_MASK) | (flags & EFLAGS_MASK);
 	if (!fop) /* exception is returned in fop variable */

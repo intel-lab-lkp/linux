@@ -213,14 +213,31 @@ static __always_inline __pure void *rip_rel_ptr(void *p)
 
 /* For C file, we already have NOKPROBE_SYMBOL macro */
 
+register unsigned long current_stack_pointer asm(_ASM_SP);
+
+/* Insert a comma if args are non-empty */
+#define COMMA(x...)		__COMMA(x)
+#define __COMMA(...)		, ##__VA_ARGS__
+
 /*
- * This output constraint should be used for any inline asm which has a "call"
+ * Combine multiple asm inline constraint args into a single arg for passing to
+ * another macro.
+ */
+#define ASM_OUTPUT(x...)	x
+#define ASM_INPUT(x...)		x
+
+/*
+ * This input constraint should be used for any inline asm which has a "call"
  * instruction.  Otherwise the asm may be inserted before the frame pointer
  * gets set up by the containing function.  If you forget to do this, objtool
  * may print a "call without frame pointer save/setup" warning.
  */
-register unsigned long current_stack_pointer asm(_ASM_SP);
-#define ASM_CALL_CONSTRAINT "+r" (current_stack_pointer)
+#ifdef CONFIG_UNWINDER_FRAME_POINTER
+#define ASM_CALL_CONSTRAINT "r" (__builtin_frame_address(0))
+#else
+#define ASM_CALL_CONSTRAINT
+#endif
+
 #endif /* __ASSEMBLY__ */
 
 #define _ASM_EXTABLE(from, to)					\

@@ -129,8 +129,9 @@ copy_user_generic(void *to, const void *from, unsigned long len)
 			    "call rep_movs_alternative", ALT_NOT(X86_FEATURE_FSRM))
 		"2:\n"
 		_ASM_EXTABLE_UA(1b, 2b)
-		:"+c" (len), "+D" (to), "+S" (from), ASM_CALL_CONSTRAINT
-		: : "memory", "rax");
+		: "+c" (len), "+D" (to), "+S" (from)
+		: ASM_CALL_CONSTRAINT
+		: "memory", "rax");
 	clac();
 	return len;
 }
@@ -191,8 +192,9 @@ static __always_inline __must_check unsigned long __clear_user(void __user *addr
 			    "call rep_stos_alternative", ALT_NOT(X86_FEATURE_FSRS))
 		"2:\n"
 	       _ASM_EXTABLE_UA(1b, 2b)
-	       : "+c" (size), "+D" (addr), ASM_CALL_CONSTRAINT
-	       : "a" (0));
+	       : "+c" (size), "+D" (addr)
+	       : "a" (0)
+	         COMMA(ASM_CALL_CONSTRAINT));
 
 	clac();
 
