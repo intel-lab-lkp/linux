@@ -133,6 +133,10 @@ The above-described ordering follows this approach:
 3. Status is the last information to annotate that device node is or is not
    finished (board resources are needed).
 
+The above-described ordering specifies the preferred ordering of property
+groups, while the individual properties inside each group shall be ordered
+alpha-numerically by the property name.
+
 Example::
 
 	/* SoC DTSI */
@@ -158,7 +162,10 @@ Example::
 	/* Board DTS */
 
 	&device_node {
-		vdd-supply = <&board_vreg1>;
+		vdd-0v9-supply = <&board_vreg1>;
+		vdd-1v8-supply = <&board_vreg4>;
+		vdd-3v3-supply = <&board_vreg2>;
+		vdd-12v-supply = <&board_vreg3>;
 		status = "okay";
 	}
 
