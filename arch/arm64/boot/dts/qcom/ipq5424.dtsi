@@ -265,6 +265,8 @@
 				 <&xo_board>;
 			clock-names = "iface", "core", "xo";
 
+			supports-cqe;
+
 			status = "disabled";
 		};
 
