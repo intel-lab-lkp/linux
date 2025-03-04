@@ -573,6 +573,9 @@ struct request_queue {
 	struct mutex		elevator_lock;
 
 	struct mutex		sysfs_lock;
+	/*
+	 * Protects queue limits and also sysfs attribute read_ahead_kb.
+	 */
 	struct mutex		limits_lock;
 
 	/*
