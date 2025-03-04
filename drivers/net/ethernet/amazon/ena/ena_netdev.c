@@ -17,6 +17,7 @@
 
 #include "ena_netdev.h"
 #include "ena_pci_id_tbl.h"
+#include "ena_sysfs.h"
 #include "ena_xdp.h"
 
 #include "ena_phc.h"
@@ -41,8 +42,6 @@ MODULE_DEVICE_TABLE(pci, ena_pci_tbl);
 
 static int ena_rss_init_default(struct ena_adapter *adapter);
 static void check_for_admin_com_state(struct ena_adapter *adapter);
-static int ena_destroy_device(struct ena_adapter *adapter, bool graceful);
-static int ena_restore_device(struct ena_adapter *adapter);
 
 static void ena_tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
@@ -3236,7 +3235,7 @@ err_disable_msix:
 	return rc;
 }
 
-static int ena_destroy_device(struct ena_adapter *adapter, bool graceful)
+int ena_destroy_device(struct ena_adapter *adapter, bool graceful)
 {
 	struct net_device *netdev = adapter->netdev;
 	struct ena_com_dev *ena_dev = adapter->ena_dev;
@@ -3287,7 +3286,7 @@ static int ena_destroy_device(struct ena_adapter *adapter, bool graceful)
 	return rc;
 }
 
-static int ena_restore_device(struct ena_adapter *adapter)
+int ena_restore_device(struct ena_adapter *adapter)
 {
 	struct ena_com_dev_get_features_ctx get_feat_ctx;
 	struct ena_com_dev *ena_dev = adapter->ena_dev;
@@ -4022,10 +4021,17 @@ static int ena_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 			"Failed to enable and set the admin interrupts\n");
 		goto err_worker_destroy;
 	}
+
+	rc = ena_sysfs_init(&adapter->pdev->dev);
+	if (rc) {
+		dev_err(&pdev->dev, "Cannot init sysfs\n");
+		goto err_free_msix;
+	}
+
 	rc = ena_rss_init_default(adapter);
 	if (rc && (rc != -EOPNOTSUPP)) {
 		dev_err(&pdev->dev, "Cannot init RSS rc: %d\n", rc);
-		goto err_free_msix;
+		goto err_terminate_sysfs;
 	}
 
 	ena_config_debug_area(adapter);
@@ -4070,6 +4076,8 @@ static int ena_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 err_rss:
 	ena_com_delete_debug_area(ena_dev);
 	ena_com_rss_destroy(ena_dev);
+err_terminate_sysfs:
+	ena_sysfs_terminate(&pdev->dev);
 err_free_msix:
 	ena_com_dev_reset(ena_dev, ENA_REGS_RESET_INIT_ERR);
 	/* stop submitting admin commands on a device that was reset */
@@ -4114,6 +4122,8 @@ static void __ena_shutoff(struct pci_dev *pdev, bool shutdown)
 
 	ena_dev = adapter->ena_dev;
 	netdev = adapter->netdev;
+
+	ena_sysfs_terminate(&adapter->pdev->dev);
 
 	/* Make sure timer and reset routine won't be called after
 	 * freeing device resources.
