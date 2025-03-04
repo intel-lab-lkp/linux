@@ -62,6 +62,7 @@ static inline void file_ref_init(file_ref_t *ref, unsigned long cnt)
 }
 
 bool __file_ref_put(file_ref_t *ref, unsigned long cnt);
+bool file_ref_put_close(file_ref_t *ref);
 
 /**
  * file_ref_get - Acquire one reference on a file

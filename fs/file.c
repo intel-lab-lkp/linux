@@ -26,6 +26,28 @@
 
 #include "internal.h"
 
+static bool __file_ref_put_badval(file_ref_t *ref, unsigned long cnt)
+{
+	/*
+	 * If the reference count was already in the dead zone, then this
+	 * put() operation is imbalanced. Warn, put the reference count back to
+	 * DEAD and tell the caller to not deconstruct the object.
+	 */
+	if (WARN_ONCE(cnt >= FILE_REF_RELEASED, "imbalanced put on file reference count")) {
+		atomic_long_set(&ref->refcnt, FILE_REF_DEAD);
+		return false;
+	}
+
+	/*
+	 * This is a put() operation on a saturated refcount. Restore the
+	 * mean saturation value and tell the caller to not deconstruct the
+	 * object.
+	 */
+	if (cnt > FILE_REF_MAXREF)
+		atomic_long_set(&ref->refcnt, FILE_REF_SATURATED);
+	return false;
+}
+
 /**
  * __file_ref_put - Slowpath of file_ref_put()
  * @ref:	Pointer to the reference count
@@ -67,26 +89,43 @@ bool __file_ref_put(file_ref_t *ref, unsigned long cnt)
 		return true;
 	}
 
-	/*
-	 * If the reference count was already in the dead zone, then this
-	 * put() operation is imbalanced. Warn, put the reference count back to
-	 * DEAD and tell the caller to not deconstruct the object.
-	 */
-	if (WARN_ONCE(cnt >= FILE_REF_RELEASED, "imbalanced put on file reference count")) {
-		atomic_long_set(&ref->refcnt, FILE_REF_DEAD);
-		return false;
-	}
-
-	/*
-	 * This is a put() operation on a saturated refcount. Restore the
-	 * mean saturation value and tell the caller to not deconstruct the
-	 * object.
-	 */
-	if (cnt > FILE_REF_MAXREF)
-		atomic_long_set(&ref->refcnt, FILE_REF_SATURATED);
-	return false;
+	return __file_ref_put_badval(ref, cnt);
 }
 EXPORT_SYMBOL_GPL(__file_ref_put);
+
+/**
+ * file_ref_put_close - drop a reference expecting it would transition to FILE_REF_NOREF
+ * @ref:	Pointer to the reference count
+ *
+ * Semantically it is equivalent to calling file_ref_put(), but it trades lower
+ * performance in face of other CPUs also modifying the refcount for higher
+ * performance when this happens to be the last reference.
+ *
+ * For the last reference file_ref_put() issues 2 atomics. One to drop the
+ * reference and another to transition it to FILE_REF_DEAD. This routine does
+ * the work in one step, but in order to do it has to pre-read the variable which
+ * decreases scalability.
+ *
+ * Use with close() et al, stick to file_ref_put() by default.
+ */
+bool file_ref_put_close(file_ref_t *ref)
+{
+	long old, new;
+
+	old = atomic_long_read(&ref->refcnt);
+	do {
+		if (unlikely(old < 0))
+			return __file_ref_put_badval(ref, old);
+
+		if (old == FILE_REF_ONEREF)
+			new = FILE_REF_DEAD;
+		else
+			new = old - 1;
+	} while (!atomic_long_try_cmpxchg(&ref->refcnt, &old, new));
+
+	return new == FILE_REF_DEAD;
+}
+EXPORT_SYMBOL_GPL(file_ref_put_close);
 
 unsigned int sysctl_nr_open __read_mostly = 1024*1024;
 unsigned int sysctl_nr_open_min = BITS_PER_LONG;
