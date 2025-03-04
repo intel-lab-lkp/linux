@@ -7,6 +7,7 @@
  */
 
 #include <linux/gpio/consumer.h>
+#include <linux/media-bus-format.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
@@ -17,12 +18,14 @@
 #include <drm/drm_bridge.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_of.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
 struct simple_bridge_info {
 	const struct drm_bridge_timings *timings;
 	unsigned int connector_type;
+	const struct drm_bridge_funcs *bridge_funcs;
 };
 
 struct simple_bridge {
@@ -34,6 +37,9 @@ struct simple_bridge {
 	struct drm_bridge	*next_bridge;
 	struct regulator	*vdd;
 	struct gpio_desc	*enable;
+
+	int			dpi_color_coding_input;
+	int			dpi_color_coding_output;
 };
 
 static inline struct simple_bridge *
@@ -156,16 +162,93 @@ static void simple_bridge_disable(struct drm_bridge *bridge)
 		regulator_disable(sbridge->vdd);
 }
 
-static const struct drm_bridge_funcs simple_bridge_bridge_funcs = {
+static const struct drm_bridge_funcs default_simple_bridge_bridge_funcs = {
 	.attach		= simple_bridge_attach,
 	.enable		= simple_bridge_enable,
 	.disable	= simple_bridge_disable,
 };
 
+static u32 *
+dpi_color_encoder_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
+					    struct drm_bridge_state *bridge_state,
+					    struct drm_crtc_state *crtc_state,
+					    struct drm_connector_state *conn_state,
+					    u32 output_fmt,
+					    unsigned int *num_input_fmts)
+{
+	struct simple_bridge *sbridge = drm_bridge_to_simple_bridge(bridge);
+	u32 *input_fmts;
+
+	*num_input_fmts = 0;
+
+	if (sbridge->dpi_color_coding_output != output_fmt)
+		return NULL;
+
+	input_fmts = kzalloc(sizeof(*input_fmts), GFP_KERNEL);
+	if (!input_fmts)
+		return NULL;
+
+	*num_input_fmts = 1;
+	input_fmts[0] = sbridge->dpi_color_coding_input;
+	return input_fmts;
+}
+
+static const struct drm_bridge_funcs dpi_color_encoder_bridge_funcs = {
+	.attach				= simple_bridge_attach,
+	.enable				= simple_bridge_enable,
+	.disable			= simple_bridge_disable,
+	.atomic_reset			= drm_atomic_helper_bridge_reset,
+	.atomic_duplicate_state		= drm_atomic_helper_bridge_duplicate_state,
+	.atomic_destroy_state		= drm_atomic_helper_bridge_destroy_state,
+	.atomic_get_input_bus_fmts	= dpi_color_encoder_atomic_get_input_bus_fmts,
+};
+
+static int simple_bridge_get_dpi_color_coding(struct simple_bridge *sbridge,
+					      struct device *dev)
+{
+	struct device_node *ep0, *ep1 = NULL;
+	int ret = 0;
+
+	ep0 = of_graph_get_endpoint_by_regs(dev->of_node, 0, 0);
+	if (!ep0) {
+		dev_err(dev, "failed to get port@0 endpoint\n");
+		ret = -ENODEV;
+		goto out;
+	}
+
+	ep1 = of_graph_get_endpoint_by_regs(dev->of_node, 1, 0);
+	if (!ep1) {
+		dev_err(dev, "failed to get port@1 endpoint\n");
+		ret = -ENODEV;
+		goto out;
+	}
+
+	sbridge->dpi_color_coding_input = drm_of_dpi_get_color_coding(ep0);
+	if (sbridge->dpi_color_coding_input < 0) {
+		dev_err(dev, "failed to get DPI input media bus format\n");
+		ret = sbridge->dpi_color_coding_input;
+		goto out;
+	}
+
+	sbridge->dpi_color_coding_output = drm_of_dpi_get_color_coding(ep1);
+	if (sbridge->dpi_color_coding_output < 0) {
+		dev_err(dev, "failed to get DPI output media bus format\n");
+		ret = sbridge->dpi_color_coding_output;
+		goto out;
+	}
+
+out:
+	of_node_put(ep1);
+	of_node_put(ep0);
+
+	return ret;
+}
+
 static int simple_bridge_probe(struct platform_device *pdev)
 {
 	struct simple_bridge *sbridge;
 	struct device_node *remote;
+	int ret;
 
 	sbridge = devm_kzalloc(&pdev->dev, sizeof(*sbridge), GFP_KERNEL);
 	if (!sbridge)
@@ -202,8 +285,14 @@ static int simple_bridge_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(sbridge->enable),
 				     "Unable to retrieve enable GPIO\n");
 
+	if (of_device_is_compatible(pdev->dev.of_node, "dpi-color-encoder")) {
+		ret = simple_bridge_get_dpi_color_coding(sbridge, &pdev->dev);
+		if (ret)
+			return ret;
+	}
+
 	/* Register the bridge. */
-	sbridge->bridge.funcs = &simple_bridge_bridge_funcs;
+	sbridge->bridge.funcs = sbridge->info->bridge_funcs;
 	sbridge->bridge.of_node = pdev->dev.of_node;
 	sbridge->bridge.timings = sbridge->info->timings;
 
@@ -253,29 +342,40 @@ static const struct of_device_id simple_bridge_match[] = {
 		.compatible = "dumb-vga-dac",
 		.data = &(const struct simple_bridge_info) {
 			.connector_type = DRM_MODE_CONNECTOR_VGA,
+			.bridge_funcs = &default_simple_bridge_bridge_funcs,
 		},
 	}, {
 		.compatible = "adi,adv7123",
 		.data = &(const struct simple_bridge_info) {
 			.timings = &default_bridge_timings,
 			.connector_type = DRM_MODE_CONNECTOR_VGA,
+			.bridge_funcs = &default_simple_bridge_bridge_funcs,
+		},
+	}, {
+		.compatible = "dpi-color-encoder",
+		.data = &(const struct simple_bridge_info) {
+			.connector_type = DRM_MODE_CONNECTOR_DPI,
+			.bridge_funcs = &dpi_color_encoder_bridge_funcs,
 		},
 	}, {
 		.compatible = "ti,opa362",
 		.data = &(const struct simple_bridge_info) {
 			.connector_type = DRM_MODE_CONNECTOR_Composite,
+			.bridge_funcs = &default_simple_bridge_bridge_funcs,
 		},
 	}, {
 		.compatible = "ti,ths8135",
 		.data = &(const struct simple_bridge_info) {
 			.timings = &ti_ths8135_bridge_timings,
 			.connector_type = DRM_MODE_CONNECTOR_VGA,
+			.bridge_funcs = &default_simple_bridge_bridge_funcs,
 		},
 	}, {
 		.compatible = "ti,ths8134",
 		.data = &(const struct simple_bridge_info) {
 			.timings = &ti_ths8134_bridge_timings,
 			.connector_type = DRM_MODE_CONNECTOR_VGA,
+			.bridge_funcs = &default_simple_bridge_bridge_funcs,
 		},
 	},
 	{},
