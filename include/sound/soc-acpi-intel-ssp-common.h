@@ -9,6 +9,7 @@
 /* Cirrus Logic */
 #define CS35L41_ACPI_HID	"CSC3541"
 #define CS42L42_ACPI_HID	"10134242"
+#define CS35L56_ACPI_HID	"CSC355C"
 
 /* Dialog */
 #define DA7219_ACPI_HID		"DLGS7219"
@@ -53,6 +54,7 @@ enum snd_soc_acpi_intel_codec {
 
 	/* speaker amplifier */
 	CODEC_CS35L41,
+	CODEC_CS35L56,
 	CODEC_MAX98357A,
 	CODEC_MAX98360A,
 	CODEC_MAX98373,

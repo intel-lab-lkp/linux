@@ -532,6 +532,11 @@ struct snd_soc_acpi_mach snd_soc_acpi_intel_tgl_machines[] = {
 		.quirk_data = &tgl_lt6911_hdmi,
 		.sof_tplg_filename = "sof-tgl-rt1308-ssp2-hdmi-ssp15.tplg"
 	},
+	{
+		.id = CS35L56_ACPI_HID,
+		.drv_name = "tgl_cs35l56_ssp2_def",
+		.sof_tplg_filename = "sof-tgl-cs35l56-ssp2.tplg",
+	},
 	{},
 };
 EXPORT_SYMBOL_GPL(snd_soc_acpi_intel_tgl_machines);

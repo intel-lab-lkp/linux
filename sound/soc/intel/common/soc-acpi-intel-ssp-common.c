@@ -48,6 +48,7 @@ static const struct codec_map codecs[] = {
 static const struct codec_map amps[] = {
 	/* Cirrus Logic */
 	CODEC_MAP_ENTRY("CS35L41", "cs35l41", CS35L41_ACPI_HID, CODEC_CS35L41),
+	CODEC_MAP_ENTRY("CS35L56", "cs35l56", CS35L56_ACPI_HID, CODEC_CS35L56),
 
 	/* Maxim */
 	CODEC_MAP_ENTRY("MAX98357A", "max98357a", MAX_98357A_ACPI_HID, CODEC_MAX98357A),
