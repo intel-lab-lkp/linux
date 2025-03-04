@@ -3234,6 +3234,81 @@ free_objs:
 	return err;
 }
 
+static int xe_vm_get_property_size(struct xe_vm *vm, u32 property)
+{
+	switch (property) {
+	case DRM_XE_VM_GET_PROPERTY_FAULTS:
+		return MAX_PFS * sizeof(struct drm_xe_pf);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int fill_property_pfs(struct xe_vm *vm,
+			     struct drm_xe_vm_get_property *args)
+{
+	struct drm_xe_pf __user *usr_ptr = u64_to_user_ptr(args->ptr);
+	struct drm_xe_pf *fault_list;
+	struct drm_xe_pf *fault;
+	struct xe_vm_pf_entry *entry;
+	int ret, i = 0;
+
+	fault_list = kzalloc(args->size, GFP_KERNEL);
+	if (!fault_list)
+		return -ENOMEM;
+
+	spin_lock(&vm->pfs.lock);
+	list_for_each_entry(entry, &vm->pfs.list, list) {
+		struct xe_pagefault *pf = entry->pf;
+
+		fault = &fault_list[i++];
+		fault->address = pf->page_addr;
+		fault->address_type = pf->address_type;
+		fault->address_precision = 1;
+	}
+	args->value = vm->pfs.len;
+	spin_unlock(&vm->pfs.lock);
+
+	ret = copy_to_user(usr_ptr, &fault_list, args->size);
+	kfree(fault_list);
+
+	return ret ? -EFAULT : 0;
+}
+
+int xe_vm_get_property_ioctl(struct drm_device *drm, void *data,
+			     struct drm_file *file)
+{
+	struct xe_device *xe = to_xe_device(drm);
+	struct xe_file *xef = to_xe_file(file);
+	struct drm_xe_vm_get_property *args = data;
+	struct xe_vm *vm;
+	int size;
+
+	if (XE_IOCTL_DBG(xe, args->reserved[0] || args->reserved[1]))
+		return -EINVAL;
+
+	vm = xe_vm_lookup(xef, args->vm_id);
+	if (XE_IOCTL_DBG(xe, !vm))
+		return -ENOENT;
+
+	size = xe_vm_get_property_size(vm, args->property);
+	if (size < 0) {
+		return size;
+	} else if (args->size != size) {
+		if (args->size)
+			return -EINVAL;
+		args->size = size;
+		return 0;
+	}
+
+	switch (args->property) {
+	case DRM_XE_VM_GET_PROPERTY_FAULTS:
+		return fill_property_pfs(vm, args);
+	default:
+		return -EINVAL;
+	}
+}
+
 /**
  * xe_vm_bind_kernel_bo - bind a kernel BO to a VM
  * @vm: VM to bind the BO to
