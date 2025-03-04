@@ -223,6 +223,10 @@ static inline void put_online_mems(void) {}
 
 static inline void mem_hotplug_begin(void) {}
 static inline void mem_hotplug_done(void) {}
+static inline bool in_mem_hotplug(void)
+{
+	return false;
+}
 
 static inline bool movable_node_is_enabled(void)
 {
