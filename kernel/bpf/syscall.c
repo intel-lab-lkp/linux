@@ -4750,6 +4750,9 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 
 	info.verified_insns = prog->aux->verified_insns;
 
+	if (prog->aux->btf)
+		info.btf_id = btf_obj_id(prog->aux->btf);
+
 	if (!bpf_capable()) {
 		info.jited_prog_len = 0;
 		info.xlated_prog_len = 0;
@@ -4895,8 +4898,6 @@ static int bpf_prog_get_info_by_fd(struct file *file,
 		}
 	}
 
-	if (prog->aux->btf)
-		info.btf_id = btf_obj_id(prog->aux->btf);
 	info.attach_btf_id = prog->aux->attach_btf_id;
 	if (attach_btf)
 		info.attach_btf_obj_id = btf_obj_id(attach_btf);
@@ -5137,14 +5138,17 @@ static int bpf_btf_load(const union bpf_attr *attr, bpfptr_t uattr, __u32 uattr_
 	return btf_new_fd(attr, uattr, uattr_size);
 }
 
-#define BPF_BTF_GET_FD_BY_ID_LAST_FIELD btf_id
+#define BPF_BTF_GET_FD_BY_ID_LAST_FIELD token_fd
 
 static int bpf_btf_get_fd_by_id(const union bpf_attr *attr)
 {
+	struct bpf_token *token;
+
 	if (CHECK_ATTR(BPF_BTF_GET_FD_BY_ID))
 		return -EINVAL;
 
-	if (!capable(CAP_SYS_ADMIN))
+	token = attr->token_fd ? bpf_token_get_from_fd(attr->token_fd) : NULL;
+	if (!bpf_token_capable(token, CAP_BPF))
 		return -EPERM;
 
 	return btf_get_fd_by_id(attr->btf_id);
