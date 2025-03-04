@@ -90,4 +90,30 @@ enum _cache_table_type {
 } __packed;
 static_assert(sizeof(enum _cache_table_type) == 1);
 
+/*
+ * Leaf 0x2 1-byte descriptors' TLB types
+ * To be used for their mappings at intel_tlb_table[]
+ */
+enum _tlb_table_type {
+	TLB_INST_4K,
+	TLB_INST_4M,
+	TLB_INST_2M_4M,
+	TLB_INST_ALL,
+
+	TLB_DATA_4K,
+	TLB_DATA_4M,
+	TLB_DATA_2M_4M,
+	TLB_DATA_4K_4M,
+	TLB_DATA_1G,
+	TLB_DATA_1G_2M_4M,
+
+	TLB_DATA0_4K,
+	TLB_DATA0_4M,
+	TLB_DATA0_2M_4M,
+
+	STLB_4K,
+	STLB_4K_2M,
+} __packed;
+static_assert(sizeof(enum _tlb_table_type) == 1);
+
 #endif /* _ASM_X86_CPUID_TYPES_H */
