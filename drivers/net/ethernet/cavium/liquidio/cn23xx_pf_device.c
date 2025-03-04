@@ -373,7 +373,7 @@ static void cn23xx_pf_setup_global_output_regs(struct octeon_device *oct)
 	/** Setting the water mark level for pko back pressure **/
 	writeq(0x40, (u8 *)oct->mmio[0].hw_addr + CN23XX_SLI_OQ_WMARK);
 
-	/** Disabling setting OQs in reset when ring has no dorebells
+	/** Disabling setting OQs in reset when ring has no doorbells
 	 * enabling this will cause of head of line blocking
 	 */
 	/* Do it only for pass1.1. and pass1.2 */
