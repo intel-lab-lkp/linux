@@ -522,6 +522,12 @@ static int ntc_read(struct device *dev, enum hwmon_sensor_types type,
 		case hwmon_temp_type:
 			*val = 4;
 			return 0;
+		case hwmon_temp_min:
+			*val = data->comp[0].temp_c*1000;
+			return 0;
+		case hwmon_temp_max:
+			*val = data->comp[data->n_comp-1].temp_c*1000;
+			return 0;
 		default:
 			break;
 		}
@@ -539,6 +545,8 @@ static umode_t ntc_is_visible(const void *data, enum hwmon_sensor_types type,
 		switch (attr) {
 		case hwmon_temp_input:
 		case hwmon_temp_type:
+		case hwmon_temp_min:
+		case hwmon_temp_max:
 			return 0444;
 		default:
 			break;
@@ -549,7 +557,8 @@ static umode_t ntc_is_visible(const void *data, enum hwmon_sensor_types type,
 
 static const struct hwmon_channel_info * const ntc_info[] = {
 	HWMON_CHANNEL_INFO(chip, HWMON_C_REGISTER_TZ),
-	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT | HWMON_T_TYPE),
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT | HWMON_T_TYPE | HWMON_T_MIN |
+					 HWMON_T_MAX),
 	NULL
 };
 
