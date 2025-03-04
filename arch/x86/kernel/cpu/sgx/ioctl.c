@@ -56,13 +56,25 @@ void sgx_encl_shrink(struct sgx_encl *encl, struct sgx_va_page *va_page)
 
 static int sgx_encl_create(struct sgx_encl *encl, struct sgx_secs *secs)
 {
+	u64 epc_size, pcmd_size, shmem_size;
 	struct sgx_epc_page *secs_epc;
 	struct sgx_va_page *va_page;
 	struct sgx_pageinfo pginfo;
 	struct sgx_secinfo secinfo;
-	unsigned long encl_size;
 	struct file *backing;
 	long ret;
+
+	if ((u64)PAGE_SIZE > ~secs->size)
+		return -E2BIG;
+
+	/* The extra page is for SECS: */
+	epc_size = secs->size + PAGE_SIZE;
+	pcmd_size = epc_size >> 5;
+
+	if (pcmd_size > ~epc_size)
+		return -E2BIG;
+
+	shmem_size = epc_size + pcmd_size;
 
 	va_page = sgx_encl_grow(encl, true);
 	if (IS_ERR(va_page))
@@ -71,11 +83,7 @@ static int sgx_encl_create(struct sgx_encl *encl, struct sgx_secs *secs)
 		list_add(&va_page->list, &encl->va_pages);
 	/* else the tail page of the VA page list had free slots. */
 
-	/* The extra page goes to SECS. */
-	encl_size = secs->size + PAGE_SIZE;
-
-	backing = shmem_file_setup("SGX backing", encl_size + (encl_size >> 5),
-				   VM_NORESERVE);
+	backing = shmem_file_setup("SGX backing", shmem_size, VM_NORESERVE);
 	if (IS_ERR(backing)) {
 		ret = PTR_ERR(backing);
 		goto err_out_shrink;
