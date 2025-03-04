@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
-#ifndef _UAPI_LINUX_ELF_H
-#define _UAPI_LINUX_ELF_H
+#ifndef _LINUX_ELF_H
+#define _LINUX_ELF_H
 
 #include <linux/types.h>
 #include <linux/elf-em.h>
@@ -32,9 +32,9 @@ typedef __u16	Elf64_Versym;
 #define PT_NOTE    4
 #define PT_SHLIB   5
 #define PT_PHDR    6
-#define PT_TLS     7               /* Thread local storage segment */
-#define PT_LOOS    0x60000000      /* OS-specific */
-#define PT_HIOS    0x6fffffff      /* OS-specific */
+#define PT_TLS     7		/* Thread local storage segment */
+#define PT_LOOS    0x60000000	/* OS-specific */
+#define PT_HIOS    0x6fffffff	/* OS-specific */
 #define PT_LOPROC  0x70000000
 #define PT_HIPROC  0x7fffffff
 #define PT_GNU_EH_FRAME	(PT_LOOS + 0x474e550)
@@ -95,7 +95,7 @@ typedef __u16	Elf64_Versym;
 #define DT_SONAME	14
 #define DT_RPATH	15
 #define DT_SYMBOLIC	16
-#define DT_REL	        17
+#define DT_REL		17
 #define DT_RELSZ	18
 #define DT_RELENT	19
 #define DT_PLTREL	20
@@ -312,7 +312,7 @@ typedef struct elf64_phdr {
 #define SHN_ABS		0xfff1
 #define SHN_COMMON	0xfff2
 #define SHN_HIRESERVE	0xffff
- 
+
 typedef struct elf32_shdr {
   Elf32_Word	sh_name;
   Elf32_Word	sh_type;
@@ -393,7 +393,7 @@ typedef struct elf64_shdr {
  * in the future to accomodate more fields, don't assume it is fixed!
  */
 #define NT_SIGINFO      0x53494749
-#define NT_FILE         0x46494c45
+#define NT_FILE		0x46494c45
 #define NT_PRXFPREG     0x46e62b7f      /* copied from gdb5.1/include/elf/common.h */
 #define NT_PPC_VMX	0x100		/* PowerPC Altivec/VMX registers */
 #define NT_PPC_SPE	0x101		/* PowerPC SPE/EVR registers */
@@ -521,4 +521,4 @@ typedef struct {
   Elf64_Word    vda_next;
 } Elf64_Verdaux;
 
-#endif /* _UAPI_LINUX_ELF_H */
+#endif /* _LINUX_ELF_H */
