@@ -65,12 +65,91 @@ static ssize_t ena_phc_enable_get(struct device *dev,
 static DEVICE_ATTR(phc_enable, S_IRUGO | S_IWUSR, ena_phc_enable_get,
 		   ena_phc_enable_set);
 
+/* Takes into account max u64 value, null and new line characters */
+#define ENA_PHC_STAT_MAX_LEN 22
+
+static ssize_t ena_phc_cnt_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct ena_adapter *adapter = dev_get_drvdata(dev);
+
+	if (!ena_phc_is_active(adapter))
+		return 0;
+
+	return snprintf(buf, ENA_PHC_STAT_MAX_LEN, "%llu\n",
+			adapter->ena_dev->phc.stats.phc_cnt);
+}
+
+static DEVICE_ATTR(phc_cnt, S_IRUGO, ena_phc_cnt_show, NULL);
+
+static ssize_t ena_phc_exp_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct ena_adapter *adapter = dev_get_drvdata(dev);
+
+	if (!ena_phc_is_active(adapter))
+		return 0;
+
+	return snprintf(buf, ENA_PHC_STAT_MAX_LEN, "%llu\n",
+			adapter->ena_dev->phc.stats.phc_exp);
+}
+
+static DEVICE_ATTR(phc_exp, S_IRUGO, ena_phc_exp_show, NULL);
+
+static ssize_t ena_phc_skp_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct ena_adapter *adapter = dev_get_drvdata(dev);
+
+	if (!ena_phc_is_active(adapter))
+		return 0;
+
+	return snprintf(buf, ENA_PHC_STAT_MAX_LEN, "%llu\n",
+			adapter->ena_dev->phc.stats.phc_skp);
+}
+
+static DEVICE_ATTR(phc_skp, S_IRUGO, ena_phc_skp_show, NULL);
+
+static ssize_t ena_phc_err_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct ena_adapter *adapter = dev_get_drvdata(dev);
+
+	if (!ena_phc_is_active(adapter))
+		return 0;
+
+	return snprintf(buf, ENA_PHC_STAT_MAX_LEN, "%llu\n",
+			adapter->ena_dev->phc.stats.phc_err);
+}
+
+static DEVICE_ATTR(phc_err, S_IRUGO, ena_phc_err_show, NULL);
+
+static struct attribute *phc_stats_attrs[] = {
+	&dev_attr_phc_cnt.attr,
+	&dev_attr_phc_exp.attr,
+	&dev_attr_phc_skp.attr,
+	&dev_attr_phc_err.attr,
+	NULL
+};
+
+static struct attribute_group phc_stats_group = {
+	.attrs = phc_stats_attrs,
+	.name = "phc_stats",
+};
+
 /******************************************************************************
  *****************************************************************************/
 int ena_sysfs_init(struct device *dev)
 {
 	if (device_create_file(dev, &dev_attr_phc_enable))
 		dev_err(dev, "Failed to create phc_enable sysfs entry");
+
+	if (device_add_group(dev, &phc_stats_group))
+		dev_err(dev, "Failed to create phc_stats sysfs group");
 
 	return 0;
 }
@@ -80,4 +159,5 @@ int ena_sysfs_init(struct device *dev)
 void ena_sysfs_terminate(struct device *dev)
 {
 	device_remove_file(dev, &dev_attr_phc_enable);
+	device_remove_group(dev, &phc_stats_group);
 }
