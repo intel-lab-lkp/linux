@@ -53,19 +53,23 @@
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
-#include <asm/types.h>
-#include <ctype.h>
-#include <errno.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#ifndef NOLIBC
+#include <asm/types.h>
+#include <ctype.h>
+#include <errno.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <unistd.h>
 #include <setjmp.h>
+#endif
 
 #include "kselftest.h"
 
