@@ -302,6 +302,7 @@ config DRM_SIMPLE_BRIDGE
 	tristate "Simple DRM bridge support"
 	depends on OF
 	select DRM_KMS_HELPER
+	select DRM_PANEL_BRIDGE
 	help
 	  Support for non-programmable DRM bridges, such as ADI ADV7123, TI
 	  THS8134 and THS8135 or passive resistor ladder DACs.

@@ -19,6 +19,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_of.h>
+#include <drm/drm_panel.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
@@ -35,6 +36,7 @@ struct simple_bridge {
 	const struct simple_bridge_info *info;
 
 	struct drm_bridge	*next_bridge;
+	struct drm_panel	*next_panel;
 	struct regulator	*vdd;
 	struct gpio_desc	*enable;
 
@@ -113,6 +115,10 @@ static int simple_bridge_attach(struct drm_bridge *bridge,
 {
 	struct simple_bridge *sbridge = drm_bridge_to_simple_bridge(bridge);
 	int ret;
+
+	if (sbridge->next_panel)
+		return drm_bridge_attach(bridge->encoder, sbridge->next_bridge,
+					 bridge, flags);
 
 	ret = drm_bridge_attach(bridge->encoder, sbridge->next_bridge, bridge,
 				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
@@ -247,7 +253,6 @@ out:
 static int simple_bridge_probe(struct platform_device *pdev)
 {
 	struct simple_bridge *sbridge;
-	struct device_node *remote;
 	int ret;
 
 	sbridge = devm_kzalloc(&pdev->dev, sizeof(*sbridge), GFP_KERNEL);
@@ -257,17 +262,20 @@ static int simple_bridge_probe(struct platform_device *pdev)
 	sbridge->info = of_device_get_match_data(&pdev->dev);
 
 	/* Get the next bridge in the pipeline. */
-	remote = of_graph_get_remote_node(pdev->dev.of_node, 1, -1);
-	if (!remote)
-		return -EINVAL;
+	ret = drm_of_find_panel_or_bridge(pdev->dev.of_node, 1, -1,
+					  &sbridge->next_panel,
+					  &sbridge->next_bridge);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret,
+				     "Next panel or bridge not found\n");
 
-	sbridge->next_bridge = of_drm_find_bridge(remote);
-	of_node_put(remote);
+	if (sbridge->next_panel)
+		sbridge->next_bridge = devm_drm_panel_bridge_add(&pdev->dev,
+								 sbridge->next_panel);
 
-	if (!sbridge->next_bridge) {
-		dev_dbg(&pdev->dev, "Next bridge not found, deferring probe\n");
-		return -EPROBE_DEFER;
-	}
+	if (IS_ERR(sbridge->next_bridge))
+		return dev_err_probe(&pdev->dev, PTR_ERR(sbridge->next_bridge),
+				     "Next bridge not found\n");
 
 	/* Get the regulator and GPIO resources. */
 	sbridge->vdd = devm_regulator_get_optional(&pdev->dev, "vdd");
