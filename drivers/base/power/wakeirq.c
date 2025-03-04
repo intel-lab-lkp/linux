@@ -130,6 +130,49 @@ int devm_pm_set_wake_irq(struct device *dev, int irq)
 EXPORT_SYMBOL_GPL(devm_pm_set_wake_irq);
 
 /**
+ * devm_pm_set_dedicated_wake_irq - device-managed variant of
+ *                                  dev_pm_set_dedicated_wake_irq
+ * @dev: Device entry
+ * @irq: Device IO interrupt
+ *
+ * Request a dedicated wake-up interrupt, same with dev_pm_set_dedicated_wake_irq,
+ * but the device will be auto clear wake capability on driver detach.
+ */
+int devm_pm_set_dedicated_wake_irq(struct device *dev, int irq)
+{
+	int ret;
+
+	ret = dev_pm_set_dedicated_wake_irq(dev, irq);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, devm_pm_clear_wake_irq, dev);
+}
+EXPORT_SYMBOL_GPL(devm_pm_set_dedicated_wake_irq);
+
+/**
+ * devm_pm_set_dedicated_wake_irq_reverse - device-managed variant of
+ *                                          dev_pm_set_dedicated_wake_irq_reverse
+ * @dev: Device entry
+ * @irq: Device IO interrupt
+ *
+ * Request a dedicated wake-up interrupt with reverse enable ordering, same with
+ * dev_pm_set_dedicated_wake_irq_reverse, but the device will be auto clear wake
+ * capability on driver detach.
+ */
+int devm_pm_set_dedicated_wake_irq_reverse(struct device *dev, int irq)
+{
+	int ret;
+
+	ret = dev_pm_set_dedicated_wake_irq_reverse(dev, irq);
+	if (ret)
+		return ret;
+
+	return devm_add_action_or_reset(dev, devm_pm_clear_wake_irq, dev);
+}
+EXPORT_SYMBOL_GPL(devm_pm_set_dedicated_wake_irq_reverse);
+
+/**
  * handle_threaded_wake_irq - Handler for dedicated wake-up interrupts
  * @irq: Device specific dedicated wake-up interrupt
  * @_wirq: Wake IRQ data
