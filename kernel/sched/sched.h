@@ -3343,7 +3343,6 @@ static inline bool update_other_load_avgs(struct rq *rq) { return false; }
 
 #ifdef CONFIG_UCLAMP_TASK
 
-unsigned long uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id);
 void uclamp_update_active_nolock(struct task_struct *p);
 
 /*
@@ -3370,6 +3369,15 @@ static inline unsigned int uclamp_none(enum uclamp_id clamp_id)
 	if (clamp_id == UCLAMP_MIN)
 		return 0;
 	return SCHED_CAPACITY_SCALE;
+}
+
+static inline unsigned long
+uclamp_eff_value(struct task_struct *p, enum uclamp_id clamp_id)
+{
+	if (uclamp_is_used() && p->uclamp[clamp_id].active)
+		return p->uclamp[clamp_id].value;
+
+	return uclamp_none(clamp_id);
 }
 
 static inline void
