@@ -5356,8 +5356,10 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	if (flags & ENQUEUE_MIGRATED)
 		se->exec_start = 0;
 
-	check_schedstat_required();
-	update_stats_enqueue_fair(cfs_rq, se, flags);
+	if (!se->sched_delayed) {
+		check_schedstat_required();
+		update_stats_enqueue_fair(cfs_rq, se, flags);
+	}
 	if (!curr)
 		__enqueue_entity(cfs_rq, se);
 	se->on_rq = 1;
@@ -5474,6 +5476,7 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		    !entity_eligible(cfs_rq, se)) {
 			update_load_avg(cfs_rq, se, 0);
 			set_delayed(se);
+			update_stats_dequeue_fair(cfs_rq, se, flags);
 			return false;
 		}
 	}
@@ -5493,7 +5496,9 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_load_avg(cfs_rq, se, action);
 	se_update_runnable(se);
 
-	update_stats_dequeue_fair(cfs_rq, se, flags);
+	/* Do not update twice for delayed task */
+	if (!se->sched_delayed)
+		update_stats_dequeue_fair(cfs_rq, se, flags);
 
 	update_entity_lag(cfs_rq, se);
 	if (sched_feat(PLACE_REL_DEADLINE) && !sleep) {
@@ -6946,6 +6951,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	if (flags & ENQUEUE_DELAYED) {
 		requeue_delayed_entity(se);
+		check_schedstat_required();
+		update_stats_enqueue_fair(cfs_rq_of(se), se, flags);
 		return;
 	}
 
