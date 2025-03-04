@@ -43,6 +43,25 @@
 #define ACCDET_DIGITAL_FASTDISCHARGE	BIT(13)
 #define ACCDET_AD_FASTDISCHRAGE		BIT(14)
 
+/* Debounce time = (DEBOUNCE/32768) sec */
+#define ACCDET_DEBOUNCE0_625MS 0x800
+#define ACCDET_DEBOUNCE1_625MS 0x800
+#define ACCDET_DEBOUNCE3_976US 0x20
+#define ACCDET_DEBOUNCE_AUXADC_2MS 0x44
+/* PWM frequency = 32768/(PWM_WIDTH + 1) Hz */
+#define ACCDET_PWM_WIDTH_25_580HZ 0x500
+/* Duty cycle = (PWM_THRESH + 1) / (PWM_WIDTH + 1) */
+#define ACCDET_PWM_THRESH_100PERCENT ACCDET_PWM_WIDTH_25_580HZ
+#define ACCDET_RISE_DELAY 0x1f0
+#define ACCDET_FALL_DELAY 1
+#define ACCDET_EINT_DEBOUNCE0_1MS 5
+#define ACCDET_EINT_DEBOUNCE1_900US 3
+#define ACCDET_EINT_DEBOUNCE2_900US 3
+#define ACCDET_EINT_DEBOUNCE3_1MS 5
+#define ACCDET_EINT_INVERTER_DEBOUNCE_256MS 0xe
+#define ACCDET_EINT_CMPMEN_PWM_WIDTH_400MS 4
+#define ACCDET_EINT_CMPMEN_PWM_THRESH_2MS 1
+
 static struct platform_driver mt6359_accdet_driver;
 static const struct snd_soc_component_driver mt6359_accdet_soc_driver;
 
@@ -130,7 +149,7 @@ static unsigned int mt6359_accdet_jd_setting(struct mt6359_accdet *priv)
 	} else if (priv->jd_sts == M_PLUG_OUT) {
 		/* set debounce to 1ms */
 		accdet_set_debounce(priv, eint_state000,
-				    priv->data->pwm_deb->eint_debounce0);
+				    ACCDET_EINT_DEBOUNCE0_1MS);
 	} else {
 		dev_dbg(priv->dev, "should not be here %s()\n", __func__);
 	}
@@ -241,11 +260,11 @@ static void mt6359_accdet_recover_jd_setting(struct mt6359_accdet *priv)
 
 	/* recover accdet debounce0,3 */
 	accdet_set_debounce(priv, accdet_state000,
-			    priv->data->pwm_deb->debounce0);
+			    ACCDET_DEBOUNCE0_625MS);
 	accdet_set_debounce(priv, accdet_state001,
-			    priv->data->pwm_deb->debounce1);
+			    ACCDET_DEBOUNCE1_625MS);
 	accdet_set_debounce(priv, accdet_state011,
-			    priv->data->pwm_deb->debounce3);
+			    ACCDET_DEBOUNCE3_976US);
 
 	priv->jack_type = 0;
 	priv->accdet_status = 0x3;
@@ -390,7 +409,7 @@ static void mt6359_accdet_jd_work(struct work_struct *work)
 		priv->jack_plugged = false;
 
 		accdet_set_debounce(priv, accdet_state011,
-				    priv->data->pwm_deb->debounce3);
+				    ACCDET_DEBOUNCE3_976US);
 		regmap_update_bits(priv->regmap, ACCDET_SW_EN_ADDR,
 				   ACCDET_SW_EN_MASK_SFT, 0);
 		mt6359_accdet_recover_jd_setting(priv);
@@ -497,7 +516,6 @@ static int mt6359_accdet_parse_dt(struct mt6359_accdet *priv)
 	int ret;
 	struct device *dev = priv->dev;
 	struct device_node *node = NULL;
-	int pwm_deb[15] = {0};
 	unsigned int tmp = 0;
 
 	node = of_get_child_by_name(dev->parent->of_node, "accdet");
@@ -513,12 +531,6 @@ static int mt6359_accdet_parse_dt(struct mt6359_accdet *priv)
 				   &priv->data->mic_mode);
 	if (ret)
 		priv->data->mic_mode = 2;
-
-	ret = of_property_read_u32_array(node, "mediatek,pwm-deb-setting",
-					 pwm_deb, ARRAY_SIZE(pwm_deb));
-	/* debounce8(auxadc debounce) is default, needn't get from dts */
-	if (!ret)
-		memcpy(priv->data->pwm_deb, pwm_deb, sizeof(pwm_deb));
 
 	priv->data->hp_eint_high = of_property_read_bool(node, "mediatek,hp-eint-high");
 
@@ -554,8 +566,8 @@ static void config_digital_init_by_mode(struct mt6359_accdet *priv)
 {
 	/* enable eint cmpmem pwm */
 	regmap_write(priv->regmap, ACCDET_EINT_CMPMEN_PWM_THRESH_ADDR,
-		     (priv->data->pwm_deb->eint_pwm_width << 4 |
-		     priv->data->pwm_deb->eint_pwm_thresh));
+		     (ACCDET_EINT_CMPMEN_PWM_WIDTH_400MS << 4 |
+		      ACCDET_EINT_CMPMEN_PWM_THRESH_2MS));
 	/* DA signal stable */
 	if (priv->caps & ACCDET_PMIC_EINT0) {
 		regmap_write(priv->regmap, ACCDET_DA_STABLE_ADDR,
@@ -675,22 +687,22 @@ static void mt6359_accdet_init(struct mt6359_accdet *priv)
 	mdelay(1);
 	/* init the debounce time (debounce/32768)sec */
 	accdet_set_debounce(priv, accdet_state000,
-			    priv->data->pwm_deb->debounce0);
+			    ACCDET_DEBOUNCE0_625MS);
 	accdet_set_debounce(priv, accdet_state001,
-			    priv->data->pwm_deb->debounce1);
+			    ACCDET_DEBOUNCE1_625MS);
 	accdet_set_debounce(priv, accdet_state011,
-			    priv->data->pwm_deb->debounce3);
+			    ACCDET_DEBOUNCE3_976US);
 	accdet_set_debounce(priv, accdet_auxadc,
-			    priv->data->pwm_deb->debounce4);
+			    ACCDET_DEBOUNCE_AUXADC_2MS);
 
 	accdet_set_debounce(priv, eint_state000,
-			    priv->data->pwm_deb->eint_debounce0);
+			    ACCDET_EINT_DEBOUNCE0_1MS);
 	accdet_set_debounce(priv, eint_state001,
-			    priv->data->pwm_deb->eint_debounce1);
+			    ACCDET_EINT_DEBOUNCE1_900US);
 	accdet_set_debounce(priv, eint_state011,
-			    priv->data->pwm_deb->eint_debounce3);
+			    ACCDET_EINT_DEBOUNCE3_1MS);
 	accdet_set_debounce(priv, eint_inverter_state000,
-			    priv->data->pwm_deb->eint_inverter_debounce);
+			    ACCDET_EINT_INVERTER_DEBOUNCE_256MS);
 
 	regmap_update_bits(priv->regmap, RG_ACCDET_RST_ADDR,
 			   RG_ACCDET_RST_MASK_SFT, BIT(RG_ACCDET_RST_SFT));
@@ -705,12 +717,12 @@ static void mt6359_accdet_init(struct mt6359_accdet *priv)
 
 	/* init pwm frequency, duty & rise/falling delay */
 	regmap_write(priv->regmap, ACCDET_PWM_WIDTH_ADDR,
-		     REGISTER_VAL(priv->data->pwm_deb->pwm_width));
+		     REGISTER_VAL(ACCDET_PWM_WIDTH_25_580HZ));
 	regmap_write(priv->regmap, ACCDET_PWM_THRESH_ADDR,
-		     REGISTER_VAL(priv->data->pwm_deb->pwm_thresh));
+		     REGISTER_VAL(ACCDET_PWM_THRESH_100PERCENT));
 	regmap_write(priv->regmap, ACCDET_RISE_DELAY_ADDR,
-		     (priv->data->pwm_deb->fall_delay << 15 |
-		      priv->data->pwm_deb->rise_delay));
+		     (ACCDET_FALL_DELAY << 15 |
+		      ACCDET_RISE_DELAY));
 
 	regmap_read(priv->regmap, RG_AUDPWDBMICBIAS1_ADDR, &reg);
 	if (priv->data->mic_vol <= 7) {
@@ -804,12 +816,6 @@ static int mt6359_accdet_probe(struct platform_device *pdev)
 	priv->data = devm_kzalloc(&pdev->dev, sizeof(struct dts_data),
 				  GFP_KERNEL);
 	if (!priv->data)
-		return -ENOMEM;
-
-	priv->data->pwm_deb = devm_kzalloc(&pdev->dev,
-					   sizeof(struct pwm_deb_settings),
-					   GFP_KERNEL);
-	if (!priv->data->pwm_deb)
 		return -ENOMEM;
 
 	priv->regmap = mt6397->regmap;
