@@ -42,6 +42,10 @@ properties:
     minItems: 1
     maxItems: 64
 
+  interrupts-extended:
+    minItems: 1
+    maxItems: 65
+
   interrupt-names:
     minItems: 1
     maxItems: 64
@@ -91,8 +95,13 @@ required:
   - "#dma-cells"
   - compatible
   - reg
-  - interrupts
   - dma-channels
+
+oneOf:
+  - required:
+    - interrupts
+  - required:
+    - interrupts-extended
 
 allOf:
   - $ref: dma-controller.yaml#
