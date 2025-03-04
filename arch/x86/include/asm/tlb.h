@@ -108,9 +108,9 @@ static inline void __tlbsync(void) { }
 /* The implied mode when all bits are clear: */
 #define INVLPGB_MODE_ALL_NONGLOBALS	0UL
 
-static inline void invlpgb_flush_user_nr_nosync(unsigned long pcid,
-						unsigned long addr,
-						u16 nr, bool stride)
+static inline void __invlpgb_flush_user_nr_nosync(unsigned long pcid,
+						  unsigned long addr,
+						  u16 nr, bool stride)
 {
 	enum addr_stride str = stride ? PMD_STRIDE : PTE_STRIDE;
 	u8 flags = INVLPGB_FLAG_PCID | INVLPGB_FLAG_VA;
@@ -119,7 +119,7 @@ static inline void invlpgb_flush_user_nr_nosync(unsigned long pcid,
 }
 
 /* Flush all mappings for a given PCID, not including globals. */
-static inline void invlpgb_flush_single_pcid_nosync(unsigned long pcid)
+static inline void __invlpgb_flush_single_pcid_nosync(unsigned long pcid)
 {
 	__invlpgb(0, pcid, 0, 1, PTE_STRIDE, INVLPGB_FLAG_PCID);
 }
@@ -139,7 +139,7 @@ static inline void invlpgb_flush_all(void)
 }
 
 /* Flush addr, including globals, for all PCIDs. */
-static inline void invlpgb_flush_addr_nosync(unsigned long addr, u16 nr)
+static inline void __invlpgb_flush_addr_nosync(unsigned long addr, u16 nr)
 {
 	__invlpgb(0, 0, addr, nr, PTE_STRIDE, INVLPGB_FLAG_INCLUDE_GLOBAL);
 }
