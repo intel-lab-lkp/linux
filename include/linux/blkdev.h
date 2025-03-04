@@ -998,6 +998,8 @@ static inline void blk_queue_disable_write_zeroes(struct request_queue *q)
  */
 extern void blk_set_queue_depth(struct request_queue *q, unsigned int depth);
 extern void blk_set_stacking_limits(struct queue_limits *lim);
+extern int blk_set_block_size(struct queue_limits *t, unsigned int logical_block_size,
+		unsigned int physical_block_size);
 extern int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 			    sector_t offset);
 void queue_limits_stack_bdev(struct queue_limits *t, struct block_device *bdev,
