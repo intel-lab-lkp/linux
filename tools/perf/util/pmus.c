@@ -358,12 +358,14 @@ static struct perf_pmu *perf_pmus__scan_skip_duplicates(struct perf_pmu *pmu)
 	if (!pmu) {
 		pmu_read_sysfs(PERF_TOOL_PMU_TYPE_ALL_MASK);
 		pmu = list_prepare_entry(pmu, &core_pmus, list);
-	} else
-		last_pmu_name_len = pmu_name_len_no_suffix(pmu->name ?: "");
+	} else {
+		last_pmu_name_len = pmu_deduped_name_len(pmu, pmu->name,
+							 /*skip_duplicate_pmus=*/true);
+	}
 
 	if (use_core_pmus) {
 		list_for_each_entry_continue(pmu, &core_pmus, list) {
-			int pmu_name_len = pmu_name_len_no_suffix(pmu->name ?: "");
+			int pmu_name_len = strlen(pmu->name ?: "");
 
 			if (last_pmu_name_len == pmu_name_len &&
 			    !strncmp(last_pmu_name, pmu->name ?: "", pmu_name_len))

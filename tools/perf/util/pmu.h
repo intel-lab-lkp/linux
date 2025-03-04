@@ -297,5 +297,7 @@ struct perf_pmu *perf_pmus__find_core_pmu(void);
 
 const char *perf_pmu__name_from_config(struct perf_pmu *pmu, u64 config);
 bool perf_pmu__is_fake(const struct perf_pmu *pmu);
+size_t pmu_deduped_name_len(const struct perf_pmu *pmu, const char *name,
+			    bool skip_duplicate_pmus);
 
 #endif /* __PMU_H */

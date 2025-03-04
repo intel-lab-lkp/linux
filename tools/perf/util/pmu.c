@@ -834,9 +834,10 @@ static int is_sysfs_pmu_core(const char *name)
  *
  * @skip_duplicate_pmus: False in verbose mode so all uncore PMUs are visible
  */
-static size_t pmu_deduped_name_len(const struct perf_pmu *pmu, const char *name,
-				   bool skip_duplicate_pmus)
+size_t pmu_deduped_name_len(const struct perf_pmu *pmu, const char *name,
+			    bool skip_duplicate_pmus)
 {
+	name = name ?: "";
 	return skip_duplicate_pmus && !pmu->is_core
 		? pmu_name_len_no_suffix(name)
 		: strlen(name);
