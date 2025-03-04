@@ -43,6 +43,8 @@ static int change_page_range(pte_t *ptep, unsigned long addr, void *data)
 	struct page_change_data *cdata = data;
 	pte_t pte = __ptep_get(ptep);
 
+	BUG_ON(pte_cont(pte));
+
 	pte = clear_pte_bit(pte, cdata->clear_mask);
 	pte = set_pte_bit(pte, cdata->set_mask);
 

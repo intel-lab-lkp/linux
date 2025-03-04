@@ -167,19 +167,36 @@ static void init_clear_pgtable(void *table)
 	dsb(ishst);
 }
 
+static void split_cont_pte(pte_t *ptep)
+{
+	pte_t *_ptep = PTR_ALIGN_DOWN(ptep, sizeof(*ptep) * CONT_PTES);
+	pte_t _pte;
+	for (int i = 0; i < CONT_PTES; i++, _ptep++) {
+		_pte = READ_ONCE(*_ptep);
+		_pte = pte_mknoncont(_pte);
+		__set_pte_nosync(_ptep, _pte);
+	}
+
+	dsb(ishst);
+	isb();
+}
+
 static int split_pmd(pmd_t *pmdp, pmd_t pmdval,
-		     phys_addr_t (*pgtable_alloc)(int))
+		     phys_addr_t (*pgtable_alloc)(int), int flags)
 {
 	unsigned long pfn;
 	pgprot_t prot;
 	phys_addr_t pte_phys;
 	pte_t *ptep;
+	bool cont;
+	int i;
 
 	if (!pmd_leaf(pmdval))
 		return 0;
 
 	pfn = pmd_pfn(pmdval);
 	prot = pmd_pgprot(pmdval);
+	cont = pgprot_val(prot) & PTE_CONT;
 
 	pte_phys = pgtable_alloc(PAGE_SHIFT);
 	if (!pte_phys)
@@ -188,10 +205,26 @@ static int split_pmd(pmd_t *pmdp, pmd_t pmdval,
 	ptep = (pte_t *)phys_to_virt(pte_phys);
 	init_clear_pgtable(ptep);
 	prot = __pgprot(pgprot_val(prot) | PTE_TYPE_PAGE);
-	for (int i = 0; i < PTRS_PER_PTE; i++, ptep++)
+
+	/* It must be naturally aligned if PMD is leaf */
+	if ((flags & NO_CONT_MAPPINGS) == 0)
+		prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+
+	for (i = 0; i < PTRS_PER_PTE; i++, ptep++)
 		__set_pte_nosync(ptep, pfn_pte(pfn + i, prot));
 
 	dsb(ishst);
+
+	/* Clear CONT bit for the PMDs in the range */
+	if (cont) {
+		pmd_t *_pmdp, _pmd;
+		_pmdp = PTR_ALIGN_DOWN(pmdp, sizeof(*pmdp) * CONT_PMDS);
+		for (i = 0; i < CONT_PMDS; i++, _pmdp++) {
+			_pmd = READ_ONCE(*_pmdp);
+			_pmd = pmd_mknoncont(_pmd);
+			set_pmd(_pmdp, _pmd);
+		}
+	}
 
 	set_pmd(pmdp, pfn_pmd(__phys_to_pfn(pte_phys),
 		__pgprot(PMD_TYPE_TABLE)));
@@ -200,7 +233,7 @@ static int split_pmd(pmd_t *pmdp, pmd_t pmdval,
 }
 
 static int split_pud(pud_t *pudp, pud_t pudval,
-		     phys_addr_t (*pgtable_alloc)(int))
+		     phys_addr_t (*pgtable_alloc)(int), int flags)
 {
 	unsigned long pfn;
 	pgprot_t prot;
@@ -221,6 +254,11 @@ static int split_pud(pud_t *pudp, pud_t pudval,
 
 	pmdp = (pmd_t *)phys_to_virt(pmd_phys);
 	init_clear_pgtable(pmdp);
+
+	/* It must be naturally aligned if PUD is leaf */
+	if ((flags & NO_CONT_MAPPINGS) == 0)
+		prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+
 	for (int i = 0; i < PTRS_PER_PMD; i++, pmdp++) {
 		__set_pmd_nosync(pmdp, pfn_pmd(pfn, prot));
 		pfn += step;
@@ -235,10 +273,17 @@ static int split_pud(pud_t *pudp, pud_t pudval,
 }
 
 static void init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
-		     phys_addr_t phys, pgprot_t prot)
+		     phys_addr_t phys, pgprot_t prot, int flags)
 {
 	do {
 		pte_t old_pte = __ptep_get(ptep);
+
+		if (flags & SPLIT_MAPPINGS) {
+			if (pte_cont(old_pte))
+				split_cont_pte(ptep);
+
+			continue;
+		}
 
 		/*
 		 * Required barriers to make this visible to the table walker
@@ -266,8 +311,16 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 	unsigned long next;
 	pmd_t pmd = READ_ONCE(*pmdp);
 	pte_t *ptep;
+	bool split = flags & SPLIT_MAPPINGS;
 
 	BUG_ON(pmd_sect(pmd));
+
+	if (split) {
+		BUG_ON(pmd_none(pmd));
+		ptep = pte_offset_kernel(pmdp, addr);
+		goto split_pgtable;
+	}
+
 	if (pmd_none(pmd)) {
 		pmdval_t pmdval = PMD_TYPE_TABLE | PMD_TABLE_UXN | PMD_TABLE_AF;
 		phys_addr_t pte_phys;
@@ -287,6 +340,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		ptep = pte_set_fixmap_offset(pmdp, addr);
 	}
 
+split_pgtable:
 	do {
 		pgprot_t __prot = prot;
 
@@ -297,7 +351,7 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		    (flags & NO_CONT_MAPPINGS) == 0)
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
-		init_pte(ptep, addr, next, phys, __prot);
+		init_pte(ptep, addr, next, phys, __prot, flags);
 
 		ptep += pte_index(next) - pte_index(addr);
 		phys += next - addr;
@@ -308,7 +362,8 @@ static int alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 	 * ensure that all previous pgtable writes are visible to the table
 	 * walker.
 	 */
-	pte_clear_fixmap();
+	if (!split)
+		pte_clear_fixmap();
 
 	return 0;
 }
@@ -327,7 +382,12 @@ static int init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		next = pmd_addr_end(addr, end);
 
 		if (split) {
-			ret = split_pmd(pmdp, old_pmd, pgtable_alloc);
+			ret = split_pmd(pmdp, old_pmd, pgtable_alloc, flags);
+			if (ret)
+				break;
+
+			ret = alloc_init_cont_pte(pmdp, addr, next, phys, prot,
+						  pgtable_alloc, flags);
 			if (ret)
 				break;
 
@@ -469,7 +529,7 @@ split_pgtable:
 		next = pud_addr_end(addr, end);
 
 		if (split) {
-			ret = split_pud(pudp, old_pud, pgtable_alloc);
+			ret = split_pud(pudp, old_pud, pgtable_alloc, flags);
 			if (ret)
 				break;
 
@@ -845,9 +905,6 @@ static void __init map_mem(pgd_t *pgdp)
 
 	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
-
-	if (rodata_full)
-		flags |= NO_CONT_MAPPINGS;
 
 	/*
 	 * Take care not to create a writable alias for the
@@ -1546,9 +1603,6 @@ int arch_add_memory(int nid, u64 start, u64 size,
 
 	if (force_pte_mapping())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
-
-	if (rodata_full)
-		flags |= NO_CONT_MAPPINGS;
 
 	__create_pgd_mapping(swapper_pg_dir, start, __phys_to_virt(start),
 			     size, params->pgprot, __pgd_pgtable_alloc,
