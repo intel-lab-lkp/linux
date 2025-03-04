@@ -752,18 +752,30 @@ EXPORT_SYMBOL_GPL(dev_pm_opp_of_remove_table);
 static int _read_rate(struct dev_pm_opp *new_opp, struct opp_table *opp_table,
 		      struct device_node *np)
 {
-	struct property *prop;
+	struct property *prop = NULL;
 	int i, count, ret;
 	u64 *rates;
+	char name[NAME_MAX];
 
-	prop = of_find_property(np, "opp-hz", NULL);
-	if (!prop)
-		return -ENODEV;
+	/* Search for "opp-hz-<name>" */
+	if (opp_table->prop_name) {
+		snprintf(name, sizeof(name), "opp-hz-%s",
+			 opp_table->prop_name);
+		prop = of_find_property(np, name, NULL);
+	}
+
+	if (!prop) {
+		/* Search for "opp-hz" */
+		sprintf(name, "opp-hz");
+		prop = of_find_property(np, name, NULL);
+		if (!prop)
+			return -ENODEV;
+	}
 
 	count = prop->length / sizeof(u64);
 	if (opp_table->clk_count != count) {
-		pr_err("%s: Count mismatch between opp-hz and clk_count (%d %d)\n",
-		       __func__, count, opp_table->clk_count);
+		pr_err("%s: Count mismatch between %s and clk_count (%d %d)\n",
+		       __func__, name, count, opp_table->clk_count);
 		return -EINVAL;
 	}
 
@@ -771,9 +783,9 @@ static int _read_rate(struct dev_pm_opp *new_opp, struct opp_table *opp_table,
 	if (!rates)
 		return -ENOMEM;
 
-	ret = of_property_read_u64_array(np, "opp-hz", rates, count);
+	ret = of_property_read_u64_array(np, name, rates, count);
 	if (ret) {
-		pr_err("%s: Error parsing opp-hz: %d\n", __func__, ret);
+		pr_err("%s: Error parsing %s: %d\n", __func__, name, ret);
 	} else {
 		/*
 		 * Rate is defined as an unsigned long in clk API, and so
