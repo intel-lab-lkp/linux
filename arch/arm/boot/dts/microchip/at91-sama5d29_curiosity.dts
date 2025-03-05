@@ -480,6 +480,16 @@
 		label = "atmel_qspi1";
 		status = "okay";
 
+		nvmem-layout {
+			compatible = "fixed-layout";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			mac_address_eui48: mac-address@261 {
+				reg = <0x261 0x6>;
+			};
+		};
+
 		at91bootstrap@0 {
 			label = "at91bootstrap";
 			reg = <0x0 0x40000>;
