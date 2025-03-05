@@ -378,9 +378,6 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	if (!(smmu->features & ARM_SMMU_FEAT_NESTING))
 		return ERR_PTR(-EOPNOTSUPP);
 
-	if (s2_parent->smmu != master->smmu)
-		return ERR_PTR(-EINVAL);
-
 	/*
 	 * FORCE_SYNC is not set with FEAT_NESTING. Some study of the exact HW
 	 * defect is needed to determine if arm_vsmmu_cache_invalidate() needs
