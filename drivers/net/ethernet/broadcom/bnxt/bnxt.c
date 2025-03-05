@@ -15685,6 +15685,7 @@ static void bnxt_get_base_stats(struct net_device *dev,
 				struct netdev_queue_stats_tx *tx)
 {
 	struct bnxt *bp = netdev_priv(dev);
+	int i;
 
 	rx->packets = bp->ring_drv_stats_prev.rx_total_packets;
 	rx->bytes = bp->ring_drv_stats_prev.rx_total_bytes;
@@ -15692,6 +15693,21 @@ static void bnxt_get_base_stats(struct net_device *dev,
 
 	tx->packets = bp->ring_drv_stats_prev.tx_total_packets;
 	tx->bytes = bp->ring_drv_stats_prev.tx_total_bytes;
+
+	for (i = 0; i < bp->tx_nr_rings_xdp; i++) {
+		struct bnxt_sw_stats *sw_stats = bp->bnapi[i]->cp_ring.sw_stats;
+		unsigned int seq;
+		u64 pkts, bytes;
+
+		do {
+			seq = u64_stats_fetch_begin(&sw_stats->rx.syncp);
+			pkts = sw_stats->tx.tx_packets;
+			bytes = sw_stats->tx.tx_bytes;
+		} while (u64_stats_fetch_retry(&sw_stats->rx.syncp, seq));
+
+		tx->packets += pkts;
+		tx->bytes += bytes;
+	}
 }
 
 static const struct netdev_stat_ops bnxt_stat_ops = {

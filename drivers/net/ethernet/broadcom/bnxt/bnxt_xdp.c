@@ -35,14 +35,17 @@ struct bnxt_sw_tx_bd *bnxt_xmit_bd(struct bnxt *bp,
 	u16 prod;
 	int i;
 
-	if (xdp && xdp_buff_has_frags(xdp)) {
-		sinfo = xdp_get_shared_info_from_buff(xdp);
-		num_frags = sinfo->nr_frags;
-	}
-
 	/* fill up the first buffer */
 	prod = txr->tx_prod;
 	tx_buf = &txr->tx_buf_ring[RING_TX(bp, prod)];
+	tx_buf->xdp_len = len;
+
+	if (xdp && xdp_buff_has_frags(xdp)) {
+		sinfo = xdp_get_shared_info_from_buff(xdp);
+		tx_buf->xdp_len += sinfo->xdp_frags_size;
+		num_frags = sinfo->nr_frags;
+	}
+
 	tx_buf->nr_frags = num_frags;
 	if (xdp)
 		tx_buf->page = virt_to_head_page(xdp->data);
@@ -120,9 +123,11 @@ static void __bnxt_xmit_xdp_redirect(struct bnxt *bp,
 
 void bnxt_tx_int_xdp(struct bnxt *bp, struct bnxt_napi *bnapi, int budget)
 {
+	struct bnxt_sw_stats *sw_stats = bnapi->cp_ring.sw_stats;
 	struct bnxt_tx_ring_info *txr = bnapi->tx_ring[0];
 	struct bnxt_rx_ring_info *rxr = bnapi->rx_ring;
 	u16 tx_hw_cons = txr->tx_hw_cons;
+	unsigned int pkts = 0, bytes = 0;
 	bool rx_doorbell_needed = false;
 	struct bnxt_sw_tx_bd *tx_buf;
 	u16 tx_cons = txr->tx_cons;
@@ -134,6 +139,10 @@ void bnxt_tx_int_xdp(struct bnxt *bp, struct bnxt_napi *bnapi, int budget)
 
 	while (RING_TX(bp, tx_cons) != tx_hw_cons) {
 		tx_buf = &txr->tx_buf_ring[RING_TX(bp, tx_cons)];
+
+		pkts++;
+		bytes += tx_buf->xdp_len;
+		tx_buf->xdp_len = 0;
 
 		if (tx_buf->action == XDP_REDIRECT) {
 			struct pci_dev *pdev = bp->pdev;
@@ -162,6 +171,12 @@ void bnxt_tx_int_xdp(struct bnxt *bp, struct bnxt_napi *bnapi, int budget)
 		}
 		tx_cons = NEXT_TX(tx_cons);
 	}
+
+	/* Note: Rx sync here, because Rx == NAPI context */
+	u64_stats_update_begin(&sw_stats->rx.syncp);
+	sw_stats->tx.tx_packets += pkts;
+	sw_stats->tx.tx_bytes += bytes;
+	u64_stats_update_end(&sw_stats->rx.syncp);
 
 	bnapi->events &= ~BNXT_TX_CMP_EVENT;
 	WRITE_ONCE(txr->tx_cons, tx_cons);
