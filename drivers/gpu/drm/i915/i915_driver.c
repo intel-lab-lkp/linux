@@ -672,26 +672,35 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 	struct intel_gt *gt;
 	unsigned int i;
 
+	if (!dev_priv->do_unregister)
+		goto do_pxp_gt;
+
 	i915_switcheroo_unregister(dev_priv);
 
 	intel_runtime_pm_disable(&dev_priv->runtime_pm);
-	if (dev_priv->do_unregister)
-		intel_power_domains_disable(display);
+	intel_power_domains_disable(display);
 
 	intel_display_driver_unregister(display);
 
+do_pxp_gt:
 	intel_pxp_fini(dev_priv);
 
 	for_each_gt(gt, dev_priv, i)
 		intel_gt_driver_unregister(gt);
 
+	if (!dev_priv->do_unregister)
+		goto do_pmu;
+
 	i915_hwmon_unregister(dev_priv);
 
 	i915_perf_unregister(dev_priv);
+do_pmu:
 	i915_pmu_unregister(dev_priv);
+	if (!dev_priv->do_unregister)
+		goto do_unplug;
 
-	if (dev_priv->do_unregister)
-		i915_teardown_sysfs(dev_priv);
+	i915_teardown_sysfs(dev_priv);
+do_unplug:
 	drm_dev_unplug(&dev_priv->drm);
 
 	i915_gem_driver_unregister(dev_priv);

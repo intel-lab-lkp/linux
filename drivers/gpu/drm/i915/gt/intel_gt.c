@@ -796,8 +796,10 @@ void intel_gt_driver_unregister(struct intel_gt *gt)
 {
 	intel_wakeref_t wakeref;
 
-	if (gt->i915->do_unregister)
-		intel_gt_sysfs_unregister(gt);
+	if (!gt->i915->do_unregister)
+		goto not_registered;
+
+	intel_gt_sysfs_unregister(gt);
 	intel_rps_driver_unregister(&gt->rps);
 	intel_gsc_fini(&gt->gsc);
 
@@ -822,7 +824,10 @@ void intel_gt_driver_unregister(struct intel_gt *gt)
 	 * will likely already be idle in the great majority of non-selftest
 	 * scenarios.
 	 */
+not_registered:
 	intel_gsc_uc_flush_work(&gt->uc.gsc);
+	if (!gt->i915->do_unregister)
+		return;
 
 	/*
 	 * Upon unregistering the device to prevent any new users, cancel
