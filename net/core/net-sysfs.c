@@ -117,7 +117,8 @@ static int sysfs_rtnl_lock(struct kobject *kobj, struct attribute *attr,
 	 * the rtnl lock.
 	 */
 unbreak:
-	sysfs_unbreak_active_protection(kn);
+	if (kn)
+		sysfs_unbreak_active_protection(kn);
 	dev_put(ndev);
 
 	return ret;
