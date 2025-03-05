@@ -186,7 +186,7 @@ static void pnp_print_mem(pnp_info_buffer_t * buffer, char *space,
 	pnp_printf(buffer, ", %s\n", s);
 }
 
-static void pnp_print_option(pnp_info_buffer_t * buffer, char *space,
+static void pnp_print_option(pnp_info_buffer_t *buffer, char *space,
 			     struct pnp_option *option)
 {
 	switch (option->type) {
