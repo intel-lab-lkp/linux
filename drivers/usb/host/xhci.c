@@ -3088,6 +3088,34 @@ void xhci_reset_bandwidth(struct usb_hcd *hcd, struct usb_device *udev)
 }
 EXPORT_SYMBOL_GPL(xhci_reset_bandwidth);
 
+/* Get the available bandwidth of the ports under the xhci roothub */
+int xhci_get_port_bandwidth(struct xhci_hcd *xhci, u8 dev_speed)
+{
+	unsigned int			num_ports;
+	int				ret;
+	unsigned long			flags;
+	struct xhci_container_ctx	*ctx;
+
+	num_ports = HCS_MAX_PORTS(xhci->hcs_params1);
+	ctx = xhci->get_bw_command->in_ctx;
+
+	/* get xhci hub port bandwidth */
+	/* refer to xhci rev1_2 protocol 4.6.15*/
+	spin_lock_irqsave(&xhci->lock, flags);
+	ret = xhci_queue_get_rh_port_bw(xhci, xhci->get_bw_command, ctx->dma,
+					dev_speed, 0, false);
+	if (ret < 0) {
+		spin_unlock_irqrestore(&xhci->lock, flags);
+		return ret;
+	}
+	xhci_ring_cmd_db(xhci);
+	spin_unlock_irqrestore(&xhci->lock, flags);
+
+	wait_for_completion(xhci->get_bw_command->completion);
+
+	return ret;
+}
+
 static void xhci_setup_input_ctx_for_config_ep(struct xhci_hcd *xhci,
 		struct xhci_container_ctx *in_ctx,
 		struct xhci_container_ctx *out_ctx,
