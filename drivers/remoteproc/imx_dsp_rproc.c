@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Copyright 2021 NXP */
+/* Copyright 2021, 2025 NXP */
 
 #include <dt-bindings/firmware/imx/rsrc.h>
 #include <linux/arm-smccc.h>
@@ -37,6 +37,15 @@ MODULE_PARM_DESC(no_mailboxes,
 
 #define REMOTE_IS_READY				BIT(0)
 #define REMOTE_READY_WAIT_MAX_RETRIES		500
+
+/*
+ * This flag is set by the remote processor in the dfeatures member of
+ * struct fw_rsc_vdev, indicating supported virtio device features
+ *
+ * Use bit 1 since bit 0 is used for VIRTIO_RPMSG_F_NS
+ * in OpenAMP and mentioned in kernel's rpmsg documentation
+ */
+#define WAIT_FW_READY				BIT(1)
 
 /* att flags */
 /* DSP own area */
@@ -301,12 +310,73 @@ static int imx_dsp_rproc_ready(struct rproc *rproc)
 }
 
 /*
+ * Determines whether we should wait for a FW_READY reply
+ * from the remote processor.
+ *
+ * This function inspects the resource table associated with the remote
+ * processor to check if the firmware has indicated that waiting
+ * for a FW_READY signal is necessary.
+ * By default, wait for FW_READY unless an RSC_VDEV explicitly
+ * indicates otherwise.
+ *
+ * Return:
+ *   - true: If we should wait for FW READY
+ *   - false: If FW_READY wait is not required
+ */
+static bool imx_dsp_rproc_wait_fw_ready(struct rproc *rproc)
+{
+	struct device *dev = &rproc->dev;
+	struct fw_rsc_hdr *hdr;
+	struct fw_rsc_vdev *rsc;
+	int i, offset, avail;
+
+	/*
+	 * If there is no resource table, wait for FW_READY
+	 * unless no_mailboxes module param is used
+	 */
+	if (!rproc->table_ptr)
+		return true;
+
+	/* Iterate over each resource entry in the resource table */
+	for (i = 0; i < rproc->table_ptr->num; i++) {
+		offset = rproc->table_ptr->offset[i];
+		hdr = (void *)rproc->table_ptr + offset;
+		avail = rproc->table_sz - offset - sizeof(*hdr);
+
+		/* Ensure the resource table is not truncated */
+		if (avail < 0) {
+			dev_err(dev, "Resource table is truncated\n");
+			return true;
+		}
+
+		/* Check if the resource type is a virtio device */
+		if (hdr->type == RSC_VDEV) {
+			rsc = (struct fw_rsc_vdev *)((void *)hdr + sizeof(*hdr));
+
+			/* vdev does not require waiting for FW_READY */
+			return !!(rsc->dfeatures & WAIT_FW_READY);
+		}
+	}
+
+	/*
+	 * By default, wait for the FW_READY
+	 * unless a vdev entry disables it
+	 */
+	return true;
+}
+
+/*
  * Start function for rproc_ops
  *
- * There is a handshake for start procedure: when DSP starts, it
- * will send a doorbell message to this driver, then the
- * REMOTE_IS_READY flags is set, then driver will kick
- * a message to DSP.
+ * The start procedure involves a handshake: when the DSP starts, it
+ * sends a doorbell message to this driver, which sets the
+ * REMOTE_IS_READY flag. The driver then sends a message to the DSP.
+ *
+ * Before proceeding, the driver checks if it needs to wait for a
+ * firmware ready reply using imx_dsp_rproc_wait_fw_ready().
+ * If waiting is required, it calls imx_dsp_rproc_ready() to complete
+ * the initialization.
+ * If waiting is not required, the start function returns.
  */
 static int imx_dsp_rproc_start(struct rproc *rproc)
 {
@@ -335,8 +405,8 @@ static int imx_dsp_rproc_start(struct rproc *rproc)
 
 	if (ret)
 		dev_err(dev, "Failed to enable remote core!\n");
-	else
-		ret = imx_dsp_rproc_ready(rproc);
+	else if (imx_dsp_rproc_wait_fw_ready(rproc))
+		return imx_dsp_rproc_ready(rproc);
 
 	return ret;
 }
