@@ -31,6 +31,7 @@
 #include "intel_dsb.h"
 #include "intel_vrr.h"
 #include "skl_universal_plane.h"
+#include "skl_universal_plane_regs.h"
 
 struct intel_color_funcs {
 	int (*color_check)(struct intel_atomic_state *state,
@@ -86,6 +87,10 @@ struct intel_color_funcs {
 	 * Read config other than LUTs and CSCs, before them. Optional.
 	 */
 	void (*get_config)(struct intel_crtc_state *crtc_state);
+
+	/* Plane CSC*/
+	void (*load_plane_csc_matrix)(const struct drm_plane_state *plane_state,
+				      const struct drm_property_blob *blob);
 };
 
 #define CTM_COEFF_SIGN	(1ULL << 63)
@@ -3811,6 +3816,15 @@ static void icl_read_luts(struct intel_crtc_state *crtc_state)
 	}
 }
 
+void intel_color_load_plane_csc_matrix(const struct drm_plane_state *plane_state,
+				       const struct drm_property_blob *blob)
+{
+	struct drm_i915_private *i915 = to_i915(plane_state->plane->dev);
+
+	if (i915->display.funcs.color->load_plane_csc_matrix)
+		i915->display.funcs.color->load_plane_csc_matrix(plane_state, blob);
+}
+
 static const struct intel_color_funcs chv_color_funcs = {
 	.color_check = chv_color_check,
 	.color_commit_arm = i9xx_color_commit_arm,
@@ -4114,6 +4128,15 @@ static void apply_colorop(const struct drm_plane_state *plane_state,
 			  struct drm_colorop *colorop,
 			  u32 *plane_color_ctl)
 {
+	struct drm_colorop_state *state = colorop->state;
+	struct intel_plane_colorop *intel_colorop = to_intel_plane_colorop(colorop);
+
+	if (colorop->type == DRM_COLOROP_CTM_3X3) {
+		/* TODO: use intel_color_op state data */
+		(*plane_color_ctl) |= PLANE_COLOR_PLANE_CSC_ENABLE;
+		if (state->data && intel_colorop->id == CB_PLANE_CSC)
+			intel_color_load_plane_csc_matrix(plane_state, state->data);
+	}
 }
 
 void intel_program_pipeline(const struct drm_plane_state *plane_state, u32 *plane_color_ctl)
