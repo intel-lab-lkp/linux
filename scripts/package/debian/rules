@@ -21,9 +21,13 @@ ifeq ($(origin KBUILD_VERBOSE),undefined)
     endif
 endif
 
-revision = $(lastword $(subst -, ,$(shell dpkg-parsechangelog -S Version)))
+debian_revision = $(shell dpkg-parsechangelog -S Version)
+revision = $(lastword $(subst -, ,$(debian_revision)))
 CROSS_COMPILE ?= $(filter-out $(DEB_BUILD_GNU_TYPE)-, $(DEB_HOST_GNU_TYPE)-)
-make-opts = ARCH=$(ARCH) KERNELRELEASE=$(KERNELRELEASE) KBUILD_BUILD_VERSION=$(revision) $(addprefix CROSS_COMPILE=,$(CROSS_COMPILE))
+make-opts = ARCH=$(ARCH) KERNELRELEASE=$(KERNELRELEASE) $(addprefix CROSS_COMPILE=,$(CROSS_COMPILE))
+ifneq ($(revision), $(debian_revision))
+    make-opts+=KBUILD_BUILD_VERSION=$(revision)
+endif
 
 binary-targets := $(addprefix binary-, image image-dbg headers libc-dev)
 
