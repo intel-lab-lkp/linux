@@ -7,6 +7,7 @@
 
 #include <linux/soc/samsung/exynos-regs-pmu.h>
 #include <linux/soc/samsung/exynos-pmu.h>
+#include <linux/array_size.h>
 
 #include "exynos-pmu.h"
 
