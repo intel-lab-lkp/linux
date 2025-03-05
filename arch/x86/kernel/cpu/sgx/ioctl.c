@@ -64,6 +64,14 @@ static int sgx_encl_create(struct sgx_encl *encl, struct sgx_secs *secs)
 	struct file *backing;
 	long ret;
 
+	/*
+	 * This is a micro-architectural requirement. ECREATE would detect this
+	 * too without mentionable overhead but this check guarantees also that
+	 * the space calculations for EPC and shmem allocations never overflow.
+	 */
+	if (!is_power_of_2(secs->size))
+		return -EINVAL;
+
 	va_page = sgx_encl_grow(encl, true);
 	if (IS_ERR(va_page))
 		return PTR_ERR(va_page);
