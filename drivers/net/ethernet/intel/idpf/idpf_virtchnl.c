@@ -937,7 +937,7 @@ int idpf_vport_alloc_max_qs(struct idpf_adapter *adapter,
 	max_tx_q = le16_to_cpu(caps->max_tx_q) / default_vports;
 	if (adapter->num_alloc_vports < default_vports) {
 		max_q->max_rxq = min_t(u16, max_rx_q, IDPF_MAX_Q);
-		max_q->max_txq = min_t(u16, max_tx_q, IDPF_MAX_Q);
+		max_q->max_txq = min_t(u16, max_tx_q, IDPF_LARGE_MAX_Q);
 	} else {
 		max_q->max_rxq = IDPF_MIN_Q;
 		max_q->max_txq = IDPF_MIN_Q;
