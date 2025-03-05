@@ -1014,6 +1014,7 @@ static unsigned long prep_move_vma(struct vma_remap_struct *vrm)
 		return -ENOMEM;
 
 	if (vma->vm_ops && vma->vm_ops->may_split) {
+		err = 0;
 		if (vma->vm_start != old_addr)
 			err = vma->vm_ops->may_split(vma, old_addr);
 		if (!err && vma->vm_end != old_addr + old_len)
