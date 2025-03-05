@@ -25,6 +25,9 @@ static const char * const cpumask_success_testcases[] = {
 	"test_global_mask_nested_deep_rcu",
 	"test_global_mask_nested_deep_array_rcu",
 	"test_cpumask_weight",
+	"test_fill_reject_unaligned",
+	"test_fill_reject_small_mask",
+	"test_fill",
 };
 
 static void verify_success(const char *prog_name)
