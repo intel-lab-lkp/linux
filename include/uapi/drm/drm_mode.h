@@ -873,12 +873,30 @@ struct drm_color_lut {
 };
 
 /**
+ * struct drm_color_lut_32 - Represents high precision lut values
+ *
+ * Creating 32 bit palette entries for better data
+ * precision. This will be required for HDR and
+ * similar color processing usecases.
+ */
+struct drm_color_lut_32 {
+	/*
+	 * Data for high precision LUTs
+	 */
+	__u32 red;
+	__u32 green;
+	__u32 blue;
+	__u32 reserved;
+};
+
+/**
  * enum drm_colorop_type - Type of color operation
  *
  * drm_colorops can be of many different types. Each type behaves differently
  * and defines a different set of properties. This enum defines all types and
  * gives a high-level description.
  */
+
 enum drm_colorop_type {
 	/**
 	 * @DRM_COLOROP_1D_CURVE:
