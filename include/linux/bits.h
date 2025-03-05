@@ -12,6 +12,7 @@
 #define BIT_ULL_MASK(nr)	(ULL(1) << ((nr) % BITS_PER_LONG_LONG))
 #define BIT_ULL_WORD(nr)	((nr) / BITS_PER_LONG_LONG)
 #define BITS_PER_BYTE		8
+#define BITS_PER_TYPE(type)	(sizeof(type) * BITS_PER_BYTE)
 
 /*
  * Create a contiguous bitmask starting at bit position @l and ending at
@@ -25,14 +26,38 @@
 
 #define GENMASK_INPUT_CHECK(h, l) BUILD_BUG_ON_ZERO(const_true((l) > (h)))
 
-#define GENMASK(h, l) \
-	(GENMASK_INPUT_CHECK(h, l) + __GENMASK(h, l))
-#define GENMASK_ULL(h, l) \
-	(GENMASK_INPUT_CHECK(h, l) + __GENMASK_ULL(h, l))
+/*
+ * Generate a mask for the specified type @t. Additional checks are made to
+ * guarantee the value returned fits in that type, relying on
+ * shift-count-overflow compiler check to detect incompatible arguments.
+ * For example, all these create build errors or warnings:
+ *
+ * - GENMASK(15, 20): wrong argument order
+ * - GENMASK(72, 15): doesn't fit unsigned long
+ * - GENMASK_U32(33, 15): doesn't fit in a u32
+ */
+#define GENMASK_t(t, h, l)				\
+	(GENMASK_INPUT_CHECK(h, l) +			\
+	 (((t)~ULL(0) - ((t)1 << (l)) + 1) &		\
+	  ((t)~ULL(0) >> (BITS_PER_TYPE(t) - 1 - (h)))))
+
+#define GENMASK(h, l) GENMASK_t(unsigned long,  h, l)
+#define GENMASK_ULL(h, l) GENMASK_t(unsigned long long, h, l)
 
 /*
  * Missing asm support
  *
+ * __GENMASK_U*() depends on BITS_PER_TYPE() which would not work in the asm
+ * code as BITS_PER_TYPE() relies on sizeof(), something not available in
+ * asm. Nethertheless, the concept of fixed width integers is a C thing which
+ * does not apply to assembly code.
+ */
+#define GENMASK_U8(h, l) ((unsigned int)GENMASK_t(u8,  h, l))
+#define GENMASK_U16(h, l) ((unsigned int)GENMASK_t(u16, h, l))
+#define GENMASK_U32(h, l) GENMASK_t(u32, h, l)
+#define GENMASK_U64(h, l) GENMASK_t(u64, h, l)
+
+/*
  * __GENMASK_U128() depends on _BIT128() which would not work
  * in the asm code, as it shifts an 'unsigned __int128' data
  * type instead of direct representation of 128 bit constants
