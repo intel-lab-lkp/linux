@@ -36,18 +36,20 @@ static int monmap_show(struct seq_file *s, void *p)
 	int i;
 	struct ceph_client *client = s->private;
 
-	if (client->monc.monmap == NULL)
-		return 0;
+	mutex_lock(&client->monc.mutex);
+	if (client->monc.monmap) {
+		seq_printf(s, "epoch %d\n", client->monc.monmap->epoch);
+		for (i = 0; i < client->monc.monmap->num_mon; i++) {
+			struct ceph_entity_inst *inst =
+				&client->monc.monmap->mon_inst[i];
 
-	seq_printf(s, "epoch %d\n", client->monc.monmap->epoch);
-	for (i = 0; i < client->monc.monmap->num_mon; i++) {
-		struct ceph_entity_inst *inst =
-			&client->monc.monmap->mon_inst[i];
-
-		seq_printf(s, "\t%s%lld\t%s\n",
-			   ENTITY_NAME(inst->name),
-			   ceph_pr_addr(&inst->addr));
+			seq_printf(s, "\t%s%lld\t%s\n",
+				   ENTITY_NAME(inst->name),
+				   ceph_pr_addr(&inst->addr));
+		}
 	}
+	mutex_unlock(&client->monc.mutex);
+
 	return 0;
 }
 
@@ -56,13 +58,15 @@ static int osdmap_show(struct seq_file *s, void *p)
 	int i;
 	struct ceph_client *client = s->private;
 	struct ceph_osd_client *osdc = &client->osdc;
-	struct ceph_osdmap *map = osdc->osdmap;
+	struct ceph_osdmap *map = NULL;
 	struct rb_node *n;
 
-	if (map == NULL)
-		return 0;
-
 	down_read(&osdc->lock);
+
+	map = osdc->osdmap;
+	if (map == NULL)
+		goto finish_osdmap_show;
+
 	seq_printf(s, "epoch %u barrier %u flags 0x%x\n", map->epoch,
 			osdc->epoch_barrier, map->flags);
 
@@ -131,6 +135,7 @@ static int osdmap_show(struct seq_file *s, void *p)
 		seq_printf(s, "]\n");
 	}
 
+finish_osdmap_show:
 	up_read(&osdc->lock);
 	return 0;
 }
