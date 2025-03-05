@@ -1983,31 +1983,30 @@ static int evlist__cmp(void *_fg_idx, const struct list_head *l, const struct li
 	bool lhs_has_group, rhs_has_group;
 
 	/*
-	 * First sort by grouping/leader. Read the leader idx only if the evsel
-	 * is part of a group, by default ungrouped events will be sorted
-	 * relative to grouped events based on where the first ungrouped event
-	 * occurs. If both events don't have a group we want to fall-through to
-	 * the arch specific sorting, that can reorder and fix things like
-	 * Intel's topdown events.
+	 * Get the indexes of the 2 events to sort. If the events are
+	 * in groups then the leader's index is used otherwise the
+	 * event's index is used. Events in the same group will be
+	 * sorted by PMU name. An index may be forced for events that
+	 * must be in the same group, namely Intel topdown events.
+	 * When everything is identical arch specific sorting is used,
+	 * that can reorder and fix things like Intel's topdown
+	 * events.
 	 */
-	if (lhs_core->leader != lhs_core || lhs_core->nr_members > 1) {
-		lhs_has_group = true;
+	lhs_has_group = lhs_core->leader != lhs_core || lhs_core->nr_members > 1;
+	if (*force_grouped_idx != -1 && arch_evsel__must_be_in_group(lhs))
+		lhs_sort_idx = *force_grouped_idx;
+	else if (lhs_has_group)
 		lhs_sort_idx = lhs_core->leader->idx;
-	} else {
-		lhs_has_group = false;
-		lhs_sort_idx = *force_grouped_idx != -1 && arch_evsel__must_be_in_group(lhs)
-			? *force_grouped_idx
-			: lhs_core->idx;
-	}
-	if (rhs_core->leader != rhs_core || rhs_core->nr_members > 1) {
-		rhs_has_group = true;
+	else
+		lhs_sort_idx = lhs_core->idx;
+	rhs_has_group = rhs_core->leader != rhs_core || rhs_core->nr_members > 1;
+
+	if (*force_grouped_idx != -1 && arch_evsel__must_be_in_group(rhs))
+		rhs_sort_idx = *force_grouped_idx;
+	else if (rhs_has_group)
 		rhs_sort_idx = rhs_core->leader->idx;
-	} else {
-		rhs_has_group = false;
-		rhs_sort_idx = *force_grouped_idx != -1 && arch_evsel__must_be_in_group(rhs)
-			? *force_grouped_idx
-			: rhs_core->idx;
-	}
+	else
+		rhs_sort_idx = rhs_core->idx;
 
 	if (lhs_sort_idx != rhs_sort_idx)
 		return lhs_sort_idx - rhs_sort_idx;
@@ -2055,10 +2054,13 @@ static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 		 */
 		pos->core.idx = idx++;
 
-		/* Remember an index to sort all forced grouped events together to. */
-		if (force_grouped_idx == -1 && pos == pos_leader && pos->core.nr_members < 2 &&
-		    arch_evsel__must_be_in_group(pos))
-			force_grouped_idx = pos->core.idx;
+		/*
+		 * Remember an index to sort all forced grouped events
+		 * together to. Use the group leader as some events
+		 * must appear first within the group.
+		 */
+		if (force_grouped_idx == -1 && arch_evsel__must_be_in_group(pos))
+			force_grouped_idx = pos_leader->core.idx;
 	}
 
 	/* Sort events. */
