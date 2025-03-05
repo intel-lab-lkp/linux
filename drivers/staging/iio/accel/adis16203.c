@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/units.h>
 
 #define ADIS16203_STARTUP_DELAY 220 /* ms */
 
@@ -173,10 +174,10 @@ static int adis16203_read_raw(struct iio_dev *indio_dev,
 		case IIO_VOLTAGE:
 			if (chan->channel == 0) {
 				*val = 1;
-				*val2 = 220000; /* 1.22 mV */
+				*val2 = 220 * MILLI; /* 0.22 mV */
 			} else {
 				*val = 0;
-				*val2 = 610000; /* 0.61 mV */
+				*val2 = 610 * MILLI; /* 0.61 mV */
 			}
 			return IIO_VAL_INT_PLUS_MICRO;
 		case IIO_TEMP:
@@ -185,7 +186,7 @@ static int adis16203_read_raw(struct iio_dev *indio_dev,
 			return IIO_VAL_INT_PLUS_MICRO;
 		case IIO_INCLI:
 			*val = 0;
-			*val2 = 25000; /* 0.025 degree */
+			*val2 = 25 * MILLI; /* 0.025 degree */
 			return IIO_VAL_INT_PLUS_MICRO;
 		default:
 			return -EINVAL;
