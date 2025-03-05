@@ -1064,7 +1064,7 @@ static int add_dport(struct cxl_port *port, struct cxl_dport *dport)
 	device_lock_assert(&port->dev);
 	dup = find_dport(port, dport->port_id);
 	if (dup) {
-		dev_err(&port->dev,
+		dev_dbg(&port->dev,
 			"unable to add dport%d-%s non-unique port id (%s)\n",
 			dport->port_id, dev_name(dport->dport_dev),
 			dev_name(dup->dport_dev));
