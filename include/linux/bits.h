@@ -68,6 +68,22 @@
 #define GENMASK_U128(h, l) \
 	(GENMASK_INPUT_CHECK(h, l) + __GENMASK_U128(h, l))
 
+/*
+ * Fixed-type variants of BIT(), with additional checks like GENMASK_t(). The
+ * following examples generate compiler warnings due to shift-count-overflow:
+ *
+ * - BIT_U8(8)
+ * - BIT_U32(-1)
+ * - BIT_U32(40)
+ */
+#define BIT_INPUT_CHECK(type, b) \
+	BUILD_BUG_ON_ZERO(const_true((b) >= BITS_PER_TYPE(type)))
+
+#define BIT_U8(b) (BIT_INPUT_CHECK(u8, b) + (unsigned int)BIT(b))
+#define BIT_U16(b) (BIT_INPUT_CHECK(u16, b) + (unsigned int)BIT(b))
+#define BIT_U32(b) (BIT_INPUT_CHECK(u32, b) + (u32)BIT(b))
+#define BIT_U64(b) (BIT_INPUT_CHECK(u64, b) + (u64)BIT_ULL(b))
+
 #else /* defined(__ASSEMBLY__) */
 
 #define GENMASK(h, l) __GENMASK(h, l)
