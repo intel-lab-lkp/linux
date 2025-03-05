@@ -2950,6 +2950,32 @@ void __init sev_set_cpu_caps(void)
 	}
 }
 
+static bool snp_initialized(void)
+{
+	struct sev_user_data_snp_status *status;
+	struct sev_data_snp_addr buf;
+	bool initialized = false;
+	void *data;
+	int error;
+
+	data = snp_alloc_firmware_page(GFP_KERNEL_ACCOUNT);
+	if (!data)
+		return initialized;
+
+	buf.address = __psp_pa(data);
+	if (sev_do_cmd(SEV_CMD_SNP_PLATFORM_STATUS, &buf, &error))
+		goto out;
+
+	status = (struct sev_user_data_snp_status *)data;
+	if (status->state)
+		initialized = true;
+
+out:
+	snp_free_firmware_page(data);
+
+	return initialized;
+}
+
 void __init sev_hardware_setup(void)
 {
 	unsigned int eax, ebx, ecx, edx, sev_asid_count, sev_es_asid_count;
@@ -3050,7 +3076,9 @@ void __init sev_hardware_setup(void)
 	sev_es_asid_count = min_sev_asid - 1;
 	WARN_ON_ONCE(misc_cg_set_capacity(MISC_CG_RES_SEV_ES, sev_es_asid_count));
 	sev_es_supported = true;
-	sev_snp_supported = sev_snp_enabled && cc_platform_has(CC_ATTR_HOST_SEV_SNP);
+	sev_snp_supported = (sev_snp_enabled &&
+			    cc_platform_has(CC_ATTR_HOST_SEV_SNP) &&
+			    snp_initialized());
 
 out:
 	if (boot_cpu_has(X86_FEATURE_SEV))
