@@ -213,7 +213,10 @@ static unsigned int omap_wdt_get_timeleft(struct watchdog_device *wdog)
 }
 
 static const struct watchdog_info omap_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "OMAP Watchdog",
 };
 

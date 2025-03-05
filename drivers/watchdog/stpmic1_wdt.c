@@ -67,7 +67,10 @@ static int pmic_wdt_set_timeout(struct watchdog_device *wdd,
 }
 
 static const struct watchdog_info pmic_watchdog_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "STPMIC1 PMIC Watchdog",
 };
 

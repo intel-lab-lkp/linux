@@ -112,7 +112,10 @@ static irqreturn_t mid_wdt_irq(int irq, void *dev_id)
 
 static const struct watchdog_info mid_wdt_info = {
 	.identity = "Intel MID SCU watchdog",
-	.options = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE,
+	.options = WDIOF_KEEPALIVEPING |
+		   WDIOF_SETTIMEOUT |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops mid_wdt_ops = {

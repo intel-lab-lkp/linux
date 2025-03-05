@@ -232,7 +232,7 @@ static int armada_37xx_wdt_stop(struct watchdog_device *wdt)
 }
 
 static const struct watchdog_info armada_37xx_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE | WDIOF_STOP_MAYSLEEP,
 	.identity = "Armada 37xx Watchdog",
 };
 

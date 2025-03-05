@@ -99,7 +99,10 @@ static unsigned int xen_wdt_get_timeleft(struct watchdog_device *wdd)
 
 static struct watchdog_info xen_wdt_info = {
 	.identity = DRV_NAME,
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops xen_wdt_ops = {

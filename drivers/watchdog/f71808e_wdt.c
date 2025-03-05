@@ -469,7 +469,8 @@ static int fintek_wdt_probe(struct platform_device *pdev)
 	wd->ident.options = WDIOF_SETTIMEOUT
 			| WDIOF_MAGICCLOSE
 			| WDIOF_KEEPALIVEPING
-			| WDIOF_CARDRESET;
+			| WDIOF_CARDRESET
+			| WDIOF_STOP_MAYSLEEP;
 
 	snprintf(wd->ident.identity,
 		sizeof(wd->ident.identity), "%s watchdog",

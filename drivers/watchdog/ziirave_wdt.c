@@ -417,7 +417,10 @@ static int ziirave_firm_upload(struct watchdog_device *wdd,
 }
 
 static const struct watchdog_info ziirave_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "RAVE Switch Watchdog",
 };
 

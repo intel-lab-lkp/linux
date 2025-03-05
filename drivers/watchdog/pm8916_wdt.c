@@ -117,14 +117,15 @@ static irqreturn_t pm8916_wdt_isr(int irq, void *arg)
 
 static const struct watchdog_info pm8916_wdt_ident = {
 	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE |
-		   WDIOF_OVERHEAT | WDIOF_CARDRESET | WDIOF_POWERUNDER,
+		   WDIOF_OVERHEAT | WDIOF_CARDRESET | WDIOF_POWERUNDER |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "QCOM PM8916 PON WDT",
 };
 
 static const struct watchdog_info pm8916_wdt_pt_ident = {
 	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE |
 		   WDIOF_OVERHEAT | WDIOF_CARDRESET | WDIOF_POWERUNDER |
-		   WDIOF_PRETIMEOUT,
+		   WDIOF_PRETIMEOUT | WDIOF_STOP_MAYSLEEP,
 	.identity = "QCOM PM8916 PON WDT",
 };
 

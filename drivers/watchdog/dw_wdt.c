@@ -336,13 +336,14 @@ static unsigned int dw_wdt_get_timeleft(struct watchdog_device *wdd)
 
 static const struct watchdog_info dw_wdt_ident = {
 	.options	= WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT |
-			  WDIOF_MAGICCLOSE,
+			  WDIOF_MAGICCLOSE | WDIOF_STOP_MAYSLEEP,
 	.identity	= "Synopsys DesignWare Watchdog",
 };
 
 static const struct watchdog_info dw_wdt_pt_ident = {
 	.options	= WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT |
-			  WDIOF_PRETIMEOUT | WDIOF_MAGICCLOSE,
+			  WDIOF_PRETIMEOUT | WDIOF_MAGICCLOSE |
+			  WDIOF_STOP_MAYSLEEP,
 	.identity	= "Synopsys DesignWare Watchdog",
 };
 

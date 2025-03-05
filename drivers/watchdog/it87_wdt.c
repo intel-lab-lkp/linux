@@ -265,7 +265,10 @@ static const struct dmi_system_id it87_quirks[] = {
 };
 
 static const struct watchdog_info ident = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.firmware_version = 1,
 	.identity = WATCHDOG_NAME,
 };

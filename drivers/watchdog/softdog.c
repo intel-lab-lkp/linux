@@ -162,7 +162,10 @@ static int softdog_stop(struct watchdog_device *w)
 
 static struct watchdog_info softdog_info = {
 	.identity = "Software Watchdog",
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops softdog_ops = {

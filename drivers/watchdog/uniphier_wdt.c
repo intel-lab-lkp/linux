@@ -168,7 +168,8 @@ static const struct watchdog_info uniphier_wdt_info = {
 	.options	= WDIOF_SETTIMEOUT |
 			  WDIOF_KEEPALIVEPING |
 			  WDIOF_MAGICCLOSE |
-			  WDIOF_OVERHEAT,
+			  WDIOF_OVERHEAT |
+			  WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops uniphier_wdt_ops = {

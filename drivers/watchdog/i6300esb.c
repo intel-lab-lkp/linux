@@ -190,7 +190,10 @@ static int esb_timer_set_heartbeat(struct watchdog_device *wdd,
 
 static struct watchdog_info esb_info = {
 	.identity = ESB_MODULE_NAME,
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops esb_ops = {

@@ -139,7 +139,8 @@ static const struct watchdog_info da9052_wdt_info = {
 			WDIOF_KEEPALIVEPING |
 			WDIOF_CARDRESET |
 			WDIOF_OVERHEAT |
-			WDIOF_POWERUNDER,
+			WDIOF_POWERUNDER |
+			WDIOF_STOP_MAYSLEEP,
 	.identity	= "DA9052 Watchdog",
 };
 

@@ -180,7 +180,9 @@ static int da9062_wdt_restart(struct watchdog_device *wdd, unsigned long action,
 }
 
 static const struct watchdog_info da9062_watchdog_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "DA9062 WDT",
 };
 

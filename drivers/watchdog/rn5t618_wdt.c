@@ -125,8 +125,10 @@ static int rn5t618_wdt_ping(struct watchdog_device *wdt_dev)
 }
 
 static const struct watchdog_info rn5t618_wdt_info = {
-	.options	= WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE |
-			  WDIOF_KEEPALIVEPING,
+	.options	= WDIOF_SETTIMEOUT |
+			  WDIOF_MAGICCLOSE |
+			  WDIOF_KEEPALIVEPING |
+			  WDIOF_STOP_MAYSLEEP,
 	.identity	= DRIVER_NAME,
 };
 

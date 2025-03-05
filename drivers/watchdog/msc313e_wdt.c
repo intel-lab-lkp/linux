@@ -77,7 +77,10 @@ static int msc313e_wdt_settimeout(struct watchdog_device *wdev, unsigned int new
 
 static const struct watchdog_info msc313e_wdt_ident = {
 	.identity = "MSC313e watchdog",
-	.options = WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT,
+	.options = WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_SETTIMEOUT |
+		   WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops msc313e_wdt_ops = {

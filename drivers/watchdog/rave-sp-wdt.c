@@ -211,7 +211,10 @@ static int rave_sp_wdt_ping(struct watchdog_device *wdd)
 }
 
 static const struct watchdog_info rave_sp_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "RAVE SP Watchdog",
 };
 

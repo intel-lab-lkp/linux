@@ -214,7 +214,10 @@ static int wdt_disable(struct watchdog_device *wdd)
 }
 
 static const struct watchdog_info wdt_info = {
-	.options = WDIOF_MAGICCLOSE | WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_MAGICCLOSE |
+		   WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = MODULE_NAME,
 };
 

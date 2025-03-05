@@ -194,8 +194,10 @@ static void sh_wdt_ping(struct timer_list *t)
 }
 
 static const struct watchdog_info sh_wdt_info = {
-	.options		= WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT |
-				  WDIOF_MAGICCLOSE,
+	.options		= WDIOF_KEEPALIVEPING |
+				  WDIOF_SETTIMEOUT |
+				  WDIOF_MAGICCLOSE |
+				  WDIOF_STOP_MAYSLEEP,
 	.firmware_version	= 1,
 	.identity		= "SH WDT",
 };

@@ -419,7 +419,8 @@ static const struct watchdog_info kempld_wdt_info = {
 	.options	= WDIOF_SETTIMEOUT |
 			WDIOF_KEEPALIVEPING |
 			WDIOF_MAGICCLOSE |
-			WDIOF_PRETIMEOUT
+			WDIOF_PRETIMEOUT |
+			WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops kempld_wdt_ops = {

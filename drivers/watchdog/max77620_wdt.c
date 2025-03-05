@@ -144,7 +144,10 @@ static int max77620_wdt_set_timeout(struct watchdog_device *wdt_dev,
 
 static const struct watchdog_info max77620_wdt_info = {
 	.identity = "max77620-watchdog",
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops max77620_wdt_ops = {

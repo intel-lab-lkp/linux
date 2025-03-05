@@ -315,7 +315,8 @@ static struct watchdog_info wd_info = {
 	.identity = INTEL_AMT_WATCHDOG_ID,
 	.options  = WDIOF_KEEPALIVEPING |
 		    WDIOF_SETTIMEOUT |
-		    WDIOF_ALARMONLY,
+		    WDIOF_ALARMONLY |
+		    WDIOF_STOP_MAYSLEEP,
 };
 
 /**

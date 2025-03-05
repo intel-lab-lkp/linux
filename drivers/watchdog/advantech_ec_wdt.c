@@ -131,7 +131,8 @@ static const struct watchdog_info adv_ec_wdt_info = {
 	.identity =	DRIVER_NAME,
 	.options =	WDIOF_SETTIMEOUT |
 			WDIOF_MAGICCLOSE |
-			WDIOF_KEEPALIVEPING,
+			WDIOF_KEEPALIVEPING |
+			WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops adv_ec_wdt_ops = {

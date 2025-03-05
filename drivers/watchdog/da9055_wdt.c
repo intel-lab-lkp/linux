@@ -105,7 +105,9 @@ static int da9055_wdt_stop(struct watchdog_device *wdt_dev)
 }
 
 static const struct watchdog_info da9055_wdt_info = {
-	.options	= WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
+	.options	= WDIOF_SETTIMEOUT |
+			  WDIOF_KEEPALIVEPING |
+			  WDIOF_STOP_MAYSLEEP,
 	.identity	= "DA9055 Watchdog",
 };
 

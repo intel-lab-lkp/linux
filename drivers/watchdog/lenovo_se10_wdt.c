@@ -140,7 +140,10 @@ static int wdt_ping(struct watchdog_device *wdog)
 }
 
 static const struct watchdog_info wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "Lenovo SE10 Watchdog",
 };
 

@@ -99,7 +99,9 @@ static int menf21bmc_wdt_ping(struct watchdog_device *wdt)
 }
 
 static const struct watchdog_info menf21bmc_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = DEVNAME,
 };
 

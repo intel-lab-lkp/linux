@@ -89,7 +89,7 @@ static int bd96801_wdt_stop(struct watchdog_device *wdt)
 
 static const struct watchdog_info bd96801_wdt_info = {
 	.options	= WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING |
-			  WDIOF_SETTIMEOUT,
+			  WDIOF_SETTIMEOUT | WDIOF_STOP_MAYSLEEP,
 	.identity	= "BD96801 Watchdog",
 };
 

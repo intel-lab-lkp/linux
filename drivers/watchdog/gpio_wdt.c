@@ -93,7 +93,7 @@ static int gpio_wdt_stop(struct watchdog_device *wdd)
 
 static const struct watchdog_info gpio_wdt_ident = {
 	.options	= WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING |
-			  WDIOF_SETTIMEOUT,
+			  WDIOF_SETTIMEOUT | WDIOF_STOP_MAYSLEEP,
 	.identity	= "GPIO Watchdog",
 };
 

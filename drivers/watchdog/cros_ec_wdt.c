@@ -107,7 +107,10 @@ static int cros_ec_wdt_set_timeout(struct watchdog_device *wdd, unsigned int t)
 }
 
 static const struct watchdog_info cros_ec_wdt_ident = {
-	.options          = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options          = WDIOF_SETTIMEOUT |
+			    WDIOF_KEEPALIVEPING |
+			    WDIOF_MAGICCLOSE |
+			    WDIOF_STOP_MAYSLEEP,
 	.firmware_version = 0,
 	.identity         = DRV_NAME,
 };

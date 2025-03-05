@@ -112,7 +112,10 @@ static int jz4740_wdt_restart(struct watchdog_device *wdt_dev,
 }
 
 static const struct watchdog_info jz4740_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "jz4740 Watchdog",
 };
 

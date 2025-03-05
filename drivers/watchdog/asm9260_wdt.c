@@ -181,7 +181,7 @@ static int asm9260_restart(struct watchdog_device *wdd, unsigned long action,
 
 static const struct watchdog_info asm9260_wdt_ident = {
 	.options          =     WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING
-				| WDIOF_MAGICCLOSE,
+				| WDIOF_MAGICCLOSE | WDIOF_STOP_MAYSLEEP,
 	.identity         =	"Alphascale asm9260 Watchdog",
 };
 

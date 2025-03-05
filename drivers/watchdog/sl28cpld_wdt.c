@@ -104,7 +104,10 @@ static int sl28cpld_wdt_set_timeout(struct watchdog_device *wdd,
 }
 
 static const struct watchdog_info sl28cpld_wdt_info = {
-	.options = WDIOF_MAGICCLOSE | WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_MAGICCLOSE |
+		   WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "sl28cpld watchdog",
 };
 

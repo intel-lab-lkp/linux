@@ -176,7 +176,8 @@ static const struct watchdog_info npcm_wdt_info = {
 	.identity	= KBUILD_MODNAME,
 	.options	= WDIOF_SETTIMEOUT
 			| WDIOF_KEEPALIVEPING
-			| WDIOF_MAGICCLOSE,
+			| WDIOF_MAGICCLOSE
+			| WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops npcm_wdt_ops = {

@@ -133,7 +133,7 @@ static int pseries_wdt_stop(struct watchdog_device *wdd)
 static struct watchdog_info pseries_wdt_info = {
 	.identity = DRV_NAME,
 	.options = WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE | WDIOF_SETTIMEOUT
-	    | WDIOF_PRETIMEOUT,
+	    | WDIOF_PRETIMEOUT | WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops pseries_wdt_ops = {

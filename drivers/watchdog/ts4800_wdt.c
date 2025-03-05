@@ -100,7 +100,10 @@ static const struct watchdog_ops ts4800_wdt_ops = {
 };
 
 static const struct watchdog_info ts4800_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "TS-4800 Watchdog",
 };
 

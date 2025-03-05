@@ -151,7 +151,7 @@ static int cgbc_wdt_set_timeout(struct watchdog_device *wdd,
 static const struct watchdog_info cgbc_wdt_info = {
 	.identity	= "CGBC Watchdog",
 	.options	= WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING |
-		WDIOF_MAGICCLOSE | WDIOF_PRETIMEOUT
+		WDIOF_MAGICCLOSE | WDIOF_PRETIMEOUT | WDIOF_STOP_MAYSLEEP,
 };
 
 static const struct watchdog_ops cgbc_wdt_ops = {

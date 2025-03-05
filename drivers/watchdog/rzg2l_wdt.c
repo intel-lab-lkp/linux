@@ -219,7 +219,10 @@ static int rzg2l_wdt_restart(struct watchdog_device *wdev,
 }
 
 static const struct watchdog_info rzg2l_wdt_ident = {
-	.options = WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT,
+	.options = WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_SETTIMEOUT |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "Renesas RZ/G2L WDT Watchdog",
 };
 

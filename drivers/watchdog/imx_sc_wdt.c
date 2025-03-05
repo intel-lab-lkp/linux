@@ -172,7 +172,7 @@ static const struct watchdog_ops imx_sc_wdt_ops = {
 static struct watchdog_info imx_sc_wdt_info = {
 	.identity	= "i.MX SC watchdog timer",
 	.options	= WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING |
-			  WDIOF_MAGICCLOSE,
+			  WDIOF_MAGICCLOSE | WDIOF_STOP_MAYSLEEP,
 };
 
 static int imx_sc_wdt_probe(struct platform_device *pdev)

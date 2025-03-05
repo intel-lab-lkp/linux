@@ -158,8 +158,11 @@ static int rwdt_restart(struct watchdog_device *wdev, unsigned long action,
 }
 
 static const struct watchdog_info rwdt_ident = {
-	.options = WDIOF_MAGICCLOSE | WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT |
-		WDIOF_CARDRESET,
+	.options = WDIOF_MAGICCLOSE |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_SETTIMEOUT |
+		   WDIOF_CARDRESET |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "Renesas WDT Watchdog",
 };
 

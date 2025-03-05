@@ -117,7 +117,10 @@ static int wm8350_wdt_ping(struct watchdog_device *wdt_dev)
 }
 
 static const struct watchdog_info wm8350_wdt_info = {
-	.options = WDIOF_SETTIMEOUT | WDIOF_KEEPALIVEPING | WDIOF_MAGICCLOSE,
+	.options = WDIOF_SETTIMEOUT |
+		   WDIOF_KEEPALIVEPING |
+		   WDIOF_MAGICCLOSE |
+		   WDIOF_STOP_MAYSLEEP,
 	.identity = "WM8350 Watchdog",
 };
 
