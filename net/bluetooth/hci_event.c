@@ -4448,6 +4448,7 @@ static void hci_num_comp_pkts_evt(struct hci_dev *hdev, void *data,
 			hdev->sco_cnt += count;
 			if (hdev->sco_cnt > hdev->sco_pkts)
 				hdev->sco_cnt = hdev->sco_pkts;
+
 			break;
 
 		case ISO_LINK:
@@ -4916,6 +4917,23 @@ unlock:
 	hci_dev_unlock(hdev);
 }
 
+static int hci_sco_flowctl_test(struct hci_dev *hdev, void *data)
+{
+	struct hci_conn *conn = data;
+	int err;
+
+	if (!hci_conn_valid(hdev, conn))
+		return -ECANCELED;
+
+	err = hci_sco_flowctl_test_sync(hdev, conn);
+	if (err)
+		hci_dev_clear_flag(hdev, HCI_SCO_FLOWCTL);
+
+	hci_connect_cfm(conn, 0x00);
+
+	return err;
+}
+
 static void hci_sync_conn_complete_evt(struct hci_dev *hdev, void *data,
 				       struct sk_buff *skb)
 {
@@ -5021,7 +5039,14 @@ static void hci_sync_conn_complete_evt(struct hci_dev *hdev, void *data,
 		}
 	}
 
-	hci_connect_cfm(conn, status);
+	/* If SCO flow control is enable attempt to generate
+	 * HCI_EV_NUM_COMP_PKTS by sending an empty packet.
+	 */
+	if (!status && hci_dev_test_flag(hdev, HCI_SCO_FLOWCTL))
+		hci_cmd_sync_queue(hdev, hci_sco_flowctl_test, conn, NULL);
+	else
+		hci_connect_cfm(conn, status);
+
 	if (status)
 		hci_conn_del(conn);
 
