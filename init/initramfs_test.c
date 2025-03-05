@@ -387,7 +387,7 @@ static void __init initramfs_test_many(struct kunit *test)
  * The kunit_case/_suite struct cannot be marked as __initdata as this will be
  * used in debugfs to retrieve results after test has run.
  */
-static struct kunit_case initramfs_test_cases[] = {
+static struct kunit_case initramfs_test_cases[] __refdata = {
 	KUNIT_CASE(initramfs_test_extract),
 	KUNIT_CASE(initramfs_test_fname_overrun),
 	KUNIT_CASE(initramfs_test_data),
