@@ -1137,7 +1137,7 @@ static int mipi_csis_get_frame_desc(struct v4l2_subdev *sd, unsigned int pad,
 	if (!csis_fmt)
 		return -EPIPE;
 
-	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL;
+	fd->type = V4L2_MBUS_FRAME_DESC_TYPE_CSI2;
 	fd->num_entries = 1;
 
 	entry->flags = 0;
