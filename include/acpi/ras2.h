@@ -31,7 +31,13 @@ struct ras2_mem_ctx {
 	struct device *dev;
 	struct acpi_ras2_shmem __iomem *comm_addr;
 	void *pcc_subspace;
+	u64 base, size;
 	int id;
+	u8 instance;
+	u8 scrub_cycle_hrs;
+	u8 min_scrub_cycle;
+	u8 max_scrub_cycle;
+	bool bg_scrub;
 };
 
 #ifdef CONFIG_ACPI_RAS2
