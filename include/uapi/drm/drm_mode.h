@@ -924,6 +924,16 @@ enum drm_colorop_type {
 	DRM_COLOROP_CTM_3X4,
 
 	/**
+	 * @DRM_COLOROP_1D_LUT_MULTSEG:
+	 *
+	 * A 1D LUT with multiple segments to cover the full color range with non-uniformly
+	 * distributed &drm_color_lut entries, packed into a blob via the DATA property.
+	 * The driver's expected LUT size and segmented capabilities are advertised via the
+	 * HW_CAPS property.
+	 */
+	DRM_COLOROP_1D_LUT_MULTSEG,
+
+	/**
 	 * @DRM_COLOROP_CTM_3X3:
 	 *
 	 * A 3x3 matrix. Its values are specified via the
