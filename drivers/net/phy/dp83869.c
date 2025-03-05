@@ -20,6 +20,7 @@
 #define DP83869_DEVADDR		0x1f
 
 #define MII_DP83869_PHYCTRL	0x10
+#define MII_DP83869_PHYSTS	0x11
 #define MII_DP83869_MICR	0x12
 #define MII_DP83869_ISR		0x13
 #define DP83869_CFG2		0x14
@@ -123,6 +124,12 @@
 #define DP83869_WOL_SEC_EN		BIT(5)
 #define DP83869_WOL_ENH_MAC		BIT(7)
 
+/* PHY STS bits */
+#define DP83869_PHYSTS_1000			BIT(15)
+#define DP83869_PHYSTS_100			BIT(14)
+#define DP83869_PHYSTS_DUPLEX			BIT(13)
+#define DP83869_PHYSTS_LINK			BIT(10)
+
 /* CFG2 bits */
 #define DP83869_DOWNSHIFT_EN		(BIT(8) | BIT(9))
 #define DP83869_DOWNSHIFT_ATTEMPT_MASK	(BIT(10) | BIT(11))
@@ -165,6 +172,7 @@ static int dp83869_config_aneg(struct phy_device *phydev)
 
 static int dp83869_read_status(struct phy_device *phydev)
 {
+	int status = phy_read(phydev, MII_DP83869_PHYSTS);
 	struct dp83869_private *dp83869 = phydev->priv;
 	bool changed;
 	int ret;
@@ -184,6 +192,21 @@ static int dp83869_read_status(struct phy_device *phydev)
 			phydev->duplex = DUPLEX_UNKNOWN;
 		}
 	}
+
+	if (status < 0)
+		return status;
+
+	if (status & DP83869_PHYSTS_DUPLEX)
+		phydev->duplex = DUPLEX_FULL;
+	else
+		phydev->duplex = DUPLEX_HALF;
+
+	if (status & DP83869_PHYSTS_1000)
+		phydev->speed = SPEED_1000;
+	else if (status & DP83869_PHYSTS_100)
+		phydev->speed = SPEED_100;
+	else
+		phydev->speed = SPEED_10;
 
 	return 0;
 }
