@@ -1966,45 +1966,36 @@ ts_valid:
 	return true;
 }
 
-static struct sk_buff *bnxt_rx_vlan(struct sk_buff *skb, u8 cmp_type,
-				    struct rx_cmp *rxcmp,
-				    struct rx_cmp_ext *rxcmp1)
+static u32
+bnxt_rx_vlan(u8 cmp_type, struct rx_cmp *rxcmp, struct rx_cmp_ext *rxcmp1)
 {
-	__be16 vlan_proto;
-	u16 vtag;
+	u16 vlan_proto = 0, vtag = 0;
 
 	if (cmp_type == CMP_TYPE_RX_L2_CMP) {
 		__le32 flags2 = rxcmp1->rx_cmp_flags2;
 		u32 meta_data;
 
 		if (!(flags2 & cpu_to_le32(RX_CMP_FLAGS2_META_FORMAT_VLAN)))
-			return skb;
+			return 0;
 
 		meta_data = le32_to_cpu(rxcmp1->rx_cmp_meta_data);
 		vtag = meta_data & RX_CMP_FLAGS2_METADATA_TCI_MASK;
-		vlan_proto = htons(meta_data >> RX_CMP_FLAGS2_METADATA_TPID_SFT);
-		if (eth_type_vlan(vlan_proto))
-			__vlan_hwaccel_put_tag(skb, vlan_proto, vtag);
-		else
-			goto vlan_err;
+		vlan_proto = meta_data >> RX_CMP_FLAGS2_METADATA_TPID_SFT;
 	} else if (cmp_type == CMP_TYPE_RX_L2_V3_CMP) {
 		if (RX_CMP_VLAN_VALID(rxcmp)) {
 			u32 tpid_sel = RX_CMP_VLAN_TPID_SEL(rxcmp);
 
 			if (tpid_sel == RX_CMP_METADATA1_TPID_8021Q)
-				vlan_proto = htons(ETH_P_8021Q);
+				vlan_proto = ETH_P_8021Q;
 			else if (tpid_sel == RX_CMP_METADATA1_TPID_8021AD)
-				vlan_proto = htons(ETH_P_8021AD);
+				vlan_proto = ETH_P_8021AD;
 			else
-				goto vlan_err;
+				vlan_proto = 0xffff;
 			vtag = RX_CMP_METADATA0_TCI(rxcmp1);
-			__vlan_hwaccel_put_tag(skb, vlan_proto, vtag);
 		}
 	}
-	return skb;
-vlan_err:
-	dev_kfree_skb(skb);
-	return NULL;
+
+	return (u32)vlan_proto << 16 | vtag;
 }
 
 static enum pkt_hash_types bnxt_rss_ext_op(struct bnxt *bp,
@@ -2049,6 +2040,7 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	struct sk_buff *skb;
 	struct xdp_buff xdp;
 	u32 flags, misc;
+	u32 vlan_info;
 	u32 cmpl_ts;
 	void *data;
 	int rc = 0;
@@ -2163,6 +2155,10 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	if (cmp_type == CMP_TYPE_RX_L2_CMP)
 		dev = bnxt_get_pkt_dev(bp, RX_CMP_CFA_CODE(rxcmp1));
 
+	vlan_info = bnxt_rx_vlan(cmp_type, rxcmp, rxcmp1);
+	if (vlan_info && !eth_type_vlan(htons(vlan_info >> 16)))
+		goto next_rx;
+
 	if (bnxt_xdp_attached(bp, rxr)) {
 		bnxt_xdp_buff_init(bp, rxr, cons, data_ptr, len, &xdp);
 		if (agg_bufs) {
@@ -2246,11 +2242,9 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 
 	skb->protocol = eth_type_trans(skb, dev);
 
-	if (skb->dev->features & BNXT_HW_FEATURE_VLAN_ALL_RX) {
-		skb = bnxt_rx_vlan(skb, cmp_type, rxcmp, rxcmp1);
-		if (!skb)
-			goto next_rx;
-	}
+	if (vlan_info && skb->dev->features & BNXT_HW_FEATURE_VLAN_ALL_RX)
+		__vlan_hwaccel_put_tag(skb, htons(vlan_info >> 16),
+				       vlan_info & 0xffff);
 
 	skb_checksum_none_assert(skb);
 	if (RX_CMP_L4_CS_OK(rxcmp1)) {
