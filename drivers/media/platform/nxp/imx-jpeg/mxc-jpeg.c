@@ -1921,6 +1921,15 @@ static void mxc_jpeg_buf_queue(struct vb2_buffer *vb)
 	if (ret)
 		jpeg_src_buf->jpeg_parse_error = true;
 
+	/*
+	 * if the capture queue is not setup, the device_run() won't be scheduled,
+	 * need to drop the error buffer, so that the decoding can continue
+	 */
+	if (jpeg_src_buf->jpeg_parse_error &&
+	    !vb2_is_streaming(v4l2_m2m_get_dst_vq(ctx->fh.m2m_ctx))) {
+		v4l2_m2m_buf_done(vbuf, VB2_BUF_STATE_ERROR);
+		return;
+	}
 end:
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vbuf);
 }
