@@ -1060,41 +1060,41 @@ static int ufs_alloc_lastblock(struct inode *inode, loff_t size)
 	for (i = 0; i < end; ++i)
 		bh = bh->b_this_page;
 
-       err = ufs_getfrag_block(inode, lastfrag, bh, 1);
+	err = ufs_getfrag_block(inode, lastfrag, bh, 1);
 
-       if (unlikely(err))
-	       goto out_unlock;
+	if (unlikely(err))
+		goto out_unlock;
 
-       if (buffer_new(bh)) {
-	       clear_buffer_new(bh);
-	       clean_bdev_bh_alias(bh);
-	       /*
-		* we do not zeroize fragment, because of
-		* if it maped to hole, it already contains zeroes
-		*/
-	       set_buffer_uptodate(bh);
-	       mark_buffer_dirty(bh);
+	if (buffer_new(bh)) {
+		clear_buffer_new(bh);
+		clean_bdev_bh_alias(bh);
+		/*
+		 * we do not zeroize fragment, because of
+		 * if it maped to hole, it already contains zeroes
+		 */
+		set_buffer_uptodate(bh);
+		mark_buffer_dirty(bh);
 		folio_mark_dirty(folio);
-       }
+	}
 
-       if (lastfrag >= UFS_IND_FRAGMENT) {
-	       end = uspi->s_fpb - ufs_fragnum(lastfrag) - 1;
-	       phys64 = bh->b_blocknr + 1;
-	       for (i = 0; i < end; ++i) {
-		       bh = sb_getblk(sb, i + phys64);
-		       lock_buffer(bh);
-		       memset(bh->b_data, 0, sb->s_blocksize);
-		       set_buffer_uptodate(bh);
-		       mark_buffer_dirty(bh);
-		       unlock_buffer(bh);
-		       sync_dirty_buffer(bh);
-		       brelse(bh);
-	       }
-       }
+	if (lastfrag >= UFS_IND_FRAGMENT) {
+		end = uspi->s_fpb - ufs_fragnum(lastfrag) - 1;
+		phys64 = bh->b_blocknr + 1;
+		for (i = 0; i < end; ++i) {
+			bh = sb_getblk(sb, i + phys64);
+			lock_buffer(bh);
+			memset(bh->b_data, 0, sb->s_blocksize);
+			set_buffer_uptodate(bh);
+			mark_buffer_dirty(bh);
+			unlock_buffer(bh);
+			sync_dirty_buffer(bh);
+			brelse(bh);
+		}
+	}
 out_unlock:
-       ufs_put_locked_folio(folio);
+	ufs_put_locked_folio(folio);
 out:
-       return err;
+	return err;
 }
 
 static void ufs_truncate_blocks(struct inode *inode)
