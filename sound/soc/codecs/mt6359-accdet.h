@@ -50,30 +50,10 @@ enum {
 	eint_inverter_state000,
 };
 
-struct pwm_deb_settings {
-	unsigned int pwm_width;
-	unsigned int pwm_thresh;
-	unsigned int fall_delay;
-	unsigned int rise_delay;
-	unsigned int debounce0;
-	unsigned int debounce1;
-	unsigned int debounce3;
-	unsigned int debounce4;
-	unsigned int eint_pwm_width;
-	unsigned int eint_pwm_thresh;
-	unsigned int eint_debounce0;
-	unsigned int eint_debounce1;
-	unsigned int eint_debounce2;
-	unsigned int eint_debounce3;
-	unsigned int eint_inverter_debounce;
-
-};
-
 struct dts_data {
 	unsigned int mic_vol;
 	unsigned int mic_mode;
 	bool hp_eint_high;
-	struct pwm_deb_settings *pwm_deb;
 	unsigned int eint_detect_mode;
 	unsigned int eint_comp_vth;
 };
