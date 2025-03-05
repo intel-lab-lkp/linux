@@ -43,6 +43,10 @@ struct vkms_frame_info {
 	unsigned int rotation;
 };
 
+struct pixel_argb_s32 {
+	s32 a, r, g, b;
+};
+
 struct pixel_argb_u16 {
 	u16 a, r, g, b;
 };
@@ -275,5 +279,8 @@ void vkms_writeback_row(struct vkms_writeback_job *wb, const struct line_buffer 
 
 /* Writeback */
 int vkms_enable_writeback_connector(struct vkms_device *vkmsdev, struct vkms_output *vkms_out);
+
+/* Colorops */
+int vkms_initialize_colorops(struct drm_plane *plane);
 
 #endif /* _VKMS_DRV_H_ */
