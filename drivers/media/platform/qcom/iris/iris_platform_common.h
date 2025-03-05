@@ -78,8 +78,12 @@ struct platform_inst_caps {
 };
 
 enum platform_inst_fw_cap_type {
-	PROFILE = 1,
-	LEVEL,
+	PROFILE_H264 = 1,
+	PROFILE_HEVC,
+	PROFILE_VP9,
+	LEVEL_H264,
+	LEVEL_HEVC,
+	LEVEL_VP9,
 	INPUT_BUF_HOST_MAX_COUNT,
 	STAGE,
 	PIPE,
@@ -88,6 +92,7 @@ enum platform_inst_fw_cap_type {
 	BIT_DEPTH,
 	RAP_FRAME,
 	DEBLOCK,
+	TIER,
 	INST_FW_CAP_MAX,
 };
 
