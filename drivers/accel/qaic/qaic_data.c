@@ -563,7 +563,8 @@ static int qaic_validate_req(struct qaic_device *qdev, struct qaic_attach_slice_
 		      invalid_sem(&slice_ent[i].sem2) || invalid_sem(&slice_ent[i].sem3))
 			return -EINVAL;
 
-		if (slice_ent[i].offset + slice_ent[i].size > total_size)
+		if (slice_ent[i].offset > U64_MAX - slice_ent[i].size ||
+		    slice_ent[i].offset + slice_ent[i].size > total_size)
 			return -EINVAL;
 	}
 
