@@ -44,6 +44,7 @@
  * @metadata_idx: index for metadata buffer
  * @codec: codec type
  * @in_reconfig: a flag raised by decoder when the stream resolution changes
+ * @last_buffer_dequeued: a flag to indicate that last buffer is sent by driver
  */
 
 struct iris_inst {
@@ -76,6 +77,7 @@ struct iris_inst {
 	u32				metadata_idx;
 	u32				codec;
 	bool				in_reconfig;
+	bool				last_buffer_dequeued;
 };
 
 #endif

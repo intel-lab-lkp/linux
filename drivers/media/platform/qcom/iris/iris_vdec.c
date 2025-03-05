@@ -454,6 +454,7 @@ static int iris_vdec_process_streamon_input(struct iris_inst *inst)
 		return ret;
 
 	inst->in_reconfig = false;
+	inst->last_buffer_dequeued = false;
 
 	return iris_inst_change_sub_state(inst, 0, set_sub_state);
 }
@@ -547,6 +548,7 @@ static int iris_vdec_process_streamon_output(struct iris_inst *inst)
 		return ret;
 
 	inst->in_reconfig = false;
+	inst->last_buffer_dequeued = false;
 
 	return iris_inst_change_sub_state(inst, clear_sub_state, 0);
 }
