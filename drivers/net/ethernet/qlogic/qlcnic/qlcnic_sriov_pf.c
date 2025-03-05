@@ -598,8 +598,10 @@ static int __qlcnic_pci_sriov_enable(struct qlcnic_adapter *adapter,
 		goto del_flr_queue;
 
 	err = qlcnic_sriov_alloc_vlans(adapter);
-	if (err)
+	if (err) {
+		qlcnic_sriov_free_vlans(adapter);
 		goto del_flr_queue;
+	}
 
 	return err;
 
