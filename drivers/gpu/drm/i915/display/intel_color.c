@@ -4110,6 +4110,37 @@ struct intel_plane_colorop *intel_plane_colorop_create(enum intel_color_block id
 	return colorop;
 }
 
+static void apply_colorop(const struct drm_plane_state *plane_state,
+			  struct drm_colorop *colorop,
+			  u32 *plane_color_ctl)
+{
+}
+
+void intel_program_pipeline(const struct drm_plane_state *plane_state, u32 *plane_color_ctl)
+{
+	struct drm_colorop *colorop;
+
+	colorop = plane_state->color_pipeline;
+
+	while (colorop) {
+		struct drm_colorop_state *colorop_state;
+
+		if (!colorop)
+			return;
+
+		/* TODO this is probably wrong */
+		colorop_state = colorop->state;
+
+		if (!colorop_state)
+			return;
+
+		if (!colorop_state->bypass)
+			apply_colorop(plane_state, colorop, plane_color_ctl);
+
+		colorop = colorop->next;
+	}
+}
+
 int intel_plane_tf_pipeline_init(struct drm_plane *plane, struct drm_prop_enum_list *list)
 {
 	struct intel_plane_colorop *colorop;

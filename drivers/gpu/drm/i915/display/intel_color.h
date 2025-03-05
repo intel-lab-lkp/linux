@@ -15,6 +15,7 @@ struct intel_display;
 struct intel_dsb;
 struct drm_property_blob;
 struct drm_plane;
+struct drm_plane_state;
 struct drm_prop_enum_list;
 enum intel_color_block;
 
@@ -47,5 +48,7 @@ struct intel_plane_colorop *intel_colorop_alloc(void);
 struct intel_plane_colorop *intel_plane_colorop_create(enum intel_color_block id);
 int intel_plane_tf_pipeline_init(struct drm_plane *plane, struct drm_prop_enum_list *list);
 int intel_plane_color_init(struct drm_plane *plane);
+void intel_program_pipeline(const struct drm_plane_state *plane_state,
+			    u32 *plane_color_ctl);
 
 #endif /* __INTEL_COLOR_H__ */
