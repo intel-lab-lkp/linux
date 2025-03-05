@@ -37,6 +37,14 @@ config SND_SOC_ROCKCHIP_PDM
 	  Rockchip PDM Controller. The Controller supports up to maximum of
 	  8 channels record.
 
+config SND_SOC_ROCKCHIP_SAI
+	tristate "Rockchip SAI Controller Driver"
+	depends on HAVE_CLK && SND_SOC_ROCKCHIP
+	select SND_SOC_GENERIC_DMAENGINE_PCM
+	help
+	  Say Y or M if you want to add support for the Rockchip Serial Audio
+	  Interface controller found on Rockchip SoCs such as the RK3576.
+
 config SND_SOC_ROCKCHIP_SPDIF
 	tristate "Rockchip SPDIF Device Driver"
 	depends on HAVE_CLK && SND_SOC_ROCKCHIP

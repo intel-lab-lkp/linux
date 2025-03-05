@@ -20666,6 +20666,7 @@ M:	Nicolas Frattaroli <nicolas.frattaroli@collabora.com>
 L:	linux-rockchip@lists.infradead.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/sound/rockchip,sai.yaml
+F:	sound/soc/rockchip/rockchip_sai.*
 
 ROCKCHIP VIDEO DECODER DRIVER
 M:	Ezequiel Garcia <ezequiel@vanguardiasur.com.ar>
