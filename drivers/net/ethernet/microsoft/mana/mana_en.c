@@ -3131,14 +3131,14 @@ out:
 	kfree(ac);
 }
 
-struct net_device *mana_get_primary_netdev_rcu(struct mana_context *ac, u32 port_index)
+struct net_device *mana_get_primary_netdev(struct mana_context *ac, u32 port_index)
 {
 	struct net_device *ndev;
 
-	RCU_LOCKDEP_WARN(!rcu_read_lock_held(),
-			 "Taking primary netdev without holding the RCU read lock");
 	if (port_index >= ac->num_ports)
 		return NULL;
+
+	rcu_read_lock();
 
 	/* When mana is used in netvsc, the upper netdevice should be returned. */
 	if (ac->ports[port_index]->flags & IFF_SLAVE)
@@ -3146,6 +3146,9 @@ struct net_device *mana_get_primary_netdev_rcu(struct mana_context *ac, u32 port
 	else
 		ndev = ac->ports[port_index];
 
+	dev_hold(ndev);
+	rcu_read_unlock();
+
 	return ndev;
 }
-EXPORT_SYMBOL_NS(mana_get_primary_netdev_rcu, "NET_MANA");
+EXPORT_SYMBOL_NS(mana_get_primary_netdev, "NET_MANA");
