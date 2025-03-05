@@ -4340,6 +4340,15 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	btrfs_flush_workqueue(fs_info->delalloc_workers);
 
 	/*
+	 * We can also have ordered extents getting their last reference dropped
+	 * from the endio_workers workqueue because for data bios we keep a
+	 * reference on an ordered extent which gets dropped when running
+	 * btrfs_bio_end_io() in that workqueue, and that final drop results in
+	 * adding a delayed iput for the inode.
+	 */
+	flush_workqueue(fs_info->endio_workers);
+
+	/*
 	 * After we parked the cleaner kthread, ordered extents may have
 	 * completed and created new delayed iputs. If one of the async reclaim
 	 * tasks is running and in the RUN_DELAYED_IPUTS flush state, then we
