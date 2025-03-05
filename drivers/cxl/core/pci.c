@@ -32,6 +32,26 @@ struct cxl_walk_context {
 	int count;
 };
 
+static int get_port_num(struct pci_dev *pdev)
+{
+	u32 lnkcap, port_num;
+	u16 lnksta;
+
+	if (pcie_capability_read_dword(pdev, PCI_EXP_LNKCAP, &lnkcap))
+		return -ENXIO;
+
+	/* Skip inactive links */
+	if (lnkcap & PCI_EXP_LNKCAP_DLLLARC) {
+		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
+		if (!(lnksta & PCI_EXP_LNKSTA_DLLLA))
+			return -ENOENT;
+	}
+
+	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
+
+	return port_num;
+}
+
 static int match_add_dports(struct pci_dev *pdev, void *data)
 {
 	struct cxl_walk_context *ctx = data;
@@ -39,7 +59,7 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 	int type = pci_pcie_type(pdev);
 	struct cxl_register_map map;
 	struct cxl_dport *dport;
-	u32 lnkcap, port_num;
+	int port_num;
 	int rc;
 
 	if (pdev->bus != ctx->bus)
@@ -48,15 +68,17 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 		return 0;
 	if (type != ctx->type)
 		return 0;
-	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
-				  &lnkcap))
+
+	port_num = get_port_num(pdev);
+	if (port_num == -ENOENT)
+		pci_dbg(pdev, "Skipping dport, link is down\n");
+	if (port_num < 0)
 		return 0;
 
 	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
 	if (rc)
 		dev_dbg(&port->dev, "failed to find component registers\n");
 
-	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
 	dport = devm_cxl_add_dport(port, &pdev->dev, port_num, map.resource);
 	if (IS_ERR(dport)) {
 		rc = PTR_ERR(dport);
