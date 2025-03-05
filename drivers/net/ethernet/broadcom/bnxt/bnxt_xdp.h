@@ -20,7 +20,7 @@ void bnxt_tx_int_xdp(struct bnxt *bp, struct bnxt_napi *bnapi, int budget);
 bool bnxt_rx_xdp(struct bnxt *bp, struct net_device *dev,
 		 struct bnxt_rx_ring_info *rxr, u16 cons,
 		 struct xdp_buff *xdp, struct page *page, u8 **data_ptr,
-		 unsigned int *len, u8 *event);
+		 unsigned int *len, u8 *event, u32 vlan_info);
 int bnxt_xdp(struct net_device *dev, struct netdev_bpf *xdp);
 int bnxt_xdp_xmit(struct net_device *dev, int num_frames,
 		  struct xdp_frame **frames, u32 flags);
