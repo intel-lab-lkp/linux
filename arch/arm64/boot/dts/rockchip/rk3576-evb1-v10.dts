@@ -711,6 +711,10 @@
 	status = "okay";
 };
 
+&ufshc {
+	status = "okay";
+};
+
 &uart0 {
 	status = "okay";
 };
