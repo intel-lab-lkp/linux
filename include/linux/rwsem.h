@@ -228,6 +228,7 @@ static inline void rwsem_assert_held_write(const struct rw_semaphore *sem)
  */
 extern void down_read(struct rw_semaphore *sem) __acquires_shared(sem);
 extern int __must_check down_read_interruptible(struct rw_semaphore *sem) __cond_acquires_shared(0, sem);
+extern int __must_check down_read_idle(struct rw_semaphore *sem) __cond_acquires_shared(0, sem);
 extern int __must_check down_read_killable(struct rw_semaphore *sem) __cond_acquires_shared(0, sem);
 
 /*
