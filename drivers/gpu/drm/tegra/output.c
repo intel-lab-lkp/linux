@@ -39,6 +39,9 @@ int tegra_output_connector_get_modes(struct drm_connector *connector)
 	else if (output->ddc)
 		drm_edid = drm_edid_read_ddc(connector, output->ddc);
 
+	if (!drm_edid)
+		return 0;
+
 	drm_edid_connector_update(connector, drm_edid);
 	cec_notifier_set_phys_addr(output->cec,
 				   connector->display_info.source_physical_address);
