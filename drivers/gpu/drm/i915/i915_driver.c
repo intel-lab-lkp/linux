@@ -689,20 +689,17 @@ do_pxp_gt:
 		intel_gt_driver_unregister(gt);
 
 	if (!dev_priv->do_unregister)
-		goto do_pmu;
+		goto do_unplug;
 
 	i915_hwmon_unregister(dev_priv);
 
 	i915_perf_unregister(dev_priv);
-do_pmu:
-	i915_pmu_unregister(dev_priv);
-	if (!dev_priv->do_unregister)
-		goto do_unplug;
 
 	i915_teardown_sysfs(dev_priv);
 do_unplug:
 	drm_dev_unplug(&dev_priv->drm);
 
+	i915_pmu_unregister(dev_priv);
 	i915_gem_driver_unregister(dev_priv);
 }
 
