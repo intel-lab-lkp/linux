@@ -1119,23 +1119,13 @@ static long madvise_guard_install(struct vm_area_struct *vma,
 				 struct vm_area_struct **prev,
 				 unsigned long start, unsigned long end)
 {
-	long err;
+	long err = 0;
+	unsigned long nr_pages;
 	int i;
 
 	*prev = vma;
 	if (!is_valid_guard_vma(vma, /* allow_locked = */false))
 		return -EINVAL;
-
-	/*
-	 * If we install guard markers, then the range is no longer
-	 * empty from a page table perspective and therefore it's
-	 * appropriate to have an anon_vma.
-	 *
-	 * This ensures that on fork, we copy page tables correctly.
-	 */
-	err = anon_vma_prepare(vma);
-	if (err)
-		return err;
 
 	/*
 	 * Optimistically try to install the guard marker pages first. If any
@@ -1150,19 +1140,20 @@ static long madvise_guard_install(struct vm_area_struct *vma,
 	 * with no zap or looping.
 	 */
 	for (i = 0; i < MAX_MADVISE_GUARD_RETRIES; i++) {
-		unsigned long nr_pages = 0;
+		/* We count existing guard region pages each retry also. */
+		nr_pages = 0;
 
 		/* Returns < 0 on error, == 0 if success, > 0 if zap needed. */
 		err = walk_page_range_mm(vma->vm_mm, start, end,
 					 &guard_install_walk_ops, &nr_pages);
 		if (err < 0)
-			return err;
+			break;
 
 		if (err == 0) {
 			unsigned long nr_expected_pages = PHYS_PFN(end - start);
 
 			VM_WARN_ON(nr_pages != nr_expected_pages);
-			return 0;
+			break;
 		}
 
 		/*
@@ -1172,12 +1163,19 @@ static long madvise_guard_install(struct vm_area_struct *vma,
 		zap_page_range_single(vma, start, end - start, NULL);
 	}
 
+	/* Ensure that page tables are propagated on fork. */
+	if (nr_pages > 0)
+		vma_set_anon_vma_unfaulted(vma);
+
 	/*
 	 * We were unable to install the guard pages due to being raced by page
 	 * faults. This should not happen ordinarily. We return to userspace and
 	 * immediately retry, relieving lock contention.
 	 */
-	return restart_syscall();
+	if (err > 0)
+		return restart_syscall();
+
+	return err;
 }
 
 static int guard_remove_pud_entry(pud_t *pud, unsigned long addr,
@@ -1229,6 +1227,8 @@ static long madvise_guard_remove(struct vm_area_struct *vma,
 				 struct vm_area_struct **prev,
 				 unsigned long start, unsigned long end)
 {
+	long err;
+
 	*prev = vma;
 	/*
 	 * We're ok with removing guards in mlock()'d ranges, as this is a
@@ -1237,8 +1237,21 @@ static long madvise_guard_remove(struct vm_area_struct *vma,
 	if (!is_valid_guard_vma(vma, /* allow_locked = */true))
 		return -EINVAL;
 
-	return walk_page_range(vma->vm_mm, start, end,
-			       &guard_remove_walk_ops, NULL);
+	err = walk_page_range(vma->vm_mm, start, end,
+			      &guard_remove_walk_ops, NULL);
+
+	/*
+	 * If we have successfully cleared the guard flags, and we span the
+	 * whole VMA, clear the unfaulted state so this VMA doesn't
+	 * unnecessarily propagate page tables.
+	 *
+	 * The operation is protected via mm->page_table_lock avoiding races
+	 * with a guard install operation.
+	 */
+	if (!err && start == vma->vm_start && end == vma->vm_end)
+		vma_clear_anon_vma_unfaulted(vma);
+
+	return err;
 }
 
 /*
