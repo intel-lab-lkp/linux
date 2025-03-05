@@ -37,6 +37,8 @@
 #include <linux/ptrace.h>
 #include <linux/dma-buf.h>
 #include <linux/processor.h>
+#include <linux/cdev.h>
+
 #include "kfd_priv.h"
 #include "kfd_device_queue_manager.h"
 #include "kfd_svm.h"
@@ -61,11 +63,13 @@ static const struct file_operations kfd_fops = {
 	.mmap = kfd_mmap,
 };
 
-static int kfd_char_dev_major = -1;
+static dev_t kfd_char_dev_id;
 struct device *kfd_device;
 static const struct class kfd_class = {
 	.name = kfd_dev_name,
 };
+
+static struct cdev kfd_cdev;
 
 static inline struct kfd_process_device *kfd_lock_pdd_by_id(struct kfd_process *p, __u32 gpu_id)
 {
@@ -90,17 +94,24 @@ int kfd_chardev_init(void)
 {
 	int err = 0;
 
-	kfd_char_dev_major = register_chrdev(0, kfd_dev_name, &kfd_fops);
-	err = kfd_char_dev_major;
+	err = alloc_chrdev_region(&kfd_char_dev_id, 0, 1, kfd_dev_name);
+
 	if (err < 0)
-		goto err_register_chrdev;
+		goto err_alloc_chrdev_region;
+
+	cdev_init(&kfd_cdev, &kfd_fops);
+	kfd_cdev.owner = THIS_MODULE;
+
+	err = cdev_add(&kfd_cdev, kfd_char_dev_id, 1);
+	if (err)
+		goto err_cdev_add;
 
 	err = class_register(&kfd_class);
 	if (err)
 		goto err_class_create;
 
 	kfd_device = device_create(&kfd_class, NULL,
-				   MKDEV(kfd_char_dev_major, 0),
+				   kfd_char_dev_id,
 				   NULL, kfd_dev_name);
 	err = PTR_ERR(kfd_device);
 	if (IS_ERR(kfd_device))
@@ -111,16 +122,19 @@ int kfd_chardev_init(void)
 err_device_create:
 	class_unregister(&kfd_class);
 err_class_create:
-	unregister_chrdev(kfd_char_dev_major, kfd_dev_name);
-err_register_chrdev:
+	cdev_del(&kfd_cdev);
+err_cdev_add:
+	unregister_chrdev_region(kfd_char_dev_id, 1);
+err_alloc_chrdev_region:
 	return err;
 }
 
 void kfd_chardev_exit(void)
 {
-	device_destroy(&kfd_class, MKDEV(kfd_char_dev_major, 0));
+	device_destroy(&kfd_class, kfd_char_dev_id);
 	class_unregister(&kfd_class);
-	unregister_chrdev(kfd_char_dev_major, kfd_dev_name);
+	cdev_del(&kfd_cdev);
+	unregister_chrdev_region(kfd_char_dev_id, 1);
 	kfd_device = NULL;
 }
 
@@ -129,9 +143,6 @@ static int kfd_open(struct inode *inode, struct file *filep)
 {
 	struct kfd_process *process;
 	bool is_32bit_user_mode;
-
-	if (iminor(inode) != 0)
-		return -ENODEV;
 
 	is_32bit_user_mode = in_compat_syscall();
 
