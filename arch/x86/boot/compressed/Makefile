@@ -107,6 +107,13 @@ vmlinux-objs-$(CONFIG_UNACCEPTED_MEMORY) += $(obj)/mem.o
 vmlinux-objs-$(CONFIG_EFI) += $(obj)/efi.o
 vmlinux-objs-$(CONFIG_EFI_MIXED) += $(obj)/efi_mixed.o
 vmlinux-libs-$(CONFIG_EFI_STUB) += $(objtree)/drivers/firmware/efi/libstub/lib.a
+vmlinux-objs-$(CONFIG_EFI_SBAT) += $(obj)/sbat.o
+
+$(obj)/sbat.o: $(obj)/sbat
+targets += sbat
+filechk_sbat = cat $(or $(real-prereqs), /dev/null)
+$(obj)/sbat: $(CONFIG_EFI_SBAT_FILE) FORCE
+	$(call filechk,sbat)
 
 $(obj)/vmlinux: $(vmlinux-objs-y) $(vmlinux-libs-y) FORCE
 	$(call if_changed,ld)

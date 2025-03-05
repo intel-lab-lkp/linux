@@ -43,6 +43,14 @@ SECTIONS
 		*(.rodata.*)
 		_erodata = . ;
 	}
+#ifdef CONFIG_EFI_SBAT
+	.sbat : ALIGN(0x1000) {
+		_sbat = . ;
+		*(.sbat)
+		_esbat = . ;
+	}
+	ASSERT((_esbat % 0x1000) == 0, "SBAT section end is not page-aligned!")
+#endif
 	.data :	ALIGN(0x1000) {
 		_data = . ;
 		*(.data)
