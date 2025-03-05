@@ -24,6 +24,7 @@ description: |
   - LED
   - Keys
   - Power controller
+  - Accessory Detection
 
   It is interfaced to host controller using SPI interface by a proprietary hardware
   called PMIC wrapper or pwrap. MT6397/MT6323 PMIC is a child device of pwrap.
@@ -223,6 +224,30 @@ properties:
     unevaluatedProperties: false
     description:
       Pin controller
+
+  accdet:
+    type: object
+    additionalProperties: false
+    description:
+      The Accessory Detection module found on the PMIC allows detecting audio
+      jack insertion and removal, as well as identifying the type of events
+      connected to the jack.
+
+    properties:
+      compatible:
+        const: mediatek,mt6359-accdet
+
+      mediatek,hp-eint-high:
+        type: boolean
+        description:
+          By default, MT6359's HP_EINT pin is assumed to be pulled high and
+          connected to a normally open 3.5mm jack. Plug insertion is detected
+          when the pin is brought low in that case. Add this property if the
+          behavior should be inverted, for example if a normally closed 3.5mm
+          jack is used, or if the line is pulled low on open.
+
+    required:
+      - compatible
 
 required:
   - compatible
@@ -596,5 +621,31 @@ examples:
 
         rtc {
             compatible = "mediatek,mt6397-rtc";
+        };
+    };
+  - |
+    #include <dt-bindings/input/input.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    pmic {
+        compatible = "mediatek,mt6359";
+        interrupt-controller;
+        #interrupt-cells = <2>;
+
+        accdet {
+            compatible = "mediatek,mt6359-accdet";
+            mediatek,hp-eint-high;
+        };
+
+        regulators {
+            compatible = "mediatek,mt6359-regulator";
+
+            buck_vs1 {
+                    regulator-name = "vs1";
+                    regulator-min-microvolt = <800000>;
+                    regulator-max-microvolt = <2200000>;
+                    regulator-enable-ramp-delay = <0>;
+                    regulator-always-on;
+            };
         };
     };
