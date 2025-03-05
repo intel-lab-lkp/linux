@@ -514,6 +514,7 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	vlan_tag_flags = 0;
 	cfa_action = bnxt_xmit_get_cfa_action(skb);
+	tx_buf->is_vfr = !!cfa_action;
 	if (skb_vlan_tag_present(skb)) {
 		vlan_tag_flags = TX_BD_CFA_META_KEY_VLAN |
 				 skb_vlan_tag_get(skb);
@@ -522,6 +523,7 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		 */
 		if (skb->vlan_proto == htons(ETH_P_8021Q))
 			vlan_tag_flags |= 1 << TX_BD_CFA_META_TPID_SHIFT;
+		tx_buf->extra_bytes += VLAN_HLEN;
 	}
 
 	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) && ptp &&
@@ -610,6 +612,8 @@ static netdev_tx_t bnxt_start_xmit(struct sk_buff *skb, struct net_device *dev)
 				    DB_RING_IDX(&txr->tx_db, prod));
 		WRITE_ONCE(txr->tx_prod, prod);
 
+		if (skb->len < BNXT_MIN_ETH_SIZE)
+			tx_buf->extra_bytes += BNXT_MIN_ETH_SIZE - skb->len;
 		tx_buf->is_push = 1;
 		netdev_tx_sent_queue(txq, skb->len);
 		wmb();	/* Sync is_push and byte queue before pushing data */
@@ -634,6 +638,8 @@ normal_tx:
 			goto tx_kick_pending;
 		length = BNXT_MIN_PKT_SIZE;
 	}
+	if (skb->len < BNXT_MIN_ETH_SIZE)
+		tx_buf->extra_bytes += BNXT_MIN_ETH_SIZE - skb->len;
 
 	mapping = dma_map_single(&pdev->dev, skb->data, len, DMA_TO_DEVICE);
 
@@ -675,6 +681,9 @@ normal_tx:
 		length = skb_shinfo(skb)->gso_size;
 		txbd1->tx_bd_mss = cpu_to_le32(length);
 		length += hdr_len;
+
+		tx_buf->hdr_size = hdr_len;
+		tx_buf->extra_segs = skb_shinfo(skb)->gso_segs - 1;
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		txbd1->tx_bd_hsize_lflags |=
 			cpu_to_le32(TX_BD_FLAGS_TCP_UDP_CHKSUM);
@@ -784,6 +793,10 @@ tx_kick_pending:
 	if (txr->kick_pending)
 		bnxt_txr_db_kick(bp, txr, txr->tx_prod);
 	txr->tx_buf_ring[txr->tx_prod].skb = NULL;
+	txr->tx_buf_ring[txr->tx_prod].extra_segs = 0;
+	txr->tx_buf_ring[txr->tx_prod].extra_bytes = 0;
+	txr->tx_buf_ring[txr->tx_prod].hdr_size = 0;
+	txr->tx_buf_ring[txr->tx_prod].is_vfr = 0;
 	dev_core_stats_tx_dropped_inc(dev);
 	return NETDEV_TX_OK;
 }
@@ -793,11 +806,12 @@ static bool __bnxt_tx_int(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 			  int budget)
 {
 	struct netdev_queue *txq = netdev_get_tx_queue(bp->dev, txr->txq_index);
+	struct bnxt_sw_stats *sw_stats = txr->bnapi->cp_ring.sw_stats;
 	struct pci_dev *pdev = bp->pdev;
+	int adj_bytes = 0, tx_bytes = 0;
+	int adj_pkts = 0, tx_pkts = 0;
 	u16 hw_cons = txr->tx_hw_cons;
-	unsigned int tx_bytes = 0;
 	u16 cons = txr->tx_cons;
-	int tx_pkts = 0;
 	bool rc = false;
 
 	while (RING_TX(bp, cons) != hw_cons) {
@@ -823,8 +837,20 @@ static bool __bnxt_tx_int(struct bnxt *bp, struct bnxt_tx_ring_info *txr,
 		cons = NEXT_TX(cons);
 		tx_pkts++;
 		tx_bytes += skb->len;
+		if (!tx_buf->is_vfr) {
+			adj_pkts += tx_buf->extra_segs;
+			adj_bytes += tx_buf->extra_bytes +
+				tx_buf->extra_segs * tx_buf->hdr_size;
+		} else {
+			adj_pkts--;
+			adj_bytes -= skb->len;
+		}
 		tx_buf->skb = NULL;
+		tx_buf->extra_segs = 0;
+		tx_buf->extra_bytes = 0;
+		tx_buf->hdr_size = 0;
 		tx_buf->is_ts_pkt = 0;
+		tx_buf->is_vfr = 0;
 
 		if (tx_buf->is_push) {
 			tx_buf->is_push = 0;
@@ -859,6 +885,11 @@ next_tx_int:
 	}
 
 	WRITE_ONCE(txr->tx_cons, cons);
+
+	u64_stats_update_begin(&sw_stats->tx.syncp);
+	sw_stats->tx.tx_packets += tx_pkts + adj_pkts;
+	sw_stats->tx.tx_bytes   += tx_bytes + adj_bytes;
+	u64_stats_update_end(&sw_stats->tx.syncp);
 
 	__netif_txq_completed_wake(txq, tx_pkts, tx_bytes,
 				   bnxt_tx_avail(bp, txr), bp->tx_wake_thresh,
@@ -5128,6 +5159,7 @@ static int bnxt_alloc_stats(struct bnxt *bp)
 			return -ENOMEM;
 
 		u64_stats_init(&cpr->sw_stats->rx.syncp);
+		u64_stats_init(&cpr->sw_stats->tx.syncp);
 
 		cpr->stats.len = size;
 		rc = bnxt_alloc_stats_mem(bp, &cpr->stats, !i);
@@ -13106,14 +13138,16 @@ static int bnxt_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 static void bnxt_drv_stat_snapshot(const struct bnxt_sw_stats *sw_stats,
 				   struct bnxt_sw_stats *snapshot)
 {
-	unsigned int seq_rx;
+	unsigned int seq_rx, seq_tx;
 
 	do {
 		seq_rx = u64_stats_fetch_begin(&sw_stats->rx.syncp);
+		seq_tx = u64_stats_fetch_begin(&sw_stats->tx.syncp);
 
 		memcpy(snapshot, sw_stats, sizeof(*snapshot));
 
-	} while (u64_stats_fetch_retry(&sw_stats->rx.syncp, seq_rx));
+	} while (u64_stats_fetch_retry(&sw_stats->rx.syncp, seq_rx) ||
+		 u64_stats_fetch_retry(&sw_stats->tx.syncp, seq_tx));
 }
 
 static void bnxt_get_ring_stats(struct bnxt *bp,
@@ -13132,13 +13166,8 @@ static void bnxt_get_ring_stats(struct bnxt *bp,
 		stats->rx_packets += sw_stats.rx.rx_packets;
 		stats->rx_bytes += sw_stats.rx.rx_bytes;
 
-		stats->tx_packets += BNXT_GET_RING_STATS64(sw, tx_ucast_pkts);
-		stats->tx_packets += BNXT_GET_RING_STATS64(sw, tx_mcast_pkts);
-		stats->tx_packets += BNXT_GET_RING_STATS64(sw, tx_bcast_pkts);
-
-		stats->tx_bytes += BNXT_GET_RING_STATS64(sw, tx_ucast_bytes);
-		stats->tx_bytes += BNXT_GET_RING_STATS64(sw, tx_mcast_bytes);
-		stats->tx_bytes += BNXT_GET_RING_STATS64(sw, tx_bcast_bytes);
+		stats->tx_packets += sw_stats.tx.tx_packets;
+		stats->tx_bytes += sw_stats.tx.tx_bytes;
 
 		stats->rx_missed_errors +=
 			BNXT_GET_RING_STATS64(sw, rx_discard_pkts);
@@ -13230,6 +13259,8 @@ static void bnxt_get_one_ring_drv_stats(struct bnxt *bp,
 	stats->rx_total_bytes += sw_stats.rx.rx_bytes;
 	stats->rx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, rx_discard_pkts);
+	stats->tx_total_packets += sw_stats.tx.tx_packets;
+	stats->tx_total_bytes += sw_stats.tx.tx_bytes;
 	stats->tx_total_resets += sw_stats.tx.tx_resets;
 	stats->tx_total_ring_discards +=
 		BNXT_GET_RING_STATS64(hw_stats, tx_discard_pkts);
@@ -15637,21 +15668,16 @@ static void bnxt_get_queue_stats_tx(struct net_device *dev, int i,
 				    struct netdev_queue_stats_tx *stats)
 {
 	struct bnxt *bp = netdev_priv(dev);
-	struct bnxt_napi *bnapi;
-	u64 *sw;
+	struct bnxt_sw_stats *sw_stats;
+	unsigned int seq;
 
-	bnapi = bp->tx_ring[bp->tx_ring_map[i]].bnapi;
-	sw = bnapi->cp_ring.stats.sw_stats;
+	sw_stats = bp->tx_ring[bp->tx_ring_map[i]].bnapi->cp_ring.sw_stats;
 
-	stats->packets = 0;
-	stats->packets += BNXT_GET_RING_STATS64(sw, tx_ucast_pkts);
-	stats->packets += BNXT_GET_RING_STATS64(sw, tx_mcast_pkts);
-	stats->packets += BNXT_GET_RING_STATS64(sw, tx_bcast_pkts);
-
-	stats->bytes = 0;
-	stats->bytes += BNXT_GET_RING_STATS64(sw, tx_ucast_bytes);
-	stats->bytes += BNXT_GET_RING_STATS64(sw, tx_mcast_bytes);
-	stats->bytes += BNXT_GET_RING_STATS64(sw, tx_bcast_bytes);
+	do {
+		seq = u64_stats_fetch_begin(&sw_stats->tx.syncp);
+		stats->packets = sw_stats->tx.tx_packets;
+		stats->bytes = sw_stats->tx.tx_bytes;
+	} while (u64_stats_fetch_retry(&sw_stats->tx.syncp, seq));
 }
 
 static void bnxt_get_base_stats(struct net_device *dev,
@@ -15664,8 +15690,8 @@ static void bnxt_get_base_stats(struct net_device *dev,
 	rx->bytes = bp->ring_drv_stats_prev.rx_total_bytes;
 	rx->alloc_fail = bp->ring_drv_stats_prev.rx_total_oom_discards;
 
-	tx->packets = bp->net_stats_prev.tx_packets;
-	tx->bytes = bp->net_stats_prev.tx_bytes;
+	tx->packets = bp->ring_drv_stats_prev.tx_total_packets;
+	tx->bytes = bp->ring_drv_stats_prev.tx_total_bytes;
 }
 
 static const struct netdev_stat_ops bnxt_stat_ops = {
