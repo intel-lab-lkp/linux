@@ -218,6 +218,13 @@ config RESET_RZG2L_USBPHY_CTRL
 	  Support for USBPHY Control found on RZ/G2L family. It mainly
 	  controls reset and power down of the USB/PHY.
 
+config RESET_RZV2H_USB2PHY_CTRL
+	tristate "Renesas RZ/V2H(P) (and similar SoCs) USB2PHY control driver"
+	depends on ARCH_RENESAS || COMPILE_TEST
+	help
+	  Support for USB2PHY Control found on the RZ/V2H(P) SoC (and similar SoCs).
+	  It mainly controls reset and power down of the USB2 PHY.
+
 config RESET_SCMI
 	tristate "Reset driver controlled via ARM SCMI interface"
 	depends on ARM_SCMI_PROTOCOL || COMPILE_TEST
