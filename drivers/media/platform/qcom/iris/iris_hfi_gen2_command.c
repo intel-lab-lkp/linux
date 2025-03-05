@@ -20,6 +20,20 @@
 #define SYS_NO_PAYLOAD_PKT_SIZE (sizeof(struct iris_hfi_header) + \
 	sizeof(struct iris_hfi_packet))
 
+static u32 iris_hfi_gen2_v4l2_to_codec_type(struct iris_inst *inst)
+{
+	switch (inst->codec) {
+	case V4L2_PIX_FMT_H264:
+		return HFI_CODEC_DECODE_AVC;
+	case V4L2_PIX_FMT_HEVC:
+		return HFI_CODEC_DECODE_HEVC;
+	case V4L2_PIX_FMT_VP9:
+		return HFI_CODEC_DECODE_VP9;
+	default:
+		return 0;
+	}
+}
+
 static int iris_hfi_gen2_sys_init(struct iris_core *core)
 {
 	struct iris_hfi_header *hdr;
@@ -416,7 +430,7 @@ static int iris_hfi_gen2_session_set_config_params(struct iris_inst *inst, u32 p
 static int iris_hfi_gen2_session_set_codec(struct iris_inst *inst)
 {
 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
-	u32 codec = HFI_CODEC_DECODE_AVC;
+	u32 codec = iris_hfi_gen2_v4l2_to_codec_type(inst);
 
 	iris_hfi_gen2_packet_session_property(inst,
 					      HFI_PROP_CODEC,
