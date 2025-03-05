@@ -156,8 +156,8 @@ static void idpf_compl_desc_rel(struct idpf_compl_queue *complq)
 		return;
 
 	dma_free_coherent(complq->netdev->dev.parent, complq->size,
-			  complq->comp, complq->dma);
-	complq->comp = NULL;
+			  complq->desc_ring, complq->dma);
+	complq->desc_ring = NULL;
 	complq->next_to_use = 0;
 	complq->next_to_clean = 0;
 }
@@ -284,12 +284,16 @@ err_alloc:
 static int idpf_compl_desc_alloc(const struct idpf_vport *vport,
 				 struct idpf_compl_queue *complq)
 {
-	complq->size = array_size(complq->desc_count, sizeof(*complq->comp));
+	u32 desc_size;
 
-	complq->comp = dma_alloc_coherent(complq->netdev->dev.parent,
-					  complq->size, &complq->dma,
-					  GFP_KERNEL);
-	if (!complq->comp)
+	desc_size = idpf_queue_has(FLOW_SCH_EN, complq) ?
+		    sizeof(*complq->comp) : sizeof(*complq->comp_4b);
+	complq->size = array_size(complq->desc_count, desc_size);
+
+	complq->desc_ring = dma_alloc_coherent(complq->netdev->dev.parent,
+					       complq->size, &complq->dma,
+					       GFP_KERNEL);
+	if (!complq->desc_ring)
 		return -ENOMEM;
 
 	complq->next_to_use = 0;
@@ -1921,8 +1925,46 @@ static bool idpf_tx_clean_buf_ring(struct idpf_tx_queue *txq, u16 compl_tag,
 }
 
 /**
- * idpf_tx_handle_rs_completion - clean a single packet and all of its buffers
- * whether on the buffer ring or in the hash table
+ * idpf_parse_compl_desc - Parse the completion descriptor
+ * @desc: completion descriptor to be parsed
+ * @complq: completion queue containing the descriptor
+ * @txq: returns corresponding Tx queue for a given descriptor
+ * @gen_flag: current generation flag in the completion queue
+ *
+ * Return: completion type from descriptor or negative value in case of error:
+ *	   -ENODATA if there is no completion descriptor to be cleaned,
+ *	   -EINVAL if no Tx queue has been found for the completion queue.
+ */
+static int
+idpf_parse_compl_desc(const struct idpf_splitq_4b_tx_compl_desc *desc,
+		      const struct idpf_compl_queue *complq,
+		      struct idpf_tx_queue **txq, bool gen_flag)
+{
+	struct idpf_tx_queue *target;
+	u32 rel_tx_qid, comptype;
+
+	/* if the descriptor isn't done, no work yet to do */
+	comptype = le16_to_cpu(desc->qid_comptype_gen);
+	if (!!(comptype & IDPF_TXD_COMPLQ_GEN_M) != gen_flag)
+		return -ENODATA;
+
+	/* Find necessary info of TX queue to clean buffers */
+	rel_tx_qid = FIELD_GET(IDPF_TXD_COMPLQ_QID_M, comptype);
+	target = likely(rel_tx_qid < complq->txq_grp->num_txq) ?
+		 complq->txq_grp->txqs[rel_tx_qid] : NULL;
+
+	if (!target)
+		return -EINVAL;
+
+	*txq = target;
+
+	/* Determine completion type */
+	return FIELD_GET(IDPF_TXD_COMPLQ_COMPL_TYPE_M, comptype);
+}
+
+/**
+ * idpf_tx_handle_rs_cmpl_qb - clean a single packet and all of its buffers
+ * whether the Tx queue is working in queue-based scheduling
  * @txq: Tx ring to clean
  * @desc: pointer to completion queue descriptor to extract completion
  * information from
@@ -1931,21 +1973,33 @@ static bool idpf_tx_clean_buf_ring(struct idpf_tx_queue *txq, u16 compl_tag,
  *
  * Returns bytes/packets cleaned
  */
-static void idpf_tx_handle_rs_completion(struct idpf_tx_queue *txq,
-					 struct idpf_splitq_tx_compl_desc *desc,
-					 struct libeth_sq_napi_stats *cleaned,
-					 int budget)
+static void
+idpf_tx_handle_rs_cmpl_qb(struct idpf_tx_queue *txq,
+			  const struct idpf_splitq_4b_tx_compl_desc *desc,
+			  struct libeth_sq_napi_stats *cleaned, int budget)
 {
-	u16 compl_tag;
+	u16 head = le16_to_cpu(desc->q_head_compl_tag.q_head);
 
-	if (!idpf_queue_has(FLOW_SCH_EN, txq)) {
-		u16 head = le16_to_cpu(desc->q_head_compl_tag.q_head);
+	idpf_tx_splitq_clean(txq, head, budget, cleaned, false);
+}
 
-		idpf_tx_splitq_clean(txq, head, budget, cleaned, false);
-		return;
-	}
-
-	compl_tag = le16_to_cpu(desc->q_head_compl_tag.compl_tag);
+/**
+ * idpf_tx_handle_rs_cmpl_fb - clean a single packet and all of its buffers
+ * whether on the buffer ring or in the hash table (flow-based scheduling only)
+ * @txq: Tx ring to clean
+ * @desc: pointer to completion queue descriptor to extract completion
+ * information from
+ * @cleaned: pointer to stats struct to track cleaned packets/bytes
+ * @budget: Used to determine if we are in netpoll
+ *
+ * Returns bytes/packets cleaned
+ */
+static void
+idpf_tx_handle_rs_cmpl_fb(struct idpf_tx_queue *txq,
+			  const struct idpf_splitq_4b_tx_compl_desc *desc,
+			  struct libeth_sq_napi_stats *cleaned, int budget)
+{
+	u16 compl_tag = le16_to_cpu(desc->q_head_compl_tag.compl_tag);
 
 	/* If we didn't clean anything on the ring, this packet must be
 	 * in the hash table. Go clean it there.
@@ -1955,96 +2009,18 @@ static void idpf_tx_handle_rs_completion(struct idpf_tx_queue *txq,
 }
 
 /**
- * idpf_tx_clean_complq - Reclaim resources on completion queue
- * @complq: Tx ring to clean
- * @budget: Used to determine if we are in netpoll
+ * idpf_tx_finalize_complq - Finalize completion queue cleaning
+ * @complq: completion queue to finalize
+ * @ntc: next to complete index
+ * @gen_flag: current state of generation flag
  * @cleaned: returns number of packets cleaned
- *
- * Returns true if there's any budget left (e.g. the clean is finished)
  */
-static bool idpf_tx_clean_complq(struct idpf_compl_queue *complq, int budget,
-				 int *cleaned)
+static void idpf_tx_finalize_complq(struct idpf_compl_queue *complq, int ntc,
+				    bool gen_flag, int *cleaned)
 {
-	struct idpf_splitq_tx_compl_desc *tx_desc;
-	s16 ntc = complq->next_to_clean;
 	struct idpf_netdev_priv *np;
-	unsigned int complq_budget;
 	bool complq_ok = true;
 	int i;
-
-	complq_budget = complq->clean_budget;
-	tx_desc = &complq->comp[ntc];
-	ntc -= complq->desc_count;
-
-	do {
-		struct libeth_sq_napi_stats cleaned_stats = { };
-		struct idpf_tx_queue *tx_q;
-		int rel_tx_qid;
-		u16 hw_head;
-		u8 ctype;	/* completion type */
-		u16 gen;
-
-		/* if the descriptor isn't done, no work yet to do */
-		gen = le16_get_bits(tx_desc->qid_comptype_gen,
-				    IDPF_TXD_COMPLQ_GEN_M);
-		if (idpf_queue_has(GEN_CHK, complq) != gen)
-			break;
-
-		/* Find necessary info of TX queue to clean buffers */
-		rel_tx_qid = le16_get_bits(tx_desc->qid_comptype_gen,
-					   IDPF_TXD_COMPLQ_QID_M);
-		if (rel_tx_qid >= complq->txq_grp->num_txq ||
-		    !complq->txq_grp->txqs[rel_tx_qid]) {
-			netdev_err(complq->netdev, "TxQ not found\n");
-			goto fetch_next_desc;
-		}
-		tx_q = complq->txq_grp->txqs[rel_tx_qid];
-
-		/* Determine completion type */
-		ctype = le16_get_bits(tx_desc->qid_comptype_gen,
-				      IDPF_TXD_COMPLQ_COMPL_TYPE_M);
-		switch (ctype) {
-		case IDPF_TXD_COMPLT_RE:
-			hw_head = le16_to_cpu(tx_desc->q_head_compl_tag.q_head);
-
-			idpf_tx_splitq_clean(tx_q, hw_head, budget,
-					     &cleaned_stats, true);
-			break;
-		case IDPF_TXD_COMPLT_RS:
-			idpf_tx_handle_rs_completion(tx_q, tx_desc,
-						     &cleaned_stats, budget);
-			break;
-		case IDPF_TXD_COMPLT_SW_MARKER:
-			idpf_tx_handle_sw_marker(tx_q);
-			break;
-		default:
-			netdev_err(tx_q->netdev,
-				   "Unknown TX completion type: %d\n", ctype);
-			goto fetch_next_desc;
-		}
-
-		u64_stats_update_begin(&tx_q->stats_sync);
-		u64_stats_add(&tx_q->q_stats.packets, cleaned_stats.packets);
-		u64_stats_add(&tx_q->q_stats.bytes, cleaned_stats.bytes);
-		tx_q->cleaned_pkts += cleaned_stats.packets;
-		tx_q->cleaned_bytes += cleaned_stats.bytes;
-		complq->num_completions++;
-		u64_stats_update_end(&tx_q->stats_sync);
-
-fetch_next_desc:
-		tx_desc++;
-		ntc++;
-		if (unlikely(!ntc)) {
-			ntc -= complq->desc_count;
-			tx_desc = &complq->comp[0];
-			idpf_queue_change(GEN_CHK, complq);
-		}
-
-		prefetch(tx_desc);
-
-		/* update budget accounting */
-		complq_budget--;
-	} while (likely(complq_budget));
 
 	/* Store the state of the complq to be used later in deciding if a
 	 * TXQ can be started again
@@ -2083,8 +2059,102 @@ fetch_next_desc:
 		tx_q->cleaned_pkts = 0;
 	}
 
-	ntc += complq->desc_count;
-	complq->next_to_clean = ntc;
+	complq->next_to_clean = ntc + complq->desc_count;
+	idpf_queue_assign(GEN_CHK, complq, gen_flag);
+}
+
+/**
+ * idpf_tx_clean_complq - Reclaim resources on completion queue
+ * @complq: Tx ring to clean
+ * @budget: Used to determine if we are in netpoll
+ * @cleaned: returns number of packets cleaned
+ *
+ * Returns true if there's any budget left (e.g. the clean is finished)
+ */
+static bool idpf_tx_clean_complq(struct idpf_compl_queue *complq, int budget,
+				 int *cleaned)
+{
+	struct idpf_splitq_4b_tx_compl_desc *tx_desc;
+	s16 ntc = complq->next_to_clean;
+	unsigned int complq_budget;
+	bool flow, gen_flag;
+	u32 pos = ntc;
+
+	flow = idpf_queue_has(FLOW_SCH_EN, complq);
+	gen_flag = idpf_queue_has(GEN_CHK, complq);
+
+	complq_budget = complq->clean_budget;
+	tx_desc = flow ? &complq->comp[pos].common : &complq->comp_4b[pos];
+	ntc -= complq->desc_count;
+
+	do {
+		struct libeth_sq_napi_stats cleaned_stats = { };
+		struct idpf_tx_queue *tx_q;
+		u16 hw_head;
+		int ctype;
+
+		ctype = idpf_parse_compl_desc(tx_desc, complq, &tx_q,
+					      gen_flag);
+		switch (ctype) {
+		case IDPF_TXD_COMPLT_RE:
+			if (unlikely(!flow))
+				goto fetch_next_desc;
+
+			hw_head = le16_to_cpu(tx_desc->q_head_compl_tag.q_head);
+
+			idpf_tx_splitq_clean(tx_q, hw_head, budget,
+					     &cleaned_stats, true);
+			break;
+		case IDPF_TXD_COMPLT_RS:
+			if (flow)
+				idpf_tx_handle_rs_cmpl_fb(tx_q, tx_desc,
+							  &cleaned_stats,
+							  budget);
+			else
+				idpf_tx_handle_rs_cmpl_qb(tx_q, tx_desc,
+							  &cleaned_stats,
+							  budget);
+			break;
+		case IDPF_TXD_COMPLT_SW_MARKER:
+			idpf_tx_handle_sw_marker(tx_q);
+			break;
+		case -ENODATA:
+			goto exit_clean_complq;
+		case -EINVAL:
+			goto fetch_next_desc;
+		default:
+			netdev_err(complq->netdev,
+				   "Unknown TX completion type: %d\n", ctype);
+			goto fetch_next_desc;
+		}
+
+		u64_stats_update_begin(&tx_q->stats_sync);
+		u64_stats_add(&tx_q->q_stats.packets, cleaned_stats.packets);
+		u64_stats_add(&tx_q->q_stats.bytes, cleaned_stats.bytes);
+		tx_q->cleaned_pkts += cleaned_stats.packets;
+		tx_q->cleaned_bytes += cleaned_stats.bytes;
+		complq->num_completions++;
+		u64_stats_update_end(&tx_q->stats_sync);
+
+fetch_next_desc:
+		pos++;
+		ntc++;
+		if (unlikely(!ntc)) {
+			ntc -= complq->desc_count;
+			pos = 0;
+			gen_flag = !gen_flag;
+		}
+
+		tx_desc = flow ? &complq->comp[pos].common :
+			  &complq->comp_4b[pos];
+		prefetch(tx_desc);
+
+		/* update budget accounting */
+		complq_budget--;
+	} while (likely(complq_budget));
+
+exit_clean_complq:
+	idpf_tx_finalize_complq(complq, ntc, gen_flag, cleaned);
 
 	return !!complq_budget;
 }
