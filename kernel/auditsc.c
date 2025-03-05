@@ -2876,7 +2876,7 @@ void __audit_log_kern_module(char *name)
 	context->type = AUDIT_KERN_MODULE;
 }
 
-void __audit_fanotify(u32 response, struct fanotify_response_info_audit_rule *friar)
+void audit_fanotify(u32 response, struct fanotify_response_info_audit_rule *friar)
 {
 	/* {subj,obj}_trust values are {0,1,2}: no,yes,unknown */
 	switch (friar->hdr.type) {

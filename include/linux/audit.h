@@ -418,7 +418,7 @@ extern void __audit_log_capset(const struct cred *new, const struct cred *old);
 extern void __audit_mmap_fd(int fd, int flags);
 extern void __audit_openat2_how(struct open_how *how);
 extern void __audit_log_kern_module(char *name);
-extern void __audit_fanotify(u32 response, struct fanotify_response_info_audit_rule *friar);
+extern void audit_fanotify(u32 response, struct fanotify_response_info_audit_rule *friar);
 extern void __audit_tk_injoffset(struct timespec64 offset);
 extern void __audit_ntp_log(const struct audit_ntp_data *ad);
 extern void __audit_log_nfcfg(const char *name, u8 af, unsigned int nentries,
@@ -523,12 +523,6 @@ static inline void audit_log_kern_module(char *name)
 {
 	if (!audit_dummy_context())
 		__audit_log_kern_module(name);
-}
-
-static inline void audit_fanotify(u32 response, struct fanotify_response_info_audit_rule *friar)
-{
-	if (!audit_dummy_context())
-		__audit_fanotify(response, friar);
 }
 
 static inline void audit_tk_injoffset(struct timespec64 offset)
