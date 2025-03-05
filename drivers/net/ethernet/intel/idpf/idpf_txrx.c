@@ -3560,7 +3560,10 @@ void idpf_vport_intr_rel(struct idpf_vport *vport)
 static void idpf_vport_intr_rel_irq(struct idpf_vport *vport)
 {
 	struct idpf_adapter *adapter = vport->adapter;
+	bool unlock;
 	int vector;
+
+	unlock = rtnl_trylock();
 
 	for (vector = 0; vector < vport->num_q_vectors; vector++) {
 		struct idpf_q_vector *q_vector = &vport->q_vectors[vector];
@@ -3573,8 +3576,23 @@ static void idpf_vport_intr_rel_irq(struct idpf_vport *vport)
 		vidx = vport->q_vector_idxs[vector];
 		irq_num = adapter->msix_entries[vidx].vector;
 
+		for (u32 i = 0; i < q_vector->num_rxq; i++)
+			netif_queue_set_napi(vport->netdev,
+					     q_vector->rx[i]->idx,
+					     NETDEV_QUEUE_TYPE_RX,
+					     NULL);
+
+		for (u32 i = 0; i < q_vector->num_txq; i++)
+			netif_queue_set_napi(vport->netdev,
+					     q_vector->tx[i]->idx,
+					     NETDEV_QUEUE_TYPE_TX,
+					     NULL);
+
 		kfree(free_irq(irq_num, q_vector));
 	}
+
+	if (unlock)
+		rtnl_unlock();
 }
 
 /**
@@ -3760,6 +3778,18 @@ static int idpf_vport_intr_req_irq(struct idpf_vport *vport)
 				   "Request_irq failed, error: %d\n", err);
 			goto free_q_irqs;
 		}
+
+		for (u32 i = 0; i < q_vector->num_rxq; i++)
+			netif_queue_set_napi(vport->netdev,
+					     q_vector->rx[i]->idx,
+					     NETDEV_QUEUE_TYPE_RX,
+					     &q_vector->napi);
+
+		for (u32 i = 0; i < q_vector->num_txq; i++)
+			netif_queue_set_napi(vport->netdev,
+					     q_vector->tx[i]->idx,
+					     NETDEV_QUEUE_TYPE_TX,
+					     &q_vector->napi);
 	}
 
 	return 0;
