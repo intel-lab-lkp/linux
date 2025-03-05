@@ -30,6 +30,7 @@
 #include "intel_display_types.h"
 #include "intel_dsb.h"
 #include "intel_vrr.h"
+#include "skl_universal_plane.h"
 
 struct intel_color_funcs {
 	int (*color_check)(struct intel_atomic_state *state,
@@ -3937,6 +3938,139 @@ static const struct intel_color_funcs ilk_color_funcs = {
 	.get_config = ilk_get_config,
 };
 
+static const struct drm_color_lut_range xelpd_degamma_hdr[] = {
+	/* segment 1 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 128,
+		.start = 0, .end = (1 << 24) - 1,
+		.norm_factor = (1 << 24),
+		.precision = {
+			.intp = 0,
+			.fracp = 24,
+		},
+	},
+	/* segment 2 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 1,
+		.start = (1 << 24), .end = (1 << 24),
+		.norm_factor = (1 << 24),
+		.precision = {
+			.intp = 3,
+			.fracp = 24,
+		},
+	},
+	/* Segment 3 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 1,
+		.start = 3 * (1 << 24), .end = 3 * (1 << 24),
+		.norm_factor = (1 << 24),
+		.precision = {
+			.intp = 3,
+			.fracp = 24,
+		},
+	},
+	/* Segment 4 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 1,
+		.start = 7 * (1 << 24), .end = 7 * (1 << 24),
+		.norm_factor = (1 << 24),
+		.precision = {
+			.intp = 3,
+			.fracp = 24,
+		},
+	}
+};
+
+/* FIXME input bpc? */
+static const struct drm_color_lut_range xelpd_gamma_hdr[] = {
+	/* segment 1 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 9,
+		.start = 0, .end = 8,
+		.norm_factor = 8 * 32,
+		.precision = {
+			.intp = 0,
+			.fracp = 24,
+		},
+	},
+	/* segment 2 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 30,
+		.start = 8 * 2, .end = 8 * (32 - 1),
+		.norm_factor = 8 * 32,
+		.precision = {
+			.intp = 0,
+			.fracp = 24,
+		},
+	},
+	/* segment 3 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 1,
+		.start = 8 * 32, .end = 8 * 32,
+		.norm_factor = 8 * 32,
+		.precision = {
+			.intp = 3,
+			.fracp = 24,
+		},
+	},
+	/* segment 4 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 1,
+		.start = 3 * 8 * 32, .end = 3 * 8 * 32,
+		.norm_factor = 8 * 32,
+		.precision = {
+			.intp = 3,
+			.fracp = 24,
+		},
+	},
+	/* segment 5 */
+	{
+		.flags = (DRM_COLOROP_1D_LUT_MULTSEG_REFLECT_NEGATIVE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_INTERPOLATE |
+			  DRM_COLOROP_1D_LUT_MULTSEG_SINGLE_CHANNEL |
+			  DRM_COLOROP_1D_LUT_MULTSEG_NON_DECREASING),
+		.count = 1,
+		.start = 7 * 8 * 32, .end = 7 * 8 * 32,
+		.norm_factor = 8 * 32,
+		.precision = {
+			.intp = 3,
+			.fracp = 24,
+		},
+	},
+};
+
 /* TODO: Move to another file */
 struct intel_plane_colorop *intel_colorop_alloc(void)
 {
@@ -3974,6 +4108,47 @@ struct intel_plane_colorop *intel_plane_colorop_create(enum intel_color_block id
 	colorop->id = id;
 
 	return colorop;
+}
+
+int intel_plane_tf_pipeline_init(struct drm_plane *plane, struct drm_prop_enum_list *list)
+{
+	struct intel_plane_colorop *colorop;
+	struct drm_device *dev = plane->dev;
+	int ret;
+	struct drm_colorop *prev_op;
+
+	colorop = intel_plane_colorop_create(CB_PLANE_PRE_CSC_LUT);
+
+	ret = drm_colorop_curve_1d_lut_multseg_init(dev, &colorop->base,
+						    plane, xelpd_degamma_hdr,
+						    sizeof(xelpd_degamma_hdr), true);
+	if (ret)
+		return ret;
+
+	list->type = colorop->base.base.id;
+	list->name = kasprintf(GFP_KERNEL, "Color Pipeline %d", colorop->base.base.id);
+
+	/* TODO: handle failures and clean up*/
+	prev_op = &colorop->base;
+
+	colorop = intel_plane_colorop_create(CB_PLANE_CSC);
+	ret = drm_colorop_ctm_3x3_init(dev, &colorop->base, plane, true);
+	if (ret)
+		return ret;
+
+	drm_colorop_set_next_property(prev_op, &colorop->base);
+	prev_op = &colorop->base;
+
+	colorop = intel_plane_colorop_create(CB_PLANE_POST_CSC_LUT);
+	ret = drm_colorop_curve_1d_lut_multseg_init(dev, &colorop->base,
+						    plane, xelpd_gamma_hdr,
+						    sizeof(xelpd_gamma_hdr), true);
+	if (ret)
+		return ret;
+
+	drm_colorop_set_next_property(prev_op, &colorop->base);
+
+	return 0;
 }
 
 void intel_color_crtc_init(struct intel_crtc *crtc)
