@@ -3224,22 +3224,6 @@ static int _perf_event_refresh(struct perf_event *event, int refresh)
 	return 0;
 }
 
-/*
- * See perf_event_disable()
- */
-int perf_event_refresh(struct perf_event *event, int refresh)
-{
-	struct perf_event_context *ctx;
-	int ret;
-
-	ctx = perf_event_ctx_lock(event);
-	ret = _perf_event_refresh(event, refresh);
-	perf_event_ctx_unlock(event, ctx);
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(perf_event_refresh);
-
 static int perf_event_modify_breakpoint(struct perf_event *bp,
 					 struct perf_event_attr *attr)
 {
@@ -13637,14 +13621,6 @@ const struct perf_event *perf_get_event(struct file *file)
 		return ERR_PTR(-EINVAL);
 
 	return file->private_data;
-}
-
-const struct perf_event_attr *perf_event_attrs(struct perf_event *event)
-{
-	if (!event)
-		return ERR_PTR(-EINVAL);
-
-	return &event->attr;
 }
 
 int perf_allow_kernel(struct perf_event_attr *attr)
