@@ -55,6 +55,7 @@ Contents:
    ti/cpsw_switchdev
    ti/am65_nuss_cpsw_switchdev
    ti/tlan
+   ti/icssg_prueth
    toshiba/spider_net
    wangxun/txgbe
    wangxun/ngbe
