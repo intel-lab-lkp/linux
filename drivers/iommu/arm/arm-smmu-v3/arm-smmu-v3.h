@@ -849,8 +849,12 @@ struct arm_smmu_domain {
 
 	enum arm_smmu_domain_stage	stage;
 	union {
-		struct arm_smmu_ctx_desc	cd;
-		struct arm_smmu_s2_cfg		s2_cfg;
+		struct arm_smmu_ctx_desc cd;	/* S1 */
+		struct arm_smmu_s2_cfg s2_cfg;	/* S2 && !nest_parent */
+		struct {			/* S2 && nest_parent */
+			struct list_head list;
+			spinlock_t lock;
+		} vsmmus;
 	};
 
 	struct iommu_domain		domain;
@@ -1049,6 +1053,8 @@ struct arm_vsmmu {
 	struct arm_smmu_device *smmu;
 	struct arm_smmu_domain *s2_parent;
 	u16 vmid;
+
+	struct list_head vsmmus_elm; /* arm_smmu_domain::vsmmus::list */
 };
 
 #if IS_ENABLED(CONFIG_ARM_SMMU_V3_IOMMUFD)

@@ -30,6 +30,23 @@ void *arm_smmu_hw_info(struct device *dev, u32 *length, u32 *type)
 	return info;
 }
 
+static void arm_vsmmu_destroy(struct iommufd_viommu *viommu)
+{
+	struct arm_vsmmu *vsmmu = container_of(viommu, struct arm_vsmmu, core);
+	struct arm_smmu_device *smmu = vsmmu->smmu;
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode = CMDQ_OP_TLBI_S12_VMALL,
+		.tlbi.vmid = vsmmu->vmid,
+	};
+	unsigned long flags;
+
+	spin_lock_irqsave(&vsmmu->s2_parent->vsmmus.lock, flags);
+	list_del(&vsmmu->vsmmus_elm);
+	spin_unlock_irqrestore(&vsmmu->s2_parent->vsmmus.lock, flags);
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
+	ida_free(&smmu->vmid_map, vsmmu->vmid);
+}
+
 static void arm_smmu_make_nested_cd_table_ste(
 	struct arm_smmu_ste *target, struct arm_smmu_master *master,
 	struct arm_smmu_nested_domain *nested_domain, bool ats_enabled)
@@ -337,6 +354,7 @@ out:
 }
 
 static const struct iommufd_viommu_ops arm_vsmmu_ops = {
+	.destroy = arm_vsmmu_destroy,
 	.alloc_domain_nested = arm_vsmmu_alloc_domain_nested,
 	.cache_invalidate = arm_vsmmu_cache_invalidate,
 };
@@ -351,6 +369,8 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 	struct arm_smmu_domain *s2_parent = to_smmu_domain(parent);
 	struct arm_vsmmu *vsmmu;
+	unsigned long flags;
+	int vmid;
 
 	if (viommu_type != IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
 		return ERR_PTR(-EOPNOTSUPP);
@@ -381,15 +401,24 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	    !(smmu->features & ARM_SMMU_FEAT_S2FWB))
 		return ERR_PTR(-EOPNOTSUPP);
 
+	vmid = ida_alloc_range(&smmu->vmid_map, 1, (1 << smmu->vmid_bits) - 1,
+			       GFP_KERNEL);
+	if (vmid < 0)
+		return ERR_PTR(vmid);
+
 	vsmmu = iommufd_viommu_alloc(ictx, struct arm_vsmmu, core,
 				     &arm_vsmmu_ops);
-	if (IS_ERR(vsmmu))
+	if (IS_ERR(vsmmu)) {
+		ida_free(&smmu->vmid_map, vmid);
 		return ERR_CAST(vsmmu);
+	}
 
 	vsmmu->smmu = smmu;
+	vsmmu->vmid = (u16)vmid;
 	vsmmu->s2_parent = s2_parent;
-	/* FIXME Move VMID allocation from the S2 domain allocation to here */
-	vsmmu->vmid = s2_parent->s2_cfg.vmid;
+	spin_lock_irqsave(&s2_parent->vsmmus.lock, flags);
+	list_add_tail(&vsmmu->vsmmus_elm, &s2_parent->vsmmus.list);
+	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
 
 	return &vsmmu->core;
 }

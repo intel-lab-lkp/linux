@@ -2249,10 +2249,22 @@ static void arm_smmu_tlb_inv_context(void *cookie)
 	 */
 	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1) {
 		arm_smmu_tlb_inv_asid(smmu, smmu_domain->cd.asid);
-	} else {
+	} else if (!smmu_domain->nest_parent) {
 		cmd.opcode	= CMDQ_OP_TLBI_S12_VMALL;
 		cmd.tlbi.vmid	= smmu_domain->s2_cfg.vmid;
 		arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
+	} else {
+		struct arm_vsmmu *vsmmu, *next;
+		unsigned long flags;
+
+		cmd.opcode = CMDQ_OP_TLBI_S12_VMALL;
+		spin_lock_irqsave(&smmu_domain->vsmmus.lock, flags);
+		list_for_each_entry_safe(vsmmu, next, &smmu_domain->vsmmus.list,
+					 vsmmus_elm) {
+			cmd.tlbi.vmid = vsmmu->vmid;
+			arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
+		}
+		spin_unlock_irqrestore(&smmu_domain->vsmmus.lock, flags);
 	}
 	arm_smmu_atc_inv_domain(smmu_domain, 0, 0);
 }
@@ -2342,19 +2354,33 @@ static void arm_smmu_tlb_inv_range_domain(unsigned long iova, size_t size,
 		cmd.opcode	= smmu_domain->smmu->features & ARM_SMMU_FEAT_E2H ?
 				  CMDQ_OP_TLBI_EL2_VA : CMDQ_OP_TLBI_NH_VA;
 		cmd.tlbi.asid	= smmu_domain->cd.asid;
-	} else {
+		__arm_smmu_tlb_inv_range(&cmd, iova, size, granule,
+					 smmu_domain);
+	} else if (!smmu_domain->nest_parent) {
 		cmd.opcode	= CMDQ_OP_TLBI_S2_IPA;
 		cmd.tlbi.vmid	= smmu_domain->s2_cfg.vmid;
-	}
-	__arm_smmu_tlb_inv_range(&cmd, iova, size, granule, smmu_domain);
+		__arm_smmu_tlb_inv_range(&cmd, iova, size, granule,
+					 smmu_domain);
+	} else {
+		struct arm_vsmmu *vsmmu, *next;
+		unsigned long flags;
 
-	if (smmu_domain->nest_parent) {
 		/*
 		 * When the S2 domain changes all the nested S1 ASIDs have to be
 		 * flushed too.
 		 */
 		cmd.opcode = CMDQ_OP_TLBI_NH_ALL;
 		arm_smmu_cmdq_issue_cmd_with_sync(smmu_domain->smmu, &cmd);
+
+		cmd.opcode = CMDQ_OP_TLBI_S2_IPA;
+		spin_lock_irqsave(&smmu_domain->vsmmus.lock, flags);
+		list_for_each_entry_safe(vsmmu, next, &smmu_domain->vsmmus.list,
+					 vsmmus_elm) {
+			cmd.tlbi.vmid = vsmmu->vmid;
+			__arm_smmu_tlb_inv_range(&cmd, iova, size, granule,
+						 smmu_domain);
+		}
+		spin_unlock_irqrestore(&smmu_domain->vsmmus.lock, flags);
 	}
 
 	/*
@@ -2477,7 +2503,7 @@ static void arm_smmu_domain_free_paging(struct iommu_domain *domain)
 		mutex_lock(&arm_smmu_asid_lock);
 		xa_erase(&arm_smmu_asid_xa, smmu_domain->cd.asid);
 		mutex_unlock(&arm_smmu_asid_lock);
-	} else {
+	} else if (!smmu_domain->nest_parent) {
 		struct arm_smmu_s2_cfg *cfg = &smmu_domain->s2_cfg;
 		if (cfg->vmid)
 			ida_free(&smmu->vmid_map, cfg->vmid);
@@ -2506,7 +2532,10 @@ static int arm_smmu_domain_finalise_s2(struct arm_smmu_device *smmu,
 				       struct arm_smmu_domain *smmu_domain)
 {
 	int vmid;
-	struct arm_smmu_s2_cfg *cfg = &smmu_domain->s2_cfg;
+
+	/* nest_parent stores vmid in vSMMU instead of a shared S2 domain */
+	if (smmu_domain->nest_parent)
+		return 0;
 
 	/* Reserve VMID 0 for stage-2 bypass STEs */
 	vmid = ida_alloc_range(&smmu->vmid_map, 1, (1 << smmu->vmid_bits) - 1,
@@ -2514,7 +2543,7 @@ static int arm_smmu_domain_finalise_s2(struct arm_smmu_device *smmu,
 	if (vmid < 0)
 		return vmid;
 
-	cfg->vmid	= (u16)vmid;
+	smmu_domain->s2_cfg.vmid = (u16)vmid;
 	return 0;
 }
 
@@ -3233,6 +3262,8 @@ arm_smmu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 		}
 		smmu_domain->stage = ARM_SMMU_DOMAIN_S2;
 		smmu_domain->nest_parent = true;
+		INIT_LIST_HEAD(&smmu_domain->vsmmus.list);
+		spin_lock_init(&smmu_domain->vsmmus.lock);
 		break;
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING:
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING | IOMMU_HWPT_ALLOC_PASID:
