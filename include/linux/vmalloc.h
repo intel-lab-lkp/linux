@@ -190,6 +190,8 @@ void * __must_check vrealloc_noprof(const void *p, size_t size, gfp_t flags)
 extern void vfree(const void *addr);
 extern void vfree_atomic(const void *addr);
 
+extern void *atomic_vmap(struct page **pages, unsigned int count,
+			 unsigned long flags, pgprot_t prot);
 extern void *vmap(struct page **pages, unsigned int count,
 			unsigned long flags, pgprot_t prot);
 void *vmap_pfn(unsigned long *pfns, unsigned int count, pgprot_t prot);

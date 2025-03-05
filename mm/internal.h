@@ -1278,6 +1278,11 @@ int numa_migrate_check(struct folio *folio, struct vm_fault *vmf,
 void free_zone_device_folio(struct folio *folio);
 int migrate_device_coherent_folio(struct folio *folio);
 
+struct vm_struct *atomic_get_vm_area_node(unsigned long size, unsigned long align,
+					  unsigned long shift, unsigned long flags,
+					  unsigned long start, unsigned long end, int node,
+					  gfp_t gfp_mask, const void *caller);
+
 struct vm_struct *__get_vm_area_node(unsigned long size,
 				     unsigned long align, unsigned long shift,
 				     unsigned long flags, unsigned long start,

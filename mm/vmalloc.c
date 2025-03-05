@@ -1945,6 +1945,57 @@ static inline void setup_vmalloc_vm(struct vm_struct *vm,
 	va->vm = vm;
 }
 
+static struct vmap_area *atomic_alloc_vmap_area(unsigned long size,
+						unsigned long align,
+						unsigned long vstart, unsigned long vend,
+						int node, gfp_t gfp_mask,
+						unsigned long va_flags, struct vm_struct *vm)
+{
+	struct vmap_node *vn;
+	struct vmap_area *va;
+	unsigned long addr;
+
+	if (unlikely(!size || offset_in_page(size) || !is_power_of_2(align)))
+		return ERR_PTR(-EINVAL);
+
+	if (unlikely(!vmap_initialized))
+		return ERR_PTR(-EBUSY);
+
+	va = kmem_cache_alloc_node(vmap_area_cachep, gfp_mask, node);
+	if (unlikely(!va))
+		return ERR_PTR(-ENOMEM);
+
+	/*
+	 * Only scan the relevant parts containing pointers to other objects
+	 * to avoid false negatives.
+	 */
+	kmemleak_scan_area(&va->rb_node, SIZE_MAX, gfp_mask);
+
+	addr = __alloc_vmap_area(&free_vmap_area_root, &free_vmap_area_list,
+				 size, align, vstart, vend);
+
+	trace_alloc_vmap_area(addr, size, align, vstart, vend, addr == vend);
+
+	va->va_start = addr;
+	va->va_end = addr + size;
+	va->vm = NULL;
+	va->flags = va_flags;
+
+	vm->addr = (void *)va->va_start;
+	vm->size = va_size(va);
+	va->vm = vm;
+
+	vn = addr_to_node(va->va_start);
+
+	insert_vmap_area(va, &vn->busy.root, &vn->busy.head);
+
+	BUG_ON(!IS_ALIGNED(va->va_start, align));
+	BUG_ON(va->va_start < vstart);
+	BUG_ON(va->va_end > vend);
+
+	return va;
+}
+
 /*
  * Allocate a region of KVA of the specified size and alignment, within the
  * vstart and vend. If vm is passed in, the two will also be bound.
@@ -3106,6 +3157,33 @@ static void clear_vm_uninitialized_flag(struct vm_struct *vm)
 	vm->flags &= ~VM_UNINITIALIZED;
 }
 
+struct vm_struct *atomic_get_vm_area_node(unsigned long size, unsigned long align,
+					  unsigned long shift, unsigned long flags,
+					  unsigned long start, unsigned long end, int node,
+					  gfp_t gfp_mask, const void *caller)
+{
+	struct vmap_area *va;
+	struct vm_struct *area;
+
+	size = ALIGN(size, 1ul << shift);
+	if (unlikely(!size))
+		return NULL;
+
+	area = kzalloc_node(sizeof(*area), gfp_mask, node);
+	if (unlikely(!area))
+		return NULL;
+
+	size += PAGE_SIZE;
+	area->flags = flags;
+	area->caller = caller;
+
+	va = atomic_alloc_vmap_area(size, align, start, end, node, gfp_mask, 0, area);
+	if (IS_ERR(va))
+		return NULL;
+
+	return area;
+}
+
 struct vm_struct *__get_vm_area_node(unsigned long size,
 		unsigned long align, unsigned long shift, unsigned long flags,
 		unsigned long start, unsigned long end, int node,
@@ -3417,6 +3495,33 @@ void vunmap(const void *addr)
 	kfree(vm);
 }
 EXPORT_SYMBOL(vunmap);
+
+void *atomic_vmap(struct page **pages, unsigned int count,
+		  unsigned long flags, pgprot_t prot)
+{
+	struct vm_struct *area;
+	unsigned long addr;
+	unsigned long size;		/* In bytes */
+
+	if (count > totalram_pages())
+		return NULL;
+
+	size = (unsigned long)count << PAGE_SHIFT;
+	area = atomic_get_vm_area_node(size, 1, PAGE_SHIFT, flags,
+				       VMALLOC_START, VMALLOC_END,
+				       NUMA_NO_NODE, GFP_ATOMIC,
+				       __builtin_return_address(0));
+	if (!area)
+		return NULL;
+
+	addr = (unsigned long)area->addr;
+	if (vmap_pages_range(addr, addr + size, pgprot_nx(prot),
+			     pages, PAGE_SHIFT) < 0) {
+		return NULL;
+	}
+
+	return area->addr;
+}
 
 /**
  * vmap - map an array of pages into virtually contiguous space
