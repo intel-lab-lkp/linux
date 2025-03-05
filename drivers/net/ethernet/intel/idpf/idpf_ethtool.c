@@ -186,9 +186,11 @@ static void idpf_get_channels(struct net_device *netdev,
 {
 	struct idpf_netdev_priv *np = netdev_priv(netdev);
 	struct idpf_vport_config *vport_config;
+	const struct idpf_vport *vport;
 	u16 num_txq, num_rxq;
 	u16 combined;
 
+	vport = idpf_netdev_to_vport(netdev);
 	vport_config = np->adapter->vport_config[np->vport_idx];
 
 	num_txq = vport_config->user_config.num_req_tx_qs;
@@ -202,8 +204,8 @@ static void idpf_get_channels(struct net_device *netdev,
 	ch->max_rx = vport_config->max_q.max_rxq;
 	ch->max_tx = vport_config->max_q.max_txq;
 
-	ch->max_other = IDPF_MAX_MBXQ;
-	ch->other_count = IDPF_MAX_MBXQ;
+	ch->max_other = IDPF_MAX_MBXQ + vport->num_xdp_txq;
+	ch->other_count = IDPF_MAX_MBXQ + vport->num_xdp_txq;
 
 	ch->combined_count = combined;
 	ch->rx_count = num_rxq - combined;
