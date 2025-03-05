@@ -171,7 +171,7 @@ static void sock_map_del_link(struct sock *sk,
 			sk_psock_stop_verdict(sk, psock);
 
 		if (psock->psock_update_sk_prot)
-			psock->psock_update_sk_prot(sk, psock, false);
+			psock->psock_update_sk_prot(sk, psock, true);
 		write_unlock_bh(&sk->sk_callback_lock);
 	}
 }
