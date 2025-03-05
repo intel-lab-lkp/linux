@@ -186,6 +186,34 @@ void drm_gem_shmem_free(struct drm_gem_shmem_object *shmem)
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_free);
 
+static int drm_gem_shmem_atomic_get_pages(struct drm_gem_shmem_object *shmem)
+{
+	struct drm_gem_object *obj = &shmem->base;
+	struct page **pages;
+
+	pages = drm_gem_atomic_get_pages(obj);
+	if (IS_ERR(pages)) {
+		drm_dbg_kms(obj->dev, "Failed to get pages (%ld)\n",
+			    PTR_ERR(pages));
+		shmem->pages_use_count = 0;
+		return PTR_ERR(pages);
+	}
+
+	/*
+	 * TODO: Allocating WC pages which are correctly flushed is only
+	 * supported on x86. Ideal solution would be a GFP_WC flag, which also
+	 * ttm_pool.c could use.
+	 */
+#ifdef CONFIG_X86
+	if (shmem->map_wc)
+		set_pages_array_wc(pages, obj->size >> PAGE_SHIFT);
+#endif
+
+	shmem->pages = pages;
+
+	return 0;
+}
+
 static int drm_gem_shmem_get_pages(struct drm_gem_shmem_object *shmem)
 {
 	struct drm_gem_object *obj = &shmem->base;
@@ -316,6 +344,29 @@ void drm_gem_shmem_unpin(struct drm_gem_shmem_object *shmem)
 	dma_resv_unlock(shmem->base.resv);
 }
 EXPORT_SYMBOL(drm_gem_shmem_unpin);
+
+int drm_gem_shmem_atomic_vmap(struct drm_gem_shmem_object *shmem,
+			      struct iosys_map *map)
+{
+	struct drm_gem_object *obj = &shmem->base;
+	int ret = 0;
+
+	pgprot_t prot = PAGE_KERNEL;
+
+	ret = drm_gem_shmem_atomic_get_pages(shmem);
+	if (ret)
+		return -ENOMEM;
+
+	if (shmem->map_wc)
+		prot = pgprot_writecombine(prot);
+	shmem->vaddr = atomic_vmap(shmem->pages, obj->size >> PAGE_SHIFT,
+				   VM_MAP, prot);
+	if (!shmem->vaddr)
+		return -ENOMEM;
+	iosys_map_set_vaddr(map, shmem->vaddr);
+
+	return 0;
+}
 
 /*
  * drm_gem_shmem_vmap - Create a virtual mapping for a shmem GEM object

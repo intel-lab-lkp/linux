@@ -535,6 +535,57 @@ static void drm_gem_check_release_batch(struct folio_batch *fbatch)
 	cond_resched();
 }
 
+struct page **drm_gem_atomic_get_pages(struct drm_gem_object *obj)
+{
+	struct address_space *mapping;
+	struct page **pages;
+	struct folio *folio;
+	long i, j, npages;
+
+	if (WARN_ON(!obj->filp))
+		return ERR_PTR(-EINVAL);
+
+	/* This is the shared memory object that backs the GEM resource */
+	mapping = obj->filp->f_mapping;
+
+	/* We already BUG_ON() for non-page-aligned sizes in
+	 * drm_gem_object_init(), so we should never hit this unless
+	 * driver author is doing something really wrong:
+	 */
+	WARN_ON((obj->size & (PAGE_SIZE - 1)) != 0);
+
+	npages = obj->size >> PAGE_SHIFT;
+
+	pages = kmalloc_array(npages, sizeof(struct page *), GFP_ATOMIC);
+	if (pages == NULL)
+		return ERR_PTR(-ENOMEM);
+
+	mapping_set_unevictable(mapping);
+
+	i = 0;
+	while (i < npages) {
+		long nr;
+
+		folio = shmem_read_folio_gfp(mapping, i,
+				GFP_ATOMIC);
+		if (IS_ERR(folio))
+			return ERR_PTR(-ENOMEM);
+		nr = min(npages - i, folio_nr_pages(folio));
+		for (j = 0; j < nr; j++, i++)
+			pages[i] = folio_file_page(folio, i);
+
+		/* Make sure shmem keeps __GFP_DMA32 allocated pages in the
+		 * correct region during swapin. Note that this requires
+		 * __GFP_DMA32 to be set in mapping_gfp_mask(inode->i_mapping)
+		 * so shmem can relocate pages during swapin if required.
+		 */
+		BUG_ON(mapping_gfp_constraint(mapping, __GFP_DMA32) &&
+				(folio_pfn(folio) >= 0x00100000UL));
+	}
+
+	return pages;
+}
+
 /**
  * drm_gem_get_pages - helper to allocate backing pages for a GEM object
  * from shmem
