@@ -651,7 +651,7 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 			newflags |= VM_ACCOUNT;
 		}
 	} else if ((oldflags & VM_ACCOUNT) && vma_is_anonymous(vma) &&
-		   !vma->anon_vma) {
+		   !vma_anon_vma(vma)) {
 		newflags &= ~VM_ACCOUNT;
 	}
 

@@ -174,7 +174,7 @@ static inline pgoff_t vma_pgoff_offset(struct vm_area_struct *vma,
 		.flags = vma_->vm_flags,			\
 		.pgoff = vma_pgoff_offset(vma_, start_),	\
 		.file = vma_->vm_file,				\
-		.anon_vma = vma_->anon_vma,			\
+		.anon_vma = vma_anon_vma(vma_),			\
 		.policy = vma_policy(vma_),			\
 		.uffd_ctx = vma_->vm_userfaultfd_ctx,		\
 		.anon_name = anon_vma_name(vma_),		\
@@ -264,6 +264,10 @@ __must_check struct vm_area_struct
 *vma_merge_extend(struct vma_iterator *vmi,
 		  struct vm_area_struct *vma,
 		  unsigned long delta);
+
+/* Functions for setting/clearing vma->anon_vma unfaulted flag. */
+void vma_set_anon_vma_unfaulted(struct vm_area_struct *vma);
+void vma_clear_anon_vma_unfaulted(struct vm_area_struct *vma);
 
 void unlink_file_vma_batch_init(struct unlink_vma_file_batch *vb);
 

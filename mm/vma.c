@@ -99,7 +99,7 @@ static inline bool is_mergeable_anon_vma(struct anon_vma *anon_vma1,
 static inline bool are_anon_vmas_compatible(struct vm_area_struct *vma1,
 					    struct vm_area_struct *vma2)
 {
-	return is_mergeable_anon_vma(vma1->anon_vma, vma2->anon_vma, NULL);
+	return is_mergeable_anon_vma(vma_anon_vma(vma1), vma_anon_vma(vma2), NULL);
 }
 
 /*
@@ -118,7 +118,7 @@ static void init_multi_vma_prep(struct vma_prepare *vp,
 
 	memset(vp, 0, sizeof(struct vma_prepare));
 	vp->vma = vma;
-	vp->anon_vma = vma->anon_vma;
+	vp->anon_vma = vma_anon_vma(vma);
 
 	if (vmg && vmg->__remove_middle) {
 		*remove = vmg->middle;
@@ -136,10 +136,10 @@ static void init_multi_vma_prep(struct vma_prepare *vp,
 
 	vp->adj_next = adjust;
 	if (!vp->anon_vma && adjust)
-		vp->anon_vma = adjust->anon_vma;
+		vp->anon_vma = vma_anon_vma(adjust);
 
-	VM_WARN_ON(vp->anon_vma && adjust && adjust->anon_vma &&
-		   vp->anon_vma != adjust->anon_vma);
+	VM_WARN_ON(vp->anon_vma && adjust && vma_anon_vma(adjust) &&
+		   vp->anon_vma != vma_anon_vma(adjust));
 
 	vp->file = vma->vm_file;
 	if (vp->file)
@@ -164,7 +164,7 @@ static bool can_vma_merge_before(struct vma_merge_struct *vmg)
 	pgoff_t pglen = PHYS_PFN(vmg->end - vmg->start);
 
 	if (is_mergeable_vma(vmg, /* merge_next = */ true) &&
-	    is_mergeable_anon_vma(vmg->anon_vma, vmg->next->anon_vma, vmg->next)) {
+	    is_mergeable_anon_vma(vmg->anon_vma, vma_anon_vma(vmg->next), vmg->next)) {
 		if (vmg->next->vm_pgoff == vmg->pgoff + pglen)
 			return true;
 	}
@@ -184,7 +184,7 @@ static bool can_vma_merge_before(struct vma_merge_struct *vmg)
 static bool can_vma_merge_after(struct vma_merge_struct *vmg)
 {
 	if (is_mergeable_vma(vmg, /* merge_next = */ false) &&
-	    is_mergeable_anon_vma(vmg->anon_vma, vmg->prev->anon_vma, vmg->prev)) {
+	    is_mergeable_anon_vma(vmg->anon_vma, vma_anon_vma(vmg->prev), vmg->prev)) {
 		if (vmg->prev->vm_pgoff + vma_pages(vmg->prev) == vmg->pgoff)
 			return true;
 	}
@@ -347,7 +347,7 @@ again:
 				      vp->remove->vm_end);
 			fput(vp->file);
 		}
-		if (vp->remove->anon_vma)
+		if (vma_anon_vma(vp->remove))
 			anon_vma_merge(vp->vma, vp->remove);
 		mm->map_count--;
 		mpol_put(vma_policy(vp->remove));
@@ -569,11 +569,11 @@ static int dup_anon_vma(struct vm_area_struct *dst,
 	 * expanding vma has anon_vma set if the shrinking vma had, to cover any
 	 * anon pages imported.
 	 */
-	if (src->anon_vma && !dst->anon_vma) {
+	if (vma_anon_vma(src) && !vma_anon_vma(dst)) {
 		int ret;
 
 		vma_assert_write_locked(dst);
-		dst->anon_vma = src->anon_vma;
+		vma_dup_anon_vma(dst, src);
 		ret = anon_vma_clone(dst, src);
 		if (ret)
 			return ret;
@@ -595,7 +595,7 @@ void validate_mm(struct mm_struct *mm)
 	mt_validate(&mm->mm_mt);
 	for_each_vma(vmi, vma) {
 #ifdef CONFIG_DEBUG_VM_RB
-		struct anon_vma *anon_vma = vma->anon_vma;
+		struct anon_vma *anon_vma = vma_anon_vma(vma);
 		struct anon_vma_chain *avc;
 #endif
 		unsigned long vmi_start, vmi_end;
@@ -858,7 +858,7 @@ static __must_check struct vm_area_struct *vma_merge_existing_range(
 		 * simply a case of, if prev has no anon_vma object, which of
 		 * next or middle contains the anon_vma we must duplicate.
 		 */
-		err = dup_anon_vma(prev, next->anon_vma ? next : middle,
+		err = dup_anon_vma(prev, vma_anon_vma(next) ? next : middle,
 				   &anon_dup);
 	} else if (merge_left) {
 		/*
@@ -1735,7 +1735,7 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	 * If anonymous vma has not yet been faulted, update new pgoff
 	 * to match new location, to increase its chance of merging.
 	 */
-	if (unlikely(vma_is_anonymous(vma) && !vma->anon_vma)) {
+	if (unlikely(vma_is_anonymous(vma) && !vma_anon_vma(vma))) {
 		pgoff = addr >> PAGE_SHIFT;
 		faulted_in_anon_vma = false;
 	}
@@ -1854,7 +1854,7 @@ static struct anon_vma *reusable_anon_vma(struct vm_area_struct *old,
 					  struct vm_area_struct *b)
 {
 	if (anon_vma_compatible(a, b)) {
-		struct anon_vma *anon_vma = READ_ONCE(old->anon_vma);
+		struct anon_vma *anon_vma = vma_anon_vma(old);
 
 		if (anon_vma && list_is_singular(&old->anon_vma_chain))
 			return anon_vma;
@@ -2108,7 +2108,7 @@ int mm_take_all_locks(struct mm_struct *mm)
 	for_each_vma(vmi, vma) {
 		if (signal_pending(current))
 			goto out_unlock;
-		if (vma->anon_vma)
+		if (vma_anon_vma(vma))
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				vm_lock_anon_vma(mm, avc->anon_vma);
 	}
@@ -2170,7 +2170,7 @@ void mm_drop_all_locks(struct mm_struct *mm)
 	BUG_ON(!mutex_is_locked(&mm_all_locks_mutex));
 
 	for_each_vma(vmi, vma) {
-		if (vma->anon_vma)
+		if (vma_anon_vma(vma))
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				vm_unlock_anon_vma(avc->anon_vma);
 		if (vma->vm_file && vma->vm_file->f_mapping)
@@ -2844,7 +2844,7 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 	/* Lock the VMA before expanding to prevent concurrent page faults */
 	vma_start_write(vma);
 	/* We update the anon VMA tree. */
-	anon_vma_lock_write(vma->anon_vma);
+	anon_vma_lock_write(vma_anon_vma(vma));
 
 	/* Somebody else might have raced and expanded it already */
 	if (address > vma->vm_end) {
@@ -2870,7 +2870,7 @@ int expand_upwards(struct vm_area_struct *vma, unsigned long address)
 			}
 		}
 	}
-	anon_vma_unlock_write(vma->anon_vma);
+	anon_vma_unlock_write(vma_anon_vma(vma));
 	vma_iter_free(&vmi);
 	validate_mm(mm);
 	return error;
@@ -2923,7 +2923,7 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 	/* Lock the VMA before expanding to prevent concurrent page faults */
 	vma_start_write(vma);
 	/* We update the anon VMA tree. */
-	anon_vma_lock_write(vma->anon_vma);
+	anon_vma_lock_write(vma_anon_vma(vma));
 
 	/* Somebody else might have raced and expanded it already */
 	if (address < vma->vm_start) {
@@ -2950,7 +2950,7 @@ int expand_downwards(struct vm_area_struct *vma, unsigned long address)
 			}
 		}
 	}
-	anon_vma_unlock_write(vma->anon_vma);
+	anon_vma_unlock_write(vma_anon_vma(vma));
 	vma_iter_free(&vmi);
 	validate_mm(mm);
 	return error;
@@ -2972,4 +2972,63 @@ int __vm_munmap(unsigned long start, size_t len, bool unlock)
 
 	userfaultfd_unmap_complete(mm, &uf);
 	return ret;
+}
+
+/*
+ * Helper to set the vma->anon_vma field, if not already set to a 'real'
+ * anon_vma (we are ok with overwriting flag-only values).
+ *
+ * mmap read lock or better must be held, this function correctly acquires the
+ * mm page table lock to prevent races against other writers.
+ */
+static void vma_set_anon_vma_if_unset(struct vm_area_struct *vma,
+		unsigned long val)
+{
+	struct mm_struct *mm = vma->vm_mm;
+
+	/* Must hold mmap read-lock at least. */
+	mmap_assert_locked(vma->vm_mm);
+	/* If we already have a 'real' anon_vma set, abort. */
+	if (vma_anon_vma(vma))
+		return;
+
+	/*
+	 * anon_vma, in vma's visible to other threads, when previously unset
+	 * (or unfaulted), is protected from races against other setters via the
+	 * mm->page_table_lock.
+	 */
+	spin_lock(&mm->page_table_lock);
+	/* We recheck under the lock. Above check is an optimisation. */
+	if (!vma_anon_vma(vma))
+		WRITE_ONCE(vma->anon_vma, val);
+	spin_unlock(&mm->page_table_lock);
+}
+
+/*
+ * Indicate that the VMA has an unfaulted anon_vma field, that is, no anon_vma
+ * has been initialised yet, but page table data may in fact be present that
+ * ought to be propagated on fork, for instance, guard regions.
+ *
+ * This flag will be cleared whenever an anon_vma is actually set for instance
+ * upon faulting in, and does not impact any operation that otherwise
+ * manipulates the anon_vma.
+ *
+ * If an anon_vma is already present, then we do nothing.
+ *
+ * This requires mmap read lock at least.
+ */
+void vma_set_anon_vma_unfaulted(struct vm_area_struct *vma)
+{
+	vma_set_anon_vma_if_unset(vma, ANON_VMA_UNFAULTED);
+}
+
+/*
+ * Clear the vma's anon_vma field of the ANON_VMA_UNFAULTED flag, if and only if
+ * it has not since had a 'real' anon_vma installed.
+ *
+ * This requires mmap read lock at least.
+ */
+void vma_clear_anon_vma_unfaulted(struct vm_area_struct *vma)
+{
+	vma_set_anon_vma_if_unset(vma, 0);
 }

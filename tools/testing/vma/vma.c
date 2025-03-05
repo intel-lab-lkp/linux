@@ -46,6 +46,9 @@ static struct anon_vma dummy_anon_vma;
 #define ASSERT_EQ(_val1, _val2) ASSERT_TRUE((_val1) == (_val2))
 #define ASSERT_NE(_val1, _val2) ASSERT_TRUE((_val1) != (_val2))
 
+#define DUMMY_ANON_VMA_VAL_1 ((struct anon_vma *)(0xffffffffff600000))
+#define DUMMY_ANON_VMA_VAL_2 ((struct anon_vma *)(0xffffffffff700000))
+
 static struct task_struct __current;
 
 struct task_struct *get_current(void)
@@ -476,7 +479,7 @@ static bool test_merge_new(void)
 	 * AA*B   DD  CC
 	 */
 	vma_a->vm_ops = &vm_ops; /* This should have no impact. */
-	vma_b->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma_b, &dummy_anon_vma);
 	vma = try_merge_new_vma(&mm, &vmg, 0x2000, 0x3000, 2, flags, &merged);
 	ASSERT_EQ(vma, vma_a);
 	/* Merge with A, delete B. */
@@ -484,7 +487,7 @@ static bool test_merge_new(void)
 	ASSERT_EQ(vma->vm_start, 0);
 	ASSERT_EQ(vma->vm_end, 0x4000);
 	ASSERT_EQ(vma->vm_pgoff, 0);
-	ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma));
 	ASSERT_EQ(mm.map_count, 3);
 
@@ -501,7 +504,7 @@ static bool test_merge_new(void)
 	ASSERT_EQ(vma->vm_start, 0);
 	ASSERT_EQ(vma->vm_end, 0x5000);
 	ASSERT_EQ(vma->vm_pgoff, 0);
-	ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma));
 	ASSERT_EQ(mm.map_count, 3);
 
@@ -511,7 +514,7 @@ static bool test_merge_new(void)
 	 * 0123456789abc
 	 * AAAAA *DD  CC
 	 */
-	vma_d->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma_d, &dummy_anon_vma);
 	vma_d->vm_ops = &vm_ops; /* This should have no impact. */
 	vma = try_merge_new_vma(&mm, &vmg, 0x6000, 0x7000, 6, flags, &merged);
 	ASSERT_EQ(vma, vma_d);
@@ -520,7 +523,7 @@ static bool test_merge_new(void)
 	ASSERT_EQ(vma->vm_start, 0x6000);
 	ASSERT_EQ(vma->vm_end, 0x9000);
 	ASSERT_EQ(vma->vm_pgoff, 6);
-	ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma));
 	ASSERT_EQ(mm.map_count, 3);
 
@@ -538,7 +541,7 @@ static bool test_merge_new(void)
 	ASSERT_EQ(vma->vm_start, 0);
 	ASSERT_EQ(vma->vm_end, 0x9000);
 	ASSERT_EQ(vma->vm_pgoff, 0);
-	ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma));
 	ASSERT_EQ(mm.map_count, 2);
 
@@ -548,7 +551,7 @@ static bool test_merge_new(void)
 	 * 0123456789abc
 	 * AAAAAAAAA *CC
 	 */
-	vma_c->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma_c, &dummy_anon_vma);
 	vma = try_merge_new_vma(&mm, &vmg, 0xa000, 0xb000, 0xa, flags, &merged);
 	ASSERT_EQ(vma, vma_c);
 	/* Prepend C. */
@@ -556,7 +559,7 @@ static bool test_merge_new(void)
 	ASSERT_EQ(vma->vm_start, 0xa000);
 	ASSERT_EQ(vma->vm_end, 0xc000);
 	ASSERT_EQ(vma->vm_pgoff, 0xa);
-	ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma));
 	ASSERT_EQ(mm.map_count, 2);
 
@@ -573,7 +576,7 @@ static bool test_merge_new(void)
 	ASSERT_EQ(vma->vm_start, 0);
 	ASSERT_EQ(vma->vm_end, 0xc000);
 	ASSERT_EQ(vma->vm_pgoff, 0);
-	ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma));
 	ASSERT_EQ(mm.map_count, 1);
 
@@ -591,7 +594,7 @@ static bool test_merge_new(void)
 		ASSERT_EQ(vma->vm_start, 0);
 		ASSERT_EQ(vma->vm_end, 0xc000);
 		ASSERT_EQ(vma->vm_pgoff, 0);
-		ASSERT_EQ(vma->anon_vma, &dummy_anon_vma);
+		ASSERT_EQ(vma_anon_vma(vma), &dummy_anon_vma);
 
 		vm_area_free(vma);
 		count++;
@@ -971,13 +974,13 @@ static bool test_merge_existing(void)
 	vmg_set_range(&vmg, 0x3000, 0x6000, 3, flags);
 	vmg.middle = vma;
 	vmg.prev = vma;
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	ASSERT_EQ(merge_existing(&vmg), vma_next);
 	ASSERT_EQ(vmg.state, VMA_MERGE_SUCCESS);
 	ASSERT_EQ(vma_next->vm_start, 0x3000);
 	ASSERT_EQ(vma_next->vm_end, 0x9000);
 	ASSERT_EQ(vma_next->vm_pgoff, 3);
-	ASSERT_EQ(vma_next->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_next), &dummy_anon_vma);
 	ASSERT_EQ(vma->vm_start, 0x2000);
 	ASSERT_EQ(vma->vm_end, 0x3000);
 	ASSERT_EQ(vma->vm_pgoff, 2);
@@ -1003,13 +1006,13 @@ static bool test_merge_existing(void)
 	vma_next->vm_ops = &vm_ops; /* This should have no impact. */
 	vmg_set_range(&vmg, 0x2000, 0x6000, 2, flags);
 	vmg.middle = vma;
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	ASSERT_EQ(merge_existing(&vmg), vma_next);
 	ASSERT_EQ(vmg.state, VMA_MERGE_SUCCESS);
 	ASSERT_EQ(vma_next->vm_start, 0x2000);
 	ASSERT_EQ(vma_next->vm_end, 0x9000);
 	ASSERT_EQ(vma_next->vm_pgoff, 2);
-	ASSERT_EQ(vma_next->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_next), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma_next));
 	ASSERT_EQ(mm.map_count, 1);
 
@@ -1033,14 +1036,14 @@ static bool test_merge_existing(void)
 	vmg_set_range(&vmg, 0x3000, 0x6000, 3, flags);
 	vmg.prev = vma_prev;
 	vmg.middle = vma;
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 
 	ASSERT_EQ(merge_existing(&vmg), vma_prev);
 	ASSERT_EQ(vmg.state, VMA_MERGE_SUCCESS);
 	ASSERT_EQ(vma_prev->vm_start, 0);
 	ASSERT_EQ(vma_prev->vm_end, 0x6000);
 	ASSERT_EQ(vma_prev->vm_pgoff, 0);
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
 	ASSERT_EQ(vma->vm_start, 0x6000);
 	ASSERT_EQ(vma->vm_end, 0x7000);
 	ASSERT_EQ(vma->vm_pgoff, 6);
@@ -1067,13 +1070,13 @@ static bool test_merge_existing(void)
 	vmg_set_range(&vmg, 0x3000, 0x7000, 3, flags);
 	vmg.prev = vma_prev;
 	vmg.middle = vma;
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	ASSERT_EQ(merge_existing(&vmg), vma_prev);
 	ASSERT_EQ(vmg.state, VMA_MERGE_SUCCESS);
 	ASSERT_EQ(vma_prev->vm_start, 0);
 	ASSERT_EQ(vma_prev->vm_end, 0x7000);
 	ASSERT_EQ(vma_prev->vm_pgoff, 0);
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma_prev));
 	ASSERT_EQ(mm.map_count, 1);
 
@@ -1097,13 +1100,13 @@ static bool test_merge_existing(void)
 	vmg_set_range(&vmg, 0x3000, 0x7000, 3, flags);
 	vmg.prev = vma_prev;
 	vmg.middle = vma;
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	ASSERT_EQ(merge_existing(&vmg), vma_prev);
 	ASSERT_EQ(vmg.state, VMA_MERGE_SUCCESS);
 	ASSERT_EQ(vma_prev->vm_start, 0);
 	ASSERT_EQ(vma_prev->vm_end, 0x9000);
 	ASSERT_EQ(vma_prev->vm_pgoff, 0);
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
 	ASSERT_TRUE(vma_write_started(vma_prev));
 	ASSERT_EQ(mm.map_count, 1);
 
@@ -1213,16 +1216,16 @@ static bool test_anon_vma_non_mergeable(void)
 	INIT_LIST_HEAD(&vma_prev->anon_vma_chain);
 	list_add(&dummy_anon_vma_chain1.same_vma, &vma_prev->anon_vma_chain);
 	ASSERT_TRUE(list_is_singular(&vma_prev->anon_vma_chain));
-	vma_prev->anon_vma = &dummy_anon_vma;
-	ASSERT_TRUE(is_mergeable_anon_vma(NULL, vma_prev->anon_vma, vma_prev));
+	vma_set_anon_vma(vma_prev, &dummy_anon_vma);
+	ASSERT_TRUE(is_mergeable_anon_vma(NULL, vma_anon_vma(vma_prev), vma_prev));
 
 	INIT_LIST_HEAD(&vma_next->anon_vma_chain);
 	list_add(&dummy_anon_vma_chain2.same_vma, &vma_next->anon_vma_chain);
 	ASSERT_TRUE(list_is_singular(&vma_next->anon_vma_chain));
-	vma_next->anon_vma = (struct anon_vma *)2;
-	ASSERT_TRUE(is_mergeable_anon_vma(NULL, vma_next->anon_vma, vma_next));
+	vma_set_anon_vma(vma_next, DUMMY_ANON_VMA_VAL_1);
+	ASSERT_TRUE(is_mergeable_anon_vma(NULL, vma_anon_vma(vma_next), vma_next));
 
-	ASSERT_FALSE(is_mergeable_anon_vma(vma_prev->anon_vma, vma_next->anon_vma, NULL));
+	ASSERT_FALSE(is_mergeable_anon_vma(vma_anon_vma(vma_prev), vma_anon_vma(vma_next), NULL));
 
 	vmg_set_range(&vmg, 0x3000, 0x7000, 3, flags);
 	vmg.prev = vma_prev;
@@ -1255,11 +1258,11 @@ static bool test_anon_vma_non_mergeable(void)
 
 	INIT_LIST_HEAD(&vma_prev->anon_vma_chain);
 	list_add(&dummy_anon_vma_chain1.same_vma, &vma_prev->anon_vma_chain);
-	vma_prev->anon_vma = (struct anon_vma *)1;
+	vma_set_anon_vma(vma_prev, DUMMY_ANON_VMA_VAL_1);
 
 	INIT_LIST_HEAD(&vma_next->anon_vma_chain);
 	list_add(&dummy_anon_vma_chain2.same_vma, &vma_next->anon_vma_chain);
-	vma_next->anon_vma = (struct anon_vma *)2;
+	vma_set_anon_vma(vma_next, DUMMY_ANON_VMA_VAL_2);
 
 	vmg_set_range(&vmg, 0x3000, 0x7000, 3, flags);
 	vmg.prev = vma_prev;
@@ -1303,7 +1306,7 @@ static bool test_dup_anon_vma(void)
 	 */
 	vma_prev = alloc_and_link_vma(&mm, 0, 0x3000, 0, flags);
 	vma_next = alloc_and_link_vma(&mm, 0x3000, 0x5000, 3, flags);
-	vma_next->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma_next, &dummy_anon_vma);
 
 	vmg_set_range(&vmg, 0, 0x5000, 0, flags);
 	vmg.middle = vma_prev;
@@ -1312,8 +1315,8 @@ static bool test_dup_anon_vma(void)
 	ASSERT_EQ(expand_existing(&vmg), 0);
 
 	/* Will have been cloned. */
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
-	ASSERT_TRUE(vma_prev->anon_vma->was_cloned);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
+	ASSERT_TRUE(vma_anon_vma(vma_prev)->was_cloned);
 
 	/* Cleanup ready for next run. */
 	cleanup_mm(&mm, &vmi);
@@ -1335,7 +1338,7 @@ static bool test_dup_anon_vma(void)
 	INIT_LIST_HEAD(&vma_next->anon_vma_chain);
 	list_add(&dummy_anon_vma_chain.same_vma, &vma_next->anon_vma_chain);
 
-	vma_next->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma_next, &dummy_anon_vma);
 	vmg_set_range(&vmg, 0x3000, 0x5000, 3, flags);
 	vmg.prev = vma_prev;
 	vmg.middle = vma;
@@ -1346,8 +1349,8 @@ static bool test_dup_anon_vma(void)
 	ASSERT_EQ(vma_prev->vm_start, 0);
 	ASSERT_EQ(vma_prev->vm_end, 0x8000);
 
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
-	ASSERT_TRUE(vma_prev->anon_vma->was_cloned);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
+	ASSERT_TRUE(vma_anon_vma(vma_prev)->was_cloned);
 
 	cleanup_mm(&mm, &vmi);
 
@@ -1364,7 +1367,7 @@ static bool test_dup_anon_vma(void)
 	vma = alloc_and_link_vma(&mm, 0x3000, 0x5000, 3, flags);
 	vma_next = alloc_and_link_vma(&mm, 0x5000, 0x8000, 5, flags);
 
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	vmg_set_range(&vmg, 0x3000, 0x5000, 3, flags);
 	vmg.prev = vma_prev;
 	vmg.middle = vma;
@@ -1375,8 +1378,8 @@ static bool test_dup_anon_vma(void)
 	ASSERT_EQ(vma_prev->vm_start, 0);
 	ASSERT_EQ(vma_prev->vm_end, 0x8000);
 
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
-	ASSERT_TRUE(vma_prev->anon_vma->was_cloned);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
+	ASSERT_TRUE(vma_anon_vma(vma_prev)->was_cloned);
 
 	cleanup_mm(&mm, &vmi);
 
@@ -1392,7 +1395,7 @@ static bool test_dup_anon_vma(void)
 	vma_prev = alloc_and_link_vma(&mm, 0, 0x3000, 0, flags);
 	vma = alloc_and_link_vma(&mm, 0x3000, 0x8000, 3, flags);
 
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	vmg_set_range(&vmg, 0x3000, 0x5000, 3, flags);
 	vmg.prev = vma_prev;
 	vmg.middle = vma;
@@ -1403,8 +1406,8 @@ static bool test_dup_anon_vma(void)
 	ASSERT_EQ(vma_prev->vm_start, 0);
 	ASSERT_EQ(vma_prev->vm_end, 0x5000);
 
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
-	ASSERT_TRUE(vma_prev->anon_vma->was_cloned);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
+	ASSERT_TRUE(vma_anon_vma(vma_prev)->was_cloned);
 
 	cleanup_mm(&mm, &vmi);
 
@@ -1420,7 +1423,7 @@ static bool test_dup_anon_vma(void)
 	vma = alloc_and_link_vma(&mm, 0, 0x5000, 0, flags);
 	vma_next = alloc_and_link_vma(&mm, 0x5000, 0x8000, 5, flags);
 
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 	vmg_set_range(&vmg, 0x3000, 0x5000, 3, flags);
 	vmg.prev = vma;
 	vmg.middle = vma;
@@ -1431,8 +1434,8 @@ static bool test_dup_anon_vma(void)
 	ASSERT_EQ(vma_next->vm_start, 0x3000);
 	ASSERT_EQ(vma_next->vm_end, 0x8000);
 
-	ASSERT_EQ(vma_next->anon_vma, &dummy_anon_vma);
-	ASSERT_TRUE(vma_next->anon_vma->was_cloned);
+	ASSERT_EQ(vma_anon_vma(vma_next), &dummy_anon_vma);
+	ASSERT_TRUE(vma_anon_vma(vma_next)->was_cloned);
 
 	cleanup_mm(&mm, &vmi);
 	return true;
@@ -1457,7 +1460,7 @@ static bool test_vmi_prealloc_fail(void)
 
 	vma_prev = alloc_and_link_vma(&mm, 0, 0x3000, 0, flags);
 	vma = alloc_and_link_vma(&mm, 0x3000, 0x5000, 3, flags);
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 
 	vmg_set_range(&vmg, 0x3000, 0x5000, 3, flags);
 	vmg.prev = vma_prev;
@@ -1469,7 +1472,7 @@ static bool test_vmi_prealloc_fail(void)
 	ASSERT_EQ(merge_existing(&vmg), NULL);
 	ASSERT_EQ(vmg.state, VMA_MERGE_ERROR_NOMEM);
 	/* We will already have assigned the anon_vma. */
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
 	/* And it was both cloned and unlinked. */
 	ASSERT_TRUE(dummy_anon_vma.was_cloned);
 	ASSERT_TRUE(dummy_anon_vma.was_unlinked);
@@ -1484,7 +1487,7 @@ static bool test_vmi_prealloc_fail(void)
 
 	vma_prev = alloc_and_link_vma(&mm, 0, 0x3000, 0, flags);
 	vma = alloc_and_link_vma(&mm, 0x3000, 0x5000, 3, flags);
-	vma->anon_vma = &dummy_anon_vma;
+	vma_set_anon_vma(vma, &dummy_anon_vma);
 
 	vmg_set_range(&vmg, 0, 0x5000, 3, flags);
 	vmg.middle = vma_prev;
@@ -1494,7 +1497,7 @@ static bool test_vmi_prealloc_fail(void)
 	ASSERT_EQ(expand_existing(&vmg), -ENOMEM);
 	ASSERT_EQ(vmg.state, VMA_MERGE_ERROR_NOMEM);
 
-	ASSERT_EQ(vma_prev->anon_vma, &dummy_anon_vma);
+	ASSERT_EQ(vma_anon_vma(vma_prev), &dummy_anon_vma);
 	ASSERT_TRUE(dummy_anon_vma.was_cloned);
 	ASSERT_TRUE(dummy_anon_vma.was_unlinked);
 

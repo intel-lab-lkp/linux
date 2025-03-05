@@ -943,7 +943,7 @@ static int hugepage_vma_revalidate(struct mm_struct *mm, unsigned long address,
 	 * thp_vma_allowable_order may return true for qualified file
 	 * vmas.
 	 */
-	if (expect_anon && (!(*vmap)->anon_vma || !vma_is_anonymous(*vmap)))
+	if (expect_anon && (!vma_anon_vma(*vmap) || !vma_is_anonymous(*vmap)))
 		return SCAN_PAGE_ANON;
 	return SCAN_SUCCEED;
 }
@@ -1173,7 +1173,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 		goto out_up_write;
 
 	vma_start_write(vma);
-	anon_vma_lock_write(vma->anon_vma);
+	anon_vma_lock_write(vma_anon_vma(vma));
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm, address,
 				address + HPAGE_PMD_SIZE);
@@ -1214,7 +1214,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 		 */
 		pmd_populate(mm, pmd, pmd_pgtable(_pmd));
 		spin_unlock(pmd_ptl);
-		anon_vma_unlock_write(vma->anon_vma);
+		anon_vma_unlock_write(vma_anon_vma(vma));
 		goto out_up_write;
 	}
 
@@ -1222,7 +1222,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	 * All pages are isolated and locked so anon_vma rmap
 	 * can't run anymore.
 	 */
-	anon_vma_unlock_write(vma->anon_vma);
+	anon_vma_unlock_write(vma_anon_vma(vma));
 
 	result = __collapse_huge_page_copy(pte, folio, pmd, _pmd,
 					   vma, address, pte_ptl,
@@ -1730,7 +1730,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		 * got written to. These VMAs are likely not worth removing
 		 * page tables from, as PMD-mapping is likely to be split later.
 		 */
-		if (READ_ONCE(vma->anon_vma))
+		if (vma_maybe_has_pagetables(vma))
 			continue;
 
 		addr = vma->vm_start + ((pgoff - vma->vm_pgoff) << PAGE_SHIFT);
@@ -1786,7 +1786,7 @@ static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 		 * repeating the anon_vma check protects from one category,
 		 * and repeating the userfaultfd_wp() check from another.
 		 */
-		if (likely(!vma->anon_vma && !userfaultfd_wp(vma))) {
+		if (likely(!vma_maybe_has_pagetables(vma) && !userfaultfd_wp(vma))) {
 			pgt_pmd = pmdp_collapse_flush(vma, addr, pmd);
 			pmdp_get_lockless_sync();
 			success = true;

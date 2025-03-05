@@ -187,7 +187,7 @@ EXPORT_SYMBOL(dump_page);
 void dump_vma(const struct vm_area_struct *vma)
 {
 	pr_emerg("vma %px start %px end %px mm %px\n"
-		"prot %lx anon_vma %px vm_ops %px\n"
+		"prot %lx anon_vma %px (flags %u) vm_ops %px\n"
 		"pgoff %lx file %px private_data %px\n"
 #ifdef CONFIG_PER_VMA_LOCK
 		"refcnt %x\n"
@@ -195,8 +195,8 @@ void dump_vma(const struct vm_area_struct *vma)
 		"flags: %#lx(%pGv)\n",
 		vma, (void *)vma->vm_start, (void *)vma->vm_end, vma->vm_mm,
 		(unsigned long)pgprot_val(vma->vm_page_prot),
-		vma->anon_vma, vma->vm_ops, vma->vm_pgoff,
-		vma->vm_file, vma->vm_private_data,
+		vma_anon_vma(vma), vma_anon_vma_flags(vma), vma->vm_ops,
+		vma->vm_pgoff, vma->vm_file, vma->vm_private_data,
 #ifdef CONFIG_PER_VMA_LOCK
 		refcount_read(&vma->vm_refcnt),
 #endif

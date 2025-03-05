@@ -159,7 +159,7 @@ int anon_vma_fork(struct vm_area_struct *, struct vm_area_struct *);
 
 static inline int anon_vma_prepare(struct vm_area_struct *vma)
 {
-	if (likely(vma->anon_vma))
+	if (likely(vma_anon_vma(vma)))
 		return 0;
 
 	return __anon_vma_prepare(vma);
@@ -168,7 +168,7 @@ static inline int anon_vma_prepare(struct vm_area_struct *vma)
 static inline void anon_vma_merge(struct vm_area_struct *vma,
 				  struct vm_area_struct *next)
 {
-	VM_BUG_ON_VMA(vma->anon_vma != next->anon_vma, vma);
+	VM_BUG_ON_VMA(vma_anon_vma(vma) != vma_anon_vma(next), vma);
 	unlink_anon_vmas(next);
 }
 

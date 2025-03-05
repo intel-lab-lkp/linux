@@ -1115,7 +1115,7 @@ static unsigned long vma_dump_size(struct vm_area_struct *vma,
 	}
 
 	/* Dump segments that have been written to.  */
-	if ((!IS_ENABLED(CONFIG_MMU) || vma->anon_vma) && FILTER(ANON_PRIVATE))
+	if ((!IS_ENABLED(CONFIG_MMU) || vma_anon_vma(vma)) && FILTER(ANON_PRIVATE))
 		goto whole;
 	if (vma->vm_file == NULL)
 		return 0;

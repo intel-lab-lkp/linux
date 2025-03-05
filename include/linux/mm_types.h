@@ -823,7 +823,8 @@ struct vm_area_struct {
 	 */
 	struct list_head anon_vma_chain; /* Serialized by mmap_lock &
 					  * page_table_lock */
-	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
+	/* Contains flags combined with pointer to anon_vma. Use accessor. */
+	unsigned long anon_vma;	/* Serialized by page_table_lock */
 
 	/* Function pointers to deal with this struct. */
 	const struct vm_operations_struct *vm_ops;
@@ -872,6 +873,70 @@ struct vm_area_struct {
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
 } __randomize_layout;
+
+/*
+ * We utilise the fact that the anon_vma will be at least system word aligned
+ * to reclaim bits for flags.
+ */
+#define ANON_VMA_UNFAULTED	1 /* anon_vma set, but not faulted in yet. */
+#define NUM_ANON_VMA_FLAGS	1
+#define ANON_VMA_FLAG_MASK	((1UL << NUM_ANON_VMA_FLAGS) - 1)
+
+/*
+ * The below functions assume the caller has obtained the appropriate locks
+ * before calling, See process address documentation for details.
+ */
+
+/* Extract anon_vma from vma if it has been set. */
+static inline struct anon_vma *vma_anon_vma(const struct vm_area_struct *vma)
+{
+	unsigned long val = READ_ONCE(vma->anon_vma);
+
+	return (struct anon_vma *)(val & ~ANON_VMA_FLAG_MASK);
+}
+
+/* Retrieve any flags encoded in the vma->anon_vma field. */
+static inline unsigned int vma_anon_vma_flags(const struct vm_area_struct *vma)
+{
+	unsigned long val = READ_ONCE(vma->anon_vma);
+
+	return (unsigned int)(val & ANON_VMA_FLAG_MASK);
+}
+
+/* Set the anon_vma field, clearing any anon_vma flags. */
+static inline void vma_set_anon_vma(struct vm_area_struct *vma,
+		struct anon_vma *anon_vma)
+{
+	WRITE_ONCE(vma->anon_vma, (unsigned long)anon_vma);
+}
+
+/* Clear the existing anon_vma and any anon_vma flags. */
+static inline void vma_clear_anon_vma(struct vm_area_struct *vma)
+{
+	WRITE_ONCE(vma->anon_vma, 0);
+}
+
+/* Duplicate anon_vma from src to dst, retaining flags. */
+static inline void vma_dup_anon_vma(struct vm_area_struct *dst,
+		const struct vm_area_struct *src)
+{
+	WRITE_ONCE(dst->anon_vma, READ_ONCE(src->anon_vma));
+}
+
+/*
+ * Does the VMA have an anon_vma or any anon_vma flags set, implying it perhaps
+ * has pagetables to propagate?
+ */
+static inline bool vma_maybe_has_pagetables(struct vm_area_struct *vma)
+{
+	return READ_ONCE(vma->anon_vma);
+}
+
+/*
+ * Assign the VMA's anon_vma but do not set up the anon_vma itself. This is
+ * useful for cases where we want to ensure behaviour that would otherwise
+ */
+void vma_set_anon_vma_unfaulted(struct vm_area_struct *vma);
 
 #ifdef CONFIG_NUMA
 #define vma_policy(vma) ((vma)->vm_policy)

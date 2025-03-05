@@ -209,8 +209,8 @@ int __anon_vma_prepare(struct vm_area_struct *vma)
 	anon_vma_lock_write(anon_vma);
 	/* page_table_lock to protect against threads */
 	spin_lock(&mm->page_table_lock);
-	if (likely(!vma->anon_vma)) {
-		vma->anon_vma = anon_vma;
+	if (likely(!vma_anon_vma(vma))) {
+		vma_set_anon_vma(vma, anon_vma);
 		anon_vma_chain_link(vma, avc, anon_vma);
 		anon_vma->num_active_vmas++;
 		allocated = NULL;
@@ -304,13 +304,13 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 		 * Root anon_vma is never reused:
 		 * it has self-parent reference and at least one child.
 		 */
-		if (!dst->anon_vma && src->anon_vma &&
+		if (!vma_anon_vma(dst) && vma_anon_vma(src) &&
 		    anon_vma->num_children < 2 &&
 		    anon_vma->num_active_vmas == 0)
-			dst->anon_vma = anon_vma;
+			vma_set_anon_vma(dst, anon_vma);
 	}
-	if (dst->anon_vma)
-		dst->anon_vma->num_active_vmas++;
+	if (vma_anon_vma(dst))
+		vma_anon_vma(dst)->num_active_vmas++;
 	unlock_anon_vma_root(root);
 	return 0;
 
@@ -321,7 +321,7 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	 * We can safely do this because callers of anon_vma_clone() don't care
 	 * about dst->anon_vma if anon_vma_clone() failed.
 	 */
-	dst->anon_vma = NULL;
+	vma_clear_anon_vma(dst);
 	unlink_anon_vmas(dst);
 	return -ENOMEM;
 }
@@ -338,11 +338,11 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	int error;
 
 	/* Don't bother if the parent process has no anon_vma here. */
-	if (!pvma->anon_vma)
+	if (!vma_anon_vma(pvma))
 		return 0;
 
 	/* Drop inherited anon_vma, we'll reuse existing or allocate new. */
-	vma->anon_vma = NULL;
+	vma_clear_anon_vma(vma);
 
 	/*
 	 * First, attach the new VMA to the parent VMA's anon_vmas,
@@ -353,7 +353,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 		return error;
 
 	/* An existing anon_vma has been reused, all done then. */
-	if (vma->anon_vma)
+	if (vma_anon_vma(vma))
 		return 0;
 
 	/* Then add our own anon_vma. */
@@ -369,8 +369,8 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	 * The root anon_vma's rwsem is the lock actually used when we
 	 * lock any of the anon_vmas in this anon_vma tree.
 	 */
-	anon_vma->root = pvma->anon_vma->root;
-	anon_vma->parent = pvma->anon_vma;
+	anon_vma->root = vma_anon_vma(pvma)->root;
+	anon_vma->parent = vma_anon_vma(pvma);
 	/*
 	 * With refcounts, an anon_vma can stay around longer than the
 	 * process it belongs to. The root anon_vma needs to be pinned until
@@ -378,7 +378,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	 */
 	get_anon_vma(anon_vma->root);
 	/* Mark this anon_vma as the one where our new (COWed) pages go. */
-	vma->anon_vma = anon_vma;
+	vma_set_anon_vma(vma, anon_vma);
 	anon_vma_lock_write(anon_vma);
 	anon_vma_chain_link(vma, avc, anon_vma);
 	anon_vma->parent->num_children++;
@@ -420,14 +420,14 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 		list_del(&avc->same_vma);
 		anon_vma_chain_free(avc);
 	}
-	if (vma->anon_vma) {
-		vma->anon_vma->num_active_vmas--;
+	if (vma_anon_vma(vma)) {
+		vma_anon_vma(vma)->num_active_vmas--;
 
 		/*
 		 * vma would still be needed after unlink, and anon_vma will be prepared
 		 * when handle fault.
 		 */
-		vma->anon_vma = NULL;
+		vma_clear_anon_vma(vma);
 	}
 	unlock_anon_vma_root(root);
 
@@ -794,8 +794,8 @@ unsigned long page_address_in_vma(const struct folio *folio,
 		 * Note: swapoff's unuse_vma() is more efficient with this
 		 * check, and needs it to match anon_vma when KSM is active.
 		 */
-		if (!vma->anon_vma || !page__anon_vma ||
-		    vma->anon_vma->root != page__anon_vma->root)
+		if (!vma_anon_vma(vma) || !page__anon_vma ||
+		    vma_anon_vma(vma)->root != page__anon_vma->root)
 			return -EFAULT;
 	} else if (!vma->vm_file) {
 		return -EFAULT;
@@ -1329,7 +1329,7 @@ static __always_inline unsigned int __folio_add_rmap(struct folio *folio,
  */
 void folio_move_anon_rmap(struct folio *folio, struct vm_area_struct *vma)
 {
-	void *anon_vma = vma->anon_vma;
+	void *anon_vma = vma_anon_vma(vma);
 
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_VMA(!anon_vma, vma);
@@ -1353,7 +1353,7 @@ void folio_move_anon_rmap(struct folio *folio, struct vm_area_struct *vma)
 static void __folio_set_anon(struct folio *folio, struct vm_area_struct *vma,
 			     unsigned long address, bool exclusive)
 {
-	struct anon_vma *anon_vma = vma->anon_vma;
+	struct anon_vma *anon_vma = vma_anon_vma(vma);
 
 	BUG_ON(!anon_vma);
 
@@ -1397,7 +1397,7 @@ static void __page_check_anon_rmap(const struct folio *folio,
 	 * are initially only visible via the pagetables, and the pte is locked
 	 * over the call to folio_add_new_anon_rmap.
 	 */
-	VM_BUG_ON_FOLIO(folio_anon_vma(folio)->root != vma->anon_vma->root,
+	VM_BUG_ON_FOLIO(folio_anon_vma(folio)->root != vma_anon_vma(vma)->root,
 			folio);
 	VM_BUG_ON_PAGE(page_pgoff(folio, page) != linear_page_index(vma, address),
 		       page);

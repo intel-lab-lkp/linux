@@ -706,7 +706,7 @@ static struct vm_area_struct *find_mergeable_vma(struct mm_struct *mm,
 	if (ksm_test_exit(mm))
 		return NULL;
 	vma = vma_lookup(mm, addr);
-	if (!vma || !(vma->vm_flags & VM_MERGEABLE) || !vma->anon_vma)
+	if (!vma || !(vma->vm_flags & VM_MERGEABLE) || !vma_anon_vma(vma))
 		return NULL;
 	return vma;
 }
@@ -1191,7 +1191,7 @@ static int unmerge_and_remove_all_rmap_items(void)
 			goto mm_exiting;
 
 		for_each_vma(vmi, vma) {
-			if (!(vma->vm_flags & VM_MERGEABLE) || !vma->anon_vma)
+			if (!(vma->vm_flags & VM_MERGEABLE) || !vma_anon_vma(vma))
 				continue;
 			err = unmerge_ksm_pages(vma,
 						vma->vm_start, vma->vm_end, false);
@@ -1570,8 +1570,8 @@ static int try_to_merge_with_ksm_page(struct ksm_rmap_item *rmap_item,
 	remove_rmap_item_from_tree(rmap_item);
 
 	/* Must get reference to anon_vma while still holding mmap_lock */
-	rmap_item->anon_vma = vma->anon_vma;
-	get_anon_vma(vma->anon_vma);
+	rmap_item->anon_vma = vma_anon_vma(vma);
+	get_anon_vma(vma_anon_vma(vma));
 out:
 	mmap_read_unlock(mm);
 	trace_ksm_merge_with_ksm_page(kpage, page_to_pfn(kpage ? kpage : page),
@@ -2537,7 +2537,7 @@ next_mm:
 			continue;
 		if (ksm_scan.address < vma->vm_start)
 			ksm_scan.address = vma->vm_start;
-		if (!vma->anon_vma)
+		if (!vma_anon_vma(vma))
 			ksm_scan.address = vma->vm_end;
 
 		while (ksm_scan.address < vma->vm_end) {
@@ -2714,7 +2714,7 @@ static int __ksm_del_vma(struct vm_area_struct *vma)
 	if (!(vma->vm_flags & VM_MERGEABLE))
 		return 0;
 
-	if (vma->anon_vma) {
+	if (vma_anon_vma(vma)) {
 		err = unmerge_ksm_pages(vma, vma->vm_start, vma->vm_end, true);
 		if (err)
 			return err;
@@ -2852,7 +2852,7 @@ int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
 		if (!(*vm_flags & VM_MERGEABLE))
 			return 0;		/* just ignore the advice */
 
-		if (vma->anon_vma) {
+		if (vma_anon_vma(vma)) {
 			err = unmerge_ksm_pages(vma, start, end, true);
 			if (err)
 				return err;
@@ -2969,7 +2969,7 @@ struct folio *ksm_might_need_to_copy(struct folio *folio,
 	} else if (!anon_vma) {
 		return folio;		/* no need to copy it */
 	} else if (folio->index == linear_page_index(vma, addr) &&
-			anon_vma->root == vma->anon_vma->root) {
+			anon_vma->root == vma_anon_vma(vma)->root) {
 		return folio;		/* still no need to copy it */
 	}
 	if (PageHWPoison(page))

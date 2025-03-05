@@ -456,7 +456,7 @@ static void vm_area_init_from(const struct vm_area_struct *src,
 	dest->vm_ops = src->vm_ops;
 	dest->vm_start = src->vm_start;
 	dest->vm_end = src->vm_end;
-	dest->anon_vma = src->anon_vma;
+	vma_dup_anon_vma(dest, src);
 	dest->vm_pgoff = src->vm_pgoff;
 	dest->vm_file = src->vm_file;
 	dest->vm_private_data = src->vm_private_data;
@@ -683,7 +683,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 			 * Don't prepare anon_vma until fault since we don't
 			 * copy page for current vma.
 			 */
-			tmp->anon_vma = NULL;
+			vma_clear_anon_vma(tmp);
 		} else if (anon_vma_fork(tmp, mpnt))
 			goto fail_nomem_anon_vma_fork;
 		vm_flags_clear(tmp, VM_LOCKED_MASK);

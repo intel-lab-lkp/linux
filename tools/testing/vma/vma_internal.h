@@ -135,6 +135,14 @@ typedef __bitwise unsigned int vm_fault_t;
  */
 #define pr_warn_once pr_err
 
+/*
+ * We utilise the fact that the anon_vma will be at least system word aligned
+ * to reclaim bits for flags.
+ */
+#define ANON_VMA_UNFAULTED	1 /* anon_vma set, but not faulted in yet. */
+#define NUM_ANON_VMA_FLAGS	1
+#define ANON_VMA_FLAG_MASK	((1UL << NUM_ANON_VMA_FLAGS) - 1)
+
 struct kref {
 	refcount_t refcount;
 };
@@ -227,6 +235,8 @@ struct mm_struct {
 	unsigned long def_flags;
 
 	unsigned long flags; /* Must use atomic bitops to access */
+
+	spinlock_t page_table_lock;
 };
 
 struct file {
@@ -287,7 +297,8 @@ struct vm_area_struct {
 	 */
 	struct list_head anon_vma_chain; /* Serialized by mmap_lock &
 					  * page_table_lock */
-	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
+	/* Contains flags combined with pointer to anon_vma. Use accessor. */
+	unsigned long anon_vma;	/* Serialized by page_table_lock */
 
 	/* Function pointers to deal with this struct. */
 	const struct vm_operations_struct *vm_ops;
@@ -420,6 +431,59 @@ struct vm_unmapped_area_info {
 	unsigned long align_offset;
 	unsigned long start_gap;
 };
+
+
+/*
+ * The below functions assume the caller has obtained the appropriate locks
+ * before calling, See process address documentation for details.
+ */
+
+/* Extract anon_vma from vma if it has been set. */
+static inline struct anon_vma *vma_anon_vma(const struct vm_area_struct *vma)
+{
+	unsigned long val = READ_ONCE(vma->anon_vma);
+
+	return (struct anon_vma *)(val & ~ANON_VMA_FLAG_MASK);
+}
+
+/* Retrieve any flags encoded in the vma->anon_vma field. */
+static inline unsigned int vma_anon_vma_flags(const struct vm_area_struct *vma)
+{
+	unsigned long val = READ_ONCE(vma->anon_vma);
+
+	return (unsigned int)(val & ANON_VMA_FLAG_MASK);
+}
+
+/* Set the anon_vma field, clearing any anon_vma flags. */
+static inline void vma_set_anon_vma(struct vm_area_struct *vma,
+		struct anon_vma *anon_vma)
+{
+	WRITE_ONCE(vma->anon_vma, (unsigned long)anon_vma);
+}
+
+/* Clear the existing anon_vma and any anon_vma flags. */
+static inline void vma_clear_anon_vma(struct vm_area_struct *vma)
+{
+	WRITE_ONCE(vma->anon_vma, 0);
+}
+
+/* Duplicate anon_vma from src to dst, retaining flags. */
+static inline void vma_dup_anon_vma(struct vm_area_struct *dst,
+		const struct vm_area_struct *src)
+{
+	WRITE_ONCE(dst->anon_vma, READ_ONCE(src->anon_vma));
+}
+
+/* Does the VMA have an anon_vma or any anon_vma flags set? */
+static inline bool vma_anon_vma_empty(struct vm_area_struct *vma)
+{
+	unsigned long val = READ_ONCE(vma->anon_vma);
+
+	if (val)
+		return false;
+
+	return true;
+}
 
 static inline void vma_iter_invalidate(struct vma_iterator *vmi)
 {
@@ -768,9 +832,9 @@ static inline int vma_dup_policy(struct vm_area_struct *, struct vm_area_struct 
 static inline int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 {
 	/* For testing purposes. We indicate that an anon_vma has been cloned. */
-	if (src->anon_vma != NULL) {
-		dst->anon_vma = src->anon_vma;
-		dst->anon_vma->was_cloned = true;
+	if (vma_anon_vma(src) != NULL) {
+		vma_dup_anon_vma(dst, src);
+		vma_anon_vma(dst)->was_cloned = true;
 	}
 
 	return 0;
@@ -859,7 +923,7 @@ static inline void vma_assert_write_locked(struct vm_area_struct *)
 static inline void unlink_anon_vmas(struct vm_area_struct *vma)
 {
 	/* For testing purposes, indicate that the anon_vma was unlinked. */
-	vma->anon_vma->was_unlinked = true;
+	vma_anon_vma(vma)->was_unlinked = true;
 }
 
 static inline void anon_vma_unlock_write(struct anon_vma *)
@@ -1161,14 +1225,14 @@ static inline int __anon_vma_prepare(struct vm_area_struct *vma)
 		return -ENOMEM;
 
 	anon_vma->root = anon_vma;
-	vma->anon_vma = anon_vma;
+	vma_set_anon_vma(vma, anon_vma);
 
 	return 0;
 }
 
 static inline int anon_vma_prepare(struct vm_area_struct *vma)
 {
-	if (likely(vma->anon_vma))
+	if (likely(vma_anon_vma(vma)))
 		return 0;
 
 	return __anon_vma_prepare(vma);

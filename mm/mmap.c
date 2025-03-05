@@ -1350,7 +1350,7 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 	 * Similarly in do_mmap and in do_brk_flags.
 	 */
 	if (vma_is_anonymous(vma)) {
-		BUG_ON(vma->anon_vma);
+		BUG_ON(vma_anon_vma(vma));
 		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
 	}
 

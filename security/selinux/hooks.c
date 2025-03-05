@@ -3869,7 +3869,7 @@ static int selinux_file_mprotect(struct vm_area_struct *vma,
 			    vma_is_stack_for_current(vma))) {
 			rc = avc_has_perm(sid, sid, SECCLASS_PROCESS,
 					  PROCESS__EXECSTACK, NULL);
-		} else if (vma->vm_file && vma->anon_vma) {
+		} else if (vma->vm_file && vma_anon_vma(vma)) {
 			/*
 			 * We are making executable a file mapping that has
 			 * had some COW done. Since pages might have been
