@@ -906,6 +906,14 @@ enum drm_colorop_type {
 	DRM_COLOROP_CTM_3X4,
 
 	/**
+	 * @DRM_COLOROP_CTM_3X3:
+	 *
+	 * A 3x3 matrix. Its values are specified via the
+	 * &drm_color_ctm struct provided via the DATA property.
+	 */
+	DRM_COLOROP_CTM_3X3,
+
+	/**
 	 * @DRM_COLOROP_MULTIPLIER:
 	 *
 	 * A simple multiplier, applied to all color values. The

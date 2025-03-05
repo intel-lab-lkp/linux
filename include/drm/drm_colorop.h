@@ -156,6 +156,14 @@ struct drm_colorop_state {
 	 * |G| = |4  5  6  7 | x | G |
 	 * |B|   |8  9  10 12|   | B |
 	 *
+	 * For 3x3 matrix (DRM_COLOROP_CTM_3X3), the blob is of type struct drm_color_ctm
+	 * which represents the Conversion matrix in S31.32 sign-magnitude
+	 * (not two's complement!) format.
+	 * out   matrix    in
+	 * |R|   |0 1 2|   |R|
+	 * |G| = |3 4 5| x |G|
+	 * |B|   |6 7 8|   |B|
+	 *
 	 * For 3D LUTs (DRM_COLOROP_3D_LUT), the blob is a 3D array of
 	 * struct drm_color_lut with dimension length of "lut_size".
 	 * The LUT elements are traversed like so:
@@ -376,6 +384,8 @@ int drm_colorop_curve_1d_lut_init(struct drm_device *dev, struct drm_colorop *co
 				  struct drm_plane *plane, uint32_t lut_size,
 				  enum drm_colorop_lut1d_interpolation_type lut1d_interpolation,
 				  bool allow_bypass);
+int drm_colorop_ctm_3x3_init(struct drm_device *dev, struct drm_colorop *colorop,
+			     struct drm_plane *plane, bool allow_bypass);
 int drm_colorop_ctm_3x4_init(struct drm_device *dev, struct drm_colorop *colorop,
 			     struct drm_plane *plane, bool allow_bypass);
 int drm_colorop_mult_init(struct drm_device *dev, struct drm_colorop *colorop,

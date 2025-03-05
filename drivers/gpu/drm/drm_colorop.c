@@ -363,6 +363,35 @@ int drm_colorop_ctm_3x4_init(struct drm_device *dev, struct drm_colorop *colorop
 EXPORT_SYMBOL(drm_colorop_ctm_3x4_init);
 
 /**
+ * drm_colorop_ctm_3x3_init - Initialize a DRM_COLOROP_CTM_3X3
+ *
+ * @dev: DRM device
+ * @colorop: The drm_colorop object to initialize
+ * @plane: The associated drm_plane
+ * @allow_bypass: true if BYPASS property should be created, false if bypass of
+ *                this colorop is not possible
+ * @return zero on success, -E value on failure
+ */
+int drm_colorop_ctm_3x3_init(struct drm_device *dev, struct drm_colorop *colorop,
+			     struct drm_plane *plane, bool allow_bypass)
+{
+	int ret;
+
+	ret = drm_colorop_init(dev, colorop, plane, DRM_COLOROP_CTM_3X3, allow_bypass);
+	if (ret)
+		return ret;
+
+	ret = drm_colorop_create_data_prop(dev, colorop);
+	if (ret)
+		return ret;
+
+	drm_colorop_reset(colorop);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_colorop_ctm_3x3_init);
+
+/**
  * drm_colorop_mult_init - Initialize a DRM_COLOROP_MULTIPLIER
  *
  * @dev: DRM device
