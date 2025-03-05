@@ -184,6 +184,8 @@ struct drm_i915_private {
 	/* FIXME: Device release actions should all be moved to drmm_ */
 	bool do_release;
 
+	bool do_unregister;
+
 	/* i915 device parameters */
 	struct i915_params params;
 

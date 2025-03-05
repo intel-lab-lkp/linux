@@ -638,6 +638,8 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
 		return;
 	}
 
+	dev_priv->do_unregister = true;
+
 	i915_debugfs_register(dev_priv);
 	i915_setup_sysfs(dev_priv);
 
@@ -673,7 +675,8 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 	i915_switcheroo_unregister(dev_priv);
 
 	intel_runtime_pm_disable(&dev_priv->runtime_pm);
-	intel_power_domains_disable(display);
+	if (dev_priv->do_unregister)
+		intel_power_domains_disable(display);
 
 	intel_display_driver_unregister(display);
 
@@ -687,7 +690,8 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 	i915_perf_unregister(dev_priv);
 	i915_pmu_unregister(dev_priv);
 
-	i915_teardown_sysfs(dev_priv);
+	if (dev_priv->do_unregister)
+		i915_teardown_sysfs(dev_priv);
 	drm_dev_unplug(&dev_priv->drm);
 
 	i915_gem_driver_unregister(dev_priv);
