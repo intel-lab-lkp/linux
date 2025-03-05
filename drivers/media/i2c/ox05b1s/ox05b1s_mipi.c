@@ -40,6 +40,7 @@ struct ox05b1s_sizes {
 	const struct v4l2_area *sizes;
 };
 
+struct ox05b1s;
 struct ox05b1s_plat_data {
 	char				name[20];
 	u32				chip_id;
@@ -52,6 +53,9 @@ struct ox05b1s_plat_data {
 	const struct ox05b1s_mode	*supported_modes;
 	u32				default_mode_index;
 	const struct ox05b1s_sizes	*supported_codes;
+	const char * const		*hdr_modes;
+	u32				hdr_modes_count;
+	int (*set_hdr_mode)(struct ox05b1s *sensor, u32 hdr_mode);
 };
 
 struct ox05b1s_ctrls {
@@ -62,6 +66,7 @@ struct ox05b1s_ctrls {
 	struct v4l2_ctrl *vblank;
 	struct v4l2_ctrl *gain;
 	struct v4l2_ctrl *exposure;
+	struct v4l2_ctrl *hdr_mode;
 };
 
 struct ox05b1s_mode {
@@ -100,6 +105,87 @@ struct ox05b1s {
 	struct mutex lock; /* sensor lock */
 	u32 stream_status;
 	struct ox05b1s_ctrls ctrls;
+};
+
+#define OS08A20_PIXEL_RATE_144M	144000000
+#define OS08A20_PIXEL_RATE_288M	288000000
+static const struct ox05b1s_mode os08a20_supported_modes[] = {
+	{
+		/* 1080p BGGR10, no hdr, 60fps */
+		.index		= 0,
+		.width		= 1920,
+		.height		= 1080,
+		.code		= MEDIA_BUS_FMT_Y10_1X10,
+		.bpp		= 10,
+		.vts		= 0x4d3,
+		.hts		= 0x790,
+		.exp		= 0x4d3 - 8,
+		.h_bin		= true,
+		.pixel_rate	= OS08A20_PIXEL_RATE_144M,
+		.reg_data	= os08a20_reglist_1080p_10b,
+	}, {
+		/* 4k BGGR10, no hdr, 30fps */
+		.index		= 1,
+		.width		= 3840,
+		.height		= 2160,
+		.code		= MEDIA_BUS_FMT_Y10_1X10,
+		.bpp		= 10,
+		.vts		= 0x90a,
+		.hts		= 0x818,
+		.exp		= 0x90a - 8,
+		.h_bin		= false,
+		.pixel_rate	= OS08A20_PIXEL_RATE_288M,
+		.reg_data	= os08a20_reglist_4k_10b,
+	}, {
+		/* 4k BGGR12, no hdr, 30fps */
+		.index		= 2,
+		.width		= 3840,
+		.height		= 2160,
+		.code		= MEDIA_BUS_FMT_Y12_1X12,
+		.bpp		= 12,
+		.vts		= 0x8f0,
+		.hts		= 0x814,
+		.exp		= 0x8f0 - 8,
+		.h_bin		= false,
+		.pixel_rate	= OS08A20_PIXEL_RATE_288M,
+		.reg_data	= os08a20_reglist_4k_12b,
+	}, {
+		/* sentinel */
+	}
+};
+
+/* keep in sync with os08a20_supported_modes */
+static const struct v4l2_area os08a20_sbggr10_sizes[] = {
+	{
+		.width = 1920,
+		.height = 1080,
+	}, {
+		.width = 3840,
+		.height = 2160,
+	}, {
+		/* sentinel */
+	}
+};
+
+static const struct v4l2_area os08a20_sbggr12_sizes[] = {
+	{
+		.width = 3840,
+		.height = 2160,
+	}, {
+		/* sentinel */
+	}
+};
+
+static const struct ox05b1s_sizes os08a20_supported_codes[] = {
+	{
+		.code = MEDIA_BUS_FMT_Y10_1X10,
+		.sizes = os08a20_sbggr10_sizes,
+	}, {
+		.code = MEDIA_BUS_FMT_Y12_1X12,
+		.sizes = os08a20_sbggr12_sizes,
+	}, {
+		/* sentinel */
+	}
 };
 
 #define OX05B1S_PIXEL_RATE_48M	48000000
@@ -231,6 +317,62 @@ static int ox05b1s_write_reg_array(struct ox05b1s *sensor,
 	return 0;
 }
 
+static const char * const os08a20_hdr_modes[] = {
+	"NO HDR", /* No HDR, single exposure */
+	"HDR Staggered", /* Staggered HDR mode, 2 exposures on separate VC */
+};
+
+static const struct ox05b1s_reg os08a20_init_setting_hdr_en[] = {
+	{ 0x3661, BIT(0) }, /* CORE1[0] STG_HDR_ALIGN_EN */
+	{ 0x3821, BIT(5) }, /* FORMAT2[5] STG_HDR_EN */
+	{ 0x4813, BIT(3) }, /* MIPI_CTRL_13[3] */
+	{ 0x486e, BIT(2) }, /* MIPI_CTRL_6E[2] MIPI_VC_ENABLE */
+};
+
+static int os08a20_enable_staggered_hdr(struct ox05b1s *sensor)
+{
+	int ret;
+
+	for (int i = 0; i < ARRAY_SIZE(os08a20_init_setting_hdr_en); i++) {
+		ret = regmap_update_bits(sensor->regmap,
+					 os08a20_init_setting_hdr_en[i].addr,
+					 os08a20_init_setting_hdr_en[i].data,
+					 os08a20_init_setting_hdr_en[i].data);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int os08a20_disable_staggered_hdr(struct ox05b1s *sensor)
+{
+	int ret;
+
+	for (int i = 0; i < ARRAY_SIZE(os08a20_init_setting_hdr_en); i++) {
+		ret = regmap_update_bits(sensor->regmap,
+					 os08a20_init_setting_hdr_en[i].addr,
+					 os08a20_init_setting_hdr_en[i].data,
+					 0);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int os08a20_set_hdr_mode(struct ox05b1s *sensor, u32 hdr_mode)
+{
+	switch (hdr_mode) {
+	case 0:
+		return os08a20_disable_staggered_hdr(sensor);
+	case 1:
+		return os08a20_enable_staggered_hdr(sensor);
+	default:
+		return -EINVAL;
+	}
+}
+
 static inline struct v4l2_subdev *ctrl_to_sd(struct v4l2_ctrl *ctrl)
 {
 	return &container_of(ctrl->handler, struct ox05b1s,
@@ -273,6 +415,12 @@ static int ox05b1s_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_EXPOSURE:
 		ret = cci_write(sensor->regmap, OX05B1S_REG_EXPOSURE,
 				ctrl->val, NULL);
+		break;
+	case V4L2_CID_HDR_SENSOR_MODE:
+		if (sensor->model->set_hdr_mode)
+			ret = sensor->model->set_hdr_mode(sensor, ctrl->val);
+		else
+			ret = -EINVAL;
 		break;
 	default:
 		ret = -EINVAL;
@@ -335,6 +483,13 @@ static int ox05b1s_init_controls(struct ox05b1s *sensor)
 
 	ctrls->gain = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_ANALOGUE_GAIN,
 					0, 0xFFFF, 1, 0x80);
+
+	if (sensor->model->hdr_modes)
+		ctrls->hdr_mode = v4l2_ctrl_new_std_menu_items(hdl, ops, V4L2_CID_HDR_SENSOR_MODE,
+							       sensor->model->hdr_modes_count - 1,
+								0, 0, sensor->model->hdr_modes);
+	else
+		ctrls->hdr_mode = NULL;
 
 	if (hdl->error) {
 		ret = hdl->error;
@@ -658,6 +813,8 @@ static u8 ox05b1s_code2dt(const u32 code)
 	switch (code) {
 	case MEDIA_BUS_FMT_Y10_1X10:
 		return MIPI_CSI2_DT_RAW10;
+	case MEDIA_BUS_FMT_Y12_1X12:
+		return MIPI_CSI2_DT_RAW12;
 	default:
 		return MIPI_CSI2_DT_RAW10;
 	}
@@ -768,6 +925,9 @@ static int ox05b1s_read_chip_id(struct ox05b1s *sensor)
 	}
 
 	switch (chip_id) {
+	case 0x530841:
+		camera_name = "os08a20";
+		break;
 	case 0x580542:
 		camera_name = "ox05b1s";
 		break;
@@ -912,6 +1072,24 @@ static void ox05b1s_remove(struct i2c_client *client)
 static DEFINE_RUNTIME_DEV_PM_OPS(ox05b1s_pm_ops, ox05b1s_runtime_suspend,
 				 ox05b1s_runtime_resume, NULL);
 
+static const struct ox05b1s_plat_data os08a20_data = {
+	.name			= "os08a20",
+	.chip_id		= 0x530841,
+	.native_width		= 3872, /* 16 dummy + 3840 active + 16 dummy */
+	.native_height		= 2192, /* 16 dummy + 2160 active + 16 dummy */
+	.active_top		= 16,
+	.active_left		= 16,
+	.active_width		= 3840,
+	.active_height		= 2160,
+	.supported_modes	= os08a20_supported_modes,
+	.default_mode_index	= 0,
+	.supported_codes	= os08a20_supported_codes,
+	.hdr_modes		= os08a20_hdr_modes,
+	.hdr_modes_count	= ARRAY_SIZE(os08a20_hdr_modes),
+	.set_hdr_mode		= os08a20_set_hdr_mode,
+
+};
+
 static const struct ox05b1s_plat_data ox05b1s_data = {
 	.name			= "ox05b1s",
 	.chip_id		= 0x580542,
@@ -923,10 +1101,17 @@ static const struct ox05b1s_plat_data ox05b1s_data = {
 	.active_height		= 1944,
 	.supported_modes	= ox05b1s_supported_modes,
 	.default_mode_index	= 0,
-	.supported_codes	= ox05b1s_supported_codes
+	.supported_codes	= ox05b1s_supported_codes,
+	.hdr_modes		= NULL,
+	.hdr_modes_count	= 0,
+	.set_hdr_mode		= NULL
 };
 
 static const struct of_device_id ox05b1s_of_match[] = {
+	{
+		.compatible = "ovti,os08a20",
+		.data = &os08a20_data,
+	},
 	{
 		.compatible = "ovti,ox05b1s",
 		.data = &ox05b1s_data,

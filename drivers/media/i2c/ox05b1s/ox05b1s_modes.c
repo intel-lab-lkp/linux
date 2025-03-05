@@ -10,6 +10,116 @@
 #include <media/v4l2-cci.h>
 #include "ox05b1s.h"
 
+#define OS08A20_REG_MIPI_BIT_10_12	CCI_REG8(0x031e)
+/* Analog Control Registers 0x3600-0x3637 */
+#define OS08A20_REG_ANA_CTRL		CCI_REG8(0x3600)
+#define OS08A20_REG_CORE_0		CCI_REG8(0x3660)
+/* Sensor Timing Control Registers 0x3700-0x37ff */
+#define OS08A20_REG_SENSOR_TIMING_CTRL	CCI_REG8(0x3700)
+#define OS08A20_REG_X_ODD_INC		CCI_REG8(0x3814)
+#define OS08A20_REG_Y_ODD_INC		CCI_REG8(0x3816)
+#define OS08A20_REG_FORMAT1		CCI_REG8(0x3820)
+#define OS08A20_REG_FORMAT2		CCI_REG8(0x3821)
+#define OS08A20_REG_PCLK_PERIOD		CCI_REG8(0x4837)
+#define OS08A20_REG_ISP_CTRL_1		CCI_REG8(0x5001)
+#define OS08A20_REG_ISP_CTRL_5		CCI_REG8(0x5005)
+
+/* Common register configuration for Omnivision OS08A20 raw camera */
+static const struct ox05b1s_reg os08a20_init_setting_common[] = {
+	{ OS08A20_REG_ANA_CTRL + 0x05, 0x50 },
+	{ OS08A20_REG_ANA_CTRL + 0x10, 0x39 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x5e, 0x0b },
+	{ OS08A20_REG_ISP_CTRL_1, 0x42 },
+	{ OS08A20_REG_ISP_CTRL_5, 0x00 },
+	{ /* sentinel*/ }
+};
+
+/* Common register configuration for Omnivision OS08A20 10 bit */
+static const struct ox05b1s_reg os08a20_init_setting_10bit[] = {
+	{ OS08A20_REG_MIPI_BIT_10_12, 0x09 },
+	{ OS08A20_REG_ANA_CTRL + 0x09, 0xb5 },
+	{ OS08A20_REG_CORE_0, 0x43 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x06, 0x35 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x0a, 0x00 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x0b, 0x98 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x09, 0x49 },
+	{ /* sentinel*/ }
+};
+
+/* Common register configuration for Omnivision OS08A20 12 bit */
+static const struct ox05b1s_reg os08a20_init_setting_12bit[] = {
+	{ OS08A20_REG_MIPI_BIT_10_12, 0x0a },
+	{ OS08A20_REG_ANA_CTRL + 0x09, 0xdb },
+	{ OS08A20_REG_CORE_0, 0xd3 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x06, 0x6a },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x0a, 0x01 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x0b, 0x30 },
+	{ OS08A20_REG_SENSOR_TIMING_CTRL + 0x09, 0x48 },
+	{ /* sentinel*/ }
+};
+
+/* Mode specific register configurations for Omnivision OS08A20 raw camera */
+
+/* OS08A20 3840 x 2160 @30fps BGGR10 no more HDR */
+static const struct ox05b1s_reg os08a20_init_setting_4k_10b[] = {
+	{ OS08A20_REG_FORMAT2, 0x04 }, /* mirror */
+	{ OS08A20_REG_PCLK_PERIOD, 0x10 },
+	{ /* sentinel*/ }
+};
+
+/* OS08A20 3840 x 2160 @30fps BGGR12 */
+static const struct ox05b1s_reg os08a20_init_setting_4k_12b[] = {
+	{ OS08A20_REG_FORMAT2, 0x04 }, /* mirror */
+	{ OS08A20_REG_PCLK_PERIOD, 0x10 },
+	{ /* sentinel*/ }
+};
+
+/* OS08A20 1920 x 1080 @60fps BGGR10 */
+static const struct ox05b1s_reg os08a20_init_setting_1080p_10b[] = {
+	{ OS08A20_REG_X_ODD_INC, 0x03 },
+	{ OS08A20_REG_Y_ODD_INC, 0x03 },
+	{ OS08A20_REG_FORMAT1, 0x01 }, /* vertical bining */
+	{ OS08A20_REG_FORMAT2, 0x05 }, /* mirror, horizontal bining */
+	{ OS08A20_REG_PCLK_PERIOD, 0x16 },
+	{ /* sentinel*/ }
+};
+
+const struct ox05b1s_reglist os08a20_reglist_4k_10b[] = {
+	{
+		.regs = os08a20_init_setting_common
+	}, {
+		.regs = os08a20_init_setting_10bit
+	}, {
+		.regs = os08a20_init_setting_4k_10b
+	}, {
+		/* sentinel */
+	}
+};
+
+const struct ox05b1s_reglist os08a20_reglist_4k_12b[] = {
+	{
+		.regs = os08a20_init_setting_common
+	}, {
+		.regs = os08a20_init_setting_12bit
+	}, {
+		.regs = os08a20_init_setting_4k_12b
+	}, {
+		/* sentinel */
+	}
+};
+
+const struct ox05b1s_reglist os08a20_reglist_1080p_10b[] = {
+	{
+		.regs = os08a20_init_setting_common
+	}, {
+		.regs = os08a20_init_setting_10bit
+	}, {
+		.regs = os08a20_init_setting_1080p_10b
+	}, {
+		/* sentinel */
+	}
+};
+
 #define OX05B1S_REG_PLL1_CTRL_REG07	CCI_REG8(0x0307)
 #define OX05B1S_REG_PLL3_CTRL_REG4A	CCI_REG8(0x034a)
 #define OX05B1S_REG_PLL_MONITOR_REG0B	CCI_REG8(0x040b)
