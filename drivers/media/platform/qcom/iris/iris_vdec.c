@@ -453,6 +453,8 @@ static int iris_vdec_process_streamon_input(struct iris_inst *inst)
 	if (ret)
 		return ret;
 
+	inst->in_reconfig = false;
+
 	return iris_inst_change_sub_state(inst, 0, set_sub_state);
 }
 
@@ -543,6 +545,8 @@ static int iris_vdec_process_streamon_output(struct iris_inst *inst)
 	ret = iris_inst_state_change_streamon(inst, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
 	if (ret)
 		return ret;
+
+	inst->in_reconfig = false;
 
 	return iris_inst_change_sub_state(inst, clear_sub_state, 0);
 }

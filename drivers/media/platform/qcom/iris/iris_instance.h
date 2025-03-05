@@ -43,6 +43,7 @@
  * @tss: timestamp metadata
  * @metadata_idx: index for metadata buffer
  * @codec: codec type
+ * @in_reconfig: a flag raised by decoder when the stream resolution changes
  */
 
 struct iris_inst {
@@ -74,6 +75,7 @@ struct iris_inst {
 	struct iris_ts_metadata		tss[VIDEO_MAX_FRAME];
 	u32				metadata_idx;
 	u32				codec;
+	bool				in_reconfig;
 };
 
 #endif
