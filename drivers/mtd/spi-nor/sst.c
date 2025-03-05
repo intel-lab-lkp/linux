@@ -5,6 +5,7 @@
  */
 
 #include <linux/mtd/spi-nor.h>
+#include <linux/nvmem-provider.h>
 
 #include "core.h"
 
@@ -12,6 +13,8 @@
 #define SST_WRITE		BIT(0)
 
 #define SST26VF_CR_BPNV		BIT(3)
+
+#define SST26VF_SFDP_EUI48	0x30
 
 static int sst26vf_nor_lock(struct spi_nor *nor, loff_t ofs, u64 len)
 {
@@ -56,8 +59,67 @@ static int sst26vf_nor_late_init(struct spi_nor *nor)
 	return 0;
 }
 
+/**
+ * sst26vf_sfdp_mac_addr_read() - check if the EUI-48 MAC Address is programmed
+ * and read the data from the prestored SFDP data
+ *
+ * @priv: User context passed to read callbacks.
+ * @offset: Offset within the NVMEM device.
+ * @val: pointer where to fill the ethernet address
+ * @bytes: Length of the NVMEM cell
+ *
+ * Return: 0 on success, -EINVAL  otherwise.
+ */
+static int sst26vf_sfdp_mac_addr_read(void *priv, unsigned int off,
+				      void *val, size_t bytes)
+{
+	struct spi_nor *nor = priv;
+	struct sfdp *sfdp = nor->sfdp;
+	loff_t offset = off;
+	size_t sfdp_size;
+
+	/*
+	 * Check if the EUI-48 MAC address is programmed in the next six address
+	 * locations.
+	 * @off is programmed in the DT and stores the start of MAC Address
+	 * byte, (off - 1) stores the bit length of the Extended Unique
+	 * Identifier
+	 */
+	if (SST26VF_SFDP_EUI48 != *((u8 *)sfdp->dwords + (offset - 1)))
+		return -EINVAL;
+
+	sfdp_size = sfdp->num_dwords * sizeof(*sfdp->dwords);
+	memory_read_from_buffer(val, bytes, &offset, sfdp->dwords,
+				sfdp_size);
+	return 0;
+}
+
+static struct nvmem_config sst26vf_sfdp_nvmem_config = {
+	.word_size = 1,
+	.stride = 1,
+};
+
+static int sst26vf_nor_post_sfdp(struct spi_nor *nor)
+{
+	struct nvmem_device *nvmem;
+
+	sst26vf_sfdp_nvmem_config.dev = nor->dev;
+	sst26vf_sfdp_nvmem_config.size = nor->sfdp->num_dwords * sizeof(*nor->sfdp->dwords);
+	sst26vf_sfdp_nvmem_config.priv = nor;
+	sst26vf_sfdp_nvmem_config.reg_read = sst26vf_sfdp_mac_addr_read;
+
+	nvmem = devm_nvmem_register(nor->dev, &sst26vf_sfdp_nvmem_config);
+	if (IS_ERR(nvmem)) {
+		dev_err(nor->dev, "failed to register NVMEM device: %ld\n", PTR_ERR(nvmem));
+		return PTR_ERR(nvmem);
+	}
+
+	return 0;
+}
+
 static const struct spi_nor_fixups sst26vf_nor_fixups = {
 	.late_init = sst26vf_nor_late_init,
+	.post_sfdp = sst26vf_nor_post_sfdp,
 };
 
 static const struct flash_info sst_nor_parts[] = {
