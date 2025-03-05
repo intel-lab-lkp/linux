@@ -29,6 +29,7 @@
 #include <linux/acpi_viot.h>
 #include <linux/pci.h>
 #include <acpi/apei.h>
+#include <acpi/ras2.h>
 #include <linux/suspend.h>
 #include <linux/prmt.h>
 
@@ -1472,6 +1473,8 @@ static int __init acpi_init(void)
 	acpi_debugger_init();
 	acpi_setup_sb_notify_handler();
 	acpi_viot_init();
+	acpi_ras2_init();
+
 	return 0;
 }
 
