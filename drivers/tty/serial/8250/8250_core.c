@@ -777,38 +777,30 @@ int serial8250_register_8250_port(const struct uart_8250_port *up)
 
 		serial8250_set_defaults(uart);
 
+		#define ASSIGN_IF_EXIST(dest, src, member) \
+			do { \
+				if ((src)->member) \
+					(dest)->member = (src)->member; \
+			} while (0)
+
 		/* Possibly override default I/O functions.  */
-		if (up->port.serial_in)
-			uart->port.serial_in = up->port.serial_in;
-		if (up->port.serial_out)
-			uart->port.serial_out = up->port.serial_out;
-		if (up->port.handle_irq)
-			uart->port.handle_irq = up->port.handle_irq;
+		ASSIGN_IF_EXIST(&uart->port, &up->port, serial_in);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, serial_out);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, handle_irq);
 		/*  Possibly override set_termios call */
-		if (up->port.set_termios)
-			uart->port.set_termios = up->port.set_termios;
-		if (up->port.set_ldisc)
-			uart->port.set_ldisc = up->port.set_ldisc;
-		if (up->port.get_mctrl)
-			uart->port.get_mctrl = up->port.get_mctrl;
-		if (up->port.set_mctrl)
-			uart->port.set_mctrl = up->port.set_mctrl;
-		if (up->port.get_divisor)
-			uart->port.get_divisor = up->port.get_divisor;
-		if (up->port.set_divisor)
-			uart->port.set_divisor = up->port.set_divisor;
-		if (up->port.startup)
-			uart->port.startup = up->port.startup;
-		if (up->port.shutdown)
-			uart->port.shutdown = up->port.shutdown;
-		if (up->port.pm)
-			uart->port.pm = up->port.pm;
-		if (up->port.handle_break)
-			uart->port.handle_break = up->port.handle_break;
-		if (up->dl_read)
-			uart->dl_read = up->dl_read;
-		if (up->dl_write)
-			uart->dl_write = up->dl_write;
+		ASSIGN_IF_EXIST(&uart->port, &up->port, set_termios);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, set_ldisc);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, get_mctrl);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, set_mctrl);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, get_divisor);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, set_divisor);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, startup);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, shutdown);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, pm);
+		ASSIGN_IF_EXIST(&uart->port, &up->port, handle_break);
+
+		ASSIGN_IF_EXIST(uart, up, dl_read);
+		ASSIGN_IF_EXIST(uart, up, dl_write);
 
 		if (uart->port.type != PORT_8250_CIR) {
 			if (uart_console_registered(&uart->port))
