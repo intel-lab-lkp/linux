@@ -164,6 +164,8 @@ struct sn65dsi83 {
 	int				irq;
 	struct delayed_work		monitor_work;
 	struct work_struct		reset_work;
+	bool				hsync_disable;
+	bool				vsync_disable;
 };
 
 static const struct regmap_range sn65dsi83_readable_ranges[] = {
@@ -604,10 +606,12 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 	/* 32 + 1 pixel clock to ensure proper operation */
 	le16val = cpu_to_le16(32 + 1);
 	regmap_bulk_write(ctx->regmap, REG_VID_CHA_SYNC_DELAY_LOW, &le16val, 2);
-	le16val = cpu_to_le16(mode->hsync_end - mode->hsync_start);
+	le16val = cpu_to_le16(ctx->hsync_disable ?
+		0 : mode->hsync_end - mode->hsync_start);
 	regmap_bulk_write(ctx->regmap, REG_VID_CHA_HSYNC_PULSE_WIDTH_LOW,
 			  &le16val, 2);
-	le16val = cpu_to_le16(mode->vsync_end - mode->vsync_start);
+	le16val = cpu_to_le16(ctx->vsync_disable ?
+		0 : mode->vsync_end - mode->vsync_start);
 	regmap_bulk_write(ctx->regmap, REG_VID_CHA_VSYNC_PULSE_WIDTH_LOW,
 			  &le16val, 2);
 	regmap_write(ctx->regmap, REG_VID_CHA_HORIZONTAL_BACK_PORCH,
@@ -866,6 +870,14 @@ static int sn65dsi83_parse_dt(struct sn65dsi83 *ctx, enum sn65dsi83_model model)
 			ctx->lvds_dual_link_even_odd_swap = true;
 		}
 	}
+
+	ctx->hsync_disable = false;
+	if (of_property_present(dev->of_node, "hsync-disable"))
+		ctx->hsync_disable = true;
+
+	ctx->vsync_disable = false;
+	if (of_property_present(dev->of_node, "vsync-disable"))
+		ctx->vsync_disable = true;
 
 	panel_bridge = devm_drm_of_get_bridge(dev, dev->of_node, 2, 0);
 	if (IS_ERR(panel_bridge))
