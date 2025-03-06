@@ -401,13 +401,55 @@ static int uet_pdc_build_req(struct uet_pdc *pdc,
 	return 0;
 }
 
+static void pdc_build_sack(struct uet_pdc *pdc,
+			   struct uet_pds_ack_ext_hdr *ack_ext)
+{
+	u32 sack_base = pdc->lowest_unack_psn, shift;
+	unsigned long bit, start_bit;
+	s16 sack_psn_offset;
+	u64 sack_bitmap;
+
+	if (sack_base + UET_PDC_SACK_BITS > pdc->max_rcv_psn)
+		sack_base = max(pdc->max_rcv_psn - UET_PDC_SACK_BITS,
+				pdc->rx_base_psn);
+	sack_base &= UET_PDC_SACK_MASK;
+	sack_psn_offset = (s16)(sack_base -
+				(pdc->rx_base_psn & UET_PDC_SACK_MASK));
+	if (sack_base == pdc->rx_base_psn) {
+		shift = 1;
+		sack_bitmap = 1;
+		bit = 0;
+	} else if (sack_base < pdc->rx_base_psn) {
+		shift = pdc->rx_base_psn - sack_base;
+		sack_bitmap = U64_MAX >> (64 - shift);
+		bit = 0;
+	} else {
+		shift = 0;
+		sack_bitmap = 0;
+		bit = sack_base - pdc->rx_base_psn;
+	}
+
+	start_bit = bit;
+	for_each_set_bit_from(bit, pdc->rx_bitmap, UET_PDC_MPR) {
+		shift += (bit - start_bit);
+		if (shift >= UET_PDC_SACK_BITS)
+			break;
+		sack_bitmap |= BIT(shift);
+	}
+
+	pdc->lowest_unack_psn += UET_PDC_SACK_BITS;
+	ack_ext->sack_psn_offset = cpu_to_be16(sack_psn_offset);
+	ack_ext->sack_bitmap = cpu_to_be64(sack_bitmap);
+}
+
 static void pdc_build_ack(struct uet_pdc *pdc, struct sk_buff *skb, u32 psn,
 			  u8 ack_flags, bool exact_psn)
 {
+	u8 type = pdc_should_sack(pdc) ? UET_PDS_TYPE_ACK_CC : UET_PDS_TYPE_ACK;
 	struct uet_pds_ack_hdr *ack = skb_put(skb, sizeof(*ack));
 
-	uet_pdc_build_prologue(&ack->prologue, UET_PDS_TYPE_ACK,
-			       UET_PDS_NEXT_HDR_RSP, ack_flags);
+	uet_pdc_build_prologue(&ack->prologue, type, UET_PDS_NEXT_HDR_RSP,
+			       ack_flags);
 	if (exact_psn) {
 		ack->ack_psn_offset = 0;
 		ack->cack_psn = cpu_to_be32(psn);
@@ -417,6 +459,13 @@ static void pdc_build_ack(struct uet_pdc *pdc, struct sk_buff *skb, u32 psn,
 	}
 	ack->spdcid = cpu_to_be16(pdc->spdcid);
 	ack->dpdcid = cpu_to_be16(pdc->dpdcid);
+
+	if (pdc_should_sack(pdc)) {
+		struct uet_pds_ack_ext_hdr *ack_ext = skb_put(skb,
+							      sizeof(*ack_ext));
+
+		pdc_build_sack(pdc, ack_ext);
+	}
 }
 
 static void uet_pdc_build_ses_ack(struct uet_pdc *pdc, struct sk_buff *skb,
@@ -439,10 +488,12 @@ static void uet_pdc_build_ses_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 static int uet_pdc_send_ses_ack(struct uet_pdc *pdc, __u8 ses_rc, __be16 msg_id,
 				u32 psn, u8 ack_flags, bool exact_psn)
 {
+	unsigned int skb_size = sizeof(struct uet_ses_rsp_hdr) +
+				sizeof(struct uet_pds_ack_hdr);
 	struct sk_buff *skb;
 
-	skb = alloc_skb(sizeof(struct uet_ses_rsp_hdr) +
-			sizeof(struct uet_pds_ack_hdr), GFP_ATOMIC);
+	skb_size += pdc_should_sack(pdc) ? sizeof(struct uet_pds_ack_ext_hdr) : 0;
+	skb = alloc_skb(skb_size, GFP_ATOMIC);
 	if (!skb)
 		return -ENOBUFS;
 
@@ -514,6 +565,30 @@ out_unlock:
 	return ret;
 }
 
+static void uet_pdc_rx_sack(struct uet_pdc *pdc, struct sk_buff *skb,
+			    u32 cack_psn, struct uet_pds_ack_ext_hdr *ext_ack,
+			    bool ecn_marked)
+{
+	unsigned long bit, *sack_bitmap = (unsigned long *)&ext_ack->sack_bitmap;
+	u32 sack_base_psn = cack_psn +
+			    (s16)be16_to_cpu(ext_ack->sack_psn_offset);
+
+	while ((bit = find_next_bit(sack_bitmap, 64, 0)) != 64) {
+		/* skip bits that were already acked */
+		if (sack_base_psn + bit <= pdc->tx_base_psn) {
+			if (sack_base_psn + bit == pdc->tx_base_psn)
+				__uet_pdc_mpr_advance_tx(pdc, 1);
+			continue;
+		}
+		if (!psn_bit_valid((sack_base_psn + bit) - pdc->tx_base_psn))
+			break;
+		if (test_and_set_bit((sack_base_psn + bit) - pdc->tx_base_psn,
+				     pdc->ack_bitmap))
+			continue;
+		uet_pdc_ack_psn(pdc, skb, sack_base_psn + bit, ecn_marked);
+	}
+}
+
 int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 		   __be32 remote_fep_addr)
 {
@@ -521,10 +596,11 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 	struct uet_pds_ack_hdr *ack = pds_ack_hdr(skb);
 	s16 ack_psn_offset = be16_to_cpu(ack->ack_psn_offset);
 	const char *drop_reason = "ack_psn not in MPR window";
+	struct uet_pds_ack_ext_hdr *ext_ack = NULL;
 	u32 cack_psn = be32_to_cpu(ack->cack_psn);
 	u32 ack_psn = cack_psn + ack_psn_offset;
+	bool is_sack = false, ecn_marked;
 	int ret = -EINVAL;
-	bool ecn_marked;
 	u32 psn_bit;
 
 	spin_lock(&pdc->lock);
@@ -545,9 +621,16 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 		drop_reason = "ack_psn bit is invalid";
 		goto err_dbg;
 	}
+	if (uet_prologue_type(&ack->prologue) == UET_PDS_TYPE_ACK_CC) {
+		ext_ack = pds_ack_ext_hdr(skb);
+		is_sack = !!ext_ack->sack_bitmap;
+	}
 	if (test_and_set_bit(psn_bit, pdc->ack_bitmap)) {
-		drop_reason = "ack_psn bit already set in ack_bitmap";
-		goto err_dbg;
+		/* SACK packets can include already acked packets */
+		if (!is_sack) {
+			drop_reason = "ack_psn bit already set in ack_bitmap";
+			goto err_dbg;
+		}
 	}
 
 	/* either using ROD mode or in SYN_SENT state */
@@ -572,6 +655,9 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 	/* minor optimization, this can happen only if they are != */
 	if (cack_psn != ack_psn)
 		uet_pdc_ack_psn(pdc, skb, ack_psn, ecn_marked);
+
+	if (is_sack)
+		uet_pdc_rx_sack(pdc, skb, cack_psn, ext_ack, ecn_marked);
 
 	ret = 0;
 	switch (pdc->state) {

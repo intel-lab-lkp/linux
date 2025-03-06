@@ -152,6 +152,46 @@ struct uet_pds_ack_hdr {
 	__be16 dpdcid;
 } __attribute__ ((__packed__));
 
+/* ext ack CC flags */
+enum {
+	UET_PDS_ACK_EXT_CC_F_RSVD	= (1 << 0)
+};
+
+/* field: cc_type_mpr_sack_off */
+#define UET_PDS_ACK_EXT_MPR_BITS 8
+#define UET_PDS_ACK_EXT_MPR_MASK 0xff
+#define UET_PDS_ACK_EXT_CC_FLAGS_BITS 4
+#define UET_PDS_ACK_EXT_CC_FLAGS_MASK 0xf
+#define UET_PDS_ACK_EXT_CC_FLAGS_SHIFT UET_PDS_ACK_EXT_MPR_BITS
+#define UET_PDS_ACK_EXT_CC_TYPE_BITS 4
+#define UET_PDS_ACK_EXT_CC_TYPE_MASK 0xf
+#define UET_PDS_ACK_EXT_CC_TYPE_SHIFT (UET_PDS_ACK_EXT_CC_FLAGS_SHIFT + \
+				       UET_PDS_ACK_EXT_CC_FLAGS_BITS)
+/* header used for ACK_CC */
+struct uet_pds_ack_ext_hdr {
+	__be16 cc_type_flags_mpr;
+	__be16 sack_psn_offset;
+	__be64 sack_bitmap;
+	__be64 ack_cc_state;
+} __attribute__ ((__packed__));
+
+static inline __u8 uet_pds_ack_ext_mpr(const struct uet_pds_ack_ext_hdr *ack)
+{
+	return __be16_to_cpu(ack->cc_type_flags_mpr) & UET_PDS_ACK_EXT_MPR_MASK;
+}
+
+static inline __u8 uet_pds_ack_ext_cc_flags(const struct uet_pds_ack_ext_hdr *ack)
+{
+	return (__be16_to_cpu(ack->cc_type_flags_mpr) >> UET_PDS_ACK_EXT_CC_FLAGS_SHIFT) &
+	       UET_PDS_ACK_EXT_CC_FLAGS_MASK;
+}
+
+static inline __u8 uet_pds_ack_ext_cc_type(const struct uet_pds_ack_ext_hdr *ack)
+{
+	return (__be16_to_cpu(ack->cc_type_flags_mpr) >> UET_PDS_ACK_EXT_CC_TYPE_SHIFT) &
+	       UET_PDS_ACK_EXT_CC_TYPE_MASK;
+}
+
 /* ses request op codes */
 enum {
 	UET_SES_REQ_OP_NOOP			= 0x00,

@@ -266,6 +266,9 @@ int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 
 	prologue = pds_prologue_hdr(skb);
 	switch (uet_prologue_type(prologue)) {
+	case UET_PDS_TYPE_ACK_CC:
+		offset += sizeof(struct uet_pds_ack_ext_hdr);
+		fallthrough;
 	case UET_PDS_TYPE_ACK:
 		if (!uet_pds_rx_valid_ack_next_hdr(prologue))
 			break;

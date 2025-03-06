@@ -20,6 +20,8 @@
 					  NSEC_PER_SEC)
 #define UET_PDC_RTX_DEFAULT_MAX 3
 #define UET_PDC_MPR 128
+#define UET_PDC_SACK_BITS 64
+#define UET_PDC_SACK_MASK (U64_MAX << 3)
 
 #define UET_SKB_CB(skb)       ((struct uet_skb_cb *)&((skb)->cb[0]))
 
@@ -93,6 +95,8 @@ struct uet_pdc {
 
 	u32 rx_base_psn;
 	u32 tx_base_psn;
+	u32 lowest_unack_psn;
+	u32 max_rcv_psn;
 
 	u32 ack_gen_trigger;
 	u32 ack_gen_min_pkt_add;
@@ -145,5 +149,11 @@ static inline bool psn_bit_valid(u32 bit)
 static inline bool before(u32 seq1, u32 seq2)
 {
 	return (s32)(seq1-seq2) < 0;
+}
+
+static inline bool pdc_should_sack(const struct uet_pdc *pdc)
+{
+	return pdc->lowest_unack_psn > pdc->rx_base_psn &&
+	       pdc->lowest_unack_psn < pdc->max_rcv_psn;
 }
 #endif /* _UECON_PDC_H */
