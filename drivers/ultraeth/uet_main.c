@@ -3,6 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/types.h>
+#include <net/ultraeth/uet_context.h>
 
 static int __init uet_init(void)
 {
@@ -11,6 +12,7 @@ static int __init uet_init(void)
 
 static void __exit uet_exit(void)
 {
+	uet_context_destroy_all();
 }
 
 module_init(uet_init);
