@@ -390,6 +390,7 @@ static void __init arch_mem_init(char **cmdline_p)
 	if (usermem)
 		pr_info("User-defined physical RAM map overwrite\n");
 
+	max_low_pfn = max_pfn = PHYS_PFN(memblock_end_of_DRAM());
 	check_kernel_sections_mem();
 
 	/*
