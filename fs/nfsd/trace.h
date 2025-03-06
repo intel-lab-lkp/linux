@@ -2337,6 +2337,41 @@ DEFINE_EVENT(nfsd_copy_async_done_class,		\
 DEFINE_COPY_ASYNC_DONE_EVENT(done);
 DEFINE_COPY_ASYNC_DONE_EVENT(cancel);
 
+DECLARE_EVENT_CLASS(nfsd_vfs_class,
+	TP_PROTO(struct svc_rqst *rqstp, struct svc_fh *fhp),
+	TP_ARGS(rqstp, fhp),
+	TP_STRUCT__entry(
+		__field(u32, xid)
+		__field(u32, fh_hash)
+	),
+	TP_fast_assign(
+		__entry->xid = be32_to_cpu(rqstp->rq_xid);
+		__entry->fh_hash = knfsd_fh_hash(&fhp->fh_handle);
+	),
+	TP_printk("xid=0x%08x fh_hash=0x%08x",
+		  __entry->xid, __entry->fh_hash)
+);
+
+#define DEFINE_NFSD_VFS_EVENT(name)                                        \
+	DEFINE_EVENT(nfsd_vfs_class, nfsd_##name,                           \
+		     TP_PROTO(struct svc_rqst *rqstp, struct svc_fh *fhp), \
+		     TP_ARGS(rqstp, fhp))
+
+DEFINE_NFSD_VFS_EVENT(lookup);
+DEFINE_NFSD_VFS_EVENT(lookup_dentry);
+DEFINE_NFSD_VFS_EVENT(create_locked);
+DEFINE_NFSD_VFS_EVENT(create);
+DEFINE_NFSD_VFS_EVENT(access);
+DEFINE_NFSD_VFS_EVENT(create_setattr);
+DEFINE_NFSD_VFS_EVENT(readlink);
+DEFINE_NFSD_VFS_EVENT(symlink);
+DEFINE_NFSD_VFS_EVENT(link);
+DEFINE_NFSD_VFS_EVENT(rename);
+DEFINE_NFSD_VFS_EVENT(unlink);
+DEFINE_NFSD_VFS_EVENT(readdir);
+DEFINE_NFSD_VFS_EVENT(statfs);
+DEFINE_NFSD_VFS_EVENT(getattr);
+
 #define show_ia_valid_flags(x)					\
 	__print_flags(x, "|",					\
 			{ ATTR_MODE, "MODE" },			\

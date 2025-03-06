@@ -244,6 +244,8 @@ nfsd_lookup_dentry(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct dentry		*dentry;
 	int			host_err;
 
+	trace_nfsd_lookup(rqstp, fhp);
+
 	dprintk("nfsd: nfsd_lookup(fh %s, %.*s)\n", SVCFH_fmt(fhp), len,name);
 
 	dparent = fhp->fh_dentry;
@@ -312,6 +314,8 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	struct svc_export	*exp;
 	struct dentry		*dentry;
 	__be32 err;
+
+	trace_nfsd_lookup(rqstp, fhp);
 
 	err = fh_verify(rqstp, fhp, S_IFDIR, NFSD_MAY_EXEC);
 	if (err)
@@ -793,6 +797,8 @@ nfsd_access(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *access, u32 *suppor
 	struct dentry		*dentry;
 	u32			query, result = 0, sresult = 0;
 	__be32			error;
+
+	trace_nfsd_create(rqstp, fhp);
 
 	error = fh_verify(rqstp, fhp, 0, NFSD_MAY_NOP);
 	if (error)
@@ -1401,6 +1407,8 @@ nfsd_create_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct iattr *iap = attrs->na_iattr;
 	__be32 status;
 
+	trace_nfsd_create_setattr(rqstp, fhp);
+
 	/*
 	 * Mode has already been set by file creation.
 	 */
@@ -1466,6 +1474,8 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct iattr	*iap = attrs->na_iattr;
 	__be32		err;
 	int		host_err;
+
+	trace_nfsd_create_locked(rqstp, fhp);
 
 	dentry = fhp->fh_dentry;
 	dirp = d_inode(dentry);
@@ -1557,6 +1567,8 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	__be32		err;
 	int		host_err;
 
+	trace_nfsd_create(rqstp, fhp);
+
 	if (isdotent(fname, flen))
 		return nfserr_exist;
 
@@ -1609,6 +1621,8 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	DEFINE_DELAYED_CALL(done);
 	int len;
 
+	trace_nfsd_readlink(rqstp, fhp);
+
 	err = fh_verify(rqstp, fhp, S_IFLNK, NFSD_MAY_NOP);
 	if (unlikely(err))
 		return err;
@@ -1656,6 +1670,8 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct dentry	*dentry, *dnew;
 	__be32		err, cerr;
 	int		host_err;
+
+	trace_nfsd_symlink(rqstp, fhp);
 
 	err = nfserr_noent;
 	if (!flen || path[0] == '\0')
@@ -1724,6 +1740,8 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	int		type;
 	__be32		err;
 	int		host_err;
+
+	trace_nfsd_link(rqstp, ffhp);
 
 	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_CREATE);
 	if (err)
@@ -1841,6 +1859,8 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	__be32		err;
 	int		host_err;
 	bool		close_cached = false;
+
+	trace_nfsd_rename(rqstp, ffhp);
 
 	err = fh_verify(rqstp, ffhp, S_IFDIR, NFSD_MAY_REMOVE);
 	if (err)
@@ -1999,6 +2019,8 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	struct inode	*rinode;
 	__be32		err;
 	int		host_err;
+
+	trace_nfsd_unlink(rqstp, fhp);
 
 	err = nfserr_acces;
 	if (!flen || isdotent(fname, flen))
@@ -2222,6 +2244,8 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t *offsetp,
 	loff_t		offset = *offsetp;
 	int             may_flags = NFSD_MAY_READ;
 
+	trace_nfsd_readdir(rqstp, fhp);
+
 	err = nfsd_open(rqstp, fhp, S_IFDIR, may_flags, &file);
 	if (err)
 		goto out;
@@ -2287,6 +2311,8 @@ __be32
 nfsd_statfs(struct svc_rqst *rqstp, struct svc_fh *fhp, struct kstatfs *stat, int access)
 {
 	__be32 err;
+
+	trace_nfsd_statfs(rqstp, fhp);
 
 	err = fh_verify(rqstp, fhp, 0, NFSD_MAY_NOP | access);
 	if (!err) {
