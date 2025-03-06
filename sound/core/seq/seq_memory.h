@@ -44,7 +44,7 @@ struct snd_seq_pool {
 	struct snd_seq_event_cell *ptr;	/* pointer to first event chunk */
 	struct snd_seq_event_cell *free;	/* pointer to the head of the free list */
 
-	int total_elements;	/* pool size actually allocated */
+	atomic_t total_elements;	/* pool size actually allocated */
 	atomic_t counter;	/* cells free */
 
 	int size;		/* pool size to be allocated */
@@ -74,13 +74,13 @@ int snd_seq_event_dup(struct snd_seq_pool *pool, struct snd_seq_event *event,
 /* return number of unused (free) cells */
 static inline int snd_seq_unused_cells(struct snd_seq_pool *pool)
 {
-	return pool ? pool->total_elements - atomic_read(&pool->counter) : 0;
+	return pool ? atomic_read(&pool->total_elements) - atomic_read(&pool->counter) : 0;
 }
 
 /* return total number of allocated cells */
 static inline int snd_seq_total_cells(struct snd_seq_pool *pool)
 {
-	return pool ? pool->total_elements : 0;
+	return pool ? atomic_read(&pool->total_elements) : 0;
 }
 
 /* init pool - allocate events */

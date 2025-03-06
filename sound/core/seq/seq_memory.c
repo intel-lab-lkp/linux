@@ -21,7 +21,7 @@
 
 static inline int snd_seq_pool_available(struct snd_seq_pool *pool)
 {
-	return pool->total_elements - atomic_read(&pool->counter);
+	return atomic_read(&pool->total_elements) - atomic_read(&pool->counter);
 }
 
 static inline int snd_seq_output_ok(struct snd_seq_pool *pool)
@@ -353,7 +353,7 @@ int snd_seq_event_dup(struct snd_seq_pool *pool, struct snd_seq_event *event,
 		extlen = event->data.ext.len & ~SNDRV_SEQ_EXT_MASK;
 		ncells = DIV_ROUND_UP(extlen, sizeof(struct snd_seq_event));
 	}
-	if (ncells >= pool->total_elements)
+	if (ncells >= atomic_read(&pool->total_elements))
 		return -ENOMEM;
 
 	err = snd_seq_cell_alloc(pool, &cell, nonblock, file, mutexp);
@@ -466,7 +466,7 @@ int snd_seq_pool_init(struct snd_seq_pool *pool)
 
 	/* init statistics */
 	pool->max_used = 0;
-	pool->total_elements = pool->size;
+	atomic_set(&pool->total_elements, pool->size);
 	return 0;
 }
 
@@ -499,7 +499,7 @@ int snd_seq_pool_done(struct snd_seq_pool *pool)
 		ptr = pool->ptr;
 		pool->ptr = NULL;
 		pool->free = NULL;
-		pool->total_elements = 0;
+		atomic_set(&pool->total_elements, 0);
 	}
 
 	kvfree(ptr);
@@ -523,7 +523,7 @@ struct snd_seq_pool *snd_seq_pool_new(int poolsize)
 	spin_lock_init(&pool->lock);
 	pool->ptr = NULL;
 	pool->free = NULL;
-	pool->total_elements = 0;
+	atomic_set(&pool->total_elements, 0);
 	atomic_set(&pool->counter, 0);
 	pool->closing = 0;
 	init_waitqueue_head(&pool->output_sleep);
@@ -555,7 +555,7 @@ void snd_seq_info_pool(struct snd_info_buffer *buffer,
 {
 	if (pool == NULL)
 		return;
-	snd_iprintf(buffer, "%sPool size          : %d\n", space, pool->total_elements);
+	snd_iprintf(buffer, "%sPool size          : %d\n", space, atomic_read(&pool->total_elements));
 	snd_iprintf(buffer, "%sCells in use       : %d\n", space, atomic_read(&pool->counter));
 	snd_iprintf(buffer, "%sPeak cells in use  : %d\n", space, pool->max_used);
 	snd_iprintf(buffer, "%sAlloc success      : %d\n", space, pool->event_alloc_success);
