@@ -122,6 +122,7 @@ struct crypto_queue {
 struct scatter_walk {
 	struct scatterlist *sg;
 	unsigned int offset;
+	void *addr;
 };
 
 struct crypto_attr_alg {
