@@ -92,6 +92,7 @@ struct dmirror {
 	struct xarray			pt;
 	struct mmu_interval_notifier	notifier;
 	struct mutex			mutex;
+	__u64			flags;
 };
 
 /*
@@ -699,7 +700,12 @@ static void dmirror_migrate_alloc_and_copy(struct migrate_vma *args,
 		     page_to_pfn(spage)))
 			goto next;
 
-		dpage = dmirror_devmem_alloc_page(dmirror, is_large);
+		if (dmirror->flags & HMM_DMIRROR_FLAG_FAIL_ALLOC) {
+			dmirror->flags &= ~HMM_DMIRROR_FLAG_FAIL_ALLOC;
+			dpage = NULL;
+		} else
+			dpage = dmirror_devmem_alloc_page(dmirror, is_large);
+
 		if (!dpage) {
 			struct folio *folio;
 			unsigned long i;
@@ -1502,6 +1508,10 @@ static long dmirror_fops_unlocked_ioctl(struct file *filp,
 
 	case HMM_DMIRROR_RELEASE:
 		dmirror_device_remove_chunks(dmirror->mdevice);
+		ret = 0;
+		break;
+	case HMM_DMIRROR_FLAGS:
+		dmirror->flags = cmd.npages;
 		ret = 0;
 		break;
 
