@@ -1385,6 +1385,15 @@ void hist_entry__delete(struct hist_entry *he)
 {
 	struct hist_entry_ops *ops = he->ops;
 
+	while (!RB_EMPTY_ROOT(&he->hroot_out.rb_root)) {
+		struct rb_node *node = rb_first(&he->hroot_out.rb_root);
+		struct hist_entry *child = rb_entry(node, struct hist_entry, rb_node);
+
+		rb_erase_init(node, &he->hroot_out.rb_root);
+
+		hist_entry__delete(child);
+	}
+
 	thread__zput(he->thread);
 	map_symbol__exit(&he->ms);
 
