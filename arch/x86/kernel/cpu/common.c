@@ -1206,6 +1206,11 @@ static const __initconst struct x86_cpu_id cpu_vuln_whitelist[] = {
 #define VULNBL_INTEL_STEPS(vfm, max_stepping, issues)		   \
 	X86_MATCH_VFM_STEPS(INTEL_##vfm, X86_STEP_MIN, max_stepping, issues)
 
+#define VULNBL_INTEL_TYPE(vfm, cpu_type, issues)			\
+	X86_MATCH_VFM_CPU_TYPE(INTEL_##vfm,				\
+			       INTEL_CPU_TYPE_##cpu_type,	\
+			       issues)
+
 #define VULNBL_AMD(family, blacklist)		\
 	VULNBL(AMD, family, X86_MODEL_ANY, blacklist)
 
@@ -1254,9 +1259,9 @@ static const struct x86_cpu_id cpu_vuln_blacklist[] __initconst = {
 	VULNBL_INTEL(		TIGERLAKE,		GDS),
 	VULNBL_INTEL(		LAKEFIELD,		MMIO | MMIO_SBDS | RETBLEED),
 	VULNBL_INTEL(		ROCKETLAKE,		MMIO | RETBLEED | GDS),
-	VULNBL_INTEL(		ALDERLAKE,		RFDS),
+	VULNBL_INTEL_TYPE(	ALDERLAKE,	ATOM,	RFDS),
 	VULNBL_INTEL(		ALDERLAKE_L,		RFDS),
-	VULNBL_INTEL(		RAPTORLAKE,		RFDS),
+	VULNBL_INTEL_TYPE(	RAPTORLAKE,	ATOM,	RFDS),
 	VULNBL_INTEL(		RAPTORLAKE_P,		RFDS),
 	VULNBL_INTEL(		RAPTORLAKE_S,		RFDS),
 	VULNBL_INTEL(		ATOM_GRACEMONT,		RFDS),
