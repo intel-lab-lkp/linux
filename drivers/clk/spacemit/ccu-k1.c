@@ -558,6 +558,10 @@ static CCU_MUX_GATE_DEFINE(twsi7_clk, twsi_parents,
 			   APBC_TWSI7_CLK_RST,
 			   4, 3, BIT(1),
 			   0);
+static CCU_GATE_DEFINE(twsi8_clk, CCU_PARENT_HW(pll1_d78_31p5),
+		       APBC_TWSI8_CLK_RST,
+		       BIT(1) | BIT(0),
+		       0);
 
 static const struct clk_parent_data timer_parents[] = {
 	CCU_PARENT_HW(pll1_d192_12p8),
@@ -795,6 +799,8 @@ static CCU_GATE_DEFINE(twsi7_bus_clk, CCU_PARENT_HW(apb_clk),
 		       APBC_TWSI7_CLK_RST,
 		       BIT(0),
 		       0);
+static CCU_FACTOR_DEFINE(twsi8_bus_clk, CCU_PARENT_HW(apb_clk),
+			 1, 1);
 
 static CCU_GATE_DEFINE(timers1_bus_clk, CCU_PARENT_HW(apb_clk),
 		       APBC_TIMERS1_CLK_RST,
