@@ -9,12 +9,15 @@
 #include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/wait.h>
+#include <net/ultraeth/uet_job.h>
 
 struct uet_context {
 	int id;
 	refcount_t refcnt;
 	wait_queue_head_t refcnt_wait;
 	struct list_head list;
+
+	struct uet_job_registry job_reg;
 };
 
 struct uet_context *uet_context_get_by_id(int id);

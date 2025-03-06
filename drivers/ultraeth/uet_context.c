@@ -102,10 +102,16 @@ int uet_context_create(int id)
 		goto ctx_id_err;
 	}
 
+	err = uet_jobs_init(&ctx->job_reg);
+	if (err)
+		goto ctx_jobs_err;
+
 	uet_context_link(ctx);
 
 	return 0;
 
+ctx_jobs_err:
+	uet_context_put_id(ctx);
 ctx_id_err:
 	kfree(ctx);
 
@@ -115,6 +121,7 @@ ctx_id_err:
 static void __uet_context_destroy(struct uet_context *ctx)
 {
 	uet_context_unlink(ctx);
+	uet_jobs_uninit(&ctx->job_reg);
 	uet_context_put_id(ctx);
 	kfree(ctx);
 }

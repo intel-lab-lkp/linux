@@ -24,6 +24,119 @@ attribute-sets:
         type: nest
         nested-attributes: context
         multi-attr: true
+  -
+    name: fep-in-addr
+    attributes:
+      -
+        name: ip
+        type: binary
+        display-hint: ipv4
+      -
+        name: ip6
+        type: binary
+        byte-order: big-endian
+        display-hint: ipv6
+      -
+        name: family
+        type: u16
+  -
+    name: fep-address
+    attributes:
+      -
+        name: in-address
+        type: nest
+        nested-attributes: fep-in-addr
+      -
+        name: flags
+        type: u16
+      -
+        name: caps
+        type: u16
+      -
+        name: start-resource-index
+        type: u16
+      -
+        name: num-resource-indices
+        type: u16
+      -
+        name: initiator-id
+        type: u32
+      -
+        name: pid-on-fep
+        type: u16
+      -
+        name: padding
+        type: u16
+      -
+        name: version
+        type: u8
+  -
+    name: fep-entry
+    attributes:
+      -
+        name: address
+        type: nest
+        nested-attributes: fep-address
+  -
+    name: flist
+    attributes:
+      -
+        name: fep
+        type: nest
+        multi-attr: true
+        nested-attributes: fep-entry
+  -
+    name: job-req
+    attributes:
+      -
+        name: context-id
+        type: s32
+      -
+        name: id
+        type : u32
+      -
+        name: address
+        type: nest
+        nested-attributes: fep-address
+      -
+        name: service-name
+        type: string
+  -
+    name: job
+    attributes:
+      -
+        name: id
+        type : u32
+      -
+        name: address
+        type: nest
+        nested-attributes: fep-address
+      -
+        name: service-name
+        type: string
+      -
+        name: flist
+        type: nest
+        nested-attributes: flist
+        multi-attr: true
+  -
+    name: jlist
+    attributes:
+      -
+        name: job
+        type: nest
+        nested-attributes: job
+        multi-attr: true
+  -
+    name: jobs
+    attributes:
+      -
+        name: context-id
+        type: s32
+      -
+        name: jlist
+        type: nest
+        nested-attributes: jlist
 
 operations:
   name-prefix: ultraeth-cmd-
@@ -53,4 +166,38 @@ operations:
       do:
         request:
           attributes:
+            - id
+    -
+      name: job-get
+      doc: dump uecon context jobs
+      attribute-set: jobs
+      dump:
+        request:
+          attributes:
+            - context-id
+        reply:
+          attributes:
+            - context-id
+            - jlist
+    -
+      name: job-new
+      doc: add a new job to uecon context
+      attribute-set: job-req
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - context-id
+            - id
+            - address
+            - service-name
+    -
+      name: job-del
+      doc: delete a job in uecon context
+      attribute-set: job-req
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - context-id
             - id
