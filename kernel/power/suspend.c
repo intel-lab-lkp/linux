@@ -98,8 +98,6 @@ static void s2idle_enter(void)
 	s2idle_state = S2IDLE_STATE_ENTER;
 	raw_spin_unlock_irq(&s2idle_lock);
 
-	cpus_read_lock();
-
 	/* Push all the CPUs into the idle loop. */
 	wake_up_all_idle_cpus();
 	/* Make the current CPU wait so it can enter the idle loop too. */
@@ -111,8 +109,6 @@ static void s2idle_enter(void)
 	 * consistent system state.
 	 */
 	wake_up_all_idle_cpus();
-
-	cpus_read_unlock();
 
 	raw_spin_lock_irq(&s2idle_lock);
 
