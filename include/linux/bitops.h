@@ -261,6 +261,48 @@ static inline __attribute_const__ bool parity8(u8 val)
 }
 
 /**
+ * parity16 - get the parity of an u16 value
+ * @val: the value to be examined
+ *
+ * Determine the parity of the u16 argument.
+ *
+ * Returns:
+ * false for even parity, true for odd parity
+ */
+static inline __attribute_const__ bool parity16(u16 val)
+{
+	return parity8(val ^ (val >> 8));
+}
+
+/**
+ * parity32 - get the parity of an u32 value
+ * @val: the value to be examined
+ *
+ * Determine the parity of the u32 argument.
+ *
+ * Returns:
+ * false for even parity, true for odd parity
+ */
+static inline __attribute_const__ bool parity32(u32 val)
+{
+	return parity16(val ^ (val >> 16));
+}
+
+/**
+ * parity64 - get the parity of an u64 value
+ * @val: the value to be examined
+ *
+ * Determine the parity of the u64 argument.
+ *
+ * Returns:
+ * false for even parity, true for odd parity
+ */
+static inline __attribute_const__ bool parity64(u64 val)
+{
+	return parity32(val ^ (val >> 32));
+}
+
+/**
  * __ffs64 - find first set bit in a 64 bit word
  * @word: The 64 bit word
  *
