@@ -13,8 +13,10 @@
 #include <linux/ptrace.h>
 #include <linux/syscore_ops.h>
 #include <linux/sched/clock.h>
+#include <linux/kpromoted.h>
 
 #include <asm/apic.h>
+#include <asm/ibs.h>
 
 #include "../perf_event.h"
 
@@ -1538,6 +1540,15 @@ static int x86_pmu_amd_ibs_dying_cpu(unsigned int cpu)
 static __init int amd_ibs_init(void)
 {
 	u32 caps;
+
+	/*
+	 * TODO: Find a clean way to disable perf IBS so that IBS
+	 * can be used for memory access profiling.
+	 */
+	if (arch_hw_access_profiling) {
+		pr_info("IBS isn't available for perf use\n");
+		return 0;
+	}
 
 	caps = __get_ibs_caps();
 	if (!caps)
