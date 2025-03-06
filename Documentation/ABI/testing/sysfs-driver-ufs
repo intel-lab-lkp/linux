@@ -1604,3 +1604,26 @@ Description:
 		prevent the UFS from frequently performing clock gating/ungating.
 
 		The attribute is read/write.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/device_lvl_exception
+What:		/sys/bus/platform/devices/*.ufs/device_lvl_exception
+Date:		March 2025
+Contact:	Bao D. Nguyen <quic_nguyenb@quicinc.com>
+Description:
+		The device_lvl_exception is a counter indicating the number
+		of times the device level exceptions have occurred since the
+		last time this variable is reset. Read the device_lvl_exception_id
+		sysfs node to know more information about the exception.
+		The file is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/device_lvl_exception_id
+What:		/sys/bus/platform/devices/*.ufs/device_lvl_exception_id
+Date:		March 2025
+Contact:	Bao D. Nguyen <quic_nguyenb@quicinc.com>
+Description:
+		Reading the device_lvl_exception_id returns the device JEDEC
+		standard's qDeviceLevelExceptionID attribute. The definition of the
+		qDeviceLevelExceptionID is the ufs device vendor specific design.
+		Refer to the device manufacturer datasheet for more information
+		on the meaning of the qDeviceLevelExceptionID attribute value.
+		The file is read only.

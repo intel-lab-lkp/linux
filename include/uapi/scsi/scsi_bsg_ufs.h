@@ -143,6 +143,15 @@ struct utp_upiu_query_v4_0 {
 	__be32 reserved;
 };
 
+struct utp_upiu_query_response_v4_0 {
+	__u8 opcode;
+	__u8 idn;
+	__u8 index;
+	__u8 selector;
+	__be64 value;
+	__be32 reserved;
+} __attribute__((__packed__));
+
 /**
  * struct utp_upiu_cmd - Command UPIU structure
  * @exp_data_transfer_len: Data Transfer Length DW-3
