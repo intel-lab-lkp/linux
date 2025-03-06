@@ -2278,7 +2278,6 @@ static int __maybe_unused flexcan_resume(struct device *device)
 	struct flexcan_priv *priv = netdev_priv(dev);
 	int err;
 
-	priv->can.state = CAN_STATE_ERROR_ACTIVE;
 	if (netif_running(dev)) {
 		netif_device_attach(dev);
 		netif_start_queue(dev);
@@ -2299,6 +2298,7 @@ static int __maybe_unused flexcan_resume(struct device *device)
 			flexcan_chip_interrupts_enable(dev);
 		}
 	}
+	priv->can.state = CAN_STATE_ERROR_ACTIVE;
 
 	return 0;
 }
