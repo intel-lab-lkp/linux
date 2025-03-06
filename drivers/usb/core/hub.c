@@ -36,6 +36,7 @@
 #include <linux/bitfield.h>
 #include <linux/uaccess.h>
 #include <asm/byteorder.h>
+#include <linux/dmi.h>
 
 #include "hub.h"
 #include "phy.h"
@@ -2610,6 +2611,7 @@ static void set_usb_port_removable(struct usb_device *udev)
 int usb_new_device(struct usb_device *udev)
 {
 	int err;
+	const char *board_name;
 
 	if (udev->parent) {
 		/* Initialize non-root-hub device wakeup to disabled;
@@ -2655,6 +2657,17 @@ int usb_new_device(struct usb_device *udev)
 
 	/* check whether the hub or firmware marks this port as non-removable */
 	set_usb_port_removable(udev);
+
+	/* get board manufacturer information (DMI_BOARD_VENDOR) */
+	board_name = dmi_get_system_info(DMI_BOARD_NAME);
+
+	/* In order to load the usbhid driver on a specific model motherboards
+	 * before the restore mode confirmation, add 200ms of latancy.
+	 */
+	if (board_name && strstr(board_name, "DH34") &&
+		(strstr(saved_command_line, "restore") != NULL))
+		msleep(200);
+
 
 	/* Register the device.  The device driver is responsible
 	 * for configuring the device and invoking the add-device
