@@ -192,6 +192,61 @@ static inline __u8 uet_pds_ack_ext_cc_type(const struct uet_pds_ack_ext_hdr *ack
 	       UET_PDS_ACK_EXT_CC_TYPE_MASK;
 }
 
+/* NACK codes */
+enum {
+	UET_PDS_NACK_TRIMMED		= 0x01,
+	UET_PDS_NACK_TRIMMED_LASTHOP	= 0x02,
+	UET_PDS_NACK_TRIMMED_ACK	= 0x03,
+	UET_PDS_NACK_NO_PDC_AVAIL	= 0x04,
+	UET_PDS_NACK_NO_CCC_AVAIL	= 0x05,
+	UET_PDS_NACK_NO_BITMAP		= 0x06,
+	UET_PDS_NACK_NO_PKT_BUFFER	= 0x07,
+	UET_PDS_NACK_NO_GTD_DEL_AVAIL	= 0x08,
+	UET_PDS_NACK_NO_SES_MSG_AVAIL	= 0x09,
+	UET_PDS_NACK_NO_RESOURCE	= 0x0A,
+	UET_PDS_NACK_PSN_OOR_WINDOW	= 0x0B,
+	UET_PDS_NACK_FIRST_ROD_OOO	= 0x0C,
+	UET_PDS_NACK_ROD_OOO		= 0x0D,
+	UET_PDS_NACK_INV_DPDCID		= 0x0E,
+	UET_PDS_NACK_PDC_HDR_MISMATCH	= 0x0F,
+	UET_PDS_NACK_CLOSING		= 0x10,
+	UET_PDS_NACK_CLOSING_IN_ERR	= 0x11,
+	UET_PDS_NACK_PKT_NOT_RCVD	= 0x12,
+	UET_PDS_NACK_GTD_RESP_UNAVAIL	= 0x13,
+	UET_PDS_NACK_ACK_WITH_DATA	= 0x14,
+	UET_PDS_NACK_INVALID_SYN	= 0x15,
+	UET_PDS_NACK_PDC_MODE_MISMATCH	= 0x16,
+	UET_PDS_NACK_NEW_START_PSN	= 0x17,
+	UET_PDS_NACK_RCVD_SES_PROCG	= 0x18,
+	UET_PDS_NACK_UNEXP_EVENT	= 0x19,
+	UET_PDS_NACK_RCVR_INFER_LOSS	= 0x1A,
+	/* 0x1B - 0xFC reserved for UET */
+	UET_PDS_NACK_EXP_NACK_NORMAL	= 0xFD,
+	UET_PDS_NACK_T_EXP_NACK_ERR	= 0xFE,
+	UET_PDS_NACK_EXP_NACK_FATAL	= 0xFF
+};
+
+/* NACK flags */
+enum {
+	UET_PDS_NACK_FLAG_RSV21	= (1 << 0),
+	UET_PDS_NACK_FLAG_RSV22	= (1 << 1),
+	UET_PDS_NACK_FLAG_RSV23	= (1 << 2),
+	UET_PDS_NACK_FLAG_NT	= (1 << 3),
+	UET_PDS_NACK_FLAG_RETX	= (1 << 4),
+	UET_PDS_NACK_FLAG_M	= (1 << 5),
+	UET_PDS_NACK_FLAG_RSV	= (1 << 6)
+};
+
+struct uet_pds_nack_hdr {
+	struct uet_prologue_hdr prologue;
+	__u8 nack_code;
+	__u8 vendor_code;
+	__be32 nack_psn_pkt_id;
+	__be16 spdcid;
+	__be16 dpdcid;
+	__be32 payload;
+} __attribute__ ((__packed__));
+
 /* ses request op codes */
 enum {
 	UET_SES_REQ_OP_NOOP			= 0x00,

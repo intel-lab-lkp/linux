@@ -6,6 +6,21 @@
 #include <net/ultraeth/uet_context.h>
 #include <net/ultraeth/uet_pdc.h>
 
+struct metadata_dst *uet_pdc_dst(const struct uet_pdc_key *key, __be16 dport,
+				 u8 tos)
+{
+	IP_TUNNEL_DECLARE_FLAGS(md_flags) = { };
+	struct metadata_dst *mdst;
+
+	mdst = __ip_tun_set_dst(key->src_ip, key->dst_ip, tos, 0, dport,
+				md_flags, 0, 0);
+	if (!mdst)
+		return NULL;
+	mdst->u.tun_info.mode |= IP_TUNNEL_INFO_TX;
+
+	return mdst;
+}
+
 static void uet_pdc_xmit(struct uet_pdc *pdc, struct sk_buff *skb)
 {
 	skb->dev = pds_netdev(pdc->pds);
@@ -241,7 +256,6 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 			       const struct uet_pdc_key *key, bool is_inbound)
 {
 	struct uet_pdc *pdc, *pdc_ins = ERR_PTR(-ENOMEM);
-	IP_TUNNEL_DECLARE_FLAGS(md_flags) = { };
 	int ret __maybe_unused;
 
 	switch (mode) {
@@ -287,8 +301,7 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 	if (!pdc->ack_bitmap)
 		goto err_ack_bitmap;
 	timer_setup(&pdc->rtx_timer, uet_pdc_rtx_timer_expired, 0);
-	pdc->metadata = __ip_tun_set_dst(key->src_ip, key->dst_ip, tos, 0, dport,
-					 md_flags, 0, 0);
+	pdc->metadata = uet_pdc_dst(key, dport, tos);
 	if (!pdc->metadata)
 		goto err_tun_dst;
 
@@ -731,6 +744,19 @@ static void uet_pdc_rx_req_handle_ack(struct uet_pdc *pdc, unsigned int len,
 	}
 }
 
+static bool uet_pdc_req_validate_mode(const struct uet_pdc *pdc,
+				      const struct uet_pds_req_hdr *req)
+{
+	switch (uet_prologue_type(&req->prologue)) {
+	case UET_PDS_TYPE_RUD_REQ:
+		return pdc->mode == UET_PDC_MODE_RUD;
+	case UET_PDS_TYPE_ROD_REQ:
+		return pdc->mode == UET_PDC_MODE_ROD;
+	}
+
+	return false;
+}
+
 int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 		   __be32 remote_fep_addr, __u8 tos)
 {
@@ -743,6 +769,7 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 	unsigned int len = skb->len;
 	bool first_ack = false;
 	enum mpr_pos psn_pos;
+	__u8 nack_code = 0;
 	int ret = -EINVAL;
 
 	spin_lock(&pdc->lock);
@@ -761,6 +788,11 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 
 	if (unlikely(pdc->tx_busy))
 		goto err_dbg;
+	if (!uet_pdc_req_validate_mode(pdc, req)) {
+		drop_reason = "pdc mode doesn't match request";
+		nack_code = UET_PDS_NACK_PDC_MODE_MISMATCH;
+		goto err_dbg;
+	}
 
 	if (req_flags & UET_PDS_REQ_FLAG_RETX)
 		ack_flags |= UET_PDS_ACK_FLAG_RETX;
@@ -770,10 +802,15 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 	switch (psn_pos) {
 	case UET_PDC_MPR_FUTURE:
 		drop_reason = "req psn is in a future MPR window";
+		if (req_flags & UET_PDS_REQ_FLAG_SYN)
+			nack_code = UET_PDS_NACK_INVALID_SYN;
+		else
+			nack_code = UET_PDS_NACK_PSN_OOR_WINDOW;
 		goto err_dbg;
 	case UET_PDC_MPR_PREV:
 		if ((int)(req_psn - pdc->rx_base_psn) < S16_MIN) {
 			drop_reason = "req psn is too far in the past";
+			nack_code = UET_PDS_NACK_PSN_OOR_WINDOW;
 			goto err_dbg;
 		}
 		uet_pdc_send_ses_ack(pdc, UET_SES_RSP_RC_NULL, ses_req->msg_id,
@@ -805,6 +842,7 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 
 			if (!psn_bit_valid(psn_bit)) {
 				drop_reason = "req psn bit is invalid";
+				nack_code = UET_PDS_NACK_PSN_OOR_WINDOW;
 				goto err_dbg;
 			}
 			if (test_and_set_bit(psn_bit, pdc->rx_bitmap)) {
@@ -844,5 +882,40 @@ err_dbg:
 		  pdc->state, pdc->dpdcid, pdc->spdcid,
 		  be16_to_cpu(ses_req->msg_id), be32_to_cpu(req->psn),
 		  be16_to_cpu(req->spdcid), be16_to_cpu(req->dpdcid));
+
+	if (nack_code)
+		uet_pds_send_nack(pdc->pds, &pdc->key,
+				  pdc->metadata->u.tun_info.key.tp_dst, 0,
+				  cpu_to_be16(pdc->spdcid),
+				  cpu_to_be16(pdc->dpdcid),
+				  nack_code, req->psn,
+				  pds_req_to_nack_flags(req_flags));
 	goto out;
+}
+
+void uet_pdc_rx_nack(struct uet_pdc *pdc, struct sk_buff *skb)
+{
+	struct uet_pds_nack_hdr *nack = pds_nack_hdr(skb);
+	u32 nack_psn = be32_to_cpu(nack->nack_psn_pkt_id);
+
+	spin_lock(&pdc->lock);
+	netdev_dbg(pds_netdev(pdc->pds), "%s: NACK pdc: [ spdcid: %u dpdcid: %u rx_base_psn %u ] "
+					 "nack header: [ nack_code: %u vendor_code: %u nack_psn: %u ]\n",
+		   __func__, pdc->spdcid, pdc->dpdcid, pdc->rx_base_psn,
+		   nack->nack_code, nack->vendor_code, nack_psn);
+	if (psn_mpr_pos(pdc->rx_base_psn, nack_psn) != UET_PDC_MPR_CUR)
+		goto out;
+	switch (nack->nack_code) {
+	/* PDC_FATAL codes */
+	case UET_PDS_NACK_CLOSING_IN_ERR:
+	case UET_PDS_NACK_INV_DPDCID:
+	case UET_PDS_NACK_NO_RESOURCE:
+	case UET_PDS_NACK_PDC_HDR_MISMATCH:
+	case UET_PDS_NACK_INVALID_SYN:
+	case UET_PDS_NACK_PDC_MODE_MISMATCH:
+		uet_pdc_destroy(pdc);
+		break;
+	}
+out:
+	spin_unlock(&pdc->lock);
 }

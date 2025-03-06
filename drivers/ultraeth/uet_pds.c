@@ -149,6 +149,46 @@ void uet_pds_clean_job(struct uet_pds *pds, u32 job_id)
 	rhashtable_walk_exit(&iter);
 }
 
+static void uet_pds_build_nack(struct sk_buff *skb, __be16 spdcid, __be16 dpdcid,
+			       u8 nack_code, __be32 nack_psn, u8 flags)
+{
+	struct uet_pds_nack_hdr *nack = skb_put(skb, sizeof(*nack));
+
+	uet_pdc_build_prologue(&nack->prologue, UET_PDS_TYPE_NACK,
+			       UET_PDS_NEXT_HDR_NONE, flags);
+	nack->nack_code = nack_code;
+	nack->vendor_code = 0;
+	nack->nack_psn_pkt_id = nack_psn;
+	nack->spdcid = spdcid;
+	nack->dpdcid = dpdcid;
+	nack->payload = 0;
+}
+
+void uet_pds_send_nack(struct uet_pds *pds, const struct uet_pdc_key *key,
+		       __be16 dport, u8 tos, __be16 spdcid, __be16 dpdcid,
+		       __u8 nack_code, __be32 nack_psn, __u8 flags)
+{
+	struct metadata_dst *mdst;
+	struct sk_buff *skb;
+
+	if (WARN_ON_ONCE(!key))
+		return;
+
+	skb = alloc_skb(sizeof(struct uet_pds_nack_hdr), GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	skb->dev = pds_netdev(pds);
+	uet_pds_build_nack(skb, spdcid, dpdcid, nack_code, nack_psn, flags);
+	mdst = uet_pdc_dst(key, dport, tos);
+	if (!mdst) {
+		kfree_skb(skb);
+		return;
+	}
+	skb_dst_set(skb, &mdst->dst);
+	dev_queue_xmit(skb);
+}
+
 static int uet_pds_rx_ack(struct uet_pds *pds, struct sk_buff *skb,
 			  __be32 local_fep_addr, __be32 remote_fep_addr)
 {
@@ -162,6 +202,20 @@ static int uet_pds_rx_ack(struct uet_pds *pds, struct sk_buff *skb,
 		return -ENOENT;
 
 	return uet_pdc_rx_ack(pdc, skb, remote_fep_addr);
+}
+
+static void uet_pds_rx_nack(struct uet_pds *pds, struct sk_buff *skb)
+{
+	struct uet_pds_nack_hdr *nack = pds_nack_hdr(skb);
+	u16 pdcid = be16_to_cpu(nack->dpdcid);
+	struct uet_pdc *pdc;
+
+	pdc = rhashtable_lookup_fast(&pds->pdcid_hash, &pdcid,
+				     uet_pds_pdcid_rht_params);
+	if (!pdc)
+		return;
+
+	uet_pdc_rx_nack(pdc, skb);
 }
 
 static struct uet_pdc *uet_pds_new_pdc_rx(struct uet_pds *pds,
@@ -201,21 +255,45 @@ static int uet_pds_rx_req(struct uet_pds *pds, struct sk_buff *skb,
 	/* new flow */
 	if (unlikely(!pdc)) {
 		struct uet_prologue_hdr *prologue = pds_prologue_hdr(skb);
+		__u8 req_flags = uet_prologue_flags(prologue);
 		struct uet_context *ctx;
 		struct uet_job *job;
 
-		if (!(uet_prologue_flags(prologue) & UET_PDS_REQ_FLAG_SYN))
+		if (!(uet_prologue_flags(prologue) & UET_PDS_REQ_FLAG_SYN)) {
+			uet_pds_send_nack(pds, &key, dport, 0, 0,
+					  pds_req->spdcid,
+					  UET_PDS_NACK_INV_DPDCID, pds_req->psn,
+					  pds_req_to_nack_flags(req_flags));
 			return -EINVAL;
+		}
 
 		ctx = container_of(pds, struct uet_context, pds);
 		job = uet_job_find(&ctx->job_reg, key.job_id);
-		if (!job)
+		if (!job) {
+			uet_pds_send_nack(pds, &key, dport, 0, 0,
+					  pds_req->spdcid,
+					  UET_PDS_NACK_NO_RESOURCE,
+					  pds_req->psn,
+					  pds_req_to_nack_flags(req_flags));
 			return -ENOENT;
+		}
 		fep = rcu_dereference(job->fep);
-		if (!fep)
+		if (!fep) {
+			uet_pds_send_nack(pds, &key, dport, 0, 0,
+					  pds_req->spdcid,
+					  UET_PDS_NACK_NO_RESOURCE,
+					  pds_req->psn,
+					  pds_req_to_nack_flags(req_flags));
 			return -ECONNREFUSED;
-		if (fep->addr.in_address.ip != local_fep_addr)
+		}
+		if (fep->addr.in_address.ip != local_fep_addr) {
+			uet_pds_send_nack(pds, &key, dport, 0, 0,
+					  pds_req->spdcid,
+					  UET_PDS_NACK_PDC_HDR_MISMATCH,
+					  pds_req->psn,
+					  pds_req_to_nack_flags(req_flags));
 			return -ENOENT;
+		}
 
 		pdc = uet_pds_new_pdc_rx(pds, skb, dport, fep->ack_gen_trigger,
 					 fep->ack_gen_min_pkt_add, &key,
@@ -289,6 +367,15 @@ int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 			break;
 		ret = uet_pds_rx_req(pds, skb, local_fep_addr, remote_fep_addr,
 				     dport, tos);
+		break;
+	case UET_PDS_TYPE_NACK:
+		if (uet_prologue_next_hdr(prologue) != UET_PDS_NEXT_HDR_NONE)
+			break;
+		offset += sizeof(struct uet_pds_nack_hdr);
+		if (!pskb_may_pull(skb, offset))
+			break;
+		ret = 0;
+		uet_pds_rx_nack(pds, skb);
 		break;
 	default:
 		break;

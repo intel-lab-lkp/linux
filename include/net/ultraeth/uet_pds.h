@@ -7,6 +7,7 @@
 #include <linux/rhashtable.h>
 #include <uapi/linux/ultraeth.h>
 #include <linux/skbuff.h>
+#include <net/ultraeth/uet_pdc.h>
 
 /**
  * struct uet_pds - Packet Delivery Sublayer state structure
@@ -42,6 +43,10 @@ int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 	       __be32 remote_fep_addr, __be16 dport, __u8 tos);
 int uet_pds_tx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 	       __be32 remote_fep_addr, __be16 dport, u32 job_id);
+
+void uet_pds_send_nack(struct uet_pds *pds, const struct uet_pdc_key *key,
+		       __be16 dport, u8 tos, __be16 spdcid, __be16 dpdcid,
+		       __u8 nack_code, __be32 nack_psn, __u8 flags);
 
 static inline struct uet_prologue_hdr *pds_prologue_hdr(const struct sk_buff *skb)
 {
@@ -91,5 +96,10 @@ static inline __be16 pds_ses_rsp_hdr_pack(__u8 opcode, __u8 version, __u8 list,
 			   UET_SES_RSP_LIST_SHIFT |
 			   (ses_rc & UET_SES_RSP_RC_MASK) <<
 			   UET_SES_RSP_RC_SHIFT);
+}
+
+static inline __u8 pds_req_to_nack_flags(__u8 req_flags)
+{
+	return req_flags & UET_PDS_REQ_FLAG_RETX ? UET_PDS_NACK_FLAG_RETX : 0;
 }
 #endif /* _UECON_PDS_H */

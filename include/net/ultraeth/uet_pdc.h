@@ -120,6 +120,9 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 		   __be32 remote_fep_addr);
 int uet_pdc_tx_req(struct uet_pdc *pdc, struct sk_buff *skb, u8 type);
+void uet_pdc_rx_nack(struct uet_pdc *pdc, struct sk_buff *skb);
+struct metadata_dst *uet_pdc_dst(const struct uet_pdc_key *key, __be16 dport,
+				 u8 tos);
 
 static inline void uet_pdc_build_prologue(struct uet_prologue_hdr *prologue,
 					  u8 type, u8 next, u8 flags)
