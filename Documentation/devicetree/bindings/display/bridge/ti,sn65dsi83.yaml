@@ -94,6 +94,18 @@ properties:
       - port@0
       - port@2
 
+  hsync-disable:
+    type: boolean
+    description: |
+      Disable HSYNC generation on the LVDS output by setting the
+      width in pixel clocks of the hsync pulse width to 0.
+
+  vsync-disable:
+    type: boolean
+    description: |
+      Disable VSYNC generation on the LVDS output by setting the
+      length in lines of the vsync pulse width to 0.
+
 required:
   - compatible
   - reg
