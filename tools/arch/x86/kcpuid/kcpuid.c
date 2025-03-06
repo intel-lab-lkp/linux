@@ -8,12 +8,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef unsigned int u32;
+typedef unsigned long long u64;
+
 #define ARRAY_SIZE(x)	(sizeof(x) / sizeof((x)[0]))
+#define BIT(x)		(1UL << (x))
 #define min(a, b)	(((a) < (b)) ? (a) : (b))
 #define __noreturn	__attribute__((__noreturn__))
 
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#define fourcc(a, b, c, d)	\
+	((u32)(a) | ((u32)(b) << 8) | ((u32)(c) << 16) | ((u32)(d) << 24))
 
 char *def_csv = "/usr/share/misc/cpuid.csv";
 char *user_csv;
@@ -65,6 +69,17 @@ struct cpuid_func {
 	int nr;
 };
 
+enum cpu_vendor {
+	VENDOR_INTEL		= BIT(0),
+	VENDOR_AMD		= BIT(1),	/* includes Hygon */
+	VENDOR_CENTAUR		= BIT(2),	/* includes Zhaoxin */
+	VENDOR_TRANSMETA	= BIT(3),
+	VENDOR_UNKNOWN		= BIT(15),
+	VENDOR_ALL		= ~0UL,
+};
+
+static enum cpu_vendor this_cpu_vendor;
+
 enum range_index {
 	RANGE_STD = 0,			/* Standard */
 	RANGE_EXT = 0x80000000,		/* Extended */
@@ -79,11 +94,17 @@ struct cpuid_range {
 	/* number of valid leafs */
 	int nr;
 	enum range_index index;
+	/* compatible cpu vendors */
+	enum cpu_vendor vendors;
 };
 
 static struct cpuid_range ranges[] = {
-	{	.index		= RANGE_STD,	},
-	{	.index		= RANGE_EXT,	},
+	{	.index		= RANGE_STD,
+		.vendors	= VENDOR_ALL,
+	},
+	{	.index		= RANGE_EXT,
+		.vendors	= VENDOR_ALL,
+	},
 };
 
 static char *range_to_str(struct cpuid_range *range)
@@ -143,6 +164,40 @@ static inline bool has_subleafs(u32 f)
 			return true;
 
 	return false;
+}
+
+/*
+ * Leaf 0x0 EDX output, CPU vendor ID string bytes 4 - 7.
+ */
+enum {
+	EDX_INTEL	= fourcc('i', 'n', 'e', 'I'),	/* Genu_ineI_ntel */
+	EDX_AMD		= fourcc('e', 'n', 't', 'i'),	/* Auth_enti_cAMD */
+	EDX_HYGON	= fourcc('n', 'G', 'e', 'n'),	/* Hygo_nGen_uine */
+	EDX_TRANSMETA	= fourcc('i', 'n', 'e', 'T'),	/* Genu_ineT_Mx86 */
+	EDX_CENTAUR	= fourcc('a', 'u', 'r', 'H'),	/* Cent_aurH_auls */
+	EDX_ZHAOXIN	= fourcc('a', 'n', 'g', 'h'),	/*   Sh_angh_ai	  */
+};
+
+static enum cpu_vendor identify_cpu_vendor(void)
+{
+	u32 eax = 0, ebx, ecx = 0, edx;
+
+	cpuid(&eax, &ebx, &ecx, &edx);
+
+	switch (edx) {
+	case EDX_INTEL:
+		return VENDOR_INTEL;
+	case EDX_AMD:
+	case EDX_HYGON:
+		return VENDOR_AMD;
+	case EDX_TRANSMETA:
+		return VENDOR_TRANSMETA;
+	case EDX_CENTAUR:
+	case EDX_ZHAOXIN:
+		return VENDOR_CENTAUR;
+	default:
+		return VENDOR_UNKNOWN;
+	}
 }
 
 static void leaf_print_raw(struct subleaf *leaf)
@@ -670,6 +725,8 @@ int main(int argc, char *argv[])
 	struct cpuid_range *range;
 
 	parse_options(argc, argv);
+
+	this_cpu_vendor = identify_cpu_vendor();
 
 	/* Setup the cpuid leafs of current platform */
 	for_each_cpuid_range(range)
