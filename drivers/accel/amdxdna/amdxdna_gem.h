@@ -6,6 +6,19 @@
 #ifndef _AMDXDNA_GEM_H_
 #define _AMDXDNA_GEM_H_
 
+#include <linux/hmm.h>
+
+struct amdxdna_umap {
+	struct vm_area_struct		*vma;
+	struct mmu_interval_notifier	notifier;
+	struct hmm_range		range;
+	struct work_struct		hmm_unreg_work;
+	struct amdxdna_gem_obj		*abo;
+	struct list_head		node;
+	struct kref			refcnt;
+	bool				invalid;
+};
+
 struct amdxdna_mem {
 	u64				userptr;
 	void				*kva;
@@ -13,8 +26,7 @@ struct amdxdna_mem {
 	size_t				size;
 	struct page			**pages;
 	u32				nr_pages;
-	struct mmu_interval_notifier	notifier;
-	unsigned long			*pfns;
+	struct list_head		umap_list;
 	bool				map_invalid;
 };
 
@@ -34,6 +46,7 @@ struct amdxdna_gem_obj {
 };
 
 #define to_gobj(obj)    (&(obj)->base.base)
+#define is_import_bo(obj) (to_gobj(obj)->import_attach)
 
 static inline struct amdxdna_gem_obj *to_xdna_obj(struct drm_gem_object *gobj)
 {
@@ -47,8 +60,12 @@ static inline void amdxdna_gem_put_obj(struct amdxdna_gem_obj *abo)
 	drm_gem_object_put(to_gobj(abo));
 }
 
+void amdxdna_umap_put(struct amdxdna_umap *mapp);
+
 struct drm_gem_object *
 amdxdna_gem_create_object_cb(struct drm_device *dev, size_t size);
+struct drm_gem_object *
+amdxdna_gem_prime_import(struct drm_device *dev, struct dma_buf *dma_buf);
 struct amdxdna_gem_obj *
 amdxdna_drm_alloc_dev_bo(struct drm_device *dev,
 			 struct amdxdna_drm_create_bo *args,
