@@ -3655,6 +3655,11 @@ after_split:
 						MTHP_STAT_NR_ANON, 1);
 			}
 
+			if (folio_is_device_private(origin_folio) &&
+					origin_folio->pgmap->ops->folio_split)
+				origin_folio->pgmap->ops->folio_split(
+					origin_folio, release);
+
 			/*
 			 * Unfreeze refcount first. Additional reference from
 			 * page cache.

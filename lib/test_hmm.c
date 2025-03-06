@@ -1640,10 +1640,45 @@ err:
 	return ret;
 }
 
+
+static void dmirror_devmem_folio_split(struct folio *head, struct folio *tail)
+{
+	struct page *rpage = BACKING_PAGE(folio_page(head, 0));
+	struct folio *new_rfolio;
+	struct folio *rfolio;
+	unsigned long offset = 0;
+
+	if (!rpage) {
+		folio_page(tail, 0)->zone_device_data = NULL;
+		return;
+	}
+
+	offset = folio_pfn(tail) - folio_pfn(head);
+	rfolio = page_folio(rpage);
+	new_rfolio = page_folio(folio_page(rfolio, offset));
+
+	folio_page(tail, 0)->zone_device_data = folio_page(new_rfolio, 0);
+
+	if (folio_pfn(tail) - folio_pfn(head) == 1) {
+		if (folio_order(head))
+			prep_compound_page(folio_page(rfolio, 0),
+						folio_order(head));
+		folio_set_count(rfolio, 1);
+	}
+	clear_compound_head(folio_page(new_rfolio, 0));
+	if (folio_order(tail))
+		prep_compound_page(folio_page(new_rfolio, 0),
+						folio_order(tail));
+	folio_set_count(new_rfolio, 1);
+	folio_page(new_rfolio, 0)->mapping = folio_page(rfolio, 0)->mapping;
+	tail->pgmap = head->pgmap;
+}
+
 static const struct dev_pagemap_ops dmirror_devmem_ops = {
 	.page_free	= dmirror_devmem_free,
 	.migrate_to_ram	= dmirror_devmem_fault,
 	.page_free	= dmirror_devmem_free,
+	.folio_split	= dmirror_devmem_folio_split,
 };
 
 static int dmirror_device_init(struct dmirror_device *mdevice, int id)
