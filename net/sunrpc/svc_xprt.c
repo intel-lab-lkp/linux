@@ -1451,15 +1451,16 @@ static int svc_pool_stats_show(struct seq_file *m, void *p)
 	struct svc_pool *pool = p;
 
 	if (p == SEQ_START_TOKEN) {
-		seq_puts(m, "# pool packets-arrived sockets-enqueued threads-woken threads-timedout\n");
+		seq_puts(m, "# pool packets-arrived sockets-enqueued threads-woken threads-timedout no-threads-avail\n");
 		return 0;
 	}
 
-	seq_printf(m, "%u %llu %llu %llu 0\n",
+	seq_printf(m, "%u %llu %llu %llu 0 %llu\n",
 		   pool->sp_id,
 		   percpu_counter_sum_positive(&pool->sp_messages_arrived),
 		   percpu_counter_sum_positive(&pool->sp_sockets_queued),
-		   percpu_counter_sum_positive(&pool->sp_threads_woken));
+		   percpu_counter_sum_positive(&pool->sp_threads_woken),
+		   percpu_counter_sum_positive(&pool->sp_no_threads_avail));
 
 	return 0;
 }

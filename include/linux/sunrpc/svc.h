@@ -44,6 +44,7 @@ struct svc_pool {
 	struct percpu_counter	sp_messages_arrived;
 	struct percpu_counter	sp_sockets_queued;
 	struct percpu_counter	sp_threads_woken;
+	struct percpu_counter	sp_no_threads_avail;
 
 	unsigned long		sp_flags;
 } ____cacheline_aligned_in_smp;

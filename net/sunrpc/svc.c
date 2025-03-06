@@ -545,6 +545,7 @@ __svc_create(struct svc_program *prog, int nprogs, struct svc_stat *stats,
 		percpu_counter_init(&pool->sp_messages_arrived, 0, GFP_KERNEL);
 		percpu_counter_init(&pool->sp_sockets_queued, 0, GFP_KERNEL);
 		percpu_counter_init(&pool->sp_threads_woken, 0, GFP_KERNEL);
+		percpu_counter_init(&pool->sp_no_threads_avail, 0, GFP_KERNEL);
 	}
 
 	return serv;
@@ -629,6 +630,7 @@ svc_destroy(struct svc_serv **servp)
 		percpu_counter_destroy(&pool->sp_messages_arrived);
 		percpu_counter_destroy(&pool->sp_sockets_queued);
 		percpu_counter_destroy(&pool->sp_threads_woken);
+		percpu_counter_destroy(&pool->sp_no_threads_avail);
 	}
 	kfree(serv->sv_pools);
 	kfree(serv);
@@ -756,7 +758,7 @@ void svc_pool_wake_idle_thread(struct svc_pool *pool)
 		return;
 	}
 	rcu_read_unlock();
-
+	percpu_counter_inc(&pool->sp_no_threads_avail);
 }
 EXPORT_SYMBOL_GPL(svc_pool_wake_idle_thread);
 
