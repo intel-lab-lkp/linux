@@ -18,7 +18,7 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	struct gdma_context *gc;
 	bool is_rnic_cq;
 	u32 doorbell;
-	u32 buf_size;
+	size_t buf_size;
 	int err;
 
 	mdev = container_of(ibdev, struct mana_ib_dev, ib_dev);
@@ -45,7 +45,8 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		}
 
 		cq->cqe = attr->cqe;
-		err = mana_ib_create_queue(mdev, ucmd.buf_addr, cq->cqe * COMP_ENTRY_SIZE,
+		buf_size = (size_t)cq->cqe * COMP_ENTRY_SIZE;
+		err = mana_ib_create_queue(mdev, ucmd.buf_addr, buf_size,
 					   &cq->queue);
 		if (err) {
 			ibdev_dbg(ibdev, "Failed to create queue for create cq, %d\n", err);
@@ -57,8 +58,8 @@ int mana_ib_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		doorbell = mana_ucontext->doorbell;
 	} else {
 		is_rnic_cq = true;
-		buf_size = MANA_PAGE_ALIGN(roundup_pow_of_two(attr->cqe * COMP_ENTRY_SIZE));
-		cq->cqe = buf_size / COMP_ENTRY_SIZE;
+		cq->cqe = attr->cqe;
+		buf_size = MANA_PAGE_ALIGN(roundup_pow_of_two((size_t)attr->cqe * COMP_ENTRY_SIZE));
 		err = mana_ib_create_kernel_queue(mdev, buf_size, GDMA_CQ, &cq->queue);
 		if (err) {
 			ibdev_dbg(ibdev, "Failed to create kernel queue for create cq, %d\n", err);

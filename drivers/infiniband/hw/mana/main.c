@@ -240,7 +240,7 @@ void mana_ib_dealloc_ucontext(struct ib_ucontext *ibcontext)
 		ibdev_dbg(ibdev, "Failed to destroy doorbell page %d\n", ret);
 }
 
-int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, u32 size, enum gdma_queue_type type,
+int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, size_t size, enum gdma_queue_type type,
 				struct mana_ib_queue *queue)
 {
 	struct gdma_context *gc = mdev_to_gc(mdev);
@@ -249,6 +249,12 @@ int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, u32 size, enum gdma_qu
 
 	queue->id = INVALID_QUEUE_ID;
 	queue->gdma_region = GDMA_INVALID_DMA_REGION;
+
+	if (size > U32_MAX) {
+		ibdev_dbg(&mdev->ib_dev, "Queue size exceeding limit %zu\n", size);
+		return -EINVAL;
+	}
+
 	spec.type = type;
 	spec.monitor_avl_buf = false;
 	spec.queue_size = size;
@@ -261,7 +267,7 @@ int mana_ib_create_kernel_queue(struct mana_ib_dev *mdev, u32 size, enum gdma_qu
 	return 0;
 }
 
-int mana_ib_create_queue(struct mana_ib_dev *mdev, u64 addr, u32 size,
+int mana_ib_create_queue(struct mana_ib_dev *mdev, u64 addr, size_t size,
 			 struct mana_ib_queue *queue)
 {
 	struct ib_umem *umem;
@@ -270,6 +276,11 @@ int mana_ib_create_queue(struct mana_ib_dev *mdev, u64 addr, u32 size,
 	queue->umem = NULL;
 	queue->id = INVALID_QUEUE_ID;
 	queue->gdma_region = GDMA_INVALID_DMA_REGION;
+
+	if (size > U32_MAX) {
+		ibdev_dbg(&mdev->ib_dev, "Queue size exceeding limit %zu\n", size);
+		return -EINVAL;
+	}
 
 	umem = ib_umem_get(&mdev->ib_dev, addr, size, IB_ACCESS_LOCAL_WRITE);
 	if (IS_ERR(umem)) {

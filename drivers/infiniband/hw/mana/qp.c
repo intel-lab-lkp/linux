@@ -405,18 +405,18 @@ static u32 mana_ib_wqe_size(u32 sge, u32 oob_size)
 	return ALIGN(wqe_size, GDMA_WQE_BU_SIZE);
 }
 
-static u32 mana_ib_queue_size(struct ib_qp_init_attr *attr, u32 queue_type)
+static size_t mana_ib_queue_size(struct ib_qp_init_attr *attr, u32 queue_type)
 {
-	u32 queue_size;
+	size_t queue_size;
 
 	switch (attr->qp_type) {
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
 		if (queue_type == MANA_UD_SEND_QUEUE)
-			queue_size = attr->cap.max_send_wr *
+			queue_size = (size_t)attr->cap.max_send_wr *
 				mana_ib_wqe_size(attr->cap.max_send_sge, INLINE_OOB_LARGE_SIZE);
 		else
-			queue_size = attr->cap.max_recv_wr *
+			queue_size = (size_t)attr->cap.max_recv_wr *
 				mana_ib_wqe_size(attr->cap.max_recv_sge, INLINE_OOB_SMALL_SIZE);
 		break;
 	default:
@@ -636,7 +636,8 @@ static int mana_ib_create_ud_qp(struct ib_qp *ibqp, struct ib_pd *ibpd,
 	struct mana_ib_dev *mdev = container_of(ibpd->device, struct mana_ib_dev, ib_dev);
 	struct mana_ib_qp *qp = container_of(ibqp, struct mana_ib_qp, ibqp);
 	struct gdma_context *gc = mdev_to_gc(mdev);
-	u32 doorbell, queue_size;
+	size_t queue_size;
+	u32 doorbell;
 	int i, err;
 
 	if (udata) {
