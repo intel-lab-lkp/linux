@@ -187,6 +187,8 @@ struct rk_udphy {
 	u32 dp_aux_din_sel;
 	bool dp_sink_hpd_sel;
 	bool dp_sink_hpd_cfg;
+	unsigned int link_rate;
+	unsigned int lanes;
 	u8 bw;
 	int id;
 
@@ -1103,42 +1105,39 @@ static int rk_udphy_dp_phy_power_off(struct phy *phy)
 	return 0;
 }
 
-static int rk_udphy_dp_phy_verify_link_rate(unsigned int link_rate)
-{
-	switch (link_rate) {
-	case 1620:
-	case 2700:
-	case 5400:
-	case 8100:
-		break;
-
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static int rk_udphy_dp_phy_verify_config(struct rk_udphy *udphy,
 					 struct phy_configure_opts_dp *dp)
 {
-	int i, ret;
+	int i;
 
-	/* If changing link rate was required, verify it's supported. */
-	ret = rk_udphy_dp_phy_verify_link_rate(dp->link_rate);
-	if (ret)
-		return ret;
+	/* Verify link rate. */
+	if (dp->set_rate) {
+		switch (dp->link_rate) {
+		case 1620:
+		case 2700:
+		case 5400:
+		case 8100:
+			udphy->link_rate = dp->link_rate;
+			break;
+
+		default:
+			return -EINVAL;
+		}
+	}
 
 	/* Verify lane count. */
-	switch (dp->lanes) {
-	case 1:
-	case 2:
-	case 4:
-		/* valid lane count. */
-		break;
+	if (dp->set_lanes) {
+		switch (dp->lanes) {
+		case 1:
+		case 2:
+		case 4:
+			/* valid lane count. */
+			udphy->lanes = dp->lanes;
+			break;
 
-	default:
-		return -EINVAL;
+		default:
+			return -EINVAL;
+		}
 	}
 
 	/*
@@ -1147,7 +1146,7 @@ static int rk_udphy_dp_phy_verify_config(struct rk_udphy *udphy,
 	 */
 	if (dp->set_voltages) {
 		/* Lane count verified previously. */
-		for (i = 0; i < dp->lanes; i++) {
+		for (i = 0; i < udphy->lanes; i++) {
 			if (dp->voltage[i] > 3 || dp->pre[i] > 3)
 				return -EINVAL;
 
@@ -1244,9 +1243,9 @@ static int rk_udphy_dp_phy_configure(struct phy *phy,
 	}
 
 	if (dp->set_voltages) {
-		for (i = 0; i < dp->lanes; i++) {
+		for (i = 0; i < udphy->lanes; i++) {
 			lane = udphy->dp_lane_sel[i];
-			switch (dp->link_rate) {
+			switch (udphy->link_rate) {
 			case 1620:
 			case 2700:
 				regmap_update_bits(udphy->pma_regmap,
