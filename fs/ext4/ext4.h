@@ -1728,6 +1728,8 @@ struct ext4_sb_info {
 	 */
 	struct work_struct s_sb_upd_work;
 
+	bool s_journal_destorying;
+
 	/* Atomic write unit values in bytes */
 	unsigned int s_awu_min;
 	unsigned int s_awu_max;

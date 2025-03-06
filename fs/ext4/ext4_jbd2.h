@@ -437,6 +437,14 @@ static inline int ext4_journal_destroy(struct ext4_sb_info *sbi, journal_t *jour
 {
 	int err = 0;
 
+	/*
+	 * At this point all pending FS updates should be done except a possible
+	 * running transaction (which will commit in jbd2_journal_destroy). It
+	 * is now safe for any new errors to directly commit superblock rather
+	 * than going via journal.
+	 */
+	sbi->s_journal_destorying = true;
+
 	err = jbd2_journal_destroy(journal);
 	sbi->s_journal = NULL;
 
