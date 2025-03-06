@@ -861,6 +861,26 @@ static inline bool __is_setuid(struct cred *new, const struct cred *old)
 static inline bool __is_setgid(struct cred *new, const struct cred *old)
 { return !gid_eq(new->egid, old->gid); }
 
+/**
+ * Are all user/group ids in both cred instances identical?
+ *
+ * It can be used after __is_setuid() / __is_setgid() to check whether
+ * this is really a set*id operation or whether both processes just
+ * have differing real/effective ids.  It is safe to keep differing
+ * real/effective ids in "unsafe" program execution.
+ */
+static bool has_identical_uids_gids(const struct cred *a, const struct cred *b)
+{
+	return uid_eq(a->uid, b->uid) &&
+		gid_eq(a->gid, b->gid) &&
+		uid_eq(a->suid, b->suid) &&
+		gid_eq(a->sgid, b->sgid) &&
+		uid_eq(a->euid, b->euid) &&
+		gid_eq(a->egid, b->egid) &&
+		uid_eq(a->fsuid, b->fsuid) &&
+		gid_eq(a->fsgid, b->fsgid);
+}
+
 /*
  * 1) Audit candidate if current->cap_effective is set
  *
@@ -940,7 +960,8 @@ int cap_bprm_creds_from_file(struct linux_binprm *bprm, const struct file *file)
 	 *
 	 * In addition, if NO_NEW_PRIVS, then ensure we get no new privs.
 	 */
-	is_setid = __is_setuid(new, old) || __is_setgid(new, old);
+	is_setid = (__is_setuid(new, old) || __is_setgid(new, old)) &&
+		!has_identical_uids_gids(new, old);
 
 	if ((is_setid || __cap_gained(permitted, new, old)) &&
 	    ((bprm->unsafe & ~LSM_UNSAFE_PTRACE) ||
