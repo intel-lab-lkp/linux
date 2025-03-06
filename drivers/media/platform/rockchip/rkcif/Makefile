@@ -5,3 +5,6 @@ rockchip-cif-objs += rkcif-dev.o \
 	rkcif-capture-mipi.o \
 	rkcif-interface.o \
 	rkcif-stream.o
+
+obj-$(CONFIG_VIDEO_ROCKCHIP_CIF) += rockchip-mipi-csi.o
+rockchip-mipi-csi-objs += rkcif-mipi-csi-host.o
