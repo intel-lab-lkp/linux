@@ -1358,6 +1358,13 @@ config PT_RECLAIM
 
 	  Note: now only empty user PTE page table pages will be reclaimed.
 
+config KPROMOTED
+	bool "Kernel hot page promotion daemon"
+	def_bool y
+	depends on NUMA && MIGRATION && MMU
+	help
+	  Promote hot pages from lower tier to top tier by using the
+	  memory access information provided by various sources.
 
 source "mm/damon/Kconfig"
 

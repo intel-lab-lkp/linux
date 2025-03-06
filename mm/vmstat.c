@@ -1468,6 +1468,19 @@ const char * const vmstat_text[] = {
 	"kstack_rest",
 #endif
 #endif
+	"kpromoted_recorded_accesses",
+	"kpromoted_recorded_hwhints",
+	"kpromoted_recorded_pgtscans",
+	"kpromoted_record_toptier",
+	"kpromoted_record_added",
+	"kpromoted_record_exists",
+	"kpromoted_mig_right_node",
+	"kpromoted_mig_non_lru",
+	"kpromoted_mig_cold_old",
+	"kpromoted_mig_cold_not_accessed",
+	"kpromoted_mig_candidate",
+	"kpromoted_mig_promoted",
+	"kpromoted_mig_dropped",
 #endif /* CONFIG_VM_EVENT_COUNTERS || CONFIG_MEMCG */
 };
 #endif /* CONFIG_PROC_FS || CONFIG_SYSFS || CONFIG_NUMA || CONFIG_MEMCG */
