@@ -18,7 +18,6 @@
  */
 
 #include <stdlib.h>
-#include <stdbool.h>
 #include <unistd.h>
 #include <stdio.h>
 #include "timeout.h"
@@ -41,6 +40,12 @@ void sigalrm(int signo)
 void timeout_begin(unsigned int seconds)
 {
 	alarm(seconds);
+}
+
+/* Check if timer has expired */
+bool timeout_check_expired(void)
+{
+	return timeout;
 }
 
 /* Exit with an error message if the timeout has expired */
