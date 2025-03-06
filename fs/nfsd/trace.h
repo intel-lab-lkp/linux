@@ -2337,6 +2337,60 @@ DEFINE_EVENT(nfsd_copy_async_done_class,		\
 DEFINE_COPY_ASYNC_DONE_EVENT(done);
 DEFINE_COPY_ASYNC_DONE_EVENT(cancel);
 
+#define show_ia_valid_flags(x)					\
+	__print_flags(x, "|",					\
+			{ ATTR_MODE, "MODE" },			\
+			{ ATTR_UID, "UID" },			\
+			{ ATTR_GID, "GID" },			\
+			{ ATTR_SIZE, "SIZE" },			\
+			{ ATTR_ATIME, "ATIME" },		\
+			{ ATTR_MTIME, "MTIME" },		\
+			{ ATTR_CTIME, "CTIME" },		\
+			{ ATTR_ATIME_SET, "ATIME_SET" },	\
+			{ ATTR_MTIME_SET, "MTIME_SET" },	\
+			{ ATTR_FORCE, "FORCE" },		\
+			{ ATTR_KILL_SUID, "KILL_SUID" },	\
+			{ ATTR_KILL_SGID, "KILL_SGID" },	\
+			{ ATTR_FILE, "FILE" },			\
+			{ ATTR_KILL_PRIV, "KILL_PRIV" },	\
+			{ ATTR_OPEN, "OPEN" },			\
+			{ ATTR_TIMES_SET, "TIMES_SET" },	\
+			{ ATTR_TOUCH, "TOUCH"})
+
+TRACE_EVENT(nfsd_setattr,
+	TP_PROTO(const struct svc_rqst *rqstp, const struct svc_fh *fhp,
+		 const struct iattr *iap, const struct timespec64 *guardtime),
+	TP_ARGS(rqstp, fhp, iap, guardtime),
+	TP_STRUCT__entry(
+		__field(u32, xid)
+		__field(u32, fh_hash)
+		__field(s64, gtime_tv_sec)
+		__field(u32, gtime_tv_nsec)
+		__field(unsigned int, ia_valid)
+		__field(umode_t, ia_mode)
+		__field(uid_t, ia_uid)
+		__field(gid_t, ia_gid)
+		__field(loff_t, ia_size)
+	),
+	TP_fast_assign(__entry->xid = be32_to_cpu(rqstp->rq_xid);
+	       __entry->fh_hash = knfsd_fh_hash(&fhp->fh_handle);
+	       __entry->gtime_tv_sec = guardtime ? guardtime->tv_sec : 0;
+	       __entry->gtime_tv_nsec = guardtime ? guardtime->tv_nsec : 0;
+	       __entry->ia_valid = iap->ia_valid;
+	       __entry->ia_mode = iap->ia_mode;
+	       __entry->ia_uid = __kuid_val(iap->ia_uid);
+	       __entry->ia_gid = __kgid_val(iap->ia_gid);
+	       __entry->ia_size = iap->ia_size;
+
+	),
+	TP_printk(
+		"xid=0x%08x fh_hash=0x%08x ia_valid=%s ia_mode=%o ia_uid=%u ia_gid=%u guard_time=%lld.%u",
+		__entry->xid, __entry->fh_hash, show_ia_valid_flags(__entry->ia_valid),
+		__entry->ia_mode, __entry->ia_uid, __entry->ia_gid,
+		__entry->gtime_tv_sec, __entry->gtime_tv_nsec
+	)
+)
+
 #endif /* _NFSD_TRACE_H */
 
 #undef TRACE_INCLUDE_PATH
