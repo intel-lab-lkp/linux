@@ -1150,7 +1150,7 @@ static unsigned int get_contig_folio_len(unsigned int *num_pages,
  */
 static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 {
-	iov_iter_extraction_t extraction_flags = 0;
+	iov_iter_extraction_t extraction_flags = ITER_ALLOW_LONGTERM;
 	unsigned short nr_pages = bio->bi_max_vecs - bio->bi_vcnt;
 	unsigned short entries_left = bio->bi_max_vecs - bio->bi_vcnt;
 	struct bio_vec *bv = bio->bi_io_vec + bio->bi_vcnt;

@@ -386,6 +386,8 @@ static inline void iov_iter_ubuf(struct iov_iter *i, unsigned int direction,
 /* Flags for iov_iter_get/extract_pages*() */
 /* Allow P2PDMA on the extracted pages */
 #define ITER_ALLOW_P2PDMA	((__force iov_iter_extraction_t)0x01)
+/* Allow LONGTERM on the extracted pages */
+#define ITER_ALLOW_LONGTERM	((__force iov_iter_extraction_t)0x02)
 
 ssize_t iov_iter_extract_pages(struct iov_iter *i, struct page ***pages,
 			       size_t maxsize, unsigned int maxpages,
