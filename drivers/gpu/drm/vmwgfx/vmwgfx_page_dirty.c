@@ -71,6 +71,11 @@ struct vmw_bo_dirty {
 	unsigned long bitmap[];
 };
 
+bool vmw_bo_is_dirty(struct vmw_bo *vbo)
+{
+	return vbo->dirty && (vbo->dirty->start < vbo->dirty->end);
+}
+
 /**
  * vmw_bo_dirty_scan_pagetable - Perform a pagetable scan for dirty bits
  * @vbo: The buffer object to scan
@@ -333,6 +338,41 @@ void vmw_bo_dirty_transfer_to_res(struct vmw_resource *res)
 		num = end - start;
 		bitmap_clear(&dirty->bitmap[0], start, num);
 		vmw_resource_dirty_update(res, start, end);
+	}
+
+	if (res_start <= dirty->start && res_end > dirty->start)
+		dirty->start = res_end;
+	if (res_start < dirty->end && res_end >= dirty->end)
+		dirty->end = res_start;
+}
+
+void vmw_bo_dirty_clear(struct vmw_bo *vbo)
+{
+	struct vmw_bo_dirty *dirty = vbo->dirty;
+	pgoff_t start, cur, end;
+	unsigned long res_start = 0;
+	unsigned long res_end = vbo->tbo.base.size;
+
+	WARN_ON_ONCE(res_start & ~PAGE_MASK);
+	res_start >>= PAGE_SHIFT;
+	res_end = DIV_ROUND_UP(res_end, PAGE_SIZE);
+
+	if (res_start >= dirty->end || res_end <= dirty->start)
+		return;
+
+	cur = max(res_start, dirty->start);
+	res_end = max(res_end, dirty->end);
+	while (cur < res_end) {
+		unsigned long num;
+
+		start = find_next_bit(&dirty->bitmap[0], res_end, cur);
+		if (start >= res_end)
+			break;
+
+		end = find_next_zero_bit(&dirty->bitmap[0], res_end, start + 1);
+		cur = end + 1;
+		num = end - start;
+		bitmap_clear(&dirty->bitmap[0], start, num);
 	}
 
 	if (res_start <= dirty->start && res_end > dirty->start)

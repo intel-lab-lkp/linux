@@ -4512,8 +4512,6 @@ int vmw_execbuf_ioctl(struct drm_device *dev, void *data,
 	if (unlikely(ret != 0))
 		goto out;
 
-	vmw_kms_cursor_post_execbuf(dev_priv);
-
 out:
 	if (in_fence)
 		dma_fence_put(in_fence);

@@ -27,6 +27,7 @@
  **************************************************************************/
 
 #include "vmwgfx_bo.h"
+#include "vmwgfx_cursor_plane.h"
 #include "vmwgfx_drv.h"
 #include "vmwgfx_resource_priv.h"
 #include "vmwgfx_so.h"
@@ -818,25 +819,11 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 		}
 	}
 	res->guest_memory_size = cur_bo_offset;
-	if (!file_priv->atomic &&
-	    metadata->scanout &&
-	    metadata->num_sizes == 1 &&
-	    metadata->sizes[0].width == VMW_CURSOR_SNOOP_WIDTH &&
-	    metadata->sizes[0].height == VMW_CURSOR_SNOOP_HEIGHT &&
-	    metadata->format == VMW_CURSOR_SNOOP_FORMAT) {
-		const struct SVGA3dSurfaceDesc *desc =
-			vmw_surface_get_desc(VMW_CURSOR_SNOOP_FORMAT);
-		const u32 cursor_size_bytes = VMW_CURSOR_SNOOP_WIDTH *
-					      VMW_CURSOR_SNOOP_HEIGHT *
-					      desc->pitchBytesPerBlock;
-		srf->snooper.image = kzalloc(cursor_size_bytes, GFP_KERNEL);
-		if (!srf->snooper.image) {
-			DRM_ERROR("Failed to allocate cursor_image\n");
-			ret = -ENOMEM;
-			goto out_no_copy;
-		}
-	} else {
-		srf->snooper.image = NULL;
+
+	srf->snooper.image = vmw_cursor_snooper_create(file_priv, metadata);
+	if (IS_ERR(srf->snooper.image)) {
+		ret = PTR_ERR(srf->snooper.image);
+		goto out_no_copy;
 	}
 
 	if (drm_is_primary_client(file_priv))

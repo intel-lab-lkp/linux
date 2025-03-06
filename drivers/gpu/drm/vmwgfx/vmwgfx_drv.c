@@ -1324,9 +1324,6 @@ static void vmw_master_set(struct drm_device *dev,
 static void vmw_master_drop(struct drm_device *dev,
 			    struct drm_file *file_priv)
 {
-	struct vmw_private *dev_priv = vmw_priv(dev);
-
-	vmw_kms_legacy_hotspot_clear(dev_priv);
 }
 
 bool vmwgfx_supported(struct vmw_private *vmw)

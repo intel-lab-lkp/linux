@@ -100,10 +100,6 @@
 #define VMW_RES_SHADER ttm_driver_type4
 #define VMW_RES_HT_ORDER 12
 
-#define VMW_CURSOR_SNOOP_FORMAT SVGA3D_A8R8G8B8
-#define VMW_CURSOR_SNOOP_WIDTH 64
-#define VMW_CURSOR_SNOOP_HEIGHT 64
-
 #define MKSSTAT_CAPACITY_LOG2 5U
 #define MKSSTAT_CAPACITY (1U << MKSSTAT_CAPACITY_LOG2)
 
@@ -201,7 +197,7 @@ enum vmw_cmdbuf_res_type {
 struct vmw_cmdbuf_res_manager;
 
 struct vmw_cursor_snooper {
-	size_t age;
+	size_t id;
 	uint32_t *image;
 };
 
@@ -1050,7 +1046,6 @@ int vmw_kms_init(struct vmw_private *dev_priv);
 int vmw_kms_close(struct vmw_private *dev_priv);
 int vmw_kms_cursor_bypass_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
-void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv);
 void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 			  struct ttm_object_file *tfile,
 			  struct ttm_buffer_object *bo,
@@ -1067,7 +1062,6 @@ int vmw_kms_present(struct vmw_private *dev_priv,
 		    uint32_t num_clips);
 int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
-void vmw_kms_legacy_hotspot_clear(struct vmw_private *dev_priv);
 int vmw_kms_suspend(struct drm_device *dev);
 int vmw_kms_resume(struct drm_device *dev);
 void vmw_kms_lost_device(struct drm_device *dev);
@@ -1393,8 +1387,10 @@ int vmw_mksstat_remove_all(struct vmw_private *dev_priv);
 	DRM_DEBUG_DRIVER(fmt, ##__VA_ARGS__)
 
 /* Resource dirtying - vmwgfx_page_dirty.c */
+bool vmw_bo_is_dirty(struct vmw_bo *vbo);
 void vmw_bo_dirty_scan(struct vmw_bo *vbo);
 int vmw_bo_dirty_add(struct vmw_bo *vbo);
+void vmw_bo_dirty_clear(struct vmw_bo *vbo);
 void vmw_bo_dirty_transfer_to_res(struct vmw_resource *res);
 void vmw_bo_dirty_clear_res(struct vmw_resource *res);
 void vmw_bo_dirty_release(struct vmw_bo *vbo);
