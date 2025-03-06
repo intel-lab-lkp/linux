@@ -469,12 +469,16 @@ static void __register_mlrc_exec_queue(struct xe_guc *guc,
 	action[len++] = info->context_idx;
 	action[len++] = info->engine_class;
 	action[len++] = info->engine_submit_mask;
+	xe_gt_assert(guc_to_gt(guc), len == XE_GUC_REGISTER_CONTEXT_MULTI_LRC_OFFS_WQ_DESC);
 	action[len++] = info->wq_desc_lo;
 	action[len++] = info->wq_desc_hi;
+	xe_gt_assert(guc_to_gt(guc), len == XE_GUC_REGISTER_CONTEXT_MULTI_LRC_OFFS_WQ_BASE);
 	action[len++] = info->wq_base_lo;
 	action[len++] = info->wq_base_hi;
 	action[len++] = info->wq_size;
+	xe_gt_assert(guc_to_gt(guc), len == XE_GUC_REGISTER_CONTEXT_MULTI_LRC_OFFS_N_CHILDREN);
 	action[len++] = q->width;
+	xe_gt_assert(guc_to_gt(guc), len == XE_GUC_REGISTER_CONTEXT_MULTI_LRC_OFFS_HWLRCA);
 	action[len++] = info->hwlrca_lo;
 	action[len++] = info->hwlrca_hi;
 
