@@ -1272,6 +1272,10 @@ int pipe_resize_ring(struct pipe_inode_info *pipe, unsigned int nr_slots)
 	struct pipe_buffer *bufs;
 	unsigned int head, tail, mask, n;
 
+	/* nr_slots larger than limits of pipe->{head,tail} */
+	if (unlikely(nr_slots > BIT(BITS_PER_TYPE(pipe_index_t) - 1)))
+		return -EINVAL;
+
 	bufs = kcalloc(nr_slots, sizeof(*bufs),
 		       GFP_KERNEL_ACCOUNT | __GFP_NOWARN);
 	if (unlikely(!bufs))
