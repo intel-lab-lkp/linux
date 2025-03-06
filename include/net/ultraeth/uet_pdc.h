@@ -45,6 +45,12 @@ enum {
 	UET_PDC_MODE_UUD
 };
 
+enum mpr_pos {
+	UET_PDC_MPR_PREV,
+	UET_PDC_MPR_CUR,
+	UET_PDC_MPR_FUTURE
+};
+
 struct uet_pdc {
 	struct rhash_head pdcid_node;
 	struct rhash_head pdcep_node;
@@ -63,6 +69,9 @@ struct uet_pdc {
 	u8 mode;
 	bool is_initiator;
 
+	unsigned long *rx_bitmap;
+	unsigned long *ack_bitmap;
+
 	u32 rx_base_psn;
 	u32 tx_base_psn;
 
@@ -76,4 +85,33 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 			       const struct uet_pdc_key *key, bool is_inbound);
 void uet_pdc_destroy(struct uet_pdc *pdc);
 void uet_pdc_free(struct uet_pdc *pdc);
+int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
+		   __be32 remote_fep_addr, __u8 tos);
+int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
+		   __be32 remote_fep_addr);
+
+static inline void uet_pdc_build_prologue(struct uet_prologue_hdr *prologue,
+					  u8 type, u8 next, u8 flags)
+{
+	prologue->type_next_flags = cpu_to_be16((type & UET_PROLOGUE_TYPE_MASK) <<
+						UET_PROLOGUE_TYPE_SHIFT |
+						(next & UET_PROLOGUE_NEXT_MASK) <<
+						UET_PROLOGUE_NEXT_SHIFT |
+						(flags & UET_PROLOGUE_FLAGS_MASK));
+}
+
+static inline enum mpr_pos psn_mpr_pos(u32 base_psn, u32 psn)
+{
+	if (base_psn > psn)
+		return UET_PDC_MPR_PREV;
+	else if (psn - base_psn < UET_PDC_MPR)
+		return UET_PDC_MPR_CUR;
+	else
+		return UET_PDC_MPR_FUTURE;
+}
+
+static inline bool psn_bit_valid(u32 bit)
+{
+	return bit < UET_PDC_MPR;
+}
 #endif /* _UECON_PDC_H */

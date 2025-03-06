@@ -149,11 +149,144 @@ void uet_pds_clean_job(struct uet_pds *pds, u32 job_id)
 	rhashtable_walk_exit(&iter);
 }
 
+static int uet_pds_rx_ack(struct uet_pds *pds, struct sk_buff *skb,
+			  __be32 local_fep_addr, __be32 remote_fep_addr)
+{
+	struct uet_pds_req_hdr *pds_req = pds_req_hdr(skb);
+	u16 pdcid = be16_to_cpu(pds_req->dpdcid);
+	struct uet_pdc *pdc;
+
+	pdc = rhashtable_lookup_fast(&pds->pdcid_hash, &pdcid,
+				     uet_pds_pdcid_rht_params);
+	if (!pdc)
+		return -ENOENT;
+
+	return uet_pdc_rx_ack(pdc, skb, remote_fep_addr);
+}
+
+static struct uet_pdc *uet_pds_new_pdc_rx(struct uet_pds *pds,
+					  struct sk_buff *skb,
+					  __be16 dport,
+					  struct uet_pdc_key *key,
+					  u8 mode, u8 state)
+{
+	struct uet_ses_req_hdr *ses_req = pds_req_ses_req_hdr(skb);
+	struct uet_pds_req_hdr *req = pds_req_hdr(skb);
+
+	return uet_pdc_create(pds, be32_to_cpu(req->psn), state,
+			      be16_to_cpu(req->spdcid),
+			      uet_ses_req_pid_on_fep(ses_req),
+			      mode, 0, dport, key, true);
+}
+
+static int uet_pds_rx_req(struct uet_pds *pds, struct sk_buff *skb,
+			  __be32 local_fep_addr, __be32 remote_fep_addr,
+			  __be16 dport, __u8 tos)
+{
+	struct uet_ses_req_hdr *ses_req = pds_req_ses_req_hdr(skb);
+	struct uet_pds_req_hdr *pds_req = pds_req_hdr(skb);
+	u16 pdcid = be16_to_cpu(pds_req->dpdcid);
+	struct uet_pdc_key key = {};
+	struct uet_fep *fep;
+	struct uet_pdc *pdc;
+
+	key.src_ip = local_fep_addr;
+	key.dst_ip = remote_fep_addr;
+	key.job_id = uet_ses_req_job_id(ses_req);
+
+	pdc = rhashtable_lookup_fast(&pds->pdcid_hash, &pdcid,
+				     uet_pds_pdcid_rht_params);
+	/* new flow */
+	if (unlikely(!pdc)) {
+		struct uet_prologue_hdr *prologue = pds_prologue_hdr(skb);
+		struct uet_context *ctx;
+		struct uet_job *job;
+
+		if (!(uet_prologue_flags(prologue) & UET_PDS_REQ_FLAG_SYN))
+			return -EINVAL;
+
+		ctx = container_of(pds, struct uet_context, pds);
+		job = uet_job_find(&ctx->job_reg, key.job_id);
+		if (!job)
+			return -ENOENT;
+		fep = rcu_dereference(job->fep);
+		if (!fep)
+			return -ECONNREFUSED;
+		if (fep->addr.in_address.ip != local_fep_addr)
+			return -ENOENT;
+
+		pdc = uet_pds_new_pdc_rx(pds, skb, dport, &key,
+					 UET_PDC_MODE_RUD,
+					 UET_PDC_EP_STATE_NEW_ESTABLISHED);
+		if (IS_ERR(pdc))
+			return PTR_ERR(pdc);
+	}
+
+	return uet_pdc_rx_req(pdc, skb, remote_fep_addr, tos);
+}
+
+static bool uet_pds_rx_valid_req_next_hdr(const struct uet_prologue_hdr *prologue)
+{
+	switch (uet_prologue_next_hdr(prologue)) {
+	case UET_PDS_NEXT_HDR_REQ_STD:
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
+static bool uet_pds_rx_valid_ack_next_hdr(const struct uet_prologue_hdr *prologue)
+{
+	switch (uet_prologue_next_hdr(prologue)) {
+	case UET_PDS_NEXT_HDR_RSP:
+	case UET_PDS_NEXT_HDR_RSP_DATA:
+	case UET_PDS_NEXT_HDR_RSP_DATA_SMALL:
+		break;
+	default:
+		return false;
+	}
+
+	return true;
+}
+
 int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 	       __be32 remote_fep_addr, __be16 dport, __u8 tos)
 {
-	if (!pskb_may_pull(skb, sizeof(struct uet_prologue_hdr)))
-		return -EINVAL;
+	struct uet_prologue_hdr *prologue;
+	unsigned int offset = 0;
+	int ret = -EINVAL;
 
-	return 0;
+	if (!pskb_may_pull(skb, sizeof(struct uet_prologue_hdr)))
+		return ret;
+
+	prologue = pds_prologue_hdr(skb);
+	switch (uet_prologue_type(prologue)) {
+	case UET_PDS_TYPE_ACK:
+		if (!uet_pds_rx_valid_ack_next_hdr(prologue))
+			break;
+		offset += sizeof(struct uet_pds_ack_hdr) +
+			  sizeof(struct uet_ses_rsp_hdr);
+		if (!pskb_may_pull(skb, offset))
+			break;
+
+		__net_timestamp(skb);
+		ret = uet_pds_rx_ack(pds, skb, local_fep_addr, remote_fep_addr);
+		break;
+	case UET_PDS_TYPE_RUD_REQ:
+		if (!uet_pds_rx_valid_req_next_hdr(prologue))
+			break;
+		offset = sizeof(struct uet_pds_ack_hdr) +
+			 sizeof(struct uet_ses_req_hdr);
+		if (!pskb_may_pull(skb, offset))
+			break;
+		ret = uet_pds_rx_req(pds, skb, local_fep_addr, remote_fep_addr,
+				     dport, tos);
+		break;
+	default:
+		break;
+	}
+
+	return ret;
 }
