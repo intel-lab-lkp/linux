@@ -2,6 +2,7 @@
 
 #include <net/ultraeth/uet_context.h>
 #include <net/ultraeth/uecon.h>
+#include <net/ultraeth/uet_chardev.h>
 #include "uet_netlink.h"
 
 #define MAX_CONTEXT_ID 256
@@ -78,6 +79,24 @@ struct uet_context *uet_context_get_by_id(int id)
 	return ctx;
 }
 
+struct uet_context *uet_context_get_by_minor(int minor)
+{
+	struct uet_context *ctx;
+
+	mutex_lock(&uet_context_lock);
+	list_for_each_entry(ctx, &uet_context_list, list) {
+		if (ctx->cdev.minor == minor) {
+			refcount_inc(&ctx->refcnt);
+			goto out;
+		}
+	}
+	ctx = NULL;
+out:
+	mutex_unlock(&uet_context_lock);
+
+	return ctx;
+}
+
 void uet_context_put(struct uet_context *ctx)
 {
 	if (refcount_dec_and_test(&ctx->refcnt))
@@ -111,6 +130,10 @@ int uet_context_create(int id)
 	if (err)
 		goto ctx_pds_err;
 
+	err = uet_char_init(&ctx->cdev, ctx->id);
+	if (err)
+		goto ctx_char_err;
+
 	err = uecon_netdev_init(ctx);
 	if (err)
 		goto ctx_netdev_err;
@@ -120,6 +143,8 @@ int uet_context_create(int id)
 	return 0;
 
 ctx_netdev_err:
+	uet_char_uninit(&ctx->cdev);
+ctx_char_err:
 	uet_pds_uninit(&ctx->pds);
 ctx_pds_err:
 	uet_jobs_uninit(&ctx->job_reg);
@@ -135,6 +160,7 @@ static void __uet_context_destroy(struct uet_context *ctx)
 {
 	uet_context_unlink(ctx);
 	uecon_netdev_uninit(ctx);
+	uet_char_uninit(&ctx->cdev);
 	uet_pds_uninit(&ctx->pds);
 	uet_jobs_uninit(&ctx->job_reg);
 	uet_context_put_id(ctx);
@@ -183,7 +209,10 @@ static int __nl_ctx_fill_one(struct sk_buff *skb,
 
 	if (nla_put_s32(skb, ULTRAETH_A_CONTEXT_ID, ctx->id) ||
 	    nla_put_s32(skb, ULTRAETH_A_CONTEXT_NETDEV_IFINDEX, ctx->netdev->ifindex) ||
-	    nla_put_string(skb, ULTRAETH_A_CONTEXT_NETDEV_NAME, ctx->netdev->name))
+	    nla_put_string(skb, ULTRAETH_A_CONTEXT_NETDEV_NAME, ctx->netdev->name) ||
+	    nla_put_string(skb, ULTRAETH_A_CONTEXT_CHARDEV_NAME, ctx->cdev.name) ||
+	    nla_put_s32(skb, ULTRAETH_A_CONTEXT_CHARDEV_MAJOR, MISC_MAJOR) ||
+	    nla_put_s32(skb, ULTRAETH_A_CONTEXT_CHARDEV_MINOR, ctx->cdev.minor))
 		goto out_err;
 
 	genlmsg_end(skb, hdr);

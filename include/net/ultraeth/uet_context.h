@@ -11,6 +11,7 @@
 #include <linux/wait.h>
 #include <net/ultraeth/uet_job.h>
 #include <net/ultraeth/uet_pds.h>
+#include <linux/miscdevice.h>
 
 struct uet_context {
 	int id;
@@ -21,9 +22,11 @@ struct uet_context {
 	struct net_device *netdev;
 	struct uet_job_registry job_reg;
 	struct uet_pds pds;
+	struct miscdevice cdev;
 };
 
 struct uet_context *uet_context_get_by_id(int id);
+struct uet_context *uet_context_get_by_minor(int minor);
 void uet_context_put(struct uet_context *ses_pl);
 
 int uet_context_create(int id);

@@ -22,6 +22,15 @@ attribute-sets:
       -
         name: netdev-name
         type: string
+      -
+        name: chardev-name
+        type: string
+      -
+        name: chardev-major
+        type: s32
+      -
+        name: chardev-minor
+        type: s32
   -
     name: contexts
     attributes:

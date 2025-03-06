@@ -512,4 +512,25 @@ struct fep_address {
 	__u16 padding;
 	__u8 version;
 };
+
+/* char device hacks */
+#define UET_IOCTL_MAGIC	'u'
+#define UET_ADDR_REQ		_IO(UET_IOCTL_MAGIC, 1)
+
+struct uet_job_addr_req {
+	struct fep_in_address address;
+	char service_name[UET_SVC_MAX_LEN];
+	__u32 ack_gen_trigger;
+	__u32 ack_gen_min_pkt_add;
+	__u8 flags;
+};
+
+struct uet_pds_meta {
+	__u8 next_hdr:4;
+	__u8 reserved1:4;
+	__u8 reserved2;
+	__be16 port;
+	/* XXX: fep_address */
+	__be32 addr;
+} __attribute__((packed));
 #endif /* _UAPI_LINUX_ULTRAETH_H */
