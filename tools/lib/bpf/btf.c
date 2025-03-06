@@ -1379,7 +1379,7 @@ static void *btf_get_raw_data(const struct btf *btf, __u32 *size, bool swap_endi
 
 int btf_load_into_kernel(struct btf *btf,
 			 char *log_buf, size_t log_sz, __u32 log_level,
-			 int token_fd)
+			 int token_fd, bool btf_mandatory)
 {
 	LIBBPF_OPTS(bpf_btf_load_opts, opts);
 	__u32 buf_sz = 0, raw_size;
@@ -1436,7 +1436,7 @@ retry_load:
 	btf->fd = bpf_btf_load(raw_data, raw_size, &opts);
 	if (btf->fd < 0) {
 		/* time to turn on verbose mode and try again */
-		if (log_level == 0) {
+		if (log_level == 0 && btf_mandatory) {
 			log_level = 1;
 			goto retry_load;
 		}
@@ -1447,10 +1447,11 @@ retry_load:
 			goto retry_load;
 
 		err = -errno;
-		pr_warn("BTF loading error: %s\n", errstr(err));
 		/* don't print out contents of custom log_buf */
-		if (!log_buf && buf[0])
+		if (!log_buf && buf[0]) {
+			pr_warn("BTF loading error: %s\n", errstr(err));
 			pr_warn("-- BEGIN BTF LOAD LOG ---\n%s\n-- END BTF LOAD LOG --\n", buf);
+		}
 	}
 
 done:
@@ -1460,7 +1461,7 @@ done:
 
 int btf__load_into_kernel(struct btf *btf)
 {
-	return btf_load_into_kernel(btf, NULL, 0, 0, 0);
+	return btf_load_into_kernel(btf, NULL, 0, 0, 0, true);
 }
 
 int btf__fd(const struct btf *btf)
