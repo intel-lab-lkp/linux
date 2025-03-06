@@ -40,6 +40,8 @@ void uet_pds_clean_job(struct uet_pds *pds, u32 job_id);
 
 int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 	       __be32 remote_fep_addr, __be16 dport, __u8 tos);
+int uet_pds_tx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
+	       __be32 remote_fep_addr, __be16 dport, u32 job_id);
 
 static inline struct uet_prologue_hdr *pds_prologue_hdr(const struct sk_buff *skb)
 {

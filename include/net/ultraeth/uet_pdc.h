@@ -13,6 +13,12 @@
 
 #define UET_PDC_ID_MAX_ATTEMPTS 128
 #define UET_PDC_MAX_ID U16_MAX
+#define UET_PDC_RTX_DEFAULT_TIMEOUT_SEC 30
+#define UET_PDC_RTX_DEFAULT_TIMEOUT_JIFFIES (UET_PDC_RTX_DEFAULT_TIMEOUT_SEC * \
+					     HZ)
+#define UET_PDC_RTX_DEFAULT_TIMEOUT_NSEC (UET_PDC_RTX_DEFAULT_TIMEOUT_SEC * \
+					  NSEC_PER_SEC)
+#define UET_PDC_RTX_DEFAULT_MAX 3
 #define UET_PDC_MPR 128
 
 #define UET_SKB_CB(skb)       ((struct uet_skb_cb *)&((skb)->cb[0]))
@@ -20,6 +26,7 @@
 struct uet_skb_cb {
 	u32 psn;
 	__be32 remote_fep_addr;
+	u8 rtx_attempts;
 };
 
 enum {
@@ -51,6 +58,13 @@ enum mpr_pos {
 	UET_PDC_MPR_FUTURE
 };
 
+struct uet_pdc_pkt {
+	struct sk_buff *skb;
+	struct timer_list rtx_timer;
+	u32 psn;
+	int rtx;
+};
+
 struct uet_pdc {
 	struct rhash_head pdcid_node;
 	struct rhash_head pdcep_node;
@@ -69,11 +83,18 @@ struct uet_pdc {
 	u8 mode;
 	bool is_initiator;
 
+	int rtx_max;
+	struct timer_list rtx_timer;
+	unsigned long rtx_timeout;
+
 	unsigned long *rx_bitmap;
+	unsigned long *tx_bitmap;
 	unsigned long *ack_bitmap;
 
 	u32 rx_base_psn;
 	u32 tx_base_psn;
+
+	struct rb_root rtx_queue;
 
 	struct hlist_node gc_node;
 	struct rcu_head rcu;
@@ -89,6 +110,7 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 		   __be32 remote_fep_addr, __u8 tos);
 int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 		   __be32 remote_fep_addr);
+int uet_pdc_tx_req(struct uet_pdc *pdc, struct sk_buff *skb, u8 type);
 
 static inline void uet_pdc_build_prologue(struct uet_prologue_hdr *prologue,
 					  u8 type, u8 next, u8 flags)
@@ -113,5 +135,10 @@ static inline enum mpr_pos psn_mpr_pos(u32 base_psn, u32 psn)
 static inline bool psn_bit_valid(u32 bit)
 {
 	return bit < UET_PDC_MPR;
+}
+
+static inline bool before(u32 seq1, u32 seq2)
+{
+	return (s32)(seq1-seq2) < 0;
 }
 #endif /* _UECON_PDC_H */

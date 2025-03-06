@@ -290,3 +290,60 @@ int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 
 	return ret;
 }
+
+static struct uet_pdc *uet_pds_new_pdc_tx(struct uet_pds *pds,
+					  struct sk_buff *skb,
+					  __be16 dport,
+					  struct uet_pdc_key *key,
+					  u8 mode, u8 state)
+{
+	struct uet_ses_req_hdr *ses_req = (struct uet_ses_req_hdr *)skb->data;
+
+	return uet_pdc_create(pds, 0, state, 0,
+			      uet_ses_req_pid_on_fep(ses_req),
+			      mode, 0, dport, key, false);
+}
+
+int uet_pds_tx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
+	       __be32 remote_fep_addr, __be16 dport, u32 job_id)
+{
+	struct uet_ses_req_hdr *ses_req = (struct uet_ses_req_hdr *)skb->data;
+	u32 req_job_id = uet_ses_req_job_id(ses_req);
+	struct uet_pdc_key key = {};
+	struct uet_pdc *pdc;
+
+	/* sending with wrong SES header job id? */
+	if (unlikely(job_id != req_job_id))
+		return -EINVAL;
+
+	key.src_ip = local_fep_addr;
+	key.dst_ip = remote_fep_addr;
+	key.job_id = job_id;
+
+	pdc = rhashtable_lookup_fast(&pds->pdcep_hash, &key,
+				     uet_pds_pdcep_rht_params);
+	/* new flow */
+	if (unlikely(!pdc)) {
+		struct uet_context *ctx;
+		struct uet_job *job;
+		struct uet_fep *fep;
+
+		ctx = container_of(pds, struct uet_context, pds);
+		job = uet_job_find(&ctx->job_reg, key.job_id);
+		if (!job)
+			return -ENOENT;
+		fep = rcu_dereference(job->fep);
+		if (!fep)
+			return -ECONNREFUSED;
+
+		pdc = uet_pds_new_pdc_tx(pds, skb, dport, &key,
+					 UET_PDC_MODE_RUD,
+					 UET_PDC_EP_STATE_CLOSED);
+		if (IS_ERR(pdc))
+			return PTR_ERR(pdc);
+	}
+
+	__net_timestamp(skb);
+
+	return uet_pdc_tx_req(pdc, skb, UET_PDS_TYPE_RUD_REQ);
+}

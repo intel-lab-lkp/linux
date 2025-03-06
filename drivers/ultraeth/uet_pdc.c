@@ -19,6 +19,191 @@ static void uet_pdc_xmit(struct uet_pdc *pdc, struct sk_buff *skb)
 	dev_queue_xmit(skb);
 }
 
+static void uet_pdc_mpr_advance_tx(struct uet_pdc *pdc, u32 bits)
+{
+	if (!test_bit(0, pdc->tx_bitmap) || !test_bit(0, pdc->ack_bitmap))
+		return;
+
+	bitmap_shift_right(pdc->tx_bitmap, pdc->tx_bitmap, bits, UET_PDC_MPR);
+	bitmap_shift_right(pdc->ack_bitmap, pdc->ack_bitmap, bits, UET_PDC_MPR);
+	pdc->tx_base_psn += bits;
+	netdev_dbg(pds_netdev(pdc->pds), "%s: advancing tx to %u\n", __func__,
+		   pdc->tx_base_psn);
+}
+
+static void uet_pdc_rtx_skb(struct uet_pdc *pdc, struct sk_buff *skb, ktime_t ts)
+{
+	struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
+	struct uet_prologue_hdr *prologue;
+
+	if (!nskb)
+		return;
+
+	prologue = (struct uet_prologue_hdr *)nskb->data;
+	if (!(uet_prologue_flags(prologue) & UET_PDS_REQ_FLAG_RETX))
+		uet_pdc_build_prologue(prologue,
+				       uet_prologue_ctl_type(prologue),
+				       uet_prologue_next_hdr(prologue),
+				       uet_prologue_flags(prologue) |
+				       UET_PDS_REQ_FLAG_RETX);
+
+	uet_pdc_xmit(pdc, nskb);
+	skb->tstamp = ts;
+	UET_SKB_CB(skb)->rtx_attempts++;
+}
+
+static void uet_pdc_rtx_timer_expired(struct timer_list *t)
+{
+	u64 smallest_diff = UET_PDC_RTX_DEFAULT_TIMEOUT_NSEC;
+	struct uet_pdc *pdc = from_timer(pdc, t, rtx_timer);
+	ktime_t now = ktime_get_real_ns();
+	struct sk_buff *skb, *skb_tmp;
+
+	spin_lock(&pdc->lock);
+	skb = skb_rb_first(&pdc->rtx_queue);
+	skb_rbtree_walk_from_safe(skb, skb_tmp) {
+		ktime_t expire = ktime_add(skb->tstamp,
+					   UET_PDC_RTX_DEFAULT_TIMEOUT_NSEC);
+
+		if (ktime_before(now, expire)) {
+			u64 diff = ktime_to_ns(ktime_sub(expire, now));
+
+			if (diff < smallest_diff)
+				smallest_diff = diff;
+			continue;
+		}
+		if (UET_SKB_CB(skb)->rtx_attempts == UET_PDC_RTX_DEFAULT_MAX) {
+			/* XXX: close connection, count drops etc */
+			netdev_dbg(pds_netdev(pdc->pds), "%s: psn: %u too many rtx attempts: %u\n",
+				   __func__, UET_SKB_CB(skb)->psn,
+				   UET_SKB_CB(skb)->rtx_attempts);
+			/* if dropping the oldest packet move window */
+			if (UET_SKB_CB(skb)->psn == pdc->tx_base_psn)
+				uet_pdc_mpr_advance_tx(pdc, 1);
+			rb_erase(&skb->rbnode, &pdc->rtx_queue);
+			consume_skb(skb);
+			continue;
+		}
+
+		uet_pdc_rtx_skb(pdc, skb, now);
+	}
+
+	mod_timer(&pdc->rtx_timer, jiffies +
+				   nsecs_to_jiffies(smallest_diff));
+	spin_unlock(&pdc->lock);
+}
+
+static void uet_pdc_rbtree_insert(struct rb_root *root, struct sk_buff *skb)
+{
+	struct rb_node **p = &root->rb_node;
+	struct rb_node *parent = NULL;
+	struct sk_buff *skb1;
+
+	while (*p) {
+		parent = *p;
+		skb1 = rb_to_skb(parent);
+		if (before(UET_SKB_CB(skb)->psn, UET_SKB_CB(skb1)->psn))
+			p = &parent->rb_left;
+		else
+			p = &parent->rb_right;
+	}
+
+	rb_link_node(&skb->rbnode, parent, p);
+	rb_insert_color(&skb->rbnode, root);
+}
+
+static struct sk_buff *uet_pdc_rtx_find(struct uet_pdc *pdc, u32 psn)
+{
+	struct rb_node *parent, **p = &pdc->rtx_queue.rb_node;
+
+	while (*p) {
+		struct sk_buff *skb;
+
+		parent = *p;
+		skb = rb_to_skb(parent);
+		if (psn == UET_SKB_CB(skb)->psn)
+			return skb;
+
+		if (before(psn, UET_SKB_CB(skb)->psn))
+			p = &parent->rb_left;
+		else
+			p = &parent->rb_right;
+	}
+
+	return NULL;
+}
+
+static void uet_pdc_rtx_remove_skb(struct uet_pdc *pdc, struct sk_buff *skb)
+{
+	rb_erase(&skb->rbnode, &pdc->rtx_queue);
+	consume_skb(skb);
+}
+
+static void uet_pdc_ack_psn(struct uet_pdc *pdc, struct sk_buff *ack_skb,
+			    u32 psn, bool ecn_marked)
+{
+	struct sk_buff *skb = skb_rb_first(&pdc->rtx_queue);
+	u32 first_psn = skb ? UET_SKB_CB(skb)->psn : 0;
+
+	/* if the oldest PSN got ACKed and it hasn't been retransmitted
+	 * we can move the timer to the next one
+	 */
+	if (skb && psn == first_psn) {
+		struct sk_buff *next = skb_rb_next(skb);
+
+		/* move timer only if first PSN wasn't retransmitted */
+		if (next && !UET_SKB_CB(skb)->rtx_attempts) {
+			ktime_t expire = ktime_add(next->tstamp,
+						   UET_PDC_RTX_DEFAULT_TIMEOUT_NSEC);
+			ktime_t now = ktime_get_ns();
+
+			if (ktime_before(expire, now)) {
+				u64 diff = ktime_to_ns(ktime_sub(expire, now));
+				unsigned long diffj = nsecs_to_jiffies(diff);
+
+				mod_timer(&pdc->rtx_timer, jiffies + diffj);
+			}
+		}
+	} else {
+		skb = uet_pdc_rtx_find(pdc, psn);
+	}
+
+	if (!skb)
+		return;
+
+	uet_pdc_rtx_remove_skb(pdc, skb);
+}
+
+static void uet_pdc_rtx_purge(struct uet_pdc *pdc)
+{
+	struct rb_node *p = rb_first(&pdc->rtx_queue);
+
+	while (p) {
+		struct sk_buff *skb = rb_to_skb(p);
+
+		p = rb_next(p);
+		uet_pdc_rtx_remove_skb(pdc, skb);
+	}
+}
+
+static int uet_pdc_rtx_queue(struct uet_pdc *pdc, struct sk_buff *skb, u32 psn)
+{
+	struct sk_buff *rtx_skb = skb_clone(skb, GFP_ATOMIC);
+
+	if (unlikely(!rtx_skb))
+		return -ENOMEM;
+
+	UET_SKB_CB(rtx_skb)->psn = psn;
+	UET_SKB_CB(rtx_skb)->rtx_attempts = 0;
+	uet_pdc_rbtree_insert(&pdc->rtx_queue, rtx_skb);
+
+	if (!timer_pending(&pdc->rtx_timer))
+		mod_timer(&pdc->rtx_timer, jiffies +
+					   UET_PDC_RTX_DEFAULT_TIMEOUT_JIFFIES);
+
+	return 0;
+}
+
 /* use the approach as nf nat, try a few rounds starting at random offset */
 static bool uet_pdc_id_get(struct uet_pdc *pdc)
 {
@@ -69,7 +254,7 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 	pdc->pds = pds;
 	pdc->mode = mode;
 	pdc->is_initiator = !is_inbound;
-
+	pdc->rtx_queue = RB_ROOT;
 	if (!uet_pdc_id_get(pdc))
 		goto err_id_get;
 
@@ -83,9 +268,13 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 	pdc->rx_bitmap = bitmap_zalloc(UET_PDC_MPR, GFP_ATOMIC);
 	if (!pdc->rx_bitmap)
 		goto err_rx_bitmap;
+	pdc->tx_bitmap = bitmap_zalloc(UET_PDC_MPR, GFP_ATOMIC);
+	if (!pdc->tx_bitmap)
+		goto err_tx_bitmap;
 	pdc->ack_bitmap = bitmap_zalloc(UET_PDC_MPR, GFP_ATOMIC);
 	if (!pdc->ack_bitmap)
 		goto err_ack_bitmap;
+	timer_setup(&pdc->rtx_timer, uet_pdc_rtx_timer_expired, 0);
 	pdc->metadata = __ip_tun_set_dst(key->src_ip, key->dst_ip, tos, 0, dport,
 					 md_flags, 0, 0);
 	if (!pdc->metadata)
@@ -124,6 +313,8 @@ err_ep_insert:
 err_tun_dst:
 	bitmap_free(pdc->ack_bitmap);
 err_ack_bitmap:
+	bitmap_free(pdc->tx_bitmap);
+err_tx_bitmap:
 	bitmap_free(pdc->rx_bitmap);
 err_rx_bitmap:
 	uet_pds_pdcid_remove(pdc);
@@ -135,8 +326,11 @@ err_alloc:
 
 void uet_pdc_free(struct uet_pdc *pdc)
 {
+	timer_delete_sync(&pdc->rtx_timer);
+	uet_pdc_rtx_purge(pdc);
 	dst_release(&pdc->metadata->dst);
 	bitmap_free(pdc->ack_bitmap);
+	bitmap_free(pdc->tx_bitmap);
 	bitmap_free(pdc->rx_bitmap);
 	kfree(pdc);
 }
@@ -146,6 +340,53 @@ void uet_pdc_destroy(struct uet_pdc *pdc)
 	uet_pds_pdcep_remove(pdc);
 	uet_pds_pdcid_remove(pdc);
 	uet_pds_pdc_gc_queue(pdc);
+}
+
+static s64 uet_pdc_get_psn(struct uet_pdc *pdc)
+{
+	unsigned long fzb = find_first_zero_bit(pdc->tx_bitmap, UET_PDC_MPR);
+
+	if (unlikely(fzb == UET_PDC_MPR))
+		return -1;
+
+	set_bit(fzb, pdc->tx_bitmap);
+
+	return pdc->tx_base_psn + fzb;
+}
+
+static void uet_pdc_put_psn(struct uet_pdc *pdc, u32 psn)
+{
+	unsigned long psn_bit = psn - pdc->tx_base_psn;
+
+	clear_bit(psn_bit, pdc->tx_bitmap);
+}
+
+static int uet_pdc_build_req(struct uet_pdc *pdc,
+			     struct sk_buff *skb, u8 type, u8 flags)
+{
+	struct uet_pds_req_hdr *req;
+	s64 psn;
+
+	req = skb_push(skb, sizeof(*req));
+	uet_pdc_build_prologue(&req->prologue, type,
+			       UET_PDS_NEXT_HDR_REQ_STD, flags);
+	switch (pdc->state) {
+	case UET_PDC_EP_STATE_CLOSED:
+		pdc->psn_start = get_random_u32();
+		pdc->tx_base_psn = pdc->psn_start;
+		pdc->rx_base_psn = pdc->psn_start;
+		break;
+	}
+
+	psn = uet_pdc_get_psn(pdc);
+	if (unlikely(psn == -1))
+		return -ENOSPC;
+	UET_SKB_CB(skb)->psn = psn;
+	req->psn = cpu_to_be32(psn);
+	req->spdcid = cpu_to_be16(pdc->spdcid);
+	req->dpdcid = cpu_to_be16(pdc->dpdcid);
+
+	return 0;
 }
 
 static void pdc_build_ack(struct uet_pdc *pdc, struct sk_buff *skb, u32 psn,
@@ -200,15 +441,65 @@ static int uet_pdc_send_ses_ack(struct uet_pdc *pdc, __u8 ses_rc, __be16 msg_id,
 	return 0;
 }
 
-static void uet_pdc_mpr_advance_tx(struct uet_pdc *pdc, u32 bits)
+int uet_pdc_tx_req(struct uet_pdc *pdc, struct sk_buff *skb, u8 type)
 {
-	if (!test_bit(0, pdc->ack_bitmap))
-		return;
+	struct uet_pds_req_hdr *req;
+	int ret = 0;
 
-	bitmap_shift_right(pdc->ack_bitmap, pdc->ack_bitmap, bits, UET_PDC_MPR);
-	pdc->tx_base_psn += bits;
-	netdev_dbg(pds_netdev(pdc->pds), "%s: advancing tx to %u\n", __func__,
-		   pdc->tx_base_psn);
+	spin_lock_bh(&pdc->lock);
+	if (pdc->tx_busy) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	switch (pdc->state) {
+	case UET_PDC_EP_STATE_CLOSED:
+		ret = uet_pdc_build_req(pdc, skb, type, UET_PDS_REQ_FLAG_SYN);
+		if (ret)
+			goto out_unlock;
+		req = (struct uet_pds_req_hdr *)skb->data;
+		ret = uet_pdc_rtx_queue(pdc, skb, be32_to_cpu(req->psn));
+		if (ret) {
+			uet_pdc_put_psn(pdc, be32_to_cpu(req->psn));
+			goto out_unlock;
+		}
+		pdc->state = UET_PDC_EP_STATE_SYN_SENT;
+		pdc->tx_busy = true;
+		break;
+	case UET_PDC_EP_STATE_SYN_SENT:
+		break;
+	case UET_PDC_EP_STATE_ESTABLISHED:
+		ret = uet_pdc_build_req(pdc, skb, type, 0);
+		if (ret)
+			goto out_unlock;
+		req = (struct uet_pds_req_hdr *)skb->data;
+		ret = uet_pdc_rtx_queue(pdc, skb, be32_to_cpu(req->psn));
+		if (ret) {
+			uet_pdc_put_psn(pdc, be32_to_cpu(req->psn));
+			goto out_unlock;
+		}
+		break;
+	case UET_PDC_EP_STATE_QUIESCE:
+		break;
+	case UET_PDC_EP_STATE_ACK_WAIT:
+		break;
+	case UET_PDC_EP_STATE_CLOSE_ACK_WAIT:
+		break;
+	default:
+		WARN_ON(1);
+	}
+
+out_unlock:
+	netdev_dbg(pds_netdev(pdc->pds), "%s: tx_busy: %u pdc: [ tx_base_psn: %u"
+				  " state: %u dpdcid: %u spdcid: %u ] proto 0x%x\n",
+		   __func__, pdc->tx_busy, pdc->tx_base_psn, pdc->state,
+		   pdc->dpdcid, pdc->spdcid, ntohs(skb->protocol));
+	spin_unlock_bh(&pdc->lock);
+
+	if (!ret)
+		uet_pdc_xmit(pdc, skb);
+
+	return ret;
 }
 
 int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
@@ -221,6 +512,7 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 	u32 cack_psn = be32_to_cpu(ack->cack_psn);
 	u32 ack_psn = cack_psn + ack_psn_offset;
 	int ret = -EINVAL;
+	bool ecn_marked;
 	u32 psn_bit;
 
 	spin_lock(&pdc->lock);
@@ -237,7 +529,7 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 		goto err_dbg;
 
 	psn_bit = ack_psn - pdc->tx_base_psn;
-	if (!psn_bit_valid(psn_bit)) {
+	if (!psn_bit_valid(psn_bit) || !test_bit(psn_bit, pdc->tx_bitmap)) {
 		drop_reason = "ack_psn bit is invalid";
 		goto err_dbg;
 	}
@@ -252,6 +544,8 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 	/* we can advance only if the oldest pkt got acked */
 	if (!psn_bit)
 		uet_pdc_mpr_advance_tx(pdc, 1);
+	ecn_marked = !!(uet_prologue_flags(&ack->prologue) & UET_PDS_ACK_FLAG_M);
+	uet_pdc_ack_psn(pdc, skb, ack_psn, ecn_marked);
 
 	ret = 0;
 	switch (pdc->state) {
