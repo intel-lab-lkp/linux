@@ -807,6 +807,7 @@ enum scx_deq_flags {
 enum scx_pick_idle_cpu_flags {
 	SCX_PICK_IDLE_CORE	= 1LLU << 0,	/* pick a CPU whose SMT siblings are also idle */
 	SCX_PICK_IDLE_IN_NODE	= 1LLU << 1,	/* pick a CPU in the same target NUMA node */
+	SCX_PICK_IDLE_IN_PREF	= 1LLU << 2,	/* pick a CPU in the preferred domain */
 };
 
 enum scx_kick_flags {
@@ -3396,7 +3397,7 @@ static int select_task_rq_scx(struct task_struct *p, int prev_cpu, int wake_flag
 		bool found;
 		s32 cpu;
 
-		cpu = scx_select_cpu_dfl(p, prev_cpu, wake_flags, 0, &found);
+		cpu = scx_select_cpu_dfl(p, NULL, prev_cpu, wake_flags, 0, &found);
 		p->scx.selected_cpu = cpu;
 		if (found) {
 			p->scx.slice = SCX_SLICE_DFL;
