@@ -489,6 +489,169 @@ free_node:
 	xe_ggtt_node_fini(node);
 }
 
+static u64 drm_mm_node_end(struct drm_mm_node *node)
+{
+	return node->start + node->size;
+}
+
+static void xe_ggtt_mm_shift_nodes(struct xe_ggtt *ggtt, struct drm_mm_node *balloon_beg,
+				struct drm_mm_node *balloon_fin, s64 shift)
+{
+	struct drm_mm_node *node, *tmpn;
+	LIST_HEAD(temp_list_head);
+	int err;
+
+	lockdep_assert_held(&ggtt->lock);
+
+	/*
+	 * Move nodes, from range previously assigned to this VF, into temp list.
+	 *
+	 * The balloon_beg and balloon_fin nodes are there to eliminate unavailable
+	 * ranges from use: first reserves the GGTT area below the range for current VF,
+	 * and second reserves area above.
+	 *
+	 * Below is a GGTT layout of example VF, with a certain address range assigned to
+	 * said VF, and inaccessible areas above and below:
+	 *
+	 *  0                                                                        4GiB
+	 *  |<--------------------------- Total GGTT size ----------------------------->|
+	 *      WOPCM                                                         GUC_TOP
+	 *      |<-------------- Area mappable by xe_ggtt instance ---------------->|
+	 *
+	 *  +---+---------------------------------+----------+----------------------+---+
+	 *  |\\\|/////////////////////////////////|  VF mem  |//////////////////////|\\\|
+	 *  +---+---------------------------------+----------+----------------------+---+
+	 *
+	 * Hardware enforced access rules before migration:
+	 *
+	 *  |<------- inaccessible for VF ------->|<VF owned>|<-- inaccessible for VF ->|
+	 *
+	 * drm_mm nodes used for tracking allocations:
+	 *
+	 *     |<----------- balloon ------------>|<- nodes->|<----- balloon ------>|
+	 *
+	 * After the migration, GGTT area assigned to the VF might have shifted, either
+	 * to lower or to higher address. But we expect the total size and extra areas to
+	 * be identical, as migration can only happen between matching platforms.
+	 * Below is an example of GGTT layout of the VF after migration. Content of the
+	 * GGTT for VF has been moved to a new area, and we receive its address from GuC:
+	 *
+	 *  +---+----------------------+----------+---------------------------------+---+
+	 *  |\\\|//////////////////////|  VF mem  |/////////////////////////////////|\\\|
+	 *  +---+----------------------+----------+---------------------------------+---+
+	 *
+	 * Hardware enforced access rules after migration:
+	 *
+	 *  |<- inaccessible for VF -->|<VF owned>|<------- inaccessible for VF ------->|
+	 *
+	 * So the VF has a new slice of GGTT assigned, and during migration process, the
+	 * memory content was copied to that new area. But the drm_mm nodes within xe kmd
+	 * are still tracking allocations using the old addresses. The nodes within VF
+	 * owned area have to be shifted, and balloon nodes need to be resized to
+	 * properly mask out areas not owned by the VF.
+	 *
+	 * Fixed drm_mm nodes used for tracking allocations:
+	 *
+	 *     |<------ balloon ------>|<- nodes->|<----------- balloon ----------->|
+	 *
+	 * Due to use of GPU profiles, we do not expect the old and new GGTT ares to
+	 * overlap; but our node shifting will fix addresses properly regardless.
+	 *
+	 */
+	drm_mm_for_each_node_in_range_safe(node, tmpn, &ggtt->mm,
+					   drm_mm_node_end(balloon_beg),
+					   balloon_fin->start) {
+		drm_mm_remove_node(node);
+		list_add(&node->node_list, &temp_list_head);
+	}
+
+	/* shift and re-add ballooning nodes */
+	if (drm_mm_node_allocated(balloon_beg))
+		drm_mm_remove_node(balloon_beg);
+	if (drm_mm_node_allocated(balloon_fin))
+		drm_mm_remove_node(balloon_fin);
+	balloon_beg->size += shift;
+	balloon_fin->start += shift;
+	balloon_fin->size -= shift;
+	if (balloon_beg->size != 0) {
+		err = drm_mm_reserve_node(&ggtt->mm, balloon_beg);
+		xe_tile_assert(ggtt->tile, !err);
+	}
+	if (balloon_fin->size != 0) {
+		err = drm_mm_reserve_node(&ggtt->mm, balloon_fin);
+		xe_tile_assert(ggtt->tile, !err);
+	}
+
+	/*
+	 * Now the GGTT VM contains only nodes outside of area assigned to this VF.
+	 * We can re-add all VF nodes with shifted offsets.
+	 */
+	list_for_each_entry_safe(node, tmpn, &temp_list_head, node_list) {
+		list_del(&node->node_list);
+		node->start += shift;
+		err = drm_mm_reserve_node(&ggtt->mm, node);
+		xe_tile_assert(ggtt->tile, !err);
+	}
+}
+
+/**
+ * xe_ggtt_node_shift_nodes - Shift GGTT nodes to adjust for a change in usable address range.
+ * @ggtt: the &xe_ggtt struct instance
+ * @balloon_beg: ggtt balloon node which preceds the area provisioned for current VF
+ * @balloon_fin: ggtt balloon node which follows the area provisioned for current VF
+ * @shift: change to the location of area provisioned for current VF
+ */
+void xe_ggtt_node_shift_nodes(struct xe_ggtt *ggtt, struct xe_ggtt_node **balloon_beg,
+			      struct xe_ggtt_node **balloon_fin, s64 shift)
+{
+	struct drm_mm_node *balloon_mm_beg, *balloon_mm_end;
+	struct xe_ggtt_node *node;
+
+	if (!*balloon_beg)
+	{
+		node = xe_ggtt_node_init(ggtt);
+		if (IS_ERR(node))
+			goto out;
+		node->base.color = 0;
+		node->base.flags = 0;
+		node->base.start = xe_wopcm_size(ggtt->tile->xe);
+		node->base.size = 0;
+		*balloon_beg = node;
+	}
+	balloon_mm_beg = &(*balloon_beg)->base;
+
+	if (!*balloon_fin)
+	{
+		node = xe_ggtt_node_init(ggtt);
+		if (IS_ERR(node))
+			goto out;
+		node->base.color = 0;
+		node->base.flags = 0;
+		node->base.start = GUC_GGTT_TOP;
+		node->base.size = 0;
+		*balloon_fin = node;
+	}
+	balloon_mm_end = &(*balloon_fin)->base;
+
+	xe_tile_assert(ggtt->tile, (*balloon_beg)->ggtt);
+	xe_tile_assert(ggtt->tile, (*balloon_fin)->ggtt);
+
+	xe_ggtt_mm_shift_nodes(ggtt, balloon_mm_beg, balloon_mm_end, shift);
+out:
+	if (*balloon_beg && !xe_ggtt_node_allocated(*balloon_beg))
+	{
+		node = *balloon_beg;
+		*balloon_beg = NULL;
+		xe_ggtt_node_fini(node);
+	}
+	if (*balloon_fin && !xe_ggtt_node_allocated(*balloon_fin))
+	{
+		node = *balloon_fin;
+		*balloon_fin = NULL;
+		xe_ggtt_node_fini(node);
+	}
+}
+
 /**
  * xe_ggtt_node_insert_locked - Locked version to insert a &xe_ggtt_node into the GGTT
  * @node: the &xe_ggtt_node to be inserted

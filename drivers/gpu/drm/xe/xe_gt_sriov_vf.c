@@ -415,6 +415,7 @@ static int vf_get_ggtt_info(struct xe_gt *gt)
 	xe_gt_sriov_dbg_verbose(gt, "GGTT %#llx-%#llx = %lluK\n",
 				start, start + size - 1, size / SZ_1K);
 
+	config->ggtt_shift = start - (s64)config->ggtt_base;
 	config->ggtt_base = start;
 	config->ggtt_size = size;
 
@@ -936,6 +937,31 @@ failed:
 	xe_gt_sriov_err(gt, "Failed to get runtime info (%pe)\n",
 			ERR_PTR(err));
 	return err;
+}
+
+/**
+ * xe_gt_sriov_vf_fixup_ggtt_nodes - Shift GGTT allocations to match assigned range.
+ * @gt: the &xe_gt struct instance
+ * Return: 0 on success, ENODATA if fixups are unnecessary
+ *
+ * Since Global GTT is not virtualized, each VF has an assigned range
+ * within the global space. This range might have changed during migration,
+ * which requires all memory addresses pointing to GGTT to be shifted.
+ */
+int xe_gt_sriov_vf_fixup_ggtt_nodes(struct xe_gt *gt)
+{
+	struct xe_gt_sriov_vf_selfconfig *config = &gt->sriov.vf.self_config;
+	struct xe_tile *tile = gt_to_tile(gt);
+	struct xe_ggtt *ggtt = tile->mem.ggtt;
+	s64 ggtt_shift;
+
+	mutex_lock(&ggtt->lock);
+	ggtt_shift = config->ggtt_shift;
+	if (ggtt_shift)
+		xe_ggtt_node_shift_nodes(ggtt, &tile->sriov.vf.ggtt_balloon[0],
+					 &tile->sriov.vf.ggtt_balloon[1], ggtt_shift);
+	mutex_unlock(&ggtt->lock);
+	return ggtt_shift ? 0 : ENODATA;
 }
 
 static int vf_runtime_reg_cmp(const void *a, const void *b)

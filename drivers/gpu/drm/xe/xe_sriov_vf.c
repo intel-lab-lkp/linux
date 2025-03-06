@@ -7,6 +7,7 @@
 
 #include "xe_assert.h"
 #include "xe_device.h"
+#include "xe_gt.h"
 #include "xe_gt_sriov_printk.h"
 #include "xe_gt_sriov_vf.h"
 #include "xe_pm.h"
@@ -170,6 +171,26 @@ static bool vf_post_migration_imminent(struct xe_device *xe)
 	work_pending(&xe->sriov.vf.migration.worker);
 }
 
+static int vf_post_migration_fixup_ggtt_nodes(struct xe_device *xe)
+{
+	struct xe_tile *tile;
+	unsigned int id;
+	int err;
+
+	for_each_tile(tile, xe, id) {
+		struct xe_gt *gt = tile->primary_gt;
+		int ret;
+
+		/* media doesn't have its own ggtt */
+		if (xe_gt_is_media_type(gt))
+			continue;
+		ret = xe_gt_sriov_vf_fixup_ggtt_nodes(gt);
+		if (ret != ENODATA)
+			err = ret;
+	}
+	return err;
+}
+
 /*
  * Notify all GuCs about resource fixups apply finished.
  */
@@ -201,6 +222,7 @@ static void vf_post_migration_recovery(struct xe_device *xe)
 	if (unlikely(err))
 		goto fail;
 
+	err = vf_post_migration_fixup_ggtt_nodes(xe);
 	/* FIXME: add the recovery steps */
 	vf_post_migration_notify_resfix_done(xe);
 	xe_pm_runtime_put(xe);
