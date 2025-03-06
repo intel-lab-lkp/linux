@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
 
 #include <net/ultraeth/uet_context.h>
+#include <net/ultraeth/uecon.h>
 #include "uet_netlink.h"
 
 #define MAX_CONTEXT_ID 256
@@ -106,10 +107,16 @@ int uet_context_create(int id)
 	if (err)
 		goto ctx_jobs_err;
 
+	err = uecon_netdev_init(ctx);
+	if (err)
+		goto ctx_netdev_err;
+
 	uet_context_link(ctx);
 
 	return 0;
 
+ctx_netdev_err:
+	uet_jobs_uninit(&ctx->job_reg);
 ctx_jobs_err:
 	uet_context_put_id(ctx);
 ctx_id_err:
@@ -121,6 +128,7 @@ ctx_id_err:
 static void __uet_context_destroy(struct uet_context *ctx)
 {
 	uet_context_unlink(ctx);
+	uecon_netdev_uninit(ctx);
 	uet_jobs_uninit(&ctx->job_reg);
 	uet_context_put_id(ctx);
 	kfree(ctx);
@@ -166,7 +174,9 @@ static int __nl_ctx_fill_one(struct sk_buff *skb,
 	if (!hdr)
 		return -EMSGSIZE;
 
-	if (nla_put_s32(skb, ULTRAETH_A_CONTEXT_ID, ctx->id))
+	if (nla_put_s32(skb, ULTRAETH_A_CONTEXT_ID, ctx->id) ||
+	    nla_put_s32(skb, ULTRAETH_A_CONTEXT_NETDEV_IFINDEX, ctx->netdev->ifindex) ||
+	    nla_put_string(skb, ULTRAETH_A_CONTEXT_NETDEV_NAME, ctx->netdev->name))
 		goto out_err;
 
 	genlmsg_end(skb, hdr);

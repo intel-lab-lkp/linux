@@ -17,6 +17,7 @@ struct uet_context {
 	wait_queue_head_t refcnt_wait;
 	struct list_head list;
 
+	struct net_device *netdev;
 	struct uet_job_registry job_reg;
 };
 
@@ -26,5 +27,4 @@ void uet_context_put(struct uet_context *ses_pl);
 int uet_context_create(int id);
 bool uet_context_destroy(int id);
 void uet_context_destroy_all(void);
-
 #endif /* _UET_CONTEXT_H */

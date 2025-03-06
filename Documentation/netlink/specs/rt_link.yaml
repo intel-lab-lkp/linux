@@ -2253,6 +2253,17 @@ attribute-sets:
       -
         name: tailroom
         type: u16
+  -
+    name: linkinfo-uecon-attrs
+    name-prefix: ifla-uecon-
+    attributes:
+      -
+        name: context-id
+        type: u32
+      -
+        name: port
+        type: u16
+        byte-order: big-endian
 
 sub-messages:
   -
@@ -2303,6 +2314,9 @@ sub-messages:
       -
         value: netkit
         attribute-set: linkinfo-netkit-attrs
+      -
+        value: uecon
+        attribute-set: linkinfo-uecon-attrs
   -
     name: linkinfo-member-data-msg
     formats:

@@ -16,6 +16,12 @@ attribute-sets:
         checks:
           min: 0
           max: 255
+      -
+        name: netdev-ifindex
+        type: s32
+      -
+        name: netdev-name
+        type: string
   -
     name: contexts
     attributes:

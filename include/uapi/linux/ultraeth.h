@@ -6,6 +6,7 @@
 #include <asm/byteorder.h>
 #include <linux/types.h>
 
+#define UET_DEFAULT_PORT 5432
 #define UET_SVC_MAX_LEN 64
 
 enum {
