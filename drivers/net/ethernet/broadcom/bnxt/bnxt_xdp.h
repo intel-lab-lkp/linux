@@ -33,6 +33,6 @@ void bnxt_xdp_buff_frags_free(struct bnxt_rx_ring_info *rxr,
 			      struct xdp_buff *xdp);
 struct sk_buff *bnxt_xdp_build_skb(struct bnxt *bp, struct sk_buff *skb,
 				   struct skb_shared_info *sinfo,
-				   struct page_pool *pool, struct xdp_buff *xdp,
-				   struct rx_cmp_ext *rxcmp1);
+				   struct page_pool *pool,
+				   struct xdp_buff *xdp);
 #endif
