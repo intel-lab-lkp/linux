@@ -191,6 +191,9 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 		u32 hw_plane_id = feat->vid_order[tidss->num_planes];
 		int ret;
 
+		if (!feat->vid_info[hw_plane_id].is_present)
+			continue;
+
 		tplane = tidss_plane_create(tidss, hw_plane_id,
 					    DRM_PLANE_TYPE_PRIMARY, crtc_mask,
 					    fourccs, fourccs_len);
@@ -220,15 +223,16 @@ static int tidss_dispc_modeset_init(struct tidss_device *tidss)
 	}
 
 	/* create overlay planes of the leftover planes */
-
-	while (tidss->num_planes < max_planes) {
+	for (i = tidss->num_planes; i < max_planes ; i++) {
 		struct tidss_plane *tplane;
 		u32 hw_plane_id = feat->vid_order[tidss->num_planes];
+
+		if (!feat->vid_info[hw_plane_id].is_present)
+			continue;
 
 		tplane = tidss_plane_create(tidss, hw_plane_id,
 					    DRM_PLANE_TYPE_OVERLAY, crtc_mask,
 					    fourccs, fourccs_len);
-
 		if (IS_ERR(tplane)) {
 			dev_err(tidss->dev, "plane create failed\n");
 			return PTR_ERR(tplane);

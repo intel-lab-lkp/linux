@@ -83,6 +83,9 @@ static irqreturn_t tidss_irq_handler(int irq, void *arg)
 		struct drm_plane *plane = tidss->planes[i];
 		struct tidss_plane *tplane = to_tidss_plane(plane);
 
+		if (!(tidss->feat->vid_info[i].is_present))
+			continue;
+
 		if (irqstatus & DSS_IRQ_PLANE_FIFO_UNDERFLOW(tplane->hw_plane_id))
 			tidss_plane_error_irq(plane, irqstatus);
 	}
@@ -122,6 +125,9 @@ int tidss_irq_install(struct drm_device *ddev, unsigned int irq)
 	}
 
 	for (unsigned int i = 0; i < tidss->num_planes; ++i) {
+		if (!tidss->feat->vid_info[i].is_present)
+			continue;
+
 		struct tidss_plane *tplane = to_tidss_plane(tidss->planes[i]);
 
 		tidss->irq_mask |= DSS_IRQ_PLANE_FIFO_UNDERFLOW(tplane->hw_plane_id);
