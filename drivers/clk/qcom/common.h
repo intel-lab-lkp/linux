@@ -26,6 +26,17 @@ struct qcom_icc_hws_data {
 	int clk_id;
 };
 
+/**
+ * struct qcom_clk_cfg - To maintain list of clocks that needs to be
+ *                       kept ON or misc clock register settings
+ * @offset: address offset for clock register
+ * @mask: bit mask to indicate the bits to update
+ */
+struct qcom_clk_cfg {
+	unsigned int offset;
+	unsigned int mask;
+};
+
 struct qcom_cc_desc {
 	const struct regmap_config *config;
 	struct clk_regmap **clks;
@@ -39,6 +50,11 @@ struct qcom_cc_desc {
 	const struct qcom_icc_hws_data *icc_hws;
 	size_t num_icc_hws;
 	unsigned int icc_first_node_id;
+	struct qcom_clk_cfg *clks_cfg;
+	size_t num_clks_cfg;
+	struct clk_alpha_pll **plls;
+	size_t num_plls;
+	bool use_rpm;
 };
 
 /**
