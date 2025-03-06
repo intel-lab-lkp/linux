@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: ((GPL-2.0 WITH Linux-syscall-note) OR BSD-3-Clause)
+
+name: ultraeth
+protocol: genetlink
+uapi-header: linux/ultraeth_nl.h
+
+doc: Ultra Ethernet driver genetlink operations
+
+attribute-sets:
+  -
+    name: context
+    attributes:
+      -
+        name: id
+        type: s32
+        checks:
+          min: 0
+          max: 255
+  -
+    name: contexts
+    attributes:
+      -
+        name: context
+        type: nest
+        nested-attributes: context
+        multi-attr: true
+
+operations:
+  name-prefix: ultraeth-cmd-
+  list:
+    -
+      name: context-get
+      doc: dump ultraeth context information
+      attribute-set: context
+      dump:
+        reply:
+          attributes: &all-context-attrs
+            - id
+    -
+      name: context-new
+      doc: add new ultraeth context
+      attribute-set: context
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - id
+    -
+      name: context-del
+      doc: delete ultraeth context
+      attribute-set: context
+      flags: [ admin-perm ]
+      do:
+        request:
+          attributes:
+            - id

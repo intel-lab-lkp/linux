@@ -5,13 +5,16 @@
 #include <linux/types.h>
 #include <net/ultraeth/uet_context.h>
 
+#include "uet_netlink.h"
+
 static int __init uet_init(void)
 {
-	return 0;
+	return genl_register_family(&ultraeth_nl_family);
 }
 
 static void __exit uet_exit(void)
 {
+	genl_unregister_family(&ultraeth_nl_family);
 	uet_context_destroy_all();
 }
 
