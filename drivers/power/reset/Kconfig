@@ -335,3 +335,14 @@ menuconfig PSCRR
       timeouts.
 
       If unsure, say N.
+
+if PSCRR
+
+config PSCRR_NVMEM
+	tristate "Generic NVMEM-based Power State Change Reason Recorder"
+	depends on OF
+	help
+	  Enabling this option adds support for recording power state change
+	  reasons in a NVMEM cell.
+
+endif
