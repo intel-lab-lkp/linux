@@ -83,6 +83,8 @@ static enum cpu_vendor this_cpu_vendor;
 enum range_index {
 	RANGE_STD = 0,			/* Standard */
 	RANGE_EXT = 0x80000000,		/* Extended */
+	RANGE_TSM = 0x80860000,		/* Transmeta */
+	RANGE_CTR = 0xc0000000,		/* Centaur/Zhaoxin */
 };
 
 #define CPUID_INDEX_MASK		0xffff0000
@@ -105,6 +107,12 @@ static struct cpuid_range ranges[] = {
 	{	.index		= RANGE_EXT,
 		.vendors	= VENDOR_ALL,
 	},
+	{	.index		= RANGE_TSM,
+		.vendors	= VENDOR_TRANSMETA,
+	},
+	{	.index		= RANGE_CTR,
+		.vendors	= VENDOR_CENTAUR,
+	},
 };
 
 static char *range_to_str(struct cpuid_range *range)
@@ -112,6 +120,8 @@ static char *range_to_str(struct cpuid_range *range)
 	switch (range->index) {
 	case RANGE_STD:		return "Standard";
 	case RANGE_EXT:		return "Extended";
+	case RANGE_TSM:		return "Transmeta";
+	case RANGE_CTR:		return "Centaur";
 	default:		return NULL;
 	}
 }
