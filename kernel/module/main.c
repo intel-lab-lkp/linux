@@ -3030,10 +3030,11 @@ static noinline int do_init_module(struct module *mod)
 	rcu_assign_pointer(mod->kallsyms, &mod->core_kallsyms);
 #endif
 	ret = module_enable_rodata_ro_after_init(mod);
-	if (ret)
-		pr_warn("%s: module_enable_rodata_ro_after_init() returned %d, "
-			"ro_after_init data might still be writable\n",
+	if (ret) {
+		pr_warn("%s: write-protecting ro_after_init data failed with %d, the data might still be writable - tainting kernel\n",
 			mod->name, ret);
+		add_taint_module(mod, TAINT_BAD_PAGE, LOCKDEP_STILL_OK);
+	}
 
 	mod_tree_remove_init(mod);
 	module_arch_freeing_init(mod);

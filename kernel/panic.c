@@ -497,7 +497,7 @@ const struct taint_flag taint_flags[TAINT_FLAGS_COUNT] = {
 	TAINT_FLAG(CPU_OUT_OF_SPEC,		'S', ' ', false),
 	TAINT_FLAG(FORCED_RMMOD,		'R', ' ', false),
 	TAINT_FLAG(MACHINE_CHECK,		'M', ' ', false),
-	TAINT_FLAG(BAD_PAGE,			'B', ' ', false),
+	TAINT_FLAG(BAD_PAGE,			'B', ' ', true),
 	TAINT_FLAG(USER,			'U', ' ', false),
 	TAINT_FLAG(DIE,				'D', ' ', false),
 	TAINT_FLAG(OVERRIDDEN_ACPI_TABLE,	'A', ' ', false),
