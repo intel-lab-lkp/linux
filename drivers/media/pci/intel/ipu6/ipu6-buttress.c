@@ -443,7 +443,7 @@ irqreturn_t ipu6_buttress_isr_threaded(int irq, void *isp_ptr)
 	return ret;
 }
 
-int ipu6_buttress_power(struct device *dev, struct ipu6_buttress_ctrl *ctrl,
+int ipu6_buttress_power(struct device *dev, const struct ipu6_buttress_ctrl *ctrl,
 			bool on)
 {
 	struct ipu6_device *isp = to_ipu6_bus_device(dev)->isp;
