@@ -908,6 +908,65 @@ prev_cpu:
 }
 
 /**
+ * scx_bpf_select_cpu_pref - Pick an idle CPU usable by task @p,
+ *			     prioritizing those in @preferred_cpus
+ * @p: task_struct to select a CPU for
+ * @preferred_cpus: cpumask of preferred CPUs
+ * @prev_cpu: CPU @p was on previously
+ * @wake_flags: %SCX_WAKE_* flags
+ * @flags: %SCX_PICK_IDLE* flags
+ *
+ * Can only be called from ops.select_cpu() if the built-in CPU selection is
+ * enabled - ops.update_idle() is missing or %SCX_OPS_KEEP_BUILTIN_IDLE is set.
+ * @p, @prev_cpu and @wake_flags match ops.select_cpu().
+ *
+ * Returns the selected idle CPU, which will be automatically awakened upon
+ * returning from ops.select_cpu() and can be used for direct dispatch, or
+ * a negative value if no idle CPU is available.
+ */
+__bpf_kfunc s32 scx_bpf_select_cpu_pref(struct task_struct *p,
+					const struct cpumask *preferred_cpus,
+					s32 prev_cpu, u64 wake_flags, u64 flags)
+{
+#ifdef CONFIG_SMP
+	struct cpumask *preferred = NULL;
+	bool is_idle = false;
+#endif
+
+	if (!ops_cpu_valid(prev_cpu, NULL))
+		return -EINVAL;
+
+	if (!check_builtin_idle_enabled())
+		return -EBUSY;
+
+	if (!scx_kf_allowed(SCX_KF_SELECT_CPU))
+		return -EPERM;
+
+#ifdef CONFIG_SMP
+	preempt_disable();
+
+	/*
+	 * As an optimization, do not update the local idle mask when
+	 * p->cpus_ptr is passed directly in @preferred_cpus.
+	 */
+	if (preferred_cpus != p->cpus_ptr) {
+		preferred = this_cpu_cpumask_var_ptr(local_idle_cpumask);
+		if (!cpumask_and(preferred, p->cpus_ptr, preferred_cpus))
+			preferred = NULL;
+	}
+	prev_cpu = scx_select_cpu_dfl(p, preferred, prev_cpu, wake_flags, flags, &is_idle);
+	if (!is_idle)
+		prev_cpu = -EBUSY;
+
+	preempt_enable();
+#else
+	prev_cpu = -EBUSY;
+#endif
+
+	return prev_cpu;
+}
+
+/**
  * scx_bpf_get_idle_cpumask_node - Get a referenced kptr to the
  * idle-tracking per-CPU cpumask of a target NUMA node.
  * @node: target NUMA node
@@ -1215,6 +1274,7 @@ static const struct btf_kfunc_id_set scx_kfunc_set_idle = {
 
 BTF_KFUNCS_START(scx_kfunc_ids_select_cpu)
 BTF_ID_FLAGS(func, scx_bpf_select_cpu_dfl, KF_RCU)
+BTF_ID_FLAGS(func, scx_bpf_select_cpu_pref, KF_RCU)
 BTF_KFUNCS_END(scx_kfunc_ids_select_cpu)
 
 static const struct btf_kfunc_id_set scx_kfunc_set_select_cpu = {
