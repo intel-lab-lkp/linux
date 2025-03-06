@@ -2943,9 +2943,10 @@ ssize_t filemap_splice_read(struct file *in, loff_t *ppos,
 {
 	struct folio_batch fbatch;
 	struct kiocb iocb;
-	size_t total_spliced = 0, used, npages;
+	size_t total_spliced = 0, npages;
 	loff_t isize, end_offset;
 	bool writably_mapped;
+	unsigned short used;
 	int i, error = 0;
 
 	if (unlikely(*ppos >= in->f_mapping->host->i_sb->s_maxbytes))
@@ -2956,7 +2957,7 @@ ssize_t filemap_splice_read(struct file *in, loff_t *ppos,
 
 	/* Work out how much data we can actually add into the pipe */
 	used = pipe_occupancy(pipe->head, pipe->tail);
-	npages = max_t(ssize_t, pipe->max_usage - used, 0);
+	npages = max_t(unsigned short, pipe->max_usage - used, 0);
 	len = min_t(size_t, len, npages * PAGE_SIZE);
 
 	folio_batch_init(&fbatch);

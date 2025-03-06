@@ -32,29 +32,16 @@ struct pipe_buffer {
 };
 
 /*
- * Really only alpha needs 32-bit fields, but
- * might as well do it for 64-bit architectures
- * since that's what we've historically done,
- * and it makes 'head_tail' always be a simple
- * 'unsigned long'.
- */
-#ifdef CONFIG_64BIT
-typedef unsigned int pipe_index_t;
-#else
-typedef unsigned short pipe_index_t;
-#endif
-
-/*
  * We have to declare this outside 'struct pipe_inode_info',
  * but then we can't use 'union pipe_index' for an anonymous
  * union, so we end up having to duplicate this declaration
  * below. Annoying.
  */
 union pipe_index {
-	unsigned long head_tail;
+	unsigned int head_tail;
 	struct {
-		pipe_index_t head;
-		pipe_index_t tail;
+		unsigned short head;
+		unsigned short tail;
 	};
 };
 
@@ -89,15 +76,15 @@ struct pipe_inode_info {
 
 	/* This has to match the 'union pipe_index' above */
 	union {
-		unsigned long head_tail;
+		unsigned int head_tail;
 		struct {
-			pipe_index_t head;
-			pipe_index_t tail;
+			unsigned short head;
+			unsigned short tail;
 		};
 	};
 
-	unsigned int max_usage;
-	unsigned int ring_size;
+	unsigned short max_usage;
+	unsigned short ring_size;
 	unsigned int nr_accounted;
 	unsigned int readers;
 	unsigned int writers;
@@ -181,7 +168,7 @@ static inline bool pipe_has_watch_queue(const struct pipe_inode_info *pipe)
  * @head: The pipe ring head pointer
  * @tail: The pipe ring tail pointer
  */
-static inline bool pipe_empty(unsigned int head, unsigned int tail)
+static inline bool pipe_empty(unsigned short head, unsigned short tail)
 {
 	return head == tail;
 }
@@ -191,9 +178,9 @@ static inline bool pipe_empty(unsigned int head, unsigned int tail)
  * @head: The pipe ring head pointer
  * @tail: The pipe ring tail pointer
  */
-static inline unsigned int pipe_occupancy(unsigned int head, unsigned int tail)
+static inline unsigned short pipe_occupancy(unsigned short head, unsigned short tail)
 {
-	return (pipe_index_t)(head - tail);
+	return head - tail;
 }
 
 /**
@@ -202,8 +189,8 @@ static inline unsigned int pipe_occupancy(unsigned int head, unsigned int tail)
  * @tail: The pipe ring tail pointer
  * @limit: The maximum amount of slots available.
  */
-static inline bool pipe_full(unsigned int head, unsigned int tail,
-			     unsigned int limit)
+static inline bool pipe_full(unsigned short head, unsigned short tail,
+			     unsigned short limit)
 {
 	return pipe_occupancy(head, tail) >= limit;
 }

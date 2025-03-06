@@ -198,9 +198,9 @@ ssize_t splice_to_pipe(struct pipe_inode_info *pipe,
 		       struct splice_pipe_desc *spd)
 {
 	unsigned int spd_pages = spd->nr_pages;
-	unsigned int tail = pipe->tail;
-	unsigned int head = pipe->head;
-	unsigned int mask = pipe->ring_size - 1;
+	unsigned short tail = pipe->tail;
+	unsigned short head = pipe->head;
+	unsigned short mask = pipe->ring_size - 1;
 	ssize_t ret = 0;
 	int page_nr = 0;
 
@@ -245,9 +245,9 @@ EXPORT_SYMBOL_GPL(splice_to_pipe);
 
 ssize_t add_to_pipe(struct pipe_inode_info *pipe, struct pipe_buffer *buf)
 {
-	unsigned int head = pipe->head;
-	unsigned int tail = pipe->tail;
-	unsigned int mask = pipe->ring_size - 1;
+	unsigned short head = pipe->head;
+	unsigned short tail = pipe->tail;
+	unsigned short mask = pipe->ring_size - 1;
 	int ret;
 
 	if (unlikely(!pipe->readers)) {
@@ -271,7 +271,7 @@ EXPORT_SYMBOL(add_to_pipe);
  */
 int splice_grow_spd(const struct pipe_inode_info *pipe, struct splice_pipe_desc *spd)
 {
-	unsigned int max_usage = READ_ONCE(pipe->max_usage);
+	unsigned short max_usage = READ_ONCE(pipe->max_usage);
 
 	spd->nr_pages_max = max_usage;
 	if (max_usage <= PIPE_DEF_BUFFERS)
@@ -327,12 +327,13 @@ ssize_t copy_splice_read(struct file *in, loff_t *ppos,
 	struct kiocb kiocb;
 	struct page **pages;
 	ssize_t ret;
-	size_t used, npages, chunk, remain, keep = 0;
+	size_t npages, chunk, remain, keep = 0;
+	unsigned short used;
 	int i;
 
 	/* Work out how much data we can actually add into the pipe */
 	used = pipe_occupancy(pipe->head, pipe->tail);
-	npages = max_t(ssize_t, pipe->max_usage - used, 0);
+	npages = max_t(unsigned short, pipe->max_usage - used, 0);
 	len = min_t(size_t, len, npages * PAGE_SIZE);
 	npages = DIV_ROUND_UP(len, PAGE_SIZE);
 
@@ -445,9 +446,9 @@ static void wakeup_pipe_writers(struct pipe_inode_info *pipe)
 static int splice_from_pipe_feed(struct pipe_inode_info *pipe, struct splice_desc *sd,
 			  splice_actor *actor)
 {
-	unsigned int head = pipe->head;
-	unsigned int tail = pipe->tail;
-	unsigned int mask = pipe->ring_size - 1;
+	unsigned short head = pipe->head;
+	unsigned short tail = pipe->tail;
+	unsigned short mask = pipe->ring_size - 1;
 	int ret;
 
 	while (!pipe_empty(head, tail)) {
@@ -494,8 +495,8 @@ static int splice_from_pipe_feed(struct pipe_inode_info *pipe, struct splice_des
 /* We know we have a pipe buffer, but maybe it's empty? */
 static inline bool eat_empty_buffer(struct pipe_inode_info *pipe)
 {
-	unsigned int tail = pipe->tail;
-	unsigned int mask = pipe->ring_size - 1;
+	unsigned short tail = pipe->tail;
+	unsigned short mask = pipe->ring_size - 1;
 	struct pipe_buffer *buf = &pipe->bufs[tail & mask];
 
 	if (unlikely(!buf->len)) {
@@ -690,7 +691,7 @@ iter_file_splice_write(struct pipe_inode_info *pipe, struct file *out,
 	while (sd.total_len) {
 		struct kiocb kiocb;
 		struct iov_iter from;
-		unsigned int head, tail, mask;
+		unsigned short head, tail, mask;
 		size_t left;
 		int n;
 
@@ -809,7 +810,7 @@ ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 	pipe_lock(pipe);
 
 	while (len > 0) {
-		unsigned int head, tail, mask, bc = 0;
+		unsigned short head, tail, mask, bc = 0;
 		size_t remain = len;
 
 		/*
@@ -960,7 +961,7 @@ static ssize_t do_splice_read(struct file *in, loff_t *ppos,
 			      struct pipe_inode_info *pipe, size_t len,
 			      unsigned int flags)
 {
-	unsigned int p_space;
+	unsigned short p_space;
 
 	if (unlikely(!(in->f_mode & FMODE_READ)))
 		return -EBADF;
@@ -1724,9 +1725,9 @@ static int splice_pipe_to_pipe(struct pipe_inode_info *ipipe,
 			       size_t len, unsigned int flags)
 {
 	struct pipe_buffer *ibuf, *obuf;
-	unsigned int i_head, o_head;
-	unsigned int i_tail, o_tail;
-	unsigned int i_mask, o_mask;
+	unsigned short i_head, o_head;
+	unsigned short i_tail, o_tail;
+	unsigned short i_mask, o_mask;
 	int ret = 0;
 	bool input_wakeup = false;
 
@@ -1861,9 +1862,9 @@ static ssize_t link_pipe(struct pipe_inode_info *ipipe,
 			 size_t len, unsigned int flags)
 {
 	struct pipe_buffer *ibuf, *obuf;
-	unsigned int i_head, o_head;
-	unsigned int i_tail, o_tail;
-	unsigned int i_mask, o_mask;
+	unsigned short i_head, o_head;
+	unsigned short i_tail, o_tail;
+	unsigned short i_mask, o_mask;
 	ssize_t ret = 0;
 
 	/*

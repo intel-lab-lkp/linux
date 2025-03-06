@@ -1440,6 +1440,7 @@ static ssize_t fuse_dev_splice_read(struct file *in, loff_t *ppos,
 	int page_nr = 0;
 	struct pipe_buffer *bufs;
 	struct fuse_copy_state cs;
+	unsigned short free_slots;
 	struct fuse_dev *fud = fuse_get_dev(in);
 
 	if (!fud)
@@ -1457,7 +1458,8 @@ static ssize_t fuse_dev_splice_read(struct file *in, loff_t *ppos,
 	if (ret < 0)
 		goto out;
 
-	if (pipe_occupancy(pipe->head, pipe->tail) + cs.nr_segs > pipe->max_usage) {
+	free_slots = pipe->max_usage - pipe_occupancy(pipe->head, pipe->tail);
+	if (free_slots < cs.nr_segs) {
 		ret = -EIO;
 		goto out;
 	}
@@ -2107,9 +2109,8 @@ static ssize_t fuse_dev_splice_write(struct pipe_inode_info *pipe,
 				     struct file *out, loff_t *ppos,
 				     size_t len, unsigned int flags)
 {
-	unsigned int head, tail, mask, count;
+	unsigned short head, tail, mask, count, idx;
 	unsigned nbuf;
-	unsigned idx;
 	struct pipe_buffer *bufs;
 	struct fuse_copy_state cs;
 	struct fuse_dev *fud;

@@ -216,9 +216,9 @@ static inline bool pipe_readable(const struct pipe_inode_info *pipe)
 	return !pipe_empty(idx.head, idx.tail) || !writers;
 }
 
-static inline unsigned int pipe_update_tail(struct pipe_inode_info *pipe,
-					    struct pipe_buffer *buf,
-					    unsigned int tail)
+static inline unsigned short pipe_update_tail(struct pipe_inode_info *pipe,
+					      struct pipe_buffer *buf,
+					      unsigned short tail)
 {
 	pipe_buf_release(pipe, buf);
 
@@ -272,9 +272,9 @@ pipe_read(struct kiocb *iocb, struct iov_iter *to)
 	 */
 	for (;;) {
 		/* Read ->head with a barrier vs post_one_notification() */
-		unsigned int head = smp_load_acquire(&pipe->head);
-		unsigned int tail = pipe->tail;
-		unsigned int mask = pipe->ring_size - 1;
+		unsigned short head = smp_load_acquire(&pipe->head);
+		unsigned short tail = pipe->tail;
+		unsigned short mask = pipe->ring_size - 1;
 
 #ifdef CONFIG_WATCH_QUEUE
 		if (pipe->note_loss) {
@@ -417,7 +417,7 @@ static inline int is_packetized(struct file *file)
 static inline bool pipe_writable(const struct pipe_inode_info *pipe)
 {
 	union pipe_index idx = { .head_tail = READ_ONCE(pipe->head_tail) };
-	unsigned int max_usage = READ_ONCE(pipe->max_usage);
+	unsigned short max_usage = READ_ONCE(pipe->max_usage);
 
 	return !pipe_full(idx.head, idx.tail, max_usage) ||
 		!READ_ONCE(pipe->readers);
@@ -428,7 +428,7 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *filp = iocb->ki_filp;
 	struct pipe_inode_info *pipe = filp->private_data;
-	unsigned int head;
+	unsigned short head;
 	ssize_t ret = 0;
 	size_t total_len = iov_iter_count(from);
 	ssize_t chars;
@@ -471,7 +471,7 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	was_empty = pipe_empty(head, pipe->tail);
 	chars = total_len & (PAGE_SIZE-1);
 	if (chars && !was_empty) {
-		unsigned int mask = pipe->ring_size - 1;
+		unsigned short mask = pipe->ring_size - 1;
 		struct pipe_buffer *buf = &pipe->bufs[(head - 1) & mask];
 		int offset = buf->offset + buf->len;
 
@@ -614,7 +614,8 @@ out:
 static long pipe_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct pipe_inode_info *pipe = filp->private_data;
-	unsigned int count, head, tail, mask;
+	unsigned short head, tail, mask;
+	unsigned int count;
 
 	switch (cmd) {
 	case FIONREAD:
@@ -1270,10 +1271,10 @@ unsigned int round_pipe_size(unsigned int size)
 int pipe_resize_ring(struct pipe_inode_info *pipe, unsigned int nr_slots)
 {
 	struct pipe_buffer *bufs;
-	unsigned int head, tail, mask, n;
+	unsigned short head, tail, mask, n;
 
 	/* nr_slots larger than limits of pipe->{head,tail} */
-	if (unlikely(nr_slots > BIT(BITS_PER_TYPE(pipe_index_t) - 1)))
+	if (unlikely(nr_slots > USHRT_MAX))
 		return -EINVAL;
 
 	bufs = kcalloc(nr_slots, sizeof(*bufs),
@@ -1298,13 +1299,13 @@ int pipe_resize_ring(struct pipe_inode_info *pipe, unsigned int nr_slots)
 	 * and adjust the indices.
 	 */
 	if (n > 0) {
-		unsigned int h = head & mask;
-		unsigned int t = tail & mask;
+		unsigned short h = head & mask;
+		unsigned short t = tail & mask;
 		if (h > t) {
 			memcpy(bufs, pipe->bufs + t,
 			       n * sizeof(struct pipe_buffer));
 		} else {
-			unsigned int tsize = pipe->ring_size - t;
+			unsigned short tsize = pipe->ring_size - t;
 			if (h > 0)
 				memcpy(bufs + tsize, pipe->bufs,
 				       h * sizeof(struct pipe_buffer));
