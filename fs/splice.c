@@ -1682,13 +1682,14 @@ static int ipipe_prep(struct pipe_inode_info *pipe, unsigned int flags)
  */
 static int opipe_prep(struct pipe_inode_info *pipe, unsigned int flags)
 {
+	union pipe_index idx = { .head_tail = READ_ONCE(pipe->head_tail) };
 	int ret;
 
 	/*
 	 * Check pipe occupancy without the inode lock first. This function
 	 * is speculative anyways, so missing one is ok.
 	 */
-	if (!pipe_full(pipe->head, pipe->tail, pipe->max_usage))
+	if (!pipe_full(idx.head, idx.tail, READ_ONCE(pipe->max_usage)))
 		return 0;
 
 	ret = 0;
