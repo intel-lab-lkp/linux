@@ -16,6 +16,7 @@
 #include <linux/io.h>
 #include <asm/alternative.h>
 #include <asm/asm.h>
+#include <linux/sysctl.h>
 
 int spin_retry = -1;
 
@@ -36,6 +37,23 @@ static int __init spin_retry_setup(char *str)
 	return 1;
 }
 __setup("spin_retry=", spin_retry_setup);
+
+static const struct ctl_table s390_spin_sysctl_table[] = {
+	{
+		.procname	= "spin_retry",
+		.data		= &spin_retry,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+};
+
+static int __init init_s390_spin_sysctls(void)
+{
+	register_sysctl_init("kernel", s390_spin_sysctl_table);
+	return 0;
+}
+arch_initcall(init_s390_spin_sysctls);
 
 struct spin_wait {
 	struct spin_wait *next, *prev;
