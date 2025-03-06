@@ -222,7 +222,7 @@ static void __init initramfs_test_data(struct kunit *test)
 	KUNIT_EXPECT_NULL(test, err);
 
 	file = filp_open(c[0].fname, O_RDONLY, 0);
-	if (!file) {
+	if (IS_ERR(file)) {
 		KUNIT_FAIL(test, "open failed");
 		goto out;
 	}
