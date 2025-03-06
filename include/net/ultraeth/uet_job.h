@@ -21,6 +21,8 @@ struct uet_fep {
 	struct uet_context *context;
 	struct sk_buff_head rxq;
 	struct fep_address addr;
+	u32 ack_gen_trigger;
+	u32 ack_gen_min_pkt_add;
 	u32 job_id;
 };
 

@@ -8,6 +8,8 @@
 
 #define UET_DEFAULT_PORT 5432
 #define UET_SVC_MAX_LEN 64
+#define UET_DEFAULT_ACK_GEN_TRIGGER (1 << 14)
+#define UET_DEFAULT_ACK_GEN_MIN_PKT_ADD (1 << 10)
 
 /* types used for prologue's type field */
 enum {

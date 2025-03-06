@@ -166,7 +166,8 @@ static int uet_pds_rx_ack(struct uet_pds *pds, struct sk_buff *skb,
 
 static struct uet_pdc *uet_pds_new_pdc_rx(struct uet_pds *pds,
 					  struct sk_buff *skb,
-					  __be16 dport,
+					  __be16 dport, u32 ack_gen_trigger,
+					  u32 ack_gen_min_pkt_add,
 					  struct uet_pdc_key *key,
 					  u8 mode, u8 state)
 {
@@ -176,7 +177,8 @@ static struct uet_pdc *uet_pds_new_pdc_rx(struct uet_pds *pds,
 	return uet_pdc_create(pds, be32_to_cpu(req->psn), state,
 			      be16_to_cpu(req->spdcid),
 			      uet_ses_req_pid_on_fep(ses_req),
-			      mode, 0, dport, key, true);
+			      mode, 0, dport, ack_gen_trigger,
+			      ack_gen_min_pkt_add, key, true);
 }
 
 static int uet_pds_rx_req(struct uet_pds *pds, struct sk_buff *skb,
@@ -215,7 +217,8 @@ static int uet_pds_rx_req(struct uet_pds *pds, struct sk_buff *skb,
 		if (fep->addr.in_address.ip != local_fep_addr)
 			return -ENOENT;
 
-		pdc = uet_pds_new_pdc_rx(pds, skb, dport, &key,
+		pdc = uet_pds_new_pdc_rx(pds, skb, dport, fep->ack_gen_trigger,
+					 fep->ack_gen_min_pkt_add, &key,
 					 UET_PDC_MODE_RUD,
 					 UET_PDC_EP_STATE_NEW_ESTABLISHED);
 		if (IS_ERR(pdc))
@@ -293,7 +296,8 @@ int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 
 static struct uet_pdc *uet_pds_new_pdc_tx(struct uet_pds *pds,
 					  struct sk_buff *skb,
-					  __be16 dport,
+					  __be16 dport, u32 ack_gen_trigger,
+					  u32 ack_gen_min_pkt_add,
 					  struct uet_pdc_key *key,
 					  u8 mode, u8 state)
 {
@@ -301,7 +305,8 @@ static struct uet_pdc *uet_pds_new_pdc_tx(struct uet_pds *pds,
 
 	return uet_pdc_create(pds, 0, state, 0,
 			      uet_ses_req_pid_on_fep(ses_req),
-			      mode, 0, dport, key, false);
+			      mode, 0, dport, ack_gen_trigger,
+			      ack_gen_min_pkt_add, key, false);
 }
 
 int uet_pds_tx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
@@ -336,7 +341,8 @@ int uet_pds_tx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 		if (!fep)
 			return -ECONNREFUSED;
 
-		pdc = uet_pds_new_pdc_tx(pds, skb, dport, &key,
+		pdc = uet_pds_new_pdc_tx(pds, skb, dport, fep->ack_gen_trigger,
+					 fep->ack_gen_min_pkt_add, &key,
 					 UET_PDC_MODE_RUD,
 					 UET_PDC_EP_STATE_CLOSED);
 		if (IS_ERR(pdc))

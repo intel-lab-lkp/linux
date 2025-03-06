@@ -94,6 +94,10 @@ struct uet_pdc {
 	u32 rx_base_psn;
 	u32 tx_base_psn;
 
+	u32 ack_gen_trigger;
+	u32 ack_gen_min_pkt_add;
+	u32 ack_gen_count;
+
 	struct rb_root rtx_queue;
 
 	struct hlist_node gc_node;
@@ -102,7 +106,8 @@ struct uet_pdc {
 
 struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 			       u16 dpdcid, u16 pid_on_fep, u8 mode,
-			       u8 tos, __be16 dport,
+			       u8 tos, __be16 dport, u32 ack_gen_trigger,
+			       u32 ack_gen_min_pkt_add,
 			       const struct uet_pdc_key *key, bool is_inbound);
 void uet_pdc_destroy(struct uet_pdc *pdc);
 void uet_pdc_free(struct uet_pdc *pdc);

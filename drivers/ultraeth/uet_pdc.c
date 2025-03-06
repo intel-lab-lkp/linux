@@ -19,9 +19,9 @@ static void uet_pdc_xmit(struct uet_pdc *pdc, struct sk_buff *skb)
 	dev_queue_xmit(skb);
 }
 
-static void uet_pdc_mpr_advance_tx(struct uet_pdc *pdc, u32 bits)
+static void __uet_pdc_mpr_advance_tx(struct uet_pdc *pdc, u32 bits)
 {
-	if (!test_bit(0, pdc->tx_bitmap) || !test_bit(0, pdc->ack_bitmap))
+	if (WARN_ON_ONCE(bits >= UET_PDC_MPR))
 		return;
 
 	bitmap_shift_right(pdc->tx_bitmap, pdc->tx_bitmap, bits, UET_PDC_MPR);
@@ -29,6 +29,15 @@ static void uet_pdc_mpr_advance_tx(struct uet_pdc *pdc, u32 bits)
 	pdc->tx_base_psn += bits;
 	netdev_dbg(pds_netdev(pdc->pds), "%s: advancing tx to %u\n", __func__,
 		   pdc->tx_base_psn);
+}
+
+static void uet_pdc_mpr_advance_tx(struct uet_pdc *pdc, u32 cack_psn)
+{
+	/* cumulative ack, clear all prior and including cack_psn */
+	if (cack_psn > pdc->tx_base_psn)
+		__uet_pdc_mpr_advance_tx(pdc, cack_psn - pdc->tx_base_psn);
+	else if (test_bit(0, pdc->tx_bitmap) && test_bit(0, pdc->ack_bitmap))
+		__uet_pdc_mpr_advance_tx(pdc, 1);
 }
 
 static void uet_pdc_rtx_skb(struct uet_pdc *pdc, struct sk_buff *skb, ktime_t ts)
@@ -227,7 +236,8 @@ try_again:
 
 struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 			       u16 dpdcid, u16 pid_on_fep, u8 mode,
-			       u8 tos, __be16 dport,
+			       u8 tos, __be16 dport, u32 ack_gen_trigger,
+			       u32 ack_gen_min_pkt_add,
 			       const struct uet_pdc_key *key, bool is_inbound)
 {
 	struct uet_pdc *pdc, *pdc_ins = ERR_PTR(-ENOMEM);
@@ -254,6 +264,8 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 	pdc->pds = pds;
 	pdc->mode = mode;
 	pdc->is_initiator = !is_inbound;
+	pdc->ack_gen_trigger = ack_gen_trigger;
+	pdc->ack_gen_min_pkt_add = ack_gen_min_pkt_add;
 	pdc->rtx_queue = RB_ROOT;
 	if (!uet_pdc_id_get(pdc))
 		goto err_id_get;
@@ -541,11 +553,25 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 	/* either using ROD mode or in SYN_SENT state */
 	if (pdc->tx_busy)
 		pdc->tx_busy = false;
-	/* we can advance only if the oldest pkt got acked */
-	if (!psn_bit)
-		uet_pdc_mpr_advance_tx(pdc, 1);
 	ecn_marked = !!(uet_prologue_flags(&ack->prologue) & UET_PDS_ACK_FLAG_M);
-	uet_pdc_ack_psn(pdc, skb, ack_psn, ecn_marked);
+	/* we can advance only if the oldest pkt got acked or we got
+	 * a cumulative ack clearing >= 1 older packets
+	 */
+	if (!psn_bit || cack_psn > pdc->tx_base_psn) {
+		if (cack_psn >= pdc->tx_base_psn) {
+			u32 i;
+
+			for (i = 0; i <= cack_psn - pdc->tx_base_psn; i++)
+				uet_pdc_ack_psn(pdc, skb, cack_psn - i,
+						ecn_marked);
+		}
+
+		uet_pdc_mpr_advance_tx(pdc, cack_psn);
+	}
+
+	/* minor optimization, this can happen only if they are != */
+	if (cack_psn != ack_psn)
+		uet_pdc_ack_psn(pdc, skb, ack_psn, ecn_marked);
 
 	ret = 0;
 	switch (pdc->state) {
@@ -584,13 +610,39 @@ err_dbg:
 
 static void uet_pdc_mpr_advance_rx(struct uet_pdc *pdc)
 {
-	if (!test_bit(0, pdc->rx_bitmap))
+	unsigned long fzb = find_first_zero_bit(pdc->rx_bitmap, UET_PDC_MPR);
+	u32 old_psn = pdc->rx_base_psn;
+
+	if (fzb == 0)
 		return;
 
-	bitmap_shift_right(pdc->rx_bitmap, pdc->rx_bitmap, 1, UET_PDC_MPR);
-	pdc->rx_base_psn++;
-	netdev_dbg(pds_netdev(pdc->pds), "%s: advancing rx to %u\n",
-		   __func__, pdc->rx_base_psn);
+	bitmap_shift_right(pdc->rx_bitmap, pdc->rx_bitmap, fzb, UET_PDC_MPR);
+	pdc->rx_base_psn += fzb;
+	netdev_dbg(pds_netdev(pdc->pds), "%s: advancing rx from %u to %u (%lu)\n",
+		   __func__, old_psn, pdc->rx_base_psn, fzb);
+}
+
+static void uet_pdc_rx_req_handle_ack(struct uet_pdc *pdc, unsigned int len,
+				      __be16 msg_id, u8 req_flags, u32 req_psn,
+				      u8 ack_flags, bool first_ack)
+{
+	pdc->ack_gen_count += max(pdc->ack_gen_min_pkt_add, len);
+	if (first_ack ||
+	    (req_flags & (UET_PDS_REQ_FLAG_AR | UET_PDS_REQ_FLAG_RETX)) ||
+	    pdc->ack_gen_count >= pdc->ack_gen_trigger) {
+		/* first advance so if the current psn == rx_base_psn
+		 * we will clear it with the cumulative ack
+		 */
+		uet_pdc_mpr_advance_rx(pdc);
+		pdc->ack_gen_count = 0;
+		/* req_psn is inside the cumulative ack range, so
+		 * it is covered by it
+		 */
+		if (unlikely(req_psn < pdc->rx_base_psn))
+			req_psn = pdc->rx_base_psn;
+		uet_pdc_send_ses_ack(pdc, UET_SES_RSP_RC_NULL, msg_id, req_psn,
+				     ack_flags, false);
+	}
 }
 
 int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
@@ -601,7 +653,9 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 	u8 req_flags = uet_prologue_flags(&req->prologue), ack_flags = 0;
 	u32 req_psn = be32_to_cpu(req->psn);
 	const char *drop_reason = "tx_busy";
-	unsigned long psn_bit;
+	__be16 msg_id = ses_req->msg_id;
+	unsigned int len = skb->len;
+	bool first_ack = false;
 	enum mpr_pos psn_pos;
 	int ret = -EINVAL;
 
@@ -648,22 +702,31 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 		break;
 	}
 
-	psn_bit = req_psn - pdc->rx_base_psn;
-	if (!psn_bit_valid(psn_bit)) {
-		drop_reason = "req psn bit is invalid";
-		goto err_dbg;
-	}
-	if (test_and_set_bit(psn_bit, pdc->rx_bitmap)) {
-		drop_reason = "req psn bit is already set in rx_bitmap";
-		goto err_dbg;
-	}
-
-	ret = 0;
 	switch (pdc->state) {
 	case UET_PDC_EP_STATE_SYN_SENT:
 		/* error */
 		break;
+	case UET_PDC_EP_STATE_NEW_ESTABLISHED:
+		/* special state when a connection is new, we need to
+		 * send first ack immediately
+		 */
+		pdc->state = UET_PDC_EP_STATE_ESTABLISHED;
+		first_ack = true;
+		fallthrough;
 	case UET_PDC_EP_STATE_ESTABLISHED:
+		if (!first_ack) {
+			unsigned long psn_bit = req_psn - pdc->rx_base_psn - 1;
+
+			if (!psn_bit_valid(psn_bit)) {
+				drop_reason = "req psn bit is invalid";
+				goto err_dbg;
+			}
+			if (test_and_set_bit(psn_bit, pdc->rx_bitmap)) {
+				drop_reason = "req psn bit is already set in rx_bitmap";
+				goto err_dbg;
+			}
+		}
+
 		/* Rx request and do an upcall, potentially return an ack */
 		ret = uet_job_fep_queue_skb(pds_context(pdc->pds),
 					    uet_ses_req_job_id(ses_req), skb,
@@ -678,12 +741,8 @@ int uet_pdc_rx_req(struct uet_pdc *pdc, struct sk_buff *skb,
 	}
 
 	if (ret >= 0)
-		uet_pdc_send_ses_ack(pdc, UET_SES_RSP_RC_NULL, ses_req->msg_id,
-				     req_psn, ack_flags, false);
-	/* TODO: NAK */
-
-	if (!psn_bit)
-		uet_pdc_mpr_advance_rx(pdc);
+		uet_pdc_rx_req_handle_ack(pdc, len, msg_id, req_flags,
+					  req_psn, ack_flags, first_ack);
 
 out:
 	spin_unlock(&pdc->lock);
