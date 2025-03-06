@@ -73,6 +73,11 @@ static inline struct uet_pds_ack_ext_hdr *pds_ack_ext_hdr(const struct sk_buff *
 	return (struct uet_pds_ack_ext_hdr *)(pds_ack_hdr(skb) + 1);
 }
 
+static inline struct uet_pds_ctl_hdr *pds_ctl_hdr(const struct sk_buff *skb)
+{
+	return (struct uet_pds_ctl_hdr *)skb_network_header(skb);
+}
+
 static inline struct uet_ses_rsp_hdr *pds_ack_ses_rsp_hdr(const struct sk_buff *skb)
 {
 	/* TODO: ack_ext_hdr, CC_STATE, etc. */

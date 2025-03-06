@@ -195,13 +195,18 @@ static int uet_pds_rx_ack(struct uet_pds *pds, struct sk_buff *skb,
 	struct uet_pds_req_hdr *pds_req = pds_req_hdr(skb);
 	u16 pdcid = be16_to_cpu(pds_req->dpdcid);
 	struct uet_pdc *pdc;
+	int ret;
 
 	pdc = rhashtable_lookup_fast(&pds->pdcid_hash, &pdcid,
 				     uet_pds_pdcid_rht_params);
 	if (!pdc)
 		return -ENOENT;
 
-	return uet_pdc_rx_ack(pdc, skb, remote_fep_addr);
+	ret = uet_pdc_rx_ack(pdc, skb, remote_fep_addr);
+	if (ret >= 0)
+		uet_pdc_rx_refresh(pdc);
+
+	return ret;
 }
 
 static void uet_pds_rx_nack(struct uet_pds *pds, struct sk_buff *skb)
@@ -216,6 +221,26 @@ static void uet_pds_rx_nack(struct uet_pds *pds, struct sk_buff *skb)
 		return;
 
 	uet_pdc_rx_nack(pdc, skb);
+}
+
+static int uet_pds_rx_ctl(struct uet_pds *pds, struct sk_buff *skb,
+			  __be32 remote_fep_addr)
+{
+	struct uet_pds_ctl_hdr *ctl = pds_ctl_hdr(skb);
+	u16 pdcid = be16_to_cpu(ctl->dpdcid_pdc_info_offset);
+	struct uet_pdc *pdc;
+	int ret;
+
+	pdc = rhashtable_lookup_fast(&pds->pdcid_hash, &pdcid,
+				     uet_pds_pdcid_rht_params);
+	if (!pdc)
+		return -ENOENT;
+
+	ret = uet_pdc_rx_ctl(pdc, skb, remote_fep_addr);
+	if (ret >= 0)
+		uet_pdc_rx_refresh(pdc);
+
+	return ret;
 }
 
 static struct uet_pdc *uet_pds_new_pdc_rx(struct uet_pds *pds,
@@ -245,6 +270,7 @@ static int uet_pds_rx_req(struct uet_pds *pds, struct sk_buff *skb,
 	struct uet_pdc_key key = {};
 	struct uet_fep *fep;
 	struct uet_pdc *pdc;
+	int ret;
 
 	key.src_ip = local_fep_addr;
 	key.dst_ip = remote_fep_addr;
@@ -303,7 +329,11 @@ static int uet_pds_rx_req(struct uet_pds *pds, struct sk_buff *skb,
 			return PTR_ERR(pdc);
 	}
 
-	return uet_pdc_rx_req(pdc, skb, remote_fep_addr, tos);
+	ret = uet_pdc_rx_req(pdc, skb, remote_fep_addr, tos);
+	if (ret >= 0)
+		uet_pdc_rx_refresh(pdc);
+
+	return ret;
 }
 
 static bool uet_pds_rx_valid_req_next_hdr(const struct uet_prologue_hdr *prologue)
@@ -367,6 +397,12 @@ int uet_pds_rx(struct uet_pds *pds, struct sk_buff *skb, __be32 local_fep_addr,
 			break;
 		ret = uet_pds_rx_req(pds, skb, local_fep_addr, remote_fep_addr,
 				     dport, tos);
+		break;
+	case UET_PDS_TYPE_CTRL_MSG:
+		offset += sizeof(struct uet_pds_ctl_hdr);
+		if (!pskb_may_pull(skb, offset))
+			break;
+		ret = uet_pds_rx_ctl(pds, skb, remote_fep_addr);
 		break;
 	case UET_PDS_TYPE_NACK:
 		if (uet_prologue_next_hdr(prologue) != UET_PDS_NEXT_HDR_NONE)

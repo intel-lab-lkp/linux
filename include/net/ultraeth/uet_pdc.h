@@ -22,6 +22,8 @@
 #define UET_PDC_MPR 128
 #define UET_PDC_SACK_BITS 64
 #define UET_PDC_SACK_MASK (U64_MAX << 3)
+#define UET_PDC_IDLE_TIMEOUT_SEC 60
+#define UET_PDC_IDLE_TIMEOUT_JIFFIES (UET_PDC_IDLE_TIMEOUT_SEC * HZ)
 
 #define UET_SKB_CB(skb)       ((struct uet_skb_cb *)&((skb)->cb[0]))
 
@@ -38,7 +40,8 @@ enum {
 	UET_PDC_EP_STATE_ESTABLISHED,
 	UET_PDC_EP_STATE_QUIESCE,
 	UET_PDC_EP_STATE_ACK_WAIT,
-	UET_PDC_EP_STATE_CLOSE_ACK_WAIT
+	UET_PDC_EP_STATE_CLOSE_ACK_WAIT,
+	UET_PDC_EP_STATE_CLOSE_WAIT
 };
 
 struct uet_pdc_key {
@@ -88,7 +91,7 @@ struct uet_pdc {
 	int rtx_max;
 	struct timer_list rtx_timer;
 	unsigned long rtx_timeout;
-
+	unsigned long rx_last_jiffies;
 	unsigned long *rx_bitmap;
 	unsigned long *tx_bitmap;
 	unsigned long *ack_bitmap;
@@ -101,6 +104,8 @@ struct uet_pdc {
 	u32 ack_gen_trigger;
 	u32 ack_gen_min_pkt_add;
 	u32 ack_gen_count;
+
+	struct timer_list timeout_timer;
 
 	struct rb_root rtx_queue;
 
@@ -121,8 +126,11 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 		   __be32 remote_fep_addr);
 int uet_pdc_tx_req(struct uet_pdc *pdc, struct sk_buff *skb, u8 type);
 void uet_pdc_rx_nack(struct uet_pdc *pdc, struct sk_buff *skb);
+int uet_pdc_rx_ctl(struct uet_pdc *pdc, struct sk_buff *skb,
+		   __be32 remote_fep_addr);
 struct metadata_dst *uet_pdc_dst(const struct uet_pdc_key *key, __be16 dport,
 				 u8 tos);
+void uet_pdc_rx_refresh(struct uet_pdc *pdc);
 
 static inline void uet_pdc_build_prologue(struct uet_prologue_hdr *prologue,
 					  u8 type, u8 next, u8 flags)

@@ -21,6 +21,14 @@ struct metadata_dst *uet_pdc_dst(const struct uet_pdc_key *key, __be16 dport,
 	return mdst;
 }
 
+void uet_pdc_rx_refresh(struct uet_pdc *pdc)
+{
+	unsigned long rx_jiffies = jiffies;
+
+	if (rx_jiffies != READ_ONCE(pdc->rx_last_jiffies))
+		WRITE_ONCE(pdc->rx_last_jiffies, rx_jiffies);
+}
+
 static void uet_pdc_xmit(struct uet_pdc *pdc, struct sk_buff *skb)
 {
 	skb->dev = pds_netdev(pdc->pds);
@@ -97,10 +105,19 @@ static void uet_pdc_rtx_timer_expired(struct timer_list *t)
 			continue;
 		}
 		if (UET_SKB_CB(skb)->rtx_attempts == UET_PDC_RTX_DEFAULT_MAX) {
+			struct uet_prologue_hdr *prologue;
+
 			/* XXX: close connection, count drops etc */
-			netdev_dbg(pds_netdev(pdc->pds), "%s: psn: %u too many rtx attempts: %u\n",
+			prologue = (struct uet_prologue_hdr *)skb->data;
+			netdev_dbg(pds_netdev(pdc->pds), "%s: psn: %u type: %u too many rtx attempts: %u\n",
 				   __func__, UET_SKB_CB(skb)->psn,
+				   uet_prologue_type(prologue),
 				   UET_SKB_CB(skb)->rtx_attempts);
+			if (uet_prologue_type(prologue) == UET_PDS_TYPE_CTRL_MSG &&
+			    uet_prologue_ctl_type(prologue) == UET_CTL_TYPE_CLOSE) {
+				uet_pdc_destroy(pdc);
+				goto out_unlock;
+			}
 			/* if dropping the oldest packet move window */
 			if (UET_SKB_CB(skb)->psn == pdc->tx_base_psn)
 				uet_pdc_mpr_advance_tx(pdc, 1);
@@ -114,6 +131,7 @@ static void uet_pdc_rtx_timer_expired(struct timer_list *t)
 
 	mod_timer(&pdc->rtx_timer, jiffies +
 				   nsecs_to_jiffies(smallest_diff));
+out_unlock:
 	spin_unlock(&pdc->lock);
 }
 
@@ -228,6 +246,154 @@ static int uet_pdc_rtx_queue(struct uet_pdc *pdc, struct sk_buff *skb, u32 psn)
 	return 0;
 }
 
+static s64 uet_pdc_get_psn(struct uet_pdc *pdc)
+{
+	unsigned long fzb = find_first_zero_bit(pdc->tx_bitmap, UET_PDC_MPR);
+
+	if (unlikely(fzb == UET_PDC_MPR))
+		return -1;
+
+	set_bit(fzb, pdc->tx_bitmap);
+
+	return pdc->tx_base_psn + fzb;
+}
+
+static void uet_pdc_put_psn(struct uet_pdc *pdc, u32 psn)
+{
+	unsigned long psn_bit = psn - pdc->tx_base_psn;
+
+	clear_bit(psn_bit, pdc->tx_bitmap);
+}
+
+static int uet_pdc_tx_ctl(struct uet_pdc *pdc, u8 ctl_type, u8 flags,
+			  __be32 psn, __be32 payload)
+{
+	struct uet_pds_ctl_hdr *ctl;
+	struct sk_buff *skb;
+	int ret;
+
+	/* both CLOSE types need to be retransmitted and need a new PSN */
+	switch (ctl_type) {
+	case UET_CTL_TYPE_CLOSE:
+	case UET_CTL_TYPE_REQ_CLOSE:
+		/* payload & psn must be 0 */
+		if (payload || psn)
+			return -EINVAL;
+		/* AR must be set */
+		flags |= UET_PDS_CTL_FLAG_AR;
+		break;
+	default:
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	skb = alloc_skb(sizeof(struct uet_pds_ctl_hdr), GFP_ATOMIC);
+	if (!skb)
+		return -ENOBUFS;
+	ctl = skb_put(skb, sizeof(*ctl));
+	uet_pdc_build_prologue(&ctl->prologue, UET_PDS_TYPE_CTRL_MSG,
+			       ctl_type, flags);
+	if (!psn) {
+		s64 psn_new = uet_pdc_get_psn(pdc);
+
+		if (psn_new == -1) {
+			kfree_skb(skb);
+			return -ENOSPC;
+		}
+		psn = cpu_to_be32(psn_new);
+	}
+	ctl->psn = psn;
+	ctl->spdcid = cpu_to_be16(pdc->spdcid);
+	ctl->dpdcid_pdc_info_offset = cpu_to_be16(pdc->dpdcid);
+	ctl->payload = payload;
+
+	ret = uet_pdc_rtx_queue(pdc, skb, be32_to_cpu(psn));
+	if (ret) {
+		uet_pdc_put_psn(pdc, be32_to_cpu(psn));
+		kfree_skb(skb);
+		return ret;
+	}
+	uet_pdc_xmit(pdc, skb);
+
+	return 0;
+}
+
+static void uet_pdc_close(struct uet_pdc *pdc)
+{
+	u8 state;
+	int ret;
+
+	/* we have already transmitted the close control packet */
+	if (pdc->state > UET_PDC_EP_STATE_ACK_WAIT)
+		return;
+
+	if (!RB_EMPTY_ROOT(&pdc->rtx_queue)) {
+		if (pdc->state == UET_PDC_EP_STATE_ACK_WAIT)
+			return;
+		state = UET_PDC_EP_STATE_ACK_WAIT;
+	} else {
+		u8 ctl_type, ctl_flags = 0;
+
+		if (pdc->is_initiator) {
+			ctl_type = UET_CTL_TYPE_CLOSE;
+			state = UET_PDC_EP_STATE_CLOSE_ACK_WAIT;
+			ctl_flags = UET_PDS_CTL_FLAG_AR;
+		} else {
+			ctl_type = UET_CTL_TYPE_REQ_CLOSE;
+			state = UET_PDC_EP_STATE_CLOSE_WAIT;
+		}
+		ret = uet_pdc_tx_ctl(pdc, ctl_type, ctl_flags, 0, 0);
+		if (ret)
+			return;
+	}
+
+	pdc->state = state;
+}
+
+static void uet_pdc_timeout_timer_expired(struct timer_list *t)
+{
+	struct uet_pdc *pdc = from_timer(pdc, t, timeout_timer);
+	unsigned long now = jiffies, last_rx;
+	bool rearm_timer = true;
+
+	last_rx = READ_ONCE(pdc->rx_last_jiffies);
+	if (time_after_eq(last_rx, now) ||
+	    time_after_eq(last_rx + UET_PDC_IDLE_TIMEOUT_JIFFIES, now))
+		goto rearm_timeout;
+	spin_lock(&pdc->lock);
+	switch (pdc->state) {
+	case UET_PDC_EP_STATE_ACK_WAIT:
+		uet_pdc_close(pdc);
+		fallthrough;
+	case UET_PDC_EP_STATE_CLOSE_WAIT:
+	case UET_PDC_EP_STATE_CLOSE_ACK_WAIT:
+		/* we waited too long for the last acks */
+		if (time_before_eq(last_rx + (UET_PDC_IDLE_TIMEOUT_JIFFIES * 2),
+				   now)) {
+			if (!pdc->is_initiator)
+				uet_pds_send_nack(pdc->pds, &pdc->key,
+						  pdc->metadata->u.tun_info.key.tp_dst,
+						  0,
+						  cpu_to_be16(pdc->spdcid),
+						  cpu_to_be16(pdc->dpdcid),
+						  UET_PDS_NACK_CLOSING_IN_ERR,
+						  cpu_to_be32(pdc->rx_base_psn + 1),
+						  0);
+			uet_pdc_destroy(pdc);
+			rearm_timer = false;
+		}
+		break;
+	default:
+		uet_pdc_close(pdc);
+		break;
+	}
+	spin_unlock(&pdc->lock);
+rearm_timeout:
+	if (rearm_timer)
+		mod_timer(&pdc->timeout_timer,
+			  now + UET_PDC_IDLE_TIMEOUT_JIFFIES);
+}
+
 /* use the approach as nf nat, try a few rounds starting at random offset */
 static bool uet_pdc_id_get(struct uet_pdc *pdc)
 {
@@ -301,6 +467,7 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 	if (!pdc->ack_bitmap)
 		goto err_ack_bitmap;
 	timer_setup(&pdc->rtx_timer, uet_pdc_rtx_timer_expired, 0);
+	timer_setup(&pdc->timeout_timer, uet_pdc_timeout_timer_expired, 0);
 	pdc->metadata = uet_pdc_dst(key, dport, tos);
 	if (!pdc->metadata)
 		goto err_tun_dst;
@@ -331,6 +498,9 @@ struct uet_pdc *uet_pdc_create(struct uet_pds *pds, u32 rx_base_psn, u8 state,
 	}
 
 out:
+	mod_timer(&pdc->timeout_timer,
+		  jiffies + UET_PDC_IDLE_TIMEOUT_JIFFIES);
+
 	return pdc_ins;
 
 err_ep_insert:
@@ -351,6 +521,7 @@ err_alloc:
 
 void uet_pdc_free(struct uet_pdc *pdc)
 {
+	timer_delete_sync(&pdc->timeout_timer);
 	timer_delete_sync(&pdc->rtx_timer);
 	uet_pdc_rtx_purge(pdc);
 	dst_release(&pdc->metadata->dst);
@@ -365,25 +536,6 @@ void uet_pdc_destroy(struct uet_pdc *pdc)
 	uet_pds_pdcep_remove(pdc);
 	uet_pds_pdcid_remove(pdc);
 	uet_pds_pdc_gc_queue(pdc);
-}
-
-static s64 uet_pdc_get_psn(struct uet_pdc *pdc)
-{
-	unsigned long fzb = find_first_zero_bit(pdc->tx_bitmap, UET_PDC_MPR);
-
-	if (unlikely(fzb == UET_PDC_MPR))
-		return -1;
-
-	set_bit(fzb, pdc->tx_bitmap);
-
-	return pdc->tx_base_psn + fzb;
-}
-
-static void uet_pdc_put_psn(struct uet_pdc *pdc, u32 psn)
-{
-	unsigned long psn_bit = psn - pdc->tx_base_psn;
-
-	clear_bit(psn_bit, pdc->tx_bitmap);
 }
 
 static int uet_pdc_build_req(struct uet_pdc *pdc,
@@ -685,8 +837,17 @@ int uet_pdc_rx_ack(struct uet_pdc *pdc, struct sk_buff *skb,
 					    remote_fep_addr);
 		break;
 	case UET_PDC_EP_STATE_ACK_WAIT:
+		ret = uet_job_fep_queue_skb(pds_context(pdc->pds),
+					    uet_ses_rsp_job_id(ses_rsp), skb,
+					    remote_fep_addr);
+		if (!RB_EMPTY_ROOT(&pdc->rtx_queue) || ret < 0)
+			break;
+		uet_pdc_close(pdc);
+		ret = 1;
 		break;
 	case UET_PDC_EP_STATE_CLOSE_ACK_WAIT:
+		uet_pdc_destroy(pdc);
+		ret = 0;
 		break;
 	}
 
@@ -918,4 +1079,44 @@ void uet_pdc_rx_nack(struct uet_pdc *pdc, struct sk_buff *skb)
 	}
 out:
 	spin_unlock(&pdc->lock);
+}
+
+int uet_pdc_rx_ctl(struct uet_pdc *pdc, struct sk_buff *skb,
+		   __be32 remote_fep_addr)
+{
+	struct uet_pds_ctl_hdr *ctl = pds_ctl_hdr(skb);
+	u32 ctl_psn = be32_to_cpu(ctl->psn);
+	int ret = -EINVAL;
+
+	spin_lock(&pdc->lock);
+	netdev_dbg(pds_netdev(pdc->pds), "%s: CTRL pdc: [ spdcid: %u dpdcid: %u rx_base_psn %u ] "
+					 "ctrl header: [ ctl_type: %u psn: %u ]\n",
+		   __func__, pdc->spdcid, pdc->dpdcid, pdc->rx_base_psn,
+		   uet_prologue_ctl_type(&ctl->prologue), ctl_psn);
+	if (psn_mpr_pos(pdc->rx_base_psn, ctl_psn) != UET_PDC_MPR_CUR)
+		goto out;
+	switch (uet_prologue_ctl_type(&ctl->prologue)) {
+	case UET_CTL_TYPE_CLOSE:
+		/* only the initiator can send CLOSE */
+		if (pdc->is_initiator)
+			break;
+		ret = 0;
+		uet_pdc_send_ses_ack(pdc, UET_SES_RSP_RC_NULL, 0,
+				     be32_to_cpu(ctl->psn),
+				     0, true);
+		uet_pdc_destroy(pdc);
+		break;
+	case UET_CTL_TYPE_REQ_CLOSE:
+		/* only the target can send REQ_CLOSE */
+		if (!pdc->is_initiator)
+			break;
+		uet_pdc_close(pdc);
+		break;
+	default:
+		break;
+	}
+out:
+	spin_unlock(&pdc->lock);
+
+	return ret;
 }

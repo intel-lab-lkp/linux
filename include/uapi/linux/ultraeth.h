@@ -247,6 +247,25 @@ struct uet_pds_nack_hdr {
 	__be32 payload;
 } __attribute__ ((__packed__));
 
+/* control packet flags */
+enum {
+	UET_PDS_CTL_FLAG_RSV21	= (1 << 0),
+	UET_PDS_CTL_FLAG_RSV22	= (1 << 1),
+	UET_PDS_CTL_FLAG_SYN	= (1 << 2),
+	UET_PDS_CTL_FLAG_AR	= (1 << 3),
+	UET_PDS_CTL_FLAG_RETX	= (1 << 4),
+	UET_PDS_CTL_FLAG_RSV11	= (1 << 5),
+	UET_PDS_CTL_FLAG_RSV12	= (1 << 6),
+};
+
+struct uet_pds_ctl_hdr {
+	struct uet_prologue_hdr prologue;
+	__be32 psn;
+	__be16 spdcid;
+	__be16 dpdcid_pdc_info_offset;
+	__be32 payload;
+} __attribute__ ((__packed__));
+
 /* ses request op codes */
 enum {
 	UET_SES_REQ_OP_NOOP			= 0x00,
