@@ -181,8 +181,7 @@ class KUnitParserTest(unittest.TestCase):
 			result = kunit_parser.parse_run_tests(
 				kunit_parser.extract_tap_lines(
 				file.readlines()), stdout)
-		# A missing test plan is not an error.
-		self.assertEqual(result.counts, kunit_parser.TestCounts(passed=10, errors=0))
+		self.assertEqual(result.counts, kunit_parser.TestCounts(passed=10, errors=2))
 		self.assertEqual(kunit_parser.TestStatus.SUCCESS, result.status)
 
 	def test_no_tests(self):
@@ -203,7 +202,7 @@ class KUnitParserTest(unittest.TestCase):
 		self.assertEqual(
 			kunit_parser.TestStatus.NO_TESTS,
 			result.subtests[0].subtests[0].status)
-		self.assertEqual(result.counts, kunit_parser.TestCounts(passed=1, errors=1))
+		self.assertEqual(result.counts, kunit_parser.TestCounts(passed=1, errors=2))
 
 
 	def test_no_kunit_output(self):
