@@ -15,6 +15,7 @@ bool arch_hw_access_profiling;
 static u64 ibs_config __read_mostly;
 static u32 ibs_caps;
 
+#define IBS_SAMPLE_PERIOD      10000
 #define IBS_NR_SAMPLES	50
 
 /*
@@ -97,6 +98,36 @@ static void ibs_work_handler(struct work_struct *work)
 static void ibs_irq_handler(struct irq_work *i)
 {
 	schedule_work_on(smp_processor_id(), &ibs_work);
+}
+
+void hw_access_profiling_stop(void)
+{
+	u64 ops_ctl;
+
+	if (!arch_hw_access_profiling)
+		return;
+
+	rdmsrl(MSR_AMD64_IBSOPCTL, ops_ctl);
+	wrmsrl(MSR_AMD64_IBSOPCTL, ops_ctl & ~IBS_OP_ENABLE);
+}
+
+void hw_access_profiling_start(void)
+{
+	u64 config = 0;
+	unsigned int period = IBS_SAMPLE_PERIOD;
+
+	if (!arch_hw_access_profiling)
+		return;
+
+	/* Disable IBS for kernel thread */
+	if (!current->mm)
+		goto out;
+
+	config = (period >> 4)  & IBS_OP_MAX_CNT;
+	config |= (period & IBS_OP_MAX_CNT_EXT_MASK);
+	config |= ibs_config;
+out:
+	wrmsrl(MSR_AMD64_IBSOPCTL, config);
 }
 
 /*
@@ -305,6 +336,7 @@ static int __init ibs_access_profiling_init(void)
 			  x86_amd_ibs_access_profile_startup,
 			  x86_amd_ibs_access_profile_teardown);
 
+	arch_hw_access_profiling = true;
 	pr_info("IBS setup for memory access profiling\n");
 	return 0;
 }
