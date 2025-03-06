@@ -532,6 +532,31 @@ static ssize_t interleave_granularity_show(struct device *dev,
 	return rc;
 }
 
+static bool interleave_granularity_allow(struct cxl_decoder *cxld, u16 ig)
+{
+	/*
+	 * When the host-bridge is interleaved, disallow region granularity
+	 * != root granularity with the exception of 3-way HB interleaves.
+	 * Allow the CXL Spec defined 3-way HB interleaves that can only be
+	 * configured when host-bridge interleave is greater that the
+	 * region interleave. (CXL 3.2 Specification 9.13.1.1)
+	 * Allow 2+2+2 interleave where HB gran is 2 * region granularity
+	 *	 4+4+4 interleave where HB gran is 4 * region granularity
+	 *
+	 * Regions with a granularity greater than the root interleave result
+	 * in invalid DPA translations (invalid to support).
+	 */
+	if (cxld->interleave_ways > 1 && ig != cxld->interleave_granularity) {
+		if (cxld->interleave_ways != 3)
+			return false;
+
+		if (cxld->interleave_granularity != 2 * ig &&
+		    cxld->interleave_granularity != 4 * ig)
+			return false;
+	}
+	return true;
+}
+
 static ssize_t interleave_granularity_store(struct device *dev,
 					    struct device_attribute *attr,
 					    const char *buf, size_t len)
@@ -551,15 +576,7 @@ static ssize_t interleave_granularity_store(struct device *dev,
 	if (rc)
 		return rc;
 
-	/*
-	 * When the host-bridge is interleaved, disallow region granularity !=
-	 * root granularity. Regions with a granularity less than the root
-	 * interleave result in needing multiple endpoints to support a single
-	 * slot in the interleave (possible to support in the future). Regions
-	 * with a granularity greater than the root interleave result in invalid
-	 * DPA translations (invalid to support).
-	 */
-	if (cxld->interleave_ways > 1 && val != cxld->interleave_granularity)
+	if (!interleave_granularity_allow(cxld, val))
 		return -EINVAL;
 
 	rc = down_write_killable(&cxl_region_rwsem);
@@ -1305,6 +1322,23 @@ static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
 	return 0;
 }
 
+static int gran_multiple(struct cxl_region *cxlr)
+{
+	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
+	int root_decoder_gran = cxlrd->cxlsd.cxld.interleave_granularity;
+	int region_gran = cxlr->params.interleave_granularity;
+
+	/*
+	 * In regions built upon 3-way HB interleaves, the root decoder
+	 * granularity can be a multiple of the region granularity. The
+	 * multiple value is used in sorting and distance calculations.
+	 */
+	if (cxlrd->cxlsd.cxld.interleave_ways != 3)
+		return 1;
+
+	return root_decoder_gran / region_gran;
+}
+
 static int cxl_port_setup_targets(struct cxl_port *port,
 				  struct cxl_region *cxlr,
 				  struct cxl_endpoint_decoder *cxled)
@@ -1336,6 +1370,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	cxlsd = to_cxl_switch_decoder(&cxld->dev);
 	if (cxl_rr->nr_targets_set) {
 		int i, distance = 1;
+		int multiple = gran_multiple(cxlr);
 		struct cxl_region_ref *cxl_rr_iter;
 
 		/*
@@ -1347,12 +1382,17 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 		 * always 1 as every index targets a different host-bridge. At
 		 * each subsequent switch level those ports map every Nth region
 		 * position where N is the width of the switch == distance.
+		 *
+		 * With the introduction of mixed granularities in 3-way HB
+		 * interleaves, divide N by a multiple that represents the root
+		 * decoder to region granularity.
 		 */
 		do {
 			cxl_rr_iter = cxl_rr_load(iter, cxlr);
 			distance *= cxl_rr_iter->nr_targets;
 			iter = to_cxl_port(iter->dev.parent);
 		} while (!is_cxl_root(iter));
+		distance /= multiple;
 		distance *= cxlrd->cxlsd.cxld.interleave_ways;
 
 		for (i = 0; i < cxl_rr->nr_targets_set; i++)
@@ -1369,12 +1409,9 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 	if (is_cxl_root(parent_port)) {
 		/*
 		 * Root decoder IG is always set to value in CFMWS which
-		 * may be different than this region's IG.  We can use the
-		 * region's IG here since interleave_granularity_store()
-		 * does not allow interleaved host-bridges with
-		 * root IG != region IG.
+		 * may be different than this region's IG.
 		 */
-		parent_ig = p->interleave_granularity;
+		parent_ig = cxlrd->cxlsd.cxld.interleave_granularity;
 		parent_iw = cxlrd->cxlsd.cxld.interleave_ways;
 		/*
 		 * For purposes of address bit routing, use power-of-2 math for
@@ -1446,7 +1483,7 @@ static int cxl_port_setup_targets(struct cxl_port *port,
 
 	if (test_bit(CXL_REGION_F_AUTO, &cxlr->flags)) {
 		if (cxld->interleave_ways != iw ||
-		    cxld->interleave_granularity != ig ||
+		    !interleave_granularity_allow(cxld, ig) ||
 		    !region_res_match_cxl_range(p, &cxld->hpa_range) ||
 		    ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)) {
 			dev_err(&cxlr->dev,
@@ -1675,11 +1712,12 @@ static int cxl_region_attach_position(struct cxl_region *cxlr,
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
 	struct cxl_switch_decoder *cxlsd = &cxlrd->cxlsd;
 	struct cxl_decoder *cxld = &cxlsd->cxld;
+	int multiple = gran_multiple(cxlr);
 	int iw = cxld->interleave_ways;
 	struct cxl_port *iter;
 	int rc;
 
-	if (dport != cxlrd->cxlsd.target[pos % iw]) {
+	if (dport != cxlrd->cxlsd.target[pos / multiple % iw]) {
 		dev_dbg(&cxlr->dev, "%s:%s invalid target position for %s\n",
 			dev_name(&cxlmd->dev), dev_name(&cxled->cxld.dev),
 			dev_name(&cxlrd->cxlsd.cxld.dev));
@@ -1811,6 +1849,9 @@ static int find_pos_and_ways(struct cxl_port *port, struct range *range,
 /**
  * cxl_calc_interleave_pos() - calculate an endpoint position in a region
  * @cxled: endpoint decoder member of given region
+ * @multiple: the root decoder gran as a multiple of region gran
+ *	      Typically enforced as 1 except in 3-way HB interleaves
+ *	      See gran_multiple()
  *
  * The endpoint position is calculated by traversing the topology from
  * the endpoint to the root decoder and iteratively applying this
@@ -1823,7 +1864,8 @@ static int find_pos_and_ways(struct cxl_port *port, struct range *range,
  * Return: position >= 0 on success
  *	   -ENXIO on failure
  */
-static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
+static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled,
+				   int multiple)
 {
 	struct cxl_port *iter, *port = cxled_to_port(cxled);
 	struct cxl_memdev *cxlmd = cxled_to_memdev(cxled);
@@ -1869,6 +1911,11 @@ static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
 		if (rc)
 			return rc;
 
+		if (multiple > 1 && is_cxl_root(next_port(iter))) {
+			pos = pos + multiple * parent_pos;
+			break;
+		}
+
 		pos = pos * parent_ways + parent_pos;
 	}
 
@@ -1883,12 +1930,13 @@ static int cxl_calc_interleave_pos(struct cxl_endpoint_decoder *cxled)
 static int cxl_region_sort_targets(struct cxl_region *cxlr)
 {
 	struct cxl_region_params *p = &cxlr->params;
+	int multiple = gran_multiple(cxlr);
 	int i, rc = 0;
 
 	for (i = 0; i < p->nr_targets; i++) {
 		struct cxl_endpoint_decoder *cxled = p->targets[i];
 
-		cxled->pos = cxl_calc_interleave_pos(cxled);
+		cxled->pos = cxl_calc_interleave_pos(cxled, multiple);
 		/*
 		 * Record that sorting failed, but still continue to calc
 		 * cxled->pos so that follow-on code paths can reliably
@@ -1915,6 +1963,23 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	struct cxl_port *ep_port, *root_port;
 	struct cxl_dport *dport;
 	int rc = -ENXIO;
+
+	/*
+	 * Protect against improper gran mixes on 3-way HB interleave
+	 * Expect decoder gran*ways == region gran*ways
+	 */
+	if (cxlrd->cxlsd.cxld.interleave_ways == 3) {
+		if ((cxlrd->cxlsd.cxld.interleave_granularity * 3) !=
+		    (p->interleave_ways * p->interleave_granularity)) {
+			dev_dbg(&cxlr->dev,
+				"invalid config region:%d/%d decoder %d/%d\n",
+				p->interleave_ways, p->interleave_granularity,
+				cxlrd->cxlsd.cxld.interleave_ways,
+				cxlrd->cxlsd.cxld.interleave_granularity);
+
+			return rc;
+		}
+	}
 
 	rc = check_interleave_cap(&cxled->cxld, p->interleave_ways,
 				  p->interleave_granularity);
@@ -2069,9 +2134,10 @@ static int cxl_region_attach(struct cxl_region *cxlr,
 	 */
 	for (int i = 0; i < p->nr_targets; i++) {
 		struct cxl_endpoint_decoder *cxled = p->targets[i];
+		int multiple = gran_multiple(cxlr);
 		int test_pos;
 
-		test_pos = cxl_calc_interleave_pos(cxled);
+		test_pos = cxl_calc_interleave_pos(cxled, multiple);
 		dev_dbg(&cxled->cxld.dev,
 			"Test cxl_calc_interleave_pos(): %s test_pos:%d cxled->pos:%d\n",
 			(test_pos == cxled->pos) ? "success" : "fail",
