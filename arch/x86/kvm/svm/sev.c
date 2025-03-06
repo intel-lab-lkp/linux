@@ -793,6 +793,14 @@ e_unpin:
 	return ret;
 }
 
+static u64 allowed_sev_features(struct kvm_sev_info *sev)
+{
+	if (cpu_feature_enabled(X86_FEATURE_ALLOWED_SEV_FEATURES))
+		return sev->vmsa_features | VMCB_ALLOWED_SEV_FEATURES_VALID;
+
+	return 0;
+}
+
 static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 {
 	struct kvm_vcpu *vcpu = &svm->vcpu;
@@ -891,6 +899,7 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 static int __sev_launch_update_vmsa(struct kvm *kvm, struct kvm_vcpu *vcpu,
 				    int *error)
 {
+	struct kvm_sev_info *sev = &to_kvm_svm(kvm)->sev_info;
 	struct sev_data_launch_update_vmsa vmsa;
 	struct vcpu_svm *svm = to_svm(vcpu);
 	int ret;
@@ -899,6 +908,8 @@ static int __sev_launch_update_vmsa(struct kvm *kvm, struct kvm_vcpu *vcpu,
 		pr_warn_once("KVM_SET_GUEST_DEBUG for SEV-ES guest is not supported");
 		return -EINVAL;
 	}
+
+	svm->vmcb->control.allowed_sev_features = allowed_sev_features(sev);
 
 	/* Perform some pre-encryption checks against the VMSA */
 	ret = sev_es_sync_vmsa(svm);
@@ -2425,6 +2436,8 @@ static int snp_launch_update_vmsa(struct kvm *kvm, struct kvm_sev_cmd *argp)
 	kvm_for_each_vcpu(i, vcpu, kvm) {
 		struct vcpu_svm *svm = to_svm(vcpu);
 		u64 pfn = __pa(svm->sev_es.vmsa) >> PAGE_SHIFT;
+
+		svm->vmcb->control.allowed_sev_features = allowed_sev_features(sev);
 
 		ret = sev_es_sync_vmsa(svm);
 		if (ret)
