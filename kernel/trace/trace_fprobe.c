@@ -775,7 +775,7 @@ static void __unregister_trace_fprobe(struct trace_fprobe *tf)
 		if (trace_fprobe_is_tracepoint(tf)) {
 			tracepoint_probe_unregister(tf->tpoint,
 					tf->tpoint->probestub, NULL);
-			tf->tpoint = NULL;
+			tf->tpoint = TRACEPOINT_STUB;
 			tf->mod = NULL;
 		}
 	}
@@ -1007,12 +1007,8 @@ static int __tracepoint_probe_module_cb(struct notifier_block *self,
 				    trace_probe_is_enabled(&tf->tp))
 					reenable_trace_fprobe(tf);
 			}
-		} else if (val == MODULE_STATE_GOING && tp_mod->mod == tf->mod) {
-			tracepoint_probe_unregister(tf->tpoint,
-					tf->tpoint->probestub, NULL);
-			tf->tpoint = NULL;
-			tf->mod = NULL;
-		}
+		} else if (val == MODULE_STATE_GOING && tp_mod->mod == tf->mod)
+			__unregister_trace_fprobe(tf);
 	}
 	mutex_unlock(&event_mutex);
 
