@@ -447,7 +447,7 @@ static int cxl_parse_cfmws(union acpi_subtable_headers *header, void *arg,
 			cfmws->base_hpa,
 			cfmws->base_hpa + cfmws->window_size - 1, rc);
 	else
-		dev_dbg(dev, "decode range: node: %d range [%#llx - %#llx]\n",
+		dev_info(dev, "ACPI: CFMWS: Node %u [mem %#010Lx-%#010Lx]\n",
 			phys_to_target_node(cfmws->base_hpa), cfmws->base_hpa,
 			cfmws->base_hpa + cfmws->window_size - 1);
 
