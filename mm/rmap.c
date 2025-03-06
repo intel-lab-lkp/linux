@@ -2326,8 +2326,23 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 #ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
 		/* PMD-mapped THP migration entry */
 		if (!pvmw.pte) {
-			subpage = folio_page(folio,
-				pmd_pfn(*pvmw.pmd) - folio_pfn(folio));
+			/*
+			 * Zone device private folios do not work well with
+			 * pmd_pfn() on some architectures due to pte
+			 * inversion.
+			 */
+			if (folio_is_device_private(folio)) {
+				swp_entry_t entry = pmd_to_swp_entry(*pvmw.pmd);
+				unsigned long pfn = swp_offset_pfn(entry);
+
+				subpage = folio_page(folio, pfn
+							- folio_pfn(folio));
+			} else {
+				subpage = folio_page(folio,
+							pmd_pfn(*pvmw.pmd)
+							- folio_pfn(folio));
+			}
+
 			VM_BUG_ON_FOLIO(folio_test_hugetlb(folio) ||
 					!folio_test_pmd_mappable(folio), folio);
 
