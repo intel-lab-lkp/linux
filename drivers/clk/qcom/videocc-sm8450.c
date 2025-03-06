@@ -63,6 +63,7 @@ static const struct alpha_pll_config sm8475_video_cc_pll0_config = {
 
 static struct clk_alpha_pll video_cc_pll0 = {
 	.offset = 0x0,
+	.config = &video_cc_pll0_config,
 	.vco_table = lucid_evo_vco,
 	.num_vco = ARRAY_SIZE(lucid_evo_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_EVO],
@@ -106,6 +107,7 @@ static const struct alpha_pll_config sm8475_video_cc_pll1_config = {
 
 static struct clk_alpha_pll video_cc_pll1 = {
 	.offset = 0x1000,
+	.config = &video_cc_pll1_config,
 	.vco_table = lucid_evo_vco,
 	.num_vco = ARRAY_SIZE(lucid_evo_vco),
 	.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_EVO],
@@ -407,6 +409,17 @@ static const struct qcom_reset_map video_cc_sm8450_resets[] = {
 	[VIDEO_CC_MVS1C_CLK_ARES] = { .reg = 0x808c, .bit = 2, .udelay = 1000 },
 };
 
+static struct clk_alpha_pll *video_cc_sm8450_plls[] = {
+	&video_cc_pll0,
+	&video_cc_pll1,
+};
+
+static struct qcom_clk_cfg video_cc_sm8450_clocks_cfg[] = {
+	{ .offset = 0x80e4, .mask = BIT(0) }, /* VIDEO_CC_AHB_CLK */
+	{ .offset = 0x8114, .mask = BIT(0) }, /* VIDEO_CC_XO_CLK */
+	{ .offset = 0x8130, .mask = BIT(0) }, /* VIDEO_CC_SLEEP_CLK */
+};
+
 static const struct regmap_config video_cc_sm8450_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
@@ -423,6 +436,11 @@ static struct qcom_cc_desc video_cc_sm8450_desc = {
 	.num_resets = ARRAY_SIZE(video_cc_sm8450_resets),
 	.gdscs = video_cc_sm8450_gdscs,
 	.num_gdscs = ARRAY_SIZE(video_cc_sm8450_gdscs),
+	.plls = video_cc_sm8450_plls,
+	.num_plls = ARRAY_SIZE(video_cc_sm8450_plls),
+	.clks_cfg = video_cc_sm8450_clocks_cfg,
+	.num_clks_cfg = ARRAY_SIZE(video_cc_sm8450_clocks_cfg),
+	.use_rpm = true,
 };
 
 static const struct of_device_id video_cc_sm8450_match_table[] = {
@@ -435,21 +453,10 @@ MODULE_DEVICE_TABLE(of, video_cc_sm8450_match_table);
 static int video_cc_sm8450_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
-	int ret;
-
-	ret = devm_pm_runtime_enable(&pdev->dev);
-	if (ret)
-		return ret;
-
-	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret)
-		return ret;
 
 	regmap = qcom_cc_map(pdev, &video_cc_sm8450_desc);
-	if (IS_ERR(regmap)) {
-		pm_runtime_put(&pdev->dev);
+	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
-	}
 
 	if (of_device_is_compatible(pdev->dev.of_node, "qcom,sm8475-videocc")) {
 		/* Update VideoCC PLL0 */
@@ -458,23 +465,11 @@ static int video_cc_sm8450_probe(struct platform_device *pdev)
 		/* Update VideoCC PLL1 */
 		video_cc_pll1.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_OLE];
 
-		clk_lucid_ole_pll_configure(&video_cc_pll0, regmap, &sm8475_video_cc_pll0_config);
-		clk_lucid_ole_pll_configure(&video_cc_pll1, regmap, &sm8475_video_cc_pll1_config);
-	} else {
-		clk_lucid_evo_pll_configure(&video_cc_pll0, regmap, &video_cc_pll0_config);
-		clk_lucid_evo_pll_configure(&video_cc_pll1, regmap, &video_cc_pll1_config);
+		video_cc_pll0.config = &sm8475_video_cc_pll0_config;
+		video_cc_pll1.config = &sm8475_video_cc_pll1_config;
 	}
 
-	/* Keep some clocks always-on */
-	qcom_branch_set_clk_en(regmap, 0x80e4); /* VIDEO_CC_AHB_CLK */
-	qcom_branch_set_clk_en(regmap, 0x8130); /* VIDEO_CC_SLEEP_CLK */
-	qcom_branch_set_clk_en(regmap, 0x8114); /* VIDEO_CC_XO_CLK */
-
-	ret = qcom_cc_really_probe(&pdev->dev, &video_cc_sm8450_desc, regmap);
-
-	pm_runtime_put(&pdev->dev);
-
-	return ret;
+	return qcom_cc_really_probe(&pdev->dev, &video_cc_sm8450_desc, regmap);
 }
 
 static struct platform_driver video_cc_sm8450_driver = {
