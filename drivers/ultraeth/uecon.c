@@ -42,9 +42,9 @@ static netdev_tx_t uecon_ndev_xmit(struct sk_buff *skb, struct net_device *dev)
 				   use_cache ? &info->dst_cache : NULL);
 	if (IS_ERR(rt)) {
 		if (PTR_ERR(rt) == -ELOOP)
-			dev->stats.collisions++;
+			DEV_STATS_INC(dev, collisions);
 		else if (PTR_ERR(rt) == -ENETUNREACH)
-			dev->stats.tx_carrier_errors++;
+			DEV_STATS_INC(dev, tx_carrier_errors);
 
 		goto out_err;
 	}
@@ -83,7 +83,7 @@ static netdev_tx_t uecon_ndev_xmit(struct sk_buff *skb, struct net_device *dev)
 out_err:
 	rcu_read_unlock();
 	dev_kfree_skb(skb);
-	dev->stats.tx_errors++;
+	DEV_STATS_INC(dev, tx_errors);
 
 	return NETDEV_TX_OK;
 }
@@ -91,7 +91,11 @@ out_err:
 static int uecon_ndev_encap_recv(struct sock *sk, struct sk_buff *skb)
 {
 	struct uecon_ndev_priv *uecpriv;
-	int len;
+	__be32 saddr, daddr;
+	unsigned int len;
+	__be16 dport;
+	__u8 tos;
+	int ret;
 
 	uecpriv = rcu_dereference_sk_user_data(sk);
 	if (!uecpriv)
@@ -99,6 +103,11 @@ static int uecon_ndev_encap_recv(struct sock *sk, struct sk_buff *skb)
 
 	if (skb->protocol != htons(ETH_P_IP))
 		goto drop;
+
+	saddr = ip_hdr(skb)->saddr;
+	daddr = ip_hdr(skb)->daddr;
+	dport = udp_hdr(skb)->source;
+	tos = ip_hdr(skb)->tos;
 
 	/* we assume [ tnl ip hdr ] [ tnl udp hdr ] [ pdc hdr ] [ ses hdr ] */
 	if (iptunnel_pull_header(skb, sizeof(struct udphdr), htons(ETH_P_802_3), false))
@@ -109,7 +118,11 @@ static int uecon_ndev_encap_recv(struct sock *sk, struct sk_buff *skb)
 	skb->pkt_type = PACKET_HOST;
 	skb->dev = uecpriv->dev;
 	len = skb->len;
-	consume_skb(skb);
+	ret = uet_pds_rx(&uecpriv->context->pds, skb, daddr, saddr, dport, tos);
+	if (ret < 0)
+		goto drop_count;
+	else if (ret == 0)
+		consume_skb(skb);
 	dev_sw_netstats_rx_add(uecpriv->dev, len);
 
 	return 0;

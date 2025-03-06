@@ -55,6 +55,7 @@ static void __job_disassociate(struct uet_job *job)
 	WRITE_ONCE(fep->job_id, 0);
 	RCU_INIT_POINTER(job->fep, NULL);
 	synchronize_rcu();
+	uet_pds_clean_job(&fep->context->pds, job->id);
 }
 
 struct uet_job *uet_job_find(struct uet_job_registry *jreg, u32 id)

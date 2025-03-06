@@ -107,6 +107,10 @@ int uet_context_create(int id)
 	if (err)
 		goto ctx_jobs_err;
 
+	err = uet_pds_init(&ctx->pds);
+	if (err)
+		goto ctx_pds_err;
+
 	err = uecon_netdev_init(ctx);
 	if (err)
 		goto ctx_netdev_err;
@@ -116,6 +120,8 @@ int uet_context_create(int id)
 	return 0;
 
 ctx_netdev_err:
+	uet_pds_uninit(&ctx->pds);
+ctx_pds_err:
 	uet_jobs_uninit(&ctx->job_reg);
 ctx_jobs_err:
 	uet_context_put_id(ctx);
@@ -129,6 +135,7 @@ static void __uet_context_destroy(struct uet_context *ctx)
 {
 	uet_context_unlink(ctx);
 	uecon_netdev_uninit(ctx);
+	uet_pds_uninit(&ctx->pds);
 	uet_jobs_uninit(&ctx->job_reg);
 	uet_context_put_id(ctx);
 	kfree(ctx);
