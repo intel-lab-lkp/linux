@@ -2508,7 +2508,7 @@ qlcnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	else if (qlcnic_mac_learn == DRV_MAC_LEARN)
 		adapter->drv_mac_learn = true;
 
-	rwlock_init(&adapter->ahw->crb_lock);
+	spin_lock_init(&adapter->ahw->crb_lock);
 	mutex_init(&adapter->ahw->mem_lock);
 
 	INIT_LIST_HEAD(&adapter->mac_list);

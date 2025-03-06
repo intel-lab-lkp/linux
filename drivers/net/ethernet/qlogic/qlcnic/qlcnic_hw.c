@@ -1185,13 +1185,13 @@ int qlcnic_82xx_hw_write_wx_2M(struct qlcnic_adapter *adapter, ulong off,
 
 	if (rv > 0) {
 		/* indirect access */
-		write_lock_irqsave(&adapter->ahw->crb_lock, flags);
+		spin_lock_irqsave(&adapter->ahw->crb_lock, flags);
 		crb_win_lock(adapter);
 		rv = qlcnic_pci_set_crbwindow_2M(adapter, off);
 		if (!rv)
 			writel(data, addr);
 		crb_win_unlock(adapter);
-		write_unlock_irqrestore(&adapter->ahw->crb_lock, flags);
+		spin_unlock_irqrestore(&adapter->ahw->crb_lock, flags);
 		return rv;
 	}
 
@@ -1216,12 +1216,12 @@ int qlcnic_82xx_hw_read_wx_2M(struct qlcnic_adapter *adapter, ulong off,
 
 	if (rv > 0) {
 		/* indirect access */
-		write_lock_irqsave(&adapter->ahw->crb_lock, flags);
+		spin_lock_irqsave(&adapter->ahw->crb_lock, flags);
 		crb_win_lock(adapter);
 		if (!qlcnic_pci_set_crbwindow_2M(adapter, off))
 			data = readl(addr);
 		crb_win_unlock(adapter);
-		write_unlock_irqrestore(&adapter->ahw->crb_lock, flags);
+		spin_unlock_irqrestore(&adapter->ahw->crb_lock, flags);
 		return data;
 	}
 

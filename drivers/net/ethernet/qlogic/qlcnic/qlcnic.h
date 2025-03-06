@@ -470,7 +470,7 @@ struct qlcnic_hardware_context {
 
 	unsigned long pci_len0;
 
-	rwlock_t crb_lock;
+	spinlock_t crb_lock;
 	struct mutex mem_lock;
 
 	u8 revision_id;
