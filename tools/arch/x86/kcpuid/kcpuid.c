@@ -118,7 +118,9 @@ static char *range_to_str(struct cpuid_range *range)
 
 #define for_each_cpuid_range(range)				\
 	for (unsigned int i = 0;				\
-	     i < ARRAY_SIZE(ranges) && ((range) = &ranges[i]);	\
+	     i < ARRAY_SIZE(ranges)		&&		\
+		     ((range) = &ranges[i])	&&		\
+		     (range->vendors & this_cpu_vendor);	\
 	     i++)
 
 struct cpuid_range *index_to_cpuid_range(u32 index)
