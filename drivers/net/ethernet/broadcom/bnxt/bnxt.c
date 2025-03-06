@@ -2040,6 +2040,7 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	u16 cons, prod, cp_cons = RING_CMP(tmp_raw_cons);
 	struct bnxt_sw_rx_bd *rx_buf;
 	unsigned int len;
+	struct skb_shared_info sinfo = {0};
 	u8 *data_ptr, agg_bufs, cmp_type;
 	bool xdp_active = false;
 	dma_addr_t dma_addr;
@@ -2166,13 +2167,12 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 				goto oom_next_rx;
 		}
 		xdp_active = true;
-	}
-
-	if (xdp_active) {
 		if (bnxt_rx_xdp(bp, rxr, cons, &xdp, data, &data_ptr, &len, event)) {
 			rc = 1;
 			goto next_rx;
 		}
+		memcpy(&sinfo, xdp_get_shared_info_from_buff(&xdp),
+		       sizeof(struct skb_shared_info));
 	}
 
 	if (len <= bp->rx_copybreak) {
@@ -2204,18 +2204,18 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 			goto oom_next_rx;
 	}
 
-	if (agg_bufs) {
-		if (!xdp_active) {
-			skb = bnxt_rx_agg_pages_skb(bp, cpr, skb, cp_cons, agg_bufs, false);
-			if (!skb)
-				goto oom_next_rx;
-		} else {
-			skb = bnxt_xdp_build_skb(bp, skb, agg_bufs, rxr->page_pool, &xdp, rxcmp1);
-			if (!skb) {
-				/* we should be able to free the old skb here */
-				bnxt_xdp_buff_frags_free(rxr, &xdp);
-				goto oom_next_rx;
-			}
+	if (!xdp_active && agg_bufs) {
+		skb = bnxt_rx_agg_pages_skb(bp, cpr, skb, cp_cons, agg_bufs,
+					    false);
+		if (!skb)
+			goto oom_next_rx;
+	} else if (xdp_active && xdp_buff_has_frags(&xdp)) {
+		skb = bnxt_xdp_build_skb(bp, skb, &sinfo, rxr->page_pool, &xdp,
+					 rxcmp1);
+		if (!skb) {
+			/* we should be able to free the old skb here */
+			bnxt_xdp_buff_frags_free(rxr, &xdp);
+			goto oom_next_rx;
 		}
 	}
 

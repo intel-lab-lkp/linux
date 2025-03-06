@@ -459,12 +459,11 @@ int bnxt_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 }
 
 struct sk_buff *
-bnxt_xdp_build_skb(struct bnxt *bp, struct sk_buff *skb, u8 num_frags,
+bnxt_xdp_build_skb(struct bnxt *bp, struct sk_buff *skb,
+		   struct skb_shared_info *sinfo,
 		   struct page_pool *pool, struct xdp_buff *xdp,
 		   struct rx_cmp_ext *rxcmp1)
 {
-	struct skb_shared_info *sinfo = xdp_get_shared_info_from_buff(xdp);
-
 	if (!skb)
 		return NULL;
 	skb_checksum_none_assert(skb);
@@ -474,7 +473,7 @@ bnxt_xdp_build_skb(struct bnxt *bp, struct sk_buff *skb, u8 num_frags,
 			skb->csum_level = RX_CMP_ENCAP(rxcmp1);
 		}
 	}
-	xdp_update_skb_shared_info(skb, num_frags,
+	xdp_update_skb_shared_info(skb, sinfo->nr_frags,
 				   sinfo->xdp_frags_size,
 				   BNXT_RX_PAGE_SIZE * sinfo->nr_frags,
 				   xdp_buff_is_frag_pfmemalloc(xdp));
