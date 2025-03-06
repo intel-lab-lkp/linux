@@ -18,6 +18,7 @@ struct clk_hw;
 #define PLL_BIAS_COUNT_MASK	0x3f
 #define PLL_VOTE_FSM_ENA	BIT(20)
 #define PLL_VOTE_FSM_RESET	BIT(21)
+#define GET_PLL_TYPE(pll)	((pll->regs - clk_alpha_pll_regs[0]) / PLL_OFF_MAX_REGS)
 
 struct qcom_icc_hws_data {
 	int master_id;
