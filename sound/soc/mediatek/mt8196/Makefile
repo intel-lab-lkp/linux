@@ -15,3 +15,5 @@ snd-soc-mt8196-afe-objs += \
 	mt8196-dai-tdm.o \
 	mt8196-afe-cm.o
 
+# machine driver
+obj-$(CONFIG_SND_SOC_MT8196_MT6681) += mt8196-mt6681.o
