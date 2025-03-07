@@ -70,6 +70,20 @@ static const char pp_stats[][ETH_GSTRING_LEN] = {
 	"rx_pp_recycle_released_ref",
 };
 
+static const char pp_stats_mq[][ETH_GSTRING_LEN] = {
+	"rx%d_pp_alloc_fast",
+	"rx%d_pp_alloc_slow",
+	"rx%d_pp_alloc_slow_ho",
+	"rx%d_pp_alloc_empty",
+	"rx%d_pp_alloc_refill",
+	"rx%d_pp_alloc_waive",
+	"rx%d_pp_recycle_cached",
+	"rx%d_pp_recycle_cache_full",
+	"rx%d_pp_recycle_ring",
+	"rx%d_pp_recycle_ring_full",
+	"rx%d_pp_recycle_released_ref",
+};
+
 /**
  * page_pool_get_stats() - fetch page pool stats
  * @pool:	pool from which page was allocated
@@ -124,6 +138,15 @@ u8 *page_pool_ethtool_stats_get_strings(u8 *data)
 	return data;
 }
 EXPORT_SYMBOL(page_pool_ethtool_stats_get_strings);
+
+void page_pool_ethtool_stats_get_strings_mq(u8 **data, unsigned int queue)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(pp_stats_mq); i++)
+		ethtool_sprintf(data, pp_stats_mq[i], queue);
+}
+EXPORT_SYMBOL(page_pool_ethtool_stats_get_strings_mq);
 
 int page_pool_ethtool_stats_get_count(void)
 {

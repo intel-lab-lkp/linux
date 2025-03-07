@@ -62,6 +62,7 @@
 /* Deprecated driver-facing API, use netlink instead */
 int page_pool_ethtool_stats_get_count(void);
 u8 *page_pool_ethtool_stats_get_strings(u8 *data);
+void page_pool_ethtool_stats_get_strings_mq(u8 **data, unsigned int queue);
 u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats);
 
 bool page_pool_get_stats(const struct page_pool *pool,
@@ -75,6 +76,10 @@ static inline int page_pool_ethtool_stats_get_count(void)
 static inline u8 *page_pool_ethtool_stats_get_strings(u8 *data)
 {
 	return data;
+}
+
+static inline void page_pool_ethtool_stats_get_strings_mq(u8 **data, unsigned int queue)
+{
 }
 
 static inline u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
