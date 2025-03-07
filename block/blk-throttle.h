@@ -104,7 +104,7 @@ struct throtl_grp {
 	/* Number of bytes dispatched in current slice */
 	int64_t bytes_disp[2];
 	/* Number of bio's dispatched in current slice */
-	int io_disp[2];
+	atomic_t io_disp[2];
 
 	/*
 	 * The following two fields are updated when new configuration is
@@ -144,6 +144,8 @@ static inline struct throtl_grp *blkg_to_tg(struct blkcg_gq *blkg)
 static inline void blk_throtl_exit(struct gendisk *disk) { }
 static inline bool blk_throtl_bio(struct bio *bio) { return false; }
 static inline void blk_throtl_cancel_bios(struct gendisk *disk) { }
+static inline void blk_throtl_bio_merge(struct request_queue *q,
+					struct bio *bio) { }
 #else /* CONFIG_BLK_DEV_THROTTLING */
 void blk_throtl_exit(struct gendisk *disk);
 bool __blk_throtl_bio(struct bio *bio);
@@ -189,11 +191,24 @@ static inline bool blk_should_throtl(struct bio *bio)
 
 static inline bool blk_throtl_bio(struct bio *bio)
 {
-
 	if (!blk_should_throtl(bio))
 		return false;
 
 	return __blk_throtl_bio(bio);
+}
+
+static inline void blk_throtl_bio_merge(struct request_queue *q,
+					struct bio *bio)
+{
+	struct throtl_grp *tg;
+	int rw = bio_data_dir(bio);
+
+	if (!blk_throtl_activated(bio->bi_bdev->bd_queue))
+		return;
+
+	tg = blkg_to_tg(bio->bi_blkg);
+	if (tg->has_rules_iops[rw])
+		atomic_dec(&tg->io_disp[rw]);
 }
 #endif /* CONFIG_BLK_DEV_THROTTLING */
 

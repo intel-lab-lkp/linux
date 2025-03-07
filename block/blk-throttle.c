@@ -477,7 +477,7 @@ static inline void throtl_start_new_slice_with_credit(struct throtl_grp *tg,
 		bool rw, unsigned long start)
 {
 	tg->bytes_disp[rw] = 0;
-	tg->io_disp[rw] = 0;
+	atomic_set(&tg->io_disp[rw], 0);
 
 	/*
 	 * Previous slice has expired. We must have trimmed it after last
@@ -500,7 +500,7 @@ static inline void throtl_start_new_slice(struct throtl_grp *tg, bool rw,
 {
 	if (clear) {
 		tg->bytes_disp[rw] = 0;
-		tg->io_disp[rw] = 0;
+		atomic_set(&tg->io_disp[rw], 0);
 	}
 	tg->slice_start[rw] = jiffies;
 	tg->slice_end[rw] = jiffies + tg->td->throtl_slice;
@@ -623,10 +623,10 @@ static inline void throtl_trim_slice(struct throtl_grp *tg, bool rw)
 	else
 		tg->bytes_disp[rw] = 0;
 
-	if ((int)tg->io_disp[rw] >= io_trim)
-		tg->io_disp[rw] -= io_trim;
+	if (atomic_read(&tg->io_disp[rw]) >= io_trim)
+		atomic_sub(io_trim, &tg->io_disp[rw]);
 	else
-		tg->io_disp[rw] = 0;
+		atomic_set(&tg->io_disp[rw], 0);
 
 	tg->slice_start[rw] += time_elapsed;
 
@@ -655,9 +655,9 @@ static void __tg_update_carryover(struct throtl_grp *tg, bool rw,
 			tg->bytes_disp[rw];
 	if (iops_limit != UINT_MAX)
 		*ios = calculate_io_allowed(iops_limit, jiffy_elapsed) -
-			tg->io_disp[rw];
+			atomic_read(&tg->io_disp[rw]);
 	tg->bytes_disp[rw] -= *bytes;
-	tg->io_disp[rw] -= *ios;
+	atomic_sub(*ios, &tg->io_disp[rw]);
 }
 
 static void tg_update_carryover(struct throtl_grp *tg)
@@ -691,7 +691,7 @@ static unsigned long tg_within_iops_limit(struct throtl_grp *tg, struct bio *bio
 	/* Round up to the next throttle slice, wait time must be nonzero */
 	jiffy_elapsed_rnd = roundup(jiffy_elapsed + 1, tg->td->throtl_slice);
 	io_allowed = calculate_io_allowed(iops_limit, jiffy_elapsed_rnd);
-	if (io_allowed > 0 && tg->io_disp[rw] + 1 <= io_allowed)
+	if (io_allowed > 0 && atomic_read(&tg->io_disp[rw]) + 1 <= io_allowed)
 		return 0;
 
 	/* Calc approx time to dispatch */
@@ -815,7 +815,7 @@ static void throtl_charge_bio(struct throtl_grp *tg, struct bio *bio)
 	if (!bio_flagged(bio, BIO_BPS_THROTTLED))
 		tg->bytes_disp[rw] += bio_size;
 
-	tg->io_disp[rw]++;
+	atomic_inc(&tg->io_disp[rw]);
 }
 
 /**
@@ -1679,7 +1679,7 @@ bool __blk_throtl_bio(struct bio *bio)
 		   rw == READ ? 'R' : 'W',
 		   tg->bytes_disp[rw], bio->bi_iter.bi_size,
 		   tg_bps_limit(tg, rw),
-		   tg->io_disp[rw], tg_iops_limit(tg, rw),
+		   atomic_read(&tg->io_disp[rw]), tg_iops_limit(tg, rw),
 		   sq->nr_queued[READ], sq->nr_queued[WRITE]);
 
 	td->nr_queued[rw]++;

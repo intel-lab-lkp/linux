@@ -991,6 +991,7 @@ enum bio_merge_status bio_attempt_back_merge(struct request *req,
 
 	trace_block_bio_backmerge(bio);
 	rq_qos_merge(req->q, req, bio);
+	blk_throtl_bio_merge(req->q, bio);
 
 	if ((req->cmd_flags & REQ_FAILFAST_MASK) != ff)
 		blk_rq_set_mixed_merge(req);
@@ -1028,6 +1029,7 @@ static enum bio_merge_status bio_attempt_front_merge(struct request *req,
 
 	trace_block_bio_frontmerge(bio);
 	rq_qos_merge(req->q, req, bio);
+	blk_throtl_bio_merge(req->q, bio);
 
 	if ((req->cmd_flags & REQ_FAILFAST_MASK) != ff)
 		blk_rq_set_mixed_merge(req);
@@ -1058,6 +1060,7 @@ static enum bio_merge_status bio_attempt_discard_merge(struct request_queue *q,
 		goto no_merge;
 
 	rq_qos_merge(q, req, bio);
+	blk_throtl_bio_merge(q, bio);
 
 	req->biotail->bi_next = bio;
 	req->biotail = bio;
