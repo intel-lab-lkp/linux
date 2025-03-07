@@ -3583,11 +3583,16 @@ L(console_not_home):
 	movel	%a0@(Lconsole_struct_cur_column),%d0
 	addql	#1,%a0@(Lconsole_struct_cur_column)
 	movel	%a0@(Lconsole_struct_num_columns),%d1
+	subil	#1,%d1
 	cmpl	%d1,%d0
 	jcs	1f
-	console_putc	#'\n'	/* recursion is OK! */
+	/*	recursion will alter console_struct so load d1 register first */
+	movel	%a0@(Lconsole_struct_cur_row),%d1
+	console_putc	#'\n'
+	jmp	2f
 1:
 	movel	%a0@(Lconsole_struct_cur_row),%d1
+2:
 
 	/*
 	 *	At this point we make a shift in register usage
