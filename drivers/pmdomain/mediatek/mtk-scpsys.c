@@ -798,10 +798,7 @@ static int mtk_pd_get_regmap(struct platform_device *pdev, struct regmap **regma
 	return 0;
 }
 
-static struct scp *init_scp(struct platform_device *pdev,
-			const struct scp_domain_data *scp_domain_data, int num,
-			const struct scp_ctrl_reg *scp_ctrl_reg,
-			bool bus_prot_reg_update)
+static struct scp *init_scp(struct platform_device *pdev, const struct scp_soc_data *soc)
 {
 	struct genpd_onecell_data *pd_data;
 	int i, j;
@@ -813,10 +810,10 @@ static struct scp *init_scp(struct platform_device *pdev,
 	if (!scp)
 		return ERR_PTR(-ENOMEM);
 
-	scp->ctrl_reg.pwr_sta_offs = scp_ctrl_reg->pwr_sta_offs;
-	scp->ctrl_reg.pwr_sta2nd_offs = scp_ctrl_reg->pwr_sta2nd_offs;
+	scp->ctrl_reg.pwr_sta_offs = soc->regs.pwr_sta_offs;
+	scp->ctrl_reg.pwr_sta2nd_offs = soc->regs.pwr_sta2nd_offs;
 
-	scp->bus_prot_reg_update = bus_prot_reg_update;
+	scp->bus_prot_reg_update = soc->bus_prot_reg_update;
 
 	scp->dev = &pdev->dev;
 
@@ -825,14 +822,14 @@ static struct scp *init_scp(struct platform_device *pdev,
 		return ERR_CAST(scp->base);
 
 	scp->domains = devm_kcalloc(&pdev->dev,
-				num, sizeof(*scp->domains), GFP_KERNEL);
+				soc->num_domains, sizeof(*scp->domains), GFP_KERNEL);
 	if (!scp->domains)
 		return ERR_PTR(-ENOMEM);
 
 	pd_data = &scp->pd_data;
 
 	pd_data->domains = devm_kcalloc(&pdev->dev,
-			num, sizeof(*pd_data->domains), GFP_KERNEL);
+			soc->num_domains, sizeof(*pd_data->domains), GFP_KERNEL);
 	if (!pd_data->domains)
 		return ERR_PTR(-ENOMEM);
 
@@ -844,9 +841,9 @@ static struct scp *init_scp(struct platform_device *pdev,
 		return ERR_CAST(scp->infracfg);
 	}
 
-	for (i = 0; i < num; i++) {
+	for (i = 0; i < soc->num_domains; i++) {
 		struct scp_domain *scpd = &scp->domains[i];
-		const struct scp_domain_data *data = &scp_domain_data[i];
+		const struct scp_domain_data *data = &soc->domains[i];
 
 		scpd->supply = devm_regulator_get_optional(&pdev->dev, data->name);
 		if (IS_ERR(scpd->supply)) {
@@ -857,14 +854,14 @@ static struct scp *init_scp(struct platform_device *pdev,
 		}
 	}
 
-	pd_data->num_domains = num;
+	pd_data->num_domains = soc->num_domains;
 
 	init_clks(pdev, clk);
 
-	for (i = 0; i < num; i++) {
+	for (i = 0; i < soc->num_domains; i++) {
 		struct scp_domain *scpd = &scp->domains[i];
 		struct generic_pm_domain *genpd = &scpd->genpd;
-		const struct scp_domain_data *data = &scp_domain_data[i];
+		const struct scp_domain_data *data = &soc->domains[i];
 
 		pd_data->domains[i] = genpd;
 		scpd->scp = scp;
@@ -1511,8 +1508,7 @@ static int scpsys_probe(struct platform_device *pdev)
 
 	soc = of_device_get_match_data(&pdev->dev);
 
-	scp = init_scp(pdev, soc->domains, soc->num_domains, &soc->regs,
-			soc->bus_prot_reg_update);
+	scp = init_scp(pdev, soc);
 	if (IS_ERR(scp))
 		return PTR_ERR(scp);
 
