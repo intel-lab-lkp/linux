@@ -1318,8 +1318,8 @@ static int nxp_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 	/* BD address can be assigned only after first reset command. */
 	err = __hci_cmd_sync_status(hdev, HCI_OP_RESET, 0, NULL, HCI_INIT_TIMEOUT);
 	if (err) {
-		bt_dev_err(hdev, "Reset before setting local-bd-addr failed (%ld)",
-			   PTR_ERR(skb));
+		bt_dev_err(hdev, "Reset before setting local-bd-addr failed (%d)",
+			   err);
 		return err;
 	}
 
@@ -1422,7 +1422,7 @@ static bool nxp_wakeup(struct hci_dev *hdev)
 	return false;
 }
 
-static void nxp_cmd_timeout(struct hci_dev *hdev)
+static void nxp_reset(struct hci_dev *hdev)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
 
@@ -1721,8 +1721,14 @@ static int nxp_serdev_probe(struct serdev_device *serdev)
 	hdev->shutdown = nxp_shutdown;
 	hdev->wakeup = nxp_wakeup;
 	hdev->set_bdaddr = nxp_set_bdaddr;
-	hdev->cmd_timeout = nxp_cmd_timeout;
+	hdev->reset = nxp_reset;
 	SET_HCIDEV_DEV(hdev, &serdev->dev);
+
+	device_property_read_u8_array(&nxpdev->serdev->dev,
+				      "local-bd-address",
+				      (u8 *)&ba, sizeof(ba));
+	if (bacmp(&ba, BDADDR_ANY))
+		set_bit(HCI_QUIRK_USE_BDADDR_PROPERTY, &hdev->quirks);
 
 	if (hci_register_dev(hdev) < 0) {
 		dev_err(&serdev->dev, "Can't register HCI device\n");
