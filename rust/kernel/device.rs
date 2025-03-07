@@ -6,10 +6,12 @@
 
 use crate::{
     bindings,
+    error::Result,
     str::CStr,
     types::{ARef, Opaque},
 };
 use core::{fmt, ptr};
+use kernel::prelude::*;
 
 #[cfg(CONFIG_PRINTK)]
 use crate::c_str;
@@ -186,6 +188,33 @@ impl Device {
     pub fn property_present(&self, name: &CStr) -> bool {
         // SAFETY: By the invariant of `CStr`, `name` is null-terminated.
         unsafe { bindings::device_property_present(self.as_raw().cast_const(), name.as_char_ptr()) }
+    }
+
+    /// Inform the kernel about the device's DMA addressing capabilities.
+    ///
+    /// Set both the DMA mask and the coherent DMA mask to the same thing.
+    /// Note that we don't check the return value from the C `dma_set_coherent_mask`
+    /// as the DMA API guarantees that the coherent DMA mask can be set to
+    /// the same or smaller than the streaming DMA mask.
+    pub fn dma_set_mask_and_coherent(&mut self, mask: u64) -> Result {
+        // SAFETY: device pointer is guaranteed as valid by invariant on `Device`.
+        let ret = unsafe { bindings::dma_set_mask_and_coherent(self.as_raw(), mask) };
+        if ret != 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Same as [`dma_set_mask_and_coherent`], but set the mask only for streaming mappings.
+    pub fn dma_set_mask(&mut self, mask: u64) -> Result {
+        // SAFETY: device pointer is guaranteed as valid by invariant on `Device`.
+        let ret = unsafe { bindings::dma_set_mask(self.as_raw(), mask) };
+        if ret != 0 {
+            Err(Error::from_errno(ret))
+        } else {
+            Ok(())
+        }
     }
 }
 
