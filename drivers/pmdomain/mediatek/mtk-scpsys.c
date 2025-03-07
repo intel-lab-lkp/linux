@@ -28,6 +28,7 @@
 #define MTK_POLL_VOTE_PREPARE_CNT	2500
 #define MTK_POLL_VOTE_PREPARE_US	2
 #define MTK_ACK_DELAY_US		50
+#define MTK_RTFF_DELAY_US		10
 #define MTK_STABLE_DELAY_US		100
 
 #define MTK_SCPD_ACTIVE_WAKEUP		BIT(0)
@@ -37,6 +38,10 @@
 #define MTK_SCPD_BYPASS_INIT_ON		BIT(4)
 #define MTK_SCPD_IS_PWR_CON_ON		BIT(5)
 #define MTK_SCPD_VOTE_OPS		BIT(6)
+#define MTK_SCPD_NON_CPU_RTFF		BIT(7)
+#define MTK_SCPD_PEXTP_PHY_RTFF		BIT(8)
+#define MTK_SCPD_UFS_RTFF		BIT(9)
+#define MTK_SCPD_RTFF_DELAY		BIT(10)
 #define MTK_SCPD_CAPS(_scpd, _x)	((_scpd)->data->caps & (_x))
 
 #define SPM_VDE_PWR_CON			0x0210
@@ -70,6 +75,11 @@
 #define PWR_CLK_DIS_BIT			BIT(4)
 #define PWR_SRAM_CLKISO_BIT		BIT(5)
 #define PWR_SRAM_ISOINT_B_BIT		BIT(6)
+#define PWR_RTFF_SAVE			BIT(24)
+#define PWR_RTFF_NRESTORE		BIT(25)
+#define PWR_RTFF_CLK_DIS		BIT(26)
+#define PWR_RTFF_SAVE_FLAG		BIT(27)
+#define PWR_RTFF_UFS_CLK_DIS		BIT(28)
 #define PWR_ACK				BIT(30)
 #define PWR_ACK_2ND			BIT(31)
 
@@ -167,7 +177,7 @@ struct scp_domain_data {
 	u32 sram_slp_ack_bits;
 	u32 bus_prot_mask;
 	enum clk_id clk_id[MAX_CLKS];
-	u8 caps;
+	u32 caps;
 };
 
 struct scp;
@@ -179,6 +189,7 @@ struct scp_domain {
 	const struct scp_domain_data *data;
 	struct regulator *supply;
 	struct regmap *vote_regmap;
+	bool rtff_flag;
 };
 
 struct scp_ctrl_reg {
@@ -428,14 +439,71 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	if (ret < 0)
 		goto err_pwr_ack;
 
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_PEXTP_PHY_RTFF) && scpd->rtff_flag) {
+		val |= PWR_RTFF_CLK_DIS;
+		writel(val, ctl_addr);
+	}
+
 	val &= ~PWR_CLK_DIS_BIT;
 	writel(val, ctl_addr);
 
 	val &= ~PWR_ISO_BIT;
 	writel(val, ctl_addr);
 
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_RTFF_DELAY) && scpd->rtff_flag)
+		udelay(MTK_RTFF_DELAY_US);
+
 	val |= PWR_RST_B_BIT;
 	writel(val, ctl_addr);
+
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_NON_CPU_RTFF)) {
+		val = readl(ctl_addr);
+		if (val & PWR_RTFF_SAVE_FLAG) {
+			val &= ~PWR_RTFF_SAVE_FLAG;
+			writel(val, ctl_addr);
+
+			val |= PWR_RTFF_CLK_DIS;
+			writel(val, ctl_addr);
+
+			val &= ~PWR_RTFF_NRESTORE;
+			writel(val, ctl_addr);
+
+			val |= PWR_RTFF_NRESTORE;
+			writel(val, ctl_addr);
+
+			val &= ~PWR_RTFF_CLK_DIS;
+			writel(val, ctl_addr);
+		}
+	} else if (MTK_SCPD_CAPS(scpd, MTK_SCPD_PEXTP_PHY_RTFF)) {
+		val = readl(ctl_addr);
+		if (val & PWR_RTFF_SAVE_FLAG) {
+			val &= ~PWR_RTFF_SAVE_FLAG;
+			writel(val, ctl_addr);
+
+			val &= ~PWR_RTFF_NRESTORE;
+			writel(val, ctl_addr);
+
+			val |= PWR_RTFF_NRESTORE;
+			writel(val, ctl_addr);
+
+			val &= ~PWR_RTFF_CLK_DIS;
+			writel(val, ctl_addr);
+		}
+	} else if (MTK_SCPD_CAPS(scpd, MTK_SCPD_UFS_RTFF) && scpd->rtff_flag) {
+		val |= PWR_RTFF_UFS_CLK_DIS;
+		writel(val, ctl_addr);
+
+		val &= ~PWR_RTFF_NRESTORE;
+		writel(val, ctl_addr);
+
+		val |= PWR_RTFF_NRESTORE;
+		writel(val, ctl_addr);
+
+		val &= ~PWR_RTFF_UFS_CLK_DIS;
+		writel(val, ctl_addr);
+
+		scpd->rtff_flag = false;
+	}
 
 	ret = scpsys_sram_enable(scpd, ctl_addr);
 	if (ret < 0)
@@ -475,8 +543,44 @@ static int scpsys_power_off(struct generic_pm_domain *genpd)
 
 	/* subsys power off */
 	val = readl(ctl_addr);
+
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_NON_CPU_RTFF) ||
+	    MTK_SCPD_CAPS(scpd, MTK_SCPD_PEXTP_PHY_RTFF)) {
+		val |= PWR_RTFF_CLK_DIS;
+		writel(val, ctl_addr);
+
+		val |= PWR_RTFF_SAVE;
+		writel(val, ctl_addr);
+
+		val &= ~PWR_RTFF_SAVE;
+		writel(val, ctl_addr);
+
+		val &= ~PWR_RTFF_CLK_DIS;
+		writel(val, ctl_addr);
+
+		val |= PWR_RTFF_SAVE_FLAG;
+		writel(val, ctl_addr);
+	} else if (MTK_SCPD_CAPS(scpd, MTK_SCPD_UFS_RTFF)) {
+		val |= PWR_RTFF_UFS_CLK_DIS;
+		writel(val, ctl_addr);
+
+		val |= PWR_RTFF_SAVE;
+		writel(val, ctl_addr);
+
+		val &= ~PWR_RTFF_SAVE;
+		writel(val, ctl_addr);
+
+		val &= ~PWR_RTFF_UFS_CLK_DIS;
+		writel(val, ctl_addr);
+		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_UFS_RTFF))
+			scpd->rtff_flag = true;
+	}
+
 	val |= PWR_ISO_BIT;
 	writel(val, ctl_addr);
+
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_RTFF_DELAY) && scpd->rtff_flag)
+		udelay(1);
 
 	val &= ~PWR_RST_B_BIT;
 	writel(val, ctl_addr);
