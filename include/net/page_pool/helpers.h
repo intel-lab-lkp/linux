@@ -81,6 +81,12 @@ static inline u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 {
 	return data;
 }
+
+static inline bool page_pool_get_stats(const struct page_pool *pool,
+				       struct page_pool_stats *stats)
+{
+	return false;
+}
 #endif
 
 /**

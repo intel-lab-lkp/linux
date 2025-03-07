@@ -140,6 +140,10 @@ struct page_pool_stats {
 	struct page_pool_alloc_stats alloc_stats;
 	struct page_pool_recycle_stats recycle_stats;
 };
+
+#else /* !CONFIG_PAGE_POOL_STATS */
+
+struct page_pool_stats { };
 #endif
 
 /* The whole frag API block must stay within one cacheline. On 32-bit systems,
