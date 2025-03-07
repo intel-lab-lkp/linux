@@ -238,6 +238,11 @@ properties:
       peak-to-peak specified in ANSI X3.263. When omitted, the PHYs default
       will be left as is.
 
+  mac-series-termination-ohms:
+    description:
+      The resistance value of the series termination resistor. When omitted, the
+      PHYs default will be left as is.
+
   leds:
     type: object
 
