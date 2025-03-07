@@ -15,6 +15,7 @@
 #![allow(
     clippy::all,
     clippy::undocumented_unsafe_blocks,
+    clippy::ptr_as_ptr,
     dead_code,
     missing_docs,
     non_camel_case_types,
