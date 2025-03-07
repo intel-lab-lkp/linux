@@ -179,17 +179,15 @@ static inline void clflushopt(volatile void *__p)
 		       "+m" (*(volatile char __force *)__p));
 }
 
-static inline void clwb(volatile void *__p)
+static inline void clwb(volatile void *p)
 {
-	volatile struct { char x[64]; } *p = __p;
-
 	asm volatile(ALTERNATIVE_2(
 		".byte 0x3e; clflush (%[pax])",
 		".byte 0x66; clflush (%[pax])", /* clflushopt (%%rax) */
 		X86_FEATURE_CLFLUSHOPT,
 		".byte 0x66, 0x0f, 0xae, 0x30",  /* clwb (%%rax) */
 		X86_FEATURE_CLWB)
-		: [p] "+m" (*p)
+		: [p] "+m" (*(volatile char(*)[64])p)
 		: [pax] "a" (p));
 }
 
