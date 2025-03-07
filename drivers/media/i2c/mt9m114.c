@@ -42,6 +42,9 @@
 #define MT9M114_RESET_AND_MISC_CONTROL			CCI_REG16(0x001a)
 #define MT9M114_RESET_SOC					BIT(0)
 #define MT9M114_PAD_SLEW				CCI_REG16(0x001e)
+#define MT9M114_PAD_SLEW_MIN					0x00
+#define MT9M114_PAD_SLEW_MAX					0x07
+#define MT9M114_PAD_SLEW_DEFAULT				0x07
 #define MT9M114_PAD_CONTROL				CCI_REG16(0x0032)
 
 /* XDMA registers */
@@ -388,6 +391,7 @@ struct mt9m114 {
 
 	unsigned int pixrate;
 	bool streaming;
+	u32 pad_slew_rate;
 
 	/* Pixel Array */
 	struct {
@@ -645,9 +649,6 @@ static const struct cci_reg_sequence mt9m114_init[] = {
 	{ MT9M114_CAM_SENSOR_CFG_FINE_INTEG_TIME_MAX,	1459 },
 	{ MT9M114_CAM_SENSOR_CFG_FINE_CORRECTION,	96 },
 	{ MT9M114_CAM_SENSOR_CFG_REG_0_DATA,		32 },
-
-	/* Miscellaneous settings */
-	{ MT9M114_PAD_SLEW,				0x0777 },
 };
 
 /* -----------------------------------------------------------------------------
@@ -775,6 +776,13 @@ static int mt9m114_initialize(struct mt9m114 *sensor)
 		      | 0x8000;
 	}
 	cci_write(sensor->regmap, MT9M114_CAM_PORT_OUTPUT_CONTROL, value, &ret);
+	if (ret < 0)
+		return ret;
+
+	value = (sensor->pad_slew_rate & 0xF)
+	      | (sensor->pad_slew_rate & 0xF) << 4
+	      |	(sensor->pad_slew_rate & 0xF) << 8;
+	cci_write(sensor->regmap, MT9M114_PAD_SLEW, value, &ret);
 	if (ret < 0)
 		return ret;
 
@@ -2357,6 +2365,8 @@ static int mt9m114_parse_dt(struct mt9m114 *sensor)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(&sensor->client->dev);
 	struct fwnode_handle *ep;
+	struct device_node *dev_node = sensor->client->dev.of_node;
+	u32 slew_rate;
 	int ret;
 
 	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
@@ -2384,6 +2394,11 @@ static int mt9m114_parse_dt(struct mt9m114 *sensor)
 		ret = -EINVAL;
 		goto error;
 	}
+
+	ret = of_property_read_u32(dev_node, "slew-rate", &slew_rate);
+	if (ret || slew_rate < MT9M114_PAD_SLEW_MIN || slew_rate > MT9M114_PAD_SLEW_MAX)
+		slew_rate = MT9M114_PAD_SLEW_DEFAULT;
+	sensor->pad_slew_rate = slew_rate;
 
 	return 0;
 
