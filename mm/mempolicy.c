@@ -3391,6 +3391,7 @@ struct iw_node_attr {
 
 struct iw_node_group {
 	struct kobject *wi_kobj;
+	struct mutex kobj_lock;
 	struct iw_node_attr **nattrs;
 };
 
@@ -3441,11 +3442,15 @@ static ssize_t node_store(struct kobject *kobj, struct kobj_attribute *attr,
 static void sysfs_wi_node_release(struct iw_node_attr *node_attr,
 				  struct kobject *parent)
 {
-	if (!node_attr)
+	mutex_lock(&ngrp->kobj_lock);
+	if (!node_attr) {
+		mutex_unlock(&ngrp->kobj_lock);
 		return;
+	}
 	sysfs_remove_file(parent, &node_attr->kobj_attr.attr);
 	kfree(node_attr->kobj_attr.attr.name);
 	kfree(node_attr);
+	mutex_unlock(&ngrp->kobj_lock);
 }
 
 static void sysfs_wi_release(struct kobject *wi_kobj)
@@ -3464,35 +3469,54 @@ static const struct kobj_type wi_ktype = {
 
 static int add_weight_node(int nid, struct kobject *wi_kobj)
 {
-	struct iw_node_attr *node_attr;
+	int ret = 0;
 	char *name;
 
-	node_attr = kzalloc(sizeof(*node_attr), GFP_KERNEL);
-	if (!node_attr)
-		return -ENOMEM;
+	if (nid < 0 || nid >= nr_node_ids) {
+		pr_err("Invalid node id: %d\n", nid);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	mutex_lock(&ngrp->kobj_lock);
+	if (!ngrp->nattrs[nid]) {
+		ngrp->nattrs[nid] = kzalloc(sizeof(struct iw_node_attr), GFP_KERNEL);
+	} else {
+		mutex_unlock(&ngrp->kobj_lock);
+		pr_info("Node [%d] is already existed\n", nid);
+		goto out;
+	}
+	mutex_unlock(&ngrp->kobj_lock);
+
+	if (!ngrp->nattrs[nid]) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	name = kasprintf(GFP_KERNEL, "node%d", nid);
 	if (!name) {
-		kfree(node_attr);
-		return -ENOMEM;
+		kfree(ngrp->nattrs[nid]);
+		ret = -ENOMEM;
+		goto out;
 	}
 
-	sysfs_attr_init(&node_attr->kobj_attr.attr);
-	node_attr->kobj_attr.attr.name = name;
-	node_attr->kobj_attr.attr.mode = 0644;
-	node_attr->kobj_attr.show = node_show;
-	node_attr->kobj_attr.store = node_store;
-	node_attr->nid = nid;
+	sysfs_attr_init(&ngrp->nattrs[nid]->kobj_attr.attr);
+	ngrp->nattrs[nid]->kobj_attr.attr.name = name;
+	ngrp->nattrs[nid]->kobj_attr.attr.mode = 0644;
+	ngrp->nattrs[nid]->kobj_attr.show = node_show;
+	ngrp->nattrs[nid]->kobj_attr.store = node_store;
+	ngrp->nattrs[nid]->nid = nid;
 
-	if (sysfs_create_file(wi_kobj, &node_attr->kobj_attr.attr)) {
-		kfree(node_attr->kobj_attr.attr.name);
-		kfree(node_attr);
-		pr_err("failed to add attribute to weighted_interleave\n");
-		return -ENOMEM;
+	ret = sysfs_create_file(wi_kobj, &ngrp->nattrs[nid]->kobj_attr.attr);
+	if (ret) {
+		kfree(ngrp->nattrs[nid]->kobj_attr.attr.name);
+		kfree(ngrp->nattrs[nid]);
+		pr_err("failed to add attribute to weighted_interleave: %d\n", ret);
+		goto out;
 	}
 
-	ngrp->nattrs[nid] = node_attr;
-	return 0;
+out:
+	return ret;
 }
 
 static int wi_node_notifier(struct notifier_block *nb,
@@ -3591,6 +3615,7 @@ static int __init mempolicy_sysfs_init(void)
 		err = -ENOMEM;
 		goto mempol_out;
 	}
+	mutex_init(&ngrp->kobj_lock);
 
 	ngrp->nattrs = kcalloc(nr_node_ids, sizeof(struct iw_node_attr *),
 			     GFP_KERNEL);
