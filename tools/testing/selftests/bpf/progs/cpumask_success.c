@@ -136,6 +136,7 @@ static bool create_cpumask_set(struct bpf_cpumask **out1,
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_alloc_free_cpumask, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -152,6 +153,7 @@ int BPF_PROG(test_alloc_free_cpumask, struct task_struct *task, u64 clone_flags)
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_set_clear_cpu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -181,6 +183,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_setall_clear_cpu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -210,6 +213,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_first_firstzero_cpu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -249,6 +253,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_firstand_nocpu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *mask1, *mask2;
@@ -281,6 +286,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_test_and_set_clear, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -313,6 +319,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_and_or_xor, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *mask1, *mask2, *dst1, *dst2;
@@ -360,6 +367,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_intersects_subset, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *mask1, *mask2, *dst1, *dst2;
@@ -402,6 +410,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_copy_any_anyand, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *mask1, *mask2, *dst1, *dst2;
@@ -456,6 +465,7 @@ release_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_insert_leave, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -471,6 +481,7 @@ int BPF_PROG(test_insert_leave, struct task_struct *task, u64 clone_flags)
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_insert_remove_release, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -501,6 +512,7 @@ int BPF_PROG(test_insert_remove_release, struct task_struct *task, u64 clone_fla
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_global_mask_rcu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *local, *prev;
@@ -534,6 +546,7 @@ int BPF_PROG(test_global_mask_rcu, struct task_struct *task, u64 clone_flags)
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_global_mask_array_one_rcu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *local, *prev;
@@ -632,12 +645,14 @@ err_exit:
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_global_mask_array_rcu, struct task_struct *task, u64 clone_flags)
 {
 	return _global_mask_array_rcu(&global_mask_array[0], &global_mask_array[1]);
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_global_mask_array_l2_rcu, struct task_struct *task, u64 clone_flags)
 {
 	return _global_mask_array_rcu(&global_mask_array_l2[0][0], &global_mask_array_l2[1][0]);
@@ -670,6 +685,7 @@ int BPF_PROG(test_global_mask_nested_rcu, struct task_struct *task, u64 clone_fl
  * incorrect offset.
  */
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_global_mask_nested_deep_rcu, struct task_struct *task, u64 clone_flags)
 {
 	int r, i;
@@ -689,6 +705,7 @@ int BPF_PROG(test_global_mask_nested_deep_rcu, struct task_struct *task, u64 clo
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_global_mask_nested_deep_array_rcu, struct task_struct *task, u64 clone_flags)
 {
 	int i;
@@ -706,6 +723,7 @@ int BPF_PROG(test_global_mask_nested_deep_array_rcu, struct task_struct *task, u
 }
 
 SEC("tp_btf/task_newtask")
+__success
 int BPF_PROG(test_cpumask_weight, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *local;
