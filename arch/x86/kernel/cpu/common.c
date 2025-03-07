@@ -1645,6 +1645,7 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 
 		c->cpu_index = 0;
 		filter_cpuid_features(c, false);
+		scan_feature_dependencies(c);
 
 		if (this_cpu->c_bsp_init)
 			this_cpu->c_bsp_init(c);
@@ -1904,6 +1905,9 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 
 	/* Filter out anything that depends on CPUID levels we don't have */
 	filter_cpuid_features(c, true);
+
+	/* Scan for unmet dependencies based on the CPUID dependency table */
+	scan_feature_dependencies(c);
 
 	/* If the model name is still unset, do table lookup. */
 	if (!c->x86_model_id[0]) {
