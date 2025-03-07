@@ -26,6 +26,7 @@
 #define MTK_SCPD_ACTIVE_WAKEUP		BIT(0)
 #define MTK_SCPD_FWAIT_SRAM		BIT(1)
 #define MTK_SCPD_SRAM_ISO		BIT(2)
+#define MTK_SCPD_SRAM_SLP		BIT(3)
 #define MTK_SCPD_CAPS(_scpd, _x)	((_scpd)->data->caps & (_x))
 
 #define SPM_VDE_PWR_CON			0x0210
@@ -118,6 +119,8 @@ static const char * const clk_names[] = {
  * @ctl_offs: The offset for main power control register.
  * @sram_pdn_bits: The mask for sram power control bits.
  * @sram_pdn_ack_bits: The mask for sram power control acked bits.
+ * @sram_slp_bits: The mask for sram low power control bits.
+ * @sram_slp_ack_bits: The mask for sram low power control acked bits.
  * @bus_prot_mask: The mask for single step bus protection.
  * @clk_id: The basic clocks required by this power domain.
  * @caps: The flag for active wake-up action.
@@ -128,6 +131,8 @@ struct scp_domain_data {
 	int ctl_offs;
 	u32 sram_pdn_bits;
 	u32 sram_pdn_ack_bits;
+	u32 sram_slp_bits;
+	u32 sram_slp_ack_bits;
 	u32 bus_prot_mask;
 	enum clk_id clk_id[MAX_CLKS];
 	u8 caps;
@@ -236,11 +241,19 @@ static int scpsys_clk_enable(struct clk *clk[], int max_num)
 static int scpsys_sram_enable(struct scp_domain *scpd, void __iomem *ctl_addr)
 {
 	u32 val;
-	u32 pdn_ack = scpd->data->sram_pdn_ack_bits;
+	u32 ack_mask, ack_sta;
 	int tmp;
 
-	val = readl(ctl_addr);
-	val &= ~scpd->data->sram_pdn_bits;
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_SRAM_SLP)) {
+		ack_mask = scpd->data->sram_slp_ack_bits;
+		ack_sta = ack_mask;
+		val = readl(ctl_addr) | scpd->data->sram_slp_bits;
+	} else {
+		ack_mask = scpd->data->sram_pdn_ack_bits;
+		ack_sta = 0;
+		val = readl(ctl_addr) & ~scpd->data->sram_pdn_bits;
+	}
+
 	writel(val, ctl_addr);
 
 	/* Either wait until SRAM_PDN_ACK all 0 or have a force wait */
@@ -254,7 +267,7 @@ static int scpsys_sram_enable(struct scp_domain *scpd, void __iomem *ctl_addr)
 	} else {
 		/* Either wait until SRAM_PDN_ACK all 1 or 0 */
 		int ret = readl_poll_timeout(ctl_addr, tmp,
-				(tmp & pdn_ack) == 0,
+				(tmp & ack_mask) == ack_sta,
 				MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 		if (ret < 0)
 			return ret;
@@ -274,7 +287,7 @@ static int scpsys_sram_enable(struct scp_domain *scpd, void __iomem *ctl_addr)
 static int scpsys_sram_disable(struct scp_domain *scpd, void __iomem *ctl_addr)
 {
 	u32 val;
-	u32 pdn_ack = scpd->data->sram_pdn_ack_bits;
+	u32 ack_mask, ack_sta;
 	int tmp;
 
 	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_SRAM_ISO)) {
@@ -285,13 +298,20 @@ static int scpsys_sram_disable(struct scp_domain *scpd, void __iomem *ctl_addr)
 		udelay(1);
 	}
 
-	val = readl(ctl_addr);
-	val |= scpd->data->sram_pdn_bits;
+	if (MTK_SCPD_CAPS(scpd, MTK_SCPD_SRAM_SLP)) {
+		ack_mask = scpd->data->sram_slp_ack_bits;
+		ack_sta = 0;
+		val = readl(ctl_addr) & ~scpd->data->sram_slp_bits;
+	} else {
+		ack_mask = scpd->data->sram_pdn_ack_bits;
+		ack_sta = ack_mask;
+		val = readl(ctl_addr) | scpd->data->sram_pdn_bits;
+	}
 	writel(val, ctl_addr);
 
 	/* Either wait until SRAM_PDN_ACK all 1 or 0 */
 	return readl_poll_timeout(ctl_addr, tmp,
-			(tmp & pdn_ack) == pdn_ack,
+			(tmp & ack_mask) == ack_sta,
 			MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 }
 
