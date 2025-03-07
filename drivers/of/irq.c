@@ -381,6 +381,13 @@ int of_irq_parse_one(struct device_node *device, int index, struct of_phandle_ar
 		goto out;
 	}
 
+	if (!intsize && index) {
+		pr_debug("%pOF trying to map IRQ %d in %pOF having #interrupt-cells = <0>\n",
+			 device, index, p);
+		res = -EINVAL;
+		goto out;
+	}
+
 	pr_debug(" parent=%pOF, intsize=%d\n", p, intsize);
 
 	/* Copy intspec into irq structure */
