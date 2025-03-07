@@ -79,7 +79,6 @@ void native_write_cr4(unsigned long val);
 #ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
 static inline u32 rdpkru(void)
 {
-	u32 ecx = 0;
 	u32 edx, pkru;
 
 	/*
@@ -88,20 +87,18 @@ static inline u32 rdpkru(void)
 	 */
 	asm volatile(".byte 0x0f,0x01,0xee\n\t"
 		     : "=a" (pkru), "=d" (edx)
-		     : "c" (ecx));
+		     : "c" (0));
 	return pkru;
 }
 
 static inline void wrpkru(u32 pkru)
 {
-	u32 ecx = 0, edx = 0;
-
 	/*
 	 * "wrpkru" instruction.  Loads contents in EAX to PKRU,
 	 * requires that ecx = edx = 0.
 	 */
 	asm volatile(".byte 0x0f,0x01,0xef\n\t"
-		     : : "a" (pkru), "c"(ecx), "d"(edx));
+		     : : "a" (pkru), "c" (0), "d" (0));
 }
 
 #else
