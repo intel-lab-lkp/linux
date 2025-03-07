@@ -137,17 +137,17 @@ page_pool_nl_stats_fill(struct sk_buff *rsp, const struct page_pool *pool,
 	nla_nest_end(rsp, nest);
 
 	if (nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_FAST,
-			 stats.alloc_stats.fast) ||
+			 u64_stats_read(&stats.alloc_stats.fast)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_SLOW,
-			 stats.alloc_stats.slow) ||
+			 u64_stats_read(&stats.alloc_stats.slow)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_SLOW_HIGH_ORDER,
-			 stats.alloc_stats.slow_high_order) ||
+			 u64_stats_read(&stats.alloc_stats.slow_high_order)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_EMPTY,
-			 stats.alloc_stats.empty) ||
+			 u64_stats_read(&stats.alloc_stats.empty)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_REFILL,
-			 stats.alloc_stats.refill) ||
+			 u64_stats_read(&stats.alloc_stats.refill)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_WAIVE,
-			 stats.alloc_stats.waive) ||
+			 u64_stats_read(&stats.alloc_stats.waive)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_CACHED,
 			 u64_stats_read(&stats.recycle_stats.cached)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_CACHE_FULL,

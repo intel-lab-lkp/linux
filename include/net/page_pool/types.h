@@ -96,6 +96,7 @@ struct page_pool_params {
 #ifdef CONFIG_PAGE_POOL_STATS
 /**
  * struct page_pool_alloc_stats - allocation statistics
+ * @syncp:	synchronisations point for updates.
  * @fast:	successful fast path allocations
  * @slow:	slow path order-0 allocations
  * @slow_high_order: slow path high order allocations
@@ -105,12 +106,13 @@ struct page_pool_params {
  *		the cache due to a NUMA mismatch
  */
 struct page_pool_alloc_stats {
-	u64 fast;
-	u64 slow;
-	u64 slow_high_order;
-	u64 empty;
-	u64 refill;
-	u64 waive;
+	struct u64_stats_sync syncp;
+	u64_stats_t fast;
+	u64_stats_t slow;
+	u64_stats_t slow_high_order;
+	u64_stats_t empty;
+	u64_stats_t refill;
+	u64_stats_t waive;
 };
 
 /**

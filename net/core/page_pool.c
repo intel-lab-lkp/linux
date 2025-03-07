@@ -44,7 +44,14 @@ static DEFINE_PER_CPU(struct page_pool_recycle_stats, pp_system_recycle_stats) =
 };
 
 /* alloc_stat_inc is intended to be used in softirq context */
-#define alloc_stat_inc(pool, __stat)	(pool->alloc_stats.__stat++)
+#define alloc_stat_inc(pool, __stat)						\
+	do {									\
+		struct page_pool_alloc_stats *s = &pool->alloc_stats;		\
+		u64_stats_update_begin(&s->syncp);				\
+		u64_stats_inc(&s->__stat);					\
+		u64_stats_update_end(&s->syncp);				\
+	} while (0)
+
 /* recycle_stat_inc is safe to use when preemption is possible. */
 #define recycle_stat_inc(pool, __stat)							\
 	do {										\
@@ -104,19 +111,32 @@ static const char pp_stats_mq[][ETH_GSTRING_LEN] = {
 bool page_pool_get_stats(const struct page_pool *pool,
 			 struct page_pool_stats *stats)
 {
+	u64 fast, slow, slow_high_order, empty, refill, waive;
+	const struct page_pool_alloc_stats *alloc_stats;
 	unsigned int start;
 	int cpu = 0;
 
 	if (!stats)
 		return false;
 
+	alloc_stats = &pool->alloc_stats;
 	/* The caller is responsible to initialize stats. */
-	stats->alloc_stats.fast += pool->alloc_stats.fast;
-	stats->alloc_stats.slow += pool->alloc_stats.slow;
-	stats->alloc_stats.slow_high_order += pool->alloc_stats.slow_high_order;
-	stats->alloc_stats.empty += pool->alloc_stats.empty;
-	stats->alloc_stats.refill += pool->alloc_stats.refill;
-	stats->alloc_stats.waive += pool->alloc_stats.waive;
+	do {
+		start = u64_stats_fetch_begin(&alloc_stats->syncp);
+		fast = u64_stats_read(&alloc_stats->fast);
+		slow = u64_stats_read(&alloc_stats->slow);
+		slow_high_order = u64_stats_read(&alloc_stats->slow_high_order);
+		empty = u64_stats_read(&alloc_stats->empty);
+		refill = u64_stats_read(&alloc_stats->refill);
+		waive = u64_stats_read(&alloc_stats->waive);
+	} while (u64_stats_fetch_retry(&alloc_stats->syncp, start));
+
+	u64_stats_add(&stats->alloc_stats.fast, fast);
+	u64_stats_add(&stats->alloc_stats.slow, slow);
+	u64_stats_add(&stats->alloc_stats.slow_high_order, slow_high_order);
+	u64_stats_add(&stats->alloc_stats.empty, empty);
+	u64_stats_add(&stats->alloc_stats.refill, refill);
+	u64_stats_add(&stats->alloc_stats.waive, waive);
 
 	for_each_possible_cpu(cpu) {
 		u64 cached, cache_full, ring, ring_full, released_refcnt;
@@ -175,12 +195,12 @@ u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 {
 	const struct page_pool_stats *pool_stats = stats;
 
-	*data++ = pool_stats->alloc_stats.fast;
-	*data++ = pool_stats->alloc_stats.slow;
-	*data++ = pool_stats->alloc_stats.slow_high_order;
-	*data++ = pool_stats->alloc_stats.empty;
-	*data++ = pool_stats->alloc_stats.refill;
-	*data++ = pool_stats->alloc_stats.waive;
+	*data++ = u64_stats_read(&pool_stats->alloc_stats.fast);
+	*data++ = u64_stats_read(&pool_stats->alloc_stats.slow);
+	*data++ = u64_stats_read(&pool_stats->alloc_stats.slow_high_order);
+	*data++ = u64_stats_read(&pool_stats->alloc_stats.empty);
+	*data++ = u64_stats_read(&pool_stats->alloc_stats.refill);
+	*data++ = u64_stats_read(&pool_stats->alloc_stats.waive);
 	*data++ = u64_stats_read(&pool_stats->recycle_stats.cached);
 	*data++ = u64_stats_read(&pool_stats->recycle_stats.cache_full);
 	*data++ = u64_stats_read(&pool_stats->recycle_stats.ring);
@@ -305,6 +325,7 @@ static int page_pool_init(struct page_pool *pool,
 		pool->recycle_stats = &pp_system_recycle_stats;
 		pool->system = true;
 	}
+	u64_stats_init(&pool->alloc_stats.syncp);
 #endif
 
 	if (ptr_ring_init(&pool->ring, ring_qsize, GFP_KERNEL) < 0) {
