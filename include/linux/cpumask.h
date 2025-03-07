@@ -20,7 +20,7 @@
  * cpumask_pr_args - printf args to output a cpumask
  * @maskp: cpumask to be printed
  *
- * Can be used to provide arguments for '%*pb[l]' when printing a cpumask.
+ * Can be used to provide arguments for '%*pb [l]' when printing a cpumask.
  */
 #define cpumask_pr_args(maskp)		nr_cpu_ids, cpumask_bits(maskp)
 
@@ -166,7 +166,7 @@ static __always_inline unsigned int cpumask_first_zero(const struct cpumask *src
 }
 
 /**
- * cpumask_first_and - return the first cpu from *srcp1 & *srcp2
+ * cpumask_first_and - return the first cpu from *@srcp1 & *@srcp2
  * @srcp1: the first input
  * @srcp2: the second input
  *
@@ -179,7 +179,7 @@ unsigned int cpumask_first_and(const struct cpumask *srcp1, const struct cpumask
 }
 
 /**
- * cpumask_first_and_and - return the first cpu from *srcp1 & *srcp2 & *srcp3
+ * cpumask_first_and_and - return the first cpu from *@srcp1 & *@srcp2 & *@srcp3
  * @srcp1: the first input
  * @srcp2: the second input
  * @srcp3: the third input
@@ -266,7 +266,7 @@ unsigned int cpumask_any_distribute(const struct cpumask *srcp);
 #endif /* NR_CPUS */
 
 /**
- * cpumask_next_and - get the next cpu in *src1p & *src2p
+ * cpumask_next_and - get the next cpu in *@src1p & *@src2p
  * @n: the cpu prior to the place to search (i.e. return will be > @n)
  * @src1p: the first cpumask pointer
  * @src2p: the second cpumask pointer
@@ -334,7 +334,8 @@ unsigned int __pure cpumask_next_wrap(int n, const struct cpumask *mask, int sta
  * @mask1: the first cpumask pointer
  * @mask2: the second cpumask pointer
  *
- * This saves a temporary CPU mask in many places.  It is equivalent to:
+ * This saves a temporary CPU mask in many places.  It is equivalent to::
+ *
  *	struct cpumask tmp;
  *	cpumask_and(&tmp, &mask1, &mask2);
  *	for_each_cpu(cpu, &tmp)
@@ -352,7 +353,8 @@ unsigned int __pure cpumask_next_wrap(int n, const struct cpumask *mask, int sta
  * @mask1: the first cpumask pointer
  * @mask2: the second cpumask pointer
  *
- * This saves a temporary CPU mask in many places.  It is equivalent to:
+ * This saves a temporary CPU mask in many places.  It is equivalent to::
+ *
  *	struct cpumask tmp;
  *	cpumask_andnot(&tmp, &mask1, &mask2);
  *	for_each_cpu(cpu, &tmp)
@@ -369,7 +371,8 @@ unsigned int __pure cpumask_next_wrap(int n, const struct cpumask *mask, int sta
  * @mask1: the first cpumask pointer
  * @mask2: the second cpumask pointer
  *
- * This saves a temporary CPU mask in many places.  It is equivalent to:
+ * This saves a temporary CPU mask in many places.  It is equivalent to::
+ *
  *	struct cpumask tmp;
  *	cpumask_or(&tmp, &mask1, &mask2);
  *	for_each_cpu(cpu, &tmp)
@@ -411,7 +414,7 @@ unsigned int cpumask_any_but(const struct cpumask *mask, unsigned int cpu)
 }
 
 /**
- * cpumask_any_and_but - pick an arbitrary cpu from *mask1 & *mask2, but not this one.
+ * cpumask_any_and_but - pick an arbitrary cpu from *@mask1 & *@mask2, but not this one.
  * @mask1: the first input cpumask
  * @mask2: the second input cpumask
  * @cpu: the cpu to ignore
@@ -545,7 +548,7 @@ static __always_inline void __cpumask_clear_cpu(int cpu, struct cpumask *dstp)
  * cpumask_assign_cpu - assign a cpu in a cpumask
  * @cpu: cpu number (< nr_cpu_ids)
  * @dstp: the cpumask pointer
- * @bool: the value to assign
+ * @value: the value to assign
  */
 static __always_inline void cpumask_assign_cpu(int cpu, struct cpumask *dstp, bool value)
 {
@@ -623,7 +626,7 @@ static __always_inline void cpumask_clear(struct cpumask *dstp)
 }
 
 /**
- * cpumask_and - *dstp = *src1p & *src2p
+ * cpumask_and - *@dstp = *@src1p & *@src2p
  * @dstp: the cpumask result
  * @src1p: the first input
  * @src2p: the second input
@@ -639,7 +642,7 @@ bool cpumask_and(struct cpumask *dstp, const struct cpumask *src1p,
 }
 
 /**
- * cpumask_or - *dstp = *src1p | *src2p
+ * cpumask_or - *@dstp = *@src1p | *@src2p
  * @dstp: the cpumask result
  * @src1p: the first input
  * @src2p: the second input
@@ -653,7 +656,7 @@ void cpumask_or(struct cpumask *dstp, const struct cpumask *src1p,
 }
 
 /**
- * cpumask_xor - *dstp = *src1p ^ *src2p
+ * cpumask_xor - *@dstp = *@src1p ^ *@src2p
  * @dstp: the cpumask result
  * @src1p: the first input
  * @src2p: the second input
@@ -667,7 +670,7 @@ void cpumask_xor(struct cpumask *dstp, const struct cpumask *src1p,
 }
 
 /**
- * cpumask_andnot - *dstp = *src1p & ~*src2p
+ * cpumask_andnot - *@dstp = *@src1p & ~*@src2p
  * @dstp: the cpumask result
  * @src1p: the first input
  * @src2p: the second input
@@ -683,7 +686,7 @@ bool cpumask_andnot(struct cpumask *dstp, const struct cpumask *src1p,
 }
 
 /**
- * cpumask_equal - *src1p == *src2p
+ * cpumask_equal - *@src1p == *@src2p
  * @src1p: the first input
  * @src2p: the second input
  *
@@ -697,7 +700,7 @@ bool cpumask_equal(const struct cpumask *src1p, const struct cpumask *src2p)
 }
 
 /**
- * cpumask_or_equal - *src1p | *src2p == *src3p
+ * cpumask_or_equal - *@src1p | *@src2p == *@src3p
  * @src1p: the first input
  * @src2p: the second input
  * @src3p: the third input
@@ -714,7 +717,7 @@ bool cpumask_or_equal(const struct cpumask *src1p, const struct cpumask *src2p,
 }
 
 /**
- * cpumask_intersects - (*src1p & *src2p) != 0
+ * cpumask_intersects - (*@src1p & *@src2p) != 0
  * @src1p: the first input
  * @src2p: the second input
  *
@@ -729,7 +732,7 @@ bool cpumask_intersects(const struct cpumask *src1p, const struct cpumask *src2p
 }
 
 /**
- * cpumask_subset - (*src1p & ~*src2p) == 0
+ * cpumask_subset - (*@src1p & ~*@src2p) == 0
  * @src1p: the first input
  * @src2p: the second input
  *
@@ -743,7 +746,7 @@ bool cpumask_subset(const struct cpumask *src1p, const struct cpumask *src2p)
 }
 
 /**
- * cpumask_empty - *srcp == 0
+ * cpumask_empty - *@srcp == 0
  * @srcp: the cpumask to that all cpus < nr_cpu_ids are clear.
  *
  * Return: true if srcp is empty (has no bits set), else false
@@ -754,7 +757,7 @@ static __always_inline bool cpumask_empty(const struct cpumask *srcp)
 }
 
 /**
- * cpumask_full - *srcp == 0xFFFFFFFF...
+ * cpumask_full - *@srcp == 0xFFFFFFFF...
  * @srcp: the cpumask to that all cpus < nr_cpu_ids are set.
  *
  * Return: true if srcp is full (has all bits set), else false
@@ -765,10 +768,10 @@ static __always_inline bool cpumask_full(const struct cpumask *srcp)
 }
 
 /**
- * cpumask_weight - Count of bits in *srcp
+ * cpumask_weight - Count of bits in *@srcp
  * @srcp: the cpumask to count bits (< nr_cpu_ids) in.
  *
- * Return: count of bits set in *srcp
+ * Return: count of bits set in *@srcp
  */
 static __always_inline unsigned int cpumask_weight(const struct cpumask *srcp)
 {
@@ -776,11 +779,11 @@ static __always_inline unsigned int cpumask_weight(const struct cpumask *srcp)
 }
 
 /**
- * cpumask_weight_and - Count of bits in (*srcp1 & *srcp2)
+ * cpumask_weight_and - Count of bits in (*@srcp1 & *@srcp2)
  * @srcp1: the cpumask to count bits (< nr_cpu_ids) in.
  * @srcp2: the cpumask to count bits (< nr_cpu_ids) in.
  *
- * Return: count of bits set in both *srcp1 and *srcp2
+ * Return: count of bits set in both *@srcp1 and *@srcp2
  */
 static __always_inline
 unsigned int cpumask_weight_and(const struct cpumask *srcp1, const struct cpumask *srcp2)
@@ -789,11 +792,11 @@ unsigned int cpumask_weight_and(const struct cpumask *srcp1, const struct cpumas
 }
 
 /**
- * cpumask_weight_andnot - Count of bits in (*srcp1 & ~*srcp2)
+ * cpumask_weight_andnot - Count of bits in (*@srcp1 & ~*@srcp2)
  * @srcp1: the cpumask to count bits (< nr_cpu_ids) in.
  * @srcp2: the cpumask to count bits (< nr_cpu_ids) in.
  *
- * Return: count of bits set in both *srcp1 and *srcp2
+ * Return: count of bits set in both *@srcp1 and *@srcp2
  */
 static __always_inline
 unsigned int cpumask_weight_andnot(const struct cpumask *srcp1,
@@ -803,7 +806,7 @@ unsigned int cpumask_weight_andnot(const struct cpumask *srcp1,
 }
 
 /**
- * cpumask_shift_right - *dstp = *srcp >> n
+ * cpumask_shift_right - *@dstp = *@srcp >> n
  * @dstp: the cpumask result
  * @srcp: the input to shift
  * @n: the number of bits to shift by
@@ -816,7 +819,7 @@ void cpumask_shift_right(struct cpumask *dstp, const struct cpumask *srcp, int n
 }
 
 /**
- * cpumask_shift_left - *dstp = *srcp << n
+ * cpumask_shift_left - *@dstp = *@srcp << n
  * @dstp: the cpumask result
  * @srcp: the input to shift
  * @n: the number of bits to shift by
@@ -829,7 +832,7 @@ void cpumask_shift_left(struct cpumask *dstp, const struct cpumask *srcp, int n)
 }
 
 /**
- * cpumask_copy - *dstp = *srcp
+ * cpumask_copy - *@dstp = *@srcp
  * @dstp: the result
  * @srcp: the input cpumask
  */
@@ -840,7 +843,7 @@ void cpumask_copy(struct cpumask *dstp, const struct cpumask *srcp)
 }
 
 /**
- * cpumask_any - pick an arbitrary cpu from *srcp
+ * cpumask_any - pick an arbitrary cpu from *@srcp
  * @srcp: the input cpumask
  *
  * Return: >= nr_cpu_ids if no cpus set.
@@ -848,7 +851,7 @@ void cpumask_copy(struct cpumask *dstp, const struct cpumask *srcp)
 #define cpumask_any(srcp) cpumask_first(srcp)
 
 /**
- * cpumask_any_and - pick an arbitrary cpu from *mask1 & *mask2
+ * cpumask_any_and - pick an arbitrary cpu from *@mask1 & *@mask2
  * @mask1: the first input cpumask
  * @mask2: the second input cpumask
  *
@@ -941,7 +944,7 @@ bool zalloc_cpumask_var_node(cpumask_var_t *mask, gfp_t flags, int node)
 /**
  * alloc_cpumask_var - allocate a struct cpumask
  * @mask: pointer to cpumask_var_t where the cpumask is returned
- * @flags: GFP_ flags
+ * @flags: %GFP_ flags
  *
  * Only defined when CONFIG_CPUMASK_OFFSTACK=y, otherwise is
  * a nop returning a constant 1 (in <linux/cpumask.h>).
