@@ -7,6 +7,11 @@
 
 #include <linux/args.h>
 #include <linux/init.h>
+
+#ifndef __ASSEMBLER__
+#include <linux/uuid.h>
+#endif
+
 #include <uapi/linux/const.h>
 
 /*
@@ -107,10 +112,10 @@
 			   ARM_SMCCC_FUNC_QUERY_CALL_UID)
 
 /* KVM UID value: 28b46fb6-2ec5-11e9-a9ca-4b564d003a74 */
-#define ARM_SMCCC_VENDOR_HYP_UID_KVM_REG_0	0xb66fb428U
-#define ARM_SMCCC_VENDOR_HYP_UID_KVM_REG_1	0xe911c52eU
-#define ARM_SMCCC_VENDOR_HYP_UID_KVM_REG_2	0x564bcaa9U
-#define ARM_SMCCC_VENDOR_HYP_UID_KVM_REG_3	0x743a004dU
+#define ARM_SMCCC_VENDOR_HYP_UID_KVM UUID_INIT(\
+	0xb66fb428, 0xc52e, 0xe911, \
+	0xa9, 0xca, 0x4b, 0x56, \
+	0x4d, 0x00, 0x3a, 0x74)
 
 /* KVM "vendor specific" services */
 #define ARM_SMCCC_KVM_FUNC_FEATURES		0
@@ -332,6 +337,48 @@ s32 arm_smccc_get_soc_id_version(void);
  * When ARM_SMCCC_ARCH_SOC_ID is not present, returns SMCCC_RET_NOT_SUPPORTED.
  */
 s32 arm_smccc_get_soc_id_revision(void);
+
+#ifndef __ASSEMBLER__
+
+/**
+ * arm_smccc_hyp_present(const uuid_t *hyp_uuid)
+ *
+ * Returns `true` if the hypervisor advertises its presence via SMCCC.
+ *
+ * When the function returns `false`, the caller shall not assume that
+ * there is no hypervisor running. Instead, the caller must fall back to
+ * other approaches if any are available.
+ */
+bool arm_smccc_hyp_present(const uuid_t *hyp_uuid);
+
+#define SMCCC_RES_TO_UUID(r0, r1, r2, r3) \
+	UUID_INIT( \
+		cpu_to_le32(lower_32_bits(r0)), \
+		cpu_to_le32(lower_32_bits(r1)) & 0xffff, \
+		cpu_to_le32(lower_32_bits(r1)) >> 16, \
+		cpu_to_le32(lower_32_bits(r2)) & 0xff, \
+		(cpu_to_le32(lower_32_bits(r2)) >> 8) & 0xff, \
+		(cpu_to_le32(lower_32_bits(r2)) >> 16) & 0xff, \
+		(cpu_to_le32(lower_32_bits(r2)) >> 24) & 0xff, \
+		cpu_to_le32(lower_32_bits(r3)) & 0xff, \
+		(cpu_to_le32(lower_32_bits(r3)) >> 8) & 0xff, \
+		(cpu_to_le32(lower_32_bits(r3)) >> 16) & 0xff, \
+		(cpu_to_le32(lower_32_bits(r3)) >> 24) & 0xff \
+	)
+
+#define UUID_TO_SMCCC_RES(uuid_init, regs) do { \
+		const uuid_t uuid = uuid_init; \
+		(regs)[0] = le32_to_cpu((u32)uuid.b[0] | (uuid.b[1] << 8) | \
+						((uuid.b[2]) << 16) | ((uuid.b[3]) << 24)); \
+		(regs)[1] = le32_to_cpu((u32)uuid.b[4] | (uuid.b[5] << 8) | \
+						((uuid.b[6]) << 16) | ((uuid.b[7]) << 24)); \
+		(regs)[2] = le32_to_cpu((u32)uuid.b[8] | (uuid.b[9] << 8) | \
+						((uuid.b[10]) << 16) | ((uuid.b[11]) << 24)); \
+		(regs)[3] = le32_to_cpu((u32)uuid.b[12] | (uuid.b[13] << 8) | \
+						((uuid.b[14]) << 16) | ((uuid.b[15]) << 24)); \
+	} while (0)
+
+#endif /* !__ASSEMBLER__ */
 
 /**
  * struct arm_smccc_res - Result from SMC/HVC call
