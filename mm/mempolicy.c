@@ -3604,47 +3604,47 @@ static int __init mempolicy_sysfs_init(void)
 	int err;
 	static struct kobject *mempolicy_kobj;
 
-	mempolicy_kobj = kzalloc(sizeof(*mempolicy_kobj), GFP_KERNEL);
-	if (!mempolicy_kobj) {
-		err = -ENOMEM;
-		goto err_out;
-	}
-
 	ngrp = kzalloc(sizeof(*ngrp), GFP_KERNEL);
 	if (!ngrp) {
 		err = -ENOMEM;
-		goto mempol_out;
+		goto err_out;
 	}
 	mutex_init(&ngrp->kobj_lock);
 
 	ngrp->nattrs = kcalloc(nr_node_ids, sizeof(struct iw_node_attr *),
-			     GFP_KERNEL);
+			       GFP_KERNEL);
 	if (!ngrp->nattrs) {
 		err = -ENOMEM;
 		goto ngrp_out;
 	}
 
+	mempolicy_kobj = kzalloc(sizeof(*mempolicy_kobj), GFP_KERNEL);
+	if (!mempolicy_kobj) {
+		err = -ENOMEM;
+		goto nattr_out;
+	}
+
 	err = kobject_init_and_add(mempolicy_kobj, &mempolicy_ktype, mm_kobj,
 				   "mempolicy");
-	if (err)
-		goto node_out;
+	if (err) {
+		kobject_put(mempolicy_kobj);
+		goto err_out;
+	}
 
 	err = add_weighted_interleave_group(mempolicy_kobj);
 	if (err) {
-		pr_err("mempolicy sysfs structure failed to initialize\n");
 		kobject_put(mempolicy_kobj);
-		return err;
+		goto err_out;
 	}
 
-	return err;
-node_out:
+	return 0;
+
+nattr_out:
 	kfree(ngrp->nattrs);
 ngrp_out:
 	kfree(ngrp);
-mempol_out:
-	kfree(mempolicy_kobj);
 err_out:
-	pr_err("failed to add mempolicy kobject to the system\n");
+	pr_err("mempolicy sysfs structure failed to initialize\n");
 	return err;
 }
 
