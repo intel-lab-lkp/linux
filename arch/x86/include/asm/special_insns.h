@@ -257,8 +257,6 @@ static inline void movdir64b_io(void __iomem *dst, const void *src)
  */
 static inline int enqcmds(void __iomem *dst, const void *src)
 {
-	const struct { char _[64]; } *__src = src;
-	struct { char _[64]; } __iomem *__dst = dst;
 	bool zf;
 
 	/*
@@ -268,8 +266,8 @@ static inline int enqcmds(void __iomem *dst, const void *src)
 	 */
 	asm volatile(".byte 0xf3, 0x0f, 0x38, 0xf8, 0x02, 0x66, 0x90"
 		     CC_SET(z)
-		     : CC_OUT(z) (zf), "+m" (*__dst)
-		     : "m" (*__src), "a" (__dst), "d" (__src));
+		     : CC_OUT(z) (zf), "+m" (*(char __iomem(*)[64])dst)
+		     : "m" (*(const char(*)[64])src), "a" (dst), "d" (src));
 
 	/* Submission failure is indicated via EFLAGS.ZF=1 */
 	if (zf)
