@@ -506,6 +506,7 @@ static int bond_ipsec_add_sa(struct xfrm_state *xs,
 		list_add(&ipsec->list, &bond->ipsec_list);
 		mutex_unlock(&bond->ipsec_lock);
 	} else {
+		xs->xso.real_dev = NULL;
 		kfree(ipsec);
 	}
 out:
@@ -541,7 +542,15 @@ static void bond_ipsec_add_sa_all(struct bonding *bond)
 		if (ipsec->xs->xso.real_dev == real_dev)
 			continue;
 
+		/* Skip dead xfrm states, they'll be freed later. */
+		if (ipsec->xs->km.state == XFRM_STATE_DEAD)
+			continue;
+
 		ipsec->xs->xso.real_dev = real_dev;
+		/* FIXME: there is a race that before .xdo_dev_state_add()
+		 * is called, the __xfrm_state_delete() is called in parallel,
+		 * which will call .xdo_dev_state_delete() and xdo_dev_state_free()
+		 */
 		if (real_dev->xfrmdev_ops->xdo_dev_state_add(ipsec->xs, NULL)) {
 			slave_warn(bond_dev, real_dev, "%s: failed to add SA\n", __func__);
 			ipsec->xs->xso.real_dev = NULL;
@@ -560,7 +569,6 @@ static void bond_ipsec_del_sa(struct xfrm_state *xs)
 	struct net_device *bond_dev = xs->xso.dev;
 	struct net_device *real_dev;
 	netdevice_tracker tracker;
-	struct bond_ipsec *ipsec;
 	struct bonding *bond;
 	struct slave *slave;
 
@@ -592,22 +600,13 @@ static void bond_ipsec_del_sa(struct xfrm_state *xs)
 	real_dev->xfrmdev_ops->xdo_dev_state_delete(xs);
 out:
 	netdev_put(real_dev, &tracker);
-	mutex_lock(&bond->ipsec_lock);
-	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
-		if (ipsec->xs == xs) {
-			list_del(&ipsec->list);
-			kfree(ipsec);
-			break;
-		}
-	}
-	mutex_unlock(&bond->ipsec_lock);
 }
 
 static void bond_ipsec_del_sa_all(struct bonding *bond)
 {
 	struct net_device *bond_dev = bond->dev;
+	struct bond_ipsec *ipsec, *tmp_ipsec;
 	struct net_device *real_dev;
-	struct bond_ipsec *ipsec;
 	struct slave *slave;
 
 	slave = rtnl_dereference(bond->curr_active_slave);
@@ -616,9 +615,22 @@ static void bond_ipsec_del_sa_all(struct bonding *bond)
 		return;
 
 	mutex_lock(&bond->ipsec_lock);
-	list_for_each_entry(ipsec, &bond->ipsec_list, list) {
-		if (!ipsec->xs->xso.real_dev)
+	list_for_each_entry_safe(ipsec, tmp_ipsec, &bond->ipsec_list, list) {
+		spin_lock_bh(&ipsec->xs->lock);
+		if (!ipsec->xs->xso.real_dev) {
+			spin_unlock_bh(&ipsec->xs->lock);
 			continue;
+		}
+
+		if (ipsec->xs->km.state == XFRM_STATE_DEAD) {
+			list_del(&ipsec->list);
+			kfree(ipsec);
+			/* Need to free device here, or the xs->xso.real_dev
+			 * may changed in bond_ipsec_add_sa_all and free
+			 * on old device will never be called.
+			 */
+			goto next;
+		}
 
 		if (!real_dev->xfrmdev_ops ||
 		    !real_dev->xfrmdev_ops->xdo_dev_state_delete ||
@@ -626,11 +638,20 @@ static void bond_ipsec_del_sa_all(struct bonding *bond)
 			slave_warn(bond_dev, real_dev,
 				   "%s: no slave xdo_dev_state_delete\n",
 				   __func__);
-		} else {
-			real_dev->xfrmdev_ops->xdo_dev_state_delete(ipsec->xs);
-			if (real_dev->xfrmdev_ops->xdo_dev_state_free)
-				real_dev->xfrmdev_ops->xdo_dev_state_free(ipsec->xs);
+			spin_unlock_bh(&ipsec->xs->lock);
+			continue;
 		}
+
+		real_dev->xfrmdev_ops->xdo_dev_state_delete(ipsec->xs);
+
+next:
+		/* set real_dev to NULL in case __xfrm_state_delete() is called in parallel */
+		ipsec->xs->xso.real_dev = NULL;
+
+		/* Unlock before freeing device state, it could sleep. */
+		spin_unlock_bh(&ipsec->xs->lock);
+		if (real_dev->xfrmdev_ops->xdo_dev_state_free)
+			real_dev->xfrmdev_ops->xdo_dev_state_free(ipsec->xs);
 	}
 	mutex_unlock(&bond->ipsec_lock);
 }
@@ -638,6 +659,7 @@ static void bond_ipsec_del_sa_all(struct bonding *bond)
 static void bond_ipsec_free_sa(struct xfrm_state *xs)
 {
 	struct net_device *bond_dev = xs->xso.dev;
+	struct bond_ipsec *ipsec, *tmp_ipsec;
 	struct net_device *real_dev;
 	netdevice_tracker tracker;
 	struct bonding *bond;
@@ -659,13 +681,24 @@ static void bond_ipsec_free_sa(struct xfrm_state *xs)
 	if (!xs->xso.real_dev)
 		goto out;
 
-	WARN_ON(xs->xso.real_dev != real_dev);
+	if (xs->xso.real_dev != real_dev)
+		goto out;
 
 	if (real_dev && real_dev->xfrmdev_ops &&
 	    real_dev->xfrmdev_ops->xdo_dev_state_free)
 		real_dev->xfrmdev_ops->xdo_dev_state_free(xs);
 out:
 	netdev_put(real_dev, &tracker);
+
+	mutex_lock(&bond->ipsec_lock);
+	list_for_each_entry_safe(ipsec, tmp_ipsec, &bond->ipsec_list, list) {
+		if (ipsec->xs == xs) {
+			list_del(&ipsec->list);
+			kfree(ipsec);
+			break;
+		}
+	}
+	mutex_unlock(&bond->ipsec_lock);
 }
 
 /**
