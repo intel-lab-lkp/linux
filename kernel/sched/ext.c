@@ -2920,11 +2920,19 @@ static int balance_scx(struct rq *rq, struct task_struct *prev,
 	 */
 	if (sched_core_enabled(rq)) {
 		const struct cpumask *smt_mask = cpu_smt_mask(cpu_of(rq));
-		int scpu;
+		int scpu, cpu;
 
-		for_each_cpu_andnot(scpu, smt_mask, cpumask_of(cpu_of(rq))) {
-			struct rq *srq = cpu_rq(scpu);
-			struct task_struct *sprev = srq->curr;
+		cpu = cpu_of(rq);
+
+		for_each_cpu(scpu, smt_mask) {
+			struct rq *srq;
+			struct task_struct *sprev;
+
+			if (scpu == cpu)
+				continue;
+
+			srq = cpu_rq(scpu);
+			sprev = srq->curr;
 
 			WARN_ON_ONCE(__rq_lockp(rq) != __rq_lockp(srq));
 			update_rq_clock(srq);
