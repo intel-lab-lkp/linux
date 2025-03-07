@@ -508,13 +508,14 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			struct page *page = pipe->tmp_page;
 			int copied;
 
-			if (!page) {
+			if (page) {
+				pipe->tmp_page = NULL;
+			} else {
 				page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
 				if (unlikely(!page)) {
 					ret = ret ? : -ENOMEM;
 					break;
 				}
-				pipe->tmp_page = page;
 			}
 
 			/* Allocate a slot in the ring in advance and attach an
@@ -534,7 +535,6 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 				buf->flags = PIPE_BUF_FLAG_PACKET;
 			else
 				buf->flags = PIPE_BUF_FLAG_CAN_MERGE;
-			pipe->tmp_page = NULL;
 
 			copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);
 			if (unlikely(copied < PAGE_SIZE && iov_iter_count(from))) {
