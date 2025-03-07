@@ -125,6 +125,17 @@
 
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
+static inline void initname(struct filename *name)
+{
+	name->uptr = NULL;
+	name->aname = NULL;
+	name->is_atomic = false;
+#ifdef CONFIG_DEBUG_VFS
+	name->owner = current;
+#endif
+	atomic_set(&name->refcnt_atomic, 1);
+}
+
 struct filename *
 getname_flags(const char __user *filename, int flags)
 {
@@ -203,10 +214,7 @@ getname_flags(const char __user *filename, int flags)
 			return ERR_PTR(-ENAMETOOLONG);
 		}
 	}
-
-	atomic_set(&result->refcnt, 1);
-	result->uptr = filename;
-	result->aname = NULL;
+	initname(result);
 	audit_getname(result);
 	return result;
 }
@@ -264,25 +272,39 @@ struct filename *getname_kernel(const char * filename)
 		return ERR_PTR(-ENAMETOOLONG);
 	}
 	memcpy((char *)result->name, filename, len);
-	result->uptr = NULL;
-	result->aname = NULL;
-	atomic_set(&result->refcnt, 1);
+	initname(result);
 	audit_getname(result);
-
 	return result;
 }
 EXPORT_SYMBOL(getname_kernel);
 
 void putname(struct filename *name)
 {
+	int refcnt;
+
 	if (IS_ERR_OR_NULL(name))
 		return;
 
-	if (WARN_ON_ONCE(!atomic_read(&name->refcnt)))
+	VFS_BUG_ON(name->owner != current && !name->is_atomic);
+
+	refcnt = atomic_read(&name->refcnt_atomic);
+	if (WARN_ON_ONCE(!refcnt))
 		return;
 
-	if (!atomic_dec_and_test(&name->refcnt))
-		return;
+	/*
+	 * If refcnt == 1 then there is nobody who can legally change it.
+	 * Short-circuiting this case saves a branch in the common case and
+	 * an atomic op for the last unref (for the ->is_atomic variant).
+	 */
+	if (refcnt != 1) {
+		if (name->is_atomic) {
+			if (!atomic_dec_and_test(&name->refcnt_atomic))
+				return;
+		} else {
+			if (--name->refcnt)
+				return;
+		}
+	}
 
 	if (name->name != name->iname) {
 		__putname(name->name);

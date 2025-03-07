@@ -66,12 +66,14 @@ int io_renameat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	ren->oldpath = getname(oldf);
 	if (IS_ERR(ren->oldpath))
 		return PTR_ERR(ren->oldpath);
+	makeatomicname(ren->oldpath);
 
 	ren->newpath = getname(newf);
 	if (IS_ERR(ren->newpath)) {
 		putname(ren->oldpath);
 		return PTR_ERR(ren->newpath);
 	}
+	makeatomicname(ren->newpath);
 
 	req->flags |= REQ_F_NEED_CLEANUP;
 	req->flags |= REQ_F_FORCE_ASYNC;
@@ -121,6 +123,7 @@ int io_unlinkat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	un->filename = getname(fname);
 	if (IS_ERR(un->filename))
 		return PTR_ERR(un->filename);
+	makeatomicname(un->filename);
 
 	req->flags |= REQ_F_NEED_CLEANUP;
 	req->flags |= REQ_F_FORCE_ASYNC;
@@ -168,6 +171,7 @@ int io_mkdirat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	mkd->filename = getname(fname);
 	if (IS_ERR(mkd->filename))
 		return PTR_ERR(mkd->filename);
+	makeatomicname(mkd->filename);
 
 	req->flags |= REQ_F_NEED_CLEANUP;
 	req->flags |= REQ_F_FORCE_ASYNC;
@@ -212,12 +216,14 @@ int io_symlinkat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	sl->oldpath = getname(oldpath);
 	if (IS_ERR(sl->oldpath))
 		return PTR_ERR(sl->oldpath);
+	makeatomicname(sl->oldpath);
 
 	sl->newpath = getname(newpath);
 	if (IS_ERR(sl->newpath)) {
 		putname(sl->oldpath);
 		return PTR_ERR(sl->newpath);
 	}
+	makeatomicname(sl->newpath);
 
 	req->flags |= REQ_F_NEED_CLEANUP;
 	req->flags |= REQ_F_FORCE_ASYNC;
@@ -257,12 +263,14 @@ int io_linkat_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	lnk->oldpath = getname_uflags(oldf, lnk->flags);
 	if (IS_ERR(lnk->oldpath))
 		return PTR_ERR(lnk->oldpath);
+	makeatomicname(lnk->oldpath);
 
 	lnk->newpath = getname(newf);
 	if (IS_ERR(lnk->newpath)) {
 		putname(lnk->oldpath);
 		return PTR_ERR(lnk->newpath);
 	}
+	makeatomicname(lnk->newpath);
 
 	req->flags |= REQ_F_NEED_CLEANUP;
 	req->flags |= REQ_F_FORCE_ASYNC;

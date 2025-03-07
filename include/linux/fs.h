@@ -2757,11 +2757,19 @@ struct audit_names;
 struct filename {
 	const char		*name;	/* pointer to actual string */
 	const __user char	*uptr;	/* original userland pointer */
-	atomic_t		refcnt;
+	union {
+		atomic_t	refcnt_atomic;
+		int		refcnt;
+	};
+#ifdef CONFIG_DEBUG_VFS
+	struct task_struct	*owner;
+#endif
+	bool			is_atomic;
 	struct audit_names	*aname;
 	const char		iname[];
 };
 static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);
+static_assert(sizeof(int) == sizeof(atomic_t)); /* refcount */
 
 static inline struct mnt_idmap *file_mnt_idmap(const struct file *file)
 {
@@ -2855,6 +2863,33 @@ static inline struct filename *getname_maybe_null(const char __user *name, int f
 }
 extern void putname(struct filename *name);
 DEFINE_FREE(putname, struct filename *, if (!IS_ERR_OR_NULL(_T)) putname(_T))
+
+static inline void makeatomicname(struct filename *name)
+{
+	VFS_BUG_ON(IS_ERR_OR_NULL(name));
+	/*
+	 * The name can legitimately already be atomic if it was cached by audit.
+	 * If switching the refcount to atomic, we need not to know we are the
+	 * only non-atomic user.
+	 */
+	VFS_BUG_ON(name->owner != current && !name->is_atomic);
+	/*
+	 * Don't bother branching, this is a store to an already dirtied cacheline.
+	 */
+	name->is_atomic = true;
+}
+
+static inline struct filename *refname(struct filename *name)
+{
+	VFS_BUG_ON(name->owner != current && !name->is_atomic);
+
+	if (name->is_atomic)
+		atomic_inc(&name->refcnt_atomic);
+	else
+		name->refcnt++;
+
+	return name;
+}
 
 extern int finish_open(struct file *file, struct dentry *dentry,
 			int (*open)(struct inode *, struct file *));

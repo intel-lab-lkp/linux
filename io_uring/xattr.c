@@ -96,6 +96,7 @@ int io_getxattr_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	ix->filename = getname(path);
 	if (IS_ERR(ix->filename))
 		return PTR_ERR(ix->filename);
+	makeatomicname(ix->filename);
 
 	return 0;
 }
@@ -172,6 +173,7 @@ int io_setxattr_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	ix->filename = getname(path);
 	if (IS_ERR(ix->filename))
 		return PTR_ERR(ix->filename);
+	makeatomicname(ix->filename);
 
 	return 0;
 }
