@@ -530,41 +530,6 @@ ice_devlink_reload_empr_finish(struct ice_pf *pf,
 }
 
 /**
- * ice_get_tx_topo_user_sel - Read user's choice from flash
- * @pf: pointer to pf structure
- * @layers: value read from flash will be saved here
- *
- * Reads user's preference for Tx Scheduler Topology Tree from PFA TLV.
- *
- * Return: zero when read was successful, negative values otherwise.
- */
-static int ice_get_tx_topo_user_sel(struct ice_pf *pf, uint8_t *layers)
-{
-	struct ice_aqc_nvm_tx_topo_user_sel usr_sel = {};
-	struct ice_hw *hw = &pf->hw;
-	int err;
-
-	err = ice_acquire_nvm(hw, ICE_RES_READ);
-	if (err)
-		return err;
-
-	err = ice_aq_read_nvm(hw, ICE_AQC_NVM_TX_TOPO_MOD_ID, 0,
-			      sizeof(usr_sel), &usr_sel, true, true, NULL);
-	if (err)
-		goto exit_release_res;
-
-	if (usr_sel.data & ICE_AQC_NVM_TX_TOPO_USER_SEL)
-		*layers = ICE_SCHED_5_LAYERS;
-	else
-		*layers = ICE_SCHED_9_LAYERS;
-
-exit_release_res:
-	ice_release_nvm(hw);
-
-	return err;
-}
-
-/**
  * ice_update_tx_topo_user_sel - Save user's preference in flash
  * @pf: pointer to pf structure
  * @layers: value to be saved in flash
@@ -610,19 +575,36 @@ exit_release_res:
  * @id: the parameter ID to set
  * @ctx: context to store the parameter value
  *
+ * Reads user's preference for Tx Scheduler Topology Tree from PFA TLV.
+ *
  * Return: zero on success and negative value on failure.
  */
 static int ice_devlink_tx_sched_layers_get(struct devlink *devlink, u32 id,
 					   struct devlink_param_gset_ctx *ctx)
 {
+	struct ice_aqc_nvm_tx_topo_user_sel usr_sel = {};
 	struct ice_pf *pf = devlink_priv(devlink);
+	struct ice_hw *hw = &pf->hw;
 	int err;
 
-	err = ice_get_tx_topo_user_sel(pf, &ctx->val.vu8);
+	err = ice_acquire_nvm(hw, ICE_RES_READ);
 	if (err)
 		return err;
 
-	return 0;
+	err = ice_aq_read_nvm(hw, ICE_AQC_NVM_TX_TOPO_MOD_ID, 0,
+			      sizeof(usr_sel), &usr_sel, true, true, NULL);
+	if (err)
+		goto exit_release_res;
+
+	if (usr_sel.data & ICE_AQC_NVM_TX_TOPO_USER_SEL)
+		ctx->val.vu8 = ICE_SCHED_5_LAYERS;
+	else
+		ctx->val.vu8 = ICE_SCHED_9_LAYERS;
+
+exit_release_res:
+	ice_release_nvm(hw);
+
+	return err;
 }
 
 /**
