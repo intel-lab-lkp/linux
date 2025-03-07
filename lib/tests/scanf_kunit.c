@@ -5,12 +5,11 @@
 
 #include <kunit/test.h>
 #include <linux/bitops.h>
-#include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/overflow.h>
 #include <linux/prandom.h>
 #include <linux/slab.h>
-#include <linux/string.h>
+#include <linux/sprintf.h>
 
 #define BUF_SIZE 1024
 
