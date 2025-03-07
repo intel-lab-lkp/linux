@@ -432,3 +432,14 @@ impl AsRef<device::Device> for Device {
         &self.0
     }
 }
+
+impl AsMut<device::Device> for Device {
+    fn as_mut(&mut self) -> &mut device::Device {
+        // SAFETY:
+        // - `self.0.as_raw()` is valid by the type invariant of `device::Device`,
+        // - `struct device` is embedded in `struct pci_dev`, hence it is safe to give out a
+        //    mutable reference for `device::Device` if we have a mutable reference to the
+        //    corresponding `pci::Device`.
+        unsafe { &mut *self.0.as_raw().cast() }
+    }
+}
