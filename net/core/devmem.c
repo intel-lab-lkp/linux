@@ -25,7 +25,7 @@
 
 /* Device memory support */
 
-/* Protected by rtnl_lock() */
+static DEFINE_MUTEX(net_devmem_bindings_mutex);
 static DEFINE_XARRAY_FLAGS(net_devmem_dmabuf_bindings, XA_FLAGS_ALLOC1);
 
 static const struct memory_provider_ops dmabuf_devmem_ops;
@@ -119,6 +119,10 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 	unsigned long xa_idx;
 	unsigned int rxq_idx;
 
+	mutex_lock(&net_devmem_bindings_mutex);
+	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
+	mutex_unlock(&net_devmem_bindings_mutex);
+
 	if (binding->list.next)
 		list_del(&binding->list);
 
@@ -132,8 +136,6 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 
 		WARN_ON(netdev_rx_queue_restart(binding->dev, rxq_idx));
 	}
-
-	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
 
 	net_devmem_dmabuf_binding_put(binding);
 }
@@ -220,24 +222,15 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 	}
 
 	binding->dev = dev;
-
-	err = xa_alloc_cyclic(&net_devmem_dmabuf_bindings, &binding->id,
-			      binding, xa_limit_32b, &id_alloc_next,
-			      GFP_KERNEL);
-	if (err < 0)
-		goto err_free_binding;
-
 	xa_init_flags(&binding->bound_rxqs, XA_FLAGS_ALLOC);
-
 	refcount_set(&binding->ref, 1);
-
 	binding->dmabuf = dmabuf;
 
 	binding->attachment = dma_buf_attach(binding->dmabuf, dev->dev.parent);
 	if (IS_ERR(binding->attachment)) {
 		err = PTR_ERR(binding->attachment);
 		NL_SET_ERR_MSG(extack, "Failed to bind dmabuf to device");
-		goto err_free_id;
+		goto err_free_binding;
 	}
 
 	binding->sgt = dma_buf_map_attachment_unlocked(binding->attachment,
@@ -305,6 +298,14 @@ net_devmem_bind_dmabuf(struct net_device *dev, unsigned int dmabuf_fd,
 		virtual += len;
 	}
 
+	mutex_lock(&net_devmem_bindings_mutex);
+	err = xa_alloc_cyclic(&net_devmem_dmabuf_bindings, &binding->id,
+			      binding, xa_limit_32b, &id_alloc_next,
+			      GFP_KERNEL);
+	mutex_unlock(&net_devmem_bindings_mutex);
+	if (err < 0)
+		goto err_free_chunks;
+
 	return binding;
 
 err_free_chunks:
@@ -316,8 +317,6 @@ err_unmap:
 					  DMA_FROM_DEVICE);
 err_detach:
 	dma_buf_detach(dmabuf, binding->attachment);
-err_free_id:
-	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
 err_free_binding:
 	kfree(binding);
 err_put_dmabuf:
