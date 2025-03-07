@@ -6,6 +6,7 @@
 #include <linux/dma-direction.h>
 #include <linux/ptr_ring.h>
 #include <linux/types.h>
+#include <linux/u64_stats_sync.h>
 #include <net/netmem.h>
 
 #define PP_FLAG_DMA_MAP		BIT(0) /* Should page_pool do the DMA
@@ -114,6 +115,7 @@ struct page_pool_alloc_stats {
 
 /**
  * struct page_pool_recycle_stats - recycling (freeing) statistics
+ * @syncp:	synchronisations point for updates.
  * @cached:	recycling placed page in the page pool cache
  * @cache_full:	page pool cache was full
  * @ring:	page placed into the ptr ring
@@ -121,11 +123,12 @@ struct page_pool_alloc_stats {
  * @released_refcnt:	page released (and not recycled) because refcnt > 1
  */
 struct page_pool_recycle_stats {
-	u64 cached;
-	u64 cache_full;
-	u64 ring;
-	u64 ring_full;
-	u64 released_refcnt;
+	struct u64_stats_sync syncp;
+	u64_stats_t cached;
+	u64_stats_t cache_full;
+	u64_stats_t ring;
+	u64_stats_t ring_full;
+	u64_stats_t released_refcnt;
 };
 
 /**

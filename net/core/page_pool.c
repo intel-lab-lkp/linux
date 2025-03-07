@@ -39,21 +39,27 @@ DEFINE_STATIC_KEY_FALSE(page_pool_mem_providers);
 #define BIAS_MAX	(LONG_MAX >> 1)
 
 #ifdef CONFIG_PAGE_POOL_STATS
-static DEFINE_PER_CPU(struct page_pool_recycle_stats, pp_system_recycle_stats);
+static DEFINE_PER_CPU(struct page_pool_recycle_stats, pp_system_recycle_stats) = {
+	U64_STATS_ZERO(.syncp, pp_system_recycle_stats),
+};
 
 /* alloc_stat_inc is intended to be used in softirq context */
 #define alloc_stat_inc(pool, __stat)	(pool->alloc_stats.__stat++)
 /* recycle_stat_inc is safe to use when preemption is possible. */
 #define recycle_stat_inc(pool, __stat)							\
 	do {										\
-		struct page_pool_recycle_stats __percpu *s = pool->recycle_stats;	\
-		this_cpu_inc(s->__stat);						\
+		struct page_pool_recycle_stats *s = this_cpu_ptr(pool->recycle_stats);	\
+		u64_stats_update_begin(&s->syncp);					\
+		u64_stats_inc(&s->__stat);						\
+		u64_stats_update_end(&s->syncp);					\
 	} while (0)
 
 #define recycle_stat_add(pool, __stat, val)						\
 	do {										\
-		struct page_pool_recycle_stats __percpu *s = pool->recycle_stats;	\
-		this_cpu_add(s->__stat, val);						\
+		struct page_pool_recycle_stats *s = this_cpu_ptr(pool->recycle_stats);	\
+		u64_stats_update_begin(&s->syncp);					\
+		u64_stats_add(&s->__stat, val);						\
+		u64_stats_update_end(&s->syncp);					\
 	} while (0)
 
 static const char pp_stats[][ETH_GSTRING_LEN] = {
@@ -98,6 +104,7 @@ static const char pp_stats_mq[][ETH_GSTRING_LEN] = {
 bool page_pool_get_stats(const struct page_pool *pool,
 			 struct page_pool_stats *stats)
 {
+	unsigned int start;
 	int cpu = 0;
 
 	if (!stats)
@@ -112,14 +119,24 @@ bool page_pool_get_stats(const struct page_pool *pool,
 	stats->alloc_stats.waive += pool->alloc_stats.waive;
 
 	for_each_possible_cpu(cpu) {
+		u64 cached, cache_full, ring, ring_full, released_refcnt;
 		const struct page_pool_recycle_stats *pcpu =
 			per_cpu_ptr(pool->recycle_stats, cpu);
 
-		stats->recycle_stats.cached += pcpu->cached;
-		stats->recycle_stats.cache_full += pcpu->cache_full;
-		stats->recycle_stats.ring += pcpu->ring;
-		stats->recycle_stats.ring_full += pcpu->ring_full;
-		stats->recycle_stats.released_refcnt += pcpu->released_refcnt;
+		do {
+			start = u64_stats_fetch_begin(&pcpu->syncp);
+			cached = u64_stats_read(&pcpu->cached);
+			cache_full = u64_stats_read(&pcpu->cache_full);
+			ring = u64_stats_read(&pcpu->ring);
+			ring_full = u64_stats_read(&pcpu->ring_full);
+			released_refcnt = u64_stats_read(&pcpu->released_refcnt);
+		} while (u64_stats_fetch_retry(&pcpu->syncp, start));
+
+		u64_stats_add(&stats->recycle_stats.cached, cached);
+		u64_stats_add(&stats->recycle_stats.cache_full, cache_full);
+		u64_stats_add(&stats->recycle_stats.ring, ring);
+		u64_stats_add(&stats->recycle_stats.ring_full, ring_full);
+		u64_stats_add(&stats->recycle_stats.released_refcnt, released_refcnt);
 	}
 
 	return true;
@@ -164,11 +181,11 @@ u64 *page_pool_ethtool_stats_get(u64 *data, const void *stats)
 	*data++ = pool_stats->alloc_stats.empty;
 	*data++ = pool_stats->alloc_stats.refill;
 	*data++ = pool_stats->alloc_stats.waive;
-	*data++ = pool_stats->recycle_stats.cached;
-	*data++ = pool_stats->recycle_stats.cache_full;
-	*data++ = pool_stats->recycle_stats.ring;
-	*data++ = pool_stats->recycle_stats.ring_full;
-	*data++ = pool_stats->recycle_stats.released_refcnt;
+	*data++ = u64_stats_read(&pool_stats->recycle_stats.cached);
+	*data++ = u64_stats_read(&pool_stats->recycle_stats.cache_full);
+	*data++ = u64_stats_read(&pool_stats->recycle_stats.ring);
+	*data++ = u64_stats_read(&pool_stats->recycle_stats.ring_full);
+	*data++ = u64_stats_read(&pool_stats->recycle_stats.released_refcnt);
 
 	return data;
 }
@@ -272,9 +289,14 @@ static int page_pool_init(struct page_pool *pool,
 
 #ifdef CONFIG_PAGE_POOL_STATS
 	if (!(pool->slow.flags & PP_FLAG_SYSTEM_POOL)) {
+		unsigned int cpu;
+
 		pool->recycle_stats = alloc_percpu(struct page_pool_recycle_stats);
 		if (!pool->recycle_stats)
 			return -ENOMEM;
+
+		for_each_possible_cpu(cpu)
+			u64_stats_init(&per_cpu_ptr(pool->recycle_stats, cpu)->syncp);
 	} else {
 		/* For system page pool instance we use a singular stats object
 		 * instead of allocating a separate percpu variable for each

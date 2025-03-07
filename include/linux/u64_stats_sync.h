@@ -94,6 +94,8 @@ static inline void u64_stats_inc(u64_stats_t *p)
 	local64_inc(&p->v);
 }
 
+#define U64_STATS_ZERO(_member, _name)	{}
+
 static inline void u64_stats_init(struct u64_stats_sync *syncp) { }
 static inline void __u64_stats_update_begin(struct u64_stats_sync *syncp) { }
 static inline void __u64_stats_update_end(struct u64_stats_sync *syncp) { }
@@ -140,6 +142,9 @@ static inline void u64_stats_inc(u64_stats_t *p)
 		struct u64_stats_sync *__s = (syncp);	\
 		seqcount_init(&__s->seq);		\
 	} while (0)
+
+#define U64_STATS_ZERO(_member, _name)			\
+	_member.seq	= SEQCNT_ZERO(#_name#_member.seq)
 
 static inline void __u64_stats_update_begin(struct u64_stats_sync *syncp)
 {

@@ -149,15 +149,15 @@ page_pool_nl_stats_fill(struct sk_buff *rsp, const struct page_pool *pool,
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_ALLOC_WAIVE,
 			 stats.alloc_stats.waive) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_CACHED,
-			 stats.recycle_stats.cached) ||
+			 u64_stats_read(&stats.recycle_stats.cached)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_CACHE_FULL,
-			 stats.recycle_stats.cache_full) ||
+			 u64_stats_read(&stats.recycle_stats.cache_full)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_RING,
-			 stats.recycle_stats.ring) ||
+			 u64_stats_read(&stats.recycle_stats.ring)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_RING_FULL,
-			 stats.recycle_stats.ring_full) ||
+			 u64_stats_read(&stats.recycle_stats.ring_full)) ||
 	    nla_put_uint(rsp, NETDEV_A_PAGE_POOL_STATS_RECYCLE_RELEASED_REFCNT,
-			 stats.recycle_stats.released_refcnt))
+			 u64_stats_read(&stats.recycle_stats.released_refcnt)))
 		goto err_cancel_msg;
 
 	genlmsg_end(rsp, hdr);

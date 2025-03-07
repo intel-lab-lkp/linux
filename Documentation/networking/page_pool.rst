@@ -181,11 +181,11 @@ Stats
 
 	#ifdef CONFIG_PAGE_POOL_STATS
 	/* retrieve stats */
-	struct page_pool_stats stats = { 0 };
+	struct page_pool_stats stats = { };
 	if (page_pool_get_stats(page_pool, &stats)) {
 		/* perhaps the driver reports statistics with ethool */
-		ethtool_print_allocation_stats(&stats.alloc_stats);
-		ethtool_print_recycle_stats(&stats.recycle_stats);
+		ethtool_print_allocation_stats(u64_stats_read(&stats.alloc_stats));
+		ethtool_print_recycle_stats(u64_stats_read(&stats.recycle_stats));
 	}
 	#endif
 
