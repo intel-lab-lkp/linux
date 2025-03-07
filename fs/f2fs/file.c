@@ -4985,6 +4985,7 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	const ssize_t count = iov_iter_count(from);
 	unsigned int dio_flags;
 	struct iomap_dio *dio;
+	const struct iomap_ops *iomap_ops = &f2fs_iomap_ops;
 	ssize_t ret;
 
 	trace_f2fs_direct_IO_enter(inode, iocb, count, WRITE);
@@ -5025,7 +5026,9 @@ static ssize_t f2fs_dio_write_iter(struct kiocb *iocb, struct iov_iter *from,
 	dio_flags = 0;
 	if (pos + count > inode->i_size)
 		dio_flags |= IOMAP_DIO_FORCE_WAIT;
-	dio = __iomap_dio_rw(iocb, from, &f2fs_iomap_ops,
+	else if (f2fs_overwrite_io(inode, pos, count))
+		iomap_ops = &f2fs_iomap_overwrite_ops;
+	dio = __iomap_dio_rw(iocb, from, iomap_ops,
 			     &f2fs_iomap_dio_write_ops, dio_flags, NULL, 0);
 	if (IS_ERR_OR_NULL(dio)) {
 		ret = PTR_ERR_OR_ZERO(dio);

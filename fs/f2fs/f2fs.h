@@ -3967,6 +3967,7 @@ void f2fs_destroy_post_read_processing(void);
 int f2fs_init_post_read_wq(struct f2fs_sb_info *sbi);
 void f2fs_destroy_post_read_wq(struct f2fs_sb_info *sbi);
 extern const struct iomap_ops f2fs_iomap_ops;
+extern const struct iomap_ops f2fs_iomap_overwrite_ops;
 
 static inline struct page *f2fs_find_data_page(struct inode *inode,
 		pgoff_t index, pgoff_t *next_pgofs)

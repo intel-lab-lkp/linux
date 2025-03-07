@@ -4267,6 +4267,26 @@ static int f2fs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	return 0;
 }
 
+static int f2fs_iomap_overwrite_begin(struct inode *inode, loff_t offset,
+		loff_t length, unsigned flags, struct iomap *iomap,
+		struct iomap *srcmap)
+{
+	int ret;
+
+	/*
+	 * Even for writes we don't need to allocate blocks, so just pretend
+	 * we are reading to save overhead of starting a transaction.
+	 */
+	flags &= ~IOMAP_WRITE;
+	ret = f2fs_iomap_begin(inode, offset, length, flags, iomap, srcmap);
+	WARN_ON_ONCE(!ret && iomap->type != IOMAP_MAPPED);
+	return ret;
+}
+
 const struct iomap_ops f2fs_iomap_ops = {
 	.iomap_begin	= f2fs_iomap_begin,
+};
+
+const struct iomap_ops f2fs_iomap_overwrite_ops = {
+	.iomap_begin	= f2fs_iomap_overwrite_begin,
 };
