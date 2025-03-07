@@ -987,6 +987,7 @@ static enum ucode_state _load_microcode_amd(u8 family, const u8 *data, size_t si
 
 static enum ucode_state load_microcode_amd(u8 family, const u8 *data, size_t size)
 {
+	const struct cpumask *mask;
 	struct cpuinfo_x86 *c;
 	unsigned int nid, cpu;
 	struct ucode_patch *p;
@@ -997,7 +998,11 @@ static enum ucode_state load_microcode_amd(u8 family, const u8 *data, size_t siz
 		return ret;
 
 	for_each_node(nid) {
-		cpu = cpumask_first(cpumask_of_node(nid));
+		mask = cpumask_of_node(nid);
+		if (cpumask_empty(mask))
+			continue;
+
+		cpu = cpumask_first(mask);
 		c = &cpu_data(cpu);
 
 		p = find_patch(cpu);
