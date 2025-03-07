@@ -95,14 +95,6 @@ static DEFINE_IDA(pci_endpoint_test_ida);
 #define to_endpoint_test(priv) container_of((priv), struct pci_endpoint_test, \
 					    miscdev)
 
-static bool no_msi;
-module_param(no_msi, bool, 0444);
-MODULE_PARM_DESC(no_msi, "Disable MSI interrupt in pci_endpoint_test");
-
-static int irq_type = IRQ_TYPE_MSI;
-module_param(irq_type, int, 0444);
-MODULE_PARM_DESC(irq_type, "IRQ mode selection in pci_endpoint_test (0 - Legacy, 1 - MSI, 2 - MSI-X)");
-
 enum pci_barno {
 	BAR_0,
 	BAR_1,
@@ -215,10 +207,9 @@ static void pci_endpoint_test_release_irq(struct pci_endpoint_test *test)
 {
 	int i;
 	struct pci_dev *pdev = test->pdev;
-	struct device *dev = &pdev->dev;
 
 	for (i = 0; i < test->num_irqs; i++)
-		devm_free_irq(dev, pci_irq_vector(pdev, i), test);
+		free_irq(pci_irq_vector(pdev, i), test);
 
 	test->num_irqs = 0;
 }
@@ -231,9 +222,9 @@ static int pci_endpoint_test_request_irq(struct pci_endpoint_test *test)
 	struct device *dev = &pdev->dev;
 
 	for (i = 0; i < test->num_irqs; i++) {
-		ret = devm_request_irq(dev, pci_irq_vector(pdev, i),
-				       pci_endpoint_test_irqhandler,
-				       IRQF_SHARED, test->name, test);
+		ret = request_irq(pci_irq_vector(pdev, i),
+				  pci_endpoint_test_irqhandler, IRQF_SHARED,
+				  test->name, test);
 		if (ret)
 			goto fail;
 	}
@@ -241,7 +232,7 @@ static int pci_endpoint_test_request_irq(struct pci_endpoint_test *test)
 	return 0;
 
 fail:
-	switch (irq_type) {
+	switch (test->irq_type) {
 	case IRQ_TYPE_INTX:
 		dev_err(dev, "Failed to request IRQ %d for Legacy\n",
 			pci_irq_vector(pdev, i));
@@ -258,6 +249,9 @@ fail:
 		break;
 	}
 
+	test->num_irqs = i;
+	pci_endpoint_test_release_irq(test);
+
 	return ret;
 }
 
@@ -271,9 +265,9 @@ static const u32 bar_test_pattern[] = {
 };
 
 static int pci_endpoint_test_bar_memcmp(struct pci_endpoint_test *test,
-					enum pci_barno barno, int offset,
-					void *write_buf, void *read_buf,
-					int size)
+					enum pci_barno barno,
+					resource_size_t offset, void *write_buf,
+					void *read_buf, int size)
 {
 	memset(write_buf, bar_test_pattern[barno], size);
 	memcpy_toio(test->bar[barno] + offset, write_buf, size);
@@ -286,15 +280,18 @@ static int pci_endpoint_test_bar_memcmp(struct pci_endpoint_test *test,
 static int pci_endpoint_test_bar(struct pci_endpoint_test *test,
 				  enum pci_barno barno)
 {
-	int j, bar_size, buf_size, iters;
+	resource_size_t bar_size, offset = 0;
 	void *write_buf __free(kfree) = NULL;
 	void *read_buf __free(kfree) = NULL;
 	struct pci_dev *pdev = test->pdev;
+	int buf_size;
+
+	bar_size = pci_resource_len(pdev, barno);
+	if (!bar_size)
+		return -ENODATA;
 
 	if (!test->bar[barno])
 		return -ENOMEM;
-
-	bar_size = pci_resource_len(pdev, barno);
 
 	if (barno == test->test_reg_bar)
 		bar_size = 0x4;
@@ -313,11 +310,12 @@ static int pci_endpoint_test_bar(struct pci_endpoint_test *test,
 	if (!read_buf)
 		return -ENOMEM;
 
-	iters = bar_size / buf_size;
-	for (j = 0; j < iters; j++)
-		if (pci_endpoint_test_bar_memcmp(test, barno, buf_size * j,
-						 write_buf, read_buf, buf_size))
+	while (offset < bar_size) {
+		if (pci_endpoint_test_bar_memcmp(test, barno, offset, write_buf,
+						 read_buf, buf_size))
 			return -EIO;
+		offset += buf_size;
+	}
 
 	return 0;
 }
@@ -381,7 +379,7 @@ static int pci_endpoint_test_bars_read_bar(struct pci_endpoint_test *test,
 static int pci_endpoint_test_bars(struct pci_endpoint_test *test)
 {
 	enum pci_barno bar;
-	bool ret;
+	int ret;
 
 	/* Write all BARs in order (without reading). */
 	for (bar = 0; bar < PCI_STD_NUM_BARS; bar++)
@@ -397,7 +395,7 @@ static int pci_endpoint_test_bars(struct pci_endpoint_test *test)
 	for (bar = 0; bar < PCI_STD_NUM_BARS; bar++) {
 		if (test->bar[bar]) {
 			ret = pci_endpoint_test_bars_read_bar(test, bar);
-			if (!ret)
+			if (ret)
 				return ret;
 		}
 	}
@@ -873,7 +871,7 @@ static long pci_endpoint_test_ioctl(struct file *file, unsigned int cmd,
 		ret = pci_endpoint_test_set_irq(test, arg);
 		break;
 	case PCITEST_GET_IRQTYPE:
-		ret = irq_type;
+		ret = test->irq_type;
 		break;
 	case PCITEST_CLEAR_IRQ:
 		ret = pci_endpoint_test_clear_irq(test);
@@ -909,7 +907,7 @@ static int pci_endpoint_test_probe(struct pci_dev *pdev,
 {
 	int ret;
 	int id;
-	char name[24];
+	char name[29];
 	enum pci_barno bar;
 	void __iomem *base;
 	struct device *dev = &pdev->dev;
@@ -930,15 +928,12 @@ static int pci_endpoint_test_probe(struct pci_dev *pdev,
 	test->pdev = pdev;
 	test->irq_type = IRQ_TYPE_UNDEFINED;
 
-	if (no_msi)
-		irq_type = IRQ_TYPE_INTX;
-
 	data = (struct pci_endpoint_test_data *)ent->driver_data;
 	if (data) {
 		test_reg_bar = data->test_reg_bar;
 		test->test_reg_bar = test_reg_bar;
 		test->alignment = data->alignment;
-		irq_type = data->irq_type;
+		test->irq_type = data->irq_type;
 	}
 
 	init_completion(&test->irq_raised);
@@ -960,7 +955,7 @@ static int pci_endpoint_test_probe(struct pci_dev *pdev,
 
 	pci_set_master(pdev);
 
-	ret = pci_endpoint_test_alloc_irq_vectors(test, irq_type);
+	ret = pci_endpoint_test_alloc_irq_vectors(test, test->irq_type);
 	if (ret)
 		goto err_disable_irq;
 
