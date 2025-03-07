@@ -1,0 +1,259 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/sound/mediatek,mt8196-afe.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Audio Front End PCM controller for MT8196
+
+maintainers:
+  - Darren Ye <darren.ye@mediatek.com>
+
+properties:
+  compatible:
+    const: mediatek,mt8196-afe-pcm
+
+  reg:
+    maxItems: 1
+
+  "#sound-dai-cells":
+    const: 0
+
+  clocks:
+    items:
+      - description: audio hopping clock
+      - description: audio f26m clock
+      - description: audio ul0 adc clock
+      - description: audio ul0 adc hires clock
+      - description: audio ul1 adc clock
+      - description: audio ul1 adc hires clock
+      - description: audio apll1 clock
+      - description: audio apll2 clock
+      - description: audio apll tuner1 clock
+      - description: audio apll tuner2 clock
+      - description: vlp mux audio int
+      - description: vlp mux aud engen1
+      - description: vlp mux aud engen2
+      - description: vlp mux audio h
+      - description: vlp clock 26m
+      - description: ck mainpll d4 d4
+      - description: ck mux aud 1
+      - description: ck apll1
+      - description: ck mux aud 2
+      - description: ck apll2
+      - description: ck apll1 d4
+      - description: ck apll2 d4
+      - description: ck i2sin0 m sel
+      - description: ck i2sin1 m sel
+      - description: ck fmi2s m sel
+      - description: ck tdmout m sel
+      - description: ck apll12 div i2sin0
+      - description: ck apll12 div i2sin1
+      - description: ck apll12 div fmi2s
+      - description: ck apll12 div tdmout m
+      - description: ck apll12 div tdmout b
+      - description: ck adsp sel
+      - description: ck clock 26m
+
+  clock-names:
+    items:
+      - const: aud_hopping_clk
+      - const: aud_f26m_clk
+      - const: aud_ul0_adc_clk
+      - const: aud_ul0_adc_hires_clk
+      - const: aud_ul1_adc_clk
+      - const: aud_ul1_adc_hires_clk
+      - const: aud_apll1_clk
+      - const: aud_apll2_clk
+      - const: aud_apll_tuner1_clk
+      - const: aud_apll_tuner2_clk
+      - const: vlp_mux_audio_int
+      - const: vlp_mux_aud_eng1
+      - const: vlp_mux_aud_eng2
+      - const: vlp_mux_audio_h
+      - const: vlp_clk26m_clk
+      - const: ck_mainpll_d4_d4
+      - const: ck_mux_aud_1
+      - const: ck_apll1_ck
+      - const: ck_mux_aud_2
+      - const: ck_apll2_ck
+      - const: ck_apll1_d4
+      - const: ck_apll2_d4
+      - const: ck_i2sin0_m_sel
+      - const: ck_i2sin1_m_sel
+      - const: ck_fmi2s_m_sel
+      - const: ck_tdmout_m_sel
+      - const: ck_apll12_div_i2sin0
+      - const: ck_apll12_div_i2sin1
+      - const: ck_apll12_div_fmi2s
+      - const: ck_apll12_div_tdmout_m
+      - const: ck_apll12_div_tdmout_b
+      - const: ck_adsp_sel
+      - const: ck_clk26m_clk
+
+  interrupts:
+    maxItems: 1
+
+  power-domains:
+    maxItems: 1
+
+  cksys:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the cksys clock controller.
+
+  vlpcksys:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the vlpcksys clock controller.
+
+  memory-region:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the reserved memory region for AFE DMA.
+
+  pinctrl-names:
+    items:
+      - const: default
+
+  pinctrl-0:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the pin control group for default state.
+
+  mediatek,etdm-out-ch:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Number of ETDM output channels.
+    enum: [2]
+
+  mediatek,etdm-in-ch:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: Number of ETDM input channels.
+    enum: [2]
+
+  mediatek,etdm-out-sync:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: ETDM output synchronization.
+    enum: [0, 1]
+
+  mediatek,etdm-in-sync:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: ETDM input synchronization.
+    enum: [0, 1]
+
+  mediatek,etdm-ip-mode:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: ETDM IP mode.
+    enum: [0, 1]
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - interrupts
+  - power-domains
+  - cksys
+  - vlpcksys
+  - memory-region
+  - pinctrl-names
+  - pinctrl-0
+  - mediatek,etdm-out-ch
+  - mediatek,etdm-in-ch
+  - mediatek,etdm-out-sync
+  - mediatek,etdm-in-sync
+  - mediatek,etdm-ip-mode
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/mt8196-clk.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    #include <dt-bindings/power/mt8196-power.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        afe: mt8196-afe-pcm@1a110000 {
+            compatible = "mediatek,mt8196-afe-pcm";
+            reg = <0 0x1a110000 0 0x9000>;
+            interrupts = <GIC_SPI 351 IRQ_TYPE_LEVEL_HIGH 0>;
+            cksys = <&cksys_clk>;
+            vlpcksys = <&vlp_cksys_clk>;
+            power-domains = <&scpsys MT8196_POWER_DOMAIN_AUDIO>;
+            memory-region = <&afe_dma_mem_reserved>;
+            pinctrl-names = "default";
+            pinctrl-0 = <&aud_pins_default>;
+            /* Only for ETDM in/out 4 */
+            mediatek,etdm-out-ch = <2>;
+            mediatek,etdm-in-ch = <2>;
+            mediatek,etdm-out-sync = <0>;
+            mediatek,etdm-in-sync = <1>;
+            mediatek,etdm-ip-mode = <0>;
+            clocks = <&afe_clk CLK_AFE_AUDIO_HOPPING_AFE>,
+                     <&afe_clk CLK_AFE_AUDIO_F26M_AFE>,
+                     <&afe_clk CLK_AFE_UL0_ADC_AFE>,
+                     <&afe_clk CLK_AFE_UL0_ADC_HIRES_AFE>,
+                     <&afe_clk CLK_AFE_UL1_ADC_AFE>,
+                     <&afe_clk CLK_AFE_UL1_ADC_HIRES_AFE>,
+                     <&afe_clk CLK_AFE_APLL1_AFE>,
+                     <&afe_clk CLK_AFE_APLL2_AFE>,
+                     <&afe_clk CLK_AFE_APLL_TUNER1_AFE>,
+                     <&afe_clk CLK_AFE_APLL_TUNER2_AFE>,
+                     <&vlp_cksys_clk CLK_VLP_CK_AUD_INTBUS_SEL>,
+                     <&vlp_cksys_clk CLK_VLP_CK_AUD_ENGEN1_SEL>,
+                     <&vlp_cksys_clk CLK_VLP_CK_AUD_ENGEN2_SEL>,
+                     <&vlp_cksys_clk CLK_VLP_CK_AUDIO_H_SEL>,
+                     <&vlp_cksys_clk CLK_VLP_CK_CLKSQ>,
+                     <&cksys_clk CLK_CK_MAINPLL_D4_D4>,
+                     <&cksys_clk CLK_CK_AUD_1_SEL>,
+                     <&cksys_clk CLK_CK_APLL1>,
+                     <&cksys_clk CLK_CK_AUD_2_SEL>,
+                     <&cksys_clk CLK_CK_APLL2>,
+                     <&cksys_clk CLK_CK_APLL1_D4>,
+                     <&cksys_clk CLK_CK_APLL2_D4>,
+                     <&cksys_clk CLK_CK_APLL_I2SIN0_MCK_SEL>,
+                     <&cksys_clk CLK_CK_APLL_I2SIN1_MCK_SEL>,
+                     <&cksys_clk CLK_CK_APLL_FMI2S_MCK_SEL>,
+                     <&cksys_clk CLK_CK_APLL_TDMOUT_MCK_SEL>,
+                     <&cksys_clk CLK_CK_APLL12_CK_DIV_I2SIN0>,
+                     <&cksys_clk CLK_CK_APLL12_CK_DIV_I2SIN1>,
+                     <&cksys_clk CLK_CK_APLL12_CK_DIV_FMI2S>,
+                     <&cksys_clk CLK_CK_APLL12_CK_DIV_TDMOUT_M>,
+                     <&cksys_clk CLK_CK_APLL12_CK_DIV_TDMOUT_B>,
+                     <&cksys_clk CLK_CK_ADSP_SEL>,
+                     <&cksys_clk CLK_CK_TCK_26M_MX9>;
+            clock-names = "aud_hopping_clk",
+                          "aud_f26m_clk",
+                          "aud_ul0_adc_clk",
+                          "aud_ul0_adc_hires_clk",
+                          "aud_ul1_adc_clk",
+                          "aud_ul1_adc_hires_clk",
+                          "aud_apll1_clk",
+                          "aud_apll2_clk",
+                          "aud_apll_tuner1_clk",
+                          "aud_apll_tuner2_clk",
+                          "vlp_mux_audio_int",
+                          "vlp_mux_aud_eng1",
+                          "vlp_mux_aud_eng2",
+                          "vlp_mux_audio_h",
+                          "vlp_clk26m_clk",
+                          "ck_mainpll_d4_d4",
+                          "ck_mux_aud_1",
+                          "ck_apll1_ck",
+                          "ck_mux_aud_2",
+                          "ck_apll2_ck",
+                          "ck_apll1_d4",
+                          "ck_apll2_d4",
+                          "ck_i2sin0_m_sel",
+                          "ck_i2sin1_m_sel",
+                          "ck_fmi2s_m_sel",
+                          "ck_tdmout_m_sel",
+                          "ck_apll12_div_i2sin0",
+                          "ck_apll12_div_i2sin1",
+                          "ck_apll12_div_fmi2s",
+                          "ck_apll12_div_tdmout_m",
+                          "ck_apll12_div_tdmout_b",
+                          "ck_adsp_sel",
+                          "ck_clk26m_clk";
+        };
+    };
