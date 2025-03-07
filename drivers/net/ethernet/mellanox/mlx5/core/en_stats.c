@@ -37,9 +37,7 @@
 #include "en/ptp.h"
 #include "en/port.h"
 
-#ifdef CONFIG_PAGE_POOL_STATS
 #include <net/page_pool/helpers.h>
-#endif
 
 void mlx5e_ethtool_put_stat(u64 **data, u64 val)
 {
@@ -196,19 +194,6 @@ static const struct counter_desc sw_stats_desc[] = {
 	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_arfs_err) },
 #endif
 	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_recover) },
-#ifdef CONFIG_PAGE_POOL_STATS
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_alloc_fast) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_alloc_slow) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_alloc_slow_high_order) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_alloc_empty) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_alloc_refill) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_alloc_waive) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_recycle_cached) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_recycle_cache_full) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_recycle_ring) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_recycle_ring_full) },
-	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_pp_recycle_released_ref) },
-#endif
 #ifdef CONFIG_MLX5_EN_TLS
 	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_tls_decrypted_packets) },
 	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_tls_decrypted_bytes) },
@@ -257,7 +242,7 @@ static const struct counter_desc sw_stats_desc[] = {
 
 static MLX5E_DECLARE_STATS_GRP_OP_NUM_STATS(sw)
 {
-	return NUM_SW_COUNTERS;
+	return NUM_SW_COUNTERS + page_pool_ethtool_stats_get_count();
 }
 
 static MLX5E_DECLARE_STATS_GRP_OP_FILL_STRS(sw)
@@ -266,6 +251,7 @@ static MLX5E_DECLARE_STATS_GRP_OP_FILL_STRS(sw)
 
 	for (i = 0; i < NUM_SW_COUNTERS; i++)
 		ethtool_puts(data, sw_stats_desc[i].format);
+	*data = page_pool_ethtool_stats_get_strings(*data);
 }
 
 static MLX5E_DECLARE_STATS_GRP_OP_FILL_STATS(sw)
@@ -276,6 +262,7 @@ static MLX5E_DECLARE_STATS_GRP_OP_FILL_STATS(sw)
 		mlx5e_ethtool_put_stat(data,
 				       MLX5E_READ_CTR64_CPU(&priv->stats.sw,
 							    sw_stats_desc, i));
+	*data = page_pool_ethtool_stats_get(*data, &priv->stats.sw.page_pool_stats);
 }
 
 static void mlx5e_stats_grp_sw_update_stats_xdp_red(struct mlx5e_sw_stats *s,
@@ -377,19 +364,6 @@ static void mlx5e_stats_grp_sw_update_stats_rq_stats(struct mlx5e_sw_stats *s,
 	s->rx_arfs_err                += rq_stats->arfs_err;
 #endif
 	s->rx_recover                 += rq_stats->recover;
-#ifdef CONFIG_PAGE_POOL_STATS
-	s->rx_pp_alloc_fast          += rq_stats->pp_alloc_fast;
-	s->rx_pp_alloc_slow          += rq_stats->pp_alloc_slow;
-	s->rx_pp_alloc_empty         += rq_stats->pp_alloc_empty;
-	s->rx_pp_alloc_refill        += rq_stats->pp_alloc_refill;
-	s->rx_pp_alloc_waive         += rq_stats->pp_alloc_waive;
-	s->rx_pp_alloc_slow_high_order		+= rq_stats->pp_alloc_slow_high_order;
-	s->rx_pp_recycle_cached			+= rq_stats->pp_recycle_cached;
-	s->rx_pp_recycle_cache_full		+= rq_stats->pp_recycle_cache_full;
-	s->rx_pp_recycle_ring			+= rq_stats->pp_recycle_ring;
-	s->rx_pp_recycle_ring_full		+= rq_stats->pp_recycle_ring_full;
-	s->rx_pp_recycle_released_ref		+= rq_stats->pp_recycle_released_ref;
-#endif
 #ifdef CONFIG_MLX5_EN_TLS
 	s->rx_tls_decrypted_packets   += rq_stats->tls_decrypted_packets;
 	s->rx_tls_decrypted_bytes     += rq_stats->tls_decrypted_bytes;
@@ -496,34 +470,14 @@ static void mlx5e_stats_grp_sw_update_stats_qos(struct mlx5e_priv *priv,
 	}
 }
 
-#ifdef CONFIG_PAGE_POOL_STATS
-static void mlx5e_stats_update_stats_rq_page_pool(struct mlx5e_channel *c)
+static void mlx5e_stats_update_stats_rq_page_pool(struct mlx5e_sw_stats *s,
+						  struct mlx5e_channel *c)
 {
 	struct mlx5e_rq_stats *rq_stats = c->rq.stats;
-	struct page_pool *pool = c->rq.page_pool;
-	struct page_pool_stats stats = { 0 };
 
-	if (!page_pool_get_stats(pool, &stats))
-		return;
-
-	rq_stats->pp_alloc_fast = stats.alloc_stats.fast;
-	rq_stats->pp_alloc_slow = stats.alloc_stats.slow;
-	rq_stats->pp_alloc_slow_high_order = stats.alloc_stats.slow_high_order;
-	rq_stats->pp_alloc_empty = stats.alloc_stats.empty;
-	rq_stats->pp_alloc_waive = stats.alloc_stats.waive;
-	rq_stats->pp_alloc_refill = stats.alloc_stats.refill;
-
-	rq_stats->pp_recycle_cached = stats.recycle_stats.cached;
-	rq_stats->pp_recycle_cache_full = stats.recycle_stats.cache_full;
-	rq_stats->pp_recycle_ring = stats.recycle_stats.ring;
-	rq_stats->pp_recycle_ring_full = stats.recycle_stats.ring_full;
-	rq_stats->pp_recycle_released_ref = stats.recycle_stats.released_refcnt;
+	page_pool_get_stats(c->rq.page_pool, &s->page_pool_stats);
+	page_pool_get_stats(c->rq.page_pool, &rq_stats->page_pool_stats);
 }
-#else
-static void mlx5e_stats_update_stats_rq_page_pool(struct mlx5e_channel *c)
-{
-}
-#endif
 
 static MLX5E_DECLARE_STATS_GRP_OP_UPDATE_STATS(sw)
 {
@@ -532,15 +486,13 @@ static MLX5E_DECLARE_STATS_GRP_OP_UPDATE_STATS(sw)
 
 	memset(s, 0, sizeof(*s));
 
-	for (i = 0; i < priv->channels.num; i++) /* for active channels only */
-		mlx5e_stats_update_stats_rq_page_pool(priv->channels.c[i]);
-
 	for (i = 0; i < priv->stats_nch; i++) {
 		struct mlx5e_channel_stats *channel_stats =
 			priv->channel_stats[i];
 
 		int j;
 
+		mlx5e_stats_update_stats_rq_page_pool(s, priv->channels.c[i]);
 		mlx5e_stats_grp_sw_update_stats_rq_stats(s, &channel_stats->rq);
 		mlx5e_stats_grp_sw_update_stats_xdpsq(s, &channel_stats->rq_xdpsq);
 		mlx5e_stats_grp_sw_update_stats_ch_stats(s, &channel_stats->ch);
@@ -2086,19 +2038,6 @@ static const struct counter_desc rq_stats_desc[] = {
 	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, arfs_err) },
 #endif
 	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, recover) },
-#ifdef CONFIG_PAGE_POOL_STATS
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_alloc_fast) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_alloc_slow) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_alloc_slow_high_order) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_alloc_empty) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_alloc_refill) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_alloc_waive) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_recycle_cached) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_recycle_cache_full) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_recycle_ring) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_recycle_ring_full) },
-	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, pp_recycle_released_ref) },
-#endif
 #ifdef CONFIG_MLX5_EN_TLS
 	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, tls_decrypted_packets) },
 	{ MLX5E_DECLARE_RX_STAT(struct mlx5e_rq_stats, tls_decrypted_bytes) },
@@ -2446,7 +2385,8 @@ static MLX5E_DECLARE_STATS_GRP_OP_NUM_STATS(channels)
 	       (NUM_RQ_XDPSQ_STATS * max_nch) +
 	       (NUM_XDPSQ_STATS * max_nch) +
 	       (NUM_XSKRQ_STATS * max_nch * priv->xsk.ever_used) +
-	       (NUM_XSKSQ_STATS * max_nch * priv->xsk.ever_used);
+	       (NUM_XSKSQ_STATS * max_nch * priv->xsk.ever_used) +
+	       page_pool_ethtool_stats_get_count() * max_nch;
 }
 
 static MLX5E_DECLARE_STATS_GRP_OP_FILL_STRS(channels)
@@ -2462,6 +2402,7 @@ static MLX5E_DECLARE_STATS_GRP_OP_FILL_STRS(channels)
 	for (i = 0; i < max_nch; i++) {
 		for (j = 0; j < NUM_RQ_STATS; j++)
 			ethtool_sprintf(data, rq_stats_desc[j].format, i);
+		page_pool_ethtool_stats_get_strings_mq(data, i);
 		for (j = 0; j < NUM_XSKRQ_STATS * is_xsk; j++)
 			ethtool_sprintf(data, xskrq_stats_desc[j].format, i);
 		for (j = 0; j < NUM_RQ_XDPSQ_STATS; j++)
@@ -2496,11 +2437,13 @@ static MLX5E_DECLARE_STATS_GRP_OP_FILL_STATS(channels)
 					      ch_stats_desc, j));
 
 	for (i = 0; i < max_nch; i++) {
+		struct mlx5e_rq_stats *rq_stats = &priv->channel_stats[i]->rq;
+
 		for (j = 0; j < NUM_RQ_STATS; j++)
 			mlx5e_ethtool_put_stat(
-				data, MLX5E_READ_CTR64_CPU(
-					      &priv->channel_stats[i]->rq,
+				data, MLX5E_READ_CTR64_CPU(rq_stats,
 					      rq_stats_desc, j));
+		*data = page_pool_ethtool_stats_get(*data, &rq_stats->page_pool_stats);
 		for (j = 0; j < NUM_XSKRQ_STATS * is_xsk; j++)
 			mlx5e_ethtool_put_stat(
 				data, MLX5E_READ_CTR64_CPU(
