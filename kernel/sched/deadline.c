@@ -2704,6 +2704,7 @@ static int push_dl_task(struct rq *rq)
 {
 	struct task_struct *next_task;
 	struct rq *later_rq;
+	struct task_struct *task;
 	int ret = 0;
 
 	next_task = pick_next_pushable_dl_task(rq);
@@ -2734,15 +2735,30 @@ retry:
 
 	/* Will lock the rq it'll find */
 	later_rq = find_lock_later_rq(next_task, rq);
-	if (!later_rq) {
-		struct task_struct *task;
+	task = pick_next_pushable_dl_task(rq);
+	if (later_rq && (!task || task != next_task)) {
+		/*
+		 * We must check all this again, since
+		 * find_lock_later_rq releases rq->lock and it is
+		 * then possible that next_task has migrated and
+		 * is no longer at the head of the pushable list.
+		 */
+		double_unlock_balance(rq, later_rq);
+		if (!task) {
+			/* No more tasks */
+			goto out;
+		}
 
+		put_task_struct(next_task);
+		next_task = task;
+		goto retry;
+	}
+	if (!later_rq) {
 		/*
 		 * We must check all this again, since
 		 * find_lock_later_rq releases rq->lock and it is
 		 * then possible that next_task has migrated.
 		 */
-		task = pick_next_pushable_dl_task(rq);
 		if (task == next_task) {
 			/*
 			 * The task is still there. We don't try
@@ -2751,9 +2767,10 @@ retry:
 			goto out;
 		}
 
-		if (!task)
+		if (!task) {
 			/* No more tasks */
 			goto out;
+		}
 
 		put_task_struct(next_task);
 		next_task = task;
