@@ -29,6 +29,7 @@ struct mtk_pll_data {
 	u32 reg;
 	u32 pwr_reg;
 	u32 en_mask;
+	u32 fenc_sta_ofs;
 	u32 pd_reg;
 	u32 tuner_reg;
 	u32 tuner_en_reg;
@@ -49,6 +50,7 @@ struct mtk_pll_data {
 	u32 en_reg;
 	u8 pll_en_bit; /* Assume 0, indicates BIT(0) by default */
 	u8 pcw_chg_bit;
+	u8 fenc_sta_bit;
 };
 
 /*
@@ -69,6 +71,9 @@ struct mtk_clk_pll {
 	void __iomem	*pcw_chg_addr;
 	void __iomem	*en_addr;
 	const struct mtk_pll_data *data;
+	void __iomem	*fenc_addr;
+	u32		fenc_mask;
+	u32		onoff_cnt;
 };
 
 int mtk_clk_register_plls(struct device_node *node,
