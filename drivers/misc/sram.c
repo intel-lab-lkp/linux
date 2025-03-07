@@ -410,8 +410,13 @@ static int sram_probe(struct platform_device *pdev)
 	if (IS_ERR(clk))
 		return PTR_ERR(clk);
 
-	ret = sram_reserve_regions(sram,
-			platform_get_resource(pdev, IORESOURCE_MEM, 0));
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (unlikely(res == NULL)) {
+		dev_err(&pdev->dev, "invalid resource\n");
+		return -EINVAL;
+	}
+
+	ret = sram_reserve_regions(sram, res);
 	if (ret)
 		return ret;
 
