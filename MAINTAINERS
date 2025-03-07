@@ -11604,6 +11604,11 @@ F:	drivers/gpu/drm/xe/
 F:	include/drm/intel/
 F:	include/uapi/drm/xe_drm.h
 
+INTEL EHL PSE GPIO MFD DRIVER
+M:	Raag Jadav <raag.jadav@intel.com>
+S:	Supported
+F:	drivers/mfd/intel_ehl_pse_gpio.c
+
 INTEL ETHERNET DRIVERS
 M:	Tony Nguyen <anthony.l.nguyen@intel.com>
 M:	Przemek Kitszel <przemyslaw.kitszel@intel.com>

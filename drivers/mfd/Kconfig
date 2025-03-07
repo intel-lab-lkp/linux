@@ -597,6 +597,18 @@ config MFD_HI655X_PMIC
 	help
 	  Select this option to enable Hisilicon hi655x series pmic driver.
 
+config MFD_INTEL_EHL_PSE_GPIO
+	tristate "Intel Elkhart Lake PSE GPIO MFD"
+	depends on PCI && (X86 || COMPILE_TEST)
+	select MFD_CORE
+	help
+	  This MFD provides support for GPIO and TIO that exist on Intel
+	  Elkhart Lake PSE as a single PCI device. It splits the two I/O
+	  devices to their respective I/O drivers.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called intel_ehl_pse_gpio.
+
 config MFD_INTEL_QUARK_I2C_GPIO
 	tristate "Intel Quark MFD I2C GPIO"
 	depends on PCI
