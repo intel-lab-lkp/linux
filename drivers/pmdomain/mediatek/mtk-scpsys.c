@@ -31,6 +31,8 @@
 #define MTK_RTFF_DELAY_US		10
 #define MTK_STABLE_DELAY_US		100
 
+#define MTK_BUS_PROTECTION_RETY_TIMES	10
+
 #define MTK_SCPD_ACTIVE_WAKEUP		BIT(0)
 #define MTK_SCPD_FWAIT_SRAM		BIT(1)
 #define MTK_SCPD_SRAM_ISO		BIT(2)
@@ -106,6 +108,24 @@
 #define PWR_STATUS_HIF1			BIT(26)	/* MT7622 */
 #define PWR_STATUS_WB			BIT(27)	/* MT7622 */
 
+#define _BUS_PROT(_type, _set_ofs, _clr_ofs,			\
+		_en_ofs, _sta_ofs, _mask, _ack_mask,		\
+		_ignore_clr_ack) {				\
+		.type = _type,					\
+		.set_ofs = _set_ofs,				\
+		.clr_ofs = _clr_ofs,				\
+		.en_ofs = _en_ofs,				\
+		.sta_ofs = _sta_ofs,				\
+		.mask = _mask,					\
+		.ack_mask = _ack_mask,				\
+		.ignore_clr_ack = _ignore_clr_ack,		\
+	}
+
+#define BUS_PROT_IGN(_type, _set_ofs, _clr_ofs,	\
+		_en_ofs, _sta_ofs, _mask)		\
+		_BUS_PROT(_type, _set_ofs, _clr_ofs,	\
+		_en_ofs, _sta_ofs, _mask, _mask, true)
+
 enum clk_id {
 	CLK_NONE,
 	CLK_MM,
@@ -135,6 +155,18 @@ static const char * const clk_names[] = {
 };
 
 #define MAX_CLKS	3
+#define MAX_STEPS	3
+
+struct bus_prot {
+	u32 type;
+	u32 set_ofs;
+	u32 clr_ofs;
+	u32 en_ofs;
+	u32 sta_ofs;
+	u32 mask;
+	u32 ack_mask;
+	bool ignore_clr_ack;
+};
 
 /**
  * struct scp_domain_data - scp domain data for power on/off flow
@@ -157,6 +189,7 @@ static const char * const clk_names[] = {
  * @sram_slp_ack_bits: The mask for sram low power control acked bits.
  * @bus_prot_mask: The mask for single step bus protection.
  * @clk_id: The basic clocks required by this power domain.
+ * @bp_table: The bus protect configs for the power domain.
  * @caps: The flag for active wake-up action.
  */
 struct scp_domain_data {
@@ -179,6 +212,7 @@ struct scp_domain_data {
 	u32 sram_slp_ack_bits;
 	u32 bus_prot_mask;
 	enum clk_id clk_id[MAX_CLKS];
+	struct bus_prot bp_table[MAX_STEPS];
 	u32 caps;
 };
 
@@ -207,6 +241,8 @@ struct scp {
 	struct regmap *infracfg;
 	struct scp_ctrl_reg ctrl_reg;
 	bool bus_prot_reg_update;
+	struct regmap **bp_regmap;
+	int num_bp;
 };
 
 struct scp_subdomain {
@@ -221,6 +257,8 @@ struct scp_soc_data {
 	int num_subdomains;
 	const struct scp_ctrl_reg regs;
 	bool bus_prot_reg_update;
+	const char **bp_list;
+	int num_bp;
 };
 
 static int scpsys_domain_is_on(struct scp_domain *scpd)
@@ -375,9 +413,120 @@ static int scpsys_sram_disable(struct scp_domain *scpd, void __iomem *ctl_addr)
 			MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
 }
 
+static int set_bus_protection(struct regmap *map, struct bus_prot *bp)
+{
+	u32 val = 0;
+	int retry = 0;
+	int ret = 0;
+
+	while (retry <= MTK_BUS_PROTECTION_RETY_TIMES) {
+		if (bp->set_ofs)
+			regmap_write(map,  bp->set_ofs, bp->mask);
+		else
+			regmap_update_bits(map, bp->en_ofs, bp->mask, bp->mask);
+
+		/* check bus protect enable setting */
+		regmap_read(map, bp->en_ofs, &val);
+		if ((val & bp->mask) == bp->mask)
+			break;
+
+		retry++;
+	}
+
+	ret = regmap_read_poll_timeout_atomic(map, bp->sta_ofs, val,
+					      (val & bp->ack_mask) == bp->ack_mask,
+					      MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
+	if (ret < 0) {
+		pr_err("%s val=0x%x, mask=0x%x, (val & mask)=0x%x\n",
+		       __func__, val, bp->ack_mask, (val & bp->ack_mask));
+	}
+
+	return ret;
+}
+
+static int clear_bus_protection(struct regmap *map, struct bus_prot *bp)
+{
+	u32 val = 0;
+	int ret = 0;
+
+	if (bp->clr_ofs)
+		regmap_write(map, bp->clr_ofs, bp->mask);
+	else
+		regmap_update_bits(map, bp->en_ofs, bp->mask, 0);
+
+	if (bp->ignore_clr_ack)
+		return 0;
+
+	ret = regmap_read_poll_timeout_atomic(map, bp->sta_ofs, val,
+					      !(val & bp->ack_mask),
+					      MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT);
+	if (ret < 0) {
+		pr_err("%s val=0x%x, mask=0x%x, (val & mask)=0x%x\n",
+		       __func__, val, bp->ack_mask, (val & bp->ack_mask));
+	}
+	return ret;
+}
+
+static int scpsys_bus_protect_table_disable(struct scp_domain *scpd, unsigned int index)
+{
+	struct scp *scp = scpd->scp;
+	const struct bus_prot *bp_table = scpd->data->bp_table;
+	int ret = 0;
+	int i;
+
+	for (i = index; i >= 0; i--) {
+		struct regmap *map;
+		struct bus_prot bp = bp_table[i];
+
+		if (bp.type == 0 || bp.type >= scp->num_bp)
+			continue;
+
+		map = scp->bp_regmap[bp.type];
+		if (!map)
+			continue;
+
+		ret = clear_bus_protection(map, &bp);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
+static int scpsys_bus_protect_table_enable(struct scp_domain *scpd)
+{
+	struct scp *scp = scpd->scp;
+	const struct bus_prot *bp_table = scpd->data->bp_table;
+	int ret = 0;
+	int i;
+
+	for (i = 0; i < MAX_STEPS; i++) {
+		struct regmap *map;
+		struct bus_prot bp = bp_table[i];
+
+		if (bp.type == 0 || bp.type >= scp->num_bp)
+			continue;
+
+		map = scp->bp_regmap[bp.type];
+		if (!map)
+			continue;
+
+		ret = set_bus_protection(map, &bp);
+		if (ret) {
+			scpsys_bus_protect_table_disable(scpd, i);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 static int scpsys_bus_protect_enable(struct scp_domain *scpd)
 {
 	struct scp *scp = scpd->scp;
+
+	if (scp->bp_regmap && scp->num_bp > 0)
+		return scpsys_bus_protect_table_enable(scpd);
 
 	if (!scpd->data->bus_prot_mask)
 		return 0;
@@ -390,6 +539,9 @@ static int scpsys_bus_protect_enable(struct scp_domain *scpd)
 static int scpsys_bus_protect_disable(struct scp_domain *scpd)
 {
 	struct scp *scp = scpd->scp;
+
+	if (scp->bp_regmap && scp->num_bp > 0)
+		return scpsys_bus_protect_table_disable(scpd, MAX_STEPS - 1);
 
 	if (!scpd->data->bus_prot_mask)
 		return 0;
@@ -833,12 +985,27 @@ static struct scp *init_scp(struct platform_device *pdev, const struct scp_soc_d
 	if (!pd_data->domains)
 		return ERR_PTR(-ENOMEM);
 
-	scp->infracfg = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
-			"infracfg");
-	if (IS_ERR(scp->infracfg)) {
-		dev_err(&pdev->dev, "Cannot find infracfg controller: %ld\n",
-				PTR_ERR(scp->infracfg));
-		return ERR_CAST(scp->infracfg);
+	if (soc->bp_list && soc->num_bp > 0) {
+		scp->num_bp = soc->num_bp;
+		scp->bp_regmap = devm_kcalloc(&pdev->dev, scp->num_bp,
+					      sizeof(*scp->bp_regmap), GFP_KERNEL);
+		if (!scp->bp_regmap)
+			return ERR_PTR(-ENOMEM);
+
+		/* get bus prot regmap from dts node, 0 means invalid bus type */
+		for (i = 1; i < scp->num_bp; i++) {
+			ret = mtk_pd_get_regmap(pdev, &scp->bp_regmap[i], soc->bp_list[i]);
+			if (ret)
+				return ERR_PTR(ret);
+		}
+	} else {
+		scp->infracfg = syscon_regmap_lookup_by_phandle(pdev->dev.of_node,
+				"infracfg");
+		if (IS_ERR(scp->infracfg)) {
+			dev_err(&pdev->dev, "Cannot find infracfg controller: %ld\n",
+					PTR_ERR(scp->infracfg));
+			return ERR_CAST(scp->infracfg);
+		}
 	}
 
 	for (i = 0; i < soc->num_domains; i++) {
