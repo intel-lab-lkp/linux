@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt8196-sys-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek System Clock Controller for MT8196
+
+maintainers:
+  - Guangjie Song <guangjie.song@mediatek.com>
+
+description:
+  The clock architecture in MediaTek like below
+  PLLs -->
+          dividers -->
+                      muxes
+                           -->
+                              clock gate
+
+  The apmixedsys, vlp_cksys, armpll, ccipll, mfgpll and ptppll provides most of PLLs
+  which generated from SoC 26m.
+  The cksys, cksys_gp2 and vlp_cksys provides dividers and muxes which provide the
+  clock source to other IP blocks.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - mediatek,mt8196-armpll_ll_pll_ctrl
+          - mediatek,mt8196-armpll_bl_pll_ctrl
+          - mediatek,mt8196-armpll_b_pll_ctrl
+          - mediatek,mt8196-apmixedsys
+          - mediatek,mt8196-apmixedsys_gp2
+          - mediatek,mt8196-ccipll_pll_ctrl
+          - mediatek,mt8196-cksys
+          - mediatek,mt8196-cksys_gp2
+          - mediatek,mt8196-mfgpll_pll_ctrl
+          - mediatek,mt8196-mfgpll_sc0_pll_ctrl
+          - mediatek,mt8196-mfgpll_sc1_pll_ctrl
+          - mediatek,mt8196-ptppll_pll_ctrl
+          - mediatek,mt8196-vlp_cksys
+      - const: syscon
+
+  reg:
+    description: Address range of the subsys.
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@10000800 {
+        compatible = "mediatek,mt8196-apmixedsys", "syscon";
+        reg = <0 0x10000800 0 0x1000>;
+        #clock-cells = <1>;
+    };

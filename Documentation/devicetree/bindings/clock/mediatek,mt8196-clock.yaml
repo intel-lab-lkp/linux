@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt8196-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Functional Clock Controller for MT8196
+
+maintainers:
+  - Guangjie Song <guangjie.song@mediatek.com>
+
+description:
+  The clock architecture in MediaTek like below
+  PLLs -->
+          dividers -->
+                      muxes
+                           -->
+                              clock gate
+
+  The devices provide clock gate control in different IP blocks.
+
+properties:
+  compatible:
+    enum:
+      - mediatek,mt8196-audiosys
+      - mediatek,mt8196-dispsys0
+      - mediatek,mt8196-dispsys1
+      - mediatek,mt8196-disp_vdisp_ao_config
+      - mediatek,mt8196-imp_iic_wrap_c
+      - mediatek,mt8196-imp_iic_wrap_e
+      - mediatek,mt8196-imp_iic_wrap_n
+      - mediatek,mt8196-imp_iic_wrap_w
+      - mediatek,mt8196-mdpsys
+      - mediatek,mt8196-mdpsys1
+      - mediatek,mt8196-ovlsys0
+      - mediatek,mt8196-ovlsys1
+      - mediatek,mt8196-pericfg_ao
+      - mediatek,mt8196-pextp0cfg_ao
+      - mediatek,mt8196-pextp1cfg_ao
+      - mediatek,mt8196-ufscfg_ao
+      - mediatek,mt8196-vdecsys
+      - mediatek,mt8196-vdecsys_soc
+      - mediatek,mt8196-vencsys
+      - mediatek,mt8196-vencsys_c1
+      - mediatek,mt8196-vencsys_c2
+
+  reg:
+    description: Address range of the subsys.
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@16300000 {
+        compatible = "mediatek,mt8196-imp_iic_wrap_c";
+        reg = <0x16300000 0x1000>;
+        #clock-cells = <1>;
+    };
