@@ -481,8 +481,6 @@ int netdev_nl_queue_get_doit(struct sk_buff *skb, struct genl_info *info)
 	if (!rsp)
 		return -ENOMEM;
 
-	rtnl_lock();
-
 	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
 	if (netdev) {
 		err = netdev_nl_queue_fill(rsp, netdev, q_id, q_type, info);
@@ -490,8 +488,6 @@ int netdev_nl_queue_get_doit(struct sk_buff *skb, struct genl_info *info)
 	} else {
 		err = -ENODEV;
 	}
-
-	rtnl_unlock();
 
 	if (err)
 		goto err_free_msg;
@@ -541,7 +537,6 @@ int netdev_nl_queue_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 	if (info->attrs[NETDEV_A_QUEUE_IFINDEX])
 		ifindex = nla_get_u32(info->attrs[NETDEV_A_QUEUE_IFINDEX]);
 
-	rtnl_lock();
 	if (ifindex) {
 		netdev = netdev_get_by_index_lock(net, ifindex);
 		if (netdev) {
@@ -559,7 +554,6 @@ int netdev_nl_queue_get_dumpit(struct sk_buff *skb, struct netlink_callback *cb)
 			ctx->txq_idx = 0;
 		}
 	}
-	rtnl_unlock();
 
 	return err;
 }
@@ -860,12 +854,11 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	mutex_lock(&priv->lock);
-	rtnl_lock();
 
-	netdev = __dev_get_by_index(genl_info_net(info), ifindex);
+	netdev = netdev_get_by_index_lock(genl_info_net(info), ifindex);
 	if (!netdev || !netif_device_present(netdev)) {
 		err = -ENODEV;
-		goto err_unlock;
+		goto err_unlock_sock;
 	}
 
 	if (dev_xdp_prog_count(netdev)) {
@@ -918,14 +911,15 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		goto err_unbind;
 
-	rtnl_unlock();
+	netdev_unlock(netdev);
 
 	return 0;
 
 err_unbind:
 	net_devmem_unbind_dmabuf(binding);
 err_unlock:
-	rtnl_unlock();
+	netdev_unlock(netdev);
+err_unlock_sock:
 	mutex_unlock(&priv->lock);
 err_genlmsg_free:
 	nlmsg_free(rsp);
@@ -945,9 +939,7 @@ void netdev_nl_sock_priv_destroy(struct netdev_nl_sock *priv)
 
 	mutex_lock(&priv->lock);
 	list_for_each_entry_safe(binding, temp, &priv->bindings, list) {
-		rtnl_lock();
 		net_devmem_unbind_dmabuf(binding);
-		rtnl_unlock();
 	}
 	mutex_unlock(&priv->lock);
 }
