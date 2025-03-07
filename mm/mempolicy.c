@@ -113,6 +113,7 @@
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include <linux/uaccess.h>
+#include <linux/memory.h>
 
 #include "internal.h"
 
@@ -3489,9 +3490,35 @@ static int add_weight_node(int nid, struct kobject *wi_kobj)
 	return 0;
 }
 
+struct kobject *wi_kobj;
+
+static int wi_node_notifier(struct notifier_block *nb,
+			       unsigned long action, void *data)
+{
+	int err;
+	struct memory_notify *arg = data;
+	int nid = arg->status_change_nid;
+
+	if (nid < 0)
+		goto notifier_end;
+
+	switch(action) {
+	case MEM_ONLINE:
+		err = add_weight_node(nid, wi_kobj);
+		if (err) {
+			pr_err("failed to add sysfs [node%d]\n", nid);
+			kobject_put(wi_kobj);
+			return NOTIFY_BAD;
+		}
+		break;
+	}
+
+notifier_end:
+	return NOTIFY_OK;
+}
+
 static int add_weighted_interleave_group(struct kobject *root_kobj)
 {
-	struct kobject *wi_kobj;
 	int nid, err;
 
 	wi_kobj = kzalloc(sizeof(struct kobject), GFP_KERNEL);
@@ -3505,16 +3532,23 @@ static int add_weighted_interleave_group(struct kobject *root_kobj)
 		return err;
 	}
 
-	for_each_node_state(nid, N_POSSIBLE) {
+	for_each_online_node(nid) {
+		if (!node_state(nid, N_MEMORY))
+			continue;
+
 		err = add_weight_node(nid, wi_kobj);
 		if (err) {
 			pr_err("failed to add sysfs [node%d]\n", nid);
-			break;
+			goto err_out;
 		}
 	}
-	if (err)
-		kobject_put(wi_kobj);
+
+	hotplug_memory_notifier(wi_node_notifier, DEFAULT_CALLBACK_PRI);
 	return 0;
+
+err_out:
+	kobject_put(wi_kobj);
+	return err;
 }
 
 static void mempolicy_kobj_release(struct kobject *kobj)
