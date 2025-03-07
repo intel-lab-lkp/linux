@@ -10,6 +10,7 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
+#include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/soc/mediatek/infracfg.h>
 
@@ -22,7 +23,12 @@
 
 #define MTK_POLL_DELAY_US   10
 #define MTK_POLL_TIMEOUT    USEC_PER_SEC
+#define MTK_POLL_TIMEOUT_300MS		(300 * USEC_PER_MSEC)
+#define MTK_POLL_IRQ_TIMEOUT		USEC_PER_SEC
+#define MTK_POLL_VOTE_PREPARE_CNT	2500
+#define MTK_POLL_VOTE_PREPARE_US	2
 #define MTK_ACK_DELAY_US		50
+#define MTK_STABLE_DELAY_US		100
 
 #define MTK_SCPD_ACTIVE_WAKEUP		BIT(0)
 #define MTK_SCPD_FWAIT_SRAM		BIT(1)
@@ -30,6 +36,7 @@
 #define MTK_SCPD_SRAM_SLP		BIT(3)
 #define MTK_SCPD_BYPASS_INIT_ON		BIT(4)
 #define MTK_SCPD_IS_PWR_CON_ON		BIT(5)
+#define MTK_SCPD_VOTE_OPS		BIT(6)
 #define MTK_SCPD_CAPS(_scpd, _x)	((_scpd)->data->caps & (_x))
 
 #define SPM_VDE_PWR_CON			0x0210
@@ -120,8 +127,18 @@ static const char * const clk_names[] = {
 /**
  * struct scp_domain_data - scp domain data for power on/off flow
  * @name: The domain name.
+ * @vote_comp: The vote name.
  * @sta_mask: The mask for power on/off status bit.
  * @ctl_offs: The offset for main power control register.
+ * @vote_done_ofs: The offset for vote done register.
+ * @vote_ofs: The offset for vote register.
+ * @vote_set_ofs: The offset for vote set register.
+ * @vote_clr_ofs: The offset for vote clear register.
+ * @vote_en_ofs: The offset for voted register.
+ * @vote_set_sta_ofs: The offset for vote set status register.
+ * @vote_clr_sta_ofs: The offset for vote clear status register.
+ * @vote_ack_ofs: The offset for power control ack register.
+ * @vote_shift: The bit of vote.
  * @sram_pdn_bits: The mask for sram power control bits.
  * @sram_pdn_ack_bits: The mask for sram power control acked bits.
  * @sram_slp_bits: The mask for sram low power control bits.
@@ -132,8 +149,18 @@ static const char * const clk_names[] = {
  */
 struct scp_domain_data {
 	const char *name;
+	const char *vote_comp;
 	u32 sta_mask;
 	int ctl_offs;
+	u32 vote_done_ofs;
+	u32 vote_ofs;
+	u32 vote_set_ofs;
+	u32 vote_clr_ofs;
+	u32 vote_en_ofs;
+	u32 vote_set_sta_ofs;
+	u32 vote_clr_sta_ofs;
+	u32 vote_ack_ofs;
+	u8 vote_shift;
 	u32 sram_pdn_bits;
 	u32 sram_pdn_ack_bits;
 	u32 sram_slp_bits;
@@ -151,6 +178,7 @@ struct scp_domain {
 	struct clk *clk[MAX_CLKS];
 	const struct scp_domain_data *data;
 	struct regulator *supply;
+	struct regmap *vote_regmap;
 };
 
 struct scp_ctrl_reg {
@@ -493,12 +521,175 @@ out:
 	return ret;
 }
 
+static int mtk_vote_is_done(struct scp_domain *scpd)
+{
+	u32 val = 0, mask = 0;
+
+	regmap_read(scpd->vote_regmap, scpd->data->vote_done_ofs, &val);
+	mask = BIT(scpd->data->vote_shift);
+	if ((val & mask) == mask)
+		return 1;
+
+	return 0;
+}
+
+static int mtk_vote_is_enable_done(struct scp_domain *scpd)
+{
+	u32 done = 0, en = 0, set_sta = 0, mask = 0, ack = 0;
+
+	regmap_read(scpd->vote_regmap, scpd->data->vote_done_ofs, &done);
+	regmap_read(scpd->vote_regmap, scpd->data->vote_en_ofs, &en);
+	regmap_read(scpd->vote_regmap, scpd->data->vote_set_sta_ofs, &set_sta);
+	mask = BIT(scpd->data->vote_shift);
+
+	if ((done & mask) && (en & mask) && !(set_sta & mask)) {
+		if (scpd->data->vote_ack_ofs) {
+			regmap_read(scpd->vote_regmap, scpd->data->vote_ack_ofs, &ack);
+			if (!(ack & mask))
+				return 0;
+		}
+
+		return 1;
+	}
+
+	return 0;
+}
+
+static int mtk_vote_is_disable_done(struct scp_domain *scpd)
+{
+	u32 val = 0, val2 = 0;
+
+	regmap_read(scpd->vote_regmap, scpd->data->vote_done_ofs, &val);
+	regmap_read(scpd->vote_regmap, scpd->data->vote_clr_sta_ofs, &val2);
+
+	if ((val & BIT(scpd->data->vote_shift)) &&
+	    ((val2 & BIT(scpd->data->vote_shift)) == 0x0))
+		return 1;
+
+	return 0;
+}
+
+static int scpsys_vote_power_on(struct generic_pm_domain *genpd)
+{
+	struct scp_domain *scpd = container_of(genpd, struct scp_domain, genpd);
+	struct scp *scp = scpd->scp;
+	u32 val = 0;
+	int ret = 0;
+	int tmp;
+	int i = 0;
+
+	ret = scpsys_regulator_enable(scpd);
+	if (ret < 0)
+		goto out;
+
+	ret = scpsys_clk_enable(scpd->clk, MAX_CLKS);
+	if (ret)
+		goto out;
+
+	ret = readx_poll_timeout_atomic(mtk_vote_is_done, scpd, tmp, tmp > 0,
+					MTK_POLL_DELAY_US, MTK_POLL_IRQ_TIMEOUT);
+	if (ret < 0)
+		goto out;
+
+	val = BIT(scpd->data->vote_shift);
+	regmap_write(scpd->vote_regmap, scpd->data->vote_set_ofs, val);
+	do {
+		regmap_read(scpd->vote_regmap, scpd->data->vote_set_ofs, &val);
+		if ((val & BIT(scpd->data->vote_shift)) != 0)
+			break;
+
+		if (i > MTK_POLL_VOTE_PREPARE_CNT)
+			goto out;
+
+		udelay(MTK_POLL_VOTE_PREPARE_US);
+		i++;
+	} while (1);
+
+	/* add debounce time */
+	udelay(1);
+
+	/* wait until VOTER_ACK = 1 */
+	ret = readx_poll_timeout_atomic(mtk_vote_is_enable_done, scpd, tmp, tmp > 0,
+					MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT_300MS);
+	if (ret < 0)
+		goto out;
+
+	return 0;
+out:
+	dev_err(scp->dev, "Failed to power on domain %s(%d)\n", genpd->name, ret);
+	return ret;
+}
+
+static int scpsys_vote_power_off(struct generic_pm_domain *genpd)
+{
+	struct scp_domain *scpd = container_of(genpd, struct scp_domain, genpd);
+	struct scp *scp = scpd->scp;
+	u32 val = 0;
+	int ret = 0;
+	int tmp;
+	int i = 0;
+
+	ret = readx_poll_timeout_atomic(mtk_vote_is_done, scpd, tmp, tmp > 0,
+					MTK_POLL_DELAY_US, MTK_POLL_IRQ_TIMEOUT);
+	if (ret < 0)
+		goto out;
+
+	val = BIT(scpd->data->vote_shift);
+	regmap_write(scpd->vote_regmap, scpd->data->vote_clr_ofs, val);
+	do {
+		regmap_read(scpd->vote_regmap, scpd->data->vote_clr_ofs, &val);
+		if ((val & BIT(scpd->data->vote_shift)) == 0)
+			break;
+
+		if (i > MTK_POLL_VOTE_PREPARE_CNT)
+			goto out;
+
+		i++;
+		udelay(MTK_POLL_VOTE_PREPARE_US);
+	} while (1);
+
+	/* delay 100us for stable status */
+	udelay(MTK_STABLE_DELAY_US);
+
+	/* wait until VOTER_ACK = 0 */
+	ret = readx_poll_timeout_atomic(mtk_vote_is_disable_done, scpd, tmp, tmp > 0,
+					MTK_POLL_DELAY_US, MTK_POLL_TIMEOUT_300MS);
+	if (ret < 0)
+		goto out;
+
+	scpsys_clk_disable(scpd->clk, MAX_CLKS);
+
+	ret = scpsys_regulator_disable(scpd);
+	if (ret < 0)
+		goto out;
+
+	return 0;
+out:
+	dev_err(scp->dev, "Failed to power off domain %s(%d)\n", genpd->name, ret);
+	return ret;
+}
+
 static void init_clks(struct platform_device *pdev, struct clk **clk)
 {
 	int i;
 
 	for (i = CLK_NONE + 1; i < CLK_MAX; i++)
 		clk[i] = devm_clk_get(&pdev->dev, clk_names[i]);
+}
+
+static int mtk_pd_get_regmap(struct platform_device *pdev, struct regmap **regmap,
+			     const char *name)
+{
+	*regmap = syscon_regmap_lookup_by_phandle(pdev->dev.of_node, name);
+	if (PTR_ERR(*regmap) == -ENODEV) {
+		dev_notice(&pdev->dev, "%s regmap is null(%ld)\n", name, PTR_ERR(*regmap));
+		*regmap = NULL;
+	} else if (IS_ERR(*regmap)) {
+		dev_notice(&pdev->dev, "Cannot find %s controller: %ld\n", name, PTR_ERR(*regmap));
+		return PTR_ERR(*regmap);
+	}
+
+	return 0;
 }
 
 static struct scp *init_scp(struct platform_device *pdev,
@@ -510,6 +701,7 @@ static struct scp *init_scp(struct platform_device *pdev,
 	int i, j;
 	struct scp *scp;
 	struct clk *clk[CLK_MAX];
+	int ret;
 
 	scp = devm_kzalloc(&pdev->dev, sizeof(*scp), GFP_KERNEL);
 	if (!scp)
@@ -585,9 +777,20 @@ static struct scp *init_scp(struct platform_device *pdev,
 			scpd->clk[j] = c;
 		}
 
+		if (data->vote_comp) {
+			ret = mtk_pd_get_regmap(pdev, &scpd->vote_regmap, data->vote_comp);
+			if (ret)
+				return ERR_PTR(ret);
+		}
+
 		genpd->name = data->name;
-		genpd->power_off = scpsys_power_off;
-		genpd->power_on = scpsys_power_on;
+		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_VOTE_OPS)) {
+			genpd->power_on = scpsys_vote_power_on;
+			genpd->power_off = scpsys_vote_power_off;
+		} else {
+			genpd->power_off = scpsys_power_off;
+			genpd->power_on = scpsys_power_on;
+		}
 		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_ACTIVE_WAKEUP))
 			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
 	}
