@@ -306,6 +306,12 @@ ssize_t mipi_dsi_generic_read(struct mipi_dsi_device *dsi, const void *params,
 			usleep_range(min, max);	\
 	} while (0)
 
+#define mipi_dsi_dual_msleep(ctx1, ctx2, delay)				\
+	do {								\
+		if ((!(ctx1)->accum_err) || (!(ctx2)->accum_err))	\
+			msleep(delay);					\
+	} while (0)
+
 /**
  * enum mipi_dsi_dcs_tear_mode - Tearing Effect Output Line mode
  * @MIPI_DSI_DCS_TEAR_MODE_VBLANK: the TE output line consists of V-Blanking
