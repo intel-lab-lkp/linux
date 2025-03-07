@@ -250,6 +250,9 @@ struct scp_subdomain {
 	int subdomain;
 };
 
+typedef int (*scp_soc_post_probe_fn)(struct platform_device *pdev,
+		struct scp *scp);
+
 struct scp_soc_data {
 	const struct scp_domain_data *domains;
 	int num_domains;
@@ -259,6 +262,7 @@ struct scp_soc_data {
 	bool bus_prot_reg_update;
 	const char **bp_list;
 	int num_bp;
+	scp_soc_post_probe_fn post_probe;
 };
 
 static int scpsys_domain_is_on(struct scp_domain *scpd)
@@ -1689,6 +1693,12 @@ static int scpsys_probe(struct platform_device *pdev)
 		if (ret && IS_ENABLED(CONFIG_PM))
 			dev_err(&pdev->dev, "Failed to add subdomain: %d\n",
 				ret);
+	}
+
+	if (soc->post_probe) {
+		ret = soc->post_probe(pdev, scp);
+		if (ret)
+			return ret;
 	}
 
 	return 0;
