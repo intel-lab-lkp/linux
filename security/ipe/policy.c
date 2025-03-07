@@ -84,8 +84,12 @@ static int set_pkcs7_data(void *ctx, const void *data, size_t len,
  * ipe_new_policy.
  *
  * Context: Requires root->i_rwsem to be held.
- * Return: %0 on success. If an error occurs, the function will return
- * the -errno.
+ * Return:
+ * * %0 					- Success
+ * * %-ENOENT					- Policy was deleted while updating
+ * * %-EINVAL					- Policy name was changed while updating
+ * * %-ESTALE					- Attempting to update an IPE policy
+ * *						  with an older version
  */
 int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
 		      const char *pkcs7, size_t pkcs7len)
@@ -150,6 +154,9 @@ err:
  * * %-ENOMEM					- Out of memory (OOM)
  * * %-ERANGE					- Policy version number overflow
  * * %-EINVAL					- Policy version parsing error
+ * * %-ENOKEY					- Key used to sign the IPE policy
+ *						  not found in the keyring
+ * * %-EKEYREJECTED				- IPE signature verification failed
  */
 struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 				  const char *pkcs7, size_t pkcs7len)
