@@ -3538,6 +3538,84 @@ put_vm:
 	return err;
 }
 
+static int xe_vm_get_faults_size(struct xe_vm *vm)
+{
+	int size;
+
+	spin_lock(&vm->pfs.lock);
+	size = vm->pfs.len * sizeof(struct xe_vm_fault);
+	spin_unlock(&vm->pfs.lock);
+
+	return size;
+}
+
+static int fill_faults(struct xe_vm *vm,
+		       struct drm_xe_vm_get_faults *args)
+{
+	struct xe_vm_fault __user *usr_ptr = u64_to_user_ptr(args->faults);
+	struct xe_vm_pf_entry *entry;
+	int ret = 0, i = 0;
+
+	spin_lock(&vm->pfs.lock);
+	list_for_each_entry(entry, &vm->pfs.list, list) {
+		struct xe_pagefault *pf = entry->pf;
+
+		ret = put_user(pf->page_addr, &usr_ptr->address);
+		if (ret)
+			break;
+
+		ret = put_user(pf->address_type, &usr_ptr->address_type);
+		if (ret)
+			break;
+
+		ret = put_user(1, &usr_ptr->address_precision);
+		if (ret)
+			break;
+
+		usr_ptr++;
+
+		if (i == args->fault_count)
+			break;
+	}
+	spin_unlock(&vm->pfs.lock);
+
+	return ret ? -EFAULT : 0;
+}
+
+int xe_vm_get_faults_ioctl(struct drm_device *drm, void *data,
+			   struct drm_file *file)
+{
+	struct xe_device *xe = to_xe_device(drm);
+	struct xe_file *xef = to_xe_file(file);
+	struct drm_xe_vm_get_faults *args = data;
+	struct xe_vm *vm;
+	int size, fault_count;
+
+	if (XE_IOCTL_DBG(xe, args->reserved[0] || args->reserved[1]))
+		return -EINVAL;
+
+	vm = xe_vm_lookup(xef, args->vm_id);
+	if (XE_IOCTL_DBG(xe, !vm))
+		return -ENOENT;
+
+	size = xe_vm_get_faults_size(vm);
+	fault_count = size / sizeof(struct xe_vm_fault);
+
+	if (size < 0) {
+		return size;
+	} else if (!args->size && !args->fault_count) {
+		args->size = size;
+		args->fault_count = fault_count;
+		return 0;
+	} else if (args->size > size || args->fault_count > fault_count) {
+		return -EINVAL;
+	} else if (args->size / sizeof(struct xe_vm_fault) != args->fault_count) {
+		return -EINVAL;
+	}
+
+	return fill_faults(vm, args);
+}
+
 /**
  * xe_vm_bind_kernel_bo - bind a kernel BO to a VM
  * @vm: VM to bind the BO to
