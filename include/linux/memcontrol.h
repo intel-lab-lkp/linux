@@ -1617,6 +1617,30 @@ extern struct static_key_false memcg_sockets_enabled_key;
 #define mem_cgroup_sockets_enabled static_branch_unlikely(&memcg_sockets_enabled_key)
 void mem_cgroup_sk_alloc(struct sock *sk);
 void mem_cgroup_sk_free(struct sock *sk);
+
+struct memcg_skmem_batch {
+	int size;
+	struct mem_cgroup *memcg[MEMCG_CHARGE_BATCH];
+	unsigned int nr_pages[MEMCG_CHARGE_BATCH];
+};
+
+void __mem_cgroup_batch_charge_skmem_begin(struct memcg_skmem_batch *batch);
+void __mem_cgroup_batch_charge_skmem_end(struct memcg_skmem_batch *batch);
+
+static inline void mem_cgroup_batch_charge_skmem_begin(struct memcg_skmem_batch *batch)
+{
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys) &&
+	   mem_cgroup_sockets_enabled)
+		__mem_cgroup_batch_charge_skmem_begin(batch);
+}
+
+static inline void mem_cgroup_batch_charge_skmem_end(struct memcg_skmem_batch *batch)
+{
+	if (cgroup_subsys_on_dfl(memory_cgrp_subsys) &&
+	   mem_cgroup_sockets_enabled)
+		__mem_cgroup_batch_charge_skmem_end(batch);
+}
+
 static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg)
 {
 #ifdef CONFIG_MEMCG_V1
@@ -1638,6 +1662,19 @@ void reparent_shrinker_deferred(struct mem_cgroup *memcg);
 #define mem_cgroup_sockets_enabled 0
 static inline void mem_cgroup_sk_alloc(struct sock *sk) { };
 static inline void mem_cgroup_sk_free(struct sock *sk) { };
+
+struct memcg_skmem_batch {};
+
+static inline void mem_cgroup_batch_charge_skmem_begin(
+					struct memcg_skmem_batch *batch)
+{
+}
+
+static inline void mem_cgroup_batch_charge_skmem_end(
+					struct memcg_skmem_batch *batch)
+{
+}
+
 static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg)
 {
 	return false;

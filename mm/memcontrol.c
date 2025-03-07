@@ -88,6 +88,7 @@ EXPORT_PER_CPU_SYMBOL_GPL(int_active_memcg);
 
 /* Socket memory accounting disabled? */
 static bool cgroup_memory_nosocket __ro_after_init;
+DEFINE_PER_CPU(struct memcg_skmem_batch *, int_skmem_batch);
 
 /* Kernel memory accounting disabled? */
 static bool cgroup_memory_nokmem __ro_after_init;
@@ -1775,6 +1776,57 @@ static struct obj_cgroup *drain_obj_stock(struct memcg_stock_pcp *stock);
 static bool obj_stock_flush_required(struct memcg_stock_pcp *stock,
 				     struct mem_cgroup *root_memcg);
 
+static inline bool consume_batch_stock(struct mem_cgroup *memcg,
+				       unsigned int nr_pages)
+{
+	int i;
+	struct memcg_skmem_batch *batch;
+
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) || in_task() ||
+	    !this_cpu_read(int_skmem_batch))
+		return false;
+
+	batch = this_cpu_read(int_skmem_batch);
+	for (i = 0; i < batch->size; ++i) {
+		if (batch->memcg[i] == memcg) {
+			if (nr_pages <= batch->nr_pages[i]) {
+				batch->nr_pages[i] -= nr_pages;
+				return true;
+			}
+			return false;
+		}
+	}
+	return false;
+}
+
+static inline bool refill_stock_batch(struct mem_cgroup *memcg,
+				      unsigned int nr_pages)
+{
+	int i;
+	struct memcg_skmem_batch *batch;
+
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) || in_task() ||
+	    !this_cpu_read(int_skmem_batch))
+		return false;
+
+	batch = this_cpu_read(int_skmem_batch);
+	for (i = 0; i < batch->size; ++i) {
+		if (memcg == batch->memcg[i]) {
+			batch->nr_pages[i] += nr_pages;
+			return true;
+		}
+	}
+
+	if (i == MEMCG_CHARGE_BATCH)
+		return false;
+
+	/* i == batch->size */
+	batch->memcg[i] = memcg;
+	batch->nr_pages[i] = nr_pages;
+	batch->size++;
+	return true;
+}
+
 /**
  * consume_stock: Try to consume stocked charge on this cpu.
  * @memcg: memcg to consume from.
@@ -1794,6 +1846,9 @@ static bool consume_stock(struct mem_cgroup *memcg, unsigned int nr_pages,
 	unsigned int stock_pages;
 	unsigned long flags;
 	bool ret = false;
+
+	if (consume_batch_stock(memcg, nr_pages))
+		return true;
 
 	if (nr_pages > MEMCG_CHARGE_BATCH)
 		return ret;
@@ -1886,6 +1941,9 @@ static void __refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 static void refill_stock(struct mem_cgroup *memcg, unsigned int nr_pages)
 {
 	unsigned long flags;
+
+	if (refill_stock_batch(memcg, nr_pages))
+		return;
 
 	if (!localtry_trylock_irqsave(&memcg_stock.stock_lock, flags)) {
 		/*
@@ -4892,6 +4950,31 @@ void mem_cgroup_sk_free(struct sock *sk)
 {
 	if (sk->sk_memcg)
 		css_put(&sk->sk_memcg->css);
+}
+
+void __mem_cgroup_batch_charge_skmem_begin(struct memcg_skmem_batch *batch)
+{
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) || in_task() ||
+	    this_cpu_read(int_skmem_batch))
+		return;
+
+	this_cpu_write(int_skmem_batch, batch);
+}
+
+void __mem_cgroup_batch_charge_skmem_end(struct memcg_skmem_batch *batch)
+{
+	int i;
+
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) || in_task() ||
+	    batch != this_cpu_read(int_skmem_batch))
+		return;
+
+	this_cpu_write(int_skmem_batch, NULL);
+	for (i = 0; i < batch->size; ++i) {
+		if (batch->nr_pages[i])
+			page_counter_uncharge(&batch->memcg[i]->memory,
+					      batch->nr_pages[i]);
+	}
 }
 
 /**

@@ -7484,8 +7484,11 @@ static __latent_entropy void net_rx_action(void)
 		usecs_to_jiffies(READ_ONCE(net_hotdata.netdev_budget_usecs));
 	struct bpf_net_context __bpf_net_ctx, *bpf_net_ctx;
 	int budget = READ_ONCE(net_hotdata.netdev_budget);
+	struct memcg_skmem_batch batch = {};
 	LIST_HEAD(list);
 	LIST_HEAD(repoll);
+
+	mem_cgroup_batch_charge_skmem_begin(&batch);
 
 	bpf_net_ctx = bpf_net_ctx_set(&__bpf_net_ctx);
 start:
@@ -7542,6 +7545,7 @@ start:
 	net_rps_action_and_irq_enable(sd);
 end:
 	bpf_net_ctx_clear(bpf_net_ctx);
+	mem_cgroup_batch_charge_skmem_end(&batch);
 }
 
 struct netdev_adjacent {
