@@ -20,6 +20,9 @@
 #include <dt-bindings/power/mt7622-power.h>
 #include <dt-bindings/power/mt7623a-power.h>
 #include <dt-bindings/power/mt8173-power.h>
+#include <dt-bindings/power/mt8196-power.h>
+
+#include "mt8196-scpsys.h"
 
 #define MTK_POLL_DELAY_US   10
 #define MTK_POLL_TIMEOUT    USEC_PER_SEC
@@ -137,6 +140,8 @@ enum clk_id {
 	CLK_HIFSEL,
 	CLK_JPGDEC,
 	CLK_AUDIO,
+	CLK_DISP_AO_CONFIG,
+	CLK_DISP_DPC,
 	CLK_MAX,
 };
 
@@ -151,6 +156,8 @@ static const char * const clk_names[] = {
 	"hif_sel",
 	"jpgdec",
 	"audio",
+	"disp_ao_config",
+	"disp_dpc",
 	NULL,
 };
 
@@ -1575,6 +1582,594 @@ static const struct scp_subdomain scp_subdomain_mt8173[] = {
 	{MT8173_POWER_DOMAIN_MFG_2D, MT8173_POWER_DOMAIN_MFG},
 };
 
+/*
+ * MT8196 power domain support
+ */
+static const char *mt8196_spm_bp_list[MT8196_SPM_BP_NR] = {
+	[MT8196_SPM_BP_SPM] = "spm",
+};
+
+static const struct scp_domain_data scp_domain_mt8196_spm_vote_data[] = {
+	[MT8196_POWER_DOMAIN_CONN] = {
+		.name = "conn",
+		.ctl_offs = MT8196_SPM_CONN_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_CONN),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_BYPASS_INIT_ON,
+	},
+	[MT8196_POWER_DOMAIN_SSUSB_DP_PHY_P0] = {
+		.name = "ssusb-dp-phy-p0",
+		.ctl_offs = MT8196_SPM_SSUSB_DP_PHY_P0_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY,
+				     MT8196_SPM_PROT_EN_BUS_SSUSB_DP_PHY_P0),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_ALWAYS_ON,
+	},
+	[MT8196_POWER_DOMAIN_SSUSB_P0] = {
+		.name = "ssusb-p0",
+		.ctl_offs = MT8196_SPM_SSUSB_P0_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_SSUSB_P0),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_ALWAYS_ON,
+	},
+	[MT8196_POWER_DOMAIN_SSUSB_P1] = {
+		.name = "ssusb-p1",
+		.ctl_offs = MT8196_SPM_SSUSB_P1_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_SSUSB_P1),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_ALWAYS_ON,
+	},
+	[MT8196_POWER_DOMAIN_SSUSB_P23] = {
+		.name = "ssusb-p23",
+		.ctl_offs = MT8196_SPM_SSUSB_P23_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_SSUSB_P23),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_BYPASS_INIT_ON,
+	},
+	[MT8196_POWER_DOMAIN_SSUSB_PHY_P2] = {
+		.name = "ssusb-phy-p2",
+		.ctl_offs = MT8196_SPM_SSUSB_PHY_P2_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY,
+				     MT8196_SPM_PROT_EN_BUS_SSUSB_PHY_P2),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_BYPASS_INIT_ON,
+	},
+	[MT8196_POWER_DOMAIN_PEXTP_MAC0] = {
+		.name = "pextp-mac0",
+		.ctl_offs = MT8196_SPM_PEXTP_MAC0_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_PEXTP_MAC0),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_PEXTP_PHY_RTFF | MTK_SCPD_RTFF_DELAY,
+	},
+	[MT8196_POWER_DOMAIN_PEXTP_MAC1] = {
+		.name = "pextp-mac1",
+		.ctl_offs = MT8196_SPM_PEXTP_MAC1_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_PEXTP_MAC1),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_PEXTP_PHY_RTFF | MTK_SCPD_RTFF_DELAY,
+	},
+	[MT8196_POWER_DOMAIN_PEXTP_MAC2] = {
+		.name = "pextp-mac2",
+		.ctl_offs = MT8196_SPM_PEXTP_MAC2_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_PEXTP_MAC2),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_PEXTP_PHY_RTFF | MTK_SCPD_RTFF_DELAY,
+	},
+	[MT8196_POWER_DOMAIN_PEXTP_PHY0] = {
+		.name = "pextp-phy0",
+		.ctl_offs = MT8196_SPM_PEXTP_PHY0_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_PEXTP_PHY0),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_PEXTP_PHY_RTFF | MTK_SCPD_RTFF_DELAY,
+	},
+	[MT8196_POWER_DOMAIN_PEXTP_PHY1] = {
+		.name = "pextp-phy1",
+		.ctl_offs = MT8196_SPM_PEXTP_PHY1_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_PEXTP_PHY1),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_PEXTP_PHY_RTFF | MTK_SCPD_RTFF_DELAY,
+	},
+	[MT8196_POWER_DOMAIN_PEXTP_PHY2] = {
+		.name = "pextp-phy2",
+		.ctl_offs = MT8196_SPM_PEXTP_PHY2_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_PEXTP_PHY2),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_PEXTP_PHY_RTFF | MTK_SCPD_RTFF_DELAY,
+	},
+	[MT8196_POWER_DOMAIN_AUDIO] = {
+		.name = "audio",
+		.ctl_offs = MT8196_SPM_AUDIO_PWR_CON,
+		.sram_pdn_bits = GENMASK(8, 8),
+		.sram_pdn_ack_bits = GENMASK(12, 12),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_AUDIO),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF,
+	},
+	[MT8196_POWER_DOMAIN_ADSP_TOP_DORMANT] = {
+		.name = "adsp-top-dormant",
+		.ctl_offs = MT8196_SPM_ADSP_TOP_PWR_CON,
+		.sram_slp_bits = GENMASK(9, 9),
+		.sram_slp_ack_bits = GENMASK(13, 13),
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_ADSP_TOP),
+		},
+		.caps = MTK_SCPD_SRAM_ISO | MTK_SCPD_SRAM_SLP | MTK_SCPD_IS_PWR_CON_ON,
+	},
+	[MT8196_POWER_DOMAIN_ADSP_INFRA] = {
+		.name = "adsp-infra",
+		.ctl_offs = MT8196_SPM_ADSP_INFRA_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_ADSP_INFRA),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_ALWAYS_ON,
+	},
+	[MT8196_POWER_DOMAIN_ADSP_AO] = {
+		.name = "adsp-ao",
+		.ctl_offs = MT8196_SPM_ADSP_AO_PWR_CON,
+		.bp_table = {
+			BUS_PROT_IGN(MT8196_SPM_BP_SPM, MT8196_SPM_BUS_PROTECT_EN_SET,
+				     MT8196_SPM_BUS_PROTECT_EN_CLR, MT8196_SPM_BUS_PROTECT_EN,
+				     MT8196_SPM_BUS_PROTECT_RDY, MT8196_SPM_PROT_EN_BUS_ADSP_AO),
+		},
+		.caps = MTK_SCPD_IS_PWR_CON_ON | MTK_SCPD_NON_CPU_RTFF | MTK_SCPD_ALWAYS_ON,
+	},
+	[MT8196_POWER_DOMAIN_MM_PROC_DORMANT] = {
+		.name = "mm-proc-dormant",
+		.vote_comp = "vote-regmap",
+		.vote_set_ofs = MT8196_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_VOTE_MTCMOS_ENABLE0,
+		.vote_set_sta_ofs = MT8196_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_shift = MT8196_VOTE_MM_PROC_SHIFT,
+		/* TODO: drop MTK_SCPD_ALWAYS_ON after fixing suspend issue. */
+		.caps = MTK_SCPD_VOTE_OPS |  MTK_SCPD_IRQ_SAFE | MTK_SCPD_ALWAYS_ON,
+	},
+	[MT8196_POWER_DOMAIN_SSR] = {
+		.name = "ssrsys",
+		.vote_comp = "vote-regmap",
+		.vote_set_ofs = MT8196_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_VOTE_MTCMOS_ENABLE0,
+		.vote_set_sta_ofs = MT8196_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_shift = MT8196_VOTE_SSR_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+};
+
+static const struct scp_subdomain scp_subdomain_mt8196_spm[] = {
+	{MT8196_POWER_DOMAIN_SSUSB_P0, MT8196_POWER_DOMAIN_SSUSB_DP_PHY_P0},
+	{MT8196_POWER_DOMAIN_SSUSB_P23, MT8196_POWER_DOMAIN_SSUSB_PHY_P2},
+	{MT8196_POWER_DOMAIN_PEXTP_MAC0, MT8196_POWER_DOMAIN_PEXTP_PHY0},
+	{MT8196_POWER_DOMAIN_PEXTP_MAC1, MT8196_POWER_DOMAIN_PEXTP_PHY1},
+	{MT8196_POWER_DOMAIN_PEXTP_MAC2, MT8196_POWER_DOMAIN_PEXTP_PHY2},
+	{MT8196_POWER_DOMAIN_ADSP_INFRA, MT8196_POWER_DOMAIN_AUDIO},
+	{MT8196_POWER_DOMAIN_ADSP_INFRA, MT8196_POWER_DOMAIN_ADSP_TOP_DORMANT},
+	{MT8196_POWER_DOMAIN_ADSP_AO, MT8196_POWER_DOMAIN_ADSP_INFRA},
+};
+
+static struct generic_pm_domain *mt8196_mm_proc_domain;
+
+static int mt8196_spm_post_probe(struct platform_device *pdev, struct scp *scp)
+{
+	mt8196_mm_proc_domain = scp->pd_data.domains[MT8196_POWER_DOMAIN_MM_PROC_DORMANT];
+
+	return 0;
+}
+
+static const char *mt8196_mmpc_bp_list[MT8196_MMPC_BP_NR] = {
+	[MT8196_MMPC_BP_MMPC] = "mmpc",
+};
+
+static const struct scp_domain_data scp_domain_mt8196_mmpc_vote_data[] = {
+	[MT8196_POWER_DOMAIN_VDE0] = {
+		.name = "vde0",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_VDE0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_VDE1] = {
+		.name = "vde1",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_VDE1_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_VDE_VCORE0] = {
+		.name = "vde-vcore0",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_VDE_VCORE0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_VEN0] = {
+		.name = "ven0",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_VEN0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_VEN1] = {
+		.name = "ven1",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_VEN1_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_VEN2] = {
+		.name = "ven2",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_VEN2_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DISP_VCORE] = {
+		.name = "disp-vcore",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_DISP_VCORE_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DIS0_DORMANT] = {
+		.name = "dis0-dormant",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_DIS0_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DIS1_DORMANT] = {
+		.name = "dis1-dormant",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_DIS1_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_OVL0_DORMANT] = {
+		.name = "ovl0-dormant",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_OVL0_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_OVL1_DORMANT] = {
+		.name = "ovl1-dormant",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_OVL1_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DISP_EDPTX_DORMANT] = {
+		.name = "disp-edptx-dormant",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_DISP_EDPTX_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DISP_DPTX_DORMANT] = {
+		.name = "disp-dptx-dormant",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_DISP_DPTX_SHIFT,
+		.clk_id = {CLK_DISP_AO_CONFIG, CLK_DISP_DPC},
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_MML0_SHUTDOWN] = {
+		.name = "mml0-shutdown",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET0,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE0,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_CLR0,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS0,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS0,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK0,
+		.vote_shift = MT8196_MM_VOTE_MML0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_MML1_SHUTDOWN] = {
+		.name = "mml1-shutdown",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_MML0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_MM_INFRA0] = {
+		.name = "mm-infra0",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_MM_INFRA0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS |  MTK_SCPD_IRQ_SAFE,
+	},
+	[MT8196_POWER_DOMAIN_MM_INFRA1] = {
+		.name = "mm-infra1",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_MM_INFRA1_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS |  MTK_SCPD_IRQ_SAFE,
+	},
+	[MT8196_POWER_DOMAIN_MM_INFRA_AO] = {
+		.name = "mm-infra-ao",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_MM_INFRA_AO_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS |  MTK_SCPD_IRQ_SAFE,
+	},
+	[MT8196_POWER_DOMAIN_CSI_BS_RX] = {
+		.name = "csi-bs-rx",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_CSI_BS_RX_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_CSI_LS_RX] = {
+		.name = "csi-ls-rx",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_CSI_LS_RX_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DSI_PHY0] = {
+		.name = "dsi-phy0",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_DSI_PHY0_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DSI_PHY1] = {
+		.name = "dsi-phy1",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_DSI_PHY1_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+	[MT8196_POWER_DOMAIN_DSI_PHY2] = {
+		.name = "dsi-phy2",
+		.vote_comp = "mm-vote-regmap",
+		.vote_set_ofs = MT8196_MM_VOTE_MTCMOS_SET1,
+		.vote_clr_ofs = MT8196_MM_VOTE_MTCMOS_CLR1,
+		.vote_done_ofs = MT8196_MM_VOTE_MTCMOS_DONE1,
+		.vote_en_ofs = MT8196_MM_VOTE_MTCMOS_ENABLE1,
+		.vote_set_sta_ofs = MT8196_MM_VOTE_MTCMOS_SET_STATUS1,
+		.vote_clr_sta_ofs = MT8196_MM_VOTE_MTCMOS_CLR_STATUS1,
+		.vote_ack_ofs = MT8196_MM_VOTE_MTCMOS_PM_ACK1,
+		.vote_shift = MT8196_MM_VOTE_DSI_PHY2_SHIFT,
+		.caps = MTK_SCPD_VOTE_OPS,
+	},
+};
+
+static const struct scp_subdomain scp_subdomain_mt8196_mmpc[] = {
+	{MT8196_POWER_DOMAIN_VDE_VCORE0, MT8196_POWER_DOMAIN_VDE0},
+	{MT8196_POWER_DOMAIN_VDE_VCORE0, MT8196_POWER_DOMAIN_VDE1},
+	{MT8196_POWER_DOMAIN_VEN0, MT8196_POWER_DOMAIN_VEN1},
+	{MT8196_POWER_DOMAIN_VEN1, MT8196_POWER_DOMAIN_VEN2},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_DIS0_DORMANT},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_DIS1_DORMANT},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_OVL0_DORMANT},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_OVL1_DORMANT},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_DISP_EDPTX_DORMANT},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_DISP_DPTX_DORMANT},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_MML0_SHUTDOWN},
+	{MT8196_POWER_DOMAIN_DISP_VCORE, MT8196_POWER_DOMAIN_MML1_SHUTDOWN},
+	{MT8196_POWER_DOMAIN_MM_INFRA1, MT8196_POWER_DOMAIN_DISP_VCORE},
+	{MT8196_POWER_DOMAIN_MM_INFRA1, MT8196_POWER_DOMAIN_VDE_VCORE0},
+	{MT8196_POWER_DOMAIN_MM_INFRA1, MT8196_POWER_DOMAIN_VEN0},
+	{MT8196_POWER_DOMAIN_MM_INFRA0, MT8196_POWER_DOMAIN_MM_INFRA1},
+	{MT8196_POWER_DOMAIN_MM_INFRA_AO, MT8196_POWER_DOMAIN_MM_INFRA0},
+};
+
+static int mt8196_mmpc_post_probe(struct platform_device *pdev, struct scp *scp)
+{
+	int ret, i;
+	int subdomain[] = {
+		MT8196_POWER_DOMAIN_MM_INFRA_AO,
+		MT8196_POWER_DOMAIN_CSI_BS_RX,
+		MT8196_POWER_DOMAIN_CSI_LS_RX,
+		MT8196_POWER_DOMAIN_DSI_PHY0,
+		MT8196_POWER_DOMAIN_DSI_PHY1,
+		MT8196_POWER_DOMAIN_DSI_PHY2
+	};
+
+	for (i = 0; i < ARRAY_SIZE(subdomain); i++) {
+		ret = pm_genpd_add_subdomain(mt8196_mm_proc_domain, scp->pd_data.domains[subdomain[i]]);
+		if (ret && IS_ENABLED(CONFIG_PM)) {
+			dev_err(&pdev->dev, "Failed to add subdomain: %d\n", ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static const struct scp_soc_data mt2701_data = {
 	.domains = scp_domain_data_mt2701,
 	.num_domains = ARRAY_SIZE(scp_domain_data_mt2701),
@@ -1641,6 +2236,34 @@ static const struct scp_soc_data mt8173_data = {
 	.bus_prot_reg_update = true,
 };
 
+static const struct scp_soc_data mt8196_spm_vote_data = {
+	.domains = scp_domain_mt8196_spm_vote_data,
+	.num_domains = MT8196_SPM_POWER_DOMAIN_NR,
+	.subdomains = scp_subdomain_mt8196_spm,
+	.num_subdomains = ARRAY_SIZE(scp_subdomain_mt8196_spm),
+	.regs = {
+		.pwr_sta_offs = MT8196_SPM_PWR_STATUS,
+		.pwr_sta2nd_offs = MT8196_SPM_PWR_STATUS_2ND,
+	},
+	.bp_list = mt8196_spm_bp_list,
+	.num_bp = MT8196_SPM_BP_NR,
+	.post_probe = mt8196_spm_post_probe,
+};
+
+static const struct scp_soc_data mt8196_mmpc_vote_data = {
+	.domains = scp_domain_mt8196_mmpc_vote_data,
+	.num_domains = MT8196_MMPC_POWER_DOMAIN_NR,
+	.subdomains = scp_subdomain_mt8196_mmpc,
+	.num_subdomains = ARRAY_SIZE(scp_subdomain_mt8196_mmpc),
+	.regs = {
+		.pwr_sta_offs = MT8196_MM_PWR_STATUS,
+		.pwr_sta2nd_offs = MT8196_MM_PWR_STATUS_2ND,
+	},
+	.bp_list = mt8196_mmpc_bp_list,
+	.num_bp = MT8196_MMPC_BP_NR,
+	.post_probe = mt8196_mmpc_post_probe,
+};
+
 /*
  * scpsys driver init
  */
@@ -1664,6 +2287,12 @@ static const struct of_device_id of_scpsys_match_tbl[] = {
 	}, {
 		.compatible = "mediatek,mt8173-scpsys",
 		.data = &mt8173_data,
+	}, {
+		.compatible = "mediatek,mt8196-scpsys",
+		.data = &mt8196_spm_vote_data,
+	}, {
+		.compatible = "mediatek,mt8196-hfrpsys",
+		.data = &mt8196_mmpc_vote_data,
 	}, {
 		/* sentinel */
 	}
