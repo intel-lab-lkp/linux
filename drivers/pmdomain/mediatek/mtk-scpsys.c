@@ -43,6 +43,7 @@
 #define MTK_SCPD_UFS_RTFF		BIT(9)
 #define MTK_SCPD_RTFF_DELAY		BIT(10)
 #define MTK_SCPD_IRQ_SAFE		BIT(11)
+#define MTK_SCPD_ALWAYS_ON		BIT(12)
 #define MTK_SCPD_CAPS(_scpd, _x)	((_scpd)->data->caps & (_x))
 
 #define SPM_VDE_PWR_CON			0x0210
@@ -900,6 +901,8 @@ static struct scp *init_scp(struct platform_device *pdev,
 			genpd->flags |= GENPD_FLAG_ACTIVE_WAKEUP;
 		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_IRQ_SAFE))
 			genpd->flags |= GENPD_FLAG_IRQ_SAFE;
+		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_ALWAYS_ON))
+			genpd->flags |= GENPD_FLAG_ALWAYS_ON;
 	}
 
 	return scp;
