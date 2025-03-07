@@ -700,8 +700,6 @@ int devm_cxl_setup_fwctl(struct cxl_memdev *cxlmd)
 	if (rc)
 		return rc;
 
-	cxlfs->fwctl_dev = fwctl_dev;
-
 	return devm_add_action_or_reset(&cxlmd->dev, free_memdev_fwctl,
 					no_free_ptr(fwctl_dev));
 }

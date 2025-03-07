@@ -53,7 +53,6 @@ enum cxl_features_capability {
  * @entries: CXl feature entry context
  *	@num_features: total Features supported by the device
  *	@ent: Flex array of Feature detail entries from the device
- * @fwctl_dev: Firmware Control device
  */
 struct cxl_features_state {
 	struct cxl_dev_state *cxlds;
@@ -62,7 +61,6 @@ struct cxl_features_state {
 		int num_user_features;
 		struct cxl_feat_entry ent[] __counted_by(num_features);
 	} *entries;
-	struct fwctl_device *fwctl_dev;
 };
 
 struct cxl_mailbox;
