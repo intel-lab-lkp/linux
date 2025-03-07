@@ -18,9 +18,10 @@
 
 struct device;
 
-#define TIOCTL			0x00
-#define TIOCOMPV		0x10
-#define TIOEC			0x30
+/* PMC Registers */
+#define TIOCTL_PMC			0x00
+#define TIOCOMPV_PMC			0x10
+#define TIOEC_PMC			0x30
 
 /* Control Register */
 #define TIOCTL_EN			BIT(0)
@@ -36,9 +37,21 @@ struct device;
 #define MAGIC_CONST			(NSEC_PER_SEC - SAFE_TIME_NS)
 #define ART_HW_DELAY_CYCLES		2
 
+struct pps_tio_regs {
+	u32 ctl;
+	u32 compv;
+	u32 ec;
+};
+
+struct pps_tio_data {
+	struct pps_tio_regs regs;
+	u32 num_pins;
+};
+
 struct pps_tio {
 	struct pps_gen_source_info gen_info;
 	struct pps_gen_device *pps_gen;
+	struct pps_tio_regs regs;
 	struct hrtimer timer;
 	void __iomem *base;
 	u32 prev_count;
