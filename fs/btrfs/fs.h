@@ -105,6 +105,10 @@ enum {
 	/* Indicates there was an error cleaning up a log tree. */
 	BTRFS_FS_STATE_LOG_CLEANUP_ERROR,
 
+#ifdef CONFIG_BTRFS_DEBUG
+	/* No more delayed iput can be queued. */
+	BTRFS_FS_STATE_NO_DELAYED_IPUT,
+#endif
 	BTRFS_FS_STATE_COUNT
 };
 
