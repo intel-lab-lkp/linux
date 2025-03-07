@@ -383,8 +383,11 @@ do {										\
 	test_array_8(fn, expect, test_buffer, fmt_buffer, result);		\
 } while (0)
 
-static void numbers_list_ll(struct kunit *test, const char *delim)
+static void numbers_list_ll(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_8(unsigned long long, "%llu",   delim, "llu", check_ull);
 	numbers_list_8(long long,	   "%lld",   delim, "lld", check_ll);
 	numbers_list_8(long long,	   "%lld",   delim, "lli", check_ll);
@@ -393,8 +396,11 @@ static void numbers_list_ll(struct kunit *test, const char *delim)
 	numbers_list_8(long long,	   "0x%llx", delim, "lli", check_ll);
 }
 
-static void numbers_list_l(struct kunit *test, const char *delim)
+static void numbers_list_l(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_8(unsigned long,	   "%lu",    delim, "lu", check_ulong);
 	numbers_list_8(long,		   "%ld",    delim, "ld", check_long);
 	numbers_list_8(long,		   "%ld",    delim, "li", check_long);
@@ -403,8 +409,11 @@ static void numbers_list_l(struct kunit *test, const char *delim)
 	numbers_list_8(long,		   "0x%lx",  delim, "li", check_long);
 }
 
-static void numbers_list_d(struct kunit *test, const char *delim)
+static void numbers_list_d(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_8(unsigned int,	   "%u",     delim, "u", check_uint);
 	numbers_list_8(int,		   "%d",     delim, "d", check_int);
 	numbers_list_8(int,		   "%d",     delim, "i", check_int);
@@ -413,8 +422,11 @@ static void numbers_list_d(struct kunit *test, const char *delim)
 	numbers_list_8(int,		   "0x%x",   delim, "i", check_int);
 }
 
-static void numbers_list_h(struct kunit *test, const char *delim)
+static void numbers_list_h(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_8(unsigned short,	   "%hu",    delim, "hu", check_ushort);
 	numbers_list_8(short,		   "%hd",    delim, "hd", check_short);
 	numbers_list_8(short,		   "%hd",    delim, "hi", check_short);
@@ -423,8 +435,11 @@ static void numbers_list_h(struct kunit *test, const char *delim)
 	numbers_list_8(short,		   "0x%hx",  delim, "hi", check_short);
 }
 
-static void numbers_list_hh(struct kunit *test, const char *delim)
+static void numbers_list_hh(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_8(unsigned char,	   "%hhu",   delim, "hhu", check_uchar);
 	numbers_list_8(signed char,	   "%hhd",   delim, "hhd", check_char);
 	numbers_list_8(signed char,	   "%hhd",   delim, "hhi", check_char);
@@ -433,20 +448,11 @@ static void numbers_list_hh(struct kunit *test, const char *delim)
 	numbers_list_8(signed char,	   "0x%hhx", delim, "hhi", check_char);
 }
 
-static void numbers_list(struct kunit *test)
+static void numbers_list_field_width_ll(struct kunit *test)
 {
 	const char * const *param = test->param_value;
 	const char *delim = *param;
 
-	numbers_list_ll(test, delim);
-	numbers_list_l(test, delim);
-	numbers_list_d(test, delim);
-	numbers_list_h(test, delim);
-	numbers_list_hh(test, delim);
-}
-
-static void numbers_list_field_width_ll(struct kunit *test, const char *delim)
-{
 	numbers_list_fix_width(unsigned long long, "%llu",   delim, 20, "llu", check_ull);
 	numbers_list_fix_width(long long,	   "%lld",   delim, 20, "lld", check_ll);
 	numbers_list_fix_width(long long,	   "%lld",   delim, 20, "lli", check_ll);
@@ -455,8 +461,11 @@ static void numbers_list_field_width_ll(struct kunit *test, const char *delim)
 	numbers_list_fix_width(long long,	   "0x%llx", delim, 18, "lli", check_ll);
 }
 
-static void numbers_list_field_width_l(struct kunit *test, const char *delim)
+static void numbers_list_field_width_l(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 #if BITS_PER_LONG == 64
 	numbers_list_fix_width(unsigned long,	"%lu",	     delim, 20, "lu", check_ulong);
 	numbers_list_fix_width(long,		"%ld",	     delim, 20, "ld", check_long);
@@ -474,8 +483,11 @@ static void numbers_list_field_width_l(struct kunit *test, const char *delim)
 #endif
 }
 
-static void numbers_list_field_width_d(struct kunit *test, const char *delim)
+static void numbers_list_field_width_d(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_fix_width(unsigned int,	"%u",	     delim, 10, "u", check_uint);
 	numbers_list_fix_width(int,		"%d",	     delim, 11, "d", check_int);
 	numbers_list_fix_width(int,		"%d",	     delim, 11, "i", check_int);
@@ -484,8 +496,11 @@ static void numbers_list_field_width_d(struct kunit *test, const char *delim)
 	numbers_list_fix_width(int,		"0x%x",	     delim, 10, "i", check_int);
 }
 
-static void numbers_list_field_width_h(struct kunit *test, const char *delim)
+static void numbers_list_field_width_h(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_fix_width(unsigned short,	"%hu",	     delim, 5, "hu", check_ushort);
 	numbers_list_fix_width(short,		"%hd",	     delim, 6, "hd", check_short);
 	numbers_list_fix_width(short,		"%hd",	     delim, 6, "hi", check_short);
@@ -494,8 +509,11 @@ static void numbers_list_field_width_h(struct kunit *test, const char *delim)
 	numbers_list_fix_width(short,		"0x%hx",     delim, 6, "hi", check_short);
 }
 
-static void numbers_list_field_width_hh(struct kunit *test, const char *delim)
+static void numbers_list_field_width_hh(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_fix_width(unsigned char,	"%hhu",	     delim, 3, "hhu", check_uchar);
 	numbers_list_fix_width(signed char,	"%hhd",	     delim, 4, "hhd", check_char);
 	numbers_list_fix_width(signed char,	"%hhd",	     delim, 4, "hhi", check_char);
@@ -504,24 +522,11 @@ static void numbers_list_field_width_hh(struct kunit *test, const char *delim)
 	numbers_list_fix_width(signed char,	"0x%hhx",    delim, 4, "hhi", check_char);
 }
 
-/*
- * List of numbers separated by delim. Each field width specifier is the
- * maximum possible digits for the given type and base.
- */
-static void numbers_list_field_width_typemax(struct kunit *test)
+static void numbers_list_field_width_val_ll(struct kunit *test)
 {
 	const char * const *param = test->param_value;
 	const char *delim = *param;
 
-	numbers_list_field_width_ll(test, delim);
-	numbers_list_field_width_l(test, delim);
-	numbers_list_field_width_d(test, delim);
-	numbers_list_field_width_h(test, delim);
-	numbers_list_field_width_hh(test, delim);
-}
-
-static void numbers_list_field_width_val_ll(struct kunit *test, const char *delim)
-{
 	numbers_list_val_width(unsigned long long, "%llu",   delim, "llu", check_ull);
 	numbers_list_val_width(long long,	   "%lld",   delim, "lld", check_ll);
 	numbers_list_val_width(long long,	   "%lld",   delim, "lli", check_ll);
@@ -530,8 +535,11 @@ static void numbers_list_field_width_val_ll(struct kunit *test, const char *deli
 	numbers_list_val_width(long long,	   "0x%llx", delim, "lli", check_ll);
 }
 
-static void numbers_list_field_width_val_l(struct kunit *test, const char *delim)
+static void numbers_list_field_width_val_l(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_val_width(unsigned long,	"%lu",	     delim, "lu", check_ulong);
 	numbers_list_val_width(long,		"%ld",	     delim, "ld", check_long);
 	numbers_list_val_width(long,		"%ld",	     delim, "li", check_long);
@@ -540,8 +548,11 @@ static void numbers_list_field_width_val_l(struct kunit *test, const char *delim
 	numbers_list_val_width(long,		"0x%lx",     delim, "li", check_long);
 }
 
-static void numbers_list_field_width_val_d(struct kunit *test, const char *delim)
+static void numbers_list_field_width_val_d(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_val_width(unsigned int,	"%u",	     delim, "u", check_uint);
 	numbers_list_val_width(int,		"%d",	     delim, "d", check_int);
 	numbers_list_val_width(int,		"%d",	     delim, "i", check_int);
@@ -550,8 +561,11 @@ static void numbers_list_field_width_val_d(struct kunit *test, const char *delim
 	numbers_list_val_width(int,		"0x%x",	     delim, "i", check_int);
 }
 
-static void numbers_list_field_width_val_h(struct kunit *test, const char *delim)
+static void numbers_list_field_width_val_h(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_val_width(unsigned short,	"%hu",	     delim, "hu", check_ushort);
 	numbers_list_val_width(short,		"%hd",	     delim, "hd", check_short);
 	numbers_list_val_width(short,		"%hd",	     delim, "hi", check_short);
@@ -560,46 +574,17 @@ static void numbers_list_field_width_val_h(struct kunit *test, const char *delim
 	numbers_list_val_width(short,		"0x%hx",     delim, "hi", check_short);
 }
 
-static void numbers_list_field_width_val_hh(struct kunit *test, const char *delim)
+static void numbers_list_field_width_val_hh(struct kunit *test)
 {
+	const char * const *param = test->param_value;
+	const char *delim = *param;
+
 	numbers_list_val_width(unsigned char,	"%hhu",	     delim, "hhu", check_uchar);
 	numbers_list_val_width(signed char,	"%hhd",	     delim, "hhd", check_char);
 	numbers_list_val_width(signed char,	"%hhd",	     delim, "hhi", check_char);
 	numbers_list_val_width(unsigned char,	"%hhx",	     delim, "hhx", check_uchar);
 	numbers_list_val_width(unsigned char,	"0x%hhx",    delim, "hhx", check_uchar);
 	numbers_list_val_width(signed char,	"0x%hhx",    delim, "hhi", check_char);
-}
-
-/*
- * List of numbers separated by delim. Each field width specifier is the
- * exact length of the corresponding value digits in the string being scanned.
- */
-static void numbers_list_field_width_val_width(struct kunit *test)
-{
-	const char * const *param = test->param_value;
-	const char *delim = *param;
-
-	numbers_list_field_width_val_ll(test, delim);
-	numbers_list_field_width_val_l(test, delim);
-	numbers_list_field_width_val_d(test, delim);
-	numbers_list_field_width_val_h(test, delim);
-	numbers_list_field_width_val_hh(test, delim);
-}
-
-/*
- * Slice a continuous string of digits without field delimiters, containing
- * numbers of varying length, using the field width to extract each group
- * of digits. For example the hex values c0,3,bf01,303 would have a
- * string representation of "c03bf01303" and extracted with "%2x%1x%4x%3x".
- */
-static void numbers_slice(struct kunit *test)
-{
-	const char *delim = "";
-
-	KUNIT_ASSERT_PTR_EQ(test, test->param_value, NULL);
-	test->param_value = &delim;
-
-	numbers_list_field_width_val_width(test);
 }
 
 #define test_number_prefix(T, str, scan_fmt, expect0, expect1, n_args, fn)	\
@@ -758,16 +743,49 @@ static void number_delimiter_param_desc(const char * const *param,
 
 KUNIT_ARRAY_PARAM(number_delimiters, number_delimiters, number_delimiter_param_desc);
 
+static const void *optional_number_delimiters_gen_params(const void *prev, char *desc)
+{
+	static const char * const blank = "";
+
+	if (prev == NULL) {
+		number_delimiter_param_desc(&blank, desc);
+		return &blank;
+	}
+	if (prev == &blank)
+		return number_delimiters_gen_params(NULL, desc);
+	return number_delimiters_gen_params(prev, desc);
+}
+
 static struct kunit_case scanf_test_cases[] = {
 	KUNIT_CASE(numbers_simple),
 	/* String with multiple numbers separated by delimiter. */
-	KUNIT_CASE_PARAM(numbers_list, number_delimiters_gen_params),
-	/* Field width may be longer than actual field digits. */
-	KUNIT_CASE_PARAM(numbers_list_field_width_typemax, number_delimiters_gen_params),
-	/* Each field width exactly length of actual field digits. */
-	KUNIT_CASE_PARAM(numbers_list_field_width_val_width, number_delimiters_gen_params),
-	/* Slice continuous sequence of digits using field widths. */
-	KUNIT_CASE(numbers_slice),
+	KUNIT_CASE_PARAM(numbers_list_ll, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_l, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_d, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_h, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_hh, number_delimiters_gen_params),
+
+	/*
+	 * Lists of numbers separated by delim. Each field width specifier is the
+	 * maximum possible digits for the given type and base.
+	 */
+	KUNIT_CASE_PARAM(numbers_list_field_width_ll, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_l, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_d, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_h, number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_hh, number_delimiters_gen_params),
+
+	/*
+	 * Lists of numbers separated by delim. Each field width specifier is the
+	 * exact length of the corresponding value digits in the string being scanned.
+	 * The empty string is included in the list of delimiters.
+	 */
+	KUNIT_CASE_PARAM(numbers_list_field_width_val_ll, optional_number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_val_l, optional_number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_val_d, optional_number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_val_h, optional_number_delimiters_gen_params),
+	KUNIT_CASE_PARAM(numbers_list_field_width_val_hh, optional_number_delimiters_gen_params),
+
 	KUNIT_CASE(numbers_prefix_overflow),
 
 	KUNIT_CASE(test_simple_strtoull),
