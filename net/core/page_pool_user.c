@@ -33,7 +33,7 @@ DEFINE_MUTEX(page_pools_lock);
  *    - user.list: unhashed, netdev: unknown
  */
 
-typedef int (*pp_nl_fill_cb)(struct sk_buff *rsp, const struct page_pool *pool,
+typedef int (*pp_nl_fill_cb)(struct sk_buff *rsp, struct page_pool *pool,
 			     const struct genl_info *info);
 
 static int
@@ -111,7 +111,7 @@ out:
 }
 
 static int
-page_pool_nl_stats_fill(struct sk_buff *rsp, const struct page_pool *pool,
+page_pool_nl_stats_fill(struct sk_buff *rsp, struct page_pool *pool,
 			const struct genl_info *info)
 {
 #ifdef CONFIG_PAGE_POOL_STATS
@@ -212,8 +212,36 @@ int netdev_nl_page_pool_stats_get_dumpit(struct sk_buff *skb,
 	return netdev_nl_page_pool_get_dump(skb, cb, page_pool_nl_stats_fill);
 }
 
+static int page_pool_nl_fill_item_mem_info(struct page_pool *pool,
+					   struct sk_buff *rsp)
+{
+	struct page_pool_item_block *block;
+	size_t resident = 0, used = 0;
+	int err;
+
+	spin_lock_bh(&pool->item_lock);
+
+	list_for_each_entry(block, &pool->item_blocks, list) {
+		resident += PAGE_SIZE;
+
+		if (block->flags & PAGE_POOL_SLOW_ITEM_BLOCK_BIT)
+			used += (PAGE_SIZE - sizeof(struct page_pool_item) *
+				 refcount_read(&block->ref));
+		else
+			used += PAGE_SIZE;
+	}
+
+	spin_unlock_bh(&pool->item_lock);
+
+	err = nla_put_uint(rsp, NETDEV_A_PAGE_POOL_ITEM_MEM_RESIDENT, resident);
+	if (err)
+		return err;
+
+	return nla_put_uint(rsp, NETDEV_A_PAGE_POOL_ITEM_MEM_USED, used);
+}
+
 static int
-page_pool_nl_fill(struct sk_buff *rsp, const struct page_pool *pool,
+page_pool_nl_fill(struct sk_buff *rsp, struct page_pool *pool,
 		  const struct genl_info *info)
 {
 	size_t inflight, refsz;
@@ -251,6 +279,9 @@ page_pool_nl_fill(struct sk_buff *rsp, const struct page_pool *pool,
 	if (pool->mp_ops && pool->mp_ops->nl_fill(pool->mp_priv, rsp, NULL))
 		goto err_cancel;
 
+	if (page_pool_nl_fill_item_mem_info(pool, rsp))
+		goto err_cancel;
+
 	genlmsg_end(rsp, hdr);
 
 	return 0;
@@ -259,7 +290,7 @@ err_cancel:
 	return -EMSGSIZE;
 }
 
-static void netdev_nl_page_pool_event(const struct page_pool *pool, u32 cmd)
+static void netdev_nl_page_pool_event(struct page_pool *pool, u32 cmd)
 {
 	struct genl_info info;
 	struct sk_buff *ntf;

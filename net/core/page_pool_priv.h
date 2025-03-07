@@ -7,6 +7,8 @@
 
 #include "netmem_priv.h"
 
+#define PAGE_POOL_SLOW_ITEM_BLOCK_BIT		BIT(0)
+
 extern struct mutex page_pools_lock;
 
 s32 page_pool_inflight(const struct page_pool *pool, bool strict);

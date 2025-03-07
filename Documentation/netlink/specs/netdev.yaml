@@ -183,6 +183,20 @@ attribute-sets:
         doc: io-uring memory provider information.
         type: nest
         nested-attributes: io-uring-provider-info
+      -
+        name: item_mem_resident
+        type: uint
+        doc: |
+          Amount of actual memory allocated to track inflight pages.
+          memory fragmentation ratio for item memory can be calculated
+          using item_mem_resident / item_mem_used.
+      -
+        name: item_mem_used
+        type: uint
+        doc: |
+          Amount of actual memory used to track inflight pages.
+          memory fragmentation ratio for item memory can be calculated
+          using item_mem_resident / item_mem_used.
   -
     name: page-pool-info
     subset-of: page-pool
@@ -602,6 +616,8 @@ operations:
             - detach-time
             - dmabuf
             - io-uring
+            - item_mem_resident
+            - item_mem_used
       dump:
         reply: *pp-reply
       config-cond: page-pool
