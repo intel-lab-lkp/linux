@@ -154,7 +154,8 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 	 * if not, let's fail the creation as trying to guess if probe was
 	 * successful is almost impossible to determine by the caller.
 	 */
-	if (!dev->driver) {
+	/* Do not need to device_lock(dev) due to no race here */
+	if (!device_is_bound(dev)) {
 		dev_err(dev, "probe did not succeed, tearing down the device\n");
 		faux_device_destroy(faux_dev);
 		faux_dev = NULL;
