@@ -90,6 +90,12 @@ Bitmap Operations
 .. kernel-doc:: include/linux/bitmap.h
    :internal:
 
+Cpumask Operations
+------------------
+
+.. kernel-doc:: include/linux/cpumask.h
+   :internal:
+
 Command-line Parsing
 --------------------
 
