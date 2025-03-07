@@ -231,6 +231,14 @@ static const struct pps_tio_data pmc_data = {
 	},
 };
 
+static const struct pps_tio_data ehl_pse_data = {
+	.regs = {
+		.ctl = TIOCTL_PSE,
+		.compv = TIOCOMPV_PSE,
+		.ec = TIOEC_PSE,
+	},
+};
+
 static const struct acpi_device_id intel_pmc_tio_acpi_match[] = {
 	{ "INTC1021", (kernel_ulong_t)&pmc_data },
 	{ "INTC1022", (kernel_ulong_t)&pmc_data },
@@ -240,9 +248,16 @@ static const struct acpi_device_id intel_pmc_tio_acpi_match[] = {
 };
 MODULE_DEVICE_TABLE(acpi, intel_pmc_tio_acpi_match);
 
+static const struct platform_device_id pps_gen_tio_ids[] = {
+	{ "pps-gen-tio", (kernel_ulong_t)&ehl_pse_data },
+	{ }
+};
+MODULE_DEVICE_TABLE(platform, pps_gen_tio_ids);
+
 static struct platform_driver pps_gen_tio_driver = {
 	.probe          = pps_gen_tio_probe,
 	.remove         = pps_gen_tio_remove,
+	.id_table	= pps_gen_tio_ids,
 	.driver         = {
 		.name                   = "intel-pps-gen-tio",
 		.acpi_match_table       = intel_pmc_tio_acpi_match,
@@ -255,5 +270,5 @@ MODULE_AUTHOR("Lakshmi Sowjanya D <lakshmi.sowjanya.d@intel.com>");
 MODULE_AUTHOR("Pandith N <pandith.n@intel.com>");
 MODULE_AUTHOR("Thejesh Reddy T R <thejesh.reddy.t.r@intel.com>");
 MODULE_AUTHOR("Subramanian Mohan <subramanian.mohan@intel.com>");
-MODULE_DESCRIPTION("Intel PMC Time-Aware IO Generator Driver");
+MODULE_DESCRIPTION("Intel Time-Aware IO Generator Driver");
 MODULE_LICENSE("GPL");
