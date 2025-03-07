@@ -3,6 +3,7 @@
  * Copyright © 2018 Intel Corporation
  */
 
+#include "linux/kconfig.h"
 #include <linux/prime_numbers.h>
 
 #include "gem/i915_gem_internal.h"
@@ -857,6 +858,16 @@ static int live_lrc_timestamp(void *arg)
 		(u32)S32_MAX + 1,
 		U32_MAX,
 	};
+
+	/*
+	 * This test was created to show existence of hardware bug.
+	 * The bug was found and fixed in further generations but
+	 * now this test polutes our CI on previous generations.
+	 *
+	 * https://gitlab.freedesktop.org/drm/i915/kernel/-/issues/13697
+	 */
+	if (!IS_ENABLED(CONFIG_DRM_I915_SELFTEST_BROKEN))
+		return 0;
 
 	/*
 	 * We want to verify that the timestamp is saved and restore across
