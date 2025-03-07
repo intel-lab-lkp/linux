@@ -92,6 +92,7 @@ class Event(dict):
         'sample_regs_user',
         'sample_stack_user',
         'alt_sample_period',
+        'jitter_alt_period',
     ]
 
     def add(self, data):

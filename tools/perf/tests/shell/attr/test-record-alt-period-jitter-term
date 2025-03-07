@@ -1,0 +1,13 @@
+[config]
+command = record
+args    = --no-bpf-event -e cycles/period=3,alt-period=2,alt-period-jitter=7/ -- kill >/dev/null 2>&1
+ret     = 1
+kernel_since = 6.11
+
+[event-10:base-record]
+sample_period=3
+alt_sample_period=2
+jitter_alt_period=7
+
+freq=0
+sample_type=7
