@@ -1432,13 +1432,6 @@ static bool intel_psr2_config_valid(struct intel_dp *intel_dp,
 		return false;
 	}
 
-	if (!transcoder_has_psr2(display, crtc_state->cpu_transcoder)) {
-		drm_dbg_kms(display->drm,
-			    "PSR2 not supported in transcoder %s\n",
-			    transcoder_name(crtc_state->cpu_transcoder));
-		return false;
-	}
-
 	/*
 	 * DSC and PSR2 cannot be enabled simultaneously. If a requested
 	 * resolution requires DSC to be enabled, priority is given to DSC
@@ -1517,6 +1510,13 @@ static bool intel_sel_update_config_valid(struct intel_dp *intel_dp,
 	if (!psr2_global_enabled(intel_dp)) {
 		drm_dbg_kms(display->drm,
 			    "Selective update disabled by flag\n");
+		goto unsupported;
+	}
+
+	if (!transcoder_has_psr2(display, crtc_state->cpu_transcoder)) {
+		drm_dbg_kms(display->drm,
+			    "Selective update not supported in transcoder %s\n",
+			    transcoder_name(crtc_state->cpu_transcoder));
 		goto unsupported;
 	}
 
