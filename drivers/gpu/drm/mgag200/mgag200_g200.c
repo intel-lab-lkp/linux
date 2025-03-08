@@ -115,6 +115,10 @@ static int mgag200_g200_pixpllc_atomic_check(struct drm_crtc *crtc, struct drm_a
 			}
 		}
 	}
+
+	if (!m)
+		return -EINVAL;
+
 	f_vco = ref_clk * n / m;
 	if (f_vco < 100000)
 		s = 0;
