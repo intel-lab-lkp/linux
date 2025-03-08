@@ -530,6 +530,12 @@ struct bpf_map *bpf_map_offload_map_alloc(union bpf_attr *attr)
 	bpf_map_init_from_attr(&offmap->map, attr);
 	rtnl_lock();
 	offmap->netdev = __dev_get_by_index(net, attr->map_ifindex);
+	if (!offmap->netdev) {
+		rtnl_unlock();
+		bpf_map_area_free(offmap);
+		return ERR_PTR(-ENODEV);
+	}	
+
 	netdev_lock_ops(offmap->netdev);
 	down_write(&bpf_devs_lock);
 	err = bpf_dev_offload_check(offmap->netdev);
