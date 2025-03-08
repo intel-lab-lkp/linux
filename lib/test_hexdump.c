@@ -22,32 +22,30 @@ static const unsigned char data_b[] = {
 static unsigned total_tests __initdata;
 static unsigned failed_tests __initdata;
 
-static void __init test_hexdump_prepare_test(size_t len, size_t rowsize,
-					     size_t groupsize, char *test,
-					     size_t testlen, bool ascii)
+static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
+					       size_t groupsize, char *test,
+					       size_t testlen, bool ascii)
 {
 	char *p;
-	size_t l = len;
-	size_t gs = groupsize, rs = rowsize;
-	size_t bs, i, j;
+	size_t byteswap, i, j;
 
-	if (rs != 16 && rs != 32)
-		rs = 16;
+	if (rowsize != 16 && rowsize != 32)
+		rowsize = 16;
 
-	if (l > rs)
-		l = rs;
+	if (len > rowsize)
+		len = rowsize;
 
-	if (!is_power_of_2(gs) || gs > 8 || (len % gs != 0))
-		gs = 1;
-	bs = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? 0 : gs - 1;
+	if (!is_power_of_2(groupsize) || groupsize > 8 || (len % groupsize != 0))
+		groupsize = 1;
+	byteswap = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? 0 : groupsize - 1;
 
 	/* hex dump */
 	p = test;
-	for (i = 0, j = 0; i < l; i++) {
-		unsigned char b = data_b[i ^ bs];
+	for (i = 0, j = 0; i < len; i++) {
+		unsigned char b = data_b[i ^ byteswap];
 		*p++ = "0123456789abcdef"[b >> 4];
 		*p++ = "0123456789abcdef"[b & 15];
-		if (++j == gs) {
+		if (++j == groupsize) {
 			j = 0;
 			*p++ = ' ';
 		}
@@ -59,15 +57,16 @@ static void __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 	if (ascii) {
 		do {
 			*p++ = ' ';
-		} while (p < test + rs * 2 + rs / gs + 1);
+		} while (p < test + rowsize * 2 + rowsize / groupsize + 1);
 
-		for (i = 0; i < l; i++) {
+		for (i = 0; i < len; i++) {
 			unsigned char b = data_b[i];
 			*p++ = (isascii(b) && isprint(b)) ? b : '.';
 		}
 	}
 
 	*p = '\0';
+	return p - test;
 }
 
 #define TEST_HEXDUMP_BUF_SIZE		(32 * 3 + 2 + 32 + 1)
@@ -113,44 +112,35 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 {
 	char test[TEST_HEXDUMP_BUF_SIZE];
 	char buf[TEST_HEXDUMP_BUF_SIZE];
-	size_t rs = rowsize, gs = groupsize;
-	size_t ae, he, e, f, r;
-	bool a;
+	size_t expected;
+	size_t f, result;
+	bool ok;
 
 	total_tests++;
 
 	memset(buf, FILL_CHAR, sizeof(buf));
 
-	r = hex_dump_to_buffer(data_b, len, rs, gs, buf, buflen, ascii);
+	result = hex_dump_to_buffer(data_b, len, rowsize, groupsize, buf,
+				    buflen, ascii);
 
-	/*
-	 * Caller must provide the data length multiple of groupsize. The
-	 * calculations below are made with that assumption in mind.
-	 */
-	ae = rs * 2 /* hex */ + rs / gs /* spaces */ + 1 /* space */ + len /* ascii */;
-	he = (gs * 2 /* hex */ + 1 /* space */) * len / gs - 1 /* no trailing space */;
+	/* Test output is generated into a 'long enough' buffer */
+	expected = test_hexdump_prepare_test(len, rowsize, groupsize, test,
+					     sizeof(test), ascii);
 
-	if (ascii)
-		e = ae;
-	else
-		e = he;
-
-	f = min(e + 1, buflen);
-	if (buflen) {
-		test_hexdump_prepare_test(len, rs, gs, test, sizeof(test), ascii);
+	f = min(expected + 1, buflen);
+	if (f)
 		test[f - 1] = '\0';
-	}
 	memset(test + f, FILL_CHAR, sizeof(test) - f);
 
-	a = r == e && !memcmp(test, buf, TEST_HEXDUMP_BUF_SIZE);
+	ok = result == expected && !memcmp(test, buf, TEST_HEXDUMP_BUF_SIZE);
 
 	buf[sizeof(buf) - 1] = '\0';
 
-	if (!a) {
+	if (!ok) {
 		pr_err("Len: %zu buflen: %zu strlen: %zu\n",
 			len, buflen, strnlen(buf, sizeof(buf)));
-		pr_err("Result: %zu '%s'\n", r, buf);
-		pr_err("Expect: %zu '%s'\n", e, test);
+		pr_err("Result: %zu '%s'\n", result, buf);
+		pr_err("Expect: %zu '%s'\n", expected, test);
 		failed_tests++;
 	}
 }
@@ -158,13 +148,14 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 static void __init test_hexdump_overflow_set(size_t buflen, bool ascii)
 {
 	unsigned int i = 0;
-	size_t rs = get_random_u32_inclusive(1, 2) * 16;
+	size_t rowsize = get_random_u32_inclusive(1, 2) * 16;
 
 	do {
-		size_t gs = 1 << i;
-		size_t len = get_random_u32_below(rs) + gs;
+		size_t groupsize = 1 << i;
+		size_t len = get_random_u32_below(rowsize) + groupsize;
 
-		test_hexdump_overflow(buflen, rounddown(len, gs), rs, gs, ascii);
+		test_hexdump_overflow(buflen, rounddown(len, groupsize),
+				      rowsize, groupsize, ascii);
 	} while (i++ < 3);
 }
 
