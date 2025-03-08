@@ -89,6 +89,7 @@ struct loop_cmd {
 
 #define LOOP_IDLE_WORKER_TIMEOUT (60 * HZ)
 #define LOOP_DEFAULT_HW_Q_DEPTH 128
+#define LOOP_DEFAULT_NR_HW_Q 1
 
 static void loop_queue_work(struct loop_device *lo, struct loop_cmd *cmd);
 
@@ -1926,6 +1927,26 @@ static const struct kernel_param_ops loop_hw_qdepth_param_ops = {
 device_param_cb(hw_queue_depth, &loop_hw_qdepth_param_ops, &hw_queue_depth, 0444);
 MODULE_PARM_DESC(hw_queue_depth, "Queue depth for each hardware queue. Default: " __stringify(LOOP_DEFAULT_HW_Q_DEPTH));
 
+static int nr_hw_queues = LOOP_DEFAULT_NR_HW_Q;
+static int loop_set_nr_hw_queues(const char *s, const struct kernel_param *p)
+{
+	int nr, ret;
+
+	ret = kstrtoint(s, 0, &nr);
+	if (ret < 0)
+		return ret;
+	if (nr < 1)
+		return -EINVAL;
+	nr_hw_queues = nr;
+	return 0;
+}
+static const struct kernel_param_ops loop_nr_hw_q_param_ops = {
+	.set	= loop_set_nr_hw_queues,
+	.get	= param_get_int,
+};
+device_param_cb(nr_hw_queues, &loop_nr_hw_q_param_ops, &nr_hw_queues, 0444);
+MODULE_PARM_DESC(nr_hw_queues, "number of hardware queues. Default: " __stringify(LOOP_DEFAULT_NR_HW_Q));
+
 MODULE_DESCRIPTION("Loopback device support");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS_BLOCKDEV_MAJOR(LOOP_MAJOR);
@@ -2110,7 +2131,7 @@ static int loop_add(int i)
 	i = err;
 
 	lo->tag_set.ops = &loop_mq_ops;
-	lo->tag_set.nr_hw_queues = 1;
+	lo->tag_set.nr_hw_queues = nr_hw_queues;
 	lo->tag_set.queue_depth = hw_queue_depth;
 	lo->tag_set.numa_node = NUMA_NO_NODE;
 	lo->tag_set.cmd_size = sizeof(struct loop_cmd);
