@@ -146,13 +146,12 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 
 	ok = result == expected && !memcmp(test, buf, TEST_HEXDUMP_BUF_SIZE);
 
-	buf[sizeof(buf) - 1] = '\0';
-
 	if (!ok) {
-		pr_err("Len: %zu buflen: %zu strlen: %zu\n",
+		pr_err("Rowsize %zu, groupsize %zu, ascii %s, len %zu, buflen %zu, strlen %zu\n",
+			rowsize, groupsize, ascii ? "yes" : "no",
 			len, buflen, strnlen(buf, sizeof(buf)));
-		pr_err("Result: %zu '%s'\n", result, buf);
-		pr_err("Expect: %zu '%s'\n", expected, test);
+		pr_err("Result: %zd '%.*s'\n", result, TEST_HEXDUMP_BUF_SIZE, buf);
+		pr_err("Expect: %zd '%.*s'\n", expected, TEST_HEXDUMP_BUF_SIZE, test);
 		failed_tests++;
 	}
 }
