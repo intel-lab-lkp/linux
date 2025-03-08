@@ -40,22 +40,10 @@ properties:
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
-    properties:
-      port@0:
+    patternProperties:
+      port@[0-3]:
         $ref: /schemas/graph.yaml#/properties/port
-        description: GMSL Input 0
-
-      port@1:
-        $ref: /schemas/graph.yaml#/properties/port
-        description: GMSL Input 1
-
-      port@2:
-        $ref: /schemas/graph.yaml#/properties/port
-        description: GMSL Input 2
-
-      port@3:
-        $ref: /schemas/graph.yaml#/properties/port
-        description: GMSL Input 3
+        description: GMSL Input port
 
       port@4:
         $ref: /schemas/graph.yaml#/$defs/port-base
