@@ -21,9 +21,9 @@ static const unsigned char data_b[] = {
 static unsigned total_tests __initdata;
 static unsigned failed_tests __initdata;
 
-static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
-					       size_t groupsize, char *test,
-					       size_t testlen, bool ascii)
+static size_t __init test_hexdump_prepare_test(const unsigned char *buf, size_t len,
+					       size_t rowsize, size_t groupsize,
+					       char *test, size_t testlen, bool ascii)
 {
 	char *p;
 	size_t byteswap, i, j;
@@ -54,7 +54,7 @@ static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 	/* hex dump */
 	p = test;
 	for (i = 0, j = 0; i < len; i++) {
-		unsigned char b = data_b[i ^ byteswap];
+		unsigned char b = buf[i ^ byteswap];
 		*p++ = "0123456789abcdef"[b >> 4];
 		*p++ = "0123456789abcdef"[b & 15];
 		if (++j == groupsize) {
@@ -71,7 +71,7 @@ static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 		} while (p < test + rowsize * 2 + rowsize / groupsize + 1);
 
 		for (i = 0; i < len; i++) {
-			unsigned char b = data_b[i];
+			unsigned char b = buf[i];
 			*p++ = (isascii(b) && isprint(b)) ? b : '.';
 		}
 	}
@@ -82,8 +82,8 @@ static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 
 #define TEST_HEXDUMP_BUF_SIZE		(32 * 3 + 2 + 32 + 1)
 
-static void __init test_hexdump(size_t len, size_t rowsize, size_t groupsize,
-				bool ascii)
+static void __init test_hexdump(const void *buf, size_t len, size_t rowsize,
+				size_t groupsize, bool ascii)
 {
 	char test[TEST_HEXDUMP_BUF_SIZE];
 	char real[TEST_HEXDUMP_BUF_SIZE];
@@ -91,11 +91,11 @@ static void __init test_hexdump(size_t len, size_t rowsize, size_t groupsize,
 	total_tests++;
 
 	memset(real, FILL_CHAR, sizeof(real));
-	hex_dump_to_buffer(data_b, len, rowsize, groupsize, real, sizeof(real),
+	hex_dump_to_buffer(buf, len, rowsize, groupsize, real, sizeof(real),
 			   ascii);
 
 	memset(test, FILL_CHAR, sizeof(test));
-	test_hexdump_prepare_test(len, rowsize, groupsize, test, sizeof(test),
+	test_hexdump_prepare_test(buf, len, rowsize, groupsize, test, sizeof(test),
 				  ascii);
 
 	if (memcmp(test, real, TEST_HEXDUMP_BUF_SIZE)) {
@@ -111,10 +111,10 @@ static void __init test_hexdump_set(size_t rowsize, bool ascii)
 	size_t len;
 
 	for (len = 1; len <= rowsize; len++) {
-		test_hexdump(len, rowsize, 4, ascii);
-		test_hexdump(len, rowsize, 2, ascii);
-		test_hexdump(len, rowsize, 8, ascii);
-		test_hexdump(len, rowsize, 1, ascii);
+		test_hexdump(data_b, len, rowsize, 4, ascii);
+		test_hexdump(data_b, len, rowsize, 2, ascii);
+		test_hexdump(data_b, len, rowsize, 8, ascii);
+		test_hexdump(data_b, len, rowsize, 1, ascii);
 	}
 }
 
@@ -136,7 +136,7 @@ static bool __init test_hexdump_overflow(size_t buflen, size_t len,
 				    buflen, ascii);
 
 	/* Test output is generated into a 'long enough' buffer */
-	expected = test_hexdump_prepare_test(len, rowsize, groupsize, test,
+	expected = test_hexdump_prepare_test(data_b, len, rowsize, groupsize, test,
 					     sizeof(test), ascii);
 
 	f = min(expected + 1, buflen);
@@ -175,6 +175,22 @@ static void __init test_hexdump_overflow_set(size_t rowsize, bool ascii)
 	}
 }
 
+static void __init test_hexdump_bytes(void)
+{
+	unsigned char buf[16];
+	size_t i, j;
+
+	for (i = 0; i < 256; i += 16) {
+		for (j = 0; j < 16; j++)
+			buf[j] = i + j;
+		test_hexdump(buf, 16, 16, 1, true);
+		test_hexdump(buf, 16, 16, 2, true);
+		test_hexdump(buf, 16, 16, 4, true);
+		test_hexdump(buf, 16, 16, 8, true);
+	}
+}
+
+
 static int __init test_hexdump_init(void)
 {
 	size_t rowsize;
@@ -188,6 +204,8 @@ static int __init test_hexdump_init(void)
 	test_hexdump_overflow_set(16, true);
 	test_hexdump_overflow_set(32, false);
 	test_hexdump_overflow_set(32, true);
+
+	test_hexdump_bytes();
 
 	if (failed_tests == 0)
 		pr_info("all %u tests passed\n", total_tests);
