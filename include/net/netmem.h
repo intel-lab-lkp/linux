@@ -20,8 +20,21 @@ DECLARE_STATIC_KEY_FALSE(page_pool_mem_providers);
  */
 #define NET_IOV 0x01UL
 
+enum net_iov_type {
+	/* The unspecified type is temporary until the io_uring net_iovs being
+	 * worked on in parallel are migrated to specify their type, then this
+	 * can be deprecated.
+	 */
+	NET_IOV_UNSPECIFIED = 0,
+	NET_IOV_DMABUF,
+
+	/* Force size to unsigned long to make the NET_IOV_ASSERTS below pass.
+	 */
+	NET_IOV_MAX = ULONG_MAX,
+};
+
 struct net_iov {
-	unsigned long __unused_padding;
+	enum net_iov_type type;
 	unsigned long pp_magic;
 	struct page_pool *pp;
 	struct net_iov_area *owner;
