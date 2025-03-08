@@ -41,9 +41,6 @@ properties:
     description:
       Specifier for the GPIO connected to the PWDNB pin.
 
-  port0-poc-supply:
-    description: Regulator providing Power over Coax for the GMSL port
-
 required:
   - compatible
   - reg
@@ -62,6 +59,9 @@ allOf:
         - ports
 
       properties:
+        port0-poc-supply:
+          description: Regulator providing Power over Coax for the GMSL port
+
         i2c-gate:
           $ref: /schemas/i2c/i2c-gate.yaml
           unevaluatedProperties: false
