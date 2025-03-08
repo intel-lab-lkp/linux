@@ -26,6 +26,7 @@ description:
   MAX96714F only supports a fixed rate of 3Gbps in the forward direction.
   MAX9296A only supports pixel mode, and has two GMSL2 links.
   MAX96716A supports both tunnel and pixel mode, and has two GMSL2 links.
+  MAX96792A supports both tunnel and pixel mode, and has two GMSL3 links.
 
 properties:
   compatible:
@@ -33,6 +34,7 @@ properties:
       - const: maxim,max9296a
       - const: maxim,max96714f
       - const: maxim,max96716a
+      - const: maxim,max96792a
       - items:
           - enum:
               - maxim,max96714
@@ -120,6 +122,7 @@ allOf:
           contains:
             enum:
               - maxim,max9296a
+              - maxim,max96792a
     then:
       allOf:
         - $ref: /schemas/i2c/i2c-atr.yaml#
@@ -163,6 +166,7 @@ allOf:
             enum:
               - maxim,max9296a
               - maxim,max96716a
+              - maxim,max96792a
     then:
       properties:
         port0-poc-supply:
