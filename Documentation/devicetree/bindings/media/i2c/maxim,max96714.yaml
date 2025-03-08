@@ -84,14 +84,6 @@ properties:
     required:
       - port@1
 
-  i2c-gate:
-    $ref: /schemas/i2c/i2c-gate.yaml
-    unevaluatedProperties: false
-    description:
-      The MAX96714 will pass through and forward the I2C requests from the
-      incoming I2C bus over the GMSL2 link. Therefore it supports an i2c-gate
-      subnode to configure a serializer.
-
   port0-poc-supply:
     description: Regulator providing Power over Coax for the GMSL port
 
@@ -101,6 +93,19 @@ required:
   - ports
 
 additionalProperties: false
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - maxim,max96714
+              - maxim,max96714f
+    then:
+      properties:
+        i2c-gate:
+          $ref: /schemas/i2c/i2c-gate.yaml
+          unevaluatedProperties: false
 
 examples:
   - |
