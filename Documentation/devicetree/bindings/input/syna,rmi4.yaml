@@ -49,6 +49,24 @@ properties:
     description:
       Delay to wait after powering on the device.
 
+  syna,pdt-fallback-desc:
+    $ref: /schemas/types.yaml#/definitions/uint8-matrix
+    description:
+      This property provides fallback values for certain register fields that
+      are missing on devices using third-party replacement displays.
+      These unofficial displays contain touch controllers that claim RMI4
+      compliance but fail to populate the function_number and function_version
+      registers of their Page Descriptor Table (PDT) entries.
+
+      Since the number of required fallback entries depends on the number of
+      Page Descriptor Tables supported by a given device, this property
+      should be provided on a best-effort basis.
+
+    items:
+      items:
+        - description: The 5th byte of the PDT entry (function number)
+        - description: The 4th byte of the PDT entry (version value)
+
   vdd-supply: true
   vio-supply: true
 
