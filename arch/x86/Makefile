@@ -137,8 +137,10 @@ ifeq ($(CONFIG_X86_32),y)
         include $(srctree)/arch/x86/Makefile_32.cpu
         KBUILD_CFLAGS += $(cflags-y)
 
+    ifeq ($(CONFIG_CC_IS_CLANG),y)
         # temporary until string.h is fixed
         KBUILD_CFLAGS += -ffreestanding
+    endif
 
     ifeq ($(CONFIG_STACKPROTECTOR),y)
         ifeq ($(CONFIG_SMP),y)
