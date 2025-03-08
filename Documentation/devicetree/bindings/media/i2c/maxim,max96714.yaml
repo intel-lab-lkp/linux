@@ -41,56 +41,12 @@ properties:
     description:
       Specifier for the GPIO connected to the PWDNB pin.
 
-  ports:
-    $ref: /schemas/graph.yaml#/properties/ports
-
-    properties:
-      port@0:
-        $ref: /schemas/graph.yaml#/properties/port
-        unevaluatedProperties: false
-        description: GMSL Input
-        properties:
-          endpoint:
-            $ref: /schemas/media/video-interfaces.yaml#
-            unevaluatedProperties: false
-            description:
-              Endpoint for GMSL2-Link port.
-
-      port@1:
-        $ref: /schemas/graph.yaml#/$defs/port-base
-        unevaluatedProperties: false
-        description: CSI-2 Output port
-
-        properties:
-          endpoint:
-            $ref: /schemas/media/video-interfaces.yaml#
-            unevaluatedProperties: false
-
-            properties:
-              data-lanes:
-                minItems: 1
-                maxItems: 4
-
-              lane-polarities:
-                minItems: 1
-                maxItems: 5
-
-              link-frequencies:
-                maxItems: 1
-
-            required:
-              - data-lanes
-
-    required:
-      - port@1
-
   port0-poc-supply:
     description: Regulator providing Power over Coax for the GMSL port
 
 required:
   - compatible
   - reg
-  - ports
 
 additionalProperties: false
 allOf:
@@ -102,10 +58,56 @@ allOf:
               - maxim,max96714
               - maxim,max96714f
     then:
+      required:
+        - ports
+
       properties:
         i2c-gate:
           $ref: /schemas/i2c/i2c-gate.yaml
           unevaluatedProperties: false
+
+        ports:
+          $ref: /schemas/graph.yaml#/properties/ports
+
+          properties:
+            port@0:
+              $ref: /schemas/graph.yaml#/properties/port
+              unevaluatedProperties: false
+              description: GMSL Input
+              properties:
+                endpoint:
+                  $ref: /schemas/media/video-interfaces.yaml#
+                  unevaluatedProperties: false
+                  description:
+                    Endpoint for GMSL2-Link port.
+
+            port@1:
+              $ref: /schemas/graph.yaml#/$defs/port-base
+              unevaluatedProperties: false
+              description: CSI-2 Output port
+
+              properties:
+                endpoint:
+                  $ref: /schemas/media/video-interfaces.yaml#
+                  unevaluatedProperties: false
+
+                  properties:
+                    data-lanes:
+                      minItems: 1
+                      maxItems: 4
+
+                    lane-polarities:
+                      minItems: 1
+                      maxItems: 5
+
+                    link-frequencies:
+                      maxItems: 1
+
+                  required:
+                    - data-lanes
+
+          required:
+            - port@1
 
 examples:
   - |
