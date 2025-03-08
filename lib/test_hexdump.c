@@ -39,6 +39,14 @@ static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 		groupsize = 1;
 	byteswap = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? 0 : groupsize - 1;
 
+	/* Check test passed a big enough output buffer */
+	if (ascii)
+		i = rowsize * 2 + rowsize / groupsize + 1 + len + 1;
+	else
+		i = len * 2 + len / groupsize - 1 + 1;
+	if (i > testlen)
+		return scnprintf(test, testlen, "buffer too short %zu < %zu", testlen, i);
+
 	/* hex dump */
 	p = test;
 	for (i = 0, j = 0; i < len; i++) {
