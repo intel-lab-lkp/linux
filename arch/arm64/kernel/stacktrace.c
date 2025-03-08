@@ -230,8 +230,14 @@ kunwind_next_frame_record(struct kunwind_state *state)
 	new_fp = READ_ONCE(record->fp);
 	new_pc = READ_ONCE(record->lr);
 
-	if (!new_fp && !new_pc)
+	if (!new_fp && !new_pc) {
+		/*
+		 * Searching across exception boundaries. The stack is now
+		 * unreliable.
+		 */
+		state->common.unreliable = true;
 		return kunwind_next_frame_record_meta(state);
+	}
 
 	unwind_consume_stack(&state->common, info, fp, sizeof(*record));
 
@@ -347,6 +353,7 @@ kunwind_stack_walk(kunwind_consume_fn consume_state,
 		.common = {
 			.stacks = stacks,
 			.nr_stacks = ARRAY_SIZE(stacks),
+			.unreliable = false,
 		},
 	};
 
@@ -385,6 +392,41 @@ noinline noinstr void arch_stack_walk(stack_trace_consume_fn consume_entry,
 	};
 
 	kunwind_stack_walk(arch_kunwind_consume_entry, &data, task, regs);
+}
+
+struct kunwind_reliable_consume_entry_data {
+	stack_trace_consume_fn consume_entry;
+	void *cookie;
+	bool unreliable;
+};
+
+static __always_inline bool
+arch_kunwind_reliable_consume_entry(const struct kunwind_state *state, void *cookie)
+{
+	struct kunwind_reliable_consume_entry_data *data = cookie;
+
+	if (state->common.unreliable) {
+		data->unreliable = true;
+		return false;
+	}
+	return data->consume_entry(data->cookie, state->common.pc);
+}
+
+noinline noinstr int arch_stack_walk_reliable(stack_trace_consume_fn consume_entry,
+			void *cookie, struct task_struct *task)
+{
+	struct kunwind_reliable_consume_entry_data data = {
+		.consume_entry = consume_entry,
+		.cookie = cookie,
+		.unreliable = false,
+	};
+
+	kunwind_stack_walk(arch_kunwind_reliable_consume_entry, &data, task, NULL);
+
+	if (data.unreliable)
+		return -EINVAL;
+
+	return 0;
 }
 
 struct bpf_unwind_consume_entry_data {

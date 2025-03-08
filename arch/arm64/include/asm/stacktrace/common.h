@@ -33,6 +33,7 @@ struct unwind_state {
 	struct stack_info stack;
 	struct stack_info *stacks;
 	int nr_stacks;
+	bool unreliable;
 };
 
 static inline struct stack_info stackinfo_get_unknown(void)
