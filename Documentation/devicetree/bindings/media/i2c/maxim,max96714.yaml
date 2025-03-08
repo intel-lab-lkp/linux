@@ -9,6 +9,7 @@ title: Maxim MAX96714 GMSL2 to CSI-2 Deserializer
 
 maintainers:
   - Julien Massot <julien.massot@collabora.com>
+  - Cosmin Tanislav <cosmin.tanislav@analog.com>
 
 description:
   The MAX96714 deserializer converts GMSL2 serial inputs into MIPI
