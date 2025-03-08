@@ -7,7 +7,6 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/random.h>
 #include <linux/string.h>
 
 static const unsigned char data_b[] = {
@@ -109,18 +108,19 @@ static void __init test_hexdump(size_t len, size_t rowsize, size_t groupsize,
 
 static void __init test_hexdump_set(size_t rowsize, bool ascii)
 {
-	size_t d = min(sizeof(data_b), rowsize);
-	size_t len = get_random_u32_inclusive(1, d);
+	size_t len;
 
-	test_hexdump(len, rowsize, 4, ascii);
-	test_hexdump(len, rowsize, 2, ascii);
-	test_hexdump(len, rowsize, 8, ascii);
-	test_hexdump(len, rowsize, 1, ascii);
+	for (len = 1; len <= rowsize; len++) {
+		test_hexdump(len, rowsize, 4, ascii);
+		test_hexdump(len, rowsize, 2, ascii);
+		test_hexdump(len, rowsize, 8, ascii);
+		test_hexdump(len, rowsize, 1, ascii);
+	}
 }
 
-static void __init test_hexdump_overflow(size_t buflen, size_t len,
-					 size_t rowsize, size_t groupsize,
-					 bool ascii)
+static bool __init test_hexdump_overflow(size_t buflen, size_t len,
+					   size_t rowsize, size_t groupsize,
+					   bool ascii)
 {
 	char test[TEST_HEXDUMP_BUF_SIZE];
 	char buf[TEST_HEXDUMP_BUF_SIZE];
@@ -154,40 +154,40 @@ static void __init test_hexdump_overflow(size_t buflen, size_t len,
 		pr_err("Expect: %zd '%.*s'\n", expected, TEST_HEXDUMP_BUF_SIZE, test);
 		failed_tests++;
 	}
+
+	return expected < buflen;
 }
 
-static void __init test_hexdump_overflow_set(size_t buflen, bool ascii)
+static void __init test_hexdump_overflow_set(size_t rowsize, bool ascii)
 {
-	unsigned int i = 0;
-	size_t rowsize = get_random_u32_inclusive(1, 2) * 16;
+	size_t groupsize, len, buflen;
 
-	do {
-		size_t groupsize = 1 << i;
-		size_t len = get_random_u32_below(rowsize) + groupsize;
-
-		test_hexdump_overflow(buflen, rounddown(len, groupsize),
-				      rowsize, groupsize, ascii);
-	} while (i++ < 3);
+	for (groupsize = 1; groupsize <= 8; groupsize *= 2) {
+		len = 0;
+		buflen = 0;
+		for (; len <= rowsize && buflen <= TEST_HEXDUMP_BUF_SIZE;) {
+			if (test_hexdump_overflow(buflen, len, rowsize,
+						  groupsize, ascii))
+				len += groupsize;
+			else
+				buflen++;
+		}
+	}
 }
 
 static int __init test_hexdump_init(void)
 {
-	unsigned int i;
 	size_t rowsize;
 
-	rowsize = get_random_u32_inclusive(1, 2) * 16;
-	for (i = 0; i < 16; i++)
+	for (rowsize = 16; rowsize <= 32; rowsize += 16) {
 		test_hexdump_set(rowsize, false);
-
-	rowsize = get_random_u32_inclusive(1, 2) * 16;
-	for (i = 0; i < 16; i++)
 		test_hexdump_set(rowsize, true);
+	}
 
-	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
-		test_hexdump_overflow_set(i, false);
-
-	for (i = 0; i <= TEST_HEXDUMP_BUF_SIZE; i++)
-		test_hexdump_overflow_set(i, true);
+	test_hexdump_overflow_set(16, false);
+	test_hexdump_overflow_set(16, true);
+	test_hexdump_overflow_set(32, false);
+	test_hexdump_overflow_set(32, true);
 
 	if (failed_tests == 0)
 		pr_info("all %u tests passed\n", total_tests);
