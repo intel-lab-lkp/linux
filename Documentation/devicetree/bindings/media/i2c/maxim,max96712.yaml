@@ -45,10 +45,10 @@ properties:
         $ref: /schemas/graph.yaml#/properties/port
         description: GMSL Input port
 
-      port@4:
+      port@[4-7]:
         $ref: /schemas/graph.yaml#/$defs/port-base
         unevaluatedProperties: false
-        description: CSI-2 Output
+        description: CSI-2 Output port
 
         properties:
           endpoint:
@@ -66,8 +66,15 @@ properties:
               - data-lanes
               - bus-type
 
-    required:
-      - port@4
+    anyOf:
+      - required:
+          - port@4
+      - required:
+          - port@5
+      - required:
+          - port@6
+      - required:
+          - port@7
 
 required:
   - compatible
