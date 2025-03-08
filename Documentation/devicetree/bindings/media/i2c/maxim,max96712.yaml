@@ -37,6 +37,17 @@ properties:
 
   enable-gpios: true
 
+  i2c-mux:
+    $ref: /schemas/i2c/i2c-mux.yaml#
+    patternProperties:
+      '^i2c@[0-3]$':
+        $ref: /schemas/i2c/i2c-controller.yaml#
+        properties:
+          reg:
+            items:
+              min: 0
+              max: 3
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
 
