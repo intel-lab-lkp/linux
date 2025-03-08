@@ -22,11 +22,14 @@ description:
 
   The GMSL2 serial link operates at a fixed rate of 3Gbps or 6Gbps in the
   forward direction and 187.5Mbps in the reverse direction.
+
   MAX96714F only supports a fixed rate of 3Gbps in the forward direction.
+  MAX9296A only supports pixel mode, and has two GMSL2 links.
 
 properties:
   compatible:
     oneOf:
+      - const: maxim,max9296a
       - const: maxim,max96714f
       - items:
           - enum:
@@ -108,6 +111,90 @@ allOf:
 
           required:
             - port@1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - maxim,max9296a
+    then:
+      allOf:
+        - $ref: /schemas/i2c/i2c-atr.yaml#
+
+      properties:
+        i2c-alias-pool:
+          maxItems: 2
+
+        i2c-atr:
+          patternProperties:
+            '^i2c@[0-1]$':
+              $ref: /schemas/i2c/i2c-controller.yaml#
+              properties:
+                reg:
+                  items:
+                    min: 0
+                    max: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - maxim,max9296a
+    then:
+      properties:
+        port0-poc-supply:
+          description: Regulator providing Power over Coax for GMSL port 0
+
+        port1-poc-supply:
+          description: Regulator providing Power over Coax for GMSL port 1
+
+        ports:
+          $ref: /schemas/graph.yaml#/properties/ports
+
+          patternProperties:
+            port@[0-1]:
+              $ref: /schemas/graph.yaml#/properties/port
+              unevaluatedProperties: false
+              description: GMSL Input
+              properties:
+                endpoint:
+                  $ref: /schemas/media/video-interfaces.yaml#
+                  unevaluatedProperties: false
+                  description:
+                    Endpoint for GMSL2-Link port.
+
+            port@[2-3]:
+              $ref: /schemas/graph.yaml#/$defs/port-base
+              unevaluatedProperties: false
+              description: CSI-2 Output port
+
+              properties:
+                endpoint:
+                  $ref: /schemas/media/video-interfaces.yaml#
+                  unevaluatedProperties: false
+
+                  properties:
+                    data-lanes:
+                      minItems: 1
+                      maxItems: 4
+
+                    lane-polarities:
+                      minItems: 1
+                      maxItems: 5
+
+                    link-frequencies:
+                      maxItems: 1
+
+                  required:
+                    - data-lanes
+
+          anyOf:
+            - required:
+                - port@2
+            - required:
+                - port@3
 
 examples:
   - |
