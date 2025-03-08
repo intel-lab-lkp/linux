@@ -11005,17 +11005,11 @@ int register_netdevice(struct net_device *dev)
 		goto err_ifindex_release;
 
 	ret = netdev_register_kobject(dev);
-
-	netdev_lock(dev);
 	WRITE_ONCE(dev->reg_state, ret ? NETREG_UNREGISTERED : NETREG_REGISTERED);
-	netdev_unlock(dev);
-
 	if (ret)
 		goto err_uninit_notify;
 
-	netdev_lock_ops(dev);
 	__netdev_update_features(dev);
-	netdev_unlock_ops(dev);
 
 	/*
 	 *	Default initial state at registry is that the
