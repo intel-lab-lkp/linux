@@ -83,20 +83,38 @@ properties:
     required:
       - port@1
 
-  i2c-gate:
-    $ref: /schemas/i2c/i2c-gate.yaml
-    unevaluatedProperties: false
-    description:
-      The MAX96717 will forward the I2C requests from the
-      incoming GMSL2 link. Therefore, it supports an i2c-gate
-      subnode to configure a sensor.
-
 required:
   - compatible
   - reg
   - ports
 
 additionalProperties: false
+
+allOf:
+  - $ref: /schemas/i2c/i2c-atr.yaml#
+
+  - oneOf:
+      - properties:
+          i2c-gate:
+            $ref: /schemas/i2c/i2c-gate.yaml
+            unevaluatedProperties: false
+            description:
+              The MAX96717 will forward the I2C requests from the
+              incoming GMSL2 link. Therefore, it supports an i2c-gate
+              subnode to configure a sensor.
+
+      - properties:
+          i2c-alias-pool:
+            maxItems: 2
+
+          i2c-atr:
+            patternProperties:
+              '^i2c@0':
+                $ref: /schemas/i2c/i2c-controller.yaml#
+                properties:
+                  reg:
+                    items:
+                      max: 0
 
 examples:
   - |
