@@ -223,7 +223,7 @@ fs_initcall(init_fs_dcache_sysctls);
  * Compare 2 name strings, return 0 if they match, otherwise non-zero.
  * The strings are both count bytes long, and count is non-zero.
  */
-#ifdef CONFIG_DCACHE_WORD_ACCESS
+#if defined(CONFIG_DCACHE_WORD_ACCESS) && !defined(CONFIG_KASAN_HW_TAGS)
 
 #include <asm/word-at-a-time.h>
 /*
