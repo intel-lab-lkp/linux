@@ -13,6 +13,8 @@
 
 #include <linux/iio/iio.h>
 
+#define AL3000A_DRV_NAME "al3000a"
+
 #define AL3000A_REG_SYSTEM		0x00
 #define AL3000A_REG_DATA		0x05
 
@@ -148,7 +150,7 @@ static int al3000a_probe(struct i2c_client *client)
 				     "failed to get vdd regulator\n");
 
 	indio_dev->info = &al3000a_info;
-	indio_dev->name = "al3000a";
+	indio_dev->name = AL3000A_DRV_NAME;
 	indio_dev->channels = al3000a_channels;
 	indio_dev->num_channels = ARRAY_SIZE(al3000a_channels);
 	indio_dev->modes = INDIO_DIRECT_MODE;
@@ -195,7 +197,7 @@ MODULE_DEVICE_TABLE(of, al3000a_of_match);
 
 static struct i2c_driver al3000a_driver = {
 	.driver = {
-		.name = "al3000a",
+		.name = AL3000A_DRV_NAME,
 		.of_match_table = al3000a_of_match,
 		.pm = pm_sleep_ptr(&al3000a_pm_ops),
 	},
