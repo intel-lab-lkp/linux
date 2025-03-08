@@ -29,6 +29,11 @@ static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 	char *p;
 	size_t byteswap, i, j;
 
+	if (!len) {
+		test[0] = 0;
+		return 0;
+	}
+
 	if (rowsize != 16 && rowsize != 32)
 		rowsize = 16;
 
@@ -58,8 +63,7 @@ static size_t __init test_hexdump_prepare_test(size_t len, size_t rowsize,
 			*p++ = ' ';
 		}
 	}
-	if (i)
-		p--;
+	p--;
 
 	/* ASCII part */
 	if (ascii) {
