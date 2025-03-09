@@ -164,16 +164,8 @@ int dm_revalidate_zones(struct dm_table *t, struct request_queue *q)
 	if (!get_capacity(disk))
 		return 0;
 
-	/* Revalidate only if something changed. */
-	if (!disk->nr_zones || disk->nr_zones != md->nr_zones) {
-		DMINFO("%s using %s zone append",
-		       disk->disk_name,
-		       queue_emulates_zone_append(q) ? "emulated" : "native");
-		md->nr_zones = 0;
-	}
-
-	if (md->nr_zones)
-		return 0;
+	DMINFO("%s using %s zone append", disk->disk_name,
+	       queue_emulates_zone_append(q) ? "emulated" : "native");
 
 	/*
 	 * Our table is not live yet. So the call to dm_get_live_table()
@@ -390,6 +382,17 @@ int dm_set_zones_restrictions(struct dm_table *t, struct request_queue *q,
 		lim->chunk_sectors = 0;
 		lim->features &= ~BLK_FEAT_ZONED;
 		return 0;
+	}
+
+	/*
+	 * If the device needs zone append emulation, and the device already has
+	 * zone append emulation resources, make sure that the chunk_sectors
+	 * hasn't changed size. Otherwise those resources will be garbage.
+	 */
+	if (!lim->max_hw_zone_append_sectors && disk->zone_wplugs_hash &&
+	    q->limits.chunk_sectors != lim->chunk_sectors) {
+		DMERR("Cannot change zone size when swapping tables");
+		return -EINVAL;
 	}
 
 	/*
