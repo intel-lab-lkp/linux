@@ -407,13 +407,13 @@ static int ci_hdrc_imx_probe(struct platform_device *pdev)
 				"pinctrl_hsic_idle lookup failed, err=%ld\n",
 					PTR_ERR(pinctrl_hsic_idle));
 			ret = PTR_ERR(pinctrl_hsic_idle);
-			goto err_put;
+			goto disable_hsic_regulator;
 		}
 
 		ret = pinctrl_select_state(data->pinctrl, pinctrl_hsic_idle);
 		if (ret) {
 			dev_err(dev, "hsic_idle select failed, err=%d\n", ret);
-			goto err_put;
+			goto disable_hsic_regulator;
 		}
 
 		data->pinctrl_hsic_active = pinctrl_lookup_state(data->pinctrl,
@@ -423,7 +423,7 @@ static int ci_hdrc_imx_probe(struct platform_device *pdev)
 				"pinctrl_hsic_active lookup failed, err=%ld\n",
 					PTR_ERR(data->pinctrl_hsic_active));
 			ret = PTR_ERR(data->pinctrl_hsic_active);
-			goto err_put;
+			goto disable_hsic_regulator;
 		}
 	}
 
@@ -432,11 +432,11 @@ static int ci_hdrc_imx_probe(struct platform_device *pdev)
 
 	ret = imx_get_clks(dev);
 	if (ret)
-		goto disable_hsic_regulator;
+		goto qos_remove_request;
 
 	ret = imx_prepare_enable_clks(dev);
 	if (ret)
-		goto disable_hsic_regulator;
+		goto qos_remove_request;
 
 	ret = clk_prepare_enable(data->clk_wakeup);
 	if (ret)
@@ -526,12 +526,13 @@ err_clk:
 	clk_disable_unprepare(data->clk_wakeup);
 err_wakeup_clk:
 	imx_disable_unprepare_clks(dev);
+qos_remove_request:
+	if (pdata.flags & CI_HDRC_PMQOS)
+		cpu_latency_qos_remove_request(&data->pm_qos_req);
 disable_hsic_regulator:
 	if (data->hsic_pad_regulator)
 		/* don't overwrite original ret (cf. EPROBE_DEFER) */
 		regulator_disable(data->hsic_pad_regulator);
-	if (pdata.flags & CI_HDRC_PMQOS)
-		cpu_latency_qos_remove_request(&data->pm_qos_req);
 	data->ci_pdev = NULL;
 err_put:
 	if (data->usbmisc_data)
