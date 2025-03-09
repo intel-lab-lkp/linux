@@ -18,6 +18,8 @@ description:
 properties:
   compatible:
     enum:
+      - amlogic,a1-audio-clkc
+      - amlogic,a1-audio-vad-clkc
       - amlogic,axg-audio-clkc
       - amlogic,g12a-audio-clkc
       - amlogic,sm1-audio-clkc
@@ -114,6 +116,8 @@ allOf:
         compatible:
           contains:
             enum:
+              - amlogic,a1-audio-clkc
+              - amlogic,a1-audio-vad-clkc
               - amlogic,g12a-audio-clkc
               - amlogic,sm1-audio-clkc
     then:
