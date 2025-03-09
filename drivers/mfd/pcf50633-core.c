@@ -207,7 +207,6 @@ static int pcf50633_probe(struct i2c_client *client)
 	pcf50633_irq_init(pcf, client->irq);
 
 	/* Create sub devices */
-	pcf50633_client_dev_register(pcf, "pcf50633-input", &pcf->input_pdev);
 	pcf50633_client_dev_register(pcf, "pcf50633-mbc", &pcf->mbc_pdev);
 
 
@@ -257,7 +256,6 @@ static void pcf50633_remove(struct i2c_client *client)
 	sysfs_remove_group(&client->dev.kobj, &pcf_attr_group);
 	pcf50633_irq_free(pcf);
 
-	platform_device_unregister(pcf->input_pdev);
 	platform_device_unregister(pcf->mbc_pdev);
 
 	for (i = 0; i < PCF50633_NUM_REGULATORS; i++)
