@@ -1363,24 +1363,23 @@ static unsigned int disk_set_conv_zones_bitmap(struct gendisk *disk,
 
 void disk_free_zone_resources(struct gendisk *disk)
 {
-	if (!disk->zone_wplugs_pool)
-		return;
+	if (disk->zone_wplugs_pool) {
+		if (disk->zone_wplugs_wq) {
+			destroy_workqueue(disk->zone_wplugs_wq);
+			disk->zone_wplugs_wq = NULL;
+		}
 
-	if (disk->zone_wplugs_wq) {
-		destroy_workqueue(disk->zone_wplugs_wq);
-		disk->zone_wplugs_wq = NULL;
+		disk_destroy_zone_wplugs_hash_table(disk);
+
+		/*
+		 * Wait for the zone write plugs to be RCU-freed before
+		 * destorying the mempool.
+		 */
+		rcu_barrier();
+
+		mempool_destroy(disk->zone_wplugs_pool);
+		disk->zone_wplugs_pool = NULL;
 	}
-
-	disk_destroy_zone_wplugs_hash_table(disk);
-
-	/*
-	 * Wait for the zone write plugs to be RCU-freed before
-	 * destorying the mempool.
-	 */
-	rcu_barrier();
-
-	mempool_destroy(disk->zone_wplugs_pool);
-	disk->zone_wplugs_pool = NULL;
 
 	disk_set_conv_zones_bitmap(disk, NULL);
 	disk->zone_capacity = 0;
