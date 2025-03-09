@@ -4715,8 +4715,10 @@ static int selinux_socket_post_create(struct socket *sock, int family,
 
 	if (sock->sk) {
 		sksec = selinux_sock(sock->sk);
+		spin_lock(&sksec->lock);
 		sksec->sclass = sclass;
 		sksec->sid = sid;
+		spin_unlock(&sksec->lock);
 		/* Allows detection of the first association on this socket */
 		if (sksec->sclass == SECCLASS_SCTP_SOCKET)
 			sksec->sctp_assoc_state = SCTP_ASSOC_UNSET;
@@ -5164,7 +5166,7 @@ static int selinux_socket_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	int err, peerlbl_active, secmark_active;
 	struct sk_security_struct *sksec = selinux_sock(sk);
 	u16 family = sk->sk_family;
-	u32 sk_sid = sksec->sid;
+	u32 sk_sid;
 	struct common_audit_data ad;
 	struct lsm_network_audit net;
 	char *addrp;
@@ -5193,6 +5195,9 @@ static int selinux_socket_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	if (err)
 		return err;
 
+	spin_lock(&sksec->lock);
+	sk_sid = sksec->sid;
+	spin_unlock(&sksec->lock);
 	if (peerlbl_active) {
 		u32 peer_sid;
 
