@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config BENCH_PAGE_POOL
+	tristate "bench page pool"
+	depends on PAGE_POOL

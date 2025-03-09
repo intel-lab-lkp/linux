@@ -758,3 +758,5 @@ config UNION_FIND
 
 config MIN_HEAP
 	bool
+
+source "lib/bench/Kconfig"
