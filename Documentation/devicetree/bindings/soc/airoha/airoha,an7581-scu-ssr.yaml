@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/airoha/airoha,an7581-scu-ssr.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha AN7581 SCU System Status Register
+
+maintainers:
+  - Christian Marangi <ansuelsmth@gmail.com>
+
+description: >
+  The Airoha AN7581 SoC have in the SCU register space particular
+  address that control how some peripheral are configured.
+
+  These are toggeled in the System Status Register and are used to
+  toggle Serdes port for USB 3.0 mode or HSGMII, USB 3.0 mode or PCIe2
+  or setup port for PCIe mode or Ethrnet mode (HSGMII/USXGMII).
+
+  Modes are mutually exclusive and selecting one mode cause the
+  other feature to not work (example a mode in USB 3.0 cause PCIe
+  port 2 to not work) This depends also on what is physically
+  connected to the Hardware and needs to correctly reflect the
+  System Status Register bits.
+
+  Special care is needed for PCIe port 0 in 2 line mode that
+  requires both WiFi1 and WiFi2 Serdes port set to PCIe0 2 Line
+  mode.
+
+properties:
+  compatible:
+    const: airoha,an7581-scu-ssr
+
+  airoha,serdes-wifi1:
+    description: |
+      Configure the Wifi1 Serdes port for:
+      - 0: PCIe0 2 Line
+      - 1: PCIe0 1 Line
+      - 2: Ethernet modes (HSGMII/USXGMII)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2]
+    default: 1
+
+  airoha,serdes-wifi2:
+    description: |
+      Configure the Wifi2 Serdes port for:
+      - 0: PCIe0 2 Line
+      - 1: PCIe1 1 Line
+      - 2: Ethernet modes (HSGMII/USXGMII)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2]
+    default: 1
+
+  airoha,serdes-usb1:
+    description: |
+      Configure the USB1 Serdes port for:
+      - 0: USB 3.0
+      - 1: Ethernet modes (HSGMII)
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    default: 0
+
+  airoha,serdes-usb2:
+    description: |
+      Configure the USB2 Serdes port for:
+      - 0: USB 3.0
+      - 1: PCIe2 1 Line
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+    default: 0
+
+required:
+  - compatible
+
+allOf:
+  - if:
+      properties:
+        airoha,serdes-wifi1:
+          const: 0
+    then:
+      properties:
+        airoha,serdes-wifi2:
+          const: 0
+
+  - if:
+      properties:
+        airoha,serdes-wifi2:
+          const: 0
+    then:
+      properties:
+        airoha,serdes-wifi1:
+          const: 0
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/soc/airoha,scu-ssr.h>
+
+    system-controller {
+      compatible = "airoha,an7581-scu-ssr";
+
+      airoha,serdes-wifi1 = <AIROHA_SCU_SSR_WIFI1_PCIE0_2LINE>;
+      airoha,serdes-wifi2 = <AIROHA_SCU_SSR_WIFI2_PCIE0_2LINE>;
+      airoha,serdes-usb2 = <AIROHA_SCU_SSR_USB2_PCIE2>;
+    };
