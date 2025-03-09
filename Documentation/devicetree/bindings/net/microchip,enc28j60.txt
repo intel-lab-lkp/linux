@@ -8,6 +8,8 @@ the SPI master node.
 Required properties:
 - compatible: Should be "microchip,enc28j60"
 - reg: Specify the SPI chip select the ENC28J60 is wired to
+
+Required interrupt properties with pin control subsystem:
 - interrupts: Specify the interrupt index within the interrupt controller (referred
               to above in interrupt-parent) and interrupt type. The ENC28J60 natively
               generates falling edge interrupts, however, additional board logic
@@ -16,6 +18,14 @@ Required properties:
 - pinctrl-0: List of phandles to configure the GPIO pin used as interrupt line,
              see also generic and your platform specific pinctrl binding
              documentation.
+
+Required interrupt properties with a single GPIO phandle:
+- irq-gpios: Specify the GPIO pin used as the interrupt line. When this property is
+             set, the kernel automatically requests the pin, configures it as an input,
+             and converts it to an IRQ number. This simplifies the process by
+             eliminating the need to manually define pinctrl and interrupt nodes.
+             Additionally, it is necessary for platforms that do not support pin
+             configuration and properties via the device tree.
 
 Optional properties:
 - spi-max-frequency: Maximum frequency of the SPI bus when accessing the ENC28J60.
@@ -52,5 +62,19 @@ Example (for NXP i.MX28 with pin control stuff for GPIO irq):
                         fsl,drive-strength = <MXS_DRIVE_4mA>;
                         fsl,voltage = <MXS_VOLTAGE_HIGH>;
                         fsl,pull-up = <MXS_PULL_DISABLE>;
+                };
+        };
+
+Example (if can not configure pin properties via the device tree):
+
+        &spi2 {
+                status = "okay";
+                cs-gpios = <&porta 23 GPIO_ACTIVE_LOW>;
+
+                enc28j60: ethernet@1 {
+                        compatible = "microchip,enc28j60";
+                        reg = <0>;
+                        spi-max-frequency = <12000000>;
+                        irq-gpios = <&porta 24 GPIO_ACTIVE_HIGH>;
                 };
         };
