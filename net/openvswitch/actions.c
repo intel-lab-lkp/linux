@@ -62,8 +62,6 @@ struct ovs_frag_data {
 	u8 l2_data[MAX_L2_LEN];
 };
 
-static DEFINE_PER_CPU(struct ovs_frag_data, ovs_frag_data_storage);
-
 #define DEFERRED_ACTION_FIFO_SIZE 10
 #define OVS_RECURSION_LIMIT 5
 #define OVS_DEFERRED_ACTION_THRESHOLD (OVS_RECURSION_LIMIT - 2)
@@ -81,6 +79,7 @@ struct action_flow_keys {
 struct ovs_action {
 	struct action_fifo action_fifos;
 	struct action_flow_keys flow_keys;
+	struct ovs_frag_data ovs_frag_data_storage;
 	int exec_level;
 	struct task_struct *owner;
 	local_lock_t bh_lock;
@@ -800,7 +799,7 @@ static int set_sctp(struct sk_buff *skb, struct sw_flow_key *flow_key,
 static int ovs_vport_output(struct net *net, struct sock *sk,
 			    struct sk_buff *skb)
 {
-	struct ovs_frag_data *data = this_cpu_ptr(&ovs_frag_data_storage);
+	struct ovs_frag_data *data = this_cpu_ptr(&ovs_actions.ovs_frag_data_storage);
 	struct vport *vport = data->vport;
 
 	if (skb_cow_head(skb, data->l2_len) < 0) {
@@ -852,7 +851,7 @@ static void prepare_frag(struct vport *vport, struct sk_buff *skb,
 	unsigned int hlen = skb_network_offset(skb);
 	struct ovs_frag_data *data;
 
-	data = this_cpu_ptr(&ovs_frag_data_storage);
+	data = this_cpu_ptr(&ovs_actions.ovs_frag_data_storage);
 	data->dst = skb->_skb_refdst;
 	data->vport = vport;
 	data->cb = *OVS_CB(skb);
