@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/processor.h>
+#include <acpi/battery.h>
 
 /* Handle ACPI lock mechanism */
 static u32 oxp_mutex;
@@ -86,6 +87,24 @@ static enum oxp_board board;
 #define OXP_TURBO_TAKE_VAL             0x40 /* All other models */
 
 #define OXP_TURBO_RETURN_VAL           0x00 /* Common return val */
+
+/* Battery bypass settings */
+#define EC_CHARGE_CONTROL_BEHAVIOURS_X1	(BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO)             | \
+					 BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE)    | \
+					 BIT(POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE_S0))
+
+#define OXP_X1_CHARGE_LIMIT_REG      0xA3 /* X1 charge limit (%) */
+#define OXP_X1_CHARGE_BYPASS_REG     0xA4 /* X1 bypass charging */
+
+#define OXP_X1_CHARGE_BYPASS_MASK_S0 0x01
+/*
+ * Cannot control S3, S5 individually.
+ * X1 Mask is 0x0A, OneXFly F1Pro is just 0x02
+ * but the extra bit on the X1 does nothing.
+ */
+#define OXP_X1_CHARGE_BYPASS_MASK_S3S5 0x02
+#define OXP_X1_CHARGE_BYPASS_MASK_ALWAYS (OXP_X1_CHARGE_BYPASS_MASK_S0 | \
+	OXP_X1_CHARGE_BYPASS_MASK_S3S5)
 
 static const struct dmi_system_id dmi_table[] = {
 	{
@@ -434,6 +453,194 @@ static ssize_t tt_toggle_show(struct device *dev,
 
 static DEVICE_ATTR_RW(tt_toggle);
 
+/* Callbacks for turbo toggle attribute */
+static bool charge_behaviour_supported(void)
+{
+	switch (board) {
+	case oxp_x1:
+	case oxp_fly:
+		return 1;
+	default:
+		break;
+	}
+	return 0;
+}
+
+static ssize_t charge_behaviour_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	int ret;
+	u8 reg;
+	long val, s0, always;
+	unsigned int available;
+
+	switch (board) {
+	case oxp_x1:
+	case oxp_fly:
+		s0 = OXP_X1_CHARGE_BYPASS_MASK_S0;
+		always = OXP_X1_CHARGE_BYPASS_MASK_ALWAYS;
+		reg = OXP_X1_CHARGE_BYPASS_REG;
+		available = EC_CHARGE_CONTROL_BEHAVIOURS_X1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = power_supply_charge_behaviour_parse(available, buf);
+	if (ret < 0)
+		return ret;
+
+	switch (ret) {
+	case POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO:
+		val = 0;
+		break;
+	case POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE_S0:
+		val = s0;
+		break;
+	case POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE:
+		val = always;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = write_to_ec(reg, val);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t charge_behaviour_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	int ret;
+	u8 reg;
+	long val, s0, always, sel;
+	unsigned int available;
+
+	switch (board) {
+	case oxp_x1:
+	case oxp_fly:
+		s0 = OXP_X1_CHARGE_BYPASS_MASK_S0;
+		always = OXP_X1_CHARGE_BYPASS_MASK_ALWAYS;
+		reg = OXP_X1_CHARGE_BYPASS_REG;
+		available = EC_CHARGE_CONTROL_BEHAVIOURS_X1;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = read_from_ec(reg, 1, &val);
+	if (ret < 0)
+		return ret;
+
+	if ((val & always) == always)
+		sel = POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE;
+	else if ((val & s0) == s0)
+		sel = POWER_SUPPLY_CHARGE_BEHAVIOUR_INHIBIT_CHARGE_S0;
+	else
+		sel = POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO;
+
+	return power_supply_charge_behaviour_show(dev, available, sel, buf);
+}
+
+static DEVICE_ATTR_RW(charge_behaviour);
+
+static ssize_t charge_control_end_threshold_store(struct device *dev,
+			       struct device_attribute *attr, const char *buf,
+			       size_t count)
+{
+	u64 val, reg;
+	int ret;
+
+	ret = kstrtou64(buf, 10, &val);
+	if (ret < 0)
+		return ret;
+
+	if (val > 100)
+		return -EINVAL;
+
+	switch (board) {
+	case oxp_x1:
+	case oxp_fly:
+		reg = OXP_X1_CHARGE_LIMIT_REG;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = write_to_ec(reg, val);
+	if (ret < 0)
+		return ret;
+
+	return count;
+}
+
+static ssize_t charge_control_end_threshold_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	int ret;
+	u8 reg;
+	long val;
+
+	switch (board) {
+	case oxp_x1:
+	case oxp_fly:
+		reg = OXP_X1_CHARGE_LIMIT_REG;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	ret = read_from_ec(reg, 1, &val);
+	if (ret < 0)
+		return ret;
+
+	return sysfs_emit(buf, "%ld\n", val);
+}
+
+static DEVICE_ATTR_RW(charge_control_end_threshold);
+
+static int oxp_battery_add(struct power_supply *battery, struct acpi_battery_hook *hook)
+{
+	/* OneXPlayer devices only have one battery. */
+	if (strcmp(battery->desc->name, "BAT0") != 0 &&
+	    strcmp(battery->desc->name, "BAT1") != 0 &&
+	    strcmp(battery->desc->name, "BATC") != 0 &&
+	    strcmp(battery->desc->name, "BATT") != 0)
+		return -ENODEV;
+
+	if (device_create_file(&battery->dev,
+	    &dev_attr_charge_control_end_threshold))
+		return -ENODEV;
+
+	if (device_create_file(&battery->dev,
+	    &dev_attr_charge_behaviour)) {
+		device_remove_file(&battery->dev,
+				&dev_attr_charge_control_end_threshold);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int oxp_battery_remove(struct power_supply *battery, struct acpi_battery_hook *hook)
+{
+	device_remove_file(&battery->dev,
+			   &dev_attr_charge_control_end_threshold);
+	device_remove_file(&battery->dev,
+			   &dev_attr_charge_behaviour);
+	return 0;
+}
+
+static struct acpi_battery_hook battery_hook = {
+	.add_battery = oxp_battery_add,
+	.remove_battery = oxp_battery_remove,
+	.name = "OneXPlayer Battery",
+};
+
 /* PWM enable/disable functions */
 static int oxp_pwm_enable(void)
 {
@@ -716,7 +923,16 @@ static int oxp_platform_probe(struct platform_device *pdev)
 	hwdev = devm_hwmon_device_register_with_info(dev, "oxpec", NULL,
 						     &oxp_ec_chip_info, NULL);
 
+	if (charge_behaviour_supported())
+		battery_hook_register(&battery_hook);
+
 	return PTR_ERR_OR_ZERO(hwdev);
+}
+
+static void oxp_platform_remove(struct platform_device *device)
+{
+	if (charge_behaviour_supported())
+		battery_hook_unregister(&battery_hook);
 }
 
 static struct platform_driver oxp_platform_driver = {
@@ -725,6 +941,7 @@ static struct platform_driver oxp_platform_driver = {
 		.dev_groups = oxp_ec_groups,
 	},
 	.probe = oxp_platform_probe,
+	.remove = oxp_platform_remove,
 };
 
 static struct platform_device *oxp_platform_device;
