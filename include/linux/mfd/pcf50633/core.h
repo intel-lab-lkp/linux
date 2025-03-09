@@ -151,7 +151,6 @@ struct pcf50633 {
 
 	struct platform_device *rtc_pdev;
 	struct platform_device *mbc_pdev;
-	struct platform_device *adc_pdev;
 	struct platform_device *input_pdev;
 	struct platform_device *bl_pdev;
 	struct platform_device *regulator_pdev[PCF50633_NUM_REGULATORS];
