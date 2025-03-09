@@ -18,15 +18,18 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/vmalloc.h>
 #include <net/netlink.h>
 
 #include "compress.h"
 
+#define SCOMP_SCRATCH_SIZE	PAGE_SIZE
+
 struct scomp_scratch {
 	spinlock_t	lock;
-	void		*src;
-	void		*dst;
+	union {
+		void *src;
+		unsigned long saddr;
+	};
 };
 
 static DEFINE_PER_CPU(struct scomp_scratch, scomp_scratch) = {
@@ -66,10 +69,8 @@ static void crypto_scomp_free_scratches(void)
 	for_each_possible_cpu(i) {
 		scratch = per_cpu_ptr(&scomp_scratch, i);
 
-		vfree(scratch->src);
-		vfree(scratch->dst);
+		free_page(scratch->saddr);
 		scratch->src = NULL;
-		scratch->dst = NULL;
 	}
 }
 
@@ -79,18 +80,14 @@ static int crypto_scomp_alloc_scratches(void)
 	int i;
 
 	for_each_possible_cpu(i) {
-		void *mem;
+		unsigned long mem;
 
 		scratch = per_cpu_ptr(&scomp_scratch, i);
 
-		mem = vmalloc_node(SCOMP_SCRATCH_SIZE, cpu_to_node(i));
+		mem = __get_free_page(GFP_KERNEL);
 		if (!mem)
 			goto error;
-		scratch->src = mem;
-		mem = vmalloc_node(SCOMP_SCRATCH_SIZE, cpu_to_node(i));
-		if (!mem)
-			goto error;
-		scratch->dst = mem;
+		scratch->saddr = mem;
 	}
 	return 0;
 error:
@@ -162,40 +159,43 @@ unlock:
 static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 {
 	struct crypto_acomp *tfm = crypto_acomp_reqtfm(req);
-	void **tfm_ctx = acomp_tfm_ctx(tfm);
+	struct crypto_scomp **tfm_ctx = acomp_tfm_ctx(tfm);
 	struct crypto_scomp *scomp = *tfm_ctx;
 	struct crypto_acomp_stream *stream;
 	struct scomp_scratch *scratch;
+	unsigned int slen = req->slen;
+	unsigned int dlen = req->dlen;
 	void *src, *dst;
-	unsigned int dlen;
 	int ret;
 
-	if (!req->src || !req->slen || req->slen > SCOMP_SCRATCH_SIZE)
+	if (!req->src || !slen)
 		return -EINVAL;
 
-	if (req->dst && !req->dlen)
+	if (req->dst && !dlen)
 		return -EINVAL;
 
-	if (!req->dlen || req->dlen > SCOMP_SCRATCH_SIZE)
-		req->dlen = SCOMP_SCRATCH_SIZE;
+	if (sg_nents(req->dst) > 1)
+		return -ENOSYS;
 
-	dlen = req->dlen;
+	if (req->dst->offset >= PAGE_SIZE)
+		return -ENOSYS;
+
+	if (req->dst->offset + dlen > PAGE_SIZE)
+		dlen = PAGE_SIZE - req->dst->offset;
+
+	if (sg_nents(req->src) == 1 && (!PageHighMem(sg_page(req->src)) ||
+					req->src->offset + slen <= PAGE_SIZE))
+		src = kmap_local_page(sg_page(req->src)) + req->src->offset;
+	else
+		src = scratch->src;
+
+	dst = kmap_local_page(sg_page(req->dst)) + req->dst->offset;
 
 	scratch = raw_cpu_ptr(&scomp_scratch);
 	spin_lock_bh(&scratch->lock);
 
-	if (sg_nents(req->src) == 1 && !PageHighMem(sg_page(req->src))) {
-		src = page_to_virt(sg_page(req->src)) + req->src->offset;
-	} else {
-		scatterwalk_map_and_copy(scratch->src, req->src, 0,
-					 req->slen, 0);
-		src = scratch->src;
-	}
-
-	if (req->dst && sg_nents(req->dst) == 1 && !PageHighMem(sg_page(req->dst)))
-		dst = page_to_virt(sg_page(req->dst)) + req->dst->offset;
-	else
-		dst = scratch->dst;
+	if (src == scratch->src)
+		memcpy_from_sglist(src, req->src, 0, req->slen);
 
 	stream = raw_cpu_ptr(crypto_scomp_alg(scomp)->stream);
 	spin_lock(&stream->lock);
@@ -206,31 +206,13 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 		ret = crypto_scomp_decompress(scomp, src, req->slen,
 					      dst, &req->dlen, stream->ctx);
 	spin_unlock(&stream->lock);
-	if (!ret) {
-		if (!req->dst) {
-			req->dst = sgl_alloc(req->dlen, GFP_ATOMIC, NULL);
-			if (!req->dst) {
-				ret = -ENOMEM;
-				goto out;
-			}
-		} else if (req->dlen > dlen) {
-			ret = -ENOSPC;
-			goto out;
-		}
-		if (dst == scratch->dst) {
-			scatterwalk_map_and_copy(scratch->dst, req->dst, 0,
-						 req->dlen, 1);
-		} else {
-			int nr_pages = DIV_ROUND_UP(req->dst->offset + req->dlen, PAGE_SIZE);
-			int i;
-			struct page *dst_page = sg_page(req->dst);
-
-			for (i = 0; i < nr_pages; i++)
-				flush_dcache_page(dst_page + i);
-		}
-	}
-out:
 	spin_unlock_bh(&scratch->lock);
+
+	if (src != scratch->src)
+		kunmap_local(src);
+	kunmap_local(dst);
+	flush_dcache_page(sg_page(req->dst));
+
 	return ret;
 }
 
@@ -277,7 +259,6 @@ int crypto_init_scomp_ops_async(struct crypto_tfm *tfm)
 
 	crt->compress = scomp_acomp_compress;
 	crt->decompress = scomp_acomp_decompress;
-	crt->dst_free = sgl_free;
 
 	return 0;
 }
