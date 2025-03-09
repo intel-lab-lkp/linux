@@ -5415,6 +5415,17 @@ static int sol_tcp_sockopt(struct sock *sk, int optname,
 		if (*optlen < 1)
 			return -EINVAL;
 		break;
+	case TCP_BPF_RTO_MIN:
+		if (*optlen != sizeof(int))
+			return -EINVAL;
+		if (getopt) {
+			int rto_min = inet_csk(sk)->icsk_rto_min;
+			int rto_min_us = jiffies_to_usecs(rto_min);
+
+			memcpy(optval, &rto_min_us, *optlen);
+			return 0;
+		}
+		return bpf_sol_tcp_setsockopt(sk, optname, optval, *optlen);
 	case TCP_BPF_SOCK_OPS_CB_FLAGS:
 		if (*optlen != sizeof(int))
 			return -EINVAL;
