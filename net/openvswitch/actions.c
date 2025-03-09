@@ -82,6 +82,8 @@ struct ovs_action {
 	struct action_fifo action_fifos;
 	struct action_flow_keys flow_keys;
 	int exec_level;
+	struct task_struct *owner;
+	local_lock_t bh_lock;
 };
 
 static DEFINE_PER_CPU(struct ovs_action, ovs_actions);
@@ -1690,7 +1692,13 @@ int ovs_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			const struct sw_flow_actions *acts,
 			struct sw_flow_key *key)
 {
+	struct ovs_action *ovs_act = this_cpu_ptr(&ovs_actions);
 	int err, level;
+
+	if (ovs_act->owner != current) {
+		local_lock_nested_bh(&ovs_actions.bh_lock);
+		ovs_act->owner = current;
+	}
 
 	level = __this_cpu_inc_return(ovs_actions.exec_level);
 	if (unlikely(level > OVS_RECURSION_LIMIT)) {
@@ -1710,5 +1718,10 @@ int ovs_execute_actions(struct datapath *dp, struct sk_buff *skb,
 
 out:
 	__this_cpu_dec(ovs_actions.exec_level);
+
+	if (level == 1) {
+		ovs_act->owner = NULL;
+		local_unlock_nested_bh(&ovs_actions.bh_lock);
+	}
 	return err;
 }
