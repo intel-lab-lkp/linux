@@ -77,9 +77,7 @@ int tpm_read_log_efi(struct tpm_chip *chip)
 			     MEMREMAP_WB);
 	if (!final_tbl) {
 		pr_err("Could not map UEFI TPM final log\n");
-		devm_kfree(&chip->dev, log->bios_event_log);
-		ret = -ENOMEM;
-		goto out;
+		goto free_log;
 	}
 
 	/*
@@ -96,6 +94,7 @@ int tpm_read_log_efi(struct tpm_chip *chip)
 			    log_size + final_events_log_size,
 			    GFP_KERNEL);
 	if (!tmp) {
+free_log:
 		devm_kfree(&chip->dev, log->bios_event_log);
 		ret = -ENOMEM;
 		goto out;
