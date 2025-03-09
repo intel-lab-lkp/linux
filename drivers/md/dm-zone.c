@@ -159,6 +159,7 @@ int dm_revalidate_zones(struct dm_table *t, struct request_queue *q)
 	struct mapped_device *md = t->md;
 	struct gendisk *disk = md->disk;
 	int ret;
+	bool was_zoned = disk->nr_zones != 0;
 
 	if (!get_capacity(disk))
 		return 0;
@@ -187,6 +188,8 @@ int dm_revalidate_zones(struct dm_table *t, struct request_queue *q)
 
 	if (ret) {
 		DMERR("Revalidate zones failed %d", ret);
+		if (!was_zoned)
+			disk_free_zone_resources(disk);
 		return ret;
 	}
 

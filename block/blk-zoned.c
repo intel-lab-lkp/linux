@@ -1343,22 +1343,17 @@ static void disk_destroy_zone_wplugs_hash_table(struct gendisk *disk)
 	disk->zone_wplugs_hash_bits = 0;
 }
 
-static unsigned int disk_set_conv_zones_bitmap(struct gendisk *disk,
-					       unsigned long *bitmap)
+static void disk_set_conv_zones_bitmap(struct gendisk *disk,
+				       unsigned long *bitmap)
 {
-	unsigned int nr_conv_zones = 0;
 	unsigned long flags;
 
 	spin_lock_irqsave(&disk->zone_wplugs_lock, flags);
-	if (bitmap)
-		nr_conv_zones = bitmap_weight(bitmap, disk->nr_zones);
 	bitmap = rcu_replace_pointer(disk->conv_zones_bitmap, bitmap,
 				     lockdep_is_held(&disk->zone_wplugs_lock));
 	spin_unlock_irqrestore(&disk->zone_wplugs_lock, flags);
 
 	kfree_rcu_mightsleep(bitmap);
-
-	return nr_conv_zones;
 }
 
 void disk_free_zone_resources(struct gendisk *disk)
@@ -1386,6 +1381,7 @@ void disk_free_zone_resources(struct gendisk *disk)
 	disk->last_zone_capacity = 0;
 	disk->nr_zones = 0;
 }
+EXPORT_SYMBOL_GPL(disk_free_zone_resources);
 
 static inline bool disk_need_zone_resources(struct gendisk *disk)
 {
@@ -1434,24 +1430,23 @@ struct blk_revalidate_zone_args {
 
 /*
  * Update the disk zone resources information and device queue limits.
- * The disk queue is frozen when this is executed.
+ * The disk queue is frozen when this is executed on blk-mq drivers.
  */
 static int disk_update_zone_resources(struct gendisk *disk,
 				      struct blk_revalidate_zone_args *args)
 {
 	struct request_queue *q = disk->queue;
-	unsigned int nr_seq_zones, nr_conv_zones;
+	unsigned int nr_seq_zones, nr_conv_zones = 0;
 	unsigned int pool_size;
 	struct queue_limits lim;
+	int ret;
 
-	disk->nr_zones = args->nr_zones;
-	disk->zone_capacity = args->zone_capacity;
-	disk->last_zone_capacity = args->last_zone_capacity;
-	nr_conv_zones =
-		disk_set_conv_zones_bitmap(disk, args->conv_zones_bitmap);
-	if (nr_conv_zones >= disk->nr_zones) {
+	if (args->conv_zones_bitmap)
+		nr_conv_zones = bitmap_weight(args->conv_zones_bitmap,
+					      args->nr_zones);
+	if (nr_conv_zones >= args->nr_zones) {
 		pr_warn("%s: Invalid number of conventional zones %u / %u\n",
-			disk->disk_name, nr_conv_zones, disk->nr_zones);
+			disk->disk_name, nr_conv_zones, args->nr_zones);
 		return -ENODEV;
 	}
 
@@ -1463,7 +1458,7 @@ static int disk_update_zone_resources(struct gendisk *disk,
 	 * small ZNS namespace. For such case, assume that the zoned device has
 	 * no zone resource limits.
 	 */
-	nr_seq_zones = disk->nr_zones - nr_conv_zones;
+	nr_seq_zones = args->nr_zones - nr_conv_zones;
 	if (lim.max_open_zones >= nr_seq_zones)
 		lim.max_open_zones = 0;
 	if (lim.max_active_zones >= nr_seq_zones)
@@ -1493,7 +1488,19 @@ static int disk_update_zone_resources(struct gendisk *disk,
 	}
 
 commit:
-	return queue_limits_commit_update_frozen(q, &lim);
+	if (queue_is_mq(disk->queue))
+		ret = queue_limits_commit_update_frozen(q, &lim);
+	else
+		ret = queue_limits_commit_update(q, &lim);
+
+	if (!ret) {
+		disk->nr_zones = args->nr_zones;
+		disk->zone_capacity = args->zone_capacity;
+		disk->last_zone_capacity = args->last_zone_capacity;
+		disk_set_conv_zones_bitmap(disk, args->conv_zones_bitmap);
+	}
+
+	return ret;
 }
 
 static int blk_revalidate_conv_zone(struct blk_zone *zone, unsigned int idx,
@@ -1648,8 +1655,6 @@ static int blk_revalidate_zone_cb(struct blk_zone *zone, unsigned int idx,
  * and when the zone configuration of the gendisk changes (e.g. after a format).
  * Before calling this function, the device driver must already have set the
  * device zone size (chunk_sector limit) and the max zone append limit.
- * BIO based drivers can also use this function as long as the device queue
- * can be safely frozen.
  */
 int blk_revalidate_disk_zones(struct gendisk *disk)
 {
@@ -1709,13 +1714,13 @@ int blk_revalidate_disk_zones(struct gendisk *disk)
 
 	/*
 	 * Set the new disk zone parameters only once the queue is frozen and
-	 * all I/Os are completed.
+	 * all I/Os are completed on blk-mq drivers.
 	 */
 	if (ret > 0)
 		ret = disk_update_zone_resources(disk, &args);
 	else
 		pr_warn("%s: failed to revalidate zones\n", disk->disk_name);
-	if (ret) {
+	if (ret && queue_is_mq(disk->queue)) {
 		unsigned int memflags = blk_mq_freeze_queue(q);
 
 		disk_free_zone_resources(disk);

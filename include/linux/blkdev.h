@@ -690,12 +690,16 @@ static inline bool blk_queue_is_zoned(struct request_queue *q)
 }
 
 #ifdef CONFIG_BLK_DEV_ZONED
+void disk_free_zone_resources(struct gendisk *disk);
 static inline unsigned int disk_nr_zones(struct gendisk *disk)
 {
 	return disk->nr_zones;
 }
 bool blk_zone_plug_bio(struct bio *bio, unsigned int nr_segs);
 #else /* CONFIG_BLK_DEV_ZONED */
+static inline void disk_free_zone_resources(struct gendisk *disk)
+{
+}
 static inline unsigned int disk_nr_zones(struct gendisk *disk)
 {
 	return 0;
