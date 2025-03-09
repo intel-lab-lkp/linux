@@ -12,11 +12,20 @@
 struct device;
 struct regmap;
 
+/* If a non empty valid_addr_mask is passed, PHY address and
+ * read/write register are encoded in the regmap register
+ * by placing the register in the first 16 bits and the PHY address
+ * right after.
+ */
+#define MDIO_REGMAP_PHY_ADDR		GENMASK(20, 16)
+#define MDIO_REGMAP_PHY_REG		GENMASK(15, 0)
+
 struct mdio_regmap_config {
 	struct device *parent;
 	struct regmap *regmap;
 	char name[MII_BUS_ID_SIZE];
 	u8 valid_addr;
+	u32 valid_addr_mask;
 	bool autoscan;
 };
 

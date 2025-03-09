@@ -20,6 +20,7 @@
 struct mdio_regmap_priv {
 	struct regmap *regmap;
 	u32 valid_addr_mask;
+	bool append_addr;
 };
 
 static int mdio_regmap_read_c22(struct mii_bus *bus, int addr, int regnum)
@@ -30,6 +31,9 @@ static int mdio_regmap_read_c22(struct mii_bus *bus, int addr, int regnum)
 
 	if (!(ctx->valid_addr_mask & BIT(addr)))
 		return -ENODEV;
+
+	if (ctx->append_addr)
+		regnum |= FIELD_PREP(MDIO_REGMAP_PHY_ADDR, addr);
 
 	ret = regmap_read(ctx->regmap, regnum, &val);
 	if (ret < 0)
@@ -45,6 +49,9 @@ static int mdio_regmap_write_c22(struct mii_bus *bus, int addr, int regnum,
 
 	if (!(ctx->valid_addr_mask & BIT(addr)))
 		return -ENODEV;
+
+	if (ctx->append_addr)
+		regnum |= FIELD_PREP(MDIO_REGMAP_PHY_ADDR, addr);
 
 	return regmap_write(ctx->regmap, regnum, val);
 }
@@ -65,7 +72,12 @@ struct mii_bus *devm_mdio_regmap_register(struct device *dev,
 
 	mr = mii->priv;
 	mr->regmap = config->regmap;
-	mr->valid_addr_mask = BIT(config->valid_addr);
+	if (config->valid_addr_mask) {
+		mr->valid_addr_mask = config->valid_addr_mask;
+		mr->append_addr = true;
+	} else {
+		mr->valid_addr_mask = BIT(config->valid_addr);
+	}
 
 	mii->name = DRV_NAME;
 	strscpy(mii->id, config->name, MII_BUS_ID_SIZE);
