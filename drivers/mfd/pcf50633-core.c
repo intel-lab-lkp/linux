@@ -210,7 +210,6 @@ static int pcf50633_probe(struct i2c_client *client)
 	pcf50633_client_dev_register(pcf, "pcf50633-input", &pcf->input_pdev);
 	pcf50633_client_dev_register(pcf, "pcf50633-rtc", &pcf->rtc_pdev);
 	pcf50633_client_dev_register(pcf, "pcf50633-mbc", &pcf->mbc_pdev);
-	pcf50633_client_dev_register(pcf, "pcf50633-backlight", &pcf->bl_pdev);
 
 
 	for (i = 0; i < PCF50633_NUM_REGULATORS; i++) {
@@ -262,7 +261,6 @@ static void pcf50633_remove(struct i2c_client *client)
 	platform_device_unregister(pcf->input_pdev);
 	platform_device_unregister(pcf->rtc_pdev);
 	platform_device_unregister(pcf->mbc_pdev);
-	platform_device_unregister(pcf->bl_pdev);
 
 	for (i = 0; i < PCF50633_NUM_REGULATORS; i++)
 		platform_device_unregister(pcf->regulator_pdev[i]);
