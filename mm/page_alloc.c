@@ -55,6 +55,7 @@
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
+#include <net/page_pool/types.h>
 #include <asm/div64.h>
 #include "internal.h"
 #include "shuffle.h"
@@ -873,7 +874,7 @@ static inline bool page_expected_state(struct page *page,
 			page->memcg_data |
 #endif
 #ifdef CONFIG_PAGE_POOL
-			((page->pp_magic & ~0x3UL) == PP_SIGNATURE) |
+			((page->pp_magic & PP_MAGIC_MASK) == PP_SIGNATURE) |
 #endif
 			(page->flags & check_flags)))
 		return false;
