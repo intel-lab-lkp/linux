@@ -5415,6 +5415,17 @@ static int sol_tcp_sockopt(struct sock *sk, int optname,
 		if (*optlen < 1)
 			return -EINVAL;
 		break;
+	case TCP_BPF_DELACK_MAX:
+		if (*optlen != sizeof(int))
+			return -EINVAL;
+		if (getopt) {
+			int delack_max = inet_csk(sk)->icsk_delack_max;
+			int delack_max_us = jiffies_to_usecs(delack_max);
+
+			memcpy(optval, &delack_max_us, *optlen);
+			return 0;
+		}
+		return bpf_sol_tcp_setsockopt(sk, optname, optval, *optlen);
 	case TCP_BPF_RTO_MIN:
 		if (*optlen != sizeof(int))
 			return -EINVAL;
