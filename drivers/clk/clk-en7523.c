@@ -665,6 +665,7 @@ static int en7581_clk_hw_init(struct platform_device *pdev,
 			      const struct en_clk_soc_data *soc_data,
 			      struct clk_hw_onecell_data *clk_data)
 {
+	struct device *dev = &pdev->dev;
 	struct regmap *map, *clk_map;
 	void __iomem *base;
 
@@ -672,22 +673,28 @@ static int en7581_clk_hw_init(struct platform_device *pdev,
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
-	base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	if (of_property_present(dev->of_node, "reg")) {
+		base = devm_platform_ioremap_resource(pdev, 0);
+		if (IS_ERR(base))
+			return PTR_ERR(base);
 
-	clk_map = devm_regmap_init_mmio(&pdev->dev, base, &en7523_clk_regmap_config);
-	if (IS_ERR(clk_map))
-		return PTR_ERR(clk_map);
+		clk_map = devm_regmap_init_mmio(dev, base, &en7523_clk_regmap_config);
+		if (IS_ERR(clk_map))
+			return PTR_ERR(clk_map);
+	} else {
+		clk_map = device_node_to_regmap(dev->parent->of_node);
+		if (IS_ERR(clk_map))
+			return PTR_ERR(clk_map);
+	}
 
-	en75xx_register_clocks(&pdev->dev, soc_data, clk_data, map, clk_map);
+	en75xx_register_clocks(dev, soc_data, clk_data, map, clk_map);
 
 	regmap_clear_bits(clk_map, REG_NP_SCU_SSTR,
 			  REG_PCIE_XSI0_SEL_MASK | REG_PCIE_XSI1_SEL_MASK);
 	regmap_update_bits(clk_map, REG_NP_SCU_PCIC, REG_PCIE_CTRL,
 			   FIELD_PREP(REG_PCIE_CTRL, 3));
 
-	return en7581_reset_register(&pdev->dev, clk_map);
+	return en7581_reset_register(dev, clk_map);
 }
 
 static int en7523_clk_probe(struct platform_device *pdev)
