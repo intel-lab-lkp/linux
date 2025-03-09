@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Sophgo/Cvitek SoC drivers
+#
+
+if ARCH_SOPHGO || COMPILE_TEST
+menu "Sophgo/Cvitek SoC drivers"
+
+config SOPHGO_CV1800_RTCSYS
+	tristate "Sophgo CV1800 RTC MFD"
+	default y if COMPILE_TEST
+	select MFD_CORE
+	help
+	  If you say yes here you get support the RTC MFD driver for Sophgo
+	  CV1800 series SoC. The RTC module comprises a 32kHz oscillator,
+	  Power-on-Reset (PoR) sub-module, HW state machine to control chip
+	  power-on, power-off and reset. Furthermore, the 8051 subsystem is
+	  located within RTCSYS including associated SRAM block.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called cv1800-rtcsys.
+
+endmenu
+endif
