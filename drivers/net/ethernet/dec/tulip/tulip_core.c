@@ -1306,7 +1306,7 @@ static int tulip_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	const char *chip_name = tulip_tbl[chip_idx].chip_name;
 	unsigned int eeprom_missing = 0;
 	u8 addr[ETH_ALEN] __aligned(2);
-	unsigned int force_csr0 = 0;
+	unsigned int force_csr0 __maybe_unused = 0;
 
 	board_idx++;
 
