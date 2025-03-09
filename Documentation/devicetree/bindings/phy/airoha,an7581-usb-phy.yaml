@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/phy/airoha,an7581-usb-phy.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha AN7581 SoC USB PHY
+
+maintainers:
+  - Christian Marangi <ansuelsmth@gmail.com>
+
+description: >
+  The Airoha AN7581 SoC USB PHY describes the USB PHY for the USB controller.
+
+  Airoha AN7581 SoC support a maximum of 2 USB port. The USB 2.0 mode is
+  always supported. The USB 3.0 mode is optional and depends on the Serdes
+  mode currently configured on the system for the USB port. If USB 3.0 node
+  is defined, then airoha,scu-ssr property is required for Serdes mode
+  validation.
+
+properties:
+  compatible:
+    const: airoha,an7581-usb-phy
+
+  reg:
+    maxItems: 1
+
+  airoha,port-id:
+    description: Describe the physical port this USB PHY refer to. A dedicated
+      osciallator is used for each port for the USB 2.0 Slew Rate calibration.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1]
+
+  airoha,scu-ssr:
+    description: Phandle to the SCU SSR node for USB 3.0 Serdes mode validation.
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+  usb2-phy:
+    type: object
+
+    properties:
+      '#phy-cells':
+        const: 1
+
+    required:
+      - '#phy-cells'
+
+    additionalProperties: false
+
+  usb3-phy:
+    type: object
+
+    properties:
+      '#phy-cells':
+        const: 1
+
+    required:
+      - '#phy-cells'
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - airoha,port-id
+  - usb2-phy
+
+if:
+  required:
+    - usb3-phy
+then:
+  required:
+    - airoha,scu-ssr
+
+additionalProperties: false
+
+examples:
+  - |
+    phy@1fac0000 {
+        compatible = "airoha,an7581-usb-phy";
+        reg = <0x1fac0000 0x10000>;
+
+        airoha,port-id = <0>;
+        airoha,scu-ssr = <&scu_ssr>;
+
+        usb0_u2: usb2-phy {
+            #phy-cells = <1>;
+        };
+
+        usb0_u3: usb3-phy {
+            #phy-cells = <1>;
+        };
+    };
+
+  - |
+    phy@1fae0000 {
+        compatible = "airoha,an7581-usb-phy";
+        reg = <0x1fae0000 0x10000>;
+
+        airoha,port-id = <1>;
+
+        usb1_u2: usb2-phy {
+            #phy-cells = <1>;
+        };
+    };
+
