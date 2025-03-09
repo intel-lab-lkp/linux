@@ -499,12 +499,17 @@ static void ib_device_release(struct device *device)
 static int ib_device_uevent(const struct device *device,
 			    struct kobj_uevent_env *env)
 {
-	if (add_uevent_var(env, "NAME=%s", dev_name(device)))
+	const struct ib_device *dev =
+		container_of(device, struct ib_device, dev);
+
+	if (add_uevent_var(env, "NAME=%s", dev_name(&dev->dev)))
 		return -ENOMEM;
 
-	/*
-	 * It would be nice to pass the node GUID with the event...
-	 */
+	__be64 node_guid_be = dev->node_guid;
+	u64 node_guid = be64_to_cpu(node_guid_be);
+
+	if (add_uevent_var(env, "NODE_GUID=0x%llx", node_guid))
+		return -ENOMEM;
 
 	return 0;
 }
