@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _TICK_INTERNAL_H
+#define _TICK_INTERNAL_H
+
 /*
  * tick internal variable and functions used by low/high res code
  */
@@ -213,3 +216,5 @@ void hrtimers_resume_local(void);
 #endif
 
 extern ssize_t sysfs_get_uname(const char *buf, char *dst, size_t cnt);
+
+#endif

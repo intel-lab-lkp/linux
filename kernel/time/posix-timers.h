@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#ifndef _POSIX_TIMERS_H
+#define _POSIX_TIMERS_H
+
 #define TIMER_RETRY 1
 
 enum posix_timer_state {
@@ -50,3 +53,5 @@ int common_timer_set(struct k_itimer *timr, int flags,
 		     struct itimerspec64 *old_setting);
 void posix_timer_set_common(struct k_itimer *timer, struct itimerspec64 *new_setting);
 int common_timer_del(struct k_itimer *timer);
+
+#endif
