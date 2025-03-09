@@ -9,9 +9,6 @@ title: Amlogic T9015 Internal Audio DAC
 maintainers:
   - Jerome Brunet <jbrunet@baylibre.com>
 
-allOf:
-  - $ref: dai-common.yaml#
-
 properties:
   $nodename:
     pattern: "^audio-controller@.*"
@@ -21,7 +18,9 @@ properties:
 
   compatible:
     items:
-      - const: amlogic,t9015
+      - enum:
+          - amlogic,t9015
+          - amlogic,t9015-a1
 
   clocks:
     items:
@@ -43,6 +42,17 @@ properties:
 
   sound-name-prefix: true
 
+  lineout-left:
+    $ref: /schemas/types.yaml#/definitions/string
+  lineout-right:
+    $ref: /schemas/types.yaml#/definitions/string
+  linein-left:
+    $ref: /schemas/types.yaml#/definitions/string
+  linein-right:
+    $ref: /schemas/types.yaml#/definitions/string
+  micbias:
+    $ref: /schemas/types.yaml#/definitions/string
+
 required:
   - "#sound-dai-cells"
   - compatible
@@ -51,6 +61,57 @@ required:
   - clock-names
   - resets
   - AVDD-supply
+
+
+allOf:
+  - $ref: dai-common.yaml#
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: amlogic,t9015-a1
+    then:
+      properties:
+        lineout-left:
+          items:
+            - enum:
+                - none
+                - right
+                - left-inverted
+        lineout-right:
+          items:
+            - enum:
+                - none
+                - left
+                - right-inverted
+        linein-left:
+          items:
+            - enum:
+                - none
+                - differential
+                - positive
+                - negative
+        linein-right:
+          items:
+            - enum:
+                - none
+                - differential
+                - positive
+                - negative
+        micbias:
+          items:
+            - enum:
+                - 2.0V
+                - 2.1V
+                - 2.3V
+                - 2.5V
+                - 2.8V
+    else:
+      lineout-left: false
+      lineout-right: false
+      linein-left: false
+      linein-right: false
+      micbias: false
 
 additionalProperties: false
 
