@@ -22102,6 +22102,7 @@ L:	sophgo@lists.linux.dev
 W:	https://github.com/sophgo/linux/wiki
 T:	git https://github.com/sophgo/linux.git
 S:	Maintained
+F:	drivers/rtc/rtc-cv1800.c
 F:	drivers/soc/sophgo/cv1800-rtcsys.c
 N:	sophgo
 K:	sophgo
