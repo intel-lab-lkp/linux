@@ -757,6 +757,7 @@ void gen9_set_dc_state(struct intel_display *display, u32 state)
 	struct i915_power_domains *power_domains = &display->power.domains;
 	u32 val;
 	u32 mask;
+	bool dc6_was_enabled, enable_dc6;
 
 	if (!HAS_DISPLAY(display))
 		return;
@@ -775,10 +776,18 @@ void gen9_set_dc_state(struct intel_display *display, u32 state)
 		drm_err(display->drm, "DC state mismatch (0x%x -> 0x%x)\n",
 			power_domains->dc_state, val & mask);
 
+	enable_dc6 = state & DC_STATE_EN_UPTO_DC6;
+	dc6_was_enabled = val & DC_STATE_EN_UPTO_DC6;
+	if (!dc6_was_enabled && enable_dc6)
+		intel_dmc_update_dc6_allowed_count(display, false);
+
 	val &= ~mask;
 	val |= state;
 
 	gen9_write_dc_state(display, val);
+
+	if (!enable_dc6 && dc6_was_enabled)
+		intel_dmc_update_dc6_allowed_count(display, true);
 
 	power_domains->dc_state = val & mask;
 }
