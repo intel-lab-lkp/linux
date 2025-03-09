@@ -20,26 +20,6 @@
 #define G12A_TOACODEC_DRV_NAME "g12a-toacodec"
 
 #define TOACODEC_CTRL0			0x0
-#define  CTRL0_ENABLE_SHIFT		31
-#define  CTRL0_DAT_SEL_SM1_MSB		19
-#define  CTRL0_DAT_SEL_SM1_LSB		18
-#define  CTRL0_DAT_SEL_MSB		15
-#define  CTRL0_DAT_SEL_LSB		14
-#define  CTRL0_LANE_SEL_SM1		16
-#define  CTRL0_LANE_SEL			12
-#define  CTRL0_LRCLK_SEL_SM1_MSB	14
-#define  CTRL0_LRCLK_SEL_SM1_LSB	12
-#define  CTRL0_LRCLK_SEL_MSB		9
-#define  CTRL0_LRCLK_SEL_LSB		8
-#define  CTRL0_LRCLK_INV_SM1		BIT(10)
-#define  CTRL0_BLK_CAP_INV_SM1		BIT(9)
-#define  CTRL0_BLK_CAP_INV		BIT(7)
-#define  CTRL0_BCLK_O_INV_SM1		BIT(8)
-#define  CTRL0_BCLK_O_INV		BIT(6)
-#define  CTRL0_BCLK_SEL_SM1_MSB		6
-#define  CTRL0_BCLK_SEL_MSB		5
-#define  CTRL0_BCLK_SEL_LSB		4
-#define  CTRL0_MCLK_SEL			GENMASK(2, 0)
 
 #define TOACODEC_OUT_CHMAX		2
 
@@ -69,6 +49,7 @@ static int g12a_toacodec_mux_put_enum(struct snd_kcontrol *kcontrol,
 	struct snd_soc_dapm_context *dapm =
 		snd_soc_dapm_kcontrol_dapm(kcontrol);
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
+	unsigned int mclk_sel = GENMASK(2, 0);
 	unsigned int mux, reg;
 
 	if (ucontrol->value.enumerated.item[0] >= e->items)
@@ -98,21 +79,18 @@ static int g12a_toacodec_mux_put_enum(struct snd_kcontrol *kcontrol,
 	 * source. For that, we will need regmap backed clock mux which
 	 * is a work in progress
 	 */
-	snd_soc_component_update_bits(component, e->reg,
-				      CTRL0_MCLK_SEL,
-				      FIELD_PREP(CTRL0_MCLK_SEL, mux));
+	snd_soc_component_update_bits(component, e->reg, mclk_sel,
+				      FIELD_PREP(mclk_sel, mux));
 
 	snd_soc_dapm_mux_update_power(dapm, kcontrol, mux, e, NULL);
 
 	return 1;
 }
 
-static SOC_ENUM_SINGLE_DECL(g12a_toacodec_mux_enum, TOACODEC_CTRL0,
-			    CTRL0_DAT_SEL_LSB,
+static SOC_ENUM_SINGLE_DECL(g12a_toacodec_mux_enum, TOACODEC_CTRL0, 14,
 			    g12a_toacodec_mux_texts);
 
-static SOC_ENUM_SINGLE_DECL(sm1_toacodec_mux_enum, TOACODEC_CTRL0,
-			    CTRL0_DAT_SEL_SM1_LSB,
+static SOC_ENUM_SINGLE_DECL(sm1_toacodec_mux_enum, TOACODEC_CTRL0, 18,
 			    g12a_toacodec_mux_texts);
 
 static const struct snd_kcontrol_new g12a_toacodec_mux =
@@ -126,8 +104,7 @@ static const struct snd_kcontrol_new sm1_toacodec_mux =
 			  g12a_toacodec_mux_put_enum);
 
 static const struct snd_kcontrol_new g12a_toacodec_out_enable =
-	SOC_DAPM_SINGLE_AUTODISABLE("Switch", TOACODEC_CTRL0,
-				    CTRL0_ENABLE_SHIFT, 1, 0);
+	SOC_DAPM_SINGLE_AUTODISABLE("Switch", TOACODEC_CTRL0, 31, 1, 0);
 
 static const struct snd_soc_dapm_widget g12a_toacodec_widgets[] = {
 	SND_SOC_DAPM_MUX("SRC", SND_SOC_NOPM, 0, 0,
@@ -209,15 +186,13 @@ static struct snd_soc_dai_driver g12a_toacodec_dai_drv[] = {
 static int g12a_toacodec_component_probe(struct snd_soc_component *c)
 {
 	/* Initialize the static clock parameters */
-	return snd_soc_component_write(c, TOACODEC_CTRL0,
-				       CTRL0_BLK_CAP_INV);
+	return snd_soc_component_write(c, TOACODEC_CTRL0, BIT(7));
 }
 
 static int sm1_toacodec_component_probe(struct snd_soc_component *c)
 {
 	/* Initialize the static clock parameters */
-	return snd_soc_component_write(c, TOACODEC_CTRL0,
-				       CTRL0_BLK_CAP_INV_SM1);
+	return snd_soc_component_write(c, TOACODEC_CTRL0, BIT(9));
 }
 
 static const struct snd_soc_dapm_route g12a_toacodec_routes[] = {
@@ -229,11 +204,11 @@ static const struct snd_soc_dapm_route g12a_toacodec_routes[] = {
 };
 
 static const struct snd_kcontrol_new g12a_toacodec_controls[] = {
-	SOC_SINGLE("Lane Select", TOACODEC_CTRL0, CTRL0_LANE_SEL, 3, 0),
+	SOC_SINGLE("Lane Select", TOACODEC_CTRL0, 12, 3, 0),
 };
 
 static const struct snd_kcontrol_new sm1_toacodec_controls[] = {
-	SOC_SINGLE("Lane Select", TOACODEC_CTRL0, CTRL0_LANE_SEL_SM1, 3, 0),
+	SOC_SINGLE("Lane Select", TOACODEC_CTRL0, 16, 3, 0),
 };
 
 static const struct snd_soc_component_driver g12a_toacodec_component_drv = {
