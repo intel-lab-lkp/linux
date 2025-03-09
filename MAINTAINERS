@@ -741,6 +741,7 @@ M:	Christian Marangi <ansuelsmth@gmail.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/devicetree/bindings/soc/airoha/airoha,an7581-scu-ssr.yaml
+F:	drivers/soc/airoha/airoha-scu-ssr.c
 F:	include/dt-bindings/soc/airoha,scu-ssr.h
 
 AIROHA SPI SNFI DRIVER

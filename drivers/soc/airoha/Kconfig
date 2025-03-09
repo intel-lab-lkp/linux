@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config AIROHA_SCU_SSR
+	tristate "Airoha SCU SSR Driver"
+	depends on ARCH_AIROHA || COMPILE_TEST
+	depends on OF
+	help
+	  Say 'Y' here to add support for Airoha SCU SSR driver.
+
+	  Airoha SoC pheriperal (like USB/PCIe/Ethernet port) are
+	  selected by toggling specific bit. Serdes Port line
+	  are mutually exclusive such as selecting PCIe port 2
+	  disable support for USB port 2 3.0 mode.
+
+	  This driver is used to configure such bit and expose
+	  an API to read the current status from a user of such
+	  Serdes lines.
+
