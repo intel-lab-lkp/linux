@@ -147,7 +147,6 @@ struct pcf50633 {
 	int onkey1s_held;
 
 	struct platform_device *mbc_pdev;
-	struct platform_device *regulator_pdev[PCF50633_NUM_REGULATORS];
 };
 
 enum pcf50633_reg_int1 {

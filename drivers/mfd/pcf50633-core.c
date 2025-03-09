@@ -166,9 +166,8 @@ static const struct regmap_config pcf50633_regmap_config = {
 static int pcf50633_probe(struct i2c_client *client)
 {
 	struct pcf50633 *pcf;
-	struct platform_device *pdev;
 	struct pcf50633_platform_data *pdata = dev_get_platdata(&client->dev);
-	int i, j, ret;
+	int ret;
 	int version, variant;
 
 	if (!client->irq) {
@@ -210,26 +209,6 @@ static int pcf50633_probe(struct i2c_client *client)
 	pcf50633_client_dev_register(pcf, "pcf50633-mbc", &pcf->mbc_pdev);
 
 
-	for (i = 0; i < PCF50633_NUM_REGULATORS; i++) {
-		pdev = platform_device_alloc("pcf50633-regulator", i);
-		if (!pdev) {
-			ret = -ENOMEM;
-			goto err2;
-		}
-
-		pdev->dev.parent = pcf->dev;
-		ret = platform_device_add_data(pdev, &pdata->reg_init_data[i],
-					       sizeof(pdata->reg_init_data[i]));
-		if (ret)
-			goto err;
-
-		ret = platform_device_add(pdev);
-		if (ret)
-			goto err;
-
-		pcf->regulator_pdev[i] = pdev;
-	}
-
 	ret = sysfs_create_group(&client->dev.kobj, &pcf_attr_group);
 	if (ret)
 		dev_warn(pcf->dev, "error creating sysfs entries\n");
@@ -238,28 +217,16 @@ static int pcf50633_probe(struct i2c_client *client)
 		pdata->probe_done(pcf);
 
 	return 0;
-
-err:
-	platform_device_put(pdev);
-err2:
-	for (j = 0; j < i; j++)
-		platform_device_put(pcf->regulator_pdev[j]);
-
-	return ret;
 }
 
 static void pcf50633_remove(struct i2c_client *client)
 {
 	struct pcf50633 *pcf = i2c_get_clientdata(client);
-	int i;
 
 	sysfs_remove_group(&client->dev.kobj, &pcf_attr_group);
 	pcf50633_irq_free(pcf);
 
 	platform_device_unregister(pcf->mbc_pdev);
-
-	for (i = 0; i < PCF50633_NUM_REGULATORS; i++)
-		platform_device_unregister(pcf->regulator_pdev[i]);
 }
 
 static const struct i2c_device_id pcf50633_id_table[] = {
