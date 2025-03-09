@@ -51,7 +51,6 @@ properties:
 
 required:
   - compatible
-  - reg
   - '#clock-cells'
 
 allOf:
@@ -65,6 +64,9 @@ allOf:
           minItems: 2
 
         '#reset-cells': false
+
+      required:
+        - reg
 
   - if:
       properties:
@@ -98,4 +100,13 @@ examples:
               #clock-cells = <1>;
               #reset-cells = <1>;
       };
+    };
+
+  # Example with clock-controller in SCU MFD
+  - |
+    clock-controller {
+      compatible = "airoha,en7581-scu";
+
+      #clock-cells = <1>;
+      #reset-cells = <1>;
     };
