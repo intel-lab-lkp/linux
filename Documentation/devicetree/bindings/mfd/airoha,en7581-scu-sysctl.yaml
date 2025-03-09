@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/airoha,en7581-scu-sysctl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Airoha EN7581 SCU (System Controller Unit)
+
+maintainers:
+  - Christian Marangi <ansuelsmth@gmail.com>
+
+description:
+  Airoha EN7581 SoC expose registers to control miscellaneous
+  pheriperals via the SCU (System Controller Unit).
+
+  Example of these pheriperals are reset-controller, clock-controller,
+  PCIe line speed controller and bits to configure different Serdes ports
+  for USB or Ethernet usage.
+
+properties:
+  compatible:
+    items:
+      - const: airoha,en7581-scu-sysctl
+      - const: syscon
+      - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  clock-controller:
+    type: object
+    $ref: /schemas/clock/airoha,en7523-scu.yaml
+    description:
+      Child node definition for EN7581 Clock controller
+
+  system-controller:
+    type: object
+    $ref: /schemas/soc/airoha/airoha,an7581-scu-ssr.yaml
+    description:
+      Child node definition for EN7581 System Status Register
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/soc/airoha,scu-ssr.h>
+
+    system-controller@1fb00000 {
+        compatible = "airoha,en7581-scu-sysctl", "syscon", "simple-mfd";
+        reg = <0x1fb00000 0x970>;
+
+        clock-controller {
+            compatible = "airoha,en7581-scu";
+
+            #clock-cells = <1>;
+            #reset-cells = <1>;
+        };
+
+        system-controller {
+            compatible = "airoha,an7581-scu-ssr";
+
+            airoha,serdes-usb2 = <AIROHA_SCU_SSR_USB2_PCIE2>;
+        };
+    };
