@@ -211,6 +211,13 @@ struct vc4_hdmi {
 	 * KMS hooks. Protected by @mutex.
 	 */
 	enum hdmi_colorspace output_format;
+
+	/**
+	 * @tmds_char_rate: Copy of
+	 * @drm_connector_state.hdmi.tmds_char_rate for use outside of
+	 * KMS hooks. Protected by @mutex.
+	 */
+	unsigned long long tmds_char_rate;
 };
 
 #define connector_to_vc4_hdmi(_connector)				\

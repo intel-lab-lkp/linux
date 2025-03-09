@@ -1637,6 +1637,7 @@ static void vc4_hdmi_encoder_atomic_mode_set(struct drm_encoder *encoder,
 		      &crtc_state->adjusted_mode);
 	vc4_hdmi->output_bpc = conn_state->hdmi.output_bpc;
 	vc4_hdmi->output_format = conn_state->hdmi.output_format;
+	vc4_hdmi->tmds_char_rate = conn_state->hdmi.tmds_char_rate;
 	mutex_unlock(&vc4_hdmi->mutex);
 }
 
@@ -1829,17 +1830,12 @@ static void vc4_hdmi_audio_set_mai_clock(struct vc4_hdmi *vc4_hdmi,
 
 static void vc4_hdmi_set_n_cts(struct vc4_hdmi *vc4_hdmi, unsigned int samplerate)
 {
-	const struct drm_display_mode *mode = &vc4_hdmi->saved_adjusted_mode;
-	u32 n, cts;
-	u64 tmp;
+	unsigned int n, cts;
 
 	lockdep_assert_held(&vc4_hdmi->mutex);
 	lockdep_assert_held(&vc4_hdmi->hw_lock);
 
-	n = 128 * samplerate / 1000;
-	tmp = (u64)(mode->clock * 1000) * n;
-	do_div(tmp, 128 * samplerate);
-	cts = tmp;
+	drm_hdmi_acr_get_n_cts(vc4_hdmi->tmds_char_rate, samplerate, &n, &cts);
 
 	HDMI_WRITE(HDMI_CRP_CFG,
 		   VC4_HDMI_CRP_CFG_EXTERNAL_CTS_EN |
