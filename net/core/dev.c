@@ -1760,6 +1760,7 @@ void netif_close(struct net_device *dev)
 		list_del(&single);
 	}
 }
+EXPORT_SYMBOL(netif_close);
 
 int dev_setup_tc(struct net_device *dev, enum tc_setup_type type,
 		 void *type_data)
