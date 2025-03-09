@@ -384,6 +384,7 @@ struct fsl_diu_data {
 	__le16 next_cursor[MAX_CURS * MAX_CURS] __aligned(32);
 	uint8_t edid_data[EDID_LENGTH];
 	bool has_edid;
+	bool has_dev_attr;
 } __aligned(32);
 
 /* Determine the DMA address of a member of the fsl_diu_data structure */
@@ -1809,6 +1810,7 @@ static int fsl_diu_probe(struct platform_device *pdev)
 			data->dev_attr.attr.name);
 	}
 
+	data->has_dev_attr = true;
 	dev_set_drvdata(&pdev->dev, data);
 	return 0;
 
@@ -1827,6 +1829,10 @@ static void fsl_diu_remove(struct platform_device *pdev)
 	int i;
 
 	data = dev_get_drvdata(&pdev->dev);
+
+	if (data->has_dev_attr)
+		device_remove_file(&pdev->dev, &data->dev_attr);
+
 	disable_lcdc(&data->fsl_diu_info[0]);
 
 	free_irq(data->irq, data->diu_reg);
