@@ -173,11 +173,16 @@
 			};
 		};
 
-		scuclk: clock-controller@1fb00000 {
-			compatible = "airoha,en7581-scu";
+		system-controller@1fb00000 {
+			compatible = "airoha,en7581-scu-sysctl", "syscon", "simple-mfd";
 			reg = <0x0 0x1fb00000 0x0 0x970>;
-			#clock-cells = <1>;
-			#reset-cells = <1>;
+
+			scuclk: clock-controller {
+				compatible = "airoha,en7581-scu";
+
+				#clock-cells = <1>;
+				#reset-cells = <1>;
+			};
 		};
 
 		uart1: serial@1fbf0000 {
