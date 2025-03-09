@@ -250,7 +250,7 @@ static int cb710_probe(struct pci_dev *pdev,
 		err = cb710_register_slot(chip,
 			CB710_SLOT_MMC, 0x00, "cb710-mmc");
 		if (err)
-			return err;
+			goto free_platform_id;
 	}
 
 	if (val & CB710_SLOT_MS) {	/* MemoryStick slot */
@@ -276,6 +276,10 @@ unreg_mmc:
 #ifdef CONFIG_CB710_DEBUG_ASSUMPTIONS
 	BUG_ON(atomic_read(&chip->slot_refs_count) != 0);
 #endif
+
+free_platform_id:
+	ida_free(&cb710_ida, chip->platform_id);
+
 	return err;
 }
 
