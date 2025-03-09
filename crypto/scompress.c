@@ -165,7 +165,8 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 	struct scomp_scratch *scratch;
 	unsigned int slen = req->slen;
 	unsigned int dlen = req->dlen;
-	void *src, *dst;
+	const u8 *src;
+	u8 *dst;
 	int ret;
 
 	if (!req->src || !slen)
@@ -174,28 +175,33 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 	if (req->dst && !dlen)
 		return -EINVAL;
 
-	if (sg_nents(req->dst) > 1)
+	if (acomp_request_dst_isvirt(req))
+		dst = req->dvirt;
+	else if (sg_nents(req->dst) > 1)
 		return -ENOSYS;
-
-	if (req->dst->offset >= PAGE_SIZE)
+	else if (req->dst->offset >= PAGE_SIZE)
 		return -ENOSYS;
+	else {
+		if (req->dst->offset + dlen > PAGE_SIZE)
+			dlen = PAGE_SIZE - req->dst->offset;
+		dst = kmap_local_page(sg_page(req->dst)) + req->dst->offset;
+	}
 
-	if (req->dst->offset + dlen > PAGE_SIZE)
-		dlen = PAGE_SIZE - req->dst->offset;
+	scratch = raw_cpu_ptr(&scomp_scratch);
 
-	if (sg_nents(req->src) == 1 && (!PageHighMem(sg_page(req->src)) ||
-					req->src->offset + slen <= PAGE_SIZE))
+	if (acomp_request_src_isvirt(req))
+		src = req->svirt;
+	else if (sg_nents(req->src) == 1 &&
+		 (!PageHighMem(sg_page(req->src)) ||
+		  req->src->offset + slen <= PAGE_SIZE))
 		src = kmap_local_page(sg_page(req->src)) + req->src->offset;
 	else
 		src = scratch->src;
 
-	dst = kmap_local_page(sg_page(req->dst)) + req->dst->offset;
-
-	scratch = raw_cpu_ptr(&scomp_scratch);
 	spin_lock_bh(&scratch->lock);
 
 	if (src == scratch->src)
-		memcpy_from_sglist(src, req->src, 0, req->slen);
+		memcpy_from_sglist(scratch->src, req->src, 0, req->slen);
 
 	stream = raw_cpu_ptr(crypto_scomp_alg(scomp)->stream);
 	spin_lock(&stream->lock);
@@ -208,22 +214,39 @@ static int scomp_acomp_comp_decomp(struct acomp_req *req, int dir)
 	spin_unlock(&stream->lock);
 	spin_unlock_bh(&scratch->lock);
 
-	if (src != scratch->src)
+	if (!acomp_request_src_isvirt(req) && src != scratch->src)
 		kunmap_local(src);
-	kunmap_local(dst);
-	flush_dcache_page(sg_page(req->dst));
+
+	if (!acomp_request_dst_isvirt(req)) {
+		kunmap_local(dst);
+		flush_dcache_page(sg_page(req->dst));
+	}
 
 	return ret;
 }
 
+static int scomp_acomp_chain(struct acomp_req *req, int dir)
+{
+	struct acomp_req *r2;
+	int err;
+
+	err = scomp_acomp_comp_decomp(req, dir);
+	req->base.err = err;
+
+	list_for_each_entry(r2, &req->base.list, base.list)
+		r2->base.err = scomp_acomp_comp_decomp(r2, dir);
+
+	return err;
+}
+
 static int scomp_acomp_compress(struct acomp_req *req)
 {
-	return scomp_acomp_comp_decomp(req, 1);
+	return scomp_acomp_chain(req, 1);
 }
 
 static int scomp_acomp_decompress(struct acomp_req *req)
 {
-	return scomp_acomp_comp_decomp(req, 0);
+	return scomp_acomp_chain(req, 0);
 }
 
 static void crypto_exit_scomp_ops_async(struct crypto_tfm *tfm)
@@ -284,11 +307,20 @@ static const struct crypto_type crypto_scomp_type = {
 	.tfmsize = offsetof(struct crypto_scomp, base),
 };
 
-int crypto_register_scomp(struct scomp_alg *alg)
+static void scomp_prepare_alg(struct scomp_alg *alg)
 {
 	struct crypto_alg *base = &alg->calg.base;
 
 	comp_prepare_alg(&alg->calg);
+
+	base->cra_flags |= CRYPTO_ALG_REQ_CHAIN;
+}
+
+int crypto_register_scomp(struct scomp_alg *alg)
+{
+	struct crypto_alg *base = &alg->calg.base;
+
+	scomp_prepare_alg(alg);
 
 	base->cra_type = &crypto_scomp_type;
 	base->cra_flags |= CRYPTO_ALG_TYPE_SCOMPRESS;
