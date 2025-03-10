@@ -2854,6 +2854,12 @@ static const struct pci_device_id parport_pc_pci_tbl[] = {
 	/* Brainboxes PX-475 */
 	{ PCI_VENDOR_ID_INTASHIELD, 0x401f,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, oxsemi_pcie_pport },
+	/* Brainboxes XC-157 */
+	{ PCI_VENDOR_ID_INTASHIELD, 0x4020,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, oxsemi_pcie_pport },
+	/* Brainboxes XC-475 */
+	{ PCI_VENDOR_ID_INTASHIELD, 0x4022,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, oxsemi_pcie_pport },
 	{ 0, } /* terminate list */
 };
 MODULE_DEVICE_TABLE(pci, parport_pc_pci_tbl);
