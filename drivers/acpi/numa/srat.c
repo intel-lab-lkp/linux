@@ -646,6 +646,9 @@ int __init acpi_numa_init(void)
 		if (node_to_pxm_map[i] > fake_pxm)
 			fake_pxm = node_to_pxm_map[i];
 	}
+	if (fake_pxm == PXM_INVAL)
+		pr_warn("Failed to find the next unused PXM value for CFMWs\n");
+
 	last_real_pxm = fake_pxm;
 	fake_pxm++;
 	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CFMWS, acpi_parse_cfmws,
