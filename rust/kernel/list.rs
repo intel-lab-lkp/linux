@@ -35,6 +35,96 @@ pub use self::arc_field::{define_list_arc_field_getter, ListArcField};
 /// * All prev/next pointers in `ListLinks` fields of items in the list are valid and form a cycle.
 /// * For every item in the list, the list owns the associated [`ListArc`] reference and has
 ///   exclusive access to the `ListLinks` field.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::list::*;
+///
+/// struct MyData { value: i32, link: ListLinks<0> };
+///
+/// impl_list_arc_safe! {
+///     impl ListArcSafe<0> for MyData { untracked; }
+/// }
+/// impl_has_list_links! {
+///     impl HasListLinks<0> for MyData { self.link }
+/// }
+/// impl_list_item! {
+///     impl ListItem<0> for MyData { using ListLinks; }
+/// }
+///
+/// let mut my_list = List::<MyData, 0>::new();
+///
+/// // The list should be empty at the moment.
+/// assert!(my_list.is_empty());
+///
+/// let item_1 = ListArc::<MyData, 0>::new(
+///     MyData {
+///         value: 10,
+///         link: ListLinks::<0>::new_link(),
+///     }, GFP_KERNEL
+/// ).unwrap();
+///
+/// let item_2 = ListArc::<MyData, 0>::new(
+///     MyData {
+///         value: 20,
+///         link: ListLinks::<0>::new_link(),
+///     }, GFP_KERNEL
+/// ).unwrap();
+///
+/// let item_3 = ListArc::<MyData, 0>::new(
+///     MyData {
+///         value: 30,
+///         link: ListLinks::<0>::new_link(),
+///     }, GFP_KERNEL
+/// ).unwrap();
+///
+/// // Append the nodes using push_back()
+/// my_list.push_back(item_1);
+/// my_list.push_back(item_2);
+/// my_list.push_back(item_3);
+///
+/// // Verify the length of the list.
+/// assert_eq!(my_list.iter().count(), 3);
+///
+/// // Iterater over the list and verify
+/// // the nodes were inserted correctly.
+/// let mut counter = 10;
+/// for item in my_list.iter() {
+///     assert_eq!(item.value, counter);
+///     counter += 10;
+/// }
+///
+/// // Pop the items out from the list and
+/// // verify their content.
+/// let item_3 = my_list.pop_back().unwrap();
+/// let item_1 = my_list.pop_front().unwrap();
+/// let item_2 = my_list.pop_front().unwrap();
+/// assert_eq!(item_1.value, 10);
+/// assert_eq!(item_2.value, 20);
+/// assert_eq!(item_3.value, 30);
+/// assert!(my_list.is_empty());
+///
+/// // Append the nodes using push_front()
+/// my_list.push_front(item_1);
+/// my_list.push_front(item_2);
+/// my_list.push_front(item_3);
+/// assert_eq!(my_list.iter().count(), 3);
+///
+/// // Use Cursor to verify the nodes were
+/// // inserted correctly.
+///
+/// let mut cursor = my_list.cursor_front().unwrap();
+/// assert_eq!(cursor.current().value, 30);
+/// cursor = cursor.next().unwrap();
+/// assert_eq!(cursor.current().value, 20);
+/// cursor = cursor.next().unwrap();
+/// assert_eq!(cursor.current().value, 10);
+/// assert!(cursor.next().is_none());
+///
+/// # Ok::<(), Error>(())
+/// ```
+///
 pub struct List<T: ?Sized + ListItem<ID>, const ID: u64 = 0> {
     first: *mut ListLinksFields,
     _ty: PhantomData<ListArc<T, ID>>,
