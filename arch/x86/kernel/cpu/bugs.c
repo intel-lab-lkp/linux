@@ -68,6 +68,8 @@ static void __init taa_select_mitigation(void);
 static void __init taa_update_mitigation(void);
 static void __init taa_apply_mitigation(void);
 static void __init mmio_select_mitigation(void);
+static void __init mmio_update_mitigation(void);
+static void __init mmio_apply_mitigation(void);
 static void __init srbds_select_mitigation(void);
 static void __init l1d_flush_select_mitigation(void);
 static void __init srso_select_mitigation(void);
@@ -194,6 +196,7 @@ void __init cpu_select_mitigations(void)
 	l1tf_select_mitigation();
 	mds_select_mitigation();
 	taa_select_mitigation();
+	mmio_select_mitigation();
 	md_clear_select_mitigation();
 	srbds_select_mitigation();
 	l1d_flush_select_mitigation();
@@ -211,9 +214,11 @@ void __init cpu_select_mitigations(void)
 	 */
 	mds_update_mitigation();
 	taa_update_mitigation();
+	mmio_update_mitigation();
 
 	mds_apply_mitigation();
 	taa_apply_mitigation();
+	mmio_apply_mitigation();
 }
 
 /*
@@ -511,24 +516,60 @@ static void __init mmio_select_mitigation(void)
 		return;
 	}
 
+	/* Microcode will be checked in mmio_update_mitigation(). */
+	if (mmio_mitigation == MMIO_MITIGATION_AUTO)
+		mmio_mitigation = MMIO_MITIGATION_VERW;
+
+	/*
+	 * Enable CPU buffer clear mitigation for host and VMM, if also affected
+	 * by MDS or TAA.
+	 */
+	if (boot_cpu_has_bug(X86_BUG_MDS) || taa_vulnerable())
+		verw_mitigation_selected = true;
+}
+
+static void __init mmio_update_mitigation(void)
+{
+	if (!boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA) || cpu_mitigations_off())
+		return;
+
+	if (verw_mitigation_selected)
+		mmio_mitigation = MMIO_MITIGATION_VERW;
+
+	if (mmio_mitigation == MMIO_MITIGATION_VERW) {
+		/*
+		 * Check if the system has the right microcode.
+		 *
+		 * CPU Fill buffer clear mitigation is enumerated by either an explicit
+		 * FB_CLEAR or by the presence of both MD_CLEAR and L1D_FLUSH on MDS
+		 * affected systems.
+		 */
+		if (!((x86_arch_cap_msr & ARCH_CAP_FB_CLEAR) ||
+		      (boot_cpu_has(X86_FEATURE_MD_CLEAR) &&
+		       boot_cpu_has(X86_FEATURE_FLUSH_L1D) &&
+		     !(x86_arch_cap_msr & ARCH_CAP_MDS_NO))))
+			mmio_mitigation = MMIO_MITIGATION_UCODE_NEEDED;
+	}
+
+	if (boot_cpu_has_bug(X86_BUG_MMIO_UNKNOWN))
+		pr_info("Unknown: No mitigations\n");
+	else
+		pr_info("%s\n", mmio_strings[mmio_mitigation]);
+}
+
+static void __init mmio_apply_mitigation(void)
+{
 	if (mmio_mitigation == MMIO_MITIGATION_OFF)
 		return;
 
 	/*
-	 * Enable CPU buffer clear mitigation for host and VMM, if also affected
-	 * by MDS or TAA. Otherwise, enable mitigation for VMM only.
+	 * Only enable the VMM mitigation if the CPU buffer clear mitigation is
+	 * not being used.
 	 */
-	if (boot_cpu_has_bug(X86_BUG_MDS) || (boot_cpu_has_bug(X86_BUG_TAA) &&
-					      boot_cpu_has(X86_FEATURE_RTM)))
+	if (verw_mitigation_selected) {
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
-
-	/*
-	 * X86_FEATURE_CLEAR_CPU_BUF could be enabled by other VERW based
-	 * mitigations, disable KVM-only mitigation in that case.
-	 */
-	if (boot_cpu_has(X86_FEATURE_CLEAR_CPU_BUF))
 		static_branch_disable(&mmio_stale_data_clear);
-	else
+	} else
 		static_branch_enable(&mmio_stale_data_clear);
 
 	/*
@@ -538,21 +579,6 @@ static void __init mmio_select_mitigation(void)
 	 */
 	if (!(x86_arch_cap_msr & ARCH_CAP_FBSDP_NO))
 		static_branch_enable(&mds_idle_clear);
-
-	/*
-	 * Check if the system has the right microcode.
-	 *
-	 * CPU Fill buffer clear mitigation is enumerated by either an explicit
-	 * FB_CLEAR or by the presence of both MD_CLEAR and L1D_FLUSH on MDS
-	 * affected systems.
-	 */
-	if ((x86_arch_cap_msr & ARCH_CAP_FB_CLEAR) ||
-	    (boot_cpu_has(X86_FEATURE_MD_CLEAR) &&
-	     boot_cpu_has(X86_FEATURE_FLUSH_L1D) &&
-	     !(x86_arch_cap_msr & ARCH_CAP_MDS_NO)))
-		mmio_mitigation = MMIO_MITIGATION_VERW;
-	else
-		mmio_mitigation = MMIO_MITIGATION_UCODE_NEEDED;
 
 	if (mmio_nosmt || cpu_mitigations_auto_nosmt())
 		cpu_smt_disable(false);
@@ -676,7 +702,6 @@ out:
 
 static void __init md_clear_select_mitigation(void)
 {
-	mmio_select_mitigation();
 	rfds_select_mitigation();
 
 	/*
