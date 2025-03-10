@@ -7446,7 +7446,7 @@ sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *
 	unsigned int min_exit_latency = UINT_MAX;
 	u64 latest_idle_timestamp = 0;
 	int least_loaded_cpu = this_cpu;
-	int shallowest_idle_cpu = -1;
+	int shallowest_idle_cpu = -1, si_cpu = -1;
 	int i;
 
 	/* Check if we have any choice: */
@@ -7459,9 +7459,6 @@ sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *
 
 		if (!sched_core_cookie_match(rq, p))
 			continue;
-
-		if (sched_idle_cpu(i))
-			return i;
 
 		if (available_idle_cpu(i)) {
 			struct cpuidle_state *idle = idle_get_state(rq);
@@ -7484,7 +7481,12 @@ sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *
 				latest_idle_timestamp = rq->idle_stamp;
 				shallowest_idle_cpu = i;
 			}
-		} else if (shallowest_idle_cpu == -1) {
+		} else if (shallowest_idle_cpu == -1 && si_cpu == -1) {
+			if (sched_idle_cpu(i)) {
+				si_cpu = i;
+				continue;
+			}
+
 			load = cpu_load(cpu_rq(i));
 			if (load < min_load) {
 				min_load = load;
@@ -7493,7 +7495,11 @@ sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *
 		}
 	}
 
-	return shallowest_idle_cpu != -1 ? shallowest_idle_cpu : least_loaded_cpu;
+	if (shallowest_idle_cpu != -1)
+		return shallowest_idle_cpu;
+	if (si_cpu != -1)
+		return si_cpu;
+	return least_loaded_cpu;
 }
 
 static inline int sched_balance_find_dst_cpu(struct sched_domain *sd, struct task_struct *p,
@@ -7549,11 +7555,14 @@ static inline int sched_balance_find_dst_cpu(struct sched_domain *sd, struct tas
 	return new_cpu;
 }
 
-static inline int __select_idle_cpu(int cpu, struct task_struct *p)
+static inline int __select_idle_cpu(int cpu, struct task_struct *p, int *si_cpu)
 {
-	if ((available_idle_cpu(cpu) || sched_idle_cpu(cpu)) &&
-	    sched_cpu_cookie_match(cpu_rq(cpu), p))
+	if (!sched_cpu_cookie_match(cpu_rq(cpu), p))
+		return -1;
+	if (available_idle_cpu(cpu))
 		return cpu;
+	if (*si_cpu == -1 && sched_idle_cpu(cpu))
+		*si_cpu = cpu;
 
 	return -1;
 }
@@ -7649,7 +7658,7 @@ static int select_idle_core(struct task_struct *p, int core, struct cpumask *cpu
  */
 static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int target)
 {
-	int cpu;
+	int cpu, si_cpu = -1;
 
 	for_each_cpu_and(cpu, cpu_smt_mask(target), p->cpus_ptr) {
 		if (cpu == target)
@@ -7660,11 +7669,13 @@ static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int t
 		 */
 		if (!cpumask_test_cpu(cpu, sched_domain_span(sd)))
 			continue;
-		if (available_idle_cpu(cpu) || sched_idle_cpu(cpu))
+		if (available_idle_cpu(cpu))
 			return cpu;
+		if (si_cpu == -1 && sched_idle_cpu(cpu))
+			si_cpu = cpu;
 	}
 
-	return -1;
+	return si_cpu;
 }
 
 #else /* CONFIG_SCHED_SMT */
@@ -7680,7 +7691,7 @@ static inline bool test_idle_cores(int cpu)
 
 static inline int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus, int *idle_cpu)
 {
-	return __select_idle_cpu(core, p);
+	return __select_idle_cpu(core, p, idle_cpu);
 }
 
 static inline int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int target)
@@ -7728,10 +7739,10 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 						return i;
 				} else {
 					if (--nr <= 0)
-						return -1;
-					idle_cpu = __select_idle_cpu(cpu, p);
-					if ((unsigned int)idle_cpu < nr_cpumask_bits)
 						return idle_cpu;
+					i = __select_idle_cpu(cpu, p, &idle_cpu);
+					if ((unsigned int)i < nr_cpumask_bits)
+						return i;
 				}
 			}
 			cpumask_andnot(cpus, cpus, sched_group_span(sg));
@@ -7746,9 +7757,9 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 
 		} else {
 			if (--nr <= 0)
-				return -1;
-			idle_cpu = __select_idle_cpu(cpu, p);
-			if ((unsigned int)idle_cpu < nr_cpumask_bits)
+				return idle_cpu;
+			i = __select_idle_cpu(cpu, p, &idle_cpu);
+			if ((unsigned int)i < nr_cpumask_bits)
 				break;
 		}
 	}
