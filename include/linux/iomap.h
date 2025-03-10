@@ -189,9 +189,9 @@ struct iomap_folio_ops {
 #else
 #define IOMAP_DAX		0
 #endif /* CONFIG_FS_DAX */
-#define IOMAP_ATOMIC_HW		(1 << 9) /* HW-based torn-write protection */
-#define IOMAP_DONTCACHE		(1 << 10)
-#define IOMAP_ATOMIC_SW		(1 << 11)/* SW-based torn-write protection */
+#define IOMAP_DONTCACHE		(1 << 9)
+#define IOMAP_BIO_ATOMIC	(1 << 10) /* Use REQ_ATOMIC on single bio */
+#define IOMAP_FS_ATOMIC		(1 << 11) /* FS-based torn-write protection */
 
 struct iomap_ops {
 	/*
@@ -504,9 +504,9 @@ struct iomap_dio_ops {
 #define IOMAP_DIO_PARTIAL		(1 << 2)
 
 /*
- * Use software-based torn-write protection.
+ * Use FS-based torn-write protection.
  */
-#define IOMAP_DIO_ATOMIC_SW		(1 << 3)
+#define IOMAP_DIO_FS_ATOMIC		(1 << 3)
 
 ssize_t iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops, const struct iomap_dio_ops *dops,

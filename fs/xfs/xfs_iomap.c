@@ -830,7 +830,7 @@ xfs_direct_write_iomap_begin(
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	xfs_fileoff_t		end_fsb = xfs_iomap_end_fsb(mp, offset, length);
 	xfs_fileoff_t		orig_end_fsb = end_fsb;
-	bool			atomic_hw = flags & IOMAP_ATOMIC_HW;
+	bool			atomic_bio = flags & IOMAP_BIO_ATOMIC;
 	int			nimaps = 1, error = 0;
 	unsigned int		reflink_flags = 0;
 	bool			shared = false;
@@ -895,7 +895,7 @@ relock:
 		if (error)
 			goto out_unlock;
 		if (shared) {
-			if (atomic_hw &&
+			if (atomic_bio &&
 			    !xfs_bmap_valid_for_atomic_write(&cmap,
 					offset_fsb, end_fsb)) {
 				error = -EAGAIN;
@@ -909,7 +909,7 @@ relock:
 
 	needs_alloc = imap_needs_alloc(inode, flags, &imap, nimaps);
 
-	if (atomic_hw) {
+	if (atomic_bio) {
 		error = -EAGAIN;
 		/*
 		 * Use CoW method for when we need to alloc > 1 block,
@@ -1141,11 +1141,11 @@ xfs_atomic_write_iomap_begin(
 	ASSERT(flags & IOMAP_WRITE);
 	ASSERT(flags & IOMAP_DIRECT);
 
-	if (flags & IOMAP_ATOMIC_SW)
+	if (flags & IOMAP_FS_ATOMIC)
 		return xfs_atomic_write_sw_iomap_begin(inode, offset, length,
 				flags, iomap, srcmap);
 
-	ASSERT(flags & IOMAP_ATOMIC_HW);
+	ASSERT(flags & IOMAP_BIO_ATOMIC);
 	return xfs_direct_write_iomap_begin(inode, offset, length, flags,
 			iomap, srcmap);
 }

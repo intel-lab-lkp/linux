@@ -755,9 +755,9 @@ retry:
 			&xfs_dio_write_ops, dio_flags, NULL, 0);
 
 	if (ret == -EAGAIN && !(iocb->ki_flags & IOCB_NOWAIT) &&
-	    !(dio_flags & IOMAP_DIO_ATOMIC_SW)) {
+	    !(dio_flags & IOMAP_DIO_FS_ATOMIC)) {
 		xfs_iunlock(ip, iolock);
-		dio_flags = IOMAP_DIO_ATOMIC_SW | IOMAP_DIO_FORCE_WAIT;
+		dio_flags = IOMAP_DIO_FS_ATOMIC | IOMAP_DIO_FORCE_WAIT;
 		iolock = XFS_IOLOCK_EXCL;
 		goto retry;
 	}

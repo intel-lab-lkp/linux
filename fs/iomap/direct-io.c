@@ -317,7 +317,7 @@ static int iomap_dio_zero(const struct iomap_iter *iter, struct iomap_dio *dio,
  * clearing the WRITE_THROUGH flag in the dio request.
  */
 static inline blk_opf_t iomap_dio_bio_opflags(struct iomap_dio *dio,
-		const struct iomap *iomap, bool use_fua, bool atomic_hw)
+		const struct iomap *iomap, bool use_fua, bool bio_atomic)
 {
 	blk_opf_t opflags = REQ_SYNC | REQ_IDLE;
 
@@ -329,7 +329,7 @@ static inline blk_opf_t iomap_dio_bio_opflags(struct iomap_dio *dio,
 		opflags |= REQ_FUA;
 	else
 		dio->flags &= ~IOMAP_DIO_WRITE_THROUGH;
-	if (atomic_hw)
+	if (bio_atomic)
 		opflags |= REQ_ATOMIC;
 
 	return opflags;
@@ -340,7 +340,7 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	const struct iomap *iomap = &iter->iomap;
 	struct inode *inode = iter->inode;
 	unsigned int fs_block_size = i_blocksize(inode), pad;
-	bool atomic_hw = iter->flags & IOMAP_ATOMIC_HW;
+	bool bio_atomic = iter->flags & IOMAP_BIO_ATOMIC;
 	const loff_t length = iomap_length(iter);
 	loff_t pos = iter->pos;
 	blk_opf_t bio_opf;
@@ -351,7 +351,7 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	u64 copied = 0;
 	size_t orig_count;
 
-	if (atomic_hw && length != iter->len)
+	if (bio_atomic && length != iter->len)
 		return -EINVAL;
 
 	if ((pos | length) & (bdev_logical_block_size(iomap->bdev) - 1) ||
@@ -428,7 +428,7 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 			goto out;
 	}
 
-	bio_opf = iomap_dio_bio_opflags(dio, iomap, use_fua, atomic_hw);
+	bio_opf = iomap_dio_bio_opflags(dio, iomap, use_fua, bio_atomic);
 
 	nr_pages = bio_iov_vecs_to_alloc(dio->submit.iter, BIO_MAX_VECS);
 	do {
@@ -461,7 +461,7 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 		}
 
 		n = bio->bi_iter.bi_size;
-		if (WARN_ON_ONCE(atomic_hw && n != length)) {
+		if (WARN_ON_ONCE(bio_atomic && n != length)) {
 			/*
 			 * This bio should have covered the complete length,
 			 * which it doesn't, so error. We may need to zero out
@@ -686,10 +686,10 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 			iomi.flags |= IOMAP_OVERWRITE_ONLY;
 		}
 
-		if (dio_flags & IOMAP_DIO_ATOMIC_SW)
-			iomi.flags |= IOMAP_ATOMIC_SW;
+		if (dio_flags & IOMAP_DIO_FS_ATOMIC)
+			iomi.flags |= IOMAP_FS_ATOMIC;
 		else if (iocb->ki_flags & IOCB_ATOMIC)
-			iomi.flags |= IOMAP_ATOMIC_HW;
+			iomi.flags |= IOMAP_BIO_ATOMIC;
 
 		/* for data sync or sync, we need sync completion processing */
 		if (iocb_is_dsync(iocb)) {
