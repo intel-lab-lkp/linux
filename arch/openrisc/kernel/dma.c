@@ -36,7 +36,7 @@ page_set_nocache(pte_t *pte, unsigned long addr,
 	flush_tlb_kernel_range(addr, addr + PAGE_SIZE);
 
 	/* Flush page out of dcache */
-	for (cl = __pa(addr); cl < __pa(next); cl += cpuinfo->dcache_block_size)
+	for (cl = __pa(addr); cl < __pa(next); cl += cpuinfo->dcache.block_size)
 		mtspr(SPR_DCBFR, cl);
 
 	return 0;
@@ -105,13 +105,13 @@ void arch_sync_dma_for_device(phys_addr_t addr, size_t size,
 	case DMA_TO_DEVICE:
 		/* Flush the dcache for the requested range */
 		for (cl = addr; cl < addr + size;
-		     cl += cpuinfo->dcache_block_size)
+		     cl += cpuinfo->dcache.block_size)
 			mtspr(SPR_DCBFR, cl);
 		break;
 	case DMA_FROM_DEVICE:
 		/* Invalidate the dcache for the requested range */
 		for (cl = addr; cl < addr + size;
-		     cl += cpuinfo->dcache_block_size)
+		     cl += cpuinfo->dcache.block_size)
 			mtspr(SPR_DCBIR, cl);
 		break;
 	default:
