@@ -1545,6 +1545,7 @@ static int gss_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 	struct kvec	iov;
 	struct xdr_buf	verf_buf;
 	int status;
+	u32 seqno;
 
 	/* Credential */
 
@@ -1556,7 +1557,8 @@ static int gss_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 	cred_len = p++;
 
 	spin_lock(&ctx->gc_seq_lock);
-	req->rq_seqno = (ctx->gc_seq < MAXSEQ) ? ctx->gc_seq++ : MAXSEQ;
+	seqno = (ctx->gc_seq < MAXSEQ) ? ctx->gc_seq++ : MAXSEQ;
+	xdr_add_gss_seqno(req, seqno);
 	spin_unlock(&ctx->gc_seq_lock);
 	if (req->rq_seqno == MAXSEQ)
 		goto expired;
@@ -1678,17 +1680,31 @@ gss_refresh_null(struct rpc_task *task)
 	return 0;
 }
 
+static u32
+gss_validate_seqno_mic(struct gss_cl_ctx *ctx, u32 seqno, __be32 *seq, __be32 *p, u32 len)
+{
+	struct kvec iov;
+	struct xdr_buf verf_buf;
+	struct xdr_netobj mic;
+
+	*seq = cpu_to_be32(seqno);
+	iov.iov_base = seq;
+	iov.iov_len = 4;
+	xdr_buf_from_iov(&iov, &verf_buf);
+	mic.data = (u8 *)p;
+	mic.len = len;
+	return gss_verify_mic(ctx->gc_gss_ctx, &verf_buf, &mic);
+}
+
 static int
 gss_validate(struct rpc_task *task, struct xdr_stream *xdr)
 {
 	struct rpc_cred *cred = task->tk_rqstp->rq_cred;
 	struct gss_cl_ctx *ctx = gss_cred_get_ctx(cred);
 	__be32		*p, *seq = NULL;
-	struct kvec	iov;
-	struct xdr_buf	verf_buf;
-	struct xdr_netobj mic;
 	u32		len, maj_stat;
 	int		status;
+	int		i = 1; /* don't recheck the first item */
 
 	p = xdr_inline_decode(xdr, 2 * sizeof(*p));
 	if (!p)
@@ -1705,13 +1721,10 @@ gss_validate(struct rpc_task *task, struct xdr_stream *xdr)
 	seq = kmalloc(4, GFP_KERNEL);
 	if (!seq)
 		goto validate_failed;
-	*seq = cpu_to_be32(task->tk_rqstp->rq_seqno);
-	iov.iov_base = seq;
-	iov.iov_len = 4;
-	xdr_buf_from_iov(&iov, &verf_buf);
-	mic.data = (u8 *)p;
-	mic.len = len;
-	maj_stat = gss_verify_mic(ctx->gc_gss_ctx, &verf_buf, &mic);
+	maj_stat = gss_validate_seqno_mic(ctx, task->tk_rqstp->rq_seqno, seq, p, len);
+	/* RFC 2203 5.3.3.1 - compute the checksum of each sequence number in the cache */
+	while (unlikely(maj_stat == GSS_S_BAD_SIG && i < task->tk_rqstp->rq_seqno_count))
+		maj_stat = gss_validate_seqno_mic(ctx, task->tk_rqstp->rq_seqnos[i], seq, p, len);
 	if (maj_stat == GSS_S_CONTEXT_EXPIRED)
 		clear_bit(RPCAUTH_CRED_UPTODATE, &cred->cr_flags);
 	if (maj_stat)

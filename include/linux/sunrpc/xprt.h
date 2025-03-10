@@ -30,6 +30,8 @@
 #define RPC_MAXCWND(xprt)	((xprt)->max_reqs << RPC_CWNDSHIFT)
 #define RPCXPRT_CONGESTED(xprt) ((xprt)->cong >= (xprt)->cwnd)
 
+#define RPC_GSS_SEQNO_ARRAY_SIZE 3U
+
 enum rpc_display_format_t {
 	RPC_DISPLAY_ADDR = 0,
 	RPC_DISPLAY_PORT,
@@ -66,7 +68,9 @@ struct rpc_rqst {
 	struct rpc_cred *	rq_cred;	/* Bound cred */
 	__be32			rq_xid;		/* request XID */
 	int			rq_cong;	/* has incremented xprt->cong */
-	u32			rq_seqno;	/* gss seq no. used on req. */
+	u32			rq_seqno;	/* latest gss seq no. used on req. */
+	u32			rq_seqnos[RPC_GSS_SEQNO_ARRAY_SIZE];	/* past req seqnos */
+	unsigned int		rq_seqno_count;	/* number of entries in the array */
 	int			rq_enc_pages_num;
 	struct page		**rq_enc_pages;	/* scratch pages for use by
 						   gss privacy code */
@@ -118,6 +122,31 @@ struct rpc_rqst {
 };
 #define rq_svec			rq_snd_buf.head
 #define rq_slen			rq_snd_buf.len
+
+static inline void xdr_init_gss_seqnos(struct rpc_rqst *req)
+{
+	req->rq_seqno = 0;
+	req->rq_seqno_count = 0;
+}
+
+static inline int xdr_add_gss_seqno(struct rpc_rqst *req, u32 seqno)
+{
+	if (likely(req->rq_seqno_count < RPC_GSS_SEQNO_ARRAY_SIZE)) {
+		req->rq_seqnos[req->rq_seqno_count++] = req->rq_seqno;
+	} else {
+		/* Shift array to make room for the most recent one */
+		memmove(&req->rq_seqnos[0], &req->rq_seqnos[1],
+			(RPC_GSS_SEQNO_ARRAY_SIZE - 1) * sizeof(req->rq_seqnos[0]));
+		req->rq_seqnos[RPC_GSS_SEQNO_ARRAY_SIZE - 1] = req->rq_seqno;
+	}
+	req->rq_seqno = seqno;
+	return 0;
+}
+
+static inline bool xdr_gss_seqnos_empty(struct rpc_rqst *req)
+{
+	return req->rq_seqno == 0 && req->rq_seqno_count == 0;
+}
 
 /* RPC transport layer security policies */
 enum xprtsec_policies {
