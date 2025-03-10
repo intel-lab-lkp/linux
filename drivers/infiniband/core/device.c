@@ -1341,7 +1341,9 @@ static void ib_device_notify_register(struct ib_device *device)
 	u32 port;
 	int ret;
 
+	down_write(&devices_rwsem);
 	ret = rdma_nl_notify_event(device, 0, RDMA_REGISTER_EVENT);
+	up_write(&devices_rwsem);
 	if (ret)
 		return;
 
