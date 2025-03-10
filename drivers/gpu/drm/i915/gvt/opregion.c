@@ -43,7 +43,7 @@
 #define DEVICE_TYPE_EFP4   0x10
 
 struct opregion_header {
-	u8 signature[16];
+	u8 signature[16] __nonstring;
 	u32 size;
 	u32 opregion_ver;
 	u8 bios_ver[32];
@@ -222,7 +222,7 @@ int intel_vgpu_init_opregion(struct intel_vgpu *vgpu)
 	u8 *buf;
 	struct opregion_header *header;
 	struct vbt v;
-	const char opregion_signature[16] = OPREGION_SIGNATURE;
+	const char opregion_signature[16] __nonstring = OPREGION_SIGNATURE;
 
 	gvt_dbg_core("init vgpu%d opregion\n", vgpu->id);
 	vgpu_opregion(vgpu)->va = (void *)__get_free_pages(GFP_KERNEL |
