@@ -19,6 +19,7 @@
 
 int efx_cxl_init(struct efx_probe_data *probe_data)
 {
+	struct cxl_dpa_info sfc_dpa_info = { 0 };
 	struct efx_nic *efx = &probe_data->efx;
 	struct pci_dev *pci_dev = efx->pci_dev;
 	DECLARE_BITMAP(expected, CXL_MAX_CAPS);
@@ -74,6 +75,11 @@ int efx_cxl_init(struct efx_probe_data *probe_data)
 	 * type2.
 	 */
 	cxl->cxlds.media_ready = true;
+
+	cxl_mem_dpa_init(&sfc_dpa_info, EFX_CTPIO_BUFFER_SIZE, 0);
+	rc = cxl_dpa_setup(&cxl->cxlds, &sfc_dpa_info);
+	if (rc)
+		return rc;
 
 	probe_data->cxl = cxl;
 
