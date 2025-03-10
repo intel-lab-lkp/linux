@@ -189,12 +189,12 @@ static void note_prot_wx(struct ptdump_pg_state *st, unsigned long addr)
 }
 
 void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
-	       u64 val)
+	       pteval_t val)
 {
 	struct ptdump_pg_state *st = container_of(pt_st, struct ptdump_pg_state, ptdump);
 	struct ptdump_pg_level *pg_level = st->pg_level;
 	static const char units[] = "KMGTPE";
-	u64 prot = 0;
+	pteval_t prot = 0;
 
 	/* check if the current level has been folded dynamically */
 	if (st->mm && ((level == 1 && mm_p4d_folded(st->mm)) ||
