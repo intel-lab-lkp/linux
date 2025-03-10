@@ -68,6 +68,7 @@ static u64 set_pd_power_limit(struct dtpm *dtpm, u64 power_limit)
 	return power_limit;
 }
 
+#ifdef CONFIG_SMP
 static u64 scale_pd_power_uw(struct cpumask *pd_mask, u64 power)
 {
 	unsigned long max, sum_util = 0;
@@ -84,6 +85,12 @@ static u64 scale_pd_power_uw(struct cpumask *pd_mask, u64 power)
 
 	return (power * ((sum_util << 10) / max)) >> 10;
 }
+#else /* !CONFIG_SMP */
+static inline u64 scale_pd_power_uw(struct cpumask *pd_mask, u64 power)
+{
+	return power;
+}
+#endif
 
 static u64 get_pd_power_uw(struct dtpm *dtpm)
 {
