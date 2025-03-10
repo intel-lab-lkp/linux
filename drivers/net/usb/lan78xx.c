@@ -173,6 +173,12 @@
 #define INT_EP_GPIO_1			(1)
 #define INT_EP_GPIO_0			(0)
 
+/* highspeed device, so polling interval is in microframes (eight per
+ * millisecond)
+ */
+#define INT_URB_MICROFRAMES_PER_MS	8
+#define MIN_INT_URB_INTERVAL_MS		8
+
 static const char lan78xx_gstrings[][ETH_GSTRING_LEN] = {
 	"RX FCS Errors",
 	"RX Alignment Errors",
@@ -4527,7 +4533,11 @@ static int lan78xx_probe(struct usb_interface *intf,
 	if (ret < 0)
 		goto out4;
 
-	period = ep_intr->desc.bInterval;
+	period = max(ep_intr->desc.bInterval,
+		     MIN_INT_URB_INTERVAL_MS * INT_URB_MICROFRAMES_PER_MS);
+	dev_info(&intf->dev,
+		 "interrupt urb period set to %d, bInterval is %d\n",
+		 period, ep_intr->desc.bInterval);
 	maxp = usb_maxpacket(dev->udev, dev->pipe_intr);
 
 	dev->urb_intr = usb_alloc_urb(0, GFP_KERNEL);
