@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 menu "ARM devices"
-	depends on DRM
+	depends on DRM && (ARM || ARM64 || COMPILE_TEST)
 
 config DRM_HDLCD
 	tristate "ARM HDLCD"
