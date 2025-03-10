@@ -975,5 +975,6 @@ void __init node_dev_init(void)
 		ret = register_one_node(i);
 		if (ret)
 			panic("%s() failed to add node: %d\n", __func__, ret);
+		cond_resched();
 	}
 }
