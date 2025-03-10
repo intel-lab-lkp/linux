@@ -785,28 +785,6 @@ config INPUT_IMS_PCU
 	  To compile this driver as a module, choose M here: the module will be
 	  called ims_pcu.
 
-config INPUT_IQS269A
-	tristate "Azoteq IQS269A capacitive touch controller"
-	depends on I2C
-	select REGMAP_I2C
-	help
-	  Say Y to enable support for the Azoteq IQS269A capacitive
-	  touch controller.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called iqs269a.
-
-config INPUT_IQS626A
-	tristate "Azoteq IQS626A capacitive touch controller"
-	depends on I2C
-	select REGMAP_I2C
-	help
-	  Say Y to enable support for the Azoteq IQS626A capacitive
-	  touch controller.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called iqs626a.
-
 config INPUT_IQS7222
 	tristate "Azoteq IQS7222A/B/C/D capacitive touch controller"
 	depends on I2C
