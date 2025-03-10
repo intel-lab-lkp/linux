@@ -1023,12 +1023,10 @@ static int config_term_pmu(struct perf_event_attr *attr,
 			return -EINVAL;
 		}
 		/*
-		 * Rewrite the PMU event to a legacy cache one unless the PMU
-		 * doesn't support legacy cache events or the event is present
-		 * within the PMU.
+		 * Rewrite the PMU event to a legacy cache one as legacy events
+		 * take priority over sysfs/json.
 		 */
-		if (perf_pmu__supports_legacy_cache(pmu) &&
-		    !perf_pmu__have_event(pmu, term->config)) {
+		if (perf_pmu__supports_legacy_cache(pmu)) {
 			attr->type = PERF_TYPE_HW_CACHE;
 			return parse_events__decode_legacy_cache(term->config, pmu->type,
 								 &attr->config);
@@ -1049,19 +1047,13 @@ static int config_term_pmu(struct perf_event_attr *attr,
 			return -EINVAL;
 		}
 		/*
-		 * If the PMU has a sysfs or json event prefer it over
-		 * legacy. ARM requires this.
+		 * Rewrite the PMU event to a legacy cache one as legacy events
+		 * take priority over sysfs/json.
 		 */
-		if (perf_pmu__have_event(pmu, term->config)) {
-			term->type_term = PARSE_EVENTS__TERM_TYPE_USER;
-			term->no_value = true;
-			term->alternate_hw_config = true;
-		} else {
-			attr->type = PERF_TYPE_HARDWARE;
-			attr->config = term->val.num;
-			if (perf_pmus__supports_extended_type())
-				attr->config |= (__u64)pmu->type << PERF_PMU_TYPE_SHIFT;
-		}
+		attr->type = PERF_TYPE_HARDWARE;
+		attr->config = term->val.num;
+		if (perf_pmus__supports_extended_type())
+			attr->config |= (__u64)pmu->type << PERF_PMU_TYPE_SHIFT;
 		return 0;
 	}
 	if (term->type_term == PARSE_EVENTS__TERM_TYPE_USER ||

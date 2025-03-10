@@ -162,16 +162,9 @@ static int test__checkevent_numeric(struct evlist *evlist)
 
 static int assert_hw(struct perf_evsel *evsel, enum perf_hw_id id, const char *name)
 {
-	struct perf_pmu *pmu;
-
-	if (evsel->attr.type == PERF_TYPE_HARDWARE) {
-		TEST_ASSERT_VAL("wrong config", test_perf_config(evsel, id));
-		return 0;
-	}
-	pmu = perf_pmus__find_by_type(evsel->attr.type);
-
-	TEST_ASSERT_VAL("unexpected PMU type", pmu);
-	TEST_ASSERT_VAL("PMU missing event", perf_pmu__have_event(pmu, name));
+	TEST_ASSERT_VAL("wrong type", PERF_TYPE_HARDWARE == evsel->attr.type);
+	TEST_ASSERT_VAL("wrong config", test_perf_config(evsel, id));
+	TEST_ASSERT_VAL("wrong name", !strcmp(evsel__hw_names[id], name));
 	return 0;
 }
 
