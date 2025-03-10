@@ -1237,7 +1237,7 @@ early_param("retbleed", retbleed_parse_cmdline);
 
 static void __init retbleed_select_mitigation(void)
 {
-	if (!boot_cpu_has_bug(X86_BUG_RETBLEED) || cpu_mitigations_off()) {
+	if (!boot_cpu_has_bug(X86_BUG_RETBLEED)) {
 		retbleed_mitigation = RETBLEED_MITIGATION_NONE;
 		return;
 	}
@@ -1272,23 +1272,27 @@ static void __init retbleed_select_mitigation(void)
 	}
 
 	if (retbleed_mitigation == RETBLEED_MITIGATION_AUTO) {
-		/* Intel mitigation selected in retbleed_update_mitigation() */
-		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-		    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) {
-			if (IS_ENABLED(CONFIG_MITIGATION_UNRET_ENTRY))
-				retbleed_mitigation = RETBLEED_MITIGATION_UNRET;
-			else if (IS_ENABLED(CONFIG_MITIGATION_IBPB_ENTRY) &&
-				 boot_cpu_has(X86_FEATURE_IBPB))
-				retbleed_mitigation = RETBLEED_MITIGATION_IBPB;
-			else
-				retbleed_mitigation = RETBLEED_MITIGATION_NONE;
+		if (should_mitigate_vuln(X86_BUG_RETBLEED)) {
+			/* Intel mitigation selected in retbleed_update_mitigation() */
+			if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
+			    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) {
+				if (IS_ENABLED(CONFIG_MITIGATION_UNRET_ENTRY))
+					retbleed_mitigation = RETBLEED_MITIGATION_UNRET;
+				else if (IS_ENABLED(CONFIG_MITIGATION_IBPB_ENTRY) &&
+					 boot_cpu_has(X86_FEATURE_IBPB))
+					retbleed_mitigation = RETBLEED_MITIGATION_IBPB;
+				else
+					retbleed_mitigation = RETBLEED_MITIGATION_NONE;
+			}
+		} else {
+			retbleed_mitigation = RETBLEED_MITIGATION_NONE;
 		}
 	}
 }
 
 static void __init retbleed_update_mitigation(void)
 {
-	if (!boot_cpu_has_bug(X86_BUG_RETBLEED) || cpu_mitigations_off())
+	if (!boot_cpu_has_bug(X86_BUG_RETBLEED))
 		return;
 
 	if (retbleed_mitigation == RETBLEED_MITIGATION_NONE)
@@ -1386,7 +1390,7 @@ static void __init retbleed_apply_mitigation(void)
 	}
 
 	if (mitigate_smt && !boot_cpu_has(X86_FEATURE_STIBP) &&
-	    (retbleed_nosmt || cpu_mitigations_auto_nosmt()))
+	    (retbleed_nosmt || smt_mitigations == SMT_MITIGATIONS_ON))
 		cpu_smt_disable(false);
 }
 
