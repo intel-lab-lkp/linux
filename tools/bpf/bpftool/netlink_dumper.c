@@ -26,8 +26,7 @@ static void xdp_dump_prog_id(struct nlattr **tb, int attr,
 		NET_END_OBJECT
 }
 
-static int do_xdp_dump_one(struct nlattr *attr, unsigned int ifindex,
-			   const char *name)
+static int do_xdp_dump_one(struct nlattr *attr, int ifindex, const char *name)
 {
 	struct nlattr *tb[IFLA_XDP_MAX + 1];
 	unsigned char mode;
@@ -168,7 +167,7 @@ int do_filter_dump(struct tcmsg *info, struct nlattr **tb, const char *kind,
 		NET_START_OBJECT;
 		if (devname[0] != '\0')
 			NET_DUMP_STR("devname", "%s", devname);
-		NET_DUMP_UINT("ifindex", "(%u)", ifindex);
+		NET_DUMP_UINT("ifindex", "(%d)", ifindex);
 		NET_DUMP_STR("kind", " %s", kind);
 		ret = do_bpf_filter_dump(tb[TCA_OPTIONS]);
 		NET_END_OBJECT_FINAL;
