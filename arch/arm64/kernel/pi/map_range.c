@@ -11,6 +11,22 @@
 
 #include "pi.h"
 
+static bool sect_supported(int level)
+{
+	switch (level) {
+	case -1:
+		return false;
+	case 0:
+		if (IS_ENABLED(CONFIG_ARM64_16K_PAGES) ||
+		    IS_ENABLED(CONFIG_ARM64_64K_PAGES))
+			return false;
+		else
+			return true;
+	default:
+		return true;
+	}
+}
+
 /**
  * map_range - Map a contiguous range of physical pages into virtual memory
  *
@@ -44,13 +60,29 @@ void __init map_range(u64 *pte, u64 start, u64 end, u64 pa, pgprot_t prot,
 	 * Set the right block/page bits for this level unless we are
 	 * clearing the mapping
 	 */
-	if (protval)
-		protval |= (level < 3) ? PMD_TYPE_SECT : PTE_TYPE_PAGE;
+	if (protval && sect_supported(level)) {
+		switch (level) {
+		case 3:
+			protval |= PTE_TYPE_PAGE;
+			break;
+		case 2:
+			protval |= PMD_TYPE_SECT;
+			break;
+		case 1:
+			protval |= PUD_TYPE_SECT;
+			break;
+		case 0:
+			protval |= P4D_TYPE_SECT;
+			break;
+		default:
+			break;
+		}
+	}
 
 	while (start < end) {
 		u64 next = min((start | lmask) + 1, PAGE_ALIGN(end));
 
-		if (level < 3 && (start | next | pa) & lmask) {
+		if ((level < 3 && (start | next | pa) & lmask) || !sect_supported(level)) {
 			/*
 			 * This chunk needs a finer grained mapping. Create a
 			 * table mapping if necessary and recurse.
