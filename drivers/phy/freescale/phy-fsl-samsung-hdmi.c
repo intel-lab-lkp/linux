@@ -557,8 +557,9 @@ static long phy_clk_round_rate(struct clk_hw *hw,
 	if (int_div_clk == rate)
 		return int_div_clk;
 
-	/* If neither rate is an exact match, use the value from the LUT */
-	return fract_div_phy->pixclk;
+	/* If neither rate is an exact match, use the closest value */
+	return fsl_samsung_hdmi_phy_get_closest_rate(rate, int_div_clk,
+						     fract_div_phy->pixclk);
 }
 
 static int phy_use_fract_div(struct fsl_samsung_hdmi_phy *phy, const struct phy_config *fract_div_phy)
