@@ -49,6 +49,7 @@
 #include <linux/fsnotify.h>
 #include <linux/irq_work.h>
 #include <linux/workqueue.h>
+#include <linux/sort.h>
 
 #include <asm/setup.h> /* COMMAND_LINE_SIZE and kaslr_offset() */
 
@@ -6014,10 +6015,40 @@ struct trace_mod_entry {
 struct trace_scratch {
 	unsigned long		kaslr_addr;
 	unsigned long		nr_entries;
+	long			*module_delta;
 	struct trace_mod_entry	entries[];
 };
 
 static DEFINE_MUTEX(scratch_mutex);
+
+/**
+ * trace_adjust_address() - Adjust prev boot address to current address.
+ * @tr: Persistent ring buffer's trace_array.
+ * @addr: Address in @tr which is adjusted.
+ */
+unsigned long trace_adjust_address(struct trace_array *tr, unsigned long addr)
+{
+	struct trace_scratch *tscratch;
+	long *module_delta;
+	int i;
+
+	/* If we don't have last boot delta, return the address */
+	if (!(tr->flags & TRACE_ARRAY_FL_LAST_BOOT))
+		return addr;
+
+	tscratch = tr->scratch;
+	module_delta = READ_ONCE(tscratch->module_delta);
+	if (!tscratch || !tscratch->nr_entries || !module_delta ||
+	    tscratch->entries[0].mod_addr > addr)
+		return addr + tr->text_delta;
+
+	/* Note that entries must be sorted. */
+	for (i = 0; i < tscratch->nr_entries; i++)
+		if (addr < tscratch->entries[i].mod_addr)
+			break;
+
+	return addr + module_delta[i - 1];
+}
 
 static int save_mod(struct module *mod, void *data)
 {
@@ -6047,6 +6078,7 @@ static int save_mod(struct module *mod, void *data)
 static void update_last_data(struct trace_array *tr)
 {
 	struct trace_scratch *tscratch;
+	long *module_delta;
 
 	if (!(tr->flags & TRACE_ARRAY_FL_BOOT))
 		return;
@@ -6081,6 +6113,8 @@ static void update_last_data(struct trace_array *tr)
 		return;
 
 	tscratch = tr->scratch;
+	module_delta = READ_ONCE(tscratch->module_delta);
+	WRITE_ONCE(tscratch->module_delta, NULL);
 
 	/* Set the persistent ring buffer meta data to this address */
 #ifdef CONFIG_RANDOMIZE_BASE
@@ -6089,6 +6123,8 @@ static void update_last_data(struct trace_array *tr)
 	tscratch->kaslr_addr = 0;
 #endif
 	tr->flags &= ~TRACE_ARRAY_FL_LAST_BOOT;
+
+	kfree(module_delta);
 }
 
 /**
@@ -9360,10 +9396,43 @@ static struct dentry *trace_instance_dir;
 static void
 init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer);
 
+static int make_mod_delta(struct module *mod, void *data)
+{
+	struct trace_scratch *tscratch;
+	struct trace_mod_entry *entry;
+	struct trace_array *tr = data;
+	long *module_delta;
+	int i;
+
+	tscratch = tr->scratch;
+	module_delta = READ_ONCE(tscratch->module_delta);
+	for (i = 0; i < tscratch->nr_entries; i++) {
+		entry = &tscratch->entries[i];
+		if (!strcmp(mod->name, entry->mod_name)) {
+			if (mod->state == MODULE_STATE_GOING)
+				module_delta[i] = 0;
+			else
+				module_delta[i] = (unsigned long)mod->mem[MOD_TEXT].base
+						 - entry->mod_addr;
+			break;
+		}
+	}
+	return 0;
+}
+
+static int mod_addr_comp(const void *a, const void *b, const void *data)
+{
+	const struct trace_mod_entry *e1 = a;
+	const struct trace_mod_entry *e2 = b;
+
+	return e1->mod_addr > e2->mod_addr ? 1 : -1;
+}
+
 static void setup_trace_scratch(struct trace_array *tr,
 				struct trace_scratch *tscratch, unsigned int size)
 {
 	struct trace_mod_entry *entry;
+	int i, nr_entries;
 
 	if (!tscratch)
 		return;
@@ -9380,7 +9449,7 @@ static void setup_trace_scratch(struct trace_array *tr,
 		goto reset;
 
 	/* Check if each module name is a valid string */
-	for (int i = 0; i < tscratch->nr_entries; i++) {
+	for (i = 0; i < tscratch->nr_entries; i++) {
 		int n;
 
 		entry = &tscratch->entries[i];
@@ -9394,6 +9463,21 @@ static void setup_trace_scratch(struct trace_array *tr,
 		if (n == MODULE_NAME_LEN)
 			goto reset;
 	}
+
+	nr_entries = i;
+	tscratch->module_delta = kcalloc(nr_entries, sizeof(long), GFP_KERNEL);
+	if (!tscratch->module_delta) {
+		pr_info("module_delta allocation failed. Not able to decode module address.");
+		goto reset;
+	}
+
+	/* Sort the entries so that we can find appropriate module from address. */
+	sort_r(tscratch->entries, nr_entries, sizeof(struct trace_mod_entry),
+	       mod_addr_comp, NULL, NULL);
+
+	/* Scan modules to make text delta for modules. */
+	module_for_each_mod(make_mod_delta, tr);
+
 	return;
  reset:
 	/* Invalid trace modules */
@@ -10119,19 +10203,23 @@ static bool trace_array_active(struct trace_array *tr)
 	return trace_events_enabled(tr, NULL) > 1;
 }
 
-static void trace_module_record(struct module *mod)
+static void trace_module_record(struct module *mod, bool remove)
 {
 	struct trace_array *tr;
+	unsigned long flags;
 
 	list_for_each_entry(tr, &ftrace_trace_arrays, list) {
+		flags = tr->flags & (TRACE_ARRAY_FL_BOOT | TRACE_ARRAY_FL_LAST_BOOT);
 		/* Update any persistent trace array that has already been started */
-		if ((tr->flags & (TRACE_ARRAY_FL_BOOT | TRACE_ARRAY_FL_LAST_BOOT)) ==
-		    TRACE_ARRAY_FL_BOOT) {
+		if (flags == TRACE_ARRAY_FL_BOOT && !remove) {
 			/* Only update if the trace array is active */
 			if (trace_array_active(tr)) {
 				guard(mutex)(&scratch_mutex);
 				save_mod(mod, tr);
 			}
+		} else if (flags & TRACE_ARRAY_FL_LAST_BOOT) {
+			/* Update delta if the module loaded in previous boot */
+			make_mod_delta(mod, tr);
 		}
 	}
 }
@@ -10144,10 +10232,11 @@ static int trace_module_notify(struct notifier_block *self,
 	switch (val) {
 	case MODULE_STATE_COMING:
 		trace_module_add_evals(mod);
-		trace_module_record(mod);
+		trace_module_record(mod, false);
 		break;
 	case MODULE_STATE_GOING:
 		trace_module_remove_evals(mod);
+		trace_module_record(mod, true);
 		break;
 	}
 
