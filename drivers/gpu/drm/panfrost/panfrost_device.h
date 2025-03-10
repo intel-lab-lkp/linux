@@ -42,6 +42,14 @@ enum panfrost_gpu_pm {
 	GPU_PM_VREG_OFF,
 };
 
+/**
+ * enum panfrost_gpu_config - GPU optional configurations
+ * @GPU_CONFIG_AARCH64_4K: Use AARCH64_4K page table format
+ */
+enum panfrost_gpu_config {
+	GPU_CONFIG_AARCH64_4K,
+};
+
 struct panfrost_features {
 	u16 id;
 	u16 revision;
@@ -95,6 +103,9 @@ struct panfrost_compatible {
 
 	/* Allowed PM features */
 	u8 pm_features;
+
+	/* GPU features */
+	u8 gpu_configs;
 };
 
 struct panfrost_device {
@@ -162,6 +173,11 @@ struct panfrost_mmu {
 	int as;
 	atomic_t as_count;
 	struct list_head list;
+	struct {
+		u64 transtab;
+		u64 memattr;
+		u64 transcfg;
+	} cfg;
 };
 
 struct panfrost_engine_usage {
