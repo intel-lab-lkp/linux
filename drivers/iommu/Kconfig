@@ -381,6 +381,7 @@ config ARM_SMMU_MMU_500_CPRE_ERRATA
 
 config ARM_SMMU_QCOM
 	def_tristate y
+	prompt "Qualcomm SMMUv3 Support"
 	depends on ARM_SMMU && ARCH_QCOM
 	select QCOM_SCM
 	help
