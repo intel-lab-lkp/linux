@@ -12,6 +12,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/cleanup.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
@@ -199,6 +200,9 @@ struct exynos_tmu_data {
 	void (*tmu_clear_irqs)(struct exynos_tmu_data *data);
 };
 
+DEFINE_GUARD(exynos_tmu_data, struct exynos_tmu_data *,
+	     mutex_lock(&_T->lock), mutex_unlock(&_T->lock))
+
 /*
  * TMU treats temperature as a mapped temperature code.
  * The temperature is converted differently depending on the calibration type.
@@ -256,7 +260,7 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 	unsigned int status;
 	int ret = 0;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 	clk_enable(data->clk_sec);
 
@@ -270,7 +274,6 @@ static int exynos_tmu_initialize(struct platform_device *pdev)
 
 	clk_disable(data->clk_sec);
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 
 	return ret;
 }
@@ -292,13 +295,12 @@ static int exynos_thermal_zone_configure(struct platform_device *pdev)
 		return ret;
 	}
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 
 	data->tmu_set_crit_temp(data, temp / MCELSIUS);
 
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 
 	return 0;
 }
@@ -325,12 +327,11 @@ static void exynos_tmu_control(struct platform_device *pdev, bool on)
 {
 	struct exynos_tmu_data *data = platform_get_drvdata(pdev);
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 	data->tmu_control(pdev, on);
 	data->enabled = on;
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 }
 
 static void exynos_tmu_update_bit(struct exynos_tmu_data *data, int reg_off,
@@ -645,7 +646,7 @@ static int exynos_get_temp(struct thermal_zone_device *tz, int *temp)
 		 */
 		return -EAGAIN;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 
 	value = data->tmu_read(data);
@@ -655,7 +656,6 @@ static int exynos_get_temp(struct thermal_zone_device *tz, int *temp)
 		*temp = code_to_temp(data, value) * MCELSIUS;
 
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 
 	return ret;
 }
@@ -720,11 +720,10 @@ static int exynos_tmu_set_emulation(struct thermal_zone_device *tz, int temp)
 	if (temp && temp < MCELSIUS)
 		goto out;
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 	data->tmu_set_emulation(data, temp);
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 	return 0;
 out:
 	return ret;
@@ -760,14 +759,13 @@ static irqreturn_t exynos_tmu_threaded_irq(int irq, void *id)
 
 	thermal_zone_device_update(data->tzd, THERMAL_EVENT_UNSPECIFIED);
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 
 	/* TODO: take action based on particular interrupt */
 	data->tmu_clear_irqs(data);
 
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 
 	return IRQ_HANDLED;
 }
@@ -987,7 +985,7 @@ static int exynos_set_trips(struct thermal_zone_device *tz, int low, int high)
 {
 	struct exynos_tmu_data *data = thermal_zone_device_priv(tz);
 
-	mutex_lock(&data->lock);
+	guard(mutex)(&data->lock);
 	clk_enable(data->clk);
 
 	if (low > INT_MIN)
@@ -1000,7 +998,6 @@ static int exynos_set_trips(struct thermal_zone_device *tz, int low, int high)
 		data->tmu_disable_high(data);
 
 	clk_disable(data->clk);
-	mutex_unlock(&data->lock);
 
 	return 0;
 }
