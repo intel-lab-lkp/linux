@@ -132,8 +132,11 @@ static void sched_domain_debug(struct sched_domain *sd, int cpu)
 {
 	int level = 0;
 
-	if (!sched_debug_verbose)
+	if (!sched_debug_verbose) {
+		pr_info_once("%s: Scheduler topology debugging disabled, add 'sched_verbose' to the cmdline to enable it\n",
+			     __func__);
 		return;
+	}
 
 	if (!sd) {
 		printk(KERN_DEBUG "CPU%d attaching NULL sched-domain.\n", cpu);
@@ -2358,6 +2361,10 @@ static bool topology_span_sane(struct sched_domain_topology_level *tl,
 			      const struct cpumask *cpu_map, int cpu)
 {
 	int i = cpu + 1;
+
+	/* Skip the topology sanity check for non-debug, as it is a time-consuming operation */
+	if (!sched_debug())
+		return true;
 
 	/* NUMA levels are allowed to overlap */
 	if (tl->flags & SDTL_OVERLAP)
