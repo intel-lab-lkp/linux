@@ -45,9 +45,12 @@ static void msm_dp_panel_read_psr_cap(struct msm_dp_panel_private *panel)
 	}
 }
 
-static int msm_dp_panel_read_dpcd(struct msm_dp_panel *msm_dp_panel)
+static int msm_dp_panel_read_dpcd(struct msm_dp_panel *msm_dp_panel,
+				  const u8 lttpr_common_caps[DP_LTTPR_COMMON_CAP_SIZE])
 {
 	int rc;
+	int max_sink_lanes, max_source_lanes, max_lttpr_lanes;
+	int max_sink_rate, max_source_rate, max_lttpr_rate;
 	struct msm_dp_panel_private *panel;
 	struct msm_dp_link_info *link_info;
 	u8 *dpcd, major, minor;
@@ -64,16 +67,24 @@ static int msm_dp_panel_read_dpcd(struct msm_dp_panel *msm_dp_panel)
 	major = (link_info->revision >> 4) & 0x0f;
 	minor = link_info->revision & 0x0f;
 
-	link_info->rate = drm_dp_max_link_rate(dpcd);
-	link_info->num_lanes = drm_dp_max_lane_count(dpcd);
+	max_source_lanes = msm_dp_panel->max_dp_lanes;
+	max_source_rate = msm_dp_panel->max_dp_link_rate;
+
+	max_sink_lanes = drm_dp_max_lane_count(dpcd);
+	max_sink_rate = drm_dp_max_link_rate(dpcd);
+
+	max_lttpr_lanes = drm_dp_lttpr_max_lane_count(lttpr_common_caps);
+	max_lttpr_rate = drm_dp_lttpr_max_link_rate(lttpr_common_caps);
+
+	if (max_lttpr_lanes)
+		max_sink_lanes = min(max_sink_lanes, max_lttpr_lanes);
+	if (max_lttpr_rate)
+		max_sink_rate = min(max_sink_rate, max_lttpr_rate);
 
 	/* Limit data lanes from data-lanes of endpoint property of dtsi */
-	if (link_info->num_lanes > msm_dp_panel->max_dp_lanes)
-		link_info->num_lanes = msm_dp_panel->max_dp_lanes;
-
+	link_info->num_lanes = min(max_sink_lanes, max_source_lanes);
 	/* Limit link rate from link-frequencies of endpoint property of dtsi */
-	if (link_info->rate > msm_dp_panel->max_dp_link_rate)
-		link_info->rate = msm_dp_panel->max_dp_link_rate;
+	link_info->rate = min(max_sink_rate, max_source_rate);
 
 	drm_dbg_dp(panel->drm_dev, "version: %d.%d\n", major, minor);
 	drm_dbg_dp(panel->drm_dev, "link_rate=%d\n", link_info->rate);
@@ -109,6 +120,7 @@ static u32 msm_dp_panel_get_supported_bpp(struct msm_dp_panel *msm_dp_panel,
 }
 
 int msm_dp_panel_read_sink_caps(struct msm_dp_panel *msm_dp_panel,
+	const u8 lttpr_common_caps[DP_LTTPR_COMMON_CAP_SIZE],
 	struct drm_connector *connector)
 {
 	int rc, bw_code;
@@ -125,7 +137,7 @@ int msm_dp_panel_read_sink_caps(struct msm_dp_panel *msm_dp_panel,
 	drm_dbg_dp(panel->drm_dev, "max_lanes=%d max_link_rate=%d\n",
 		msm_dp_panel->max_dp_lanes, msm_dp_panel->max_dp_link_rate);
 
-	rc = msm_dp_panel_read_dpcd(msm_dp_panel);
+	rc = msm_dp_panel_read_dpcd(msm_dp_panel, lttpr_common_caps);
 	if (rc) {
 		DRM_ERROR("read dpcd failed %d\n", rc);
 		return rc;
