@@ -259,7 +259,7 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
         // SAFETY: We have not yet called `post_remove`, so `list_links` is still valid.
         let item = unsafe { ListLinks::fields(list_links) };
 
-        if self.first.is_null() {
+        if self.is_empty() {
             self.first = item;
             // SAFETY: The caller just gave us ownership of these fields.
             // INVARIANT: A linked list with one item should be cyclic.
@@ -299,7 +299,7 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
         // SAFETY: We have not yet called `post_remove`, so `list_links` is still valid.
         let item = unsafe { ListLinks::fields(list_links) };
 
-        if self.first.is_null() {
+        if self.is_empty() {
             // SAFETY: The caller just gave us ownership of these fields.
             // INVARIANT: A linked list with one item should be cyclic.
             unsafe {
@@ -325,7 +325,7 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
 
     /// Removes the last item from this list.
     pub fn pop_back(&mut self) -> Option<ListArc<T, ID>> {
-        if self.first.is_null() {
+        if self.is_empty() {
             return None;
         }
 
@@ -337,7 +337,7 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
 
     /// Removes the first item from this list.
     pub fn pop_front(&mut self) -> Option<ListArc<T, ID>> {
-        if self.first.is_null() {
+        if self.is_empty() {
             return None;
         }
 
@@ -493,7 +493,7 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
     ///
     /// If the list is empty, this returns `None`.
     pub fn cursor_front(&mut self) -> Option<Cursor<'_, T, ID>> {
-        if self.first.is_null() {
+        if self.is_empty() {
             None
         } else {
             Some(Cursor {
