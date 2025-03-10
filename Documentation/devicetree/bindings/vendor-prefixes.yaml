@@ -1599,6 +1599,8 @@ patternProperties:
     description: U.S. Robotics Corporation
   "^utoo,.*":
     description: Aigo Digital Technology Co., Ltd.
+  "^ux,.*":
+    description: Ultratronik GmbH
   "^v3,.*":
     description: V3 Semiconductor
   "^vaisala,.*":
