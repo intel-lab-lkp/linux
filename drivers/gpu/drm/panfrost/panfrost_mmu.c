@@ -121,6 +121,21 @@ static int mmu_hw_do_operation(struct panfrost_device *pfdev,
 	return ret;
 }
 
+static void
+_panfrost_mmu_as_control_write(struct panfrost_device *pfdev, u32 as_nr,
+			       u64 transtab, u64 memattr)
+{
+	mmu_hw_do_operation_locked(pfdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
+
+	mmu_write(pfdev, AS_TRANSTAB_LO(as_nr), lower_32_bits(transtab));
+	mmu_write(pfdev, AS_TRANSTAB_HI(as_nr), upper_32_bits(transtab));
+
+	mmu_write(pfdev, AS_MEMATTR_LO(as_nr), lower_32_bits(memattr));
+	mmu_write(pfdev, AS_MEMATTR_HI(as_nr), upper_32_bits(memattr));
+
+	write_cmd(pfdev, as_nr, AS_COMMAND_UPDATE);
+}
+
 static void panfrost_mmu_enable(struct panfrost_device *pfdev, struct panfrost_mmu *mmu)
 {
 	int as_nr = mmu->as;
@@ -128,31 +143,15 @@ static void panfrost_mmu_enable(struct panfrost_device *pfdev, struct panfrost_m
 	u64 transtab = cfg->arm_mali_lpae_cfg.transtab;
 	u64 memattr = cfg->arm_mali_lpae_cfg.memattr;
 
-	mmu_hw_do_operation_locked(pfdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
-
-	mmu_write(pfdev, AS_TRANSTAB_LO(as_nr), lower_32_bits(transtab));
-	mmu_write(pfdev, AS_TRANSTAB_HI(as_nr), upper_32_bits(transtab));
-
 	/* Need to revisit mem attrs.
 	 * NC is the default, Mali driver is inner WT.
 	 */
-	mmu_write(pfdev, AS_MEMATTR_LO(as_nr), lower_32_bits(memattr));
-	mmu_write(pfdev, AS_MEMATTR_HI(as_nr), upper_32_bits(memattr));
-
-	write_cmd(pfdev, as_nr, AS_COMMAND_UPDATE);
+	_panfrost_mmu_as_control_write(pfdev, as_nr, transtab, memattr);
 }
 
 static void panfrost_mmu_disable(struct panfrost_device *pfdev, u32 as_nr)
 {
-	mmu_hw_do_operation_locked(pfdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
-
-	mmu_write(pfdev, AS_TRANSTAB_LO(as_nr), 0);
-	mmu_write(pfdev, AS_TRANSTAB_HI(as_nr), 0);
-
-	mmu_write(pfdev, AS_MEMATTR_LO(as_nr), 0);
-	mmu_write(pfdev, AS_MEMATTR_HI(as_nr), 0);
-
-	write_cmd(pfdev, as_nr, AS_COMMAND_UPDATE);
+	_panfrost_mmu_as_control_write(pfdev, as_nr, 0, 0);
 }
 
 u32 panfrost_mmu_as_get(struct panfrost_device *pfdev, struct panfrost_mmu *mmu)
