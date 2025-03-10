@@ -2074,6 +2074,7 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 
 		if (have_full_constraints()) {
 			r = dummy_regulator_rdev;
+			BUG_ON(!r);
 			get_device(&r->dev);
 		} else {
 			dev_err(dev, "Failed to resolve %s-supply for %s\n",
@@ -2091,6 +2092,7 @@ static int regulator_resolve_supply(struct regulator_dev *rdev)
 			goto out;
 		}
 		r = dummy_regulator_rdev;
+		BUG_ON(!r);
 		get_device(&r->dev);
 	}
 
@@ -2221,6 +2223,7 @@ struct regulator *_regulator_get_common(struct regulator_dev *rdev, struct devic
 			 */
 			dev_warn(dev, "supply %s not found, using dummy regulator\n", id);
 			rdev = dummy_regulator_rdev;
+			BUG_ON(!rdev);
 			get_device(&rdev->dev);
 			break;
 
