@@ -1934,15 +1934,14 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
 {
 	s64 interval = tk->cycle_interval;
 
-	if (mult_adj == 0) {
+	if (mult_adj == 0)
 		return;
-	} else if (mult_adj == -1) {
+
+	if (mult_adj == -1)
 		interval = -interval;
-		offset = -offset;
-	} else if (mult_adj != 1) {
+	else if (mult_adj != 1)
 		interval *= mult_adj;
-		offset *= mult_adj;
-	}
+
 
 	/*
 	 * So the following can be confusing.
@@ -1963,33 +1962,8 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
 	 * Which can be shortened to:
 	 *	xtime_interval += cycle_interval
 	 *
-	 * So offset stores the non-accumulated cycles. Thus the current
-	 * time (in shifted nanoseconds) is:
-	 *	now = (offset * adj) + xtime_nsec
-	 * Now, even though we're adjusting the clock frequency, we have
-	 * to keep time consistent. In other words, we can't jump back
-	 * in time, and we also want to avoid jumping forward in time.
-	 *
-	 * So given the same offset value, we need the time to be the same
-	 * both before and after the freq adjustment.
-	 *	now = (offset * adj_1) + xtime_nsec_1
-	 *	now = (offset * adj_2) + xtime_nsec_2
-	 * So:
-	 *	(offset * adj_1) + xtime_nsec_1 =
-	 *		(offset * adj_2) + xtime_nsec_2
-	 * And we know:
-	 *	adj_2 = adj_1 + 1
-	 * So:
-	 *	(offset * adj_1) + xtime_nsec_1 =
-	 *		(offset * (adj_1+1)) + xtime_nsec_2
-	 *	(offset * adj_1) + xtime_nsec_1 =
-	 *		(offset * adj_1) + offset + xtime_nsec_2
-	 * Canceling the sides:
-	 *	xtime_nsec_1 = offset + xtime_nsec_2
-	 * Which gives us:
-	 *	xtime_nsec_2 = xtime_nsec_1 - offset
-	 * Which simplifies to:
-	 *	xtime_nsec -= offset
++	 * Since mult will be changed, @offset should be accumulated with original
++	 * mult value
 	 */
 	if ((mult_adj > 0) && (tk->tkr_mono.mult + mult_adj < mult_adj)) {
 		/* NTP adjustment caused clocksource mult overflow */
@@ -1997,9 +1971,11 @@ static __always_inline void timekeeping_apply_adjustment(struct timekeeper *tk,
 		return;
 	}
 
+	tk->tkr_mono.xtime_nsec += offset * tk->tkr_mono.mult;
+	tk->tkr_mono.cycle_last += offset;
+
 	tk->tkr_mono.mult += mult_adj;
 	tk->xtime_interval += interval;
-	tk->tkr_mono.xtime_nsec -= offset;
 }
 
 /*
