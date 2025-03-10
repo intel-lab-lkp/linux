@@ -945,6 +945,60 @@ unsigned int device_get_child_node_count(const struct device *dev)
 }
 EXPORT_SYMBOL_GPL(device_get_child_node_count);
 
+/**
+ * fwnode_get_named_child_node_count - number of child nodes with given name
+ * @fwnode: Node which child nodes are counted.
+ * @name: String to match child node name against.
+ *
+ * Scan child nodes and count all the nodes with a specific name. Return the
+ * number of found nodes. Potential '@number' -ending for scanned names is
+ * ignored. Eg,
+ * device_get_child_node_count(dev, "channel");
+ * would match all the nodes:
+ * channel { }, channel@0 {}, channel@0xabba {}...
+ *
+ * Return: the number of child nodes with a matching name for a given device.
+ */
+unsigned int fwnode_get_named_child_node_count(const struct fwnode_handle *fwnode,
+					       const char *name)
+{
+	struct fwnode_handle *child;
+	unsigned int count = 0;
+
+	fwnode_for_each_named_child_node(fwnode, child, name)
+		count++;
+
+	return count;
+}
+EXPORT_SYMBOL_GPL(fwnode_get_named_child_node_count);
+
+/**
+ * device_get_named_child_node_count - number of child nodes with given name
+ * @dev: Device to count the child nodes for.
+ * @name: String to match child node name against.
+ *
+ * Scan device's child nodes and find all the nodes with a specific name and
+ * return the number of found nodes. Potential '@number' -ending for scanned
+ * names is ignored. Eg,
+ * device_get_child_node_count(dev, "channel");
+ * would match all the nodes:
+ * channel { }, channel@0 {}, channel@0xabba {}...
+ *
+ * Return: the number of child nodes with a matching name for a given device.
+ */
+unsigned int device_get_named_child_node_count(const struct device *dev,
+					       const char *name)
+{
+	struct fwnode_handle *child;
+	unsigned int count = 0;
+
+	device_for_each_named_child_node(dev, child, name)
+		count++;
+
+	return count;
+}
+EXPORT_SYMBOL_GPL(device_get_named_child_node_count);
+
 bool device_dma_supported(const struct device *dev)
 {
 	return fwnode_call_bool_op(dev_fwnode(dev), device_dma_supported);
