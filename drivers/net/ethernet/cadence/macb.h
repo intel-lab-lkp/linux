@@ -1067,7 +1067,8 @@ static const struct gem_statistic gem_statistics[] = {
 	GEM_STAT_TITLE(TX256CNT, "tx_256_511_byte_frames"),
 	GEM_STAT_TITLE(TX512CNT, "tx_512_1023_byte_frames"),
 	GEM_STAT_TITLE(TX1024CNT, "tx_1024_1518_byte_frames"),
-	GEM_STAT_TITLE(TX1519CNT, "tx_greater_than_1518_byte_frames"),
+	GEM_STAT_TITLE(TX1519CNT, "tx_greater_than_1518_byte_frame"),
+
 	GEM_STAT_TITLE_BITS(TXURUNCNT, "tx_underrun",
 			    GEM_BIT(NDS_TXERR)|GEM_BIT(NDS_TXFIFOERR)),
 	GEM_STAT_TITLE_BITS(SNGLCOLLCNT, "tx_single_collision_frames",
