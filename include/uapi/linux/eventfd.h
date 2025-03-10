@@ -8,4 +8,7 @@
 #define EFD_CLOEXEC O_CLOEXEC
 #define EFD_NONBLOCK O_NONBLOCK
 
+#define EFD_IOC_SET_MAXIMUM	_IOW('E', 0, __u64)
+#define EFD_IOC_GET_MAXIMUM	_IOR('E', 0, __u64)
+
 #endif /* _UAPI_LINUX_EVENTFD_H */
