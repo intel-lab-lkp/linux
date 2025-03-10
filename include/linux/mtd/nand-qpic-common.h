@@ -196,7 +196,7 @@
 #define dev_cmd_reg_addr(nandc, reg) ((nandc)->props->dev_cmd_reg_start + (reg))
 
 /* Returns the NAND register physical address */
-#define nandc_reg_phys(chip, offset) ((chip)->base_phys + (offset))
+#define nandc_reg_phys(chip, offset)  ((nandc)->props->nandc_offset + (offset))
 
 /* Returns the dma address for reg read buffer */
 #define reg_buf_dma_addr(chip, vaddr) \
@@ -454,6 +454,7 @@ struct qcom_nandc_props {
 	bool nandc_part_of_qpic;
 	bool qpic_version2;
 	bool use_codeword_fixup;
+	u32 nandc_offset;
 };
 
 void qcom_free_bam_transaction(struct qcom_nand_controller *nandc);
