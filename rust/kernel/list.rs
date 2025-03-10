@@ -158,6 +158,16 @@ unsafe impl<const ID: u64> Send for ListLinks<ID> {}
 unsafe impl<const ID: u64> Sync for ListLinks<ID> {}
 
 impl<const ID: u64> ListLinks<ID> {
+    /// Create a new instance of this type.
+    pub fn new_link() -> Self {
+        ListLinks {
+            inner: Opaque::new(ListLinksFields {
+                prev: ptr::null_mut(),
+                next: ptr::null_mut(),
+            }),
+        }
+    }
+
     /// Creates a new initializer for this type.
     pub fn new() -> impl PinInit<Self> {
         // INVARIANT: Pin-init initializers can't be used on an existing `Arc`, so this value will
