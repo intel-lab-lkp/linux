@@ -17111,6 +17111,7 @@ M:	Pankit Garg<pankit.garg@nxp.com>
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/rtc/nxp,pcf85053a.yaml
+F:	drivers/rtc/rtc-pcf85053a.c
 
 NZXT-KRAKEN2 HARDWARE MONITORING DRIVER
 M:	Jonas Malaco <jonas@protocubo.io>
