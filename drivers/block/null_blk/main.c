@@ -1598,7 +1598,7 @@ static int null_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 		cmd = blk_mq_rq_to_pdu(req);
 		cmd->error = null_process_cmd(cmd, req_op(req), blk_rq_pos(req),
 						blk_rq_sectors(req));
-		if (!blk_mq_add_to_batch(req, iob, (__force int) cmd->error,
+		if (!blk_mq_add_to_batch(req, iob, cmd->error,
 					blk_mq_end_request_batch))
 			blk_mq_end_request(req, cmd->error);
 		nr++;

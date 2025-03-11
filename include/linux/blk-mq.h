@@ -857,7 +857,8 @@ static inline bool blk_mq_is_reserved_rq(struct request *rq)
  * ->end_io handler.
  */
 static inline bool blk_mq_add_to_batch(struct request *req,
-				       struct io_comp_batch *iob, int ioerror,
+				       struct io_comp_batch *iob,
+				       blk_status_t status,
 				       void (*complete)(struct io_comp_batch *))
 {
 	/*
@@ -874,7 +875,7 @@ static inline bool blk_mq_add_to_batch(struct request *req,
 	if (!blk_rq_is_passthrough(req)) {
 		if (req->end_io)
 			return false;
-		if (ioerror < 0)
+		if (blk_status_to_errno(status) < 0)
 			return false;
 	}
 
