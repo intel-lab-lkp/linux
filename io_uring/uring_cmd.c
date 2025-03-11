@@ -255,6 +255,35 @@ int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 }
 EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed);
 
+int io_uring_cmd_import_fixed_vec(const struct iovec __user *uiovec,
+				  unsigned long nr_segs, int rw,
+				  struct iov_iter *iter,
+				  struct io_uring_cmd *ioucmd,
+				  struct iou_vec *iou_vec, bool compat,
+				  unsigned int issue_flags)
+{
+	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);
+	struct iovec *iov;
+	int ret;
+
+	iov = iovec_from_user(uiovec, nr_segs, 0, NULL, compat);
+	if (IS_ERR(iov))
+		return PTR_ERR(iov);
+
+	ret = io_vec_realloc(iou_vec, nr_segs);
+	if (ret) {
+		kfree(iov);
+		return ret;
+	}
+	memcpy(iou_vec->iovec, iov, sizeof(*iov) * nr_segs);
+	kfree(iov);
+
+	ret = io_import_reg_vec(rw, iter, req, iou_vec, iou_vec->nr, 0,
+				issue_flags);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_import_fixed_vec);
+
 void io_uring_cmd_issue_blocking(struct io_uring_cmd *ioucmd)
 {
 	struct io_kiocb *req = cmd_to_io_kiocb(ioucmd);

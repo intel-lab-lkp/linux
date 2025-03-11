@@ -44,6 +44,13 @@ int io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			      struct io_uring_cmd *ioucmd,
 			      unsigned int issue_flags);
 
+int io_uring_cmd_import_fixed_vec(const struct iovec __user *uiovec,
+				  unsigned long nr_segs, int rw,
+				  struct iov_iter *iter,
+				  struct io_uring_cmd *ioucmd,
+				  struct iou_vec *iou_vec, bool compat,
+				  unsigned int issue_flags);
+
 /*
  * Completes the request, i.e. posts an io_uring CQE and deallocates @ioucmd
  * and the corresponding io_uring request.
@@ -73,6 +80,13 @@ static inline int
 io_uring_cmd_import_fixed(u64 ubuf, unsigned long len, int rw,
 			  struct iov_iter *iter, struct io_uring_cmd *ioucmd,
 			  unsigned int issue_flags)
+{
+	return -EOPNOTSUPP;
+}
+int io_uring_cmd_import_fixed_vec(int rw, struct iov_iter *iter,
+				  struct io_uring_cmd *ioucmd,
+				  struct iou_vec *vec, unsigned nr_iovs,
+				  unsigned iovec_off, unsigned int issue_flags)
 {
 	return -EOPNOTSUPP;
 }
