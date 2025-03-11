@@ -1827,8 +1827,11 @@ static int match_session(struct cifs_ses *ses,
 			 struct smb3_fs_context *ctx,
 			 bool match_super)
 {
+	struct TCP_Server_Info *server = ses->server;
+	enum securityEnum selected_sectype = server->ops->select_sectype(ses->server, ctx->sectype);
+
 	if (ctx->sectype != Unspecified &&
-	    ctx->sectype != ses->sectype)
+	    ctx->sectype != selected_sectype)
 		return 0;
 
 	if (!match_super && ctx->dfs_root_ses != ses->dfs_root_ses)
