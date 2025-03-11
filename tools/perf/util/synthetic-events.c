@@ -2551,6 +2551,8 @@ static union perf_event *__synthesize_schedstat_cpu(struct io *io, __u16 version
 #include <perf/schedstat-v15.h>
 	} else if (version == 16) {
 #include <perf/schedstat-v16.h>
+	} else if (version == 17) {
+#include <perf/schedstat-v17.h>
 	}
 #undef CPU_FIELD
 
@@ -2589,6 +2591,7 @@ static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 vers
 	int nr_cpus_avail = perf_env__nr_cpus_avail(&env);
 	struct perf_record_schedstat_domain *ds;
 	union perf_event *event;
+	size_t d_name_len = 0;
 	char *d_name = NULL;
 	size_t cpu_mask_len = 0;
 	char *cpu_mask = NULL;
@@ -2604,6 +2607,12 @@ static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 vers
 		return NULL;
 
 	ch = io__get_dec(io, &d_num);
+	if (version >= 17) {
+		if (io__getdelim(io, &d_name, &d_name_len, ' ') < 0 || !d_name_len)
+			return NULL;
+		d_name[d_name_len - 1] = '\0';
+		d_name_len--;
+	}
 
 	if (io__getdelim(io, &cpu_mask, &cpu_mask_len, ' ') < 0 || !cpu_mask_len)
 		goto out;
@@ -2650,6 +2659,7 @@ static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 vers
 		low = !low;
 	}
 
+	free(d_name);
 	free(cpu_mask);
 
 #define DOMAIN_FIELD(_type, _name, _ver)				\
@@ -2665,6 +2675,8 @@ static union perf_event *__synthesize_schedstat_domain(struct io *io, __u16 vers
 #include <perf/schedstat-v15.h>
 	} else if (version == 16) {
 #include <perf/schedstat-v16.h>
+	} else if (version == 17) {
+#include <perf/schedstat-v17.h>
 	}
 #undef DOMAIN_FIELD
 
@@ -2676,6 +2688,7 @@ out_domain:
 out_cpu_mask:
 	free(cpu_mask);
 out:
+	free(d_name);
 	return NULL;
 }
 
@@ -2709,6 +2722,8 @@ int perf_event__synthesize_schedstat(const struct perf_tool *tool,
 		version = 15;
 	} else if (!strcmp(line, "version 16\n")) {
 		version = 16;
+	} else if (!strcmp(line, "version 17\n")) {
+		version = 17;
 	} else {
 		pr_err("Unsupported %s version: %s", path, line + 8);
 		goto out_free_line;
