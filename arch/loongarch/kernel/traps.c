@@ -1114,6 +1114,7 @@ asmlinkage void noinstr do_vint(struct pt_regs *regs, unsigned long sp)
 
 	irqentry_exit(regs, state);
 }
+EXPORT_SYMBOL(do_vint);
 
 unsigned long eentry;
 unsigned long tlbrentry;

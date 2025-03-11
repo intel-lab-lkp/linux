@@ -5,6 +5,7 @@
 
 #include <linux/kvm_host.h>
 #include <linux/entry-kvm.h>
+#include <asm/exception.h>
 #include <asm/fpu.h>
 #include <asm/lbt.h>
 #include <asm/loongarch.h>
@@ -304,6 +305,23 @@ static int kvm_pre_enter_guest(struct kvm_vcpu *vcpu)
 	return ret;
 }
 
+static void kvm_handle_irq(struct kvm_vcpu *vcpu)
+{
+	struct pt_regs regs, *old;
+
+	/*
+	 * Construct pseudo pt_regs, only necessary registers is added
+	 * Interrupt context coming from guest enter context
+	 */
+	old = (struct pt_regs *)(vcpu->arch.host_sp - sizeof(struct pt_regs));
+	/* Disable preemption in irq exit function irqentry_exit() */
+	regs.csr_prmd = 0;
+	regs.regs[LOONGARCH_GPR_SP] = vcpu->arch.host_sp;
+	regs.regs[LOONGARCH_GPR_FP] = old->regs[LOONGARCH_GPR_FP];
+	regs.csr_era = old->regs[LOONGARCH_GPR_RA];
+	do_vint(&regs, (unsigned long)&regs);
+}
+
 /*
  * Return 1 for resume guest and "<= 0" for resume host.
  */
@@ -321,8 +339,23 @@ static int kvm_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 
 	kvm_lose_pmu(vcpu);
 
-	guest_timing_exit_irqoff();
 	guest_state_exit_irqoff();
+
+	/*
+	 * VM exit because of host interrupts
+	 * Handle irq directly before enabling irq
+	 */
+	if (!ecode && intr)
+		kvm_handle_irq(vcpu);
+
+	/*
+	 * Wait until after servicing IRQs to account guest time so that any
+	 * ticks that occurred while running the guest are properly accounted
+	 * to the guest. Waiting until IRQs are enabled degrades the accuracy
+	 * of accounting via context tracking, but the loss of accuracy is
+	 * acceptable for all known use cases.
+	 */
+	guest_timing_exit_irqoff();
 	local_irq_enable();
 
 	trace_kvm_exit(vcpu, ecode);
@@ -331,6 +364,7 @@ static int kvm_handle_exit(struct kvm_run *run, struct kvm_vcpu *vcpu)
 	} else {
 		WARN(!intr, "vm exiting with suspicious irq\n");
 		++vcpu->stat.int_exits;
+		cond_resched();
 	}
 
 	if (ret == RESUME_GUEST)
