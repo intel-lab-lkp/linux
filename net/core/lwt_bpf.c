@@ -88,6 +88,7 @@ static int run_lwt_bpf(struct sk_buff *skb, struct bpf_lwt_prog *lwt,
 
 static int bpf_lwt_input_reroute(struct sk_buff *skb)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	enum skb_drop_reason reason;
 	int err = -EINVAL;
 
@@ -110,6 +111,13 @@ static int bpf_lwt_input_reroute(struct sk_buff *skb)
 
 	if (err)
 		goto err;
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
+
 	return dst_input(skb);
 
 err:
@@ -180,6 +188,7 @@ static int bpf_lwt_xmit_reroute(struct sk_buff *skb)
 	struct net_device *l3mdev = l3mdev_master_dev_rcu(skb_dst(skb)->dev);
 	int oif = l3mdev ? l3mdev->ifindex : 0;
 	struct dst_entry *dst = NULL;
+	struct dst_entry *orig_dst;
 	int err = -EAFNOSUPPORT;
 	struct sock *sk;
 	struct net *net;
@@ -200,6 +209,8 @@ static int bpf_lwt_xmit_reroute(struct sk_buff *skb)
 	} else {
 		net = dev_net(skb_dst(skb)->dev);
 	}
+
+	orig_dst = skb_dst(skb);
 
 	if (ipv4) {
 		struct iphdr *iph = ip_hdr(skb);
@@ -253,6 +264,16 @@ static int bpf_lwt_xmit_reroute(struct sk_buff *skb)
 	err = skb_cow_head(skb, LL_RESERVED_SPACE(dst->dev));
 	if (unlikely(err))
 		goto err;
+
+	/* avoid lwtunnel_xmit() reentry loop when destination is the same
+	 * after transformation (i.e., disallow BPF_LWT_REROUTE when dst_entry
+	 * remains the same).
+	 */
+	if (orig_dst->lwtstate == dst->lwtstate) {
+		dst_release(dst);
+		err = -EINVAL;
+		goto err;
+	}
 
 	skb_dst_drop(skb);
 	skb_dst_set(skb, dst);
