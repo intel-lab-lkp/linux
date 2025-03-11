@@ -103,7 +103,9 @@ endif
 # freely generate instructions which are not supported by earlier architecture
 # versions, which would prevent a single kernel image from working on earlier
 # hardware.
-ifeq ($(CONFIG_AS_HAS_ARMV8_5), y)
+ifeq ($(CONFIG_AS_HAS_ARMV9_5), y)
+  asm-arch := armv9.5-a
+else ifeq ($(CONFIG_AS_HAS_ARMV8_5), y)
   asm-arch := armv8.5-a
 else ifeq ($(CONFIG_AS_HAS_ARMV8_4), y)
   asm-arch := armv8.4-a

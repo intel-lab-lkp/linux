@@ -748,6 +748,9 @@ static inline bool system_supports_hdbss(void)
 	u64 mmfr1;
 	u32 val;
 
+	if (!IS_ENABLED(CONFIG_ARM64_HDBSS))
+		return false;
+
 	mmfr1 =	read_sanitised_ftr_reg(SYS_ID_AA64MMFR1_EL1);
 	val = cpuid_feature_extract_unsigned_field(mmfr1,
 						ID_AA64MMFR1_EL1_HAFDBS_SHIFT);
