@@ -71,7 +71,7 @@ struct us_unusual_dev {
  * size we'll allocate.
  */
 
-#define US_IOBUF_SIZE		64	/* Size of the DMA-mapped I/O buffer */
+#define US_IOBUF_SIZE		512	/* Size of the DMA-mapped I/O buffer */
 #define US_SENSE_SIZE		18	/* Size of the autosense data buffer */
 
 typedef int (*trans_cmnd)(struct scsi_cmnd *, struct us_data*);
