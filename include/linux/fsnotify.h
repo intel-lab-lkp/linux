@@ -138,14 +138,19 @@ static inline int fsnotify_file_area_perm(struct file *file, int perm_mask,
 					  const loff_t *ppos, size_t count)
 {
 	/*
+	 * Temporarily disable pre-content hooks from page faults (MAY_ACCESS).
+	 * We may bring them back later either only to executables or to user
+	 * mapped files under some conditions.
+	 */
+	if (!(perm_mask & (MAY_READ | MAY_WRITE)))
+		return 0;
+
+	/*
 	 * filesystem may be modified in the context of permission events
 	 * (e.g. by HSM filling a file on access), so sb freeze protection
 	 * must not be held.
 	 */
 	lockdep_assert_once(file_write_not_started(file));
-
-	if (!(perm_mask & (MAY_READ | MAY_WRITE | MAY_ACCESS)))
-		return 0;
 
 	if (likely(!FMODE_FSNOTIFY_PERM(file->f_mode)))
 		return 0;
