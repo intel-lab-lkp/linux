@@ -96,6 +96,19 @@ static int __init ttynull_init(void)
 	return 0;
 }
 
+#ifdef CONFIG_NULL_TTY_DEFAULT_CONSOLE
+static int __init ttynull_register(void)
+{
+	if (console_set_on_cmdline)
+		return 0;
+
+	add_preferred_console("ttynull", 0, NULL);
+
+	return 0;
+}
+console_initcall(ttynull_register);
+#endif
+
 static void __exit ttynull_exit(void)
 {
 	unregister_console(&ttynull_console);
