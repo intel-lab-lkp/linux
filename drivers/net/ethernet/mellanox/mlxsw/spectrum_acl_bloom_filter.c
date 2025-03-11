@@ -203,17 +203,6 @@ static const u8 mlxsw_sp4_acl_bf_crc6_tab[256] = {
 0x2f, 0x02, 0x18, 0x35, 0x2c, 0x01, 0x1b, 0x36,
 };
 
-/* Each chunk contains 4 key blocks. Chunk 2 uses key blocks 11-8,
- * and we need to populate it with 4 key blocks copied from the entry encoded
- * key. The original keys layout is same for Spectrum-{2,3,4}.
- * Since the encoded key contains a 2 bytes padding, key block 11 starts at
- * offset 2. block 7 that is used in chunk 1 starts at offset 20 as 4 key blocks
- * take 18 bytes. See 'MLXSW_SP2_AFK_BLOCK_LAYOUT' for more details.
- * This array defines key offsets for easy access when copying key blocks from
- * entry key to Bloom filter chunk.
- */
-static const u8 chunk_key_offsets[MLXSW_BLOOM_KEY_CHUNKS] = {2, 20, 38};
-
 static u16 mlxsw_sp2_acl_bf_crc16_byte(u16 crc, u8 c)
 {
 	return (crc << 8) ^ mlxsw_sp2_acl_bf_crc16_tab[(crc >> 8) ^ c];
@@ -237,6 +226,7 @@ __mlxsw_sp_acl_bf_key_encode(struct mlxsw_sp_acl_atcam_region *aregion,
 	struct mlxsw_afk_key_info *key_info = aregion->region->key_info;
 	u8 chunk_index, chunk_count, block_count;
 	char *chunk = output;
+	char *enc_key_src_ptr;
 	__be16 erp_region_id;
 
 	block_count = mlxsw_afk_key_info_blocks_count_get(key_info);
@@ -248,9 +238,30 @@ __mlxsw_sp_acl_bf_key_encode(struct mlxsw_sp_acl_atcam_region *aregion,
 		memset(chunk, 0, pad_bytes);
 		memcpy(chunk + pad_bytes, &erp_region_id,
 		       sizeof(erp_region_id));
-		memcpy(chunk + key_offset,
-		       &aentry->ht_key.enc_key[chunk_key_offsets[chunk_index]],
-		       chunk_key_len);
+/* Each chunk contains 4 key blocks. Chunk 2 uses key blocks 11-8,
+ * and we need to populate it with 4 key blocks copied from the entry encoded
+ * key. The original keys layout is same for Spectrum-{2,3,4}.
+ * Since the encoded key contains a 2 bytes padding, key block 11 starts at
+ * offset 2. block 7 that is used in chunk 1 starts at offset 20 as 4 key blocks
+ * take 18 bytes. See 'MLXSW_SP2_AFK_BLOCK_LAYOUT' for more details.
+ * This array defines key offsets for easy access when copying key blocks from
+ * entry key to Bloom filter chunk.
+ *
+ * Define the acceptable values for chunk_index to prevent LLVM from failing
+ * compilation in certain circumstances.
+ */
+		switch (chunk_index) {
+		case 0:
+			enc_key_src_ptr = &aentry->ht_key.enc_key[2];
+			break;
+		case 1:
+			enc_key_src_ptr = &aentry->ht_key.enc_key[20];
+			break;
+		case 2:
+			enc_key_src_ptr = &aentry->ht_key.enc_key[38];
+			break;
+		}
+		memcpy(chunk + key_offset, enc_key_src_ptr, chunk_key_len);
 		chunk += chunk_len;
 	}
 	*len = chunk_count * chunk_len;
