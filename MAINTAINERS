@@ -8577,6 +8577,7 @@ M:	Min Lin <linmin@eswincomputing.com>
 M:	Pinkesh Vaghela <pinkesh.vaghela@einfochips.com>
 M:	Pritesh Patel <pritesh.patel@einfochips.com>
 S:	Maintained
+F:	arch/riscv/boot/dts/eswin/
 
 ET131X NETWORK DRIVER
 M:	Mark Einon <mark.einon@gmail.com>
