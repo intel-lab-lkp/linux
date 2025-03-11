@@ -81,20 +81,7 @@ static int show_irq_affinity(int type, struct seq_file *m)
 static int irq_affinity_hint_proc_show(struct seq_file *m, void *v)
 {
 	struct irq_desc *desc = irq_to_desc((long)m->private);
-	unsigned long flags;
-	cpumask_var_t mask;
-
-	if (!zalloc_cpumask_var(&mask, GFP_KERNEL))
-		return -ENOMEM;
-
-	raw_spin_lock_irqsave(&desc->lock, flags);
-	if (desc->affinity_hint)
-		cpumask_copy(mask, desc->affinity_hint);
-	raw_spin_unlock_irqrestore(&desc->lock, flags);
-
-	seq_printf(m, "%*pb\n", cpumask_pr_args(mask));
-	free_cpumask_var(mask);
-
+	seq_printf(m, "%*pb\n", cpumask_pr_args(desc->affinity_hint));
 	return 0;
 }
 

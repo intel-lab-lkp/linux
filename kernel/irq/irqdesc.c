@@ -58,9 +58,16 @@ static int alloc_masks(struct irq_desc *desc, int node)
 				     GFP_KERNEL, node))
 		return -ENOMEM;
 
+	if (!zalloc_cpumask_var_node(&desc->affinity_hint,
+				     GFP_KERNEL, node)) {
+		free_cpumask_var(desc->irq_common_data.affinity);
+		return -ENOMEM;
+	}
+
 #ifdef CONFIG_GENERIC_IRQ_EFFECTIVE_AFF_MASK
 	if (!zalloc_cpumask_var_node(&desc->irq_common_data.effective_affinity,
 				     GFP_KERNEL, node)) {
+		free_cpumask_var(desc->affinity_hint);
 		free_cpumask_var(desc->irq_common_data.affinity);
 		return -ENOMEM;
 	}
@@ -71,6 +78,7 @@ static int alloc_masks(struct irq_desc *desc, int node)
 #ifdef CONFIG_GENERIC_IRQ_EFFECTIVE_AFF_MASK
 		free_cpumask_var(desc->irq_common_data.effective_affinity);
 #endif
+		free_cpumask_var(desc->affinity_hint);
 		free_cpumask_var(desc->irq_common_data.affinity);
 		return -ENOMEM;
 	}
@@ -98,6 +106,7 @@ static void free_masks(struct irq_desc *desc)
 #ifdef CONFIG_GENERIC_PENDING_IRQ
 	free_cpumask_var(desc->pending_mask);
 #endif
+	free_cpumask_var(desc->affinity_hint);
 	free_cpumask_var(desc->irq_common_data.affinity);
 #ifdef CONFIG_GENERIC_IRQ_EFFECTIVE_AFF_MASK
 	free_cpumask_var(desc->irq_common_data.effective_affinity);
