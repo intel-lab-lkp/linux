@@ -2212,10 +2212,7 @@ EXPORT_SYMBOL(b53_mirror_del);
  */
 int b53_eee_init(struct dsa_switch *ds, int port, struct phy_device *phy)
 {
-	int ret;
-
-	ret = phy_init_eee(phy, false);
-	if (ret)
+	if (!phy->drv || genphy_c45_eee_is_active(phy, NULL) <= 0)
 		return 0;
 
 	b53_eee_enable_set(ds, port, true);
