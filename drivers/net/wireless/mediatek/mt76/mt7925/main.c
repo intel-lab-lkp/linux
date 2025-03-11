@@ -2177,7 +2177,7 @@ const struct ieee80211_ops mt7925_ops = {
 	.set_coverage_class = mt792x_set_coverage_class,
 	.hw_scan = mt7925_hw_scan,
 	.cancel_hw_scan = mt7925_cancel_hw_scan,
-	.sta_statistics = mt792x_sta_statistics,
+	.link_sta_statistics = mt792x_sta_statistics,
 	.sched_scan_start = mt7925_start_sched_scan,
 	.sched_scan_stop = mt7925_stop_sched_scan,
 #ifdef CONFIG_PM

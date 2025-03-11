@@ -9267,7 +9267,7 @@ static void ath10k_mac_parse_bitrate(struct ath10k *ar, u32 rate_code,
 
 static void ath10k_mac_sta_get_peer_stats_info(struct ath10k *ar,
 					       struct ieee80211_sta *sta,
-					       struct station_info *sinfo)
+					       struct link_station_info *sinfo)
 {
 	struct ath10k_sta *arsta = (struct ath10k_sta *)sta->drv_priv;
 	struct ath10k_peer *peer;
@@ -9326,7 +9326,7 @@ static void ath10k_mac_sta_get_peer_stats_info(struct ath10k *ar,
 static void ath10k_sta_statistics(struct ieee80211_hw *hw,
 				  struct ieee80211_vif *vif,
 				  struct ieee80211_sta *sta,
-				  struct station_info *sinfo)
+				  struct link_station_info *sinfo)
 {
 	struct ath10k_sta *arsta = (struct ath10k_sta *)sta->drv_priv;
 	struct ath10k *ar = arsta->arvif->ar;
@@ -9478,7 +9478,7 @@ static const struct ieee80211_ops ath10k_ops = {
 	.unassign_vif_chanctx		= ath10k_mac_op_unassign_vif_chanctx,
 	.switch_vif_chanctx		= ath10k_mac_op_switch_vif_chanctx,
 	.sta_pre_rcu_remove		= ath10k_mac_op_sta_pre_rcu_remove,
-	.sta_statistics			= ath10k_sta_statistics,
+	.link_sta_statistics		= ath10k_sta_statistics,
 	.set_tid_config			= ath10k_mac_op_set_tid_config,
 	.reset_tid_config		= ath10k_mac_op_reset_tid_config,
 

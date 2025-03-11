@@ -2590,7 +2590,7 @@ out:
 }
 
 int wcn36xx_smd_get_stats(struct wcn36xx *wcn, u8 sta_index, u32 stats_mask,
-			  struct station_info *sinfo)
+			  struct link_station_info *sinfo)
 {
 	struct wcn36xx_hal_stats_req_msg msg_body;
 	struct wcn36xx_hal_stats_rsp_msg *rsp;

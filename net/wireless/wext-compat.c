@@ -1267,12 +1267,12 @@ static int cfg80211_wext_giwrate(struct net_device *dev,
 	if (err)
 		return err;
 
-	if (!(sinfo.filled & BIT_ULL(NL80211_STA_INFO_TX_BITRATE))) {
+	if (!(sinfo.links[0]->filled & BIT_ULL(NL80211_STA_INFO_TX_BITRATE))) {
 		err = -EOPNOTSUPP;
 		goto free;
 	}
 
-	rate->value = 100000 * cfg80211_calculate_bitrate(&sinfo.txrate);
+	rate->value = 100000 * cfg80211_calculate_bitrate(&sinfo.links[0]->txrate);
 
 free:
 	cfg80211_sinfo_release_content(&sinfo);
@@ -1316,8 +1316,8 @@ static struct iw_statistics *cfg80211_wireless_stats(struct net_device *dev)
 
 	switch (rdev->wiphy.signal_type) {
 	case CFG80211_SIGNAL_TYPE_MBM:
-		if (sinfo.filled & BIT_ULL(NL80211_STA_INFO_SIGNAL)) {
-			int sig = sinfo.signal;
+		if (sinfo.links[0]->filled & BIT_ULL(NL80211_STA_INFO_SIGNAL)) {
+			int sig = sinfo.links[0]->signal;
 			wstats.qual.updated |= IW_QUAL_LEVEL_UPDATED;
 			wstats.qual.updated |= IW_QUAL_QUAL_UPDATED;
 			wstats.qual.updated |= IW_QUAL_DBM;
@@ -1331,11 +1331,11 @@ static struct iw_statistics *cfg80211_wireless_stats(struct net_device *dev)
 		}
 		fallthrough;
 	case CFG80211_SIGNAL_TYPE_UNSPEC:
-		if (sinfo.filled & BIT_ULL(NL80211_STA_INFO_SIGNAL)) {
+		if (sinfo.links[0]->filled & BIT_ULL(NL80211_STA_INFO_SIGNAL)) {
 			wstats.qual.updated |= IW_QUAL_LEVEL_UPDATED;
 			wstats.qual.updated |= IW_QUAL_QUAL_UPDATED;
-			wstats.qual.level = sinfo.signal;
-			wstats.qual.qual = sinfo.signal;
+			wstats.qual.level = sinfo.links[0]->signal;
+			wstats.qual.qual = sinfo.links[0]->signal;
 			break;
 		}
 		fallthrough;
@@ -1345,10 +1345,10 @@ static struct iw_statistics *cfg80211_wireless_stats(struct net_device *dev)
 	}
 
 	wstats.qual.updated |= IW_QUAL_NOISE_INVALID;
-	if (sinfo.filled & BIT_ULL(NL80211_STA_INFO_RX_DROP_MISC))
-		wstats.discard.misc = sinfo.rx_dropped_misc;
-	if (sinfo.filled & BIT_ULL(NL80211_STA_INFO_TX_FAILED))
-		wstats.discard.retries = sinfo.tx_failed;
+	if (sinfo.links[0]->filled & BIT_ULL(NL80211_STA_INFO_RX_DROP_MISC))
+		wstats.discard.misc = sinfo.links[0]->rx_dropped_misc;
+	if (sinfo.links[0]->filled & BIT_ULL(NL80211_STA_INFO_TX_FAILED))
+		wstats.discard.retries = sinfo.links[0]->tx_failed;
 
 	cfg80211_sinfo_release_content(&sinfo);
 
