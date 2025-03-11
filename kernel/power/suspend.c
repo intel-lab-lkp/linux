@@ -91,8 +91,12 @@ static void s2idle_enter(void)
 {
 	trace_suspend_resume(TPS("machine_suspend"), PM_SUSPEND_TO_IDLE, true);
 
-	/* CPUs can't be hotplugged here so let's not protect for it. */
-
+	/*
+	 * The s2idle_lock must be held while checking for a pending wakeup and
+	 * while moving into S2IDLE_STATE_ENTER, to make sure a wakeup doesn't
+	 * get lost. Note also that CPUs can't be hotplugged here so let's not
+	 * protect for it.
+	 */
 	raw_spin_lock_irq(&s2idle_lock);
 	if (pm_wakeup_pending())
 		goto out;
