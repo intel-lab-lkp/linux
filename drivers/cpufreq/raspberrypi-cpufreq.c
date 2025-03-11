@@ -78,7 +78,7 @@ static void raspberrypi_cpufreq_remove(struct platform_device *pdev)
 
 /*
  * Since the driver depends on clk-raspberrypi, which may return EPROBE_DEFER,
- * all the activity is performed in the probe, which may be defered as well.
+ * all the activity is performed in the probe, which may be deferred as well.
  */
 static struct platform_driver raspberrypi_cpufreq_driver = {
 	.driver = {
