@@ -467,9 +467,16 @@ static int seg6_input_finish(struct net *net, struct sock *sk,
 	return dst_input(skb);
 }
 
+static int seg6_input_redirect_finish(struct net *net, struct sock *sk,
+				      struct sk_buff *skb)
+{
+	return skb_dst(skb)->lwtstate->orig_input(skb);
+}
+
 static int seg6_input_core(struct net *net, struct sock *sk,
 			   struct sk_buff *skb)
 {
+	int (*in_func)(struct net *net, struct sock *sk, struct sk_buff *skb);
 	struct dst_entry *orig_dst = skb_dst(skb);
 	struct dst_entry *dst = NULL;
 	struct lwtunnel_state *lwtst;
@@ -515,12 +522,20 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 		skb_dst_set(skb, dst);
 	}
 
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == dst->lwtstate)
+		in_func = seg6_input_redirect_finish;
+	else
+		in_func = seg6_input_finish;
+
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
 			       dev_net(skb->dev), NULL, skb, NULL,
-			       skb_dst(skb)->dev, seg6_input_finish);
+			       skb_dst(skb)->dev, in_func);
 
-	return seg6_input_finish(dev_net(skb->dev), NULL, skb);
+	return in_func(dev_net(skb->dev), NULL, skb);
 drop:
 	kfree_skb(skb);
 	return err;
@@ -554,6 +569,7 @@ static int seg6_input(struct sk_buff *skb)
 static int seg6_output_core(struct net *net, struct sock *sk,
 			    struct sk_buff *skb)
 {
+	int (*out_func)(struct net *net, struct sock *sk, struct sk_buff *skb);
 	struct dst_entry *orig_dst = skb_dst(skb);
 	struct dst_entry *dst = NULL;
 	struct seg6_lwt *slwt;
@@ -598,14 +614,23 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 			goto drop;
 	}
 
-	skb_dst_drop(skb);
-	skb_dst_set(skb, dst);
+	/* avoid lwtunnel_output() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (orig_dst->lwtstate == dst->lwtstate) {
+		dst_release(dst);
+		out_func = orig_dst->lwtstate->orig_output;
+	} else {
+		skb_dst_drop(skb);
+		skb_dst_set(skb, dst);
+		out_func = dst_output;
+	}
 
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT, net, sk, skb,
-			       NULL, skb_dst(skb)->dev, dst_output);
+			       NULL, skb_dst(skb)->dev, out_func);
 
-	return dst_output(net, sk, skb);
+	return out_func(net, sk, skb);
 drop:
 	dst_release(dst);
 	kfree_skb(skb);
