@@ -1144,8 +1144,7 @@ xfs_growfs_rtg(
 			goto out_error;
 	}
 
-	if (old_rsum_cache)
-		kvfree(old_rsum_cache);
+	kvfree(old_rsum_cache);
 	xfs_rtgroup_rele(rtg);
 	return 0;
 
