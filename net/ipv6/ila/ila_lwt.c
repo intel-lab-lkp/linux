@@ -96,6 +96,14 @@ static int ila_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 		}
 	}
 
+	/* avoid lwtunnel_output() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (orig_dst->lwtstate == dst->lwtstate) {
+		dst_release(dst);
+		return orig_dst->lwtstate->orig_output(net, sk, skb);
+	}
+
 	skb_dst_drop(skb);
 	skb_dst_set(skb, dst);
 	return dst_output(net, sk, skb);
