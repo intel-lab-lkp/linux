@@ -2280,7 +2280,7 @@ __latent_entropy struct task_struct *copy_process(
 		p->flags |= PF_IO_WORKER;
 
 	if (args->name)
-		strscpy_pad(p->comm, args->name, sizeof(p->comm));
+		strscpy_pad(p->comm, args->name);
 
 	p->set_child_tid = (clone_flags & CLONE_CHILD_SETTID) ? args->child_tid : NULL;
 	/*
