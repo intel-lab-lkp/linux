@@ -162,11 +162,11 @@ static void iio_reenable_work_fn(struct work_struct *work)
 	 * This 'might' occur after the trigger state is set to disabled -
 	 * in that case the driver should skip reenabling.
 	 */
-	trig->ops->reenable(trig);
+	trig->ops->re-enable(trig);
 }
 
 /*
- * In general, reenable callbacks may need to sleep and this path is
+ * In general, re-enable callbacks may need to sleep and this path is
  * not performance sensitive, so just queue up a work item
  * to reneable the trigger for us.
  *
@@ -175,14 +175,14 @@ static void iio_reenable_work_fn(struct work_struct *work)
  *    the final decrement is still in this interrupt.
  * 2) The trigger has been removed, but one last interrupt gets through.
  *
- * For (1) we must call reenable, but not in atomic context.
+ * For (1) we must call re-enable, but not in atomic context.
  * For (2) it should be safe to call reenanble, if drivers never blindly
- * reenable after state is off.
+ * re-enable after state is off.
  */
 static void iio_trigger_notify_done_atomic(struct iio_trigger *trig)
 {
 	if (atomic_dec_and_test(&trig->use_count) && trig->ops &&
-	    trig->ops->reenable)
+	    trig->ops->re-enable)
 		schedule_work(&trig->reenable_work);
 }
 
@@ -243,8 +243,8 @@ EXPORT_SYMBOL(iio_trigger_poll_nested);
 void iio_trigger_notify_done(struct iio_trigger *trig)
 {
 	if (atomic_dec_and_test(&trig->use_count) && trig->ops &&
-	    trig->ops->reenable)
-		trig->ops->reenable(trig);
+	    trig->ops->re-enable)
+		trig->ops->re-enable(trig);
 }
 EXPORT_SYMBOL(iio_trigger_notify_done);
 
