@@ -30,6 +30,7 @@
 #include "i915_irq.h"
 #include "intel_connector.h"
 #include "intel_display_power.h"
+#include "intel_display_rpm.h"
 #include "intel_display_types.h"
 #include "intel_hdcp.h"
 #include "intel_hotplug.h"
@@ -267,12 +268,13 @@ static void intel_hpd_irq_storm_reenable_work(struct work_struct *work)
 	struct drm_i915_private *dev_priv =
 		container_of(work, typeof(*dev_priv),
 			     display.hotplug.reenable_work.work);
+	struct intel_display *display = &dev_priv->display;
 	struct drm_connector_list_iter conn_iter;
 	struct intel_connector *connector;
-	intel_wakeref_t wakeref;
+	struct ref_tracker *wakeref;
 	enum hpd_pin pin;
 
-	wakeref = intel_runtime_pm_get(&dev_priv->runtime_pm);
+	wakeref = intel_display_rpm_get(display);
 
 	spin_lock_irq(&dev_priv->irq_lock);
 
@@ -300,7 +302,7 @@ static void intel_hpd_irq_storm_reenable_work(struct work_struct *work)
 
 	spin_unlock_irq(&dev_priv->irq_lock);
 
-	intel_runtime_pm_put(&dev_priv->runtime_pm, wakeref);
+	intel_display_rpm_put(display, wakeref);
 }
 
 static enum intel_hotplug_state
