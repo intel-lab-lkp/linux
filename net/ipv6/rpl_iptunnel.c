@@ -247,6 +247,14 @@ static int rpl_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 			goto drop;
 	}
 
+	/* avoid lwtunnel_output() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (orig_dst->lwtstate == dst->lwtstate) {
+		dst_release(dst);
+		return orig_dst->lwtstate->orig_output(net, sk, skb);
+	}
+
 	skb_dst_drop(skb);
 	skb_dst_set(skb, dst);
 
@@ -304,6 +312,12 @@ static int rpl_input(struct sk_buff *skb)
 		skb_dst_drop(skb);
 		skb_dst_set(skb, dst);
 	}
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == dst->lwtstate)
+		return dst->lwtstate->orig_input(skb);
 
 	return dst_input(skb);
 
