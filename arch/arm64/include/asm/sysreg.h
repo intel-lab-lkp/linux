@@ -522,6 +522,10 @@
 #define SYS_VTCR_EL2			sys_reg(3, 4, 2, 1, 2)
 
 #define SYS_VNCR_EL2			sys_reg(3, 4, 2, 2, 0)
+
+#define SYS_HDBSSBR_EL2			sys_reg(3, 4, 2, 3, 2)
+#define SYS_HDBSSPROD_EL2		sys_reg(3, 4, 2, 3, 3)
+
 #define SYS_HAFGRTR_EL2			sys_reg(3, 4, 3, 1, 6)
 #define SYS_SPSR_EL2			sys_reg(3, 4, 4, 0, 0)
 #define SYS_ELR_EL2			sys_reg(3, 4, 4, 0, 1)
