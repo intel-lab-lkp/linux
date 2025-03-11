@@ -39,6 +39,14 @@ config RV_MON_RTAPP_BLOCK
 	  Enable rtapp_wakeup which monitors that realtime tasks are not blocked.
 	  For details, see Documentation/trace/rv/monitor_rtapp_block.rst.
 
+config RV_MON_RTAPP_PAGEFAULT
+	depends on RV
+	select DA_MON_EVENTS
+	bool "rtapp_pagefault monitor"
+	help
+	  Enable rtapp_pagefault which monitors that real-time tasks do not raise page faults.
+	  See Documentation/trace/rv/monitor_rtapp_pagefault.rst for full details.
+
 config RV_REACTORS
 	bool "Runtime verification reactors"
 	default y

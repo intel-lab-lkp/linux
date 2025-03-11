@@ -165,6 +165,26 @@ TRACE_EVENT(rtapp_block_sleep_error,
 	TP_printk("rv: %s[%d](RT) is blocked\n", __get_str(comm), __entry->pid)
 );
 #endif
+#ifdef CONFIG_RV_MON_RTAPP_PAGEFAULT
+TRACE_EVENT(rtapp_pagefault_error,
+
+	TP_PROTO(struct task_struct *task),
+
+	TP_ARGS(task),
+
+	TP_STRUCT__entry(
+		__string(comm, task->comm)
+		__field(pid_t, pid)
+	),
+
+	TP_fast_assign(
+		__assign_str(comm);
+		__entry->pid = task->pid;
+	),
+
+	TP_printk("rv: %s[%d](RT) raises a page fault", __get_str(comm), __entry->pid)
+);
+#endif
 #endif /* _TRACE_RV_H */
 
 /* This part must be outside protection */
