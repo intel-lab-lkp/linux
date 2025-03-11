@@ -104,8 +104,7 @@ int xillybus_init_chrdev(struct device *dev,
 	if (rc) {
 		dev_err(dev, "Failed to add cdev.\n");
 		/* kobject_put() is normally done by cdev_del() */
-		kobject_put(&unit->cdev->kobj);
-		goto unregister_chrdev;
+		goto err_cdev;
 	}
 
 	for (i = 0; i < num_nodes; i++) {
@@ -157,6 +156,7 @@ unroll_device_create:
 		device_destroy(&xillybus_class, MKDEV(unit->major,
 						     i + unit->lowest_minor));
 
+err_cdev:
 	cdev_del(unit->cdev);
 
 unregister_chrdev:
