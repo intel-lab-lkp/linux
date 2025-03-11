@@ -10,12 +10,32 @@
 #define MAX_DA_NAME_LEN	24
 
 #ifdef CONFIG_RV
+#include <linux/types.h>
+
 /*
  * Deterministic automaton per-object variables.
  */
 struct da_monitor {
 	bool		monitoring;
 	unsigned int	curr_state;
+};
+
+enum ltl_truth_value {
+	LTL_FALSE,
+	LTL_TRUE,
+	LTL_UNDETERMINED,
+};
+
+/*
+ * In the future, if the number of atomic propositions or the custom data size is larger, we can
+ * switch to dynamic allocation. For now, the code is simpler this way.
+ */
+#define RV_MAX_LTL_ATOM 10
+#define RV_MAX_DATA_SIZE 16
+struct ltl_monitor {
+	unsigned int		state;
+	enum ltl_truth_value	atoms[RV_MAX_LTL_ATOM];
+	u8			data[RV_MAX_DATA_SIZE];
 };
 
 /*
@@ -27,11 +47,9 @@ struct da_monitor {
 #define RV_PER_TASK_MONITORS		1
 #define RV_PER_TASK_MONITOR_INIT	(RV_PER_TASK_MONITORS)
 
-/*
- * Futher monitor types are expected, so make this a union.
- */
 union rv_task_monitor {
-	struct da_monitor da_mon;
+	struct da_monitor	da_mon;
+	struct ltl_monitor	ltl_mon;
 };
 
 #ifdef CONFIG_RV_REACTORS
