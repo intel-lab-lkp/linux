@@ -8,7 +8,7 @@ perf-sched - Tool to trace/measure scheduler properties (latencies)
 SYNOPSIS
 --------
 [verse]
-'perf sched' {record|latency|map|replay|script|timehist}
+'perf sched' {record|latency|map|replay|script|timehist|stats}
 
 DESCRIPTION
 -----------
@@ -80,8 +80,249 @@ There are several variants of 'perf sched':
     
    Times are in msec.usec.
 
+   'perf sched stats {record | report | diff} <command>' to capture, report the diff
+   in schedstat counters and show the difference between perf sched stats report.
+   schedstat counters which are present in the linux kernel which are exposed through
+   the file ``/proc/schedstat``. These counters are enabled or disabled via the
+   sysctl governed by the file ``/proc/sys/kernel/sched_schedstats``. These counters
+   accounts for many scheduler events such as ``schedule()`` calls, load-balancing
+   events, ``try_to_wakeup()`` call among others. This is useful in understading the
+   scheduler behavior for the workload.
+
+   Note: The tool will not give correct results if there is topological reordering or
+         online/offline of cpus in between capturing snapshots of `/proc/schedstat`.
+
+    Example usage:
+        perf sched stats record -- sleep 1
+        perf sched stats report
+        perf sched stats diff
+
+   A detailed description of the schedstats can be found in the Kernel Documentation:
+   https://www.kernel.org/doc/html/latest/scheduler/sched-stats.html
+
+   The result can be interprested as follows:
+
+   The `perf sched stats report` starts with description of the columns present in
+   the report. These column names are gievn before cpu and domain stats to improve
+   the readability of the report.
+
+   ----------------------------------------------------------------------------------------------------
+   DESC                    -> Description of the field
+   COUNT                   -> Value of the field
+   PCT_CHANGE              -> Percent change with corresponding base value
+   AVG_JIFFIES             -> Avg time in jiffies between two consecutive occurrence of event
+   ----------------------------------------------------------------------------------------------------
+
+   Next is the total profiling time in terms of jiffies:
+
+   ----------------------------------------------------------------------------------------------------
+   Time elapsed (in jiffies)                                   :       24537
+   ----------------------------------------------------------------------------------------------------
+
+   Next is CPU scheduling statistics. These are simple diffs of /proc/schedstat
+   CPU lines along with description. The report also prints % relative to base stat.
+
+   In the example below, schedule() left the CPU0 idle 98.19% of the time.
+   16.54% of total try_to_wake_up() was to wakeup local CPU. And, the total
+   waittime by tasks on CPU0 is 0.49% of the total runtime by tasks on the
+   same CPU.
+
+   ----------------------------------------------------------------------------------------------------
+   CPU 0
+   ----------------------------------------------------------------------------------------------------
+   DESC                                                                COUNT  PCT_CHANGE
+   ----------------------------------------------------------------------------------------------------
+   sched_yield() count                                         :           0
+   Legacy counter can be ignored                               :           0
+   schedule() called                                           :       17138
+   schedule() left the processor idle                          :       16827  (  98.19% )
+   try_to_wake_up() was called                                 :         508
+   try_to_wake_up() was called to wake up the local cpu        :          84  (  16.54% )
+   total runtime by tasks on this processor (in jiffies)       :  2408959243
+   total waittime by tasks on this processor (in jiffies)      :    11731825  (  0.49% )
+   total timeslices run on this cpu                            :         311
+   ----------------------------------------------------------------------------------------------------
+
+   Next is load balancing statistics. For each of the sched domains
+   (eg: `SMT`, `MC`, `DIE`...), the scheduler computes statistics under
+   the following three categories:
+
+   1) Idle Load Balance: Load balancing performed on behalf of a long
+                         idling CPU by some other CPU.
+   2) Busy Load Balance: Load balancing performed when the CPU was busy.
+   3) New Idle Balance : Load balancing performed when a CPU just became
+                        idle.
+
+   Under each of these three categories, sched stats report provides
+   different load balancing statistics. Along with direct stats, the
+   report also contains derived metrics prefixed with *. Example:
+
+   ----------------------------------------------------------------------------------------------------
+   CPU 0 DOMAIN SMT CPUS <0, 64>
+   ----------------------------------------------------------------------------------------------------
+   DESC                                                                     COUNT     AVG_JIFFIES
+   ----------------------------------------- <Category idle> ------------------------------------------
+   load_balance() count on cpu idle                                 :          50   $      490.74 $
+   load_balance() found balanced on cpu idle                        :          42   $      584.21 $
+   load_balance() move task failed on cpu idle                      :           8   $     3067.12 $
+   imbalance sum on cpu idle                                        :           8
+   pull_task() count on cpu idle                                    :           0
+   pull_task() when target task was cache-hot on cpu idle           :           0
+   load_balance() failed to find busier queue on cpu idle           :           0   $        0.00 $
+   load_balance() failed to find busier group on cpu idle           :          42   $      584.21 $
+   *load_balance() success count on cpu idle                        :           0
+   *avg task pulled per successful lb attempt (cpu idle)            :        0.00
+   ----------------------------------------- <Category busy> ------------------------------------------
+   load_balance() count on cpu busy                                 :           2   $    12268.50 $
+   load_balance() found balanced on cpu busy                        :           2   $    12268.50 $
+   load_balance() move task failed on cpu busy                      :           0   $        0.00 $
+   imbalance sum on cpu busy                                        :           0
+   pull_task() count on cpu busy                                    :           0
+   pull_task() when target task was cache-hot on cpu busy           :           0
+   load_balance() failed to find busier queue on cpu busy           :           0   $        0.00 $
+   load_balance() failed to find busier group on cpu busy           :           1   $    24537.00 $
+   *load_balance() success count on cpu busy                        :           0
+   *avg task pulled per successful lb attempt (cpu busy)            :        0.00
+   ---------------------------------------- <Category newidle> ----------------------------------------
+   load_balance() count on cpu newly idle                           :         427   $       57.46 $
+   load_balance() found balanced on cpu newly idle                  :         382   $       64.23 $
+   load_balance() move task failed on cpu newly idle                :          45   $      545.27 $
+   imbalance sum on cpu newly idle                                  :          48
+   pull_task() count on cpu newly idle                              :           0
+   pull_task() when target task was cache-hot on cpu newly idle     :           0
+   load_balance() failed to find busier queue on cpu newly idle     :           0   $        0.00 $
+   load_balance() failed to find busier group on cpu newly idle     :         382   $       64.23 $
+   *load_balance() success count on cpu newly idle                  :           0
+   *avg task pulled per successful lb attempt (cpu newly idle)      :        0.00
+   ----------------------------------------------------------------------------------------------------
+
+   Consider following line:
+
+   load_balance() found balanced on cpu newly idle                  :         382    $      64.23 $
+
+   While profiling was active, the load-balancer found 382 times the load
+   needs to be balanced on a newly idle CPU 0. Following value encapsulated
+   inside $ is average jiffies between two events (24537 / 382 = 64.23).
+
+   Next are active_load_balance() stats. alb did not trigger while the
+   profiling was active, hence it's all 0s.
+
+   --------------------------------- <Category active_load_balance()> ---------------------------------
+   active_load_balance() count                                      :           0
+   active_load_balance() move task failed                           :           0
+   active_load_balance() successfully moved a task                  :           0
+   ----------------------------------------------------------------------------------------------------
+
+   Next are sched_balance_exec() and sched_balance_fork() stats. They are
+   not used but we kept it in RFC just for legacy purpose. Unless opposed,
+   we plan to remove them in next revision.
+
+   Next are wakeup statistics. For every domain, the report also shows
+   task-wakeup statistics. Example:
+
+   ------------------------------------------- <Wakeup Info> ------------------------------------------
+   try_to_wake_up() awoke a task that last ran on a diff cpu       :       12070
+   try_to_wake_up() moved task because cache-cold on own cpu       :        3324
+   try_to_wake_up() started passive balancing                      :           0
+   ----------------------------------------------------------------------------------------------------
+
+   Same set of stats are reported for each CPU and each domain level.
+
+   How to interpret the diff
+   ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   The `perf sched stats diff` will also start with explaining the columns
+   present in the diff. Then it will show the diff in time in terms of
+   jiffies. The order of the values depends on the order of input data
+   files. Example:
+
+   ----------------------------------------------------------------------------------------------------
+   Time elapsed (in jiffies)                                        :        2009,       2001
+   ----------------------------------------------------------------------------------------------------
+
+   Below is the sample representing the difference in cpu and domain stats of
+   two runs. Here third column or the values enclosed in `|...|` shows the
+   percent change between the two. Second and fourth columns shows the
+   side-by-side representions of the corresponding fields from `perf sched
+   stats report`.
+
+   ----------------------------------------------------------------------------------------------------
+   CPU <ALL CPUS SUMMARY>
+   ----------------------------------------------------------------------------------------------------
+   DESC                                                                    COUNT1      COUNT2  PCT_CHANGE  PCT_CHANGE1 PCT_CHANGE2
+   ----------------------------------------------------------------------------------------------------
+   sched_yield() count                                              :           0,          0  |    0.00% |
+   Legacy counter can be ignored                                    :           0,          0  |    0.00% |
+   schedule() called                                                :      442939,     447305  |    0.99% |
+   schedule() left the processor idle                               :      154012,     174657  |   13.40% |  (   34.77,      39.05 )
+   try_to_wake_up() was called                                      :      306810,     258076  |  -15.88% |
+   try_to_wake_up() was called to wake up the local cpu             :       21313,      14130  |  -33.70% |  (    6.95,       5.48 )
+   total runtime by tasks on this processor (in jiffies)            :  6235330010, 5463133934  |  -12.38% |
+   total waittime by tasks on this processor (in jiffies)           :  8349785693, 5755097654  |  -31.07% |  (  133.91,     105.34 )
+   total timeslices run on this cpu                                 :      288869,     272599  |   -5.63% |
+   ----------------------------------------------------------------------------------------------------
+
+   Below is the sample of domain stats diff:
+
+   ----------------------------------------------------------------------------------------------------
+   CPU <ALL CPUS SUMMARY>, DOMAIN SMT CPUS <0, 64>
+   ----------------------------------------------------------------------------------------------------
+   DESC                                                                    COUNT1      COUNT2  PCT_CHANGE     AVG_JIFFIES1  AVG_JIFFIES2
+   ----------------------------------------- <Category busy> ------------------------------------------
+   load_balance() count on cpu busy                                 :         154,         80  |  -48.05% |  $       13.05,       25.01 $
+   load_balance() found balanced on cpu busy                        :         120,         66  |  -45.00% |  $       16.74,       30.32 $
+   load_balance() move task failed on cpu busy                      :           0,          4  |    0.00% |  $        0.00,      500.25 $
+   imbalance sum on cpu busy                                        :        1640,        299  |  -81.77% |
+   pull_task() count on cpu busy                                    :          55,         18  |  -67.27% |
+   pull_task() when target task was cache-hot on cpu busy           :           0,          0  |    0.00% |
+   load_balance() failed to find busier queue on cpu busy           :           0,          0  |    0.00% |  $        0.00,        0.00 $
+   load_balance() failed to find busier group on cpu busy           :         120,         66  |  -45.00% |  $       16.74,       30.32 $
+   *load_balance() success count on cpu busy                        :          34,         10  |  -70.59% |
+   *avg task pulled per successful lb attempt (cpu busy)            :        1.62,       1.80  |   11.27% |
+   ----------------------------------------- <Category idle> ------------------------------------------
+   load_balance() count on cpu idle                                 :         299,        481  |   60.87% |  $        6.72,        4.16 $
+   load_balance() found balanced on cpu idle                        :         197,        331  |   68.02% |  $       10.20,        6.05 $
+   load_balance() move task failed on cpu idle                      :           1,          2  |  100.00% |  $     2009.00,     1000.50 $
+   imbalance sum on cpu idle                                        :         145,        222  |   53.10% |
+   pull_task() count on cpu idle                                    :         133,        199  |   49.62% |
+   pull_task() when target task was cache-hot on cpu idle           :           0,          0  |    0.00% |
+   load_balance() failed to find busier queue on cpu idle           :           0,          0  |    0.00% |  $        0.00,        0.00 $
+   load_balance() failed to find busier group on cpu idle           :         197,        331  |   68.02% |  $       10.20,        6.05 $
+   *load_balance() success count on cpu idle                        :         101,        148  |   46.53% |
+   *avg task pulled per successful lb attempt (cpu idle)            :        1.32,       1.34  |    2.11% |
+   ---------------------------------------- <Category newidle> ----------------------------------------
+   load_balance() count on cpu newly idle                           :       21791,      15976  |  -26.69% |  $        0.09,        0.13 $
+   load_balance() found balanced on cpu newly idle                  :       16226,      12125  |  -25.27% |  $        0.12,        0.17 $
+   load_balance() move task failed on cpu newly idle                :         236,         88  |  -62.71% |  $        8.51,       22.74 $
+   imbalance sum on cpu newly idle                                  :        6655,       4628  |  -30.46% |
+   pull_task() count on cpu newly idle                              :        5329,       3763  |  -29.39% |
+   pull_task() when target task was cache-hot on cpu newly idle     :           0,          0  |    0.00% |
+   load_balance() failed to find busier queue on cpu newly idle     :           0,          0  |    0.00% |  $        0.00,        0.00 $
+   load_balance() failed to find busier group on cpu newly idle     :       12649,       9914  |  -21.62% |  $        0.16,        0.20 $
+   *load_balance() success count on cpu newly idle                  :        5329,       3763  |  -29.39% |
+   *avg task pulled per successful lb attempt (cpu newly idle)      :        1.00,       1.00  |    0.00% |
+   --------------------------------- <Category active_load_balance()> ---------------------------------
+   active_load_balance() count                                      :           0,          0  |    0.00% |
+   active_load_balance() move task failed                           :           0,          0  |    0.00% |
+   active_load_balance() successfully moved a task                  :           0,          0  |    0.00% |
+   --------------------------------- <Category sched_balance_exec()> ----------------------------------
+   sbe_count is not used                                            :           0,          0  |    0.00% |
+   sbe_balanced is not used                                         :           0,          0  |    0.00% |
+   sbe_pushed is not used                                           :           0,          0  |    0.00% |
+   --------------------------------- <Category sched_balance_fork()> ----------------------------------
+   sbf_count is not used                                            :           0,          0  |    0.00% |
+   sbf_balanced is not used                                         :           0,          0  |    0.00% |
+   sbf_pushed is not used                                           :           0,          0  |    0.00% |
+   ------------------------------------------ <Wakeup Info> -------------------------------------------
+   try_to_wake_up() awoke a task that last ran on a diff cpu        :       16606,      10214  |  -38.49% |
+   try_to_wake_up() moved task because cache-cold on own cpu        :        3184,       2534  |  -20.41% |
+   try_to_wake_up() started passive balancing                       :           0,          0  |    0.00% |
+   ----------------------------------------------------------------------------------------------------
+
 OPTIONS
 -------
+Applicable to {record|latency|map|replay|script}
+
 -i::
 --input=<file>::
         Input file name. (default: perf.data unless stdin is a fifo)
