@@ -27,7 +27,7 @@ enum {
 #define MT76_INCR(_var, _size) \
 	(_var = (((_var) + 1) % (_size)))
 
-int mt76_wcid_alloc(u32 *mask, int size);
+int __mt76_wcid_alloc(u32 *mask, int size, u8 flags);
 
 static inline void
 mt76_wcid_mask_set(u32 *mask, int idx)
