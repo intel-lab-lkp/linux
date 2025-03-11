@@ -561,6 +561,8 @@ static __always_inline void rt_mutex_wake_q_add(struct rt_wake_q_head *wqh,
 
 static __always_inline void rt_mutex_wake_up_q(struct rt_wake_q_head *wqh)
 {
+	trace_rt_mutex_wake_waiter_begin(current);
+
 	if (IS_ENABLED(CONFIG_PREEMPT_RT) && wqh->rtlock_task) {
 		wake_up_state(wqh->rtlock_task, TASK_RTLOCK_WAIT);
 		put_task_struct(wqh->rtlock_task);
@@ -572,6 +574,8 @@ static __always_inline void rt_mutex_wake_up_q(struct rt_wake_q_head *wqh)
 
 	/* Pairs with preempt_disable() in mark_wakeup_next_waiter() */
 	preempt_enable();
+
+	trace_rt_mutex_wake_waiter_end(current);
 }
 
 /*

@@ -13,7 +13,7 @@ config DA_MON_EVENTS_ID
 
 menuconfig RV
 	bool "Runtime Verification"
-	depends on TRACING
+	select TRACING
 	help
 	  Enable the kernel runtime verification infrastructure. RV is a
 	  lightweight (yet rigorous) method that complements classical
@@ -28,6 +28,16 @@ menuconfig RV
 source "kernel/trace/rv/monitors/wip/Kconfig"
 source "kernel/trace/rv/monitors/wwnr/Kconfig"
 # Add new monitors here
+
+config RV_MON_RTAPP_BLOCK
+	depends on RV
+	select DA_MON_EVENTS
+	select TRACE_IRQFLAGS
+	select TRACE_RT_MUTEX_WAKE_WAITER
+	bool "rtapp_block monitor"
+	help
+	  Enable rtapp_wakeup which monitors that realtime tasks are not blocked.
+	  For details, see Documentation/trace/rv/monitor_rtapp_block.rst.
 
 config RV_REACTORS
 	bool "Runtime verification reactors"

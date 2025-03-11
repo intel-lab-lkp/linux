@@ -1638,6 +1638,9 @@ config TRACE_IRQFLAGS
 	  Enables hooks to interrupt enabling and disabling for
 	  either tracing or lock debugging.
 
+config TRACE_RT_MUTEX_WAKE_WAITER
+	bool
+
 config TRACE_IRQFLAGS_NMI
 	def_bool y
 	depends on TRACE_IRQFLAGS

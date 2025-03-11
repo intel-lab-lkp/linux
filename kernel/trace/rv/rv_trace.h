@@ -121,6 +121,50 @@ DECLARE_EVENT_CLASS(error_da_monitor_id,
 // Add new monitors based on CONFIG_DA_MON_EVENTS_ID here
 
 #endif /* CONFIG_DA_MON_EVENTS_ID */
+#ifdef CONFIG_RV_MON_RTAPP_BLOCK
+TRACE_EVENT(rtapp_block_wakeup_error,
+
+	TP_PROTO(struct task_struct *task, struct task_struct *woken),
+
+	TP_ARGS(task, woken),
+
+	TP_STRUCT__entry(
+		__string(comm, task->comm)
+		__string(woken_comm, woken->comm)
+		__field(pid_t, pid)
+		__field(pid_t, woken_pid)
+	),
+
+	TP_fast_assign(
+		__assign_str(comm);
+		__assign_str(woken_comm);
+		__entry->pid = task->pid;
+		__entry->woken_pid = woken->pid;
+	),
+
+	TP_printk("rv: %s[%d](RT) was blocked by %s[%d](non-RT)\n",
+			__get_str(woken_comm), __entry->woken_pid,
+			__get_str(comm), __entry->pid)
+);
+TRACE_EVENT(rtapp_block_sleep_error,
+
+	TP_PROTO(struct task_struct *task),
+
+	TP_ARGS(task),
+
+	TP_STRUCT__entry(
+		__string(comm, task->comm)
+		__field(pid_t, pid)
+	),
+
+	TP_fast_assign(
+		__assign_str(comm);
+		__entry->pid = task->pid;
+	),
+
+	TP_printk("rv: %s[%d](RT) is blocked\n", __get_str(comm), __entry->pid)
+);
+#endif
 #endif /* _TRACE_RV_H */
 
 /* This part must be outside protection */

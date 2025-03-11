@@ -138,6 +138,18 @@ TRACE_EVENT(contention_end,
 	TP_printk("%p (ret=%d)", __entry->lock_addr, __entry->ret)
 );
 
+#ifdef CONFIG_TRACE_RT_MUTEX_WAKE_WAITER
+DECLARE_TRACE(rt_mutex_wake_waiter_begin,
+		TP_PROTO(struct task_struct *task),
+		TP_ARGS(task))
+DECLARE_TRACE(rt_mutex_wake_waiter_end,
+		TP_PROTO(struct task_struct *task),
+		TP_ARGS(task))
+#else
+#define trace_rt_mutex_wake_waiter_begin(...)
+#define trace_rt_mutex_wake_waiter_end(...)
+#endif /* CONFIG_TRACE_RT_MUTEX */
+
 #endif /* _TRACE_LOCK_H */
 
 /* This part must be outside protection */
