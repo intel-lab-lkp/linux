@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- *  comedi/drivers/tests/comedi_example_test.c
  *  Example set of unit tests.
  *
  *  COMEDI - Linux Control and Measurement Device Interface

@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
- *  comedi/drivers/ni_routing/ni_device_routes.c
  *  List of valid routes for specific NI boards.
  *
  *  COMEDI - Linux Control and Measurement Device Interface

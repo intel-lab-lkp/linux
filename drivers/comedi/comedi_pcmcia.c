@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * comedi_pcmcia.c
  * Comedi PCMCIA driver specific functions.
  *
  * COMEDI - Linux Control and Measurement Device Interface

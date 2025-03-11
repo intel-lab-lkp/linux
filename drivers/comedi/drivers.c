@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- *  module/drivers.c
  *  functions for manipulating drivers
  *
  *  COMEDI - Linux Control and Measurement Device Interface

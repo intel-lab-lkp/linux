@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0+ */
 /*
- *  comedi/drivers/tests/unittest.h
  *  Simple framework for unittests for comedi drivers.
  *
  *  COMEDI - Linux Control and Measurement Device Interface

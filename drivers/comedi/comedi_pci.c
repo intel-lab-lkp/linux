@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * comedi_pci.c
  * Comedi PCI driver specific functions.
  *
  * COMEDI - Linux Control and Measurement Device Interface

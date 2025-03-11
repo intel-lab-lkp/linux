@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * comedi/comedi_fops.c
  * comedi kernel module
  *
  * COMEDI - Linux Control and Measurement Device Interface
