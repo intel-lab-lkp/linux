@@ -13,15 +13,10 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 
-static void rv_panic_reaction(char *msg)
-{
-	panic(msg);
-}
-
 static struct rv_reactor rv_panic = {
 	.name = "panic",
 	.description = "panic the system if an exception is found.",
-	.react = rv_panic_reaction
+	.react = panic
 };
 
 static int __init register_react_panic(void)
