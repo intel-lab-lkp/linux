@@ -1027,7 +1027,7 @@ struct gem_stats {
  * this register should contribute to.
  */
 struct gem_statistic {
-	char stat_string[ETH_GSTRING_LEN];
+	char stat_string[ETH_GSTRING_LEN] __nonstring;
 	int offset;
 	u32 stat_bits;
 };
@@ -1068,6 +1068,7 @@ static const struct gem_statistic gem_statistics[] = {
 	GEM_STAT_TITLE(TX512CNT, "tx_512_1023_byte_frames"),
 	GEM_STAT_TITLE(TX1024CNT, "tx_1024_1518_byte_frames"),
 	GEM_STAT_TITLE(TX1519CNT, "tx_greater_than_1518_byte_frames"),
+
 	GEM_STAT_TITLE_BITS(TXURUNCNT, "tx_underrun",
 			    GEM_BIT(NDS_TXERR)|GEM_BIT(NDS_TXFIFOERR)),
 	GEM_STAT_TITLE_BITS(SNGLCOLLCNT, "tx_single_collision_frames",
