@@ -91,7 +91,7 @@ static void bcmgenet_mac_config(struct net_device *dev)
 	bcmgenet_umac_writel(priv, reg, UMAC_CMD);
 	spin_unlock_bh(&priv->reg_lock);
 
-	active = phy_init_eee(phydev, 0) >= 0;
+	active = phydev->drv && genphy_c45_eee_is_active(phydev, NULL) > 0;
 	bcmgenet_eee_enable_set(dev,
 				priv->eee.eee_enabled && active,
 				priv->eee.tx_lpi_enabled);

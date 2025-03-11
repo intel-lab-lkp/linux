@@ -1358,7 +1358,8 @@ static int bcmgenet_set_eee(struct net_device *dev, struct ethtool_keee *e)
 	if (!p->eee_enabled) {
 		bcmgenet_eee_enable_set(dev, false, false);
 	} else {
-		active = phy_init_eee(dev->phydev, false) >= 0;
+		active = dev->phydev->drv &&
+			 genphy_c45_eee_is_active(dev->phydev, NULL) > 0;
 		bcmgenet_umac_writel(priv, e->tx_lpi_timer, UMAC_EEE_LPI_TIMER);
 		bcmgenet_eee_enable_set(dev, active, e->tx_lpi_enabled);
 	}
