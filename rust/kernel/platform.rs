@@ -198,3 +198,5 @@ impl AsRef<device::Device> for Device {
         &self.0
     }
 }
+
+impl crate::dma::Device for Device {}
