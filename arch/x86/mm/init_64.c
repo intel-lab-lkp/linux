@@ -38,7 +38,7 @@
 #include <asm/processor.h>
 #include <asm/bios_ebda.h>
 #include <linux/uaccess.h>
-#include <asm/pgalloc.h>
+#include <linux/pgalloc.h>
 #include <asm/dma.h>
 #include <asm/fixmap.h>
 #include <asm/e820/api.h>
@@ -222,6 +222,27 @@ static void sync_global_pgds(unsigned long start, unsigned long end)
 	else
 		sync_global_pgds_l4(start, end);
 }
+
+#ifdef CONFIG_ARCH_USE_SYNC_GLOBAL_PGDS
+#if CONFIG_PGTABLE_LEVELS > 3
+void arch_sync_global_p4ds(unsigned long start, unsigned long end)
+{
+	sync_global_pgds(start, end);
+}
+
+void arch_sync_global_pgds(unsigned long start, unsigned long end) {}
+
+#if CONFIG_PGTABLE_LEVELS > 4
+void arch_sync_global_p4ds(unsigned long start, unsigned long end) {}
+
+void arch_sync_global_pgds(unsigned long start, unsigned long end)
+{
+	sync_global_pgds(start, end);
+}
+
+#endif	/* CONFIG_PGTABLE_LEVELS > 4 */
+#endif	/* CONFIG_PGTABLE_LEVELS > 3 */
+#endif	/* CONFIG_ARCH_USE_SYNC_GLOBAL_PGDS */
 
 /*
  * NOTE: This function is marked __ref because it calls __init function

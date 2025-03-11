@@ -427,6 +427,10 @@ config PGTABLE_LEVELS
 	default 3 if X86_PAE
 	default 2
 
+config ARCH_USE_SYNC_GLOBAL_PGDS
+	def_bool y
+	depends on X86_64 && (PGTABLE_LEVELS > 3)
+
 config CC_HAS_SANE_STACKPROTECTOR
 	bool
 	default $(success,$(srctree)/scripts/gcc-x86_64-has-stack-protector.sh $(CC) $(CLANG_FLAGS)) if 64BIT
