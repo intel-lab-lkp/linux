@@ -378,7 +378,15 @@ static void seg6_next_csid_advance_arg(struct in6_addr *addr,
 static int input_action_end_finish(struct sk_buff *skb,
 				   struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
+
 	seg6_lookup_nexthop(skb, NULL, 0);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 }
@@ -418,7 +426,15 @@ static int end_next_csid_core(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 static int input_action_end_x_finish(struct sk_buff *skb,
 				     struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
+
 	seg6_lookup_nexthop(skb, &slwt->nh6, 0);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 }
@@ -825,6 +841,7 @@ static int input_action_end_x(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 
 static int input_action_end_t(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	struct ipv6_sr_hdr *srh;
 
 	srh = get_and_validate_srh(skb);
@@ -834,6 +851,12 @@ static int input_action_end_t(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
 	seg6_lookup_nexthop(skb, NULL, slwt->table);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 
@@ -902,11 +925,11 @@ drop:
 static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 				       struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	struct in6_addr *nhaddr = NULL;
 	struct seg6_local_lwt *slwt;
 
-	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	slwt = seg6_local_lwtunnel(lwtst);
 
 	/* The inner packet is not associated to any local interface,
 	 * so we do not call netif_rx().
@@ -918,6 +941,12 @@ static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 		nhaddr = &slwt->nh6;
 
 	seg6_lookup_nexthop(skb, nhaddr, 0);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 }
@@ -953,13 +982,13 @@ drop:
 static int input_action_end_dx4_finish(struct net *net, struct sock *sk,
 				       struct sk_buff *skb)
 {
-	struct dst_entry *orig_dst = skb_dst(skb);
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	enum skb_drop_reason reason;
 	struct seg6_local_lwt *slwt;
 	struct iphdr *iph;
 	__be32 nhaddr;
 
-	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
+	slwt = seg6_local_lwtunnel(lwtst);
 
 	iph = ip_hdr(skb);
 
@@ -972,6 +1001,12 @@ static int input_action_end_dx4_finish(struct net *net, struct sock *sk,
 		kfree_skb_reason(skb, reason);
 		return -EINVAL;
 	}
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 }
@@ -1174,6 +1209,7 @@ drop:
 static int input_action_end_dt4(struct sk_buff *skb,
 				struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	enum skb_drop_reason reason;
 	struct iphdr *iph;
 
@@ -1196,6 +1232,12 @@ static int input_action_end_dt4(struct sk_buff *skb,
 	reason = ip_route_input(skb, iph->daddr, iph->saddr, 0, skb->dev);
 	if (unlikely(reason))
 		goto drop;
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 
@@ -1255,6 +1297,8 @@ static int seg6_end_dt6_build(struct seg6_local_lwt *slwt, const void *cfg,
 static int input_action_end_dt6(struct sk_buff *skb,
 				struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
+
 	if (!decap_and_validate(skb, IPPROTO_IPV6))
 		goto drop;
 
@@ -1279,6 +1323,12 @@ static int input_action_end_dt6(struct sk_buff *skb,
 	 */
 	seg6_lookup_any_nexthop(skb, NULL, 0, true);
 
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
+
 	return dst_input(skb);
 
 legacy_mode:
@@ -1286,6 +1336,12 @@ legacy_mode:
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
 	seg6_lookup_any_nexthop(skb, NULL, slwt->table, true);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 
@@ -1327,6 +1383,7 @@ drop:
 /* push an SRH on top of the current one */
 static int input_action_end_b6(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	struct ipv6_sr_hdr *srh;
 	int err = -EINVAL;
 
@@ -1342,6 +1399,12 @@ static int input_action_end_b6(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 
 	seg6_lookup_nexthop(skb, NULL, 0);
 
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
+
 	return dst_input(skb);
 
 drop:
@@ -1353,6 +1416,7 @@ drop:
 static int input_action_end_b6_encap(struct sk_buff *skb,
 				     struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	struct ipv6_sr_hdr *srh;
 	int err = -EINVAL;
 
@@ -1372,6 +1436,12 @@ static int input_action_end_b6_encap(struct sk_buff *skb,
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
 	seg6_lookup_nexthop(skb, NULL, 0);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 
@@ -1411,6 +1481,7 @@ bool seg6_bpf_has_valid_srh(struct sk_buff *skb)
 static int input_action_end_bpf(struct sk_buff *skb,
 				struct seg6_local_lwt *slwt)
 {
+	struct lwtunnel_state *lwtst = skb_dst(skb)->lwtstate;
 	struct seg6_bpf_srh_state *srh_state;
 	struct ipv6_sr_hdr *srh;
 	int ret;
@@ -1456,6 +1527,12 @@ static int input_action_end_bpf(struct sk_buff *skb,
 
 	if (ret != BPF_REDIRECT)
 		seg6_lookup_nexthop(skb, NULL, 0);
+
+	/* avoid lwtunnel_input() reentry loop when destination is the same
+	 * after transformation
+	 */
+	if (lwtst == skb_dst(skb)->lwtstate)
+		return lwtst->orig_input(skb);
 
 	return dst_input(skb);
 
