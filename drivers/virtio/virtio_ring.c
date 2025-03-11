@@ -875,9 +875,10 @@ static void virtqueue_disable_cb_split(struct virtqueue *_vq)
 
 		/*
 		 * If device triggered an event already it won't trigger one again:
-		 * no need to disable.
+		 * no need to disable. smp_load_acquire pairs with smp_store_release()
+		 * in virtqueue_enable_cb_delayed()
 		 */
-		if (vq->event_triggered)
+		if (smp_load_acquire(&vq->event_triggered))
 			return;
 
 		if (vq->event)
@@ -1802,9 +1803,10 @@ static void virtqueue_disable_cb_packed(struct virtqueue *_vq)
 
 		/*
 		 * If device triggered an event already it won't trigger one again:
-		 * no need to disable.
+		 * no need to disable. smp_load_acquire pairs with smp_store_release()
+		 * in virtqueue_enable_cb_delayed()
 		 */
-		if (vq->event_triggered)
+		if (smp_load_acquire(&vq->event_triggered))
 			return;
 
 		vq->packed.vring.driver->flags =
@@ -2650,7 +2652,8 @@ bool virtqueue_enable_cb_delayed(struct virtqueue *_vq)
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
 	if (vq->event_triggered)
-		vq->event_triggered = false;
+		/* Pairs with smp_load_acquire in virtqueue_disable_cb_split/packed() */
+		smp_store_release(&vq->event_triggered, false);
 
 	return vq->packed_ring ? virtqueue_enable_cb_delayed_packed(_vq) :
 				 virtqueue_enable_cb_delayed_split(_vq);
