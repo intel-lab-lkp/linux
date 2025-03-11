@@ -8,7 +8,7 @@
 
 static inline bool ufshcd_is_user_access_allowed(struct ufs_hba *hba)
 {
-	return !hba->shutting_down;
+	return !atomic_read(&hba->shutting_down);
 }
 
 void ufshcd_schedule_eh_work(struct ufs_hba *hba);

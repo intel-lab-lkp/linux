@@ -1743,12 +1743,10 @@ static ssize_t ufshcd_clkscale_enable_store(struct device *dev,
 	if (kstrtou32(buf, 0, &value))
 		return -EINVAL;
 
-	down(&hba->host_sem);
-	if (!ufshcd_is_user_access_allowed(hba)) {
-		err = -EBUSY;
-		goto out;
-	}
+	if (!ufshcd_is_user_access_allowed(hba))
+		return -EBUSY;
 
+	down(&hba->host_sem);
 	value = !!value;
 	if (value == hba->clk_scaling.is_enabled)
 		goto out;
@@ -6422,8 +6420,7 @@ static void ufshcd_err_handling_unprepare(struct ufs_hba *hba)
 
 static inline bool ufshcd_err_handling_should_stop(struct ufs_hba *hba)
 {
-	return (!hba->is_powered || hba->shutting_down ||
-		!hba->ufs_device_wlun ||
+	return (!hba->is_powered || !hba->ufs_device_wlun ||
 		hba->ufshcd_state == UFSHCD_STATE_ERROR ||
 		(!(hba->saved_err || hba->saved_uic_err || hba->force_reset ||
 		   ufshcd_is_link_broken(hba))));
@@ -6547,9 +6544,12 @@ static void ufshcd_err_handler(struct work_struct *work)
 	dev_info(hba->dev,
 		 "%s started; HBA state %s; powered %d; shutting down %d; saved_err = %d; saved_uic_err = %d; force_reset = %d%s\n",
 		 __func__, ufshcd_state_name[hba->ufshcd_state],
-		 hba->is_powered, hba->shutting_down, hba->saved_err,
+		 hba->is_powered, atomic_read(&hba->shutting_down), hba->saved_err,
 		 hba->saved_uic_err, hba->force_reset,
 		 ufshcd_is_link_broken(hba) ? "; link is broken" : "");
+
+	if (!ufshcd_is_user_access_allowed(hba))
+		return;
 
 	down(&hba->host_sem);
 	spin_lock_irqsave(hba->host->host_lock, flags);
@@ -10177,10 +10177,7 @@ static void ufshcd_wl_shutdown(struct device *dev)
 	struct scsi_device *sdev = to_scsi_device(dev);
 	struct ufs_hba *hba = shost_priv(sdev->host);
 
-	down(&hba->host_sem);
-	hba->shutting_down = true;
-	up(&hba->host_sem);
-
+	atomic_set(&hba->shutting_down, 1);
 	/* Turn on everything while shutting down */
 	ufshcd_rpm_get_sync(hba);
 	scsi_device_quiesce(sdev);

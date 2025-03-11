@@ -1045,7 +1045,7 @@ struct ufs_hba {
 	u16 ee_usr_mask;
 	struct mutex ee_ctrl_mutex;
 	bool is_powered;
-	bool shutting_down;
+	atomic_t shutting_down;
 	struct semaphore host_sem;
 
 	/* Work Queues */
