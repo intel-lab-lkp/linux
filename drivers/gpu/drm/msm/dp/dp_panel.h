@@ -7,6 +7,7 @@
 #define _DP_PANEL_H_
 
 #include <drm/msm_drm.h>
+#include <drm/display/drm_dp_helper.h>
 
 #include "dp_aux.h"
 #include "dp_link.h"
@@ -49,6 +50,7 @@ int msm_dp_panel_init_panel_info(struct msm_dp_panel *msm_dp_panel);
 int msm_dp_panel_deinit(struct msm_dp_panel *msm_dp_panel);
 int msm_dp_panel_timing_cfg(struct msm_dp_panel *msm_dp_panel);
 int msm_dp_panel_read_sink_caps(struct msm_dp_panel *msm_dp_panel,
+		const u8 lttpr_common_caps[DP_LTTPR_COMMON_CAP_SIZE],
 		struct drm_connector *connector);
 u32 msm_dp_panel_get_mode_bpp(struct msm_dp_panel *msm_dp_panel, u32 mode_max_bpp,
 			u32 mode_pclk_khz);
