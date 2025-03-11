@@ -44,7 +44,7 @@ struct ltl_monitor {
  * adding more or developing a dynamic method. So far, none of
  * these are justified.
  */
-#define RV_PER_TASK_MONITORS		1
+#define RV_PER_TASK_MONITORS		2
 #define RV_PER_TASK_MONITOR_INIT	(RV_PER_TASK_MONITORS)
 
 union rv_task_monitor {
