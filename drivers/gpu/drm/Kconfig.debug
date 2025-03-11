@@ -111,5 +111,18 @@ config DRM_SCHED_KUNIT_TEST
 
 	  If in doubt, say "N".
 
+config DRM_SCHED_KUNIT_TEST_ASPIRATIONAL
+	bool "Aspirational mode for DRM scheduler unit tests" if !KUNIT_ALL_TESTS
+	depends on DRM && KUNIT && DRM_SCHED_KUNIT_TEST
+	default n
+	help
+	  Choose this option to make the DRM scheduler unit tests test for
+	  behaviour which was agreed as a design goal, even if the current
+	  implementation can make specific tests fail.
+
+	  Recommended for driver developers only.
+
+	  If in doubt, say "N".
+
 config DRM_EXPORT_FOR_TESTS
 	bool

@@ -261,8 +261,12 @@ struct drm_mock_scheduler *drm_mock_sched_new(struct kunit *test)
 void drm_mock_sched_fini(struct drm_mock_scheduler *sched)
 {
 	struct drm_mock_sched_job *job, *next;
+	struct kunit  *test = sched->test;
 	unsigned long flags;
 	LIST_HEAD(signal);
+
+	if (IS_ENABLED(CONFIG_DRM_SCHED_KUNIT_TEST_ASPIRATIONAL))
+		goto sched_fini;
 
 	drm_sched_wqueue_stop(&sched->base);
 
@@ -278,7 +282,13 @@ void drm_mock_sched_fini(struct drm_mock_scheduler *sched)
 		drm_sched_job_cleanup(&job->base);
 	}
 
+sched_fini:
 	drm_sched_fini(&sched->base);
+
+	if (IS_ENABLED(CONFIG_DRM_SCHED_KUNIT_TEST_ASPIRATIONAL)) {
+		KUNIT_ASSERT_TRUE(test, list_empty(&sched->job_list));
+		KUNIT_ASSERT_TRUE(test, list_empty(&sched->base.pending_list));
+	}
 }
 
 /**
