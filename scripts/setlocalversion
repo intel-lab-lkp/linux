@@ -186,7 +186,7 @@ if ${no_local}; then
 	exit 0
 fi
 
-if ! test -e include/config/auto.conf; then
+if ! test -e ${objtree}/include/config/auto.conf; then
 	echo "Error: kernelrelease not valid - run 'make prepare' to update it" >&2
 	exit 1
 fi
