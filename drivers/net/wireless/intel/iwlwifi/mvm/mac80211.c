@@ -6255,7 +6255,7 @@ static void iwl_mvm_set_sta_rate(u32 rate_n_flags, struct rate_info *rinfo)
 void iwl_mvm_mac_sta_statistics(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_sta *sta,
-				struct station_info *sinfo)
+				struct link_station_info *sinfo)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
@@ -6663,7 +6663,7 @@ const struct ieee80211_ops iwl_mvm_hw_ops = {
 	.set_default_unicast_key = iwl_mvm_set_default_unicast_key,
 #endif
 	.get_survey = iwl_mvm_mac_get_survey,
-	.sta_statistics = iwl_mvm_mac_sta_statistics,
+	.link_sta_statistics = iwl_mvm_mac_sta_statistics,
 	.get_ftm_responder_stats = iwl_mvm_mac_get_ftm_responder_stats,
 	.start_pmsr = iwl_mvm_start_pmsr,
 	.abort_pmsr = iwl_mvm_abort_pmsr,

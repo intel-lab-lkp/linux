@@ -1396,6 +1396,10 @@ static int link_show(struct seq_file *s, void *data)
 	if (!sinfo)
 		return -ENOMEM;
 
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
 	for (i = 0; i < wil->max_assoc_sta; i++) {
 		struct wil_sta_info *p = &wil->sta[i];
 		char *status = "unknown";
@@ -1427,16 +1431,17 @@ static int link_show(struct seq_file *s, void *data)
 				goto out;
 
 			seq_printf(s, "  Tx_mcs = %s\n",
-				   WIL_EXTENDED_MCS_CHECK(sinfo->txrate.mcs));
+				   WIL_EXTENDED_MCS_CHECK(sinfo->links[0]->txrate.mcs));
 			seq_printf(s, "  Rx_mcs = %s\n",
-				   WIL_EXTENDED_MCS_CHECK(sinfo->rxrate.mcs));
-			seq_printf(s, "  SQ     = %d\n", sinfo->signal);
+				   WIL_EXTENDED_MCS_CHECK(sinfo->links[0]->rxrate.mcs));
+			seq_printf(s, "  SQ     = %d\n", sinfo->links[0]->signal);
 		} else {
 			seq_puts(s, "  INVALID MID\n");
 		}
 	}
 
 out:
+	kfree(sinfo->links[0]);
 	kfree(sinfo);
 	return rc;
 }

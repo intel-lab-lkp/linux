@@ -2634,7 +2634,7 @@ static void sta_set_mesh_sinfo(struct sta_info *sta,
 }
 #endif
 
-static void sta_set_link_sinfo(struct sta_info *sta, struct station_info *sinfo,
+static void sta_set_link_sinfo(struct sta_info *sta, struct link_station_info *sinfo,
 			       struct ieee80211_link_data *link_sdata, bool tidstats)
 {
 	struct link_sta_info *link_sta_info = &sta->deflink;
@@ -2653,7 +2653,7 @@ static void sta_set_link_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	if (sdata->vif.type == NL80211_IFTYPE_STATION)
 		sinfo->rx_beacon = link_sdata->u.mgd.count_beacon_signal;
 
-	drv_sta_statistics(local, sdata, &sta->sta, sinfo);
+	drv_link_sta_statistics(local, sdata, &sta->sta, sinfo);
 	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME) |
 			 BIT_ULL(NL80211_STA_INFO_BSS_PARAM) |
 			 BIT_ULL(NL80211_STA_INFO_RX_DROP_MISC);
@@ -2849,6 +2849,7 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 		   bool tidstats)
 {
 	struct ieee80211_sub_if_data *sdata = sta->sdata;
+	struct link_station_info *link_sinfo = sinfo->links[0];
 	struct ieee80211_link_data *link_sdata = &sdata->deflink;
 
 	sinfo->generation = sdata->local->sta_generation;
@@ -2888,7 +2889,11 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	if (test_sta_flag(sta, WLAN_STA_TDLS_PEER))
 		sinfo->sta_flags.set |= BIT(NL80211_STA_FLAG_TDLS_PEER);
 
-	sta_set_link_sinfo(sta, sinfo, link_sdata, tidstats);
+	link_sinfo = kzalloc(sizeof(*link_sinfo), GFP_KERNEL);
+	if (!link_sinfo)
+		return;
+
+	sta_set_link_sinfo(sta, link_sinfo, link_sdata, tidstats);
 }
 
 u32 sta_get_expected_throughput(struct sta_info *sta)
