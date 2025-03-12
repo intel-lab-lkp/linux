@@ -3389,6 +3389,13 @@ struct iw_node_attr {
 	int nid;
 };
 
+struct iw_node_group {
+	struct kobject *wi_kobj;
+	struct iw_node_attr **nattrs;
+};
+
+static struct iw_node_group *ngrp;
+
 static ssize_t node_show(struct kobject *kobj, struct kobj_attribute *attr,
 			 char *buf)
 {
@@ -3431,24 +3438,22 @@ static ssize_t node_store(struct kobject *kobj, struct kobj_attribute *attr,
 	return count;
 }
 
-static struct iw_node_attr **node_attrs;
-
-static void sysfs_wi_node_release(struct iw_node_attr *node_attr,
-				  struct kobject *parent)
+static void sysfs_wi_node_release(int nid)
 {
-	if (!node_attr)
+	if (!ngrp->nattrs[nid])
 		return;
-	sysfs_remove_file(parent, &node_attr->kobj_attr.attr);
-	kfree(node_attr->kobj_attr.attr.name);
-	kfree(node_attr);
+
+	sysfs_remove_file(ngrp->wi_kobj, &ngrp->nattrs[nid]->kobj_attr.attr);
+	kfree(ngrp->nattrs[nid]->kobj_attr.attr.name);
+	kfree(ngrp->nattrs[nid]);
 }
 
 static void sysfs_wi_release(struct kobject *wi_kobj)
 {
-	int i;
+	int nid;
 
-	for (i = 0; i < nr_node_ids; i++)
-		sysfs_wi_node_release(node_attrs[i], wi_kobj);
+	for (nid = 0; nid < nr_node_ids; nid++)
+		sysfs_wi_node_release(nid);
 	kobject_put(wi_kobj);
 }
 
@@ -3457,7 +3462,7 @@ static const struct kobj_type wi_ktype = {
 	.release = sysfs_wi_release,
 };
 
-static int add_weight_node(int nid, struct kobject *wi_kobj)
+static int sysfs_wi_node_add(int nid)
 {
 	struct iw_node_attr *node_attr;
 	char *name;
@@ -3479,18 +3484,16 @@ static int add_weight_node(int nid, struct kobject *wi_kobj)
 	node_attr->kobj_attr.store = node_store;
 	node_attr->nid = nid;
 
-	if (sysfs_create_file(wi_kobj, &node_attr->kobj_attr.attr)) {
+	if (sysfs_create_file(ngrp->wi_kobj, &node_attr->kobj_attr.attr)) {
 		kfree(node_attr->kobj_attr.attr.name);
 		kfree(node_attr);
 		pr_err("failed to add attribute to weighted_interleave\n");
 		return -ENOMEM;
 	}
 
-	node_attrs[nid] = node_attr;
+	ngrp->nattrs[nid] = node_attr;
 	return 0;
 }
-
-struct kobject *wi_kobj;
 
 static int wi_node_notifier(struct notifier_block *nb,
 			       unsigned long action, void *data)
@@ -3504,15 +3507,15 @@ static int wi_node_notifier(struct notifier_block *nb,
 
 	switch(action) {
 	case MEM_ONLINE:
-		err = add_weight_node(nid, wi_kobj);
+		err = sysfs_wi_node_add(nid);
 		if (err) {
 			pr_err("failed to add sysfs [node%d]\n", nid);
-			kobject_put(wi_kobj);
+			kobject_put(ngrp->wi_kobj);
 			return NOTIFY_BAD;
 		}
 		break;
 	case MEM_OFFLINE:
-		sysfs_wi_node_release(node_attrs[nid], wi_kobj);
+		sysfs_wi_node_release(nid);
 		break;
 	}
 
@@ -3524,14 +3527,14 @@ static int add_weighted_interleave_group(struct kobject *root_kobj)
 {
 	int nid, err;
 
-	wi_kobj = kzalloc(sizeof(struct kobject), GFP_KERNEL);
-	if (!wi_kobj)
+	ngrp->wi_kobj = kzalloc(sizeof(struct kobject), GFP_KERNEL);
+	if (!ngrp->wi_kobj)
 		return -ENOMEM;
 
-	err = kobject_init_and_add(wi_kobj, &wi_ktype, root_kobj,
+	err = kobject_init_and_add(ngrp->wi_kobj, &wi_ktype, root_kobj,
 				   "weighted_interleave");
 	if (err) {
-		kfree(wi_kobj);
+		kfree(ngrp->wi_kobj);
 		return err;
 	}
 
@@ -3539,7 +3542,7 @@ static int add_weighted_interleave_group(struct kobject *root_kobj)
 		if (!node_state(nid, N_MEMORY))
 			continue;
 
-		err = add_weight_node(nid, wi_kobj);
+		err = sysfs_wi_node_add(nid);
 		if (err) {
 			pr_err("failed to add sysfs [node%d]\n", nid);
 			goto err_out;
@@ -3550,7 +3553,7 @@ static int add_weighted_interleave_group(struct kobject *root_kobj)
 	return 0;
 
 err_out:
-	kobject_put(wi_kobj);
+	kobject_put(ngrp->wi_kobj);
 	return err;
 }
 
@@ -3565,7 +3568,9 @@ static void mempolicy_kobj_release(struct kobject *kobj)
 	mutex_unlock(&iw_table_lock);
 	synchronize_rcu();
 	kfree(old);
-	kfree(node_attrs);
+
+	kfree(ngrp->nattrs);
+	kfree(ngrp);
 	kfree(kobj);
 }
 
@@ -3578,17 +3583,23 @@ static int __init mempolicy_sysfs_init(void)
 	int err;
 	static struct kobject *mempolicy_kobj;
 
-	node_attrs = kcalloc(nr_node_ids, sizeof(struct iw_node_attr *),
-			     GFP_KERNEL);
-	if (!node_attrs) {
+	ngrp = kzalloc(sizeof(*ngrp), GFP_KERNEL);
+	if (!ngrp) {
 		err = -ENOMEM;
 		goto err_out;
+	}
+
+	ngrp->nattrs = kcalloc(nr_node_ids, sizeof(struct iw_node_attr *),
+			       GFP_KERNEL);
+	if (!ngrp->nattrs) {
+		err = -ENOMEM;
+		goto ngrp_out;
 	}
 
 	mempolicy_kobj = kzalloc(sizeof(*mempolicy_kobj), GFP_KERNEL);
 	if (!mempolicy_kobj) {
 		err = -ENOMEM;
-		goto node_out;
+		goto nattr_out;
 	}
 
 	err = kobject_init_and_add(mempolicy_kobj, &mempolicy_ktype, mm_kobj,
@@ -3606,12 +3617,13 @@ static int __init mempolicy_sysfs_init(void)
 
 	return 0;
 
-node_out:
-	kfree(node_attrs);
+nattr_out:
+	kfree(ngrp->nattrs);
+ngrp_out:
+	kfree(ngrp);
 err_out:
 	pr_err("mempolicy sysfs structure failed to initialize\n");
 	return err;
-
 }
 
 late_initcall(mempolicy_sysfs_init);
