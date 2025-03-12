@@ -142,13 +142,6 @@ but depends on the BIOS to behave correctly.
 Note TDX works with CPU logical online/offline, thus the kernel still
 allows to offline logical CPU and online it again.
 
-Kexec()
-~~~~~~~
-
-TDX host support currently lacks the ability to handle kexec.  For
-simplicity only one of them can be enabled in the Kconfig.  This will be
-fixed in the future.
-
 Erratum
 ~~~~~~~
 
@@ -170,6 +163,16 @@ software-triggered issue.  But in the end, this issue is hard to trigger.
 If the platform has such erratum, the kernel prints additional message in
 machine check handler to tell user the machine check may be caused by
 kernel bug on TDX private memory.
+
+Kexec
+~~~~~~~
+
+Kexec/kdump works normally when TDX is enabled in the kernel.  One
+limitation is if the old kernel has ever enabled TDX the new kernel won't
+be able to use TDX anymore.
+
+One exception is kexec/kdump are disabled on the platform with the TDX
+"tdx_pw_mce" erratum.  This will be enhanced in the future.
 
 Interaction vs S3 and deeper states
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
