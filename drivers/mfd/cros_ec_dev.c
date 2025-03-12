@@ -5,6 +5,7 @@
  * Copyright (C) 2014 Google, Inc.
  */
 
+#include <linux/acpi.h>
 #include <linux/dmi.h>
 #include <linux/kconfig.h>
 #include <linux/mfd/core.h>
@@ -129,11 +130,6 @@ static const struct cros_feature_to_cells cros_subdevices[] = {
 		.num_cells	= ARRAY_SIZE(cros_ec_rtc_cells),
 	},
 	{
-		.id		= EC_FEATURE_UCSI_PPM,
-		.mfd_cells	= cros_ec_ucsi_cells,
-		.num_cells	= ARRAY_SIZE(cros_ec_ucsi_cells),
-	},
-	{
 		.id		= EC_FEATURE_HANG_DETECT,
 		.mfd_cells	= cros_ec_wdt_cells,
 		.num_cells	= ARRAY_SIZE(cros_ec_wdt_cells),
@@ -168,6 +164,15 @@ static const struct mfd_cell cros_ec_lightbar_cells[] = {
 static const struct mfd_cell cros_ec_vbc_cells[] = {
 	{ .name = "cros-ec-vbc", }
 };
+
+
+static int ucsi_acpi_match(struct device *dev, void *data)
+{
+	struct acpi_device_id ucsi_acpi_device_ids[] = {
+		{ "GOOG0021", 0 },
+	};
+	return !!acpi_match_device(ucsi_acpi_device_ids, dev);
+}
 
 static void cros_ec_class_release(struct device *dev)
 {
@@ -253,6 +258,30 @@ static int ec_device_probe(struct platform_device *pdev)
 					"failed to add %s subdevice: %d\n",
 					cros_subdevices[i].mfd_cells->name,
 					retval);
+		}
+	}
+
+	/*
+	 * FW nodes can load cros_ec_ucsi, but early PDC devices did not define
+	 * the required nodes. On PDC systems without FW nodes for cros_ec_ucsi,
+	 * the driver should be added as an mfd subdevice.
+	 */
+	if (cros_ec_check_features(ec, EC_FEATURE_USB_PD) &&
+	    cros_ec_check_features(ec, EC_FEATURE_UCSI_PPM)) {
+		struct device *acpi_dev = device_find_child(ec->ec_dev->dev,
+							    NULL,
+							    ucsi_acpi_match);
+
+		if (!!acpi_dev) {
+			put_device(acpi_dev);
+		} else if (!of_find_compatible_node(NULL, NULL, "google,cros-ec-ucsi")) {
+			retval = mfd_add_hotplug_devices(ec->dev,
+						cros_ec_ucsi_cells,
+						ARRAY_SIZE(cros_ec_ucsi_cells));
+			if (retval)
+				dev_warn(ec->dev,
+					 "failed to add cros_ec_ucsi: %d\n",
+					 retval);
 		}
 	}
 
