@@ -62,7 +62,7 @@ static const char *page_type_name(unsigned int page_type)
 {
 	unsigned i = (page_type >> 24) - 0xf0;
 
-	if (i >= ARRAY_SIZE(page_type_names))
+	if (i < 0 || i >= ARRAY_SIZE(page_type_names))
 		return "unknown";
 	return page_type_names[i];
 }
@@ -137,15 +137,15 @@ static void __dump_page(const struct page *page)
 again:
 	memcpy(&precise, page, sizeof(*page));
 	head = precise.compound_head;
-	if ((head & 1) == 0) {
+	if (head & 1) {
+		foliop = (struct folio *)(head - 1);
+		idx = folio_page_idx(foliop, page);
+	} else {
 		foliop = (struct folio *)&precise;
 		idx = 0;
 		if (!folio_test_large(foliop))
 			goto dump;
 		foliop = (struct folio *)page;
-	} else {
-		foliop = (struct folio *)(head - 1);
-		idx = folio_page_idx(foliop, page);
 	}
 
 	if (idx < MAX_FOLIO_NR_PAGES) {
@@ -173,7 +173,7 @@ dump:
 void dump_page(const struct page *page, const char *reason)
 {
 	if (PagePoisoned(page))
-		pr_warn("page:%p is uninitialized and poisoned", page);
+		pr_warn("page:%p is uninitialized and poisoned\n", page);
 	else
 		__dump_page(page);
 	if (reason)
