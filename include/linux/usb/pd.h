@@ -204,6 +204,37 @@ struct pd_message {
 	};
 } __packed;
 
+/*
+ * count_chunked_data_objs: Helper to calculate number of Data Objects on a 4
+ *   byte boundary.
+ * @size: Size of data block for extended message. Should *not* include extended
+ *   header size.
+ */
+static inline u8 count_chunked_data_objs(u32 size)
+{
+	size += offsetof(struct pd_chunked_ext_message_data, data);
+	return ((size / 4) + (size % 4 ? 1 : 0));
+}
+
+/**
+ * batt_cap_ext_msg - Battery capability extended PD message
+ * @vid: Battery Vendor ID (assigned by USB-IF)
+ * @pid: Battery Product ID (assigned by battery or device vendor)
+ * @batt_design_cap: Battery design capacity in 0.1Wh
+ * @batt_last_chg_cap: Battery last full charge capacity in 0.1Wh
+ * @batt_type: Battery Type. bit0 when set indicates invalid battery reference.
+ *             Rest of the bits are reserved.
+ */
+struct batt_cap_ext_msg {
+	__le16 vid;
+	__le16 pid;
+	__le16 batt_design_cap;
+	__le16 batt_last_chg_cap;
+	u8 batt_type;
+} __packed;
+
+#define BATT_CAP_BATT_TYPE_INVALID_REF			BIT(0)
+
 /* PDO: Power Data Object */
 #define PDO_MAX_OBJECTS		7
 
