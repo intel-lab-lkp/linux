@@ -296,6 +296,8 @@ struct smc_sock {				/* smc sock container */
 						/* original write_space fct. */
 	void			(*clcsk_error_report)(struct sock *sk);
 						/* original error_report fct. */
+	void			(*clcsk_destruct)(struct sock *sk);
+						/* original destruct fct. */
 	struct smc_connection	conn;		/* smc connection */
 	struct smc_sock		*listen_smc;	/* listen parent */
 	struct work_struct	connect_work;	/* handle non-blocking connect*/
@@ -340,11 +342,7 @@ static inline void smc_init_saved_callbacks(struct smc_sock *smc)
 	smc->clcsk_error_report	= NULL;
 }
 
-static inline struct smc_sock *smc_clcsock_user_data(const struct sock *clcsk)
-{
-	return (struct smc_sock *)
-	       ((uintptr_t)clcsk->sk_user_data & ~SK_USER_DATA_NOCOPY);
-}
+#define smc_sk_from_clcsk(sk)	(tcp_sk(sk)->smc_ctx)
 
 /* save target_cb in saved_cb, and replace target_cb with new_cb */
 static inline void smc_clcsock_replace_cb(void (**target_cb)(struct sock *),
