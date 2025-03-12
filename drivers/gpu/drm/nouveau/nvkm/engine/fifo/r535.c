@@ -39,6 +39,7 @@
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080ce.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080fifo.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080gpu.h>
+#include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080gr.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080internal.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrla06f/ctrla06fgpfifo.h>
 #include <nvrm/535.113.01/nvidia/generated/g_kernel_channel_nvoc.h>
@@ -328,6 +329,30 @@ r535_chan_id_get(struct nvkm_chan *chan, struct nvkm_memory *muserd, u64 ouserd)
 	return ret;
 }
 
+static int
+r535_chan_set_zcull_ctxsw_buffer(struct nvkm_chan *chan, u64 addr)
+{
+	NV2080_CTRL_GR_CTXSW_ZCULL_BIND_PARAMS *ctrl;
+
+	ctrl = nvkm_gsp_rm_ctrl_get(&chan->vmm->rm.device.subdevice,
+		NV2080_CTRL_CMD_GR_CTXSW_ZCULL_BIND, sizeof(*ctrl));
+
+	if (WARN_ON(IS_ERR(ctrl)))
+		return PTR_ERR(ctrl);
+
+	ctrl->hClient = chan->vmm->rm.client.object.handle;
+	ctrl->hChannel = chan->rm.object.handle;
+	if (addr) {
+		ctrl->vMemPtr = addr;
+		ctrl->zcullMode = NV2080_CTRL_CTXSW_ZCULL_MODE_SEPARATE_BUFFER;
+	} else {
+		ctrl->vMemPtr = 0;
+		ctrl->zcullMode = NV2080_CTRL_CTXSW_ZCULL_MODE_NO_CTXSW;
+	}
+
+	return nvkm_gsp_rm_ctrl_wr(&chan->vmm->rm.device.subdevice, ctrl);
+}
+
 static const struct nvkm_chan_func
 r535_chan = {
 	.id_get = r535_chan_id_get,
@@ -338,6 +363,7 @@ r535_chan = {
 	.start = r535_chan_start,
 	.stop = r535_chan_stop,
 	.doorbell_handle = r535_chan_doorbell_handle,
+	.set_zcull_ctxsw_buffer = r535_chan_set_zcull_ctxsw_buffer,
 };
 
 static const struct nvkm_cgrp_func

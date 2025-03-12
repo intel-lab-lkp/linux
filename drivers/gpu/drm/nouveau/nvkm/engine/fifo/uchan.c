@@ -31,6 +31,7 @@
 #include <subdev/mmu.h>
 #include <engine/dma.h>
 
+#include <nvkm/engine/gr.h>
 #include <nvif/if0020.h>
 
 struct nvkm_uchan {
@@ -269,6 +270,21 @@ nvkm_uchan_map(struct nvkm_object *object, void *argv, u32 argc,
 }
 
 static int
+nvkm_uchan_mthd(struct nvkm_object *object, u32 mthd, void *argv, u32 argc)
+{
+	struct nvkm_chan *chan = nvkm_uchan(object)->chan;
+	struct nvif_chan_mthd_set_zcull_ctxsw_buffer *args = argv;
+
+	if (mthd != NVIF_CHAN_MTHD_SET_ZCULL_CTXSW_BUFFER)
+		return -ENOTTY;
+
+	if (argc < sizeof(*args))
+		return -EINVAL;
+
+	return nvkm_chan_set_zcull_ctxsw_buffer(chan, args->addr);
+}
+
+static int
 nvkm_uchan_fini(struct nvkm_object *object, bool suspend)
 {
 	struct nvkm_chan *chan = nvkm_uchan(object)->chan;
@@ -312,6 +328,7 @@ nvkm_uchan = {
 	.dtor = nvkm_uchan_dtor,
 	.init = nvkm_uchan_init,
 	.fini = nvkm_uchan_fini,
+	.mthd = nvkm_uchan_mthd,
 	.map = nvkm_uchan_map,
 	.sclass = nvkm_uchan_sclass,
 	.uevent = nvkm_uchan_uevent,

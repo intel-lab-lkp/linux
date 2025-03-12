@@ -42,4 +42,10 @@ union nvif_chan_event_args {
 		__u8 type;
 	} v0;
 };
+
+#define NVIF_CHAN_MTHD_SET_ZCULL_CTXSW_BUFFER 0x00000000
+
+struct nvif_chan_mthd_set_zcull_ctxsw_buffer {
+	u64 addr;
+};
 #endif

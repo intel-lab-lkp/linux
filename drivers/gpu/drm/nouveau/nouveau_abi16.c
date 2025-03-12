@@ -27,6 +27,7 @@
 #include <nvif/ioctl.h>
 #include <nvif/class.h>
 #include <nvif/cl0002.h>
+#include <nvif/if0020.h>
 #include <nvif/unpack.h>
 
 #include "nouveau_drv.h"
@@ -347,6 +348,51 @@ nouveau_abi16_ioctl_get_zcull_info(ABI16_IOCTL_ARGS)
 		return -ENODEV;
 	}
 }
+
+int
+nouveau_abi16_ioctl_set_zcull_ctxsw_buffer(ABI16_IOCTL_ARGS)
+{
+	struct nouveau_abi16 *abi16 = nouveau_abi16_get(file_priv);
+	struct nouveau_abi16_chan *chan16;
+	struct nouveau_channel *chan = NULL;
+	struct nouveau_drm *drm = nouveau_drm(dev);
+	struct nvkm_device *device = drm->nvkm;
+	struct drm_nouveau_set_zcull_ctxsw_buffer *req = data;
+	int ret = 0;
+
+	if (unlikely(!device->has_zcull_info))
+		return nouveau_abi16_put(abi16, -ENODEV);
+
+	if (unlikely(req->pad))
+		return nouveau_abi16_put(abi16, -EINVAL);
+
+	if (unlikely(!abi16))
+		return nouveau_abi16_put(abi16, -ENOMEM);
+
+	/* abi16 locks already */
+	list_for_each_entry(chan16, &abi16->channels, head) {
+		if (chan16->chan->chid == req->channel) {
+			chan = chan16->chan;
+			break;
+		}
+	}
+
+	if (!chan)
+		return nouveau_abi16_put(abi16, -ENOENT);
+
+	if (unlikely(atomic_read(&chan->killed)))
+		return nouveau_abi16_put(abi16, -ENODEV);
+
+	struct nvif_chan_mthd_set_zcull_ctxsw_buffer args = {
+		.addr = req->addr,
+	};
+
+	ret = nvif_mthd(&chan->user, NVIF_CHAN_MTHD_SET_ZCULL_CTXSW_BUFFER,
+			&args, sizeof(args));
+
+	return nouveau_abi16_put(abi16, ret);
+}
+
 
 int
 nouveau_abi16_ioctl_channel_alloc(ABI16_IOCTL_ARGS)

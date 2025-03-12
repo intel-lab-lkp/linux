@@ -9,6 +9,7 @@ struct nvkm_gr {
 };
 
 u64 nvkm_gr_units(struct nvkm_gr *);
+int nvkm_gr_set_zcull_ctxsw_buffer(struct nvkm_gr *gr, struct nvkm_chan *chan, u64 addr);
 int nvkm_gr_tlb_flush(struct nvkm_gr *);
 int nvkm_gr_ctxsw_pause(struct nvkm_device *);
 int nvkm_gr_ctxsw_resume(struct nvkm_device *);

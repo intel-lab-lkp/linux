@@ -346,6 +346,14 @@ nvkm_chan_get_chid(struct nvkm_engine *engine, int id, unsigned long *pirqflags)
 }
 
 int
+nvkm_chan_set_zcull_ctxsw_buffer(struct nvkm_chan *chan, u64 addr)
+{
+	if (chan->func->set_zcull_ctxsw_buffer)
+		return chan->func->set_zcull_ctxsw_buffer(chan, addr);
+	return -ENODEV;
+}
+
+int
 nvkm_chan_new_(const struct nvkm_chan_func *func, struct nvkm_runl *runl, int runq,
 	       struct nvkm_cgrp *cgrp, const char *name, bool priv, u32 devm, struct nvkm_vmm *vmm,
 	       struct nvkm_dmaobj *dmaobj, u64 offset, u64 length,

@@ -54,6 +54,7 @@ struct nvkm_chan_func {
 	void (*stop)(struct nvkm_chan *);
 	void (*preempt)(struct nvkm_chan *);
 	u32 (*doorbell_handle)(struct nvkm_chan *);
+	int (*set_zcull_ctxsw_buffer)(struct nvkm_chan *, u64 addr);
 };
 
 int nvkm_chan_new_(const struct nvkm_chan_func *, struct nvkm_runl *, int runq, struct nvkm_cgrp *,
@@ -73,6 +74,7 @@ int nvkm_chan_cctx_get(struct nvkm_chan *, struct nvkm_engn *, struct nvkm_cctx 
 		       struct nvkm_client * /*TODO: remove need for this */);
 void nvkm_chan_cctx_put(struct nvkm_chan *, struct nvkm_cctx **);
 void nvkm_chan_cctx_bind(struct nvkm_chan *, struct nvkm_engn *, struct nvkm_cctx *);
+int nvkm_chan_set_zcull_ctxsw_buffer(struct nvkm_chan *chan, u64 addr);
 
 #define CHAN_PRCLI(c,l,p,f,a...) CGRP_PRINT((c)->cgrp, l, p, "%04x:[%s]"f, (c)->id, (c)->name, ##a)
 #define CHAN_PRINT(c,l,p,f,a...) CGRP_PRINT((c)->cgrp, l, p, "%04x:"f, (c)->id, ##a)
