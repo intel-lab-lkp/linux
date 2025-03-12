@@ -57,6 +57,7 @@ static inline size_t __must_check arch_get_random_seed_longs(unsigned long *v, s
 
 #ifndef CONFIG_UML
 void x86_init_rdrand(struct cpuinfo_x86 *c);
+void x86_init_rdseed(struct cpuinfo_x86 *c);
 #endif
 
 #endif /* ASM_X86_ARCHRANDOM_H */

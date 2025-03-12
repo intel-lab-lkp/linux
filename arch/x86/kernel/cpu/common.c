@@ -1918,6 +1918,7 @@ static void identify_cpu(struct cpuinfo_x86 *c)
 	}
 
 	x86_init_rdrand(c);
+	x86_init_rdseed(c);
 	setup_pku(c);
 	setup_cet(c);
 

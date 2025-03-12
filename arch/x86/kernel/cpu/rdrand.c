@@ -12,18 +12,20 @@
 #include <asm/archrandom.h>
 #include <asm/sections.h>
 
+
+enum { SAMPLES = 8, MIN_CHANGE = 5 };
+
 /*
  * RDRAND has Built-In-Self-Test (BIST) that runs on every invocation.
  * Run the instruction a few times as a sanity check. Also make sure
  * it's not outputting the same value over and over, which has happened
  * as a result of past CPU bugs.
  *
- * If it fails, it is simple to disable RDRAND and RDSEED here.
+ * If it fails, it is simple to disable RDRAND here.
  */
 
 void x86_init_rdrand(struct cpuinfo_x86 *c)
 {
-	enum { SAMPLES = 8, MIN_CHANGE = 5 };
 	unsigned long sample, prev;
 	bool failure = false;
 	size_t i, changed;
@@ -44,7 +46,42 @@ void x86_init_rdrand(struct cpuinfo_x86 *c)
 
 	if (failure) {
 		clear_cpu_cap(c, X86_FEATURE_RDRAND);
-		clear_cpu_cap(c, X86_FEATURE_RDSEED);
 		pr_emerg("RDRAND is not reliable on this platform; disabling.\n");
+	}
+}
+
+
+/*
+ * RDSEED has Built-In-Self-Test (BIST) that runs on every invocation.
+ * Run the instruction a few times as a sanity check. Also make sure
+ * it's not outputting the same value over and over, which has happened
+ * as a result of past CPU bugs.
+ *
+ * If it fails, it is simple to disable RDSEED here.
+ */
+
+void x86_init_rdseed(struct cpuinfo_x86 *c)
+{
+	unsigned long sample, prev;
+	bool failure = false;
+	size_t i, changed;
+
+	if (!cpu_has(c, X86_FEATURE_RDSEED))
+		return;
+
+	for (changed = 0, i = 0; i < SAMPLES; ++i) {
+		if (!rdseed_long(&sample)) {
+			failure = true;
+			break;
+		}
+		changed += i && sample != prev;
+		prev = sample;
+	}
+	if (changed < MIN_CHANGE)
+		failure = true;
+
+	if (failure) {
+		clear_cpu_cap(c, X86_FEATURE_RDSEED);
+		pr_emerg("RDSEED is not reliable on this platform; disabling.\n");
 	}
 }
