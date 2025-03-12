@@ -644,7 +644,7 @@ static DEVICE_ATTR(gsm_log, S_IRUGO, pm8001_ctl_gsm_log_show, NULL);
 #define FLASH_CMD_SET_NVMD    0x02
 
 struct flash_command {
-     u8      command[8];
+     u8      command[9];
      int     code;
 };
 
@@ -825,8 +825,7 @@ static ssize_t pm8001_store_update_fw(struct device *cdev,
 	}
 
 	for (i = 0; flash_command_table[i].code != FLASH_CMD_NONE; i++) {
-		if (!memcmp(flash_command_table[i].command,
-				 cmd_ptr, strlen(cmd_ptr))) {
+		if (!strcmp(flash_command_table[i].command, cmd_ptr)) {
 			flash_command = flash_command_table[i].code;
 			break;
 		}
