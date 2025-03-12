@@ -274,6 +274,8 @@ static unsigned int fill_balloon(struct virtio_balloon *vb, size_t num)
 
 		set_page_pfns(vb, vb->pfns + vb->num_pfns, page);
 		vb->num_pages += VIRTIO_BALLOON_PAGES_PER_PAGE;
+		mod_node_page_state(page_pgdat(page), NR_BALLOON_PAGES,
+			VIRTIO_BALLOON_PAGES_PER_PAGE);
 		if (!virtio_has_feature(vb->vdev,
 					VIRTIO_BALLOON_F_DEFLATE_ON_OOM))
 			adjust_managed_page_count(page, -1);
@@ -324,6 +326,8 @@ static unsigned int leak_balloon(struct virtio_balloon *vb, size_t num)
 		set_page_pfns(vb, vb->pfns + vb->num_pfns, page);
 		list_add(&page->lru, &pages);
 		vb->num_pages -= VIRTIO_BALLOON_PAGES_PER_PAGE;
+		mod_node_page_state(page_pgdat(page), NR_BALLOON_PAGES,
+			-VIRTIO_BALLOON_PAGES_PER_PAGE);
 	}
 
 	num_freed_pages = vb->num_pfns;
