@@ -1235,7 +1235,7 @@ int ipmi_create_user(unsigned int          if_num,
 		return -ENOMEM;
 
 	index = srcu_read_lock(&ipmi_interfaces_srcu);
-	list_for_each_entry_rcu(intf, &ipmi_interfaces, link) {
+	list_for_each_entry_srcu(intf, &ipmi_interfaces, link) {
 		if (intf->intf_num == if_num)
 			goto found;
 	}
