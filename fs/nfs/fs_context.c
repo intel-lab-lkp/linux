@@ -72,6 +72,7 @@ enum nfs_param {
 	Opt_posix,
 	Opt_proto,
 	Opt_rdirplus,
+	Opt_force_rdirplus,
 	Opt_rdma,
 	Opt_resvport,
 	Opt_retrans,
@@ -175,6 +176,7 @@ static const struct fs_parameter_spec nfs_fs_parameters[] = {
 	fsparam_flag_no("posix",	Opt_posix),
 	fsparam_string("proto",		Opt_proto),
 	fsparam_flag_no("rdirplus",	Opt_rdirplus),
+	fsparam_flag  ("force_rdirplus", Opt_force_rdirplus),
 	fsparam_flag  ("rdma",		Opt_rdma),
 	fsparam_flag_no("resvport",	Opt_resvport),
 	fsparam_u32   ("retrans",	Opt_retrans),
@@ -636,10 +638,18 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 			ctx->flags &= ~NFS_MOUNT_NOACL;
 		break;
 	case Opt_rdirplus:
-		if (result.negated)
+		if (result.negated) {
+			if (ctx->flags && NFS_MOUNT_FORCE_RDIRPLUS)
+				return nfs_invalf(fc, "NFS: Cannot both force and disable READDIR PLUS");
 			ctx->flags |= NFS_MOUNT_NORDIRPLUS;
-		else
+		} else {
 			ctx->flags &= ~NFS_MOUNT_NORDIRPLUS;
+		}
+		break;
+	case Opt_force_rdirplus:
+		if (ctx->flags && NFS_MOUNT_NORDIRPLUS)
+			return nfs_invalf(fc, "NFS: Cannot both force and disable READDIR PLUS");
+		ctx->flags |= NFS_MOUNT_FORCE_RDIRPLUS;
 		break;
 	case Opt_sharecache:
 		if (result.negated)
