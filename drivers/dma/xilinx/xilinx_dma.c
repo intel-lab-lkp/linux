@@ -2864,6 +2864,7 @@ static int xilinx_dma_chan_probe(struct xilinx_dma_device *xdev,
 	    of_device_is_compatible(node, "xlnx,axi-dma-mm2s-channel") ||
 	    of_device_is_compatible(node, "xlnx,axi-cdma-channel")) {
 		chan->direction = DMA_MEM_TO_DEV;
+		xdev->common.directions |= BIT(DMA_MEM_TO_DEV);
 		chan->id = xdev->mm2s_chan_id++;
 		chan->tdest = chan->id;
 
@@ -2881,6 +2882,7 @@ static int xilinx_dma_chan_probe(struct xilinx_dma_device *xdev,
 		   of_device_is_compatible(node,
 					   "xlnx,axi-dma-s2mm-channel")) {
 		chan->direction = DMA_DEV_TO_MEM;
+		xdev->common.directions |= BIT(DMA_DEV_TO_MEM);
 		chan->id = xdev->s2mm_chan_id++;
 		chan->tdest = chan->id - xdev->dma_config->max_channels / 2;
 		chan->has_vflip = of_property_read_bool(node,
