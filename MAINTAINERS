@@ -21706,6 +21706,13 @@ S:	Maintained
 F:	drivers/input/touchscreen/silead.c
 F:	drivers/platform/x86/touchscreen_dmi.c
 
+SILEX MULTIPK DRIVER
+M:	Nipun Gupta <nipun.gupta@amd.com>
+M:	Praveen Jain <praveen.jain@amd.com>
+S:	Maintained
+F:	drivers/misc/silex_mpk*
+F:	include/uapi/misc/silex_mpk.h
+
 SILICON LABS WIRELESS DRIVERS (for WFxxx series)
 M:	Jérôme Pouiller <jerome.pouiller@silabs.com>
 S:	Supported
