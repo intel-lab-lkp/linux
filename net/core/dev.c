@@ -10465,11 +10465,13 @@ static void netdev_sync_lower_features(struct net_device *upper,
 
 static bool netdev_has_ip_or_hw_csum(netdev_features_t features)
 {
-	netdev_features_t ip_csum_mask = NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
-	bool ip_csum = (features & ip_csum_mask) == ip_csum_mask;
+	netdev_features_t ipv4_csum_mask = NETIF_F_IP_CSUM;
+	netdev_features_t ipv6_csum_mask = NETIF_F_IPV6_CSUM;
+	bool ipv4_csum = (features & ipv4_csum_mask) == ipv4_csum_mask;
+	bool ipv6_csum = (features & ipv6_csum_mask) == ipv6_csum_mask;
 	bool hw_csum = features & NETIF_F_HW_CSUM;
 
-	return ip_csum || hw_csum;
+	return ipv4_csum || ipv6_csum || hw_csum;
 }
 
 static netdev_features_t netdev_fix_features(struct net_device *dev,
