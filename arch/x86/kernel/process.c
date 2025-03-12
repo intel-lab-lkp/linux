@@ -814,18 +814,19 @@ void __noreturn stop_this_cpu(void *dummy)
 	mcheck_cpu_clear(c);
 
 	/*
-	 * Use wbinvd on processors that support SME. This provides support
-	 * for performing a successful kexec when going from SME inactive
-	 * to SME active (or vice-versa). The cache must be cleared so that
-	 * if there are entries with the same physical address, both with and
-	 * without the encryption bit, they don't race each other when flushed
-	 * and potentially end up with the wrong entry being committed to
-	 * memory.
+	 * Use wbinvd to support kexec for both SME (from inactive to active
+	 * or vice-versa) and TDX.  The cache must be cleared so that if there
+	 * are entries with the same physical address, both with and without
+	 * the encryption bit(s), they don't race each other when flushed and
+	 * potentially end up with the wrong entry being committed to memory.
 	 *
-	 * Test the CPUID bit directly because the machine might've cleared
-	 * X86_FEATURE_SME due to cmdline options.
+	 * stop_this_cpu() isn't a fast path, just do unconditional WBINVD for
+	 * bare-metal to cover both SME and TDX.  Do not do WBINVD in a guest
+	 * since performing one will result in an exception (#VE or #VC) for
+	 * TDX or SEV-ES/SEV-SNP guests which the guest may not be able to
+	 * handle (e.g., TDX guest panics if it sees #VE).
 	 */
-	if (c->extended_cpuid_level >= 0x8000001f && (cpuid_eax(0x8000001f) & BIT(0)))
+	if (!boot_cpu_has(X86_FEATURE_HYPERVISOR))
 		wbinvd();
 
 	/*
