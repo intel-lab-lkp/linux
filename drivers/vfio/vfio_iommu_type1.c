@@ -679,6 +679,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 
 		if (unlikely(disable_hugepages))
 			break;
+		cond_resched();
 	}
 
 out:
