@@ -1892,7 +1892,7 @@ static int ath10k_download_cal_file(struct ath10k *ar,
 static int ath10k_download_cal_dt(struct ath10k *ar, const char *dt_name)
 {
 	struct device_node *node;
-	int data_len;
+	int data_len = ar->hw_params.cal_data_len;
 	void *data;
 	int ret;
 
@@ -1903,28 +1903,18 @@ static int ath10k_download_cal_dt(struct ath10k *ar, const char *dt_name)
 		 */
 		return -ENOENT;
 
-	if (!of_get_property(node, dt_name, &data_len)) {
-		/* The calibration data node is optional */
-		return -ENOENT;
-	}
-
-	if (data_len != ar->hw_params.cal_data_len) {
-		ath10k_warn(ar, "invalid calibration data length in DT: %d\n",
-			    data_len);
-		ret = -EMSGSIZE;
-		goto out;
-	}
-
 	data = kmalloc(data_len, GFP_KERNEL);
 	if (!data) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	ret = of_property_read_u8_array(node, dt_name, data, data_len);
+	ret = of_property_read_variable_u8_array(node, dt_name, data, data_len, data_len);
 	if (ret) {
-		ath10k_warn(ar, "failed to read calibration data from DT: %d\n",
-			    ret);
+		/* Don't warn if optional property not found  */
+		if (ret != -EINVAL)
+			ath10k_warn(ar, "failed to read calibration data from DT: %d\n",
+				    ret);
 		goto out_free;
 	}
 
