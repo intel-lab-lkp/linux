@@ -391,6 +391,34 @@ void vsock_for_each_connected_socket(struct vsock_transport *transport,
 }
 EXPORT_SYMBOL_GPL(vsock_for_each_connected_socket);
 
+bool vsock_net_has_connected(struct net *net, u64 guest_cid)
+{
+	bool ret = false;
+	int i;
+
+	spin_lock_bh(&vsock_table_lock);
+
+	for (i = 0; i < ARRAY_SIZE(vsock_connected_table); i++) {
+		struct vsock_sock *vsk;
+
+		list_for_each_entry(vsk, &vsock_connected_table[i],
+				    connected_table) {
+			if (sock_net(sk_vsock(vsk)) != net)
+				continue;
+
+			if (vsk->remote_addr.svm_cid == guest_cid) {
+				ret = true;
+				goto out;
+			}
+		}
+	}
+
+out:
+	spin_unlock_bh(&vsock_table_lock);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(vsock_net_has_connected);
+
 void vsock_add_pending(struct sock *listener, struct sock *pending)
 {
 	struct vsock_sock *vlistener;
@@ -537,7 +565,7 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 
 	if (sk->sk_type == SOCK_SEQPACKET) {
 		if (!new_transport->seqpacket_allow ||
-		    !new_transport->seqpacket_allow(remote_cid)) {
+		    !new_transport->seqpacket_allow(vsk, remote_cid)) {
 			module_put(new_transport->module);
 			return -ESOCKTNOSUPPORT;
 		}
