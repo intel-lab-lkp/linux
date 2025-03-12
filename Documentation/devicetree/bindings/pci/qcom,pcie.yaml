@@ -175,7 +175,7 @@ allOf:
       properties:
         reg:
           minItems: 5
-          maxItems: 5
+          maxItems: 6
         reg-names:
           items:
             - const: dbi # DesignWare PCIe registers
@@ -183,6 +183,7 @@ allOf:
             - const: atu # ATU address space
             - const: parf # Qualcomm specific registers
             - const: config # PCIe configuration space
+            - const: mhi # MHI registers
 
   - if:
       properties:
