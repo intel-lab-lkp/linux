@@ -137,15 +137,15 @@ static void __dump_page(const struct page *page)
 again:
 	memcpy(&precise, page, sizeof(*page));
 	head = precise.compound_head;
-	if ((head & 1) == 0) {
+	if (head & 1) {
+		foliop = (struct folio *)(head - 1);
+		idx = folio_page_idx(foliop, page);
+	} else {
 		foliop = (struct folio *)&precise;
 		idx = 0;
 		if (!folio_test_large(foliop))
 			goto dump;
 		foliop = (struct folio *)page;
-	} else {
-		foliop = (struct folio *)(head - 1);
-		idx = folio_page_idx(foliop, page);
 	}
 
 	if (idx < MAX_FOLIO_NR_PAGES) {
@@ -173,7 +173,7 @@ dump:
 void dump_page(const struct page *page, const char *reason)
 {
 	if (PagePoisoned(page))
-		pr_warn("page:%p is uninitialized and poisoned", page);
+		pr_warn("page:%p is uninitialized and poisoned\n", page);
 	else
 		__dump_page(page);
 	if (reason)
