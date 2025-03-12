@@ -3294,7 +3294,7 @@ static const struct attribute_group fbcon_device_attr_group = {
 	.attrs		= fbcon_device_attrs,
 };
 
-static int fbcon_init_device(void)
+static void fbcon_init_device(void)
 {
 	int ret;
 
@@ -3303,8 +3303,6 @@ static int fbcon_init_device(void)
 	ret = device_add_group(fbcon_device, &fbcon_device_attr_group);
 	if (ret)
 		fbcon_has_sysfs = 0;
-
-	return 0;
 }
 
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
