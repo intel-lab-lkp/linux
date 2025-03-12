@@ -34,6 +34,7 @@ struct pmc_ipc_rbuf {
  *
  * Return: 0 on success. Non-zero on mailbox error
  */
+#if CONFIG_ACPI
 static inline int intel_pmc_ipc(struct pmc_ipc_cmd *ipc_cmd, struct pmc_ipc_rbuf *rbuf)
 {
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
@@ -90,5 +91,9 @@ static inline int intel_pmc_ipc(struct pmc_ipc_cmd *ipc_cmd, struct pmc_ipc_rbuf
 
 	return 0;
 }
+#else
+static inline int intel_pmc_ipc(struct pmc_ipc_cmd *ipc_cmd, struct pmc_ipc_rbuf *rbuf)
+{ return -ENODEV; }
+#endif /* CONFIG_ACPI */
 
 #endif /* INTEL_PMC_IPC_H */
