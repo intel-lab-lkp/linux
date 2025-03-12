@@ -147,10 +147,24 @@
 			bias-pull-up;
 		};
 	};
+
+	uart1_tx_state: uart1-tx-state {
+		pins = "gpio44";
+		function = "uart1";
+		drive-strength = <8>;
+		bias-pull-down;
+	};
+
+	uart1_rx_state: uart1-rx-state {
+		pins = "gpio43";
+		function = "uart1";
+		drive-strength = <8>;
+		bias-pull-up;
+	};
 };
 
 &uart1 {
-	pinctrl-0 = <&uart1_pins>;
+	pinctrl-0 = <&uart1_tx_state>, <&uart1_rx_state>;
 	pinctrl-names = "default";
 	status = "okay";
 };
