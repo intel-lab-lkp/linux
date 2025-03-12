@@ -334,6 +334,21 @@ nouveau_abi16_ioctl_getparam(ABI16_IOCTL_ARGS)
 }
 
 int
+nouveau_abi16_ioctl_get_zcull_info(ABI16_IOCTL_ARGS)
+{
+	struct nouveau_drm *drm = nouveau_drm(dev);
+	struct nvkm_device *device = drm->nvkm;
+	struct drm_nouveau_get_zcull_info *out = data;
+
+	if (device->has_zcull_info) {
+		*out = device->zcull_info;
+		return 0;
+	} else {
+		return -ENODEV;
+	}
+}
+
+int
 nouveau_abi16_ioctl_channel_alloc(ABI16_IOCTL_ARGS)
 {
 	struct drm_nouveau_channel_alloc *init = data;

@@ -34,6 +34,7 @@
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/alloc/alloc_channel.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl0080/ctrl0080fifo.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080gpu.h>
+#include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080gr.h>
 #include <nvrm/535.113.01/common/sdk/nvidia/inc/ctrl/ctrl2080/ctrl2080internal.h>
 #include <nvrm/535.113.01/nvidia/generated/g_kernel_channel_nvoc.h>
 
@@ -244,6 +245,8 @@ static int
 r535_gr_oneinit(struct nvkm_gr *base)
 {
 	NV2080_CTRL_INTERNAL_STATIC_GR_GET_CONTEXT_BUFFERS_INFO_PARAMS *info;
+	NV2080_CTRL_GR_GET_ZCULL_INFO_PARAMS *zcull_info;
+	u32 zcull_ctxsw_size, zcull_ctxsw_align;
 	struct r535_gr *gr = container_of(base, typeof(*gr), base);
 	struct nvkm_subdev *subdev = &gr->base.engine.subdev;
 	struct nvkm_device *device = subdev->device;
@@ -418,6 +421,11 @@ r535_gr_oneinit(struct nvkm_gr *base)
 		}
 	}
 
+	zcull_ctxsw_size = info->engineContextBuffersInfo[0]
+		.engine[NV0080_CTRL_FIFO_GET_ENGINE_CONTEXT_PROPERTIES_ENGINE_ID_GRAPHICS_ZCULL].size;
+	zcull_ctxsw_align = info->engineContextBuffersInfo[0]
+		.engine[NV0080_CTRL_FIFO_GET_ENGINE_CONTEXT_PROPERTIES_ENGINE_ID_GRAPHICS_ZCULL].alignment;
+
 	nvkm_gsp_rm_ctrl_done(&gsp->internal.device.subdevice, info);
 
 	/* Promote golden context to RM. */
@@ -449,6 +457,32 @@ r535_gr_oneinit(struct nvkm_gr *base)
 			goto done;
 		}
 	}
+
+	zcull_info = nvkm_gsp_rm_ctrl_rd(&gsp->internal.device.subdevice,
+					 NV2080_CTRL_CMD_GR_GET_ZCULL_INFO,
+					 sizeof(*zcull_info));
+	if (WARN_ON(IS_ERR(zcull_info))) {
+		ret = PTR_ERR(zcull_info);
+		goto done;
+	}
+
+	device->has_zcull_info = true;
+
+	device->zcull_info.width_align_pixels = zcull_info->widthAlignPixels;
+	device->zcull_info.height_align_pixels = zcull_info->heightAlignPixels;
+	device->zcull_info.pixel_squares_by_aliquots = zcull_info->pixelSquaresByAliquots;
+	device->zcull_info.aliquot_total = zcull_info->aliquotTotal;
+	device->zcull_info.zcull_region_byte_multiplier = zcull_info->zcullRegionByteMultiplier;
+	device->zcull_info.zcull_region_header_size = zcull_info->zcullRegionHeaderSize;
+	device->zcull_info.zcull_subregion_header_size = zcull_info->zcullSubregionHeaderSize;
+	device->zcull_info.subregion_count = zcull_info->subregionCount;
+	device->zcull_info.subregion_width_align_pixels = zcull_info->subregionWidthAlignPixels;
+	device->zcull_info.subregion_height_align_pixels = zcull_info->subregionHeightAlignPixels;
+
+	device->zcull_info.ctxsw_size = zcull_ctxsw_size;
+	device->zcull_info.ctxsw_align = zcull_ctxsw_align;
+
+	nvkm_gsp_rm_ctrl_done(&gsp->internal.device.subdevice, zcull_info);
 
 done:
 	nvkm_gsp_rm_free(&golden.chan);

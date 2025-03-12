@@ -26,6 +26,75 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+/**
+ * NV2080_CTRL_CMD_GR_GET_ZCULL_INFO
+ *
+ * This command is used to query the RM for zcull information that the
+ * driver will need to allocate and manage the zcull regions.
+ *
+ *   widthAlignPixels
+ *     This parameter returns the width alignment restrictions in pixels
+ *     used to adjust a surface for proper aliquot coverage (typically
+ *     #TPC's * 16).
+ *
+ *   heightAlignPixels
+ *     This parameter returns the height alignment restrictions in pixels
+ *     used to adjust a surface for proper aliquot coverage (typically 32).
+ *
+ *   pixelSquaresByAliquots
+ *     This parameter returns the pixel area covered by an aliquot
+ *     (typically #Zcull_banks * 16 * 16).
+ *
+ *   aliquotTotal
+ *     This parameter returns the total aliquot pool available in HW.
+ *
+ *   zcullRegionByteMultiplier
+ *     This parameter returns multiplier used to convert aliquots in a region
+ *     to the number of bytes required to save/restore them.
+ *
+ *   zcullRegionHeaderSize
+ *     This parameter returns the region header size which is required to be
+ *     allocated and accounted for in any save/restore operation on a region.
+ *
+ *   zcullSubregionHeaderSize
+ *     This parameter returns the subregion header size which is required to be
+ *     allocated and accounted for in any save/restore operation on a region.
+ *
+ *   subregionCount
+ *     This parameter returns the subregion count.
+ *
+ *   subregionWidthAlignPixels
+ *     This parameter returns the subregion width alignment restrictions in
+ *     pixels used to adjust a surface for proper aliquot coverage
+ *     (typically #TPC's * 16).
+ *
+ *   subregionHeightAlignPixels
+ *     This parameter returns the subregion height alignment restrictions in
+ *     pixels used to adjust a surface for proper aliquot coverage
+ *     (typically 62).
+ *
+ *   The callee should compute the size of a zcull region as follows.
+ *     (numBytes = aliquots * zcullRegionByteMultiplier +
+ *                 zcullRegionHeaderSize + zcullSubregionHeaderSize)
+ */
+#define NV2080_CTRL_CMD_GR_GET_ZCULL_INFO            (0x20801206U) /* finn: Evaluated from "(FINN_NV20_SUBDEVICE_0_GR_INTERFACE_ID << 8) | NV2080_CTRL_GR_GET_ZCULL_INFO_PARAMS_MESSAGE_ID" */
+
+#define NV2080_CTRL_GR_GET_ZCULL_INFO_PARAMS_SUBREGION_SUPPORTED
+#define NV2080_CTRL_GR_GET_ZCULL_INFO_PARAMS_MESSAGE_ID (0x6U)
+
+typedef struct NV2080_CTRL_GR_GET_ZCULL_INFO_PARAMS {
+    NvU32 widthAlignPixels;
+    NvU32 heightAlignPixels;
+    NvU32 pixelSquaresByAliquots;
+    NvU32 aliquotTotal;
+    NvU32 zcullRegionByteMultiplier;
+    NvU32 zcullRegionHeaderSize;
+    NvU32 zcullSubregionHeaderSize;
+    NvU32 subregionCount;
+    NvU32 subregionWidthAlignPixels;
+    NvU32 subregionHeightAlignPixels;
+} NV2080_CTRL_GR_GET_ZCULL_INFO_PARAMS;
+
 typedef enum NV2080_CTRL_CMD_GR_CTXSW_PREEMPTION_BIND_BUFFERS {
     NV2080_CTRL_CMD_GR_CTXSW_PREEMPTION_BIND_BUFFERS_MAIN = 0,
     NV2080_CTRL_CMD_GR_CTXSW_PREEMPTION_BIND_BUFFERS_SPILL = 1,

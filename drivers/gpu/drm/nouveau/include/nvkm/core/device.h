@@ -3,6 +3,9 @@
 #define __NVKM_DEVICE_H__
 #include <core/oclass.h>
 #include <core/intr.h>
+
+#include "uapi/drm/nouveau_drm.h"
+
 enum nvkm_subdev_type;
 
 enum nvkm_device_type {
@@ -72,6 +75,9 @@ struct nvkm_device {
 		bool armed;
 		bool legacy_done;
 	} intr;
+
+	bool has_zcull_info;
+	struct drm_nouveau_get_zcull_info zcull_info;
 };
 
 struct nvkm_subdev *nvkm_device_subdev(struct nvkm_device *, int type, int inst);
