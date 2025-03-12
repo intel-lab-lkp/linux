@@ -673,6 +673,8 @@ static int vmballoon_alloc_page_list(struct vmballoon *b,
 
 			vmballoon_stats_page_inc(b, VMW_BALLOON_PAGE_STAT_ALLOC,
 						 ctl->page_size);
+			mod_node_page_state(page_pgdat(page), NR_BALLOON_PAGES,
+				vmballoon_page_in_frames(ctl->page_size));
 		}
 
 		if (page) {
@@ -915,6 +917,8 @@ static void vmballoon_release_page_list(struct list_head *page_list,
 	list_for_each_entry_safe(page, tmp, page_list, lru) {
 		list_del(&page->lru);
 		__free_pages(page, vmballoon_page_order(page_size));
+		mod_node_page_state(page_pgdat(page), NR_BALLOON_PAGES,
+			-vmballoon_page_in_frames(page_size));
 	}
 
 	if (n_pages)
@@ -1129,7 +1133,6 @@ static void vmballoon_inflate(struct vmballoon *b)
 
 		/* Update the balloon size */
 		atomic64_add(ctl.n_pages * page_in_frames, &b->size);
-
 		vmballoon_enqueue_page_list(b, &ctl.pages, &ctl.n_pages,
 					    ctl.page_size);
 
