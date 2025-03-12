@@ -2382,6 +2382,23 @@ void igb_reset(struct igb_adapter *adapter)
 	    (adapter->flags & IGB_FLAG_MAS_ENABLE)) {
 		igb_enable_mas(adapter);
 	}
+
+	/* Re-establish EEE setting */
+	if (hw->phy.media_type == e1000_media_type_copper) {
+		switch (mac->type) {
+		case e1000_i350:
+		case e1000_i210:
+		case e1000_i211:
+			igb_set_eee_i350(hw, true, true);
+			break;
+		case e1000_i354:
+			igb_set_eee_i354(hw, true, true);
+			break;
+		default:
+			break;
+		}
+	}
+
 	if (hw->mac.ops.init_hw(hw))
 		dev_err(&pdev->dev, "Hardware Error\n");
 
@@ -2412,21 +2429,6 @@ void igb_reset(struct igb_adapter *adapter)
 		}
 	}
 #endif
-	/* Re-establish EEE setting */
-	if (hw->phy.media_type == e1000_media_type_copper) {
-		switch (mac->type) {
-		case e1000_i350:
-		case e1000_i210:
-		case e1000_i211:
-			igb_set_eee_i350(hw, true, true);
-			break;
-		case e1000_i354:
-			igb_set_eee_i354(hw, true, true);
-			break;
-		default:
-			break;
-		}
-	}
 	if (!netif_running(adapter->netdev))
 		igb_power_down_link(adapter);
 
