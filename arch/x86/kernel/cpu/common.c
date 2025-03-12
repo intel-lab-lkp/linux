@@ -26,6 +26,7 @@
 #include <linux/pgtable.h>
 #include <linux/stackprotector.h>
 #include <linux/utsname.h>
+#include <linux/acpi.h>
 
 #include <asm/alternative.h>
 #include <asm/cmdline.h>
@@ -516,6 +517,21 @@ static bool pku_disabled;
 
 static __always_inline void setup_pku(struct cpuinfo_x86 *c)
 {
+	/*
+	 * OSPKE seems broken on Apple Virtualization.
+	 * https://lore.kernel.org/regressions/CAG8fp8QvH71Wi_y7b7tgFp7knK38rfrF7rRHh-gFKqeS0gxY6Q@mail.gmail.com/T/#u
+	 *
+	 * TODO: conditionally enable pku depending on the DMI BIOS version when Apple
+	 * fixes the issue.
+	 *
+	 * However, this would be still not enough because DMI is missing when vmlinuz
+	 * is directly loaded into VM.
+	 */
+	if (!memcmp(acpi_gbl_FADT.header.oem_table_id, "Apple Vz", 8)) {
+		pr_info("pku: disabled on Apple Virtualization platform (Intel) due to a bug\n");
+		pku_disabled = true;
+	}
+
 	if (c == &boot_cpu_data) {
 		if (pku_disabled || !cpu_feature_enabled(X86_FEATURE_PKU))
 			return;
