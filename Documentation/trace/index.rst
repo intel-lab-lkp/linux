@@ -14,7 +14,7 @@ This section provides an overview of Linux tracing mechanisms
 and debugging approaches.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    debugging
    tracepoints
@@ -28,7 +28,7 @@ The following are the primary tracing frameworks integrated into
 the Linux kernel.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    ftrace
    ftrace-design
@@ -47,7 +47,7 @@ A detailed explanation of event tracing mechanisms and their
 applications.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    events
    events-kmem
@@ -65,7 +65,7 @@ This section covers tracing features that monitor hardware
 interactions and system performance.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    intel_th
    stm
@@ -85,7 +85,7 @@ These tools allow tracing user-space applications and
 interactions.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    user_events
 
