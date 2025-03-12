@@ -33,7 +33,7 @@ static bool have_pidfd_send_signal;
 static pid_t pidfd_clone(int flags, int *pidfd, int (*fn)(void *))
 {
 	size_t stack_size = 1024;
-	char *stack[1024] = { 0 };
+	char *stack[1024] __attribute__((aligned(16))) = {0};
 
 #ifdef __ia64__
 	return __clone2(fn, stack, stack_size, flags | SIGCHLD, NULL, pidfd);
