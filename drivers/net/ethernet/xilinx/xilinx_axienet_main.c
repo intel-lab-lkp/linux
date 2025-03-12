@@ -2583,6 +2583,7 @@ static struct phylink_pcs *axienet_mac_select_pcs(struct phylink_config *config,
 	struct axienet_local *lp = netdev_priv(ndev);
 
 	if (interface == PHY_INTERFACE_MODE_1000BASEX ||
+	    interface == PHY_INTERFACE_MODE_2500BASEX ||
 	    interface ==  PHY_INTERFACE_MODE_SGMII)
 		return &lp->pcs;
 
@@ -2616,8 +2617,9 @@ static void axienet_mac_link_up(struct phylink_config *config,
 	emmc_reg &= ~XAE_EMMC_LINKSPEED_MASK;
 
 	switch (speed) {
+	case SPEED_2500:
 	case SPEED_1000:
-		emmc_reg |= XAE_EMMC_LINKSPD_1000;
+		emmc_reg |= XAE_EMMC_LINKSPD_1000_2500;
 		break;
 	case SPEED_100:
 		emmc_reg |= XAE_EMMC_LINKSPD_100;
@@ -2627,7 +2629,7 @@ static void axienet_mac_link_up(struct phylink_config *config,
 		break;
 	default:
 		dev_err(&ndev->dev,
-			"Speed other than 10, 100 or 1Gbps is not supported\n");
+			"Speed other than 10, 100, 1Gbps or 2.5Gbps is not supported\n");
 		break;
 	}
 
@@ -3055,7 +3057,8 @@ static int axienet_probe(struct platform_device *pdev)
 			 "error registering MDIO bus: %d\n", ret);
 
 	if (lp->phy_mode == PHY_INTERFACE_MODE_SGMII ||
-	    lp->phy_mode == PHY_INTERFACE_MODE_1000BASEX) {
+	    lp->phy_mode == PHY_INTERFACE_MODE_1000BASEX ||
+	    lp->phy_mode == PHY_INTERFACE_MODE_2500BASEX) {
 		np = of_parse_phandle(pdev->dev.of_node, "pcs-handle", 0);
 		if (!np) {
 			/* Deprecated: Always use "pcs-handle" for pcs_phy.
@@ -3083,8 +3086,19 @@ static int axienet_probe(struct platform_device *pdev)
 	lp->phylink_config.dev = &ndev->dev;
 	lp->phylink_config.type = PHYLINK_NETDEV;
 	lp->phylink_config.mac_managed_pm = true;
-	lp->phylink_config.mac_capabilities = MAC_SYM_PAUSE | MAC_ASYM_PAUSE |
-		MAC_10FD | MAC_100FD | MAC_1000FD;
+	lp->phylink_config.mac_capabilities = MAC_SYM_PAUSE | MAC_ASYM_PAUSE;
+
+	/* AXI 1G/2.5G ethernet IP has following synthesis options:
+	 * 1) SGMII/1000base-X only.
+	 * 2) 2500base-X only.
+	 * 3) Dynamically switching between (1) and (2), and is not
+	 * implemented in driver.
+	 */
+
+	if (axienet_ior(lp, XAE_ABILITY_OFFSET) & XAE_ABILITY_2_5G)
+		lp->phylink_config.mac_capabilities |= MAC_2500FD;
+	else
+		lp->phylink_config.mac_capabilities |= MAC_10FD | MAC_100FD | MAC_1000FD;
 
 	__set_bit(lp->phy_mode, lp->phylink_config.supported_interfaces);
 	if (lp->switch_x_sgmii) {
