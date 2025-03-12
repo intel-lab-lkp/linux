@@ -21712,6 +21712,7 @@ M:	Praveen Jain <praveen.jain@amd.com>
 S:	Maintained
 F:	drivers/misc/silex_mpk*
 F:	include/uapi/misc/silex_mpk.h
+F:	Documentation/devicetree/bindings/misc/silex,multipk.yaml
 
 SILICON LABS WIRELESS DRIVERS (for WFxxx series)
 M:	Jérôme Pouiller <jerome.pouiller@silabs.com>
