@@ -1699,12 +1699,6 @@ static void evsel__set_needs_uniquify(struct evsel *counter, const struct perf_s
 		return;
 	}
 
-	if (counter->pmu && counter->pmu->is_core &&
-	    counter->alternate_hw_config != PERF_COUNT_HW_MAX) {
-		/* A sysfs or json event replacing a legacy event, don't uniquify. */
-		return;
-	}
-
 	if (config->aggr_mode == AGGR_NONE) {
 		/* Always unique with no aggregation. */
 		counter->needs_uniquify = true;
