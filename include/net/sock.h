@@ -2755,6 +2755,11 @@ static inline bool sk_is_vsock(const struct sock *sk)
 	return sk->sk_family == AF_VSOCK;
 }
 
+static inline bool sk_is_tipc(const struct sock *sk)
+{
+	return sk->sk_family == AF_TIPC;
+}
+
 /**
  * sk_eat_skb - Release a skb if it is no longer needed
  * @sk: socket to eat this skb from
