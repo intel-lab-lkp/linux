@@ -98,6 +98,24 @@ static void page_cache_release(struct folio *folio)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
 }
 
+#ifdef CONFIG_KVM_GMEM_SHARED_MEM
+static void gmem_folio_put(struct folio *folio)
+{
+#if IS_MODULE(CONFIG_KVM)
+	void (*fn)(struct folio *folio);
+
+	fn = symbol_get(kvm_gmem_handle_folio_put);
+	if (WARN_ON_ONCE(!fn))
+		return;
+
+	fn(folio);
+	symbol_put(kvm_gmem_handle_folio_put);
+#else
+	kvm_gmem_handle_folio_put(folio);
+#endif
+}
+#endif
+
 static void free_typed_folio(struct folio *folio)
 {
 	switch (folio_get_type(folio)) {
@@ -108,7 +126,7 @@ static void free_typed_folio(struct folio *folio)
 #endif
 #ifdef CONFIG_KVM_GMEM_SHARED_MEM
 	case PGTY_guestmem:
-		kvm_gmem_handle_folio_put(folio);
+		gmem_folio_put(folio);
 		return;
 #endif
 	default:
