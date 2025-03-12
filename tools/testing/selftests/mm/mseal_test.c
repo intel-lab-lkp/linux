@@ -677,7 +677,7 @@ static void test_seal_mprotect_two_vma(bool seal)
 		FAIL_TEST_IF_FALSE(!ret);
 	}
 
-	ret = sys_mprotect(ptr, page_size * 2, PROT_READ | PROT_WRITE);
+	ret = sys_mprotect(ptr, page_size * 2, PROT_READ);
 	if (seal)
 		FAIL_TEST_IF_FALSE(ret < 0);
 	else
@@ -718,7 +718,7 @@ static void test_seal_mprotect_two_vma_with_split(bool seal)
 	FAIL_TEST_IF_FALSE(!ret);
 
 	/* the second page is sealed. */
-	ret = sys_mprotect(ptr + page_size, page_size, PROT_READ | PROT_WRITE);
+	ret = sys_mprotect(ptr + page_size, page_size, PROT_READ);
 	if (seal)
 		FAIL_TEST_IF_FALSE(ret < 0);
 	else
@@ -873,7 +873,7 @@ static void test_seal_mprotect_split(bool seal)
 		FAIL_TEST_IF_FALSE(!ret);
 
 
-	ret = sys_mprotect(ptr + 2 * page_size, 2 * page_size, PROT_READ);
+	ret = sys_mprotect(ptr + 2 * page_size, 2 * page_size, PROT_WRITE);
 	if (seal)
 		FAIL_TEST_IF_FALSE(ret < 0);
 	else
