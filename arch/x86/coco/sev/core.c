@@ -2698,12 +2698,10 @@ static int __init sev_sysfs_init(void)
 	if (!cc_platform_has(CC_ATTR_GUEST_SEV_SNP))
 		return -ENODEV;
 
-	dev_root = bus_get_dev_root(&cpu_subsys);
-	if (!dev_root)
-		return -ENODEV;
-
-	sev_kobj = kobject_create_and_add("sev", &dev_root->kobj);
-	put_device(dev_root);
+	/*
+	 * Create /sys/hypervisor/sev/ with attributes
+	 */
+	sev_kobj = kobject_create_and_add("sev", hypervisor_kobj);
 
 	if (!sev_kobj)
 		return -ENOMEM;
@@ -2711,6 +2709,17 @@ static int __init sev_sysfs_init(void)
 	ret = sysfs_create_group(sev_kobj, &sev_attr_group);
 	if (ret)
 		kobject_put(sev_kobj);
+
+	/*
+	 * Link from /sys/devices/system/cpu/sev to /sys/hypervisor/sev/ for
+	 * compatibility reasons.
+	 */
+	dev_root = bus_get_dev_root(&cpu_subsys);
+	if (!dev_root)
+		return -ENODEV;
+
+	ret = compat_only_sysfs_link_entry_to_kobj(&dev_root->kobj, hypervisor_kobj, "sev", NULL);
+	put_device(dev_root);
 
 	return ret;
 }

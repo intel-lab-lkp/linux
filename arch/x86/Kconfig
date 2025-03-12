@@ -1495,6 +1495,7 @@ config AMD_MEM_ENCRYPT
 	select X86_MEM_ENCRYPT
 	select UNACCEPTED_MEMORY
 	select CRYPTO_LIB_AESGCM
+	select SYS_HYPERVISOR
 	help
 	  Say yes to enable support for the encryption of system memory.
 	  This requires an AMD processor that supports Secure Memory
