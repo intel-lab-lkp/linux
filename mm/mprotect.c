@@ -605,13 +605,13 @@ mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
 	unsigned long charged = 0;
 	int error;
 
-	if (!can_modify_vma(vma))
-		return -EPERM;
-
 	if (newflags == oldflags) {
 		*pprev = vma;
 		return 0;
 	}
+
+	if (!can_modify_vma(vma))
+		return -EPERM;
 
 	/*
 	 * Do PROT_NONE PFN permission checks here when we can still
