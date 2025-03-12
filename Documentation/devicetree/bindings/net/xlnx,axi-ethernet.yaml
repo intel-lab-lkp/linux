@@ -9,9 +9,11 @@ title: AXI 1G/2.5G Ethernet Subsystem
 description: |
   Also called  AXI 1G/2.5G Ethernet Subsystem, the xilinx axi ethernet IP core
   provides connectivity to an external ethernet PHY supporting different
-  interfaces: MII, GMII, RGMII, SGMII, 1000BaseX. It also includes two
+  interfaces: MII, GMII, RGMII, SGMII, 1000BaseX and 2500BaseX. It also includes two
   segments of memory for buffering TX and RX, as well as the capability of
   offloading TX/RX checksum calculation off the processor.
+
+  AXI 2.5G MAC is incremental speed upgrade of AXI 1G and supports 2.5G speed.
 
   Management configuration is done through the AXI interface, while payload is
   sent and received through means of an AXI DMA controller. This driver
@@ -62,6 +64,7 @@ properties:
       - rgmii
       - sgmii
       - 1000base-x
+      - 2500base-x
 
   xlnx,phy-type:
     description:
@@ -118,8 +121,8 @@ properties:
     type: object
 
   pcs-handle:
-    description: Phandle to the internal PCS/PMA PHY in SGMII or 1000Base-X
-      modes, where "pcs-handle" should be used to point to the PCS/PMA PHY,
+    description: Phandle to the internal PCS/PMA PHY in SGMII or 1000base-x/
+      2500base-x modes, where "pcs-handle" should be used to point to the PCS/PMA PHY,
       and "phy-handle" should point to an external PHY if exists.
     maxItems: 1
 
