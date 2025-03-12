@@ -201,6 +201,7 @@ struct dp83822_private {
 	bool set_gpio2_clk_out;
 	u32 gpio2_clk_out;
 	bool led_pin_enable[DP83822_MAX_LED_PINS];
+	bool tx_amplitude_100base_tx_modify;
 	int tx_amplitude_100base_tx_index;
 };
 
@@ -527,7 +528,7 @@ static int dp83822_config_init(struct phy_device *phydev)
 			       FIELD_PREP(DP83822_IOCTRL2_GPIO2_CLK_SRC,
 					  dp83822->gpio2_clk_out));
 
-	if (dp83822->tx_amplitude_100base_tx_index >= 0)
+	if (dp83822->tx_amplitude_100base_tx_modify)
 		phy_modify_mmd(phydev, MDIO_MMD_VEND2, MII_DP83822_LDCTRL,
 			       DP83822_100BASE_TX_LINE_DRIVER_SWING,
 			       FIELD_PREP(DP83822_100BASE_TX_LINE_DRIVER_SWING,
@@ -851,6 +852,8 @@ static int dp83822_of_init(struct phy_device *phydev)
 				   val);
 			return -EINVAL;
 		}
+
+		dp83822->tx_amplitude_100base_tx_modify = true;
 	}
 
 	return dp83822_of_init_leds(phydev);
