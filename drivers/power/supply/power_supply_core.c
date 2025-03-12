@@ -593,6 +593,66 @@ struct power_supply *devm_power_supply_get_by_phandle(struct device *dev,
 EXPORT_SYMBOL_GPL(devm_power_supply_get_by_phandle);
 #endif /* CONFIG_OF */
 
+static int power_supply_match_fwnode(struct device *dev, const void *data)
+{
+	return dev && dev->parent && dev->parent->fwnode == data;
+}
+
+/**
+ * power_supply_get_by_fwnode_reference_array() - Returns an array of power
+ * supply objects associated with each fwnode reference present in the property
+ * @fwnode: Pointer to fwnode to lookup property
+ * @property: Name of property holding references
+ * @psy: Resulting array of power_supply pointers. To be provided by the caller.
+ * @size: size of power_supply pointer array.
+ *
+ * If power supply was found, it increases reference count for the
+ * internal power supply's device. The user should power_supply_put()
+ * after usage.
+ *
+ * Return: On success returns the number of power supply objects filled
+ * in the @psy array.
+ * -EOVERFLOW when size of @psy array is not suffice.
+ * -EINVAL when @psy is NULL or @size is 0.
+ * -ENODATA when fwnode does not contain the given property
+ */
+int power_supply_get_by_fwnode_reference_array(struct fwnode_handle *fwnode,
+					       const char *property,
+					       struct power_supply **psy,
+					       ssize_t size)
+{
+	int ret, index, count = 0;
+	struct fwnode_reference_args args;
+	struct device *dev;
+
+	if (!psy || !size)
+		return -EINVAL;
+
+	for (index = 0; index < size &&
+	     !(ret = fwnode_property_get_reference_args(fwnode, property, NULL,
+							0, index, &args));
+	     ++index) {
+		dev = class_find_device(&power_supply_class, NULL, args.fwnode,
+					power_supply_match_fwnode);
+		fwnode_handle_put(args.fwnode);
+		if (!dev)
+			continue;
+
+		if (count > size)
+			return -EOVERFLOW;
+
+		psy[count] = dev_get_drvdata(dev);
+		atomic_inc(&psy[count]->use_cnt);
+		++count;
+	}
+
+	if (ret != -ENOENT)
+		return ret;
+
+	return index ? count : -ENODATA;
+}
+EXPORT_SYMBOL_GPL(power_supply_get_by_fwnode_reference_array);
+
 int power_supply_get_battery_info(struct power_supply *psy,
 				  struct power_supply_battery_info **info_out)
 {

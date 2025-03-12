@@ -820,6 +820,11 @@ devm_power_supply_get_by_phandle(struct device *dev, const char *property)
 { return NULL; }
 #endif /* CONFIG_OF */
 
+extern int
+power_supply_get_by_fwnode_reference_array(struct fwnode_handle *fwnode,
+					   const char *property,
+					   struct power_supply **psy,
+					   ssize_t size);
 extern const enum power_supply_property power_supply_battery_info_properties[];
 extern const size_t power_supply_battery_info_properties_size;
 extern int power_supply_get_battery_info(struct power_supply *psy,
