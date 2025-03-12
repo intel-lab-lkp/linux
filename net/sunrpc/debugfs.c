@@ -145,6 +145,17 @@ static int do_xprt_debugfs(struct rpc_clnt *clnt, struct rpc_xprt *xprt, void *n
 	return 0;
 }
 
+static int
+clnt_shutdown(void *data, u64 value)
+{
+	struct rpc_clnt *clnt = data;
+
+	rpc_clnt_shutdown(clnt);
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(shutdown_fops, NULL, clnt_shutdown, "%llu\n");
+
 void
 rpc_clnt_debugfs_register(struct rpc_clnt *clnt)
 {
@@ -162,6 +173,10 @@ rpc_clnt_debugfs_register(struct rpc_clnt *clnt)
 	/* make tasks file */
 	debugfs_create_file("tasks", S_IFREG | 0400, clnt->cl_debugfs, clnt,
 			    &tasks_fops);
+
+	/* make shutdown file */
+	debugfs_create_file("shutdown", S_IFREG | 0200, clnt->cl_debugfs, clnt,
+			    &shutdown_fops);
 
 	rpc_clnt_iterate_for_each_xprt(clnt, do_xprt_debugfs, &xprtnum);
 }
