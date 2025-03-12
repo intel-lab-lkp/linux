@@ -355,16 +355,14 @@ static void pt_cmd_callback_work(void *data, int err)
 		desc->status = DMA_ERROR;
 
 	spin_lock_irqsave(&chan->vc.lock, flags);
-	if (desc) {
-		if (desc->status != DMA_COMPLETE) {
-			if (desc->status != DMA_ERROR)
-				desc->status = DMA_COMPLETE;
+	if (desc->status != DMA_COMPLETE) {
+		if (desc->status != DMA_ERROR)
+			desc->status = DMA_COMPLETE;
 
-			dma_cookie_complete(tx_desc);
-			dma_descriptor_unmap(tx_desc);
-		} else {
-			tx_desc = NULL;
-		}
+		dma_cookie_complete(tx_desc);
+		dma_descriptor_unmap(tx_desc);
+	} else {
+		tx_desc = NULL;
 	}
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 
