@@ -213,6 +213,17 @@ TIME_TO_FULL
   seconds left for battery to be considered full
   (i.e. while battery is charging)
 
+USBIF_VENDOR_ID
+  Vendor ID (VID) assigned to manufacturer or device vendor associated with the
+  battery by USB Implementers Forum (USB-IF). This property is described in
+  "USB Power Delivery Specification Rev3.1 V1.8" Chapter 6.5.5 Battery
+  Capabilities, Section 6.5.5.1 Vendor ID (VID).
+USBIF_PRODUCT_ID
+  Product ID (PID) assigned to the battery, such that if the VID belongs to the
+  manufacturer then the PID will be designated by it. Similarly if the VID
+  belongs to the device vendor then the PID will be designated by it. This
+  property is described in "USB Power Delivery Specification Rev3.1 V1.8"
+  Chapter 6.5.5 Battery Capabilities, Section 6.5.5.2 Product ID (PID).
 
 Battery <-> external power supply interaction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

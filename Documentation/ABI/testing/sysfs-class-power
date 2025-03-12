@@ -822,3 +822,23 @@ Description:
 		Each entry is a link to the device which registered the extension.
 
 		Access: Read
+
+What:		/sys/class/power_supply/<supply_name>/usbif_vendor_id
+Date:		March 2025
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Reports the vendor id assigned to the battery manufacturer by USB
+		Implementers Forum (USB-IF).
+
+		Access: Read
+		Valid values: 0x0-0xffff
+
+What:		/sys/class/power_supply/<supply_name>/usbif_product_id
+Date:		March 2025
+Contact:	linux-pm@vger.kernel.org
+Description:
+		Reports the product id assigned to the battery by the manufacturer
+		(associated with usbif_vendor_id).
+
+		Access: Read
+		Valid values: 0x0-0xffff
