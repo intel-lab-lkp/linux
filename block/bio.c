@@ -1026,9 +1026,17 @@ EXPORT_SYMBOL(bio_add_page);
 void bio_add_folio_nofail(struct bio *bio, struct folio *folio, size_t len,
 			  size_t off)
 {
+	struct page *page = &folio->page;
+
 	WARN_ON_ONCE(len > UINT_MAX);
-	WARN_ON_ONCE(off > UINT_MAX);
-	__bio_add_page(bio, &folio->page, len, off);
+	if (unlikely(off > UINT_MAX)) {
+		unsigned long nr = off / PAGE_SIZE;
+
+		page = folio_page(folio, nr);
+		off -= nr * PAGE_SIZE;
+	}
+
+	__bio_add_page(bio, page, len, off);
 }
 EXPORT_SYMBOL_GPL(bio_add_folio_nofail);
 
