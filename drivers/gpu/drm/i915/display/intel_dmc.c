@@ -28,6 +28,7 @@
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_de.h"
+#include "intel_display_power_well.h"
 #include "intel_dmc.h"
 #include "intel_dmc_regs.h"
 #include "intel_step.h"
@@ -57,6 +58,10 @@ struct intel_dmc {
 	const char *fw_path;
 	u32 max_fw_size; /* bytes */
 	u32 version;
+	struct {
+		u32 dc5_start;
+		u32 count;
+	} dc6_allowed;
 	struct dmc_fw_info {
 		u32 mmio_count;
 		i915_reg_t mmioaddr[20];
@@ -1235,6 +1240,43 @@ void intel_dmc_snapshot_print(const struct intel_dmc_snapshot *snapshot, struct 
 			   DMC_VERSION_MINOR(snapshot->version));
 }
 
+void intel_dmc_update_dc6_allowed_count(struct intel_display *display,
+					bool start_tracking)
+{
+	struct intel_dmc *dmc = display_to_dmc(display);
+	u32 dc5_cur_count;
+
+	if (DISPLAY_VER(dmc->display) < 14)
+		return;
+
+	dc5_cur_count = intel_de_read(dmc->display, DG1_DMC_DEBUG_DC5_COUNT);
+
+	if (!start_tracking)
+		dmc->dc6_allowed.count += dc5_cur_count - dmc->dc6_allowed.dc5_start;
+
+	dmc->dc6_allowed.dc5_start = dc5_cur_count;
+}
+
+static bool intel_dmc_get_dc6_allowed_count(struct intel_display *display, u32 *count)
+{
+	struct i915_power_domains *power_domains = &display->power.domains;
+	struct intel_dmc *dmc = display_to_dmc(display);
+
+	if (DISPLAY_VER(display) < 14)
+		return false;
+
+	mutex_lock(&power_domains->lock);
+	bool dc6_enabled = DC_STATE_EN_UPTO_DC6 &
+			   intel_de_read(display, DC_STATE_EN);
+	if (dc6_enabled)
+		intel_dmc_update_dc6_allowed_count(display, false);
+
+	*count = dmc->dc6_allowed.count;
+	mutex_unlock(&power_domains->lock);
+
+	return true;
+}
+
 static int intel_dmc_debugfs_status_show(struct seq_file *m, void *unused)
 {
 	struct intel_display *display = m->private;
@@ -1242,6 +1284,7 @@ static int intel_dmc_debugfs_status_show(struct seq_file *m, void *unused)
 	struct intel_dmc *dmc = display_to_dmc(display);
 	intel_wakeref_t wakeref;
 	i915_reg_t dc5_reg, dc6_reg = INVALID_MMIO_REG;
+	u32 dc6_allowed_count;
 
 	if (!HAS_DMC(display))
 		return -ENODEV;
@@ -1290,7 +1333,11 @@ static int intel_dmc_debugfs_status_show(struct seq_file *m, void *unused)
 	}
 
 	seq_printf(m, "DC3 -> DC5 count: %d\n", intel_de_read(display, dc5_reg));
-	if (i915_mmio_reg_valid(dc6_reg))
+
+	if (intel_dmc_get_dc6_allowed_count(display, &dc6_allowed_count))
+		seq_printf(m, "DC5 -> DC6 allowed count: %d\n",
+			   dc6_allowed_count);
+	else if (i915_mmio_reg_valid(dc6_reg))
 		seq_printf(m, "DC5 -> DC6 count: %d\n",
 			   intel_de_read(display, dc6_reg));
 
