@@ -11,6 +11,7 @@
 #include <asm/processor.h>
 #include <asm/archrandom.h>
 #include <asm/sections.h>
+#include <asm/msr.h>
 
 
 enum { SAMPLES = 8, MIN_CHANGE = 5 };
@@ -46,6 +47,8 @@ void x86_init_rdrand(struct cpuinfo_x86 *c)
 
 	if (failure) {
 		clear_cpu_cap(c, X86_FEATURE_RDRAND);
+		if (c->x86_vendor == X86_VENDOR_AMD || c->x86_vendor == X86_VENDOR_HYGON)
+			msr_clear_bit(MSR_AMD64_CPUID_FN_1, 62);
 		pr_emerg("RDRAND is not reliable on this platform; disabling.\n");
 	}
 }
@@ -82,6 +85,8 @@ void x86_init_rdseed(struct cpuinfo_x86 *c)
 
 	if (failure) {
 		clear_cpu_cap(c, X86_FEATURE_RDSEED);
+		if (c->x86_vendor == X86_VENDOR_AMD || c->x86_vendor == X86_VENDOR_HYGON)
+			msr_clear_bit(MSR_AMD64_CPUID_FN_7, 18);
 		pr_emerg("RDSEED is not reliable on this platform; disabling.\n");
 	}
 }
