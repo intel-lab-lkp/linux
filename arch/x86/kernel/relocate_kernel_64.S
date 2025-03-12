@@ -50,7 +50,7 @@ SYM_CODE_START_NOALIGN(relocate_kernel)
 	 * %rsi pa_control_page
 	 * %rdx start address
 	 * %rcx preserve_context
-	 * %r8  host_mem_enc_active
+	 * %r8  bare_metal
 	 */
 
 	/* Save the CPU context, used for jumping back */
@@ -107,7 +107,7 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	/*
 	 * %rdi	indirection page
 	 * %rdx start address
-	 * %r8 host_mem_enc_active
+	 * %r8 bare_metal
 	 * %r9 page table page
 	 * %r11 preserve_context
 	 * %r13 original CR4 when relocate_kernel() was invoked
@@ -156,14 +156,19 @@ SYM_CODE_START_LOCAL_NOALIGN(identity_mapped)
 	movq	%r9, %cr3
 
 	/*
-	 * If SME is active, there could be old encrypted cache line
+	 * If SME/TDX is active, there could be old encrypted cache line
 	 * entries that will conflict with the now unencrypted memory
 	 * used by kexec. Flush the caches before copying the kernel.
+	 *
+	 * Do WBINVD for bare-metal only to cover both SME and TDX. Doing
+	 * WBINVD in guest results in an unexpected exception (#VE or #VC)
+	 * for TDX and SEV-ES/SNP guests which then crashes the guest (the
+	 * kernel has torn down the IDT).
 	 */
 	testq	%r8, %r8
-	jz .Lsme_off
+	jz .Lno_wbinvd
 	wbinvd
-.Lsme_off:
+.Lno_wbinvd:
 
 	call	swap_pages
 

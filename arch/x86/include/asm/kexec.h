@@ -123,7 +123,7 @@ relocate_kernel_fn(unsigned long indirection_page,
 		   unsigned long pa_control_page,
 		   unsigned long start_address,
 		   unsigned int preserve_context,
-		   unsigned int host_mem_enc_active);
+		   unsigned int bare_metal);
 #endif
 extern relocate_kernel_fn relocate_kernel;
 #define ARCH_HAS_KIMAGE_ARCH
