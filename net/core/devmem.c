@@ -127,10 +127,8 @@ void net_devmem_unbind_dmabuf(struct net_devmem_dmabuf_binding *binding)
 		rxq->mp_params.mp_priv = NULL;
 		rxq->mp_params.mp_ops = NULL;
 
-		netdev_lock(binding->dev);
 		rxq_idx = get_netdev_rx_queue_index(rxq);
 		WARN_ON(netdev_rx_queue_restart(binding->dev, rxq_idx));
-		netdev_unlock(binding->dev);
 	}
 
 	xa_erase(&net_devmem_dmabuf_bindings, binding->id);
