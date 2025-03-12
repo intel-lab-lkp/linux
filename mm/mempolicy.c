@@ -3541,39 +3541,40 @@ static int __init mempolicy_sysfs_init(void)
 	int err;
 	static struct kobject *mempolicy_kobj;
 
-	mempolicy_kobj = kzalloc(sizeof(*mempolicy_kobj), GFP_KERNEL);
-	if (!mempolicy_kobj) {
-		err = -ENOMEM;
-		goto err_out;
-	}
-
 	node_attrs = kcalloc(nr_node_ids, sizeof(struct iw_node_attr *),
 			     GFP_KERNEL);
 	if (!node_attrs) {
 		err = -ENOMEM;
-		goto mempol_out;
+		goto err_out;
+	}
+
+	mempolicy_kobj = kzalloc(sizeof(*mempolicy_kobj), GFP_KERNEL);
+	if (!mempolicy_kobj) {
+		err = -ENOMEM;
+		goto node_out;
 	}
 
 	err = kobject_init_and_add(mempolicy_kobj, &mempolicy_ktype, mm_kobj,
 				   "mempolicy");
-	if (err)
-		goto node_out;
+	if (err) {
+		kobject_put(mempolicy_kobj);
+		goto err_out;
+	}
 
 	err = add_weighted_interleave_group(mempolicy_kobj);
 	if (err) {
-		pr_err("mempolicy sysfs structure failed to initialize\n");
 		kobject_put(mempolicy_kobj);
-		return err;
+		goto err_out;
 	}
 
-	return err;
+	return 0;
+
 node_out:
 	kfree(node_attrs);
-mempol_out:
-	kfree(mempolicy_kobj);
 err_out:
-	pr_err("failed to add mempolicy kobject to the system\n");
+	pr_err("mempolicy sysfs structure failed to initialize\n");
 	return err;
+
 }
 
 late_initcall(mempolicy_sysfs_init);
