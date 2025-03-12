@@ -9,7 +9,7 @@
 
 /* Will be updated by benchmark before program loading */
 const volatile unsigned int cmp_str_len = 1;
-const char target[STRNCMP_STR_SZ];
+const volatile char target[STRNCMP_STR_SZ];
 
 long hits = 0;
 char str[STRNCMP_STR_SZ];
@@ -17,7 +17,7 @@ char str[STRNCMP_STR_SZ];
 char _license[] SEC("license") = "GPL";
 
 static __always_inline int local_strncmp(const char *s1, unsigned int sz,
-					 const char *s2)
+					 const volatile char *s2)
 {
 	int ret = 0;
 	unsigned int i;
@@ -43,7 +43,7 @@ int strncmp_no_helper(void *ctx)
 SEC("tp/syscalls/sys_enter_getpgid")
 int strncmp_helper(void *ctx)
 {
-	if (bpf_strncmp(str, cmp_str_len + 1, target) < 0)
+	if (bpf_strncmp(str, cmp_str_len + 1, (const char *)target) < 0)
 		__sync_add_and_fetch(&hits, 1);
 	return 0;
 }
