@@ -36,10 +36,14 @@ enum panfrost_drv_comp_bits {
  * enum panfrost_gpu_pm - Supported kernel power management features
  * @GPU_PM_CLK_DIS:  Allow disabling clocks during system suspend
  * @GPU_PM_VREG_OFF: Allow turning off regulators during system suspend
+ * @GPU_PM_RT_CLK_DIS: Allow disabling clocks during system runtime suspend
+ * @GPU_PM_RST_ASRT: Allow asserting the reset control during runtime suspend
  */
 enum panfrost_gpu_pm {
 	GPU_PM_CLK_DIS,
 	GPU_PM_VREG_OFF,
+	GPU_PM_RT_CLK_DIS,
+	GPU_PM_RT_RST_ASRT
 };
 
 struct panfrost_features {
