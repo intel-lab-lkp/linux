@@ -2184,7 +2184,10 @@ static void __init memmap_init_reserved_pages(void)
 	 * set nid on all reserved pages and also treat struct
 	 * pages for the NOMAP regions as PageReserved
 	 */
+repeat:
 	for_each_mem_region(region) {
+		unsigned long max = memblock.reserved.max;
+
 		nid = memblock_get_region_node(region);
 		start = region->base;
 		end = start + region->size;
@@ -2193,6 +2196,15 @@ static void __init memmap_init_reserved_pages(void)
 			reserve_bootmem_region(start, end, nid);
 
 		memblock_set_node(start, region->size, &memblock.reserved, nid);
+
+		/*
+		 * 'max' is changed means memblock.reserved has been doubled
+		 * its array, which may result a new reserved region before
+		 * current 'start'. Now we should repeat the procedure to set
+		 * its node id.
+		 */
+		if (max != memblock.reserved.max)
+			goto repeat;
 	}
 
 	/*
