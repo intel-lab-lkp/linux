@@ -214,6 +214,7 @@ void nvmet_add_async_event(struct nvmet_ctrl *ctrl, u8 event_type,
 
 	queue_work(nvmet_wq, &ctrl->async_event_work);
 }
+EXPORT_SYMBOL_GPL(nvmet_add_async_event);
 
 static void nvmet_add_to_changed_ns_log(struct nvmet_ctrl *ctrl, __le32 nsid)
 {
