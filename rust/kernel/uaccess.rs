@@ -322,6 +322,7 @@ impl UserSliceWriter {
     /// Fails with [`EFAULT`] if the write happens on a bad address, or if the write goes out of
     /// bounds of this [`UserSliceWriter`]. This call may modify the associated userspace slice even
     /// if it returns an error.
+    #[inline]
     pub fn write_slice(&mut self, data: &[u8]) -> Result {
         let len = data.len();
         let data_ptr = data.as_ptr().cast::<c_void>();
