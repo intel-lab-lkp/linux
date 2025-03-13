@@ -3162,9 +3162,11 @@ ice_get_ringparam(struct net_device *netdev, struct ethtool_ringparam *ring,
 {
 	struct ice_netdev_priv *np = netdev_priv(netdev);
 	struct ice_vsi *vsi = np->vsi;
+	struct ice_hw *hw;
 
-	ring->rx_max_pending = ICE_MAX_NUM_DESC;
-	ring->tx_max_pending = ICE_MAX_NUM_DESC;
+	hw = &vsi->back->hw;
+	ring->rx_max_pending = ICE_MAX_NUM_DESC_BY_MAC(hw);
+	ring->tx_max_pending = ICE_MAX_NUM_DESC_BY_MAC(hw);
 	if (vsi->tx_rings && vsi->rx_rings) {
 		ring->rx_pending = vsi->rx_rings[0]->count;
 		ring->tx_pending = vsi->tx_rings[0]->count;
@@ -3186,21 +3188,24 @@ ice_set_ringparam(struct net_device *netdev, struct ethtool_ringparam *ring,
 		  struct netlink_ext_ack *extack)
 {
 	struct ice_netdev_priv *np = netdev_priv(netdev);
+	u16 new_rx_cnt, new_tx_cnt, new_tstamp_cnt;
+	struct ice_tx_ring *tstamp_rings = NULL;
 	struct ice_tx_ring *xdp_rings = NULL;
 	struct ice_tx_ring *tx_rings = NULL;
 	struct ice_rx_ring *rx_rings = NULL;
 	struct ice_vsi *vsi = np->vsi;
 	struct ice_pf *pf = vsi->back;
 	int i, timeout = 50, err = 0;
-	u16 new_rx_cnt, new_tx_cnt;
+	struct ice_hw *hw = &pf->hw;
+	bool txtime_ena;
 
-	if (ring->tx_pending > ICE_MAX_NUM_DESC ||
+	if (ring->tx_pending > ICE_MAX_NUM_DESC_BY_MAC(hw) ||
 	    ring->tx_pending < ICE_MIN_NUM_DESC ||
-	    ring->rx_pending > ICE_MAX_NUM_DESC ||
+	    ring->rx_pending > ICE_MAX_NUM_DESC_BY_MAC(hw) ||
 	    ring->rx_pending < ICE_MIN_NUM_DESC) {
 		netdev_err(netdev, "Descriptors requested (Tx: %d / Rx: %d) out of range [%d-%d] (increment %d)\n",
 			   ring->tx_pending, ring->rx_pending,
-			   ICE_MIN_NUM_DESC, ICE_MAX_NUM_DESC,
+			   ICE_MIN_NUM_DESC, ICE_MAX_NUM_DESC_BY_MAC(hw),
 			   ICE_REQ_DESC_MULTIPLE);
 		return -EINVAL;
 	}
@@ -3238,11 +3243,18 @@ ice_set_ringparam(struct net_device *netdev, struct ethtool_ringparam *ring,
 			return -EBUSY;
 		usleep_range(1000, 2000);
 	}
+	txtime_ena = test_bit(ICE_FLAG_TXTIME, pf->flags);
+	if (txtime_ena)
+		new_tstamp_cnt = ice_calc_ts_ring_count(hw, new_tx_cnt);
 
 	/* set for the next time the netdev is started */
 	if (!netif_running(vsi->netdev)) {
 		ice_for_each_alloc_txq(vsi, i)
 			vsi->tx_rings[i]->count = new_tx_cnt;
+		/* Change all tstamp_rings to match Tx rings */
+		if (txtime_ena)
+			ice_for_each_alloc_txq(vsi, i)
+				vsi->tstamp_rings[i]->count = new_tstamp_cnt;
 		ice_for_each_alloc_rxq(vsi, i)
 			vsi->rx_rings[i]->count = new_rx_cnt;
 		if (ice_is_xdp_ena_vsi(vsi))
@@ -3267,6 +3279,15 @@ ice_set_ringparam(struct net_device *netdev, struct ethtool_ringparam *ring,
 		goto done;
 	}
 
+	if (txtime_ena) {
+		tstamp_rings = kcalloc(vsi->num_txq, sizeof(*tstamp_rings),
+				       GFP_KERNEL);
+		if (!tstamp_rings) {
+			err = -ENOMEM;
+			goto free_tx;
+		}
+	}
+
 	ice_for_each_txq(vsi, i) {
 		/* clone ring and setup updated count */
 		tx_rings[i] = *vsi->tx_rings[i];
@@ -3275,10 +3296,22 @@ ice_set_ringparam(struct net_device *netdev, struct ethtool_ringparam *ring,
 		tx_rings[i].tx_buf = NULL;
 		tx_rings[i].tx_tstamps = &pf->ptp.port.tx;
 		err = ice_setup_tx_ring(&tx_rings[i]);
+
+		if (txtime_ena) {
+			tstamp_rings[i] = *vsi->tstamp_rings[i];
+			tstamp_rings[i].count = new_tstamp_cnt;
+			tstamp_rings[i].desc = NULL;
+			tstamp_rings[i].tx_buf = NULL;
+			err |= ice_setup_tstamp_ring(&tstamp_rings[i]);
+		}
 		if (err) {
-			while (i--)
+			while (i--) {
+				if (txtime_ena)
+					ice_clean_tstamp_ring(&tstamp_rings[i]);
 				ice_clean_tx_ring(&tx_rings[i]);
+			}
 			kfree(tx_rings);
+			kfree(tstamp_rings);
 			goto done;
 		}
 	}
@@ -3372,6 +3405,14 @@ process_link:
 			kfree(tx_rings);
 		}
 
+		if (tstamp_rings) {
+			ice_for_each_txq(vsi, i) {
+				ice_free_tstamp_ring(vsi->tstamp_rings[i]);
+				*vsi->tstamp_rings[i] = tstamp_rings[i];
+			}
+			kfree(tstamp_rings);
+		}
+
 		if (rx_rings) {
 			ice_for_each_rxq(vsi, i) {
 				ice_free_rx_ring(vsi->rx_rings[i]);
@@ -3410,6 +3451,12 @@ free_tx:
 		ice_for_each_txq(vsi, i)
 			ice_free_tx_ring(&tx_rings[i]);
 		kfree(tx_rings);
+	}
+
+	if (tstamp_rings) {
+		ice_for_each_txq(vsi, i)
+			ice_free_tstamp_ring(&tstamp_rings[i]);
+		kfree(tstamp_rings);
 	}
 
 done:

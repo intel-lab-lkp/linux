@@ -242,7 +242,7 @@ static void ice_cfg_itr_gran(struct ice_hw *hw)
  * @ring: ring to get the absolute queue index
  * @tc: traffic class number
  */
-static u16 ice_calc_txq_handle(struct ice_vsi *vsi, struct ice_tx_ring *ring, u8 tc)
+static u16 ice_calc_txq_handle(const struct ice_vsi *vsi, struct ice_tx_ring *ring, u8 tc)
 {
 	WARN_ONCE(ice_ring_is_xdp(ring) && tc, "XDP ring can't belong to TC other than 0\n");
 
@@ -278,30 +278,20 @@ static void ice_cfg_xps_tx_ring(struct ice_tx_ring *ring)
 }
 
 /**
- * ice_setup_tx_ctx - setup a struct ice_tlan_ctx instance
- * @ring: The Tx ring to configure
- * @tlan_ctx: Pointer to the Tx LAN queue context structure to be initialized
- * @pf_q: queue index in the PF space
+ * ice_set_txq_ctx_vmvf - set queue context VM/VF type and number by VSI type
+ * @ring: the Tx ring to configure
+ * @vmvf_type: VM/VF type
+ * @vmvf_num: VM/VF number
  *
- * Configure the Tx descriptor ring in TLAN context.
+ * Return: 0 on success and a negative value on error.
  */
-static void
-ice_setup_tx_ctx(struct ice_tx_ring *ring, struct ice_tlan_ctx *tlan_ctx, u16 pf_q)
+static int
+ice_set_txq_ctx_vmvf(struct ice_tx_ring *ring, u8 *vmvf_type, u16 *vmvf_num)
 {
 	struct ice_vsi *vsi = ring->vsi;
-	struct ice_hw *hw = &vsi->back->hw;
+	struct ice_hw *hw;
 
-	tlan_ctx->base = ring->dma >> ICE_TLAN_CTX_BASE_S;
-
-	tlan_ctx->port_num = vsi->port_info->lport;
-
-	/* Transmit Queue Length */
-	tlan_ctx->qlen = ring->count;
-
-	ice_set_cgd_num(tlan_ctx, ring->dcb_tc);
-
-	/* PF number */
-	tlan_ctx->pf_num = hw->pf_id;
+	hw = &vsi->back->hw;
 
 	/* queue belongs to a specific VSI type
 	 * VF / VM index should be programmed per vmvf_type setting:
@@ -314,21 +304,57 @@ ice_setup_tx_ctx(struct ice_tx_ring *ring, struct ice_tlan_ctx *tlan_ctx, u16 pf
 	case ICE_VSI_CTRL:
 	case ICE_VSI_PF:
 		if (ring->ch)
-			tlan_ctx->vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_VMQ;
+			*vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_VMQ;
 		else
-			tlan_ctx->vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_PF;
+			*vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_PF;
 		break;
 	case ICE_VSI_VF:
 		/* Firmware expects vmvf_num to be absolute VF ID */
-		tlan_ctx->vmvf_num = hw->func_caps.vf_base_id + vsi->vf->vf_id;
-		tlan_ctx->vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_VF;
+		*vmvf_num = hw->func_caps.vf_base_id + vsi->vf->vf_id;
+		*vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_VF;
 		break;
 	case ICE_VSI_SF:
-		tlan_ctx->vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_VMQ;
+		*vmvf_type = ICE_TLAN_CTX_VMVF_TYPE_VMQ;
 		break;
 	default:
-		return;
+		dev_info(ice_pf_to_dev(vsi->back),
+			 "Unable to set VMVF type for VSI type %d\n",
+			 vsi->type);
+		return -EINVAL;
 	}
+
+	return 0;
+}
+
+/**
+ * ice_setup_tx_ctx - setup a struct ice_tlan_ctx instance
+ * @ring: the Tx ring to configure
+ * @tlan_ctx: pointer to the Tx LAN queue context structure to be initialized
+ * @pf_q: queue index in the PF space
+ *
+ * Configure the Tx descriptor ring in TLAN context.
+ */
+static void
+ice_setup_tx_ctx(struct ice_tx_ring *ring, struct ice_tlan_ctx *tlan_ctx, u16 pf_q)
+{
+	struct ice_vsi *vsi = ring->vsi;
+	struct ice_hw *hw;
+
+	hw = &vsi->back->hw;
+	tlan_ctx->base = ring->dma >> ICE_TLAN_CTX_BASE_S;
+	tlan_ctx->port_num = vsi->port_info->lport;
+
+	/* Transmit Queue Length */
+	tlan_ctx->qlen = ring->count;
+
+	ice_set_cgd_num(tlan_ctx, ring->dcb_tc);
+
+	/* PF number */
+	tlan_ctx->pf_num = hw->pf_id;
+
+	if (ice_set_txq_ctx_vmvf(ring, &tlan_ctx->vmvf_type,
+				 &tlan_ctx->vmvf_num))
+		return;
 
 	/* make sure the context is associated with the right VSI */
 	if (ring->ch)
@@ -355,6 +381,74 @@ ice_setup_tx_ctx(struct ice_tx_ring *ring, struct ice_tlan_ctx *tlan_ctx, u16 pf
 	 * 1: Legacy Host Interface
 	 */
 	tlan_ctx->legacy_int = ICE_TX_LEGACY;
+}
+
+/**
+ * ice_setup_txtime_ctx - setup a struct ice_txtime_ctx instance
+ * @ring: the tstamp ring to configure
+ * @txtime_ctx: pointer to the Tx time queue context structure to be initialized
+ * @txtime_ena: Tx time enable flag, set to true if Tx time should be enabled
+ */
+static void
+ice_setup_txtime_ctx(struct ice_tx_ring *ring,
+		     struct ice_txtime_ctx *txtime_ctx, bool txtime_ena)
+{
+	struct ice_vsi *vsi = ring->vsi;
+	struct ice_hw *hw;
+
+	hw = &vsi->back->hw;
+	txtime_ctx->base = ring->dma >> ICE_TXTIME_CTX_BASE_S;
+
+	/* Tx time Queue Length */
+	txtime_ctx->qlen = ring->count;
+
+	if (txtime_ena)
+		txtime_ctx->txtime_ena_q = 1;
+
+	/* PF number */
+	txtime_ctx->pf_num = hw->pf_id;
+
+	if (ice_set_txq_ctx_vmvf(ring, &txtime_ctx->vmvf_type,
+				 &txtime_ctx->vmvf_num))
+		return;
+
+	/* make sure the context is associated with the right VSI */
+	if (ring->ch)
+		txtime_ctx->src_vsi = ring->ch->vsi_num;
+	else
+		txtime_ctx->src_vsi = ice_get_hw_vsi_num(hw, vsi->idx);
+
+	txtime_ctx->ts_res = ICE_TXTIME_CTX_RESOLUTION_128NS;
+	txtime_ctx->drbell_mode_32 = ICE_TXTIME_CTX_DRBELL_MODE_32;
+	txtime_ctx->ts_fetch_prof_id = ICE_TXTIME_CTX_FETCH_PROF_ID_0;
+}
+
+/**
+ * ice_calc_ts_ring_count - calculate the number of timestamp descriptors
+ * @hw: pointer to the hardware structure
+ * @tx_desc_count: number of Tx descriptors in the ring
+ *
+ * Return: the number of timestamp descriptors.
+ */
+u16 ice_calc_ts_ring_count(struct ice_hw *hw, u16 tx_desc_count)
+{
+	u16 prof = ICE_TXTIME_CTX_FETCH_PROF_ID_0;
+	u16 max_fetch_desc = 0, fetch, i;
+	u32 reg;
+
+	for (i = 0; i < ICE_TXTIME_FETCH_PROFILE_CNT; i++) {
+		reg = rd32(hw, E830_GLTXTIME_FETCH_PROFILE(prof, 0));
+		fetch = FIELD_GET(E830_GLTXTIME_FETCH_PROFILE_FETCH_TS_DESC_M,
+				  reg);
+		max_fetch_desc = max(fetch, max_fetch_desc);
+	}
+
+	if (!max_fetch_desc)
+		max_fetch_desc = ICE_TXTIME_FETCH_TS_DESC_DFLT;
+
+	max_fetch_desc = ALIGN(max_fetch_desc, ICE_REQ_DESC_MULTIPLE);
+
+	return tx_desc_count + max_fetch_desc;
 }
 
 /**
@@ -882,11 +976,17 @@ void ice_vsi_free_q_vectors(struct ice_vsi *vsi)
  * ice_vsi_cfg_txq - Configure single Tx queue
  * @vsi: the VSI that queue belongs to
  * @ring: Tx ring to be configured
+ * @tstamp_ring: time stamp ring to be configured
  * @qg_buf: queue group buffer
+ * @txtime_qg_buf: Tx Time queue group buffer
+ *
+ * Return: 0 on success and a negative value on error.
  */
 static int
-ice_vsi_cfg_txq(struct ice_vsi *vsi, struct ice_tx_ring *ring,
-		struct ice_aqc_add_tx_qgrp *qg_buf)
+ice_vsi_cfg_txq(const struct ice_vsi *vsi, struct ice_tx_ring *ring,
+		struct ice_tx_ring *tstamp_ring,
+		struct ice_aqc_add_tx_qgrp *qg_buf,
+		struct ice_aqc_set_txtime_qgrp *txtime_qg_buf)
 {
 	u8 buf_len = struct_size(qg_buf, txqs, 1);
 	struct ice_tlan_ctx tlan_ctx = { 0 };
@@ -944,6 +1044,27 @@ ice_vsi_cfg_txq(struct ice_vsi *vsi, struct ice_tx_ring *ring,
 	if (pf_q == le16_to_cpu(txq->txq_id))
 		ring->txq_teid = le32_to_cpu(txq->q_teid);
 
+	if (tstamp_ring) {
+		u8 txtime_buf_len = struct_size(txtime_qg_buf, txtimeqs, 1);
+		struct ice_txtime_ctx txtime_ctx = {};
+
+		ice_setup_txtime_ctx(tstamp_ring, &txtime_ctx,
+				     !!(ring->flags & ICE_TX_FLAGS_TXTIME));
+		ice_pack_txtime_ctx(&txtime_ctx,
+				    &txtime_qg_buf->txtimeqs[0].txtime_ctx);
+
+		tstamp_ring->tail =
+			 hw->hw_addr + E830_GLQTX_TXTIME_DBELL_LSB(pf_q);
+
+		status = ice_aq_set_txtimeq(hw, pf_q, 1, txtime_qg_buf,
+					    txtime_buf_len, NULL);
+		if (status) {
+			dev_err(ice_pf_to_dev(pf), "Failed to set Tx Time queue context, error: %d\n",
+				status);
+			return status;
+		}
+	}
+
 	return 0;
 }
 
@@ -957,21 +1078,35 @@ int ice_vsi_cfg_single_txq(struct ice_vsi *vsi, struct ice_tx_ring **tx_rings,
 
 	qg_buf->num_txqs = 1;
 
-	return ice_vsi_cfg_txq(vsi, tx_rings[q_idx], qg_buf);
+	if (!vsi->tstamp_rings) {
+		return ice_vsi_cfg_txq(vsi, tx_rings[q_idx], NULL, qg_buf,
+				       NULL);
+	} else {
+		DEFINE_RAW_FLEX(struct ice_aqc_set_txtime_qgrp, txtime_qg_buf,
+				txtimeqs, 1);
+		struct ice_tx_ring **tstamp_rings = vsi->tstamp_rings;
+
+		return ice_vsi_cfg_txq(vsi, tx_rings[q_idx], tstamp_rings[q_idx],
+				       qg_buf, txtime_qg_buf);
+	}
 }
 
 /**
  * ice_vsi_cfg_txqs - Configure the VSI for Tx
  * @vsi: the VSI being configured
  * @rings: Tx ring array to be configured
+ * @tstamp_rings: time stamp ring array to be configured
  * @count: number of Tx ring array elements
  *
- * Return 0 on success and a negative value on error
+ * Return: 0 on success and a negative value on error.
  * Configure the Tx VSI for operation.
  */
 static int
-ice_vsi_cfg_txqs(struct ice_vsi *vsi, struct ice_tx_ring **rings, u16 count)
+ice_vsi_cfg_txqs(const struct ice_vsi *vsi, struct ice_tx_ring **rings,
+		 struct ice_tx_ring **tstamp_rings, u16 count)
 {
+	DEFINE_RAW_FLEX(struct ice_aqc_set_txtime_qgrp, txtime_qg_buf,
+			txtimeqs, 1);
 	DEFINE_RAW_FLEX(struct ice_aqc_add_tx_qgrp, qg_buf, txqs, 1);
 	int err = 0;
 	u16 q_idx;
@@ -979,7 +1114,14 @@ ice_vsi_cfg_txqs(struct ice_vsi *vsi, struct ice_tx_ring **rings, u16 count)
 	qg_buf->num_txqs = 1;
 
 	for (q_idx = 0; q_idx < count; q_idx++) {
-		err = ice_vsi_cfg_txq(vsi, rings[q_idx], qg_buf);
+		/* If tstamp_rings is allocated, configure used tstamp queue */
+		if (tstamp_rings)
+			err = ice_vsi_cfg_txq(vsi, rings[q_idx],
+					      tstamp_rings[q_idx], qg_buf,
+					      txtime_qg_buf);
+		else
+			err = ice_vsi_cfg_txq(vsi, rings[q_idx],
+					      NULL, qg_buf, NULL);
 		if (err)
 			break;
 	}
@@ -996,7 +1138,8 @@ ice_vsi_cfg_txqs(struct ice_vsi *vsi, struct ice_tx_ring **rings, u16 count)
  */
 int ice_vsi_cfg_lan_txqs(struct ice_vsi *vsi)
 {
-	return ice_vsi_cfg_txqs(vsi, vsi->tx_rings, vsi->num_txq);
+	return ice_vsi_cfg_txqs(vsi, vsi->tx_rings, vsi->tstamp_rings,
+				vsi->num_txq);
 }
 
 /**
@@ -1011,7 +1154,8 @@ int ice_vsi_cfg_xdp_txqs(struct ice_vsi *vsi)
 	int ret;
 	int i;
 
-	ret = ice_vsi_cfg_txqs(vsi, vsi->xdp_rings, vsi->num_xdp_txq);
+	ret = ice_vsi_cfg_txqs(vsi, vsi->xdp_rings, vsi->tstamp_rings,
+			       vsi->num_xdp_txq);
 	if (ret)
 		return ret;
 
