@@ -7292,8 +7292,12 @@ int ice_down(struct ice_vsi *vsi)
 
 	ice_napi_disable_all(vsi);
 
-	ice_for_each_txq(vsi, i)
+	ice_for_each_txq(vsi, i) {
+		if (vsi->tstamp_rings &&
+		    (vsi->tx_rings[i]->flags & ICE_TX_FLAGS_TXTIME))
+			ice_clean_tstamp_ring(vsi->tstamp_rings[i]);
 		ice_clean_tx_ring(vsi->tx_rings[i]);
+	}
 
 	if (vsi->xdp_rings)
 		ice_for_each_xdp_txq(vsi, i)
@@ -7363,6 +7367,17 @@ int ice_vsi_setup_tx_rings(struct ice_vsi *vsi)
 		err = ice_setup_tx_ring(ring);
 		if (err)
 			break;
+
+		if (vsi->tstamp_rings) {
+			struct ice_tx_ring *tstamp_ring = vsi->tstamp_rings[i];
+
+			if (vsi->netdev)
+				tstamp_ring->netdev = vsi->netdev;
+
+			err = ice_setup_tstamp_ring(tstamp_ring);
+			if (err)
+				break;
+		}
 	}
 
 	return err;
@@ -7489,7 +7504,8 @@ int ice_vsi_open(struct ice_vsi *vsi)
 	if (err)
 		goto err_setup_rx;
 
-	ice_vsi_cfg_netdev_tc(vsi, vsi->tc_cfg.ena_tc);
+	if (!test_bit(ICE_FLAG_TXTIME, pf->flags))
+		ice_vsi_cfg_netdev_tc(vsi, vsi->tc_cfg.ena_tc);
 
 	if (vsi->type == ICE_VSI_PF || vsi->type == ICE_VSI_SF) {
 		/* Notify the stack of the actual queue counts. */
@@ -9348,6 +9364,158 @@ exit:
 	return ret;
 }
 
+/**
+ * ice_is_txtime_ena - check if TxTime is enabled
+ * @vsi: VSI to check
+ *
+ * Return: true if TxTime is enabled on any Tx queue, else false.
+ */
+static bool ice_is_txtime_ena(struct ice_vsi *vsi)
+{
+	int i;
+
+	ice_for_each_txq(vsi, i)
+		if (vsi->tx_rings[i]->flags & ICE_TX_FLAGS_TXTIME)
+			return true;
+
+	return false;
+}
+
+/**
+ * ice_vsi_cfg_txtime - configure TxTime for the VSI
+ * @vsi: VSI to reconfigure
+ * @enable: enable or disable TxTime
+ * @queue: Tx queue to configure TxTime on
+ *
+ * Return: 0 on success, negative value on failure.
+ */
+static int ice_vsi_cfg_txtime(struct ice_vsi *vsi, bool enable,
+			      int queue)
+{
+	bool if_running = netif_running(vsi->netdev), locked = false;
+	struct ice_pf *pf = vsi->back;
+	int ret, timeout = 50;
+
+	while (test_and_set_bit(ICE_CFG_BUSY, vsi->back->state)) {
+		timeout--;
+		if (!timeout)
+			return -EBUSY;
+		usleep_range(1000, 2000);
+	}
+
+	if (pf->adev) {
+		mutex_lock(&pf->adev_mutex);
+		device_lock(&pf->adev->dev);
+		locked = true;
+		if (pf->adev->dev.driver) {
+			dev_err(ice_pf_to_dev(pf), "Cannot change TxTime when RDMA is active\n");
+			ret = -EBUSY;
+			goto adev_unlock;
+		}
+	}
+
+	/* If rnnning, close and open VSI to clear and reconfigure all rings. */
+	if (if_running)
+		ice_vsi_close(vsi);
+
+	/* Enable or disable PF TxTime flag which is checked during VSI rebuild
+	 * for allocating the timestamp rings.
+	 */
+	if (enable)
+		set_bit(ICE_FLAG_TXTIME, pf->flags);
+	else
+		clear_bit(ICE_FLAG_TXTIME, pf->flags);
+
+	/* Rebuild VSI to allocate or free timestamp rings */
+	ret = ice_vsi_rebuild(vsi, ICE_VSI_FLAG_NO_INIT);
+	if (ret) {
+		dev_err(ice_pf_to_dev(pf), "Unhandled error during VSI rebuild. Unload and reload the driver.\n");
+		goto adev_unlock;
+	}
+
+	if (enable)
+		vsi->tx_rings[queue]->flags |= ICE_TX_FLAGS_TXTIME;
+
+	if (!if_running)
+		goto adev_unlock;
+	ice_vsi_open(vsi);
+
+adev_unlock:
+	if (locked) {
+		device_unlock(&pf->adev->dev);
+		mutex_unlock(&pf->adev_mutex);
+	}
+	clear_bit(ICE_CFG_BUSY, vsi->back->state);
+	return ret;
+}
+
+/**
+ * ice_offload_txtime - set earliest TxTime first
+ * @netdev: network interface device structure
+ * @qopt_off: etf queue option offload from the skb to set
+ *
+ * Return: 0 on success, negative value on failure.
+ */
+static int ice_offload_txtime(struct net_device *netdev,
+			      void *qopt_off)
+{
+	struct ice_netdev_priv *np = netdev_priv(netdev);
+	struct ice_pf *pf = np->vsi->back;
+	struct tc_etf_qopt_offload *qopt;
+	struct ice_vsi *vsi = np->vsi;
+	struct ice_tx_ring *tx_ring;
+	int ret = 0;
+
+	if (!ice_is_feature_supported(pf, ICE_F_TXTIME))
+		return -EOPNOTSUPP;
+
+	qopt = qopt_off;
+	if (!qopt_off || qopt->queue < 0 || qopt->queue >= vsi->num_txq)
+		return -EINVAL;
+
+	tx_ring = vsi->tx_rings[qopt->queue];
+
+	/* Enable or disable TxTime on the specified Tx queue. */
+	if (qopt->enable)
+		tx_ring->flags |= ICE_TX_FLAGS_TXTIME;
+	else
+		tx_ring->flags &= ~ICE_TX_FLAGS_TXTIME;
+
+	/* When TxTime is first enabled on any Tx queue or is disabled on all
+	 * Tx queues, then configure TxTime to allocate or free resources.
+	 */
+	if (!test_bit(ICE_FLAG_TXTIME, pf->flags) || !ice_is_txtime_ena(vsi)) {
+		ret = ice_vsi_cfg_txtime(vsi, qopt->enable, qopt->queue);
+		if (ret)
+			goto err;
+	} else if (netif_running(netdev)) {
+		struct ice_aqc_ena_dis_txtime_qgrp txtime_pg;
+		struct ice_hw *hw = &pf->hw;
+
+		/* If queues are allocated and configured (running), then enable
+		 * or disable TxTime on the specified queue.
+		 */
+		ret = ice_aq_ena_dis_txtimeq(hw, qopt->queue, 1, qopt->enable,
+					     &txtime_pg, NULL);
+		if (ret)
+			goto err;
+	}
+	netdev_info(netdev, "%s TxTime on queue: %i\n",
+		    str_enable_disable(qopt->enable), qopt->queue);
+
+	return 0;
+
+err:
+	netdev_err(netdev, "Failed to %s TxTime on queue: %i\n",
+		   str_enable_disable(qopt->enable), qopt->queue);
+
+	if (qopt->enable)
+		tx_ring->flags &= ~ICE_TX_FLAGS_TXTIME;
+	else
+		tx_ring->flags |= ICE_TX_FLAGS_TXTIME;
+	return ret;
+}
+
 static LIST_HEAD(ice_block_cb_list);
 
 static int
@@ -9409,6 +9577,8 @@ adev_unlock:
 			mutex_unlock(&pf->adev_mutex);
 		}
 		return err;
+	case TC_SETUP_QDISC_ETF:
+		return ice_offload_txtime(netdev, type_data);
 	default:
 		return -EOPNOTSUPP;
 	}
