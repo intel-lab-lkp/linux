@@ -755,7 +755,10 @@ static inline bool nvmet_is_disc_subsys(struct nvmet_subsys *subsys)
 
 static inline bool nvmet_is_pci_ctrl(struct nvmet_ctrl *ctrl)
 {
-	return ctrl->port->disc_addr.trtype == NVMF_TRTYPE_PCI;
+	struct nvmf_disc_rsp_page_entry *addr = &ctrl->port->disc_addr;
+
+	return addr->trtype == NVMF_TRTYPE_PCI ||
+	       addr->trtype == NVMF_TRTYPE_MDEV_PCI;
 }
 
 #ifdef CONFIG_NVME_TARGET_PASSTHRU

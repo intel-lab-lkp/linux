@@ -53,12 +53,13 @@ enum nvme_dctype {
 
 /* Address Family codes for Discovery Log Page entry ADRFAM field */
 enum {
-	NVMF_ADDR_FAMILY_PCI	= 0,	/* PCIe */
-	NVMF_ADDR_FAMILY_IP4	= 1,	/* IP4 */
-	NVMF_ADDR_FAMILY_IP6	= 2,	/* IP6 */
-	NVMF_ADDR_FAMILY_IB	= 3,	/* InfiniBand */
-	NVMF_ADDR_FAMILY_FC	= 4,	/* Fibre Channel */
-	NVMF_ADDR_FAMILY_LOOP	= 254,	/* Reserved for host usage */
+	NVMF_ADDR_FAMILY_PCI		= 0,	/* PCIe */
+	NVMF_ADDR_FAMILY_IP4		= 1,	/* IP4 */
+	NVMF_ADDR_FAMILY_IP6		= 2,	/* IP6 */
+	NVMF_ADDR_FAMILY_IB		= 3,	/* InfiniBand */
+	NVMF_ADDR_FAMILY_FC		= 4,	/* Fibre Channel */
+	NVMF_ADDR_FAMILY_MDEV_PCI	= 253,	/* MDEV PCI */
+	NVMF_ADDR_FAMILY_LOOP		= 254,	/* Reserved for host usage */
 	NVMF_ADDR_FAMILY_MAX,
 };
 
@@ -68,6 +69,7 @@ enum {
 	NVMF_TRTYPE_RDMA	= 1,	/* RDMA */
 	NVMF_TRTYPE_FC		= 2,	/* Fibre Channel */
 	NVMF_TRTYPE_TCP		= 3,	/* TCP/IP */
+	NVMF_TRTYPE_MDEV_PCI	= 253,	/* MDEV PCI hack */
 	NVMF_TRTYPE_LOOP	= 254,	/* Reserved for host usage */
 	NVMF_TRTYPE_MAX,
 };

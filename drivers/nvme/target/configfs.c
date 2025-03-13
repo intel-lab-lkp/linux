@@ -39,6 +39,7 @@ static struct nvmet_type_name_map nvmet_transport[] = {
 	{ NVMF_TRTYPE_TCP,	"tcp" },
 	{ NVMF_TRTYPE_PCI,	"pci" },
 	{ NVMF_TRTYPE_LOOP,	"loop" },
+	{ NVMF_TRTYPE_MDEV_PCI,	"mdev-pci" },
 };
 
 static const struct nvmet_type_name_map nvmet_addr_family[] = {
