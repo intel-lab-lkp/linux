@@ -2987,6 +2987,7 @@ static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 			if (!create)
 				continue;
 			pmd_clear_bad(pmd);
+			*mask = PGTBL_PMD_MODIFIED;
 		}
 		err = apply_to_pte_range(mm, pmd, addr, next,
 					 fn, data, create, mask);
@@ -3023,6 +3024,7 @@ static int apply_to_pud_range(struct mm_struct *mm, p4d_t *p4d,
 			if (!create)
 				continue;
 			pud_clear_bad(pud);
+			*mask = PGTBL_PUD_MODIFIED;
 		}
 		err = apply_to_pmd_range(mm, pud, addr, next,
 					 fn, data, create, mask);
@@ -3059,6 +3061,7 @@ static int apply_to_p4d_range(struct mm_struct *mm, pgd_t *pgd,
 			if (!create)
 				continue;
 			p4d_clear_bad(p4d);
+			*mask = PGTBL_P4D_MODIFIED;
 		}
 		err = apply_to_pud_range(mm, p4d, addr, next,
 					 fn, data, create, mask);
@@ -3095,6 +3098,7 @@ static int __apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 			if (!create)
 				continue;
 			pgd_clear_bad(pgd);
+			mask = PGTBL_PGD_MODIFIED;
 		}
 		err = apply_to_p4d_range(mm, pgd, addr, next,
 					 fn, data, create, &mask);
