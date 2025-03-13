@@ -336,7 +336,8 @@ void nvmet_port_del_ctrls(struct nvmet_port *port, struct nvmet_subsys *subsys)
 
 	mutex_lock(&subsys->lock);
 	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry) {
-		if (ctrl->port == port)
+		if (ctrl->port == port &&
+		    !(ctrl->ops->flags & NVMF_STATIC_CTRL))
 			ctrl->ops->delete_ctrl(ctrl);
 	}
 	mutex_unlock(&subsys->lock);
@@ -1889,7 +1890,8 @@ void nvmet_subsys_del_ctrls(struct nvmet_subsys *subsys)
 
 	mutex_lock(&subsys->lock);
 	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
-		ctrl->ops->delete_ctrl(ctrl);
+		if (!(ctrl->ops->flags & NVMF_STATIC_CTRL))
+			ctrl->ops->delete_ctrl(ctrl);
 	mutex_unlock(&subsys->lock);
 }
 

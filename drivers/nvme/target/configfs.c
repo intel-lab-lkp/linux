@@ -1666,7 +1666,8 @@ static ssize_t nvmet_subsys_attr_qid_max_store(struct config_item *item,
 
 	/* Force reconnect */
 	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
-		ctrl->ops->delete_ctrl(ctrl);
+		if (!(ctrl->ops->flags & NVMF_STATIC_CTRL))
+			ctrl->ops->delete_ctrl(ctrl);
 	up_write(&nvmet_config_sem);
 
 	return cnt;
@@ -1976,6 +1977,323 @@ static const struct config_item_type nvmet_ana_groups_type = {
 	.ct_owner		= THIS_MODULE,
 };
 
+struct nvmet_ctrl_conf {
+	struct nvmet_alloc_ctrl_args args;
+	struct config_group	group;
+	struct config_group	subsys_group;
+	struct nvmet_ctrl	*ctrl;
+	char			hostnqn[NVMF_NQN_SIZE];
+	char			subsysnqn[NVMF_NQN_SIZE];
+};
+
+static inline
+struct nvmet_ctrl_conf *to_nvmet_ctrl_conf(struct config_item *item)
+{
+	return container_of(to_config_group(item), struct nvmet_ctrl_conf,
+			    group);
+}
+
+static bool nvmet_is_ctrl_enabled(struct nvmet_ctrl_conf *conf,
+				  const char *caller)
+{
+	if (conf->ctrl)
+		pr_err("Disable ctrl '%u' before changing attribute in %s\n",
+		       conf->args.cntlid, caller);
+	return conf->ctrl ? true : false;
+}
+
+static ssize_t nvmet_ctrl_enable_show(struct config_item *item, char *page)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+
+	return snprintf(page, PAGE_SIZE, "%d\n", conf->ctrl ? true : false);
+}
+
+static ssize_t nvmet_ctrl_enable_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	struct nvmet_port *port = to_nvmet_port(item->ci_parent->ci_parent);
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+	struct nvmet_ctrl *ctrl;
+	bool val;
+	int ret;
+
+	if (kstrtobool(page, &val))
+		return -EINVAL;
+
+	if (!val)
+		return -EINVAL;
+
+	down_read(&nvmet_config_sem);
+	if (conf->ctrl) {
+		up_read(&nvmet_config_sem);
+		return -EINVAL;
+	}
+
+	if (!conf->args.ops) {
+		pr_err("trtype must be set before enabling controller.\n");
+		up_read(&nvmet_config_sem);
+		return -EINVAL;
+	}
+
+	if (!conf->args.subsysnqn) {
+		pr_err("subsystem must be set before enabling controller.\n");
+		up_read(&nvmet_config_sem);
+		return -EINVAL;
+	}
+
+	if (port->enabled) {
+		pr_err("Cannot create new controllers on enabled port.\n");
+		up_read(&nvmet_config_sem);
+		return -EBUSY;
+	}
+
+	if (port->disc_addr.trtype != conf->args.ops->type) {
+		pr_err("Port trtype and controller trtype must match.\n");
+		up_read(&nvmet_config_sem);
+		return -EINVAL;
+	}
+
+	conf->args.hostnqn = conf->hostnqn;
+	conf->args.port = port;
+	up_read(&nvmet_config_sem);
+
+	ctrl = nvmet_alloc_ctrl(&conf->args);
+	if (!ctrl)
+		return count;
+
+	down_read(&nvmet_config_sem);
+	/* Check if a user did this while nvmet_config_sem was dropped */
+	if (port->enabled) {
+		pr_err("Controller and port were already setup.\n");
+		ret = -EBUSY;
+		goto out_put_ctrl;
+	}
+
+	ret = nvmet_enable_port(port);
+	if (ret)
+		goto out_put_ctrl;
+
+	conf->ctrl = ctrl;
+	up_read(&nvmet_config_sem);
+
+	return count;
+
+out_put_ctrl:
+	up_read(&nvmet_config_sem);
+	nvmet_ctrl_put(ctrl);
+	return ret;
+}
+CONFIGFS_ATTR(nvmet_ctrl_, enable);
+
+static ssize_t nvmet_ctrl_trtype_show(struct config_item *item, char *page)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+
+	if (!conf->args.ops)
+		return sprintf(page, "\n");
+
+	return nvmet_trtype_show(conf->args.ops->type, page);
+}
+
+static ssize_t nvmet_ctrl_trtype_store(struct config_item *item,
+				       const char *page, size_t count)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+	const struct nvmet_fabrics_ops *ops = NULL;
+	int i;
+
+	if (nvmet_is_ctrl_enabled(conf, __func__))
+		return -EACCES;
+
+	down_write(&nvmet_config_sem);
+	for (i = 0; i < ARRAY_SIZE(nvmet_transport); i++) {
+		if (sysfs_streq(page, nvmet_transport[i].name)) {
+			ops = nvmet_get_ops_by_transport(
+						nvmet_transport[i].type);
+			break;
+		}
+	}
+
+	if (ops && (ops->flags & NVMF_STATIC_CTRL)) {
+		conf->args.ops = ops;
+		up_write(&nvmet_config_sem);
+		return count;
+	}
+	up_write(&nvmet_config_sem);
+
+	pr_err("Invalid value '%s' for trtype\n", page);
+	return -EINVAL;
+}
+CONFIGFS_ATTR(nvmet_ctrl_, trtype);
+
+static struct configfs_attribute *nvmet_ctrl_attrs[] = {
+	&nvmet_ctrl_attr_trtype,
+	&nvmet_ctrl_attr_enable,
+	NULL,
+};
+
+static void nvmet_ctrl_release(struct config_item *item)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+	struct nvmet_port *port = conf->args.port;
+	struct module *mod = NULL;
+
+	if (conf->args.ops)
+		mod = conf->args.ops->owner;
+
+	if (conf->ctrl) {
+		conf->args.ops->delete_ctrl(conf->ctrl);
+		nvmet_ctrl_put(conf->ctrl);
+	}
+
+	kfree(conf);
+
+	/*
+	 * We wait for the last user of the port before disabling to make
+	 * it easier on the driver. It knows the controllers will be freed
+	 * and will not require extra locking.
+	 */
+	down_write(&nvmet_config_sem);
+	if (port && port->enabled && list_empty(&port->subsystems))
+		nvmet_disable_port(port);
+	up_write(&nvmet_config_sem);
+
+	if (mod)
+		module_put(mod);
+}
+
+static struct configfs_item_operations nvmet_ctrl_item_ops = {
+	.release		= nvmet_ctrl_release,
+};
+
+static const struct config_item_type nvmet_ctrl_type = {
+	.ct_attrs		= nvmet_ctrl_attrs,
+	.ct_item_ops		= &nvmet_ctrl_item_ops,
+	.ct_owner		= THIS_MODULE,
+};
+
+static int nvmet_ctrl_subsys_allow_link(struct config_item *parent,
+					struct config_item *target)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(parent->ci_parent);
+	struct nvmet_port *port = to_nvmet_port(parent->ci_parent->ci_parent->ci_parent);
+	struct nvmet_subsys_link *link, *p;
+	struct nvmet_subsys *subsys;
+	int ret;
+
+	if (target->ci_type != &nvmet_subsys_type) {
+		pr_err("can only link subsystems into the subsystem directory.\n");
+		return -EINVAL;
+	}
+
+	down_write(&nvmet_config_sem);
+	if (conf->args.subsysnqn) {
+		pr_err("subsystem %s already set to controller %u\n",
+		       conf->subsysnqn, conf->args.cntlid);
+		ret = -EBUSY;
+		goto out_unlock;
+	}
+
+	subsys = to_subsys(target);
+	link = kmalloc(sizeof(*link), GFP_KERNEL);
+	if (!link) {
+		ret = -ENOMEM;
+		goto out_unlock;
+	}
+	link->subsys = subsys;
+
+	ret = -EEXIST;
+	list_for_each_entry(p, &port->subsystems, entry) {
+		if (p->subsys == subsys)
+			goto out_free_link;
+	}
+	list_add_tail(&link->entry, &port->subsystems);
+
+	memcpy(conf->subsysnqn, subsys->subsysnqn, NVMF_NQN_SIZE);
+	conf->args.subsysnqn = conf->subsysnqn;
+	conf->args.port = port;
+	up_write(&nvmet_config_sem);
+	return 0;
+
+out_free_link:
+	kfree(link);
+out_unlock:
+	up_write(&nvmet_config_sem);
+	return ret;
+}
+
+static void nvmet_ctrl_subsys_drop_link(struct config_item *parent,
+					struct config_item *target)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(parent->ci_parent);
+	struct nvmet_subsys *subsys = to_subsys(target);
+	struct nvmet_port *port = conf->args.port;
+	struct nvmet_subsys_link *p;
+
+	down_write(&nvmet_config_sem);
+	list_for_each_entry(p, &port->subsystems, entry) {
+		if (p->subsys == subsys)
+			goto found;
+	}
+	up_write(&nvmet_config_sem);
+	return;
+
+found:
+	list_del(&p->entry);
+	conf->args.subsysnqn = NULL;
+	up_write(&nvmet_config_sem);
+	kfree(p);
+}
+
+static struct configfs_item_operations nvmet_ctrl_subsys_item_ops = {
+	.allow_link		= nvmet_ctrl_subsys_allow_link,
+	.drop_link		= nvmet_ctrl_subsys_drop_link,
+};
+
+static const struct config_item_type nvmet_ctrl_subsys_type = {
+	.ct_item_ops		= &nvmet_ctrl_subsys_item_ops,
+	.ct_owner		= THIS_MODULE,
+};
+
+static struct
+config_group *nvmet_ctrl_make_group(struct config_group *group,
+				    const char *name)
+{
+	struct nvmet_ctrl_conf *conf;
+	u16 cntlid;
+
+	if (kstrtou16(name, 0, &cntlid))
+		return ERR_PTR(-EINVAL);
+
+	if (cntlid >= NVMET_MAX_CNTLID)
+		return ERR_PTR(-EINVAL);
+
+	conf = kzalloc(sizeof(*conf), GFP_KERNEL);
+	if (!conf)
+		return ERR_PTR(-ENOMEM);
+
+	conf->args.cntlid = cntlid;
+
+	config_group_init_type_name(&conf->group, name, &nvmet_ctrl_type);
+	config_group_init_type_name(&conf->subsys_group, "subsystem",
+				    &nvmet_ctrl_subsys_type);
+	configfs_add_default_group(&conf->subsys_group, &conf->group);
+
+	return &conf->group;
+}
+
+static struct configfs_group_operations nvmet_controllers_group_ops = {
+	.make_group		= nvmet_ctrl_make_group,
+};
+
+static const struct config_item_type nvmet_controllers_type = {
+	.ct_group_ops		= &nvmet_controllers_group_ops,
+	.ct_owner		= THIS_MODULE,
+};
+
+static struct config_group nvmet_controllers_group;
+
 /*
  * Ports definitions.
  */
@@ -2078,6 +2396,10 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 	config_group_init_type_name(&port->ana_groups_group,
 			"ana_groups", &nvmet_ana_groups_type);
 	configfs_add_default_group(&port->ana_groups_group, &port->group);
+
+	config_group_init_type_name(&nvmet_controllers_group,
+			"static_controllers", &nvmet_controllers_type);
+	configfs_add_default_group(&nvmet_controllers_group, &port->group);
 
 	port->ana_default_group.port = port;
 	port->ana_default_group.grpid = NVMET_DEFAULT_ANA_GRPID;
