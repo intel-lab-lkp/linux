@@ -69,6 +69,7 @@ pub mod platform;
 pub mod prelude;
 pub mod print;
 pub mod rbtree;
+mod reg;
 pub mod revocable;
 pub mod security;
 pub mod seq_file;
