@@ -1509,7 +1509,9 @@ int cfg80211_set_monitor_channel(struct cfg80211_registered_device *rdev,
 {
 	if (!rdev->ops->set_monitor_channel)
 		return -EOPNOTSUPP;
-	if (!cfg80211_has_monitors_only(rdev))
+	if (!(rdev->wiphy.flags &
+	      WIPHY_FLAG_SUPPORTS_CONCUR_MONITOR_N_OTHER_VIF) &&
+	    !cfg80211_has_monitors_only(rdev))
 		return -EBUSY;
 
 	return rdev_set_monitor_channel(rdev, dev, chandef);
