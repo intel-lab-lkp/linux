@@ -804,6 +804,19 @@ struct pci_ops {
 	void __iomem *(*map_bus)(struct pci_bus *bus, unsigned int devfn, int where);
 	int (*read)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 *val);
 	int (*write)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 val);
+	/*
+	 * Callback to the drivers to update ICC bw votes, clock frequencies etc for
+	 * the link re-train to come up in targeted speed. These are called by a single
+	 * client endpoint driver, so there is no need for explicit locking mechanisms.
+	 */
+	int (*pre_scale_bus_bw)(struct pci_bus *bus, int target_speed);
+	/*
+	 * Callback to the drivers to adjust ICC bw votes, clock frequencies etc
+	 * to the updated speed after link re-train. These are called by a
+	 * single client endpoint driver, so there is no need for explicit
+	 * locking mechanisms.
+	 */
+	void (*post_scale_bus_bw)(struct pci_bus *bus, int current_speed);
 };
 
 /*
