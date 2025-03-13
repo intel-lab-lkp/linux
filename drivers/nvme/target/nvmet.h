@@ -253,6 +253,7 @@ struct nvmet_ctrl {
 	u64			cap;
 	u32			cc;
 	u32			csts;
+	bool			shadow_db;
 
 	uuid_t			hostid;
 	u16			cntlid;
@@ -417,6 +418,8 @@ struct nvmet_fabrics_ops {
 	void (*discovery_chg)(struct nvmet_port *port);
 	u8 (*get_mdts)(const struct nvmet_ctrl *ctrl);
 	u16 (*get_max_queue_size)(const struct nvmet_ctrl *ctrl);
+
+	u16 (*set_dbbuf)(struct nvmet_ctrl *ctrl, u64 prp1, u64 prp2);
 
 	/* Operations mandatory for PCI target controllers */
 	u16 (*create_sq)(struct nvmet_ctrl *ctrl, u16 sqid, u16 flags,
@@ -593,6 +596,7 @@ struct nvmet_alloc_ctrl_args {
 	const struct nvmet_fabrics_ops *ops;
 	struct device		*p2p_client;
 	u32			kato;
+	bool			shadow_db;
 	u16			cntlid;
 	__le32			result;
 	u16			error_loc;

@@ -378,6 +378,8 @@ static void nvmet_get_cmd_effects_admin(struct nvmet_ctrl *ctrl,
 			cpu_to_le32(NVME_CMD_EFFECTS_CSUPP);
 	}
 
+	if (ctrl->ops->set_dbbuf && ctrl->shadow_db)
+		log->acs[nvme_admin_dbbuf] = cpu_to_le32(NVME_CMD_EFFECTS_CSUPP);
 	log->acs[nvme_admin_get_log_page] =
 	log->acs[nvme_admin_identify] =
 	log->acs[nvme_admin_abort_cmd] =
@@ -713,7 +715,8 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 		ctratt |= NVME_CTRL_ATTR_RHII;
 	id->ctratt = cpu_to_le32(ctratt);
 
-	id->oacs = 0;
+	if (ctrl->ops->set_dbbuf && ctrl->shadow_db)
+		id->oacs = cpu_to_le16(NVME_CTRL_OACS_DBBUF_SUPP);
 
 	/*
 	 * We don't really have a practical limit on the number of abort
@@ -1640,6 +1643,23 @@ u32 nvmet_admin_cmd_data_len(struct nvmet_req *req)
 	}
 }
 
+static void nvmet_execute_dbbuf(struct nvmet_req *req)
+{
+	struct nvmet_ctrl *ctrl = req->sq->ctrl;
+	struct nvme_command *cmd = req->cmd;
+	u16 status;
+
+	if (!nvmet_is_pci_ctrl(ctrl)) {
+		status = nvmet_report_invalid_opcode(req);
+		goto complete;
+	}
+
+	status = ctrl->ops->set_dbbuf(ctrl, le64_to_cpu(cmd->dbbuf.prp1),
+				    le64_to_cpu(cmd->dbbuf.prp2));
+complete:
+	nvmet_req_complete(req, status);
+}
+
 u16 nvmet_parse_admin_cmd(struct nvmet_req *req)
 {
 	struct nvme_command *cmd = req->cmd;
@@ -1695,6 +1715,9 @@ u16 nvmet_parse_admin_cmd(struct nvmet_req *req)
 		return 0;
 	case nvme_admin_keep_alive:
 		req->execute = nvmet_execute_keep_alive;
+		return 0;
+	case nvme_admin_dbbuf:
+		req->execute = nvmet_execute_dbbuf;
 		return 0;
 	default:
 		return nvmet_report_invalid_opcode(req);

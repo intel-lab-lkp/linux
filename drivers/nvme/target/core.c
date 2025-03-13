@@ -1587,6 +1587,7 @@ struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 		goto out_put_subsystem;
 	mutex_init(&ctrl->lock);
 
+	ctrl->shadow_db = args->shadow_db;
 	ctrl->port = args->port;
 	ctrl->ops = args->ops;
 

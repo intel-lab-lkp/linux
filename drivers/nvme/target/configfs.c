@@ -2086,6 +2086,31 @@ out_put_ctrl:
 }
 CONFIGFS_ATTR(nvmet_ctrl_, enable);
 
+static ssize_t nvmet_ctrl_shadow_doorbell_show(struct config_item *item,
+					       char *page)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+
+	return snprintf(page, PAGE_SIZE, "%d\n", conf->args.shadow_db);
+}
+
+static ssize_t nvmet_ctrl_shadow_doorbell_store(struct config_item *item,
+						const char *page, size_t count)
+{
+	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
+	int ret;
+
+	if (nvmet_is_ctrl_enabled(conf, __func__))
+		return -EACCES;
+
+	ret = kstrtobool(page, &conf->args.shadow_db);
+	if (ret)
+		return ret;
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_ctrl_, shadow_doorbell);
+
 static ssize_t nvmet_ctrl_trtype_show(struct config_item *item, char *page)
 {
 	struct nvmet_ctrl_conf *conf = to_nvmet_ctrl_conf(item);
@@ -2128,6 +2153,7 @@ static ssize_t nvmet_ctrl_trtype_store(struct config_item *item,
 CONFIGFS_ATTR(nvmet_ctrl_, trtype);
 
 static struct configfs_attribute *nvmet_ctrl_attrs[] = {
+	&nvmet_ctrl_attr_shadow_doorbell,
 	&nvmet_ctrl_attr_trtype,
 	&nvmet_ctrl_attr_enable,
 	NULL,
