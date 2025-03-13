@@ -11,7 +11,7 @@ use core::{
     cmp::{Ord, Ordering},
     marker::PhantomData,
     mem::MaybeUninit,
-    ptr::{addr_of_mut, from_mut, NonNull},
+    ptr::{from_mut, NonNull},
 };
 
 /// A red-black tree with owned nodes.
@@ -238,7 +238,7 @@ impl<K, V> RBTree<K, V> {
 
     /// Returns a cursor over the tree nodes, starting with the smallest key.
     pub fn cursor_front(&mut self) -> Option<Cursor<'_, K, V>> {
-        let root = addr_of_mut!(self.root);
+        let root = &raw mut self.root;
         // SAFETY: `self.root` is always a valid root node
         let current = unsafe { bindings::rb_first(root) };
         NonNull::new(current).map(|current| {
@@ -253,7 +253,7 @@ impl<K, V> RBTree<K, V> {
 
     /// Returns a cursor over the tree nodes, starting with the largest key.
     pub fn cursor_back(&mut self) -> Option<Cursor<'_, K, V>> {
-        let root = addr_of_mut!(self.root);
+        let root = &raw mut self.root;
         // SAFETY: `self.root` is always a valid root node
         let current = unsafe { bindings::rb_last(root) };
         NonNull::new(current).map(|current| {
@@ -459,7 +459,7 @@ where
         let best = best_match?;
 
         // SAFETY: `best` is a non-null node so it is valid by the type invariants.
-        let links = unsafe { addr_of_mut!((*best.as_ptr()).links) };
+        let links = unsafe { &raw mut (*best.as_ptr()).links };
 
         NonNull::new(links).map(|current| {
             // INVARIANT:
@@ -767,7 +767,7 @@ impl<'a, K, V> Cursor<'a, K, V> {
         let node = RBTreeNode { node };
         // SAFETY: The reference to the tree used to create the cursor outlives the cursor, so
         // the tree cannot change. By the tree invariant, all nodes are valid.
-        unsafe { bindings::rb_erase(&mut (*this).links, addr_of_mut!(self.tree.root)) };
+        unsafe { bindings::rb_erase(&mut (*this).links, &raw mut self.tree.root) };
 
         let current = match (prev, next) {
             (_, Some(next)) => next,
@@ -803,7 +803,7 @@ impl<'a, K, V> Cursor<'a, K, V> {
             let neighbor = neighbor.as_ptr();
             // SAFETY: The reference to the tree used to create the cursor outlives the cursor, so
             // the tree cannot change. By the tree invariant, all nodes are valid.
-            unsafe { bindings::rb_erase(neighbor, addr_of_mut!(self.tree.root)) };
+            unsafe { bindings::rb_erase(neighbor, &raw mut self.tree.root) };
             // SAFETY: By the type invariant of `Self`, all non-null `rb_node` pointers stored in `self`
             // point to the links field of `Node<K, V>` objects.
             let this = unsafe { container_of!(neighbor, Node<K, V>, links) }.cast_mut();
@@ -918,7 +918,7 @@ impl<'a, K, V> Cursor<'a, K, V> {
         let k = unsafe { &(*this).key };
         // SAFETY: The passed `node` is the current node or a non-null neighbor,
         // thus `this` is valid by the type invariants.
-        let v = unsafe { addr_of_mut!((*this).value) };
+        let v = unsafe { &raw mut (*this).value };
         (k, v)
     }
 }
@@ -1027,7 +1027,7 @@ impl<K, V> Iterator for IterRaw<K, V> {
         self.next = unsafe { bindings::rb_next(self.next) };
 
         // SAFETY: By the same reasoning above, it is safe to dereference the node.
-        Some(unsafe { (addr_of_mut!((*cur).key), addr_of_mut!((*cur).value)) })
+        Some(unsafe { (&raw mut (*cur).key, &raw mut (*cur).value) })
     }
 }
 
@@ -1170,7 +1170,7 @@ impl<'a, K, V> RawVacantEntry<'a, K, V> {
 
         // SAFETY: `node` is valid at least until we call `Box::from_raw`, which only happens when
         // the node is removed or replaced.
-        let node_links = unsafe { addr_of_mut!((*node).links) };
+        let node_links = unsafe { &raw mut (*node).links };
 
         // INVARIANT: We are linking in a new node, which is valid. It remains valid because we
         // "forgot" it with `Box::into_raw`.
@@ -1178,7 +1178,7 @@ impl<'a, K, V> RawVacantEntry<'a, K, V> {
         unsafe { bindings::rb_link_node(node_links, self.parent, self.child_field_of_parent) };
 
         // SAFETY: All pointers are valid. `node` has just been inserted into the tree.
-        unsafe { bindings::rb_insert_color(node_links, addr_of_mut!((*self.rbtree).root)) };
+        unsafe { bindings::rb_insert_color(node_links, &raw mut (*self.rbtree).root) };
 
         // SAFETY: The node is valid until we remove it from the tree.
         unsafe { &mut (*node).value }
@@ -1261,7 +1261,7 @@ impl<'a, K, V> OccupiedEntry<'a, K, V> {
 
         // SAFETY: `node` is valid at least until we call `Box::from_raw`, which only happens when
         // the node is removed or replaced.
-        let new_node_links = unsafe { addr_of_mut!((*node).links) };
+        let new_node_links = unsafe { &raw mut (*node).links };
 
         // SAFETY: This updates the pointers so that `new_node_links` is in the tree where
         // `self.node_links` used to be.

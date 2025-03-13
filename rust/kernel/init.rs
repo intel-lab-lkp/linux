@@ -122,7 +122,7 @@
 //! ```rust
 //! # #![expect(unreachable_pub, clippy::disallowed_names)]
 //! use kernel::{init, types::Opaque};
-//! use core::{ptr::addr_of_mut, marker::PhantomPinned, pin::Pin};
+//! use core::{marker::PhantomPinned, pin::Pin};
 //! # mod bindings {
 //! #     #![expect(non_camel_case_types)]
 //! #     #![expect(clippy::missing_safety_doc)]
@@ -159,7 +159,7 @@
 //!         unsafe {
 //!             init::pin_init_from_closure(move |slot: *mut Self| {
 //!                 // `slot` contains uninit memory, avoid creating a reference.
-//!                 let foo = addr_of_mut!((*slot).foo);
+//!                 let foo = &raw mut (*slot).foo;
 //!
 //!                 // Initialize the `foo`
 //!                 bindings::init_foo(Opaque::raw_get(foo));
@@ -541,7 +541,7 @@ macro_rules! stack_try_pin_init {
 ///
 /// ```rust
 /// # use kernel::{macros::{Zeroable, pin_data}, pin_init};
-/// # use core::{ptr::addr_of_mut, marker::PhantomPinned};
+/// # use core::marker::PhantomPinned;
 /// #[pin_data]
 /// #[derive(Zeroable)]
 /// struct Buf {
@@ -554,7 +554,7 @@ macro_rules! stack_try_pin_init {
 /// pin_init!(&this in Buf {
 ///     buf: [0; 64],
 ///     // SAFETY: TODO.
-///     ptr: unsafe { addr_of_mut!((*this.as_ptr()).buf).cast() },
+///     ptr: unsafe { &raw mut (*this.as_ptr()).buf.cast() },
 ///     pin: PhantomPinned,
 /// });
 /// pin_init!(Buf {
