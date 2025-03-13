@@ -1351,6 +1351,10 @@ The following nested keys are defined.
 	same semantics as vm.swappiness applied to memcg reclaim with
 	all the existing limitations and potential future extensions.
 
+	The swappiness have the range [0, 200], 0 means reclaiming only
+	from file folios, 200 (MAX_SWAPPINESS) means reclaiming just from
+	anonymous folios.
+
   memory.peak
 	A read-write single value file which exists on non-root cgroups.
 
