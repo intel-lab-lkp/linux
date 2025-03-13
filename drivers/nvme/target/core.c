@@ -1551,6 +1551,76 @@ static void nvmet_fatal_error_handler(struct work_struct *work)
 	ctrl->ops->delete_ctrl(ctrl);
 }
 
+/**
+ * nvmet_find_get_static_ctrl - find a static controller by port and cntlid
+ * @port: port to search under
+ * @trtype: transport type of the controller
+ * @cntlid: controller ID
+ *
+ * Returns: On success this returns a nvmet_ctrl with the refcount increased
+ * by one that the caller must drop.
+ */
+struct nvmet_ctrl *nvmet_find_get_static_ctrl(struct nvmet_port *port,
+					      int trtype, u16 cntlid)
+{
+	struct nvmet_ctrl *ctrl;
+
+	down_read(&nvmet_config_sem);
+
+	list_for_each_entry(ctrl, &port->static_ctrls, port_entry) {
+		if (ctrl->ops->type != trtype)
+			continue;
+
+		if (ctrl->cntlid == cntlid) {
+			if (!kref_get_unless_zero(&ctrl->ref))
+				ctrl = NULL;
+
+			up_read(&nvmet_config_sem);
+			return ctrl;
+		}
+	}
+
+	up_read(&nvmet_config_sem);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(nvmet_find_get_static_ctrl);
+
+/**
+ * nvmet_for_each_static_ctrl - execute fn over matching static controllers
+ * @port: port that the controller is using.
+ * @trtype: transport type of the controller.
+ * @fn: function to execute on each matching controller.
+ * @priv: driver specific struct passed to fn.
+ *
+ * This must be called with the nvmet_config_sem.
+ *
+ * Returns: passes fn's return value to caller.
+ */
+int nvmet_for_each_static_ctrl(struct nvmet_port *port, int trtype,
+			       nvmet_ctlr_iter_fn *fn, void *priv)
+{
+	struct nvmet_ctrl *ctrl;
+	int ret = 0;
+
+	lockdep_assert_held(&nvmet_config_sem);
+
+	list_for_each_entry(ctrl, &port->static_ctrls, port_entry) {
+		if (ctrl->ops->type != trtype)
+			continue;
+
+		if (!kref_get_unless_zero(&ctrl->ref))
+			continue;
+
+		ret = fn(priv, port, ctrl);
+		nvmet_ctrl_put(ctrl);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(nvmet_for_each_static_ctrl);
+
 struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 {
 	struct nvmet_subsys *subsys;
@@ -1599,6 +1669,7 @@ struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 
 	INIT_WORK(&ctrl->async_event_work, nvmet_async_event_work);
 	INIT_LIST_HEAD(&ctrl->async_events);
+	INIT_LIST_HEAD(&ctrl->port_entry);
 	INIT_RADIX_TREE(&ctrl->p2p_ns_map, GFP_KERNEL);
 	INIT_WORK(&ctrl->fatal_err_work, nvmet_fatal_error_handler);
 	INIT_DELAYED_WORK(&ctrl->ka_work, nvmet_keep_alive_timer);

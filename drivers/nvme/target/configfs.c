@@ -2069,16 +2069,19 @@ static ssize_t nvmet_ctrl_enable_store(struct config_item *item,
 		ret = -EBUSY;
 		goto out_put_ctrl;
 	}
+	list_add_tail(&ctrl->port_entry, &port->static_ctrls);
 
 	ret = nvmet_enable_port(port);
 	if (ret)
-		goto out_put_ctrl;
+		goto out_del_entry;
 
 	conf->ctrl = ctrl;
 	up_read(&nvmet_config_sem);
 
 	return count;
 
+out_del_entry:
+	list_del(&ctrl->port_entry);
 out_put_ctrl:
 	up_read(&nvmet_config_sem);
 	nvmet_ctrl_put(ctrl);
@@ -2169,6 +2172,10 @@ static void nvmet_ctrl_release(struct config_item *item)
 		mod = conf->args.ops->owner;
 
 	if (conf->ctrl) {
+		down_write(&nvmet_config_sem);
+		list_del(&conf->ctrl->port_entry);
+		up_write(&nvmet_config_sem);
+
 		conf->args.ops->delete_ctrl(conf->ctrl);
 		nvmet_ctrl_put(conf->ctrl);
 	}
@@ -2401,6 +2408,7 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 
 	INIT_LIST_HEAD(&port->entry);
 	INIT_LIST_HEAD(&port->subsystems);
+	INIT_LIST_HEAD(&port->static_ctrls);
 	INIT_LIST_HEAD(&port->referrals);
 	port->inline_data_size = -1;	/* < 0 == let the transport choose */
 	port->max_queue_size = -1;	/* < 0 == let the transport choose */

@@ -196,6 +196,7 @@ struct nvmet_port {
 	struct config_group		group;
 	struct config_group		subsys_group;
 	struct list_head		subsystems;
+	struct list_head		static_ctrls;
 	struct config_group		referrals_group;
 	struct list_head		referrals;
 	struct list_head		global_entry;
@@ -268,6 +269,7 @@ struct nvmet_ctrl {
 	struct list_head	async_events;
 	struct work_struct	async_event_work;
 
+	struct list_head	port_entry;
 	struct list_head	subsys_entry;
 	struct kref		ref;
 	struct delayed_work	ka_work;
@@ -603,6 +605,12 @@ struct nvmet_alloc_ctrl_args {
 	u16			status;
 };
 
+typedef int (nvmet_ctlr_iter_fn)(void *priv, struct nvmet_port *port,
+				 struct nvmet_ctrl *ctrl);
+int nvmet_for_each_static_ctrl(struct nvmet_port *port, int trtype,
+			       nvmet_ctlr_iter_fn *fn, void *priv);
+struct nvmet_ctrl *nvmet_find_get_static_ctrl(struct nvmet_port *port,
+					      int trtype, u16 cntlid);
 struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args);
 struct nvmet_ctrl *nvmet_ctrl_find_get(const char *subsysnqn,
 				       const char *hostnqn, u16 cntlid,
