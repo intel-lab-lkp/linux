@@ -993,7 +993,7 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 	srcu_read_unlock(&dev->disassociate_srcu, srcu_key);
 
 	setup_ufile_idr_uobject(file);
-
+	file->filp = filp;
 	return stream_open(inode, filp);
 
 err_module:

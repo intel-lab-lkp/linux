@@ -181,6 +181,7 @@ struct ib_uverbs_file {
 	struct xarray		idr;
 
 	struct mutex disassociation_lock;
+	struct file *filp;
 };
 
 extern const struct uverbs_obj_type_class uverbs_idr_class;
