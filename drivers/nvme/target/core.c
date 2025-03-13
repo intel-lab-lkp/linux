@@ -1621,9 +1621,12 @@ struct nvmet_ctrl *nvmet_alloc_ctrl(struct nvmet_alloc_ctrl_args *args)
 	if (!ctrl->sqs)
 		goto out_free_changed_ns_list;
 
-	ret = ida_alloc_range(&cntlid_ida,
-			     subsys->cntlid_min, subsys->cntlid_max,
-			     GFP_KERNEL);
+	if (args->cntlid == NVMET_MAX_CNTLID)
+		ret = ida_alloc_range(&cntlid_ida, subsys->cntlid_min,
+				      subsys->cntlid_max, GFP_KERNEL);
+	else
+		ret = ida_alloc_range(&cntlid_ida, args->cntlid, args->cntlid,
+				      GFP_KERNEL);
 	if (ret < 0) {
 		args->status = NVME_SC_CONNECT_CTRL_BUSY | NVME_STATUS_DNR;
 		goto out_free_sqs;

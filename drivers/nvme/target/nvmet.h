@@ -582,6 +582,8 @@ void nvmet_ctrl_fatal_error(struct nvmet_ctrl *ctrl);
 
 void nvmet_update_cc(struct nvmet_ctrl *ctrl, u32 new);
 
+#define NVMET_MAX_CNTLID 0xFFF0
+
 struct nvmet_alloc_ctrl_args {
 	struct nvmet_port	*port;
 	char			*subsysnqn;
@@ -590,6 +592,7 @@ struct nvmet_alloc_ctrl_args {
 	const struct nvmet_fabrics_ops *ops;
 	struct device		*p2p_client;
 	u32			kato;
+	u16			cntlid;
 	__le32			result;
 	u16			error_loc;
 	u16			status;

@@ -2031,6 +2031,7 @@ static int nvmet_pci_epf_create_ctrl(struct nvmet_pci_epf *nvme_epf,
 	args.hostid = &id;
 	args.hostnqn = hostnqn;
 	args.ops = &nvmet_pci_epf_fabrics_ops;
+	args.cntlid = NVMET_MAX_CNTLID;
 
 	ctrl->tctrl = nvmet_alloc_ctrl(&args);
 	if (!ctrl->tctrl) {
