@@ -165,6 +165,7 @@ static inline
 struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 {
 	struct net_device *master = NULL;
+	const struct l3mdev_ops *l3mdev_ops;
 
 	if (netif_is_l3_slave(skb->dev))
 		master = netdev_master_upper_dev_get_rcu(skb->dev);
@@ -172,8 +173,12 @@ struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 		 netif_has_l3_rx_handler(skb->dev))
 		master = skb->dev;
 
-	if (master && master->l3mdev_ops->l3mdev_l3_rcv)
-		skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
+	if (!master)
+		return skb;
+
+	l3mdev_ops = master->l3mdev_ops;
+	if (l3mdev_ops && l3mdev_ops->l3mdev_l3_rcv)
+		skb = l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
 
 	return skb;
 }
