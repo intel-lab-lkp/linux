@@ -755,12 +755,13 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	id->awun = 0;
 	id->awupf = 0;
 
-	/* we always support SGLs */
-	id->sgls = cpu_to_le32(NVME_CTRL_SGLS_BYTE_ALIGNED);
-	if (ctrl->ops->flags & NVMF_KEYED_SGLS)
-		id->sgls |= cpu_to_le32(NVME_CTRL_SGLS_KSDBDS);
-	if (req->port->inline_data_size)
-		id->sgls |= cpu_to_le32(NVME_CTRL_SGLS_SAOS);
+	if (!(ctrl->ops->flags & NVMF_SGLS_NOT_SUPP)) {
+		id->sgls = cpu_to_le32(NVME_CTRL_SGLS_BYTE_ALIGNED);
+		if (ctrl->ops->flags & NVMF_KEYED_SGLS)
+			id->sgls |= cpu_to_le32(NVME_CTRL_SGLS_KSDBDS);
+		if (req->port->inline_data_size)
+			id->sgls |= cpu_to_le32(NVME_CTRL_SGLS_SAOS);
+	}
 
 	strscpy(id->subnqn, ctrl->subsys->subsysnqn, sizeof(id->subnqn));
 
