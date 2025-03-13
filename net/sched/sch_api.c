@@ -1278,13 +1278,14 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 			 * tell the caller to replay the request.  We
 			 * indicate this using -EAGAIN.
 			 * We replay the request because the device may
-			 * go away in the mean time.
+			 * go away in the mean time. Note that we also
+			 * don't relock the device because it might
+			 * be gone at this point.
 			 */
 			netdev_unlock_ops(dev);
 			rtnl_unlock();
 			request_module(NET_SCH_ALIAS_PREFIX "%s", name);
 			rtnl_lock();
-			netdev_lock_ops(dev);
 			ops = qdisc_lookup_ops(kind);
 			if (ops != NULL) {
 				/* We will try again qdisc_lookup_ops,
@@ -1837,9 +1838,10 @@ replay:
 	replay = false;
 	netdev_lock_ops(dev);
 	err = __tc_modify_qdisc(skb, n, extack, dev, tca, tcm, &replay);
-	netdev_unlock_ops(dev);
+	/* __tc_modify_qdisc returns with unlocked dev in case of replay */
 	if (replay)
 		goto replay;
+	netdev_unlock_ops(dev);
 
 	return err;
 }
