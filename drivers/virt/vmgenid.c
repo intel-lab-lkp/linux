@@ -59,6 +59,9 @@ static int vmgenid_add_acpi(struct device *dev, struct vmgenid_state *state)
 	void *virt_addr;
 	int ret = 0;
 
+	if (!device)
+		return -ENODEV;
+
 	status = acpi_evaluate_object(device->handle, "ADDR", NULL, &parsed);
 	if (ACPI_FAILURE(status)) {
 		ACPI_EXCEPTION((AE_INFO, status, "Evaluating ADDR"));
