@@ -105,6 +105,28 @@ impl<T> Revocable<T> {
         }
     }
 
+    /// Tries to access the wrapped object and run the closure `f` on it with the guard held.
+    ///
+    /// This is a convenience method to run short non-sleepable code blocks while ensuring the
+    /// guard is dropped afterwards. [`Self::try_access`] carries the risk that the caller
+    /// will forget to explicitly drop that returned guard before calling sleepable code ; this
+    /// method adds an extra safety to make sure it doesn't happen.
+    ///
+    /// Returns `Err(ENXIO)` if the wrapped object has been revoked, or the result of `f` after it
+    /// has been run.
+    pub fn try_with<R, F: Fn(&T) -> Result<R>>(&self, f: F) -> Result<R> {
+        self.try_access().ok_or(ENXIO).and_then(|t| f(&*t))
+    }
+
+    /// Tries to access the wrapped object and run the closure `f` on it with the guard held.
+    ///
+    /// This is the same as [`Self::try_with`], with the exception that `f` is expected to
+    /// always succeed and thus does not need to return a `Result`. Thus the only error case is if
+    /// the wrapped object has been revoked.
+    pub fn try_with_ok<R, F: Fn(&T) -> R>(&self, f: F) -> Result<R> {
+        self.try_with(|t| Ok(f(t)))
+    }
+
     /// Tries to access the revocable wrapped object.
     ///
     /// Returns `None` if the object has been revoked and is therefore no longer accessible.
