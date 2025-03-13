@@ -622,6 +622,7 @@ void nvmet_port_send_ana_event(struct nvmet_port *port);
 
 int nvmet_register_transport(const struct nvmet_fabrics_ops *ops);
 void nvmet_unregister_transport(const struct nvmet_fabrics_ops *ops);
+const struct nvmet_fabrics_ops *nvmet_get_ops_by_transport(int trtype);
 
 void nvmet_port_del_ctrls(struct nvmet_port *port,
 			  struct nvmet_subsys *subsys);

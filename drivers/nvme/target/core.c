@@ -306,6 +306,30 @@ void nvmet_unregister_transport(const struct nvmet_fabrics_ops *ops)
 }
 EXPORT_SYMBOL_GPL(nvmet_unregister_transport);
 
+const struct nvmet_fabrics_ops *nvmet_get_ops_by_transport(int trtype)
+{
+	const struct nvmet_fabrics_ops *ops;
+
+	lockdep_assert_held(&nvmet_config_sem);
+
+	ops = nvmet_transports[trtype];
+	if (!ops) {
+		up_write(&nvmet_config_sem);
+		request_module("nvmet-transport-%d", trtype);
+		down_write(&nvmet_config_sem);
+		ops = nvmet_transports[trtype];
+		if (!ops) {
+			pr_err("transport type %d not supported\n", trtype);
+			return NULL;
+		}
+	}
+
+	if (!try_module_get(ops->owner))
+		return NULL;
+
+	return ops;
+}
+
 void nvmet_port_del_ctrls(struct nvmet_port *port, struct nvmet_subsys *subsys)
 {
 	struct nvmet_ctrl *ctrl;
@@ -325,22 +349,9 @@ int nvmet_enable_port(struct nvmet_port *port)
 
 	lockdep_assert_held(&nvmet_config_sem);
 
-	ops = nvmet_transports[port->disc_addr.trtype];
-	if (!ops) {
-		up_write(&nvmet_config_sem);
-		request_module("nvmet-transport-%d", port->disc_addr.trtype);
-		down_write(&nvmet_config_sem);
-		ops = nvmet_transports[port->disc_addr.trtype];
-		if (!ops) {
-			pr_err("transport type %d not supported\n",
-				port->disc_addr.trtype);
-			return -EINVAL;
-		}
-	}
-
-	if (!try_module_get(ops->owner))
+	ops = nvmet_get_ops_by_transport(port->disc_addr.trtype);
+	if (!ops)
 		return -EINVAL;
-
 	/*
 	 * If the user requested PI support and the transport isn't pi capable,
 	 * don't enable the port.
