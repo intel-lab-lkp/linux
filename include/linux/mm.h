@@ -2207,7 +2207,7 @@ static inline long thp_nr_pages(struct page *page)
  */
 static inline struct folio *folio_next(struct folio *folio)
 {
-	return (struct folio *)folio_page(folio, folio_nr_pages(folio));
+	return (struct folio *)nth_page(&folio->page, folio_nr_pages(folio));
 }
 
 /**
