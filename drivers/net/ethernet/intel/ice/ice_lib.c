@@ -85,6 +85,15 @@ static int ice_vsi_alloc_arrays(struct ice_vsi *vsi)
 	if (!vsi->tx_rings)
 		return -ENOMEM;
 
+	if (vsi->type == ICE_VSI_PF &&
+	    test_bit(ICE_FLAG_TXTIME, pf->flags)) {
+		vsi->tstamp_rings = devm_kcalloc(dev, vsi->alloc_txq,
+						 sizeof(*vsi->tstamp_rings),
+						 GFP_KERNEL);
+		if (!vsi->tstamp_rings)
+			goto err_tstamp_rings;
+	}
+
 	vsi->rx_rings = devm_kcalloc(dev, vsi->alloc_rxq,
 				     sizeof(*vsi->rx_rings), GFP_KERNEL);
 	if (!vsi->rx_rings)
@@ -126,6 +135,8 @@ err_rxq_map:
 err_txq_map:
 	devm_kfree(dev, vsi->rx_rings);
 err_rings:
+	devm_kfree(dev, vsi->tstamp_rings);
+err_tstamp_rings:
 	devm_kfree(dev, vsi->tx_rings);
 	return -ENOMEM;
 }
@@ -322,6 +333,8 @@ static void ice_vsi_free_arrays(struct ice_vsi *vsi)
 	vsi->q_vectors = NULL;
 	devm_kfree(dev, vsi->tx_rings);
 	vsi->tx_rings = NULL;
+	devm_kfree(dev, vsi->tstamp_rings);
+	vsi->tstamp_rings = NULL;
 	devm_kfree(dev, vsi->rx_rings);
 	vsi->rx_rings = NULL;
 	devm_kfree(dev, vsi->txq_map);
@@ -1369,6 +1382,14 @@ static void ice_vsi_clear_rings(struct ice_vsi *vsi)
 			}
 		}
 	}
+	if (vsi->tstamp_rings) {
+		ice_for_each_alloc_txq(vsi, i) {
+			if (vsi->tstamp_rings[i]) {
+				kfree_rcu(vsi->tstamp_rings[i], rcu);
+				WRITE_ONCE(vsi->tstamp_rings[i], NULL);
+			}
+		}
+	}
 	if (vsi->rx_rings) {
 		ice_for_each_alloc_rxq(vsi, i) {
 			if (vsi->rx_rings[i]) {
@@ -1413,6 +1434,24 @@ static int ice_vsi_alloc_rings(struct ice_vsi *vsi)
 		else
 			ring->flags |= ICE_TX_FLAGS_RING_VLAN_L2TAG1;
 		WRITE_ONCE(vsi->tx_rings[i], ring);
+
+		if (vsi->type == ICE_VSI_PF &&
+		    test_bit(ICE_FLAG_TXTIME, pf->flags)) {
+			struct ice_tx_ring *tstamp_ring;
+
+			tstamp_ring = kzalloc(sizeof(*ring), GFP_KERNEL);
+			if (!tstamp_ring)
+				goto err_out;
+
+			tstamp_ring->q_index = i;
+			tstamp_ring->reg_idx = vsi->txq_map[i];
+			tstamp_ring->vsi = vsi;
+			tstamp_ring->dev = dev;
+			tstamp_ring->count =
+				       ice_calc_ts_ring_count(&pf->hw,
+							      vsi->num_tx_desc);
+			WRITE_ONCE(vsi->tstamp_rings[i], tstamp_ring);
+		}
 	}
 
 	/* Allocate Rx rings */
@@ -2667,9 +2706,12 @@ void ice_vsi_free_tx_rings(struct ice_vsi *vsi)
 	if (!vsi->tx_rings)
 		return;
 
-	ice_for_each_txq(vsi, i)
+	ice_for_each_txq(vsi, i) {
 		if (vsi->tx_rings[i] && vsi->tx_rings[i]->desc)
 			ice_free_tx_ring(vsi->tx_rings[i]);
+		if (vsi->tstamp_rings && vsi->tstamp_rings[i])
+			ice_free_tstamp_ring(vsi->tstamp_rings[i]);
+	}
 }
 
 /**
@@ -3951,6 +3993,7 @@ void ice_init_feature_support(struct ice_pf *pf)
 	if (pf->hw.mac_type == ICE_MAC_E830) {
 		ice_set_feature_support(pf, ICE_F_MBX_LIMIT);
 		ice_set_feature_support(pf, ICE_F_GCS);
+		ice_set_feature_support(pf, ICE_F_TXTIME);
 	}
 }
 
