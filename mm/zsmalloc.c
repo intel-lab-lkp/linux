@@ -1410,7 +1410,7 @@ static void obj_free(int class_size, unsigned long obj)
 
 
 	obj_to_location(obj, &f_zpdesc, &f_objidx);
-	f_offset = offset_in_page(class_size * f_objidx);
+	f_offset = offset_in_page((unsigned long)class_size * f_objidx);
 	zspage = get_zspage(f_zpdesc);
 
 	vaddr = kmap_local_zpdesc(f_zpdesc);
