@@ -551,7 +551,7 @@ static int rkcanfd_handle_error_int(struct rkcanfd_priv *priv)
 
 	rkcanfd_handle_error_int_reg_ec(priv, cf, reg_ec);
 
-	if (!cf)
+	if (!cf || !skb)
 		return 0;
 
 	err = can_rx_offload_queue_timestamp(&priv->offload, skb, timestamp);
