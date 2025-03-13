@@ -1148,6 +1148,10 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		    (!local->ops->start_nan || !local->ops->stop_nan)))
 		return -EINVAL;
 
+	if (ieee80211_hw_check(hw, NO_VIRTUAL_MONITOR))
+		local->hw.wiphy->flags |=
+			WIPHY_FLAG_SUPPORTS_CONCUR_MONITOR_N_OTHER_VIF;
+
 	if (hw->wiphy->flags & WIPHY_FLAG_SUPPORTS_MLO) {
 		/*
 		 * For drivers capable of doing MLO, assume modern driver
