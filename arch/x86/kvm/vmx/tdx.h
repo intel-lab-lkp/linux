@@ -5,7 +5,7 @@
 #include "tdx_arch.h"
 #include "tdx_errno.h"
 
-#ifdef CONFIG_INTEL_TDX_HOST
+#ifdef CONFIG_KVM_INTEL_TDX
 #include "common.h"
 
 int tdx_bringup(void);

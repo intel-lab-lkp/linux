@@ -10,9 +10,8 @@
 #include "tdx.h"
 #include "tdx_arch.h"
 
-#ifdef CONFIG_INTEL_TDX_HOST
+#ifdef CONFIG_KVM_INTEL_TDX
 static_assert(offsetof(struct vcpu_vmx, vt) == offsetof(struct vcpu_tdx, vt));
-#endif
 
 static void vt_disable_virtualization_cpu(void)
 {
@@ -879,6 +878,7 @@ static int vt_gmem_private_max_mapping_level(struct kvm *kvm, kvm_pfn_t pfn)
 
 	return 0;
 }
+#endif
 
 #define VMX_REQUIRED_APICV_INHIBITS				\
 	(BIT(APICV_INHIBIT_REASON_DISABLED) |			\
