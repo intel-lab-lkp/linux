@@ -209,6 +209,24 @@ unsafe impl Send for Device {}
 // synchronization in `struct device`.
 unsafe impl Sync for Device {}
 
+/// Marker trait for the context of a bus specific device.
+///
+/// Some functions of a bus specific device should only be called from a certain context, i.e. bus
+/// callbacks, such as `probe()`.
+///
+/// This is the marker trait for structures representing the context of a bus specific device.
+pub trait DeviceContext {}
+
+/// The [`Normal`] context is the context of a bus specific device when it is not an argument of
+/// any bus callback.
+pub struct Normal;
+impl DeviceContext for Normal {}
+
+/// The [`Core`] context is the context of a bus specific device when it is supplied as argument of
+/// any of the bus callbacks, such as `probe()`.
+pub struct Core;
+impl DeviceContext for Core {}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! dev_printk {
