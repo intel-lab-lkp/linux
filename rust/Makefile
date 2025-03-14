@@ -57,10 +57,12 @@ endif
 core-cfgs = \
     --cfg no_fp_fmt_parse
 
+rustc_strict_provenance_flags = -Zcrate-attr='feature($(rustc_strict_provenance_feature))'
+
 quiet_cmd_rustdoc = RUSTDOC $(if $(rustdoc_host),H, ) $<
       cmd_rustdoc = \
 	OBJTREE=$(abspath $(objtree)) \
-	$(RUSTDOC) $(filter-out $(skip_flags),$(if $(rustdoc_host),$(rust_common_flags),$(rust_flags))) \
+	$(RUSTDOC) $(filter-out $(skip_flags),$(if $(rustdoc_host),$(rust_common_flags),$(rust_flags)) $(rustc_strict_provenance_flags)) \
 		$(rustc_target_flags) -L$(objtree)/$(obj) \
 		-Zunstable-options --generate-link-to-definition \
 		--output $(rustdoc_output) \
@@ -99,7 +101,7 @@ rustdoc-macros: $(src)/macros/lib.rs FORCE
 
 # Starting with Rust 1.82.0, skipping `-Wrustdoc::unescaped_backticks` should
 # not be needed -- see https://github.com/rust-lang/rust/pull/128307.
-rustdoc-core: private skip_flags = -Wrustdoc::unescaped_backticks
+rustdoc-core: private skip_flags = -Wrustdoc::unescaped_backticks $(rustc_strict_provenance_flags)
 rustdoc-core: private rustc_target_flags = $(core-cfgs)
 rustdoc-core: $(RUST_LIB_SRC)/core/src/lib.rs FORCE
 	+$(call if_changed,rustdoc)
@@ -122,6 +124,7 @@ quiet_cmd_rustc_test_library = $(RUSTC_OR_CLIPPY_QUIET) TL $<
       cmd_rustc_test_library = \
 	OBJTREE=$(abspath $(objtree)) \
 	$(RUSTC_OR_CLIPPY) $(rust_common_flags) \
+		$(rustc_strict_provenance_flags) \
 		@$(objtree)/include/generated/rustc_cfg $(rustc_target_flags) \
 		--crate-type $(if $(rustc_test_library_proc),proc-macro,rlib) \
 		--out-dir $(objtree)/$(obj)/test --cfg testlib \
@@ -155,11 +158,19 @@ rusttestlib-uapi: private rustc_target_flags = --extern ffi
 rusttestlib-uapi: $(src)/uapi/lib.rs rusttestlib-ffi FORCE
 	+$(call if_changed,rustc_test_library)
 
+# `rustdoc --test` doesn't respect `-Zcrate-attr`, which means we can't use
+# `rustc_strict_provenance_flags` below. Instead we filter out those lints to avoid unknown lint
+# warnings.
+#
+# See https://github.com/rust-lang/rust/issues/138491.
+rustc_strict_provenance_lints = -Wfuzzy_provenance_casts -Wlossy_provenance_casts
+
 quiet_cmd_rustdoc_test = RUSTDOC T $<
       cmd_rustdoc_test = \
 	RUST_MODFILE=test.rs \
 	OBJTREE=$(abspath $(objtree)) \
-	$(RUSTDOC) --test $(rust_common_flags) \
+	$(RUSTDOC) --test \
+		$(filter-out $(rustc_strict_provenance_lints),$(rust_common_flags)) \
 		@$(objtree)/include/generated/rustc_cfg \
 		$(rustc_target_flags) $(rustdoc_test_target_flags) \
 		$(rustdoc_test_quiet) \
@@ -171,7 +182,8 @@ quiet_cmd_rustdoc_test_kernel = RUSTDOC TK $<
 	rm -rf $(objtree)/$(obj)/test/doctests/kernel; \
 	mkdir -p $(objtree)/$(obj)/test/doctests/kernel; \
 	OBJTREE=$(abspath $(objtree)) \
-	$(RUSTDOC) --test $(rust_flags) \
+	$(RUSTDOC) --test \
+		$(filter-out $(rustc_strict_provenance_lints),$(rust_flags)) \
 		-L$(objtree)/$(obj) --extern ffi --extern kernel \
 		--extern build_error --extern macros \
 		--extern bindings --extern uapi \
@@ -193,6 +205,7 @@ quiet_cmd_rustc_test = $(RUSTC_OR_CLIPPY_QUIET) T  $<
       cmd_rustc_test = \
 	OBJTREE=$(abspath $(objtree)) \
 	$(RUSTC_OR_CLIPPY) --test $(rust_common_flags) \
+		$(rustc_strict_provenance_flags) \
 		@$(objtree)/include/generated/rustc_cfg \
 		$(rustc_target_flags) --out-dir $(objtree)/$(obj)/test \
 		-L$(objtree)/$(obj)/test \
@@ -362,6 +375,7 @@ $(obj)/exports_kernel_generated.h: $(obj)/kernel.o FORCE
 quiet_cmd_rustc_procmacro = $(RUSTC_OR_CLIPPY_QUIET) P $@
       cmd_rustc_procmacro = \
 	$(RUSTC_OR_CLIPPY) $(rust_common_flags) \
+		$(rustc_strict_provenance_flags) \
 		-Clinker-flavor=gcc -Clinker=$(HOSTCC) \
 		-Clink-args='$(call escsq,$(KBUILD_PROCMACROLDFLAGS))' \
 		--emit=dep-info=$(depfile) --emit=link=$@ --extern proc_macro \
@@ -376,7 +390,7 @@ quiet_cmd_rustc_library = $(if $(skip_clippy),RUSTC,$(RUSTC_OR_CLIPPY_QUIET)) L 
       cmd_rustc_library = \
 	OBJTREE=$(abspath $(objtree)) \
 	$(if $(skip_clippy),$(RUSTC),$(RUSTC_OR_CLIPPY)) \
-		$(filter-out $(skip_flags),$(rust_flags) $(rustc_target_flags)) \
+		$(filter-out $(skip_flags),$(rust_flags) $(rustc_target_flags) $(rustc_strict_provenance_flags)) \
 		--emit=dep-info=$(depfile) --emit=obj=$@ \
 		--emit=metadata=$(dir $@)$(patsubst %.o,lib%.rmeta,$(notdir $@)) \
 		--crate-type rlib -L$(objtree)/$(obj) \
@@ -436,7 +450,7 @@ $(obj)/helpers/helpers.o: $(src)/helpers/helpers.c $(recordmcount_source) FORCE
 $(obj)/exports.o: private skip_gendwarfksyms = 1
 
 $(obj)/core.o: private skip_clippy = 1
-$(obj)/core.o: private skip_flags = -Wunreachable_pub
+$(obj)/core.o: private skip_flags = -Wunreachable_pub -Wlossy_provenance_casts $(rustc_strict_provenance_flags)
 $(obj)/core.o: private rustc_objcopy = $(foreach sym,$(redirect-intrinsics),--redefine-sym $(sym)=__rust$(sym))
 $(obj)/core.o: private rustc_target_flags = $(core-cfgs)
 $(obj)/core.o: $(RUST_LIB_SRC)/core/src/lib.rs \

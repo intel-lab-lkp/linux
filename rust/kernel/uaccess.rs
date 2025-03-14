@@ -226,7 +226,9 @@ impl UserSliceReader {
         }
         // SAFETY: `out_ptr` points into a mutable slice of length `len`, so we may write
         // that many bytes to it.
-        let res = unsafe { bindings::copy_from_user(out_ptr, self.ptr as *const c_void, len) };
+        let res = unsafe {
+            bindings::copy_from_user(out_ptr, crate::with_exposed_provenance(self.ptr), len)
+        };
         if res != 0 {
             return Err(EFAULT);
         }
@@ -264,7 +266,7 @@ impl UserSliceReader {
         let res = unsafe {
             bindings::_copy_from_user(
                 out.as_mut_ptr().cast::<c_void>(),
-                self.ptr as *const c_void,
+                crate::with_exposed_provenance(self.ptr),
                 len,
             )
         };
@@ -330,7 +332,9 @@ impl UserSliceWriter {
         }
         // SAFETY: `data_ptr` points into an immutable slice of length `len`, so we may read
         // that many bytes from it.
-        let res = unsafe { bindings::copy_to_user(self.ptr as *mut c_void, data_ptr, len) };
+        let res = unsafe {
+            bindings::copy_to_user(crate::with_exposed_provenance_mut(self.ptr), data_ptr, len)
+        };
         if res != 0 {
             return Err(EFAULT);
         }
@@ -357,7 +361,7 @@ impl UserSliceWriter {
         // is a compile-time constant.
         let res = unsafe {
             bindings::_copy_to_user(
-                self.ptr as *mut c_void,
+                crate::with_exposed_provenance_mut(self.ptr),
                 (value as *const T).cast::<c_void>(),
                 len,
             )

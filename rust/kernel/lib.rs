@@ -25,6 +25,26 @@
 #![feature(const_ptr_write)]
 #![feature(const_refs_to_cell)]
 
+#[allow(clippy::incompatible_msrv)]
+mod strict_provenance {
+    #[doc(hidden)]
+    pub fn expose_provenance<T>(addr: *const T) -> usize {
+        addr.expose_provenance()
+    }
+
+    #[doc(hidden)]
+    pub fn with_exposed_provenance<T>(addr: usize) -> *const T {
+        core::ptr::with_exposed_provenance(addr)
+    }
+
+    #[doc(hidden)]
+    pub fn with_exposed_provenance_mut<T>(addr: usize) -> *mut T {
+        core::ptr::with_exposed_provenance_mut(addr)
+    }
+}
+
+pub use strict_provenance::*;
+
 // Ensure conditional compilation based on the kernel configuration works;
 // otherwise we may silently break things like initcall handling.
 #[cfg(not(CONFIG_RUST))]

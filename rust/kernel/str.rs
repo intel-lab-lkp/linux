@@ -692,9 +692,9 @@ impl RawFormatter {
     pub(crate) unsafe fn from_ptrs(pos: *mut u8, end: *mut u8) -> Self {
         // INVARIANT: The safety requirements guarantee the type invariants.
         Self {
-            beg: pos as usize,
-            pos: pos as usize,
-            end: end as usize,
+            beg: crate::expose_provenance(pos),
+            pos: crate::expose_provenance(pos),
+            end: crate::expose_provenance(end),
         }
     }
 
@@ -705,7 +705,7 @@ impl RawFormatter {
     /// The memory region starting at `buf` and extending for `len` bytes must be valid for writes
     /// for the lifetime of the returned [`RawFormatter`].
     pub(crate) unsafe fn from_buffer(buf: *mut u8, len: usize) -> Self {
-        let pos = buf as usize;
+        let pos = crate::expose_provenance(buf);
         // INVARIANT: We ensure that `end` is never less then `buf`, and the safety requirements
         // guarantees that the memory region is valid for writes.
         Self {
@@ -719,7 +719,7 @@ impl RawFormatter {
     ///
     /// N.B. It may point to invalid memory.
     pub(crate) fn pos(&self) -> *mut u8 {
-        self.pos as *mut u8
+        crate::with_exposed_provenance_mut(self.pos)
     }
 
     /// Returns the number of bytes written to the formatter.
@@ -741,11 +741,7 @@ impl fmt::Write for RawFormatter {
             // SAFETY: If `len_to_copy` is non-zero, then we know `pos` has not gone past `end`
             // yet, so it is valid for write per the type invariants.
             unsafe {
-                core::ptr::copy_nonoverlapping(
-                    s.as_bytes().as_ptr(),
-                    self.pos as *mut u8,
-                    len_to_copy,
-                )
+                core::ptr::copy_nonoverlapping(s.as_bytes().as_ptr(), self.pos(), len_to_copy)
             };
         }
 

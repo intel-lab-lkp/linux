@@ -5,7 +5,7 @@
 //! C header: [`include/asm-generic/io.h`](srctree/include/asm-generic/io.h)
 
 use crate::error::{code::EINVAL, Result};
-use crate::{bindings, build_assert, ffi::c_void};
+use crate::{bindings, build_assert};
 
 /// Raw representation of an MMIO region.
 ///
@@ -75,14 +75,14 @@ impl<const SIZE: usize> IoRaw<SIZE> {
 ///             return Err(ENOMEM);
 ///         }
 ///
-///         Ok(IoMem(IoRaw::new(addr as usize, SIZE)?))
+///         Ok(IoMem(IoRaw::new(kernel::expose_provenance(addr), SIZE)?))
 ///     }
 /// }
 ///
 /// impl<const SIZE: usize> Drop for IoMem<SIZE> {
 ///     fn drop(&mut self) {
 ///         // SAFETY: `self.0.addr()` is guaranteed to be properly mapped by `Self::new`.
-///         unsafe { bindings::iounmap(self.0.addr() as *mut c_void); };
+///         unsafe { bindings::iounmap(kernel::with_exposed_provenance_mut(self.0.addr())); };
 ///     }
 /// }
 ///
@@ -119,7 +119,7 @@ macro_rules! define_read {
             let addr = self.io_addr_assert::<$type_name>(offset);
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$name(addr as *const c_void) }
+            unsafe { bindings::$name(crate::with_exposed_provenance(addr)) }
         }
 
         /// Read IO data from a given offset.
@@ -131,7 +131,7 @@ macro_rules! define_read {
             let addr = self.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            Ok(unsafe { bindings::$name(addr as *const c_void) })
+            Ok(unsafe { bindings::$name(crate::with_exposed_provenance(addr)) })
         }
     };
 }
@@ -148,7 +148,7 @@ macro_rules! define_write {
             let addr = self.io_addr_assert::<$type_name>(offset);
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$name(value, addr as *mut c_void) }
+            unsafe { bindings::$name(value, crate::with_exposed_provenance_mut(addr)) }
         }
 
         /// Write IO data from a given offset.
@@ -160,7 +160,7 @@ macro_rules! define_write {
             let addr = self.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$name(value, addr as *mut c_void) }
+            unsafe { bindings::$name(value, crate::with_exposed_provenance_mut(addr)) }
             Ok(())
         }
     };
