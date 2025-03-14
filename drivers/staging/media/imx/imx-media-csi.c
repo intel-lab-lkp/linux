@@ -169,6 +169,8 @@ static int csi_get_upstream_mbus_config(struct csi_priv *priv,
 {
 	struct v4l2_subdev *sd, *remote_sd;
 	struct media_pad *remote_pad;
+	struct fwnode_handle *ep_node;
+	struct v4l2_fwnode_endpoint ep = { .bus_type = 0 };
 	int ret;
 
 	if (!priv->src_sd)
@@ -210,11 +212,37 @@ static int csi_get_upstream_mbus_config(struct csi_priv *priv,
 
 	ret = v4l2_subdev_call(remote_sd, pad, get_mbus_config,
 			       remote_pad->index, mbus_cfg);
-	if (ret == -ENOIOCTLCMD)
-		v4l2_err(&priv->sd,
-			 "entity %s does not implement get_mbus_config()\n",
-			 remote_pad->entity->name);
+	if (ret == -ENOIOCTLCMD) {
+		/*
+		 * If the upstream sd does not implement get_mbus_config,
+		 * try to parse the link configuration from its fw_node
+		 */
+		ep_node = fwnode_graph_get_endpoint_by_id(dev_fwnode(remote_sd->dev),
+							  0, 0,
+							  FWNODE_GRAPH_ENDPOINT_NEXT);
+		if (!ep_node)
+			return -ENOTCONN;
 
+		ret = v4l2_fwnode_endpoint_parse(ep_node, &ep);
+		fwnode_handle_put(ep_node);
+		if (ret)
+			return ret;
+
+		mbus_cfg->type = ep.bus_type;
+		switch (ep.bus_type) {
+		case V4L2_MBUS_PARALLEL:
+		case V4L2_MBUS_BT656:
+			mbus_cfg->bus.parallel = ep.bus.parallel;
+			break;
+		case V4L2_MBUS_CSI2_DPHY:
+			mbus_cfg->bus.mipi_csi2 = ep.bus.mipi_csi2;
+			break;
+		default:
+			v4l2_err(&priv->sd, "Unsupported mbus_type: %i\n",
+				 ep.bus_type);
+			return -EINVAL;
+		}
+	}
 	return ret;
 }
 
