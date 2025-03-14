@@ -257,11 +257,11 @@ static ssize_t per_cpu_count_show(struct kobject *kobj,
 	for_each_possible_cpu(cpu) {
 		unsigned int c = irq_desc_kstat_cpu(desc, cpu);
 
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s%u", p, c);
+		ret += sysfs_emit(buf + ret, "%s%u", p, c);
 		p = ",";
 	}
 
-	ret += scnprintf(buf + ret, PAGE_SIZE - ret, "\n");
+	ret += sysfs_emit(buf + ret, "\n");
 	return ret;
 }
 IRQ_ATTR_RO(per_cpu_count);
@@ -274,7 +274,7 @@ static ssize_t chip_name_show(struct kobject *kobj,
 
 	raw_spin_lock_irq(&desc->lock);
 	if (desc->irq_data.chip && desc->irq_data.chip->name) {
-		ret = scnprintf(buf, PAGE_SIZE, "%s\n",
+		ret = sysfs_emit(buf, "%s\n",
 				desc->irq_data.chip->name);
 	}
 	raw_spin_unlock_irq(&desc->lock);
@@ -337,7 +337,7 @@ static ssize_t name_show(struct kobject *kobj,
 
 	raw_spin_lock_irq(&desc->lock);
 	if (desc->name)
-		ret = scnprintf(buf, PAGE_SIZE, "%s\n", desc->name);
+		ret = sysfs_emit(buf, "%s\n", desc->name);
 	raw_spin_unlock_irq(&desc->lock);
 
 	return ret;
@@ -354,14 +354,14 @@ static ssize_t actions_show(struct kobject *kobj,
 
 	raw_spin_lock_irq(&desc->lock);
 	for_each_action_of_desc(desc, action) {
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s%s",
+		ret += sysfs_emit(buf + ret, "%s%s",
 				 p, action->name);
 		p = ",";
 	}
 	raw_spin_unlock_irq(&desc->lock);
 
 	if (ret)
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "\n");
+		ret += sysfs_emit(buf + ret, "\n");
 
 	return ret;
 }
