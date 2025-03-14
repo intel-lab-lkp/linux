@@ -3,8 +3,14 @@
 #include "ddk750_reg.h"
 #include "ddk750_power.h"
 
-void ddk750_set_dpms(enum dpms state)
-{
+void ddk750_set_dpms(unsigned int state)
+{	/*
+	 *	state values documentation
+	 *	crt_DPMS_ON = 0x0,
+	 *	crt_DPMS_STANDBY = 0x1,
+	 *	crt_DPMS_SUSPEND = 0x2,
+	 *	crt_DPMS_OFF = 0x3,	unsigned int value;
+	 */
 	unsigned int value;
 
 	if (sm750_get_chip_type() == SM750LE) {
