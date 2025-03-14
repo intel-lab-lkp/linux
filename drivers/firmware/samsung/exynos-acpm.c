@@ -701,12 +701,14 @@ static const struct acpm_handle *acpm_get_by_phandle(struct device *dev,
 
 	link = device_link_add(dev, &pdev->dev, DL_FLAG_AUTOREMOVE_SUPPLIER);
 	if (!link) {
-		dev_err(&pdev->dev,
-			"Failed to create device link to consumer %s.\n",
-			dev_name(dev));
+		int ret = -EINVAL;
+
+		dev_err_probe(&pdev->dev, ret,
+			      "Failed to create device link to consumer %s.\n",
+			      dev_name(dev));
 		platform_device_put(pdev);
 		module_put(pdev->dev.driver->owner);
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(ret);
 	}
 
 	return &acpm->handle;
