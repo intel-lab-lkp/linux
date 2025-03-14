@@ -105,6 +105,19 @@ enum mtk_instance_state {
 	MTK_STATE_ABORT = 4,
 };
 
+/**
+ * enum mtk_request_state - Stages of processing a request
+ * MTK_REQUEST_RECEIVED: Hardware prepared for the LAT decode
+ * MTK_REQUEST_DONE_WITH_BITSTREAM: LAT decode finished, the bitstream is not
+ *				    needed anymore
+ * MTK_REQUEST_COMPLETE: CORE decode finished
+ */
+enum mtk_request_state {
+	MTK_REQUEST_RECEIVED = 0,
+	MTK_REQUEST_LAT_DONE = 1,
+	MTK_REQUEST_CORE_DONE = 2,
+};
+
 enum mtk_fmt_type {
 	MTK_FMT_DEC = 0,
 	MTK_FMT_ENC = 1,

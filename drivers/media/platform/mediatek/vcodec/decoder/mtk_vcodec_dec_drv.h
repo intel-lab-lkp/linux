@@ -185,6 +185,7 @@ struct mtk_vcodec_dec_ctx {
 	struct mtk_q_data q_data[2];
 	int id;
 	enum mtk_instance_state state;
+	enum mtk_request_state req_state;
 
 	const struct vdec_common_if *dec_if;
 	void *drv_handle;
@@ -325,6 +326,9 @@ wake_up_dec_ctx(struct mtk_vcodec_dec_ctx *ctx, unsigned int reason, unsigned in
 	ctx->int_type[hw_id] = reason;
 	wake_up_interruptible(&ctx->queue[hw_id]);
 }
+
+int mtk_vcodec_complete(struct mtk_vcodec_dec_ctx *ctx, enum mtk_request_state state,
+			enum vb2_buffer_state buffer_state, struct media_request *src_buf_req);
 
 #define mtk_vdec_err(ctx, fmt, args...)                               \
 	mtk_vcodec_err((ctx)->id, (ctx)->dev->plat_dev, fmt, ##args)
