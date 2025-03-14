@@ -1512,7 +1512,7 @@ config LOCKDEP_SMALL
 config LOCKDEP_BITS
 	int "Size for MAX_LOCKDEP_ENTRIES (as Nth power of 2)"
 	depends on LOCKDEP && !LOCKDEP_SMALL
-	range 10 24
+	range 10 22
 	default 15
 	help
 	  Try increasing this value if you hit "BUG: MAX_LOCKDEP_ENTRIES too low!" message.
