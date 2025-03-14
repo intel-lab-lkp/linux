@@ -191,3 +191,20 @@ Typical voltage channel attributes of a differential AD4000 series device:
 +-------------------------------------------+------------------------------------------+
 | ``in_voltage0-voltage1_scale_available``  | Toggles input span compression           |
 +-------------------------------------------+------------------------------------------+
+
+SPI offload support
+-------------------
+
+To be able to achieve the maximum sample rate, the driver can be used with the
+`AXI SPI Engine`_ to provide SPI offload support.
+
+.. _AXI SPI Engine: http://analogdevicesinc.github.io/hdl/projects/pulsar_adc/index.html
+
+When set for SPI offload support, the IIO device will provide different
+interfaces.
+
+* Either ``in_voltage0_sampling_frequency`` or
+  ``in_voltage0-voltage1_sampling_frequency`` file is provided to allow setting
+  the sample rate.
+* IIO trigger device is not provided (no ``trigger`` directory).
+* ``timestamp`` channel is not provided.
