@@ -405,13 +405,13 @@ void intel_posted_msi_init(void)
  * instead of:
  *		read, xchg, read, xchg, read, xchg, read, xchg
  */
-static __always_inline bool handle_pending_pir(u64 *pir, struct pt_regs *regs)
+static __always_inline bool handle_pending_pir(unsigned long *pir, struct pt_regs *regs)
 {
 	int i, vec = FIRST_EXTERNAL_VECTOR;
-	unsigned long pir_copy[4];
+	unsigned long pir_copy[NR_PIR_WORDS];
 	bool found_irq = false;
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < NR_PIR_WORDS; i++) {
 		pir_copy[i] = READ_ONCE(pir[i]);
 		if (pir_copy[i])
 			found_irq = true;
@@ -420,7 +420,7 @@ static __always_inline bool handle_pending_pir(u64 *pir, struct pt_regs *regs)
 	if (!found_irq)
 		return false;
 
-	for (i = 0; i < 4; i++) {
+	for (i = 0; i < NR_PIR_WORDS; i++) {
 		if (!pir_copy[i])
 			continue;
 
@@ -460,7 +460,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_posted_msi_notification)
 	 * MAX_POSTED_MSI_COALESCING_LOOP - 1 loops are executed here.
 	 */
 	while (++i < MAX_POSTED_MSI_COALESCING_LOOP) {
-		if (!handle_pending_pir(pid->pir64, regs))
+		if (!handle_pending_pir(pid->pir, regs))
 			break;
 	}
 
@@ -475,7 +475,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_posted_msi_notification)
 	 * process PIR bits one last time such that handling the new interrupts
 	 * are not delayed until the next IRQ.
 	 */
-	handle_pending_pir(pid->pir64, regs);
+	handle_pending_pir(pid->pir, regs);
 
 	apic_eoi();
 	irq_exit();
