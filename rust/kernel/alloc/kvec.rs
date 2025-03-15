@@ -189,7 +189,9 @@ where
     ///
     /// - `new_len` must be less than or equal to [`Self::capacity`].
     /// - If `new_len` is greater than `self.len`, all elements within the interval
-    ///   [`self.len`,`new_len`) must be initialized.
+    ///   [`self.len`,`new_len`) must be initialized,
+    /// - if `new_len` is smaller than `self.len`, all elements within the interval
+    ///   [`new_len`, `self.len`) must either be dropped or copied and taken ownership of.
     #[inline]
     pub unsafe fn set_len(&mut self, new_len: usize) {
         debug_assert!(new_len <= self.capacity());
