@@ -113,13 +113,19 @@ struct mii_bus *devm_mdio_regmap_register(struct device *dev,
 	if (!config->parent)
 		return ERR_PTR(-EINVAL);
 
+	if (config->valid_addr_mask && !config->support_encoded_addr) {
+		dev_err(dev, "encoded address support is required to support multiple MDIO address\n");
+		return ERR_PTR(-EINVAL);
+	}
+
 	mii = devm_mdiobus_alloc_size(config->parent, sizeof(*mr));
 	if (!mii)
 		return ERR_PTR(-ENOMEM);
 
 	mr = mii->priv;
 	mr->regmap = config->regmap;
-	mr->valid_addr_mask = BIT(config->valid_addr);
+	mr->valid_addr_mask = config->valid_addr_mask ? config->valid_addr_mask :
+							BIT(config->valid_addr);
 	mr->encode_addr = config->support_encoded_addr;
 
 	mii->name = DRV_NAME;
