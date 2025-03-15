@@ -659,6 +659,7 @@ bool __kvm_apic_update_irr(unsigned long *pir, void *regs, int *max_irr)
 {
 	unsigned long pir_vals[NR_PIR_WORDS];
 	u32 *__pir = (void *)pir_vals;
+	bool found_irq = false;
 	u32 i, vec;
 	u32 irr_val, prev_irr_val;
 	int max_updated_irr;
@@ -668,6 +669,14 @@ bool __kvm_apic_update_irr(unsigned long *pir, void *regs, int *max_irr)
 
 	for (i = 0; i < NR_PIR_WORDS; i++) {
 		pir_vals[i] = READ_ONCE(pir[i]);
+		if (pir_vals[i])
+			found_irq = true;
+	}
+
+	if (!found_irq)
+		return false;
+
+	for (i = 0; i < NR_PIR_WORDS; i++) {
 		if (!pir_vals[i])
 			continue;
 
