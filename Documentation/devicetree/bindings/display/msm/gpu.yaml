@@ -152,11 +152,13 @@ allOf:
       properties:
         clocks:
           minItems: 2
-          maxItems: 7
+          maxItems: 8
 
         clock-names:
           items:
             anyOf:
+              - const: alwayson
+                description: GPU Always-On clock
               - const: core
                 description: GPU Core clock
               - const: iface
@@ -174,7 +176,7 @@ allOf:
               - const: rbcpr
                 description: GPU RB Core Power Reduction clock
           minItems: 2
-          maxItems: 7
+          maxItems: 8
 
       required:
         - clocks
