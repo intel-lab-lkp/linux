@@ -1616,12 +1616,11 @@ static inline int zap_nonpresent_ptes(struct mmu_gather *tlb,
 		if (unlikely(!should_zap_folio(details, folio)))
 			return 1;
 		/*
-		 * Both device private/exclusive mappings should only
-		 * work with anonymous page so far, so we don't need to
-		 * consider uffd-wp bit when zap. For more information,
-		 * see zap_install_uffd_wp_if_needed().
+		 * TODO: Do we need to consider uffd-wp bit when zap? For more
+		 * information, see zap_install_uffd_wp_if_needed().
 		 */
-		WARN_ON_ONCE(!vma_is_anonymous(vma));
+		WARN_ON_ONCE(zap_install_uffd_wp_if_needed(vma, addr, pte, nr,
+							details, ptent));
 		rss[mm_counter(folio)]--;
 		if (is_device_private_entry(entry))
 			folio_remove_rmap_pte(folio, page, vma);

@@ -62,6 +62,7 @@ extern const char *migrate_reason_names[MR_TYPES];
 
 #ifdef CONFIG_MIGRATION
 
+void migrate_device_page(struct page *page);
 void putback_movable_pages(struct list_head *l);
 int migrate_folio(struct address_space *mapping, struct folio *dst,
 		struct folio *src, enum migrate_mode mode);
@@ -82,6 +83,7 @@ int folio_migrate_mapping(struct address_space *mapping,
 
 #else
 
+static inline void migrate_device_page(struct page *page) {}
 static inline void putback_movable_pages(struct list_head *l) {}
 static inline int migrate_pages(struct list_head *l, new_folio_t new,
 		free_folio_t free, unsigned long private,

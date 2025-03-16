@@ -745,7 +745,7 @@ static void __migrate_device_pages(unsigned long *src_pfns,
 				 *
 				 * Try to get rid of swap cache if possible.
 				 */
-				if (!folio_test_anon(folio) ||
+				if (folio_test_anon(folio) &&
 				    !folio_free_swap(folio)) {
 					src_pfns[i] &= ~MIGRATE_PFN_MIGRATE;
 					continue;
@@ -862,6 +862,7 @@ void migrate_device_finalize(unsigned long *src_pfns,
 
 		if (dst != src) {
 			folio_unlock(dst);
+
 			if (folio_is_zone_device(dst))
 				folio_put(dst);
 			else
@@ -887,6 +888,69 @@ void migrate_vma_finalize(struct migrate_vma *migrate)
 	migrate_device_finalize(migrate->src, migrate->dst, migrate->npages);
 }
 EXPORT_SYMBOL(migrate_vma_finalize);
+
+/*
+ * This migrates the device private page back to the page cache. It doesn't
+ * actually copy any data though, it reads it back from the filesystem.
+ */
+void migrate_device_page(struct page *page)
+{
+	int ret;
+	struct page *newpage;
+
+	WARN_ON(!is_device_private_page(page));
+
+	/*
+	 * We don't support writeback of dirty pages from the driver yet.
+	 */
+	WARN_ON(PageDirty(page));
+
+	lock_page(page);
+	try_to_migrate(page_folio(page), 0);
+
+	/*
+	 * We should always be able to unmap device-private pages. Right?
+	 */
+	WARN_ON(page_mapped(page));
+
+	newpage = alloc_pages(GFP_HIGHUSER_MOVABLE, 0);
+	/*
+	 * OOM is fatal, so need to retry harder although 0-order allocations
+	 * should never fail?
+	 */
+	WARN_ON(!newpage);
+	lock_page(newpage);
+
+	/*
+	 * Replace the device-private page with the new page in the page cache.
+	 */
+	ret = fallback_migrate_folio(folio_mapping(page_folio(page)),
+				page_folio(newpage), page_folio(page),
+				MIGRATE_SYNC, 0);
+
+	/* This should never fail... */
+	WARN_ON_ONCE(ret != MIGRATEPAGE_SUCCESS);
+	page->mapping = NULL;
+
+	/*
+	 * We're going to read the newpage back from disk so make it not
+	 * uptodate.
+	 */
+	ClearPageUptodate(newpage);
+
+	/*
+	 * IO will unlock newpage asynchronously.
+	 */
+	folio_mapping(page_folio(newpage))->a_ops->read_folio(NULL,
+						page_folio(newpage));
+	lock_page(newpage);
+
+	remove_migration_ptes(page_folio(page), page_folio(newpage), false);
+
+	unlock_page(page);
+	unlock_page(newpage);
+	folio_putback_lru(page_folio(newpage));
+}
 
 /**
  * migrate_device_range() - migrate device private pfns to normal memory.

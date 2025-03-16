@@ -248,12 +248,14 @@ static bool remove_migration_pte(struct folio *folio,
 		pte_t pte;
 		swp_entry_t entry;
 		struct page *new;
+		struct page *old;
 		unsigned long idx = 0;
 
 		/* pgoff is invalid for ksm pages, but they are never large */
 		if (folio_test_large(folio) && !folio_test_hugetlb(folio))
 			idx = linear_page_index(vma, pvmw.address) - pvmw.pgoff;
 		new = folio_page(folio, idx);
+		old = folio_page(rmap_walk_arg->folio, idx);
 
 #ifdef CONFIG_ARCH_ENABLE_THP_MIGRATION
 		/* PMD-mapped THP migration entry */
@@ -291,7 +293,12 @@ static bool remove_migration_pte(struct folio *folio,
 			rmap_flags |= RMAP_EXCLUSIVE;
 
 		if (unlikely(is_device_private_page(new))) {
-			if (pte_write(pte))
+			/*
+			 * Page should have been written out during migration.
+			 */
+			WARN_ON_ONCE(PageDirty(old) &&
+				folio_mapping(page_folio(old)));
+			if (!folio_mapping(page_folio(old)) && pte_write(pte))
 				entry = make_writable_device_private_entry(
 							page_to_pfn(new));
 			else
@@ -758,9 +765,12 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 	if (folio_ref_count(src) != expected_count)
 		return -EAGAIN;
 
-	rc = folio_mc_copy(dst, src);
-	if (unlikely(rc))
-		return rc;
+	/* Drivers will do the copy before calling migrate_device_finalize() */
+	if (!folio_is_device_private(dst) && !folio_is_device_private(src)) {
+		rc = folio_mc_copy(dst, src);
+		if (unlikely(rc))
+			return rc;
+	}
 
 	rc = __folio_migrate_mapping(mapping, dst, src, expected_count);
 	if (rc != MIGRATEPAGE_SUCCESS)
@@ -1044,7 +1054,8 @@ static int move_to_new_folio(struct folio *dst, struct folio *src,
 			rc = migrate_folio(mapping, dst, src, mode);
 		else if (mapping_inaccessible(mapping))
 			rc = -EOPNOTSUPP;
-		else if (mapping->a_ops->migrate_folio)
+		else if (!is_device_private_page(&dst->page) &&
+			 mapping->a_ops->migrate_folio)
 			/*
 			 * Most folios have a mapping and most filesystems
 			 * provide a migrate_folio callback. Anonymous folios
