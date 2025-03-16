@@ -195,6 +195,21 @@ where
         self.len += additional;
     }
 
+    /// Decreases `self.len` by `count`.
+    ///
+    /// Returns a mutable reference to the removed elements.
+    ///
+    /// # Safety
+    ///
+    /// - `count` must be less than or equal to `self.len`.
+    unsafe fn dec_len(&mut self, count: usize) -> &mut [T] {
+        debug_assert!(count <= self.len());
+        self.len -= count;
+        // SAFETY: The memory between `self.len` and `self.len + count` is guaranteed to contain
+        // `self.len` initialized elements of type `T`.
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr().add(self.len), count) }
+    }
+
     /// Returns a slice of the entire vector.
     #[inline]
     pub fn as_slice(&self) -> &[T] {
