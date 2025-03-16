@@ -160,6 +160,17 @@ again:
 				goto next;
 			mpfn = migrate_pfn(pfn) | MIGRATE_PFN_MIGRATE;
 			mpfn |= pte_write(pte) ? MIGRATE_PFN_WRITE : 0;
+
+			/*
+			 * Tell the driver it may write to the PTE. Normally
+			 * page_mkwrite() would need to be called to upgrade a
+			 * read-only to writable PTE for a folio with mappings.
+			 * So the driver is responsible for marking the page dirty
+			 * with set_page_dirty() if it does actually write to
+			 * the page.
+			 */
+			mpfn |= vma->vm_flags & VM_WRITE && page->mapping ?
+				MIGRATE_PFN_WRITE : 0;
 		}
 
 		/* FIXME support THP */
@@ -240,6 +251,7 @@ again:
 					entry = make_migration_entry_dirty(entry);
 				}
 			}
+			entry = make_migration_entry_dirty(entry);
 			swp_pte = swp_entry_to_pte(entry);
 			if (pte_present(pte)) {
 				if (pte_soft_dirty(pte))
@@ -898,14 +910,15 @@ void migrate_device_page(struct page *page)
 	int ret;
 	struct page *newpage;
 
-	WARN_ON(!is_device_private_page(page));
-
-	/*
-	 * We don't support writeback of dirty pages from the driver yet.
-	 */
-	WARN_ON(PageDirty(page));
+	if (WARN_ON_ONCE(!is_device_private_page(page)))
+		return;
 
 	lock_page(page);
+
+	/*
+	 * TODO: It would be nice to have the driver call some version of this
+	 * (migrate_device_range()?)  so it can expand the region.
+	 */
 	try_to_migrate(page_folio(page), 0);
 
 	/*
@@ -932,18 +945,27 @@ void migrate_device_page(struct page *page)
 	WARN_ON_ONCE(ret != MIGRATEPAGE_SUCCESS);
 	page->mapping = NULL;
 
-	/*
-	 * We're going to read the newpage back from disk so make it not
-	 * uptodate.
-	 */
-	ClearPageUptodate(newpage);
+	if (page->pgmap->ops->migrate_to_pagecache)
+		ret = page->pgmap->ops->migrate_to_pagecache(page, newpage);
 
-	/*
-	 * IO will unlock newpage asynchronously.
-	 */
-	folio_mapping(page_folio(newpage))->a_ops->read_folio(NULL,
-						page_folio(newpage));
-	lock_page(newpage);
+	/* Fallback to reading page from disk */
+	if (!page->pgmap->ops->migrate_to_pagecache || ret) {
+		if (WARN_ON_ONCE(PageDirty(newpage)))
+			ClearPageDirty(newpage);
+
+		/*
+		 * We're going to read the newpage back from disk so make it not
+		 * uptodate.
+		 */
+		ClearPageUptodate(newpage);
+
+		/*
+		 * IO will unlock newpage asynchronously.
+		 */
+		folio_mapping(page_folio(newpage))->a_ops->read_folio(NULL,
+							page_folio(newpage));
+		lock_page(newpage);
+	}
 
 	remove_migration_ptes(page_folio(page), page_folio(newpage), false);
 

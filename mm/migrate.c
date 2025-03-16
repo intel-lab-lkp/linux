@@ -1006,7 +1006,7 @@ int fallback_migrate_folio(struct address_space *mapping,
 		struct folio *dst, struct folio *src, enum migrate_mode mode,
 		int extra_count)
 {
-	if (folio_test_dirty(src)) {
+	if (!folio_is_device_private(src) && folio_test_dirty(src)) {
 		/* Only writeback folios in full synchronous migration */
 		switch (mode) {
 		case MIGRATE_SYNC:

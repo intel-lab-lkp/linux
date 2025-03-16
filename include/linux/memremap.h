@@ -89,6 +89,8 @@ struct dev_pagemap_ops {
 	 */
 	vm_fault_t (*migrate_to_ram)(struct vm_fault *vmf);
 
+	int (*migrate_to_pagecache)(struct page *page, struct page *newpage);
+
 	/*
 	 * Handle the memory failure happens on a range of pfns.  Notify the
 	 * processes who are using these pfns, and try to recover the data on
