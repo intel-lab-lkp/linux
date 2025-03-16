@@ -410,9 +410,7 @@ static int starfive_pcie_probe(struct platform_device *pdev)
 	plda->host_ops = &sf_host_ops;
 	plda->num_events = PLDA_MAX_EVENT_NUM;
 	/* mask doorbell event */
-	plda->events_bitmap = GENMASK(PLDA_INT_EVENT_NUM - 1, 0)
-			     & ~BIT(PLDA_AXI_DOORBELL)
-			     & ~BIT(PLDA_PCIE_DOORBELL);
+	plda->events_bitmap = GENMASK(PLDA_INT_EVENT_NUM - 1, 0);
 	plda->events_bitmap <<= PLDA_NUM_DMA_EVENTS;
 	ret = plda_pcie_host_init(&pcie->plda, &starfive_pcie_ops,
 				  &stf_pcie_event);
