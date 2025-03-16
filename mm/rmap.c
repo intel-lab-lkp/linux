@@ -2176,7 +2176,7 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 		}
 
 		/* Set the dirty flag on the folio now the pte is gone. */
-		if (pte_dirty(pteval))
+		if (pte_present(pteval) && pte_dirty(pteval))
 			folio_mark_dirty(folio);
 
 		/* Update high watermark before we lower rss */

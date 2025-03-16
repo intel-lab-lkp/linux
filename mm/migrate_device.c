@@ -215,10 +215,6 @@ again:
 
 			migrate->cpages++;
 
-			/* Set the dirty flag on the folio now the pte is gone. */
-			if (pte_dirty(pte))
-				folio_mark_dirty(folio);
-
 			/* Setup special migration page table entry */
 			if (mpfn & MIGRATE_PFN_WRITE)
 				entry = make_writable_migration_entry(
@@ -232,8 +228,17 @@ again:
 			if (pte_present(pte)) {
 				if (pte_young(pte))
 					entry = make_migration_entry_young(entry);
-				if (pte_dirty(pte))
+				if (pte_dirty(pte)) {
+					/*
+					 * Mark the folio dirty now the pte is
+					 * gone because
+					 * make_migration_entry_dirty() won't
+					 * store the dirty bit if there isn't
+					 * room.
+					 */
+					folio_mark_dirty(folio);
 					entry = make_migration_entry_dirty(entry);
+				}
 			}
 			swp_pte = swp_entry_to_pte(entry);
 			if (pte_present(pte)) {
