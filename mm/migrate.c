@@ -749,9 +749,10 @@ EXPORT_SYMBOL(folio_migrate_flags);
 
 static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 			   struct folio *src, void *src_private,
-			   enum migrate_mode mode)
+			   enum migrate_mode mode, int extra_count)
 {
-	int rc, expected_count = folio_expected_refs(mapping, src);
+	int rc;
+	int expected_count = folio_expected_refs(mapping, src) + extra_count;
 
 	/* Check whether src does not have extra refs before we do more work */
 	if (folio_ref_count(src) != expected_count)
@@ -788,7 +789,7 @@ int migrate_folio(struct address_space *mapping, struct folio *dst,
 		  struct folio *src, enum migrate_mode mode)
 {
 	BUG_ON(folio_test_writeback(src));	/* Writeback must be complete */
-	return __migrate_folio(mapping, dst, src, NULL, mode);
+	return __migrate_folio(mapping, dst, src, NULL, mode, 0);
 }
 EXPORT_SYMBOL(migrate_folio);
 
@@ -942,7 +943,8 @@ EXPORT_SYMBOL_GPL(buffer_migrate_folio_norefs);
 int filemap_migrate_folio(struct address_space *mapping,
 		struct folio *dst, struct folio *src, enum migrate_mode mode)
 {
-	return __migrate_folio(mapping, dst, src, folio_get_private(src), mode);
+	return __migrate_folio(mapping, dst, src,
+			folio_get_private(src), mode, 0);
 }
 EXPORT_SYMBOL_GPL(filemap_migrate_folio);
 
@@ -990,8 +992,9 @@ static int writeout(struct address_space *mapping, struct folio *folio)
 /*
  * Default handling if a filesystem does not provide a migration function.
  */
-static int fallback_migrate_folio(struct address_space *mapping,
-		struct folio *dst, struct folio *src, enum migrate_mode mode)
+int fallback_migrate_folio(struct address_space *mapping,
+		struct folio *dst, struct folio *src, enum migrate_mode mode,
+		int extra_count)
 {
 	if (folio_test_dirty(src)) {
 		/* Only writeback folios in full synchronous migration */
@@ -1011,7 +1014,7 @@ static int fallback_migrate_folio(struct address_space *mapping,
 	if (!filemap_release_folio(src, GFP_KERNEL))
 		return mode == MIGRATE_SYNC ? -EAGAIN : -EBUSY;
 
-	return migrate_folio(mapping, dst, src, mode);
+	return __migrate_folio(mapping, dst, src, NULL, mode, extra_count);
 }
 
 /*
@@ -1052,7 +1055,7 @@ static int move_to_new_folio(struct folio *dst, struct folio *src,
 			rc = mapping->a_ops->migrate_folio(mapping, dst, src,
 								mode);
 		else
-			rc = fallback_migrate_folio(mapping, dst, src, mode);
+			rc = fallback_migrate_folio(mapping, dst, src, mode, 0);
 	} else {
 		const struct movable_operations *mops;
 
