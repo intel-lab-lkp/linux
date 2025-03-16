@@ -979,6 +979,8 @@ static int dmirror_migrate_to_device(struct dmirror *dmirror,
 
 	mmap_read_lock(mm);
 	for (addr = start; addr < end; addr = next) {
+		int i, retried = 0;
+
 		vma = vma_lookup(mm, addr);
 		if (!vma || !(vma->vm_flags & VM_READ)) {
 			ret = -EINVAL;
@@ -987,7 +989,7 @@ static int dmirror_migrate_to_device(struct dmirror *dmirror,
 		next = min(end, addr + (ARRAY_SIZE(src_pfns) << PAGE_SHIFT));
 		if (next > vma->vm_end)
 			next = vma->vm_end;
-
+retry:
 		args.vma = vma;
 		args.src = src_pfns;
 		args.dst = dst_pfns;
@@ -1004,6 +1006,16 @@ static int dmirror_migrate_to_device(struct dmirror *dmirror,
 		migrate_vma_pages(&args);
 		dmirror_migrate_finalize_and_map(&args, dmirror);
 		migrate_vma_finalize(&args);
+
+		for (i = 0; i < ((next - addr) >> PAGE_SHIFT); i++) {
+			if (!(src_pfns[i] & MIGRATE_PFN_MIGRATE)
+			    && migrate_pfn_to_page(src_pfns[i])
+			    && retried++ < 3) {
+				wait_on_page_writeback(
+					migrate_pfn_to_page(src_pfns[i]));
+				goto retry;
+			}
+		}
 	}
 	mmap_read_unlock(mm);
 	mmput(mm);
@@ -1404,6 +1416,10 @@ static void dmirror_devmem_free(struct page *page)
 	if (rpage != page)
 		__free_page(rpage);
 
+	/* Page has been freed so reinitialize these fields */
+	ClearPageDirty(page);
+	folio_clear_swapbacked(page_folio(page));
+
 	mdevice = dmirror_page_to_device(page);
 	spin_lock(&mdevice->lock);
 
@@ -1459,9 +1475,18 @@ static vm_fault_t dmirror_devmem_fault(struct vm_fault *vmf)
 	return 0;
 }
 
+static int dmirror_devmem_pagecache(struct page *page, struct page *newpage)
+{
+	set_page_dirty(newpage);
+	copy_highpage(newpage, BACKING_PAGE(page));
+
+	return 0;
+}
+
 static const struct dev_pagemap_ops dmirror_devmem_ops = {
 	.page_free	= dmirror_devmem_free,
 	.migrate_to_ram	= dmirror_devmem_fault,
+	.migrate_to_pagecache = dmirror_devmem_pagecache,
 };
 
 static int dmirror_device_init(struct dmirror_device *mdevice, int id)
