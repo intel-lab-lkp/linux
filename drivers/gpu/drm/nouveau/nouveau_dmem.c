@@ -218,9 +218,33 @@ done:
 	return ret;
 }
 
+static int nouveau_dmem_migrate_to_pagecache(struct page *page,
+						struct page *newpage)
+{
+	struct nouveau_drm *drm = page_to_drm(page);
+	struct nouveau_dmem *dmem = drm->dmem;
+	dma_addr_t dma_addr = 0;
+	struct nouveau_svmm *svmm;
+	struct nouveau_fence *fence;
+
+	set_page_dirty(newpage);
+	svmm = page->zone_device_data;
+	mutex_lock(&svmm->mutex);
+
+	/* TODO: Error handling */
+	WARN_ON_ONCE(nouveau_dmem_copy_one(drm, page, newpage, &dma_addr));
+	mutex_unlock(&svmm->mutex);
+	nouveau_fence_new(&fence, dmem->migrate.chan);
+	nouveau_dmem_fence_done(&fence);
+	dma_unmap_page(drm->dev->dev, dma_addr, PAGE_SIZE, DMA_BIDIRECTIONAL);
+
+	return 0;
+}
+
 static const struct dev_pagemap_ops nouveau_dmem_pagemap_ops = {
 	.page_free		= nouveau_dmem_page_free,
 	.migrate_to_ram		= nouveau_dmem_migrate_to_ram,
+	.migrate_to_pagecache   = nouveau_dmem_migrate_to_pagecache,
 };
 
 static int
