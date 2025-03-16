@@ -280,11 +280,6 @@ static u32 plda_get_events(struct plda_pcie_rp *port)
 	return events;
 }
 
-static irqreturn_t plda_event_handler(int irq, void *dev_id)
-{
-	return IRQ_HANDLED;
-}
-
 static void plda_handle_event(struct irq_desc *desc)
 {
 	struct plda_pcie_rp *port = irq_desc_get_handler_data(desc);
@@ -452,16 +447,13 @@ int plda_init_interrupts(struct platform_device *pdev,
 			return -ENXIO;
 		}
 
-		if (event->request_event_irq)
+		if (event->request_event_irq) {
 			ret = event->request_event_irq(port, event_irq, i);
-		else
-			ret = devm_request_irq(dev, event_irq,
-					       plda_event_handler,
-					       0, NULL, port);
-
-		if (ret) {
-			dev_err(dev, "failed to request IRQ %d\n", event_irq);
-			return ret;
+			if (ret) {
+				dev_err(dev, "failed to request IRQ %d\n",
+					event_irq);
+				return ret;
+			}
 		}
 	}
 
