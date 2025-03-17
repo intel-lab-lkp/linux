@@ -16,7 +16,7 @@ static ssize_t type_show(struct device *cdev,
 {
 	struct atm_dev *adev = to_atm_dev(cdev);
 
-	return scnprintf(buf, PAGE_SIZE, "%s\n", adev->type);
+	return sysfs_emit(buf, "%s\n", adev->type);
 }
 
 static ssize_t address_show(struct device *cdev,
@@ -24,7 +24,7 @@ static ssize_t address_show(struct device *cdev,
 {
 	struct atm_dev *adev = to_atm_dev(cdev);
 
-	return scnprintf(buf, PAGE_SIZE, "%pM\n", adev->esi);
+	return sysfs_emit(buf, "%pM\n", adev->esi);
 }
 
 static ssize_t atmaddress_show(struct device *cdev,
@@ -37,7 +37,7 @@ static ssize_t atmaddress_show(struct device *cdev,
 
 	spin_lock_irqsave(&adev->lock, flags);
 	list_for_each_entry(aaddr, &adev->local, entry) {
-		count += scnprintf(buf + count, PAGE_SIZE - count,
+		count += sysfs_emit_at(buf, count,
 				   "%1phN.%2phN.%10phN.%6phN.%1phN\n",
 				   &aaddr->addr.sas_addr.prv[0],
 				   &aaddr->addr.sas_addr.prv[1],
@@ -55,7 +55,7 @@ static ssize_t atmindex_show(struct device *cdev,
 {
 	struct atm_dev *adev = to_atm_dev(cdev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", adev->number);
+	return sysfs_emit(buf, "%d\n", adev->number);
 }
 
 static ssize_t carrier_show(struct device *cdev,
@@ -63,7 +63,7 @@ static ssize_t carrier_show(struct device *cdev,
 {
 	struct atm_dev *adev = to_atm_dev(cdev);
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n",
+	return sysfs_emit(buf, "%d\n",
 			 adev->signal == ATM_PHY_SIG_LOST ? 0 : 1);
 }
 
@@ -87,7 +87,7 @@ static ssize_t link_rate_show(struct device *cdev,
 	default:
 		link_rate = adev->link_rate * 8 * 53;
 	}
-	return scnprintf(buf, PAGE_SIZE, "%d\n", link_rate);
+	return sysfs_emit(buf, "%d\n", link_rate);
 }
 
 static DEVICE_ATTR_RO(address);
