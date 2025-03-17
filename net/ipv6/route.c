@@ -2193,6 +2193,12 @@ int fib6_table_lookup(struct net *net, struct fib6_table *table, int oif,
 
 redo_rt6_select:
 	rt6_select(net, fn, oif, res, strict);
+	if (ipv6_addr_loopback(&fl6->daddr)) {
+		struct fib6_info *rt = res->f6i;
+
+		if (!rt || !(rt->fib6_flags & RTF_LOCAL))
+			res->f6i = net->ipv6.fib6_null_entry;
+	}
 	if (res->f6i == net->ipv6.fib6_null_entry) {
 		fn = fib6_backtrack(fn, &fl6->saddr);
 		if (fn)
