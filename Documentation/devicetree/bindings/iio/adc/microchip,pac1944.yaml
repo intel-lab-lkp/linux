@@ -1,0 +1,195 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/adc/microchip,pac1944.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Microchip PAC1944 and PAC1954 Power Monitors with Accumulator
+
+maintainers:
+  - Marius Cristea <marius.cristea@microchip.com>
+
+description: |
+  This device is part of the Microchip family of Power Monitors with
+  Accumulator. The datasheet for PAC1941-1, PAC1941-1, PAC1942-1, PAC1942-2,
+  PAC1943-1 and PAC1944-1 can be found here:
+    https://ww1.microchip.com/downloads/aemDocuments/documents/MSLD/ProductDocuments/DataSheets/PAC194X-Family-Data-Sheet-DS20006543.pdf
+  The datasheet for PAC1951-1, PAC1951-1, PAC1952-1, PAC1952-2, PAC1953-1 and
+  PAC1954-1 can be found here:
+    https://ww1.microchip.com/downloads/aemDocuments/documents/MSLD/ProductDocuments/DataSheets/PAC195X-Family-Data-Sheet-DS20006539.pdf
+
+properties:
+  compatible:
+    enum:
+      - microchip,pac1941
+      - microchip,pac19412
+      - microchip,pac1942
+      - microchip,pac19422
+      - microchip,pac1943
+      - microchip,pac1944
+      - microchip,pac1951
+      - microchip,pac19512
+      - microchip,pac1952
+      - microchip,pac19522
+      - microchip,pac1953
+      - microchip,pac1954
+
+  reg:
+    maxItems: 1
+
+  vdd-supply: true
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+  interrupts:
+    maxItems: 2
+
+  interrupt-names:
+    maxItems: 2
+    items:
+      enum:
+        - alert1
+        - alert2
+
+patternProperties:
+  "^channel@[1-4]+$":
+    type: object
+    $ref: adc.yaml
+    description:
+      Represents the external channels which are connected to the ADC.
+
+    properties:
+      reg:
+        items:
+          minimum: 1
+          maximum: 4
+
+      shunt-resistor-micro-ohms:
+        description:
+          Value in micro Ohms of the shunt resistor connected between
+          the SENSE+ and SENSE- inputs, across which the current is measured.
+          Value is needed to compute the scaling of the measured current.
+
+      microchip,vbus-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          In order to increase measurement resolution and keeping the same
+          number the of bits the device has a configurable VBUS full range
+          scale (FSR). The range should be set by hardware design and it should
+          not be changed during runtime. The bipolar capability for VBUS enables
+          accurate offset measurement and correction.
+          The VBUS could be configured into the following full scale range
+            <0>  -  VBUS has unipolar +32V to 0V FSR (default) for PAC195X
+                    or +9V to 0V (default) for PAC194X
+            <1>  -  VBUS has bipolar +32V to -32V FSR for PAC195X
+                    or +9V to -9V for PAC194X. The actual range is limited to
+                    about -200 mV due to the impact of the ESD structures.
+            <2>  -  VBUS has bipolar +16V to -16V FSR for PAC195X
+                    or +4.5V to -4.5V for PAC194X. The actual range is limited
+                    to about -200 mV due to the impact of the ESD structures.
+        maximum: 2
+
+      microchip,vsense-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          In order to decrease the power dissipation on the shunt resistor and
+          in the same time to increase measurement resolution by keeping the
+          same number the of bits the device has a configurable VSENSE full
+          range scale (FSR). The range should be set by hardware design and it
+          should not be changed during runtime. 
+          The VSENSE could be configured into the following full scale range
+            <0>  -  VSENSE has unipolar +100 mV to 0V FSR (default)
+            <1>  -  VSENSE has bipolar +100 mV to -100 mV FSR
+            <2>  -  VSENSE has bipolar +50 mV to -50 mV FSR
+        maximum: 2
+
+      microchip,accumulation-mode:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          The Hardware Accumulator may be used to accumulate VPOWER, VSENSE or
+          VBUS values for any channel. By setting the accumulator for a channel
+          to accumulate the VPOWER values gives a measure of accumulated power
+          into a time period, which is equivalent to energy. Setting the
+          accumulator for a channel to accumulate VSENSE values gives a measure
+          of accumulated current, which is equivalent to charge. This allows the
+          accumulator to be used as a coulomb counter. For either VSENSE or
+          VBUS, many samples may be accumulated on chip and the result collected
+          by the host and divided by the accumulator counter count value to
+          yield an average value with a very long integration time to reduce
+          noise. This feature is also very useful for system calibration,
+          allowing many averages to be accumulated for fast averaging/noise
+          reduction.
+          This functionality needs to be setup once and must not be changed
+          during the runtime, just in case the user wants to measure the charge
+          or the energy consumed from board power up till the user has control
+          or during a reboot of the system.          
+          The Hardware Accumulator could be configured to accumulate
+          VPOWER, VSENSE or VBUS
+            <0>  -  Accumulator accumulates VPOWER (default)
+            <1>  -  Accumulator accumulates VSENSE
+            <2>  -  Accumulator accumulates VBUS
+        maximum: 2
+
+    required:
+      - reg
+      - shunt-resistor-micro-ohms
+
+    unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+  - vdd-supply
+  - "#address-cells"
+  - "#size-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        power-monitor@10 {
+            compatible = "microchip,pac1954";
+            reg = <0x10>;
+            vdd-supply = <&vdd>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            channel@1 {
+                reg = <0x1>;
+                shunt-resistor-micro-ohms = <24900>;
+                label = "CPU";
+                microchip,vbus-mode = <0>;
+                microchip,vsense-mode = <0>;
+                microchip,accumulation-mode = <0>;
+            };
+
+            channel@3 {
+                reg = <0x3>;
+                shunt-resistor-micro-ohms = <75000>;
+                label = "MEM";
+                microchip,vbus-mode = <0>;
+                microchip,vsense-mode = <0>;
+                microchip,accumulation-mode = <0>;
+            };
+
+            channel@4 {
+                reg = <0x4>;
+                shunt-resistor-micro-ohms = <100000>;
+                label = "NET";
+                microchip,vbus-mode = <0>;
+                microchip,vsense-mode = <0>;
+                microchip,accumulation-mode = <0>;
+            };
+        };
+    };
+
+...
