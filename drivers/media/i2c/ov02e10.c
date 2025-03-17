@@ -220,7 +220,6 @@ static const struct ov02e10_mode supported_modes[] = {
 			.num_regs = ARRAY_SIZE(mode_1928x1088_30fps_2lane),
 			.regs = mode_1928x1088_30fps_2lane,
 		},
-
 		.link_freq_index = OV02E10_LINK_FREQ_360MHZ_INDEX,
 	},
 };
@@ -771,14 +770,14 @@ static int ov02e10_identify_module(struct ov02e10 *ov02e10)
 	u64 val;
 
 	ret = cci_write(ov02e10->regmap, OV02E10_REG_PAGE_FLAG,
-			   OV02E10_PAGE_0, NULL);
+			OV02E10_PAGE_0, NULL);
 	cci_read(ov02e10->regmap, OV02E10_REG_CHIP_ID, &val, &ret);
 	if (ret)
 		return ret;
 
 	if (val != OV02E10_CHIP_ID) {
 		dev_err(&client->dev, "chip id mismatch: %x!=%x\n",
-			OV02E10_CHIP_ID, (u32) val);
+			OV02E10_CHIP_ID, (u32)val);
 		return -ENXIO;
 	}
 
@@ -948,7 +947,7 @@ error_power_off:
 
 static const struct dev_pm_ops ov02e10_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(ov02e10_suspend, ov02e10_resume)
-	    SET_RUNTIME_PM_OPS(ov02e10_power_off, ov02e10_power_on, NULL)
+	SET_RUNTIME_PM_OPS(ov02e10_power_off, ov02e10_power_on, NULL)
 };
 
 static const struct acpi_device_id ov02e10_acpi_ids[] = {
@@ -960,10 +959,10 @@ MODULE_DEVICE_TABLE(acpi, ov02e10_acpi_ids);
 
 static struct i2c_driver ov02e10_i2c_driver = {
 	.driver = {
-		   .name = "ov02e10",
-		   .pm = &ov02e10_pm_ops,
-		   .acpi_match_table = ov02e10_acpi_ids,
-		    },
+		.name = "ov02e10",
+		.pm = &ov02e10_pm_ops,
+		.acpi_match_table = ov02e10_acpi_ids,
+	},
 	.probe = ov02e10_probe,
 	.remove = ov02e10_remove,
 };
