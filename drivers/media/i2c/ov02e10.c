@@ -538,11 +538,6 @@ static int ov02e10_get_pm_resources(struct device *dev)
 		return dev_err_probe(dev, PTR_ERR(ov02e10->reset),
 				     "failed to get reset gpio\n");
 
-	ov02e10->img_clk = devm_clk_get_optional(dev, NULL);
-	if (IS_ERR(ov02e10->img_clk))
-		return dev_err_probe(dev, PTR_ERR(ov02e10->img_clk),
-				     "failed to get imaging clock\n");
-
 	for (i = 0; i < ARRAY_SIZE(ov02e10_supply_names); i++)
 		ov02e10->supplies[i].supply = ov02e10_supply_names[i];
 
@@ -774,7 +769,7 @@ static int ov02e10_identify_module(struct ov02e10 *ov02e10)
 	return 0;
 }
 
-static int ov02e10_check_hwcfg(struct device *dev)
+static int ov02e10_check_hwcfg(struct device *dev, struct ov02e10 *ov02e10)
 {
 	struct v4l2_fwnode_endpoint bus_cfg = {
 		.bus_type = V4L2_MBUS_CSI2_DPHY
@@ -795,10 +790,28 @@ static int ov02e10_check_hwcfg(struct device *dev)
 	if (ret)
 		return dev_err_probe(dev, ret, "parsing endpoint failed\n");
 
-	ret = fwnode_property_read_u32(dev_fwnode(dev), "clock-frequency",
-				       &ext_clk);
-	if (ret) {
-		dev_err(dev, "can't get clock frequency\n");
+	ov02e10->img_clk = devm_clk_get_optional(dev, NULL);
+	if (IS_ERR(ov02e10->img_clk)) {
+		ret = dev_err_probe(dev, PTR_ERR(ov02e10->img_clk),
+				    "failed to get imaging clock\n");
+		goto out_err;
+	}
+
+	if (ov02e10->img_clk) {
+		ext_clk = clk_get_rate(ov02e10->img_clk);
+	} else {
+		ret = fwnode_property_read_u32(dev_fwnode(dev), "clock-frequency",
+					       &ext_clk);
+		if (ret) {
+			dev_err(dev, "can't get clock frequency\n");
+			goto out_err;
+		}
+	}
+
+	if (ext_clk != OV02E10_MCLK) {
+		dev_err(dev, "external clock %d is not supported\n",
+			ext_clk);
+		ret = -EINVAL;
 		goto out_err;
 	}
 
@@ -853,14 +866,14 @@ static int ov02e10_probe(struct i2c_client *client)
 	struct ov02e10 *ov02e;
 	int ret;
 
-	/* Check HW config */
-	ret = ov02e10_check_hwcfg(&client->dev);
-	if (ret)
-		return ret;
-
 	ov02e = devm_kzalloc(&client->dev, sizeof(*ov02e), GFP_KERNEL);
 	if (!ov02e)
 		return -ENOMEM;
+
+	/* Check HW config */
+	ret = ov02e10_check_hwcfg(&client->dev, ov02e);
+	if (ret)
+		return ret;
 
 	/* Initialize subdev */
 	ov02e->regmap = devm_cci_regmap_init_i2c(client, 8);
