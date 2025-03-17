@@ -240,7 +240,6 @@ struct ov02e10 {
 	struct clk *img_clk;
 	struct regulator *avdd;
 	struct gpio_desc *reset;
-	struct gpio_desc *handshake;
 
 	/* Current mode */
 	const struct ov02e10_mode *cur_mode;
@@ -533,12 +532,6 @@ static int ov02e10_get_pm_resources(struct device *dev)
 		return dev_err_probe(dev, PTR_ERR(ov02e10->reset),
 				     "failed to get reset gpio\n");
 
-	ov02e10->handshake = devm_gpiod_get_optional(dev, "handshake",
-						   GPIOD_OUT_LOW);
-	if (IS_ERR(ov02e10->handshake))
-		return dev_err_probe(dev, PTR_ERR(ov02e10->handshake),
-				     "failed to get handshake gpio\n");
-
 	ov02e10->img_clk = devm_clk_get_optional(dev, NULL);
 	if (IS_ERR(ov02e10->img_clk))
 		return dev_err_probe(dev, PTR_ERR(ov02e10->img_clk),
@@ -563,7 +556,6 @@ static int ov02e10_power_off(struct device *dev)
 	int ret = 0;
 
 	gpiod_set_value_cansleep(ov02e10->reset, 1);
-	gpiod_set_value_cansleep(ov02e10->handshake, 0);
 
 	if (ov02e10->avdd)
 		ret = regulator_disable(ov02e10->avdd);
@@ -593,13 +585,7 @@ static int ov02e10_power_on(struct device *dev)
 			return ret;
 		}
 	}
-	gpiod_set_value_cansleep(ov02e10->handshake, 1);
 	gpiod_set_value_cansleep(ov02e10->reset, 0);
-
-	/* Lattice MIPI aggregator with some version FW needs longer delay
-	   after handshake triggered. We set 25ms as a safe value and wait
-	   for a stable version FW. */
-	msleep_interruptible(25);
 
 	return ret;
 }
