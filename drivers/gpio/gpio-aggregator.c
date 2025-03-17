@@ -556,7 +556,7 @@ int gpiochip_fwd_add_gpio_desc(struct gpiochip_fwd *fwd, struct gpio_desc *desc,
 }
 EXPORT_SYMBOL_GPL(gpiochip_fwd_add_gpio_desc);
 
-int gpiochip_fwd_register(struct gpiochip_fwd *fwd)
+int gpiochip_fwd_register(struct gpiochip_fwd *fwd, void *data)
 {
 	struct gpio_chip *chip = &fwd->chip;
 	struct device *dev = fwd->dev;
@@ -578,6 +578,8 @@ int gpiochip_fwd_register(struct gpiochip_fwd *fwd)
 		mutex_init(&fwd->mlock);
 	else
 		spin_lock_init(&fwd->slock);
+
+	fwd->data = data;
 
 	error = devm_gpiochip_add_data(dev, chip, fwd);
 
@@ -625,7 +627,7 @@ static struct gpiochip_fwd *gpiochip_fwd_create(struct device *dev,
 			return ERR_PTR(error);
 	}
 
-	error = gpiochip_fwd_register(fwd);
+	error = gpiochip_fwd_register(fwd, NULL);
 	if (error)
 		return ERR_PTR(error);
 

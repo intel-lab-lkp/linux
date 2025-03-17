@@ -10,6 +10,7 @@ struct gpiochip_fwd_timing {
 struct gpiochip_fwd {
 	struct device *dev;
 	struct gpio_chip chip;
+	void *data;
 	struct gpio_desc **descs;
 	union {
 		struct mutex mlock;	/* protects tmp[] if can_sleep */
@@ -50,6 +51,6 @@ int gpiochip_fwd_add_gpio_desc(struct gpiochip_fwd *fwd,
 			       struct gpio_desc *desc,
 			       unsigned int offset);
 
-int gpiochip_fwd_register(struct gpiochip_fwd *fwd);
+int gpiochip_fwd_register(struct gpiochip_fwd *fwd, void *data);
 
 #endif
