@@ -954,11 +954,18 @@ static const struct acpi_device_id ov02e10_acpi_ids[] = {
 
 MODULE_DEVICE_TABLE(acpi, ov02e10_acpi_ids);
 
+static const struct of_device_id ov02e10_of_match[] = {
+	{ .compatible = "ovti,ov02e10" },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, ov02e10_of_match);
+
 static struct i2c_driver ov02e10_i2c_driver = {
 	.driver = {
 		.name = "ov02e10",
 		.pm = &ov02e10_pm_ops,
 		.acpi_match_table = ov02e10_acpi_ids,
+		.of_match_table = ov02e10_of_match,
 	},
 	.probe = ov02e10_probe,
 	.remove = ov02e10_remove,
