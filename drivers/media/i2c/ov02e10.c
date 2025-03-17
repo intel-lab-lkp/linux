@@ -579,7 +579,11 @@ static int ov02e10_power_on(struct device *dev)
 		goto disable_clk;
 	}
 
-	gpiod_set_value_cansleep(ov02e10->reset, 0);
+	if (ov02e10->reset) {
+		usleep_range(5000, 5100);
+		gpiod_set_value_cansleep(ov02e10->reset, 0);
+		usleep_range(8000, 8100);
+	}
 
 	return 0;
 
