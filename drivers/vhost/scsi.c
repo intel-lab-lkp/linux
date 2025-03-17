@@ -133,6 +133,11 @@ struct vhost_scsi_cmd {
 	struct se_cmd tvc_se_cmd;
 	/* Sense buffer that will be mapped into outgoing status */
 	unsigned char tvc_sense_buf[TRANSPORT_SENSE_BUFFER];
+	/*
+	 * Dirty write descriptors of this command.
+	 */
+	struct vhost_log *tvc_log;
+	unsigned int tvc_log_num;
 	/* Completed commands list, serviced from vhost worker thread */
 	struct llist_node tvc_completion_list;
 	/* Used to track inflight cmd */
@@ -676,6 +681,7 @@ vhost_scsi_get_cmd(struct vhost_virtqueue *vq, u64 scsi_tag)
 					struct vhost_scsi_virtqueue, vq);
 	struct vhost_scsi_cmd *cmd;
 	struct scatterlist *sgl, *prot_sgl;
+	struct vhost_log *log;
 	int tag;
 
 	tag = sbitmap_get(&svq->scsi_tags);
@@ -687,9 +693,11 @@ vhost_scsi_get_cmd(struct vhost_virtqueue *vq, u64 scsi_tag)
 	cmd = &svq->scsi_cmds[tag];
 	sgl = cmd->sgl;
 	prot_sgl = cmd->prot_sgl;
+	log = cmd->tvc_log;
 	memset(cmd, 0, sizeof(*cmd));
 	cmd->sgl = sgl;
 	cmd->prot_sgl = prot_sgl;
+	cmd->tvc_log = log;
 	cmd->tvc_se_cmd.map_tag = tag;
 	cmd->inflight = vhost_scsi_get_inflight(vq);
 
@@ -1760,6 +1768,55 @@ static void vhost_scsi_flush(struct vhost_scsi *vs)
 		wait_for_completion(&vs->old_inflight[i]->comp);
 }
 
+static void vhost_scsi_destroy_vq_log(struct vhost_virtqueue *vq)
+{
+	struct vhost_scsi_virtqueue *svq = container_of(vq,
+					struct vhost_scsi_virtqueue, vq);
+	struct vhost_scsi_cmd *tv_cmd;
+	unsigned int i;
+
+	if (!svq->scsi_cmds)
+		return;
+
+	for (i = 0; i < svq->max_cmds; i++) {
+		tv_cmd = &svq->scsi_cmds[i];
+		kfree(tv_cmd->tvc_log);
+		tv_cmd->tvc_log = NULL;
+		tv_cmd->tvc_log_num = 0;
+	}
+}
+
+static int vhost_scsi_setup_vq_log(struct vhost_virtqueue *vq)
+{
+	struct vhost_scsi_virtqueue *svq = container_of(vq,
+					struct vhost_scsi_virtqueue, vq);
+	struct vhost_scsi_cmd *tv_cmd;
+	unsigned int i;
+
+	if (!svq->scsi_cmds)
+		return 0;
+
+	for (i = 0; i < svq->max_cmds; i++) {
+		tv_cmd = &svq->scsi_cmds[i];
+		WARN_ON_ONCE(unlikely(tv_cmd->tvc_log ||
+				      tv_cmd->tvc_log_num));
+		tv_cmd->tvc_log_num = 0;
+		tv_cmd->tvc_log = kcalloc(vq->dev->iov_limit,
+					  sizeof(struct vhost_log),
+					  GFP_KERNEL);
+		if (!tv_cmd->tvc_log) {
+			pr_err("Unable to allocate tv_cmd->tvc_log\n");
+			goto err;
+		}
+	}
+
+	return 0;
+
+err:
+	vhost_scsi_destroy_vq_log(vq);
+	return -ENOMEM;
+}
+
 static void vhost_scsi_destroy_vq_cmds(struct vhost_virtqueue *vq)
 {
 	struct vhost_scsi_virtqueue *svq = container_of(vq,
@@ -1779,6 +1836,7 @@ static void vhost_scsi_destroy_vq_cmds(struct vhost_virtqueue *vq)
 
 	sbitmap_free(&svq->scsi_tags);
 	kfree(svq->upages);
+	vhost_scsi_destroy_vq_log(vq);
 	kfree(svq->scsi_cmds);
 	svq->scsi_cmds = NULL;
 }
@@ -1834,6 +1892,11 @@ static int vhost_scsi_setup_vq_cmds(struct vhost_virtqueue *vq, int max_cmds)
 			}
 		}
 	}
+
+	if (vhost_has_feature(vq, VHOST_F_LOG_ALL) &&
+	    vhost_scsi_setup_vq_log(vq))
+		goto out;
+
 	return 0;
 out:
 	vhost_scsi_destroy_vq_cmds(vq);
@@ -2088,6 +2151,8 @@ err_dev:
 static int vhost_scsi_set_features(struct vhost_scsi *vs, u64 features)
 {
 	struct vhost_virtqueue *vq;
+	bool is_log, was_log;
+	int ret;
 	int i;
 
 	if (features & ~VHOST_SCSI_FEATURES)
@@ -2100,14 +2165,75 @@ static int vhost_scsi_set_features(struct vhost_scsi *vs, u64 features)
 		return -EFAULT;
 	}
 
+	if (!vs->dev.nvqs)
+		goto out;
+
+	is_log = features & (1 << VHOST_F_LOG_ALL);
+	/*
+	 * All VQs should have same feature.
+	 */
+	was_log = vhost_has_feature(&vs->vqs[0].vq, VHOST_F_LOG_ALL);
+
+	/*
+	 * If VHOST_F_LOG_ALL is going to be added, allocate tvc_log before
+	 * vq->acked_features is committed.
+	 * Return -ENOMEM on allocation failure.
+	 */
+	if (is_log && !was_log) {
+		for (i = VHOST_SCSI_VQ_IO; i < vs->dev.nvqs; i++) {
+			if (!vs->vqs[i].scsi_cmds)
+				continue;
+
+			vq = &vs->vqs[i].vq;
+
+			mutex_lock(&vq->mutex);
+			ret = vhost_scsi_setup_vq_log(vq);
+			mutex_unlock(&vq->mutex);
+
+			if (ret)
+				goto destroy_cmd_log;
+		}
+	}
+
 	for (i = 0; i < vs->dev.nvqs; i++) {
 		vq = &vs->vqs[i].vq;
 		mutex_lock(&vq->mutex);
 		vq->acked_features = features;
 		mutex_unlock(&vq->mutex);
 	}
+
+	/*
+	 * If VHOST_F_LOG_ALL is removed, free tvc_log after
+	 * vq->acked_features is committed.
+	 */
+	if (!is_log && was_log) {
+		for (i = VHOST_SCSI_VQ_IO; i < vs->dev.nvqs; i++) {
+			if (!vs->vqs[i].scsi_cmds)
+				continue;
+
+			vq = &vs->vqs[i].vq;
+			mutex_lock(&vq->mutex);
+			vhost_scsi_destroy_vq_log(vq);
+			mutex_unlock(&vq->mutex);
+		}
+	}
+
+out:
 	mutex_unlock(&vs->dev.mutex);
 	return 0;
+
+destroy_cmd_log:
+	for (i--; i >= VHOST_SCSI_VQ_IO; i--) {
+		if (!vs->vqs[i].scsi_cmds)
+			continue;
+
+		vq = &vs->vqs[i].vq;
+		mutex_lock(&vq->mutex);
+		vhost_scsi_destroy_vq_log(vq);
+		mutex_unlock(&vq->mutex);
+	}
+	mutex_unlock(&vs->dev.mutex);
+	return -ENOMEM;
 }
 
 static int vhost_scsi_open(struct inode *inode, struct file *f)
