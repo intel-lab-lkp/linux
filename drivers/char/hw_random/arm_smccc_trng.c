@@ -16,8 +16,10 @@
 #include <linux/device.h>
 #include <linux/hw_random.h>
 #include <linux/module.h>
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/arm-smccc.h>
+
+#include <asm/archrandom.h>
 
 #ifdef CONFIG_ARM64
 #define ARM_SMCCC_TRNG_RND	ARM_SMCCC_TRNG_RND64
@@ -32,6 +34,8 @@
 
 #define SMCCC_RET_TRNG_INVALID_PARAMETER	-2
 #define SMCCC_RET_TRNG_NO_ENTROPY		-3
+
+bool __ro_after_init smccc_trng_available;
 
 static int copy_from_registers(char *buf, struct arm_smccc_res *res,
 			       size_t bytes)
@@ -94,29 +98,43 @@ static int smccc_trng_read(struct hwrng *rng, void *data, size_t max, bool wait)
 	return copied;
 }
 
-static int smccc_trng_probe(struct platform_device *pdev)
+static int smccc_trng_probe(struct faux_device *fdev)
 {
 	struct hwrng *trng;
 
-	trng = devm_kzalloc(&pdev->dev, sizeof(*trng), GFP_KERNEL);
+	trng = devm_kzalloc(&fdev->dev, sizeof(*trng), GFP_KERNEL);
 	if (!trng)
 		return -ENOMEM;
 
 	trng->name = "smccc_trng";
 	trng->read = smccc_trng_read;
 
-	return devm_hwrng_register(&pdev->dev, trng);
+	return devm_hwrng_register(&fdev->dev, trng);
 }
 
-static struct platform_driver smccc_trng_driver = {
-	.driver = {
-		.name		= "smccc_trng",
-	},
-	.probe		= smccc_trng_probe,
+static struct faux_device_ops smccc_trng_ops = {
+	.probe = smccc_trng_probe,
 };
-module_platform_driver(smccc_trng_driver);
 
-MODULE_ALIAS("platform:smccc_trng");
+static int __init smccc_trng_init(void)
+{
+	struct faux_device *fdev;
+
+	smccc_trng_available = smccc_probe_trng();
+	if (!smccc_trng_available)
+		return 0;
+
+	fdev = faux_device_create("smccc_trng", NULL, &smccc_trng_ops);
+	if (!fdev) {
+		pr_err("smccc_trng: could not create the device\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+device_initcall(smccc_trng_init);
+
+MODULE_ALIAS("faux:smccc_trng");
 MODULE_AUTHOR("Andre Przywara");
 MODULE_DESCRIPTION("Arm SMCCC TRNG firmware interface support");
 MODULE_LICENSE("GPL");
