@@ -2232,6 +2232,46 @@ int gpiochip_add_pingroup_range(struct gpio_chip *gc,
 }
 EXPORT_SYMBOL_GPL(gpiochip_add_pingroup_range);
 
+static int __gpiochip_add_pin_range(struct gpio_chip *gc, const char *pinctl_name,
+				    unsigned int gpio_offset, unsigned int pin_offset,
+				    unsigned int const *pins, unsigned int npins)
+{
+	struct gpio_pin_range *pin_range;
+	struct gpio_device *gdev = gc->gpiodev;
+	int ret;
+
+	pin_range = kzalloc(sizeof(*pin_range), GFP_KERNEL);
+	if (!pin_range) {
+		chip_err(gc, "failed to allocate pin ranges\n");
+		return -ENOMEM;
+	}
+
+	/* Use local offset as range ID */
+	pin_range->range.id = gpio_offset;
+	pin_range->range.gc = gc;
+	pin_range->range.name = gc->label;
+	pin_range->range.base = gdev->base + gpio_offset;
+	pin_range->range.pin_base = pin_offset;
+	pin_range->range.pins = pins;
+	pin_range->range.npins = npins;
+	pin_range->pctldev = pinctrl_find_and_add_gpio_range(pinctl_name,
+			&pin_range->range);
+	if (IS_ERR(pin_range->pctldev)) {
+		ret = PTR_ERR(pin_range->pctldev);
+		chip_err(gc, "could not create pin range\n");
+		kfree(pin_range);
+		return ret;
+	}
+	chip_dbg(gc, "created GPIO range %d->%d ==> %s PIN %d->%d\n",
+		 gpio_offset, gpio_offset + npins - 1,
+		 pinctl_name,
+		 pin_offset, pin_offset + npins - 1);
+
+	list_add_tail(&pin_range->node, &gdev->pin_ranges);
+
+	return 0;
+}
+
 /**
  * gpiochip_add_pin_range() - add a range for GPIO <-> pin mapping
  * @gc: the gpiochip to add the range for
@@ -2253,41 +2293,35 @@ int gpiochip_add_pin_range(struct gpio_chip *gc, const char *pinctl_name,
 			   unsigned int gpio_offset, unsigned int pin_offset,
 			   unsigned int npins)
 {
-	struct gpio_pin_range *pin_range;
-	struct gpio_device *gdev = gc->gpiodev;
-	int ret;
-
-	pin_range = kzalloc(sizeof(*pin_range), GFP_KERNEL);
-	if (!pin_range) {
-		chip_err(gc, "failed to allocate pin ranges\n");
-		return -ENOMEM;
-	}
-
-	/* Use local offset as range ID */
-	pin_range->range.id = gpio_offset;
-	pin_range->range.gc = gc;
-	pin_range->range.name = gc->label;
-	pin_range->range.base = gdev->base + gpio_offset;
-	pin_range->range.pin_base = pin_offset;
-	pin_range->range.npins = npins;
-	pin_range->pctldev = pinctrl_find_and_add_gpio_range(pinctl_name,
-			&pin_range->range);
-	if (IS_ERR(pin_range->pctldev)) {
-		ret = PTR_ERR(pin_range->pctldev);
-		chip_err(gc, "could not create pin range\n");
-		kfree(pin_range);
-		return ret;
-	}
-	chip_dbg(gc, "created GPIO range %d->%d ==> %s PIN %d->%d\n",
-		 gpio_offset, gpio_offset + npins - 1,
-		 pinctl_name,
-		 pin_offset, pin_offset + npins - 1);
-
-	list_add_tail(&pin_range->node, &gdev->pin_ranges);
-
-	return 0;
+	return __gpiochip_add_pin_range(gc, pinctl_name, gpio_offset,
+					pin_offset, NULL, npins);
 }
 EXPORT_SYMBOL_GPL(gpiochip_add_pin_range);
+
+/**
+ * gpiochip_add_pin_range_sparse() - add a range for GPIO <-> pin mapping
+ * @gc: the gpiochip to add the range for
+ * @pinctl_name: the dev_name() of the pin controller to map to
+ * @gpio_offset: the start offset in the current gpio_chip number space
+ * @pin_list: the list of pins to accumulate in this range
+ * @npins: the number of pins to accumulate in this range
+ *
+ * Calling this function directly from a DeviceTree-supported
+ * pinctrl driver is DEPRECATED. Please see Section 2.1 of
+ * Documentation/devicetree/bindings/gpio/gpio.txt on how to
+ * bind pinctrl and gpio drivers via the "gpio-ranges" property.
+ *
+ * Returns:
+ * 0 on success, or a negative errno on failure.
+ */
+int gpiochip_add_pin_range_sparse(struct gpio_chip *gc, const char *pinctl_name,
+				  unsigned int gpio_offset, unsigned int const *pins,
+				  unsigned int npins)
+{
+	return __gpiochip_add_pin_range(gc, pinctl_name, gpio_offset, 0, pins,
+					npins);
+}
+EXPORT_SYMBOL_GPL(gpiochip_add_pin_range_sparse);
 
 /**
  * gpiochip_remove_pin_ranges() - remove all the GPIO <-> pin mappings
