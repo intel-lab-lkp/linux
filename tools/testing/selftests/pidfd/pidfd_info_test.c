@@ -428,21 +428,22 @@ TEST_F(pidfd_info, thread_group_exec)
 	ASSERT_GE(pidfd_leader_thread, 0);
 
 	/*
-	 * We can poll and wait for the old thread-group leader to exit
-	 * using a thread-specific pidfd.
+	 * We can't poll and wait for the old thread-group leader to exit
+	 * using a thread-specific pidfd. The thread-group leader exited
+	 * prematurely and notification is delayed until all subthreads
+	 * have exited.
 	 *
-	 * This only works until the thread has execed. When the thread
-	 * has execed it will have taken over the old thread-group
-	 * leaders struct pid. Calling poll after the thread execed will
-	 * thus block again because a new thread-group has started (Yes,
-	 * it's fscked.).
+	 * When the thread has execed it will taken over the old
+	 * thread-group leaders struct pid. Calling poll after the
+	 * thread execed will thus block again because a new
+	 * thread-group has started.
 	 */
 	fds.events = POLLIN;
 	fds.fd = pidfd_leader_thread;
-	nevents = poll(&fds, 1, -1);
-	ASSERT_EQ(nevents, 1);
-	/* The thread-group leader has exited. */
-	ASSERT_TRUE(!!(fds.revents & POLLIN));
+	nevents = poll(&fds, 1, 2000 /* wait 2 seconds */);
+	ASSERT_EQ(nevents, 0);
+	/* The thread-group leader has exited but there's still a live subthread. */
+	ASSERT_FALSE(!!(fds.revents & POLLIN));
 	/* The thread-group leader hasn't been reaped. */
 	ASSERT_FALSE(!!(fds.revents & POLLHUP));
 
