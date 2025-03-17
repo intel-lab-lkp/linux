@@ -316,7 +316,6 @@ static int ov02e10_set_ctrl(struct v4l2_ctrl *ctrl)
 
 	switch (ctrl->id) {
 	case V4L2_CID_ANALOGUE_GAIN:
-		dev_dbg(&client->dev, "set analog gain\n");
 		cci_write(ov02e10->regmap, OV02E10_REG_PAGE_FLAG,
 			  OV02E10_PAGE_1, &ret);
 		cci_write(ov02e10->regmap, OV02E10_REG_ANALOG_GAIN,
@@ -324,7 +323,6 @@ static int ov02e10_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_DIGITAL_GAIN:
-		dev_dbg(&client->dev, "set digital gain\n");
 		cci_write(ov02e10->regmap, OV02E10_REG_PAGE_FLAG,
 			  OV02E10_PAGE_1, &ret);
 		cci_write(ov02e10->regmap, OV02E10_REG_DIGITAL_GAIN,
@@ -332,7 +330,6 @@ static int ov02e10_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_EXPOSURE:
-		dev_dbg(&client->dev, "set exposure\n");
 		cci_write(ov02e10->regmap, OV02E10_REG_PAGE_FLAG,
 			  OV02E10_PAGE_1, &ret);
 		cci_write(ov02e10->regmap, OV02E10_REG_EXPOSURE,
@@ -340,7 +337,6 @@ static int ov02e10_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_VBLANK:
-		dev_dbg(&client->dev, "set vblank\n");
 		cci_write(ov02e10->regmap, OV02E10_REG_PAGE_FLAG,
 			  OV02E10_PAGE_1, &ret);
 		cci_write(ov02e10->regmap, OV02E10_REG_VTS,
@@ -348,7 +344,6 @@ static int ov02e10_set_ctrl(struct v4l2_ctrl *ctrl)
 		break;
 
 	case V4L2_CID_TEST_PATTERN:
-		dev_dbg(&client->dev, "set test pattern\n");
 		cci_write(ov02e10->regmap, OV02E10_REG_PAGE_FLAG,
 			  OV02E10_PAGE_1, &ret);
 		ov02e10_test_pattern(ov02e10, ctrl->val, &ret);
@@ -358,7 +353,7 @@ static int ov02e10_set_ctrl(struct v4l2_ctrl *ctrl)
 		ret = -EINVAL;
 		break;
 	}
-	dev_dbg(&client->dev, "will update cmd\n");
+
 	cci_write(ov02e10->regmap, OV02E10_REG_COMMAND_UPDATE,
 		  OV02E10_COMMAND_UPDATE, &ret);
 
@@ -510,7 +505,6 @@ static int ov02e10_set_stream(struct v4l2_subdev *sd, int enable)
 
 		ret = ov02e10_start_streaming(ov02e10);
 		if (ret) {
-			dev_dbg(&client->dev, "start streaming failed\n");
 			enable = 0;
 			ov02e10_stop_streaming(ov02e10);
 			pm_runtime_put(&client->dev);
@@ -903,7 +897,6 @@ static int ov02e10_probe(struct i2c_client *client)
 	/* Set default mode to max resolution */
 	ov02e->cur_mode = &supported_modes[0];
 
-	dev_dbg(&client->dev, "will Init controls\n");
 	ret = ov02e10_init_controls(ov02e);
 	if (ret)
 		return ret;
@@ -917,10 +910,8 @@ static int ov02e10_probe(struct i2c_client *client)
 	/* Initialize source pad */
 	ov02e->pad.flags = MEDIA_PAD_FL_SOURCE;
 	ret = media_entity_pads_init(&ov02e->sd.entity, 1, &ov02e->pad);
-	if (ret) {
-		dev_err(&client->dev, "%s failed:%d\n", __func__, ret);
+	if (ret)
 		goto error_handler_free;
-	}
 
 	ret = v4l2_async_register_subdev_sensor(&ov02e->sd);
 	if (ret < 0) {
@@ -944,11 +935,10 @@ error_media_entity:
 error_handler_free:
 	v4l2_ctrl_handler_free(ov02e->sd.ctrl_handler);
 	mutex_destroy(&ov02e->mutex);
-	dev_err(&client->dev, "%s failed:%d\n", __func__, ret);
+
 error_power_off:
 	ov02e10_power_off(&client->dev);
 
-	dev_dbg(&client->dev, "probe done\n");
 	return ret;
 }
 
