@@ -146,7 +146,6 @@ struct auxiliary_device {
 	struct {
 		struct xarray irqs;
 		struct mutex lock; /* Synchronize irq sysfs creation */
-		bool irq_dir_exists;
 	} sysfs;
 };
 
@@ -238,7 +237,6 @@ auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev, int irq) {}
 
 static inline void auxiliary_device_uninit(struct auxiliary_device *auxdev)
 {
-	mutex_destroy(&auxdev->sysfs.lock);
 	put_device(&auxdev->dev);
 }
 

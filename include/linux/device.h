@@ -1273,6 +1273,8 @@ static inline void device_remove_group(struct device *dev,
 
 int __must_check devm_device_add_group(struct device *dev,
 				       const struct attribute_group *grp);
+int __must_check devm_device_update_group(struct device *dev,
+					  const struct attribute_group *grp);
 
 /*
  * get_device - atomically increment the reference count for the device.

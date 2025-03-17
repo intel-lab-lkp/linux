@@ -201,6 +201,18 @@ static const struct dev_pm_ops auxiliary_dev_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(pm_generic_suspend, pm_generic_resume)
 };
 
+static void auxiliary_bus_sysfs_probe(struct auxiliary_device *auxdev)
+{
+	mutex_init(&auxdev->sysfs.lock);
+	xa_init(&auxdev->sysfs.irqs);
+}
+
+static void auxiliary_bus_sysfs_remove(struct auxiliary_device *auxdev)
+{
+	xa_destroy(&auxdev->sysfs.irqs);
+	mutex_destroy(&auxdev->sysfs.lock);
+}
+
 static int auxiliary_bus_probe(struct device *dev)
 {
 	const struct auxiliary_driver *auxdrv = to_auxiliary_drv(dev->driver);
@@ -213,10 +225,12 @@ static int auxiliary_bus_probe(struct device *dev)
 		return ret;
 	}
 
+	auxiliary_bus_sysfs_probe(auxdev);
 	ret = auxdrv->probe(auxdev, auxiliary_match_id(auxdrv->id_table, auxdev));
-	if (ret)
+	if (ret) {
+		auxiliary_bus_sysfs_remove(auxdev);
 		dev_pm_domain_detach(dev, true);
-
+	}
 	return ret;
 }
 
@@ -227,6 +241,7 @@ static void auxiliary_bus_remove(struct device *dev)
 
 	if (auxdrv->remove)
 		auxdrv->remove(auxdev);
+	auxiliary_bus_sysfs_remove(auxdev);
 	dev_pm_domain_detach(dev, true);
 }
 
@@ -287,7 +302,6 @@ int auxiliary_device_init(struct auxiliary_device *auxdev)
 
 	dev->bus = &auxiliary_bus_type;
 	device_initialize(&auxdev->dev);
-	mutex_init(&auxdev->sysfs.lock);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(auxiliary_device_init);

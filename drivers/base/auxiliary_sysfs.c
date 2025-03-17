@@ -24,19 +24,8 @@ static const struct attribute_group auxiliary_irqs_group = {
 
 static int auxiliary_irq_dir_prepare(struct auxiliary_device *auxdev)
 {
-	int ret = 0;
-
 	guard(mutex)(&auxdev->sysfs.lock);
-	if (auxdev->sysfs.irq_dir_exists)
-		return 0;
-
-	ret = devm_device_add_group(&auxdev->dev, &auxiliary_irqs_group);
-	if (ret)
-		return ret;
-
-	auxdev->sysfs.irq_dir_exists = true;
-	xa_init(&auxdev->sysfs.irqs);
-	return 0;
+	return devm_device_update_group(&auxdev->dev, &auxiliary_irqs_group);
 }
 
 /**

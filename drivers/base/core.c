@@ -2835,6 +2835,29 @@ static void devm_attr_group_remove(struct device *dev, void *res)
 	sysfs_remove_group(&dev->kobj, group);
 }
 
+static int __devm_device_add_group(struct device *dev, const struct attribute_group *grp,
+				   bool sysfs_update)
+{
+	union device_attr_group_devres *devres;
+	int error;
+
+	devres = devres_alloc(devm_attr_group_remove,
+			      sizeof(*devres), GFP_KERNEL);
+	if (!devres)
+		return -ENOMEM;
+
+	error = sysfs_update ? sysfs_update_group(&dev->kobj, grp) :
+			       sysfs_create_group(&dev->kobj, grp);
+	if (error) {
+		devres_free(devres);
+		return error;
+	}
+
+	devres->group = grp;
+	devres_add(dev, devres);
+	return 0;
+}
+
 /**
  * devm_device_add_group - given a device, create a managed attribute group
  * @dev:	The device to create the group for
@@ -2847,25 +2870,43 @@ static void devm_attr_group_remove(struct device *dev, void *res)
  */
 int devm_device_add_group(struct device *dev, const struct attribute_group *grp)
 {
-	union device_attr_group_devres *devres;
-	int error;
-
-	devres = devres_alloc(devm_attr_group_remove,
-			      sizeof(*devres), GFP_KERNEL);
-	if (!devres)
-		return -ENOMEM;
-
-	error = sysfs_create_group(&dev->kobj, grp);
-	if (error) {
-		devres_free(devres);
-		return error;
-	}
-
-	devres->group = grp;
-	devres_add(dev, devres);
-	return 0;
+	return __devm_device_add_group(dev, grp, false);
 }
 EXPORT_SYMBOL_GPL(devm_device_add_group);
+
+static int devm_device_group_match(struct device *dev, void *res, void *grp)
+{
+	union device_attr_group_devres *devres = res;
+
+	return devres->group == grp;
+}
+
+/**
+ * devm_device_update_group - given a device, update managed attribute group
+ * @dev:	The device to update the group for
+ * @grp:	The attribute group to update
+ *
+ * This function updates a managed attribute group, create it if it does not
+ * exist and converts an unmanaged attributes group into a managed attributes
+ * group. Unlike devm_device_add_group it will explicitly not warn or error if
+ * any of the attribute files being created already exist. Furthermore, if the
+ * visibility of the files has changed through the is_visible() callback, it
+ * will update the permissions and add or remove the relevant files. Changing a
+ * group's name (subdirectory name under kobj's directory in sysfs) is not
+ * allowed.
+ *
+ * Returns 0 on success or error code on failure.
+ */
+int devm_device_update_group(struct device *dev, const struct attribute_group *grp)
+{
+	union device_attr_group_devres *devres;
+
+	devres = devres_find(dev, devm_attr_group_remove, devm_device_group_match, (void *)grp);
+
+	return devres ? sysfs_update_group(&dev->kobj, grp) :
+			__devm_device_add_group(dev, grp, true);
+}
+EXPORT_SYMBOL_GPL(devm_device_update_group);
 
 static int device_add_attrs(struct device *dev)
 {
