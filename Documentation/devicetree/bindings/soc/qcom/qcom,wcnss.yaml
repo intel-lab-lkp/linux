@@ -68,6 +68,8 @@ properties:
           - const: tx
           - const: rx
 
+      local-mac-address: true
+
       qcom,smem-states:
         $ref: /schemas/types.yaml#/definitions/phandle-array
         maxItems: 2
