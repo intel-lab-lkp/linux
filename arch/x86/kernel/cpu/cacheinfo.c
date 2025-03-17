@@ -637,8 +637,7 @@ static int find_num_cache_leaves(struct cpuinfo_x86 *c)
 	union _cpuid4_leaf_eax	cache_eax;
 	int 			i = -1;
 
-	if (c->x86_vendor == X86_VENDOR_AMD ||
-	    c->x86_vendor == X86_VENDOR_HYGON)
+	if (x86_vendor_amd_or_hygon(c->x86_vendor))
 		op = 0x8000001d;
 	else
 		op = 4;
@@ -930,8 +929,7 @@ static void __cache_cpumap_setup(unsigned int cpu, int index,
 	int index_msb, i;
 	struct cpuinfo_x86 *c = &cpu_data(cpu);
 
-	if (c->x86_vendor == X86_VENDOR_AMD ||
-	    c->x86_vendor == X86_VENDOR_HYGON) {
+	if (x86_vendor_amd_or_hygon(c->x86_vendor)) {
 		if (__cache_amd_cpumap_setup(cpu, index, base))
 			return;
 	}

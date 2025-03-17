@@ -127,8 +127,7 @@ bool __init early_is_amd_nb(u32 device)
 	const struct pci_device_id *id;
 	u32 vendor = device & 0xffff;
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 		return false;
 
 	if (cpu_feature_enabled(X86_FEATURE_ZEN))
@@ -147,8 +146,7 @@ struct resource *amd_get_mmconfig_range(struct resource *res)
 	u64 base, msr;
 	unsigned int segn_busn_bits;
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 		return NULL;
 
 	/* assume all cpus from fam10h have mmconfig */
@@ -320,8 +318,7 @@ static __init void fix_erratum_688(void)
 
 static __init int init_amd_nbs(void)
 {
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 		return 0;
 
 	amd_cache_northbridges();

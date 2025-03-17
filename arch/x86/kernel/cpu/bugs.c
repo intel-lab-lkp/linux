@@ -1081,8 +1081,7 @@ static void __init retbleed_select_mitigation(void)
 
 do_cmd_auto:
 	case RETBLEED_CMD_AUTO:
-		if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-		    boot_cpu_data.x86_vendor == X86_VENDOR_HYGON) {
+		if (x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor)) {
 			if (IS_ENABLED(CONFIG_MITIGATION_UNRET_ENTRY))
 				retbleed_mitigation = RETBLEED_MITIGATION_UNRET;
 			else if (IS_ENABLED(CONFIG_MITIGATION_IBPB_ENTRY) &&
@@ -1106,8 +1105,7 @@ do_cmd_auto:
 
 		x86_return_thunk = retbleed_return_thunk;
 
-		if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-		    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+		if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 			pr_err(RETBLEED_UNTRAIN_MSG);
 
 		mitigate_smt = true;
@@ -1872,8 +1870,7 @@ static void __init spectre_v2_select_mitigation(void)
 	 */
 	if (boot_cpu_has_bug(X86_BUG_RETBLEED) &&
 	    boot_cpu_has(X86_FEATURE_IBPB) &&
-	    (boot_cpu_data.x86_vendor == X86_VENDOR_AMD ||
-	     boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)) {
+	    x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor)) {
 
 		if (retbleed_cmd != RETBLEED_CMD_IBPB) {
 			setup_force_cpu_cap(X86_FEATURE_USE_IBPB_FW);
@@ -2903,8 +2900,7 @@ static ssize_t retbleed_show_state(char *buf)
 {
 	if (retbleed_mitigation == RETBLEED_MITIGATION_UNRET ||
 	    retbleed_mitigation == RETBLEED_MITIGATION_IBPB) {
-		if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-		    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+		if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 			return sysfs_emit(buf, "Vulnerable: untrained return thunk / IBPB on non-AMD based uarch\n");
 
 		return sysfs_emit(buf, "%s; SMT %s\n", retbleed_strings[retbleed_mitigation],

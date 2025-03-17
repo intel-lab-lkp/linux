@@ -1023,8 +1023,7 @@ static int __init amd_uncore_init(void)
 	int ret = -ENODEV;
 	int i;
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+	if (!x86_vendor_amd_or_hygon(boot_cpu_data.x86_vendor))
 		return -ENODEV;
 
 	if (!boot_cpu_has(X86_FEATURE_TOPOEXT))
