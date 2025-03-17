@@ -2553,6 +2553,15 @@ static int get_indirect(struct vhost_virtqueue *vq,
 		if (access == VHOST_ACCESS_WO) {
 			*in_num += ret;
 			if (unlikely(log && ret)) {
+				/*
+				 * Since long time ago, the only user of
+				 * vq->log is vhost-net. The concern is to
+				 * add support for more devices (i.e.
+				 * vhost-scsi or vsock) may reveals unknown
+				 * issue in the vhost API. Add a WARNING.
+				 */
+				WARN_ON_ONCE(*log_num >= vq->dev->iov_limit);
+
 				log[*log_num].addr = vhost64_to_cpu(vq, desc.addr);
 				log[*log_num].len = vhost32_to_cpu(vq, desc.len);
 				++*log_num;
@@ -2673,6 +2682,15 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 			 * increment that count. */
 			*in_num += ret;
 			if (unlikely(log && ret)) {
+				/*
+				 * Since long time ago, the only user of
+				 * vq->log is vhost-net. The concern is to
+				 * add support for more devices (i.e.
+				 * vhost-scsi or vsock) may reveals unknown
+				 * issue in the vhost API. Add a WARNING.
+				 */
+				WARN_ON_ONCE(*log_num >= vq->dev->iov_limit);
+
 				log[*log_num].addr = vhost64_to_cpu(vq, desc.addr);
 				log[*log_num].len = vhost32_to_cpu(vq, desc.len);
 				++*log_num;
