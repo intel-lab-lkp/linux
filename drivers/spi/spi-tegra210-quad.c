@@ -999,7 +999,7 @@ static void tegra_qspi_handle_error(struct tegra_qspi *tqspi)
 	dev_err(tqspi->dev, "error in transfer, fifo status 0x%08x\n", tqspi->status_reg);
 	tegra_qspi_dump_regs(tqspi);
 	tegra_qspi_flush_fifos(tqspi, true);
-	if (device_reset(tqspi->dev) < 0)
+	if (device_reset_optional(tqspi->dev) < 0)
 		dev_warn_once(tqspi->dev, "device reset failed\n");
 }
 
@@ -1149,7 +1149,7 @@ static int tegra_qspi_combined_seq_xfer(struct tegra_qspi *tqspi,
 				}
 
 				/* Reset controller if timeout happens */
-				if (device_reset(tqspi->dev) < 0)
+				if (device_reset_optional(tqspi->dev) < 0)
 					dev_warn_once(tqspi->dev,
 						      "device reset failed\n");
 				ret = -EIO;
@@ -1606,7 +1606,7 @@ static int tegra_qspi_probe(struct platform_device *pdev)
 		goto exit_pm_disable;
 	}
 
-	if (device_reset(tqspi->dev) < 0)
+	if (device_reset_optional(tqspi->dev) < 0)
 		dev_warn_once(tqspi->dev, "device reset failed\n");
 
 	tqspi->def_command1_reg = QSPI_M_S | QSPI_CS_SW_HW |  QSPI_CS_SW_VAL;
