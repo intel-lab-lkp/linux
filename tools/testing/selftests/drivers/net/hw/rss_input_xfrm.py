@@ -7,7 +7,7 @@ from lib.py import ksft_run, ksft_exit, ksft_eq, ksft_ge, cmd, fd_read_timeout
 from lib.py import NetDrvEpEnv
 from lib.py import EthtoolFamily, NetdevFamily
 from lib.py import KsftSkipEx, KsftFailEx
-from lib.py import rand_port
+from lib.py import rand_port, CmdExitFailure
 
 
 def traffic(cfg, local_port, remote_port, ipver):
@@ -31,6 +31,14 @@ def test_rss_input_xfrm(cfg, ipver):
 
     if multiprocessing.cpu_count() < 2:
         raise KsftSkipEx("Need at least two CPUs to test symmetric RSS hash")
+
+    try:
+        cmd("hash socat", host=cfg.remote)
+    except CmdExitFailure:
+        raise KsftSkipEx("socat not installed on remote")
+
+    if not hasattr(socket, "SO_INCOMING_CPU"):
+        raise KsftSkipEx("socket.SO_INCOMING_CPU was added in Python 3.11")
 
     input_xfrm = cfg.ethnl.rss_get(
         {'header': {'dev-name': cfg.ifname}}).get('input_xfrm')
