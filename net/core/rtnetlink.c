@@ -1150,7 +1150,9 @@ static inline int rtnl_vfinfo_size(const struct net_device *dev,
 			 nla_total_size(sizeof(struct ifla_vf_rate)) +
 			 nla_total_size(sizeof(struct ifla_vf_link_state)) +
 			 nla_total_size(sizeof(struct ifla_vf_rss_query_en)) +
-			 nla_total_size(sizeof(struct ifla_vf_trust)));
+			 nla_total_size(sizeof(struct ifla_vf_trust)) +
+			 (dev->netdev_ops->ndo_get_vf_guid ?
+			  nla_total_size(sizeof(struct ifla_vf_guid)) * 2 : 0));
 		if (~ext_filter_mask & RTEXT_FILTER_SKIP_STATS) {
 			size += num_vfs *
 				(nla_total_size(0) + /* nest IFLA_VF_STATS */
