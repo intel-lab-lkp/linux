@@ -24,7 +24,6 @@
 #include <linux/initrd.h>
 #include <linux/io.h>
 #include <linux/kexec.h>
-#include <linux/platform_device.h>
 #include <linux/random.h>
 #include <linux/reboot.h>
 #include <linux/slab.h>
@@ -463,11 +462,6 @@ static int __init efisubsys_init(void)
 
 	if (efi_enabled(EFI_DBG) && efi_enabled(EFI_PRESERVE_BS_REGIONS))
 		efi_debugfs_init();
-
-#ifdef CONFIG_EFI_COCO_SECRET
-	if (efi.coco_secret != EFI_INVALID_TABLE_ADDR)
-		platform_device_register_simple("efi_secret", 0, NULL, 0);
-#endif
 
 	return 0;
 

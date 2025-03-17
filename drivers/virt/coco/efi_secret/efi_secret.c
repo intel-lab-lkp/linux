@@ -16,7 +16,7 @@
  * is the GUID of the secret entry, and its content is the secret data.
  */
 
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/seq_file.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
@@ -152,16 +152,11 @@ static const struct inode_operations efi_secret_dir_inode_operations = {
 	.unlink         = efi_secret_unlink,
 };
 
-static int efi_secret_map_area(struct platform_device *dev)
+static int efi_secret_map_area(struct faux_device *dev)
 {
 	int ret;
 	struct efi_secret *s = efi_secret_get();
 	struct linux_efi_coco_secret_area *secret_area;
-
-	if (efi.coco_secret == EFI_INVALID_TABLE_ADDR) {
-		dev_err(&dev->dev, "Secret area address is not available\n");
-		return -EINVAL;
-	}
 
 	secret_area = memremap(efi.coco_secret, sizeof(*secret_area), MEMREMAP_WB);
 	if (secret_area == NULL) {
@@ -191,7 +186,7 @@ unmap:
 	return ret;
 }
 
-static void efi_secret_securityfs_teardown(struct platform_device *dev)
+static void efi_secret_securityfs_teardown(struct faux_device *dev)
 {
 	struct efi_secret *s = efi_secret_get();
 	int i;
@@ -210,7 +205,7 @@ static void efi_secret_securityfs_teardown(struct platform_device *dev)
 	dev_dbg(&dev->dev, "Removed securityfs entries\n");
 }
 
-static int efi_secret_securityfs_setup(struct platform_device *dev)
+static int efi_secret_securityfs_setup(struct faux_device *dev)
 {
 	struct efi_secret *s = efi_secret_get();
 	int ret = 0, i = 0, bytes_left;
@@ -307,7 +302,7 @@ static void efi_secret_unmap_area(void)
 	}
 }
 
-static int efi_secret_probe(struct platform_device *dev)
+static int efi_secret_probe(struct faux_device *dev)
 {
 	int ret;
 
@@ -326,23 +321,35 @@ err_unmap:
 	return ret;
 }
 
-static void efi_secret_remove(struct platform_device *dev)
+static void efi_secret_remove(struct faux_device *dev)
 {
 	efi_secret_securityfs_teardown(dev);
 	efi_secret_unmap_area();
 }
 
-static struct platform_driver efi_secret_driver = {
+static struct faux_device_ops efi_secret_ops = {
 	.probe = efi_secret_probe,
 	.remove = efi_secret_remove,
-	.driver = {
-		.name = "efi_secret",
-	},
 };
 
-module_platform_driver(efi_secret_driver);
+static int __init efi_secret_init(void)
+{
+	struct faux_device *fdev;
+
+	if (efi.coco_secret == EFI_INVALID_TABLE_ADDR)
+		return 0;
+
+	fdev = faux_device_create("efi_secret", NULL, &efi_secret_ops);
+	if (!fdev) {
+		pr_err("efi_secret: could not create the device\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+device_initcall(efi_secret_init);
 
 MODULE_DESCRIPTION("Confidential computing EFI secret area access");
 MODULE_AUTHOR("IBM");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("platform:efi_secret");
+MODULE_ALIAS("faux:efi_secret");
