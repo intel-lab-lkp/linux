@@ -446,7 +446,6 @@ static int __init efisubsys_init(void)
 		error = efivar_ssdt_load();
 		if (error)
 			pr_err("efi: failed to load SSDT, error %d.\n", error);
-		platform_device_register_simple("efivars", 0, NULL, 0);
 	}
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&efivar_ops_nh);
