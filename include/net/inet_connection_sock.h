@@ -116,7 +116,6 @@ struct inet_connection_sock {
 		__u32		  ato:ATO_BITS,	 /* Predicted tick of soft clock	   */
 				  lrcv_flowlabel:20, /* last received ipv6 flowlabel	   */
 				  unused:4;
-		unsigned long	  timeout;	 /* Currently scheduled timeout		   */
 		__u32		  lrcvtime;	 /* timestamp of last received data packet */
 		__u16		  last_seg_size; /* Size of last incoming segment	   */
 		__u16		  rcv_mss;	 /* MSS used for delayed ACK decisions	   */
@@ -194,6 +193,12 @@ icsk_timeout(const struct inet_connection_sock *icsk)
 	return READ_ONCE(icsk->icsk_retransmit_timer.expires);
 }
 
+static inline unsigned long
+icsk_delack_timeout(const struct inet_connection_sock *icsk)
+{
+	return READ_ONCE(icsk->icsk_delack_timer.expires);
+}
+
 static inline void inet_csk_clear_xmit_timer(struct sock *sk, const int what)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -229,16 +234,15 @@ static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what,
 		when = max_when;
 	}
 
+	when += jiffies;
 	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0 ||
 	    what == ICSK_TIME_LOSS_PROBE || what == ICSK_TIME_REO_TIMEOUT) {
 		smp_store_release(&icsk->icsk_pending, what);
-		when += jiffies;
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, when);
 	} else if (what == ICSK_TIME_DACK) {
 		smp_store_release(&icsk->icsk_ack.pending,
 				  icsk->icsk_ack.pending | ICSK_ACK_TIMER);
-		icsk->icsk_ack.timeout = jiffies + when;
-		sk_reset_timer(sk, &icsk->icsk_delack_timer, icsk->icsk_ack.timeout);
+		sk_reset_timer(sk, &icsk->icsk_delack_timer, when);
 	} else {
 		pr_debug("inet_csk BUG: unknown timer value\n");
 	}
