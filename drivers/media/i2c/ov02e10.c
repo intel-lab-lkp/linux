@@ -224,6 +224,12 @@ static const struct ov02e10_mode supported_modes[] = {
 	},
 };
 
+static const char * const ov02e10_supply_names[] = {
+	"dovdd",	/* Digital I/O power */
+	"avdd",		/* Analog power */
+	"dvdd",		/* Digital core power */
+};
+
 struct ov02e10 {
 	struct regmap *regmap;
 	struct v4l2_subdev sd;
@@ -238,7 +244,7 @@ struct ov02e10 {
 	struct v4l2_ctrl *exposure;
 
 	struct clk *img_clk;
-	struct regulator *avdd;
+	struct regulator_bulk_data supplies[ARRAY_SIZE(ov02e10_supply_names)];
 	struct gpio_desc *reset;
 
 	/* Current mode */
@@ -525,7 +531,7 @@ static int ov02e10_get_pm_resources(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct ov02e10 *ov02e10 = to_ov02e10(sd);
-	int ret;
+	int i;
 
 	ov02e10->reset = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ov02e10->reset))
@@ -537,32 +543,26 @@ static int ov02e10_get_pm_resources(struct device *dev)
 		return dev_err_probe(dev, PTR_ERR(ov02e10->img_clk),
 				     "failed to get imaging clock\n");
 
-	ov02e10->avdd = devm_regulator_get_optional(dev, "avdd");
-	if (IS_ERR(ov02e10->avdd)) {
-		ret = PTR_ERR(ov02e10->avdd);
-		ov02e10->avdd = NULL;
-		if (ret != -ENODEV)
-			return dev_err_probe(dev, ret,
-					     "failed to get avdd regulator\n");
-	}
+	for (i = 0; i < ARRAY_SIZE(ov02e10_supply_names); i++)
+		ov02e10->supplies[i].supply = ov02e10_supply_names[i];
 
-	return 0;
+	return devm_regulator_bulk_get(dev, ARRAY_SIZE(ov02e10_supply_names),
+				       ov02e10->supplies);
 }
 
 static int ov02e10_power_off(struct device *dev)
 {
 	struct v4l2_subdev *sd = dev_get_drvdata(dev);
 	struct ov02e10 *ov02e10 = to_ov02e10(sd);
-	int ret = 0;
 
 	gpiod_set_value_cansleep(ov02e10->reset, 1);
 
-	if (ov02e10->avdd)
-		ret = regulator_disable(ov02e10->avdd);
+	regulator_bulk_disable(ARRAY_SIZE(ov02e10_supply_names),
+			       ov02e10->supplies);
 
 	clk_disable_unprepare(ov02e10->img_clk);
 
-	return ret;
+	return 0;
 }
 
 static int ov02e10_power_on(struct device *dev)
@@ -577,15 +577,19 @@ static int ov02e10_power_on(struct device *dev)
 		return ret;
 	}
 
-	if (ov02e10->avdd) {
-		ret = regulator_enable(ov02e10->avdd);
-		if (ret < 0) {
-			dev_err(dev, "failed to enable avdd: %d\n", ret);
-			clk_disable_unprepare(ov02e10->img_clk);
-			return ret;
-		}
+	ret = regulator_bulk_enable(ARRAY_SIZE(ov02e10_supply_names),
+				    ov02e10->supplies);
+	if (ret < 0) {
+		dev_err(dev, "failed to enable regulators\n");
+		goto disable_clk;
 	}
+
 	gpiod_set_value_cansleep(ov02e10->reset, 0);
+
+	return 0;
+
+disable_clk:
+	clk_disable_unprepare(ov02e10->img_clk);
 
 	return ret;
 }
