@@ -386,6 +386,15 @@ void exchange_tids(struct task_struct *left, struct task_struct *right)
 	struct hlist_head *head1 = &pid1->tasks[PIDTYPE_PID];
 	struct hlist_head *head2 = &pid2->tasks[PIDTYPE_PID];
 
+	/*
+	 * If delayed leader marker is set then this was a malformed
+	 * thread-group exec. The thread-group leader had exited before
+	 * all of its subthreads and then one of the subthreads execed.
+	 * The struct pid continues it's existence so remove the
+	 * premature thread-group leader exit indicator.
+	 */
+	WRITE_ONCE(pid2->delayed_leader, 0);
+
 	/* Swap the single entry tid lists */
 	hlists_swap_heads_rcu(head1, head2);
 

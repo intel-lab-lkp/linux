@@ -267,6 +267,11 @@ repeat:
 	leader = p->group_leader;
 	if (leader != p && thread_group_empty(leader)
 			&& leader->exit_state == EXIT_ZOMBIE) {
+		struct pid *pid;
+
+		pid = task_pid(leader);
+		WRITE_ONCE(pid->delayed_leader, 0);
+
 		/*
 		 * If we were the last child thread and the leader has
 		 * exited already, and the leader's parent ignores SIGCHLD,
@@ -746,8 +751,23 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 	 * sub-thread or delay_group_leader(), wake up the
 	 * PIDFD_THREAD waiters.
 	 */
-	if (!thread_group_empty(tsk))
-		do_notify_pidfd(tsk);
+	if (!thread_group_empty(tsk)) {
+		if (delay_group_leader(tsk)) {
+			struct pid *pid;
+
+			/*
+			 * This is a thread-group leader exiting before
+			 * all of its subthreads have exited allow pidfd
+			 * polling to detect this case and delay exit
+			 * notification until the last thread has
+			 * exited.
+			 */
+			pid = task_pid(tsk);
+			WRITE_ONCE(pid->delayed_leader, 1);
+		} else {
+			do_notify_pidfd(tsk);
+		}
+	}
 
 	if (unlikely(tsk->ptrace)) {
 		int sig = thread_group_leader(tsk) &&
