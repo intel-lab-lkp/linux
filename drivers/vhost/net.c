@@ -1219,7 +1219,7 @@ static void handle_rx(struct vhost_net *net)
 		if (nvq->done_idx > VHOST_NET_BATCH)
 			vhost_net_signal_used(nvq);
 		if (unlikely(vq_log))
-			vhost_log_write(vq, vq_log, log, vhost_len,
+			vhost_log_write(vq, vq_log, log, vhost_len, true,
 					vq->iov, in);
 		total_len += vhost_len;
 	} while (likely(!vhost_exceeds_weight(vq, ++recv_pkts, total_len)));

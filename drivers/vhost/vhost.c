@@ -2304,8 +2304,14 @@ static int log_used(struct vhost_virtqueue *vq, u64 used_offset, u64 len)
 	return 0;
 }
 
-int vhost_log_write(struct vhost_virtqueue *vq, struct vhost_log *log,
-		    unsigned int log_num, u64 len, struct iovec *iov, int count)
+/*
+ * 'len' is used only when 'partial' is true, to indicate whether the
+ * entire length of each descriptor is logged.
+ */
+int vhost_log_write(struct vhost_virtqueue *vq,
+		    struct vhost_log *log, unsigned int log_num,
+		    u64 len, bool partial,
+		    struct iovec *iov, int count)
 {
 	int i, r;
 
@@ -2323,19 +2329,19 @@ int vhost_log_write(struct vhost_virtqueue *vq, struct vhost_log *log,
 	}
 
 	for (i = 0; i < log_num; ++i) {
-		u64 l = min(log[i].len, len);
+		u64 l = partial ? min(log[i].len, len) : log[i].len;
+
 		r = log_write(vq->log_base, log[i].addr, l);
 		if (r < 0)
 			return r;
-		len -= l;
-		if (!len) {
-			if (vq->log_ctx)
-				eventfd_signal(vq->log_ctx);
-			return 0;
-		}
+
+		if (partial)
+			len -= l;
 	}
-	/* Length written exceeds what we have stored. This is a bug. */
-	BUG();
+
+	if (vq->log_ctx)
+		eventfd_signal(vq->log_ctx);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vhost_log_write);
