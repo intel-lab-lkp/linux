@@ -126,6 +126,9 @@
 	phy-mode = "rgmii-rxid";
 	phy-handle = <&ethphy0>;
 
+	tx-internal-delay-ps = <16>;
+	rx-internal-delay-ps = <10>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_rgmii1_default>;
 };
@@ -137,6 +140,9 @@
 	phy-mode = "rgmii-rxid";
 	phy-handle = <&ethphy1>;
 
+	tx-internal-delay-ps = <16>;
+	rx-internal-delay-ps = <10>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_rgmii2_default>;
 };
@@ -147,6 +153,9 @@
 	phy-mode = "rgmii";
 	phy-handle = <&ethphy2>;
 
+	tx-internal-delay-ps = <8>;
+	rx-internal-delay-ps = <4>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_rgmii3_default>;
 };
@@ -156,6 +165,9 @@
 
 	phy-mode = "rgmii";
 	phy-handle = <&ethphy3>;
+
+	tx-internal-delay-ps = <8>;
+	rx-internal-delay-ps = <4>;
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_rgmii4_default>;
