@@ -25,6 +25,7 @@
 
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/driver.h>
+#include <linux/gpio/gpio-fwd.h>
 #include <linux/gpio/machine.h>
 
 #define AGGREGATOR_MAX_GPIOS 512
@@ -254,60 +255,47 @@ static void __exit gpio_aggregator_remove_all(void)
  *  GPIO Forwarder
  */
 
-struct gpiochip_fwd_timing {
-	u32 ramp_up_us;
-	u32 ramp_down_us;
-};
-
-struct gpiochip_fwd {
-	struct device *dev;
-	struct gpio_chip chip;
-	struct gpio_desc **descs;
-	union {
-		struct mutex mlock;	/* protects tmp[] if can_sleep */
-		spinlock_t slock;	/* protects tmp[] if !can_sleep */
-	};
-	struct gpiochip_fwd_timing *delay_timings;
-	unsigned long tmp[];		/* values and descs for multiple ops */
-};
-
 #define fwd_tmp_values(fwd)	&(fwd)->tmp[0]
 #define fwd_tmp_descs(fwd)	(void *)&(fwd)->tmp[BITS_TO_LONGS((fwd)->chip.ngpio)]
 
 #define fwd_tmp_size(ngpios)	(BITS_TO_LONGS((ngpios)) + (ngpios))
 
-static int gpio_fwd_get_direction(struct gpio_chip *chip, unsigned int offset)
+int gpio_fwd_get_direction(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return gpiod_get_direction(fwd->descs[offset]);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_get_direction);
 
-static int gpio_fwd_direction_input(struct gpio_chip *chip, unsigned int offset)
+int gpio_fwd_direction_input(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return gpiod_direction_input(fwd->descs[offset]);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_direction_input);
 
-static int gpio_fwd_direction_output(struct gpio_chip *chip,
-				     unsigned int offset, int value)
+int gpio_fwd_direction_output(struct gpio_chip *chip,
+			      unsigned int offset, int value)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return gpiod_direction_output(fwd->descs[offset], value);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_direction_output);
 
-static int gpio_fwd_get(struct gpio_chip *chip, unsigned int offset)
+int gpio_fwd_get(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return chip->can_sleep ? gpiod_get_value_cansleep(fwd->descs[offset])
 			       : gpiod_get_value(fwd->descs[offset]);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_get);
 
-static int gpio_fwd_get_multiple(struct gpiochip_fwd *fwd, unsigned long *mask,
-				 unsigned long *bits)
+static int gpio_fwd_get_multiple_unlocked(struct gpiochip_fwd *fwd,
+					  unsigned long *mask, unsigned long *bits)
 {
 	struct gpio_desc **descs = fwd_tmp_descs(fwd);
 	unsigned long *values = fwd_tmp_values(fwd);
@@ -332,8 +320,8 @@ static int gpio_fwd_get_multiple(struct gpiochip_fwd *fwd, unsigned long *mask,
 	return 0;
 }
 
-static int gpio_fwd_get_multiple_locked(struct gpio_chip *chip,
-					unsigned long *mask, unsigned long *bits)
+int gpio_fwd_get_multiple(struct gpio_chip *chip, unsigned long *mask,
+			  unsigned long *bits)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 	unsigned long flags;
@@ -341,16 +329,17 @@ static int gpio_fwd_get_multiple_locked(struct gpio_chip *chip,
 
 	if (chip->can_sleep) {
 		mutex_lock(&fwd->mlock);
-		error = gpio_fwd_get_multiple(fwd, mask, bits);
+		error = gpio_fwd_get_multiple_unlocked(fwd, mask, bits);
 		mutex_unlock(&fwd->mlock);
 	} else {
 		spin_lock_irqsave(&fwd->slock, flags);
-		error = gpio_fwd_get_multiple(fwd, mask, bits);
+		error = gpio_fwd_get_multiple_unlocked(fwd, mask, bits);
 		spin_unlock_irqrestore(&fwd->slock, flags);
 	}
 
 	return error;
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_get_multiple);
 
 static void gpio_fwd_delay(struct gpio_chip *chip, unsigned int offset, int value)
 {
@@ -373,7 +362,7 @@ static void gpio_fwd_delay(struct gpio_chip *chip, unsigned int offset, int valu
 		udelay(delay_us);
 }
 
-static void gpio_fwd_set(struct gpio_chip *chip, unsigned int offset, int value)
+void gpio_fwd_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
@@ -385,9 +374,11 @@ static void gpio_fwd_set(struct gpio_chip *chip, unsigned int offset, int value)
 	if (fwd->delay_timings)
 		gpio_fwd_delay(chip, offset, value);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_set);
 
-static void gpio_fwd_set_multiple(struct gpiochip_fwd *fwd, unsigned long *mask,
-				  unsigned long *bits)
+static void gpio_fwd_set_multiple_unlocked(struct gpiochip_fwd *fwd,
+					   unsigned long *mask,
+					   unsigned long *bits)
 {
 	struct gpio_desc **descs = fwd_tmp_descs(fwd);
 	unsigned long *values = fwd_tmp_values(fwd);
@@ -404,37 +395,40 @@ static void gpio_fwd_set_multiple(struct gpiochip_fwd *fwd, unsigned long *mask,
 		gpiod_set_array_value(j, descs, NULL, values);
 }
 
-static void gpio_fwd_set_multiple_locked(struct gpio_chip *chip,
-					 unsigned long *mask, unsigned long *bits)
+void gpio_fwd_set_multiple(struct gpio_chip *chip, unsigned long *mask,
+			   unsigned long *bits)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 	unsigned long flags;
 
 	if (chip->can_sleep) {
 		mutex_lock(&fwd->mlock);
-		gpio_fwd_set_multiple(fwd, mask, bits);
+		gpio_fwd_set_multiple_unlocked(fwd, mask, bits);
 		mutex_unlock(&fwd->mlock);
 	} else {
 		spin_lock_irqsave(&fwd->slock, flags);
-		gpio_fwd_set_multiple(fwd, mask, bits);
+		gpio_fwd_set_multiple_unlocked(fwd, mask, bits);
 		spin_unlock_irqrestore(&fwd->slock, flags);
 	}
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_set_multiple);
 
-static int gpio_fwd_set_config(struct gpio_chip *chip, unsigned int offset,
-			       unsigned long config)
+int gpio_fwd_set_config(struct gpio_chip *chip, unsigned int offset,
+			unsigned long config)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return gpiod_set_config(fwd->descs[offset], config);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_set_config);
 
-static int gpio_fwd_to_irq(struct gpio_chip *chip, unsigned int offset)
+int gpio_fwd_to_irq(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
 
 	return gpiod_to_irq(fwd->descs[offset]);
 }
+EXPORT_SYMBOL_GPL(gpio_fwd_to_irq);
 
 /*
  * The GPIO delay provides a way to configure platform specific delays
@@ -489,8 +483,8 @@ static int gpiochip_fwd_setup_delay_line(struct gpiochip_fwd *fwd)
 }
 #endif	/* !CONFIG_OF_GPIO */
 
-static struct gpiochip_fwd *devm_gpiochip_fwd_alloc(struct device *dev,
-						    unsigned int ngpios)
+struct gpiochip_fwd *devm_gpiochip_fwd_alloc(struct device *dev,
+					     unsigned int ngpios)
 {
 	const char *label = dev_name(dev);
 	struct gpiochip_fwd *fwd;
@@ -515,18 +509,19 @@ static struct gpiochip_fwd *devm_gpiochip_fwd_alloc(struct device *dev,
 	chip->direction_input = gpio_fwd_direction_input;
 	chip->direction_output = gpio_fwd_direction_output;
 	chip->get = gpio_fwd_get;
-	chip->get_multiple = gpio_fwd_get_multiple_locked;
+	chip->get_multiple = gpio_fwd_get_multiple;
 	chip->set = gpio_fwd_set;
-	chip->set_multiple = gpio_fwd_set_multiple_locked;
+	chip->set_multiple = gpio_fwd_set_multiple;
 	chip->to_irq = gpio_fwd_to_irq;
 	chip->base = -1;
 	chip->ngpio = ngpios;
 
 	return fwd;
 }
+EXPORT_SYMBOL_GPL(devm_gpiochip_fwd_alloc);
 
-static int gpiochip_fwd_add_gpio_desc(struct gpiochip_fwd *fwd, struct gpio_desc *desc,
-				      unsigned int offset)
+int gpiochip_fwd_add_gpio_desc(struct gpiochip_fwd *fwd, struct gpio_desc *desc,
+			       unsigned int offset)
 {
 	struct gpio_chip *chip = &fwd->chip;
 	struct gpio_chip *parent = gpiod_to_chip(desc);
@@ -556,8 +551,9 @@ static int gpiochip_fwd_add_gpio_desc(struct gpiochip_fwd *fwd, struct gpio_desc
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(gpiochip_fwd_add_gpio_desc);
 
-static int gpiochip_fwd_register(struct gpiochip_fwd *fwd)
+int gpiochip_fwd_register(struct gpiochip_fwd *fwd)
 {
 	struct gpio_chip *chip = &fwd->chip;
 	struct device *dev = fwd->dev;
@@ -572,6 +568,7 @@ static int gpiochip_fwd_register(struct gpiochip_fwd *fwd)
 
 	return error;
 }
+EXPORT_SYMBOL_GPL(gpiochip_fwd_register);
 
 /**
  * gpiochip_fwd_create() - Create a new GPIO forwarder
