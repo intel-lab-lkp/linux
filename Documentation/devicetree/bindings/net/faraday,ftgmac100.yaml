@@ -66,6 +66,20 @@ properties:
     type: boolean
     deprecated: true
 
+  rx-internal-delay-ps:
+    description:
+       Setting this property to a non-zero number sets the RX internal delay
+       for the MAC. Use this property value as a index not a ps unit to
+       configure the corresponding delay register field. And the index range is
+       0 to 63.
+
+  tx-internal-delay-ps:
+    description:
+       Setting this property to a non-zero number sets the TX internal delay
+       for the MAC. Use this property value as a index not a ps unit to
+       configure the corresponding delay register field. And the index range is
+       0 to 63.
+
   mdio:
     $ref: /schemas/net/mdio.yaml#
 
