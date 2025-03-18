@@ -14,7 +14,7 @@
 #include <linux/module.h>
 #include <linux/stringify.h>
 #include <linux/time.h>
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/rtc.h>
 #include <linux/efi.h>
 
@@ -254,7 +254,7 @@ static const struct rtc_class_ops efi_rtc_ops = {
 	.proc		= efi_procfs,
 };
 
-static int __init efi_rtc_probe(struct platform_device *dev)
+static int __init efi_rtc_probe(struct faux_device *dev)
 {
 	struct rtc_device *rtc;
 	efi_time_t eft;
@@ -268,7 +268,7 @@ static int __init efi_rtc_probe(struct platform_device *dev)
 	if (IS_ERR(rtc))
 		return PTR_ERR(rtc);
 
-	platform_set_drvdata(dev, rtc);
+	faux_device_set_drvdata(dev, rtc);
 
 	rtc->ops = &efi_rtc_ops;
 	clear_bit(RTC_FEATURE_UPDATE_INTERRUPT, rtc->features);
@@ -282,15 +282,9 @@ static int __init efi_rtc_probe(struct platform_device *dev)
 	return devm_rtc_register_device(rtc);
 }
 
-static struct platform_driver efi_rtc_driver = {
-	.driver = {
-		.name = "rtc-efi",
-	},
-};
-
-module_platform_driver_probe(efi_rtc_driver, efi_rtc_probe);
+module_faux_driver(rtc_efi, efi_rtc_probe, NULL,
+		   efi_rt_services_supported(EFI_RT_SUPPORTED_TIME_SERVICES));
 
 MODULE_AUTHOR("dann frazier <dannf@dannf.org>");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("EFI RTC driver");
-MODULE_ALIAS("platform:rtc-efi");
