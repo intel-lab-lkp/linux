@@ -4,6 +4,7 @@
 #ifndef __MLX5_SH_DEVLINK_H__
 #define __MLX5_SH_DEVLINK_H__
 
+struct mlx5_core_dev *mlx5_shd_dev(struct mlx5_shd *shd);
 int mlx5_shd_init(struct mlx5_core_dev *dev);
 void mlx5_shd_uninit(struct mlx5_core_dev *dev);
 

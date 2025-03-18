@@ -2,9 +2,10 @@
 /* Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved. */
 
 #include <linux/device/faux.h>
+#include <linux/mlx5/device.h>
 #include <linux/mlx5/driver.h>
 #include <linux/mlx5/vport.h>
-
+#include "lib/nv_param.h"
 #include "sh_devlink.h"
 
 static LIST_HEAD(shd_list);
@@ -24,6 +25,12 @@ struct mlx5_shd {
 	struct faux_device *faux_dev;
 };
 
+struct mlx5_core_dev *mlx5_shd_dev(struct mlx5_shd *shd)
+{
+	return list_first_entry(&shd->dev_list,
+				struct mlx5_core_dev, shd_list);
+}
+
 static const struct devlink_ops mlx5_shd_ops = {
 };
 
@@ -31,6 +38,7 @@ static int mlx5_shd_faux_probe(struct faux_device *faux_dev)
 {
 	struct devlink *devlink;
 	struct mlx5_shd *shd;
+	int err;
 
 	devlink = devlink_alloc(&mlx5_shd_ops, sizeof(struct mlx5_shd), &faux_dev->dev);
 	if (!devlink)
@@ -39,6 +47,11 @@ static int mlx5_shd_faux_probe(struct faux_device *faux_dev)
 	faux_device_set_drvdata(faux_dev, shd);
 
 	devl_lock(devlink);
+	err = mlx5_shd_nv_param_register_dl_params(devlink);
+	if (err) {
+		devl_unlock(devlink);
+		return err;
+	}
 	devl_register(devlink);
 	devl_unlock(devlink);
 	return 0;
@@ -51,6 +64,7 @@ static void mlx5_shd_faux_remove(struct faux_device *faux_dev)
 
 	devl_lock(devlink);
 	devl_unregister(devlink);
+	mlx5_shd_nv_param_unregister_dl_params(devlink);
 	devl_unlock(devlink);
 	devlink_free(devlink);
 }
