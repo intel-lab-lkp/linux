@@ -678,8 +678,10 @@ static struct ssca_vsie *get_existing_ssca(struct kvm *kvm, u64 sca_o_hva)
 {
 	struct ssca_vsie *ssca = radix_tree_lookup(&kvm->arch.vsie.osca_to_ssca, sca_o_hva);
 
-	if (ssca)
+	if (ssca) {
 		WARN_ON_ONCE(atomic_inc_return(&ssca->ref_count) < 1);
+		kvm->stat.vsie_shadow_sca_reuse++;
+	}
 	return ssca;
 }
 
@@ -755,6 +757,7 @@ static struct ssca_vsie *get_ssca(struct kvm *kvm, struct vsie_page *vsie_page)
 
 		kvm->arch.vsie.sscas[kvm->arch.vsie.ssca_count] = ssca;
 		kvm->arch.vsie.ssca_count++;
+		kvm->stat.vsie_shadow_sca++;
 	} else {
 		/* reuse previously created ssca for different osca */
 		ssca = get_free_existing_ssca(kvm);
@@ -771,6 +774,7 @@ static struct ssca_vsie *get_ssca(struct kvm *kvm, struct vsie_page *vsie_page)
 
 	/* virt_to_phys(sca_o_hva) == ssca->osca */
 	radix_tree_insert(&kvm->arch.vsie.osca_to_ssca, sca_o_hva, ssca);
+	kvm->stat.vsie_shadow_sca_create++;
 	WRITE_ONCE(ssca->ssca.osca, sca_o_hpa);
 
 out:
@@ -1672,6 +1676,7 @@ static struct vsie_page *get_vsie_page(struct kvm *kvm, unsigned long addr)
 		__set_bit(VSIE_PAGE_IN_USE, &vsie_page->flags);
 		kvm->arch.vsie.pages[kvm->arch.vsie.page_count] = vsie_page;
 		kvm->arch.vsie.page_count++;
+		kvm->stat.vsie_shadow_scb++;
 	} else {
 		/* reuse an existing entry that belongs to nobody */
 		while (true) {
