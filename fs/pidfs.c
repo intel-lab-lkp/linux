@@ -223,8 +223,31 @@ static __poll_t pidfd_poll(struct file *file, struct poll_table_struct *pts)
 	task = pid_task(pid, PIDTYPE_PID);
 	if (!task)
 		poll_flags = EPOLLIN | EPOLLRDNORM | EPOLLHUP;
-	else if (task->exit_state && (thread || thread_group_empty(task)))
-		poll_flags = EPOLLIN | EPOLLRDNORM;
+	else if (task->exit_state) {
+		if (thread) {
+			/*
+			 * If this is a regular thread exit then notify
+			 * the PIDFD_THREAD waiters.
+			 *
+			 * Don't notify in the following circumstances:
+			 *
+			 * (1) If this is a premature thread-group
+			 *     leader exit then delay the exit nofication
+			 *     until the last thread in the thread-group
+			 *     gets autoreaped as there might still be a
+			 *     thread that execs and revives the struct
+			 *     pid of the old thread-group leader.
+			 * (2) There's a multi-threaded exec commencing
+			 *     and @pid is the current and therefore new
+			 *     thread-group leader's pid.
+			 */
+			if (likely(!READ_ONCE(pid->delayed_leader)))
+				poll_flags = EPOLLIN | EPOLLRDNORM;
+		}
+
+		if (thread_group_empty(task))
+			poll_flags = EPOLLIN | EPOLLRDNORM;
+	}
 
 	return poll_flags;
 }

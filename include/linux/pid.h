@@ -55,7 +55,8 @@ struct upid {
 struct pid
 {
 	refcount_t count;
-	unsigned int level;
+	u16 level;
+	u16 delayed_leader;
 	spinlock_t lock;
 	struct dentry *stashed;
 	u64 ino;
