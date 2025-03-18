@@ -63,6 +63,7 @@
 #define CH341_REG_DIVISOR      0x13
 #define CH341_REG_LCR          0x18
 #define CH341_REG_LCR2         0x25
+#define CH341_REG_INTERRUPT    0x2727
 
 #define CH341_NBREAK_BITS      0x01
 
@@ -102,6 +103,9 @@ struct ch341_private {
 	u8 version;
 
 	unsigned long break_end;
+
+	struct work_struct interrupt_work;
+	struct usb_serial_port *port;
 };
 
 static void ch341_set_termios(struct tty_struct *tty,
@@ -306,6 +310,32 @@ static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
 	return 0;
 }
 
+static int ch341_clear_interrupt(struct usb_device *dev)
+{
+	int r;
+
+	r = ch341_control_out(dev, CH341_REQ_WRITE_REG,
+			CH341_REG_INTERRUPT, 0);
+	if (r)
+		return r;
+
+	return 0;
+}
+
+static void ch341_interrupt_work(struct work_struct *work)
+{
+	struct ch341_private *priv =
+		container_of(work, struct ch341_private, interrupt_work);
+	struct usb_serial_port *port = priv->port;
+	int ret;
+
+	ret = ch341_clear_interrupt(port->serial->dev);
+	if (ret < 0) {
+		dev_err_once(&port->dev, "failed to clear interrupt: %d\n",
+			ret);
+	}
+}
+
 /* -------------------------------------------------------------------------- */
 
 static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
@@ -399,6 +429,9 @@ static int ch341_port_probe(struct usb_serial_port *port)
 	if (r < 0)
 		goto error;
 
+	INIT_WORK(&priv->interrupt_work, ch341_interrupt_work);
+	priv->port = port;
+
 	return 0;
 
 error:	kfree(priv);
@@ -438,8 +471,10 @@ static void ch341_dtr_rts(struct usb_serial_port *port, int on)
 
 static void ch341_close(struct usb_serial_port *port)
 {
+	struct ch341_private *priv = usb_get_serial_port_data(port);
 	usb_serial_generic_close(port);
 	usb_kill_urb(port->interrupt_in_urb);
+	flush_work(&priv->interrupt_work);
 }
 
 
@@ -466,6 +501,12 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 		goto err_kill_interrupt_urb;
 	}
 
+	r = ch341_clear_interrupt(port->serial->dev);
+	if (r < 0) {
+		dev_err(&port->dev, "failed to clear interrupt: %d\n", r);
+		goto err_kill_interrupt_urb;
+	}
+
 	r = usb_serial_generic_open(tty, port);
 	if (r)
 		goto err_kill_interrupt_urb;
@@ -474,6 +515,7 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 
 err_kill_interrupt_urb:
 	usb_kill_urb(port->interrupt_in_urb);
+	flush_work(&priv->interrupt_work);
 
 	return r;
 }
@@ -747,6 +789,7 @@ static void ch341_update_status(struct usb_serial_port *port,
 static void ch341_read_int_callback(struct urb *urb)
 {
 	struct usb_serial_port *port = urb->context;
+	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned char *data = urb->transfer_buffer;
 	unsigned int len = urb->actual_length;
 	int status;
@@ -770,6 +813,8 @@ static void ch341_read_int_callback(struct urb *urb)
 
 	usb_serial_debug_data(&port->dev, __func__, len, data);
 	ch341_update_status(port, data, len);
+	schedule_work(&priv->interrupt_work);
+
 exit:
 	status = usb_submit_urb(urb, GFP_ATOMIC);
 	if (status) {
@@ -828,6 +873,12 @@ static int ch341_reset_resume(struct usb_serial *serial)
 		ret = ch341_get_status(port->serial->dev, priv);
 		if (ret < 0) {
 			dev_err(&port->dev, "failed to read modem status: %d\n",
+				ret);
+		}
+
+		ret = ch341_clear_interrupt(port->serial->dev);
+		if (ret < 0) {
+			dev_err(&port->dev, "failed to clear interrupt: %d\n",
 				ret);
 		}
 	}
