@@ -18,7 +18,7 @@
 struct ax88172a_private {
 	struct mii_bus *mdio;
 	struct phy_device *phydev;
-	char phy_name[20];
+	char phy_name[MII_BUS_ID_SIZE + 5];
 	u16 phy_addr;
 	u16 oldmode;
 	int use_embdphy;
@@ -308,7 +308,7 @@ static int ax88172a_reset(struct usbnet *dev)
 		   rx_ctl);
 
 	/* Connect to PHY */
-	snprintf(priv->phy_name, 20, PHY_ID_FMT,
+	snprintf(priv->phy_name, sizeof(priv->phy_name), PHY_ID_FMT,
 		 priv->mdio->id, priv->phy_addr);
 
 	priv->phydev = phy_connect(dev->net, priv->phy_name,
