@@ -1374,6 +1374,7 @@ bool ixgbe_check_mdd_event(struct ixgbe_adapter *adapter)
 		return false;
 
 	/* Did we have a malicious event */
+	bitmap_zero(vf_bitmap, 64);
 	hw->mac.ops.handle_mdd(hw, vf_bitmap);
 
 	/* Log any blocked queues and release lock */
