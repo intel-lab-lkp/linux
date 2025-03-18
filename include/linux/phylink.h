@@ -703,6 +703,8 @@ void phylink_pcs_change(struct phylink_pcs *, bool up);
 
 int phylink_pcs_pre_init(struct phylink *pl, struct phylink_pcs *pcs);
 
+void phylink_pcs_release(struct phylink_pcs *pcs);
+
 void phylink_start(struct phylink *);
 void phylink_stop(struct phylink *);
 

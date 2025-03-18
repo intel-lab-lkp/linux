@@ -5,6 +5,13 @@
 
 menu "PCS device drivers"
 
+config OF_PCS
+	tristate
+	depends on OF
+	depends on PHYLINK
+	help
+		OpenFirmware PCS accessors
+
 config PCS_XPCS
 	tristate "Synopsys DesignWare Ethernet XPCS"
 	select PHYLINK

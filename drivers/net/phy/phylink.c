@@ -976,6 +976,27 @@ int phylink_pcs_pre_init(struct phylink *pl, struct phylink_pcs *pcs)
 }
 EXPORT_SYMBOL_GPL(phylink_pcs_pre_init);
 
+/**
+ * phylink_pcs_release() - release a PCS
+ * @pl: a pointer to &struct phylink_pcs
+ *
+ * PCS provider can use this to release a PCS from a phylink
+ * instance by stopping the attached netdev. This is only done
+ * if the PCS is actually attached to a phylink, otherwise is
+ * ignored.
+ */
+void phylink_pcs_release(struct phylink_pcs *pcs)
+{
+	struct phylink *pl = pcs->phylink;
+
+	if (pl) {
+		rtnl_lock();
+		dev_close(pl->netdev);
+		rtnl_unlock();
+	}
+}
+EXPORT_SYMBOL_GPL(phylink_pcs_release);
+
 static void phylink_mac_config(struct phylink *pl,
 			       const struct phylink_link_state *state)
 {
