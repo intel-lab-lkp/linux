@@ -24,7 +24,7 @@
 #include <linux/initrd.h>
 #include <linux/io.h>
 #include <linux/kexec.h>
-#include <linux/platform_device.h>
+#include <linux/device/faux.h>
 #include <linux/random.h>
 #include <linux/reboot.h>
 #include <linux/slab.h>
@@ -443,7 +443,7 @@ static int __init efisubsys_init(void)
 		error = efivar_ssdt_load();
 		if (error)
 			pr_err("efi: failed to load SSDT, error %d.\n", error);
-		platform_device_register_simple("efivars", 0, NULL, 0);
+		faux_device_create("efivars", NULL, NULL);
 	}
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&efivar_ops_nh);
