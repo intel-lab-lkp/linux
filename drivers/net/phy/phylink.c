@@ -1241,6 +1241,15 @@ static void phylink_major_config(struct phylink *pl, bool restart,
 	if (pl->mac_ops->mac_select_pcs) {
 		pcs = pl->mac_ops->mac_select_pcs(pl->config, state->interface);
 		if (IS_ERR(pcs)) {
+			/* PCS can be removed unexpectedly and not available
+			 * anymore.
+			 * PCS provider will return probe defer as the PCS
+			 * can't be found in the global provider list.
+			 * In such case, return -ENOENT as a more symbolic name
+			 * for the error message.
+			 */
+			if (PTR_ERR(pcs) == -EPROBE_DEFER)
+				pcs = ERR_PTR(-ENOENT);
 			phylink_err(pl,
 				    "mac_select_pcs unexpectedly failed: %pe\n",
 				    pcs);
@@ -1849,7 +1858,18 @@ struct phylink *phylink_create(struct phylink_config *config,
 
 	linkmode_fill(pl->supported);
 	linkmode_copy(pl->link_config.advertising, pl->supported);
-	phylink_validate(pl, pl->supported, &pl->link_config);
+	ret = phylink_validate(pl, pl->supported, &pl->link_config);
+	/* The PCS might not available at the time phylink_create
+	 * is called. Check this and communicate to the MAC driver
+	 * that probe should be retried later.
+	 *
+	 * Notice that this can only happen in probe stage and PCS
+	 * is expected to be avaialble in phylink_major_config.
+	 */
+	if (ret == -EPROBE_DEFER) {
+		kfree(pl);
+		return ERR_PTR(ret);
+	}
 
 	ret = phylink_parse_mode(pl, fwnode);
 	if (ret < 0) {
