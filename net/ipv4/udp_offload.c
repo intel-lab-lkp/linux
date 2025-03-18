@@ -110,14 +110,7 @@ void udp_tunnel_update_gro_rcv(struct sock *sk, bool add)
 		cur = &udp_tunnel_gro_types[udp_tunnel_gro_type_nr++];
 		refcount_set(&cur->count, 1);
 		cur->gro_receive = up->gro_receive;
-	} else {
-		/*
-		 * The stack cleanups only successfully added tunnel, the
-		 * lookup on removal should never fail.
-		 */
-		if (WARN_ON_ONCE(!cur))
-			goto out;
-
+	} else if (cur) {
 		if (!refcount_dec_and_test(&cur->count))
 			goto out;
 
