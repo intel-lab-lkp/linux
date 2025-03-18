@@ -742,6 +742,19 @@ enum in6_addr_gen_mode {
  * @IFLA_BR_FDB_MAX_LEARNED
  *   Set the number of max dynamically learned FDB entries for the current
  *   bridge.
+ *
+ * @IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE
+ *   Set how the bridge shall notify user space about MDB flag change via
+ *   RTM_NEWMDB netlink message.
+ *   The valid values are:
+ *
+ *     * 0 - the bridge will not notify user space about MDB flag change
+ *     * 1 - the bridge will notify user space about flag change if either
+ *           MDB_PG_FLAGS_OFFLOAD or MDB_PG_FLAGS_OFFLOAD_FAILED has changed
+ *     * 2 - the bridge will notify user space about flag change only if
+ *           MDB_PG_FLAGS_OFFLOAD_FAILED has changed
+ *
+ *   The default value is 0.
  */
 enum {
 	IFLA_BR_UNSPEC,
@@ -794,6 +807,7 @@ enum {
 	IFLA_BR_MCAST_QUERIER_STATE,
 	IFLA_BR_FDB_N_LEARNED,
 	IFLA_BR_FDB_MAX_LEARNED,
+	IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE,
 	__IFLA_BR_MAX,
 };
 

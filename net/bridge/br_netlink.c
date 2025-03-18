@@ -1270,6 +1270,7 @@ static const struct nla_policy br_policy[IFLA_BR_MAX + 1] = {
 		NLA_POLICY_EXACT_LEN(sizeof(struct br_boolopt_multi)),
 	[IFLA_BR_FDB_N_LEARNED] = { .type = NLA_REJECT },
 	[IFLA_BR_FDB_MAX_LEARNED] = { .type = NLA_U32 },
+	[IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE] = { .type = NLA_U8 },
 };
 
 static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
@@ -1514,6 +1515,18 @@ static int br_changelink(struct net_device *brdev, struct nlattr *tb[],
 			return err;
 	}
 #endif
+
+#ifdef CONFIG_NET_SWITCHDEV
+	if (data[IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE]) {
+		__u8 val;
+
+		val = nla_get_u8(data[IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE]);
+		err = br_multicast_set_mdb_notify_on_flag_change(&br->multicast_ctx,
+								 val);
+		if (err)
+			return err;
+	}
+#endif
 #endif
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	if (data[IFLA_BR_NF_CALL_IPTABLES]) {
@@ -1627,6 +1640,9 @@ static size_t br_get_size(const struct net_device *brdev)
 	       nla_total_size(sizeof(u8)) +	/* IFLA_BR_MCAST_IGMP_VERSION */
 	       nla_total_size(sizeof(u8)) +	/* IFLA_BR_MCAST_MLD_VERSION */
 	       br_multicast_querier_state_size() + /* IFLA_BR_MCAST_QUERIER_STATE */
+#ifdef CONFIG_NET_SWITCHDEV
+	       nla_total_size(sizeof(u8)) +	/* IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE */
+#endif
 #endif
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	       nla_total_size(sizeof(u8)) +     /* IFLA_BR_NF_CALL_IPTABLES */
@@ -1723,6 +1739,11 @@ static int br_fill_info(struct sk_buff *skb, const struct net_device *brdev)
 #if IS_ENABLED(CONFIG_IPV6)
 	if (nla_put_u8(skb, IFLA_BR_MCAST_MLD_VERSION,
 		       br->multicast_ctx.multicast_mld_version))
+		return -EMSGSIZE;
+#endif
+#ifdef CONFIG_NET_SWITCHDEV
+	if (nla_put_u8(skb, IFLA_BR_MDB_NOTIFY_ON_FLAG_CHANGE,
+		       br->multicast_ctx.multicast_mdb_notify_on_flag_change))
 		return -EMSGSIZE;
 #endif
 	clockval = jiffies_to_clock_t(br->multicast_ctx.multicast_last_member_interval);
