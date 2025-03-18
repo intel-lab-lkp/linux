@@ -25,6 +25,8 @@
 #include "gaccess.h"
 #include "gmap.h"
 
+#define SSCA_PAGEORDER 2
+
 enum vsie_page_flags {
 	VSIE_PAGE_IN_USE = 0,
 };
@@ -63,7 +65,8 @@ struct vsie_page {
 	 * looked up by other CPUs.
 	 */
 	unsigned long flags;			/* 0x0260 */
-	__u8 reserved[0x0700 - 0x0268];		/* 0x0268 */
+	u64 sca_o;				/* 0x0268 */
+	__u8 reserved[0x0700 - 0x0270];		/* 0x0270 */
 	struct kvm_s390_crypto_cb crycb;	/* 0x0700 */
 	__u8 fac[S390_ARCH_FAC_LIST_SIZE_BYTE];	/* 0x0800 */
 };
@@ -595,6 +598,236 @@ out:
 	return rc;
 }
 
+/* fill the shadow system control area */
+static void init_ssca(struct vsie_page *vsie_page, struct ssca_vsie *ssca)
+{
+	u64 sca_o_hva = vsie_page->sca_o;
+	unsigned int bit, cpu_slots;
+	struct ssca_entry *cpu;
+	void *ossea_hva;
+	int is_esca;
+	u64 *mcn;
+
+	/* set original SIE control block address */
+	ssca->ssca.osca = virt_to_phys((void *)sca_o_hva);
+	WARN_ON_ONCE(ssca->ssca.osca & 0x000f);
+
+	/* use ECB of shadow scb to determine SCA type */
+	is_esca = (vsie_page->scb_s.ecb2 & ECB2_ESCA);
+	cpu_slots = is_esca ? KVM_S390_MAX_VCPUS : KVM_S390_BSCA_CPU_SLOTS;
+	mcn = is_esca ? ((struct esca_block *)sca_o_hva)->mcn :
+			&((struct bsca_block *)sca_o_hva)->mcn;
+
+	/*
+	 * For every enabled sigp entry in the original sca we need to populate
+	 * the corresponding shadow sigp entry with the address of the shadow
+	 * state description and the address of the original sigp entry.
+	 */
+	for_each_set_bit_inv(bit, (unsigned long *)mcn, cpu_slots) {
+		cpu = &ssca->ssca.cpu[bit];
+		if (is_esca)
+			ossea_hva = &((struct esca_block *)sca_o_hva)->cpu[bit];
+		else
+			ossea_hva = &((struct bsca_block *)sca_o_hva)->cpu[bit];
+		cpu->ossea = virt_to_phys(ossea_hva);
+		/* cpu->ssda is set in update_entry_ssda() when vsie is entered */
+	}
+}
+
+/* remove running scb pointer to ssca */
+static void update_entry_ssda_remove(struct vsie_page *vsie_page, struct ssca_vsie *ssca)
+{
+	struct ssca_entry *cpu = &ssca->ssca.cpu[vsie_page->scb_s.icpua & 0xff];
+
+	WRITE_ONCE(cpu->ssda, 0);
+}
+
+/* add running scb pointer to ssca */
+static void update_entry_ssda_add(struct vsie_page *vsie_page, struct ssca_vsie *ssca)
+{
+	struct ssca_entry *cpu = &ssca->ssca.cpu[vsie_page->scb_s.icpua & 0xff];
+	phys_addr_t scb_s_hpa = virt_to_phys(&vsie_page->scb_s);
+
+	WRITE_ONCE(cpu->ssda, scb_s_hpa);
+}
+
+/*
+ * Try to find the address of an existing shadow system control area.
+ * @kvm:  pointer to the kvm struct
+ * @sca_o_hva: original system control area address; guest-1 virtual
+ *
+ * Called with ssca_lock held.
+ */
+static struct ssca_vsie *get_existing_ssca(struct kvm *kvm, u64 sca_o_hva)
+{
+	struct ssca_vsie *ssca = radix_tree_lookup(&kvm->arch.vsie.osca_to_ssca, sca_o_hva);
+
+	if (ssca)
+		WARN_ON_ONCE(atomic_inc_return(&ssca->ref_count) < 1);
+	return ssca;
+}
+
+/*
+ * Try to find an currently unused ssca_vsie from the vsie struct.
+ * @kvm:  pointer to the kvm struct
+ *
+ * Called with ssca_lock held.
+ */
+static struct ssca_vsie *get_free_existing_ssca(struct kvm *kvm)
+{
+	struct ssca_vsie *ssca;
+	int i;
+
+	for (i = kvm->arch.vsie.ssca_count - 1; i >= 0; i--) {
+		ssca = kvm->arch.vsie.sscas[i];
+		if (atomic_inc_return(&ssca->ref_count) == 1)
+			return ssca;
+		atomic_dec(&ssca->ref_count);
+	}
+	return ERR_PTR(-EFAULT);
+}
+
+/*
+ * Get a existing or new shadow system control area (ssca).
+ * @kvm:  pointer to the kvm struct
+ * @vsie_page:  the current vsie_page
+ *
+ * May sleep.
+ */
+static struct ssca_vsie *get_ssca(struct kvm *kvm, struct vsie_page *vsie_page)
+{
+	u64 sca_o_hva = vsie_page->sca_o;
+	phys_addr_t sca_o_hpa = virt_to_phys((void *)sca_o_hva);
+	struct ssca_vsie *ssca, *ssca_new = NULL;
+
+	/* get existing ssca */
+	down_read(&kvm->arch.vsie.ssca_lock);
+	ssca = get_existing_ssca(kvm, sca_o_hva);
+	up_read(&kvm->arch.vsie.ssca_lock);
+	if (ssca)
+		return ssca;
+
+	/*
+	 * Allocate new ssca, it will likely be needed below.
+	 * We want at least #online_vcpus shadows, so every VCPU can execute the
+	 * VSIE in parallel. (Worst case all single core VMs.)
+	 */
+	if (kvm->arch.vsie.ssca_count < atomic_read(&kvm->online_vcpus)) {
+		BUILD_BUG_ON(offsetof(struct ssca_block, cpu) != 64);
+		BUILD_BUG_ON(offsetof(struct ssca_vsie, ref_count) != 0x2200);
+		BUILD_BUG_ON(sizeof(struct ssca_vsie) > ((1UL << SSCA_PAGEORDER)-1) * PAGE_SIZE);
+		ssca_new = (struct ssca_vsie *)__get_free_pages(GFP_KERNEL_ACCOUNT | __GFP_ZERO,
+								SSCA_PAGEORDER);
+		if (!ssca_new) {
+			ssca = ERR_PTR(-ENOMEM);
+			goto out;
+		}
+		init_ssca(vsie_page, ssca_new);
+	}
+
+	/* enter write lock and recheck to make sure ssca has not been created by other cpu */
+	down_write(&kvm->arch.vsie.ssca_lock);
+	ssca = get_existing_ssca(kvm, sca_o_hva);
+	if (ssca)
+		goto out;
+
+	/* check again under write lock if we are still under our ssca_count limit */
+	if (ssca_new && kvm->arch.vsie.ssca_count < atomic_read(&kvm->online_vcpus)) {
+		/* make use of ssca just created */
+		ssca = ssca_new;
+		ssca_new = NULL;
+
+		kvm->arch.vsie.sscas[kvm->arch.vsie.ssca_count] = ssca;
+		kvm->arch.vsie.ssca_count++;
+	} else {
+		/* reuse previously created ssca for different osca */
+		ssca = get_free_existing_ssca(kvm);
+		/* with nr_vcpus sscas one must be free */
+		if (IS_ERR(ssca))
+			goto out;
+
+		radix_tree_delete(&kvm->arch.vsie.osca_to_ssca,
+				  (u64)phys_to_virt(ssca->ssca.osca));
+		memset(ssca, 0, sizeof(struct ssca_vsie));
+		init_ssca(vsie_page, ssca);
+	}
+	atomic_set(&ssca->ref_count, 1);
+
+	/* virt_to_phys(sca_o_hva) == ssca->osca */
+	radix_tree_insert(&kvm->arch.vsie.osca_to_ssca, sca_o_hva, ssca);
+	WRITE_ONCE(ssca->ssca.osca, sca_o_hpa);
+
+out:
+	up_write(&kvm->arch.vsie.ssca_lock);
+	if (ssca_new)
+		free_pages((unsigned long)ssca_new, SSCA_PAGEORDER);
+	return ssca;
+}
+
+/*
+ * Unshadow the sca on vsie exit.
+ * @vcpu:  pointer to the current vcpu struct
+ * @vsie_page:  the current vsie_page
+ */
+static void unshadow_sca(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
+{
+	struct ssca_vsie *ssca;
+
+	down_read(&vcpu->kvm->arch.vsie.ssca_lock);
+	ssca = radix_tree_lookup(&vcpu->kvm->arch.vsie.osca_to_ssca,
+				 vsie_page->sca_o);
+	if (ssca) {
+		update_entry_ssda_remove(vsie_page, ssca);
+		vsie_page->scb_s.scaoh = vsie_page->sca_o >> 32;
+		vsie_page->scb_s.scaol = vsie_page->sca_o;
+		vsie_page->scb_s.osda = 0;
+		atomic_dec(&ssca->ref_count);
+	}
+	up_read(&vcpu->kvm->arch.vsie.ssca_lock);
+}
+
+/*
+ * Shadow the sca on vsie enter.
+ * @vcpu:  pointer to the current vcpu struct
+ * @vsie_page:  the current vsie_page
+ */
+static int shadow_sca(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
+{
+	phys_addr_t scb_o_hpa, sca_s_hpa;
+	struct ssca_vsie *ssca;
+	u64 sca_o_hva;
+
+	/* only shadow sca when vsie_sigpif is enabled */
+	if (!vcpu->kvm->arch.use_vsie_sigpif)
+		return 0;
+
+	sca_o_hva = (u64)vsie_page->scb_s.scaoh << 32 | vsie_page->scb_s.scaol;
+	/* skip if the guest does not have an sca */
+	if (!sca_o_hva)
+		return 0;
+
+	scb_o_hpa = virt_to_phys(vsie_page->scb_o);
+	WRITE_ONCE(vsie_page->scb_s.osda, scb_o_hpa);
+	vsie_page->sca_o = sca_o_hva;
+
+	ssca = get_ssca(vcpu->kvm, vsie_page);
+	if (WARN_ON(IS_ERR(ssca)))
+		return PTR_ERR(ssca);
+
+	/* update shadow control block sca references to shadow sca */
+	update_entry_ssda_add(vsie_page, ssca);
+	sca_s_hpa = virt_to_phys(ssca);
+	if (sclp.has_64bscao) {
+		WARN_ON_ONCE(sca_s_hpa & 0x003f);
+		vsie_page->scb_s.scaoh = (u64)sca_s_hpa >> 32;
+	} else {
+		WARN_ON_ONCE(sca_s_hpa & 0x000f);
+	}
+	vsie_page->scb_s.scaol = (u64)sca_s_hpa;
+
+	return 0;
+}
+
 void kvm_s390_vsie_gmap_notifier(struct gmap *gmap, unsigned long start,
 				 unsigned long end)
 {
@@ -699,6 +932,9 @@ static void unpin_blocks(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 
 	hpa = (u64) scb_s->scaoh << 32 | scb_s->scaol;
 	if (hpa) {
+		/* with vsie_sigpif scaoh/l was pointing to g1 ssca_block but
+		 * should have been reset in unshadow_sca()
+		 */
 		unpin_guest_page(vcpu->kvm, vsie_page->sca_gpa, hpa);
 		vsie_page->sca_gpa = 0;
 		scb_s->scaol = 0;
@@ -775,6 +1011,9 @@ static int pin_blocks(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 		if (rc)
 			goto unpin;
 		vsie_page->sca_gpa = gpa;
+		/* with vsie_sigpif scaoh and scaol will be overwritten
+		 * in shadow_sca to point to g1 ssca_block instead
+		 */
 		scb_s->scaoh = (u32)((u64)hpa >> 32);
 		scb_s->scaol = (u32)(u64)hpa;
 	}
@@ -1490,12 +1729,17 @@ int kvm_s390_handle_vsie(struct kvm_vcpu *vcpu)
 		goto out_unpin_scb;
 	rc = pin_blocks(vcpu, vsie_page);
 	if (rc)
-		goto out_unshadow;
+		goto out_unshadow_scb;
+	rc = shadow_sca(vcpu, vsie_page);
+	if (rc)
+		goto out_unpin_blocks;
 	register_shadow_scb(vcpu, vsie_page);
 	rc = vsie_run(vcpu, vsie_page);
 	unregister_shadow_scb(vcpu);
+	unshadow_sca(vcpu, vsie_page);
+out_unpin_blocks:
 	unpin_blocks(vcpu, vsie_page);
-out_unshadow:
+out_unshadow_scb:
 	unshadow_scb(vcpu, vsie_page);
 out_unpin_scb:
 	unpin_scb(vcpu, vsie_page, scb_addr);
@@ -1510,12 +1754,15 @@ void kvm_s390_vsie_init(struct kvm *kvm)
 {
 	mutex_init(&kvm->arch.vsie.mutex);
 	INIT_RADIX_TREE(&kvm->arch.vsie.addr_to_page, GFP_KERNEL_ACCOUNT);
+	init_rwsem(&kvm->arch.vsie.ssca_lock);
+	INIT_RADIX_TREE(&kvm->arch.vsie.osca_to_ssca, GFP_KERNEL_ACCOUNT);
 }
 
 /* Destroy the vsie data structures. To be called when a vm is destroyed. */
 void kvm_s390_vsie_destroy(struct kvm *kvm)
 {
 	struct vsie_page *vsie_page;
+	struct ssca_vsie *ssca;
 	int i;
 
 	mutex_lock(&kvm->arch.vsie.mutex);
@@ -1531,6 +1778,17 @@ void kvm_s390_vsie_destroy(struct kvm *kvm)
 	}
 	kvm->arch.vsie.page_count = 0;
 	mutex_unlock(&kvm->arch.vsie.mutex);
+
+	down_write(&kvm->arch.vsie.ssca_lock);
+	for (i = 0; i < kvm->arch.vsie.ssca_count; i++) {
+		ssca = kvm->arch.vsie.sscas[i];
+		kvm->arch.vsie.sscas[i] = NULL;
+		radix_tree_delete(&kvm->arch.vsie.osca_to_ssca,
+				  (u64)phys_to_virt(ssca->ssca.osca));
+		free_pages((unsigned long)ssca, SSCA_PAGEORDER);
+	}
+	kvm->arch.vsie.ssca_count = 0;
+	up_write(&kvm->arch.vsie.ssca_lock);
 }
 
 void kvm_s390_vsie_kick(struct kvm_vcpu *vcpu)

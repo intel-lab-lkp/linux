@@ -29,6 +29,7 @@
 #define KVM_S390_BSCA_CPU_SLOTS 64
 #define KVM_S390_ESCA_CPU_SLOTS 248
 #define KVM_MAX_VCPUS 255
+#define KVM_S390_MAX_VCPUS 256
 
 #define KVM_INTERNAL_MEM_SLOTS 1
 
@@ -137,13 +138,23 @@ struct esca_block {
 
 /*
  * The shadow sca / ssca needs to cover both bsca and esca depending on what the
- * guest uses so we use KVM_S390_ESCA_CPU_SLOTS.
+ * guest uses so we allocate space for 256 entries that are defined in the
+ * architecture.
  * The header part of the struct must not cross page boundaries.
  */
 struct ssca_block {
 	__u64	osca;
 	__u64	reserved08[7];
-	struct ssca_entry cpu[KVM_S390_ESCA_CPU_SLOTS];
+	struct ssca_entry cpu[KVM_S390_MAX_VCPUS];
+};
+
+/*
+ * Store the vsie ssca block and accompanied management data.
+ */
+struct ssca_vsie {
+	struct ssca_block ssca;			/* 0x0000 */
+	__u8	reserved[0x2200 - 0x2040];	/* 0x2040 */
+	atomic_t ref_count;			/* 0x2200 */
 };
 
 /*
@@ -953,12 +964,19 @@ struct sie_page2 {
 
 struct vsie_page;
 
+/*
+ * vsie_pages, sscas and accompanied management vars
+ */
 struct kvm_s390_vsie {
 	struct mutex mutex;
 	struct radix_tree_root addr_to_page;
 	int page_count;
 	int next;
 	struct vsie_page *pages[KVM_MAX_VCPUS];
+	struct rw_semaphore ssca_lock;
+	struct radix_tree_root osca_to_ssca;
+	int ssca_count;
+	struct ssca_vsie *sscas[KVM_MAX_VCPUS];
 };
 
 struct kvm_s390_gisa_iam {
