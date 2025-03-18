@@ -1343,6 +1343,10 @@ The following nested keys are defined.
 	same semantics as vm.swappiness applied to memcg reclaim with
 	all the existing limitations and potential future extensions.
 
+	If set swappiness=max, memory reclamation will exclusively
+	target the anonymous folio list for both traditional LRU and
+	MGLRU reclamation algorithms.
+
   memory.peak
 	A read-write single value file which exists on non-root cgroups.
 

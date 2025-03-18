@@ -4368,11 +4368,13 @@ static ssize_t memory_oom_group_write(struct kernfs_open_file *of,
 
 enum {
 	MEMORY_RECLAIM_SWAPPINESS = 0,
+	MEMORY_RECLAIM_ONLY_ANON_MODE,
 	MEMORY_RECLAIM_NULL,
 };
 
 static const match_table_t tokens = {
 	{ MEMORY_RECLAIM_SWAPPINESS, "swappiness=%d"},
+	{ MEMORY_RECLAIM_ONLY_ANON_MODE, "swappiness=max"},
 	{ MEMORY_RECLAIM_NULL, NULL },
 };
 
@@ -4405,6 +4407,9 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 				return -EINVAL;
 			if (swappiness < MIN_SWAPPINESS || swappiness > MAX_SWAPPINESS)
 				return -EINVAL;
+			break;
+		case MEMORY_RECLAIM_ONLY_ANON_MODE:
+			swappiness = ONLY_ANON_RECLAIM_MODE;
 			break;
 		default:
 			return -EINVAL;

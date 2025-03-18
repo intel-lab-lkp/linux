@@ -2492,6 +2492,16 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	}
 
 	/*
+	 * Do not bother scanning file folios if the memory reclaim
+	 * invoked by userspace through memory.reclaim and set
+	 * 'swappiness=max'.
+	 */
+	if (sc->proactive && (swappiness == ONLY_ANON_RECLAIM_MODE)) {
+		scan_balance = SCAN_ANON;
+		goto out;
+	}
+
+	/*
 	 * Do not apply any pressure balancing cleverness when the
 	 * system is close to OOM, scan both anon and file equally
 	 * (unless the swappiness setting disagrees with swapping).
