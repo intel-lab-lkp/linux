@@ -102,6 +102,22 @@
 };
 
 &tlmm {
+	qup_uart1_default_state: qup-uart1-default-state {
+		uart1-tx-pins {
+			pins = "gpio44";
+			function = "uart1";
+			drive-strength = <8>;
+			bias-pull-down;
+		};
+
+		uart1-rx-pins {
+			pins = "gpio43";
+			function = "uart1";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+
 	spi0_default_state: spi0-default-state {
 		clk-pins {
 			pins = "gpio6";
@@ -157,8 +173,9 @@
 };
 
 &uart1 {
-	pinctrl-0 = <&uart1_pins>;
+	pinctrl-0 = <&qup_uart1_default_state>;
 	pinctrl-names = "default";
+
 	status = "okay";
 };
 

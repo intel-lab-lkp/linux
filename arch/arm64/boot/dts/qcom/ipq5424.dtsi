@@ -262,13 +262,6 @@
 			gpio-ranges = <&tlmm 0 0 50>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
-
-			uart1_pins: uart1-state {
-				pins = "gpio43", "gpio44";
-				function = "uart1";
-				drive-strength = <8>;
-				bias-pull-up;
-			};
 		};
 
 		gcc: clock-controller@1800000 {
