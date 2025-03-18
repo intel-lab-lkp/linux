@@ -744,7 +744,7 @@ static inline void __module_get(struct module *module)
 /* This is a #define so the string doesn't get put in every .o file */
 #define module_name(mod)			\
 ({						\
-	struct module *__mod = (mod);		\
+	const struct module *__mod = (mod);	\
 	__mod ? __mod->name : "kernel";		\
 })
 

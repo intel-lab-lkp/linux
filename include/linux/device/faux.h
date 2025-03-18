@@ -47,10 +47,12 @@ struct faux_device_ops {
 	void (*remove)(struct faux_device *faux_dev);
 };
 
-struct faux_device *faux_device_create(const char *name,
+struct faux_device *faux_device_create(const struct module *module,
+				       const char *name,
 				       struct device *parent,
 				       const struct faux_device_ops *faux_ops);
-struct faux_device *faux_device_create_with_groups(const char *name,
+struct faux_device *faux_device_create_with_groups(const struct module *module,
+						   const char *name,
 						   struct device *parent,
 						   const struct faux_device_ops *faux_ops,
 						   const struct attribute_group **groups);

@@ -85,8 +85,9 @@ static void faux_device_release(struct device *dev)
  * faux_device_create_with_groups - Create and register with the driver
  *		core a faux device and populate the device with an initial
  *		set of sysfs attributes.
- * @name:	The name of the device we are adding, must be unique for
- *		all faux devices.
+ * @module:	Pointer to module this device is associated.
+ * @name:	The name of the device we are adding, must be unique for all
+ *		faux devices within a single module.
  * @parent:	Pointer to a potential parent struct device.  If set to
  *		NULL, the device will be created in the "root" of the faux
  *		device tree in sysfs.
@@ -108,7 +109,8 @@ static void faux_device_release(struct device *dev)
  * * NULL if an error happened with creating the device
  * * pointer to a valid struct faux_device that is registered with sysfs
  */
-struct faux_device *faux_device_create_with_groups(const char *name,
+struct faux_device *faux_device_create_with_groups(const struct module *module,
+						   const char *name,
 						   struct device *parent,
 						   const struct faux_device_ops *faux_ops,
 						   const struct attribute_group **groups)
@@ -137,12 +139,12 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 		dev->parent = &faux_bus_root;
 	dev->bus = &faux_bus_type;
 	dev->groups = groups;
-	dev_set_name(dev, "%s", name);
+	dev_set_name(dev, "%s_%s", module_name(module), name);
 
 	ret = device_add(dev);
 	if (ret) {
 		pr_err("%s: device_add for faux device '%s' failed with %d\n",
-		       __func__, name, ret);
+		       __func__, dev_name(dev), ret);
 		put_device(dev);
 		return NULL;
 	}
@@ -153,8 +155,9 @@ EXPORT_SYMBOL_GPL(faux_device_create_with_groups);
 
 /**
  * faux_device_create - create and register with the driver core a faux device
+ * @module:	Pointer to module this device is associated.
  * @name:	The name of the device we are adding, must be unique for all
- *		faux devices.
+ *		faux devices within a single module.
  * @parent:	Pointer to a potential parent struct device.  If set to
  *		NULL, the device will be created in the "root" of the faux
  *		device tree in sysfs.
@@ -174,11 +177,12 @@ EXPORT_SYMBOL_GPL(faux_device_create_with_groups);
  * * NULL if an error happened with creating the device
  * * pointer to a valid struct faux_device that is registered with sysfs
  */
-struct faux_device *faux_device_create(const char *name,
+struct faux_device *faux_device_create(const struct module *module,
+				       const char *name,
 				       struct device *parent,
 				       const struct faux_device_ops *faux_ops)
 {
-	return faux_device_create_with_groups(name, parent, faux_ops, NULL);
+	return faux_device_create_with_groups(module, name, parent, faux_ops, NULL);
 }
 EXPORT_SYMBOL_GPL(faux_device_create);
 
