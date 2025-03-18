@@ -468,6 +468,7 @@ struct it6505 {
 	struct work_struct hdcp_wait_ksv_list;
 	struct completion extcon_completion;
 	u8 auto_train_retry;
+	u8 step_train_only;
 	bool hdcp_desired;
 	bool is_repeater;
 	u8 hdcp_down_stream_count;
@@ -2459,11 +2460,13 @@ static void it6505_link_step_train_process(struct it6505 *it6505)
 				     ret ? "pass" : "failed", i + 1);
 		if (ret) {
 			it6505_link_train_ok(it6505);
+			it6505->step_train_only = true;
 			return;
 		}
 	}
 
 	DRM_DEV_DEBUG_DRIVER(dev, "training fail");
+	it6505->step_train_only = false;
 	it6505->link_state = LINK_IDLE;
 	it6505_video_reset(it6505);
 }
@@ -2479,21 +2482,23 @@ static void it6505_link_training_work(struct work_struct *work)
 
 	if (!it6505_get_sink_hpd_status(it6505))
 		return;
+	/* skip auto training if previous auto train is fail*/
+	if (!it6505->step_train_only) {
+		retry = it6505->auto_train_retry;
+		do {
+			it6505_link_training_setup(it6505);
+			it6505_reset_hdcp(it6505);
+			it6505_aux_reset(it6505);
 
-	retry = it6505->auto_train_retry;
-	do {
-		it6505_link_training_setup(it6505);
-		it6505_reset_hdcp(it6505);
-		it6505_aux_reset(it6505);
-
-		ret = it6505_link_start_auto_train(it6505);
-		DRM_DEV_DEBUG_DRIVER(dev, "auto train %s, auto_train_retry: %d",
-			     ret ? "pass" : "failed", it6505->auto_train_retry);
-		if (ret) {
-			it6505_link_train_ok(it6505);
-			return;
-		}
-	} while (retry--);
+			ret = it6505_link_start_auto_train(it6505);
+			DRM_DEV_DEBUG_DRIVER(dev, "auto train %s, auto_train_retry: %d",
+				ret ? "pass" : "failed", it6505->auto_train_retry);
+			if (ret) {
+				it6505_link_train_ok(it6505);
+				return;
+			}
+		} while (retry--);
+	}
 
 	/*After HW auto training fail, try link training step by step*/
 	it6505_link_step_train_process(it6505);
@@ -2605,6 +2610,7 @@ static void it6505_irq_hpd(struct it6505 *it6505)
 			it6505_parse_link_capabilities(it6505);
 		}
 		it6505->auto_train_retry = AUTO_TRAIN_RETRY;
+		it6505->step_train_only = false;
 
 		it6505_drm_dp_link_set_power(&it6505->aux, &it6505->link,
 					     DP_SET_POWER_D0);
