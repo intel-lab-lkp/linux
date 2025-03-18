@@ -132,6 +132,10 @@ struct net_bridge_mcast_port {
 #endif /* CONFIG_BRIDGE_IGMP_SNOOPING */
 };
 
+#define MDB_NOTIFY_ON_FLAG_CHANGE_DISABLE	0
+#define MDB_NOTIFY_ON_FLAG_CHANGE_BOTH		1
+#define MDB_NOTIFY_ON_FLAG_CHANGE_FAIL_ONLY	2
+
 /* net_bridge_mcast must be always defined due to forwarding stubs */
 struct net_bridge_mcast {
 #ifdef CONFIG_BRIDGE_IGMP_SNOOPING
@@ -146,6 +150,9 @@ struct net_bridge_mcast {
 	u8				multicast_router;
 #if IS_ENABLED(CONFIG_IPV6)
 	u8				multicast_mld_version;
+#endif
+#ifdef CONFIG_NET_SWITCHDEV
+	u8				multicast_mdb_notify_on_flag_change;
 #endif
 	unsigned long			multicast_last_member_interval;
 	unsigned long			multicast_membership_interval;
@@ -988,6 +995,10 @@ int br_multicast_set_igmp_version(struct net_bridge_mcast *brmctx,
 int br_multicast_set_mld_version(struct net_bridge_mcast *brmctx,
 				 unsigned long val);
 #endif
+#ifdef CONFIG_NET_SWITCHDEV
+int br_multicast_set_mdb_notify_on_flag_change(struct net_bridge_mcast *brmctx,
+					       u8 val);
+#endif
 struct net_bridge_mdb_entry *
 br_mdb_ip_get(struct net_bridge *br, struct br_ip *dst);
 struct net_bridge_mdb_entry *
@@ -1004,6 +1015,10 @@ int br_mdb_hash_init(struct net_bridge *br);
 void br_mdb_hash_fini(struct net_bridge *br);
 void br_mdb_notify(struct net_device *dev, struct net_bridge_mdb_entry *mp,
 		   struct net_bridge_port_group *pg, int type);
+#ifdef CONFIG_NET_SWITCHDEV
+void br_mdb_flag_change_notify(struct net_device *dev, struct net_bridge_mdb_entry *mp,
+			       struct net_bridge_port_group *pg);
+#endif
 void br_rtr_notify(struct net_device *dev, struct net_bridge_mcast_port *pmctx,
 		   int type);
 void br_multicast_del_pg(struct net_bridge_mdb_entry *mp,

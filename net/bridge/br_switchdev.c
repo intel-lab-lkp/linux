@@ -504,20 +504,41 @@ static void br_switchdev_mdb_complete(struct net_device *dev, int err, void *pri
 	struct net_bridge_mdb_entry *mp;
 	struct net_bridge_port *port = data->port;
 	struct net_bridge *br = port->br;
+	bool offload_changed = false;
+	bool failed_changed = false;
+	u8 notify;
 
 	spin_lock_bh(&br->multicast_lock);
 	mp = br_mdb_ip_get(br, &data->ip);
 	if (!mp)
 		goto out;
+
+	notify = br->multicast_ctx.multicast_mdb_notify_on_flag_change;
+
 	for (pp = &mp->ports; (p = mlock_dereference(*pp, br)) != NULL;
 	     pp = &p->next) {
 		if (p->key.port != port)
 			continue;
 
-		if (err)
+		if (err) {
+			if (!(p->flags & MDB_PG_FLAGS_OFFLOAD_FAILED))
+				failed_changed = true;
 			p->flags |= MDB_PG_FLAGS_OFFLOAD_FAILED;
-		else
+		} else {
+			if (!(p->flags & MDB_PG_FLAGS_OFFLOAD))
+				offload_changed = true;
 			p->flags |= MDB_PG_FLAGS_OFFLOAD;
+		}
+
+		if (notify == MDB_NOTIFY_ON_FLAG_CHANGE_DISABLE ||
+		    (!offload_changed && !failed_changed))
+			continue;
+
+		if (notify == MDB_NOTIFY_ON_FLAG_CHANGE_FAIL_ONLY &&
+		    !failed_changed)
+			continue;
+
+		br_mdb_flag_change_notify(br->dev, mp, p);
 	}
 out:
 	spin_unlock_bh(&br->multicast_lock);

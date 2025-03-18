@@ -4051,6 +4051,10 @@ void br_multicast_ctx_init(struct net_bridge *br,
 	brmctx->ip6_querier.port_ifidx = 0;
 	seqcount_spinlock_init(&brmctx->ip6_querier.seq, &br->multicast_lock);
 #endif
+#ifdef CONFIG_NET_SWITCHDEV
+	brmctx->multicast_mdb_notify_on_flag_change =
+		MDB_NOTIFY_ON_FLAG_CHANGE_DISABLE;
+#endif
 
 	timer_setup(&brmctx->ip4_mc_router_timer,
 		    br_ip4_multicast_local_router_expired, 0);
@@ -4702,6 +4706,27 @@ int br_multicast_set_mld_version(struct net_bridge_mcast *brmctx,
 
 	spin_lock_bh(&brmctx->br->multicast_lock);
 	brmctx->multicast_mld_version = val;
+	spin_unlock_bh(&brmctx->br->multicast_lock);
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_NET_SWITCHDEV
+int br_multicast_set_mdb_notify_on_flag_change(struct net_bridge_mcast *brmctx,
+					       u8 val)
+{
+	switch (val) {
+	case MDB_NOTIFY_ON_FLAG_CHANGE_DISABLE:
+	case MDB_NOTIFY_ON_FLAG_CHANGE_BOTH:
+	case MDB_NOTIFY_ON_FLAG_CHANGE_FAIL_ONLY:
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	spin_lock_bh(&brmctx->br->multicast_lock);
+	brmctx->multicast_mdb_notify_on_flag_change = val;
 	spin_unlock_bh(&brmctx->br->multicast_lock);
 
 	return 0;
