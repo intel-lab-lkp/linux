@@ -15,6 +15,7 @@
 
 #include <linux/container_of.h>
 #include <linux/device.h>
+#include <linux/stringify.h>
 
 /**
  * struct faux_device - a "faux" device
@@ -65,5 +66,53 @@ static inline void faux_device_set_drvdata(struct faux_device *faux_dev, void *d
 {
 	dev_set_drvdata(&faux_dev->dev, data);
 }
+
+#define FAUX_DEVICE(__faux_devname) \
+static struct faux_device *__faux_devname##_dev;
+
+#define FAUX_DEVICE_OPS(__faux_devname, __faux_probe, __faux_remove) \
+static const struct faux_device_ops __faux_devname##_ops = {	\
+	.probe = __faux_probe,					\
+	.remove = __faux_remove,				\
+};								\
+FAUX_DEVICE(__faux_devname)
+
+static inline int
+__faux_device_register(struct faux_device **faux_dev, const char *name,
+		       const struct faux_device_ops *faux_ops, bool condition)
+{
+	struct faux_device *fdev;
+
+	if (!condition)
+		return 0;
+
+	fdev = faux_device_create(name, NULL, faux_ops);
+	if (!fdev)
+		return -ENODEV;
+
+	*faux_dev = fdev;
+	return 0;
+}
+
+#define faux_device_register(faux_dev, faux_devname, init_condition) \
+	__faux_device_register(faux_dev, __stringify(faux_devname), \
+			       &faux_devname##_ops, init_condition)
+
+#define faux_device_unregister(faux_dev, ...) \
+		faux_device_destroy(*faux_dev)
+
+/* module_faux_driver() - Helper macro for faux drivers that don't do
+ * anything special in module init/exit.  This eliminates a lot of
+ * boilerplate.  Each module may only use this macro once, and
+ * calling it replaces module_init() and module_exit(). The module init
+ * creates a faux device if the init condition is met and module exit
+ * destroys the created device. FAUX_DEVICE_OPS must be used to declare
+ * faux device ops and the device pointer.
+ */
+#define module_faux_driver(__faux_devname, __faux_probe, __faux_remove, \
+			   __init_condition) \
+	FAUX_DEVICE_OPS(__faux_devname, __faux_probe, __faux_remove) \
+	module_driver(__faux_devname##_dev, faux_device_register, \
+		      faux_device_unregister, __faux_devname, __init_condition)
 
 #endif /* _FAUX_DEVICE_H_ */
