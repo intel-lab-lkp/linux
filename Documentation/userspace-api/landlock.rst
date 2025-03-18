@@ -8,7 +8,7 @@ Landlock: unprivileged access control
 =====================================
 
 :Author: Mickaël Salaün
-:Date: January 2025
+:Date: March 2025
 
 The goal of Landlock is to enable restriction of ambient rights (e.g. global
 filesystem or network access) for a set of processes.  Because Landlock
@@ -662,6 +662,28 @@ To be able to explicitly allow TCP operations (e.g., adding a network rule with
 (``CONFIG_INET=y``).  Otherwise, sys_landlock_add_rule() returns an
 ``EAFNOSUPPORT`` error, which can safely be ignored because this kind of TCP
 operation is already not possible.
+
+Errata
+======
+
+These errata identify visible fixes (e.g., loosen restrictions) that should be
+applied to any kernel according to their supported Landlock ABI.  Because user
+space updates and kernel updates might not be applied at the same time, user
+space may need to check if specific features are fixed and can now be leveraged
+with the running kernel.  To get these errata, use the
+``LANDLOCK_CREATE_RULESET_ERRATA`` flag with sys_landlock_create_ruleset().
+
+ABI v4
+------
+
+.. kernel-doc:: security/landlock/errata/abi-4.h
+    :identifiers: erratum_1
+
+ABI v6
+------
+
+.. kernel-doc:: security/landlock/errata/abi-6.h
+    :identifiers: erratum_2
 
 Questions and answers
 =====================
