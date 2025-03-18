@@ -1344,6 +1344,11 @@ static inline unsigned int bdev_write_zeroes_sectors(struct block_device *bdev)
 	return bdev_limits(bdev)->max_write_zeroes_sectors;
 }
 
+static inline bool bdev_unmap_write_zeroes(struct block_device *bdev)
+{
+	return bdev_limits(bdev)->features & BLK_FEAT_WRITE_ZEROES_UNMAP;
+}
+
 static inline bool bdev_nonrot(struct block_device *bdev)
 {
 	return blk_queue_nonrot(bdev_get_queue(bdev));
