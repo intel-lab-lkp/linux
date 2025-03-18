@@ -155,6 +155,7 @@ struct ssca_vsie {
 	struct ssca_block ssca;			/* 0x0000 */
 	__u8	reserved[0x2200 - 0x2040];	/* 0x2040 */
 	atomic_t ref_count;			/* 0x2200 */
+	__u8	is_esca;
 };
 
 /*

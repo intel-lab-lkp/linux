@@ -71,6 +71,11 @@ struct vsie_page {
 	__u8 fac[S390_ARCH_FAC_LIST_SIZE_BYTE];	/* 0x0800 */
 };
 
+static inline bool vsie_uses_esca(struct vsie_page *vsie_page)
+{
+	return (vsie_page->scb_s.ecb2 & ECB2_ESCA);
+}
+
 /* trigger a validity icpt for the given scb */
 static int set_validity_icpt(struct kvm_s390_sie_block *scb,
 			     __u16 reason_code)
@@ -605,7 +610,7 @@ static void init_ssca(struct vsie_page *vsie_page, struct ssca_vsie *ssca)
 	unsigned int bit, cpu_slots;
 	struct ssca_entry *cpu;
 	void *ossea_hva;
-	int is_esca;
+	bool is_esca;
 	u64 *mcn;
 
 	/* set original SIE control block address */
@@ -613,11 +618,12 @@ static void init_ssca(struct vsie_page *vsie_page, struct ssca_vsie *ssca)
 	WARN_ON_ONCE(ssca->ssca.osca & 0x000f);
 
 	/* use ECB of shadow scb to determine SCA type */
-	is_esca = (vsie_page->scb_s.ecb2 & ECB2_ESCA);
+	is_esca = vsie_uses_esca(vsie_page);
 	cpu_slots = is_esca ? KVM_S390_MAX_VCPUS : KVM_S390_BSCA_CPU_SLOTS;
 	mcn = is_esca ? ((struct esca_block *)sca_o_hva)->mcn :
 			&((struct bsca_block *)sca_o_hva)->mcn;
 
+	ssca->is_esca = is_esca;
 	/*
 	 * For every enabled sigp entry in the original sca we need to populate
 	 * the corresponding shadow sigp entry with the address of the shadow
@@ -643,10 +649,20 @@ static void update_entry_ssda_remove(struct vsie_page *vsie_page, struct ssca_vs
 }
 
 /* add running scb pointer to ssca */
-static void update_entry_ssda_add(struct vsie_page *vsie_page, struct ssca_vsie *ssca)
+static void update_entry_ssda_add(struct kvm *kvm, struct vsie_page *vsie_page,
+				  struct ssca_vsie *ssca)
 {
 	struct ssca_entry *cpu = &ssca->ssca.cpu[vsie_page->scb_s.icpua & 0xff];
 	phys_addr_t scb_s_hpa = virt_to_phys(&vsie_page->scb_s);
+	bool is_esca = vsie_uses_esca(vsie_page);
+
+	/* update original sca entry addresses after bsca / esca switch */
+	if (!ssca->is_esca && is_esca) {
+		down_write(&kvm->arch.vsie.ssca_lock);
+		if (!ssca->is_esca && is_esca)
+			init_ssca(vsie_page, ssca);
+		up_write(&kvm->arch.vsie.ssca_lock);
+	}
 
 	WRITE_ONCE(cpu->ssda, scb_s_hpa);
 }
@@ -815,7 +831,7 @@ static int shadow_sca(struct kvm_vcpu *vcpu, struct vsie_page *vsie_page)
 		return PTR_ERR(ssca);
 
 	/* update shadow control block sca references to shadow sca */
-	update_entry_ssda_add(vsie_page, ssca);
+	update_entry_ssda_add(vcpu->kvm, vsie_page, ssca);
 	sca_s_hpa = virt_to_phys(ssca);
 	if (sclp.has_64bscao) {
 		WARN_ON_ONCE(sca_s_hpa & 0x003f);
