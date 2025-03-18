@@ -38,6 +38,10 @@
 #include <linux/local_lock.h>
 #include <linux/buffer_head.h>
 
+#ifdef CONFIG_KVM_GMEM_SHARED_MEM
+#include <linux/kvm_host.h>
+#endif
+
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -94,12 +98,37 @@ static void page_cache_release(struct folio *folio)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
 }
 
+#ifdef CONFIG_KVM_GMEM_SHARED_MEM
+static void gmem_folio_put(struct folio *folio)
+{
+	/*
+	 * Perform the callback only as long as the KVM module is still loaded.
+	 * As long as the folio mapping is set, the folio is associated with a
+	 * guest_memfd inode.
+	 */
+	if (folio->mapping)
+		kvm_gmem_handle_folio_put(folio);
+
+	/*
+	 * If there are no references to the folio left, it's not associated
+	 * with a guest_memfd inode anymore.
+	 */
+	if (folio_ref_count(folio) == 0)
+		__folio_put(folio);
+}
+#endif /* CONFIG_KVM_GMEM_SHARED_MEM */
+
 static void free_typed_folio(struct folio *folio)
 {
 	switch (folio_get_type(folio)) {
 #ifdef CONFIG_HUGETLBFS
 	case PGTY_hugetlb:
 		free_huge_folio(folio);
+		return;
+#endif
+#ifdef CONFIG_KVM_GMEM_SHARED_MEM
+	case PGTY_guestmem:
+		gmem_folio_put(folio);
 		return;
 #endif
 	default:
