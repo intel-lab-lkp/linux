@@ -178,8 +178,22 @@ SECTIONS
 		/* init_task */
 		INIT_TASK_DATA(THREAD_SIZE)
 
-		/* equivalent to task_pt_regs(&init_task) */
-		__top_init_kernel_stack = __end_init_stack - TOP_OF_KERNEL_STACK_PADDING - PTREGS_SIZE;
+		/*
+		 * No need to reserve extra padding space above the pt_regs
+		 * structure at top of the init stack, because its owner
+		 * init task doesn't have any user level context, thus there
+		 * will NEVER be an actual pt_regs structure pushed at top
+		 * of the init stack.
+		 *
+		 * However a zeroed pt_regs structure is created at build
+		 * time and kept at top of the init stack for task_pt_regs()
+		 * to function properly with the init task in the same manner
+		 * as a normal task with user level context.
+		 *
+		 * task_pt_regs(&init_task) is now:
+		 *	'(struct pt_regs *)&__end_init_stack - 1'
+		 */
+		__top_init_kernel_stack = __end_init_stack - PTREGS_SIZE;
 
 #ifdef CONFIG_X86_32
 		/* 32 bit has nosave before _edata */
