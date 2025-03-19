@@ -390,6 +390,7 @@
 464	common	getxattrat		sys_getxattrat
 465	common	listxattrat		sys_listxattrat
 466	common	removexattrat		sys_removexattrat
+467	common  sendfile2		sys_sendfile2
 
 #
 # Due to a historical design error, certain syscalls are numbered differently
