@@ -55,6 +55,9 @@ static int handle_hvc(struct kvm_vcpu *vcpu)
 
 static int handle_smc(struct kvm_vcpu *vcpu)
 {
+	trace_kvm_smc_arm64(*vcpu_pc(vcpu), vcpu_get_reg(vcpu, 0),
+			    kvm_vcpu_hvc_get_imm(vcpu));
+
 	/*
 	 * Forward this trapped smc instruction to the virtual EL2 if
 	 * the guest has asked for it.
