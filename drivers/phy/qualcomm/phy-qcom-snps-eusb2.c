@@ -401,9 +401,13 @@ static int qcom_snps_eusb2_hsphy_probe(struct platform_device *pdev)
 				     "failed to get regulator supplies\n");
 
 	phy->repeater = devm_of_phy_get_by_index(dev, np, 0);
-	if (IS_ERR(phy->repeater))
-		return dev_err_probe(dev, PTR_ERR(phy->repeater),
-				     "failed to get repeater\n");
+	if (IS_ERR(phy->repeater)) {
+		if (PTR_ERR(phy->repeater) == -ENODEV)
+			phy->repeater = NULL;
+		else
+			return dev_err_probe(dev, PTR_ERR(phy->repeater),
+					     "failed to get repeater\n");
+	}
 
 	generic_phy = devm_phy_create(dev, NULL, &qcom_snps_eusb2_hsphy_ops);
 	if (IS_ERR(generic_phy)) {
