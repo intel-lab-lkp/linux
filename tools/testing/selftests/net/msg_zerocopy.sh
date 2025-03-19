@@ -74,6 +74,7 @@ esac
 cleanup() {
 	ip netns del "${NS2}"
 	ip netns del "${NS1}"
+	rm -f sendfile_data
 }
 
 trap cleanup EXIT
@@ -106,6 +107,9 @@ ip -netns "${NS2}" addr add       fd::2/64 dev "${DEV}" nodad
 # Optionally disable sg or csum offload to test edge cases
 # ip netns exec "${NS1}" ethtool -K "${DEV}" sg off
 
+# create sendfile test data
+dd if=/dev/zero of=sendfile_data bs=1M count=8 2> /dev/null
+
 do_test() {
 	local readonly ARGS="$1"
 
@@ -118,4 +122,5 @@ do_test() {
 
 do_test "${EXTRA_ARGS}"
 do_test "-z ${EXTRA_ARGS}"
+do_test "-z -f sendfile_data ${EXTRA_ARGS}"
 echo ok

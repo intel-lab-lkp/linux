@@ -30,6 +30,7 @@
 #include <arpa/inet.h>
 #include <error.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <linux/errqueue.h>
 #include <linux/if_packet.h>
@@ -50,6 +51,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/sendfile.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -74,6 +76,14 @@
 #define MSG_ZEROCOPY	0x4000000
 #endif
 
+#ifndef SENDFILE_ZC
+#define SENDFILE_ZC (0x2)
+#endif
+
+#ifndef __NR_sendfile2
+#define __NR_sendfile2 467
+#endif
+
 static int  cfg_cork;
 static bool cfg_cork_mixed;
 static int  cfg_cpu		= -1;		/* default: pin to last cpu */
@@ -87,6 +97,8 @@ static int  cfg_verbose;
 static int  cfg_waittime_ms	= 500;
 static int  cfg_notification_limit = 32;
 static bool cfg_zerocopy;
+static bool cfg_sendfile;
+static const char *cfg_sendfile_path;
 
 static socklen_t cfg_alen;
 static struct sockaddr_storage cfg_dst_addr;
@@ -180,6 +192,37 @@ static void add_zcopy_cookie(struct msghdr *msg, uint32_t cookie)
 	cm->cmsg_level = SOL_RDS;
 	cm->cmsg_type = RDS_CMSG_ZCOPY_COOKIE;
 	memcpy(CMSG_DATA(cm), &cookie, sizeof(cookie));
+}
+
+static bool do_sendfile(int fd)
+{
+	int from_fd = open(cfg_sendfile_path, O_RDONLY, 0);
+	struct stat buf;
+	ssize_t total = 0;
+	ssize_t ret = 0;
+	off_t off = 0;
+
+	if (fd < 0)
+		error(1, errno, "couldn't open sendfile path");
+
+	if (fstat(from_fd, &buf))
+		error(1, errno, "couldn't fstat");
+
+	while (total < buf.st_size) {
+		ret = syscall(__NR_sendfile2, fd, from_fd, &off, buf.st_size,
+			      SENDFILE_ZC);
+		if (ret < 0)
+			error(1, errno, "unable to sendfile");
+		total += ret;
+		sends_since_notify++;
+		bytes += ret;
+		packets++;
+		if (ret > 0)
+			expected_completions++;
+	}
+
+	close(from_fd);
+	return total == buf.st_size;
 }
 
 static bool do_sendmsg(int fd, struct msghdr *msg, bool do_zerocopy, int domain)
@@ -550,6 +593,8 @@ static void do_tx(int domain, int type, int protocol)
 	do {
 		if (cfg_cork)
 			do_sendmsg_corked(fd, &msg);
+		else if (cfg_sendfile)
+			do_sendfile(fd);
 		else
 			do_sendmsg(fd, &msg, cfg_zerocopy, domain);
 
@@ -715,7 +760,7 @@ static void parse_opts(int argc, char **argv)
 
 	cfg_payload_len = max_payload_len;
 
-	while ((c = getopt(argc, argv, "46c:C:D:i:l:mp:rs:S:t:vz")) != -1) {
+	while ((c = getopt(argc, argv, "46c:C:D:i:l:mp:rs:S:t:vzf:w:")) != -1) {
 		switch (c) {
 		case '4':
 			if (cfg_family != PF_UNSPEC)
@@ -767,8 +812,15 @@ static void parse_opts(int argc, char **argv)
 		case 'v':
 			cfg_verbose++;
 			break;
+		case 'f':
+			cfg_sendfile = true;
+			cfg_sendfile_path = optarg;
+			break;
 		case 'z':
 			cfg_zerocopy = true;
+			break;
+		case 'w':
+			cfg_waittime_ms = 200 + strtoul(optarg, NULL, 10) * 1000;
 			break;
 		}
 	}
