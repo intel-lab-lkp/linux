@@ -88,6 +88,14 @@ static DEFINE_READ_MOSTLY_HASHTABLE(kmmscand_slots_hash, KMMSCAND_SLOT_HASH_BITS
 
 static struct kmem_cache *kmmscand_slot_cache __read_mostly;
 
+/* Per memory node information used to caclulate target_node for migration */
+struct kmmscand_nodeinfo {
+	unsigned long nr_scanned;
+	unsigned long nr_accessed;
+	int node;
+	bool is_toptier;
+};
+
 /* Per mm information collected to control VMA scanning */
 struct kmmscand_mm_slot {
 	struct mm_slot slot;
@@ -100,6 +108,7 @@ struct kmmscand_mm_slot {
 	unsigned long scan_size;
 	long address;
 	bool is_scanned;
+	int target_node;
 };
 
 /* Data structure to keep track of current mm under scan */
@@ -118,7 +127,9 @@ struct kmmscand_scan kmmscand_scan = {
  */
 struct kmmscand_scanctrl {
 	struct list_head scan_list;
+	struct kmmscand_nodeinfo *nodeinfo[MAX_NUMNODES];
 	unsigned long address;
+	unsigned long nr_to_scan;
 };
 
 struct kmmscand_scanctrl kmmscand_scanctrl;
@@ -208,6 +219,98 @@ static void kmmmigrated_wait_work(void)
 			migrate_sleep_jiffies);
 }
 
+static unsigned long get_slowtier_accesed(struct kmmscand_scanctrl *scanctrl)
+{
+	int node;
+	unsigned long accessed = 0;
+
+	for_each_node_state(node, N_MEMORY) {
+		if (!node_is_toptier(node) && scanctrl->nodeinfo[node])
+			accessed += scanctrl->nodeinfo[node]->nr_accessed;
+	}
+	return accessed;
+}
+
+static inline void set_nodeinfo_nr_accessed(struct kmmscand_nodeinfo *ni, unsigned long val)
+{
+	ni->nr_accessed = val;
+}
+static inline unsigned long get_nodeinfo_nr_scanned(struct kmmscand_nodeinfo *ni)
+{
+	return ni->nr_scanned;
+}
+
+static inline void set_nodeinfo_nr_scanned(struct kmmscand_nodeinfo *ni, unsigned long val)
+{
+	ni->nr_scanned = val;
+}
+
+static inline void reset_nodeinfo_nr_scanned(struct kmmscand_nodeinfo *ni)
+{
+	set_nodeinfo_nr_scanned(ni, 0);
+}
+
+static inline void reset_nodeinfo(struct kmmscand_nodeinfo *ni)
+{
+	set_nodeinfo_nr_scanned(ni, 0);
+	set_nodeinfo_nr_accessed(ni, 0);
+}
+
+static void init_one_nodeinfo(struct kmmscand_nodeinfo *ni, int node)
+{
+	ni->nr_scanned = 0;
+	ni->nr_accessed = 0;
+	ni->node = node;
+	ni->is_toptier = node_is_toptier(node) ? true : false;
+}
+
+static struct kmmscand_nodeinfo *alloc_one_nodeinfo(int node)
+{
+	struct kmmscand_nodeinfo *ni;
+
+	ni = kzalloc(sizeof(*ni), GFP_KERNEL);
+
+	if (!ni)
+		return NULL;
+
+	init_one_nodeinfo(ni, node);
+
+	return ni;
+}
+
+/* TBD: Handle errors */
+static void init_scanctrl(struct kmmscand_scanctrl *scanctrl)
+{
+	struct kmmscand_nodeinfo *ni;
+	int node;
+
+	for_each_node(node) {
+		ni = alloc_one_nodeinfo(node);
+		if (!ni)
+			WARN_ON_ONCE(ni);
+		scanctrl->nodeinfo[node] = ni;
+	}
+}
+
+static void reset_scanctrl(struct kmmscand_scanctrl *scanctrl)
+{
+	int node;
+
+	for_each_node_state(node, N_MEMORY)
+		reset_nodeinfo(scanctrl->nodeinfo[node]);
+
+	/* XXX: Not rellay required? */
+	scanctrl->nr_to_scan = kmmscand_scan_size;
+}
+
+static void free_scanctrl(struct kmmscand_scanctrl *scanctrl)
+{
+	int node;
+
+	for_each_node(node)
+		kfree(scanctrl->nodeinfo[node]);
+}
+
 /*
  * Do not know what info to pass in the future to make
  * decision on taget node. Keep it void * now.
@@ -215,6 +318,24 @@ static void kmmmigrated_wait_work(void)
 static int kmmscand_get_target_node(void *data)
 {
 	return kmmscand_target_node;
+}
+
+static int get_target_node(struct kmmscand_scanctrl *scanctrl)
+{
+	int node, target_node = NUMA_NO_NODE;
+	unsigned long prev = 0;
+
+	for_each_node(node) {
+		if (node_is_toptier(node) && scanctrl->nodeinfo[node] &&
+				get_nodeinfo_nr_scanned(scanctrl->nodeinfo[node]) > prev) {
+			prev = get_nodeinfo_nr_scanned(scanctrl->nodeinfo[node]);
+			target_node = node;
+		}
+	}
+	if (target_node == NUMA_NO_NODE)
+		target_node = kmmscand_get_target_node(NULL);
+
+	return target_node;
 }
 
 extern bool migrate_balanced_pgdat(struct pglist_data *pgdat,
@@ -469,6 +590,14 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 	}
 	srcnid = folio_nid(folio);
 
+	scanctrl->nodeinfo[srcnid]->nr_scanned++;
+	if (scanctrl->nr_to_scan)
+		scanctrl->nr_to_scan--;
+
+	if (!scanctrl->nr_to_scan) {
+		folio_put(folio);
+		return 1;
+	}
 
 	if (!folio_test_lru(folio)) {
 		folio_put(folio);
@@ -479,11 +608,14 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 			mmu_notifier_test_young(mm, addr) ||
 			folio_test_referenced(folio) || pte_young(pteval)) {
 
+		scanctrl->nodeinfo[srcnid]->nr_accessed++;
+
 		/* Do not try to promote pages from regular nodes */
 		if (!kmmscand_eligible_srcnid(srcnid)) {
 			folio_put(folio);
 			return 0;
 		}
+
 		info = kzalloc(sizeof(struct kmmscand_migrate_info), GFP_NOWAIT);
 		if (info && scanctrl) {
 
@@ -571,6 +703,7 @@ static void kmmscand_collect_mm_slot(struct kmmscand_mm_slot *mm_slot)
 static void kmmscand_migrate_folio(void)
 {
 	int ret = 0, dest = -1;
+	struct mm_struct *oldmm = NULL;
 	struct kmmscand_migrate_info *info, *tmp;
 
 	spin_lock(&kmmscand_migrate_lock);
@@ -596,7 +729,16 @@ static void kmmscand_migrate_folio(void)
 			spin_unlock(&kmmscand_migrate_lock);
 
 			if (info->mm) {
-				dest = kmmscand_get_target_node(NULL);
+				if (oldmm != info->mm) {
+					if (!mmap_read_trylock(info->mm)) {
+						dest = kmmscand_get_target_node(NULL);
+					} else {
+						dest = READ_ONCE(info->mm->target_node);
+						mmap_read_unlock(info->mm);
+					}
+					oldmm = info->mm;
+				}
+
 				ret = kmmscand_promote_folio(info, dest);
 			}
 
@@ -658,7 +800,7 @@ dirty_list_handled:
  *		Increase scan_size by (1 << SCAN_SIZE_CHANGE_SHIFT).
  */
 static inline void kmmscand_update_mmslot_info(struct kmmscand_mm_slot *mm_slot,
-				unsigned long total)
+				unsigned long total, int target_node)
 {
 	unsigned int scan_period;
 	unsigned long now;
@@ -706,6 +848,7 @@ static inline void kmmscand_update_mmslot_info(struct kmmscand_mm_slot *mm_slot,
 	mm_slot->scan_period = scan_period;
 	mm_slot->scan_size = scan_size;
 	mm_slot->scan_delta = total;
+	mm_slot->target_node = target_node;
 }
 
 static unsigned long kmmscand_scan_mm_slot(void)
@@ -714,6 +857,7 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	bool update_mmslot_info = false;
 
 	unsigned int mm_slot_scan_period;
+	int target_node, mm_slot_target_node, mm_target_node;
 	unsigned long now;
 	unsigned long mm_slot_next_scan;
 	unsigned long mm_slot_scan_size;
@@ -746,6 +890,7 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	mm_slot_next_scan = mm_slot->next_scan;
 	mm_slot_scan_period = mm_slot->scan_period;
 	mm_slot_scan_size = mm_slot->scan_size;
+	mm_slot_target_node = mm_slot->target_node;
 	spin_unlock(&kmmscand_mm_lock);
 
 	if (unlikely(!mmap_read_trylock(mm)))
@@ -756,6 +901,9 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		goto outerloop;
 	}
 
+	mm_target_node = READ_ONCE(mm->target_node);
+	if (mm_target_node != mm_slot_target_node)
+		WRITE_ONCE(mm->target_node, mm_slot_target_node);
 	now = jiffies;
 
 	if (mm_slot_next_scan && time_before(now, mm_slot_next_scan))
@@ -763,11 +911,17 @@ static unsigned long kmmscand_scan_mm_slot(void)
 
 	VMA_ITERATOR(vmi, mm, address);
 
+	/* Either Scan 25% of scan_size or cover vma size of scan_size */
+	kmmscand_scanctrl.nr_to_scan =	mm_slot_scan_size >> PAGE_SHIFT;
+	/* Reduce actual amount of pages scanned */
+	kmmscand_scanctrl.nr_to_scan =	mm_slot_scan_size >> 1;
+
 	for_each_vma(vmi, vma) {
 		kmmscand_walk_page_vma(vma, &kmmscand_scanctrl);
 		vma_scanned_size += vma->vm_end - vma->vm_start;
 
-		if (vma_scanned_size >= kmmscand_scan_size) {
+		if (vma_scanned_size >= mm_slot_scan_size ||
+					!kmmscand_scanctrl.nr_to_scan) {
 			next_mm = true;
 			/* Add scanned folios to migration list */
 			spin_lock(&kmmscand_migrate_lock);
@@ -789,9 +943,19 @@ static unsigned long kmmscand_scan_mm_slot(void)
 
 	update_mmslot_info = true;
 
+	total = get_slowtier_accesed(&kmmscand_scanctrl);
+	target_node = get_target_node(&kmmscand_scanctrl);
+
+	mm_target_node = READ_ONCE(mm->target_node);
+
+	/* XXX: Do we need write lock? */
+	if (mm_target_node != target_node)
+		WRITE_ONCE(mm->target_node, target_node);
+	reset_scanctrl(&kmmscand_scanctrl);
+
 	if (update_mmslot_info) {
 		mm_slot->address = address;
-		kmmscand_update_mmslot_info(mm_slot, total);
+		kmmscand_update_mmslot_info(mm_slot, total, target_node);
 	}
 
 outerloop:
@@ -988,6 +1152,7 @@ static int stop_kmmscand(void)
 		kthread_stop(kmmscand_thread);
 		kmmscand_thread = NULL;
 	}
+	free_scanctrl(&kmmscand_scanctrl);
 
 	return err;
 }
@@ -1044,6 +1209,7 @@ static void init_list(void)
 	spin_lock_init(&kmmscand_migrate_lock);
 	init_waitqueue_head(&kmmscand_wait);
 	init_waitqueue_head(&kmmmigrated_wait);
+	init_scanctrl(&kmmscand_scanctrl);
 }
 
 static int __init kmmscand_init(void)
