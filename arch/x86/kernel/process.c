@@ -124,9 +124,8 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
  */
 void arch_init_user_pt_regs(struct task_struct *tsk)
 {
-	unsigned long top_of_stack = (unsigned long)task_stack_page(tsk) + THREAD_SIZE;
+	unsigned long top_of_stack = task_top_of_stack(tsk);
 
-	top_of_stack -= TOP_OF_KERNEL_STACK_PADDING;
 	tsk->thread_info.user_pt_regs = (struct pt_regs *)top_of_stack - 1;
 }
 

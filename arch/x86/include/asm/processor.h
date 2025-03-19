@@ -656,8 +656,6 @@ extern unsigned long __end_init_stack[];
  */
 #define TOP_OF_INIT_STACK ((unsigned long)&__end_init_stack)
 
-#define task_top_of_stack(task) ((unsigned long)(task_pt_regs(task) + 1))
-
 /*
  * Note, this can't be converted to an inline function as this header
  * file defines 'struct thread_struct' which is used in the task_struct
@@ -666,6 +664,9 @@ extern unsigned long __end_init_stack[];
 #define task_pt_regs(task) ((task)->thread_info.user_pt_regs)
 
 #ifdef CONFIG_X86_32
+#define task_top_of_stack(task) ((unsigned long)task_stack_page(task) + THREAD_SIZE	\
+				 - TOP_OF_KERNEL_STACK_PADDING)
+
 #define INIT_THREAD  {							  \
 	.sp0			= TOP_OF_INIT_STACK,			  \
 	.sysenter_cs		= __KERNEL_CS,				  \
@@ -673,6 +674,7 @@ extern unsigned long __end_init_stack[];
 
 #else
 extern unsigned long __top_init_kernel_stack[];
+#define task_top_of_stack(task) ((unsigned long)task_stack_page(task) + THREAD_SIZE)
 
 #define INIT_THREAD {							\
 	.sp	= (unsigned long)&__top_init_kernel_stack,		\
