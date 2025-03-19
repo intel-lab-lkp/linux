@@ -267,3 +267,18 @@ u64 mul_u64_u64_div_u64(u64 a, u64 b, u64 c)
 }
 EXPORT_SYMBOL(mul_u64_u64_div_u64);
 #endif
+
+#ifndef mul_u64_u64_div_u64_roundup
+u64 mul_u64_u64_div_u64_roundup(u64 a, u64 b, u64 c)
+{
+	u64 res = mul_u64_u64_div_u64(a, b, c);
+	/* Those multiplications might overflow but it doesn't matter */
+	u64 rem = a * b - c * res;
+
+	if (rem)
+		res += 1;
+
+	return res;
+}
+EXPORT_SYMBOL(mul_u64_u64_div_u64_roundup);
+#endif
