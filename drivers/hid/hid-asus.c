@@ -427,10 +427,9 @@ static int asus_kbd_init(struct hid_device *hdev)
 }
 
 static int asus_kbd_get_functions(struct hid_device *hdev,
-				  unsigned char *kbd_func,
-				  u8 report_id)
+				  unsigned char *kbd_func)
 {
-	const u8 buf[] = { report_id, 0x05, 0x20, 0x31, 0x00, 0x08 };
+	const u8 buf[] = { FEATURE_KBD_REPORT_ID, 0x05, 0x20, 0x31, 0x00, 0x08 };
 	u8 *readbuf;
 	int ret;
 
@@ -572,7 +571,7 @@ static int asus_kbd_register_leds(struct hid_device *hdev)
 		return ret;
 
 	/* Get keyboard functions */
-	ret = asus_kbd_get_functions(hdev, &kbd_func, FEATURE_KBD_REPORT_ID);
+	ret = asus_kbd_get_functions(hdev, &kbd_func);
 	if (ret < 0)
 		return ret;
 
