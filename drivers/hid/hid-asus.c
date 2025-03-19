@@ -84,6 +84,7 @@ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
 #define QUIRK_MEDION_E1239T		BIT(10)
 #define QUIRK_ROG_NKEY_KEYBOARD		BIT(11)
 #define QUIRK_ROG_CLAYMORE_II_KEYBOARD BIT(12)
+#define QUIRK_HANDLE_GENERIC		BIT(13)
 
 #define I2C_KEYBOARD_QUIRKS			(QUIRK_FIX_NOTEBOOK_REPORT | \
 						 QUIRK_NO_INIT_REPORTS | \
@@ -325,6 +326,10 @@ static int asus_raw_event(struct hid_device *hdev,
 		struct hid_report *report, u8 *data, int size)
 {
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+
+	if (drvdata->quirks & QUIRK_HANDLE_GENERIC)
+		/* NOOP on generic HID devices to avoid side effects. */
+		return 0;
 
 	if (drvdata->battery && data[0] == BATTERY_REPORT_ID)
 		return asus_report_battery(drvdata, data, size);
@@ -773,6 +778,10 @@ static int asus_input_configured(struct hid_device *hdev, struct hid_input *hi)
 	struct input_dev *input = hi->input;
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
 
+	if (drvdata->quirks & QUIRK_HANDLE_GENERIC)
+		/* NOOP on generic HID devices to avoid side effects. */
+		return 0;
+
 	/* T100CHI uses MULTI_INPUT, bind the touchpad to the mouse hid_input */
 	if (drvdata->quirks & QUIRK_T100CHI &&
 	    hi->report->id != T100CHI_MOUSE_REPORT_ID)
@@ -849,6 +858,10 @@ static int asus_input_mapping(struct hid_device *hdev,
 		 */
 		return -1;
 	}
+
+	if (drvdata->quirks & QUIRK_HANDLE_GENERIC)
+		/* NOOP on generic HID devices to avoid side effects. */
+		return 0;
 
 	/*
 	 * Ignore a bunch of bogus collections in the T100CHI descriptor.
@@ -1025,8 +1038,10 @@ static int __maybe_unused asus_reset_resume(struct hid_device *hdev)
 
 static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
-	int ret;
+	struct hid_report_enum *rep_enum;
 	struct asus_drvdata *drvdata;
+	struct hid_report *rep;
+	int ret, found = 0;
 
 	drvdata = devm_kzalloc(&hdev->dev, sizeof(*drvdata), GFP_KERNEL);
 	if (drvdata == NULL) {
@@ -1110,6 +1125,37 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		return ret;
 	}
 
+	if (drvdata->quirks & QUIRK_ROG_NKEY_KEYBOARD) {
+		/*
+		 * The only application we care about on ROG NKEY keyboards is
+		 * 0xff310076. This is meant Asus drivers and uses report 0x54.
+		 */
+		rep_enum = &hdev->report_enum[HID_INPUT_REPORT];
+		list_for_each_entry(rep, &rep_enum->report_list, list) {
+			if (rep->application == 0xff310076)
+				found = true;
+		}
+
+		/*
+		 * If we didn't find the application, block hid-asus fixups
+		 * to prevent side effects on generic endpoints.
+		 *
+		 * We cannot -ENODEV here, as hid-generic checked our id_table
+		 * on its match and bailed so it will not take over the device.
+		 * We have to handle it transparently as part of this driver.
+		 */
+		if (!found)
+			drvdata->quirks |= QUIRK_HANDLE_GENERIC;
+
+		/*
+		 * Start all endpoints normally. Include the RGB endpoint
+		 * as it being the only one renamed looks out of place.
+		 * The ->input bail causes regressions in endpoints without
+		 * an input dev and is a NOOP on the RGB endpoint.
+		 */
+		return hid_hw_start(hdev, HID_CONNECT_DEFAULT);
+	}
+
 	ret = hid_hw_start(hdev, HID_CONNECT_DEFAULT);
 	if (ret) {
 		hid_err(hdev, "Asus hw start failed: %d\n", ret);
@@ -1165,6 +1211,10 @@ static const __u8 *asus_report_fixup(struct hid_device *hdev, __u8 *rdesc,
 		unsigned int *rsize)
 {
 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+
+	if (drvdata->quirks & QUIRK_HANDLE_GENERIC)
+		/* NOOP on generic HID devices to avoid side effects. */
+		return rdesc;
 
 	if (drvdata->quirks & QUIRK_FIX_NOTEBOOK_REPORT &&
 			*rsize >= 56 && rdesc[54] == 0x25 && rdesc[55] == 0x65) {
