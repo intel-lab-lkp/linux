@@ -63,6 +63,12 @@ properties:
       it can not be detected at runtime. Refer to your chips' datasheet to check
       if this is supported by your chip.
 
+  rdid-dummy-ncycles:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Number of dummy cycles for the 1-1-1 Read ID command, if not zero.
+      The Read ID command is not covered by JESD216 or any other standard.
+
   broken-flash-reset:
     type: boolean
     description:
