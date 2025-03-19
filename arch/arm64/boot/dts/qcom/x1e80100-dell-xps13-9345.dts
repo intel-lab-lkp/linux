@@ -867,6 +867,10 @@
 	status = "okay";
 };
 
+&pm8010 {
+	status = "disabled";
+};
+
 &pm8550_gpios {
 	rtmr0_default: rtmr0-reset-n-active-state {
 		pins = "gpio10";
