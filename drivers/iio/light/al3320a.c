@@ -206,14 +206,12 @@ static int al3320a_probe(struct i2c_client *client)
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
 	ret = al3320a_init(data);
-	if (ret < 0) {
-		dev_err(dev, "al3320a chip init failed\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to init ALS\n");
 
 	ret = devm_add_action_or_reset(dev, al3320a_set_pwr_off, data);
-	if (ret < 0)
-		return ret;
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to add action\n");
 
 	return devm_iio_device_register(dev, indio_dev);
 }
