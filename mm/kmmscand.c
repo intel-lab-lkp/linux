@@ -945,6 +945,7 @@ static void kmmscand_migrate_folio(void)
 				}
 
 				ret = kmmscand_promote_folio(info, dest);
+				trace_kmem_scan_mm_migrate(info->mm, ret, dest);
 			}
 
 			/* TBD: encode migrated count here, currently assume folio_nr_pages */
@@ -1115,6 +1116,9 @@ static unsigned long kmmscand_scan_mm_slot(void)
 	mm_target_node = READ_ONCE(mm->target_node);
 	if (mm_target_node != mm_slot_target_node)
 		WRITE_ONCE(mm->target_node, mm_slot_target_node);
+
+	trace_kmem_scan_mm_start(mm);
+
 	now = jiffies;
 
 	if (mm_slot_next_scan && time_before(now, mm_slot_next_scan))
@@ -1172,6 +1176,8 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		kmmscand_update_mmslot_info(mm_slot, total, target_node);
 	}
 
+	trace_kmem_scan_mm_end(mm, address, total, mm_slot_scan_period,
+			mm_slot_scan_size, target_node);
 
 outerloop:
 	/* exit_mmap will destroy ptes after this */
@@ -1323,6 +1329,7 @@ void __kmmscand_enter(struct mm_struct *mm)
 	spin_unlock(&kmmscand_mm_lock);
 
 	mmgrab(mm);
+	trace_kmem_mm_enter(mm);
 	if (wakeup)
 		wake_up_interruptible(&kmmscand_wait);
 }
@@ -1333,6 +1340,7 @@ void __kmmscand_exit(struct mm_struct *mm)
 	struct mm_slot *slot;
 	int free = 0, serialize = 1;
 
+	trace_kmem_mm_exit(mm);
 	spin_lock(&kmmscand_mm_lock);
 	slot = mm_slot_lookup(kmmscand_slots_hash, mm);
 	mm_slot = mm_slot_entry(slot, struct kmmscand_mm_slot, slot);
