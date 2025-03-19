@@ -463,6 +463,14 @@ static inline void bond_hw_addr_copy(u8 *dst, const u8 *src, unsigned int len)
 	memcpy(dst, src, len);
 }
 
+static inline bool bond_hw_addr_equal(const u8 *dst, const u8 *src, unsigned int len)
+{
+	if (len == ETH_ALEN)
+		return ether_addr_equal(dst, src);
+	else
+		return (memcmp(dst, src, len) == 0);
+}
+
 #define BOND_PRI_RESELECT_ALWAYS	0
 #define BOND_PRI_RESELECT_BETTER	1
 #define BOND_PRI_RESELECT_FAILURE	2
