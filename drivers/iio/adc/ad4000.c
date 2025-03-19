@@ -50,8 +50,7 @@
 		.sign = _sign,							\
 		.realbits = _real_bits,						\
 		.storagebits = _storage_bits,					\
-		.shift = _storage_bits - _real_bits,				\
-		.endianness = IIO_BE,						\
+		.endianness = IIO_CPU,						\
 	},									\
 }
 
@@ -79,8 +78,7 @@
 		.sign = _sign,							\
 		.realbits = _real_bits,						\
 		.storagebits = _storage_bits,					\
-		.shift = _storage_bits - _real_bits,				\
-		.endianness = IIO_BE,						\
+		.endianness = IIO_CPU,						\
 	},									\
 }
 
@@ -411,8 +409,8 @@ struct ad4000_state {
 	 */
 	struct {
 		union {
-			__be16 sample_buf16;
-			__be32 sample_buf32;
+			u16 sample_buf16;
+			u32 sample_buf32;
 		} data;
 		aligned_s64 timestamp;
 	} scan __aligned(IIO_DMA_MINALIGN);
@@ -516,11 +514,9 @@ static int ad4000_single_conversion(struct iio_dev *indio_dev,
 		return ret;
 
 	if (chan->scan_type.storagebits > 16)
-		sample = be32_to_cpu(st->scan.data.sample_buf32);
+		sample = st->scan.data.sample_buf32;
 	else
-		sample = be16_to_cpu(st->scan.data.sample_buf16);
-
-	sample >>= chan->scan_type.shift;
+		sample = st->scan.data.sample_buf16;
 
 	if (chan->scan_type.sign == 's')
 		*val = sign_extend32(sample, chan->scan_type.realbits - 1);
@@ -689,6 +685,7 @@ static int ad4000_prepare_3wire_mode_message(struct ad4000_state *st,
 	xfers[0].cs_change_delay.unit = SPI_DELAY_UNIT_NSECS;
 
 	xfers[1].rx_buf = &st->scan.data;
+	xfers[1].bits_per_word = chan->scan_type.realbits;
 	xfers[1].len = BITS_TO_BYTES(chan->scan_type.storagebits);
 	xfers[1].delay.value = st->time_spec->t_quiet2_ns;
 	xfers[1].delay.unit = SPI_DELAY_UNIT_NSECS;
@@ -719,6 +716,7 @@ static int ad4000_prepare_4wire_mode_message(struct ad4000_state *st,
 	xfers[0].delay.unit = SPI_DELAY_UNIT_NSECS;
 
 	xfers[1].rx_buf = &st->scan.data;
+	xfers[1].bits_per_word = chan->scan_type.realbits;
 	xfers[1].len = BITS_TO_BYTES(chan->scan_type.storagebits);
 
 	spi_message_init_with_transfers(&st->msg, st->xfers, 2);
