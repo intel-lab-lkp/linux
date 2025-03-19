@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/mmu_notifier.h>
+#include <linux/migrate.h>
 #include <linux/rmap.h>
 #include <linux/pagewalk.h>
 #include <linux/page_ext.h>
@@ -41,10 +42,26 @@ static unsigned long kmmscand_mms_to_scan __read_mostly = KMMSCAND_MMS_TO_SCAN;
 
 bool kmmscand_scan_enabled = true;
 static bool need_wakeup;
+static bool migrated_need_wakeup;
+
+/* How long to pause between two migration cycles */
+static unsigned int kmmmigrate_sleep_ms __read_mostly = 20;
+
+static struct task_struct *kmmmigrated_thread __read_mostly;
+static DEFINE_MUTEX(kmmmigrated_mutex);
+static DECLARE_WAIT_QUEUE_HEAD(kmmmigrated_wait);
+static unsigned long kmmmigrated_sleep_expire;
+
+/* mm of the migrating folio entry */
+static struct mm_struct *kmmscand_cur_migrate_mm;
+
+/* Migration list is manipulated underneath because of mm_exit */
+static bool  kmmscand_migration_list_dirty;
 
 static unsigned long kmmscand_sleep_expire;
 
 static DEFINE_SPINLOCK(kmmscand_mm_lock);
+static DEFINE_SPINLOCK(kmmscand_migrate_lock);
 static DECLARE_WAIT_QUEUE_HEAD(kmmscand_wait);
 
 #define KMMSCAND_SLOT_HASH_BITS 10
@@ -80,6 +97,14 @@ struct kmmscand_scanctrl {
 
 struct kmmscand_scanctrl kmmscand_scanctrl;
 
+struct kmmscand_migrate_list {
+	struct list_head migrate_head;
+};
+
+struct kmmscand_migrate_list kmmscand_migrate_list = {
+	.migrate_head = LIST_HEAD_INIT(kmmscand_migrate_list.migrate_head),
+};
+
 /* Per folio information used for migration */
 struct kmmscand_migrate_info {
 	struct list_head migrate_node;
@@ -101,12 +126,29 @@ static int kmmscand_has_work(void)
 	return !list_empty(&kmmscand_scan.mm_head);
 }
 
+static int kmmmigrated_has_work(void)
+{
+	if (!list_empty(&kmmscand_migrate_list.migrate_head))
+		return true;
+	return false;
+}
+
 static bool kmmscand_should_wakeup(void)
 {
 	bool wakeup =  kthread_should_stop() || need_wakeup ||
 	       time_after_eq(jiffies, kmmscand_sleep_expire);
 	if (need_wakeup)
 		need_wakeup = false;
+
+	return wakeup;
+}
+
+static bool kmmmigrated_should_wakeup(void)
+{
+	bool wakeup =  kthread_should_stop() || migrated_need_wakeup ||
+	       time_after_eq(jiffies, kmmmigrated_sleep_expire);
+	if (migrated_need_wakeup)
+		migrated_need_wakeup = false;
 
 	return wakeup;
 }
@@ -126,6 +168,19 @@ static void kmmscand_wait_work(void)
 	return;
 }
 
+static void kmmmigrated_wait_work(void)
+{
+	const unsigned long migrate_sleep_jiffies =
+		msecs_to_jiffies(kmmmigrate_sleep_ms);
+
+	if (!migrate_sleep_jiffies)
+		return;
+
+	kmmmigrated_sleep_expire = jiffies + migrate_sleep_jiffies;
+	wait_event_timeout(kmmmigrated_wait,
+			kmmmigrated_should_wakeup(),
+			migrate_sleep_jiffies);
+}
 
 static inline bool is_valid_folio(struct folio *folio)
 {
@@ -238,7 +293,6 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 			folio_put(folio);
 			return 0;
 		}
-		/* XXX: Leaking memory. TBD: consume info */
 		info = kzalloc(sizeof(struct kmmscand_migrate_info), GFP_NOWAIT);
 		if (info && scanctrl) {
 
@@ -282,6 +336,28 @@ static inline int kmmscand_test_exit(struct mm_struct *mm)
 	return atomic_read(&mm->mm_users) == 0;
 }
 
+static void kmmscand_cleanup_migration_list(struct mm_struct *mm)
+{
+	struct kmmscand_migrate_info *info, *tmp;
+
+	spin_lock(&kmmscand_migrate_lock);
+	if (!list_empty(&kmmscand_migrate_list.migrate_head)) {
+		if (mm == READ_ONCE(kmmscand_cur_migrate_mm)) {
+			/* A folio in this mm is being migrated. wait */
+			WRITE_ONCE(kmmscand_migration_list_dirty, true);
+		}
+
+		list_for_each_entry_safe(info, tmp, &kmmscand_migrate_list.migrate_head,
+			migrate_node) {
+			if (info && (info->mm == mm)) {
+				info->mm = NULL;
+				WRITE_ONCE(kmmscand_migration_list_dirty, true);
+			}
+		}
+	}
+	spin_unlock(&kmmscand_migrate_lock);
+}
+
 static void kmmscand_collect_mm_slot(struct kmmscand_mm_slot *mm_slot)
 {
 	struct mm_slot *slot = &mm_slot->slot;
@@ -294,9 +370,15 @@ static void kmmscand_collect_mm_slot(struct kmmscand_mm_slot *mm_slot)
 		hash_del(&slot->hash);
 		list_del(&slot->mm_node);
 
+		kmmscand_cleanup_migration_list(mm);
+
 		mm_slot_free(kmmscand_slot_cache, mm_slot);
 		mmdrop(mm);
 	}
+}
+
+static void kmmscand_migrate_folio(void)
+{
 }
 
 static unsigned long kmmscand_scan_mm_slot(void)
@@ -347,9 +429,17 @@ static unsigned long kmmscand_scan_mm_slot(void)
 
 		if (vma_scanned_size >= kmmscand_scan_size) {
 			next_mm = true;
-			/* TBD: Add scanned folios to migration list */
+			/* Add scanned folios to migration list */
+			spin_lock(&kmmscand_migrate_lock);
+			list_splice_tail_init(&kmmscand_scanctrl.scan_list,
+						&kmmscand_migrate_list.migrate_head);
+			spin_unlock(&kmmscand_migrate_lock);
 			break;
 		}
+		spin_lock(&kmmscand_migrate_lock);
+		list_splice_tail_init(&kmmscand_scanctrl.scan_list,
+					&kmmscand_migrate_list.migrate_head);
+		spin_unlock(&kmmscand_migrate_lock);
 	}
 
 	if (!vma)
@@ -478,7 +568,7 @@ void __kmmscand_exit(struct mm_struct *mm)
 {
 	struct kmmscand_mm_slot *mm_slot;
 	struct mm_slot *slot;
-	int free = 0;
+	int free = 0, serialize = 1;
 
 	spin_lock(&kmmscand_mm_lock);
 	slot = mm_slot_lookup(kmmscand_slots_hash, mm);
@@ -493,9 +583,14 @@ void __kmmscand_exit(struct mm_struct *mm)
 		free = 1;
 		/* TBD: Set the actual next slot */
 		kmmscand_scan.mm_slot = NULL;
+	} else if (mm_slot && kmmscand_scan.mm_slot == mm_slot && mm_slot->is_scanned) {
+		serialize = 0;
 	}
 
 	spin_unlock(&kmmscand_mm_lock);
+
+	if (serialize)
+		kmmscand_cleanup_migration_list(mm);
 
 	if (free) {
 		mm_slot_free(kmmscand_slot_cache, mm_slot);
@@ -546,10 +641,59 @@ static int stop_kmmscand(void)
 
 	return err;
 }
+static int kmmmigrated(void *arg)
+{
+	for (;;) {
+		WRITE_ONCE(migrated_need_wakeup, false);
+		if (unlikely(kthread_should_stop()))
+			break;
+		if (kmmmigrated_has_work())
+			kmmscand_migrate_folio();
+		msleep(20);
+		kmmmigrated_wait_work();
+	}
+	return 0;
+}
+
+static int start_kmmmigrated(void)
+{
+	int err = 0;
+
+	guard(mutex)(&kmmmigrated_mutex);
+
+	/* Someone already succeeded in starting daemon */
+	if (kmmmigrated_thread)
+		goto end;
+
+	kmmmigrated_thread = kthread_run(kmmmigrated, NULL, "kmmmigrated");
+	if (IS_ERR(kmmmigrated_thread)) {
+		pr_err("kmmmigrated: kthread_run(kmmmigrated)  failed\n");
+		err = PTR_ERR(kmmmigrated_thread);
+		kmmmigrated_thread = NULL;
+		goto end;
+	} else {
+		pr_info("kmmmigrated: Successfully started kmmmigrated");
+	}
+
+	wake_up_interruptible(&kmmmigrated_wait);
+end:
+	return err;
+}
+
+static int stop_kmmmigrated(void)
+{
+	guard(mutex)(&kmmmigrated_mutex);
+	kthread_stop(kmmmigrated_thread);
+	return 0;
+}
+
 static void init_list(void)
 {
+	INIT_LIST_HEAD(&kmmscand_migrate_list.migrate_head);
 	INIT_LIST_HEAD(&kmmscand_scanctrl.scan_list);
+	spin_lock_init(&kmmscand_migrate_lock);
 	init_waitqueue_head(&kmmscand_wait);
+	init_waitqueue_head(&kmmmigrated_wait);
 }
 
 static int __init kmmscand_init(void)
@@ -568,7 +712,14 @@ static int __init kmmscand_init(void)
 	if (err)
 		goto err_kmmscand;
 
+	err = start_kmmmigrated();
+	if (err)
+		goto err_kmmmigrated;
+
 	return 0;
+
+err_kmmmigrated:
+	stop_kmmmigrated();
 
 err_kmmscand:
 	stop_kmmscand();
