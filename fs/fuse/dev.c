@@ -438,6 +438,7 @@ static void request_wait_answer(struct fuse_req *req)
 		/* Request is not yet in userspace, bail out */
 		if (test_bit(FR_PENDING, &req->flags)) {
 			list_del(&req->list);
+			clear_bit(FR_PENDING, &req->flags);
 			spin_unlock(&fiq->lock);
 			__fuse_put_request(req);
 			req->out.h.error = -EINTR;
