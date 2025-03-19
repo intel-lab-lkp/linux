@@ -682,6 +682,17 @@ struct vm_operations_struct {
 					  unsigned long addr);
 };
 
+#ifdef CONFIG_KMMSCAND
+void count_kmmscand_mm_scans(void);
+void count_kmmscand_vma_scans(void);
+void count_kmmscand_migadded(void);
+void count_kmmscand_migrated(void);
+void count_kmmscand_migrate_failed(void);
+void count_kmmscand_slowtier(void);
+void count_kmmscand_toptier(void);
+void count_kmmscand_idlepage(void);
+#endif
+
 #ifdef CONFIG_NUMA_BALANCING
 static inline void vma_numab_state_init(struct vm_area_struct *vma)
 {
