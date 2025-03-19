@@ -88,6 +88,7 @@ TRACE_EVENT(kvm_sys_access,
 
 	TP_STRUCT__entry(
 		__field(unsigned long,			vcpu_pc)
+		__field(u64,				regval)
 		__field(bool,				is_write)
 		__field(const char *,			name)
 		__field(u8,				Op0)
@@ -99,6 +100,7 @@ TRACE_EVENT(kvm_sys_access,
 
 	TP_fast_assign(
 		__entry->vcpu_pc = vcpu_pc;
+		__entry->regval = params->regval;
 		__entry->is_write = params->is_write;
 		__entry->name = reg->name;
 		__entry->Op0 = reg->Op0;
@@ -109,10 +111,10 @@ TRACE_EVENT(kvm_sys_access,
 		__entry->Op2 = reg->Op2;
 	),
 
-	TP_printk("PC: %lx %s (%d,%d,%d,%d,%d) %s",
+	TP_printk("PC: %lx %s (%d,%d,%d,%d,%d) %llx %s",
 		  __entry->vcpu_pc, __entry->name ?: "UNKN",
 		  __entry->Op0, __entry->Op1, __entry->CRn,
-		  __entry->CRm, __entry->Op2,
+		  __entry->CRm, __entry->Op2, __entry->regval,
 		  __entry->is_write ? "write" : "read")
 );
 

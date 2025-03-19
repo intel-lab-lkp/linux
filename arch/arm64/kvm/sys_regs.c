@@ -3987,23 +3987,27 @@ static void perform_access(struct kvm_vcpu *vcpu,
 			   struct sys_reg_params *params,
 			   const struct sys_reg_desc *r)
 {
-	trace_kvm_sys_access(*vcpu_pc(vcpu), params, r);
+	bool skip;
 
 	/* Check for regs disabled by runtime config */
 	if (sysreg_hidden(vcpu, r)) {
 		kvm_inject_undefined(vcpu);
-		return;
+		skip = false;
+	} else {
+		/*
+		 * Not having an accessor means that we have configured a trap
+		 * that we don't know how to handle. This certainly qualifies
+		 * as a gross bug that should be fixed right away.
+		 */
+		BUG_ON(!r->access);
+
+		/* Skip instruction if instructed so */
+		skip = r->access(vcpu, params, r);
 	}
 
-	/*
-	 * Not having an accessor means that we have configured a trap
-	 * that we don't know how to handle. This certainly qualifies
-	 * as a gross bug that should be fixed right away.
-	 */
-	BUG_ON(!r->access);
+	trace_kvm_sys_access(*vcpu_pc(vcpu), params, r);
 
-	/* Skip instruction if instructed so */
-	if (likely(r->access(vcpu, params, r)))
+	if (likely(skip))
 		kvm_incr_pc(vcpu);
 }
 
