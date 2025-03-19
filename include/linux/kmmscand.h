@@ -13,6 +13,7 @@ static inline void kmmscand_execve(struct mm_struct *mm)
 
 static inline void kmmscand_fork(struct mm_struct *mm, struct mm_struct *oldmm)
 {
+	mm->pte_scan_scale = oldmm->pte_scan_scale;
 	__kmmscand_enter(mm);
 }
 

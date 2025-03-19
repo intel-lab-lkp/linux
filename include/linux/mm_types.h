@@ -1018,6 +1018,9 @@ struct mm_struct {
 #ifdef CONFIG_KMMSCAND
 		/* Tracks promotion node. XXX: use nodemask */
 		int target_node;
+
+		/* Integer representing PTE A bit scan aggression (0-10) */
+		unsigned int pte_scan_scale;
  #endif
 		/*
 		 * An operation with batched TLB flushing is going on. Anything

@@ -1113,6 +1113,11 @@ static unsigned long kmmscand_scan_mm_slot(void)
 		goto outerloop;
 	}
 
+	if (!mm->pte_scan_scale) {
+		next_mm = true;
+		goto outerloop;
+	}
+
 	mm_target_node = READ_ONCE(mm->target_node);
 	if (mm_target_node != mm_slot_target_node)
 		WRITE_ONCE(mm->target_node, mm_slot_target_node);
