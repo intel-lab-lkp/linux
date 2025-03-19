@@ -7,6 +7,7 @@
  * Copyright (C) 2014, Freescale Semiconductor, Inc.
  */
 
+#include <linux/bits.h>
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/delay.h>
@@ -16,6 +17,7 @@
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/spi-nor.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/regulator/consumer.h>
 #include <linux/sched/task_stack.h>
@@ -2011,9 +2013,14 @@ static const struct flash_info *spi_nor_detect(struct spi_nor *nor)
 {
 	const struct flash_info *info;
 	u8 *id = nor->bouncebuf;
+	u32 ndummy = 0;
 	int ret;
 
-	ret = spi_nor_read_id(nor, 0, 0, id, nor->reg_proto);
+	if (!of_property_read_u32(nor->dev->of_node, "rdid-dummy-ncycles",
+				  &ndummy))
+		ndummy /= BITS_PER_BYTE;
+
+	ret = spi_nor_read_id(nor, 0, ndummy, id, nor->reg_proto);
 	if (ret) {
 		dev_dbg(nor->dev, "error %d reading JEDEC ID\n", ret);
 		return ERR_PTR(ret);
