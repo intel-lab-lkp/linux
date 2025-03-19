@@ -758,6 +758,18 @@ static const struct spi_nor_fixups s25fs_s_nor_fixups = {
 	.post_bfpt = s25fs_s_nor_post_bfpt_fixups,
 };
 
+static int cyrs17b_late_init(struct spi_nor *nor)
+{
+	/* Fast Read requires mode cycles */
+	nor->params->reads[SNOR_CMD_READ_FAST].num_mode_clocks = 8;
+
+	return 0;
+}
+
+static const struct spi_nor_fixups cyrs17b_fixups = {
+	.late_init = cyrs17b_late_init,
+};
+
 static const struct flash_info spansion_nor_parts[] = {
 	{
 		.id = SNOR_ID(0x01, 0x02, 0x12),
@@ -996,6 +1008,11 @@ static const struct flash_info spansion_nor_parts[] = {
 		.name = "s28hs02gt",
 		.mfr_flags = USE_CLPEF,
 		.fixups = &s28hx_t_fixups,
+	}, {
+		/* cyrs17b512 */
+		.id = SNOR_ID(0xc1, 0x60, 0x1a),
+		.mfr_flags = USE_CLSR,
+		.fixups = &cyrs17b_fixups
 	}, {
 		.id = SNOR_ID(0xef, 0x40, 0x13),
 		.name = "s25fl004k",
