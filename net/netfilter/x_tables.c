@@ -766,9 +766,9 @@ void xt_compat_match_from_user(struct xt_entry_match *m, void **dstptr,
 
 	msize += off;
 	m->u.user.match_size = msize;
-	strscpy(name, match->name, sizeof(name));
+	strscpy(name, match->name);
 	module_put(match->me);
-	strscpy_pad(m->u.user.name, name, sizeof(m->u.user.name));
+	strscpy_pad(m->u.user.name, name);
 
 	*size += off;
 	*dstptr += msize;
@@ -1147,9 +1147,9 @@ void xt_compat_target_from_user(struct xt_entry_target *t, void **dstptr,
 
 	tsize += off;
 	t->u.user.target_size = tsize;
-	strscpy(name, target->name, sizeof(name));
+	strscpy(name, target->name);
 	module_put(target->me);
-	strscpy_pad(t->u.user.name, name, sizeof(t->u.user.name));
+	strscpy_pad(t->u.user.name, name);
 
 	*size += off;
 	*dstptr += tsize;
