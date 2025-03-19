@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/cleanup.h>
 #include <linux/minmax.h>
+#include <trace/events/kmem.h>
 
 #include <asm/pgalloc.h>
 #include "internal.h"
@@ -157,6 +158,170 @@ static bool kmmscand_eligible_srcnid(int nid)
 
 	return false;
 }
+
+#ifdef CONFIG_SYSFS
+static ssize_t scan_sleep_ms_show(struct kobject *kobj,
+					 struct kobj_attribute *attr,
+					 char *buf)
+{
+	return sysfs_emit(buf, "%u\n", kmmscand_scan_sleep_ms);
+}
+
+static ssize_t scan_sleep_ms_store(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  const char *buf, size_t count)
+{
+	unsigned int msecs;
+	int err;
+
+	err = kstrtouint(buf, 10, &msecs);
+	if (err)
+		return -EINVAL;
+
+	kmmscand_scan_sleep_ms = msecs;
+	kmmscand_sleep_expire = 0;
+	wake_up_interruptible(&kmmscand_wait);
+
+	return count;
+}
+static struct kobj_attribute scan_sleep_ms_attr =
+	__ATTR_RW(scan_sleep_ms);
+
+static ssize_t mm_scan_period_ms_show(struct kobject *kobj,
+					 struct kobj_attribute *attr,
+					 char *buf)
+{
+	return sysfs_emit(buf, "%u\n", kmmscand_mm_scan_period_ms);
+}
+
+/* If a value less than MIN or greater than MAX asked for store value is clamped */
+static ssize_t mm_scan_period_ms_store(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  const char *buf, size_t count)
+{
+	unsigned int msecs, stored_msecs;
+	int err;
+
+	err = kstrtouint(buf, 10, &msecs);
+	if (err)
+		return -EINVAL;
+
+	stored_msecs = clamp(msecs, KMMSCAND_SCAN_PERIOD_MIN, KMMSCAND_SCAN_PERIOD_MAX);
+
+	kmmscand_mm_scan_period_ms = stored_msecs;
+	kmmscand_sleep_expire = 0;
+	wake_up_interruptible(&kmmscand_wait);
+
+	return count;
+}
+
+static struct kobj_attribute mm_scan_period_ms_attr =
+	__ATTR_RW(mm_scan_period_ms);
+
+static ssize_t mms_to_scan_show(struct kobject *kobj,
+					 struct kobj_attribute *attr,
+					 char *buf)
+{
+	return sysfs_emit(buf, "%lu\n", kmmscand_mms_to_scan);
+}
+
+static ssize_t mms_to_scan_store(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  const char *buf, size_t count)
+{
+	unsigned long val;
+	int err;
+
+	err = kstrtoul(buf, 10, &val);
+	if (err)
+		return -EINVAL;
+
+	kmmscand_mms_to_scan = val;
+	kmmscand_sleep_expire = 0;
+	wake_up_interruptible(&kmmscand_wait);
+
+	return count;
+}
+
+static struct kobj_attribute mms_to_scan_attr =
+	__ATTR_RW(mms_to_scan);
+
+static ssize_t scan_enabled_show(struct kobject *kobj,
+					 struct kobj_attribute *attr,
+					 char *buf)
+{
+	return sysfs_emit(buf, "%u\n", kmmscand_scan_enabled ? 1 : 0);
+}
+
+static ssize_t scan_enabled_store(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  const char *buf, size_t count)
+{
+	unsigned int val;
+	int err;
+
+	err = kstrtouint(buf, 10, &val);
+	if (err || val > 1)
+		return -EINVAL;
+
+	if (val) {
+		kmmscand_scan_enabled = true;
+		need_wakeup = true;
+	} else
+		kmmscand_scan_enabled = false;
+
+	kmmscand_sleep_expire = 0;
+	wake_up_interruptible(&kmmscand_wait);
+
+	return count;
+}
+
+static struct kobj_attribute scan_enabled_attr =
+	__ATTR_RW(scan_enabled);
+
+static ssize_t target_node_show(struct kobject *kobj,
+					 struct kobj_attribute *attr,
+					 char *buf)
+{
+	return sysfs_emit(buf, "%u\n", kmmscand_target_node);
+}
+
+static ssize_t target_node_store(struct kobject *kobj,
+					  struct kobj_attribute *attr,
+					  const char *buf, size_t count)
+{
+	int err, node;
+
+	err = kstrtoint(buf, 10, &node);
+	if (err)
+		return -EINVAL;
+
+	kmmscand_sleep_expire = 0;
+	if (!node_is_toptier(node))
+		return -EINVAL;
+
+	kmmscand_target_node = node;
+	wake_up_interruptible(&kmmscand_wait);
+
+	return count;
+}
+static struct kobj_attribute target_node_attr =
+	__ATTR_RW(target_node);
+
+static struct attribute *kmmscand_attr[] = {
+	&scan_sleep_ms_attr.attr,
+	&mm_scan_period_ms_attr.attr,
+	&mms_to_scan_attr.attr,
+	&scan_enabled_attr.attr,
+	&target_node_attr.attr,
+	NULL,
+};
+
+struct attribute_group kmmscand_attr_group = {
+	.attrs = kmmscand_attr,
+	.name = "kmmscand",
+};
+#endif
 
 static int kmmscand_has_work(void)
 {
@@ -1036,9 +1201,43 @@ static int kmmscand(void *none)
 	return 0;
 }
 
+#ifdef CONFIG_SYSFS
+extern struct kobject *mm_kobj;
+static int __init kmmscand_init_sysfs(struct kobject **kobj)
+{
+	int err;
+
+	err = sysfs_create_group(*kobj, &kmmscand_attr_group);
+	if (err) {
+		pr_err("failed to register kmmscand group\n");
+		goto err_kmmscand_attr;
+	}
+
+	return 0;
+
+err_kmmscand_attr:
+	sysfs_remove_group(*kobj, &kmmscand_attr_group);
+	return err;
+}
+
+static void __init kmmscand_exit_sysfs(struct kobject *kobj)
+{
+		sysfs_remove_group(kobj, &kmmscand_attr_group);
+}
+#else
+static inline int __init kmmscand_init_sysfs(struct kobject **kobj)
+{
+	return 0;
+}
+static inline void __init kmmscand_exit_sysfs(struct kobject *kobj)
+{
+}
+#endif
+
 static inline void kmmscand_destroy(void)
 {
 	kmem_cache_destroy(kmmscand_slot_cache);
+	kmmscand_exit_sysfs(mm_kobj);
 }
 
 void __kmmscand_enter(struct mm_struct *mm)
@@ -1223,7 +1422,13 @@ static int __init kmmscand_init(void)
 		return -ENOMEM;
 	}
 
+	err = kmmscand_init_sysfs(&mm_kobj);
+
+	if (err)
+		goto err_init_sysfs;
+
 	init_list();
+
 	err = start_kmmscand();
 	if (err)
 		goto err_kmmscand;
@@ -1239,6 +1444,7 @@ err_kmmmigrated:
 
 err_kmmscand:
 	stop_kmmscand();
+err_init_sysfs:
 	kmmscand_destroy();
 
 	return err;
