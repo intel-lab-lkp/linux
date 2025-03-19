@@ -543,12 +543,15 @@ int arm_mmu500_reset(struct arm_smmu_device *smmu);
 
 struct arm_smmu_context_fault_info {
 	unsigned long iova;
+	u64 ttbr0;
 	u32 fsr;
-	u32 fsynr;
+	u32 fsynr0;
+	u32 fsynr1;
 	u32 cbfrsynra;
+	u32 contextidr;
 };
 
-void arm_smmu_read_context_fault_info(struct arm_smmu_device *smmu, int idx,
+void arm_smmu_read_context_fault_info(struct arm_smmu_domain *smmu_domain,
 				      struct arm_smmu_context_fault_info *cfi);
 
 void arm_smmu_print_context_fault_info(struct arm_smmu_device *smmu, int idx,
