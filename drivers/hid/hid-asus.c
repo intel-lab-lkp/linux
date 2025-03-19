@@ -571,6 +571,10 @@ static int asus_kbd_register_leds(struct hid_device *hdev)
 	unsigned char kbd_func;
 	int ret;
 
+	/* Wait a bit before init to prevent locking the keyboard */
+	if (dmi_match(DMI_PRODUCT_FAMILY, "ROG Flow Z13"))
+		msleep(500);
+
 	ret = asus_kbd_init(hdev);
 	if (ret < 0)
 		return ret;
