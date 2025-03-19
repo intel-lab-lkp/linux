@@ -157,13 +157,29 @@
 #define ASUS_WMI_DSTS_MAX_BRIGTH_MASK	0x0000FF00
 #define ASUS_WMI_DSTS_LIGHTBAR_MASK	0x0000000F
 
+struct asus_brt_listener {
+	struct list_head list;
+	void (*notify)(struct asus_brt_listener *listener, int brightness);
+};
+
 #if IS_REACHABLE(CONFIG_ASUS_WMI)
 int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1, u32 *retval);
+
+int asus_brt_register_listener(struct asus_brt_listener *cdev);
+void asus_brt_unregister_listener(struct asus_brt_listener *cdev);
 #else
 static inline int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1,
 					   u32 *retval)
 {
 	return -ENODEV;
+}
+
+static inline int asus_brt_register_listener(struct asus_brt_listener *bdev)
+{
+	return -ENODEV;
+}
+static inline void asus_brt_unregister_listener(struct asus_brt_listener *bdev)
+{
 }
 #endif
 
