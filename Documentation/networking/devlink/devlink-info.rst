@@ -50,6 +50,11 @@ versions is generally discouraged - here, and via any other Linux API.
        This is usually the serial number of the board, often available in
        PCI *Vital Product Data*.
 
+   * - ``function.uid``
+     - Function uniqueue identifier.
+
+       Vendor defined uniqueue identifier of a function.
+
    * - ``fixed``
      - Group for hardware identifiers, and versions of components
        which are not field-updatable.
