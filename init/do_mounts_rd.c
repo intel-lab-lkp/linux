@@ -183,6 +183,24 @@ static unsigned long nr_blocks(struct file *file)
 	return i_size_read(inode) >> 10;
 }
 
+static int resize_ramdisk(const char *devname, u64 new_size_blocks)
+{
+	struct block_device *bdev;
+	struct file *bdev_file;
+
+	bdev_file = bdev_file_open_by_path(devname, BLK_OPEN_READ, NULL, NULL);
+	if (IS_ERR(bdev_file))
+		goto err;
+
+	bdev = file_bdev(bdev_file);
+	set_capacity(bdev->bd_disk, (new_size_blocks * BLOCK_SIZE) / SECTOR_SIZE);
+
+	fput(bdev_file);
+	return 0;
+err:
+	return -1;
+}
+
 int __init rd_load_image(char *from)
 {
 	int res = 0;
@@ -219,9 +237,10 @@ int __init rd_load_image(char *from)
 	 * the number of kibibytes of data to load into a ramdisk.
 	 */
 	rd_blocks = nr_blocks(out_file);
-	if (nblocks > rd_blocks) {
-		printk("RAMDISK: image too big! (%dKiB/%ldKiB)\n",
+	if (nblocks > rd_blocks && resize_ramdisk("/dev/ram", nblocks)) {
+		printk("RAMDISK: image too big and couldn't resize! (%dKiB/%ldKiB)\n",
 		       nblocks, rd_blocks);
+
 		goto done;
 	}
 
