@@ -36,6 +36,7 @@
 #include <linux/cpuset.h>
 #include <linux/hugetlb.h>
 #include <linux/memcontrol.h>
+#include <linux/cleancache.h>
 #include <linux/shmem_fs.h>
 #include <linux/rmap.h>
 #include <linux/delayacct.h>
@@ -147,9 +148,19 @@ static void page_cache_delete(struct address_space *mapping,
 }
 
 static void filemap_unaccount_folio(struct address_space *mapping,
-		struct folio *folio)
+		struct folio *folio, struct cleancache_filekey *key)
 {
 	long nr;
+
+	/*
+	 * if we're uptodate, flush out into the cleancache, otherwise
+	 * invalidate any existing cleancache entries.  We can't leave
+	 * stale data around in the cleancache once our page is gone
+	 */
+	if (folio_test_uptodate(folio) && folio_test_mappedtodisk(folio))
+		cleancache_store_folio(folio, key);
+	else
+		cleancache_invalidate_folio(mapping, folio, key);
 
 	VM_BUG_ON_FOLIO(folio_mapped(folio), folio);
 	if (!IS_ENABLED(CONFIG_DEBUG_VM) && unlikely(folio_mapped(folio))) {
@@ -210,6 +221,16 @@ static void filemap_unaccount_folio(struct address_space *mapping,
 		folio_account_cleaned(folio, inode_to_wb(mapping->host));
 }
 
+static void ___filemap_remove_folio(struct folio *folio, void *shadow,
+				    struct cleancache_filekey *key)
+{
+	struct address_space *mapping = folio->mapping;
+
+	trace_mm_filemap_delete_from_page_cache(folio);
+	filemap_unaccount_folio(mapping, folio, key);
+	page_cache_delete(mapping, folio, shadow);
+}
+
 /*
  * Delete a page from the page cache and free it. Caller has to make
  * sure the page is locked and that nobody else uses it - or that usage
@@ -217,11 +238,7 @@ static void filemap_unaccount_folio(struct address_space *mapping,
  */
 void __filemap_remove_folio(struct folio *folio, void *shadow)
 {
-	struct address_space *mapping = folio->mapping;
-
-	trace_mm_filemap_delete_from_page_cache(folio);
-	filemap_unaccount_folio(mapping, folio);
-	page_cache_delete(mapping, folio, shadow);
+	___filemap_remove_folio(folio, shadow, NULL);
 }
 
 void filemap_free_folio(struct address_space *mapping, struct folio *folio)
@@ -246,11 +263,20 @@ void filemap_free_folio(struct address_space *mapping, struct folio *folio)
 void filemap_remove_folio(struct folio *folio)
 {
 	struct address_space *mapping = folio->mapping;
+	struct cleancache_filekey *pkey;
+	struct cleancache_filekey key;
 
 	BUG_ON(!folio_test_locked(folio));
+
+	/*
+	 * cleancache_get_key() uses sb->s_export_op->encode_fh which can
+	 * also take inode->i_lock. Get the key before taking inode->i_lock.
+	 */
+	pkey = cleancache_get_key(mapping->host, &key);
+
 	spin_lock(&mapping->host->i_lock);
 	xa_lock_irq(&mapping->i_pages);
-	__filemap_remove_folio(folio, NULL);
+	___filemap_remove_folio(folio, NULL, pkey);
 	xa_unlock_irq(&mapping->i_pages);
 	if (mapping_shrinkable(mapping))
 		inode_add_lru(mapping->host);
@@ -316,10 +342,18 @@ static void page_cache_delete_batch(struct address_space *mapping,
 void delete_from_page_cache_batch(struct address_space *mapping,
 				  struct folio_batch *fbatch)
 {
+	struct cleancache_filekey *pkey;
+	struct cleancache_filekey key;
 	int i;
 
 	if (!folio_batch_count(fbatch))
 		return;
+
+	/*
+	 * cleancache_get_key() uses sb->s_export_op->encode_fh which can
+	 * also take inode->i_lock. Get the key before taking inode->i_lock.
+	 */
+	pkey = cleancache_get_key(mapping->host, &key);
 
 	spin_lock(&mapping->host->i_lock);
 	xa_lock_irq(&mapping->i_pages);
@@ -327,7 +361,7 @@ void delete_from_page_cache_batch(struct address_space *mapping,
 		struct folio *folio = fbatch->folios[i];
 
 		trace_mm_filemap_delete_from_page_cache(folio);
-		filemap_unaccount_folio(mapping, folio);
+		filemap_unaccount_folio(mapping, folio, pkey);
 	}
 	page_cache_delete_batch(mapping, fbatch);
 	xa_unlock_irq(&mapping->i_pages);
@@ -1865,6 +1899,13 @@ repeat:
 out:
 	rcu_read_unlock();
 
+	if (folio && !folio_test_uptodate(folio)) {
+		struct cleancache_filekey key;
+
+		if (cleancache_restore_folio(folio, cleancache_get_key(mapping->host, &key)))
+			folio_mark_uptodate(folio);
+	}
+
 	return folio;
 }
 
@@ -2430,6 +2471,7 @@ static int filemap_update_page(struct kiocb *iocb,
 		struct address_space *mapping, size_t count,
 		struct folio *folio, bool need_uptodate)
 {
+	struct cleancache_filekey key;
 	int error;
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
@@ -2466,6 +2508,11 @@ static int filemap_update_page(struct kiocb *iocb,
 				   need_uptodate))
 		goto unlock;
 
+	if (cleancache_restore_folio(folio,
+			cleancache_get_key(folio->mapping->host, &key))) {
+		folio_mark_uptodate(folio);
+		goto unlock;
+	}
 	error = -EAGAIN;
 	if (iocb->ki_flags & (IOCB_NOIO | IOCB_NOWAIT | IOCB_WAITQ))
 		goto unlock;

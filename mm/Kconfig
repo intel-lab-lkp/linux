@@ -945,6 +945,23 @@ config USE_PERCPU_NUMA_NODE_ID
 config HAVE_SETUP_PER_CPU_AREA
 	bool
 
+config CLEANCACHE
+	bool "Enable cleancache to cache clean pages if tmem is present"
+	help
+	  Cleancache can be thought of as a page-granularity victim cache
+	  for clean pages that the kernel's pageframe replacement algorithm
+	  (PFRA) would like to keep around, but can't since there isn't enough
+	  memory.  So when the PFRA "evicts" a page, it first attempts to use
+	  cleancache code to put the data contained in that page into
+	  "transcendent memory", memory that is not directly accessible or
+	  addressable by the kernel and is of unknown and possibly
+	  time-varying size. When system wishes to access a page in a file
+	  on disk, it first checks cleancache to see if it already contains
+	  it; if it does, the page is copied into the kernel and a disk
+	  access is avoided.
+
+	  If unsure, say N.
+
 config CMA
 	bool "Contiguous Memory Allocator"
 	depends on MMU
