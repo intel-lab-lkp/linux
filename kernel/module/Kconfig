@@ -192,6 +192,10 @@ config GENDWARFKSYMS
 	depends on !DEBUG_INFO_REDUCED && !DEBUG_INFO_SPLIT
 	# Requires ELF object files.
 	depends on !LTO
+	# Requires pahole commit 9810758003ce ("btf_encoder: Verify 0 address
+	# DWARF variables are in ELF section") on X86 to avoid conflicts with
+	# __gendwarfksyms_ptr symbols.
+	depends on !X86 || !DEBUG_INFO_BTF || PAHOLE_VERSION > 129
 	help
 	  Calculate symbol versions from DWARF debugging information using
 	  gendwarfksyms. Requires DEBUG_INFO to be enabled.
