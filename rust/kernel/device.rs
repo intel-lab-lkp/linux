@@ -65,6 +65,21 @@ impl Device {
         self.0.get()
     }
 
+    /// Returns a reference to the parent device, if any.
+    pub fn parent<'a>(&self) -> Option<&'a Self> {
+        // SAFETY:
+        // - By the type invariant `self.as_raw()` is always valid.
+        // - The parent device is only ever set at device creation.
+        let parent = unsafe { (*self.as_raw()).parent };
+
+        if parent.is_null() {
+            None
+        } else {
+            // SAFETY: Since `parent` is not NULL, it must be a valid pointer to a `struct device`.
+            Some(unsafe { Self::as_ref(parent) })
+        }
+    }
+
     /// Convert a raw C `struct device` pointer to a `&'a Device`.
     ///
     /// # Safety
