@@ -319,6 +319,17 @@ static int asus_event(struct hid_device *hdev, struct hid_field *field,
 			 usage->hid & HID_USAGE);
 	}
 
+	if (usage->type == EV_KEY && value) {
+		switch (usage->code) {
+		case KEY_KBDILLUMUP:
+			return !asus_brt_event(ASUS_BRT_UP);
+		case KEY_KBDILLUMDOWN:
+			return !asus_brt_event(ASUS_BRT_DOWN);
+		case KEY_KBDILLUMTOGGLE:
+			return !asus_brt_event(ASUS_BRT_TOGGLE);
+		}
+	}
+
 	return 0;
 }
 
