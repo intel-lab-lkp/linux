@@ -1038,3 +1038,8 @@
 &xo_board_clk {
 	clock-frequency = <38400000>;
 };
+
+&iris {
+	firmware-name = "qcom/vpu/vpu30_p4_s6.mbn";
+	status = "okay";
+};
