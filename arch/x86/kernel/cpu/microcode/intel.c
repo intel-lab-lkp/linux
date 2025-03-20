@@ -22,6 +22,7 @@
 #include <linux/mm.h>
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/pci_ids.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/processor.h>
@@ -42,8 +43,30 @@ static const char ucode_path[] = "kernel/x86/microcode/GenuineIntel.bin";
 
 #define MBOX_CONTROL_OFFSET	0x0
 #define MBOX_STATUS_OFFSET	0x4
+#define MBOX_WRDATA_OFFSET	0x8
+#define MBOX_RDDATA_OFFSET	0xc
 
 #define MASK_MBOX_CTRL_ABORT	BIT(0)
+#define MASK_MBOX_CTRL_GO	BIT(31)
+
+#define MASK_MBOX_STATUS_ERROR	BIT(2)
+#define MASK_MBOX_STATUS_READY	BIT(31)
+
+#define MASK_MBOX_RESP_SUCCESS	BIT(0)
+#define MASK_MBOX_RESP_PROGRESS	BIT(1)
+#define MASK_MBOX_RESP_ERROR	BIT(2)
+
+#define MBOX_CMD_LOAD		0x3
+#define MBOX_OBJ_STAGING	0xb
+#define DWORD_ALIGN(size)	((size) / sizeof(u32))
+#define MBOX_HEADER(mbox_size)	(PCI_VENDOR_ID_INTEL | \
+				 (MBOX_OBJ_STAGING << 16) | \
+				 ((u64)DWORD_ALIGN(mbox_size) << 32))
+
+/* The size of each mailbox header */
+#define MBOX_HEADER_SIZE	sizeof(u64)
+/* The size of staging hardware response */
+#define MBOX_RESPONSE_SIZE	sizeof(u64)
 
 /*
  * Each microcode image is divided into chunks, each at most
@@ -57,6 +80,7 @@ static const char ucode_path[] = "kernel/x86/microcode/GenuineIntel.bin";
  */
 #define MBOX_XACTION_SIZE	PAGE_SIZE
 #define MBOX_XACTION_MAX(imgsz)	((imgsz) * 2)
+#define MBOX_XACTION_TIMEOUT_MS	(10 * MSEC_PER_SEC)
 
 /* Current microcode patch used in early patching on the APs. */
 static struct microcode_intel *ucode_patch_va __read_mostly;
@@ -348,6 +372,49 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 	return size ? NULL : patch;
 }
 
+static inline u32 read_mbox_dword(void)
+{
+	u32 dword = readl(staging.mmio_base + MBOX_RDDATA_OFFSET);
+
+	/* Acknowledge read completion to the staging firmware */
+	writel(0, staging.mmio_base + MBOX_RDDATA_OFFSET);
+	return dword;
+}
+
+static inline void write_mbox_dword(u32 dword)
+{
+	writel(dword, staging.mmio_base + MBOX_WRDATA_OFFSET);
+}
+
+static inline u64 read_mbox_header(void)
+{
+	u32 high, low;
+
+	low  = read_mbox_dword();
+	high = read_mbox_dword();
+
+	return ((u64)high << 32) | low;
+}
+
+static inline void write_mbox_header(u64 value)
+{
+	write_mbox_dword(value);
+	write_mbox_dword(value >> 32);
+}
+
+static inline void write_mbox_data(u32 *chunk, unsigned int chunk_size)
+{
+	int i;
+
+	/*
+	 * The MMIO space is mapped as Uncached (UC). Each write arrives
+	 * at the device as an individual transaction in program order.
+	 * The device can then resemble the sequence accordingly.
+	 */
+	for (i = 0; i < DWORD_ALIGN(chunk_size); i++)
+		write_mbox_dword(chunk[i]);
+}
+
 /*
  * Prepare for a new microcode transfer by resetting both hardware and
  * software states.
@@ -393,13 +460,70 @@ static bool can_send_next_chunk(void)
 }
 
 /*
+ * Wait for the hardware to complete a transaction.
+ * Return true on success, false on failure.
+ */
+static bool wait_for_transaction(void)
+{
+	u32 timeout, status;
+
+	/* Allow time for hardware to complete the operation: */
+	for (timeout = 0; timeout < MBOX_XACTION_TIMEOUT_MS; timeout++) {
+		msleep(1);
+
+		status = readl(staging.mmio_base + MBOX_STATUS_OFFSET);
+		/* Break out early if the hardware is ready: */
+		if (status & MASK_MBOX_STATUS_READY)
+			break;
+	}
+
+	status = readl(staging.mmio_base + MBOX_STATUS_OFFSET);
+
+	/* Check for explicit error response */
+	if (status & MASK_MBOX_STATUS_ERROR) {
+		staging.state = UCODE_ERROR;
+		return false;
+	}
+
+	/*
+	 * Hardware is neither responded to the action nor
+	 * signaled any error. Treat the case as timeout.
+	 */
+	if (!(status & MASK_MBOX_STATUS_READY)) {
+		staging.state = UCODE_TIMEOUT;
+		return false;
+	}
+
+	staging.state = UCODE_OK;
+	return true;
+}
+
+/*
  * Transmit a chunk of the microcode image to the hardware.
  * Return true if the chunk is processed successfully.
  */
 static bool send_data_chunk(void)
 {
-	pr_debug_once("Staging mailbox loading code needs to be implemented.\n");
-	return false;
+	u16 mbox_size = MBOX_HEADER_SIZE * 2 + staging.chunk_size;
+	u32 *chunk = staging.ucode_ptr + staging.offset;
+
+	/*
+	 * Write 'request' mailbox object in the following order:
+	 * - Mailbox header includes total size
+	 * - Command header specifies the load operation
+	 * - Data section contains a microcode chunk
+	 */
+	write_mbox_header(MBOX_HEADER(mbox_size));
+	write_mbox_header(MBOX_CMD_LOAD);
+	write_mbox_data(chunk, staging.chunk_size);
+	staging.bytes_sent += staging.chunk_size;
+
+	/*
+	 * Notify the hardware that the mailbox is ready for processing.
+	 * The staging firmware will process the request asynchronously.
+	 */
+	writel(MASK_MBOX_CTRL_GO, staging.mmio_base + MBOX_CONTROL_OFFSET);
+	return wait_for_transaction();
 }
 
 /*
@@ -408,8 +532,24 @@ static bool send_data_chunk(void)
  */
 static bool fetch_next_offset(void)
 {
-	pr_debug_once("Staging mailbox response handling code needs to be implemented.\n\n");
-	return false;
+	const u16 mbox_size = MBOX_HEADER_SIZE + MBOX_RESPONSE_SIZE;
+
+	/* All responses begin with the same header value: */
+	WARN_ON_ONCE(read_mbox_header() != MBOX_HEADER(mbox_size));
+
+	/*
+	 * The 'response' mailbox contains two dword data:
+	 * - First has next offset in microcode image
+	 * - Second delivers status flag
+	 */
+	staging.offset = read_mbox_dword();
+	if (read_mbox_dword() & MASK_MBOX_RESP_ERROR) {
+		staging.state = UCODE_ERROR;
+		return false;
+	}
+
+	staging.state = UCODE_OK;
+	return true;
 }
 
 /*
