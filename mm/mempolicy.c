@@ -113,6 +113,7 @@
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
 #include <linux/uaccess.h>
+#include <linux/memory.h>
 
 #include "internal.h"
 
@@ -3390,6 +3391,7 @@ struct iw_node_attr {
 
 struct sysfs_wi_group {
 	struct kobject wi_kobj;
+	struct mutex kobj_lock;
 	struct iw_node_attr *nattrs[];
 };
 
@@ -3439,12 +3441,24 @@ static ssize_t node_store(struct kobject *kobj, struct kobj_attribute *attr,
 
 static void sysfs_wi_node_release(int nid)
 {
-	if (!sgrp->nattrs[nid])
+	struct iw_node_attr *attr;
+
+	if (nid < 0 || nid >= nr_node_ids)
 		return;
 
-	sysfs_remove_file(&sgrp->wi_kobj, &sgrp->nattrs[nid]->kobj_attr.attr);
-	kfree(sgrp->nattrs[nid]->kobj_attr.attr.name);
-	kfree(sgrp->nattrs[nid]);
+	mutex_lock(&sgrp->kobj_lock);
+	attr = sgrp->nattrs[nid];
+	if (!attr) {
+		mutex_unlock(&sgrp->kobj_lock);
+		return;
+	}
+
+	sgrp->nattrs[nid] = NULL;
+	mutex_unlock(&sgrp->kobj_lock);
+
+	sysfs_remove_file(&sgrp->wi_kobj, &attr->kobj_attr.attr);
+	kfree(attr->kobj_attr.attr.name);
+	kfree(attr);
 }
 
 static void sysfs_wi_release(struct kobject *wi_kobj)
@@ -3463,35 +3477,80 @@ static const struct kobj_type wi_ktype = {
 
 static int sysfs_wi_node_add(int nid)
 {
-	struct iw_node_attr *node_attr;
+	int ret = 0;
 	char *name;
+	struct iw_node_attr *new_attr = NULL;
 
-	node_attr = kzalloc(sizeof(*node_attr), GFP_KERNEL);
-	if (!node_attr)
+	if (nid < 0 || nid >= nr_node_ids) {
+		pr_err("Invalid node id: %d\n", nid);
+		return -EINVAL;
+	}
+
+	new_attr = kzalloc(sizeof(struct iw_node_attr), GFP_KERNEL);
+	if (!new_attr)
 		return -ENOMEM;
 
 	name = kasprintf(GFP_KERNEL, "node%d", nid);
 	if (!name) {
-		kfree(node_attr);
+		kfree(new_attr);
 		return -ENOMEM;
 	}
 
-	sysfs_attr_init(&node_attr->kobj_attr.attr);
-	node_attr->kobj_attr.attr.name = name;
-	node_attr->kobj_attr.attr.mode = 0644;
-	node_attr->kobj_attr.show = node_show;
-	node_attr->kobj_attr.store = node_store;
-	node_attr->nid = nid;
-
-	if (sysfs_create_file(&sgrp->wi_kobj, &node_attr->kobj_attr.attr)) {
-		kfree(node_attr->kobj_attr.attr.name);
-		kfree(node_attr);
-		pr_err("failed to add attribute to weighted_interleave\n");
-		return -ENOMEM;
+	mutex_lock(&sgrp->kobj_lock);
+	if (sgrp->nattrs[nid]) {
+		mutex_unlock(&sgrp->kobj_lock);
+		pr_info("Node [%d] already exists\n", nid);
+		kfree(new_attr);
+		kfree(name);
+		return 0;
 	}
 
-	sgrp->nattrs[nid] = node_attr;
-	return 0;
+	sgrp->nattrs[nid] = new_attr;
+	mutex_unlock(&sgrp->kobj_lock);
+
+	sysfs_attr_init(&sgrp->nattrs[nid]->kobj_attr.attr);
+	sgrp->nattrs[nid]->kobj_attr.attr.name = name;
+	sgrp->nattrs[nid]->kobj_attr.attr.mode = 0644;
+	sgrp->nattrs[nid]->kobj_attr.show = node_show;
+	sgrp->nattrs[nid]->kobj_attr.store = node_store;
+	sgrp->nattrs[nid]->nid = nid;
+
+	ret = sysfs_create_file(&sgrp->wi_kobj, &sgrp->nattrs[nid]->kobj_attr.attr);
+	if (ret) {
+		kfree(sgrp->nattrs[nid]->kobj_attr.attr.name);
+		kfree(sgrp->nattrs[nid]);
+		sgrp->nattrs[nid] = NULL;
+		pr_err("Failed to add attribute to weighted_interleave: %d\n", ret);
+	}
+
+	return ret;
+}
+
+static int wi_node_notifier(struct notifier_block *nb,
+			       unsigned long action, void *data)
+{
+	int err;
+	struct memory_notify *arg = data;
+	int nid = arg->status_change_nid;
+
+	if (nid < 0)
+		goto notifier_end;
+
+	switch(action) {
+	case MEM_ONLINE:
+		err = sysfs_wi_node_add(nid);
+		if (err) {
+			pr_err("failed to add sysfs [node%d]\n", nid);
+			return NOTIFY_BAD;
+		}
+		break;
+	case MEM_OFFLINE:
+		sysfs_wi_node_release(nid);
+		break;
+	}
+
+notifier_end:
+	return NOTIFY_OK;
 }
 
 static int add_weighted_interleave_group(struct kobject *mempolicy_kobj)
@@ -3503,13 +3562,17 @@ static int add_weighted_interleave_group(struct kobject *mempolicy_kobj)
 		       GFP_KERNEL);
 	if (!sgrp)
 		return -ENOMEM;
+	mutex_init(&sgrp->kobj_lock);
 
 	err = kobject_init_and_add(&sgrp->wi_kobj, &wi_ktype, mempolicy_kobj,
 				   "weighted_interleave");
 	if (err)
 		goto err_out;
 
-	for_each_node_state(nid, N_POSSIBLE) {
+	for_each_online_node(nid) {
+		if (!node_state(nid, N_MEMORY))
+			continue;
+
 		err = sysfs_wi_node_add(nid);
 		if (err) {
 			pr_err("failed to add sysfs [node%d]\n", nid);
@@ -3517,6 +3580,7 @@ static int add_weighted_interleave_group(struct kobject *mempolicy_kobj)
 		}
 	}
 
+	hotplug_memory_notifier(wi_node_notifier, DEFAULT_CALLBACK_PRI);
 	return 0;
 
 err_out:
