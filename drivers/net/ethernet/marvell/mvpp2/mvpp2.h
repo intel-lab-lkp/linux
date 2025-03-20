@@ -1113,6 +1113,9 @@ struct mvpp2 {
 
 	/* Spinlocks for CM3 shared memory configuration */
 	spinlock_t mss_spinlock;
+
+	/* Spinlock for shared parser memory */
+	spinlock_t prs_spinlock;
 };
 
 struct mvpp2_pcpu_stats {
