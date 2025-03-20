@@ -81,7 +81,6 @@ impl Device {
     }
 
     /// Returns a raw pointer to the device' bus type.
-    #[expect(unused)]
     pub(crate) fn bus_type_raw(&self) -> *const bindings::bus_type {
         // SAFETY:
         // - By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
