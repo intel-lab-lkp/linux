@@ -64,8 +64,11 @@ struct extended_sigtable {
  * @bytes_sent:		Total bytes transmitted so far
  * @offset:		Current offset in the microcode image
  * @state:		Current state of the staging process
+ *
+ * Staging is performed sequentially per package, so concurrent access is
+ * not expected.
  */
-struct staging_state {
+static struct staging_state {
 	void __iomem		*mmio_base;
 	void			*ucode_ptr;
 	unsigned int		ucode_len;
@@ -73,7 +76,7 @@ struct staging_state {
 	unsigned int		bytes_sent;
 	unsigned int		offset;
 	enum ucode_state	state;
-};
+} staging;
 
 #define DEFAULT_UCODE_TOTALSIZE (DEFAULT_UCODE_DATASIZE + MC_HEADER_SIZE)
 #define EXT_HEADER_SIZE		(sizeof(struct extended_sigtable))
@@ -318,6 +321,55 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 	}
 
 	return size ? NULL : patch;
+}
+
+/*
+ * Handle the staging process using the mailbox MMIO interface. The
+ * caller is expected to check the result in staging.state.
+ */
+static void do_stage(u64 mmio_pa)
+{
+	pr_debug_once("Staging implementation is pending.\n");
+	staging.state = UCODE_ERROR;
+}
+
+static void stage_microcode(void)
+{
+	unsigned int pkg_id = UINT_MAX;
+	u64 mmio_pa;
+	int cpu;
+
+	staging.ucode_ptr = ucode_patch_late;
+	staging.ucode_len = get_totalsize(&ucode_patch_late->hdr);
+	if (!IS_ALIGNED(staging.ucode_len, sizeof(u32)))
+		return;
+
+	lockdep_assert_cpus_held();
+
+	/*
+	 * The MMIO address is unique per package, and all the SMT
+	 * primary threads are online here. Find each MMIO space by
+	 * their package ids to avoid duplicate staging.
+	 */
+	for_each_cpu(cpu, cpu_online_mask) {
+		if (!topology_is_primary_thread(cpu) ||
+		     topology_logical_package_id(cpu) == pkg_id)
+			continue;
+		pkg_id = topology_logical_package_id(cpu);
+
+		rdmsrl_on_cpu(cpu, MSR_IA32_MCU_STAGING_MBOX_ADDR, &mmio_pa);
+
+		do_stage(mmio_pa);
+		if (staging.state != UCODE_OK) {
+			pr_err("Error: staging failed with %s for CPU%d at package %u.\n",
+			       staging.state == UCODE_TIMEOUT ? "timeout" : "error state",
+			       cpu, pkg_id);
+			return;
+		}
+	}
+
+	pr_info("Staging of patch revision 0x%x succeeded.\n",
+		((struct microcode_header_intel *)ucode_patch_late)->rev);
 }
 
 static enum ucode_state __apply_microcode(struct ucode_cpu_info *uci,
@@ -648,6 +700,7 @@ static struct microcode_ops microcode_intel_ops = {
 	.collect_cpu_info	= collect_cpu_info,
 	.apply_microcode	= apply_microcode_late,
 	.finalize_late_load	= finalize_late_load,
+	.stage_microcode	= stage_microcode,
 	.use_nmi		= IS_ENABLED(CONFIG_X86_64),
 };
 
