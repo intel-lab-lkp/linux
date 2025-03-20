@@ -1280,11 +1280,13 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 			 * We replay the request because the device may
 			 * go away in the mean time.
 			 */
+			dev_hold(dev);
 			netdev_unlock_ops(dev);
 			rtnl_unlock();
 			request_module(NET_SCH_ALIAS_PREFIX "%s", name);
 			rtnl_lock();
 			netdev_lock_ops(dev);
+			dev_put(dev);
 			ops = qdisc_lookup_ops(kind);
 			if (ops != NULL) {
 				/* We will try again qdisc_lookup_ops,
