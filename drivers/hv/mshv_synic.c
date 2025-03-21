@@ -151,13 +151,12 @@ static bool mshv_async_call_completion_isr(struct hv_message *msg)
 	rcu_read_lock();
 
 	partition = mshv_partition_find(partition_id);
-	partition->async_hypercall_status = async_msg->status;
-
 	if (unlikely(!partition)) {
 		pr_debug("failed to find partition %llu\n", partition_id);
 		goto unlock_out;
 	}
 
+	partition->async_hypercall_status = async_msg->status;
 	complete(&partition->async_hypercall);
 
 	handled = true;
