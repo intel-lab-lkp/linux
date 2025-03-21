@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _DT_BINDINGS_CLK_QCOM_IPQ_CMN_PLL_H
@@ -19,4 +19,12 @@
 #define ETH1_50MHZ_CLK			7
 #define ETH2_50MHZ_CLK			8
 #define ETH_25MHZ_CLK			9
+
+/*
+ * The CMN PLL output clock rates that are specifically applicable for IPQ5424
+ * SoC. For IPQ5424, the other output clocks and their rates are same as IPQ9574.
+ */
+#define NSS_300MHZ_CLK			4
+#define PPE_375MHZ_CLK			5
+
 #endif
