@@ -400,6 +400,13 @@ struct vsp1_rwpf *vsp1_rpf_create(struct vsp1_device *vsp1, unsigned int index)
 	rpf->entity.type = VSP1_ENTITY_RPF;
 	rpf->entity.index = index;
 
+	ret = vsp1_rwpf_init_formats(vsp1, rpf);
+	if (ret < 0) {
+		dev_err(vsp1->dev, "rpf%u: failed to initialize formats\n",
+			index);
+		return ERR_PTR(ret);
+	}
+
 	sprintf(name, "rpf.%u", index);
 	ret = vsp1_entity_init(vsp1, &rpf->entity, name, 2, &vsp1_rwpf_subdev_ops,
 			       MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER);

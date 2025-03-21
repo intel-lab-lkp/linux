@@ -30,6 +30,7 @@ struct vsp1_rwpf_memory {
 	dma_addr_t addr[3];
 };
 
+struct vsp1_rwpf_codes;
 struct vsp1_rwpf {
 	struct vsp1_entity entity;
 	struct v4l2_ctrl_handler ctrls;
@@ -38,6 +39,8 @@ struct vsp1_rwpf {
 
 	unsigned int max_width;
 	unsigned int max_height;
+
+	const struct vsp1_rwpf_codes *mbus_codes;
 
 	struct v4l2_pix_format_mplane format;
 	const struct vsp1_format_info *fmtinfo;
@@ -81,6 +84,7 @@ struct vsp1_rwpf *vsp1_wpf_create(struct vsp1_device *vsp1, unsigned int index);
 
 void vsp1_wpf_stop(struct vsp1_rwpf *wpf);
 
+int vsp1_rwpf_init_formats(struct vsp1_device *vsp1, struct vsp1_rwpf *rwpf);
 int vsp1_rwpf_init_ctrls(struct vsp1_rwpf *rwpf, unsigned int ncontrols);
 
 extern const struct v4l2_subdev_ops vsp1_rwpf_subdev_ops;

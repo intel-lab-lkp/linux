@@ -16,10 +16,45 @@
 #define RWPF_MIN_WIDTH				1
 #define RWPF_MIN_HEIGHT				1
 
+struct vsp1_rwpf_codes {
+	const u32 *codes;
+	unsigned int num_codes;
+};
+
 static const u32 rwpf_mbus_codes[] = {
 	MEDIA_BUS_FMT_ARGB8888_1X32,
 	MEDIA_BUS_FMT_AHSV8888_1X32,
 	MEDIA_BUS_FMT_AYUV8_1X32,
+};
+
+static const struct vsp1_rwpf_codes rwpf_codes = {
+	.codes = rwpf_mbus_codes,
+	.num_codes = ARRAY_SIZE(rwpf_mbus_codes),
+};
+
+static const u32 vspx_rpf0_mbus_codes[] = {
+	MEDIA_BUS_FMT_Y8_1X8,
+	MEDIA_BUS_FMT_Y10_1X10,
+	MEDIA_BUS_FMT_Y12_1X12,
+	MEDIA_BUS_FMT_Y16_1X16,
+	MEDIA_BUS_FMT_METADATA_FIXED
+};
+
+static const struct vsp1_rwpf_codes vspx_rpf0_codes = {
+	.codes = vspx_rpf0_mbus_codes,
+	.num_codes = ARRAY_SIZE(vspx_rpf0_mbus_codes),
+};
+
+static const u32 vspx_rpf1_mbus_codes[] = {
+	MEDIA_BUS_FMT_Y8_1X8,
+	MEDIA_BUS_FMT_Y10_1X10,
+	MEDIA_BUS_FMT_Y12_1X12,
+	MEDIA_BUS_FMT_Y16_1X16,
+};
+
+static const struct vsp1_rwpf_codes vspx_rpf1_codes = {
+	.codes = vspx_rpf1_mbus_codes,
+	.num_codes = ARRAY_SIZE(vspx_rpf1_mbus_codes),
 };
 
 /* -----------------------------------------------------------------------------
@@ -30,10 +65,12 @@ static int vsp1_rwpf_enum_mbus_code(struct v4l2_subdev *subdev,
 				    struct v4l2_subdev_state *sd_state,
 				    struct v4l2_subdev_mbus_code_enum *code)
 {
-	if (code->index >= ARRAY_SIZE(rwpf_mbus_codes))
+	struct vsp1_rwpf *rwpf = to_rwpf(subdev);
+
+	if (code->index >= rwpf->mbus_codes->num_codes)
 		return -EINVAL;
 
-	code->code = rwpf_mbus_codes[code->index];
+	code->code = rwpf->mbus_codes->codes[code->index];
 
 	return 0;
 }
@@ -69,12 +106,12 @@ static int vsp1_rwpf_set_format(struct v4l2_subdev *subdev,
 	}
 
 	/* Default to YUV if the requested format is not supported. */
-	for (i = 0; i < ARRAY_SIZE(rwpf_mbus_codes); ++i) {
-		if (fmt->format.code == rwpf_mbus_codes[i])
+	for (i = 0; i < rwpf->mbus_codes->num_codes; ++i) {
+		if (fmt->format.code == rwpf->mbus_codes->codes[i])
 			break;
 	}
-	if (i == ARRAY_SIZE(rwpf_mbus_codes))
-		fmt->format.code = MEDIA_BUS_FMT_AYUV8_1X32;
+	if (i == rwpf->mbus_codes->num_codes)
+		fmt->format.code = rwpf->mbus_codes->codes[0];
 
 	format = v4l2_subdev_state_get_format(state, fmt->pad);
 
@@ -267,8 +304,37 @@ static const struct v4l2_ctrl_ops vsp1_rwpf_ctrl_ops = {
 	.s_ctrl = vsp1_rwpf_s_ctrl,
 };
 
+int vsp1_rwpf_init_formats(struct vsp1_device *vsp1, struct vsp1_rwpf *rwpf)
+{
+	/* Only VSPX and RPF support reading Bayer data. */
+	if (!vsp1_feature(vsp1, VSP1_HAS_IIF) ||
+	    rwpf->entity.type != VSP1_ENTITY_RPF) {
+		rwpf->mbus_codes = &rwpf_codes;
+		return 0;
+	}
+
+	/*
+	 * VSPX only features RPF0 and RPF1. RPF0 supports reading ISP ConfigDMA
+	 * and Bayer data, RPF1 supports reading Bayer data only.
+	 */
+	switch (rwpf->entity.index) {
+	case 0:
+		rwpf->mbus_codes = &vspx_rpf0_codes;
+		break;
+	case 1:
+		rwpf->mbus_codes = &vspx_rpf1_codes;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int vsp1_rwpf_init_ctrls(struct vsp1_rwpf *rwpf, unsigned int ncontrols)
 {
+	/* Initialize controls. */
+
 	v4l2_ctrl_handler_init(&rwpf->ctrls, ncontrols + 1);
 	v4l2_ctrl_new_std(&rwpf->ctrls, &vsp1_rwpf_ctrl_ops,
 			  V4L2_CID_ALPHA_COMPONENT, 0, 255, 1, 255);
