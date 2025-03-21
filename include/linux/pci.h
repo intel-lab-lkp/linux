@@ -1205,6 +1205,11 @@ u8 pci_find_ht_capability(struct pci_dev *dev, int ht_cap);
 u8 pci_find_next_ht_capability(struct pci_dev *dev, u8 pos, int ht_cap);
 u16 pci_find_ext_capability(struct pci_dev *dev, int cap);
 u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 pos, int cap);
+typedef u32 (*pci_generic_read_cfg)(void *priv, int where, int size);
+u8 pci_generic_find_capability(void *priv, pci_generic_read_cfg read_cfg,
+			       u8 cap);
+u16 pci_generic_find_ext_capability(void *priv, pci_generic_read_cfg read_cfg,
+				    u8 cap);
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 u16 pci_find_vsec_capability(struct pci_dev *dev, u16 vendor, int cap);
 u16 pci_find_dvsec_capability(struct pci_dev *dev, u16 vendor, u16 dvsec);
@@ -2012,7 +2017,13 @@ static inline u8 pci_find_next_capability(struct pci_dev *dev, u8 post, int cap)
 { return 0; }
 static inline u16 pci_find_ext_capability(struct pci_dev *dev, int cap)
 { return 0; }
-
+typedef u32 (*pci_generic_read_cfg)(void *priv, int where, int size);
+u8 pci_generic_find_capability(void *priv, pci_generic_read_cfg read_cfg,
+			       u8 cap)
+{ return 0; }
+u16 pci_generic_find_ext_capability(void *priv, pci_generic_read_cfg read_cfg,
+				    u8 cap)
+{ return 0; }
 static inline u64 pci_get_dsn(struct pci_dev *dev)
 { return 0; }
 
