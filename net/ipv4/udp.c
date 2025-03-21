@@ -2903,10 +2903,15 @@ static void set_xfrm_gro_udp_encap_rcv(__u16 encap_type, unsigned short family,
 {
 #ifdef CONFIG_XFRM
 	if (udp_test_bit(GRO_ENABLED, sk) && encap_type == UDP_ENCAP_ESPINUDP) {
+		bool old_enabled = !!udp_sk(sk)->gro_receive;
+
 		if (family == AF_INET)
 			WRITE_ONCE(udp_sk(sk)->gro_receive, xfrm4_gro_udp_encap_rcv);
 		else if (IS_ENABLED(CONFIG_IPV6) && family == AF_INET6)
 			WRITE_ONCE(udp_sk(sk)->gro_receive, ipv6_stub->xfrm6_gro_udp_encap_rcv);
+
+		if (!old_enabled && udp_sk(sk)->gro_receive)
+			udp_tunnel_update_gro_rcv(sk, true);
 	}
 #endif
 }

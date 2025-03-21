@@ -37,9 +37,11 @@ struct udp_tunnel_type_entry {
 	refcount_t count;
 };
 
+/* vxlan, fou and xfrm have 2 different gro_receive hooks each */
 #define UDP_MAX_TUNNEL_TYPES (IS_ENABLED(CONFIG_GENEVE) + \
 			      IS_ENABLED(CONFIG_VXLAN) * 2 + \
-			      IS_ENABLED(CONFIG_NET_FOU) * 2)
+			      IS_ENABLED(CONFIG_NET_FOU) * 2 + \
+			      IS_ENABLED(CONFIG_XFRM) * 2)
 
 DEFINE_STATIC_CALL(udp_tunnel_gro_rcv, dummy_gro_rcv);
 static DEFINE_STATIC_KEY_FALSE(udp_tunnel_static_call);
