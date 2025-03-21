@@ -6806,6 +6806,30 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+int napi_set_threaded(struct napi_struct *napi, bool threaded)
+{
+	if (napi->dev->threaded)
+		return -EINVAL;
+
+	if (threaded) {
+		if (!napi->thread) {
+			int err = napi_kthread_create(napi);
+
+			if (err)
+				return err;
+		}
+	}
+
+	if (napi->config)
+		napi->config->threaded = threaded;
+
+	/* Make sure kthread is created before THREADED bit is set. */
+	smp_mb__before_atomic();
+	assign_bit(NAPI_STATE_THREADED, &napi->state, threaded);
+
+	return 0;
+}
+
 int dev_set_threaded(struct net_device *dev, bool threaded)
 {
 	struct napi_struct *napi;
@@ -6817,6 +6841,11 @@ int dev_set_threaded(struct net_device *dev, bool threaded)
 		return 0;
 
 	if (threaded) {
+		/* Check if threaded is set at napi level already */
+		list_for_each_entry(napi, &dev->napi_list, dev_list)
+			if (test_bit(NAPI_STATE_THREADED, &napi->state))
+				return -EINVAL;
+
 		list_for_each_entry(napi, &dev->napi_list, dev_list) {
 			if (!napi->thread) {
 				err = napi_kthread_create(napi);
@@ -7063,6 +7092,8 @@ static void napi_restore_config(struct napi_struct *n)
 		napi_hash_add(n);
 		n->config->napi_id = n->napi_id;
 	}
+
+	napi_set_threaded(n, n->config->threaded);
 }
 
 static void napi_save_config(struct napi_struct *n)
