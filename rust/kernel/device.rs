@@ -65,6 +65,16 @@ impl Device {
         self.0.get()
     }
 
+    /// Returns a raw pointer to the device' bus type.
+    #[expect(unused)]
+    pub(crate) fn bus_type_raw(&self) -> *const bindings::bus_type {
+        // SAFETY:
+        // - By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        // - `dev->bus` is a pointer to a `const struct bus_type`, which is only ever set at device
+        //    creation.
+        unsafe { (*self.as_raw()).bus }
+    }
+
     /// Convert a raw C `struct device` pointer to a `&'a Device`.
     ///
     /// # Safety
