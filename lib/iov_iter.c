@@ -19,12 +19,15 @@ size_t copy_to_user_iter(void __user *iter_to, size_t progress,
 {
 	if (should_fail_usercopy())
 		return len;
-	if (access_ok(iter_to, len)) {
-		from += progress;
-		instrument_copy_to_user(iter_to, from, len);
-		len = raw_copy_to_user(iter_to, from, len);
-	}
-	return len;
+
+	if (can_do_masked_user_access())
+		iter_to = mask_user_address(iter_to);
+	else if (!access_ok(iter_to, len))
+		return len;
+
+	from += progress;
+	instrument_copy_to_user(iter_to, from, len);
+	return raw_copy_to_user(iter_to, from, len);
 }
 
 static __always_inline
@@ -49,12 +52,17 @@ size_t copy_from_user_iter(void __user *iter_from, size_t progress,
 
 	if (should_fail_usercopy())
 		return len;
-	if (access_ok(iter_from, len)) {
-		to += progress;
-		instrument_copy_from_user_before(to, iter_from, len);
-		res = raw_copy_from_user(to, iter_from, len);
-		instrument_copy_from_user_after(to, iter_from, len, res);
-	}
+
+	if (can_do_masked_user_access())
+		iter_from = mask_user_address(iter_from);
+	else if (!access_ok(iter_from, len))
+		return len;
+
+	to += progress;
+	instrument_copy_from_user_before(to, iter_from, len);
+	res = raw_copy_from_user(to, iter_from, len);
+	instrument_copy_from_user_after(to, iter_from, len, res);
+
 	return res;
 }
 
@@ -1330,15 +1338,17 @@ static __noclone int copy_compat_iovec_from_user(struct iovec *iov,
 	int ret = -EFAULT;
 	u32 i;
 
-	if (!user_access_begin(uiov, nr_segs * sizeof(*uiov)))
+	if (can_do_masked_user_access())
+		uiov = masked_user_access_begin(uiov);
+	else if (!user_access_begin(uiov, nr_segs * sizeof(*uiov)))
 		return -EFAULT;
 
 	for (i = 0; i < nr_segs; i++) {
 		compat_uptr_t buf;
 		compat_ssize_t len;
 
-		unsafe_get_user(len, &uiov[i].iov_len, uaccess_end);
 		unsafe_get_user(buf, &uiov[i].iov_base, uaccess_end);
+		unsafe_get_user(len, &uiov[i].iov_len, uaccess_end);
 
 		/* check for compat_size_t not fitting in compat_ssize_t .. */
 		if (len < 0) {
@@ -1360,15 +1370,17 @@ static __noclone int copy_iovec_from_user(struct iovec *iov,
 {
 	int ret = -EFAULT;
 
-	if (!user_access_begin(uiov, nr_segs * sizeof(*uiov)))
+	if (can_do_masked_user_access())
+		uiov = masked_user_access_begin(uiov);
+	else if (!user_access_begin(uiov, nr_segs * sizeof(*uiov)))
 		return -EFAULT;
 
 	do {
 		void __user *buf;
 		ssize_t len;
 
-		unsafe_get_user(len, &uiov->iov_len, uaccess_end);
 		unsafe_get_user(buf, &uiov->iov_base, uaccess_end);
+		unsafe_get_user(len, &uiov->iov_len, uaccess_end);
 
 		/* check for size_t not fitting in ssize_t .. */
 		if (unlikely(len < 0)) {
