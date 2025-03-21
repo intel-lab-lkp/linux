@@ -57,10 +57,11 @@ void udp_tunnel_update_gro_lookup(struct net *net, struct sock *sk, bool add)
 	struct udp_tunnel_gro *udp_tunnel_gro;
 
 	spin_lock(&udp_tunnel_gro_lock);
+
 	udp_tunnel_gro = &net->ipv4.udp_tunnel_gro[is_ipv6];
 	if (add)
 		hlist_add_head(&up->tunnel_list, &udp_tunnel_gro->list);
-	else
+	else if (up->tunnel_list.pprev)
 		hlist_del_init(&up->tunnel_list);
 
 	if (udp_tunnel_gro->list.first &&

@@ -214,13 +214,9 @@ static inline void udp_tunnel_update_gro_rcv(struct sock *sk, bool add) {}
 
 static inline void udp_tunnel_cleanup_gro(struct sock *sk)
 {
-	struct udp_sock *up = udp_sk(sk);
 	struct net *net = sock_net(sk);
 
 	udp_tunnel_update_gro_rcv(sk, false);
-
-	if (!up->tunnel_list.pprev)
-		return;
 
 	udp_tunnel_update_gro_lookup(net, sk, false);
 }
