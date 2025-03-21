@@ -82,6 +82,10 @@ definitions:
     name: qstats-scope
     type: flags
     entries: [ queue ]
+  -
+    name: napi-threaded
+    type: enum
+    entries: [ disable, enable, busy-poll-enable ]
 
 attribute-sets:
   -
@@ -283,11 +287,11 @@ attribute-sets:
       -
         name: threaded
         doc: Whether the napi is configured to operate in threaded polling
-             mode. If this is set to `1` then the NAPI context operates
-             in threaded polling mode.
+             mode. If this is set to `enable` then the NAPI context operates
+             in threaded polling mode. If this is set to `busy-poll-enable`
+             then the NAPI kthread also does busypolling.
         type: u32
-        checks:
-          max: 1
+        enum: napi-threaded
   -
     name: xsk-info
     attributes: []

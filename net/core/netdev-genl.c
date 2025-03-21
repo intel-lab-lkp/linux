@@ -332,7 +332,7 @@ netdev_nl_napi_set_config(struct napi_struct *napi, struct genl_info *info)
 
 	if (info->attrs[NETDEV_A_NAPI_THREADED]) {
 		threaded = nla_get_u32(info->attrs[NETDEV_A_NAPI_THREADED]);
-		napi_set_threaded(napi, !!threaded);
+		napi_set_threaded(napi, threaded);
 	}
 
 	if (info->attrs[NETDEV_A_NAPI_DEFER_HARD_IRQS]) {
