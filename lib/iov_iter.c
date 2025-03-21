@@ -1475,13 +1475,6 @@ ssize_t __import_iovec(int type, const struct iovec __user *uvec,
 	for (seg = 0; seg < nr_segs; seg++) {
 		ssize_t len = (ssize_t)iov[seg].iov_len;
 
-		if (!access_ok(iov[seg].iov_base, len)) {
-			if (iov != *iovp)
-				kfree(iov);
-			*iovp = NULL;
-			return -EFAULT;
-		}
-
 		if (len > MAX_RW_COUNT - total_len) {
 			len = MAX_RW_COUNT - total_len;
 			iov[seg].iov_len = len;
@@ -1532,8 +1525,6 @@ int import_ubuf(int rw, void __user *buf, size_t len, struct iov_iter *i)
 {
 	if (len > MAX_RW_COUNT)
 		len = MAX_RW_COUNT;
-	if (unlikely(!access_ok(buf, len)))
-		return -EFAULT;
 
 	iov_iter_ubuf(i, rw, buf, len);
 	return 0;
