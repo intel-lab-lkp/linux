@@ -83,7 +83,7 @@ void udp_tunnel_update_gro_rcv(struct sock *sk, bool add)
 	struct udp_sock *up = udp_sk(sk);
 	int i, old_gro_type_nr;
 
-	if (!up->gro_receive)
+	if (!UDP_MAX_TUNNEL_TYPES || !up->gro_receive)
 		return;
 
 	mutex_lock(&udp_tunnel_gro_type_lock);
