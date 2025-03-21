@@ -1441,22 +1441,48 @@ static ssize_t __import_iovec_ubuf(int type, const struct iovec __user *uvec,
 				   struct iovec **iovp, struct iov_iter *i,
 				   bool compat)
 {
+	const struct compat_iovec __user *compat_uvec;
 	struct iovec *iov = *iovp;
-	ssize_t ret;
+	void __user *buf;
+	ssize_t len;
+	int ret;
 
 	*iovp = NULL;
 
-	if (compat)
-		ret = copy_compat_iovec_from_user(iov, uvec, 1);
-	else
-		ret = copy_iovec_from_user(iov, uvec, 1);
-	if (unlikely(ret))
-		return ret;
+	if (can_do_masked_user_access())
+		uvec = masked_user_access_begin(uvec);
+	else if (!user_access_begin(uvec, compat ? sizeof (*compat_uvec) : sizeof (*uvec)))
+		return -EFAULT;
 
-	ret = import_ubuf(type, iov->iov_base, iov->iov_len, i);
+	if (unlikely(compat)) {
+		compat_uvec = (const void __user *)uvec;
+		compat_uptr_t compat_buf;
+		compat_ssize_t compat_len;
+
+		unsafe_get_user(compat_buf, &compat_uvec->iov_base, uaccess_end_efault);
+		unsafe_get_user(compat_len, &compat_uvec->iov_len, uaccess_end_efault);
+		buf = compat_ptr(compat_buf);
+		len = compat_len;
+	} else {
+		unsafe_get_user(buf, &uvec->iov_base, uaccess_end_efault);
+		unsafe_get_user(len, &uvec->iov_len, uaccess_end_efault);
+	}
+	user_access_end();
+
+	/* check for size_t not fitting in ssize_t .. */
+	if (unlikely(len < 0))
+		return -EINVAL;
+
+	iov->iov_base = buf;
+	iov->iov_len = len;
+	ret = import_ubuf(type, buf, len, i);
 	if (unlikely(ret))
 		return ret;
-	return i->count;
+	return len;
+
+uaccess_end_efault:
+	user_access_end();
+	return -EFAULT;
 }
 
 ssize_t __import_iovec(int type, const struct iovec __user *uvec,
