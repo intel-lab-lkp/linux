@@ -226,41 +226,55 @@ static void uvc_fixup_video_ctrl(struct uvc_streaming *stream,
 	if ((ctrl->dwMaxPayloadTransferSize & 0xffff0000) == 0xffff0000)
 		ctrl->dwMaxPayloadTransferSize &= ~0xffff0000;
 
-	if (!(format->flags & UVC_FMT_FLAG_COMPRESSED) &&
-	    stream->dev->quirks & UVC_QUIRK_FIX_BANDWIDTH &&
-	    stream->intf->num_altsetting > 1) {
-		u32 interval;
-		u32 bandwidth;
+	if (stream->intf->num_altsetting > 1) {
+		if (!(format->flags & UVC_FMT_FLAG_COMPRESSED) &&
+		    stream->dev->quirks & UVC_QUIRK_FIX_BANDWIDTH) {
+			u32 interval;
+			u32 bandwidth;
 
-		interval = (ctrl->dwFrameInterval > 100000)
-			 ? ctrl->dwFrameInterval
-			 : frame->dwFrameInterval[0];
+			interval = (ctrl->dwFrameInterval > 100000)
+				 ? ctrl->dwFrameInterval
+				 : frame->dwFrameInterval[0];
 
-		/*
-		 * Compute a bandwidth estimation by multiplying the frame
-		 * size by the number of video frames per second, divide the
-		 * result by the number of USB frames (or micro-frames for
-		 * high- and super-speed devices) per second and add the UVC
-		 * header size (assumed to be 12 bytes long).
-		 */
-		bandwidth = frame->wWidth * frame->wHeight / 8 * format->bpp;
-		bandwidth *= 10000000 / interval + 1;
-		bandwidth /= 1000;
-		if (stream->dev->udev->speed >= USB_SPEED_HIGH)
-			bandwidth /= 8;
-		bandwidth += 12;
+			/*
+			 * Compute a bandwidth estimation by multiplying the
+			 * frame size by the number of video frames per second,
+			 * divide the result by the number of USB frames (or
+			 * micro-frames for high- and super-speed devices) per
+			 * second and add the UVC header size (assumed to be
+			 * 12 bytes long).
+			 */
+			bandwidth = frame->wWidth * frame->wHeight / 8
+				    * format->bpp;
+			bandwidth *= 10000000 / interval + 1;
+			bandwidth /= 1000;
+			if (stream->dev->udev->speed >= USB_SPEED_HIGH)
+				bandwidth /= 8;
+			bandwidth += 12;
 
-		/*
-		 * The bandwidth estimate is too low for many cameras. Don't use
-		 * maximum packet sizes lower than 1024 bytes to try and work
-		 * around the problem. According to measurements done on two
-		 * different camera models, the value is high enough to get most
-		 * resolutions working while not preventing two simultaneous
-		 * VGA streams at 15 fps.
-		 */
-		bandwidth = max_t(u32, bandwidth, 1024);
+			/*
+			 * The bandwidth estimate is too low for many cameras.
+			 * Don't use maximum packet sizes lower than 1024 bytes
+			 * to try and work around the problem. According to
+			 * measurements done on two different camera models,
+			 * the value is high enough to get most resolutions
+			 * working while not preventing two simultaneous VGA
+			 * streams at 15 fps.
+			 */
+			bandwidth = max_t(u32, bandwidth, 1024);
 
-		ctrl->dwMaxPayloadTransferSize = bandwidth;
+			ctrl->dwMaxPayloadTransferSize = bandwidth;
+		}
+
+		if (format->flags & UVC_FMT_FLAG_COMPRESSED &&
+		    stream->dev->quirks & UVC_QUIRK_OVERFLOW_BANDWIDTH &&
+		    ctrl->dwMaxPayloadTransferSize > stream->maxpsize) {
+			dev_warn(&stream->intf->dev,
+				 "the max payload transmission size (%d) exceededs the size of the ep max packet (%d). use the default value of 1024 bytes.\n",
+				 ctrl->dwMaxPayloadTransferSize,
+				 stream->maxpsize);
+			ctrl->dwMaxPayloadTransferSize = 1024;
+		}
 	}
 }
 
