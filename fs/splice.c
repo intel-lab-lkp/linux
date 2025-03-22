@@ -175,14 +175,6 @@ static const struct pipe_buf_operations user_page_pipe_buf_ops = {
 	.get		= generic_pipe_buf_get,
 };
 
-static void wakeup_pipe_readers(struct pipe_inode_info *pipe)
-{
-	smp_mb();
-	if (waitqueue_active(&pipe->rd_wait))
-		wake_up_interruptible(&pipe->rd_wait);
-	kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
-}
-
 /**
  * splice_to_pipe - fill passed data into a pipe
  * @pipe:	pipe to fill
@@ -414,14 +406,6 @@ const struct pipe_buf_operations nosteal_pipe_buf_ops = {
 };
 EXPORT_SYMBOL(nosteal_pipe_buf_ops);
 
-static void wakeup_pipe_writers(struct pipe_inode_info *pipe)
-{
-	smp_mb();
-	if (waitqueue_active(&pipe->wr_wait))
-		wake_up_interruptible(&pipe->wr_wait);
-	kill_fasync(&pipe->fasync_writers, SIGIO, POLL_OUT);
-}
-
 /**
  * splice_from_pipe_feed - feed available data from a pipe to a file
  * @pipe:	pipe to splice from
@@ -541,7 +525,7 @@ repeat:
 			return -ERESTARTSYS;
 
 		if (sd->need_wakeup) {
-			wakeup_pipe_writers(pipe);
+			pipe_wakeup_writers(pipe);
 			sd->need_wakeup = false;
 		}
 
@@ -582,7 +566,7 @@ static void splice_from_pipe_begin(struct splice_desc *sd)
 static void splice_from_pipe_end(struct pipe_inode_info *pipe, struct splice_desc *sd)
 {
 	if (sd->need_wakeup)
-		wakeup_pipe_writers(pipe);
+		pipe_wakeup_writers(pipe);
 }
 
 /**
@@ -837,7 +821,7 @@ ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 				goto out;
 
 			if (need_wakeup) {
-				wakeup_pipe_writers(pipe);
+				pipe_wakeup_writers(pipe);
 				need_wakeup = false;
 			}
 
@@ -917,7 +901,7 @@ ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 out:
 	pipe_unlock(pipe);
 	if (need_wakeup)
-		wakeup_pipe_writers(pipe);
+		pipe_wakeup_writers(pipe);
 	return spliced ?: ret;
 }
 #endif
@@ -1295,7 +1279,7 @@ ssize_t splice_file_to_pipe(struct file *in,
 		ret = do_splice_read(in, offset, opipe, len, flags);
 	pipe_unlock(opipe);
 	if (ret > 0)
-		wakeup_pipe_readers(opipe);
+		pipe_wakeup_readers(opipe);
 	return ret;
 }
 
@@ -1558,7 +1542,7 @@ static ssize_t vmsplice_to_pipe(struct file *file, struct iov_iter *iter,
 		ret = iter_to_pipe(iter, pipe, buf_flag);
 	pipe_unlock(pipe);
 	if (ret > 0) {
-		wakeup_pipe_readers(pipe);
+		pipe_wakeup_readers(pipe);
 		fsnotify_modify(file);
 	}
 	return ret;
@@ -1844,10 +1828,10 @@ retry:
 	 * If we put data in the output pipe, wakeup any potential readers.
 	 */
 	if (ret > 0)
-		wakeup_pipe_readers(opipe);
+		pipe_wakeup_readers(opipe);
 
 	if (input_wakeup)
-		wakeup_pipe_writers(ipipe);
+		pipe_wakeup_writers(ipipe);
 
 	return ret;
 }
@@ -1935,7 +1919,7 @@ static ssize_t link_pipe(struct pipe_inode_info *ipipe,
 	 * If we put data in the output pipe, wakeup any potential readers.
 	 */
 	if (ret > 0)
-		wakeup_pipe_readers(opipe);
+		pipe_wakeup_readers(opipe);
 
 	return ret;
 }

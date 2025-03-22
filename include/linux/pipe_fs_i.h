@@ -267,6 +267,10 @@ void pipe_double_lock(struct pipe_inode_info *, struct pipe_inode_info *);
 void pipe_wait_readable(struct pipe_inode_info *);
 void pipe_wait_writable(struct pipe_inode_info *);
 
+/* Wake up pipe readers/writers */
+void pipe_wakeup_readers(struct pipe_inode_info *pipe);
+void pipe_wakeup_writers(struct pipe_inode_info *pipe);
+
 struct pipe_inode_info *alloc_pipe_info(void);
 void free_pipe_info(struct pipe_inode_info *);
 
