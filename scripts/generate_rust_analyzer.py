@@ -123,7 +123,7 @@ def generate_crates(
         proc_macro_crate: ProcMacroCrate = {
             **crate,
             "is_proc_macro": True,
-            "proc_macro_dylib_path": f"{objtree}/rust/{proc_macro_dylib_name}",
+            "proc_macro_dylib_path": str(objtree / "rust" / proc_macro_dylib_name),
         }
         register_crate(proc_macro_crate)
 
