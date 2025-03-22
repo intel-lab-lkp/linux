@@ -3739,11 +3739,11 @@ static ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 				loff_t *ppos, size_t len, unsigned int flags)
 {
 	struct socket *sock = sock_from_file(out);
+	bool need_wakeup = false;
 	struct bio_vec bvec[16];
 	struct msghdr msg = {};
-	ssize_t ret = 0;
 	size_t spliced = 0;
-	bool need_wakeup = false;
+	ssize_t ret = 0;
 
 	pipe_lock(pipe);
 
