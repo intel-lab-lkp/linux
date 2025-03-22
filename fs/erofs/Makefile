@@ -9,3 +9,8 @@ erofs-$(CONFIG_EROFS_FS_ZIP_DEFLATE) += decompressor_deflate.o
 erofs-$(CONFIG_EROFS_FS_ZIP_ZSTD) += decompressor_zstd.o
 erofs-$(CONFIG_EROFS_FS_BACKED_BY_FILE) += fileio.o
 erofs-$(CONFIG_EROFS_FS_ONDEMAND) += fscache.o
+
+# If we are built-in, we provide support for erofs on initrds.
+ifeq ($(CONFIG_EROFS_FS),y)
+erofs-objs += initrd.o
+endif
