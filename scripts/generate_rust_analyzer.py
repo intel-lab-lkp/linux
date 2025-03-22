@@ -211,7 +211,8 @@ def generate_crates(
 
     def is_root_crate(build_file: pathlib.Path, target: str) -> bool:
         try:
-            return f"{target}.o" in open(build_file).read()
+            with open(build_file) as f:
+                return f"{target}.o" in f.read()
         except FileNotFoundError:
             return False
 
