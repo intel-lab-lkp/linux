@@ -2,7 +2,6 @@
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
-#include <linux/romfs_fs.h>
 
 #include <linux/initrd.h>
 #include <linux/string.h>
@@ -42,7 +41,6 @@ static int __init crd_load(decompress_fn deco);
  *
  * We currently check for the following magic numbers:
  *	ext2
- *	romfs
  *	squashfs
  *	gzip
  *	bzip2
@@ -56,7 +54,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 		decompress_fn *decompressor)
 {
 	const int size = BLOCK_SIZE;
-	struct romfs_super_block *romfsb;
 
 	struct squashfs_super_block *squashfsb;
 	int nblocks = -1;
@@ -70,7 +67,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 	if (!buf)
 		return -ENOMEM;
 
-	romfsb = (struct romfs_super_block *) buf;
 	squashfsb = (struct squashfs_super_block *) buf;
 	memset(buf, 0xe5, size);
 
@@ -89,16 +85,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 			       "RAMDISK: %s decompressor not configured!\n",
 			       compress_name);
 		nblocks = 0;
-		goto done;
-	}
-
-	/* romfs is at block zero too */
-	if (romfsb->word0 == ROMSB_WORD0 &&
-	    romfsb->word1 == ROMSB_WORD1) {
-		printk(KERN_NOTICE
-		       "RAMDISK: romfs filesystem found at block %d\n",
-		       start_block);
-		nblocks = (ntohl(romfsb->size)+BLOCK_SIZE-1)>>BLOCK_SIZE_BITS;
 		goto done;
 	}
 

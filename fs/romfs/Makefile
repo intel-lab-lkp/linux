@@ -11,3 +11,7 @@ ifneq ($(CONFIG_MMU),y)
 romfs-$(CONFIG_ROMFS_ON_MTD) += mmap-nommu.o
 endif
 
+# If we are built-in, we provide support for romfs on initrds.
+ifeq ($(CONFIG_ROMFS_FS),y)
+romfs-y += initrd.o
+endif
