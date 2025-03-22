@@ -3,7 +3,7 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/romfs_fs.h>
-#include <uapi/linux/cramfs_fs.h>
+
 #include <linux/initrd.h>
 #include <linux/string.h>
 #include <linux/slab.h>
@@ -43,7 +43,6 @@ static int __init crd_load(decompress_fn deco);
  * We currently check for the following magic numbers:
  *	ext2
  *	romfs
- *	cramfs
  *	squashfs
  *	gzip
  *	bzip2
@@ -58,7 +57,7 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 {
 	const int size = BLOCK_SIZE;
 	struct romfs_super_block *romfsb;
-	struct cramfs_super *cramfsb;
+
 	struct squashfs_super_block *squashfsb;
 	int nblocks = -1;
 	unsigned char *buf;
@@ -72,7 +71,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 		return -ENOMEM;
 
 	romfsb = (struct romfs_super_block *) buf;
-	cramfsb = (struct cramfs_super *) buf;
 	squashfsb = (struct squashfs_super_block *) buf;
 	memset(buf, 0xe5, size);
 
@@ -104,14 +102,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 		goto done;
 	}
 
-	if (cramfsb->magic == CRAMFS_MAGIC) {
-		printk(KERN_NOTICE
-		       "RAMDISK: cramfs filesystem found at block %d\n",
-		       start_block);
-		nblocks = (cramfsb->size + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
-		goto done;
-	}
-
 	/* squashfs is at block zero too */
 	if (le32_to_cpu(squashfsb->s_magic) == SQUASHFS_MAGIC) {
 		printk(KERN_NOTICE
@@ -119,20 +109,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 		       start_block);
 		nblocks = (le64_to_cpu(squashfsb->bytes_used) + BLOCK_SIZE - 1)
 			 >> BLOCK_SIZE_BITS;
-		goto done;
-	}
-
-	/*
-	 * Read 512 bytes further to check if cramfs is padded
-	 */
-	pos = start_block * BLOCK_SIZE + 0x200;
-	kernel_read(file, buf, size, &pos);
-
-	if (cramfsb->magic == CRAMFS_MAGIC) {
-		printk(KERN_NOTICE
-		       "RAMDISK: cramfs filesystem found at block %d\n",
-		       start_block);
-		nblocks = (cramfsb->size + BLOCK_SIZE - 1) >> BLOCK_SIZE_BITS;
 		goto done;
 	}
 
