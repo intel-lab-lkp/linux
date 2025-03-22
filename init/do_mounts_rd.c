@@ -8,7 +8,6 @@
 #include <linux/slab.h>
 
 #include "do_mounts.h"
-#include "../fs/squashfs/squashfs_fs.h"
 
 #include <linux/decompress/generic.h>
 
@@ -41,7 +40,6 @@ static int __init crd_load(decompress_fn deco);
  *
  * We currently check for the following magic numbers:
  *	ext2
- *	squashfs
  *	gzip
  *	bzip2
  *	lzma
@@ -55,7 +53,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 {
 	const int size = BLOCK_SIZE;
 
-	struct squashfs_super_block *squashfsb;
 	int nblocks = -1;
 	unsigned char *buf;
 	const char *compress_name;
@@ -67,7 +64,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 	if (!buf)
 		return -ENOMEM;
 
-	squashfsb = (struct squashfs_super_block *) buf;
 	memset(buf, 0xe5, size);
 
 	/*
@@ -85,16 +81,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 			       "RAMDISK: %s decompressor not configured!\n",
 			       compress_name);
 		nblocks = 0;
-		goto done;
-	}
-
-	/* squashfs is at block zero too */
-	if (le32_to_cpu(squashfsb->s_magic) == SQUASHFS_MAGIC) {
-		printk(KERN_NOTICE
-		       "RAMDISK: squashfs filesystem found at block %d\n",
-		       start_block);
-		nblocks = (le64_to_cpu(squashfsb->bytes_used) + BLOCK_SIZE - 1)
-			 >> BLOCK_SIZE_BITS;
 		goto done;
 	}
 

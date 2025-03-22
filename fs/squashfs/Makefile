@@ -17,3 +17,8 @@ squashfs-$(CONFIG_SQUASHFS_LZO) += lzo_wrapper.o
 squashfs-$(CONFIG_SQUASHFS_XZ) += xz_wrapper.o
 squashfs-$(CONFIG_SQUASHFS_ZLIB) += zlib_wrapper.o
 squashfs-$(CONFIG_SQUASHFS_ZSTD) += zstd_wrapper.o
+
+# If we are built-in, we provide support for squashfs on initrds.
+ifeq ($(CONFIG_SQUASHFS),y)
+squashfs-y += initrd.o
+endif
