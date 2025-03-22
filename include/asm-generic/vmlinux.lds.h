@@ -968,8 +968,13 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 	KEEP(*(.init.ramfs))						\
 	. = ALIGN(8);							\
 	KEEP(*(.init.ramfs.info))
+
+#define INITRD_FS_DETECT()						\
+	. = ALIGN(16);							\
+	BOUNDED_SECTION(_initrd_fs_detect)
 #else
 #define INIT_RAM_FS
+#define INITRD_FS_DETECT()
 #endif
 
 /*
@@ -1170,6 +1175,7 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 		INIT_CALLS						\
 		CON_INITCALL						\
 		INIT_RAM_FS						\
+		INITRD_FS_DETECT()					\
 	}
 
 #define BSS_SECTION(sbss_align, bss_align, stop_align)			\

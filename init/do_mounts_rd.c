@@ -58,7 +58,7 @@ static int __init
 identify_ramdisk_image(struct file *file, loff_t pos,
 		decompress_fn *decompressor)
 {
-	const int size = 512;
+	const int size = BLOCK_SIZE;
 	struct minix_super_block *minixsb;
 	struct romfs_super_block *romfsb;
 	struct cramfs_super *cramfsb;
@@ -68,6 +68,7 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 	const char *compress_name;
 	unsigned long n;
 	int start_block = rd_image_start;
+	struct initrd_detect_fs *detect_fs;
 
 	buf = kmalloc(size, GFP_KERNEL);
 	if (!buf)
@@ -162,6 +163,31 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 		       "RAMDISK: ext2 filesystem found at block %d\n",
 		       start_block);
 		nblocks = n;
+		goto done;
+	}
+
+	/* Try to find a filesystem in the initrd */
+	for (detect_fs = __start_initrd_fs_detect;
+	     detect_fs < __stop_initrd_fs_detect;
+	     detect_fs++
+	     ) {
+		size_t fs_size;
+
+		pos = (start_block * BLOCK_SIZE) + detect_fs->detect_byte_offset;
+		kernel_read(file, buf, size, &pos);
+
+		fs_size = detect_fs->detect_fn(buf);
+
+		if (fs_size == 0)
+			continue;
+
+		nblocks = (fs_size + BLOCK_SIZE + 1)
+			>> BLOCK_SIZE_BITS;
+
+		printk(KERN_NOTICE
+		       "RAMDISK: filesystem found (%d blocks)\n",
+		       nblocks);
+
 		goto done;
 	}
 
