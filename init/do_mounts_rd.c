@@ -234,20 +234,20 @@ int __init rd_load_image(char *from)
 		goto done;
 	}
 
+	if (devblocks < nblocks) {
+		printk(KERN_ERR "RAMDISK: looks truncated: (%luKiB vs %dKiB) - continuing anyway\n",
+		       devblocks, nblocks);
+		nblocks = devblocks;
+	}
+
 	buf = kmalloc(BLOCK_SIZE, GFP_KERNEL);
 	if (!buf) {
 		printk(KERN_ERR "RAMDISK: could not allocate buffer\n");
 		goto done;
 	}
 
-	printk(KERN_NOTICE "RAMDISK: Loading %dKiB [%ld disk%s] into ram disk... ",
-		nblocks, ((nblocks-1)/devblocks)+1, nblocks>devblocks ? "s" : "");
+	printk(KERN_NOTICE "RAMDISK: Loading %dKiB into ram disk... ", nblocks);
 	for (i = 0; i < nblocks; i++) {
-		if (i && (i % devblocks == 0)) {
-			pr_cont("done disk #1.\n");
-			fput(in_file);
-			break;
-		}
 		kernel_read(in_file, buf, BLOCK_SIZE, &in_pos);
 		kernel_write(out_file, buf, BLOCK_SIZE, &out_pos);
 	}
