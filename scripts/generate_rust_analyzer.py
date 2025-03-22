@@ -209,6 +209,19 @@ def generate_crates(
     uapi = append_crate_with_generated("uapi", [core])
     kernel = append_crate_with_generated("kernel", [core, macros, build_error, bindings, pin_init, uapi])
 
+    scripts = srctree / "scripts"
+    with open(scripts / "Makefile") as f:
+        makefile = f.read()
+    for path in scripts.glob("*.rs"):
+        name = path.name.replace(".rs", "")
+        if f"{name}-rust" not in makefile:
+            continue
+        _script = append_crate(
+            name,
+            path,
+            [host_std],
+        )
+
     def is_root_crate(build_file: pathlib.Path, target: str) -> bool:
         try:
             with open(build_file) as f:
