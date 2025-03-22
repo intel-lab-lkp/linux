@@ -8,8 +8,8 @@
 #define OCTEON_IRQ_WORKQ0 0
 #define OCTEON_IRQ_RML 0
 #define OCTEON_IRQ_TIMER1 0
-#define OCTEON_IS_MODEL(x) 0
-#define octeon_has_feature(x)	0
+#define OCTEON_IS_MODEL(x) ((void)(x), 0)
+#define octeon_has_feature(x) ((void)(x), 0)
 #define octeon_get_clock_rate()	0
 
 #define CVMX_SYNCIOBDMA		do { } while (0)
