@@ -143,10 +143,12 @@ def generate_crates(
     # NB: sysroot crates reexport items from one another so setting up our transitive dependencies
     # here is important for ensuring that rust-analyzer can resolve symbols. The sources of truth
     # for this dependency graph are `(sysroot_src / crate / "Cargo.toml" for crate in crates)`.
+    host_core = append_sysroot_crate("core", [])
+    host_alloc = append_sysroot_crate("alloc", [host_core])
+    host_std = append_sysroot_crate("std", [host_alloc, host_core])
+    host_proc_macro = append_sysroot_crate("proc_macro", [host_core, host_std])
+
     core = append_sysroot_crate("core", [], cfg=crates_cfgs.get("core", []))
-    alloc = append_sysroot_crate("alloc", [core])
-    std = append_sysroot_crate("std", [alloc, core])
-    proc_macro = append_sysroot_crate("proc_macro", [core, std])
 
     compiler_builtins = append_crate(
         "compiler_builtins",
@@ -157,7 +159,7 @@ def generate_crates(
     macros = append_proc_macro_crate(
         "macros",
         srctree / "rust" / "macros" / "lib.rs",
-        [std, proc_macro],
+        [host_std, host_proc_macro],
     )
 
     build_error = append_crate(
