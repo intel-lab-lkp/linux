@@ -14,3 +14,8 @@ CFLAGS_trace.o := -I$(src)
 ext2-$(CONFIG_EXT2_FS_XATTR)	 += xattr.o xattr_user.o xattr_trusted.o
 ext2-$(CONFIG_EXT2_FS_POSIX_ACL) += acl.o
 ext2-$(CONFIG_EXT2_FS_SECURITY)	 += xattr_security.o
+
+# If we are built-in, we provide support for ext2 on initrds.
+ifeq ($(CONFIG_EXT2_FS),y)
+ext2-y += initrd.o
+endif

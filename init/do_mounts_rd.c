@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/kernel.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
 
 #include <linux/initrd.h>
 #include <linux/string.h>
@@ -39,7 +38,6 @@ static int __init crd_load(decompress_fn deco);
  * numbers could not be found.
  *
  * We currently check for the following magic numbers:
- *	ext2
  *	gzip
  *	bzip2
  *	lzma
@@ -56,7 +54,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 	int nblocks = -1;
 	unsigned char *buf;
 	const char *compress_name;
-	unsigned long n;
 	int start_block = rd_image_start;
 	struct initrd_detect_fs *detect_fs;
 
@@ -81,22 +78,6 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 			       "RAMDISK: %s decompressor not configured!\n",
 			       compress_name);
 		nblocks = 0;
-		goto done;
-	}
-
-	/*
-	 * Read block 1 to test for ext2 superblock
-	 */
-	pos = (start_block + 1) * BLOCK_SIZE;
-	kernel_read(file, buf, size, &pos);
-
-	/* Try ext2 */
-	n = ext2_image_size(buf);
-	if (n) {
-		printk(KERN_NOTICE
-		       "RAMDISK: ext2 filesystem found at block %d\n",
-		       start_block);
-		nblocks = n;
 		goto done;
 	}
 

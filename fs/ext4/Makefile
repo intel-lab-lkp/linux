@@ -18,3 +18,7 @@ ext4-inode-test-objs			+= inode-test.o
 obj-$(CONFIG_EXT4_KUNIT_TESTS)		+= ext4-inode-test.o
 ext4-$(CONFIG_FS_VERITY)		+= verity.o
 ext4-$(CONFIG_FS_ENCRYPTION)		+= crypto.o
+
+ifeq ($(CONFIG_EXT4_FS),y)
+ext4-$(CONFIG_EXT4_USE_FOR_EXT2) += ../ext2/initrd.o
+endif
