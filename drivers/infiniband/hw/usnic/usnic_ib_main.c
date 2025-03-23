@@ -587,9 +587,9 @@ static int usnic_ib_pci_probe(struct pci_dev *pdev,
 
 	pf = usnic_ib_discover_pf(vf->vnic);
 	if (IS_ERR_OR_NULL(pf)) {
-		usnic_err("Failed to discover pf of vnic %s with err%ld\n",
-				pci_name(pdev), PTR_ERR(pf));
 		err = pf ? PTR_ERR(pf) : -EFAULT;
+		usnic_err("Failed to discover pf of vnic %s with err%d\n",
+				pci_name(pdev), err);
 		goto out_clean_vnic;
 	}
 
