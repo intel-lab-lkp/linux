@@ -5,6 +5,7 @@ menu "DesignWare-based PCIe controllers"
 
 config PCIE_DW
 	bool
+	select PCI_HOST_HELPERS
 
 config PCIE_DW_HOST
 	bool
