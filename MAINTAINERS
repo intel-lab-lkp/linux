@@ -18119,6 +18119,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/pci/intel,ixp4xx-pci.yaml
 F:	drivers/pci/controller/pci-ixp4xx.c
 
+PCI DRIVER FOR HELPER FUNCTIONS
+M:	Hans Zhang <18255117159@163.com>
+L:	linux-pci@vger.kernel.org
+S:	Maintained
+F:	drivers/pci/controller/pci-host-helpers.c
+
 PCI DRIVER FOR INTEL VOLUME MANAGEMENT DEVICE (VMD)
 M:	Nirmal Patel <nirmal.patel@linux.intel.com>
 R:	Jonathan Derrick <jonathan.derrick@linux.dev>
