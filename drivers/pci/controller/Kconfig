@@ -132,6 +132,23 @@ config PCI_HOST_GENERIC
 	  Say Y here if you want to support a simple generic PCI host
 	  controller, such as the one emulated by kvmtool.
 
+config PCI_HOST_HELPERS
+	bool
+	prompt "PCI Host Controller Helper Functions" if EXPERT
+ 	help
+	  This provides common infrastructure for PCI host controller drivers to
+	  handle PCI capability scanning and other shared operations. The helper
+	  functions eliminate code duplication across controller drivers.
+
+	  These functions are used by PCI controller drivers that need to scan
+	  PCI capabilities using controller-specific access methods (e.g. when
+	  the controller is behind a non-standard configuration space).
+
+	  If you are using any PCI host controller drivers that require these
+	  helpers (such as DesignWare, Cadence, etc), this will be
+	  automatically selected. Say N unless you are developing a custom PCI
+	  host controller driver.
+
 config PCIE_HISI_ERR
 	depends on ACPI_APEI_GHES && (ARM64 || COMPILE_TEST)
 	bool "HiSilicon HIP PCIe controller error handling driver"

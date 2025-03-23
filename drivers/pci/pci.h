@@ -1034,4 +1034,11 @@ void pcim_release_region(struct pci_dev *pdev, int bar);
 	(PCI_CONF1_ADDRESS(bus, dev, func, reg) | \
 	 PCI_CONF1_EXT_REG(reg))
 
+typedef u32 (*pci_host_bridge_read_cfg)(void *priv, int where, int size);
+u8 pci_host_bridge_find_capability(void *priv,
+				   pci_host_bridge_read_cfg read_cfg, u8 cap);
+u16 pci_host_bridge_find_ext_capability(void *priv,
+					pci_host_bridge_read_cfg read_cfg,
+					u8 cap);
+
 #endif /* DRIVERS_PCI_H */
