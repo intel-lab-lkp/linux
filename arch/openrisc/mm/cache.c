@@ -14,30 +14,66 @@
 #include <asm/spr_defs.h>
 #include <asm/cache.h>
 #include <asm/cacheflush.h>
+#include <asm/cpuinfo.h>
 #include <asm/tlbflush.h>
 
-static __always_inline void cache_loop(struct page *page, const unsigned int reg)
+static __always_inline void cache_loop(struct page *page, unsigned long *start,
+				       unsigned long *end, const unsigned int reg,
+				       const unsigned int cache_type)
 {
-	unsigned long paddr = page_to_pfn(page) << PAGE_SHIFT;
-	unsigned long line = paddr & ~(L1_CACHE_BYTES - 1);
+	unsigned long paddr, next;
 
-	while (line < paddr + PAGE_SIZE) {
-		mtspr(reg, line);
-		line += L1_CACHE_BYTES;
+	if (!cpu_cache_is_present(cache_type))
+		return;
+
+	if (!cb_inv_flush_is_implemented(reg, cache_type))
+		return;
+
+	if (page) {
+		paddr = page_to_pfn(page) << PAGE_SHIFT;
+		next = paddr + PAGE_SIZE;
+		paddr &= ~(L1_CACHE_BYTES - 1);
+	} else if (start && end) {
+		paddr = *start;
+		next = *end;
+	} else {
+		printk(KERN_ERR "Missing start and/or end address.\n");
+		return;
+	}
+
+	while (paddr < next) {
+		mtspr(reg, paddr);
+		paddr += L1_CACHE_BYTES;
 	}
 }
 
 void local_dcache_page_flush(struct page *page)
 {
-	cache_loop(page, SPR_DCBFR);
+	cache_loop(page, NULL, NULL, SPR_DCBFR, SPR_UPR_DCP);
 }
 EXPORT_SYMBOL(local_dcache_page_flush);
 
 void local_icache_page_inv(struct page *page)
 {
-	cache_loop(page, SPR_ICBIR);
+	cache_loop(page, NULL, NULL, SPR_ICBIR, SPR_UPR_ICP);
 }
 EXPORT_SYMBOL(local_icache_page_inv);
+
+void local_dcache_range_flush(unsigned long start, unsigned long end)
+{
+	cache_loop(NULL, &start, &end, SPR_DCBFR, SPR_UPR_DCP);
+}
+
+void local_dcache_range_inv(unsigned long start, unsigned long end)
+{
+	cache_loop(NULL, &start, &end, SPR_DCBIR, SPR_UPR_DCP);
+}
+
+void local_icache_range_inv(unsigned long start, unsigned long end)
+{
+	cache_loop(NULL, &start, &end, SPR_ICBIR, SPR_UPR_ICP);
+}
+
 
 void update_cache(struct vm_area_struct *vma, unsigned long address,
 	pte_t *pte)
