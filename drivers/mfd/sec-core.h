@@ -10,6 +10,23 @@
 #ifndef __SEC_CORE_INT_H
 #define __SEC_CORE_INT_H
 
+struct i2c_client;
+
+extern const struct dev_pm_ops sec_pmic_pm_ops;
+
+struct sec_pmic_probe_data {
+	/* Whether or not manually set PWRHOLD to low during shutdown. */
+	bool manual_poweroff;
+	/* Disable the WRSTBI (buck voltage warm reset) when probing? */
+	bool disable_wrstbi;
+};
+
+int sec_pmic_probe(struct device *dev, unsigned long device_type,
+		   unsigned int irq, struct regmap *regmap,
+		   const struct sec_pmic_probe_data *probedata,
+		   struct i2c_client *client);
+void sec_pmic_shutdown(struct device *dev);
+
 int sec_irq_init(struct sec_pmic_dev *sec_pmic);
 
 #endif /* __SEC_CORE_INT_H */
