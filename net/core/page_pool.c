@@ -281,7 +281,7 @@ static int page_pool_init(struct page_pool *pool,
 		 * configuration doesn't change while we're initializing
 		 * the page_pool.
 		 */
-		ASSERT_RTNL();
+		netdev_assert_locked(params->netdev);
 		rxq = __netif_get_rx_queue(pool->slow.netdev,
 					   pool->slow.queue_idx);
 		pool->mp_priv = rxq->mp_params.mp_priv;
