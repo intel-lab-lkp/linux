@@ -560,6 +560,84 @@ out:
 	return ret;
 }
 
+/* Specific context for phy-targeting command DUMP operatins. We keep in context
+ * the latest phy_index we dumped, in case of an interrupted DUMP.
+ */
+struct ethnl_dump_ctx_perphy {
+	unsigned long phy_index;
+};
+
+/**
+ * ethnl_dump_start_perphy() - Initialise a dump for PHY cmds
+ * @ctx: Generic ethnl dump context whose cmd_ctx will be initialized
+ *
+ * Initializes a dump context for ethnl commands that may return
+ * one message per PHY on a single netdev.
+ *
+ * Returns: 0 for success, a negative value for errors.
+ */
+int ethnl_dump_start_perphy(struct ethnl_dump_ctx *ctx)
+{
+	struct ethnl_dump_ctx_perphy *dump_ctx;
+
+	dump_ctx = kzalloc(sizeof(*dump_ctx), GFP_KERNEL);
+	if (!dump_ctx)
+		return -ENOMEM;
+
+	ctx->cmd_ctx = dump_ctx;
+
+	return 0;
+}
+
+/**
+ * ethnl_dump_done_perphy() - Releases the per-phy dump context
+ * @ctx: Generic ethnl dump context whose cmd_ctx will be released
+ */
+void ethnl_dump_done_perphy(struct ethnl_dump_ctx *ctx)
+{
+	kfree(ctx->cmd_ctx);
+}
+
+/**
+ * ethnl_dump_one_dev_perphy() - Dump all PHY-related messages for one netdev
+ * @skb: skb containing the DUMP result
+ * @ctx: Dump context. Will be kept across the DUMP operation.
+ * @info: Genl receive info
+ *
+ * Some commands are related to PHY devices attached to netdevs. As there may be
+ * multiple PHYs, this DUMP handler will populate the reply with one message per
+ * PHY on a single netdev.
+ *
+ * Returns: 0 for success or when nothing to do, a negative value otherwise.
+ */
+int ethnl_dump_one_dev_perphy(struct sk_buff *skb,
+			      struct ethnl_dump_ctx *ctx,
+			      const struct genl_info *info)
+{
+	struct ethnl_dump_ctx_perphy *dump_ctx = ctx->cmd_ctx;
+	struct net_device *dev = ctx->reply_data->dev;
+	struct phy_device_node *pdn;
+	int ret = 0;
+
+	if (!dev->link_topo)
+		return 0;
+
+	xa_for_each_start(&dev->link_topo->phys, dump_ctx->phy_index,
+			  pdn, dump_ctx->phy_index) {
+		ctx->req_info->phy_index = dump_ctx->phy_index;
+
+		/* We can re-use the original dump_one as ->prepare_data in
+		 * commands use ethnl_req_get_phydev(), which gets the PHY from
+		 * what's in req_info
+		 */
+		ret = ethnl_default_dump_one(skb, ctx, info);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
 static int ethnl_default_dump_one_dev(struct sk_buff *skb, struct net_device *dev,
 				      struct ethnl_dump_ctx *ctx,
 				      const struct genl_info *info)
