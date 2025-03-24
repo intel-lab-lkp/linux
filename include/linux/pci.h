@@ -1857,16 +1857,51 @@ static inline bool pci_aer_available(void) { return false; }
 
 bool pci_ats_disabled(void);
 
+struct pcie_ptm_ops {
+	int (*check_capability)(void *drvdata);
+	int (*context_update_store)(void *drvdata, const char *buf);
+	ssize_t (*context_update_show)(void *drvdata, char *buf);
+	int (*context_valid_store)(void *drvdata, bool valid);
+	ssize_t (*context_valid_show)(void *drvdata, char *buf);
+	ssize_t (*local_clock_show)(void *drvdata, char *buf);
+	ssize_t (*master_clock_show)(void *drvdata, char *buf);
+	ssize_t (*t1_show)(void *drvdata, char *buf);
+	ssize_t (*t2_show)(void *drvdata, char *buf);
+	ssize_t (*t3_show)(void *drvdata, char *buf);
+	ssize_t (*t4_show)(void *drvdata, char *buf);
+
+	bool (*context_update_visible)(void *drvdata);
+	bool (*context_valid_visible)(void *drvdata);
+	bool (*local_clock_visible)(void *drvdata);
+	bool (*master_clock_visible)(void *drvdata);
+	bool (*t1_visible)(void *drvdata);
+	bool (*t2_visible)(void *drvdata);
+	bool (*t3_visible)(void *drvdata);
+	bool (*t4_visible)(void *drvdata);
+};
+
+struct pcie_ptm {
+	struct device dev;
+	struct pcie_ptm_ops *ops;
+	void *pdata;
+};
+
 #ifdef CONFIG_PCIE_PTM
 int pci_enable_ptm(struct pci_dev *dev, u8 *granularity);
 void pci_disable_ptm(struct pci_dev *dev);
 bool pcie_ptm_enabled(struct pci_dev *dev);
+int pcie_ptm_create_sysfs(struct device *dev, void *pdata, struct pcie_ptm_ops *ops);
+void pcie_ptm_destroy_sysfs(void);
 #else
 static inline int pci_enable_ptm(struct pci_dev *dev, u8 *granularity)
 { return -EINVAL; }
 static inline void pci_disable_ptm(struct pci_dev *dev) { }
 static inline bool pcie_ptm_enabled(struct pci_dev *dev)
 { return false; }
+static inline int pcie_ptm_create_sysfs(struct device *dev, void *pdata,
+				 struct pcie_ptm_ops *ops)
+{ return 0; }
+static inline void pcie_ptm_destroy_sysfs(void) { }
 #endif
 
 void pci_cfg_access_lock(struct pci_dev *dev);

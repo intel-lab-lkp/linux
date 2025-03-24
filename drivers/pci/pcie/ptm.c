@@ -10,6 +10,8 @@
 #include <linux/pci.h>
 #include "../pci.h"
 
+struct device *ptm_device;
+
 /*
  * If the next upstream device supports PTM, return it; otherwise return
  * NULL.  PTM Messages are local, so both link partners must support it.
@@ -252,3 +254,269 @@ bool pcie_ptm_enabled(struct pci_dev *dev)
 	return dev->ptm_enabled;
 }
 EXPORT_SYMBOL(pcie_ptm_enabled);
+
+static ssize_t context_update_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+	int ret;
+
+	if (!ptm->ops->context_update_store)
+		return -EOPNOTSUPP;
+
+	ret = ptm->ops->context_update_store(ptm->pdata, buf);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t context_update_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->context_update_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->context_update_show(ptm->pdata, buf);
+}
+
+static ssize_t context_valid_store(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+	unsigned long arg;
+	int ret;
+
+	if (kstrtoul(buf, 0, &arg) < 0)
+		return -EINVAL;
+
+	if (!ptm->ops->context_valid_store)
+		return -EOPNOTSUPP;
+
+	ret = ptm->ops->context_valid_store(ptm->pdata, !!arg);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t context_valid_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->context_valid_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->context_valid_show(ptm->pdata, buf);
+}
+
+static ssize_t local_clock_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->local_clock_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->local_clock_show(ptm->pdata, buf);
+}
+
+static ssize_t master_clock_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->master_clock_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->master_clock_show(ptm->pdata, buf);
+}
+
+static ssize_t t1_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->t1_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->t1_show(ptm->pdata, buf);
+}
+
+static ssize_t t2_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->t2_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->t2_show(ptm->pdata, buf);
+}
+
+static ssize_t t3_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->t3_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->t3_show(ptm->pdata, buf);
+}
+
+static ssize_t t4_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if (!ptm->ops->t4_show)
+		return -EOPNOTSUPP;
+
+	return ptm->ops->t4_show(ptm->pdata, buf);
+}
+
+static DEVICE_ATTR_RW(context_update);
+static DEVICE_ATTR_RW(context_valid);
+static DEVICE_ATTR_RO(local_clock);
+static DEVICE_ATTR_RO(master_clock);
+static DEVICE_ATTR_RO(t1);
+static DEVICE_ATTR_RO(t2);
+static DEVICE_ATTR_RO(t3);
+static DEVICE_ATTR_RO(t4);
+
+static struct attribute *pcie_ptm_attrs[] = {
+	&dev_attr_context_update.attr,
+	&dev_attr_context_valid.attr,
+	&dev_attr_local_clock.attr,
+	&dev_attr_master_clock.attr,
+	&dev_attr_t1.attr,
+	&dev_attr_t2.attr,
+	&dev_attr_t3.attr,
+	&dev_attr_t4.attr,
+	NULL
+};
+
+static umode_t pcie_ptm_attr_visible(struct kobject *kobj, struct attribute *attr,
+				int n)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct pcie_ptm *ptm = dev_get_drvdata(dev);
+
+	if ((attr == &dev_attr_t1.attr && ptm->ops->t1_visible &&
+	     ptm->ops->t1_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_t2.attr && ptm->ops->t2_visible &&
+	     ptm->ops->t2_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_t3.attr && ptm->ops->t3_visible &&
+	     ptm->ops->t3_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_t4.attr && ptm->ops->t4_visible &&
+	     ptm->ops->t4_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_local_clock.attr &&
+	     ptm->ops->local_clock_visible &&
+	     ptm->ops->local_clock_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_master_clock.attr &&
+	     ptm->ops->master_clock_visible &&
+	     ptm->ops->master_clock_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_context_update.attr &&
+	     ptm->ops->context_update_visible &&
+	     ptm->ops->context_update_visible(ptm->pdata)) ||
+	    (attr == &dev_attr_context_valid.attr &&
+	     ptm->ops->context_valid_visible &&
+	     ptm->ops->context_valid_visible(ptm->pdata)))
+		return attr->mode;
+
+	return 0;
+}
+
+static const struct attribute_group pcie_ptm_attr_group = {
+	.attrs = pcie_ptm_attrs,
+	.is_visible = pcie_ptm_attr_visible,
+};
+
+static const struct attribute_group *pcie_ptm_attr_groups[] = {
+	&pcie_ptm_attr_group,
+	NULL,
+};
+
+static void pcie_ptm_release(struct device *dev)
+{
+	struct pcie_ptm *ptm = container_of(dev, struct pcie_ptm, dev);
+
+	kfree(ptm);
+}
+
+/*
+ * pcie_ptm_create_sysfs() - Create sysfs entries for the PTM context
+ * @dev: PTM capable component device
+ * @pdata: Private data of the PTM capable component device
+ * @ops: PTM callback structure
+ *
+ * Create sysfs entries for exposing the PTM context of the PTM capable
+ * components such as Root Complex and Endpoint controllers.
+ */
+int pcie_ptm_create_sysfs(struct device *dev, void *pdata,
+			  struct pcie_ptm_ops *ops)
+{
+	struct pcie_ptm *ptm;
+	int ret;
+
+	/* Caller must provide check_capability() callback */
+	if (!ops->check_capability)
+		return -EINVAL;
+
+	/* Check for PTM capability before creating sysfs attrbutes */
+	ret = ops->check_capability(pdata);
+	if (!ret) {
+		dev_dbg(dev, "PTM capability not present\n");
+		return -ENODATA;
+	}
+
+	ptm = kzalloc(sizeof(*ptm), GFP_KERNEL);
+	if (!ptm)
+		return -ENOMEM;
+
+	ptm->pdata = pdata;
+	ptm->ops = ops;
+
+	device_initialize(&ptm->dev);
+	ptm->dev.groups = pcie_ptm_attr_groups;
+	ptm->dev.release = pcie_ptm_release;
+	ptm->dev.parent = dev;
+	dev_set_drvdata(&ptm->dev, ptm);
+	device_set_pm_not_required(&ptm->dev);
+
+	ret = dev_set_name(&ptm->dev, "ptm");
+	if (ret)
+		goto err_put_device;
+
+	ret = device_add(&ptm->dev);
+	if (ret)
+		goto err_put_device;
+
+	ptm_device = &ptm->dev;
+
+	return 0;
+
+err_put_device:
+	put_device(&ptm->dev);
+
+	return ret;
+}
+EXPORT_SYMBOL(pci_ptm_init);
+
+/*
+ * pcie_ptm_destroy_sysfs() - Destroy sysfs entries for the PTM context
+ */
+void pcie_ptm_destroy_sysfs(void)
+{
+	if (ptm_device) {
+		device_unregister(ptm_device);
+		ptm_device = NULL;
+	}
+}
+EXPORT_SYMBOL(pcie_ptm_destroy_sysfs);
