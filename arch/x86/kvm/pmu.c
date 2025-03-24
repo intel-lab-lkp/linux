@@ -604,6 +604,40 @@ int kvm_pmu_rdpmc(struct kvm_vcpu *vcpu, unsigned idx, u64 *data)
 	return 0;
 }
 
+inline bool kvm_rdpmc_in_guest(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+
+	if (!kvm_mediated_pmu_enabled(vcpu))
+		return false;
+
+	/*
+	 * VMware allows access to these Pseduo-PMCs even when read via RDPMC
+	 * in Ring3 when CR4.PCE=0.
+	 */
+	if (enable_vmware_backdoor)
+		return false;
+
+	/*
+	 * FIXME: In theory, perf metrics is always combined with fixed
+	 *	  counter 3. it's fair enough to compare the guest and host
+	 *	  fixed counter number and don't need to check perf metrics
+	 *	  explicitly. However kvm_pmu_cap.num_counters_fixed is limited
+	 *	  KVM_MAX_NR_FIXED_COUNTERS (3) as fixed counter 3 is not
+	 *	  supported now. perf metrics is still needed to be checked
+	 *	  explicitly here. Once fixed counter 3 is supported, the perf
+	 *	  metrics checking can be removed.
+	 */
+	return pmu->nr_arch_gp_counters == kvm_pmu_cap.num_counters_gp &&
+	       pmu->nr_arch_fixed_counters == kvm_pmu_cap.num_counters_fixed &&
+	       vcpu_has_perf_metrics(vcpu) == kvm_host_has_perf_metrics() &&
+	       pmu->counter_bitmask[KVM_PMC_GP] ==
+				(BIT_ULL(kvm_pmu_cap.bit_width_gp) - 1) &&
+	       pmu->counter_bitmask[KVM_PMC_FIXED] ==
+				(BIT_ULL(kvm_pmu_cap.bit_width_fixed) - 1);
+}
+EXPORT_SYMBOL_GPL(kvm_rdpmc_in_guest);
+
 void kvm_pmu_deliver_pmi(struct kvm_vcpu *vcpu)
 {
 	if (lapic_in_kernel(vcpu)) {

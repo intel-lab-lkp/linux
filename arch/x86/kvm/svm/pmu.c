@@ -173,7 +173,7 @@ static int amd_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	return 1;
 }
 
-static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
+static void __amd_pmu_refresh(struct kvm_vcpu *vcpu)
 {
 	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
 	union cpuid_0x80000022_ebx ebx;
@@ -210,6 +210,18 @@ static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
 	pmu->counter_bitmask[KVM_PMC_FIXED] = 0;
 	pmu->nr_arch_fixed_counters = 0;
 	bitmap_set(pmu->all_valid_pmc_idx, 0, pmu->nr_arch_gp_counters);
+}
+
+static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	__amd_pmu_refresh(vcpu);
+
+	if (kvm_rdpmc_in_guest(vcpu))
+		svm_clr_intercept(svm, INTERCEPT_RDPMC);
+	else
+		svm_set_intercept(svm, INTERCEPT_RDPMC);
 }
 
 static void amd_pmu_init(struct kvm_vcpu *vcpu)
