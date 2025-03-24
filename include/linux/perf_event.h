@@ -584,6 +584,11 @@ struct pmu {
 	 * Check period value for PERF_EVENT_IOC_PERIOD ioctl.
 	 */
 	int (*check_period)		(struct perf_event *event, u64 value); /* optional */
+
+	/*
+	 * Switch guest context when a guest enter/exit, e.g., interrupt vectors.
+	 */
+	void (*switch_guest_ctx)	(bool enter, void *data); /* optional */
 };
 
 enum perf_addr_filter_action_t {
@@ -1030,6 +1035,11 @@ struct perf_event_context {
 	local_t				nr_no_switch_fast;
 };
 
+struct mediated_pmus_list {
+	raw_spinlock_t		lock;
+	struct list_head	list;
+};
+
 struct perf_cpu_pmu_context {
 	struct perf_event_pmu_context	epc;
 	struct perf_event_pmu_context	*task_epc;
@@ -1044,6 +1054,9 @@ struct perf_cpu_pmu_context {
 	struct hrtimer			hrtimer;
 	ktime_t				hrtimer_interval;
 	unsigned int			hrtimer_active;
+
+	/* Track the PMU with PERF_PMU_CAP_MEDIATED_VPMU cap */
+	struct list_head		mediated_entry;
 };
 
 /**
@@ -1822,7 +1835,7 @@ extern int perf_event_period(struct perf_event *event, u64 value);
 extern u64 perf_event_pause(struct perf_event *event, bool reset);
 int perf_get_mediated_pmu(void);
 void perf_put_mediated_pmu(void);
-void perf_guest_enter(void);
+void perf_guest_enter(u32 guest_lvtpc);
 void perf_guest_exit(void);
 #else /* !CONFIG_PERF_EVENTS: */
 static inline void *
@@ -1921,7 +1934,7 @@ static inline int perf_get_mediated_pmu(void)
 }
 
 static inline void perf_put_mediated_pmu(void)			{ }
-static inline void perf_guest_enter(void)			{ }
+static inline void perf_guest_enter(u32 guest_lvtpc)		{ }
 static inline void perf_guest_exit(void)			{ }
 #endif
 
