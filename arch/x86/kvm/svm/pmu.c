@@ -220,6 +220,67 @@ static void __amd_pmu_refresh(struct kvm_vcpu *vcpu)
 	bitmap_set(pmu->all_valid_pmc_idx, 0, pmu->nr_arch_gp_counters);
 }
 
+static void amd_pmu_update_msr_intercepts(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct vcpu_svm *svm = to_svm(vcpu);
+	int msr_clear = !!(kvm_mediated_pmu_enabled(vcpu));
+	int i;
+
+	for (i = 0; i < min(pmu->nr_arch_gp_counters, AMD64_NUM_COUNTERS); i++) {
+		/*
+		 * Legacy counters are always available irrespective of any
+		 * CPUID feature bits and when X86_FEATURE_PERFCTR_CORE is set,
+		 * PERF_LEGACY_CTLx and PERF_LEGACY_CTRx registers are mirrored
+		 * with PERF_CTLx and PERF_CTRx respectively.
+		 */
+		set_msr_interception(vcpu, svm->msrpm, MSR_K7_EVNTSEL0 + i, 0, 0);
+		set_msr_interception(vcpu, svm->msrpm, MSR_K7_PERFCTR0 + i,
+				     msr_clear, msr_clear);
+	}
+
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+		/*
+		 * PERF_CTLx registers require interception in order to clear
+		 * HostOnly bit and set GuestOnly bit. This is to prevent the
+		 * PERF_CTRx registers from counting before VM entry and after
+		 * VM exit.
+		 */
+		set_msr_interception(vcpu, svm->msrpm, MSR_F15H_PERF_CTL + 2 * i, 0, 0);
+		/*
+		 * Pass through counters exposed to the guest and intercept
+		 * counters that are unexposed. Do this explicitly since this
+		 * function may be set multiple times before vcpu runs.
+		 */
+		set_msr_interception(vcpu, svm->msrpm, MSR_F15H_PERF_CTR + 2 * i,
+				     msr_clear, msr_clear);
+	}
+
+	for ( ; i < kvm_pmu_cap.num_counters_gp; i++) {
+		set_msr_interception(vcpu, svm->msrpm, MSR_F15H_PERF_CTL + 2 * i, 0, 0);
+		set_msr_interception(vcpu, svm->msrpm, MSR_F15H_PERF_CTR + 2 * i, 0, 0);
+	}
+
+	/*
+	 * In mediated vPMU, intercept global PMU MSRs when guest PMU only owns
+	 * a subset of counters provided in HW or its version is less than 2.
+	 */
+	if (kvm_mediated_pmu_enabled(vcpu) && kvm_pmu_has_perf_global_ctrl(pmu) &&
+	    pmu->nr_arch_gp_counters == kvm_pmu_cap.num_counters_gp)
+		msr_clear = 1;
+	else
+		msr_clear = 0;
+
+	set_msr_interception(vcpu, svm->msrpm, MSR_AMD64_PERF_CNTR_GLOBAL_CTL,
+			     msr_clear, msr_clear);
+	set_msr_interception(vcpu, svm->msrpm, MSR_AMD64_PERF_CNTR_GLOBAL_STATUS,
+			     msr_clear, msr_clear);
+	set_msr_interception(vcpu, svm->msrpm, MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR,
+			     msr_clear, msr_clear);
+	set_msr_interception(vcpu, svm->msrpm, MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_SET,
+			     msr_clear, msr_clear);
+}
+
 static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -230,6 +291,8 @@ static void amd_pmu_refresh(struct kvm_vcpu *vcpu)
 		svm_clr_intercept(svm, INTERCEPT_RDPMC);
 	else
 		svm_set_intercept(svm, INTERCEPT_RDPMC);
+
+	amd_pmu_update_msr_intercepts(vcpu);
 }
 
 static void amd_pmu_init(struct kvm_vcpu *vcpu)
