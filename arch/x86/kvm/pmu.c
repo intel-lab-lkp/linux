@@ -743,6 +743,10 @@ static void kvm_pmu_reset(struct kvm_vcpu *vcpu)
 	kvm_pmu_call(reset)(vcpu);
 }
 
+inline bool vcpu_pmu_can_enable(struct kvm_vcpu *vcpu)
+{
+	return vcpu->kvm->arch.enable_pmu && lapic_in_kernel(vcpu);
+}
 
 /*
  * Refresh the PMU configuration for the vCPU, e.g. if userspace changes CPUID
@@ -775,8 +779,7 @@ void kvm_pmu_refresh(struct kvm_vcpu *vcpu)
 	pmu->pebs_data_cfg_rsvd = ~0ull;
 	bitmap_zero(pmu->all_valid_pmc_idx, X86_PMC_IDX_MAX);
 
-	if (!vcpu->kvm->arch.enable_pmu ||
-	    (!lapic_in_kernel(vcpu) && enable_mediated_pmu))
+	if (!vcpu_pmu_can_enable(vcpu))
 		return;
 
 	kvm_pmu_call(refresh)(vcpu);
