@@ -305,15 +305,15 @@ fn get_next_13b(data: &[u8], offset: usize) -> Option<(u16, usize)> {
         // `b` is 20 at max (`bit_off` <= 7 and `size` <= 13).
         let b = (bit_off + size) as u16;
 
-        let first_byte = (data[byte_off] << bit_off >> bit_off) as u16;
+        let first_byte = u16::from(data[byte_off] << bit_off >> bit_off);
 
         let number = match b {
             0..=8 => first_byte >> (8 - b),
-            9..=16 => (first_byte << (b - 8)) + (data[byte_off + 1] >> (16 - b)) as u16,
+            9..=16 => (first_byte << (b - 8)) + u16::from(data[byte_off + 1] >> (16 - b)),
             _ => {
                 (first_byte << (b - 8))
-                    + ((data[byte_off + 1] as u16) << (b - 16))
-                    + (data[byte_off + 2] >> (24 - b)) as u16
+                    + u16::from(data[byte_off + 1] << (b - 16))
+                    + u16::from(data[byte_off + 2] >> (24 - b))
             }
         };
         Some((number, size))
@@ -414,7 +414,7 @@ impl Iterator for SegmentIterator<'_> {
         match self.segment {
             Segment::Binary(data) => {
                 if self.offset < data.len() {
-                    let byte = data[self.offset] as u16;
+                    let byte = data[self.offset].into();
                     self.offset += 1;
                     Some((byte, 8))
                 } else {
