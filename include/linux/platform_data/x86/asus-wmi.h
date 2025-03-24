@@ -162,11 +162,18 @@ struct asus_hid_listener {
 	void (*brightness_set)(struct asus_hid_listener *listener, int brightness);
 };
 
+enum asus_hid_event {
+	ASUS_EV_BRTUP,
+	ASUS_EV_BRTDOWN,
+	ASUS_EV_BRTTOGGLE,
+};
+
 #if IS_REACHABLE(CONFIG_ASUS_WMI)
 int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1, u32 *retval);
 
 int asus_hid_register_listener(struct asus_hid_listener *cdev);
 void asus_hid_unregister_listener(struct asus_hid_listener *cdev);
+int asus_hid_event(enum asus_hid_event event);
 #else
 static inline int asus_wmi_evaluate_method(u32 method_id, u32 arg0, u32 arg1,
 					   u32 *retval)
@@ -180,6 +187,10 @@ static inline int asus_hid_register_listener(struct asus_hid_listener *bdev)
 }
 static inline void asus_hid_unregister_listener(struct asus_hid_listener *bdev)
 {
+}
+static inline int asus_hid_event(enum asus_hid_event event)
+{
+	return -ENODEV;
 }
 #endif
 
