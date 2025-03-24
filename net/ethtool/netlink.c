@@ -577,9 +577,7 @@ out:
 	return ret;
 }
 
-/* Default ->dumpit() handler for GET requests. */
-static int ethnl_default_dumpit(struct sk_buff *skb,
-				struct netlink_callback *cb)
+static int ethnl_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct ethnl_dump_ctx *ctx = ethnl_dump_context(cb);
 	struct net *net = sock_net(skb->sk);
@@ -605,6 +603,31 @@ static int ethnl_default_dumpit(struct sk_buff *skb,
 		ret = 0;
 	}
 	rcu_read_unlock();
+
+	return ret;
+}
+
+/* Default ->dumpit() handler for GET requests. */
+static int ethnl_default_dumpit(struct sk_buff *skb,
+				struct netlink_callback *cb)
+{
+	struct ethnl_dump_ctx *ctx = ethnl_dump_context(cb);
+	int ret;
+
+	if (ctx->req_info->dev) {
+		/* Filtered DUMP request targeted to a single netdev. We already
+		 * hold a ref to the netdev from ->start()
+		 */
+		ret = ethnl_default_dump_one(skb, ctx->req_info->dev, ctx,
+					     genl_info_dump(cb));
+		netdev_put(ctx->req_info->dev, &ctx->req_info->dev_tracker);
+
+		if (ret < 0 && ret != -EOPNOTSUPP && likely(skb->len))
+			ret = skb->len;
+
+	} else {
+		ret = ethnl_dump_all(skb, cb);
+	}
 
 	return ret;
 }
@@ -636,10 +659,10 @@ static int ethnl_default_start(struct netlink_callback *cb)
 	}
 
 	ret = ethnl_default_parse(req_info, &info->info, ops, false);
-	if (req_info->dev) {
-		/* We ignore device specification in dump requests but as the
-		 * same parser as for non-dump (doit) requests is used, it
-		 * would take reference to the device if it finds one
+	if (req_info->dev && !ops->allow_pernetdev_dump) {
+		/* We ignore device specification in unfiltered dump requests
+		 * but as the same parser as for non-dump (doit) requests is
+		 * used, it would take reference to the device if it finds one
 		 */
 		netdev_put(req_info->dev, &req_info->dev_tracker);
 		req_info->dev = NULL;
