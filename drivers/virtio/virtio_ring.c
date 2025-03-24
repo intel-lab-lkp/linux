@@ -138,9 +138,6 @@ struct vring_virtqueue_packed {
 	/* Avail used flags. */
 	u16 avail_used_flags;
 
-	/* Index of the next avail descriptor. */
-	u16 next_avail_idx;
-
 	/*
 	 * Last written value to driver->flags in
 	 * guest byte order.
@@ -213,6 +210,9 @@ struct vring_virtqueue {
 	 * bits from VRING_PACKED_EVENT_F_WRAP_CTR include the used wrap counter.
 	 */
 	u16 last_used_idx;
+
+	/* Index of the next avail descriptor. */
+	u16 next_avail_idx;
 
 	/* Hint for event idx: already triggered no need to disable. */
 	bool event_triggered;
@@ -448,6 +448,7 @@ static void virtqueue_init(struct vring_virtqueue *vq, u32 num)
 	else
 		vq->last_used_idx = 0;
 
+	vq->next_avail_idx = 0;
 	vq->event_triggered = false;
 	vq->num_added = 0;
 
@@ -1350,7 +1351,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	u16 head, id;
 	dma_addr_t addr;
 
-	head = vq->packed.next_avail_idx;
+	head = vq->next_avail_idx;
 	desc = alloc_indirect_packed(total_sg, gfp);
 	if (!desc)
 		return -ENOMEM;
@@ -1431,7 +1432,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 				1 << VRING_PACKED_DESC_F_AVAIL |
 				1 << VRING_PACKED_DESC_F_USED;
 	}
-	vq->packed.next_avail_idx = n;
+	vq->next_avail_idx = n;
 	vq->free_head = vq->packed.desc_extra[id].next;
 
 	/* Store token and indirect buffer state. */
@@ -1501,7 +1502,7 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 		/* fall back on direct */
 	}
 
-	head = vq->packed.next_avail_idx;
+	head = vq->next_avail_idx;
 	avail_used_flags = vq->packed.avail_used_flags;
 
 	WARN_ON_ONCE(total_sg > vq->packed.vring.num && !vq->indirect);
@@ -1569,7 +1570,7 @@ static inline int virtqueue_add_packed(struct vring_virtqueue *vq,
 	vq->vq.num_free -= descs_used;
 
 	/* Update free pointer */
-	vq->packed.next_avail_idx = i;
+	vq->next_avail_idx = i;
 	vq->free_head = curr;
 
 	/* Store token. */
@@ -1633,8 +1634,8 @@ static bool virtqueue_kick_prepare_packed(struct vring_virtqueue *vq)
 	 */
 	virtio_mb(vq->weak_barriers);
 
-	old = vq->packed.next_avail_idx - vq->num_added;
-	new = vq->packed.next_avail_idx;
+	old = vq->next_avail_idx - vq->num_added;
+	new = vq->next_avail_idx;
 	vq->num_added = 0;
 
 	snapshot.u32 = *(u32 *)vq->packed.vring.device;
@@ -2083,7 +2084,6 @@ err_desc_state:
 static void virtqueue_vring_init_packed(struct vring_virtqueue_packed *vring_packed,
 					bool callback)
 {
-	vring_packed->next_avail_idx = 0;
 	vring_packed->avail_wrap_counter = 1;
 	vring_packed->event_flags_shadow = 0;
 	vring_packed->avail_used_flags = 1 << VRING_PACKED_DESC_F_AVAIL;
@@ -2977,7 +2977,7 @@ u32 vring_notification_data(struct virtqueue *_vq)
 	u16 next;
 
 	if (vq->packed_ring)
-		next = (vq->packed.next_avail_idx &
+		next = (vq->next_avail_idx &
 				~(-(1 << VRING_PACKED_EVENT_F_WRAP_CTR))) |
 			vq->packed.avail_wrap_counter <<
 				VRING_PACKED_EVENT_F_WRAP_CTR;
