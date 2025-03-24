@@ -564,8 +564,14 @@ static void test_intel_counters(void)
 	 * Test up to PMU v5, which is the current maximum version defined by
 	 * Intel, i.e. is the last version that is guaranteed to be backwards
 	 * compatible with KVM's existing behavior.
+	 *
+	 * Whereas for mediated vPMU, limit max_pmu_version to KVM supported
+	 * maximum pmu version since KVM rejects PMU versions larger than KVM
+	 * supported maximum PMU version to avoid guest to manipulate unsupported
+	 * or unallowed PMU MSRs directly.
 	 */
-	uint8_t max_pmu_version = max_t(typeof(pmu_version), pmu_version, 5);
+	uint8_t max_pmu_version = kvm_is_mediated_pmu_enabled() ?
+				  pmu_version : max_t(typeof(pmu_version), pmu_version, 5);
 
 	/*
 	 * Detect the existence of events that aren't supported by selftests.
@@ -622,8 +628,16 @@ static void test_intel_counters(void)
 			pr_info("Testing fixed counters, PMU version %u, perf_caps = %lx\n",
 				v, perf_caps[i]);
 			for (j = 0; j <= nr_fixed_counters; j++) {
-				for (k = 0; k <= (BIT(nr_fixed_counters) - 1); k++)
-					test_fixed_counters(v, perf_caps[i], j, k);
+				/*
+				 * pmu version less than 5 doesn't support fixed counter
+				 * bitmap, so only set fixed counter bitamp to 0.
+				 */
+				if (v < 5) {
+					test_fixed_counters(v, perf_caps[i], j, 0);
+				} else {
+					for (k = 0; k <= (BIT(nr_fixed_counters) - 1); k++)
+						test_fixed_counters(v, perf_caps[i], j, k);
+				}
 			}
 		}
 	}
