@@ -212,9 +212,6 @@ unsafe impl<T: ?Sized + Send, const ID: u64> Send for ListLinksSelfPtr<T, ID> {}
 unsafe impl<T: ?Sized + Sync, const ID: u64> Sync for ListLinksSelfPtr<T, ID> {}
 
 impl<T: ?Sized, const ID: u64> ListLinksSelfPtr<T, ID> {
-    /// The offset from the [`ListLinks`] to the self pointer field.
-    pub const LIST_LINKS_SELF_PTR_OFFSET: usize = core::mem::offset_of!(Self, self_ptr);
-
     /// Creates a new initializer for this type.
     pub fn new() -> impl PinInit<Self> {
         // INVARIANT: Pin-init initializers can't be used on an existing `Arc`, so this value will
@@ -228,6 +225,16 @@ impl<T: ?Sized, const ID: u64> ListLinksSelfPtr<T, ID> {
             },
             self_ptr: Opaque::uninit(),
         }
+    }
+
+    /// Returns a pointer to the self pointer.
+    ///
+    /// # Safety
+    ///
+    /// The provided pointer must point at a valid struct of type `Self`.
+    pub unsafe fn raw_get_self_ptr(me: *mut Self) -> *const Opaque<*const T> {
+        // SAFETY: The caller promises that the pointer is valid.
+        unsafe { ptr::addr_of!((*me).self_ptr) }
     }
 }
 
@@ -603,14 +610,11 @@ impl<'a, T: ?Sized + ListItem<ID>, const ID: u64> Iterator for Iter<'a, T, ID> {
 ///     }
 /// }
 ///
-/// kernel::list::impl_has_list_links! {
-///     impl HasListLinks<0> for ListItem { self.links }
-/// }
 /// kernel::list::impl_list_arc_safe! {
 ///     impl ListArcSafe<0> for ListItem { untracked; }
 /// }
 /// kernel::list::impl_list_item! {
-///     impl ListItem<0> for ListItem { using ListLinks; }
+///     impl ListItem<0> for ListItem { using ListLinks { self.links }; }
 /// }
 ///
 /// // Use a cursor to remove the first element with the given value.
