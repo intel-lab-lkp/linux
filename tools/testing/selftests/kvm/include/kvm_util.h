@@ -961,6 +961,9 @@ static inline struct kvm_vm *vm_create_shape_with_one_vcpu(struct vm_shape shape
 	return __vm_create_shape_with_one_vcpu(shape, vcpu, 0, guest_code);
 }
 
+struct kvm_vm *vm_create_with_one_vcpu_with_pmu(struct kvm_vcpu **vcpu,
+						void *guest_code);
+
 struct kvm_vcpu *vm_recreate_with_one_vcpu(struct kvm_vm *vm);
 
 void kvm_pin_this_task_to_pcpu(uint32_t pcpu);

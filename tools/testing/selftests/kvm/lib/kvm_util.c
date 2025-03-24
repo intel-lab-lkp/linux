@@ -545,6 +545,29 @@ struct kvm_vcpu *vm_recreate_with_one_vcpu(struct kvm_vm *vm)
 	return vm_vcpu_recreate(vm, 0);
 }
 
+struct kvm_vm *vm_create_with_one_vcpu_with_pmu(struct kvm_vcpu **vcpu,
+						void *guest_code)
+{
+	struct kvm_vm *vm;
+	int r;
+
+	r = kvm_check_cap(KVM_CAP_PMU_CAPABILITY);
+	if (!(r & KVM_PMU_CAP_DISABLE))
+		return NULL;
+
+	vm = vm_create(1);
+
+	/*
+	 * KVM_CAP_PMU_CAPABILITY ioctl must be explicitly called to enable
+	 * mediated vPMU.
+	 */
+	vm_enable_cap(vm, KVM_CAP_PMU_CAPABILITY, !KVM_PMU_CAP_DISABLE);
+
+	*vcpu = vm_vcpu_add(vm, 0, guest_code);
+
+	return vm;
+}
+
 void kvm_pin_this_task_to_pcpu(uint32_t pcpu)
 {
 	cpu_set_t mask;

@@ -40,7 +40,9 @@ static struct kvm_vm *pmu_vm_create_with_one_vcpu(struct kvm_vcpu **vcpu,
 {
 	struct kvm_vm *vm;
 
-	vm = vm_create_with_one_vcpu(vcpu, guest_code);
+	vm = vm_create_with_one_vcpu_with_pmu(vcpu, guest_code);
+	assert(vm);
+
 	sync_global_to_guest(vm, kvm_pmu_version);
 
 	/*

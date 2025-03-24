@@ -822,8 +822,9 @@ static void test_fixed_counter_bitmap(void)
 	 * fixed performance counters.
 	 */
 	for (idx = 0; idx < nr_fixed_counters; idx++) {
-		vm = vm_create_with_one_vcpu(&vcpu,
-					     intel_run_fixed_counter_guest_code);
+		vm = vm_create_with_one_vcpu_with_pmu(&vcpu,
+						      intel_run_fixed_counter_guest_code);
+		assert(vm);
 		vcpu_args_set(vcpu, 1, idx);
 		__test_fixed_counter_bitmap(vcpu, idx, nr_fixed_counters);
 		kvm_vm_free(vm);
@@ -843,7 +844,8 @@ int main(int argc, char *argv[])
 	TEST_REQUIRE(use_intel_pmu() || use_amd_pmu());
 	guest_code = use_intel_pmu() ? intel_guest_code : amd_guest_code;
 
-	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
+	vm = vm_create_with_one_vcpu_with_pmu(&vcpu, guest_code);
+	assert(vm);
 
 	TEST_REQUIRE(sanity_check_pmu(vcpu));
 
