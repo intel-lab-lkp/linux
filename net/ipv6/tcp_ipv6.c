@@ -1965,7 +1965,7 @@ do_time_wait:
 		goto csum_error;
 	}
 
-	switch (tcp_timewait_state_process(inet_twsk(sk), skb, th, &isn)) {
+	switch (tcp_timewait_state_process(inet_twsk(sk), skb, th, &isn, &drop_reason)) {
 	case TCP_TW_SYN:
 	{
 		struct sock *sk2;
