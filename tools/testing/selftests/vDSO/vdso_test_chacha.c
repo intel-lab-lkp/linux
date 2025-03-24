@@ -19,6 +19,9 @@ static bool cpu_has_capabilities(void)
 	return getauxval(AT_HWCAP) & HWCAP_ASIMD;
 }
 #elif defined(__s390x__)
+#ifndef HWCAP_S390_VXRS
+#define HWCAP_S390_VXRS	(1 << 11)
+#endif
 static bool cpu_has_capabilities(void)
 {
 	return getauxval(AT_HWCAP) & HWCAP_S390_VXRS;
