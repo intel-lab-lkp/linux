@@ -1375,6 +1375,9 @@ static void init_vmcb(struct kvm_vcpu *vcpu)
 		svm->vmcb->control.int_ctl |= V_GIF_ENABLE_MASK;
 	}
 
+	if (vcpu->kvm->arch.bus_lock_detection_enabled)
+		svm_set_intercept(svm, INTERCEPT_BUSLOCK);
+
 	if (sev_guest(vcpu->kvm))
 		sev_init_vmcb(svm);
 
@@ -5297,6 +5300,11 @@ static __init void svm_set_cpu_caps(void)
 
 		/* Nested VM can receive #VMEXIT instead of triggering #GP */
 		kvm_cpu_cap_set(X86_FEATURE_SVME_ADDR_CHK);
+	}
+
+	if (cpu_feature_enabled(X86_FEATURE_BUS_LOCK_THRESHOLD)) {
+		pr_info("Bus Lock Threshold supported\n");
+		kvm_caps.has_bus_lock_exit = true;
 	}
 
 	/* CPUID 0x80000008 */
