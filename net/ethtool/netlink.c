@@ -540,9 +540,9 @@ err_dev:
 	return ret;
 }
 
-static int ethnl_default_dump_one(struct sk_buff *skb, struct net_device *dev,
-				  const struct ethnl_dump_ctx *ctx,
-				  const struct genl_info *info)
+static int ethnl_default_dump_one_dev(struct sk_buff *skb, struct net_device *dev,
+				      const struct ethnl_dump_ctx *ctx,
+				      const struct genl_info *info)
 {
 	void *ehdr;
 	int ret;
@@ -590,7 +590,8 @@ static int ethnl_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 		rcu_read_unlock();
 
 		ctx->req_info->dev = dev;
-		ret = ethnl_default_dump_one(skb, dev, ctx, genl_info_dump(cb));
+		ret = ethnl_default_dump_one_dev(skb, dev, ctx,
+						 genl_info_dump(cb));
 
 		rcu_read_lock();
 		dev_put(dev);
@@ -618,8 +619,8 @@ static int ethnl_default_dumpit(struct sk_buff *skb,
 		/* Filtered DUMP request targeted to a single netdev. We already
 		 * hold a ref to the netdev from ->start()
 		 */
-		ret = ethnl_default_dump_one(skb, ctx->req_info->dev, ctx,
-					     genl_info_dump(cb));
+		ret = ethnl_default_dump_one_dev(skb, ctx->req_info->dev, ctx,
+						 genl_info_dump(cb));
 		netdev_put(ctx->req_info->dev, &ctx->req_info->dev_tracker);
 
 		if (ret < 0 && ret != -EOPNOTSUPP && likely(skb->len))
