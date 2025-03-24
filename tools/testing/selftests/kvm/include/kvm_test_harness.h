@@ -23,6 +23,19 @@
 		kvm_vm_free(self->vcpu->vm);				\
 	}
 
+#define KVM_ONE_VCPU_PMU_TEST_SUITE(name)					\
+	FIXTURE(name) {								\
+		struct kvm_vcpu *vcpu;						\
+	};									\
+										\
+	FIXTURE_SETUP(name) {							\
+		(void)vm_create_with_one_vcpu_with_pmu(&self->vcpu, NULL);	\
+	}									\
+										\
+	FIXTURE_TEARDOWN(name) {						\
+		kvm_vm_free(self->vcpu->vm);					\
+	}
+
 #define KVM_ONE_VCPU_TEST(suite, test, guestcode)			\
 static void __suite##_##test(struct kvm_vcpu *vcpu);			\
 									\

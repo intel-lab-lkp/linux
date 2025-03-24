@@ -73,7 +73,7 @@ static void guest_code(uint64_t current_val)
 	GUEST_DONE();
 }
 
-KVM_ONE_VCPU_TEST_SUITE(vmx_pmu_caps);
+KVM_ONE_VCPU_PMU_TEST_SUITE(vmx_pmu_caps);
 
 /*
  * Verify that guest WRMSRs to PERF_CAPABILITIES #GP regardless of the value
