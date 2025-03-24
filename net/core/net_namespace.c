@@ -1512,3 +1512,154 @@ const struct proc_ns_operations netns_operations = {
 	.owner		= netns_owner,
 };
 #endif
+
+#ifdef CONFIG_DEBUG_FS
+#ifdef CONFIG_NET_NS_REFCNT_TRACKER
+
+#include <linux/debugfs.h>
+
+static struct dentry *ns_debug_dir;
+static unsigned int ns_debug_net_id;
+
+struct ns_debug_net {
+	struct dentry *netdir;
+	struct dentry *refcnt;
+	struct dentry *notrefcnt;
+};
+
+#define MAX_NS_DEBUG_BUFSIZE	(32 * PAGE_SIZE)
+
+static int
+ns_debug_tracker_show(struct seq_file *f, void *v)
+{
+	struct ref_tracker_dir *tracker = f->private;
+	int len, bufsize = PAGE_SIZE;
+	char *buf;
+
+	for (;;) {
+		buf = kvmalloc(bufsize, GFP_KERNEL);
+		if (!buf)
+			return -ENOMEM;
+
+		len = ref_tracker_dir_snprint(tracker, buf, bufsize);
+		if (len < bufsize)
+			break;
+
+		kvfree(buf);
+		bufsize *= 2;
+		if (bufsize > MAX_NS_DEBUG_BUFSIZE)
+			return -ENOBUFS;
+	}
+	seq_write(f, buf, len);
+	kvfree(buf);
+	return 0;
+}
+
+static int
+ns_debug_ref_open(struct inode *inode, struct file *filp)
+{
+	int ret;
+	struct net *net = inode->i_private;
+
+	ret = single_open(filp, ns_debug_tracker_show, &net->refcnt_tracker);
+	if (!ret)
+		net_passive_inc(net);
+	return ret;
+}
+
+static int
+ns_debug_notref_open(struct inode *inode, struct file *filp)
+{
+	int ret;
+	struct net *net = inode->i_private;
+
+	ret = single_open(filp, ns_debug_tracker_show, &net->notrefcnt_tracker);
+	if (!ret)
+		net_passive_inc(net);
+	return ret;
+}
+
+static int
+ns_debug_ref_release(struct inode *inode, struct file *filp)
+{
+	struct net *net = inode->i_private;
+
+	net_passive_dec(net);
+	return single_release(inode, filp);
+}
+
+static const struct file_operations ns_debug_ref_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ns_debug_ref_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= ns_debug_ref_release,
+};
+
+static const struct file_operations ns_debug_notref_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ns_debug_notref_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= ns_debug_ref_release,
+};
+
+static int
+ns_debug_init_net(struct net *net)
+{
+	struct ns_debug_net *dnet = net_generic(net, ns_debug_net_id);
+	char name[11]; /* 10 decimal digits + NULL term */
+	int len;
+
+	len = snprintf(name, sizeof(name), "%u", net->ns.inum);
+	if (len >= sizeof(name))
+		return -EOVERFLOW;
+
+	dnet->netdir = debugfs_create_dir(name, ns_debug_dir);
+	if (IS_ERR(dnet->netdir))
+		return PTR_ERR(dnet->netdir);
+
+	dnet->refcnt = debugfs_create_file("refcnt", S_IFREG | 0400, dnet->netdir,
+					   net, &ns_debug_ref_fops);
+	if (IS_ERR(dnet->refcnt)) {
+		debugfs_remove(dnet->netdir);
+		return PTR_ERR(dnet->refcnt);
+	}
+
+	dnet->notrefcnt = debugfs_create_file("notrefcnt", S_IFREG | 0400, dnet->netdir,
+					      net, &ns_debug_notref_fops);
+	if (IS_ERR(dnet->notrefcnt)) {
+		debugfs_remove_recursive(dnet->netdir);
+		return PTR_ERR(dnet->notrefcnt);
+	}
+
+	return 0;
+}
+
+static void
+ns_debug_exit_net(struct net *net)
+{
+	struct ns_debug_net *dnet = net_generic(net, ns_debug_net_id);
+
+	debugfs_remove_recursive(dnet->netdir);
+}
+
+static struct pernet_operations ns_debug_net_ops = {
+	.init = ns_debug_init_net,
+	.exit = ns_debug_exit_net,
+	.id = &ns_debug_net_id,
+	.size = sizeof(struct ns_debug_net),
+};
+
+static int __init ns_debug_init(void)
+{
+	ns_debug_dir = debugfs_create_dir("net_ns", NULL);
+	if (IS_ERR(ns_debug_dir))
+		return PTR_ERR(ns_debug_dir);
+
+	register_pernet_subsys(&ns_debug_net_ops);
+	return 0;
+}
+late_initcall(ns_debug_init);
+#endif /* CONFIG_NET_NS_REFCNT_TRACKER */
+#endif /* CONFIG_DEBUG_FS */
