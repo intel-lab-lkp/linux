@@ -46,6 +46,7 @@ struct kvm_host_values {
 	u64 xcr0;
 	u64 xss;
 	u64 arch_capabilities;
+	u64 perf_capabilities;
 };
 
 void kvm_spurious_fault(void);
