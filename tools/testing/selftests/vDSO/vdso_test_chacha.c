@@ -13,6 +13,7 @@
 #include "../kselftest.h"
 
 #if defined(__aarch64__)
+#include <asm/hwcap.h>
 static bool cpu_has_capabilities(void)
 {
 	return getauxval(AT_HWCAP) & HWCAP_ASIMD;
