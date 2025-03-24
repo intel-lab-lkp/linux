@@ -550,6 +550,8 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 
 	dwc_pcie_debugfs_init(pci);
 
+	pcie_designware_sysfs_init(pci, DW_PCIE_RC_TYPE);
+
 	return 0;
 
 err_stop_link:
@@ -574,6 +576,7 @@ void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 
+	pcie_designware_sysfs_exit(pci);
 	dwc_pcie_debugfs_deinit(pci);
 
 	pci_stop_root_bus(pp->bridge->bus);

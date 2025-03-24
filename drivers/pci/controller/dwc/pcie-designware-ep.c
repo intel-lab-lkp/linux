@@ -705,6 +705,7 @@ void dw_pcie_ep_cleanup(struct dw_pcie_ep *ep)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
 
+	pcie_designware_sysfs_exit(pci);
 	dwc_pcie_debugfs_deinit(pci);
 	dw_pcie_edma_remove(pci);
 }
@@ -879,6 +880,8 @@ int dw_pcie_ep_init_registers(struct dw_pcie_ep *ep)
 	dw_pcie_ep_init_non_sticky_registers(pci);
 
 	dwc_pcie_debugfs_init(pci);
+
+	pcie_designware_sysfs_init(pci, DW_PCIE_EP_TYPE);
 
 	return 0;
 
