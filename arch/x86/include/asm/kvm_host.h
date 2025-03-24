@@ -568,6 +568,10 @@ struct kvm_pmu {
 	u64 raw_event_mask;
 	struct kvm_pmc gp_counters[KVM_MAX_NR_GP_COUNTERS];
 	struct kvm_pmc fixed_counters[KVM_MAX_NR_FIXED_COUNTERS];
+	u32 gp_eventsel_base;
+	u32 gp_counter_base;
+	u32 fixed_base;
+	u32 cntr_shift;
 
 	/*
 	 * Overlay the bitmap with a 64-bit atomic so that all bits can be

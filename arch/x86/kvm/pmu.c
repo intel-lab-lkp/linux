@@ -1127,3 +1127,99 @@ cleanup:
 	kfree(filter);
 	return r;
 }
+
+void kvm_pmu_put_guest_pmcs(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	u32 eventsel_msr;
+	u32 counter_msr;
+	u32 i;
+
+	/*
+	 * Clear hardware selector MSR content and its counter to avoid
+	 * leakage and also avoid this guest GP counter get accidentally
+	 * enabled during host running when host enable global ctrl.
+	 */
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+		pmc = &pmu->gp_counters[i];
+		eventsel_msr = pmc_msr_addr(pmu, pmu->gp_eventsel_base, i);
+		counter_msr = pmc_msr_addr(pmu, pmu->gp_counter_base, i);
+
+		rdpmcl(i, pmc->counter);
+		rdmsrl(eventsel_msr, pmc->eventsel_hw);
+		if (pmc->counter)
+			wrmsrl(counter_msr, 0);
+		if (pmc->eventsel_hw)
+			wrmsrl(eventsel_msr, 0);
+	}
+
+	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+		pmc = &pmu->fixed_counters[i];
+		counter_msr = pmc_msr_addr(pmu, pmu->fixed_base, i);
+
+		rdpmcl(INTEL_PMC_FIXED_RDPMC_BASE | i, pmc->counter);
+		if (pmc->counter)
+			wrmsrl(counter_msr, 0);
+	}
+
+}
+EXPORT_SYMBOL_GPL(kvm_pmu_put_guest_pmcs);
+
+void kvm_pmu_load_guest_pmcs(struct kvm_vcpu *vcpu)
+{
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct kvm_pmc *pmc;
+	u32 eventsel_msr;
+	u32 counter_msr;
+	u32 i;
+
+	/*
+	 * No need to zero out unexposed GP/fixed counters/selectors since RDPMC
+	 * in this case will be intercepted. Accessing to these counters and
+	 * selectors will cause #GP in the guest.
+	 */
+	for (i = 0; i < pmu->nr_arch_gp_counters; i++) {
+		pmc = &pmu->gp_counters[i];
+		eventsel_msr = pmc_msr_addr(pmu, pmu->gp_eventsel_base, i);
+		counter_msr = pmc_msr_addr(pmu, pmu->gp_counter_base, i);
+
+		wrmsrl(counter_msr, pmc->counter);
+		wrmsrl(eventsel_msr, pmc->eventsel_hw);
+	}
+	for (i = 0; i < pmu->nr_arch_fixed_counters; i++) {
+		pmc = &pmu->fixed_counters[i];
+		counter_msr = pmc_msr_addr(pmu, pmu->fixed_base, i);
+
+		wrmsrl(counter_msr, pmc->counter);
+	}
+}
+EXPORT_SYMBOL_GPL(kvm_pmu_load_guest_pmcs);
+
+void kvm_pmu_put_guest_context(struct kvm_vcpu *vcpu)
+{
+	if (!kvm_mediated_pmu_enabled(vcpu))
+		return;
+
+	lockdep_assert_irqs_disabled();
+
+	kvm_pmu_call(put_guest_context)(vcpu);
+
+	perf_guest_exit();
+}
+
+void kvm_pmu_load_guest_context(struct kvm_vcpu *vcpu)
+{
+	u32 guest_lvtpc;
+
+	if (!kvm_mediated_pmu_enabled(vcpu))
+		return;
+
+	lockdep_assert_irqs_disabled();
+
+	guest_lvtpc = APIC_DM_FIXED | KVM_GUEST_PMI_VECTOR |
+		(kvm_lapic_get_reg(vcpu->arch.apic, APIC_LVTPC) & APIC_LVT_MASKED);
+	perf_guest_enter(guest_lvtpc);
+
+	kvm_pmu_call(load_guest_context)(vcpu);
+}
