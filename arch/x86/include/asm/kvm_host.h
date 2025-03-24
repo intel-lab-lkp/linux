@@ -553,6 +553,10 @@ struct kvm_pmu {
 	unsigned available_event_types;
 	u64 fixed_ctr_ctrl;
 	u64 fixed_ctr_ctrl_rsvd;
+	/*
+	 * kvm_pmu_sync_global_ctrl_from_vmcs() must be called to update
+	 * this SW-maintained global_ctrl for mediated vPMU before accessing it.
+	 */
 	u64 global_ctrl;
 	u64 global_status;
 	u64 counter_bitmask[2];

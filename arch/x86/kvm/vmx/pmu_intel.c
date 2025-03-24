@@ -294,6 +294,11 @@ static int intel_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	u32 msr = msr_info->index;
 
 	switch (msr) {
+	case MSR_CORE_PERF_GLOBAL_CTRL:
+		if (kvm_mediated_pmu_enabled(vcpu))
+			pmu->global_ctrl = vmcs_read64(GUEST_IA32_PERF_GLOBAL_CTRL);
+		msr_info->data = pmu->global_ctrl;
+		break;
 	case MSR_CORE_PERF_FIXED_CTR_CTRL:
 		msr_info->data = pmu->fixed_ctr_ctrl;
 		break;
@@ -339,6 +344,11 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 	u64 reserved_bits, diff;
 
 	switch (msr) {
+	case MSR_CORE_PERF_GLOBAL_CTRL:
+		if (kvm_mediated_pmu_enabled(vcpu))
+			vmcs_write64(GUEST_IA32_PERF_GLOBAL_CTRL,
+				     pmu->global_ctrl);
+		break;
 	case MSR_CORE_PERF_FIXED_CTR_CTRL:
 		if (data & pmu->fixed_ctr_ctrl_rsvd)
 			return 1;
@@ -558,10 +568,37 @@ static void __intel_pmu_refresh(struct kvm_vcpu *vcpu)
 
 static void intel_pmu_refresh(struct kvm_vcpu *vcpu)
 {
+	struct kvm_pmu *pmu = vcpu_to_pmu(vcpu);
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	bool mediated;
+
 	__intel_pmu_refresh(vcpu);
 
-	exec_controls_changebit(to_vmx(vcpu), CPU_BASED_RDPMC_EXITING,
+	exec_controls_changebit(vmx, CPU_BASED_RDPMC_EXITING,
 				!kvm_rdpmc_in_guest(vcpu));
+
+	mediated = kvm_mediated_pmu_enabled(vcpu);
+	if (cpu_has_load_perf_global_ctrl()) {
+		vm_entry_controls_changebit(vmx,
+			VM_ENTRY_LOAD_IA32_PERF_GLOBAL_CTRL, mediated);
+		/*
+		 * Initialize guest PERF_GLOBAL_CTRL to reset value as SDM rules.
+		 *
+		 * Note: GUEST_IA32_PERF_GLOBAL_CTRL must be initialized to
+		 * "BIT_ULL(pmu->nr_arch_gp_counters) - 1" instead of pmu->global_ctrl
+		 * since pmu->global_ctrl is only be initialized when guest
+		 * pmu->version > 1. Otherwise if pmu->version is 1, pmu->global_ctrl
+		 * is 0 and guest counters are never really enabled.
+		 */
+		if (mediated)
+			vmcs_write64(GUEST_IA32_PERF_GLOBAL_CTRL,
+				     BIT_ULL(pmu->nr_arch_gp_counters) - 1);
+	}
+
+	if (cpu_has_save_perf_global_ctrl())
+		vm_exit_controls_changebit(vmx,
+			VM_EXIT_LOAD_IA32_PERF_GLOBAL_CTRL |
+			VM_EXIT_SAVE_IA32_PERF_GLOBAL_CTRL, mediated);
 }
 
 static void intel_pmu_init(struct kvm_vcpu *vcpu)

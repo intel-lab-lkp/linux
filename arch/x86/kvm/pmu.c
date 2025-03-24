@@ -646,6 +646,30 @@ void kvm_pmu_deliver_pmi(struct kvm_vcpu *vcpu)
 	}
 }
 
+static void kvm_pmu_sync_global_ctrl_from_vmcs(struct kvm_vcpu *vcpu)
+{
+	struct msr_data msr_info = { .index = MSR_CORE_PERF_GLOBAL_CTRL };
+
+	if (!kvm_mediated_pmu_enabled(vcpu))
+		return;
+
+	/* Sync pmu->global_ctrl from GUEST_IA32_PERF_GLOBAL_CTRL. */
+	kvm_pmu_call(get_msr)(vcpu, &msr_info);
+}
+
+static void kvm_pmu_sync_global_ctrl_to_vmcs(struct kvm_vcpu *vcpu, u64 global_ctrl)
+{
+	struct msr_data msr_info = {
+		.index = MSR_CORE_PERF_GLOBAL_CTRL,
+		.data = global_ctrl };
+
+	if (!kvm_mediated_pmu_enabled(vcpu))
+		return;
+
+	/* Sync pmu->global_ctrl to GUEST_IA32_PERF_GLOBAL_CTRL. */
+	kvm_pmu_call(set_msr)(vcpu, &msr_info);
+}
+
 bool kvm_pmu_is_valid_msr(struct kvm_vcpu *vcpu, u32 msr)
 {
 	switch (msr) {
@@ -680,7 +704,6 @@ int kvm_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		msr_info->data = pmu->global_status;
 		break;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_CTL:
-	case MSR_CORE_PERF_GLOBAL_CTRL:
 		msr_info->data = pmu->global_ctrl;
 		break;
 	case MSR_AMD64_PERF_CNTR_GLOBAL_STATUS_CLR:
@@ -731,6 +754,9 @@ int kvm_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			diff = pmu->global_ctrl ^ data;
 			pmu->global_ctrl = data;
 			reprogram_counters(pmu, diff);
+
+			/* Propagate guest global_ctrl to GUEST_IA32_PERF_GLOBAL_CTRL. */
+			kvm_pmu_sync_global_ctrl_to_vmcs(vcpu, data);
 		}
 		break;
 	case MSR_CORE_PERF_GLOBAL_OVF_CTRL:
@@ -906,6 +932,8 @@ void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 eventsel)
 	int i;
 
 	BUILD_BUG_ON(sizeof(pmu->global_ctrl) * BITS_PER_BYTE != X86_PMC_IDX_MAX);
+
+	kvm_pmu_sync_global_ctrl_from_vmcs(vcpu);
 
 	if (!kvm_pmu_has_perf_global_ctrl(pmu))
 		bitmap_copy(bitmap, pmu->all_valid_pmc_idx, X86_PMC_IDX_MAX);
