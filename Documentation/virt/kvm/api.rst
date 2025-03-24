@@ -7909,6 +7909,25 @@ apply some other policy-based mitigation. When exiting to userspace, KVM sets
 KVM_RUN_X86_BUS_LOCK in vcpu-run->flags, and conditionally sets the exit_reason
 to KVM_EXIT_X86_BUS_LOCK.
 
+Note! KVM_CAP_X86_BUS_LOCK_EXIT on AMD CPUs with the Bus Lock Threshold is close
+enough  to INTEL's Bus Lock Detection VM-Exit to allow using
+KVM_CAP_X86_BUS_LOCK_EXIT for AMD CPUs.
+
+The biggest difference between the two features is that Threshold (AMD CPUs) is
+fault-like i.e. the bus lock exit to user space occurs with RIP pointing at the
+offending instruction, whereas Detection (Intel CPUs) is trap-like i.e. the bus
+lock exit to user space occurs with RIP pointing at the instruction right after
+the guilty one.
+
+The bus lock threshold on AMD CPUs provides a per-VMCB counter which is
+decremented every time a bus lock occurs, and a VM-Exit is triggered if and only
+if the bus lock counter is '0'.
+
+To provide Detection-like semantics for AMD CPUs, the bus lock counter has been
+initialized to '0', i.e. exit on every bus lock, and when re-executing the
+guilty instruction, the bus lock counter has been set to '1' to effectively step
+past the instruction.
+
 Note! Detected bus locks may be coincident with other exits to userspace, i.e.
 KVM_RUN_X86_BUS_LOCK should be checked regardless of the primary exit reason if
 userspace wants to take action on all detected bus locks.
