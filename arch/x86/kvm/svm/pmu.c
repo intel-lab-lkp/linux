@@ -198,12 +198,20 @@ static void __amd_pmu_refresh(struct kvm_vcpu *vcpu)
 	pmu->nr_arch_gp_counters = min_t(unsigned int, pmu->nr_arch_gp_counters,
 					 kvm_pmu_cap.num_counters_gp);
 
-	if (pmu->version > 1) {
-		pmu->global_ctrl_rsvd = ~((1ull << pmu->nr_arch_gp_counters) - 1);
+	if (kvm_pmu_cap.version > 1) {
+		/*
+		 * At RESET, AMD CPUs set all enable bits for general purpose counters in
+		 * IA32_PERF_GLOBAL_CTRL (so that software that was written for v1 PMUs
+		 * don't unknowingly leave GP counters disabled in the global controls).
+		 * Emulate that behavior when refreshing the PMU so that userspace doesn't
+		 * need to manually set PERF_GLOBAL_CTRL.
+		 */
+		pmu->global_ctrl = BIT_ULL(pmu->nr_arch_gp_counters) - 1;
+		pmu->global_ctrl_rsvd = ~pmu->global_ctrl;
 		pmu->global_status_rsvd = pmu->global_ctrl_rsvd;
 	}
 
-	pmu->counter_bitmask[KVM_PMC_GP] = ((u64)1 << 48) - 1;
+	pmu->counter_bitmask[KVM_PMC_GP] = BIT_ULL(48) - 1;
 	pmu->reserved_bits = 0xfffffff000280000ull;
 	pmu->raw_event_mask = AMD64_RAW_EVENT_MASK;
 	/* not applicable to AMD; but clean them to prevent any fall out */

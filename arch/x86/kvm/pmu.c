@@ -843,16 +843,6 @@ void kvm_pmu_refresh(struct kvm_vcpu *vcpu)
 		return;
 
 	kvm_pmu_call(refresh)(vcpu);
-
-	/*
-	 * At RESET, both Intel and AMD CPUs set all enable bits for general
-	 * purpose counters in IA32_PERF_GLOBAL_CTRL (so that software that
-	 * was written for v1 PMUs don't unknowingly leave GP counters disabled
-	 * in the global controls).  Emulate that behavior when refreshing the
-	 * PMU so that userspace doesn't need to manually set PERF_GLOBAL_CTRL.
-	 */
-	if (kvm_pmu_has_perf_global_ctrl(pmu) && pmu->nr_arch_gp_counters)
-		pmu->global_ctrl = GENMASK_ULL(pmu->nr_arch_gp_counters - 1, 0);
 }
 
 void kvm_pmu_init(struct kvm_vcpu *vcpu)
