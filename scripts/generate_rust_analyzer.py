@@ -29,6 +29,7 @@ class Crate(TypedDict):
     root_module: str
     is_workspace_member: bool
     deps: List[Dependency]
+    cfg_groups: List[str]
     cfg: List[str]
     edition: Literal["2021"]
     env: Dict[str, str]
@@ -51,15 +52,8 @@ def generate_crates(
     sysroot_src: pathlib.Path,
     external_src: pathlib.Path,
     crates_cfgs: DefaultDict[str, List[str]],
+    cfg_groups: List[str],
 ) -> List[Crate]:
-    # Generate the configuration list.
-    cfg = []
-    with open(objtree / "include" / "generated" / "rustc_cfg") as fd:
-        for line in fd:
-            line = line.replace("--cfg=", "")
-            line = line.replace("\n", "")
-            cfg.append(line)
-
     # Now fill the crates list.
     crates: List[Crate] = []
 
@@ -76,6 +70,7 @@ def generate_crates(
             "root_module": str(root_module),
             "is_workspace_member": is_workspace_member,
             "deps": deps,
+            "cfg_groups": cfg_groups if is_workspace_member else [],
             "cfg": cfg,
             "edition": "2021",
             "env": {
@@ -293,7 +288,7 @@ def generate_crates(
                 name,
                 path,
                 deps=[core, kernel],
-                cfg=cfg,
+                cfg=[],
             )
 
     return crates
@@ -328,6 +323,10 @@ def main() -> None:
     # Making sure that the `sysroot` and `sysroot_src` belong to the same toolchain.
     assert args.sysroot in args.sysroot_src.parents
 
+    # Generate the configuration list.
+    with open(args.objtree / "include" / "generated" / "rustc_cfg") as fd:
+        cfg_groups = {"rustc_cfg": [line.lstrip("--cfg=").rstrip("\n") for line in fd]}
+
     rust_project = {
         "crates": generate_crates(
             args.srctree,
@@ -341,8 +340,10 @@ def main() -> None:
                     for crate, vals in map(lambda cfg: cfg.split("=", 1), args.cfgs)
                 },
             ),
+            list(cfg_groups.keys()),
         ),
         "sysroot": str(args.sysroot),
+        "cfg_groups": cfg_groups,
     }
 
     json.dump(rust_project, sys.stdout, sort_keys=True, indent=4)
