@@ -430,7 +430,6 @@ size_t strnlen(const char *s, size_t count)
 EXPORT_SYMBOL(strnlen);
 #endif
 
-size_t wcslen(const wchar_t *s);
 size_t wcslen(const wchar_t *s)
 {
 	const wchar_t *sc;

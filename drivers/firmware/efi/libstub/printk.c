@@ -24,7 +24,7 @@ void efi_char16_puts(efi_char16_t *str)
 }
 
 static
-u32 utf8_to_utf32(const u8 **s8)
+u32 efi_utf8_to_utf32(const u8 **s8)
 {
 	u32 c32;
 	u8 c0, cx;
@@ -82,7 +82,7 @@ void efi_puts(const char *str)
 	while (*s8) {
 		if (*s8 == '\n')
 			buf[pos++] = L'\r';
-		c32 = utf8_to_utf32(&s8);
+		c32 = efi_utf8_to_utf32(&s8);
 		if (c32 < 0x10000) {
 			/* Characters in plane 0 use a single word. */
 			buf[pos++] = c32;
