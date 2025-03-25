@@ -41,6 +41,7 @@ sk_so_peek_off
 socket
 so_incoming_cpu
 so_netns_cookie
+so_rcvbuf
 so_txtime
 stress_reuseport_listen
 tap
