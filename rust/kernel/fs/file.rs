@@ -359,12 +359,13 @@ impl core::ops::Deref for File {
     type Target = LocalFile;
     #[inline]
     fn deref(&self) -> &LocalFile {
+        let this: *const Self = self;
         // SAFETY: The caller provides a `&File`, and since it is a reference, it must point at a
         // valid file for the desired duration.
         //
         // By the type invariants, there are no `fdget_pos` calls that did not take the
         // `f_pos_lock` mutex.
-        unsafe { LocalFile::from_raw_file((self as *const Self).cast()) }
+        unsafe { LocalFile::from_raw_file(this.cast()) }
     }
 }
 
