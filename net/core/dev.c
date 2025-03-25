@@ -1829,6 +1829,8 @@ static int call_netdevice_register_notifiers(struct notifier_block *nb,
 {
 	int err;
 
+	netdev_ops_assert_locked(dev);
+
 	err = call_netdevice_notifier(nb, NETDEV_REGISTER, dev);
 	err = notifier_to_errno(err);
 	if (err)
@@ -1842,24 +1844,34 @@ static int call_netdevice_register_notifiers(struct notifier_block *nb,
 }
 
 static void call_netdevice_unregister_notifiers(struct notifier_block *nb,
-						struct net_device *dev)
+						struct net_device *dev,
+						bool lock)
 {
 	if (dev->flags & IFF_UP) {
 		call_netdevice_notifier(nb, NETDEV_GOING_DOWN,
 					dev);
 		call_netdevice_notifier(nb, NETDEV_DOWN, dev);
 	}
+	if (lock)
+		netdev_lock_ops(dev);
 	call_netdevice_notifier(nb, NETDEV_UNREGISTER, dev);
+	if (lock)
+		netdev_unlock_ops(dev);
 }
 
 static int call_netdevice_register_net_notifiers(struct notifier_block *nb,
-						 struct net *net)
+						 struct net *net,
+						 bool lock)
 {
 	struct net_device *dev;
 	int err;
 
 	for_each_netdev(net, dev) {
+		if (lock)
+			netdev_lock_ops(dev);
 		err = call_netdevice_register_notifiers(nb, dev);
+		if (lock)
+			netdev_unlock_ops(dev);
 		if (err)
 			goto rollback;
 	}
@@ -1867,17 +1879,18 @@ static int call_netdevice_register_net_notifiers(struct notifier_block *nb,
 
 rollback:
 	for_each_netdev_continue_reverse(net, dev)
-		call_netdevice_unregister_notifiers(nb, dev);
+		call_netdevice_unregister_notifiers(nb, dev, lock);
 	return err;
 }
 
 static void call_netdevice_unregister_net_notifiers(struct notifier_block *nb,
-						    struct net *net)
+						    struct net *net,
+						    bool lock)
 {
 	struct net_device *dev;
 
 	for_each_netdev(net, dev)
-		call_netdevice_unregister_notifiers(nb, dev);
+		call_netdevice_unregister_notifiers(nb, dev, lock);
 }
 
 static int dev_boot_phase = 1;
@@ -1914,7 +1927,7 @@ int register_netdevice_notifier(struct notifier_block *nb)
 		goto unlock;
 	for_each_net(net) {
 		__rtnl_net_lock(net);
-		err = call_netdevice_register_net_notifiers(nb, net);
+		err = call_netdevice_register_net_notifiers(nb, net, true);
 		__rtnl_net_unlock(net);
 		if (err)
 			goto rollback;
@@ -1928,7 +1941,7 @@ unlock:
 rollback:
 	for_each_net_continue_reverse(net) {
 		__rtnl_net_lock(net);
-		call_netdevice_unregister_net_notifiers(nb, net);
+		call_netdevice_unregister_net_notifiers(nb, net, true);
 		__rtnl_net_unlock(net);
 	}
 
@@ -1965,7 +1978,7 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 
 	for_each_net(net) {
 		__rtnl_net_lock(net);
-		call_netdevice_unregister_net_notifiers(nb, net);
+		call_netdevice_unregister_net_notifiers(nb, net, true);
 		__rtnl_net_unlock(net);
 	}
 
@@ -1978,7 +1991,8 @@ EXPORT_SYMBOL(unregister_netdevice_notifier);
 
 static int __register_netdevice_notifier_net(struct net *net,
 					     struct notifier_block *nb,
-					     bool ignore_call_fail)
+					     bool ignore_call_fail,
+					     bool lock)
 {
 	int err;
 
@@ -1988,7 +2002,7 @@ static int __register_netdevice_notifier_net(struct net *net,
 	if (dev_boot_phase)
 		return 0;
 
-	err = call_netdevice_register_net_notifiers(nb, net);
+	err = call_netdevice_register_net_notifiers(nb, net, lock);
 	if (err && !ignore_call_fail)
 		goto chain_unregister;
 
@@ -2000,7 +2014,8 @@ chain_unregister:
 }
 
 static int __unregister_netdevice_notifier_net(struct net *net,
-					       struct notifier_block *nb)
+					       struct notifier_block *nb,
+					       bool lock)
 {
 	int err;
 
@@ -2008,7 +2023,7 @@ static int __unregister_netdevice_notifier_net(struct net *net,
 	if (err)
 		return err;
 
-	call_netdevice_unregister_net_notifiers(nb, net);
+	call_netdevice_unregister_net_notifiers(nb, net, lock);
 	return 0;
 }
 
@@ -2032,7 +2047,7 @@ int register_netdevice_notifier_net(struct net *net, struct notifier_block *nb)
 	int err;
 
 	rtnl_net_lock(net);
-	err = __register_netdevice_notifier_net(net, nb, false);
+	err = __register_netdevice_notifier_net(net, nb, false, true);
 	rtnl_net_unlock(net);
 
 	return err;
@@ -2061,7 +2076,7 @@ int unregister_netdevice_notifier_net(struct net *net,
 	int err;
 
 	rtnl_net_lock(net);
-	err = __unregister_netdevice_notifier_net(net, nb);
+	err = __unregister_netdevice_notifier_net(net, nb, true);
 	rtnl_net_unlock(net);
 
 	return err;
@@ -2072,8 +2087,8 @@ static void __move_netdevice_notifier_net(struct net *src_net,
 					  struct net *dst_net,
 					  struct notifier_block *nb)
 {
-	__unregister_netdevice_notifier_net(src_net, nb);
-	__register_netdevice_notifier_net(dst_net, nb, true);
+	__unregister_netdevice_notifier_net(src_net, nb, false);
+	__register_netdevice_notifier_net(dst_net, nb, true, false);
 }
 
 static void rtnl_net_dev_lock(struct net_device *dev)
@@ -2119,7 +2134,7 @@ int register_netdevice_notifier_dev_net(struct net_device *dev,
 	int err;
 
 	rtnl_net_dev_lock(dev);
-	err = __register_netdevice_notifier_net(dev_net(dev), nb, false);
+	err = __register_netdevice_notifier_net(dev_net(dev), nb, false, true);
 	if (!err) {
 		nn->nb = nb;
 		list_add(&nn->list, &dev->net_notifier_list);
@@ -2138,7 +2153,7 @@ int unregister_netdevice_notifier_dev_net(struct net_device *dev,
 
 	rtnl_net_dev_lock(dev);
 	list_del(&nn->list);
-	err = __unregister_netdevice_notifier_net(dev_net(dev), nb);
+	err = __unregister_netdevice_notifier_net(dev_net(dev), nb, true);
 	rtnl_net_dev_unlock(dev);
 
 	return err;
@@ -11047,7 +11062,9 @@ int register_netdevice(struct net_device *dev)
 		memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 
 	/* Notify protocols, that a new device appeared. */
+	netdev_lock_ops(dev);
 	ret = call_netdevice_notifiers(NETDEV_REGISTER, dev);
+	netdev_unlock_ops(dev);
 	ret = notifier_to_errno(ret);
 	if (ret) {
 		/* Expect explicit free_netdev() on failure */
@@ -11180,8 +11197,11 @@ static struct net_device *netdev_wait_allrefs_any(struct list_head *list)
 			rtnl_lock();
 
 			/* Rebroadcast unregister notification */
-			list_for_each_entry(dev, list, todo_list)
+			list_for_each_entry(dev, list, todo_list) {
+				netdev_lock_ops(dev);
 				call_netdevice_notifiers(NETDEV_UNREGISTER, dev);
+				netdev_unlock_ops(dev);
+			}
 
 			__rtnl_unlock();
 			rcu_barrier();
@@ -11972,7 +11992,9 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		/* Notify protocols, that we are about to destroy
 		 * this device. They should clean all the things.
 		 */
+		netdev_lock_ops(dev);
 		call_netdevice_notifiers(NETDEV_UNREGISTER, dev);
+		netdev_unlock_ops(dev);
 
 		if (!dev->rtnl_link_ops ||
 		    dev->rtnl_link_state == RTNL_LINK_INITIALIZED)
@@ -12069,6 +12091,7 @@ int netif_change_net_namespace(struct net_device *dev, struct net *net,
 	int err, new_nsid;
 
 	ASSERT_RTNL();
+	netdev_ops_assert_locked(dev);
 
 	/* Don't allow namespace local devices to be moved. */
 	err = -EINVAL;
