@@ -74,8 +74,10 @@ EXPORT_SYMBOL(drm_panel_init);
  * drm_panel_add - add a panel to the global registry
  * @panel: panel to add
  *
- * Add a panel to the global registry so that it can be looked up by display
- * drivers.
+ * Add a panel to the global registry so that it can be looked
+ * up by display drivers. The panel to be added must have been
+ * allocated by devm_drm_panel_alloc(). Old-style allocation by
+ * kzalloc(), devm_kzalloc() and similar is deprecated.
  */
 void drm_panel_add(struct drm_panel *panel)
 {
