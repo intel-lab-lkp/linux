@@ -4022,10 +4022,12 @@ static int bond_slave_netdev_event(unsigned long event,
 
 	switch (event) {
 	case NETDEV_UNREGISTER:
+		netdev_unlock_ops(slave_dev);
 		if (bond_dev->type != ARPHRD_ETHER)
 			bond_release_and_destroy(bond_dev, slave_dev);
 		else
 			__bond_release_one(bond_dev, slave_dev, false, true);
+		netdev_lock_ops(slave_dev);
 		break;
 	case NETDEV_UP:
 	case NETDEV_CHANGE:
