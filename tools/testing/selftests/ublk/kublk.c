@@ -1065,6 +1065,7 @@ int main(int argc, char *argv[])
 		{ "zero_copy",          0,      NULL, 'z' },
 		{ "foreground",		0,	NULL,  0  },
 		{ "chunk_size", 	1,	NULL,  0  },
+		{ "delay_us",		1,	NULL,  0  },
 		{ 0, 0, 0, 0 }
 	};
 	int option_idx, opt;
@@ -1113,6 +1114,8 @@ int main(int argc, char *argv[])
 				ctx.fg = 1;
 			if (!strcmp(longopts[option_idx].name, "chunk_size"))
 				ctx.chunk_size = strtol(optarg, NULL, 10);
+			if (!strcmp(longopts[option_idx].name, "delay_us"))
+				ctx.delay_us = strtoul(optarg, NULL, 10);
 		}
 	}
 

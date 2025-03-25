@@ -67,6 +67,9 @@ struct dev_ctx {
 	unsigned int	all:1;
 	unsigned int	fg:1;
 
+	/* null */
+	unsigned long	delay_us;
+
 	/* stripe */
 	unsigned int    chunk_size;
 

@@ -1247,8 +1247,6 @@ static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
 static enum blk_eh_timer_return ublk_timeout(struct request *rq)
 {
 	struct ublk_queue *ubq = rq->mq_hctx->driver_data;
-	unsigned int nr_inflight = 0;
-	int i;
 
 	if (ubq->flags & UBLK_F_UNPRIVILEGED_DEV) {
 		if (!ubq->timeout) {
@@ -1256,26 +1254,6 @@ static enum blk_eh_timer_return ublk_timeout(struct request *rq)
 			ubq->timeout = true;
 		}
 
-		return BLK_EH_DONE;
-	}
-
-	if (!ubq_daemon_is_dying(ubq))
-		return BLK_EH_RESET_TIMER;
-
-	for (i = 0; i < ubq->q_depth; i++) {
-		struct ublk_io *io = &ubq->ios[i];
-
-		if (!(io->flags & UBLK_IO_FLAG_ACTIVE))
-			nr_inflight++;
-	}
-
-	/* cancelable uring_cmd can't help us if all commands are in-flight */
-	if (nr_inflight == ubq->q_depth) {
-		struct ublk_device *ub = ubq->dev;
-
-		if (ublk_abort_requests(ub, ubq)) {
-			schedule_work(&ub->nosrv_work);
-		}
 		return BLK_EH_DONE;
 	}
 
@@ -1351,6 +1329,24 @@ static int ublk_ch_open(struct inode *inode, struct file *filp)
 static int ublk_ch_release(struct inode *inode, struct file *filp)
 {
 	struct ublk_device *ub = filp->private_data;
+	bool need_schedule = false;
+	int i;
+
+	/*
+	 * Error out any requests outstanding to the ublk server. This
+	 * may have happened already (via uring_cmd cancellation), in
+	 * which case it is not harmful to repeat. But uring_cmd
+	 * cancellation does not handle queues which are fully saturated
+	 * (all requests in ublk server), because from the kernel's POV,
+	 * there are no outstanding uring_cmds to cancel. This code
+	 * handles such queues.
+	 */
+
+	for (i = 0; i < ub->dev_info.nr_hw_queues; i++)
+		need_schedule |= ublk_abort_requests(ub, ublk_get_queue(ub, i));
+
+	if (need_schedule)
+		schedule_work(&ub->nosrv_work);
 
 	clear_bit(UB_STATE_OPEN, &ub->state);
 	return 0;

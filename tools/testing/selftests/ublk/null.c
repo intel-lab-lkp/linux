@@ -30,6 +30,8 @@ static int ublk_null_tgt_init(const struct dev_ctx *ctx, struct ublk_dev *dev)
 
 	if (info->flags & UBLK_F_SUPPORT_ZERO_COPY)
 		dev->tgt.sq_depth = dev->tgt.cq_depth = 2 * info->queue_depth;
+
+	dev->private_data = (void *)ctx->delay_us;
 	return 0;
 }
 
@@ -87,6 +89,8 @@ static int ublk_null_queue_io(struct ublk_queue *q, int tag)
 	const struct ublksrv_io_desc *iod = ublk_get_iod(q, tag);
 	int zc = ublk_queue_use_zc(q);
 	int queued;
+
+	usleep((unsigned long)q->dev->private_data);
 
 	if (!zc) {
 		ublk_complete_io(q, tag, iod->nr_sectors << 9);
