@@ -890,6 +890,7 @@ static int cmd_dev_add(struct dev_ctx *ctx)
 		exit(-1);
 	}
 
+	signal(SIGCHLD, SIG_IGN);
 	setsid();
 	res = fork();
 	if (res == 0) {
