@@ -3494,7 +3494,7 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 			   struct mm_walk *args)
 {
 	int i;
-	bool dirty;
+	bool dirty = 0;
 	pte_t *pte;
 	spinlock_t *ptl;
 	unsigned long addr;
@@ -3573,7 +3573,7 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 				  struct mm_walk *args, unsigned long *bitmap, unsigned long *first)
 {
 	int i;
-	bool dirty;
+	bool dirty = 0;
 	pmd_t *pmd;
 	spinlock_t *ptl;
 	struct folio *last = NULL;
@@ -4185,7 +4185,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
 bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 {
 	int i;
-	bool dirty;
+	bool dirty = 0;
 	unsigned long start;
 	unsigned long end;
 	struct lru_gen_mm_walk *walk;
