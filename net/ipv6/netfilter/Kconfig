@@ -11,6 +11,7 @@ config IP6_NF_IPTABLES_LEGACY
 	tristate "Legacy IP6 tables support"
 	depends on INET && IPV6
 	select NETFILTER_XTABLES
+	select IP6_NF_IPTABLES
 	default n
 	help
 	  ip6tables is a legacy packet classifier.
