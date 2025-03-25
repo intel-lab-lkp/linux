@@ -310,6 +310,18 @@ static bool xsk_is_bound(struct xdp_sock *xs)
 	return false;
 }
 
+static void __xsk_mark_napi_id_once(struct sock *sk, struct net_device *dev, u32 qid)
+{
+	struct netdev_rx_queue *rxq;
+
+	if (qid >= dev->real_num_rx_queues)
+		return;
+
+	rxq = __netif_get_rx_queue(dev, qid);
+	if (rxq->napi)
+		__sk_mark_napi_id_once(sk, rxq->napi->napi_id);
+}
+
 static int xsk_rcv_check(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 {
 	if (!xsk_is_bound(xs))
@@ -323,6 +335,7 @@ static int xsk_rcv_check(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 		return -ENOSPC;
 	}
 
+	__xsk_mark_napi_id_once(&xs->sk, xs->dev, xs->queue_id);
 	return 0;
 }
 
@@ -1300,13 +1313,8 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 	xs->queue_id = qid;
 	xp_add_xsk(xs->pool, xs);
 
-	if (xs->zc && qid < dev->real_num_rx_queues) {
-		struct netdev_rx_queue *rxq;
-
-		rxq = __netif_get_rx_queue(dev, qid);
-		if (rxq->napi)
-			__sk_mark_napi_id_once(sk, rxq->napi->napi_id);
-	}
+	if (xs->zc)
+		__xsk_mark_napi_id_once(sk, dev, qid);
 
 out_unlock:
 	if (err) {
