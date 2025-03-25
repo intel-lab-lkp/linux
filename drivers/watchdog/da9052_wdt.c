@@ -170,7 +170,6 @@ static int da9052_wdt_probe(struct platform_device *pdev)
 	struct da9052 *da9052 = dev_get_drvdata(dev->parent);
 	struct da9052_wdt_data *driver_data;
 	struct watchdog_device *da9052_wdt;
-	int ret;
 
 	driver_data = devm_kzalloc(dev, sizeof(*driver_data), GFP_KERNEL);
 	if (!driver_data)
@@ -193,13 +192,6 @@ static int da9052_wdt_probe(struct platform_device *pdev)
 		da9052_wdt->bootstatus |= WDIOF_OVERHEAT;
 	if (da9052->fault_log & DA9052_FAULTLOG_VDDFAULT)
 		da9052_wdt->bootstatus |= WDIOF_POWERUNDER;
-
-	ret = da9052_reg_update(da9052, DA9052_CONTROL_D_REG,
-				DA9052_CONTROLD_TWDSCALE, 0);
-	if (ret < 0) {
-		dev_err(dev, "Failed to disable watchdog bits, %d\n", ret);
-		return ret;
-	}
 
 	return devm_watchdog_register_device(dev, &driver_data->wdt);
 }
