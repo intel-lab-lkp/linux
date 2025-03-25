@@ -249,6 +249,20 @@ def generate_crates(
         cfg=[],
     )
 
+    scripts = srctree / "scripts"
+    with open(scripts / "Makefile") as f:
+        makefile = f.read()
+    for path in scripts.glob("*.rs"):
+        name = path.name.rstrip(".rs")
+        if f"{name}-rust" not in makefile:
+            continue
+        _script = append_crate(
+            name,
+            path,
+            deps=[host_std],
+            cfg=[],
+        )
+
     def is_root_crate(build_file: pathlib.Path, target: str) -> bool:
         try:
             with open(build_file) as f:
@@ -267,7 +281,7 @@ def generate_crates(
     for folder in extra_dirs:
         for path in folder.rglob("*.rs"):
             logging.info("Checking %s", path)
-            name = path.name.replace(".rs", "")
+            name = path.name.rstrip(".rs")
 
             # Skip those that are not crate roots.
             if not is_root_crate(path.parent / "Makefile", name) and \
