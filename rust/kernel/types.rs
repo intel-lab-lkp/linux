@@ -11,6 +11,8 @@ use core::{
     ptr::NonNull,
 };
 
+pub use crate::ownable::{Ownable, OwnableMut, Owned};
+
 /// Used to transfer ownership to and from foreign (non-Rust) languages.
 ///
 /// Ownership is transferred from Rust to a foreign language by calling [`Self::into_foreign`] and
