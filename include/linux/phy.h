@@ -578,6 +578,10 @@ struct macsec_ops;
  * @mac_managed_pm: Set true if MAC driver takes of suspending/resuming PHY
  * @wol_enabled: Set to true if the PHY or the attached MAC have Wake-on-LAN
  * 		 enabled.
+ * @needs_reregister: Set to true if the PHY needs to register AGAIN after
+ *		 first registration. This is to handle special case where the
+ *		 PHY needs to load a firmware to correctly communicate the
+ *		 specific PHY ID.
  * @state: State of the PHY for management purposes
  * @dev_flags: Device-specific flags used by the PHY driver.
  *
@@ -681,6 +685,7 @@ struct phy_device {
 	unsigned is_on_sfp_module:1;
 	unsigned mac_managed_pm:1;
 	unsigned wol_enabled:1;
+	unsigned needs_reregister;
 
 	unsigned autoneg:1;
 	/* The most recently read link state */

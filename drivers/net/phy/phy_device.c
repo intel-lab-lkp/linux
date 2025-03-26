@@ -987,6 +987,33 @@ int phy_device_register(struct phy_device *phydev)
 		goto out;
 	}
 
+	/* Some PHY might needs to register AGAIN after a firmware
+	 * is loaded to correctly provide the real PHY ID.
+	 * For PHY that needs this, release the PHY driver, rescan
+	 * the MDIO bus for the PHY address and attach a driver
+	 * again.
+	 * This second time, the real PHY is provided and the
+	 * more specific PHY driver OPs are used.
+	 */
+	if (phydev->needs_reregister) {
+		device_release_driver(&phydev->mdio.dev);
+
+		if (phydev->is_c45)
+			get_phy_c45_ids(phydev->mdio.bus,
+					phydev->mdio.addr,
+					&phydev->c45_ids);
+		else
+			get_phy_c22_id(phydev->mdio.bus,
+				       phydev->mdio.addr,
+				       &phydev->phy_id);
+
+		err = device_attach(&phydev->mdio.dev);
+		if (err <= 0) {
+			phydev_err(phydev, "failed to reattach\n");
+			goto out;
+		}
+	}
+
 	return 0;
 
  out:
