@@ -2997,7 +2997,9 @@ static int team_device_event(struct notifier_block *unused,
 					       !!netif_oper_up(port->dev));
 		break;
 	case NETDEV_UNREGISTER:
+		netdev_unlock_ops(dev);
 		team_del_slave(port->team->dev, dev);
+		netdev_lock_ops(dev);
 		break;
 	case NETDEV_FEAT_CHANGE:
 		if (!port->team->notifier_ctx) {
