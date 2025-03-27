@@ -670,11 +670,6 @@ static void __cxl_handle_cor_ras(struct device *cxl_dev, struct device *pcie_dev
 	trace_cxl_aer_correctable_error(cxl_dev, pcie_dev, serial, status);
 }
 
-static void cxl_handle_endpoint_cor_ras(struct cxl_dev_state *cxlds)
-{
-	return __cxl_handle_cor_ras(&cxlds->cxlmd->dev, NULL, cxlds->serial, cxlds->regs.ras);
-}
-
 /* CXL spec rev3.0 8.2.4.16.1 */
 static void header_log_copy(void __iomem *ras_base, u32 *log)
 {
@@ -732,13 +727,7 @@ static pci_ers_result_t __cxl_handle_ras(struct device *cxl_dev, struct device *
 	return PCI_ERS_RESULT_PANIC;
 }
 
-static bool cxl_handle_endpoint_ras(struct cxl_dev_state *cxlds)
-{
-	return __cxl_handle_ras(&cxlds->cxlmd->dev, NULL, cxlds->serial, cxlds->regs.ras);
-}
-
 #ifdef CONFIG_PCIEAER_CXL
-
 
 void cxl_port_cor_error_detected(struct device *cxl_dev,
 				 struct cxl_prot_error_info *err_info)
@@ -868,7 +857,8 @@ void cxl_cor_error_detected(struct device *dev, struct cxl_prot_error_info *err_
 		if (cxlds->rcd)
 			cxl_handle_rdport_errors(cxlds);
 
-		cxl_handle_endpoint_cor_ras(cxlds);
+		__cxl_handle_cor_ras(&cxlds->cxlmd->dev, &pdev->dev,
+				     cxlds->serial, cxlds->regs.ras);
 	}
 }
 EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, "CXL");
@@ -907,7 +897,8 @@ pci_ers_result_t cxl_error_detected(struct device *dev,
 		 * chance the situation is recoverable dump the status of the RAS
 		 * capability registers and bounce the active state of the memdev.
 		 */
-		ue = cxl_handle_endpoint_ras(cxlds);
+		ue = __cxl_handle_ras(&cxlds->cxlmd->dev, &pdev->dev,
+				      cxlds->serial, cxlds->regs.ras);
 	}
 
 	if (ue)
