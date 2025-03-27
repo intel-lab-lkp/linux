@@ -1072,6 +1072,7 @@ struct net_device *netdev_get_by_index_lock(struct net *net, int ifindex)
 
 	return __netdev_put_lock(dev);
 }
+EXPORT_SYMBOL(netdev_get_by_index_lock);
 
 struct net_device *
 netdev_xa_find_lock(struct net *net, struct net_device *dev,
