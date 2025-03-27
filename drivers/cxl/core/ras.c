@@ -139,8 +139,108 @@ int cxl_create_prot_err_info(struct pci_dev *_pdev, int severity,
 
 	return 0;
 }
+EXPORT_SYMBOL_NS_GPL(cxl_create_prot_err_info, "CXL");
 
-struct work_struct cxl_prot_err_work;
+static void cxl_do_recovery(struct pci_dev *pdev) { }
+
+static int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
+{
+	struct cxl_prot_error_info *err_info = data;
+	const struct cxl_error_handlers *err_handler;
+	struct device *dev = err_info->dev;
+	struct cxl_driver *pdrv;
+
+	/*
+	 * The capability, status, and control fields in Device 0,
+	 * Function 0 DVSEC control the CXL functionality of the
+	 * entire device (CXL 3.0, 8.1.3).
+	 */
+	if (pdev->devfn != PCI_DEVFN(0, 0))
+		return 0;
+
+	/*
+	 * CXL Memory Devices must have the 502h class code set (CXL
+	 * 3.0, 8.1.12.1).
+	 */
+	if ((pdev->class >> 8) != PCI_CLASS_MEMORY_CXL)
+		return 0;
+
+	if (!is_cxl_memdev(dev) || !dev->driver)
+		return 0;
+
+	pdrv = to_cxl_drv(dev->driver);
+	if (!pdrv || !pdrv->err_handler)
+		return 0;
+
+	err_handler = pdrv->err_handler;
+	if (err_info->severity == AER_CORRECTABLE) {
+		if (err_handler->cor_error_detected)
+			err_handler->cor_error_detected(dev, err_info);
+	} else if (err_handler->error_detected) {
+		cxl_do_recovery(pdev);
+	}
+
+	return 0;
+}
+
+static void cxl_handle_prot_error(struct pci_dev *pdev, struct cxl_prot_error_info *err_info)
+{
+	if (!pdev || !err_info)
+		return;
+
+	/*
+	 * Internal errors of an RCEC indicate an AER error in an
+	 * RCH's downstream port. Check and handle them in the CXL.mem
+	 * device driver.
+	 */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_EC)
+		return pcie_walk_rcec(pdev, cxl_rch_handle_error_iter, err_info);
+
+	if (err_info->severity == AER_CORRECTABLE) {
+		struct device *dev __free(put_device) = get_device(err_info->dev);
+		struct cxl_driver *pdrv;
+		int aer = pdev->aer_cap;
+
+		if (!dev || !dev->driver)
+			return;
+
+		if (aer) {
+			int ras_status;
+
+			pci_read_config_dword(pdev, aer + PCI_ERR_COR_STATUS, &ras_status);
+			pci_write_config_dword(pdev, aer + PCI_ERR_COR_STATUS,
+					       ras_status);
+		}
+
+		pdrv = to_cxl_drv(dev->driver);
+		if (!pdrv || !pdrv->err_handler ||
+		    !pdrv->err_handler->cor_error_detected)
+			return;
+
+		pdrv->err_handler->cor_error_detected(dev, err_info);
+		pcie_clear_device_status(pdev);
+	} else {
+		cxl_do_recovery(pdev);
+	}
+}
+
+static void cxl_prot_err_work_fn(struct work_struct *work)
+{
+	struct cxl_prot_err_work_data wd;
+
+	while (cxl_prot_err_kfifo_get(&wd)) {
+		struct cxl_prot_error_info *err_info = &wd.err_info;
+		struct device *dev __free(put_device) = get_device(err_info->dev);
+		struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(err_info->pdev);
+
+		if (!dev || !pdev)
+			continue;
+
+		cxl_handle_prot_error(pdev, err_info);
+	}
+}
+
+static DECLARE_WORK(cxl_prot_err_work, cxl_prot_err_work_fn);
 
 int cxl_ras_init(void)
 {

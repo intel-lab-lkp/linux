@@ -11,6 +11,8 @@
 #include <linux/log2.h>
 #include <linux/node.h>
 #include <linux/io.h>
+#include <linux/pci.h>
+#include <linux/aer.h>
 
 extern const struct nvdimm_security_ops *cxl_security_ops;
 
@@ -786,6 +788,20 @@ static inline int cxl_root_decoder_autoremove(struct device *host,
 }
 int cxl_endpoint_autoremove(struct cxl_memdev *cxlmd, struct cxl_port *endpoint);
 
+int cxl_create_prot_err_info(struct pci_dev *pdev, int severity,
+			     struct cxl_prot_error_info *err_info);
+
+/* CXL bus error event callbacks */
+struct cxl_error_handlers {
+	/* CXL bus error detected on this device */
+	pci_ers_result_t (*error_detected)(struct device *dev,
+					   struct cxl_prot_error_info *err_info);
+
+	/* Allow device driver to record more details of a correctable error */
+	void (*cor_error_detected)(struct device *dev,
+				   struct cxl_prot_error_info *err_info);
+};
+
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info
  * @mem_enabled: cached value of mem_enabled in the DVSEC at init time
@@ -820,6 +836,7 @@ struct cxl_driver {
 	void (*remove)(struct device *dev);
 	struct device_driver drv;
 	int id;
+	const struct cxl_error_handlers *err_handler;
 };
 
 #define to_cxl_drv(__drv)	container_of_const(__drv, struct cxl_driver, drv)
