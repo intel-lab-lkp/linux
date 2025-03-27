@@ -149,6 +149,8 @@ static const u32 lt_lcd_regs[] = {
 void aty_st_lcd(int index, u32 val, const struct atyfb_par *par)
 {
 	if (M64_HAS(LT_LCD_REGS)) {
+		if ((u32)index >= ARRAY_SIZE(lt_lcd_regs))
+			return;
 		aty_st_le32(lt_lcd_regs[index], val, par);
 	} else {
 		unsigned long temp;
@@ -164,6 +166,8 @@ void aty_st_lcd(int index, u32 val, const struct atyfb_par *par)
 u32 aty_ld_lcd(int index, const struct atyfb_par *par)
 {
 	if (M64_HAS(LT_LCD_REGS)) {
+		if ((u32)index >= ARRAY_SIZE(lt_lcd_regs))
+			return 0;
 		return aty_ld_le32(lt_lcd_regs[index], par);
 	} else {
 		unsigned long temp;
