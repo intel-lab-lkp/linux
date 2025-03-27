@@ -65,6 +65,11 @@ static const struct cxl_error_handlers cxl_port_error_handlers = {
 	.cor_error_detected = cxl_port_cor_error_detected,
 };
 
+const struct cxl_error_handlers cxl_ep_error_handlers = {
+	.error_detected = cxl_error_detected,
+	.cor_error_detected = cxl_cor_error_detected,
+};
+
 static void cxl_assign_error_handlers(struct device *_dev,
 				      const struct cxl_error_handlers *handlers)
 {
@@ -203,6 +208,8 @@ static void cxl_endpoint_port_init_ras(struct cxl_port *port)
 	}
 
 	cxl_dport_init_ras_reporting(dport, cxlmd_dev);
+
+	cxl_assign_error_handlers(cxlmd_dev, &cxl_ep_error_handlers);
 }
 
 #else

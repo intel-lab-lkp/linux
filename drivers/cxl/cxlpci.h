@@ -133,8 +133,8 @@ struct cxl_dev_state;
 int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 			struct cxl_endpoint_dvsec_info *info);
 void read_cdat_data(struct cxl_port *port);
-void cxl_cor_error_detected(struct pci_dev *pdev);
-pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
+void pci_cor_error_detected(struct pci_dev *pdev);
+pci_ers_result_t pci_error_detected(struct pci_dev *pdev,
 				    pci_channel_state_t state);
 int cxl_create_prot_err_info(struct pci_dev *_pdev, int severity,
 			     struct cxl_prot_error_info *err_info);

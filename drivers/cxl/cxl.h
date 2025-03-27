@@ -815,6 +815,11 @@ void cxl_port_cor_error_detected(struct device *dev,
 pci_ers_result_t cxl_port_error_detected(struct device *dev,
 					 struct cxl_prot_error_info *err_info);
 
+void cxl_cor_error_detected(struct device *dev,
+			    struct cxl_prot_error_info *err_info);
+pci_ers_result_t cxl_error_detected(struct device *dev,
+				    struct cxl_prot_error_info *err_info);
+
 /**
  * struct cxl_endpoint_dvsec_info - Cached DVSEC info
  * @mem_enabled: cached value of mem_enabled in the DVSEC at init time
