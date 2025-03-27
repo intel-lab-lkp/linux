@@ -110,6 +110,16 @@ struct aer_stats {
 static int pcie_aer_disable;
 static pci_ers_result_t aer_root_reset(struct pci_dev *dev);
 
+#if defined(CONFIG_PCIEAER_CXL)
+#define CXL_ERROR_SOURCES_MAX          128
+static DEFINE_KFIFO(cxl_prot_err_fifo, struct cxl_prot_err_work_data,
+		    CXL_ERROR_SOURCES_MAX);
+static DEFINE_SPINLOCK(cxl_prot_err_fifo_lock);
+struct work_struct *cxl_prot_err_work;
+static int (*cxl_create_prot_err_info)(struct pci_dev*, int severity,
+				       struct cxl_prot_error_info*);
+#endif
+
 void pci_no_aer(void)
 {
 	pcie_aer_disable = 1;
@@ -1576,6 +1586,35 @@ static pci_ers_result_t aer_root_reset(struct pci_dev *dev)
 
 	return rc ? PCI_ERS_RESULT_DISCONNECT : PCI_ERS_RESULT_RECOVERED;
 }
+
+
+#if defined(CONFIG_PCIEAER_CXL)
+int cxl_register_prot_err_work(struct work_struct *work,
+			       int (*_cxl_create_prot_err_info)(struct pci_dev*, int,
+								struct cxl_prot_error_info*))
+{
+	guard(spinlock)(&cxl_prot_err_fifo_lock);
+	cxl_prot_err_work = work;
+	cxl_create_prot_err_info = _cxl_create_prot_err_info;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_register_prot_err_work, "CXL");
+
+int cxl_unregister_prot_err_work(void)
+{
+	guard(spinlock)(&cxl_prot_err_fifo_lock);
+	cxl_prot_err_work = NULL;
+	cxl_create_prot_err_info = NULL;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_unregister_prot_err_work, "CXL");
+
+int cxl_prot_err_kfifo_get(struct cxl_prot_err_work_data *wd)
+{
+	return kfifo_get(&cxl_prot_err_fifo, wd);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_prot_err_kfifo_get, "CXL");
+#endif
 
 static struct pcie_port_service_driver aerdriver = {
 	.name		= "aer",

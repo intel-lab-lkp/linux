@@ -5,6 +5,7 @@
 #include <linux/aer.h>
 #include <cxl/event.h>
 #include <cxlmem.h>
+#include <cxlpci.h>
 #include "trace.h"
 
 static void cxl_cper_trace_corr_port_prot_err(struct pci_dev *pdev,
@@ -107,13 +108,64 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
+int cxl_create_prot_err_info(struct pci_dev *_pdev, int severity,
+			     struct cxl_prot_error_info *err_info)
+{
+	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(_pdev);
+	struct cxl_dev_state *cxlds;
+
+	if (!pdev || !err_info) {
+		pr_warn_once("Error: parameter is NULL");
+		return -ENODEV;
+	}
+
+	if ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ENDPOINT) &&
+	    (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_END)) {
+		pci_warn_once(pdev, "Error: Unsupported device type (%X)", pci_pcie_type(pdev));
+		return -ENODEV;
+	}
+
+	cxlds = pci_get_drvdata(pdev);
+	struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
+
+	if (!dev)
+		return -ENODEV;
+
+	*err_info = (struct cxl_prot_error_info){ 0 };
+	err_info->ras_base = cxlds->regs.ras;
+	err_info->severity = severity;
+	err_info->pdev = pdev;
+	err_info->dev = dev;
+
+	return 0;
+}
+
+struct work_struct cxl_prot_err_work;
+
 int cxl_ras_init(void)
 {
-	return cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	int rc;
+
+	rc = cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	if (rc) {
+		pr_err("Failed to register CPER kfifo with AER driver");
+		return rc;
+	}
+
+	rc = cxl_register_prot_err_work(&cxl_prot_err_work, cxl_create_prot_err_info);
+	if (rc) {
+		pr_err("Failed to register kfifo with AER driver");
+		return rc;
+	}
+
+	return rc;
 }
 
 void cxl_ras_exit(void)
 {
 	cxl_cper_unregister_prot_err_work(&cxl_cper_prot_err_work);
 	cancel_work_sync(&cxl_cper_prot_err_work);
+
+	cxl_unregister_prot_err_work();
+	cancel_work_sync(&cxl_prot_err_work);
 }
