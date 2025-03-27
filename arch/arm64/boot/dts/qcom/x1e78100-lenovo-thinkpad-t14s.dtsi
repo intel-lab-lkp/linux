@@ -980,7 +980,11 @@
 	aux-bus {
 		panel: panel {
 			compatible = "edp-panel";
+			hpd-gpios = <&tlmm 119 GPIO_ACTIVE_HIGH>;
 			power-supply = <&vreg_edp_3p3>;
+
+			pinctrl-0 = <&edp_hpd_n_default>;
+			pinctrl-names = "default";
 
 			port {
 				edp_panel_in: endpoint {
@@ -1284,6 +1288,13 @@
 		pins = "gpio92";
 		function = "gpio";
 		bias-disable;
+	};
+
+	edp_hpd_n_default: edp-hpd-n-state {
+		pins = "gpio119";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
 	};
 
 	pcie4_default: pcie4-default-state {
