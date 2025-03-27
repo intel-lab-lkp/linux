@@ -16,8 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "cgroup_util.h"
-#include "../clone3/clone3_selftests.h"
+#include <cgroup_util.h>
 
 /* Returns read len on success, or -errno on failure. */
 static ssize_t read_text(const char *path, char *buf, size_t max_len)
