@@ -42,8 +42,9 @@ sk_so_peek_off
 socket
 so_incoming_cpu
 so_netns_cookie
-so_txtime
 so_rcv_listener
+so_rcvbuf
+so_txtime
 stress_reuseport_listen
 tap
 tcp_fastopen_backup_key
