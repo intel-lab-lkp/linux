@@ -1010,6 +1010,14 @@ static bool is_internal_error(struct aer_err_info *info)
 	return info->status & PCI_ERR_UNC_INTN;
 }
 
+static bool is_cxl_error(struct aer_err_info *info)
+{
+	if (!info || !info->is_cxl)
+		return false;
+
+	return is_internal_error(info);
+}
+
 static int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data)
 {
 	struct aer_err_info *info = (struct aer_err_info *)data;
@@ -1062,13 +1070,17 @@ static int handles_cxl_error_iter(struct pci_dev *dev, void *data)
 	return *handles_cxl;
 }
 
-static bool handles_cxl_errors(struct pci_dev *rcec)
+static bool handles_cxl_errors(struct pci_dev *dev)
 {
 	bool handles_cxl = false;
 
-	if (pci_pcie_type(rcec) == PCI_EXP_TYPE_RC_EC &&
-	    pcie_aer_is_native(rcec))
-		pcie_walk_rcec(rcec, handles_cxl_error_iter, &handles_cxl);
+	if (!pcie_aer_is_native(dev))
+		return false;
+
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC)
+		pcie_walk_rcec(dev, handles_cxl_error_iter, &handles_cxl);
+	else
+		handles_cxl = pcie_is_cxl(dev);
 
 	return handles_cxl;
 }
@@ -1082,10 +1094,44 @@ static void cxl_rch_enable_rcec(struct pci_dev *rcec)
 	pci_info(rcec, "CXL: Internal errors unmasked");
 }
 
+static void forward_cxl_error(struct pci_dev *_pdev, struct aer_err_info *info)
+{
+	int severity = info->severity;
+	struct cxl_prot_err_work_data wd;
+	struct cxl_prot_error_info *err_info = &wd.err_info;
+	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(_pdev);
+
+	if (!cxl_create_prot_err_info) {
+		pci_err(pdev, "Failed. CXL-AER interface not initialized.");
+		return;
+	}
+
+	if (cxl_create_prot_err_info(pdev, severity, err_info)) {
+		pci_err(pdev, "Failed to create CXL protocol error information");
+		return;
+	}
+
+	struct device *cxl_dev __free(put_device) = get_device(err_info->dev);
+
+	if (!kfifo_put(&cxl_prot_err_fifo, wd)) {
+		pr_err_ratelimited("CXL kfifo overflow\n");
+		return;
+	}
+
+	schedule_work(cxl_prot_err_work);
+}
+
 #else
 static inline void cxl_rch_enable_rcec(struct pci_dev *dev) { }
 static inline void cxl_rch_handle_error(struct pci_dev *dev,
 					struct aer_err_info *info) { }
+static inline void forward_cxl_error(struct pci_dev *dev,
+				    struct aer_err_info *info) { }
+static inline bool handles_cxl_errors(struct pci_dev *dev)
+{
+	return false;
+}
+static bool is_cxl_error(struct aer_err_info *info) { return 0; };
 #endif
 
 /**
@@ -1123,8 +1169,11 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
-	cxl_rch_handle_error(dev, info);
-	pci_aer_handle_error(dev, info);
+	if (is_cxl_error(info))
+		forward_cxl_error(dev, info);
+	else
+		pci_aer_handle_error(dev, info);
+
 	pci_dev_put(dev);
 }
 
