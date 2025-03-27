@@ -926,6 +926,24 @@ static void nsim_queue_uninit(struct netdevsim *ns)
 	ns->rq = NULL;
 }
 
+static int nsim_net_event(struct notifier_block *this, unsigned long event,
+			  void *ptr)
+{
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+
+	switch (event) {
+	case NETDEV_REGISTER:
+	case NETDEV_UNREGISTER:
+	case NETDEV_UP:
+		netdev_ops_assert_locked(dev);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
 static int nsim_init_netdevsim(struct netdevsim *ns)
 {
 	struct mock_phc *phc;
@@ -939,6 +957,7 @@ static int nsim_init_netdevsim(struct netdevsim *ns)
 	ns->netdev->netdev_ops = &nsim_netdev_ops;
 	ns->netdev->stat_ops = &nsim_stat_ops;
 	ns->netdev->queue_mgmt_ops = &nsim_queue_mgmt_ops;
+	netdev_lockdep_set_classes(ns->netdev);
 
 	err = nsim_udp_tunnels_info_create(ns->nsim_dev, ns->netdev);
 	if (err)
@@ -959,7 +978,13 @@ static int nsim_init_netdevsim(struct netdevsim *ns)
 	err = register_netdevice(ns->netdev);
 	if (err)
 		goto err_ipsec_teardown;
+
 	rtnl_unlock();
+
+	ns->nb.notifier_call = nsim_net_event;
+	if (register_netdevice_notifier_dev_net(ns->netdev, &ns->nb, &ns->nn))
+		ns->nb.notifier_call = NULL;
+
 	return 0;
 
 err_ipsec_teardown:
@@ -1043,6 +1068,10 @@ void nsim_destroy(struct netdevsim *ns)
 	debugfs_remove(ns->qr_dfs);
 	debugfs_remove(ns->pp_dfs);
 
+	if (ns->nb.notifier_call)
+		unregister_netdevice_notifier_dev_net(ns->netdev, &ns->nb,
+						      &ns->nn);
+
 	rtnl_lock();
 	peer = rtnl_dereference(ns->peer);
 	if (peer)
@@ -1086,6 +1115,28 @@ static struct rtnl_link_ops nsim_link_ops __read_mostly = {
 	.validate	= nsim_validate,
 };
 
+static int nsim_device_event(struct notifier_block *this, unsigned long event,
+			     void *ptr)
+{
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+
+	switch (event) {
+	case NETDEV_REGISTER:
+	case NETDEV_UNREGISTER:
+	case NETDEV_UP:
+		netdev_ops_assert_locked(dev);
+		break;
+	default:
+		break;
+	}
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block nsim_notifier = {
+	.notifier_call = nsim_device_event,
+};
+
 static int __init nsim_module_init(void)
 {
 	int err;
@@ -1102,8 +1153,14 @@ static int __init nsim_module_init(void)
 	if (err)
 		goto err_bus_exit;
 
+	err = register_netdevice_notifier(&nsim_notifier);
+	if (err)
+		goto err_notifier_exit;
+
 	return 0;
 
+err_notifier_exit:
+	rtnl_link_unregister(&nsim_link_ops);
 err_bus_exit:
 	nsim_bus_exit();
 err_dev_exit:
@@ -1113,6 +1170,7 @@ err_dev_exit:
 
 static void __exit nsim_module_exit(void)
 {
+	unregister_netdevice_notifier(&nsim_notifier);
 	rtnl_link_unregister(&nsim_link_ops);
 	nsim_bus_exit();
 	nsim_dev_exit();
