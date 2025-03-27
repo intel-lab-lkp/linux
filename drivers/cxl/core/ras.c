@@ -141,7 +141,97 @@ int cxl_create_prot_err_info(struct pci_dev *_pdev, int severity,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_create_prot_err_info, "CXL");
 
-static void cxl_do_recovery(struct pci_dev *pdev) { }
+
+static pci_ers_result_t merge_result(enum pci_ers_result orig,
+				     enum pci_ers_result new)
+{
+	if (new == PCI_ERS_RESULT_PANIC)
+		return PCI_ERS_RESULT_PANIC;
+
+	if (new == PCI_ERS_RESULT_NO_AER_DRIVER)
+		return PCI_ERS_RESULT_NO_AER_DRIVER;
+
+	if (new == PCI_ERS_RESULT_NONE)
+		return orig;
+
+	switch (orig) {
+	case PCI_ERS_RESULT_CAN_RECOVER:
+	case PCI_ERS_RESULT_RECOVERED:
+		orig = new;
+		break;
+	case PCI_ERS_RESULT_DISCONNECT:
+		if (new == PCI_ERS_RESULT_NEED_RESET)
+			orig = PCI_ERS_RESULT_NEED_RESET;
+		break;
+	default:
+		break;
+	}
+
+	return orig;
+}
+
+static void cxl_walk_bridge(struct pci_dev *bridge,
+			    int (*cb)(struct pci_dev *, void *),
+			    void *userdata)
+{
+	if (cb(bridge, userdata))
+		return;
+
+	if (bridge->subordinate)
+		pci_walk_bus(bridge->subordinate, cb, userdata);
+}
+
+
+static int cxl_report_error_detected(struct pci_dev *pdev, void *data)
+{
+	struct cxl_driver *pdrv;
+	pci_ers_result_t vote, *result = data;
+	struct cxl_prot_error_info err_info = { 0 };
+	const struct cxl_error_handlers *cxl_err_handler;
+
+	if (cxl_create_prot_err_info(pdev, AER_FATAL, &err_info))
+		return 0;
+
+	struct device *dev __free(put_device) = get_device(err_info.dev);
+	if (!dev)
+		return 0;
+
+	pdrv = to_cxl_drv(dev->driver);
+	if (!pdrv || !pdrv->err_handler ||
+	    !pdrv->err_handler->error_detected)
+		return 0;
+
+	cxl_err_handler = pdrv->err_handler;
+	vote = cxl_err_handler->error_detected(dev, &err_info);
+
+	*result = merge_result(*result, vote);
+
+	return 0;
+}
+
+static void cxl_do_recovery(struct pci_dev *pdev)
+{
+	struct pci_host_bridge *host = pci_find_host_bridge(pdev->bus);
+	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
+
+	cxl_walk_bridge(pdev, cxl_report_error_detected, &status);
+	if (status == PCI_ERS_RESULT_PANIC)
+		panic("CXL cachemem error.");
+
+	/*
+	 * If we have native control of AER, clear error status in the device
+	 * that detected the error.  If the platform retained control of AER,
+	 * it is responsible for clearing this status.  In that case, the
+	 * signaling device may not even be visible to the OS.
+	 */
+	if (host->native_aer) {
+		pcie_clear_device_status(pdev);
+		pci_aer_clear_nonfatal_status(pdev);
+		pci_aer_clear_fatal_status(pdev);
+	}
+
+	pci_info(pdev, "CXL uncorrectable error.\n");
+}
 
 static int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
 {
