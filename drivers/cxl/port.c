@@ -60,6 +60,24 @@ static int discover_region(struct device *dev, void *root)
 
 #ifdef CONFIG_PCIEAER_CXL
 
+static const struct cxl_error_handlers cxl_port_error_handlers = {
+	.error_detected = cxl_port_error_detected,
+	.cor_error_detected = cxl_port_cor_error_detected,
+};
+
+static void cxl_assign_error_handlers(struct device *_dev,
+				      const struct cxl_error_handlers *handlers)
+{
+	struct device *dev __free(put_device) = get_device(_dev);
+	struct cxl_driver *pdrv;
+
+	if (!dev)
+		return;
+
+	pdrv = to_cxl_drv(dev->driver);
+	pdrv->err_handler = handlers;
+}
+
 static void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {
 	resource_size_t aer_phys;
@@ -118,8 +136,12 @@ static void cxl_uport_init_ras_reporting(struct cxl_port *port,
 
 	map->host = host;
 	if (cxl_map_component_regs(map, &port->uport_regs,
-				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+				   BIT(CXL_CM_CAP_CAP_ID_RAS))) {
 		dev_dbg(&port->dev, "Failed to map RAS capability\n");
+		return;
+	}
+
+	cxl_assign_error_handlers(&port->dev, &cxl_port_error_handlers);
 }
 
 /**
@@ -144,9 +166,12 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host)
 	}
 
 	if (cxl_map_component_regs(&dport->reg_map, &dport->regs.component,
-				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+				   BIT(CXL_CM_CAP_CAP_ID_RAS))) {
 		dev_dbg(dport->dport_dev, "Failed to map RAS capability\n");
+		return;
+	}
 
+	cxl_assign_error_handlers(dport->dport_dev, &cxl_port_error_handlers);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dport_init_ras_reporting, "CXL");
 

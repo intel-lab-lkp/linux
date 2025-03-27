@@ -110,34 +110,80 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
 
+static int match_uport(struct device *dev, const void *data)
+{
+	const struct device *uport_dev = data;
+	struct cxl_port *port;
+
+	if (!is_cxl_port(dev))
+		return 0;
+
+	port = to_cxl_port(dev);
+
+	return port->uport_dev == uport_dev;
+}
+
 int cxl_create_prot_err_info(struct pci_dev *_pdev, int severity,
 			     struct cxl_prot_error_info *err_info)
 {
 	struct pci_dev *pdev __free(pci_dev_put) = pci_dev_get(_pdev);
-	struct cxl_dev_state *cxlds;
 
 	if (!pdev || !err_info) {
 		pr_warn_once("Error: parameter is NULL");
 		return -ENODEV;
 	}
 
-	if ((pci_pcie_type(pdev) != PCI_EXP_TYPE_ENDPOINT) &&
-	    (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_END)) {
+	*err_info = (struct cxl_prot_error_info){ 0 };
+	err_info->severity = severity;
+	err_info->pdev = pdev;
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+	{
+		struct cxl_dport *dport = NULL;
+		struct cxl_port *port __free(put_cxl_port) =
+			find_cxl_port(&pdev->dev, &dport);
+
+		if (!port || !is_cxl_port(&port->dev))
+			return -ENODEV;
+
+		err_info->ras_base = dport ? dport->regs.ras : NULL;
+		err_info->dev = &port->dev;
+		break;
+	}
+	case PCI_EXP_TYPE_UPSTREAM:
+	{
+		struct cxl_port *port;
+		struct device *port_dev __free(put_device) =
+			bus_find_device(&cxl_bus_type, NULL, &pdev->dev,
+					match_uport);
+
+		if (!port_dev || !is_cxl_port(port_dev))
+			return -ENODEV;
+
+		port = to_cxl_port(port_dev);
+		err_info->ras_base = port ? port->uport_regs.ras : NULL;
+		err_info->dev = port_dev;
+		break;
+	}
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END:
+	{
+		struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+		struct cxl_memdev *cxlmd = cxlds->cxlmd;
+		struct device *dev __free(put_device) = get_device(&cxlmd->dev);
+
+		err_info->ras_base = cxlds->regs.ras;
+		err_info->dev = &cxlds->cxlmd->dev;
+		break;
+	}
+	default:
+	{
 		pci_warn_once(pdev, "Error: Unsupported device type (%X)", pci_pcie_type(pdev));
 		return -ENODEV;
 	}
-
-	cxlds = pci_get_drvdata(pdev);
-	struct device *dev __free(put_device) = get_device(&cxlds->cxlmd->dev);
-
-	if (!dev)
-		return -ENODEV;
-
-	*err_info = (struct cxl_prot_error_info){ 0 };
-	err_info->ras_base = cxlds->regs.ras;
-	err_info->severity = severity;
-	err_info->pdev = pdev;
-	err_info->dev = dev;
+	}
 
 	return 0;
 }

@@ -739,6 +739,29 @@ static bool cxl_handle_endpoint_ras(struct cxl_dev_state *cxlds)
 
 #ifdef CONFIG_PCIEAER_CXL
 
+
+void cxl_port_cor_error_detected(struct device *cxl_dev,
+				 struct cxl_prot_error_info *err_info)
+{
+	void __iomem *ras_base = err_info->ras_base;
+	struct device *pci_dev = &err_info->pdev->dev;
+	u64 serial = 0;
+
+	__cxl_handle_cor_ras(cxl_dev, pci_dev, serial, ras_base);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_cor_error_detected, "CXL");
+
+pci_ers_result_t cxl_port_error_detected(struct device *cxl_dev,
+					 struct cxl_prot_error_info *err_info)
+{
+	void __iomem *ras_base = err_info->ras_base;
+	struct device *pci_dev = &err_info->pdev->dev;
+	u64 serial = 0;
+
+	return  __cxl_handle_ras(cxl_dev, pci_dev, serial, ras_base);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_error_detected, "CXL");
+
 static void cxl_handle_rdport_cor_ras(struct cxl_dev_state *cxlds,
 					  struct cxl_dport *dport)
 {
