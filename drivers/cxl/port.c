@@ -83,6 +83,24 @@ static void cxl_assign_error_handlers(struct device *_dev,
 	pdrv->err_handler = handlers;
 }
 
+void cxl_enable_prot_errors(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct device *pci_dev __free(put_device) = get_device(&pdev->dev);
+
+	if (!pci_dev)
+		return;
+
+	if (!pdev->aer_cap) {
+		pdev->aer_cap = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_ERR);
+		if (!pdev->aer_cap)
+			return;
+	}
+
+	pci_aer_unmask_internal_errors(pdev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_enable_prot_errors, "CXL");
+
 static void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {
 	resource_size_t aer_phys;
@@ -147,6 +165,7 @@ static void cxl_uport_init_ras_reporting(struct cxl_port *port,
 	}
 
 	cxl_assign_error_handlers(&port->dev, &cxl_port_error_handlers);
+	cxl_enable_prot_errors(port->uport_dev);
 }
 
 /**
@@ -177,6 +196,7 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host)
 	}
 
 	cxl_assign_error_handlers(dport->dport_dev, &cxl_port_error_handlers);
+	cxl_enable_prot_errors(dport->dport_dev);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dport_init_ras_reporting, "CXL");
 
@@ -201,6 +221,7 @@ static void cxl_endpoint_port_init_ras(struct cxl_port *port)
 	struct cxl_port *parent_port __free(put_cxl_port) =
 		cxl_mem_find_port(cxlmd, &dport);
 	struct device *cxlmd_dev __free(put_device) = &cxlmd->dev;
+	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 
 	if (!dport || !dev_is_pci(dport->dport_dev)) {
 		dev_err(&port->dev, "CXL port topology not found\n");
@@ -210,6 +231,7 @@ static void cxl_endpoint_port_init_ras(struct cxl_port *port)
 	cxl_dport_init_ras_reporting(dport, cxlmd_dev);
 
 	cxl_assign_error_handlers(cxlmd_dev, &cxl_ep_error_handlers);
+	cxl_enable_prot_errors(cxlds->dev);
 }
 
 #else

@@ -769,9 +769,11 @@ struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 #ifdef CONFIG_PCIEAER_CXL
 void cxl_setup_parent_dport(struct device *host, struct cxl_dport *dport);
 void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host);
+void cxl_enable_prot_errors(struct device *dev);
 #else
 static inline void cxl_dport_init_ras_reporting(struct cxl_dport *dport,
 						struct device *host) { }
+static inline void cxl_enable_prot_errors(struct device *dev) { }
 #endif
 
 struct cxl_decoder *to_cxl_decoder(struct device *dev);
