@@ -1197,6 +1197,40 @@ void emergency_thaw_all(void)
 	}
 }
 
+static void filesystems_freeze_callback(struct super_block *sb, void *flagsp)
+{
+	if (!sb->s_op->freeze_fs && !sb->s_op->freeze_super)
+		return;
+
+	if (sb->s_op->freeze_super)
+		sb->s_op->freeze_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+	else
+		freeze_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+}
+
+void filesystems_freeze(bool hibernate)
+{
+	__iterate_supers(filesystems_freeze_callback, NULL,
+			 SUPER_ITER_GRAB | SUPER_ITER_REVERSE);
+}
+
+static void filesystems_thaw_callback(struct super_block *sb, void *flagsp)
+{
+	if (!sb->s_op->freeze_fs && !sb->s_op->freeze_super)
+		return;
+
+	if (sb->s_op->thaw_super)
+		sb->s_op->thaw_super(sb, FREEZE_HOLDER_KERNEL);
+	else
+		thaw_super(sb, FREEZE_HOLDER_KERNEL);
+}
+
+void filesystems_thaw(bool hibernate)
+{
+	__iterate_supers(filesystems_thaw_callback, NULL,
+			 SUPER_ITER_GRAB | SUPER_ITER_REVERSE);
+}
+
 static DEFINE_IDA(unnamed_dev_ida);
 
 /**
