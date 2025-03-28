@@ -631,6 +631,18 @@ static int sfq_change(struct Qdisc *sch, struct nlattr *opt,
 	struct red_parms *p = NULL;
 	struct sk_buff *to_free = NULL;
 	struct sk_buff *tail = NULL;
+	/* work area for validating changes before committing them */
+	struct {
+		int limit;
+		unsigned int divisor;
+		unsigned int maxflows;
+		int perturb_period;
+		unsigned int quantum;
+		u8 headdrop;
+		u8 maxdepth;
+		u8 flags;
+	} tmp;
+
 
 	if (opt->nla_len < nla_attr_size(sizeof(*ctl)))
 		return -EINVAL;
@@ -656,35 +668,59 @@ static int sfq_change(struct Qdisc *sch, struct nlattr *opt,
 		NL_SET_ERR_MSG_MOD(extack, "invalid limit");
 		return -EINVAL;
 	}
+
 	sch_tree_lock(sch);
+
+	/* copy configuration to work area */
+	tmp.limit = q->limit;
+	tmp.divisor = q->divisor;
+	tmp.headdrop = q->headdrop;
+	tmp.maxdepth = q->maxdepth;
+	tmp.maxflows = q->maxflows;
+	tmp.perturb_period = q->perturb_period;
+	tmp.quantum = q->quantum;
+	tmp.flags = q->flags;
+
+	/* update and validate configuration */
 	if (ctl->quantum)
-		q->quantum = ctl->quantum;
-	WRITE_ONCE(q->perturb_period, ctl->perturb_period * HZ);
+		tmp.quantum = ctl->quantum;
+	tmp.perturb_period = ctl->perturb_period * HZ;
 	if (ctl->flows)
-		q->maxflows = min_t(u32, ctl->flows, SFQ_MAX_FLOWS);
+		tmp.maxflows = min_t(u32, ctl->flows, SFQ_MAX_FLOWS);
 	if (ctl->divisor) {
-		q->divisor = ctl->divisor;
-		q->maxflows = min_t(u32, q->maxflows, q->divisor);
+		tmp.divisor = ctl->divisor;
+		tmp.maxflows = min_t(u32, tmp.maxflows, tmp.divisor);
 	}
 	if (ctl_v1) {
 		if (ctl_v1->depth)
-			q->maxdepth = min_t(u32, ctl_v1->depth, SFQ_MAX_DEPTH);
+			tmp.maxdepth = min_t(u32, ctl_v1->depth, SFQ_MAX_DEPTH);
 		if (p) {
-			swap(q->red_parms, p);
-			red_set_parms(q->red_parms,
+			red_set_parms(p,
 				      ctl_v1->qth_min, ctl_v1->qth_max,
 				      ctl_v1->Wlog,
 				      ctl_v1->Plog, ctl_v1->Scell_log,
 				      NULL,
 				      ctl_v1->max_P);
 		}
-		q->flags = ctl_v1->flags;
-		q->headdrop = ctl_v1->headdrop;
+		tmp.flags = ctl_v1->flags;
+		tmp.headdrop = ctl_v1->headdrop;
 	}
 	if (ctl->limit) {
-		q->limit = min_t(u32, ctl->limit, q->maxdepth * q->maxflows);
-		q->maxflows = min_t(u32, q->maxflows, q->limit);
+		tmp.limit = min_t(u32, ctl->limit, tmp.maxdepth * tmp.maxflows);
+		tmp.maxflows = min_t(u32, tmp.maxflows, tmp.limit);
 	}
+
+	/* commit configuration, no return from this point further */
+	q->limit = tmp.limit;
+	q->divisor = tmp.divisor;
+	q->headdrop = tmp.headdrop;
+	q->maxdepth = tmp.maxdepth;
+	q->maxflows = tmp.maxflows;
+	WRITE_ONCE(q->perturb_period, tmp.perturb_period);
+	q->quantum = tmp.quantum;
+	q->flags = tmp.flags;
+	if (p)
+		swap(q->red_parms, p);
 
 	qlen = sch->q.qlen;
 	while (sch->q.qlen > q->limit) {
