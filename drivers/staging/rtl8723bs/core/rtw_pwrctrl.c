@@ -463,8 +463,9 @@ void LPS_Enter(struct adapter *padapter, const char *msg)
 				pwrpriv->bpower_saving = true;
 				rtw_set_ps_mode(padapter, pwrpriv->power_mgnt, padapter->registrypriv.smart_ps, 0, buf);
 			}
-		} else
+		} else {
 			pwrpriv->LpsIdleCount++;
+		}
 	}
 }
 
@@ -1100,9 +1101,9 @@ int rtw_pm_set_lps(struct adapter *padapter, u8 mode)
 			pwrctrlpriv->bLeisurePs =
 				pwrctrlpriv->power_mgnt != PS_MODE_ACTIVE;
 		}
-	} else
+	} else {
 		ret = -EINVAL;
-
+	}
 	return ret;
 }
 
