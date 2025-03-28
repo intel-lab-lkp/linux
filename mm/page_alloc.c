@@ -900,6 +900,12 @@ static inline bool page_expected_state(struct page *page,
 			(page->flags & check_flags)))
 		return false;
 
+	if (unlikely(PageHWPoison(page))) {
+		/* Don't complain about hwpoisoned pages */
+		if (PageBuddy(page))
+			__ClearPageBuddy(page);
+	}
+
 	return true;
 }
 
@@ -1557,29 +1563,15 @@ static __always_inline void page_del_and_expand(struct zone *zone,
 	account_freepages(zone, -nr_pages, migratetype);
 }
 
-static void check_new_page_bad(struct page *page)
-{
-	if (unlikely(PageHWPoison(page))) {
-		/* Don't complain about hwpoisoned pages */
-		if (PageBuddy(page))
-			__ClearPageBuddy(page);
-		return;
-	}
-
-	bad_page(page,
-		 page_bad_reason(page, PAGE_FLAGS_CHECK_AT_PREP));
-}
-
 /*
  * This page is about to be returned from the page allocator
  */
 static bool check_new_page(struct page *page)
 {
-	if (likely(page_expected_state(page,
-				PAGE_FLAGS_CHECK_AT_PREP|__PG_HWPOISON)))
+	if (likely(page_expected_state(page, PAGE_FLAGS_CHECK_AT_PREP)))
 		return false;
 
-	check_new_page_bad(page);
+	bad_page(page, page_bad_reason(page, PAGE_FLAGS_CHECK_AT_PREP));
 	return true;
 }
 
