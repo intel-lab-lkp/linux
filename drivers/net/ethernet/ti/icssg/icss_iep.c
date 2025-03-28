@@ -820,9 +820,9 @@ int icss_iep_exit(struct icss_iep *iep)
 	icss_iep_disable(iep);
 
 	if (iep->pps_enabled)
-		icss_iep_pps_enable(iep, false);
+		iep->pps_enabled = false;
 	else if (iep->perout_enabled)
-		icss_iep_perout_enable(iep, NULL, false);
+		iep->perout_enabled = false;
 
 	return 0;
 }
