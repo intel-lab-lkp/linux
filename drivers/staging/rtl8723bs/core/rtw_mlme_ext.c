@@ -3579,7 +3579,7 @@ void issue_action_BA(struct adapter *padapter, unsigned char *raddr, unsigned ch
 	dump_mgntframe(padapter, pmgntframe);
 }
 
-static void issue_action_BSSCoexistPacket(struct adapter *padapter)
+static void issue_action_bss_coexist_packet(struct adapter *padapter)
 {
 	struct list_head		*plist, *phead;
 	unsigned char category, action;
@@ -3901,9 +3901,9 @@ void site_survey(struct adapter *padapter)
 			pmlmeext->chan_scan_time = SURVEY_TO;
 			pmlmeext->sitesurvey_res.state = SCAN_DISABLE;
 
-			issue_action_BSSCoexistPacket(padapter);
-			issue_action_BSSCoexistPacket(padapter);
-			issue_action_BSSCoexistPacket(padapter);
+			issue_action_bss_coexist_packet(padapter);
+			issue_action_bss_coexist_packet(padapter);
+			issue_action_bss_coexist_packet(padapter);
 		}
 	}
 

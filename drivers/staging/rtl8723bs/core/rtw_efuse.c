@@ -10,21 +10,21 @@
 
 
 /* Define global variables */
-u8 fakeEfuseBank;
-u32 fakeEfuseUsedBytes;
-u8 fakeEfuseContent[EFUSE_MAX_HW_SIZE] = {0};
-u8 fakeEfuseInitMap[EFUSE_MAX_MAP_LEN] = {0};
-u8 fakeEfuseModifiedMap[EFUSE_MAX_MAP_LEN] = {0};
+u8 fake_efuse_bank;
+u32 fake_efuse_used_bytes;
+u8 fake_efuse_content[EFUSE_MAX_HW_SIZE] = {0};
+u8 fake_efuse_init_map[EFUSE_MAX_MAP_LEN] = {0};
+u8 fake_efuse_modified_map[EFUSE_MAX_MAP_LEN] = {0};
 
-u32 BTEfuseUsedBytes;
-u8 BTEfuseContent[EFUSE_MAX_BT_BANK][EFUSE_MAX_HW_SIZE];
-u8 BTEfuseInitMap[EFUSE_BT_MAX_MAP_LEN] = {0};
-u8 BTEfuseModifiedMap[EFUSE_BT_MAX_MAP_LEN] = {0};
+u32 bte_fuse_used_bytes;
+u8 bte_fuse_content[EFUSE_MAX_BT_BANK][EFUSE_MAX_HW_SIZE];
+u8 bte_use_init_map[EFUSE_BT_MAX_MAP_LEN] = {0};
+u8 bte_use_modified_map[EFUSE_BT_MAX_MAP_LEN] = {0};
 
-u32 fakeBTEfuseUsedBytes;
-u8 fakeBTEfuseContent[EFUSE_MAX_BT_BANK][EFUSE_MAX_HW_SIZE];
-u8 fakeBTEfuseInitMap[EFUSE_BT_MAX_MAP_LEN] = {0};
-u8 fakeBTEfuseModifiedMap[EFUSE_BT_MAX_MAP_LEN] = {0};
+u32 fakebte_fuse_used_bytes;
+u8 fakebte_fuse_content[EFUSE_MAX_BT_BANK][EFUSE_MAX_HW_SIZE];
+u8 fakebte_use_init_map[EFUSE_BT_MAX_MAP_LEN] = {0};
+u8 fakebte_use_modified_map[EFUSE_BT_MAX_MAP_LEN] = {0};
 
 #define REG_EFUSE_CTRL		0x0030
 #define EFUSE_CTRL			REG_EFUSE_CTRL		/*  E-Fuse Control. */
@@ -33,10 +33,10 @@ static bool Efuse_Read1ByteFromFakeContent(u16 Offset, u8 *Value)
 {
 	if (Offset >= EFUSE_MAX_HW_SIZE)
 		return false;
-	if (fakeEfuseBank == 0)
-		*Value = fakeEfuseContent[Offset];
+	if (fake_efuse_bank == 0)
+		*Value = fake_efuse_content[Offset];
 	else
-		*Value = fakeBTEfuseContent[fakeEfuseBank - 1][Offset];
+		*Value = fakebte_fuse_content[fake_efuse_bank - 1][Offset];
 	return true;
 }
 
@@ -44,10 +44,10 @@ static bool Efuse_Write1ByteToFakeContent(u16 Offset, u8 Value)
 {
 	if (Offset >= EFUSE_MAX_HW_SIZE)
 		return false;
-	if (fakeEfuseBank == 0)
-		fakeEfuseContent[Offset] = Value;
+	if (fake_efuse_bank == 0)
+		fake_efuse_content[Offset] = Value;
 	else
-		fakeBTEfuseContent[fakeEfuseBank - 1][Offset] = Value;
+		fakebte_fuse_content[fake_efuse_bank - 1][Offset] = Value;
 	return true;
 }
 

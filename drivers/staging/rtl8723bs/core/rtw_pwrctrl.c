@@ -407,14 +407,14 @@ void rtw_set_ps_mode(struct adapter *padapter, u8 ps_mode, u8 smart_ps, u8 bcn_a
 s32 LPS_RF_ON_check(struct adapter *padapter, u32 delay_ms)
 {
 	unsigned long start_time;
-	u8 bAwake = false;
+	u8 b_awake = false;
 	s32 err = 0;
 
 
 	start_time = jiffies;
 	while (1) {
-		rtw_hal_get_hwreg(padapter, HW_VAR_FWLPS_RF_ON, &bAwake);
-		if (bAwake)
+		rtw_hal_get_hwreg(padapter, HW_VAR_FWLPS_RF_ON, &b_awake);
+		if (b_awake)
 			break;
 
 		if (padapter->bSurpriseRemoved) {
@@ -560,11 +560,11 @@ void LPS_Leave_check(struct adapter *padapter)
 {
 	struct pwrctrl_priv *pwrpriv;
 	unsigned long	start_time;
-	u8 bReady;
+	u8 b_ready;
 
 	pwrpriv = adapter_to_pwrctl(padapter);
 
-	bReady = false;
+	b_ready = false;
 	start_time = jiffies;
 
 	cond_resched();
@@ -575,11 +575,11 @@ void LPS_Leave_check(struct adapter *padapter)
 		if (padapter->bSurpriseRemoved ||
 		    !(padapter->hw_init_completed) ||
 		    (pwrpriv->pwr_mode == PS_MODE_ACTIVE))
-			bReady = true;
+			b_ready = true;
 
 		mutex_unlock(&pwrpriv->lock);
 
-		if (bReady)
+		if (b_ready)
 			break;
 
 		if (jiffies_to_msecs(jiffies - start_time) > 100)
