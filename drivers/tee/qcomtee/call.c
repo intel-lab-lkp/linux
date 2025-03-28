@@ -136,8 +136,11 @@ int qcomtee_objref_to_arg(struct qcomtee_arg *arg, struct tee_param *param,
 	/* param is a QTEE object: */
 	} else if (param->u.objref.flags & QCOMTEE_OBJREF_FLAG_TEE) {
 		err = qcomtee_context_find_qtee_object(&object, param, ctx);
+
 	} else {
-		err = -EINVAL;
+		err = qcomtee_memobj_param_to_object(&object, param, ctx);
+		if (!err)
+			qcomtee_object_get(object);
 	}
 
 	arg->o = err ? NULL_QCOMTEE_OBJECT : object;
@@ -181,6 +184,9 @@ int qcomtee_objref_from_arg(struct tee_param *param, struct qcomtee_arg *arg,
 		if (is_qcomtee_user_object(object))
 			err = qcomtee_user_param_from_object(param, object,
 							     ctx);
+		else if (is_qcomtee_memobj_object(object))
+			err = qcomtee_memobj_param_from_object(param, object,
+							       ctx);
 		else
 			err = -EINVAL;
 
