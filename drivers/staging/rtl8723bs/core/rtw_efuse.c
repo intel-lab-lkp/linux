@@ -29,8 +29,7 @@ u8 fakeBTEfuseModifiedMap[EFUSE_BT_MAX_MAP_LEN] = {0};
 #define REG_EFUSE_CTRL		0x0030
 #define EFUSE_CTRL			REG_EFUSE_CTRL		/*  E-Fuse Control. */
 
-static bool
-Efuse_Read1ByteFromFakeContent(u16 Offset, u8 *Value)
+static bool Efuse_Read1ByteFromFakeContent(u16 Offset, u8 *Value)
 {
 	if (Offset >= EFUSE_MAX_HW_SIZE)
 		return false;
@@ -41,8 +40,7 @@ Efuse_Read1ByteFromFakeContent(u16 Offset, u8 *Value)
 	return true;
 }
 
-static bool
-Efuse_Write1ByteToFakeContent(u16 Offset, u8 Value)
+static bool Efuse_Write1ByteToFakeContent(u16 Offset, u8 Value)
 {
 	if (Offset >= EFUSE_MAX_HW_SIZE)
 		return false;
@@ -71,18 +69,13 @@ Efuse_Write1ByteToFakeContent(u16 Offset, u8 Value)
  * 11/17/2008	MHC		Create Version 0.
  *
  *---------------------------------------------------------------------------*/
-void
-Efuse_PowerSwitch(
-struct adapter *padapter,
-u8 bWrite,
-u8 PwrState)
+void Efuse_PowerSwitch(struct adapter *padapter, u8 bWrite, u8 PwrState)
 {
 	Hal_EfusePowerSwitch(padapter, bWrite, PwrState);
 }
 
 /*  11/16/2008 MH Add description. Get current efuse area enabled word!!. */
-u8
-Efuse_CalculateWordCnts(u8 word_en)
+u8 Efuse_CalculateWordCnts(u8 word_en)
 {
 	u8 word_cnts = 0;
 	if (!(word_en & BIT(0)))
@@ -114,36 +107,17 @@ Efuse_CalculateWordCnts(u8 word_en)
 /*					write addr must be after sec5. */
 /*  */
 
-void
-efuse_ReadEFuse(
-	struct adapter *Adapter,
-	u8 efuseType,
-	u16		_offset,
-	u16		_size_byte,
-	u8 *pbuf,
-bool	bPseudoTest
-	);
-void
-efuse_ReadEFuse(
-	struct adapter *Adapter,
-	u8 efuseType,
-	u16		_offset,
-	u16		_size_byte,
-	u8 *pbuf,
-bool	bPseudoTest
-	)
+void efuse_ReadEFuse(struct adapter *Adapter, u8 efuseType, u16 _offset, u16 _size_byte,
+		     u8 *pbuf,
+		     bool bPseudoTest);
+void efuse_ReadEFuse(struct adapter *Adapter, u8 efuseType, u16 _offset, u16 _size_byte, u8 *pbuf,
+		     bool bPseudoTest)
 {
 	Hal_ReadEFuse(Adapter, efuseType, _offset, _size_byte, pbuf, bPseudoTest);
 }
 
-void
-EFUSE_GetEfuseDefinition(
-	struct adapter *padapter,
-	u8 efuseType,
-	u8 type,
-	void	*pOut,
-	bool		bPseudoTest
-	)
+void EFUSE_GetEfuseDefinition(struct adapter *padapter, u8 efuseType, u8 type, void *pOut,
+			      bool bPseudoTest)
 {
 	Hal_GetEfuseDefinition(padapter, efuseType, type, pOut, bPseudoTest);
 }
@@ -164,10 +138,7 @@ EFUSE_GetEfuseDefinition(
  * 09/23/2008	MHC		Copy from WMAC.
  *
  *---------------------------------------------------------------------------*/
-u8
-EFUSE_Read1Byte(
-struct adapter *Adapter,
-u16		Address)
+u8 EFUSE_Read1Byte(struct adapter *Adapter, u16 Address)
 {
 	u8 Bytetemp = {0x00};
 	u8 temp = {0x00};
@@ -205,12 +176,7 @@ u16		Address)
 } /* EFUSE_Read1Byte */
 
 /*  11/16/2008 MH Read one byte from real Efuse. */
-u8
-efuse_OneByteRead(
-struct adapter *padapter,
-u16	addr,
-u8	*data,
-bool		bPseudoTest)
+u8 efuse_OneByteRead(struct adapter *padapter, u16 addr, u8 *data, bool bPseudoTest)
 {
 	u32 tmpidx = 0;
 	u8 bResult;
@@ -286,12 +252,8 @@ u8 efuse_OneByteWrite(struct adapter *padapter, u16 addr, u8 data, bool bPseudoT
 	return bResult;
 }
 
-u8
-Efuse_WordEnableDataWrite(struct adapter *padapter,
-						u16		efuse_addr,
-						u8 word_en,
-						u8 *data,
-						bool		bPseudoTest)
+u8 Efuse_WordEnableDataWrite(struct adapter *padapter, u16 efuse_addr, u8 word_en, u8 *data,
+			     bool bPseudoTest)
 {
 	return padapter->HalFunc.Efuse_WordEnableDataWrite(padapter, efuse_addr,
 							   word_en, data,
@@ -314,12 +276,7 @@ Efuse_WordEnableDataWrite(struct adapter *padapter,
  * 11/11/2008	MHC		Create Version 0.
  *
  *---------------------------------------------------------------------------*/
-void
-Efuse_ReadAllMap(
-	struct adapter *padapter,
-	u8 efuseType,
-	u8 *Efuse,
-	bool		bPseudoTest);
+void Efuse_ReadAllMap(struct adapter *padapter, u8 efuseType, u8 *Efuse, bool bPseudoTest);
 void Efuse_ReadAllMap(struct adapter *padapter, u8 efuseType, u8 *Efuse, bool bPseudoTest)
 {
 	u16 mapLen = 0;
