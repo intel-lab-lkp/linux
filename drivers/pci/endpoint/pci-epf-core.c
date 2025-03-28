@@ -285,12 +285,11 @@ void *pci_epf_alloc_space(struct pci_epf *epf, size_t size, enum pci_barno bar,
 			return NULL;
 		}
 		size = bar_fixed_size;
-	}
-
-	if (align)
+	} else if (align) {
 		size = ALIGN(size, align);
-	else
+	} else {
 		size = roundup_pow_of_two(size);
+	}
 
 	if (type == PRIMARY_INTERFACE) {
 		epc = epf->epc;
