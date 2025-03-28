@@ -997,7 +997,7 @@ static int rtw89_ops_ampdu_action(struct ieee80211_hw *hw,
 	return 0;
 }
 
-static int rtw89_ops_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
+static int rtw89_ops_set_rts_threshold(struct ieee80211_hw *hw, s8 radio_id, u32 value)
 {
 	struct rtw89_dev *rtwdev = hw->priv;
 

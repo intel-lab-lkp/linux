@@ -6988,7 +6988,7 @@ static void rtl8xxxu_configure_filter(struct ieee80211_hw *hw,
 			 FIF_PROBE_REQ);
 }
 
-static int rtl8xxxu_set_rts_threshold(struct ieee80211_hw *hw, u32 rts)
+static int rtl8xxxu_set_rts_threshold(struct ieee80211_hw *hw, s8 radio_id, u32 rts)
 {
 	if (rts > 2347 && rts != (u32)-1)
 		return -EINVAL;

@@ -1051,7 +1051,7 @@ out:
 	return ret;
 }
 
-static int wl1251_op_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
+static int wl1251_op_set_rts_threshold(struct ieee80211_hw *hw, s8 radio_id, u32 value)
 {
 	struct wl1251 *wl = hw->priv;
 	int ret;

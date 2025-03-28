@@ -1201,11 +1201,13 @@ unlock:
 /**
  * rsi_mac80211_set_rts_threshold() - This function sets rts threshold value.
  * @hw: Pointer to the ieee80211_hw structure.
+ * @radio_id: Index of the radio whose RTS threshold needs to be changed.
  * @value: Rts threshold value.
  *
  * Return: 0 on success.
  */
 static int rsi_mac80211_set_rts_threshold(struct ieee80211_hw *hw,
+					  s8 radio_id,
 					  u32 value)
 {
 	struct rsi_hw *adapter = hw->priv;
