@@ -851,6 +851,7 @@ static const struct nla_policy nl80211_policy[NUM_NL80211_ATTR] = {
 	[NL80211_ATTR_MLO_RECONF_REM_LINKS] = { .type = NLA_U16 },
 	[NL80211_ATTR_EPCS] = { .type = NLA_FLAG },
 	[NL80211_ATTR_ASSOC_MLD_EXT_CAPA_OPS] = { .type = NLA_U16 },
+	[NL80211_ATTR_WIPHY_RADIO_INDEX] = { .type = NLA_S8 },
 };
 
 /* policy for the key attributes */
@@ -3614,6 +3615,7 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 	struct nlattr *nl_txq_params;
 	u32 changed;
 	u8 retry_short = 0, retry_long = 0;
+	s8 radio_id = NL80211_WIPHY_RADIO_ID_DEFAULT;
 	u32 frag_threshold = 0, rts_threshold = 0;
 	u8 coverage_class = 0;
 	u32 txq_limit = 0, txq_memory_limit = 0, txq_quantum = 0;
@@ -3666,6 +3668,16 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 
 	if (result)
 		return result;
+
+	if (info->attrs[NL80211_ATTR_WIPHY_RADIO_INDEX]) {
+		/* Radio idx is not expected for non-multi radio wiphy */
+		if (rdev->wiphy.n_radio <= 0)
+			return -EINVAL;
+
+		radio_id = nla_get_s8(info->attrs[NL80211_ATTR_WIPHY_RADIO_INDEX]);
+		if (radio_id >= rdev->wiphy.n_radio || radio_id < 0)
+			return -EINVAL;
+	}
 
 	if (info->attrs[NL80211_ATTR_WIPHY_TXQ_PARAMS]) {
 		struct ieee80211_txq_params txq_params;
@@ -3875,50 +3887,79 @@ static int nl80211_set_wiphy(struct sk_buff *skb, struct genl_info *info)
 
 	if (changed) {
 		u8 old_retry_short, old_retry_long;
-		u32 old_frag_threshold, old_rts_threshold;
-		u8 old_coverage_class;
+		u32 old_frag_threshold, old_rts_threshold, *old_radio_rts_threshold;
+		u8 old_coverage_class, i;
 		u32 old_txq_limit, old_txq_memory_limit, old_txq_quantum;
 
 		if (!rdev->ops->set_wiphy_params)
 			return -EOPNOTSUPP;
 
-		old_retry_short = rdev->wiphy.retry_short;
-		old_retry_long = rdev->wiphy.retry_long;
-		old_frag_threshold = rdev->wiphy.frag_threshold;
-		old_rts_threshold = rdev->wiphy.rts_threshold;
-		old_coverage_class = rdev->wiphy.coverage_class;
-		old_txq_limit = rdev->wiphy.txq_limit;
-		old_txq_memory_limit = rdev->wiphy.txq_memory_limit;
-		old_txq_quantum = rdev->wiphy.txq_quantum;
+		old_radio_rts_threshold = kcalloc(rdev->wiphy.n_radio, sizeof(u32),
+						  GFP_KERNEL);
 
-		if (changed & WIPHY_PARAM_RETRY_SHORT)
-			rdev->wiphy.retry_short = retry_short;
-		if (changed & WIPHY_PARAM_RETRY_LONG)
-			rdev->wiphy.retry_long = retry_long;
-		if (changed & WIPHY_PARAM_FRAG_THRESHOLD)
-			rdev->wiphy.frag_threshold = frag_threshold;
-		if (changed & WIPHY_PARAM_RTS_THRESHOLD)
-			rdev->wiphy.rts_threshold = rts_threshold;
-		if (changed & WIPHY_PARAM_COVERAGE_CLASS)
-			rdev->wiphy.coverage_class = coverage_class;
-		if (changed & WIPHY_PARAM_TXQ_LIMIT)
-			rdev->wiphy.txq_limit = txq_limit;
-		if (changed & WIPHY_PARAM_TXQ_MEMORY_LIMIT)
-			rdev->wiphy.txq_memory_limit = txq_memory_limit;
-		if (changed & WIPHY_PARAM_TXQ_QUANTUM)
-			rdev->wiphy.txq_quantum = txq_quantum;
+		if (radio_id < rdev->wiphy.n_radio && radio_id >= 0) {
+			old_rts_threshold =
+				rdev->wiphy.radio_cfg[radio_id].rts_threshold;
 
-		result = rdev_set_wiphy_params(rdev, changed);
-		if (result) {
-			rdev->wiphy.retry_short = old_retry_short;
-			rdev->wiphy.retry_long = old_retry_long;
-			rdev->wiphy.frag_threshold = old_frag_threshold;
-			rdev->wiphy.rts_threshold = old_rts_threshold;
-			rdev->wiphy.coverage_class = old_coverage_class;
-			rdev->wiphy.txq_limit = old_txq_limit;
-			rdev->wiphy.txq_memory_limit = old_txq_memory_limit;
-			rdev->wiphy.txq_quantum = old_txq_quantum;
-			return result;
+			if (changed & WIPHY_PARAM_RTS_THRESHOLD)
+				rdev->wiphy.radio_cfg[radio_id].rts_threshold =
+					rts_threshold;
+
+			result = rdev_set_wiphy_params(rdev, radio_id, changed);
+			if (result)
+				rdev->wiphy.radio_cfg[radio_id].rts_threshold =
+					old_rts_threshold;
+		} else if (radio_id < 0) {
+			old_retry_short = rdev->wiphy.retry_short;
+			old_retry_long = rdev->wiphy.retry_long;
+			old_frag_threshold = rdev->wiphy.frag_threshold;
+			old_rts_threshold = rdev->wiphy.rts_threshold;
+			for (i = 0 ; i < rdev->wiphy.n_radio; i++)
+				old_radio_rts_threshold[i] =
+					rdev->wiphy.radio_cfg[i].rts_threshold;
+			old_coverage_class = rdev->wiphy.coverage_class;
+			old_txq_limit = rdev->wiphy.txq_limit;
+			old_txq_memory_limit = rdev->wiphy.txq_memory_limit;
+			old_txq_quantum = rdev->wiphy.txq_quantum;
+
+			if (changed & WIPHY_PARAM_RETRY_SHORT)
+				rdev->wiphy.retry_short = retry_short;
+			if (changed & WIPHY_PARAM_RETRY_LONG)
+				rdev->wiphy.retry_long = retry_long;
+			if (changed & WIPHY_PARAM_FRAG_THRESHOLD)
+				rdev->wiphy.frag_threshold = frag_threshold;
+			if (changed & WIPHY_PARAM_RTS_THRESHOLD) {
+				rdev->wiphy.rts_threshold = rts_threshold;
+				for (i = 0 ; i < rdev->wiphy.n_radio; i++)
+					rdev->wiphy.radio_cfg[i].rts_threshold =
+						rdev->wiphy.rts_threshold;
+			}
+			if (changed & WIPHY_PARAM_COVERAGE_CLASS)
+				rdev->wiphy.coverage_class = coverage_class;
+			if (changed & WIPHY_PARAM_TXQ_LIMIT)
+				rdev->wiphy.txq_limit = txq_limit;
+			if (changed & WIPHY_PARAM_TXQ_MEMORY_LIMIT)
+				rdev->wiphy.txq_memory_limit = txq_memory_limit;
+			if (changed & WIPHY_PARAM_TXQ_QUANTUM)
+				rdev->wiphy.txq_quantum = txq_quantum;
+
+			result = rdev_set_wiphy_params(rdev, radio_id, changed);
+			if (result) {
+				rdev->wiphy.retry_short = old_retry_short;
+				rdev->wiphy.retry_long = old_retry_long;
+				rdev->wiphy.frag_threshold = old_frag_threshold;
+				rdev->wiphy.rts_threshold = old_rts_threshold;
+				for (i = 0 ; i < rdev->wiphy.n_radio; i++)
+					rdev->wiphy.radio_cfg[i].rts_threshold =
+						old_radio_rts_threshold[i];
+				rdev->wiphy.coverage_class = old_coverage_class;
+				rdev->wiphy.txq_limit = old_txq_limit;
+				rdev->wiphy.txq_memory_limit = old_txq_memory_limit;
+				rdev->wiphy.txq_quantum = old_txq_quantum;
+				return result;
+			}
+		} else {
+			return -EOPNOTSUPP;
 		}
 	}
 
