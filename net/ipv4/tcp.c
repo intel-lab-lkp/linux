@@ -3868,6 +3868,11 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 			return -EINVAL;
 		tp->init_cwnd = val;
 		return 0;
+	case TCP_IW_DYNAMIC:
+		if (val < 0 || val > 1)
+			return -EINVAL;
+		tp->dynamic_initcwnd = val;
+		return 0;
 	}
 
 	sockopt_lock_sock(sk);
@@ -4715,6 +4720,9 @@ zerocopy_rcv_out:
 		break;
 	case TCP_IW:
 		val = tp->init_cwnd;
+		break;
+	case TCP_IW_DYNAMIC:
+		val = tp->dynamic_initcwnd;
 		break;
 	default:
 		return -ENOPROTOOPT;

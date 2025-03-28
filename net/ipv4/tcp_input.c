@@ -6341,10 +6341,17 @@ void tcp_init_transfer(struct sock *sk, int bpf_op, struct sk_buff *skb)
 	 * initRTO, we only reset cwnd when more than 1 SYN/SYN-ACK
 	 * retransmission has occurred.
 	 */
-	if (tp->total_retrans > 1 && tp->undo_marker)
+	if (tp->total_retrans > 1 && tp->undo_marker) {
 		tcp_snd_cwnd_set(tp, 1);
-	else
+	} else {
+		if (tp->dynamic_initcwnd) {
+			u32 win = min(tp->max_window, 65535);
+
+			tp->init_cwnd = max(win / tp->mss_cache, TCP_INIT_CWND);
+		}
+
 		tcp_snd_cwnd_set(tp, tcp_init_cwnd(tp, __sk_dst_get(sk)));
+	}
 	tp->snd_cwnd_stamp = tcp_jiffies32;
 
 	bpf_skops_established(sk, bpf_op, skb);
