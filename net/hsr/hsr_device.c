@@ -706,6 +706,8 @@ int hsr_dev_finalize(struct net_device *hsr_dev, struct net_device *slave[2],
 		 */
 		hsr->net_id = PRP_LAN_ID << 1;
 		hsr->proto_ops = &prp_ops;
+		eth_hw_addr_set(slave[1], slave[0]->dev_addr);
+		call_netdevice_notifiers(NETDEV_CHANGEADDR, slave[1]);
 	} else {
 		hsr->proto_ops = &hsr_ops;
 	}
