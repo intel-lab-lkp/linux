@@ -403,6 +403,7 @@ struct tcp_sock {
 	u32	snd_cwnd_used;
 	u32	snd_cwnd_stamp;
 	u32	prior_cwnd;	/* cwnd right before starting loss recovery */
+	u32	init_cwnd;	/* init cwnd controlled by setsockopt */
 	u32	prr_delivered;	/* Number of newly delivered packets to
 				 * receiver in Recovery. */
 	u32	last_oow_ack_time;  /* timestamp of last out-of-window ACK */

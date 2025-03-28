@@ -3863,6 +3863,11 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		WRITE_ONCE(inet_csk(sk)->icsk_delack_max, delack_max);
 		return 0;
 	}
+	case TCP_IW:
+		if (val <= 0 || tp->data_segs_out > tp->syn_data)
+			return -EINVAL;
+		tp->init_cwnd = val;
+		return 0;
 	}
 
 	sockopt_lock_sock(sk);
@@ -4707,6 +4712,9 @@ zerocopy_rcv_out:
 		break;
 	case TCP_DELACK_MAX_US:
 		val = jiffies_to_usecs(READ_ONCE(inet_csk(sk)->icsk_delack_max));
+		break;
+	case TCP_IW:
+		val = tp->init_cwnd;
 		break;
 	default:
 		return -ENOPROTOOPT;

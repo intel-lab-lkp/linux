@@ -142,6 +142,7 @@ enum {
 #define TCP_RTO_MAX_MS		44	/* max rto time in ms */
 #define TCP_RTO_MIN_US		45	/* min rto time in us */
 #define TCP_DELACK_MAX_US	46	/* max delayed ack time in us */
+#define TCP_IW			47	/* initial congestion window */
 
 #define TCP_REPAIR_ON		1
 #define TCP_REPAIR_OFF		0

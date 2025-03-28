@@ -1019,7 +1019,7 @@ static void tcp_set_rto(struct sock *sk)
 
 __u32 tcp_init_cwnd(const struct tcp_sock *tp, const struct dst_entry *dst)
 {
-	__u32 cwnd = (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
+	__u32 cwnd = tp->init_cwnd ? : (dst ? dst_metric(dst, RTAX_INITCWND) : 0);
 
 	if (!cwnd)
 		cwnd = TCP_INIT_CWND;
