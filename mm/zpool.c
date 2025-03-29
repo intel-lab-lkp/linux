@@ -226,20 +226,22 @@ const char *zpool_get_type(struct zpool *zpool)
  * @size:	The amount of memory to allocate.
  * @gfp:	The GFP flags to use when allocating memory.
  * @handle:	Pointer to the handle to set
+ * @nid:	Pointer to the preferred node id.
  *
  * This allocates the requested amount of memory from the pool.
  * The gfp flags will be used when allocating memory, if the
  * implementation supports it.  The provided @handle will be
- * set to the allocated object handle.
+ * set to the allocated object handle. If @nid is provided, the
+ * allocation will prefer the specified node.
  *
  * Implementations must guarantee this to be thread-safe.
  *
  * Returns: 0 on success, negative value on error.
  */
 int zpool_malloc(struct zpool *zpool, size_t size, gfp_t gfp,
-			unsigned long *handle)
+			unsigned long *handle, int *nid)
 {
-	return zpool->driver->malloc(zpool->pool, size, gfp, handle);
+	return zpool->driver->malloc(zpool->pool, size, gfp, handle, nid);
 }
 
 /**
