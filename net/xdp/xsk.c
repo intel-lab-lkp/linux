@@ -993,7 +993,7 @@ static __poll_t xsk_poll(struct file *file, struct socket *sock,
 	if (pool->cached_need_wakeup) {
 		if (xs->zc)
 			xsk_wakeup(xs, pool->cached_need_wakeup);
-		else if (xs->tx)
+		else if (xs->tx && xskq_has_descs(xs->tx))
 			/* Poll needs to drive Tx also in copy mode */
 			xsk_generic_xmit(sk);
 	}
