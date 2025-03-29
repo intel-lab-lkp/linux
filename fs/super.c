@@ -1176,6 +1176,61 @@ void emergency_thaw_all(void)
 	}
 }
 
+static inline bool get_active_super(struct super_block *sb)
+{
+	bool active;
+
+	if (super_lock_excl(sb)) {
+		active = atomic_inc_not_zero(&sb->s_active);
+		super_unlock_excl(sb);
+	}
+	return active;
+}
+
+static void filesystems_freeze_callback(struct super_block *sb, void *unused)
+{
+	if (!sb->s_op->freeze_fs && !sb->s_op->freeze_super)
+		return;
+
+	if (!get_active_super(sb))
+		return;
+
+	if (sb->s_op->freeze_super)
+		sb->s_op->freeze_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+	else
+		freeze_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+
+	deactivate_super(sb);
+}
+
+void filesystems_freeze(bool hibernate)
+{
+	__iterate_supers(filesystems_freeze_callback, NULL,
+			 SUPER_ITER_UNLOCKED | SUPER_ITER_REVERSE);
+}
+
+static void filesystems_thaw_callback(struct super_block *sb, void *unused)
+{
+	if (!sb->s_op->freeze_fs && !sb->s_op->freeze_super)
+		return;
+
+	if (!get_active_super(sb))
+		return;
+
+	if (sb->s_op->thaw_super)
+		sb->s_op->thaw_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+	else
+		thaw_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+
+	deactivate_super(sb);
+}
+
+void filesystems_thaw(bool hibernate)
+{
+	__iterate_supers(filesystems_thaw_callback, NULL,
+			 SUPER_ITER_UNLOCKED | SUPER_ITER_REVERSE);
+}
+
 static DEFINE_IDA(unnamed_dev_ida);
 
 /**
