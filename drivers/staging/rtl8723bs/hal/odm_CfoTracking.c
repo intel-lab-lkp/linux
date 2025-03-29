@@ -7,153 +7,153 @@
 
 #include "odm_precomp.h"
 
-static void odm_SetCrystalCap(void *pDM_VOID, u8 CrystalCap)
+static void odm_SetCrystalCap(void *dm_void, u8 CrystalCap)
 {
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
-	struct cfo_tracking *pCfoTrack = &pDM_Odm->DM_CfoTrack;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
+	struct cfo_tracking *cfo_track = &dm_odm->DM_CfoTrack;
 
-	if (pCfoTrack->CrystalCap == CrystalCap)
+	if (cfo_track->CrystalCap == CrystalCap)
 		return;
 
-	pCfoTrack->CrystalCap = CrystalCap;
+	cfo_track->CrystalCap = CrystalCap;
 
 	/*  0x2C[23:18] = 0x2C[17:12] = CrystalCap */
 	CrystalCap = CrystalCap & 0x3F;
 	PHY_SetBBReg(
-		pDM_Odm->Adapter,
+		dm_odm->Adapter,
 		REG_MAC_PHY_CTRL,
 		0x00FFF000,
 		(CrystalCap | (CrystalCap << 6))
 	);
 }
 
-static u8 odm_GetDefaultCrytaltalCap(void *pDM_VOID)
+static u8 odm_GetDefaultCrytaltalCap(void *dm_void)
 {
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
 
-	struct adapter *Adapter = pDM_Odm->Adapter;
+	struct adapter *Adapter = dm_odm->Adapter;
 	struct hal_com_data *pHalData = GET_HAL_DATA(Adapter);
 
 	return pHalData->CrystalCap & 0x3f;
 }
 
-static void odm_SetATCStatus(void *pDM_VOID, bool ATCStatus)
+static void odm_SetATCStatus(void *dm_void, bool ATCStatus)
 {
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
-	struct cfo_tracking *pCfoTrack = &pDM_Odm->DM_CfoTrack;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
+	struct cfo_tracking *cfo_track = &dm_odm->DM_CfoTrack;
 
-	if (pCfoTrack->bATCStatus == ATCStatus)
+	if (cfo_track->bATCStatus == ATCStatus)
 		return;
 
 	PHY_SetBBReg(
-		pDM_Odm->Adapter,
-		ODM_REG(BB_ATC, pDM_Odm),
-		ODM_BIT(BB_ATC, pDM_Odm),
+		dm_odm->Adapter,
+		ODM_REG(BB_ATC, dm_odm),
+		ODM_BIT(BB_ATC, dm_odm),
 		ATCStatus
 	);
-	pCfoTrack->bATCStatus = ATCStatus;
+	cfo_track->bATCStatus = ATCStatus;
 }
 
-static bool odm_GetATCStatus(void *pDM_VOID)
+static bool odm_GetATCStatus(void *dm_void)
 {
 	bool ATCStatus;
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
 
 	ATCStatus = (bool)PHY_QueryBBReg(
-		pDM_Odm->Adapter,
-		ODM_REG(BB_ATC, pDM_Odm),
-		ODM_BIT(BB_ATC, pDM_Odm)
+		dm_odm->Adapter,
+		ODM_REG(BB_ATC, dm_odm),
+		ODM_BIT(BB_ATC, dm_odm)
 	);
 	return ATCStatus;
 }
 
-void ODM_CfoTrackingReset(void *pDM_VOID)
+void ODM_CfoTrackingReset(void *dm_void)
 {
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
-	struct cfo_tracking *pCfoTrack = &pDM_Odm->DM_CfoTrack;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
+	struct cfo_tracking *cfo_track = &dm_odm->DM_CfoTrack;
 
-	pCfoTrack->DefXCap = odm_GetDefaultCrytaltalCap(pDM_Odm);
-	pCfoTrack->bAdjust = true;
+	cfo_track->DefXCap = odm_GetDefaultCrytaltalCap(dm_odm);
+	cfo_track->bAdjust = true;
 
-	odm_SetCrystalCap(pDM_Odm, pCfoTrack->DefXCap);
-	odm_SetATCStatus(pDM_Odm, true);
+	odm_SetCrystalCap(dm_odm, cfo_track->DefXCap);
+	odm_SetATCStatus(dm_odm, true);
 }
 
-void ODM_CfoTrackingInit(void *pDM_VOID)
+void ODM_CfoTrackingInit(void *dm_void)
 {
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
-	struct cfo_tracking *pCfoTrack = &pDM_Odm->DM_CfoTrack;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
+	struct cfo_tracking *cfo_track = &dm_odm->DM_CfoTrack;
 
-	pCfoTrack->DefXCap =
-		pCfoTrack->CrystalCap = odm_GetDefaultCrytaltalCap(pDM_Odm);
-	pCfoTrack->bATCStatus = odm_GetATCStatus(pDM_Odm);
-	pCfoTrack->bAdjust = true;
+	cfo_track->DefXCap =
+		cfo_track->CrystalCap = odm_GetDefaultCrytaltalCap(dm_odm);
+	cfo_track->bATCStatus = odm_GetATCStatus(dm_odm);
+	cfo_track->bAdjust = true;
 }
 
-void ODM_CfoTracking(void *pDM_VOID)
+void ODM_CfoTracking(void *dm_void)
 {
-	struct dm_odm_t *pDM_Odm = (struct dm_odm_t *)pDM_VOID;
-	struct cfo_tracking *pCfoTrack = &pDM_Odm->DM_CfoTrack;
+	struct dm_odm_t *dm_odm = (struct dm_odm_t *)dm_void;
+	struct cfo_tracking *cfo_track = &dm_odm->DM_CfoTrack;
 	int CFO_kHz_A, CFO_ave = 0;
 	int CFO_ave_diff;
-	int CrystalCap = (int)pCfoTrack->CrystalCap;
+	int CrystalCap = (int)cfo_track->CrystalCap;
 	u8 Adjust_Xtal = 1;
 
 	/* 4 Support ability */
-	if (!(pDM_Odm->SupportAbility & ODM_BB_CFO_TRACKING)) {
+	if (!(dm_odm->SupportAbility & ODM_BB_CFO_TRACKING)) {
 		return;
 	}
 
-	if (!pDM_Odm->bLinked || !pDM_Odm->bOneEntryOnly) {
+	if (!dm_odm->bLinked || !dm_odm->bOneEntryOnly) {
 		/* 4 No link or more than one entry */
-		ODM_CfoTrackingReset(pDM_Odm);
+		ODM_CfoTrackingReset(dm_odm);
 	} else {
 		/* 3 1. CFO Tracking */
 		/* 4 1.1 No new packet */
-		if (pCfoTrack->packetCount == pCfoTrack->packetCount_pre) {
+		if (cfo_track->packetCount == cfo_track->packetCount_pre) {
 			return;
 		}
-		pCfoTrack->packetCount_pre = pCfoTrack->packetCount;
+		cfo_track->packetCount_pre = cfo_track->packetCount;
 
 		/* 4 1.2 Calculate CFO */
-		CFO_kHz_A =  (int)(pCfoTrack->CFO_tail[0] * 3125)  / 1280;
+		CFO_kHz_A =  (int)(cfo_track->CFO_tail[0] * 3125)  / 1280;
 
 		CFO_ave = CFO_kHz_A;
 
 		/* 4 1.3 Avoid abnormal large CFO */
 		CFO_ave_diff =
-			(pCfoTrack->CFO_ave_pre >= CFO_ave) ?
-			(pCfoTrack->CFO_ave_pre-CFO_ave) :
-			(CFO_ave-pCfoTrack->CFO_ave_pre);
+			(cfo_track->CFO_ave_pre >= CFO_ave) ?
+			(cfo_track->CFO_ave_pre-CFO_ave) :
+			(CFO_ave-cfo_track->CFO_ave_pre);
 
 		if (
 			CFO_ave_diff > 20 &&
-			pCfoTrack->largeCFOHit == 0 &&
-			!pCfoTrack->bAdjust
+			cfo_track->largeCFOHit == 0 &&
+			!cfo_track->bAdjust
 		) {
-			pCfoTrack->largeCFOHit = 1;
+			cfo_track->largeCFOHit = 1;
 			return;
 		} else
-			pCfoTrack->largeCFOHit = 0;
-		pCfoTrack->CFO_ave_pre = CFO_ave;
+			cfo_track->largeCFOHit = 0;
+		cfo_track->CFO_ave_pre = CFO_ave;
 
 		/* 4 1.4 Dynamic Xtal threshold */
-		if (pCfoTrack->bAdjust == false) {
+		if (cfo_track->bAdjust == false) {
 			if (CFO_ave > CFO_TH_XTAL_HIGH || CFO_ave < (-CFO_TH_XTAL_HIGH))
-				pCfoTrack->bAdjust = true;
+				cfo_track->bAdjust = true;
 		} else {
 			if (CFO_ave < CFO_TH_XTAL_LOW && CFO_ave > (-CFO_TH_XTAL_LOW))
-				pCfoTrack->bAdjust = false;
+				cfo_track->bAdjust = false;
 		}
 
 		/* 4 1.5 BT case: Disable CFO tracking */
-		if (pDM_Odm->bBtEnabled) {
-			pCfoTrack->bAdjust = false;
-			odm_SetCrystalCap(pDM_Odm, pCfoTrack->DefXCap);
+		if (dm_odm->bBtEnabled) {
+			cfo_track->bAdjust = false;
+			odm_SetCrystalCap(dm_odm, cfo_track->DefXCap);
 		}
 
 		/* 4 1.6 Big jump */
-		if (pCfoTrack->bAdjust) {
+		if (cfo_track->bAdjust) {
 			if (CFO_ave > CFO_TH_XTAL_LOW)
 				Adjust_Xtal = Adjust_Xtal+((CFO_ave-CFO_TH_XTAL_LOW)>>2);
 			else if (CFO_ave < (-CFO_TH_XTAL_LOW))
@@ -161,7 +161,7 @@ void ODM_CfoTracking(void *pDM_VOID)
 		}
 
 		/* 4 1.7 Adjust Crystal Cap. */
-		if (pCfoTrack->bAdjust) {
+		if (cfo_track->bAdjust) {
 			if (CFO_ave > CFO_TH_XTAL_LOW)
 				CrystalCap = CrystalCap + Adjust_Xtal;
 			else if (CFO_ave < (-CFO_TH_XTAL_LOW))
@@ -172,14 +172,14 @@ void ODM_CfoTracking(void *pDM_VOID)
 			else if (CrystalCap < 0)
 				CrystalCap = 0;
 
-			odm_SetCrystalCap(pDM_Odm, (u8)CrystalCap);
+			odm_SetCrystalCap(dm_odm, (u8)CrystalCap);
 		}
 
 		/* 3 2. Dynamic ATC switch */
 		if (CFO_ave < CFO_TH_ATC && CFO_ave > -CFO_TH_ATC) {
-			odm_SetATCStatus(pDM_Odm, false);
+			odm_SetATCStatus(dm_odm, false);
 		} else {
-			odm_SetATCStatus(pDM_Odm, true);
+			odm_SetATCStatus(dm_odm, true);
 		}
 	}
 }
