@@ -142,6 +142,15 @@ User can enable it as follows::
 This can be enabled at the boot time if ``CONFIG_ZSWAP_SHRINKER_DEFAULT_ON`` is
 selected.
 
+In a NUMA system, sometimes we want the compressed copy to reside in the same
+node as the original page. For instance, if we use the NUMA nodes to represent
+a CXL-based memory tiering system, we do not want the pages demoted to the
+lower tier to accidentally return to the higher tier via zswap, creating
+memory pressure in the higher tier. The same-node behavior can be enabled
+as follows::
+
+	echo Y > /sys/module/zswap/parameters/same_node_mode
+
 A debugfs interface is provided for various statistic about pool size, number
 of pages stored, same-value filled pages and various counters for the reasons
 pages are rejected.

@@ -129,6 +129,9 @@ static bool zswap_shrinker_enabled = IS_ENABLED(
 		CONFIG_ZSWAP_SHRINKER_DEFAULT_ON);
 module_param_named(shrinker_enabled, zswap_shrinker_enabled, bool, 0644);
 
+static bool zswap_same_node_mode;
+module_param_named(same_node_mode, zswap_same_node_mode, bool, 0644);
+
 bool zswap_is_enabled(void)
 {
 	return zswap_enabled;
@@ -942,7 +945,7 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 {
 	struct crypto_acomp_ctx *acomp_ctx;
 	struct scatterlist input, output;
-	int comp_ret = 0, alloc_ret = 0;
+	int comp_ret = 0, alloc_ret = 0, nid = page_to_nid(page);
 	unsigned int dlen = PAGE_SIZE;
 	unsigned long handle;
 	struct zpool *zpool;
@@ -981,7 +984,10 @@ static bool zswap_compress(struct page *page, struct zswap_entry *entry,
 
 	zpool = pool->zpool;
 	gfp = GFP_NOWAIT | __GFP_NORETRY | __GFP_HIGHMEM | __GFP_MOVABLE;
-	alloc_ret = zpool_malloc(zpool, dlen, gfp, &handle, NULL);
+	if (zswap_same_node_mode)
+		alloc_ret = zpool_malloc(zpool, dlen, gfp, &handle, &nid);
+	else
+		alloc_ret = zpool_malloc(zpool, dlen, gfp, &handle, NULL);
 	if (alloc_ret)
 		goto unlock;
 
