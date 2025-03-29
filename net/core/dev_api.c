@@ -119,9 +119,7 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net,
 {
 	int ret;
 
-	netdev_lock_ops(dev);
-	ret = netif_change_net_namespace(dev, net, pat, 0, NULL);
-	netdev_unlock_ops(dev);
+	ret = __dev_change_net_namespace(dev, net, pat, 0, NULL);
 
 	return ret;
 }
