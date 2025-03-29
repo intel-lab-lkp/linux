@@ -98,4 +98,15 @@ static inline int netdev_lock_cmp_fn(const struct lockdep_map *a,
 				  &qdisc_xmit_lock_key);	\
 }
 
+#if IS_ENABLED(CONFIG_DEBUG_NET)
+int netdev_debug_event(struct notifier_block *nb, unsigned long event,
+		       void *ptr);
+#else
+static inline int netdev_debug_event(struct notifier_block *nb,
+				     unsigned long event, void *ptr)
+{
+	return 0;
+}
+#endif
+
 #endif
