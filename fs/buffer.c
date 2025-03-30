@@ -208,6 +208,15 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 	head = folio_buffers(folio);
 	if (!head)
 		goto out_unlock;
+
+	if (folio->mapping->a_ops->migrate_folio &&
+	    folio->mapping->a_ops->migrate_folio == buffer_migrate_folio_norefs) {
+		if (folio_test_lru(folio) &&
+		    folio_test_locked(folio) &&
+		    !folio_test_writeback(folio))
+			goto out_unlock;
+	}
+
 	bh = head;
 	do {
 		if (!buffer_mapped(bh))
