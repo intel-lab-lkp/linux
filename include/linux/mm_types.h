@@ -19,6 +19,7 @@
 #include <linux/workqueue.h>
 #include <linux/seqlock.h>
 #include <linux/percpu_counter.h>
+#include <linux/compiler_types.h>
 
 #include <asm/mmu.h>
 
@@ -939,7 +940,7 @@ struct mm_struct {
 #endif
 
 
-		unsigned long hiwater_rss; /* High-watermark of RSS usage */
+		unsigned long __data_racy hiwater_rss; /* High-watermark of RSS usage */
 		unsigned long hiwater_vm;  /* High-water virtual memory usage */
 
 		unsigned long total_vm;	   /* Total pages mapped */
