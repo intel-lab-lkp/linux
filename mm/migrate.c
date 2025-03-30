@@ -751,6 +751,8 @@ static int __migrate_folio(struct address_space *mapping, struct folio *dst,
 {
 	int rc, expected_count = folio_expected_refs(mapping, src);
 
+	might_sleep();
+
 	/* Check whether src does not have extra refs before we do more work */
 	if (folio_ref_count(src) != expected_count)
 		return -EAGAIN;
