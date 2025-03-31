@@ -1165,9 +1165,9 @@ static void xen_do_write_msr(unsigned int msr, unsigned int low,
 
 		if (!pmu_msr_write(msr, val)) {
 			if (err)
-				*err = native_write_msr_safe(msr, low, high);
+				*err = native_write_msr_safe(msr, val);
 			else
-				native_write_msr(msr, low, high);
+				native_write_msr(msr, val);
 		}
 	}
 }
@@ -1177,12 +1177,11 @@ static u64 xen_read_msr_safe(unsigned int msr, int *err)
 	return xen_do_read_msr(msr, err);
 }
 
-static int xen_write_msr_safe(unsigned int msr, unsigned int low,
-			      unsigned int high)
+static int xen_write_msr_safe(u32 msr, u64 val)
 {
 	int err = 0;
 
-	xen_do_write_msr(msr, low, high, &err);
+	xen_do_write_msr(msr, val, (u32)(val >> 32), &err);
 
 	return err;
 }
@@ -1194,11 +1193,11 @@ static u64 xen_read_msr(unsigned int msr)
 	return xen_do_read_msr(msr, xen_msr_safe ? &err : NULL);
 }
 
-static void xen_write_msr(unsigned int msr, unsigned low, unsigned high)
+static void xen_write_msr(u32 msr, u64 val)
 {
 	int err;
 
-	xen_do_write_msr(msr, low, high, xen_msr_safe ? &err : NULL);
+	xen_do_write_msr(msr, val, (u32)(val >> 32), xen_msr_safe ? &err : NULL);
 }
 
 /* This is called once we have the cpu_possible_mask */
