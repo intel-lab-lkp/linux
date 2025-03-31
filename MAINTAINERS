@@ -10151,6 +10151,7 @@ F:	include/linux/gpio.h
 F:	include/linux/gpio/
 F:	include/linux/of_gpio.h
 K:	(devm_)?gpio_(request|free|direction|get|set)
+K:	GPIOD_FLAGS_BIT_NONEXCLUSIVE
 
 GPIO UAPI
 M:	Bartosz Golaszewski <brgl@bgdev.pl>
