@@ -154,17 +154,13 @@ void __net_mp_close_rxq(struct net_device *dev, unsigned int ifq_idx,
 			const struct pp_memory_provider_params *old_p)
 {
 	struct netdev_rx_queue *rxq;
+	int err;
 
 	if (WARN_ON_ONCE(ifq_idx >= dev->real_num_rx_queues))
 		return;
 
 	rxq = __netif_get_rx_queue(dev, ifq_idx);
-
-	/* Callers holding a netdev ref may get here after we already
-	 * went thru shutdown via dev_memory_provider_uninstall().
-	 */
-	if (dev->reg_state > NETREG_REGISTERED &&
-	    !rxq->mp_params.mp_ops)
+	if (!rxq->mp_params.mp_ops)
 		return;
 
 	if (WARN_ON_ONCE(rxq->mp_params.mp_ops != old_p->mp_ops ||
@@ -173,13 +169,18 @@ void __net_mp_close_rxq(struct net_device *dev, unsigned int ifq_idx,
 
 	rxq->mp_params.mp_ops = NULL;
 	rxq->mp_params.mp_priv = NULL;
-	WARN_ON(netdev_rx_queue_restart(dev, ifq_idx));
+	err = netdev_rx_queue_restart(dev, ifq_idx);
+	WARN_ON(err && err != -ENETDOWN);
 }
 
 void net_mp_close_rxq(struct net_device *dev, unsigned ifq_idx,
 		      struct pp_memory_provider_params *old_p)
 {
 	netdev_lock(dev);
-	__net_mp_close_rxq(dev, ifq_idx, old_p);
+	/* Callers holding a netdev ref may get here after we already
+	 * went thru shutdown via dev_memory_provider_uninstall().
+	 */
+	if (dev->reg_state <= NETREG_REGISTERED)
+		__net_mp_close_rxq(dev, ifq_idx, old_p);
 	netdev_unlock(dev);
 }
