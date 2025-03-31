@@ -4855,7 +4855,7 @@ static int bnxt_rx_loopback(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 		&cpr->cp_desc_ring[CP_RING(cp_cons)][CP_IDX(cp_cons)];
 	cons = rxcmp->rx_cmp_opaque;
 	rx_buf = &rxr->rx_buf_ring[cons];
-	data = bnxt_data_ptr(bp, rx_buf->page, rx_buf->offset);
+	data = bnxt_data_ptr(bp, rx_buf->netmem, rx_buf->offset);
 	len = le32_to_cpu(rxcmp->rx_cmp_len_flags_type) >> RX_CMP_LEN_SHIFT;
 	if (len != pkt_size)
 		return -EIO;

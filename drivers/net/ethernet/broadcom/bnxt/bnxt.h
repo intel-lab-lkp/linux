@@ -897,7 +897,7 @@ struct bnxt_sw_tx_bd {
 };
 
 struct bnxt_sw_rx_bd {
-	struct page		*page;
+	netmem_ref		netmem;
 	unsigned int		offset;
 	dma_addr_t		mapping;
 };
@@ -1110,6 +1110,7 @@ struct bnxt_rx_ring_info {
 	struct xdp_rxq_info	xdp_rxq;
 	struct page_pool	*page_pool;
 	struct page_pool	*head_pool;
+	bool			need_head_pool;
 };
 
 struct bnxt_rx_sw_stats {
@@ -2342,7 +2343,8 @@ struct bnxt {
 
 	struct sk_buff *	(*rx_skb_func)(struct bnxt *,
 					       struct bnxt_rx_ring_info *,
-					       u16, struct page *, unsigned int,
+					       u16, netmem_ref netmem,
+					       unsigned int,
 					       dma_addr_t,
 					       unsigned int);
 
@@ -2863,15 +2865,15 @@ static inline bool bnxt_sriov_cfg(struct bnxt *bp)
 #endif
 }
 
-static inline u8 *bnxt_data_ptr(struct bnxt *bp, struct page *page,
+static inline u8 *bnxt_data_ptr(struct bnxt *bp, netmem_ref netmem,
 				unsigned int offset)
 {
-	return page_address(page) + offset + bp->rx_offset;
+	return netmem_address(netmem) + offset + bp->rx_offset;
 }
 
-static inline u8 *bnxt_data(struct page *page, unsigned int offset)
+static inline u8 *bnxt_data(netmem_ref netmem, unsigned int offset)
 {
-	return page_address(page) + offset;
+	return netmem_address(netmem) + offset;
 }
 
 extern const u16 bnxt_bstore_to_trace[];
@@ -2879,8 +2881,8 @@ extern const u16 bnxt_lhint_arr[];
 
 int bnxt_alloc_rx_data(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
 		       u16 prod, gfp_t gfp);
-void bnxt_reuse_rx_data(struct bnxt_rx_ring_info *rxr, u16 cons,
-			struct page *page);
+void bnxt_reuse_rx_netmem(struct bnxt_rx_ring_info *rxr, u16 cons,
+			  netmem_ref netmem);
 u32 bnxt_fw_health_readl(struct bnxt *bp, int reg_idx);
 bool bnxt_bs_trace_avail(struct bnxt *bp, u16 type);
 void bnxt_set_tpa_flags(struct bnxt *bp);
