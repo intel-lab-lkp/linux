@@ -344,3 +344,58 @@ SYM_CODE_END(xen_entry_SYSENTER_compat)
 SYM_CODE_END(xen_entry_SYSCALL_compat)
 
 #endif	/* CONFIG_IA32_EMULATION */
+
+.macro XEN_SAVE_CALLEE_REGS_FOR_MSR
+	push %rcx
+	push %rdi
+	push %rsi
+	push %r8
+	push %r9
+	push %r10
+	push %r11
+.endm
+
+.macro XEN_RESTORE_CALLEE_REGS_FOR_MSR
+	pop %r11
+	pop %r10
+	pop %r9
+	pop %r8
+	pop %rsi
+	pop %rdi
+	pop %rcx
+.endm
+
+/*
+ * MSR number in %ecx, MSR value in %rax.
+ *
+ * %edx is set up to match %rax >> 32 like the native stub
+ * is expected to do
+ *
+ * Let xen_do_write_msr() return 'false' if the MSR access should
+ * be executed natively, IOW, 'true' means it has done the job.
+ *
+ * 	bool xen_do_write_msr(u32 msr, u64 value)
+ *
+ * If ZF=1 then this will fall down to the actual native WRMSR[NS]
+ * instruction.
+ *
+ * This also removes the need for Xen to maintain different safe and
+ * unsafe MSR routines, as the difference is handled by the same
+ * trap handler as is used natively.
+ */
+ SYM_FUNC_START(asm_xen_write_msr)
+	ENDBR
+	FRAME_BEGIN
+	push %rax		/* Save in case of native fallback */
+	XEN_SAVE_CALLEE_REGS_FOR_MSR
+	mov %ecx, %edi		/* MSR number */
+	mov %rax, %rsi		/* MSR data */
+	call xen_do_write_msr
+	test %al, %al		/* %al=1, i.e., ZF=0, means successfully done */
+	XEN_RESTORE_CALLEE_REGS_FOR_MSR
+	mov 4(%rsp), %edx	/* Set up %edx for native execution */
+	pop %rax
+	FRAME_END
+	RET
+SYM_FUNC_END(asm_xen_write_msr)
+EXPORT_SYMBOL_GPL(asm_xen_write_msr)

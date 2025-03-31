@@ -1112,43 +1112,33 @@ static u64 xen_do_read_msr(unsigned int msr, int *err)
 	return val;
 }
 
-static void set_seg(unsigned int which, unsigned int low, unsigned int high,
-		    int *err)
+static void set_seg(u32 which, u64 base)
 {
-	u64 base = ((u64)high << 32) | low;
-
-	if (HYPERVISOR_set_segment_base(which, base) == 0)
-		return;
-
-	if (err)
-		*err = -EIO;
-	else
+	if (HYPERVISOR_set_segment_base(which, base))
 		WARN(1, "Xen set_segment_base(%u, %llx) failed\n", which, base);
 }
 
 /*
- * Support write_msr_safe() and write_msr() semantics.
- * With err == NULL write_msr() semantics are selected.
- * Supplying an err pointer requires err to be pre-initialized with 0.
+ * Return true to indicate the requested MSR write has been done successfully,
+ * otherwise return false to have the calling MSR write primitives in msr.h to
+ * fail.
  */
-static void xen_do_write_msr(unsigned int msr, unsigned int low,
-			     unsigned int high, int *err)
+bool xen_do_write_msr(u32 msr, u64 val)
 {
-	u64 val;
 	bool emulated;
 
 	switch (msr) {
 	case MSR_FS_BASE:
-		set_seg(SEGBASE_FS, low, high, err);
-		break;
+		set_seg(SEGBASE_FS, val);
+		return true;
 
 	case MSR_KERNEL_GS_BASE:
-		set_seg(SEGBASE_GS_USER, low, high, err);
-		break;
+		set_seg(SEGBASE_GS_USER, val);
+		return true;
 
 	case MSR_GS_BASE:
-		set_seg(SEGBASE_GS_KERNEL, low, high, err);
-		break;
+		set_seg(SEGBASE_GS_KERNEL, val);
+		return true;
 
 	case MSR_STAR:
 	case MSR_CSTAR:
@@ -1160,18 +1150,13 @@ static void xen_do_write_msr(unsigned int msr, unsigned int low,
 		/* Fast syscall setup is all done in hypercalls, so
 		   these are all ignored.  Stub them out here to stop
 		   Xen console noise. */
-		break;
+		return true;
 
 	default:
-		val = (u64)high << 32 | low;
-
 		if (pmu_msr_chk_emulated(msr, &val, false, &emulated) && emulated)
-			return;
+			return true;
 
-		if (err)
-			*err = native_write_msr_safe(msr, val);
-		else
-			native_write_msr(msr, val);
+		return false;
 	}
 }
 
@@ -1180,27 +1165,11 @@ static u64 xen_read_msr_safe(unsigned int msr, int *err)
 	return xen_do_read_msr(msr, err);
 }
 
-static int xen_write_msr_safe(u32 msr, u64 val)
-{
-	int err = 0;
-
-	xen_do_write_msr(msr, val, (u32)(val >> 32), &err);
-
-	return err;
-}
-
 static u64 xen_read_msr(unsigned int msr)
 {
 	int err;
 
 	return xen_do_read_msr(msr, xen_msr_safe ? &err : NULL);
-}
-
-static void xen_write_msr(u32 msr, u64 val)
-{
-	int err;
-
-	xen_do_write_msr(msr, val, (u32)(val >> 32), xen_msr_safe ? &err : NULL);
 }
 
 /* This is called once we have the cpu_possible_mask */
@@ -1238,10 +1207,8 @@ static const typeof(pv_ops) xen_cpu_ops __initconst = {
 		.write_cr4 = xen_write_cr4,
 
 		.read_msr = xen_read_msr,
-		.write_msr = xen_write_msr,
 
 		.read_msr_safe = xen_read_msr_safe,
-		.write_msr_safe = xen_write_msr_safe,
 
 		.read_pmc = xen_read_pmc,
 
