@@ -9,6 +9,7 @@
 
 #define MAX_TEST_NAME 80
 #define TCP_ULP 31
+#define SOCKMAP_VERDICT_PROG "test_sockmap_skb_verdict_attach.bpf.o"
 
 static int tcp_server(int family)
 {
@@ -132,6 +133,73 @@ close:
 	close(s);
 }
 
+/* close a kTLS socket after removing it from sockmap. */
+static void test_sockmap_ktls_close_after_delete(int family, int map)
+{
+	struct sockaddr_storage addr = {0};
+	socklen_t len = sizeof(addr);
+	int err, cli, srv, zero = 0;
+	struct bpf_program *prog;
+	struct bpf_object *obj;
+	int verdict;
+
+	obj = bpf_object__open_file(SOCKMAP_VERDICT_PROG, NULL);
+	if (!ASSERT_OK(libbpf_get_error(obj), "bpf_object__open_file"))
+		return;
+
+	err = bpf_object__load(obj);
+	if (!ASSERT_OK(err, "bpf_object__load"))
+		goto close_obj;
+
+	prog = bpf_object__next_program(obj, NULL);
+	verdict = bpf_program__fd(prog);
+	if (!ASSERT_GE(verdict, 0, "bpf_program__fd"))
+		goto close_obj;
+
+	err = bpf_prog_attach(verdict, map, BPF_SK_SKB_STREAM_VERDICT, 0);
+	if (!ASSERT_OK(err, "bpf_prog_attach"))
+		goto close_verdict;
+
+	srv = tcp_server(family);
+	if (srv == -1)
+		goto detach;
+
+	err = getsockname(srv, (struct sockaddr *)&addr, &len);
+	if (!ASSERT_OK(err, "getsockopt"))
+		goto close_srv;
+
+	cli = socket(family, SOCK_STREAM, 0);
+	if (!ASSERT_GE(cli, 0, "socket"))
+		goto close_srv;
+
+	err = connect(cli, (struct sockaddr *)&addr, len);
+	if (!ASSERT_OK(err, "connect"))
+		goto close_cli;
+
+	err = bpf_map_update_elem(map, &zero, &cli, 0);
+	if (!ASSERT_OK(err, "bpf_map_update_elem"))
+		goto close_cli;
+
+	err = setsockopt(cli, IPPROTO_TCP, TCP_ULP, "tls", strlen("tls"));
+	if (!ASSERT_OK(err, "setsockopt(TCP_ULP)"))
+		goto close_cli;
+
+	err = bpf_map_delete_elem(map, &zero);
+	if (!ASSERT_OK(err, "bpf_map_delete_elem"))
+		goto close_cli;
+
+close_cli:
+	close(cli);
+close_srv:
+	close(srv);
+detach:
+	bpf_prog_detach2(verdict, map, BPF_SK_SKB_STREAM_VERDICT);
+close_verdict:
+	close(verdict);
+close_obj:
+	bpf_object__close(obj);
+}
+
 static const char *fmt_test_name(const char *subtest_name, int family,
 				 enum bpf_map_type map_type)
 {
@@ -158,6 +226,8 @@ static void run_tests(int family, enum bpf_map_type map_type)
 		test_sockmap_ktls_disconnect_after_delete(family, map);
 	if (test__start_subtest(fmt_test_name("update_fails_when_sock_has_ulp", family, map_type)))
 		test_sockmap_ktls_update_fails_when_sock_has_ulp(family, map);
+	if (test__start_subtest(fmt_test_name("close_after_delete", family, map_type)))
+		test_sockmap_ktls_close_after_delete(family, map);
 
 	close(map);
 }
