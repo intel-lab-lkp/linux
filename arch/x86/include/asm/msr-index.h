@@ -1226,4 +1226,10 @@
 						* a #GP
 						*/
 
+/* Instruction opcode for WRMSRNS supported in binutils >= 2.40 */
+#define ASM_WRMSRNS		_ASM_BYTES(0x0f,0x01,0xc6)
+
+/* Instruction opcode for the immediate form RDMSR/WRMSRNS */
+#define ASM_WRMSRNS_RAX		_ASM_BYTES(0xc4,0xe7,0x7a,0xf6,0xc0)
+
 #endif /* _ASM_X86_MSR_INDEX_H */

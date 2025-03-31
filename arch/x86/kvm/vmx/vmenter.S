@@ -64,6 +64,29 @@
 	RET
 .endm
 
+/*
+ * Write EAX to MSR_IA32_SPEC_CTRL.
+ *
+ * Choose the best WRMSR instruction based on availability.
+ *
+ * Replace with 'wrmsrns' and 'wrmsrns %rax, $MSR_IA32_SPEC_CTRL' once binutils support them.
+ */
+.macro WRITE_EAX_TO_MSR_IA32_SPEC_CTRL
+	ALTERNATIVE_2 __stringify(mov $MSR_IA32_SPEC_CTRL, %ecx;		\
+				  xor %edx, %edx;				\
+				  mov %edi, %eax;				\
+				  ds wrmsr),					\
+		      __stringify(mov $MSR_IA32_SPEC_CTRL, %ecx;		\
+				  xor %edx, %edx;				\
+				  mov %edi, %eax;				\
+				  ASM_WRMSRNS),					\
+		      X86_FEATURE_WRMSRNS,					\
+		      __stringify(xor %_ASM_AX, %_ASM_AX;			\
+				  mov %edi, %eax;				\
+				  ASM_WRMSRNS_RAX; .long MSR_IA32_SPEC_CTRL),	\
+		      X86_FEATURE_MSR_IMM
+.endm
+
 .section .noinstr.text, "ax"
 
 /**
@@ -123,10 +146,7 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	movl PER_CPU_VAR(x86_spec_ctrl_current), %esi
 	cmp %edi, %esi
 	je .Lspec_ctrl_done
-	mov $MSR_IA32_SPEC_CTRL, %ecx
-	xor %edx, %edx
-	mov %edi, %eax
-	wrmsr
+	WRITE_EAX_TO_MSR_IA32_SPEC_CTRL
 
 .Lspec_ctrl_done:
 
