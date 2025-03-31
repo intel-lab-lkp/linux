@@ -164,30 +164,53 @@ static bool ex_handler_uaccess(const struct exception_table_entry *fixup,
 	return ex_handler_default(fixup, regs);
 }
 
+#ifdef CONFIG_X86_64
+static const u8 msr_imm_insn_prefix[] = { 0xc4, 0xe7 };
+#endif
+
 static bool ex_handler_msr(const struct exception_table_entry *fixup,
-			   struct pt_regs *regs, bool wrmsr, bool safe, int reg)
+			   struct pt_regs *regs, bool wrmsr, bool safe)
 {
+	/*
+	 * To ensure consistency with the existing RDMSR and WRMSR(NS), the register
+	 * operand of the immediate form MSR access instructions is ALWAYS encoded as
+	 * RAX in <asm/msr.h> for the MSR value to be written or read.
+	 *
+	 * Full decoder for the immediate form MSR access instructions looks overkill.
+	 */
+	bool is_imm_insn;
+	u32 msr;
+	u64 msr_val;
+
+#ifdef CONFIG_X86_64
+	is_imm_insn = !memcmp((void *)regs->ip, msr_imm_insn_prefix, sizeof(msr_imm_insn_prefix));
+#else
+	is_imm_insn = false;
+#endif
+
+	if (is_imm_insn) {
+		u8 *insn = (u8 *)regs->ip;
+
+		msr = insn[5] | (insn[6] << 8) | (insn[7] << 16) | (insn[8] << 24);
+	} else {
+		msr = (u32)regs->cx;
+	}
+
 	if (__ONCE_LITE_IF(!safe && wrmsr)) {
-		pr_warn("unchecked MSR access error: WRMSR to 0x%x (tried to write 0x%08x%08x) at rIP: 0x%lx (%pS)\n",
-			(unsigned int)regs->cx, (unsigned int)regs->dx,
-			(unsigned int)regs->ax,  regs->ip, (void *)regs->ip);
+		msr_val = regs->ax;
+		if (!is_imm_insn)
+			msr_val |= (u64)regs->dx << 32;
+
+		pr_warn("unchecked MSR access error: WRMSR to 0x%x (tried to write 0x%016llx) at rIP: 0x%lx (%pS)\n",
+			msr, msr_val, regs->ip, (void *)regs->ip);
 		show_stack_regs(regs);
 	}
 
 	if (__ONCE_LITE_IF(!safe && !wrmsr)) {
 		pr_warn("unchecked MSR access error: RDMSR from 0x%x at rIP: 0x%lx (%pS)\n",
-			(unsigned int)regs->cx, regs->ip, (void *)regs->ip);
+			msr, regs->ip, (void *)regs->ip);
 		show_stack_regs(regs);
 	}
-
-	if (!wrmsr) {
-		/* Pretend that the read succeeded and returned 0. */
-		regs->ax = 0;
-		regs->dx = 0;
-	}
-
-	if (safe)
-		*pt_regs_nr(regs, reg) = -EIO;
 
 	return ex_handler_default(fixup, regs);
 }
@@ -366,13 +389,13 @@ int fixup_exception(struct pt_regs *regs, int trapnr, unsigned long error_code,
 		case EX_TYPE_BPF:
 			return ex_handler_bpf(e, regs);
 		case EX_TYPE_WRMSR:
-			return ex_handler_msr(e, regs, true, false, reg);
+			return ex_handler_msr(e, regs, true, false);
 		case EX_TYPE_RDMSR:
-			return ex_handler_msr(e, regs, false, false, reg);
+			return ex_handler_msr(e, regs, false, false);
 		case EX_TYPE_WRMSR_SAFE:
-			return ex_handler_msr(e, regs, true, true, reg);
+			return ex_handler_msr(e, regs, true, true);
 		case EX_TYPE_RDMSR_SAFE:
-			return ex_handler_msr(e, regs, false, true, reg);
+			return ex_handler_msr(e, regs, false, true);
 		case EX_TYPE_WRMSR_IN_MCE:
 			ex_handler_msr_mce(regs, true);
 			break;
