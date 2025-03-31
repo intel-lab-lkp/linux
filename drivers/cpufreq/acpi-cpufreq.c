@@ -271,7 +271,7 @@ static u32 cpu_freq_read_amd(struct acpi_pct_register *not_used)
 
 static void cpu_freq_write_amd(struct acpi_pct_register *not_used, u32 val)
 {
-	wrmsr(MSR_AMD_PERF_CTL, val, 0);
+	wrmsrl(MSR_AMD_PERF_CTL, val);
 }
 
 static u32 cpu_freq_read_io(struct acpi_pct_register *reg)

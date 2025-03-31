@@ -123,7 +123,7 @@ static int eps_set_state(struct eps_cpu_data *centaur,
 		}
 	}
 	/* Set new multiplier and voltage */
-	wrmsr(MSR_IA32_PERF_CTL, dest_state & 0xffff, 0);
+	wrmsrl(MSR_IA32_PERF_CTL, dest_state & 0xffff);
 	/* Wait until transition end */
 	i = 0;
 	do {

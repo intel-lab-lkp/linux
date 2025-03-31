@@ -34,9 +34,9 @@ module_param_named(msr, use_msr, int, 0644);
 MODULE_PARM_DESC(msr, "Force using MSR to configure IDE function (Default: 0)");
 #else
 #undef rdmsr	/* avoid accidental MSR usage on, e.g. x86-64 */
-#undef wrmsr
+#undef wrmsrl
 #define rdmsr(x, y, z) do { } while (0)
-#define wrmsr(x, y, z) do { } while (0)
+#define wrmsrl(x, y) do { } while (0)
 #define use_msr 0
 #endif
 
@@ -98,7 +98,7 @@ static int cs5536_read(struct pci_dev *pdev, int reg, u32 *val)
 static int cs5536_write(struct pci_dev *pdev, int reg, int val)
 {
 	if (unlikely(use_msr)) {
-		wrmsr(MSR_IDE_CFG + reg, val, 0);
+		wrmsrl(MSR_IDE_CFG + reg, val);
 		return 0;
 	}
 
