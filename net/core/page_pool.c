@@ -446,26 +446,29 @@ static netmem_ref __page_pool_get_cached(struct page_pool *pool)
 }
 
 static void __page_pool_dma_sync_for_device(const struct page_pool *pool,
-					    netmem_ref netmem,
+					    netmem_ref netmem, u32 offset,
 					    u32 dma_sync_size)
 {
 #if defined(CONFIG_HAS_DMA) && defined(CONFIG_DMA_NEED_SYNC)
 	dma_addr_t dma_addr = page_pool_get_dma_addr_netmem(netmem);
 
 	dma_sync_size = min(dma_sync_size, pool->p.max_len);
-	__dma_sync_single_for_device(pool->p.dev, dma_addr + pool->p.offset,
+	__dma_sync_single_for_device(pool->p.dev,
+				     dma_addr + pool->p.offset + offset,
 				     dma_sync_size, pool->p.dma_dir);
 #endif
 }
 
-static __always_inline void
-page_pool_dma_sync_for_device(const struct page_pool *pool,
-			      netmem_ref netmem,
-			      u32 dma_sync_size)
+void page_pool_dma_sync_for_device(const struct page_pool *pool,
+				   netmem_ref netmem,
+				   u32 offset,
+				   u32 dma_sync_size)
 {
 	if (pool->dma_sync && dma_dev_need_sync(pool->p.dev))
-		__page_pool_dma_sync_for_device(pool, netmem, dma_sync_size);
+		__page_pool_dma_sync_for_device(pool, netmem, offset,
+						dma_sync_size);
 }
+EXPORT_SYMBOL(page_pool_dma_sync_for_device);
 
 static bool page_pool_dma_map(struct page_pool *pool, netmem_ref netmem)
 {
@@ -486,7 +489,7 @@ static bool page_pool_dma_map(struct page_pool *pool, netmem_ref netmem)
 	if (page_pool_set_dma_addr_netmem(netmem, dma))
 		goto unmap_failed;
 
-	page_pool_dma_sync_for_device(pool, netmem, pool->p.max_len);
+	page_pool_dma_sync_for_device(pool, netmem, 0, pool->p.max_len);
 
 	return true;
 
@@ -772,7 +775,7 @@ __page_pool_put_page(struct page_pool *pool, netmem_ref netmem,
 	if (likely(__page_pool_page_can_be_recycled(netmem))) {
 		/* Read barrier done in page_ref_count / READ_ONCE */
 
-		page_pool_dma_sync_for_device(pool, netmem, dma_sync_size);
+		page_pool_dma_sync_for_device(pool, netmem, 0, dma_sync_size);
 
 		if (allow_direct && page_pool_recycle_in_cache(netmem, pool))
 			return 0;
@@ -956,7 +959,7 @@ static netmem_ref page_pool_drain_frag(struct page_pool *pool,
 		return 0;
 
 	if (__page_pool_page_can_be_recycled(netmem)) {
-		page_pool_dma_sync_for_device(pool, netmem, -1);
+		page_pool_dma_sync_for_device(pool, netmem, 0, -1);
 		return netmem;
 	}
 

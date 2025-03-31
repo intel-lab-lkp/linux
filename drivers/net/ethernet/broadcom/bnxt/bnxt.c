@@ -915,24 +915,24 @@ static struct page *__bnxt_alloc_rx_page(struct bnxt *bp, dma_addr_t *mapping,
 	if (!page)
 		return NULL;
 
-	*mapping = page_pool_get_dma_addr(page) + *offset;
+	*mapping = page_pool_get_dma_addr(page) + bp->rx_dma_offset + *offset;
 	return page;
 }
 
-static inline u8 *__bnxt_alloc_rx_frag(struct bnxt *bp, dma_addr_t *mapping,
-				       struct bnxt_rx_ring_info *rxr,
-				       gfp_t gfp)
+static struct page *__bnxt_alloc_rx_frag(struct bnxt *bp, dma_addr_t *mapping,
+					 struct bnxt_rx_ring_info *rxr,
+					 unsigned int *offset,
+					 gfp_t gfp)
 {
-	unsigned int offset;
 	struct page *page;
 
-	page = page_pool_alloc_frag(rxr->head_pool, &offset,
+	page = page_pool_alloc_frag(rxr->head_pool, offset,
 				    bp->rx_buf_size, gfp);
 	if (!page)
 		return NULL;
 
-	*mapping = page_pool_get_dma_addr(page) + bp->rx_dma_offset + offset;
-	return page_address(page) + offset;
+	*mapping = page_pool_get_dma_addr(page) + bp->rx_dma_offset + *offset;
+	return page;
 }
 
 int bnxt_alloc_rx_data(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
@@ -940,35 +940,27 @@ int bnxt_alloc_rx_data(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
 {
 	struct rx_bd *rxbd = &rxr->rx_desc_ring[RX_RING(bp, prod)][RX_IDX(prod)];
 	struct bnxt_sw_rx_bd *rx_buf = &rxr->rx_buf_ring[RING_RX(bp, prod)];
+	unsigned int offset;
 	dma_addr_t mapping;
+	struct page *page;
 
-	if (BNXT_RX_PAGE_MODE(bp)) {
-		unsigned int offset;
-		struct page *page =
-			__bnxt_alloc_rx_page(bp, &mapping, rxr, &offset, gfp);
+	if (BNXT_RX_PAGE_MODE(bp))
+		page = __bnxt_alloc_rx_page(bp, &mapping, rxr, &offset, gfp);
+	else
+		page = __bnxt_alloc_rx_frag(bp, &mapping, rxr, &offset, gfp);
+	if (!page)
+		return -ENOMEM;
 
-		if (!page)
-			return -ENOMEM;
-
-		mapping += bp->rx_dma_offset;
-		rx_buf->data = page;
-		rx_buf->data_ptr = page_address(page) + offset + bp->rx_offset;
-	} else {
-		u8 *data = __bnxt_alloc_rx_frag(bp, &mapping, rxr, gfp);
-
-		if (!data)
-			return -ENOMEM;
-
-		rx_buf->data = data;
-		rx_buf->data_ptr = data + bp->rx_offset;
-	}
+	rx_buf->page = page;
+	rx_buf->offset = offset;
 	rx_buf->mapping = mapping;
 
 	rxbd->rx_bd_haddr = cpu_to_le64(mapping);
 	return 0;
 }
 
-void bnxt_reuse_rx_data(struct bnxt_rx_ring_info *rxr, u16 cons, void *data)
+void bnxt_reuse_rx_data(struct bnxt_rx_ring_info *rxr, u16 cons,
+			struct page *page)
 {
 	u16 prod = rxr->rx_prod;
 	struct bnxt_sw_rx_bd *cons_rx_buf, *prod_rx_buf;
@@ -978,8 +970,8 @@ void bnxt_reuse_rx_data(struct bnxt_rx_ring_info *rxr, u16 cons, void *data)
 	prod_rx_buf = &rxr->rx_buf_ring[RING_RX(bp, prod)];
 	cons_rx_buf = &rxr->rx_buf_ring[cons];
 
-	prod_rx_buf->data = data;
-	prod_rx_buf->data_ptr = cons_rx_buf->data_ptr;
+	prod_rx_buf->page = page;
+	prod_rx_buf->offset = cons_rx_buf->offset;
 
 	prod_rx_buf->mapping = cons_rx_buf->mapping;
 
@@ -999,22 +991,22 @@ static inline u16 bnxt_find_next_agg_idx(struct bnxt_rx_ring_info *rxr, u16 idx)
 	return next;
 }
 
-static inline int bnxt_alloc_rx_page(struct bnxt *bp,
-				     struct bnxt_rx_ring_info *rxr,
-				     u16 prod, gfp_t gfp)
+static inline int bnxt_alloc_rx_agg_page(struct bnxt *bp,
+					 struct bnxt_rx_ring_info *rxr,
+					 u16 prod, gfp_t gfp)
 {
 	struct rx_bd *rxbd =
 		&rxr->rx_agg_desc_ring[RX_AGG_RING(bp, prod)][RX_IDX(prod)];
-	struct bnxt_sw_rx_agg_bd *rx_agg_buf;
-	struct page *page;
-	dma_addr_t mapping;
 	u16 sw_prod = rxr->rx_sw_agg_prod;
+	struct bnxt_sw_rx_bd *rx_agg_buf;
 	unsigned int offset = 0;
+	dma_addr_t mapping;
+	struct page *page;
 
 	page = __bnxt_alloc_rx_page(bp, &mapping, rxr, &offset, gfp);
-
 	if (!page)
 		return -ENOMEM;
+	mapping -= bp->rx_dma_offset;
 
 	if (unlikely(test_bit(sw_prod, rxr->rx_agg_bmap)))
 		sw_prod = bnxt_find_next_agg_idx(rxr, sw_prod);
@@ -1067,11 +1059,11 @@ static void bnxt_reuse_rx_agg_bufs(struct bnxt_cp_ring_info *cpr, u16 idx,
 		p5_tpa = true;
 
 	for (i = 0; i < agg_bufs; i++) {
-		u16 cons;
+		struct bnxt_sw_rx_bd *cons_rx_buf, *prod_rx_buf;
 		struct rx_agg_cmp *agg;
-		struct bnxt_sw_rx_agg_bd *cons_rx_buf, *prod_rx_buf;
 		struct rx_bd *prod_bd;
 		struct page *page;
+		u16 cons;
 
 		if (p5_tpa)
 			agg = bnxt_get_tpa_agg_p5(bp, rxr, idx, start + i);
@@ -1111,25 +1103,24 @@ static void bnxt_reuse_rx_agg_bufs(struct bnxt_cp_ring_info *cpr, u16 idx,
 
 static struct sk_buff *bnxt_rx_multi_page_skb(struct bnxt *bp,
 					      struct bnxt_rx_ring_info *rxr,
-					      u16 cons, void *data, u8 *data_ptr,
+					      u16 cons, struct page *page,
+					      unsigned int offset,
 					      dma_addr_t dma_addr,
 					      unsigned int offset_and_len)
 {
 	unsigned int len = offset_and_len & 0xffff;
-	struct page *page = data;
 	u16 prod = rxr->rx_prod;
 	struct sk_buff *skb;
 	int err;
 
 	err = bnxt_alloc_rx_data(bp, rxr, prod, GFP_ATOMIC);
 	if (unlikely(err)) {
-		bnxt_reuse_rx_data(rxr, cons, data);
+		bnxt_reuse_rx_data(rxr, cons, page);
 		return NULL;
 	}
-	dma_addr -= bp->rx_dma_offset;
-	dma_sync_single_for_cpu(&bp->pdev->dev, dma_addr, BNXT_RX_PAGE_SIZE,
-				bp->rx_dir);
-	skb = napi_build_skb(data_ptr - bp->rx_offset, BNXT_RX_PAGE_SIZE);
+	page_pool_dma_sync_for_cpu(rxr->page_pool, page, 0, BNXT_RX_PAGE_SIZE);
+
+	skb = napi_build_skb(bnxt_data(page, offset), BNXT_RX_PAGE_SIZE);
 	if (!skb) {
 		page_pool_recycle_direct(rxr->page_pool, page);
 		return NULL;
@@ -1143,26 +1134,26 @@ static struct sk_buff *bnxt_rx_multi_page_skb(struct bnxt *bp,
 
 static struct sk_buff *bnxt_rx_page_skb(struct bnxt *bp,
 					struct bnxt_rx_ring_info *rxr,
-					u16 cons, void *data, u8 *data_ptr,
+					u16 cons, struct page *page,
+					unsigned int offset,
 					dma_addr_t dma_addr,
 					unsigned int offset_and_len)
 {
 	unsigned int payload = offset_and_len >> 16;
 	unsigned int len = offset_and_len & 0xffff;
-	skb_frag_t *frag;
-	struct page *page = data;
 	u16 prod = rxr->rx_prod;
 	struct sk_buff *skb;
-	int off, err;
+	skb_frag_t *frag;
+	u8 *data_ptr;
+	int err;
 
 	err = bnxt_alloc_rx_data(bp, rxr, prod, GFP_ATOMIC);
 	if (unlikely(err)) {
-		bnxt_reuse_rx_data(rxr, cons, data);
+		bnxt_reuse_rx_data(rxr, cons, page);
 		return NULL;
 	}
-	dma_addr -= bp->rx_dma_offset;
-	dma_sync_single_for_cpu(&bp->pdev->dev, dma_addr, BNXT_RX_PAGE_SIZE,
-				bp->rx_dir);
+	data_ptr = bnxt_data_ptr(bp, page, offset);
+	page_pool_dma_sync_for_cpu(rxr->page_pool, page, 0, BNXT_RX_PAGE_SIZE);
 
 	if (unlikely(!payload))
 		payload = eth_get_headlen(bp->dev, data_ptr, len);
@@ -1174,8 +1165,8 @@ static struct sk_buff *bnxt_rx_page_skb(struct bnxt *bp,
 	}
 
 	skb_mark_for_recycle(skb);
-	off = (void *)data_ptr - page_address(page);
-	skb_add_rx_frag(skb, 0, page, off, len, BNXT_RX_PAGE_SIZE);
+	skb_add_rx_frag(skb, 0, page, bp->rx_offset + offset, len,
+			BNXT_RX_PAGE_SIZE);
 	memcpy(skb->data - NET_IP_ALIGN, data_ptr - NET_IP_ALIGN,
 	       payload + NET_IP_ALIGN);
 
@@ -1190,7 +1181,7 @@ static struct sk_buff *bnxt_rx_page_skb(struct bnxt *bp,
 
 static struct sk_buff *bnxt_rx_skb(struct bnxt *bp,
 				   struct bnxt_rx_ring_info *rxr, u16 cons,
-				   void *data, u8 *data_ptr,
+				   struct page *page, unsigned int offset,
 				   dma_addr_t dma_addr,
 				   unsigned int offset_and_len)
 {
@@ -1200,15 +1191,16 @@ static struct sk_buff *bnxt_rx_skb(struct bnxt *bp,
 
 	err = bnxt_alloc_rx_data(bp, rxr, prod, GFP_ATOMIC);
 	if (unlikely(err)) {
-		bnxt_reuse_rx_data(rxr, cons, data);
+		bnxt_reuse_rx_data(rxr, cons, page);
 		return NULL;
 	}
 
-	skb = napi_build_skb(data, bp->rx_buf_size);
-	dma_sync_single_for_cpu(&bp->pdev->dev, dma_addr, bp->rx_buf_use_size,
-				bp->rx_dir);
+	skb = napi_build_skb(bnxt_data(page, offset), bp->rx_buf_size);
+	page_pool_dma_sync_for_cpu(rxr->head_pool, page,
+				   offset + bp->rx_dma_offset,
+				   bp->rx_buf_use_size);
 	if (!skb) {
-		page_pool_free_va(rxr->head_pool, data, true);
+		page_pool_recycle_direct(rxr->head_pool, page);
 		return NULL;
 	}
 
@@ -1225,22 +1217,24 @@ static u32 __bnxt_rx_agg_pages(struct bnxt *bp,
 			       struct xdp_buff *xdp)
 {
 	struct bnxt_napi *bnapi = cpr->bnapi;
-	struct pci_dev *pdev = bp->pdev;
-	struct bnxt_rx_ring_info *rxr = bnapi->rx_ring;
-	u16 prod = rxr->rx_agg_prod;
+	struct bnxt_rx_ring_info *rxr;
 	u32 i, total_frag_len = 0;
 	bool p5_tpa = false;
+	u16 prod;
+
+	rxr = bnapi->rx_ring;
+	prod = rxr->rx_agg_prod;
 
 	if ((bp->flags & BNXT_FLAG_CHIP_P5_PLUS) && tpa)
 		p5_tpa = true;
 
 	for (i = 0; i < agg_bufs; i++) {
 		skb_frag_t *frag = &shinfo->frags[i];
-		u16 cons, frag_len;
+		struct bnxt_sw_rx_bd *cons_rx_buf;
 		struct rx_agg_cmp *agg;
-		struct bnxt_sw_rx_agg_bd *cons_rx_buf;
-		struct page *page;
+		u16 cons, frag_len;
 		dma_addr_t mapping;
+		struct page *page;
 
 		if (p5_tpa)
 			agg = bnxt_get_tpa_agg_p5(bp, rxr, idx, i);
@@ -1256,7 +1250,7 @@ static u32 __bnxt_rx_agg_pages(struct bnxt *bp,
 		shinfo->nr_frags = i + 1;
 		__clear_bit(cons, rxr->rx_agg_bmap);
 
-		/* It is possible for bnxt_alloc_rx_page() to allocate
+		/* It is possible for bnxt_alloc_rx_agg_page() to allocate
 		 * a sw_prod index that equals the cons index, so we
 		 * need to clear the cons entry now.
 		 */
@@ -1267,7 +1261,7 @@ static u32 __bnxt_rx_agg_pages(struct bnxt *bp,
 		if (xdp && page_is_pfmemalloc(page))
 			xdp_buff_set_frag_pfmemalloc(xdp);
 
-		if (bnxt_alloc_rx_page(bp, rxr, prod, GFP_ATOMIC) != 0) {
+		if (bnxt_alloc_rx_agg_page(bp, rxr, prod, GFP_ATOMIC) != 0) {
 			--shinfo->nr_frags;
 			cons_rx_buf->page = page;
 
@@ -1279,8 +1273,8 @@ static u32 __bnxt_rx_agg_pages(struct bnxt *bp,
 			return 0;
 		}
 
-		dma_sync_single_for_cpu(&pdev->dev, mapping, BNXT_RX_PAGE_SIZE,
-					bp->rx_dir);
+		page_pool_dma_sync_for_cpu(rxr->page_pool, page, 0,
+					   BNXT_RX_PAGE_SIZE);
 
 		total_frag_len += frag_len;
 		prod = NEXT_RX_AGG(prod);
@@ -1345,43 +1339,47 @@ static int bnxt_agg_bufs_valid(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	return RX_AGG_CMP_VALID(agg, *raw_cons);
 }
 
-static struct sk_buff *bnxt_copy_data(struct bnxt_napi *bnapi, u8 *data,
-				      unsigned int len,
-				      dma_addr_t mapping)
+static struct sk_buff *bnxt_copy_data(struct bnxt_napi *bnapi,
+				      struct page *page,
+				      unsigned int offset,
+				      unsigned int len)
 {
+	struct bnxt_rx_ring_info *rxr = bnapi->rx_ring;
 	struct bnxt *bp = bnapi->bp;
-	struct pci_dev *pdev = bp->pdev;
 	struct sk_buff *skb;
 
 	skb = napi_alloc_skb(&bnapi->napi, len);
 	if (!skb)
 		return NULL;
 
-	dma_sync_single_for_cpu(&pdev->dev, mapping, bp->rx_copybreak,
-				bp->rx_dir);
+	page_pool_dma_sync_for_cpu(rxr->head_pool, page,
+				   offset + bp->rx_dma_offset,
+				   bp->rx_copybreak);
 
-	memcpy(skb->data - NET_IP_ALIGN, data - NET_IP_ALIGN,
+	memcpy(skb->data - NET_IP_ALIGN,
+	       bnxt_data_ptr(bp, page, offset) - NET_IP_ALIGN,
 	       len + NET_IP_ALIGN);
 
-	dma_sync_single_for_device(&pdev->dev, mapping, bp->rx_copybreak,
-				   bp->rx_dir);
-
+	page_pool_dma_sync_for_device(rxr->head_pool, page_to_netmem(page),
+				      bp->rx_dma_offset, bp->rx_copybreak);
 	skb_put(skb, len);
 
 	return skb;
 }
 
-static struct sk_buff *bnxt_copy_skb(struct bnxt_napi *bnapi, u8 *data,
-				     unsigned int len,
-				     dma_addr_t mapping)
+static struct sk_buff *bnxt_copy_skb(struct bnxt_napi *bnapi,
+				     struct page *page,
+				     unsigned int offset,
+				     unsigned int len)
 {
-	return bnxt_copy_data(bnapi, data, len, mapping);
+	return bnxt_copy_data(bnapi, page, offset, len);
 }
 
 static struct sk_buff *bnxt_copy_xdp(struct bnxt_napi *bnapi,
+				     struct page *page,
+				     unsigned int offset,
 				     struct xdp_buff *xdp,
-				     unsigned int len,
-				     dma_addr_t mapping)
+				     unsigned int len)
 {
 	unsigned int metasize = 0;
 	u8 *data = xdp->data;
@@ -1391,7 +1389,7 @@ static struct sk_buff *bnxt_copy_xdp(struct bnxt_napi *bnapi,
 	metasize = xdp->data - xdp->data_meta;
 	data = xdp->data_meta;
 
-	skb = bnxt_copy_data(bnapi, data, len, mapping);
+	skb = bnxt_copy_data(bnapi, page, offset, len);
 	if (!skb)
 		return skb;
 
@@ -1521,20 +1519,20 @@ static void bnxt_tpa_start(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
 		bnxt_sched_reset_rxr(bp, rxr);
 		return;
 	}
-	prod_rx_buf->data = tpa_info->data;
-	prod_rx_buf->data_ptr = tpa_info->data_ptr;
+	prod_rx_buf->page = tpa_info->bd.page;
+	prod_rx_buf->offset = tpa_info->bd.offset;
 
-	mapping = tpa_info->mapping;
+	mapping = tpa_info->bd.mapping;
 	prod_rx_buf->mapping = mapping;
 
 	prod_bd = &rxr->rx_desc_ring[RX_RING(bp, prod)][RX_IDX(prod)];
 
 	prod_bd->rx_bd_haddr = cpu_to_le64(mapping);
 
-	tpa_info->data = cons_rx_buf->data;
-	tpa_info->data_ptr = cons_rx_buf->data_ptr;
-	cons_rx_buf->data = NULL;
-	tpa_info->mapping = cons_rx_buf->mapping;
+	tpa_info->bd.page = cons_rx_buf->page;
+	tpa_info->bd.offset = cons_rx_buf->offset;
+	cons_rx_buf->page = NULL;
+	tpa_info->bd.mapping = cons_rx_buf->mapping;
 
 	tpa_info->len =
 		le32_to_cpu(tpa_start->rx_tpa_start_cmp_len_flags_type) >>
@@ -1568,9 +1566,9 @@ static void bnxt_tpa_start(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
 	rxr->rx_next_cons = RING_RX(bp, NEXT_RX(cons));
 	cons_rx_buf = &rxr->rx_buf_ring[cons];
 
-	bnxt_reuse_rx_data(rxr, cons, cons_rx_buf->data);
+	bnxt_reuse_rx_data(rxr, cons, cons_rx_buf->page);
 	rxr->rx_prod = NEXT_RX(rxr->rx_prod);
-	cons_rx_buf->data = NULL;
+	cons_rx_buf->page = NULL;
 }
 
 static void bnxt_abort_tpa(struct bnxt_cp_ring_info *cpr, u16 idx, u32 agg_bufs)
@@ -1796,13 +1794,13 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 	struct bnxt_napi *bnapi = cpr->bnapi;
 	struct bnxt_rx_ring_info *rxr = bnapi->rx_ring;
 	struct net_device *dev = bp->dev;
-	u8 *data_ptr, agg_bufs;
-	unsigned int len;
 	struct bnxt_tpa_info *tpa_info;
-	dma_addr_t mapping;
+	unsigned int len, offset;
+	u8 *data_ptr, agg_bufs;
 	struct sk_buff *skb;
 	u16 idx = 0, agg_id;
-	void *data;
+	dma_addr_t mapping;
+	struct page *page;
 	bool gro;
 
 	if (unlikely(bnapi->in_reset)) {
@@ -1842,11 +1840,12 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 		}
 		gro = !!TPA_END_GRO(tpa_end);
 	}
-	data = tpa_info->data;
-	data_ptr = tpa_info->data_ptr;
+	page = tpa_info->bd.page;
+	offset = tpa_info->bd.offset;
+	data_ptr = bnxt_data_ptr(bp, page, offset);
 	prefetch(data_ptr);
 	len = tpa_info->len;
-	mapping = tpa_info->mapping;
+	mapping = tpa_info->bd.mapping;
 
 	if (unlikely(agg_bufs > MAX_SKB_FRAGS || TPA_END_ERRORS(tpa_end1))) {
 		bnxt_abort_tpa(cpr, idx, agg_bufs);
@@ -1857,34 +1856,36 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 	}
 
 	if (len <= bp->rx_copybreak) {
-		skb = bnxt_copy_skb(bnapi, data_ptr, len, mapping);
+		skb = bnxt_copy_skb(bnapi, page, offset, len);
 		if (!skb) {
 			bnxt_abort_tpa(cpr, idx, agg_bufs);
 			cpr->sw_stats->rx.rx_oom_discards += 1;
 			return NULL;
 		}
 	} else {
-		u8 *new_data;
+		unsigned int new_offset;
 		dma_addr_t new_mapping;
+		struct page *new_page;
 
-		new_data = __bnxt_alloc_rx_frag(bp, &new_mapping, rxr,
-						GFP_ATOMIC);
-		if (!new_data) {
+		new_page = __bnxt_alloc_rx_frag(bp, &new_mapping, rxr,
+						&new_offset, GFP_ATOMIC);
+		if (!new_page) {
 			bnxt_abort_tpa(cpr, idx, agg_bufs);
 			cpr->sw_stats->rx.rx_oom_discards += 1;
 			return NULL;
 		}
 
-		tpa_info->data = new_data;
-		tpa_info->data_ptr = new_data + bp->rx_offset;
-		tpa_info->mapping = new_mapping;
+		tpa_info->bd.page = new_page;
+		tpa_info->bd.offset = new_offset;
+		tpa_info->bd.mapping = new_mapping;
 
-		skb = napi_build_skb(data, bp->rx_buf_size);
-		dma_sync_single_for_cpu(&bp->pdev->dev, mapping,
-					bp->rx_buf_use_size, bp->rx_dir);
+		skb = napi_build_skb(bnxt_data(page, offset), bp->rx_buf_size);
+		page_pool_dma_sync_for_cpu(rxr->head_pool, page,
+					   offset + bp->rx_dma_offset,
+					   bp->rx_buf_use_size);
 
 		if (!skb) {
-			page_pool_free_va(rxr->head_pool, data, true);
+			page_pool_recycle_direct(rxr->head_pool, page);
 			bnxt_abort_tpa(cpr, idx, agg_bufs);
 			cpr->sw_stats->rx.rx_oom_discards += 1;
 			return NULL;
@@ -2047,24 +2048,27 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 		       u32 *raw_cons, u8 *event)
 {
 	struct bnxt_napi *bnapi = cpr->bnapi;
-	struct bnxt_rx_ring_info *rxr = bnapi->rx_ring;
 	struct net_device *dev = bp->dev;
-	struct rx_cmp *rxcmp;
-	struct rx_cmp_ext *rxcmp1;
-	u32 tmp_raw_cons = *raw_cons;
-	u16 cons, prod, cp_cons = RING_CMP(tmp_raw_cons);
-	struct skb_shared_info *sinfo;
-	struct bnxt_sw_rx_bd *rx_buf;
-	unsigned int len;
 	u8 *data_ptr, agg_bufs, cmp_type;
+	struct bnxt_rx_ring_info *rxr;
+	struct skb_shared_info *sinfo;
+	u32 tmp_raw_cons = *raw_cons;
+	struct bnxt_sw_rx_bd *rx_buf;
+	struct rx_cmp_ext *rxcmp1;
+	unsigned int len, offset;
 	bool xdp_active = false;
+	u16 cons, prod, cp_cons;
+	struct rx_cmp *rxcmp;
 	dma_addr_t dma_addr;
 	struct sk_buff *skb;
 	struct xdp_buff xdp;
+	struct page *page;
 	u32 flags, misc;
 	u32 cmpl_ts;
-	void *data;
 	int rc = 0;
+
+	rxr = bnapi->rx_ring;
+	cp_cons = RING_CMP(tmp_raw_cons);
 
 	rxcmp = (struct rx_cmp *)
 			&cpr->cp_desc_ring[CP_RING(cp_cons)][CP_IDX(cp_cons)];
@@ -2130,8 +2134,9 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 		goto next_rx_no_prod_no_len;
 	}
 	rx_buf = &rxr->rx_buf_ring[cons];
-	data = rx_buf->data;
-	data_ptr = rx_buf->data_ptr;
+	page = rx_buf->page;
+	offset = rx_buf->offset;
+	data_ptr = bnxt_data_ptr(bp, page, offset);
 	prefetch(data_ptr);
 
 	misc = le32_to_cpu(rxcmp->rx_cmp_misc_v1);
@@ -2146,11 +2151,11 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	}
 	*event |= BNXT_RX_EVENT;
 
-	rx_buf->data = NULL;
+	rx_buf->page = NULL;
 	if (rxcmp1->rx_cmp_cfa_code_errors_v2 & RX_CMP_L2_ERRORS) {
 		u32 rx_err = le32_to_cpu(rxcmp1->rx_cmp_cfa_code_errors_v2);
 
-		bnxt_reuse_rx_data(rxr, cons, data);
+		bnxt_reuse_rx_data(rxr, cons, page);
 		if (agg_bufs)
 			bnxt_reuse_rx_agg_bufs(cpr, cp_cons, 0, agg_bufs,
 					       false);
@@ -2173,7 +2178,7 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	dma_addr = rx_buf->mapping;
 
 	if (bnxt_xdp_attached(bp, rxr)) {
-		bnxt_xdp_buff_init(bp, rxr, cons, data_ptr, len, &xdp);
+		bnxt_xdp_buff_init(bp, rxr, cons, page, len, &xdp);
 		if (agg_bufs) {
 			u32 frag_len = bnxt_rx_agg_pages_xdp(bp, cpr, &xdp,
 							     cp_cons, agg_bufs,
@@ -2186,7 +2191,7 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	}
 
 	if (xdp_active) {
-		if (bnxt_rx_xdp(bp, rxr, cons, &xdp, data, &data_ptr, &len, event)) {
+		if (bnxt_rx_xdp(bp, rxr, cons, &xdp, page, &data_ptr, &len, event)) {
 			rc = 1;
 			goto next_rx;
 		}
@@ -2200,10 +2205,10 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 
 	if (len <= bp->rx_copybreak) {
 		if (!xdp_active)
-			skb = bnxt_copy_skb(bnapi, data_ptr, len, dma_addr);
+			skb = bnxt_copy_skb(bnapi, page, offset, len);
 		else
-			skb = bnxt_copy_xdp(bnapi, &xdp, len, dma_addr);
-		bnxt_reuse_rx_data(rxr, cons, data);
+			skb = bnxt_copy_xdp(bnapi, page, offset, &xdp, len);
+		bnxt_reuse_rx_data(rxr, cons, page);
 		if (!skb) {
 			if (agg_bufs) {
 				if (!xdp_active)
@@ -2217,11 +2222,11 @@ static int bnxt_rx_pkt(struct bnxt *bp, struct bnxt_cp_ring_info *cpr,
 	} else {
 		u32 payload;
 
-		if (rx_buf->data_ptr == data_ptr)
+		if (bnxt_data_ptr(bp, page, offset) == data_ptr)
 			payload = misc & RX_CMP_PAYLOAD_OFFSET;
 		else
 			payload = 0;
-		skb = bp->rx_skb_func(bp, rxr, cons, data, data_ptr, dma_addr,
+		skb = bp->rx_skb_func(bp, rxr, cons, page, offset, dma_addr,
 				      payload | len);
 		if (!skb)
 			goto oom_next_rx;
@@ -3424,16 +3429,13 @@ static void bnxt_free_one_rx_ring(struct bnxt *bp, struct bnxt_rx_ring_info *rxr
 
 	for (i = 0; i < max_idx; i++) {
 		struct bnxt_sw_rx_bd *rx_buf = &rxr->rx_buf_ring[i];
-		void *data = rx_buf->data;
+		struct page *page = rx_buf->page;
 
-		if (!data)
+		if (!page)
 			continue;
 
-		rx_buf->data = NULL;
-		if (BNXT_RX_PAGE_MODE(bp))
-			page_pool_recycle_direct(rxr->page_pool, data);
-		else
-			page_pool_free_va(rxr->head_pool, data, true);
+		rx_buf->page = NULL;
+		page_pool_recycle_direct(rxr->page_pool, page);
 	}
 }
 
@@ -3444,7 +3446,7 @@ static void bnxt_free_one_rx_agg_ring(struct bnxt *bp, struct bnxt_rx_ring_info 
 	max_idx = bp->rx_agg_nr_pages * RX_DESC_CNT;
 
 	for (i = 0; i < max_idx; i++) {
-		struct bnxt_sw_rx_agg_bd *rx_agg_buf = &rxr->rx_agg_ring[i];
+		struct bnxt_sw_rx_bd *rx_agg_buf = &rxr->rx_agg_ring[i];
 		struct page *page = rx_agg_buf->page;
 
 		if (!page)
@@ -3464,13 +3466,13 @@ static void bnxt_free_one_tpa_info_data(struct bnxt *bp,
 
 	for (i = 0; i < bp->max_tpa; i++) {
 		struct bnxt_tpa_info *tpa_info = &rxr->rx_tpa[i];
-		u8 *data = tpa_info->data;
+		struct page *page = tpa_info->bd.page;
 
-		if (!data)
+		if (!page)
 			continue;
 
-		tpa_info->data = NULL;
-		page_pool_free_va(rxr->head_pool, data, false);
+		tpa_info->bd.page = NULL;
+		page_pool_put_full_page(rxr->head_pool, page, false);
 	}
 }
 
@@ -4330,7 +4332,7 @@ static void bnxt_alloc_one_rx_ring_page(struct bnxt *bp,
 
 	prod = rxr->rx_agg_prod;
 	for (i = 0; i < bp->rx_agg_ring_size; i++) {
-		if (bnxt_alloc_rx_page(bp, rxr, prod, GFP_KERNEL)) {
+		if (bnxt_alloc_rx_agg_page(bp, rxr, prod, GFP_KERNEL)) {
 			netdev_warn(bp->dev, "init'ed rx ring %d with %d/%d pages only\n",
 				    ring_nr, i, bp->rx_ring_size);
 			break;
@@ -4343,19 +4345,20 @@ static void bnxt_alloc_one_rx_ring_page(struct bnxt *bp,
 static int bnxt_alloc_one_tpa_info_data(struct bnxt *bp,
 					struct bnxt_rx_ring_info *rxr)
 {
+	unsigned int offset;
 	dma_addr_t mapping;
-	u8 *data;
+	struct page *page;
 	int i;
 
 	for (i = 0; i < bp->max_tpa; i++) {
-		data = __bnxt_alloc_rx_frag(bp, &mapping, rxr,
+		page = __bnxt_alloc_rx_frag(bp, &mapping, rxr, &offset,
 					    GFP_KERNEL);
-		if (!data)
+		if (!page)
 			return -ENOMEM;
 
-		rxr->rx_tpa[i].data = data;
-		rxr->rx_tpa[i].data_ptr = data + bp->rx_offset;
-		rxr->rx_tpa[i].mapping = mapping;
+		rxr->rx_tpa[i].bd.page = page;
+		rxr->rx_tpa[i].bd.offset = offset;
+		rxr->rx_tpa[i].bd.mapping = mapping;
 	}
 
 	return 0;

@@ -180,24 +180,12 @@ bool bnxt_xdp_attached(struct bnxt *bp, struct bnxt_rx_ring_info *rxr)
 }
 
 void bnxt_xdp_buff_init(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
-			u16 cons, u8 *data_ptr, unsigned int len,
+			u16 cons, struct page *page, unsigned int len,
 			struct xdp_buff *xdp)
 {
-	u32 buflen = BNXT_RX_PAGE_SIZE;
-	struct bnxt_sw_rx_bd *rx_buf;
-	struct pci_dev *pdev;
-	dma_addr_t mapping;
-	u32 offset;
-
-	pdev = bp->pdev;
-	rx_buf = &rxr->rx_buf_ring[cons];
-	offset = bp->rx_offset;
-
-	mapping = rx_buf->mapping - bp->rx_dma_offset;
-	dma_sync_single_for_cpu(&pdev->dev, mapping + offset, len, bp->rx_dir);
-
-	xdp_init_buff(xdp, buflen, &rxr->xdp_rxq);
-	xdp_prepare_buff(xdp, data_ptr - offset, offset, len, true);
+	page_pool_dma_sync_for_cpu(rxr->page_pool, page, bp->rx_offset, len);
+	xdp_init_buff(xdp, BNXT_RX_PAGE_SIZE, &rxr->xdp_rxq);
+	xdp_prepare_buff(xdp, page_address(page), bp->rx_offset, len, true);
 }
 
 void bnxt_xdp_buff_frags_free(struct bnxt_rx_ring_info *rxr,
@@ -284,8 +272,7 @@ bool bnxt_rx_xdp(struct bnxt *bp, struct bnxt_rx_ring_info *rxr, u16 cons,
 			return true;
 		}
 
-		dma_sync_single_for_device(&pdev->dev, mapping + offset, *len,
-					   bp->rx_dir);
+		page_pool_dma_sync_for_cpu(rxr->page_pool, page, offset, *len);
 
 		*event |= BNXT_TX_EVENT;
 		__bnxt_xmit_xdp(bp, txr, mapping + offset, *len,

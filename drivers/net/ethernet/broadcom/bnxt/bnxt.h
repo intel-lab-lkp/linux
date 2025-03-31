@@ -807,7 +807,7 @@ struct nqe_cn {
 #define SW_RXBD_RING_SIZE (sizeof(struct bnxt_sw_rx_bd) * RX_DESC_CNT)
 #define HW_RXBD_RING_SIZE (sizeof(struct rx_bd) * RX_DESC_CNT)
 
-#define SW_RXBD_AGG_RING_SIZE (sizeof(struct bnxt_sw_rx_agg_bd) * RX_DESC_CNT)
+#define SW_RXBD_AGG_RING_SIZE (sizeof(struct bnxt_sw_rx_bd) * RX_DESC_CNT)
 
 #define SW_TXBD_RING_SIZE (sizeof(struct bnxt_sw_tx_bd) * TX_DESC_CNT)
 #define HW_TXBD_RING_SIZE (sizeof(struct tx_bd) * TX_DESC_CNT)
@@ -897,12 +897,6 @@ struct bnxt_sw_tx_bd {
 };
 
 struct bnxt_sw_rx_bd {
-	void			*data;
-	u8			*data_ptr;
-	dma_addr_t		mapping;
-};
-
-struct bnxt_sw_rx_agg_bd {
 	struct page		*page;
 	unsigned int		offset;
 	dma_addr_t		mapping;
@@ -1049,9 +1043,7 @@ struct bnxt_coal {
 };
 
 struct bnxt_tpa_info {
-	void			*data;
-	u8			*data_ptr;
-	dma_addr_t		mapping;
+	struct bnxt_sw_rx_bd	bd;
 	u16			len;
 	unsigned short		gso_type;
 	u32			flags2;
@@ -1102,7 +1094,7 @@ struct bnxt_rx_ring_info {
 	struct bnxt_sw_rx_bd	*rx_buf_ring;
 
 	struct rx_bd		*rx_agg_desc_ring[MAX_RX_AGG_PAGES];
-	struct bnxt_sw_rx_agg_bd	*rx_agg_ring;
+	struct bnxt_sw_rx_bd	*rx_agg_ring;
 
 	unsigned long		*rx_agg_bmap;
 	u16			rx_agg_bmap_size;
@@ -2350,7 +2342,8 @@ struct bnxt {
 
 	struct sk_buff *	(*rx_skb_func)(struct bnxt *,
 					       struct bnxt_rx_ring_info *,
-					       u16, void *, u8 *, dma_addr_t,
+					       u16, struct page *, unsigned int,
+					       dma_addr_t,
 					       unsigned int);
 
 	u16			max_tpa_v2;
@@ -2870,12 +2863,24 @@ static inline bool bnxt_sriov_cfg(struct bnxt *bp)
 #endif
 }
 
+static inline u8 *bnxt_data_ptr(struct bnxt *bp, struct page *page,
+				unsigned int offset)
+{
+	return page_address(page) + offset + bp->rx_offset;
+}
+
+static inline u8 *bnxt_data(struct page *page, unsigned int offset)
+{
+	return page_address(page) + offset;
+}
+
 extern const u16 bnxt_bstore_to_trace[];
 extern const u16 bnxt_lhint_arr[];
 
 int bnxt_alloc_rx_data(struct bnxt *bp, struct bnxt_rx_ring_info *rxr,
 		       u16 prod, gfp_t gfp);
-void bnxt_reuse_rx_data(struct bnxt_rx_ring_info *rxr, u16 cons, void *data);
+void bnxt_reuse_rx_data(struct bnxt_rx_ring_info *rxr, u16 cons,
+			struct page *page);
 u32 bnxt_fw_health_readl(struct bnxt *bp, int reg_idx);
 bool bnxt_bs_trace_avail(struct bnxt *bp, u16 type);
 void bnxt_set_tpa_flags(struct bnxt *bp);

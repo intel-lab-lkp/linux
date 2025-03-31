@@ -255,7 +255,9 @@ netmem_ref page_pool_alloc_frag_netmem(struct page_pool *pool,
 struct page_pool *page_pool_create(const struct page_pool_params *params);
 struct page_pool *page_pool_create_percpu(const struct page_pool_params *params,
 					  int cpuid);
-
+void page_pool_dma_sync_for_device(const struct page_pool *pool,
+				   netmem_ref netmem, u32 offset,
+				   u32 dma_sync_size);
 struct xdp_mem_info;
 
 #ifdef CONFIG_PAGE_POOL
