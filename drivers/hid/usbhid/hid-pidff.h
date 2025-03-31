@@ -10,7 +10,8 @@
 #define HID_PIDFF_QUIRK_MISSING_DELAY		BIT(0)
 
 /* Missing Paramter block offset (0x23). Skip it during SET_CONDITION
-   report upload */
+ * report upload
+ */
 #define HID_PIDFF_QUIRK_MISSING_PBO		BIT(1)
 
 /* Initialise device control field even if logical_minimum != 1 */
