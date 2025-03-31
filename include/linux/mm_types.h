@@ -889,6 +889,13 @@ struct mm_cid {
 };
 #endif
 
+#define _MM_NUMA_COUNTERS MIN(MAX_NUMNODES, 32)
+#define _MM_NUMA_COUNTERS_BATCH max(32, (num_possible_cpus() >> NODES_SHIFT) * 2)
+struct mm_pernuma_counter {
+	atomic64_t global;
+	atomic64_t numa_counters[_MM_NUMA_COUNTERS];
+};
+
 struct kioctx_table;
 struct iommu_mm_data;
 struct mm_struct {
@@ -1055,7 +1062,7 @@ struct mm_struct {
 
 		unsigned long saved_auxv[AT_VECTOR_SIZE]; /* for /proc/PID/auxv */
 
-		struct percpu_counter rss_stat[NR_MM_COUNTERS];
+		struct mm_pernuma_counter rss_stat[NR_MM_COUNTERS];
 
 		struct linux_binfmt *binfmt;
 

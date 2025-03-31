@@ -2694,30 +2694,58 @@ static inline bool get_user_page_fast_only(unsigned long addr,
 /*
  * per-process(per-mm_struct) statistics.
  */
+static inline long get_mm_counter_slow(struct mm_struct *mm,
+						int member)
+{
+	long ret = atomic64_read(&mm->rss_stat[member].global);
+
+	for (int i = 0; i < _MM_NUMA_COUNTERS; i++)
+		ret += atomic64_read(&mm->rss_stat[member].numa_counters[i]);
+	return ret;
+}
+
 static inline unsigned long get_mm_counter(struct mm_struct *mm, int member)
 {
-	return percpu_counter_read_positive(&mm->rss_stat[member]);
+	s64 val = atomic64_read(&mm->rss_stat[member].global);
+
+	if (val < 0)
+		return 0;
+	return val;
 }
 
 void mm_trace_rss_stat(struct mm_struct *mm, int member);
 
+static inline void __mm_update_numa_counter(struct mm_struct *mm, int member,
+					    long value)
+{
+	size_t index = numa_node_id() % _MM_NUMA_COUNTERS;
+	struct mm_pernuma_counter *rss_stat = &mm->rss_stat[member];
+	atomic64_t *numa_counter = &rss_stat->numa_counters[index];
+	s64 val = atomic64_add_return(value, numa_counter);
+
+	if (abs(val) >= _MM_NUMA_COUNTERS_BATCH) {
+		atomic64_add(val, &rss_stat->global);
+		atomic64_add(-val, numa_counter);
+	}
+}
+
 static inline void add_mm_counter(struct mm_struct *mm, int member, long value)
 {
-	percpu_counter_add(&mm->rss_stat[member], value);
+	__mm_update_numa_counter(mm, member, value);
 
 	mm_trace_rss_stat(mm, member);
 }
 
 static inline void inc_mm_counter(struct mm_struct *mm, int member)
 {
-	percpu_counter_inc(&mm->rss_stat[member]);
+	__mm_update_numa_counter(mm, member, 1);
 
 	mm_trace_rss_stat(mm, member);
 }
 
 static inline void dec_mm_counter(struct mm_struct *mm, int member)
 {
-	percpu_counter_dec(&mm->rss_stat[member]);
+	__mm_update_numa_counter(mm, member, -1);
 
 	mm_trace_rss_stat(mm, member);
 }
