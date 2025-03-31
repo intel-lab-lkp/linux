@@ -32,7 +32,8 @@
 #define ENABLE_IRQ(IRQ, TYPE) irq_set_irq_type(IRQ, TYPE)
 #define DISABLE_IRQ(IRQ) irq_set_irq_type(IRQ, IRQ_TYPE_NONE)
 
-/* Debug print levels:
+/*
+ * Debug print levels:
  *  0 = load/unload info and errors that make the driver fail;
  *  1 = + warnings for unforeseen events that may break the current
  *	 operation and lead to a timeout, but do not affect the
@@ -41,8 +42,8 @@
  *  3 = + trace of protocol codes;
  *  4 = + trace of interrupt operation.
  */
-#define dbg_printk(level, frm, ...)					\
-	do { if (debug >= (level))					\
+#define dbg_printk(level, frm, ...)					 \
+	do { if (debug >= (level))					 \
 			dev_dbg(board->gpib_dev, frm, ## __VA_ARGS__); } \
 	while (0)
 
@@ -137,13 +138,13 @@ enum lines_t {
 
 DEFINE_LED_TRIGGER(ledtrig_gpib);
 #define ACT_LED_ON do {							\
-		if (ACT_LED)					\
+		if (ACT_LED)						\
 			gpiod_direction_output(ACT_LED, 1);		\
 		else							\
 			led_trigger_event(ledtrig_gpib, LED_FULL); }	\
 	while (0)
 #define ACT_LED_OFF do {						\
-		if (ACT_LED)					\
+		if (ACT_LED)						\
 			gpiod_direction_output(ACT_LED, 0);		\
 		else							\
 			led_trigger_event(ledtrig_gpib, LED_OFF); }	\
@@ -205,14 +206,14 @@ static int gpios_vector[] = {
 /* Lookup table for general GPIOs */
 
 static struct gpiod_lookup_table gpib_gpio_table_1 = {
-	// for bcm2835/6
-	.dev_id = "",	 // device id of board device
+	/* for bcm2835/6 */
+	.dev_id = "",	 /* device id of board device */
 	.table = {
-		GPIO_LOOKUP_IDX("GPIO_GCLK",  U16_MAX, NULL,  4, GPIO_ACTIVE_HIGH),
+		GPIO_LOOKUP_IDX("GPIO_GCLK",	  U16_MAX, NULL,  4, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("GPIO5",	  U16_MAX, NULL,  5, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("GPIO6",	  U16_MAX, NULL,  6, GPIO_ACTIVE_HIGH),
-		GPIO_LOOKUP_IDX("SPI_CE1_N",  U16_MAX, NULL,  7, GPIO_ACTIVE_HIGH),
-		GPIO_LOOKUP_IDX("SPI_CE0_N",  U16_MAX, NULL,  8, GPIO_ACTIVE_HIGH),
+		GPIO_LOOKUP_IDX("SPI_CE1_N",	  U16_MAX, NULL,  7, GPIO_ACTIVE_HIGH),
+		GPIO_LOOKUP_IDX("SPI_CE0_N",	  U16_MAX, NULL,  8, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("SPI_MISO",	  U16_MAX, NULL,  9, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("SPI_MOSI",	  U16_MAX, NULL, 10, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("SPI_SCLK",	  U16_MAX, NULL, 11, GPIO_ACTIVE_HIGH),
@@ -235,9 +236,9 @@ static struct gpiod_lookup_table gpib_gpio_table_1 = {
 };
 
 static struct gpiod_lookup_table gpib_gpio_table_0 = {
-	.dev_id = "",	 // device id of board device
+	.dev_id = "",	 /* device id of board device */
 	.table = {
-		// for bcm27xx based pis (b b+ 2b 3b 3b+ 4 5)
+		/* for bcm27xx based pis (b b+ 2b 3b 3b+ 4 5) */
 		GPIO_LOOKUP_IDX("GPIO4",  U16_MAX, NULL,  4, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("GPIO5",  U16_MAX, NULL,  5, GPIO_ACTIVE_HIGH),
 		GPIO_LOOKUP_IDX("GPIO6",  U16_MAX, NULL,  6, GPIO_ACTIVE_HIGH),
@@ -282,8 +283,8 @@ struct bb_priv {
 	int ndac_mode;	     /* nrfd interrupt mode 0/1 -> edge/levels */
 	int dav_tx;	     /* keep trace of DAV status while sending */
 	int dav_rx;	     /* keep trace of DAV status while receiving */
-	u8 eos;	     // eos character
-	short eos_flags;     // eos mode
+	u8 eos;		     /* eos character */
+	short eos_flags;     /* eos mode */
 	short eos_check;     /* eos check required in current operation ... */
 	short eos_check_8;   /* ... with byte comparison */
 	short eos_mask_7;    /* ... with 7 bit masked character */
@@ -302,7 +303,7 @@ struct bb_priv {
 	size_t w_cnt;
 	size_t length;
 	u8 *w_buf;
-	spinlock_t rw_lock; // protect mods to rw_lock
+	spinlock_t rw_lock; /* protect mods to rw_lock */
 	int phase;
 	int ndac_idle;
 	int ndac_seq;
@@ -383,7 +384,7 @@ static int bb_read(struct gpib_board *board, uint8_t *buffer, size_t length,
 	priv->dav_rx = 1;
 	ENABLE_IRQ(priv->irq_DAV, IRQ_TYPE_LEVEL_LOW);
 	priv->end_flag = 0;
-	gpiod_set_value(NRFD, 1); // ready for data
+	gpiod_set_value(NRFD, 1); /* ready for data */
 	priv->r_busy = 1;
 	priv->phase = 100;
 	spin_unlock_irqrestore(&priv->rw_lock, flags);
@@ -404,7 +405,7 @@ static int bb_read(struct gpib_board *board, uint8_t *buffer, size_t length,
 
 	DISABLE_IRQ(priv->irq_DAV);
 	spin_lock_irqsave(&priv->rw_lock, flags);
-	gpiod_set_value(NRFD, 0); // DIR_READ line state
+	gpiod_set_value(NRFD, 0); /* DIR_READ line state */
 	priv->r_busy = 0;
 	spin_unlock_irqrestore(&priv->rw_lock, flags);
 
@@ -460,21 +461,21 @@ static irqreturn_t bb_DAV_interrupt(int irq, void *arg)
 		   irq, val, board->status, priv->direction, priv->r_busy, priv->w_busy);
 
 	if (val == 0) {
-		gpiod_set_value(NRFD, 0); // not ready for data
+		gpiod_set_value(NRFD, 0); /* not ready for data */
 		priv->rbuf[priv->count++] = get_data_lines();
 		priv->end = !gpiod_get_value(EOI);
-		gpiod_set_value(NDAC, 1); // data accepted
+		gpiod_set_value(NDAC, 1); /* data accepted */
 		priv->end |= check_for_eos(priv, priv->rbuf[priv->count - 1]);
 		priv->end_flag = ((priv->count >= priv->request) || priv->end);
 		priv->phase = 210;
 	} else {
-		gpiod_set_value(NDAC, 0);	// data not accepted
+		gpiod_set_value(NDAC, 0);	/* data not accepted */
 		if (priv->end_flag) {
 			priv->r_busy = 0;
 			wake_up_interruptible(&board->wait);
 			priv->phase = 220;
 		} else {
-			gpiod_set_value(NRFD, 1);     // ready for data
+			gpiod_set_value(NRFD, 1);     /* ready for data */
 			priv->phase = 230;
 		}
 	}
@@ -560,8 +561,8 @@ static int bb_write(struct gpib_board *board, uint8_t *buffer, size_t length,
 
 	spin_lock_irqsave(&priv->rw_lock, flags);
 	priv->w_busy = 0;
-	gpiod_set_value(DAV, 1); // DIR_WRITE line state
-	gpiod_set_value(EOI, 1); // De-assert EOI (in case)
+	gpiod_set_value(DAV, 1); /* DIR_WRITE line state */
+	gpiod_set_value(EOI, 1); /* De-assert EOI (in case) */
 	spin_unlock_irqrestore(&priv->rw_lock, flags);
 
 write_end:
@@ -619,7 +620,7 @@ static irqreturn_t bb_NRFD_interrupt(int irq, void *arg)
 		goto nrfd_exit;
 	}
 
-	if (priv->atn_asserted && priv->w_cnt >= priv->length) { // test for end of transfer
+	if (priv->atn_asserted && priv->w_cnt >= priv->length) { /* test for end of transfer */
 		priv->write_done = 1;
 		priv->w_busy = 0;
 		wake_up_interruptible(&board->wait);
@@ -628,14 +629,14 @@ static irqreturn_t bb_NRFD_interrupt(int irq, void *arg)
 
 	dbg_printk(3, "sending %zu\n", priv->w_cnt);
 
-	set_data_lines(priv->w_buf[priv->w_cnt++]); // put the data on the lines
+	set_data_lines(priv->w_buf[priv->w_cnt++]); /* put the data on the lines */
 
 	if (priv->w_cnt == priv->length && priv->end) {
 		dbg_printk(3, "Asserting EOI\n");
-		gpiod_set_value(EOI, 0); // Assert EOI
+		gpiod_set_value(EOI, 0); /* Assert EOI */
 	}
 
-	gpiod_set_value(DAV, 0); // Data available
+	gpiod_set_value(DAV, 0); /* Data available */
 	priv->dav_tx = 0;
 	priv->phase = 410;
 
@@ -691,12 +692,12 @@ static irqreturn_t bb_NDAC_interrupt(int irq, void *arg)
 
 	dbg_printk(3, "accepted %zu\n", priv->w_cnt - 1);
 
-	if (!priv->atn_asserted && priv->w_cnt >= priv->length) { // test for end of transfer
+	if (!priv->atn_asserted && priv->w_cnt >= priv->length) { /* test for end of transfer */
 		priv->write_done = 1;
 		priv->w_busy = 0;
 		wake_up_interruptible(&board->wait);
 	} else {
-		gpiod_set_value(DAV, 1); // Data not available
+		gpiod_set_value(DAV, 1); /* Data not available */
 		priv->dav_tx = 1;
 		priv->phase = 510;
 	}
@@ -741,7 +742,7 @@ static int bb_command(struct gpib_board *board, uint8_t *buffer,
 
 	priv->cmd = 1;
 
-	ret = bb_write(board, buffer, length, 0, bytes_written); // no eoi
+	ret = bb_write(board, buffer, length, 0, bytes_written); /* no eoi */
 
 	for (i = 0; i < length; i++) {
 		if (buffer[i] == UNT) {
@@ -775,38 +776,38 @@ static int bb_command(struct gpib_board *board, uint8_t *buffer,
  ***************************************************************************/
 
 static char *cmd_string[32] = {
-	"",    // 0x00
-	"GTL", // 0x01
-	"",    // 0x02
-	"",    // 0x03
-	"SDC", // 0x04
-	"PPC", // 0x05
-	"",    // 0x06
-	"",    // 0x07
-	"GET", // 0x08
-	"TCT", // 0x09
-	"",    // 0x0a
-	"",    // 0x0b
-	"",    // 0x0c
-	"",    // 0x0d
-	"",    // 0x0e
-	"",    // 0x0f
-	"",    // 0x10
-	"LLO", // 0x11
-	"",    // 0x12
-	"",    // 0x13
-	"DCL", // 0x14
-	"PPU", // 0x15
-	"",    // 0x16
-	"",    // 0x17
-	"SPE", // 0x18
-	"SPD", // 0x19
-	"",    // 0x1a
-	"",    // 0x1b
-	"",    // 0x1c
-	"",    // 0x1d
-	"",    // 0x1e
-	"CFE"  // 0x1f
+	"",    /* 0x00 */
+	"GTL", /* 0x01 */
+	"",    /* 0x02 */
+	"",    /* 0x03 */
+	"SDC", /* 0x04 */
+	"PPC", /* 0x05 */
+	"",    /* 0x06 */
+	"",    /* 0x07 */
+	"GET", /* 0x08 */
+	"TCT", /* 0x09 */
+	"",    /* 0x0a */
+	"",    /* 0x0b */
+	"",    /* 0x0c */
+	"",    /* 0x0d */
+	"",    /* 0x0e */
+	"",    /* 0x0f */
+	"",    /* 0x10 */
+	"LLO", /* 0x11 */
+	"",    /* 0x12 */
+	"",    /* 0x13 */
+	"DCL", /* 0x14 */
+	"PPU", /* 0x15 */
+	"",    /* 0x16 */
+	"",    /* 0x17 */
+	"SPE", /* 0x18 */
+	"SPD", /* 0x19 */
+	"",    /* 0x1a */
+	"",    /* 0x1b */
+	"",    /* 0x1c */
+	"",    /* 0x1d */
+	"",    /* 0x1e */
+	"CFE"  /* 0x1f */
 };
 
 static void bb_buffer_print(struct gpib_board *board, unsigned char *buffer, size_t length,
@@ -858,7 +859,7 @@ static void set_atn(struct gpib_board *board, int atn_asserted)
 	} else {
 		if (priv->listener_state == listener_addressed) {
 			priv->listener_state = listener_active;
-			SET_DIR_READ(priv); // make sure holdoff is active when we unassert ATN
+			SET_DIR_READ(priv); /* make sure holdoff is active when we unassert ATN */
 		}
 		if (priv->talker_state == talker_addressed)
 			priv->talker_state = talker_active;
@@ -887,7 +888,7 @@ static void bb_request_system_control(struct gpib_board *board, int request_cont
 	dbg_printk(2, "%d\n", request_control);
 	if (request_control) {
 		set_bit(CIC_NUM, &board->status);
-		// drive DAV & EOI false, enable NRFD & NDAC irqs
+		/* drive DAV & EOI false, enable NRFD & NDAC irqs */
 		SET_DIR_WRITE(board->private_data);
 	} else {
 		clear_bit(CIC_NUM, &board->status);
@@ -947,7 +948,7 @@ static unsigned int bb_update_status(struct gpib_board *board, unsigned int clea
 
 	board->status &= ~clear_mask;
 
-	if (gpiod_get_value(SRQ))	       /* SRQ asserted low */
+	if (gpiod_get_value(SRQ))			/* SRQ asserted low */
 		clear_bit(SRQI_NUM, &board->status);
 	else
 		set_bit(SRQI_NUM, &board->status);
@@ -1006,7 +1007,7 @@ static void bb_serial_poll_response(struct gpib_board *board, uint8_t status)
 
 static uint8_t bb_serial_poll_status(struct gpib_board *board)
 {
-	return 0; // -ENOENT;
+	return 0; /* -ENOENT; */
 }
 
 static int bb_t1_delay(struct gpib_board *board,  unsigned int nano_sec)
@@ -1171,7 +1172,7 @@ try_again:
 	}
 	if (lookup_table)
 		gpiod_remove_lookup_table(lookup_table);
-	// Initialize LED trigger
+	/* Initialize LED trigger */
 	led_trigger_register_simple("gpib", &ledtrig_gpib);
 	return retval;
 }
@@ -1256,7 +1257,8 @@ static int bb_attach(struct gpib_board *board, const gpib_board_config_t *config
 	if (allocate_gpios(board))
 		goto bb_attach_fail;
 
-/* Configure SN7516X control lines.
+/*
+ * Configure SN7516X control lines.
  * drive ATN, IFC and REN as outputs only when master
  * i.e. system controller. In this mode can only be the CIC
  * When not master then enable device mode ATN, IFC & REN as inputs
@@ -1464,8 +1466,8 @@ static inline void SET_DIR_READ(struct bb_priv *priv)
 		gpiod_set_value(TE, 0);	 /* set NDAC and NRFD to transmit and DAV to receive */
 	}
 
-	gpiod_direction_output(NRFD, 0);  // hold off the talker
-	gpiod_direction_output(NDAC, 0);  // data not accepted
+	gpiod_direction_output(NRFD, 0);  /* hold off the talker */
+	gpiod_direction_output(NDAC, 0);  /* data not accepted */
 
 	priv->direction = DIR_READ;
 }
