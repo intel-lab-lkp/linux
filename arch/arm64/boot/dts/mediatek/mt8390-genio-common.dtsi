@@ -1199,7 +1199,13 @@
 };
 
 &ssusb2 {
-	dr_mode = "otg";
+	/*
+	 * the ssusb2 controller is one but we got two ports : one is routed
+	 * to the M.2 slot, the other is on the RPi header who does support
+	 * full OTG but we keep it disabled otherwise the BT on the M.2 slot
+	 * USB line goes obviously dead if switching to gadget mode.
+	 */
+	dr_mode = "host";
 	maximum-speed = "high-speed";
 	usb-role-switch;
 	vusb33-supply = <&mt6359_vusb_ldo_reg>;
