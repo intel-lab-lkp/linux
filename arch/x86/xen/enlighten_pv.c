@@ -1087,19 +1087,26 @@ static void xen_write_cr4(unsigned long cr4)
 	native_write_cr4(cr4);
 }
 
-static u64 xen_do_read_msr(unsigned int msr, int *err)
+/*
+ * Return true in xen_rdmsr_ret_type to indicate the requested MSR read has
+ * been done successfully.
+ */
+struct xen_rdmsr_ret_type xen_do_read_msr(u32 msr)
 {
-	u64 val = 0;	/* Avoid uninitialized value for safe variant. */
-	bool emulated;
+	struct xen_rdmsr_ret_type ret;
 
-	if (pmu_msr_chk_emulated(msr, &val, true, &emulated) && emulated)
-		return val;
+	ret.done = true;
 
-	if (err)
-		val = native_read_msr_safe(msr, err);
-	else
-		val = native_read_msr(msr);
+	if (pmu_msr_chk_emulated(msr, &ret.val, true, &ret.done) && ret.done)
+		return ret;
 
+	ret.val = 0;
+	ret.done = false;
+	return ret;
+}
+
+u64 xen_do_read_msr_fixup(u32 msr, u64 val)
+{
 	switch (msr) {
 	case MSR_IA32_APICBASE:
 		val &= ~X2APIC_ENABLE;
@@ -1108,7 +1115,11 @@ static u64 xen_do_read_msr(unsigned int msr, int *err)
 		else
 			val &= ~MSR_IA32_APICBASE_BSP;
 		break;
+
+	default:
+		break;
 	}
+
 	return val;
 }
 
@@ -1160,18 +1171,6 @@ bool xen_do_write_msr(u32 msr, u64 val)
 	}
 }
 
-static u64 xen_read_msr_safe(unsigned int msr, int *err)
-{
-	return xen_do_read_msr(msr, err);
-}
-
-static u64 xen_read_msr(unsigned int msr)
-{
-	int err;
-
-	return xen_do_read_msr(msr, xen_msr_safe ? &err : NULL);
-}
-
 /* This is called once we have the cpu_possible_mask */
 void __init xen_setup_vcpu_info_placement(void)
 {
@@ -1205,10 +1204,6 @@ static const typeof(pv_ops) xen_cpu_ops __initconst = {
 		.write_cr0 = xen_write_cr0,
 
 		.write_cr4 = xen_write_cr4,
-
-		.read_msr = xen_read_msr,
-
-		.read_msr_safe = xen_read_msr_safe,
 
 		.read_pmc = xen_read_pmc,
 

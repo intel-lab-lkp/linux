@@ -146,7 +146,14 @@ __visible unsigned long xen_read_cr2_direct(void);
 /* These are not functions, and cannot be called normally */
 __visible void xen_iret(void);
 
+struct xen_rdmsr_ret_type {
+	u64 val;
+	bool done;
+};
+
 extern bool xen_do_write_msr(u32 msr, u64 val);
+extern struct xen_rdmsr_ret_type xen_do_read_msr(u32 msr);
+extern u64 xen_do_read_msr_fixup(u32 msr, u64 val);
 
 extern int xen_panic_handler_init(void);
 
