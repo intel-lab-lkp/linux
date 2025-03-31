@@ -274,8 +274,7 @@ void xen_pmu_finish(int cpu);
 static inline void xen_pmu_init(int cpu) {}
 static inline void xen_pmu_finish(int cpu) {}
 #endif
-bool pmu_msr_read(u32 msr, u64 *val, int *err);
-bool pmu_msr_write(u32 msr, u64 val);
+bool pmu_msr_chk_emulated(u32 msr, u64 *val, bool is_read, bool *emul);
 int pmu_apic_update(uint32_t reg);
 unsigned long long xen_read_pmc(int counter);
 

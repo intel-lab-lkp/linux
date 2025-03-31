@@ -1090,8 +1090,9 @@ static void xen_write_cr4(unsigned long cr4)
 static u64 xen_do_read_msr(unsigned int msr, int *err)
 {
 	u64 val = 0;	/* Avoid uninitialized value for safe variant. */
+	bool emulated;
 
-	if (pmu_msr_read(msr, &val, err))
+	if (pmu_msr_chk_emulated(msr, &val, true, &emulated) && emulated)
 		return val;
 
 	if (err)
@@ -1134,6 +1135,7 @@ static void xen_do_write_msr(unsigned int msr, unsigned int low,
 			     unsigned int high, int *err)
 {
 	u64 val;
+	bool emulated;
 
 	switch (msr) {
 	case MSR_FS_BASE:
@@ -1163,12 +1165,13 @@ static void xen_do_write_msr(unsigned int msr, unsigned int low,
 	default:
 		val = (u64)high << 32 | low;
 
-		if (!pmu_msr_write(msr, val)) {
-			if (err)
-				*err = native_write_msr_safe(msr, val);
-			else
-				native_write_msr(msr, val);
-		}
+		if (pmu_msr_chk_emulated(msr, &val, false, &emulated) && emulated)
+			return;
+
+		if (err)
+			*err = native_write_msr_safe(msr, val);
+		else
+			native_write_msr(msr, val);
 	}
 }
 
