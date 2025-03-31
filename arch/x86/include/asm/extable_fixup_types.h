@@ -67,5 +67,6 @@
 #define	EX_TYPE_ZEROPAD			20 /* longword load with zeropad on fault */
 
 #define	EX_TYPE_ERETU			21
+#define	EX_TYPE_FUNC_REWIND		22
 
 #endif

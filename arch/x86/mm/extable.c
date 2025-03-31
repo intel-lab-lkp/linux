@@ -290,6 +290,27 @@ static bool ex_handler_eretu(const struct exception_table_entry *fixup,
 }
 #endif
 
+/*
+ * Emulate a fault taken at the call site of a function.
+ *
+ * The combined reg and flags field are used as an unsigned number of
+ * machine words to pop off the stack before the return address, then
+ * the signed imm field is used as a delta from the return IP address.
+ */
+static bool ex_handler_func_rewind(struct pt_regs *regs, int data)
+{
+	const long ipdelta = FIELD_GET(EX_DATA_IMM_MASK, data);
+	const unsigned long pops = FIELD_GET(EX_DATA_REG_MASK | EX_DATA_FLAG_MASK, data);
+	unsigned long *sp;
+
+	sp = (unsigned long *)regs->sp;
+	sp += pops;
+	regs->ip = *sp++ + ipdelta;
+	regs->sp = (unsigned long)sp;
+
+	return true;
+}
+
 int ex_get_fixup_type(unsigned long ip)
 {
 	const struct exception_table_entry *e = search_exception_tables(ip);
@@ -302,6 +323,7 @@ int fixup_exception(struct pt_regs *regs, int trapnr, unsigned long error_code,
 {
 	const struct exception_table_entry *e;
 	int type, reg, imm;
+	bool again;
 
 #ifdef CONFIG_PNPBIOS
 	if (unlikely(SEGMENT_IS_PNP_CODE(regs->cs))) {
@@ -317,60 +339,71 @@ int fixup_exception(struct pt_regs *regs, int trapnr, unsigned long error_code,
 	}
 #endif
 
-	e = search_exception_tables(regs->ip);
-	if (!e)
-		return 0;
+	do {
+		e = search_exception_tables(regs->ip);
+		if (!e)
+			return 0;
 
-	type = FIELD_GET(EX_DATA_TYPE_MASK, e->data);
-	reg  = FIELD_GET(EX_DATA_REG_MASK,  e->data);
-	imm  = FIELD_GET(EX_DATA_IMM_MASK,  e->data);
+		again = false;
 
-	switch (type) {
-	case EX_TYPE_DEFAULT:
-	case EX_TYPE_DEFAULT_MCE_SAFE:
-		return ex_handler_default(e, regs);
-	case EX_TYPE_FAULT:
-	case EX_TYPE_FAULT_MCE_SAFE:
-		return ex_handler_fault(e, regs, trapnr);
-	case EX_TYPE_UACCESS:
-		return ex_handler_uaccess(e, regs, trapnr, fault_addr);
-	case EX_TYPE_CLEAR_FS:
-		return ex_handler_clear_fs(e, regs);
-	case EX_TYPE_FPU_RESTORE:
-		return ex_handler_fprestore(e, regs);
-	case EX_TYPE_BPF:
-		return ex_handler_bpf(e, regs);
-	case EX_TYPE_WRMSR:
-		return ex_handler_msr(e, regs, true, false, reg);
-	case EX_TYPE_RDMSR:
-		return ex_handler_msr(e, regs, false, false, reg);
-	case EX_TYPE_WRMSR_SAFE:
-		return ex_handler_msr(e, regs, true, true, reg);
-	case EX_TYPE_RDMSR_SAFE:
-		return ex_handler_msr(e, regs, false, true, reg);
-	case EX_TYPE_WRMSR_IN_MCE:
-		ex_handler_msr_mce(regs, true);
-		break;
-	case EX_TYPE_RDMSR_IN_MCE:
-		ex_handler_msr_mce(regs, false);
-		break;
-	case EX_TYPE_POP_REG:
-		regs->sp += sizeof(long);
-		fallthrough;
-	case EX_TYPE_IMM_REG:
-		return ex_handler_imm_reg(e, regs, reg, imm);
-	case EX_TYPE_FAULT_SGX:
-		return ex_handler_sgx(e, regs, trapnr);
-	case EX_TYPE_UCOPY_LEN:
-		return ex_handler_ucopy_len(e, regs, trapnr, fault_addr, reg, imm);
-	case EX_TYPE_ZEROPAD:
-		return ex_handler_zeropad(e, regs, fault_addr);
+		type = FIELD_GET(EX_DATA_TYPE_MASK, e->data);
+		reg  = FIELD_GET(EX_DATA_REG_MASK,  e->data);
+		imm  = FIELD_GET(EX_DATA_IMM_MASK,  e->data);
+
+		switch (type) {
+		case EX_TYPE_DEFAULT:
+		case EX_TYPE_DEFAULT_MCE_SAFE:
+			return ex_handler_default(e, regs);
+		case EX_TYPE_FAULT:
+		case EX_TYPE_FAULT_MCE_SAFE:
+			return ex_handler_fault(e, regs, trapnr);
+		case EX_TYPE_UACCESS:
+			return ex_handler_uaccess(e, regs, trapnr, fault_addr);
+		case EX_TYPE_CLEAR_FS:
+			return ex_handler_clear_fs(e, regs);
+		case EX_TYPE_FPU_RESTORE:
+			return ex_handler_fprestore(e, regs);
+		case EX_TYPE_BPF:
+			return ex_handler_bpf(e, regs);
+		case EX_TYPE_WRMSR:
+			return ex_handler_msr(e, regs, true, false, reg);
+		case EX_TYPE_RDMSR:
+			return ex_handler_msr(e, regs, false, false, reg);
+		case EX_TYPE_WRMSR_SAFE:
+			return ex_handler_msr(e, regs, true, true, reg);
+		case EX_TYPE_RDMSR_SAFE:
+			return ex_handler_msr(e, regs, false, true, reg);
+		case EX_TYPE_WRMSR_IN_MCE:
+			ex_handler_msr_mce(regs, true);
+			break;
+		case EX_TYPE_RDMSR_IN_MCE:
+			ex_handler_msr_mce(regs, false);
+			break;
+		case EX_TYPE_POP_REG:
+			regs->sp += sizeof(long);
+			fallthrough;
+		case EX_TYPE_IMM_REG:
+			return ex_handler_imm_reg(e, regs, reg, imm);
+		case EX_TYPE_FAULT_SGX:
+			return ex_handler_sgx(e, regs, trapnr);
+		case EX_TYPE_UCOPY_LEN:
+			return ex_handler_ucopy_len(e, regs, trapnr, fault_addr, reg, imm);
+		case EX_TYPE_ZEROPAD:
+			return ex_handler_zeropad(e, regs, fault_addr);
 #ifdef CONFIG_X86_FRED
-	case EX_TYPE_ERETU:
-		return ex_handler_eretu(e, regs, error_code);
+		case EX_TYPE_ERETU:
+			return ex_handler_eretu(e, regs, error_code);
 #endif
-	}
+		case EX_TYPE_FUNC_REWIND:
+			again = ex_handler_func_rewind(regs, e->data);
+			break;
+		default:
+			break;	/* Will BUG() */
+		}
+	} while (again);
+
 	BUG();
+	return 0;
 }
 
 extern unsigned int early_recursion_flag;
