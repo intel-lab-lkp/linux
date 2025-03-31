@@ -111,9 +111,6 @@ static __always_inline u64 native_rdmsrl(const u32 msr)
 	return __rdmsr(msr);
 }
 
-#define native_wrmsr(msr, low, high)			\
-	__wrmsr((msr), ((u64)(high) << 32) | (low))
-
 #define native_wrmsrl(msr, val)				\
 	__wrmsr((msr), (val))
 
@@ -253,23 +250,12 @@ do {								\
 	(void)((high) = (u32)(__val >> 32));			\
 } while (0)
 
-static inline void wrmsr(u32 msr, u32 low, u32 high)
-{
-	native_write_msr(msr, (u64)high << 32 | low);
-}
-
 #define rdmsrl(msr, val)			\
 	((val) = native_read_msr((msr)))
 
 static inline void wrmsrl(u32 msr, u64 val)
 {
 	native_write_msr(msr, val);
-}
-
-/* wrmsr with exception handling */
-static inline int wrmsr_safe(u32 msr, u32 low, u32 high)
-{
-	return native_write_msr_safe(msr, (u64)high << 32 | low);
 }
 
 /* rdmsr with exception handling */
@@ -321,7 +307,7 @@ static __always_inline void wrmsrns(u32 msr, u64 val)
  */
 static inline int wrmsrl_safe(u32 msr, u64 val)
 {
-	return wrmsr_safe(msr, (u32)val,  (u32)(val >> 32));
+	return native_write_msr_safe(msr, val);
 }
 
 struct msr __percpu *msrs_alloc(void);
@@ -380,7 +366,7 @@ static inline int rdmsr_safe_on_cpu(unsigned int cpu, u32 msr_no,
 }
 static inline int wrmsr_safe_on_cpu(unsigned int cpu, u32 msr_no, u32 l, u32 h)
 {
-	return wrmsr_safe(msr_no, l, h);
+	return wrmsrl_safe(msr_no, (u64)h << 32 | l);
 }
 static inline int rdmsrl_safe_on_cpu(unsigned int cpu, u32 msr_no, u64 *q)
 {
