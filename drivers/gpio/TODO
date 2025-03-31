@@ -186,3 +186,17 @@ their hardware offsets within the chip.
 
 Encourage users to switch to using them and eventually remove the existing
 global export/unexport attribues.
+
+-------------------------------------------------------------------------------
+
+Remove GPIOD_FLAGS_BIT_NONEXCLUSIVE
+
+This flag is an awful workaround that was created for some regulator
+corner-cases but got out of hand and is now used in at least 33 places
+treewide. Unlike what the intuition may tell users, it's not a reference
+counted mechanisms like what clocks or regulators use but just a raw access
+to the same GPIO descriptor from multiple places with no synchronization (other
+than what the underying driver offers). It doesn't even correctly support
+releasing the supposedly non-exclusive GPIOs. This whole thing should go and be
+replaced with a better solution - for exampe: using the relatively new power
+sequencing subsystem.
