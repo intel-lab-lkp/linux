@@ -1012,8 +1012,9 @@ static int extron_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 	for (i = 0; i < msg->len - 1; i++)
 		sprintf(buf + i * 3, "%%%02X", msg->msg[i + 1]);
 	snprintf(cmd, sizeof(cmd), "W%c%u*%u*%u*%sDCEC",
-		 port->direction, port->port.port,
-		 cec_msg_initiator(msg), cec_msg_destination(msg), buf);
+		 port->direction, port->port.port % 10,
+		 cec_msg_initiator(msg) % 10, cec_msg_destination(msg) % 10,
+		 buf);
 	return extron_send_and_wait(port->extron, port, cmd, NULL);
 }
 
