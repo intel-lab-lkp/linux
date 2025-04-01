@@ -9,11 +9,24 @@
 
 #include <linux/cpumask.h>
 #include <linux/cc_platform.h>
+#include <linux/percpu-defs.h>
 
 #include <asm/apic.h>
 #include <asm/sev.h>
 
 #include "local.h"
+
+/* APIC_EILVTn(3) is the last defined APIC register. */
+#define NR_APIC_REGS	(APIC_EILVTn(4) >> 2)
+
+struct apic_page {
+	union {
+		u32	regs[NR_APIC_REGS];
+		u8	bytes[PAGE_SIZE];
+	};
+} __aligned(PAGE_SIZE);
+
+static struct apic_page __percpu *apic_page __ro_after_init;
 
 static int x2apic_savic_acpi_madt_oem_check(char *oem_id, char *oem_table_id)
 {
@@ -60,6 +73,30 @@ static void x2apic_savic_send_ipi_mask_allbutself(const struct cpumask *mask, in
 	__send_ipi_mask(mask, vector, true);
 }
 
+static void x2apic_savic_setup(void)
+{
+	void *backing_page;
+	enum es_result ret;
+	unsigned long gpa;
+
+	backing_page = this_cpu_ptr(apic_page);
+	gpa = __pa(backing_page);
+
+	/*
+	 * The NPT entry for a vCPU's APIC backing page must always be
+	 * present when the vCPU is running in order for Secure AVIC to
+	 * function. A VMEXIT_BUSY is returned on VMRUN and the vCPU cannot
+	 * be resumed if the NPT entry for the APIC backing page is not
+	 * present. Notify GPA of the vCPU's APIC backing page to the
+	 * hypervisor by calling savic_register_gpa(). Before executing
+	 * VMRUN, the hypervisor makes use of this information to make sure
+	 * the APIC backing page is mapped in NPT.
+	 */
+	ret = savic_register_gpa(gpa);
+	if (ret != ES_OK)
+		snp_abort();
+}
+
 static int x2apic_savic_probe(void)
 {
 	if (!cc_platform_has(CC_ATTR_SNP_SECURE_AVIC))
@@ -70,6 +107,10 @@ static int x2apic_savic_probe(void)
 		snp_abort();
 	}
 
+	apic_page = alloc_percpu(struct apic_page);
+	if (!apic_page)
+		snp_abort();
+
 	return 1;
 }
 
@@ -78,6 +119,7 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 	.name				= "secure avic x2apic",
 	.probe				= x2apic_savic_probe,
 	.acpi_madt_oem_check		= x2apic_savic_acpi_madt_oem_check,
+	.setup				= x2apic_savic_setup,
 
 	.dest_mode_logical		= false,
 
