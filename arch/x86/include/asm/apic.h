@@ -338,6 +338,7 @@ struct apic_override {
 	void	(*icr_write)(u32 low, u32 high);
 	int	(*wakeup_secondary_cpu)(u32 apicid, unsigned long start_eip);
 	int	(*wakeup_secondary_cpu_64)(u32 apicid, unsigned long start_eip);
+	void	(*update_vector)(unsigned int cpu, unsigned int vector, bool set);
 };
 
 /*
@@ -397,6 +398,7 @@ DECLARE_APIC_CALL(wait_icr_idle);
 DECLARE_APIC_CALL(wakeup_secondary_cpu);
 DECLARE_APIC_CALL(wakeup_secondary_cpu_64);
 DECLARE_APIC_CALL(write);
+DECLARE_APIC_CALL(update_vector);
 
 static __always_inline u32 apic_read(u32 reg)
 {
@@ -473,6 +475,11 @@ static __always_inline bool apic_id_valid(u32 apic_id)
 	return apic_id <= apic->max_apic_id;
 }
 
+static __always_inline void apic_update_vector(unsigned int cpu, unsigned int vector, bool set)
+{
+	static_call(apic_call_update_vector)(cpu, vector, set);
+}
+
 #else /* CONFIG_X86_LOCAL_APIC */
 
 static inline u32 apic_read(u32 reg) { return 0; }
@@ -484,6 +491,7 @@ static inline void apic_wait_icr_idle(void) { }
 static inline u32 safe_apic_wait_icr_idle(void) { return 0; }
 static inline void apic_native_eoi(void) { WARN_ON_ONCE(1); }
 static inline void apic_setup_apic_calls(void) { }
+static inline void apic_update_vector(unsigned int cpu, unsigned int vector, bool set) { }
 
 #define apic_update_callback(_callback, _fn) do { } while (0)
 

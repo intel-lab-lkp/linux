@@ -139,12 +139,6 @@ static void apic_update_irq_cfg(struct irq_data *irqd, unsigned int vector,
 			    apicd->hw_irq_cfg.dest_apicid);
 }
 
-static inline void apic_update_vector(unsigned int cpu, unsigned int vector, bool set)
-{
-	if (apic->update_vector)
-		apic->update_vector(cpu, vector, set);
-}
-
 static int irq_alloc_vector(const struct cpumask *dest, bool resvd, unsigned int *cpu)
 {
 	int vector;

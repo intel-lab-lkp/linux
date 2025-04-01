@@ -29,6 +29,7 @@ DEFINE_APIC_CALL(wait_icr_idle);
 DEFINE_APIC_CALL(wakeup_secondary_cpu);
 DEFINE_APIC_CALL(wakeup_secondary_cpu_64);
 DEFINE_APIC_CALL(write);
+DEFINE_APIC_CALL(update_vector);
 
 EXPORT_STATIC_CALL_TRAMP_GPL(apic_call_send_IPI_mask);
 EXPORT_STATIC_CALL_TRAMP_GPL(apic_call_send_IPI_self);
@@ -56,6 +57,7 @@ static __init void restore_override_callbacks(void)
 	apply_override(icr_write);
 	apply_override(wakeup_secondary_cpu);
 	apply_override(wakeup_secondary_cpu_64);
+	apply_override(update_vector);
 }
 
 #define update_call(__cb)					\
@@ -78,6 +80,7 @@ static __init void update_static_calls(void)
 	update_call(wait_icr_idle);
 	update_call(wakeup_secondary_cpu);
 	update_call(wakeup_secondary_cpu_64);
+	update_call(update_vector);
 }
 
 void __init apic_setup_apic_calls(void)
