@@ -1098,8 +1098,13 @@ static void bond_do_fail_over_mac(struct bonding *bond,
 			old_active = bond_get_old_active(bond, new_active);
 
 		if (old_active) {
-			bond_hw_addr_copy(tmp_mac, new_active->dev->dev_addr,
-					  new_active->dev->addr_len);
+			if (memcmp(old_active->dev->dev_addr, new_active->dev->dev_addr,
+				   new_active->dev->addr_len) == 0)
+				bond_hw_addr_copy(tmp_mac, new_active->perm_hwaddr,
+						  new_active->dev->addr_len);
+			else
+				bond_hw_addr_copy(tmp_mac, new_active->dev->dev_addr,
+						  new_active->dev->addr_len);
 			bond_hw_addr_copy(ss.__data,
 					  old_active->dev->dev_addr,
 					  old_active->dev->addr_len);
