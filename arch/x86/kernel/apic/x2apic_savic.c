@@ -185,6 +185,24 @@ static void x2apic_savic_send_ipi_mask_allbutself(const struct cpumask *mask, in
 	__send_ipi_mask(mask, vector, true);
 }
 
+static void x2apic_savic_update_vector(unsigned int cpu, unsigned int vector, bool set)
+{
+	struct apic_page *ap = per_cpu_ptr(apic_page, cpu);
+	unsigned long *sirr = (unsigned long *) &ap->bytes[SAVIC_ALLOWED_IRR];
+	unsigned int bit;
+
+	/*
+	 * The registers are 32-bit wide and 16-byte aligned.
+	 * Compensate for the resulting bit number spacing.
+	 */
+	bit = vector + 96 * (vector / 32);
+
+	if (set)
+		set_bit(bit, sirr);
+	else
+		clear_bit(bit, sirr);
+}
+
 static void init_apic_page(void)
 {
 	u32 apic_id;
@@ -271,6 +289,8 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 	.eoi				= native_apic_msr_eoi,
 	.icr_read			= native_x2apic_icr_read,
 	.icr_write			= native_x2apic_icr_write,
+
+	.update_vector			= x2apic_savic_update_vector,
 };
 
 apic_driver(apic_x2apic_savic);
