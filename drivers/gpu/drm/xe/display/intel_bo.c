@@ -59,3 +59,13 @@ void intel_bo_describe(struct seq_file *m, struct drm_gem_object *obj)
 {
 	/* FIXME */
 }
+
+void intel_bo_panic_map(struct drm_gem_object *obj, struct iosys_map *map)
+{
+	struct xe_bo *bo = gem_to_xe_bo(obj);
+	int ret;
+
+	ret = ttm_bo_vmap(&bo->ttm, map);
+	if (ret)
+		iosys_map_clear(map);
+}
