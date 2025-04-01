@@ -6,7 +6,7 @@
 #include <asm/page.h>
 
 #define __HAVE_ARCH_HUGE_PTEP_CLEAR_FLUSH
-static inline pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
+static inline pte_t huge_ptep_clear_flush(struct mm_area *vma,
 					  unsigned long addr, pte_t *ptep)
 {
 	return *ptep;

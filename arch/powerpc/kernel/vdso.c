@@ -42,7 +42,7 @@ extern char vdso64_start, vdso64_end;
 
 long sys_ni_syscall(void);
 
-static int vdso_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma,
+static int vdso_mremap(const struct vm_special_mapping *sm, struct mm_area *new_vma,
 		       unsigned long text_size)
 {
 	unsigned long new_size = new_vma->vm_end - new_vma->vm_start;
@@ -55,17 +55,17 @@ static int vdso_mremap(const struct vm_special_mapping *sm, struct vm_area_struc
 	return 0;
 }
 
-static int vdso32_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
+static int vdso32_mremap(const struct vm_special_mapping *sm, struct mm_area *new_vma)
 {
 	return vdso_mremap(sm, new_vma, &vdso32_end - &vdso32_start);
 }
 
-static int vdso64_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
+static int vdso64_mremap(const struct vm_special_mapping *sm, struct mm_area *new_vma)
 {
 	return vdso_mremap(sm, new_vma, &vdso64_end - &vdso64_start);
 }
 
-static void vdso_close(const struct vm_special_mapping *sm, struct vm_area_struct *vma)
+static void vdso_close(const struct vm_special_mapping *sm, struct mm_area *vma)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -102,7 +102,7 @@ static int __arch_setup_additional_pages(struct linux_binprm *bprm, int uses_int
 	struct vm_special_mapping *vdso_spec;
 	unsigned long vvar_size = VDSO_NR_PAGES * PAGE_SIZE;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	if (is_32bit_task()) {
 		vdso_spec = &vdso32_spec;

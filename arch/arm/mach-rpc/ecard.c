@@ -213,7 +213,7 @@ static DEFINE_MUTEX(ecard_mutex);
  */
 static void ecard_init_pgtables(struct mm_struct *mm)
 {
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, VM_EXEC);
+	struct mm_area vma = TLB_FLUSH_VMA(mm, VM_EXEC);
 
 	/* We want to set up the page tables for the following mapping:
 	 *  Virtual	Physical

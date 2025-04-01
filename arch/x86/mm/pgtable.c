@@ -458,7 +458,7 @@ void pgd_free(struct mm_struct *mm, pgd_t *pgd)
  * to also make the pte writeable at the same time the dirty bit is
  * set. In that case we do actually need to write the PTE.
  */
-int ptep_set_access_flags(struct vm_area_struct *vma,
+int ptep_set_access_flags(struct mm_area *vma,
 			  unsigned long address, pte_t *ptep,
 			  pte_t entry, int dirty)
 {
@@ -471,7 +471,7 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-int pmdp_set_access_flags(struct vm_area_struct *vma,
+int pmdp_set_access_flags(struct mm_area *vma,
 			  unsigned long address, pmd_t *pmdp,
 			  pmd_t entry, int dirty)
 {
@@ -492,7 +492,7 @@ int pmdp_set_access_flags(struct vm_area_struct *vma,
 	return changed;
 }
 
-int pudp_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+int pudp_set_access_flags(struct mm_area *vma, unsigned long address,
 			  pud_t *pudp, pud_t entry, int dirty)
 {
 	int changed = !pud_same(*pudp, entry);
@@ -513,7 +513,7 @@ int pudp_set_access_flags(struct vm_area_struct *vma, unsigned long address,
 }
 #endif
 
-int ptep_test_and_clear_young(struct vm_area_struct *vma,
+int ptep_test_and_clear_young(struct mm_area *vma,
 			      unsigned long addr, pte_t *ptep)
 {
 	int ret = 0;
@@ -526,7 +526,7 @@ int ptep_test_and_clear_young(struct vm_area_struct *vma,
 }
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG)
-int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+int pmdp_test_and_clear_young(struct mm_area *vma,
 			      unsigned long addr, pmd_t *pmdp)
 {
 	int ret = 0;
@@ -540,7 +540,7 @@ int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 #endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-int pudp_test_and_clear_young(struct vm_area_struct *vma,
+int pudp_test_and_clear_young(struct mm_area *vma,
 			      unsigned long addr, pud_t *pudp)
 {
 	int ret = 0;
@@ -553,7 +553,7 @@ int pudp_test_and_clear_young(struct vm_area_struct *vma,
 }
 #endif
 
-int ptep_clear_flush_young(struct vm_area_struct *vma,
+int ptep_clear_flush_young(struct mm_area *vma,
 			   unsigned long address, pte_t *ptep)
 {
 	/*
@@ -573,7 +573,7 @@ int ptep_clear_flush_young(struct vm_area_struct *vma,
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-int pmdp_clear_flush_young(struct vm_area_struct *vma,
+int pmdp_clear_flush_young(struct mm_area *vma,
 			   unsigned long address, pmd_t *pmdp)
 {
 	int young;
@@ -587,7 +587,7 @@ int pmdp_clear_flush_young(struct vm_area_struct *vma,
 	return young;
 }
 
-pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_invalidate_ad(struct mm_area *vma, unsigned long address,
 			 pmd_t *pmdp)
 {
 	VM_WARN_ON_ONCE(!pmd_present(*pmdp));
@@ -602,7 +602,7 @@ pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma, unsigned long address,
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && \
 	defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)
-pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
+pud_t pudp_invalidate(struct mm_area *vma, unsigned long address,
 		     pud_t *pudp)
 {
 	VM_WARN_ON_ONCE(!pud_present(*pudp));
@@ -858,7 +858,7 @@ int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 #endif /* CONFIG_X86_64 */
 #endif	/* CONFIG_HAVE_ARCH_HUGE_VMAP */
 
-pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
+pte_t pte_mkwrite(pte_t pte, struct mm_area *vma)
 {
 	if (vma->vm_flags & VM_SHADOW_STACK)
 		return pte_mkwrite_shstk(pte);
@@ -868,7 +868,7 @@ pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
 	return pte_clear_saveddirty(pte);
 }
 
-pmd_t pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
+pmd_t pmd_mkwrite(pmd_t pmd, struct mm_area *vma)
 {
 	if (vma->vm_flags & VM_SHADOW_STACK)
 		return pmd_mkwrite_shstk(pmd);
@@ -878,7 +878,7 @@ pmd_t pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
 	return pmd_clear_saveddirty(pmd);
 }
 
-void arch_check_zapped_pte(struct vm_area_struct *vma, pte_t pte)
+void arch_check_zapped_pte(struct mm_area *vma, pte_t pte)
 {
 	/*
 	 * Hardware before shadow stack can (rarely) set Dirty=1
@@ -891,14 +891,14 @@ void arch_check_zapped_pte(struct vm_area_struct *vma, pte_t pte)
 			pte_shstk(pte));
 }
 
-void arch_check_zapped_pmd(struct vm_area_struct *vma, pmd_t pmd)
+void arch_check_zapped_pmd(struct mm_area *vma, pmd_t pmd)
 {
 	/* See note in arch_check_zapped_pte() */
 	VM_WARN_ON_ONCE(!(vma->vm_flags & VM_SHADOW_STACK) &&
 			pmd_shstk(pmd));
 }
 
-void arch_check_zapped_pud(struct vm_area_struct *vma, pud_t pud)
+void arch_check_zapped_pud(struct mm_area *vma, pud_t pud)
 {
 	/* See note in arch_check_zapped_pte() */
 	VM_WARN_ON_ONCE(!(vma->vm_flags & VM_SHADOW_STACK) && pud_shstk(pud));

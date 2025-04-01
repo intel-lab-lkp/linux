@@ -24,7 +24,7 @@ struct file;
 struct dentry;
 struct iattr;
 struct seq_file;
-struct vm_area_struct;
+struct mm_area;
 struct vm_operations_struct;
 struct super_block;
 struct file_system_type;
@@ -322,7 +322,7 @@ struct kernfs_ops {
 	__poll_t (*poll)(struct kernfs_open_file *of,
 			 struct poll_table_struct *pt);
 
-	int (*mmap)(struct kernfs_open_file *of, struct vm_area_struct *vma);
+	int (*mmap)(struct kernfs_open_file *of, struct mm_area *vma);
 	loff_t (*llseek)(struct kernfs_open_file *of, loff_t offset, int whence);
 };
 

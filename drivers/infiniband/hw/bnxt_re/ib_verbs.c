@@ -4425,7 +4425,7 @@ static struct bnxt_re_srq *bnxt_re_search_for_srq(struct bnxt_re_dev *rdev, u32 
 }
 
 /* Helper function to mmap the virtual memory from user app */
-int bnxt_re_mmap(struct ib_ucontext *ib_uctx, struct vm_area_struct *vma)
+int bnxt_re_mmap(struct ib_ucontext *ib_uctx, struct mm_area *vma)
 {
 	struct bnxt_re_ucontext *uctx = container_of(ib_uctx,
 						   struct bnxt_re_ucontext,

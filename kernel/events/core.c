@@ -6638,7 +6638,7 @@ void ring_buffer_put(struct perf_buffer *rb)
 	call_rcu(&rb->rcu_head, rb_free_rcu);
 }
 
-static void perf_mmap_open(struct vm_area_struct *vma)
+static void perf_mmap_open(struct mm_area *vma)
 {
 	struct perf_event *event = vma->vm_file->private_data;
 
@@ -6662,7 +6662,7 @@ static void perf_pmu_output_stop(struct perf_event *event);
  * the buffer here, where we still have a VM context. This means we need
  * to detach all events redirecting to us.
  */
-static void perf_mmap_close(struct vm_area_struct *vma)
+static void perf_mmap_close(struct mm_area *vma)
 {
 	struct perf_event *event = vma->vm_file->private_data;
 	struct perf_buffer *rb = ring_buffer_get(event);
@@ -6784,7 +6784,7 @@ static const struct vm_operations_struct perf_mmap_vmops = {
 	.pfn_mkwrite	= perf_mmap_pfn_mkwrite,
 };
 
-static int map_range(struct perf_buffer *rb, struct vm_area_struct *vma)
+static int map_range(struct perf_buffer *rb, struct mm_area *vma)
 {
 	unsigned long nr_pages = vma_pages(vma);
 	int err = 0;
@@ -6853,7 +6853,7 @@ static int map_range(struct perf_buffer *rb, struct vm_area_struct *vma)
 	return err;
 }
 
-static int perf_mmap(struct file *file, struct vm_area_struct *vma)
+static int perf_mmap(struct file *file, struct mm_area *vma)
 {
 	struct perf_event *event = file->private_data;
 	unsigned long user_locked, user_lock_limit;
@@ -9155,7 +9155,7 @@ static void perf_event_cgroup(struct cgroup *cgrp)
  */
 
 struct perf_mmap_event {
-	struct vm_area_struct	*vma;
+	struct mm_area	*vma;
 
 	const char		*file_name;
 	int			file_size;
@@ -9181,7 +9181,7 @@ static int perf_event_mmap_match(struct perf_event *event,
 				 void *data)
 {
 	struct perf_mmap_event *mmap_event = data;
-	struct vm_area_struct *vma = mmap_event->vma;
+	struct mm_area *vma = mmap_event->vma;
 	int executable = vma->vm_flags & VM_EXEC;
 
 	return (!executable && event->attr.mmap_data) ||
@@ -9257,7 +9257,7 @@ out:
 
 static void perf_event_mmap_event(struct perf_mmap_event *mmap_event)
 {
-	struct vm_area_struct *vma = mmap_event->vma;
+	struct mm_area *vma = mmap_event->vma;
 	struct file *file = vma->vm_file;
 	int maj = 0, min = 0;
 	u64 ino = 0, gen = 0;
@@ -9387,7 +9387,7 @@ static bool perf_addr_filter_match(struct perf_addr_filter *filter,
 }
 
 static bool perf_addr_filter_vma_adjust(struct perf_addr_filter *filter,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					struct perf_addr_filter_range *fr)
 {
 	unsigned long vma_size = vma->vm_end - vma->vm_start;
@@ -9411,7 +9411,7 @@ static bool perf_addr_filter_vma_adjust(struct perf_addr_filter *filter,
 static void __perf_addr_filters_adjust(struct perf_event *event, void *data)
 {
 	struct perf_addr_filters_head *ifh = perf_event_addr_filters(event);
-	struct vm_area_struct *vma = data;
+	struct mm_area *vma = data;
 	struct perf_addr_filter *filter;
 	unsigned int restart = 0, count = 0;
 	unsigned long flags;
@@ -9442,7 +9442,7 @@ static void __perf_addr_filters_adjust(struct perf_event *event, void *data)
 /*
  * Adjust all task's events' filters to the new vma
  */
-static void perf_addr_filters_adjust(struct vm_area_struct *vma)
+static void perf_addr_filters_adjust(struct mm_area *vma)
 {
 	struct perf_event_context *ctx;
 
@@ -9460,7 +9460,7 @@ static void perf_addr_filters_adjust(struct vm_area_struct *vma)
 	rcu_read_unlock();
 }
 
-void perf_event_mmap(struct vm_area_struct *vma)
+void perf_event_mmap(struct mm_area *vma)
 {
 	struct perf_mmap_event mmap_event;
 
@@ -11255,7 +11255,7 @@ static void perf_addr_filter_apply(struct perf_addr_filter *filter,
 				   struct mm_struct *mm,
 				   struct perf_addr_filter_range *fr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	for_each_vma(vmi, vma) {

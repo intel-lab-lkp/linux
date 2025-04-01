@@ -29,7 +29,7 @@ void sync_icache_aliases(unsigned long start, unsigned long end)
 	}
 }
 
-static void flush_ptrace_access(struct vm_area_struct *vma, unsigned long start,
+static void flush_ptrace_access(struct mm_area *vma, unsigned long start,
 				unsigned long end)
 {
 	if (vma->vm_flags & VM_EXEC)
@@ -41,7 +41,7 @@ static void flush_ptrace_access(struct vm_area_struct *vma, unsigned long start,
  * address space.  Really, we want to allow our "user space" model to handle
  * this.
  */
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		       unsigned long uaddr, void *dst, const void *src,
 		       unsigned long len)
 {

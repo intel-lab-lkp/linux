@@ -173,7 +173,7 @@ create_elf_tables(struct linux_binprm *bprm, const struct elfhdr *exec,
 	elf_addr_t flags = 0;
 	int ei_index;
 	const struct cred *cred = current_cred();
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	/*
 	 * In some cases (e.g. Hyper-Threading), we want to avoid L1

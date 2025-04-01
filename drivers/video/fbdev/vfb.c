@@ -76,7 +76,7 @@ static int vfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 static int vfb_pan_display(struct fb_var_screeninfo *var,
 			   struct fb_info *info);
 static int vfb_mmap(struct fb_info *info,
-		    struct vm_area_struct *vma);
+		    struct mm_area *vma);
 
 static const struct fb_ops vfb_ops = {
 	.owner		= THIS_MODULE,
@@ -380,7 +380,7 @@ static int vfb_pan_display(struct fb_var_screeninfo *var,
      */
 
 static int vfb_mmap(struct fb_info *info,
-		    struct vm_area_struct *vma)
+		    struct mm_area *vma)
 {
 	vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
 

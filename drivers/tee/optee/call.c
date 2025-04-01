@@ -611,7 +611,7 @@ static bool is_normal_memory(pgprot_t p)
 static int __check_mem_type(struct mm_struct *mm, unsigned long start,
 				unsigned long end)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, start);
 
 	for_each_vma_range(vmi, vma, end) {

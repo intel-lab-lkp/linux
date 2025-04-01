@@ -702,7 +702,7 @@ uvc_v4l2_release(struct file *file)
 }
 
 static int
-uvc_v4l2_mmap(struct file *file, struct vm_area_struct *vma)
+uvc_v4l2_mmap(struct file *file, struct mm_area *vma)
 {
 	struct video_device *vdev = video_devdata(file);
 	struct uvc_device *uvc = video_get_drvdata(vdev);

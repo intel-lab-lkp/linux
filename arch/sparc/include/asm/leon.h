@@ -195,7 +195,7 @@ static inline int sparc_leon3_cpuid(void)
 #define LEON2_CFG_SSIZE_MASK 0x00007000UL
 
 #ifndef __ASSEMBLY__
-struct vm_area_struct;
+struct mm_area;
 
 unsigned long leon_swprobe(unsigned long vaddr, unsigned long *paddr);
 void leon_flush_icache_all(void);
@@ -204,7 +204,7 @@ void leon_flush_cache_all(void);
 void leon_flush_tlb_all(void);
 extern int leon_flush_during_switch;
 int leon_flush_needed(void);
-void leon_flush_pcache_all(struct vm_area_struct *vma, unsigned long page);
+void leon_flush_pcache_all(struct mm_area *vma, unsigned long page);
 
 /* struct that hold LEON3 cache configuration registers */
 struct leon3_cacheregs {

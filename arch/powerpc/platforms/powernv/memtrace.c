@@ -45,7 +45,7 @@ static ssize_t memtrace_read(struct file *filp, char __user *ubuf,
 	return simple_read_from_buffer(ubuf, count, ppos, ent->mem, ent->size);
 }
 
-static int memtrace_mmap(struct file *filp, struct vm_area_struct *vma)
+static int memtrace_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct memtrace_entry *ent = filp->private_data;
 

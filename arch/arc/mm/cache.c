@@ -880,7 +880,7 @@ noinline void flush_cache_all(void)
 }
 
 void copy_user_highpage(struct page *to, struct page *from,
-	unsigned long u_vaddr, struct vm_area_struct *vma)
+	unsigned long u_vaddr, struct mm_area *vma)
 {
 	struct folio *src = page_folio(from);
 	struct folio *dst = page_folio(to);

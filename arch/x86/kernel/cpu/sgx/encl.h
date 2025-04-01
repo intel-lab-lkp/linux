@@ -87,9 +87,9 @@ struct sgx_backing {
 extern const struct vm_operations_struct sgx_vm_ops;
 
 static inline int sgx_encl_find(struct mm_struct *mm, unsigned long addr,
-				struct vm_area_struct **vma)
+				struct mm_area **vma)
 {
-	struct vm_area_struct *result;
+	struct mm_area *result;
 
 	result = vma_lookup(mm, addr);
 	if (!result || result->vm_ops != &sgx_vm_ops)

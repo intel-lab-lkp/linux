@@ -43,7 +43,7 @@ struct page;
 
 #include <abi/page.h>
 
-struct vm_area_struct;
+struct mm_area;
 
 typedef struct { unsigned long pte_low; } pte_t;
 #define pte_val(x)	((x).pte_low)

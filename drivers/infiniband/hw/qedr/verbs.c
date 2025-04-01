@@ -385,7 +385,7 @@ void qedr_mmap_free(struct rdma_user_mmap_entry *rdma_entry)
 	kfree(entry);
 }
 
-int qedr_mmap(struct ib_ucontext *ucontext, struct vm_area_struct *vma)
+int qedr_mmap(struct ib_ucontext *ucontext, struct mm_area *vma)
 {
 	struct ib_device *dev = ucontext->device;
 	size_t length = vma->vm_end - vma->vm_start;

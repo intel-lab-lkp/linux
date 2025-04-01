@@ -22,7 +22,7 @@
 
 static vm_fault_t psb_fbdev_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct fb_info *info = vma->vm_private_data;
 	unsigned long address = vmf->address - (vmf->pgoff << PAGE_SHIFT);
 	unsigned long pfn = info->fix.smem_start >> PAGE_SHIFT;
@@ -93,7 +93,7 @@ static int psb_fbdev_fb_setcolreg(unsigned int regno,
 	return 0;
 }
 
-static int psb_fbdev_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int psb_fbdev_fb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	if (vma->vm_pgoff != 0)
 		return -EINVAL;

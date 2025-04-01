@@ -295,7 +295,7 @@ static int loongson_pcm_close(struct snd_soc_component *component,
 
 static int loongson_pcm_mmap(struct snd_soc_component *component,
 			     struct snd_pcm_substream *substream,
-			     struct vm_area_struct *vma)
+			     struct mm_area *vma)
 {
 	return remap_pfn_range(vma, vma->vm_start,
 			substream->dma_buffer.addr >> PAGE_SHIFT,

@@ -272,7 +272,7 @@ out_unlock:
 	drm_exec_fini(&exec);
 }
 
-static int amdgpu_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int amdgpu_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(obj);
 

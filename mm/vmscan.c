@@ -3322,7 +3322,7 @@ static void reset_batch_size(struct lru_gen_mm_walk *walk)
 static int should_skip_vma(unsigned long start, unsigned long end, struct mm_walk *args)
 {
 	struct address_space *mapping;
-	struct vm_area_struct *vma = args->vma;
+	struct mm_area *vma = args->vma;
 	struct lru_gen_mm_walk *walk = args->private;
 
 	if (!vma_is_accessible(vma))
@@ -3391,7 +3391,7 @@ static bool get_next_vma(unsigned long mask, unsigned long size, struct mm_walk 
 	return false;
 }
 
-static unsigned long get_pte_pfn(pte_t pte, struct vm_area_struct *vma, unsigned long addr,
+static unsigned long get_pte_pfn(pte_t pte, struct mm_area *vma, unsigned long addr,
 				 struct pglist_data *pgdat)
 {
 	unsigned long pfn = pte_pfn(pte);
@@ -3416,7 +3416,7 @@ static unsigned long get_pte_pfn(pte_t pte, struct vm_area_struct *vma, unsigned
 	return pfn;
 }
 
-static unsigned long get_pmd_pfn(pmd_t pmd, struct vm_area_struct *vma, unsigned long addr,
+static unsigned long get_pmd_pfn(pmd_t pmd, struct mm_area *vma, unsigned long addr,
 				 struct pglist_data *pgdat)
 {
 	unsigned long pfn = pmd_pfn(pmd);
@@ -3569,7 +3569,7 @@ restart:
 	return suitable_to_scan(total, young);
 }
 
-static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area_struct *vma,
+static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct mm_area *vma,
 				  struct mm_walk *args, unsigned long *bitmap, unsigned long *first)
 {
 	int i;
@@ -3664,7 +3664,7 @@ static void walk_pmd_range(pud_t *pud, unsigned long start, unsigned long end,
 	pmd_t *pmd;
 	unsigned long next;
 	unsigned long addr;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	DECLARE_BITMAP(bitmap, MIN_LRU_BATCH);
 	unsigned long first = -1;
 	struct lru_gen_mm_walk *walk = args->private;
@@ -4193,7 +4193,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 	int young = 1;
 	pte_t *pte = pvmw->pte;
 	unsigned long addr = pvmw->address;
-	struct vm_area_struct *vma = pvmw->vma;
+	struct mm_area *vma = pvmw->vma;
 	struct folio *folio = pfn_folio(pvmw->pfn);
 	struct mem_cgroup *memcg = folio_memcg(folio);
 	struct pglist_data *pgdat = folio_pgdat(folio);

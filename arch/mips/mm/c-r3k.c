@@ -228,12 +228,12 @@ static void r3k_flush_cache_mm(struct mm_struct *mm)
 {
 }
 
-static void r3k_flush_cache_range(struct vm_area_struct *vma,
+static void r3k_flush_cache_range(struct mm_area *vma,
 				  unsigned long start, unsigned long end)
 {
 }
 
-static void r3k_flush_cache_page(struct vm_area_struct *vma,
+static void r3k_flush_cache_page(struct mm_area *vma,
 				 unsigned long addr, unsigned long pfn)
 {
 	unsigned long kaddr = KSEG0ADDR(pfn << PAGE_SHIFT);

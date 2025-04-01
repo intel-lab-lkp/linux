@@ -303,7 +303,7 @@ static int ht16k33_blank(int blank, struct fb_info *info)
 	return 0;
 }
 
-static int ht16k33_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int ht16k33_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct ht16k33_priv *priv = info->par;
 	struct page *pages = virt_to_page(priv->fbdev.buffer);

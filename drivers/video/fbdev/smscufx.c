@@ -773,7 +773,7 @@ static int ufx_set_vid_mode(struct ufx_data *dev, struct fb_var_screeninfo *var)
 	return 0;
 }
 
-static int ufx_ops_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int ufx_ops_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	unsigned long start = vma->vm_start;
 	unsigned long size = vma->vm_end - vma->vm_start;

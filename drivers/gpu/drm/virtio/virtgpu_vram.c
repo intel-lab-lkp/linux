@@ -30,7 +30,7 @@ static const struct vm_operations_struct virtio_gpu_vram_vm_ops = {
 };
 
 static int virtio_gpu_vram_mmap(struct drm_gem_object *obj,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	int ret;
 	struct virtio_gpu_device *vgdev = obj->dev->dev_private;

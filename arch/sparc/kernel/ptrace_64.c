@@ -103,7 +103,7 @@ void ptrace_disable(struct task_struct *child)
  *    has been created
  * 2) flush the I-cache if this is pre-cheetah and we did a write
  */
-void flush_ptrace_access(struct vm_area_struct *vma, struct page *page,
+void flush_ptrace_access(struct mm_area *vma, struct page *page,
 			 unsigned long uaddr, void *kaddr,
 			 unsigned long len, int write)
 {

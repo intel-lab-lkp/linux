@@ -1786,7 +1786,7 @@ static long fw_device_op_ioctl(struct file *file,
 	return dispatch_ioctl(file->private_data, cmd, (void __user *)arg);
 }
 
-static int fw_device_op_mmap(struct file *file, struct vm_area_struct *vma)
+static int fw_device_op_mmap(struct file *file, struct mm_area *vma)
 {
 	struct client *client = file->private_data;
 	unsigned long size;

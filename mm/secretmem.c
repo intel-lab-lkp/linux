@@ -120,7 +120,7 @@ static int secretmem_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int secretmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int secretmem_mmap(struct file *file, struct mm_area *vma)
 {
 	unsigned long len = vma->vm_end - vma->vm_start;
 
@@ -136,7 +136,7 @@ static int secretmem_mmap(struct file *file, struct vm_area_struct *vma)
 	return 0;
 }
 
-bool vma_is_secretmem(struct vm_area_struct *vma)
+bool vma_is_secretmem(struct mm_area *vma)
 {
 	return vma->vm_ops == &secretmem_vm_ops;
 }

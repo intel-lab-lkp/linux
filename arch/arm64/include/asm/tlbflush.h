@@ -295,13 +295,13 @@ static inline void __flush_tlb_page_nosync(struct mm_struct *mm,
 						(uaddr & PAGE_MASK) + PAGE_SIZE);
 }
 
-static inline void flush_tlb_page_nosync(struct vm_area_struct *vma,
+static inline void flush_tlb_page_nosync(struct mm_area *vma,
 					 unsigned long uaddr)
 {
 	return __flush_tlb_page_nosync(vma->vm_mm, uaddr);
 }
 
-static inline void flush_tlb_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct mm_area *vma,
 				  unsigned long uaddr)
 {
 	flush_tlb_page_nosync(vma, uaddr);
@@ -472,7 +472,7 @@ static inline void __flush_tlb_range_nosync(struct mm_struct *mm,
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, start, end);
 }
 
-static inline void __flush_tlb_range(struct vm_area_struct *vma,
+static inline void __flush_tlb_range(struct mm_area *vma,
 				     unsigned long start, unsigned long end,
 				     unsigned long stride, bool last_level,
 				     int tlb_level)
@@ -482,7 +482,7 @@ static inline void __flush_tlb_range(struct vm_area_struct *vma,
 	dsb(ish);
 }
 
-static inline void flush_tlb_range(struct vm_area_struct *vma,
+static inline void flush_tlb_range(struct mm_area *vma,
 				   unsigned long start, unsigned long end)
 {
 	/*

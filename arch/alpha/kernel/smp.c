@@ -658,7 +658,7 @@ flush_tlb_mm(struct mm_struct *mm)
 EXPORT_SYMBOL(flush_tlb_mm);
 
 struct flush_tlb_page_struct {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm;
 	unsigned long addr;
 };
@@ -676,7 +676,7 @@ ipi_flush_tlb_page(void *x)
 }
 
 void
-flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
+flush_tlb_page(struct mm_area *vma, unsigned long addr)
 {
 	struct flush_tlb_page_struct data;
 	struct mm_struct *mm = vma->vm_mm;
@@ -709,7 +709,7 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 EXPORT_SYMBOL(flush_tlb_page);
 
 void
-flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	/* On the Alpha we always flush the whole user tlb.  */
 	flush_tlb_mm(vma->vm_mm);
@@ -727,7 +727,7 @@ ipi_flush_icache_page(void *x)
 }
 
 void
-flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
+flush_icache_user_page(struct mm_area *vma, struct page *page,
 			unsigned long addr, int len)
 {
 	struct mm_struct *mm = vma->vm_mm;

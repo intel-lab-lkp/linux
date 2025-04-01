@@ -25,7 +25,7 @@
 
 extern char vdso_start[], vdso_end[];
 
-static int vdso_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
+static int vdso_mremap(const struct vm_special_mapping *sm, struct mm_area *new_vma)
 {
 	current->mm->context.vdso = (void *)(new_vma->vm_start);
 
@@ -79,7 +79,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 	int ret;
 	unsigned long size, data_addr, vdso_addr;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct loongarch_vdso_info *info = current->thread.vdso;
 
 	if (mmap_write_lock_killable(mm))

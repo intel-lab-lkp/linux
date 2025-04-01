@@ -392,7 +392,7 @@ static unsigned long v4l2_get_unmapped_area(struct file *filp,
 }
 #endif
 
-static int v4l2_mmap(struct file *filp, struct vm_area_struct *vm)
+static int v4l2_mmap(struct file *filp, struct mm_area *vm)
 {
 	struct video_device *vdev = video_devdata(filp);
 	int ret = -ENODEV;

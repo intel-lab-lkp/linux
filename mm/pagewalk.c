@@ -321,7 +321,7 @@ static unsigned long hugetlb_entry_end(struct hstate *h, unsigned long addr,
 static int walk_hugetlb_range(unsigned long addr, unsigned long end,
 			      struct mm_walk *walk)
 {
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	struct hstate *h = hstate_vma(vma);
 	unsigned long next;
 	unsigned long hmask = huge_page_mask(h);
@@ -364,7 +364,7 @@ static int walk_hugetlb_range(unsigned long addr, unsigned long end,
 static int walk_page_test(unsigned long start, unsigned long end,
 			struct mm_walk *walk)
 {
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	const struct mm_walk_ops *ops = walk->ops;
 
 	if (ops->test_walk)
@@ -391,7 +391,7 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 			struct mm_walk *walk)
 {
 	int err = 0;
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	const struct mm_walk_ops *ops = walk->ops;
 	bool is_hugetlb = is_vm_hugetlb_page(vma);
 
@@ -426,7 +426,7 @@ static inline void process_mm_walk_lock(struct mm_struct *mm,
 		mmap_assert_write_locked(mm);
 }
 
-static inline void process_vma_walk_lock(struct vm_area_struct *vma,
+static inline void process_vma_walk_lock(struct mm_area *vma,
 					 enum page_walk_lock walk_lock)
 {
 #ifdef CONFIG_PER_VMA_LOCK
@@ -457,7 +457,7 @@ int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
 {
 	int err = 0;
 	unsigned long next;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_walk walk = {
 		.ops		= ops,
 		.mm		= mm,
@@ -648,7 +648,7 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 	return walk_pgd_range(start, end, &walk);
 }
 
-int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
+int walk_page_range_vma(struct mm_area *vma, unsigned long start,
 			unsigned long end, const struct mm_walk_ops *ops,
 			void *private)
 {
@@ -671,7 +671,7 @@ int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
 	return __walk_page_range(start, end, &walk);
 }
 
-int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
+int walk_page_vma(struct mm_area *vma, const struct mm_walk_ops *ops,
 		void *private)
 {
 	struct mm_walk walk = {
@@ -714,7 +714,7 @@ int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
  *   struct mm_struct::mmap_lock is not needed.
  *
  *   Also this means that a caller can't rely on the struct
- *   vm_area_struct::vm_flags to be constant across a call,
+ *   mm_area::vm_flags to be constant across a call,
  *   except for immutable flags. Callers requiring this shouldn't use
  *   this function.
  *
@@ -729,7 +729,7 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
 		.ops		= ops,
 		.private	= private,
 	};
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	pgoff_t vba, vea, cba, cea;
 	unsigned long start_addr, end_addr;
 	int err = 0;
@@ -827,7 +827,7 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
  * Return: folio pointer on success, otherwise NULL.
  */
 struct folio *folio_walk_start(struct folio_walk *fw,
-		struct vm_area_struct *vma, unsigned long addr,
+		struct mm_area *vma, unsigned long addr,
 		folio_walk_flags_t flags)
 {
 	unsigned long entry_size;

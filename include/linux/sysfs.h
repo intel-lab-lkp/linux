@@ -298,7 +298,7 @@ static const struct attribute_group _name##_group = {		\
 __ATTRIBUTE_GROUPS(_name)
 
 struct file;
-struct vm_area_struct;
+struct mm_area;
 struct address_space;
 
 struct bin_attribute {
@@ -317,7 +317,7 @@ struct bin_attribute {
 	loff_t (*llseek)(struct file *, struct kobject *, const struct bin_attribute *,
 			 loff_t, int);
 	int (*mmap)(struct file *, struct kobject *, const struct bin_attribute *attr,
-		    struct vm_area_struct *vma);
+		    struct mm_area *vma);
 };
 
 /**

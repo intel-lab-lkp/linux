@@ -454,7 +454,7 @@ static inline pte_t ptep_get(pte_t *ptep)
 }
 #define ptep_get ptep_get
 
-static inline int ptep_test_and_clear_young(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
+static inline int ptep_test_and_clear_young(struct mm_area *vma, unsigned long addr, pte_t *ptep)
 {
 	pte_t pte;
 
@@ -466,8 +466,8 @@ static inline int ptep_test_and_clear_young(struct vm_area_struct *vma, unsigned
 	return 1;
 }
 
-int ptep_clear_flush_young(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep);
-pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep);
+int ptep_clear_flush_young(struct mm_area *vma, unsigned long addr, pte_t *ptep);
+pte_t ptep_clear_flush(struct mm_area *vma, unsigned long addr, pte_t *ptep);
 
 struct mm_struct;
 static inline void ptep_set_wrprotect(struct mm_struct *mm, unsigned long addr, pte_t *ptep)

@@ -628,7 +628,7 @@ int mana_ib_alloc_ucontext(struct ib_ucontext *ibcontext,
 			   struct ib_udata *udata);
 void mana_ib_dealloc_ucontext(struct ib_ucontext *ibcontext);
 
-int mana_ib_mmap(struct ib_ucontext *ibcontext, struct vm_area_struct *vma);
+int mana_ib_mmap(struct ib_ucontext *ibcontext, struct mm_area *vma);
 
 int mana_ib_get_port_immutable(struct ib_device *ibdev, u32 port_num,
 			       struct ib_port_immutable *immutable);

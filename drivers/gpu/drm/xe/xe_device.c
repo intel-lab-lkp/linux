@@ -237,12 +237,12 @@ static long xe_drm_compat_ioctl(struct file *file, unsigned int cmd, unsigned lo
 #define xe_drm_compat_ioctl NULL
 #endif
 
-static void barrier_open(struct vm_area_struct *vma)
+static void barrier_open(struct mm_area *vma)
 {
 	drm_dev_get(vma->vm_private_data);
 }
 
-static void barrier_close(struct vm_area_struct *vma)
+static void barrier_close(struct mm_area *vma)
 {
 	drm_dev_put(vma->vm_private_data);
 }
@@ -257,7 +257,7 @@ static void barrier_release_dummy_page(struct drm_device *dev, void *res)
 static vm_fault_t barrier_fault(struct vm_fault *vmf)
 {
 	struct drm_device *dev = vmf->vma->vm_private_data;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	vm_fault_t ret = VM_FAULT_NOPAGE;
 	pgprot_t prot;
 	int idx;
@@ -299,7 +299,7 @@ static const struct vm_operations_struct vm_ops_barrier = {
 };
 
 static int xe_pci_barrier_mmap(struct file *filp,
-			       struct vm_area_struct *vma)
+			       struct mm_area *vma)
 {
 	struct drm_file *priv = filp->private_data;
 	struct drm_device *dev = priv->minor->dev;
@@ -326,7 +326,7 @@ static int xe_pci_barrier_mmap(struct file *filp,
 	return 0;
 }
 
-static int xe_mmap(struct file *filp, struct vm_area_struct *vma)
+static int xe_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct drm_file *priv = filp->private_data;
 	struct drm_device *dev = priv->minor->dev;

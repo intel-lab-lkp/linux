@@ -86,7 +86,7 @@ void local_flush_tlb_mm(struct mm_struct *mm)
 # define _TLB_ENTRIES _DTLB_ENTRIES
 #endif
 
-void local_flush_tlb_range(struct vm_area_struct *vma,
+void local_flush_tlb_range(struct mm_area *vma,
 		unsigned long start, unsigned long end)
 {
 	int cpu = smp_processor_id();
@@ -124,7 +124,7 @@ void local_flush_tlb_range(struct vm_area_struct *vma,
 	local_irq_restore(flags);
 }
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	int cpu = smp_processor_id();
 	struct mm_struct* mm = vma->vm_mm;
@@ -163,7 +163,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	}
 }
 
-void update_mmu_tlb_range(struct vm_area_struct *vma,
+void update_mmu_tlb_range(struct mm_area *vma,
 			unsigned long address, pte_t *ptep, unsigned int nr)
 {
 	local_flush_tlb_range(vma, address, address + PAGE_SIZE * nr);

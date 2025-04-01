@@ -974,7 +974,7 @@ void hmm_bo_unref(struct hmm_buffer_object *bo)
 	kref_put(&bo->kref, kref_hmm_bo_release);
 }
 
-static void hmm_bo_vm_open(struct vm_area_struct *vma)
+static void hmm_bo_vm_open(struct mm_area *vma)
 {
 	struct hmm_buffer_object *bo =
 	    (struct hmm_buffer_object *)vma->vm_private_data;
@@ -992,7 +992,7 @@ static void hmm_bo_vm_open(struct vm_area_struct *vma)
 	mutex_unlock(&bo->mutex);
 }
 
-static void hmm_bo_vm_close(struct vm_area_struct *vma)
+static void hmm_bo_vm_close(struct mm_area *vma)
 {
 	struct hmm_buffer_object *bo =
 	    (struct hmm_buffer_object *)vma->vm_private_data;
@@ -1021,7 +1021,7 @@ static const struct vm_operations_struct hmm_bo_vm_ops = {
 /*
  * mmap the bo to user space.
  */
-int hmm_bo_mmap(struct vm_area_struct *vma, struct hmm_buffer_object *bo)
+int hmm_bo_mmap(struct mm_area *vma, struct hmm_buffer_object *bo)
 {
 	unsigned int start, end;
 	unsigned int virt;

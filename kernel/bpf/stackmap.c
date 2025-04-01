@@ -124,7 +124,7 @@ free_smap:
 	return ERR_PTR(err);
 }
 
-static int fetch_build_id(struct vm_area_struct *vma, unsigned char *build_id, bool may_fault)
+static int fetch_build_id(struct mm_area *vma, unsigned char *build_id, bool may_fault)
 {
 	return may_fault ? build_id_parse(vma, build_id, NULL)
 			 : build_id_parse_nofault(vma, build_id, NULL);
@@ -146,7 +146,7 @@ static void stack_map_get_build_id_offset(struct bpf_stack_build_id *id_offs,
 	int i;
 	struct mmap_unlock_irq_work *work = NULL;
 	bool irq_work_busy = bpf_mmap_unlock_get_irq_work(&work);
-	struct vm_area_struct *vma, *prev_vma = NULL;
+	struct mm_area *vma, *prev_vma = NULL;
 	const char *prev_build_id;
 
 	/* If the irq_work is in use, fall back to report ips. Same

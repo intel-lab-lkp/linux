@@ -658,7 +658,7 @@ void usnic_ib_dealloc_ucontext(struct ib_ucontext *ibcontext)
 }
 
 int usnic_ib_mmap(struct ib_ucontext *context,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	struct usnic_ib_ucontext *uctx = to_ucontext(context);
 	struct usnic_ib_dev *us_ibdev;

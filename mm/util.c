@@ -314,7 +314,7 @@ void *memdup_user_nul(const void __user *src, size_t len)
 EXPORT_SYMBOL(memdup_user_nul);
 
 /* Check if the vma is being used as a stack by this task */
-int vma_is_stack_for_current(struct vm_area_struct *vma)
+int vma_is_stack_for_current(struct mm_area *vma)
 {
 	struct task_struct * __maybe_unused t = current;
 
@@ -324,7 +324,7 @@ int vma_is_stack_for_current(struct vm_area_struct *vma)
 /*
  * Change backing file, only valid to use during initial VMA setup.
  */
-void vma_set_file(struct vm_area_struct *vma, struct file *file)
+void vma_set_file(struct mm_area *vma, struct file *file)
 {
 	/* Changing an anonymous vma with this is illegal */
 	get_file(file);

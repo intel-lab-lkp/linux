@@ -57,7 +57,7 @@ static inline void cacheop_on_each_cpu(void (*func) (void *info), void *info,
 	preempt_enable();
 }
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		       unsigned long vaddr, void *dst, const void *src,
 		       unsigned long len)
 {
@@ -78,7 +78,7 @@ void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
 		flush_cache_page(vma, vaddr, page_to_pfn(page));
 }
 
-void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_from_user_page(struct mm_area *vma, struct page *page,
 			 unsigned long vaddr, void *dst, const void *src,
 			 unsigned long len)
 {
@@ -97,7 +97,7 @@ void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
 }
 
 void copy_user_highpage(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma)
+			unsigned long vaddr, struct mm_area *vma)
 {
 	struct folio *src = page_folio(from);
 	void *vfrom, *vto;
@@ -138,7 +138,7 @@ void clear_user_highpage(struct page *page, unsigned long vaddr)
 }
 EXPORT_SYMBOL(clear_user_highpage);
 
-void __update_cache(struct vm_area_struct *vma,
+void __update_cache(struct mm_area *vma,
 		    unsigned long address, pte_t pte)
 {
 	unsigned long pfn = pte_pfn(pte);
@@ -197,7 +197,7 @@ void flush_cache_dup_mm(struct mm_struct *mm)
 	cacheop_on_each_cpu(local_flush_cache_dup_mm, mm, 1);
 }
 
-void flush_cache_page(struct vm_area_struct *vma, unsigned long addr,
+void flush_cache_page(struct mm_area *vma, unsigned long addr,
 		      unsigned long pfn)
 {
 	struct flusher_data data;
@@ -209,7 +209,7 @@ void flush_cache_page(struct vm_area_struct *vma, unsigned long addr,
 	cacheop_on_each_cpu(local_flush_cache_page, (void *)&data, 1);
 }
 
-void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
+void flush_cache_range(struct mm_area *vma, unsigned long start,
 		       unsigned long end)
 {
 	struct flusher_data data;
@@ -240,7 +240,7 @@ void flush_icache_range(unsigned long start, unsigned long end)
 }
 EXPORT_SYMBOL(flush_icache_range);
 
-void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
+void flush_icache_pages(struct mm_area *vma, struct page *page,
 		unsigned int nr)
 {
 	/* Nothing uses the VMA, so just pass the folio along */

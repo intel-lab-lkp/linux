@@ -129,7 +129,7 @@ static const struct class rmtfs_class = {
 	.name           = "rmtfs",
 };
 
-static int qcom_rmtfs_mem_mmap(struct file *filep, struct vm_area_struct *vma)
+static int qcom_rmtfs_mem_mmap(struct file *filep, struct mm_area *vma)
 {
 	struct qcom_rmtfs_mem *rmtfs_mem = filep->private_data;
 

@@ -106,8 +106,8 @@ int main(void)
   DEFINE(MM_CONTEXT_ID,		offsetof(struct mm_struct, context.id.counter));
   BLANK();
 #endif
-  DEFINE(VMA_VM_MM,		offsetof(struct vm_area_struct, vm_mm));
-  DEFINE(VMA_VM_FLAGS,		offsetof(struct vm_area_struct, vm_flags));
+  DEFINE(VMA_VM_MM,		offsetof(struct mm_area, vm_mm));
+  DEFINE(VMA_VM_FLAGS,		offsetof(struct mm_area, vm_flags));
   BLANK();
   DEFINE(VM_EXEC,	       	VM_EXEC);
   BLANK();

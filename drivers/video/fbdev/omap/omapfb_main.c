@@ -1197,7 +1197,7 @@ static int omapfb_ioctl(struct fb_info *fbi, unsigned int cmd,
 	return r;
 }
 
-static int omapfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int omapfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct omapfb_plane_struct *plane = info->par;
 	struct omapfb_device *fbdev = plane->fbdev;

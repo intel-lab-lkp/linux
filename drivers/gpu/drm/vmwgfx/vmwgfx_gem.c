@@ -107,7 +107,7 @@ static void vmw_gem_vunmap(struct drm_gem_object *obj, struct iosys_map *map)
 		drm_gem_ttm_vunmap(obj, map);
 }
 
-static int vmw_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int vmw_gem_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	int ret;
 

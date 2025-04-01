@@ -1470,7 +1470,7 @@ void fuse_free_conn(struct fuse_conn *fc);
 
 ssize_t fuse_dax_read_iter(struct kiocb *iocb, struct iov_iter *to);
 ssize_t fuse_dax_write_iter(struct kiocb *iocb, struct iov_iter *from);
-int fuse_dax_mmap(struct file *file, struct vm_area_struct *vma);
+int fuse_dax_mmap(struct file *file, struct mm_area *vma);
 int fuse_dax_break_layouts(struct inode *inode, u64 dmap_start, u64 dmap_end);
 int fuse_dax_conn_alloc(struct fuse_conn *fc, enum fuse_dax_mode mode,
 			struct dax_device *dax_dev);
@@ -1567,7 +1567,7 @@ ssize_t fuse_passthrough_splice_read(struct file *in, loff_t *ppos,
 ssize_t fuse_passthrough_splice_write(struct pipe_inode_info *pipe,
 				      struct file *out, loff_t *ppos,
 				      size_t len, unsigned int flags);
-ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma);
+ssize_t fuse_passthrough_mmap(struct file *file, struct mm_area *vma);
 
 #ifdef CONFIG_SYSCTL
 extern int fuse_sysctl_register(void);

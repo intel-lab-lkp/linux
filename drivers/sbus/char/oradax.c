@@ -208,7 +208,7 @@ static ssize_t dax_read(struct file *filp, char __user *buf,
 			size_t count, loff_t *ppos);
 static ssize_t dax_write(struct file *filp, const char __user *buf,
 			 size_t count, loff_t *ppos);
-static int dax_devmap(struct file *f, struct vm_area_struct *vma);
+static int dax_devmap(struct file *f, struct mm_area *vma);
 static int dax_close(struct inode *i, struct file *f);
 
 static const struct file_operations dax_fops = {
@@ -368,7 +368,7 @@ static void __exit dax_detach(void)
 module_exit(dax_detach);
 
 /* map completion area */
-static int dax_devmap(struct file *f, struct vm_area_struct *vma)
+static int dax_devmap(struct file *f, struct mm_area *vma)
 {
 	struct dax_ctx *ctx = (struct dax_ctx *)f->private_data;
 	size_t len = vma->vm_end - vma->vm_start;

@@ -61,7 +61,7 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 #endif
 }
 
-static inline void flush_tlb_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct mm_area *vma,
 	unsigned long addr)
 {
 	purge_tlb_entries(vma->vm_mm, addr);

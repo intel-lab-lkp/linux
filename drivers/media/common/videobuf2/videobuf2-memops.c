@@ -87,7 +87,7 @@ EXPORT_SYMBOL(vb2_destroy_framevec);
  * This function adds another user to the provided vma. It expects
  * struct vb2_vmarea_handler pointer in vma->vm_private_data.
  */
-static void vb2_common_vm_open(struct vm_area_struct *vma)
+static void vb2_common_vm_open(struct mm_area *vma)
 {
 	struct vb2_vmarea_handler *h = vma->vm_private_data;
 
@@ -105,7 +105,7 @@ static void vb2_common_vm_open(struct vm_area_struct *vma)
  * This function releases the user from the provided vma. It expects
  * struct vb2_vmarea_handler pointer in vma->vm_private_data.
  */
-static void vb2_common_vm_close(struct vm_area_struct *vma)
+static void vb2_common_vm_close(struct mm_area *vma)
 {
 	struct vb2_vmarea_handler *h = vma->vm_private_data;
 

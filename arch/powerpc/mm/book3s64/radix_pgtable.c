@@ -1439,7 +1439,7 @@ unsigned long radix__pud_hugepage_update(struct mm_struct *mm, unsigned long add
 	return old;
 }
 
-pmd_t radix__pmdp_collapse_flush(struct vm_area_struct *vma, unsigned long address,
+pmd_t radix__pmdp_collapse_flush(struct mm_area *vma, unsigned long address,
 			pmd_t *pmdp)
 
 {
@@ -1528,7 +1528,7 @@ pud_t radix__pudp_huge_get_and_clear(struct mm_struct *mm,
 
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
-void radix__ptep_set_access_flags(struct vm_area_struct *vma, pte_t *ptep,
+void radix__ptep_set_access_flags(struct mm_area *vma, pte_t *ptep,
 				  pte_t entry, unsigned long address, int psize)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -1570,7 +1570,7 @@ void radix__ptep_set_access_flags(struct vm_area_struct *vma, pte_t *ptep,
 	/* See ptesync comment in radix__set_pte_at */
 }
 
-void radix__ptep_modify_prot_commit(struct vm_area_struct *vma,
+void radix__ptep_modify_prot_commit(struct mm_area *vma,
 				    unsigned long addr, pte_t *ptep,
 				    pte_t old_pte, pte_t pte)
 {

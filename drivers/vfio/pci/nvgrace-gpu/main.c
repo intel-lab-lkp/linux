@@ -131,7 +131,7 @@ static void nvgrace_gpu_close_device(struct vfio_device *core_vdev)
 }
 
 static int nvgrace_gpu_mmap(struct vfio_device *core_vdev,
-			    struct vm_area_struct *vma)
+			    struct mm_area *vma)
 {
 	struct nvgrace_gpu_pci_core_device *nvdev =
 		container_of(core_vdev, struct nvgrace_gpu_pci_core_device,

@@ -294,7 +294,7 @@ static int shstk_push_sigframe(unsigned long *ssp)
 
 static int shstk_pop_sigframe(unsigned long *ssp)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long token_addr;
 	bool need_to_check_vma;
 	int err = 1;

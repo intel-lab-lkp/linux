@@ -30,9 +30,9 @@ void (*flush_cache_all)(void);
 void (*__flush_cache_all)(void);
 EXPORT_SYMBOL_GPL(__flush_cache_all);
 void (*flush_cache_mm)(struct mm_struct *mm);
-void (*flush_cache_range)(struct vm_area_struct *vma, unsigned long start,
+void (*flush_cache_range)(struct mm_area *vma, unsigned long start,
 	unsigned long end);
-void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page,
+void (*flush_cache_page)(struct mm_area *vma, unsigned long page,
 	unsigned long pfn);
 void (*flush_icache_range)(unsigned long start, unsigned long end);
 EXPORT_SYMBOL_GPL(flush_icache_range);

@@ -144,7 +144,7 @@ static struct file_system_type dma_buf_fs_type = {
 	.kill_sb = kill_anon_super,
 };
 
-static int dma_buf_mmap_internal(struct file *file, struct vm_area_struct *vma)
+static int dma_buf_mmap_internal(struct file *file, struct mm_area *vma)
 {
 	struct dma_buf *dmabuf;
 
@@ -1364,7 +1364,7 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_move_notify, "DMA_BUF");
  *
  *   .. code-block:: c
  *
- *     int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *, unsigned long);
+ *     int dma_buf_mmap(struct dma_buf *, struct mm_area *, unsigned long);
  *
  *   If the importing subsystem simply provides a special-purpose mmap call to
  *   set up a mapping in userspace, calling do_mmap with &dma_buf.file will
@@ -1474,7 +1474,7 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_end_cpu_access, "DMA_BUF");
  *
  * Can return negative error values, returns 0 on success.
  */
-int dma_buf_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma,
+int dma_buf_mmap(struct dma_buf *dmabuf, struct mm_area *vma,
 		 unsigned long pgoff)
 {
 	if (WARN_ON(!dmabuf || !vma))

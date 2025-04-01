@@ -715,7 +715,7 @@ static struct dma_buf *vc4_prime_export(struct drm_gem_object *obj, int flags)
 
 static vm_fault_t vc4_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct vc4_bo *bo = to_vc4_bo(obj);
 
@@ -729,7 +729,7 @@ static vm_fault_t vc4_fault(struct vm_fault *vmf)
 	return VM_FAULT_SIGBUS;
 }
 
-static int vc4_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int vc4_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct vc4_bo *bo = to_vc4_bo(obj);
 

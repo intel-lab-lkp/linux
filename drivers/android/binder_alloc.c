@@ -258,7 +258,7 @@ static int binder_page_insert(struct binder_alloc *alloc,
 			      struct page *page)
 {
 	struct mm_struct *mm = alloc->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int ret = -ESRCH;
 
 	/* attempt per-vma lock first */
@@ -892,7 +892,7 @@ void binder_alloc_free_buf(struct binder_alloc *alloc,
  *      -ENOMEM = failed to map memory to given address space
  */
 int binder_alloc_mmap_handler(struct binder_alloc *alloc,
-			      struct vm_area_struct *vma)
+			      struct mm_area *vma)
 {
 	struct binder_buffer *buffer;
 	const char *failure_string;
@@ -1140,7 +1140,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 	struct binder_shrinker_mdata *mdata = container_of(item, typeof(*mdata), lru);
 	struct binder_alloc *alloc = mdata->alloc;
 	struct mm_struct *mm = alloc->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct page *page_to_free;
 	unsigned long page_addr;
 	int mm_locked = 0;

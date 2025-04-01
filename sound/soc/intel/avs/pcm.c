@@ -1240,7 +1240,7 @@ avs_component_pointer(struct snd_soc_component *component, struct snd_pcm_substr
 
 static int avs_component_mmap(struct snd_soc_component *component,
 			      struct snd_pcm_substream *substream,
-			      struct vm_area_struct *vma)
+			      struct mm_area *vma)
 {
 	return snd_pcm_lib_default_mmap(substream, vma);
 }

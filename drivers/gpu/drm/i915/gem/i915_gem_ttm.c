@@ -1034,7 +1034,7 @@ static void i915_ttm_delayed_free(struct drm_i915_gem_object *obj)
 
 static vm_fault_t vm_fault_ttm(struct vm_fault *vmf)
 {
-	struct vm_area_struct *area = vmf->vma;
+	struct mm_area *area = vmf->vma;
 	struct ttm_buffer_object *bo = area->vm_private_data;
 	struct drm_device *dev = bo->base.dev;
 	struct drm_i915_gem_object *obj = i915_ttm_to_gem(bo);
@@ -1147,7 +1147,7 @@ out_rpm:
 }
 
 static int
-vm_access_ttm(struct vm_area_struct *area, unsigned long addr,
+vm_access_ttm(struct mm_area *area, unsigned long addr,
 	      void *buf, int len, int write)
 {
 	struct drm_i915_gem_object *obj =
@@ -1159,7 +1159,7 @@ vm_access_ttm(struct vm_area_struct *area, unsigned long addr,
 	return ttm_bo_vm_access(area, addr, buf, len, write);
 }
 
-static void ttm_vm_open(struct vm_area_struct *vma)
+static void ttm_vm_open(struct mm_area *vma)
 {
 	struct drm_i915_gem_object *obj =
 		i915_ttm_to_gem(vma->vm_private_data);
@@ -1168,7 +1168,7 @@ static void ttm_vm_open(struct vm_area_struct *vma)
 	i915_gem_object_get(obj);
 }
 
-static void ttm_vm_close(struct vm_area_struct *vma)
+static void ttm_vm_close(struct mm_area *vma)
 {
 	struct drm_i915_gem_object *obj =
 		i915_ttm_to_gem(vma->vm_private_data);

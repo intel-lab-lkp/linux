@@ -30,7 +30,7 @@ void *ipu6_dma_alloc(struct ipu6_bus_device *sys, size_t size,
 		     unsigned long attrs);
 void ipu6_dma_free(struct ipu6_bus_device *sys, size_t size, void *vaddr,
 		   dma_addr_t dma_handle, unsigned long attrs);
-int ipu6_dma_mmap(struct ipu6_bus_device *sys, struct vm_area_struct *vma,
+int ipu6_dma_mmap(struct ipu6_bus_device *sys, struct mm_area *vma,
 		  void *addr, dma_addr_t iova, size_t size,
 		  unsigned long attrs);
 int ipu6_dma_map_sg(struct ipu6_bus_device *sys, struct scatterlist *sglist,

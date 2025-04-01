@@ -143,11 +143,11 @@ const struct movable_operations *page_movable_ops(struct page *page)
 
 #ifdef CONFIG_NUMA_BALANCING
 int migrate_misplaced_folio_prepare(struct folio *folio,
-		struct vm_area_struct *vma, int node);
+		struct mm_area *vma, int node);
 int migrate_misplaced_folio(struct folio *folio, int node);
 #else
 static inline int migrate_misplaced_folio_prepare(struct folio *folio,
-		struct vm_area_struct *vma, int node)
+		struct mm_area *vma, int node)
 {
 	return -EAGAIN; /* can't migrate now */
 }
@@ -188,7 +188,7 @@ enum migrate_vma_direction {
 };
 
 struct migrate_vma {
-	struct vm_area_struct	*vma;
+	struct mm_area	*vma;
 	/*
 	 * Both src and dst array must be big enough for
 	 * (end - start) >> PAGE_SHIFT entries.

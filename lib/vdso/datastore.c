@@ -38,7 +38,7 @@ struct vdso_arch_data *vdso_k_arch_data = &vdso_arch_data_store.data;
 #endif /* CONFIG_ARCH_HAS_VDSO_ARCH_DATA */
 
 static vm_fault_t vvar_fault(const struct vm_special_mapping *sm,
-			     struct vm_area_struct *vma, struct vm_fault *vmf)
+			     struct mm_area *vma, struct vm_fault *vmf)
 {
 	struct page *timens_page = find_timens_vvar_page(vma);
 	unsigned long addr, pfn;
@@ -96,7 +96,7 @@ const struct vm_special_mapping vdso_vvar_mapping = {
 	.fault	= vvar_fault,
 };
 
-struct vm_area_struct *vdso_install_vvar_mapping(struct mm_struct *mm, unsigned long addr)
+struct mm_area *vdso_install_vvar_mapping(struct mm_struct *mm, unsigned long addr)
 {
 	return _install_special_mapping(mm, addr, VDSO_NR_PAGES * PAGE_SIZE,
 					VM_READ | VM_MAYREAD | VM_IO | VM_DONTDUMP |
@@ -115,7 +115,7 @@ struct vm_area_struct *vdso_install_vvar_mapping(struct mm_struct *mm, unsigned 
 int vdso_join_timens(struct task_struct *task, struct time_namespace *ns)
 {
 	struct mm_struct *mm = task->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	mmap_read_lock(mm);

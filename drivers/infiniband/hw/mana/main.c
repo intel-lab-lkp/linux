@@ -512,7 +512,7 @@ int mana_ib_gd_destroy_dma_region(struct mana_ib_dev *dev, u64 gdma_region)
 	return mana_gd_destroy_dma_region(gc, gdma_region);
 }
 
-int mana_ib_mmap(struct ib_ucontext *ibcontext, struct vm_area_struct *vma)
+int mana_ib_mmap(struct ib_ucontext *ibcontext, struct mm_area *vma)
 {
 	struct mana_ib_ucontext *mana_ucontext =
 		container_of(ibcontext, struct mana_ib_ucontext, ibucontext);

@@ -11,12 +11,12 @@ static inline bool secretmem_mapping(struct address_space *mapping)
 	return mapping->a_ops == &secretmem_aops;
 }
 
-bool vma_is_secretmem(struct vm_area_struct *vma);
+bool vma_is_secretmem(struct mm_area *vma);
 bool secretmem_active(void);
 
 #else
 
-static inline bool vma_is_secretmem(struct vm_area_struct *vma)
+static inline bool vma_is_secretmem(struct mm_area *vma)
 {
 	return false;
 }

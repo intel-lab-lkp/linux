@@ -1596,7 +1596,7 @@ static inline void perf_event_task_sched_out(struct task_struct *prev,
 		__perf_event_task_sched_out(prev, next);
 }
 
-extern void perf_event_mmap(struct vm_area_struct *vma);
+extern void perf_event_mmap(struct mm_area *vma);
 
 extern void perf_event_ksymbol(u16 ksym_type, u64 addr, u32 len,
 			       bool unregister, const char *sym);
@@ -1889,7 +1889,7 @@ perf_sw_event(u32 event_id, u64 nr, struct pt_regs *regs, u64 addr)	{ }
 static inline void
 perf_bp_event(struct perf_event *event, void *data)			{ }
 
-static inline void perf_event_mmap(struct vm_area_struct *vma)		{ }
+static inline void perf_event_mmap(struct mm_area *vma)		{ }
 
 typedef int (perf_ksymbol_get_name_f)(char *name, int name_len, void *data);
 static inline void perf_event_ksymbol(u16 ksym_type, u64 addr, u32 len,

@@ -2618,7 +2618,7 @@ EXPORT_SYMBOL_GPL(kvm_vcpu_is_visible_gfn);
 
 unsigned long kvm_host_page_size(struct kvm_vcpu *vcpu, gfn_t gfn)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr, size;
 
 	size = PAGE_SIZE;
@@ -2860,7 +2860,7 @@ out:
 	return npages;
 }
 
-static bool vma_is_valid(struct vm_area_struct *vma, bool write_fault)
+static bool vma_is_valid(struct mm_area *vma, bool write_fault)
 {
 	if (unlikely(!(vma->vm_flags & VM_READ)))
 		return false;
@@ -2871,7 +2871,7 @@ static bool vma_is_valid(struct vm_area_struct *vma, bool write_fault)
 	return true;
 }
 
-static int hva_to_pfn_remapped(struct vm_area_struct *vma,
+static int hva_to_pfn_remapped(struct mm_area *vma,
 			       struct kvm_follow_pfn *kfp, kvm_pfn_t *p_pfn)
 {
 	struct follow_pfnmap_args args = { .vma = vma, .address = kfp->hva };
@@ -2919,7 +2919,7 @@ out:
 
 kvm_pfn_t hva_to_pfn(struct kvm_follow_pfn *kfp)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	kvm_pfn_t pfn;
 	int npages, r;
 
@@ -3997,7 +3997,7 @@ static const struct vm_operations_struct kvm_vcpu_vm_ops = {
 	.fault = kvm_vcpu_fault,
 };
 
-static int kvm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
+static int kvm_vcpu_mmap(struct file *file, struct mm_area *vma)
 {
 	struct kvm_vcpu *vcpu = file->private_data;
 	unsigned long pages = vma_pages(vma);
@@ -4613,7 +4613,7 @@ out:
 }
 #endif
 
-static int kvm_device_mmap(struct file *filp, struct vm_area_struct *vma)
+static int kvm_device_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct kvm_device *dev = filp->private_data;
 

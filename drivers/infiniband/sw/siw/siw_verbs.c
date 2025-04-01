@@ -51,7 +51,7 @@ void siw_mmap_free(struct rdma_user_mmap_entry *rdma_entry)
 	kfree(entry);
 }
 
-int siw_mmap(struct ib_ucontext *ctx, struct vm_area_struct *vma)
+int siw_mmap(struct ib_ucontext *ctx, struct mm_area *vma)
 {
 	struct siw_ucontext *uctx = to_siw_ctx(ctx);
 	size_t size = vma->vm_end - vma->vm_start;

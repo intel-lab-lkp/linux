@@ -19,7 +19,7 @@ struct iomap_writepage_ctx;
 struct iov_iter;
 struct kiocb;
 struct page;
-struct vm_area_struct;
+struct mm_area;
 struct vm_fault;
 
 /*

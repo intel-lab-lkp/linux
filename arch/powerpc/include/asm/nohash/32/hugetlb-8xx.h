@@ -4,7 +4,7 @@
 
 #define PAGE_SHIFT_8M		23
 
-static inline void flush_hugetlb_page(struct vm_area_struct *vma,
+static inline void flush_hugetlb_page(struct mm_area *vma,
 				      unsigned long vmaddr)
 {
 	flush_tlb_page(vma, vmaddr);

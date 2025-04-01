@@ -1095,7 +1095,7 @@ struct page *snd_soc_pcm_component_page(struct snd_pcm_substream *substream,
 }
 
 int snd_soc_pcm_component_mmap(struct snd_pcm_substream *substream,
-			       struct vm_area_struct *vma)
+			       struct mm_area *vma)
 {
 	struct snd_soc_pcm_runtime *rtd = snd_soc_substream_to_rtd(substream);
 	struct snd_soc_component *component;

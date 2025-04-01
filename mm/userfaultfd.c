@@ -21,7 +21,7 @@
 #include "swap.h"
 
 static __always_inline
-bool validate_dst_vma(struct vm_area_struct *dst_vma, unsigned long dst_end)
+bool validate_dst_vma(struct mm_area *dst_vma, unsigned long dst_end)
 {
 	/* Make sure that the dst range is fully within dst_vma. */
 	if (dst_end > dst_vma->vm_end)
@@ -39,10 +39,10 @@ bool validate_dst_vma(struct vm_area_struct *dst_vma, unsigned long dst_end)
 }
 
 static __always_inline
-struct vm_area_struct *find_vma_and_prepare_anon(struct mm_struct *mm,
+struct mm_area *find_vma_and_prepare_anon(struct mm_struct *mm,
 						 unsigned long addr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	mmap_assert_locked(mm);
 	vma = vma_lookup(mm, addr);
@@ -66,10 +66,10 @@ struct vm_area_struct *find_vma_and_prepare_anon(struct mm_struct *mm,
  * Return: A locked vma containing @address, -ENOENT if no vma is found, or
  * -ENOMEM if anon_vma couldn't be allocated.
  */
-static struct vm_area_struct *uffd_lock_vma(struct mm_struct *mm,
+static struct mm_area *uffd_lock_vma(struct mm_struct *mm,
 				       unsigned long address)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = lock_vma_under_rcu(mm, address);
 	if (vma) {
@@ -96,11 +96,11 @@ static struct vm_area_struct *uffd_lock_vma(struct mm_struct *mm,
 	return vma;
 }
 
-static struct vm_area_struct *uffd_mfill_lock(struct mm_struct *dst_mm,
+static struct mm_area *uffd_mfill_lock(struct mm_struct *dst_mm,
 					      unsigned long dst_start,
 					      unsigned long len)
 {
-	struct vm_area_struct *dst_vma;
+	struct mm_area *dst_vma;
 
 	dst_vma = uffd_lock_vma(dst_mm, dst_start);
 	if (IS_ERR(dst_vma) || validate_dst_vma(dst_vma, dst_start + len))
@@ -110,18 +110,18 @@ static struct vm_area_struct *uffd_mfill_lock(struct mm_struct *dst_mm,
 	return ERR_PTR(-ENOENT);
 }
 
-static void uffd_mfill_unlock(struct vm_area_struct *vma)
+static void uffd_mfill_unlock(struct mm_area *vma)
 {
 	vma_end_read(vma);
 }
 
 #else
 
-static struct vm_area_struct *uffd_mfill_lock(struct mm_struct *dst_mm,
+static struct mm_area *uffd_mfill_lock(struct mm_struct *dst_mm,
 					      unsigned long dst_start,
 					      unsigned long len)
 {
-	struct vm_area_struct *dst_vma;
+	struct mm_area *dst_vma;
 
 	mmap_read_lock(dst_mm);
 	dst_vma = find_vma_and_prepare_anon(dst_mm, dst_start);
@@ -137,14 +137,14 @@ out_unlock:
 	return dst_vma;
 }
 
-static void uffd_mfill_unlock(struct vm_area_struct *vma)
+static void uffd_mfill_unlock(struct mm_area *vma)
 {
 	mmap_read_unlock(vma->vm_mm);
 }
 #endif
 
 /* Check if dst_addr is outside of file's size. Must be called with ptl held. */
-static bool mfill_file_over_size(struct vm_area_struct *dst_vma,
+static bool mfill_file_over_size(struct mm_area *dst_vma,
 				 unsigned long dst_addr)
 {
 	struct inode *inode;
@@ -166,7 +166,7 @@ static bool mfill_file_over_size(struct vm_area_struct *dst_vma,
  * and anon, and for both shared and private VMAs.
  */
 int mfill_atomic_install_pte(pmd_t *dst_pmd,
-			     struct vm_area_struct *dst_vma,
+			     struct mm_area *dst_vma,
 			     unsigned long dst_addr, struct page *page,
 			     bool newly_allocated, uffd_flags_t flags)
 {
@@ -235,7 +235,7 @@ out:
 }
 
 static int mfill_atomic_pte_copy(pmd_t *dst_pmd,
-				 struct vm_area_struct *dst_vma,
+				 struct mm_area *dst_vma,
 				 unsigned long dst_addr,
 				 unsigned long src_addr,
 				 uffd_flags_t flags,
@@ -311,7 +311,7 @@ out_release:
 }
 
 static int mfill_atomic_pte_zeroed_folio(pmd_t *dst_pmd,
-					 struct vm_area_struct *dst_vma,
+					 struct mm_area *dst_vma,
 					 unsigned long dst_addr)
 {
 	struct folio *folio;
@@ -343,7 +343,7 @@ out_put:
 }
 
 static int mfill_atomic_pte_zeropage(pmd_t *dst_pmd,
-				     struct vm_area_struct *dst_vma,
+				     struct mm_area *dst_vma,
 				     unsigned long dst_addr)
 {
 	pte_t _dst_pte, *dst_pte;
@@ -378,7 +378,7 @@ out:
 
 /* Handles UFFDIO_CONTINUE for all shmem VMAs (shared or private). */
 static int mfill_atomic_pte_continue(pmd_t *dst_pmd,
-				     struct vm_area_struct *dst_vma,
+				     struct mm_area *dst_vma,
 				     unsigned long dst_addr,
 				     uffd_flags_t flags)
 {
@@ -422,7 +422,7 @@ out_release:
 
 /* Handles UFFDIO_POISON for all non-hugetlb VMAs. */
 static int mfill_atomic_pte_poison(pmd_t *dst_pmd,
-				   struct vm_area_struct *dst_vma,
+				   struct mm_area *dst_vma,
 				   unsigned long dst_addr,
 				   uffd_flags_t flags)
 {
@@ -487,7 +487,7 @@ static pmd_t *mm_alloc_pmd(struct mm_struct *mm, unsigned long address)
  */
 static __always_inline ssize_t mfill_atomic_hugetlb(
 					      struct userfaultfd_ctx *ctx,
-					      struct vm_area_struct *dst_vma,
+					      struct mm_area *dst_vma,
 					      unsigned long dst_start,
 					      unsigned long src_start,
 					      unsigned long len,
@@ -643,7 +643,7 @@ out:
 #else /* !CONFIG_HUGETLB_PAGE */
 /* fail at build time if gcc attempts to use this */
 extern ssize_t mfill_atomic_hugetlb(struct userfaultfd_ctx *ctx,
-				    struct vm_area_struct *dst_vma,
+				    struct mm_area *dst_vma,
 				    unsigned long dst_start,
 				    unsigned long src_start,
 				    unsigned long len,
@@ -651,7 +651,7 @@ extern ssize_t mfill_atomic_hugetlb(struct userfaultfd_ctx *ctx,
 #endif /* CONFIG_HUGETLB_PAGE */
 
 static __always_inline ssize_t mfill_atomic_pte(pmd_t *dst_pmd,
-						struct vm_area_struct *dst_vma,
+						struct mm_area *dst_vma,
 						unsigned long dst_addr,
 						unsigned long src_addr,
 						uffd_flags_t flags,
@@ -701,7 +701,7 @@ static __always_inline ssize_t mfill_atomic(struct userfaultfd_ctx *ctx,
 					    uffd_flags_t flags)
 {
 	struct mm_struct *dst_mm = ctx->mm;
-	struct vm_area_struct *dst_vma;
+	struct mm_area *dst_vma;
 	ssize_t err;
 	pmd_t *dst_pmd;
 	unsigned long src_addr, dst_addr;
@@ -897,7 +897,7 @@ ssize_t mfill_atomic_poison(struct userfaultfd_ctx *ctx, unsigned long start,
 			    uffd_flags_set_mode(flags, MFILL_ATOMIC_POISON));
 }
 
-long uffd_wp_range(struct vm_area_struct *dst_vma,
+long uffd_wp_range(struct mm_area *dst_vma,
 		   unsigned long start, unsigned long len, bool enable_wp)
 {
 	unsigned int mm_cp_flags;
@@ -932,7 +932,7 @@ int mwriteprotect_range(struct userfaultfd_ctx *ctx, unsigned long start,
 	struct mm_struct *dst_mm = ctx->mm;
 	unsigned long end = start + len;
 	unsigned long _start, _end;
-	struct vm_area_struct *dst_vma;
+	struct mm_area *dst_vma;
 	unsigned long page_mask;
 	long err;
 	VMA_ITERATOR(vmi, dst_mm, start);
@@ -1027,8 +1027,8 @@ static inline bool is_pte_pages_stable(pte_t *dst_pte, pte_t *src_pte,
 }
 
 static int move_present_pte(struct mm_struct *mm,
-			    struct vm_area_struct *dst_vma,
-			    struct vm_area_struct *src_vma,
+			    struct mm_area *dst_vma,
+			    struct mm_area *src_vma,
 			    unsigned long dst_addr, unsigned long src_addr,
 			    pte_t *dst_pte, pte_t *src_pte,
 			    pte_t orig_dst_pte, pte_t orig_src_pte,
@@ -1073,7 +1073,7 @@ out:
 	return err;
 }
 
-static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
+static int move_swap_pte(struct mm_struct *mm, struct mm_area *dst_vma,
 			 unsigned long dst_addr, unsigned long src_addr,
 			 pte_t *dst_pte, pte_t *src_pte,
 			 pte_t orig_dst_pte, pte_t orig_src_pte,
@@ -1107,8 +1107,8 @@ static int move_swap_pte(struct mm_struct *mm, struct vm_area_struct *dst_vma,
 }
 
 static int move_zeropage_pte(struct mm_struct *mm,
-			     struct vm_area_struct *dst_vma,
-			     struct vm_area_struct *src_vma,
+			     struct mm_area *dst_vma,
+			     struct mm_area *src_vma,
 			     unsigned long dst_addr, unsigned long src_addr,
 			     pte_t *dst_pte, pte_t *src_pte,
 			     pte_t orig_dst_pte, pte_t orig_src_pte,
@@ -1140,8 +1140,8 @@ static int move_zeropage_pte(struct mm_struct *mm,
  * in moving the page.
  */
 static int move_pages_pte(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd,
-			  struct vm_area_struct *dst_vma,
-			  struct vm_area_struct *src_vma,
+			  struct mm_area *dst_vma,
+			  struct mm_area *src_vma,
 			  unsigned long dst_addr, unsigned long src_addr,
 			  __u64 mode)
 {
@@ -1445,15 +1445,15 @@ static inline bool move_splits_huge_pmd(unsigned long dst_addr,
 }
 #endif
 
-static inline bool vma_move_compatible(struct vm_area_struct *vma)
+static inline bool vma_move_compatible(struct mm_area *vma)
 {
 	return !(vma->vm_flags & (VM_PFNMAP | VM_IO |  VM_HUGETLB |
 				  VM_MIXEDMAP | VM_SHADOW_STACK));
 }
 
 static int validate_move_areas(struct userfaultfd_ctx *ctx,
-			       struct vm_area_struct *src_vma,
-			       struct vm_area_struct *dst_vma)
+			       struct mm_area *src_vma,
+			       struct mm_area *dst_vma)
 {
 	/* Only allow moving if both have the same access and protection */
 	if ((src_vma->vm_flags & VM_ACCESS_FLAGS) != (dst_vma->vm_flags & VM_ACCESS_FLAGS) ||
@@ -1491,10 +1491,10 @@ static __always_inline
 int find_vmas_mm_locked(struct mm_struct *mm,
 			unsigned long dst_start,
 			unsigned long src_start,
-			struct vm_area_struct **dst_vmap,
-			struct vm_area_struct **src_vmap)
+			struct mm_area **dst_vmap,
+			struct mm_area **src_vmap)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	mmap_assert_locked(mm);
 	vma = find_vma_and_prepare_anon(mm, dst_start);
@@ -1518,10 +1518,10 @@ out_success:
 static int uffd_move_lock(struct mm_struct *mm,
 			  unsigned long dst_start,
 			  unsigned long src_start,
-			  struct vm_area_struct **dst_vmap,
-			  struct vm_area_struct **src_vmap)
+			  struct mm_area **dst_vmap,
+			  struct mm_area **src_vmap)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int err;
 
 	vma = uffd_lock_vma(mm, dst_start);
@@ -1581,8 +1581,8 @@ out:
 	return err;
 }
 
-static void uffd_move_unlock(struct vm_area_struct *dst_vma,
-			     struct vm_area_struct *src_vma)
+static void uffd_move_unlock(struct mm_area *dst_vma,
+			     struct mm_area *src_vma)
 {
 	vma_end_read(src_vma);
 	if (src_vma != dst_vma)
@@ -1594,8 +1594,8 @@ static void uffd_move_unlock(struct vm_area_struct *dst_vma,
 static int uffd_move_lock(struct mm_struct *mm,
 			  unsigned long dst_start,
 			  unsigned long src_start,
-			  struct vm_area_struct **dst_vmap,
-			  struct vm_area_struct **src_vmap)
+			  struct mm_area **dst_vmap,
+			  struct mm_area **src_vmap)
 {
 	int err;
 
@@ -1606,8 +1606,8 @@ static int uffd_move_lock(struct mm_struct *mm,
 	return err;
 }
 
-static void uffd_move_unlock(struct vm_area_struct *dst_vma,
-			     struct vm_area_struct *src_vma)
+static void uffd_move_unlock(struct mm_area *dst_vma,
+			     struct mm_area *src_vma)
 {
 	mmap_assert_locked(src_vma->vm_mm);
 	mmap_read_unlock(dst_vma->vm_mm);
@@ -1694,7 +1694,7 @@ ssize_t move_pages(struct userfaultfd_ctx *ctx, unsigned long dst_start,
 		   unsigned long src_start, unsigned long len, __u64 mode)
 {
 	struct mm_struct *mm = ctx->mm;
-	struct vm_area_struct *src_vma, *dst_vma;
+	struct mm_area *src_vma, *dst_vma;
 	unsigned long src_addr, dst_addr;
 	pmd_t *src_pmd, *dst_pmd;
 	long err = -EINVAL;
@@ -1865,7 +1865,7 @@ out:
 	return moved ? moved : err;
 }
 
-static void userfaultfd_set_vm_flags(struct vm_area_struct *vma,
+static void userfaultfd_set_vm_flags(struct mm_area *vma,
 				     vm_flags_t flags)
 {
 	const bool uffd_wp_changed = (vma->vm_flags ^ flags) & VM_UFFD_WP;
@@ -1880,7 +1880,7 @@ static void userfaultfd_set_vm_flags(struct vm_area_struct *vma,
 		vma_set_page_prot(vma);
 }
 
-static void userfaultfd_set_ctx(struct vm_area_struct *vma,
+static void userfaultfd_set_ctx(struct mm_area *vma,
 				struct userfaultfd_ctx *ctx,
 				unsigned long flags)
 {
@@ -1890,18 +1890,18 @@ static void userfaultfd_set_ctx(struct vm_area_struct *vma,
 				 (vma->vm_flags & ~__VM_UFFD_FLAGS) | flags);
 }
 
-void userfaultfd_reset_ctx(struct vm_area_struct *vma)
+void userfaultfd_reset_ctx(struct mm_area *vma)
 {
 	userfaultfd_set_ctx(vma, NULL, 0);
 }
 
-struct vm_area_struct *userfaultfd_clear_vma(struct vma_iterator *vmi,
-					     struct vm_area_struct *prev,
-					     struct vm_area_struct *vma,
+struct mm_area *userfaultfd_clear_vma(struct vma_iterator *vmi,
+					     struct mm_area *prev,
+					     struct mm_area *vma,
 					     unsigned long start,
 					     unsigned long end)
 {
-	struct vm_area_struct *ret;
+	struct mm_area *ret;
 
 	/* Reset ptes for the whole vma range if wr-protected */
 	if (userfaultfd_wp(vma))
@@ -1924,13 +1924,13 @@ struct vm_area_struct *userfaultfd_clear_vma(struct vma_iterator *vmi,
 
 /* Assumes mmap write lock taken, and mm_struct pinned. */
 int userfaultfd_register_range(struct userfaultfd_ctx *ctx,
-			       struct vm_area_struct *vma,
+			       struct mm_area *vma,
 			       unsigned long vm_flags,
 			       unsigned long start, unsigned long end,
 			       bool wp_async)
 {
 	VMA_ITERATOR(vmi, ctx->mm, start);
-	struct vm_area_struct *prev = vma_prev(&vmi);
+	struct mm_area *prev = vma_prev(&vmi);
 	unsigned long vma_end;
 	unsigned long new_flags;
 
@@ -1985,7 +1985,7 @@ skip:
 void userfaultfd_release_new(struct userfaultfd_ctx *ctx)
 {
 	struct mm_struct *mm = ctx->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	/* the various vma->vm_userfaultfd_ctx still points to it */
@@ -2000,7 +2000,7 @@ void userfaultfd_release_new(struct userfaultfd_ctx *ctx)
 void userfaultfd_release_all(struct mm_struct *mm,
 			     struct userfaultfd_ctx *ctx)
 {
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	if (!mmget_not_zero(mm))

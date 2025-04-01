@@ -36,7 +36,7 @@
 
 static vm_fault_t udf_page_mkwrite(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct inode *inode = file_inode(vma->vm_file);
 	struct address_space *mapping = inode->i_mapping;
 	struct folio *folio = page_folio(vmf->page);
@@ -189,7 +189,7 @@ static int udf_release_file(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int udf_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int udf_file_mmap(struct file *file, struct mm_area *vma)
 {
 	file_accessed(file);
 	vma->vm_ops = &udf_file_vm_ops;

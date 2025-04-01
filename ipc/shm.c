@@ -3,7 +3,7 @@
  * linux/ipc/shm.c
  * Copyright (C) 1992, 1993 Krishna Balasubramanian
  *	 Many improvements/fixes by Bruno Haible.
- * Replaced `struct shm_desc' by `struct vm_area_struct', July 1994.
+ * Replaced `struct shm_desc' by `struct mm_area', July 1994.
  * Fixed the shm swap deallocation (shm_unuse()), August 1998 Andrea Arcangeli.
  *
  * /proc/sysvipc/shm support (c) 1999 Dragos Acostachioaie <dragos@iname.com>
@@ -99,8 +99,8 @@ static const struct vm_operations_struct shm_vm_ops;
 	ipc_unlock(&(shp)->shm_perm)
 
 static int newseg(struct ipc_namespace *, struct ipc_params *);
-static void shm_open(struct vm_area_struct *vma);
-static void shm_close(struct vm_area_struct *vma);
+static void shm_open(struct mm_area *vma);
+static void shm_close(struct mm_area *vma);
 static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp);
 #ifdef CONFIG_PROC_FS
 static int sysvipc_shm_proc_show(struct seq_file *s, void *it);
@@ -299,7 +299,7 @@ static int __shm_open(struct shm_file_data *sfd)
 }
 
 /* This is called by fork, once for every shm attach. */
-static void shm_open(struct vm_area_struct *vma)
+static void shm_open(struct mm_area *vma)
 {
 	struct file *file = vma->vm_file;
 	struct shm_file_data *sfd = shm_file_data(file);
@@ -393,7 +393,7 @@ done:
 	up_write(&shm_ids(ns).rwsem);
 }
 
-static void shm_close(struct vm_area_struct *vma)
+static void shm_close(struct mm_area *vma)
 {
 	struct file *file = vma->vm_file;
 	struct shm_file_data *sfd = shm_file_data(file);
@@ -540,7 +540,7 @@ static vm_fault_t shm_fault(struct vm_fault *vmf)
 	return sfd->vm_ops->fault(vmf);
 }
 
-static int shm_may_split(struct vm_area_struct *vma, unsigned long addr)
+static int shm_may_split(struct mm_area *vma, unsigned long addr)
 {
 	struct file *file = vma->vm_file;
 	struct shm_file_data *sfd = shm_file_data(file);
@@ -551,7 +551,7 @@ static int shm_may_split(struct vm_area_struct *vma, unsigned long addr)
 	return 0;
 }
 
-static unsigned long shm_pagesize(struct vm_area_struct *vma)
+static unsigned long shm_pagesize(struct mm_area *vma)
 {
 	struct file *file = vma->vm_file;
 	struct shm_file_data *sfd = shm_file_data(file);
@@ -563,7 +563,7 @@ static unsigned long shm_pagesize(struct vm_area_struct *vma)
 }
 
 #ifdef CONFIG_NUMA
-static int shm_set_policy(struct vm_area_struct *vma, struct mempolicy *mpol)
+static int shm_set_policy(struct mm_area *vma, struct mempolicy *mpol)
 {
 	struct shm_file_data *sfd = shm_file_data(vma->vm_file);
 	int err = 0;
@@ -573,7 +573,7 @@ static int shm_set_policy(struct vm_area_struct *vma, struct mempolicy *mpol)
 	return err;
 }
 
-static struct mempolicy *shm_get_policy(struct vm_area_struct *vma,
+static struct mempolicy *shm_get_policy(struct mm_area *vma,
 					unsigned long addr, pgoff_t *ilx)
 {
 	struct shm_file_data *sfd = shm_file_data(vma->vm_file);
@@ -585,7 +585,7 @@ static struct mempolicy *shm_get_policy(struct vm_area_struct *vma,
 }
 #endif
 
-static int shm_mmap(struct file *file, struct vm_area_struct *vma)
+static int shm_mmap(struct file *file, struct mm_area *vma)
 {
 	struct shm_file_data *sfd = shm_file_data(file);
 	int ret;
@@ -1723,7 +1723,7 @@ COMPAT_SYSCALL_DEFINE3(shmat, int, shmid, compat_uptr_t, shmaddr, int, shmflg)
 long ksys_shmdt(char __user *shmaddr)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr = (unsigned long)shmaddr;
 	int retval = -EINVAL;
 #ifdef CONFIG_MMU

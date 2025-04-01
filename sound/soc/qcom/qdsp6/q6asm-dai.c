@@ -1114,7 +1114,7 @@ static int q6asm_compr_copy(struct snd_soc_component *component,
 
 static int q6asm_dai_compr_mmap(struct snd_soc_component *component,
 				struct snd_compr_stream *stream,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	struct snd_compr_runtime *runtime = stream->runtime;
 	struct q6asm_dai_rtd *prtd = runtime->private_data;

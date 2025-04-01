@@ -710,11 +710,11 @@ struct anon_vma_name {
  * either keep holding the lock while using the returned pointer or it should
  * raise anon_vma_name refcount before releasing the lock.
  */
-struct anon_vma_name *anon_vma_name(struct vm_area_struct *vma);
+struct anon_vma_name *anon_vma_name(struct mm_area *vma);
 struct anon_vma_name *anon_vma_name_alloc(const char *name);
 void anon_vma_name_free(struct kref *kref);
 #else /* CONFIG_ANON_VMA_NAME */
-static inline struct anon_vma_name *anon_vma_name(struct vm_area_struct *vma)
+static inline struct anon_vma_name *anon_vma_name(struct mm_area *vma)
 {
 	return NULL;
 }
@@ -774,9 +774,9 @@ struct vma_numab_state {
  * getting a stable reference.
  *
  * WARNING: when adding new members, please update vm_area_init_from() to copy
- * them during vm_area_struct content duplication.
+ * them during mm_area content duplication.
  */
-struct vm_area_struct {
+struct mm_area {
 	/* The first cache line has the info for VMA tree walking. */
 
 	union {
@@ -1488,14 +1488,14 @@ struct vm_special_mapping {
 	 * on the special mapping.  If used, .pages is not checked.
 	 */
 	vm_fault_t (*fault)(const struct vm_special_mapping *sm,
-				struct vm_area_struct *vma,
+				struct mm_area *vma,
 				struct vm_fault *vmf);
 
 	int (*mremap)(const struct vm_special_mapping *sm,
-		     struct vm_area_struct *new_vma);
+		     struct mm_area *new_vma);
 
 	void (*close)(const struct vm_special_mapping *sm,
-		      struct vm_area_struct *vma);
+		      struct mm_area *vma);
 };
 
 enum tlb_flush_reason {

@@ -6,7 +6,7 @@
 struct device_node;
 struct fb_info;
 struct fb_var_screeninfo;
-struct vm_area_struct;
+struct mm_area;
 
 struct sbus_mmap_map {
 	unsigned long voff;
@@ -22,7 +22,7 @@ extern void sbusfb_fill_var(struct fb_var_screeninfo *var,
 extern int sbusfb_mmap_helper(const struct sbus_mmap_map *map,
 			      unsigned long physbase, unsigned long fbsize,
 			      unsigned long iospace,
-			      struct vm_area_struct *vma);
+			      struct mm_area *vma);
 int sbusfb_ioctl_helper(unsigned long cmd, unsigned long arg,
 			struct fb_info *info,
 			int type, int fb_depth, unsigned long fb_size);

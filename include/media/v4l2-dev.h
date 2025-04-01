@@ -209,7 +209,7 @@ struct v4l2_file_operations {
 #endif
 	unsigned long (*get_unmapped_area) (struct file *, unsigned long,
 				unsigned long, unsigned long, unsigned long);
-	int (*mmap) (struct file *, struct vm_area_struct *);
+	int (*mmap) (struct file *, struct mm_area *);
 	int (*open) (struct file *);
 	int (*release) (struct file *);
 };

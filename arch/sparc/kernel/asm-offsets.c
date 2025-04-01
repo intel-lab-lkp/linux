@@ -52,7 +52,7 @@ static int __used foo(void)
 	BLANK();
 	DEFINE(AOFF_mm_context, offsetof(struct mm_struct, context));
 	BLANK();
-	DEFINE(VMA_VM_MM,    offsetof(struct vm_area_struct, vm_mm));
+	DEFINE(VMA_VM_MM,    offsetof(struct mm_area, vm_mm));
 
 	/* DEFINE(NUM_USER_SEGMENTS, TASK_SIZE>>28); */
 	return 0;

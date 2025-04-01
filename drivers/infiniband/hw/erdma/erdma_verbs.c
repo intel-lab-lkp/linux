@@ -1371,7 +1371,7 @@ void erdma_qp_put_ref(struct ib_qp *ibqp)
 	erdma_qp_put(to_eqp(ibqp));
 }
 
-int erdma_mmap(struct ib_ucontext *ctx, struct vm_area_struct *vma)
+int erdma_mmap(struct ib_ucontext *ctx, struct mm_area *vma)
 {
 	struct rdma_user_mmap_entry *rdma_entry;
 	struct erdma_user_mmap_entry *entry;

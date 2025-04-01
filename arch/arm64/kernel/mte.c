@@ -422,7 +422,7 @@ static int __access_remote_tags(struct mm_struct *mm, unsigned long addr,
 		return -EIO;
 
 	while (len) {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		unsigned long tags, offset;
 		void *maddr;
 		struct page *page = get_user_page_vma_remote(mm, addr,

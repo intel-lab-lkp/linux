@@ -56,7 +56,7 @@ unsigned long arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	vm_flags_t vm_flags)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int do_colour_align;
 	struct vm_unmapped_area_info info = {};
 
@@ -102,7 +102,7 @@ arch_get_unmapped_area_topdown(struct file *filp, const unsigned long addr0,
 			  const unsigned long len, const unsigned long pgoff,
 			  const unsigned long flags, vm_flags_t vm_flags)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm = current->mm;
 	unsigned long addr = addr0;
 	int do_colour_align;

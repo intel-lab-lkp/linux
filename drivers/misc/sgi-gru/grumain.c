@@ -303,7 +303,7 @@ static struct gru_thread_state *gru_find_current_gts_nolock(struct gru_vma_data
 /*
  * Allocate a thread state structure.
  */
-struct gru_thread_state *gru_alloc_gts(struct vm_area_struct *vma,
+struct gru_thread_state *gru_alloc_gts(struct mm_area *vma,
 		int cbr_au_count, int dsr_au_count,
 		unsigned char tlb_preload_count, int options, int tsid)
 {
@@ -352,7 +352,7 @@ err:
 /*
  * Allocate a vma private data structure.
  */
-struct gru_vma_data *gru_alloc_vma_data(struct vm_area_struct *vma, int tsid)
+struct gru_vma_data *gru_alloc_vma_data(struct mm_area *vma, int tsid)
 {
 	struct gru_vma_data *vdata = NULL;
 
@@ -370,7 +370,7 @@ struct gru_vma_data *gru_alloc_vma_data(struct vm_area_struct *vma, int tsid)
 /*
  * Find the thread state structure for the current thread.
  */
-struct gru_thread_state *gru_find_thread_state(struct vm_area_struct *vma,
+struct gru_thread_state *gru_find_thread_state(struct mm_area *vma,
 					int tsid)
 {
 	struct gru_vma_data *vdata = vma->vm_private_data;
@@ -387,7 +387,7 @@ struct gru_thread_state *gru_find_thread_state(struct vm_area_struct *vma,
  * Allocate a new thread state for a GSEG. Note that races may allow
  * another thread to race to create a gts.
  */
-struct gru_thread_state *gru_alloc_thread_state(struct vm_area_struct *vma,
+struct gru_thread_state *gru_alloc_thread_state(struct mm_area *vma,
 					int tsid)
 {
 	struct gru_vma_data *vdata = vma->vm_private_data;
@@ -920,7 +920,7 @@ again:
  */
 vm_fault_t gru_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct gru_thread_state *gts;
 	unsigned long paddr, vaddr;
 	unsigned long expires;

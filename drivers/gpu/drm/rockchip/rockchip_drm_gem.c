@@ -213,7 +213,7 @@ static void rockchip_gem_free_buf(struct rockchip_gem_object *rk_obj)
 }
 
 static int rockchip_drm_gem_object_mmap_iommu(struct drm_gem_object *obj,
-					      struct vm_area_struct *vma)
+					      struct mm_area *vma)
 {
 	struct rockchip_gem_object *rk_obj = to_rockchip_obj(obj);
 	unsigned int count = obj->size >> PAGE_SHIFT;
@@ -226,7 +226,7 @@ static int rockchip_drm_gem_object_mmap_iommu(struct drm_gem_object *obj,
 }
 
 static int rockchip_drm_gem_object_mmap_dma(struct drm_gem_object *obj,
-					    struct vm_area_struct *vma)
+					    struct mm_area *vma)
 {
 	struct rockchip_gem_object *rk_obj = to_rockchip_obj(obj);
 	struct drm_device *drm = obj->dev;
@@ -236,7 +236,7 @@ static int rockchip_drm_gem_object_mmap_dma(struct drm_gem_object *obj,
 }
 
 static int rockchip_drm_gem_object_mmap(struct drm_gem_object *obj,
-					struct vm_area_struct *vma)
+					struct mm_area *vma)
 {
 	int ret;
 	struct rockchip_gem_object *rk_obj = to_rockchip_obj(obj);

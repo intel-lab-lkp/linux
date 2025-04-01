@@ -96,7 +96,7 @@ void flush_icache_range(unsigned long address, unsigned long endaddr)
 }
 EXPORT_SYMBOL(flush_icache_range);
 
-void flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
+void flush_icache_user_page(struct mm_area *vma, struct page *page,
 			     unsigned long addr, int len)
 {
 	if (CPU_IS_COLDFIRE) {

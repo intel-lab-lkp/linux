@@ -57,7 +57,7 @@ asmlinkage long sys_mmap2(unsigned long addr, unsigned long len,
 /* sys_cacheflush -- flush (part of) the processor cache.  */
 asmlinkage int sys_cacheflush(unsigned long addr, unsigned long len, int op)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	if ((op <= 0) || (op > (CACHEFLUSH_D_PURGE|CACHEFLUSH_I)))
 		return -EINVAL;

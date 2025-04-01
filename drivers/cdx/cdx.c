@@ -708,7 +708,7 @@ static const struct vm_operations_struct cdx_phys_vm_ops = {
  *      this API is registered as a callback.
  * @kobj: kobject for mapping
  * @attr: struct bin_attribute for the file being mapped
- * @vma: struct vm_area_struct passed into the mmap
+ * @vma: struct mm_area passed into the mmap
  *
  * Use the regular CDX mapping routines to map a CDX resource into userspace.
  *
@@ -716,7 +716,7 @@ static const struct vm_operations_struct cdx_phys_vm_ops = {
  */
 static int cdx_mmap_resource(struct file *fp, struct kobject *kobj,
 			     const struct bin_attribute *attr,
-			     struct vm_area_struct *vma)
+			     struct mm_area *vma)
 {
 	struct cdx_device *cdx_dev = to_cdx_device(kobj_to_dev(kobj));
 	int num = (unsigned long)attr->private;

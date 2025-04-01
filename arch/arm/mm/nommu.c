@@ -189,7 +189,7 @@ void flush_dcache_page(struct page *page)
 }
 EXPORT_SYMBOL(flush_dcache_page);
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		       unsigned long uaddr, void *dst, const void *src,
 		       unsigned long len)
 {

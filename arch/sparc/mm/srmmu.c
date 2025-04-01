@@ -555,34 +555,34 @@ void srmmu_unmapiorange(unsigned long virt_addr, unsigned int len)
 /* tsunami.S */
 extern void tsunami_flush_cache_all(void);
 extern void tsunami_flush_cache_mm(struct mm_struct *mm);
-extern void tsunami_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void tsunami_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+extern void tsunami_flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end);
+extern void tsunami_flush_cache_page(struct mm_area *vma, unsigned long page);
 extern void tsunami_flush_page_to_ram(unsigned long page);
 extern void tsunami_flush_page_for_dma(unsigned long page);
 extern void tsunami_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 extern void tsunami_flush_tlb_all(void);
 extern void tsunami_flush_tlb_mm(struct mm_struct *mm);
-extern void tsunami_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void tsunami_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+extern void tsunami_flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end);
+extern void tsunami_flush_tlb_page(struct mm_area *vma, unsigned long page);
 extern void tsunami_setup_blockops(void);
 
 /* swift.S */
 extern void swift_flush_cache_all(void);
 extern void swift_flush_cache_mm(struct mm_struct *mm);
-extern void swift_flush_cache_range(struct vm_area_struct *vma,
+extern void swift_flush_cache_range(struct mm_area *vma,
 				    unsigned long start, unsigned long end);
-extern void swift_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+extern void swift_flush_cache_page(struct mm_area *vma, unsigned long page);
 extern void swift_flush_page_to_ram(unsigned long page);
 extern void swift_flush_page_for_dma(unsigned long page);
 extern void swift_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 extern void swift_flush_tlb_all(void);
 extern void swift_flush_tlb_mm(struct mm_struct *mm);
-extern void swift_flush_tlb_range(struct vm_area_struct *vma,
+extern void swift_flush_tlb_range(struct mm_area *vma,
 				  unsigned long start, unsigned long end);
-extern void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+extern void swift_flush_tlb_page(struct mm_area *vma, unsigned long page);
 
 #if 0  /* P3: deadwood to debug precise flushes on Swift. */
-void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void swift_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	int cctx, ctx1;
 
@@ -621,9 +621,9 @@ void swift_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 /* viking.S */
 extern void viking_flush_cache_all(void);
 extern void viking_flush_cache_mm(struct mm_struct *mm);
-extern void viking_flush_cache_range(struct vm_area_struct *vma, unsigned long start,
+extern void viking_flush_cache_range(struct mm_area *vma, unsigned long start,
 				     unsigned long end);
-extern void viking_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+extern void viking_flush_cache_page(struct mm_area *vma, unsigned long page);
 extern void viking_flush_page_to_ram(unsigned long page);
 extern void viking_flush_page_for_dma(unsigned long page);
 extern void viking_flush_sig_insns(struct mm_struct *mm, unsigned long addr);
@@ -631,29 +631,29 @@ extern void viking_flush_page(unsigned long page);
 extern void viking_mxcc_flush_page(unsigned long page);
 extern void viking_flush_tlb_all(void);
 extern void viking_flush_tlb_mm(struct mm_struct *mm);
-extern void viking_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+extern void viking_flush_tlb_range(struct mm_area *vma, unsigned long start,
 				   unsigned long end);
-extern void viking_flush_tlb_page(struct vm_area_struct *vma,
+extern void viking_flush_tlb_page(struct mm_area *vma,
 				  unsigned long page);
 extern void sun4dsmp_flush_tlb_all(void);
 extern void sun4dsmp_flush_tlb_mm(struct mm_struct *mm);
-extern void sun4dsmp_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+extern void sun4dsmp_flush_tlb_range(struct mm_area *vma, unsigned long start,
 				   unsigned long end);
-extern void sun4dsmp_flush_tlb_page(struct vm_area_struct *vma,
+extern void sun4dsmp_flush_tlb_page(struct mm_area *vma,
 				  unsigned long page);
 
 /* hypersparc.S */
 extern void hypersparc_flush_cache_all(void);
 extern void hypersparc_flush_cache_mm(struct mm_struct *mm);
-extern void hypersparc_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void hypersparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page);
+extern void hypersparc_flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end);
+extern void hypersparc_flush_cache_page(struct mm_area *vma, unsigned long page);
 extern void hypersparc_flush_page_to_ram(unsigned long page);
 extern void hypersparc_flush_page_for_dma(unsigned long page);
 extern void hypersparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 extern void hypersparc_flush_tlb_all(void);
 extern void hypersparc_flush_tlb_mm(struct mm_struct *mm);
-extern void hypersparc_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-extern void hypersparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page);
+extern void hypersparc_flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end);
+extern void hypersparc_flush_tlb_page(struct mm_area *vma, unsigned long page);
 extern void hypersparc_setup_blockops(void);
 
 /*
@@ -1235,7 +1235,7 @@ static void turbosparc_flush_cache_mm(struct mm_struct *mm)
 	FLUSH_END
 }
 
-static void turbosparc_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+static void turbosparc_flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	FLUSH_BEGIN(vma->vm_mm)
 	flush_user_windows();
@@ -1243,7 +1243,7 @@ static void turbosparc_flush_cache_range(struct vm_area_struct *vma, unsigned lo
 	FLUSH_END
 }
 
-static void turbosparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
+static void turbosparc_flush_cache_page(struct mm_area *vma, unsigned long page)
 {
 	FLUSH_BEGIN(vma->vm_mm)
 	flush_user_windows();
@@ -1286,14 +1286,14 @@ static void turbosparc_flush_tlb_mm(struct mm_struct *mm)
 	FLUSH_END
 }
 
-static void turbosparc_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+static void turbosparc_flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	FLUSH_BEGIN(vma->vm_mm)
 	srmmu_flush_whole_tlb();
 	FLUSH_END
 }
 
-static void turbosparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+static void turbosparc_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	FLUSH_BEGIN(vma->vm_mm)
 	srmmu_flush_whole_tlb();
@@ -1672,7 +1672,7 @@ static void smp_flush_tlb_mm(struct mm_struct *mm)
 	}
 }
 
-static void smp_flush_cache_range(struct vm_area_struct *vma,
+static void smp_flush_cache_range(struct mm_area *vma,
 				  unsigned long start,
 				  unsigned long end)
 {
@@ -1686,7 +1686,7 @@ static void smp_flush_cache_range(struct vm_area_struct *vma,
 	}
 }
 
-static void smp_flush_tlb_range(struct vm_area_struct *vma,
+static void smp_flush_tlb_range(struct mm_area *vma,
 				unsigned long start,
 				unsigned long end)
 {
@@ -1700,7 +1700,7 @@ static void smp_flush_tlb_range(struct vm_area_struct *vma,
 	}
 }
 
-static void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
+static void smp_flush_cache_page(struct mm_area *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -1711,7 +1711,7 @@ static void smp_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
 	}
 }
 
-static void smp_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+static void smp_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	struct mm_struct *mm = vma->vm_mm;
 

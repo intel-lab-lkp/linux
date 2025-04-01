@@ -198,7 +198,7 @@ static int lima_gem_vmap(struct drm_gem_object *obj, struct iosys_map *map)
 	return drm_gem_shmem_vmap(&bo->base, map);
 }
 
-static int lima_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int lima_gem_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct lima_bo *bo = to_lima_bo(obj);
 

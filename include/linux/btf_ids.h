@@ -270,7 +270,7 @@ extern u32 btf_sock_ids[];
 #define BTF_TRACING_TYPE_xxx	\
 	BTF_TRACING_TYPE(BTF_TRACING_TYPE_TASK, task_struct)	\
 	BTF_TRACING_TYPE(BTF_TRACING_TYPE_FILE, file)		\
-	BTF_TRACING_TYPE(BTF_TRACING_TYPE_VMA, vm_area_struct)
+	BTF_TRACING_TYPE(BTF_TRACING_TYPE_VMA, mm_area)
 
 enum {
 #define BTF_TRACING_TYPE(name, type) name,

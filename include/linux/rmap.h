@@ -81,7 +81,7 @@ struct anon_vma {
  * which link all the VMAs associated with this anon_vma.
  */
 struct anon_vma_chain {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct anon_vma *anon_vma;
 	struct list_head same_vma;   /* locked by mmap_lock & page_table_lock */
 	struct rb_node rb;			/* locked by anon_vma->rwsem */
@@ -152,12 +152,12 @@ static inline void anon_vma_unlock_read(struct anon_vma *anon_vma)
  * anon_vma helper functions.
  */
 void anon_vma_init(void);	/* create anon_vma_cachep */
-int  __anon_vma_prepare(struct vm_area_struct *);
-void unlink_anon_vmas(struct vm_area_struct *);
-int anon_vma_clone(struct vm_area_struct *, struct vm_area_struct *);
-int anon_vma_fork(struct vm_area_struct *, struct vm_area_struct *);
+int  __anon_vma_prepare(struct mm_area *);
+void unlink_anon_vmas(struct mm_area *);
+int anon_vma_clone(struct mm_area *, struct mm_area *);
+int anon_vma_fork(struct mm_area *, struct mm_area *);
 
-static inline int anon_vma_prepare(struct vm_area_struct *vma)
+static inline int anon_vma_prepare(struct mm_area *vma)
 {
 	if (likely(vma->anon_vma))
 		return 0;
@@ -165,8 +165,8 @@ static inline int anon_vma_prepare(struct vm_area_struct *vma)
 	return __anon_vma_prepare(vma);
 }
 
-static inline void anon_vma_merge(struct vm_area_struct *vma,
-				  struct vm_area_struct *next)
+static inline void anon_vma_merge(struct mm_area *vma,
+				  struct mm_area *next)
 {
 	VM_BUG_ON_VMA(vma->anon_vma != next->anon_vma, vma);
 	unlink_anon_vmas(next);
@@ -227,7 +227,7 @@ static inline void __folio_large_mapcount_sanity_checks(const struct folio *foli
 }
 
 static __always_inline void folio_set_large_mapcount(struct folio *folio,
-		int mapcount, struct vm_area_struct *vma)
+		int mapcount, struct mm_area *vma)
 {
 	__folio_large_mapcount_sanity_checks(folio, mapcount, vma->vm_mm->mm_id);
 
@@ -241,7 +241,7 @@ static __always_inline void folio_set_large_mapcount(struct folio *folio,
 }
 
 static __always_inline int folio_add_return_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
+		int diff, struct mm_area *vma)
 {
 	const mm_id_t mm_id = vma->vm_mm->mm_id;
 	int new_mapcount_val;
@@ -291,7 +291,7 @@ static __always_inline int folio_add_return_large_mapcount(struct folio *folio,
 #define folio_add_large_mapcount folio_add_return_large_mapcount
 
 static __always_inline int folio_sub_return_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
+		int diff, struct mm_area *vma)
 {
 	const mm_id_t mm_id = vma->vm_mm->mm_id;
 	int new_mapcount_val;
@@ -342,32 +342,32 @@ out:
  * CONFIG_TRANSPARENT_HUGEPAGE. We'll keep that working for now.
  */
 static inline void folio_set_large_mapcount(struct folio *folio, int mapcount,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	/* Note: mapcounts start at -1. */
 	atomic_set(&folio->_large_mapcount, mapcount - 1);
 }
 
 static inline void folio_add_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
+		int diff, struct mm_area *vma)
 {
 	atomic_add(diff, &folio->_large_mapcount);
 }
 
 static inline int folio_add_return_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
+		int diff, struct mm_area *vma)
 {
 	BUILD_BUG();
 }
 
 static inline void folio_sub_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
+		int diff, struct mm_area *vma)
 {
 	atomic_sub(diff, &folio->_large_mapcount);
 }
 
 static inline int folio_sub_return_large_mapcount(struct folio *folio,
-		int diff, struct vm_area_struct *vma)
+		int diff, struct mm_area *vma)
 {
 	BUILD_BUG();
 }
@@ -454,40 +454,40 @@ static inline void __folio_rmap_sanity_checks(const struct folio *folio,
 /*
  * rmap interfaces called when adding or removing pte of page
  */
-void folio_move_anon_rmap(struct folio *, struct vm_area_struct *);
+void folio_move_anon_rmap(struct folio *, struct mm_area *);
 void folio_add_anon_rmap_ptes(struct folio *, struct page *, int nr_pages,
-		struct vm_area_struct *, unsigned long address, rmap_t flags);
+		struct mm_area *, unsigned long address, rmap_t flags);
 #define folio_add_anon_rmap_pte(folio, page, vma, address, flags) \
 	folio_add_anon_rmap_ptes(folio, page, 1, vma, address, flags)
 void folio_add_anon_rmap_pmd(struct folio *, struct page *,
-		struct vm_area_struct *, unsigned long address, rmap_t flags);
-void folio_add_new_anon_rmap(struct folio *, struct vm_area_struct *,
+		struct mm_area *, unsigned long address, rmap_t flags);
+void folio_add_new_anon_rmap(struct folio *, struct mm_area *,
 		unsigned long address, rmap_t flags);
 void folio_add_file_rmap_ptes(struct folio *, struct page *, int nr_pages,
-		struct vm_area_struct *);
+		struct mm_area *);
 #define folio_add_file_rmap_pte(folio, page, vma) \
 	folio_add_file_rmap_ptes(folio, page, 1, vma)
 void folio_add_file_rmap_pmd(struct folio *, struct page *,
-		struct vm_area_struct *);
+		struct mm_area *);
 void folio_add_file_rmap_pud(struct folio *, struct page *,
-		struct vm_area_struct *);
+		struct mm_area *);
 void folio_remove_rmap_ptes(struct folio *, struct page *, int nr_pages,
-		struct vm_area_struct *);
+		struct mm_area *);
 #define folio_remove_rmap_pte(folio, page, vma) \
 	folio_remove_rmap_ptes(folio, page, 1, vma)
 void folio_remove_rmap_pmd(struct folio *, struct page *,
-		struct vm_area_struct *);
+		struct mm_area *);
 void folio_remove_rmap_pud(struct folio *, struct page *,
-		struct vm_area_struct *);
+		struct mm_area *);
 
-void hugetlb_add_anon_rmap(struct folio *, struct vm_area_struct *,
+void hugetlb_add_anon_rmap(struct folio *, struct mm_area *,
 		unsigned long address, rmap_t flags);
-void hugetlb_add_new_anon_rmap(struct folio *, struct vm_area_struct *,
+void hugetlb_add_new_anon_rmap(struct folio *, struct mm_area *,
 		unsigned long address);
 
 /* See folio_try_dup_anon_rmap_*() */
 static inline int hugetlb_try_dup_anon_rmap(struct folio *folio,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	VM_WARN_ON_FOLIO(!folio_test_hugetlb(folio), folio);
 	VM_WARN_ON_FOLIO(!folio_test_anon(folio), folio);
@@ -544,7 +544,7 @@ static inline void hugetlb_remove_rmap(struct folio *folio)
 }
 
 static __always_inline void __folio_dup_file_rmap(struct folio *folio,
-		struct page *page, int nr_pages, struct vm_area_struct *dst_vma,
+		struct page *page, int nr_pages, struct mm_area *dst_vma,
 		enum rmap_level level)
 {
 	const int orig_nr_pages = nr_pages;
@@ -585,13 +585,13 @@ static __always_inline void __folio_dup_file_rmap(struct folio *folio,
  * The caller needs to hold the page table lock.
  */
 static inline void folio_dup_file_rmap_ptes(struct folio *folio,
-		struct page *page, int nr_pages, struct vm_area_struct *dst_vma)
+		struct page *page, int nr_pages, struct mm_area *dst_vma)
 {
 	__folio_dup_file_rmap(folio, page, nr_pages, dst_vma, RMAP_LEVEL_PTE);
 }
 
 static __always_inline void folio_dup_file_rmap_pte(struct folio *folio,
-		struct page *page, struct vm_area_struct *dst_vma)
+		struct page *page, struct mm_area *dst_vma)
 {
 	__folio_dup_file_rmap(folio, page, 1, dst_vma, RMAP_LEVEL_PTE);
 }
@@ -607,7 +607,7 @@ static __always_inline void folio_dup_file_rmap_pte(struct folio *folio,
  * The caller needs to hold the page table lock.
  */
 static inline void folio_dup_file_rmap_pmd(struct folio *folio,
-		struct page *page, struct vm_area_struct *dst_vma)
+		struct page *page, struct mm_area *dst_vma)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	__folio_dup_file_rmap(folio, page, HPAGE_PMD_NR, dst_vma, RMAP_LEVEL_PTE);
@@ -617,8 +617,8 @@ static inline void folio_dup_file_rmap_pmd(struct folio *folio,
 }
 
 static __always_inline int __folio_try_dup_anon_rmap(struct folio *folio,
-		struct page *page, int nr_pages, struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma, enum rmap_level level)
+		struct page *page, int nr_pages, struct mm_area *dst_vma,
+		struct mm_area *src_vma, enum rmap_level level)
 {
 	const int orig_nr_pages = nr_pages;
 	bool maybe_pinned;
@@ -704,16 +704,16 @@ static __always_inline int __folio_try_dup_anon_rmap(struct folio *folio,
  * Returns 0 if duplicating the mappings succeeded. Returns -EBUSY otherwise.
  */
 static inline int folio_try_dup_anon_rmap_ptes(struct folio *folio,
-		struct page *page, int nr_pages, struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma)
+		struct page *page, int nr_pages, struct mm_area *dst_vma,
+		struct mm_area *src_vma)
 {
 	return __folio_try_dup_anon_rmap(folio, page, nr_pages, dst_vma,
 					 src_vma, RMAP_LEVEL_PTE);
 }
 
 static __always_inline int folio_try_dup_anon_rmap_pte(struct folio *folio,
-		struct page *page, struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma)
+		struct page *page, struct mm_area *dst_vma,
+		struct mm_area *src_vma)
 {
 	return __folio_try_dup_anon_rmap(folio, page, 1, dst_vma, src_vma,
 					 RMAP_LEVEL_PTE);
@@ -743,8 +743,8 @@ static __always_inline int folio_try_dup_anon_rmap_pte(struct folio *folio,
  * Returns 0 if duplicating the mapping succeeded. Returns -EBUSY otherwise.
  */
 static inline int folio_try_dup_anon_rmap_pmd(struct folio *folio,
-		struct page *page, struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma)
+		struct page *page, struct mm_area *dst_vma,
+		struct mm_area *src_vma)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	return __folio_try_dup_anon_rmap(folio, page, HPAGE_PMD_NR, dst_vma,
@@ -910,7 +910,7 @@ struct page_vma_mapped_walk {
 	unsigned long pfn;
 	unsigned long nr_pages;
 	pgoff_t pgoff;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long address;
 	pmd_t *pmd;
 	pte_t *pte;
@@ -963,7 +963,7 @@ page_vma_mapped_walk_restart(struct page_vma_mapped_walk *pvmw)
 
 bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw);
 unsigned long page_address_in_vma(const struct folio *folio,
-		const struct page *, const struct vm_area_struct *);
+		const struct page *, const struct mm_area *);
 
 /*
  * Cleans the PTEs of shared mappings.
@@ -977,7 +977,7 @@ int mapping_wrprotect_range(struct address_space *mapping, pgoff_t pgoff,
 		unsigned long pfn, unsigned long nr_pages);
 
 int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
-		      struct vm_area_struct *vma);
+		      struct mm_area *vma);
 
 enum rmp_flags {
 	RMP_LOCKED		= 1 << 0,
@@ -1005,12 +1005,12 @@ struct rmap_walk_control {
 	 * Return false if page table scanning in rmap_walk should be stopped.
 	 * Otherwise, return true.
 	 */
-	bool (*rmap_one)(struct folio *folio, struct vm_area_struct *vma,
+	bool (*rmap_one)(struct folio *folio, struct mm_area *vma,
 					unsigned long addr, void *arg);
 	int (*done)(struct folio *folio);
 	struct anon_vma *(*anon_lock)(const struct folio *folio,
 				      struct rmap_walk_control *rwc);
-	bool (*invalid_vma)(struct vm_area_struct *vma, void *arg);
+	bool (*invalid_vma)(struct mm_area *vma, void *arg);
 };
 
 void rmap_walk(struct folio *folio, struct rmap_walk_control *rwc);

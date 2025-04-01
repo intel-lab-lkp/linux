@@ -307,7 +307,7 @@ static int ep93xxfb_check_var(struct fb_var_screeninfo *var,
 	return 0;
 }
 
-static int ep93xxfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int ep93xxfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	unsigned int offset = vma->vm_pgoff << PAGE_SHIFT;
 

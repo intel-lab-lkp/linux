@@ -94,16 +94,16 @@ typedef pte_t *pte_addr_t;
 
 #define pte_pfn(x)		((unsigned long)(((x).pte_low >> PAGE_SHIFT)))
 
-struct vm_area_struct;
+struct mm_area;
 struct mm_struct;
 
-extern void __update_cache(struct vm_area_struct *vma,
+extern void __update_cache(struct mm_area *vma,
 			   unsigned long address, pte_t pte);
-extern void __update_tlb(struct vm_area_struct *vma,
+extern void __update_tlb(struct mm_area *vma,
 			 unsigned long address, pte_t pte);
 
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long address,
+		struct mm_area *vma, unsigned long address,
 		pte_t *ptep, unsigned int nr)
 {
 	pte_t pte = *ptep;

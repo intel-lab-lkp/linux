@@ -34,14 +34,14 @@ void rxe_mmap_release(struct kref *ref)
  * open and close keep track of how many times the memory region is mapped,
  * to avoid releasing it.
  */
-static void rxe_vma_open(struct vm_area_struct *vma)
+static void rxe_vma_open(struct mm_area *vma)
 {
 	struct rxe_mmap_info *ip = vma->vm_private_data;
 
 	kref_get(&ip->ref);
 }
 
-static void rxe_vma_close(struct vm_area_struct *vma)
+static void rxe_vma_close(struct mm_area *vma)
 {
 	struct rxe_mmap_info *ip = vma->vm_private_data;
 
@@ -59,7 +59,7 @@ static const struct vm_operations_struct rxe_vm_ops = {
  * @vma: the VMA to be initialized
  * Return zero if the mmap is OK. Otherwise, return an errno.
  */
-int rxe_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+int rxe_mmap(struct ib_ucontext *context, struct mm_area *vma)
 {
 	struct rxe_dev *rxe = to_rdev(context->device);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;

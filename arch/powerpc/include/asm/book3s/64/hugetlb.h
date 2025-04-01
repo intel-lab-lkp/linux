@@ -9,10 +9,10 @@
  * both hash and radix to be enabled together we need to workaround the
  * limitations.
  */
-void radix__flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
-void radix__local_flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+void radix__flush_hugetlb_page(struct mm_area *vma, unsigned long vmaddr);
+void radix__local_flush_hugetlb_page(struct mm_area *vma, unsigned long vmaddr);
 
-extern void radix__huge_ptep_modify_prot_commit(struct vm_area_struct *vma,
+extern void radix__huge_ptep_modify_prot_commit(struct mm_area *vma,
 						unsigned long addr, pte_t *ptep,
 						pte_t old_pte, pte_t pte);
 
@@ -50,22 +50,22 @@ static inline bool gigantic_page_runtime_supported(void)
 }
 
 #define huge_ptep_modify_prot_start huge_ptep_modify_prot_start
-extern pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma,
+extern pte_t huge_ptep_modify_prot_start(struct mm_area *vma,
 					 unsigned long addr, pte_t *ptep);
 
 #define huge_ptep_modify_prot_commit huge_ptep_modify_prot_commit
-extern void huge_ptep_modify_prot_commit(struct vm_area_struct *vma,
+extern void huge_ptep_modify_prot_commit(struct mm_area *vma,
 					 unsigned long addr, pte_t *ptep,
 					 pte_t old_pte, pte_t new_pte);
 
-static inline void flush_hugetlb_page(struct vm_area_struct *vma,
+static inline void flush_hugetlb_page(struct mm_area *vma,
 				      unsigned long vmaddr)
 {
 	if (radix_enabled())
 		return radix__flush_hugetlb_page(vma, vmaddr);
 }
 
-void flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+void flush_hugetlb_page(struct mm_area *vma, unsigned long vmaddr);
 
 static inline int check_and_get_huge_psize(int shift)
 {

@@ -364,7 +364,7 @@ void pvrdma_dealloc_ucontext(struct ib_ucontext *ibcontext)
  *
  * @return: 0 on success, otherwise errno.
  */
-int pvrdma_mmap(struct ib_ucontext *ibcontext, struct vm_area_struct *vma)
+int pvrdma_mmap(struct ib_ucontext *ibcontext, struct mm_area *vma)
 {
 	struct pvrdma_ucontext *context = to_vucontext(ibcontext);
 	unsigned long start = vma->vm_start;

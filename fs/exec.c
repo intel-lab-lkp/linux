@@ -198,7 +198,7 @@ static struct page *get_arg_page(struct linux_binprm *bprm, unsigned long pos,
 		int write)
 {
 	struct page *page;
-	struct vm_area_struct *vma = bprm->vma;
+	struct mm_area *vma = bprm->vma;
 	struct mm_struct *mm = bprm->mm;
 	int ret;
 
@@ -245,7 +245,7 @@ static void flush_arg_page(struct linux_binprm *bprm, unsigned long pos,
 static int __bprm_mm_init(struct linux_binprm *bprm)
 {
 	int err;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	struct mm_struct *mm = bprm->mm;
 
 	bprm->vma = vma = vm_area_alloc(mm);
@@ -363,7 +363,7 @@ static bool valid_arg_len(struct linux_binprm *bprm, long len)
 
 /*
  * Create a new mm_struct and populate it with a temporary stack
- * vm_area_struct.  We don't have enough context at this point to set the stack
+ * mm_area.  We don't have enough context at this point to set the stack
  * flags, permissions, and offset, so we use temporary values.  We'll update
  * them later in setup_arg_pages().
  */
@@ -702,7 +702,7 @@ static int copy_strings_kernel(int argc, const char *const *argv,
 #ifdef CONFIG_MMU
 
 /*
- * Finalizes the stack vm_area_struct. The flags and permissions are updated,
+ * Finalizes the stack mm_area. The flags and permissions are updated,
  * the stack is optionally relocated, and some extra space is added.
  */
 int setup_arg_pages(struct linux_binprm *bprm,
@@ -712,8 +712,8 @@ int setup_arg_pages(struct linux_binprm *bprm,
 	unsigned long ret;
 	unsigned long stack_shift;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = bprm->vma;
-	struct vm_area_struct *prev = NULL;
+	struct mm_area *vma = bprm->vma;
+	struct mm_area *prev = NULL;
 	unsigned long vm_flags;
 	unsigned long stack_base;
 	unsigned long stack_size;

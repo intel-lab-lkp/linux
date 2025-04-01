@@ -258,11 +258,11 @@ static inline void enter_lazy_tlb(struct mm_struct *mm,
 extern void arch_exit_mmap(struct mm_struct *mm);
 
 #ifdef CONFIG_PPC_MEM_KEYS
-bool arch_vma_access_permitted(struct vm_area_struct *vma, bool write,
+bool arch_vma_access_permitted(struct mm_area *vma, bool write,
 			       bool execute, bool foreign);
 void arch_dup_pkeys(struct mm_struct *oldmm, struct mm_struct *mm);
 #else /* CONFIG_PPC_MEM_KEYS */
-static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
+static inline bool arch_vma_access_permitted(struct mm_area *vma,
 		bool write, bool execute, bool foreign)
 {
 	/* by default, allow everything */

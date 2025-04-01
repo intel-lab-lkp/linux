@@ -205,7 +205,7 @@ static void dec_usb_memory_use_count(struct usb_memory *usbm, int *count)
 	}
 }
 
-static void usbdev_vm_open(struct vm_area_struct *vma)
+static void usbdev_vm_open(struct mm_area *vma)
 {
 	struct usb_memory *usbm = vma->vm_private_data;
 	unsigned long flags;
@@ -215,7 +215,7 @@ static void usbdev_vm_open(struct vm_area_struct *vma)
 	spin_unlock_irqrestore(&usbm->ps->lock, flags);
 }
 
-static void usbdev_vm_close(struct vm_area_struct *vma)
+static void usbdev_vm_close(struct mm_area *vma)
 {
 	struct usb_memory *usbm = vma->vm_private_data;
 
@@ -227,7 +227,7 @@ static const struct vm_operations_struct usbdev_vm_ops = {
 	.close = usbdev_vm_close
 };
 
-static int usbdev_mmap(struct file *file, struct vm_area_struct *vma)
+static int usbdev_mmap(struct file *file, struct mm_area *vma)
 {
 	struct usb_memory *usbm = NULL;
 	struct usb_dev_state *ps = file->private_data;

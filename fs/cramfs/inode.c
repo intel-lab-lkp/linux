@@ -343,7 +343,7 @@ static bool cramfs_last_page_is_shared(struct inode *inode)
 	return memchr_inv(tail_data, 0, PAGE_SIZE - partial) ? true : false;
 }
 
-static int cramfs_physmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int cramfs_physmem_mmap(struct file *file, struct mm_area *vma)
 {
 	struct inode *inode = file_inode(file);
 	struct cramfs_sb_info *sbi = CRAMFS_SB(inode->i_sb);
@@ -435,7 +435,7 @@ bailout:
 
 #else /* CONFIG_MMU */
 
-static int cramfs_physmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int cramfs_physmem_mmap(struct file *file, struct mm_area *vma)
 {
 	return is_nommu_shared_mapping(vma->vm_flags) ? 0 : -ENOSYS;
 }

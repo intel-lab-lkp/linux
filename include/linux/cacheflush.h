@@ -18,7 +18,7 @@ static inline void flush_dcache_folio(struct folio *folio)
 #endif /* ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE */
 
 #ifndef flush_icache_pages
-static inline void flush_icache_pages(struct vm_area_struct *vma,
+static inline void flush_icache_pages(struct mm_area *vma,
 				     struct page *page, unsigned int nr)
 {
 }

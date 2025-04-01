@@ -1214,7 +1214,7 @@ sg_fasync(int fd, struct file *filp, int mode)
 static vm_fault_t
 sg_vma_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	Sg_fd *sfp;
 	unsigned long offset, len, sa;
 	Sg_scatter_hold *rsv_schp;
@@ -1253,7 +1253,7 @@ static const struct vm_operations_struct sg_mmap_vm_ops = {
 };
 
 static int
-sg_mmap(struct file *filp, struct vm_area_struct *vma)
+sg_mmap(struct file *filp, struct mm_area *vma)
 {
 	Sg_fd *sfp;
 	unsigned long req_sz, len, sa;

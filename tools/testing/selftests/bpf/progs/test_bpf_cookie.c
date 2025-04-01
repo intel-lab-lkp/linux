@@ -125,7 +125,7 @@ int BPF_PROG(fmod_ret_test, int _a, int *_b, int _ret)
 }
 
 SEC("lsm/file_mprotect")
-int BPF_PROG(test_int_hook, struct vm_area_struct *vma,
+int BPF_PROG(test_int_hook, struct mm_area *vma,
 	     unsigned long reqprot, unsigned long prot, int ret)
 {
 	if (my_tid != (u32)bpf_get_current_pid_tgid())

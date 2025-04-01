@@ -41,7 +41,7 @@ void flush_dcache_page(struct page *page)
 }
 EXPORT_SYMBOL(flush_dcache_page);
 
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long addr, pte_t *ptep, unsigned int nr)
 {
 	unsigned long pfn = pte_pfn(*ptep);
@@ -65,7 +65,7 @@ void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
 	}
 }
 
-void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
+void flush_cache_range(struct mm_area *vma, unsigned long start,
 	unsigned long end)
 {
 	dcache_wbinv_all();

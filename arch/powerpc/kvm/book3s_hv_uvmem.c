@@ -395,7 +395,7 @@ static int kvmppc_memslot_page_merge(struct kvm *kvm,
 	unsigned long end, start = gfn_to_hva(kvm, gfn);
 	unsigned long vm_flags;
 	int ret = 0;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int merge_flag = (merge) ? MADV_MERGEABLE : MADV_UNMERGEABLE;
 
 	if (kvm_is_error_hva(start))
@@ -510,7 +510,7 @@ unsigned long kvmppc_h_svm_init_start(struct kvm *kvm)
  * from secure memory using UV_PAGE_OUT uvcall.
  * Caller must held kvm->arch.uvmem_lock.
  */
-static int __kvmppc_svm_page_out(struct vm_area_struct *vma,
+static int __kvmppc_svm_page_out(struct mm_area *vma,
 		unsigned long start,
 		unsigned long end, unsigned long page_shift,
 		struct kvm *kvm, unsigned long gpa, struct page *fault_page)
@@ -583,7 +583,7 @@ out_finalize:
 	return ret;
 }
 
-static inline int kvmppc_svm_page_out(struct vm_area_struct *vma,
+static inline int kvmppc_svm_page_out(struct mm_area *vma,
 				      unsigned long start, unsigned long end,
 				      unsigned long page_shift,
 				      struct kvm *kvm, unsigned long gpa,
@@ -613,7 +613,7 @@ void kvmppc_uvmem_drop_pages(const struct kvm_memory_slot *slot,
 	int i;
 	struct kvmppc_uvmem_page_pvt *pvt;
 	struct page *uvmem_page;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	unsigned long uvmem_pfn, gfn;
 	unsigned long addr;
 
@@ -737,7 +737,7 @@ out:
  * Alloc a PFN from private device memory pool. If @pagein is true,
  * copy page from normal memory to secure memory using UV_PAGE_IN uvcall.
  */
-static int kvmppc_svm_page_in(struct vm_area_struct *vma,
+static int kvmppc_svm_page_in(struct mm_area *vma,
 		unsigned long start,
 		unsigned long end, unsigned long gpa, struct kvm *kvm,
 		unsigned long page_shift,
@@ -795,7 +795,7 @@ static int kvmppc_uv_migrate_mem_slot(struct kvm *kvm,
 		const struct kvm_memory_slot *memslot)
 {
 	unsigned long gfn = memslot->base_gfn;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long start, end;
 	int ret = 0;
 
@@ -937,7 +937,7 @@ unsigned long kvmppc_h_svm_page_in(struct kvm *kvm, unsigned long gpa,
 		unsigned long page_shift)
 {
 	unsigned long start, end;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int srcu_idx;
 	unsigned long gfn = gpa >> page_shift;
 	int ret;
@@ -1047,7 +1047,7 @@ kvmppc_h_svm_page_out(struct kvm *kvm, unsigned long gpa,
 {
 	unsigned long gfn = gpa >> page_shift;
 	unsigned long start, end;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int srcu_idx;
 	int ret;
 

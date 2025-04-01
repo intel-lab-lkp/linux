@@ -4450,7 +4450,7 @@ finished:
  *
  * Similar to remap_pfn_range() (see mm/memory.c)
  */
-int remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
+int remap_vmalloc_range_partial(struct mm_area *vma, unsigned long uaddr,
 				void *kaddr, unsigned long pgoff,
 				unsigned long size)
 {
@@ -4510,7 +4510,7 @@ int remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
  *
  * Similar to remap_pfn_range() (see mm/memory.c)
  */
-int remap_vmalloc_range(struct vm_area_struct *vma, void *addr,
+int remap_vmalloc_range(struct mm_area *vma, void *addr,
 						unsigned long pgoff)
 {
 	return remap_vmalloc_range_partial(vma, vma->vm_start,

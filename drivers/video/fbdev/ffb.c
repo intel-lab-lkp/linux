@@ -39,7 +39,7 @@ static void ffb_copyarea(struct fb_info *, const struct fb_copyarea *);
 static int ffb_sync(struct fb_info *);
 static int ffb_pan_display(struct fb_var_screeninfo *, struct fb_info *);
 
-static int ffb_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int ffb_sbusfb_mmap(struct fb_info *info, struct mm_area *vma);
 static int ffb_sbusfb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg);
 
 /*
@@ -849,7 +849,7 @@ static const struct sbus_mmap_map ffb_mmap_map[] = {
 	{ .size = 0 }
 };
 
-static int ffb_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int ffb_sbusfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct ffb_par *par = (struct ffb_par *)info->par;
 

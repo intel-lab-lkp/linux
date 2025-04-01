@@ -129,7 +129,7 @@ err_free_bo:
 	return ERR_PTR(ret);
 }
 
-static int panthor_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int panthor_gem_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct panthor_gem_object *bo = to_panthor_bo(obj);
 

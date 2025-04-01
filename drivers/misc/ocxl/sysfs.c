@@ -108,7 +108,7 @@ static ssize_t global_mmio_read(struct file *filp, struct kobject *kobj,
 
 static vm_fault_t global_mmio_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ocxl_afu *afu = vma->vm_private_data;
 	unsigned long offset;
 
@@ -126,7 +126,7 @@ static const struct vm_operations_struct global_mmio_vmops = {
 
 static int global_mmio_mmap(struct file *filp, struct kobject *kobj,
 			const struct bin_attribute *bin_attr,
-			struct vm_area_struct *vma)
+			struct mm_area *vma)
 {
 	struct ocxl_afu *afu = to_afu(kobj_to_dev(kobj));
 

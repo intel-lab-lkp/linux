@@ -368,7 +368,7 @@ static int idxd_cdev_release(struct inode *node, struct file *filep)
 	return 0;
 }
 
-static int check_vma(struct idxd_wq *wq, struct vm_area_struct *vma,
+static int check_vma(struct idxd_wq *wq, struct mm_area *vma,
 		     const char *func)
 {
 	struct device *dev = &wq->idxd->pdev->dev;
@@ -384,7 +384,7 @@ static int check_vma(struct idxd_wq *wq, struct vm_area_struct *vma,
 	return 0;
 }
 
-static int idxd_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
+static int idxd_cdev_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct idxd_user_context *ctx = filp->private_data;
 	struct idxd_wq *wq = ctx->wq;

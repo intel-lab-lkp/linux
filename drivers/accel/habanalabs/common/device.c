@@ -647,7 +647,7 @@ out:
 	return 0;
 }
 
-static int __hl_mmap(struct hl_fpriv *hpriv, struct vm_area_struct *vma)
+static int __hl_mmap(struct hl_fpriv *hpriv, struct mm_area *vma)
 {
 	struct hl_device *hdev = hpriv->hdev;
 	unsigned long vm_pgoff;
@@ -675,12 +675,12 @@ static int __hl_mmap(struct hl_fpriv *hpriv, struct vm_area_struct *vma)
  * hl_mmap - mmap function for habanalabs device
  *
  * @*filp: pointer to file structure
- * @*vma: pointer to vm_area_struct of the process
+ * @*vma: pointer to mm_area of the process
  *
  * Called when process does an mmap on habanalabs device. Call the relevant mmap
  * function at the end of the common code.
  */
-int hl_mmap(struct file *filp, struct vm_area_struct *vma)
+int hl_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct drm_file *file_priv = filp->private_data;
 	struct hl_fpriv *hpriv = file_priv->driver_priv;

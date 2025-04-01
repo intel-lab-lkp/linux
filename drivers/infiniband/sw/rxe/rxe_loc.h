@@ -54,7 +54,7 @@ void rxe_mmap_release(struct kref *ref);
 struct rxe_mmap_info *rxe_create_mmap_info(struct rxe_dev *dev, u32 size,
 					   struct ib_udata *udata, void *obj);
 
-int rxe_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
+int rxe_mmap(struct ib_ucontext *context, struct mm_area *vma);
 
 /* rxe_mr.c */
 u8 rxe_get_next_key(u32 last_key);

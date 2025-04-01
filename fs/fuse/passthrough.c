@@ -129,7 +129,7 @@ ssize_t fuse_passthrough_splice_write(struct pipe_inode_info *pipe,
 	return ret;
 }
 
-ssize_t fuse_passthrough_mmap(struct file *file, struct vm_area_struct *vma)
+ssize_t fuse_passthrough_mmap(struct file *file, struct mm_area *vma)
 {
 	struct fuse_file *ff = file->private_data;
 	struct file *backing_file = fuse_file_passthrough(ff);

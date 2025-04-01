@@ -37,7 +37,7 @@ static const struct vm_operations_struct us428ctls_vm_ops = {
 	.fault = snd_us428ctls_vm_fault,
 };
 
-static int snd_us428ctls_mmap(struct snd_hwdep *hw, struct file *filp, struct vm_area_struct *area)
+static int snd_us428ctls_mmap(struct snd_hwdep *hw, struct file *filp, struct mm_area *area)
 {
 	unsigned long	size = (unsigned long)(area->vm_end - area->vm_start);
 	struct usx2ydev	*us428 = hw->private_data;

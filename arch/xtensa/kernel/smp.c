@@ -468,7 +468,7 @@ int setup_profiling_timer(unsigned int multiplier)
 /* TLB flush functions */
 
 struct flush_data {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr1;
 	unsigned long addr2;
 };
@@ -499,7 +499,7 @@ static void ipi_flush_tlb_page(void *arg)
 	local_flush_tlb_page(fd->vma, fd->addr1);
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
+void flush_tlb_page(struct mm_area *vma, unsigned long addr)
 {
 	struct flush_data fd = {
 		.vma = vma,
@@ -514,7 +514,7 @@ static void ipi_flush_tlb_range(void *arg)
 	local_flush_tlb_range(fd->vma, fd->addr1, fd->addr2);
 }
 
-void flush_tlb_range(struct vm_area_struct *vma,
+void flush_tlb_range(struct mm_area *vma,
 		     unsigned long start, unsigned long end)
 {
 	struct flush_data fd = {
@@ -558,7 +558,7 @@ static void ipi_flush_cache_page(void *arg)
 	local_flush_cache_page(fd->vma, fd->addr1, fd->addr2);
 }
 
-void flush_cache_page(struct vm_area_struct *vma,
+void flush_cache_page(struct mm_area *vma,
 		     unsigned long address, unsigned long pfn)
 {
 	struct flush_data fd = {
@@ -575,7 +575,7 @@ static void ipi_flush_cache_range(void *arg)
 	local_flush_cache_range(fd->vma, fd->addr1, fd->addr2);
 }
 
-void flush_cache_range(struct vm_area_struct *vma,
+void flush_cache_range(struct mm_area *vma,
 		     unsigned long start, unsigned long end)
 {
 	struct flush_data fd = {

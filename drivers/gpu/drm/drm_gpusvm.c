@@ -902,7 +902,7 @@ err_free:
 static unsigned long
 drm_gpusvm_range_chunk_size(struct drm_gpusvm *gpusvm,
 			    struct drm_gpusvm_notifier *notifier,
-			    struct vm_area_struct *vas,
+			    struct mm_area *vas,
 			    unsigned long fault_addr,
 			    unsigned long gpuva_start,
 			    unsigned long gpuva_end,
@@ -1003,7 +1003,7 @@ drm_gpusvm_range_find_or_insert(struct drm_gpusvm *gpusvm,
 	struct drm_gpusvm_notifier *notifier;
 	struct drm_gpusvm_range *range;
 	struct mm_struct *mm = gpusvm->mm;
-	struct vm_area_struct *vas;
+	struct mm_area *vas;
 	bool notifier_alloc = false;
 	unsigned long chunk_size;
 	int err;
@@ -1678,7 +1678,7 @@ int drm_gpusvm_migrate_to_devmem(struct drm_gpusvm *gpusvm,
 	};
 	struct mm_struct *mm = gpusvm->mm;
 	unsigned long i, npages = npages_in_range(start, end);
-	struct vm_area_struct *vas;
+	struct mm_area *vas;
 	struct drm_gpusvm_zdd *zdd = NULL;
 	struct page **pages;
 	dma_addr_t *dma_addr;
@@ -1800,7 +1800,7 @@ EXPORT_SYMBOL_GPL(drm_gpusvm_migrate_to_devmem);
  *
  * Return: 0 on success, negative error code on failure.
  */
-static int drm_gpusvm_migrate_populate_ram_pfn(struct vm_area_struct *vas,
+static int drm_gpusvm_migrate_populate_ram_pfn(struct mm_area *vas,
 					       struct page *fault_page,
 					       unsigned long npages,
 					       unsigned long *mpages,
@@ -1962,7 +1962,7 @@ EXPORT_SYMBOL_GPL(drm_gpusvm_evict_to_ram);
  *
  * Return: 0 on success, negative error code on failure.
  */
-static int __drm_gpusvm_migrate_to_ram(struct vm_area_struct *vas,
+static int __drm_gpusvm_migrate_to_ram(struct mm_area *vas,
 				       void *device_private_page_owner,
 				       struct page *page,
 				       unsigned long fault_addr,

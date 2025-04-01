@@ -64,7 +64,7 @@ void local_flush_tlb_all(void)
 	local_irq_restore(flags);
 }
 
-void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_tlb_range(struct mm_area *vma, unsigned long start,
 			   unsigned long end)
 {
 	unsigned long asid_mask = cpu_asid_mask(&current_cpu_data);
@@ -144,7 +144,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	local_irq_restore(flags);
 }
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	unsigned long asid_mask = cpu_asid_mask(&current_cpu_data);
 	int cpu = smp_processor_id();
@@ -176,7 +176,7 @@ finish:
 	}
 }
 
-void __update_tlb(struct vm_area_struct *vma, unsigned long address, pte_t pte)
+void __update_tlb(struct mm_area *vma, unsigned long address, pte_t pte)
 {
 	unsigned long asid_mask = cpu_asid_mask(&current_cpu_data);
 	unsigned long flags;

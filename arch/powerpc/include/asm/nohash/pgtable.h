@@ -99,7 +99,7 @@ static inline pte_basic_t pte_update(struct mm_struct *mm, unsigned long addr, p
 }
 #endif
 
-static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
+static inline int ptep_test_and_clear_young(struct mm_area *vma,
 					    unsigned long addr, pte_t *ptep)
 {
 	unsigned long old;
@@ -133,7 +133,7 @@ static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *pt
 
 /* Set the dirty and/or accessed bits atomically in a linux PTE */
 #ifndef __ptep_set_access_flags
-static inline void __ptep_set_access_flags(struct vm_area_struct *vma,
+static inline void __ptep_set_access_flags(struct mm_area *vma,
 					   pte_t *ptep, pte_t entry,
 					   unsigned long address,
 					   int psize)

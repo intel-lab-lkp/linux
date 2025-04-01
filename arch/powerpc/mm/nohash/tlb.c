@@ -149,7 +149,7 @@ void __local_flush_tlb_page(struct mm_struct *mm, unsigned long vmaddr,
 	preempt_enable();
 }
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 	__local_flush_tlb_page(vma ? vma->vm_mm : NULL, vmaddr,
 			       mmu_get_tsize(mmu_virtual_psize), 0);
@@ -275,7 +275,7 @@ void __flush_tlb_page(struct mm_struct *mm, unsigned long vmaddr,
 	preempt_enable();
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 #ifdef CONFIG_HUGETLB_PAGE
 	if (vma && is_vm_hugetlb_page(vma))
@@ -313,7 +313,7 @@ EXPORT_SYMBOL(flush_tlb_kernel_range);
  * some implementation can stack multiple tlbivax before a tlbsync but
  * for now, we keep it that way
  */
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void flush_tlb_range(struct mm_area *vma, unsigned long start,
 		     unsigned long end)
 
 {

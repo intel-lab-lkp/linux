@@ -53,7 +53,7 @@ static inline void flush_dcache_page(struct page *page)
 void flush_icache_range(unsigned long start, unsigned long stop);
 #define flush_icache_range flush_icache_range
 
-void flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
+void flush_icache_user_page(struct mm_area *vma, struct page *page,
 		unsigned long addr, int len);
 #define flush_icache_user_page flush_icache_user_page
 

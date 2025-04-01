@@ -200,7 +200,7 @@ static int uacce_fops_release(struct inode *inode, struct file *filep)
 	return 0;
 }
 
-static void uacce_vma_close(struct vm_area_struct *vma)
+static void uacce_vma_close(struct mm_area *vma)
 {
 	struct uacce_queue *q = vma->vm_private_data;
 
@@ -218,7 +218,7 @@ static const struct vm_operations_struct uacce_vm_ops = {
 	.close = uacce_vma_close,
 };
 
-static int uacce_fops_mmap(struct file *filep, struct vm_area_struct *vma)
+static int uacce_fops_mmap(struct file *filep, struct mm_area *vma)
 {
 	struct uacce_queue *q = filep->private_data;
 	struct uacce_device *uacce = q->uacce;

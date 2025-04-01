@@ -445,7 +445,7 @@ static long gntalloc_ioctl(struct file *filp, unsigned int cmd,
 	return 0;
 }
 
-static void gntalloc_vma_open(struct vm_area_struct *vma)
+static void gntalloc_vma_open(struct mm_area *vma)
 {
 	struct gntalloc_vma_private_data *priv = vma->vm_private_data;
 
@@ -457,7 +457,7 @@ static void gntalloc_vma_open(struct vm_area_struct *vma)
 	mutex_unlock(&gref_mutex);
 }
 
-static void gntalloc_vma_close(struct vm_area_struct *vma)
+static void gntalloc_vma_close(struct mm_area *vma)
 {
 	struct gntalloc_vma_private_data *priv = vma->vm_private_data;
 	struct gntalloc_gref *gref, *next;
@@ -488,7 +488,7 @@ static const struct vm_operations_struct gntalloc_vmops = {
 	.close = gntalloc_vma_close,
 };
 
-static int gntalloc_mmap(struct file *filp, struct vm_area_struct *vma)
+static int gntalloc_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct gntalloc_file_private_data *priv = filp->private_data;
 	struct gntalloc_vma_private_data *vm_priv;

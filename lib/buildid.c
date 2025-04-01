@@ -287,7 +287,7 @@ static int get_build_id_64(struct freader *r, unsigned char *build_id, __u32 *si
 /* enough for Elf64_Ehdr, Elf64_Phdr, and all the smaller requests */
 #define MAX_FREADER_BUF_SZ 64
 
-static int __build_id_parse(struct vm_area_struct *vma, unsigned char *build_id,
+static int __build_id_parse(struct mm_area *vma, unsigned char *build_id,
 			    __u32 *size, bool may_fault)
 {
 	const Elf32_Ehdr *ehdr;
@@ -338,7 +338,7 @@ out:
  *
  * Return: 0 on success; negative error, otherwise
  */
-int build_id_parse_nofault(struct vm_area_struct *vma, unsigned char *build_id, __u32 *size)
+int build_id_parse_nofault(struct mm_area *vma, unsigned char *build_id, __u32 *size)
 {
 	return __build_id_parse(vma, build_id, size, false /* !may_fault */);
 }
@@ -354,7 +354,7 @@ int build_id_parse_nofault(struct vm_area_struct *vma, unsigned char *build_id, 
  *
  * Return: 0 on success; negative error, otherwise
  */
-int build_id_parse(struct vm_area_struct *vma, unsigned char *build_id, __u32 *size)
+int build_id_parse(struct mm_area *vma, unsigned char *build_id, __u32 *size)
 {
 	return __build_id_parse(vma, build_id, size, true /* may_fault */);
 }

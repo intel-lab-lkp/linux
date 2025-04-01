@@ -585,7 +585,7 @@ static int apparmor_mmap_file(struct file *file, unsigned long reqprot,
 	return common_mmap(OP_FMMAP, file, prot, flags, GFP_ATOMIC);
 }
 
-static int apparmor_file_mprotect(struct vm_area_struct *vma,
+static int apparmor_file_mprotect(struct mm_area *vma,
 				  unsigned long reqprot, unsigned long prot)
 {
 	return common_mmap(OP_FMPROT, vma->vm_file, prot,

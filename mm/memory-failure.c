@@ -398,7 +398,7 @@ static void shake_page(struct page *page)
 	shake_folio(page_folio(page));
 }
 
-static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
+static unsigned long dev_pagemap_mapping_shift(struct mm_area *vma,
 		unsigned long address)
 {
 	unsigned long ret = 0;
@@ -446,7 +446,7 @@ static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
  * Uses GFP_ATOMIC allocations to avoid potential recursions in the VM.
  */
 static void __add_to_kill(struct task_struct *tsk, const struct page *p,
-			  struct vm_area_struct *vma, struct list_head *to_kill,
+			  struct mm_area *vma, struct list_head *to_kill,
 			  unsigned long addr)
 {
 	struct to_kill *tk;
@@ -487,7 +487,7 @@ static void __add_to_kill(struct task_struct *tsk, const struct page *p,
 }
 
 static void add_to_kill_anon_file(struct task_struct *tsk, const struct page *p,
-		struct vm_area_struct *vma, struct list_head *to_kill,
+		struct mm_area *vma, struct list_head *to_kill,
 		unsigned long addr)
 {
 	if (addr == -EFAULT)
@@ -510,7 +510,7 @@ static bool task_in_to_kill_list(struct list_head *to_kill,
 }
 
 void add_to_kill_ksm(struct task_struct *tsk, const struct page *p,
-		     struct vm_area_struct *vma, struct list_head *to_kill,
+		     struct mm_area *vma, struct list_head *to_kill,
 		     unsigned long addr)
 {
 	if (!task_in_to_kill_list(to_kill, tsk))
@@ -621,7 +621,7 @@ static void collect_procs_anon(const struct folio *folio,
 	pgoff = page_pgoff(folio, page);
 	rcu_read_lock();
 	for_each_process(tsk) {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		struct anon_vma_chain *vmac;
 		struct task_struct *t = task_early_kill(tsk, force_early);
 		unsigned long addr;
@@ -648,7 +648,7 @@ static void collect_procs_file(const struct folio *folio,
 		const struct page *page, struct list_head *to_kill,
 		int force_early)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk;
 	struct address_space *mapping = folio->mapping;
 	pgoff_t pgoff;
@@ -683,7 +683,7 @@ static void collect_procs_file(const struct folio *folio,
 
 #ifdef CONFIG_FS_DAX
 static void add_to_kill_fsdax(struct task_struct *tsk, const struct page *p,
-			      struct vm_area_struct *vma,
+			      struct mm_area *vma,
 			      struct list_head *to_kill, pgoff_t pgoff)
 {
 	unsigned long addr = vma_address(vma, pgoff, 1);
@@ -697,7 +697,7 @@ static void collect_procs_fsdax(const struct page *page,
 		struct address_space *mapping, pgoff_t pgoff,
 		struct list_head *to_kill, bool pre_remove)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk;
 
 	i_mmap_lock_read(mapping);

@@ -1801,7 +1801,7 @@ static const struct vm_operations_struct tcp_vm_ops = {
 };
 
 int tcp_mmap(struct file *file, struct socket *sock,
-	     struct vm_area_struct *vma)
+	     struct mm_area *vma)
 {
 	if (vma->vm_flags & (VM_WRITE | VM_EXEC))
 		return -EPERM;
@@ -1997,7 +1997,7 @@ static int tcp_zc_handle_leftover(struct tcp_zerocopy_receive *zc,
 	return zc->copybuf_len < 0 ? 0 : copylen;
 }
 
-static int tcp_zerocopy_vm_insert_batch_error(struct vm_area_struct *vma,
+static int tcp_zerocopy_vm_insert_batch_error(struct mm_area *vma,
 					      struct page **pending_pages,
 					      unsigned long pages_remaining,
 					      unsigned long *address,
@@ -2045,7 +2045,7 @@ static int tcp_zerocopy_vm_insert_batch_error(struct vm_area_struct *vma,
 	return err;
 }
 
-static int tcp_zerocopy_vm_insert_batch(struct vm_area_struct *vma,
+static int tcp_zerocopy_vm_insert_batch(struct mm_area *vma,
 					struct page **pages,
 					unsigned int pages_to_map,
 					unsigned long *address,
@@ -2104,11 +2104,11 @@ static void tcp_zc_finalize_rx_tstamp(struct sock *sk,
 	}
 }
 
-static struct vm_area_struct *find_tcp_vma(struct mm_struct *mm,
+static struct mm_area *find_tcp_vma(struct mm_struct *mm,
 					   unsigned long address,
 					   bool *mmap_locked)
 {
-	struct vm_area_struct *vma = lock_vma_under_rcu(mm, address);
+	struct mm_area *vma = lock_vma_under_rcu(mm, address);
 
 	if (vma) {
 		if (vma->vm_ops != &tcp_vm_ops) {
@@ -2141,7 +2141,7 @@ static int tcp_zerocopy_receive(struct sock *sk,
 	struct tcp_sock *tp = tcp_sk(sk);
 	const skb_frag_t *frags = NULL;
 	unsigned int pages_to_map = 0;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct sk_buff *skb = NULL;
 	u32 seq = tp->copied_seq;
 	u32 total_bytes_to_map;

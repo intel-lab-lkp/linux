@@ -729,7 +729,7 @@ static int controlfb_blank(int blank_mode, struct fb_info *info)
  * Note there's no locking in here; it's done in fb_mmap() in fbmem.c.
  */
 static int controlfb_mmap(struct fb_info *info,
-                       struct vm_area_struct *vma)
+                       struct mm_area *vma)
 {
 	unsigned long mmio_pgoff;
 	unsigned long start;

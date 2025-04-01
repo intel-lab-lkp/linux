@@ -160,7 +160,7 @@ static unsigned long shmem_default_max_inodes(void)
 
 static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 			struct folio **foliop, enum sgp_type sgp, gfp_t gfp,
-			struct vm_area_struct *vma, vm_fault_t *fault_type);
+			struct mm_area *vma, vm_fault_t *fault_type);
 
 static inline struct shmem_sb_info *SHMEM_SB(struct super_block *sb)
 {
@@ -281,12 +281,12 @@ bool shmem_mapping(struct address_space *mapping)
 }
 EXPORT_SYMBOL_GPL(shmem_mapping);
 
-bool vma_is_anon_shmem(struct vm_area_struct *vma)
+bool vma_is_anon_shmem(struct mm_area *vma)
 {
 	return vma->vm_ops == &shmem_anon_vm_ops;
 }
 
-bool vma_is_shmem(struct vm_area_struct *vma)
+bool vma_is_shmem(struct mm_area *vma)
 {
 	return vma_is_anon_shmem(vma) || vma->vm_ops == &shmem_vm_ops;
 }
@@ -614,7 +614,7 @@ static unsigned int shmem_get_orders_within_size(struct inode *inode,
 
 static unsigned int shmem_huge_global_enabled(struct inode *inode, pgoff_t index,
 					      loff_t write_end, bool shmem_huge_force,
-					      struct vm_area_struct *vma,
+					      struct mm_area *vma,
 					      unsigned long vm_flags)
 {
 	unsigned int maybe_pmd_order = HPAGE_PMD_ORDER > MAX_PAGECACHE_ORDER ?
@@ -861,7 +861,7 @@ static unsigned long shmem_unused_huge_shrink(struct shmem_sb_info *sbinfo,
 
 static unsigned int shmem_huge_global_enabled(struct inode *inode, pgoff_t index,
 					      loff_t write_end, bool shmem_huge_force,
-					      struct vm_area_struct *vma,
+					      struct mm_area *vma,
 					      unsigned long vm_flags)
 {
 	return 0;
@@ -1003,7 +1003,7 @@ unsigned long shmem_partial_swap_usage(struct address_space *mapping,
  * This is safe to call without i_rwsem or the i_pages lock thanks to RCU,
  * as long as the inode doesn't go away and racy results are not a problem.
  */
-unsigned long shmem_swap_usage(struct vm_area_struct *vma)
+unsigned long shmem_swap_usage(struct mm_area *vma)
 {
 	struct inode *inode = file_inode(vma->vm_file);
 	struct shmem_inode_info *info = SHMEM_I(inode);
@@ -1755,7 +1755,7 @@ bool shmem_hpage_pmd_enabled(void)
 }
 
 unsigned long shmem_allowable_huge_orders(struct inode *inode,
-				struct vm_area_struct *vma, pgoff_t index,
+				struct mm_area *vma, pgoff_t index,
 				loff_t write_end, bool shmem_huge_force)
 {
 	unsigned long mask = READ_ONCE(huge_shmem_orders_always);
@@ -1802,7 +1802,7 @@ static unsigned long shmem_suitable_orders(struct inode *inode, struct vm_fault 
 					   struct address_space *mapping, pgoff_t index,
 					   unsigned long orders)
 {
-	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
+	struct mm_area *vma = vmf ? vmf->vma : NULL;
 	pgoff_t aligned_index;
 	unsigned long pages;
 	int order;
@@ -1959,7 +1959,7 @@ unlock:
 }
 
 static struct folio *shmem_swap_alloc_folio(struct inode *inode,
-		struct vm_area_struct *vma, pgoff_t index,
+		struct mm_area *vma, pgoff_t index,
 		swp_entry_t entry, int order, gfp_t gfp)
 {
 	struct shmem_inode_info *info = SHMEM_I(inode);
@@ -2036,7 +2036,7 @@ static bool shmem_should_replace_folio(struct folio *folio, gfp_t gfp)
 
 static int shmem_replace_folio(struct folio **foliop, gfp_t gfp,
 				struct shmem_inode_info *info, pgoff_t index,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	struct folio *new, *old = *foliop;
 	swp_entry_t entry = old->swap;
@@ -2231,7 +2231,7 @@ unlock:
  */
 static int shmem_swapin_folio(struct inode *inode, pgoff_t index,
 			     struct folio **foliop, enum sgp_type sgp,
-			     gfp_t gfp, struct vm_area_struct *vma,
+			     gfp_t gfp, struct mm_area *vma,
 			     vm_fault_t *fault_type)
 {
 	struct address_space *mapping = inode->i_mapping;
@@ -2434,7 +2434,7 @@ static int shmem_get_folio_gfp(struct inode *inode, pgoff_t index,
 		loff_t write_end, struct folio **foliop, enum sgp_type sgp,
 		gfp_t gfp, struct vm_fault *vmf, vm_fault_t *fault_type)
 {
-	struct vm_area_struct *vma = vmf ? vmf->vma : NULL;
+	struct mm_area *vma = vmf ? vmf->vma : NULL;
 	struct mm_struct *fault_mm;
 	struct folio *folio;
 	int error;
@@ -2853,13 +2853,13 @@ unsigned long shmem_get_unmapped_area(struct file *file,
 }
 
 #ifdef CONFIG_NUMA
-static int shmem_set_policy(struct vm_area_struct *vma, struct mempolicy *mpol)
+static int shmem_set_policy(struct mm_area *vma, struct mempolicy *mpol)
 {
 	struct inode *inode = file_inode(vma->vm_file);
 	return mpol_set_shared_policy(&SHMEM_I(inode)->policy, vma, mpol);
 }
 
-static struct mempolicy *shmem_get_policy(struct vm_area_struct *vma,
+static struct mempolicy *shmem_get_policy(struct mm_area *vma,
 					  unsigned long addr, pgoff_t *ilx)
 {
 	struct inode *inode = file_inode(vma->vm_file);
@@ -2924,7 +2924,7 @@ out_nomem:
 	return retval;
 }
 
-static int shmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int shmem_mmap(struct file *file, struct mm_area *vma)
 {
 	struct inode *inode = file_inode(file);
 
@@ -3148,7 +3148,7 @@ static inline struct inode *shmem_get_inode(struct mnt_idmap *idmap,
 
 #ifdef CONFIG_USERFAULTFD
 int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
-			   struct vm_area_struct *dst_vma,
+			   struct mm_area *dst_vma,
 			   unsigned long dst_addr,
 			   unsigned long src_addr,
 			   uffd_flags_t flags,
@@ -5880,7 +5880,7 @@ EXPORT_SYMBOL_GPL(shmem_file_setup_with_mnt);
  * shmem_zero_setup - setup a shared anonymous mapping
  * @vma: the vma to be mmapped is prepared by do_mmap
  */
-int shmem_zero_setup(struct vm_area_struct *vma)
+int shmem_zero_setup(struct mm_area *vma)
 {
 	struct file *file;
 	loff_t size = vma->vm_end - vma->vm_start;

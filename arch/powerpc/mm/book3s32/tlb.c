@@ -80,7 +80,7 @@ EXPORT_SYMBOL(hash__flush_range);
  */
 void hash__flush_tlb_mm(struct mm_struct *mm)
 {
-	struct vm_area_struct *mp;
+	struct mm_area *mp;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	/*
@@ -94,7 +94,7 @@ void hash__flush_tlb_mm(struct mm_struct *mm)
 }
 EXPORT_SYMBOL(hash__flush_tlb_mm);
 
-void hash__flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void hash__flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 	struct mm_struct *mm;
 	pmd_t *pmd;

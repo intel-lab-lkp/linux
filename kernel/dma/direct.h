@@ -14,7 +14,7 @@ int dma_direct_get_sgtable(struct device *dev, struct sg_table *sgt,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
 bool dma_direct_can_mmap(struct device *dev);
-int dma_direct_mmap(struct device *dev, struct vm_area_struct *vma,
+int dma_direct_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
 bool dma_direct_need_sync(struct device *dev, dma_addr_t dma_addr);

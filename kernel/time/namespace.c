@@ -192,7 +192,7 @@ static void timens_setup_vdso_clock_data(struct vdso_clock *vc,
 	offset[CLOCK_BOOTTIME_ALARM]	= boottime;
 }
 
-struct page *find_timens_vvar_page(struct vm_area_struct *vma)
+struct page *find_timens_vvar_page(struct mm_area *vma)
 {
 	if (likely(vma->vm_mm == current->mm))
 		return current->nsproxy->time_ns->vvar_page;

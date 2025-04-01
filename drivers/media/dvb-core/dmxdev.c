@@ -1212,7 +1212,7 @@ static __poll_t dvb_demux_poll(struct file *file, poll_table *wait)
 }
 
 #ifdef CONFIG_DVB_MMAP
-static int dvb_demux_mmap(struct file *file, struct vm_area_struct *vma)
+static int dvb_demux_mmap(struct file *file, struct mm_area *vma)
 {
 	struct dmxdev_filter *dmxdevfilter = file->private_data;
 	struct dmxdev *dmxdev = dmxdevfilter->dev;
@@ -1362,7 +1362,7 @@ static __poll_t dvb_dvr_poll(struct file *file, poll_table *wait)
 }
 
 #ifdef CONFIG_DVB_MMAP
-static int dvb_dvr_mmap(struct file *file, struct vm_area_struct *vma)
+static int dvb_dvr_mmap(struct file *file, struct mm_area *vma)
 {
 	struct dvb_device *dvbdev = file->private_data;
 	struct dmxdev *dmxdev = dvbdev->priv;

@@ -92,7 +92,7 @@ extern struct file *shmem_kernel_file_setup(const char *name, loff_t size,
 					    unsigned long flags);
 extern struct file *shmem_file_setup_with_mnt(struct vfsmount *mnt,
 		const char *name, loff_t size, unsigned long flags);
-extern int shmem_zero_setup(struct vm_area_struct *);
+extern int shmem_zero_setup(struct mm_area *);
 extern unsigned long shmem_get_unmapped_area(struct file *, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags);
 extern int shmem_lock(struct file *file, int lock, struct ucounts *ucounts);
@@ -112,12 +112,12 @@ int shmem_unuse(unsigned int type);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 unsigned long shmem_allowable_huge_orders(struct inode *inode,
-				struct vm_area_struct *vma, pgoff_t index,
+				struct mm_area *vma, pgoff_t index,
 				loff_t write_end, bool shmem_huge_force);
 bool shmem_hpage_pmd_enabled(void);
 #else
 static inline unsigned long shmem_allowable_huge_orders(struct inode *inode,
-				struct vm_area_struct *vma, pgoff_t index,
+				struct mm_area *vma, pgoff_t index,
 				loff_t write_end, bool shmem_huge_force)
 {
 	return 0;
@@ -130,9 +130,9 @@ static inline bool shmem_hpage_pmd_enabled(void)
 #endif
 
 #ifdef CONFIG_SHMEM
-extern unsigned long shmem_swap_usage(struct vm_area_struct *vma);
+extern unsigned long shmem_swap_usage(struct mm_area *vma);
 #else
-static inline unsigned long shmem_swap_usage(struct vm_area_struct *vma)
+static inline unsigned long shmem_swap_usage(struct mm_area *vma)
 {
 	return 0;
 }
@@ -194,7 +194,7 @@ extern void shmem_uncharge(struct inode *inode, long pages);
 #ifdef CONFIG_USERFAULTFD
 #ifdef CONFIG_SHMEM
 extern int shmem_mfill_atomic_pte(pmd_t *dst_pmd,
-				  struct vm_area_struct *dst_vma,
+				  struct mm_area *dst_vma,
 				  unsigned long dst_addr,
 				  unsigned long src_addr,
 				  uffd_flags_t flags,

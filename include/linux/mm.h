@@ -230,9 +230,9 @@ void setup_initial_init_mm(void *start_code, void *end_code,
  * mmap() functions).
  */
 
-struct vm_area_struct *vm_area_alloc(struct mm_struct *);
-struct vm_area_struct *vm_area_dup(struct vm_area_struct *);
-void vm_area_free(struct vm_area_struct *);
+struct mm_area *vm_area_alloc(struct mm_struct *);
+struct mm_area *vm_area_dup(struct mm_area *);
+void vm_area_free(struct mm_area *);
 
 #ifndef CONFIG_MMU
 extern struct rb_root nommu_region_tree;
@@ -242,7 +242,7 @@ extern unsigned int kobjsize(const void *objp);
 #endif
 
 /*
- * vm_flags in vm_area_struct, see mm_types.h.
+ * vm_flags in mm_area, see mm_types.h.
  * When changing, update also include/trace/events/mmflags.h
  */
 #define VM_NONE		0x00000000
@@ -533,7 +533,7 @@ static inline bool fault_flag_allow_retry_first(enum fault_flag flags)
  */
 struct vm_fault {
 	const struct {
-		struct vm_area_struct *vma;	/* Target VMA */
+		struct mm_area *vma;	/* Target VMA */
 		gfp_t gfp_mask;			/* gfp mask to be used for allocations */
 		pgoff_t pgoff;			/* Logical page offset based on vma */
 		unsigned long address;		/* Faulting virtual address - masked */
@@ -583,27 +583,27 @@ struct vm_fault {
  * to the functions called when a no-page or a wp-page exception occurs.
  */
 struct vm_operations_struct {
-	void (*open)(struct vm_area_struct * area);
+	void (*open)(struct mm_area * area);
 	/**
 	 * @close: Called when the VMA is being removed from the MM.
 	 * Context: User context.  May sleep.  Caller holds mmap_lock.
 	 */
-	void (*close)(struct vm_area_struct * area);
+	void (*close)(struct mm_area * area);
 	/* Called any time before splitting to check if it's allowed */
-	int (*may_split)(struct vm_area_struct *area, unsigned long addr);
-	int (*mremap)(struct vm_area_struct *area);
+	int (*may_split)(struct mm_area *area, unsigned long addr);
+	int (*mremap)(struct mm_area *area);
 	/*
 	 * Called by mprotect() to make driver-specific permission
 	 * checks before mprotect() is finalised.   The VMA must not
 	 * be modified.  Returns 0 if mprotect() can proceed.
 	 */
-	int (*mprotect)(struct vm_area_struct *vma, unsigned long start,
+	int (*mprotect)(struct mm_area *vma, unsigned long start,
 			unsigned long end, unsigned long newflags);
 	vm_fault_t (*fault)(struct vm_fault *vmf);
 	vm_fault_t (*huge_fault)(struct vm_fault *vmf, unsigned int order);
 	vm_fault_t (*map_pages)(struct vm_fault *vmf,
 			pgoff_t start_pgoff, pgoff_t end_pgoff);
-	unsigned long (*pagesize)(struct vm_area_struct * area);
+	unsigned long (*pagesize)(struct mm_area * area);
 
 	/* notification that a previously read-only page is about to become
 	 * writable, if an error is returned it will cause a SIGBUS */
@@ -616,13 +616,13 @@ struct vm_operations_struct {
 	 * for use by special VMAs. See also generic_access_phys() for a generic
 	 * implementation useful for any iomem mapping.
 	 */
-	int (*access)(struct vm_area_struct *vma, unsigned long addr,
+	int (*access)(struct mm_area *vma, unsigned long addr,
 		      void *buf, int len, int write);
 
 	/* Called by the /proc/PID/maps code to ask the vma whether it
 	 * has a special name.  Returning non-NULL will also cause this
 	 * vma to be dumped unconditionally. */
-	const char *(*name)(struct vm_area_struct *vma);
+	const char *(*name)(struct mm_area *vma);
 
 #ifdef CONFIG_NUMA
 	/*
@@ -632,7 +632,7 @@ struct vm_operations_struct {
 	 * install a MPOL_DEFAULT policy, nor the task or system default
 	 * mempolicy.
 	 */
-	int (*set_policy)(struct vm_area_struct *vma, struct mempolicy *new);
+	int (*set_policy)(struct mm_area *vma, struct mempolicy *new);
 
 	/*
 	 * get_policy() op must add reference [mpol_get()] to any policy at
@@ -644,7 +644,7 @@ struct vm_operations_struct {
 	 * must return NULL--i.e., do not "fallback" to task or system default
 	 * policy.
 	 */
-	struct mempolicy *(*get_policy)(struct vm_area_struct *vma,
+	struct mempolicy *(*get_policy)(struct mm_area *vma,
 					unsigned long addr, pgoff_t *ilx);
 #endif
 	/*
@@ -652,26 +652,26 @@ struct vm_operations_struct {
 	 * page for @addr.  This is useful if the default behavior
 	 * (using pte_page()) would not find the correct page.
 	 */
-	struct page *(*find_special_page)(struct vm_area_struct *vma,
+	struct page *(*find_special_page)(struct mm_area *vma,
 					  unsigned long addr);
 };
 
 #ifdef CONFIG_NUMA_BALANCING
-static inline void vma_numab_state_init(struct vm_area_struct *vma)
+static inline void vma_numab_state_init(struct mm_area *vma)
 {
 	vma->numab_state = NULL;
 }
-static inline void vma_numab_state_free(struct vm_area_struct *vma)
+static inline void vma_numab_state_free(struct mm_area *vma)
 {
 	kfree(vma->numab_state);
 }
 #else
-static inline void vma_numab_state_init(struct vm_area_struct *vma) {}
-static inline void vma_numab_state_free(struct vm_area_struct *vma) {}
+static inline void vma_numab_state_init(struct mm_area *vma) {}
+static inline void vma_numab_state_free(struct mm_area *vma) {}
 #endif /* CONFIG_NUMA_BALANCING */
 
 #ifdef CONFIG_PER_VMA_LOCK
-static inline void vma_lock_init(struct vm_area_struct *vma, bool reset_refcnt)
+static inline void vma_lock_init(struct mm_area *vma, bool reset_refcnt)
 {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	static struct lock_class_key lockdep_key;
@@ -694,7 +694,7 @@ static inline bool is_vma_writer_only(int refcnt)
 	return refcnt & VMA_LOCK_OFFSET && refcnt <= VMA_LOCK_OFFSET + 1;
 }
 
-static inline void vma_refcount_put(struct vm_area_struct *vma)
+static inline void vma_refcount_put(struct mm_area *vma)
 {
 	/* Use a copy of vm_mm in case vma is freed after we drop vm_refcnt */
 	struct mm_struct *mm = vma->vm_mm;
@@ -717,8 +717,8 @@ static inline void vma_refcount_put(struct vm_area_struct *vma)
  * Returns the vma on success, NULL on failure to lock and EAGAIN if vma got
  * detached.
  */
-static inline struct vm_area_struct *vma_start_read(struct mm_struct *mm,
-						    struct vm_area_struct *vma)
+static inline struct mm_area *vma_start_read(struct mm_struct *mm,
+						    struct mm_area *vma)
 {
 	int oldcnt;
 
@@ -770,7 +770,7 @@ static inline struct vm_area_struct *vma_start_read(struct mm_struct *mm,
  * not be used in such cases because it might fail due to mm_lock_seq overflow.
  * This functionality is used to obtain vma read lock and drop the mmap read lock.
  */
-static inline bool vma_start_read_locked_nested(struct vm_area_struct *vma, int subclass)
+static inline bool vma_start_read_locked_nested(struct mm_area *vma, int subclass)
 {
 	int oldcnt;
 
@@ -789,18 +789,18 @@ static inline bool vma_start_read_locked_nested(struct vm_area_struct *vma, int 
  * not be used in such cases because it might fail due to mm_lock_seq overflow.
  * This functionality is used to obtain vma read lock and drop the mmap read lock.
  */
-static inline bool vma_start_read_locked(struct vm_area_struct *vma)
+static inline bool vma_start_read_locked(struct mm_area *vma)
 {
 	return vma_start_read_locked_nested(vma, 0);
 }
 
-static inline void vma_end_read(struct vm_area_struct *vma)
+static inline void vma_end_read(struct mm_area *vma)
 {
 	vma_refcount_put(vma);
 }
 
 /* WARNING! Can only be used if mmap_lock is expected to be write-locked */
-static bool __is_vma_write_locked(struct vm_area_struct *vma, unsigned int *mm_lock_seq)
+static bool __is_vma_write_locked(struct mm_area *vma, unsigned int *mm_lock_seq)
 {
 	mmap_assert_write_locked(vma->vm_mm);
 
@@ -812,14 +812,14 @@ static bool __is_vma_write_locked(struct vm_area_struct *vma, unsigned int *mm_l
 	return (vma->vm_lock_seq == *mm_lock_seq);
 }
 
-void __vma_start_write(struct vm_area_struct *vma, unsigned int mm_lock_seq);
+void __vma_start_write(struct mm_area *vma, unsigned int mm_lock_seq);
 
 /*
  * Begin writing to a VMA.
  * Exclude concurrent readers under the per-VMA lock until the currently
  * write-locked mmap_lock is dropped or downgraded.
  */
-static inline void vma_start_write(struct vm_area_struct *vma)
+static inline void vma_start_write(struct mm_area *vma)
 {
 	unsigned int mm_lock_seq;
 
@@ -829,14 +829,14 @@ static inline void vma_start_write(struct vm_area_struct *vma)
 	__vma_start_write(vma, mm_lock_seq);
 }
 
-static inline void vma_assert_write_locked(struct vm_area_struct *vma)
+static inline void vma_assert_write_locked(struct mm_area *vma)
 {
 	unsigned int mm_lock_seq;
 
 	VM_BUG_ON_VMA(!__is_vma_write_locked(vma, &mm_lock_seq), vma);
 }
 
-static inline void vma_assert_locked(struct vm_area_struct *vma)
+static inline void vma_assert_locked(struct mm_area *vma)
 {
 	unsigned int mm_lock_seq;
 
@@ -849,24 +849,24 @@ static inline void vma_assert_locked(struct vm_area_struct *vma)
  * assertions should be made either under mmap_write_lock or when the object
  * has been isolated under mmap_write_lock, ensuring no competing writers.
  */
-static inline void vma_assert_attached(struct vm_area_struct *vma)
+static inline void vma_assert_attached(struct mm_area *vma)
 {
 	WARN_ON_ONCE(!refcount_read(&vma->vm_refcnt));
 }
 
-static inline void vma_assert_detached(struct vm_area_struct *vma)
+static inline void vma_assert_detached(struct mm_area *vma)
 {
 	WARN_ON_ONCE(refcount_read(&vma->vm_refcnt));
 }
 
-static inline void vma_mark_attached(struct vm_area_struct *vma)
+static inline void vma_mark_attached(struct mm_area *vma)
 {
 	vma_assert_write_locked(vma);
 	vma_assert_detached(vma);
 	refcount_set_release(&vma->vm_refcnt, 1);
 }
 
-void vma_mark_detached(struct vm_area_struct *vma);
+void vma_mark_detached(struct mm_area *vma);
 
 static inline void release_fault_lock(struct vm_fault *vmf)
 {
@@ -884,31 +884,31 @@ static inline void assert_fault_locked(struct vm_fault *vmf)
 		mmap_assert_locked(vmf->vma->vm_mm);
 }
 
-struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
+struct mm_area *lock_vma_under_rcu(struct mm_struct *mm,
 					  unsigned long address);
 
 #else /* CONFIG_PER_VMA_LOCK */
 
-static inline void vma_lock_init(struct vm_area_struct *vma, bool reset_refcnt) {}
-static inline struct vm_area_struct *vma_start_read(struct mm_struct *mm,
-						    struct vm_area_struct *vma)
+static inline void vma_lock_init(struct mm_area *vma, bool reset_refcnt) {}
+static inline struct mm_area *vma_start_read(struct mm_struct *mm,
+						    struct mm_area *vma)
 		{ return NULL; }
-static inline void vma_end_read(struct vm_area_struct *vma) {}
-static inline void vma_start_write(struct vm_area_struct *vma) {}
-static inline void vma_assert_write_locked(struct vm_area_struct *vma)
+static inline void vma_end_read(struct mm_area *vma) {}
+static inline void vma_start_write(struct mm_area *vma) {}
+static inline void vma_assert_write_locked(struct mm_area *vma)
 		{ mmap_assert_write_locked(vma->vm_mm); }
-static inline void vma_assert_attached(struct vm_area_struct *vma) {}
-static inline void vma_assert_detached(struct vm_area_struct *vma) {}
-static inline void vma_mark_attached(struct vm_area_struct *vma) {}
-static inline void vma_mark_detached(struct vm_area_struct *vma) {}
+static inline void vma_assert_attached(struct mm_area *vma) {}
+static inline void vma_assert_detached(struct mm_area *vma) {}
+static inline void vma_mark_attached(struct mm_area *vma) {}
+static inline void vma_mark_detached(struct mm_area *vma) {}
 
-static inline struct vm_area_struct *lock_vma_under_rcu(struct mm_struct *mm,
+static inline struct mm_area *lock_vma_under_rcu(struct mm_struct *mm,
 		unsigned long address)
 {
 	return NULL;
 }
 
-static inline void vma_assert_locked(struct vm_area_struct *vma)
+static inline void vma_assert_locked(struct mm_area *vma)
 {
 	mmap_assert_locked(vma->vm_mm);
 }
@@ -927,7 +927,7 @@ static inline void assert_fault_locked(struct vm_fault *vmf)
 
 extern const struct vm_operations_struct vma_dummy_vm_ops;
 
-static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
+static inline void vma_init(struct mm_area *vma, struct mm_struct *mm)
 {
 	memset(vma, 0, sizeof(*vma));
 	vma->vm_mm = mm;
@@ -937,7 +937,7 @@ static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 }
 
 /* Use when VMA is not part of the VMA tree and needs no locking */
-static inline void vm_flags_init(struct vm_area_struct *vma,
+static inline void vm_flags_init(struct mm_area *vma,
 				 vm_flags_t flags)
 {
 	ACCESS_PRIVATE(vma, __vm_flags) = flags;
@@ -948,28 +948,28 @@ static inline void vm_flags_init(struct vm_area_struct *vma,
  * Note: vm_flags_reset and vm_flags_reset_once do not lock the vma and
  * it should be locked explicitly beforehand.
  */
-static inline void vm_flags_reset(struct vm_area_struct *vma,
+static inline void vm_flags_reset(struct mm_area *vma,
 				  vm_flags_t flags)
 {
 	vma_assert_write_locked(vma);
 	vm_flags_init(vma, flags);
 }
 
-static inline void vm_flags_reset_once(struct vm_area_struct *vma,
+static inline void vm_flags_reset_once(struct mm_area *vma,
 				       vm_flags_t flags)
 {
 	vma_assert_write_locked(vma);
 	WRITE_ONCE(ACCESS_PRIVATE(vma, __vm_flags), flags);
 }
 
-static inline void vm_flags_set(struct vm_area_struct *vma,
+static inline void vm_flags_set(struct mm_area *vma,
 				vm_flags_t flags)
 {
 	vma_start_write(vma);
 	ACCESS_PRIVATE(vma, __vm_flags) |= flags;
 }
 
-static inline void vm_flags_clear(struct vm_area_struct *vma,
+static inline void vm_flags_clear(struct mm_area *vma,
 				  vm_flags_t flags)
 {
 	vma_start_write(vma);
@@ -980,7 +980,7 @@ static inline void vm_flags_clear(struct vm_area_struct *vma,
  * Use only if VMA is not part of the VMA tree or has no other users and
  * therefore needs no locking.
  */
-static inline void __vm_flags_mod(struct vm_area_struct *vma,
+static inline void __vm_flags_mod(struct mm_area *vma,
 				  vm_flags_t set, vm_flags_t clear)
 {
 	vm_flags_init(vma, (vma->vm_flags | set) & ~clear);
@@ -990,19 +990,19 @@ static inline void __vm_flags_mod(struct vm_area_struct *vma,
  * Use only when the order of set/clear operations is unimportant, otherwise
  * use vm_flags_{set|clear} explicitly.
  */
-static inline void vm_flags_mod(struct vm_area_struct *vma,
+static inline void vm_flags_mod(struct mm_area *vma,
 				vm_flags_t set, vm_flags_t clear)
 {
 	vma_start_write(vma);
 	__vm_flags_mod(vma, set, clear);
 }
 
-static inline void vma_set_anonymous(struct vm_area_struct *vma)
+static inline void vma_set_anonymous(struct mm_area *vma)
 {
 	vma->vm_ops = NULL;
 }
 
-static inline bool vma_is_anonymous(struct vm_area_struct *vma)
+static inline bool vma_is_anonymous(struct mm_area *vma)
 {
 	return !vma->vm_ops;
 }
@@ -1011,7 +1011,7 @@ static inline bool vma_is_anonymous(struct vm_area_struct *vma)
  * Indicate if the VMA is a heap for the given task; for
  * /proc/PID/maps that is the heap of the main task.
  */
-static inline bool vma_is_initial_heap(const struct vm_area_struct *vma)
+static inline bool vma_is_initial_heap(const struct mm_area *vma)
 {
 	return vma->vm_start < vma->vm_mm->brk &&
 		vma->vm_end > vma->vm_mm->start_brk;
@@ -1021,7 +1021,7 @@ static inline bool vma_is_initial_heap(const struct vm_area_struct *vma)
  * Indicate if the VMA is a stack for the given task; for
  * /proc/PID/maps that is the stack of the main task.
  */
-static inline bool vma_is_initial_stack(const struct vm_area_struct *vma)
+static inline bool vma_is_initial_stack(const struct mm_area *vma)
 {
 	/*
 	 * We make no effort to guess what a given thread considers to be
@@ -1032,7 +1032,7 @@ static inline bool vma_is_initial_stack(const struct vm_area_struct *vma)
 		vma->vm_end >= vma->vm_mm->start_stack;
 }
 
-static inline bool vma_is_temporary_stack(struct vm_area_struct *vma)
+static inline bool vma_is_temporary_stack(struct mm_area *vma)
 {
 	int maybe_stack = vma->vm_flags & (VM_GROWSDOWN | VM_GROWSUP);
 
@@ -1046,7 +1046,7 @@ static inline bool vma_is_temporary_stack(struct vm_area_struct *vma)
 	return false;
 }
 
-static inline bool vma_is_foreign(struct vm_area_struct *vma)
+static inline bool vma_is_foreign(struct mm_area *vma)
 {
 	if (!current->mm)
 		return true;
@@ -1057,7 +1057,7 @@ static inline bool vma_is_foreign(struct vm_area_struct *vma)
 	return false;
 }
 
-static inline bool vma_is_accessible(struct vm_area_struct *vma)
+static inline bool vma_is_accessible(struct mm_area *vma)
 {
 	return vma->vm_flags & VM_ACCESS_FLAGS;
 }
@@ -1068,18 +1068,18 @@ static inline bool is_shared_maywrite(vm_flags_t vm_flags)
 		(VM_SHARED | VM_MAYWRITE);
 }
 
-static inline bool vma_is_shared_maywrite(struct vm_area_struct *vma)
+static inline bool vma_is_shared_maywrite(struct mm_area *vma)
 {
 	return is_shared_maywrite(vma->vm_flags);
 }
 
 static inline
-struct vm_area_struct *vma_find(struct vma_iterator *vmi, unsigned long max)
+struct mm_area *vma_find(struct vma_iterator *vmi, unsigned long max)
 {
 	return mas_find(&vmi->mas, max - 1);
 }
 
-static inline struct vm_area_struct *vma_next(struct vma_iterator *vmi)
+static inline struct mm_area *vma_next(struct vma_iterator *vmi)
 {
 	/*
 	 * Uses mas_find() to get the first VMA when the iterator starts.
@@ -1089,13 +1089,13 @@ static inline struct vm_area_struct *vma_next(struct vma_iterator *vmi)
 }
 
 static inline
-struct vm_area_struct *vma_iter_next_range(struct vma_iterator *vmi)
+struct mm_area *vma_iter_next_range(struct vma_iterator *vmi)
 {
 	return mas_next_range(&vmi->mas, ULONG_MAX);
 }
 
 
-static inline struct vm_area_struct *vma_prev(struct vma_iterator *vmi)
+static inline struct mm_area *vma_prev(struct vma_iterator *vmi)
 {
 	return mas_prev(&vmi->mas, 0);
 }
@@ -1118,7 +1118,7 @@ static inline void vma_iter_free(struct vma_iterator *vmi)
 }
 
 static inline int vma_iter_bulk_store(struct vma_iterator *vmi,
-				      struct vm_area_struct *vma)
+				      struct mm_area *vma)
 {
 	vmi->mas.index = vma->vm_start;
 	vmi->mas.last = vma->vm_end - 1;
@@ -1152,14 +1152,14 @@ static inline void vma_iter_set(struct vma_iterator *vmi, unsigned long addr)
  * The vma_is_shmem is not inline because it is used only by slow
  * paths in userfault.
  */
-bool vma_is_shmem(struct vm_area_struct *vma);
-bool vma_is_anon_shmem(struct vm_area_struct *vma);
+bool vma_is_shmem(struct mm_area *vma);
+bool vma_is_anon_shmem(struct mm_area *vma);
 #else
-static inline bool vma_is_shmem(struct vm_area_struct *vma) { return false; }
-static inline bool vma_is_anon_shmem(struct vm_area_struct *vma) { return false; }
+static inline bool vma_is_shmem(struct mm_area *vma) { return false; }
+static inline bool vma_is_anon_shmem(struct mm_area *vma) { return false; }
 #endif
 
-int vma_is_stack_for_current(struct vm_area_struct *vma);
+int vma_is_stack_for_current(struct mm_area *vma);
 
 /* flush_tlb_range() takes a vma, not a mm, and can care about flags */
 #define TLB_FLUSH_VMA(mm,flags) { .vm_mm = (mm), .vm_flags = (flags) }
@@ -1435,7 +1435,7 @@ static inline unsigned long thp_size(struct page *page)
  * pte_mkwrite.  But get_user_pages can cause write faults for mappings
  * that do not have writing enabled, when used by access_process_vm.
  */
-static inline pte_t maybe_mkwrite(pte_t pte, struct vm_area_struct *vma)
+static inline pte_t maybe_mkwrite(pte_t pte, struct mm_area *vma)
 {
 	if (likely(vma->vm_flags & VM_WRITE))
 		pte = pte_mkwrite(pte, vma);
@@ -1811,7 +1811,7 @@ static inline int folio_xchg_access_time(struct folio *folio, int time)
 	return last_time << PAGE_ACCESS_TIME_BUCKETS;
 }
 
-static inline void vma_set_access_pid_bit(struct vm_area_struct *vma)
+static inline void vma_set_access_pid_bit(struct mm_area *vma)
 {
 	unsigned int pid_bit;
 
@@ -1872,7 +1872,7 @@ static inline bool cpupid_match_pid(struct task_struct *task, int cpupid)
 	return false;
 }
 
-static inline void vma_set_access_pid_bit(struct vm_area_struct *vma)
+static inline void vma_set_access_pid_bit(struct mm_area *vma)
 {
 }
 static inline bool folio_use_access_time(struct folio *folio)
@@ -2042,7 +2042,7 @@ static inline bool folio_maybe_dma_pinned(struct folio *folio)
  *
  * The caller has to hold the PT lock and the vma->vm_mm->->write_protect_seq.
  */
-static inline bool folio_needs_cow_for_dma(struct vm_area_struct *vma,
+static inline bool folio_needs_cow_for_dma(struct mm_area *vma,
 					  struct folio *folio)
 {
 	VM_BUG_ON(!(raw_read_seqcount(&vma->vm_mm->write_protect_seq) & 1));
@@ -2445,26 +2445,26 @@ static inline bool can_do_mlock(void) { return false; }
 extern int user_shm_lock(size_t, struct ucounts *);
 extern void user_shm_unlock(size_t, struct ucounts *);
 
-struct folio *vm_normal_folio(struct vm_area_struct *vma, unsigned long addr,
+struct folio *vm_normal_folio(struct mm_area *vma, unsigned long addr,
 			     pte_t pte);
-struct page *vm_normal_page(struct vm_area_struct *vma, unsigned long addr,
+struct page *vm_normal_page(struct mm_area *vma, unsigned long addr,
 			     pte_t pte);
-struct folio *vm_normal_folio_pmd(struct vm_area_struct *vma,
+struct folio *vm_normal_folio_pmd(struct mm_area *vma,
 				  unsigned long addr, pmd_t pmd);
-struct page *vm_normal_page_pmd(struct vm_area_struct *vma, unsigned long addr,
+struct page *vm_normal_page_pmd(struct mm_area *vma, unsigned long addr,
 				pmd_t pmd);
 
-void zap_vma_ptes(struct vm_area_struct *vma, unsigned long address,
+void zap_vma_ptes(struct mm_area *vma, unsigned long address,
 		  unsigned long size);
-void zap_page_range_single(struct vm_area_struct *vma, unsigned long address,
+void zap_page_range_single(struct mm_area *vma, unsigned long address,
 			   unsigned long size, struct zap_details *details);
-static inline void zap_vma_pages(struct vm_area_struct *vma)
+static inline void zap_vma_pages(struct mm_area *vma)
 {
 	zap_page_range_single(vma, vma->vm_start,
 			      vma->vm_end - vma->vm_start, NULL);
 }
 void unmap_vmas(struct mmu_gather *tlb, struct ma_state *mas,
-		struct vm_area_struct *start_vma, unsigned long start,
+		struct mm_area *start_vma, unsigned long start,
 		unsigned long end, unsigned long tree_end, bool mm_wr_locked);
 
 struct mmu_notifier_range;
@@ -2472,17 +2472,17 @@ struct mmu_notifier_range;
 void free_pgd_range(struct mmu_gather *tlb, unsigned long addr,
 		unsigned long end, unsigned long floor, unsigned long ceiling);
 int
-copy_page_range(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma);
-int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
+copy_page_range(struct mm_area *dst_vma, struct mm_area *src_vma);
+int generic_access_phys(struct mm_area *vma, unsigned long addr,
 			void *buf, int len, int write);
 
 struct follow_pfnmap_args {
 	/**
 	 * Inputs:
-	 * @vma: Pointer to @vm_area_struct struct
+	 * @vma: Pointer to @mm_area struct
 	 * @address: the virtual address to walk
 	 */
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long address;
 	/**
 	 * Internals:
@@ -2516,11 +2516,11 @@ void truncate_pagecache_range(struct inode *inode, loff_t offset, loff_t end);
 int generic_error_remove_folio(struct address_space *mapping,
 		struct folio *folio);
 
-struct vm_area_struct *lock_mm_and_find_vma(struct mm_struct *mm,
+struct mm_area *lock_mm_and_find_vma(struct mm_struct *mm,
 		unsigned long address, struct pt_regs *regs);
 
 #ifdef CONFIG_MMU
-extern vm_fault_t handle_mm_fault(struct vm_area_struct *vma,
+extern vm_fault_t handle_mm_fault(struct mm_area *vma,
 				  unsigned long address, unsigned int flags,
 				  struct pt_regs *regs);
 extern int fixup_user_fault(struct mm_struct *mm,
@@ -2531,7 +2531,7 @@ void unmap_mapping_pages(struct address_space *mapping,
 void unmap_mapping_range(struct address_space *mapping,
 		loff_t const holebegin, loff_t const holelen, int even_cows);
 #else
-static inline vm_fault_t handle_mm_fault(struct vm_area_struct *vma,
+static inline vm_fault_t handle_mm_fault(struct mm_area *vma,
 					 unsigned long address, unsigned int flags,
 					 struct pt_regs *regs)
 {
@@ -2558,7 +2558,7 @@ static inline void unmap_shared_mapping_range(struct address_space *mapping,
 	unmap_mapping_range(mapping, holebegin, holelen, 0);
 }
 
-static inline struct vm_area_struct *vma_lookup(struct mm_struct *mm,
+static inline struct mm_area *vma_lookup(struct mm_struct *mm,
 						unsigned long addr);
 
 extern int access_process_vm(struct task_struct *tsk, unsigned long addr,
@@ -2586,10 +2586,10 @@ long pin_user_pages_remote(struct mm_struct *mm,
 static inline struct page *get_user_page_vma_remote(struct mm_struct *mm,
 						    unsigned long addr,
 						    int gup_flags,
-						    struct vm_area_struct **vmap)
+						    struct mm_area **vmap)
 {
 	struct page *page;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int got;
 
 	if (WARN_ON_ONCE(unlikely(gup_flags & FOLL_NOWAIT)))
@@ -2663,13 +2663,13 @@ int get_cmdline(struct task_struct *task, char *buffer, int buflen);
 #define  MM_CP_UFFD_WP_ALL                 (MM_CP_UFFD_WP | \
 					    MM_CP_UFFD_WP_RESOLVE)
 
-bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
+bool can_change_pte_writable(struct mm_area *vma, unsigned long addr,
 			     pte_t pte);
 extern long change_protection(struct mmu_gather *tlb,
-			      struct vm_area_struct *vma, unsigned long start,
+			      struct mm_area *vma, unsigned long start,
 			      unsigned long end, unsigned long cp_flags);
 extern int mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
-	  struct vm_area_struct *vma, struct vm_area_struct **pprev,
+	  struct mm_area *vma, struct mm_area **pprev,
 	  unsigned long start, unsigned long end, unsigned long newflags);
 
 /*
@@ -3360,16 +3360,16 @@ extern atomic_long_t mmap_pages_allocated;
 extern int nommu_shrink_inode_mappings(struct inode *, size_t, size_t);
 
 /* interval_tree.c */
-void vma_interval_tree_insert(struct vm_area_struct *node,
+void vma_interval_tree_insert(struct mm_area *node,
 			      struct rb_root_cached *root);
-void vma_interval_tree_insert_after(struct vm_area_struct *node,
-				    struct vm_area_struct *prev,
+void vma_interval_tree_insert_after(struct mm_area *node,
+				    struct mm_area *prev,
 				    struct rb_root_cached *root);
-void vma_interval_tree_remove(struct vm_area_struct *node,
+void vma_interval_tree_remove(struct mm_area *node,
 			      struct rb_root_cached *root);
-struct vm_area_struct *vma_interval_tree_iter_first(struct rb_root_cached *root,
+struct mm_area *vma_interval_tree_iter_first(struct rb_root_cached *root,
 				unsigned long start, unsigned long last);
-struct vm_area_struct *vma_interval_tree_iter_next(struct vm_area_struct *node,
+struct mm_area *vma_interval_tree_iter_next(struct mm_area *node,
 				unsigned long start, unsigned long last);
 
 #define vma_interval_tree_foreach(vma, root, start, last)		\
@@ -3395,10 +3395,10 @@ void anon_vma_interval_tree_verify(struct anon_vma_chain *node);
 
 /* mmap.c */
 extern int __vm_enough_memory(struct mm_struct *mm, long pages, int cap_sys_admin);
-extern int insert_vm_struct(struct mm_struct *, struct vm_area_struct *);
+extern int insert_vm_struct(struct mm_struct *, struct mm_area *);
 extern void exit_mmap(struct mm_struct *);
-int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift);
-bool mmap_read_lock_maybe_expand(struct mm_struct *mm, struct vm_area_struct *vma,
+int relocate_vma_down(struct mm_area *vma, unsigned long shift);
+bool mmap_read_lock_maybe_expand(struct mm_struct *mm, struct mm_area *vma,
 				 unsigned long addr, bool write);
 
 static inline int check_data_rlimit(unsigned long rlim,
@@ -3426,9 +3426,9 @@ extern struct file *get_task_exe_file(struct task_struct *task);
 extern bool may_expand_vm(struct mm_struct *, vm_flags_t, unsigned long npages);
 extern void vm_stat_account(struct mm_struct *, vm_flags_t, long npages);
 
-extern bool vma_is_special_mapping(const struct vm_area_struct *vma,
+extern bool vma_is_special_mapping(const struct mm_area *vma,
 				   const struct vm_special_mapping *sm);
-extern struct vm_area_struct *_install_special_mapping(struct mm_struct *mm,
+extern struct mm_area *_install_special_mapping(struct mm_struct *mm,
 				   unsigned long addr, unsigned long len,
 				   unsigned long flags,
 				   const struct vm_special_mapping *spec);
@@ -3454,7 +3454,7 @@ extern unsigned long do_mmap(struct file *file, unsigned long addr,
 extern int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 			 unsigned long start, size_t len, struct list_head *uf,
 			 bool unlock);
-int do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
+int do_vmi_align_munmap(struct vma_iterator *vmi, struct mm_area *vma,
 		    struct mm_struct *mm, unsigned long start,
 		    unsigned long end, struct list_head *uf, bool unlock);
 extern int do_munmap(struct mm_struct *, unsigned long, size_t,
@@ -3507,19 +3507,19 @@ extern vm_fault_t filemap_page_mkwrite(struct vm_fault *vmf);
 
 extern unsigned long stack_guard_gap;
 /* Generic expand stack which grows the stack according to GROWS{UP,DOWN} */
-int expand_stack_locked(struct vm_area_struct *vma, unsigned long address);
-struct vm_area_struct *expand_stack(struct mm_struct * mm, unsigned long addr);
+int expand_stack_locked(struct mm_area *vma, unsigned long address);
+struct mm_area *expand_stack(struct mm_struct * mm, unsigned long addr);
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
-extern struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned long addr);
-extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned long addr,
-					     struct vm_area_struct **pprev);
+extern struct mm_area * find_vma(struct mm_struct * mm, unsigned long addr);
+extern struct mm_area * find_vma_prev(struct mm_struct * mm, unsigned long addr,
+					     struct mm_area **pprev);
 
 /*
  * Look up the first VMA which intersects the interval [start_addr, end_addr)
  * NULL if none.  Assume start_addr < end_addr.
  */
-struct vm_area_struct *find_vma_intersection(struct mm_struct *mm,
+struct mm_area *find_vma_intersection(struct mm_struct *mm,
 			unsigned long start_addr, unsigned long end_addr);
 
 /**
@@ -3527,15 +3527,15 @@ struct vm_area_struct *find_vma_intersection(struct mm_struct *mm,
  * @mm: The process address space.
  * @addr: The user address.
  *
- * Return: The vm_area_struct at the given address, %NULL otherwise.
+ * Return: The mm_area at the given address, %NULL otherwise.
  */
 static inline
-struct vm_area_struct *vma_lookup(struct mm_struct *mm, unsigned long addr)
+struct mm_area *vma_lookup(struct mm_struct *mm, unsigned long addr)
 {
 	return mtree_load(&mm->mm_mt, addr);
 }
 
-static inline unsigned long stack_guard_start_gap(struct vm_area_struct *vma)
+static inline unsigned long stack_guard_start_gap(struct mm_area *vma)
 {
 	if (vma->vm_flags & VM_GROWSDOWN)
 		return stack_guard_gap;
@@ -3547,7 +3547,7 @@ static inline unsigned long stack_guard_start_gap(struct vm_area_struct *vma)
 	return 0;
 }
 
-static inline unsigned long vm_start_gap(struct vm_area_struct *vma)
+static inline unsigned long vm_start_gap(struct mm_area *vma)
 {
 	unsigned long gap = stack_guard_start_gap(vma);
 	unsigned long vm_start = vma->vm_start;
@@ -3558,7 +3558,7 @@ static inline unsigned long vm_start_gap(struct vm_area_struct *vma)
 	return vm_start;
 }
 
-static inline unsigned long vm_end_gap(struct vm_area_struct *vma)
+static inline unsigned long vm_end_gap(struct mm_area *vma)
 {
 	unsigned long vm_end = vma->vm_end;
 
@@ -3570,16 +3570,16 @@ static inline unsigned long vm_end_gap(struct vm_area_struct *vma)
 	return vm_end;
 }
 
-static inline unsigned long vma_pages(struct vm_area_struct *vma)
+static inline unsigned long vma_pages(struct mm_area *vma)
 {
 	return (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
 }
 
 /* Look up the first VMA which exactly match the interval vm_start ... vm_end */
-static inline struct vm_area_struct *find_exact_vma(struct mm_struct *mm,
+static inline struct mm_area *find_exact_vma(struct mm_struct *mm,
 				unsigned long vm_start, unsigned long vm_end)
 {
-	struct vm_area_struct *vma = vma_lookup(mm, vm_start);
+	struct mm_area *vma = vma_lookup(mm, vm_start);
 
 	if (vma && (vma->vm_start != vm_start || vma->vm_end != vm_end))
 		vma = NULL;
@@ -3587,7 +3587,7 @@ static inline struct vm_area_struct *find_exact_vma(struct mm_struct *mm,
 	return vma;
 }
 
-static inline bool range_in_vma(struct vm_area_struct *vma,
+static inline bool range_in_vma(struct mm_area *vma,
 				unsigned long start, unsigned long end)
 {
 	return (vma && vma->vm_start <= start && end <= vma->vm_end);
@@ -3595,51 +3595,51 @@ static inline bool range_in_vma(struct vm_area_struct *vma,
 
 #ifdef CONFIG_MMU
 pgprot_t vm_get_page_prot(unsigned long vm_flags);
-void vma_set_page_prot(struct vm_area_struct *vma);
+void vma_set_page_prot(struct mm_area *vma);
 #else
 static inline pgprot_t vm_get_page_prot(unsigned long vm_flags)
 {
 	return __pgprot(0);
 }
-static inline void vma_set_page_prot(struct vm_area_struct *vma)
+static inline void vma_set_page_prot(struct mm_area *vma)
 {
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 }
 #endif
 
-void vma_set_file(struct vm_area_struct *vma, struct file *file);
+void vma_set_file(struct mm_area *vma, struct file *file);
 
 #ifdef CONFIG_NUMA_BALANCING
-unsigned long change_prot_numa(struct vm_area_struct *vma,
+unsigned long change_prot_numa(struct mm_area *vma,
 			unsigned long start, unsigned long end);
 #endif
 
-struct vm_area_struct *find_extend_vma_locked(struct mm_struct *,
+struct mm_area *find_extend_vma_locked(struct mm_struct *,
 		unsigned long addr);
-int remap_pfn_range(struct vm_area_struct *, unsigned long addr,
+int remap_pfn_range(struct mm_area *, unsigned long addr,
 			unsigned long pfn, unsigned long size, pgprot_t);
-int remap_pfn_range_notrack(struct vm_area_struct *vma, unsigned long addr,
+int remap_pfn_range_notrack(struct mm_area *vma, unsigned long addr,
 		unsigned long pfn, unsigned long size, pgprot_t prot);
-int vm_insert_page(struct vm_area_struct *, unsigned long addr, struct page *);
-int vm_insert_pages(struct vm_area_struct *vma, unsigned long addr,
+int vm_insert_page(struct mm_area *, unsigned long addr, struct page *);
+int vm_insert_pages(struct mm_area *vma, unsigned long addr,
 			struct page **pages, unsigned long *num);
-int vm_map_pages(struct vm_area_struct *vma, struct page **pages,
+int vm_map_pages(struct mm_area *vma, struct page **pages,
 				unsigned long num);
-int vm_map_pages_zero(struct vm_area_struct *vma, struct page **pages,
+int vm_map_pages_zero(struct mm_area *vma, struct page **pages,
 				unsigned long num);
 vm_fault_t vmf_insert_page_mkwrite(struct vm_fault *vmf, struct page *page,
 			bool write);
-vm_fault_t vmf_insert_pfn(struct vm_area_struct *vma, unsigned long addr,
+vm_fault_t vmf_insert_pfn(struct mm_area *vma, unsigned long addr,
 			unsigned long pfn);
-vm_fault_t vmf_insert_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
+vm_fault_t vmf_insert_pfn_prot(struct mm_area *vma, unsigned long addr,
 			unsigned long pfn, pgprot_t pgprot);
-vm_fault_t vmf_insert_mixed(struct vm_area_struct *vma, unsigned long addr,
+vm_fault_t vmf_insert_mixed(struct mm_area *vma, unsigned long addr,
 			pfn_t pfn);
-vm_fault_t vmf_insert_mixed_mkwrite(struct vm_area_struct *vma,
+vm_fault_t vmf_insert_mixed_mkwrite(struct mm_area *vma,
 		unsigned long addr, pfn_t pfn);
-int vm_iomap_memory(struct vm_area_struct *vma, phys_addr_t start, unsigned long len);
+int vm_iomap_memory(struct mm_area *vma, phys_addr_t start, unsigned long len);
 
-static inline vm_fault_t vmf_insert_page(struct vm_area_struct *vma,
+static inline vm_fault_t vmf_insert_page(struct mm_area *vma,
 				unsigned long addr, struct page *page)
 {
 	int err = vm_insert_page(vma, addr, page);
@@ -3653,7 +3653,7 @@ static inline vm_fault_t vmf_insert_page(struct vm_area_struct *vma,
 }
 
 #ifndef io_remap_pfn_range
-static inline int io_remap_pfn_range(struct vm_area_struct *vma,
+static inline int io_remap_pfn_range(struct mm_area *vma,
 				     unsigned long addr, unsigned long pfn,
 				     unsigned long size, pgprot_t prot)
 {
@@ -3703,7 +3703,7 @@ static inline int vm_fault_to_errno(vm_fault_t vm_fault, int foll_flags)
  * Indicates whether GUP can follow a PROT_NONE mapped page, or whether
  * a (NUMA hinting) fault is required.
  */
-static inline bool gup_can_follow_protnone(struct vm_area_struct *vma,
+static inline bool gup_can_follow_protnone(struct mm_area *vma,
 					   unsigned int flags)
 {
 	/*
@@ -3872,11 +3872,11 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 #endif	/* CONFIG_DEBUG_PAGEALLOC */
 
 #ifdef __HAVE_ARCH_GATE_AREA
-extern struct vm_area_struct *get_gate_vma(struct mm_struct *mm);
+extern struct mm_area *get_gate_vma(struct mm_struct *mm);
 extern int in_gate_area_no_mm(unsigned long addr);
 extern int in_gate_area(struct mm_struct *mm, unsigned long addr);
 #else
-static inline struct vm_area_struct *get_gate_vma(struct mm_struct *mm)
+static inline struct mm_area *get_gate_vma(struct mm_struct *mm)
 {
 	return NULL;
 }
@@ -3897,7 +3897,7 @@ void drop_slab(void);
 extern int randomize_va_space;
 #endif
 
-const char * arch_vma_name(struct vm_area_struct *vma);
+const char * arch_vma_name(struct mm_area *vma);
 #ifdef CONFIG_MMU
 void print_vma_addr(char *prefix, unsigned long rip);
 #else
@@ -4117,14 +4117,14 @@ enum mf_action_page_type {
 void folio_zero_user(struct folio *folio, unsigned long addr_hint);
 int copy_user_large_folio(struct folio *dst, struct folio *src,
 			  unsigned long addr_hint,
-			  struct vm_area_struct *vma);
+			  struct mm_area *vma);
 long copy_folio_from_user(struct folio *dst_folio,
 			   const void __user *usr_src,
 			   bool allow_pagefault);
 
 /**
  * vma_is_special_huge - Are transhuge page-table entries considered special?
- * @vma: Pointer to the struct vm_area_struct to consider
+ * @vma: Pointer to the struct mm_area to consider
  *
  * Whether transhuge page-table entries are considered "special" following
  * the definition in vm_normal_page().
@@ -4132,7 +4132,7 @@ long copy_folio_from_user(struct folio *dst_folio,
  * Return: true if transhuge page-table entries should be considered special,
  * false otherwise.
  */
-static inline bool vma_is_special_huge(const struct vm_area_struct *vma)
+static inline bool vma_is_special_huge(const struct mm_area *vma)
 {
 	return vma_is_dax(vma) || (vma->vm_file &&
 				   (vma->vm_flags & (VM_PFNMAP | VM_MIXEDMAP)));
@@ -4201,8 +4201,8 @@ static inline bool pfn_is_unaccepted_memory(unsigned long pfn)
 	return range_contains_unaccepted_memory(pfn << PAGE_SHIFT, PAGE_SIZE);
 }
 
-void vma_pgtable_walk_begin(struct vm_area_struct *vma);
-void vma_pgtable_walk_end(struct vm_area_struct *vma);
+void vma_pgtable_walk_begin(struct mm_area *vma);
+void vma_pgtable_walk_end(struct mm_area *vma);
 
 int reserve_mem_find_by_name(const char *name, phys_addr_t *start, phys_addr_t *size);
 int reserve_mem_release_by_name(const char *name);

@@ -374,7 +374,7 @@ void vmw_bo_dirty_clear_res(struct vmw_resource *res)
 
 vm_fault_t vmw_bo_vm_mkwrite(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ttm_buffer_object *bo = (struct ttm_buffer_object *)
 	    vma->vm_private_data;
 	vm_fault_t ret;
@@ -415,7 +415,7 @@ out_unlock:
 
 vm_fault_t vmw_bo_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ttm_buffer_object *bo = (struct ttm_buffer_object *)
 	    vma->vm_private_data;
 	struct vmw_bo *vbo = to_vmw_bo(&bo->base);

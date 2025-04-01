@@ -5935,7 +5935,7 @@ err_unlocked:
 	return ret;
 }
 
-static void binder_vma_open(struct vm_area_struct *vma)
+static void binder_vma_open(struct mm_area *vma)
 {
 	struct binder_proc *proc = vma->vm_private_data;
 
@@ -5946,7 +5946,7 @@ static void binder_vma_open(struct vm_area_struct *vma)
 		     (unsigned long)pgprot_val(vma->vm_page_prot));
 }
 
-static void binder_vma_close(struct vm_area_struct *vma)
+static void binder_vma_close(struct mm_area *vma)
 {
 	struct binder_proc *proc = vma->vm_private_data;
 
@@ -5969,7 +5969,7 @@ static const struct vm_operations_struct binder_vm_ops = {
 	.fault = binder_vm_fault,
 };
 
-static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
+static int binder_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct binder_proc *proc = filp->private_data;
 

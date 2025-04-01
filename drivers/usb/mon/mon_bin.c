@@ -1222,7 +1222,7 @@ mon_bin_poll(struct file *file, struct poll_table_struct *wait)
  * open and close: just keep track of how many times the device is
  * mapped, to use the proper memory allocation function.
  */
-static void mon_bin_vma_open(struct vm_area_struct *vma)
+static void mon_bin_vma_open(struct mm_area *vma)
 {
 	struct mon_reader_bin *rp = vma->vm_private_data;
 	unsigned long flags;
@@ -1232,7 +1232,7 @@ static void mon_bin_vma_open(struct vm_area_struct *vma)
 	spin_unlock_irqrestore(&rp->b_lock, flags);
 }
 
-static void mon_bin_vma_close(struct vm_area_struct *vma)
+static void mon_bin_vma_close(struct mm_area *vma)
 {
 	unsigned long flags;
 
@@ -1272,7 +1272,7 @@ static const struct vm_operations_struct mon_bin_vm_ops = {
 	.fault =    mon_bin_vma_fault,
 };
 
-static int mon_bin_mmap(struct file *filp, struct vm_area_struct *vma)
+static int mon_bin_mmap(struct file *filp, struct mm_area *vma)
 {
 	/* don't do anything here: "fault" will set up page table entries */
 	vma->vm_ops = &mon_bin_vm_ops;

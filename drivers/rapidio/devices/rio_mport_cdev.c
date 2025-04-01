@@ -2173,7 +2173,7 @@ static void mport_release_mapping(struct kref *ref)
 	kfree(map);
 }
 
-static void mport_mm_open(struct vm_area_struct *vma)
+static void mport_mm_open(struct mm_area *vma)
 {
 	struct rio_mport_mapping *map = vma->vm_private_data;
 
@@ -2181,7 +2181,7 @@ static void mport_mm_open(struct vm_area_struct *vma)
 	kref_get(&map->ref);
 }
 
-static void mport_mm_close(struct vm_area_struct *vma)
+static void mport_mm_close(struct mm_area *vma)
 {
 	struct rio_mport_mapping *map = vma->vm_private_data;
 
@@ -2196,7 +2196,7 @@ static const struct vm_operations_struct vm_ops = {
 	.close = mport_mm_close,
 };
 
-static int mport_cdev_mmap(struct file *filp, struct vm_area_struct *vma)
+static int mport_cdev_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct mport_cdev_priv *priv = filp->private_data;
 	struct mport_dev *md;

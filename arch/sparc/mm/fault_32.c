@@ -112,7 +112,7 @@ static noinline void do_fault_siginfo(int code, int sig, struct pt_regs *regs,
 asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 			       unsigned long address)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
 	int from_user = !(regs->psr & PSR_PS);
@@ -304,7 +304,7 @@ vmalloc_fault:
 /* This always deals with user addresses. */
 static void force_user_fault(unsigned long address, int write)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
 	unsigned int flags = FAULT_FLAG_USER;

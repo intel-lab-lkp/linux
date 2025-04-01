@@ -33,7 +33,7 @@ static int cg14_setcolreg(unsigned, unsigned, unsigned, unsigned,
 			 unsigned, struct fb_info *);
 static int cg14_pan_display(struct fb_var_screeninfo *, struct fb_info *);
 
-static int cg14_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int cg14_sbusfb_mmap(struct fb_info *info, struct mm_area *vma);
 static int cg14_sbusfb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg);
 
 /*
@@ -258,7 +258,7 @@ static int cg14_setcolreg(unsigned regno,
 	return 0;
 }
 
-static int cg14_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int cg14_sbusfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct cg14_par *par = (struct cg14_par *) info->par;
 

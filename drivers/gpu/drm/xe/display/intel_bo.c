@@ -32,7 +32,7 @@ void intel_bo_flush_if_display(struct drm_gem_object *obj)
 {
 }
 
-int intel_bo_fb_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+int intel_bo_fb_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	return drm_gem_prime_mmap(obj, vma);
 }

@@ -209,7 +209,7 @@ static int __sgx_encl_add_page(struct sgx_encl *encl,
 			       struct sgx_secinfo *secinfo, unsigned long src)
 {
 	struct sgx_pageinfo pginfo;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct page *src_page;
 	int ret;
 

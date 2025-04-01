@@ -25,7 +25,7 @@ __u32 one_task_error = 0;
 
 SEC("iter/task_vma") int proc_maps(struct bpf_iter__task_vma *ctx)
 {
-	struct vm_area_struct *vma = ctx->vma;
+	struct mm_area *vma = ctx->vma;
 	struct seq_file *seq = ctx->meta->seq;
 	struct task_struct *task = ctx->task;
 	struct file *file;

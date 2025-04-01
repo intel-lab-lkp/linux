@@ -65,7 +65,7 @@ void pmd_clear_bad(pmd_t *pmd)
  * used to be done in the caller, but sparc needs minor faults to
  * force that call on sun4c so we changed this macro slightly
  */
-int ptep_set_access_flags(struct vm_area_struct *vma,
+int ptep_set_access_flags(struct mm_area *vma,
 			  unsigned long address, pte_t *ptep,
 			  pte_t entry, int dirty)
 {
@@ -79,7 +79,7 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-int ptep_clear_flush_young(struct vm_area_struct *vma,
+int ptep_clear_flush_young(struct mm_area *vma,
 			   unsigned long address, pte_t *ptep)
 {
 	int young;
@@ -91,7 +91,7 @@ int ptep_clear_flush_young(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_FLUSH
-pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long address,
+pte_t ptep_clear_flush(struct mm_area *vma, unsigned long address,
 		       pte_t *ptep)
 {
 	struct mm_struct *mm = (vma)->vm_mm;
@@ -106,7 +106,7 @@ pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long address,
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 
 #ifndef __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
-int pmdp_set_access_flags(struct vm_area_struct *vma,
+int pmdp_set_access_flags(struct mm_area *vma,
 			  unsigned long address, pmd_t *pmdp,
 			  pmd_t entry, int dirty)
 {
@@ -121,7 +121,7 @@ int pmdp_set_access_flags(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_CLEAR_YOUNG_FLUSH
-int pmdp_clear_flush_young(struct vm_area_struct *vma,
+int pmdp_clear_flush_young(struct mm_area *vma,
 			   unsigned long address, pmd_t *pmdp)
 {
 	int young;
@@ -134,7 +134,7 @@ int pmdp_clear_flush_young(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_HUGE_CLEAR_FLUSH
-pmd_t pmdp_huge_clear_flush(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_huge_clear_flush(struct mm_area *vma, unsigned long address,
 			    pmd_t *pmdp)
 {
 	pmd_t pmd;
@@ -147,7 +147,7 @@ pmd_t pmdp_huge_clear_flush(struct vm_area_struct *vma, unsigned long address,
 }
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-pud_t pudp_huge_clear_flush(struct vm_area_struct *vma, unsigned long address,
+pud_t pudp_huge_clear_flush(struct mm_area *vma, unsigned long address,
 			    pud_t *pudp)
 {
 	pud_t pud;
@@ -195,7 +195,7 @@ pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE
-pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_invalidate(struct mm_area *vma, unsigned long address,
 		     pmd_t *pmdp)
 {
 	VM_WARN_ON_ONCE(!pmd_present(*pmdp));
@@ -206,7 +206,7 @@ pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE_AD
-pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_invalidate_ad(struct mm_area *vma, unsigned long address,
 			 pmd_t *pmdp)
 {
 	VM_WARN_ON_ONCE(!pmd_present(*pmdp));
@@ -215,7 +215,7 @@ pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma, unsigned long address,
 #endif
 
 #ifndef pmdp_collapse_flush
-pmd_t pmdp_collapse_flush(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_collapse_flush(struct mm_area *vma, unsigned long address,
 			  pmd_t *pmdp)
 {
 	/*

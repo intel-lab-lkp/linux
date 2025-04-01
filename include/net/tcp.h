@@ -469,7 +469,7 @@ void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 void tcp_data_ready(struct sock *sk);
 #ifdef CONFIG_MMU
 int tcp_mmap(struct file *file, struct socket *sock,
-	     struct vm_area_struct *vma);
+	     struct mm_area *vma);
 #endif
 void tcp_parse_options(const struct net *net, const struct sk_buff *skb,
 		       struct tcp_options_received *opt_rx,

@@ -47,7 +47,7 @@ static const struct fb_var_screeninfo cfag12864bfb_var = {
 	.vmode = FB_VMODE_NONINTERLACED,
 };
 
-static int cfag12864bfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int cfag12864bfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct page *pages = virt_to_page(cfag12864b_buffer);
 

@@ -424,14 +424,14 @@ vme_user_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
-static void vme_user_vm_open(struct vm_area_struct *vma)
+static void vme_user_vm_open(struct mm_area *vma)
 {
 	struct vme_user_vma_priv *vma_priv = vma->vm_private_data;
 
 	refcount_inc(&vma_priv->refcnt);
 }
 
-static void vme_user_vm_close(struct vm_area_struct *vma)
+static void vme_user_vm_close(struct mm_area *vma)
 {
 	struct vme_user_vma_priv *vma_priv = vma->vm_private_data;
 	unsigned int minor = vma_priv->minor;
@@ -451,7 +451,7 @@ static const struct vm_operations_struct vme_user_vm_ops = {
 	.close = vme_user_vm_close,
 };
 
-static int vme_user_master_mmap(unsigned int minor, struct vm_area_struct *vma)
+static int vme_user_master_mmap(unsigned int minor, struct mm_area *vma)
 {
 	int err;
 	struct vme_user_vma_priv *vma_priv;
@@ -482,7 +482,7 @@ static int vme_user_master_mmap(unsigned int minor, struct vm_area_struct *vma)
 	return 0;
 }
 
-static int vme_user_mmap(struct file *file, struct vm_area_struct *vma)
+static int vme_user_mmap(struct file *file, struct mm_area *vma)
 {
 	unsigned int minor = iminor(file_inode(file));
 

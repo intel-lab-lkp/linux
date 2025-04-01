@@ -120,7 +120,7 @@ finish_read:
 }
 
 static void
-coda_vm_open(struct vm_area_struct *vma)
+coda_vm_open(struct mm_area *vma)
 {
 	struct coda_vm_ops *cvm_ops =
 		container_of(vma->vm_ops, struct coda_vm_ops, vm_ops);
@@ -132,7 +132,7 @@ coda_vm_open(struct vm_area_struct *vma)
 }
 
 static void
-coda_vm_close(struct vm_area_struct *vma)
+coda_vm_close(struct mm_area *vma)
 {
 	struct coda_vm_ops *cvm_ops =
 		container_of(vma->vm_ops, struct coda_vm_ops, vm_ops);
@@ -148,7 +148,7 @@ coda_vm_close(struct vm_area_struct *vma)
 }
 
 static int
-coda_file_mmap(struct file *coda_file, struct vm_area_struct *vma)
+coda_file_mmap(struct file *coda_file, struct mm_area *vma)
 {
 	struct inode *coda_inode = file_inode(coda_file);
 	struct coda_file_info *cfi = coda_ftoc(coda_file);

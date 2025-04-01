@@ -75,7 +75,7 @@ static int mshv_vp_release(struct inode *inode, struct file *filp);
 static long mshv_vp_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg);
 static int mshv_partition_release(struct inode *inode, struct file *filp);
 static long mshv_partition_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg);
-static int mshv_vp_mmap(struct file *file, struct vm_area_struct *vma);
+static int mshv_vp_mmap(struct file *file, struct mm_area *vma);
 static vm_fault_t mshv_vp_fault(struct vm_fault *vmf);
 static int mshv_init_async_handler(struct mshv_partition *partition);
 static void mshv_async_hvcall_handler(void *data, u64 *status);
@@ -831,7 +831,7 @@ static vm_fault_t mshv_vp_fault(struct vm_fault *vmf)
 	return 0;
 }
 
-static int mshv_vp_mmap(struct file *file, struct vm_area_struct *vma)
+static int mshv_vp_mmap(struct file *file, struct mm_area *vma)
 {
 	struct mshv_vp *vp = file->private_data;
 
@@ -1332,7 +1332,7 @@ mshv_map_user_memory(struct mshv_partition *partition,
 		     struct mshv_user_mem_region mem)
 {
 	struct mshv_mem_region *region;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	bool is_mmio;
 	ulong mmio_pfn;
 	long ret;

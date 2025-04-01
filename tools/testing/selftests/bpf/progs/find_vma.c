@@ -20,7 +20,7 @@ __u64 addr = 0;
 int find_zero_ret = -1;
 int find_addr_ret = -1;
 
-static long check_vma(struct task_struct *task, struct vm_area_struct *vma,
+static long check_vma(struct task_struct *task, struct mm_area *vma,
 		      struct callback_ctx *data)
 {
 	if (vma->vm_file)

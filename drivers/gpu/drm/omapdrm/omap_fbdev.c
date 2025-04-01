@@ -81,7 +81,7 @@ fallback:
 	return drm_fb_helper_pan_display(var, fbi);
 }
 
-static int omap_fbdev_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int omap_fbdev_fb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	vma->vm_page_prot = pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 

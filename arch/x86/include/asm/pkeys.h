@@ -30,9 +30,9 @@ static inline int execute_only_pkey(struct mm_struct *mm)
 	return __execute_only_pkey(mm);
 }
 
-extern int __arch_override_mprotect_pkey(struct vm_area_struct *vma,
+extern int __arch_override_mprotect_pkey(struct mm_area *vma,
 		int prot, int pkey);
-static inline int arch_override_mprotect_pkey(struct vm_area_struct *vma,
+static inline int arch_override_mprotect_pkey(struct mm_area *vma,
 		int prot, int pkey)
 {
 	if (!cpu_feature_enabled(X86_FEATURE_OSPKE))
@@ -115,7 +115,7 @@ int mm_pkey_free(struct mm_struct *mm, int pkey)
 	return 0;
 }
 
-static inline int vma_pkey(struct vm_area_struct *vma)
+static inline int vma_pkey(struct mm_area *vma)
 {
 	unsigned long vma_pkey_mask = VM_PKEY_BIT0 | VM_PKEY_BIT1 |
 				      VM_PKEY_BIT2 | VM_PKEY_BIT3;

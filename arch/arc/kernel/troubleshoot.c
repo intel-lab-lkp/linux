@@ -76,7 +76,7 @@ done:
 
 static void show_faulting_vma(unsigned long address)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *active_mm = current->active_mm;
 
 	/* can't use print_vma_addr() yet as it doesn't check for

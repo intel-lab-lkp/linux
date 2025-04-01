@@ -183,7 +183,7 @@ static inline unsigned long nr_free_highpages(void);
 static inline unsigned long totalhigh_pages(void);
 
 #ifndef ARCH_HAS_FLUSH_ANON_PAGE
-static inline void flush_anon_page(struct vm_area_struct *vma, struct page *page, unsigned long vmaddr)
+static inline void flush_anon_page(struct mm_area *vma, struct page *page, unsigned long vmaddr)
 {
 }
 #endif
@@ -221,7 +221,7 @@ static inline void clear_user_highpage(struct page *page, unsigned long vaddr)
  * we are out of memory.
  */
 static inline
-struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
+struct folio *vma_alloc_zeroed_movable_folio(struct mm_area *vma,
 				   unsigned long vaddr)
 {
 	struct folio *folio;
@@ -301,7 +301,7 @@ static inline void zero_user(struct page *page,
 #ifndef __HAVE_ARCH_COPY_USER_HIGHPAGE
 
 static inline void copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma)
+	unsigned long vaddr, struct mm_area *vma)
 {
 	char *vfrom, *vto;
 
@@ -339,7 +339,7 @@ static inline void copy_highpage(struct page *to, struct page *from)
  * of bytes not copied if there was a #MC, otherwise 0 for success.
  */
 static inline int copy_mc_user_highpage(struct page *to, struct page *from,
-					unsigned long vaddr, struct vm_area_struct *vma)
+					unsigned long vaddr, struct mm_area *vma)
 {
 	unsigned long ret;
 	char *vfrom, *vto;
@@ -378,7 +378,7 @@ static inline int copy_mc_highpage(struct page *to, struct page *from)
 }
 #else
 static inline int copy_mc_user_highpage(struct page *to, struct page *from,
-					unsigned long vaddr, struct vm_area_struct *vma)
+					unsigned long vaddr, struct mm_area *vma)
 {
 	copy_user_highpage(to, from, vaddr, vma);
 	return 0;

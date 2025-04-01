@@ -1017,7 +1017,7 @@ static void stage2_unmap_memslot(struct kvm *kvm,
 	 *     +--------------------------------------------+
 	 */
 	do {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		hva_t vm_start, vm_end;
 
 		vma = find_vma_intersection(current->mm, hva, reg_end);
@@ -1393,7 +1393,7 @@ transparent_hugepage_adjust(struct kvm *kvm, struct kvm_memory_slot *memslot,
 	return PAGE_SIZE;
 }
 
-static int get_vma_page_shift(struct vm_area_struct *vma, unsigned long hva)
+static int get_vma_page_shift(struct mm_area *vma, unsigned long hva)
 {
 	unsigned long pa;
 
@@ -1461,7 +1461,7 @@ static void sanitise_mte_tags(struct kvm *kvm, kvm_pfn_t pfn,
 	}
 }
 
-static bool kvm_vma_mte_allowed(struct vm_area_struct *vma)
+static bool kvm_vma_mte_allowed(struct mm_area *vma)
 {
 	return vma->vm_flags & VM_MTE_ALLOWED;
 }
@@ -1478,7 +1478,7 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 	unsigned long mmu_seq;
 	phys_addr_t ipa = fault_ipa;
 	struct kvm *kvm = vcpu->kvm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	short vma_shift;
 	void *memcache;
 	gfn_t gfn;
@@ -2190,7 +2190,7 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 	 *     +--------------------------------------------+
 	 */
 	do {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		vma = find_vma_intersection(current->mm, hva, reg_end);
 		if (!vma)

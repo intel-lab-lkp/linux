@@ -1256,7 +1256,7 @@ static long cs_char_ioctl(struct file *file, unsigned int cmd,
 	return r;
 }
 
-static int cs_char_mmap(struct file *file, struct vm_area_struct *vma)
+static int cs_char_mmap(struct file *file, struct mm_area *vma)
 {
 	if (vma->vm_end < vma->vm_start)
 		return -EINVAL;

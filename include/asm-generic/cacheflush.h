@@ -5,7 +5,7 @@
 #include <linux/instrumented.h>
 
 struct mm_struct;
-struct vm_area_struct;
+struct mm_area;
 struct page;
 struct address_space;
 
@@ -32,7 +32,7 @@ static inline void flush_cache_dup_mm(struct mm_struct *mm)
 #endif
 
 #ifndef flush_cache_range
-static inline void flush_cache_range(struct vm_area_struct *vma,
+static inline void flush_cache_range(struct mm_area *vma,
 				     unsigned long start,
 				     unsigned long end)
 {
@@ -40,7 +40,7 @@ static inline void flush_cache_range(struct vm_area_struct *vma,
 #endif
 
 #ifndef flush_cache_page
-static inline void flush_cache_page(struct vm_area_struct *vma,
+static inline void flush_cache_page(struct mm_area *vma,
 				    unsigned long vmaddr,
 				    unsigned long pfn)
 {
@@ -78,7 +78,7 @@ static inline void flush_icache_range(unsigned long start, unsigned long end)
 #endif
 
 #ifndef flush_icache_user_page
-static inline void flush_icache_user_page(struct vm_area_struct *vma,
+static inline void flush_icache_user_page(struct mm_area *vma,
 					   struct page *page,
 					   unsigned long addr, int len)
 {

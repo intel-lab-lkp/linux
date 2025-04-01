@@ -313,10 +313,10 @@ set_pmd(pmd_t *pmdp, pmd_t pmdval)
 	*pmdp = pmdval;
 }
 
-struct vm_area_struct;
+struct mm_area;
 
 static inline int
-ptep_test_and_clear_young(struct vm_area_struct *vma, unsigned long addr,
+ptep_test_and_clear_young(struct mm_area *vma, unsigned long addr,
 			  pte_t *ptep)
 {
 	pte_t pte = *ptep;
@@ -403,14 +403,14 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 #else
 
 struct vm_fault;
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long address, pte_t *ptep, unsigned int nr);
 #define update_mmu_cache(vma, address, ptep) \
 	update_mmu_cache_range(NULL, vma, address, ptep, 1)
 
 typedef pte_t *pte_addr_t;
 
-void update_mmu_tlb_range(struct vm_area_struct *vma,
+void update_mmu_tlb_range(struct mm_area *vma,
 		unsigned long address, pte_t *ptep, unsigned int nr);
 #define update_mmu_tlb_range update_mmu_tlb_range
 

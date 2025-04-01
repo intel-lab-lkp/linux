@@ -143,7 +143,7 @@ binder_alloc_prepare_to_free(struct binder_alloc *alloc,
 void binder_alloc_free_buf(struct binder_alloc *alloc,
 			   struct binder_buffer *buffer);
 int binder_alloc_mmap_handler(struct binder_alloc *alloc,
-			      struct vm_area_struct *vma);
+			      struct mm_area *vma);
 void binder_alloc_deferred_release(struct binder_alloc *alloc);
 int binder_alloc_get_allocated_count(struct binder_alloc *alloc);
 void binder_alloc_print_allocated(struct seq_file *m,

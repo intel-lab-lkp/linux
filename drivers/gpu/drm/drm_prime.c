@@ -737,7 +737,7 @@ EXPORT_SYMBOL(drm_gem_dmabuf_vunmap);
  * The fake GEM offset is added to vma->vm_pgoff and &drm_driver->fops->mmap is
  * called to set up the mapping.
  */
-int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+int drm_gem_prime_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct drm_file *priv;
 	struct file *fil;
@@ -795,7 +795,7 @@ EXPORT_SYMBOL(drm_gem_prime_mmap);
  *
  * Returns 0 on success or a negative error code on failure.
  */
-int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
+int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct mm_area *vma)
 {
 	struct drm_gem_object *obj = dma_buf->priv;
 

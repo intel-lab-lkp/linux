@@ -117,7 +117,7 @@ static void irdma_disassociate_ucontext(struct ib_ucontext *context)
 }
 
 static int irdma_mmap_legacy(struct irdma_ucontext *ucontext,
-			     struct vm_area_struct *vma)
+			     struct mm_area *vma)
 {
 	u64 pfn;
 
@@ -168,7 +168,7 @@ irdma_user_mmap_entry_insert(struct irdma_ucontext *ucontext, u64 bar_offset,
  * @context: context created during alloc
  * @vma: kernel info for user memory map
  */
-static int irdma_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+static int irdma_mmap(struct ib_ucontext *context, struct mm_area *vma)
 {
 	struct rdma_user_mmap_entry *rdma_entry;
 	struct irdma_user_mmap_entry *entry;

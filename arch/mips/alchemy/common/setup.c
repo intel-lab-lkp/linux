@@ -94,7 +94,7 @@ phys_addr_t fixup_bigphys_addr(phys_addr_t phys_addr, phys_addr_t size)
 	return phys_addr;
 }
 
-int io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr,
+int io_remap_pfn_range(struct mm_area *vma, unsigned long vaddr,
 		unsigned long pfn, unsigned long size, pgprot_t prot)
 {
 	phys_addr_t phys_addr = fixup_bigphys_addr(pfn << PAGE_SHIFT, size);

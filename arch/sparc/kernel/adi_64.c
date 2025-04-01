@@ -122,7 +122,7 @@ adi_not_found:
 }
 
 static tag_storage_desc_t *find_tag_store(struct mm_struct *mm,
-					  struct vm_area_struct *vma,
+					  struct mm_area *vma,
 					  unsigned long addr)
 {
 	tag_storage_desc_t *tag_desc = NULL;
@@ -154,7 +154,7 @@ static tag_storage_desc_t *find_tag_store(struct mm_struct *mm,
 }
 
 static tag_storage_desc_t *alloc_tag_store(struct mm_struct *mm,
-					   struct vm_area_struct *vma,
+					   struct mm_area *vma,
 					   unsigned long addr)
 {
 	unsigned char *tags;
@@ -324,7 +324,7 @@ static void del_tag_store(tag_storage_desc_t *tag_desc, struct mm_struct *mm)
 /* Retrieve any saved ADI tags for the page being swapped back in and
  * restore these tags to the newly allocated physical page.
  */
-void adi_restore_tags(struct mm_struct *mm, struct vm_area_struct *vma,
+void adi_restore_tags(struct mm_struct *mm, struct mm_area *vma,
 		      unsigned long addr, pte_t pte)
 {
 	unsigned char *tag;
@@ -367,7 +367,7 @@ void adi_restore_tags(struct mm_struct *mm, struct vm_area_struct *vma,
  * this physical page so they can be restored later when the page is swapped
  * back in.
  */
-int adi_save_tags(struct mm_struct *mm, struct vm_area_struct *vma,
+int adi_save_tags(struct mm_struct *mm, struct mm_area *vma,
 		  unsigned long addr, pte_t oldpte)
 {
 	unsigned char *tag;

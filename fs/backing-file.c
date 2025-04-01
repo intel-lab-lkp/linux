@@ -323,7 +323,7 @@ ssize_t backing_file_splice_write(struct pipe_inode_info *pipe,
 }
 EXPORT_SYMBOL_GPL(backing_file_splice_write);
 
-int backing_file_mmap(struct file *file, struct vm_area_struct *vma,
+int backing_file_mmap(struct file *file, struct mm_area *vma,
 		      struct backing_file_ctx *ctx)
 {
 	const struct cred *old_cred;

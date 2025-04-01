@@ -1232,7 +1232,7 @@ static int au1200fb_fb_blank(int blank_mode, struct fb_info *fbi)
  * Map video memory in user space. We don't use the generic fb_mmap
  * method mainly to allow the use of the TLB streaming flag (CCA=6)
  */
-static int au1200fb_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int au1200fb_fb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct au1200fb_device *fbdev = info->par;
 

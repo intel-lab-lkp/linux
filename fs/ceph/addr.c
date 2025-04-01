@@ -1940,7 +1940,7 @@ static void ceph_restore_sigs(sigset_t *oldset)
  */
 static vm_fault_t ceph_filemap_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct inode *inode = file_inode(vma->vm_file);
 	struct ceph_inode_info *ci = ceph_inode(inode);
 	struct ceph_client *cl = ceph_inode_to_client(inode);
@@ -2031,7 +2031,7 @@ out_restore:
 
 static vm_fault_t ceph_page_mkwrite(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct inode *inode = file_inode(vma->vm_file);
 	struct ceph_client *cl = ceph_inode_to_client(inode);
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -2319,7 +2319,7 @@ static const struct vm_operations_struct ceph_vmops = {
 	.page_mkwrite	= ceph_page_mkwrite,
 };
 
-int ceph_mmap(struct file *file, struct vm_area_struct *vma)
+int ceph_mmap(struct file *file, struct mm_area *vma)
 {
 	struct address_space *mapping = file->f_mapping;
 

@@ -339,7 +339,7 @@ int vb2_ioctl_remove_bufs(struct file *file, void *priv,
 
 /* struct v4l2_file_operations helpers */
 
-int vb2_fop_mmap(struct file *file, struct vm_area_struct *vma);
+int vb2_fop_mmap(struct file *file, struct mm_area *vma);
 int vb2_fop_release(struct file *file);
 int _vb2_fop_release(struct file *file, struct mutex *lock);
 ssize_t vb2_fop_write(struct file *file, const char __user *buf,

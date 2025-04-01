@@ -179,7 +179,7 @@ static void __kprobes __do_page_fault(struct pt_regs *regs,
 	unsigned int flags = FAULT_FLAG_DEFAULT;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	vm_fault_t fault;
 
 	if (kprobe_page_fault(regs, current->thread.trap_nr))

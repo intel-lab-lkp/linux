@@ -173,7 +173,7 @@ nouveau_svmm_bind(struct drm_device *dev, void *data,
 	}
 
 	for (addr = args->va_start, end = args->va_end; addr < end;) {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		unsigned long next;
 
 		vma = find_vma_intersection(mm, addr, end);

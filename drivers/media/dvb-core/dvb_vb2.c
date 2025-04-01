@@ -431,7 +431,7 @@ int dvb_vb2_dqbuf(struct dvb_vb2_ctx *ctx, struct dmx_buffer *b)
 	return 0;
 }
 
-int dvb_vb2_mmap(struct dvb_vb2_ctx *ctx, struct vm_area_struct *vma)
+int dvb_vb2_mmap(struct dvb_vb2_ctx *ctx, struct mm_area *vma)
 {
 	int ret;
 

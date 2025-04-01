@@ -380,7 +380,7 @@ void lru_note_cost(struct lruvec *lruvec, bool file,
 		   unsigned int nr_io, unsigned int nr_rotated);
 void lru_note_cost_refault(struct folio *);
 void folio_add_lru(struct folio *);
-void folio_add_lru_vma(struct folio *, struct vm_area_struct *);
+void folio_add_lru_vma(struct folio *, struct mm_area *);
 void mark_page_accessed(struct page *);
 void folio_mark_accessed(struct folio *);
 

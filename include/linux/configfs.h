@@ -146,7 +146,7 @@ static struct configfs_attribute _pfx##attr_##_name = {	\
 }
 
 struct file;
-struct vm_area_struct;
+struct mm_area;
 
 struct configfs_bin_attribute {
 	struct configfs_attribute cb_attr;	/* std. attribute */

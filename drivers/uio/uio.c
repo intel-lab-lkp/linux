@@ -669,7 +669,7 @@ out:
 	return retval ? retval : sizeof(s32);
 }
 
-static int uio_find_mem_index(struct vm_area_struct *vma)
+static int uio_find_mem_index(struct mm_area *vma)
 {
 	struct uio_device *idev = vma->vm_private_data;
 
@@ -726,7 +726,7 @@ static const struct vm_operations_struct uio_logical_vm_ops = {
 	.fault = uio_vma_fault,
 };
 
-static int uio_mmap_logical(struct vm_area_struct *vma)
+static int uio_mmap_logical(struct mm_area *vma)
 {
 	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);
 	vma->vm_ops = &uio_logical_vm_ops;
@@ -739,7 +739,7 @@ static const struct vm_operations_struct uio_physical_vm_ops = {
 #endif
 };
 
-static int uio_mmap_physical(struct vm_area_struct *vma)
+static int uio_mmap_physical(struct mm_area *vma)
 {
 	struct uio_device *idev = vma->vm_private_data;
 	int mi = uio_find_mem_index(vma);
@@ -774,7 +774,7 @@ static int uio_mmap_physical(struct vm_area_struct *vma)
 			       vma->vm_page_prot);
 }
 
-static int uio_mmap_dma_coherent(struct vm_area_struct *vma)
+static int uio_mmap_dma_coherent(struct mm_area *vma)
 {
 	struct uio_device *idev = vma->vm_private_data;
 	struct uio_mem *mem;
@@ -817,7 +817,7 @@ static int uio_mmap_dma_coherent(struct vm_area_struct *vma)
 	return ret;
 }
 
-static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
+static int uio_mmap(struct file *filep, struct mm_area *vma)
 {
 	struct uio_listener *listener = filep->private_data;
 	struct uio_device *idev = listener->dev;

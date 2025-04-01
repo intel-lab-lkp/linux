@@ -21,7 +21,7 @@ struct task_struct;
 struct cpumask;
 struct flush_tlb_info;
 struct mmu_gather;
-struct vm_area_struct;
+struct mm_area;
 
 /*
  * Wrapper type for pointers to code which uses the non-standard
@@ -168,9 +168,9 @@ struct pv_mmu_ops {
 	void (*set_pte)(pte_t *ptep, pte_t pteval);
 	void (*set_pmd)(pmd_t *pmdp, pmd_t pmdval);
 
-	pte_t (*ptep_modify_prot_start)(struct vm_area_struct *vma, unsigned long addr,
+	pte_t (*ptep_modify_prot_start)(struct mm_area *vma, unsigned long addr,
 					pte_t *ptep);
-	void (*ptep_modify_prot_commit)(struct vm_area_struct *vma, unsigned long addr,
+	void (*ptep_modify_prot_commit)(struct mm_area *vma, unsigned long addr,
 					pte_t *ptep, pte_t pte);
 
 	struct paravirt_callee_save pte_val;

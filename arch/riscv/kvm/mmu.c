@@ -487,7 +487,7 @@ int kvm_arch_prepare_memory_region(struct kvm *kvm,
 	 *     +--------------------------------------------+
 	 */
 	do {
-		struct vm_area_struct *vma = find_vma(current->mm, hva);
+		struct mm_area *vma = find_vma(current->mm, hva);
 		hva_t vm_start, vm_end;
 
 		if (!vma || vma->vm_start >= reg_end)
@@ -595,7 +595,7 @@ int kvm_riscv_gstage_map(struct kvm_vcpu *vcpu,
 	bool writable;
 	short vma_pageshift;
 	gfn_t gfn = gpa >> PAGE_SHIFT;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct kvm *kvm = vcpu->kvm;
 	struct kvm_mmu_memory_cache *pcache = &vcpu->arch.mmu_page_cache;
 	bool logging = (memslot->dirty_bitmap &&

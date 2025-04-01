@@ -26,7 +26,7 @@ struct module;
 struct notifier_block;
 struct page;
 struct videomode;
-struct vm_area_struct;
+struct mm_area;
 
 /* Definitions below are used in the parsed monitor specs */
 #define FB_DPMS_ACTIVE_OFF	1
@@ -302,7 +302,7 @@ struct fb_ops {
 			unsigned long arg);
 
 	/* perform fb specific mmap */
-	int (*fb_mmap)(struct fb_info *info, struct vm_area_struct *vma);
+	int (*fb_mmap)(struct fb_info *info, struct mm_area *vma);
 
 	/* get capability given var */
 	void (*fb_get_caps)(struct fb_info *info, struct fb_blit_caps *caps,
@@ -555,7 +555,7 @@ extern ssize_t fb_io_read(struct fb_info *info, char __user *buf,
 			  size_t count, loff_t *ppos);
 extern ssize_t fb_io_write(struct fb_info *info, const char __user *buf,
 			   size_t count, loff_t *ppos);
-int fb_io_mmap(struct fb_info *info, struct vm_area_struct *vma);
+int fb_io_mmap(struct fb_info *info, struct mm_area *vma);
 
 #define __FB_DEFAULT_IOMEM_OPS_RDWR \
 	.fb_read	= fb_io_read, \
@@ -648,7 +648,7 @@ static inline void __fb_pad_aligned_buffer(u8 *dst, u32 d_pitch,
 }
 
 /* fb_defio.c */
-int fb_deferred_io_mmap(struct fb_info *info, struct vm_area_struct *vma);
+int fb_deferred_io_mmap(struct fb_info *info, struct mm_area *vma);
 extern int  fb_deferred_io_init(struct fb_info *info);
 extern void fb_deferred_io_open(struct fb_info *info,
 				struct inode *inode,

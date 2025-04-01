@@ -109,7 +109,7 @@ static inline void flush_icache_range(unsigned long start, unsigned long end)
  * processes address space.  Really, we want to allow our "user
  * space" model to handle this.
  */
-extern void copy_to_user_page(struct vm_area_struct *, struct page *,
+extern void copy_to_user_page(struct mm_area *, struct page *,
 	unsigned long, void *, const void *, unsigned long);
 #define copy_to_user_page copy_to_user_page
 

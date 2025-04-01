@@ -256,7 +256,7 @@ static inline bool is_64bit_mm(struct mm_struct *mm)
  * So do not enforce things if the VMA is not from the current
  * mm, or if we are in a kernel thread.
  */
-static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
+static inline bool arch_vma_access_permitted(struct mm_area *vma,
 		bool write, bool execute, bool foreign)
 {
 	/* pkeys never affect instruction fetches */

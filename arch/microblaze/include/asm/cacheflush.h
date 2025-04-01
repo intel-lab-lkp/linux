@@ -85,7 +85,7 @@ static inline void flush_dcache_folio(struct folio *folio)
 #define flush_cache_page(vma, vmaddr, pfn) \
 	flush_dcache_range(pfn << PAGE_SHIFT, (pfn << PAGE_SHIFT) + PAGE_SIZE);
 
-static inline void copy_to_user_page(struct vm_area_struct *vma,
+static inline void copy_to_user_page(struct mm_area *vma,
 				     struct page *page, unsigned long vaddr,
 				     void *dst, void *src, int len)
 {

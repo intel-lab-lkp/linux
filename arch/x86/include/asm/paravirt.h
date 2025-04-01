@@ -402,7 +402,7 @@ static inline pgdval_t pgd_val(pgd_t pgd)
 }
 
 #define  __HAVE_ARCH_PTEP_MODIFY_PROT_TRANSACTION
-static inline pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
+static inline pte_t ptep_modify_prot_start(struct mm_area *vma, unsigned long addr,
 					   pte_t *ptep)
 {
 	pteval_t ret;
@@ -412,7 +412,7 @@ static inline pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned 
 	return (pte_t) { .pte = ret };
 }
 
-static inline void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
+static inline void ptep_modify_prot_commit(struct mm_area *vma, unsigned long addr,
 					   pte_t *ptep, pte_t old_pte, pte_t pte)
 {
 

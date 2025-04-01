@@ -3848,7 +3848,7 @@ static int selinux_mmap_file(struct file *file,
 				   (flags & MAP_TYPE) == MAP_SHARED);
 }
 
-static int selinux_file_mprotect(struct vm_area_struct *vma,
+static int selinux_file_mprotect(struct mm_area *vma,
 				 unsigned long reqprot __always_unused,
 				 unsigned long prot)
 {

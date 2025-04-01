@@ -1082,7 +1082,7 @@ fs_initcall(init_fs_coredump_sysctls);
  * meant. These special mappings include - vDSO, vsyscall, and other
  * architecture specific mappings
  */
-static bool always_dump_vma(struct vm_area_struct *vma)
+static bool always_dump_vma(struct mm_area *vma)
 {
 	/* Any vsyscall mappings? */
 	if (vma == get_gate_vma(vma->vm_mm))
@@ -1110,7 +1110,7 @@ static bool always_dump_vma(struct vm_area_struct *vma)
 /*
  * Decide how much of @vma's contents should be included in a core dump.
  */
-static unsigned long vma_dump_size(struct vm_area_struct *vma,
+static unsigned long vma_dump_size(struct mm_area *vma,
 				   unsigned long mm_flags)
 {
 #define FILTER(type)	(mm_flags & (1UL << MMF_DUMP_##type))
@@ -1193,9 +1193,9 @@ whole:
  * Helper function for iterating across a vma list.  It ensures that the caller
  * will visit `gate_vma' prior to terminating the search.
  */
-static struct vm_area_struct *coredump_next_vma(struct vma_iterator *vmi,
-				       struct vm_area_struct *vma,
-				       struct vm_area_struct *gate_vma)
+static struct mm_area *coredump_next_vma(struct vma_iterator *vmi,
+				       struct mm_area *vma,
+				       struct mm_area *gate_vma)
 {
 	if (gate_vma && (vma == gate_vma))
 		return NULL;
@@ -1238,7 +1238,7 @@ static int cmp_vma_size(const void *vma_meta_lhs_ptr, const void *vma_meta_rhs_p
  */
 static bool dump_vma_snapshot(struct coredump_params *cprm)
 {
-	struct vm_area_struct *gate_vma, *vma = NULL;
+	struct mm_area *gate_vma, *vma = NULL;
 	struct mm_struct *mm = current->mm;
 	VMA_ITERATOR(vmi, mm, 0);
 	int i = 0;

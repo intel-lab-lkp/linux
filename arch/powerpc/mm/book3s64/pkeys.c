@@ -376,7 +376,7 @@ int execute_only_pkey(struct mm_struct *mm)
 	return mm->context.execute_only_pkey;
 }
 
-static inline bool vma_is_pkey_exec_only(struct vm_area_struct *vma)
+static inline bool vma_is_pkey_exec_only(struct mm_area *vma)
 {
 	/* Do this check first since the vm_flags should be hot */
 	if ((vma->vm_flags & VM_ACCESS_FLAGS) != VM_EXEC)
@@ -388,7 +388,7 @@ static inline bool vma_is_pkey_exec_only(struct vm_area_struct *vma)
 /*
  * This should only be called for *plain* mprotect calls.
  */
-int __arch_override_mprotect_pkey(struct vm_area_struct *vma, int prot,
+int __arch_override_mprotect_pkey(struct mm_area *vma, int prot,
 				  int pkey)
 {
 	/*
@@ -444,7 +444,7 @@ bool arch_pte_access_permitted(u64 pte, bool write, bool execute)
  * So do not enforce things if the VMA is not from the current mm, or if we are
  * in a kernel thread.
  */
-bool arch_vma_access_permitted(struct vm_area_struct *vma, bool write,
+bool arch_vma_access_permitted(struct mm_area *vma, bool write,
 			       bool execute, bool foreign)
 {
 	if (!mmu_has_feature(MMU_FTR_PKEY))

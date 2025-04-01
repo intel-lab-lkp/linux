@@ -170,9 +170,9 @@ extern bool __rpte_sub_valid(real_pte_t rpte, unsigned long index);
 #define pte_pagesize_index(mm, addr, pte)	\
 	(((pte) & H_PAGE_COMBO)? MMU_PAGE_4K: MMU_PAGE_64K)
 
-extern int remap_pfn_range(struct vm_area_struct *, unsigned long addr,
+extern int remap_pfn_range(struct mm_area *, unsigned long addr,
 			   unsigned long pfn, unsigned long size, pgprot_t);
-static inline int hash__remap_4k_pfn(struct vm_area_struct *vma, unsigned long addr,
+static inline int hash__remap_4k_pfn(struct mm_area *vma, unsigned long addr,
 				 unsigned long pfn, pgprot_t prot)
 {
 	if (pfn > (PTE_RPN_MASK >> PAGE_SHIFT)) {
@@ -271,7 +271,7 @@ static inline pmd_t hash__pmd_mkhuge(pmd_t pmd)
 extern unsigned long hash__pmd_hugepage_update(struct mm_struct *mm,
 					   unsigned long addr, pmd_t *pmdp,
 					   unsigned long clr, unsigned long set);
-extern pmd_t hash__pmdp_collapse_flush(struct vm_area_struct *vma,
+extern pmd_t hash__pmdp_collapse_flush(struct mm_area *vma,
 				   unsigned long address, pmd_t *pmdp);
 extern void hash__pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 					 pgtable_t pgtable);

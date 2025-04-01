@@ -1403,7 +1403,7 @@ static const struct vm_operations_struct bch_vm_ops = {
 	.page_mkwrite   = bch2_page_mkwrite,
 };
 
-static int bch2_mmap(struct file *file, struct vm_area_struct *vma)
+static int bch2_mmap(struct file *file, struct mm_area *vma)
 {
 	file_accessed(file);
 

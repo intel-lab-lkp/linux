@@ -394,7 +394,7 @@ static int do_fail_paste(void)
  */
 static vm_fault_t vas_mmap_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct file *fp = vma->vm_file;
 	struct coproc_instance *cp_inst = fp->private_data;
 	struct vas_window *txwin;
@@ -472,7 +472,7 @@ static vm_fault_t vas_mmap_fault(struct vm_fault *vmf)
  * be invalid. Set VAS window VMA to NULL in this function which
  * is called before VMA free.
  */
-static void vas_mmap_close(struct vm_area_struct *vma)
+static void vas_mmap_close(struct mm_area *vma)
 {
 	struct file *fp = vma->vm_file;
 	struct coproc_instance *cp_inst = fp->private_data;
@@ -504,7 +504,7 @@ static const struct vm_operations_struct vas_vm_ops = {
 	.fault = vas_mmap_fault,
 };
 
-static int coproc_mmap(struct file *fp, struct vm_area_struct *vma)
+static int coproc_mmap(struct file *fp, struct mm_area *vma)
 {
 	struct coproc_instance *cp_inst = fp->private_data;
 	struct vas_window *txwin;

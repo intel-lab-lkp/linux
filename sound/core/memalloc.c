@@ -25,7 +25,7 @@ struct snd_malloc_ops {
 	struct page *(*get_page)(struct snd_dma_buffer *dmab, size_t offset);
 	unsigned int (*get_chunk_size)(struct snd_dma_buffer *dmab,
 				       unsigned int ofs, unsigned int size);
-	int (*mmap)(struct snd_dma_buffer *dmab, struct vm_area_struct *area);
+	int (*mmap)(struct snd_dma_buffer *dmab, struct mm_area *area);
 	void (*sync)(struct snd_dma_buffer *dmab, enum snd_dma_sync_mode mode);
 };
 
@@ -189,7 +189,7 @@ EXPORT_SYMBOL_GPL(snd_devm_alloc_dir_pages);
  * Return: zero if successful, or a negative error code
  */
 int snd_dma_buffer_mmap(struct snd_dma_buffer *dmab,
-			struct vm_area_struct *area)
+			struct mm_area *area)
 {
 	const struct snd_malloc_ops *ops;
 
@@ -334,7 +334,7 @@ static void snd_dma_continuous_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_continuous_mmap(struct snd_dma_buffer *dmab,
-				   struct vm_area_struct *area)
+				   struct mm_area *area)
 {
 	return remap_pfn_range(area, area->vm_start,
 			       dmab->addr >> PAGE_SHIFT,
@@ -362,7 +362,7 @@ static void snd_dma_vmalloc_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_vmalloc_mmap(struct snd_dma_buffer *dmab,
-				struct vm_area_struct *area)
+				struct mm_area *area)
 {
 	return remap_vmalloc_range(area, dmab->area, 0);
 }
@@ -451,7 +451,7 @@ static void snd_dma_iram_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_iram_mmap(struct snd_dma_buffer *dmab,
-			     struct vm_area_struct *area)
+			     struct mm_area *area)
 {
 	area->vm_page_prot = pgprot_writecombine(area->vm_page_prot);
 	return remap_pfn_range(area, area->vm_start,
@@ -481,7 +481,7 @@ static void snd_dma_dev_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_dev_mmap(struct snd_dma_buffer *dmab,
-			    struct vm_area_struct *area)
+			    struct mm_area *area)
 {
 	return dma_mmap_coherent(dmab->dev.dev, area,
 				 dmab->area, dmab->addr, dmab->bytes);
@@ -520,7 +520,7 @@ static void snd_dma_wc_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_wc_mmap(struct snd_dma_buffer *dmab,
-			   struct vm_area_struct *area)
+			   struct mm_area *area)
 {
 	area->vm_page_prot = pgprot_writecombine(area->vm_page_prot);
 	return dma_mmap_coherent(dmab->dev.dev, area,
@@ -538,7 +538,7 @@ static void snd_dma_wc_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_wc_mmap(struct snd_dma_buffer *dmab,
-			   struct vm_area_struct *area)
+			   struct mm_area *area)
 {
 	return dma_mmap_wc(dmab->dev.dev, area,
 			   dmab->area, dmab->addr, dmab->bytes);
@@ -585,7 +585,7 @@ static void snd_dma_noncontig_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_noncontig_mmap(struct snd_dma_buffer *dmab,
-				  struct vm_area_struct *area)
+				  struct mm_area *area)
 {
 	return dma_mmap_noncontiguous(dmab->dev.dev, area,
 				      dmab->bytes, dmab->private_data);
@@ -789,7 +789,7 @@ static void snd_dma_sg_fallback_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_sg_fallback_mmap(struct snd_dma_buffer *dmab,
-				    struct vm_area_struct *area)
+				    struct mm_area *area)
 {
 	struct snd_dma_sg_fallback *sgbuf = dmab->private_data;
 
@@ -849,7 +849,7 @@ static void snd_dma_noncoherent_free(struct snd_dma_buffer *dmab)
 }
 
 static int snd_dma_noncoherent_mmap(struct snd_dma_buffer *dmab,
-				    struct vm_area_struct *area)
+				    struct mm_area *area)
 {
 	area->vm_page_prot = vm_get_page_prot(area->vm_flags);
 	return dma_mmap_pages(dmab->dev.dev, area,

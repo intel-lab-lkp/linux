@@ -19,7 +19,7 @@ int css_task_cnt;
 u64 cg_id;
 
 SEC("lsm/file_mprotect")
-int BPF_PROG(iter_css_task_for_each, struct vm_area_struct *vma,
+int BPF_PROG(iter_css_task_for_each, struct mm_area *vma,
 	    unsigned long reqprot, unsigned long prot, int ret)
 {
 	struct task_struct *cur_task = bpf_get_current_task_btf();

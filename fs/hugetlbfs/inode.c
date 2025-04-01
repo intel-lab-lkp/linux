@@ -96,7 +96,7 @@ static const struct fs_parameter_spec hugetlb_fs_parameters[] = {
 #define PGOFF_LOFFT_MAX \
 	(((1UL << (PAGE_SHIFT + 1)) - 1) <<  (BITS_PER_LONG - (PAGE_SHIFT + 1)))
 
-static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int hugetlbfs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	struct inode *inode = file_inode(file);
 	loff_t len, vma_len;
@@ -340,7 +340,7 @@ static void hugetlb_delete_from_page_cache(struct folio *folio)
  * mutex for the page in the mapping.  So, we can not race with page being
  * faulted into the vma.
  */
-static bool hugetlb_vma_maps_pfn(struct vm_area_struct *vma,
+static bool hugetlb_vma_maps_pfn(struct mm_area *vma,
 				unsigned long addr, unsigned long pfn)
 {
 	pte_t *ptep, pte;
@@ -365,7 +365,7 @@ static bool hugetlb_vma_maps_pfn(struct vm_area_struct *vma,
  * which overlap the truncated area starting at pgoff,
  * and no vma on a 32-bit arch can span beyond the 4GB.
  */
-static unsigned long vma_offset_start(struct vm_area_struct *vma, pgoff_t start)
+static unsigned long vma_offset_start(struct mm_area *vma, pgoff_t start)
 {
 	unsigned long offset = 0;
 
@@ -375,7 +375,7 @@ static unsigned long vma_offset_start(struct vm_area_struct *vma, pgoff_t start)
 	return vma->vm_start + offset;
 }
 
-static unsigned long vma_offset_end(struct vm_area_struct *vma, pgoff_t end)
+static unsigned long vma_offset_end(struct mm_area *vma, pgoff_t end)
 {
 	unsigned long t_end;
 
@@ -399,7 +399,7 @@ static void hugetlb_unmap_file_folio(struct hstate *h,
 	struct rb_root_cached *root = &mapping->i_mmap;
 	struct hugetlb_vma_lock *vma_lock;
 	unsigned long pfn = folio_pfn(folio);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long v_start;
 	unsigned long v_end;
 	pgoff_t start, end;
@@ -479,7 +479,7 @@ static void
 hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 		      zap_flags_t zap_flags)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	/*
 	 * end == 0 indicates that the entire range after start should be
@@ -730,7 +730,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 	struct hugetlbfs_inode_info *info = HUGETLBFS_I(inode);
 	struct address_space *mapping = inode->i_mapping;
 	struct hstate *h = hstate_inode(inode);
-	struct vm_area_struct pseudo_vma;
+	struct mm_area pseudo_vma;
 	struct mm_struct *mm = current->mm;
 	loff_t hpage_size = huge_page_size(h);
 	unsigned long hpage_shift = huge_page_shift(h);

@@ -71,7 +71,7 @@ void pcibios_fixup_bus(struct pci_bus *bus)
  *  -- paulus.
  */
 
-int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma)
+int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct mm_area *vma)
 {
 	struct pci_controller *pci_ctrl = (struct pci_controller*) pdev->sysdata;
 	resource_size_t ioaddr = pci_resource_start(pdev, bar);

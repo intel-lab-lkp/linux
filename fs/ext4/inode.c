@@ -6172,7 +6172,7 @@ static int ext4_bh_unmapped(handle_t *handle, struct inode *inode,
 
 vm_fault_t ext4_page_mkwrite(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct folio *folio = page_folio(vmf->page);
 	loff_t size;
 	unsigned long len;

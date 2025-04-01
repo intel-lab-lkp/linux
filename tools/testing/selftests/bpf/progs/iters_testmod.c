@@ -14,7 +14,7 @@ int iter_next_trusted(const void *ctx)
 {
 	struct task_struct *cur_task = bpf_get_current_task_btf();
 	struct bpf_iter_task_vma vma_it;
-	struct vm_area_struct *vma_ptr;
+	struct mm_area *vma_ptr;
 
 	bpf_iter_task_vma_new(&vma_it, cur_task, 0);
 
@@ -34,7 +34,7 @@ int iter_next_trusted_or_null(const void *ctx)
 {
 	struct task_struct *cur_task = bpf_get_current_task_btf();
 	struct bpf_iter_task_vma vma_it;
-	struct vm_area_struct *vma_ptr;
+	struct mm_area *vma_ptr;
 
 	bpf_iter_task_vma_new(&vma_it, cur_task, 0);
 

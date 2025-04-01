@@ -214,7 +214,7 @@ static void sh4_flush_cache_mm(void *arg)
 static void sh4_flush_cache_page(void *args)
 {
 	struct flusher_data *data = args;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct page *page;
 	unsigned long address, pfn, phys;
 	int map_coherent = 0;
@@ -283,7 +283,7 @@ static void sh4_flush_cache_page(void *args)
 static void sh4_flush_cache_range(void *args)
 {
 	struct flusher_data *data = args;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long start, end;
 
 	vma = data->vma;

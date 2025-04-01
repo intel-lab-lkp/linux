@@ -17,7 +17,7 @@ struct coredump_params;
  */
 struct linux_binprm {
 #ifdef CONFIG_MMU
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long vma_pages;
 	unsigned long argmin; /* rlimit marker for copy_strings() */
 #else

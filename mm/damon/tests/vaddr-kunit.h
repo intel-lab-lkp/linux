@@ -14,7 +14,7 @@
 
 #include <kunit/test.h>
 
-static int __link_vmas(struct maple_tree *mt, struct vm_area_struct *vmas,
+static int __link_vmas(struct maple_tree *mt, struct mm_area *vmas,
 			ssize_t nr_vmas)
 {
 	int i, ret = -ENOMEM;
@@ -68,13 +68,13 @@ static void damon_test_three_regions_in_vmas(struct kunit *test)
 	static struct mm_struct mm;
 	struct damon_addr_range regions[3] = {0};
 	/* 10-20-25, 200-210-220, 300-305, 307-330 */
-	static struct vm_area_struct vmas[] = {
-		(struct vm_area_struct) {.vm_start = 10, .vm_end = 20},
-		(struct vm_area_struct) {.vm_start = 20, .vm_end = 25},
-		(struct vm_area_struct) {.vm_start = 200, .vm_end = 210},
-		(struct vm_area_struct) {.vm_start = 210, .vm_end = 220},
-		(struct vm_area_struct) {.vm_start = 300, .vm_end = 305},
-		(struct vm_area_struct) {.vm_start = 307, .vm_end = 330},
+	static struct mm_area vmas[] = {
+		(struct mm_area) {.vm_start = 10, .vm_end = 20},
+		(struct mm_area) {.vm_start = 20, .vm_end = 25},
+		(struct mm_area) {.vm_start = 200, .vm_end = 210},
+		(struct mm_area) {.vm_start = 210, .vm_end = 220},
+		(struct mm_area) {.vm_start = 300, .vm_end = 305},
+		(struct mm_area) {.vm_start = 307, .vm_end = 330},
 	};
 
 	mt_init_flags(&mm.mm_mt, MT_FLAGS_ALLOC_RANGE | MT_FLAGS_USE_RCU);

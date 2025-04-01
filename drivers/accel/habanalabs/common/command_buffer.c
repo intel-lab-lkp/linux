@@ -247,7 +247,7 @@ release_cb:
 }
 
 static int hl_cb_mmap(struct hl_mmap_mem_buf *buf,
-				      struct vm_area_struct *vma, void *args)
+				      struct mm_area *vma, void *args)
 {
 	struct hl_cb *cb = buf->private;
 

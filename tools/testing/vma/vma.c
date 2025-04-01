@@ -59,13 +59,13 @@ unsigned long rlimit(unsigned int limit)
 }
 
 /* Helper function to simply allocate a VMA. */
-static struct vm_area_struct *alloc_vma(struct mm_struct *mm,
+static struct mm_area *alloc_vma(struct mm_struct *mm,
 					unsigned long start,
 					unsigned long end,
 					pgoff_t pgoff,
 					vm_flags_t flags)
 {
-	struct vm_area_struct *ret = vm_area_alloc(mm);
+	struct mm_area *ret = vm_area_alloc(mm);
 
 	if (ret == NULL)
 		return NULL;
@@ -80,7 +80,7 @@ static struct vm_area_struct *alloc_vma(struct mm_struct *mm,
 }
 
 /* Helper function to allocate a VMA and link it to the tree. */
-static int attach_vma(struct mm_struct *mm, struct vm_area_struct *vma)
+static int attach_vma(struct mm_struct *mm, struct mm_area *vma)
 {
 	int res;
 
@@ -91,13 +91,13 @@ static int attach_vma(struct mm_struct *mm, struct vm_area_struct *vma)
 }
 
 /* Helper function to allocate a VMA and link it to the tree. */
-static struct vm_area_struct *alloc_and_link_vma(struct mm_struct *mm,
+static struct mm_area *alloc_and_link_vma(struct mm_struct *mm,
 						 unsigned long start,
 						 unsigned long end,
 						 pgoff_t pgoff,
 						 vm_flags_t flags)
 {
-	struct vm_area_struct *vma = alloc_vma(mm, start, end, pgoff, flags);
+	struct mm_area *vma = alloc_vma(mm, start, end, pgoff, flags);
 
 	if (vma == NULL)
 		return NULL;
@@ -118,9 +118,9 @@ static struct vm_area_struct *alloc_and_link_vma(struct mm_struct *mm,
 }
 
 /* Helper function which provides a wrapper around a merge new VMA operation. */
-static struct vm_area_struct *merge_new(struct vma_merge_struct *vmg)
+static struct mm_area *merge_new(struct vma_merge_struct *vmg)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	/*
 	 * For convenience, get prev and next VMAs. Which the new VMA operation
 	 * requires.
@@ -140,9 +140,9 @@ static struct vm_area_struct *merge_new(struct vma_merge_struct *vmg)
  * Helper function which provides a wrapper around a merge existing VMA
  * operation.
  */
-static struct vm_area_struct *merge_existing(struct vma_merge_struct *vmg)
+static struct mm_area *merge_existing(struct vma_merge_struct *vmg)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = vma_merge_existing_range(vmg);
 	if (vma)
@@ -191,13 +191,13 @@ static void vmg_set_range(struct vma_merge_struct *vmg, unsigned long start,
  * Update vmg and the iterator for it and try to merge, otherwise allocate a new
  * VMA, link it to the maple tree and return it.
  */
-static struct vm_area_struct *try_merge_new_vma(struct mm_struct *mm,
+static struct mm_area *try_merge_new_vma(struct mm_struct *mm,
 						struct vma_merge_struct *vmg,
 						unsigned long start, unsigned long end,
 						pgoff_t pgoff, vm_flags_t flags,
 						bool *was_merged)
 {
-	struct vm_area_struct *merged;
+	struct mm_area *merged;
 
 	vmg_set_range(vmg, start, end, pgoff, flags);
 
@@ -231,7 +231,7 @@ static void reset_dummy_anon_vma(void)
  */
 static int cleanup_mm(struct mm_struct *mm, struct vma_iterator *vmi)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int count = 0;
 
 	fail_prealloc = false;
@@ -249,7 +249,7 @@ static int cleanup_mm(struct mm_struct *mm, struct vma_iterator *vmi)
 }
 
 /* Helper function to determine if VMA has had vma_start_write() performed. */
-static bool vma_write_started(struct vm_area_struct *vma)
+static bool vma_write_started(struct mm_area *vma)
 {
 	int seq = vma->vm_lock_seq;
 
@@ -261,17 +261,17 @@ static bool vma_write_started(struct vm_area_struct *vma)
 }
 
 /* Helper function providing a dummy vm_ops->close() method.*/
-static void dummy_close(struct vm_area_struct *)
+static void dummy_close(struct mm_area *)
 {
 }
 
 static bool test_simple_merge(void)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
-	struct vm_area_struct *vma_left = alloc_vma(&mm, 0, 0x1000, 0, flags);
-	struct vm_area_struct *vma_right = alloc_vma(&mm, 0x2000, 0x3000, 2, flags);
+	struct mm_area *vma_left = alloc_vma(&mm, 0, 0x1000, 0, flags);
+	struct mm_area *vma_right = alloc_vma(&mm, 0x2000, 0x3000, 2, flags);
 	VMA_ITERATOR(vmi, &mm, 0x1000);
 	struct vma_merge_struct vmg = {
 		.mm = &mm,
@@ -301,10 +301,10 @@ static bool test_simple_merge(void)
 
 static bool test_simple_modify(void)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
-	struct vm_area_struct *init_vma = alloc_vma(&mm, 0, 0x3000, 0, flags);
+	struct mm_area *init_vma = alloc_vma(&mm, 0, 0x3000, 0, flags);
 	VMA_ITERATOR(vmi, &mm, 0x1000);
 
 	ASSERT_FALSE(attach_vma(&mm, init_vma));
@@ -363,7 +363,7 @@ static bool test_simple_expand(void)
 {
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
-	struct vm_area_struct *vma = alloc_vma(&mm, 0, 0x1000, 0, flags);
+	struct mm_area *vma = alloc_vma(&mm, 0, 0x1000, 0, flags);
 	VMA_ITERATOR(vmi, &mm, 0);
 	struct vma_merge_struct vmg = {
 		.vmi = &vmi,
@@ -391,7 +391,7 @@ static bool test_simple_shrink(void)
 {
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
-	struct vm_area_struct *vma = alloc_vma(&mm, 0, 0x3000, 0, flags);
+	struct mm_area *vma = alloc_vma(&mm, 0, 0x3000, 0, flags);
 	VMA_ITERATOR(vmi, &mm, 0);
 
 	ASSERT_FALSE(attach_vma(&mm, vma));
@@ -433,7 +433,7 @@ static bool test_merge_new(void)
 		.close = dummy_close,
 	};
 	int count;
-	struct vm_area_struct *vma, *vma_a, *vma_b, *vma_c, *vma_d;
+	struct mm_area *vma, *vma_a, *vma_b, *vma_c, *vma_d;
 	bool merged;
 
 	/*
@@ -616,7 +616,7 @@ static bool test_vma_merge_special_flags(void)
 	vm_flags_t special_flags[] = { VM_IO, VM_DONTEXPAND, VM_PFNMAP, VM_MIXEDMAP };
 	vm_flags_t all_special_flags = 0;
 	int i;
-	struct vm_area_struct *vma_left, *vma;
+	struct mm_area *vma_left, *vma;
 
 	/* Make sure there aren't new VM_SPECIAL flags. */
 	for (i = 0; i < ARRAY_SIZE(special_flags); i++) {
@@ -688,7 +688,7 @@ static bool test_vma_merge_with_close(void)
 	const struct vm_operations_struct vm_ops = {
 		.close = dummy_close,
 	};
-	struct vm_area_struct *vma_prev, *vma_next, *vma;
+	struct mm_area *vma_prev, *vma_next, *vma;
 
 	/*
 	 * When merging VMAs we are not permitted to remove any VMA that has a
@@ -894,12 +894,12 @@ static bool test_vma_merge_new_with_close(void)
 		.mm = &mm,
 		.vmi = &vmi,
 	};
-	struct vm_area_struct *vma_prev = alloc_and_link_vma(&mm, 0, 0x2000, 0, flags);
-	struct vm_area_struct *vma_next = alloc_and_link_vma(&mm, 0x5000, 0x7000, 5, flags);
+	struct mm_area *vma_prev = alloc_and_link_vma(&mm, 0, 0x2000, 0, flags);
+	struct mm_area *vma_next = alloc_and_link_vma(&mm, 0x5000, 0x7000, 5, flags);
 	const struct vm_operations_struct vm_ops = {
 		.close = dummy_close,
 	};
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	/*
 	 * We should allow the partial merge of a proposed new VMA if the
@@ -945,7 +945,7 @@ static bool test_merge_existing(void)
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
 	VMA_ITERATOR(vmi, &mm, 0);
-	struct vm_area_struct *vma, *vma_prev, *vma_next;
+	struct mm_area *vma, *vma_prev, *vma_next;
 	struct vma_merge_struct vmg = {
 		.mm = &mm,
 		.vmi = &vmi,
@@ -1175,7 +1175,7 @@ static bool test_anon_vma_non_mergeable(void)
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
 	VMA_ITERATOR(vmi, &mm, 0);
-	struct vm_area_struct *vma, *vma_prev, *vma_next;
+	struct mm_area *vma, *vma_prev, *vma_next;
 	struct vma_merge_struct vmg = {
 		.mm = &mm,
 		.vmi = &vmi,
@@ -1290,7 +1290,7 @@ static bool test_dup_anon_vma(void)
 	struct anon_vma_chain dummy_anon_vma_chain = {
 		.anon_vma = &dummy_anon_vma,
 	};
-	struct vm_area_struct *vma_prev, *vma_next, *vma;
+	struct mm_area *vma_prev, *vma_next, *vma;
 
 	reset_dummy_anon_vma();
 
@@ -1447,7 +1447,7 @@ static bool test_vmi_prealloc_fail(void)
 		.mm = &mm,
 		.vmi = &vmi,
 	};
-	struct vm_area_struct *vma_prev, *vma;
+	struct mm_area *vma_prev, *vma;
 
 	/*
 	 * We are merging vma into prev, with vma possessing an anon_vma, which
@@ -1507,7 +1507,7 @@ static bool test_merge_extend(void)
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
 	VMA_ITERATOR(vmi, &mm, 0x1000);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = alloc_and_link_vma(&mm, 0, 0x1000, 0, flags);
 	alloc_and_link_vma(&mm, 0x3000, 0x4000, 3, flags);
@@ -1538,7 +1538,7 @@ static bool test_copy_vma(void)
 	struct mm_struct mm = {};
 	bool need_locks = false;
 	VMA_ITERATOR(vmi, &mm, 0);
-	struct vm_area_struct *vma, *vma_new, *vma_next;
+	struct mm_area *vma, *vma_new, *vma_next;
 
 	/* Move backwards and do not merge. */
 
@@ -1570,7 +1570,7 @@ static bool test_expand_only_mode(void)
 	unsigned long flags = VM_READ | VM_WRITE | VM_MAYREAD | VM_MAYWRITE;
 	struct mm_struct mm = {};
 	VMA_ITERATOR(vmi, &mm, 0);
-	struct vm_area_struct *vma_prev, *vma;
+	struct mm_area *vma_prev, *vma;
 	VMG_STATE(vmg, &mm, &vmi, 0x5000, 0x9000, flags, 5);
 
 	/*
@@ -1609,7 +1609,7 @@ static bool test_mmap_region_basic(void)
 {
 	struct mm_struct mm = {};
 	unsigned long addr;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, &mm, 0);
 
 	current->mm = &mm;

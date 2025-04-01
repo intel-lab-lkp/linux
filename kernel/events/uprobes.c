@@ -131,7 +131,7 @@ static void uprobe_warn(struct task_struct *t, const char *msg)
  *	- Return 1 if the specified virtual address is in an
  *	  executable vma.
  */
-static bool valid_vma(struct vm_area_struct *vma, bool is_register)
+static bool valid_vma(struct mm_area *vma, bool is_register)
 {
 	vm_flags_t flags = VM_HUGETLB | VM_MAYEXEC | VM_MAYSHARE;
 
@@ -141,12 +141,12 @@ static bool valid_vma(struct vm_area_struct *vma, bool is_register)
 	return vma->vm_file && (vma->vm_flags & flags) == VM_MAYEXEC;
 }
 
-static unsigned long offset_to_vaddr(struct vm_area_struct *vma, loff_t offset)
+static unsigned long offset_to_vaddr(struct mm_area *vma, loff_t offset)
 {
 	return vma->vm_start + offset - ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
 }
 
-static loff_t vaddr_to_offset(struct vm_area_struct *vma, unsigned long vaddr)
+static loff_t vaddr_to_offset(struct mm_area *vma, unsigned long vaddr)
 {
 	return ((loff_t)vma->vm_pgoff << PAGE_SHIFT) + (vaddr - vma->vm_start);
 }
@@ -164,7 +164,7 @@ static loff_t vaddr_to_offset(struct vm_area_struct *vma, unsigned long vaddr)
  *
  * Returns 0 on success, negative error code otherwise.
  */
-static int __replace_page(struct vm_area_struct *vma, unsigned long addr,
+static int __replace_page(struct mm_area *vma, unsigned long addr,
 				struct page *old_page, struct page *new_page)
 {
 	struct folio *old_folio = page_folio(old_page);
@@ -360,7 +360,7 @@ static void delayed_uprobe_remove(struct uprobe *uprobe, struct mm_struct *mm)
 }
 
 static bool valid_ref_ctr_vma(struct uprobe *uprobe,
-			      struct vm_area_struct *vma)
+			      struct mm_area *vma)
 {
 	unsigned long vaddr = offset_to_vaddr(vma, uprobe->ref_ctr_offset);
 
@@ -372,11 +372,11 @@ static bool valid_ref_ctr_vma(struct uprobe *uprobe,
 		vma->vm_end > vaddr;
 }
 
-static struct vm_area_struct *
+static struct mm_area *
 find_ref_ctr_vma(struct uprobe *uprobe, struct mm_struct *mm)
 {
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *tmp;
+	struct mm_area *tmp;
 
 	for_each_vma(vmi, tmp)
 		if (valid_ref_ctr_vma(uprobe, tmp))
@@ -437,7 +437,7 @@ static void update_ref_ctr_warn(struct uprobe *uprobe,
 static int update_ref_ctr(struct uprobe *uprobe, struct mm_struct *mm,
 			  short d)
 {
-	struct vm_area_struct *rc_vma;
+	struct mm_area *rc_vma;
 	unsigned long rc_vaddr;
 	int ret = 0;
 
@@ -486,7 +486,7 @@ int uprobe_write_opcode(struct arch_uprobe *auprobe, struct mm_struct *mm,
 {
 	struct uprobe *uprobe;
 	struct page *old_page, *new_page;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int ret, is_register, ref_ctr_updated = 0;
 	bool orig_page_huge = false;
 	unsigned int gup_flags = FOLL_FORCE;
@@ -1136,7 +1136,7 @@ static bool filter_chain(struct uprobe *uprobe, struct mm_struct *mm)
 
 static int
 install_breakpoint(struct uprobe *uprobe, struct mm_struct *mm,
-			struct vm_area_struct *vma, unsigned long vaddr)
+			struct mm_area *vma, unsigned long vaddr)
 {
 	bool first_uprobe;
 	int ret;
@@ -1186,7 +1186,7 @@ static struct map_info *
 build_map_info(struct address_space *mapping, loff_t offset, bool is_register)
 {
 	unsigned long pgoff = offset >> PAGE_SHIFT;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct map_info *curr = NULL;
 	struct map_info *prev = NULL;
 	struct map_info *info;
@@ -1269,7 +1269,7 @@ register_for_each_vma(struct uprobe *uprobe, struct uprobe_consumer *new)
 
 	while (info) {
 		struct mm_struct *mm = info->mm;
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		if (err && is_register)
 			goto free;
@@ -1454,7 +1454,7 @@ int uprobe_apply(struct uprobe *uprobe, struct uprobe_consumer *uc, bool add)
 static int unapply_uprobe(struct uprobe *uprobe, struct mm_struct *mm)
 {
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int err = 0;
 
 	mmap_read_lock(mm);
@@ -1508,7 +1508,7 @@ find_node_in_range(struct inode *inode, loff_t min, loff_t max)
  * For a given range in vma, build a list of probes that need to be inserted.
  */
 static void build_probe_list(struct inode *inode,
-				struct vm_area_struct *vma,
+				struct mm_area *vma,
 				unsigned long start, unsigned long end,
 				struct list_head *head)
 {
@@ -1544,7 +1544,7 @@ static void build_probe_list(struct inode *inode,
 }
 
 /* @vma contains reference counter, not the probed instruction. */
-static int delayed_ref_ctr_inc(struct vm_area_struct *vma)
+static int delayed_ref_ctr_inc(struct mm_area *vma)
 {
 	struct list_head *pos, *q;
 	struct delayed_uprobe *du;
@@ -1578,7 +1578,7 @@ static int delayed_ref_ctr_inc(struct vm_area_struct *vma)
  * Currently we ignore all errors and always return 0, the callers
  * can't handle the failure anyway.
  */
-int uprobe_mmap(struct vm_area_struct *vma)
+int uprobe_mmap(struct mm_area *vma)
 {
 	struct list_head tmp_list;
 	struct uprobe *uprobe, *u;
@@ -1620,7 +1620,7 @@ int uprobe_mmap(struct vm_area_struct *vma)
 }
 
 static bool
-vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+vma_has_uprobes(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	loff_t min, max;
 	struct inode *inode;
@@ -1641,7 +1641,7 @@ vma_has_uprobes(struct vm_area_struct *vma, unsigned long start, unsigned long e
 /*
  * Called in context of a munmap of a vma.
  */
-void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+void uprobe_munmap(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	if (no_uprobe_events() || !valid_vma(vma, false))
 		return;
@@ -1658,7 +1658,7 @@ void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned lon
 }
 
 static vm_fault_t xol_fault(const struct vm_special_mapping *sm,
-			    struct vm_area_struct *vma, struct vm_fault *vmf)
+			    struct mm_area *vma, struct vm_fault *vmf)
 {
 	struct xol_area *area = vma->vm_mm->uprobes_state.xol_area;
 
@@ -1667,7 +1667,7 @@ static vm_fault_t xol_fault(const struct vm_special_mapping *sm,
 	return 0;
 }
 
-static int xol_mremap(const struct vm_special_mapping *sm, struct vm_area_struct *new_vma)
+static int xol_mremap(const struct vm_special_mapping *sm, struct mm_area *new_vma)
 {
 	return -EPERM;
 }
@@ -1681,7 +1681,7 @@ static const struct vm_special_mapping xol_mapping = {
 /* Slot allocation for XOL */
 static int xol_add_vma(struct mm_struct *mm, struct xol_area *area)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int ret;
 
 	if (mmap_write_lock_killable(mm))
@@ -2338,7 +2338,7 @@ bool uprobe_deny_signal(void)
 static void mmf_recalc_uprobes(struct mm_struct *mm)
 {
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	for_each_vma(vmi, vma) {
 		if (!valid_vma(vma, false))
@@ -2387,7 +2387,7 @@ static struct uprobe *find_active_uprobe_speculative(unsigned long bp_vaddr)
 {
 	struct mm_struct *mm = current->mm;
 	struct uprobe *uprobe = NULL;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct file *vm_file;
 	loff_t offset;
 	unsigned int seq;
@@ -2429,7 +2429,7 @@ static struct uprobe *find_active_uprobe_rcu(unsigned long bp_vaddr, int *is_swb
 {
 	struct mm_struct *mm = current->mm;
 	struct uprobe *uprobe = NULL;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	uprobe = find_active_uprobe_speculative(bp_vaddr);
 	if (uprobe)

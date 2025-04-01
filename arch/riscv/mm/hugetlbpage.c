@@ -28,7 +28,7 @@ pte_t huge_ptep_get(struct mm_struct *mm, unsigned long addr, pte_t *ptep)
 }
 
 pte_t *huge_pte_alloc(struct mm_struct *mm,
-		      struct vm_area_struct *vma,
+		      struct mm_area *vma,
 		      unsigned long addr,
 		      unsigned long sz)
 {
@@ -172,7 +172,7 @@ static pte_t get_clear_contig_flush(struct mm_struct *mm,
 				    unsigned long pte_num)
 {
 	pte_t orig_pte = get_clear_contig(mm, addr, ptep, pte_num);
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	struct mm_area vma = TLB_FLUSH_VMA(mm, 0);
 	bool valid = !pte_none(orig_pte);
 
 	if (valid)
@@ -203,7 +203,7 @@ static void clear_flush(struct mm_struct *mm,
 			unsigned long pgsize,
 			unsigned long ncontig)
 {
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	struct mm_area vma = TLB_FLUSH_VMA(mm, 0);
 	unsigned long i, saddr = addr;
 
 	for (i = 0; i < ncontig; i++, addr += pgsize, ptep++)
@@ -260,7 +260,7 @@ void set_huge_pte_at(struct mm_struct *mm,
 		set_pte_at(mm, addr, ptep, pte);
 }
 
-int huge_ptep_set_access_flags(struct vm_area_struct *vma,
+int huge_ptep_set_access_flags(struct mm_area *vma,
 			       unsigned long addr,
 			       pte_t *ptep,
 			       pte_t pte,
@@ -331,7 +331,7 @@ void huge_ptep_set_wrprotect(struct mm_struct *mm,
 		set_pte_at(mm, addr, ptep, orig_pte);
 }
 
-pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
+pte_t huge_ptep_clear_flush(struct mm_area *vma,
 			    unsigned long addr,
 			    pte_t *ptep)
 {

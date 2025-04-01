@@ -35,7 +35,7 @@ extern void smp_imb(void);
 
 extern void __load_new_mm_context(struct mm_struct *);
 static inline void
-flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
+flush_icache_user_page(struct mm_area *vma, struct page *page,
 			unsigned long addr, int len)
 {
 	if (vma->vm_flags & VM_EXEC) {
@@ -48,7 +48,7 @@ flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
 }
 #define flush_icache_user_page flush_icache_user_page
 #else /* CONFIG_SMP */
-extern void flush_icache_user_page(struct vm_area_struct *vma,
+extern void flush_icache_user_page(struct mm_area *vma,
 		struct page *page, unsigned long addr, int len);
 #define flush_icache_user_page flush_icache_user_page
 #endif /* CONFIG_SMP */
@@ -57,7 +57,7 @@ extern void flush_icache_user_page(struct vm_area_struct *vma,
  * Both implementations of flush_icache_user_page flush the entire
  * address space, so one call, no matter how many pages.
  */
-static inline void flush_icache_pages(struct vm_area_struct *vma,
+static inline void flush_icache_pages(struct mm_area *vma,
 		struct page *page, unsigned int nr)
 {
 	flush_icache_user_page(vma, page, 0, 0);

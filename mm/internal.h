@@ -44,8 +44,8 @@ struct folio_batch;
  * represents the length of the range being copied as specified by the user.
  */
 struct pagetable_move_control {
-	struct vm_area_struct *old; /* Source VMA. */
-	struct vm_area_struct *new; /* Destination VMA. */
+	struct mm_area *old; /* Source VMA. */
+	struct mm_area *new; /* Destination VMA. */
 	unsigned long old_addr; /* Address from which the move begins. */
 	unsigned long old_end; /* Exclusive address at which old range ends. */
 	unsigned long new_addr; /* Address to move page tables to. */
@@ -162,7 +162,7 @@ static inline void *folio_raw_mapping(const struct folio *folio)
  *
  * Returns: 0 if success, error otherwise.
  */
-static inline int mmap_file(struct file *file, struct vm_area_struct *vma)
+static inline int mmap_file(struct file *file, struct mm_area *vma)
 {
 	int err = call_mmap(file, vma);
 
@@ -184,7 +184,7 @@ static inline int mmap_file(struct file *file, struct vm_area_struct *vma)
  * it in an inconsistent state which makes the use of any hooks suspect, clear
  * them down by installing dummy empty hooks.
  */
-static inline void vma_close(struct vm_area_struct *vma)
+static inline void vma_close(struct mm_area *vma)
 {
 	if (vma->vm_ops && vma->vm_ops->close) {
 		vma->vm_ops->close(vma);
@@ -426,13 +426,13 @@ void deactivate_file_folio(struct folio *folio);
 void folio_activate(struct folio *folio);
 
 void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
-		   struct vm_area_struct *start_vma, unsigned long floor,
+		   struct mm_area *start_vma, unsigned long floor,
 		   unsigned long ceiling, bool mm_wr_locked);
 void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte);
 
 struct zap_details;
 void unmap_page_range(struct mmu_gather *tlb,
-			     struct vm_area_struct *vma,
+			     struct mm_area *vma,
 			     unsigned long addr, unsigned long end,
 			     struct zap_details *details);
 int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
@@ -927,7 +927,7 @@ struct anon_vma *folio_anon_vma(const struct folio *folio);
 
 #ifdef CONFIG_MMU
 void unmap_mapping_folio(struct folio *folio);
-extern long populate_vma_page_range(struct vm_area_struct *vma,
+extern long populate_vma_page_range(struct mm_area *vma,
 		unsigned long start, unsigned long end, int *locked);
 extern long faultin_page_range(struct mm_struct *mm, unsigned long start,
 		unsigned long end, bool write, int *locked);
@@ -950,7 +950,7 @@ extern bool mlock_future_ok(struct mm_struct *mm, unsigned long flags,
  * the page table to know whether the folio is fully mapped to the range.
  */
 static inline bool
-folio_within_range(struct folio *folio, struct vm_area_struct *vma,
+folio_within_range(struct folio *folio, struct mm_area *vma,
 		unsigned long start, unsigned long end)
 {
 	pgoff_t pgoff, addr;
@@ -978,7 +978,7 @@ folio_within_range(struct folio *folio, struct vm_area_struct *vma,
 }
 
 static inline bool
-folio_within_vma(struct folio *folio, struct vm_area_struct *vma)
+folio_within_vma(struct folio *folio, struct mm_area *vma)
 {
 	return folio_within_range(folio, vma, vma->vm_start, vma->vm_end);
 }
@@ -994,7 +994,7 @@ folio_within_vma(struct folio *folio, struct vm_area_struct *vma)
  */
 void mlock_folio(struct folio *folio);
 static inline void mlock_vma_folio(struct folio *folio,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	/*
 	 * The VM_SPECIAL check here serves two purposes.
@@ -1010,7 +1010,7 @@ static inline void mlock_vma_folio(struct folio *folio,
 
 void munlock_folio(struct folio *folio);
 static inline void munlock_vma_folio(struct folio *folio,
-					struct vm_area_struct *vma)
+					struct mm_area *vma)
 {
 	/*
 	 * munlock if the function is called. Ideally, we should only
@@ -1030,7 +1030,7 @@ bool need_mlock_drain(int cpu);
 void mlock_drain_local(void);
 void mlock_drain_remote(int cpu);
 
-extern pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma);
+extern pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct mm_area *vma);
 
 /**
  * vma_address - Find the virtual address a page range is mapped at
@@ -1041,7 +1041,7 @@ extern pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma);
  * If any page in this range is mapped by this VMA, return the first address
  * where any of these pages appear.  Otherwise, return -EFAULT.
  */
-static inline unsigned long vma_address(const struct vm_area_struct *vma,
+static inline unsigned long vma_address(const struct mm_area *vma,
 		pgoff_t pgoff, unsigned long nr_pages)
 {
 	unsigned long address;
@@ -1067,7 +1067,7 @@ static inline unsigned long vma_address(const struct vm_area_struct *vma,
  */
 static inline unsigned long vma_address_end(struct page_vma_mapped_walk *pvmw)
 {
-	struct vm_area_struct *vma = pvmw->vma;
+	struct mm_area *vma = pvmw->vma;
 	pgoff_t pgoff;
 	unsigned long address;
 
@@ -1210,10 +1210,10 @@ bool take_page_off_buddy(struct page *page);
 bool put_page_back_buddy(struct page *page);
 struct task_struct *task_early_kill(struct task_struct *tsk, int force_early);
 void add_to_kill_ksm(struct task_struct *tsk, const struct page *p,
-		     struct vm_area_struct *vma, struct list_head *to_kill,
+		     struct mm_area *vma, struct list_head *to_kill,
 		     unsigned long ksm_addr);
 unsigned long page_mapped_in_vma(const struct page *page,
-		struct vm_area_struct *vma);
+		struct mm_area *vma);
 
 #else
 static inline int unmap_poisoned_folio(struct folio *folio, unsigned long pfn, bool must_kill)
@@ -1373,9 +1373,9 @@ int __must_check try_grab_folio(struct folio *folio, int refs,
 /*
  * mm/huge_memory.c
  */
-void touch_pud(struct vm_area_struct *vma, unsigned long addr,
+void touch_pud(struct mm_area *vma, unsigned long addr,
 	       pud_t *pud, bool write);
-void touch_pmd(struct vm_area_struct *vma, unsigned long addr,
+void touch_pmd(struct mm_area *vma, unsigned long addr,
 	       pmd_t *pmd, bool write);
 
 /*
@@ -1441,7 +1441,7 @@ enum {
  * If the vma is NULL, we're coming from the GUP-fast path and might have
  * to fallback to the slow path just to lookup the vma.
  */
-static inline bool gup_must_unshare(struct vm_area_struct *vma,
+static inline bool gup_must_unshare(struct mm_area *vma,
 				    unsigned int flags, struct page *page)
 {
 	/*
@@ -1490,7 +1490,7 @@ extern bool mirrored_kernelcore;
 bool memblock_has_mirror(void);
 void memblock_free_all(void);
 
-static __always_inline void vma_set_range(struct vm_area_struct *vma,
+static __always_inline void vma_set_range(struct mm_area *vma,
 					  unsigned long start, unsigned long end,
 					  pgoff_t pgoff)
 {
@@ -1499,7 +1499,7 @@ static __always_inline void vma_set_range(struct vm_area_struct *vma,
 	vma->vm_pgoff = pgoff;
 }
 
-static inline bool vma_soft_dirty_enabled(struct vm_area_struct *vma)
+static inline bool vma_soft_dirty_enabled(struct mm_area *vma)
 {
 	/*
 	 * NOTE: we must check this before VM_SOFTDIRTY on soft-dirty
@@ -1517,12 +1517,12 @@ static inline bool vma_soft_dirty_enabled(struct vm_area_struct *vma)
 	return !(vma->vm_flags & VM_SOFTDIRTY);
 }
 
-static inline bool pmd_needs_soft_dirty_wp(struct vm_area_struct *vma, pmd_t pmd)
+static inline bool pmd_needs_soft_dirty_wp(struct mm_area *vma, pmd_t pmd)
 {
 	return vma_soft_dirty_enabled(vma) && !pmd_soft_dirty(pmd);
 }
 
-static inline bool pte_needs_soft_dirty_wp(struct vm_area_struct *vma, pte_t pte)
+static inline bool pte_needs_soft_dirty_wp(struct mm_area *vma, pte_t pte)
 {
 	return vma_soft_dirty_enabled(vma) && !pte_soft_dirty(pte);
 }

@@ -249,7 +249,7 @@ ssize_t __weak elfcorehdr_read_notes(char *buf, size_t count, u64 *ppos)
 /*
  * Architectures may override this function to map oldmem
  */
-int __weak remap_oldmem_pfn_range(struct vm_area_struct *vma,
+int __weak remap_oldmem_pfn_range(struct mm_area *vma,
 				  unsigned long from, unsigned long pfn,
 				  unsigned long size, pgprot_t prot)
 {
@@ -295,7 +295,7 @@ static int vmcoredd_copy_dumps(struct iov_iter *iter, u64 start, size_t size)
 }
 
 #ifdef CONFIG_MMU
-static int vmcoredd_mmap_dumps(struct vm_area_struct *vma, unsigned long dst,
+static int vmcoredd_mmap_dumps(struct mm_area *vma, unsigned long dst,
 			       u64 start, size_t size)
 {
 	struct vmcoredd_node *dump;
@@ -511,7 +511,7 @@ static const struct vm_operations_struct vmcore_mmap_ops = {
  * remap_oldmem_pfn_checked - do remap_oldmem_pfn_range replacing all pages
  * reported as not being ram with the zero page.
  *
- * @vma: vm_area_struct describing requested mapping
+ * @vma: mm_area describing requested mapping
  * @from: start remapping from
  * @pfn: page frame number to start remapping to
  * @size: remapping size
@@ -519,7 +519,7 @@ static const struct vm_operations_struct vmcore_mmap_ops = {
  *
  * Returns zero on success, -EAGAIN on failure.
  */
-static int remap_oldmem_pfn_checked(struct vm_area_struct *vma,
+static int remap_oldmem_pfn_checked(struct mm_area *vma,
 				    unsigned long from, unsigned long pfn,
 				    unsigned long size, pgprot_t prot)
 {
@@ -569,7 +569,7 @@ fail:
 	return -EAGAIN;
 }
 
-static int vmcore_remap_oldmem_pfn(struct vm_area_struct *vma,
+static int vmcore_remap_oldmem_pfn(struct mm_area *vma,
 			    unsigned long from, unsigned long pfn,
 			    unsigned long size, pgprot_t prot)
 {
@@ -588,7 +588,7 @@ static int vmcore_remap_oldmem_pfn(struct vm_area_struct *vma,
 	return ret;
 }
 
-static int mmap_vmcore(struct file *file, struct vm_area_struct *vma)
+static int mmap_vmcore(struct file *file, struct mm_area *vma)
 {
 	size_t size = vma->vm_end - vma->vm_start;
 	u64 start, end, len, tsz;
@@ -701,7 +701,7 @@ fail:
 	return -EAGAIN;
 }
 #else
-static int mmap_vmcore(struct file *file, struct vm_area_struct *vma)
+static int mmap_vmcore(struct file *file, struct mm_area *vma)
 {
 	return -ENOSYS;
 }

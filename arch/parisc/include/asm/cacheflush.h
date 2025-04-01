@@ -58,7 +58,7 @@ static inline void flush_dcache_page(struct page *page)
 #define flush_dcache_mmap_unlock_irqrestore(mapping, flags)	\
 		xa_unlock_irqrestore(&mapping->i_pages, flags)
 
-void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
+void flush_icache_pages(struct mm_area *vma, struct page *page,
 		unsigned int nr);
 #define flush_icache_pages flush_icache_pages
 
@@ -67,17 +67,17 @@ void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
 	flush_kernel_icache_range_asm(s,e); 		\
 } while (0)
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		unsigned long user_vaddr, void *dst, void *src, int len);
-void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_from_user_page(struct mm_area *vma, struct page *page,
 		unsigned long user_vaddr, void *dst, void *src, int len);
-void flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr,
+void flush_cache_page(struct mm_area *vma, unsigned long vmaddr,
 		unsigned long pfn);
-void flush_cache_range(struct vm_area_struct *vma,
+void flush_cache_range(struct mm_area *vma,
 		unsigned long start, unsigned long end);
 
 #define ARCH_HAS_FLUSH_ANON_PAGE
-void flush_anon_page(struct vm_area_struct *vma, struct page *page, unsigned long vmaddr);
+void flush_anon_page(struct mm_area *vma, struct page *page, unsigned long vmaddr);
 
 #define ARCH_HAS_FLUSH_ON_KUNMAP
 void kunmap_flush_on_unmap(const void *addr);

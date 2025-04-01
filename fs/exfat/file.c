@@ -651,7 +651,7 @@ static ssize_t exfat_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 static vm_fault_t exfat_page_mkwrite(struct vm_fault *vmf)
 {
 	int err;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct file *file = vma->vm_file;
 	struct inode *inode = file_inode(file);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
@@ -683,7 +683,7 @@ static const struct vm_operations_struct exfat_file_vm_ops = {
 	.page_mkwrite	= exfat_page_mkwrite,
 };
 
-static int exfat_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int exfat_file_mmap(struct file *file, struct mm_area *vma)
 {
 	if (unlikely(exfat_forced_shutdown(file_inode(file)->i_sb)))
 		return -EIO;

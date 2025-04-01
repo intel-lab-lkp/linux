@@ -220,7 +220,7 @@ unsigned long hash__pmd_hugepage_update(struct mm_struct *mm, unsigned long addr
 	return old;
 }
 
-pmd_t hash__pmdp_collapse_flush(struct vm_area_struct *vma, unsigned long address,
+pmd_t hash__pmdp_collapse_flush(struct mm_area *vma, unsigned long address,
 			    pmd_t *pmdp)
 {
 	pmd_t pmd;

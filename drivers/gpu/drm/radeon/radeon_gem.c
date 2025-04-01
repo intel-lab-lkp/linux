@@ -263,7 +263,7 @@ static int radeon_gem_handle_lockup(struct radeon_device *rdev, int r)
 	return r;
 }
 
-static int radeon_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int radeon_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct radeon_bo *bo = gem_to_radeon_bo(obj);
 	struct radeon_device *rdev = radeon_get_rdev(bo->tbo.bdev);

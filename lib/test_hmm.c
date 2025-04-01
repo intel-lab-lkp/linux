@@ -878,7 +878,7 @@ static int dmirror_migrate_to_system(struct dmirror *dmirror,
 	unsigned long start, end, addr;
 	unsigned long size = cmd->npages << PAGE_SHIFT;
 	struct mm_struct *mm = dmirror->notifier.mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long src_pfns[64] = { 0 };
 	unsigned long dst_pfns[64] = { 0 };
 	struct migrate_vma args = { 0 };
@@ -938,7 +938,7 @@ static int dmirror_migrate_to_device(struct dmirror *dmirror,
 	unsigned long start, end, addr;
 	unsigned long size = cmd->npages << PAGE_SHIFT;
 	struct mm_struct *mm = dmirror->notifier.mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long src_pfns[64] = { 0 };
 	unsigned long dst_pfns[64] = { 0 };
 	struct dmirror_bounce bounce;
@@ -1342,7 +1342,7 @@ static long dmirror_fops_unlocked_ioctl(struct file *filp,
 	return 0;
 }
 
-static int dmirror_fops_mmap(struct file *file, struct vm_area_struct *vma)
+static int dmirror_fops_mmap(struct file *file, struct mm_area *vma)
 {
 	unsigned long addr;
 

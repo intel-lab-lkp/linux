@@ -232,7 +232,7 @@ void hmm_bo_vunmap(struct hmm_buffer_object *bo);
  *
  * vma->vm_flags will be set to (VM_RESERVED | VM_IO).
  */
-int hmm_bo_mmap(struct vm_area_struct *vma,
+int hmm_bo_mmap(struct mm_area *vma,
 		struct hmm_buffer_object *bo);
 
 /*

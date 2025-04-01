@@ -100,7 +100,7 @@ void clear_user_highpage(struct page *page, unsigned long vaddr)
 EXPORT_SYMBOL(clear_user_highpage);
 
 void copy_user_highpage(struct page *dst, struct page *src,
-			unsigned long vaddr, struct vm_area_struct *vma)
+			unsigned long vaddr, struct mm_area *vma)
 {
 	struct folio *folio = page_folio(dst);
 	unsigned long dst_paddr, src_paddr;
@@ -181,7 +181,7 @@ EXPORT_SYMBOL(flush_dcache_folio);
  * For now, flush the whole cache. FIXME??
  */
 
-void local_flush_cache_range(struct vm_area_struct *vma,
+void local_flush_cache_range(struct mm_area *vma,
 		       unsigned long start, unsigned long end)
 {
 	__flush_invalidate_dcache_all();
@@ -196,7 +196,7 @@ EXPORT_SYMBOL(local_flush_cache_range);
  * alias versions of the cache flush functions.
  */
 
-void local_flush_cache_page(struct vm_area_struct *vma, unsigned long address,
+void local_flush_cache_page(struct mm_area *vma, unsigned long address,
 		      unsigned long pfn)
 {
 	/* Note that we have to use the 'alias' address to avoid multi-hit */
@@ -213,7 +213,7 @@ EXPORT_SYMBOL(local_flush_cache_page);
 
 #endif /* DCACHE_WAY_SIZE > PAGE_SIZE */
 
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long addr, pte_t *ptep, unsigned int nr)
 {
 	unsigned long pfn = pte_pfn(*ptep);
@@ -270,7 +270,7 @@ void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
 
 #if (DCACHE_WAY_SIZE > PAGE_SIZE)
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		unsigned long vaddr, void *dst, const void *src,
 		unsigned long len)
 {
@@ -310,7 +310,7 @@ void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
 	}
 }
 
-extern void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+extern void copy_from_user_page(struct mm_area *vma, struct page *page,
 		unsigned long vaddr, void *dst, const void *src,
 		unsigned long len)
 {

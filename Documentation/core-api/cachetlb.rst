@@ -50,7 +50,7 @@ changes occur:
 	page table operations such as what happens during
 	fork, and exec.
 
-3) ``void flush_tlb_range(struct vm_area_struct *vma,
+3) ``void flush_tlb_range(struct mm_area *vma,
    unsigned long start, unsigned long end)``
 
 	Here we are flushing a specific range of (user) virtual
@@ -70,7 +70,7 @@ changes occur:
 	call flush_tlb_page (see below) for each entry which may be
 	modified.
 
-4) ``void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)``
+4) ``void flush_tlb_page(struct mm_area *vma, unsigned long addr)``
 
 	This time we need to remove the PAGE_SIZE sized translation
 	from the TLB.  The 'vma' is the backing structure used by
@@ -89,7 +89,7 @@ changes occur:
 	This is used primarily during fault processing.
 
 5) ``void update_mmu_cache_range(struct vm_fault *vmf,
-   struct vm_area_struct *vma, unsigned long address, pte_t *ptep,
+   struct mm_area *vma, unsigned long address, pte_t *ptep,
    unsigned int nr)``
 
 	At the end of every page fault, this routine is invoked to tell
@@ -159,7 +159,7 @@ Here are the routines, one by one:
 	This option is separate from flush_cache_mm to allow some
 	optimizations for VIPT caches.
 
-3) ``void flush_cache_range(struct vm_area_struct *vma,
+3) ``void flush_cache_range(struct mm_area *vma,
    unsigned long start, unsigned long end)``
 
 	Here we are flushing a specific range of (user) virtual
@@ -176,7 +176,7 @@ Here are the routines, one by one:
 	call flush_cache_page (see below) for each entry which may be
 	modified.
 
-4) ``void flush_cache_page(struct vm_area_struct *vma, unsigned long addr, unsigned long pfn)``
+4) ``void flush_cache_page(struct mm_area *vma, unsigned long addr, unsigned long pfn)``
 
 	This time we need to remove a PAGE_SIZE sized range
 	from the cache.  The 'vma' is the backing structure used by
@@ -331,9 +331,9 @@ maps this page at its virtual address.
 			dirty.  Again, see sparc64 for examples of how
 			to deal with this.
 
-  ``void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+  ``void copy_to_user_page(struct mm_area *vma, struct page *page,
   unsigned long user_vaddr, void *dst, void *src, int len)``
-  ``void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+  ``void copy_from_user_page(struct mm_area *vma, struct page *page,
   unsigned long user_vaddr, void *dst, void *src, int len)``
 
 	When the kernel needs to copy arbitrary data in and out
@@ -346,7 +346,7 @@ maps this page at its virtual address.
 	likely that you will need to flush the instruction cache
 	for copy_to_user_page().
 
-  ``void flush_anon_page(struct vm_area_struct *vma, struct page *page,
+  ``void flush_anon_page(struct mm_area *vma, struct page *page,
   unsigned long vmaddr)``
 
   	When the kernel needs to access the contents of an anonymous
@@ -365,7 +365,7 @@ maps this page at its virtual address.
 	If the icache does not snoop stores then this routine will need
 	to flush it.
 
-  ``void flush_icache_page(struct vm_area_struct *vma, struct page *page)``
+  ``void flush_icache_page(struct mm_area *vma, struct page *page)``
 
 	All the functionality of flush_icache_page can be implemented in
 	flush_dcache_folio and update_mmu_cache_range. In the future, the hope

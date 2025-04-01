@@ -6,7 +6,7 @@
 #include <asm/tlbflush.h>
 
 #ifdef CONFIG_CPU_TLB_V4WT
-void v4_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+void v4_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 void v4_flush_kern_tlb_range(unsigned long, unsigned long);
 
 struct cpu_tlb_fns v4_tlb_fns __initconst = {
@@ -17,7 +17,7 @@ struct cpu_tlb_fns v4_tlb_fns __initconst = {
 #endif
 
 #ifdef CONFIG_CPU_TLB_V4WB
-void v4wb_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+void v4wb_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 void v4wb_flush_kern_tlb_range(unsigned long, unsigned long);
 
 struct cpu_tlb_fns v4wb_tlb_fns __initconst = {
@@ -28,7 +28,7 @@ struct cpu_tlb_fns v4wb_tlb_fns __initconst = {
 #endif
 
 #if defined(CONFIG_CPU_TLB_V4WBI) || defined(CONFIG_CPU_TLB_FEROCEON)
-void v4wbi_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+void v4wbi_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 void v4wbi_flush_kern_tlb_range(unsigned long, unsigned long);
 
 struct cpu_tlb_fns v4wbi_tlb_fns __initconst = {
@@ -39,7 +39,7 @@ struct cpu_tlb_fns v4wbi_tlb_fns __initconst = {
 #endif
 
 #ifdef CONFIG_CPU_TLB_V6
-void v6wbi_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+void v6wbi_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 void v6wbi_flush_kern_tlb_range(unsigned long, unsigned long);
 
 struct cpu_tlb_fns v6wbi_tlb_fns __initconst = {
@@ -50,7 +50,7 @@ struct cpu_tlb_fns v6wbi_tlb_fns __initconst = {
 #endif
 
 #ifdef CONFIG_CPU_TLB_V7
-void v7wbi_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+void v7wbi_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 void v7wbi_flush_kern_tlb_range(unsigned long, unsigned long);
 
 struct cpu_tlb_fns v7wbi_tlb_fns __initconst = {
@@ -73,7 +73,7 @@ asm("	.pushsection	\".alt.smp.init\", \"a\"		\n" \
 #endif
 
 #ifdef CONFIG_CPU_TLB_FA
-void fa_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+void fa_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 void fa_flush_kern_tlb_range(unsigned long, unsigned long);
 
 struct cpu_tlb_fns fa_tlb_fns __initconst = {

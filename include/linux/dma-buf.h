@@ -281,7 +281,7 @@ struct dma_buf_ops {
 	 *
 	 * 0 on success or a negative error code on failure.
 	 */
-	int (*mmap)(struct dma_buf *, struct vm_area_struct *vma);
+	int (*mmap)(struct dma_buf *, struct mm_area *vma);
 
 	int (*vmap)(struct dma_buf *dmabuf, struct iosys_map *map);
 	void (*vunmap)(struct dma_buf *dmabuf, struct iosys_map *map);
@@ -630,7 +630,7 @@ void dma_buf_unmap_attachment_unlocked(struct dma_buf_attachment *attach,
 				       struct sg_table *sg_table,
 				       enum dma_data_direction direction);
 
-int dma_buf_mmap(struct dma_buf *, struct vm_area_struct *,
+int dma_buf_mmap(struct dma_buf *, struct mm_area *,
 		 unsigned long);
 int dma_buf_vmap(struct dma_buf *dmabuf, struct iosys_map *map);
 void dma_buf_vunmap(struct dma_buf *dmabuf, struct iosys_map *map);

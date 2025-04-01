@@ -27,7 +27,7 @@ extern char vdso32_start, vdso32_end;
 extern char vdso64_start, vdso64_end;
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
-		       struct vm_area_struct *vma)
+		       struct mm_area *vma)
 {
 	current->mm->context.vdso_base = vma->vm_start;
 	return 0;
@@ -56,7 +56,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm,
 	unsigned long vdso_text_start, vdso_text_len, map_base;
 	struct vm_special_mapping *vdso_mapping;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int rc;
 
 	if (mmap_write_lock_killable(mm))

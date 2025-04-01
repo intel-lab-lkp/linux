@@ -23,12 +23,12 @@
  * specific tlbie's
  */
 
-struct vm_area_struct;
+struct mm_area;
 struct mm_struct;
 
 #define MMU_NO_CONTEXT      	((unsigned int)-1)
 
-extern void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+extern void flush_tlb_range(struct mm_area *vma, unsigned long start,
 			    unsigned long end);
 
 #ifdef CONFIG_PPC_8xx
@@ -40,7 +40,7 @@ static inline void local_flush_tlb_mm(struct mm_struct *mm)
 		asm volatile ("sync; tlbia; isync" : : : "memory");
 }
 
-static inline void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+static inline void local_flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 	asm volatile ("tlbie %0; sync" : : "r" (vmaddr) : "memory");
 }
@@ -63,7 +63,7 @@ static inline void flush_tlb_kernel_range(unsigned long start, unsigned long end
 #else
 extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 extern void local_flush_tlb_mm(struct mm_struct *mm);
-extern void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+extern void local_flush_tlb_page(struct mm_area *vma, unsigned long vmaddr);
 void local_flush_tlb_page_psize(struct mm_struct *mm, unsigned long vmaddr, int psize);
 
 extern void __local_flush_tlb_page(struct mm_struct *mm, unsigned long vmaddr,
@@ -72,7 +72,7 @@ extern void __local_flush_tlb_page(struct mm_struct *mm, unsigned long vmaddr,
 
 #ifdef CONFIG_SMP
 extern void flush_tlb_mm(struct mm_struct *mm);
-extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+extern void flush_tlb_page(struct mm_area *vma, unsigned long vmaddr);
 extern void __flush_tlb_page(struct mm_struct *mm, unsigned long vmaddr,
 			     int tsize, int ind);
 #else

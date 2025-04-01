@@ -12,7 +12,7 @@
 struct user_namespace;
 extern struct user_namespace init_user_ns;
 
-struct vm_area_struct;
+struct mm_area;
 
 struct timens_offsets {
 	struct timespec64 monotonic;
@@ -47,7 +47,7 @@ struct time_namespace *copy_time_ns(unsigned long flags,
 				    struct time_namespace *old_ns);
 void free_time_ns(struct time_namespace *ns);
 void timens_on_fork(struct nsproxy *nsproxy, struct task_struct *tsk);
-struct page *find_timens_vvar_page(struct vm_area_struct *vma);
+struct page *find_timens_vvar_page(struct mm_area *vma);
 
 static inline void put_time_ns(struct time_namespace *ns)
 {
@@ -144,7 +144,7 @@ static inline void timens_on_fork(struct nsproxy *nsproxy,
 	return;
 }
 
-static inline struct page *find_timens_vvar_page(struct vm_area_struct *vma)
+static inline struct page *find_timens_vvar_page(struct mm_area *vma)
 {
 	return NULL;
 }

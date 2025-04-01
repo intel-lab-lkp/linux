@@ -27,7 +27,7 @@
 #include "i915_vma.h"
 
 static inline bool
-__vma_matches(struct vm_area_struct *vma, struct file *filp,
+__vma_matches(struct mm_area *vma, struct file *filp,
 	      unsigned long addr, unsigned long size)
 {
 	if (vma->vm_file != filp)
@@ -104,7 +104,7 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 
 	if (args->flags & I915_MMAP_WC) {
 		struct mm_struct *mm = current->mm;
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		if (mmap_write_lock_killable(mm)) {
 			addr = -EINTR;
@@ -252,7 +252,7 @@ static vm_fault_t i915_error_to_vmf_fault(int err)
 
 static vm_fault_t vm_fault_cpu(struct vm_fault *vmf)
 {
-	struct vm_area_struct *area = vmf->vma;
+	struct mm_area *area = vmf->vma;
 	struct i915_mmap_offset *mmo = area->vm_private_data;
 	struct drm_i915_gem_object *obj = mmo->obj;
 	unsigned long obj_offset;
@@ -295,7 +295,7 @@ out:
 	return i915_error_to_vmf_fault(err);
 }
 
-static void set_address_limits(struct vm_area_struct *area,
+static void set_address_limits(struct mm_area *area,
 			       struct i915_vma *vma,
 			       unsigned long obj_offset,
 			       resource_size_t gmadr_start,
@@ -339,7 +339,7 @@ static void set_address_limits(struct vm_area_struct *area,
 static vm_fault_t vm_fault_gtt(struct vm_fault *vmf)
 {
 #define MIN_CHUNK_PAGES (SZ_1M >> PAGE_SHIFT)
-	struct vm_area_struct *area = vmf->vma;
+	struct mm_area *area = vmf->vma;
 	struct i915_mmap_offset *mmo = area->vm_private_data;
 	struct drm_i915_gem_object *obj = mmo->obj;
 	struct drm_device *dev = obj->base.dev;
@@ -506,7 +506,7 @@ err_rpm:
 }
 
 static int
-vm_access(struct vm_area_struct *area, unsigned long addr,
+vm_access(struct mm_area *area, unsigned long addr,
 	  void *buf, int len, int write)
 {
 	struct i915_mmap_offset *mmo = area->vm_private_data;
@@ -919,7 +919,7 @@ i915_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
 	return __assign_mmap_offset_handle(file, args->handle, type, &args->offset);
 }
 
-static void vm_open(struct vm_area_struct *vma)
+static void vm_open(struct mm_area *vma)
 {
 	struct i915_mmap_offset *mmo = vma->vm_private_data;
 	struct drm_i915_gem_object *obj = mmo->obj;
@@ -928,7 +928,7 @@ static void vm_open(struct vm_area_struct *vma)
 	i915_gem_object_get(obj);
 }
 
-static void vm_close(struct vm_area_struct *vma)
+static void vm_close(struct mm_area *vma)
 {
 	struct i915_mmap_offset *mmo = vma->vm_private_data;
 	struct drm_i915_gem_object *obj = mmo->obj;
@@ -990,7 +990,7 @@ static struct file *mmap_singleton(struct drm_i915_private *i915)
 static int
 i915_gem_object_mmap(struct drm_i915_gem_object *obj,
 		     struct i915_mmap_offset *mmo,
-		     struct vm_area_struct *vma)
+		     struct mm_area *vma)
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 	struct drm_device *dev = &i915->drm;
@@ -1071,7 +1071,7 @@ i915_gem_object_mmap(struct drm_i915_gem_object *obj,
  * be able to resolve multiple mmap offsets which could be tied
  * to a single gem object.
  */
-int i915_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int i915_gem_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct drm_vma_offset_node *node;
 	struct drm_file *priv = filp->private_data;
@@ -1114,7 +1114,7 @@ int i915_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 	return i915_gem_object_mmap(obj, mmo, vma);
 }
 
-int i915_gem_fb_mmap(struct drm_i915_gem_object *obj, struct vm_area_struct *vma)
+int i915_gem_fb_mmap(struct drm_i915_gem_object *obj, struct mm_area *vma)
 {
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
 	struct drm_device *dev = &i915->drm;

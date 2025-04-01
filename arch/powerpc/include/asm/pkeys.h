@@ -35,7 +35,7 @@ static inline u64 pkey_to_vmflag_bits(u16 pkey)
 	return (((u64)pkey << VM_PKEY_SHIFT) & ARCH_VM_PKEY_FLAGS);
 }
 
-static inline int vma_pkey(struct vm_area_struct *vma)
+static inline int vma_pkey(struct mm_area *vma)
 {
 	if (!mmu_has_feature(MMU_FTR_PKEY))
 		return 0;
@@ -125,9 +125,9 @@ static inline int mm_pkey_free(struct mm_struct *mm, int pkey)
  * execute-only protection key.
  */
 extern int execute_only_pkey(struct mm_struct *mm);
-extern int __arch_override_mprotect_pkey(struct vm_area_struct *vma,
+extern int __arch_override_mprotect_pkey(struct mm_area *vma,
 					 int prot, int pkey);
-static inline int arch_override_mprotect_pkey(struct vm_area_struct *vma,
+static inline int arch_override_mprotect_pkey(struct mm_area *vma,
 					      int prot, int pkey)
 {
 	if (!mmu_has_feature(MMU_FTR_PKEY))

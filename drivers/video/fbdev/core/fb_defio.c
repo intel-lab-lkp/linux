@@ -243,7 +243,7 @@ static const struct address_space_operations fb_deferred_io_aops = {
 	.dirty_folio	= noop_dirty_folio,
 };
 
-int fb_deferred_io_mmap(struct fb_info *info, struct vm_area_struct *vma)
+int fb_deferred_io_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
 

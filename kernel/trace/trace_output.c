@@ -404,7 +404,7 @@ static int seq_print_user_ip(struct trace_seq *s, struct mm_struct *mm,
 		return 0;
 
 	if (mm) {
-		const struct vm_area_struct *vma;
+		const struct mm_area *vma;
 
 		mmap_read_lock(mm);
 		vma = find_vma(mm, ip);

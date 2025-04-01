@@ -104,7 +104,7 @@ These operations result in a call to the routine hugetlb_reserve_pages()::
 
 	int hugetlb_reserve_pages(struct inode *inode,
 				  long from, long to,
-				  struct vm_area_struct *vma,
+				  struct mm_area *vma,
 				  vm_flags_t vm_flags)
 
 The first thing hugetlb_reserve_pages() does is check if the NORESERVE
@@ -181,7 +181,7 @@ Reservations are consumed when huge pages associated with the reservations
 are allocated and instantiated in the corresponding mapping.  The allocation
 is performed within the routine alloc_hugetlb_folio()::
 
-	struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
+	struct folio *alloc_hugetlb_folio(struct mm_area *vma,
 				     unsigned long addr, int avoid_reserve)
 
 alloc_hugetlb_folio is passed a VMA pointer and a virtual address, so it can
@@ -464,14 +464,14 @@ account the 'opposite' meaning of reservation map entries for private and
 shared mappings and hide this detail from the caller::
 
 	long vma_needs_reservation(struct hstate *h,
-				   struct vm_area_struct *vma,
+				   struct mm_area *vma,
 				   unsigned long addr)
 
 This routine calls region_chg() for the specified page.  If no reservation
 exists, 1 is returned.  If a reservation exists, 0 is returned::
 
 	long vma_commit_reservation(struct hstate *h,
-				    struct vm_area_struct *vma,
+				    struct mm_area *vma,
 				    unsigned long addr)
 
 This calls region_add() for the specified page.  As in the case of region_chg
@@ -483,7 +483,7 @@ vma_needs_reservation.  An unexpected difference indicates the reservation
 map was modified between calls::
 
 	void vma_end_reservation(struct hstate *h,
-				 struct vm_area_struct *vma,
+				 struct mm_area *vma,
 				 unsigned long addr)
 
 This calls region_abort() for the specified page.  As in the case of region_chg
@@ -492,7 +492,7 @@ vma_needs_reservation.  It will abort/end the in progress reservation add
 operation::
 
 	long vma_add_reservation(struct hstate *h,
-				 struct vm_area_struct *vma,
+				 struct mm_area *vma,
 				 unsigned long addr)
 
 This is a special wrapper routine to help facilitate reservation cleanup

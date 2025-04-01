@@ -932,7 +932,7 @@ static void free_pfn_range(u64 paddr, unsigned long size)
 		memtype_free(paddr, paddr + size);
 }
 
-static int follow_phys(struct vm_area_struct *vma, unsigned long *prot,
+static int follow_phys(struct mm_area *vma, unsigned long *prot,
 		resource_size_t *phys)
 {
 	struct follow_pfnmap_args args = { .vma = vma, .address = vma->vm_start };
@@ -952,7 +952,7 @@ static int follow_phys(struct vm_area_struct *vma, unsigned long *prot,
 	return 0;
 }
 
-static int get_pat_info(struct vm_area_struct *vma, resource_size_t *paddr,
+static int get_pat_info(struct mm_area *vma, resource_size_t *paddr,
 		pgprot_t *pgprot)
 {
 	unsigned long prot;
@@ -984,8 +984,8 @@ static int get_pat_info(struct vm_area_struct *vma, resource_size_t *paddr,
 	return -EINVAL;
 }
 
-int track_pfn_copy(struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma, unsigned long *pfn)
+int track_pfn_copy(struct mm_area *dst_vma,
+		struct mm_area *src_vma, unsigned long *pfn)
 {
 	const unsigned long vma_size = src_vma->vm_end - src_vma->vm_start;
 	resource_size_t paddr;
@@ -1011,7 +1011,7 @@ int track_pfn_copy(struct vm_area_struct *dst_vma,
 	return 0;
 }
 
-void untrack_pfn_copy(struct vm_area_struct *dst_vma, unsigned long pfn)
+void untrack_pfn_copy(struct mm_area *dst_vma, unsigned long pfn)
 {
 	untrack_pfn(dst_vma, pfn, dst_vma->vm_end - dst_vma->vm_start, true);
 	/*
@@ -1026,7 +1026,7 @@ void untrack_pfn_copy(struct vm_area_struct *dst_vma, unsigned long pfn)
  * reserve the entire pfn + size range with single reserve_pfn_range
  * call.
  */
-int track_pfn_remap(struct vm_area_struct *vma, pgprot_t *prot,
+int track_pfn_remap(struct mm_area *vma, pgprot_t *prot,
 		    unsigned long pfn, unsigned long addr, unsigned long size)
 {
 	resource_size_t paddr = (resource_size_t)pfn << PAGE_SHIFT;
@@ -1066,7 +1066,7 @@ int track_pfn_remap(struct vm_area_struct *vma, pgprot_t *prot,
 	return 0;
 }
 
-void track_pfn_insert(struct vm_area_struct *vma, pgprot_t *prot, pfn_t pfn)
+void track_pfn_insert(struct mm_area *vma, pgprot_t *prot, pfn_t pfn)
 {
 	enum page_cache_mode pcm;
 
@@ -1084,7 +1084,7 @@ void track_pfn_insert(struct vm_area_struct *vma, pgprot_t *prot, pfn_t pfn)
  * untrack can be called for a specific region indicated by pfn and size or
  * can be for the entire vma (in which case pfn, size are zero).
  */
-void untrack_pfn(struct vm_area_struct *vma, unsigned long pfn,
+void untrack_pfn(struct mm_area *vma, unsigned long pfn,
 		 unsigned long size, bool mm_wr_locked)
 {
 	resource_size_t paddr;
@@ -1108,7 +1108,7 @@ void untrack_pfn(struct vm_area_struct *vma, unsigned long pfn,
 	}
 }
 
-void untrack_pfn_clear(struct vm_area_struct *vma)
+void untrack_pfn_clear(struct mm_area *vma)
 {
 	vm_flags_clear(vma, VM_PAT);
 }

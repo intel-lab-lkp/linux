@@ -7028,7 +7028,7 @@ static int __rb_inc_dec_mapped(struct ring_buffer_per_cpu *cpu_buffer,
  */
 #ifdef CONFIG_MMU
 static int __rb_map_vma(struct ring_buffer_per_cpu *cpu_buffer,
-			struct vm_area_struct *vma)
+			struct mm_area *vma)
 {
 	unsigned long nr_subbufs, nr_pages, nr_vma_pages, pgoff = vma->vm_pgoff;
 	unsigned int subbuf_pages, subbuf_order;
@@ -7125,14 +7125,14 @@ out:
 }
 #else
 static int __rb_map_vma(struct ring_buffer_per_cpu *cpu_buffer,
-			struct vm_area_struct *vma)
+			struct mm_area *vma)
 {
 	return -EOPNOTSUPP;
 }
 #endif
 
 int ring_buffer_map(struct trace_buffer *buffer, int cpu,
-		    struct vm_area_struct *vma)
+		    struct mm_area *vma)
 {
 	struct ring_buffer_per_cpu *cpu_buffer;
 	unsigned long flags, *subbuf_ids;

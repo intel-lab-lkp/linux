@@ -412,7 +412,7 @@ static long proc_reg_compat_ioctl(struct file *file, unsigned int cmd, unsigned 
 }
 #endif
 
-static int pde_mmap(struct proc_dir_entry *pde, struct file *file, struct vm_area_struct *vma)
+static int pde_mmap(struct proc_dir_entry *pde, struct file *file, struct mm_area *vma)
 {
 	__auto_type mmap = pde->proc_ops->proc_mmap;
 	if (mmap)
@@ -420,7 +420,7 @@ static int pde_mmap(struct proc_dir_entry *pde, struct file *file, struct vm_are
 	return -EIO;
 }
 
-static int proc_reg_mmap(struct file *file, struct vm_area_struct *vma)
+static int proc_reg_mmap(struct file *file, struct mm_area *vma)
 {
 	struct proc_dir_entry *pde = PDE(file_inode(file));
 	int rv = -EIO;

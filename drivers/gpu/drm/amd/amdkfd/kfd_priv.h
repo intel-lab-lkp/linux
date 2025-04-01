@@ -61,7 +61,7 @@
  * BITS[61:46] - Encode gpu_id. To identify to which GPU the offset belongs to
  * BITS[45:0]  - MMAP offset value
  *
- * NOTE: struct vm_area_struct.vm_pgoff uses offset in pages. Hence, these
+ * NOTE: struct mm_area.vm_pgoff uses offset in pages. Hence, these
  *  defines are w.r.t to PAGE_SIZE
  */
 #define KFD_MMAP_TYPE_SHIFT	62
@@ -1077,7 +1077,7 @@ struct kfd_process_device *kfd_create_process_device_data(struct kfd_node *dev,
 bool kfd_process_xnack_mode(struct kfd_process *p, bool supported);
 
 int kfd_reserved_mem_mmap(struct kfd_node *dev, struct kfd_process *process,
-			  struct vm_area_struct *vma);
+			  struct mm_area *vma);
 
 /* KFD process API for creating and translating handles */
 int kfd_process_device_create_obj_handle(struct kfd_process_device *pdd,
@@ -1099,7 +1099,7 @@ size_t kfd_doorbell_process_slice(struct kfd_dev *kfd);
 int kfd_doorbell_init(struct kfd_dev *kfd);
 void kfd_doorbell_fini(struct kfd_dev *kfd);
 int kfd_doorbell_mmap(struct kfd_node *dev, struct kfd_process *process,
-		      struct vm_area_struct *vma);
+		      struct mm_area *vma);
 void __iomem *kfd_get_kernel_doorbell(struct kfd_dev *kfd,
 					unsigned int *doorbell_off);
 void kfd_release_kernel_doorbell(struct kfd_dev *kfd, u32 __iomem *db_addr);
@@ -1487,7 +1487,7 @@ extern const struct kfd_device_global_init_class device_global_init_class_cik;
 
 int kfd_event_init_process(struct kfd_process *p);
 void kfd_event_free_process(struct kfd_process *p);
-int kfd_event_mmap(struct kfd_process *process, struct vm_area_struct *vma);
+int kfd_event_mmap(struct kfd_process *process, struct mm_area *vma);
 int kfd_wait_on_events(struct kfd_process *p,
 		       uint32_t num_events, void __user *data,
 		       bool all, uint32_t *user_timeout_ms,

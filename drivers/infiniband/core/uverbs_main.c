@@ -688,7 +688,7 @@ out_unlock:
 
 static const struct vm_operations_struct rdma_umap_ops;
 
-static int ib_uverbs_mmap(struct file *filp, struct vm_area_struct *vma)
+static int ib_uverbs_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct ib_uverbs_file *file = filp->private_data;
 	struct ib_ucontext *ucontext;
@@ -717,7 +717,7 @@ out:
  * The VMA has been dup'd, initialize the vm_private_data with a new tracking
  * struct
  */
-static void rdma_umap_open(struct vm_area_struct *vma)
+static void rdma_umap_open(struct mm_area *vma)
 {
 	struct ib_uverbs_file *ufile = vma->vm_file->private_data;
 	struct rdma_umap_priv *opriv = vma->vm_private_data;
@@ -759,7 +759,7 @@ out_zap:
 	zap_vma_ptes(vma, vma->vm_start, vma->vm_end - vma->vm_start);
 }
 
-static void rdma_umap_close(struct vm_area_struct *vma)
+static void rdma_umap_close(struct mm_area *vma)
 {
 	struct ib_uverbs_file *ufile = vma->vm_file->private_data;
 	struct rdma_umap_priv *priv = vma->vm_private_data;
@@ -872,7 +872,7 @@ void uverbs_user_mmap_disassociate(struct ib_uverbs_file *ufile)
 		mutex_lock(&ufile->umap_lock);
 		list_for_each_entry_safe (priv, next_priv, &ufile->umaps,
 					  list) {
-			struct vm_area_struct *vma = priv->vma;
+			struct mm_area *vma = priv->vma;
 
 			if (vma->vm_mm != mm)
 				continue;

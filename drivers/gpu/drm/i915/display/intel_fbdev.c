@@ -121,7 +121,7 @@ static int intel_fbdev_pan_display(struct fb_var_screeninfo *var,
 	return ret;
 }
 
-static int intel_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int intel_fbdev_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct drm_fb_helper *fb_helper = info->par;
 	struct drm_gem_object *obj = drm_gem_fb_get_obj(fb_helper->fb, 0);

@@ -205,7 +205,7 @@
 #include <linux/sched.h>
 
 struct cpu_tlb_fns {
-	void (*flush_user_range)(unsigned long, unsigned long, struct vm_area_struct *);
+	void (*flush_user_range)(unsigned long, unsigned long, struct mm_area *);
 	void (*flush_kern_range)(unsigned long, unsigned long);
 	unsigned long tlb_flags;
 };
@@ -223,7 +223,7 @@ struct cpu_tlb_fns {
 #define __cpu_flush_user_tlb_range	__glue(_TLB,_flush_user_tlb_range)
 #define __cpu_flush_kern_tlb_range	__glue(_TLB,_flush_kern_tlb_range)
 
-extern void __cpu_flush_user_tlb_range(unsigned long, unsigned long, struct vm_area_struct *);
+extern void __cpu_flush_user_tlb_range(unsigned long, unsigned long, struct mm_area *);
 extern void __cpu_flush_kern_tlb_range(unsigned long, unsigned long);
 
 #endif
@@ -264,7 +264,7 @@ extern struct cpu_tlb_fns cpu_tlb;
  *	flush_tlb_page(vma, uaddr)
  *
  *		Invalidate the specified page in the specified address range.
- *		- vma	- vm_area_struct describing address range
+ *		- vma	- mm_area describing address range
  *		- vaddr - virtual address (may not be aligned)
  */
 
@@ -410,7 +410,7 @@ static inline void __flush_tlb_mm(struct mm_struct *mm)
 }
 
 static inline void
-__local_flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
+__local_flush_tlb_page(struct mm_area *vma, unsigned long uaddr)
 {
 	const int zero = 0;
 	const unsigned int __tlb_flag = __cpu_tlb_flags;
@@ -432,7 +432,7 @@ __local_flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
 }
 
 static inline void
-local_flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
+local_flush_tlb_page(struct mm_area *vma, unsigned long uaddr)
 {
 	const unsigned int __tlb_flag = __cpu_tlb_flags;
 
@@ -449,7 +449,7 @@ local_flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
 }
 
 static inline void
-__flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
+__flush_tlb_page(struct mm_area *vma, unsigned long uaddr)
 {
 	const unsigned int __tlb_flag = __cpu_tlb_flags;
 
@@ -608,9 +608,9 @@ static inline void clean_pmd_entry(void *pmd)
 #else
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *mm);
-extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr);
+extern void flush_tlb_page(struct mm_area *vma, unsigned long uaddr);
 extern void flush_tlb_kernel_page(unsigned long kaddr);
-extern void flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
+extern void flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end);
 extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 extern void flush_bp_all(void);
 #endif
@@ -622,11 +622,11 @@ extern void flush_bp_all(void);
  * the set_ptes() function.
  */
 #if __LINUX_ARM_ARCH__ < 6
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long addr, pte_t *ptep, unsigned int nr);
 #else
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+		struct mm_area *vma, unsigned long addr, pte_t *ptep,
 		unsigned int nr)
 {
 }
@@ -644,17 +644,17 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 #ifndef __ASSEMBLY__
 static inline void local_flush_tlb_all(void)									{ }
 static inline void local_flush_tlb_mm(struct mm_struct *mm)							{ }
-static inline void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)			{ }
+static inline void local_flush_tlb_page(struct mm_area *vma, unsigned long uaddr)			{ }
 static inline void local_flush_tlb_kernel_page(unsigned long kaddr)						{ }
-static inline void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)	{ }
+static inline void local_flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end)	{ }
 static inline void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)				{ }
 static inline void local_flush_bp_all(void)									{ }
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *mm);
-extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr);
+extern void flush_tlb_page(struct mm_area *vma, unsigned long uaddr);
 extern void flush_tlb_kernel_page(unsigned long kaddr);
-extern void flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
+extern void flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end);
 extern void flush_tlb_kernel_range(unsigned long start, unsigned long end);
 extern void flush_bp_all(void);
 #endif	/* __ASSEMBLY__ */

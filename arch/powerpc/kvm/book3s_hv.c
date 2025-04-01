@@ -5473,7 +5473,7 @@ static int kvmppc_hv_setup_htab_rma(struct kvm_vcpu *vcpu)
 	struct kvm *kvm = vcpu->kvm;
 	unsigned long hva;
 	struct kvm_memory_slot *memslot;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long lpcr = 0, senc;
 	unsigned long psize, porder;
 	int srcu_idx;

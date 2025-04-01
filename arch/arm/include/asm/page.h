@@ -102,34 +102,34 @@
 #endif
 
 struct page;
-struct vm_area_struct;
+struct mm_area;
 
 struct cpu_user_fns {
 	void (*cpu_clear_user_highpage)(struct page *page, unsigned long vaddr);
 	void (*cpu_copy_user_highpage)(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma);
+			unsigned long vaddr, struct mm_area *vma);
 };
 
 void fa_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void fa_clear_user_highpage(struct page *page, unsigned long vaddr);
 void feroceon_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void feroceon_clear_user_highpage(struct page *page, unsigned long vaddr);
 void v4_mc_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void v4_mc_clear_user_highpage(struct page *page, unsigned long vaddr);
 void v4wb_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void v4wb_clear_user_highpage(struct page *page, unsigned long vaddr);
 void v4wt_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void v4wt_clear_user_highpage(struct page *page, unsigned long vaddr);
 void xsc3_mc_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void xsc3_mc_clear_user_highpage(struct page *page, unsigned long vaddr);
 void xscale_mc_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma);
+	unsigned long vaddr, struct mm_area *vma);
 void xscale_mc_clear_user_highpage(struct page *page, unsigned long vaddr);
 
 #ifdef MULTI_USER
@@ -145,7 +145,7 @@ extern struct cpu_user_fns cpu_user;
 
 extern void __cpu_clear_user_highpage(struct page *page, unsigned long vaddr);
 extern void __cpu_copy_user_highpage(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma);
+			unsigned long vaddr, struct mm_area *vma);
 #endif
 
 #define clear_user_highpage(page,vaddr)		\

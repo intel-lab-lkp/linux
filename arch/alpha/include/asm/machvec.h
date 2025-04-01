@@ -16,7 +16,7 @@
 
 struct task_struct;
 struct mm_struct;
-struct vm_area_struct;
+struct mm_area;
 struct linux_hose_info;
 struct pci_dev;
 struct pci_ops;

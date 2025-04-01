@@ -1062,7 +1062,7 @@ end:
 }
 
 /* Mmap */
-static int s5p_mfc_mmap(struct file *file, struct vm_area_struct *vma)
+static int s5p_mfc_mmap(struct file *file, struct mm_area *vma)
 {
 	struct s5p_mfc_ctx *ctx = fh_to_ctx(file->private_data);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;

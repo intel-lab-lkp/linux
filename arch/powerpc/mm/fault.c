@@ -72,7 +72,7 @@ static noinline int bad_area_nosemaphore(struct pt_regs *regs, unsigned long add
 }
 
 static int __bad_area(struct pt_regs *regs, unsigned long address, int si_code,
-		      struct mm_struct *mm, struct vm_area_struct *vma)
+		      struct mm_struct *mm, struct mm_area *vma)
 {
 
 	/*
@@ -89,7 +89,7 @@ static int __bad_area(struct pt_regs *regs, unsigned long address, int si_code,
 
 static noinline int bad_access_pkey(struct pt_regs *regs, unsigned long address,
 				    struct mm_struct *mm,
-				    struct vm_area_struct *vma)
+				    struct mm_area *vma)
 {
 	int pkey;
 
@@ -131,7 +131,7 @@ static noinline int bad_access_pkey(struct pt_regs *regs, unsigned long address,
 }
 
 static noinline int bad_access(struct pt_regs *regs, unsigned long address,
-			       struct mm_struct *mm, struct vm_area_struct *vma)
+			       struct mm_struct *mm, struct mm_area *vma)
 {
 	return __bad_area(regs, address, SEGV_ACCERR, mm, vma);
 }
@@ -235,7 +235,7 @@ static bool bad_kernel_fault(struct pt_regs *regs, unsigned long error_code,
 }
 
 static bool access_pkey_error(bool is_write, bool is_exec, bool is_pkey,
-			      struct vm_area_struct *vma)
+			      struct mm_area *vma)
 {
 	/*
 	 * Make sure to check the VMA so that we do not perform
@@ -248,7 +248,7 @@ static bool access_pkey_error(bool is_write, bool is_exec, bool is_pkey,
 	return false;
 }
 
-static bool access_error(bool is_write, bool is_exec, struct vm_area_struct *vma)
+static bool access_error(bool is_write, bool is_exec, struct mm_area *vma)
 {
 	/*
 	 * Allow execution from readable areas if the MMU does not
@@ -413,7 +413,7 @@ static int page_fault_is_bad(unsigned long err)
 static int ___do_page_fault(struct pt_regs *regs, unsigned long address,
 			   unsigned long error_code)
 {
-	struct vm_area_struct * vma;
+	struct mm_area * vma;
 	struct mm_struct *mm = current->mm;
 	unsigned int flags = FAULT_FLAG_DEFAULT;
 	int is_exec = TRAP(regs) == INTERRUPT_INST_STORAGE;

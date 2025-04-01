@@ -59,7 +59,7 @@ int __execute_only_pkey(struct mm_struct *mm)
 	return execute_only_pkey;
 }
 
-static inline bool vma_is_pkey_exec_only(struct vm_area_struct *vma)
+static inline bool vma_is_pkey_exec_only(struct mm_area *vma)
 {
 	/* Do this check first since the vm_flags should be hot */
 	if ((vma->vm_flags & VM_ACCESS_FLAGS) != VM_EXEC)
@@ -73,7 +73,7 @@ static inline bool vma_is_pkey_exec_only(struct vm_area_struct *vma)
 /*
  * This is only called for *plain* mprotect calls.
  */
-int __arch_override_mprotect_pkey(struct vm_area_struct *vma, int prot, int pkey)
+int __arch_override_mprotect_pkey(struct mm_area *vma, int prot, int pkey)
 {
 	/*
 	 * Is this an mprotect_pkey() call?  If so, never

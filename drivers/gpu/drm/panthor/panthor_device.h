@@ -253,7 +253,7 @@ static inline bool panthor_device_reset_is_pending(struct panthor_device *ptdev)
 }
 
 int panthor_device_mmap_io(struct panthor_device *ptdev,
-			   struct vm_area_struct *vma);
+			   struct mm_area *vma);
 
 int panthor_device_resume(struct device *dev);
 int panthor_device_suspend(struct device *dev);

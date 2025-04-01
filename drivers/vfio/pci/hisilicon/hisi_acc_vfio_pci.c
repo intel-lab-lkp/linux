@@ -1218,7 +1218,7 @@ static int hisi_acc_pci_rw_access_check(struct vfio_device *core_vdev,
 }
 
 static int hisi_acc_vfio_pci_mmap(struct vfio_device *core_vdev,
-				  struct vm_area_struct *vma)
+				  struct mm_area *vma)
 {
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);

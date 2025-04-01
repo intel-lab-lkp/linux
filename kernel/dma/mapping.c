@@ -536,7 +536,7 @@ EXPORT_SYMBOL_GPL(dma_can_mmap);
 /**
  * dma_mmap_attrs - map a coherent DMA allocation into user space
  * @dev: valid struct device pointer, or NULL for ISA and EISA-like devices
- * @vma: vm_area_struct describing requested user mapping
+ * @vma: mm_area describing requested user mapping
  * @cpu_addr: kernel CPU-view address returned from dma_alloc_attrs
  * @dma_addr: device-view address returned from dma_alloc_attrs
  * @size: size of memory originally requested in dma_alloc_attrs
@@ -546,7 +546,7 @@ EXPORT_SYMBOL_GPL(dma_can_mmap);
  * space.  The coherent DMA buffer must not be freed by the driver until the
  * user space mapping has been released.
  */
-int dma_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_attrs(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs)
 {
@@ -725,7 +725,7 @@ void dma_free_pages(struct device *dev, size_t size, struct page *page,
 }
 EXPORT_SYMBOL_GPL(dma_free_pages);
 
-int dma_mmap_pages(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_pages(struct device *dev, struct mm_area *vma,
 		size_t size, struct page *page)
 {
 	unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
@@ -828,7 +828,7 @@ void dma_vunmap_noncontiguous(struct device *dev, void *vaddr)
 }
 EXPORT_SYMBOL_GPL(dma_vunmap_noncontiguous);
 
-int dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_noncontiguous(struct device *dev, struct mm_area *vma,
 		size_t size, struct sg_table *sgt)
 {
 	if (use_dma_iommu(dev))

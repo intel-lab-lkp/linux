@@ -24,7 +24,7 @@
 
 #define MAX_CONNECTOR		4
 
-static int exynos_drm_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int exynos_drm_fb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct drm_fb_helper *helper = info->par;
 	struct drm_gem_object *obj = drm_gem_fb_get_obj(helper->fb, 0);

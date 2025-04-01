@@ -2454,7 +2454,7 @@ static void hisi_qm_uacce_put_queue(struct uacce_queue *q)
 
 /* map sq/cq/doorbell to user space */
 static int hisi_qm_uacce_mmap(struct uacce_queue *q,
-			      struct vm_area_struct *vma,
+			      struct mm_area *vma,
 			      struct uacce_qfile_region *qfr)
 {
 	struct hisi_qp *qp = q->priv;

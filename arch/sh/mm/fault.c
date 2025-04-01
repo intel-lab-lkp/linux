@@ -355,7 +355,7 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	return 1;
 }
 
-static inline int access_error(int error_code, struct vm_area_struct *vma)
+static inline int access_error(int error_code, struct mm_area *vma)
 {
 	if (error_code & FAULT_CODE_WRITE) {
 		/* write, present and write, not present: */
@@ -393,7 +393,7 @@ asmlinkage void __kprobes do_page_fault(struct pt_regs *regs,
 	unsigned long vec;
 	struct task_struct *tsk;
 	struct mm_struct *mm;
-	struct vm_area_struct * vma;
+	struct mm_area * vma;
 	vm_fault_t fault;
 	unsigned int flags = FAULT_FLAG_DEFAULT;
 

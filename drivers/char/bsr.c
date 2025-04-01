@@ -111,7 +111,7 @@ static const struct class bsr_class = {
 	.dev_groups	= bsr_dev_groups,
 };
 
-static int bsr_mmap(struct file *filp, struct vm_area_struct *vma)
+static int bsr_mmap(struct file *filp, struct mm_area *vma)
 {
 	unsigned long size   = vma->vm_end - vma->vm_start;
 	struct bsr_dev *dev = filp->private_data;

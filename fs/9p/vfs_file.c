@@ -454,7 +454,7 @@ int v9fs_file_fsync_dotl(struct file *filp, loff_t start, loff_t end,
 }
 
 static int
-v9fs_file_mmap(struct file *filp, struct vm_area_struct *vma)
+v9fs_file_mmap(struct file *filp, struct mm_area *vma)
 {
 	int retval;
 	struct inode *inode = file_inode(filp);
@@ -480,7 +480,7 @@ v9fs_vm_page_mkwrite(struct vm_fault *vmf)
 	return netfs_page_mkwrite(vmf, NULL);
 }
 
-static void v9fs_mmap_vm_close(struct vm_area_struct *vma)
+static void v9fs_mmap_vm_close(struct mm_area *vma)
 {
 	struct inode *inode;
 

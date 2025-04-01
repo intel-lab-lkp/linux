@@ -76,7 +76,7 @@ void flush_cache_mm(struct mm_struct *mm)
 	}
 }
 
-void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+void flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	if (cache_is_vivt()) {
 		vivt_flush_cache_range(vma, start, end);
@@ -95,7 +95,7 @@ void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned
 		__flush_icache_all();
 }
 
-void flush_cache_pages(struct vm_area_struct *vma, unsigned long user_addr, unsigned long pfn, unsigned int nr)
+void flush_cache_pages(struct mm_area *vma, unsigned long user_addr, unsigned long pfn, unsigned int nr)
 {
 	if (cache_is_vivt()) {
 		vivt_flush_cache_pages(vma, user_addr, pfn, nr);
@@ -156,7 +156,7 @@ void __flush_ptrace_access(struct page *page, unsigned long uaddr, void *kaddr,
 }
 
 static
-void flush_ptrace_access(struct vm_area_struct *vma, struct page *page,
+void flush_ptrace_access(struct mm_area *vma, struct page *page,
 			 unsigned long uaddr, void *kaddr, unsigned long len)
 {
 	unsigned int flags = 0;
@@ -182,7 +182,7 @@ void flush_uprobe_xol_access(struct page *page, unsigned long uaddr,
  *
  * Note that this code needs to run on the current CPU.
  */
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		       unsigned long uaddr, void *dst, const void *src,
 		       unsigned long len)
 {
@@ -238,7 +238,7 @@ void __flush_dcache_folio(struct address_space *mapping, struct folio *folio)
 static void __flush_dcache_aliases(struct address_space *mapping, struct folio *folio)
 {
 	struct mm_struct *mm = current->active_mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	pgoff_t pgoff, pgoff_end;
 
 	/*
@@ -378,8 +378,8 @@ EXPORT_SYMBOL(flush_dcache_page);
  *  memcpy() to/from page
  *  if written to page, flush_dcache_page()
  */
-void __flush_anon_page(struct vm_area_struct *vma, struct page *page, unsigned long vmaddr);
-void __flush_anon_page(struct vm_area_struct *vma, struct page *page, unsigned long vmaddr)
+void __flush_anon_page(struct mm_area *vma, struct page *page, unsigned long vmaddr);
+void __flush_anon_page(struct mm_area *vma, struct page *page, unsigned long vmaddr)
 {
 	unsigned long pfn;
 

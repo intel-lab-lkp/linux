@@ -83,7 +83,7 @@ unsigned long huge_anon_orders_madvise __read_mostly;
 unsigned long huge_anon_orders_inherit __read_mostly;
 static bool anon_orders_configured __initdata;
 
-static inline bool file_thp_enabled(struct vm_area_struct *vma)
+static inline bool file_thp_enabled(struct mm_area *vma)
 {
 	struct inode *inode;
 
@@ -98,7 +98,7 @@ static inline bool file_thp_enabled(struct vm_area_struct *vma)
 	return !inode_is_open_for_write(inode) && S_ISREG(inode->i_mode);
 }
 
-unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
+unsigned long __thp_vma_allowable_orders(struct mm_area *vma,
 					 unsigned long vm_flags,
 					 unsigned long tva_flags,
 					 unsigned long orders)
@@ -1050,7 +1050,7 @@ err:
 }
 __setup("thp_anon=", setup_thp_anon);
 
-pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
+pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct mm_area *vma)
 {
 	if (likely(vma->vm_flags & VM_WRITE))
 		pmd = pmd_mkwrite(pmd, vma);
@@ -1155,7 +1155,7 @@ unsigned long thp_get_unmapped_area(struct file *filp, unsigned long addr,
 }
 EXPORT_SYMBOL_GPL(thp_get_unmapped_area);
 
-static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
+static struct folio *vma_alloc_anon_folio_pmd(struct mm_area *vma,
 		unsigned long addr)
 {
 	gfp_t gfp = vma_thp_gfp_mask(vma);
@@ -1199,7 +1199,7 @@ static struct folio *vma_alloc_anon_folio_pmd(struct vm_area_struct *vma,
 }
 
 static void map_anon_folio_pmd(struct folio *folio, pmd_t *pmd,
-		struct vm_area_struct *vma, unsigned long haddr)
+		struct mm_area *vma, unsigned long haddr)
 {
 	pmd_t entry;
 
@@ -1218,7 +1218,7 @@ static void map_anon_folio_pmd(struct folio *folio, pmd_t *pmd,
 static vm_fault_t __do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 {
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct folio *folio;
 	pgtable_t pgtable;
 	vm_fault_t ret = 0;
@@ -1277,7 +1277,7 @@ release:
  *	    available
  * never: never stall for any thp allocation
  */
-gfp_t vma_thp_gfp_mask(struct vm_area_struct *vma)
+gfp_t vma_thp_gfp_mask(struct mm_area *vma)
 {
 	const bool vma_madvised = vma && (vma->vm_flags & VM_HUGEPAGE);
 
@@ -1305,7 +1305,7 @@ gfp_t vma_thp_gfp_mask(struct vm_area_struct *vma)
 
 /* Caller must hold page table lock. */
 static void set_huge_zero_folio(pgtable_t pgtable, struct mm_struct *mm,
-		struct vm_area_struct *vma, unsigned long haddr, pmd_t *pmd,
+		struct mm_area *vma, unsigned long haddr, pmd_t *pmd,
 		struct folio *zero_folio)
 {
 	pmd_t entry;
@@ -1318,7 +1318,7 @@ static void set_huge_zero_folio(pgtable_t pgtable, struct mm_struct *mm,
 
 vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
 	vm_fault_t ret;
 
@@ -1373,7 +1373,7 @@ vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 	return __do_huge_pmd_anonymous_page(vmf);
 }
 
-static int insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
+static int insert_pfn_pmd(struct mm_area *vma, unsigned long addr,
 		pmd_t *pmd, pfn_t pfn, pgprot_t prot, bool write,
 		pgtable_t pgtable)
 {
@@ -1430,7 +1430,7 @@ static int insert_pfn_pmd(struct vm_area_struct *vma, unsigned long addr,
 vm_fault_t vmf_insert_pfn_pmd(struct vm_fault *vmf, pfn_t pfn, bool write)
 {
 	unsigned long addr = vmf->address & PMD_MASK;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	pgprot_t pgprot = vma->vm_page_prot;
 	pgtable_t pgtable = NULL;
 	spinlock_t *ptl;
@@ -1471,7 +1471,7 @@ EXPORT_SYMBOL_GPL(vmf_insert_pfn_pmd);
 vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 				bool write)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	unsigned long addr = vmf->address & PMD_MASK;
 	struct mm_struct *mm = vma->vm_mm;
 	spinlock_t *ptl;
@@ -1508,14 +1508,14 @@ vm_fault_t vmf_insert_folio_pmd(struct vm_fault *vmf, struct folio *folio,
 EXPORT_SYMBOL_GPL(vmf_insert_folio_pmd);
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-static pud_t maybe_pud_mkwrite(pud_t pud, struct vm_area_struct *vma)
+static pud_t maybe_pud_mkwrite(pud_t pud, struct mm_area *vma)
 {
 	if (likely(vma->vm_flags & VM_WRITE))
 		pud = pud_mkwrite(pud);
 	return pud;
 }
 
-static void insert_pfn_pud(struct vm_area_struct *vma, unsigned long addr,
+static void insert_pfn_pud(struct mm_area *vma, unsigned long addr,
 		pud_t *pud, pfn_t pfn, bool write)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -1560,7 +1560,7 @@ static void insert_pfn_pud(struct vm_area_struct *vma, unsigned long addr,
 vm_fault_t vmf_insert_pfn_pud(struct vm_fault *vmf, pfn_t pfn, bool write)
 {
 	unsigned long addr = vmf->address & PUD_MASK;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	pgprot_t pgprot = vma->vm_page_prot;
 	spinlock_t *ptl;
 
@@ -1599,7 +1599,7 @@ EXPORT_SYMBOL_GPL(vmf_insert_pfn_pud);
 vm_fault_t vmf_insert_folio_pud(struct vm_fault *vmf, struct folio *folio,
 				bool write)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	unsigned long addr = vmf->address & PUD_MASK;
 	pud_t *pud = vmf->pud;
 	struct mm_struct *mm = vma->vm_mm;
@@ -1633,7 +1633,7 @@ vm_fault_t vmf_insert_folio_pud(struct vm_fault *vmf, struct folio *folio,
 EXPORT_SYMBOL_GPL(vmf_insert_folio_pud);
 #endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
 
-void touch_pmd(struct vm_area_struct *vma, unsigned long addr,
+void touch_pmd(struct mm_area *vma, unsigned long addr,
 	       pmd_t *pmd, bool write)
 {
 	pmd_t _pmd;
@@ -1646,7 +1646,7 @@ void touch_pmd(struct vm_area_struct *vma, unsigned long addr,
 		update_mmu_cache_pmd(vma, addr, pmd);
 }
 
-struct page *follow_devmap_pmd(struct vm_area_struct *vma, unsigned long addr,
+struct page *follow_devmap_pmd(struct mm_area *vma, unsigned long addr,
 		pmd_t *pmd, int flags, struct dev_pagemap **pgmap)
 {
 	unsigned long pfn = pmd_pfn(*pmd);
@@ -1688,7 +1688,7 @@ struct page *follow_devmap_pmd(struct vm_area_struct *vma, unsigned long addr,
 
 int copy_huge_pmd(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		  pmd_t *dst_pmd, pmd_t *src_pmd, unsigned long addr,
-		  struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma)
+		  struct mm_area *dst_vma, struct mm_area *src_vma)
 {
 	spinlock_t *dst_ptl, *src_ptl;
 	struct page *src_page;
@@ -1810,7 +1810,7 @@ out:
 }
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-void touch_pud(struct vm_area_struct *vma, unsigned long addr,
+void touch_pud(struct mm_area *vma, unsigned long addr,
 	       pud_t *pud, bool write)
 {
 	pud_t _pud;
@@ -1825,7 +1825,7 @@ void touch_pud(struct vm_area_struct *vma, unsigned long addr,
 
 int copy_huge_pud(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		  pud_t *dst_pud, pud_t *src_pud, unsigned long addr,
-		  struct vm_area_struct *vma)
+		  struct mm_area *vma)
 {
 	spinlock_t *dst_ptl, *src_ptl;
 	pud_t pud;
@@ -1889,7 +1889,7 @@ unlock:
 static vm_fault_t do_huge_zero_wp_pmd(struct vm_fault *vmf)
 {
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct mmu_notifier_range range;
 	struct folio *folio;
 	vm_fault_t ret = 0;
@@ -1921,7 +1921,7 @@ unlock:
 vm_fault_t do_huge_pmd_wp_page(struct vm_fault *vmf)
 {
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct folio *folio;
 	struct page *page;
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
@@ -2012,7 +2012,7 @@ fallback:
 	return VM_FAULT_FALLBACK;
 }
 
-static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
+static inline bool can_change_pmd_writable(struct mm_area *vma,
 					   unsigned long addr, pmd_t pmd)
 {
 	struct page *page;
@@ -2045,7 +2045,7 @@ static inline bool can_change_pmd_writable(struct vm_area_struct *vma,
 /* NUMA hinting page fault entry point for trans huge pmds */
 vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct folio *folio;
 	unsigned long haddr = vmf->address & HPAGE_PMD_MASK;
 	int nid = NUMA_NO_NODE;
@@ -2123,7 +2123,7 @@ out_map:
  * Return true if we do MADV_FREE successfully on entire pmd page.
  * Otherwise, return false.
  */
-bool madvise_free_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
+bool madvise_free_huge_pmd(struct mmu_gather *tlb, struct mm_area *vma,
 		pmd_t *pmd, unsigned long addr, unsigned long next)
 {
 	spinlock_t *ptl;
@@ -2202,7 +2202,7 @@ static inline void zap_deposited_table(struct mm_struct *mm, pmd_t *pmd)
 	mm_dec_nr_ptes(mm);
 }
 
-int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
+int zap_huge_pmd(struct mmu_gather *tlb, struct mm_area *vma,
 		 pmd_t *pmd, unsigned long addr)
 {
 	pmd_t orig_pmd;
@@ -2272,7 +2272,7 @@ int zap_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
 #ifndef pmd_move_must_withdraw
 static inline int pmd_move_must_withdraw(spinlock_t *new_pmd_ptl,
 					 spinlock_t *old_pmd_ptl,
-					 struct vm_area_struct *vma)
+					 struct mm_area *vma)
 {
 	/*
 	 * With split pmd lock we also need to move preallocated
@@ -2305,7 +2305,7 @@ static pmd_t clear_uffd_wp_pmd(pmd_t pmd)
 	return pmd;
 }
 
-bool move_huge_pmd(struct vm_area_struct *vma, unsigned long old_addr,
+bool move_huge_pmd(struct mm_area *vma, unsigned long old_addr,
 		  unsigned long new_addr, pmd_t *old_pmd, pmd_t *new_pmd)
 {
 	spinlock_t *old_ptl, *new_ptl;
@@ -2363,7 +2363,7 @@ bool move_huge_pmd(struct vm_area_struct *vma, unsigned long old_addr,
  *      or if prot_numa but THP migration is not supported
  *  - HPAGE_PMD_NR if protections changed and TLB flush necessary
  */
-int change_huge_pmd(struct mmu_gather *tlb, struct vm_area_struct *vma,
+int change_huge_pmd(struct mmu_gather *tlb, struct mm_area *vma,
 		    pmd_t *pmd, unsigned long addr, pgprot_t newprot,
 		    unsigned long cp_flags)
 {
@@ -2502,7 +2502,7 @@ unlock:
  * - HPAGE_PUD_NR: if pud was successfully processed
  */
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-int change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
+int change_huge_pud(struct mmu_gather *tlb, struct mm_area *vma,
 		    pud_t *pudp, unsigned long addr, pgprot_t newprot,
 		    unsigned long cp_flags)
 {
@@ -2550,7 +2550,7 @@ int change_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
  * repeated by the caller, or other errors in case of failure.
  */
 int move_pages_huge_pmd(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd, pmd_t dst_pmdval,
-			struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
+			struct mm_area *dst_vma, struct mm_area *src_vma,
 			unsigned long dst_addr, unsigned long src_addr)
 {
 	pmd_t _dst_pmd, src_pmdval;
@@ -2687,7 +2687,7 @@ unlock_folio:
  * Note that if it returns page table lock pointer, this routine returns without
  * unlocking page table lock. So callers must unlock it.
  */
-spinlock_t *__pmd_trans_huge_lock(pmd_t *pmd, struct vm_area_struct *vma)
+spinlock_t *__pmd_trans_huge_lock(pmd_t *pmd, struct mm_area *vma)
 {
 	spinlock_t *ptl;
 	ptl = pmd_lock(vma->vm_mm, pmd);
@@ -2704,7 +2704,7 @@ spinlock_t *__pmd_trans_huge_lock(pmd_t *pmd, struct vm_area_struct *vma)
  * Note that if it returns page table lock pointer, this routine returns without
  * unlocking page table lock. So callers must unlock it.
  */
-spinlock_t *__pud_trans_huge_lock(pud_t *pud, struct vm_area_struct *vma)
+spinlock_t *__pud_trans_huge_lock(pud_t *pud, struct mm_area *vma)
 {
 	spinlock_t *ptl;
 
@@ -2716,7 +2716,7 @@ spinlock_t *__pud_trans_huge_lock(pud_t *pud, struct vm_area_struct *vma)
 }
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
+int zap_huge_pud(struct mmu_gather *tlb, struct mm_area *vma,
 		 pud_t *pud, unsigned long addr)
 {
 	spinlock_t *ptl;
@@ -2751,7 +2751,7 @@ int zap_huge_pud(struct mmu_gather *tlb, struct vm_area_struct *vma,
 	return 1;
 }
 
-static void __split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
+static void __split_huge_pud_locked(struct mm_area *vma, pud_t *pud,
 		unsigned long haddr)
 {
 	struct folio *folio;
@@ -2783,7 +2783,7 @@ static void __split_huge_pud_locked(struct vm_area_struct *vma, pud_t *pud,
 		-HPAGE_PUD_NR);
 }
 
-void __split_huge_pud(struct vm_area_struct *vma, pud_t *pud,
+void __split_huge_pud(struct mm_area *vma, pud_t *pud,
 		unsigned long address)
 {
 	spinlock_t *ptl;
@@ -2803,13 +2803,13 @@ out:
 	mmu_notifier_invalidate_range_end(&range);
 }
 #else
-void __split_huge_pud(struct vm_area_struct *vma, pud_t *pud,
+void __split_huge_pud(struct mm_area *vma, pud_t *pud,
 		unsigned long address)
 {
 }
 #endif /* CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD */
 
-static void __split_huge_zero_page_pmd(struct vm_area_struct *vma,
+static void __split_huge_zero_page_pmd(struct mm_area *vma,
 		unsigned long haddr, pmd_t *pmd)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -2850,7 +2850,7 @@ static void __split_huge_zero_page_pmd(struct vm_area_struct *vma,
 	pmd_populate(mm, pmd, pgtable);
 }
 
-static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
+static void __split_huge_pmd_locked(struct mm_area *vma, pmd_t *pmd,
 		unsigned long haddr, bool freeze)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -3072,7 +3072,7 @@ static void __split_huge_pmd_locked(struct vm_area_struct *vma, pmd_t *pmd,
 	pmd_populate(mm, pmd, pgtable);
 }
 
-void split_huge_pmd_locked(struct vm_area_struct *vma, unsigned long address,
+void split_huge_pmd_locked(struct mm_area *vma, unsigned long address,
 			   pmd_t *pmd, bool freeze, struct folio *folio)
 {
 	VM_WARN_ON_ONCE(folio && !folio_test_pmd_mappable(folio));
@@ -3093,7 +3093,7 @@ void split_huge_pmd_locked(struct vm_area_struct *vma, unsigned long address,
 	}
 }
 
-void __split_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
+void __split_huge_pmd(struct mm_area *vma, pmd_t *pmd,
 		unsigned long address, bool freeze, struct folio *folio)
 {
 	spinlock_t *ptl;
@@ -3109,7 +3109,7 @@ void __split_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 	mmu_notifier_invalidate_range_end(&range);
 }
 
-void split_huge_pmd_address(struct vm_area_struct *vma, unsigned long address,
+void split_huge_pmd_address(struct mm_area *vma, unsigned long address,
 		bool freeze, struct folio *folio)
 {
 	pmd_t *pmd = mm_find_pmd(vma->vm_mm, address);
@@ -3120,7 +3120,7 @@ void split_huge_pmd_address(struct vm_area_struct *vma, unsigned long address,
 	__split_huge_pmd(vma, pmd, address, freeze, folio);
 }
 
-static inline void split_huge_pmd_if_needed(struct vm_area_struct *vma, unsigned long address)
+static inline void split_huge_pmd_if_needed(struct mm_area *vma, unsigned long address)
 {
 	/*
 	 * If the new address isn't hpage aligned and it could previously
@@ -3132,10 +3132,10 @@ static inline void split_huge_pmd_if_needed(struct vm_area_struct *vma, unsigned
 		split_huge_pmd_address(vma, address, false, NULL);
 }
 
-void vma_adjust_trans_huge(struct vm_area_struct *vma,
+void vma_adjust_trans_huge(struct mm_area *vma,
 			   unsigned long start,
 			   unsigned long end,
-			   struct vm_area_struct *next)
+			   struct mm_area *next)
 {
 	/* Check if we need to split start first. */
 	split_huge_pmd_if_needed(vma, start);
@@ -3171,7 +3171,7 @@ static void unmap_folio(struct folio *folio)
 	try_to_unmap_flush();
 }
 
-static bool __discard_anon_folio_pmd_locked(struct vm_area_struct *vma,
+static bool __discard_anon_folio_pmd_locked(struct mm_area *vma,
 					    unsigned long addr, pmd_t *pmdp,
 					    struct folio *folio)
 {
@@ -3234,7 +3234,7 @@ static bool __discard_anon_folio_pmd_locked(struct vm_area_struct *vma,
 	return true;
 }
 
-bool unmap_huge_pmd_locked(struct vm_area_struct *vma, unsigned long addr,
+bool unmap_huge_pmd_locked(struct mm_area *vma, unsigned long addr,
 			   pmd_t *pmdp, struct folio *folio)
 {
 	VM_WARN_ON_FOLIO(!folio_test_pmd_mappable(folio), folio);
@@ -4316,7 +4316,7 @@ next:
 	pr_debug("%lu of %lu THP split\n", split, total);
 }
 
-static inline bool vma_not_suitable_for_thp_split(struct vm_area_struct *vma)
+static inline bool vma_not_suitable_for_thp_split(struct mm_area *vma)
 {
 	return vma_is_special_huge(vma) || (vma->vm_flags & VM_IO) ||
 		    is_vm_hugetlb_page(vma);
@@ -4359,7 +4359,7 @@ static int split_huge_pages_pid(int pid, unsigned long vaddr_start,
 	 * table filled with PTE-mapped THPs, each of which is distinct.
 	 */
 	for (addr = vaddr_start; addr < vaddr_end; addr += PAGE_SIZE) {
-		struct vm_area_struct *vma = vma_lookup(mm, addr);
+		struct mm_area *vma = vma_lookup(mm, addr);
 		struct folio_walk fw;
 		struct folio *folio;
 		struct address_space *mapping;
@@ -4614,7 +4614,7 @@ int set_pmd_migration_entry(struct page_vma_mapped_walk *pvmw,
 		struct page *page)
 {
 	struct folio *folio = page_folio(page);
-	struct vm_area_struct *vma = pvmw->vma;
+	struct mm_area *vma = pvmw->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long address = pvmw->address;
 	bool anon_exclusive;
@@ -4663,7 +4663,7 @@ int set_pmd_migration_entry(struct page_vma_mapped_walk *pvmw,
 void remove_migration_pmd(struct page_vma_mapped_walk *pvmw, struct page *new)
 {
 	struct folio *folio = page_folio(new);
-	struct vm_area_struct *vma = pvmw->vma;
+	struct mm_area *vma = pvmw->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long address = pvmw->address;
 	unsigned long haddr = address & HPAGE_PMD_MASK;

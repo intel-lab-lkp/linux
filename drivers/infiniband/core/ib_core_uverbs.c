@@ -28,7 +28,7 @@
  *
  */
 void rdma_umap_priv_init(struct rdma_umap_priv *priv,
-			 struct vm_area_struct *vma,
+			 struct mm_area *vma,
 			 struct rdma_user_mmap_entry *entry)
 {
 	struct ib_uverbs_file *ufile = vma->vm_file->private_data;
@@ -64,7 +64,7 @@ EXPORT_SYMBOL(rdma_umap_priv_init);
  * Return -EINVAL on wrong flags or size, -EAGAIN on failure to map. 0 on
  * success.
  */
-int rdma_user_mmap_io(struct ib_ucontext *ucontext, struct vm_area_struct *vma,
+int rdma_user_mmap_io(struct ib_ucontext *ucontext, struct mm_area *vma,
 		      unsigned long pfn, unsigned long size, pgprot_t prot,
 		      struct rdma_user_mmap_entry *entry)
 {
@@ -159,7 +159,7 @@ EXPORT_SYMBOL(rdma_user_mmap_entry_get_pgoff);
  */
 struct rdma_user_mmap_entry *
 rdma_user_mmap_entry_get(struct ib_ucontext *ucontext,
-			 struct vm_area_struct *vma)
+			 struct mm_area *vma)
 {
 	struct rdma_user_mmap_entry *entry;
 

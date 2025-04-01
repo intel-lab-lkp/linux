@@ -357,7 +357,7 @@ static ssize_t vfio_fsl_mc_write(struct vfio_device *core_vdev,
 }
 
 static int vfio_fsl_mc_mmap_mmio(struct vfio_fsl_mc_region region,
-				 struct vm_area_struct *vma)
+				 struct mm_area *vma)
 {
 	u64 size = vma->vm_end - vma->vm_start;
 	u64 pgoff, base;
@@ -382,7 +382,7 @@ static int vfio_fsl_mc_mmap_mmio(struct vfio_fsl_mc_region region,
 }
 
 static int vfio_fsl_mc_mmap(struct vfio_device *core_vdev,
-			    struct vm_area_struct *vma)
+			    struct mm_area *vma)
 {
 	struct vfio_fsl_mc_device *vdev =
 		container_of(core_vdev, struct vfio_fsl_mc_device, vdev);

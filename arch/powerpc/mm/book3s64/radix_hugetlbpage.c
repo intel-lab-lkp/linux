@@ -7,7 +7,7 @@
 #include <asm/mman.h>
 #include <asm/tlb.h>
 
-void radix__flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void radix__flush_hugetlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 	int psize;
 	struct hstate *hstate = hstate_file(vma->vm_file);
@@ -16,7 +16,7 @@ void radix__flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
 	radix__flush_tlb_page_psize(vma->vm_mm, vmaddr, psize);
 }
 
-void radix__local_flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void radix__local_flush_hugetlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 	int psize;
 	struct hstate *hstate = hstate_file(vma->vm_file);
@@ -25,7 +25,7 @@ void radix__local_flush_hugetlb_page(struct vm_area_struct *vma, unsigned long v
 	radix__local_flush_tlb_page_psize(vma->vm_mm, vmaddr, psize);
 }
 
-void radix__flush_hugetlb_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void radix__flush_hugetlb_tlb_range(struct mm_area *vma, unsigned long start,
 				   unsigned long end)
 {
 	int psize;
@@ -42,7 +42,7 @@ void radix__flush_hugetlb_tlb_range(struct vm_area_struct *vma, unsigned long st
 	mmu_notifier_arch_invalidate_secondary_tlbs(vma->vm_mm, start, end);
 }
 
-void radix__huge_ptep_modify_prot_commit(struct vm_area_struct *vma,
+void radix__huge_ptep_modify_prot_commit(struct mm_area *vma,
 					 unsigned long addr, pte_t *ptep,
 					 pte_t old_pte, pte_t pte)
 {

@@ -34,7 +34,7 @@ static struct __vdso_info compat_vdso_info;
 #endif
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
-		       struct vm_area_struct *new_vma)
+		       struct mm_area *new_vma)
 {
 	current->mm->context.vdso = (void *)new_vma->vm_start;
 

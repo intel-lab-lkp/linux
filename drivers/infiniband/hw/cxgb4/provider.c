@@ -125,7 +125,7 @@ err:
 	return ret;
 }
 
-static int c4iw_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+static int c4iw_mmap(struct ib_ucontext *context, struct mm_area *vma)
 {
 	int len = vma->vm_end - vma->vm_start;
 	u32 key = vma->vm_pgoff << PAGE_SHIFT;

@@ -233,7 +233,7 @@ static long vfio_cdx_ioctl(struct vfio_device *core_vdev,
 }
 
 static int vfio_cdx_mmap_mmio(struct vfio_cdx_region region,
-			      struct vm_area_struct *vma)
+			      struct mm_area *vma)
 {
 	u64 size = vma->vm_end - vma->vm_start;
 	u64 pgoff, base;
@@ -253,7 +253,7 @@ static int vfio_cdx_mmap_mmio(struct vfio_cdx_region region,
 }
 
 static int vfio_cdx_mmap(struct vfio_device *core_vdev,
-			 struct vm_area_struct *vma)
+			 struct mm_area *vma)
 {
 	struct vfio_cdx_device *vdev =
 		container_of(core_vdev, struct vfio_cdx_device, vdev);

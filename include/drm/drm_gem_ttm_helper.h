@@ -21,7 +21,7 @@ int drm_gem_ttm_vmap(struct drm_gem_object *gem,
 void drm_gem_ttm_vunmap(struct drm_gem_object *gem,
 			struct iosys_map *map);
 int drm_gem_ttm_mmap(struct drm_gem_object *gem,
-		     struct vm_area_struct *vma);
+		     struct mm_area *vma);
 
 int drm_gem_ttm_dumb_map_offset(struct drm_file *file, struct drm_device *dev,
 				uint32_t handle, uint64_t *offset);

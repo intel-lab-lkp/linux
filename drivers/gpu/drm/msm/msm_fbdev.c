@@ -29,7 +29,7 @@ FB_GEN_DEFAULT_DEFERRED_SYSMEM_OPS(msm_fbdev,
 				   drm_fb_helper_damage_range,
 				   drm_fb_helper_damage_area)
 
-static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int msm_fbdev_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct drm_fb_helper *helper = (struct drm_fb_helper *)info->par;
 	struct drm_gem_object *bo = msm_framebuffer_bo(helper->fb, 0);

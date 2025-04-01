@@ -50,7 +50,7 @@ static struct folio *page_idle_get_folio(unsigned long pfn)
 }
 
 static bool page_idle_clear_pte_refs_one(struct folio *folio,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					unsigned long addr, void *arg)
 {
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, addr, 0);

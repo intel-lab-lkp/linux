@@ -5368,7 +5368,7 @@ union bpf_attr {
  *
  *		The expected callback signature is
  *
- *		long (\*callback_fn)(struct task_struct \*task, struct vm_area_struct \*vma, void \*callback_ctx);
+ *		long (\*callback_fn)(struct task_struct \*task, struct mm_area \*vma, void \*callback_ctx);
  *
  *	Return
  *		0 on success.

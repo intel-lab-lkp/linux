@@ -258,7 +258,7 @@ static void do_sigbus(struct pt_regs *regs)
  */
 static void do_exception(struct pt_regs *regs, int access)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long address;
 	struct mm_struct *mm;
 	unsigned int flags;
@@ -405,7 +405,7 @@ void do_secure_storage_access(struct pt_regs *regs)
 {
 	union teid teid = { .val = regs->int_parm_long };
 	unsigned long addr = get_fault_address(regs);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct folio_walk fw;
 	struct mm_struct *mm;
 	struct folio *folio;

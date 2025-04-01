@@ -227,7 +227,7 @@ static struct kvmppc_xive_ops kvmppc_xive_native_ops =  {
 
 static vm_fault_t xive_native_esb_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct kvm_device *dev = vma->vm_file->private_data;
 	struct kvmppc_xive *xive = dev->private;
 	struct kvmppc_xive_src_block *sb;
@@ -287,7 +287,7 @@ static const struct vm_operations_struct xive_native_esb_vmops = {
 
 static vm_fault_t xive_native_tima_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 
 	switch (vmf->pgoff - vma->vm_pgoff) {
 	case 0: /* HW - forbid access */
@@ -307,7 +307,7 @@ static const struct vm_operations_struct xive_native_tima_vmops = {
 };
 
 static int kvmppc_xive_native_mmap(struct kvm_device *dev,
-				   struct vm_area_struct *vma)
+				   struct mm_area *vma)
 {
 	struct kvmppc_xive *xive = dev->private;
 

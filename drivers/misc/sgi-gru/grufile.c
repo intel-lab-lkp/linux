@@ -58,7 +58,7 @@ static int gru_supported(void)
  * Called when unmapping a device mapping. Frees all gru resources
  * and tables belonging to the vma.
  */
-static void gru_vma_close(struct vm_area_struct *vma)
+static void gru_vma_close(struct mm_area *vma)
 {
 	struct gru_vma_data *vdata;
 	struct gru_thread_state *gts;
@@ -92,7 +92,7 @@ static void gru_vma_close(struct vm_area_struct *vma)
  * and private data structure necessary to allocate, track, and free the
  * underlying pages.
  */
-static int gru_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int gru_file_mmap(struct file *file, struct mm_area *vma)
 {
 	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) != (VM_SHARED | VM_WRITE))
 		return -EPERM;
@@ -121,7 +121,7 @@ static int gru_file_mmap(struct file *file, struct vm_area_struct *vma)
 static int gru_create_new_context(unsigned long arg)
 {
 	struct gru_create_context_req req;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct gru_vma_data *vdata;
 	int ret = -EINVAL;
 

@@ -894,7 +894,7 @@ static snd_pcm_uframes_t lpass_platform_pcmops_pointer(
 }
 
 static int lpass_platform_cdc_dma_mmap(struct snd_pcm_substream *substream,
-				       struct vm_area_struct *vma)
+				       struct mm_area *vma)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	unsigned long size, offset;
@@ -910,7 +910,7 @@ static int lpass_platform_cdc_dma_mmap(struct snd_pcm_substream *substream,
 
 static int lpass_platform_pcmops_mmap(struct snd_soc_component *component,
 				      struct snd_pcm_substream *substream,
-				      struct vm_area_struct *vma)
+				      struct mm_area *vma)
 {
 	struct snd_soc_pcm_runtime *soc_runtime = snd_soc_substream_to_rtd(substream);
 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(soc_runtime, 0);

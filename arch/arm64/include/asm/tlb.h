@@ -52,7 +52,7 @@ static inline int tlb_get_level(struct mmu_gather *tlb)
 
 static inline void tlb_flush(struct mmu_gather *tlb)
 {
-	struct vm_area_struct vma = TLB_FLUSH_VMA(tlb->mm, 0);
+	struct mm_area vma = TLB_FLUSH_VMA(tlb->mm, 0);
 	bool last_level = !tlb->freed_tables;
 	unsigned long stride = tlb_get_unmap_size(tlb);
 	int tlb_level = tlb_get_level(tlb);

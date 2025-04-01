@@ -78,7 +78,7 @@ static bool ignore_rlimit_data;
 core_param(ignore_rlimit_data, ignore_rlimit_data, bool, 0644);
 
 /* Update vma->vm_page_prot to reflect vma->vm_flags. */
-void vma_set_page_prot(struct vm_area_struct *vma)
+void vma_set_page_prot(struct mm_area *vma)
 {
 	unsigned long vm_flags = vma->vm_flags;
 	pgprot_t vm_page_prot;
@@ -116,7 +116,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 {
 	unsigned long newbrk, oldbrk, origbrk;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *brkvma, *next = NULL;
+	struct mm_area *brkvma, *next = NULL;
 	unsigned long min_brk;
 	bool populate = false;
 	LIST_HEAD(uf);
@@ -693,7 +693,7 @@ generic_get_unmapped_area(struct file *filp, unsigned long addr,
 			  unsigned long flags, vm_flags_t vm_flags)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	struct vm_unmapped_area_info info = {};
 	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
 
@@ -741,7 +741,7 @@ generic_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 				  unsigned long len, unsigned long pgoff,
 				  unsigned long flags, vm_flags_t vm_flags)
 {
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	struct mm_struct *mm = current->mm;
 	struct vm_unmapped_area_info info = {};
 	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
@@ -886,7 +886,7 @@ EXPORT_SYMBOL(mm_get_unmapped_area);
  * Returns: The first VMA within the provided range, %NULL otherwise.  Assumes
  * start_addr < end_addr.
  */
-struct vm_area_struct *find_vma_intersection(struct mm_struct *mm,
+struct mm_area *find_vma_intersection(struct mm_struct *mm,
 					     unsigned long start_addr,
 					     unsigned long end_addr)
 {
@@ -905,7 +905,7 @@ EXPORT_SYMBOL(find_vma_intersection);
  * Returns: The VMA associated with addr, or the next VMA.
  * May return %NULL in the case of no VMA at addr or above.
  */
-struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
+struct mm_area *find_vma(struct mm_struct *mm, unsigned long addr)
 {
 	unsigned long index = addr;
 
@@ -927,11 +927,11 @@ EXPORT_SYMBOL(find_vma);
  * Returns: The VMA associated with @addr, or the next vma.
  * May return %NULL in the case of no vma at addr or above.
  */
-struct vm_area_struct *
+struct mm_area *
 find_vma_prev(struct mm_struct *mm, unsigned long addr,
-			struct vm_area_struct **pprev)
+			struct mm_area **pprev)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, addr);
 
 	vma = vma_iter_load(&vmi);
@@ -958,14 +958,14 @@ static int __init cmdline_parse_stack_guard_gap(char *p)
 __setup("stack_guard_gap=", cmdline_parse_stack_guard_gap);
 
 #ifdef CONFIG_STACK_GROWSUP
-int expand_stack_locked(struct vm_area_struct *vma, unsigned long address)
+int expand_stack_locked(struct mm_area *vma, unsigned long address)
 {
 	return expand_upwards(vma, address);
 }
 
-struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm, unsigned long addr)
+struct mm_area *find_extend_vma_locked(struct mm_struct *mm, unsigned long addr)
 {
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 
 	addr &= PAGE_MASK;
 	vma = find_vma_prev(mm, addr, &prev);
@@ -980,14 +980,14 @@ struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm, unsigned lon
 	return prev;
 }
 #else
-int expand_stack_locked(struct vm_area_struct *vma, unsigned long address)
+int expand_stack_locked(struct mm_area *vma, unsigned long address)
 {
 	return expand_downwards(vma, address);
 }
 
-struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm, unsigned long addr)
+struct mm_area *find_extend_vma_locked(struct mm_struct *mm, unsigned long addr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long start;
 
 	addr &= PAGE_MASK;
@@ -1028,9 +1028,9 @@ struct vm_area_struct *find_extend_vma_locked(struct mm_struct *mm, unsigned lon
  * If no vma is found or it can't be expanded, it returns NULL and has
  * dropped the lock.
  */
-struct vm_area_struct *expand_stack(struct mm_struct *mm, unsigned long addr)
+struct mm_area *expand_stack(struct mm_struct *mm, unsigned long addr)
 {
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 
 	mmap_read_unlock(mm);
 	if (mmap_write_lock_killable(mm))
@@ -1093,7 +1093,7 @@ SYSCALL_DEFINE5(remap_file_pages, unsigned long, start, unsigned long, size,
 {
 
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long populate = 0;
 	unsigned long ret = -EINVAL;
 	struct file *file;
@@ -1172,7 +1172,7 @@ SYSCALL_DEFINE5(remap_file_pages, unsigned long, start, unsigned long, size,
 
 	if (start + size > vma->vm_end) {
 		VMA_ITERATOR(vmi, mm, vma->vm_end);
-		struct vm_area_struct *next, *prev = vma;
+		struct mm_area *next, *prev = vma;
 
 		for_each_vma_range(vmi, next, start + size) {
 			/* hole between vmas ? */
@@ -1210,7 +1210,7 @@ out:
 int vm_brk_flags(unsigned long addr, unsigned long request, unsigned long flags)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	unsigned long len;
 	int ret;
 	bool populate;
@@ -1258,7 +1258,7 @@ EXPORT_SYMBOL(vm_brk_flags);
 void exit_mmap(struct mm_struct *mm)
 {
 	struct mmu_gather tlb;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long nr_accounted = 0;
 	VMA_ITERATOR(vmi, mm, 0);
 	int count = 0;
@@ -1325,7 +1325,7 @@ destroy:
  * and into the inode's i_mmap tree.  If vm_file is non-NULL
  * then i_mmap_rwsem is taken here.
  */
-int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
+int insert_vm_struct(struct mm_struct *mm, struct mm_area *vma)
 {
 	unsigned long charged = vma_pages(vma);
 
@@ -1411,7 +1411,7 @@ static vm_fault_t special_mapping_fault(struct vm_fault *vmf);
  *
  * Having a close hook prevents vma merging regardless of flags.
  */
-static void special_mapping_close(struct vm_area_struct *vma)
+static void special_mapping_close(struct mm_area *vma)
 {
 	const struct vm_special_mapping *sm = vma->vm_private_data;
 
@@ -1419,12 +1419,12 @@ static void special_mapping_close(struct vm_area_struct *vma)
 		sm->close(sm, vma);
 }
 
-static const char *special_mapping_name(struct vm_area_struct *vma)
+static const char *special_mapping_name(struct mm_area *vma)
 {
 	return ((struct vm_special_mapping *)vma->vm_private_data)->name;
 }
 
-static int special_mapping_mremap(struct vm_area_struct *new_vma)
+static int special_mapping_mremap(struct mm_area *new_vma)
 {
 	struct vm_special_mapping *sm = new_vma->vm_private_data;
 
@@ -1437,7 +1437,7 @@ static int special_mapping_mremap(struct vm_area_struct *new_vma)
 	return 0;
 }
 
-static int special_mapping_split(struct vm_area_struct *vma, unsigned long addr)
+static int special_mapping_split(struct mm_area *vma, unsigned long addr)
 {
 	/*
 	 * Forbid splitting special mappings - kernel has expectations over
@@ -1460,7 +1460,7 @@ static const struct vm_operations_struct special_mapping_vmops = {
 
 static vm_fault_t special_mapping_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	pgoff_t pgoff;
 	struct page **pages;
 	struct vm_special_mapping *sm = vma->vm_private_data;
@@ -1483,14 +1483,14 @@ static vm_fault_t special_mapping_fault(struct vm_fault *vmf)
 	return VM_FAULT_SIGBUS;
 }
 
-static struct vm_area_struct *__install_special_mapping(
+static struct mm_area *__install_special_mapping(
 	struct mm_struct *mm,
 	unsigned long addr, unsigned long len,
 	unsigned long vm_flags, void *priv,
 	const struct vm_operations_struct *ops)
 {
 	int ret;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = vm_area_alloc(mm);
 	if (unlikely(vma == NULL))
@@ -1519,7 +1519,7 @@ out:
 	return ERR_PTR(ret);
 }
 
-bool vma_is_special_mapping(const struct vm_area_struct *vma,
+bool vma_is_special_mapping(const struct mm_area *vma,
 	const struct vm_special_mapping *sm)
 {
 	return vma->vm_private_data == sm &&
@@ -1535,7 +1535,7 @@ bool vma_is_special_mapping(const struct vm_area_struct *vma,
  * The array pointer and the pages it points to are assumed to stay alive
  * for as long as this mapping might exist.
  */
-struct vm_area_struct *_install_special_mapping(
+struct mm_area *_install_special_mapping(
 	struct mm_struct *mm,
 	unsigned long addr, unsigned long len,
 	unsigned long vm_flags, const struct vm_special_mapping *spec)
@@ -1725,7 +1725,7 @@ subsys_initcall(init_reserve_notifier);
  * This function is almost certainly NOT what you want for anything other than
  * early executable temporary stack relocation.
  */
-int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift)
+int relocate_vma_down(struct mm_area *vma, unsigned long shift)
 {
 	/*
 	 * The process proceeds as follows:
@@ -1746,7 +1746,7 @@ int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift)
 	unsigned long new_end = old_end - shift;
 	VMA_ITERATOR(vmi, mm, new_start);
 	VMG_STATE(vmg, mm, &vmi, new_start, old_end, 0, vma->vm_pgoff);
-	struct vm_area_struct *next;
+	struct mm_area *next;
 	struct mmu_gather tlb;
 	PAGETABLE_MOVE(pmc, vma, vma, old_start, new_start, length);
 
@@ -1824,7 +1824,7 @@ int relocate_vma_down(struct vm_area_struct *vma, unsigned long shift)
  * before downgrading it.
  */
 bool mmap_read_lock_maybe_expand(struct mm_struct *mm,
-				 struct vm_area_struct *new_vma,
+				 struct mm_area *new_vma,
 				 unsigned long addr, bool write)
 {
 	if (!write || addr >= new_vma->vm_start) {
@@ -1845,7 +1845,7 @@ bool mmap_read_lock_maybe_expand(struct mm_struct *mm,
 	return true;
 }
 #else
-bool mmap_read_lock_maybe_expand(struct mm_struct *mm, struct vm_area_struct *vma,
+bool mmap_read_lock_maybe_expand(struct mm_struct *mm, struct mm_area *vma,
 				 unsigned long addr, bool write)
 {
 	return false;

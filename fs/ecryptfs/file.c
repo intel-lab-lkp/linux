@@ -185,7 +185,7 @@ out:
 	return rc;
 }
 
-static int ecryptfs_mmap(struct file *file, struct vm_area_struct *vma)
+static int ecryptfs_mmap(struct file *file, struct mm_area *vma)
 {
 	struct file *lower_file = ecryptfs_file_to_lower(file);
 	/*

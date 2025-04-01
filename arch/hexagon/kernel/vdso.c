@@ -51,7 +51,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
 	int ret;
 	unsigned long vdso_base;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm = current->mm;
 	static struct vm_special_mapping vdso_mapping = {
 		.name = "[vdso]",
@@ -87,7 +87,7 @@ up_fail:
 	return ret;
 }
 
-const char *arch_vma_name(struct vm_area_struct *vma)
+const char *arch_vma_name(struct mm_area *vma)
 {
 	if (vma->vm_mm && vma->vm_start == (long)vma->vm_mm->context.vdso)
 		return "[vdso]";

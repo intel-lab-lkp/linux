@@ -2,7 +2,7 @@
 #ifndef _ASM_POWERPC_NOHASH_HUGETLB_E500_H
 #define _ASM_POWERPC_NOHASH_HUGETLB_E500_H
 
-void flush_hugetlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+void flush_hugetlb_page(struct mm_area *vma, unsigned long vmaddr);
 
 static inline int check_and_get_huge_psize(int shift)
 {

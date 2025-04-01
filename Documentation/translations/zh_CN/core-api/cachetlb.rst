@@ -51,7 +51,7 @@ cpu上对这个地址空间进行刷新。
 	这个接口被用来处理整个地址空间的页表操作，比如在fork和exec过程
 	中发生的事情。
 
-3) ``void flush_tlb_range(struct vm_area_struct *vma,
+3) ``void flush_tlb_range(struct mm_area *vma,
    unsigned long start, unsigned long end)``
 
 	这里我们要从TLB中刷新一个特定范围的（用户）虚拟地址转换。在运行后，
@@ -65,7 +65,7 @@ cpu上对这个地址空间进行刷新。
 	个页面大小的转换，而不是让内核为每个可能被修改的页表项调用
 	flush_tlb_page(见下文)。
 
-4) ``void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)``
+4) ``void flush_tlb_page(struct mm_area *vma, unsigned long addr)``
 
 	这一次我们需要从TLB中删除PAGE_SIZE大小的转换。‘vma’是Linux用来跟
 	踪进程的mmap区域的支持结构体，地址空间可以通过vma->vm_mm获得。另
@@ -78,7 +78,7 @@ cpu上对这个地址空间进行刷新。
 
 	这主要是在故障处理时使用。
 
-5) ``void update_mmu_cache(struct vm_area_struct *vma,
+5) ``void update_mmu_cache(struct mm_area *vma,
    unsigned long address, pte_t *ptep)``
 
 	在每个缺页异常结束时，这个程序被调用，以告诉体系结构特定的代码，在
@@ -134,7 +134,7 @@ HyperSparc cpu就是这样一个具有这种属性的cpu。
 
 	这个选项与flush_cache_mm分开，以允许对VIPT缓存进行一些优化。
 
-3) ``void flush_cache_range(struct vm_area_struct *vma,
+3) ``void flush_cache_range(struct mm_area *vma,
    unsigned long start, unsigned long end)``
 
 	在这里，我们要从缓存中刷新一个特定范围的（用户）虚拟地址。运行
@@ -147,7 +147,7 @@ HyperSparc cpu就是这样一个具有这种属性的cpu。
 	除多个页面大小的区域， 而不是让内核为每个可能被修改的页表项调
 	用 flush_cache_page (见下文)。
 
-4) ``void flush_cache_page(struct vm_area_struct *vma, unsigned long addr, unsigned long pfn)``
+4) ``void flush_cache_page(struct mm_area *vma, unsigned long addr, unsigned long pfn)``
 
 	这一次我们需要从缓存中删除一个PAGE_SIZE大小的区域。“vma”是
 	Linux用来跟踪进程的mmap区域的支持结构体，地址空间可以通过
@@ -284,9 +284,9 @@ HyperSparc cpu就是这样一个具有这种属性的cpu。
 	该函数的调用情形与flush_dcache_page()相同。它允许架构针对刷新整个
 	folio页面进行优化，而不是一次刷新一页。
 
-  ``void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+  ``void copy_to_user_page(struct mm_area *vma, struct page *page,
   unsigned long user_vaddr, void *dst, void *src, int len)``
-  ``void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+  ``void copy_from_user_page(struct mm_area *vma, struct page *page,
   unsigned long user_vaddr, void *dst, void *src, int len)``
 
 	当内核需要复制任意的数据进出任意的用户页时（比如ptrace()），它将使
@@ -296,7 +296,7 @@ HyperSparc cpu就是这样一个具有这种属性的cpu。
 	处理器的指令缓存没有对cpu存储进行窥探，那么你很可能需要为
 	copy_to_user_page()刷新指令缓存。
 
-  ``void flush_anon_page(struct vm_area_struct *vma, struct page *page,
+  ``void flush_anon_page(struct mm_area *vma, struct page *page,
   unsigned long vmaddr)``
 
 	当内核需要访问一个匿名页的内容时，它会调用这个函数（目前只有
@@ -310,7 +310,7 @@ HyperSparc cpu就是这样一个具有这种属性的cpu。
 
 	如果icache不对存储进行窥探，那么这个程序将需要对其进行刷新。
 
-  ``void flush_icache_page(struct vm_area_struct *vma, struct page *page)``
+  ``void flush_icache_page(struct mm_area *vma, struct page *page)``
 
 	flush_icache_page的所有功能都可以在flush_dcache_page和update_mmu_cache
 	中实现。在未来，我们希望能够完全删除这个接口。

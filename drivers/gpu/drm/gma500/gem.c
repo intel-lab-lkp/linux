@@ -253,7 +253,7 @@ err_drm_gem_object_put:
  */
 static vm_fault_t psb_gem_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *obj;
 	struct psb_gem_object *pobj;
 	int err;

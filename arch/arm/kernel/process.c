@@ -306,7 +306,7 @@ unsigned long __get_wchan(struct task_struct *p)
  * atomic helpers. Insert it into the gate_vma so that it is visible
  * through ptrace and /proc/<pid>/mem.
  */
-static struct vm_area_struct gate_vma;
+static struct mm_area gate_vma;
 
 static int __init gate_vma_init(void)
 {
@@ -319,7 +319,7 @@ static int __init gate_vma_init(void)
 }
 arch_initcall(gate_vma_init);
 
-struct vm_area_struct *get_gate_vma(struct mm_struct *mm)
+struct mm_area *get_gate_vma(struct mm_struct *mm)
 {
 	return &gate_vma;
 }
@@ -338,7 +338,7 @@ int in_gate_area_no_mm(unsigned long addr)
 #define is_gate_vma(vma)	0
 #endif
 
-const char *arch_vma_name(struct vm_area_struct *vma)
+const char *arch_vma_name(struct mm_area *vma)
 {
 	return is_gate_vma(vma) ? "[vectors]" : NULL;
 }
@@ -380,7 +380,7 @@ static struct page *signal_page;
 extern struct page *get_signal_page(void);
 
 static int sigpage_mremap(const struct vm_special_mapping *sm,
-		struct vm_area_struct *new_vma)
+		struct mm_area *new_vma)
 {
 	current->mm->context.sigpage = new_vma->vm_start;
 	return 0;
@@ -395,7 +395,7 @@ static const struct vm_special_mapping sigpage_mapping = {
 int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long npages;
 	unsigned long addr;
 	unsigned long hint;

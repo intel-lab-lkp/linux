@@ -1823,7 +1823,7 @@ static int tcmu_irqcontrol(struct uio_info *info, s32 irq_on)
  * mmap code from uio.c. Copied here because we want to hook mmap()
  * and this stuff must come along.
  */
-static int tcmu_find_mem_index(struct vm_area_struct *vma)
+static int tcmu_find_mem_index(struct mm_area *vma)
 {
 	struct tcmu_dev *udev = vma->vm_private_data;
 	struct uio_info *info = &udev->uio_info;
@@ -1860,7 +1860,7 @@ static struct page *tcmu_try_get_data_page(struct tcmu_dev *udev, uint32_t dpi)
 	return NULL;
 }
 
-static void tcmu_vma_open(struct vm_area_struct *vma)
+static void tcmu_vma_open(struct mm_area *vma)
 {
 	struct tcmu_dev *udev = vma->vm_private_data;
 
@@ -1869,7 +1869,7 @@ static void tcmu_vma_open(struct vm_area_struct *vma)
 	kref_get(&udev->kref);
 }
 
-static void tcmu_vma_close(struct vm_area_struct *vma)
+static void tcmu_vma_close(struct mm_area *vma)
 {
 	struct tcmu_dev *udev = vma->vm_private_data;
 
@@ -1924,7 +1924,7 @@ static const struct vm_operations_struct tcmu_vm_ops = {
 	.fault = tcmu_vma_fault,
 };
 
-static int tcmu_mmap(struct uio_info *info, struct vm_area_struct *vma)
+static int tcmu_mmap(struct uio_info *info, struct mm_area *vma)
 {
 	struct tcmu_dev *udev = container_of(info, struct tcmu_dev, uio_info);
 

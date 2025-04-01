@@ -604,7 +604,7 @@ static __poll_t s3c_camif_poll(struct file *file,
 	return ret;
 }
 
-static int s3c_camif_mmap(struct file *file, struct vm_area_struct *vma)
+static int s3c_camif_mmap(struct file *file, struct mm_area *vma)
 {
 	struct camif_vp *vp = video_drvdata(file);
 	int ret;

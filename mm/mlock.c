@@ -319,7 +319,7 @@ static inline unsigned int folio_mlock_step(struct folio *folio,
 }
 
 static inline bool allow_mlock_munlock(struct folio *folio,
-		struct vm_area_struct *vma, unsigned long start,
+		struct mm_area *vma, unsigned long start,
 		unsigned long end, unsigned int step)
 {
 	/*
@@ -353,7 +353,7 @@ static int mlock_pte_range(pmd_t *pmd, unsigned long addr,
 			   unsigned long end, struct mm_walk *walk)
 
 {
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	spinlock_t *ptl;
 	pte_t *start_pte, *pte;
 	pte_t ptent;
@@ -422,7 +422,7 @@ out:
  * Called for mlock(), mlock2() and mlockall(), to set @vma VM_LOCKED;
  * called for munlock() and munlockall(), to clear VM_LOCKED from @vma.
  */
-static void mlock_vma_pages_range(struct vm_area_struct *vma,
+static void mlock_vma_pages_range(struct mm_area *vma,
 	unsigned long start, unsigned long end, vm_flags_t newflags)
 {
 	static const struct mm_walk_ops mlock_walk_ops = {
@@ -465,8 +465,8 @@ static void mlock_vma_pages_range(struct vm_area_struct *vma,
  *
  * For vmas that pass the filters, merge/split as appropriate.
  */
-static int mlock_fixup(struct vma_iterator *vmi, struct vm_area_struct *vma,
-	       struct vm_area_struct **prev, unsigned long start,
+static int mlock_fixup(struct vma_iterator *vmi, struct mm_area *vma,
+	       struct mm_area **prev, unsigned long start,
 	       unsigned long end, vm_flags_t newflags)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -517,7 +517,7 @@ static int apply_vma_lock_flags(unsigned long start, size_t len,
 				vm_flags_t flags)
 {
 	unsigned long nstart, end, tmp;
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	VMA_ITERATOR(vmi, current->mm, start);
 
 	VM_BUG_ON(offset_in_page(start));
@@ -573,7 +573,7 @@ static int apply_vma_lock_flags(unsigned long start, size_t len,
 static unsigned long count_mm_mlocked_page_nr(struct mm_struct *mm,
 		unsigned long start, size_t len)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long count = 0;
 	unsigned long end;
 	VMA_ITERATOR(vmi, mm, start);
@@ -706,7 +706,7 @@ SYSCALL_DEFINE2(munlock, unsigned long, start, size_t, len)
 static int apply_mlockall_flags(int flags)
 {
 	VMA_ITERATOR(vmi, current->mm, 0);
-	struct vm_area_struct *vma, *prev = NULL;
+	struct mm_area *vma, *prev = NULL;
 	vm_flags_t to_add = 0;
 
 	current->mm->def_flags &= ~VM_LOCKED_MASK;

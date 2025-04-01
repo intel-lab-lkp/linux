@@ -72,7 +72,7 @@ bad_area:
 
 void do_page_fault(unsigned long address, struct pt_regs *regs)
 {
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
 	int sig, si_code = SEGV_MAPERR;

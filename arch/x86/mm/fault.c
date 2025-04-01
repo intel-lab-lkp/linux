@@ -836,7 +836,7 @@ bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 static void
 __bad_area(struct pt_regs *regs, unsigned long error_code,
 	   unsigned long address, struct mm_struct *mm,
-	   struct vm_area_struct *vma, u32 pkey, int si_code)
+	   struct mm_area *vma, u32 pkey, int si_code)
 {
 	/*
 	 * Something tried to access memory that isn't in our memory map..
@@ -851,7 +851,7 @@ __bad_area(struct pt_regs *regs, unsigned long error_code,
 }
 
 static inline bool bad_area_access_from_pkeys(unsigned long error_code,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	/* This code is always called on the current mm */
 	bool foreign = false;
@@ -870,7 +870,7 @@ static inline bool bad_area_access_from_pkeys(unsigned long error_code,
 static noinline void
 bad_area_access_error(struct pt_regs *regs, unsigned long error_code,
 		      unsigned long address, struct mm_struct *mm,
-		      struct vm_area_struct *vma)
+		      struct mm_area *vma)
 {
 	/*
 	 * This OSPKE check is not strictly necessary at runtime.
@@ -1049,7 +1049,7 @@ NOKPROBE_SYMBOL(spurious_kernel_fault);
 int show_unhandled_signals = 1;
 
 static inline int
-access_error(unsigned long error_code, struct vm_area_struct *vma)
+access_error(unsigned long error_code, struct mm_area *vma)
 {
 	/* This is only called for the current mm, so: */
 	bool foreign = false;
@@ -1211,7 +1211,7 @@ void do_user_addr_fault(struct pt_regs *regs,
 			unsigned long error_code,
 			unsigned long address)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk;
 	struct mm_struct *mm;
 	vm_fault_t fault;

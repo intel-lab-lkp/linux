@@ -23,7 +23,7 @@
  * processors must be induced to flush the copies in their local TLBs,
  * but Hexagon thread-based virtual processors share the same MMU.
  */
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void flush_tlb_range(struct mm_area *vma, unsigned long start,
 			unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -64,7 +64,7 @@ void flush_tlb_mm(struct mm_struct *mm)
 /*
  * Flush TLB state associated with a page of a vma.
  */
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long vaddr)
+void flush_tlb_page(struct mm_area *vma, unsigned long vaddr)
 {
 	struct mm_struct *mm = vma->vm_mm;
 

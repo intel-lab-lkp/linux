@@ -347,7 +347,7 @@ out:
 /*
  * ntfs_file_mmap - file_operations::mmap
  */
-static int ntfs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int ntfs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	struct inode *inode = file_inode(file);
 	struct ntfs_inode *ni = ntfs_i(inode);

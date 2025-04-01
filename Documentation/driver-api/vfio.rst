@@ -419,7 +419,7 @@ similar to a file operations structure::
 			 size_t count, loff_t *size);
 		long	(*ioctl)(struct vfio_device *vdev, unsigned int cmd,
 				 unsigned long arg);
-		int	(*mmap)(struct vfio_device *vdev, struct vm_area_struct *vma);
+		int	(*mmap)(struct vfio_device *vdev, struct mm_area *vma);
 		void	(*request)(struct vfio_device *vdev, unsigned int count);
 		int	(*match)(struct vfio_device *vdev, char *buf);
 		void	(*dma_unmap)(struct vfio_device *vdev, u64 iova, u64 length);

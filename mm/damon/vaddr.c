@@ -121,7 +121,7 @@ static int __damon_va_three_regions(struct mm_struct *mm,
 {
 	struct damon_addr_range first_gap = {0}, second_gap = {0};
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *vma, *prev = NULL;
+	struct mm_area *vma, *prev = NULL;
 	unsigned long start;
 
 	/*
@@ -341,7 +341,7 @@ out:
 
 #ifdef CONFIG_HUGETLB_PAGE
 static void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
-				struct vm_area_struct *vma, unsigned long addr)
+				struct mm_area *vma, unsigned long addr)
 {
 	bool referenced = false;
 	pte_t entry = huge_ptep_get(mm, addr, pte);

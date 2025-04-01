@@ -1201,7 +1201,7 @@ err_exit:
 	return ret;
 }
 
-static int bcm_vk_mmap(struct file *file, struct vm_area_struct *vma)
+static int bcm_vk_mmap(struct file *file, struct mm_area *vma)
 {
 	struct bcm_vk_ctx *ctx = file->private_data;
 	struct bcm_vk *vk = container_of(ctx->miscdev, struct bcm_vk, miscdev);

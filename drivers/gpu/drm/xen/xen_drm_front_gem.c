@@ -58,7 +58,7 @@ static void gem_free_pages_array(struct xen_gem_object *xen_obj)
 }
 
 static int xen_drm_front_gem_object_mmap(struct drm_gem_object *gem_obj,
-					 struct vm_area_struct *vma)
+					 struct mm_area *vma)
 {
 	struct xen_gem_object *xen_obj = to_xen_gem_obj(gem_obj);
 	int ret;

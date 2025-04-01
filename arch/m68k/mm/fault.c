@@ -71,7 +71,7 @@ int do_page_fault(struct pt_regs *regs, unsigned long address,
 			      unsigned long error_code)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct * vma;
+	struct mm_area * vma;
 	vm_fault_t fault;
 	unsigned int flags = FAULT_FLAG_DEFAULT;
 

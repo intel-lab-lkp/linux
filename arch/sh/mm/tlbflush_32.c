@@ -12,7 +12,7 @@
 #include <asm/mmu_context.h>
 #include <asm/tlbflush.h>
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	unsigned int cpu = smp_processor_id();
 
@@ -36,7 +36,7 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 	}
 }
 
-void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_tlb_range(struct mm_area *vma, unsigned long start,
 			   unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;

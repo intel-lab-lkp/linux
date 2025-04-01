@@ -61,7 +61,7 @@ static int omap_gem_dmabuf_end_cpu_access(struct dma_buf *buffer,
 }
 
 static int omap_gem_dmabuf_mmap(struct dma_buf *buffer,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	struct drm_gem_object *obj = buffer->priv;
 

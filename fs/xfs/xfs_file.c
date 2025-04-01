@@ -1846,7 +1846,7 @@ static const struct vm_operations_struct xfs_file_vm_ops = {
 STATIC int
 xfs_file_mmap(
 	struct file		*file,
-	struct vm_area_struct	*vma)
+	struct mm_area	*vma)
 {
 	struct inode		*inode = file_inode(file);
 	struct xfs_buftarg	*target = xfs_inode_buftarg(XFS_I(inode));

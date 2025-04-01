@@ -15,7 +15,7 @@
 
 static unsigned char __HOSTLINK__[4 * PAGE_SIZE] __aligned(PAGE_SIZE);
 
-static int arc_hl_mmap(struct file *fp, struct vm_area_struct *vma)
+static int arc_hl_mmap(struct file *fp, struct mm_area *vma)
 {
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 

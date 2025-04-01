@@ -4,7 +4,7 @@
  */
 #include <linux/dma-map-ops.h>
 
-static int dma_dummy_mmap(struct device *dev, struct vm_area_struct *vma,
+static int dma_dummy_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs)
 {

@@ -3668,7 +3668,7 @@ static const struct vm_operations_struct snd_pcm_vm_ops_status =
 };
 
 static int snd_pcm_mmap_status(struct snd_pcm_substream *substream, struct file *file,
-			       struct vm_area_struct *area)
+			       struct mm_area *area)
 {
 	long size;
 	if (!(area->vm_flags & VM_READ))
@@ -3706,7 +3706,7 @@ static const struct vm_operations_struct snd_pcm_vm_ops_control =
 };
 
 static int snd_pcm_mmap_control(struct snd_pcm_substream *substream, struct file *file,
-				struct vm_area_struct *area)
+				struct mm_area *area)
 {
 	long size;
 	if (!(area->vm_flags & VM_READ))
@@ -3762,12 +3762,12 @@ static bool pcm_control_mmap_allowed(struct snd_pcm_file *pcm_file)
 #define pcm_control_mmap_allowed(pcm_file)	false
 
 static int snd_pcm_mmap_status(struct snd_pcm_substream *substream, struct file *file,
-			       struct vm_area_struct *area)
+			       struct mm_area *area)
 {
 	return -ENXIO;
 }
 static int snd_pcm_mmap_control(struct snd_pcm_substream *substream, struct file *file,
-				struct vm_area_struct *area)
+				struct mm_area *area)
 {
 	return -ENXIO;
 }
@@ -3776,7 +3776,7 @@ static int snd_pcm_mmap_control(struct snd_pcm_substream *substream, struct file
 /*
  * snd_pcm_mmap_data_open - increase the mmap counter
  */
-static void snd_pcm_mmap_data_open(struct vm_area_struct *area)
+static void snd_pcm_mmap_data_open(struct mm_area *area)
 {
 	struct snd_pcm_substream *substream = area->vm_private_data;
 
@@ -3786,7 +3786,7 @@ static void snd_pcm_mmap_data_open(struct vm_area_struct *area)
 /*
  * snd_pcm_mmap_data_close - decrease the mmap counter
  */
-static void snd_pcm_mmap_data_close(struct vm_area_struct *area)
+static void snd_pcm_mmap_data_close(struct mm_area *area)
 {
 	struct snd_pcm_substream *substream = area->vm_private_data;
 
@@ -3852,7 +3852,7 @@ static const struct vm_operations_struct snd_pcm_vm_ops_data_fault = {
  * Return: zero if successful, or a negative error code
  */
 int snd_pcm_lib_default_mmap(struct snd_pcm_substream *substream,
-			     struct vm_area_struct *area)
+			     struct mm_area *area)
 {
 	vm_flags_set(area, VM_DONTEXPAND | VM_DONTDUMP);
 	if (!substream->ops->page &&
@@ -3880,7 +3880,7 @@ EXPORT_SYMBOL_GPL(snd_pcm_lib_default_mmap);
  * Return: zero if successful, or a negative error code
  */
 int snd_pcm_lib_mmap_iomem(struct snd_pcm_substream *substream,
-			   struct vm_area_struct *area)
+			   struct mm_area *area)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 
@@ -3894,7 +3894,7 @@ EXPORT_SYMBOL(snd_pcm_lib_mmap_iomem);
  * mmap DMA buffer
  */
 int snd_pcm_mmap_data(struct snd_pcm_substream *substream, struct file *file,
-		      struct vm_area_struct *area)
+		      struct mm_area *area)
 {
 	struct snd_pcm_runtime *runtime;
 	long size;
@@ -3937,7 +3937,7 @@ int snd_pcm_mmap_data(struct snd_pcm_substream *substream, struct file *file,
 }
 EXPORT_SYMBOL(snd_pcm_mmap_data);
 
-static int snd_pcm_mmap(struct file *file, struct vm_area_struct *area)
+static int snd_pcm_mmap(struct file *file, struct mm_area *area)
 {
 	struct snd_pcm_file * pcm_file;
 	struct snd_pcm_substream *substream;	

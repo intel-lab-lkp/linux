@@ -896,7 +896,7 @@ static int __igt_mmap(struct drm_i915_private *i915,
 		      struct drm_i915_gem_object *obj,
 		      enum i915_mmap_type type)
 {
-	struct vm_area_struct *area;
+	struct mm_area *area;
 	unsigned long addr;
 	int err, i;
 	u64 offset;
@@ -924,7 +924,7 @@ static int __igt_mmap(struct drm_i915_private *i915,
 	area = vma_lookup(current->mm, addr);
 	mmap_read_unlock(current->mm);
 	if (!area) {
-		pr_err("%s: Did not create a vm_area_struct for the mmap\n",
+		pr_err("%s: Did not create a mm_area for the mmap\n",
 		       obj->mm.region->name);
 		err = -EINVAL;
 		goto out_unmap;
@@ -1096,7 +1096,7 @@ static int ___igt_mmap_migrate(struct drm_i915_private *i915,
 			       unsigned long addr,
 			       bool unfaultable)
 {
-	struct vm_area_struct *area;
+	struct mm_area *area;
 	int err = 0, i;
 
 	pr_info("igt_mmap(%s, %d) @ %lx\n",
@@ -1106,7 +1106,7 @@ static int ___igt_mmap_migrate(struct drm_i915_private *i915,
 	area = vma_lookup(current->mm, addr);
 	mmap_read_unlock(current->mm);
 	if (!area) {
-		pr_err("%s: Did not create a vm_area_struct for the mmap\n",
+		pr_err("%s: Did not create a mm_area for the mmap\n",
 		       obj->mm.region->name);
 		err = -EINVAL;
 		goto out_unmap;

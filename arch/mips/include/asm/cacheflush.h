@@ -47,9 +47,9 @@ extern void (*flush_cache_all)(void);
 extern void (*__flush_cache_all)(void);
 extern void (*flush_cache_mm)(struct mm_struct *mm);
 #define flush_cache_dup_mm(mm)	do { (void) (mm); } while (0)
-extern void (*flush_cache_range)(struct vm_area_struct *vma,
+extern void (*flush_cache_range)(struct mm_area *vma,
 	unsigned long start, unsigned long end);
-extern void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page, unsigned long pfn);
+extern void (*flush_cache_page)(struct mm_area *vma, unsigned long page, unsigned long pfn);
 extern void __flush_dcache_pages(struct page *page, unsigned int nr);
 
 #define ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE 1
@@ -75,7 +75,7 @@ static inline void flush_dcache_page(struct page *page)
 
 #define ARCH_HAS_FLUSH_ANON_PAGE
 extern void __flush_anon_page(struct page *, unsigned long);
-static inline void flush_anon_page(struct vm_area_struct *vma,
+static inline void flush_anon_page(struct mm_area *vma,
 	struct page *page, unsigned long vmaddr)
 {
 	if (cpu_has_dc_aliases && PageAnon(page))
@@ -107,11 +107,11 @@ static inline void flush_cache_vunmap(unsigned long start, unsigned long end)
 		__flush_cache_vunmap();
 }
 
-extern void copy_to_user_page(struct vm_area_struct *vma,
+extern void copy_to_user_page(struct mm_area *vma,
 	struct page *page, unsigned long vaddr, void *dst, const void *src,
 	unsigned long len);
 
-extern void copy_from_user_page(struct vm_area_struct *vma,
+extern void copy_from_user_page(struct mm_area *vma,
 	struct page *page, unsigned long vaddr, void *dst, const void *src,
 	unsigned long len);
 

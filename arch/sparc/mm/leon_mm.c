@@ -185,7 +185,7 @@ void leon_flush_dcache_all(void)
 			     "i"(ASI_LEON_DFLUSH) : "memory");
 }
 
-void leon_flush_pcache_all(struct vm_area_struct *vma, unsigned long page)
+void leon_flush_pcache_all(struct mm_area *vma, unsigned long page)
 {
 	if (vma->vm_flags & VM_EXEC)
 		leon_flush_icache_all();
@@ -273,12 +273,12 @@ static void leon_flush_cache_mm(struct mm_struct *mm)
 	leon_flush_cache_all();
 }
 
-static void leon_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
+static void leon_flush_cache_page(struct mm_area *vma, unsigned long page)
 {
 	leon_flush_pcache_all(vma, page);
 }
 
-static void leon_flush_cache_range(struct vm_area_struct *vma,
+static void leon_flush_cache_range(struct mm_area *vma,
 				   unsigned long start,
 				   unsigned long end)
 {
@@ -290,13 +290,13 @@ static void leon_flush_tlb_mm(struct mm_struct *mm)
 	leon_flush_tlb_all();
 }
 
-static void leon_flush_tlb_page(struct vm_area_struct *vma,
+static void leon_flush_tlb_page(struct mm_area *vma,
 				unsigned long page)
 {
 	leon_flush_tlb_all();
 }
 
-static void leon_flush_tlb_range(struct vm_area_struct *vma,
+static void leon_flush_tlb_range(struct mm_area *vma,
 				 unsigned long start,
 				 unsigned long end)
 {

@@ -15,7 +15,7 @@ Structure
 The example shows an eBPF program that can be attached to the ``file_mprotect``
 LSM hook:
 
-.. c:function:: int file_mprotect(struct vm_area_struct *vma, unsigned long reqprot, unsigned long prot);
+.. c:function:: int file_mprotect(struct mm_area *vma, unsigned long reqprot, unsigned long prot);
 
 Other LSM hooks which can be instrumented can be found in
 ``security/security.c``.
@@ -31,7 +31,7 @@ the fields that need to be accessed.
 		unsigned long start_brk, brk, start_stack;
 	} __attribute__((preserve_access_index));
 
-	struct vm_area_struct {
+	struct mm_area {
 		unsigned long start_brk, brk, start_stack;
 		unsigned long vm_start, vm_end;
 		struct mm_struct *vm_mm;
@@ -65,7 +65,7 @@ example:
 .. code-block:: c
 
 	SEC("lsm/file_mprotect")
-	int BPF_PROG(mprotect_audit, struct vm_area_struct *vma,
+	int BPF_PROG(mprotect_audit, struct mm_area *vma,
 		     unsigned long reqprot, unsigned long prot, int ret)
 	{
 		/* ret is the return value from the previous BPF program

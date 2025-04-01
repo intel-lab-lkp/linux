@@ -32,7 +32,7 @@ void iommu_dma_unmap_sg(struct device *dev, struct scatterlist *sg, int nents,
 		enum dma_data_direction dir, unsigned long attrs);
 void *iommu_dma_alloc(struct device *dev, size_t size, dma_addr_t *handle,
 		gfp_t gfp, unsigned long attrs);
-int iommu_dma_mmap(struct device *dev, struct vm_area_struct *vma,
+int iommu_dma_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
 int iommu_dma_get_sgtable(struct device *dev, struct sg_table *sgt,
@@ -55,7 +55,7 @@ void *iommu_dma_vmap_noncontiguous(struct device *dev, size_t size,
 		struct sg_table *sgt);
 #define iommu_dma_vunmap_noncontiguous(dev, vaddr) \
 	vunmap(vaddr);
-int iommu_dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
+int iommu_dma_mmap_noncontiguous(struct device *dev, struct mm_area *vma,
 		size_t size, struct sg_table *sgt);
 void iommu_dma_sync_single_for_cpu(struct device *dev, dma_addr_t dma_handle,
 		size_t size, enum dma_data_direction dir);

@@ -115,7 +115,7 @@ void flush_cache_all_hexagon(void)
 	mb();
 }
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		       unsigned long vaddr, void *dst, void *src, int len)
 {
 	memcpy(dst, src, len);

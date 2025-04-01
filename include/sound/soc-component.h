@@ -53,7 +53,7 @@ struct snd_compress_ops {
 		    size_t count);
 	int (*mmap)(struct snd_soc_component *component,
 		    struct snd_compr_stream *stream,
-		    struct vm_area_struct *vma);
+		    struct mm_area *vma);
 	int (*ack)(struct snd_soc_component *component,
 		   struct snd_compr_stream *stream, size_t bytes);
 	int (*get_caps)(struct snd_soc_component *component,
@@ -146,7 +146,7 @@ struct snd_soc_component_driver {
 			     unsigned long offset);
 	int (*mmap)(struct snd_soc_component *component,
 		    struct snd_pcm_substream *substream,
-		    struct vm_area_struct *vma);
+		    struct mm_area *vma);
 	int (*ack)(struct snd_soc_component *component,
 		   struct snd_pcm_substream *substream);
 	snd_pcm_sframes_t (*delay)(struct snd_soc_component *component,
@@ -517,7 +517,7 @@ int snd_soc_pcm_component_copy(struct snd_pcm_substream *substream,
 struct page *snd_soc_pcm_component_page(struct snd_pcm_substream *substream,
 					unsigned long offset);
 int snd_soc_pcm_component_mmap(struct snd_pcm_substream *substream,
-			       struct vm_area_struct *vma);
+			       struct mm_area *vma);
 int snd_soc_pcm_component_new(struct snd_soc_pcm_runtime *rtd);
 void snd_soc_pcm_component_free(struct snd_soc_pcm_runtime *rtd);
 int snd_soc_pcm_component_prepare(struct snd_pcm_substream *substream);

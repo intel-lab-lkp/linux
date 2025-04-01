@@ -979,17 +979,17 @@ unsigned long find_ecache_flush_span(unsigned long size);
 struct seq_file;
 void mmu_info(struct seq_file *);
 
-struct vm_area_struct;
-void update_mmu_cache_range(struct vm_fault *, struct vm_area_struct *,
+struct mm_area;
+void update_mmu_cache_range(struct vm_fault *, struct mm_area *,
 		unsigned long addr, pte_t *ptep, unsigned int nr);
 #define update_mmu_cache(vma, addr, ptep) \
 	update_mmu_cache_range(NULL, vma, addr, ptep, 1)
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-void update_mmu_cache_pmd(struct vm_area_struct *vma, unsigned long addr,
+void update_mmu_cache_pmd(struct mm_area *vma, unsigned long addr,
 			  pmd_t *pmd);
 
 #define __HAVE_ARCH_PMDP_INVALIDATE
-extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
+extern pmd_t pmdp_invalidate(struct mm_area *vma, unsigned long address,
 			    pmd_t *pmdp);
 
 #define __HAVE_ARCH_PGTABLE_DEPOSIT
@@ -1050,18 +1050,18 @@ int page_in_phys_avail(unsigned long paddr);
 #define GET_IOSPACE(pfn)		(pfn >> (BITS_PER_LONG - 4))
 #define GET_PFN(pfn)			(pfn & 0x0fffffffffffffffUL)
 
-int remap_pfn_range(struct vm_area_struct *, unsigned long, unsigned long,
+int remap_pfn_range(struct mm_area *, unsigned long, unsigned long,
 		    unsigned long, pgprot_t);
 
-void adi_restore_tags(struct mm_struct *mm, struct vm_area_struct *vma,
+void adi_restore_tags(struct mm_struct *mm, struct mm_area *vma,
 		      unsigned long addr, pte_t pte);
 
-int adi_save_tags(struct mm_struct *mm, struct vm_area_struct *vma,
+int adi_save_tags(struct mm_struct *mm, struct mm_area *vma,
 		  unsigned long addr, pte_t oldpte);
 
 #define __HAVE_ARCH_DO_SWAP_PAGE
 static inline void arch_do_swap_page(struct mm_struct *mm,
-				     struct vm_area_struct *vma,
+				     struct mm_area *vma,
 				     unsigned long addr,
 				     pte_t pte, pte_t oldpte)
 {
@@ -1078,7 +1078,7 @@ static inline void arch_do_swap_page(struct mm_struct *mm,
 
 #define __HAVE_ARCH_UNMAP_ONE
 static inline int arch_unmap_one(struct mm_struct *mm,
-				 struct vm_area_struct *vma,
+				 struct mm_area *vma,
 				 unsigned long addr, pte_t oldpte)
 {
 	if (adi_state.enabled && (pte_val(oldpte) & _PAGE_MCD_4V))
@@ -1086,7 +1086,7 @@ static inline int arch_unmap_one(struct mm_struct *mm,
 	return 0;
 }
 
-static inline int io_remap_pfn_range(struct vm_area_struct *vma,
+static inline int io_remap_pfn_range(struct mm_area *vma,
 				     unsigned long from, unsigned long pfn,
 				     unsigned long size, pgprot_t prot)
 {

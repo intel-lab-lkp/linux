@@ -1978,7 +1978,7 @@ void efa_mmap_free(struct rdma_user_mmap_entry *rdma_entry)
 }
 
 static int __efa_mmap(struct efa_dev *dev, struct efa_ucontext *ucontext,
-		      struct vm_area_struct *vma)
+		      struct mm_area *vma)
 {
 	struct rdma_user_mmap_entry *rdma_entry;
 	struct efa_user_mmap_entry *entry;
@@ -2041,7 +2041,7 @@ static int __efa_mmap(struct efa_dev *dev, struct efa_ucontext *ucontext,
 }
 
 int efa_mmap(struct ib_ucontext *ibucontext,
-	     struct vm_area_struct *vma)
+	     struct mm_area *vma)
 {
 	struct efa_ucontext *ucontext = to_eucontext(ibucontext);
 	struct efa_dev *dev = to_edev(ibucontext->device);

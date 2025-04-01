@@ -24,10 +24,10 @@ static inline void local_flush_tlb_all(void)
 	{ __tlbia(); }
 static inline void local_flush_tlb_mm(struct mm_struct *mm)
 	{ __tlbia(); }
-static inline void local_flush_tlb_page(struct vm_area_struct *vma,
+static inline void local_flush_tlb_page(struct mm_area *vma,
 				unsigned long vmaddr)
 	{ __tlbie(vmaddr); }
-static inline void local_flush_tlb_range(struct vm_area_struct *vma,
+static inline void local_flush_tlb_range(struct mm_area *vma,
 		unsigned long start, unsigned long end)
 	{ __tlbia(); }
 

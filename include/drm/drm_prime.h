@@ -89,8 +89,8 @@ void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 int drm_gem_dmabuf_vmap(struct dma_buf *dma_buf, struct iosys_map *map);
 void drm_gem_dmabuf_vunmap(struct dma_buf *dma_buf, struct iosys_map *map);
 
-int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
-int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma);
+int drm_gem_prime_mmap(struct drm_gem_object *obj, struct mm_area *vma);
+int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct mm_area *vma);
 
 struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 				       struct page **pages, unsigned int nr_pages);

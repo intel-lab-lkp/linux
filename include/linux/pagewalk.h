@@ -120,7 +120,7 @@ struct mm_walk {
 	const struct mm_walk_ops *ops;
 	struct mm_struct *mm;
 	pgd_t *pgd;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	enum page_walk_action action;
 	bool no_vma;
 	void *private;
@@ -133,10 +133,10 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 			  unsigned long end, const struct mm_walk_ops *ops,
 			  pgd_t *pgd,
 			  void *private);
-int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
+int walk_page_range_vma(struct mm_area *vma, unsigned long start,
 			unsigned long end, const struct mm_walk_ops *ops,
 			void *private);
-int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
+int walk_page_vma(struct mm_area *vma, const struct mm_walk_ops *ops,
 		void *private);
 int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
 		      pgoff_t nr, const struct mm_walk_ops *ops,
@@ -185,12 +185,12 @@ struct folio_walk {
 		pmd_t pmd;
 	};
 	/* private */
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	spinlock_t *ptl;
 };
 
 struct folio *folio_walk_start(struct folio_walk *fw,
-		struct vm_area_struct *vma, unsigned long addr,
+		struct mm_area *vma, unsigned long addr,
 		folio_walk_flags_t flags);
 
 #define folio_walk_end(__fw, __vma) do { \

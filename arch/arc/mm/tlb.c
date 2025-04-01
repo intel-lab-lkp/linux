@@ -205,7 +205,7 @@ noinline void local_flush_tlb_mm(struct mm_struct *mm)
  *      without doing any explicit Shootdown
  *  -In case of kernel Flush, entry has to be shot down explicitly
  */
-void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_tlb_range(struct mm_area *vma, unsigned long start,
 			   unsigned long end)
 {
 	const unsigned int cpu = smp_processor_id();
@@ -275,7 +275,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
  * NOTE One TLB entry contains translation for single PAGE
  */
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	const unsigned int cpu = smp_processor_id();
 	unsigned long flags;
@@ -295,7 +295,7 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 #ifdef CONFIG_SMP
 
 struct tlb_args {
-	struct vm_area_struct *ta_vma;
+	struct mm_area *ta_vma;
 	unsigned long ta_start;
 	unsigned long ta_end;
 };
@@ -341,7 +341,7 @@ void flush_tlb_mm(struct mm_struct *mm)
 			 mm, 1);
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
+void flush_tlb_page(struct mm_area *vma, unsigned long uaddr)
 {
 	struct tlb_args ta = {
 		.ta_vma = vma,
@@ -351,7 +351,7 @@ void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
 	on_each_cpu_mask(mm_cpumask(vma->vm_mm), ipi_flush_tlb_page, &ta, 1);
 }
 
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void flush_tlb_range(struct mm_area *vma, unsigned long start,
 		     unsigned long end)
 {
 	struct tlb_args ta = {
@@ -364,7 +364,7 @@ void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 }
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-void flush_pmd_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void flush_pmd_tlb_range(struct mm_area *vma, unsigned long start,
 			 unsigned long end)
 {
 	struct tlb_args ta = {
@@ -391,7 +391,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 /*
  * Routine to create a TLB entry
  */
-static void create_tlb(struct vm_area_struct *vma, unsigned long vaddr, pte_t *ptep)
+static void create_tlb(struct mm_area *vma, unsigned long vaddr, pte_t *ptep)
 {
 	unsigned long flags;
 	unsigned int asid_or_sasid, rwx;
@@ -469,7 +469,7 @@ static void create_tlb(struct vm_area_struct *vma, unsigned long vaddr, pte_t *p
  * Note that flush (when done) involves both WBACK - so physical page is
  * in sync as well as INV - so any non-congruent aliases don't remain
  */
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long vaddr_unaligned, pte_t *ptep, unsigned int nr)
 {
 	unsigned long vaddr = vaddr_unaligned & PAGE_MASK;
@@ -527,14 +527,14 @@ void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
  * Thus THP PMD accessors are implemented in terms of PTE (just like sparc)
  */
 
-void update_mmu_cache_pmd(struct vm_area_struct *vma, unsigned long addr,
+void update_mmu_cache_pmd(struct mm_area *vma, unsigned long addr,
 				 pmd_t *pmd)
 {
 	pte_t pte = __pte(pmd_val(*pmd));
 	update_mmu_cache_range(NULL, vma, addr, &pte, HPAGE_PMD_NR);
 }
 
-void local_flush_pmd_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_pmd_tlb_range(struct mm_area *vma, unsigned long start,
 			       unsigned long end)
 {
 	unsigned int cpu;

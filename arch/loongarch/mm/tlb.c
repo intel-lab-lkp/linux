@@ -54,7 +54,7 @@ void local_flush_tlb_mm(struct mm_struct *mm)
 	preempt_enable();
 }
 
-void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_tlb_range(struct mm_area *vma, unsigned long start,
 	unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -110,7 +110,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	local_irq_restore(flags);
 }
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	int cpu = smp_processor_id();
 
@@ -135,7 +135,7 @@ void local_flush_tlb_one(unsigned long page)
 	invtlb_addr(INVTLB_ADDR_GTRUE_OR_ASID, 0, page);
 }
 
-static void __update_hugetlb(struct vm_area_struct *vma, unsigned long address, pte_t *ptep)
+static void __update_hugetlb(struct mm_area *vma, unsigned long address, pte_t *ptep)
 {
 #ifdef CONFIG_HUGETLB_PAGE
 	int idx;
@@ -163,7 +163,7 @@ static void __update_hugetlb(struct vm_area_struct *vma, unsigned long address, 
 #endif
 }
 
-void __update_tlb(struct vm_area_struct *vma, unsigned long address, pte_t *ptep)
+void __update_tlb(struct mm_area *vma, unsigned long address, pte_t *ptep)
 {
 	int idx;
 	unsigned long flags;

@@ -3467,7 +3467,7 @@ int sock_no_recvmsg(struct socket *sock, struct msghdr *m, size_t len,
 }
 EXPORT_SYMBOL(sock_no_recvmsg);
 
-int sock_no_mmap(struct file *file, struct socket *sock, struct vm_area_struct *vma)
+int sock_no_mmap(struct file *file, struct socket *sock, struct mm_area *vma)
 {
 	/* Mirror missing mmap method error code */
 	return -ENODEV;

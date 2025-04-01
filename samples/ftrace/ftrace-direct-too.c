@@ -7,10 +7,10 @@
 #include <asm/asm-offsets.h>
 #endif
 
-extern void my_direct_func(struct vm_area_struct *vma, unsigned long address,
+extern void my_direct_func(struct mm_area *vma, unsigned long address,
 			   unsigned int flags, struct pt_regs *regs);
 
-void my_direct_func(struct vm_area_struct *vma, unsigned long address,
+void my_direct_func(struct mm_area *vma, unsigned long address,
 		    unsigned int flags, struct pt_regs *regs)
 {
 	trace_printk("handle mm fault vma=%p address=%lx flags=%x regs=%p\n",

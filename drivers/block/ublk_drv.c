@@ -1467,7 +1467,7 @@ static int ublk_ch_release(struct inode *inode, struct file *filp)
 }
 
 /* map pre-allocated per-queue cmd buffer to ublksrv daemon */
-static int ublk_ch_mmap(struct file *filp, struct vm_area_struct *vma)
+static int ublk_ch_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct ublk_device *ub = filp->private_data;
 	size_t sz = vma->vm_end - vma->vm_start;

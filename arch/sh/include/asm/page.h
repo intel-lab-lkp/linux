@@ -48,10 +48,10 @@ extern void copy_page(void *to, void *from);
 #define copy_user_page(to, from, vaddr, pg)  __copy_user(to, from, PAGE_SIZE)
 
 struct page;
-struct vm_area_struct;
+struct mm_area;
 
 extern void copy_user_highpage(struct page *to, struct page *from,
-			       unsigned long vaddr, struct vm_area_struct *vma);
+			       unsigned long vaddr, struct mm_area *vma);
 #define __HAVE_ARCH_COPY_USER_HIGHPAGE
 extern void clear_user_highpage(struct page *page, unsigned long vaddr);
 #define clear_user_highpage	clear_user_highpage

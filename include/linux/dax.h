@@ -65,7 +65,7 @@ size_t dax_recovery_write(struct dax_device *dax_dev, pgoff_t pgoff,
 /*
  * Check if given mapping is supported by the file / underlying device.
  */
-static inline bool daxdev_mapping_supported(struct vm_area_struct *vma,
+static inline bool daxdev_mapping_supported(struct mm_area *vma,
 					     struct dax_device *dax_dev)
 {
 	if (!(vma->vm_flags & VM_SYNC))
@@ -110,7 +110,7 @@ static inline void set_dax_nomc(struct dax_device *dax_dev)
 static inline void set_dax_synchronous(struct dax_device *dax_dev)
 {
 }
-static inline bool daxdev_mapping_supported(struct vm_area_struct *vma,
+static inline bool daxdev_mapping_supported(struct mm_area *vma,
 				struct dax_device *dax_dev)
 {
 	return !(vma->vm_flags & VM_SYNC);

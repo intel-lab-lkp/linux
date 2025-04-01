@@ -183,7 +183,7 @@ static void step_forward(struct page_vma_mapped_walk *pvmw, unsigned long size)
  */
 bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 {
-	struct vm_area_struct *vma = pvmw->vma;
+	struct mm_area *vma = pvmw->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long end;
 	spinlock_t *ptl;
@@ -342,7 +342,7 @@ next_pte:
  * Only valid for normal file or anonymous VMAs.
  */
 unsigned long page_mapped_in_vma(const struct page *page,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	const struct folio *folio = page_folio(page);
 	struct page_vma_mapped_walk pvmw = {

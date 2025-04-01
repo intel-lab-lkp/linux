@@ -186,7 +186,7 @@ struct drm_gem_object_funcs {
 	 * drm_gem_prime_mmap().  When @mmap is present @vm_ops is not
 	 * used, the @mmap callback must set vma->vm_ops instead.
 	 */
-	int (*mmap)(struct drm_gem_object *obj, struct vm_area_struct *vma);
+	int (*mmap)(struct drm_gem_object *obj, struct mm_area *vma);
 
 	/**
 	 * @evict:
@@ -482,11 +482,11 @@ int drm_gem_object_init_with_mnt(struct drm_device *dev,
 void drm_gem_private_object_init(struct drm_device *dev,
 				 struct drm_gem_object *obj, size_t size);
 void drm_gem_private_object_fini(struct drm_gem_object *obj);
-void drm_gem_vm_open(struct vm_area_struct *vma);
-void drm_gem_vm_close(struct vm_area_struct *vma);
+void drm_gem_vm_open(struct mm_area *vma);
+void drm_gem_vm_close(struct mm_area *vma);
 int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,
-		     struct vm_area_struct *vma);
-int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma);
+		     struct mm_area *vma);
+int drm_gem_mmap(struct file *filp, struct mm_area *vma);
 
 /**
  * drm_gem_object_get - acquire a GEM buffer object reference

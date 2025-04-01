@@ -71,7 +71,7 @@ struct vas_user_win_ref {
 	struct mm_struct *mm;	/* Linux process mm_struct */
 	struct mutex mmap_mutex;	/* protects paste address mmap() */
 					/* with DLPAR close/open windows */
-	struct vm_area_struct *vma;	/* Save VMA and used in DLPAR ops */
+	struct mm_area *vma;	/* Save VMA and used in DLPAR ops */
 };
 
 /*

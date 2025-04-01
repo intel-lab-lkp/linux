@@ -821,7 +821,7 @@ static const struct vm_operations_struct fuse_dax_vm_ops = {
 	.pfn_mkwrite	= fuse_dax_pfn_mkwrite,
 };
 
-int fuse_dax_mmap(struct file *file, struct vm_area_struct *vma)
+int fuse_dax_mmap(struct file *file, struct mm_area *vma)
 {
 	file_accessed(file);
 	vma->vm_ops = &fuse_dax_vm_ops;

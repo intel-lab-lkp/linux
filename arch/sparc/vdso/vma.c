@@ -363,7 +363,7 @@ static int map_vdso(const struct vdso_image *image,
 		struct vm_special_mapping *vdso_mapping)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long text_start, addr = 0;
 	int ret = 0;
 

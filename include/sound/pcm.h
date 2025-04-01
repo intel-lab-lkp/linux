@@ -74,7 +74,7 @@ struct snd_pcm_ops {
 		    unsigned long pos, struct iov_iter *iter, unsigned long bytes);
 	struct page *(*page)(struct snd_pcm_substream *substream,
 			     unsigned long offset);
-	int (*mmap)(struct snd_pcm_substream *substream, struct vm_area_struct *vma);
+	int (*mmap)(struct snd_pcm_substream *substream, struct mm_area *vma);
 	int (*ack)(struct snd_pcm_substream *substream);
 };
 
@@ -605,7 +605,7 @@ void snd_pcm_release_substream(struct snd_pcm_substream *substream);
 int snd_pcm_attach_substream(struct snd_pcm *pcm, int stream, struct file *file,
 			     struct snd_pcm_substream **rsubstream);
 void snd_pcm_detach_substream(struct snd_pcm_substream *substream);
-int snd_pcm_mmap_data(struct snd_pcm_substream *substream, struct file *file, struct vm_area_struct *area);
+int snd_pcm_mmap_data(struct snd_pcm_substream *substream, struct file *file, struct mm_area *area);
 
 
 #ifdef CONFIG_SND_DEBUG
@@ -1394,11 +1394,11 @@ snd_pcm_sgbuf_get_chunk_size(struct snd_pcm_substream *substream,
 }
 
 int snd_pcm_lib_default_mmap(struct snd_pcm_substream *substream,
-			     struct vm_area_struct *area);
+			     struct mm_area *area);
 /* mmap for io-memory area */
 #if defined(CONFIG_X86) || defined(CONFIG_PPC) || defined(CONFIG_ALPHA)
 #define SNDRV_PCM_INFO_MMAP_IOMEM	SNDRV_PCM_INFO_MMAP
-int snd_pcm_lib_mmap_iomem(struct snd_pcm_substream *substream, struct vm_area_struct *area);
+int snd_pcm_lib_mmap_iomem(struct snd_pcm_substream *substream, struct mm_area *area);
 #else
 #define SNDRV_PCM_INFO_MMAP_IOMEM	0
 #define snd_pcm_lib_mmap_iomem	NULL

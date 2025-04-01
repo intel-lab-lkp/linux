@@ -536,7 +536,7 @@ void ocrdma_dealloc_ucontext(struct ib_ucontext *ibctx)
 	}
 }
 
-int ocrdma_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+int ocrdma_mmap(struct ib_ucontext *context, struct mm_area *vma)
 {
 	struct ocrdma_ucontext *ucontext = get_ocrdma_ucontext(context);
 	struct ocrdma_dev *dev = get_ocrdma_dev(context->device);

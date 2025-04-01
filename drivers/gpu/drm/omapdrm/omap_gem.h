@@ -23,7 +23,7 @@ struct file;
 struct list_head;
 struct page;
 struct seq_file;
-struct vm_area_struct;
+struct mm_area;
 struct vm_fault;
 
 union omap_gem_size;

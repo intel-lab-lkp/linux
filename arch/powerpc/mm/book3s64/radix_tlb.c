@@ -625,7 +625,7 @@ void radix__local_flush_tlb_page_psize(struct mm_struct *mm, unsigned long vmadd
 	preempt_enable();
 }
 
-void radix__local_flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void radix__local_flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 #ifdef CONFIG_HUGETLB_PAGE
 	/* need the return fix for nohash.c */
@@ -947,7 +947,7 @@ void radix__flush_tlb_page_psize(struct mm_struct *mm, unsigned long vmaddr,
 	preempt_enable();
 }
 
-void radix__flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+void radix__flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 #ifdef CONFIG_HUGETLB_PAGE
 	if (is_vm_hugetlb_page(vma))
@@ -1114,7 +1114,7 @@ out:
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, start, end);
 }
 
-void radix__flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void radix__flush_tlb_range(struct mm_area *vma, unsigned long start,
 		     unsigned long end)
 
 {
@@ -1360,14 +1360,14 @@ void radix__flush_tlb_collapsed_pmd(struct mm_struct *mm, unsigned long addr)
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
-void radix__flush_pmd_tlb_range(struct vm_area_struct *vma,
+void radix__flush_pmd_tlb_range(struct mm_area *vma,
 				unsigned long start, unsigned long end)
 {
 	radix__flush_tlb_range_psize(vma->vm_mm, start, end, MMU_PAGE_2M);
 }
 EXPORT_SYMBOL(radix__flush_pmd_tlb_range);
 
-void radix__flush_pud_tlb_range(struct vm_area_struct *vma,
+void radix__flush_pud_tlb_range(struct mm_area *vma,
 				unsigned long start, unsigned long end)
 {
 	radix__flush_tlb_range_psize(vma->vm_mm, start, end, MMU_PAGE_1G);

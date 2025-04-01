@@ -240,7 +240,7 @@ idma_pointer(struct snd_soc_component *component,
 
 static int idma_mmap(struct snd_soc_component *component,
 		     struct snd_pcm_substream *substream,
-	struct vm_area_struct *vma)
+	struct mm_area *vma)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	unsigned long size, offset;

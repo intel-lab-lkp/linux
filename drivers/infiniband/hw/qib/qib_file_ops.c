@@ -59,7 +59,7 @@ static int qib_close(struct inode *, struct file *);
 static ssize_t qib_write(struct file *, const char __user *, size_t, loff_t *);
 static ssize_t qib_write_iter(struct kiocb *, struct iov_iter *);
 static __poll_t qib_poll(struct file *, struct poll_table_struct *);
-static int qib_mmapf(struct file *, struct vm_area_struct *);
+static int qib_mmapf(struct file *, struct mm_area *);
 
 /*
  * This is really, really weird shit - write() and writev() here
@@ -705,7 +705,7 @@ static void qib_clean_part_key(struct qib_ctxtdata *rcd,
 }
 
 /* common code for the mappings on dma_alloc_coherent mem */
-static int qib_mmap_mem(struct vm_area_struct *vma, struct qib_ctxtdata *rcd,
+static int qib_mmap_mem(struct mm_area *vma, struct qib_ctxtdata *rcd,
 			unsigned len, void *kvaddr, u32 write_ok, char *what)
 {
 	struct qib_devdata *dd = rcd->dd;
@@ -747,7 +747,7 @@ bail:
 	return ret;
 }
 
-static int mmap_ureg(struct vm_area_struct *vma, struct qib_devdata *dd,
+static int mmap_ureg(struct mm_area *vma, struct qib_devdata *dd,
 		     u64 ureg)
 {
 	unsigned long phys;
@@ -778,7 +778,7 @@ static int mmap_ureg(struct vm_area_struct *vma, struct qib_devdata *dd,
 	return ret;
 }
 
-static int mmap_piobufs(struct vm_area_struct *vma,
+static int mmap_piobufs(struct mm_area *vma,
 			struct qib_devdata *dd,
 			struct qib_ctxtdata *rcd,
 			unsigned piobufs, unsigned piocnt)
@@ -823,7 +823,7 @@ bail:
 	return ret;
 }
 
-static int mmap_rcvegrbufs(struct vm_area_struct *vma,
+static int mmap_rcvegrbufs(struct mm_area *vma,
 			   struct qib_ctxtdata *rcd)
 {
 	struct qib_devdata *dd = rcd->dd;
@@ -889,7 +889,7 @@ static const struct vm_operations_struct qib_file_vm_ops = {
 	.fault = qib_file_vma_fault,
 };
 
-static int mmap_kvaddr(struct vm_area_struct *vma, u64 pgaddr,
+static int mmap_kvaddr(struct mm_area *vma, u64 pgaddr,
 		       struct qib_ctxtdata *rcd, unsigned subctxt)
 {
 	struct qib_devdata *dd = rcd->dd;
@@ -971,7 +971,7 @@ bail:
  * buffers in the chip.  We have the open and close entries so we can bump
  * the ref count and keep the driver from being unloaded while still mapped.
  */
-static int qib_mmapf(struct file *fp, struct vm_area_struct *vma)
+static int qib_mmapf(struct file *fp, struct mm_area *vma)
 {
 	struct qib_ctxtdata *rcd;
 	struct qib_devdata *dd;

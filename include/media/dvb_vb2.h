@@ -270,11 +270,11 @@ int dvb_vb2_dqbuf(struct dvb_vb2_ctx *ctx, struct dmx_buffer *b);
  * dvb_vb2_mmap() - Wrapper to vb2_mmap() for Digital TV buffer handling.
  *
  * @ctx:	control struct for VB2 handler
- * @vma:        pointer to &struct vm_area_struct with the vma passed
+ * @vma:        pointer to &struct mm_area with the vma passed
  *              to the mmap file operation handler in the driver.
  *
  * map Digital TV video buffers into application address space.
  */
-int dvb_vb2_mmap(struct dvb_vb2_ctx *ctx, struct vm_area_struct *vma);
+int dvb_vb2_mmap(struct dvb_vb2_ctx *ctx, struct mm_area *vma);
 
 #endif /* _DVB_VB2_H */

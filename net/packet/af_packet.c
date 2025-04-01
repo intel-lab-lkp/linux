@@ -4358,7 +4358,7 @@ static __poll_t packet_poll(struct file *file, struct socket *sock,
  * for user mmaps.
  */
 
-static void packet_mm_open(struct vm_area_struct *vma)
+static void packet_mm_open(struct mm_area *vma)
 {
 	struct file *file = vma->vm_file;
 	struct socket *sock = file->private_data;
@@ -4368,7 +4368,7 @@ static void packet_mm_open(struct vm_area_struct *vma)
 		atomic_long_inc(&pkt_sk(sk)->mapped);
 }
 
-static void packet_mm_close(struct vm_area_struct *vma)
+static void packet_mm_close(struct mm_area *vma)
 {
 	struct file *file = vma->vm_file;
 	struct socket *sock = file->private_data;
@@ -4619,7 +4619,7 @@ out:
 }
 
 static int packet_mmap(struct file *file, struct socket *sock,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	struct sock *sk = sock->sk;
 	struct packet_sock *po = pkt_sk(sk);

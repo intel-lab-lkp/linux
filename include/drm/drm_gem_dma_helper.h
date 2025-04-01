@@ -40,7 +40,7 @@ void drm_gem_dma_print_info(const struct drm_gem_dma_object *dma_obj,
 struct sg_table *drm_gem_dma_get_sg_table(struct drm_gem_dma_object *dma_obj);
 int drm_gem_dma_vmap(struct drm_gem_dma_object *dma_obj,
 		     struct iosys_map *map);
-int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct vm_area_struct *vma);
+int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct mm_area *vma);
 
 extern const struct vm_operations_struct drm_gem_dma_vm_ops;
 
@@ -126,7 +126,7 @@ static inline int drm_gem_dma_object_vmap(struct drm_gem_object *obj,
  * Returns:
  * 0 on success or a negative error code on failure.
  */
-static inline int drm_gem_dma_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static inline int drm_gem_dma_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct drm_gem_dma_object *dma_obj = to_drm_gem_dma_obj(obj);
 

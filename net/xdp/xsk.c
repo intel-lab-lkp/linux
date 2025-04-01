@@ -1595,7 +1595,7 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 }
 
 static int xsk_mmap(struct file *file, struct socket *sock,
-		    struct vm_area_struct *vma)
+		    struct mm_area *vma)
 {
 	loff_t offset = (loff_t)vma->vm_pgoff << PAGE_SHIFT;
 	unsigned long size = vma->vm_end - vma->vm_start;

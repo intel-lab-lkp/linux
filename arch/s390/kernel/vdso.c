@@ -27,7 +27,7 @@ extern char vdso64_start[], vdso64_end[];
 extern char vdso32_start[], vdso32_end[];
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
-		       struct vm_area_struct *vma)
+		       struct mm_area *vma)
 {
 	current->mm->context.vdso_base = vma->vm_start;
 	return 0;
@@ -55,7 +55,7 @@ static int map_vdso(unsigned long addr, unsigned long vdso_mapping_len)
 	unsigned long vvar_start, vdso_text_start, vdso_text_len;
 	struct vm_special_mapping *vdso_mapping;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int rc;
 
 	BUILD_BUG_ON(VDSO_NR_PAGES != __VDSO_PAGES);

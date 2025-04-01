@@ -65,7 +65,7 @@ struct kobject;
 struct pipe_inode_info;
 struct poll_table_struct;
 struct kstatfs;
-struct vm_area_struct;
+struct mm_area;
 struct vfsmount;
 struct cred;
 struct swap_info_struct;
@@ -2140,7 +2140,7 @@ struct file_operations {
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
-	int (*mmap) (struct file *, struct vm_area_struct *);
+	int (*mmap) (struct file *, struct mm_area *);
 	int (*open) (struct inode *, struct file *);
 	int (*flush) (struct file *, fl_owner_t id);
 	int (*release) (struct inode *, struct file *);
@@ -2238,7 +2238,7 @@ struct inode_operations {
 	struct offset_ctx *(*get_offset_ctx)(struct inode *inode);
 } ____cacheline_aligned;
 
-static inline int call_mmap(struct file *file, struct vm_area_struct *vma)
+static inline int call_mmap(struct file *file, struct mm_area *vma)
 {
 	return file->f_op->mmap(file, vma);
 }
@@ -3341,8 +3341,8 @@ extern void inode_add_lru(struct inode *inode);
 extern int sb_set_blocksize(struct super_block *, int);
 extern int sb_min_blocksize(struct super_block *, int);
 
-extern int generic_file_mmap(struct file *, struct vm_area_struct *);
-extern int generic_file_readonly_mmap(struct file *, struct vm_area_struct *);
+extern int generic_file_mmap(struct file *, struct mm_area *);
+extern int generic_file_readonly_mmap(struct file *, struct mm_area *);
 extern ssize_t generic_write_checks(struct kiocb *, struct iov_iter *);
 int generic_write_checks_count(struct kiocb *iocb, loff_t *count);
 extern int generic_write_check_limits(struct file *file, loff_t pos,
@@ -3666,12 +3666,12 @@ void setattr_copy(struct mnt_idmap *, struct inode *inode,
 
 extern int file_update_time(struct file *file);
 
-static inline bool vma_is_dax(const struct vm_area_struct *vma)
+static inline bool vma_is_dax(const struct mm_area *vma)
 {
 	return vma->vm_file && IS_DAX(vma->vm_file->f_mapping->host);
 }
 
-static inline bool vma_is_fsdax(struct vm_area_struct *vma)
+static inline bool vma_is_fsdax(struct mm_area *vma)
 {
 	struct inode *inode;
 

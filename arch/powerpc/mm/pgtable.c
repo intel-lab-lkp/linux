@@ -141,7 +141,7 @@ static inline pte_t set_pte_filter(pte_t pte, unsigned long addr)
 	return pte_exprotect(pte);
 }
 
-static pte_t set_access_flags_filter(pte_t pte, struct vm_area_struct *vma,
+static pte_t set_access_flags_filter(pte_t pte, struct mm_area *vma,
 				     int dirty)
 {
 	struct folio *folio;
@@ -240,7 +240,7 @@ void unmap_kernel_page(unsigned long va)
  * handled those two for us, we additionally deal with missing execute
  * permission here on some processors
  */
-int ptep_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+int ptep_set_access_flags(struct mm_area *vma, unsigned long address,
 			  pte_t *ptep, pte_t entry, int dirty)
 {
 	int changed;
@@ -255,7 +255,7 @@ int ptep_set_access_flags(struct vm_area_struct *vma, unsigned long address,
 }
 
 #ifdef CONFIG_HUGETLB_PAGE
-int huge_ptep_set_access_flags(struct vm_area_struct *vma,
+int huge_ptep_set_access_flags(struct mm_area *vma,
 			       unsigned long addr, pte_t *ptep,
 			       pte_t pte, int dirty)
 {

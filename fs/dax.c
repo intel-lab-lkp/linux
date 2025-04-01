@@ -439,7 +439,7 @@ static void dax_folio_init(void *entry)
 }
 
 static void dax_associate_entry(void *entry, struct address_space *mapping,
-				struct vm_area_struct *vma,
+				struct mm_area *vma,
 				unsigned long address, bool shared)
 {
 	unsigned long size = dax_entry_size(entry), index;
@@ -1038,7 +1038,7 @@ static int copy_cow_page_dax(struct vm_fault *vmf, const struct iomap_iter *iter
  * flushed on write-faults (non-cow), but not read-faults.
  */
 static bool dax_fault_is_synchronous(const struct iomap_iter *iter,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	return (iter->flags & IOMAP_WRITE) && (vma->vm_flags & VM_SYNC) &&
 		(iter->iomap.flags & IOMAP_F_DIRTY);
@@ -1114,7 +1114,7 @@ static int dax_writeback_one(struct xa_state *xas, struct dax_device *dax_dev,
 {
 	unsigned long pfn, index, count, end;
 	long ret = 0;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	/*
 	 * A page got tagged dirty in DAX mapping? Something is seriously
@@ -1388,7 +1388,7 @@ static vm_fault_t dax_pmd_load_hole(struct xa_state *xas, struct vm_fault *vmf,
 {
 	struct address_space *mapping = vmf->vma->vm_file->f_mapping;
 	unsigned long pmd_addr = vmf->address & PMD_MASK;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct inode *inode = mapping->host;
 	pgtable_t pgtable = NULL;
 	struct folio *zero_folio;

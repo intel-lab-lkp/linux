@@ -175,7 +175,7 @@ int efa_get_port_immutable(struct ib_device *ibdev, u32 port_num,
 int efa_alloc_ucontext(struct ib_ucontext *ibucontext, struct ib_udata *udata);
 void efa_dealloc_ucontext(struct ib_ucontext *ibucontext);
 int efa_mmap(struct ib_ucontext *ibucontext,
-	     struct vm_area_struct *vma);
+	     struct mm_area *vma);
 void efa_mmap_free(struct rdma_user_mmap_entry *rdma_entry);
 int efa_create_ah(struct ib_ah *ibah,
 		  struct rdma_ah_init_attr *init_attr,

@@ -35,7 +35,7 @@ static int hfi1_file_open(struct inode *inode, struct file *fp);
 static int hfi1_file_close(struct inode *inode, struct file *fp);
 static ssize_t hfi1_write_iter(struct kiocb *kiocb, struct iov_iter *from);
 static __poll_t hfi1_poll(struct file *fp, struct poll_table_struct *pt);
-static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma);
+static int hfi1_file_mmap(struct file *fp, struct mm_area *vma);
 
 static u64 kvirt_to_phys(void *addr);
 static int assign_ctxt(struct hfi1_filedata *fd, unsigned long arg, u32 len);
@@ -306,7 +306,7 @@ static ssize_t hfi1_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 
 static inline void mmap_cdbg(u16 ctxt, u8 subctxt, u8 type, u8 mapio, u8 vmf,
 			     u64 memaddr, void *memvirt, dma_addr_t memdma,
-			     ssize_t memlen, struct vm_area_struct *vma)
+			     ssize_t memlen, struct mm_area *vma)
 {
 	hfi1_cdbg(PROC,
 		  "%u:%u type:%u io/vf/dma:%d/%d/%d, addr:0x%llx, len:%lu(%lu), flags:0x%lx",
@@ -315,7 +315,7 @@ static inline void mmap_cdbg(u16 ctxt, u8 subctxt, u8 type, u8 mapio, u8 vmf,
 		  vma->vm_end - vma->vm_start, vma->vm_flags);
 }
 
-static int hfi1_file_mmap(struct file *fp, struct vm_area_struct *vma)
+static int hfi1_file_mmap(struct file *fp, struct mm_area *vma)
 {
 	struct hfi1_filedata *fd = fp->private_data;
 	struct hfi1_ctxtdata *uctxt = fd->uctxt;

@@ -125,7 +125,7 @@ void etnaviv_gem_put_pages(struct etnaviv_gem_object *etnaviv_obj)
 }
 
 static int etnaviv_gem_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	pgprot_t vm_page_prot;
 
@@ -152,7 +152,7 @@ static int etnaviv_gem_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
 	return 0;
 }
 
-static int etnaviv_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int etnaviv_gem_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct etnaviv_gem_object *etnaviv_obj = to_etnaviv_bo(obj);
 
@@ -161,7 +161,7 @@ static int etnaviv_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *v
 
 static vm_fault_t etnaviv_gem_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct etnaviv_gem_object *etnaviv_obj = to_etnaviv_bo(obj);
 	struct page **pages;
@@ -718,7 +718,7 @@ static void etnaviv_gem_userptr_release(struct etnaviv_gem_object *etnaviv_obj)
 }
 
 static int etnaviv_gem_userptr_mmap_obj(struct etnaviv_gem_object *etnaviv_obj,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	return -EINVAL;
 }

@@ -750,7 +750,7 @@ int pcibios_enable_device(struct pci_dev *dev, int mask)
 }
 
 /* Platform support for /proc/bus/pci/X/Y mmap()s. */
-int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma)
+int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct mm_area *vma)
 {
 	struct pci_pbm_info *pbm = pdev->dev.archdata.host_controller;
 	resource_size_t ioaddr = pci_resource_start(pdev, bar);

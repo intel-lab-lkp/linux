@@ -106,7 +106,7 @@ typedef struct page *pgtable_t;
 # include <asm-generic/getorder.h>
 
 struct page;
-struct vm_area_struct;
+struct mm_area;
 extern void clear_page(void *page);
 extern void copy_page(void *to, void *from);
 
@@ -124,7 +124,7 @@ extern void copy_page_alias(void *to, void *from,
 void clear_user_highpage(struct page *page, unsigned long vaddr);
 #define __HAVE_ARCH_COPY_USER_HIGHPAGE
 void copy_user_highpage(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma);
+			unsigned long vaddr, struct mm_area *vma);
 #else
 # define clear_user_page(page, vaddr, pg)	clear_page(page)
 # define copy_user_page(to, from, vaddr, pg)	copy_page(to, from)

@@ -522,7 +522,7 @@ phys_addr_t hmm_virt_to_phys(ia_css_ptr virt)
 	return page_to_phys(bo->pages[idx]) + offset;
 }
 
-int hmm_mmap(struct vm_area_struct *vma, ia_css_ptr virt)
+int hmm_mmap(struct mm_area *vma, ia_css_ptr virt)
 {
 	struct hmm_buffer_object *bo;
 

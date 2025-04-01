@@ -44,7 +44,7 @@ static inline void tlbiel_all_lpid(bool radix)
 
 
 #define __HAVE_ARCH_FLUSH_PMD_TLB_RANGE
-static inline void flush_pmd_tlb_range(struct vm_area_struct *vma,
+static inline void flush_pmd_tlb_range(struct mm_area *vma,
 				       unsigned long start, unsigned long end)
 {
 	if (radix_enabled())
@@ -52,7 +52,7 @@ static inline void flush_pmd_tlb_range(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_FLUSH_PUD_TLB_RANGE
-static inline void flush_pud_tlb_range(struct vm_area_struct *vma,
+static inline void flush_pud_tlb_range(struct mm_area *vma,
 				       unsigned long start, unsigned long end)
 {
 	if (radix_enabled())
@@ -60,7 +60,7 @@ static inline void flush_pud_tlb_range(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_FLUSH_HUGETLB_TLB_RANGE
-static inline void flush_hugetlb_tlb_range(struct vm_area_struct *vma,
+static inline void flush_hugetlb_tlb_range(struct mm_area *vma,
 					   unsigned long start,
 					   unsigned long end)
 {
@@ -68,7 +68,7 @@ static inline void flush_hugetlb_tlb_range(struct vm_area_struct *vma,
 		radix__flush_hugetlb_tlb_range(vma, start, end);
 }
 
-static inline void flush_tlb_range(struct vm_area_struct *vma,
+static inline void flush_tlb_range(struct mm_area *vma,
 				   unsigned long start, unsigned long end)
 {
 	if (radix_enabled())
@@ -88,7 +88,7 @@ static inline void local_flush_tlb_mm(struct mm_struct *mm)
 		radix__local_flush_tlb_mm(mm);
 }
 
-static inline void local_flush_tlb_page(struct vm_area_struct *vma,
+static inline void local_flush_tlb_page(struct mm_area *vma,
 					unsigned long vmaddr)
 {
 	if (radix_enabled())
@@ -117,7 +117,7 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 		radix__flush_tlb_mm(mm);
 }
 
-static inline void flush_tlb_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct mm_area *vma,
 				  unsigned long vmaddr)
 {
 	if (radix_enabled())
@@ -129,7 +129,7 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
 #endif /* CONFIG_SMP */
 
 #define flush_tlb_fix_spurious_fault flush_tlb_fix_spurious_fault
-static inline void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
+static inline void flush_tlb_fix_spurious_fault(struct mm_area *vma,
 						unsigned long address,
 						pte_t *ptep)
 {

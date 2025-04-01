@@ -581,7 +581,7 @@ dma_alloc_pages().  page must be the pointer returned by dma_alloc_pages().
 ::
 
 	int
-	dma_mmap_pages(struct device *dev, struct vm_area_struct *vma,
+	dma_mmap_pages(struct device *dev, struct mm_area *vma,
 		       size_t size, struct page *page)
 
 Map an allocation returned from dma_alloc_pages() into a user address space.
@@ -679,7 +679,7 @@ returned by dma_vmap_noncontiguous().
 ::
 
 	int
-	dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
+	dma_mmap_noncontiguous(struct device *dev, struct mm_area *vma,
 			       size_t size, struct sg_table *sgt)
 
 Map an allocation returned from dma_alloc_noncontiguous() into a user address

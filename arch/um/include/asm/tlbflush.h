@@ -35,13 +35,13 @@ extern int um_tlb_sync(struct mm_struct *mm);
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *mm);
 
-static inline void flush_tlb_page(struct vm_area_struct *vma,
+static inline void flush_tlb_page(struct mm_area *vma,
 				  unsigned long address)
 {
 	um_tlb_mark_sync(vma->vm_mm, address, address + PAGE_SIZE);
 }
 
-static inline void flush_tlb_range(struct vm_area_struct *vma,
+static inline void flush_tlb_range(struct mm_area *vma,
 				   unsigned long start, unsigned long end)
 {
 	um_tlb_mark_sync(vma->vm_mm, start, end);

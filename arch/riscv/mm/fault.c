@@ -243,7 +243,7 @@ flush_tlb:
 	local_flush_tlb_page(addr);
 }
 
-static inline bool access_error(unsigned long cause, struct vm_area_struct *vma)
+static inline bool access_error(unsigned long cause, struct mm_area *vma)
 {
 	switch (cause) {
 	case EXC_INST_PAGE_FAULT:
@@ -275,7 +275,7 @@ static inline bool access_error(unsigned long cause, struct vm_area_struct *vma)
 void handle_page_fault(struct pt_regs *regs)
 {
 	struct task_struct *tsk;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm;
 	unsigned long addr, cause;
 	unsigned int flags = FAULT_FLAG_DEFAULT;

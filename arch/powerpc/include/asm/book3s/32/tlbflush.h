@@ -9,7 +9,7 @@
  * TLB flushing for "classic" hash-MMU 32-bit CPUs, 6xx, 7xx, 7xxx
  */
 void hash__flush_tlb_mm(struct mm_struct *mm);
-void hash__flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
+void hash__flush_tlb_page(struct mm_area *vma, unsigned long vmaddr);
 void hash__flush_range(struct mm_struct *mm, unsigned long start, unsigned long end);
 
 #ifdef CONFIG_SMP
@@ -52,7 +52,7 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 		_tlbia();
 }
 
-static inline void flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+static inline void flush_tlb_page(struct mm_area *vma, unsigned long vmaddr)
 {
 	if (mmu_has_feature(MMU_FTR_HPTE_TABLE))
 		hash__flush_tlb_page(vma, vmaddr);
@@ -61,7 +61,7 @@ static inline void flush_tlb_page(struct vm_area_struct *vma, unsigned long vmad
 }
 
 static inline void
-flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	flush_range(vma->vm_mm, start, end);
 }
@@ -71,7 +71,7 @@ static inline void flush_tlb_kernel_range(unsigned long start, unsigned long end
 	flush_range(&init_mm, start, end);
 }
 
-static inline void local_flush_tlb_page(struct vm_area_struct *vma,
+static inline void local_flush_tlb_page(struct mm_area *vma,
 					unsigned long vmaddr)
 {
 	flush_tlb_page(vma, vmaddr);

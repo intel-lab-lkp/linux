@@ -78,7 +78,7 @@ void local_icache_range_inv(unsigned long start, unsigned long end)
 	cache_loop(start, end, SPR_ICBIR, SPR_UPR_ICP);
 }
 
-void update_cache(struct vm_area_struct *vma, unsigned long address,
+void update_cache(struct mm_area *vma, unsigned long address,
 	pte_t *pte)
 {
 	unsigned long pfn = pte_val(*pte) >> PAGE_SHIFT;

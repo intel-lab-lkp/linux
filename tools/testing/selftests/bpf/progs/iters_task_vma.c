@@ -18,7 +18,7 @@ SEC("raw_tp/sys_enter")
 int iter_task_vma_for_each(const void *ctx)
 {
 	struct task_struct *task = bpf_get_current_task_btf();
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned int seen = 0;
 
 	if (task->pid != target_pid)

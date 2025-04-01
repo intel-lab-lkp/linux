@@ -9,10 +9,10 @@ Process Addresses
 
 
 Userland memory ranges are tracked by the kernel via Virtual Memory Areas or
-'VMA's of type :c:struct:`!struct vm_area_struct`.
+'VMA's of type :c:struct:`!struct mm_area`.
 
 Each VMA describes a virtually contiguous memory range with identical
-attributes, each described by a :c:struct:`!struct vm_area_struct`
+attributes, each described by a :c:struct:`!struct mm_area`
 object. Userland access outside of VMAs is invalid except in the case where an
 adjacent stack VMA could be extended to contain the accessed address.
 
@@ -142,7 +142,7 @@ obtain either a read or a write lock for each of these.
 VMA fields
 ^^^^^^^^^^
 
-We can subdivide :c:struct:`!struct vm_area_struct` fields by their purpose, which makes it
+We can subdivide :c:struct:`!struct mm_area` fields by their purpose, which makes it
 easier to explore their locking characteristics:
 
 .. note:: We exclude VMA lock-specific fields here to avoid confusion, as these

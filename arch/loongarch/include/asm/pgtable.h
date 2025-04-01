@@ -63,7 +63,7 @@
 #include <asm/sparsemem.h>
 
 struct mm_struct;
-struct vm_area_struct;
+struct mm_area;
 
 /*
  * ZERO_PAGE is a global shared page that is always zero; used
@@ -438,11 +438,11 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 		     (pgprot_val(newprot) & ~_PAGE_CHG_MASK));
 }
 
-extern void __update_tlb(struct vm_area_struct *vma,
+extern void __update_tlb(struct mm_area *vma,
 			unsigned long address, pte_t *ptep);
 
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long address,
+		struct mm_area *vma, unsigned long address,
 		pte_t *ptep, unsigned int nr)
 {
 	for (;;) {
@@ -459,7 +459,7 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 #define update_mmu_tlb_range(vma, addr, ptep, nr) \
 	update_mmu_cache_range(NULL, vma, addr, ptep, nr)
 
-static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pmd(struct mm_area *vma,
 			unsigned long address, pmd_t *pmdp)
 {
 	__update_tlb(vma, address, (pte_t *)pmdp);

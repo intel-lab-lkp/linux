@@ -391,7 +391,7 @@ sys_cacheflush (unsigned long addr, int scope, int cache, unsigned long len)
 
 		mmap_read_lock(current->mm);
 	} else {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		/* Check for overflow.  */
 		if (addr + len < addr)

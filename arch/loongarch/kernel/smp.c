@@ -703,7 +703,7 @@ void flush_tlb_mm(struct mm_struct *mm)
 }
 
 struct flush_tlb_data {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr1;
 	unsigned long addr2;
 };
@@ -715,7 +715,7 @@ static void flush_tlb_range_ipi(void *info)
 	local_flush_tlb_range(fd->vma, fd->addr1, fd->addr2);
 }
 
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+void flush_tlb_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -764,7 +764,7 @@ static void flush_tlb_page_ipi(void *info)
 	local_flush_tlb_page(fd->vma, fd->addr1);
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	preempt_disable();
 	if ((atomic_read(&vma->vm_mm->mm_users) != 1) || (current->mm != vma->vm_mm)) {

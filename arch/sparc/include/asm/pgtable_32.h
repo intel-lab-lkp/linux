@@ -33,7 +33,7 @@
 #include <asm/cpu_type.h>
 
 
-struct vm_area_struct;
+struct mm_area;
 struct page;
 
 void load_mmu(void);
@@ -400,10 +400,10 @@ __get_iospace (unsigned long addr)
 #define GET_IOSPACE(pfn)		(pfn >> (BITS_PER_LONG - 4))
 #define GET_PFN(pfn)			(pfn & 0x0fffffffUL)
 
-int remap_pfn_range(struct vm_area_struct *, unsigned long, unsigned long,
+int remap_pfn_range(struct mm_area *, unsigned long, unsigned long,
 		    unsigned long, pgprot_t);
 
-static inline int io_remap_pfn_range(struct vm_area_struct *vma,
+static inline int io_remap_pfn_range(struct mm_area *vma,
 				     unsigned long from, unsigned long pfn,
 				     unsigned long size, pgprot_t prot)
 {

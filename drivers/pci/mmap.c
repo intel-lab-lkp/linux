@@ -22,7 +22,7 @@ static const struct vm_operations_struct pci_phys_vm_ops = {
 };
 
 int pci_mmap_resource_range(struct pci_dev *pdev, int bar,
-			    struct vm_area_struct *vma,
+			    struct mm_area *vma,
 			    enum pci_mmap_state mmap_state, int write_combine)
 {
 	unsigned long size;
@@ -56,7 +56,7 @@ int pci_mmap_resource_range(struct pci_dev *pdev, int bar,
 #if (defined(CONFIG_SYSFS) || defined(CONFIG_PROC_FS)) && \
     (defined(HAVE_PCI_MMAP) || defined(ARCH_GENERIC_PCI_MMAP_RESOURCE))
 
-int pci_mmap_fits(struct pci_dev *pdev, int resno, struct vm_area_struct *vma,
+int pci_mmap_fits(struct pci_dev *pdev, int resno, struct mm_area *vma,
 		  enum pci_mmap_api mmap_api)
 {
 	resource_size_t pci_start = 0, pci_end;

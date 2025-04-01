@@ -15,7 +15,7 @@
 #define PKEY_DEDICATED_EXECUTE_ONLY 0
 #define ARCH_VM_PKEY_FLAGS 0
 
-static inline int vma_pkey(struct vm_area_struct *vma)
+static inline int vma_pkey(struct mm_area *vma)
 {
 	return 0;
 }

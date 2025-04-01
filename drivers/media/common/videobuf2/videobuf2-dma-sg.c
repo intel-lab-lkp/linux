@@ -329,7 +329,7 @@ static unsigned int vb2_dma_sg_num_users(void *buf_priv)
 	return refcount_read(&buf->refcount);
 }
 
-static int vb2_dma_sg_mmap(void *buf_priv, struct vm_area_struct *vma)
+static int vb2_dma_sg_mmap(void *buf_priv, struct mm_area *vma)
 {
 	struct vb2_dma_sg_buf *buf = buf_priv;
 	int err;
@@ -501,7 +501,7 @@ static int vb2_dma_sg_dmabuf_ops_vmap(struct dma_buf *dbuf,
 }
 
 static int vb2_dma_sg_dmabuf_ops_mmap(struct dma_buf *dbuf,
-	struct vm_area_struct *vma)
+	struct mm_area *vma)
 {
 	return vb2_dma_sg_mmap(dbuf->priv, vma);
 }

@@ -35,7 +35,7 @@ static int drm_fbdev_dma_fb_release(struct fb_info *info, int user)
 	return 0;
 }
 
-static int drm_fbdev_dma_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int drm_fbdev_dma_fb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct drm_fb_helper *fb_helper = info->par;
 

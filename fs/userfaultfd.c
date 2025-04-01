@@ -94,7 +94,7 @@ static bool userfaultfd_wp_async_ctx(struct userfaultfd_ctx *ctx)
  * meaningful when userfaultfd_wp()==true on the vma and when it's
  * anonymous.
  */
-bool userfaultfd_wp_unpopulated(struct vm_area_struct *vma)
+bool userfaultfd_wp_unpopulated(struct mm_area *vma)
 {
 	struct userfaultfd_ctx *ctx = vma->vm_userfaultfd_ctx.ctx;
 
@@ -231,7 +231,7 @@ static inline bool userfaultfd_huge_must_wait(struct userfaultfd_ctx *ctx,
 					      struct vm_fault *vmf,
 					      unsigned long reason)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	pte_t *ptep, pte;
 	bool ret = true;
 
@@ -362,7 +362,7 @@ static inline unsigned int userfaultfd_get_blocking_state(unsigned int flags)
  */
 vm_fault_t handle_userfault(struct vm_fault *vmf, unsigned long reason)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	struct userfaultfd_ctx *ctx;
 	struct userfaultfd_wait_queue uwq;
@@ -614,7 +614,7 @@ static void userfaultfd_event_complete(struct userfaultfd_ctx *ctx,
 	__remove_wait_queue(&ctx->event_wqh, &ewq->wq);
 }
 
-int dup_userfaultfd(struct vm_area_struct *vma, struct list_head *fcs)
+int dup_userfaultfd(struct mm_area *vma, struct list_head *fcs)
 {
 	struct userfaultfd_ctx *ctx = NULL, *octx;
 	struct userfaultfd_fork_ctx *fctx;
@@ -719,7 +719,7 @@ void dup_userfaultfd_fail(struct list_head *fcs)
 	}
 }
 
-void mremap_userfaultfd_prep(struct vm_area_struct *vma,
+void mremap_userfaultfd_prep(struct mm_area *vma,
 			     struct vm_userfaultfd_ctx *vm_ctx)
 {
 	struct userfaultfd_ctx *ctx;
@@ -766,7 +766,7 @@ void mremap_userfaultfd_complete(struct vm_userfaultfd_ctx *vm_ctx,
 	userfaultfd_event_wait_completion(ctx, &ewq);
 }
 
-bool userfaultfd_remove(struct vm_area_struct *vma,
+bool userfaultfd_remove(struct mm_area *vma,
 			unsigned long start, unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -807,7 +807,7 @@ static bool has_unmap_ctx(struct userfaultfd_ctx *ctx, struct list_head *unmaps,
 	return false;
 }
 
-int userfaultfd_unmap_prep(struct vm_area_struct *vma, unsigned long start,
+int userfaultfd_unmap_prep(struct mm_area *vma, unsigned long start,
 			   unsigned long end, struct list_head *unmaps)
 {
 	struct userfaultfd_unmap_ctx *unmap_ctx;
@@ -1239,7 +1239,7 @@ static int userfaultfd_register(struct userfaultfd_ctx *ctx,
 				unsigned long arg)
 {
 	struct mm_struct *mm = ctx->mm;
-	struct vm_area_struct *vma, *cur;
+	struct mm_area *vma, *cur;
 	int ret;
 	struct uffdio_register uffdio_register;
 	struct uffdio_register __user *user_uffdio_register;
@@ -1413,7 +1413,7 @@ static int userfaultfd_unregister(struct userfaultfd_ctx *ctx,
 				  unsigned long arg)
 {
 	struct mm_struct *mm = ctx->mm;
-	struct vm_area_struct *vma, *prev, *cur;
+	struct mm_area *vma, *prev, *cur;
 	int ret;
 	struct uffdio_range uffdio_unregister;
 	bool found;
@@ -1845,7 +1845,7 @@ out:
 	return ret;
 }
 
-bool userfaultfd_wp_async(struct vm_area_struct *vma)
+bool userfaultfd_wp_async(struct mm_area *vma)
 {
 	return userfaultfd_wp_async_ctx(vma->vm_userfaultfd_ctx.ctx);
 }

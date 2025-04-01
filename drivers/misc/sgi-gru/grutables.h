@@ -337,7 +337,7 @@ struct gru_thread_state {
 	struct mutex		ts_ctxlock;	/* load/unload CTX lock */
 	struct mm_struct	*ts_mm;		/* mm currently mapped to
 						   context */
-	struct vm_area_struct	*ts_vma;	/* vma of GRU context */
+	struct mm_area	*ts_vma;	/* vma of GRU context */
 	struct gru_state	*ts_gru;	/* GRU where the context is
 						   loaded */
 	struct gru_mm_struct	*ts_gms;	/* asid & ioproc struct */
@@ -607,11 +607,11 @@ struct gru_unload_context_req;
 extern const struct vm_operations_struct gru_vm_ops;
 extern struct device *grudev;
 
-extern struct gru_vma_data *gru_alloc_vma_data(struct vm_area_struct *vma,
+extern struct gru_vma_data *gru_alloc_vma_data(struct mm_area *vma,
 				int tsid);
-extern struct gru_thread_state *gru_find_thread_state(struct vm_area_struct
+extern struct gru_thread_state *gru_find_thread_state(struct mm_area
 				*vma, int tsid);
-extern struct gru_thread_state *gru_alloc_thread_state(struct vm_area_struct
+extern struct gru_thread_state *gru_alloc_thread_state(struct mm_area
 				*vma, int tsid);
 extern struct gru_state *gru_assign_gru_context(struct gru_thread_state *gts);
 extern void gru_load_context(struct gru_thread_state *gts);
@@ -634,12 +634,12 @@ extern int gru_get_exception_detail(unsigned long arg);
 extern int gru_set_context_option(unsigned long address);
 extern int gru_check_context_placement(struct gru_thread_state *gts);
 extern int gru_cpu_fault_map_id(void);
-extern struct vm_area_struct *gru_find_vma(unsigned long vaddr);
+extern struct mm_area *gru_find_vma(unsigned long vaddr);
 extern void gru_flush_all_tlb(struct gru_state *gru);
 extern int gru_proc_init(void);
 extern void gru_proc_exit(void);
 
-extern struct gru_thread_state *gru_alloc_gts(struct vm_area_struct *vma,
+extern struct gru_thread_state *gru_alloc_gts(struct mm_area *vma,
 		int cbr_au_count, int dsr_au_count,
 		unsigned char tlb_preload_count, int options, int tsid);
 extern unsigned long gru_reserve_cb_resources(struct gru_state *gru,

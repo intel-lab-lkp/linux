@@ -21,7 +21,7 @@
 int copro_handle_mm_fault(struct mm_struct *mm, unsigned long ea,
 		unsigned long dsisr, vm_fault_t *flt)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long is_write;
 	int ret;
 

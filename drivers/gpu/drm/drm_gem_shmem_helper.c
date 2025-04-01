@@ -533,7 +533,7 @@ EXPORT_SYMBOL_GPL(drm_gem_shmem_dumb_create);
 
 static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
 	loff_t num_pages = obj->size >> PAGE_SHIFT;
@@ -561,7 +561,7 @@ static vm_fault_t drm_gem_shmem_fault(struct vm_fault *vmf)
 	return ret;
 }
 
-static void drm_gem_shmem_vm_open(struct vm_area_struct *vma)
+static void drm_gem_shmem_vm_open(struct mm_area *vma)
 {
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
@@ -583,7 +583,7 @@ static void drm_gem_shmem_vm_open(struct vm_area_struct *vma)
 	drm_gem_vm_open(vma);
 }
 
-static void drm_gem_shmem_vm_close(struct vm_area_struct *vma)
+static void drm_gem_shmem_vm_close(struct mm_area *vma)
 {
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
@@ -613,7 +613,7 @@ EXPORT_SYMBOL_GPL(drm_gem_shmem_vm_ops);
  * Returns:
  * 0 on success or a negative error code on failure.
  */
-int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct *vma)
+int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct mm_area *vma)
 {
 	struct drm_gem_object *obj = &shmem->base;
 	int ret;

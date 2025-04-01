@@ -330,7 +330,7 @@ static void mthca_dealloc_ucontext(struct ib_ucontext *context)
 }
 
 static int mthca_mmap_uar(struct ib_ucontext *context,
-			  struct vm_area_struct *vma)
+			  struct mm_area *vma)
 {
 	if (vma->vm_end - vma->vm_start != PAGE_SIZE)
 		return -EINVAL;

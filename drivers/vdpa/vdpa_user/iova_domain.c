@@ -532,7 +532,7 @@ static const struct vm_operations_struct vduse_domain_mmap_ops = {
 	.fault = vduse_domain_mmap_fault,
 };
 
-static int vduse_domain_mmap(struct file *file, struct vm_area_struct *vma)
+static int vduse_domain_mmap(struct file *file, struct mm_area *vma)
 {
 	struct vduse_iova_domain *domain = file->private_data;
 

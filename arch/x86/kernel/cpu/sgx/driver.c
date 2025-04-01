@@ -81,7 +81,7 @@ static int sgx_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int sgx_mmap(struct file *file, struct vm_area_struct *vma)
+static int sgx_mmap(struct file *file, struct mm_area *vma)
 {
 	struct sgx_encl *encl = file->private_data;
 	int ret;

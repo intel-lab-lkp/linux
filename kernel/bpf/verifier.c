@@ -10720,7 +10720,7 @@ static int set_find_vma_callback_state(struct bpf_verifier_env *env,
 	/* bpf_find_vma(struct task_struct *task, u64 addr,
 	 *               void *callback_fn, void *callback_ctx, u64 flags)
 	 * (callback_fn)(struct task_struct *task,
-	 *               struct vm_area_struct *vma, void *callback_ctx);
+	 *               struct mm_area *vma, void *callback_ctx);
 	 */
 	callee->regs[BPF_REG_1] = caller->regs[BPF_REG_1];
 

@@ -13,7 +13,7 @@
  *
  *  Note: this is only safe if the mm semaphore is held when called.
  */
-int io_mapping_map_user(struct io_mapping *iomap, struct vm_area_struct *vma,
+int io_mapping_map_user(struct io_mapping *iomap, struct mm_area *vma,
 		unsigned long addr, unsigned long pfn, unsigned long size)
 {
 	vm_flags_t expected_flags = VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP;

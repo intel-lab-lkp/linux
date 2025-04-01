@@ -389,7 +389,7 @@ static ssize_t snd_compr_read(struct file *f, char __user *buf,
 	return retval;
 }
 
-static int snd_compr_mmap(struct file *f, struct vm_area_struct *vma)
+static int snd_compr_mmap(struct file *f, struct mm_area *vma)
 {
 	return -ENXIO;
 }

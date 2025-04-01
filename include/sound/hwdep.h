@@ -29,7 +29,7 @@ struct snd_hwdep_ops {
 	int (*ioctl_compat)(struct snd_hwdep *hw, struct file *file,
 			    unsigned int cmd, unsigned long arg);
 	int (*mmap)(struct snd_hwdep *hw, struct file *file,
-		    struct vm_area_struct *vma);
+		    struct mm_area *vma);
 	int (*dsp_status)(struct snd_hwdep *hw,
 			  struct snd_hwdep_dsp_status *status);
 	int (*dsp_load)(struct snd_hwdep *hw,

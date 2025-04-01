@@ -161,7 +161,7 @@ void kunmap_coherent(void)
 }
 
 void copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma)
+	unsigned long vaddr, struct mm_area *vma)
 {
 	struct folio *src = page_folio(from);
 	void *vfrom, *vto;
@@ -185,7 +185,7 @@ void copy_user_highpage(struct page *to, struct page *from,
 	smp_wmb();
 }
 
-void copy_to_user_page(struct vm_area_struct *vma,
+void copy_to_user_page(struct mm_area *vma,
 	struct page *page, unsigned long vaddr, void *dst, const void *src,
 	unsigned long len)
 {
@@ -205,7 +205,7 @@ void copy_to_user_page(struct vm_area_struct *vma,
 		flush_cache_page(vma, vaddr, page_to_pfn(page));
 }
 
-void copy_from_user_page(struct vm_area_struct *vma,
+void copy_from_user_page(struct mm_area *vma,
 	struct page *page, unsigned long vaddr, void *dst, const void *src,
 	unsigned long len)
 {

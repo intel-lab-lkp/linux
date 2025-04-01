@@ -428,15 +428,15 @@ struct kmem_cache *files_cachep;
 /* SLAB cache for fs_struct structures (tsk->fs) */
 struct kmem_cache *fs_cachep;
 
-/* SLAB cache for vm_area_struct structures */
+/* SLAB cache for mm_area structures */
 static struct kmem_cache *vm_area_cachep;
 
 /* SLAB cache for mm_struct structures (tsk->mm) */
 static struct kmem_cache *mm_cachep;
 
-struct vm_area_struct *vm_area_alloc(struct mm_struct *mm)
+struct mm_area *vm_area_alloc(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 	if (!vma)
@@ -447,8 +447,8 @@ struct vm_area_struct *vm_area_alloc(struct mm_struct *mm)
 	return vma;
 }
 
-static void vm_area_init_from(const struct vm_area_struct *src,
-			      struct vm_area_struct *dest)
+static void vm_area_init_from(const struct mm_area *src,
+			      struct mm_area *dest)
 {
 	dest->vm_mm = src->vm_mm;
 	dest->vm_ops = src->vm_ops;
@@ -483,9 +483,9 @@ static void vm_area_init_from(const struct vm_area_struct *src,
 #endif
 }
 
-struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
+struct mm_area *vm_area_dup(struct mm_area *orig)
 {
-	struct vm_area_struct *new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
+	struct mm_area *new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 
 	if (!new)
 		return NULL;
@@ -505,7 +505,7 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 	return new;
 }
 
-void vm_area_free(struct vm_area_struct *vma)
+void vm_area_free(struct mm_area *vma)
 {
 	/* The vma should be detached while being destroyed. */
 	vma_assert_detached(vma);
@@ -611,7 +611,7 @@ static void dup_mm_exe_file(struct mm_struct *mm, struct mm_struct *oldmm)
 static __latent_entropy int dup_mmap(struct mm_struct *mm,
 					struct mm_struct *oldmm)
 {
-	struct vm_area_struct *mpnt, *tmp;
+	struct mm_area *mpnt, *tmp;
 	int retval;
 	unsigned long charge = 0;
 	LIST_HEAD(uf);
@@ -1473,7 +1473,7 @@ int set_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
  */
 int replace_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct file *old_exe_file;
 	int ret = 0;
 
@@ -3215,7 +3215,7 @@ void __init proc_caches_init(void)
 {
 	struct kmem_cache_args args = {
 		.use_freeptr_offset = true,
-		.freeptr_offset = offsetof(struct vm_area_struct, vm_freeptr),
+		.freeptr_offset = offsetof(struct mm_area, vm_freeptr),
 	};
 
 	sighand_cachep = kmem_cache_create("sighand_cache",
@@ -3234,8 +3234,8 @@ void __init proc_caches_init(void)
 			sizeof(struct fs_struct), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
 			NULL);
-	vm_area_cachep = kmem_cache_create("vm_area_struct",
-			sizeof(struct vm_area_struct), &args,
+	vm_area_cachep = kmem_cache_create("mm_area",
+			sizeof(struct mm_area), &args,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_TYPESAFE_BY_RCU|
 			SLAB_ACCOUNT);
 	mmap_init();

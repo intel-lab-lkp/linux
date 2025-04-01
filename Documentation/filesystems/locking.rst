@@ -530,7 +530,7 @@ prototypes::
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
-	int (*mmap) (struct file *, struct vm_area_struct *);
+	int (*mmap) (struct file *, struct mm_area *);
 	int (*open) (struct inode *, struct file *);
 	int (*flush) (struct file *);
 	int (*release) (struct inode *, struct file *);
@@ -643,14 +643,14 @@ vm_operations_struct
 
 prototypes::
 
-	void (*open)(struct vm_area_struct *);
-	void (*close)(struct vm_area_struct *);
+	void (*open)(struct mm_area *);
+	void (*close)(struct mm_area *);
 	vm_fault_t (*fault)(struct vm_fault *);
 	vm_fault_t (*huge_fault)(struct vm_fault *, unsigned int order);
 	vm_fault_t (*map_pages)(struct vm_fault *, pgoff_t start, pgoff_t end);
-	vm_fault_t (*page_mkwrite)(struct vm_area_struct *, struct vm_fault *);
-	vm_fault_t (*pfn_mkwrite)(struct vm_area_struct *, struct vm_fault *);
-	int (*access)(struct vm_area_struct *, unsigned long, void*, int, int);
+	vm_fault_t (*page_mkwrite)(struct mm_area *, struct vm_fault *);
+	vm_fault_t (*pfn_mkwrite)(struct mm_area *, struct vm_fault *);
+	int (*access)(struct mm_area *, unsigned long, void*, int, int);
 
 locking rules:
 

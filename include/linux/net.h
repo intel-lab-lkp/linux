@@ -147,7 +147,7 @@ typedef struct {
 	int error;
 } read_descriptor_t;
 
-struct vm_area_struct;
+struct mm_area;
 struct page;
 struct sockaddr;
 struct msghdr;
@@ -208,7 +208,7 @@ struct proto_ops {
 	int		(*recvmsg)   (struct socket *sock, struct msghdr *m,
 				      size_t total_len, int flags);
 	int		(*mmap)	     (struct file *file, struct socket *sock,
-				      struct vm_area_struct * vma);
+				      struct mm_area * vma);
 	ssize_t 	(*splice_read)(struct socket *sock,  loff_t *ppos,
 				       struct pipe_inode_info *pipe, size_t len, unsigned int flags);
 	void		(*splice_eof)(struct socket *sock);

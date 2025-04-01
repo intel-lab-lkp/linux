@@ -240,7 +240,7 @@ svm_migrate_addr(struct amdgpu_device *adev, struct page *page)
 }
 
 static struct page *
-svm_migrate_get_sys_page(struct vm_area_struct *vma, unsigned long addr)
+svm_migrate_get_sys_page(struct mm_area *vma, unsigned long addr)
 {
 	struct page *page;
 
@@ -385,7 +385,7 @@ out_free_vram_pages:
 
 static long
 svm_migrate_vma_to_vram(struct kfd_node *node, struct svm_range *prange,
-			struct vm_area_struct *vma, uint64_t start,
+			struct mm_area *vma, uint64_t start,
 			uint64_t end, uint32_t trigger, uint64_t ttm_res_offset)
 {
 	struct kfd_process *p = container_of(prange->svms, struct kfd_process, svms);
@@ -489,7 +489,7 @@ svm_migrate_ram_to_vram(struct svm_range *prange, uint32_t best_loc,
 			struct mm_struct *mm, uint32_t trigger)
 {
 	unsigned long addr, start, end;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	uint64_t ttm_res_offset;
 	struct kfd_node *node;
 	unsigned long mpages = 0;
@@ -668,7 +668,7 @@ out_oom:
  * svm_migrate_vma_to_ram - migrate range inside one vma from device to system
  *
  * @prange: svm range structure
- * @vma: vm_area_struct that range [start, end] belongs to
+ * @vma: mm_area that range [start, end] belongs to
  * @start: range start virtual address in pages
  * @end: range end virtual address in pages
  * @node: kfd node device to migrate from
@@ -683,7 +683,7 @@ out_oom:
  */
 static long
 svm_migrate_vma_to_ram(struct kfd_node *node, struct svm_range *prange,
-		       struct vm_area_struct *vma, uint64_t start, uint64_t end,
+		       struct mm_area *vma, uint64_t start, uint64_t end,
 		       uint32_t trigger, struct page *fault_page)
 {
 	struct kfd_process *p = container_of(prange->svms, struct kfd_process, svms);
@@ -793,7 +793,7 @@ int svm_migrate_vram_to_ram(struct svm_range *prange, struct mm_struct *mm,
 			    uint32_t trigger, struct page *fault_page)
 {
 	struct kfd_node *node;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr;
 	unsigned long start;
 	unsigned long end;

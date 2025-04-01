@@ -77,7 +77,7 @@ int ipe_mmap_file(struct file *f, unsigned long reqprot __always_unused,
  * * %0		- Success
  * * %-EACCES	- Did not pass IPE policy
  */
-int ipe_file_mprotect(struct vm_area_struct *vma,
+int ipe_file_mprotect(struct mm_area *vma,
 		      unsigned long reqprot __always_unused,
 		      unsigned long prot)
 {

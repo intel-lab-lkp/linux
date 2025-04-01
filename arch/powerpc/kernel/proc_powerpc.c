@@ -30,7 +30,7 @@ static ssize_t page_map_read( struct file *file, char __user *buf, size_t nbytes
 			pde_data(file_inode(file)), PAGE_SIZE);
 }
 
-static int page_map_mmap( struct file *file, struct vm_area_struct *vma )
+static int page_map_mmap( struct file *file, struct mm_area *vma )
 {
 	if ((vma->vm_end - vma->vm_start) > PAGE_SIZE)
 		return -EINVAL;

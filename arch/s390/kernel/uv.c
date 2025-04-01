@@ -356,7 +356,7 @@ static int s390_wiggle_split_folio(struct mm_struct *mm, struct folio *folio, bo
 
 int make_hva_secure(struct mm_struct *mm, unsigned long hva, struct uv_cb_header *uvcb)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct folio_walk fw;
 	struct folio *folio;
 	int rc;

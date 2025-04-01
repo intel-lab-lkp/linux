@@ -33,7 +33,7 @@ static int cg3_setcolreg(unsigned, unsigned, unsigned, unsigned,
 			 unsigned, struct fb_info *);
 static int cg3_blank(int, struct fb_info *);
 
-static int cg3_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int cg3_sbusfb_mmap(struct fb_info *info, struct mm_area *vma);
 static int cg3_sbusfb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg);
 
 /*
@@ -218,7 +218,7 @@ static const struct sbus_mmap_map cg3_mmap_map[] = {
 	{ .size = 0 }
 };
 
-static int cg3_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int cg3_sbusfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct cg3_par *par = (struct cg3_par *)info->par;
 

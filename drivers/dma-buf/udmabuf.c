@@ -46,7 +46,7 @@ struct udmabuf {
 
 static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct udmabuf *ubuf = vma->vm_private_data;
 	pgoff_t pgoff = vmf->pgoff;
 	unsigned long addr, pfn;
@@ -93,7 +93,7 @@ static const struct vm_operations_struct udmabuf_vm_ops = {
 	.fault = udmabuf_vm_fault,
 };
 
-static int mmap_udmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
+static int mmap_udmabuf(struct dma_buf *buf, struct mm_area *vma)
 {
 	struct udmabuf *ubuf = buf->priv;
 

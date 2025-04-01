@@ -34,7 +34,7 @@ static int tcx_setcolreg(unsigned, unsigned, unsigned, unsigned,
 static int tcx_blank(int, struct fb_info *);
 static int tcx_pan_display(struct fb_var_screeninfo *, struct fb_info *);
 
-static int tcx_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int tcx_sbusfb_mmap(struct fb_info *info, struct mm_area *vma);
 static int tcx_sbusfb_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg);
 
 /*
@@ -292,7 +292,7 @@ static const struct sbus_mmap_map __tcx_mmap_map[TCX_MMAP_ENTRIES] = {
 	{ .size = 0 }
 };
 
-static int tcx_sbusfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int tcx_sbusfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct tcx_par *par = (struct tcx_par *)info->par;
 

@@ -49,7 +49,7 @@ static void contpte_try_unfold_partial(struct mm_struct *mm, unsigned long addr,
 static void contpte_convert(struct mm_struct *mm, unsigned long addr,
 			    pte_t *ptep, pte_t pte)
 {
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	struct mm_area vma = TLB_FLUSH_VMA(mm, 0);
 	unsigned long start_addr;
 	pte_t *start_ptep;
 	int i;
@@ -297,7 +297,7 @@ pte_t contpte_get_and_clear_full_ptes(struct mm_struct *mm,
 }
 EXPORT_SYMBOL_GPL(contpte_get_and_clear_full_ptes);
 
-int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
+int contpte_ptep_test_and_clear_young(struct mm_area *vma,
 					unsigned long addr, pte_t *ptep)
 {
 	/*
@@ -322,7 +322,7 @@ int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
 }
 EXPORT_SYMBOL_GPL(contpte_ptep_test_and_clear_young);
 
-int contpte_ptep_clear_flush_young(struct vm_area_struct *vma,
+int contpte_ptep_clear_flush_young(struct mm_area *vma,
 					unsigned long addr, pte_t *ptep)
 {
 	int young;
@@ -361,7 +361,7 @@ void contpte_wrprotect_ptes(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL_GPL(contpte_wrprotect_ptes);
 
-void contpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
+void contpte_clear_young_dirty_ptes(struct mm_area *vma,
 				    unsigned long addr, pte_t *ptep,
 				    unsigned int nr, cydp_t flags)
 {
@@ -390,7 +390,7 @@ void contpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
 }
 EXPORT_SYMBOL_GPL(contpte_clear_young_dirty_ptes);
 
-int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
+int contpte_ptep_set_access_flags(struct mm_area *vma,
 					unsigned long addr, pte_t *ptep,
 					pte_t entry, int dirty)
 {

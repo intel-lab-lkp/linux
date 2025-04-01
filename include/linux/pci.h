@@ -2103,7 +2103,7 @@ pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
  *
  */
 int pci_mmap_resource_range(struct pci_dev *dev, int bar,
-			    struct vm_area_struct *vma,
+			    struct mm_area *vma,
 			    enum pci_mmap_state mmap_state, int write_combine);
 
 #ifndef arch_can_pci_mmap_wc
@@ -2114,7 +2114,7 @@ int pci_mmap_resource_range(struct pci_dev *dev, int bar,
 #define arch_can_pci_mmap_io()		0
 #define pci_iobar_pfn(pdev, bar, vma) (-EINVAL)
 #else
-int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
+int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct mm_area *vma);
 #endif
 
 #ifndef pci_root_bus_fwnode

@@ -66,7 +66,7 @@ struct remap_data {
 	int nr_fgfn; /* Number of foreign gfn left to map */
 	pgprot_t prot;
 	domid_t  domid;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int index;
 	struct page **pages;
 	struct xen_remap_gfn_info *info;
@@ -140,7 +140,7 @@ static int remap_pte_fn(pte_t *ptep, unsigned long addr, void *data)
 	return 0;
 }
 
-int xen_xlate_remap_gfn_array(struct vm_area_struct *vma,
+int xen_xlate_remap_gfn_array(struct mm_area *vma,
 			      unsigned long addr,
 			      xen_pfn_t *gfn, int nr,
 			      int *err_ptr, pgprot_t prot,
@@ -180,7 +180,7 @@ static void unmap_gfn(unsigned long gfn, void *data)
 	(void)HYPERVISOR_memory_op(XENMEM_remove_from_physmap, &xrp);
 }
 
-int xen_xlate_unmap_gfn_range(struct vm_area_struct *vma,
+int xen_xlate_unmap_gfn_range(struct mm_area *vma,
 			      int nr, struct page **pages)
 {
 	xen_for_each_gfn(pages, nr, unmap_gfn, NULL);
@@ -282,7 +282,7 @@ static int remap_pfn_fn(pte_t *ptep, unsigned long addr, void *data)
 }
 
 /* Used by the privcmd module, but has to be built-in on ARM */
-int xen_remap_vma_range(struct vm_area_struct *vma, unsigned long addr, unsigned long len)
+int xen_remap_vma_range(struct mm_area *vma, unsigned long addr, unsigned long len)
 {
 	struct remap_pfn r = {
 		.mm = vma->vm_mm,

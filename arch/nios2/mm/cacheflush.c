@@ -74,7 +74,7 @@ static void __flush_icache(unsigned long start, unsigned long end)
 static void flush_aliases(struct address_space *mapping, struct folio *folio)
 {
 	struct mm_struct *mm = current->active_mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long flags;
 	pgoff_t pgoff;
 	unsigned long nr = folio_nr_pages(folio);
@@ -131,7 +131,7 @@ void invalidate_dcache_range(unsigned long start, unsigned long end)
 }
 EXPORT_SYMBOL(invalidate_dcache_range);
 
-void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
+void flush_cache_range(struct mm_area *vma, unsigned long start,
 			unsigned long end)
 {
 	__flush_dcache(start, end);
@@ -139,7 +139,7 @@ void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
 		__flush_icache(start, end);
 }
 
-void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
+void flush_icache_pages(struct mm_area *vma, struct page *page,
 		unsigned int nr)
 {
 	unsigned long start = (unsigned long) page_address(page);
@@ -149,7 +149,7 @@ void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
 	__flush_icache(start, end);
 }
 
-void flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr,
+void flush_cache_page(struct mm_area *vma, unsigned long vmaddr,
 			unsigned long pfn)
 {
 	unsigned long start = vmaddr;
@@ -206,7 +206,7 @@ void flush_dcache_page(struct page *page)
 }
 EXPORT_SYMBOL(flush_dcache_page);
 
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long address, pte_t *ptep, unsigned int nr)
 {
 	pte_t pte = *ptep;
@@ -258,7 +258,7 @@ void clear_user_page(void *addr, unsigned long vaddr, struct page *page)
 	__flush_icache((unsigned long)addr, (unsigned long)addr + PAGE_SIZE);
 }
 
-void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_from_user_page(struct mm_area *vma, struct page *page,
 			unsigned long user_vaddr,
 			void *dst, void *src, int len)
 {
@@ -269,7 +269,7 @@ void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
 		__flush_icache((unsigned long)src, (unsigned long)src + len);
 }
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 			unsigned long user_vaddr,
 			void *dst, void *src, int len)
 {

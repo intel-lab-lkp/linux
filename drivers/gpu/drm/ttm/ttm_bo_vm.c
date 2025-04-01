@@ -182,7 +182,7 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 				    pgprot_t prot,
 				    pgoff_t num_prefault)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 	struct ttm_device *bdev = bo->bdev;
 	unsigned long page_offset;
@@ -290,7 +290,7 @@ static void ttm_bo_release_dummy_page(struct drm_device *dev, void *res)
 
 vm_fault_t ttm_bo_vm_dummy_page(struct vm_fault *vmf, pgprot_t prot)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 	struct drm_device *ddev = bo->base.dev;
 	vm_fault_t ret = VM_FAULT_NOPAGE;
@@ -320,7 +320,7 @@ EXPORT_SYMBOL(ttm_bo_vm_dummy_page);
 
 vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	pgprot_t prot;
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 	struct drm_device *ddev = bo->base.dev;
@@ -347,7 +347,7 @@ vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf)
 }
 EXPORT_SYMBOL(ttm_bo_vm_fault);
 
-void ttm_bo_vm_open(struct vm_area_struct *vma)
+void ttm_bo_vm_open(struct mm_area *vma)
 {
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 
@@ -357,7 +357,7 @@ void ttm_bo_vm_open(struct vm_area_struct *vma)
 }
 EXPORT_SYMBOL(ttm_bo_vm_open);
 
-void ttm_bo_vm_close(struct vm_area_struct *vma)
+void ttm_bo_vm_close(struct mm_area *vma)
 {
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 
@@ -453,7 +453,7 @@ int ttm_bo_access(struct ttm_buffer_object *bo, unsigned long offset,
 }
 EXPORT_SYMBOL(ttm_bo_access);
 
-int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
+int ttm_bo_vm_access(struct mm_area *vma, unsigned long addr,
 		     void *buf, int len, int write)
 {
 	struct ttm_buffer_object *bo = vma->vm_private_data;
@@ -480,7 +480,7 @@ static const struct vm_operations_struct ttm_bo_vm_ops = {
  *
  * Maps a buffer object.
  */
-int ttm_bo_mmap_obj(struct vm_area_struct *vma, struct ttm_buffer_object *bo)
+int ttm_bo_mmap_obj(struct mm_area *vma, struct ttm_buffer_object *bo)
 {
 	/* Enforce no COW since would have really strange behavior with it. */
 	if (is_cow_mapping(vma->vm_flags))

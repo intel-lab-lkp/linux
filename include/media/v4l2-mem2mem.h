@@ -490,7 +490,7 @@ __poll_t v4l2_m2m_poll(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
  *
  * @file: pointer to struct &file
  * @m2m_ctx: m2m context assigned to the instance given by struct &v4l2_m2m_ctx
- * @vma: pointer to struct &vm_area_struct
+ * @vma: pointer to struct &mm_area
  *
  * Call from driver's mmap() function. Will handle mmap() for both queues
  * seamlessly for the video buffer, which will receive normal per-queue offsets
@@ -500,7 +500,7 @@ __poll_t v4l2_m2m_poll(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
  * thus applications) receive modified offsets.
  */
 int v4l2_m2m_mmap(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
-		  struct vm_area_struct *vma);
+		  struct mm_area *vma);
 
 #ifndef CONFIG_MMU
 unsigned long v4l2_m2m_get_unmapped_area(struct file *file, unsigned long addr,
@@ -895,7 +895,7 @@ int v4l2_m2m_ioctl_stateless_try_decoder_cmd(struct file *file, void *fh,
 					     struct v4l2_decoder_cmd *dc);
 int v4l2_m2m_ioctl_stateless_decoder_cmd(struct file *file, void *priv,
 					 struct v4l2_decoder_cmd *dc);
-int v4l2_m2m_fop_mmap(struct file *file, struct vm_area_struct *vma);
+int v4l2_m2m_fop_mmap(struct file *file, struct mm_area *vma);
 __poll_t v4l2_m2m_fop_poll(struct file *file, poll_table *wait);
 
 #endif /* _MEDIA_V4L2_MEM2MEM_H */

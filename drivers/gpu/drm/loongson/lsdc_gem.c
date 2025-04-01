@@ -110,7 +110,7 @@ static void lsdc_gem_object_vunmap(struct drm_gem_object *obj, struct iosys_map 
 	}
 }
 
-static int lsdc_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int lsdc_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct ttm_buffer_object *tbo = to_ttm_bo(obj);
 	int ret;

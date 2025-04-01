@@ -41,7 +41,7 @@
 
 static vm_fault_t nouveau_ttm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ttm_buffer_object *bo = vma->vm_private_data;
 	pgprot_t prot;
 	vm_fault_t ret;

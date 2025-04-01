@@ -165,7 +165,7 @@ extern void dmac_flush_range(const void *, const void *);
  * processes address space.  Really, we want to allow our "user
  * space" model to handle this.
  */
-extern void copy_to_user_page(struct vm_area_struct *, struct page *,
+extern void copy_to_user_page(struct mm_area *, struct page *,
 	unsigned long, void *, const void *, unsigned long);
 #define copy_from_user_page(vma, page, vaddr, dst, src, len) \
 	do {							\
@@ -222,7 +222,7 @@ static inline void vivt_flush_cache_mm(struct mm_struct *mm)
 }
 
 static inline void
-vivt_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+vivt_flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -231,7 +231,7 @@ vivt_flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned
 					vma->vm_flags);
 }
 
-static inline void vivt_flush_cache_pages(struct vm_area_struct *vma,
+static inline void vivt_flush_cache_pages(struct mm_area *vma,
 		unsigned long user_addr, unsigned long pfn, unsigned int nr)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -252,8 +252,8 @@ static inline void vivt_flush_cache_pages(struct vm_area_struct *vma,
 		vivt_flush_cache_pages(vma, addr, pfn, nr)
 #else
 void flush_cache_mm(struct mm_struct *mm);
-void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
-void flush_cache_pages(struct vm_area_struct *vma, unsigned long user_addr,
+void flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end);
+void flush_cache_pages(struct mm_area *vma, unsigned long user_addr,
 		unsigned long pfn, unsigned int nr);
 #endif
 
@@ -309,10 +309,10 @@ static inline void invalidate_kernel_vmap_range(void *addr, int size)
 }
 
 #define ARCH_HAS_FLUSH_ANON_PAGE
-static inline void flush_anon_page(struct vm_area_struct *vma,
+static inline void flush_anon_page(struct mm_area *vma,
 			 struct page *page, unsigned long vmaddr)
 {
-	extern void __flush_anon_page(struct vm_area_struct *vma,
+	extern void __flush_anon_page(struct mm_area *vma,
 				struct page *, unsigned long);
 	if (PageAnon(page))
 		__flush_anon_page(vma, page, vmaddr);

@@ -1141,7 +1141,7 @@ EXPORT_SYMBOL_GPL(vb2_ioctl_expbuf);
 
 /* v4l2_file_operations helpers */
 
-int vb2_fop_mmap(struct file *file, struct vm_area_struct *vma)
+int vb2_fop_mmap(struct file *file, struct mm_area *vma)
 {
 	struct video_device *vdev = video_devdata(file);
 

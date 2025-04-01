@@ -96,7 +96,7 @@ arch_initcall(alloc_kuser_page);
 int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	mmap_write_lock(mm);
 
@@ -110,7 +110,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 	return IS_ERR(vma) ? PTR_ERR(vma) : 0;
 }
 
-const char *arch_vma_name(struct vm_area_struct *vma)
+const char *arch_vma_name(struct mm_area *vma)
 {
 	return (vma->vm_start == KUSER_BASE) ? "[kuser]" : NULL;
 }

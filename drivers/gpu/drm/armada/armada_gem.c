@@ -471,7 +471,7 @@ static void armada_gem_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
 }
 
 static int
-armada_gem_dmabuf_mmap(struct dma_buf *buf, struct vm_area_struct *vma)
+armada_gem_dmabuf_mmap(struct dma_buf *buf, struct mm_area *vma)
 {
 	return -EINVAL;
 }

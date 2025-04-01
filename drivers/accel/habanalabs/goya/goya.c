@@ -2869,7 +2869,7 @@ int goya_resume(struct hl_device *hdev)
 	return goya_init_iatu(hdev);
 }
 
-static int goya_mmap(struct hl_device *hdev, struct vm_area_struct *vma,
+static int goya_mmap(struct hl_device *hdev, struct mm_area *vma,
 			void *cpu_addr, dma_addr_t dma_addr, size_t size)
 {
 	int rc;
@@ -5313,7 +5313,7 @@ static int goya_get_hw_block_id(struct hl_device *hdev, u64 block_addr,
 	return -EPERM;
 }
 
-static int goya_block_mmap(struct hl_device *hdev, struct vm_area_struct *vma,
+static int goya_block_mmap(struct hl_device *hdev, struct mm_area *vma,
 				u32 block_id, u32 block_size)
 {
 	return -EPERM;

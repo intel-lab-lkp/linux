@@ -116,12 +116,12 @@ struct mutex *hugetlb_fault_mutex_table __ro_after_init;
 
 /* Forward declaration */
 static int hugetlb_acct_memory(struct hstate *h, long delta);
-static void hugetlb_vma_lock_free(struct vm_area_struct *vma);
-static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma);
-static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma);
-static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
+static void hugetlb_vma_lock_free(struct mm_area *vma);
+static void hugetlb_vma_lock_alloc(struct mm_area *vma);
+static void __hugetlb_vma_unlock_write_free(struct mm_area *vma);
+static void hugetlb_unshare_pmds(struct mm_area *vma,
 		unsigned long start, unsigned long end);
-static struct resv_map *vma_resv_map(struct vm_area_struct *vma);
+static struct resv_map *vma_resv_map(struct mm_area *vma);
 
 static void hugetlb_free_folio(struct folio *folio)
 {
@@ -288,7 +288,7 @@ static inline struct hugepage_subpool *subpool_inode(struct inode *inode)
 	return HUGETLBFS_SB(inode->i_sb)->spool;
 }
 
-static inline struct hugepage_subpool *subpool_vma(struct vm_area_struct *vma)
+static inline struct hugepage_subpool *subpool_vma(struct mm_area *vma)
 {
 	return subpool_inode(file_inode(vma->vm_file));
 }
@@ -296,7 +296,7 @@ static inline struct hugepage_subpool *subpool_vma(struct vm_area_struct *vma)
 /*
  * hugetlb vma_lock helper routines
  */
-void hugetlb_vma_lock_read(struct vm_area_struct *vma)
+void hugetlb_vma_lock_read(struct mm_area *vma)
 {
 	if (__vma_shareable_lock(vma)) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
@@ -309,7 +309,7 @@ void hugetlb_vma_lock_read(struct vm_area_struct *vma)
 	}
 }
 
-void hugetlb_vma_unlock_read(struct vm_area_struct *vma)
+void hugetlb_vma_unlock_read(struct mm_area *vma)
 {
 	if (__vma_shareable_lock(vma)) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
@@ -322,7 +322,7 @@ void hugetlb_vma_unlock_read(struct vm_area_struct *vma)
 	}
 }
 
-void hugetlb_vma_lock_write(struct vm_area_struct *vma)
+void hugetlb_vma_lock_write(struct mm_area *vma)
 {
 	if (__vma_shareable_lock(vma)) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
@@ -335,7 +335,7 @@ void hugetlb_vma_lock_write(struct vm_area_struct *vma)
 	}
 }
 
-void hugetlb_vma_unlock_write(struct vm_area_struct *vma)
+void hugetlb_vma_unlock_write(struct mm_area *vma)
 {
 	if (__vma_shareable_lock(vma)) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
@@ -348,7 +348,7 @@ void hugetlb_vma_unlock_write(struct vm_area_struct *vma)
 	}
 }
 
-int hugetlb_vma_trylock_write(struct vm_area_struct *vma)
+int hugetlb_vma_trylock_write(struct mm_area *vma)
 {
 
 	if (__vma_shareable_lock(vma)) {
@@ -364,7 +364,7 @@ int hugetlb_vma_trylock_write(struct vm_area_struct *vma)
 	return 1;
 }
 
-void hugetlb_vma_assert_locked(struct vm_area_struct *vma)
+void hugetlb_vma_assert_locked(struct mm_area *vma)
 {
 	if (__vma_shareable_lock(vma)) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
@@ -387,7 +387,7 @@ void hugetlb_vma_lock_release(struct kref *kref)
 
 static void __hugetlb_vma_unlock_write_put(struct hugetlb_vma_lock *vma_lock)
 {
-	struct vm_area_struct *vma = vma_lock->vma;
+	struct mm_area *vma = vma_lock->vma;
 
 	/*
 	 * vma_lock structure may or not be released as a result of put,
@@ -400,7 +400,7 @@ static void __hugetlb_vma_unlock_write_put(struct hugetlb_vma_lock *vma_lock)
 	kref_put(&vma_lock->refs, hugetlb_vma_lock_release);
 }
 
-static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma)
+static void __hugetlb_vma_unlock_write_free(struct mm_area *vma)
 {
 	if (__vma_shareable_lock(vma)) {
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
@@ -414,7 +414,7 @@ static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma)
 	}
 }
 
-static void hugetlb_vma_lock_free(struct vm_area_struct *vma)
+static void hugetlb_vma_lock_free(struct mm_area *vma)
 {
 	/*
 	 * Only present in sharable vmas.
@@ -430,7 +430,7 @@ static void hugetlb_vma_lock_free(struct vm_area_struct *vma)
 	}
 }
 
-static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma)
+static void hugetlb_vma_lock_alloc(struct mm_area *vma)
 {
 	struct hugetlb_vma_lock *vma_lock;
 
@@ -1021,7 +1021,7 @@ static long region_count(struct resv_map *resv, long f, long t)
  * the mapping, huge page units here.
  */
 static pgoff_t vma_hugecache_offset(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long address)
+			struct mm_area *vma, unsigned long address)
 {
 	return ((address - vma->vm_start) >> huge_page_shift(h)) +
 			(vma->vm_pgoff >> huge_page_order(h));
@@ -1036,7 +1036,7 @@ static pgoff_t vma_hugecache_offset(struct hstate *h,
  *
  * Return: The default size of the folios allocated when backing a VMA.
  */
-unsigned long vma_kernel_pagesize(struct vm_area_struct *vma)
+unsigned long vma_kernel_pagesize(struct mm_area *vma)
 {
 	if (vma->vm_ops && vma->vm_ops->pagesize)
 		return vma->vm_ops->pagesize(vma);
@@ -1050,7 +1050,7 @@ EXPORT_SYMBOL_GPL(vma_kernel_pagesize);
  * architectures where it differs, an architecture-specific 'strong'
  * version of this symbol is required.
  */
-__weak unsigned long vma_mmu_pagesize(struct vm_area_struct *vma)
+__weak unsigned long vma_mmu_pagesize(struct mm_area *vma)
 {
 	return vma_kernel_pagesize(vma);
 }
@@ -1083,12 +1083,12 @@ __weak unsigned long vma_mmu_pagesize(struct vm_area_struct *vma)
  * reference it, this region map represents those offsets which have consumed
  * reservation ie. where pages have been instantiated.
  */
-static unsigned long get_vma_private_data(struct vm_area_struct *vma)
+static unsigned long get_vma_private_data(struct mm_area *vma)
 {
 	return (unsigned long)vma->vm_private_data;
 }
 
-static void set_vma_private_data(struct vm_area_struct *vma,
+static void set_vma_private_data(struct mm_area *vma,
 							unsigned long value)
 {
 	vma->vm_private_data = (void *)value;
@@ -1178,7 +1178,7 @@ static inline struct resv_map *inode_resv_map(struct inode *inode)
 	return (struct resv_map *)(&inode->i_data)->i_private_data;
 }
 
-static struct resv_map *vma_resv_map(struct vm_area_struct *vma)
+static struct resv_map *vma_resv_map(struct mm_area *vma)
 {
 	VM_BUG_ON_VMA(!is_vm_hugetlb_page(vma), vma);
 	if (vma->vm_flags & VM_MAYSHARE) {
@@ -1193,7 +1193,7 @@ static struct resv_map *vma_resv_map(struct vm_area_struct *vma)
 	}
 }
 
-static void set_vma_resv_map(struct vm_area_struct *vma, struct resv_map *map)
+static void set_vma_resv_map(struct mm_area *vma, struct resv_map *map)
 {
 	VM_BUG_ON_VMA(!is_vm_hugetlb_page(vma), vma);
 	VM_BUG_ON_VMA(vma->vm_flags & VM_MAYSHARE, vma);
@@ -1201,7 +1201,7 @@ static void set_vma_resv_map(struct vm_area_struct *vma, struct resv_map *map)
 	set_vma_private_data(vma, (unsigned long)map);
 }
 
-static void set_vma_resv_flags(struct vm_area_struct *vma, unsigned long flags)
+static void set_vma_resv_flags(struct mm_area *vma, unsigned long flags)
 {
 	VM_BUG_ON_VMA(!is_vm_hugetlb_page(vma), vma);
 	VM_BUG_ON_VMA(vma->vm_flags & VM_MAYSHARE, vma);
@@ -1209,21 +1209,21 @@ static void set_vma_resv_flags(struct vm_area_struct *vma, unsigned long flags)
 	set_vma_private_data(vma, get_vma_private_data(vma) | flags);
 }
 
-static int is_vma_resv_set(struct vm_area_struct *vma, unsigned long flag)
+static int is_vma_resv_set(struct mm_area *vma, unsigned long flag)
 {
 	VM_BUG_ON_VMA(!is_vm_hugetlb_page(vma), vma);
 
 	return (get_vma_private_data(vma) & flag) != 0;
 }
 
-bool __vma_private_lock(struct vm_area_struct *vma)
+bool __vma_private_lock(struct mm_area *vma)
 {
 	return !(vma->vm_flags & VM_MAYSHARE) &&
 		get_vma_private_data(vma) & ~HPAGE_RESV_MASK &&
 		is_vma_resv_set(vma, HPAGE_RESV_OWNER);
 }
 
-void hugetlb_dup_vma_private(struct vm_area_struct *vma)
+void hugetlb_dup_vma_private(struct mm_area *vma)
 {
 	VM_BUG_ON_VMA(!is_vm_hugetlb_page(vma), vma);
 	/*
@@ -1254,7 +1254,7 @@ void hugetlb_dup_vma_private(struct vm_area_struct *vma)
  * same sized vma. It should never come here with last ref on the
  * reservation.
  */
-void clear_vma_resv_huge_pages(struct vm_area_struct *vma)
+void clear_vma_resv_huge_pages(struct mm_area *vma)
 {
 	/*
 	 * Clear the old hugetlb private page reservation.
@@ -1365,7 +1365,7 @@ static unsigned long available_huge_pages(struct hstate *h)
 }
 
 static struct folio *dequeue_hugetlb_folio_vma(struct hstate *h,
-				struct vm_area_struct *vma,
+				struct mm_area *vma,
 				unsigned long address, long gbl_chg)
 {
 	struct folio *folio = NULL;
@@ -2324,7 +2324,7 @@ static struct folio *alloc_migrate_hugetlb_folio(struct hstate *h, gfp_t gfp_mas
  */
 static
 struct folio *alloc_buddy_hugetlb_folio_with_mpol(struct hstate *h,
-		struct vm_area_struct *vma, unsigned long addr)
+		struct mm_area *vma, unsigned long addr)
 {
 	struct folio *folio = NULL;
 	struct mempolicy *mpol;
@@ -2606,7 +2606,7 @@ enum vma_resv_mode {
 	VMA_DEL_RESV,
 };
 static long __vma_reservation_common(struct hstate *h,
-				struct vm_area_struct *vma, unsigned long addr,
+				struct mm_area *vma, unsigned long addr,
 				enum vma_resv_mode mode)
 {
 	struct resv_map *resv;
@@ -2686,31 +2686,31 @@ static long __vma_reservation_common(struct hstate *h,
 }
 
 static long vma_needs_reservation(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long addr)
+			struct mm_area *vma, unsigned long addr)
 {
 	return __vma_reservation_common(h, vma, addr, VMA_NEEDS_RESV);
 }
 
 static long vma_commit_reservation(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long addr)
+			struct mm_area *vma, unsigned long addr)
 {
 	return __vma_reservation_common(h, vma, addr, VMA_COMMIT_RESV);
 }
 
 static void vma_end_reservation(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long addr)
+			struct mm_area *vma, unsigned long addr)
 {
 	(void)__vma_reservation_common(h, vma, addr, VMA_END_RESV);
 }
 
 static long vma_add_reservation(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long addr)
+			struct mm_area *vma, unsigned long addr)
 {
 	return __vma_reservation_common(h, vma, addr, VMA_ADD_RESV);
 }
 
 static long vma_del_reservation(struct hstate *h,
-			struct vm_area_struct *vma, unsigned long addr)
+			struct mm_area *vma, unsigned long addr)
 {
 	return __vma_reservation_common(h, vma, addr, VMA_DEL_RESV);
 }
@@ -2735,7 +2735,7 @@ static long vma_del_reservation(struct hstate *h,
  *
  * In case 2, simply undo reserve map modifications done by alloc_hugetlb_folio.
  */
-void restore_reserve_on_error(struct hstate *h, struct vm_area_struct *vma,
+void restore_reserve_on_error(struct hstate *h, struct mm_area *vma,
 			unsigned long address, struct folio *folio)
 {
 	long rc = vma_needs_reservation(h, vma, address);
@@ -3004,7 +3004,7 @@ typedef enum {
  * allocation).  New call sites should (probably) never set it to true!!
  * When it's set, the allocation will bypass all vma level reservations.
  */
-struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
+struct folio *alloc_hugetlb_folio(struct mm_area *vma,
 				    unsigned long addr, bool cow_from_owner)
 {
 	struct hugepage_subpool *spool = subpool_vma(vma);
@@ -5314,7 +5314,7 @@ out:
 	return ret;
 }
 
-static void hugetlb_vm_op_open(struct vm_area_struct *vma)
+static void hugetlb_vm_op_open(struct mm_area *vma)
 {
 	struct resv_map *resv = vma_resv_map(vma);
 
@@ -5352,7 +5352,7 @@ static void hugetlb_vm_op_open(struct vm_area_struct *vma)
 	}
 }
 
-static void hugetlb_vm_op_close(struct vm_area_struct *vma)
+static void hugetlb_vm_op_close(struct mm_area *vma)
 {
 	struct hstate *h = hstate_vma(vma);
 	struct resv_map *resv;
@@ -5383,7 +5383,7 @@ static void hugetlb_vm_op_close(struct vm_area_struct *vma)
 	kref_put(&resv->refs, resv_map_release);
 }
 
-static int hugetlb_vm_op_split(struct vm_area_struct *vma, unsigned long addr)
+static int hugetlb_vm_op_split(struct mm_area *vma, unsigned long addr)
 {
 	if (addr & ~(huge_page_mask(hstate_vma(vma))))
 		return -EINVAL;
@@ -5409,7 +5409,7 @@ static int hugetlb_vm_op_split(struct vm_area_struct *vma, unsigned long addr)
 	return 0;
 }
 
-static unsigned long hugetlb_vm_op_pagesize(struct vm_area_struct *vma)
+static unsigned long hugetlb_vm_op_pagesize(struct mm_area *vma)
 {
 	return huge_page_size(hstate_vma(vma));
 }
@@ -5441,7 +5441,7 @@ const struct vm_operations_struct hugetlb_vm_ops = {
 	.pagesize = hugetlb_vm_op_pagesize,
 };
 
-static pte_t make_huge_pte(struct vm_area_struct *vma, struct page *page,
+static pte_t make_huge_pte(struct mm_area *vma, struct page *page,
 		bool try_mkwrite)
 {
 	pte_t entry;
@@ -5460,7 +5460,7 @@ static pte_t make_huge_pte(struct vm_area_struct *vma, struct page *page,
 	return entry;
 }
 
-static void set_huge_ptep_writable(struct vm_area_struct *vma,
+static void set_huge_ptep_writable(struct mm_area *vma,
 				   unsigned long address, pte_t *ptep)
 {
 	pte_t entry;
@@ -5470,7 +5470,7 @@ static void set_huge_ptep_writable(struct vm_area_struct *vma,
 		update_mmu_cache(vma, address, ptep);
 }
 
-static void set_huge_ptep_maybe_writable(struct vm_area_struct *vma,
+static void set_huge_ptep_maybe_writable(struct mm_area *vma,
 					 unsigned long address, pte_t *ptep)
 {
 	if (vma->vm_flags & VM_WRITE)
@@ -5504,7 +5504,7 @@ bool is_hugetlb_entry_hwpoisoned(pte_t pte)
 }
 
 static void
-hugetlb_install_folio(struct vm_area_struct *vma, pte_t *ptep, unsigned long addr,
+hugetlb_install_folio(struct mm_area *vma, pte_t *ptep, unsigned long addr,
 		      struct folio *new_folio, pte_t old, unsigned long sz)
 {
 	pte_t newpte = make_huge_pte(vma, &new_folio->page, true);
@@ -5519,8 +5519,8 @@ hugetlb_install_folio(struct vm_area_struct *vma, pte_t *ptep, unsigned long add
 }
 
 int copy_hugetlb_page_range(struct mm_struct *dst, struct mm_struct *src,
-			    struct vm_area_struct *dst_vma,
-			    struct vm_area_struct *src_vma)
+			    struct mm_area *dst_vma,
+			    struct mm_area *src_vma)
 {
 	pte_t *src_pte, *dst_pte, entry;
 	struct folio *pte_folio;
@@ -5706,7 +5706,7 @@ again:
 	return ret;
 }
 
-static void move_huge_pte(struct vm_area_struct *vma, unsigned long old_addr,
+static void move_huge_pte(struct mm_area *vma, unsigned long old_addr,
 			  unsigned long new_addr, pte_t *src_pte, pte_t *dst_pte,
 			  unsigned long sz)
 {
@@ -5745,8 +5745,8 @@ static void move_huge_pte(struct vm_area_struct *vma, unsigned long old_addr,
 	spin_unlock(dst_ptl);
 }
 
-int move_hugetlb_page_tables(struct vm_area_struct *vma,
-			     struct vm_area_struct *new_vma,
+int move_hugetlb_page_tables(struct mm_area *vma,
+			     struct mm_area *new_vma,
 			     unsigned long old_addr, unsigned long new_addr,
 			     unsigned long len)
 {
@@ -5809,7 +5809,7 @@ int move_hugetlb_page_tables(struct vm_area_struct *vma,
 	return len + old_addr - old_end;
 }
 
-void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
+void __unmap_hugepage_range(struct mmu_gather *tlb, struct mm_area *vma,
 			    unsigned long start, unsigned long end,
 			    struct page *ref_page, zap_flags_t zap_flags)
 {
@@ -5977,7 +5977,7 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		tlb_flush_mmu_tlbonly(tlb);
 }
 
-void __hugetlb_zap_begin(struct vm_area_struct *vma,
+void __hugetlb_zap_begin(struct mm_area *vma,
 			 unsigned long *start, unsigned long *end)
 {
 	if (!vma->vm_file)	/* hugetlbfs_file_mmap error */
@@ -5989,7 +5989,7 @@ void __hugetlb_zap_begin(struct vm_area_struct *vma,
 		i_mmap_lock_write(vma->vm_file->f_mapping);
 }
 
-void __hugetlb_zap_end(struct vm_area_struct *vma,
+void __hugetlb_zap_end(struct mm_area *vma,
 		       struct zap_details *details)
 {
 	zap_flags_t zap_flags = details ? details->zap_flags : 0;
@@ -6016,7 +6016,7 @@ void __hugetlb_zap_end(struct vm_area_struct *vma,
 		i_mmap_unlock_write(vma->vm_file->f_mapping);
 }
 
-void unmap_hugepage_range(struct vm_area_struct *vma, unsigned long start,
+void unmap_hugepage_range(struct mm_area *vma, unsigned long start,
 			  unsigned long end, struct page *ref_page,
 			  zap_flags_t zap_flags)
 {
@@ -6041,11 +6041,11 @@ void unmap_hugepage_range(struct vm_area_struct *vma, unsigned long start,
  * from other VMAs and let the children be SIGKILLed if they are faulting the
  * same region.
  */
-static void unmap_ref_private(struct mm_struct *mm, struct vm_area_struct *vma,
+static void unmap_ref_private(struct mm_struct *mm, struct mm_area *vma,
 			      struct page *page, unsigned long address)
 {
 	struct hstate *h = hstate_vma(vma);
-	struct vm_area_struct *iter_vma;
+	struct mm_area *iter_vma;
 	struct address_space *mapping;
 	pgoff_t pgoff;
 
@@ -6100,7 +6100,7 @@ static void unmap_ref_private(struct mm_struct *mm, struct vm_area_struct *vma,
 static vm_fault_t hugetlb_wp(struct folio *pagecache_folio,
 		       struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	const bool unshare = vmf->flags & FAULT_FLAG_UNSHARE;
 	pte_t pte = huge_ptep_get(mm, vmf->address, vmf->pte);
@@ -6294,7 +6294,7 @@ out_release_old:
  * Return whether there is a pagecache page to back given address within VMA.
  */
 bool hugetlbfs_pagecache_present(struct hstate *h,
-				 struct vm_area_struct *vma, unsigned long address)
+				 struct mm_area *vma, unsigned long address)
 {
 	struct address_space *mapping = vma->vm_file->f_mapping;
 	pgoff_t idx = linear_page_index(vma, address);
@@ -6373,7 +6373,7 @@ static bool hugetlb_pte_stable(struct hstate *h, struct mm_struct *mm, unsigned 
 static vm_fault_t hugetlb_no_page(struct address_space *mapping,
 			struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	struct hstate *h = hstate_vma(vma);
 	vm_fault_t ret = VM_FAULT_SIGBUS;
@@ -6611,7 +6611,7 @@ u32 hugetlb_fault_mutex_hash(struct address_space *mapping, pgoff_t idx)
 }
 #endif
 
-vm_fault_t hugetlb_fault(struct mm_struct *mm, struct vm_area_struct *vma,
+vm_fault_t hugetlb_fault(struct mm_struct *mm, struct mm_area *vma,
 			unsigned long address, unsigned int flags)
 {
 	vm_fault_t ret;
@@ -6824,7 +6824,7 @@ out_mutex:
  * Can probably be eliminated, but still used by hugetlb_mfill_atomic_pte().
  */
 static struct folio *alloc_hugetlb_folio_vma(struct hstate *h,
-		struct vm_area_struct *vma, unsigned long address)
+		struct mm_area *vma, unsigned long address)
 {
 	struct mempolicy *mpol;
 	nodemask_t *nodemask;
@@ -6851,7 +6851,7 @@ static struct folio *alloc_hugetlb_folio_vma(struct hstate *h,
  * with modifications for hugetlb pages.
  */
 int hugetlb_mfill_atomic_pte(pte_t *dst_pte,
-			     struct vm_area_struct *dst_vma,
+			     struct mm_area *dst_vma,
 			     unsigned long dst_addr,
 			     unsigned long src_addr,
 			     uffd_flags_t flags,
@@ -7063,7 +7063,7 @@ out_release_nounlock:
 }
 #endif /* CONFIG_USERFAULTFD */
 
-long hugetlb_change_protection(struct vm_area_struct *vma,
+long hugetlb_change_protection(struct mm_area *vma,
 		unsigned long address, unsigned long end,
 		pgprot_t newprot, unsigned long cp_flags)
 {
@@ -7213,7 +7213,7 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 /* Return true if reservation was successful, false otherwise.  */
 bool hugetlb_reserve_pages(struct inode *inode,
 					long from, long to,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					vm_flags_t vm_flags)
 {
 	long chg = -1, add = -1;
@@ -7413,8 +7413,8 @@ long hugetlb_unreserve_pages(struct inode *inode, long start, long end,
 }
 
 #ifdef CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING
-static unsigned long page_table_shareable(struct vm_area_struct *svma,
-				struct vm_area_struct *vma,
+static unsigned long page_table_shareable(struct mm_area *svma,
+				struct mm_area *vma,
 				unsigned long addr, pgoff_t idx)
 {
 	unsigned long saddr = ((idx - svma->vm_pgoff) << PAGE_SHIFT) +
@@ -7441,7 +7441,7 @@ static unsigned long page_table_shareable(struct vm_area_struct *svma,
 	return saddr;
 }
 
-bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
+bool want_pmd_share(struct mm_area *vma, unsigned long addr)
 {
 	unsigned long start = addr & PUD_MASK;
 	unsigned long end = start + PUD_SIZE;
@@ -7467,7 +7467,7 @@ bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
  * If yes, adjust start and end to cover range associated with possible
  * shared pmd mappings.
  */
-void adjust_range_if_pmd_sharing_possible(struct vm_area_struct *vma,
+void adjust_range_if_pmd_sharing_possible(struct mm_area *vma,
 				unsigned long *start, unsigned long *end)
 {
 	unsigned long v_start = ALIGN(vma->vm_start, PUD_SIZE),
@@ -7498,13 +7498,13 @@ void adjust_range_if_pmd_sharing_possible(struct vm_area_struct *vma,
  * racing tasks could either miss the sharing (see huge_pte_offset) or select a
  * bad pmd for sharing.
  */
-pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
+pte_t *huge_pmd_share(struct mm_struct *mm, struct mm_area *vma,
 		      unsigned long addr, pud_t *pud)
 {
 	struct address_space *mapping = vma->vm_file->f_mapping;
 	pgoff_t idx = ((addr - vma->vm_start) >> PAGE_SHIFT) +
 			vma->vm_pgoff;
-	struct vm_area_struct *svma;
+	struct mm_area *svma;
 	unsigned long saddr;
 	pte_t *spte = NULL;
 	pte_t *pte;
@@ -7551,7 +7551,7 @@ out:
  * returns: 1 successfully unmapped a shared pte page
  *	    0 the underlying pte page is not shared, or it is the last user
  */
-int huge_pmd_unshare(struct mm_struct *mm, struct vm_area_struct *vma,
+int huge_pmd_unshare(struct mm_struct *mm, struct mm_area *vma,
 					unsigned long addr, pte_t *ptep)
 {
 	unsigned long sz = huge_page_size(hstate_vma(vma));
@@ -7574,31 +7574,31 @@ int huge_pmd_unshare(struct mm_struct *mm, struct vm_area_struct *vma,
 
 #else /* !CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING */
 
-pte_t *huge_pmd_share(struct mm_struct *mm, struct vm_area_struct *vma,
+pte_t *huge_pmd_share(struct mm_struct *mm, struct mm_area *vma,
 		      unsigned long addr, pud_t *pud)
 {
 	return NULL;
 }
 
-int huge_pmd_unshare(struct mm_struct *mm, struct vm_area_struct *vma,
+int huge_pmd_unshare(struct mm_struct *mm, struct mm_area *vma,
 				unsigned long addr, pte_t *ptep)
 {
 	return 0;
 }
 
-void adjust_range_if_pmd_sharing_possible(struct vm_area_struct *vma,
+void adjust_range_if_pmd_sharing_possible(struct mm_area *vma,
 				unsigned long *start, unsigned long *end)
 {
 }
 
-bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
+bool want_pmd_share(struct mm_area *vma, unsigned long addr)
 {
 	return false;
 }
 #endif /* CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING */
 
 #ifdef CONFIG_ARCH_WANT_GENERAL_HUGETLB
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+pte_t *huge_pte_alloc(struct mm_struct *mm, struct mm_area *vma,
 			unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgd;
@@ -7837,7 +7837,7 @@ void move_hugetlb_state(struct folio *old_folio, struct folio *new_folio, int re
 	spin_unlock_irq(&hugetlb_lock);
 }
 
-static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
+static void hugetlb_unshare_pmds(struct mm_area *vma,
 				   unsigned long start,
 				   unsigned long end)
 {
@@ -7887,7 +7887,7 @@ static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
  * This function will unconditionally remove all the shared pmd pgtable entries
  * within the specific vma for a hugetlbfs memory range.
  */
-void hugetlb_unshare_all_pmds(struct vm_area_struct *vma)
+void hugetlb_unshare_all_pmds(struct mm_area *vma)
 {
 	hugetlb_unshare_pmds(vma, ALIGN(vma->vm_start, PUD_SIZE),
 			ALIGN_DOWN(vma->vm_end, PUD_SIZE));

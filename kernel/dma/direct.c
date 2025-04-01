@@ -537,7 +537,7 @@ bool dma_direct_can_mmap(struct device *dev)
 		IS_ENABLED(CONFIG_DMA_NONCOHERENT_MMAP);
 }
 
-int dma_direct_mmap(struct device *dev, struct vm_area_struct *vma,
+int dma_direct_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs)
 {

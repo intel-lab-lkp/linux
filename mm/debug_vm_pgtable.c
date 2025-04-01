@@ -45,7 +45,7 @@
 
 struct pgtable_debug_args {
 	struct mm_struct	*mm;
-	struct vm_area_struct	*vma;
+	struct mm_area	*vma;
 
 	pgd_t			*pgdp;
 	p4d_t			*p4dp;

@@ -23,7 +23,7 @@
 #include <asm/cpu-features.h>
 
 struct mm_struct;
-struct vm_area_struct;
+struct mm_area;
 
 #define PAGE_SHARED	vm_get_page_prot(VM_READ|VM_WRITE|VM_SHARED)
 
@@ -478,7 +478,7 @@ static inline pgprot_t pgprot_writecombine(pgprot_t _prot)
 	return __pgprot(prot);
 }
 
-static inline void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
+static inline void flush_tlb_fix_spurious_fault(struct mm_area *vma,
 						unsigned long address,
 						pte_t *ptep)
 {
@@ -491,7 +491,7 @@ static inline int pte_same(pte_t pte_a, pte_t pte_b)
 }
 
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-static inline int ptep_set_access_flags(struct vm_area_struct *vma,
+static inline int ptep_set_access_flags(struct mm_area *vma,
 					unsigned long address, pte_t *ptep,
 					pte_t entry, int dirty)
 {
@@ -575,11 +575,11 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 }
 #endif
 
-extern void __update_tlb(struct vm_area_struct *vma, unsigned long address,
+extern void __update_tlb(struct mm_area *vma, unsigned long address,
 	pte_t pte);
 
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long address,
+		struct mm_area *vma, unsigned long address,
 		pte_t *ptep, unsigned int nr)
 {
 	for (;;) {
@@ -597,7 +597,7 @@ static inline void update_mmu_cache_range(struct vm_fault *vmf,
 #define update_mmu_tlb_range(vma, address, ptep, nr) \
 	update_mmu_cache_range(NULL, vma, address, ptep, nr)
 
-static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pmd(struct mm_area *vma,
 	unsigned long address, pmd_t *pmdp)
 {
 	pte_t pte = *(pte_t *)pmdp;
@@ -610,7 +610,7 @@ static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
  */
 #ifdef CONFIG_MIPS_FIXUP_BIGPHYS_ADDR
 phys_addr_t fixup_bigphys_addr(phys_addr_t addr, phys_addr_t size);
-int io_remap_pfn_range(struct vm_area_struct *vma, unsigned long vaddr,
+int io_remap_pfn_range(struct mm_area *vma, unsigned long vaddr,
 		unsigned long pfn, unsigned long size, pgprot_t prot);
 #define io_remap_pfn_range io_remap_pfn_range
 #else

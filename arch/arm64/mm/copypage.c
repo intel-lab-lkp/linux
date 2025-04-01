@@ -61,7 +61,7 @@ void copy_highpage(struct page *to, struct page *from)
 EXPORT_SYMBOL(copy_highpage);
 
 void copy_user_highpage(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma)
+			unsigned long vaddr, struct mm_area *vma)
 {
 	copy_highpage(to, from);
 	flush_dcache_page(to);

@@ -40,7 +40,7 @@ MODULE_LICENSE("GPL");
 
 static long uv_mmtimer_ioctl(struct file *file, unsigned int cmd,
 						unsigned long arg);
-static int uv_mmtimer_mmap(struct file *file, struct vm_area_struct *vma);
+static int uv_mmtimer_mmap(struct file *file, struct mm_area *vma);
 
 /*
  * Period in femtoseconds (10^-15 s)
@@ -144,7 +144,7 @@ static long uv_mmtimer_ioctl(struct file *file, unsigned int cmd,
  * Calls remap_pfn_range() to map the clock's registers into
  * the calling process' address space.
  */
-static int uv_mmtimer_mmap(struct file *file, struct vm_area_struct *vma)
+static int uv_mmtimer_mmap(struct file *file, struct mm_area *vma)
 {
 	unsigned long uv_mmtimer_addr;
 

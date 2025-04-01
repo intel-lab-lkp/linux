@@ -595,7 +595,7 @@ static struct folio *try_grab_folio_fast(struct page *page, int refs,
 
 /* Common code for can_follow_write_* */
 static inline bool can_follow_write_common(struct page *page,
-		struct vm_area_struct *vma, unsigned int flags)
+		struct mm_area *vma, unsigned int flags)
 {
 	/* Maybe FOLL_FORCE is set to override it? */
 	if (!(flags & FOLL_FORCE))
@@ -620,7 +620,7 @@ static inline bool can_follow_write_common(struct page *page,
 	return page && PageAnon(page) && PageAnonExclusive(page);
 }
 
-static struct page *no_page_table(struct vm_area_struct *vma,
+static struct page *no_page_table(struct mm_area *vma,
 				  unsigned int flags, unsigned long address)
 {
 	if (!(flags & FOLL_DUMP))
@@ -648,7 +648,7 @@ static struct page *no_page_table(struct vm_area_struct *vma,
 #ifdef CONFIG_PGTABLE_HAS_HUGE_LEAVES
 /* FOLL_FORCE can write to even unwritable PUDs in COW mappings. */
 static inline bool can_follow_write_pud(pud_t pud, struct page *page,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					unsigned int flags)
 {
 	/* If the pud is writable, we can write to the page. */
@@ -658,7 +658,7 @@ static inline bool can_follow_write_pud(pud_t pud, struct page *page,
 	return can_follow_write_common(page, vma, flags);
 }
 
-static struct page *follow_huge_pud(struct vm_area_struct *vma,
+static struct page *follow_huge_pud(struct mm_area *vma,
 				    unsigned long addr, pud_t *pudp,
 				    int flags, struct follow_page_context *ctx)
 {
@@ -716,7 +716,7 @@ static struct page *follow_huge_pud(struct vm_area_struct *vma,
 
 /* FOLL_FORCE can write to even unwritable PMDs in COW mappings. */
 static inline bool can_follow_write_pmd(pmd_t pmd, struct page *page,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					unsigned int flags)
 {
 	/* If the pmd is writable, we can write to the page. */
@@ -732,7 +732,7 @@ static inline bool can_follow_write_pmd(pmd_t pmd, struct page *page,
 	return !userfaultfd_huge_pmd_wp(vma, pmd);
 }
 
-static struct page *follow_huge_pmd(struct vm_area_struct *vma,
+static struct page *follow_huge_pmd(struct mm_area *vma,
 				    unsigned long addr, pmd_t *pmd,
 				    unsigned int flags,
 				    struct follow_page_context *ctx)
@@ -778,14 +778,14 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 }
 
 #else  /* CONFIG_PGTABLE_HAS_HUGE_LEAVES */
-static struct page *follow_huge_pud(struct vm_area_struct *vma,
+static struct page *follow_huge_pud(struct mm_area *vma,
 				    unsigned long addr, pud_t *pudp,
 				    int flags, struct follow_page_context *ctx)
 {
 	return NULL;
 }
 
-static struct page *follow_huge_pmd(struct vm_area_struct *vma,
+static struct page *follow_huge_pmd(struct mm_area *vma,
 				    unsigned long addr, pmd_t *pmd,
 				    unsigned int flags,
 				    struct follow_page_context *ctx)
@@ -794,7 +794,7 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 }
 #endif	/* CONFIG_PGTABLE_HAS_HUGE_LEAVES */
 
-static int follow_pfn_pte(struct vm_area_struct *vma, unsigned long address,
+static int follow_pfn_pte(struct mm_area *vma, unsigned long address,
 		pte_t *pte, unsigned int flags)
 {
 	if (flags & FOLL_TOUCH) {
@@ -817,7 +817,7 @@ static int follow_pfn_pte(struct vm_area_struct *vma, unsigned long address,
 
 /* FOLL_FORCE can write to even unwritable PTEs in COW mappings. */
 static inline bool can_follow_write_pte(pte_t pte, struct page *page,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					unsigned int flags)
 {
 	/* If the pte is writable, we can write to the page. */
@@ -833,7 +833,7 @@ static inline bool can_follow_write_pte(pte_t pte, struct page *page,
 	return !userfaultfd_pte_wp(vma, pte);
 }
 
-static struct page *follow_page_pte(struct vm_area_struct *vma,
+static struct page *follow_page_pte(struct mm_area *vma,
 		unsigned long address, pmd_t *pmd, unsigned int flags,
 		struct dev_pagemap **pgmap)
 {
@@ -947,7 +947,7 @@ no_page:
 	return no_page_table(vma, flags, address);
 }
 
-static struct page *follow_pmd_mask(struct vm_area_struct *vma,
+static struct page *follow_pmd_mask(struct mm_area *vma,
 				    unsigned long address, pud_t *pudp,
 				    unsigned int flags,
 				    struct follow_page_context *ctx)
@@ -999,7 +999,7 @@ static struct page *follow_pmd_mask(struct vm_area_struct *vma,
 	return page;
 }
 
-static struct page *follow_pud_mask(struct vm_area_struct *vma,
+static struct page *follow_pud_mask(struct mm_area *vma,
 				    unsigned long address, p4d_t *p4dp,
 				    unsigned int flags,
 				    struct follow_page_context *ctx)
@@ -1027,7 +1027,7 @@ static struct page *follow_pud_mask(struct vm_area_struct *vma,
 	return follow_pmd_mask(vma, address, pudp, flags, ctx);
 }
 
-static struct page *follow_p4d_mask(struct vm_area_struct *vma,
+static struct page *follow_p4d_mask(struct mm_area *vma,
 				    unsigned long address, pgd_t *pgdp,
 				    unsigned int flags,
 				    struct follow_page_context *ctx)
@@ -1046,7 +1046,7 @@ static struct page *follow_p4d_mask(struct vm_area_struct *vma,
 
 /**
  * follow_page_mask - look up a page descriptor from a user-virtual address
- * @vma: vm_area_struct mapping @address
+ * @vma: mm_area mapping @address
  * @address: virtual address to look up
  * @flags: flags modifying lookup behaviour
  * @ctx: contains dev_pagemap for %ZONE_DEVICE memory pinning and a
@@ -1068,7 +1068,7 @@ static struct page *follow_p4d_mask(struct vm_area_struct *vma,
  * an error pointer if there is a mapping to something not represented
  * by a page descriptor (see also vm_normal_page()).
  */
-static struct page *follow_page_mask(struct vm_area_struct *vma,
+static struct page *follow_page_mask(struct mm_area *vma,
 			      unsigned long address, unsigned int flags,
 			      struct follow_page_context *ctx)
 {
@@ -1092,7 +1092,7 @@ static struct page *follow_page_mask(struct vm_area_struct *vma,
 }
 
 static int get_gate_page(struct mm_struct *mm, unsigned long address,
-		unsigned int gup_flags, struct vm_area_struct **vma,
+		unsigned int gup_flags, struct mm_area **vma,
 		struct page **page)
 {
 	pgd_t *pgd;
@@ -1151,7 +1151,7 @@ unmap:
  * FOLL_NOWAIT, the mmap_lock may be released.  If it is, *@locked will be set
  * to 0 and -EBUSY returned.
  */
-static int faultin_page(struct vm_area_struct *vma,
+static int faultin_page(struct mm_area *vma,
 		unsigned long address, unsigned int flags, bool unshare,
 		int *locked)
 {
@@ -1246,7 +1246,7 @@ static int faultin_page(struct vm_area_struct *vma,
  * This results in both data being written to a folio without writenotify, and
  * the folio being dirtied unexpectedly (if the caller decides to do so).
  */
-static bool writable_file_mapping_allowed(struct vm_area_struct *vma,
+static bool writable_file_mapping_allowed(struct mm_area *vma,
 					  unsigned long gup_flags)
 {
 	/*
@@ -1264,7 +1264,7 @@ static bool writable_file_mapping_allowed(struct vm_area_struct *vma,
 	return !vma_needs_dirty_tracking(vma);
 }
 
-static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
+static int check_vma_flags(struct mm_area *vma, unsigned long gup_flags)
 {
 	vm_flags_t vm_flags = vma->vm_flags;
 	int write = (gup_flags & FOLL_WRITE);
@@ -1329,14 +1329,14 @@ static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
  * This is "vma_lookup()", but with a warning if we would have
  * historically expanded the stack in the GUP code.
  */
-static struct vm_area_struct *gup_vma_lookup(struct mm_struct *mm,
+static struct mm_area *gup_vma_lookup(struct mm_struct *mm,
 	 unsigned long addr)
 {
 #ifdef CONFIG_STACK_GROWSUP
 	return vma_lookup(mm, addr);
 #else
 	static volatile unsigned long next_warn;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long now, next;
 
 	vma = find_vma(mm, addr);
@@ -1424,7 +1424,7 @@ static long __get_user_pages(struct mm_struct *mm,
 		int *locked)
 {
 	long ret = 0, i = 0;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	struct follow_page_context ctx = { NULL };
 
 	if (!nr_pages)
@@ -1574,7 +1574,7 @@ out:
 	return i ? i : ret;
 }
 
-static bool vma_permits_fault(struct vm_area_struct *vma,
+static bool vma_permits_fault(struct mm_area *vma,
 			      unsigned int fault_flags)
 {
 	bool write   = !!(fault_flags & FAULT_FLAG_WRITE);
@@ -1630,7 +1630,7 @@ int fixup_user_fault(struct mm_struct *mm,
 		     unsigned long address, unsigned int fault_flags,
 		     bool *unlocked)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	vm_fault_t ret;
 
 	address = untagged_addr_remote(mm, address);
@@ -1879,7 +1879,7 @@ retry:
  * If @locked is non-NULL, it must held for read only and may be
  * released.  If it's released, *@locked will be set to 0.
  */
-long populate_vma_page_range(struct vm_area_struct *vma,
+long populate_vma_page_range(struct mm_area *vma,
 		unsigned long start, unsigned long end, int *locked)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -1995,7 +1995,7 @@ int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
 {
 	struct mm_struct *mm = current->mm;
 	unsigned long end, nstart, nend;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	int locked = 0;
 	long ret = 0;
 
@@ -2049,7 +2049,7 @@ static long __get_user_pages_locked(struct mm_struct *mm, unsigned long start,
 		unsigned long nr_pages, struct page **pages,
 		int *locked, unsigned int foll_flags)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	bool must_unlock = false;
 	unsigned long vm_flags;
 	long i;

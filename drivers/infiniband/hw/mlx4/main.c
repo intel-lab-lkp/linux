@@ -1150,7 +1150,7 @@ static void mlx4_ib_disassociate_ucontext(struct ib_ucontext *ibcontext)
 {
 }
 
-static int mlx4_ib_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+static int mlx4_ib_mmap(struct ib_ucontext *context, struct mm_area *vma)
 {
 	struct mlx4_ib_dev *dev = to_mdev(context->device);
 

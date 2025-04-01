@@ -86,7 +86,7 @@ int mprotect_count = 0;
 int bprm_count = 0;
 
 SEC("lsm/file_mprotect")
-int BPF_PROG(test_int_hook, struct vm_area_struct *vma,
+int BPF_PROG(test_int_hook, struct mm_area *vma,
 	     unsigned long reqprot, unsigned long prot, int ret)
 {
 	if (ret != 0)

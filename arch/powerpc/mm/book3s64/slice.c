@@ -86,7 +86,7 @@ static void slice_range_to_mask(unsigned long start, unsigned long len,
 static int slice_area_is_free(struct mm_struct *mm, unsigned long addr,
 			      unsigned long len)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	if ((mm_ctx_slb_addr_limit(&mm->context) - len) < addr)
 		return 0;
@@ -808,7 +808,7 @@ int slice_is_hugepage_only_range(struct mm_struct *mm, unsigned long addr,
 	return !slice_check_range_fits(mm, maskp, addr, len);
 }
 
-unsigned long vma_mmu_pagesize(struct vm_area_struct *vma)
+unsigned long vma_mmu_pagesize(struct mm_area *vma)
 {
 	/* With radix we don't use slice, so derive it from vma*/
 	if (radix_enabled())

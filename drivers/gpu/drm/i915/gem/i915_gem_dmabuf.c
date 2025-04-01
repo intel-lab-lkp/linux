@@ -91,7 +91,7 @@ static void i915_gem_dmabuf_vunmap(struct dma_buf *dma_buf,
 	i915_gem_object_unpin_map(obj);
 }
 
-static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
+static int i915_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct mm_area *vma)
 {
 	struct drm_i915_gem_object *obj = dma_buf_to_obj(dma_buf);
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);

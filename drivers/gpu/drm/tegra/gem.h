@@ -93,8 +93,8 @@ int tegra_bo_dumb_create(struct drm_file *file, struct drm_device *drm,
 
 extern const struct vm_operations_struct tegra_bo_vm_ops;
 
-int __tegra_gem_mmap(struct drm_gem_object *gem, struct vm_area_struct *vma);
-int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma);
+int __tegra_gem_mmap(struct drm_gem_object *gem, struct mm_area *vma);
+int tegra_drm_mmap(struct file *file, struct mm_area *vma);
 
 struct dma_buf *tegra_gem_prime_export(struct drm_gem_object *gem,
 				       int flags);

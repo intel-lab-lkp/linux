@@ -8,14 +8,14 @@
 
 struct drm_gem_object;
 struct seq_file;
-struct vm_area_struct;
+struct mm_area;
 
 bool intel_bo_is_tiled(struct drm_gem_object *obj);
 bool intel_bo_is_userptr(struct drm_gem_object *obj);
 bool intel_bo_is_shmem(struct drm_gem_object *obj);
 bool intel_bo_is_protected(struct drm_gem_object *obj);
 void intel_bo_flush_if_display(struct drm_gem_object *obj);
-int intel_bo_fb_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
+int intel_bo_fb_mmap(struct drm_gem_object *obj, struct mm_area *vma);
 int intel_bo_read_from_page(struct drm_gem_object *obj, u64 offset, void *dst, int size);
 
 struct intel_frontbuffer *intel_bo_get_frontbuffer(struct drm_gem_object *obj);

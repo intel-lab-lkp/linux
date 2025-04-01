@@ -17,7 +17,7 @@ static inline void arch_exit_mmap(struct mm_struct *mm)
 {
 }
 
-static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
+static inline bool arch_vma_access_permitted(struct mm_area *vma,
 		bool write, bool execute, bool foreign)
 {
 	/* by default, allow everything */

@@ -312,7 +312,7 @@ static const struct vm_operations_struct zonefs_file_vm_ops = {
 	.page_mkwrite	= zonefs_filemap_page_mkwrite,
 };
 
-static int zonefs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int zonefs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	/*
 	 * Conventional zones accept random writes, so their files can support

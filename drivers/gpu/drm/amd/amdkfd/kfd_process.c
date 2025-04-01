@@ -2111,7 +2111,7 @@ int kfd_resume_all_processes(void)
 }
 
 int kfd_reserved_mem_mmap(struct kfd_node *dev, struct kfd_process *process,
-			  struct vm_area_struct *vma)
+			  struct mm_area *vma)
 {
 	struct kfd_process_device *pdd;
 	struct qcm_process_device *qpd;

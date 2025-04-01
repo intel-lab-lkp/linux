@@ -22,7 +22,7 @@
 #include "drm.h"
 #include "gem.h"
 
-static int tegra_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int tegra_fb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct drm_fb_helper *helper = info->par;
 	struct tegra_bo *bo;

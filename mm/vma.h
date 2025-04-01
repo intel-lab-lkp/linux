@@ -11,19 +11,19 @@
  * VMA lock generalization
  */
 struct vma_prepare {
-	struct vm_area_struct *vma;
-	struct vm_area_struct *adj_next;
+	struct mm_area *vma;
+	struct mm_area *adj_next;
 	struct file *file;
 	struct address_space *mapping;
 	struct anon_vma *anon_vma;
-	struct vm_area_struct *insert;
-	struct vm_area_struct *remove;
-	struct vm_area_struct *remove2;
+	struct mm_area *insert;
+	struct mm_area *remove;
+	struct mm_area *remove2;
 };
 
 struct unlink_vma_file_batch {
 	int count;
-	struct vm_area_struct *vmas[8];
+	struct mm_area *vmas[8];
 };
 
 /*
@@ -31,9 +31,9 @@ struct unlink_vma_file_batch {
  */
 struct vma_munmap_struct {
 	struct vma_iterator *vmi;
-	struct vm_area_struct *vma;     /* The first vma to munmap */
-	struct vm_area_struct *prev;    /* vma before the munmap area */
-	struct vm_area_struct *next;    /* vma after the munmap area */
+	struct mm_area *vma;     /* The first vma to munmap */
+	struct mm_area *prev;    /* vma before the munmap area */
+	struct mm_area *next;    /* vma after the munmap area */
 	struct list_head *uf;           /* Userfaultfd list_head */
 	unsigned long start;            /* Aligned start addr (inclusive) */
 	unsigned long end;              /* Aligned end addr (exclusive) */
@@ -79,11 +79,11 @@ struct vma_merge_struct {
 	 *
 	 * next may be assigned by the caller.
 	 */
-	struct vm_area_struct *prev;
-	struct vm_area_struct *middle;
-	struct vm_area_struct *next;
+	struct mm_area *prev;
+	struct mm_area *middle;
+	struct mm_area *next;
 	/* This is the VMA we ultimately target to become the merged VMA. */
-	struct vm_area_struct *target;
+	struct mm_area *target;
 	/*
 	 * Initially, the start, end, pgoff fields are provided by the caller
 	 * and describe the proposed new VMA range, whether modifying an
@@ -145,7 +145,7 @@ static inline bool vmg_nomem(struct vma_merge_struct *vmg)
 }
 
 /* Assumes addr >= vma->vm_start. */
-static inline pgoff_t vma_pgoff_offset(struct vm_area_struct *vma,
+static inline pgoff_t vma_pgoff_offset(struct mm_area *vma,
 				       unsigned long addr)
 {
 	return vma->vm_pgoff + PHYS_PFN(addr - vma->vm_start);
@@ -189,11 +189,11 @@ void validate_mm(struct mm_struct *mm);
 
 __must_check int vma_expand(struct vma_merge_struct *vmg);
 __must_check int vma_shrink(struct vma_iterator *vmi,
-		struct vm_area_struct *vma,
+		struct mm_area *vma,
 		unsigned long start, unsigned long end, pgoff_t pgoff);
 
 static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
-			struct vm_area_struct *vma, gfp_t gfp)
+			struct mm_area *vma, gfp_t gfp)
 
 {
 	if (vmi->mas.status != ma_start &&
@@ -210,7 +210,7 @@ static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
 }
 
 int
-do_vmi_align_munmap(struct vma_iterator *vmi, struct vm_area_struct *vma,
+do_vmi_align_munmap(struct vma_iterator *vmi, struct mm_area *vma,
 		    struct mm_struct *mm, unsigned long start,
 		    unsigned long end, struct list_head *uf, bool unlock);
 
@@ -218,51 +218,51 @@ int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 		  unsigned long start, size_t len, struct list_head *uf,
 		  bool unlock);
 
-void remove_vma(struct vm_area_struct *vma);
+void remove_vma(struct mm_area *vma);
 
-void unmap_region(struct ma_state *mas, struct vm_area_struct *vma,
-		struct vm_area_struct *prev, struct vm_area_struct *next);
+void unmap_region(struct ma_state *mas, struct mm_area *vma,
+		struct mm_area *prev, struct mm_area *next);
 
 /* We are about to modify the VMA's flags. */
-__must_check struct vm_area_struct
+__must_check struct mm_area
 *vma_modify_flags(struct vma_iterator *vmi,
-		struct vm_area_struct *prev, struct vm_area_struct *vma,
+		struct mm_area *prev, struct mm_area *vma,
 		unsigned long start, unsigned long end,
 		unsigned long new_flags);
 
 /* We are about to modify the VMA's flags and/or anon_name. */
-__must_check struct vm_area_struct
+__must_check struct mm_area
 *vma_modify_flags_name(struct vma_iterator *vmi,
-		       struct vm_area_struct *prev,
-		       struct vm_area_struct *vma,
+		       struct mm_area *prev,
+		       struct mm_area *vma,
 		       unsigned long start,
 		       unsigned long end,
 		       unsigned long new_flags,
 		       struct anon_vma_name *new_name);
 
 /* We are about to modify the VMA's memory policy. */
-__must_check struct vm_area_struct
+__must_check struct mm_area
 *vma_modify_policy(struct vma_iterator *vmi,
-		   struct vm_area_struct *prev,
-		   struct vm_area_struct *vma,
+		   struct mm_area *prev,
+		   struct mm_area *vma,
 		   unsigned long start, unsigned long end,
 		   struct mempolicy *new_pol);
 
 /* We are about to modify the VMA's flags and/or uffd context. */
-__must_check struct vm_area_struct
+__must_check struct mm_area
 *vma_modify_flags_uffd(struct vma_iterator *vmi,
-		       struct vm_area_struct *prev,
-		       struct vm_area_struct *vma,
+		       struct mm_area *prev,
+		       struct mm_area *vma,
 		       unsigned long start, unsigned long end,
 		       unsigned long new_flags,
 		       struct vm_userfaultfd_ctx new_ctx);
 
-__must_check struct vm_area_struct
+__must_check struct mm_area
 *vma_merge_new_range(struct vma_merge_struct *vmg);
 
-__must_check struct vm_area_struct
+__must_check struct mm_area
 *vma_merge_extend(struct vma_iterator *vmi,
-		  struct vm_area_struct *vma,
+		  struct mm_area *vma,
 		  unsigned long delta);
 
 void unlink_file_vma_batch_init(struct unlink_vma_file_batch *vb);
@@ -270,22 +270,22 @@ void unlink_file_vma_batch_init(struct unlink_vma_file_batch *vb);
 void unlink_file_vma_batch_final(struct unlink_vma_file_batch *vb);
 
 void unlink_file_vma_batch_add(struct unlink_vma_file_batch *vb,
-			       struct vm_area_struct *vma);
+			       struct mm_area *vma);
 
-void unlink_file_vma(struct vm_area_struct *vma);
+void unlink_file_vma(struct mm_area *vma);
 
-void vma_link_file(struct vm_area_struct *vma);
+void vma_link_file(struct mm_area *vma);
 
-int vma_link(struct mm_struct *mm, struct vm_area_struct *vma);
+int vma_link(struct mm_struct *mm, struct mm_area *vma);
 
-struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
+struct mm_area *copy_vma(struct mm_area **vmap,
 	unsigned long addr, unsigned long len, pgoff_t pgoff,
 	bool *need_rmap_locks);
 
-struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma);
+struct anon_vma *find_mergeable_anon_vma(struct mm_area *vma);
 
-bool vma_needs_dirty_tracking(struct vm_area_struct *vma);
-bool vma_wants_writenotify(struct vm_area_struct *vma, pgprot_t vm_page_prot);
+bool vma_needs_dirty_tracking(struct mm_area *vma);
+bool vma_wants_writenotify(struct mm_area *vma, pgprot_t vm_page_prot);
 
 int mm_take_all_locks(struct mm_struct *mm);
 void mm_drop_all_locks(struct mm_struct *mm);
@@ -294,13 +294,13 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
 		struct list_head *uf);
 
-int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *brkvma,
+int do_brk_flags(struct vma_iterator *vmi, struct mm_area *brkvma,
 		 unsigned long addr, unsigned long request, unsigned long flags);
 
 unsigned long unmapped_area(struct vm_unmapped_area_info *info);
 unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info);
 
-static inline bool vma_wants_manual_pte_write_upgrade(struct vm_area_struct *vma)
+static inline bool vma_wants_manual_pte_write_upgrade(struct mm_area *vma)
 {
 	/*
 	 * We want to check manually if we can change individual PTEs writable
@@ -320,7 +320,7 @@ static inline pgprot_t vm_pgprot_modify(pgprot_t oldprot, unsigned long vm_flags
 }
 #endif
 
-static inline struct vm_area_struct *vma_prev_limit(struct vma_iterator *vmi,
+static inline struct mm_area *vma_prev_limit(struct vma_iterator *vmi,
 						    unsigned long min)
 {
 	return mas_prev(&vmi->mas, min);
@@ -370,13 +370,13 @@ static inline void vma_iter_reset(struct vma_iterator *vmi)
 }
 
 static inline
-struct vm_area_struct *vma_iter_prev_range_limit(struct vma_iterator *vmi, unsigned long min)
+struct mm_area *vma_iter_prev_range_limit(struct vma_iterator *vmi, unsigned long min)
 {
 	return mas_prev_range(&vmi->mas, min);
 }
 
 static inline
-struct vm_area_struct *vma_iter_next_range_limit(struct vma_iterator *vmi, unsigned long max)
+struct mm_area *vma_iter_next_range_limit(struct vma_iterator *vmi, unsigned long max)
 {
 	return mas_next_range(&vmi->mas, max);
 }
@@ -397,7 +397,7 @@ static inline int vma_iter_area_highest(struct vma_iterator *vmi, unsigned long 
  * VMA Iterator functions shared between nommu and mmap
  */
 static inline int vma_iter_prealloc(struct vma_iterator *vmi,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	return mas_preallocate(&vmi->mas, vma, GFP_KERNEL);
 }
@@ -407,14 +407,14 @@ static inline void vma_iter_clear(struct vma_iterator *vmi)
 	mas_store_prealloc(&vmi->mas, NULL);
 }
 
-static inline struct vm_area_struct *vma_iter_load(struct vma_iterator *vmi)
+static inline struct mm_area *vma_iter_load(struct vma_iterator *vmi)
 {
 	return mas_walk(&vmi->mas);
 }
 
 /* Store a VMA with preallocated memory */
 static inline void vma_iter_store_overwrite(struct vma_iterator *vmi,
-					    struct vm_area_struct *vma)
+					    struct mm_area *vma)
 {
 	vma_assert_attached(vma);
 
@@ -442,7 +442,7 @@ static inline void vma_iter_store_overwrite(struct vma_iterator *vmi,
 }
 
 static inline void vma_iter_store_new(struct vma_iterator *vmi,
-				      struct vm_area_struct *vma)
+				      struct mm_area *vma)
 {
 	vma_mark_attached(vma);
 	vma_iter_store_overwrite(vmi, vma);
@@ -465,7 +465,7 @@ static inline int vma_iter_bulk_alloc(struct vma_iterator *vmi,
 }
 
 static inline
-struct vm_area_struct *vma_iter_prev_range(struct vma_iterator *vmi)
+struct mm_area *vma_iter_prev_range(struct vma_iterator *vmi)
 {
 	return mas_prev_range(&vmi->mas, 0);
 }
@@ -475,11 +475,11 @@ struct vm_area_struct *vma_iter_prev_range(struct vma_iterator *vmi)
  * if no previous VMA, to index 0.
  */
 static inline
-struct vm_area_struct *vma_iter_next_rewind(struct vma_iterator *vmi,
-		struct vm_area_struct **pprev)
+struct mm_area *vma_iter_next_rewind(struct vma_iterator *vmi,
+		struct mm_area **pprev)
 {
-	struct vm_area_struct *next = vma_next(vmi);
-	struct vm_area_struct *prev = vma_prev(vmi);
+	struct mm_area *next = vma_next(vmi);
+	struct mm_area *prev = vma_prev(vmi);
 
 	/*
 	 * Consider the case where no previous VMA exists. We advance to the
@@ -500,7 +500,7 @@ struct vm_area_struct *vma_iter_next_rewind(struct vma_iterator *vmi,
 
 #ifdef CONFIG_64BIT
 
-static inline bool vma_is_sealed(struct vm_area_struct *vma)
+static inline bool vma_is_sealed(struct mm_area *vma)
 {
 	return (vma->vm_flags & VM_SEALED);
 }
@@ -509,7 +509,7 @@ static inline bool vma_is_sealed(struct vm_area_struct *vma)
  * check if a vma is sealed for modification.
  * return true, if modification is allowed.
  */
-static inline bool can_modify_vma(struct vm_area_struct *vma)
+static inline bool can_modify_vma(struct mm_area *vma)
 {
 	if (unlikely(vma_is_sealed(vma)))
 		return false;
@@ -517,16 +517,16 @@ static inline bool can_modify_vma(struct vm_area_struct *vma)
 	return true;
 }
 
-bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior);
+bool can_modify_vma_madv(struct mm_area *vma, int behavior);
 
 #else
 
-static inline bool can_modify_vma(struct vm_area_struct *vma)
+static inline bool can_modify_vma(struct mm_area *vma)
 {
 	return true;
 }
 
-static inline bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior)
+static inline bool can_modify_vma_madv(struct mm_area *vma, int behavior)
 {
 	return true;
 }
@@ -534,10 +534,10 @@ static inline bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior)
 #endif
 
 #if defined(CONFIG_STACK_GROWSUP)
-int expand_upwards(struct vm_area_struct *vma, unsigned long address);
+int expand_upwards(struct mm_area *vma, unsigned long address);
 #endif
 
-int expand_downwards(struct vm_area_struct *vma, unsigned long address);
+int expand_downwards(struct mm_area *vma, unsigned long address);
 
 int __vm_munmap(unsigned long start, size_t len, bool unlock);
 

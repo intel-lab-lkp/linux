@@ -97,7 +97,7 @@ EXPORT_SYMBOL(drm_gem_ttm_vunmap);
  * callback.
  */
 int drm_gem_ttm_mmap(struct drm_gem_object *gem,
-		     struct vm_area_struct *vma)
+		     struct mm_area *vma)
 {
 	struct ttm_buffer_object *bo = drm_gem_ttm_of_gem(gem);
 	int ret;

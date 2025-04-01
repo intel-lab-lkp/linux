@@ -306,7 +306,7 @@ static void *io_uring_validate_mmap_request(struct file *file, loff_t pgoff,
 
 static int io_region_mmap(struct io_ring_ctx *ctx,
 			  struct io_mapped_region *mr,
-			  struct vm_area_struct *vma,
+			  struct mm_area *vma,
 			  unsigned max_pages)
 {
 	unsigned long nr_pages = min(mr->nr_pages, max_pages);
@@ -315,7 +315,7 @@ static int io_region_mmap(struct io_ring_ctx *ctx,
 	return vm_insert_pages(vma, vma->vm_start, mr->pages, &nr_pages);
 }
 
-__cold int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
+__cold int io_uring_mmap(struct file *file, struct mm_area *vma)
 {
 	struct io_ring_ctx *ctx = file->private_data;
 	size_t sz = vma->vm_end - vma->vm_start;
@@ -389,7 +389,7 @@ unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
 
 #else /* !CONFIG_MMU */
 
-int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
+int io_uring_mmap(struct file *file, struct mm_area *vma)
 {
 	return is_nommu_shared_mapping(vma->vm_flags) ? 0 : -EINVAL;
 }

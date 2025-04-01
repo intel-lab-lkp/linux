@@ -85,7 +85,7 @@ asmlinkage void
 do_page_fault(unsigned long address, unsigned long mmcsr,
 	      long cause, struct pt_regs *regs)
 {
-	struct vm_area_struct * vma;
+	struct mm_area * vma;
 	struct mm_struct *mm = current->mm;
 	const struct exception_table_entry *fixup;
 	int si_code = SEGV_MAPERR;

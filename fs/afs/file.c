@@ -19,14 +19,14 @@
 #include <trace/events/netfs.h>
 #include "internal.h"
 
-static int afs_file_mmap(struct file *file, struct vm_area_struct *vma);
+static int afs_file_mmap(struct file *file, struct mm_area *vma);
 
 static ssize_t afs_file_read_iter(struct kiocb *iocb, struct iov_iter *iter);
 static ssize_t afs_file_splice_read(struct file *in, loff_t *ppos,
 				    struct pipe_inode_info *pipe,
 				    size_t len, unsigned int flags);
-static void afs_vm_open(struct vm_area_struct *area);
-static void afs_vm_close(struct vm_area_struct *area);
+static void afs_vm_open(struct mm_area *area);
+static void afs_vm_close(struct mm_area *area);
 static vm_fault_t afs_vm_map_pages(struct vm_fault *vmf, pgoff_t start_pgoff, pgoff_t end_pgoff);
 
 const struct file_operations afs_file_operations = {
@@ -492,7 +492,7 @@ static void afs_drop_open_mmap(struct afs_vnode *vnode)
 /*
  * Handle setting up a memory mapping on an AFS file.
  */
-static int afs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int afs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	struct afs_vnode *vnode = AFS_FS_I(file_inode(file));
 	int ret;
@@ -507,12 +507,12 @@ static int afs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	return ret;
 }
 
-static void afs_vm_open(struct vm_area_struct *vma)
+static void afs_vm_open(struct mm_area *vma)
 {
 	afs_add_open_mmap(AFS_FS_I(file_inode(vma->vm_file)));
 }
 
-static void afs_vm_close(struct vm_area_struct *vma)
+static void afs_vm_close(struct mm_area *vma)
 {
 	afs_drop_open_mmap(AFS_FS_I(file_inode(vma->vm_file)));
 }

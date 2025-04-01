@@ -592,7 +592,7 @@ void acct_collect(long exitcode, int group_dead)
 	if (group_dead && current->mm) {
 		struct mm_struct *mm = current->mm;
 		VMA_ITERATOR(vmi, mm, 0);
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		mmap_read_lock(mm);
 		for_each_vma(vmi, vma)

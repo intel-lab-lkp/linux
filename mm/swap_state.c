@@ -284,7 +284,7 @@ static inline bool swap_use_vma_readahead(void)
  * Caller must lock the swap device or hold a reference to keep it valid.
  */
 struct folio *swap_cache_get_folio(swp_entry_t entry,
-		struct vm_area_struct *vma, unsigned long addr)
+		struct mm_area *vma, unsigned long addr)
 {
 	struct folio *folio;
 
@@ -481,7 +481,7 @@ put_and_return:
  * swap cache folio lock.
  */
 struct folio *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
-		struct vm_area_struct *vma, unsigned long addr,
+		struct mm_area *vma, unsigned long addr,
 		struct swap_iocb **plug)
 {
 	struct swap_info_struct *si;
@@ -677,7 +677,7 @@ void exit_swap_address_space(unsigned int type)
 static int swap_vma_ra_win(struct vm_fault *vmf, unsigned long *start,
 			   unsigned long *end)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	unsigned long ra_val;
 	unsigned long faddr, prev_faddr, left, right;
 	unsigned int max_win, hits, prev_win, win;

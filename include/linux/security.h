@@ -476,7 +476,7 @@ int security_file_ioctl_compat(struct file *file, unsigned int cmd,
 int security_mmap_file(struct file *file, unsigned long prot,
 			unsigned long flags);
 int security_mmap_addr(unsigned long addr);
-int security_file_mprotect(struct vm_area_struct *vma, unsigned long reqprot,
+int security_file_mprotect(struct mm_area *vma, unsigned long reqprot,
 			   unsigned long prot);
 int security_file_lock(struct file *file, unsigned int cmd);
 int security_file_fcntl(struct file *file, unsigned int cmd, unsigned long arg);
@@ -1151,7 +1151,7 @@ static inline int security_mmap_addr(unsigned long addr)
 	return cap_mmap_addr(addr);
 }
 
-static inline int security_file_mprotect(struct vm_area_struct *vma,
+static inline int security_file_mprotect(struct mm_area *vma,
 					 unsigned long reqprot,
 					 unsigned long prot)
 {

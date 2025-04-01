@@ -99,7 +99,7 @@ void anon_vma_name_free(struct kref *kref)
 	kfree(anon_name);
 }
 
-struct anon_vma_name *anon_vma_name(struct vm_area_struct *vma)
+struct anon_vma_name *anon_vma_name(struct mm_area *vma)
 {
 	mmap_assert_locked(vma->vm_mm);
 
@@ -107,7 +107,7 @@ struct anon_vma_name *anon_vma_name(struct vm_area_struct *vma)
 }
 
 /* mmap_lock should be write-locked */
-static int replace_anon_vma_name(struct vm_area_struct *vma,
+static int replace_anon_vma_name(struct mm_area *vma,
 				 struct anon_vma_name *anon_name)
 {
 	struct anon_vma_name *orig_name = anon_vma_name(vma);
@@ -127,7 +127,7 @@ static int replace_anon_vma_name(struct vm_area_struct *vma,
 	return 0;
 }
 #else /* CONFIG_ANON_VMA_NAME */
-static int replace_anon_vma_name(struct vm_area_struct *vma,
+static int replace_anon_vma_name(struct mm_area *vma,
 				 struct anon_vma_name *anon_name)
 {
 	if (anon_name)
@@ -142,8 +142,8 @@ static int replace_anon_vma_name(struct vm_area_struct *vma,
  * Caller should ensure anon_name stability by raising its refcount even when
  * anon_name belongs to a valid vma because this function might free that vma.
  */
-static int madvise_update_vma(struct vm_area_struct *vma,
-			      struct vm_area_struct **prev, unsigned long start,
+static int madvise_update_vma(struct mm_area *vma,
+			      struct mm_area **prev, unsigned long start,
 			      unsigned long end, unsigned long new_flags,
 			      struct anon_vma_name *anon_name)
 {
@@ -179,7 +179,7 @@ static int madvise_update_vma(struct vm_area_struct *vma,
 static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 		unsigned long end, struct mm_walk *walk)
 {
-	struct vm_area_struct *vma = walk->private;
+	struct mm_area *vma = walk->private;
 	struct swap_iocb *splug = NULL;
 	pte_t *ptep = NULL;
 	spinlock_t *ptl;
@@ -225,7 +225,7 @@ static const struct mm_walk_ops swapin_walk_ops = {
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
-static void shmem_swapin_range(struct vm_area_struct *vma,
+static void shmem_swapin_range(struct mm_area *vma,
 		unsigned long start, unsigned long end,
 		struct address_space *mapping)
 {
@@ -266,8 +266,8 @@ static void shmem_swapin_range(struct vm_area_struct *vma,
 /*
  * Schedule all required I/O operations.  Do not wait for completion.
  */
-static long madvise_willneed(struct vm_area_struct *vma,
-			     struct vm_area_struct **prev,
+static long madvise_willneed(struct mm_area *vma,
+			     struct mm_area **prev,
 			     unsigned long start, unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -314,7 +314,7 @@ static long madvise_willneed(struct vm_area_struct *vma,
 	return 0;
 }
 
-static inline bool can_do_file_pageout(struct vm_area_struct *vma)
+static inline bool can_do_file_pageout(struct mm_area *vma)
 {
 	if (!vma->vm_file)
 		return false;
@@ -349,7 +349,7 @@ static int madvise_cold_or_pageout_pte_range(pmd_t *pmd,
 	struct mmu_gather *tlb = private->tlb;
 	bool pageout = private->pageout;
 	struct mm_struct *mm = tlb->mm;
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	pte_t *start_pte, *pte, ptent;
 	spinlock_t *ptl;
 	struct folio *folio = NULL;
@@ -567,7 +567,7 @@ static const struct mm_walk_ops cold_walk_ops = {
 };
 
 static void madvise_cold_page_range(struct mmu_gather *tlb,
-			     struct vm_area_struct *vma,
+			     struct mm_area *vma,
 			     unsigned long addr, unsigned long end)
 {
 	struct madvise_walk_private walk_private = {
@@ -580,13 +580,13 @@ static void madvise_cold_page_range(struct mmu_gather *tlb,
 	tlb_end_vma(tlb, vma);
 }
 
-static inline bool can_madv_lru_vma(struct vm_area_struct *vma)
+static inline bool can_madv_lru_vma(struct mm_area *vma)
 {
 	return !(vma->vm_flags & (VM_LOCKED|VM_PFNMAP|VM_HUGETLB));
 }
 
-static long madvise_cold(struct vm_area_struct *vma,
-			struct vm_area_struct **prev,
+static long madvise_cold(struct mm_area *vma,
+			struct mm_area **prev,
 			unsigned long start_addr, unsigned long end_addr)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -605,7 +605,7 @@ static long madvise_cold(struct vm_area_struct *vma,
 }
 
 static void madvise_pageout_page_range(struct mmu_gather *tlb,
-			     struct vm_area_struct *vma,
+			     struct mm_area *vma,
 			     unsigned long addr, unsigned long end)
 {
 	struct madvise_walk_private walk_private = {
@@ -618,8 +618,8 @@ static void madvise_pageout_page_range(struct mmu_gather *tlb,
 	tlb_end_vma(tlb, vma);
 }
 
-static long madvise_pageout(struct vm_area_struct *vma,
-			struct vm_area_struct **prev,
+static long madvise_pageout(struct mm_area *vma,
+			struct mm_area **prev,
 			unsigned long start_addr, unsigned long end_addr)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -654,7 +654,7 @@ static int madvise_free_pte_range(pmd_t *pmd, unsigned long addr,
 	const cydp_t cydp_flags = CYDP_CLEAR_YOUNG | CYDP_CLEAR_DIRTY;
 	struct mmu_gather *tlb = walk->private;
 	struct mm_struct *mm = tlb->mm;
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	spinlock_t *ptl;
 	pte_t *start_pte, *pte, ptent;
 	struct folio *folio;
@@ -794,7 +794,7 @@ static const struct mm_walk_ops madvise_free_walk_ops = {
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
-static int madvise_free_single_vma(struct vm_area_struct *vma,
+static int madvise_free_single_vma(struct mm_area *vma,
 			unsigned long start_addr, unsigned long end_addr)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -848,7 +848,7 @@ static int madvise_free_single_vma(struct vm_area_struct *vma,
  * An interface that causes the system to free clean pages and flush
  * dirty pages is already available as msync(MS_INVALIDATE).
  */
-static long madvise_dontneed_single_vma(struct vm_area_struct *vma,
+static long madvise_dontneed_single_vma(struct mm_area *vma,
 					unsigned long start, unsigned long end)
 {
 	struct zap_details details = {
@@ -860,7 +860,7 @@ static long madvise_dontneed_single_vma(struct vm_area_struct *vma,
 	return 0;
 }
 
-static bool madvise_dontneed_free_valid_vma(struct vm_area_struct *vma,
+static bool madvise_dontneed_free_valid_vma(struct mm_area *vma,
 					    unsigned long start,
 					    unsigned long *end,
 					    int behavior)
@@ -890,8 +890,8 @@ static bool madvise_dontneed_free_valid_vma(struct vm_area_struct *vma,
 	return true;
 }
 
-static long madvise_dontneed_free(struct vm_area_struct *vma,
-				  struct vm_area_struct **prev,
+static long madvise_dontneed_free(struct mm_area *vma,
+				  struct mm_area **prev,
 				  unsigned long start, unsigned long end,
 				  int behavior)
 {
@@ -994,8 +994,8 @@ static long madvise_populate(struct mm_struct *mm, unsigned long start,
  * Application wants to free up the pages and associated backing store.
  * This is effectively punching a hole into the middle of a file.
  */
-static long madvise_remove(struct vm_area_struct *vma,
-				struct vm_area_struct **prev,
+static long madvise_remove(struct mm_area *vma,
+				struct mm_area **prev,
 				unsigned long start, unsigned long end)
 {
 	loff_t offset;
@@ -1039,7 +1039,7 @@ static long madvise_remove(struct vm_area_struct *vma,
 	return error;
 }
 
-static bool is_valid_guard_vma(struct vm_area_struct *vma, bool allow_locked)
+static bool is_valid_guard_vma(struct mm_area *vma, bool allow_locked)
 {
 	vm_flags_t disallowed = VM_SPECIAL | VM_HUGETLB;
 
@@ -1115,8 +1115,8 @@ static const struct mm_walk_ops guard_install_walk_ops = {
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
-static long madvise_guard_install(struct vm_area_struct *vma,
-				 struct vm_area_struct **prev,
+static long madvise_guard_install(struct mm_area *vma,
+				 struct mm_area **prev,
 				 unsigned long start, unsigned long end)
 {
 	long err;
@@ -1225,8 +1225,8 @@ static const struct mm_walk_ops guard_remove_walk_ops = {
 	.walk_lock		= PGWALK_RDLOCK,
 };
 
-static long madvise_guard_remove(struct vm_area_struct *vma,
-				 struct vm_area_struct **prev,
+static long madvise_guard_remove(struct mm_area *vma,
+				 struct mm_area **prev,
 				 unsigned long start, unsigned long end)
 {
 	*prev = vma;
@@ -1246,8 +1246,8 @@ static long madvise_guard_remove(struct vm_area_struct *vma,
  * will handle splitting a vm area into separate areas, each area with its own
  * behavior.
  */
-static int madvise_vma_behavior(struct vm_area_struct *vma,
-				struct vm_area_struct **prev,
+static int madvise_vma_behavior(struct mm_area *vma,
+				struct mm_area **prev,
 				unsigned long start, unsigned long end,
 				unsigned long behavior)
 {
@@ -1488,12 +1488,12 @@ static bool process_madvise_remote_valid(int behavior)
 static
 int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
 		      unsigned long end, unsigned long arg,
-		      int (*visit)(struct vm_area_struct *vma,
-				   struct vm_area_struct **prev, unsigned long start,
+		      int (*visit)(struct mm_area *vma,
+				   struct mm_area **prev, unsigned long start,
 				   unsigned long end, unsigned long arg))
 {
-	struct vm_area_struct *vma;
-	struct vm_area_struct *prev;
+	struct mm_area *vma;
+	struct mm_area *prev;
 	unsigned long tmp;
 	int unmapped_error = 0;
 
@@ -1545,8 +1545,8 @@ int madvise_walk_vmas(struct mm_struct *mm, unsigned long start,
 }
 
 #ifdef CONFIG_ANON_VMA_NAME
-static int madvise_vma_anon_name(struct vm_area_struct *vma,
-				 struct vm_area_struct **prev,
+static int madvise_vma_anon_name(struct mm_area *vma,
+				 struct mm_area **prev,
 				 unsigned long start, unsigned long end,
 				 unsigned long anon_name)
 {

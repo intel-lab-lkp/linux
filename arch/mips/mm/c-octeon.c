@@ -60,7 +60,7 @@ static void local_octeon_flush_icache_range(unsigned long start,
  *
  * @vma:    VMA to flush or NULL to flush all icaches.
  */
-static void octeon_flush_icache_all_cores(struct vm_area_struct *vma)
+static void octeon_flush_icache_all_cores(struct mm_area *vma)
 {
 	extern void octeon_send_ipi_single(int cpu, unsigned int action);
 #ifdef CONFIG_SMP
@@ -136,7 +136,7 @@ static void octeon_flush_icache_range(unsigned long start, unsigned long end)
  * @start:  beginning address for flush
  * @end:    ending address for flush
  */
-static void octeon_flush_cache_range(struct vm_area_struct *vma,
+static void octeon_flush_cache_range(struct mm_area *vma,
 				     unsigned long start, unsigned long end)
 {
 	if (vma->vm_flags & VM_EXEC)
@@ -151,7 +151,7 @@ static void octeon_flush_cache_range(struct vm_area_struct *vma,
  * @page:   Page to flush
  * @pfn:    Page frame number
  */
-static void octeon_flush_cache_page(struct vm_area_struct *vma,
+static void octeon_flush_cache_page(struct mm_area *vma,
 				    unsigned long page, unsigned long pfn)
 {
 	if (vma->vm_flags & VM_EXEC)

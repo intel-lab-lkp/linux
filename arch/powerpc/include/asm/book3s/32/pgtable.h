@@ -325,7 +325,7 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm, unsigned long addr,
 	pte_update(mm, addr, ptep, _PAGE_WRITE, 0, 0);
 }
 
-static inline void __ptep_set_access_flags(struct vm_area_struct *vma,
+static inline void __ptep_set_access_flags(struct mm_area *vma,
 					   pte_t *ptep, pte_t entry,
 					   unsigned long address,
 					   int psize)

@@ -212,7 +212,7 @@ __poll_t uvcg_queue_poll(struct uvc_video_queue *queue, struct file *file,
 	return vb2_poll(&queue->queue, file, wait);
 }
 
-int uvcg_queue_mmap(struct uvc_video_queue *queue, struct vm_area_struct *vma)
+int uvcg_queue_mmap(struct uvc_video_queue *queue, struct mm_area *vma)
 {
 	return vb2_mmap(&queue->queue, vma);
 }

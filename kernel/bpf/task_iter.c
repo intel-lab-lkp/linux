@@ -410,7 +410,7 @@ struct bpf_iter_seq_task_vma_info {
 	struct bpf_iter_seq_task_common common;
 	struct task_struct *task;
 	struct mm_struct *mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	u32 tid;
 	unsigned long prev_vm_start;
 	unsigned long prev_vm_end;
@@ -422,11 +422,11 @@ enum bpf_task_vma_iter_find_op {
 	task_vma_iter_find_vma,    /* use find_vma() to find next vma */
 };
 
-static struct vm_area_struct *
+static struct mm_area *
 task_vma_seq_get_next(struct bpf_iter_seq_task_vma_info *info)
 {
 	enum bpf_task_vma_iter_find_op op;
-	struct vm_area_struct *curr_vma;
+	struct mm_area *curr_vma;
 	struct task_struct *curr_task;
 	struct mm_struct *curr_mm;
 	u32 saved_tid = info->tid;
@@ -577,7 +577,7 @@ finish:
 static void *task_vma_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	struct bpf_iter_seq_task_vma_info *info = seq->private;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = task_vma_seq_get_next(info);
 	if (vma && *pos == 0)
@@ -597,11 +597,11 @@ static void *task_vma_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 struct bpf_iter__task_vma {
 	__bpf_md_ptr(struct bpf_iter_meta *, meta);
 	__bpf_md_ptr(struct task_struct *, task);
-	__bpf_md_ptr(struct vm_area_struct *, vma);
+	__bpf_md_ptr(struct mm_area *, vma);
 };
 
 DEFINE_BPF_ITER_FUNC(task_vma, struct bpf_iter_meta *meta,
-		     struct task_struct *task, struct vm_area_struct *vma)
+		     struct task_struct *task, struct mm_area *vma)
 
 static int __task_vma_seq_show(struct seq_file *seq, bool in_stop)
 {
@@ -752,7 +752,7 @@ BPF_CALL_5(bpf_find_vma, struct task_struct *, task, u64, start,
 	   bpf_callback_t, callback_fn, void *, callback_ctx, u64, flags)
 {
 	struct mmap_unlock_irq_work *work = NULL;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	bool irq_work_busy = false;
 	struct mm_struct *mm;
 	int ret = -ENOENT;
@@ -859,7 +859,7 @@ err_cleanup_iter:
 	return err;
 }
 
-__bpf_kfunc struct vm_area_struct *bpf_iter_task_vma_next(struct bpf_iter_task_vma *it)
+__bpf_kfunc struct mm_area *bpf_iter_task_vma_next(struct bpf_iter_task_vma *it)
 {
 	struct bpf_iter_task_vma_kern *kit = (void *)it;
 

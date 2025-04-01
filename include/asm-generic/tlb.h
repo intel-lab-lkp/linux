@@ -292,7 +292,7 @@ bool __tlb_remove_folio_pages(struct mmu_gather *tlb, struct page *page,
  * function, except we define it before the 'struct mmu_gather'.
  */
 #define tlb_delay_rmap(tlb) (((tlb)->delayed_rmap = 1), true)
-extern void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma);
+extern void tlb_flush_rmaps(struct mmu_gather *tlb, struct mm_area *vma);
 #endif
 
 #endif
@@ -306,7 +306,7 @@ extern void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma);
  */
 #ifndef tlb_delay_rmap
 #define tlb_delay_rmap(tlb) (false)
-static inline void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma) { }
+static inline void tlb_flush_rmaps(struct mmu_gather *tlb, struct mm_area *vma) { }
 #endif
 
 /*
@@ -435,7 +435,7 @@ static inline void tlb_flush(struct mmu_gather *tlb)
 	if (tlb->fullmm || tlb->need_flush_all) {
 		flush_tlb_mm(tlb->mm);
 	} else if (tlb->end) {
-		struct vm_area_struct vma = {
+		struct mm_area vma = {
 			.vm_mm = tlb->mm,
 			.vm_flags = (tlb->vma_exec ? VM_EXEC    : 0) |
 				    (tlb->vma_huge ? VM_HUGETLB : 0),
@@ -449,7 +449,7 @@ static inline void tlb_flush(struct mmu_gather *tlb)
 #endif /* CONFIG_MMU_GATHER_NO_RANGE */
 
 static inline void
-tlb_update_vma_flags(struct mmu_gather *tlb, struct vm_area_struct *vma)
+tlb_update_vma_flags(struct mmu_gather *tlb, struct mm_area *vma)
 {
 	/*
 	 * flush_tlb_range() implementations that look at VM_HUGETLB (tile,
@@ -535,7 +535,7 @@ static inline unsigned long tlb_get_unmap_size(struct mmu_gather *tlb)
  * case where we're doing a full MM flush.  When we're doing a munmap,
  * the vmas are adjusted to only cover the region to be torn down.
  */
-static inline void tlb_start_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
+static inline void tlb_start_vma(struct mmu_gather *tlb, struct mm_area *vma)
 {
 	if (tlb->fullmm)
 		return;
@@ -546,7 +546,7 @@ static inline void tlb_start_vma(struct mmu_gather *tlb, struct vm_area_struct *
 #endif
 }
 
-static inline void tlb_end_vma(struct mmu_gather *tlb, struct vm_area_struct *vma)
+static inline void tlb_end_vma(struct mmu_gather *tlb, struct mm_area *vma)
 {
 	if (tlb->fullmm)
 		return;

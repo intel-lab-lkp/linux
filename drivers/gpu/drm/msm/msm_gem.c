@@ -321,7 +321,7 @@ static pgprot_t msm_gem_pgprot(struct msm_gem_object *msm_obj, pgprot_t prot)
 
 static vm_fault_t msm_gem_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct msm_gem_object *msm_obj = to_msm_bo(obj);
 	struct page **pages;
@@ -1097,7 +1097,7 @@ static void msm_gem_free_object(struct drm_gem_object *obj)
 	kfree(msm_obj);
 }
 
-static int msm_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int msm_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct msm_gem_object *msm_obj = to_msm_bo(obj);
 

@@ -514,7 +514,7 @@ static DEFINE_SPINLOCK(oom_reaper_lock);
 
 static bool __oom_reap_task_mm(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	bool ret = true;
 	VMA_ITERATOR(vmi, mm, 0);
 

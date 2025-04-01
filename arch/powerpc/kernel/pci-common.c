@@ -501,7 +501,7 @@ error_exit:
  * Platform support for /proc/bus/pci/X/Y mmap()s.
  *  -- paulus.
  */
-int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma)
+int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct mm_area *vma)
 {
 	struct pci_controller *hose = pci_bus_to_host(pdev->bus);
 	resource_size_t ioaddr = pci_resource_start(pdev, bar);
@@ -651,7 +651,7 @@ int pci_legacy_write(struct pci_bus *bus, loff_t port, u32 val, size_t size)
 
 /* This provides legacy IO or memory mmap access on a bus */
 int pci_mmap_legacy_page_range(struct pci_bus *bus,
-			       struct vm_area_struct *vma,
+			       struct mm_area *vma,
 			       enum pci_mmap_state mmap_state)
 {
 	struct pci_controller *hose = pci_bus_to_host(bus);

@@ -1402,7 +1402,7 @@ static const struct drm_ioctl_desc panthor_drm_driver_ioctls[] = {
 	PANTHOR_IOCTL(GROUP_SUBMIT, group_submit, DRM_RENDER_ALLOW),
 };
 
-static int panthor_mmap(struct file *filp, struct vm_area_struct *vma)
+static int panthor_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct drm_file *file = filp->private_data;
 	struct panthor_file *pfile = file->driver_priv;

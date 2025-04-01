@@ -80,7 +80,7 @@ void local_flush_tlb_all(void)
 #define flush_itlb_page_no_eir(addr) \
 	mtspr_off(SPR_ITLBMR_BASE(0), ITLB_OFFSET(addr), 0);
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long addr)
 {
 	if (have_dtlbeir)
 		flush_dtlb_page_eir(addr);
@@ -93,7 +93,7 @@ void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 		flush_itlb_page_no_eir(addr);
 }
 
-void local_flush_tlb_range(struct vm_area_struct *vma,
+void local_flush_tlb_range(struct mm_area *vma,
 			   unsigned long start, unsigned long end)
 {
 	int addr;

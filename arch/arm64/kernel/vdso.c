@@ -58,7 +58,7 @@ static struct vdso_abi_info vdso_info[] __ro_after_init = {
 };
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
-		struct vm_area_struct *new_vma)
+		struct mm_area *new_vma)
 {
 	current->mm->context.vdso = (void *)new_vma->vm_start;
 
@@ -157,7 +157,7 @@ static struct page *aarch32_vectors_page __ro_after_init;
 static struct page *aarch32_sig_page __ro_after_init;
 
 static int aarch32_sigpage_mremap(const struct vm_special_mapping *sm,
-				  struct vm_area_struct *new_vma)
+				  struct mm_area *new_vma)
 {
 	current->mm->context.sigpage = (void *)new_vma->vm_start;
 

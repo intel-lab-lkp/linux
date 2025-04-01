@@ -602,7 +602,7 @@ static const struct vm_operations_struct drm_vm_ops = {
 	.close = drm_gem_vm_close,
 };
 
-static int qaic_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int qaic_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct qaic_bo *bo = to_qaic_bo(obj);
 	unsigned long offset = 0;

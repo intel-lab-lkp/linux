@@ -176,7 +176,7 @@ ssize_t copy_oldmem_page(struct iov_iter *iter, unsigned long pfn, size_t csize,
  * For the kdump reserved memory this functions performs a swap operation:
  * [0 - OLDMEM_SIZE] is mapped to [OLDMEM_BASE - OLDMEM_BASE + OLDMEM_SIZE]
  */
-static int remap_oldmem_pfn_range_kdump(struct vm_area_struct *vma,
+static int remap_oldmem_pfn_range_kdump(struct mm_area *vma,
 					unsigned long from, unsigned long pfn,
 					unsigned long size, pgprot_t prot)
 {
@@ -203,7 +203,7 @@ static int remap_oldmem_pfn_range_kdump(struct vm_area_struct *vma,
  * We only map available memory above HSA size. Memory below HSA size
  * is read on demand using the copy_oldmem_page() function.
  */
-static int remap_oldmem_pfn_range_zfcpdump(struct vm_area_struct *vma,
+static int remap_oldmem_pfn_range_zfcpdump(struct mm_area *vma,
 					   unsigned long from,
 					   unsigned long pfn,
 					   unsigned long size, pgprot_t prot)
@@ -225,7 +225,7 @@ static int remap_oldmem_pfn_range_zfcpdump(struct vm_area_struct *vma,
 /*
  * Remap "oldmem" for kdump or zfcp/nvme dump
  */
-int remap_oldmem_pfn_range(struct vm_area_struct *vma, unsigned long from,
+int remap_oldmem_pfn_range(struct mm_area *vma, unsigned long from,
 			   unsigned long pfn, unsigned long size, pgprot_t prot)
 {
 	if (oldmem_data.start)

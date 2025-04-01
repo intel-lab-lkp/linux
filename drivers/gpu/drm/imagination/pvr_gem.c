@@ -27,7 +27,7 @@ static void pvr_gem_object_free(struct drm_gem_object *obj)
 	drm_gem_shmem_object_free(obj);
 }
 
-static int pvr_gem_mmap(struct drm_gem_object *gem_obj, struct vm_area_struct *vma)
+static int pvr_gem_mmap(struct drm_gem_object *gem_obj, struct mm_area *vma)
 {
 	struct pvr_gem_object *pvr_obj = gem_to_pvr_gem(gem_obj);
 	struct drm_gem_shmem_object *shmem_obj = shmem_gem_from_pvr_gem(pvr_obj);

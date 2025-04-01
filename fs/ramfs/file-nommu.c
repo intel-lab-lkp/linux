@@ -28,7 +28,7 @@ static unsigned long ramfs_nommu_get_unmapped_area(struct file *file,
 						   unsigned long len,
 						   unsigned long pgoff,
 						   unsigned long flags);
-static int ramfs_nommu_mmap(struct file *file, struct vm_area_struct *vma);
+static int ramfs_nommu_mmap(struct file *file, struct mm_area *vma);
 
 static unsigned ramfs_mmap_capabilities(struct file *file)
 {
@@ -262,7 +262,7 @@ out:
 /*
  * set up a mapping for shared memory segments
  */
-static int ramfs_nommu_mmap(struct file *file, struct vm_area_struct *vma)
+static int ramfs_nommu_mmap(struct file *file, struct mm_area *vma)
 {
 	if (!is_nommu_shared_mapping(vma->vm_flags))
 		return -ENOSYS;

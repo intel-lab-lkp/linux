@@ -708,7 +708,7 @@ struct uvc_buffer *uvc_queue_next_buffer(struct uvc_video_queue *queue,
 struct uvc_buffer *uvc_queue_get_current_buffer(struct uvc_video_queue *queue);
 void uvc_queue_buffer_release(struct uvc_buffer *buf);
 int uvc_queue_mmap(struct uvc_video_queue *queue,
-		   struct vm_area_struct *vma);
+		   struct mm_area *vma);
 __poll_t uvc_queue_poll(struct uvc_video_queue *queue, struct file *file,
 			poll_table *wait);
 #ifndef CONFIG_MMU

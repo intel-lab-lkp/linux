@@ -45,7 +45,7 @@ struct hl_fpriv;
  * bits[63:59] - Encode mmap type
  * bits[45:0]  - mmap offset value
  *
- * NOTE: struct vm_area_struct.vm_pgoff uses offset in pages. Hence, these
+ * NOTE: struct mm_area.vm_pgoff uses offset in pages. Hence, these
  *  defines are w.r.t to PAGE_SIZE
  */
 #define HL_MMAP_TYPE_SHIFT		(59 - PAGE_SHIFT)
@@ -931,7 +931,7 @@ struct hl_mmap_mem_buf_behavior {
 	u64 mem_id;
 
 	int (*alloc)(struct hl_mmap_mem_buf *buf, gfp_t gfp, void *args);
-	int (*mmap)(struct hl_mmap_mem_buf *buf, struct vm_area_struct *vma, void *args);
+	int (*mmap)(struct hl_mmap_mem_buf *buf, struct mm_area *vma, void *args);
 	void (*release)(struct hl_mmap_mem_buf *buf);
 };
 
@@ -1650,7 +1650,7 @@ struct hl_asic_funcs {
 	void (*halt_engines)(struct hl_device *hdev, bool hard_reset, bool fw_reset);
 	int (*suspend)(struct hl_device *hdev);
 	int (*resume)(struct hl_device *hdev);
-	int (*mmap)(struct hl_device *hdev, struct vm_area_struct *vma,
+	int (*mmap)(struct hl_device *hdev, struct mm_area *vma,
 			void *cpu_addr, dma_addr_t dma_addr, size_t size);
 	void (*ring_doorbell)(struct hl_device *hdev, u32 hw_queue_id, u32 pi);
 	void (*pqe_write)(struct hl_device *hdev, __le64 *pqe,
@@ -1745,7 +1745,7 @@ struct hl_asic_funcs {
 	void (*ack_protection_bits_errors)(struct hl_device *hdev);
 	int (*get_hw_block_id)(struct hl_device *hdev, u64 block_addr,
 				u32 *block_size, u32 *block_id);
-	int (*hw_block_mmap)(struct hl_device *hdev, struct vm_area_struct *vma,
+	int (*hw_block_mmap)(struct hl_device *hdev, struct mm_area *vma,
 			u32 block_id, u32 block_size);
 	void (*enable_events_from_fw)(struct hl_device *hdev);
 	int (*ack_mmu_errors)(struct hl_device *hdev, u64 mmu_cap_mask);
@@ -3733,7 +3733,7 @@ int hl_access_cfg_region(struct hl_device *hdev, u64 addr, u64 *val,
 int hl_access_dev_mem(struct hl_device *hdev, enum pci_region region_type,
 			u64 addr, u64 *val, enum debugfs_access_type acc_type);
 
-int hl_mmap(struct file *filp, struct vm_area_struct *vma);
+int hl_mmap(struct file *filp, struct mm_area *vma);
 
 int hl_device_open(struct drm_device *drm, struct drm_file *file_priv);
 void hl_device_release(struct drm_device *ddev, struct drm_file *file_priv);
@@ -3819,7 +3819,7 @@ int hl_cb_create(struct hl_device *hdev, struct hl_mem_mgr *mmg,
 			struct hl_ctx *ctx, u32 cb_size, bool internal_cb,
 			bool map_cb, u64 *handle);
 int hl_cb_destroy(struct hl_mem_mgr *mmg, u64 cb_handle);
-int hl_hw_block_mmap(struct hl_fpriv *hpriv, struct vm_area_struct *vma);
+int hl_hw_block_mmap(struct hl_fpriv *hpriv, struct mm_area *vma);
 struct hl_cb *hl_cb_get(struct hl_mem_mgr *mmg, u64 handle);
 void hl_cb_put(struct hl_cb *cb);
 struct hl_cb *hl_cb_kernel_create(struct hl_device *hdev, u32 cb_size,
@@ -4063,7 +4063,7 @@ const char *hl_sync_engine_to_string(enum hl_sync_engine_type engine_type);
 void hl_mem_mgr_init(struct device *dev, struct hl_mem_mgr *mmg);
 void hl_mem_mgr_fini(struct hl_mem_mgr *mmg, struct hl_mem_mgr_fini_stats *stats);
 void hl_mem_mgr_idr_destroy(struct hl_mem_mgr *mmg);
-int hl_mem_mgr_mmap(struct hl_mem_mgr *mmg, struct vm_area_struct *vma,
+int hl_mem_mgr_mmap(struct hl_mem_mgr *mmg, struct mm_area *vma,
 		    void *args);
 struct hl_mmap_mem_buf *hl_mmap_mem_buf_get(struct hl_mem_mgr *mmg,
 						   u64 handle);

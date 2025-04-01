@@ -118,27 +118,27 @@ struct sp_node {
 	struct mempolicy *policy;
 };
 
-int vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst);
+int vma_dup_policy(struct mm_area *src, struct mm_area *dst);
 void mpol_shared_policy_init(struct shared_policy *sp, struct mempolicy *mpol);
 int mpol_set_shared_policy(struct shared_policy *sp,
-			   struct vm_area_struct *vma, struct mempolicy *mpol);
+			   struct mm_area *vma, struct mempolicy *mpol);
 void mpol_free_shared_policy(struct shared_policy *sp);
 struct mempolicy *mpol_shared_policy_lookup(struct shared_policy *sp,
 					    pgoff_t idx);
 
 struct mempolicy *get_task_policy(struct task_struct *p);
-struct mempolicy *__get_vma_policy(struct vm_area_struct *vma,
+struct mempolicy *__get_vma_policy(struct mm_area *vma,
 		unsigned long addr, pgoff_t *ilx);
-struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
+struct mempolicy *get_vma_policy(struct mm_area *vma,
 		unsigned long addr, int order, pgoff_t *ilx);
-bool vma_policy_mof(struct vm_area_struct *vma);
+bool vma_policy_mof(struct mm_area *vma);
 
 extern void numa_default_policy(void);
 extern void numa_policy_init(void);
 extern void mpol_rebind_task(struct task_struct *tsk, const nodemask_t *new);
 extern void mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new);
 
-extern int huge_node(struct vm_area_struct *vma,
+extern int huge_node(struct mm_area *vma,
 				unsigned long addr, gfp_t gfp_flags,
 				struct mempolicy **mpol, nodemask_t **nodemask);
 extern bool init_nodemask_of_mempolicy(nodemask_t *mask);
@@ -165,7 +165,7 @@ extern int mpol_parse_str(char *str, struct mempolicy **mpol);
 extern void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol);
 
 /* Check if a vma is migratable */
-extern bool vma_migratable(struct vm_area_struct *vma);
+extern bool vma_migratable(struct mm_area *vma);
 
 int mpol_misplaced(struct folio *folio, struct vm_fault *vmf,
 					unsigned long addr);
@@ -221,7 +221,7 @@ mpol_shared_policy_lookup(struct shared_policy *sp, pgoff_t idx)
 	return NULL;
 }
 
-static inline struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
+static inline struct mempolicy *get_vma_policy(struct mm_area *vma,
 				unsigned long addr, int order, pgoff_t *ilx)
 {
 	*ilx = 0;
@@ -229,7 +229,7 @@ static inline struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
 }
 
 static inline int
-vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst)
+vma_dup_policy(struct mm_area *src, struct mm_area *dst)
 {
 	return 0;
 }
@@ -251,7 +251,7 @@ static inline void mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new)
 {
 }
 
-static inline int huge_node(struct vm_area_struct *vma,
+static inline int huge_node(struct mm_area *vma,
 				unsigned long addr, gfp_t gfp_flags,
 				struct mempolicy **mpol, nodemask_t **nodemask)
 {

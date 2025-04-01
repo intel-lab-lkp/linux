@@ -275,14 +275,14 @@ sigsegv:
  * covers the 64bit vsyscall page now. 32bit has a real VMA now and does
  * not need special handling anymore:
  */
-static const char *gate_vma_name(struct vm_area_struct *vma)
+static const char *gate_vma_name(struct mm_area *vma)
 {
 	return "[vsyscall]";
 }
 static const struct vm_operations_struct gate_vma_ops = {
 	.name = gate_vma_name,
 };
-static struct vm_area_struct gate_vma __ro_after_init = {
+static struct mm_area gate_vma __ro_after_init = {
 	.vm_start	= VSYSCALL_ADDR,
 	.vm_end		= VSYSCALL_ADDR + PAGE_SIZE,
 	.vm_page_prot	= PAGE_READONLY_EXEC,
@@ -290,7 +290,7 @@ static struct vm_area_struct gate_vma __ro_after_init = {
 	.vm_ops		= &gate_vma_ops,
 };
 
-struct vm_area_struct *get_gate_vma(struct mm_struct *mm)
+struct mm_area *get_gate_vma(struct mm_struct *mm)
 {
 #ifdef CONFIG_COMPAT
 	if (!mm || !test_bit(MM_CONTEXT_HAS_VSYSCALL, &mm->context.flags))
@@ -303,7 +303,7 @@ struct vm_area_struct *get_gate_vma(struct mm_struct *mm)
 
 int in_gate_area(struct mm_struct *mm, unsigned long addr)
 {
-	struct vm_area_struct *vma = get_gate_vma(mm);
+	struct mm_area *vma = get_gate_vma(mm);
 
 	if (!vma)
 		return 0;

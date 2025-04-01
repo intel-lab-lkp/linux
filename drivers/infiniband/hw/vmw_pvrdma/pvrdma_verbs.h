@@ -358,7 +358,7 @@ enum rdma_link_layer pvrdma_port_link_layer(struct ib_device *ibdev,
 					    u32 port);
 int pvrdma_modify_port(struct ib_device *ibdev, u32 port,
 		       int mask, struct ib_port_modify *props);
-int pvrdma_mmap(struct ib_ucontext *context, struct vm_area_struct *vma);
+int pvrdma_mmap(struct ib_ucontext *context, struct mm_area *vma);
 int pvrdma_alloc_ucontext(struct ib_ucontext *uctx, struct ib_udata *udata);
 void pvrdma_dealloc_ucontext(struct ib_ucontext *context);
 int pvrdma_alloc_pd(struct ib_pd *pd, struct ib_udata *udata);

@@ -2156,7 +2156,7 @@ static int prctl_set_mm(int opt, unsigned long addr,
 		.auxv_size = 0,
 		.exe_fd = -1,
 	};
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int error;
 
 	if (arg5 || (arg4 && (opt != PR_SET_MM_AUXV &&

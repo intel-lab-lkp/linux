@@ -1704,7 +1704,7 @@ static int svm_range_validate_and_map(struct mm_struct *mm,
 		struct hmm_range *hmm_range = NULL;
 		unsigned long map_start_vma;
 		unsigned long map_last_vma;
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		unsigned long next = 0;
 		unsigned long offset;
 		unsigned long npages;
@@ -2721,7 +2721,7 @@ svm_range_get_range_boundaries(struct kfd_process *p, int64_t addr,
 			       unsigned long *start, unsigned long *last,
 			       bool *is_heap_stack)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct interval_tree_node *node;
 	struct rb_node *rb_node;
 	unsigned long start_limit, end_limit;
@@ -2938,7 +2938,7 @@ svm_range_count_fault(struct kfd_node *node, struct kfd_process *p,
 }
 
 static bool
-svm_fault_allowed(struct vm_area_struct *vma, bool write_fault)
+svm_fault_allowed(struct mm_area *vma, bool write_fault)
 {
 	unsigned long requested = VM_READ;
 
@@ -2965,7 +2965,7 @@ svm_range_restore_pages(struct amdgpu_device *adev, unsigned int pasid,
 	int32_t best_loc;
 	int32_t gpuid, gpuidx = MAX_GPU_INSTANCE;
 	bool write_locked = false;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	bool migration = false;
 	int r = 0;
 
@@ -3373,7 +3373,7 @@ static int
 svm_range_is_valid(struct kfd_process *p, uint64_t start, uint64_t size)
 {
 	const unsigned long device_vma = VM_IO | VM_PFNMAP | VM_MIXEDMAP;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long end;
 	unsigned long start_unchg = start;
 

@@ -62,7 +62,7 @@ static void mc_copy_user_page(void *from, void *to)
 }
 
 void v4_mc_copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma)
+	unsigned long vaddr, struct mm_area *vma)
 {
 	struct folio *src = page_folio(from);
 	void *kto = kmap_atomic(to);

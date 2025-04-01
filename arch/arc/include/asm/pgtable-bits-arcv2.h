@@ -101,7 +101,7 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 }
 
 struct vm_fault;
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long address, pte_t *ptep, unsigned int nr);
 
 #define update_mmu_cache(vma, addr, ptep) \

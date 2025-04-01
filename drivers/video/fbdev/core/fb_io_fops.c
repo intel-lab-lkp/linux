@@ -138,7 +138,7 @@ ssize_t fb_io_write(struct fb_info *info, const char __user *buf, size_t count, 
 }
 EXPORT_SYMBOL(fb_io_write);
 
-int fb_io_mmap(struct fb_info *info, struct vm_area_struct *vma)
+int fb_io_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	unsigned long start = info->fix.smem_start;
 	u32 len = info->fix.smem_len;

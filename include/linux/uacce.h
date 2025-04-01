@@ -43,7 +43,7 @@ struct uacce_ops {
 	int (*start_queue)(struct uacce_queue *q);
 	void (*stop_queue)(struct uacce_queue *q);
 	int (*is_q_updated)(struct uacce_queue *q);
-	int (*mmap)(struct uacce_queue *q, struct vm_area_struct *vma,
+	int (*mmap)(struct uacce_queue *q, struct mm_area *vma,
 		    struct uacce_qfile_region *qfr);
 	long (*ioctl)(struct uacce_queue *q, unsigned int cmd,
 		      unsigned long arg);

@@ -40,7 +40,7 @@
 
 #include "internal.h"
 
-bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
+bool can_change_pte_writable(struct mm_area *vma, unsigned long addr,
 			     pte_t pte)
 {
 	struct page *page;
@@ -84,7 +84,7 @@ bool can_change_pte_writable(struct vm_area_struct *vma, unsigned long addr,
 }
 
 static long change_pte_range(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, pmd_t *pmd, unsigned long addr,
+		struct mm_area *vma, pmd_t *pmd, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
 {
 	pte_t *pte, oldpte;
@@ -292,7 +292,7 @@ static long change_pte_range(struct mmu_gather *tlb,
  * protection procedure, false otherwise.
  */
 static inline bool
-pgtable_split_needed(struct vm_area_struct *vma, unsigned long cp_flags)
+pgtable_split_needed(struct mm_area *vma, unsigned long cp_flags)
 {
 	/*
 	 * pte markers only resides in pte level, if we need pte markers,
@@ -308,7 +308,7 @@ pgtable_split_needed(struct vm_area_struct *vma, unsigned long cp_flags)
  * procedure, false otherwise
  */
 static inline bool
-pgtable_populate_needed(struct vm_area_struct *vma, unsigned long cp_flags)
+pgtable_populate_needed(struct mm_area *vma, unsigned long cp_flags)
 {
 	/* If not within ioctl(UFFDIO_WRITEPROTECT), then don't bother */
 	if (!(cp_flags & MM_CP_UFFD_WP))
@@ -351,7 +351,7 @@ pgtable_populate_needed(struct vm_area_struct *vma, unsigned long cp_flags)
 	})
 
 static inline long change_pmd_range(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, pud_t *pud, unsigned long addr,
+		struct mm_area *vma, pud_t *pud, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
 {
 	pmd_t *pmd;
@@ -421,7 +421,7 @@ next:
 }
 
 static inline long change_pud_range(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, p4d_t *p4d, unsigned long addr,
+		struct mm_area *vma, p4d_t *p4d, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
 {
 	struct mmu_notifier_range range;
@@ -480,7 +480,7 @@ again:
 }
 
 static inline long change_p4d_range(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, pgd_t *pgd, unsigned long addr,
+		struct mm_area *vma, pgd_t *pgd, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
 {
 	p4d_t *p4d;
@@ -503,7 +503,7 @@ static inline long change_p4d_range(struct mmu_gather *tlb,
 }
 
 static long change_protection_range(struct mmu_gather *tlb,
-		struct vm_area_struct *vma, unsigned long addr,
+		struct mm_area *vma, unsigned long addr,
 		unsigned long end, pgprot_t newprot, unsigned long cp_flags)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -533,7 +533,7 @@ static long change_protection_range(struct mmu_gather *tlb,
 }
 
 long change_protection(struct mmu_gather *tlb,
-		       struct vm_area_struct *vma, unsigned long start,
+		       struct mm_area *vma, unsigned long start,
 		       unsigned long end, unsigned long cp_flags)
 {
 	pgprot_t newprot = vma->vm_page_prot;
@@ -595,7 +595,7 @@ static const struct mm_walk_ops prot_none_walk_ops = {
 
 int
 mprotect_fixup(struct vma_iterator *vmi, struct mmu_gather *tlb,
-	       struct vm_area_struct *vma, struct vm_area_struct **pprev,
+	       struct mm_area *vma, struct mm_area **pprev,
 	       unsigned long start, unsigned long end, unsigned long newflags)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -704,7 +704,7 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 		unsigned long prot, int pkey)
 {
 	unsigned long nstart, end, tmp, reqprot;
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	int error;
 	const int grows = prot & (PROT_GROWSDOWN|PROT_GROWSUP);
 	const bool rier = (current->personality & READ_IMPLIES_EXEC) &&

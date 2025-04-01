@@ -63,7 +63,7 @@ void hmm_flush_vmap(ia_css_ptr virt);
  * virt must be the start address of ISP memory (return by hmm_alloc),
  * do not pass any other address.
  */
-int hmm_mmap(struct vm_area_struct *vma, ia_css_ptr virt);
+int hmm_mmap(struct mm_area *vma, ia_css_ptr virt);
 
 extern struct hmm_bo_device bo_device;
 

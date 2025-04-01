@@ -67,7 +67,7 @@ extern int pci_domain_nr(struct pci_bus *bus);
 /* Decide whether to display the domain number in /proc */
 extern int pci_proc_domain(struct pci_bus *bus);
 
-struct vm_area_struct;
+struct mm_area;
 
 /* Tell PCI code what kind of PCI resource mappings we support */
 #define HAVE_PCI_MMAP			1
@@ -80,7 +80,7 @@ extern int pci_legacy_read(struct pci_bus *bus, loff_t port, u32 *val,
 extern int pci_legacy_write(struct pci_bus *bus, loff_t port, u32 val,
 			   size_t count);
 extern int pci_mmap_legacy_page_range(struct pci_bus *bus,
-				      struct vm_area_struct *vma,
+				      struct mm_area *vma,
 				      enum pci_mmap_state mmap_state);
 extern void pci_adjust_legacy_attr(struct pci_bus *bus,
 				   enum pci_mmap_state mmap_type);

@@ -720,7 +720,7 @@ NUMAB_SKIP_REASON
 
 TRACE_EVENT(sched_skip_vma_numa,
 
-	TP_PROTO(struct mm_struct *mm, struct vm_area_struct *vma,
+	TP_PROTO(struct mm_struct *mm, struct mm_area *vma,
 		 enum numa_vmaskip_reason reason),
 
 	TP_ARGS(mm, vma, reason),

@@ -3293,7 +3293,7 @@ static struct file *do_async_mmap_readahead(struct vm_fault *vmf,
 
 static vm_fault_t filemap_fault_recheck_pte_none(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	vm_fault_t ret = 0;
 	pte_t *ptep;
 
@@ -3689,7 +3689,7 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 			     pgoff_t start_pgoff, pgoff_t end_pgoff)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct file *file = vma->vm_file;
 	struct address_space *mapping = file->f_mapping;
 	pgoff_t file_end, last_pgoff = start_pgoff;
@@ -3793,7 +3793,7 @@ const struct vm_operations_struct generic_file_vm_ops = {
 
 /* This is used for a general mmap of a disk file */
 
-int generic_file_mmap(struct file *file, struct vm_area_struct *vma)
+int generic_file_mmap(struct file *file, struct mm_area *vma)
 {
 	struct address_space *mapping = file->f_mapping;
 
@@ -3807,7 +3807,7 @@ int generic_file_mmap(struct file *file, struct vm_area_struct *vma)
 /*
  * This is for filesystems which do not implement ->writepage.
  */
-int generic_file_readonly_mmap(struct file *file, struct vm_area_struct *vma)
+int generic_file_readonly_mmap(struct file *file, struct mm_area *vma)
 {
 	if (vma_is_shared_maywrite(vma))
 		return -EINVAL;
@@ -3818,11 +3818,11 @@ vm_fault_t filemap_page_mkwrite(struct vm_fault *vmf)
 {
 	return VM_FAULT_SIGBUS;
 }
-int generic_file_mmap(struct file *file, struct vm_area_struct *vma)
+int generic_file_mmap(struct file *file, struct mm_area *vma)
 {
 	return -ENOSYS;
 }
-int generic_file_readonly_mmap(struct file *file, struct vm_area_struct *vma)
+int generic_file_readonly_mmap(struct file *file, struct mm_area *vma)
 {
 	return -ENOSYS;
 }

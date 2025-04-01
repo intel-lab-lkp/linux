@@ -20,7 +20,7 @@
 
 MODULE_IMPORT_NS("DMA_BUF");
 
-static int exynos_drm_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
+static int exynos_drm_gem_mmap(struct drm_gem_object *obj, struct mm_area *vma);
 
 static int exynos_drm_alloc_buf(struct exynos_drm_gem *exynos_gem, bool kvmap)
 {
@@ -268,7 +268,7 @@ struct exynos_drm_gem *exynos_drm_gem_get(struct drm_file *filp,
 }
 
 static int exynos_drm_gem_mmap_buffer(struct exynos_drm_gem *exynos_gem,
-				      struct vm_area_struct *vma)
+				      struct mm_area *vma)
 {
 	struct drm_device *drm_dev = exynos_gem->base.dev;
 	unsigned long vm_size;
@@ -360,7 +360,7 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 	return 0;
 }
 
-static int exynos_drm_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int exynos_drm_gem_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct exynos_drm_gem *exynos_gem = to_exynos_gem(obj);
 	int ret;

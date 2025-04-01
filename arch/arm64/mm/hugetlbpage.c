@@ -182,7 +182,7 @@ static pte_t get_clear_contig_flush(struct mm_struct *mm,
 				    unsigned long ncontig)
 {
 	pte_t orig_pte = get_clear_contig(mm, addr, ptep, pgsize, ncontig);
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	struct mm_area vma = TLB_FLUSH_VMA(mm, 0);
 
 	flush_tlb_range(&vma, addr, addr + (pgsize * ncontig));
 	return orig_pte;
@@ -203,7 +203,7 @@ static void clear_flush(struct mm_struct *mm,
 			     unsigned long pgsize,
 			     unsigned long ncontig)
 {
-	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
+	struct mm_area vma = TLB_FLUSH_VMA(mm, 0);
 	unsigned long i, saddr = addr;
 
 	for (i = 0; i < ncontig; i++, addr += pgsize, ptep++)
@@ -244,7 +244,7 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
 		__set_ptes(mm, addr, ptep, pfn_pte(pfn, hugeprot), 1);
 }
 
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+pte_t *huge_pte_alloc(struct mm_struct *mm, struct mm_area *vma,
 		      unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgdp;
@@ -427,7 +427,7 @@ static int __cont_access_flags_changed(pte_t *ptep, pte_t pte, int ncontig)
 	return 0;
 }
 
-int huge_ptep_set_access_flags(struct vm_area_struct *vma,
+int huge_ptep_set_access_flags(struct mm_area *vma,
 			       unsigned long addr, pte_t *ptep,
 			       pte_t pte, int dirty)
 {
@@ -490,7 +490,7 @@ void huge_ptep_set_wrprotect(struct mm_struct *mm,
 		__set_ptes(mm, addr, ptep, pfn_pte(pfn, hugeprot), 1);
 }
 
-pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
+pte_t huge_ptep_clear_flush(struct mm_area *vma,
 			    unsigned long addr, pte_t *ptep)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -534,7 +534,7 @@ bool __init arch_hugetlb_valid_size(unsigned long size)
 	return __hugetlb_valid_size(size);
 }
 
-pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
+pte_t huge_ptep_modify_prot_start(struct mm_area *vma, unsigned long addr, pte_t *ptep)
 {
 	unsigned long psize = huge_page_size(hstate_vma(vma));
 
@@ -550,7 +550,7 @@ pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr
 	return huge_ptep_get_and_clear(vma->vm_mm, addr, ptep, psize);
 }
 
-void huge_ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+void huge_ptep_modify_prot_commit(struct mm_area *vma, unsigned long addr, pte_t *ptep,
 				  pte_t old_pte, pte_t pte)
 {
 	unsigned long psize = huge_page_size(hstate_vma(vma));

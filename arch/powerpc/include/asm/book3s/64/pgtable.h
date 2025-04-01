@@ -722,7 +722,7 @@ static inline bool check_pte_access(unsigned long access, unsigned long ptev)
  * Generic functions with hash/radix callbacks
  */
 
-static inline void __ptep_set_access_flags(struct vm_area_struct *vma,
+static inline void __ptep_set_access_flags(struct mm_area *vma,
 					   pte_t *ptep, pte_t entry,
 					   unsigned long address,
 					   int psize)
@@ -1104,12 +1104,12 @@ extern void set_pmd_at(struct mm_struct *mm, unsigned long addr,
 extern void set_pud_at(struct mm_struct *mm, unsigned long addr,
 		       pud_t *pudp, pud_t pud);
 
-static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pmd(struct mm_area *vma,
 					unsigned long addr, pmd_t *pmd)
 {
 }
 
-static inline void update_mmu_cache_pud(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pud(struct mm_area *vma,
 					unsigned long addr, pud_t *pud)
 {
 }
@@ -1284,19 +1284,19 @@ static inline pud_t pud_mkhuge(pud_t pud)
 
 
 #define __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
-extern int pmdp_set_access_flags(struct vm_area_struct *vma,
+extern int pmdp_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pmd_t *pmdp,
 				 pmd_t entry, int dirty);
 #define __HAVE_ARCH_PUDP_SET_ACCESS_FLAGS
-extern int pudp_set_access_flags(struct vm_area_struct *vma,
+extern int pudp_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pud_t *pudp,
 				 pud_t entry, int dirty);
 
 #define __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
-extern int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+extern int pmdp_test_and_clear_young(struct mm_area *vma,
 				     unsigned long address, pmd_t *pmdp);
 #define __HAVE_ARCH_PUDP_TEST_AND_CLEAR_YOUNG
-extern int pudp_test_and_clear_young(struct vm_area_struct *vma,
+extern int pudp_test_and_clear_young(struct mm_area *vma,
 				     unsigned long address, pud_t *pudp);
 
 
@@ -1319,7 +1319,7 @@ static inline pud_t pudp_huge_get_and_clear(struct mm_struct *mm,
 	return *pudp;
 }
 
-static inline pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
+static inline pmd_t pmdp_collapse_flush(struct mm_area *vma,
 					unsigned long address, pmd_t *pmdp)
 {
 	if (radix_enabled())
@@ -1329,12 +1329,12 @@ static inline pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
 #define pmdp_collapse_flush pmdp_collapse_flush
 
 #define __HAVE_ARCH_PMDP_HUGE_GET_AND_CLEAR_FULL
-pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
+pmd_t pmdp_huge_get_and_clear_full(struct mm_area *vma,
 				   unsigned long addr,
 				   pmd_t *pmdp, int full);
 
 #define __HAVE_ARCH_PUDP_HUGE_GET_AND_CLEAR_FULL
-pud_t pudp_huge_get_and_clear_full(struct vm_area_struct *vma,
+pud_t pudp_huge_get_and_clear_full(struct mm_area *vma,
 				   unsigned long addr,
 				   pud_t *pudp, int full);
 
@@ -1357,16 +1357,16 @@ static inline pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PMDP_INVALIDATE
-extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
+extern pmd_t pmdp_invalidate(struct mm_area *vma, unsigned long address,
 			     pmd_t *pmdp);
-extern pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
+extern pud_t pudp_invalidate(struct mm_area *vma, unsigned long address,
 			     pud_t *pudp);
 
 #define pmd_move_must_withdraw pmd_move_must_withdraw
 struct spinlock;
 extern int pmd_move_must_withdraw(struct spinlock *new_pmd_ptl,
 				  struct spinlock *old_pmd_ptl,
-				  struct vm_area_struct *vma);
+				  struct mm_area *vma);
 /*
  * Hash translation mode use the deposited table to store hash pte
  * slot information.
@@ -1413,8 +1413,8 @@ static inline int pgd_devmap(pgd_t pgd)
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
 #define __HAVE_ARCH_PTEP_MODIFY_PROT_TRANSACTION
-pte_t ptep_modify_prot_start(struct vm_area_struct *, unsigned long, pte_t *);
-void ptep_modify_prot_commit(struct vm_area_struct *, unsigned long,
+pte_t ptep_modify_prot_start(struct mm_area *, unsigned long, pte_t *);
+void ptep_modify_prot_commit(struct mm_area *, unsigned long,
 			     pte_t *, pte_t, pte_t);
 
 /*

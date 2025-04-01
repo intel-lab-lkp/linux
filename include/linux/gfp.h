@@ -9,7 +9,7 @@
 #include <linux/alloc_tag.h>
 #include <linux/sched.h>
 
-struct vm_area_struct;
+struct mm_area;
 struct mempolicy;
 
 /* Convert GFP flags to their corresponding migrate type */
@@ -318,7 +318,7 @@ struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order);
 struct folio *folio_alloc_noprof(gfp_t gfp, unsigned int order);
 struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *mpol, pgoff_t ilx, int nid);
-struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct *vma,
+struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct mm_area *vma,
 		unsigned long addr);
 #else
 static inline struct page *alloc_pages_noprof(gfp_t gfp_mask, unsigned int order)
@@ -346,7 +346,7 @@ static inline struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int orde
 #define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 
 static inline struct page *alloc_page_vma_noprof(gfp_t gfp,
-		struct vm_area_struct *vma, unsigned long addr)
+		struct mm_area *vma, unsigned long addr)
 {
 	struct folio *folio = vma_alloc_folio_noprof(gfp, 0, vma, addr);
 
@@ -420,7 +420,7 @@ static inline bool gfp_compaction_allowed(gfp_t gfp_mask)
 	return IS_ENABLED(CONFIG_COMPACTION) && (gfp_mask & __GFP_IO);
 }
 
-extern gfp_t vma_thp_gfp_mask(struct vm_area_struct *vma);
+extern gfp_t vma_thp_gfp_mask(struct mm_area *vma);
 
 #ifdef CONFIG_CONTIG_ALLOC
 /* The below functions must be run on a range from a single zone. */

@@ -307,7 +307,7 @@ static inline unsigned long mm_untag_mask(struct mm_struct *mm)
  * Only enforce protection keys on the current process, because there is no
  * user context to access POR_EL0 for another address space.
  */
-static inline bool arch_vma_access_permitted(struct vm_area_struct *vma,
+static inline bool arch_vma_access_permitted(struct mm_area *vma,
 		bool write, bool execute, bool foreign)
 {
 	if (!system_supports_poe())

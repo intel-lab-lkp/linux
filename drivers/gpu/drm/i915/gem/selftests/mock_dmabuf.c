@@ -82,7 +82,7 @@ static void mock_dmabuf_vunmap(struct dma_buf *dma_buf, struct iosys_map *map)
 	vm_unmap_ram(map->vaddr, mock->npages);
 }
 
-static int mock_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
+static int mock_dmabuf_mmap(struct dma_buf *dma_buf, struct mm_area *vma)
 {
 	return -ENODEV;
 }

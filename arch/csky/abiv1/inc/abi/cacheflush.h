@@ -30,7 +30,7 @@ static inline void invalidate_kernel_vmap_range(void *addr, int size)
 }
 
 #define ARCH_HAS_FLUSH_ANON_PAGE
-static inline void flush_anon_page(struct vm_area_struct *vma,
+static inline void flush_anon_page(struct mm_area *vma,
 			 struct page *page, unsigned long vmaddr)
 {
 	if (PageAnon(page))
@@ -41,7 +41,7 @@ static inline void flush_anon_page(struct vm_area_struct *vma,
  * if (current_mm != vma->mm) cache_wbinv_range(start, end) will be broken.
  * Use cache_wbinv_all() here and need to be improved in future.
  */
-extern void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end);
+extern void flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end);
 #define flush_cache_vmap(start, end)		cache_wbinv_all()
 #define flush_cache_vmap_early(start, end)	do { } while (0)
 #define flush_cache_vunmap(start, end)		cache_wbinv_all()

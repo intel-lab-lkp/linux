@@ -231,7 +231,7 @@ void set_pmd_at(struct mm_struct *mm, unsigned long addr,
 	__set_pmd_acct(mm, addr, orig, pmd);
 }
 
-static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
+static inline pmd_t pmdp_establish(struct mm_area *vma,
 		unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	pmd_t old;
@@ -247,7 +247,7 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 /*
  * This routine is only called when splitting a THP
  */
-pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_invalidate(struct mm_area *vma, unsigned long address,
 		     pmd_t *pmdp)
 {
 	pmd_t old, entry;

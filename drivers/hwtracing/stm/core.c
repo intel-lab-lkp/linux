@@ -666,7 +666,7 @@ static ssize_t stm_char_write(struct file *file, const char __user *buf,
 	return count;
 }
 
-static void stm_mmap_open(struct vm_area_struct *vma)
+static void stm_mmap_open(struct mm_area *vma)
 {
 	struct stm_file *stmf = vma->vm_file->private_data;
 	struct stm_device *stm = stmf->stm;
@@ -674,7 +674,7 @@ static void stm_mmap_open(struct vm_area_struct *vma)
 	pm_runtime_get(&stm->dev);
 }
 
-static void stm_mmap_close(struct vm_area_struct *vma)
+static void stm_mmap_close(struct mm_area *vma)
 {
 	struct stm_file *stmf = vma->vm_file->private_data;
 	struct stm_device *stm = stmf->stm;
@@ -688,7 +688,7 @@ static const struct vm_operations_struct stm_mmap_vmops = {
 	.close	= stm_mmap_close,
 };
 
-static int stm_char_mmap(struct file *file, struct vm_area_struct *vma)
+static int stm_char_mmap(struct file *file, struct mm_area *vma)
 {
 	struct stm_file *stmf = file->private_data;
 	struct stm_device *stm = stmf->stm;

@@ -103,7 +103,7 @@ nitpick_ignore = [
     ("c:type", "usb_interface"),
     ("c:type", "v4l2_std_id"),
     ("c:type", "video_system_t"),
-    ("c:type", "vm_area_struct"),
+    ("c:type", "mm_area"),
 
     # Opaque structures
 

@@ -99,7 +99,7 @@ static void reload_tlb_one_pid(unsigned long addr, unsigned long mmu_pid, pte_t 
 	replace_tlb_one_pid(addr, mmu_pid, pte_val(pte));
 }
 
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void flush_tlb_range(struct mm_area *vma, unsigned long start,
 			unsigned long end)
 {
 	unsigned long mmu_pid = get_pid_from_context(&vma->vm_mm->context);
@@ -110,7 +110,7 @@ void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 	}
 }
 
-void reload_tlb_page(struct vm_area_struct *vma, unsigned long addr, pte_t pte)
+void reload_tlb_page(struct mm_area *vma, unsigned long addr, pte_t pte)
 {
 	unsigned long mmu_pid = get_pid_from_context(&vma->vm_mm->context);
 

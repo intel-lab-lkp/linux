@@ -45,7 +45,7 @@ static inline void flush_micro_tlb(void)
 	}
 }
 
-static inline void flush_micro_tlb_vm(struct vm_area_struct *vma)
+static inline void flush_micro_tlb_vm(struct mm_area *vma)
 {
 	if (vma->vm_flags & VM_EXEC)
 		flush_micro_tlb();
@@ -103,7 +103,7 @@ void local_flush_tlb_all(void)
 }
 EXPORT_SYMBOL(local_flush_tlb_all);
 
-void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_tlb_range(struct mm_area *vma, unsigned long start,
 	unsigned long end)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -208,7 +208,7 @@ void local_flush_tlb_kernel_range(unsigned long start, unsigned long end)
 	local_irq_restore(flags);
 }
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	int cpu = smp_processor_id();
 
@@ -290,7 +290,7 @@ void local_flush_tlb_one(unsigned long page)
  * updates the TLB with the new pte(s), and another which also checks
  * for the R4k "end of page" hardware bug and does the needy.
  */
-void __update_tlb(struct vm_area_struct * vma, unsigned long address, pte_t pte)
+void __update_tlb(struct mm_area * vma, unsigned long address, pte_t pte)
 {
 	unsigned long flags;
 	pgd_t *pgdp;

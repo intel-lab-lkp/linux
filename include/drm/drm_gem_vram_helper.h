@@ -18,7 +18,7 @@ struct drm_mode_create_dumb;
 struct drm_plane;
 struct drm_plane_state;
 struct filp;
-struct vm_area_struct;
+struct mm_area;
 
 #define DRM_GEM_VRAM_PL_FLAG_SYSTEM	(1 << 0)
 #define DRM_GEM_VRAM_PL_FLAG_VRAM	(1 << 1)

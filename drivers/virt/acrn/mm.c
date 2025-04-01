@@ -163,7 +163,7 @@ int acrn_vm_ram_map(struct acrn_vm *vm, struct acrn_vm_memmap *memmap)
 	void *remap_vaddr;
 	int ret, pinned;
 	u64 user_vm_pa;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	if (!vm || !memmap)
 		return -EINVAL;

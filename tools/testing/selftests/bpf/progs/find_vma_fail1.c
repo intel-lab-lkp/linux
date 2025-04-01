@@ -10,7 +10,7 @@ struct callback_ctx {
 	int dummy;
 };
 
-static long write_vma(struct task_struct *task, struct vm_area_struct *vma,
+static long write_vma(struct task_struct *task, struct mm_area *vma,
 		      struct callback_ctx *data)
 {
 	/* writing to vma, which is illegal */

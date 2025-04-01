@@ -6,13 +6,13 @@
 #include <linux/stringify.h>
 
 struct page;
-struct vm_area_struct;
+struct mm_area;
 struct mm_struct;
 struct vma_iterator;
 struct vma_merge_struct;
 
 void dump_page(const struct page *page, const char *reason);
-void dump_vma(const struct vm_area_struct *vma);
+void dump_vma(const struct mm_area *vma);
 void dump_mm(const struct mm_struct *mm);
 void dump_vmg(const struct vma_merge_struct *vmg, const char *reason);
 void vma_iter_dump_tree(const struct vma_iterator *vmi);

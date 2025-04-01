@@ -2449,7 +2449,7 @@ struct ib_device_ops {
 	int (*alloc_ucontext)(struct ib_ucontext *context,
 			      struct ib_udata *udata);
 	void (*dealloc_ucontext)(struct ib_ucontext *context);
-	int (*mmap)(struct ib_ucontext *context, struct vm_area_struct *vma);
+	int (*mmap)(struct ib_ucontext *context, struct mm_area *vma);
 	/**
 	 * This will be called once refcount of an entry in mmap_xa reaches
 	 * zero. The type of the memory that was mapped may differ between
@@ -2976,7 +2976,7 @@ void  ib_set_client_data(struct ib_device *device, struct ib_client *client,
 void ib_set_device_ops(struct ib_device *device,
 		       const struct ib_device_ops *ops);
 
-int rdma_user_mmap_io(struct ib_ucontext *ucontext, struct vm_area_struct *vma,
+int rdma_user_mmap_io(struct ib_ucontext *ucontext, struct mm_area *vma,
 		      unsigned long pfn, unsigned long size, pgprot_t prot,
 		      struct rdma_user_mmap_entry *entry);
 int rdma_user_mmap_entry_insert(struct ib_ucontext *ucontext,
@@ -3009,7 +3009,7 @@ rdma_user_mmap_entry_get_pgoff(struct ib_ucontext *ucontext,
 			       unsigned long pgoff);
 struct rdma_user_mmap_entry *
 rdma_user_mmap_entry_get(struct ib_ucontext *ucontext,
-			 struct vm_area_struct *vma);
+			 struct mm_area *vma);
 void rdma_user_mmap_entry_put(struct rdma_user_mmap_entry *entry);
 
 void rdma_user_mmap_entry_remove(struct rdma_user_mmap_entry *entry);

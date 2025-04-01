@@ -370,18 +370,18 @@ static inline unsigned long pmd_page_vaddr(pmd_t pmd)
 
 extern pgd_t swapper_pg_dir[PTRS_PER_PGD]; /* defined in head.S */
 
-struct vm_area_struct;
+struct mm_area;
 
-static inline void update_tlb(struct vm_area_struct *vma,
+static inline void update_tlb(struct mm_area *vma,
 	unsigned long address, pte_t *pte)
 {
 }
 
-extern void update_cache(struct vm_area_struct *vma,
+extern void update_cache(struct mm_area *vma,
 	unsigned long address, pte_t *pte);
 
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long address,
+		struct mm_area *vma, unsigned long address,
 		pte_t *ptep, unsigned int nr)
 {
 	update_tlb(vma, address, ptep);

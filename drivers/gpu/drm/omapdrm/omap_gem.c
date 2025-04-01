@@ -351,7 +351,7 @@ size_t omap_gem_mmap_size(struct drm_gem_object *obj)
 
 /* Normal handling for the case of faulting in non-tiled buffers */
 static vm_fault_t omap_gem_fault_1d(struct drm_gem_object *obj,
-		struct vm_area_struct *vma, struct vm_fault *vmf)
+		struct mm_area *vma, struct vm_fault *vmf)
 {
 	struct omap_gem_object *omap_obj = to_omap_bo(obj);
 	unsigned long pfn;
@@ -377,7 +377,7 @@ static vm_fault_t omap_gem_fault_1d(struct drm_gem_object *obj,
 
 /* Special handling for the case of faulting in 2d tiled buffers */
 static vm_fault_t omap_gem_fault_2d(struct drm_gem_object *obj,
-		struct vm_area_struct *vma, struct vm_fault *vmf)
+		struct mm_area *vma, struct vm_fault *vmf)
 {
 	struct omap_gem_object *omap_obj = to_omap_bo(obj);
 	struct omap_drm_private *priv = obj->dev->dev_private;
@@ -496,7 +496,7 @@ static vm_fault_t omap_gem_fault_2d(struct drm_gem_object *obj,
  */
 static vm_fault_t omap_gem_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *obj = vma->vm_private_data;
 	struct omap_gem_object *omap_obj = to_omap_bo(obj);
 	int err;
@@ -531,7 +531,7 @@ fail:
 	return ret;
 }
 
-static int omap_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
+static int omap_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma)
 {
 	struct omap_gem_object *omap_obj = to_omap_bo(obj);
 

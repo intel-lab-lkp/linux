@@ -357,7 +357,7 @@ static struct ptp_clock *vmclock_ptp_register(struct device *dev,
 	return ptp_clock_register(&st->ptp_clock_info, dev);
 }
 
-static int vmclock_miscdev_mmap(struct file *fp, struct vm_area_struct *vma)
+static int vmclock_miscdev_mmap(struct file *fp, struct mm_area *vma)
 {
 	struct vmclock_state *st = container_of(fp->private_data,
 						struct vmclock_state, miscdev);

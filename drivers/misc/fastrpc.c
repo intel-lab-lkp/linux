@@ -731,7 +731,7 @@ static int fastrpc_vmap(struct dma_buf *dmabuf, struct iosys_map *map)
 }
 
 static int fastrpc_mmap(struct dma_buf *dmabuf,
-			struct vm_area_struct *vma)
+			struct mm_area *vma)
 {
 	struct fastrpc_buf *buf = dmabuf->priv;
 	size_t size = vma->vm_end - vma->vm_start;
@@ -984,7 +984,7 @@ static int fastrpc_get_args(u32 kernel, struct fastrpc_invoke_ctx *ctx)
 			continue;
 
 		if (ctx->maps[i]) {
-			struct vm_area_struct *vma = NULL;
+			struct mm_area *vma = NULL;
 
 			rpra[i].buf.pv = (u64) ctx->args[i].ptr;
 			pages[i].addr = ctx->maps[i]->phys;

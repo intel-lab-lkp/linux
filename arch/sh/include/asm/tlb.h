@@ -10,10 +10,10 @@
 #include <linux/swap.h>
 
 #if defined(CONFIG_CPU_SH4)
-extern void tlb_wire_entry(struct vm_area_struct *, unsigned long, pte_t);
+extern void tlb_wire_entry(struct mm_area *, unsigned long, pte_t);
 extern void tlb_unwire_entry(void);
 #else
-static inline void tlb_wire_entry(struct vm_area_struct *vma ,
+static inline void tlb_wire_entry(struct mm_area *vma ,
 				  unsigned long addr, pte_t pte)
 {
 	BUG();

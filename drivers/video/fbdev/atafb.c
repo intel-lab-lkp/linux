@@ -291,7 +291,7 @@ static int *MV300_reg = MV300_reg_8bit;
  *			unsigned long arg);
  *
  *	* perform fb specific mmap *
- *	int (*fb_mmap)(struct fb_info *info, struct vm_area_struct *vma);
+ *	int (*fb_mmap)(struct fb_info *info, struct mm_area *vma);
  * } ;
  */
 

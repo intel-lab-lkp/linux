@@ -550,7 +550,7 @@ ssize_t vfio_platform_write(struct vfio_device *core_vdev, const char __user *bu
 EXPORT_SYMBOL_GPL(vfio_platform_write);
 
 static int vfio_platform_mmap_mmio(struct vfio_platform_region region,
-				   struct vm_area_struct *vma)
+				   struct mm_area *vma)
 {
 	u64 req_len, pgoff, req_start;
 
@@ -569,7 +569,7 @@ static int vfio_platform_mmap_mmio(struct vfio_platform_region region,
 			       req_len, vma->vm_page_prot);
 }
 
-int vfio_platform_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma)
+int vfio_platform_mmap(struct vfio_device *core_vdev, struct mm_area *vma)
 {
 	struct vfio_platform_device *vdev =
 		container_of(core_vdev, struct vfio_platform_device, vdev);

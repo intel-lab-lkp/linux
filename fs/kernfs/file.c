@@ -349,7 +349,7 @@ out_free:
 	return len;
 }
 
-static void kernfs_vma_open(struct vm_area_struct *vma)
+static void kernfs_vma_open(struct mm_area *vma)
 {
 	struct file *file = vma->vm_file;
 	struct kernfs_open_file *of = kernfs_of(file);
@@ -408,7 +408,7 @@ static vm_fault_t kernfs_vma_page_mkwrite(struct vm_fault *vmf)
 	return ret;
 }
 
-static int kernfs_vma_access(struct vm_area_struct *vma, unsigned long addr,
+static int kernfs_vma_access(struct mm_area *vma, unsigned long addr,
 			     void *buf, int len, int write)
 {
 	struct file *file = vma->vm_file;
@@ -436,7 +436,7 @@ static const struct vm_operations_struct kernfs_vm_ops = {
 	.access		= kernfs_vma_access,
 };
 
-static int kernfs_fop_mmap(struct file *file, struct vm_area_struct *vma)
+static int kernfs_fop_mmap(struct file *file, struct mm_area *vma)
 {
 	struct kernfs_open_file *of = kernfs_of(file);
 	const struct kernfs_ops *ops;

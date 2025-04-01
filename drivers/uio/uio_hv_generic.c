@@ -136,7 +136,7 @@ static void hv_uio_rescind(struct vmbus_channel *channel)
  */
 static int hv_uio_ring_mmap(struct file *filp, struct kobject *kobj,
 			    const struct bin_attribute *attr,
-			    struct vm_area_struct *vma)
+			    struct mm_area *vma)
 {
 	struct vmbus_channel *channel
 		= container_of(kobj, struct vmbus_channel, kobj);

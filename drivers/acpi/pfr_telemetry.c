@@ -295,7 +295,7 @@ static long pfrt_log_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 }
 
 static int
-pfrt_log_mmap(struct file *file, struct vm_area_struct *vma)
+pfrt_log_mmap(struct file *file, struct mm_area *vma)
 {
 	struct pfrt_log_device *pfrt_log_dev;
 	struct pfrt_log_data_info info;

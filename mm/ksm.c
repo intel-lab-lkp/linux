@@ -620,7 +620,7 @@ static inline bool ksm_test_exit(struct mm_struct *mm)
  * of the process that owns 'vma'.  We also do not want to enforce
  * protection keys here anyway.
  */
-static int break_ksm(struct vm_area_struct *vma, unsigned long addr, bool lock_vma)
+static int break_ksm(struct mm_area *vma, unsigned long addr, bool lock_vma)
 {
 	vm_fault_t ret = 0;
 
@@ -677,7 +677,7 @@ static int break_ksm(struct vm_area_struct *vma, unsigned long addr, bool lock_v
 	return (ret & VM_FAULT_OOM) ? -ENOMEM : 0;
 }
 
-static bool vma_ksm_compatible(struct vm_area_struct *vma)
+static bool vma_ksm_compatible(struct mm_area *vma)
 {
 	if (vma->vm_flags & (VM_SHARED  | VM_MAYSHARE   | VM_PFNMAP  |
 			     VM_IO      | VM_DONTEXPAND | VM_HUGETLB |
@@ -699,10 +699,10 @@ static bool vma_ksm_compatible(struct vm_area_struct *vma)
 	return true;
 }
 
-static struct vm_area_struct *find_mergeable_vma(struct mm_struct *mm,
+static struct mm_area *find_mergeable_vma(struct mm_struct *mm,
 		unsigned long addr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	if (ksm_test_exit(mm))
 		return NULL;
 	vma = vma_lookup(mm, addr);
@@ -715,7 +715,7 @@ static void break_cow(struct ksm_rmap_item *rmap_item)
 {
 	struct mm_struct *mm = rmap_item->mm;
 	unsigned long addr = rmap_item->address;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	/*
 	 * It is not an accident that whenever we want to break COW
@@ -734,7 +734,7 @@ static struct page *get_mergeable_page(struct ksm_rmap_item *rmap_item)
 {
 	struct mm_struct *mm = rmap_item->mm;
 	unsigned long addr = rmap_item->address;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct page *page = NULL;
 	struct folio_walk fw;
 	struct folio *folio;
@@ -1034,7 +1034,7 @@ static void remove_trailing_rmap_items(struct ksm_rmap_item **rmap_list)
  * to the next pass of ksmd - consider, for example, how ksmd might be
  * in cmp_and_merge_page on one of the rmap_items we would be removing.
  */
-static int unmerge_ksm_pages(struct vm_area_struct *vma,
+static int unmerge_ksm_pages(struct mm_area *vma,
 			     unsigned long start, unsigned long end, bool lock_vma)
 {
 	unsigned long addr;
@@ -1167,7 +1167,7 @@ static int unmerge_and_remove_all_rmap_items(void)
 	struct ksm_mm_slot *mm_slot;
 	struct mm_slot *slot;
 	struct mm_struct *mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int err = 0;
 
 	spin_lock(&ksm_mmlist_lock);
@@ -1243,7 +1243,7 @@ static u32 calc_checksum(struct page *page)
 	return checksum;
 }
 
-static int write_protect_page(struct vm_area_struct *vma, struct folio *folio,
+static int write_protect_page(struct mm_area *vma, struct folio *folio,
 			      pte_t *orig_pte)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -1343,7 +1343,7 @@ out:
  *
  * Returns 0 on success, -EFAULT on failure.
  */
-static int replace_page(struct vm_area_struct *vma, struct page *page,
+static int replace_page(struct mm_area *vma, struct page *page,
 			struct page *kpage, pte_t orig_pte)
 {
 	struct folio *kfolio = page_folio(kpage);
@@ -1446,7 +1446,7 @@ out:
  *
  * This function returns 0 if the pages were merged, -EFAULT otherwise.
  */
-static int try_to_merge_one_page(struct vm_area_struct *vma,
+static int try_to_merge_one_page(struct mm_area *vma,
 				 struct page *page, struct page *kpage)
 {
 	struct folio *folio = page_folio(page);
@@ -1521,7 +1521,7 @@ static int try_to_merge_with_zero_page(struct ksm_rmap_item *rmap_item,
 	 * appropriate zero page if the user enabled this via sysfs.
 	 */
 	if (ksm_use_zero_pages && (rmap_item->oldchecksum == zero_checksum)) {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		mmap_read_lock(mm);
 		vma = find_mergeable_vma(mm, rmap_item->address);
@@ -1554,7 +1554,7 @@ static int try_to_merge_with_ksm_page(struct ksm_rmap_item *rmap_item,
 				      struct page *page, struct page *kpage)
 {
 	struct mm_struct *mm = rmap_item->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int err = -EFAULT;
 
 	mmap_read_lock(mm);
@@ -2459,7 +2459,7 @@ static struct ksm_rmap_item *scan_get_next_rmap_item(struct page **page)
 	struct mm_struct *mm;
 	struct ksm_mm_slot *mm_slot;
 	struct mm_slot *slot;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct ksm_rmap_item *rmap_item;
 	struct vma_iterator vmi;
 	int nid;
@@ -2696,7 +2696,7 @@ static int ksm_scan_thread(void *nothing)
 	return 0;
 }
 
-static void __ksm_add_vma(struct vm_area_struct *vma)
+static void __ksm_add_vma(struct mm_area *vma)
 {
 	unsigned long vm_flags = vma->vm_flags;
 
@@ -2707,7 +2707,7 @@ static void __ksm_add_vma(struct vm_area_struct *vma)
 		vm_flags_set(vma, VM_MERGEABLE);
 }
 
-static int __ksm_del_vma(struct vm_area_struct *vma)
+static int __ksm_del_vma(struct mm_area *vma)
 {
 	int err;
 
@@ -2728,7 +2728,7 @@ static int __ksm_del_vma(struct vm_area_struct *vma)
  *
  * @vma:  Pointer to vma
  */
-void ksm_add_vma(struct vm_area_struct *vma)
+void ksm_add_vma(struct mm_area *vma)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -2738,7 +2738,7 @@ void ksm_add_vma(struct vm_area_struct *vma)
 
 static void ksm_add_vmas(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	VMA_ITERATOR(vmi, mm, 0);
 	for_each_vma(vmi, vma)
@@ -2747,7 +2747,7 @@ static void ksm_add_vmas(struct mm_struct *mm)
 
 static int ksm_del_vmas(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int err;
 
 	VMA_ITERATOR(vmi, mm, 0);
@@ -2826,7 +2826,7 @@ int ksm_disable(struct mm_struct *mm)
 	return ksm_del_vmas(mm);
 }
 
-int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
+int ksm_madvise(struct mm_area *vma, unsigned long start,
 		unsigned long end, int advice, unsigned long *vm_flags)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -2953,7 +2953,7 @@ void __ksm_exit(struct mm_struct *mm)
 }
 
 struct folio *ksm_might_need_to_copy(struct folio *folio,
-			struct vm_area_struct *vma, unsigned long addr)
+			struct mm_area *vma, unsigned long addr)
 {
 	struct page *page = folio_page(folio, 0);
 	struct anon_vma *anon_vma = folio_anon_vma(folio);
@@ -3021,7 +3021,7 @@ again:
 	hlist_for_each_entry(rmap_item, &stable_node->hlist, hlist) {
 		struct anon_vma *anon_vma = rmap_item->anon_vma;
 		struct anon_vma_chain *vmac;
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 
 		cond_resched();
 		if (!anon_vma_trylock_read(anon_vma)) {
@@ -3079,7 +3079,7 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 {
 	struct ksm_stable_node *stable_node;
 	struct ksm_rmap_item *rmap_item;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk;
 
 	stable_node = folio_stable_node(folio);
@@ -3277,7 +3277,7 @@ static void wait_while_offlining(void)
  */
 bool ksm_process_mergeable(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	mmap_assert_locked(mm);
 	VMA_ITERATOR(vmi, mm, 0);

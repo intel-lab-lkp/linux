@@ -46,7 +46,7 @@ static long mmapper_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	return -ENOIOCTLCMD;
 }
 
-static int mmapper_mmap(struct file *file, struct vm_area_struct *vma)
+static int mmapper_mmap(struct file *file, struct mm_area *vma)
 {
 	int ret = -EINVAL;
 	int size;

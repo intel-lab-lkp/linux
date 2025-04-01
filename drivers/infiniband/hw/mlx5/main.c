@@ -2201,7 +2201,7 @@ static inline char *mmap_cmd2str(enum mlx5_ib_mmap_cmd cmd)
 }
 
 static int mlx5_ib_mmap_clock_info_page(struct mlx5_ib_dev *dev,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					struct mlx5_ib_ucontext *context)
 {
 	if ((vma->vm_end - vma->vm_start != PAGE_SIZE) ||
@@ -2252,7 +2252,7 @@ static void mlx5_ib_mmap_free(struct rdma_user_mmap_entry *entry)
 }
 
 static int uar_mmap(struct mlx5_ib_dev *dev, enum mlx5_ib_mmap_cmd cmd,
-		    struct vm_area_struct *vma,
+		    struct mm_area *vma,
 		    struct mlx5_ib_ucontext *context)
 {
 	struct mlx5_bfreg_info *bfregi = &context->bfregi;
@@ -2359,7 +2359,7 @@ free_bfreg:
 	return err;
 }
 
-static unsigned long mlx5_vma_to_pgoff(struct vm_area_struct *vma)
+static unsigned long mlx5_vma_to_pgoff(struct mm_area *vma)
 {
 	unsigned long idx;
 	u8 command;
@@ -2371,7 +2371,7 @@ static unsigned long mlx5_vma_to_pgoff(struct vm_area_struct *vma)
 }
 
 static int mlx5_ib_mmap_offset(struct mlx5_ib_dev *dev,
-			       struct vm_area_struct *vma,
+			       struct mm_area *vma,
 			       struct ib_ucontext *ucontext)
 {
 	struct mlx5_user_mmap_entry *mentry;
@@ -2410,7 +2410,7 @@ static u64 mlx5_entry_to_mmap_offset(struct mlx5_user_mmap_entry *entry)
 		(index & 0xFF)) << PAGE_SHIFT;
 }
 
-static int mlx5_ib_mmap(struct ib_ucontext *ibcontext, struct vm_area_struct *vma)
+static int mlx5_ib_mmap(struct ib_ucontext *ibcontext, struct mm_area *vma)
 {
 	struct mlx5_ib_ucontext *context = to_mucontext(ibcontext);
 	struct mlx5_ib_dev *dev = to_mdev(ibcontext->device);

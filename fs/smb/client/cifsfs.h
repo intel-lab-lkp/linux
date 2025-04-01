@@ -103,8 +103,8 @@ extern int cifs_lock(struct file *, int, struct file_lock *);
 extern int cifs_fsync(struct file *, loff_t, loff_t, int);
 extern int cifs_strict_fsync(struct file *, loff_t, loff_t, int);
 extern int cifs_flush(struct file *, fl_owner_t id);
-extern int cifs_file_mmap(struct file *file, struct vm_area_struct *vma);
-extern int cifs_file_strict_mmap(struct file *file, struct vm_area_struct *vma);
+extern int cifs_file_mmap(struct file *file, struct mm_area *vma);
+extern int cifs_file_strict_mmap(struct file *file, struct mm_area *vma);
 extern const struct file_operations cifs_dir_ops;
 extern int cifs_readdir(struct file *file, struct dir_context *ctx);
 

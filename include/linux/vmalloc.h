@@ -14,7 +14,7 @@
 
 #include <asm/vmalloc.h>
 
-struct vm_area_struct;		/* vma defining user mapping in mm_types.h */
+struct mm_area;		/* vma defining user mapping in mm_types.h */
 struct notifier_block;		/* in notifier.h */
 struct iov_iter;		/* in uio.h */
 
@@ -195,11 +195,11 @@ extern void *vmap(struct page **pages, unsigned int count,
 void *vmap_pfn(unsigned long *pfns, unsigned int count, pgprot_t prot);
 extern void vunmap(const void *addr);
 
-extern int remap_vmalloc_range_partial(struct vm_area_struct *vma,
+extern int remap_vmalloc_range_partial(struct mm_area *vma,
 				       unsigned long uaddr, void *kaddr,
 				       unsigned long pgoff, unsigned long size);
 
-extern int remap_vmalloc_range(struct vm_area_struct *vma, void *addr,
+extern int remap_vmalloc_range(struct mm_area *vma, void *addr,
 							unsigned long pgoff);
 
 int vmap_pages_range(unsigned long addr, unsigned long end, pgprot_t prot,

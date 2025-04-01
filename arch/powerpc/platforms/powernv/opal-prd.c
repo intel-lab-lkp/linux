@@ -110,7 +110,7 @@ static int opal_prd_open(struct inode *inode, struct file *file)
  * @vma: VMA to map the registers into
  */
 
-static int opal_prd_mmap(struct file *file, struct vm_area_struct *vma)
+static int opal_prd_mmap(struct file *file, struct mm_area *vma)
 {
 	size_t addr, size;
 	pgprot_t page_prot;

@@ -22,7 +22,7 @@ extern ssize_t elfcorehdr_read(char *buf, size_t count, u64 *ppos);
 extern ssize_t elfcorehdr_read_notes(char *buf, size_t count, u64 *ppos);
 void elfcorehdr_fill_device_ram_ptload_elf64(Elf64_Phdr *phdr,
 		unsigned long long paddr, unsigned long long size);
-extern int remap_oldmem_pfn_range(struct vm_area_struct *vma,
+extern int remap_oldmem_pfn_range(struct mm_area *vma,
 				  unsigned long from, unsigned long pfn,
 				  unsigned long size, pgprot_t prot);
 

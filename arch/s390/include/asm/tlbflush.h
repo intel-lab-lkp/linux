@@ -111,7 +111,7 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 	__tlb_flush_mm_lazy(mm);
 }
 
-static inline void flush_tlb_range(struct vm_area_struct *vma,
+static inline void flush_tlb_range(struct mm_area *vma,
 				   unsigned long start, unsigned long end)
 {
 	__tlb_flush_mm_lazy(vma->vm_mm);

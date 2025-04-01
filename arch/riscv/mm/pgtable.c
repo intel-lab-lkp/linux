@@ -5,7 +5,7 @@
 #include <linux/kernel.h>
 #include <linux/pgtable.h>
 
-int ptep_set_access_flags(struct vm_area_struct *vma,
+int ptep_set_access_flags(struct mm_area *vma,
 			  unsigned long address, pte_t *ptep,
 			  pte_t entry, int dirty)
 {
@@ -31,7 +31,7 @@ svvptc:
 	return false;
 }
 
-int ptep_test_and_clear_young(struct vm_area_struct *vma,
+int ptep_test_and_clear_young(struct mm_area *vma,
 			      unsigned long address,
 			      pte_t *ptep)
 {
@@ -136,7 +136,7 @@ int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
 
 #endif /* CONFIG_HAVE_ARCH_HUGE_VMAP */
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
+pmd_t pmdp_collapse_flush(struct mm_area *vma,
 					unsigned long address, pmd_t *pmdp)
 {
 	pmd_t pmd = pmdp_huge_get_and_clear(vma->vm_mm, address, pmdp);

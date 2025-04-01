@@ -86,7 +86,7 @@ static ssize_t open_dice_write(struct file *filp, const char __user *ptr,
 /*
  * Creates a mapping of the reserved memory region in user address space.
  */
-static int open_dice_mmap(struct file *filp, struct vm_area_struct *vma)
+static int open_dice_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct open_dice_drvdata *drvdata = to_open_dice_drvdata(filp);
 

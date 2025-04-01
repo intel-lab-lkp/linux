@@ -34,7 +34,7 @@ struct vfio_pci_regops {
 			   struct vfio_pci_region *region);
 	int	(*mmap)(struct vfio_pci_core_device *vdev,
 			struct vfio_pci_region *region,
-			struct vm_area_struct *vma);
+			struct mm_area *vma);
 	int	(*add_capability)(struct vfio_pci_core_device *vdev,
 				  struct vfio_pci_region *region,
 				  struct vfio_info_cap *caps);
@@ -119,7 +119,7 @@ ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,
 		size_t count, loff_t *ppos);
 ssize_t vfio_pci_core_write(struct vfio_device *core_vdev, const char __user *buf,
 		size_t count, loff_t *ppos);
-int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma);
+int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct mm_area *vma);
 void vfio_pci_core_request(struct vfio_device *core_vdev, unsigned int count);
 int vfio_pci_core_match(struct vfio_device *core_vdev, char *buf);
 int vfio_pci_core_enable(struct vfio_pci_core_device *vdev);

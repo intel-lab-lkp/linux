@@ -1589,7 +1589,7 @@ put_count:
  * vm operations callbacks (vm_ops)
  */
 
-static void msc_mmap_open(struct vm_area_struct *vma)
+static void msc_mmap_open(struct mm_area *vma)
 {
 	struct msc_iter *iter = vma->vm_file->private_data;
 	struct msc *msc = iter->msc;
@@ -1597,7 +1597,7 @@ static void msc_mmap_open(struct vm_area_struct *vma)
 	atomic_inc(&msc->mmap_count);
 }
 
-static void msc_mmap_close(struct vm_area_struct *vma)
+static void msc_mmap_close(struct mm_area *vma)
 {
 	struct msc_iter *iter = vma->vm_file->private_data;
 	struct msc *msc = iter->msc;
@@ -1644,7 +1644,7 @@ static const struct vm_operations_struct msc_mmap_ops = {
 	.fault	= msc_mmap_fault,
 };
 
-static int intel_th_msc_mmap(struct file *file, struct vm_area_struct *vma)
+static int intel_th_msc_mmap(struct file *file, struct mm_area *vma)
 {
 	unsigned long size = vma->vm_end - vma->vm_start;
 	struct msc_iter *iter = vma->vm_file->private_data;

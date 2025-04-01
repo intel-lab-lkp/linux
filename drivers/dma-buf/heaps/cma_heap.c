@@ -162,7 +162,7 @@ static int cma_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 
 static vm_fault_t cma_heap_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct cma_heap_buffer *buffer = vma->vm_private_data;
 
 	if (vmf->pgoff >= buffer->pagecount)
@@ -175,7 +175,7 @@ static const struct vm_operations_struct dma_heap_vm_ops = {
 	.fault = cma_heap_vm_fault,
 };
 
-static int cma_heap_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
+static int cma_heap_mmap(struct dma_buf *dmabuf, struct mm_area *vma)
 {
 	struct cma_heap_buffer *buffer = dmabuf->priv;
 

@@ -300,12 +300,12 @@ void flush_tlb_mm(struct mm_struct *mm)
 	smp_flush_tlb_mm(mm_cpumask(mm), mm);
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
+void flush_tlb_page(struct mm_area *vma, unsigned long uaddr)
 {
 	smp_flush_tlb_range(mm_cpumask(vma->vm_mm), uaddr, uaddr + PAGE_SIZE);
 }
 
-void flush_tlb_range(struct vm_area_struct *vma,
+void flush_tlb_range(struct mm_area *vma,
 		     unsigned long start, unsigned long end)
 {
 	const struct cpumask *cmask = vma ? mm_cpumask(vma->vm_mm)

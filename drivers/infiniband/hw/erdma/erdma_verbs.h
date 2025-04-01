@@ -455,7 +455,7 @@ struct ib_mr *erdma_reg_user_mr(struct ib_pd *ibpd, u64 start, u64 len,
 				u64 virt, int access, struct ib_udata *udata);
 struct ib_mr *erdma_get_dma_mr(struct ib_pd *ibpd, int rights);
 int erdma_dereg_mr(struct ib_mr *ibmr, struct ib_udata *data);
-int erdma_mmap(struct ib_ucontext *ctx, struct vm_area_struct *vma);
+int erdma_mmap(struct ib_ucontext *ctx, struct mm_area *vma);
 void erdma_mmap_free(struct rdma_user_mmap_entry *rdma_entry);
 void erdma_qp_get_ref(struct ib_qp *ibqp);
 void erdma_qp_put_ref(struct ib_qp *ibqp);

@@ -3006,7 +3006,7 @@ int security_mmap_addr(unsigned long addr)
  *
  * Return: Returns 0 if permission is granted.
  */
-int security_file_mprotect(struct vm_area_struct *vma, unsigned long reqprot,
+int security_file_mprotect(struct mm_area *vma, unsigned long reqprot,
 			   unsigned long prot)
 {
 	return call_int_hook(file_mprotect, vma, reqprot, prot);

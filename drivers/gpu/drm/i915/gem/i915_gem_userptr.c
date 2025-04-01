@@ -401,7 +401,7 @@ static int
 probe_range(struct mm_struct *mm, unsigned long addr, unsigned long len)
 {
 	VMA_ITERATOR(vmi, mm, addr);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long end = addr + len;
 
 	mmap_read_lock(mm);

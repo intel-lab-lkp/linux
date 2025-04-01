@@ -401,7 +401,7 @@ static int fsl_asrc_m2m_comp_set_params(struct snd_compr_stream *stream,
 	return 0;
 }
 
-static int fsl_asrc_m2m_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
+static int fsl_asrc_m2m_mmap(struct dma_buf *dmabuf, struct mm_area *vma)
 {
 	struct snd_dma_buffer *dmab = dmabuf->priv;
 

@@ -404,8 +404,8 @@ struct anon_vma_name *anon_vma_name_reuse(struct anon_vma_name *anon_name)
 	return anon_vma_name_alloc(anon_name->name);
 }
 
-static inline void dup_anon_vma_name(struct vm_area_struct *orig_vma,
-				     struct vm_area_struct *new_vma)
+static inline void dup_anon_vma_name(struct mm_area *orig_vma,
+				     struct mm_area *new_vma)
 {
 	struct anon_vma_name *anon_name = anon_vma_name(orig_vma);
 
@@ -413,7 +413,7 @@ static inline void dup_anon_vma_name(struct vm_area_struct *orig_vma,
 		new_vma->anon_name = anon_vma_name_reuse(anon_name);
 }
 
-static inline void free_anon_vma_name(struct vm_area_struct *vma)
+static inline void free_anon_vma_name(struct mm_area *vma)
 {
 	/*
 	 * Not using anon_vma_name because it generates a warning if mmap_lock
@@ -435,9 +435,9 @@ static inline bool anon_vma_name_eq(struct anon_vma_name *anon_name1,
 #else /* CONFIG_ANON_VMA_NAME */
 static inline void anon_vma_name_get(struct anon_vma_name *anon_name) {}
 static inline void anon_vma_name_put(struct anon_vma_name *anon_name) {}
-static inline void dup_anon_vma_name(struct vm_area_struct *orig_vma,
-				     struct vm_area_struct *new_vma) {}
-static inline void free_anon_vma_name(struct vm_area_struct *vma) {}
+static inline void dup_anon_vma_name(struct mm_area *orig_vma,
+				     struct mm_area *new_vma) {}
+static inline void free_anon_vma_name(struct mm_area *vma) {}
 
 static inline bool anon_vma_name_eq(struct anon_vma_name *anon_name1,
 				    struct anon_vma_name *anon_name2)
@@ -538,7 +538,7 @@ static inline bool mm_tlb_flush_nested(struct mm_struct *mm)
  * The caller should insert a new pte created with make_pte_marker().
  */
 static inline pte_marker copy_pte_marker(
-		swp_entry_t entry, struct vm_area_struct *dst_vma)
+		swp_entry_t entry, struct mm_area *dst_vma)
 {
 	pte_marker srcm = pte_marker_get(entry);
 	/* Always copy error entries. */
@@ -565,7 +565,7 @@ static inline pte_marker copy_pte_marker(
  * Returns true if an uffd-wp pte was installed, false otherwise.
  */
 static inline bool
-pte_install_uffd_wp_if_needed(struct vm_area_struct *vma, unsigned long addr,
+pte_install_uffd_wp_if_needed(struct mm_area *vma, unsigned long addr,
 			      pte_t *pte, pte_t pteval)
 {
 #ifdef CONFIG_PTE_MARKER_UFFD_WP
@@ -603,7 +603,7 @@ pte_install_uffd_wp_if_needed(struct vm_area_struct *vma, unsigned long addr,
 	return false;
 }
 
-static inline bool vma_has_recency(struct vm_area_struct *vma)
+static inline bool vma_has_recency(struct mm_area *vma)
 {
 	if (vma->vm_flags & (VM_SEQ_READ | VM_RAND_READ))
 		return false;

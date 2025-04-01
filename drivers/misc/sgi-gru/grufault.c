@@ -45,9 +45,9 @@ static inline int is_gru_paddr(unsigned long paddr)
 /*
  * Find the vma of a GRU segment. Caller must hold mmap_lock.
  */
-struct vm_area_struct *gru_find_vma(unsigned long vaddr)
+struct mm_area *gru_find_vma(unsigned long vaddr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	vma = vma_lookup(current->mm, vaddr);
 	if (vma && vma->vm_ops == &gru_vm_ops)
@@ -66,7 +66,7 @@ struct vm_area_struct *gru_find_vma(unsigned long vaddr)
 static struct gru_thread_state *gru_find_lock_gts(unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct gru_thread_state *gts = NULL;
 
 	mmap_read_lock(mm);
@@ -83,7 +83,7 @@ static struct gru_thread_state *gru_find_lock_gts(unsigned long vaddr)
 static struct gru_thread_state *gru_alloc_locked_gts(unsigned long vaddr)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct gru_thread_state *gts = ERR_PTR(-EINVAL);
 
 	mmap_write_lock(mm);
@@ -174,7 +174,7 @@ static void get_clear_fault_map(struct gru_state *gru,
  * 		< 0 - error code
  * 		  1 - (atomic only) try again in non-atomic context
  */
-static int non_atomic_pte_lookup(struct vm_area_struct *vma,
+static int non_atomic_pte_lookup(struct mm_area *vma,
 				 unsigned long vaddr, int write,
 				 unsigned long *paddr, int *pageshift)
 {
@@ -202,7 +202,7 @@ static int non_atomic_pte_lookup(struct vm_area_struct *vma,
  * NOTE: mmap_lock is already held on entry to this function. This
  * guarantees existence of the page tables.
  */
-static int atomic_pte_lookup(struct vm_area_struct *vma, unsigned long vaddr,
+static int atomic_pte_lookup(struct mm_area *vma, unsigned long vaddr,
 	int write, unsigned long *paddr, int *pageshift)
 {
 	pgd_t *pgdp;
@@ -253,7 +253,7 @@ static int gru_vtop(struct gru_thread_state *gts, unsigned long vaddr,
 		    int write, int atomic, unsigned long *gpa, int *pageshift)
 {
 	struct mm_struct *mm = gts->ts_mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long paddr;
 	int ret, ps;
 

@@ -14,7 +14,7 @@ struct {
 	__uint(max_entries, 8);
 } ringbuf SEC(".maps");
 
-struct vm_area_struct;
+struct mm_area;
 struct bpf_map;
 
 struct buf_context {
@@ -146,7 +146,7 @@ int unsafe_ringbuf_drain(void *unused)
 	return choice_arr[loop_ctx.i];
 }
 
-static __u64 find_vma_cb(struct task_struct *task, struct vm_area_struct *vma, void *data)
+static __u64 find_vma_cb(struct task_struct *task, struct mm_area *vma, void *data)
 {
 	return oob_state_machine(data);
 }

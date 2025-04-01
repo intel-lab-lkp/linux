@@ -33,7 +33,7 @@ static pteval_t shared_pte_mask = L_PTE_MT_BUFFERABLE;
  * Therefore those configurations which might call adjust_pte (those
  * without CONFIG_CPU_CACHE_VIPT) cannot support split page_table_lock.
  */
-static int do_adjust_pte(struct vm_area_struct *vma, unsigned long address,
+static int do_adjust_pte(struct mm_area *vma, unsigned long address,
 	unsigned long pfn, pte_t *ptep)
 {
 	pte_t entry = *ptep;
@@ -61,7 +61,7 @@ static int do_adjust_pte(struct vm_area_struct *vma, unsigned long address,
 	return ret;
 }
 
-static int adjust_pte(struct vm_area_struct *vma, unsigned long address,
+static int adjust_pte(struct mm_area *vma, unsigned long address,
 		      unsigned long pfn, bool need_lock)
 {
 	spinlock_t *ptl;
@@ -121,13 +121,13 @@ again:
 }
 
 static void
-make_coherent(struct address_space *mapping, struct vm_area_struct *vma,
+make_coherent(struct address_space *mapping, struct mm_area *vma,
 	      unsigned long addr, pte_t *ptep, unsigned long pfn)
 {
 	const unsigned long pmd_start_addr = ALIGN_DOWN(addr, PMD_SIZE);
 	const unsigned long pmd_end_addr = pmd_start_addr + PMD_SIZE;
 	struct mm_struct *mm = vma->vm_mm;
-	struct vm_area_struct *mpnt;
+	struct mm_area *mpnt;
 	unsigned long offset;
 	pgoff_t pgoff;
 	int aliases = 0;
@@ -184,7 +184,7 @@ make_coherent(struct address_space *mapping, struct vm_area_struct *vma,
  *
  * Note that the pte lock will be held.
  */
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long addr, pte_t *ptep, unsigned int nr)
 {
 	unsigned long pfn = pte_pfn(*ptep);

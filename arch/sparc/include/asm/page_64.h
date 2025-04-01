@@ -46,9 +46,9 @@ void clear_user_page(void *addr, unsigned long vaddr, struct page *page);
 #define copy_page(X,Y)	memcpy((void *)(X), (void *)(Y), PAGE_SIZE)
 void copy_user_page(void *to, void *from, unsigned long vaddr, struct page *topage);
 #define __HAVE_ARCH_COPY_USER_HIGHPAGE
-struct vm_area_struct;
+struct mm_area;
 void copy_user_highpage(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma);
+			unsigned long vaddr, struct mm_area *vma);
 #define __HAVE_ARCH_COPY_HIGHPAGE
 void copy_highpage(struct page *to, struct page *from);
 

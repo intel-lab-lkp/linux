@@ -560,7 +560,7 @@ int tegra_bo_dumb_create(struct drm_file *file, struct drm_device *drm,
 
 static vm_fault_t tegra_bo_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct drm_gem_object *gem = vma->vm_private_data;
 	struct tegra_bo *bo = to_tegra_bo(gem);
 	struct page *page;
@@ -581,7 +581,7 @@ const struct vm_operations_struct tegra_bo_vm_ops = {
 	.close = drm_gem_vm_close,
 };
 
-int __tegra_gem_mmap(struct drm_gem_object *gem, struct vm_area_struct *vma)
+int __tegra_gem_mmap(struct drm_gem_object *gem, struct mm_area *vma)
 {
 	struct tegra_bo *bo = to_tegra_bo(gem);
 
@@ -616,7 +616,7 @@ int __tegra_gem_mmap(struct drm_gem_object *gem, struct vm_area_struct *vma)
 	return 0;
 }
 
-int tegra_drm_mmap(struct file *file, struct vm_area_struct *vma)
+int tegra_drm_mmap(struct file *file, struct mm_area *vma)
 {
 	struct drm_gem_object *gem;
 	int err;
@@ -708,7 +708,7 @@ static int tegra_gem_prime_end_cpu_access(struct dma_buf *buf,
 	return 0;
 }
 
-static int tegra_gem_prime_mmap(struct dma_buf *buf, struct vm_area_struct *vma)
+static int tegra_gem_prime_mmap(struct dma_buf *buf, struct mm_area *vma)
 {
 	struct drm_gem_object *gem = buf->priv;
 	int err;

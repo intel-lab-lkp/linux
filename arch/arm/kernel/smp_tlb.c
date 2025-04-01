@@ -18,7 +18,7 @@
  * TLB operations
  */
 struct tlb_args {
-	struct vm_area_struct *ta_vma;
+	struct mm_area *ta_vma;
 	unsigned long ta_start;
 	unsigned long ta_end;
 };
@@ -193,7 +193,7 @@ void flush_tlb_mm(struct mm_struct *mm)
 	broadcast_tlb_mm_a15_erratum(mm);
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long uaddr)
+void flush_tlb_page(struct mm_area *vma, unsigned long uaddr)
 {
 	if (tlb_ops_need_broadcast()) {
 		struct tlb_args ta;
@@ -217,7 +217,7 @@ void flush_tlb_kernel_page(unsigned long kaddr)
 	broadcast_tlb_a15_erratum();
 }
 
-void flush_tlb_range(struct vm_area_struct *vma,
+void flush_tlb_range(struct mm_area *vma,
                      unsigned long start, unsigned long end)
 {
 	if (tlb_ops_need_broadcast()) {

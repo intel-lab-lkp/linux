@@ -24,7 +24,7 @@ struct dma_map_ops {
 			gfp_t gfp);
 	void (*free_pages)(struct device *dev, size_t size, struct page *vaddr,
 			dma_addr_t dma_handle, enum dma_data_direction dir);
-	int (*mmap)(struct device *, struct vm_area_struct *,
+	int (*mmap)(struct device *, struct mm_area *,
 			void *, dma_addr_t, size_t, unsigned long attrs);
 
 	int (*get_sgtable)(struct device *dev, struct sg_table *sgt,
@@ -162,7 +162,7 @@ void dma_release_coherent_memory(struct device *dev);
 int dma_alloc_from_dev_coherent(struct device *dev, ssize_t size,
 		dma_addr_t *dma_handle, void **ret);
 int dma_release_from_dev_coherent(struct device *dev, int order, void *vaddr);
-int dma_mmap_from_dev_coherent(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_from_dev_coherent(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, size_t size, int *ret);
 #else
 static inline int dma_declare_coherent_memory(struct device *dev,
@@ -181,7 +181,7 @@ static inline void dma_release_coherent_memory(struct device *dev) { }
 void *dma_alloc_from_global_coherent(struct device *dev, ssize_t size,
 		dma_addr_t *dma_handle);
 int dma_release_from_global_coherent(int order, void *vaddr);
-int dma_mmap_from_global_coherent(struct vm_area_struct *vma, void *cpu_addr,
+int dma_mmap_from_global_coherent(struct mm_area *vma, void *cpu_addr,
 		size_t size, int *ret);
 int dma_init_global_coherent(phys_addr_t phys_addr, size_t size);
 #else
@@ -194,7 +194,7 @@ static inline int dma_release_from_global_coherent(int order, void *vaddr)
 {
 	return 0;
 }
-static inline int dma_mmap_from_global_coherent(struct vm_area_struct *vma,
+static inline int dma_mmap_from_global_coherent(struct mm_area *vma,
 		void *cpu_addr, size_t size, int *ret)
 {
 	return 0;
@@ -204,7 +204,7 @@ static inline int dma_mmap_from_global_coherent(struct vm_area_struct *vma,
 int dma_common_get_sgtable(struct device *dev, struct sg_table *sgt,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
-int dma_common_mmap(struct device *dev, struct vm_area_struct *vma,
+int dma_common_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
 struct page *dma_common_alloc_pages(struct device *dev, size_t size,

@@ -398,7 +398,7 @@ static const struct vm_operations_struct orangefs_file_vm_ops = {
 /*
  * Memory map a region of a file.
  */
-static int orangefs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int orangefs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	int ret;
 

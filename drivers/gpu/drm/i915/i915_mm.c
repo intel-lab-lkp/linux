@@ -91,7 +91,7 @@ static int remap_pfn(pte_t *pte, unsigned long addr, void *data)
  *
  *  Note: this is only safe if the mm semaphore is held when called.
  */
-int remap_io_mapping(struct vm_area_struct *vma,
+int remap_io_mapping(struct mm_area *vma,
 		     unsigned long addr, unsigned long pfn, unsigned long size,
 		     struct io_mapping *iomap)
 {
@@ -127,7 +127,7 @@ int remap_io_mapping(struct vm_area_struct *vma,
  *
  *  Note: this is only safe if the mm semaphore is held when called.
  */
-int remap_io_sg(struct vm_area_struct *vma,
+int remap_io_sg(struct mm_area *vma,
 		unsigned long addr, unsigned long size,
 		struct scatterlist *sgl, unsigned long offset,
 		resource_size_t iobase)

@@ -1339,7 +1339,7 @@ static ssize_t vfio_device_fops_write(struct file *filep,
 	return device->ops->write(device, buf, count, ppos);
 }
 
-static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
+static int vfio_device_fops_mmap(struct file *filep, struct mm_area *vma)
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;

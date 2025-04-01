@@ -484,7 +484,7 @@ void kcov_task_exit(struct task_struct *t)
 	kcov_put(kcov);
 }
 
-static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
+static int kcov_mmap(struct file *filep, struct mm_area *vma)
 {
 	int res = 0;
 	struct kcov *kcov = vma->vm_file->private_data;

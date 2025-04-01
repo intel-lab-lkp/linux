@@ -48,7 +48,7 @@ static bool tlb_next_batch(struct mmu_gather *tlb)
 }
 
 #ifdef CONFIG_SMP
-static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch, struct vm_area_struct *vma)
+static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch, struct mm_area *vma)
 {
 	struct encoded_page **pages = batch->encoded_pages;
 
@@ -79,7 +79,7 @@ static void tlb_flush_rmap_batch(struct mmu_gather_batch *batch, struct vm_area_
  * we only need to walk through the current active batch and the
  * original local one.
  */
-void tlb_flush_rmaps(struct mmu_gather *tlb, struct vm_area_struct *vma)
+void tlb_flush_rmaps(struct mmu_gather *tlb, struct mm_area *vma)
 {
 	if (!tlb->delayed_rmap)
 		return;

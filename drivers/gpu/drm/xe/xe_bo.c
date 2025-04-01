@@ -1579,7 +1579,7 @@ out:
 	return ret;
 }
 
-static int xe_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
+static int xe_bo_vm_access(struct mm_area *vma, unsigned long addr,
 			   void *buf, int len, int write)
 {
 	struct ttm_buffer_object *ttm_bo = vma->vm_private_data;

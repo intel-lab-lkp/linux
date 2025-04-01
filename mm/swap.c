@@ -514,7 +514,7 @@ EXPORT_SYMBOL(folio_add_lru);
  * If the VMA is mlocked, @folio is added to the unevictable list.
  * Otherwise, it is treated the same way as folio_add_lru().
  */
-void folio_add_lru_vma(struct folio *folio, struct vm_area_struct *vma)
+void folio_add_lru_vma(struct folio *folio, struct mm_area *vma)
 {
 	VM_BUG_ON_FOLIO(folio_test_lru(folio), folio);
 

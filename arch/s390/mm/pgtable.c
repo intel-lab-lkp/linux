@@ -327,7 +327,7 @@ pte_t ptep_xchg_lazy(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL(ptep_xchg_lazy);
 
-pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
+pte_t ptep_modify_prot_start(struct mm_area *vma, unsigned long addr,
 			     pte_t *ptep)
 {
 	pgste_t pgste;
@@ -346,7 +346,7 @@ pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
 	return old;
 }
 
-void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
+void ptep_modify_prot_commit(struct mm_area *vma, unsigned long addr,
 			     pte_t *ptep, pte_t old_pte, pte_t pte)
 {
 	pgste_t pgste;
@@ -437,7 +437,7 @@ static inline pmd_t pmdp_flush_lazy(struct mm_struct *mm,
 #ifdef CONFIG_PGSTE
 static int pmd_lookup(struct mm_struct *mm, unsigned long addr, pmd_t **pmdp)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	pgd_t *pgd;
 	p4d_t *p4d;
 	pud_t *pud;
@@ -1032,7 +1032,7 @@ EXPORT_SYMBOL(get_guest_storage_key);
 int pgste_perform_essa(struct mm_struct *mm, unsigned long hva, int orc,
 			unsigned long *oldpte, unsigned long *oldpgste)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long pgstev;
 	spinlock_t *ptl;
 	pgste_t pgste;
@@ -1138,7 +1138,7 @@ EXPORT_SYMBOL(pgste_perform_essa);
 int set_pgste_bits(struct mm_struct *mm, unsigned long hva,
 			unsigned long bits, unsigned long value)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	spinlock_t *ptl;
 	pgste_t new;
 	pte_t *ptep;
@@ -1170,7 +1170,7 @@ EXPORT_SYMBOL(set_pgste_bits);
  */
 int get_pgste(struct mm_struct *mm, unsigned long hva, unsigned long *pgstep)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	spinlock_t *ptl;
 	pte_t *ptep;
 

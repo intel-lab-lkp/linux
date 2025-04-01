@@ -2576,7 +2576,7 @@ static int fuse_launder_folio(struct folio *folio)
  * Write back dirty data/metadata now (there may not be any suitable
  * open files later for data)
  */
-static void fuse_vma_close(struct vm_area_struct *vma)
+static void fuse_vma_close(struct mm_area *vma)
 {
 	int err;
 
@@ -2622,7 +2622,7 @@ static const struct vm_operations_struct fuse_file_vm_ops = {
 	.page_mkwrite	= fuse_page_mkwrite,
 };
 
-static int fuse_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int fuse_file_mmap(struct file *file, struct mm_area *vma)
 {
 	struct fuse_file *ff = file->private_data;
 	struct fuse_conn *fc = ff->fm->fc;

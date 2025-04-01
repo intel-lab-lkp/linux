@@ -126,7 +126,7 @@ SYSCALL_DEFINE3(s390_pci_mmio_write, unsigned long, mmio_addr,
 	u8 local_buf[64];
 	void __iomem *io_addr;
 	void *buf;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	long ret;
 
 	if (!zpci_is_enabled())
@@ -279,7 +279,7 @@ SYSCALL_DEFINE3(s390_pci_mmio_read, unsigned long, mmio_addr,
 	u8 local_buf[64];
 	void __iomem *io_addr;
 	void *buf;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	long ret;
 
 	if (!zpci_is_enabled())

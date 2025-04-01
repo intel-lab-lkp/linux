@@ -48,7 +48,7 @@
 static long kfd_ioctl(struct file *, unsigned int, unsigned long);
 static int kfd_open(struct inode *, struct file *);
 static int kfd_release(struct inode *, struct file *);
-static int kfd_mmap(struct file *, struct vm_area_struct *);
+static int kfd_mmap(struct file *, struct mm_area *);
 
 static const char kfd_dev_name[] = "kfd";
 
@@ -3360,7 +3360,7 @@ err_i1:
 }
 
 static int kfd_mmio_mmap(struct kfd_node *dev, struct kfd_process *process,
-		      struct vm_area_struct *vma)
+		      struct mm_area *vma)
 {
 	phys_addr_t address;
 
@@ -3393,7 +3393,7 @@ static int kfd_mmio_mmap(struct kfd_node *dev, struct kfd_process *process,
 }
 
 
-static int kfd_mmap(struct file *filp, struct vm_area_struct *vma)
+static int kfd_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct kfd_process *process;
 	struct kfd_node *dev = NULL;

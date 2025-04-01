@@ -2867,7 +2867,7 @@ static __poll_t snd_pcm_oss_poll(struct file *file, poll_table * wait)
 	return mask;
 }
 
-static int snd_pcm_oss_mmap(struct file *file, struct vm_area_struct *area)
+static int snd_pcm_oss_mmap(struct file *file, struct mm_area *area)
 {
 	struct snd_pcm_oss_file *pcm_oss_file;
 	struct snd_pcm_substream *substream = NULL;

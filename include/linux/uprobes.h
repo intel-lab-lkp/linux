@@ -19,7 +19,7 @@
 #include <linux/seqlock.h>
 
 struct uprobe;
-struct vm_area_struct;
+struct mm_area;
 struct mm_struct;
 struct inode;
 struct notifier_block;
@@ -199,8 +199,8 @@ extern struct uprobe *uprobe_register(struct inode *inode, loff_t offset, loff_t
 extern int uprobe_apply(struct uprobe *uprobe, struct uprobe_consumer *uc, bool);
 extern void uprobe_unregister_nosync(struct uprobe *uprobe, struct uprobe_consumer *uc);
 extern void uprobe_unregister_sync(void);
-extern int uprobe_mmap(struct vm_area_struct *vma);
-extern void uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned long end);
+extern int uprobe_mmap(struct mm_area *vma);
+extern void uprobe_munmap(struct mm_area *vma, unsigned long start, unsigned long end);
 extern void uprobe_start_dup_mmap(void);
 extern void uprobe_end_dup_mmap(void);
 extern void uprobe_dup_mmap(struct mm_struct *oldmm, struct mm_struct *newmm);
@@ -253,12 +253,12 @@ uprobe_unregister_nosync(struct uprobe *uprobe, struct uprobe_consumer *uc)
 static inline void uprobe_unregister_sync(void)
 {
 }
-static inline int uprobe_mmap(struct vm_area_struct *vma)
+static inline int uprobe_mmap(struct mm_area *vma)
 {
 	return 0;
 }
 static inline void
-uprobe_munmap(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+uprobe_munmap(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 }
 static inline void uprobe_start_dup_mmap(void)

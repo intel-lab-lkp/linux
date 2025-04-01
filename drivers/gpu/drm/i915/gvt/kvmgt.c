@@ -1011,7 +1011,7 @@ write_err:
 }
 
 static int intel_vgpu_mmap(struct vfio_device *vfio_dev,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	struct intel_vgpu *vgpu = vfio_dev_to_vgpu(vfio_dev);
 	unsigned int index;

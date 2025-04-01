@@ -36,7 +36,7 @@ void nouveau_dmem_resume(struct nouveau_drm *);
 
 int nouveau_dmem_migrate_vma(struct nouveau_drm *drm,
 			     struct nouveau_svmm *svmm,
-			     struct vm_area_struct *vma,
+			     struct mm_area *vma,
 			     unsigned long start,
 			     unsigned long end);
 unsigned long nouveau_dmem_page_addr(struct page *page);

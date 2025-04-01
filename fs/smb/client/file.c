@@ -2964,7 +2964,7 @@ static const struct vm_operations_struct cifs_file_vm_ops = {
 	.page_mkwrite = cifs_page_mkwrite,
 };
 
-int cifs_file_strict_mmap(struct file *file, struct vm_area_struct *vma)
+int cifs_file_strict_mmap(struct file *file, struct mm_area *vma)
 {
 	int xid, rc = 0;
 	struct inode *inode = file_inode(file);
@@ -2982,7 +2982,7 @@ int cifs_file_strict_mmap(struct file *file, struct vm_area_struct *vma)
 	return rc;
 }
 
-int cifs_file_mmap(struct file *file, struct vm_area_struct *vma)
+int cifs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	int rc, xid;
 

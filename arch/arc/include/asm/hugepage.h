@@ -61,11 +61,11 @@ static inline void set_pmd_at(struct mm_struct *mm, unsigned long addr,
 	*pmdp = pmd;
 }
 
-extern void update_mmu_cache_pmd(struct vm_area_struct *vma, unsigned long addr,
+extern void update_mmu_cache_pmd(struct mm_area *vma, unsigned long addr,
 				 pmd_t *pmd);
 
 #define __HAVE_ARCH_FLUSH_PMD_TLB_RANGE
-extern void flush_pmd_tlb_range(struct vm_area_struct *vma, unsigned long start,
+extern void flush_pmd_tlb_range(struct mm_area *vma, unsigned long start,
 				unsigned long end);
 
 /* We don't have hardware dirty/accessed bits, generic_pmdp_establish is fine.*/

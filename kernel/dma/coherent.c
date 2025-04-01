@@ -232,7 +232,7 @@ int dma_release_from_dev_coherent(struct device *dev, int order, void *vaddr)
 }
 
 static int __dma_mmap_from_coherent(struct dma_coherent_mem *mem,
-		struct vm_area_struct *vma, void *vaddr, size_t size, int *ret)
+		struct mm_area *vma, void *vaddr, size_t size, int *ret)
 {
 	if (mem && vaddr >= mem->virt_base && vaddr + size <=
 		   (mem->virt_base + ((dma_addr_t)mem->size << PAGE_SHIFT))) {
@@ -268,7 +268,7 @@ static int __dma_mmap_from_coherent(struct dma_coherent_mem *mem,
  * should return @ret, or 0 if they should proceed with mapping memory from
  * generic areas.
  */
-int dma_mmap_from_dev_coherent(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_from_dev_coherent(struct device *dev, struct mm_area *vma,
 			   void *vaddr, size_t size, int *ret)
 {
 	struct dma_coherent_mem *mem = dev_get_coherent_memory(dev);
@@ -298,7 +298,7 @@ int dma_release_from_global_coherent(int order, void *vaddr)
 			vaddr);
 }
 
-int dma_mmap_from_global_coherent(struct vm_area_struct *vma, void *vaddr,
+int dma_mmap_from_global_coherent(struct mm_area *vma, void *vaddr,
 				   size_t size, int *ret)
 {
 	if (!dma_coherent_default_memory)

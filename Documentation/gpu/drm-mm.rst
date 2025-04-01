@@ -280,8 +280,8 @@ made up of several fields, the more interesting ones being:
 .. code-block:: c
 
 	struct vm_operations_struct {
-		void (*open)(struct vm_area_struct * area);
-		void (*close)(struct vm_area_struct * area);
+		void (*open)(struct mm_area * area);
+		void (*close)(struct mm_area * area);
 		vm_fault_t (*fault)(struct vm_fault *vmf);
 	};
 

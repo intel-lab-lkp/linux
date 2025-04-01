@@ -763,7 +763,7 @@ static int reconfig_close_windows(struct vas_caps *vcap, int excess_creds,
 {
 	struct pseries_vas_window *win, *tmp;
 	struct vas_user_win_ref *task_ref;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int rc = 0, flag;
 
 	if (migrate)

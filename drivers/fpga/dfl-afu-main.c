@@ -805,7 +805,7 @@ static const struct vm_operations_struct afu_vma_ops = {
 #endif
 };
 
-static int afu_mmap(struct file *filp, struct vm_area_struct *vma)
+static int afu_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct platform_device *pdev = filp->private_data;
 	u64 size = vma->vm_end - vma->vm_start;

@@ -394,7 +394,7 @@ bool __init arch_hugetlb_valid_size(unsigned long size)
 }
 #endif	/* CONFIG_HUGETLB_PAGE */
 
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long address, pte_t *ptep, unsigned int nr)
 {
 	struct mm_struct *mm;
@@ -2945,7 +2945,7 @@ void pte_free_defer(struct mm_struct *mm, pgtable_t pgtable)
 	call_rcu(&page->rcu_head, pte_free_now);
 }
 
-void update_mmu_cache_pmd(struct vm_area_struct *vma, unsigned long addr,
+void update_mmu_cache_pmd(struct mm_area *vma, unsigned long addr,
 			  pmd_t *pmd)
 {
 	unsigned long pte, flags;
@@ -3134,7 +3134,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 }
 
 void copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma)
+	unsigned long vaddr, struct mm_area *vma)
 {
 	char *vfrom, *vto;
 

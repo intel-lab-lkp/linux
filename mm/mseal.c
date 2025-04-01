@@ -16,7 +16,7 @@
 #include <linux/sched.h>
 #include "internal.h"
 
-static inline void set_vma_sealed(struct vm_area_struct *vma)
+static inline void set_vma_sealed(struct mm_area *vma)
 {
 	vm_flags_set(vma, VM_SEALED);
 }
@@ -37,7 +37,7 @@ static bool is_madv_discard(int behavior)
 	return false;
 }
 
-static bool is_ro_anon(struct vm_area_struct *vma)
+static bool is_ro_anon(struct mm_area *vma)
 {
 	/* check anonymous mapping. */
 	if (vma->vm_file || vma->vm_flags & VM_SHARED)
@@ -57,7 +57,7 @@ static bool is_ro_anon(struct vm_area_struct *vma)
 /*
  * Check if a vma is allowed to be modified by madvise.
  */
-bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior)
+bool can_modify_vma_madv(struct mm_area *vma, int behavior)
 {
 	if (!is_madv_discard(behavior))
 		return true;
@@ -69,8 +69,8 @@ bool can_modify_vma_madv(struct vm_area_struct *vma, int behavior)
 	return true;
 }
 
-static int mseal_fixup(struct vma_iterator *vmi, struct vm_area_struct *vma,
-		struct vm_area_struct **prev, unsigned long start,
+static int mseal_fixup(struct vma_iterator *vmi, struct mm_area *vma,
+		struct mm_area **prev, unsigned long start,
 		unsigned long end, vm_flags_t newflags)
 {
 	int ret = 0;
@@ -100,7 +100,7 @@ out:
  */
 static int check_mm_seal(unsigned long start, unsigned long end)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long nstart = start;
 
 	VMA_ITERATOR(vmi, current->mm, start);
@@ -126,7 +126,7 @@ static int check_mm_seal(unsigned long start, unsigned long end)
 static int apply_mm_seal(unsigned long start, unsigned long end)
 {
 	unsigned long nstart;
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 
 	VMA_ITERATOR(vmi, current->mm, start);
 

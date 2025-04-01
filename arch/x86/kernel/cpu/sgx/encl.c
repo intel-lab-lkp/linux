@@ -324,7 +324,7 @@ struct sgx_encl_page *sgx_encl_load_page(struct sgx_encl *encl,
  * Returns: Appropriate vm_fault_t: VM_FAULT_NOPAGE when PTE was installed
  * successfully, VM_FAULT_SIGBUS or VM_FAULT_OOM as error otherwise.
  */
-static vm_fault_t sgx_encl_eaug_page(struct vm_area_struct *vma,
+static vm_fault_t sgx_encl_eaug_page(struct mm_area *vma,
 				     struct sgx_encl *encl, unsigned long addr)
 {
 	vm_fault_t vmret = VM_FAULT_SIGBUS;
@@ -430,7 +430,7 @@ err_out_unlock:
 static vm_fault_t sgx_vma_fault(struct vm_fault *vmf)
 {
 	unsigned long addr = (unsigned long)vmf->address;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct sgx_encl_page *entry;
 	unsigned long phys_addr;
 	struct sgx_encl *encl;
@@ -484,7 +484,7 @@ static vm_fault_t sgx_vma_fault(struct vm_fault *vmf)
 	return VM_FAULT_NOPAGE;
 }
 
-static void sgx_vma_open(struct vm_area_struct *vma)
+static void sgx_vma_open(struct mm_area *vma)
 {
 	struct sgx_encl *encl = vma->vm_private_data;
 
@@ -567,7 +567,7 @@ int sgx_encl_may_map(struct sgx_encl *encl, unsigned long start,
 	return ret;
 }
 
-static int sgx_vma_mprotect(struct vm_area_struct *vma, unsigned long start,
+static int sgx_vma_mprotect(struct mm_area *vma, unsigned long start,
 			    unsigned long end, unsigned long newflags)
 {
 	return sgx_encl_may_map(vma->vm_private_data, start, end, newflags);
@@ -625,7 +625,7 @@ static struct sgx_encl_page *sgx_encl_reserve_page(struct sgx_encl *encl,
 	return entry;
 }
 
-static int sgx_vma_access(struct vm_area_struct *vma, unsigned long addr,
+static int sgx_vma_access(struct mm_area *vma, unsigned long addr,
 			  void *buf, int len, int write)
 {
 	struct sgx_encl *encl = vma->vm_private_data;
@@ -1137,7 +1137,7 @@ int sgx_encl_test_and_clear_young(struct mm_struct *mm,
 {
 	unsigned long addr = page->desc & PAGE_MASK;
 	struct sgx_encl *encl = page->encl;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int ret;
 
 	ret = sgx_encl_find(mm, addr, &vma);
@@ -1200,7 +1200,7 @@ void sgx_zap_enclave_ptes(struct sgx_encl *encl, unsigned long addr)
 {
 	unsigned long mm_list_version;
 	struct sgx_encl_mm *encl_mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int idx, ret;
 
 	do {

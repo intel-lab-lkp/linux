@@ -247,7 +247,7 @@ static const struct vm_operations_struct kvm_spapr_tce_vm_ops = {
 	.fault = kvm_spapr_tce_fault,
 };
 
-static int kvm_spapr_tce_mmap(struct file *file, struct vm_area_struct *vma)
+static int kvm_spapr_tce_mmap(struct file *file, struct mm_area *vma)
 {
 	vma->vm_ops = &kvm_spapr_tce_vm_ops;
 	return 0;

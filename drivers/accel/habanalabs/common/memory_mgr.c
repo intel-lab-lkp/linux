@@ -196,7 +196,7 @@ free_buf:
  *
  * Put the memory buffer if it is no longer mapped.
  */
-static void hl_mmap_mem_buf_vm_close(struct vm_area_struct *vma)
+static void hl_mmap_mem_buf_vm_close(struct mm_area *vma)
 {
 	struct hl_mmap_mem_buf *buf =
 		(struct hl_mmap_mem_buf *)vma->vm_private_data;
@@ -227,7 +227,7 @@ static const struct vm_operations_struct hl_mmap_mem_buf_vm_ops = {
  *
  * Map the buffer specified by the vma->vm_pgoff to the given vma.
  */
-int hl_mem_mgr_mmap(struct hl_mem_mgr *mmg, struct vm_area_struct *vma,
+int hl_mem_mgr_mmap(struct hl_mem_mgr *mmg, struct mm_area *vma,
 		    void *args)
 {
 	struct hl_mmap_mem_buf *buf;

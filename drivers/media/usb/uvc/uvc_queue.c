@@ -346,7 +346,7 @@ int uvc_queue_streamoff(struct uvc_video_queue *queue, enum v4l2_buf_type type)
 	return ret;
 }
 
-int uvc_queue_mmap(struct uvc_video_queue *queue, struct vm_area_struct *vma)
+int uvc_queue_mmap(struct uvc_video_queue *queue, struct mm_area *vma)
 {
 	return vb2_mmap(&queue->queue, vma);
 }

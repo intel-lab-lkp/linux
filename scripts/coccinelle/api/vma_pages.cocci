@@ -16,7 +16,7 @@ virtual report
 //----------------------------------------------------------
 
 @r_context depends on context && !patch && !org && !report@
-struct vm_area_struct *vma;
+struct mm_area *vma;
 @@
 
 * (vma->vm_end - vma->vm_start) >> PAGE_SHIFT
@@ -26,7 +26,7 @@ struct vm_area_struct *vma;
 //----------------------------------------------------------
 
 @r_patch depends on !context && patch && !org && !report@
-struct vm_area_struct *vma;
+struct mm_area *vma;
 @@
 
 - ((vma->vm_end - vma->vm_start) >> PAGE_SHIFT)
@@ -37,7 +37,7 @@ struct vm_area_struct *vma;
 //----------------------------------------------------------
 
 @r_org depends on !context && !patch && (org || report)@
-struct vm_area_struct *vma;
+struct mm_area *vma;
 position p;
 @@
 

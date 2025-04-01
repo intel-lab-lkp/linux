@@ -9,17 +9,17 @@
 #include <linux/bug.h>
 #include <linux/types.h>
 
-struct vm_area_struct;
+struct mm_area;
 struct io_mapping;
 struct scatterlist;
 
 #if IS_ENABLED(CONFIG_X86)
-int remap_io_mapping(struct vm_area_struct *vma,
+int remap_io_mapping(struct mm_area *vma,
 		     unsigned long addr, unsigned long pfn, unsigned long size,
 		     struct io_mapping *iomap);
 #else
 static inline
-int remap_io_mapping(struct vm_area_struct *vma,
+int remap_io_mapping(struct mm_area *vma,
 		     unsigned long addr, unsigned long pfn, unsigned long size,
 		     struct io_mapping *iomap)
 {
@@ -28,7 +28,7 @@ int remap_io_mapping(struct vm_area_struct *vma,
 }
 #endif
 
-int remap_io_sg(struct vm_area_struct *vma,
+int remap_io_sg(struct mm_area *vma,
 		unsigned long addr, unsigned long size,
 		struct scatterlist *sgl, unsigned long offset,
 		resource_size_t iobase);

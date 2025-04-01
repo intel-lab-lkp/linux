@@ -57,7 +57,7 @@ early_param("kfence.sample_interval", parse_kfence_early_init);
  * handled those two for us, we additionally deal with missing execute
  * permission here on some processors
  */
-int pmdp_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+int pmdp_set_access_flags(struct mm_area *vma, unsigned long address,
 			  pmd_t *pmdp, pmd_t entry, int dirty)
 {
 	int changed;
@@ -77,7 +77,7 @@ int pmdp_set_access_flags(struct vm_area_struct *vma, unsigned long address,
 	return changed;
 }
 
-int pudp_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+int pudp_set_access_flags(struct mm_area *vma, unsigned long address,
 			  pud_t *pudp, pud_t entry, int dirty)
 {
 	int changed;
@@ -98,13 +98,13 @@ int pudp_set_access_flags(struct vm_area_struct *vma, unsigned long address,
 }
 
 
-int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+int pmdp_test_and_clear_young(struct mm_area *vma,
 			      unsigned long address, pmd_t *pmdp)
 {
 	return __pmdp_test_and_clear_young(vma->vm_mm, address, pmdp);
 }
 
-int pudp_test_and_clear_young(struct vm_area_struct *vma,
+int pudp_test_and_clear_young(struct mm_area *vma,
 			      unsigned long address, pud_t *pudp)
 {
 	return __pudp_test_and_clear_young(vma->vm_mm, address, pudp);
@@ -177,7 +177,7 @@ void serialize_against_pte_lookup(struct mm_struct *mm)
  * We use this to invalidate a pmdp entry before switching from a
  * hugepte to regular pmd entry.
  */
-pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
+pmd_t pmdp_invalidate(struct mm_area *vma, unsigned long address,
 		     pmd_t *pmdp)
 {
 	unsigned long old_pmd;
@@ -188,7 +188,7 @@ pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
 	return __pmd(old_pmd);
 }
 
-pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
+pud_t pudp_invalidate(struct mm_area *vma, unsigned long address,
 		      pud_t *pudp)
 {
 	unsigned long old_pud;
@@ -199,7 +199,7 @@ pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
 	return __pud(old_pud);
 }
 
-pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
+pmd_t pmdp_huge_get_and_clear_full(struct mm_area *vma,
 				   unsigned long addr, pmd_t *pmdp, int full)
 {
 	pmd_t pmd;
@@ -217,7 +217,7 @@ pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
 	return pmd;
 }
 
-pud_t pudp_huge_get_and_clear_full(struct vm_area_struct *vma,
+pud_t pudp_huge_get_and_clear_full(struct mm_area *vma,
 				   unsigned long addr, pud_t *pudp, int full)
 {
 	pud_t pud;
@@ -534,7 +534,7 @@ void arch_report_meminfo(struct seq_file *m)
 }
 #endif /* CONFIG_PROC_FS */
 
-pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
+pte_t ptep_modify_prot_start(struct mm_area *vma, unsigned long addr,
 			     pte_t *ptep)
 {
 	unsigned long pte_val;
@@ -550,7 +550,7 @@ pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr,
 
 }
 
-void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
+void ptep_modify_prot_commit(struct mm_area *vma, unsigned long addr,
 			     pte_t *ptep, pte_t old_pte, pte_t pte)
 {
 	if (radix_enabled())
@@ -574,7 +574,7 @@ void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
  */
 int pmd_move_must_withdraw(struct spinlock *new_pmd_ptl,
 			   struct spinlock *old_pmd_ptl,
-			   struct vm_area_struct *vma)
+			   struct mm_area *vma)
 {
 	if (radix_enabled())
 		return (new_pmd_ptl != old_pmd_ptl) && vma_is_anonymous(vma);

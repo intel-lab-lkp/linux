@@ -26,7 +26,7 @@ int handle_page_fault(unsigned long address, unsigned long ip,
 		      int is_write, int is_user, int *code_out)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	pmd_t *pmd;
 	pte_t *pte;
 	int err = -EFAULT;

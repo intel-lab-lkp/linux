@@ -23,9 +23,9 @@ struct mm_struct;
 extern void flush_cache_all(void);
 extern void flush_cache_mm(struct mm_struct *mm);
 extern void flush_cache_dup_mm(struct mm_struct *mm);
-extern void flush_cache_range(struct vm_area_struct *vma, unsigned long start,
+extern void flush_cache_range(struct mm_area *vma, unsigned long start,
 	unsigned long end);
-extern void flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr,
+extern void flush_cache_page(struct mm_area *vma, unsigned long vmaddr,
 	unsigned long pfn);
 #define ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE 1
 void flush_dcache_page(struct page *page);
@@ -33,7 +33,7 @@ void flush_dcache_folio(struct folio *folio);
 #define flush_dcache_folio flush_dcache_folio
 
 extern void flush_icache_range(unsigned long start, unsigned long end);
-void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
+void flush_icache_pages(struct mm_area *vma, struct page *page,
 		unsigned int nr);
 #define flush_icache_pages flush_icache_pages
 
@@ -41,10 +41,10 @@ void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
 #define flush_cache_vmap_early(start, end)	do { } while (0)
 #define flush_cache_vunmap(start, end)		flush_dcache_range(start, end)
 
-extern void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+extern void copy_to_user_page(struct mm_area *vma, struct page *page,
 				unsigned long user_vaddr,
 				void *dst, void *src, int len);
-extern void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+extern void copy_from_user_page(struct mm_area *vma, struct page *page,
 				unsigned long user_vaddr,
 				void *dst, void *src, int len);
 

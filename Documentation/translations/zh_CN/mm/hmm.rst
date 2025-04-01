@@ -247,7 +247,7 @@ devm_memunmap_pages() 和 devm_release_mem_region() 当资源可以绑定到 ``s
 
 1. ``mmap_read_lock()``
 
-   设备驱动程序必须将 ``struct vm_area_struct`` 传递给migrate_vma_setup()，
+   设备驱动程序必须将 ``struct mm_area`` 传递给migrate_vma_setup()，
    因此需要在迁移期间保留 mmap_read_lock() 或 mmap_write_lock()。
 
 2. ``migrate_vma_setup(struct migrate_vma *args)``

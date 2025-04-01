@@ -25,13 +25,13 @@
 #define copy_user_page(to, from, vaddr, pg)	copy_page(to, from)
 #define copy_page(to, from)		memcpy((to), (from), PAGE_SIZE)
 
-struct vm_area_struct;
+struct mm_area;
 struct page;
 
 #define __HAVE_ARCH_COPY_USER_HIGHPAGE
 
 void copy_user_highpage(struct page *to, struct page *from,
-			unsigned long u_vaddr, struct vm_area_struct *vma);
+			unsigned long u_vaddr, struct mm_area *vma);
 void clear_user_page(void *to, unsigned long u_vaddr, struct page *page);
 
 typedef struct {

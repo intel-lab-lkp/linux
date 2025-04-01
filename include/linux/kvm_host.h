@@ -2340,7 +2340,7 @@ struct kvm_device_ops {
 	int (*has_attr)(struct kvm_device *dev, struct kvm_device_attr *attr);
 	long (*ioctl)(struct kvm_device *dev, unsigned int ioctl,
 		      unsigned long arg);
-	int (*mmap)(struct kvm_device *dev, struct vm_area_struct *vma);
+	int (*mmap)(struct kvm_device *dev, struct mm_area *vma);
 };
 
 struct kvm_device *kvm_device_from_filp(struct file *filp);

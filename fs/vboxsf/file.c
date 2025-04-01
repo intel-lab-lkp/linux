@@ -154,7 +154,7 @@ static int vboxsf_file_release(struct inode *inode, struct file *file)
  * Write back dirty pages now, because there may not be any suitable
  * open files later
  */
-static void vboxsf_vma_close(struct vm_area_struct *vma)
+static void vboxsf_vma_close(struct mm_area *vma)
 {
 	filemap_write_and_wait(vma->vm_file->f_mapping);
 }
@@ -165,7 +165,7 @@ static const struct vm_operations_struct vboxsf_file_vm_ops = {
 	.map_pages	= filemap_map_pages,
 };
 
-static int vboxsf_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int vboxsf_file_mmap(struct file *file, struct mm_area *vma)
 {
 	int err;
 

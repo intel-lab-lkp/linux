@@ -135,7 +135,7 @@ int __hash_page_huge(unsigned long ea, unsigned long access, unsigned long vsid,
 }
 #endif
 
-pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma,
+pte_t huge_ptep_modify_prot_start(struct mm_area *vma,
 				  unsigned long addr, pte_t *ptep)
 {
 	unsigned long pte_val;
@@ -150,7 +150,7 @@ pte_t huge_ptep_modify_prot_start(struct vm_area_struct *vma,
 	return __pte(pte_val);
 }
 
-void huge_ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr,
+void huge_ptep_modify_prot_commit(struct mm_area *vma, unsigned long addr,
 				  pte_t *ptep, pte_t old_pte, pte_t pte)
 {
 	unsigned long psize;

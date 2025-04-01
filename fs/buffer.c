@@ -2585,7 +2585,7 @@ EXPORT_SYMBOL(cont_write_begin);
  * Direct callers of this function should protect against filesystem freezing
  * using sb_start_pagefault() - sb_end_pagefault() functions.
  */
-int block_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
+int block_page_mkwrite(struct mm_area *vma, struct vm_fault *vmf,
 			 get_block_t get_block)
 {
 	struct folio *folio = page_folio(vmf->page);

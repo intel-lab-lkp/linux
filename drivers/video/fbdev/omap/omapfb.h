@@ -159,7 +159,7 @@ struct lcd_ctrl {
 	int		(*setup_mem)	  (int plane, size_t size,
 					   int mem_type, unsigned long *paddr);
 	int		(*mmap)		  (struct fb_info *info,
-					   struct vm_area_struct *vma);
+					   struct mm_area *vma);
 	int		(*set_scale)	  (int plane,
 					   int orig_width, int orig_height,
 					   int out_width, int out_height);

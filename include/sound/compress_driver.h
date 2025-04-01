@@ -165,7 +165,7 @@ struct snd_compr_ops {
 	int (*copy)(struct snd_compr_stream *stream, char __user *buf,
 		       size_t count);
 	int (*mmap)(struct snd_compr_stream *stream,
-			struct vm_area_struct *vma);
+			struct mm_area *vma);
 	int (*ack)(struct snd_compr_stream *stream, size_t bytes);
 	int (*get_caps) (struct snd_compr_stream *stream,
 			struct snd_compr_caps *caps);

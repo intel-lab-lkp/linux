@@ -1849,7 +1849,7 @@ int sock_no_sendmsg(struct socket *, struct msghdr *, size_t);
 int sock_no_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t len);
 int sock_no_recvmsg(struct socket *, struct msghdr *, size_t, int);
 int sock_no_mmap(struct file *file, struct socket *sock,
-		 struct vm_area_struct *vma);
+		 struct mm_area *vma);
 
 /*
  * Functions to fill in entries in struct proto_ops when a protocol

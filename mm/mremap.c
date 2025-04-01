@@ -61,7 +61,7 @@ struct vma_remap_struct {
 	struct list_head *uf_unmap;
 
 	/* VMA state, determined in do_mremap(). */
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	/* Internal state, determined in do_mremap(). */
 	unsigned long delta;		/* Absolute delta of old_len,new_len. */
@@ -139,7 +139,7 @@ static pmd_t *alloc_new_pmd(struct mm_struct *mm, unsigned long addr)
 	return pmd;
 }
 
-static void take_rmap_locks(struct vm_area_struct *vma)
+static void take_rmap_locks(struct mm_area *vma)
 {
 	if (vma->vm_file)
 		i_mmap_lock_write(vma->vm_file->f_mapping);
@@ -147,7 +147,7 @@ static void take_rmap_locks(struct vm_area_struct *vma)
 		anon_vma_lock_write(vma->anon_vma);
 }
 
-static void drop_rmap_locks(struct vm_area_struct *vma)
+static void drop_rmap_locks(struct mm_area *vma)
 {
 	if (vma->anon_vma)
 		anon_vma_unlock_write(vma->anon_vma);
@@ -173,7 +173,7 @@ static pte_t move_soft_dirty_pte(pte_t pte)
 static int move_ptes(struct pagetable_move_control *pmc,
 		unsigned long extent, pmd_t *old_pmd, pmd_t *new_pmd)
 {
-	struct vm_area_struct *vma = pmc->old;
+	struct mm_area *vma = pmc->old;
 	bool need_clear_uffd_wp = vma_has_uffd_without_event_remap(vma);
 	struct mm_struct *mm = vma->vm_mm;
 	pte_t *old_pte, *new_pte, pte;
@@ -297,7 +297,7 @@ static bool move_normal_pmd(struct pagetable_move_control *pmc,
 			pmd_t *old_pmd, pmd_t *new_pmd)
 {
 	spinlock_t *old_ptl, *new_ptl;
-	struct vm_area_struct *vma = pmc->old;
+	struct mm_area *vma = pmc->old;
 	struct mm_struct *mm = vma->vm_mm;
 	bool res = false;
 	pmd_t pmd;
@@ -381,7 +381,7 @@ static bool move_normal_pud(struct pagetable_move_control *pmc,
 		pud_t *old_pud, pud_t *new_pud)
 {
 	spinlock_t *old_ptl, *new_ptl;
-	struct vm_area_struct *vma = pmc->old;
+	struct mm_area *vma = pmc->old;
 	struct mm_struct *mm = vma->vm_mm;
 	pud_t pud;
 
@@ -439,7 +439,7 @@ static bool move_huge_pud(struct pagetable_move_control *pmc,
 		pud_t *old_pud, pud_t *new_pud)
 {
 	spinlock_t *old_ptl, *new_ptl;
-	struct vm_area_struct *vma = pmc->old;
+	struct mm_area *vma = pmc->old;
 	struct mm_struct *mm = vma->vm_mm;
 	pud_t pud;
 
@@ -598,7 +598,7 @@ static bool move_pgt_entry(struct pagetable_move_control *pmc,
  * so we make an exception for it.
  */
 static bool can_align_down(struct pagetable_move_control *pmc,
-			   struct vm_area_struct *vma, unsigned long addr_to_align,
+			   struct mm_area *vma, unsigned long addr_to_align,
 			   unsigned long mask)
 {
 	unsigned long addr_masked = addr_to_align & mask;
@@ -902,7 +902,7 @@ static bool vrm_implies_new_addr(struct vma_remap_struct *vrm)
  */
 static unsigned long vrm_set_new_addr(struct vma_remap_struct *vrm)
 {
-	struct vm_area_struct *vma = vrm->vma;
+	struct mm_area *vma = vrm->vma;
 	unsigned long map_flags = 0;
 	/* Page Offset _into_ the VMA. */
 	pgoff_t internal_pgoff = (vrm->addr - vma->vm_start) >> PAGE_SHIFT;
@@ -978,7 +978,7 @@ static void vrm_stat_account(struct vma_remap_struct *vrm,
 {
 	unsigned long pages = bytes >> PAGE_SHIFT;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = vrm->vma;
+	struct mm_area *vma = vrm->vma;
 
 	vm_stat_account(mm, vma->vm_flags, pages);
 	if (vma->vm_flags & VM_LOCKED) {
@@ -994,7 +994,7 @@ static void vrm_stat_account(struct vma_remap_struct *vrm,
 static unsigned long prep_move_vma(struct vma_remap_struct *vrm)
 {
 	unsigned long err = 0;
-	struct vm_area_struct *vma = vrm->vma;
+	struct mm_area *vma = vrm->vma;
 	unsigned long old_addr = vrm->addr;
 	unsigned long old_len = vrm->old_len;
 	unsigned long dummy = vma->vm_flags;
@@ -1043,7 +1043,7 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 	struct mm_struct *mm = current->mm;
 	unsigned long addr = vrm->addr;
 	unsigned long len = vrm->old_len;
-	struct vm_area_struct *vma = vrm->vma;
+	struct mm_area *vma = vrm->vma;
 	VMA_ITERATOR(vmi, mm, addr);
 	int err;
 	unsigned long vm_start;
@@ -1119,13 +1119,13 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 		unsigned long end = addr + len;
 
 		if (vm_start < addr) {
-			struct vm_area_struct *prev = vma_prev(&vmi);
+			struct mm_area *prev = vma_prev(&vmi);
 
 			vm_flags_set(prev, VM_ACCOUNT); /* Acquires VMA lock. */
 		}
 
 		if (vm_end > end) {
-			struct vm_area_struct *next = vma_next(&vmi);
+			struct mm_area *next = vma_next(&vmi);
 
 			vm_flags_set(next, VM_ACCOUNT); /* Acquires VMA lock. */
 		}
@@ -1141,14 +1141,14 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
  * error code.
  */
 static int copy_vma_and_data(struct vma_remap_struct *vrm,
-			     struct vm_area_struct **new_vma_ptr)
+			     struct mm_area **new_vma_ptr)
 {
 	unsigned long internal_offset = vrm->addr - vrm->vma->vm_start;
 	unsigned long internal_pgoff = internal_offset >> PAGE_SHIFT;
 	unsigned long new_pgoff = vrm->vma->vm_pgoff + internal_pgoff;
 	unsigned long moved_len;
-	struct vm_area_struct *vma = vrm->vma;
-	struct vm_area_struct *new_vma;
+	struct mm_area *vma = vrm->vma;
+	struct mm_area *new_vma;
 	int err = 0;
 	PAGETABLE_MOVE(pmc, NULL, NULL, vrm->addr, vrm->new_addr, vrm->old_len);
 
@@ -1206,7 +1206,7 @@ static int copy_vma_and_data(struct vma_remap_struct *vrm,
  * links from it (if the entire VMA was copied over).
  */
 static void dontunmap_complete(struct vma_remap_struct *vrm,
-			       struct vm_area_struct *new_vma)
+			       struct mm_area *new_vma)
 {
 	unsigned long start = vrm->addr;
 	unsigned long end = vrm->addr + vrm->old_len;
@@ -1232,7 +1232,7 @@ static void dontunmap_complete(struct vma_remap_struct *vrm,
 static unsigned long move_vma(struct vma_remap_struct *vrm)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *new_vma;
+	struct mm_area *new_vma;
 	unsigned long hiwater_vm;
 	int err;
 
@@ -1288,7 +1288,7 @@ static unsigned long move_vma(struct vma_remap_struct *vrm)
 static int resize_is_valid(struct vma_remap_struct *vrm)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = vrm->vma;
+	struct mm_area *vma = vrm->vma;
 	unsigned long addr = vrm->addr;
 	unsigned long old_len = vrm->old_len;
 	unsigned long new_len = vrm->new_len;
@@ -1444,7 +1444,7 @@ static unsigned long mremap_to(struct vma_remap_struct *vrm)
 	return move_vma(vrm);
 }
 
-static int vma_expandable(struct vm_area_struct *vma, unsigned long delta)
+static int vma_expandable(struct mm_area *vma, unsigned long delta)
 {
 	unsigned long end = vma->vm_end + delta;
 
@@ -1546,7 +1546,7 @@ static unsigned long check_mremap_params(struct vma_remap_struct *vrm)
 static unsigned long expand_vma_in_place(struct vma_remap_struct *vrm)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = vrm->vma;
+	struct mm_area *vma = vrm->vma;
 	VMA_ITERATOR(vmi, mm, vma->vm_end);
 
 	if (!vrm_charge(vrm))
@@ -1688,7 +1688,7 @@ static unsigned long mremap_at(struct vma_remap_struct *vrm)
 static unsigned long do_mremap(struct vma_remap_struct *vrm)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long ret;
 
 	ret = check_mremap_params(vrm);

@@ -39,14 +39,14 @@ void rvt_release_mmap_info(struct kref *ref)
 	kfree(ip);
 }
 
-static void rvt_vma_open(struct vm_area_struct *vma)
+static void rvt_vma_open(struct mm_area *vma)
 {
 	struct rvt_mmap_info *ip = vma->vm_private_data;
 
 	kref_get(&ip->ref);
 }
 
-static void rvt_vma_close(struct vm_area_struct *vma)
+static void rvt_vma_close(struct mm_area *vma)
 {
 	struct rvt_mmap_info *ip = vma->vm_private_data;
 
@@ -65,7 +65,7 @@ static const struct vm_operations_struct rvt_vm_ops = {
  *
  * Return: zero if the mmap is OK. Otherwise, return an errno.
  */
-int rvt_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
+int rvt_mmap(struct ib_ucontext *context, struct mm_area *vma)
 {
 	struct rvt_dev_info *rdi = ib_to_rvt(context->device);
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;

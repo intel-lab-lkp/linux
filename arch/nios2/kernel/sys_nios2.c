@@ -21,7 +21,7 @@
 asmlinkage int sys_cacheflush(unsigned long addr, unsigned long len,
 				unsigned int op)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm = current->mm;
 
 	if (len == 0)

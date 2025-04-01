@@ -86,7 +86,7 @@ void bad_page_fault(struct pt_regs *regs, unsigned long address, int sig)
 void do_page_fault(struct pt_regs *regs, unsigned long address,
 		   unsigned long error_code)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm = current->mm;
 	int code = SEGV_MAPERR;
 	int is_write = error_code & ESR_S;

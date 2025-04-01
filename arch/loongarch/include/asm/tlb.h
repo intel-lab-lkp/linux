@@ -139,7 +139,7 @@ static void tlb_flush(struct mmu_gather *tlb);
 
 static inline void tlb_flush(struct mmu_gather *tlb)
 {
-	struct vm_area_struct vma;
+	struct mm_area vma;
 
 	vma.vm_mm = tlb->mm;
 	vm_flags_init(&vma, 0);

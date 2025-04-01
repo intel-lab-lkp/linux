@@ -2496,7 +2496,7 @@ int vb2_core_expbuf(struct vb2_queue *q, int *fd, unsigned int type,
 }
 EXPORT_SYMBOL_GPL(vb2_core_expbuf);
 
-int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
+int vb2_mmap(struct vb2_queue *q, struct mm_area *vma)
 {
 	unsigned long offset = vma->vm_pgoff << PAGE_SHIFT;
 	struct vb2_buffer *vb;

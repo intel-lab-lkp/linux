@@ -445,7 +445,7 @@ void mpol_rebind_task(struct task_struct *tsk, const nodemask_t *new)
  */
 void mpol_rebind_mm(struct mm_struct *mm, nodemask_t *new)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	mmap_write_lock(mm);
@@ -511,7 +511,7 @@ struct queue_pages {
 	nodemask_t *nmask;
 	unsigned long start;
 	unsigned long end;
-	struct vm_area_struct *first;
+	struct mm_area *first;
 	struct folio *large;		/* note last large folio encountered */
 	long nr_failed;			/* could not be isolated at this time */
 };
@@ -566,7 +566,7 @@ static void queue_folios_pmd(pmd_t *pmd, struct mm_walk *walk)
 static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 			unsigned long end, struct mm_walk *walk)
 {
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	struct folio *folio;
 	struct queue_pages *qp = walk->private;
 	unsigned long flags = qp->flags;
@@ -698,7 +698,7 @@ unlock:
  * an architecture makes a different choice, it will need further
  * changes to the core.
  */
-unsigned long change_prot_numa(struct vm_area_struct *vma,
+unsigned long change_prot_numa(struct mm_area *vma,
 			unsigned long addr, unsigned long end)
 {
 	struct mmu_gather tlb;
@@ -721,7 +721,7 @@ unsigned long change_prot_numa(struct vm_area_struct *vma,
 static int queue_pages_test_walk(unsigned long start, unsigned long end,
 				struct mm_walk *walk)
 {
-	struct vm_area_struct *next, *vma = walk->vma;
+	struct mm_area *next, *vma = walk->vma;
 	struct queue_pages *qp = walk->private;
 	unsigned long flags = qp->flags;
 
@@ -817,7 +817,7 @@ queue_pages_range(struct mm_struct *mm, unsigned long start, unsigned long end,
  * Apply policy to a single VMA
  * This must be called with the mmap_lock held for writing.
  */
-static int vma_replace_policy(struct vm_area_struct *vma,
+static int vma_replace_policy(struct mm_area *vma,
 				struct mempolicy *pol)
 {
 	int err;
@@ -847,8 +847,8 @@ static int vma_replace_policy(struct vm_area_struct *vma,
 }
 
 /* Split or merge the VMA (if required) and apply the new policy */
-static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
-		struct vm_area_struct **prev, unsigned long start,
+static int mbind_range(struct vma_iterator *vmi, struct mm_area *vma,
+		struct mm_area **prev, unsigned long start,
 		unsigned long end, struct mempolicy *new_pol)
 {
 	unsigned long vmstart, vmend;
@@ -960,7 +960,7 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 {
 	int err;
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	struct mempolicy *pol = current->mempolicy, *pol_refcount = NULL;
 
 	if (flags &
@@ -1094,7 +1094,7 @@ static long migrate_to_node(struct mm_struct *mm, int source, int dest,
 			    int flags)
 {
 	nodemask_t nmask;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	LIST_HEAD(pagelist);
 	long nr_failed;
 	long err = 0;
@@ -1299,7 +1299,7 @@ static long do_mbind(unsigned long start, unsigned long len,
 		     nodemask_t *nmask, unsigned long flags)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	struct vma_iterator vmi;
 	struct migration_mpol mmpol;
 	struct mempolicy *new;
@@ -1572,7 +1572,7 @@ SYSCALL_DEFINE4(set_mempolicy_home_node, unsigned long, start, unsigned long, le
 		unsigned long, home_node, unsigned long, flags)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma, *prev;
+	struct mm_area *vma, *prev;
 	struct mempolicy *new, *old;
 	unsigned long end;
 	int err = -ENOENT;
@@ -1799,7 +1799,7 @@ SYSCALL_DEFINE5(get_mempolicy, int __user *, policy,
 	return kernel_get_mempolicy(policy, nmask, maxnode, addr, flags);
 }
 
-bool vma_migratable(struct vm_area_struct *vma)
+bool vma_migratable(struct mm_area *vma)
 {
 	if (vma->vm_flags & (VM_IO | VM_PFNMAP))
 		return false;
@@ -1827,7 +1827,7 @@ bool vma_migratable(struct vm_area_struct *vma)
 	return true;
 }
 
-struct mempolicy *__get_vma_policy(struct vm_area_struct *vma,
+struct mempolicy *__get_vma_policy(struct mm_area *vma,
 				   unsigned long addr, pgoff_t *ilx)
 {
 	*ilx = 0;
@@ -1850,7 +1850,7 @@ struct mempolicy *__get_vma_policy(struct vm_area_struct *vma,
  * freeing by another task.  It is the caller's responsibility to free the
  * extra reference for shared policies.
  */
-struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
+struct mempolicy *get_vma_policy(struct mm_area *vma,
 				 unsigned long addr, int order, pgoff_t *ilx)
 {
 	struct mempolicy *pol;
@@ -1866,7 +1866,7 @@ struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
 	return pol;
 }
 
-bool vma_policy_mof(struct vm_area_struct *vma)
+bool vma_policy_mof(struct mm_area *vma)
 {
 	struct mempolicy *pol;
 
@@ -2135,7 +2135,7 @@ static nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *pol,
  * If the effective policy is 'bind' or 'prefer-many', returns a pointer
  * to the mempolicy's @nodemask for filtering the zonelist.
  */
-int huge_node(struct vm_area_struct *vma, unsigned long addr, gfp_t gfp_flags,
+int huge_node(struct mm_area *vma, unsigned long addr, gfp_t gfp_flags,
 		struct mempolicy **mpol, nodemask_t **nodemask)
 {
 	pgoff_t ilx;
@@ -2341,7 +2341,7 @@ struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
  *
  * Return: The folio on success or NULL if allocation fails.
  */
-struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct *vma,
+struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct mm_area *vma,
 		unsigned long addr)
 {
 	struct mempolicy *pol;
@@ -2607,7 +2607,7 @@ unsigned long alloc_pages_bulk_mempolicy_noprof(gfp_t gfp,
 				       nr_pages, page_array);
 }
 
-int vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst)
+int vma_dup_policy(struct mm_area *src, struct mm_area *dst)
 {
 	struct mempolicy *pol = mpol_dup(src->vm_policy);
 
@@ -2795,7 +2795,7 @@ int mpol_misplaced(struct folio *folio, struct vm_fault *vmf,
 	pgoff_t ilx;
 	struct zoneref *z;
 	int curnid = folio_nid(folio);
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	int thiscpu = raw_smp_processor_id();
 	int thisnid = numa_node_id();
 	int polnid = NUMA_NO_NODE;
@@ -3054,7 +3054,7 @@ put_mpol:
 }
 
 int mpol_set_shared_policy(struct shared_policy *sp,
-			struct vm_area_struct *vma, struct mempolicy *pol)
+			struct mm_area *vma, struct mempolicy *pol)
 {
 	int err;
 	struct sp_node *new = NULL;

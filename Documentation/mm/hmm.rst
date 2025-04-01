@@ -298,7 +298,7 @@ between device driver specific code and shared common code:
 
 1. ``mmap_read_lock()``
 
-   The device driver has to pass a ``struct vm_area_struct`` to
+   The device driver has to pass a ``struct mm_area`` to
    migrate_vma_setup() so the mmap_read_lock() or mmap_write_lock() needs to
    be held for the duration of the migration.
 

@@ -31,7 +31,7 @@ static struct mutex zombie_secs_pages_lock;
 static struct list_head zombie_secs_pages;
 
 static int __sgx_vepc_fault(struct sgx_vepc *vepc,
-			    struct vm_area_struct *vma, unsigned long addr)
+			    struct mm_area *vma, unsigned long addr)
 {
 	struct sgx_epc_page *epc_page;
 	unsigned long index, pfn;
@@ -73,7 +73,7 @@ err_free:
 
 static vm_fault_t sgx_vepc_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct sgx_vepc *vepc = vma->vm_private_data;
 	int ret;
 
@@ -96,7 +96,7 @@ static const struct vm_operations_struct sgx_vepc_vm_ops = {
 	.fault = sgx_vepc_fault,
 };
 
-static int sgx_vepc_mmap(struct file *file, struct vm_area_struct *vma)
+static int sgx_vepc_mmap(struct file *file, struct mm_area *vma)
 {
 	struct sgx_vepc *vepc = file->private_data;
 

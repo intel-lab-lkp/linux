@@ -210,7 +210,7 @@ static void show_pte(unsigned long addr)
  *
  * Returns whether or not the PTE actually changed.
  */
-int __ptep_set_access_flags(struct vm_area_struct *vma,
+int __ptep_set_access_flags(struct mm_area *vma,
 			    unsigned long address, pte_t *ptep,
 			    pte_t entry, int dirty)
 {
@@ -487,7 +487,7 @@ static void do_bad_area(unsigned long far, unsigned long esr,
 	}
 }
 
-static bool fault_from_pkey(unsigned long esr, struct vm_area_struct *vma,
+static bool fault_from_pkey(unsigned long esr, struct mm_area *vma,
 			unsigned int mm_flags)
 {
 	unsigned long iss2 = ESR_ELx_ISS2(esr);
@@ -526,7 +526,7 @@ static bool is_write_abort(unsigned long esr)
 	return (esr & ESR_ELx_WNR) && !(esr & ESR_ELx_CM);
 }
 
-static bool is_invalid_gcs_access(struct vm_area_struct *vma, u64 esr)
+static bool is_invalid_gcs_access(struct mm_area *vma, u64 esr)
 {
 	if (!system_supports_gcs())
 		return false;
@@ -552,7 +552,7 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	unsigned long vm_flags;
 	unsigned int mm_flags = FAULT_FLAG_DEFAULT;
 	unsigned long addr = untagged_addr(far);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int si_code;
 	int pkey = -1;
 
@@ -1010,7 +1010,7 @@ NOKPROBE_SYMBOL(do_debug_exception);
 /*
  * Used during anonymous page fault handling.
  */
-struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
+struct folio *vma_alloc_zeroed_movable_folio(struct mm_area *vma,
 						unsigned long vaddr)
 {
 	gfp_t flags = GFP_HIGHUSER_MOVABLE | __GFP_ZERO;

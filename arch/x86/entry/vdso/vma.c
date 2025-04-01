@@ -50,7 +50,7 @@ int __init init_vdso_image(const struct vdso_image *image)
 struct linux_binprm;
 
 static vm_fault_t vdso_fault(const struct vm_special_mapping *sm,
-		      struct vm_area_struct *vma, struct vm_fault *vmf)
+		      struct mm_area *vma, struct vm_fault *vmf)
 {
 	const struct vdso_image *image = vma->vm_mm->context.vdso_image;
 
@@ -63,7 +63,7 @@ static vm_fault_t vdso_fault(const struct vm_special_mapping *sm,
 }
 
 static void vdso_fix_landing(const struct vdso_image *image,
-		struct vm_area_struct *new_vma)
+		struct mm_area *new_vma)
 {
 #if defined CONFIG_X86_32 || defined CONFIG_IA32_EMULATION
 	if (in_ia32_syscall() && image == &vdso_image_32) {
@@ -80,7 +80,7 @@ static void vdso_fix_landing(const struct vdso_image *image,
 }
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
-		struct vm_area_struct *new_vma)
+		struct mm_area *new_vma)
 {
 	const struct vdso_image *image = current->mm->context.vdso_image;
 
@@ -91,7 +91,7 @@ static int vdso_mremap(const struct vm_special_mapping *sm,
 }
 
 static vm_fault_t vvar_vclock_fault(const struct vm_special_mapping *sm,
-				    struct vm_area_struct *vma, struct vm_fault *vmf)
+				    struct mm_area *vma, struct vm_fault *vmf)
 {
 	switch (vmf->pgoff) {
 #ifdef CONFIG_PARAVIRT_CLOCK
@@ -139,7 +139,7 @@ static const struct vm_special_mapping vvar_vclock_mapping = {
 static int map_vdso(const struct vdso_image *image, unsigned long addr)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long text_start;
 	int ret = 0;
 
@@ -203,7 +203,7 @@ up_fail:
 int map_vdso_once(const struct vdso_image *image, unsigned long addr)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	mmap_write_lock(mm);

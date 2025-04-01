@@ -667,11 +667,11 @@ static int snd_usx2y_hwdep_pcm_release(struct snd_hwdep *hw, struct file *file)
 	return err;
 }
 
-static void snd_usx2y_hwdep_pcm_vm_open(struct vm_area_struct *area)
+static void snd_usx2y_hwdep_pcm_vm_open(struct mm_area *area)
 {
 }
 
-static void snd_usx2y_hwdep_pcm_vm_close(struct vm_area_struct *area)
+static void snd_usx2y_hwdep_pcm_vm_close(struct mm_area *area)
 {
 }
 
@@ -693,7 +693,7 @@ static const struct vm_operations_struct snd_usx2y_hwdep_pcm_vm_ops = {
 	.fault = snd_usx2y_hwdep_pcm_vm_fault,
 };
 
-static int snd_usx2y_hwdep_pcm_mmap(struct snd_hwdep *hw, struct file *filp, struct vm_area_struct *area)
+static int snd_usx2y_hwdep_pcm_mmap(struct snd_hwdep *hw, struct file *filp, struct mm_area *area)
 {
 	unsigned long	size = (unsigned long)(area->vm_end - area->vm_start);
 	struct usx2ydev	*usx2y = hw->private_data;

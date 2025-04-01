@@ -518,7 +518,7 @@ static void vfio_batch_fini(struct vfio_batch *batch)
 		free_page((unsigned long)batch->pages);
 }
 
-static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
+static int follow_fault_pfn(struct mm_area *vma, struct mm_struct *mm,
 			    unsigned long vaddr, unsigned long *pfn,
 			    unsigned long *addr_mask, bool write_fault)
 {
@@ -567,7 +567,7 @@ static long vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 			   struct vfio_batch *batch)
 {
 	unsigned long pin_pages = min_t(unsigned long, npages, batch->capacity);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned int flags = 0;
 	long ret;
 

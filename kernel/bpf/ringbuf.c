@@ -258,7 +258,7 @@ static int ringbuf_map_get_next_key(struct bpf_map *map, void *key,
 	return -ENOTSUPP;
 }
 
-static int ringbuf_map_mmap_kern(struct bpf_map *map, struct vm_area_struct *vma)
+static int ringbuf_map_mmap_kern(struct bpf_map *map, struct mm_area *vma)
 {
 	struct bpf_ringbuf_map *rb_map;
 
@@ -274,7 +274,7 @@ static int ringbuf_map_mmap_kern(struct bpf_map *map, struct vm_area_struct *vma
 				   vma->vm_pgoff + RINGBUF_PGOFF);
 }
 
-static int ringbuf_map_mmap_user(struct bpf_map *map, struct vm_area_struct *vma)
+static int ringbuf_map_mmap_user(struct bpf_map *map, struct mm_area *vma)
 {
 	struct bpf_ringbuf_map *rb_map;
 

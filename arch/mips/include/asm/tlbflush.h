@@ -14,11 +14,11 @@
  *  - flush_tlb_kernel_range(start, end) flushes a range of kernel pages
  */
 extern void local_flush_tlb_all(void);
-extern void local_flush_tlb_range(struct vm_area_struct *vma,
+extern void local_flush_tlb_range(struct mm_area *vma,
 	unsigned long start, unsigned long end);
 extern void local_flush_tlb_kernel_range(unsigned long start,
 	unsigned long end);
-extern void local_flush_tlb_page(struct vm_area_struct *vma,
+extern void local_flush_tlb_page(struct mm_area *vma,
 	unsigned long page);
 extern void local_flush_tlb_one(unsigned long vaddr);
 
@@ -28,10 +28,10 @@ extern void local_flush_tlb_one(unsigned long vaddr);
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *);
-extern void flush_tlb_range(struct vm_area_struct *vma, unsigned long,
+extern void flush_tlb_range(struct mm_area *vma, unsigned long,
 	unsigned long);
 extern void flush_tlb_kernel_range(unsigned long, unsigned long);
-extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
+extern void flush_tlb_page(struct mm_area *, unsigned long);
 extern void flush_tlb_one(unsigned long vaddr);
 
 #else /* CONFIG_SMP */

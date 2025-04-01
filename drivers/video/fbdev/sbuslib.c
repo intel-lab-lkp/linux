@@ -42,7 +42,7 @@ int sbusfb_mmap_helper(const struct sbus_mmap_map *map,
 		       unsigned long physbase,
 		       unsigned long fbsize,
 		       unsigned long iospace,
-		       struct vm_area_struct *vma)
+		       struct mm_area *vma)
 {
 	unsigned int size, page, r, map_size;
 	unsigned long map_offset = 0;

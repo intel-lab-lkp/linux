@@ -46,13 +46,13 @@ void local_flush_tlb_mm(struct mm_struct *mm)
 	BUG();
 }
 
-void local_flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void local_flush_tlb_range(struct mm_area *vma, unsigned long start,
 			    unsigned long end)
 {
 	BUG();
 }
 
-void local_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+void local_flush_tlb_page(struct mm_area *vma, unsigned long page)
 {
 	BUG();
 }
@@ -71,7 +71,7 @@ void __flush_tlb_global(void)
 {
 }
 
-void __update_tlb(struct vm_area_struct *vma, unsigned long address, pte_t pte)
+void __update_tlb(struct mm_area *vma, unsigned long address, pte_t pte)
 {
 }
 

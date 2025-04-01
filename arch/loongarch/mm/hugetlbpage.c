@@ -13,7 +13,7 @@
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+pte_t *huge_pte_alloc(struct mm_struct *mm, struct mm_area *vma,
 		      unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgd;

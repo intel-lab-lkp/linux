@@ -36,7 +36,7 @@
  */
 static void do_page_fault(unsigned long address, long cause, struct pt_regs *regs)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm = current->mm;
 	int si_signo;
 	int si_code = SEGV_MAPERR;

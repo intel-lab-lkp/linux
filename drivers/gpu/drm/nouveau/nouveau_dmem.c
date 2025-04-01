@@ -691,7 +691,7 @@ static void nouveau_dmem_migrate_chunk(struct nouveau_drm *drm,
 int
 nouveau_dmem_migrate_vma(struct nouveau_drm *drm,
 			 struct nouveau_svmm *svmm,
-			 struct vm_area_struct *vma,
+			 struct mm_area *vma,
 			 unsigned long start,
 			 unsigned long end)
 {

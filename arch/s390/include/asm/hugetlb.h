@@ -54,14 +54,14 @@ static inline void huge_pte_clear(struct mm_struct *mm, unsigned long addr,
 }
 
 #define __HAVE_ARCH_HUGE_PTEP_CLEAR_FLUSH
-static inline pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,
+static inline pte_t huge_ptep_clear_flush(struct mm_area *vma,
 					  unsigned long address, pte_t *ptep)
 {
 	return __huge_ptep_get_and_clear(vma->vm_mm, address, ptep);
 }
 
 #define  __HAVE_ARCH_HUGE_PTEP_SET_ACCESS_FLAGS
-static inline int huge_ptep_set_access_flags(struct vm_area_struct *vma,
+static inline int huge_ptep_set_access_flags(struct mm_area *vma,
 					     unsigned long addr, pte_t *ptep,
 					     pte_t pte, int dirty)
 {

@@ -173,7 +173,7 @@ static int usb_stream_hwdep_release(struct snd_hwdep *hw, struct file *file)
 }
 
 static int usb_stream_hwdep_mmap(struct snd_hwdep *hw,
-				 struct file *filp, struct vm_area_struct *area)
+				 struct file *filp, struct mm_area *area)
 {
 	unsigned long	size = area->vm_end - area->vm_start;
 	struct us122l	*us122l = hw->private_data;

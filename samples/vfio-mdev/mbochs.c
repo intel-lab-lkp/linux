@@ -777,7 +777,7 @@ static void mbochs_put_pages(struct mdev_state *mdev_state)
 
 static vm_fault_t mbochs_region_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct mdev_state *mdev_state = vma->vm_private_data;
 	pgoff_t page_offset = (vmf->address - vma->vm_start) >> PAGE_SHIFT;
 
@@ -795,7 +795,7 @@ static const struct vm_operations_struct mbochs_region_vm_ops = {
 	.fault = mbochs_region_vm_fault,
 };
 
-static int mbochs_mmap(struct vfio_device *vdev, struct vm_area_struct *vma)
+static int mbochs_mmap(struct vfio_device *vdev, struct mm_area *vma)
 {
 	struct mdev_state *mdev_state =
 		container_of(vdev, struct mdev_state, vdev);
@@ -816,7 +816,7 @@ static int mbochs_mmap(struct vfio_device *vdev, struct vm_area_struct *vma)
 
 static vm_fault_t mbochs_dmabuf_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct mbochs_dmabuf *dmabuf = vma->vm_private_data;
 
 	if (WARN_ON(vmf->pgoff >= dmabuf->pagecount))
@@ -831,7 +831,7 @@ static const struct vm_operations_struct mbochs_dmabuf_vm_ops = {
 	.fault = mbochs_dmabuf_vm_fault,
 };
 
-static int mbochs_mmap_dmabuf(struct dma_buf *buf, struct vm_area_struct *vma)
+static int mbochs_mmap_dmabuf(struct dma_buf *buf, struct mm_area *vma)
 {
 	struct mbochs_dmabuf *dmabuf = buf->priv;
 	struct device *dev = mdev_dev(dmabuf->mdev_state->mdev);

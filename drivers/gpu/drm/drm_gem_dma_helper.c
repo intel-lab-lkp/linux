@@ -519,7 +519,7 @@ EXPORT_SYMBOL_GPL(drm_gem_dma_vmap);
  * Returns:
  * 0 on success or a negative error code on failure.
  */
-int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct vm_area_struct *vma)
+int drm_gem_dma_mmap(struct drm_gem_dma_object *dma_obj, struct mm_area *vma)
 {
 	struct drm_gem_object *obj = &dma_obj->base;
 	int ret;

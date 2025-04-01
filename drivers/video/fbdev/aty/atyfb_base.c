@@ -253,7 +253,7 @@ static int atyfb_compat_ioctl(struct fb_info *info, u_int cmd, u_long arg)
 #endif
 
 #ifdef __sparc__
-static int atyfb_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int atyfb_mmap(struct fb_info *info, struct mm_area *vma);
 #endif
 static int atyfb_sync(struct fb_info *info);
 
@@ -1932,7 +1932,7 @@ static int atyfb_sync(struct fb_info *info)
 }
 
 #ifdef __sparc__
-static int atyfb_mmap(struct fb_info *info, struct vm_area_struct *vma)
+static int atyfb_mmap(struct fb_info *info, struct mm_area *vma)
 {
 	struct atyfb_par *par = (struct atyfb_par *) info->par;
 	unsigned int size, page, map_size = 0;

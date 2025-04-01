@@ -408,7 +408,7 @@ static const struct vm_operations_struct erofs_dax_vm_ops = {
 	.huge_fault	= erofs_dax_huge_fault,
 };
 
-static int erofs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int erofs_file_mmap(struct file *file, struct mm_area *vma)
 {
 	if (!IS_DAX(file_inode(file)))
 		return generic_file_readonly_mmap(file, vma);

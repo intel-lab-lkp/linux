@@ -95,7 +95,7 @@ Page Flags
 
 	int hugetlb_reserve_pages(struct inode *inode,
 				  long from, long to,
-				  struct vm_area_struct *vma,
+				  struct mm_area *vma,
 				  vm_flags_t vm_flags)
 
 hugetlb_reserve_pages()做的第一件事是检查在调用shmget()或mmap()时是否指定了NORESERVE
@@ -146,7 +146,7 @@ HPAGE_RESV_OWNER标志被设置，以表明该VMA拥有预留。
 当与预留相关的巨页在相应的映射中被分配和实例化时，预留就被消耗了。该分配是在函数alloc_hugetlb_folio()
 中进行的::
 
-	struct folio *alloc_hugetlb_folio(struct vm_area_struct *vma,
+	struct folio *alloc_hugetlb_folio(struct mm_area *vma,
 				     unsigned long addr, int avoid_reserve)
 
 alloc_hugetlb_folio被传递给一个VMA指针和一个虚拟地址，因此它可以查阅预留映射以确定是否存在预留。
@@ -342,13 +342,13 @@ region_count()在解除私有巨页映射时被调用。在私有映射中，预
 它们确实考虑到了私有和共享映射的预留映射条目的 “相反” 含义，并向调用者隐藏了这个细节::
 
 	long vma_needs_reservation(struct hstate *h,
-				   struct vm_area_struct *vma,
+				   struct mm_area *vma,
 				   unsigned long addr)
 
 该函数为指定的页面调用 region_chg()。如果不存在预留，则返回1。如果存在预留，则返回0::
 
 	long vma_commit_reservation(struct hstate *h,
-				    struct vm_area_struct *vma,
+				    struct mm_area *vma,
 				    unsigned long addr)
 
 这将调用 region_add()，用于指定的页面。与region_chg和region_add的情况一样，该函数应在
@@ -357,14 +357,14 @@ region_count()在解除私有巨页映射时被调用。在私有映射中，预
 现意外的差异，说明在两次调用之间修改了预留映射::
 
 	void vma_end_reservation(struct hstate *h,
-				 struct vm_area_struct *vma,
+				 struct mm_area *vma,
 				 unsigned long addr)
 
 这将调用指定页面的 region_abort()。与region_chg和region_abort的情况一样，该函数应在
 先前调用的vma_needs_reservation后被调用。它将中止/结束正在进行的预留添加操作::
 
 	long vma_add_reservation(struct hstate *h,
-				 struct vm_area_struct *vma,
+				 struct mm_area *vma,
 				 unsigned long addr)
 
 这是一个特殊的包装函数，有助于在错误路径上清理预留。它只从repare_reserve_on_error()函数

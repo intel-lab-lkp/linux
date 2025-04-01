@@ -62,7 +62,7 @@ static int migrate_vma_collect_pmd(pmd_t *pmdp,
 	struct migrate_vma *migrate = walk->private;
 	struct folio *fault_folio = migrate->fault_page ?
 		page_folio(migrate->fault_page) : NULL;
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long addr = start, unmapped = 0;
 	spinlock_t *ptl;
@@ -589,7 +589,7 @@ static void migrate_vma_insert_page(struct migrate_vma *migrate,
 				    unsigned long *src)
 {
 	struct folio *folio = page_folio(page);
-	struct vm_area_struct *vma = migrate->vma;
+	struct mm_area *vma = migrate->vma;
 	struct mm_struct *mm = vma->vm_mm;
 	bool flush = false;
 	spinlock_t *ptl;

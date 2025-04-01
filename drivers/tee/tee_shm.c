@@ -434,7 +434,7 @@ static int tee_shm_fop_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static int tee_shm_fop_mmap(struct file *filp, struct vm_area_struct *vma)
+static int tee_shm_fop_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct tee_shm *shm = filp->private_data;
 	size_t size = vma->vm_end - vma->vm_start;

@@ -1971,7 +1971,7 @@ static inline int pte_same_as_swp(pte_t pte, pte_t swp_pte)
  * just let do_wp_page work it out if a write is requested later - to
  * force COW, vm_page_prot omits write permission from any private vma.
  */
-static int unuse_pte(struct vm_area_struct *vma, pmd_t *pmd,
+static int unuse_pte(struct mm_area *vma, pmd_t *pmd,
 		unsigned long addr, swp_entry_t entry, struct folio *folio)
 {
 	struct page *page;
@@ -2072,7 +2072,7 @@ out:
 	return ret;
 }
 
-static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
+static int unuse_pte_range(struct mm_area *vma, pmd_t *pmd,
 			unsigned long addr, unsigned long end,
 			unsigned int type)
 {
@@ -2145,7 +2145,7 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 	return 0;
 }
 
-static inline int unuse_pmd_range(struct vm_area_struct *vma, pud_t *pud,
+static inline int unuse_pmd_range(struct mm_area *vma, pud_t *pud,
 				unsigned long addr, unsigned long end,
 				unsigned int type)
 {
@@ -2164,7 +2164,7 @@ static inline int unuse_pmd_range(struct vm_area_struct *vma, pud_t *pud,
 	return 0;
 }
 
-static inline int unuse_pud_range(struct vm_area_struct *vma, p4d_t *p4d,
+static inline int unuse_pud_range(struct mm_area *vma, p4d_t *p4d,
 				unsigned long addr, unsigned long end,
 				unsigned int type)
 {
@@ -2184,7 +2184,7 @@ static inline int unuse_pud_range(struct vm_area_struct *vma, p4d_t *p4d,
 	return 0;
 }
 
-static inline int unuse_p4d_range(struct vm_area_struct *vma, pgd_t *pgd,
+static inline int unuse_p4d_range(struct mm_area *vma, pgd_t *pgd,
 				unsigned long addr, unsigned long end,
 				unsigned int type)
 {
@@ -2204,7 +2204,7 @@ static inline int unuse_p4d_range(struct vm_area_struct *vma, pgd_t *pgd,
 	return 0;
 }
 
-static int unuse_vma(struct vm_area_struct *vma, unsigned int type)
+static int unuse_vma(struct mm_area *vma, unsigned int type)
 {
 	pgd_t *pgd;
 	unsigned long addr, end, next;
@@ -2227,7 +2227,7 @@ static int unuse_vma(struct vm_area_struct *vma, unsigned int type)
 
 static int unuse_mm(struct mm_struct *mm, unsigned int type)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int ret = 0;
 	VMA_ITERATOR(vmi, mm, 0);
 

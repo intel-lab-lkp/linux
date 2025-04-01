@@ -280,7 +280,7 @@ void arch_free_page(struct page *page, int order);
 #define HAVE_ARCH_FREE_PAGE
 #endif
 
-struct vm_area_struct;
+struct mm_area;
 
 extern unsigned long kernstart_virt_addr;
 

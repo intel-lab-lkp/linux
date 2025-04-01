@@ -158,7 +158,7 @@ static inline pmd_t hash__pmd_mkhuge(pmd_t pmd)
 extern unsigned long hash__pmd_hugepage_update(struct mm_struct *mm,
 					   unsigned long addr, pmd_t *pmdp,
 					   unsigned long clr, unsigned long set);
-extern pmd_t hash__pmdp_collapse_flush(struct vm_area_struct *vma,
+extern pmd_t hash__pmdp_collapse_flush(struct mm_area *vma,
 				   unsigned long address, pmd_t *pmdp);
 extern void hash__pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 					 pgtable_t pgtable);

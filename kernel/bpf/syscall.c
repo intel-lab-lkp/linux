@@ -1030,7 +1030,7 @@ static ssize_t bpf_dummy_write(struct file *filp, const char __user *buf,
 }
 
 /* called for any extra memory-mapped regions (except initial) */
-static void bpf_map_mmap_open(struct vm_area_struct *vma)
+static void bpf_map_mmap_open(struct mm_area *vma)
 {
 	struct bpf_map *map = vma->vm_file->private_data;
 
@@ -1039,7 +1039,7 @@ static void bpf_map_mmap_open(struct vm_area_struct *vma)
 }
 
 /* called for all unmapped memory region (including initial) */
-static void bpf_map_mmap_close(struct vm_area_struct *vma)
+static void bpf_map_mmap_close(struct mm_area *vma)
 {
 	struct bpf_map *map = vma->vm_file->private_data;
 
@@ -1052,7 +1052,7 @@ static const struct vm_operations_struct bpf_map_default_vmops = {
 	.close		= bpf_map_mmap_close,
 };
 
-static int bpf_map_mmap(struct file *filp, struct vm_area_struct *vma)
+static int bpf_map_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct bpf_map *map = filp->private_data;
 	int err = 0;

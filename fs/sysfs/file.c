@@ -171,7 +171,7 @@ static ssize_t sysfs_kf_bin_write(struct kernfs_open_file *of, char *buf,
 }
 
 static int sysfs_kf_bin_mmap(struct kernfs_open_file *of,
-			     struct vm_area_struct *vma)
+			     struct mm_area *vma)
 {
 	struct bin_attribute *battr = of->kn->priv;
 	struct kobject *kobj = sysfs_file_kobj(of->kn);

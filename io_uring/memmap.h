@@ -12,7 +12,7 @@ unsigned int io_uring_nommu_mmap_capabilities(struct file *file);
 unsigned long io_uring_get_unmapped_area(struct file *file, unsigned long addr,
 					 unsigned long len, unsigned long pgoff,
 					 unsigned long flags);
-int io_uring_mmap(struct file *file, struct vm_area_struct *vma);
+int io_uring_mmap(struct file *file, struct mm_area *vma);
 
 void io_free_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr);
 int io_create_region(struct io_ring_ctx *ctx, struct io_mapped_region *mr,

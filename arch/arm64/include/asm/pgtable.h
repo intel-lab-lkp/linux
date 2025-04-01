@@ -1207,13 +1207,13 @@ static inline pmd_t pmd_modify(pmd_t pmd, pgprot_t newprot)
 	return pte_pmd(pte_modify(pmd_pte(pmd), newprot));
 }
 
-extern int __ptep_set_access_flags(struct vm_area_struct *vma,
+extern int __ptep_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pte_t *ptep,
 				 pte_t entry, int dirty);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
-static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
+static inline int pmdp_set_access_flags(struct mm_area *vma,
 					unsigned long address, pmd_t *pmdp,
 					pmd_t entry, int dirty)
 {
@@ -1252,7 +1252,7 @@ static inline bool pud_user_accessible_page(pud_t pud)
 /*
  * Atomic pte/pmd modifications.
  */
-static inline int __ptep_test_and_clear_young(struct vm_area_struct *vma,
+static inline int __ptep_test_and_clear_young(struct mm_area *vma,
 					      unsigned long address,
 					      pte_t *ptep)
 {
@@ -1269,7 +1269,7 @@ static inline int __ptep_test_and_clear_young(struct vm_area_struct *vma,
 	return pte_young(pte);
 }
 
-static inline int __ptep_clear_flush_young(struct vm_area_struct *vma,
+static inline int __ptep_clear_flush_young(struct mm_area *vma,
 					 unsigned long address, pte_t *ptep)
 {
 	int young = __ptep_test_and_clear_young(vma, address, ptep);
@@ -1291,7 +1291,7 @@ static inline int __ptep_clear_flush_young(struct vm_area_struct *vma,
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG)
 #define __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
-static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+static inline int pmdp_test_and_clear_young(struct mm_area *vma,
 					    unsigned long address,
 					    pmd_t *pmdp)
 {
@@ -1388,7 +1388,7 @@ static inline void __wrprotect_ptes(struct mm_struct *mm, unsigned long address,
 		__ptep_set_wrprotect(mm, address, ptep);
 }
 
-static inline void __clear_young_dirty_pte(struct vm_area_struct *vma,
+static inline void __clear_young_dirty_pte(struct mm_area *vma,
 					   unsigned long addr, pte_t *ptep,
 					   pte_t pte, cydp_t flags)
 {
@@ -1407,7 +1407,7 @@ static inline void __clear_young_dirty_pte(struct vm_area_struct *vma,
 	} while (pte_val(pte) != pte_val(old_pte));
 }
 
-static inline void __clear_young_dirty_ptes(struct vm_area_struct *vma,
+static inline void __clear_young_dirty_ptes(struct mm_area *vma,
 					    unsigned long addr, pte_t *ptep,
 					    unsigned int nr, cydp_t flags)
 {
@@ -1437,7 +1437,7 @@ static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 }
 
 #define pmdp_establish pmdp_establish
-static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
+static inline pmd_t pmdp_establish(struct mm_area *vma,
 		unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	page_table_check_pmd_set(vma->vm_mm, pmdp, pmd);
@@ -1506,7 +1506,7 @@ extern void arch_swap_restore(swp_entry_t entry, struct folio *folio);
  * On AArch64, the cache coherency is handled via the __set_ptes() function.
  */
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+		struct mm_area *vma, unsigned long addr, pte_t *ptep,
 		unsigned int nr)
 {
 	/*
@@ -1552,11 +1552,11 @@ static inline bool pud_sect_supported(void)
 
 #define __HAVE_ARCH_PTEP_MODIFY_PROT_TRANSACTION
 #define ptep_modify_prot_start ptep_modify_prot_start
-extern pte_t ptep_modify_prot_start(struct vm_area_struct *vma,
+extern pte_t ptep_modify_prot_start(struct mm_area *vma,
 				    unsigned long addr, pte_t *ptep);
 
 #define ptep_modify_prot_commit ptep_modify_prot_commit
-extern void ptep_modify_prot_commit(struct vm_area_struct *vma,
+extern void ptep_modify_prot_commit(struct mm_area *vma,
 				    unsigned long addr, pte_t *ptep,
 				    pte_t old_pte, pte_t new_pte);
 
@@ -1580,16 +1580,16 @@ extern void contpte_clear_full_ptes(struct mm_struct *mm, unsigned long addr,
 extern pte_t contpte_get_and_clear_full_ptes(struct mm_struct *mm,
 				unsigned long addr, pte_t *ptep,
 				unsigned int nr, int full);
-extern int contpte_ptep_test_and_clear_young(struct vm_area_struct *vma,
+extern int contpte_ptep_test_and_clear_young(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep);
-extern int contpte_ptep_clear_flush_young(struct vm_area_struct *vma,
+extern int contpte_ptep_clear_flush_young(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep);
 extern void contpte_wrprotect_ptes(struct mm_struct *mm, unsigned long addr,
 				pte_t *ptep, unsigned int nr);
-extern int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
+extern int contpte_ptep_set_access_flags(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep,
 				pte_t entry, int dirty);
-extern void contpte_clear_young_dirty_ptes(struct vm_area_struct *vma,
+extern void contpte_clear_young_dirty_ptes(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep,
 				unsigned int nr, cydp_t flags);
 
@@ -1747,7 +1747,7 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
+static inline int ptep_test_and_clear_young(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep)
 {
 	pte_t orig_pte = __ptep_get(ptep);
@@ -1759,7 +1759,7 @@ static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
+static inline int ptep_clear_flush_young(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep)
 {
 	pte_t orig_pte = __ptep_get(ptep);
@@ -1802,7 +1802,7 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-static inline int ptep_set_access_flags(struct vm_area_struct *vma,
+static inline int ptep_set_access_flags(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep,
 				pte_t entry, int dirty)
 {
@@ -1817,7 +1817,7 @@ static inline int ptep_set_access_flags(struct vm_area_struct *vma,
 }
 
 #define clear_young_dirty_ptes clear_young_dirty_ptes
-static inline void clear_young_dirty_ptes(struct vm_area_struct *vma,
+static inline void clear_young_dirty_ptes(struct mm_area *vma,
 					  unsigned long addr, pte_t *ptep,
 					  unsigned int nr, cydp_t flags)
 {

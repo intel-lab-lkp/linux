@@ -192,7 +192,7 @@ static int system_heap_dma_buf_end_cpu_access(struct dma_buf *dmabuf,
 	return 0;
 }
 
-static int system_heap_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
+static int system_heap_mmap(struct dma_buf *dmabuf, struct mm_area *vma)
 {
 	struct system_heap_buffer *buffer = dmabuf->priv;
 	struct sg_table *table = &buffer->sg_table;

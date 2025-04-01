@@ -26,7 +26,7 @@ ev5_flush_tlb_current(struct mm_struct *mm)
 
 __EXTERN_INLINE void
 ev5_flush_tlb_current_page(struct mm_struct * mm,
-			   struct vm_area_struct *vma,
+			   struct mm_area *vma,
 			   unsigned long addr)
 {
 	if (vma->vm_flags & VM_EXEC)
@@ -81,7 +81,7 @@ flush_tlb_mm(struct mm_struct *mm)
 
 /* Page-granular tlb flush.  */
 static inline void
-flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
+flush_tlb_page(struct mm_area *vma, unsigned long addr)
 {
 	struct mm_struct *mm = vma->vm_mm;
 
@@ -94,7 +94,7 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
 /* Flush a specified range of user mapping.  On the Alpha we flush
    the whole user tlb.  */
 static inline void
-flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+flush_tlb_range(struct mm_area *vma, unsigned long start,
 		unsigned long end)
 {
 	flush_tlb_mm(vma->vm_mm);
@@ -104,8 +104,8 @@ flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *);
-extern void flush_tlb_page(struct vm_area_struct *, unsigned long);
-extern void flush_tlb_range(struct vm_area_struct *, unsigned long,
+extern void flush_tlb_page(struct mm_area *, unsigned long);
+extern void flush_tlb_range(struct mm_area *, unsigned long,
 			    unsigned long);
 
 #endif /* CONFIG_SMP */

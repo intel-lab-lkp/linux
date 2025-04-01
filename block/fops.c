@@ -871,7 +871,7 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 	return error;
 }
 
-static int blkdev_mmap(struct file *file, struct vm_area_struct *vma)
+static int blkdev_mmap(struct file *file, struct mm_area *vma)
 {
 	struct inode *bd_inode = bdev_file_inode(file);
 

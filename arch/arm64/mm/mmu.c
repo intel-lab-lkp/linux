@@ -1504,7 +1504,7 @@ static int __init prevent_bootmem_remove_init(void)
 early_initcall(prevent_bootmem_remove_init);
 #endif
 
-pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
+pte_t ptep_modify_prot_start(struct mm_area *vma, unsigned long addr, pte_t *ptep)
 {
 	if (alternative_has_cap_unlikely(ARM64_WORKAROUND_2645198)) {
 		/*
@@ -1518,7 +1518,7 @@ pte_t ptep_modify_prot_start(struct vm_area_struct *vma, unsigned long addr, pte
 	return ptep_get_and_clear(vma->vm_mm, addr, ptep);
 }
 
-void ptep_modify_prot_commit(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep,
+void ptep_modify_prot_commit(struct mm_area *vma, unsigned long addr, pte_t *ptep,
 			     pte_t old_pte, pte_t pte)
 {
 	set_pte_at(vma->vm_mm, addr, ptep, pte);

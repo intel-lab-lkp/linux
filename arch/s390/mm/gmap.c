@@ -620,7 +620,7 @@ EXPORT_SYMBOL(__gmap_link);
  */
 void __gmap_zap(struct gmap *gmap, unsigned long gaddr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long vmaddr;
 	spinlock_t *ptl;
 	pte_t *ptep;
@@ -648,7 +648,7 @@ EXPORT_SYMBOL_GPL(__gmap_zap);
 void gmap_discard(struct gmap *gmap, unsigned long from, unsigned long to)
 {
 	unsigned long gaddr, vmaddr, size;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	mmap_read_lock(gmap->mm);
 	for (gaddr = from; gaddr < to;
@@ -2222,7 +2222,7 @@ EXPORT_SYMBOL_GPL(gmap_sync_dirty_log_pmd);
 static int thp_split_walk_pmd_entry(pmd_t *pmd, unsigned long addr,
 				    unsigned long end, struct mm_walk *walk)
 {
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 
 	split_huge_pmd(vma, pmd, addr);
 	return 0;
@@ -2235,7 +2235,7 @@ static const struct mm_walk_ops thp_split_walk_ops = {
 
 static inline void thp_split_mm(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	for_each_vma(vmi, vma) {
@@ -2312,7 +2312,7 @@ static const struct mm_walk_ops find_zeropage_ops = {
  */
 static int __s390_unshare_zeropages(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 	unsigned long addr;
 	vm_fault_t fault;

@@ -116,7 +116,7 @@ static inline uffd_flags_t uffd_flags_set_mode(uffd_flags_t flags, enum mfill_at
 #define MFILL_ATOMIC_WP MFILL_ATOMIC_FLAG(0)
 
 extern int mfill_atomic_install_pte(pmd_t *dst_pmd,
-				    struct vm_area_struct *dst_vma,
+				    struct mm_area *dst_vma,
 				    unsigned long dst_addr, struct page *page,
 				    bool newly_allocated, uffd_flags_t flags);
 
@@ -132,7 +132,7 @@ extern ssize_t mfill_atomic_poison(struct userfaultfd_ctx *ctx, unsigned long st
 				   unsigned long len, uffd_flags_t flags);
 extern int mwriteprotect_range(struct userfaultfd_ctx *ctx, unsigned long start,
 			       unsigned long len, bool enable_wp);
-extern long uffd_wp_range(struct vm_area_struct *vma,
+extern long uffd_wp_range(struct mm_area *vma,
 			  unsigned long start, unsigned long len, bool enable_wp);
 
 /* move_pages */
@@ -141,12 +141,12 @@ void double_pt_unlock(spinlock_t *ptl1, spinlock_t *ptl2);
 ssize_t move_pages(struct userfaultfd_ctx *ctx, unsigned long dst_start,
 		   unsigned long src_start, unsigned long len, __u64 flags);
 int move_pages_huge_pmd(struct mm_struct *mm, pmd_t *dst_pmd, pmd_t *src_pmd, pmd_t dst_pmdval,
-			struct vm_area_struct *dst_vma,
-			struct vm_area_struct *src_vma,
+			struct mm_area *dst_vma,
+			struct mm_area *src_vma,
 			unsigned long dst_addr, unsigned long src_addr);
 
 /* mm helpers */
-static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
+static inline bool is_mergeable_vm_userfaultfd_ctx(struct mm_area *vma,
 					struct vm_userfaultfd_ctx vm_ctx)
 {
 	return vma->vm_userfaultfd_ctx.ctx == vm_ctx.ctx;
@@ -163,7 +163,7 @@ static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
  *   with huge pmd sharing this would *also* setup the second UFFD-registered
  *   mapping, and we'd not get minor faults.)
  */
-static inline bool uffd_disable_huge_pmd_share(struct vm_area_struct *vma)
+static inline bool uffd_disable_huge_pmd_share(struct mm_area *vma)
 {
 	return vma->vm_flags & (VM_UFFD_WP | VM_UFFD_MINOR);
 }
@@ -175,44 +175,44 @@ static inline bool uffd_disable_huge_pmd_share(struct vm_area_struct *vma)
  * as the fault around checks for pte_none() before the installation, however
  * to be super safe we just forbid it.
  */
-static inline bool uffd_disable_fault_around(struct vm_area_struct *vma)
+static inline bool uffd_disable_fault_around(struct mm_area *vma)
 {
 	return vma->vm_flags & (VM_UFFD_WP | VM_UFFD_MINOR);
 }
 
-static inline bool userfaultfd_missing(struct vm_area_struct *vma)
+static inline bool userfaultfd_missing(struct mm_area *vma)
 {
 	return vma->vm_flags & VM_UFFD_MISSING;
 }
 
-static inline bool userfaultfd_wp(struct vm_area_struct *vma)
+static inline bool userfaultfd_wp(struct mm_area *vma)
 {
 	return vma->vm_flags & VM_UFFD_WP;
 }
 
-static inline bool userfaultfd_minor(struct vm_area_struct *vma)
+static inline bool userfaultfd_minor(struct mm_area *vma)
 {
 	return vma->vm_flags & VM_UFFD_MINOR;
 }
 
-static inline bool userfaultfd_pte_wp(struct vm_area_struct *vma,
+static inline bool userfaultfd_pte_wp(struct mm_area *vma,
 				      pte_t pte)
 {
 	return userfaultfd_wp(vma) && pte_uffd_wp(pte);
 }
 
-static inline bool userfaultfd_huge_pmd_wp(struct vm_area_struct *vma,
+static inline bool userfaultfd_huge_pmd_wp(struct mm_area *vma,
 					   pmd_t pmd)
 {
 	return userfaultfd_wp(vma) && pmd_uffd_wp(pmd);
 }
 
-static inline bool userfaultfd_armed(struct vm_area_struct *vma)
+static inline bool userfaultfd_armed(struct mm_area *vma)
 {
 	return vma->vm_flags & __VM_UFFD_FLAGS;
 }
 
-static inline bool vma_can_userfault(struct vm_area_struct *vma,
+static inline bool vma_can_userfault(struct mm_area *vma,
 				     unsigned long vm_flags,
 				     bool wp_async)
 {
@@ -247,44 +247,44 @@ static inline bool vma_can_userfault(struct vm_area_struct *vma,
 	    vma_is_shmem(vma);
 }
 
-static inline bool vma_has_uffd_without_event_remap(struct vm_area_struct *vma)
+static inline bool vma_has_uffd_without_event_remap(struct mm_area *vma)
 {
 	struct userfaultfd_ctx *uffd_ctx = vma->vm_userfaultfd_ctx.ctx;
 
 	return uffd_ctx && (uffd_ctx->features & UFFD_FEATURE_EVENT_REMAP) == 0;
 }
 
-extern int dup_userfaultfd(struct vm_area_struct *, struct list_head *);
+extern int dup_userfaultfd(struct mm_area *, struct list_head *);
 extern void dup_userfaultfd_complete(struct list_head *);
 void dup_userfaultfd_fail(struct list_head *);
 
-extern void mremap_userfaultfd_prep(struct vm_area_struct *,
+extern void mremap_userfaultfd_prep(struct mm_area *,
 				    struct vm_userfaultfd_ctx *);
 extern void mremap_userfaultfd_complete(struct vm_userfaultfd_ctx *,
 					unsigned long from, unsigned long to,
 					unsigned long len);
 
-extern bool userfaultfd_remove(struct vm_area_struct *vma,
+extern bool userfaultfd_remove(struct mm_area *vma,
 			       unsigned long start,
 			       unsigned long end);
 
-extern int userfaultfd_unmap_prep(struct vm_area_struct *vma,
+extern int userfaultfd_unmap_prep(struct mm_area *vma,
 		unsigned long start, unsigned long end, struct list_head *uf);
 extern void userfaultfd_unmap_complete(struct mm_struct *mm,
 				       struct list_head *uf);
-extern bool userfaultfd_wp_unpopulated(struct vm_area_struct *vma);
-extern bool userfaultfd_wp_async(struct vm_area_struct *vma);
+extern bool userfaultfd_wp_unpopulated(struct mm_area *vma);
+extern bool userfaultfd_wp_async(struct mm_area *vma);
 
-void userfaultfd_reset_ctx(struct vm_area_struct *vma);
+void userfaultfd_reset_ctx(struct mm_area *vma);
 
-struct vm_area_struct *userfaultfd_clear_vma(struct vma_iterator *vmi,
-					     struct vm_area_struct *prev,
-					     struct vm_area_struct *vma,
+struct mm_area *userfaultfd_clear_vma(struct vma_iterator *vmi,
+					     struct mm_area *prev,
+					     struct mm_area *vma,
 					     unsigned long start,
 					     unsigned long end);
 
 int userfaultfd_register_range(struct userfaultfd_ctx *ctx,
-			       struct vm_area_struct *vma,
+			       struct mm_area *vma,
 			       unsigned long vm_flags,
 			       unsigned long start, unsigned long end,
 			       bool wp_async);
@@ -303,53 +303,53 @@ static inline vm_fault_t handle_userfault(struct vm_fault *vmf,
 	return VM_FAULT_SIGBUS;
 }
 
-static inline long uffd_wp_range(struct vm_area_struct *vma,
+static inline long uffd_wp_range(struct mm_area *vma,
 				 unsigned long start, unsigned long len,
 				 bool enable_wp)
 {
 	return false;
 }
 
-static inline bool is_mergeable_vm_userfaultfd_ctx(struct vm_area_struct *vma,
+static inline bool is_mergeable_vm_userfaultfd_ctx(struct mm_area *vma,
 					struct vm_userfaultfd_ctx vm_ctx)
 {
 	return true;
 }
 
-static inline bool userfaultfd_missing(struct vm_area_struct *vma)
+static inline bool userfaultfd_missing(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline bool userfaultfd_wp(struct vm_area_struct *vma)
+static inline bool userfaultfd_wp(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline bool userfaultfd_minor(struct vm_area_struct *vma)
+static inline bool userfaultfd_minor(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline bool userfaultfd_pte_wp(struct vm_area_struct *vma,
+static inline bool userfaultfd_pte_wp(struct mm_area *vma,
 				      pte_t pte)
 {
 	return false;
 }
 
-static inline bool userfaultfd_huge_pmd_wp(struct vm_area_struct *vma,
+static inline bool userfaultfd_huge_pmd_wp(struct mm_area *vma,
 					   pmd_t pmd)
 {
 	return false;
 }
 
 
-static inline bool userfaultfd_armed(struct vm_area_struct *vma)
+static inline bool userfaultfd_armed(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline int dup_userfaultfd(struct vm_area_struct *vma,
+static inline int dup_userfaultfd(struct mm_area *vma,
 				  struct list_head *l)
 {
 	return 0;
@@ -363,7 +363,7 @@ static inline void dup_userfaultfd_fail(struct list_head *l)
 {
 }
 
-static inline void mremap_userfaultfd_prep(struct vm_area_struct *vma,
+static inline void mremap_userfaultfd_prep(struct mm_area *vma,
 					   struct vm_userfaultfd_ctx *ctx)
 {
 }
@@ -375,14 +375,14 @@ static inline void mremap_userfaultfd_complete(struct vm_userfaultfd_ctx *ctx,
 {
 }
 
-static inline bool userfaultfd_remove(struct vm_area_struct *vma,
+static inline bool userfaultfd_remove(struct mm_area *vma,
 				      unsigned long start,
 				      unsigned long end)
 {
 	return true;
 }
 
-static inline int userfaultfd_unmap_prep(struct vm_area_struct *vma,
+static inline int userfaultfd_unmap_prep(struct mm_area *vma,
 					 unsigned long start, unsigned long end,
 					 struct list_head *uf)
 {
@@ -394,29 +394,29 @@ static inline void userfaultfd_unmap_complete(struct mm_struct *mm,
 {
 }
 
-static inline bool uffd_disable_fault_around(struct vm_area_struct *vma)
+static inline bool uffd_disable_fault_around(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline bool userfaultfd_wp_unpopulated(struct vm_area_struct *vma)
+static inline bool userfaultfd_wp_unpopulated(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline bool userfaultfd_wp_async(struct vm_area_struct *vma)
+static inline bool userfaultfd_wp_async(struct mm_area *vma)
 {
 	return false;
 }
 
-static inline bool vma_has_uffd_without_event_remap(struct vm_area_struct *vma)
+static inline bool vma_has_uffd_without_event_remap(struct mm_area *vma)
 {
 	return false;
 }
 
 #endif /* CONFIG_USERFAULTFD */
 
-static inline bool userfaultfd_wp_use_markers(struct vm_area_struct *vma)
+static inline bool userfaultfd_wp_use_markers(struct mm_area *vma)
 {
 	/* Only wr-protect mode uses pte markers */
 	if (!userfaultfd_wp(vma))

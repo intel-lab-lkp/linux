@@ -23,7 +23,7 @@
 #include <linux/spinlock.h>
 
 struct mm_struct;
-struct vm_area_struct;
+struct mm_area;
 
 extern pgd_t swapper_pg_dir[1024];
 extern pgd_t initial_page_table[1024];

@@ -433,7 +433,7 @@ int ttm_bo_kmap(struct ttm_buffer_object *bo, unsigned long start_page,
 void ttm_bo_kunmap(struct ttm_bo_kmap_obj *map);
 int ttm_bo_vmap(struct ttm_buffer_object *bo, struct iosys_map *map);
 void ttm_bo_vunmap(struct ttm_buffer_object *bo, struct iosys_map *map);
-int ttm_bo_mmap_obj(struct vm_area_struct *vma, struct ttm_buffer_object *bo);
+int ttm_bo_mmap_obj(struct mm_area *vma, struct ttm_buffer_object *bo);
 s64 ttm_bo_swapout(struct ttm_device *bdev, struct ttm_operation_ctx *ctx,
 		   struct ttm_resource_manager *man, gfp_t gfp_flags,
 		   s64 target);
@@ -450,9 +450,9 @@ vm_fault_t ttm_bo_vm_fault_reserved(struct vm_fault *vmf,
 				    pgprot_t prot,
 				    pgoff_t num_prefault);
 vm_fault_t ttm_bo_vm_fault(struct vm_fault *vmf);
-void ttm_bo_vm_open(struct vm_area_struct *vma);
-void ttm_bo_vm_close(struct vm_area_struct *vma);
-int ttm_bo_vm_access(struct vm_area_struct *vma, unsigned long addr,
+void ttm_bo_vm_open(struct mm_area *vma);
+void ttm_bo_vm_close(struct mm_area *vma);
+int ttm_bo_vm_access(struct mm_area *vma, unsigned long addr,
 		     void *buf, int len, int write);
 vm_fault_t ttm_bo_vm_dummy_page(struct vm_fault *vmf, pgprot_t prot);
 

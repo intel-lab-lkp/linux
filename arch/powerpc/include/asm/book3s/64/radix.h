@@ -143,11 +143,11 @@ extern void radix__mark_rodata_ro(void);
 extern void radix__mark_initmem_nx(void);
 #endif
 
-extern void radix__ptep_set_access_flags(struct vm_area_struct *vma, pte_t *ptep,
+extern void radix__ptep_set_access_flags(struct mm_area *vma, pte_t *ptep,
 					 pte_t entry, unsigned long address,
 					 int psize);
 
-extern void radix__ptep_modify_prot_commit(struct vm_area_struct *vma,
+extern void radix__ptep_modify_prot_commit(struct mm_area *vma,
 					   unsigned long addr, pte_t *ptep,
 					   pte_t old_pte, pte_t pte);
 
@@ -288,7 +288,7 @@ extern unsigned long radix__pmd_hugepage_update(struct mm_struct *mm, unsigned l
 extern unsigned long radix__pud_hugepage_update(struct mm_struct *mm, unsigned long addr,
 						pud_t *pudp, unsigned long clr,
 						unsigned long set);
-extern pmd_t radix__pmdp_collapse_flush(struct vm_area_struct *vma,
+extern pmd_t radix__pmdp_collapse_flush(struct mm_area *vma,
 				  unsigned long address, pmd_t *pmdp);
 extern void radix__pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 					pgtable_t pgtable);

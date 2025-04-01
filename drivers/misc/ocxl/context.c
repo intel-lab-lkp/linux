@@ -95,7 +95,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(ocxl_context_attach);
 
-static vm_fault_t map_afu_irq(struct vm_area_struct *vma, unsigned long address,
+static vm_fault_t map_afu_irq(struct mm_area *vma, unsigned long address,
 		u64 offset, struct ocxl_context *ctx)
 {
 	u64 trigger_addr;
@@ -108,7 +108,7 @@ static vm_fault_t map_afu_irq(struct vm_area_struct *vma, unsigned long address,
 	return vmf_insert_pfn(vma, address, trigger_addr >> PAGE_SHIFT);
 }
 
-static vm_fault_t map_pp_mmio(struct vm_area_struct *vma, unsigned long address,
+static vm_fault_t map_pp_mmio(struct mm_area *vma, unsigned long address,
 		u64 offset, struct ocxl_context *ctx)
 {
 	u64 pp_mmio_addr;
@@ -138,7 +138,7 @@ static vm_fault_t map_pp_mmio(struct vm_area_struct *vma, unsigned long address,
 
 static vm_fault_t ocxl_mmap_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct ocxl_context *ctx = vma->vm_file->private_data;
 	u64 offset;
 	vm_fault_t ret;
@@ -159,7 +159,7 @@ static const struct vm_operations_struct ocxl_vmops = {
 };
 
 static int check_mmap_afu_irq(struct ocxl_context *ctx,
-			struct vm_area_struct *vma)
+			struct mm_area *vma)
 {
 	int irq_id = ocxl_irq_offset_to_id(ctx, vma->vm_pgoff << PAGE_SHIFT);
 
@@ -185,7 +185,7 @@ static int check_mmap_afu_irq(struct ocxl_context *ctx,
 }
 
 static int check_mmap_mmio(struct ocxl_context *ctx,
-			struct vm_area_struct *vma)
+			struct mm_area *vma)
 {
 	if ((vma_pages(vma) + vma->vm_pgoff) >
 		(ctx->afu->config.pp_mmio_stride >> PAGE_SHIFT))
@@ -193,7 +193,7 @@ static int check_mmap_mmio(struct ocxl_context *ctx,
 	return 0;
 }
 
-int ocxl_context_mmap(struct ocxl_context *ctx, struct vm_area_struct *vma)
+int ocxl_context_mmap(struct ocxl_context *ctx, struct mm_area *vma)
 {
 	int rc;
 

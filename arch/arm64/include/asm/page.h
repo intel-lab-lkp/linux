@@ -17,19 +17,19 @@
 #include <asm/pgtable-types.h>
 
 struct page;
-struct vm_area_struct;
+struct mm_area;
 
 extern void copy_page(void *to, const void *from);
 extern void clear_page(void *to);
 
 void copy_user_highpage(struct page *to, struct page *from,
-			unsigned long vaddr, struct vm_area_struct *vma);
+			unsigned long vaddr, struct mm_area *vma);
 #define __HAVE_ARCH_COPY_USER_HIGHPAGE
 
 void copy_highpage(struct page *to, struct page *from);
 #define __HAVE_ARCH_COPY_HIGHPAGE
 
-struct folio *vma_alloc_zeroed_movable_folio(struct vm_area_struct *vma,
+struct folio *vma_alloc_zeroed_movable_folio(struct mm_area *vma,
 						unsigned long vaddr);
 #define vma_alloc_zeroed_movable_folio vma_alloc_zeroed_movable_folio
 

@@ -469,7 +469,7 @@ pxa3xx_gcu_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 
 static int
-pxa3xx_gcu_mmap(struct file *file, struct vm_area_struct *vma)
+pxa3xx_gcu_mmap(struct file *file, struct mm_area *vma)
 {
 	unsigned int size = vma->vm_end - vma->vm_start;
 	struct pxa3xx_gcu_priv *priv = to_pxa3xx_gcu_priv(file);

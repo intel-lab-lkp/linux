@@ -104,7 +104,7 @@ void kfd_doorbell_fini(struct kfd_dev *kfd)
 }
 
 int kfd_doorbell_mmap(struct kfd_node *dev, struct kfd_process *process,
-		      struct vm_area_struct *vma)
+		      struct mm_area *vma)
 {
 	phys_addr_t address;
 	struct kfd_process_device *pdd;

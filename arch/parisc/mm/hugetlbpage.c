@@ -23,7 +23,7 @@
 
 
 
-pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
+pte_t *huge_pte_alloc(struct mm_struct *mm, struct mm_area *vma,
 			unsigned long addr, unsigned long sz)
 {
 	pgd_t *pgd;
@@ -146,7 +146,7 @@ void huge_ptep_set_wrprotect(struct mm_struct *mm,
 	__set_huge_pte_at(mm, addr, ptep, pte_wrprotect(old_pte));
 }
 
-int huge_ptep_set_access_flags(struct vm_area_struct *vma,
+int huge_ptep_set_access_flags(struct mm_area *vma,
 				unsigned long addr, pte_t *ptep,
 				pte_t pte, int dirty)
 {

@@ -26,7 +26,7 @@
  *
  *	- start - start address (may not be aligned)
  *	- end   - end address (exclusive, may not be aligned)
- *	- vma   - vm_area_struct describing address range
+ *	- vma   - mm_area describing address range
  *
  *	It is assumed that:
  *	- the "Invalidate single entry" instruction will invalidate

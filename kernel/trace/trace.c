@@ -8481,7 +8481,7 @@ static inline int get_snapshot_map(struct trace_array *tr) { return 0; }
 static inline void put_snapshot_map(struct trace_array *tr) { }
 #endif
 
-static void tracing_buffers_mmap_close(struct vm_area_struct *vma)
+static void tracing_buffers_mmap_close(struct mm_area *vma)
 {
 	struct ftrace_buffer_info *info = vma->vm_file->private_data;
 	struct trace_iterator *iter = &info->iter;
@@ -8494,7 +8494,7 @@ static const struct vm_operations_struct tracing_buffers_vmops = {
 	.close		= tracing_buffers_mmap_close,
 };
 
-static int tracing_buffers_mmap(struct file *filp, struct vm_area_struct *vma)
+static int tracing_buffers_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct ftrace_buffer_info *info = filp->private_data;
 	struct trace_iterator *iter = &info->iter;

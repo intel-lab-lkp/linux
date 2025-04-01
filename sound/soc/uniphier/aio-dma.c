@@ -193,7 +193,7 @@ static snd_pcm_uframes_t uniphier_aiodma_pointer(
 
 static int uniphier_aiodma_mmap(struct snd_soc_component *component,
 				struct snd_pcm_substream *substream,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 

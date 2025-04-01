@@ -124,7 +124,7 @@ void dmam_free_coherent(struct device *dev, size_t size, void *vaddr,
 int dma_get_sgtable_attrs(struct device *dev, struct sg_table *sgt,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
-int dma_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_attrs(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs);
 bool dma_can_mmap(struct device *dev);
@@ -143,7 +143,7 @@ void dma_free_noncontiguous(struct device *dev, size_t size,
 void *dma_vmap_noncontiguous(struct device *dev, size_t size,
 		struct sg_table *sgt);
 void dma_vunmap_noncontiguous(struct device *dev, void *vaddr);
-int dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_noncontiguous(struct device *dev, struct mm_area *vma,
 		size_t size, struct sg_table *sgt);
 #else /* CONFIG_HAS_DMA */
 static inline dma_addr_t dma_map_page_attrs(struct device *dev,
@@ -210,7 +210,7 @@ static inline int dma_get_sgtable_attrs(struct device *dev,
 {
 	return -ENXIO;
 }
-static inline int dma_mmap_attrs(struct device *dev, struct vm_area_struct *vma,
+static inline int dma_mmap_attrs(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs)
 {
@@ -271,7 +271,7 @@ static inline void dma_vunmap_noncontiguous(struct device *dev, void *vaddr)
 {
 }
 static inline int dma_mmap_noncontiguous(struct device *dev,
-		struct vm_area_struct *vma, size_t size, struct sg_table *sgt)
+		struct mm_area *vma, size_t size, struct sg_table *sgt)
 {
 	return -EINVAL;
 }
@@ -357,7 +357,7 @@ struct page *dma_alloc_pages(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp);
 void dma_free_pages(struct device *dev, size_t size, struct page *page,
 		dma_addr_t dma_handle, enum dma_data_direction dir);
-int dma_mmap_pages(struct device *dev, struct vm_area_struct *vma,
+int dma_mmap_pages(struct device *dev, struct mm_area *vma,
 		size_t size, struct page *page);
 
 static inline void *dma_alloc_noncoherent(struct device *dev, size_t size,
@@ -611,7 +611,7 @@ static inline void dma_free_wc(struct device *dev, size_t size,
 }
 
 static inline int dma_mmap_wc(struct device *dev,
-			      struct vm_area_struct *vma,
+			      struct mm_area *vma,
 			      void *cpu_addr, dma_addr_t dma_addr,
 			      size_t size)
 {

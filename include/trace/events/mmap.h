@@ -69,13 +69,13 @@ TRACE_EVENT(vma_mas_szero,
 );
 
 TRACE_EVENT(vma_store,
-	TP_PROTO(struct maple_tree *mt, struct vm_area_struct *vma),
+	TP_PROTO(struct maple_tree *mt, struct mm_area *vma),
 
 	TP_ARGS(mt, vma),
 
 	TP_STRUCT__entry(
 			__field(struct maple_tree *, mt)
-			__field(struct vm_area_struct *, vma)
+			__field(struct mm_area *, vma)
 			__field(unsigned long, vm_start)
 			__field(unsigned long, vm_end)
 	),

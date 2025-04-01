@@ -198,7 +198,7 @@ __bpf_kfunc void bpf_kfunc_nested_release_test(struct sk_buff *ptr)
 {
 }
 
-__bpf_kfunc void bpf_kfunc_trusted_vma_test(struct vm_area_struct *ptr)
+__bpf_kfunc void bpf_kfunc_trusted_vma_test(struct mm_area *ptr)
 {
 }
 

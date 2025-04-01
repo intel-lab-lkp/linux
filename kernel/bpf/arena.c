@@ -220,12 +220,12 @@ static u64 arena_map_mem_usage(const struct bpf_map *map)
 }
 
 struct vma_list {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct list_head head;
 	refcount_t mmap_count;
 };
 
-static int remember_vma(struct bpf_arena *arena, struct vm_area_struct *vma)
+static int remember_vma(struct bpf_arena *arena, struct mm_area *vma)
 {
 	struct vma_list *vml;
 
@@ -239,14 +239,14 @@ static int remember_vma(struct bpf_arena *arena, struct vm_area_struct *vma)
 	return 0;
 }
 
-static void arena_vm_open(struct vm_area_struct *vma)
+static void arena_vm_open(struct mm_area *vma)
 {
 	struct vma_list *vml = vma->vm_private_data;
 
 	refcount_inc(&vml->mmap_count);
 }
 
-static void arena_vm_close(struct vm_area_struct *vma)
+static void arena_vm_close(struct mm_area *vma)
 {
 	struct bpf_map *map = vma->vm_file->private_data;
 	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
@@ -345,7 +345,7 @@ static unsigned long arena_get_unmapped_area(struct file *filp, unsigned long ad
 	return round_up(ret, SZ_4G);
 }
 
-static int arena_map_mmap(struct bpf_map *map, struct vm_area_struct *vma)
+static int arena_map_mmap(struct bpf_map *map, struct mm_area *vma)
 {
 	struct bpf_arena *arena = container_of(map, struct bpf_arena, map);
 

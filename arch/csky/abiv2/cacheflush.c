@@ -7,7 +7,7 @@
 #include <asm/cache.h>
 #include <asm/tlbflush.h>
 
-void update_mmu_cache_range(struct vm_fault *vmf, struct vm_area_struct *vma,
+void update_mmu_cache_range(struct vm_fault *vmf, struct mm_area *vma,
 		unsigned long address, pte_t *pte, unsigned int nr)
 {
 	unsigned long pfn = pte_pfn(*pte);

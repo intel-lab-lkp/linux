@@ -348,7 +348,7 @@ static void xen_set_pte(pte_t *ptep, pte_t pteval)
 	__xen_set_pte(ptep, pteval);
 }
 
-static pte_t xen_ptep_modify_prot_start(struct vm_area_struct *vma,
+static pte_t xen_ptep_modify_prot_start(struct mm_area *vma,
 					unsigned long addr, pte_t *ptep)
 {
 	/* Just return the pte as-is.  We preserve the bits on commit */
@@ -356,7 +356,7 @@ static pte_t xen_ptep_modify_prot_start(struct vm_area_struct *vma,
 	return *ptep;
 }
 
-static void xen_ptep_modify_prot_commit(struct vm_area_struct *vma,
+static void xen_ptep_modify_prot_commit(struct mm_area *vma,
 					unsigned long addr,
 					pte_t *ptep, pte_t pte)
 {
@@ -2494,7 +2494,7 @@ static int remap_area_pfn_pte_fn(pte_t *ptep, unsigned long addr, void *data)
 	return 0;
 }
 
-int xen_remap_pfn(struct vm_area_struct *vma, unsigned long addr,
+int xen_remap_pfn(struct mm_area *vma, unsigned long addr,
 		  xen_pfn_t *pfn, int nr, int *err_ptr, pgprot_t prot,
 		  unsigned int domid, bool no_translate)
 {

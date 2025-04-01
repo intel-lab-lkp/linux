@@ -338,7 +338,7 @@ static int radeon_ttm_tt_pin_userptr(struct ttm_device *bdev, struct ttm_tt *ttm
 		/* check that we only pin down anonymous memory
 		   to prevent problems with writeback */
 		unsigned long end = gtt->userptr + (u64)ttm->num_pages * PAGE_SIZE;
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		vma = find_vma(gtt->usermm, gtt->userptr);
 		if (!vma || vma->vm_file || vma->vm_end < end)
 			return -EPERM;

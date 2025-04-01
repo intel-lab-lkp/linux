@@ -204,7 +204,7 @@ static inline void flush_cache_mm(struct mm_struct *mm)
 
 /* flush_cache_range/flush_cache_page must be macros to avoid
    a dependency on linux/mm.h, which includes this file... */
-static inline void flush_cache_range(struct vm_area_struct *vma,
+static inline void flush_cache_range(struct mm_area *vma,
 				     unsigned long start,
 				     unsigned long end)
 {
@@ -212,7 +212,7 @@ static inline void flush_cache_range(struct vm_area_struct *vma,
 	        __flush_cache_030();
 }
 
-static inline void flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr, unsigned long pfn)
+static inline void flush_cache_page(struct mm_area *vma, unsigned long vmaddr, unsigned long pfn)
 {
 	if (vma->vm_mm == current->mm)
 	        __flush_cache_030();
@@ -263,13 +263,13 @@ static inline void __flush_pages_to_ram(void *vaddr, unsigned int nr)
 #define flush_icache_pages(vma, page, nr)	\
 	__flush_pages_to_ram(page_address(page), nr)
 
-extern void flush_icache_user_page(struct vm_area_struct *vma, struct page *page,
+extern void flush_icache_user_page(struct mm_area *vma, struct page *page,
 				    unsigned long addr, int len);
 extern void flush_icache_range(unsigned long address, unsigned long endaddr);
 extern void flush_icache_user_range(unsigned long address,
 		unsigned long endaddr);
 
-static inline void copy_to_user_page(struct vm_area_struct *vma,
+static inline void copy_to_user_page(struct mm_area *vma,
 				     struct page *page, unsigned long vaddr,
 				     void *dst, void *src, int len)
 {
@@ -277,7 +277,7 @@ static inline void copy_to_user_page(struct vm_area_struct *vma,
 	memcpy(dst, src, len);
 	flush_icache_user_page(vma, page, vaddr, len);
 }
-static inline void copy_from_user_page(struct vm_area_struct *vma,
+static inline void copy_from_user_page(struct mm_area *vma,
 				       struct page *page, unsigned long vaddr,
 				       void *dst, void *src, int len)
 {

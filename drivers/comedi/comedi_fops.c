@@ -2282,7 +2282,7 @@ done:
 	return rc;
 }
 
-static void comedi_vm_open(struct vm_area_struct *area)
+static void comedi_vm_open(struct mm_area *area)
 {
 	struct comedi_buf_map *bm;
 
@@ -2290,7 +2290,7 @@ static void comedi_vm_open(struct vm_area_struct *area)
 	comedi_buf_map_get(bm);
 }
 
-static void comedi_vm_close(struct vm_area_struct *area)
+static void comedi_vm_close(struct mm_area *area)
 {
 	struct comedi_buf_map *bm;
 
@@ -2298,7 +2298,7 @@ static void comedi_vm_close(struct vm_area_struct *area)
 	comedi_buf_map_put(bm);
 }
 
-static int comedi_vm_access(struct vm_area_struct *vma, unsigned long addr,
+static int comedi_vm_access(struct mm_area *vma, unsigned long addr,
 			    void *buf, int len, int write)
 {
 	struct comedi_buf_map *bm = vma->vm_private_data;
@@ -2318,7 +2318,7 @@ static const struct vm_operations_struct comedi_vm_ops = {
 	.access = comedi_vm_access,
 };
 
-static int comedi_mmap(struct file *file, struct vm_area_struct *vma)
+static int comedi_mmap(struct file *file, struct mm_area *vma)
 {
 	struct comedi_file *cfp = file->private_data;
 	struct comedi_device *dev = cfp->dev;

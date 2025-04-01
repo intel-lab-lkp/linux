@@ -15,7 +15,7 @@
 #include "mtk_drm_drv.h"
 #include "mtk_gem.h"
 
-static int mtk_gem_object_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
+static int mtk_gem_object_mmap(struct drm_gem_object *obj, struct mm_area *vma);
 
 static const struct vm_operations_struct vm_ops = {
 	.open = drm_gem_vm_open,
@@ -157,7 +157,7 @@ err_handle_create:
 }
 
 static int mtk_gem_object_mmap(struct drm_gem_object *obj,
-			       struct vm_area_struct *vma)
+			       struct mm_area *vma)
 
 {
 	int ret;

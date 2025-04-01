@@ -700,7 +700,7 @@ int amdgpu_ttm_tt_get_user_pages(struct amdgpu_bo *bo, struct page **pages,
 	struct ttm_tt *ttm = bo->tbo.ttm;
 	struct amdgpu_ttm_tt *gtt = ttm_to_amdgpu_ttm_tt(ttm);
 	unsigned long start = gtt->userptr;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm;
 	bool readonly;
 	int r = 0;

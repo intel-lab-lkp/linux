@@ -1043,7 +1043,7 @@ static inline pgoff_t folio_pgoff(struct folio *folio)
 	return folio->index;
 }
 
-static inline pgoff_t linear_page_index(struct vm_area_struct *vma,
+static inline pgoff_t linear_page_index(struct mm_area *vma,
 					unsigned long address)
 {
 	pgoff_t pgoff;

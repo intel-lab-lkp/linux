@@ -2099,7 +2099,7 @@ static void hash_preload(struct mm_struct *mm, pte_t *ptep, unsigned long ea,
  *
  * This must always be called with the pte lock held.
  */
-void __update_mmu_cache(struct vm_area_struct *vma, unsigned long address,
+void __update_mmu_cache(struct mm_area *vma, unsigned long address,
 		      pte_t *ptep)
 {
 	/*

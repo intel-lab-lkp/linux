@@ -99,7 +99,7 @@ enum pci_mmap_api {
 	PCI_MMAP_SYSFS,	/* mmap on /sys/bus/pci/devices/<BDF>/resource<N> */
 	PCI_MMAP_PROCFS	/* mmap on /proc/bus/pci/<BDF> */
 };
-int pci_mmap_fits(struct pci_dev *pdev, int resno, struct vm_area_struct *vmai,
+int pci_mmap_fits(struct pci_dev *pdev, int resno, struct mm_area *vmai,
 		  enum pci_mmap_api mmap_api);
 
 bool pci_reset_supported(struct pci_dev *dev);

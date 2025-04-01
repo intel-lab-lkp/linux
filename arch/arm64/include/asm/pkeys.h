@@ -20,12 +20,12 @@ static inline bool arch_pkeys_enabled(void)
 	return system_supports_poe();
 }
 
-static inline int vma_pkey(struct vm_area_struct *vma)
+static inline int vma_pkey(struct mm_area *vma)
 {
 	return (vma->vm_flags & ARCH_VM_PKEY_FLAGS) >> VM_PKEY_SHIFT;
 }
 
-static inline int arch_override_mprotect_pkey(struct vm_area_struct *vma,
+static inline int arch_override_mprotect_pkey(struct mm_area *vma,
 		int prot, int pkey)
 {
 	if (pkey != -1)

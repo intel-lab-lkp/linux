@@ -24,7 +24,7 @@
 #include <asm/mmu_context.h>
 #include <asm/cacheflush.h>
 
-void __update_tlb(struct vm_area_struct *vma, unsigned long address, pte_t pte)
+void __update_tlb(struct mm_area *vma, unsigned long address, pte_t pte)
 {
 	unsigned long flags, pteval, vpn;
 

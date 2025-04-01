@@ -35,7 +35,7 @@ extern char vdso_start[], vdso_end[];
 unsigned int vdso_total_pages __ro_after_init;
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
-		struct vm_area_struct *new_vma)
+		struct mm_area *new_vma)
 {
 	current->mm->context.vdso = new_vma->vm_start;
 
@@ -210,7 +210,7 @@ static_assert(__VDSO_PAGES == VDSO_NR_PAGES);
 /* assumes mmap_lock is write-locked */
 void arm_install_vdso(struct mm_struct *mm, unsigned long addr)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long len;
 
 	mm->context.vdso = 0;

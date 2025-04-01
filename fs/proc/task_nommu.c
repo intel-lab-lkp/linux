@@ -21,7 +21,7 @@
 void task_mem(struct seq_file *m, struct mm_struct *mm)
 {
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct vm_region *region;
 	unsigned long bytes = 0, sbytes = 0, slack = 0, size;
 
@@ -81,7 +81,7 @@ void task_mem(struct seq_file *m, struct mm_struct *mm)
 unsigned long task_vsize(struct mm_struct *mm)
 {
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long vsize = 0;
 
 	mmap_read_lock(mm);
@@ -96,7 +96,7 @@ unsigned long task_statm(struct mm_struct *mm,
 			 unsigned long *data, unsigned long *resident)
 {
 	VMA_ITERATOR(vmi, mm, 0);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct vm_region *region;
 	unsigned long size = kobjsize(mm);
 
@@ -124,7 +124,7 @@ unsigned long task_statm(struct mm_struct *mm,
 /*
  * display a single VMA to a sequenced file
  */
-static int nommu_vma_show(struct seq_file *m, struct vm_area_struct *vma)
+static int nommu_vma_show(struct seq_file *m, struct mm_area *vma)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	unsigned long ino = 0;
@@ -175,10 +175,10 @@ static int show_map(struct seq_file *m, void *_p)
 	return nommu_vma_show(m, _p);
 }
 
-static struct vm_area_struct *proc_get_vma(struct proc_maps_private *priv,
+static struct mm_area *proc_get_vma(struct proc_maps_private *priv,
 						loff_t *ppos)
 {
-	struct vm_area_struct *vma = vma_next(&priv->iter);
+	struct mm_area *vma = vma_next(&priv->iter);
 
 	if (vma) {
 		*ppos = vma->vm_start;

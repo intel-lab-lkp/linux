@@ -168,7 +168,7 @@ static inline void vmalloc_fault(struct pt_regs *regs, int code, unsigned long a
 	flush_tlb_one(addr);
 }
 
-static inline bool access_error(struct pt_regs *regs, struct vm_area_struct *vma)
+static inline bool access_error(struct pt_regs *regs, struct mm_area *vma)
 {
 	if (is_write(regs)) {
 		if (!(vma->vm_flags & VM_WRITE))
@@ -187,7 +187,7 @@ static inline bool access_error(struct pt_regs *regs, struct vm_area_struct *vma
 asmlinkage void do_page_fault(struct pt_regs *regs)
 {
 	struct task_struct *tsk;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mm_struct *mm;
 	unsigned long addr = read_mmu_entryhi() & PAGE_MASK;
 	unsigned int flags = FAULT_FLAG_DEFAULT;

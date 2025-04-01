@@ -70,7 +70,7 @@ static unsigned char mincore_page(struct address_space *mapping, pgoff_t index)
 }
 
 static int __mincore_unmapped_range(unsigned long addr, unsigned long end,
-				struct vm_area_struct *vma, unsigned char *vec)
+				struct mm_area *vma, unsigned char *vec)
 {
 	unsigned long nr = (end - addr) >> PAGE_SHIFT;
 	int i;
@@ -101,7 +101,7 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			struct mm_walk *walk)
 {
 	spinlock_t *ptl;
-	struct vm_area_struct *vma = walk->vma;
+	struct mm_area *vma = walk->vma;
 	pte_t *ptep;
 	unsigned char *vec = walk->private;
 	int nr = (end - addr) >> PAGE_SHIFT;
@@ -155,7 +155,7 @@ out:
 	return 0;
 }
 
-static inline bool can_do_mincore(struct vm_area_struct *vma)
+static inline bool can_do_mincore(struct mm_area *vma)
 {
 	if (vma_is_anonymous(vma))
 		return true;
@@ -186,7 +186,7 @@ static const struct mm_walk_ops mincore_walk_ops = {
  */
 static long do_mincore(unsigned long addr, unsigned long pages, unsigned char *vec)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long end;
 	int err;
 

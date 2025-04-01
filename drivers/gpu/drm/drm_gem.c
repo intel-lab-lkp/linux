@@ -1013,7 +1013,7 @@ EXPORT_SYMBOL(drm_gem_object_free);
  * This function implements the #vm_operations_struct open() callback for GEM
  * drivers. This must be used together with drm_gem_vm_close().
  */
-void drm_gem_vm_open(struct vm_area_struct *vma)
+void drm_gem_vm_open(struct mm_area *vma)
 {
 	struct drm_gem_object *obj = vma->vm_private_data;
 
@@ -1028,7 +1028,7 @@ EXPORT_SYMBOL(drm_gem_vm_open);
  * This function implements the #vm_operations_struct close() callback for GEM
  * drivers. This must be used together with drm_gem_vm_open().
  */
-void drm_gem_vm_close(struct vm_area_struct *vma)
+void drm_gem_vm_close(struct mm_area *vma)
 {
 	struct drm_gem_object *obj = vma->vm_private_data;
 
@@ -1061,7 +1061,7 @@ EXPORT_SYMBOL(drm_gem_vm_close);
  * size, or if no vm_ops are provided.
  */
 int drm_gem_mmap_obj(struct drm_gem_object *obj, unsigned long obj_size,
-		     struct vm_area_struct *vma)
+		     struct mm_area *vma)
 {
 	int ret;
 
@@ -1119,7 +1119,7 @@ EXPORT_SYMBOL(drm_gem_mmap_obj);
  * If the caller is not granted access to the buffer object, the mmap will fail
  * with EACCES. Please see the vma manager for more information.
  */
-int drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
+int drm_gem_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct drm_file *priv = filp->private_data;
 	struct drm_device *dev = priv->minor->dev;

@@ -1623,7 +1623,7 @@ static int xe_oa_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int xe_oa_mmap(struct file *file, struct vm_area_struct *vma)
+static int xe_oa_mmap(struct file *file, struct mm_area *vma)
 {
 	struct xe_oa_stream *stream = file->private_data;
 	struct xe_bo *bo = stream->oa_buffer.bo;

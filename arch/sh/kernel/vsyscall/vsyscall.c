@@ -83,7 +83,7 @@ fs_initcall(vm_sysctl_init);
 int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
 	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr;
 	int ret;
 
@@ -113,7 +113,7 @@ up_fail:
 	return ret;
 }
 
-const char *arch_vma_name(struct vm_area_struct *vma)
+const char *arch_vma_name(struct mm_area *vma)
 {
 	if (vma->vm_mm && vma->vm_start == (long)vma->vm_mm->context.vdso)
 		return "[vdso]";

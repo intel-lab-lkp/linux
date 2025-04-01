@@ -1048,7 +1048,7 @@ static int vhost_vdpa_va_map(struct vhost_vdpa *v,
 	struct vhost_dev *dev = &v->vdev;
 	u64 offset, map_size, map_iova = iova;
 	struct vdpa_map_file *map_file;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int ret = 0;
 
 	mmap_read_lock(dev->mm);
@@ -1486,7 +1486,7 @@ static vm_fault_t vhost_vdpa_fault(struct vm_fault *vmf)
 	struct vdpa_device *vdpa = v->vdpa;
 	const struct vdpa_config_ops *ops = vdpa->config;
 	struct vdpa_notification_area notify;
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	u16 index = vma->vm_pgoff;
 
 	notify = ops->get_vq_notification(vdpa, index);
@@ -1498,7 +1498,7 @@ static const struct vm_operations_struct vhost_vdpa_vm_ops = {
 	.fault = vhost_vdpa_fault,
 };
 
-static int vhost_vdpa_mmap(struct file *file, struct vm_area_struct *vma)
+static int vhost_vdpa_mmap(struct file *file, struct mm_area *vma)
 {
 	struct vhost_vdpa *v = vma->vm_file->private_data;
 	struct vdpa_device *vdpa = v->vdpa;

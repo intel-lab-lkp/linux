@@ -159,7 +159,7 @@ static int amdxdna_hmm_register(struct amdxdna_gem_obj *abo, unsigned long addr,
 }
 
 static int amdxdna_gem_obj_mmap(struct drm_gem_object *gobj,
-				struct vm_area_struct *vma)
+				struct mm_area *vma)
 {
 	struct amdxdna_gem_obj *abo = to_xdna_obj(gobj);
 	unsigned long num_pages;
@@ -192,12 +192,12 @@ static vm_fault_t amdxdna_gem_vm_fault(struct vm_fault *vmf)
 	return drm_gem_shmem_vm_ops.fault(vmf);
 }
 
-static void amdxdna_gem_vm_open(struct vm_area_struct *vma)
+static void amdxdna_gem_vm_open(struct mm_area *vma)
 {
 	drm_gem_shmem_vm_ops.open(vma);
 }
 
-static void amdxdna_gem_vm_close(struct vm_area_struct *vma)
+static void amdxdna_gem_vm_close(struct mm_area *vma)
 {
 	struct drm_gem_object *gobj = vma->vm_private_data;
 

@@ -294,7 +294,7 @@ void ipu6_dma_free(struct ipu6_bus_device *sys, size_t size, void *vaddr,
 }
 EXPORT_SYMBOL_NS_GPL(ipu6_dma_free, "INTEL_IPU6");
 
-int ipu6_dma_mmap(struct ipu6_bus_device *sys, struct vm_area_struct *vma,
+int ipu6_dma_mmap(struct ipu6_bus_device *sys, struct mm_area *vma,
 		  void *addr, dma_addr_t iova, size_t size,
 		  unsigned long attrs)
 {

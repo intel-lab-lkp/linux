@@ -1215,7 +1215,7 @@ pte_t ptep_xchg_direct(struct mm_struct *, unsigned long, pte_t *, pte_t);
 pte_t ptep_xchg_lazy(struct mm_struct *, unsigned long, pte_t *, pte_t);
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
+static inline int ptep_test_and_clear_young(struct mm_area *vma,
 					    unsigned long addr, pte_t *ptep)
 {
 	pte_t pte = *ptep;
@@ -1225,7 +1225,7 @@ static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
+static inline int ptep_clear_flush_young(struct mm_area *vma,
 					 unsigned long address, pte_t *ptep)
 {
 	return ptep_test_and_clear_young(vma, address, ptep);
@@ -1245,12 +1245,12 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PTEP_MODIFY_PROT_TRANSACTION
-pte_t ptep_modify_prot_start(struct vm_area_struct *, unsigned long, pte_t *);
-void ptep_modify_prot_commit(struct vm_area_struct *, unsigned long,
+pte_t ptep_modify_prot_start(struct mm_area *, unsigned long, pte_t *);
+void ptep_modify_prot_commit(struct mm_area *, unsigned long,
 			     pte_t *, pte_t, pte_t);
 
 #define __HAVE_ARCH_PTEP_CLEAR_FLUSH
-static inline pte_t ptep_clear_flush(struct vm_area_struct *vma,
+static inline pte_t ptep_clear_flush(struct mm_area *vma,
 				     unsigned long addr, pte_t *ptep)
 {
 	pte_t res;
@@ -1327,7 +1327,7 @@ static inline int pte_allow_rdp(pte_t old, pte_t new)
 	return (pte_val(old) & _PAGE_RDP_MASK) == (pte_val(new) & _PAGE_RDP_MASK);
 }
 
-static inline void flush_tlb_fix_spurious_fault(struct vm_area_struct *vma,
+static inline void flush_tlb_fix_spurious_fault(struct mm_area *vma,
 						unsigned long address,
 						pte_t *ptep)
 {
@@ -1350,7 +1350,7 @@ void ptep_reset_dat_prot(struct mm_struct *mm, unsigned long addr, pte_t *ptep,
 			 pte_t new);
 
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-static inline int ptep_set_access_flags(struct vm_area_struct *vma,
+static inline int ptep_set_access_flags(struct mm_area *vma,
 					unsigned long addr, pte_t *ptep,
 					pte_t entry, int dirty)
 {
@@ -1776,7 +1776,7 @@ void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
 
 #define  __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
-static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
+static inline int pmdp_set_access_flags(struct mm_area *vma,
 					unsigned long addr, pmd_t *pmdp,
 					pmd_t entry, int dirty)
 {
@@ -1792,7 +1792,7 @@ static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
-static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+static inline int pmdp_test_and_clear_young(struct mm_area *vma,
 					    unsigned long addr, pmd_t *pmdp)
 {
 	pmd_t pmd = *pmdp;
@@ -1802,7 +1802,7 @@ static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PMDP_CLEAR_YOUNG_FLUSH
-static inline int pmdp_clear_flush_young(struct vm_area_struct *vma,
+static inline int pmdp_clear_flush_young(struct mm_area *vma,
 					 unsigned long addr, pmd_t *pmdp)
 {
 	VM_BUG_ON(addr & ~HPAGE_MASK);
@@ -1830,7 +1830,7 @@ static inline pmd_t pmdp_huge_get_and_clear(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PMDP_HUGE_GET_AND_CLEAR_FULL
-static inline pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
+static inline pmd_t pmdp_huge_get_and_clear_full(struct mm_area *vma,
 						 unsigned long addr,
 						 pmd_t *pmdp, int full)
 {
@@ -1843,14 +1843,14 @@ static inline pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PMDP_HUGE_CLEAR_FLUSH
-static inline pmd_t pmdp_huge_clear_flush(struct vm_area_struct *vma,
+static inline pmd_t pmdp_huge_clear_flush(struct mm_area *vma,
 					  unsigned long addr, pmd_t *pmdp)
 {
 	return pmdp_huge_get_and_clear(vma->vm_mm, addr, pmdp);
 }
 
 #define __HAVE_ARCH_PMDP_INVALIDATE
-static inline pmd_t pmdp_invalidate(struct vm_area_struct *vma,
+static inline pmd_t pmdp_invalidate(struct mm_area *vma,
 				   unsigned long addr, pmd_t *pmdp)
 {
 	pmd_t pmd;
@@ -1870,7 +1870,7 @@ static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 		pmd = pmdp_xchg_lazy(mm, addr, pmdp, pmd_wrprotect(pmd));
 }
 
-static inline pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
+static inline pmd_t pmdp_collapse_flush(struct mm_area *vma,
 					unsigned long address,
 					pmd_t *pmdp)
 {

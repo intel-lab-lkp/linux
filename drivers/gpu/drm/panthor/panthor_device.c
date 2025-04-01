@@ -359,7 +359,7 @@ const char *panthor_exception_name(struct panthor_device *ptdev, u32 exception_c
 
 static vm_fault_t panthor_mmio_vm_fault(struct vm_fault *vmf)
 {
-	struct vm_area_struct *vma = vmf->vma;
+	struct mm_area *vma = vmf->vma;
 	struct panthor_device *ptdev = vma->vm_private_data;
 	u64 offset = (u64)vma->vm_pgoff << PAGE_SHIFT;
 	unsigned long pfn;
@@ -403,7 +403,7 @@ static const struct vm_operations_struct panthor_mmio_vm_ops = {
 	.fault = panthor_mmio_vm_fault,
 };
 
-int panthor_device_mmap_io(struct panthor_device *ptdev, struct vm_area_struct *vma)
+int panthor_device_mmap_io(struct panthor_device *ptdev, struct mm_area *vma)
 {
 	u64 offset = (u64)vma->vm_pgoff << PAGE_SHIFT;
 

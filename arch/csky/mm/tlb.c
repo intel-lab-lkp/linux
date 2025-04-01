@@ -49,7 +49,7 @@ do { \
 } while (0)
 #endif
 
-void flush_tlb_range(struct vm_area_struct *vma, unsigned long start,
+void flush_tlb_range(struct mm_area *vma, unsigned long start,
 			unsigned long end)
 {
 	unsigned long newpid = cpu_asid(vma->vm_mm);
@@ -132,7 +132,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 #endif
 }
 
-void flush_tlb_page(struct vm_area_struct *vma, unsigned long addr)
+void flush_tlb_page(struct mm_area *vma, unsigned long addr)
 {
 	int newpid = cpu_asid(vma->vm_mm);
 

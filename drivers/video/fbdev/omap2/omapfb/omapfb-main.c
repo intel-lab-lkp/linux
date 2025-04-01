@@ -1063,7 +1063,7 @@ static int omapfb_pan_display(struct fb_var_screeninfo *var,
 	return r;
 }
 
-static void mmap_user_open(struct vm_area_struct *vma)
+static void mmap_user_open(struct mm_area *vma)
 {
 	struct omapfb2_mem_region *rg = vma->vm_private_data;
 
@@ -1072,7 +1072,7 @@ static void mmap_user_open(struct vm_area_struct *vma)
 	omapfb_put_mem_region(rg);
 }
 
-static void mmap_user_close(struct vm_area_struct *vma)
+static void mmap_user_close(struct mm_area *vma)
 {
 	struct omapfb2_mem_region *rg = vma->vm_private_data;
 
@@ -1086,7 +1086,7 @@ static const struct vm_operations_struct mmap_user_ops = {
 	.close = mmap_user_close,
 };
 
-static int omapfb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
+static int omapfb_mmap(struct fb_info *fbi, struct mm_area *vma)
 {
 	struct omapfb_info *ofbi = FB2OFB(fbi);
 	struct fb_fix_screeninfo *fix = &fbi->fix;

@@ -340,7 +340,7 @@ int au1100fb_fb_pan_display(struct fb_var_screeninfo *var, struct fb_info *fbi)
  * Map video memory in user space. We don't use the generic fb_mmap method mainly
  * to allow the use of the TLB streaming flag (CCA=6)
  */
-int au1100fb_fb_mmap(struct fb_info *fbi, struct vm_area_struct *vma)
+int au1100fb_fb_mmap(struct fb_info *fbi, struct mm_area *vma)
 {
 	struct au1100fb_device *fbdev = to_au1100fb_device(fbi);
 

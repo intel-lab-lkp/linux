@@ -48,7 +48,7 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long address,
 {
 	struct task_struct *tsk;
 	struct mm_struct *mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int si_code;
 	vm_fault_t fault;
 	unsigned int flags = FAULT_FLAG_DEFAULT;

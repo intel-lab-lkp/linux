@@ -87,7 +87,7 @@ bad_page_fault:
 
 void do_page_fault(struct pt_regs *regs)
 {
-	struct vm_area_struct * vma;
+	struct mm_area * vma;
 	struct mm_struct *mm = current->mm;
 	unsigned int exccause = regs->exccause;
 	unsigned int address = regs->excvaddr;

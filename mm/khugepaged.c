@@ -346,7 +346,7 @@ struct attribute_group khugepaged_attr_group = {
 };
 #endif /* CONFIG_SYSFS */
 
-int hugepage_madvise(struct vm_area_struct *vma,
+int hugepage_madvise(struct mm_area *vma,
 		     unsigned long *vm_flags, int advice)
 {
 	switch (advice) {
@@ -469,7 +469,7 @@ void __khugepaged_enter(struct mm_struct *mm)
 		wake_up_interruptible(&khugepaged_wait);
 }
 
-void khugepaged_enter_vma(struct vm_area_struct *vma,
+void khugepaged_enter_vma(struct mm_area *vma,
 			  unsigned long vm_flags)
 {
 	if (!test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags) &&
@@ -561,7 +561,7 @@ static bool is_refcount_suitable(struct folio *folio)
 	return folio_ref_count(folio) == expected_refcount;
 }
 
-static int __collapse_huge_page_isolate(struct vm_area_struct *vma,
+static int __collapse_huge_page_isolate(struct mm_area *vma,
 					unsigned long address,
 					pte_t *pte,
 					struct collapse_control *cc,
@@ -708,7 +708,7 @@ out:
 }
 
 static void __collapse_huge_page_copy_succeeded(pte_t *pte,
-						struct vm_area_struct *vma,
+						struct mm_area *vma,
 						unsigned long address,
 						spinlock_t *ptl,
 						struct list_head *compound_pagelist)
@@ -763,7 +763,7 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 static void __collapse_huge_page_copy_failed(pte_t *pte,
 					     pmd_t *pmd,
 					     pmd_t orig_pmd,
-					     struct vm_area_struct *vma,
+					     struct mm_area *vma,
 					     struct list_head *compound_pagelist)
 {
 	spinlock_t *pmd_ptl;
@@ -800,7 +800,7 @@ static void __collapse_huge_page_copy_failed(pte_t *pte,
  * @compound_pagelist: list that stores compound pages
  */
 static int __collapse_huge_page_copy(pte_t *pte, struct folio *folio,
-		pmd_t *pmd, pmd_t orig_pmd, struct vm_area_struct *vma,
+		pmd_t *pmd, pmd_t orig_pmd, struct mm_area *vma,
 		unsigned long address, spinlock_t *ptl,
 		struct list_head *compound_pagelist)
 {
@@ -919,10 +919,10 @@ static int hpage_collapse_find_target_node(struct collapse_control *cc)
 
 static int hugepage_vma_revalidate(struct mm_struct *mm, unsigned long address,
 				   bool expect_anon,
-				   struct vm_area_struct **vmap,
+				   struct mm_area **vmap,
 				   struct collapse_control *cc)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long tva_flags = cc->is_khugepaged ? TVA_ENFORCE_SYSFS : 0;
 
 	if (unlikely(hpage_collapse_test_exit_or_disable(mm)))
@@ -998,7 +998,7 @@ static int check_pmd_still_valid(struct mm_struct *mm,
  * Returns result: if not SCAN_SUCCEED, mmap_lock has been released.
  */
 static int __collapse_huge_page_swapin(struct mm_struct *mm,
-				       struct vm_area_struct *vma,
+				       struct mm_area *vma,
 				       unsigned long haddr, pmd_t *pmd,
 				       int referenced)
 {
@@ -1112,7 +1112,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	struct folio *folio;
 	spinlock_t *pmd_ptl, *pte_ptl;
 	int result = SCAN_FAIL;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct mmu_notifier_range range;
 
 	VM_BUG_ON(address & ~HPAGE_PMD_MASK);
@@ -1265,7 +1265,7 @@ out_nolock:
 }
 
 static int hpage_collapse_scan_pmd(struct mm_struct *mm,
-				   struct vm_area_struct *vma,
+				   struct mm_area *vma,
 				   unsigned long address, bool *mmap_locked,
 				   struct collapse_control *cc)
 {
@@ -1466,7 +1466,7 @@ static void collect_mm_slot(struct khugepaged_mm_slot *mm_slot)
 
 #ifdef CONFIG_SHMEM
 /* hpage must be locked, and mmap_lock must be held */
-static int set_huge_pmd(struct vm_area_struct *vma, unsigned long addr,
+static int set_huge_pmd(struct mm_area *vma, unsigned long addr,
 			pmd_t *pmdp, struct page *hpage)
 {
 	struct vm_fault vmf = {
@@ -1504,7 +1504,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	struct mmu_notifier_range range;
 	bool notified = false;
 	unsigned long haddr = addr & HPAGE_PMD_MASK;
-	struct vm_area_struct *vma = vma_lookup(mm, haddr);
+	struct mm_area *vma = vma_lookup(mm, haddr);
 	struct folio *folio;
 	pte_t *start_pte, *pte;
 	pmd_t *pmd, pgt_pmd;
@@ -1713,7 +1713,7 @@ drop_folio:
 
 static void retract_page_tables(struct address_space *mapping, pgoff_t pgoff)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 
 	i_mmap_lock_read(mapping);
 	vma_interval_tree_foreach(vma, &mapping->i_mmap, pgoff, pgoff) {
@@ -2114,7 +2114,7 @@ xa_unlocked:
 	}
 
 	if (nr_none) {
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		int nr_none_check = 0;
 
 		i_mmap_lock_read(mapping);
@@ -2372,7 +2372,7 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, int *result,
 	struct khugepaged_mm_slot *mm_slot;
 	struct mm_slot *slot;
 	struct mm_struct *mm;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	int progress = 0;
 
 	VM_BUG_ON(!pages);
@@ -2736,7 +2736,7 @@ static int madvise_collapse_errno(enum scan_result r)
 	}
 }
 
-int madvise_collapse(struct vm_area_struct *vma, struct vm_area_struct **prev,
+int madvise_collapse(struct mm_area *vma, struct mm_area **prev,
 		     unsigned long start, unsigned long end)
 {
 	struct collapse_control *cc;

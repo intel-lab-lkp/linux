@@ -241,7 +241,7 @@ const char *trap_name(unsigned long code)
 static inline void
 show_signal_msg(struct pt_regs *regs, unsigned long code,
 		unsigned long address, struct task_struct *tsk,
-		struct vm_area_struct *vma)
+		struct mm_area *vma)
 {
 	if (!unhandled_signal(tsk, SIGSEGV))
 		return;
@@ -267,7 +267,7 @@ show_signal_msg(struct pt_regs *regs, unsigned long code,
 void do_page_fault(struct pt_regs *regs, unsigned long code,
 			      unsigned long address)
 {
-	struct vm_area_struct *vma, *prev_vma;
+	struct mm_area *vma, *prev_vma;
 	struct task_struct *tsk;
 	struct mm_struct *mm;
 	unsigned long acc_type;
@@ -454,7 +454,7 @@ handle_nadtlb_fault(struct pt_regs *regs)
 {
 	unsigned long insn = regs->iir;
 	int breg, treg, xreg, val = 0;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *tsk;
 	struct mm_struct *mm;
 	unsigned long address;

@@ -303,28 +303,28 @@ static inline void set_ptes(struct mm_struct *mm, unsigned long addr,
 #define set_pte_at(mm, addr, ptep, pte) set_ptes(mm, addr, ptep, pte, 1)
 
 #ifndef __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-extern int ptep_set_access_flags(struct vm_area_struct *vma,
+extern int ptep_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pte_t *ptep,
 				 pte_t entry, int dirty);
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-extern int pmdp_set_access_flags(struct vm_area_struct *vma,
+extern int pmdp_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pmd_t *pmdp,
 				 pmd_t entry, int dirty);
-extern int pudp_set_access_flags(struct vm_area_struct *vma,
+extern int pudp_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pud_t *pudp,
 				 pud_t entry, int dirty);
 #else
-static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
+static inline int pmdp_set_access_flags(struct mm_area *vma,
 					unsigned long address, pmd_t *pmdp,
 					pmd_t entry, int dirty)
 {
 	BUILD_BUG();
 	return 0;
 }
-static inline int pudp_set_access_flags(struct vm_area_struct *vma,
+static inline int pudp_set_access_flags(struct mm_area *vma,
 					unsigned long address, pud_t *pudp,
 					pud_t entry, int dirty)
 {
@@ -370,7 +370,7 @@ static inline pgd_t pgdp_get(pgd_t *pgdp)
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
+static inline int ptep_test_and_clear_young(struct mm_area *vma,
 					    unsigned long address,
 					    pte_t *ptep)
 {
@@ -386,7 +386,7 @@ static inline int ptep_test_and_clear_young(struct vm_area_struct *vma,
 
 #ifndef __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_ARCH_HAS_NONLEAF_PMD_YOUNG)
-static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+static inline int pmdp_test_and_clear_young(struct mm_area *vma,
 					    unsigned long address,
 					    pmd_t *pmdp)
 {
@@ -399,7 +399,7 @@ static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 	return r;
 }
 #else
-static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+static inline int pmdp_test_and_clear_young(struct mm_area *vma,
 					    unsigned long address,
 					    pmd_t *pmdp)
 {
@@ -410,20 +410,20 @@ static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-int ptep_clear_flush_young(struct vm_area_struct *vma,
+int ptep_clear_flush_young(struct mm_area *vma,
 			   unsigned long address, pte_t *ptep);
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_CLEAR_YOUNG_FLUSH
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-extern int pmdp_clear_flush_young(struct vm_area_struct *vma,
+extern int pmdp_clear_flush_young(struct mm_area *vma,
 				  unsigned long address, pmd_t *pmdp);
 #else
 /*
  * Despite relevant to THP only, this API is called from generic rmap code
  * under PageTransHuge(), hence needs a dummy implementation for !THP
  */
-static inline int pmdp_clear_flush_young(struct vm_area_struct *vma,
+static inline int pmdp_clear_flush_young(struct mm_area *vma,
 					 unsigned long address, pmd_t *pmdp)
 {
 	BUILD_BUG();
@@ -457,21 +457,21 @@ static inline bool arch_has_hw_pte_young(void)
 #endif
 
 #ifndef arch_check_zapped_pte
-static inline void arch_check_zapped_pte(struct vm_area_struct *vma,
+static inline void arch_check_zapped_pte(struct mm_area *vma,
 					 pte_t pte)
 {
 }
 #endif
 
 #ifndef arch_check_zapped_pmd
-static inline void arch_check_zapped_pmd(struct vm_area_struct *vma,
+static inline void arch_check_zapped_pmd(struct mm_area *vma,
 					 pmd_t pmd)
 {
 }
 #endif
 
 #ifndef arch_check_zapped_pud
-static inline void arch_check_zapped_pud(struct vm_area_struct *vma, pud_t pud)
+static inline void arch_check_zapped_pud(struct mm_area *vma, pud_t pud)
 {
 }
 #endif
@@ -507,7 +507,7 @@ static inline pte_t ptep_get_and_clear(struct mm_struct *mm,
  * Context: The caller holds the page table lock.  The PTEs map consecutive
  * pages that belong to the same folio.  The PTEs are all in the same PMD.
  */
-static inline void clear_young_dirty_ptes(struct vm_area_struct *vma,
+static inline void clear_young_dirty_ptes(struct mm_area *vma,
 					  unsigned long addr, pte_t *ptep,
 					  unsigned int nr, cydp_t flags)
 {
@@ -659,7 +659,7 @@ static inline pud_t pudp_huge_get_and_clear(struct mm_struct *mm,
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #ifndef __HAVE_ARCH_PMDP_HUGE_GET_AND_CLEAR_FULL
-static inline pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
+static inline pmd_t pmdp_huge_get_and_clear_full(struct mm_area *vma,
 					    unsigned long address, pmd_t *pmdp,
 					    int full)
 {
@@ -668,7 +668,7 @@ static inline pmd_t pmdp_huge_get_and_clear_full(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PUDP_HUGE_GET_AND_CLEAR_FULL
-static inline pud_t pudp_huge_get_and_clear_full(struct vm_area_struct *vma,
+static inline pud_t pudp_huge_get_and_clear_full(struct mm_area *vma,
 					    unsigned long address, pud_t *pudp,
 					    int full)
 {
@@ -766,13 +766,13 @@ static inline void clear_full_ptes(struct mm_struct *mm, unsigned long addr,
  * It is the difference with function update_mmu_cache.
  */
 #ifndef update_mmu_tlb_range
-static inline void update_mmu_tlb_range(struct vm_area_struct *vma,
+static inline void update_mmu_tlb_range(struct mm_area *vma,
 				unsigned long address, pte_t *ptep, unsigned int nr)
 {
 }
 #endif
 
-static inline void update_mmu_tlb(struct vm_area_struct *vma,
+static inline void update_mmu_tlb(struct mm_area *vma,
 				unsigned long address, pte_t *ptep)
 {
 	update_mmu_tlb_range(vma, address, ptep, 1);
@@ -823,29 +823,29 @@ static inline void clear_not_present_full_ptes(struct mm_struct *mm,
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_FLUSH
-extern pte_t ptep_clear_flush(struct vm_area_struct *vma,
+extern pte_t ptep_clear_flush(struct mm_area *vma,
 			      unsigned long address,
 			      pte_t *ptep);
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_HUGE_CLEAR_FLUSH
-extern pmd_t pmdp_huge_clear_flush(struct vm_area_struct *vma,
+extern pmd_t pmdp_huge_clear_flush(struct mm_area *vma,
 			      unsigned long address,
 			      pmd_t *pmdp);
-extern pud_t pudp_huge_clear_flush(struct vm_area_struct *vma,
+extern pud_t pudp_huge_clear_flush(struct mm_area *vma,
 			      unsigned long address,
 			      pud_t *pudp);
 #endif
 
 #ifndef pte_mkwrite
-static inline pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma)
+static inline pte_t pte_mkwrite(pte_t pte, struct mm_area *vma)
 {
 	return pte_mkwrite_novma(pte);
 }
 #endif
 
 #if defined(CONFIG_ARCH_WANT_PMD_MKWRITE) && !defined(pmd_mkwrite)
-static inline pmd_t pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
+static inline pmd_t pmd_mkwrite(pmd_t pmd, struct mm_area *vma)
 {
 	return pmd_mkwrite_novma(pmd);
 }
@@ -945,10 +945,10 @@ static inline void pudp_set_wrprotect(struct mm_struct *mm,
 
 #ifndef pmdp_collapse_flush
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-extern pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
+extern pmd_t pmdp_collapse_flush(struct mm_area *vma,
 				 unsigned long address, pmd_t *pmdp);
 #else
-static inline pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
+static inline pmd_t pmdp_collapse_flush(struct mm_area *vma,
 					unsigned long address,
 					pmd_t *pmdp)
 {
@@ -978,7 +978,7 @@ extern pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp);
  * architecture that doesn't have hardware dirty/accessed bits. In this case we
  * can't race with CPU which sets these bits and non-atomic approach is fine.
  */
-static inline pmd_t generic_pmdp_establish(struct vm_area_struct *vma,
+static inline pmd_t generic_pmdp_establish(struct mm_area *vma,
 		unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	pmd_t old_pmd = *pmdp;
@@ -988,7 +988,7 @@ static inline pmd_t generic_pmdp_establish(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_INVALIDATE
-extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
+extern pmd_t pmdp_invalidate(struct mm_area *vma, unsigned long address,
 			    pmd_t *pmdp);
 #endif
 
@@ -1008,7 +1008,7 @@ extern pmd_t pmdp_invalidate(struct vm_area_struct *vma, unsigned long address,
  * to batch these TLB flushing operations, so fewer TLB flush operations are
  * needed.
  */
-extern pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma,
+extern pmd_t pmdp_invalidate_ad(struct mm_area *vma,
 				unsigned long address, pmd_t *pmdp);
 #endif
 
@@ -1088,7 +1088,7 @@ static inline int pgd_same(pgd_t pgd_a, pgd_t pgd_b)
 
 #ifndef __HAVE_ARCH_DO_SWAP_PAGE
 static inline void arch_do_swap_page_nr(struct mm_struct *mm,
-				     struct vm_area_struct *vma,
+				     struct mm_area *vma,
 				     unsigned long addr,
 				     pte_t pte, pte_t oldpte,
 				     int nr)
@@ -1105,7 +1105,7 @@ static inline void arch_do_swap_page_nr(struct mm_struct *mm,
  * metadata when a page is swapped back in.
  */
 static inline void arch_do_swap_page_nr(struct mm_struct *mm,
-					struct vm_area_struct *vma,
+					struct mm_area *vma,
 					unsigned long addr,
 					pte_t pte, pte_t oldpte,
 					int nr)
@@ -1128,7 +1128,7 @@ static inline void arch_do_swap_page_nr(struct mm_struct *mm,
  * metadata on a swap-out of a page.
  */
 static inline int arch_unmap_one(struct mm_struct *mm,
-				  struct vm_area_struct *vma,
+				  struct mm_area *vma,
 				  unsigned long addr,
 				  pte_t orig_pte)
 {
@@ -1277,7 +1277,7 @@ static inline int pmd_none_or_clear_bad(pmd_t *pmd)
 	return 0;
 }
 
-static inline pte_t __ptep_modify_prot_start(struct vm_area_struct *vma,
+static inline pte_t __ptep_modify_prot_start(struct mm_area *vma,
 					     unsigned long addr,
 					     pte_t *ptep)
 {
@@ -1289,7 +1289,7 @@ static inline pte_t __ptep_modify_prot_start(struct vm_area_struct *vma,
 	return ptep_get_and_clear(vma->vm_mm, addr, ptep);
 }
 
-static inline void __ptep_modify_prot_commit(struct vm_area_struct *vma,
+static inline void __ptep_modify_prot_commit(struct mm_area *vma,
 					     unsigned long addr,
 					     pte_t *ptep, pte_t pte)
 {
@@ -1315,7 +1315,7 @@ static inline void __ptep_modify_prot_commit(struct vm_area_struct *vma,
  * queue the update to be done at some later time.  The update must be
  * actually committed before the pte lock is released, however.
  */
-static inline pte_t ptep_modify_prot_start(struct vm_area_struct *vma,
+static inline pte_t ptep_modify_prot_start(struct mm_area *vma,
 					   unsigned long addr,
 					   pte_t *ptep)
 {
@@ -1326,7 +1326,7 @@ static inline pte_t ptep_modify_prot_start(struct vm_area_struct *vma,
  * Commit an update to a pte, leaving any hardware-controlled bits in
  * the PTE unmodified.
  */
-static inline void ptep_modify_prot_commit(struct vm_area_struct *vma,
+static inline void ptep_modify_prot_commit(struct mm_area *vma,
 					   unsigned long addr,
 					   pte_t *ptep, pte_t old_pte, pte_t pte)
 {
@@ -1493,7 +1493,7 @@ static inline pmd_t pmd_swp_clear_soft_dirty(pmd_t pmd)
  * track_pfn_remap is called when a _new_ pfn mapping is being established
  * by remap_pfn_range() for physical range indicated by pfn and size.
  */
-static inline int track_pfn_remap(struct vm_area_struct *vma, pgprot_t *prot,
+static inline int track_pfn_remap(struct mm_area *vma, pgprot_t *prot,
 				  unsigned long pfn, unsigned long addr,
 				  unsigned long size)
 {
@@ -1504,7 +1504,7 @@ static inline int track_pfn_remap(struct vm_area_struct *vma, pgprot_t *prot,
  * track_pfn_insert is called when a _new_ single pfn is established
  * by vmf_insert_pfn().
  */
-static inline void track_pfn_insert(struct vm_area_struct *vma, pgprot_t *prot,
+static inline void track_pfn_insert(struct mm_area *vma, pgprot_t *prot,
 				    pfn_t pfn)
 {
 }
@@ -1514,8 +1514,8 @@ static inline void track_pfn_insert(struct vm_area_struct *vma, pgprot_t *prot,
  * tables copied during copy_page_range(). On success, stores the pfn to be
  * passed to untrack_pfn_copy().
  */
-static inline int track_pfn_copy(struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma, unsigned long *pfn)
+static inline int track_pfn_copy(struct mm_area *dst_vma,
+		struct mm_area *src_vma, unsigned long *pfn)
 {
 	return 0;
 }
@@ -1524,7 +1524,7 @@ static inline int track_pfn_copy(struct vm_area_struct *dst_vma,
  * untrack_pfn_copy is called when a VM_PFNMAP VMA failed to copy during
  * copy_page_range(), but after track_pfn_copy() was already called.
  */
-static inline void untrack_pfn_copy(struct vm_area_struct *dst_vma,
+static inline void untrack_pfn_copy(struct mm_area *dst_vma,
 		unsigned long pfn)
 {
 }
@@ -1534,7 +1534,7 @@ static inline void untrack_pfn_copy(struct vm_area_struct *dst_vma,
  * untrack can be called for a specific region indicated by pfn and size or
  * can be for the entire vma (in which case pfn, size are zero).
  */
-static inline void untrack_pfn(struct vm_area_struct *vma,
+static inline void untrack_pfn(struct mm_area *vma,
 			       unsigned long pfn, unsigned long size,
 			       bool mm_wr_locked)
 {
@@ -1546,22 +1546,22 @@ static inline void untrack_pfn(struct vm_area_struct *vma,
  * 1) During mremap() on the src VMA after the page tables were moved.
  * 2) During fork() on the dst VMA, immediately after duplicating the src VMA.
  */
-static inline void untrack_pfn_clear(struct vm_area_struct *vma)
+static inline void untrack_pfn_clear(struct mm_area *vma)
 {
 }
 #else
-extern int track_pfn_remap(struct vm_area_struct *vma, pgprot_t *prot,
+extern int track_pfn_remap(struct mm_area *vma, pgprot_t *prot,
 			   unsigned long pfn, unsigned long addr,
 			   unsigned long size);
-extern void track_pfn_insert(struct vm_area_struct *vma, pgprot_t *prot,
+extern void track_pfn_insert(struct mm_area *vma, pgprot_t *prot,
 			     pfn_t pfn);
-extern int track_pfn_copy(struct vm_area_struct *dst_vma,
-		struct vm_area_struct *src_vma, unsigned long *pfn);
-extern void untrack_pfn_copy(struct vm_area_struct *dst_vma,
+extern int track_pfn_copy(struct mm_area *dst_vma,
+		struct mm_area *src_vma, unsigned long *pfn);
+extern void untrack_pfn_copy(struct mm_area *dst_vma,
 		unsigned long pfn);
-extern void untrack_pfn(struct vm_area_struct *vma, unsigned long pfn,
+extern void untrack_pfn(struct mm_area *vma, unsigned long pfn,
 			unsigned long size, bool mm_wr_locked);
-extern void untrack_pfn_clear(struct vm_area_struct *vma);
+extern void untrack_pfn_clear(struct mm_area *vma);
 #endif
 
 #ifdef CONFIG_MMU

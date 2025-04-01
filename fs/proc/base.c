@@ -2244,7 +2244,7 @@ static const struct dentry_operations tid_map_files_dentry_operations = {
 static int map_files_get_link(struct dentry *dentry, struct path *path)
 {
 	unsigned long vm_start, vm_end;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *task;
 	struct mm_struct *mm;
 	int rc;
@@ -2341,7 +2341,7 @@ static struct dentry *proc_map_files_lookup(struct inode *dir,
 		struct dentry *dentry, unsigned int flags)
 {
 	unsigned long vm_start, vm_end;
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *task;
 	struct dentry *result;
 	struct mm_struct *mm;
@@ -2395,7 +2395,7 @@ static const struct inode_operations proc_map_files_inode_operations = {
 static int
 proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct task_struct *task;
 	struct mm_struct *mm;
 	unsigned long nr_files, pos, i;

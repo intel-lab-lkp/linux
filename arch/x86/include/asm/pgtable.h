@@ -498,8 +498,8 @@ static inline pte_t pte_mkwrite_novma(pte_t pte)
 	return pte_set_flags(pte, _PAGE_RW);
 }
 
-struct vm_area_struct;
-pte_t pte_mkwrite(pte_t pte, struct vm_area_struct *vma);
+struct mm_area;
+pte_t pte_mkwrite(pte_t pte, struct mm_area *vma);
 #define pte_mkwrite pte_mkwrite
 
 static inline pte_t pte_mkhuge(pte_t pte)
@@ -623,7 +623,7 @@ static inline pmd_t pmd_mkwrite_novma(pmd_t pmd)
 	return pmd_set_flags(pmd, _PAGE_RW);
 }
 
-pmd_t pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma);
+pmd_t pmd_mkwrite(pmd_t pmd, struct mm_area *vma);
 #define pmd_mkwrite pmd_mkwrite
 
 /* See comments above mksaveddirty_shift() */
@@ -1291,19 +1291,19 @@ static inline void set_pud_at(struct mm_struct *mm, unsigned long addr,
  * race with other CPU's that might be updating the dirty
  * bit at the same time.
  */
-struct vm_area_struct;
+struct mm_area;
 
 #define  __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-extern int ptep_set_access_flags(struct vm_area_struct *vma,
+extern int ptep_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pte_t *ptep,
 				 pte_t entry, int dirty);
 
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-extern int ptep_test_and_clear_young(struct vm_area_struct *vma,
+extern int ptep_test_and_clear_young(struct mm_area *vma,
 				     unsigned long addr, pte_t *ptep);
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-extern int ptep_clear_flush_young(struct vm_area_struct *vma,
+extern int ptep_clear_flush_young(struct mm_area *vma,
 				  unsigned long address, pte_t *ptep);
 
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR
@@ -1356,21 +1356,21 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm,
 #define mk_pmd(page, pgprot)   pfn_pmd(page_to_pfn(page), (pgprot))
 
 #define  __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
-extern int pmdp_set_access_flags(struct vm_area_struct *vma,
+extern int pmdp_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pmd_t *pmdp,
 				 pmd_t entry, int dirty);
-extern int pudp_set_access_flags(struct vm_area_struct *vma,
+extern int pudp_set_access_flags(struct mm_area *vma,
 				 unsigned long address, pud_t *pudp,
 				 pud_t entry, int dirty);
 
 #define __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
-extern int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+extern int pmdp_test_and_clear_young(struct mm_area *vma,
 				     unsigned long addr, pmd_t *pmdp);
-extern int pudp_test_and_clear_young(struct vm_area_struct *vma,
+extern int pudp_test_and_clear_young(struct mm_area *vma,
 				     unsigned long addr, pud_t *pudp);
 
 #define __HAVE_ARCH_PMDP_CLEAR_YOUNG_FLUSH
-extern int pmdp_clear_flush_young(struct vm_area_struct *vma,
+extern int pmdp_clear_flush_young(struct mm_area *vma,
 				  unsigned long address, pmd_t *pmdp);
 
 
@@ -1415,7 +1415,7 @@ static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 
 #ifndef pmdp_establish
 #define pmdp_establish pmdp_establish
-static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
+static inline pmd_t pmdp_establish(struct mm_area *vma,
 		unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	page_table_check_pmd_set(vma->vm_mm, pmdp, pmd);
@@ -1430,7 +1430,7 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 #endif
 
 #ifdef CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD
-static inline pud_t pudp_establish(struct vm_area_struct *vma,
+static inline pud_t pudp_establish(struct mm_area *vma,
 		unsigned long address, pud_t *pudp, pud_t pud)
 {
 	page_table_check_pud_set(vma->vm_mm, pudp, pud);
@@ -1445,10 +1445,10 @@ static inline pud_t pudp_establish(struct vm_area_struct *vma,
 #endif
 
 #define __HAVE_ARCH_PMDP_INVALIDATE_AD
-extern pmd_t pmdp_invalidate_ad(struct vm_area_struct *vma,
+extern pmd_t pmdp_invalidate_ad(struct mm_area *vma,
 				unsigned long address, pmd_t *pmdp);
 
-pud_t pudp_invalidate(struct vm_area_struct *vma, unsigned long address,
+pud_t pudp_invalidate(struct mm_area *vma, unsigned long address,
 		      pud_t *pudp);
 
 /*
@@ -1554,20 +1554,20 @@ static inline unsigned long page_level_mask(enum pg_level level)
  * The x86 doesn't have any external MMU info: the kernel page
  * tables contain all the necessary information.
  */
-static inline void update_mmu_cache(struct vm_area_struct *vma,
+static inline void update_mmu_cache(struct mm_area *vma,
 		unsigned long addr, pte_t *ptep)
 {
 }
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long addr,
+		struct mm_area *vma, unsigned long addr,
 		pte_t *ptep, unsigned int nr)
 {
 }
-static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pmd(struct mm_area *vma,
 		unsigned long addr, pmd_t *pmd)
 {
 }
-static inline void update_mmu_cache_pud(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pud(struct mm_area *vma,
 		unsigned long addr, pud_t *pud)
 {
 }
@@ -1724,13 +1724,13 @@ static inline bool arch_has_pfn_modify_check(void)
 }
 
 #define arch_check_zapped_pte arch_check_zapped_pte
-void arch_check_zapped_pte(struct vm_area_struct *vma, pte_t pte);
+void arch_check_zapped_pte(struct mm_area *vma, pte_t pte);
 
 #define arch_check_zapped_pmd arch_check_zapped_pmd
-void arch_check_zapped_pmd(struct vm_area_struct *vma, pmd_t pmd);
+void arch_check_zapped_pmd(struct mm_area *vma, pmd_t pmd);
 
 #define arch_check_zapped_pud arch_check_zapped_pud
-void arch_check_zapped_pud(struct vm_area_struct *vma, pud_t pud);
+void arch_check_zapped_pud(struct mm_area *vma, pud_t pud);
 
 #ifdef CONFIG_XEN_PV
 #define arch_has_hw_nonleaf_pmd_young arch_has_hw_nonleaf_pmd_young

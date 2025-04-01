@@ -1066,7 +1066,7 @@ void *iommu_dma_vmap_noncontiguous(struct device *dev, size_t size,
 	return vmap(sgt_handle(sgt)->pages, count, VM_MAP, PAGE_KERNEL);
 }
 
-int iommu_dma_mmap_noncontiguous(struct device *dev, struct vm_area_struct *vma,
+int iommu_dma_mmap_noncontiguous(struct device *dev, struct mm_area *vma,
 		size_t size, struct sg_table *sgt)
 {
 	unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
@@ -1643,7 +1643,7 @@ void *iommu_dma_alloc(struct device *dev, size_t size, dma_addr_t *handle,
 	return cpu_addr;
 }
 
-int iommu_dma_mmap(struct device *dev, struct vm_area_struct *vma,
+int iommu_dma_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs)
 {

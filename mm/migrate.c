@@ -237,7 +237,7 @@ struct rmap_walk_arg {
  * Restore a potential migration pte to a working pte entry
  */
 static bool remove_migration_pte(struct folio *folio,
-		struct vm_area_struct *vma, unsigned long addr, void *arg)
+		struct mm_area *vma, unsigned long addr, void *arg)
 {
 	struct rmap_walk_arg *rmap_walk_arg = arg;
 	DEFINE_FOLIO_VMA_WALK(pvmw, rmap_walk_arg->folio, vma, addr, PVMW_SYNC | PVMW_MIGRATION);
@@ -405,7 +405,7 @@ out:
  *
  * This function will release the vma lock before returning.
  */
-void migration_entry_wait_huge(struct vm_area_struct *vma, unsigned long addr, pte_t *ptep)
+void migration_entry_wait_huge(struct mm_area *vma, unsigned long addr, pte_t *ptep)
 {
 	spinlock_t *ptl = huge_pte_lockptr(hstate_vma(vma), vma->vm_mm, ptep);
 	pte_t pte;
@@ -2254,7 +2254,7 @@ static int __add_folio_for_migration(struct folio *folio, int node,
 static int add_folio_for_migration(struct mm_struct *mm, const void __user *p,
 		int node, struct list_head *pagelist, bool migrate_all)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	struct folio_walk fw;
 	struct folio *folio;
 	unsigned long addr;
@@ -2423,7 +2423,7 @@ static void do_pages_stat_array(struct mm_struct *mm, unsigned long nr_pages,
 
 	for (i = 0; i < nr_pages; i++) {
 		unsigned long addr = (unsigned long)(*pages);
-		struct vm_area_struct *vma;
+		struct mm_area *vma;
 		struct folio_walk fw;
 		struct folio *folio;
 		int err = -EFAULT;
@@ -2640,7 +2640,7 @@ static struct folio *alloc_misplaced_dst_folio(struct folio *src,
  * permitted. Must be called with the PTL still held.
  */
 int migrate_misplaced_folio_prepare(struct folio *folio,
-		struct vm_area_struct *vma, int node)
+		struct mm_area *vma, int node)
 {
 	int nr_pages = folio_nr_pages(folio);
 	pg_data_t *pgdat = NODE_DATA(node);

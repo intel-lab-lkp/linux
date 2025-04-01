@@ -1424,7 +1424,7 @@ static int map_block(struct hl_device *hdev, u64 address, u64 *handle, u32 *size
 	return 0;
 }
 
-static void hw_block_vm_close(struct vm_area_struct *vma)
+static void hw_block_vm_close(struct mm_area *vma)
 {
 	struct hl_vm_hw_block_list_node *lnode =
 		(struct hl_vm_hw_block_list_node *) vma->vm_private_data;
@@ -1452,12 +1452,12 @@ static const struct vm_operations_struct hw_block_vm_ops = {
 /**
  * hl_hw_block_mmap() - mmap a hw block to user.
  * @hpriv: pointer to the private data of the fd
- * @vma: pointer to vm_area_struct of the process
+ * @vma: pointer to mm_area of the process
  *
  * Driver increments context reference for every HW block mapped in order
  * to prevent user from closing FD without unmapping first
  */
-int hl_hw_block_mmap(struct hl_fpriv *hpriv, struct vm_area_struct *vma)
+int hl_hw_block_mmap(struct hl_fpriv *hpriv, struct mm_area *vma)
 {
 	struct hl_vm_hw_block_list_node *lnode;
 	struct hl_device *hdev = hpriv->hdev;
@@ -2103,7 +2103,7 @@ static void ts_buff_release(struct hl_mmap_mem_buf *buf)
 	kfree(ts_buff);
 }
 
-static int hl_ts_mmap(struct hl_mmap_mem_buf *buf, struct vm_area_struct *vma, void *args)
+static int hl_ts_mmap(struct hl_mmap_mem_buf *buf, struct mm_area *vma, void *args)
 {
 	struct hl_ts_buff *ts_buff = buf->private;
 

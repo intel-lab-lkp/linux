@@ -14,7 +14,7 @@
 #include "dax-private.h"
 #include "bus.h"
 
-static int check_vma(struct dev_dax *dev_dax, struct vm_area_struct *vma,
+static int check_vma(struct dev_dax *dev_dax, struct mm_area *vma,
 		const char *func)
 {
 	struct device *dev = &dev_dax->dev;
@@ -261,7 +261,7 @@ static vm_fault_t dev_dax_fault(struct vm_fault *vmf)
 	return dev_dax_huge_fault(vmf, 0);
 }
 
-static int dev_dax_may_split(struct vm_area_struct *vma, unsigned long addr)
+static int dev_dax_may_split(struct mm_area *vma, unsigned long addr)
 {
 	struct file *filp = vma->vm_file;
 	struct dev_dax *dev_dax = filp->private_data;
@@ -271,7 +271,7 @@ static int dev_dax_may_split(struct vm_area_struct *vma, unsigned long addr)
 	return 0;
 }
 
-static unsigned long dev_dax_pagesize(struct vm_area_struct *vma)
+static unsigned long dev_dax_pagesize(struct mm_area *vma)
 {
 	struct file *filp = vma->vm_file;
 	struct dev_dax *dev_dax = filp->private_data;
@@ -286,7 +286,7 @@ static const struct vm_operations_struct dax_vm_ops = {
 	.pagesize = dev_dax_pagesize,
 };
 
-static int dax_mmap(struct file *filp, struct vm_area_struct *vma)
+static int dax_mmap(struct file *filp, struct mm_area *vma)
 {
 	struct dev_dax *dev_dax = filp->private_data;
 	int rc, id;

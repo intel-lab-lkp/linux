@@ -43,7 +43,7 @@
 asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long cause,
 				unsigned long address)
 {
-	struct vm_area_struct *vma = NULL;
+	struct mm_area *vma = NULL;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
 	int code = SEGV_MAPERR;

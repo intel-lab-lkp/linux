@@ -68,7 +68,7 @@ static __read_mostly phys_addr_t xen_grant_frames;
 uint32_t xen_start_flags;
 EXPORT_SYMBOL(xen_start_flags);
 
-int xen_unmap_domain_gfn_range(struct vm_area_struct *vma,
+int xen_unmap_domain_gfn_range(struct mm_area *vma,
 			       int nr, struct page **pages)
 {
 	return xen_xlate_unmap_gfn_range(vma, nr, pages);

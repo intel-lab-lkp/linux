@@ -457,7 +457,7 @@ static void hns_roce_dealloc_ucontext(struct ib_ucontext *ibcontext)
 	ida_free(&hr_dev->uar_ida.ida, (int)context->uar.logic_idx);
 }
 
-static int hns_roce_mmap(struct ib_ucontext *uctx, struct vm_area_struct *vma)
+static int hns_roce_mmap(struct ib_ucontext *uctx, struct mm_area *vma)
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(uctx->device);
 	struct rdma_user_mmap_entry *rdma_entry;

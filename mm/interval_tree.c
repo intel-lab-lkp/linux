@@ -10,27 +10,27 @@
 #include <linux/rmap.h>
 #include <linux/interval_tree_generic.h>
 
-static inline unsigned long vma_start_pgoff(struct vm_area_struct *v)
+static inline unsigned long vma_start_pgoff(struct mm_area *v)
 {
 	return v->vm_pgoff;
 }
 
-static inline unsigned long vma_last_pgoff(struct vm_area_struct *v)
+static inline unsigned long vma_last_pgoff(struct mm_area *v)
 {
 	return v->vm_pgoff + vma_pages(v) - 1;
 }
 
-INTERVAL_TREE_DEFINE(struct vm_area_struct, shared.rb,
+INTERVAL_TREE_DEFINE(struct mm_area, shared.rb,
 		     unsigned long, shared.rb_subtree_last,
 		     vma_start_pgoff, vma_last_pgoff, /* empty */, vma_interval_tree)
 
 /* Insert node immediately after prev in the interval tree */
-void vma_interval_tree_insert_after(struct vm_area_struct *node,
-				    struct vm_area_struct *prev,
+void vma_interval_tree_insert_after(struct mm_area *node,
+				    struct mm_area *prev,
 				    struct rb_root_cached *root)
 {
 	struct rb_node **link;
-	struct vm_area_struct *parent;
+	struct mm_area *parent;
 	unsigned long last = vma_last_pgoff(node);
 
 	VM_BUG_ON_VMA(vma_start_pgoff(node) != vma_start_pgoff(prev), node);
@@ -40,12 +40,12 @@ void vma_interval_tree_insert_after(struct vm_area_struct *node,
 		link = &prev->shared.rb.rb_right;
 	} else {
 		parent = rb_entry(prev->shared.rb.rb_right,
-				  struct vm_area_struct, shared.rb);
+				  struct mm_area, shared.rb);
 		if (parent->shared.rb_subtree_last < last)
 			parent->shared.rb_subtree_last = last;
 		while (parent->shared.rb.rb_left) {
 			parent = rb_entry(parent->shared.rb.rb_left,
-				struct vm_area_struct, shared.rb);
+				struct mm_area, shared.rb);
 			if (parent->shared.rb_subtree_last < last)
 				parent->shared.rb_subtree_last = last;
 		}

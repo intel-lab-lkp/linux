@@ -32,7 +32,7 @@ int dma_common_get_sgtable(struct device *dev, struct sg_table *sgt,
 /*
  * Create userspace mapping for the DMA-coherent memory.
  */
-int dma_common_mmap(struct device *dev, struct vm_area_struct *vma,
+int dma_common_mmap(struct device *dev, struct mm_area *vma,
 		void *cpu_addr, dma_addr_t dma_addr, size_t size,
 		unsigned long attrs)
 {

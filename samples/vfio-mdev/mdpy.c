@@ -418,7 +418,7 @@ write_err:
 	return -EFAULT;
 }
 
-static int mdpy_mmap(struct vfio_device *vdev, struct vm_area_struct *vma)
+static int mdpy_mmap(struct vfio_device *vdev, struct mm_area *vma)
 {
 	struct mdev_state *mdev_state =
 		container_of(vdev, struct mdev_state, vdev);

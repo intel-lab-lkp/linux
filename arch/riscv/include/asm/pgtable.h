@@ -506,7 +506,7 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 
 /* Commit new configuration to MMU hardware */
 static inline void update_mmu_cache_range(struct vm_fault *vmf,
-		struct vm_area_struct *vma, unsigned long address,
+		struct mm_area *vma, unsigned long address,
 		pte_t *ptep, unsigned int nr)
 {
 	asm goto(ALTERNATIVE("nop", "j %l[svvptc]", 0, RISCV_ISA_EXT_SVVPTC, 1)
@@ -535,7 +535,7 @@ svvptc:;
 #define update_mmu_tlb_range(vma, addr, ptep, nr) \
 	update_mmu_cache_range(NULL, vma, addr, ptep, nr)
 
-static inline void update_mmu_cache_pmd(struct vm_area_struct *vma,
+static inline void update_mmu_cache_pmd(struct mm_area *vma,
 		unsigned long address, pmd_t *pmdp)
 {
 	pte_t *ptep = (pte_t *)pmdp;
@@ -593,10 +593,10 @@ static inline void pte_clear(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS	/* defined in mm/pgtable.c */
-extern int ptep_set_access_flags(struct vm_area_struct *vma, unsigned long address,
+extern int ptep_set_access_flags(struct mm_area *vma, unsigned long address,
 				 pte_t *ptep, pte_t entry, int dirty);
 #define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG	/* defined in mm/pgtable.c */
-extern int ptep_test_and_clear_young(struct vm_area_struct *vma, unsigned long address,
+extern int ptep_test_and_clear_young(struct mm_area *vma, unsigned long address,
 				     pte_t *ptep);
 
 #define __HAVE_ARCH_PTEP_GET_AND_CLEAR
@@ -618,7 +618,7 @@ static inline void ptep_set_wrprotect(struct mm_struct *mm,
 }
 
 #define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-static inline int ptep_clear_flush_young(struct vm_area_struct *vma,
+static inline int ptep_clear_flush_young(struct mm_area *vma,
 					 unsigned long address, pte_t *ptep)
 {
 	/*
@@ -859,7 +859,7 @@ static inline int pmd_trans_huge(pmd_t pmd)
 }
 
 #define __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
-static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
+static inline int pmdp_set_access_flags(struct mm_area *vma,
 					unsigned long address, pmd_t *pmdp,
 					pmd_t entry, int dirty)
 {
@@ -867,7 +867,7 @@ static inline int pmdp_set_access_flags(struct vm_area_struct *vma,
 }
 
 #define __HAVE_ARCH_PMDP_TEST_AND_CLEAR_YOUNG
-static inline int pmdp_test_and_clear_young(struct vm_area_struct *vma,
+static inline int pmdp_test_and_clear_young(struct mm_area *vma,
 					unsigned long address, pmd_t *pmdp)
 {
 	return ptep_test_and_clear_young(vma, address, (pte_t *)pmdp);
@@ -892,7 +892,7 @@ static inline void pmdp_set_wrprotect(struct mm_struct *mm,
 }
 
 #define pmdp_establish pmdp_establish
-static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
+static inline pmd_t pmdp_establish(struct mm_area *vma,
 				unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	page_table_check_pmd_set(vma->vm_mm, pmdp, pmd);
@@ -900,7 +900,7 @@ static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
 }
 
 #define pmdp_collapse_flush pmdp_collapse_flush
-extern pmd_t pmdp_collapse_flush(struct vm_area_struct *vma,
+extern pmd_t pmdp_collapse_flush(struct mm_area *vma,
 				 unsigned long address, pmd_t *pmdp);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 

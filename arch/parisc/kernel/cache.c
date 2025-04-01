@@ -328,7 +328,7 @@ void disable_sr_hashing(void)
 }
 
 static inline void
-__flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr,
+__flush_cache_page(struct mm_area *vma, unsigned long vmaddr,
 		   unsigned long physaddr)
 {
 	if (!static_branch_likely(&parisc_has_cache))
@@ -390,7 +390,7 @@ void kunmap_flush_on_unmap(const void *addr)
 }
 EXPORT_SYMBOL(kunmap_flush_on_unmap);
 
-void flush_icache_pages(struct vm_area_struct *vma, struct page *page,
+void flush_icache_pages(struct mm_area *vma, struct page *page,
 		unsigned int nr)
 {
 	void *kaddr = page_address(page);
@@ -473,7 +473,7 @@ static inline unsigned long get_upa(struct mm_struct *mm, unsigned long addr)
 void flush_dcache_folio(struct folio *folio)
 {
 	struct address_space *mapping = folio_flush_mapping(folio);
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr, old_addr = 0;
 	void *kaddr;
 	unsigned long count = 0;
@@ -620,7 +620,7 @@ extern void purge_kernel_dcache_page_asm(unsigned long);
 extern void clear_user_page_asm(void *, unsigned long);
 extern void copy_user_page_asm(void *, void *, unsigned long);
 
-static void flush_cache_page_if_present(struct vm_area_struct *vma,
+static void flush_cache_page_if_present(struct mm_area *vma,
 	unsigned long vmaddr)
 {
 #if CONFIG_FLUSH_PAGE_ACCESSED
@@ -645,7 +645,7 @@ static void flush_cache_page_if_present(struct vm_area_struct *vma,
 }
 
 void copy_user_highpage(struct page *to, struct page *from,
-	unsigned long vaddr, struct vm_area_struct *vma)
+	unsigned long vaddr, struct mm_area *vma)
 {
 	void *kto, *kfrom;
 
@@ -657,7 +657,7 @@ void copy_user_highpage(struct page *to, struct page *from,
 	kunmap_local(kfrom);
 }
 
-void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_to_user_page(struct mm_area *vma, struct page *page,
 		unsigned long user_vaddr, void *dst, void *src, int len)
 {
 	__flush_cache_page(vma, user_vaddr, PFN_PHYS(page_to_pfn(page)));
@@ -665,7 +665,7 @@ void copy_to_user_page(struct vm_area_struct *vma, struct page *page,
 	flush_kernel_dcache_page_addr(PTR_PAGE_ALIGN_DOWN(dst));
 }
 
-void copy_from_user_page(struct vm_area_struct *vma, struct page *page,
+void copy_from_user_page(struct mm_area *vma, struct page *page,
 		unsigned long user_vaddr, void *dst, void *src, int len)
 {
 	__flush_cache_page(vma, user_vaddr, PFN_PHYS(page_to_pfn(page)));
@@ -702,7 +702,7 @@ int __flush_tlb_range(unsigned long sid, unsigned long start,
 	return 0;
 }
 
-static void flush_cache_pages(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+static void flush_cache_pages(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	unsigned long addr;
 
@@ -712,7 +712,7 @@ static void flush_cache_pages(struct vm_area_struct *vma, unsigned long start, u
 
 static inline unsigned long mm_total_size(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long usize = 0;
 	VMA_ITERATOR(vmi, mm, 0);
 
@@ -726,7 +726,7 @@ static inline unsigned long mm_total_size(struct mm_struct *mm)
 
 void flush_cache_mm(struct mm_struct *mm)
 {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	VMA_ITERATOR(vmi, mm, 0);
 
 	/*
@@ -751,7 +751,7 @@ void flush_cache_mm(struct mm_struct *mm)
 		flush_cache_pages(vma, vma->vm_start, vma->vm_end);
 }
 
-void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned long end)
+void flush_cache_range(struct mm_area *vma, unsigned long start, unsigned long end)
 {
 	if (!parisc_requires_coherency()
 	    || end - start >= parisc_cache_flush_threshold) {
@@ -768,12 +768,12 @@ void flush_cache_range(struct vm_area_struct *vma, unsigned long start, unsigned
 	flush_cache_pages(vma, start & PAGE_MASK, end);
 }
 
-void flush_cache_page(struct vm_area_struct *vma, unsigned long vmaddr, unsigned long pfn)
+void flush_cache_page(struct mm_area *vma, unsigned long vmaddr, unsigned long pfn)
 {
 	__flush_cache_page(vma, vmaddr, PFN_PHYS(pfn));
 }
 
-void flush_anon_page(struct vm_area_struct *vma, struct page *page, unsigned long vmaddr)
+void flush_anon_page(struct mm_area *vma, struct page *page, unsigned long vmaddr)
 {
 	if (!PageAnon(page))
 		return;
@@ -781,7 +781,7 @@ void flush_anon_page(struct vm_area_struct *vma, struct page *page, unsigned lon
 	__flush_cache_page(vma, vmaddr, PFN_PHYS(page_to_pfn(page)));
 }
 
-int ptep_clear_flush_young(struct vm_area_struct *vma, unsigned long addr,
+int ptep_clear_flush_young(struct mm_area *vma, unsigned long addr,
 			   pte_t *ptep)
 {
 	pte_t pte = ptep_get(ptep);
@@ -801,7 +801,7 @@ int ptep_clear_flush_young(struct vm_area_struct *vma, unsigned long addr,
  * can cause random cache corruption. Thus, we must flush the cache
  * as well as the TLB when clearing a PTE that's valid.
  */
-pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long addr,
+pte_t ptep_clear_flush(struct mm_area *vma, unsigned long addr,
 		       pte_t *ptep)
 {
 	struct mm_struct *mm = (vma)->vm_mm;

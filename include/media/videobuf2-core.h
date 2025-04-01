@@ -146,7 +146,7 @@ struct vb2_mem_ops {
 
 	unsigned int	(*num_users)(void *buf_priv);
 
-	int		(*mmap)(void *buf_priv, struct vm_area_struct *vma);
+	int		(*mmap)(void *buf_priv, struct mm_area *vma);
 };
 
 /**
@@ -1033,7 +1033,7 @@ void vb2_queue_error(struct vb2_queue *q);
 /**
  * vb2_mmap() - map video buffers into application address space.
  * @q:		pointer to &struct vb2_queue with videobuf2 queue.
- * @vma:	pointer to &struct vm_area_struct with the vma passed
+ * @vma:	pointer to &struct mm_area with the vma passed
  *		to the mmap file operation handler in the driver.
  *
  * Should be called from mmap file operation handler of a driver.
@@ -1052,7 +1052,7 @@ void vb2_queue_error(struct vb2_queue *q);
  * The return values from this function are intended to be directly returned
  * from the mmap handler in driver.
  */
-int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma);
+int vb2_mmap(struct vb2_queue *q, struct mm_area *vma);
 
 #ifndef CONFIG_MMU
 /**

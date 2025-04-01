@@ -376,7 +376,7 @@ static int genwqe_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static void genwqe_vma_open(struct vm_area_struct *vma)
+static void genwqe_vma_open(struct mm_area *vma)
 {
 	/* nothing ... */
 }
@@ -387,7 +387,7 @@ static void genwqe_vma_open(struct vm_area_struct *vma)
  *
  * Free memory which got allocated by GenWQE mmap().
  */
-static void genwqe_vma_close(struct vm_area_struct *vma)
+static void genwqe_vma_close(struct mm_area *vma)
 {
 	unsigned long vsize = vma->vm_end - vma->vm_start;
 	struct inode *inode = file_inode(vma->vm_file);
@@ -432,7 +432,7 @@ static const struct vm_operations_struct genwqe_vma_ops = {
  * plain buffer, we lookup our dma_mapping list to find the
  * corresponding DMA address for the associated user-space address.
  */
-static int genwqe_mmap(struct file *filp, struct vm_area_struct *vma)
+static int genwqe_mmap(struct file *filp, struct mm_area *vma)
 {
 	int rc;
 	unsigned long pfn, vsize = vma->vm_end - vma->vm_start;

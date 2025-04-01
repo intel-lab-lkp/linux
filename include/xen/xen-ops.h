@@ -44,11 +44,11 @@ int xen_setup_shutdown_event(void);
 extern unsigned long *xen_contiguous_bitmap;
 
 #if defined(CONFIG_XEN_PV)
-int xen_remap_pfn(struct vm_area_struct *vma, unsigned long addr,
+int xen_remap_pfn(struct mm_area *vma, unsigned long addr,
 		  xen_pfn_t *pfn, int nr, int *err_ptr, pgprot_t prot,
 		  unsigned int domid, bool no_translate);
 #else
-static inline int xen_remap_pfn(struct vm_area_struct *vma, unsigned long addr,
+static inline int xen_remap_pfn(struct mm_area *vma, unsigned long addr,
 				xen_pfn_t *pfn, int nr, int *err_ptr,
 				pgprot_t prot,  unsigned int domid,
 				bool no_translate)
@@ -58,23 +58,23 @@ static inline int xen_remap_pfn(struct vm_area_struct *vma, unsigned long addr,
 }
 #endif
 
-struct vm_area_struct;
+struct mm_area;
 
 #ifdef CONFIG_XEN_AUTO_XLATE
-int xen_xlate_remap_gfn_array(struct vm_area_struct *vma,
+int xen_xlate_remap_gfn_array(struct mm_area *vma,
 			      unsigned long addr,
 			      xen_pfn_t *gfn, int nr,
 			      int *err_ptr, pgprot_t prot,
 			      unsigned int domid,
 			      struct page **pages);
-int xen_xlate_unmap_gfn_range(struct vm_area_struct *vma,
+int xen_xlate_unmap_gfn_range(struct mm_area *vma,
 			      int nr, struct page **pages);
 #else
 /*
  * These two functions are called from arch/x86/xen/mmu.c and so stubs
  * are needed for a configuration not specifying CONFIG_XEN_AUTO_XLATE.
  */
-static inline int xen_xlate_remap_gfn_array(struct vm_area_struct *vma,
+static inline int xen_xlate_remap_gfn_array(struct mm_area *vma,
 					    unsigned long addr,
 					    xen_pfn_t *gfn, int nr,
 					    int *err_ptr, pgprot_t prot,
@@ -84,14 +84,14 @@ static inline int xen_xlate_remap_gfn_array(struct vm_area_struct *vma,
 	return -EOPNOTSUPP;
 }
 
-static inline int xen_xlate_unmap_gfn_range(struct vm_area_struct *vma,
+static inline int xen_xlate_unmap_gfn_range(struct mm_area *vma,
 					    int nr, struct page **pages)
 {
 	return -EOPNOTSUPP;
 }
 #endif
 
-int xen_remap_vma_range(struct vm_area_struct *vma, unsigned long addr,
+int xen_remap_vma_range(struct mm_area *vma, unsigned long addr,
 			unsigned long len);
 
 /*
@@ -111,7 +111,7 @@ int xen_remap_vma_range(struct vm_area_struct *vma, unsigned long addr,
  * Returns the number of successfully mapped frames, or a -ve error
  * code.
  */
-static inline int xen_remap_domain_gfn_array(struct vm_area_struct *vma,
+static inline int xen_remap_domain_gfn_array(struct mm_area *vma,
 					     unsigned long addr,
 					     xen_pfn_t *gfn, int nr,
 					     int *err_ptr, pgprot_t prot,
@@ -147,7 +147,7 @@ static inline int xen_remap_domain_gfn_array(struct vm_area_struct *vma,
  * Returns the number of successfully mapped frames, or a -ve error
  * code.
  */
-static inline int xen_remap_domain_mfn_array(struct vm_area_struct *vma,
+static inline int xen_remap_domain_mfn_array(struct mm_area *vma,
 					     unsigned long addr, xen_pfn_t *mfn,
 					     int nr, int *err_ptr,
 					     pgprot_t prot, unsigned int domid)
@@ -171,7 +171,7 @@ static inline int xen_remap_domain_mfn_array(struct vm_area_struct *vma,
  * Returns the number of successfully mapped frames, or a -ve error
  * code.
  */
-static inline int xen_remap_domain_gfn_range(struct vm_area_struct *vma,
+static inline int xen_remap_domain_gfn_range(struct mm_area *vma,
 					     unsigned long addr,
 					     xen_pfn_t gfn, int nr,
 					     pgprot_t prot, unsigned int domid,
@@ -183,7 +183,7 @@ static inline int xen_remap_domain_gfn_range(struct vm_area_struct *vma,
 	return xen_remap_pfn(vma, addr, &gfn, nr, NULL, prot, domid, false);
 }
 
-int xen_unmap_domain_gfn_range(struct vm_area_struct *vma,
+int xen_unmap_domain_gfn_range(struct mm_area *vma,
 			       int numpgs, struct page **pages);
 
 int xen_xlate_map_ballooned_pages(xen_pfn_t **pfns, void **vaddr,

@@ -478,7 +478,7 @@ static int ima_file_mmap(struct file *file, unsigned long reqprot,
 
 /**
  * ima_file_mprotect - based on policy, limit mprotect change
- * @vma: vm_area_struct protection is set to
+ * @vma: mm_area protection is set to
  * @reqprot: protection requested by the application
  * @prot: protection that will be applied by the kernel
  *
@@ -490,7 +490,7 @@ static int ima_file_mmap(struct file *file, unsigned long reqprot,
  *
  * On mprotect change success, return 0.  On failure, return -EACESS.
  */
-static int ima_file_mprotect(struct vm_area_struct *vma, unsigned long reqprot,
+static int ima_file_mprotect(struct mm_area *vma, unsigned long reqprot,
 			     unsigned long prot)
 {
 	struct ima_template_desc *template = NULL;

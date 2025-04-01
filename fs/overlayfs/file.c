@@ -476,7 +476,7 @@ static int ovl_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	return ret;
 }
 
-static int ovl_mmap(struct file *file, struct vm_area_struct *vma)
+static int ovl_mmap(struct file *file, struct mm_area *vma)
 {
 	struct ovl_file *of = file->private_data;
 	struct backing_file_ctx ctx = {

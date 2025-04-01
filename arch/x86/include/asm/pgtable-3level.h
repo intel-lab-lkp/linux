@@ -122,7 +122,7 @@ static inline pud_t native_pudp_get_and_clear(pud_t *pudp)
 
 #ifndef pmdp_establish
 #define pmdp_establish pmdp_establish
-static inline pmd_t pmdp_establish(struct vm_area_struct *vma,
+static inline pmd_t pmdp_establish(struct mm_area *vma,
 		unsigned long address, pmd_t *pmdp, pmd_t pmd)
 {
 	pmd_t old;

@@ -84,7 +84,7 @@ static int privcmd_buf_release(struct inode *ino, struct file *file)
 	return 0;
 }
 
-static void privcmd_buf_vma_open(struct vm_area_struct *vma)
+static void privcmd_buf_vma_open(struct mm_area *vma)
 {
 	struct privcmd_buf_vma_private *vma_priv = vma->vm_private_data;
 
@@ -96,7 +96,7 @@ static void privcmd_buf_vma_open(struct vm_area_struct *vma)
 	mutex_unlock(&vma_priv->file_priv->lock);
 }
 
-static void privcmd_buf_vma_close(struct vm_area_struct *vma)
+static void privcmd_buf_vma_close(struct mm_area *vma)
 {
 	struct privcmd_buf_vma_private *vma_priv = vma->vm_private_data;
 	struct privcmd_buf_private *file_priv;
@@ -130,7 +130,7 @@ static const struct vm_operations_struct privcmd_buf_vm_ops = {
 	.fault = privcmd_buf_vma_fault,
 };
 
-static int privcmd_buf_mmap(struct file *file, struct vm_area_struct *vma)
+static int privcmd_buf_mmap(struct file *file, struct mm_area *vma)
 {
 	struct privcmd_buf_private *file_priv = file->private_data;
 	struct privcmd_buf_vma_private *vma_priv;

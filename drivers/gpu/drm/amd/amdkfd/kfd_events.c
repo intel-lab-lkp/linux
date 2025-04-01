@@ -1063,7 +1063,7 @@ out:
 	return ret;
 }
 
-int kfd_event_mmap(struct kfd_process *p, struct vm_area_struct *vma)
+int kfd_event_mmap(struct kfd_process *p, struct mm_area *vma)
 {
 	unsigned long pfn;
 	struct kfd_signal_page *page;

@@ -64,7 +64,7 @@ int ocrdma_query_pkey(struct ib_device *ibdev, u32 port, u16 index, u16 *pkey);
 int ocrdma_alloc_ucontext(struct ib_ucontext *uctx, struct ib_udata *udata);
 void ocrdma_dealloc_ucontext(struct ib_ucontext *uctx);
 
-int ocrdma_mmap(struct ib_ucontext *, struct vm_area_struct *vma);
+int ocrdma_mmap(struct ib_ucontext *, struct mm_area *vma);
 
 int ocrdma_alloc_pd(struct ib_pd *pd, struct ib_udata *udata);
 int ocrdma_dealloc_pd(struct ib_pd *pd, struct ib_udata *udata);

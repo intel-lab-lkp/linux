@@ -469,7 +469,7 @@ static void r4k__flush_cache_vunmap(void)
  */
 static inline void local_r4k_flush_cache_range(void * args)
 {
-	struct vm_area_struct *vma = args;
+	struct mm_area *vma = args;
 	int exec = vma->vm_flags & VM_EXEC;
 
 	if (!has_valid_asid(vma->vm_mm, R4K_INDEX))
@@ -487,7 +487,7 @@ static inline void local_r4k_flush_cache_range(void * args)
 		r4k_blast_icache();
 }
 
-static void r4k_flush_cache_range(struct vm_area_struct *vma,
+static void r4k_flush_cache_range(struct mm_area *vma,
 	unsigned long start, unsigned long end)
 {
 	int exec = vma->vm_flags & VM_EXEC;
@@ -529,7 +529,7 @@ static void r4k_flush_cache_mm(struct mm_struct *mm)
 }
 
 struct flush_cache_page_args {
-	struct vm_area_struct *vma;
+	struct mm_area *vma;
 	unsigned long addr;
 	unsigned long pfn;
 };
@@ -537,7 +537,7 @@ struct flush_cache_page_args {
 static inline void local_r4k_flush_cache_page(void *args)
 {
 	struct flush_cache_page_args *fcp_args = args;
-	struct vm_area_struct *vma = fcp_args->vma;
+	struct mm_area *vma = fcp_args->vma;
 	unsigned long addr = fcp_args->addr;
 	struct page *page = pfn_to_page(fcp_args->pfn);
 	int exec = vma->vm_flags & VM_EXEC;
@@ -605,7 +605,7 @@ static inline void local_r4k_flush_cache_page(void *args)
 	}
 }
 
-static void r4k_flush_cache_page(struct vm_area_struct *vma,
+static void r4k_flush_cache_page(struct mm_area *vma,
 	unsigned long addr, unsigned long pfn)
 {
 	struct flush_cache_page_args args;

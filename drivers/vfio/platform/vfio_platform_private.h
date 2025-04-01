@@ -92,7 +92,7 @@ ssize_t vfio_platform_write(struct vfio_device *core_vdev,
 			    const char __user *buf,
 			    size_t count, loff_t *ppos);
 int vfio_platform_mmap(struct vfio_device *core_vdev,
-		       struct vm_area_struct *vma);
+		       struct mm_area *vma);
 
 int vfio_platform_irq_init(struct vfio_platform_device *vdev);
 void vfio_platform_irq_cleanup(struct vfio_platform_device *vdev);
