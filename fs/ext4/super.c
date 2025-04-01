@@ -3778,7 +3778,6 @@ static int ext4_lazyinit_thread(void *arg)
 	unsigned long next_wakeup, cur;
 
 	BUG_ON(NULL == eli);
-	set_freezable();
 
 cont_thread:
 	while (true) {
@@ -3836,8 +3835,6 @@ cont_thread:
 			}
 		}
 		mutex_unlock(&eli->li_list_mtx);
-
-		try_to_freeze();
 
 		cur = jiffies;
 		if (!next_wakeup_initialized || time_after_eq(cur, next_wakeup)) {

@@ -6782,7 +6782,7 @@ static ext4_grpblk_t ext4_last_grp_cluster(struct super_block *sb,
 
 static bool ext4_trim_interrupted(void)
 {
-	return fatal_signal_pending(current) || freezing(current);
+	return fatal_signal_pending(current);
 }
 
 static int ext4_try_to_trim_range(struct super_block *sb,
