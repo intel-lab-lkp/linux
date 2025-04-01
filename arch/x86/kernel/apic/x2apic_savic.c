@@ -13,6 +13,7 @@
 #include <linux/align.h>
 
 #include <asm/apic.h>
+#include <asm/apic-emul.h>
 #include <asm/sev.h>
 
 #include "local.h"
@@ -49,26 +50,43 @@ static __always_inline void set_reg(unsigned int offset, u32 val)
 	WRITE_ONCE(this_cpu_ptr(apic_page)->regs[offset >> 2], val);
 }
 
-#define SAVIC_ALLOWED_IRR	0x204
-
-static inline void update_vector(unsigned int cpu, unsigned int offset,
-				 unsigned int vector, bool set)
+static inline unsigned long *get_reg_bitmap(unsigned int cpu, unsigned int offset)
 {
 	struct apic_page *ap = per_cpu_ptr(apic_page, cpu);
-	unsigned long *reg = (unsigned long *) &ap->bytes[offset];
-	unsigned int bit;
 
+	return (unsigned long *) &ap->bytes[offset];
+}
+
+static inline unsigned int get_vec_bit(unsigned int vector)
+{
 	/*
 	 * The registers are 32-bit wide and 16-byte aligned.
 	 * Compensate for the resulting bit number spacing.
 	 */
-	bit = vector + 96 * (vector / 32);
+	return vector + 96 * (vector / 32);
+}
+
+static inline void update_vector(unsigned int cpu, unsigned int offset,
+				 unsigned int vector, bool set)
+{
+	unsigned long *reg = get_reg_bitmap(cpu, offset);
+	unsigned int bit = get_vec_bit(vector);
 
 	if (set)
 		set_bit(bit, reg);
 	else
 		clear_bit(bit, reg);
 }
+
+static inline bool test_vector(unsigned int cpu, unsigned int offset, unsigned int vector)
+{
+	unsigned long *reg = get_reg_bitmap(cpu, offset);
+	unsigned int bit = get_vec_bit(vector);
+
+	return test_bit(bit, reg);
+}
+
+#define SAVIC_ALLOWED_IRR	0x204
 
 static u32 x2apic_savic_read(u32 reg)
 {
@@ -374,6 +392,34 @@ static int x2apic_savic_probe(void)
 	return 1;
 }
 
+static void x2apic_savic_eoi(void)
+{
+	unsigned int cpu;
+	int vec;
+
+	cpu = raw_smp_processor_id();
+	vec = apic_find_highest_vector(get_reg_bitmap(cpu, APIC_ISR));
+	if (WARN_ONCE(vec == -1, "EOI write while no active interrupt in APIC_ISR"))
+		return;
+
+	if (test_vector(cpu, APIC_TMR, vec)) {
+		update_vector(cpu, APIC_ISR, vec, false);
+		/*
+		 * Propagate the EOI write to hv for level-triggered interrupts.
+		 * Return to guest from GHCB protocol event takes care of
+		 * re-evaluating interrupt state.
+		 */
+		savic_ghcb_msr_write(APIC_EOI, 0);
+	} else {
+		/*
+		 * Hardware clears APIC_ISR and re-evaluates the interrupt state
+		 * to determine if there is any pending interrupt which can be
+		 * delivered to CPU.
+		 */
+		native_apic_msr_eoi();
+	}
+}
+
 static struct apic apic_x2apic_savic __ro_after_init = {
 
 	.name				= "secure avic x2apic",
@@ -403,7 +449,7 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 
 	.read				= x2apic_savic_read,
 	.write				= x2apic_savic_write,
-	.eoi				= native_apic_msr_eoi,
+	.eoi				= x2apic_savic_eoi,
 	.icr_read			= native_x2apic_icr_read,
 	.icr_write			= x2apic_savic_icr_write,
 
