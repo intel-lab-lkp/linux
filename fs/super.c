@@ -1187,6 +1187,8 @@ static inline bool get_active_super(struct super_block *sb)
 	return active;
 }
 
+static const void *filesystems_freeze_ptr;
+
 static void filesystems_freeze_callback(struct super_block *sb, void *unused)
 {
 	if (!sb->s_op->freeze_fs && !sb->s_op->freeze_super)
@@ -1196,9 +1198,11 @@ static void filesystems_freeze_callback(struct super_block *sb, void *unused)
 		return;
 
 	if (sb->s_op->freeze_super)
-		sb->s_op->freeze_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+		sb->s_op->freeze_super(sb, FREEZE_EXCL | FREEZE_HOLDER_KERNEL,
+				       filesystems_freeze_ptr);
 	else
-		freeze_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+		freeze_super(sb, FREEZE_EXCL | FREEZE_HOLDER_KERNEL,
+			     filesystems_freeze_ptr);
 
 	deactivate_super(sb);
 }
@@ -1218,9 +1222,11 @@ static void filesystems_thaw_callback(struct super_block *sb, void *unused)
 		return;
 
 	if (sb->s_op->thaw_super)
-		sb->s_op->thaw_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+		sb->s_op->thaw_super(sb, FREEZE_EXCL | FREEZE_HOLDER_KERNEL,
+				     filesystems_freeze_ptr);
 	else
-		thaw_super(sb, FREEZE_MAY_NEST | FREEZE_HOLDER_KERNEL);
+		thaw_super(sb, FREEZE_EXCL | FREEZE_HOLDER_KERNEL,
+			   filesystems_freeze_ptr);
 
 	deactivate_super(sb);
 }
