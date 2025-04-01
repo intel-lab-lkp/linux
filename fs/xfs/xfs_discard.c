@@ -333,7 +333,7 @@ out_trans_cancel:
 static bool
 xfs_trim_should_stop(void)
 {
-	return fatal_signal_pending(current) || freezing(current);
+	return fatal_signal_pending(current);
 }
 
 /*

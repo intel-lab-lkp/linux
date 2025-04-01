@@ -993,7 +993,6 @@ xfs_zone_gc_handle_work(
 	}
 
 	__set_current_state(TASK_RUNNING);
-	try_to_freeze();
 
 	if (reset_list)
 		xfs_zone_gc_reset_zones(data, reset_list);
@@ -1041,7 +1040,6 @@ xfs_zoned_gcd(
 	unsigned int		nofs_flag;
 
 	nofs_flag = memalloc_nofs_save();
-	set_freezable();
 
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE | TASK_FREEZABLE);

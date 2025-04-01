@@ -636,7 +636,6 @@ xfsaild(
 	unsigned int	noreclaim_flag;
 
 	noreclaim_flag = memalloc_noreclaim_save();
-	set_freezable();
 
 	while (1) {
 		/*
@@ -694,8 +693,6 @@ xfsaild(
 			schedule_timeout(msecs_to_jiffies(tout));
 
 		__set_current_state(TASK_RUNNING);
-
-		try_to_freeze();
 
 		tout = xfsaild_push(ailp);
 	}
