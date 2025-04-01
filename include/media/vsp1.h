@@ -9,11 +9,16 @@
 #ifndef __MEDIA_VSP1_H__
 #define __MEDIA_VSP1_H__
 
+#include <linux/list.h>
 #include <linux/scatterlist.h>
 #include <linux/types.h>
 #include <linux/videodev2.h>
 
 struct device;
+
+/*******************************************************************************
+ * VSP1 DU interface
+ */
 
 int vsp1_du_init(struct device *dev);
 
@@ -116,5 +121,73 @@ void vsp1_du_atomic_flush(struct device *dev, unsigned int pipe_index,
 			  const struct vsp1_du_atomic_pipe_config *cfg);
 int vsp1_du_map_sg(struct device *dev, struct sg_table *sgt);
 void vsp1_du_unmap_sg(struct device *dev, struct sg_table *sgt);
+
+/*******************************************************************************
+ * VSP1 ISP interface
+ */
+
+/**
+ * struct vsp1_isp_buffer_desc - Describe a buffer allocated by VSPX
+ *
+ * @cpu_addr: CPU-mapped address of a buffer allocated by VSPX
+ * @dma_addr: bus address of a buffer allocated by VSPX
+ */
+struct vsp1_isp_buffer_desc {
+	void *cpu_addr;
+	dma_addr_t dma_addr;
+};
+
+/**
+ * struct vsp1_isp_job_desc - Describe a VSPX buffer transfer request
+ *
+ * Describe a transfer request for the VSPX to perform on behalf of the ISP.
+ * The transfer job descriptor contains an optional ConfigDMA buffer and
+ * one RAW image buffer. Set config.pairs to 0 if no ConfigDMA buffer should
+ * be transferred.
+ *
+ * @config: ConfigDMA buffer
+ * @config.pairs: number of reg-value pairs in the ConfigDMA buffer
+ * @config.mem: bus address of the ConfigDMA buffer
+ * @img: RAW image buffer
+ * @img.fmt: RAW image format
+ * @img.mem: bus address of the RAW image buffer
+ */
+struct vsp1_isp_job_desc {
+	struct {
+		unsigned int pairs;
+		dma_addr_t mem;
+	} config;
+	struct {
+		struct v4l2_format fmt;
+		dma_addr_t mem;
+	} img;
+};
+
+/**
+ * struct vsp1_vspx_frame_end - VSPX frame end callback data
+ *
+ * @vspx_frame_end: Frame end callback. Called after a transfer job has been
+ *		    completed. If the job includes both a ConfigDMA and a
+ *		    RAW image, the callback is called after both have been
+ *		    transferred
+ * @frame_end_data: Frame end callback data, passed to vspx_frame_end
+ */
+struct vsp1_vspx_frame_end {
+	void (*vspx_frame_end)(void *data);
+	void *frame_end_data;
+};
+
+int vsp1_isp_init(struct device *dev);
+struct device *vsp1_isp_get_bus_master(struct device *dev);
+int vsp1_isp_alloc_buffers(struct device *dev, size_t size,
+			   struct vsp1_isp_buffer_desc *buffer_desc);
+int vsp1_isp_configure(struct device *dev,
+		       const struct v4l2_pix_format_mplane *fmt);
+int vsp1_isp_start_streaming(struct device *dev,
+			     struct vsp1_vspx_frame_end *frame_end,
+			     bool enable);
+int vsp1_isp_job_prepare(struct device *dev,
+			 const struct vsp1_isp_job_desc *desc);
+void vsp1_isp_job_run(struct device *dev);
 
 #endif /* __MEDIA_VSP1_H__ */
