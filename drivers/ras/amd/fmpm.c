@@ -258,7 +258,7 @@ static bool fpds_equal(struct cper_fru_poison_desc *old, struct cper_fru_poison_
 	 *
 	 * Also, order the checks from most->least likely to fail to shortcut the code.
 	 */
-	if (old->addr != new->addr)
+	if (amd_atl_masked_addr(old->addr) != amd_atl_masked_addr(new->addr))
 		return false;
 
 	if (old->hw_id != new->hw_id)

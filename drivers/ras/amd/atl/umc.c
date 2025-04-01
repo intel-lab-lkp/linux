@@ -375,6 +375,20 @@ void amd_retire_dram_row(struct atl_err *a_err)
 }
 EXPORT_SYMBOL_GPL(amd_retire_dram_row);
 
+u64 amd_atl_masked_addr(u64 addr)
+{
+	/*
+	 * Row retirement is done on MI300 systems, and some bits are 'don't care'
+	 * for comparing addresses with unique physical rows.
+	 * This includes all column bits and the row[13] bit.
+	 */
+	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
+		return addr & ~(MI300_UMC_MCA_ROW13 | MI300_UMC_MCA_COL);
+
+	return addr;
+}
+EXPORT_SYMBOL_GPL(amd_atl_masked_addr);
+
 static unsigned long get_addr(unsigned long addr)
 {
 	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
