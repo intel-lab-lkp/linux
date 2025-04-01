@@ -2873,6 +2873,7 @@ int phylink_ethtool_ksettings_set(struct phylink *pl,
 
 		config.speed = c->speed;
 		config.duplex = c->duplex;
+		linkmode_and(config.advertising, c->linkmodes, pl->supported);
 		break;
 
 	case AUTONEG_ENABLE:
