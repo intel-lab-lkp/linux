@@ -2840,9 +2840,9 @@ static int nf_tables_updchain(struct nft_ctx *ctx, u8 genmask, u8 policy,
 			if (err < 0)
 				goto err_hooks;
 		}
-	}
 
-	unregister = true;
+		unregister = true;
+	}
 
 	if (nla[NFTA_CHAIN_COUNTERS]) {
 		if (!nft_is_base_chain(chain)) {
