@@ -1435,8 +1435,9 @@ out_unmap:
 		*mmap_locked = false;
 	}
 out:
-	trace_mm_khugepaged_scan_pmd(mm, &folio->page, writable, referenced,
-				     none_or_zero, result, unmapped);
+	trace_mm_khugepaged_scan_pmd(mm, folio ? &folio->page : NULL,
+				     writable, referenced, none_or_zero,
+				     result, unmapped);
 	return result;
 }
 
