@@ -1096,7 +1096,7 @@ tx_err:
 
 }
 
-static void ipip6_tunnel_bind_dev(struct net_device *dev)
+static int ipip6_tunnel_bind_dev(struct net_device *dev)
 {
 	struct ip_tunnel *tunnel = netdev_priv(dev);
 	int t_hlen = tunnel->hlen + sizeof(struct iphdr);
@@ -1135,7 +1135,12 @@ static void ipip6_tunnel_bind_dev(struct net_device *dev)
 		WRITE_ONCE(dev->mtu, mtu);
 		hlen = tdev->hard_header_len + tdev->needed_headroom;
 	}
+
+	if (t_hlen + hlen > U16_MAX)
+		return -EOVERFLOW;
+
 	dev->needed_headroom = t_hlen + hlen;
+	return 0;
 }
 
 static void ipip6_tunnel_update(struct ip_tunnel *t,
@@ -1452,7 +1457,9 @@ static int ipip6_tunnel_init(struct net_device *dev)
 	tunnel->dev = dev;
 	strcpy(tunnel->parms.name, dev->name);
 
-	ipip6_tunnel_bind_dev(dev);
+	err = ipip6_tunnel_bind_dev(dev);
+	if (err)
+		return err;
 
 	err = dst_cache_init(&tunnel->dst_cache, GFP_KERNEL);
 	if (err)
