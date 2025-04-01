@@ -715,16 +715,23 @@ static int phylink_parse_fixedlink(struct phylink *pl,
 		phylink_warn(pl, "fixed link specifies half duplex for %dMbps link?\n",
 			     pl->link_config.speed);
 
-	linkmode_zero(pl->supported);
-	phylink_fill_fixedlink_supported(pl->supported);
-
+	linkmode_fill(pl->supported);
 	linkmode_copy(pl->link_config.advertising, pl->supported);
 	phylink_validate(pl, pl->supported, &pl->link_config);
 
 	c = phy_caps_lookup(pl->link_config.speed, pl->link_config.duplex,
 			    pl->supported, true);
-	if (c)
+	if (c) {
 		linkmode_and(match, pl->supported, c->linkmodes);
+
+		/* Compatbility with the legacy behaviour:
+		 * Report one single BaseT mode.
+		 */
+		phylink_fill_fixedlink_supported(mask);
+		if (linkmode_intersects(match, mask))
+			linkmode_and(match, match, mask);
+		linkmode_zero(mask);
+	}
 
 	linkmode_set_bit(ETHTOOL_LINK_MODE_Pause_BIT, mask);
 	linkmode_set_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT, mask);
