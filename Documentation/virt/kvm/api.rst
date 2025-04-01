@@ -8158,6 +8158,31 @@ KVM_X86_QUIRK_STUFF_FEATURE_MSRS    By default, at vCPU creation, KVM sets the
                                     and 0x489), as KVM does now allow them to
                                     be set by userspace (KVM sets them based on
                                     guest CPUID, for safety purposes).
+
+KVM_X86_QUIRK_EPT_IGNORE_GUEST_PAT  By default, on Intel CPUs with TDP (EPT)
+                                    enabled, KVM ignores guest PAT unless the
+                                    VM has an assigned non-coherent device,
+                                    even if it is entirely safe/correct for KVM
+                                    to honor guest PAT.  When this quirk is
+                                    disabled, and the host CPU fully supports
+                                    selfsnoop (isn't affected by errata), KVM
+                                    honors guest PAT for all VMs.
+
+                                    The only _known_ issue with honoring guest
+                                    PAT is when QEMU's Bochs VGA is exposed to
+                                    a VM on Cascade Lake and later Intel server
+                                    CPUs, and the guest kernel is running an
+                                    outdated driver that maps video RAM as UC.
+                                    Accessing UC memory on the affected Intel
+                                    CPUs is an order of magnitude slower than
+                                    previous generations, to the point where
+                                    the access latency prevents the guest from
+                                    booting.  This quirk can likely be disabled
+                                    if the above do not hold true.
+
+                                    Note, KVM always honors guest PAT on AMD
+                                    CPUs when TDP (NPT) is enabled.  KVM never
+                                    honors guest PAT when TDP is disabled.
 =================================== ============================================
 
 7.32 KVM_CAP_MAX_VCPU_ID
