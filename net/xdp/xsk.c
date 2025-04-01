@@ -1651,7 +1651,9 @@ static int xsk_notifier(struct notifier_block *this,
 				xsk_unbind_dev(xs);
 
 				/* Clear device references. */
+				netdev_lock_ops(dev);
 				xp_clear_dev(xs->pool);
+				netdev_unlock_ops(dev);
 			}
 			mutex_unlock(&xs->mutex);
 		}
