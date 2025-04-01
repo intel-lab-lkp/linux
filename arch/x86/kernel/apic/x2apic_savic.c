@@ -185,12 +185,25 @@ static void x2apic_savic_send_ipi_mask_allbutself(const struct cpumask *mask, in
 	__send_ipi_mask(mask, vector, true);
 }
 
+static void init_apic_page(void)
+{
+	u32 apic_id;
+
+	/*
+	 * Before Secure AVIC is enabled, APIC msr reads are intercepted.
+	 * APIC_ID msr read returns the value from the Hypervisor.
+	 */
+	apic_id = native_apic_msr_read(APIC_ID);
+	set_reg(APIC_ID, apic_id);
+}
+
 static void x2apic_savic_setup(void)
 {
 	void *backing_page;
 	enum es_result ret;
 	unsigned long gpa;
 
+	init_apic_page();
 	backing_page = this_cpu_ptr(apic_page);
 	gpa = __pa(backing_page);
 
