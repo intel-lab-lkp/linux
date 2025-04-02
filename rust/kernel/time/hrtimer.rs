@@ -165,6 +165,29 @@ impl<T> HrTimer<T> {
     }
 }
 
+/// The timer base for a specific clock.
+///
+/// # Invariants
+///
+/// The layout of this type is equivalent to that of `struct hrtimer_clock_base`.
+#[repr(transparent)]
+pub struct HrTimerClockBase(Opaque<bindings::hrtimer_clock_base>);
+
+impl HrTimerClockBase {
+    /// Retrieve a reference to a [`HrTimerClockBase`] from `ptr`.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must point to a live `struct hrtimer_clock_base`.
+    unsafe fn from_raw<'a>(ptr: *mut bindings::hrtimer_clock_base) -> &'a Self {
+        // SAFETY:
+        // - `ptr` is guaranteed to point to a live `struct hrtimer_clock_base` by our safety
+        //   contract.
+        // - Our data layout is equivalent to said struct via our type invariants.
+        unsafe { &*ptr.cast() }
+    }
+}
+
 /// Implemented by pointer types that point to structs that contain a [`HrTimer`].
 ///
 /// `Self` must be [`Sync`] because it is passed to timer callbacks in another
@@ -504,6 +527,15 @@ impl<'a, T> HrTimerCallbackContext<'a, T> {
     pub(crate) fn raw_get_timer(&self) -> *mut bindings::hrtimer {
         // SAFETY: By our type invariants, `self.0` always points to a valid [`HrTimer<T>`].
         unsafe { HrTimer::raw_get(self.0.as_ptr()) }
+    }
+
+    /// Get the [`HrTimerClockBase`] for the [`HrTimer`] associated with this [`HrTimerCallbackContext`].
+    pub fn clock_base(&self) -> &HrTimerClockBase {
+        // SAFETY:
+        // - By our type invariants, `self.0` always points to a valid `HrTimer<T>`.
+        // - `base` is initialized and points to a valid `hrtimer_clock_base` for as long as
+        //   `HrTimer<T>` is exposed to users.
+        unsafe { HrTimerClockBase::from_raw((*self.raw_get_timer()).base) }
     }
 
     /// Forward the timer expiry so it will expire in the future.
