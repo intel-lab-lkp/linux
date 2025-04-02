@@ -252,7 +252,8 @@ struct hclgevf_dev {
 	u16 *vector_status;
 	int *vector_irq;
 
-	bool gro_en;
+	u32 gro_en :1;
+	u32 rxvtag_strip_en :1;
 
 	unsigned long vlan_del_fail_bmap[BITS_TO_LONGS(VLAN_N_VID)];
 
