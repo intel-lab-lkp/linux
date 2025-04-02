@@ -35,13 +35,13 @@ void ethtool_cmis_cdb_compose_args(struct ethtool_cmis_cdb_cmd_args *args,
 	args->req.lpl_len = lpl_len;
 	if (lpl) {
 		memcpy(args->req.payload, lpl, args->req.lpl_len);
-		args->read_write_len_ext =
+		args->calc_read_write_len_ext =
 			ethtool_cmis_get_max_lpl_size(read_write_len_ext);
 	}
 	if (epl) {
 		args->req.epl_len = cpu_to_be16(epl_len);
 		args->req.epl = epl;
-		args->read_write_len_ext =
+		args->calc_read_write_len_ext =
 			ethtool_cmis_get_max_epl_size(read_write_len_ext);
 	}
 
@@ -590,7 +590,7 @@ ethtool_cmis_cdb_execute_epl_cmd(struct net_device *dev,
 			space_left = CMIS_CDB_EPL_FW_BLOCK_OFFSET_END - offset + 1;
 			bytes_to_write = min_t(u16, bytes_left,
 					       min_t(u16, space_left,
-						     args->read_write_len_ext));
+						     args->calc_read_write_len_ext));
 
 			err = __ethtool_cmis_cdb_execute_cmd(dev, page_data,
 							     page, offset,
@@ -631,7 +631,7 @@ int ethtool_cmis_cdb_execute_cmd(struct net_device *dev,
 				       offsetof(struct ethtool_cmis_cdb_request,
 						epl));
 
-	if (args->req.lpl_len > args->read_write_len_ext) {
+	if (args->req.lpl_len > args->calc_read_write_len_ext) {
 		args->err_msg = "LPL length is longer than CDB read write length extension allows";
 		return -EINVAL;
 	}
