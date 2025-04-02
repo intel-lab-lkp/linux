@@ -1358,7 +1358,7 @@ static signed int validate_80211w_mgmt(struct adapter *adapter, union recv_frame
 			u8 *mgmt_DATA;
 			u32 data_len = 0;
 
-			pattrib->bdecrypted = 0;
+			pattrib->bdecrypted = false;
 			pattrib->encrypt = _AES_;
 			pattrib->hdrlen = sizeof(struct ieee80211_hdr_3addr);
 			/* set iv and icv length */
