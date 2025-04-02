@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
-
+// SPDX-License-Identifier: GPL-2.0 
 //! Time related primitives.
 //!
 //! This module contains the kernel APIs related to time and timers that
@@ -9,6 +8,7 @@
 //! C header: [`include/linux/ktime.h`](srctree/include/linux/ktime.h).
 
 pub mod hrtimer;
+use core::convert::Into;
 
 /// The number of nanoseconds per millisecond.
 pub const NSEC_PER_MSEC: i64 = bindings::NSEC_PER_MSEC as i64;
@@ -64,6 +64,12 @@ impl Ktime {
     #[inline]
     pub fn to_ms(self) -> i64 {
         self.divns_constant::<NSEC_PER_MSEC>()
+    }
+
+    /// Creates a new Ktime from the given duration in nanoseconds.
+    #[inline]
+    pub fn from_nanos(ns: impl Into<bindings::ktime_t>) -> Self {
+        Self { inner: ns.into() }
     }
 }
 
