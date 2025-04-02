@@ -69,7 +69,7 @@
 
 use super::ClockId;
 use crate::{init::PinInit, prelude::*, time::Ktime, types::Opaque};
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ptr::NonNull};
 
 /// A timer backed by a C `struct hrtimer`.
 ///
@@ -279,7 +279,10 @@ pub trait HrTimerCallback {
     type Pointer<'a>: RawHrTimerCallback;
 
     /// Called by the timer logic when the timer fires.
-    fn run(this: <Self::Pointer<'_> as RawHrTimerCallback>::CallbackTarget<'_>) -> HrTimerRestart
+    fn run<T>(
+        this: <Self::Pointer<'_> as RawHrTimerCallback>::CallbackTarget<'_>,
+        ctx: HrTimerCallbackContext<'_, T>
+    ) -> HrTimerRestart
     where
         Self: Sized;
 }
@@ -467,6 +470,49 @@ impl HrTimerMode {
             HrTimerMode::AbsolutePinnedHard => hrtimer_mode_HRTIMER_MODE_ABS_PINNED_HARD,
             HrTimerMode::RelativePinnedHard => hrtimer_mode_HRTIMER_MODE_REL_PINNED_HARD,
         }
+    }
+}
+
+/// Privileged smart-pointer for a [`HrTimer`] callback context.
+///
+/// This provides access to various methods for a [`HrTimer`] which can only be safely called within
+/// its callback.
+///
+/// # Invariants
+///
+/// * The existence of this type means the caller is currently within the callback for a
+///   [`HrTimer`].
+/// * `self.0` always points to a live instance of [`HrTimer<T>`].
+pub struct HrTimerCallbackContext<'a, T>(NonNull<HrTimer<T>>, PhantomData<&'a ()>);
+
+impl<'a, T> HrTimerCallbackContext<'a, T> {
+    /// Create a new [`HrTimerCallbackContext`].
+    ///
+    /// # Safety
+    ///
+    /// This function relies on the caller being within the context of a timer callback, so it must
+    /// not be used anywhere except for within implementations of [`RawHrTimerCallback::run`]. The
+    /// caller promises that `timer` points to a valid initialized instance of
+    /// [`bindings::hrtimer`].
+    pub(crate) unsafe fn from_raw(timer: *mut HrTimer<T>) -> Self {
+        // SAFETY: The caller guarantees `timer` is a valid pointer to an initialized
+        // `bindings::hrtimer`
+        Self(unsafe { NonNull::new_unchecked(timer) }, PhantomData)
+    }
+
+    /// Get the raw `bindings::hrtimer` pointer for this [`HrTimerCallbackContext`].
+    pub(crate) fn raw_get_timer(&self) -> *mut bindings::hrtimer {
+        // SAFETY: By our type invariants, `self.0` always points to a valid [`HrTimer<T>`].
+        unsafe { HrTimer::raw_get(self.0.as_ptr()) }
+    }
+
+    /// Forward the timer expiry so it will expire in the future.
+    ///
+    /// Note that this does not requeue the timer, it simply updates its expiry value. It returns
+    /// the number of overruns that have occurred as a result of the expiry change.
+    pub fn forward(&self, now: Ktime, interval: Ktime) -> u64 {
+        // SAFETY: The C API requirements for this function are fulfilled by our type invariants.
+        unsafe { bindings::hrtimer_forward(self.raw_get_timer(), now.to_ns(), interval.to_ns()) }
     }
 }
 
