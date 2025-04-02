@@ -777,6 +777,8 @@ int hibernate(void)
 		goto Restore;
 
 	ksys_sync_helper();
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
 
 	error = freeze_processes();
 	if (error)
@@ -845,6 +847,7 @@ int hibernate(void)
 	/* Don't bother checking whether freezer_test_done is true */
 	freezer_test_done = false;
  Exit:
+	filesystems_thaw();
 	pm_notifier_call_chain(PM_POST_HIBERNATION);
  Restore:
 	pm_restore_console();
@@ -880,6 +883,9 @@ int hibernate_quiet_exec(int (*func)(void *data), void *data)
 	error = pm_notifier_call_chain_robust(PM_HIBERNATION_PREPARE, PM_POST_HIBERNATION);
 	if (error)
 		goto restore;
+
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
 
 	error = freeze_processes();
 	if (error)
@@ -940,6 +946,7 @@ thaw:
 	thaw_processes();
 
 exit:
+	filesystems_thaw();
 	pm_notifier_call_chain(PM_POST_HIBERNATION);
 
 restore:
@@ -1028,19 +1035,26 @@ static int software_resume(void)
 	if (error)
 		goto Restore;
 
+	if (filesystem_freeze_enabled)
+		filesystems_freeze();
+
 	pm_pr_dbg("Preparing processes for hibernation restore.\n");
 	error = freeze_processes();
-	if (error)
+	if (error) {
+		filesystems_thaw();
 		goto Close_Finish;
+	}
 
 	error = freeze_kernel_threads();
 	if (error) {
 		thaw_processes();
+		filesystems_thaw();
 		goto Close_Finish;
 	}
 
 	error = load_image_and_restore();
 	thaw_processes();
+	filesystems_thaw();
  Finish:
 	pm_notifier_call_chain(PM_POST_RESTORE);
  Restore:
