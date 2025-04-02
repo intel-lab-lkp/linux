@@ -1173,7 +1173,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 
 	/*  check if there is WMM IE & support WWM-PS */
 	pstat->flags &= ~WLAN_STA_WME;
-	pstat->qos_option = 0;
+	pstat->qos_option = false;
 	pstat->qos_info = 0;
 	pstat->has_legacy_ac = true;
 	pstat->uapsd_vo = 0;
@@ -1189,7 +1189,7 @@ unsigned int OnAssocReq(struct adapter *padapter, union recv_frame *precv_frame)
 
 					pstat->flags |= WLAN_STA_WME;
 
-					pstat->qos_option = 1;
+					pstat->qos_option = true;
 					pstat->qos_info = *(p+8);
 
 					pstat->max_sp_len = (pstat->qos_info>>5)&0x3;
