@@ -69,7 +69,7 @@
 
 use super::ClockId;
 use crate::{init::PinInit, prelude::*, time::Ktime, types::Opaque};
-use core::{marker::PhantomData, ptr::NonNull};
+use core::{marker::PhantomData, ptr::{NonNull, addr_of}};
 
 /// A timer backed by a C `struct hrtimer`.
 ///
@@ -131,7 +131,7 @@ impl<T> HrTimer<T> {
         // SAFETY: The field projection to `timer` does not go out of bounds,
         // because the caller of this function promises that `this` points to an
         // allocation of at least the size of `Self`.
-        unsafe { Opaque::raw_get(core::ptr::addr_of!((*this).timer)) }
+        unsafe { Opaque::raw_get(addr_of!((*this).timer)) }
     }
 
     /// Cancel an initialized and potentially running timer.
@@ -162,6 +162,31 @@ impl<T> HrTimer<T> {
         // SAFETY: `c_timer_ptr` is initialized and valid. Synchronization is
         // handled on the C side.
         unsafe { bindings::hrtimer_cancel(c_timer_ptr) != 0 }
+    }
+
+    /// Return the time expiry for the given timer pointer.
+    ///
+    /// This value should only be used as a snapshot, as the actual expiry time could change after
+    /// this function is called.
+    ///
+    /// # Safety
+    ///
+    /// `self_ptr` must point to a valid `Self`.
+    unsafe fn raw_expires(self_ptr: *const Self) -> Ktime {
+        // SAFETY: self_ptr points to an allocation of at least `HrTimer` size.
+        let c_timer_ptr = unsafe { HrTimer::raw_get(self_ptr) };
+
+        // SAFETY: There's no actual locking here, a racy read is fine and expected.
+        Ktime::from_raw(unsafe { core::ptr::read(addr_of!((*c_timer_ptr).node.expires)) })
+    }
+
+    /// Return the time expiry for this [`HrTimer`].
+    ///
+    /// This value should only be used as a snapshot, as the actual expiry time could change after
+    /// this function is called.
+    pub fn expires(&self) -> Ktime {
+        // SAFETY: By our type invariants, `self.0` always points to a valid `HrTimer<T>`.
+        unsafe { HrTimer::raw_expires(self) }
     }
 }
 
