@@ -10,6 +10,7 @@
 #include <drm/drm_encoder.h>
 #include <drm/drm_plane.h>
 
+struct drm_scanout_buffer;
 struct drm_simple_display_pipe;
 
 /**
@@ -226,6 +227,27 @@ struct drm_simple_display_pipe_funcs {
 	 */
 	void (*destroy_plane_state)(struct drm_simple_display_pipe *pipe,
 				    struct drm_plane_state *plane_state);
+
+	/**
+	 * @get_scanout_buffer:
+	 *
+	 * Optional, called by &drm_plane_funcs.get_scanout_buffer. Please
+	 * read the documentation for the &drm_plane_funcs.get_scanout_buffer
+	 * hook for more details.
+	 *
+	 */
+	int (*get_scanout_buffer)(struct drm_simple_display_pipe *pipe,
+				  struct drm_scanout_buffer *sb);
+
+	/**
+	 * @panic_flush:
+	 *
+	 * Optional, called by &drm_plane_funcs.panic_flush. Please read the
+	 * documentation for the &drm_plane_funcs.get_scanout_buffer hook for
+	 * more details.
+	 *
+	 */
+	void (*panic_flush)(struct drm_simple_display_pipe *pipe);
 };
 
 /**

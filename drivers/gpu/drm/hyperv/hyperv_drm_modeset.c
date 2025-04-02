@@ -16,6 +16,7 @@
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_panic.h>
 
 #include "hyperv_drm.h"
 
@@ -146,10 +147,51 @@ static void hyperv_pipe_update(struct drm_simple_display_pipe *pipe,
 	}
 }
 
+static int hyperv_pipe_get_scanout_buffer(struct drm_simple_display_pipe *pipe,
+					  struct drm_scanout_buffer *sb)
+{
+	struct drm_plane_state *state = pipe->plane.state;
+	struct hyperv_drm_device *hv;
+	struct drm_framebuffer *fb;
+
+	if (!state || !state->fb || !state->visible)
+		return -ENODEV;
+
+	fb = state->fb;
+	hv = to_hv(fb->dev);
+
+	iosys_map_set_vaddr_iomem(&sb->map[0], hv->vram);
+	sb->format = fb->format;
+	sb->height = fb->height;
+	sb->width = fb->width;
+	sb->pitch[0] = fb->pitches[0];
+	return 0;
+}
+
+static void hyperv_pipe_panic_flush(struct drm_simple_display_pipe *pipe)
+{
+	struct drm_plane_state *state = pipe->plane.state;
+	struct hyperv_drm_device *hv;
+	struct drm_rect rect;
+
+	if (!state || !state->fb)
+		return;
+
+	rect.x1 = 0;
+	rect.y1 = 0;
+	rect.x2 = state->fb->width;
+	rect.y2 = state->fb->height;
+
+	hv = to_hv(state->fb->dev);
+	hyperv_update_dirt(hv->hdev, &rect);
+}
+
 static const struct drm_simple_display_pipe_funcs hyperv_pipe_funcs = {
 	.enable	= hyperv_pipe_enable,
 	.check = hyperv_pipe_check,
 	.update	= hyperv_pipe_update,
+	.get_scanout_buffer = hyperv_pipe_get_scanout_buffer,
+	.panic_flush = hyperv_pipe_panic_flush,
 	DRM_GEM_SIMPLE_DISPLAY_PIPE_SHADOW_PLANE_FUNCS,
 };
 

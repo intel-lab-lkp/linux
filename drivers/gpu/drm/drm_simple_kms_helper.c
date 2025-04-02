@@ -14,6 +14,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_simple_kms_helper.h>
+#include <drm/drm_panic.h>
 
 /**
  * DOC: overview
@@ -316,6 +317,29 @@ static bool drm_simple_kms_format_mod_supported(struct drm_plane *plane,
 	return modifier == DRM_FORMAT_MOD_LINEAR;
 }
 
+static int drm_simple_kms_plane_get_scanout_buffer(struct drm_plane *plane,
+						   struct drm_scanout_buffer *sb)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
+	if (!pipe->funcs || !pipe->funcs->get_scanout_buffer)
+		return -EINVAL;
+
+	return pipe->funcs->get_scanout_buffer(pipe, sb);
+}
+
+static void drm_simple_kms_plane_panic_flush(struct drm_plane *plane)
+{
+	struct drm_simple_display_pipe *pipe;
+
+	pipe = container_of(plane, struct drm_simple_display_pipe, plane);
+	if (!pipe->funcs || !pipe->funcs->panic_flush)
+		return;
+
+	pipe->funcs->panic_flush(pipe);
+}
+
 static const struct drm_plane_helper_funcs drm_simple_kms_plane_helper_funcs = {
 	.prepare_fb = drm_simple_kms_plane_prepare_fb,
 	.cleanup_fb = drm_simple_kms_plane_cleanup_fb,
@@ -323,6 +347,8 @@ static const struct drm_plane_helper_funcs drm_simple_kms_plane_helper_funcs = {
 	.end_fb_access = drm_simple_kms_plane_end_fb_access,
 	.atomic_check = drm_simple_kms_plane_atomic_check,
 	.atomic_update = drm_simple_kms_plane_atomic_update,
+	.get_scanout_buffer = drm_simple_kms_plane_get_scanout_buffer,
+	.panic_flush = drm_simple_kms_plane_panic_flush,
 };
 
 static void drm_simple_kms_plane_reset(struct drm_plane *plane)
