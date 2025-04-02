@@ -386,10 +386,10 @@ void update_bmc_sta(struct adapter *padapter)
 
 		pmlmeinfo->FW_sta_info[psta->mac_id].psta = psta;
 
-		psta->qos_option = 0;
+		psta->qos_option = false;
 		psta->htpriv.ht_option = false;
 
-		psta->ieee8021x_blocked = 0;
+		psta->ieee8021x_blocked = false;
 
 		memset((void *)&psta->sta_stats, 0, sizeof(struct stainfo_stats));
 
@@ -1966,17 +1966,17 @@ void sta_info_update(struct adapter *padapter, struct sta_info *psta)
 
 	/* update wmm cap. */
 	if (WLAN_STA_WME & flags)
-		psta->qos_option = 1;
+		psta->qos_option = true;
 	else
-		psta->qos_option = 0;
+		psta->qos_option = false;
 
 	if (pmlmepriv->qospriv.qos_option == 0)
-		psta->qos_option = 0;
+		psta->qos_option = false;
 
 	/* update 802.11n ht cap. */
 	if (WLAN_STA_HT & flags) {
 		psta->htpriv.ht_option = true;
-		psta->qos_option = 1;
+		psta->qos_option = true;
 	} else {
 		psta->htpriv.ht_option = false;
 	}
