@@ -10,6 +10,7 @@
 //
 
 virtual patch
+virtual report
 
 @depends on patch@ constant C; @@
 
@@ -30,3 +31,8 @@ virtual patch
 
 - msecs_to_jiffies(E * MSEC_PER_SEC)
 + secs_to_jiffies(E)
+
+// Dummy rule for report mode that would otherwise be empty and make spatch
+// fail ("No rules apply.")
+@script:python depends on report@
+@@
