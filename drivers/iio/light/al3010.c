@@ -92,8 +92,8 @@ static int al3010_init(struct al3010_data *data)
 	ret = devm_add_action_or_reset(&data->client->dev,
 				       al3010_set_pwr_off,
 				       data);
-	if (ret < 0)
-		return ret;
+	if (ret)
+		return dev_err_probe(&data->client->dev, ret, "failed to add action\n");
 
 	ret = i2c_smbus_write_byte_data(data->client, AL3010_REG_CONFIG,
 					FIELD_PREP(AL3010_GAIN_MASK,
@@ -190,10 +190,8 @@ static int al3010_probe(struct i2c_client *client)
 	indio_dev->modes = INDIO_DIRECT_MODE;
 
 	ret = al3010_init(data);
-	if (ret < 0) {
-		dev_err(dev, "al3010 chip init failed\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to init ALS\n");
 
 	return devm_iio_device_register(dev, indio_dev);
 }
