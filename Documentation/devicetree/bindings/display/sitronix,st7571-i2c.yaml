@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/sitronix,st7571-i2c.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Sitronix ST7571 Display Panels
+
+maintainers:
+  - Marcus Folkesson <marcus.folkesson@gmail.com>
+
+properties:
+  compatible:
+    const: sitronix,st7571-i2c
+
+  reg:
+    description: I2C address of the LCD controller
+    maxItems: 1
+
+  sitronix,panel-width-mm:
+    description: physical panel width [mm]
+
+  sitronix,panel-height-mm:
+    description: physical panel height [mm]
+
+  sitronix,panel-nlines:
+    description: Number of lines in the panel
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 1
+    maximum: 128
+    default: 128
+
+  sitronix,panel-start-line:
+    description: Start line of the panel
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 0
+    maximum: 127
+    default: 0
+
+  reset-gpios:
+    description: GPIO connected to the RST_N signal.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+  - reset-gpios
+  - sitronix,panel-width-mm
+  - sitronix,panel-height-mm
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        display@3f {
+          compatible = "sitronix,st7571-i2c";
+          reg = <0x3f>;
+
+          reset-gpios = <&gpio0 3 GPIO_ACTIVE_HIGH>;
+          sitronix,panel-width-mm = <37>;
+          sitronix,panel-height-mm = <27>;
+          sitronix,panel-nlines = <96>;
+          sitronix,panel-start-line = <0>;
+        };
+    };
