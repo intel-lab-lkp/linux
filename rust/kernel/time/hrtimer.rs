@@ -556,6 +556,14 @@ impl<'a, T> HrTimerCallbackContext<'a, T> {
         // SAFETY: The C API requirements for this function are fulfilled by our type invariants.
         unsafe { bindings::hrtimer_forward(self.raw_get_timer(), now.to_ns(), interval.to_ns()) }
     }
+
+    /// Forward the time expiry so it expires after now.
+    ///
+    /// This is a variant of [`HrTimerCallbackContext::forward()`] that uses an interval after the
+    /// current time of the [`HrTimerClockBase`] for this [`HrTimerCallbackContext`].
+    pub fn forward_now(&self, interval: Ktime) -> u64 {
+        self.forward(self.clock_base().time(), interval)
+    }
 }
 
 /// Use to implement the [`HasHrTimer<T>`] trait.
