@@ -1787,17 +1787,24 @@ static int sctp_sendmsg_check_sflags(struct sctp_association *asoc,
 	return 1;
 }
 
+static union sctp_addr *sctp_sendmsg_get_daddr(struct sock *sk,
+					       const struct msghdr *msg,
+					       struct sctp_cmsgs *cmsgs);
+
 static int sctp_sendmsg_to_asoc(struct sctp_association *asoc,
 				struct msghdr *msg, size_t msg_len,
 				struct sctp_transport *transport,
 				struct sctp_sndrcvinfo *sinfo)
 {
+	struct sctp_transport *aux_transport = NULL;
 	struct sock *sk = asoc->base.sk;
+	struct sctp_endpoint *ep = sctp_sk(sk)->ep;
 	struct sctp_sock *sp = sctp_sk(sk);
 	struct net *net = sock_net(sk);
 	struct sctp_datamsg *datamsg;
 	bool wait_connect = false;
 	struct sctp_chunk *chunk;
+	union sctp_addr *daddr;
 	long timeo;
 	int err;
 
@@ -1868,6 +1875,15 @@ static int sctp_sendmsg_to_asoc(struct sctp_association *asoc,
 		sctp_chunk_hold(chunk);
 		sctp_set_owner_w(chunk);
 		chunk->transport = transport;
+	}
+	/* Fail if transport was deleted after lookup in sctp_sendmsg() */
+	daddr = sctp_sendmsg_get_daddr(sk, msg, NULL);
+	if (daddr) {
+		sctp_endpoint_lookup_assoc(ep, daddr, &aux_transport);
+		if (!aux_transport || aux_transport != transport) {
+			sctp_datamsg_free(datamsg);
+			goto err;
+		}
 	}
 
 	err = sctp_primitive_SEND(net, asoc, datamsg);
