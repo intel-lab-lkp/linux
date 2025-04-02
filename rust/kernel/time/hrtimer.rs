@@ -186,6 +186,16 @@ impl HrTimerClockBase {
         // - Our data layout is equivalent to said struct via our type invariants.
         unsafe { &*ptr.cast() }
     }
+
+    /// Retrieve the current time from this [`HrTimerClockBase`].
+    fn time(&self) -> Ktime {
+        // SAFETY: This callback is initialized to a valid NonNull function for as long as this type
+        // is exposed to users.
+        let get_time_fn = unsafe { (*self.0.get()).get_time.unwrap_unchecked() };
+
+        // SAFETY: This FFI function has no special requirements
+        Ktime::from_raw(unsafe { get_time_fn() })
+    }
 }
 
 /// Implemented by pointer types that point to structs that contain a [`HrTimer`].
