@@ -267,7 +267,8 @@ static int of_coresight_parse_endpoint(struct device *dev,
 		new_conn = coresight_add_out_conn(dev, pdata, &conn);
 		if (IS_ERR_VALUE(new_conn)) {
 			fwnode_handle_put(conn.dest_fwnode);
-			return PTR_ERR(new_conn);
+			ret = PTR_ERR(new_conn);
+			break;
 		}
 		/* Connection record updated */
 	} while (0);
