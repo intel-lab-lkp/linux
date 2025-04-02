@@ -182,6 +182,17 @@ extern struct list_head asym_cap_list;
  */
 #define RUNTIME_INF		((u64)~0ULL)
 
+struct sched_tp_callbacks {
+	/* Fetches the util_est from a cfs_rq. */
+	unsigned int (*cfs_rq_util_est)(struct cfs_rq *cfs_rq);
+	/* Fetches the util_est from a sched_entity. */
+	unsigned int (*se_util_est)(struct sched_entity *se);
+	/* Fetches the current cpu capacity out of a rq. */
+	unsigned long (*rq_cpu_current_capacity)(struct rq *rq);
+};
+
+extern struct sched_tp_callbacks sched_tp_callbacks;
+
 static inline int idle_policy(int policy)
 {
 	return policy == SCHED_IDLE;

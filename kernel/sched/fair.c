@@ -4433,8 +4433,8 @@ static inline int propagate_entity_load_avg(struct sched_entity *se)
 	update_tg_cfs_runnable(cfs_rq, se, gcfs_rq);
 	update_tg_cfs_load(cfs_rq, se, gcfs_rq);
 
-	trace_pelt_cfs_tp(cfs_rq);
-	trace_pelt_se_tp(se);
+	trace_pelt_cfs_tp(cfs_rq, &sched_tp_callbacks);
+	trace_pelt_se_tp(se, &sched_tp_callbacks);
 
 	return 1;
 }
@@ -4698,7 +4698,7 @@ static void attach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 
 	cfs_rq_util_change(cfs_rq, 0);
 
-	trace_pelt_cfs_tp(cfs_rq);
+	trace_pelt_cfs_tp(cfs_rq, &sched_tp_callbacks);
 }
 
 /**
@@ -4728,7 +4728,7 @@ static void detach_entity_load_avg(struct cfs_rq *cfs_rq, struct sched_entity *s
 
 	cfs_rq_util_change(cfs_rq, 0);
 
-	trace_pelt_cfs_tp(cfs_rq);
+	trace_pelt_cfs_tp(cfs_rq, &sched_tp_callbacks);
 }
 
 /*
@@ -4865,7 +4865,7 @@ static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
 	enqueued += _task_util_est(p);
 	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
 
-	trace_sched_util_est_cfs_tp(cfs_rq);
+	trace_sched_util_est_cfs_tp(cfs_rq, &sched_tp_callbacks);
 }
 
 static inline void util_est_dequeue(struct cfs_rq *cfs_rq,
@@ -4881,7 +4881,7 @@ static inline void util_est_dequeue(struct cfs_rq *cfs_rq,
 	enqueued -= min_t(unsigned int, enqueued, _task_util_est(p));
 	WRITE_ONCE(cfs_rq->avg.util_est, enqueued);
 
-	trace_sched_util_est_cfs_tp(cfs_rq);
+	trace_sched_util_est_cfs_tp(cfs_rq, &sched_tp_callbacks);
 }
 
 #define UTIL_EST_MARGIN (SCHED_CAPACITY_SCALE / 100)
@@ -4970,7 +4970,7 @@ done:
 	ewma |= UTIL_AVG_UNCHANGED;
 	WRITE_ONCE(p->se.avg.util_est, ewma);
 
-	trace_sched_util_est_se_tp(&p->se);
+	trace_sched_util_est_se_tp(&p->se, &sched_tp_callbacks);
 }
 
 static inline unsigned long get_actual_cpu_capacity(int cpu)
@@ -10009,7 +10009,7 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 		capacity = 1;
 
 	cpu_rq(cpu)->cpu_capacity = capacity;
-	trace_sched_cpu_capacity_tp(cpu_rq(cpu));
+	trace_sched_cpu_capacity_tp(cpu_rq(cpu), &sched_tp_callbacks);
 
 	sdg->sgc->capacity = capacity;
 	sdg->sgc->min_capacity = capacity;

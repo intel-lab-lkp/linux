@@ -767,6 +767,13 @@ TRACE_EVENT(sched_wake_idle_without_ipi,
 	TP_printk("cpu=%d", __entry->cpu)
 );
 
+/* This struct is declared here so the tracepoints below can pass
+ * these types as parameter.
+ * This is only used for testing and debugging, so tracepoint probes can
+ * use the callbacks to fetch the data they need.
+ */
+struct sched_tp_callbacks;
+
 /*
  * Following tracepoints are not exported in tracefs and provide hooking
  * mechanisms only for testing and debugging purposes.
@@ -774,8 +781,8 @@ TRACE_EVENT(sched_wake_idle_without_ipi,
  * Postfixed with _tp to make them easily identifiable in the code.
  */
 DECLARE_TRACE(pelt_cfs_tp,
-	TP_PROTO(struct cfs_rq *cfs_rq),
-	TP_ARGS(cfs_rq));
+	TP_PROTO(struct cfs_rq *cfs_rq, struct sched_tp_callbacks *sched_tp_callbacks),
+	TP_ARGS(cfs_rq, sched_tp_callbacks));
 
 DECLARE_TRACE(pelt_rt_tp,
 	TP_PROTO(struct rq *rq),
@@ -794,24 +801,24 @@ DECLARE_TRACE(pelt_irq_tp,
 	TP_ARGS(rq));
 
 DECLARE_TRACE(pelt_se_tp,
-	TP_PROTO(struct sched_entity *se),
-	TP_ARGS(se));
+	TP_PROTO(struct sched_entity *se, struct sched_tp_callbacks *sched_tp_callbacks),
+	TP_ARGS(se, sched_tp_callbacks));
 
 DECLARE_TRACE(sched_cpu_capacity_tp,
-	TP_PROTO(struct rq *rq),
-	TP_ARGS(rq));
+	TP_PROTO(struct rq *rq, struct sched_tp_callbacks *sched_tp_callbacks),
+	TP_ARGS(rq, sched_tp_callbacks));
 
 DECLARE_TRACE(sched_overutilized_tp,
 	TP_PROTO(struct root_domain *rd, bool overutilized),
 	TP_ARGS(rd, overutilized));
 
 DECLARE_TRACE(sched_util_est_cfs_tp,
-	TP_PROTO(struct cfs_rq *cfs_rq),
-	TP_ARGS(cfs_rq));
+	TP_PROTO(struct cfs_rq *cfs_rq, struct sched_tp_callbacks *sched_tp_callbacks),
+	TP_ARGS(cfs_rq, sched_tp_callbacks));
 
 DECLARE_TRACE(sched_util_est_se_tp,
-	TP_PROTO(struct sched_entity *se),
-	TP_ARGS(se));
+	TP_PROTO(struct sched_entity *se, struct sched_tp_callbacks *sched_tp_callbacks),
+	TP_ARGS(se, sched_tp_callbacks));
 
 DECLARE_TRACE(sched_update_nr_running_tp,
 	TP_PROTO(struct rq *rq, int change),
