@@ -188,7 +188,6 @@ struct ufshcd_lrb {
 	int scsi_status;
 
 	int command_type;
-	int task_tag;
 	u8 lun; /* UPIU LUN id field is only 8-bit wide */
 	bool intr_cmd;
 	ktime_t issue_time_stamp;
