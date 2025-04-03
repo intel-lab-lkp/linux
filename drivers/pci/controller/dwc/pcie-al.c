@@ -353,9 +353,7 @@ static int al_pcie_probe(struct platform_device *pdev)
 	}
 	al_pcie->ecam_size = resource_size(ecam_res);
 
-	controller_res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
-						      "controller");
-	al_pcie->controller_base = devm_ioremap_resource(dev, controller_res);
+	al_pcie->controller_base = devm_platform_ioremap_resource_byname(pdev, "controller");
 	if (IS_ERR(al_pcie->controller_base)) {
 		dev_err(dev, "couldn't remap controller base %pR\n",
 			controller_res);
