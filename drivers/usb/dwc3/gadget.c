@@ -3010,6 +3010,7 @@ static int __dwc3_gadget_start(struct dwc3 *dwc)
 	dwc->ep0_bounced = false;
 	dwc->link_state = DWC3_LINK_STATE_SS_DIS;
 	dwc->delayed_status = false;
+	dwc->ep0_usb_req.status = DWC3_REQUEST_STATUS_UNKNOWN;
 	dwc3_ep0_out_start(dwc);
 
 	dwc3_gadget_enable_irq(dwc);

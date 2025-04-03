@@ -91,6 +91,12 @@ static int __dwc3_gadget_ep0_queue(struct dwc3_ep *dep,
 {
 	struct dwc3		*dwc = dep->dwc;
 
+	if (req->status < DWC3_REQUEST_STATUS_COMPLETED) {
+		dev_warn(dwc->dev, "%s: request %pK already in flight\n",
+			dep->name, &req->request);
+		return -EINVAL;
+	}
+
 	req->request.actual	= 0;
 	req->request.status	= -EINPROGRESS;
 	req->epnum		= dep->number;
