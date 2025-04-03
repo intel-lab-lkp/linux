@@ -25,9 +25,18 @@
 #define TPAUSE_C01_STATE		1
 #define TPAUSE_C02_STATE		0
 
+#ifdef CONFIG_LD_IS_LLD
+# define ASM_MONITOR	"monitor"
+# define ASM_MWAIT	"mwait"
+#else
+# define ASM_MONITOR	"monitor %[eax], %[ecx], %[edx]"
+# define ASM_MWAIT	"mwait %[eax], %[ecx]"
+#endif
+
 static __always_inline void __monitor(const void *eax, u32 ecx, u32 edx)
 {
-	asm volatile("monitor %0, %1, %2" :: "a" (eax), "c" (ecx), "d" (edx));
+	asm volatile(ASM_MONITOR
+		     :: [eax] "a" (eax), [ecx] "c" (ecx), [edx] "d" (edx));
 }
 
 static __always_inline void __monitorx(const void *eax, u32 ecx, u32 edx)
@@ -41,7 +50,7 @@ static __always_inline void __mwait(u32 eax, u32 ecx)
 {
 	mds_idle_clear_cpu_buffers();
 
-	asm volatile("mwait %0, %1" :: "a" (eax), "c" (ecx));
+	asm volatile(ASM_MWAIT :: [eax] "a" (eax), [ecx] "c" (ecx));
 }
 
 /*
@@ -92,7 +101,8 @@ static __always_inline void __sti_mwait(u32 eax, u32 ecx)
 {
 	mds_idle_clear_cpu_buffers();
 
-	asm volatile("sti; mwait %0, %1" :: "a" (eax), "c" (ecx));
+	asm volatile("sti\n\t"
+		     ASM_MWAIT :: [eax] "a" (eax), [ecx] "c" (ecx));
 }
 
 /*
