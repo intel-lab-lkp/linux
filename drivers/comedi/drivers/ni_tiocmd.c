@@ -84,9 +84,10 @@ static int ni_tio_input_inttrig(struct comedi_device *dev,
 		return -EINVAL;
 
 	spin_lock_irqsave(&counter->lock, flags);
-	if (counter->mite_chan)
+	if (counter->mite_chan) {
+		mite_prep_dma(counter->mite_chan, 32, 32);
 		mite_dma_arm(counter->mite_chan);
-	else
+	} else
 		ret = -EIO;
 	spin_unlock_irqrestore(&counter->lock, flags);
 	if (ret < 0)
