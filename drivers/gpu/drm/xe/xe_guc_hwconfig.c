@@ -175,7 +175,7 @@ int xe_guc_hwconfig_lookup_u32(struct xe_guc *guc, u32 attribute, u32 *val)
 	if (num_dw == 0)
 		return -EINVAL;
 
-	hwconfig = kzalloc(size, GFP_KERNEL);
+	hwconfig = kzalloc(size, GFP_ATOMIC);
 	if (!hwconfig)
 		return -ENOMEM;
 
