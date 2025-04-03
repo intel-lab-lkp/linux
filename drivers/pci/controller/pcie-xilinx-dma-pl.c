@@ -753,8 +753,7 @@ static int xilinx_pl_dma_pcie_parse_dt(struct pl_dma_pcie *port,
 
 	if (port->variant->version == QDMA) {
 		port->cfg_base = port->cfg->win;
-		res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "breg");
-		port->reg_base = devm_ioremap_resource(dev, res);
+		port->reg_base = devm_platform_ioremap_resource_byname(pdev, "breg");
 		if (IS_ERR(port->reg_base))
 			return PTR_ERR(port->reg_base);
 		port->phys_reg_base = res->start;
