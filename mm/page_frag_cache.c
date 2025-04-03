@@ -98,6 +98,15 @@ void *__page_frag_alloc_align(struct page_frag_cache *nc,
 	unsigned int size, offset;
 	struct page *page;
 
+	if (unlikely(fragsz > PAGE_SIZE)) {
+		/*
+		 * The caller is trying to allocate a fragment
+		 * with fragsz > PAGE_SIZE which is not supported
+		 * by design. So we simply return NULL here.
+		 */
+		return NULL;
+	}
+
 	if (unlikely(!encoded_page)) {
 refill:
 		page = __page_frag_cache_refill(nc, gfp_mask);
@@ -119,19 +128,6 @@ refill:
 	size = PAGE_SIZE << encoded_page_decode_order(encoded_page);
 	offset = __ALIGN_KERNEL_MASK(nc->offset, ~align_mask);
 	if (unlikely(offset + fragsz > size)) {
-		if (unlikely(fragsz > PAGE_SIZE)) {
-			/*
-			 * The caller is trying to allocate a fragment
-			 * with fragsz > PAGE_SIZE but the cache isn't big
-			 * enough to satisfy the request, this may
-			 * happen in low memory conditions.
-			 * We don't release the cache page because
-			 * it could make memory pressure worse
-			 * so we simply return NULL here.
-			 */
-			return NULL;
-		}
-
 		page = encoded_page_decode_page(encoded_page);
 
 		if (!page_ref_sub_and_test(page, nc->pagecnt_bias))
