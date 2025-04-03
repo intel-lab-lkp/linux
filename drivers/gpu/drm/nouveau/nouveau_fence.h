@@ -10,6 +10,7 @@ struct nouveau_bo;
 
 struct nouveau_fence {
 	struct dma_fence base;
+	struct dma_fence_cb cb;
 
 	struct list_head head;
 
