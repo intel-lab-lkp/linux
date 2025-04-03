@@ -1781,10 +1781,12 @@ static void update_port_bc_queue_len(struct macvlan_port *port)
 static int macvlan_device_event(struct notifier_block *unused,
 				unsigned long event, void *ptr)
 {
+	struct netlink_ext_ack *extack = netdev_notifier_info_to_extack(ptr);
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct macvlan_dev *vlan, *next;
 	struct macvlan_port *port;
 	LIST_HEAD(list_kill);
+	int flags;
 
 	if (!netif_is_macvlan_port(dev))
 		return NOTIFY_DONE;
@@ -1793,7 +1795,25 @@ static int macvlan_device_event(struct notifier_block *unused,
 
 	switch (event) {
 	case NETDEV_UP:
+		list_for_each_entry(vlan, &port->vlans, list) {
+			flags = vlan->dev->flags;
+			if (flags & IFF_UP)
+				continue;
+			dev_change_flags(vlan->dev, flags | IFF_UP, extack);
+			netif_stacked_transfer_operstate(vlan->lowerdev,
+							 vlan->dev);
+		}
+		break;
 	case NETDEV_DOWN:
+		list_for_each_entry(vlan, &port->vlans, list) {
+			flags = vlan->dev->flags;
+			if (!(flags & IFF_UP))
+				continue;
+			dev_close(vlan->dev);
+			netif_stacked_transfer_operstate(vlan->lowerdev,
+							 vlan->dev);
+		}
+		break;
 	case NETDEV_CHANGE:
 		list_for_each_entry(vlan, &port->vlans, list)
 			netif_stacked_transfer_operstate(vlan->lowerdev,
