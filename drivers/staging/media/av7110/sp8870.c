@@ -508,12 +508,10 @@ static int sp8870_set_frontend(struct dvb_frontend *fe)
 	}
 
 	if (debug) {
-		if (valid) {
-			if (trials > 1) {
-				pr_info("%s(): firmware lockup!!!\n", __func__);
-				pr_info("%s(): recovered after %i trial(s))\n",  __func__, trials - 1);
-				lockups++;
-			}
+		if (trials > 1) {
+			pr_info("%s(): firmware lockup!!!\n", __func__);
+			pr_info("%s(): recovered after %i trial(s))\n",  __func__, trials - 1);
+			lockups++;
 		}
 		switches++;
 		pr_info("%s(): switches = %i lockups = %i\n", __func__, switches, lockups);
