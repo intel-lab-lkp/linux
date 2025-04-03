@@ -2,7 +2,7 @@
 Page fragments
 ==============
 
-A page fragment is an arbitrary-length arbitrary-offset area of memory
+A page fragment is a len <= PAGE_SIZE, arbitrary-offset area of memory
 which resides within a 0 or higher order compound page.  Multiple
 fragments within that page are individually refcounted, in the page's
 reference counter.
