@@ -930,6 +930,7 @@ static void fuse_iqueue_init(struct fuse_iqueue *fiq,
 	memset(fiq, 0, sizeof(struct fuse_iqueue));
 	spin_lock_init(&fiq->lock);
 	init_waitqueue_head(&fiq->waitq);
+	fiq->reqctr = alloc_percpu(u64);
 	INIT_LIST_HEAD(&fiq->pending);
 	INIT_LIST_HEAD(&fiq->interrupts);
 	fiq->forget_list_tail = &fiq->forget_list_head;
