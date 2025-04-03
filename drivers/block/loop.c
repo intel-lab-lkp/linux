@@ -190,8 +190,6 @@ static bool lo_can_use_dio(struct loop_device *lo)
 static inline void loop_update_dio(struct loop_device *lo)
 {
 	lockdep_assert_held(&lo->lo_mutex);
-	WARN_ON_ONCE(lo->lo_state == Lo_bound &&
-		     lo->lo_queue->mq_freeze_depth == 0);
 
 	if ((lo->lo_flags & LO_FLAGS_DIRECT_IO) && !lo_can_use_dio(lo))
 		lo->lo_flags &= ~LO_FLAGS_DIRECT_IO;
@@ -595,7 +593,6 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 {
 	struct file *file = fget(arg);
 	struct file *old_file;
-	unsigned int memflags;
 	int error;
 	bool partscan;
 	bool is_loop;
@@ -640,11 +637,11 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 
 	/* and ... switch */
 	disk_force_media_change(lo->lo_disk);
-	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	blk_mq_quiesce_queue(lo->lo_queue);
 	mapping_set_gfp_mask(old_file->f_mapping, lo->old_gfp_mask);
 	loop_assign_backing_file(lo, file);
 	loop_update_dio(lo);
-	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+	blk_mq_unquiesce_queue(lo->lo_queue);
 	partscan = lo->lo_flags & LO_FLAGS_PARTSCAN;
 	loop_global_unlock(lo, is_loop);
 
@@ -1270,7 +1267,6 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 	int err;
 	bool partscan = false;
 	bool size_changed = false;
-	unsigned int memflags;
 
 	err = mutex_lock_killable(&lo->lo_mutex);
 	if (err)
@@ -1287,8 +1283,8 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 		invalidate_bdev(lo->lo_device);
 	}
 
-	/* I/O needs to be drained before changing lo_offset or lo_sizelimit */
-	memflags = blk_mq_freeze_queue(lo->lo_queue);
+	/* queue needs to be quiesced before changing lo_offset or lo_sizelimit */
+	blk_mq_quiesce_queue(lo->lo_queue);
 
 	err = loop_set_status_from_info(lo, info);
 	if (err)
@@ -1310,7 +1306,7 @@ loop_set_status(struct loop_device *lo, const struct loop_info64 *info)
 	loop_update_dio(lo);
 
 out_unfreeze:
-	blk_mq_unfreeze_queue(lo->lo_queue, memflags);
+	blk_mq_unquiesce_queue(lo->lo_queue);
 	if (partscan)
 		clear_bit(GD_SUPPRESS_PART_SCAN, &lo->lo_disk->state);
 out_unlock:
