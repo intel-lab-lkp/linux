@@ -554,7 +554,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs1: ethernet-phy@0 {
+			pcs1: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -567,7 +568,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs2: ethernet-phy@0 {
+			pcs2: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -580,7 +582,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs3: ethernet-phy@0 {
+			pcs3: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -593,7 +596,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs4: ethernet-phy@0 {
+			pcs4: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -606,7 +610,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs5: ethernet-phy@0 {
+			pcs5: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -619,7 +624,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs6: ethernet-phy@0 {
+			pcs6: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -632,7 +638,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs7: ethernet-phy@0 {
+			pcs7: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -645,7 +652,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs8: ethernet-phy@0 {
+			pcs8: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -658,7 +666,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs9: ethernet-phy@0 {
+			pcs9: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -671,7 +680,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs10: ethernet-phy@0 {
+			pcs10: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -684,7 +694,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs11: ethernet-phy@0 {
+			pcs11: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -697,7 +708,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs12: ethernet-phy@0 {
+			pcs12: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -710,7 +722,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs13: ethernet-phy@0 {
+			pcs13: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -723,7 +736,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs14: ethernet-phy@0 {
+			pcs14: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -736,7 +750,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs15: ethernet-phy@0 {
+			pcs15: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};
@@ -749,7 +764,8 @@
 			#size-cells = <0>;
 			status = "disabled";
 
-			pcs16: ethernet-phy@0 {
+			pcs16: ethernet-pcs@0 {
+				compatible = "fsl,lynx-pcs";
 				reg = <0>;
 			};
 		};

@@ -34,7 +34,8 @@ fman@1a00000 {
 		compatible = "fsl,fman-memac-mdio";
 		reg = <0xeb000 0x1000>;
 
-		pcsphy5: ethernet-phy@0 {
+		pcsphy5: ethernet-pcs@0 {
+			compatible = "fsl,lynx-pcs";
 			reg = <0x0>;
 		};
 	};
