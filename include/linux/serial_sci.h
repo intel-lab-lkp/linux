@@ -38,6 +38,7 @@ enum {
 	SCIx_HSCIF_REGTYPE,
 	SCIx_RZ_SCIFA_REGTYPE,
 	SCIx_RZV2H_SCIF_REGTYPE,
+	SCIx_RZT2H_SCI_REGTYPE,
 
 	SCIx_NR_REGTYPES,
 };
@@ -50,7 +51,7 @@ struct plat_sci_port_ops {
  * Platform device specific platform_data struct
  */
 struct plat_sci_port {
-	unsigned int	type;			/* SCI / SCIF / IRDA / HSCIF */
+	unsigned int	type;			/* SCI / SCIF / IRDA / HSCIF / RZSCI */
 	upf_t		flags;			/* UPF_* flags */
 
 	unsigned int	sampling_rate;

@@ -54,6 +54,7 @@
 #include <asm/platform_early.h>
 #endif
 
+#include "rsci.h"
 #include "serial_mctrl_gpio.h"
 #include "sh-sci.h"
 #include "sh-sci-common.h"
@@ -1820,7 +1821,7 @@ static irqreturn_t sci_tx_end_interrupt(int irq, void *ptr)
 	unsigned long flags;
 	u32 ctrl;
 
-	if (port->type != PORT_SCI)
+	if (port->type != PORT_SCI && port->type != PORT_RSCI)
 		return sci_tx_interrupt(irq, ptr);
 
 	uart_port_lock_irqsave(port, &flags);
@@ -3069,10 +3070,10 @@ static int sci_init_single(struct platform_device *dev,
 	}
 
 	/*
-	 * The fourth interrupt on SCI port is transmit end interrupt, so
+	 * The fourth interrupt on SCI and RZSCI port is transmit end interrupt, so
 	 * shuffle the interrupts.
 	 */
-	if (p->type == PORT_SCI)
+	if (p->type == PORT_SCI || p->type == PORT_RSCI)
 		swap(sci_port->irqs[SCIx_BRI_IRQ], sci_port->irqs[SCIx_TEI_IRQ]);
 
 	/* The SCI generates several interrupts. They can be muxed together or
@@ -3105,6 +3106,9 @@ static int sci_init_single(struct platform_device *dev,
 			sci_port->rx_trigger = 1;
 		else
 			sci_port->rx_trigger = 8;
+		break;
+	case PORT_RSCI:
+		sci_port->rx_trigger = 15;
 		break;
 	default:
 		sci_port->rx_trigger = 1;
@@ -3330,7 +3334,8 @@ static void sci_remove(struct platform_device *dev)
 
 	if (port->port.fifosize > 1)
 		device_remove_file(&dev->dev, &dev_attr_rx_fifo_trigger);
-	if (type == PORT_SCIFA || type == PORT_SCIFB || type == PORT_HSCIF)
+	if (type == PORT_SCIFA || type == PORT_SCIFB || type == PORT_HSCIF ||
+	    type == PORT_RSCI)
 		device_remove_file(&dev->dev, &dev_attr_rx_fifo_timeout);
 }
 
@@ -3424,6 +3429,12 @@ static const struct of_device_id of_sci_match[] __maybe_unused = {
 		.compatible = "renesas,scif-r9a09g057",
 		.data = &of_sci_scif_rzv2h,
 	},
+#ifdef CONFIG_SERIAL_RSCI
+	{
+		.compatible = "renesas,r9a09g077-rsci",
+		.data = &of_sci_r9a09g077_data,
+	},
+#endif	/* CONFIG_SERIAL_RSCI */
 	/* Family-specific types */
 	{
 		.compatible = "renesas,rcar-gen1-scif",
@@ -3683,7 +3694,7 @@ static int sci_probe(struct platform_device *dev)
 			return ret;
 	}
 	if (sp->port.type == PORT_SCIFA || sp->port.type == PORT_SCIFB ||
-	    sp->port.type == PORT_HSCIF) {
+	    sp->port.type == PORT_HSCIF || sp->port.type == PORT_RSCI) {
 		ret = device_create_file(&dev->dev, &dev_attr_rx_fifo_timeout);
 		if (ret) {
 			if (sp->port.fifosize > 1) {
