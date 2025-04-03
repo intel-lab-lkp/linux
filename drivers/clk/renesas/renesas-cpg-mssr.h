@@ -22,6 +22,8 @@
 struct cpg_core_clk {
 	/* Common */
 	const char *name;
+	const char * const *parent_names;
+	const struct clk_div_table *dtable;
 	unsigned int id;
 	unsigned int type;
 	/* Depending on type */
@@ -29,18 +31,26 @@ struct cpg_core_clk {
 	unsigned int div;
 	unsigned int mult;
 	unsigned int offset;
+	unsigned int conf;
+	int flag;
+	int mux_flags;
+	int num_parents;
+	int sel_base;
+};
 
 /**
  * struct cpg_mssr_pub - Private data shared with
  * device-specific clk registration code
  *
  * @base0: CPG/MSSR register block base0 address
+ * @base1: CPG/MSSR register block base1 address
  * @rmw_lock: protects RMW register accesses
  * @notifiers: Notifier chain to save/restore clock state for system resume
  * @clks: pointer to clocks
  */
 struct cpg_mssr_pub {
 	void __iomem *base0;
+	void __iomem *base1;
 	struct raw_notifier_head notifiers;
 	spinlock_t rmw_lock;
 	struct clk **clks;
@@ -53,6 +63,8 @@ enum clk_types {
 	CLK_TYPE_DIV6P1,	/* DIV6 Clock with 1 parent clock */
 	CLK_TYPE_DIV6_RO,	/* DIV6 Clock read only with extra divisor */
 	CLK_TYPE_FR,		/* Fixed Rate Clock */
+	CLK_TYPE_DIV,		/* Clock with divider */
+	CLK_TYPE_MUX,		/* Clock with clock source selector */
 
 	/* Custom definitions start here */
 	CLK_TYPE_CUSTOM,
@@ -73,6 +85,15 @@ enum clk_types {
 	DEF_BASE(_name, _id, CLK_TYPE_DIV6_RO, _parent, .offset = _offset, .div = _div, .mult = 1)
 #define DEF_RATE(_name, _id, _rate)	\
 	DEF_TYPE(_name, _id, CLK_TYPE_FR, .mult = _rate)
+#define DEF_DIV(_name, _id, _parent, _conf, _dtable, _flag, _sel_base) \
+	DEF_TYPE(_name, _id, CLK_TYPE_DIV, .conf = _conf, \
+		 .parent = _parent, .dtable = _dtable, .flag = _flag, .sel_base = _sel_base)
+#define DEF_MUX(_name, _id, _conf, _parent_names, _num_parents, _flag, \
+		_mux_flags) \
+	DEF_TYPE(_name, _id, CLK_TYPE_MUX, .conf = _conf, \
+		 .parent_names = _parent_names, .num_parents = _num_parents, \
+		 .flag = _flag, .mux_flags = _mux_flags)
+
 
     /*
      * Definitions of Module Clocks
@@ -106,6 +127,7 @@ enum clk_reg_layout {
 	CLK_REG_LAYOUT_RCAR_GEN2_AND_GEN3 = 0,
 	CLK_REG_LAYOUT_RZ_A,
 	CLK_REG_LAYOUT_RCAR_GEN4,
+	CLK_REG_LAYOUT_RZ_T2H,
 };
 
     /**
@@ -197,6 +219,7 @@ extern const struct cpg_mssr_info r8a779a0_cpg_mssr_info;
 extern const struct cpg_mssr_info r8a779f0_cpg_mssr_info;
 extern const struct cpg_mssr_info r8a779g0_cpg_mssr_info;
 extern const struct cpg_mssr_info r8a779h0_cpg_mssr_info;
+extern const struct cpg_mssr_info r9a09g077_cpg_mssr_info;
 
 void __init cpg_mssr_early_init(struct device_node *np,
 				const struct cpg_mssr_info *info);
