@@ -146,6 +146,10 @@ PHYLINK
 
 .. kernel-doc:: include/linux/phylink.h
    :internal:
+   :no-identifiers: phylink_pcs phylink_pcs_ops pcs_validate pcs_inband_caps
+      pcs_enable pcs_disable pcs_pre_config pcs_post_config pcs_get_state
+      pcs_config pcs_an_restart pcs_link_up pcs_disable_eee pcs_enable_eee
+      pcs_pre_init
 
 .. kernel-doc:: drivers/net/phy/phylink.c
 
