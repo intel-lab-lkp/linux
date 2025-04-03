@@ -30,6 +30,9 @@ ALL_TESTS="
 	kci_test_address_proto
 	kci_test_enslave_bonding
 	kci_test_mngtmpaddr
+	kci_test_vlan
+	kci_test_ipvlan
+	kci_test_macvlan
 "
 
 devdummy="test-dummy0"
@@ -1332,6 +1335,67 @@ kci_test_mngtmpaddr()
 
 	ip netns del "$testns"
 	return $ret
+}
+
+kci_test_link_state()
+{
+	local test_link=$(mktemp -u test_link-XXX)
+	local bond=$(mktemp -u bond-XXX)
+	local link_param=$2
+	local link_type=$1
+	local ret=0
+
+	setup_ns testns
+	if [ $? -ne 0 ]; then
+		end_test "SKIP ${link_type} netns tests: cannot add net namespace $testns"
+		return $ksft_skip
+	fi
+
+	# 1. Test link state over bond
+	run_cmd ip link add dev $bond type bond mode active-backup miimon 10
+	run_cmd ip link set dev ${devdummy} down
+	run_cmd ip link set dev ${devdummy} master $bond
+	run_cmd ip link set dev ${bond} up
+	run_cmd ip link add link ${bond} name ${test_link} type ${link_type} ${link_param}
+	run_cmd ip link set ${test_link} up
+	run_cmd ip link set ${devdummy} down
+	run_cmd_grep_fail "LOWER_UP" ip link show dev ${test_link}
+	run_cmd ip link set ${devdummy} up
+	run_cmd_grep "LOWER_UP" ip link show dev ${test_link}
+
+	# 2. Test link state over bond in netns
+	run_cmd ip link set ${test_link} netns ${testns}
+	run_cmd ip -n ${testns} link set ${test_link} up
+	run_cmd ip link set ${devdummy} down
+	run_cmd_grep_fail "LOWER_UP" ip -n ${testns} link show dev ${test_link}
+	run_cmd ip link set ${devdummy} up
+	run_cmd_grep "LOWER_UP" ip -n ${testns} link show dev ${test_link}
+	ip -n ${testns} link del ${test_link}
+
+	if [ $ret -ne 0 ]; then
+		end_test "FAIL: ${link_type} link state incorrect"
+	else
+		end_test "PASS: ${link_type} link state correct"
+	fi
+
+	ip netns del "$testns"
+	ip link del dev ${bond}
+	return $ret
+}
+
+kci_test_vlan()
+{
+	kci_test_link_state "vlan" "id 2"
+}
+
+kci_test_ipvlan()
+{
+	kci_test_link_state "ipvlan" "mode l2"
+}
+
+kci_test_macvlan()
+{
+	kci_test_link_state "macvlan" "mode bridge"
 }
 
 kci_test_rtnl()
