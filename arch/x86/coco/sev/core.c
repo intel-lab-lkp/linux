@@ -43,6 +43,7 @@
 #include <asm/apic.h>
 #include <asm/cpuid.h>
 #include <asm/cmdline.h>
+#include <asm/e820/types.h>
 
 #define DR7_RESET_VALUE        0x400
 
@@ -759,6 +760,18 @@ static u64 __init get_jump_table_addr(void)
 	local_irq_restore(flags);
 
 	return ret;
+}
+
+bool sev_snp_pfn_access_allowed(unsigned long pfn)
+{
+	/*
+	 * Reject access to BIOS address range (0xa0000 to 0x100000) for SEV-SNP guests
+	 * as that address range is not validated, so access can cause #VC exception
+	 */
+	if (pfn << PAGE_SHIFT >= BIOS_BEGIN && pfn << PAGE_SHIFT < BIOS_END)
+		return 0;
+
+	return 1;
 }
 
 static void __head

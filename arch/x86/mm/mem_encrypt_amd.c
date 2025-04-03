@@ -532,6 +532,7 @@ void __init sme_early_init(void)
 		 * parsing has happened.
 		 */
 		x86_init.resources.dmi_setup = snp_dmi_setup;
+		x86_platform.pfn_access_allowed = sev_snp_pfn_access_allowed;
 	}
 
 	/*
