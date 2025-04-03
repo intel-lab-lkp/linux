@@ -454,7 +454,7 @@ static void sysrq_handle_replay_logs(u8 key)
 {
 	console_try_replay_all();
 }
-static struct sysrq_key_op sysrq_replay_logs_op = {
+static const struct sysrq_key_op sysrq_replay_logs_op = {
 	.handler        = sysrq_handle_replay_logs,
 	.help_msg       = "replay-kernel-logs(R)",
 	.action_msg     = "Replay kernel logs on consoles",
