@@ -8733,9 +8733,16 @@ static int ufshcd_alloc_mcq(struct ufs_hba *hba, u32 ufs_dev_qd)
 		return ret;
 
 	hba->nutrs = ret;
-	ret = ufshcd_mcq_init(hba);
-	if (ret)
-		goto err;
+	if (hba->host->nr_hw_queues == 0) {
+		/*
+		 * ufshcd_mcq_init() is independent of hba->nutrs. Hence, only
+		 * call ufshcd_mcq_init() the first time ufshcd_alloc_mcq() is
+		 * called.
+		 */
+		ret = ufshcd_mcq_init(hba);
+		if (ret)
+			goto err;
+	}
 
 	/*
 	 * Previously allocated memory for nutrs may not be enough in MCQ mode.
