@@ -2842,7 +2842,7 @@ static int trace__fprintf_sys_enter(struct trace *trace, struct evsel *evsel,
 	e_machine = thread__e_machine(thread, trace->host);
 	sc = trace__syscall_info(trace, evsel, e_machine, id);
 	if (sc == NULL)
-		return -1;
+		goto out_put;
 	ttrace = thread__trace(thread, trace);
 	/*
 	 * We need to get ttrace just to make sure it is there when syscall__scnprintf_args()
@@ -4128,10 +4128,13 @@ static int trace__set_filter_loop_pids(struct trace *trace)
 		if (!strcmp(thread__comm_str(parent), "sshd") ||
 		    strstarts(thread__comm_str(parent), "gnome-terminal")) {
 			pids[nr++] = thread__tid(parent);
+			thread__put(parent);
 			break;
 		}
+		thread__put(thread);
 		thread = parent;
 	}
+	thread__put(thread);
 
 	err = evlist__append_tp_filter_pids(trace->evlist, nr, pids);
 	if (!err && trace->filter_pids.map)
