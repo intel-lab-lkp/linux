@@ -1387,7 +1387,7 @@ void __release_region(struct resource *parent, resource_size_t start,
 }
 EXPORT_SYMBOL(__release_region);
 
-#ifdef CONFIG_MEMORY_HOTREMOVE
+#if defined(CONFIG_MEMORY_HOTREMOVE) || defined(CONFIG_CXL_REGION)
 /**
  * release_mem_region_adjustable - release a previously reserved memory region
  * @start: resource start address
@@ -1407,7 +1407,10 @@ EXPORT_SYMBOL(__release_region);
  *   assumes that all children remain in the lower address entry for
  *   simplicity.  Enhance this logic when necessary.
  */
-void release_mem_region_adjustable(resource_size_t start, resource_size_t size)
+static void __release_mem_region_adjustable(resource_size_t start,
+					    resource_size_t size,
+					    bool busy_check,
+					    int res_desc)
 {
 	struct resource *parent = &iomem_resource;
 	struct resource *new_res = NULL;
@@ -1446,7 +1449,12 @@ retry:
 		if (!(res->flags & IORESOURCE_MEM))
 			break;
 
-		if (!(res->flags & IORESOURCE_BUSY)) {
+		if (busy_check && !(res->flags & IORESOURCE_BUSY)) {
+			p = &res->child;
+			continue;
+		}
+
+		if (res_desc != IORES_DESC_NONE && res->desc != res_desc) {
 			p = &res->child;
 			continue;
 		}
@@ -1496,7 +1504,46 @@ retry:
 	write_unlock(&resource_lock);
 	free_resource(new_res);
 }
-#endif	/* CONFIG_MEMORY_HOTREMOVE */
+#endif
+
+#ifdef CONFIG_MEMORY_HOTREMOVE
+/**
+ * release_mem_region_adjustable - release a previously reserved memory region
+ * @start: resource start address
+ * @size: resource region size
+ *
+ * This interface is intended for memory hot-delete.  The requested region
+ * is released from a currently busy memory resource.  The requested region
+ * must either match exactly or fit into a single busy resource entry.  In
+ * the latter case, the remaining resource is adjusted accordingly.
+ * Existing children of the busy memory resource must be immutable in the
+ * request.
+ *
+ * Note:
+ * - Additional release conditions, such as overlapping region, can be
+ *   supported after they are confirmed as valid cases.
+ * - When a busy memory resource gets split into two entries, the code
+ *   assumes that all children remain in the lower address entry for
+ *   simplicity.  Enhance this logic when necessary.
+ */
+void release_mem_region_adjustable(resource_size_t start, resource_size_t size)
+{
+	return __release_mem_region_adjustable(start, size,
+					       true, IORES_DESC_NONE);
+}
+EXPORT_SYMBOL(release_mem_region_adjustable);
+#endif
+
+#ifdef CONFIG_CXL_REGION
+void release_srmem_region_adjustable(resource_size_t start,
+				     resource_size_t size)
+{
+	return __release_mem_region_adjustable(start, size,
+					       false, IORES_DESC_SOFT_RESERVED);
+}
+EXPORT_SYMBOL(release_srmem_region_adjustable);
+#endif
+
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 static bool system_ram_resources_mergeable(struct resource *r1,
