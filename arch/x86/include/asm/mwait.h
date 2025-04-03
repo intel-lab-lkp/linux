@@ -27,7 +27,7 @@
 
 static __always_inline void __monitor(const void *eax, u32 ecx, u32 edx)
 {
-	asm volatile("monitor %0, %1, %2" :: "a" (eax), "c" (ecx), "d" (edx));
+	asm volatile("monitor" :: "a" (eax), "c" (ecx), "d" (edx));
 }
 
 static __always_inline void __monitorx(const void *eax, u32 ecx, u32 edx)
@@ -41,7 +41,7 @@ static __always_inline void __mwait(u32 eax, u32 ecx)
 {
 	mds_idle_clear_cpu_buffers();
 
-	asm volatile("mwait %0, %1" :: "a" (eax), "c" (ecx));
+	asm volatile("mwait" :: "a" (eax), "c" (ecx));
 }
 
 /*
@@ -92,7 +92,7 @@ static __always_inline void __sti_mwait(u32 eax, u32 ecx)
 {
 	mds_idle_clear_cpu_buffers();
 
-	asm volatile("sti; mwait %0, %1" :: "a" (eax), "c" (ecx));
+	asm volatile("sti; mwait" :: "a" (eax), "c" (ecx));
 }
 
 /*
