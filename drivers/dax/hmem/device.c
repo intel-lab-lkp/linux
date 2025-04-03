@@ -17,14 +17,14 @@ static struct resource hmem_active = {
 	.flags = IORESOURCE_MEM,
 };
 
-int walk_hmem_resources(struct device *host, walk_hmem_fn fn)
+int walk_hmem_resources(walk_hmem_fn fn)
 {
 	struct resource *res;
 	int rc = 0;
 
 	mutex_lock(&hmem_resource_lock);
 	for (res = hmem_active.child; res; res = res->sibling) {
-		rc = fn(host, (int) res->desc, res);
+		rc = fn((int) res->desc, res);
 		if (rc)
 			break;
 	}
