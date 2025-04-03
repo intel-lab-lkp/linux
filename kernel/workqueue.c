@@ -5837,6 +5837,9 @@ static bool pwq_busy(struct pool_workqueue *pwq)
  * @wq: target workqueue
  *
  * Safely destroy a workqueue. All work currently pending will be done first.
+ * This does not apply to non-pending work that was submitted with
+ * queue_delayed_work(). Such work must be cancelled manually before calling
+ * this function.
  */
 void destroy_workqueue(struct workqueue_struct *wq)
 {
