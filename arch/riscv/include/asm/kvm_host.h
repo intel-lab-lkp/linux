@@ -195,6 +195,7 @@ struct kvm_vcpu_smstateen_csr {
 
 struct kvm_vcpu_reset_state {
 	spinlock_t lock;
+	bool active;
 	unsigned long pc;
 	unsigned long a1;
 };

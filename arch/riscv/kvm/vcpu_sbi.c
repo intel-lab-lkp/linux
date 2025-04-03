@@ -156,12 +156,29 @@ void kvm_riscv_vcpu_sbi_system_reset(struct kvm_vcpu *vcpu,
 	run->exit_reason = KVM_EXIT_SYSTEM_EVENT;
 }
 
+/* must be called with held vcpu->arch.reset_state.lock */
+void __kvm_riscv_vcpu_set_reset_state(struct kvm_vcpu *vcpu,
+                                      unsigned long pc, unsigned long a1)
+{
+	vcpu->arch.reset_state.active = true;
+	vcpu->arch.reset_state.pc = pc;
+	vcpu->arch.reset_state.a1 = a1;
+}
+
 void kvm_riscv_vcpu_sbi_request_reset(struct kvm_vcpu *vcpu,
                                       unsigned long pc, unsigned long a1)
 {
 	spin_lock(&vcpu->arch.reset_state.lock);
-	vcpu->arch.reset_state.pc = pc;
-	vcpu->arch.reset_state.a1 = a1;
+	__kvm_riscv_vcpu_set_reset_state(vcpu, pc, a1);
+	spin_unlock(&vcpu->arch.reset_state.lock);
+
+	kvm_make_request(KVM_REQ_VCPU_RESET, vcpu);
+}
+
+void kvm_riscv_vcpu_sbi_request_reset_from_userspace(struct kvm_vcpu *vcpu)
+{
+	spin_lock(&vcpu->arch.reset_state.lock);
+	vcpu->arch.reset_state.active = false;
 	spin_unlock(&vcpu->arch.reset_state.lock);
 
 	kvm_make_request(KVM_REQ_VCPU_RESET, vcpu);

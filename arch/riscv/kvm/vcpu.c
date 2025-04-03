@@ -58,6 +58,11 @@ static void kvm_riscv_vcpu_context_reset(struct kvm_vcpu *vcpu)
 	struct kvm_vcpu_reset_state *reset_state = &vcpu->arch.reset_state;
 	void *vector_datap = cntx->vector.datap;
 
+	spin_lock(&reset_state->lock);
+	if (!reset_state->active)
+		__kvm_riscv_vcpu_set_reset_state(vcpu, cntx->sepc, cntx->a1);
+	spin_unlock(&reset_state->lock);
+
 	memset(cntx, 0, sizeof(*cntx));
 	memset(csr, 0, sizeof(*csr));
 
@@ -520,6 +525,10 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 
 	switch (mp_state->mp_state) {
 	case KVM_MP_STATE_RUNNABLE:
+		if (riscv_vcpu_supports_sbi_ext(vcpu, KVM_RISCV_SBI_EXT_HSM) &&
+				vcpu->arch.ran_atleast_once &&
+				kvm_riscv_vcpu_stopped(vcpu))
+			kvm_riscv_vcpu_sbi_request_reset_from_userspace(vcpu);
 		WRITE_ONCE(vcpu->arch.mp_state, *mp_state);
 		break;
 	case KVM_MP_STATE_STOPPED:
