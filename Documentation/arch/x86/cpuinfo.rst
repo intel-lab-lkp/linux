@@ -124,37 +124,21 @@ also defined in cpufeatures.h.
 Naming of Flags
 ===============
 
-The script arch/x86/kernel/cpu/mkcapflags.sh processes the
-#define X86_FEATURE_<name> from cpufeatures.h and generates the
-x86_cap/bug_flags[] arrays in kernel/cpu/capflags.c. The names in the
-resulting x86_cap/bug_flags[] are used to populate /proc/cpuinfo. The naming
-of flags in the x86_cap/bug_flags[] are as follows:
-
-a: The name of the flag is from the string in X86_FEATURE_<name> by default.
-----------------------------------------------------------------------------
-By default, the flag <name> in /proc/cpuinfo is extracted from the respective
-X86_FEATURE_<name> in cpufeatures.h. For example, the flag "avx2" is from
-X86_FEATURE_AVX2.
-
-b: The naming can be overridden.
---------------------------------
 If the comment on the line for the #define X86_FEATURE_* starts with a
-double-quote character (""), the string inside the double-quote characters
-will be the name of the flags. For example, the flag "sse4_1" comes from
-the comment "sse4_1" following the X86_FEATURE_XMM4_1 definition.
+double-quote character (""), the string inside the double-quote characters will
+be the name of the flag. For example, the flag "sse4_1" comes from the comment
+"sse4_1" following the X86_FEATURE_XMM4_1 definition. /proc/cpuinfo is a
+userspace interface and must remain constant. If, for some reason, the naming
+of X86_FEATURE_<name> changes, one shall retain the name already used in
+/proc/cpuinfo.
 
-There are situations in which overriding the displayed name of the flag is
-needed. For instance, /proc/cpuinfo is a userspace interface and must remain
-constant. If, for some reason, the naming of X86_FEATURE_<name> changes, one
-shall override the new naming with the name already used in /proc/cpuinfo.
-
-c: The naming override can be "", which means it will not appear in /proc/cpuinfo.
-----------------------------------------------------------------------------------
-The feature shall be omitted from /proc/cpuinfo if it does not make sense for
-the feature to be exposed to userspace. For example, X86_FEATURE_ALWAYS is
-defined in cpufeatures.h but that flag is an internal kernel feature used
-in the alternative runtime patching functionality. So, its name is overridden
-with "". Its flag will not appear in /proc/cpuinfo.
+If the comment on the line does not start with a double-quote character, then
+it will be omitted from /proc/cpuinfo. This is desirable if it does not make
+sense for the feature to be exposed to userspace. For example,
+X86_FEATURE_ALWAYS is defined in cpufeatures.h but that flag is an internal
+kernel feature used in the alternative runtime patching functionality. So, no
+name is specified within double-quotes and its flag will not appear in
+/proc/cpuinfo.
 
 Flags are missing when one or more of these happen
 ==================================================
