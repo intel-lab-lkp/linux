@@ -198,6 +198,32 @@ void scsi_finish_command(struct scsi_cmnd *cmd)
 	scsi_io_completion(cmd, good_bytes);
 }
 
+/**
+ * scsi_host_update_can_queue - Modify @host->can_queue
+ *
+ * @host->__devices must be empty and I/O must have been quiesced before this
+ * function is called.
+ */
+int scsi_host_update_can_queue(struct Scsi_Host *host, int can_queue)
+{
+	struct blk_mq_tag_set prev_set;
+	int prev_can_queue, ret;
+
+	if (!list_empty(&host->__devices))
+		return -EINVAL;
+
+	prev_can_queue = host->can_queue;
+	prev_set = host->tag_set;
+	host->can_queue = can_queue;
+	ret = scsi_mq_setup_tags(host);
+	if (ret) {
+		host->can_queue = prev_can_queue;
+		return ret;
+	}
+	blk_mq_free_tag_set(&prev_set);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(scsi_host_update_can_queue);
 
 /*
  * 4096 is big enough for saturating fast SCSI LUNs.
