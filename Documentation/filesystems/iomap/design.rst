@@ -243,12 +243,22 @@ The fields are as follows:
      regular file data.
      This is only useful for FIEMAP.
 
+   * **IOMAP_F_BOUNDARY**: This indicates that I/O and I/O completions
+     for this iomap must never be merged with the mapping before it.
+     Currently XFS uses this to prevent merging of ioends across RTG
+     (realtime group) boundaries.
+
    * **IOMAP_F_PRIVATE**: Starting with this value, the upper bits can
      be set by the filesystem for its own purposes.
 
    * **IOMAP_F_ANON_WRITE**: Indicates that (write) I/O does not have a target
      block assigned to it yet and the file system will do that in the bio
      submission handler, splitting the I/O as needed.
+
+   * **IOMAP_F_ATOMIC_BIO**: Indicates that write I/O must be submitted
+     with the ``REQ_ATOMIC`` flag set in the bio. Filesystems need to set
+     this flag to inform iomap that the write I/O operation requires
+     torn-write protection based on HW-offload mechanism.
 
    These flags can be set by iomap itself during file operations.
    The filesystem should supply an ``->iomap_end`` function if it needs
