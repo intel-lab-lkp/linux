@@ -395,8 +395,13 @@ static void lru_gen_inc_refs(struct folio *folio)
 
 	do {
 		if ((old_flags & LRU_REFS_MASK) == LRU_REFS_MASK) {
-			if (!folio_test_workingset(folio))
+			if (!folio_test_workingset(folio)) {
 				folio_set_workingset(folio);
+			} else if (!folio_test_isolated(folio) &&
+				  (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) &&
+				   numa_pagecache_promotion_enabled) {
+				promotion_candidate(folio);
+			}
 			return;
 		}
 
