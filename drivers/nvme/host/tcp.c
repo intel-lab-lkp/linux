@@ -1789,8 +1789,14 @@ static int nvme_tcp_alloc_queue(struct nvme_ctrl *nctrl, int qid,
 		queue->cmnd_capsule_len = sizeof(struct nvme_command) +
 						NVME_TCP_ADMIN_CCSZ;
 
-	ret = sock_create_kern(current->nsproxy->net_ns,
-			ctrl->addr.ss_family, SOCK_STREAM,
+	/*
+	 * sock_create_kern() does not take a reference to
+	 * current->nsproxy->net_ns, use init_net instead.
+	 * This also avoid changing sock's netns from previous
+	 * creator's netns to init_net when sock is re-created
+	 * by nvme recovery path.
+	 */
+	ret = sock_create_kern(&init_net, ctrl->addr.ss_family, SOCK_STREAM,
 			IPPROTO_TCP, &queue->sock);
 	if (ret) {
 		dev_err(nctrl->device,
