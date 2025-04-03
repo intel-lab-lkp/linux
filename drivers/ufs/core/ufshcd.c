@@ -3857,14 +3857,10 @@ static int ufshcd_get_ref_clk_gating_wait(struct ufs_hba *hba)
  */
 static int ufshcd_memory_alloc(struct ufs_hba *hba)
 {
-	size_t utmrdl_size, utrdl_size, ucdl_size;
-
 	/* Allocate memory for UTP command descriptors */
-	ucdl_size = ufshcd_get_ucd_size(hba) * hba->nutrs;
-	hba->ucdl_base_addr = dmam_alloc_coherent(hba->dev,
-						  ucdl_size,
-						  &hba->ucdl_dma_addr,
-						  GFP_KERNEL);
+	hba->ucdl_size = ufshcd_get_ucd_size(hba) * hba->nutrs;
+	hba->ucdl_base_addr = dmam_alloc_coherent(
+		hba->dev, hba->ucdl_size, &hba->ucdl_dma_addr, GFP_KERNEL);
 
 	/*
 	 * UFSHCI requires UTP command descriptor to be 128 byte aligned.
@@ -3880,11 +3876,9 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 	 * Allocate memory for UTP Transfer descriptors
 	 * UFSHCI requires 1KB alignment of UTRD
 	 */
-	utrdl_size = (sizeof(struct utp_transfer_req_desc) * hba->nutrs);
-	hba->utrdl_base_addr = dmam_alloc_coherent(hba->dev,
-						   utrdl_size,
-						   &hba->utrdl_dma_addr,
-						   GFP_KERNEL);
+	hba->utrdl_size = sizeof(struct utp_transfer_req_desc) * hba->nutrs;
+	hba->utrdl_base_addr = dmam_alloc_coherent(
+		hba->dev, hba->utrdl_size, &hba->utrdl_dma_addr, GFP_KERNEL);
 	if (!hba->utrdl_base_addr ||
 	    WARN_ON(hba->utrdl_dma_addr & (SZ_1K - 1))) {
 		dev_err(hba->dev,
@@ -3896,7 +3890,7 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 	 * Skip utmrdl allocation; it may have been
 	 * allocated during first pass and not released during
 	 * MCQ memory allocation.
-	 * See ufshcd_release_sdb_queue() and ufshcd_config_mcq()
+	 * See ufshcd_memory_free() and ufshcd_config_mcq()
 	 */
 	if (hba->utmrdl_base_addr)
 		goto skip_utmrdl;
@@ -3904,11 +3898,9 @@ static int ufshcd_memory_alloc(struct ufs_hba *hba)
 	 * Allocate memory for UTP Task Management descriptors
 	 * UFSHCI requires 1KB alignment of UTMRD
 	 */
-	utmrdl_size = sizeof(struct utp_task_req_desc) * hba->nutmrs;
-	hba->utmrdl_base_addr = dmam_alloc_coherent(hba->dev,
-						    utmrdl_size,
-						    &hba->utmrdl_dma_addr,
-						    GFP_KERNEL);
+	hba->utmrdl_size = sizeof(struct utp_task_req_desc) * hba->nutmrs;
+	hba->utmrdl_base_addr = dmam_alloc_coherent(
+		hba->dev, hba->utmrdl_size, &hba->utmrdl_dma_addr, GFP_KERNEL);
 	if (!hba->utmrdl_base_addr ||
 	    WARN_ON(hba->utmrdl_dma_addr & (SZ_1K - 1))) {
 		dev_err(hba->dev,
@@ -8705,20 +8697,30 @@ out:
 	return ret;
 }
 
-/* SDB - Single Doorbell */
-static void ufshcd_release_sdb_queue(struct ufs_hba *hba, int nutrs)
+/*
+ * Free the memory allocated by ufshcd_memory_alloc() except the utmrdl DMA
+ * memory.
+ */
+static void ufshcd_memory_free(struct ufs_hba *hba)
 {
-	size_t ucdl_size, utrdl_size;
+	if (hba->ucdl_base_addr) {
+		dmam_free_coherent(hba->dev, hba->ucdl_size,
+				   hba->ucdl_base_addr, hba->ucdl_dma_addr);
+		hba->ucdl_base_addr = NULL;
+		hba->ucdl_dma_addr = 0;
+	}
 
-	ucdl_size = ufshcd_get_ucd_size(hba) * nutrs;
-	dmam_free_coherent(hba->dev, ucdl_size, hba->ucdl_base_addr,
-			   hba->ucdl_dma_addr);
+	if (hba->utrdl_base_addr) {
+		dmam_free_coherent(hba->dev, hba->utrdl_size,
+				   hba->utrdl_base_addr, hba->utrdl_dma_addr);
+		hba->utrdl_base_addr = NULL;
+		hba->utrdl_dma_addr = 0;
+	}
 
-	utrdl_size = sizeof(struct utp_transfer_req_desc) * nutrs;
-	dmam_free_coherent(hba->dev, utrdl_size, hba->utrdl_base_addr,
-			   hba->utrdl_dma_addr);
-
-	devm_kfree(hba->dev, hba->lrb);
+	if (hba->lrb) {
+		devm_kfree(hba->dev, hba->lrb);
+		hba->lrb = NULL;
+	}
 }
 
 static int ufshcd_alloc_mcq(struct ufs_hba *hba)
@@ -8740,7 +8742,7 @@ static int ufshcd_alloc_mcq(struct ufs_hba *hba)
 	 * Number of supported tags in MCQ mode may be larger than SDB mode.
 	 */
 	if (hba->nutrs != old_nutrs) {
-		ufshcd_release_sdb_queue(hba, old_nutrs);
+		ufshcd_memory_free(hba);
 		ret = ufshcd_memory_alloc(hba);
 		if (ret)
 			goto err;

@@ -847,6 +847,9 @@ enum ufshcd_mcq_opr {
 /**
  * struct ufs_hba - per adapter private structure
  * @mmio_base: UFSHCI base register address
+ * @ucdl_size: Size of UFS Command Descriptor buffer
+ * @utrdl_size: Size of UTP Transfer Request Descriptor buffer
+ * @utmrdl_size: Size of UTP Task Management Descriptor buffer
  * @ucdl_base_addr: UFS Command Descriptor base address
  * @utrdl_base_addr: UTP Transfer Request Descriptor base address
  * @utmrdl_base_addr: UTP Task Management Descriptor base address
@@ -974,6 +977,8 @@ enum ufshcd_mcq_opr {
  */
 struct ufs_hba {
 	void __iomem *mmio_base;
+
+	u32 ucdl_size, utrdl_size, utmrdl_size;
 
 	/* Virtual memory reference */
 	struct utp_transfer_cmd_desc *ucdl_base_addr;
