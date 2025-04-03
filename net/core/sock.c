@@ -2324,6 +2324,12 @@ static void __sk_destruct(struct rcu_head *head)
 		__netns_tracker_free(net, &sk->ns_tracker, false);
 		net_passive_dec(net);
 	}
+
+#if IS_ENABLED(CONFIG_PROVE_LOCKING) && IS_ENABLED(CONFIG_MODULES)
+	if (sk->sk_owner)
+		module_put(sk->sk_owner);
+#endif
+
 	sk_prot_free(sk->sk_prot_creator, sk);
 }
 
