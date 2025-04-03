@@ -255,7 +255,12 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		 */
 		data->next_timer_ns = KTIME_MAX;
 		delta_tick = TICK_NSEC / 2;
-		data->bucket = which_bucket(KTIME_MAX);
+		/*
+		 * Assign the last bucket value directly instead of calling
+		 * which_bucket(), since KTIME_MAX is the largest possible
+		 * value that always falls into the last bucket.
+		 */
+		data->bucket = BUCKETS - 1;
 	}
 
 	if (unlikely(drv->state_count <= 1 || latency_req == 0) ||
