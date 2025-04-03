@@ -243,6 +243,23 @@ struct drm_print_iterator {
 };
 
 /**
+ * drm_printer_is_full() - DRM printer output is full
+ * @p: DRM printer
+ *
+ * DRM printer output is full, useful to short circuit coredump printing once
+ * printer is full.
+ *
+ * RETURNS:
+ * True if DRM printer output buffer is full, False otherwise
+ */
+static inline bool drm_printer_is_full(struct drm_printer *p)
+{
+	struct drm_print_iterator *iterator = p->arg;
+
+	return !iterator->remain;
+}
+
+/**
  * drm_coredump_printer - construct a &drm_printer that can output to a buffer
  * from the read function for devcoredump
  * @iter: A pointer to a struct drm_print_iterator for the read instance
