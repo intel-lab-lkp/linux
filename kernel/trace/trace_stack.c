@@ -3,6 +3,7 @@
  * Copyright (C) 2008 Steven Rostedt <srostedt@redhat.com>
  *
  */
+#include <linux/compiler_attributes.h>
 #include <linux/sched/task_stack.h>
 #include <linux/stacktrace.h>
 #include <linux/security.h>
@@ -535,14 +536,16 @@ stack_trace_sysctl(const struct ctl_table *table, int write, void *buffer,
 	return ret;
 }
 
-static char stack_trace_filter_buf[COMMAND_LINE_SIZE+1] __initdata;
+static char stack_trace_filter_buf[COMMAND_LINE_SIZE+1] __initdata __nonstring;
 
 static __init int enable_stacktrace(char *str)
 {
 	int len;
 
-	if ((len = str_has_prefix(str, "_filter=")))
-		strncpy(stack_trace_filter_buf, str + len, COMMAND_LINE_SIZE);
+	len = str_has_prefix(str, "_filter=");
+
+	if (len)
+		memcpy(stack_trace_filter_buf, str + len, sizeof(stack_trace_filter_buf));
 
 	stack_tracer_enabled = 1;
 	return 1;
