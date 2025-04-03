@@ -5518,7 +5518,7 @@ static const char * const tpacpi_led_names[TPACPI_LED_NUMLEDS] = {
 	"tpacpi::unknown_led3",
 	"tpacpi::thinkvantage",
 };
-#define TPACPI_SAFE_LEDS	0x1481U
+#define TPACPI_SAFE_LEDS	0x1487U
 
 static inline bool tpacpi_is_led_restricted(const unsigned int led)
 {
