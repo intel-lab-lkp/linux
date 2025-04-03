@@ -336,6 +336,29 @@ int __auxiliary_device_add(struct auxiliary_device *auxdev, const char *modname)
 EXPORT_SYMBOL_GPL(__auxiliary_device_add);
 
 /**
+ * auxiliary_get_resource - get a resource for a device
+ * @auxdev: auxiliary device
+ * @type: resource type
+ * @num: resource index
+ *
+ * Return: a pointer to the resource or NULL on failure.
+ */
+struct resource *auxiliary_get_resource(struct auxiliary_device *auxdev, unsigned int type,
+					unsigned int num)
+{
+	u32 i;
+
+	for (i = 0; i < auxdev->num_resources; i++) {
+		struct resource *r = &auxdev->resource[i];
+
+		if (type == resource_type(r) && num-- == 0)
+			return r;
+	}
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(auxiliary_get_resource);
+
+/**
  * __auxiliary_driver_register - register a driver for auxiliary bus devices
  * @auxdrv: auxiliary_driver structure
  * @owner: owning module/driver

@@ -10,6 +10,8 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <linux/acpi.h>
+#include <linux/auxiliary_bus.h>
+#include <linux/pci.h>
 #include <linux/list.h>
 #include <linux/property.h>
 #include <linux/mfd/core.h>
@@ -29,8 +31,15 @@ struct mfd_of_node_entry {
 	struct device_node *np;
 };
 
-static const struct device_type mfd_dev_type = {
-	.name	= "mfd_device",
+enum mfd_dev {
+	MFD_AUX_DEV,
+	MFD_PLAT_DEV,
+	MFD_MAX_DEV
+};
+
+static const struct device_type mfd_dev_type[MFD_MAX_DEV] = {
+	[MFD_AUX_DEV]	= { .name = "mfd_auxiliary_device" },
+	[MFD_PLAT_DEV]	= { .name = "mfd_platform_device" },
 };
 
 #if IS_ENABLED(CONFIG_ACPI)
@@ -136,10 +145,91 @@ allocate_of_node:
 	return 0;
 }
 
-static int mfd_add_device(struct device *parent, int id,
-			  const struct mfd_cell *cell,
-			  struct resource *mem_base,
-			  int irq_base, struct irq_domain *domain)
+static void mfd_release_auxiliary_device(struct device *dev)
+{
+	struct auxiliary_device *auxdev = to_auxiliary_dev(dev);
+
+	kfree(auxdev);
+}
+
+static int mfd_add_auxiliary_device(struct device *parent, int id, const struct mfd_cell *cell,
+				    struct resource *mem_base, int irq_base,
+				    struct irq_domain *domain)
+{
+	struct auxiliary_device *auxdev;
+	struct resource *res;
+	int r, ret = -ENOMEM;
+
+	auxdev = kzalloc(sizeof(*auxdev), GFP_KERNEL);
+	if (!auxdev)
+		return ret;
+
+	res = kcalloc(cell->num_resources, sizeof(*res), GFP_KERNEL);
+	if (!res)
+		goto fail_alloc;
+
+	for (r = 0; r < cell->num_resources; r++) {
+		res[r].name = cell->resources[r].name;
+		res[r].flags = cell->resources[r].flags;
+
+		/* Find out base to use */
+		if ((cell->resources[r].flags & IORESOURCE_MEM) && mem_base) {
+			res[r].parent = mem_base;
+			res[r].start = mem_base->start +
+				cell->resources[r].start;
+			res[r].end = mem_base->start +
+				cell->resources[r].end;
+		} else if (cell->resources[r].flags & IORESOURCE_IRQ) {
+			if (domain) {
+				/* Unable to create mappings for IRQ ranges. */
+				WARN_ON(cell->resources[r].start !=
+					cell->resources[r].end);
+				res[r].start = res[r].end = irq_create_mapping(
+					domain, cell->resources[r].start);
+			} else {
+				res[r].start = irq_base +
+					cell->resources[r].start;
+				res[r].end   = irq_base +
+					cell->resources[r].end;
+			}
+		} else {
+			res[r].parent = cell->resources[r].parent;
+			res[r].start = cell->resources[r].start;
+			res[r].end   = cell->resources[r].end;
+		}
+	}
+
+	auxdev->name = cell->name;
+	auxdev->id = cell->id;
+	auxdev->resource = res;
+	auxdev->num_resources = cell->num_resources;
+	auxdev->dev.parent = parent;
+	auxdev->dev.type = &mfd_dev_type[MFD_AUX_DEV];
+	auxdev->dev.release = mfd_release_auxiliary_device;
+
+	ret = auxiliary_device_init(auxdev);
+	if (ret)
+		goto fail_aux_init;
+
+	ret = auxiliary_device_add(auxdev);
+	if (ret)
+		goto fail_aux_add;
+
+	return 0;
+
+fail_aux_add:
+	/* auxdev will be freed with the put_device() and .release sequence */
+	auxiliary_device_uninit(auxdev);
+fail_aux_init:
+	kfree(res);
+fail_alloc:
+	kfree(auxdev);
+	return ret;
+}
+
+static int mfd_add_platform_device(struct device *parent, int id, const struct mfd_cell *cell,
+				   struct resource *mem_base, int irq_base,
+				   struct irq_domain *domain)
 {
 	struct resource *res;
 	struct platform_device *pdev;
@@ -168,7 +258,7 @@ static int mfd_add_device(struct device *parent, int id,
 		goto fail_device;
 
 	pdev->dev.parent = parent;
-	pdev->dev.type = &mfd_dev_type;
+	pdev->dev.type = &mfd_dev_type[MFD_PLAT_DEV];
 	pdev->dev.dma_mask = parent->dma_mask;
 	pdev->dev.dma_parms = parent->dma_parms;
 	pdev->dev.coherent_dma_mask = parent->coherent_dma_mask;
@@ -302,6 +392,15 @@ fail_alloc:
 	return ret;
 }
 
+static int mfd_add_device(struct device *parent, int id, const struct mfd_cell *cells,
+			  struct resource *mem_base, int irq_base, struct irq_domain *domain)
+{
+	if (dev_is_pci(parent))
+		return mfd_add_auxiliary_device(parent, id, cells, mem_base, irq_base, domain);
+	else
+		return mfd_add_platform_device(parent, id, cells, mem_base, irq_base, domain);
+}
+
 /**
  * mfd_add_devices - register child devices
  *
@@ -340,15 +439,21 @@ fail:
 }
 EXPORT_SYMBOL(mfd_add_devices);
 
-static int mfd_remove_devices_fn(struct device *dev, void *data)
+static int mfd_remove_auxiliary_device(struct device *dev)
+{
+	struct auxiliary_device *auxdev = to_auxiliary_dev(dev);
+
+	auxiliary_device_delete(auxdev);
+	auxiliary_device_uninit(auxdev);
+	return 0;
+}
+
+static int mfd_remove_platform_device(struct device *dev, void *data)
 {
 	struct platform_device *pdev;
 	const struct mfd_cell *cell;
 	struct mfd_of_node_entry *of_entry, *tmp;
 	int *level = data;
-
-	if (dev->type != &mfd_dev_type)
-		return 0;
 
 	pdev = to_platform_device(dev);
 	cell = mfd_get_cell(pdev);
@@ -370,6 +475,16 @@ static int mfd_remove_devices_fn(struct device *dev, void *data)
 
 	platform_device_unregister(pdev);
 	return 0;
+}
+
+static int mfd_remove_devices_fn(struct device *dev, void *data)
+{
+	if (dev->type == &mfd_dev_type[MFD_AUX_DEV])
+		return mfd_remove_auxiliary_device(dev);
+	else if (dev->type == &mfd_dev_type[MFD_PLAT_DEV])
+		return mfd_remove_platform_device(dev, data);
+	else
+		return 0;
 }
 
 void mfd_remove_devices_late(struct device *parent)

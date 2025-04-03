@@ -148,6 +148,8 @@ struct auxiliary_device {
 		struct mutex lock; /* Synchronize irq sysfs creation */
 		bool irq_dir_exists;
 	} sysfs;
+	u32 num_resources;
+	struct resource	*resource;
 };
 
 /**
@@ -220,6 +222,8 @@ static inline const struct auxiliary_driver *to_auxiliary_drv(const struct devic
 int auxiliary_device_init(struct auxiliary_device *auxdev);
 int __auxiliary_device_add(struct auxiliary_device *auxdev, const char *modname);
 #define auxiliary_device_add(auxdev) __auxiliary_device_add(auxdev, KBUILD_MODNAME)
+struct resource *auxiliary_get_resource(struct auxiliary_device *auxdev, unsigned int type,
+					unsigned int num);
 
 #ifdef CONFIG_SYSFS
 int auxiliary_device_sysfs_irq_add(struct auxiliary_device *auxdev, int irq);
@@ -238,6 +242,9 @@ auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev, int irq) {}
 
 static inline void auxiliary_device_uninit(struct auxiliary_device *auxdev)
 {
+	if (auxdev->resource)
+		kfree(auxdev->resource);
+
 	mutex_destroy(&auxdev->sysfs.lock);
 	put_device(&auxdev->dev);
 }
