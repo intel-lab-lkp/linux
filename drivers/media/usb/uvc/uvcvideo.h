@@ -19,6 +19,7 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-fh.h>
 #include <media/videobuf2-v4l2.h>
+#include <media/v4l2-fwnode.h>
 
 /* --------------------------------------------------------------------------
  * UVC constants
@@ -40,6 +41,9 @@
 
 #define UVC_EXT_GPIO_UNIT		0x7ffe
 #define UVC_EXT_GPIO_UNIT_ID		0x100
+
+#define UVC_FWNODE_UNIT			0x7ffd
+#define UVC_FWNODE_UNIT_ID		0x101
 
 /* ------------------------------------------------------------------------
  * Driver specific constants.
@@ -242,6 +246,12 @@ struct uvc_entity {
 			int irq;
 			bool initialized;
 		} gpio;
+
+		struct {
+			u8  bControlSize;
+			u8  *bmControls;
+			struct v4l2_fwnode_device_properties props;
+		} fwnode;
 	};
 
 	u8 bNrInPins;
@@ -617,6 +627,7 @@ struct uvc_device {
 	} async_ctrl;
 
 	struct uvc_entity *gpio_unit;
+	struct uvc_entity *fwnode_unit;
 };
 
 enum uvc_handle_state {
@@ -835,4 +846,8 @@ size_t uvc_video_stats_dump(struct uvc_streaming *stream, char *buf,
 int uvc_gpio_parse(struct uvc_device *dev);
 int uvc_gpio_init_irq(struct uvc_device *dev);
 void uvc_gpio_deinit(struct uvc_device *dev);
+
+/* fwnode */
+int uvc_fwnode_parse(struct uvc_device *dev);
+
 #endif
