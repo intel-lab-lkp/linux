@@ -75,8 +75,7 @@ bool ufshcd_cmd_inflight(struct scsi_cmnd *cmd);
 int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag);
 int ufshcd_mcq_abort(struct scsi_cmnd *cmd);
 int ufshcd_try_to_abort_task(struct ufs_hba *hba, int tag);
-void ufshcd_release_scsi_cmd(struct ufs_hba *hba,
-			     struct ufshcd_lrb *lrbp);
+void ufshcd_release_scsi_cmd(struct ufs_hba *hba, struct scsi_cmnd *cmd);
 
 #define SD_ASCII_STD true
 #define SD_RAW false
@@ -359,6 +358,28 @@ static inline bool ufs_is_valid_unit_desc_lun(struct ufs_dev_info *dev_info, u8 
 		return false;
 	}
 	return lun == UFS_UPIU_RPMB_WLUN || (lun < dev_info->max_lu_supported);
+}
+
+/*
+ * Convert a block layer tag into a SCSI command pointer. This function is
+ * called once per I/O completion path and is also called from error paths.
+ */
+static inline struct scsi_cmnd *ufshcd_tag_to_cmd(struct ufs_hba *hba, u32 tag)
+{
+	struct blk_mq_tags *tags = hba->host->tag_set.tags[0];
+	struct request *rq;
+
+	/*
+	 * Use .static_rqs[] for reserved commands because blk_mq_get_tag()
+	 * is not called for reserved commands by the UFS driver.
+	 */
+	rq = tag < UFSHCD_NUM_RESERVED ? tags->static_rqs[tag] :
+					 blk_mq_tag_to_rq(tags, tag);
+
+	if (WARN_ON_ONCE(!rq))
+		return NULL;
+
+	return blk_mq_rq_to_pdu(rq);
 }
 
 static inline void ufshcd_inc_sq_tail(struct ufs_hw_queue *q)
