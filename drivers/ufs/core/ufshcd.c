@@ -8728,7 +8728,7 @@ static int ufshcd_alloc_mcq(struct ufs_hba *hba)
 	int ret;
 	int old_nutrs = hba->nutrs;
 
-	ret = ufshcd_mcq_decide_queue_depth(hba);
+	ret = ufshcd_mcq_decide_queue_depth(hba, hba->dev_info.bqueuedepth);
 	if (ret < 0)
 		return ret;
 

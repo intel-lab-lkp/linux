@@ -132,6 +132,7 @@ EXPORT_SYMBOL_GPL(ufshcd_mcq_queue_cfg_addr);
 /**
  * ufshcd_mcq_decide_queue_depth - decide the queue depth
  * @hba: per adapter instance
+ * @ufs_dev_qd: maximum queue depth supported by the UFS device
  *
  * Return: queue-depth on success, non-zero on error
  *
@@ -140,7 +141,7 @@ EXPORT_SYMBOL_GPL(ufshcd_mcq_queue_cfg_addr);
  * Calculates and adjusts the queue depth based on the depth
  * supported by the HC and ufs device.
  */
-int ufshcd_mcq_decide_queue_depth(struct ufs_hba *hba)
+int ufshcd_mcq_decide_queue_depth(struct ufs_hba *hba, u32 ufs_dev_qd)
 {
 	int mac;
 
@@ -160,13 +161,14 @@ int ufshcd_mcq_decide_queue_depth(struct ufs_hba *hba)
 	if (mac < 0)
 		goto err;
 
-	WARN_ON_ONCE(!hba->dev_info.bqueuedepth);
 	/*
-	 * max. value of bqueuedepth = 256, mac is host dependent.
-	 * It is mandatory for UFS device to define bQueueDepth if
-	 * shared queuing architecture is enabled.
+	 * According to the UFS standard, the UFS device queue depth
+	 * (bQueueDepth) must be in the range 1..255 if the shared queueing
+	 * architecture is supported. bQueueDepth is zero if the shared queueing
+	 * architecture is not supported.
 	 */
-	return min_t(int, mac, hba->dev_info.bqueuedepth);
+	WARN_ON_ONCE(!ufs_dev_qd);
+	return min(mac, ufs_dev_qd);
 
 err:
 	dev_err(hba->dev, "Failed to get mac, err=%d\n", mac);
