@@ -69,7 +69,8 @@ fman@500000 {
 		reg = <0xe5000 0x1000>;
 		fsl,erratum-a011043; /* must ignore read errors */
 
-		pcsphy10: ethernet-phy@0 {
+		pcsphy10: ethernet-pcs@0 {
+			compatible = "fsl,lynx-pcs";
 			reg = <0x0>;
 		};
 	};
