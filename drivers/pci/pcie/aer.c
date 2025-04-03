@@ -1112,6 +1112,12 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
+	/*
+	 * Avoid any power state transition if an error is triggered during
+	 * system suspend.
+	 */
+	dev->skip_bus_pm = true;
+
 	cxl_rch_handle_error(dev, info);
 	pci_aer_handle_error(dev, info);
 	pci_dev_put(dev);
