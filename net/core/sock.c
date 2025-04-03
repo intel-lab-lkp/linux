@@ -2130,6 +2130,8 @@ lenout:
  */
 static inline void sock_lock_init(struct sock *sk)
 {
+	sk_owner_clear(sk);
+
 	if (sk->sk_kern_sock)
 		sock_lock_init_class_and_name(
 			sk,
@@ -2324,6 +2326,8 @@ static void __sk_destruct(struct rcu_head *head)
 		__netns_tracker_free(net, &sk->ns_tracker, false);
 		net_passive_dec(net);
 	}
+
+	sk_owner_put(sk);
 	sk_prot_free(sk->sk_prot_creator, sk);
 }
 
