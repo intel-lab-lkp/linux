@@ -10,6 +10,7 @@
 #include <linux/sort.h>
 #include <linux/idr.h>
 #include <linux/memory-tiers.h>
+#include <linux/ioport.h>
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
@@ -2333,7 +2334,7 @@ const struct device_type cxl_region_type = {
 
 bool is_cxl_region(struct device *dev)
 {
-	return dev->type == &cxl_region_type;
+	return dev && dev->type == &cxl_region_type;
 }
 EXPORT_SYMBOL_NS_GPL(is_cxl_region, "CXL");
 
@@ -3442,6 +3443,27 @@ out:
 	return rc;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, "CXL");
+
+int cxl_region_srmem_update(void)
+{
+	struct device *dev = NULL;
+	struct cxl_region *cxlr;
+	struct resource *res;
+
+	do {
+		dev = bus_find_next_device(&cxl_bus_type, dev);
+		if (is_cxl_region(dev)) {
+			cxlr = to_cxl_region(dev);
+			res = cxlr->params.res;
+			release_srmem_region_adjustable(res->start,
+							resource_size(res));
+		}
+		put_device(dev);
+	} while (dev);
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_region_srmem_update, "CXL");
 
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa)
 {

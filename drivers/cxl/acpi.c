@@ -7,6 +7,8 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/node.h>
+#include <linux/pm.h>
+#include <linux/workqueue.h>
 #include <asm/div64.h>
 #include "cxlpci.h"
 #include "cxl.h"
@@ -813,6 +815,27 @@ static int pair_cxl_resource(struct device *dev, void *data)
 	return 0;
 }
 
+static void cxl_srmem_work_fn(struct work_struct *work)
+{
+	/* Wait for CXL PCI and mem drivers to load */
+	cxl_wait_for_pci_mem();
+
+	/*
+	 * Once the CXL PCI and mem drivers have loaded wait
+	 * for the driver probe routines to complete.
+	 */
+	wait_for_device_probe();
+
+	cxl_region_srmem_update();
+}
+
+DECLARE_WORK(cxl_sr_work, cxl_srmem_work_fn);
+
+static void cxl_srmem_update(void)
+{
+	schedule_work(&cxl_sr_work);
+}
+
 static int cxl_acpi_probe(struct platform_device *pdev)
 {
 	int rc;
@@ -887,6 +910,10 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 
 	/* In case PCI is scanned before ACPI re-trigger memdev attach */
 	cxl_bus_rescan();
+
+	/* Update SOFT RESERVED resources that intersect with CXL regions */
+	cxl_srmem_update();
+
 	return 0;
 }
 
@@ -918,6 +945,7 @@ static int __init cxl_acpi_init(void)
 
 static void __exit cxl_acpi_exit(void)
 {
+	cancel_work_sync(&cxl_sr_work);
 	platform_driver_unregister(&cxl_acpi_driver);
 	cxl_bus_drain();
 }
