@@ -730,7 +730,7 @@ static int ipvlan_device_event(struct notifier_block *unused,
 	struct ipvl_dev *ipvlan, *next;
 	struct ipvl_port *port;
 	LIST_HEAD(lst_kill);
-	int err;
+	int flags, err;
 
 	if (!netif_is_ipvlan_port(dev))
 		return NOTIFY_DONE;
@@ -739,7 +739,25 @@ static int ipvlan_device_event(struct notifier_block *unused,
 
 	switch (event) {
 	case NETDEV_UP:
+		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
+			flags = ipvlan->dev->flags;
+			if (flags & IFF_UP)
+				continue;
+			dev_change_flags(ipvlan->dev, flags | IFF_UP, extack);
+			netif_stacked_transfer_operstate(ipvlan->phy_dev,
+							 ipvlan->dev);
+		}
+		break;
 	case NETDEV_DOWN:
+		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
+			flags = ipvlan->dev->flags;
+			if (!(flags & IFF_UP))
+				continue;
+			dev_close(ipvlan->dev);
+			netif_stacked_transfer_operstate(ipvlan->phy_dev,
+							 ipvlan->dev);
+		}
+		break;
 	case NETDEV_CHANGE:
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode)
 			netif_stacked_transfer_operstate(ipvlan->phy_dev,
