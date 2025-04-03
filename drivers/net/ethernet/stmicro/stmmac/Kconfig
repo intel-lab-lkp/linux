@@ -170,9 +170,12 @@ config DWMAC_SOCFPGA
 	tristate "SOCFPGA dwmac support"
 	default ARCH_INTEL_SOCFPGA
 	depends on OF && (ARCH_INTEL_SOCFPGA || COMPILE_TEST)
+	select OF_DYNAMIC
 	select MFD_SYSCON
+	select MDIO_DEVICE
 	select MDIO_REGMAP
 	select REGMAP_MMIO
+	select PCS
 	select PCS_LYNX
 	help
 	  Support for ethernet controller on Altera SOCFPGA

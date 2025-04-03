@@ -5,7 +5,9 @@ config ALTERA_TSE
 	depends on HAS_IOMEM
 	select PHYLIB
 	select PHYLINK
+	select PCS
 	select PCS_LYNX
+	select MDIO_DEVICE
 	select MDIO_REGMAP
 	select REGMAP_MMIO
 	help
