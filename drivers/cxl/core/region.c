@@ -11,6 +11,7 @@
 #include <linux/idr.h>
 #include <linux/memory-tiers.h>
 #include <linux/ioport.h>
+#include <linux/dax.h>
 #include <cxlmem.h>
 #include <cxl.h>
 #include "core.h"
@@ -3444,6 +3445,11 @@ out:
 }
 EXPORT_SYMBOL_NS_GPL(cxl_add_to_region, "CXL");
 
+static int cxl_srmem_register(struct resource *res, void *unused)
+{
+	return hmem_register_device(phys_to_target_node(res->start), res);
+}
+
 int cxl_region_srmem_update(void)
 {
 	struct device *dev = NULL;
@@ -3460,6 +3466,10 @@ int cxl_region_srmem_update(void)
 		}
 		put_device(dev);
 	} while (dev);
+
+	/* Now register any remaining SOFT RESERVES with dax */
+	walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED, IORESOURCE_MEM,
+			    0, -1, NULL, cxl_srmem_register);
 
 	return 0;
 }

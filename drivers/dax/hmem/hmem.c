@@ -61,7 +61,7 @@ static void release_hmem(void *pdev)
 	platform_device_unregister(pdev);
 }
 
-static int hmem_register_device(int target_nid, const struct resource *res)
+int hmem_register_device(int target_nid, const struct resource *res)
 {
 	struct device *host = &dax_hmem_pdev->dev;
 	struct platform_device *pdev;
@@ -124,6 +124,7 @@ out_put:
 	platform_device_put(pdev);
 	return rc;
 }
+EXPORT_SYMBOL_GPL(hmem_register_device);
 
 static int dax_hmem_platform_probe(struct platform_device *pdev)
 {

@@ -8,7 +8,6 @@
 static bool nohmem;
 module_param_named(disable, nohmem, bool, 0444);
 
-static bool platform_initialized;
 static DEFINE_MUTEX(hmem_resource_lock);
 static struct resource hmem_active = {
 	.name = "HMEM devices",
@@ -35,9 +34,7 @@ EXPORT_SYMBOL_GPL(walk_hmem_resources);
 
 static void __hmem_register_resource(int target_nid, struct resource *res)
 {
-	struct platform_device *pdev;
 	struct resource *new;
-	int rc;
 
 	new = __request_region(&hmem_active, res->start, resource_size(res), "",
 			       0);
@@ -47,21 +44,6 @@ static void __hmem_register_resource(int target_nid, struct resource *res)
 	}
 
 	new->desc = target_nid;
-
-	if (platform_initialized)
-		return;
-
-	pdev = platform_device_alloc("hmem_platform", 0);
-	if (!pdev) {
-		pr_err_once("failed to register device-dax hmem_platform device\n");
-		return;
-	}
-
-	rc = platform_device_add(pdev);
-	if (rc)
-		platform_device_put(pdev);
-	else
-		platform_initialized = true;
 }
 
 void hmem_register_resource(int target_nid, struct resource *res)
@@ -83,9 +65,28 @@ static __init int hmem_register_one(struct resource *res, void *data)
 
 static __init int hmem_init(void)
 {
-	walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED,
-			IORESOURCE_MEM, 0, -1, NULL, hmem_register_one);
-	return 0;
+	struct platform_device *pdev;
+	int rc;
+
+	if (!IS_ENABLED(CONFIG_CXL_ACPI)) {
+		walk_iomem_res_desc(IORES_DESC_SOFT_RESERVED,
+				    IORESOURCE_MEM, 0, -1, NULL,
+				    hmem_register_one);
+	}
+
+	pdev = platform_device_alloc("hmem_platform", 0);
+	if (!pdev) {
+		pr_err("failed to register device-dax hmem_platform device\n");
+		return -1;
+	}
+
+	rc = platform_device_add(pdev);
+	if (rc) {
+		pr_err("failed to add device-dax hmem_platform device\n");
+		platform_device_put(pdev);
+	}
+
+	return rc;
 }
 
 /*
