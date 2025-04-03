@@ -235,9 +235,11 @@ static int sofef00_panel_probe(struct mipi_dsi_device *dsi)
 	struct sofef00_panel *ctx;
 	int ret;
 
-	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
+	ctx = devm_drm_panel_alloc(dev, struct sofef00_panel, panel,
+				   &sofef00_panel_panel_funcs,
+				   DRM_MODE_CONNECTOR_DSI);
+	if (IS_ERR(ctx))
+		return PTR_ERR(ctx);
 
 	ctx->mode = of_device_get_match_data(dev);
 
@@ -261,9 +263,6 @@ static int sofef00_panel_probe(struct mipi_dsi_device *dsi)
 
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-
-	drm_panel_init(&ctx->panel, dev, &sofef00_panel_panel_funcs,
-		       DRM_MODE_CONNECTOR_DSI);
 
 	ctx->panel.backlight = sofef00_create_backlight(dsi);
 	if (IS_ERR(ctx->panel.backlight))
