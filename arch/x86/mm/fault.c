@@ -20,6 +20,7 @@
 #include <linux/mm_types.h>
 #include <linux/mm.h>			/* find_and_lock_vma() */
 #include <linux/vmalloc.h>
+#include <linux/memcontrol.h>
 
 #include <asm/cpufeature.h>		/* boot_cpu_has, ...		*/
 #include <asm/traps.h>			/* dotraplinkage, ...		*/
@@ -1218,6 +1219,8 @@ void do_user_addr_fault(struct pt_regs *regs,
 	unsigned int flags = FAULT_FLAG_DEFAULT;
 	bool is_shared_vma;
 	unsigned long addr;
+	struct mem_cgroup *mshare_memcg;
+	struct mem_cgroup *memcg;
 
 	tsk = current;
 	mm = tsk->mm;
@@ -1374,6 +1377,8 @@ retry:
 	}
 
 	if (unlikely(vma_is_mshare(vma))) {
+		mshare_memcg = get_mshare_memcg(vma);
+
 		fault = find_shared_vma(&vma, &addr);
 
 		if (fault) {
@@ -1401,6 +1406,9 @@ retry:
 		return;
 	}
 
+	if (is_shared_vma && mshare_memcg)
+		memcg = set_active_memcg(mshare_memcg);
+
 	/*
 	 * If for any reason at all we couldn't handle the fault,
 	 * make sure we exit gracefully rather than endlessly redo
@@ -1415,6 +1423,9 @@ retry:
 	 * FAULT_FLAG_USER|FAULT_FLAG_KILLABLE are both set in flags.
 	 */
 	fault = handle_mm_fault(vma, addr, flags, regs);
+
+	if (is_shared_vma && mshare_memcg)
+		set_active_memcg(memcg);
 
 	if (unlikely(is_shared_vma) && ((fault & VM_FAULT_COMPLETED) ||
 	    (fault & VM_FAULT_RETRY) || fault_signal_pending(fault, regs)))

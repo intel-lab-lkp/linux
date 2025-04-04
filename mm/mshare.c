@@ -16,6 +16,7 @@
 
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/memcontrol.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
 #include <uapi/linux/magic.h>
@@ -34,7 +35,21 @@ struct mshare_data {
 	unsigned long size;
 	unsigned long flags;
 	struct mmu_notifier mn;
+#ifdef CONFIG_MEMCG
+	struct mem_cgroup *memcg;
+#endif
 };
+
+struct mem_cgroup *get_mshare_memcg(struct vm_area_struct *vma)
+{
+	struct mshare_data *m_data = vma->vm_private_data;
+
+#ifdef CONFIG_MEMCG
+	return m_data->memcg;
+#else
+	return NULL;
+#endif
+}
 
 static void mshare_invalidate_tlbs(struct mmu_notifier *mn, struct mm_struct *mm,
 				   unsigned long start, unsigned long end)
@@ -408,6 +423,9 @@ msharefs_fill_mm(struct inode *inode)
 	struct mm_struct *mm;
 	struct mshare_data *m_data = NULL;
 	int ret = 0;
+#ifdef CONFIG_MEMCG
+	struct mem_cgroup *memcg;
+#endif
 
 	mm = mm_alloc();
 	if (!mm) {
@@ -434,6 +452,17 @@ msharefs_fill_mm(struct inode *inode)
 
 #ifdef CONFIG_MEMCG
 	mm->owner = NULL;
+
+	rcu_read_lock();
+	memcg = mem_cgroup_from_task(current);
+	if (mem_cgroup_is_root(memcg))
+		goto out;
+	if (!cgroup_subsys_on_dfl(memory_cgrp_subsys))
+		goto out;
+	if (css_tryget(&memcg->css))
+		m_data->memcg = memcg;
+out:
+	rcu_read_unlock();
 #endif
 	return 0;
 
@@ -447,6 +476,10 @@ err_free:
 static void
 msharefs_delmm(struct mshare_data *m_data)
 {
+#ifdef CONFIG_MEMCG
+	if (m_data->memcg)
+		css_put(&m_data->memcg->css);
+#endif
 	mmput(m_data->mm);
 	kfree(m_data);
 }
