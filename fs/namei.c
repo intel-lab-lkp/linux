@@ -40,6 +40,7 @@
 #include <linux/bitops.h>
 #include <linux/init_task.h>
 #include <linux/uaccess.h>
+#include <linux/anon_inodes.h>
 
 #include "internal.h"
 #include "mount.h"
@@ -3429,7 +3430,12 @@ static int may_open(struct mnt_idmap *idmap, const struct path *path,
 			return -EACCES;
 		break;
 	default:
-		VFS_BUG_ON_INODE(1, inode);
+		if (!is_default_anon_inode(inode)
+			&& !(inode->i_flags & S_PRIVATE))
+			VFS_BUG_ON_INODE(1, inode);
+		if (acc_mode & MAY_EXEC)
+			return -EACCES;
+		break;
 	}
 
 	error = inode_permission(idmap, inode, MAY_OPEN | acc_mode);

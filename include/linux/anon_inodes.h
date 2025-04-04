@@ -30,6 +30,7 @@ int anon_inode_create_getfd(const char *name,
 			    const struct file_operations *fops,
 			    void *priv, int flags,
 			    const struct inode *context_inode);
+bool is_default_anon_inode(const struct inode *inode);
 
 #endif /* _LINUX_ANON_INODES_H */
 

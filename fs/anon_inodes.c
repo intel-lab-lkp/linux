@@ -303,6 +303,18 @@ int anon_inode_create_getfd(const char *name, const struct file_operations *fops
 	return __anon_inode_getfd(name, fops, priv, flags, context_inode, true);
 }
 
+/**
+ * is_default_anon_inode - Checks if the given inode is the default
+ * anonymous inode (anon_inode_inode)
+ *
+ * @inode: [in] the inode to be checked
+ *
+ * Returns true if the given inode is anon_inode_inode, otherwise returns false.
+ */
+inline bool is_default_anon_inode(const struct inode *inode)
+{
+	return anon_inode_inode == inode;
+}
 
 static int __init anon_inode_init(void)
 {
