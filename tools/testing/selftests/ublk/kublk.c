@@ -10,6 +10,7 @@ static const struct ublk_tgt_ops *tgt_ops_list[] = {
 	&null_tgt_ops,
 	&loop_tgt_ops,
 	&stripe_tgt_ops,
+	&fault_inject_tgt_ops,
 };
 
 static const struct ublk_tgt_ops *ublk_find_tgt(const char *name)
@@ -1041,7 +1042,7 @@ static int cmd_dev_get_features(void)
 
 static int cmd_dev_help(char *exe)
 {
-	printf("%s add -t [null|loop] [-q nr_queues] [-d depth] [-n dev_id] [backfile1] [backfile2] ...\n", exe);
+	printf("%s add -t [null|loop|stripe|fault_inject] [-q nr_queues] [-d depth] [-n dev_id] [--delay_us delay] [backfile1] [backfile2] ...\n", exe);
 	printf("\t default: nr_queues=2(max 4), depth=128(max 128), dev_id=-1(auto allocation)\n");
 	printf("%s del [-n dev_id] -a \n", exe);
 	printf("\t -a delete all devices -n delete specified device\n");
@@ -1064,6 +1065,7 @@ int main(int argc, char *argv[])
 		{ "zero_copy",          0,      NULL, 'z' },
 		{ "foreground",		0,	NULL,  0  },
 		{ "chunk_size", 	1,	NULL,  0  },
+		{ "delay_us",		1,	NULL,  0  },
 		{ 0, 0, 0, 0 }
 	};
 	int option_idx, opt;
@@ -1112,6 +1114,8 @@ int main(int argc, char *argv[])
 				ctx.fg = 1;
 			if (!strcmp(longopts[option_idx].name, "chunk_size"))
 				ctx.chunk_size = strtol(optarg, NULL, 10);
+			if (!strcmp(longopts[option_idx].name, "delay_us"))
+				ctx.delay_us = strtoll(optarg, NULL, 10);
 		}
 	}
 
