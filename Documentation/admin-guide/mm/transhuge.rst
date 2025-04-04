@@ -12,8 +12,8 @@ using huge pages for the backing of virtual memory with huge pages
 that supports the automatic promotion and demotion of page sizes and
 without the shortcomings of hugetlbfs.
 
-Currently THP only works for anonymous memory mappings and tmpfs/shmem.
-But in the future it can expand to other filesystems.
+Currently, THP only works for anonymous memory mappings, tmpfs/shmem and
+filesystems that support large folios.
 
 .. note::
    in the examples below we presume that the basic page size is 4K and
@@ -463,11 +463,19 @@ fields for each mapping. (Note that AnonHugePages only applies to traditional
 PMD-sized THP for historical reasons and should have been called
 AnonHugePmdMapped).
 
-The number of file transparent huge pages mapped to userspace is available
-by reading ShmemPmdMapped and ShmemHugePages fields in ``/proc/meminfo``.
-To identify what applications are mapping file transparent huge pages, it
-is necessary to read ``/proc/PID/smaps`` and count the FilePmdMapped fields
-for each mapping.
+The number of PMD-sized transparent huge pages currently used by
+filesystem data (page cache) is available by reading the FileHugePages field
+in ``/proc/meminfo``. The number of these huge pages that are mapped to userspace
+is available by reading FilePmdMapped field in ``proc/meminfo``. To identify
+what applications are mapping these huge pages, it is necessary to read
+``/proc/PID/smaps`` and count the FilePmdMapped fields for each mapping.
+
+In similar fashion, the number of PMD-sized transparent huge pages currently
+used by tmpfs/shmem is available by reading the ShmemHugePages field
+in ``/proc/meminfo``. The number of these huge pages that are mapped to userspace
+is available by reading ShmemPmdMapped field in ``proc/meminfo``. To identify
+what applications are mapping these huge pages, it is necessary to read
+``/proc/PID/smaps`` and count the ShmemPmdMapped fields for each mapping.
 
 Note that reading the smaps file is expensive and reading it
 frequently will incur overhead.
