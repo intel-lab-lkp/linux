@@ -211,6 +211,12 @@ __find_get_block_slow(struct block_device *bdev, sector_t block, bool atomic)
 	head = folio_buffers(folio);
 	if (!head)
 		goto out_unlock;
+	/*
+	 * Upon a noref migration, the folio lock serialize here;
+	 * otherwise bail.
+	 */
+	if (!folio_locked && test_bit(BH_Migrate, &head->b_state))
+		goto out_unlock;
 	bh = head;
 	do {
 		if (!buffer_mapped(bh))

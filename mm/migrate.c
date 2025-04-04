@@ -846,10 +846,13 @@ static int __buffer_migrate_folio(struct address_space *mapping,
 	if (!buffer_migrate_lock_buffers(head, mode))
 		return -EAGAIN;
 
+	set_bit(BH_Migrate, &head->b_state);
+
 	if (check_refs) {
 		bool busy;
 		bool invalidated = false;
 
+		folio_lock(src);
 recheck_buffers:
 		busy = false;
 		spin_lock(&mapping->i_private_lock);
@@ -861,12 +864,12 @@ recheck_buffers:
 			}
 			bh = bh->b_this_page;
 		} while (bh != head);
+		spin_unlock(&mapping->i_private_lock);
 		if (busy) {
 			if (invalidated) {
 				rc = -EAGAIN;
 				goto unlock_buffers;
 			}
-			spin_unlock(&mapping->i_private_lock);
 			invalidate_bh_lrus();
 			invalidated = true;
 			goto recheck_buffers;
@@ -884,8 +887,9 @@ recheck_buffers:
 	} while (bh != head);
 
 unlock_buffers:
+	clear_bit(BH_Migrate, &head->b_state);
 	if (check_refs)
-		spin_unlock(&mapping->i_private_lock);
+		folio_unlock(src);
 	bh = head;
 	do {
 		unlock_buffer(bh);
