@@ -983,6 +983,9 @@ static inline void count_memcg_events_mm(struct mm_struct *mm,
 	if (mem_cgroup_disabled())
 		return;
 
+	if (test_bit(MMF_MSHARE, &mm->flags))
+		mm = current->mm;
+
 	rcu_read_lock();
 	memcg = mem_cgroup_from_task(rcu_dereference(mm->owner));
 	if (likely(memcg))

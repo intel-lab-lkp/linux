@@ -945,7 +945,8 @@ struct mem_cgroup *get_mem_cgroup_from_mm(struct mm_struct *mm)
 		mm = current->mm;
 		if (unlikely(!mm))
 			return root_mem_cgroup;
-	}
+	} else if (test_bit(MMF_MSHARE, &mm->flags))
+		mm = current->mm;
 
 	rcu_read_lock();
 	do {

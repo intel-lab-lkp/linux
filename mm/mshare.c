@@ -432,6 +432,9 @@ msharefs_fill_mm(struct inode *inode)
 	if (ret)
 		goto err_free;
 
+#ifdef CONFIG_MEMCG
+	mm->owner = NULL;
+#endif
 	return 0;
 
 err_free:
