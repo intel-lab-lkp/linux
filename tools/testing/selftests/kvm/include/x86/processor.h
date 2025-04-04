@@ -19,6 +19,27 @@
 #include "kvm_util.h"
 #include "ucall_common.h"
 
+
+static inline void writel(uint32_t val, volatile void *addr)
+{
+	*(volatile uint32_t *)addr = val;
+}
+
+static inline uint32_t readl(volatile void *addr)
+{
+	return *(volatile uint32_t *)addr;
+}
+
+static inline void writeq(uint64_t val, volatile void *addr)
+{
+	*(volatile uint64_t *)addr = val;
+}
+
+static inline uint64_t readq(volatile void *addr)
+{
+	return *(volatile uint64_t *)addr;
+}
+
 extern bool host_cpu_is_intel;
 extern bool host_cpu_is_amd;
 extern uint64_t guest_tsc_khz;

@@ -15,6 +15,7 @@ LIBKVM += lib/sparsebit.c
 LIBKVM += lib/test_util.c
 LIBKVM += lib/ucall_common.c
 LIBKVM += lib/userfaultfd_util.c
+LIBKVM += lib/vfio_pci_util.c
 
 LIBKVM_STRING += lib/string_override.c
 
@@ -133,6 +134,7 @@ TEST_GEN_PROGS_x86 += mmu_stress_test
 TEST_GEN_PROGS_x86 += rseq_test
 TEST_GEN_PROGS_x86 += set_memory_region_test
 TEST_GEN_PROGS_x86 += steal_time
+TEST_GEN_PROGS_x86 += vfio_irq_test
 TEST_GEN_PROGS_x86 += kvm_binary_stats_test
 TEST_GEN_PROGS_x86 += system_counter_offset_test
 TEST_GEN_PROGS_x86 += pre_fault_memory_test
