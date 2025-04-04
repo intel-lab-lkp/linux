@@ -10,6 +10,7 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/usb.h>
+#include <linux/usb/uvc.h>
 #include <linux/videodev2.h>
 
 #include <media/v4l2-ioctl.h>
@@ -187,11 +188,64 @@ static const struct v4l2_file_operations uvc_meta_fops = {
 	.mmap = vb2_fop_mmap,
 };
 
+static const u8 uvc_msxu_guid[16] = UVC_GUID_MSXU_1_5;
+
+#define MSXU_CONTROL_METADATA 0x9
+static int uvc_enable_msxu(struct uvc_device *dev)
+{
+	u32 *data __free(kfree) = NULL;
+	struct uvc_entity *entity;
+
+	list_for_each_entry(entity, &dev->entities, list) {
+		int ret;
+
+		if (memcmp(entity->guid, uvc_msxu_guid, sizeof(entity->guid)))
+			continue;
+
+		if (!data)
+			data = kmalloc(sizeof(*data), GFP_KERNEL);
+		if (!data)
+			return -ENOMEM;
+
+		ret = uvc_query_ctrl(dev, UVC_GET_CUR, entity->id,
+				     dev->intfnum, MSXU_CONTROL_METADATA,
+				     data, sizeof(*data));
+		if (ret)
+			continue;
+
+		if (*data) {
+			dev->quirks |= UVC_QUIRK_MSXU_META;
+			return 0;
+		}
+
+		ret = uvc_query_ctrl(dev, UVC_GET_MAX, entity->id,
+				     dev->intfnum, MSXU_CONTROL_METADATA,
+				     data, sizeof(*data));
+		if (ret || !*data)
+			continue;
+
+		ret = uvc_query_ctrl(dev, UVC_SET_CUR, entity->id,
+				     dev->intfnum, MSXU_CONTROL_METADATA,
+				     data, sizeof(*data));
+		if (!ret) {
+			dev->quirks |= UVC_QUIRK_MSXU_META;
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
 int uvc_meta_register(struct uvc_streaming *stream)
 {
 	struct uvc_device *dev = stream->dev;
 	struct video_device *vdev = &stream->meta.vdev;
 	struct uvc_video_queue *queue = &stream->meta.queue;
+	int ret;
+
+	ret = uvc_enable_msxu(dev);
+	if (ret)
+		return ret;
 
 	stream->meta.format = V4L2_META_FMT_UVC;
 
