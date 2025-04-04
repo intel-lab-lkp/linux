@@ -16,18 +16,72 @@
 #include <linux/fs.h>
 #include <linux/fs_context.h>
 #include <uapi/linux/magic.h>
+#include <linux/falloc.h>
 
 const unsigned long mshare_align = P4D_SIZE;
 
+#define MSHARE_INITIALIZED	0x1
+
 struct mshare_data {
 	struct mm_struct *mm;
+	unsigned long size;
+	unsigned long flags;
 };
+
+static int msharefs_set_size(struct mshare_data *m_data, unsigned long size)
+{
+	int error = -EINVAL;
+
+	if (test_bit(MSHARE_INITIALIZED, &m_data->flags))
+		goto out;
+
+	if (m_data->size || (size & (mshare_align - 1)))
+		goto out;
+
+	m_data->mm->task_size = m_data->size = size;
+
+	set_bit(MSHARE_INITIALIZED, &m_data->flags);
+	error = 0;
+out:
+	return error;
+}
+
+static long msharefs_fallocate(struct file *file, int mode, loff_t offset,
+				loff_t len)
+{
+	struct inode *inode = file_inode(file);
+	struct mshare_data *m_data = inode->i_private;
+	int error;
+
+	if (mode != FALLOC_FL_ALLOCATE_RANGE)
+		return -EOPNOTSUPP;
+
+	if (offset)
+		return -EINVAL;
+
+	inode_lock(inode);
+
+	error = inode_newsize_ok(inode, len);
+	if (error)
+		goto out;
+
+	error = msharefs_set_size(m_data, len);
+	if (error)
+		goto out;
+
+	i_size_write(inode, len);
+out:
+	inode_unlock(inode);
+
+	return error;
+}
 
 static const struct inode_operations msharefs_dir_inode_ops;
 static const struct inode_operations msharefs_file_inode_ops;
 
 static const struct file_operations msharefs_file_operations = {
 	.open			= simple_open,
+	.fallocate		= msharefs_fallocate,
 };
 
 static int
@@ -123,6 +177,32 @@ msharefs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	return 0;
 }
 
+static int msharefs_setattr(struct mnt_idmap *idmap,
+			    struct dentry *dentry, struct iattr *attr)
+{
+	struct inode *inode = d_inode(dentry);
+	struct mshare_data *m_data = inode->i_private;
+	unsigned int ia_valid = attr->ia_valid;
+	int error;
+
+	error = setattr_prepare(idmap, dentry, attr);
+	if (error)
+		return error;
+
+	if (ia_valid & ATTR_SIZE) {
+		loff_t newsize = attr->ia_size;
+
+		error = msharefs_set_size(m_data, newsize);
+		if (error)
+			return error;
+
+		i_size_write(inode, newsize);
+	}
+
+	setattr_copy(idmap, inode, attr);
+	return 0;
+}
+
 static int
 msharefs_create(struct mnt_idmap *idmap, struct inode *dir,
 		struct dentry *dentry, umode_t mode, bool excl)
@@ -177,7 +257,7 @@ msharefs_unlink(struct inode *dir, struct dentry *dentry)
 }
 
 static const struct inode_operations msharefs_file_inode_ops = {
-	.setattr	= simple_setattr,
+	.setattr	= msharefs_setattr,
 };
 
 static const struct inode_operations msharefs_dir_inode_ops = {
