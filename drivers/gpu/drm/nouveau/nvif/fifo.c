@@ -25,33 +25,34 @@ static int
 nvif_fifo_runlists(struct nvif_device *device)
 {
 	struct nvif_object *object = &device->object;
-	struct {
-		struct nv_device_info_v1 m;
-		struct {
-			struct nv_device_info_v1_data runlists;
-			struct nv_device_info_v1_data runlist[64];
-		} v;
-	} *a;
+	struct nv_device_info_v1_data *runlists;
+	struct nv_device_info_v1_data *runlist;
+	struct nv_device_info_v1 *a;
+	const u8 runlist_cnt = 64;
 	int ret, i;
 
 	if (device->runlist)
 		return 0;
 
-	if (!(a = kmalloc(sizeof(*a), GFP_KERNEL)))
+	a = kmalloc(struct_size(a, data, runlist_cnt + 1), GFP_KERNEL);
+	if (!a)
 		return -ENOMEM;
-	a->m.version = 1;
-	a->m.count = sizeof(a->v) / sizeof(a->v.runlists);
-	a->v.runlists.mthd = NV_DEVICE_HOST_RUNLISTS;
-	for (i = 0; i < ARRAY_SIZE(a->v.runlist); i++) {
-		a->v.runlist[i].mthd = NV_DEVICE_HOST_RUNLIST_ENGINES;
-		a->v.runlist[i].data = i;
+
+	runlists = &a->data[0];
+	runlist = &a->data[1];
+	a->version = 1;
+	a->count = runlist_cnt + 1;
+	runlists->mthd = NV_DEVICE_HOST_RUNLISTS;
+	for (i = 0; i < runlist_cnt; i++) {
+		runlist[i].mthd = NV_DEVICE_HOST_RUNLIST_ENGINES;
+		runlist[i].data = i;
 	}
 
 	ret = nvif_object_mthd(object, NV_DEVICE_V0_INFO, a, sizeof(*a));
 	if (ret)
 		goto done;
 
-	device->runlists = fls64(a->v.runlists.data);
+	device->runlists = fls64(runlists->data);
 	device->runlist = kcalloc(device->runlists, sizeof(*device->runlist),
 				  GFP_KERNEL);
 	if (!device->runlist) {
@@ -60,8 +61,8 @@ nvif_fifo_runlists(struct nvif_device *device)
 	}
 
 	for (i = 0; i < device->runlists; i++) {
-		if (a->v.runlist[i].mthd != NV_DEVICE_INFO_INVALID)
-			device->runlist[i].engines = a->v.runlist[i].data;
+		if (runlist[i].mthd != NV_DEVICE_INFO_INVALID)
+			device->runlist[i].engines = runlist[i].data;
 	}
 
 done:
