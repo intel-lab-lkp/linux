@@ -279,13 +279,11 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 		return 0;
 	}
 
-	return qxl_alloc_release_reserved(qdev, sizeof(struct qxl_surface_cmd),
-					 QXL_RELEASE_SURFACE_CMD, release, NULL);
+	return qxl_alloc_release_reserved(qdev, QXL_RELEASE_SURFACE_CMD, release, NULL);
 }
 
-int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
-				       int type, struct qxl_release **release,
-				       struct qxl_bo **rbo)
+int qxl_alloc_release_reserved(struct qxl_device *qdev, int type,
+			       struct qxl_release **release, struct qxl_bo **rbo)
 {
 	struct qxl_bo *bo, *free_bo = NULL;
 	int idr_ret;

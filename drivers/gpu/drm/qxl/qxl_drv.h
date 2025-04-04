@@ -372,9 +372,8 @@ int qxl_alloc_surface_release_reserved(struct qxl_device *qdev,
 				       enum qxl_surface_cmd_type surface_cmd_type,
 				       struct qxl_release *create_rel,
 				       struct qxl_release **release);
-int qxl_alloc_release_reserved(struct qxl_device *qdev, unsigned long size,
-			       int type, struct qxl_release **release,
-			       struct qxl_bo **rbo);
+int qxl_alloc_release_reserved(struct qxl_device *qdev, int type,
+			       struct qxl_release **release, struct qxl_bo **rbo);
 
 int
 qxl_push_command_ring_release(struct qxl_device *qdev, struct qxl_release *release,

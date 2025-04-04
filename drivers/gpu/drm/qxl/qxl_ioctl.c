@@ -171,12 +171,7 @@ static int qxl_process_single_command(struct qxl_device *qdev,
 	if (!reloc_info)
 		return -ENOMEM;
 
-	ret = qxl_alloc_release_reserved(qdev,
-					 sizeof(union qxl_release_info) +
-					 cmd->command_size,
-					 release_type,
-					 &release,
-					 &cmd_bo);
+	ret = qxl_alloc_release_reserved(qdev, release_type, &release, &cmd_bo);
 	if (ret)
 		goto out_free_reloc;
 

@@ -496,8 +496,7 @@ static int qxl_primary_apply_cursor(struct qxl_device *qdev,
 	if (!qcrtc->cursor_bo)
 		return 0;
 
-	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd),
-					 QXL_RELEASE_CURSOR_CMD,
+	ret = qxl_alloc_release_reserved(qdev, QXL_RELEASE_CURSOR_CMD,
 					 &release, NULL);
 	if (ret)
 		return ret;
@@ -541,8 +540,7 @@ static int qxl_primary_move_cursor(struct qxl_device *qdev,
 	if (!qcrtc->cursor_bo)
 		return 0;
 
-	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd),
-					 QXL_RELEASE_CURSOR_CMD,
+	ret = qxl_alloc_release_reserved(qdev, QXL_RELEASE_CURSOR_CMD,
 					 &release, NULL);
 	if (ret)
 		return ret;
@@ -714,8 +712,7 @@ static void qxl_cursor_atomic_disable(struct drm_plane *plane,
 	struct qxl_cursor_cmd *cmd;
 	int ret;
 
-	ret = qxl_alloc_release_reserved(qdev, sizeof(*cmd),
-					 QXL_RELEASE_CURSOR_CMD,
+	ret = qxl_alloc_release_reserved(qdev, QXL_RELEASE_CURSOR_CMD,
 					 &release, NULL);
 	if (ret)
 		return;
