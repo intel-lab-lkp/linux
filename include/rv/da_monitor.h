@@ -82,16 +82,19 @@ static inline void da_monitor_reset_##name(struct da_monitor *da_mon)				\
  */												\
 static inline type da_monitor_curr_state_##name(struct da_monitor *da_mon)			\
 {												\
-	return da_mon->curr_state;								\
+	return READ_ONCE(da_mon->curr_state);							\
 }												\
 												\
 /*												\
  * da_monitor_set_state_##name - set the new current state					\
+ *												\
+ * return false without the change in case the state was modified elsewhere			\
  */												\
-static inline void										\
-da_monitor_set_state_##name(struct da_monitor *da_mon, enum states_##name state)		\
+static inline bool										\
+da_monitor_set_state_##name(struct da_monitor *da_mon, enum states_##name prev_state,		\
+			    enum states_##name state)						\
 {												\
-	da_mon->curr_state = state;								\
+	return try_cmpxchg(&da_mon->curr_state, &prev_state, state);				\
 }												\
 												\
 /*												\
@@ -150,17 +153,29 @@ static inline bool da_monitor_handling_event_##name(struct da_monitor *da_mon)		
  * Event handler for implicit monitors. Implicit monitor is the one which the
  * handler does not need to specify which da_monitor to manipulate. Examples
  * of implicit monitor are the per_cpu or the global ones.
+ *
+ * Retry, in case there is a race while getting and setting the next state
+ * return an invalid current state if we run out of retries. The monitor should
+ * be able to handle various orders.
  */
 #define DECLARE_DA_MON_MODEL_HANDLER_IMPLICIT(name, type)					\
 												\
 static inline bool										\
 da_event_##name(struct da_monitor *da_mon, enum events_##name event)				\
 {												\
-	type curr_state = da_monitor_curr_state_##name(da_mon);					\
-	type next_state = model_get_next_state_##name(curr_state, event);			\
+	bool changed;										\
+	type curr_state, next_state;								\
 												\
-	if (next_state != INVALID_STATE) {							\
-		da_monitor_set_state_##name(da_mon, next_state);				\
+	for (int i = 0; i < MAX_DA_RETRY_RACING_EVENTS; i++) {					\
+		curr_state = da_monitor_curr_state_##name(da_mon);				\
+		next_state = model_get_next_state_##name(curr_state, event);			\
+		if (next_state == INVALID_STATE)						\
+			break;									\
+		changed = da_monitor_set_state_##name(da_mon, curr_state, next_state);		\
+		if (unlikely(!changed))	{							\
+			curr_state = -1;							\
+			continue;								\
+		}										\
 												\
 		trace_event_##name(model_get_state_name_##name(curr_state),			\
 				   model_get_event_name_##name(event),				\
@@ -181,17 +196,29 @@ da_event_##name(struct da_monitor *da_mon, enum events_##name event)				\
 
 /*
  * Event handler for per_task monitors.
+ *
+ * Retry, in case there is a race while getting and setting the next state
+ * return an invalid current state if we run out of retries. The monitor should
+ * be able to handle various orders.
  */
 #define DECLARE_DA_MON_MODEL_HANDLER_PER_TASK(name, type)					\
 												\
 static inline bool da_event_##name(struct da_monitor *da_mon, struct task_struct *tsk,		\
 				   enum events_##name event)					\
 {												\
-	type curr_state = da_monitor_curr_state_##name(da_mon);					\
-	type next_state = model_get_next_state_##name(curr_state, event);			\
+	bool changed;										\
+	type curr_state, next_state;								\
 												\
-	if (next_state != INVALID_STATE) {							\
-		da_monitor_set_state_##name(da_mon, next_state);				\
+	for (int i = 0; i < MAX_DA_RETRY_RACING_EVENTS; i++) {					\
+		curr_state = da_monitor_curr_state_##name(da_mon);				\
+		next_state = model_get_next_state_##name(curr_state, event);			\
+		if (next_state == INVALID_STATE)						\
+			break;									\
+		changed = da_monitor_set_state_##name(da_mon, curr_state, next_state);		\
+		if (unlikely(!changed))	{							\
+			curr_state = -1;							\
+			continue;								\
+		}										\
 												\
 		trace_event_##name(tsk->pid,							\
 				   model_get_state_name_##name(curr_state),			\
