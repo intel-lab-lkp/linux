@@ -383,6 +383,8 @@ static bool efistub_is_sevsnp_guest(void)
 	return sev_get_status() & MSR_AMD64_SEV_SNP_ENABLED;
 }
 
+void snp_accept_memory_early(phys_addr_t start, phys_addr_t end);
+
 void efistub_accept_memory(phys_addr_t start, phys_addr_t end)
 {
 	static bool once, is_tdx, is_sevsnp;
@@ -398,7 +400,7 @@ void efistub_accept_memory(phys_addr_t start, phys_addr_t end)
 	if (is_tdx)
 		tdx_accept_memory(start, end);
 	else if (is_sevsnp)
-		snp_accept_memory(start, end);
+		snp_accept_memory_early(start, end);
 }
 
 #endif
