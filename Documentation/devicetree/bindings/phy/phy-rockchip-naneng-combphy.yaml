@@ -41,6 +41,9 @@ properties:
       - const: phy
       - const: apb
 
+  phy-supply:
+    maxItems: 1
+
   rockchip,enable-ssc:
     type: boolean
     description:
