@@ -156,11 +156,12 @@ static void pnv_php_detach_device_nodes(struct device_node *parent)
 	struct device_node *dn;
 
 	for_each_child_of_node(parent, dn) {
+		/* Detach any children of the parent node first */
 		pnv_php_detach_device_nodes(dn);
-
-		of_node_put(dn);
-		of_detach_node(dn);
 	}
+
+	/* Finally, detach the parent */
+	of_detach_node(parent);
 }
 
 static void pnv_php_rmv_devtree(struct pnv_php_slot *php_slot)
