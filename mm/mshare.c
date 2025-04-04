@@ -16,8 +16,10 @@
 #include <linux/fs.h>
 #include <linux/fs_context.h>
 #include <linux/mman.h>
+#include <linux/mmu_notifier.h>
 #include <uapi/linux/magic.h>
 #include <linux/falloc.h>
+#include <asm/tlbflush.h>
 
 const unsigned long mshare_align = P4D_SIZE;
 const unsigned long mshare_base = mshare_align;
@@ -29,6 +31,17 @@ struct mshare_data {
 	unsigned long start;
 	unsigned long size;
 	unsigned long flags;
+	struct mmu_notifier mn;
+};
+
+static void mshare_invalidate_tlbs(struct mmu_notifier *mn, struct mm_struct *mm,
+				   unsigned long start, unsigned long end)
+{
+	flush_tlb_all();
+}
+
+static const struct mmu_notifier_ops mshare_mmu_ops = {
+	.arch_invalidate_secondary_tlbs = mshare_invalidate_tlbs,
 };
 
 static int mshare_vm_op_split(struct vm_area_struct *vma, unsigned long addr)
@@ -237,6 +250,10 @@ msharefs_fill_mm(struct inode *inode)
 	m_data->mm = mm;
 	m_data->start = mshare_base;
 	inode->i_private = m_data;
+	m_data->mn.ops = &mshare_mmu_ops;
+	ret = mmu_notifier_register(&m_data->mn, mm);
+	if (ret)
+		goto err_free;
 
 	return 0;
 
