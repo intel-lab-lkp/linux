@@ -282,10 +282,40 @@ out:
 }
 
 static long
+msharefs_unmap(struct mshare_data *m_data, struct mshare_unmap *munmap)
+{
+	struct mm_struct *host_mm = m_data->mm;
+	unsigned long mshare_start, mshare_end, mshare_size;
+	unsigned long region_offset = munmap->region_offset;
+	unsigned long size = munmap->size;
+	unsigned long addr;
+	int error;
+
+	mshare_start = m_data->start;
+	mshare_size = m_data->size;
+	mshare_end = mshare_start + mshare_size;
+	addr = mshare_start + region_offset;
+
+	if ((size > mshare_size) || (region_offset >= mshare_size) ||
+	    (addr + size > mshare_end))
+		return -EINVAL;
+
+	if (mmap_write_lock_killable(host_mm))
+		return -EINTR;
+
+	error = do_munmap(host_mm, addr, size, NULL);
+
+	mmap_write_unlock(host_mm);
+
+	return error;
+}
+
+static long
 msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct mshare_data *m_data = filp->private_data;
 	struct mshare_create mcreate;
+	struct mshare_unmap munmap;
 
 	switch (cmd) {
 	case MSHAREFS_CREATE_MAPPING:
@@ -297,6 +327,16 @@ msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 
 		return msharefs_create_mapping(m_data, &mcreate);
+
+	case MSHAREFS_UNMAP:
+		if (copy_from_user(&munmap, (struct mshare_unmap __user *)arg,
+			sizeof(munmap)))
+			return -EFAULT;
+
+		if (!test_bit(MSHARE_INITIALIZED, &m_data->flags))
+			return -EINVAL;
+
+		return msharefs_unmap(m_data, &munmap);
 
 	default:
 		return -ENOTTY;
