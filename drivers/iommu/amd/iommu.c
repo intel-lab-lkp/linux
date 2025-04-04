@@ -3775,6 +3775,15 @@ static const struct irq_domain_ops amd_ir_domain_ops = {
 	.deactivate = irq_remapping_deactivate,
 };
 
+struct amd_iommu_pi_data amd_iommu_fake_irte;
+EXPORT_SYMBOL_GPL(amd_iommu_fake_irte);
+
+static bool amd_iommu_fudge_pi(void)
+{
+	return irq_remapping_cap(IRQ_POSTING_CAP) &&
+	       !AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir);
+}
+
 static void __amd_iommu_update_ga(struct irte_ga *entry, int cpu,
 				  bool ga_log_intr)
 {
@@ -3795,6 +3804,12 @@ int amd_iommu_update_ga(void *data, int cpu, bool ga_log_intr)
 {
 	struct amd_ir_data *ir_data = (struct amd_ir_data *)data;
 	struct irte_ga *entry = (struct irte_ga *) ir_data->entry;
+
+	if (amd_iommu_fudge_pi()) {
+		amd_iommu_fake_irte.cpu = cpu;
+		amd_iommu_fake_irte.ga_log_intr = ga_log_intr;
+		return 0;
+	}
 
 	if (WARN_ON_ONCE(!AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir)))
 		return -EINVAL;
@@ -3817,6 +3832,26 @@ int amd_iommu_activate_guest_mode(void *data, int cpu, bool ga_log_intr)
 	struct amd_ir_data *ir_data = (struct amd_ir_data *)data;
 	struct irte_ga *entry = (struct irte_ga *) ir_data->entry;
 	u64 valid;
+
+	if (amd_iommu_fudge_pi()) {
+		if (WARN_ON_ONCE(!entry->lo.fields_remap.valid))
+			return -EINVAL;
+
+		if (WARN_ON_ONCE(entry->lo.fields_remap.int_type != APIC_DELIVERY_MODE_FIXED))
+			return -EINVAL;
+
+		amd_iommu_fake_irte.cpu = cpu;
+		amd_iommu_fake_irte.vapic_addr = ir_data->ga_root_ptr;
+		amd_iommu_fake_irte.vector = ir_data->ga_vector;
+		amd_iommu_fake_irte.ga_tag = ir_data->ga_tag;
+		amd_iommu_fake_irte.ga_log_intr = ga_log_intr;
+		amd_iommu_fake_irte.is_guest_mode = true;
+
+		entry->hi.fields.vector = POSTED_INTR_WAKEUP_VECTOR;
+
+		return modify_irte_ga(ir_data->iommu, ir_data->irq_2_irte.devid,
+				      ir_data->irq_2_irte.index, entry);
+	}
 
 	if (WARN_ON_ONCE(!AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir)))
 		return -EINVAL;
@@ -3849,12 +3884,18 @@ int amd_iommu_deactivate_guest_mode(void *data)
 	struct irq_cfg *cfg = ir_data->cfg;
 	u64 valid;
 
+	if (amd_iommu_fudge_pi() && entry) {
+		memset(&amd_iommu_fake_irte, 0, sizeof(amd_iommu_fake_irte));
+		goto fudge;
+	}
+
 	if (WARN_ON_ONCE(!AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir)))
 		return -EINVAL;
 
 	if (!entry || !entry->lo.fields_vapic.guest_mode)
 		return 0;
 
+fudge:
 	valid = entry->lo.fields_remap.valid;
 
 	entry->lo.val = 0;
@@ -3891,12 +3932,19 @@ static int amd_ir_set_vcpu_affinity(struct irq_data *data, void *info)
 	 * This device has never been set up for guest mode.
 	 * we should not modify the IRTE
 	 */
-	if (!dev_data || !dev_data->use_vapic)
+	if (!dev_data)
+		return -EINVAL;
+
+	if (amd_iommu_fudge_pi())
+		goto fudge;
+
+	if (!dev_data->use_vapic)
 		return -EINVAL;
 
 	if (WARN_ON_ONCE(!AMD_IOMMU_GUEST_IR_VAPIC(amd_iommu_guest_ir)))
 		return -EINVAL;
 
+fudge:
 	ir_data->cfg = irqd_cfg(data);
 
 	if (pi_data) {

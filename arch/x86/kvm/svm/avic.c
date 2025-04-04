@@ -28,6 +28,8 @@
 #include "irq.h"
 #include "svm.h"
 
+#include "../../../drivers/iommu/amd/amd_iommu_types.h"
+
 /*
  * Encode the arbitrary VM ID and the vCPU's _index_ into the GATag so that
  * KVM can retrieve the correct vCPU from a GALog entry if an interrupt can't
@@ -141,11 +143,7 @@ static void avic_deactivate_vmcb(struct vcpu_svm *svm)
 	svm_set_x2apic_msr_interception(svm, true);
 }
 
-/* Note:
- * This function is called from IOMMU driver to notify
- * SVM to schedule in a particular vCPU of a particular VM.
- */
-int avic_ga_log_notifier(u32 ga_tag)
+static struct kvm_vcpu *avic_ga_log_get_vcpu(u32 ga_tag)
 {
 	unsigned long flags;
 	struct kvm_svm *kvm_svm;
@@ -164,6 +162,17 @@ int avic_ga_log_notifier(u32 ga_tag)
 		break;
 	}
 	spin_unlock_irqrestore(&svm_vm_data_hash_lock, flags);
+
+	return vcpu;
+}
+
+/* Note:
+ * This function is called from IOMMU driver to notify
+ * SVM to schedule in a particular vCPU of a particular VM.
+ */
+int avic_ga_log_notifier(u32 ga_tag)
+{
+	struct kvm_vcpu *vcpu = avic_ga_log_get_vcpu(ga_tag);
 
 	/* Note:
 	 * At this point, the IOMMU should have already set the pending
@@ -750,6 +759,8 @@ static void svm_ir_list_del(struct kvm_kernel_irqfd *irqfd)
 	spin_unlock_irqrestore(&to_svm(vcpu)->ir_list_lock, flags);
 }
 
+extern struct amd_iommu_pi_data amd_iommu_fake_irte;
+
 int avic_pi_update_irte(struct kvm_kernel_irqfd *irqfd, struct kvm *kvm,
 			unsigned int host_irq, uint32_t guest_irq,
 			struct kvm_kernel_irq_routing_entry *new,
@@ -1055,6 +1066,58 @@ void avic_vcpu_unblocking(struct kvm_vcpu *vcpu)
 	avic_vcpu_load(vcpu, vcpu->cpu);
 }
 
+static void avic_pi_handler(void)
+{
+	struct amd_iommu_pi_data pi;
+	struct kvm_vcpu *vcpu;
+
+	memcpy(&pi, &amd_iommu_fake_irte, sizeof(pi));
+
+	if (!pi.is_guest_mode) {
+		pr_warn("IRQ %u arrived with !is_guest_mode\n", pi.vector);
+		return;
+	}
+
+	vcpu = avic_ga_log_get_vcpu(pi.ga_tag);
+	if (!vcpu) {
+		pr_warn("No vCPU for IRQ %u\n", pi.vector);
+		return;
+	}
+	WARN_ON_ONCE(pi.vapic_addr << 12 != avic_get_backing_page_address(to_svm(vcpu)));
+
+	/*
+	 * When updating a vCPU's IRTE, the fake posted IRQ can race with the
+	 * IRTE update.  Take ir_list_lock so that the IRQ can be processed
+	 * atomically.  In real hardware, the IOMMU will complete IRQ delivery
+	 * before accepting the new IRTE.
+	 */
+	guard(spinlock_irqsave)(&to_svm(vcpu)->ir_list_lock);
+
+	if (amd_iommu_fake_irte.ga_tag != pi.ga_tag) {
+		WARN_ON_ONCE(amd_iommu_fake_irte.is_guest_mode);
+		return;
+	}
+
+	memcpy(&pi, &amd_iommu_fake_irte, sizeof(pi));
+
+#if 0
+	pr_warn("In PI handler, guest = %u, cpu = %d, tag = %x, intr = %u, vector = %u\n",
+		pi.is_guest_mode, pi.cpu,
+		pi.ga_tag, pi.ga_log_intr, pi.vector);
+#endif
+
+	if (!pi.is_guest_mode)
+		return;
+
+	kvm_lapic_set_irr(pi.vector, vcpu->arch.apic);
+	smp_mb__after_atomic();
+
+	if (pi.cpu >= 0)
+		avic_ring_doorbell(vcpu);
+	else if (pi.ga_log_intr)
+		avic_ga_log_notifier(pi.ga_tag);
+}
+
 /*
  * Note:
  * - The module param avic enable both xAPIC and x2APIC mode.
@@ -1106,6 +1169,9 @@ bool avic_hardware_setup(void)
 	enable_ipiv = enable_ipiv && boot_cpu_data.x86 != 0x17;
 
 	amd_iommu_register_ga_log_notifier(&avic_ga_log_notifier);
+
+	pr_warn("Register AVIC PI wakeup handler\n");
+	kvm_set_posted_intr_wakeup_handler(avic_pi_handler);
 
 	return true;
 }
