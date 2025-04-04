@@ -28,6 +28,7 @@
 #include <net/sock.h>
 #include <net/netlink.h>
 #include <net/net_namespace.h>
+#include <linux/namei.h>
 
 
 atomic64_t uevent_seqnum;
@@ -57,6 +58,23 @@ static const char *kobject_actions[] = {
 	[KOBJ_BIND] =		"bind",
 	[KOBJ_UNBIND] =		"unbind",
 };
+
+#ifdef CONFIG_UEVENT_HELPER
+static int uevent_helper_lookup(void)
+{
+	static int ret = -ENOENT;
+	struct path path;
+
+	if (!ret)
+		return ret;
+
+	ret = kern_path(uevent_helper, LOOKUP_FOLLOW, &path);
+	if (!ret)
+		path_put(&path);
+
+	return ret;
+}
+#endif
 
 static int kobject_action_type(const char *buf, size_t count,
 			       enum kobject_action *type,
@@ -610,7 +628,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 
 #ifdef CONFIG_UEVENT_HELPER
 	/* call uevent_helper, usually only enabled during early boot */
-	if (uevent_helper[0] && !kobj_usermode_filter(kobj)) {
+	if (uevent_helper[0] && !uevent_helper_lookup() && !kobj_usermode_filter(kobj)) {
 		struct subprocess_info *info;
 
 		retval = add_uevent_var(env, "HOME=/");
