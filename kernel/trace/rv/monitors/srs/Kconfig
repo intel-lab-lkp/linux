@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-config RV_MON_SNROC
+config RV_MON_SRS
 	depends on RV
 	depends on RV_MON_SCHED
 	default y
 	select DA_MON_EVENTS_ID
-	bool "snroc monitor"
+	bool "srs monitor"
 	help
-	  Monitor to ensure sched_set_state happens only in the respective task's context.
+	  Monitor to describe conditions for different types of task switch.
+	  This monitor enforces rules such as preempt after setting need
+	  for reschedule and suspend after setting a task to sleepable.
 	  This monitor is part of the sched monitors collection.
 
 	  For further information, see:
