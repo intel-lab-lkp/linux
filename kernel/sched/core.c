@@ -6584,7 +6584,12 @@ static bool try_to_block_task(struct rq *rq, struct task_struct *p,
 	int flags = DEQUEUE_NOCLOCK;
 
 	if (signal_pending_state(task_state, p)) {
-		WRITE_ONCE(p->__state, TASK_RUNNING);
+		/*
+		 * From a modelling perspective, this is equivalent to a wakeup
+		 * before dequeuing the task: trace accordingly.
+		 */
+		trace_sched_waking(p);
+		ttwu_do_wakeup(p);
 		return false;
 	}
 
@@ -6721,7 +6726,9 @@ static void __sched notrace __schedule(int sched_mode)
 			goto picked;
 		}
 	} else if (!preempt && prev_state) {
-		try_to_block_task(rq, prev, prev_state);
+		/* Task was not blocked due to a signal and is again runnable */
+		if (!try_to_block_task(rq, prev, prev_state))
+			prev_state = TASK_RUNNING;
 		switch_count = &prev->nvcsw;
 	}
 
