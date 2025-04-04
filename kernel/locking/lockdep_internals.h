@@ -48,25 +48,25 @@ enum {
 };
 
 #define LOCKDEP_STATE(__STATE)	LOCKF_ENABLED_##__STATE |
-static const unsigned long LOCKF_ENABLED_IRQ =
+static __maybe_unused const unsigned long LOCKF_ENABLED_IRQ =
 #include "lockdep_states.h"
 	0;
 #undef LOCKDEP_STATE
 
 #define LOCKDEP_STATE(__STATE)	LOCKF_USED_IN_##__STATE |
-static const unsigned long LOCKF_USED_IN_IRQ =
+static __maybe_unused const unsigned long LOCKF_USED_IN_IRQ =
 #include "lockdep_states.h"
 	0;
 #undef LOCKDEP_STATE
 
 #define LOCKDEP_STATE(__STATE)	LOCKF_ENABLED_##__STATE##_READ |
-static const unsigned long LOCKF_ENABLED_IRQ_READ =
+static __maybe_unused const unsigned long LOCKF_ENABLED_IRQ_READ =
 #include "lockdep_states.h"
 	0;
 #undef LOCKDEP_STATE
 
 #define LOCKDEP_STATE(__STATE)	LOCKF_USED_IN_##__STATE##_READ |
-static const unsigned long LOCKF_USED_IN_IRQ_READ =
+static __maybe_unused const unsigned long LOCKF_USED_IN_IRQ_READ =
 #include "lockdep_states.h"
 	0;
 #undef LOCKDEP_STATE
