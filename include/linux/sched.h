@@ -1394,7 +1394,7 @@ struct task_struct {
 	 * period is adapted based on the locality of the faults with different
 	 * weights depending on whether they were shared or private faults
 	 */
-	unsigned long			numa_faults_locality[3];
+	unsigned long			numa_faults_locality[2];
 
 	unsigned long			numa_pages_migrated;
 #endif /* CONFIG_NUMA_BALANCING */
