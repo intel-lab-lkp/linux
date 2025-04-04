@@ -444,22 +444,24 @@ static void acpi_button_notify(acpi_handle handle, u32 event, void *data)
 	struct input_dev *input;
 	int keycode;
 
+	button = acpi_driver_data(device);
+
 	switch (event) {
 	case ACPI_BUTTON_NOTIFY_STATUS:
+		acpi_pm_wakeup_event(&device->dev);
+		if (button->suspended)
+			return;
 		break;
 	case ACPI_BUTTON_NOTIFY_WAKE:
+		acpi_pm_wakeup_event(&device->dev);
+		if (!button->suspended)
+			return;
 		break;
 	default:
 		acpi_handle_debug(device->handle, "Unsupported event [0x%x]\n",
 				  event);
 		return;
 	}
-
-	acpi_pm_wakeup_event(&device->dev);
-
-	button = acpi_driver_data(device);
-	if (button->suspended)
-		return;
 
 	input = button->input;
 	keycode = test_bit(KEY_SLEEP, input->keybit) ? KEY_SLEEP : KEY_POWER;
