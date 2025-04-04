@@ -5,16 +5,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-/*
- * Some corrections by tytso.
- */
-
-/* [Feb 1997 T. Schoebel-Theuer] Complete rewrite of the pathname
- * lookup logic.
- */
-/* [Feb-Apr 2000, AV] Rewrite to the new namespace architecture.
- */
-
 #include <linux/init.h>
 #include <linux/export.h>
 #include <linux/slab.h>
@@ -44,83 +34,9 @@
 #include "internal.h"
 #include "mount.h"
 
-/* [Feb-1997 T. Schoebel-Theuer]
- * Fundamental changes in the pathname lookup mechanisms (namei)
- * were necessary because of omirr.  The reason is that omirr needs
- * to know the _real_ pathname, not the user-supplied one, in case
- * of symlinks (and also when transname replacements occur).
- *
- * The new code replaces the old recursive symlink resolution with
- * an iterative one (in case of non-nested symlink chains).  It does
- * this with calls to <fs>_follow_link().
- * As a side effect, dir_namei(), _namei() and follow_link() are now 
- * replaced with a single function lookup_dentry() that can handle all 
- * the special cases of the former code.
- *
- * With the new dcache, the pathname is stored at each inode, at least as
- * long as the refcount of the inode is positive.  As a side effect, the
- * size of the dcache depends on the inode cache and thus is dynamic.
- *
- * [29-Apr-1998 C. Scott Ananian] Updated above description of symlink
- * resolution to correspond with current state of the code.
- *
- * Note that the symlink resolution is not *completely* iterative.
- * There is still a significant amount of tail- and mid- recursion in
- * the algorithm.  Also, note that <fs>_readlink() is not used in
- * lookup_dentry(): lookup_dentry() on the result of <fs>_readlink()
- * may return different results than <fs>_follow_link().  Many virtual
- * filesystems (including /proc) exhibit this behavior.
- */
-
-/* [24-Feb-97 T. Schoebel-Theuer] Side effects caused by new implementation:
- * New symlink semantics: when open() is called with flags O_CREAT | O_EXCL
- * and the name already exists in form of a symlink, try to create the new
- * name indicated by the symlink. The old code always complained that the
- * name already exists, due to not following the symlink even if its target
- * is nonexistent.  The new semantics affects also mknod() and link() when
- * the name is a symlink pointing to a non-existent name.
- *
- * I don't know which semantics is the right one, since I have no access
- * to standards. But I found by trial that HP-UX 9.0 has the full "new"
- * semantics implemented, while SunOS 4.1.1 and Solaris (SunOS 5.4) have the
- * "old" one. Personally, I think the new semantics is much more logical.
- * Note that "ln old new" where "new" is a symlink pointing to a non-existing
- * file does succeed in both HP-UX and SunOs, but not in Solaris
- * and in the old Linux semantics.
- */
-
-/* [16-Dec-97 Kevin Buhr] For security reasons, we change some symlink
- * semantics.  See the comments in "open_namei" and "do_link" below.
- *
- * [10-Sep-98 Alan Modra] Another symlink change.
- */
-
-/* [Feb-Apr 2000 AV] Complete rewrite. Rules for symlinks:
- *	inside the path - always follow.
- *	in the last component in creation/removal/renaming - never follow.
- *	if LOOKUP_FOLLOW passed - follow.
- *	if the pathname has trailing slashes - follow.
- *	otherwise - don't follow.
- * (applied in that order).
- *
- * [Jun 2000 AV] Inconsistent behaviour of open() in case if flags==O_CREAT
- * restored for 2.4. This is the last surviving part of old 4.2BSD bug.
- * During the 2.4 we need to fix the userland stuff depending on it -
- * hopefully we will be able to get rid of that wart in 2.5. So far only
- * XEmacs seems to be relying on it...
- */
 /*
- * [Sep 2001 AV] Single-semaphore locking scheme (kudos to David Holland)
- * implemented.  Let's see if raised priority of ->s_vfs_rename_mutex gives
- * any extra contention...
- */
-
-/* In order to reduce some races, while at the same time doing additional
- * checking and hopefully speeding things up, we copy filenames to the
- * kernel data space before using them..
- *
  * POSIX.1 2.4: an empty pathname is invalid (ENOENT).
- * PATH_MAX includes the nul terminator --RR.
+ * PATH_MAX includes the nul terminator.
  */
 
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
