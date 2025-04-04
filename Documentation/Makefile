@@ -115,7 +115,7 @@ $(YNL_INDEX): $(YNL_RST_FILES)
 $(YNL_RST_DIR)/%.rst: $(YNL_YAML_DIR)/%.yaml $(YNL_TOOL)
 	$(Q)$(YNL_TOOL) -i $< -o $@
 
-htmldocs texinfodocs latexdocs epubdocs xmldocs: $(YNL_INDEX)
+htmldocs texinfodocs latexdocs epubdocs xmldocs: $(YNL_INDEX) kconfigdocs
 
 htmldocs:
 	@$(srctree)/scripts/sphinx-pre-install --version-check
@@ -182,9 +182,19 @@ endif # HAVE_SPHINX
 refcheckdocs:
 	$(Q)cd $(srctree);scripts/documentation-file-ref-check
 
+KCONFIG_DOC_DIR=$(srctree)/Documentation/Config
+KCONFIGS := $(shell find $(srctree) -name Kconfig -type f)
+KCONFIGS_RST := $(patsubst %, $(KCONFIG_DOC_DIR)/%.rst, $(KCONFIGS))
+
+$(KCONFIGS_RST): $(KCONFIGS)
+	$(Q)cd $(srctree); $(foreach var,$^,$(shell mkdir -p $(KCONFIG_DOC_DIR)/$(shell dirname $(var)); scripts/kconfig2rst.py $(var) >$(KCONFIG_DOC_DIR)/$(var).rst))
+
+kconfigdocs: $(KCONFIGS_RST)
+
 cleandocs:
 	$(Q)rm -f $(YNL_INDEX) $(YNL_RST_FILES)
 	$(Q)rm -rf $(BUILDDIR)
+	$(Q)rm -rf $(filter-out %index.rst,$(wildcard $(KCONFIG_DOC_DIR)/*))
 	$(Q)$(MAKE) BUILDDIR=$(abspath $(BUILDDIR)) $(build)=Documentation/userspace-api/media clean
 
 dochelp:

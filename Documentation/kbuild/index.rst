@@ -15,6 +15,8 @@ Kernel Build System
     makefiles
     modules
 
+    /Config/index
+
     headers_install
 
     issues
