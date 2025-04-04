@@ -1344,7 +1344,7 @@ config PT_RECLAIM
 
 config MSHARE
 	bool "Mshare"
-	depends on MMU
+	depends on MMU && ARCH_SUPPORTS_MSHARE
 	help
 	  Enable msharefs: A ram-based filesystem that allows multiple
 	  processes to share page table entries for shared pages. A file
