@@ -465,13 +465,17 @@ AnonHugePmdMapped).
 
 The number of PMD-sized transparent huge pages currently used by
 filesystem data (page cache) is available by reading the FileHugePages field
-in ``/proc/meminfo``.
+in ``/proc/meminfo``. The number of these huge pages that are mapped to userspace
+is available by reading FilePmdMapped field in ``proc/meminfo``. To identify
+what applications are mapping these huge pages, it is necessary to read
+``/proc/PID/smaps`` and count the FilePmdMapped fields for each mapping.
 
-The number of file transparent huge pages mapped to userspace is available
-by reading ShmemPmdMapped and ShmemHugePages fields in ``/proc/meminfo``.
-To identify what applications are mapping file transparent huge pages, it
-is necessary to read ``/proc/PID/smaps`` and count the FilePmdMapped fields
-for each mapping.
+The number of PMD-sized transparent huge pages currently used by
+tmpfs/shmem is available by reading the ShmemHugePages field
+in ``/proc/meminfo``. The number of these huge pages that are mapped to userspace
+is available by reading ShmemPmdMapped field in ``proc/meminfo``. To identify
+what applications are mapping these huge pages, it is necessary to read
+``/proc/PID/smaps`` and count the ShmemPmdMapped fields for each mapping.
 
 Note that reading the smaps file is expensive and reading it
 frequently will incur overhead.
