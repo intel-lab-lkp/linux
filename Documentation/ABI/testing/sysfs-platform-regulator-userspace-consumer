@@ -1,0 +1,23 @@
+What:		/devices/platform/<device>/uevent EVENT=
+Date:		April 2025
+Contact:	Johann Neuhauser <jneuhauser@dh-electronics.com>
+Description:
+		Reports regulator events via uevents for platform devices
+		controlled by the userspace-consumer regulator driver.
+		
+		Possible EVENT= values:
+		 - ABORT_DISABLE
+		 - ABORT_VOLTAGE_CHANGE
+		 - DISABLE
+		 - ENABLE
+		 - FAIL
+		 - FORCE_DISABLE
+		 - OVER_CURRENT
+		 - OVER_TEMP
+		 - PRE_DISABLE
+		 - PRE_VOLTAGE_CHANGE
+		 - REGULATION_OUT
+		 - UNDER_VOLTAGE
+		 - VOLTAGE_CHANGE
+
+Userspace can monitor these events using udev and respond accordingly.
