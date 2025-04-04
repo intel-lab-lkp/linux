@@ -51,7 +51,7 @@ all the keys are in the kernel user keyring for unlock.
 A nvdimm encrypted-key of format enc32 has the description format of:
 nvdimm:<bus-provider-specific-unique-id>
 
-See file ``Documentation/security/keys/trusted-encrypted.rst`` for creating
+See Documentation/security/keys/trusted-encrypted.rst for creating
 encrypted-keys of enc32 format. TPM usage with a master trusted key is
 preferred for sealing the encrypted-keys.
 

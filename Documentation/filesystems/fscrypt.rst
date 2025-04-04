@@ -873,7 +873,7 @@ as follows:
   hash of the key.  To add this type of key, the calling process does
   not need any privileges.  However, the number of keys that can be
   added is limited by the user's quota for the keyrings service (see
-  ``Documentation/security/keys/core.rst``).
+  Documentation/security/keys/core.rst).
 
 - ``raw_size`` must be the size of the ``raw`` key provided, in bytes.
   Alternatively, if ``key_id`` is nonzero, this field must be 0, since
@@ -955,7 +955,7 @@ access encrypted files.
 
 Nevertheless, to add a key to one of the process-subscribed keyrings,
 the add_key() system call can be used (see:
-``Documentation/security/keys/core.rst``).  The key type must be
+Documentation/security/keys/core.rst).  The key type must be
 "logon"; keys of this type are kept in kernel memory and cannot be
 read back by userspace.  The key description must be "fscrypt:"
 followed by the 16-character lower case hex representation of the

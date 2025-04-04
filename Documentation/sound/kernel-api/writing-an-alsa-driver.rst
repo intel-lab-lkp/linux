@@ -2466,7 +2466,7 @@ Mic boost
 Mic-boost switch is set as “Mic Boost” or “Mic Boost (6dB)”.
 
 More precise information can be found in
-``Documentation/sound/designs/control-names.rst``.
+Documentation/sound/designs/control-names.rst.
 
 Access Flags
 ------------

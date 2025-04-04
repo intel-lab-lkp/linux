@@ -98,7 +98,7 @@ UAPI
 ====
 
 There exist a set of netlink commands to query the link topology from userspace,
-see ``Documentation/networking/ethtool-netlink.rst``.
+see Documentation/networking/ethtool-netlink.rst.
 
 The whole point of having a topology representation is to assign the phyindex
 field in :c:type:`struct phy_device <phy_device>`. This index is reported to

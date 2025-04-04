@@ -30,7 +30,8 @@ Review Kconfig changes
 
 1) Any new or modified ``CONFIG`` options do not muck up the config menu and
    default to off unless they meet the exception criteria documented in
-   ``Documentation/kbuild/kconfig-language.rst`` Menu attributes: default value.
+   Documentation/kbuild/kconfig-language.rst, under "Menu attributes", "default
+   value".
 
 2) All new ``Kconfig`` options have help text.
 
@@ -47,7 +48,7 @@ Provide documentation
 2) All new ``/proc`` entries are documented under ``Documentation/``
 
 3) All new kernel boot parameters are documented in
-   ``Documentation/admin-guide/kernel-parameters.rst``.
+   Documentation/admin-guide/kernel-parameters.rst.
 
 4) All new module parameters are documented with ``MODULE_PARM_DESC()``
 
@@ -58,7 +59,7 @@ Provide documentation
    linux-api@vger.kernel.org.
 
 6) If any ioctl's are added by the patch, then also update
-   ``Documentation/userspace-api/ioctl/ioctl-number.rst``.
+   Documentation/userspace-api/ioctl/ioctl-number.rst.
 
 Check your code with tools
 ==========================

@@ -1118,7 +1118,7 @@ new feature, please send it to ``linux-um@lists.infradead.org``.
 
 Please follow all standard Linux patch guidelines such as cc-ing
 relevant maintainers and run ``./scripts/checkpatch.pl`` on your patch.
-For more details see ``Documentation/process/submitting-patches.rst``
+For more details see Documentation/process/submitting-patches.rst
 
 Note - the list does not accept HTML or attachments, all emails must
 be formatted as plain text.

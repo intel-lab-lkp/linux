@@ -1370,7 +1370,7 @@ Futex API reference
 Further reading
 ===============
 
--  ``Documentation/locking/spinlocks.rst``: Linus Torvalds' spinlocking
+-  Documentation/locking/spinlocks.rst: Linus Torvalds' spinlocking
    tutorial in the kernel sources.
 
 -  Unix Systems for Modern Architectures: Symmetric Multiprocessing and

@@ -634,7 +634,7 @@ devices is documented in :ref:`extended-controls`.
    compatible with V4L or V4L2.
 
 .. [#f2]
-   According to ``Documentation/admin-guide/devices.rst`` a symbolic link to
+   According to Documentation/admin-guide/devices.rst a symbolic link to
    ``/dev/radio0``.
 
 .. [#f3]

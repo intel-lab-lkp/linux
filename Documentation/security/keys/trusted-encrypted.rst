@@ -107,7 +107,7 @@ safe.
      (2) TEE
 
          TEEs have well-documented, standardized client interface and APIs. For
-         more details refer to ``Documentation/driver-api/tee.rst``.
+         more details refer to Documentation/driver-api/tee.rst.
 
      (3) CAAM
 
@@ -407,7 +407,7 @@ Other uses for trusted and encrypted keys, such as for disk and file encryption
 are anticipated.  In particular the new format 'ecryptfs' has been defined
 in order to use encrypted keys to mount an eCryptfs filesystem.  More details
 about the usage can be found in the file
-``Documentation/security/keys/ecryptfs.rst``.
+Documentation/security/keys/ecryptfs.rst.
 
 Another new format 'enc32' has been defined in order to support encrypted keys
 with payload size of 32 bytes. This will initially be used for nvdimm security

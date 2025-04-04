@@ -1110,7 +1110,7 @@ interface with a physical switch port does not produce the expected result).
 
 A driver which is able of offloading certain functions of a DANP or DANH should
 declare the corresponding netdev features as indicated by the documentation at
-``Documentation/networking/netdev-features.rst``. Additionally, the following
+Documentation/networking/netdev-features.rst. Additionally, the following
 methods must be implemented:
 
 - ``port_hsr_join``: function invoked when a given switch port is added to a
