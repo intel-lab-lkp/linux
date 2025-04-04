@@ -71,7 +71,7 @@ enum pca955x_type {
 };
 
 struct pca955x_chipdef {
-	int			bits;
+	u8			bits;
 	u8			slv_addr;	/* 7-bit slave address mask */
 	int			slv_addr_shift;	/* Number of bits to ignore */
 };
@@ -455,11 +455,12 @@ static int pca955x_probe(struct i2c_client *client)
 	struct led_classdev *led;
 	struct led_init_data init_data;
 	struct i2c_adapter *adapter;
-	int i, err;
 	struct pca955x_platform_data *pdata;
 	bool set_default_label = false;
 	bool keep_pwm = false;
 	char default_label[8];
+	unsigned int i;
+	int err;
 
 	chip = i2c_get_match_data(client);
 	if (!chip)
@@ -481,16 +482,15 @@ static int pca955x_probe(struct i2c_client *client)
 		return -ENODEV;
 	}
 
-	dev_info(&client->dev, "leds-pca955x: Using %s %d-bit LED driver at "
-		 "slave address 0x%02x\n", client->name, chip->bits,
-		 client->addr);
+	dev_info(&client->dev, "Using %s %u-bit LED driver at slave address 0x%02x\n",
+		 client->name, chip->bits, client->addr);
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE_DATA))
 		return -EIO;
 
 	if (pdata->num_leds != chip->bits) {
 		dev_err(&client->dev,
-			"board info claims %d LEDs on a %d-bit chip\n",
+			"board info claims %d LEDs on a %u-bit chip\n",
 			pdata->num_leds, chip->bits);
 		return -ENODEV;
 	}
@@ -551,8 +551,7 @@ static int pca955x_probe(struct i2c_client *client)
 			}
 
 			if (set_default_label) {
-				snprintf(default_label, sizeof(default_label),
-					 "%d", i);
+				snprintf(default_label, sizeof(default_label), "%u", i);
 				init_data.default_label = default_label;
 			} else {
 				init_data.default_label = NULL;
