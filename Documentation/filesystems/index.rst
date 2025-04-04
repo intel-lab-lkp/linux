@@ -101,6 +101,7 @@ Documentation for filesystem implementations.
    fuse-io-uring
    inotify
    isofs
+   msharefs
    nilfs2
    nfs/index
    ntfs3
