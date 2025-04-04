@@ -4,15 +4,23 @@
 	cpus {
 		cpu@0 {
 			enable-method = "qcom,msm8916-smp";
+			qcom,acc = <&cpu0_acc>;
+			qcom,saw = <&cpu0_saw>;
 		};
 		cpu@1 {
 			enable-method = "qcom,msm8916-smp";
+			qcom,acc = <&cpu1_acc>;
+			qcom,saw = <&cpu1_saw>;
 		};
 		cpu@2 {
 			enable-method = "qcom,msm8916-smp";
+			qcom,acc = <&cpu2_acc>;
+			qcom,saw = <&cpu2_saw>;
 		};
 		cpu@3 {
 			enable-method = "qcom,msm8916-smp";
+			qcom,acc = <&cpu3_acc>;
+			qcom,saw = <&cpu3_saw>;
 		};
 
 		idle-states {
