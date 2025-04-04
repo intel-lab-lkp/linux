@@ -38,9 +38,7 @@ SYM_FUNC_START(xen_hypercall_pv)
 	ANNOTATE_NOENDBR
 	push %rcx
 	push %r11
-	UNWIND_HINT_SAVE
 	syscall
-	UNWIND_HINT_RESTORE
 	pop %r11
 	pop %rcx
 	RET
@@ -226,9 +224,7 @@ SYM_CODE_END(xen_early_idt_handler_array)
 	push %rax
 	mov  $__HYPERVISOR_iret, %eax
 	syscall		/* Do the IRET. */
-#ifdef CONFIG_MITIGATION_SLS
-	int3
-#endif
+	ud2		/* The SYSCALL should never return. */
 .endm
 
 SYM_CODE_START(xen_iret)
