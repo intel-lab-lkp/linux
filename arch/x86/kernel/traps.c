@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/kallsyms.h>
 #include <linux/kmsan.h>
+#include <linux/kasan.h>
 #include <linux/spinlock.h>
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
@@ -833,6 +834,51 @@ exit:
 	cond_local_irq_disable(regs);
 }
 
+#ifdef CONFIG_KASAN_SW_TAGS
+
+#define KASAN_RAX_RECOVER	0x20
+#define KASAN_RAX_WRITE	0x10
+#define KASAN_RAX_SIZE_MASK	0x0f
+#define KASAN_RAX_SIZE(rax)	(1 << ((rax) & KASAN_RAX_SIZE_MASK))
+
+static bool kasan_handler(struct pt_regs *regs)
+{
+	int metadata = regs->ax;
+	u64 addr = regs->di;
+	u64 pc = regs->ip;
+	bool recover = metadata & KASAN_RAX_RECOVER;
+	bool write = metadata & KASAN_RAX_WRITE;
+	size_t size = KASAN_RAX_SIZE(metadata);
+
+	if (!IS_ENABLED(CONFIG_KASAN_INLINE))
+		return false;
+
+	if (user_mode(regs))
+		return false;
+
+	kasan_report((void *)addr, size, write, pc);
+
+	/*
+	 * The instrumentation allows to control whether we can proceed after
+	 * a crash was detected. This is done by passing the -recover flag to
+	 * the compiler. Disabling recovery allows to generate more compact
+	 * code.
+	 *
+	 * Unfortunately disabling recovery doesn't work for the kernel right
+	 * now. KASAN reporting is disabled in some contexts (for example when
+	 * the allocator accesses slab object metadata; this is controlled by
+	 * current->kasan_depth). All these accesses are detected by the tool,
+	 * even though the reports for them are not printed.
+	 *
+	 * This is something that might be fixed at some point in the future.
+	 */
+	if (!recover)
+		die("Oops - KASAN", regs, 0);
+	return true;
+}
+
+#endif
+
 static bool do_int3(struct pt_regs *regs)
 {
 	int res;
@@ -847,6 +893,12 @@ static bool do_int3(struct pt_regs *regs)
 	if (kprobe_int3_handler(regs))
 		return true;
 #endif
+
+#ifdef CONFIG_KASAN_SW_TAGS
+	if (kasan_handler(regs))
+		return true;
+#endif
+
 	res = notify_die(DIE_INT3, "int3", regs, 0, X86_TRAP_BP, SIGTRAP);
 
 	return res == NOTIFY_STOP;

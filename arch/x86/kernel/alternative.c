@@ -1979,6 +1979,9 @@ static noinline void __init int3_selftest(void)
 	};
 	unsigned int val = 0;
 
+	if (IS_ENABLED(CONFIG_KASAN_INLINE))
+		return;
+
 	BUG_ON(register_die_notifier(&int3_exception_nb));
 
 	/*
