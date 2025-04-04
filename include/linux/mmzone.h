@@ -2157,21 +2157,20 @@ static inline int pfn_valid(unsigned long pfn)
 	return ret;
 }
 
-static inline bool first_valid_pfn(unsigned long *p_pfn)
+/* Returns -1 (an invalid PFN) if no valid PFN remaining */
+static inline unsigned long first_valid_pfn(unsigned long pfn, unsigned long end_pfn)
 {
-	unsigned long pfn = *p_pfn;
 	unsigned long nr = pfn_to_section_nr(pfn);
 
 	rcu_read_lock_sched();
 
-	while (nr <= __highest_present_section_nr) {
+	while (nr <= __highest_present_section_nr && pfn < end_pfn) {
 		struct mem_section *ms = __pfn_to_section(pfn);
 
 		if (valid_section(ms) &&
 		    (early_section(ms) || pfn_section_first_valid(ms, &pfn))) {
-			*p_pfn = pfn;
 			rcu_read_unlock_sched();
-			return true;
+			return pfn;
 		}
 
 		/* Nothing left in this section? Skip to next section */
@@ -2180,14 +2179,34 @@ static inline bool first_valid_pfn(unsigned long *p_pfn)
 	}
 
 	rcu_read_unlock_sched();
-
-	return false;
+	return (unsigned long)-1;
 }
 
-#define for_each_valid_pfn(_pfn, _start_pfn, _end_pfn)	       \
-	for ((_pfn) = (_start_pfn);			       \
-	     first_valid_pfn(&(_pfn)) && (_pfn) < (_end_pfn);  \
-	     (_pfn)++)
+static inline unsigned long next_valid_pfn(unsigned long pfn, unsigned long end_pfn)
+{
+	pfn++;
+
+	if (pfn >= end_pfn)
+		return (unsigned long)-1;
+
+	/*
+	 * Either every PFN within the section (or subsection for VMEMMAP) is
+	 * valid, or none of them are. So there's no point repeating the check
+	 * for every PFN; only call first_valid_pfn() the first time, and when
+	 * crossing a (sub)section boundary (i.e. !(pfn & ~PFN_VALID_MASK)).
+	 */
+	if (pfn & (IS_ENABLED(CONFIG_SPARSEMEM_VMEMMAP) ?
+		   PAGE_SUBSECTION_MASK : PAGE_SECTION_MASK))
+		return pfn;
+
+	return first_valid_pfn(pfn, end_pfn);
+}
+
+
+#define for_each_valid_pfn(_pfn, _start_pfn, _end_pfn)			\
+	for ((_pfn) = first_valid_pfn((_start_pfn), (_end_pfn));	\
+	     (_pfn) != (unsigned long)-1;				\
+	     (_pfn) = next_valid_pfn((_pfn), (_end_pfn)))
 
 #endif
 
