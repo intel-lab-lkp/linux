@@ -32,7 +32,7 @@ static bool early_is_tdx_guest(void)
 	return is_tdx;
 }
 
-void arch_accept_memory(phys_addr_t start, phys_addr_t end)
+static void arch_accept_memory(phys_addr_t start, phys_addr_t end)
 {
 	/* Platform-specific memory-acceptance call goes here */
 	if (early_is_tdx_guest()) {

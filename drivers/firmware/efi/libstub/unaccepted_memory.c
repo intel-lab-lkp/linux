@@ -118,7 +118,7 @@ void process_unaccepted_memory(u64 start, u64 end)
 	 * immediately accepted in its entirety.
 	 */
 	if (end - start < 2 * unit_size) {
-		arch_accept_memory(start, end);
+		efistub_accept_memory(start, end);
 		return;
 	}
 
@@ -129,13 +129,13 @@ void process_unaccepted_memory(u64 start, u64 end)
 
 	/* Immediately accept a <unit_size piece at the start: */
 	if (start & unit_mask) {
-		arch_accept_memory(start, round_up(start, unit_size));
+		efistub_accept_memory(start, round_up(start, unit_size));
 		start = round_up(start, unit_size);
 	}
 
 	/* Immediately accept a <unit_size piece at the end: */
 	if (end & unit_mask) {
-		arch_accept_memory(round_down(end, unit_size), end);
+		efistub_accept_memory(round_down(end, unit_size), end);
 		end = round_down(end, unit_size);
 	}
 
@@ -144,8 +144,8 @@ void process_unaccepted_memory(u64 start, u64 end)
 	 * into the bitmap.
 	 */
 	if (start < unaccepted_table->phys_base) {
-		arch_accept_memory(start,
-				   min(unaccepted_table->phys_base, end));
+		efistub_accept_memory(start,
+				      min(unaccepted_table->phys_base, end));
 		start = unaccepted_table->phys_base;
 	}
 
@@ -165,7 +165,7 @@ void process_unaccepted_memory(u64 start, u64 end)
 			     unaccepted_table->phys_base;
 		phys_end = end + unaccepted_table->phys_base;
 
-		arch_accept_memory(phys_start, phys_end);
+		efistub_accept_memory(phys_start, phys_end);
 		end = bitmap_size * unit_size * BITS_PER_BYTE;
 	}
 

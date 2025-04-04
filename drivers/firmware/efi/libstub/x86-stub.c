@@ -17,6 +17,7 @@
 #include <asm/boot.h>
 #include <asm/kaslr.h>
 #include <asm/sev.h>
+#include <asm/shared/tdx.h>
 
 #include "efistub.h"
 #include "x86-stub.h"
@@ -363,6 +364,44 @@ static void setup_unaccepted_memory(void)
 	if (status != EFI_SUCCESS)
 		efi_err("Memory acceptance protocol failed\n");
 }
+
+#ifdef CONFIG_UNACCEPTED_MEMORY
+
+static bool efistub_is_tdx_guest(void)
+{
+	u32 eax = TDX_CPUID_LEAF_ID, sig[3] = {};
+
+	if (!IS_ENABLED(CONFIG_INTEL_TDX_GUEST))
+		return false;
+
+	native_cpuid(&eax, &sig[0], &sig[2], &sig[1]);
+	return !memcmp(TDX_IDENT, sig, sizeof(sig));
+}
+
+static bool efistub_is_sevsnp_guest(void)
+{
+	return sev_get_status() & MSR_AMD64_SEV_SNP_ENABLED;
+}
+
+void efistub_accept_memory(phys_addr_t start, phys_addr_t end)
+{
+	static bool once, is_tdx, is_sevsnp;
+
+	if (!once) {
+		if (efistub_is_tdx_guest())
+			is_tdx = true;
+		else if (efistub_is_sevsnp_guest())
+			is_sevsnp = true;
+		once = true;
+	}
+
+	if (is_tdx)
+		tdx_accept_memory(start, end);
+	else if (is_sevsnp)
+		snp_accept_memory(start, end);
+}
+
+#endif
 
 static efi_char16_t *efistub_fw_vendor(void)
 {
