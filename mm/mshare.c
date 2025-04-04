@@ -415,6 +415,7 @@ msharefs_fill_mm(struct inode *inode)
 		goto err_free;
 	}
 
+	set_bit(MMF_MSHARE, &mm->flags);
 	mm->mmap_base = mshare_base;
 	mm->task_size = 0;
 
