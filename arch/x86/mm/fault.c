@@ -512,6 +512,8 @@ show_fault_oops(struct pt_regs *regs, unsigned long error_code, unsigned long ad
 	if (!oops_may_print())
 		return;
 
+	kasan_non_canonical_hook(address);
+
 	if (error_code & X86_PF_INSTR) {
 		unsigned int level;
 		bool nx, rw;

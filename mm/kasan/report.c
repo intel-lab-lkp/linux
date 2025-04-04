@@ -700,7 +700,7 @@ void kasan_non_canonical_hook(unsigned long addr)
 	 * operation would overflow only for some memory addresses. However, due
 	 * to the chosen KASAN_SHADOW_OFFSET values and the fact the
 	 * kasan_mem_to_shadow() only operates on pointers with the tag reset,
-	 * the overflow always happens.
+	 * the overflow always happens (for both x86 and arm64).
 	 *
 	 * For arm64, the top byte of the pointer gets reset to 0xFF. Thus, the
 	 * possible shadow addresses belong to a region that is the result of
@@ -712,6 +712,40 @@ void kasan_non_canonical_hook(unsigned long addr)
 	if (IS_ENABLED(CONFIG_KASAN_SW_TAGS) && IS_ENABLED(CONFIG_ARM64)) {
 		if (addr < (u64)kasan_mem_to_shadow((void *)(0xFFUL << 56)) ||
 		    addr > (u64)kasan_mem_to_shadow((void *)(~0UL)))
+			return;
+	}
+
+	 /*
+	  * For x86-64, only the pointer bits [62:57] get reset, and bits #63
+	  * and #56 can be 0 or 1. Thus, kasan_mem_to_shadow() can be possibly
+	  * applied to two regions of memory:
+	  * [0x7E00000000000000, 0x7FFFFFFFFFFFFFFF] and
+	  * [0xFE00000000000000, 0xFFFFFFFFFFFFFFFF]. As the overflow happens
+	  * for both ends of both memory ranges, both possible shadow regions
+	  * are contiguous.
+	  *
+	  * Given the KASAN_SHADOW_OFFSET equal to 0xffeffc0000000000, the
+	  * following ranges are valid mem-to-shadow mappings:
+	  *
+	  * 0xFFFFFFFFFFFFFFFF
+	  *         INVALID
+	  * 0xFFEFFBFFFFFFFFFF - kasan_mem_to_shadow(~0UL)
+	  *         VALID   - kasan shadow mem
+	  *         VALID   - non-canonical kernel virtual address
+	  * 0xFFCFFC0000000000 - kasan_mem_to_shadow(0xFEUL << 56)
+	  *         INVALID
+	  * 0x07EFFBFFFFFFFFFF - kasan_mem_to_shadow(~0UL >> 1)
+	  *         VALID   - non-canonical user virtual addresses
+	  *         VALID   - user addresses
+	  * 0x07CFFC0000000000 - kasan_mem_to_shadow(0x7EUL << 56)
+	  *         INVALID
+	  * 0x0000000000000000
+	  */
+	if (IS_ENABLED(CONFIG_KASAN_SW_TAGS) && IS_ENABLED(CONFIG_X86_64)) {
+		if ((addr < (u64)kasan_mem_to_shadow((void *)(0x7EUL << 56)) ||
+		     addr > (u64)kasan_mem_to_shadow((void *)(~0UL >> 1))) &&
+		    (addr < (u64)kasan_mem_to_shadow((void *)(0xFEUL << 56)) ||
+		     addr > (u64)kasan_mem_to_shadow((void *)(~0UL))))
 			return;
 	}
 
