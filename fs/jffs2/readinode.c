@@ -1416,7 +1416,17 @@ void jffs2_do_clear_inode(struct jffs2_sb_info *c, struct jffs2_inode_info *f)
 	int deleted;
 
 	jffs2_xattr_delete_inode(c, f->inocache);
-	mutex_lock(&f->sem);
+
+	/*
+	 * We should be the only ones having a reference to this struct
+	 * jffs2_inode_info. So the locking is actually unnecessary. Besides,
+	 * lockdep triggers a false-positive warning on &f->sem here about
+	 * reclaim circular dependency. Play it safe and bump a warning if
+	 * this doesn't hold true.
+	 */
+	if (WARN_ON_ONCE(!mutex_trylock(&f->sem)))
+		return;
+
 	deleted = f->inocache && !f->inocache->pino_nlink;
 
 	if (f->inocache && f->inocache->state != INO_STATE_CHECKING)
