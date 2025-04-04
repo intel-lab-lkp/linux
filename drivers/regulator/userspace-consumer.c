@@ -11,6 +11,7 @@
  *   Author: Mark Brown <broonie@opensource.wolfsonmicro.com>
  */
 
+#include <linux/bitops.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
 #include <linux/module.h>
@@ -29,6 +30,9 @@ struct userspace_consumer_data {
 
 	int num_supplies;
 	struct regulator_bulk_data *supplies;
+
+	struct kobject *kobj;
+	struct notifier_block nb;
 };
 
 static ssize_t name_show(struct device *dev,
@@ -115,12 +119,68 @@ static const struct attribute_group attr_group = {
 	.is_visible =  attr_visible,
 };
 
+/*
+ * This should probably be placed elsewhere in the regulator framework...
+ */
+static const char *regulator_event_str(unsigned long event)
+{
+	switch (event) {
+	case REGULATOR_EVENT_ABORT_DISABLE:
+		return "ABORT_DISABLE";
+	case REGULATOR_EVENT_ABORT_VOLTAGE_CHANGE:
+		return "ABORT_VOLTAGE_CHANGE";
+	case REGULATOR_EVENT_DISABLE:
+		return "DISABLE";
+	case REGULATOR_EVENT_ENABLE:
+		return "ENABLE";
+	case REGULATOR_EVENT_FAIL:
+		return "FAIL";
+	case REGULATOR_EVENT_FORCE_DISABLE:
+		return "FORCE_DISABLE";
+	case REGULATOR_EVENT_OVER_CURRENT:
+		return "OVER_CURRENT";
+	case REGULATOR_EVENT_OVER_TEMP:
+		return "OVER_TEMP";
+	case REGULATOR_EVENT_PRE_DISABLE:
+		return "PRE_DISABLE";
+	case REGULATOR_EVENT_PRE_VOLTAGE_CHANGE:
+		return "PRE_VOLTAGE_CHANGE";
+	case REGULATOR_EVENT_REGULATION_OUT:
+		return "REGULATION_OUT";
+	case REGULATOR_EVENT_UNDER_VOLTAGE:
+		return "UNDER_VOLTAGE";
+	case REGULATOR_EVENT_VOLTAGE_CHANGE:
+		return "VOLTAGE_CHANGE";
+	default:
+		return NULL;
+	}
+}
+
+static int regulator_userspace_notify(struct notifier_block *nb, unsigned long event, void *unused)
+{
+	struct userspace_consumer_data *drvdata = container_of(nb, struct userspace_consumer_data, nb);
+	char env_buf[128];
+	char *envp[] = { "NAME=event", env_buf, NULL };
+	unsigned int bit;
+
+	for_each_set_bit(bit, &event, BITS_PER_TYPE(event)) {
+		const char *event_str = regulator_event_str(BIT(bit));
+
+		if (event_str && event_str[0] != '\0') {
+			scnprintf(env_buf, sizeof(env_buf), "EVENT=%s", event_str);
+			kobject_uevent_env(drvdata->kobj, KOBJ_CHANGE, envp);
+		}
+	}
+
+	return NOTIFY_OK;
+}
+
 static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 {
 	struct regulator_userspace_consumer_data tmpdata;
 	struct regulator_userspace_consumer_data *pdata;
 	struct userspace_consumer_data *drvdata;
-	int ret;
+	int i, ret;
 
 	pdata = dev_get_platdata(&pdev->dev);
 	if (!pdata) {
@@ -153,6 +213,7 @@ static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 	drvdata->num_supplies = pdata->num_supplies;
 	drvdata->supplies = pdata->supplies;
 	drvdata->no_autoswitch = pdata->no_autoswitch;
+	drvdata->kobj = &pdev->dev.kobj;
 
 	mutex_init(&drvdata->lock);
 
@@ -184,6 +245,13 @@ static int regulator_userspace_consumer_probe(struct platform_device *pdev)
 	}
 	drvdata->enabled = !!ret;
 
+	drvdata->nb.notifier_call = regulator_userspace_notify;
+	for (i = 0; i < drvdata->num_supplies; i++) {
+		ret = devm_regulator_register_notifier(drvdata->supplies[i].consumer, &drvdata->nb);
+		if (ret)
+			goto err_enable;
+	}
+
 	return 0;
 
 err_enable:
@@ -195,6 +263,10 @@ err_enable:
 static void regulator_userspace_consumer_remove(struct platform_device *pdev)
 {
 	struct userspace_consumer_data *data = platform_get_drvdata(pdev);
+	int i;
+
+	for (i = 0; i < data->num_supplies; i++)
+		devm_regulator_unregister_notifier(data->supplies[i].consumer, &data->nb);
 
 	sysfs_remove_group(&pdev->dev.kobj, &attr_group);
 
