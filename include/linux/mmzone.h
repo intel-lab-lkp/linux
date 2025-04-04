@@ -2077,10 +2077,36 @@ static inline int pfn_section_valid(struct mem_section *ms, unsigned long pfn)
 
 	return usage ? test_bit(idx, usage->subsection_map) : 0;
 }
+
+static inline bool pfn_section_first_valid(struct mem_section *ms, unsigned long *pfn)
+{
+	struct mem_section_usage *usage = READ_ONCE(ms->usage);
+	int idx = subsection_map_index(*pfn);
+	unsigned long bit;
+
+	if (!usage)
+		return false;
+
+	if (test_bit(idx, usage->subsection_map))
+		return true;
+
+	/* Find the next subsection that exists */
+	bit = find_next_bit(usage->subsection_map, SUBSECTIONS_PER_SECTION, idx);
+	if (bit == SUBSECTIONS_PER_SECTION)
+		return false;
+
+	*pfn = (*pfn & PAGE_SECTION_MASK) + (bit * PAGES_PER_SUBSECTION);
+	return true;
+}
 #else
 static inline int pfn_section_valid(struct mem_section *ms, unsigned long pfn)
 {
 	return 1;
+}
+
+static inline bool pfn_section_first_valid(struct mem_section *ms, unsigned long *pfn)
+{
+	return true;
 }
 #endif
 
@@ -2130,6 +2156,39 @@ static inline int pfn_valid(unsigned long pfn)
 
 	return ret;
 }
+
+static inline bool first_valid_pfn(unsigned long *p_pfn)
+{
+	unsigned long pfn = *p_pfn;
+	unsigned long nr = pfn_to_section_nr(pfn);
+
+	rcu_read_lock_sched();
+
+	while (nr <= __highest_present_section_nr) {
+		struct mem_section *ms = __pfn_to_section(pfn);
+
+		if (valid_section(ms) &&
+		    (early_section(ms) || pfn_section_first_valid(ms, &pfn))) {
+			*p_pfn = pfn;
+			rcu_read_unlock_sched();
+			return true;
+		}
+
+		/* Nothing left in this section? Skip to next section */
+		nr++;
+		pfn = section_nr_to_pfn(nr);
+	}
+
+	rcu_read_unlock_sched();
+
+	return false;
+}
+
+#define for_each_valid_pfn(_pfn, _start_pfn, _end_pfn)	       \
+	for ((_pfn) = (_start_pfn);			       \
+	     first_valid_pfn(&(_pfn)) && (_pfn) < (_end_pfn);  \
+	     (_pfn)++)
+
 #endif
 
 static inline int pfn_in_present_section(unsigned long pfn)
