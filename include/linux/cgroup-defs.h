@@ -223,7 +223,10 @@ struct cgroup_subsys_state {
 	/*
 	 * A singly-linked list of css structures to be rstat flushed.
 	 * This is a scratch field to be used exclusively by
-	 * css_rstat_flush_locked() and protected by cgroup_rstat_lock.
+	 * css_rstat_flush_locked().
+	 *
+	 * Protected by rstat_base_lock when css is cgroup::self.
+	 * Protected by css->ss->rstat_ss_lock otherwise.
 	 */
 	struct cgroup_subsys_state *rstat_flush_next;
 };
@@ -359,11 +362,11 @@ struct css_rstat_cpu {
 	 * are linked on the parent's ->updated_children through
 	 * ->updated_next.
 	 *
-	 * In addition to being more compact, singly-linked list pointing
-	 * to the cgroup makes it unnecessary for each per-cpu struct to
-	 * point back to the associated cgroup.
+	 * In addition to being more compact, singly-linked list pointing to
+	 * the css makes it unnecessary for each per-cpu struct to point back
+	 * to the associated css.
 	 *
-	 * Protected by per-cpu cgroup_rstat_cpu_lock.
+	 * Protected by per-cpu css->ss->rstat_ss_cpu_lock.
 	 */
 	struct cgroup_subsys_state *updated_children;	/* terminated by self cgroup */
 	struct cgroup_subsys_state *updated_next;	/* NULL iff not on the list */
@@ -793,6 +796,9 @@ struct cgroup_subsys {
 	 * specifies the mask of subsystems that this one depends on.
 	 */
 	unsigned int depends_on;
+
+	spinlock_t rstat_ss_lock;
+	raw_spinlock_t __percpu *rstat_ss_cpu_lock;
 };
 
 extern struct percpu_rw_semaphore cgroup_threadgroup_rwsem;
