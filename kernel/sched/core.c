@@ -1109,6 +1109,7 @@ static void __resched_curr(struct rq *rq, int tif)
 
 	cpu = cpu_of(rq);
 
+	trace_sched_set_need_resched_tp(curr, cpu, tif);
 	if (cpu == smp_processor_id()) {
 		set_ti_thread_flag(cti, tif);
 		if (tif == TIF_NEED_RESCHED)
@@ -1123,6 +1124,13 @@ static void __resched_curr(struct rq *rq, int tif)
 		trace_sched_wake_idle_without_ipi(cpu);
 	}
 }
+
+#ifdef CONFIG_SMP
+void __trace_set_need_resched(struct task_struct *curr, int tif)
+{
+	trace_sched_set_need_resched_tp(curr, smp_processor_id(), tif);
+}
+#endif
 
 void resched_curr(struct rq *rq)
 {
@@ -6767,6 +6775,7 @@ picked:
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
 		rq_unpin_lock(rq, &rf);
+		trace_sched_switch_vain_tp(preempt, prev, prev_state);
 		__balance_callbacks(rq);
 		raw_spin_rq_unlock_irq(rq);
 	}

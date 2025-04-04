@@ -835,6 +835,14 @@ DECLARE_TRACE_CONDITION(sched_set_state_tp,
 	TP_ARGS(tsk, state),
 	TP_CONDITION(!!(tsk->__state) != !!state));
 
+DECLARE_TRACE(sched_set_need_resched_tp,
+	TP_PROTO(struct task_struct *tsk, int cpu, int tif),
+	TP_ARGS(tsk, cpu, tif));
+
+DECLARE_TRACE(sched_switch_vain_tp,
+	TP_PROTO(bool preempt, struct task_struct *tsk, unsigned int prev_state),
+	TP_ARGS(preempt, tsk, prev_state));
+
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */
