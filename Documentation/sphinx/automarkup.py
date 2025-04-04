@@ -47,6 +47,8 @@ RE_abi_symbol = re.compile(r'(\b/(sys|config|proc)/[\w\-/]+)')
 
 RE_namespace = re.compile(r'^\s*..\s*c:namespace::\s*(\S+)\s*$')
 
+RE_kconfig = re.compile(r'CONFIG_[A-Za-z0-9_]+')
+
 #
 # Reserved C words that we should skip when cross-referencing
 #
@@ -88,7 +90,8 @@ def markup_refs(docname, app, node):
                            RE_union: markup_c_ref,
                            RE_enum: markup_c_ref,
                            RE_typedef: markup_c_ref,
-                           RE_git: markup_git}
+                           RE_git: markup_git,
+                           RE_kconfig: markup_kconfig_ref}
 
     match_iterators = [regex.finditer(t) for regex in markup_func]
     #
@@ -249,6 +252,37 @@ def markup_doc_ref(docname, app, match):
     #
     try:
         xref = stddom.resolve_xref(app.env, docname, app.builder, 'doc',
+                                   target, pxref, None)
+    except NoUri:
+        xref = None
+    #
+    # Return the xref if we got it; otherwise just return the plain text.
+    #
+    if xref:
+        return xref
+    else:
+        return nodes.Text(match.group(0))
+
+#
+# Try to replace a kernel config reference of the form CONFIG_... with a
+# cross reference to that kconfig's section
+#
+def markup_kconfig_ref(docname, app, match):
+    stddom = app.env.domains['std']
+    #
+    # Go through the dance of getting an xref out of the std domain
+    #
+    target = match.group(0).lower()
+    xref = None
+    pxref = addnodes.pending_xref('', refdomain = 'std', reftype = 'ref',
+                                  reftarget = target, modname = None,
+                                  classname = None, refexplicit = False)
+    #
+    # XXX The Latex builder will throw NoUri exceptions here,
+    # work around that by ignoring them.
+    #
+    try:
+        xref = stddom.resolve_xref(app.env, docname, app.builder, 'ref',
                                    target, pxref, None)
     except NoUri:
         xref = None
