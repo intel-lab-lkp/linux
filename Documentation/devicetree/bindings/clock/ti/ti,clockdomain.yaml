@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/ti/ti,clockdomain.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI clock domain
+
+maintainers:
+  - Tero Kristo <kristo@kernel.org>
+  - Sukrut Bellary <sbellary@baylibre.com>
+
+description: |
+  Every clock on TI SoC belongs to one clockdomain. For specific clocks, the
+  parent clockdomain has to be controlled when the clock is enabled/disabled.
+  This binding doesn't define a new clock binding type, it is used to group
+  the existing clock nodes under hardware hierarchy.
+
+properties:
+  compatible:
+    const: ti,clockdomain
+
+  clocks:
+    description:
+      Clocks within this domain
+
+required:
+  - compatible
+  - clocks
+
+additionalProperties: false
+
+examples:
+  - |
+    l3init_clkdm: l3init_clkdm {
+        compatible = "ti,clockdomain";
+        clocks = <&dpll_usb_ck>;
+    };
