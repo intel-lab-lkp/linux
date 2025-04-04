@@ -1032,7 +1032,9 @@ static int iwl_mvm_mac_ctxt_send_beacon_v6(struct iwl_mvm *mvm,
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mac_beacon_cmd_v6 beacon_cmd = {};
 
-	iwl_mvm_mac_ctxt_set_tx(mvm, vif, beacon, &beacon_cmd.tx);
+	iwl_mvm_mac_ctxt_set_tx(mvm, vif, beacon,
+				container_of(&beacon_cmd.tx,
+					     struct iwl_tx_cmd, __hdr));
 
 	beacon_cmd.template_id = cpu_to_le32((u32)mvmvif->id);
 
@@ -1052,7 +1054,9 @@ static int iwl_mvm_mac_ctxt_send_beacon_v7(struct iwl_mvm *mvm,
 	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct iwl_mac_beacon_cmd_v7 beacon_cmd = {};
 
-	iwl_mvm_mac_ctxt_set_tx(mvm, vif, beacon, &beacon_cmd.tx);
+	iwl_mvm_mac_ctxt_set_tx(mvm, vif, beacon,
+				container_of(&beacon_cmd.tx,
+					     struct iwl_tx_cmd, __hdr));
 
 	beacon_cmd.template_id = cpu_to_le32((u32)mvmvif->id);
 
