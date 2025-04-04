@@ -1,5 +1,5 @@
 #!/bin/bash
-# perf trace BTF general tests
+# perf trace BTF general tests (exclusive)
 # SPDX-License-Identifier: GPL-2.0
 
 err=0
@@ -29,7 +29,7 @@ check_vmlinux() {
 trace_test_string() {
   echo "Testing perf trace's string augmentation"
   if ! perf trace -e renameat* --max-events=1 -- mv ${file1} ${file2} 2>&1 | \
-    grep -q -E "^mv/[0-9]+ renameat(2)?\(.*, \"${file1}\", .*, \"${file2}\", .*\) += +[0-9]+$"
+    grep -q -E "^.*/[0-9]+ renameat(2)?\(.*, \"${file1}\", .*, \"${file2}\", .*\) += +[0-9]+$"
   then
     echo "String augmentation test failed"
     err=1
@@ -40,7 +40,7 @@ trace_test_buffer() {
   echo "Testing perf trace's buffer augmentation"
   # echo will insert a newline (\10) at the end of the buffer
   if ! perf trace -e write --max-events=1 -- echo "${buffer}" 2>&1 | \
-    grep -q -E "^echo/[0-9]+ write\([0-9]+, ${buffer}.*, [0-9]+\) += +[0-9]+$"
+    grep -q -E "^.*/[0-9]+ write\([0-9]+, ${buffer}.*, [0-9]+\) += +[0-9]+$"
   then
     echo "Buffer augmentation test failed"
     err=1
@@ -50,7 +50,7 @@ trace_test_buffer() {
 trace_test_struct_btf() {
   echo "Testing perf trace's struct augmentation"
   if ! perf trace -e clock_nanosleep --force-btf --max-events=1 -- sleep 1 2>&1 | \
-    grep -q -E "^sleep/[0-9]+ clock_nanosleep\(0, 0, \{1,\}, 0x[0-9a-f]+\) += +[0-9]+$"
+    grep -q -E "^.*/[0-9]+ clock_nanosleep\(0, 0, \{1,\}, 0x[0-9a-f]+\) += +[0-9]+$"
   then
     echo "BTF struct augmentation test failed"
     err=1
