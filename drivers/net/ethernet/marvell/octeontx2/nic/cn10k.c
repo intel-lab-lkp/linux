@@ -358,8 +358,10 @@ int cn10k_free_matchall_ipolicer(struct otx2_nic *pfvf)
 
 	/* Remove RQ's policer mapping */
 	for (qidx = 0; qidx < hw->rx_queues; qidx++)
-		cn10k_map_unmap_rq_policer(pfvf, qidx,
-					   hw->matchall_ipolicer, false);
+		rc = cn10k_map_unmap_rq_policer(pfvf, qidx, hw->matchall_ipolicer, false);
+		if (rc)
+			dev_warn(pfvf->dev,
+				 "Failed to unmap RQ's policer.");
 
 	rc = cn10k_free_leaf_profile(pfvf, hw->matchall_ipolicer);
 
