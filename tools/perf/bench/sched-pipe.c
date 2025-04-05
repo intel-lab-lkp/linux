@@ -50,6 +50,8 @@ static bool			threaded;
 static unsigned int		nr_threads = 2;
 
 static bool			nonblocking;
+static bool			Kn_mode;	/* Toggle for ring mode -> complete graph mode */
+
 static char			*cgrp_names[2];
 static struct cgroup		*cgrps[2];
 
@@ -90,6 +92,7 @@ static const struct option options[] = {
 	OPT_BOOLEAN('n', "nonblocking",	&nonblocking,	"Use non-blocking operations"),
 	OPT_UINTEGER('p', "nprocs",	&nr_threads,    "Number of processes"),
 	OPT_UINTEGER('l', "loop",	&loops,		"Specify number of loops"),
+	OPT_BOOLEAN('K', "Kn",		&Kn_mode,	"Send tokens in a complete graph instead of a ring."),
 	OPT_BOOLEAN('T', "threaded",	&threaded,	"Specify threads/process based task setup"),
 	OPT_CALLBACK('G', "cgroups", NULL, "SEND,RECV",
 		     "Put sender and receivers in given cgroups",
@@ -189,10 +192,54 @@ retry:
 }
 
 /*
+ * Worker thread for processes forming a complete graph,
+ * sending tokens one to each other.
+ */
+static void *worker_thread_kn(void *__tdata)
+{
+	struct thread_data *this_thread = __tdata;
+	struct thread_data *all_threads = this_thread - this_thread->nr;
+
+	int ret, m = 0;
+	unsigned int i;
+	unsigned int t;
+
+	ret = enter_cgroup(this_thread->nr);
+	if (ret < 0) {
+		this_thread->cgroup_failed = true;
+		return NULL;
+	}
+
+	if (nonblocking) {
+		this_thread->epoll_ev.events = EPOLLIN;
+		this_thread->epoll_fd = epoll_create(1);
+		BUG_ON(this_thread->epoll_fd < 0);
+		BUG_ON(epoll_ctl(this_thread->epoll_fd, EPOLL_CTL_ADD, this_thread->pipe_read, &this_thread->epoll_ev) < 0);
+	}
+
+	for (i = 0; i < loops; i++) {
+		/* First: feed all other workers. */
+		for (t = 0; t < nr_threads; t++)
+			if (t != this_thread->nr) {
+				ret = write(all_threads[t].pipe_write, &m, sizeof(int));
+				BUG_ON(ret != sizeof(int));
+			}
+
+		/* Read a token from all other workers. */
+		for (t = 1; t < nr_threads; t++) {
+			ret = read_pipe(this_thread);
+			BUG_ON(ret != sizeof(int));
+		}
+	}
+
+	return NULL;
+}
+
+/*
  * Worker thread for nodes forming a ring, receiving tokens from the left
  * neighbor and sending them to the right one.
  */
-static void *worker_thread(void *__tdata)
+static void *worker_thread_ring(void *__tdata)
 {
 	struct thread_data *this_thread = __tdata;
 	struct thread_data *first_thread = this_thread - this_thread->nr;
@@ -230,6 +277,9 @@ static void *worker_thread(void *__tdata)
 
 	return NULL;
 }
+
+/* Ring mode is the default. */
+void * (*worker_thread)(void *) = worker_thread_ring;
 
 static struct thread_data *create_thread_data(void)
 {
@@ -278,6 +328,9 @@ int bench_sched_pipe(int argc, const char **argv)
 	pid_t retpid __maybe_unused;
 
 	argc = parse_options(argc, argv, options, bench_sched_pipe_usage, 0);
+
+	if (Kn_mode)
+		worker_thread = worker_thread_kn;
 
 	threads = create_thread_data();
 
@@ -331,8 +384,9 @@ int bench_sched_pipe(int argc, const char **argv)
 
 	switch (bench_format) {
 	case BENCH_FORMAT_DEFAULT:
-		printf("# Executed %d pipe operations between %u %s\n\n", loops,
-		       nr_threads, threaded ? "threads" : "processes");
+		printf("# Executed %d pipe operations (%s) between %u %s\n\n", loops,
+		       Kn_mode ? "Kn" : "ring", nr_threads,
+		       threaded ? "threads" : "processes");
 
 		result_usec = diff.tv_sec * USEC_PER_SEC;
 		result_usec += diff.tv_usec;

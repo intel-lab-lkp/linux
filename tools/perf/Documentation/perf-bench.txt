@@ -130,6 +130,11 @@ process).
 
 Options of *pipe*
 ^^^^^^^^^^^^^^^^^
+-K::
+--Kn::
+Simulate a complete graph instead of a ring for sending tokens.
+Each process sends and receives tokens to/from every other process.
+
 -l::
 --loop=::
 Specify number of loops.
