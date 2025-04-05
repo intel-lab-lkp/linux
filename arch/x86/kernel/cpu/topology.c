@@ -428,8 +428,13 @@ void __init topology_apply_cmdline_limits_early(void)
 {
 	unsigned int possible = nr_cpu_ids;
 
-	/* 'maxcpus=0' 'nosmp' 'nolapic' */
-	if (!setup_max_cpus || apic_is_disabled)
+	/* 'maxcpus=0' 'nosmp' 'nolapic'
+	 *
+	 * The apic_is_disabled check is ignored for Xen PV domains because Xen
+	 * disables ACPI in unprivileged PV DomU guests, which would otherwise limit
+	 * CPUs to 1, even if multiple vCPUs were configured.
+	 */
+	if (!setup_max_cpus || (!xen_pv_domain() && apic_is_disabled))
 		possible = 1;
 
 	/* 'possible_cpus=N' */
