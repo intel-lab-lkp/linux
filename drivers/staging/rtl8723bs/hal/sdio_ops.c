@@ -185,7 +185,12 @@ static u32 sdio_read32(struct intf_hdl *intfhdl, u32 addr)
 			return SDIO_ERR_VAL32;
 
 		ftaddr &= ~(u16)0x3;
-		sd_read(intfhdl, ftaddr, 8, tmpbuf);
+		err = sd_read(intfhdl, ftaddr, 8, tmpbuf);
+		if (err) {
+			kfree(tmpbuf)
+			return SDIO_ERR_VAL32;
+		}
+
 		memcpy(&le_tmp, tmpbuf + shift, 4);
 		val = le32_to_cpu(le_tmp);
 
