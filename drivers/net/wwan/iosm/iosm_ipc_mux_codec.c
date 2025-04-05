@@ -509,8 +509,11 @@ static void ipc_mux_dl_acbcmd_decode(struct iosm_mux *ipc_mux,
 			return;
 			}
 		trans_id = le32_to_cpu(cmdh->transaction_id);
-		ipc_mux_dl_acb_send_cmds(ipc_mux, cmd, cmdh->if_id,
-					 trans_id, cmd_p, size, false, true);
+		if (ipc_mux_dl_acb_send_cmds(ipc_mux, cmd, cmdh->if_id,
+					     trans_id, cmd_p, size, false, true))
+			dev_err(ipc_mux->dev,
+				"if_id %d: cmd send failed",
+				cmdh->if_id);
 	}
 }
 
