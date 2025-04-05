@@ -42,7 +42,7 @@
 #include "internal.h"
 
 static struct microcode_ops	*microcode_ops;
-bool dis_ucode_ldr = true;
+static int dis_ucode_ldr = -1;
 
 bool force_minrev = IS_ENABLED(CONFIG_MICROCODE_LATE_FORCE_MINREV);
 module_param(force_minrev, bool, S_IRUSR | S_IWUSR);
@@ -95,11 +95,20 @@ static bool amd_check_current_patch_level(void)
 	return false;
 }
 
-static bool __init check_loader_disabled_bsp(void)
+bool __init microcode_loader_disabled(void)
 {
-	static const char *__dis_opt_str = "dis_ucode_ldr";
-	const char *cmdline = boot_command_line;
-	const char *option  = __dis_opt_str;
+	if (dis_ucode_ldr < 0) {
+		if (cmdline_find_option_bool(boot_command_line, "dis_ucode_ldr") <= 0)
+			dis_ucode_ldr = 0;
+		else
+			goto disable;
+	}
+
+	if (dis_ucode_ldr > 0)
+		return true;
+
+	if (!have_cpuid_p())
+		goto disable;
 
 	/*
 	 * CPUID(1).ECX[31]: reserved for hypervisor use. This is still not
@@ -107,17 +116,18 @@ static bool __init check_loader_disabled_bsp(void)
 	 * that's good enough as they don't land on the BSP path anyway.
 	 */
 	if (native_cpuid_ecx(1) & BIT(31))
-		return true;
+		goto disable;
 
 	if (x86_cpuid_vendor() == X86_VENDOR_AMD) {
 		if (amd_check_current_patch_level())
-			return true;
+			goto disable;
 	}
 
-	if (cmdline_find_option_bool(cmdline, option) <= 0)
-		dis_ucode_ldr = false;
+	return (bool)dis_ucode_ldr;
 
-	return dis_ucode_ldr;
+disable:
+	dis_ucode_ldr = 1;
+	return true;
 }
 
 void __init load_ucode_bsp(void)
@@ -125,7 +135,7 @@ void __init load_ucode_bsp(void)
 	unsigned int cpuid_1_eax;
 	bool intel = true;
 
-	if (!have_cpuid_p())
+	if (microcode_loader_disabled())
 		return;
 
 	cpuid_1_eax = native_cpuid_eax(1);
@@ -145,9 +155,6 @@ void __init load_ucode_bsp(void)
 	default:
 		return;
 	}
-
-	if (check_loader_disabled_bsp())
-		return;
 
 	if (intel)
 		load_ucode_intel_bsp(&early_data);
@@ -810,7 +817,7 @@ static int __init microcode_init(void)
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 	int error;
 
-	if (dis_ucode_ldr)
+	if (microcode_loader_disabled())
 		return -EINVAL;
 
 	if (c->x86_vendor == X86_VENDOR_INTEL)
