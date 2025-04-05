@@ -30,6 +30,8 @@ struct timerqueue_node *timerqueue_getnext(struct timerqueue_head *head)
 static inline void timerqueue_init(struct timerqueue_node *node)
 {
 	RB_CLEAR_NODE(&node->node);
+	node->node.rb_right = NULL;
+	node->node.rb_left = NULL;
 }
 
 static inline bool timerqueue_node_queued(struct timerqueue_node *node)
