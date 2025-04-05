@@ -1172,6 +1172,15 @@ static bool reduce_link_params_in_bw_order(struct intel_dp *intel_dp,
 	int i;
 
 	i = intel_dp_link_config_index(intel_dp, crtc_state->port_clock, crtc_state->lane_count);
+
+	if (i < 0) {
+		/* Old config is not located. Skip to the lowest*/
+		intel_dp_link_config_get(intel_dp, 0, &link_rate, &lane_count);
+		*new_link_rate = link_rate;
+		*new_lane_count = lane_count;
+		return true;
+	}
+
 	for (i--; i >= 0; i--) {
 		intel_dp_link_config_get(intel_dp, i, &link_rate, &lane_count);
 
