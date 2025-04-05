@@ -15,6 +15,7 @@ file=$(mktemp /tmp/temporary_file.XXXXX)
 perf trace record -o ${file} sleep 1 || exit 1
 if ! perf trace -i ${file} 2>&1 | grep nanosleep; then
 	echo "Failed: cannot find *nanosleep syscall"
+	rm -f ${file}
 	exit 1
 fi
 
