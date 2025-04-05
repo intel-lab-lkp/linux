@@ -582,7 +582,7 @@ static int
 vc4_lock_bo_reservations(struct vc4_exec_info *exec,
 			 struct drm_exec *exec_ctx)
 {
-	int ret;
+	int ret = 0;
 
 	/* Reserve space for our shared (read-only) fence references,
 	 * before we commit the CL to the hardware.
