@@ -1944,10 +1944,26 @@ static void __nvme_tcp_stop_queue(struct nvme_tcp_queue *queue)
 	cancel_work_sync(&queue->io_work);
 }
 
+static void nvme_tcp_stop_queue_wait(struct nvme_tcp_queue *queue)
+{
+	int timeout = 100;
+
+	while (timeout > 0) {
+		if (!sk_wmem_alloc_get(queue->sock->sk))
+			return;
+		msleep(2);
+		timeout -= 2;
+	}
+	dev_warn(queue->ctrl->ctrl.device,
+		 "qid %d: wait draining sock wmem allocation timeout\n",
+		 nvme_tcp_queue_id(queue));
+}
+
 static void nvme_tcp_stop_queue(struct nvme_ctrl *nctrl, int qid)
 {
 	struct nvme_tcp_ctrl *ctrl = to_tcp_ctrl(nctrl);
 	struct nvme_tcp_queue *queue = &ctrl->queues[qid];
+	bool was_alive = false;
 
 	if (!test_bit(NVME_TCP_Q_ALLOCATED, &queue->flags))
 		return;
@@ -1956,11 +1972,14 @@ static void nvme_tcp_stop_queue(struct nvme_ctrl *nctrl, int qid)
 		atomic_dec(&nvme_tcp_cpu_queues[queue->io_cpu]);
 
 	mutex_lock(&queue->queue_lock);
-	if (test_and_clear_bit(NVME_TCP_Q_LIVE, &queue->flags))
+	was_alive = test_and_clear_bit(NVME_TCP_Q_LIVE, &queue->flags);
+	if (was_alive)
 		__nvme_tcp_stop_queue(queue);
 	/* Stopping the queue will disable TLS */
 	queue->tls_enabled = false;
 	mutex_unlock(&queue->queue_lock);
+	if (was_alive)
+		nvme_tcp_stop_queue_wait(queue);
 }
 
 static void nvme_tcp_setup_sock_ops(struct nvme_tcp_queue *queue)
