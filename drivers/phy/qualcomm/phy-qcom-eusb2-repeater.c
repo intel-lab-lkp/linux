@@ -76,6 +76,11 @@ struct eusb2_repeater {
 	const struct eusb2_repeater_cfg *cfg;
 	u32 base;
 	enum phy_mode mode;
+
+	u32 *param_override_seq;
+	u32 *host_param_override_seq;
+	u8 param_override_seq_cnt;
+	u8 host_param_override_seq_cnt;
 };
 
 static const char * const pm8550b_vreg_l[] = {
@@ -108,6 +113,63 @@ static const struct eusb2_repeater_cfg smb2360_eusb2_cfg = {
 	.num_vregs	= ARRAY_SIZE(pm8550b_vreg_l),
 };
 
+static void eusb2_repeater_write_overrides(struct eusb2_repeater *rptr,
+					   u32 *seq, u8 cnt)
+{
+	int i;
+
+	for (i = 0; i < cnt; i += 2)
+		regmap_write(rptr->regmap, rptr->base + seq[i], seq[i + 1]);
+}
+
+static int eusb2_repeater_read_overrides(struct device *dev, const char *prop,
+					 u32 **seq, u8 *seq_cnt)
+{
+	int num_elem, ret;
+
+	num_elem = of_property_count_elems_of_size(dev->of_node, prop, sizeof(**seq));
+	if (num_elem > 0) {
+		if (num_elem % 2) {
+			dev_err(dev, "invalid len for %s\n", prop);
+			return -EINVAL;
+		}
+
+		*seq_cnt = num_elem;
+		*seq = devm_kcalloc(dev, num_elem, sizeof(**seq), GFP_KERNEL);
+		if (!*seq)
+			return -ENOMEM;
+
+		ret = of_property_read_u32_array(dev->of_node, prop, *seq, num_elem);
+		if (ret) {
+			dev_err(dev, "%s read failed %d\n", prop, ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int eusb2_repeater_parse_dt(struct eusb2_repeater *rptr)
+{
+	int ret;
+
+	ret = of_property_read_u32(rptr->dev->of_node, "reg", &rptr->base);
+	if (ret < 0)
+		return ret;
+
+	ret = eusb2_repeater_read_overrides(rptr->dev, "qcom,param-override-seq",
+					    &rptr->param_override_seq,
+					    &rptr->param_override_seq_cnt);
+	if (ret < 0)
+		return ret;
+
+	ret = eusb2_repeater_read_overrides(rptr->dev, "qcom,host-param-override-seq",
+					    &rptr->host_param_override_seq,
+					    &rptr->host_param_override_seq_cnt);
+
+	return ret;
+}
+
 static int eusb2_repeater_init_vregs(struct eusb2_repeater *rptr)
 {
 	int num = rptr->cfg->num_vregs;
@@ -127,19 +189,11 @@ static int eusb2_repeater_init_vregs(struct eusb2_repeater *rptr)
 static int eusb2_repeater_init(struct phy *phy)
 {
 	struct eusb2_repeater *rptr = phy_get_drvdata(phy);
-	struct device_node *np = rptr->dev->of_node;
 	struct regmap *regmap = rptr->regmap;
 	const u32 *init_tbl = rptr->cfg->init_tbl;
-	u8 tune_usb2_preem = init_tbl[TUNE_USB2_PREEM];
-	u8 tune_hsdisc = init_tbl[TUNE_HSDISC];
-	u8 tune_iusb2 = init_tbl[TUNE_IUSB2];
 	u32 base = rptr->base;
 	u32 val;
 	int ret;
-
-	of_property_read_u8(np, "qcom,tune-usb2-amplitude", &tune_iusb2);
-	of_property_read_u8(np, "qcom,tune-usb2-disc-thres", &tune_hsdisc);
-	of_property_read_u8(np, "qcom,tune-usb2-preem", &tune_usb2_preem);
 
 	ret = regulator_bulk_enable(rptr->cfg->num_vregs, rptr->vregs);
 	if (ret)
@@ -156,10 +210,9 @@ static int eusb2_repeater_init(struct phy *phy)
 	regmap_write(regmap, base + EUSB2_TUNE_SQUELCH_U, init_tbl[TUNE_SQUELCH_U]);
 	regmap_write(regmap, base + EUSB2_TUNE_RES_FSDIF, init_tbl[TUNE_RES_FSDIF]);
 	regmap_write(regmap, base + EUSB2_TUNE_USB2_CROSSOVER, init_tbl[TUNE_USB2_CROSSOVER]);
-
-	regmap_write(regmap, base + EUSB2_TUNE_USB2_PREEM, tune_usb2_preem);
-	regmap_write(regmap, base + EUSB2_TUNE_HSDISC, tune_hsdisc);
-	regmap_write(regmap, base + EUSB2_TUNE_IUSB2, tune_iusb2);
+	regmap_write(regmap, base + EUSB2_TUNE_USB2_PREEM, init_tbl[TUNE_USB2_PREEM]);
+	regmap_write(regmap, base + EUSB2_TUNE_HSDISC, init_tbl[TUNE_HSDISC]);
+	regmap_write(regmap, base + EUSB2_TUNE_IUSB2, init_tbl[TUNE_IUSB2]);
 
 	ret = regmap_read_poll_timeout(regmap, base + EUSB2_RPTR_STATUS, val, val & RPTR_OK, 10, 5);
 	if (ret)
@@ -177,6 +230,8 @@ static int eusb2_repeater_set_mode(struct phy *phy,
 
 	switch (mode) {
 	case PHY_MODE_USB_HOST:
+		eusb2_repeater_write_overrides(rptr, rptr->host_param_override_seq,
+					       rptr->host_param_override_seq_cnt);
 		/*
 		 * CM.Lx is prohibited when repeater is already into Lx state as
 		 * per eUSB 1.2 Spec. Below implement software workaround until
@@ -186,6 +241,8 @@ static int eusb2_repeater_set_mode(struct phy *phy,
 		regmap_write(regmap, base + EUSB2_FORCE_VAL_5, V_CLK_19P2M_EN);
 		break;
 	case PHY_MODE_USB_DEVICE:
+		eusb2_repeater_write_overrides(rptr, rptr->param_override_seq,
+					       rptr->param_override_seq_cnt);
 		/*
 		 * In device mode clear host mode related workaround as there
 		 * is no repeater reset available, and enable/disable of
@@ -222,7 +279,6 @@ static int eusb2_repeater_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct phy_provider *phy_provider;
 	struct device_node *np = dev->of_node;
-	u32 res;
 	int ret;
 
 	rptr = devm_kzalloc(dev, sizeof(*rptr), GFP_KERNEL);
@@ -240,11 +296,9 @@ static int eusb2_repeater_probe(struct platform_device *pdev)
 	if (!rptr->regmap)
 		return -ENODEV;
 
-	ret = of_property_read_u32(np, "reg", &res);
+	ret = eusb2_repeater_parse_dt(rptr);
 	if (ret < 0)
 		return ret;
-
-	rptr->base = res;
 
 	ret = eusb2_repeater_init_vregs(rptr);
 	if (ret < 0) {
