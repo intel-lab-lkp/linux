@@ -159,6 +159,20 @@ by
 -p::
 --nprocs=::
 Number of processes to use for sending tokens along the pipes.
+This option accepts a number follwed by optional (case insensitive)
+multipliers in this order:
+
+- k, m
++
+Multipliers 1024 and 1048576 for the leading number.
+
+- p
++
+Multiplier replaced by the number of online processors.
+
+Example:
+
+        -p 1kP means: 1024 * number of online processors
 
 Example of *pipe*
 ^^^^^^^^^^^^^^^^^

@@ -12,7 +12,8 @@
 #include <subcmd/parse-options.h>
 #include <api/fs/fs.h>
 #include "bench.h"
-#include "util/cgroup.h"
+#include <util/cgroup.h>
+#include <util/string2.h>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -44,6 +45,8 @@ struct thread_data {
 
 #define LOOPS_DEFAULT 1000000
 static	unsigned int		loops = LOOPS_DEFAULT;
+
+static const char *nproc_str;	/* String that specifies a number of processes. */
 
 /* Use processes by default: */
 static bool			threaded;
@@ -90,7 +93,8 @@ out:
 
 static const struct option options[] = {
 	OPT_BOOLEAN('n', "nonblocking",	&nonblocking,	"Use non-blocking operations"),
-	OPT_UINTEGER('p', "nprocs",	&nr_threads,    "Number of processes"),
+	OPT_STRING('p', "nprocs",	&nproc_str,	"2P",
+		   "Number of processes (2P := 2 * online processors)"),
 	OPT_UINTEGER('l', "loop",	&loops,		"Specify number of loops"),
 	OPT_BOOLEAN('K', "Kn",		&Kn_mode,	"Send tokens in a complete graph instead of a ring."),
 	OPT_BOOLEAN('T', "threaded",	&threaded,	"Specify threads/process based task setup"),
@@ -281,6 +285,31 @@ static void *worker_thread_ring(void *__tdata)
 /* Ring mode is the default. */
 void * (*worker_thread)(void *) = worker_thread_ring;
 
+/*
+ * Get number of processes from the given string,
+ * e.g. "1k" => 1024 or
+ *      "8p" => 8 * number of online processors.
+ */
+static unsigned int get_nprocs(const char *np_str)
+{
+	unsigned int np;
+
+	np = perf_nptou(np_str);
+
+	if (np == -1U) {
+		fprintf(stderr, "Cannot parse number of processes/threads: %s\n",
+			nproc_str);
+		exit(1);
+	}
+
+	if (np < 2) {
+		fprintf(stderr, "Two processes are the minimum requirement.\n");
+		exit(1);
+	}
+
+	return np;
+}
+
 static struct thread_data *create_thread_data(void)
 {
 	struct thread_data *threads;
@@ -328,6 +357,9 @@ int bench_sched_pipe(int argc, const char **argv)
 	pid_t retpid __maybe_unused;
 
 	argc = parse_options(argc, argv, options, bench_sched_pipe_usage, 0);
+
+	if (nproc_str)
+		nr_threads = get_nprocs(nproc_str);
 
 	if (Kn_mode)
 		worker_thread = worker_thread_kn;

@@ -3,6 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include <linux/ctype.h>
 
@@ -66,6 +67,63 @@ s64 perf_atoll(const char *str)
 
 out_err:
 	return -1;
+}
+
+/*
+ * perf_nptou()
+ *
+ * Parse given string to a number of processes and return that number.
+ * Multipliers up to 'm' are accepted, and an optional final unit suffix
+ * 'p' meaning "number of online processors".
+ *
+ * str must match: (\d+)(k|K|m|M)?(p|P)?
+ *
+ * (e.g. "8P" meaning "8 * number of online processors",
+ *  or   "1k" meaning "1024",
+ *  or   "1Kp" meaning "1024 * number of online processors")
+ */
+u32 perf_nptou(const char *str)
+{
+	s32 length;
+	char *p;
+	char c;
+
+	if (!isdigit(str[0]))
+		goto out_err;
+
+	length = strtol(str, &p, 10);
+
+	switch (c = *p++) {
+		case 'p': case 'P':
+			if (*p)
+				goto out_err;
+			goto handle_p;
+		case '\0':
+			return length;
+		default:
+			goto out_err;
+
+		/* Multipliers */
+		case 'k': case 'K':
+			length <<= 10;
+			break;
+		case 'm': case 'M':
+			length <<= 20;
+			break;
+	}
+
+	if (*p == '\0')
+		return length;
+
+	if (strcmp(p, "p") != 0 && strcmp(p, "P") != 0)
+		goto out_err;
+
+handle_p:
+	length *= sysconf(_SC_NPROCESSORS_ONLN);
+	return length;
+
+out_err:
+	return -1U;
 }
 
 /* Character class matching */
