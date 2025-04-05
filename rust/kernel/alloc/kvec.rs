@@ -454,30 +454,64 @@ where
     }
 }
 
+impl<T, A: Allocator> Vec<T, A> {
+    /// Extends the vector by the elements of `iter`.
+    ///
+    /// This uses [`Iterator::size_hint`] to optimize reallocation of memory, but will work even
+    /// with imprecise implementations - albeit with potentially more memory reallocations.
+    ///
+    /// In the kernel most iterators are expected to have a precise `size_hint` implementation, so
+    /// this should nicely optimize out in most cases.
+    pub fn extend<I>(&mut self, iter: I, flags: Flags) -> Result<(), AllocError>
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let mut iter = iter.into_iter();
+
+        loop {
+            let low_bound = match iter.size_hint() {
+                // No more items expected, we can return.
+                (0, Some(0)) => break,
+                // Possibly more items but not certain, tentatively add one.
+                (0, _) => 1,
+                // More items pending, reserve space for the lower bound.
+                (low_bound, _) => low_bound,
+            };
+
+            self.reserve(low_bound, flags)?;
+
+            // Number of items we effectively added.
+            let added_items = self
+                .spare_capacity_mut()
+                .into_iter()
+                // Take a mutable reference to the iterator so we can reuse it in the next
+                // iteration of the loop if needed.
+                .zip(&mut iter)
+                .fold(0, |count, (dst, src)| {
+                    dst.write(src);
+
+                    count + 1
+                });
+
+            // SAFETY:
+            // - `self.len() + added_items <= self.capacity()` due to the call to `reserve` above,
+            // - items `[self.len()..self.len() + added_items - 1]` are initialized.
+            unsafe { self.set_len(self.len() + added_items) };
+
+            // `size_hint` was incorrect and our iterator ended before its advertized low bound.
+            if added_items < low_bound {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl<T: Clone, A: Allocator> Vec<T, A> {
     /// Extend the vector by `n` clones of `value`.
     pub fn extend_with(&mut self, n: usize, value: T, flags: Flags) -> Result<(), AllocError> {
-        if n == 0 {
-            return Ok(());
-        }
-
-        self.reserve(n, flags)?;
-
-        let spare = self.spare_capacity_mut();
-
-        for item in spare.iter_mut().take(n - 1) {
-            item.write(value.clone());
-        }
-
-        // We can write the last element directly without cloning needlessly.
-        spare[n - 1].write(value);
-
-        // SAFETY:
-        // - `self.len() + n < self.capacity()` due to the call to reserve above,
-        // - the loop and the line above initialized the next `n` elements.
-        unsafe { self.set_len(self.len() + n) };
-
-        Ok(())
+        self.extend(core::iter::repeat(value).take(n), flags)
     }
 
     /// Pushes clones of the elements of slice into the [`Vec`] instance.
@@ -496,18 +530,7 @@ impl<T: Clone, A: Allocator> Vec<T, A> {
     /// # Ok::<(), Error>(())
     /// ```
     pub fn extend_from_slice(&mut self, other: &[T], flags: Flags) -> Result<(), AllocError> {
-        self.reserve(other.len(), flags)?;
-        for (slot, item) in core::iter::zip(self.spare_capacity_mut(), other) {
-            slot.write(item.clone());
-        }
-
-        // SAFETY:
-        // - `other.len()` spare entries have just been initialized, so it is safe to increase
-        //   the length by the same number.
-        // - `self.len() + other.len() <= self.capacity()` is guaranteed by the preceding `reserve`
-        //   call.
-        unsafe { self.set_len(self.len() + other.len()) };
-        Ok(())
+        self.extend(other.into_iter().cloned(), flags)
     }
 
     /// Create a new `Vec<T, A>` and extend it by `n` clones of `value`.
