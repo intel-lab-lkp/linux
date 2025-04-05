@@ -118,6 +118,16 @@ options (20 sender and receiver processes per group)
 Suite for pipe() system call.
 Based on pipe-test-1m.c by Ingo Molnar.
 
+Create a number of processes (default is 2) and a pipe for each of
+them.  Then, send tokens using the pipe ends for a specified number of
+loops (default 1,000,000).
+
+By default, theses Processes send tokens of length 4 (an int) by
+simulating a ring structure which means each process has two peers.
+It sends the tokens to one of its peers and receives them from its other
+peer (in case of 2 processes those peers are identical and just the other
+process).
+
 Options of *pipe*
 ^^^^^^^^^^^^^^^^^
 -l::
@@ -126,11 +136,24 @@ Specify number of loops.
 
 -G::
 --cgroups=::
-Names of cgroups for sender and receiver, separated by a comma.
+Names of two cgroups separated by a comma.
++
+The worker processes will be added to the cgroups in an alternating
+fashion: processes with an even index go into the first one, those
+with an odd index into the second one.
++
 This is useful to check cgroup context switching overhead.
 Note that perf doesn't create nor delete the cgroups, so users should
-make sure that the cgroups exist and are accessible before use.
+make sure that the cgroups exist and are accessible before use, e.g.
+by
++
+------
+% mkdir /sys/fs/cgroup/{AAA,BBB}
+------
 
+-p::
+--nprocs=::
+Number of processes to use for sending tokens along the pipes.
 
 Example of *pipe*
 ^^^^^^^^^^^^^^^^^

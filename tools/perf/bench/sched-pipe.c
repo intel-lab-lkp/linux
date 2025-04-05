@@ -32,7 +32,8 @@
 #include <pthread.h>
 
 struct thread_data {
-	int			nr;
+	unsigned int		nr;		/* index of this worker */
+	pid_t			pid;
 	int			pipe_read;
 	int			pipe_write;
 	struct epoll_event      epoll_ev;
@@ -42,10 +43,11 @@ struct thread_data {
 };
 
 #define LOOPS_DEFAULT 1000000
-static	int			loops = LOOPS_DEFAULT;
+static	unsigned int		loops = LOOPS_DEFAULT;
 
 /* Use processes by default: */
 static bool			threaded;
+static unsigned int		nr_threads = 2;
 
 static bool			nonblocking;
 static char			*cgrp_names[2];
@@ -86,7 +88,8 @@ out:
 
 static const struct option options[] = {
 	OPT_BOOLEAN('n', "nonblocking",	&nonblocking,	"Use non-blocking operations"),
-	OPT_INTEGER('l', "loop",	&loops,		"Specify number of loops"),
+	OPT_UINTEGER('p', "nprocs",	&nr_threads,    "Number of processes"),
+	OPT_UINTEGER('l', "loop",	&loops,		"Specify number of loops"),
 	OPT_BOOLEAN('T', "threaded",	&threaded,	"Specify threads/process based task setup"),
 	OPT_CALLBACK('G', "cgroups", NULL, "SEND,RECV",
 		     "Put sender and receivers in given cgroups",
@@ -107,15 +110,15 @@ static int enter_cgroup(int nr)
 	struct cgroup *cgrp;
 	pid_t pid;
 
-	if (cgrp_names[nr] == NULL)
+	if (cgrp_names[nr % 2] == NULL)
 		return 0;
 
-	if (cgrps[nr] == NULL) {
-		cgrps[nr] = cgroup__new(cgrp_names[nr], /*do_open=*/true);
-		if (cgrps[nr] == NULL)
+	if (cgrps[nr % 2] == NULL) {
+		cgrps[nr % 2] = cgroup__new(cgrp_names[nr % 2], /*do_open=*/true);
+		if (cgrps[nr % 2] == NULL)
 			goto err;
 	}
-	cgrp = cgrps[nr];
+	cgrp = cgrps[nr % 2];
 
 	if (threaded)
 		pid = syscall(__NR_gettid);
@@ -149,14 +152,14 @@ static int enter_cgroup(int nr)
 
 err:
 	saved_errno = errno;
-	printf("Failed to open cgroup file in %s\n", cgrp_names[nr]);
+	printf("Failed to open cgroup file in %s\n", cgrp_names[nr % 2]);
 
 	if (saved_errno == ENOENT) {
 		char mnt[PATH_MAX];
 
 		if (cgroupfs_find_mountpoint(mnt, sizeof(mnt), "perf_event") == 0)
 			printf(" Hint: create the cgroup first, like 'mkdir %s/%s'\n",
-			       mnt, cgrp_names[nr]);
+			       mnt, cgrp_names[nr % 2]);
 	} else if (saved_errno == EACCES && geteuid() > 0) {
 		printf(" Hint: try to run as root\n");
 	}
@@ -166,8 +169,8 @@ err:
 
 static void exit_cgroup(int nr)
 {
-	cgroup__put(cgrps[nr]);
-	free(cgrp_names[nr]);
+	cgroup__put(cgrps[nr % 2]);
+	free(cgrp_names[nr % 2]);
 }
 
 static inline int read_pipe(struct thread_data *td)
@@ -185,81 +188,106 @@ retry:
 	return ret;
 }
 
+/*
+ * Worker thread for nodes forming a ring, receiving tokens from the left
+ * neighbor and sending them to the right one.
+ */
 static void *worker_thread(void *__tdata)
 {
-	struct thread_data *td = __tdata;
-	int i, ret, m = 0;
+	struct thread_data *this_thread = __tdata;
+	struct thread_data *first_thread = this_thread - this_thread->nr;
 
-	ret = enter_cgroup(td->nr);
+	unsigned int i;
+	int ret, m = 0;
+	int write_fd;
+
+	ret = enter_cgroup(this_thread->nr);
 	if (ret < 0) {
-		td->cgroup_failed = true;
+		this_thread->cgroup_failed = true;
 		return NULL;
 	}
 
 	if (nonblocking) {
-		td->epoll_ev.events = EPOLLIN;
-		td->epoll_fd = epoll_create(1);
-		BUG_ON(td->epoll_fd < 0);
-		BUG_ON(epoll_ctl(td->epoll_fd, EPOLL_CTL_ADD, td->pipe_read, &td->epoll_ev) < 0);
+		this_thread->epoll_ev.events = EPOLLIN;
+		this_thread->epoll_fd = epoll_create(1);
+		BUG_ON(this_thread->epoll_fd < 0);
+		BUG_ON(epoll_ctl(this_thread->epoll_fd, EPOLL_CTL_ADD, this_thread->pipe_read, &this_thread->epoll_ev) < 0);
 	}
 
+	/* Find write_fd of right peer in the ring. */
+	if ((this_thread->nr + 1) == nr_threads)
+		write_fd = first_thread->pipe_write;
+	else
+		write_fd = (this_thread + 1)->pipe_write;
+
+
 	for (i = 0; i < loops; i++) {
-		ret = write(td->pipe_write, &m, sizeof(int));
+		ret = write(write_fd, &m, sizeof(int));
 		BUG_ON(ret != sizeof(int));
-		ret = read_pipe(td);
+		ret = read_pipe(this_thread);
 		BUG_ON(ret != sizeof(int));
 	}
 
 	return NULL;
 }
 
+static struct thread_data *create_thread_data(void)
+{
+	struct thread_data *threads;
+	int __maybe_unused flags = 0;
+	int pipe_fds[2];
+	unsigned int i;
+
+	if (nonblocking)
+		flags |= O_NONBLOCK;
+
+	threads = malloc(nr_threads * sizeof(struct thread_data));
+
+	if (!threads) {
+		fprintf(stderr, "Allocation of thread data memory failed.");
+		exit(1);
+	}
+
+	for (i = 0; i < nr_threads; i++) {
+		threads[i].nr = i;
+
+		BUG_ON(pipe2(pipe_fds, flags));
+
+		threads[i].pipe_read = pipe_fds[0];
+		threads[i].pipe_write = pipe_fds[1];
+	}
+
+	return threads;
+}
+
 int bench_sched_pipe(int argc, const char **argv)
 {
-	struct thread_data threads[2] = {};
+	struct thread_data *threads;
 	struct thread_data *td;
-	int pipe_1[2], pipe_2[2];
+
 	struct timeval start, stop, diff;
 	unsigned long long result_usec = 0;
-	int nr_threads = 2;
-	int t;
+	unsigned int t;
 
 	/*
 	 * why does "ret" exist?
 	 * discarding returned value of read(), write()
 	 * causes error in building environment for perf
 	 */
-	int __maybe_unused ret, wait_stat, flags = 0;
-	pid_t pid, retpid __maybe_unused;
+	int __maybe_unused ret, wait_stat;
+	pid_t retpid __maybe_unused;
 
 	argc = parse_options(argc, argv, options, bench_sched_pipe_usage, 0);
 
-	if (nonblocking)
-		flags |= O_NONBLOCK;
-
-	BUG_ON(pipe2(pipe_1, flags));
-	BUG_ON(pipe2(pipe_2, flags));
+	threads = create_thread_data();
 
 	gettimeofday(&start, NULL);
-
-	for (t = 0; t < nr_threads; t++) {
-		td = threads + t;
-
-		td->nr = t;
-
-		if (t == 0) {
-			td->pipe_read = pipe_1[0];
-			td->pipe_write = pipe_2[1];
-		} else {
-			td->pipe_write = pipe_1[1];
-			td->pipe_read = pipe_2[0];
-		}
-	}
 
 	if (threaded) {
 		for (t = 0; t < nr_threads; t++) {
 			td = threads + t;
 
-			ret = pthread_create(&td->pthread, NULL, worker_thread, td);
+			ret = pthread_create(&td->pthread, NULL, worker_thread, threads + t);
 			BUG_ON(ret);
 		}
 
@@ -270,18 +298,26 @@ int bench_sched_pipe(int argc, const char **argv)
 			BUG_ON(ret);
 		}
 	} else {
-		pid = fork();
-		assert(pid >= 0);
+		/*
+		 * Start at '1', because the parent eventually also becomes a
+		 * worker.
+		 */
+		for (t = 1; t < nr_threads; t++) {
+			threads[t].pid = fork();
+			assert(threads[t].pid >= 0);
 
-		if (!pid) {
-			worker_thread(threads + 0);
-			exit(0);
-		} else {
-			worker_thread(threads + 1);
+			if (!threads[t].pid) {
+				worker_thread(threads + t);
+				exit(0);
+			}
 		}
 
-		retpid = waitpid(pid, &wait_stat, 0);
-		assert((retpid == pid) && WIFEXITED(wait_stat));
+		worker_thread(threads);
+
+		for (t = 1; t < nr_threads; t++) {
+			retpid = waitpid(threads[t].pid, &wait_stat, 0);
+			assert((retpid == threads[t].pid) && WIFEXITED(wait_stat));
+		}
 	}
 
 	gettimeofday(&stop, NULL);
@@ -295,8 +331,8 @@ int bench_sched_pipe(int argc, const char **argv)
 
 	switch (bench_format) {
 	case BENCH_FORMAT_DEFAULT:
-		printf("# Executed %d pipe operations between two %s\n\n",
-			loops, threaded ? "threads" : "processes");
+		printf("# Executed %d pipe operations between %u %s\n\n", loops,
+		       nr_threads, threaded ? "threads" : "processes");
 
 		result_usec = diff.tv_sec * USEC_PER_SEC;
 		result_usec += diff.tv_usec;
