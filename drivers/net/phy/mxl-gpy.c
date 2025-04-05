@@ -110,9 +110,11 @@
 #define VSPEC1_MBOX_DATA	0x5
 #define VSPEC1_MBOX_ADDRLO	0x6
 #define VSPEC1_MBOX_CMD		0x7
-#define VSPEC1_MBOX_CMD_ADDRHI	GENMASK(7, 0)
-#define VSPEC1_MBOX_CMD_RD	(0 << 8)
 #define VSPEC1_MBOX_CMD_READY	BIT(15)
+#define VSPEC1_MBOX_CMD_MASK	GENMASK(11, 8)
+#define VSPEC1_MBOX_CMD_WR	0x1
+#define VSPEC1_MBOX_CMD_RD	0x0
+#define VSPEC1_MBOX_CMD_ADDRHI	GENMASK(7, 0)
 
 /* WoL */
 #define VPSPEC2_WOL_CTL		0x0E06
@@ -123,6 +125,15 @@
 
 /* Internal registers, access via mbox */
 #define REG_GPIO0_OUT		0xd3ce00
+
+/* LED Brightness registers, access via mbox */
+#define LED_BRT_CTRL		0xd3cf84
+#define LED_BRT_CTRL_LVLMAX	GENMASK(15, 12)
+#define LED_BRT_CTRL_LVLMIN	GENMASK(11, 8)
+#define LED_BRT_CTRL_EN		BIT(5)
+#define LED_BRT_CTRL_TSEN	BIT(4)
+
+#define GPY_MAX_BRIGHTNESS	15
 
 struct gpy_priv {
 	/* serialize mailbox acesses */
@@ -138,6 +149,9 @@ struct gpy_priv {
 	 * is enabled.
 	 */
 	u64 lb_dis_to;
+
+	/* LED index with brightness control enabled */
+	int br_led_index;
 };
 
 static const struct {
@@ -261,7 +275,7 @@ static int gpy_mbox_read(struct phy_device *phydev, u32 addr)
 	if (ret)
 		goto out;
 
-	cmd = VSPEC1_MBOX_CMD_RD;
+	cmd = FIELD_PREP(VSPEC1_MBOX_CMD_MASK, VSPEC1_MBOX_CMD_RD);
 	cmd |= FIELD_PREP(VSPEC1_MBOX_CMD_ADDRHI, addr >> 16);
 
 	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_MBOX_CMD, cmd);
@@ -281,6 +295,46 @@ static int gpy_mbox_read(struct phy_device *phydev, u32 addr)
 		goto out;
 
 	ret = phy_read_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_MBOX_DATA);
+
+out:
+	mutex_unlock(&priv->mbox_lock);
+	return ret;
+}
+
+static int gpy_mbox_write(struct phy_device *phydev, u32 addr, u16 data)
+{
+	struct gpy_priv *priv = phydev->priv;
+	int val, ret;
+	u16 cmd;
+
+	mutex_lock(&priv->mbox_lock);
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_MBOX_DATA,
+			    data);
+	if (ret)
+		goto out;
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_MBOX_ADDRLO,
+			    addr);
+	if (ret)
+		goto out;
+
+	cmd = FIELD_PREP(VSPEC1_MBOX_CMD_MASK, VSPEC1_MBOX_CMD_WR);
+	cmd |= FIELD_PREP(VSPEC1_MBOX_CMD_ADDRHI, addr >> 16);
+
+	ret = phy_write_mmd(phydev, MDIO_MMD_VEND1, VSPEC1_MBOX_CMD, cmd);
+	if (ret)
+		goto out;
+
+	/* The mbox read is used in the interrupt workaround. It was observed
+	 * that a read might take up to 2.5ms. This is also the time for which
+	 * the interrupt line is stuck low. To be on the safe side, poll the
+	 * ready bit for 10ms.
+	 */
+	ret = phy_read_mmd_poll_timeout(phydev, MDIO_MMD_VEND1,
+					VSPEC1_MBOX_CMD, val,
+					(val & VSPEC1_MBOX_CMD_READY),
+					500, 10000, false);
 
 out:
 	mutex_unlock(&priv->mbox_lock);
@@ -317,6 +371,7 @@ static int gpy_probe(struct phy_device *phydev)
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+	priv->br_led_index = -1;
 	phydev->priv = priv;
 	mutex_init(&priv->mbox_lock);
 
@@ -858,7 +913,8 @@ static int gpy115_loopback(struct phy_device *phydev, bool enable, int speed)
 static int gpy_led_brightness_set(struct phy_device *phydev,
 				  u8 index, enum led_brightness value)
 {
-	int ret;
+	struct gpy_priv *priv = phydev->priv;
+	int ret, reg;
 
 	if (index >= GPY_MAX_LEDS)
 		return -EINVAL;
@@ -871,7 +927,21 @@ static int gpy_led_brightness_set(struct phy_device *phydev,
 	if (ret)
 		return ret;
 
-	/* ToDo: set PWM brightness */
+	/* Set PWM brightness */
+	if (index == priv->br_led_index) {
+		if (value > LED_OFF && value < GPY_MAX_BRIGHTNESS) {
+			reg = LED_BRT_CTRL_EN;
+
+			reg |= FIELD_PREP(LED_BRT_CTRL_LVLMIN, 0x4);
+			reg |= FIELD_PREP(LED_BRT_CTRL_LVLMAX, value);
+		} else {
+			reg = LED_BRT_CTRL_TSEN;
+		}
+
+		ret = gpy_mbox_write(phydev, LED_BRT_CTRL, reg);
+		if (ret < 0)
+			return ret;
+	}
 
 	/* clear HW LED setup */
 	if (value == LED_OFF)
@@ -880,6 +950,17 @@ static int gpy_led_brightness_set(struct phy_device *phydev,
 		return 0;
 }
 
+static int gpy_led_max_brightness(struct phy_device *phydev, u8 index)
+{
+	struct gpy_priv *priv = phydev->priv;
+
+	if (priv->br_led_index < 0) {
+		priv->br_led_index = index;
+		return GPY_MAX_BRIGHTNESS;
+	}
+
+	return 1;
+}
 static const unsigned long supported_triggers = (BIT(TRIGGER_NETDEV_LINK) |
 						 BIT(TRIGGER_NETDEV_LINK_10) |
 						 BIT(TRIGGER_NETDEV_LINK_100) |
@@ -1032,6 +1113,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1055,6 +1137,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy115_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1077,6 +1160,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy115_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1100,6 +1184,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1122,6 +1207,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1145,6 +1231,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1167,6 +1254,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1190,6 +1278,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
@@ -1212,6 +1301,7 @@ static struct phy_driver gpy_drivers[] = {
 		.get_wol	= gpy_get_wol,
 		.set_loopback	= gpy_loopback,
 		.led_brightness_set = gpy_led_brightness_set,
+		.led_max_brightness = gpy_led_max_brightness,
 		.led_hw_is_supported = gpy_led_hw_is_supported,
 		.led_hw_control_get = gpy_led_hw_control_get,
 		.led_hw_control_set = gpy_led_hw_control_set,
