@@ -111,7 +111,7 @@ int cxusb_ctrl_msg(struct dvb_usb_device *d,
 static void cxusb_gpio_tuner(struct dvb_usb_device *d, int onoff)
 {
 	struct cxusb_state *st = d->priv;
-	u8 o[2], i;
+	u8 o[2], i = 0;
 
 	if (st->gpio_write_state[GPIO_TUNER] == onoff &&
 	    !st->gpio_write_refresh[GPIO_TUNER])
