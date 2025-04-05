@@ -6387,6 +6387,43 @@ retry:
 	return ret;
 }
 EXPORT_SYMBOL(mtree_insert_range);
+/**
+ * __mtree_insert_range() - Insert an entry at a given range if there is no value. without locking
+ * @mt: The maple tree
+ * @first: The start of the range
+ * @last: The end of the range
+ * @entry: The entry to store
+ * @gfp: The GFP_FLAGS to use for allocations.
+ *
+ * Return: 0 on success, -EEXISTS if the range is occupied, -EINVAL on invalid
+ * request, -ENOMEM if memory could not be allocated.
+ * Note that the user needs to manually lock the  tree.
+ */
+int __mtree_insert_range(struct maple_tree *mt, unsigned long first,
+		unsigned long last, void *entry, gfp_t gfp)
+{
+	MA_STATE(ms, mt, first, last);
+	int ret = 0;
+
+	if (WARN_ON_ONCE(xa_is_advanced(entry)))
+		return -EINVAL;
+
+	if (first > last)
+		return -EINVAL;
+
+retry:
+	mas_insert(&ms, entry);
+	if (mas_nomem(&ms, gfp))
+		goto retry;
+
+	if (mas_is_err(&ms))
+		ret = xa_err(ms.node);
+
+	mas_destroy(&ms);
+	return ret;
+
+}
+EXPORT_SYMBOL(__mtree_insert_range);
 
 /**
  * mtree_insert() - Insert an entry at a given index if there is no value.

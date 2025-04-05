@@ -329,6 +329,8 @@ int mtree_insert(struct maple_tree *mt, unsigned long index,
 		void *entry, gfp_t gfp);
 int mtree_insert_range(struct maple_tree *mt, unsigned long first,
 		unsigned long last, void *entry, gfp_t gfp);
+int __mtree_insert_range(struct maple_tree *mt, unsigned long first,
+		unsigned long last, void *entry, gfp_t gfp);
 int mtree_alloc_range(struct maple_tree *mt, unsigned long *startp,
 		void *entry, unsigned long size, unsigned long min,
 		unsigned long max, gfp_t gfp);
