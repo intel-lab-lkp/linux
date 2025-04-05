@@ -25,6 +25,8 @@
 #include <linux/minmax.h>
 #include <linux/log2.h>
 
+#include <generated/autoconf.h>
+
 /* Not needed on 64bit architectures */
 #if BITS_PER_LONG == 32
 
@@ -183,10 +185,22 @@ u32 iter_div_u64_rem(u64 dividend, u32 divisor, u64 *remainder)
 }
 EXPORT_SYMBOL(iter_div_u64_rem);
 
-#if !defined(mul_u64_add_u64_div_u64)
+/*
+ * If the architecture overrides the implementation below and the test module
+ * is being built then compile the default implementation with a different name
+ * so that it can be tested.
+ */
+#if defined(mul_u64_add_u64_div_u64) && (defined(CONFIG_TEST_MULDIV64) || defined(CONFIG_TEST_MULDIV64_MODULE))
+#define TEST_MULDIV64
+#undef mul_u64_add_u64_div_u64
+#define mul_u64_add_u64_div_u64 mul_u64_add_u64_div_u64_test
+u64 mul_u64_add_u64_div_u64_test(u64 a, u64 b, u64 c, u64 d);
+#endif
+
+#if !defined( mul_u64_add_u64_div_u64) || defined(TEST_MULDIV64)
 u64 mul_u64_add_u64_div_u64(u64 a, u64 b, u64 c, u64 d)
 {
-#if defined(__SIZEOF_INT128__)
+#if defined(__SIZEOF_INT128__) && !defined(TEST_MULDIV64)
 
 	/* native 64x64=128 bits multiplication */
 	u128 prod = (u128)a * b + c;

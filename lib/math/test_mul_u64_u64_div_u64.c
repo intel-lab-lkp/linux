@@ -73,6 +73,10 @@ done
 
  */
 
+#ifdef mul_u64_add_u64_div_u64
+u64 mul_u64_add_u64_div_u64_test(u64 a, u64 b, u64 add, u64 c);
+#endif
+
 static int __init test_init(void)
 {
 	int errors = 0;
@@ -80,13 +84,23 @@ static int __init test_init(void)
 
 	pr_info("Starting mul_u64_u64_div_u64() test\n");
 
-	for (i = 0; i < ARRAY_SIZE(test_values); i++) {
-		u64 a = test_values[i].a;
-		u64 b = test_values[i].b;
-		u64 c = test_values[i].c;
-		u64 expected_result = test_values[i].result;
+	for (i = 0; i < ARRAY_SIZE(test_values) * 2; i++) {
+		u64 a = test_values[i / 2].a;
+		u64 b = test_values[i / 2].b;
+		u64 c = test_values[i / 2].c;
+		u64 expected_result = test_values[i / 2].result;
 		u64 result = mul_u64_u64_div_u64(a, b, c);
 		u64 result_up = mul_u64_u64_div_u64_roundup(a, b, c);
+
+#ifdef mul_u64_add_u64_div_u64
+		if (i & 1) {
+			/* Verify the generic C version */
+			result = mul_u64_add_u64_div_u64_test(a, b, 0, c);
+			result_up = mul_u64_add_u64_div_u64_test(a, b, c - 1, c);
+		}
+#else
+		i++;
+#endif
 
 		if (result != expected_result) {
 			pr_err("ERROR: 0x%016llx * 0x%016llx / 0x%016llx\n", a, b, c);
@@ -94,7 +108,7 @@ static int __init test_init(void)
 			pr_err("ERROR: obtained result: %016llx\n", result);
 			errors++;
 		}
-		expected_result += test_values[i].round_up;
+		expected_result += test_values[i / 2].round_up;
 		if (result_up != expected_result) {
 			pr_err("ERROR: 0x%016llx * 0x%016llx +/ 0x%016llx\n", a, b, c);
 			pr_err("ERROR: expected result: %016llx\n", expected_result);
