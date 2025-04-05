@@ -1173,6 +1173,13 @@ struct phy_driver {
 				  u8 index, enum led_brightness value);
 
 	/**
+	 * @led_max_brightness: Maximum number of brightness levels
+	 * supported by hardware. When only two levels are supported
+	 * i.e. LED_ON and LED_OFF the function can be omitted.
+	 */
+	int (*led_max_brightness)(struct phy_device *dev, u8 index);
+
+	/**
 	 * @led_blink_set: Set a PHY LED blinking.  Index indicates
 	 * which of the PHYs led should be configured to blink. Delays
 	 * are in milliseconds and if both are zero then a sensible
