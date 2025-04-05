@@ -716,11 +716,20 @@ static void init_debugfs(struct tegra_pcie_dw *pcie)
 	debugfs_create_devm_seqfile(pcie->dev, "aspm_state_cnt", pcie->debugfs,
 				    aspm_state_cnt);
 }
+
+static void deinit_debugfs(struct tegra_pcie_dw *pcie)
+{
+	if (!pcie->debugfs)
+		return;
+
+	debugfs_remove_recursive(pcie->debugfs);
+}
 #else
 static inline void disable_aspm_l12(struct tegra_pcie_dw *pcie) { return; }
 static inline void disable_aspm_l11(struct tegra_pcie_dw *pcie) { return; }
 static inline void init_host_aspm(struct tegra_pcie_dw *pcie) { return; }
 static inline void init_debugfs(struct tegra_pcie_dw *pcie) { return; }
+static inline void deinit_debugfs(struct tegra_pcie_dw *pcie) { return; }
 #endif
 
 static void tegra_pcie_enable_system_interrupts(struct dw_pcie_rp *pp)
@@ -2289,7 +2298,7 @@ static void tegra_pcie_dw_remove(struct platform_device *pdev)
 		if (!pcie->link_state)
 			return;
 
-		debugfs_remove_recursive(pcie->debugfs);
+		deinit_debugfs(pcie->debugfs);
 		tegra_pcie_deinit_controller(pcie);
 		pm_runtime_put_sync(pcie->dev);
 	} else {
@@ -2408,7 +2417,7 @@ static void tegra_pcie_dw_shutdown(struct platform_device *pdev)
 		if (!pcie->link_state)
 			return;
 
-		debugfs_remove_recursive(pcie->debugfs);
+		deinit_debugfs(pcie->debugfs);
 		tegra_pcie_downstream_dev_to_D0(pcie);
 
 		disable_irq(pcie->pci.pp.irq);
