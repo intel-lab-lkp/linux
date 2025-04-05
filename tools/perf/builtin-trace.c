@@ -1990,7 +1990,7 @@ static int trace__symbols_init(struct trace *trace, struct evlist *evlist)
 	if (err)
 		return err;
 
-	trace->host = machine__new_host();
+	trace->host = machine__new_host(callchain_param.enabled && trace->kernel_syscallchains);
 	if (trace->host == NULL)
 		return -ENOMEM;
 

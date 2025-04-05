@@ -654,7 +654,7 @@ static int do_test_code_reading(bool try_kcore)
 
 	pid = getpid();
 
-	machine = machine__new_host();
+	machine = machine__new_host(true);
 	machine->env = &perf_env;
 
 	ret = machine__create_kernel_maps(machine);

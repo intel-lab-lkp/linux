@@ -167,7 +167,7 @@ static int mmap_events(synth_cb synth)
 	 */
 	TEST_ASSERT_VAL("failed to create threads", !threads_create());
 
-	machine = machine__new_host();
+	machine = machine__new_host(true);
 
 	dump_trace = verbose > 1 ? 1 : 0;
 

@@ -47,7 +47,7 @@ static void buildid__show_kernel_maps(void)
 {
 	struct machine *machine;
 
-	machine = machine__new_host();
+	machine = machine__new_host(true);
 	machine__for_each_kernel_map(machine, buildid__map_cb, NULL);
 	machine__delete(machine);
 }
