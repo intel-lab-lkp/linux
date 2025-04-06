@@ -1659,8 +1659,16 @@ int pnfs_roc_done(struct rpc_task *task, struct nfs4_layoutreturn_args **argpp,
 		break;
 	case -NFS4ERR_NOMATCHING_LAYOUT:
 		/* Was there an RPC level error? If not, retry */
-		if (task->tk_rpc_status == 0)
+		if (task->tk_rpc_status == 0) {
+			if ((task->tk_rpc_status == -ENETDOWN ||
+			     task->tk_rpc_status == -ENETUNREACH) &&
+			    task->tk_flags & RPC_TASK_NETUNREACH_FATAL) {
+				*ret = 0;
+				(*respp)->lrs_present = 0;
+				retval = -EIO;
+			}
 			break;
+		}
 		/* If the call was not sent, let caller handle it */
 		if (!RPC_WAS_SENT(task))
 			return 0;
