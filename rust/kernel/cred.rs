@@ -6,7 +6,7 @@
 //!
 //! C header: [`include/linux/cred.h`](srctree/include/linux/cred.h).
 //!
-//! Reference: <https://www.kernel.org/doc/html/latest/security/credentials.html>
+//! Reference: [kernel documentation: Credentials](https://www.kernel.org/doc/html/latest/security/credentials.html)
 
 use crate::{
     bindings,

@@ -152,7 +152,7 @@ pub unsafe trait Allocator {
     /// - aligned to `layout.align()`,
     ///
     /// Additionally, `Flags` are honored as documented in
-    /// <https://docs.kernel.org/core-api/mm-api.html#mm-api-gfp-flags>.
+    /// [kernel documentation: GFP flags](https://docs.kernel.org/core-api/mm-api.html#mm-api-gfp-flags).
     fn alloc(layout: Layout, flags: Flags) -> Result<NonNull<[u8]>, AllocError> {
         // SAFETY: Passing `None` to `realloc` is valid by its safety requirements and asks for a
         // new memory allocation.

@@ -3,9 +3,9 @@
 //! Rust standard library vendored code.
 //!
 //! The contents of this file come from the Rust standard library, hosted in
-//! the <https://github.com/rust-lang/rust> repository, licensed under
+//! the [rust-lang/rust](https://github.com/rust-lang/rust) repository, licensed under
 //! "Apache-2.0 OR MIT" and adapted for kernel use. For copyright details,
-//! see <https://github.com/rust-lang/rust/blob/master/COPYRIGHT>.
+//! see [rust-lang/rust/blob/master/COPYRIGHT].
 
 /// [`std::dbg`], but using [`pr_info`] instead of [`eprintln`].
 ///

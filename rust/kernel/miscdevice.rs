@@ -6,7 +6,7 @@
 //!
 //! C headers: [`include/linux/miscdevice.h`](srctree/include/linux/miscdevice.h).
 //!
-//! Reference: <https://www.kernel.org/doc/html/latest/driver-api/misc_devices.html>
+//! Reference: [kernel documentation: Miscdevices](https://www.kernel.org/doc/html/latest/driver-api/misc_devices.html)
 
 use crate::{
     bindings,

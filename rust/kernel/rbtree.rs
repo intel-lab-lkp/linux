@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/rbtree.h`](srctree/include/linux/rbtree.h)
 //!
-//! Reference: <https://docs.kernel.org/core-api/rbtree.html>
+//! Reference: [kernel documentation: Rbtree](https://docs.kernel.org/core-api/rbtree.html)
 
 use crate::{alloc::Flags, bindings, container_of, error::Result, prelude::*};
 use core::{

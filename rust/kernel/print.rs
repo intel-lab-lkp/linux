@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/linux/printk.h`](srctree/include/linux/printk.h)
 //!
-//! Reference: <https://docs.kernel.org/core-api/printk-basics.html>
+//! Reference: [kernel documentation: Printk basics](https://docs.kernel.org/core-api/printk-basics.html)
 
 use crate::{
     ffi::{c_char, c_void},

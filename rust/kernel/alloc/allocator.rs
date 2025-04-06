@@ -6,7 +6,7 @@
 //! linked below. For instance, this includes the concept of "get free page" (GFP) flags and the
 //! typical application of the different kernel allocators.
 //!
-//! Reference: <https://docs.kernel.org/core-api/memory-allocation.html>
+//! Reference: [kernel documentation: Memory Allocation](https://docs.kernel.org/core-api/memory-allocation.html)
 
 use super::Flags;
 use core::alloc::Layout;

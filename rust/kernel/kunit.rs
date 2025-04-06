@@ -4,7 +4,7 @@
 //!
 //! C header: [`include/kunit/test.h`](srctree/include/kunit/test.h)
 //!
-//! Reference: <https://docs.kernel.org/dev-tools/kunit/index.html>
+//! Reference: [kernel documentation: KUnit](https://docs.kernel.org/dev-tools/kunit/index.html)
 
 use core::{ffi::c_void, fmt};
 
