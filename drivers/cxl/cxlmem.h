@@ -871,6 +871,7 @@ int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd);
  * struct cxl_hdm - HDM Decoder registers and cached / decoded capabilities
  * @regs: mapped registers, see devm_cxl_setup_hdm()
  * @decoder_count: number of decoders for this port
+ * @decoder_count_cap: number of decoders from HDM Decoder Capability
  * @target_count: for switch decoders, max downstream port targets
  * @interleave_mask: interleave granularity capability, see check_interleave_cap()
  * @iw_cap_mask: bitmask of supported interleave ways, see check_interleave_cap()
@@ -879,6 +880,7 @@ int cxl_mem_sanitize(struct cxl_memdev *cxlmd, u16 cmd);
 struct cxl_hdm {
 	struct cxl_component_regs regs;
 	unsigned int decoder_count;
+	unsigned int decoder_count_cap;
 	unsigned int target_count;
 	unsigned int interleave_mask;
 	unsigned long iw_cap_mask;

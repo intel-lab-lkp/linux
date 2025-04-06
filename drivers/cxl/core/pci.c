@@ -403,7 +403,7 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 	struct cxl_port *port = cxlhdm->port;
 	struct device *dev = cxlds->dev;
 	struct cxl_port *root;
-	int i, rc, allowed;
+	int i, rc, allowed = 0;
 	u32 global_ctrl = 0;
 
 	if (hdm)
@@ -426,15 +426,7 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 		return -ENODEV;
 	}
 
-	if (!info->mem_enabled) {
-		rc = devm_cxl_enable_hdm(&port->dev, cxlhdm);
-		if (rc)
-			return rc;
-
-		return devm_cxl_enable_mem(&port->dev, cxlds);
-	}
-
-	for (i = 0, allowed = 0; i < info->ranges; i++) {
+	for (i = 0; i < info->ranges; i++) {
 		struct device *cxld_dev;
 
 		cxld_dev = device_find_child(&root->dev, &info->dvsec_range[i],
@@ -446,6 +438,29 @@ int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
 		dev_dbg(dev, "DVSEC Range%d allowed by platform\n", i);
 		put_device(cxld_dev);
 		allowed++;
+	}
+
+	if (info->mem_enabled && !allowed) {
+		dev_warn(dev, "RR decodes outside ranges, have a try by disabling Mem_Enable bit.\n");
+
+		/*
+		 * Instead of Return error when RR decodes outside platform ranges, reenable
+		 * Mem_Enable bit of DVSEC control for a try.
+		 */
+		rc = cxl_set_mem_enable(cxlds, 0);
+		if (rc)
+			return rc;
+
+		info->mem_enabled = 0;
+		cxlhdm->decoder_count = cxlhdm->decoder_count_cap;
+	}
+
+	if (!info->mem_enabled) {
+		rc = devm_cxl_enable_hdm(&port->dev, cxlhdm);
+		if (rc)
+			return rc;
+
+		return devm_cxl_enable_mem(&port->dev, cxlds);
 	}
 
 	if (!allowed) {

@@ -80,7 +80,7 @@ static void parse_hdm_decoder_caps(struct cxl_hdm *cxlhdm)
 	u32 hdm_cap;
 
 	hdm_cap = readl(cxlhdm->regs.hdm_decoder + CXL_HDM_DECODER_CAP_OFFSET);
-	cxlhdm->decoder_count = cxl_hdm_decoder_count(hdm_cap);
+	cxlhdm->decoder_count_cap = cxlhdm->decoder_count = cxl_hdm_decoder_count(hdm_cap);
 	cxlhdm->target_count =
 		FIELD_GET(CXL_HDM_DECODER_TARGET_COUNT_MASK, hdm_cap);
 	if (FIELD_GET(CXL_HDM_DECODER_INTERLEAVE_11_8, hdm_cap))
