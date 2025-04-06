@@ -68,7 +68,7 @@
 //! `start` operation.
 
 use super::ClockId;
-use crate::{prelude::*, time::Ktime, types::Opaque};
+use crate::{prelude::*, time::Instant, types::Opaque};
 use core::marker::PhantomData;
 use pin_init::PinInit;
 
@@ -189,7 +189,7 @@ pub trait HrTimerPointer: Sync + Sized {
 
     /// Start the timer with expiry after `expires` time units. If the timer was
     /// already running, it is restarted with the new expiry time.
-    fn start(self, expires: Ktime) -> Self::TimerHandle;
+    fn start(self, expires: Instant) -> Self::TimerHandle;
 }
 
 /// Unsafe version of [`HrTimerPointer`] for situations where leaking the
@@ -220,7 +220,7 @@ pub unsafe trait UnsafeHrTimerPointer: Sync + Sized {
     ///
     /// Caller promises keep the timer structure alive until the timer is dead.
     /// Caller can ensure this by not leaking the returned [`Self::TimerHandle`].
-    unsafe fn start(self, expires: Ktime) -> Self::TimerHandle;
+    unsafe fn start(self, expires: Instant) -> Self::TimerHandle;
 }
 
 /// A trait for stack allocated timers.
@@ -232,7 +232,7 @@ pub unsafe trait UnsafeHrTimerPointer: Sync + Sized {
 pub unsafe trait ScopedHrTimerPointer {
     /// Start the timer to run after `expires` time units and immediately
     /// after call `f`. When `f` returns, the timer is cancelled.
-    fn start_scoped<T, F>(self, expires: Ktime, f: F) -> T
+    fn start_scoped<T, F>(self, expires: Instant, f: F) -> T
     where
         F: FnOnce() -> T;
 }
@@ -244,7 +244,7 @@ unsafe impl<T> ScopedHrTimerPointer for T
 where
     T: UnsafeHrTimerPointer,
 {
-    fn start_scoped<U, F>(self, expires: Ktime, f: F) -> U
+    fn start_scoped<U, F>(self, expires: Instant, f: F) -> U
     where
         F: FnOnce() -> U,
     {
@@ -366,12 +366,12 @@ pub unsafe trait HasHrTimer<T> {
     /// - `this` must point to a valid `Self`.
     /// - Caller must ensure that the pointee of `this` lives until the timer
     ///   fires or is canceled.
-    unsafe fn start(this: *const Self, expires: Ktime) {
+    unsafe fn start(this: *const Self, expires: Instant) {
         // SAFETY: By function safety requirement, `this` is a valid `Self`.
         unsafe {
             bindings::hrtimer_start_range_ns(
                 Self::c_timer_ptr(this).cast_mut(),
-                expires.to_ns(),
+                expires.as_nanos(),
                 0,
                 (*Self::raw_get_timer(this)).mode.into_c(),
             );
