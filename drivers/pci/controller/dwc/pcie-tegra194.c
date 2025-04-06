@@ -711,16 +711,27 @@ static void init_host_aspm(struct tegra_pcie_dw *pcie)
 	dw_pcie_writel_dbi(pci, PCIE_PORT_AFR, val);
 }
 
-static void init_debugfs(struct tegra_pcie_dw *pcie)
+static int init_debugfs(struct tegra_pcie_dw *pcie)
 {
-	debugfs_create_devm_seqfile(pcie->dev, "aspm_state_cnt", pcie->debugfs,
+	struct device *dev = pcie->dev;
+	char *name;
+
+	name = devm_kasprintf(dev, GFP_KERNEL, "%pOFP", dev->of_node);
+	if (!name)
+		return -ENOMEM;
+
+	pcie->debugfs = debugfs_create_dir(name, NULL);
+
+	debugfs_create_devm_seqfile(dev, "aspm_state_cnt", pcie->debugfs,
 				    aspm_state_cnt);
+
+	return 0;
 }
 #else
 static inline void disable_aspm_l12(struct tegra_pcie_dw *pcie) { return; }
 static inline void disable_aspm_l11(struct tegra_pcie_dw *pcie) { return; }
 static inline void init_host_aspm(struct tegra_pcie_dw *pcie) { return; }
-static inline void init_debugfs(struct tegra_pcie_dw *pcie) { return; }
+static inline int init_debugfs(struct tegra_pcie_dw *pcie) { return 0; }
 #endif
 
 static void tegra_pcie_enable_system_interrupts(struct dw_pcie_rp *pp)
@@ -1634,7 +1645,6 @@ static void tegra_pcie_deinit_controller(struct tegra_pcie_dw *pcie)
 static int tegra_pcie_config_rp(struct tegra_pcie_dw *pcie)
 {
 	struct device *dev = pcie->dev;
-	char *name;
 	int ret;
 
 	pm_runtime_enable(dev);
@@ -1664,14 +1674,9 @@ static int tegra_pcie_config_rp(struct tegra_pcie_dw *pcie)
 		goto fail_host_init;
 	}
 
-	name = devm_kasprintf(dev, GFP_KERNEL, "%pOFP", dev->of_node);
-	if (!name) {
-		ret = -ENOMEM;
+	ret = init_debugfs(pcie);
+	if (ret < 0)
 		goto fail_host_init;
-	}
-
-	pcie->debugfs = debugfs_create_dir(name, NULL);
-	init_debugfs(pcie);
 
 	return ret;
 
