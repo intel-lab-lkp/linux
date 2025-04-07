@@ -503,7 +503,7 @@ software_node_get_named_child_node(const struct fwnode_handle *fwnode,
 static int
 software_node_get_reference_args(const struct fwnode_handle *fwnode,
 				 const char *propname, const char *nargs_prop,
-				 unsigned int nargs, unsigned int index,
+				 int nargs, unsigned int index,
 				 struct fwnode_reference_args *args)
 {
 	struct swnode *swnode = to_swnode(fwnode);
@@ -543,10 +543,15 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
 		error = property_entry_read_int_array(ref->node->properties,
 						      nargs_prop, sizeof(u32),
 						      &nargs_prop_val, 1);
-		if (error)
-			return error;
 
-		nargs = nargs_prop_val;
+		if (error == -EINVAL) {
+			if (nargs < 0)
+				return error;
+		} else if (error) {
+			return error;
+		} else {
+			nargs = nargs_prop_val;
+		}
 	}
 
 	if (nargs > NR_FWNODE_REFERENCE_ARGS)

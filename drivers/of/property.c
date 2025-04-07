@@ -1116,19 +1116,15 @@ of_fwnode_get_named_child_node(const struct fwnode_handle *fwnode,
 static int
 of_fwnode_get_reference_args(const struct fwnode_handle *fwnode,
 			     const char *prop, const char *nargs_prop,
-			     unsigned int nargs, unsigned int index,
+			     int nargs, unsigned int index,
 			     struct fwnode_reference_args *args)
 {
 	struct of_phandle_args of_args;
 	unsigned int i;
 	int ret;
 
-	if (nargs_prop)
-		ret = of_parse_phandle_with_args(to_of_node(fwnode), prop,
-						 nargs_prop, index, &of_args);
-	else
-		ret = of_parse_phandle_with_fixed_args(to_of_node(fwnode), prop,
-						       nargs, index, &of_args);
+	ret = __of_parse_phandle_with_args(to_of_node(fwnode), prop, nargs_prop,
+					   nargs, index, &of_args);
 	if (ret < 0)
 		return ret;
 	if (!args) {
