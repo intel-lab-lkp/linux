@@ -67,6 +67,12 @@ struct telem_entry {
 	struct pmt_event evts[];
 };
 
+/* Lookup table to get from resctrl event id to useful structures */
+static struct evtinfo {
+	struct telem_entry	*telem_entry;
+	struct pmt_event	*pmt_event;
+} evtinfo[QOS_NUM_EVENTS];
+
 /* All known telemetry event groups */
 static struct telem_entry *telem_entry[] = {
 	NULL
@@ -151,6 +157,7 @@ bool intel_aet_get_events(void)
 	struct pmt_feature_group *p2 __free(intel_pmt_put_feature_group) = NULL;
 	struct pkg_info *pkg __free(free_pkg_info) = NULL;
 	int num_pkgs = topology_max_packages();
+	struct telem_entry **tentry;
 	bool use_p1, use_p2;
 	int slot;
 
@@ -182,6 +189,17 @@ bool intel_aet_get_events(void)
 			slot = setup(pkg, i, p1, slot);
 		if (use_p2)
 			slot = setup(pkg, i, p2, slot);
+	}
+
+	for (tentry = telem_entry; *tentry; tentry++) {
+		if (!(*tentry)->active)
+			continue;
+		for (int i = 0; i < (*tentry)->num_events; i++) {
+			enum resctrl_event_id evtid = (*tentry)->evts[i].evtid;
+
+			evtinfo[evtid].telem_entry = *tentry;
+			evtinfo[evtid].pmt_event = &(*tentry)->evts[i];
+		}
 	}
 
 	if (use_p1)
