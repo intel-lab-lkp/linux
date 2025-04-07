@@ -163,17 +163,26 @@ pte_t contpte_ptep_get(pte_t *ptep, pte_t orig_pte)
 
 	pte_t pte;
 	int i;
+	bool dirty = false;
+	bool young = false;
 
 	ptep = contpte_align_down(ptep);
 
 	for (i = 0; i < CONT_PTES; i++, ptep++) {
 		pte = __ptep_get(ptep);
 
-		if (pte_dirty(pte))
+		if (!dirty && pte_dirty(pte)) {
+			dirty = true;
 			orig_pte = pte_mkdirty(orig_pte);
+		}
 
-		if (pte_young(pte))
+		if (!young && pte_young(pte)) {
+			young = true;
 			orig_pte = pte_mkyoung(orig_pte);
+		}
+
+		if (dirty && young)
+			break;
 	}
 
 	return orig_pte;
