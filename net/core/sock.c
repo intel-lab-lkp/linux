@@ -2489,17 +2489,14 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 		 */
 		if (!is_charged)
 			RCU_INIT_POINTER(newsk->sk_filter, NULL);
-		sk_free_unlock_clone(newsk);
-		newsk = NULL;
+
 		goto out;
 	}
+
 	RCU_INIT_POINTER(newsk->sk_reuseport_cb, NULL);
 
-	if (bpf_sk_storage_clone(sk, newsk)) {
-		sk_free_unlock_clone(newsk);
-		newsk = NULL;
+	if (bpf_sk_storage_clone(sk, newsk))
 		goto out;
-	}
 
 	/* Clear sk_user_data if parent had the pointer tagged
 	 * as not suitable for copying when cloning.
@@ -2528,19 +2525,14 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 	if (sock_needs_netstamp(sk) && newsk->sk_flags & SK_FLAGS_TIMESTAMP)
 		net_enable_timestamp();
 out:
-	return newsk;
-}
-EXPORT_SYMBOL_GPL(sk_clone_lock);
-
-void sk_free_unlock_clone(struct sock *sk)
-{
 	/* It is still raw copy of parent, so invalidate
 	 * destructor and make plain sk_free() */
-	sk->sk_destruct = NULL;
-	bh_unlock_sock(sk);
-	sk_free(sk);
+	newsk->sk_destruct = NULL;
+	bh_unlock_sock(newsk);
+	sk_free(newsk);
+	return NULL;
 }
-EXPORT_SYMBOL_GPL(sk_free_unlock_clone);
+EXPORT_SYMBOL_GPL(sk_clone_lock);
 
 static u32 sk_dst_gso_max_size(struct sock *sk, struct dst_entry *dst)
 {
