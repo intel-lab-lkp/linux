@@ -863,6 +863,18 @@ static struct mon_evt all_events[QOS_NUM_EVENTS] = {
 	},
 };
 
+int resctrl_set_event_attributes(enum resctrl_event_id evt,
+				 enum resctrl_event_type type, bool any_cpu)
+{
+	if (evt >= QOS_NUM_EVENTS)
+		return -ENOENT;
+
+	all_events[evt].type = type;
+	all_events[evt].any_cpu = any_cpu;
+
+	return 0;
+}
+
 int rdt_lookup_evtid_by_name(char *name)
 {
 	int evt;
