@@ -787,7 +787,7 @@ static void _intel_dsb_commit(struct intel_dsb *dsb, u32 ctrl,
 
 	intel_de_write_fw(display, DSB_INTERRUPT(pipe, dsb->id),
 			  dsb_error_int_status(display) | DSB_PROG_INT_STATUS |
-			  dsb_error_int_en(display) | DSB_PROG_INT_EN);
+			  dsb_error_int_en(display) | DSB_PROG_INT_EN | DSB_GOSUB_INT_EN);
 
 	intel_de_write_fw(display, DSB_HEAD(pipe, dsb->id),
 			  intel_dsb_head(dsb));
@@ -979,5 +979,8 @@ void intel_dsb_irq_handler(struct intel_display *display,
 			crtc->base.base.id, crtc->base.name, dsb_id);
 	if (errors & DSB_POLL_ERR_INT_STATUS)
 		drm_err(display->drm, "[CRTC:%d:%s] DSB %d poll error\n",
+			crtc->base.base.id, crtc->base.name, dsb_id);
+	if (errors & DSB_GOSUB_INT_STATUS)
+		drm_err(display->drm, "[CRTC:%d:%s] DSB %d gosub int error\n",
 			crtc->base.base.id, crtc->base.name, dsb_id);
 }
