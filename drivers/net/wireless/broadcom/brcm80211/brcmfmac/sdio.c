@@ -3898,8 +3898,9 @@ static void brcmf_sdio_buscore_activate(void *ctx, struct brcmf_chip *chip,
 
 	if (rstvec)
 		/* Write reset vector to address 0 */
-		brcmf_sdiod_ramrw(sdiodev, true, 0, (void *)&rstvec,
-				  sizeof(rstvec));
+		if (brcmf_sdiod_ramrw(sdiodev, true, 0, (void *)&rstvec,
+				      sizeof(rstvec)) < 0)
+			brcmf_err("Fail to reset vector\n");
 }
 
 static u32 brcmf_sdio_buscore_read32(void *ctx, u32 addr)
