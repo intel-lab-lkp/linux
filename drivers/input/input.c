@@ -509,6 +509,26 @@ void input_copy_abs(struct input_dev *dst, unsigned int dst_axis,
 EXPORT_SYMBOL(input_copy_abs);
 
 /**
+ * input_report_lock_sequence - Report key combination to lock the screen
+ * @dev: input device
+ *
+ * Key combination used in the PC industry since Windows 7 for locking display
+ * is META + L. This is also used in GNOME and KDE by default.
+ * See https://support.microsoft.com/en-us/windows/keyboard-shortcuts-in-windows-dcc61a57-8ff0-cffe-9796-cb9706c75eec
+ */
+void input_report_lock_sequence(struct input_dev *dev)
+{
+	input_report_key(dev, KEY_LEFTMETA, 1);
+	input_report_key(dev, KEY_L, 1);
+	input_sync(dev);
+	input_report_key(dev, KEY_L, 0);
+	input_sync(dev);
+	input_report_key(dev, KEY_LEFTMETA, 0);
+	input_sync(dev);
+}
+EXPORT_SYMBOL(input_report_lock_sequence);
+
+/**
  * input_grab_device - grabs device for exclusive use
  * @handle: input handle that wants to own the device
  *
