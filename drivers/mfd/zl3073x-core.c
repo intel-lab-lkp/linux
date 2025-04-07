@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/bitfield.h>
+#include <linux/mfd/core.h>
 #include <linux/module.h>
 #include <linux/unaligned.h>
 #include <net/devlink.h>
@@ -760,6 +761,11 @@ zl3073x_dev_state_fetch(struct zl3073x_dev *zldev)
 	return rc;
 }
 
+static const struct mfd_cell zl3073x_devs[] = {
+	MFD_CELL_BASIC("zl3073x-dpll", NULL, NULL, 0, 0),
+	MFD_CELL_BASIC("zl3073x-dpll", NULL, NULL, 0, 1),
+};
+
 int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 {
 	u16 id, revision, fw_ver;
@@ -804,6 +810,16 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id)
 		 FIELD_GET(GENMASK(23, 16), cfg_ver),
 		 FIELD_GET(GENMASK(15, 8), cfg_ver),
 		 FIELD_GET(GENMASK(7, 0), cfg_ver));
+
+	/* Add DPLL sub-device cells */
+	rc = devm_mfd_add_devices(zldev->dev, PLATFORM_DEVID_AUTO, zl3073x_devs,
+				  ARRAY_SIZE(zl3073x_devs), NULL, 0, NULL);
+	if (rc) {
+		dev_err(zldev->dev, "Failed to add sub-devices: %pe\n",
+			ERR_PTR(rc));
+
+		return rc;
+	}
 
 	devlink = priv_to_devlink(zldev);
 	devlink_register(devlink);
