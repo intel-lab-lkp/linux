@@ -46,6 +46,8 @@
 #define LCD_BIAS_EN 0x9F
 #define PWM_HYST 0x5
 
+#define CURRENT_SINKS_MASK GENMASK(5, 0)
+
 struct ktz8866_slave {
 	struct i2c_client *client;
 	struct regmap *regmap;
@@ -64,6 +66,12 @@ static const struct regmap_config ktz8866_regmap_config = {
 	.val_bits = 8,
 	.max_register = REG_MAX,
 };
+
+static inline void ktz8866_read(struct ktz8866 *ktz, unsigned int reg,
+				unsigned int *val)
+{
+	regmap_read(ktz->regmap, reg, &val);
+}
 
 static void ktz8866_write(struct ktz8866 *ktz, unsigned int reg,
 			  unsigned int val)
@@ -112,11 +120,18 @@ static void ktz8866_init(struct ktz8866 *ktz)
 {
 	unsigned int val = 0;
 
-	if (!of_property_read_u32(ktz->client->dev.of_node, "current-num-sinks", &val))
+	if (!of_property_read_u32(ktz->client->dev.of_node, "current-num-sinks", &val)) {
 		ktz8866_write(ktz, BL_EN, BIT(val) - 1);
-	else
-		/* Enable all 6 current sinks if the number of current sinks isn't specified. */
-		ktz8866_write(ktz, BL_EN, BIT(6) - 1);
+	} else {
+		/*
+		 * Enable all 6 current sinks if the number of current
+		 * sinks isn't specified and the bootloader didn't set
+		 * the value.
+		 */
+		ktz8866_read(ktz, BL_EN, &val);
+		if (!(val && CURRENT_SINKS_MASK))
+			ktz8866_write(ktz, BL_EN, CURRENT_SINKS_MASK);
+	}
 
 	if (!of_property_read_u32(ktz->client->dev.of_node, "kinetic,current-ramp-delay-ms", &val)) {
 		if (val <= 128)
