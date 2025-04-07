@@ -156,6 +156,58 @@ static void btrfs_repair_done(struct btrfs_failed_bio *fbio)
 	}
 }
 
+/*
+ * Since a single bio_vec can merge multiple physically contiguous pages
+ * into one bio_vec entry, we can have the following case:
+ *
+ * bv_page             bv_offset
+ * v                   v
+ * |    |    |   |   |   |   |
+ *
+ * In that case we need to grab the real page where bv_offset is at.
+ */
+static struct page *bio_vec_get_real_page(const struct bio_vec *bv)
+{
+	return bv->bv_page + (bv->bv_offset >> PAGE_SHIFT);
+}
+static struct folio *bio_vec_get_folio(const struct bio_vec *bv)
+{
+	return page_folio(bio_vec_get_real_page(bv));
+}
+
+static unsigned long bio_vec_get_folio_offset(const struct bio_vec *bv)
+{
+	const struct page *real_page = bio_vec_get_real_page(bv);
+	const struct folio *folio = page_folio(real_page);
+
+	/*
+	 * The following ASCII chart is to show how the calculation is done.
+	 *
+	 *                   real_page
+	 * bv_page           |   bv_offset (10K)
+	 * |                 |   |
+	 * v                 v   v
+	 * |        |        |       |
+	 * |<- F1 ->|<--- Folio 2 -->|
+	 *          | result off |
+	 *
+	 * '|' is page boundary.
+	 *
+	 * The folio is the one containing that real_page.
+	 * We want the real offset inside that folio.
+	 *
+	 * The result offset we want is of two parts:
+	 * - the offset of the real page to the folio page
+	 * - the offset inside that real page
+	 *
+	 * We can not use offset_in_folio() which will give an incorrect result.
+	 * (2K instead of 6K, as folio 1 has a different order)
+	 */
+	ASSERT(&folio->page <= real_page);
+	return (folio_page_idx(folio, real_page) << PAGE_SHIFT) +
+		offset_in_page(bv->bv_offset);
+}
+
 static void btrfs_end_repair_bio(struct btrfs_bio *repair_bbio,
 				 struct btrfs_device *dev)
 {
@@ -164,12 +216,6 @@ static void btrfs_end_repair_bio(struct btrfs_bio *repair_bbio,
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	struct bio_vec *bv = bio_first_bvec_all(&repair_bbio->bio);
 	int mirror = repair_bbio->mirror_num;
-
-	/*
-	 * We can only trigger this for data bio, which doesn't support larger
-	 * folios yet.
-	 */
-	ASSERT(folio_order(page_folio(bv->bv_page)) == 0);
 
 	if (repair_bbio->bio.bi_status ||
 	    !btrfs_data_csum_ok(repair_bbio, dev, 0, bv)) {
@@ -192,7 +238,8 @@ static void btrfs_end_repair_bio(struct btrfs_bio *repair_bbio,
 		btrfs_repair_io_failure(fs_info, btrfs_ino(inode),
 				  repair_bbio->file_offset, fs_info->sectorsize,
 				  repair_bbio->saved_iter.bi_sector << SECTOR_SHIFT,
-				  page_folio(bv->bv_page), bv->bv_offset, mirror);
+				  bio_vec_get_folio(bv), bio_vec_get_folio_offset(bv),
+				  mirror);
 	} while (mirror != fbio->bbio->mirror_num);
 
 done:
