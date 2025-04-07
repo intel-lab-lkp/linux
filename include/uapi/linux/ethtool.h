@@ -289,11 +289,24 @@ struct ethtool_tunable {
 #define ETHTOOL_PHY_EDPD_NO_TX			0xfffe
 #define ETHTOOL_PHY_EDPD_DISABLE		0
 
+/**
+ * SFF-8636 Spec in Signal Definition section (Other signals) mentions
+ * that 'Additional signals such as power, module present, interrupt, reset,
+ * and low-power mode may be implemented'. Below defines reflect present
+ * and reset signal statuses. Additionally ETHTOOL_PHY_MODULE_RESET
+ * in 'enum phy_tunable_id' will be used for reset pin toggle.
+ */
+#define ETHTOOL_PHY_MODULE_RESET_OFF            0x00
+#define ETHTOOL_PHY_MODULE_RESET_ON             0x01
+/* Not Available if module not present */
+#define ETHTOOL_PHY_MODULE_RESET_NA             0xff
+
 enum phy_tunable_id {
 	ETHTOOL_PHY_ID_UNSPEC,
 	ETHTOOL_PHY_DOWNSHIFT,
 	ETHTOOL_PHY_FAST_LINK_DOWN,
 	ETHTOOL_PHY_EDPD,
+	ETHTOOL_PHY_MODULE_RESET,
 	/*
 	 * Add your fresh new phy tunable attribute above and remember to update
 	 * phy_tunable_strings[] in net/ethtool/common.c
