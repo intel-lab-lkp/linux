@@ -896,6 +896,8 @@ struct ice_hw {
 	u64 debug_mask;		/* bitmap for debug mask */
 	enum ice_mac_type mac_type;
 
+	bool has_gpios;
+
 	u16 fd_ctr_base;	/* FD counter base index */
 
 	/* pci info */

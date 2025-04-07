@@ -4765,6 +4765,76 @@ static int ice_repr_ethtool_reset(struct net_device *dev, u32 *flags)
 	return ice_reset_vf(vf, ICE_VF_RESET_VFLR | ICE_VF_RESET_LOCK);
 }
 
+static int ice_get_phy_tunable(struct net_device *netdev,
+			       const struct ethtool_tunable *tuna, void *data)
+{
+	struct ice_netdev_priv *np = netdev_priv(netdev);
+	struct ice_vsi *vsi = np->vsi;
+	struct ice_pf *pf = vsi->back;
+	struct ice_hw *hw = &pf->hw;
+	u16 gpio_handle = 0; /* SOC/on-chip GPIO */
+	u8 *enabled = data;
+	bool value;
+
+	switch (tuna->id) {
+	case ETHTOOL_PHY_MODULE_RESET:
+		if (!hw->has_gpios)
+			return -EOPNOTSUPP;
+
+		if (ice_aq_get_gpio(hw, gpio_handle, ICE_GPIO_QSFP0_PRESENT,
+				    &value, NULL))
+			return -EIO;
+		if (!value) {
+			*enabled = ETHTOOL_PHY_MODULE_RESET_NA;
+		} else {
+			if (ice_aq_get_gpio(hw, gpio_handle, ICE_GPIO_QSFP0_RESET,
+					    &value, NULL))
+				return -EIO;
+			*enabled = value ? ETHTOOL_PHY_MODULE_RESET_ON :
+						ETHTOOL_PHY_FAST_LINK_DOWN_OFF;
+		}
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int ice_set_phy_tunable(struct net_device *netdev,
+			       const struct ethtool_tunable *tuna, const void *data)
+{
+	struct ice_netdev_priv *np = netdev_priv(netdev);
+	struct ice_vsi *vsi = np->vsi;
+	struct ice_pf *pf = vsi->back;
+	struct ice_hw *hw = &pf->hw;
+	u16 gpio_handle = 0; /* SOC/on-chip GPIO */
+	const u8 *enable = data;
+	bool value;
+
+	switch (tuna->id) {
+	case ETHTOOL_PHY_MODULE_RESET:
+		if (!hw->has_gpios)
+			return -EOPNOTSUPP;
+
+		if (*enable == ETHTOOL_PHY_MODULE_RESET_ON)
+			value = true;
+		else if (*enable == ETHTOOL_PHY_FAST_LINK_DOWN_OFF)
+			value = false;
+		else
+			return -EINVAL;
+
+		if (ice_aq_set_gpio(hw, gpio_handle, ICE_GPIO_QSFP0_RESET,
+				    value, NULL))
+			return -EIO;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct ethtool_ops ice_ethtool_ops = {
 	.cap_rss_ctx_supported  = true,
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
@@ -4815,6 +4885,8 @@ static const struct ethtool_ops ice_ethtool_ops = {
 	.set_fecparam		= ice_set_fecparam,
 	.get_module_info	= ice_get_module_info,
 	.get_module_eeprom	= ice_get_module_eeprom,
+	.get_phy_tunable	= ice_get_phy_tunable,
+	.set_phy_tunable	= ice_set_phy_tunable,
 };
 
 static const struct ethtool_ops ice_ethtool_safe_mode_ops = {
