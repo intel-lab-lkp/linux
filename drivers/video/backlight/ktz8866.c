@@ -3,6 +3,9 @@
  * Backlight driver for the Kinetic KTZ8866
  *
  * Copyright (C) 2022, 2023 Jianhua Lu <lujianhua000@gmail.com>
+ *
+ * Apr 2025 - Pengyu Luo <mitltlatltl@gmail.com>
+ *	Added handling for dual KTZ8866(master and slave)
  */
 
 #include <linux/backlight.h>
@@ -43,11 +46,17 @@
 #define LCD_BIAS_EN 0x9F
 #define PWM_HYST 0x5
 
+struct ktz8866_slave {
+	struct i2c_client *client;
+	struct regmap *regmap;
+};
+
 struct ktz8866 {
 	struct i2c_client *client;
 	struct regmap *regmap;
-	bool led_on;
 	struct gpio_desc *enable_gpio;
+	struct ktz8866_slave *slave;
+	bool led_on;
 };
 
 static const struct regmap_config ktz8866_regmap_config = {
@@ -56,16 +65,22 @@ static const struct regmap_config ktz8866_regmap_config = {
 	.max_register = REG_MAX,
 };
 
-static int ktz8866_write(struct ktz8866 *ktz, unsigned int reg,
-			 unsigned int val)
+static void ktz8866_write(struct ktz8866 *ktz, unsigned int reg,
+			  unsigned int val)
 {
-	return regmap_write(ktz->regmap, reg, val);
+	regmap_write(ktz->regmap, reg, val);
+
+	if (ktz->slave)
+		regmap_write(ktz->slave->regmap, reg, val);
 }
 
-static int ktz8866_update_bits(struct ktz8866 *ktz, unsigned int reg,
-			       unsigned int mask, unsigned int val)
+static void ktz8866_update_bits(struct ktz8866 *ktz, unsigned int reg,
+				unsigned int mask, unsigned int val)
 {
-	return regmap_update_bits(ktz->regmap, reg, mask, val);
+	regmap_update_bits(ktz->regmap, reg, mask, val);
+
+	if (ktz->slave)
+		regmap_update_bits(ktz->slave->regmap, reg, mask, val);
 }
 
 static int ktz8866_backlight_update_status(struct backlight_device *backlight_dev)
@@ -124,10 +139,41 @@ static void ktz8866_init(struct ktz8866 *ktz)
 		ktz8866_write(ktz, LCD_BIAS_CFG1, LCD_BIAS_EN);
 }
 
+static int ktz8866_slave_register(struct ktz8866 *ktz)
+{
+	struct device *dev = &ktz->client->dev;
+	struct ktz8866_slave *slave;
+	struct i2c_client *client;
+	struct device_node *np;
+
+	np = of_find_compatible_node(NULL, NULL, "kinetic,ktz8866-slave");
+	if (!np)
+		return 0;
+
+	client = of_find_i2c_device_by_node(np);
+	of_node_put(np);
+	if (!client)
+		return 0;
+
+	slave = devm_kzalloc(dev, sizeof(*slave), GFP_KERNEL);
+	if (!slave)
+		return -ENOMEM;
+
+	slave->client = client;
+	slave->regmap = devm_regmap_init_i2c(client, &ktz8866_regmap_config);
+	if (IS_ERR(slave->regmap))
+		return dev_err_probe(&client->dev, PTR_ERR(slave->regmap),
+				     "failed to init regmap\n");
+
+	ktz->slave = slave;
+
+	return 0;
+}
+
 static int ktz8866_probe(struct i2c_client *client)
 {
 	struct backlight_device *backlight_dev;
-	struct backlight_properties props;
+	struct backlight_properties props = {};
 	struct ktz8866 *ktz;
 	int ret = 0;
 
@@ -151,7 +197,6 @@ static int ktz8866_probe(struct i2c_client *client)
 	if (IS_ERR(ktz->enable_gpio))
 		return PTR_ERR(ktz->enable_gpio);
 
-	memset(&props, 0, sizeof(props));
 	props.type = BACKLIGHT_RAW;
 	props.max_brightness = MAX_BRIGHTNESS;
 	props.brightness = DEFAULT_BRIGHTNESS;
@@ -162,6 +207,11 @@ static int ktz8866_probe(struct i2c_client *client)
 	if (IS_ERR(backlight_dev))
 		return dev_err_probe(&client->dev, PTR_ERR(backlight_dev),
 				"failed to register backlight device\n");
+
+	ret = ktz8866_slave_register(ktz);
+	if (ret)
+		return dev_err_probe(&client->dev, ret,
+				     "failed to register slave\n");
 
 	ktz8866_init(ktz);
 
