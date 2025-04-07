@@ -326,6 +326,10 @@ int bt_convert__perf2json(const char *input_name, const char *output_name,
 		.force = opts->force,
 	};
 
+	struct itrace_synth_opts itrace_synth_opts = {
+		.set = 0,
+	};
+
 	perf_tool__init(&c.tool, /*ordered_events=*/true);
 	c.tool.sample         = process_sample_event;
 	c.tool.mmap           = perf_event__process_mmap;
@@ -376,6 +380,8 @@ int bt_convert__perf2json(const char *input_name, const char *output_name,
 		fprintf(stderr, "Error creating perf session!\n");
 		goto err_fclose;
 	}
+
+	session->itrace_synth_opts = &itrace_synth_opts;
 
 	if (symbol__init(&session->header.env) < 0) {
 		fprintf(stderr, "Symbol init error!\n");
