@@ -2089,7 +2089,7 @@ DECLARE_EVENT_CLASS(nfs4_flexfiles_io_event,
 		TP_printk(
 			"error=%ld (%s) fileid=%02x:%02x:%llu fhandle=0x%08x "
 			"offset=%llu count=%u stateid=%d:0x%08x dstaddr=%s",
-			-__entry->error,
+			__entry->error,
 			show_nfs4_status(__entry->error),
 			MAJOR(__entry->dev), MINOR(__entry->dev),
 			(unsigned long long)__entry->fileid,
