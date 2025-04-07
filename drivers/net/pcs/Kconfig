@@ -57,6 +57,7 @@ config PCS_XILINX
 	depends on PCS
 	select MDIO_DEVICE
 	select PHYLINK
+	default XILINX_AXI_EMAC
 	tristate "Xilinx PCS driver"
 	help
 	  PCS driver for the Xilinx 1G/2.5G Ethernet PCS/PMA or SGMII device.
