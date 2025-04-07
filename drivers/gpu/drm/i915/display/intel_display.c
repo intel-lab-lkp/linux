@@ -6727,10 +6727,12 @@ static void intel_pre_update_crtc(struct intel_atomic_state *state,
 static void intel_update_crtc(struct intel_atomic_state *state,
 			      struct intel_crtc *crtc)
 {
+	struct intel_display *display = to_intel_display(crtc);
 	const struct intel_crtc_state *old_crtc_state =
 		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_crtc_state *new_crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+	bool modeset = intel_crtc_needs_modeset(new_crtc_state);
 
 	if (new_crtc_state->use_dsb) {
 		intel_crtc_prepare_vblank_event(new_crtc_state, &crtc->dsb_event);
@@ -6739,6 +6741,12 @@ static void intel_update_crtc(struct intel_atomic_state *state,
 	} else {
 		/* Perform vblank evasion around commit operation */
 		intel_pipe_update_start(state, crtc);
+
+		if (!modeset &&
+		    intel_crtc_needs_color_update(new_crtc_state) &&
+		    !new_crtc_state->dsb_color &&
+		    HAS_DOUBLE_BUFFERED_LUT(display))
+			intel_color_load_luts(new_crtc_state);
 
 		if (new_crtc_state->dsb_commit)
 			intel_dsb_commit(new_crtc_state->dsb_commit, false);
