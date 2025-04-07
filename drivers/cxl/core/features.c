@@ -616,9 +616,8 @@ static bool cxlctl_validate_hw_command(struct cxl_features_state *cxlfs,
 	case CXL_MBOX_OP_GET_FEATURE:
 		if (cxl_mbox->feat_cap < CXL_FEATURES_RO)
 			return false;
-		if (scope >= FWCTL_RPC_CONFIGURATION)
+		else
 			return true;
-		return false;
 	case CXL_MBOX_OP_SET_FEATURE:
 		if (cxl_mbox->feat_cap < CXL_FEATURES_RW)
 			return false;
