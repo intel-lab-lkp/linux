@@ -364,9 +364,9 @@ static int __init setup_early_printk(char *buf)
 		}
 #ifdef CONFIG_PCI
 		if (!strncmp(buf, "pciserial", 9)) {
-			early_pci_serial_init(buf + 9);
+			buf += 9; /* Keep from match the above "pciserial" */
+			early_pci_serial_init(buf);
 			early_console_register(&early_serial_console, keep);
-			buf += 9; /* Keep from match the above "serial" */
 		}
 #endif
 		if (!strncmp(buf, "vga", 3) &&
