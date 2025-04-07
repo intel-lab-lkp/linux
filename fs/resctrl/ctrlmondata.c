@@ -614,7 +614,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 		 * the resource to find the domain with "domid".
 		 */
 		hdr = resctrl_find_domain(&r->mon_domains, domid, NULL);
-		if (!hdr || WARN_ON_ONCE(hdr->type != RESCTRL_MON_DOMAIN)) {
+		if (!hdr || WARN_ON_ONCE(hdr->type != DOMTYPE(r->rid, DOMTYPE_MON))) {
 			ret = -ENOENT;
 			goto out;
 		}

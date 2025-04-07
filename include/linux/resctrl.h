@@ -111,11 +111,6 @@ struct resctrl_staged_config {
 	bool			have_new_ctrl;
 };
 
-enum resctrl_domain_type {
-	RESCTRL_CTRL_DOMAIN,
-	RESCTRL_MON_DOMAIN,
-};
-
 /**
  * struct rdt_domain_hdr - common header for different domain types
  * @list:		all instances of this resource
@@ -124,11 +119,17 @@ enum resctrl_domain_type {
  * @cpu_mask:		which CPUs share this resource
  */
 struct rdt_domain_hdr {
-	struct list_head		list;
-	int				id;
-	enum resctrl_domain_type	type;
-	struct cpumask			cpu_mask;
+	struct list_head	list;
+	int			id;
+	u32			type;
+	struct cpumask		cpu_mask;
 };
+
+/* Bitfields in rdt_domain_hdr.type */
+#define	DOMTYPE_RID		GENMASK(8, 0)
+#define DOMTYPE_CTRL		BIT(9)
+#define DOMTYPE_MON		BIT(10)
+#define DOMTYPE(rid, type)	(((rid) & DOMTYPE_RID) | (type))
 
 /**
  * struct rdt_ctrl_domain - group of CPUs sharing a resctrl control resource
