@@ -1917,6 +1917,22 @@ struct i2c_adapter *i2c_get_adapter_by_fwnode(struct fwnode_handle *fwnode)
 }
 EXPORT_SYMBOL(i2c_get_adapter_by_fwnode);
 
+/**
+ * i2c_get_adapter_supplier() - Get the supplier of an adapter
+ * @adapter: the adapter to get the supplier from
+ *
+ * return:
+ * Look up and return the &struct device corresponding to the device supplying
+ * this adapter.
+ *
+ * The user must call put_device() once done with the supplier returned.
+ */
+struct device *i2c_get_adapter_supplier(struct i2c_adapter *adapter)
+{
+	return get_device(adapter->supplier ?: adapter->dev.parent);
+}
+EXPORT_SYMBOL(i2c_get_adapter_supplier);
+
 static void i2c_parse_timing(struct device *dev, char *prop_name, u32 *cur_val_p,
 			    u32 def_val, bool use_def)
 {
