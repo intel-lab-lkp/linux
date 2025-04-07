@@ -38,3 +38,9 @@ config INTEL_PMT_CRASHLOG
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called intel_pmt_crashlog.
+
+config INTEL_AET_RESCTRL
+	bool
+	help
+	  Architecture config should "select" this option to enable
+	  support for RMID telemtry events in the resctrl file system.
