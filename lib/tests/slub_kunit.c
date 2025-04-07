@@ -323,6 +323,8 @@ static struct kunit_suite test_suite = {
 	.init = test_init,
 	.test_cases = test_cases,
 };
+
 kunit_test_suite(test_suite);
 
+MODULE_DESCRIPTION("KUnit tests for SLUB allocator");
 MODULE_LICENSE("GPL");
