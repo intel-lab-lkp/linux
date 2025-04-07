@@ -48,6 +48,7 @@ TARGETS += ipc
 TARGETS += ir
 TARGETS += kcmp
 TARGETS += kexec
+TARGETS += kselftest
 TARGETS += kvm
 TARGETS += landlock
 TARGETS += lib
