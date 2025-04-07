@@ -576,6 +576,7 @@ err:
  */
 int of_irq_parse_and_map_pci(const struct pci_dev *dev, u8 slot, u8 pin)
 {
+	struct device_node *np __free(device_node) = NULL;
 	struct of_phandle_args oirq;
 	int ret;
 
@@ -583,6 +584,7 @@ int of_irq_parse_and_map_pci(const struct pci_dev *dev, u8 slot, u8 pin)
 	if (ret)
 		return 0; /* Proper return code 0 == NO_IRQ */
 
+	np = oirq.np;
 	return irq_create_of_mapping(&oirq);
 }
 EXPORT_SYMBOL_GPL(of_irq_parse_and_map_pci);
