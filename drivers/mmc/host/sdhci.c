@@ -2355,6 +2355,27 @@ static bool sdhci_presetable_values_change(struct sdhci_host *host, struct mmc_i
 	       (sdhci_preset_needed(host, ios->timing) || host->drv_type != ios->drv_type);
 }
 
+void sdhci_set_hs_ena(struct sdhci_host *host, unsigned char timing)
+{
+	u8 ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
+
+	if (timing == MMC_TIMING_SD_HS ||
+	    timing == MMC_TIMING_MMC_HS ||
+	    timing == MMC_TIMING_MMC_HS400 ||
+	    timing == MMC_TIMING_MMC_HS200 ||
+	    timing == MMC_TIMING_MMC_DDR52 ||
+	    timing == MMC_TIMING_UHS_SDR50 ||
+	    timing == MMC_TIMING_UHS_SDR104 ||
+	    timing == MMC_TIMING_UHS_DDR50 ||
+	    timing == MMC_TIMING_UHS_SDR25)
+		ctrl |= SDHCI_CTRL_HISPD;
+	else
+		ctrl &= ~SDHCI_CTRL_HISPD;
+
+	sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
+}
+EXPORT_SYMBOL_GPL(sdhci_set_hs_ena);
+
 void sdhci_set_ios_common(struct mmc_host *mmc, struct mmc_ios *ios)
 {
 	struct sdhci_host *host = mmc_priv(mmc);
@@ -2436,23 +2457,6 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	    !sdhci_presetable_values_change(host, ios))
 		return;
 
-	ctrl = sdhci_readb(host, SDHCI_HOST_CONTROL);
-
-	if (!(host->quirks & SDHCI_QUIRK_NO_HISPD_BIT)) {
-		if (ios->timing == MMC_TIMING_SD_HS ||
-		     ios->timing == MMC_TIMING_MMC_HS ||
-		     ios->timing == MMC_TIMING_MMC_HS400 ||
-		     ios->timing == MMC_TIMING_MMC_HS200 ||
-		     ios->timing == MMC_TIMING_MMC_DDR52 ||
-		     ios->timing == MMC_TIMING_UHS_SDR50 ||
-		     ios->timing == MMC_TIMING_UHS_SDR104 ||
-		     ios->timing == MMC_TIMING_UHS_DDR50 ||
-		     ios->timing == MMC_TIMING_UHS_SDR25)
-			ctrl |= SDHCI_CTRL_HISPD;
-		else
-			ctrl &= ~SDHCI_CTRL_HISPD;
-	}
-
 	if (host->version >= SDHCI_SPEC_300) {
 		u16 clk, ctrl_2;
 
@@ -2468,7 +2472,12 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 			sdhci_writew(host, clk, SDHCI_CLOCK_CONTROL);
 		}
 
-		sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
+		if (!(host->quirks & SDHCI_QUIRK_NO_HISPD_BIT)) {
+			if (host->ops->set_hs_ena)
+				host->ops->set_hs_ena(host, ios->timing);
+			else
+				sdhci_set_hs_ena(host, ios->timing);
+		}
 
 		if (!host->preset_enabled) {
 			/*
@@ -2510,8 +2519,14 @@ void sdhci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 		/* Re-enable SD Clock */
 		host->ops->set_clock(host, host->clock);
-	} else
-		sdhci_writeb(host, ctrl, SDHCI_HOST_CONTROL);
+	} else {
+		if (!(host->quirks & SDHCI_QUIRK_NO_HISPD_BIT)) {
+			if (host->ops->set_hs_ena)
+				host->ops->set_hs_ena(host, ios->timing);
+			else
+				sdhci_set_hs_ena(host, ios->timing);
+		}
+	}
 }
 EXPORT_SYMBOL_GPL(sdhci_set_ios);
 

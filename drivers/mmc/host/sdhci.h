@@ -704,6 +704,7 @@ struct sdhci_ops {
 	void		(*set_timeout)(struct sdhci_host *host,
 				       struct mmc_command *cmd);
 	void		(*set_bus_width)(struct sdhci_host *host, int width);
+	void		(*set_hs_ena)(struct sdhci_host *host, unsigned char timing);
 	void (*platform_send_init_74_clocks)(struct sdhci_host *host,
 					     u8 power_mode);
 	unsigned int    (*get_ro)(struct sdhci_host *host);
@@ -857,6 +858,7 @@ int sdhci_get_ro(struct mmc_host *mmc);
 void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq);
 int sdhci_request_atomic(struct mmc_host *mmc, struct mmc_request *mrq);
 void sdhci_set_bus_width(struct sdhci_host *host, int width);
+void sdhci_set_hs_ena(struct sdhci_host *host, unsigned char timing);
 void sdhci_reset(struct sdhci_host *host, u8 mask);
 bool sdhci_do_reset(struct sdhci_host *host, u8 mask);
 void sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned timing);
