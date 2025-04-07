@@ -404,6 +404,45 @@ zl3073x_dpll_ref_prio_get(struct zl3073x_dpll_pin *pin, u8 *prio)
 }
 
 static int
+zl3073x_dpll_ref_prio_set(struct zl3073x_dpll_pin *pin, u8 prio)
+{
+	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	u8 idx, ref_prio;
+	int rc;
+
+	/* Read DPLL configuration into mailbox */
+	rc = zl3073x_mb_dpll_read(zldev, zldpll->id);
+	if (rc)
+		return rc;
+
+	/* Get index of the pin */
+	idx = zl3073x_dpll_pin_index_get(pin);
+
+	/* Read ref prio nibble */
+	rc = zl3073x_read_dpll_ref_prio(zldev, idx / 2, &ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update nibble according pin type */
+	if (zl3073x_dpll_is_p_pin(pin)) {
+		ref_prio &= ~DPLL_REF_PRIO_REF_P;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_P, prio);
+	} else {
+		ref_prio &= ~DPLL_REF_PRIO_REF_N;
+		ref_prio |= FIELD_PREP(DPLL_REF_PRIO_REF_N, prio);
+	}
+
+	/* Write the updated priority value */
+	rc = zl3073x_write_dpll_ref_prio(zldev, idx / 2, ref_prio);
+	if (rc)
+		return rc;
+
+	/* Update channel configuration from mailbox */
+	return zl3073x_mb_dpll_write(zldev, zldpll->id);
+}
+
+static int
 zl3073x_dpll_input_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 					 void *pin_priv,
 					 const struct dpll_device *dpll,
@@ -501,6 +540,46 @@ zl3073x_dpll_input_pin_state_on_dpll_set(const struct dpll_pin *dpll_pin,
 }
 
 static int
+zl3073x_dpll_input_pin_prio_get(const struct dpll_pin *dpll_pin, void *pin_priv,
+				const struct dpll_device *dpll, void *dpll_priv,
+				u32 *prio, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll_pin *pin = pin_priv;
+
+	*prio = pin->prio;
+
+	return 0;
+}
+
+static int
+zl3073x_dpll_input_pin_prio_set(const struct dpll_pin *dpll_pin, void *pin_priv,
+				const struct dpll_device *dpll, void *dpll_priv,
+				u32 prio, struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	int rc;
+
+	if (prio > DPLL_REF_PRIO_MAX)
+		return -EINVAL;
+
+	/* If the pin is selectable then update HW registers */
+	if (pin->selectable) {
+		guard(zl3073x)(zldev);
+
+		rc = zl3073x_dpll_ref_prio_set(pin, prio);
+		if (rc)
+			return rc;
+	}
+
+	/* Save priority */
+	pin->prio = prio;
+
+	return 0;
+}
+
+static int
 zl3073x_dpll_output_pin_state_on_dpll_get(const struct dpll_pin *dpll_pin,
 					  void *pin_priv,
 					  const struct dpll_device *dpll,
@@ -575,6 +654,8 @@ zl3073x_dpll_mode_get(const struct dpll_device *dpll, void *dpll_priv,
 
 static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
+	.prio_get = zl3073x_dpll_input_pin_prio_get,
+	.prio_set = zl3073x_dpll_input_pin_prio_set,
 	.state_on_dpll_get = zl3073x_dpll_input_pin_state_on_dpll_get,
 	.state_on_dpll_set = zl3073x_dpll_input_pin_state_on_dpll_set,
 };
@@ -736,6 +817,7 @@ zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
 	if (zl3073x_dpll_is_input_pin(pin)) {
 		pin_info->props.type = DPLL_PIN_TYPE_EXT;
 		pin_info->props.capabilities =
+			DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE |
 			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
 	} else {
 		pin_info->props.type = DPLL_PIN_TYPE_GNSS;
