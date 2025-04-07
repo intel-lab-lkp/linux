@@ -2574,6 +2574,8 @@ static int rdt_get_tree(struct fs_context *fc)
 		goto out;
 	}
 
+	resctrl_init_mon_events();
+
 	ret = rdtgroup_setup_root(ctx);
 	if (ret)
 		goto out;

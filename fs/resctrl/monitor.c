@@ -846,14 +846,17 @@ static struct mon_evt all_events[QOS_NUM_EVENTS] = {
 	[QOS_L3_OCCUP_EVENT_ID] = {
 		.name	= "llc_occupancy",
 		.evtid	= QOS_L3_OCCUP_EVENT_ID,
+		.rid	= RDT_RESOURCE_L3,
 	},
 	[QOS_L3_MBM_TOTAL_EVENT_ID] = {
 		.name	= "mbm_total_bytes",
 		.evtid	= QOS_L3_MBM_TOTAL_EVENT_ID,
+		.rid	= RDT_RESOURCE_L3,
 	},
 	[QOS_L3_MBM_LOCAL_EVENT_ID] = {
 		.name	= "mbm_local_bytes",
 		.evtid	= QOS_L3_MBM_LOCAL_EVENT_ID,
+		.rid	= RDT_RESOURCE_L3,
 	},
 };
 
@@ -878,22 +881,29 @@ char *rdt_event_name(enum resctrl_event_id evt)
 }
 
 /*
- * Initialize the event list for the resource.
+ * Initialize the event list for all mon_capable resources.
  *
- * Note that MBM events are also part of RDT_RESOURCE_L3 resource
- * because as per the SDM the total and local memory bandwidth
- * are enumerated as part of L3 monitoring.
- *
- * mon_put_default_kn_priv_all() also assumes monitor events are only supported
- * on the L3 resource.
+ * Called on each mount of the resctrl file system when all
+ * events have been enumerated. Only needs to build the per-resource
+ * event lists once.
  */
-static void l3_mon_evt_init(struct rdt_resource *r)
+void resctrl_init_mon_events(void)
 {
+	struct rdt_resource *r;
+	static bool only_once;
 	int evt;
 
-	INIT_LIST_HEAD(&r->evt_list);
+	if (only_once)
+		return;
+	only_once = true;
+
+	for_each_mon_capable_rdt_resource(r)
+		INIT_LIST_HEAD(&r->evt_list);
 
 	for_each_set_bit(evt, rdt_mon_features, QOS_NUM_EVENTS) {
+		r = resctrl_arch_get_resource(all_events[evt].rid);
+		if (!r->mon_capable)
+			continue;
 		list_add_tail(&all_events[evt].list, &r->evt_list);
 	}
 }
@@ -921,8 +931,6 @@ int resctrl_mon_resource_init(void)
 	ret = dom_data_init(r);
 	if (ret)
 		return ret;
-
-	l3_mon_evt_init(r);
 
 	if (resctrl_arch_is_evt_configurable(QOS_L3_MBM_TOTAL_EVENT_ID)) {
 		all_events[QOS_L3_MBM_TOTAL_EVENT_ID].configurable = true;

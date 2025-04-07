@@ -76,6 +76,7 @@ static inline struct rdt_fs_context *rdt_fc2context(struct fs_context *fc)
  */
 struct mon_evt {
 	enum resctrl_event_id	evtid;
+	enum resctrl_res_level	rid;
 	char			*name;
 	bool			configurable;
 	struct list_head	list;
@@ -389,6 +390,8 @@ int resctrl_find_cleanest_closid(void);
 int rdt_lookup_evtid_by_name(char *name);
 
 char *rdt_event_name(enum resctrl_event_id evt);
+
+void resctrl_init_mon_events(void);
 
 #ifdef CONFIG_RESCTRL_FS_PSEUDO_LOCK
 int rdtgroup_locksetup_enter(struct rdtgroup *rdtgrp);
