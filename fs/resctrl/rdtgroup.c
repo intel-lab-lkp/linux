@@ -2926,6 +2926,7 @@ static struct mon_data *mon_get_kn_priv(int rid, int domid, struct mon_evt *mevt
 	priv->domid = domid;
 	priv->sum = do_sum;
 	priv->evtid = mevt->evtid;
+	priv->any_cpu = mevt->any_cpu;
 	list_add_tail(&priv->list, &kn_priv_list);
 
 	return priv;

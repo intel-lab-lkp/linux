@@ -525,7 +525,7 @@ struct rdt_domain_hdr *resctrl_find_domain(struct list_head *h, int id,
 
 void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 		    struct rdt_mon_domain *d, struct rdtgroup *rdtgrp,
-		    cpumask_t *cpumask, int evtid, int first)
+		    const cpumask_t *cpumask, int evtid, int first)
 {
 	int cpu;
 
@@ -571,6 +571,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 	u32 resid, evtid, domid;
 	struct rdtgroup *rdtgrp;
 	struct rdt_resource *r;
+	const cpumask_t *mask;
 	struct mon_data *md;
 	int ret = 0;
 
@@ -589,6 +590,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 	resid = md->rid;
 	domid = md->domid;
 	evtid = md->evtid;
+	rr.any_cpu = md->any_cpu;
 	r = resctrl_arch_get_resource(resid);
 
 	if (md->sum) {
@@ -601,8 +603,9 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 		list_for_each_entry(d, &r->mon_domains, hdr.list) {
 			if (d->ci->id == domid) {
 				rr.ci = d->ci;
+				mask = md->any_cpu ? cpu_online_mask : &d->ci->shared_cpu_map;
 				mon_event_read(&rr, r, NULL, rdtgrp,
-					       &d->ci->shared_cpu_map, evtid, false);
+					       mask, evtid, false);
 				goto checkresult;
 			}
 		}
@@ -619,7 +622,8 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 			goto out;
 		}
 		d = container_of(hdr, struct rdt_mon_domain, hdr);
-		mon_event_read(&rr, r, d, rdtgrp, &d->hdr.cpu_mask, evtid, false);
+		mask = md->any_cpu ? cpu_online_mask : &d->hdr.cpu_mask;
+		mon_event_read(&rr, r, d, rdtgrp, mask, evtid, false);
 	}
 
 checkresult:

@@ -72,6 +72,7 @@ static inline struct rdt_fs_context *rdt_fc2context(struct fs_context *fc)
  * @evtid:		event id
  * @name:		name of the event
  * @configurable:	true if the event is configurable
+ * @any_cpu:		true if this event can be read from any CPU
  * @list:		entry in &rdt_resource->evt_list
  */
 struct mon_evt {
@@ -79,6 +80,7 @@ struct mon_evt {
 	enum resctrl_res_level	rid;
 	char			*name;
 	bool			configurable;
+	bool			any_cpu;
 	struct list_head	list;
 };
 
@@ -93,6 +95,7 @@ struct mon_evt {
  *                   the event file belongs. When @sum is one this
  *                   is the id of the L3 cache that all domains to be
  *                   summed share.
+ * @any_cpu:         true if this event can be read from any CPU
  *
  * Stored in the kernfs kn->priv field, readers and writers must hold
  * rdtgroup_mutex.
@@ -103,6 +106,7 @@ struct mon_data {
 	enum resctrl_event_id evtid;
 	unsigned int sum;
 	unsigned int domid;
+	bool any_cpu;
 };
 
 /**
@@ -115,6 +119,7 @@ struct mon_data {
  *	   domains in @r sharing L3 @ci.id
  * @evtid: Which monitor event to read.
  * @first: Initialize MBM counter when true.
+ * @any_cpu: When true read can be executed on any CPU.
  * @ci:    Cacheinfo for L3. Only set when @d is NULL. Used when summing domains.
  * @err:   Error encountered when reading counter.
  * @val:   Returned value of event counter. If @rgrp is a parent resource group,
@@ -129,6 +134,7 @@ struct rmid_read {
 	struct rdt_mon_domain	*d;
 	enum resctrl_event_id	evtid;
 	bool			first;
+	bool			any_cpu;
 	struct cacheinfo	*ci;
 	int			err;
 	u64			val;
@@ -358,7 +364,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg);
 
 void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 		    struct rdt_mon_domain *d, struct rdtgroup *rdtgrp,
-		    cpumask_t *cpumask, int evtid, int first);
+		    const cpumask_t *cpumask, int evtid, int first);
 
 int resctrl_mon_resource_init(void);
 
