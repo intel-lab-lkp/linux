@@ -7241,9 +7241,25 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		}
 	}
 
-	if (new_crtc_state->dsb_color)
-		intel_dsb_chain(state, new_crtc_state->dsb_commit,
-				new_crtc_state->dsb_color, true);
+	if (new_crtc_state->dsb_color) {
+		if (HAS_DOUBLE_BUFFERED_LUT(display)) {
+			intel_dsb_gosub(new_crtc_state->dsb_commit,
+					new_crtc_state->dsb_color);
+
+			if (new_crtc_state->use_dsb) {
+				intel_dsb_wait_vblanks(new_crtc_state->dsb_commit, 1);
+
+				intel_vrr_send_push(new_crtc_state->dsb_commit, new_crtc_state);
+				intel_dsb_wait_vblank_delay(state, new_crtc_state->dsb_commit);
+				intel_vrr_check_push_sent(new_crtc_state->dsb_commit,
+							  new_crtc_state);
+				intel_dsb_interrupt(new_crtc_state->dsb_commit);
+			}
+		} else {
+			intel_dsb_chain(state, new_crtc_state->dsb_commit,
+					new_crtc_state->dsb_color, true);
+		}
+	}
 
 	intel_dsb_finish(new_crtc_state->dsb_commit);
 }
