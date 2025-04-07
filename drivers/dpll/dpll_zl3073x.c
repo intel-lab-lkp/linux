@@ -37,6 +37,15 @@ ZL3073X_REG8_IDX_DEF(dpll_refsel_status,	0x130, ZL3073X_NUM_CHANNELS, 1);
 #define DPLL_REFSEL_STATUS_STATE_LOCK		4
 
 /*
+ * Register Map Page 4, Ref
+ */
+ZL3073X_REG8_DEF(ref_phase_err_read_rqst,	0x20f);
+#define REF_PHASE_ERR_READ_RQST_RD		BIT(0)
+
+ZL3073X_REG48_IDX_DEF(ref_phase,		0x220,
+						ZL3073X_NUM_INPUT_PINS, 6);
+
+/*
  * Register Map Page 5, DPLL
  */
 ZL3073X_REG8_IDX_DEF(dpll_mode_refsel,		0x284, ZL3073X_NUM_CHANNELS, 4);
@@ -47,6 +56,13 @@ ZL3073X_REG8_IDX_DEF(dpll_mode_refsel,		0x284, ZL3073X_NUM_CHANNELS, 4);
 #define DPLL_MODE_REFSEL_MODE_AUTO		3
 #define DPLL_MODE_REFSEL_MODE_NCO		4
 #define DPLL_MODE_REFSEL_REF			GENMASK(7, 4)
+
+ZL3073X_REG8_DEF(dpll_meas_ctrl,		0x2d0);
+#define DPLL_MEAS_CTRL_EN			BIT(0)
+#define DPLL_MEAS_CTRL_AVG_FACTOR		GENMASK(7, 4)
+
+ZL3073X_REG8_DEF(dpll_meas_idx,			0x2d1);
+#define DPLL_MEAS_IDX_IDX			GENMASK(2, 0)
 
 /*
  * Register Map Page 9, Synth and Output
@@ -104,6 +120,7 @@ struct zl3073x_dpll_pin_info {
  * @prio: pin priority <0, 14>
  * @selectable: pin is selectable in automatic mode
  * @pin_state: last saved pin state
+ * @phase_offset: last saved pin phase offset
  */
 struct zl3073x_dpll_pin {
 	struct dpll_pin			*dpll_pin;
@@ -111,6 +128,7 @@ struct zl3073x_dpll_pin {
 	u8				prio;
 	bool				selectable;
 	enum dpll_pin_state		pin_state;
+	s64				phase_offset;
 };
 
 /**
@@ -558,6 +576,120 @@ zl3073x_dpll_connected_ref_get(struct zl3073x_dpll *zldpll, u8 *ref)
  *
  * Returns 0 in case of success or negative value otherwise.
  */
+static int
+zl3073x_dpll_input_pin_phase_offset_get(const struct dpll_pin *dpll_pin,
+					void *pin_priv,
+					const struct dpll_device *dpll,
+					void *dpll_priv, s64 *phase_offset,
+					struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dpll *zldpll = dpll_priv;
+	struct zl3073x_dev *zldev = zldpll->mfd;
+	struct zl3073x_dpll_pin *pin = pin_priv;
+	u8 dpll_meas_ctrl, dpll_meas_idx;
+	u8 conn_ref, ref_id, ref_status;
+	s64 ref_phase;
+	int rc;
+
+	/* Take device lock */
+	guard(zl3073x)(zldev);
+
+	/* Get index of the pin */
+	ref_id = zl3073x_dpll_pin_index_get(pin);
+
+	/* Wait for reading to be ready */
+	rc = zl3073x_wait_clear_bits(zldev, ref_phase_err_read_rqst,
+				     REF_PHASE_ERR_READ_RQST_RD);
+	if (rc)
+		return rc;
+
+	/* Read measurement control register */
+	rc = zl3073x_read_dpll_meas_ctrl(zldev, &dpll_meas_ctrl);
+	if (rc)
+		return rc;
+
+	/* Enable measurement */
+	dpll_meas_ctrl |= DPLL_MEAS_CTRL_EN;
+
+	/* Update measurement control register with new values */
+	rc = zl3073x_write_dpll_meas_ctrl(zldev, dpll_meas_ctrl);
+	if (rc)
+		return rc;
+
+	/* Set measurement index to channel index */
+	dpll_meas_idx = FIELD_PREP(DPLL_MEAS_IDX_IDX, zldpll->id);
+	rc = zl3073x_write_dpll_meas_idx(zldev, dpll_meas_idx);
+	if (rc)
+		return rc;
+
+	/* Request read of the current phase error measurements */
+	rc = zl3073x_write_ref_phase_err_read_rqst(zldev,
+						   REF_PHASE_ERR_READ_RQST_RD);
+	if (rc)
+		return rc;
+
+	/* Wait for confirmation from the device */
+	rc = zl3073x_wait_clear_bits(zldev, ref_phase_err_read_rqst,
+				     REF_PHASE_ERR_READ_RQST_RD);
+	if (rc)
+		return rc;
+
+	/* Read DPLL-to-REF phase measurement */
+	rc = zl3073x_read_ref_phase(zldev, ref_id, &ref_phase);
+	if (rc)
+		return rc;
+
+	/* Perform sign extension for 48bit signed value */
+	ref_phase = sign_extend64(ref_phase, 47);
+
+	/* Register units are 0.01 ps -> convert it to ps */
+	ref_phase = div_s64(ref_phase, 100);
+
+	/* Get currently connected reference */
+	rc = zl3073x_dpll_connected_ref_get(zldpll, &conn_ref);
+	if (rc)
+		return rc;
+
+	/* Get this pin monitor status */
+	rc = zl3073x_read_ref_mon_status(zldev, ref_id, &ref_status);
+	if (rc)
+		return rc;
+
+	/* The DPLL being locked to a higher freq than the current ref
+	 * the phase offset is modded to the period of the signal
+	 * the dpll is locked to.
+	 */
+	if (ZL3073X_REF_IS_VALID(conn_ref) && conn_ref != ref_id &&
+	    ref_status == REF_MON_STATUS_OK) {
+		u64 conn_freq, ref_freq;
+
+		/* Get frequency of connected ref */
+		rc = zl3073x_dpll_input_ref_frequency_get(zldev, conn_ref,
+							  &conn_freq);
+		if (rc)
+			return rc;
+
+		/* Get frequency of given ref */
+		rc = zl3073x_dpll_input_ref_frequency_get(zldev, ref_id,
+							  &ref_freq);
+		if (rc)
+			return rc;
+
+		if (conn_freq > ref_freq) {
+			s64 conn_period;
+			int div_factor;
+
+			conn_period = (s64)div_u64(PSEC_PER_SEC, conn_freq);
+			div_factor = div64_s64(ref_phase, conn_period);
+			ref_phase -= conn_period * div_factor;
+		}
+	}
+
+	*phase_offset = ref_phase;
+
+	return rc;
+}
+
 static int
 zl3073x_dpll_ref_prio_get(struct zl3073x_dpll_pin *pin, u8 *prio)
 {
@@ -1110,6 +1242,7 @@ static const struct dpll_pin_ops zl3073x_dpll_input_pin_ops = {
 	.direction_get = zl3073x_dpll_pin_direction_get,
 	.frequency_get = zl3073x_dpll_input_pin_frequency_get,
 	.frequency_set = zl3073x_dpll_input_pin_frequency_set,
+	.phase_offset_get = zl3073x_dpll_input_pin_phase_offset_get,
 	.prio_get = zl3073x_dpll_input_pin_prio_get,
 	.prio_set = zl3073x_dpll_input_pin_prio_set,
 	.state_on_dpll_get = zl3073x_dpll_input_pin_state_on_dpll_get,
@@ -1805,6 +1938,8 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 	for (i = 0; i < ZL3073X_NUM_INPUT_PINS; i++) {
 		struct zl3073x_dpll_pin *pin;
 		enum dpll_pin_state state;
+		s64 phase_offset;
+		bool pin_changed;
 
 		/* Input pins starts are stored after output pins */
 		pin = &zldpll->pins[ZL3073X_NUM_OUTPUT_PINS + i];
@@ -1821,13 +1956,32 @@ zl3073x_dpll_periodic_work(struct kthread_work *work)
 		if (rc)
 			goto out;
 
+		rc = zl3073x_dpll_input_pin_phase_offset_get(pin->dpll_pin,
+							     pin,
+							     zldpll->dpll_dev,
+							     zldpll,
+							     &phase_offset,
+							     NULL);
+		if (rc)
+			goto out;
+
 		if (state != pin->pin_state) {
 			dev_dbg(zldev->dev,
 				"INPUT%u state changed to %u\n",
 				zl3073x_dpll_pin_index_get(pin), state);
 			pin->pin_state = state;
-			dpll_pin_change_ntf(pin->dpll_pin);
+			pin_changed = true;
 		}
+		if (phase_offset != pin->phase_offset) {
+			dev_dbg(zldev->dev,
+				"INPUT%u phase offset changed to %llu\n",
+				pin->index, phase_offset);
+			pin->phase_offset = phase_offset;
+			pin_changed = true;
+		}
+
+		if (pin_changed)
+			dpll_pin_change_ntf(pin->dpll_pin);
 	}
 
 out:
