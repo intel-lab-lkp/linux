@@ -709,6 +709,51 @@ unlock:
 }
 #endif
 
+static bool supports_4K_migration(struct xe_device *xe)
+{
+	if (xe->info.platform == XE_BATTLEMAGE)
+		return true;
+
+	return false;
+}
+
+/**
+ * xe_svm_range_needs_migrate_to_vram() - SVM range needs migrate to VRAM or not
+ * @range: SVM range for which migration needs to be decided
+ * @vma: vma which has range
+ * @region: default placement for range
+ *
+ * Return: True for range needing migration and migration is supported else false
+ */
+bool xe_svm_range_needs_migrate_to_vram(struct xe_svm_range *range, struct xe_vma *vma,
+					u32 region)
+{
+	struct xe_vm *vm = range_to_vm(&range->base);
+	u64 range_size = xe_svm_range_size(range);
+	bool needs_migrate = false;
+
+	if (!range->base.flags.migrate_devmem)
+		return false;
+
+	needs_migrate = region;
+
+	if (needs_migrate && !IS_DGFX(vm->xe)) {
+		drm_warn(&vm->xe->drm, "Platform doesn't support VRAM\n");
+		return false;
+	}
+
+	if (needs_migrate && xe_svm_range_in_vram(range)) {
+		drm_info(&vm->xe->drm, "Range is already in VRAM\n");
+		return false;
+	}
+
+	if (needs_migrate && range_size <= SZ_64K && !supports_4K_migration(vm->xe)) {
+		drm_warn(&vm->xe->drm, "Platform doesn't support SZ_4K range migration\n");
+		return false;
+	}
+
+	return needs_migrate;
+}
 
 /**
  * xe_svm_handle_pagefault() - SVM handle page fault
@@ -763,8 +808,8 @@ retry:
 	range_debug(range, "PAGE FAULT");
 
 	/* XXX: Add migration policy, for now migrate range once */
-	if (!range->skip_migrate && range->base.flags.migrate_devmem &&
-	    xe_svm_range_size(range) >= SZ_64K) {
+	if (!range->skip_migrate &&
+	    xe_svm_range_needs_migrate_to_vram(range, vma, IS_DGFX(vm->xe))) {
 		range->skip_migrate = true;
 
 		err = xe_svm_alloc_vram(vm, tile, range, &ctx);
