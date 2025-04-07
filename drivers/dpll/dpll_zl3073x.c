@@ -73,10 +73,12 @@ ZL3073X_REG8_IDX_DEF(dpll_ref_prio,		0x652,
  * struct zl3073x_dpll_pin_info - DPLL pin info
  * @props: DPLL core pin properties
  * @package_label: pin package label
+ * @fwnode: pin firmware node
  */
 struct zl3073x_dpll_pin_info {
 	struct dpll_pin_properties	props;
 	char				package_label[8];
+	struct fwnode_handle		*fwnode;
 };
 
 /**
@@ -483,6 +485,62 @@ static const struct dpll_device_ops zl3073x_dpll_device_ops = {
 };
 
 /**
+ * zl3073x_dpll_pin_fwnode_get - get fwnode for given pin
+ * pin: pointer to pin structure
+ *
+ * The caller is responsible for calling fwnode_handle_put() on the returned
+ * fwnode pointer.
+ *
+ * Returns the firmware node for the given pin if it is present or
+ * NULL if it is missing.
+ */
+static struct fwnode_handle *
+zl3073x_dpll_pin_fwnode_get(struct zl3073x_dpll_pin *pin)
+{
+	struct zl3073x_dpll *zldpll = pin_to_dpll(pin);
+	struct fwnode_handle *pins_node, *pin_node;
+	const char *node_name;
+	u8 idx;
+
+	if (zl3073x_dpll_is_input_pin(pin))
+		node_name = "input-pins";
+	else
+		node_name = "output-pins";
+
+	/* Get node containing input or output pins */
+	pins_node = device_get_named_child_node(zldpll->mfd->dev, node_name);
+	if (!pins_node) {
+		dev_dbg(zldpll->mfd->dev, "'%s' sub-node is missing\n",
+			node_name);
+		return NULL;
+	}
+
+	/* Get pin HW index */
+	idx = zl3073x_dpll_pin_index_get(pin);
+
+	/* Enumerate pin nodes and find the requested one */
+	fwnode_for_each_child_node(pins_node, pin_node) {
+		u32 reg;
+
+		if (fwnode_property_read_u32(pin_node, "reg", &reg))
+			continue;
+
+		if (idx == reg)
+			break;
+	}
+
+	/* Release pin parent node */
+	fwnode_handle_put(pins_node);
+
+	dev_dbg(zldpll->mfd->dev, "Firmware node for %s%u%c %sfound\n",
+		zl3073x_dpll_is_input_pin(pin) ? "REF" : "OUT", idx / 2,
+		zl3073x_dpll_is_p_pin(pin) ? 'P' : 'N',
+		pin_node ? "" : "NOT ");
+
+	return pin_node;
+}
+
+/**
  * zl3073x_dpll_pin_info_package_label_set - generate package label for the pin
  * @pin: pointer to pin
  * @pin_info: pointer to pin info structure
@@ -548,8 +606,10 @@ zl3073x_dpll_pin_info_package_label_set(struct zl3073x_dpll_pin *pin,
  * zl3073x_dpll_pin_info_get - get pin info
  * @pin: pin whose info is returned
  *
- * The function allocates pin info structure, generates package label
- * string according pin type and its order number.
+ * The function looks for firmware node for the given pin if it is provided
+ * by the system firmware (DT or ACPI), allocates pin info structure,
+ * generates package label string according pin type and its order number
+ * and optionally fetches board label from the firmware node if it exists.
  *
  * Returns pointer to allocated pin info structure that has to be freed
  * by @zl3073x_dpll_pin_info_put by the caller and in case of error
@@ -558,14 +618,16 @@ zl3073x_dpll_pin_info_package_label_set(struct zl3073x_dpll_pin *pin,
 static struct zl3073x_dpll_pin_info *
 zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
 {
+	struct zl3073x_dev *zldev = pin_to_dev(pin);
 	struct zl3073x_dpll_pin_info *pin_info;
+	const char *pin_type;
 
 	/* Allocate pin info structure */
 	pin_info = kzalloc(sizeof(*pin_info), GFP_KERNEL);
 	if (!pin_info)
 		return ERR_PTR(-ENOMEM);
 
-	/* Set pin type */
+	/* Set default pin type */
 	if (zl3073x_dpll_is_input_pin(pin))
 		pin_info->props.type = DPLL_PIN_TYPE_EXT;
 	else
@@ -577,6 +639,34 @@ zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
 	/* Generate package label for the given pin */
 	zl3073x_dpll_pin_info_package_label_set(pin, pin_info);
 
+	/* Get firmware node for the given pin */
+	pin_info->fwnode = zl3073x_dpll_pin_fwnode_get(pin);
+	if (!pin_info->fwnode)
+		/* Return if it does not exist */
+		return pin_info;
+
+	/* Look for label property and store the value as board label */
+	fwnode_property_read_string(pin_info->fwnode, "label",
+				    &pin_info->props.board_label);
+
+	/* Look for pin type property and translate its value to DPLL
+	 * pin type enum if it is present.
+	 */
+	if (!fwnode_property_read_string(pin_info->fwnode, "type", &pin_type)) {
+		if (!strcmp(pin_type, "ext"))
+			pin_info->props.type = DPLL_PIN_TYPE_EXT;
+		else if (!strcmp(pin_type, "gnss"))
+			pin_info->props.type = DPLL_PIN_TYPE_GNSS;
+		else if (!strcmp(pin_type, "int"))
+			pin_info->props.type = DPLL_PIN_TYPE_INT_OSCILLATOR;
+		else if (!strcmp(pin_type, "synce"))
+			pin_info->props.type = DPLL_PIN_TYPE_SYNCE_ETH_PORT;
+		else
+			dev_warn(zldev->dev,
+				 "Unknown or unsupported pin type '%s'\n",
+				 pin_type);
+	}
+
 	return pin_info;
 }
 
@@ -584,11 +674,15 @@ zl3073x_dpll_pin_info_get(struct zl3073x_dpll_pin *pin)
  * zl3073x_dpll_pin_info_put - free pin info
  * @pin_info: pin info to free
  *
- * The function deallocates given pin info structure.
+ * The function deallocates given pin info structure and firmware node handle.
  */
 static void
 zl3073x_dpll_pin_info_put(struct zl3073x_dpll_pin_info *pin_info)
 {
+	/* Put firmware handle if it is present */
+	if (pin_info->fwnode)
+		fwnode_handle_put(pin_info->fwnode);
+
 	/* Free the pin info structure itself */
 	kfree(pin_info);
 }
