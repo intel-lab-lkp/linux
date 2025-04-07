@@ -718,6 +718,9 @@ void resctrl_arch_mount(void)
 	if (only_once)
 		return;
 	only_once = true;
+
+	if (!intel_aet_get_events())
+		return;
 }
 
 enum {
@@ -1063,6 +1066,8 @@ late_initcall(resctrl_arch_late_init);
 
 static void __exit resctrl_arch_exit(void)
 {
+	intel_aet_exit();
+
 	cpuhp_remove_state(rdt_online);
 
 	resctrl_exit();
