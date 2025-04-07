@@ -13,6 +13,7 @@
 
 #include <linux/cpu.h>
 #include <linux/cleanup.h>
+#include <linux/minmax.h>
 #include "fake_intel_aet_features.h"
 #include <linux/intel_vsec.h>
 #include <linux/resctrl.h>
@@ -51,6 +52,7 @@ struct pmt_event {
  * @last_overflow_tstamp_off:	Offset of overflow timestamp
  * @last_update_tstamp_off:	Offset of last update timestamp
  * @active:			Marks this group as active on this system
+ * @rmid_warned:		Set to stop multiple rmid sanity warnings
  * @num_events:			Size of @evts array
  * @evts:			Telemetry events in this group
  */
@@ -63,6 +65,7 @@ struct telem_entry {
 	int	last_overflow_tstamp_off;
 	int	last_update_tstamp_off;
 	bool	active;
+	bool	rmid_warned;
 	int	num_events;
 	struct pmt_event evts[];
 };
@@ -83,6 +86,33 @@ static struct evtinfo {
 static struct telem_entry *telem_entry[] = {
 	NULL
 };
+
+static void rmid_sanity_check(struct telemetry_region *tr, struct telem_entry *tentry)
+{
+	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_PERF_PKG].r_resctrl;
+	int system_rmids = boot_cpu_data.x86_cache_max_rmid + 1;
+
+	if (tentry->rmid_warned)
+		return;
+
+	if (tentry->num_rmids != system_rmids) {
+		pr_info("Telemetry region %s has %d RMIDs system supports %d\n",
+			tentry->name, tentry->num_rmids, system_rmids);
+		tentry->rmid_warned = true;
+	}
+
+	if (tr->num_rmids < tentry->num_rmids) {
+		pr_info("Telemetry region %s only supports %d simultaneous RMIDS\n",
+			tentry->name, tr->num_rmids);
+		tentry->rmid_warned = true;
+	}
+
+	/* info/PKG_PERF_MON/num_rmids reports number of guaranteed counters */
+	if (!r->num_rmid)
+		r->num_rmid = tr->num_rmids;
+	else
+		r->num_rmid = min((u32)r->num_rmid, tr->num_rmids);
+}
 
 /*
  * Scan a feature group looking for guids recognized
@@ -109,6 +139,7 @@ static bool count_events(struct pkg_info *pkg, int max_pkgs, struct pmt_feature_
 					pr_warn_once("MMIO region for guid 0x%x too small\n", tr->guid);
 					continue;
 				}
+				rmid_sanity_check(tr, *tentry);
 				found = true;
 				(*tentry)->active = true;
 				pkg[tr->plat_info.package_id].count++;
