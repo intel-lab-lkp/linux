@@ -140,6 +140,17 @@ struct ublk_uring_cmd_pdu {
  */
 #define UBLK_IO_FLAG_NEED_GET_DATA 0x08
 
+
+/*
+ * Set when this request buffer is leased to ublk server, and cleared when
+ * the buffer is returned back.
+ *
+ * If this flag is set, this request can't be aborted until buffer is
+ * returned back from io_uring since io_uring is guaranteed to release the
+ * buffer.
+ */
+#define UBLK_IO_FLAG_BUF_LEASED   0x10
+
 /* atomic RW with ubq->cancel_lock */
 #define UBLK_IO_FLAG_CANCELED	0x80000000
 
@@ -1550,7 +1561,8 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 			rq = blk_mq_tag_to_rq(ub->tag_set.tags[ubq->q_id], i);
 			if (rq && blk_mq_request_started(rq)) {
 				io->flags |= UBLK_IO_FLAG_ABORTED;
-				__ublk_fail_req(ubq, io, rq);
+				if (!(io->flags & UBLK_IO_FLAG_BUF_LEASED))
+					__ublk_fail_req(ubq, io, rq);
 			}
 		}
 	}
@@ -1874,8 +1886,18 @@ static void ublk_io_release(void *priv)
 {
 	struct request *rq = priv;
 	struct ublk_queue *ubq = rq->mq_hctx->driver_data;
+	struct ublk_io *io = &ubq->ios[rq->tag];
 
-	ublk_put_req_ref(ubq, rq);
+	io->flags &= ~UBLK_IO_FLAG_BUF_LEASED;
+	/*
+	 * request has been aborted, and the queue context is exiting,
+	 * and ublk server can't be relied for completing this IO cmd,
+	 * so force to complete it
+	 */
+	if (unlikely(io->flags & UBLK_IO_FLAG_ABORTED))
+		__ublk_complete_rq(rq);
+	else
+		ublk_put_req_ref(ubq, rq);
 }
 
 static int ublk_register_io_buf(struct io_uring_cmd *cmd,
@@ -1958,7 +1980,10 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 	ret = -EINVAL;
 	switch (_IOC_NR(cmd_op)) {
 	case UBLK_IO_REGISTER_IO_BUF:
-		return ublk_register_io_buf(cmd, ubq, tag, ub_cmd->addr, issue_flags);
+		ret = ublk_register_io_buf(cmd, ubq, tag, ub_cmd->addr, issue_flags);
+		if (!ret)
+			io->flags |= UBLK_IO_FLAG_BUF_LEASED;
+		return ret;
 	case UBLK_IO_UNREGISTER_IO_BUF:
 		return ublk_unregister_io_buf(cmd, ub_cmd->addr, issue_flags);
 	case UBLK_IO_FETCH_REQ:
