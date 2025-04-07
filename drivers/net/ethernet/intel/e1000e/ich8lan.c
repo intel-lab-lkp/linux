@@ -5567,7 +5567,11 @@ void e1000_suspend_workarounds_ich8lan(struct e1000_hw *hw)
 			e1e_wphy_locked(hw, I217_SxCTRL, phy_reg);
 
 			/* Disable the SMB release on LCD reset. */
-			e1e_rphy_locked(hw, I217_MEMPWR, &phy_reg);
+			ret_val = e1e_rphy_locked(hw, I217_MEMPWR, &phy_reg);
+			if (ret_val) {
+				e_dbg("Fail to Disable the SMB release on LCD reset.");
+				goto release;
+			}
 			phy_reg &= ~I217_MEMPWR_DISABLE_SMB_RELEASE;
 			e1e_wphy_locked(hw, I217_MEMPWR, phy_reg);
 		}
