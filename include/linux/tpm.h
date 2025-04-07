@@ -257,7 +257,28 @@ enum tpm2_return_codes {
 	TPM2_RC_TESTING		= 0x090A, /* RC_WARN */
 	TPM2_RC_REFERENCE_H0	= 0x0910,
 	TPM2_RC_RETRY		= 0x0922,
+	TPM2_RC_SESSION_MEMORY	= 0x0903,
 };
+
+/*
+ * Convert a return value from tpm_transmit_cmd() to a POSIX return value. The
+ * fallback return value is -EFAULT.
+ */
+static inline ssize_t tpm_to_ret(ssize_t ret)
+{
+	/* Already a POSIX error: */
+	if (ret < 0)
+		return ret;
+
+	switch (ret) {
+	case TPM2_RC_SUCCESS:
+		return 0;
+	case TPM2_RC_SESSION_MEMORY:
+		return -ENOMEM;
+	default:
+		return -EFAULT;
+	}
+}
 
 enum tpm2_command_codes {
 	TPM2_CC_FIRST		        = 0x011F,
