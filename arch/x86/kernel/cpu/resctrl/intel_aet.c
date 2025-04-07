@@ -108,6 +108,30 @@ static bool count_events(struct pkg_info *pkg, int max_pkgs, struct pmt_feature_
 	return found;
 }
 
+/*
+ * Copy the pointers to telemetry regions associated with a given package
+ * and with known guids over to the pkg_info structure for that package.
+ */
+static int setup(struct pkg_info *pkg, int pkgnum, struct pmt_feature_group *p, int slot)
+{
+	struct telem_entry **tentry;
+
+	for (int i = 0; i < p->count; i++) {
+		for (tentry = telem_entry; *tentry; tentry++) {
+			if (!(*tentry)->active)
+				continue;
+			if (pkgnum != p->regions[i].plat_info.package_id)
+				continue;
+			if (p->regions[i].guid != (*tentry)->guid)
+				continue;
+
+			pkg[pkgnum].regions[slot++] =  p->regions[i];
+		}
+	}
+
+	return slot;
+}
+
 DEFINE_FREE(intel_pmt_put_feature_group, struct pmt_feature_group *,	\
 	if (!IS_ERR_OR_NULL(_T))					\
 		intel_pmt_put_feature_group(_T))
@@ -128,6 +152,7 @@ bool intel_aet_get_events(void)
 	struct pkg_info *pkg __free(free_pkg_info) = NULL;
 	int num_pkgs = topology_max_packages();
 	bool use_p1, use_p2;
+	int slot;
 
 	pkg = kcalloc(num_pkgs, sizeof(*pkg_info), GFP_KERNEL);
 	if (!pkg)
@@ -144,6 +169,19 @@ bool intel_aet_get_events(void)
 	if (!resctrl_arch_mon_capable()) {
 		pr_info("Telemetry available but monitor support disabled\n");
 		return false;
+	}
+
+	for (int i = 0; i < num_pkgs; i++) {
+		if (!pkg[i].count)
+			continue;
+		pkg[i].regions = kmalloc_array(pkg[i].count, sizeof(*pkg[i].regions), GFP_KERNEL);
+		if (!pkg[i].regions)
+			return false;
+		slot = 0;
+		if (use_p1)
+			slot = setup(pkg, i, p1, slot);
+		if (use_p2)
+			slot = setup(pkg, i, p2, slot);
 	}
 
 	if (use_p1)
