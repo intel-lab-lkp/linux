@@ -24,7 +24,9 @@
 #define DEVICE_ID 0x01
 #define BL_CFG1 0x02
 #define BL_CFG2 0x03
+/* least significant byte */
 #define BL_BRT_LSB 0x04
+/* most significant byte */
 #define BL_BRT_MSB 0x05
 #define BL_EN 0x08
 #define LCD_BIAS_CFG1 0x09
@@ -47,6 +49,8 @@
 #define PWM_HYST 0x5
 
 #define CURRENT_SINKS_MASK GENMASK(5, 0)
+#define LOWER_BYTE GENMASK(2, 0)
+#define HIGHER_BYTE GENMASK(10, 3)
 
 struct ktz8866_slave {
 	struct i2c_client *client;
@@ -105,8 +109,8 @@ static int ktz8866_backlight_update_status(struct backlight_device *backlight_de
 	}
 
 	/* Set brightness */
-	ktz8866_write(ktz, BL_BRT_LSB, brightness & 0x7);
-	ktz8866_write(ktz, BL_BRT_MSB, (brightness >> 3) & 0xFF);
+	ktz8866_write(ktz, BL_BRT_LSB, FIELD_GET(LOWER_BYTE, brightness);
+	ktz8866_write(ktz, BL_BRT_MSB, FIELD_GET(HIGHER_BYTE, brightness);
 
 	return 0;
 }
