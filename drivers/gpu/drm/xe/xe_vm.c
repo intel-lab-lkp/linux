@@ -2470,6 +2470,12 @@ err_unlock:
 		vma = ERR_PTR(err);
 	}
 
+	/*TODO: assign devmem_fd of local vram once multi device
+	 * support is added.
+	 */
+	vma->attr.preferred_loc.devmem_fd = 1;
+	vma->attr.atomic_access = DRM_XE_VMA_ATOMIC_UNDEFINED;
+
 	return vma;
 }
 
