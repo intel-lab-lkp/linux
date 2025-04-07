@@ -842,11 +842,9 @@ static struct simd_skcipher_alg *					       \
 simd_skcipher_algs_##suffix[ARRAY_SIZE(skcipher_algs_##suffix)]
 
 DEFINE_AVX_SKCIPHER_ALGS(aesni_avx, "aesni-avx", 500);
-#if defined(CONFIG_AS_VAES) && defined(CONFIG_AS_VPCLMULQDQ)
 DEFINE_AVX_SKCIPHER_ALGS(vaes_avx2, "vaes-avx2", 600);
 DEFINE_AVX_SKCIPHER_ALGS(vaes_avx10_256, "vaes-avx10_256", 700);
 DEFINE_AVX_SKCIPHER_ALGS(vaes_avx10_512, "vaes-avx10_512", 800);
-#endif
 
 /* The common part of the x86_64 AES-GCM key struct */
 struct aes_gcm_key {
@@ -927,17 +925,8 @@ struct aes_gcm_key_avx10 {
 #define FLAG_RFC4106	BIT(0)
 #define FLAG_ENC	BIT(1)
 #define FLAG_AVX	BIT(2)
-#if defined(CONFIG_AS_VAES) && defined(CONFIG_AS_VPCLMULQDQ)
-#  define FLAG_AVX10_256	BIT(3)
-#  define FLAG_AVX10_512	BIT(4)
-#else
-   /*
-    * This should cause all calls to the AVX10 assembly functions to be
-    * optimized out, avoiding the need to ifdef each call individually.
-    */
-#  define FLAG_AVX10_256	0
-#  define FLAG_AVX10_512	0
-#endif
+#define FLAG_AVX10_256	BIT(3)
+#define FLAG_AVX10_512	BIT(4)
 
 static inline struct aes_gcm_key *
 aes_gcm_key_get(struct crypto_aead *tfm, int flags)
@@ -1538,7 +1527,6 @@ DEFINE_GCM_ALGS(aesni_avx, FLAG_AVX,
 		"generic-gcm-aesni-avx", "rfc4106-gcm-aesni-avx",
 		AES_GCM_KEY_AESNI_SIZE, 500);
 
-#if defined(CONFIG_AS_VAES) && defined(CONFIG_AS_VPCLMULQDQ)
 /* aes_gcm_algs_vaes_avx10_256 */
 DEFINE_GCM_ALGS(vaes_avx10_256, FLAG_AVX10_256,
 		"generic-gcm-vaes-avx10_256", "rfc4106-gcm-vaes-avx10_256",
@@ -1548,7 +1536,6 @@ DEFINE_GCM_ALGS(vaes_avx10_256, FLAG_AVX10_256,
 DEFINE_GCM_ALGS(vaes_avx10_512, FLAG_AVX10_512,
 		"generic-gcm-vaes-avx10_512", "rfc4106-gcm-vaes-avx10_512",
 		AES_GCM_KEY_AVX10_SIZE, 800);
-#endif /* CONFIG_AS_VAES && CONFIG_AS_VPCLMULQDQ */
 
 static int __init register_avx_algs(void)
 {
@@ -1572,7 +1559,6 @@ static int __init register_avx_algs(void)
 	 * Similarly, the assembler support was added at about the same time.
 	 * For simplicity, just always check for VAES and VPCLMULQDQ together.
 	 */
-#if defined(CONFIG_AS_VAES) && defined(CONFIG_AS_VPCLMULQDQ)
 	if (!boot_cpu_has(X86_FEATURE_AVX2) ||
 	    !boot_cpu_has(X86_FEATURE_VAES) ||
 	    !boot_cpu_has(X86_FEATURE_VPCLMULQDQ) ||
@@ -1622,7 +1608,6 @@ static int __init register_avx_algs(void)
 					 aes_gcm_simdalgs_vaes_avx10_512);
 	if (err)
 		return err;
-#endif /* CONFIG_AS_VAES && CONFIG_AS_VPCLMULQDQ */
 	return 0;
 }
 
@@ -1636,7 +1621,6 @@ static void unregister_avx_algs(void)
 		simd_unregister_aeads(aes_gcm_algs_aesni_avx,
 				      ARRAY_SIZE(aes_gcm_algs_aesni_avx),
 				      aes_gcm_simdalgs_aesni_avx);
-#if defined(CONFIG_AS_VAES) && defined(CONFIG_AS_VPCLMULQDQ)
 	if (simd_skcipher_algs_vaes_avx2[0])
 		simd_unregister_skciphers(skcipher_algs_vaes_avx2,
 					  ARRAY_SIZE(skcipher_algs_vaes_avx2),
@@ -1657,7 +1641,6 @@ static void unregister_avx_algs(void)
 		simd_unregister_aeads(aes_gcm_algs_vaes_avx10_512,
 				      ARRAY_SIZE(aes_gcm_algs_vaes_avx10_512),
 				      aes_gcm_simdalgs_vaes_avx10_512);
-#endif
 }
 #else /* CONFIG_X86_64 */
 static struct aead_alg aes_gcm_algs_aesni[0];

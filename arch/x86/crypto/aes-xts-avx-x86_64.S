@@ -861,7 +861,6 @@ SYM_TYPED_FUNC_START(aes_xts_decrypt_aesni_avx)
 	_aes_xts_crypt	0
 SYM_FUNC_END(aes_xts_decrypt_aesni_avx)
 
-#if defined(CONFIG_AS_VAES) && defined(CONFIG_AS_VPCLMULQDQ)
 .set	VL, 32
 .set	USE_AVX10, 0
 SYM_TYPED_FUNC_START(aes_xts_encrypt_vaes_avx2)
@@ -888,4 +887,3 @@ SYM_FUNC_END(aes_xts_encrypt_vaes_avx10_512)
 SYM_TYPED_FUNC_START(aes_xts_decrypt_vaes_avx10_512)
 	_aes_xts_crypt	0
 SYM_FUNC_END(aes_xts_decrypt_vaes_avx10_512)
-#endif /* CONFIG_AS_VAES && CONFIG_AS_VPCLMULQDQ */
