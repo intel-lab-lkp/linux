@@ -151,7 +151,7 @@ static void amd_pmf_apply_policies(struct amd_pmf_dev *dev, struct ta_pmf_enact_
 				amd_pmf_update_uevents(dev, KEY_SUSPEND);
 				break;
 			case 2:
-				amd_pmf_update_uevents(dev, KEY_SCREENLOCK);
+				input_report_lock_sequence(dev->pmf_idev);
 				break;
 			default:
 				dev_err(dev->dev, "Invalid PMF policy system state: %d\n", val);
@@ -422,8 +422,9 @@ static int amd_pmf_register_input_device(struct amd_pmf_dev *dev)
 	dev->pmf_idev->phys = "amd-pmf/input0";
 
 	input_set_capability(dev->pmf_idev, EV_KEY, KEY_SLEEP);
-	input_set_capability(dev->pmf_idev, EV_KEY, KEY_SCREENLOCK);
 	input_set_capability(dev->pmf_idev, EV_KEY, KEY_SUSPEND);
+	input_set_capability(dev->pmf_idev, EV_KEY, KEY_L);
+	input_set_capability(dev->pmf_idev, EV_KEY, KEY_LEFTMETA);
 
 	err = input_register_device(dev->pmf_idev);
 	if (err) {
