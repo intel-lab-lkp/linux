@@ -113,6 +113,17 @@ static struct dmx_frontend *get_fe(struct dmx_demux *demux, int type)
 	return NULL;
 }
 
+static void dvb_ringbuffer_init_noqueue(struct dvb_ringbuffer *ringbuffer,
+				void *data, size_t len)
+{
+	ringbuffer->pread = 0;
+	ringbuffer->pwrite = 0;
+	ringbuffer->data = data;
+	ringbuffer->size = len;
+	ringbuffer->error = 0;
+	spin_lock_init(&ringbuffer->lock);
+}
+
 static int dvb_dvr_open(struct inode *inode, struct file *file)
 {
 	struct dvb_device *dvbdev = file->private_data;
@@ -156,7 +167,7 @@ static int dvb_dvr_open(struct inode *inode, struct file *file)
 		}
 	}
 
-	if (need_ringbuffer) {
+	if (need_ringbuffer && !dmxdev->dvr_buffer.data) {
 		void *mem;
 
 		if (!dvbdev->readers) {
@@ -168,7 +179,8 @@ static int dvb_dvr_open(struct inode *inode, struct file *file)
 			mutex_unlock(&dmxdev->mutex);
 			return -ENOMEM;
 		}
-		dvb_ringbuffer_init(&dmxdev->dvr_buffer, mem, DVR_BUFFER_SIZE);
+		dvb_ringbuffer_init_noqueue(&dmxdev->dvr_buffer, mem,
+					DVR_BUFFER_SIZE);
 		if (dmxdev->may_do_mmap)
 			dvb_vb2_init(&dmxdev->dvr_vb2_ctx, "dvr",
 				     file->f_flags & O_NONBLOCK);
