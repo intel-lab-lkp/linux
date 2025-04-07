@@ -2398,6 +2398,7 @@ alloc_next_range:
 			xa_store(&op->prefetch_range.range, i, svm_range, GFP_KERNEL);
 			op->prefetch_range.ranges_count++;
 			vops->flags |= XE_VMA_OPS_HAS_SVM_PREFETCH;
+			xe_svm_range_debug(svm_range, "PREFETCH - RANGE CREATED");
 
 			if (range_end > xe_svm_range_end(svm_range) &&
 			    xe_svm_range_end(svm_range) < xe_vma_end(vma)) {
@@ -2898,6 +2899,7 @@ static int prefetch_ranges_lock_and_prep(struct xe_vm *vm,
 						vm->usm.asid, &vm->svm.gpusvm, ERR_PTR(err));
 					return -ENODATA;
 				}
+				xe_svm_range_debug(svm_range, "PREFETCH - RANGE MIGRATED TO VRAM");
 			}
 
 			err = xe_svm_range_get_pages(vm, svm_range, &ctx);
@@ -2909,6 +2911,7 @@ static int prefetch_ranges_lock_and_prep(struct xe_vm *vm,
 					vm->usm.asid, &vm->svm.gpusvm, ERR_PTR(err));
 				return err;
 			}
+			xe_svm_range_debug(svm_range, "PREFETCH - RANGE GET PAGES DONE");
 		}
 	}
 	return err;
