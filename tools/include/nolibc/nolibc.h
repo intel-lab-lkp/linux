@@ -105,6 +105,7 @@
 #include "time.h"
 #include "stackprotector.h"
 #include "dirent.h"
+#include "getopt.h"
 
 /* Used by programs to avoid std includes */
 #define NOLIBC
