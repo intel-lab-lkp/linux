@@ -2930,6 +2930,7 @@ static int prefetch_ranges_lock_and_prep(struct xe_vm *vm,
 		for (i = 0; i < op->prefetch_range.ranges_count; i++) {
 			svm_range = xa_load(&op->prefetch_range.range, i);
 			if (xe_svm_range_needs_migrate_to_vram(svm_range, vma, region)) {
+				region = region ? region : 1;
 				tile = &vm->xe->tiles[region_to_mem_type[region] - XE_PL_VRAM0];
 				err = xe_svm_alloc_vram(vm, tile, svm_range, &ctx);
 				if (err) {
@@ -2938,6 +2939,7 @@ static int prefetch_ranges_lock_and_prep(struct xe_vm *vm,
 					return -ENODATA;
 				}
 				xe_svm_range_debug(svm_range, "PREFETCH - RANGE MIGRATED TO VRAM");
+				ctx.vram_only = 1;
 			}
 
 			err = xe_svm_range_get_pages(vm, svm_range, &ctx);

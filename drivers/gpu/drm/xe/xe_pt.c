@@ -645,12 +645,17 @@ static bool xe_atomic_for_vram(struct xe_vm *vm)
 	return true;
 }
 
-static bool xe_atomic_for_system(struct xe_vm *vm, struct xe_bo *bo)
+static bool xe_atomic_for_system(struct xe_vm *vm,
+				 struct xe_bo *bo,
+				 struct xe_vma *vma)
 {
 	struct xe_device *xe = vm->xe;
 
 	if (!xe->info.has_device_atomics_on_smem)
 		return false;
+
+	if (vma->attr.atomic_access == DRM_XE_VMA_ATOMIC_DEVICE)
+		return true;
 
 	/*
 	 * If a SMEM+LMEM allocation is backed by SMEM, a device
@@ -745,7 +750,7 @@ xe_pt_stage_bind(struct xe_tile *tile, struct xe_vma *vma,
 
 	if (vma->gpuva.flags & XE_VMA_ATOMIC_PTE_BIT) {
 		xe_walk.default_vram_pte = xe_atomic_for_vram(vm) ? XE_USM_PPGTT_PTE_AE : 0;
-		xe_walk.default_system_pte = xe_atomic_for_system(vm, bo) ?
+		xe_walk.default_system_pte = xe_atomic_for_system(vm, bo, vma) ?
 			XE_USM_PPGTT_PTE_AE : 0;
 	}
 

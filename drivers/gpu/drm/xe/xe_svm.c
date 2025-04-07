@@ -717,6 +717,16 @@ static bool supports_4K_migration(struct xe_device *xe)
 	return false;
 }
 
+static bool needs_ranges_in_vram_to_support_atomic(struct xe_device *xe, struct xe_vma *vma)
+{
+	if (vma->attr.atomic_access == DRM_XE_VMA_ATOMIC_UNDEFINED ||
+	    (xe->info.has_device_atomics_on_smem &&
+	     vma->attr.atomic_access == DRM_XE_VMA_ATOMIC_DEVICE))
+		return false;
+
+	return true;
+}
+
 /**
  * xe_svm_range_needs_migrate_to_vram() - SVM range needs migrate to VRAM or not
  * @range: SVM range for which migration needs to be decided
@@ -735,7 +745,7 @@ bool xe_svm_range_needs_migrate_to_vram(struct xe_svm_range *range, struct xe_vm
 	if (!range->base.flags.migrate_devmem)
 		return false;
 
-	needs_migrate = region;
+	needs_migrate =  needs_ranges_in_vram_to_support_atomic(vm->xe, vma) || region;
 
 	if (needs_migrate && !IS_DGFX(vm->xe)) {
 		drm_warn(&vm->xe->drm, "Platform doesn't support VRAM\n");
@@ -828,7 +838,7 @@ retry:
 
 	}
 
-	if (atomic)
+	if (atomic && needs_ranges_in_vram_to_support_atomic(vm->xe, vma))
 		ctx.vram_only = 1;
 
 	range_debug(range, "GET PAGES");

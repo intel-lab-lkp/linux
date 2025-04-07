@@ -69,7 +69,16 @@ static int madvise_atomic(struct xe_device *xe, struct xe_vm *vm,
 			  struct xe_vma **vmas, int num_vmas,
 			  struct drm_xe_madvise_ops ops)
 {
-	/* Implementation pending */
+	int i;
+
+	xe_assert(vm->xe, ops.type == DRM_XE_VMA_ATTR_ATOMIC);
+	xe_assert(vm->xe, ops.atomic.val > DRM_XE_VMA_ATOMIC_UNDEFINED &&
+		  ops.atomic.val <= DRM_XE_VMA_ATOMIC_CPU);
+	vm_dbg(&xe->drm, "attr_value = %d", ops.atomic.val);
+
+	for (i = 0; i < num_vmas; i++)
+		vmas[i]->attr.atomic_access = ops.atomic.val;
+	/*TODO: handle bo backed vmas */
 	return 0;
 }
 
