@@ -523,7 +523,7 @@ static void setup_l3_mon_domain(int cpu, int id, struct rdt_resource *r, struct 
 
 	list_add_tail_rcu(&d->hdr.list, add_pos);
 
-	err = resctrl_online_mon_domain(r, d);
+	err = resctrl_online_mon_domain(r, &d->hdr);
 	if (err) {
 		list_del_rcu(&d->hdr.list);
 		synchronize_rcu();
