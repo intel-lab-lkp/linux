@@ -44,4 +44,103 @@ int zl3073x_read_reg(struct zl3073x_dev *zldev, unsigned int reg,
 int zl3073x_write_reg(struct zl3073x_dev *zldev, unsigned int reg,
 		      unsigned int len, const void *value);
 
+/**
+ * __ZL3073X_REG_DEF - Define a device register helpers
+ * @_name: register name
+ * @_addr: register address
+ * @_len: size of register value in bytes
+ * @_type: type of register value
+ *
+ * The macro defines helper functions for particular device register
+ * to access it.
+ *
+ * Example:
+ * __ZL3073X_REG_DEF(sample_reg, 0x1234, 4, u32)
+ *
+ * generates static inline functions:
+ * int zl3073x_read_sample_reg(struct zl3073x_dev *dev, u32 *value);
+ * int zl3073x_write_sample_reg(struct zl3073x_dev *dev, u32 value);
+ *
+ * Note that these functions have to be called with the device lock
+ * taken.
+ */
+#define __ZL3073X_REG_DEF(_name, _addr, _len, _type)			\
+typedef _type zl3073x_##_name##_t;					\
+static inline								\
+int zl3073x_read_##_name(struct zl3073x_dev *zldev, _type * value)	\
+{									\
+	return zl3073x_read_reg(zldev, _addr, _len, value);		\
+}									\
+static inline								\
+int zl3073x_write_##_name(struct zl3073x_dev *zldev, _type value)	\
+{									\
+	return zl3073x_write_reg(zldev, _addr, _len, &value);		\
+}
+
+/**
+ * __ZL3073X_REG_IDX_DEF - Define an indexed device register helpers
+ * @_name: register name
+ * @_addr: register address
+ * @_len: size of register value in bytes
+ * @_type: type of register value
+ * @_num: number of register instances
+ * @_stride: address stride between instances
+ *
+ * The macro defines helper functions for particular indexed device
+ * register to access it.
+ *
+ * Example:
+ * __ZL3073X_REG_IDX_DEF(sample_reg, 0x1234, 2, u16, 4, 0x10)
+ *
+ * generates static inline functions:
+ * int zl3073x_read_sample_reg(struct zl3073x_dev *dev, unsigned int idx,
+ *			       u32 *value);
+ * int zl3073x_write_sample_reg(struct zl3073x_dev *dev, unsigned int idx,
+ *				u32 value);
+ *
+ * Note that these functions have to be called with the device lock
+ * taken.
+ */
+#define __ZL3073X_REG_IDX_DEF(_name, _addr, _len, _type, _num, _stride)	\
+typedef _type zl3073x_##_name##_t;					\
+static inline								\
+int zl3073x_read_##_name(struct zl3073x_dev *zldev, unsigned int idx,	\
+			 _type * value)					\
+{									\
+	WARN_ON(idx >= (_num));						\
+	return zl3073x_read_reg(zldev, (_addr) + idx * (_stride), _len,	\
+				value);					\
+}									\
+static inline								\
+int zl3073x_write_##_name(struct zl3073x_dev *zldev, unsigned int idx,	\
+			  _type value)					\
+{									\
+	WARN_ON(idx >= (_num));						\
+	return zl3073x_write_reg(zldev, (_addr) + idx * (_stride),	\
+				 _len, &value);				\
+}
+
+/*
+ * Add register definition shortcuts for 8, 16, 32 and 48 bits
+ */
+#define ZL3073X_REG8_DEF(_name, _addr)	__ZL3073X_REG_DEF(_name, _addr, 1, u8)
+#define ZL3073X_REG16_DEF(_name, _addr)	__ZL3073X_REG_DEF(_name, _addr, 2, u16)
+#define ZL3073X_REG32_DEF(_name, _addr)	__ZL3073X_REG_DEF(_name, _addr, 4, u32)
+#define ZL3073X_REG48_DEF(_name, _addr)	__ZL3073X_REG_DEF(_name, _addr, 6, u64)
+
+/*
+ * Add indexed register definition shortcuts for 8, 16, 32 and 48 bits
+ */
+#define ZL3073X_REG8_IDX_DEF(_name, _addr, _num, _stride)		\
+	__ZL3073X_REG_IDX_DEF(_name, _addr, 1, u8, _num, _stride)
+
+#define ZL3073X_REG16_IDX_DEF(_name, _addr, _num, _stride)		\
+	__ZL3073X_REG_IDX_DEF(_name, _addr, 2, u16, _num, _stride)
+
+#define ZL3073X_REG32_IDX_DEF(_name, _addr, _num, _stride)		\
+	__ZL3073X_REG_IDX_DEF(_name, _addr, 4, u32, _num, _stride)
+
+#define ZL3073X_REG48_IDX_DEF(_name, _addr, _num, _stride)		\
+	__ZL3073X_REG_IDX_DEF(_name, _addr, 6, u64, _num, _stride)
+
 #endif /* __LINUX_MFD_ZL3073X_H */
