@@ -861,6 +861,51 @@ static struct mon_evt all_events[QOS_NUM_EVENTS] = {
 		.rid	= RDT_RESOURCE_L3,
 		.type	= EVT_TYPE_U64,
 	},
+	[PMT_EVENT_ENERGY] = {
+		.name	= "core_energy",
+		.evtid	= PMT_EVENT_ENERGY,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_ACTIVITY] = {
+		.name	= "activity",
+		.evtid	= PMT_EVENT_ACTIVITY,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_STALLS_LLC_HIT] = {
+		.name	= "stalls_llc_hit",
+		.evtid	= PMT_EVENT_STALLS_LLC_HIT,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_C1_RES] = {
+		.name	= "c1_res",
+		.evtid	= PMT_EVENT_C1_RES,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_UNHALTED_CORE_CYCLES] = {
+		.name	= "unhalted_core_cycles",
+		.evtid	= PMT_EVENT_UNHALTED_CORE_CYCLES,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_STALLS_LLC_MISS] = {
+		.name	= "stalls_llc_miss",
+		.evtid	= PMT_EVENT_STALLS_LLC_MISS,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_AUTO_C6_RES] = {
+		.name	= "c6_res",
+		.evtid	= PMT_EVENT_AUTO_C6_RES,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_UNHALTED_REF_CYCLES] = {
+		.name	= "unhalted_ref_cycles",
+		.evtid	= PMT_EVENT_UNHALTED_REF_CYCLES,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
+	[PMT_EVENT_UOPS_RETIRED] = {
+		.name	= "uops_retired",
+		.evtid	= PMT_EVENT_UOPS_RETIRED,
+		.rid	= RDT_RESOURCE_PERF_PKG,
+	},
 };
 
 int resctrl_set_event_attributes(enum resctrl_event_id evt,
