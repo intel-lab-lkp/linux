@@ -2174,7 +2174,8 @@ static void nvmet_pci_epf_free_bar(struct nvmet_pci_epf *nvme_epf)
 	if (!nvme_epf->reg_bar)
 		return;
 
-	pci_epf_free_space(epf, nvme_epf->reg_bar, BAR_0, PRIMARY_INTERFACE);
+	pci_epf_free_space(epf, nvme_epf->reg_bar, BAR_0,
+			   nvme_epf->epc_features, PRIMARY_INTERFACE);
 	nvme_epf->reg_bar = NULL;
 }
 
