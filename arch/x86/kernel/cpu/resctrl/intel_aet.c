@@ -233,9 +233,14 @@ bool intel_aet_get_events(void)
 			continue;
 		for (int i = 0; i < (*tentry)->num_events; i++) {
 			enum resctrl_event_id evtid = (*tentry)->evts[i].evtid;
+			enum resctrl_event_type type;
 
 			evtinfo[evtid].telem_entry = *tentry;
 			evtinfo[evtid].pmt_event = &(*tentry)->evts[i];
+
+			__set_bit(evtid, rdt_mon_features);
+			type = (*tentry)->evts[i].type;
+			resctrl_set_event_attributes(evtid, type, true);
 		}
 	}
 
