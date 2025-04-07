@@ -1163,7 +1163,8 @@ static int nfs23_parse_monolithic(struct fs_context *fc,
 		 * to BITS_PER_LONG (majortimeo is unsigned long)
 		 */
 		if (!(data->flags & NFS_MOUNT_TCP)) /* this will be UDP */
-			if (data->retrans >= 64) /* shift value is too large */
+			/* Reject invalid retrans values (negative or too large) */
+			if (data->retrans < 0 || data->retrans >= 64)
 				goto out_invalid_data;
 
 		/*
