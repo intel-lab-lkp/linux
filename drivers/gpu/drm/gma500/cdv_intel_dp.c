@@ -1767,6 +1767,9 @@ static int cdv_intel_dp_get_modes(struct drm_connector *connector)
 		if (intel_dp->panel_fixed_mode != NULL) {
 			struct drm_display_mode *mode;
 			mode = drm_mode_duplicate(dev, intel_dp->panel_fixed_mode);
+			if (!mode)
+				return ret;
+
 			drm_mode_probed_add(connector, mode);
 			return 1;
 		}
