@@ -6,6 +6,7 @@
 #include <linux/mfd/zl3073x.h>
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 
 /*
  * Register Map Page 2, Status
@@ -825,6 +826,36 @@ zl3073x_dpll_unregister_pins(struct zl3073x_dpll *zldpll)
 		zl3073x_dpll_pin_unregister(&zldpll->pins[i]);
 }
 
+static enum dpll_type
+zl3073x_dpll_type_get(struct zl3073x_dpll *zldpll)
+{
+	const char *types[ZL3073X_NUM_CHANNELS];
+	enum dpll_type type;
+	int rc;
+
+	/* Set default */
+	type = DPLL_TYPE_PPS;
+
+	/* Read dpll types property from firmware */
+	rc = device_property_read_string_array(zldpll->mfd->dev, "dpll-types",
+					       types, ARRAY_SIZE(types));
+
+	/* It is not present or property does not exist, use default */
+	if (rc <= zldpll->id)
+		return type;
+
+	if (!strcmp(types[zldpll->id], "pps"))
+		type = DPLL_TYPE_PPS;
+	else if (!strcmp(types[zldpll->id], "eec"))
+		type = DPLL_TYPE_EEC;
+	else
+		dev_info(zldpll->mfd->dev,
+			 "Unknown dpll type '%s', using default\n",
+			 types[zldpll->id]);
+
+	return type;
+}
+
 static int
 zl3073x_dpll_register(struct zl3073x_dpll *zldpll)
 {
@@ -852,7 +883,8 @@ zl3073x_dpll_register(struct zl3073x_dpll *zldpll)
 	if (IS_ERR(zldpll->dpll_dev))
 		return PTR_ERR(zldpll->dpll_dev);
 
-	rc = dpll_device_register(zldpll->dpll_dev, DPLL_TYPE_PPS,
+	rc = dpll_device_register(zldpll->dpll_dev,
+				  zl3073x_dpll_type_get(zldpll),
 				  &zl3073x_dpll_device_ops, zldpll);
 	if (rc) {
 		dpll_device_put(zldpll->dpll_dev);
