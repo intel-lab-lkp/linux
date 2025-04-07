@@ -139,6 +139,10 @@ int fwnode_property_get_reference_args(const struct fwnode_handle *fwnode,
 				       const char *prop, const char *nargs_prop,
 				       unsigned int nargs, unsigned int index,
 				       struct fwnode_reference_args *args);
+int fwnode_property_get_reference_optional_args(const struct fwnode_handle *fwnode,
+						const char *prop, const char *nargs_prop,
+						unsigned int index,
+						struct fwnode_reference_args *args);
 
 struct fwnode_handle *fwnode_find_reference(const struct fwnode_handle *fwnode,
 					    const char *name,

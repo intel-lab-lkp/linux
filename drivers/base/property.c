@@ -619,6 +619,52 @@ int fwnode_property_get_reference_args(const struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_property_get_reference_args);
 
 /**
+ * fwnode_property_get_reference_optional_args() - Find a reference with optional arguments
+ * @fwnode:	Firmware node where to look for the reference
+ * @prop:	The name of the property
+ * @nargs_prop:	The name of the property telling the number of
+ *		arguments in the referred node.
+ * @index:	Index of the reference, from zero onwards.
+ * @args:	Result structure with reference and integer arguments.
+ *		May be NULL.
+ *
+ * Obtain a reference based on a named property in an fwnode, with
+ * integer arguments. If @nargs_prop is absent from the referenced node, then
+ * number of arguments is be assumed to be 0.
+ *
+ * The caller is responsible for calling fwnode_handle_put() on the returned
+ * @args->fwnode pointer.
+ *
+ * Return: %0 on success
+ *	    %-ENOENT when the index is out of bounds, the index has an empty
+ *		     reference or the property was not found
+ *	    %-EINVAL on parse error
+ */
+int fwnode_property_get_reference_optional_args(const struct fwnode_handle *fwnode,
+						const char *prop,
+						const char *nargs_prop,
+						unsigned int index,
+						struct fwnode_reference_args *args)
+{
+	int ret;
+
+	if (IS_ERR_OR_NULL(fwnode))
+		return -ENOENT;
+
+	ret = fwnode_call_int_op(fwnode, get_reference_args, prop, nargs_prop,
+				 0, index, args);
+	if (ret == 0)
+		return ret;
+
+	if (IS_ERR_OR_NULL(fwnode->secondary))
+		return ret;
+
+	return fwnode_call_int_op(fwnode->secondary, get_reference_args, prop, nargs_prop,
+				  0, index, args);
+}
+EXPORT_SYMBOL_GPL(fwnode_property_get_reference_optional_args);
+
+/**
  * fwnode_find_reference - Find named reference to a fwnode_handle
  * @fwnode: Firmware node where to look for the reference
  * @name: The name of the reference
