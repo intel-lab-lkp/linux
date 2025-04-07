@@ -803,6 +803,7 @@ out_fallback:
 	dev_info(smmu->impl_dev, "Falling back to standard SMMU CMDQ\n");
 	smmu->options &= ~ARM_SMMU_OPT_TEGRA241_CMDQV;
 	tegra241_cmdqv_remove(smmu);
+	smmu->impl_ops = NULL;
 	return 0;
 }
 
