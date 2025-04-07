@@ -631,6 +631,11 @@ config MCHP_LAN966X_PCI
 	    - lan966x-serdes (PHY_LAN966X_SERDES)
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
+	    - lan966x-gck (COMMON_CLK_LAN966X)
+	    - i2c-mux-pinctrl (I2C_MUX_PINCTRL)
+	    - sama5d2-flexcom (MFD_ATMEL_FLEXCOM)
+	    - sam9x60-i2c (I2C_AT91)
+	    - sfp (SFP)
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
