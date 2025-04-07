@@ -9,9 +9,14 @@
 /*
  * Hardware limits for ZL3073x chip family
  */
+#define ZL3073X_NUM_CHANNELS	2
 #define ZL3073X_NUM_INPUTS	10
 #define ZL3073X_NUM_OUTPUTS	10
 #define ZL3073X_NUM_SYNTHS	5
+#define ZL3073X_NUM_INPUT_PINS	ZL3073X_NUM_INPUTS
+#define ZL3073X_NUM_OUTPUT_PINS	(ZL3073X_NUM_OUTPUTS * 2)
+#define ZL3073X_NUM_PINS	(ZL3073X_NUM_INPUT_PINS + \
+				 ZL3073X_NUM_OUTPUT_PINS)
 
 struct zl3073x_input {
 	bool	enabled;
