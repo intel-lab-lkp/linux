@@ -1351,16 +1351,20 @@ static void marvell_nfc_hw_ecc_bch_read_chunk(struct nand_chip *chip, int chunk,
 	 * Length is a multiple of 32 bytes, hence it is a multiple of 8 too.
 	 */
 	for (i = 0; i < data_len; i += FIFO_DEPTH * BCH_SEQ_READS) {
-		marvell_nfc_end_cmd(chip, NDSR_RDDREQ,
-				    "RDDREQ while draining FIFO (data)");
+		err = marvell_nfc_end_cmd(chip, NDSR_RDDREQ,
+					  "RDDREQ while draining FIFO (data)");
+		if (err)
+			dev_err(nfc->dev, "Fail to confirm the NDSR.RDDREQ");
 		marvell_nfc_xfer_data_in_pio(nfc, data,
 					     FIFO_DEPTH * BCH_SEQ_READS);
 		data += FIFO_DEPTH * BCH_SEQ_READS;
 	}
 
 	for (i = 0; i < spare_len; i += FIFO_DEPTH * BCH_SEQ_READS) {
-		marvell_nfc_end_cmd(chip, NDSR_RDDREQ,
-				    "RDDREQ while draining FIFO (OOB)");
+		err = marvell_nfc_end_cmd(chip, NDSR_RDDREQ,
+					  "RDDREQ while draining FIFO (OOB)");
+		if (err)
+			dev_err(nfc->dev, "Fail to confirm the NDSR.RDDREQ");
 		marvell_nfc_xfer_data_in_pio(nfc, spare,
 					     FIFO_DEPTH * BCH_SEQ_READS);
 		spare += FIFO_DEPTH * BCH_SEQ_READS;
