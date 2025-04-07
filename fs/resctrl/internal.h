@@ -83,6 +83,7 @@ struct mon_evt {
 
 /**
  * struct mon_data - Monitoring details for each event file.
+ * @list:            List of all allocated structures.
  * @rid:             Resource id associated with the event file.
  * @evtid:           Event id associated with the event file.
  * @sum:             Set when event must be summed across multiple
@@ -96,6 +97,7 @@ struct mon_evt {
  * rdtgroup_mutex.
  */
 struct mon_data {
+	struct list_head list;
 	unsigned int rid;
 	enum resctrl_event_id evtid;
 	unsigned int sum;

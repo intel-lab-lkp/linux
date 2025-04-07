@@ -69,6 +69,8 @@ static int rdtgroup_setup_root(struct rdt_fs_context *ctx);
 
 static void rdtgroup_destroy_root(void);
 
+static void mon_put_kn_priv(void);
+
 struct dentry *debugfs_resctrl;
 
 /*
@@ -2873,6 +2875,7 @@ static void rdt_kill_sb(struct super_block *sb)
 		resctrl_arch_reset_all_ctrls(r);
 
 	rmdir_all_sub();
+	mon_put_kn_priv();
 	rdt_pseudo_lock_release();
 	rdtgroup_default.mode = RDT_MODE_SHAREABLE;
 	schemata_list_destroy();
@@ -2895,107 +2898,54 @@ static struct file_system_type rdt_fs_type = {
 	.kill_sb		= rdt_kill_sb,
 };
 
+static LIST_HEAD(kn_priv_list);
+
 /**
- * mon_get_default_kn_priv() - Get the mon_data priv data for this event from
- *                             the default control group.
+ * mon_get_kn_priv() - Get the mon_data priv data for this event
  * Called when monitor event files are created for a domain.
- * When called with the default control group, the structure will be allocated.
- * This happens at mount time, before other control or monitor groups are
- * created.
- * This simplifies the lifetime management for rmdir() versus domain-offline
- * as the default control group lives forever, and only one group needs to be
- * special cased.
+ * The same values are used in multiple directories. Keep a list
+ * of allocated structures and reuse an existing one with the same
+ * list of values for rid, domain, etc.
  *
- * @r:      The resource for the event type being created.
- * @d:	    The domain for the event type being created.
- * @mevt:   The event type being created.
- * @rdtgrp: The rdtgroup for which the monitor file is being created,
- *          used to determine if this is the default control group.
- * @do_sum: Whether the SNC sub-numa node monitors are being created.
+ * @rid:	The resource for the event type being created.
+ * @domid:	The domain for the event type being created.
+ * @mevt:	The event type being created.
+ * @do_sum:	Whether the SNC sub-numa node monitors are being created.
  */
-static struct mon_data *mon_get_default_kn_priv(struct rdt_resource *r,
-						struct rdt_mon_domain *d,
-						struct mon_evt *mevt,
-						struct rdtgroup *rdtgrp,
-						bool do_sum)
+static struct mon_data *mon_get_kn_priv(int rid, int domid, struct mon_evt *mevt, bool do_sum)
 {
-	struct kernfs_node *kn_dom, *kn_evt;
 	struct mon_data *priv;
-	bool snc_mode;
-	char name[32];
 
-	lockdep_assert_held(&rdtgroup_mutex);
-
-	snc_mode = r->mon_scope == RESCTRL_L3_NODE;
-	if (!do_sum)
-		sprintf(name, "mon_%s_%02d", r->name, snc_mode ? d->ci->id : d->hdr.id);
-	else
-		sprintf(name, "mon_sub_%s_%02d", r->name, d->hdr.id);
-
-	kn_dom = kernfs_find_and_get(kn_mondata, name);
-	if (!kn_dom)
-		return NULL;
-
-	kn_evt = kernfs_find_and_get(kn_dom, mevt->name);
-
-	/* Is this the creation of the default groups monitor files? */
-	if (!kn_evt && rdtgrp == &rdtgroup_default) {
-		priv = kzalloc(sizeof(*priv), GFP_KERNEL);
-		if (!priv)
-			return NULL;
-		priv->rid = r->rid;
-		priv->domid = do_sum ? d->ci->id : d->hdr.id;
-		priv->sum = do_sum;
-		priv->evtid = mevt->evtid;
-		return priv;
+	list_for_each_entry(priv, &kn_priv_list, list) {
+		if (priv->rid == rid && priv->domid == domid &&
+		    priv->sum == do_sum && priv->evtid == mevt->evtid)
+			return priv;
 	}
 
-	if (!kn_evt)
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!priv)
 		return NULL;
 
-	return kn_evt->priv;
+	priv->rid = rid;
+	priv->domid = domid;
+	priv->sum = do_sum;
+	priv->evtid = mevt->evtid;
+	list_add_tail(&priv->list, &kn_priv_list);
+
+	return priv;
 }
 
 /**
- * mon_put_default_kn_priv_all() - Potentially free the mon_data priv data for
- *                                 all events from the default control group.
- * Put the mon_data priv data for all events for a particular domain.
- * When called with the default control group, the priv structure previously
- * allocated will be kfree()d. This should only be done as part of taking a
- * domain offline.
- * Only a domain offline will 'rmdir' monitor files in the default control
- * group. After domain offline releases rdtgrp_mutex, all references will
- * have been removed.
- *
- * @rdtgrp:  The rdtgroup for which the monitor files are being removed,
- *           used to determine if this is the default control group.
- * @name:    The name of the domain or SNC sub-numa domain which is being
- *           taken offline.
+ * mon_put_kn_priv() - Free all allocated mon_data structures
+ * Called when resctrl file system is unmounted.
  */
-static void mon_put_default_kn_priv_all(struct rdtgroup *rdtgrp, char *name)
+static void mon_put_kn_priv(void)
 {
-	struct rdt_resource *r = resctrl_arch_get_resource(RDT_RESOURCE_L3);
-	struct kernfs_node *kn_dom, *kn_evt;
-	struct mon_evt *mevt;
+	struct mon_data *priv, *tmp;
 
-	lockdep_assert_held(&rdtgroup_mutex);
-
-	if (rdtgrp != &rdtgroup_default)
-		return;
-
-	kn_dom = kernfs_find_and_get(kn_mondata, name);
-	if (!kn_dom)
-		return;
-
-	list_for_each_entry(mevt, &r->evt_list, list) {
-		kn_evt = kernfs_find_and_get(kn_dom, mevt->name);
-		if (!kn_evt)
-			continue;
-		if (!kn_evt->priv)
-			continue;
-
-		kfree(kn_evt->priv);
-		kn_evt->priv = NULL;
+	list_for_each_entry_safe(priv, tmp, &kn_priv_list, list) {
+		kfree(priv);
+		list_del(&priv->list);
 	}
 }
 
@@ -3029,16 +2979,12 @@ static void mon_rmdir_one_subdir(struct rdtgroup *rdtgrp, char *name, char *subn
 	if (!kn)
 		return;
 
-	mon_put_default_kn_priv_all(rdtgrp, name);
-
 	kernfs_put(kn);
 
-	if (kn->dir.subdirs <= 1) {
+	if (kn->dir.subdirs <= 1)
 		kernfs_remove(kn);
-	} else {
-		mon_put_default_kn_priv_all(rdtgrp, subname);
+	else
 		kernfs_remove_by_name(kn, subname);
-	}
 }
 
 /*
@@ -3081,7 +3027,7 @@ static int mon_add_all_files(struct kernfs_node *kn, struct rdt_mon_domain *d,
 		return -EPERM;
 
 	list_for_each_entry(mevt, &r->evt_list, list) {
-		priv = mon_get_default_kn_priv(r, d, mevt, prgrp, do_sum);
+		priv = mon_get_kn_priv(r->rid, do_sum ? d->ci->id : d->hdr.id, mevt, do_sum);
 		if (WARN_ON_ONCE(!priv))
 			return -EINVAL;
 
@@ -3165,17 +3111,9 @@ static void mkdir_mondata_subdir_allrdtgrp(struct rdt_resource *r,
 	struct rdtgroup *prgrp, *crgrp;
 	struct list_head *head;
 
-	/*
-	 * During domain-online create the default control group first
-	 * so that mon_get_default_kn_priv() can find the allocated structure
-	 * on subsequent calls.
-	 */
-	mkdir_mondata_subdir(kn_mondata, d, r, &rdtgroup_default);
-
 	list_for_each_entry(prgrp, &rdt_all_groups, rdtgroup_list) {
 		parent_kn = prgrp->mon.mon_data_kn;
-		if (prgrp != &rdtgroup_default)
-			mkdir_mondata_subdir(parent_kn, d, r, prgrp);
+		mkdir_mondata_subdir(parent_kn, d, r, prgrp);
 
 		head = &prgrp->mon.crdtgrp_list;
 		list_for_each_entry(crgrp, head, mon.crdtgrp_list) {
