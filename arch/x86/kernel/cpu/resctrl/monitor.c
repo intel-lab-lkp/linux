@@ -236,6 +236,12 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_mon_domain *d,
 	u32 prmid;
 	int ret;
 
+	if (r->rid == RDT_RESOURCE_PERF_PKG) {
+		ret = intel_aet_read_event(d->hdr.id, rmid, eventid, val);
+
+		return ret ? ret : 0;
+	}
+
 	resctrl_arch_rmid_read_context_check();
 
 	prmid = logical_rmid_to_physical_rmid(cpu, rmid);

@@ -73,6 +73,12 @@ static struct evtinfo {
 	struct pmt_event	*pmt_event;
 } evtinfo[QOS_NUM_EVENTS];
 
+#define EVT_NUM_RMIDS(evtid)	(evtinfo[evtid].telem_entry->num_rmids)
+#define EVT_NUM_EVENTS(evtid)	(evtinfo[evtid].telem_entry->num_events)
+#define EVT_GUID(evtid)		(evtinfo[evtid].telem_entry->guid)
+
+#define EVT_OFFSET(evtid)	(evtinfo[evtid].pmt_event->evt_offset)
+
 /* All known telemetry event groups */
 static struct telem_entry *telem_entry[] = {
 	NULL
@@ -223,4 +229,56 @@ void __exit intel_aet_exit(void)
 			kfree(pkg_info[i].regions);
 	}
 	kfree(pkg_info);
+}
+
+#define VALID_BIT	BIT_ULL(63)
+#define DATA_BITS	GENMASK_ULL(62, 0)
+
+/*
+ * Walk the array of telemetry groups on a specific package.
+ * Read and sum values for a specific counter (described by
+ * guid and offset).
+ * Return failure (~0x0ull) if any counter isn't valid.
+ */
+static u64 scan_pmt_devs(int package, int guid, int offset)
+{
+	u64 rval, val;
+	int ndev = 0;
+
+	rval = 0;
+
+	for (int i = 0; i < pkg_info[package].count; i++) {
+		if (pkg_info[package].regions[i].guid != guid)
+			continue;
+		ndev++;
+		val = readq(pkg_info[package].regions[i].addr + offset);
+
+		if (!(val & VALID_BIT))
+			return ~0ull;
+		rval += val & DATA_BITS;
+	}
+
+	return ndev ? rval : ~0ull;
+}
+
+/*
+ * Read counter for an event on a domain (summing all aggregators
+ * on the domain).
+ */
+int intel_aet_read_event(int domid, int rmid, int evtid, u64 *val)
+{
+	u64 evtcount;
+	int offset;
+
+	if (rmid >= EVT_NUM_RMIDS(evtid))
+		return -ENOENT;
+
+	offset = rmid * EVT_NUM_EVENTS(evtid) * sizeof(u64);
+	offset += EVT_OFFSET(evtid);
+	evtcount = scan_pmt_devs(domid, EVT_GUID(evtid), offset);
+
+	if (evtcount != ~0ull || *val == 0)
+		*val += evtcount;
+
+	return evtcount != ~0ull ? 0 : -EINVAL;
 }
