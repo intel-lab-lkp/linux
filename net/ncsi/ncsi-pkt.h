@@ -251,49 +251,49 @@ struct ncsi_rsp_gp_pkt {
 
 /* Get Controller Packet Statistics */
 struct ncsi_rsp_gcps_pkt {
-	struct ncsi_rsp_pkt_hdr rsp;            /* Response header            */
-	__be32                  cnt_hi;         /* Counter cleared            */
-	__be32                  cnt_lo;         /* Counter cleared            */
-	__be32                  rx_bytes;       /* Rx bytes                   */
-	__be32                  tx_bytes;       /* Tx bytes                   */
-	__be32                  rx_uc_pkts;     /* Rx UC packets              */
-	__be32                  rx_mc_pkts;     /* Rx MC packets              */
-	__be32                  rx_bc_pkts;     /* Rx BC packets              */
-	__be32                  tx_uc_pkts;     /* Tx UC packets              */
-	__be32                  tx_mc_pkts;     /* Tx MC packets              */
-	__be32                  tx_bc_pkts;     /* Tx BC packets              */
-	__be32                  fcs_err;        /* FCS errors                 */
-	__be32                  align_err;      /* Alignment errors           */
-	__be32                  false_carrier;  /* False carrier detection    */
-	__be32                  runt_pkts;      /* Rx runt packets            */
-	__be32                  jabber_pkts;    /* Rx jabber packets          */
-	__be32                  rx_pause_xon;   /* Rx pause XON frames        */
-	__be32                  rx_pause_xoff;  /* Rx XOFF frames             */
-	__be32                  tx_pause_xon;   /* Tx XON frames              */
-	__be32                  tx_pause_xoff;  /* Tx XOFF frames             */
-	__be32                  tx_s_collision; /* Single collision frames    */
-	__be32                  tx_m_collision; /* Multiple collision frames  */
-	__be32                  l_collision;    /* Late collision frames      */
-	__be32                  e_collision;    /* Excessive collision frames */
-	__be32                  rx_ctl_frames;  /* Rx control frames          */
-	__be32                  rx_64_frames;   /* Rx 64-bytes frames         */
-	__be32                  rx_127_frames;  /* Rx 65-127 bytes frames     */
-	__be32                  rx_255_frames;  /* Rx 128-255 bytes frames    */
-	__be32                  rx_511_frames;  /* Rx 256-511 bytes frames    */
-	__be32                  rx_1023_frames; /* Rx 512-1023 bytes frames   */
-	__be32                  rx_1522_frames; /* Rx 1024-1522 bytes frames  */
-	__be32                  rx_9022_frames; /* Rx 1523-9022 bytes frames  */
-	__be32                  tx_64_frames;   /* Tx 64-bytes frames         */
-	__be32                  tx_127_frames;  /* Tx 65-127 bytes frames     */
-	__be32                  tx_255_frames;  /* Tx 128-255 bytes frames    */
-	__be32                  tx_511_frames;  /* Tx 256-511 bytes frames    */
-	__be32                  tx_1023_frames; /* Tx 512-1023 bytes frames   */
-	__be32                  tx_1522_frames; /* Tx 1024-1522 bytes frames  */
-	__be32                  tx_9022_frames; /* Tx 1523-9022 bytes frames  */
-	__be32                  rx_valid_bytes; /* Rx valid bytes             */
-	__be32                  rx_runt_pkts;   /* Rx error runt packets      */
-	__be32                  rx_jabber_pkts; /* Rx error jabber packets    */
-	__be32                  checksum;       /* Checksum                   */
+	struct ncsi_rsp_pkt_hdr rsp;               /* Response header            */
+	__be32                  cnt_hi;            /* Counter cleared            */
+	__be32                  cnt_lo;            /* Counter cleared            */
+	__be32                  rx_bytes;          /* Rx bytes                   */
+	__be32                  tx_bytes;          /* Tx bytes                   */
+	__be32                  rx_uc_pkts;        /* Rx UC packets              */
+	__be32                  rx_mc_pkts;        /* Rx MC packets              */
+	__be32                  rx_bc_pkts;        /* Rx BC packets              */
+	__be32                  tx_uc_pkts;        /* Tx UC packets              */
+	__be32                  tx_mc_pkts;        /* Tx MC packets              */
+	__be32                  tx_bc_pkts;        /* Tx BC packets              */
+	__be32                  fcs_err;           /* FCS errors                 */
+	__be32                  align_err;         /* Alignment errors           */
+	__be32                  false_carrier;     /* False carrier detection    */
+	__be32                  runt_pkts;         /* Rx runt packets            */
+	__be32                  jabber_pkts;       /* Rx jabber packets          */
+	__be32                  rx_pause_xon;      /* Rx pause XON frames        */
+	__be32                  rx_pause_xoff;     /* Rx XOFF frames             */
+	__be32                  tx_pause_xon;      /* Tx XON frames              */
+	__be32                  tx_pause_xoff;     /* Tx XOFF frames             */
+	__be32                  tx_s_collision;    /* Single collision frames    */
+	__be32                  tx_m_collision;    /* Multiple collision frames  */
+	__be32                  l_collision;       /* Late collision frames      */
+	__be32                  e_collision;       /* Excessive collision frames */
+	__be32                  rx_ctl_frames;     /* Rx control frames          */
+	__be32                  rx_64_frames;      /* Rx 64-bytes frames         */
+	__be32                  rx_127_frames;     /* Rx 65-127 bytes frames     */
+	__be32                  rx_255_frames;     /* Rx 128-255 bytes frames    */
+	__be32                  rx_511_frames;     /* Rx 256-511 bytes frames    */
+	__be32                  rx_1023_frames;    /* Rx 512-1023 bytes frames   */
+	__be32                  rx_1522_frames;    /* Rx 1024-1522 bytes frames  */
+	__be32                  rx_9022_frames;    /* Rx 1523-9022 bytes frames  */
+	__be32                  tx_64_frames;      /* Tx 64-bytes frames         */
+	__be32                  tx_127_frames;     /* Tx 65-127 bytes frames     */
+	__be32                  tx_255_frames;     /* Tx 128-255 bytes frames    */
+	__be32                  tx_511_frames;     /* Tx 256-511 bytes frames    */
+	__be32                  tx_1023_frames;    /* Tx 512-1023 bytes frames   */
+	__be32                  tx_1522_frames;    /* Tx 1024-1522 bytes frames  */
+	__be32                  tx_9022_frames;    /* Tx 1523-9022 bytes frames  */
+	__be32                  rx_valid_bytes;    /* Rx valid bytes             */
+	__be32                  rx_runt_pkts;      /* Rx error runt packets      */
+	__be32                  rx_jabber_pkts;    /* Rx error jabber packets    */
+	__be32                  checksum;          /* Checksum                   */
 };
 
 /* Get NCSI Statistics */
