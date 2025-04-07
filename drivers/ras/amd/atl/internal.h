@@ -362,4 +362,19 @@ static inline void atl_debug_on_bad_intlv_mode(struct addr_ctx *ctx)
 	atl_debug(ctx, "Unrecognized interleave mode: %u", ctx->map.intlv_mode);
 }
 
+#define MI300_UMC_MCA_COL	GENMASK(5, 1)
+#define MI300_UMC_MCA_ROW13	BIT(23)
+static inline u64 atl_mask_address(u64 addr)
+{
+	/*
+	 * Row retirement is done on MI300 systems, and some bits are 'don't care'
+	 * for comparing addresses with unique physical rows.
+	 * This includes all column bits and the row[13] bit.
+	 */
+	if (df_cfg.rev == DF4p5 && df_cfg.flags.heterogeneous)
+		return addr & ~(MI300_UMC_MCA_ROW13 | MI300_UMC_MCA_COL);
+
+	return addr;
+}
+
 #endif /* __AMD_ATL_INTERNAL_H__ */
