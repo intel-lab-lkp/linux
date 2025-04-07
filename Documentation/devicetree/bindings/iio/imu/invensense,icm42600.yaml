@@ -41,6 +41,17 @@ properties:
   interrupts:
     maxItems: 1
 
+  interrupt-names:
+    minItems: 1
+    maxItems: 1
+    items:
+      enum:
+        - INT1
+        - INT2
+    description: |
+      choose chip interrupt pin to be used as interrupt input, beware that the
+      only support interrupt pin is INT1 for the moment.
+
   drive-open-drain:
     type: boolean
 
@@ -76,6 +87,7 @@ examples:
             reg = <0x68>;
             interrupt-parent = <&gpio2>;
             interrupts = <7 IRQ_TYPE_EDGE_FALLING>;
+            interrupt-names = "INT1";
             vdd-supply = <&vdd>;
             vddio-supply = <&vddio>;
         };
@@ -95,6 +107,7 @@ examples:
             spi-cpol;
             interrupt-parent = <&gpio1>;
             interrupts = <2 IRQ_TYPE_EDGE_FALLING>;
+            interrupt-names = "INT1";
             vdd-supply = <&vdd>;
             vddio-supply = <&vddio>;
         };
