@@ -15,6 +15,47 @@ ZL3073X_REG16_DEF(fw_ver,		0x0005);
 ZL3073X_REG32_DEF(custom_config_ver,	0x0007);
 
 /*
+ * Register Map Page 10, Ref Mailbox
+ */
+ZL3073X_REG16_DEF(ref_mb_mask,			0x502);
+#define REF_MB_MASK				GENMASK(9, 0)
+
+ZL3073X_REG8_DEF(ref_mb_sem,			0x504);
+#define REF_MB_SEM_WR				BIT(0)
+#define REF_MB_SEM_RD				BIT(1)
+
+/*
+ * Register Map Page 12, DPLL Mailbox
+ */
+ZL3073X_REG16_DEF(dpll_mb_mask,			0x602);
+
+ZL3073X_REG8_DEF(dpll_mb_sem,			0x604);
+#define DPLL_MB_SEM_WR				BIT(0)
+#define DPLL_MB_SEM_RD				BIT(1)
+
+/*
+ * Register Map Page 13, Synth Mailbox
+ */
+ZL3073X_REG16_DEF(synth_mb_mask,		0x682);
+
+ZL3073X_REG8_DEF(synth_mb_sem,			0x684);
+#define SYNTH_MB_SEM_WR				BIT(0)
+#define SYNTH_MB_SEM_RD				BIT(1)
+
+ZL3073X_REG16_DEF(synth_freq_base,		0x686);
+ZL3073X_REG32_DEF(synth_freq_mult,		0x688);
+ZL3073X_REG16_DEF(synth_freq_m,			0x68c);
+ZL3073X_REG16_DEF(synth_freq_n,			0x68e);
+
+/*
+ * Register Map Page 14, Output Mailbox
+ */
+ZL3073X_REG16_DEF(output_mb_mask,		0x702);
+ZL3073X_REG8_DEF(output_mb_sem,			0x704);
+#define OUTPUT_MB_SEM_WR			BIT(0)
+#define OUTPUT_MB_SEM_RD			BIT(1)
+
+/*
  * Regmap ranges
  */
 #define ZL3073x_PAGE_SIZE	128
@@ -141,6 +182,150 @@ int zl3073x_write_reg(struct zl3073x_dev *zldev, unsigned int reg,
 	return regmap_bulk_write(zldev->regmap, reg, buf, len);
 }
 EXPORT_SYMBOL_GPL(zl3073x_write_reg);
+
+/**
+ * ZL3073X_MB_OP - perform an operation on mailbox of certain type
+ * @_zldev: pointer to device structure
+ * @_type: type of mailbox (dpll, ref or output)
+ * @_index: object index of given type
+ * @_op: operation to perform
+ *
+ * Performs the requested operation on mailbox of certain type and
+ * returns 0 in case of success or negative value otherwise.
+ */
+#define ZL3073X_MB_OP(_zldev, _type, _index, _op)			\
+({									\
+	struct zl3073x_dev *__zldev = (_zldev);				\
+	u16 __mask = BIT(_index);					\
+	u8 __op = (_op);						\
+	int __rc;							\
+	do {								\
+		/* Select requested index in mask register */		\
+		__rc = zl3073x_write_##_type##_mb_mask(__zldev, __mask);\
+		if (__rc)						\
+			break;						\
+		/* Select requested command */				\
+		__rc = zl3073x_write_##_type##_mb_sem(__zldev, __op);	\
+		if (__rc)						\
+			break;						\
+		/* Wait for the command to actually finish */		\
+		__rc = zl3073x_wait_clear_bits(__zldev, _type##_mb_sem,	\
+					       __op);			\
+	} while (0);							\
+	__rc;								\
+})
+
+/**
+ * zl3073x_mb_dpll_read - read given DPLL configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: DPLL index
+ *
+ * Reads configuration of given DPLL into DPLL mailbox and returns 0
+ * in case of success or negative value otherwise.
+ */
+int zl3073x_mb_dpll_read(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, dpll, index, DPLL_MB_SEM_RD);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_dpll_read);
+
+/**
+ * zl3073x_mb_dpll_write - write given DPLL configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: DPLL index
+ *
+ * Writes (commits) configuration of given DPLL from DPLL mailbox and
+ * returns 0 in case of success or negative value otherwise.
+ */
+int zl3073x_mb_dpll_write(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, dpll, index, DPLL_MB_SEM_WR);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_dpll_write);
+
+/**
+ * zl3073x_mb_output_read - read given output configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: output index
+ *
+ * Reads configuration of given output into output mailbox and returns 0
+ * in case of success or negative value otherwise.
+ */
+int zl3073x_mb_output_read(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, output, index, OUTPUT_MB_SEM_RD);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_output_read);
+
+/**
+ * zl3073x_mb_output_write - write given output configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: DPLL index
+ *
+ * Writes (commits) configuration of given output from output mailbox and
+ * returns 0 in case of success or negative value otherwise.
+ */
+int zl3073x_mb_output_write(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, output, index, OUTPUT_MB_SEM_WR);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_output_write);
+
+/**
+ * zl3073x_mb_ref_read - read given reference configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: reference index
+ *
+ * Reads configuration of given reference into reference mailbox and
+ * returns 0 in case of success or negative value otherwise.
+ */
+int zl3073x_mb_ref_read(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, ref, index, REF_MB_SEM_RD);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_ref_read);
+
+/**
+ * zl3073x_mb_ref_write - write given reference configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: reference index
+ *
+ * Writes (commits) configuration of given reference from reference mailbox
+ * and returns 0 in case of success or negative value otherwise.
+ */
+int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, ref, index, REF_MB_SEM_WR);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_ref_write);
+
+/**
+ * zl3073x_mb_synth_read - read given synth configuration to mailbox
+ * @zldev: pointer to device structure
+ * @index: synth index
+ *
+ * Reads configuration of given synth into synth mailbox and returns 0
+ * in case of success or negative value otherwise.
+ */
+int zl3073x_mb_synth_read(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, synth, index, SYNTH_MB_SEM_RD);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_synth_read);
+
+/**
+ * zl3073x_mb_synth_write - write given synth configuration from mailbox
+ * @zldev: pointer to device structure
+ * @index: synth index
+ *
+ * Writes (commits) configuration of given synth from reference mailbox
+ * and returns 0 in case of success or negative value otherwise.
+ */
+int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index)
+{
+	return ZL3073X_MB_OP(zldev, synth, index, SYNTH_MB_SEM_WR);
+}
+EXPORT_SYMBOL_GPL(zl3073x_mb_synth_write);
 
 /**
  * zl3073x_devlink_info_get - Devlink device info callback
