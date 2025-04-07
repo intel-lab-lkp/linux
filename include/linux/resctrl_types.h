@@ -58,6 +58,14 @@ enum resctrl_event_id {
 #define QOS_NUM_MBM_EVENTS	(QOS_L3_MBM_LOCAL_EVENT_ID - QOS_L3_MBM_TOTAL_EVENT_ID + 1)
 #define MBM_EVENT_IDX(evt)	((evt) - QOS_L3_MBM_TOTAL_EVENT_ID)
 
+/*
+ * Event value display types
+ */
+enum resctrl_event_type {
+	EVT_TYPE_U64,
+	EVT_TYPE_U46_18,
+};
+
 static inline bool resctrl_is_mbm_event(int e)
 {
 	return (e >= QOS_L3_MBM_TOTAL_EVENT_ID &&

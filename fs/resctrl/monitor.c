@@ -847,16 +847,19 @@ static struct mon_evt all_events[QOS_NUM_EVENTS] = {
 		.name	= "llc_occupancy",
 		.evtid	= QOS_L3_OCCUP_EVENT_ID,
 		.rid	= RDT_RESOURCE_L3,
+		.type	= EVT_TYPE_U64,
 	},
 	[QOS_L3_MBM_TOTAL_EVENT_ID] = {
 		.name	= "mbm_total_bytes",
 		.evtid	= QOS_L3_MBM_TOTAL_EVENT_ID,
 		.rid	= RDT_RESOURCE_L3,
+		.type	= EVT_TYPE_U64,
 	},
 	[QOS_L3_MBM_LOCAL_EVENT_ID] = {
 		.name	= "mbm_local_bytes",
 		.evtid	= QOS_L3_MBM_LOCAL_EVENT_ID,
 		.rid	= RDT_RESOURCE_L3,
+		.type	= EVT_TYPE_U64,
 	},
 };
 

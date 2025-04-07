@@ -71,6 +71,7 @@ static inline struct rdt_fs_context *rdt_fc2context(struct fs_context *fc)
  * struct mon_evt - Entry in the event list of a resource
  * @evtid:		event id
  * @name:		name of the event
+ * @type:		format for display to user
  * @configurable:	true if the event is configurable
  * @any_cpu:		true if this event can be read from any CPU
  * @list:		entry in &rdt_resource->evt_list
@@ -79,6 +80,7 @@ struct mon_evt {
 	enum resctrl_event_id	evtid;
 	enum resctrl_res_level	rid;
 	char			*name;
+	enum resctrl_event_type	type;
 	bool			configurable;
 	bool			any_cpu;
 	struct list_head	list;
@@ -89,6 +91,7 @@ struct mon_evt {
  * @list:            List of all allocated structures.
  * @rid:             Resource id associated with the event file.
  * @evtid:           Event id associated with the event file.
+ * @type:            Format for display to user
  * @sum:             Set when event must be summed across multiple
  *                   domains.
  * @domid:           When @sum is zero this is the domain to which
@@ -104,6 +107,7 @@ struct mon_data {
 	struct list_head list;
 	unsigned int rid;
 	enum resctrl_event_id evtid;
+	enum resctrl_event_type type;
 	unsigned int sum;
 	unsigned int domid;
 	bool any_cpu;

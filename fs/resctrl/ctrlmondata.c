@@ -562,6 +562,27 @@ void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 	resctrl_arch_mon_ctx_free(r, evtid, rr->arch_mon_ctx);
 }
 
+#define NUM_FRAC_BITS	18
+#define FRAC_MASK	GENMASK(NUM_FRAC_BITS - 1, 0)
+
+static void show_value(struct seq_file *m, enum resctrl_event_type type, u64 val)
+{
+	u64 frac;
+
+	switch (type) {
+	case EVT_TYPE_U64:
+		seq_printf(m, "%llu\n", val);
+		break;
+	case EVT_TYPE_U46_18:
+		frac = val & FRAC_MASK;
+		frac = frac * 1000000;
+		frac += 1ul << (NUM_FRAC_BITS - 1);
+		frac >>= NUM_FRAC_BITS;
+		seq_printf(m, "%llu.%06llu\n", val >> NUM_FRAC_BITS, frac);
+		break;
+	}
+}
+
 int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 {
 	struct kernfs_open_file *of = m->private;
@@ -633,7 +654,7 @@ checkresult:
 	else if (rr.err == -EINVAL)
 		seq_puts(m, "Unavailable\n");
 	else
-		seq_printf(m, "%llu\n", rr.val);
+		show_value(m, md->type, rr.val);
 
 out:
 	rdtgroup_kn_unlock(of->kn);
