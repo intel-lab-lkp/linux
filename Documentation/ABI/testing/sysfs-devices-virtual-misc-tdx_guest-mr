@@ -1,0 +1,48 @@
+What:		/sys/devices/virtual/misc/tdx_guest/mr/MRNAME[:HASH]
+Date:		April, 2025
+KernelVersion:	v6.16
+Contact:	linux-coco@lists.linux.dev
+Description:
+		Value of a TDX measurement register (MR). MRNAME and HASH above
+		are placeholders. The optional suffix :HASH is used for MRs
+		that have associated hash algorithms. See below for a complete
+		list of TDX MRs exposed via sysfs. Comprehensive information is
+		available at https://intel.com/tdx
+
+What:		/sys/devices/virtual/misc/tdx_guest/mr/mrconfigid
+Date:		April, 2025
+KernelVersion:	v6.16
+Contact:	cedric.xing@intel.com
+Description:
+		(RO) Value of MRCONFIGID - immutable storage for SW use.
+
+What:		/sys/devices/virtual/misc/tdx_guest/mr/mrowner
+Date:		April, 2025
+KernelVersion:	v6.16
+Contact:	cedric.xing@intel.com
+Description:
+		(RO) Value of MROWNER - immutable storage for SW use.
+
+What:		/sys/devices/virtual/misc/tdx_guest/mr/mrownerconfig
+Date:		April, 2025
+KernelVersion:	v6.16
+Contact:	cedric.xing@intel.com
+Description:
+		(RO) Value of MROWNERCONFIG - immutable storage for SW use.
+
+What:		/sys/devices/virtual/misc/tdx_guest/mr/mrtd:sha384
+Date:		April, 2025
+KernelVersion:	v6.16
+Contact:	cedric.xing@intel.com
+Description:
+		(RO) Value of MRTD - the measurement of the initial memory
+		image of the current TD.
+
+What:		/sys/devices/virtual/misc/tdx_guest/mr/rtmr[0123]:sha384
+Date:		April, 2025
+KernelVersion:	v6.16
+Contact:	cedric.xing@intel.com
+Description:
+		(RW) Read returns the current value of the RTMR. Write extends
+		the written buffer to the RTMR. All writes must start at offset
+		0 and be 48 bytes in size. Partial writes are not supported.
