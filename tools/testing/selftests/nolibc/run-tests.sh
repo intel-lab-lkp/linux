@@ -189,7 +189,7 @@ test_arch() {
 	swallow_output "${MAKE[@]}" defconfig
 	swallow_output "${MAKE[@]}" CFLAGS_EXTRA="$CFLAGS_EXTRA" "$test_target" V=1
 	cp run.out run.out."${arch}"
-	"${MAKE[@]}" report | grep passed
+	"${MAKE[@]}" report
 }
 
 if [ "$perform_download" -ne 0 ]; then
