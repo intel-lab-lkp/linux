@@ -1,0 +1,21 @@
+Bit, Type, Reason
+0, Pin, Thermal trip (BP_THERMTRIP_L)
+1, Pin, Power button
+2, Pin, SHUTDOWN# pin
+4, Remote, Remote ASF power off command
+9, Internal, Thermal trip (internal)
+16, Pin, User reset (BP_SYS_RST_L)
+17, Software, PCI reset (PMIO 0xC4)
+18, Software, CF9 reset (0x04)
+19, Software, CF9 reset (0x06)
+20, Software, CF9 reset (0x0E)
+21, Sleep, Power state or ACPI state transition
+22, Pin, Keyboard reset (KB_RST_L)
+23, Internal, Internal CPU shutdown
+24, Hardware, Failed boot timer
+25, Hardware, Watchdog timer
+26, Remote, Remote ASF reset command
+27, Internal, Data fabric sync flood event due to uncorrected error
+29, Internal, MP1 Watchdog timer timeout
+30, Internal, Parity error
+31, Internal, SW sync flood event

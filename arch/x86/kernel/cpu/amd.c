@@ -1231,3 +1231,53 @@ void amd_check_microcode(void)
 	if (cpu_feature_enabled(X86_FEATURE_ZEN2))
 		on_each_cpu(zenbleed_check_cpu, NULL, 1);
 }
+
+#define PIN_RESET	(BIT(0) | BIT(1) | BIT(2) | BIT(16) | BIT(22))
+#define REMOTE_RESET	(BIT(4) | BIT(26))
+#define INTERNAL_RESET	(BIT(9) | BIT(23) | BIT(27) | BIT(29) | BIT(30) | BIT(31))
+#define SW_RESET	(BIT(17) | BIT(18) | BIT(19) | BIT(20))
+#define HW_RESET	(BIT(24) | BIT(25))
+#define SLEEP_RESET	(BIT(21))
+
+static inline char *get_s5_reset_reason(u32 value)
+{
+	if (value & SW_RESET)
+		return "software";
+	if (value & SLEEP_RESET)
+		return "power state transition";
+	if (value & PIN_RESET)
+		return "pin state change";
+	if (value & HW_RESET)
+		return "hardware";
+	if (value & REMOTE_RESET)
+		return "remote power event";
+	if (value & INTERNAL_RESET)
+		return "internal CPU error";
+	return "unknown reason";
+}
+
+static __init int print_s5_reset_status_mmio(void)
+{
+	void __iomem *addr;
+	u32 value;
+
+	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+		return 0;
+
+	/*
+	 * FCH::PM::S5_RESET_STATUS
+	 * PM Base = 0xFED80300
+	 * S5_RESET_STATUS offset = 0xC0
+	 */
+	addr = ioremap(0xFED803C0, sizeof(value));
+	if (!addr)
+		return 0;
+	value = ioread32(addr);
+	iounmap(addr);
+
+	pr_info("System reset was due to %s (0x%08x)\n",
+		get_s5_reset_reason(value), value);
+
+	return 0;
+}
+late_initcall(print_s5_reset_status_mmio);
