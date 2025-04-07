@@ -458,7 +458,7 @@ ssize_t rdtgroup_mba_mbps_event_write(struct kernfs_open_file *of,
 				      char *buf, size_t nbytes, loff_t off)
 {
 	struct rdtgroup *rdtgrp;
-	int ret = 0;
+	int ret;
 
 	/* Valid input requires a trailing newline */
 	if (nbytes == 0 || buf[nbytes - 1] != '\n')
@@ -472,26 +472,15 @@ ssize_t rdtgroup_mba_mbps_event_write(struct kernfs_open_file *of,
 	}
 	rdt_last_cmd_clear();
 
-	if (!strcmp(buf, "mbm_local_bytes")) {
-		if (resctrl_arch_is_mbm_local_enabled())
-			rdtgrp->mba_mbps_event = QOS_L3_MBM_LOCAL_EVENT_ID;
-		else
-			ret = -EINVAL;
-	} else if (!strcmp(buf, "mbm_total_bytes")) {
-		if (resctrl_arch_is_mbm_total_enabled())
-			rdtgrp->mba_mbps_event = QOS_L3_MBM_TOTAL_EVENT_ID;
-		else
-			ret = -EINVAL;
-	} else {
-		ret = -EINVAL;
-	}
-
-	if (ret)
+	ret = rdt_lookup_evtid_by_name(buf);
+	if (ret < 0)
 		rdt_last_cmd_printf("Unsupported event id '%s'\n", buf);
+	else
+		rdtgrp->mba_mbps_event = ret;
 
 	rdtgroup_kn_unlock(of->kn);
 
-	return ret ?: nbytes;
+	return ret < 0 ? ret : nbytes;
 }
 
 int rdtgroup_mba_mbps_event_show(struct kernfs_open_file *of,
@@ -502,22 +491,10 @@ int rdtgroup_mba_mbps_event_show(struct kernfs_open_file *of,
 
 	rdtgrp = rdtgroup_kn_lock_live(of->kn);
 
-	if (rdtgrp) {
-		switch (rdtgrp->mba_mbps_event) {
-		case QOS_L3_MBM_LOCAL_EVENT_ID:
-			seq_puts(s, "mbm_local_bytes\n");
-			break;
-		case QOS_L3_MBM_TOTAL_EVENT_ID:
-			seq_puts(s, "mbm_total_bytes\n");
-			break;
-		default:
-			pr_warn_once("Bad event %d\n", rdtgrp->mba_mbps_event);
-			ret = -EINVAL;
-			break;
-		}
-	} else {
+	if (rdtgrp)
+		seq_printf(s, "%s\n", rdt_event_name(rdtgrp->mba_mbps_event));
+	else
 		ret = -ENOENT;
-	}
 
 	rdtgroup_kn_unlock(of->kn);
 

@@ -36,7 +36,7 @@ bool rdt_mon_capable;
 /*
  * Global to indicate which monitoring events are enabled.
  */
-unsigned int rdt_mon_features;
+DECLARE_BITMAP(rdt_mon_features, QOS_NUM_EVENTS);
 
 #define CF(cf)	((unsigned long)(1048576 * (cf) + 0.5))
 
@@ -168,19 +168,14 @@ static struct arch_mbm_state *get_arch_mbm_state(struct rdt_hw_mon_domain *hw_do
 						 u32 rmid,
 						 enum resctrl_event_id eventid)
 {
-	switch (eventid) {
-	case QOS_L3_OCCUP_EVENT_ID:
+	struct arch_mbm_state *state;
+
+	if (!resctrl_is_mbm_event(eventid))
 		return NULL;
-	case QOS_L3_MBM_TOTAL_EVENT_ID:
-		return &hw_dom->arch_mbm_total[rmid];
-	case QOS_L3_MBM_LOCAL_EVENT_ID:
-		return &hw_dom->arch_mbm_local[rmid];
-	}
 
-	/* Never expect to get here */
-	WARN_ON_ONCE(1);
+	state = hw_dom->arch_mbm_states[MBM_EVENT_IDX(eventid)];
 
-	return NULL;
+	return state ? &state[rmid] : NULL;
 }
 
 void resctrl_arch_reset_rmid(struct rdt_resource *r, struct rdt_mon_domain *d,
@@ -209,14 +204,16 @@ void resctrl_arch_reset_rmid(struct rdt_resource *r, struct rdt_mon_domain *d,
 void resctrl_arch_reset_rmid_all(struct rdt_resource *r, struct rdt_mon_domain *d)
 {
 	struct rdt_hw_mon_domain *hw_dom = resctrl_to_arch_mon_dom(d);
+	int evt, idx;
 
-	if (resctrl_arch_is_mbm_total_enabled())
-		memset(hw_dom->arch_mbm_total, 0,
-		       sizeof(*hw_dom->arch_mbm_total) * r->num_rmid);
+	for_each_set_bit(evt, rdt_mon_features, QOS_NUM_EVENTS) {
+		idx = MBM_EVENT_IDX(evt);
+		if (!hw_dom->arch_mbm_states[idx])
+			continue;
+		memset(hw_dom->arch_mbm_states[idx], 0,
+		       sizeof(struct arch_mbm_state) * r->num_rmid);
+	}
 
-	if (resctrl_arch_is_mbm_local_enabled())
-		memset(hw_dom->arch_mbm_local, 0,
-		       sizeof(*hw_dom->arch_mbm_local) * r->num_rmid);
 }
 
 static u64 mbm_overflow_count(u64 prev_msr, u64 cur_msr, unsigned int width)

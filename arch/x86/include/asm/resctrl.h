@@ -42,7 +42,7 @@ DECLARE_PER_CPU(struct resctrl_pqr_state, pqr_state);
 
 extern bool rdt_alloc_capable;
 extern bool rdt_mon_capable;
-extern unsigned int rdt_mon_features;
+extern DECLARE_BITMAP(rdt_mon_features, QOS_NUM_EVENTS);
 
 DECLARE_STATIC_KEY_FALSE(rdt_enable_key);
 DECLARE_STATIC_KEY_FALSE(rdt_alloc_enable_key);
@@ -84,17 +84,17 @@ static inline void resctrl_arch_disable_mon(void)
 
 static inline bool resctrl_arch_is_llc_occupancy_enabled(void)
 {
-	return (rdt_mon_features & (1 << QOS_L3_OCCUP_EVENT_ID));
+	return test_bit(QOS_L3_OCCUP_EVENT_ID, rdt_mon_features);
 }
 
 static inline bool resctrl_arch_is_mbm_total_enabled(void)
 {
-	return (rdt_mon_features & (1 << QOS_L3_MBM_TOTAL_EVENT_ID));
+	return test_bit(QOS_L3_MBM_TOTAL_EVENT_ID, rdt_mon_features);
 }
 
 static inline bool resctrl_arch_is_mbm_local_enabled(void)
 {
-	return (rdt_mon_features & (1 << QOS_L3_MBM_LOCAL_EVENT_ID));
+	return test_bit(QOS_L3_MBM_LOCAL_EVENT_ID, rdt_mon_features);
 }
 
 /*

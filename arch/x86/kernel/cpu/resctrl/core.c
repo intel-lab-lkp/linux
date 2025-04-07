@@ -366,8 +366,8 @@ static void ctrl_domain_free(struct rdt_hw_ctrl_domain *hw_dom)
 
 static void mon_domain_free(struct rdt_hw_mon_domain *hw_dom)
 {
-	kfree(hw_dom->arch_mbm_total);
-	kfree(hw_dom->arch_mbm_local);
+	for (int i = 0; i < QOS_NUM_MBM_EVENTS; i++)
+		kfree(hw_dom->arch_mbm_states[i]);
 	kfree(hw_dom);
 }
 
@@ -401,25 +401,26 @@ static int domain_setup_ctrlval(struct rdt_resource *r, struct rdt_ctrl_domain *
  */
 static int arch_domain_mbm_alloc(u32 num_rmid, struct rdt_hw_mon_domain *hw_dom)
 {
-	size_t tsize;
+	size_t tsize = sizeof(struct arch_mbm_state);
+	int evt, idx;
 
-	if (resctrl_arch_is_mbm_total_enabled()) {
-		tsize = sizeof(*hw_dom->arch_mbm_total);
-		hw_dom->arch_mbm_total = kcalloc(num_rmid, tsize, GFP_KERNEL);
-		if (!hw_dom->arch_mbm_total)
-			return -ENOMEM;
-	}
-	if (resctrl_arch_is_mbm_local_enabled()) {
-		tsize = sizeof(*hw_dom->arch_mbm_local);
-		hw_dom->arch_mbm_local = kcalloc(num_rmid, tsize, GFP_KERNEL);
-		if (!hw_dom->arch_mbm_local) {
-			kfree(hw_dom->arch_mbm_total);
-			hw_dom->arch_mbm_total = NULL;
-			return -ENOMEM;
-		}
+	for_each_set_bit(evt, rdt_mon_features, QOS_NUM_EVENTS) {
+		if (!resctrl_is_mbm_event(evt))
+			continue;
+		idx = MBM_EVENT_IDX(evt);
+		hw_dom->arch_mbm_states[idx] = kcalloc(num_rmid, tsize, GFP_KERNEL);
+		if (!hw_dom->arch_mbm_states[idx])
+			goto cleanup;
 	}
 
 	return 0;
+cleanup:
+	for (idx = 0; idx < QOS_NUM_MBM_EVENTS; idx++) {
+		kfree(hw_dom->arch_mbm_states[idx]);
+		hw_dom->arch_mbm_states[idx] = NULL;
+	}
+
+	return -ENOMEM;
 }
 
 static int get_domain_id_from_scope(int cpu, enum resctrl_scope scope)
@@ -864,13 +865,13 @@ static __init bool get_rdt_mon_resources(void)
 	struct rdt_resource *r = &rdt_resources_all[RDT_RESOURCE_L3].r_resctrl;
 
 	if (rdt_cpu_has(X86_FEATURE_CQM_OCCUP_LLC))
-		rdt_mon_features |= (1 << QOS_L3_OCCUP_EVENT_ID);
+		__set_bit(QOS_L3_OCCUP_EVENT_ID, rdt_mon_features);
 	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_TOTAL))
-		rdt_mon_features |= (1 << QOS_L3_MBM_TOTAL_EVENT_ID);
+		__set_bit(QOS_L3_MBM_TOTAL_EVENT_ID, rdt_mon_features);
 	if (rdt_cpu_has(X86_FEATURE_CQM_MBM_LOCAL))
-		rdt_mon_features |= (1 << QOS_L3_MBM_LOCAL_EVENT_ID);
+		__set_bit(QOS_L3_MBM_LOCAL_EVENT_ID, rdt_mon_features);
 
-	if (!rdt_mon_features)
+	if (find_first_bit(rdt_mon_features, QOS_NUM_EVENTS) == QOS_NUM_EVENTS)
 		return false;
 
 	return !rdt_get_mon_l3_config(r);
