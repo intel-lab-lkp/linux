@@ -1452,6 +1452,10 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 	sched->ready = false;
 	kfree(sched->sched_rq);
 	sched->sched_rq = NULL;
+
+	if (!list_empty(&sched->pending_list))
+		dev_err(sched->dev, "%s: Tearing down scheduler while jobs are pending!\n",
+			__func__);
 }
 EXPORT_SYMBOL(drm_sched_fini);
 
