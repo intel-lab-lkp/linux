@@ -807,6 +807,7 @@ extern void ftrace_call(void);
 extern void ftrace_regs_call(void);
 extern void mcount_call(void);
 
+void ftrace_sync_ipi(void *data);
 void ftrace_modify_all_code(int command);
 
 #ifndef FTRACE_ADDR
