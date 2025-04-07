@@ -19,7 +19,9 @@ allOf:
 
 properties:
   compatible:
-    const: kinetic,ktz8866
+    enum:
+      - kinetic,ktz8866
+      - kinetic,ktz8866-slave
 
   reg:
     maxItems: 1
@@ -58,9 +60,16 @@ properties:
 required:
   - compatible
   - reg
-  - vddpos-supply
-  - vddneg-supply
-  - enable-gpios
+
+if:
+  properties:
+    compatible:
+      const: kinetic,ktz8866
+then:
+  required:
+    - vddpos-supply
+    - vddneg-supply
+    - enable-gpios
 
 unevaluatedProperties: false
 
@@ -68,7 +77,7 @@ examples:
   - |
     #include <dt-bindings/gpio/gpio.h>
 
-    i2c {
+    i2c0 {
         #address-cells = <1>;
         #size-cells = <0>;
 
@@ -82,5 +91,15 @@ examples:
             kinetic,current-ramp-delay-ms = <128>;
             kinetic,led-enable-ramp-delay-ms = <1>;
             kinetic,enable-lcd-bias;
+        };
+    };
+
+    i2c1 {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        backlight@11 {
+            compatible = "kinetic,ktz8866-slave";
+            reg = <0x11>;
         };
     };
