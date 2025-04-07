@@ -1258,6 +1258,11 @@ struct survey_info {
  *	port frames over NL80211 instead of the network interface.
  * @control_port_no_preauth: disables pre-auth rx over the nl80211 control
  *	port for mac80211
+ * @control_port_vlan_id: if set (nonzero) userspace expect to receive also
+ *	8021Q tagged control port protocol frames. Verification of VLAN id
+ *	should be done in lower layer. Also 8021Q header should be stripped.
+ *	For tx path userspace expect lower layer will add proper 8021Q header
+ *	and setup VLAN id.
  * @psk: PSK (for devices supporting 4-way-handshake offload)
  * @sae_pwd: password for SAE authentication (for devices supporting SAE
  *	offload)
@@ -1290,6 +1295,7 @@ struct cfg80211_crypto_settings {
 	bool control_port_no_encrypt;
 	bool control_port_over_nl80211;
 	bool control_port_no_preauth;
+	u16 control_port_vlan_id;
 	const u8 *psk;
 	const u8 *sae_pwd;
 	u8 sae_pwd_len;
@@ -4963,7 +4969,7 @@ struct cfg80211_ops {
 				   const u8 *buf, size_t len,
 				   const u8 *dest, const __be16 proto,
 				   const bool noencrypt, int link_id,
-				   u64 *cookie);
+				   u64 *cookie, u16 vlan_id);
 
 	int	(*get_ftm_responder_stats)(struct wiphy *wiphy,
 				struct net_device *dev,

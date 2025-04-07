@@ -11009,6 +11009,10 @@ static int nl80211_crypto_settings(struct cfg80211_registered_device *rdev,
 
 		if (info->attrs[NL80211_ATTR_CONTROL_PORT_NO_PREAUTH])
 			settings->control_port_no_preauth = true;
+
+		if (info->attrs[NL80211_ATTR_VLAN_ID])
+			settings->control_port_vlan_id =
+				nla_get_u16(info->attrs[NL80211_ATTR_VLAN_ID]);
 	}
 
 	if (info->attrs[NL80211_ATTR_CIPHER_SUITES_PAIRWISE]) {
@@ -15790,6 +15794,7 @@ static int nl80211_tx_control_port(struct sk_buff *skb, struct genl_info *info)
 	u8 *dest;
 	u16 proto;
 	bool noencrypt;
+	u16 vlan_id = 0;
 	u64 cookie = 0;
 	int link_id;
 	int err;
@@ -15835,9 +15840,12 @@ static int nl80211_tx_control_port(struct sk_buff *skb, struct genl_info *info)
 
 	link_id = nl80211_link_id_or_invalid(info->attrs);
 
+	if (info->attrs[NL80211_ATTR_VLAN_ID])
+		vlan_id = nla_get_u16(info->attrs[NL80211_ATTR_VLAN_ID]);
+
 	err = rdev_tx_control_port(rdev, dev, buf, len,
 				   dest, cpu_to_be16(proto), noencrypt, link_id,
-				   dont_wait_for_ack ? NULL : &cookie);
+				   dont_wait_for_ack ? NULL : &cookie, vlan_id);
 	if (!err && !dont_wait_for_ack)
 		nl_set_extack_cookie_u64(info->extack, cookie);
 	return err;
