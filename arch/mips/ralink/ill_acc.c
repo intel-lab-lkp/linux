@@ -84,6 +84,7 @@ static int __init ill_acc_of_setup(void)
 	rt_memc_w32(ILL_INT_STATUS, REG_ILL_ACC_TYPE);
 
 	dev_info(&pdev->dev, "irq registered\n");
+	put_device(&pdev->dev);
 
 	return 0;
 }
