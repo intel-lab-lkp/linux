@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 #include <linux/module.h>
+#include <linux/unaligned.h>
 #include <net/devlink.h>
 #include "zl3073x.h"
 
@@ -44,6 +45,93 @@ const struct regmap_config *zl3073x_get_regmap_config(void)
 	return &zl3073x_regmap_config;
 }
 EXPORT_SYMBOL_NS_GPL(zl3073x_get_regmap_config, "ZL3073X");
+
+/**
+ * zl3073x_read_reg - Read value from device register
+ * @zldev: device structure pointer
+ * @reg: register to be read
+ * @len: number of bytes to read
+ * @value: pointer to place to store value read from the register
+ *
+ * Caller has to hold the device lock that can be obtained
+ * by zl3073x_lock().
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+int zl3073x_read_reg(struct zl3073x_dev *zldev, unsigned int reg,
+		     unsigned int len, void *value)
+{
+	u8 buf[6];
+	int rc;
+
+	lockdep_assert_held(&zldev->lock);
+
+	rc = regmap_bulk_read(zldev->regmap, reg, buf, len);
+	if (rc)
+		return rc;
+
+	switch (len) {
+	case 1:
+		*(u8 *)value = buf[0];
+		break;
+	case 2:
+		*(u16 *)value = get_unaligned_be16(buf);
+		break;
+	case 4:
+		*(u32 *)value = get_unaligned_be32(buf);
+		break;
+	case 6:
+		*(u64 *)value = get_unaligned_be48(buf);
+		break;
+	default:
+		WARN(true, "Unsupported register size: %u\n", len);
+		break;
+	}
+
+	return rc;
+}
+EXPORT_SYMBOL_GPL(zl3073x_read_reg);
+
+/**
+ * zl3073x_write_reg - Write value to device register
+ * @zldev: device structure pointer
+ * @reg: register to be written
+ * @len: number of bytes to write
+ * @value: pointer to value to write to the register
+ *
+ * Caller has to hold the device lock that can be obtained
+ * by zl3073x_lock().
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+int zl3073x_write_reg(struct zl3073x_dev *zldev, unsigned int reg,
+		      unsigned int len, const void *value)
+{
+	u8 buf[6];
+
+	lockdep_assert_held(&zldev->lock);
+
+	switch (len) {
+	case 1:
+		buf[0] = *(u8 *)value;
+		break;
+	case 2:
+		put_unaligned_be16(*(u16 *)value, buf);
+		break;
+	case 4:
+		put_unaligned_be32(*(u32 *)value, buf);
+		break;
+	case 6:
+		put_unaligned_be48(*(u64 *)value, buf);
+		break;
+	default:
+		WARN(true, "Unsupported register size: %u\n", len);
+		break;
+	}
+
+	return regmap_bulk_write(zldev->regmap, reg, buf, len);
+}
+EXPORT_SYMBOL_GPL(zl3073x_write_reg);
 
 static const struct devlink_ops zl3073x_devlink_ops = {
 };
