@@ -585,11 +585,12 @@ static int efx_devlink_info_board_cfg(struct efx_nic *efx,
 	int rc;
 
 	rc = efx_mcdi_get_board_cfg(efx, (u8 *)mac_address, NULL, NULL);
-	if (!rc) {
-		snprintf(sn, EFX_MAX_SERIALNUM_LEN, "%pm", mac_address);
-		devlink_info_serial_number_put(req, sn);
-	}
-	return rc;
+	if (rc)
+		return rc;
+
+	snprintf(sn, EFX_MAX_SERIALNUM_LEN, "%pm", mac_address);
+
+	return devlink_info_serial_number_put(req, sn);
 }
 
 static int efx_devlink_info_get(struct devlink *devlink,
