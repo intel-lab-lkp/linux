@@ -621,6 +621,7 @@ static int exfat_dir_readahead(struct super_block *sb, sector_t sec)
 {
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct buffer_head *bh;
+	struct blk_plug plug;
 	unsigned int max_ra_count = EXFAT_MAX_RA_SIZE >> sb->s_blocksize_bits;
 	unsigned int page_ra_count = PAGE_SIZE >> sb->s_blocksize_bits;
 	unsigned int adj_ra_count = max(sbi->sect_per_clus, page_ra_count);
@@ -644,8 +645,10 @@ static int exfat_dir_readahead(struct super_block *sb, sector_t sec)
 	if (!bh || !buffer_uptodate(bh)) {
 		unsigned int i;
 
+		blk_start_plug(&plug);
 		for (i = 0; i < ra_count; i++)
 			sb_breadahead(sb, (sector_t)(sec + i));
+		blk_finish_plug(&plug);
 	}
 	brelse(bh);
 	return 0;
