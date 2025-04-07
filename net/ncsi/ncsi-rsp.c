@@ -926,16 +926,24 @@ static int ncsi_rsp_handler_gcps(struct ncsi_request *nr)
 
 	/* Update HNC's statistics */
 	ncs = &nc->stats;
-	ncs->hnc_cnt_hi         = ntohl(rsp->cnt_hi);
-	ncs->hnc_cnt_lo         = ntohl(rsp->cnt_lo);
-	ncs->hnc_rx_bytes       = ntohl(rsp->rx_bytes);
-	ncs->hnc_tx_bytes       = ntohl(rsp->tx_bytes);
-	ncs->hnc_rx_uc_pkts     = ntohl(rsp->rx_uc_pkts);
-	ncs->hnc_rx_mc_pkts     = ntohl(rsp->rx_mc_pkts);
-	ncs->hnc_rx_bc_pkts     = ntohl(rsp->rx_bc_pkts);
-	ncs->hnc_tx_uc_pkts     = ntohl(rsp->tx_uc_pkts);
-	ncs->hnc_tx_mc_pkts     = ntohl(rsp->tx_mc_pkts);
-	ncs->hnc_tx_bc_pkts     = ntohl(rsp->tx_bc_pkts);
+	ncs->hnc_cnt            = (u64)ntohl(rsp->cnt_hi) << 32 |
+				  (u64)ntohl(rsp->cnt_lo);
+	ncs->hnc_rx_bytes       = (u64)ntohl(rsp->rx_bytes_hi) << 32 |
+				  (u64)ntohl(rsp->rx_bytes_lo);
+	ncs->hnc_tx_bytes       = (u64)ntohl(rsp->tx_bytes_hi) << 32 |
+				  (u64)ntohl(rsp->tx_bytes_lo);
+	ncs->hnc_rx_uc_pkts     = (u64)ntohl(rsp->rx_uc_pkts_hi) << 32 |
+				  (u64)ntohl(rsp->rx_uc_pkts_lo);
+	ncs->hnc_rx_mc_pkts     = (u64)ntohl(rsp->rx_mc_pkts_hi) << 32 |
+				  (u64)ntohl(rsp->rx_mc_pkts_lo);
+	ncs->hnc_rx_bc_pkts     = (u64)ntohl(rsp->rx_bc_pkts_hi) << 32 |
+				  (u64)ntohl(rsp->rx_bc_pkts_lo);
+	ncs->hnc_tx_uc_pkts     = (u64)ntohl(rsp->tx_uc_pkts_hi) << 32 |
+				  (u64)ntohl(rsp->tx_uc_pkts_lo);
+	ncs->hnc_tx_mc_pkts     = (u64)ntohl(rsp->tx_mc_pkts_hi) << 32 |
+				  (u64)ntohl(rsp->tx_mc_pkts_lo);
+	ncs->hnc_tx_bc_pkts     = (u64)ntohl(rsp->tx_bc_pkts_hi) << 32 |
+				  (u64)ntohl(rsp->tx_bc_pkts_lo);
 	ncs->hnc_fcs_err        = ntohl(rsp->fcs_err);
 	ncs->hnc_align_err      = ntohl(rsp->align_err);
 	ncs->hnc_false_carrier  = ntohl(rsp->false_carrier);
@@ -964,7 +972,8 @@ static int ncsi_rsp_handler_gcps(struct ncsi_request *nr)
 	ncs->hnc_tx_1023_frames = ntohl(rsp->tx_1023_frames);
 	ncs->hnc_tx_1522_frames = ntohl(rsp->tx_1522_frames);
 	ncs->hnc_tx_9022_frames = ntohl(rsp->tx_9022_frames);
-	ncs->hnc_rx_valid_bytes = ntohl(rsp->rx_valid_bytes);
+	ncs->hnc_rx_valid_bytes = (u64)ntohl(rsp->rx_valid_bytes_hi) << 32 |
+				  (u64)ntohl(rsp->rx_valid_bytes_lo);
 	ncs->hnc_rx_runt_pkts   = ntohl(rsp->rx_runt_pkts);
 	ncs->hnc_rx_jabber_pkts = ntohl(rsp->rx_jabber_pkts);
 
