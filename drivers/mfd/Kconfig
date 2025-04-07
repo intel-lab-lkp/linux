@@ -2424,11 +2424,13 @@ config MFD_UPBOARD_FPGA
 
 config MFD_ZL3073X_CORE
 	tristate
+	select NET_DEVLINK
 	select MFD_CORE
 
 config MFD_ZL3073X_I2C
 	tristate "Microchip Azurite DPLL/PTP/SyncE with I2C"
 	depends on I2C
+	depends on NET
 	select MFD_ZL3073X_CORE
 	select REGMAP_I2C
 	help
@@ -2441,6 +2443,7 @@ config MFD_ZL3073X_I2C
 
 config MFD_ZL3073X_SPI
 	tristate "Microchip Azurite DPLL/PTP/SyncE with SPI"
+	depends on NET
 	depends on SPI
 	select MFD_ZL3073X_CORE
 	select REGMAP_SPI
