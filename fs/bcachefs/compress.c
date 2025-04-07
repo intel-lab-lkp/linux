@@ -713,8 +713,10 @@ int bch2_opt_compression_parse(struct bch_fs *c, const char *_val, u64 *res,
 	level_str = p;
 
 	ret = match_string(bch2_compression_opts, -1, type_str);
-	if (ret < 0 && err)
-		prt_str(err, "invalid compression type\n");
+	if (ret < 0 && err) {
+		prt_str(err, "invalid compression type");
+		prt_newline(err);
+	}
 	if (ret < 0)
 		goto err;
 
@@ -728,8 +730,10 @@ int bch2_opt_compression_parse(struct bch_fs *c, const char *_val, u64 *res,
 			ret = -EINVAL;
 		if (!ret && level > 15)
 			ret = -EINVAL;
-		if (ret < 0 && err)
-			prt_str(err, "invalid compression level\n");
+		if (ret < 0 && err) {
+			prt_str(err, "invalid compression level");
+			prt_newline(err);
+		}
 		if (ret < 0)
 			goto err;
 
