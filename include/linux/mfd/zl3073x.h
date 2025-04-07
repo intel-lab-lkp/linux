@@ -6,11 +6,49 @@
 #include <linux/device.h>
 #include <linux/regmap.h>
 
+/*
+ * Hardware limits for ZL3073x chip family
+ */
+#define ZL3073X_NUM_INPUTS	10
+#define ZL3073X_NUM_OUTPUTS	10
+#define ZL3073X_NUM_SYNTHS	5
+
+struct zl3073x_input {
+	bool	enabled;
+	bool	diff;
+};
+
+struct zl3073x_output {
+	bool	enabled;
+	u8	synth;
+	u8	signal_format;
+#define OUTPUT_MODE_SIGNAL_FORMAT_DISABLED	0
+#define OUTPUT_MODE_SIGNAL_FORMAT_LVDS		1
+#define OUTPUT_MODE_SIGNAL_FORMAT_DIFFERENTIAL	2
+#define OUTPUT_MODE_SIGNAL_FORMAT_LOWVCM	3
+#define OUTPUT_MODE_SIGNAL_FORMAT_TWO		4
+#define OUTPUT_MODE_SIGNAL_FORMAT_ONE_P		5
+#define OUTPUT_MODE_SIGNAL_FORMAT_ONE_N		6
+#define OUTPUT_MODE_SIGNAL_FORMAT_TWO_INV	7
+#define OUTPUT_MODE_SIGNAL_FORMAT_TWO_N_DIV	12
+#define OUTPUT_MODE_SIGNAL_FORMAT_TWO_N_DIV_INV	15
+};
+
+struct zl3073x_synth {
+	u64	freq;
+	u8	dpll;
+};
+
 struct zl3073x_dev {
 	struct device		*dev;
 	struct regmap		*regmap;
 	u64			clock_id;
 	struct mutex		lock;
+
+	/* Invariants */
+	struct zl3073x_input	input[ZL3073X_NUM_INPUTS];
+	struct zl3073x_output	output[ZL3073X_NUM_OUTPUTS];
+	struct zl3073x_synth	synth[ZL3073X_NUM_SYNTHS];
 };
 
 /**
@@ -184,5 +222,109 @@ int zl3073x_mb_ref_read(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_ref_write(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_read(struct zl3073x_dev *zldev, u8 index);
 int zl3073x_mb_synth_write(struct zl3073x_dev *zldev, u8 index);
+
+static inline
+bool zl3073x_is_n_pin(u8 index)
+{
+	/* P-pins indices are even while N-pins are odd */
+	return index & 1;
+}
+
+static inline
+bool zl3073x_is_p_pin(u8 index)
+{
+	return !zl3073x_is_n_pin(index);
+}
+
+/**
+ * zl3073x_input_is_diff - check if the given input ref is differential
+ * @zldev: device structure pointer
+ * @index: output index
+ *
+ * Returns true if the given input ref is differential
+ */
+static inline
+bool zl3073x_input_is_diff(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->input[index].diff;
+}
+
+/**
+ * zl3073x_input_is_enabled - check if the given input ref is enabled
+ * @zldev: device structure pointer
+ * @index: output index
+ *
+ * Returns true if the given input ref is enabled
+ */
+static inline
+bool zl3073x_input_is_enabled(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->input[index].enabled;
+}
+
+/**
+ * zl3073x_output_is_enabled - check if the given output is enabled
+ * @zldev: device structure pointer
+ * @index: output index
+ *
+ * Returns true if the given output is enabled
+ */
+static inline
+u8 zl3073x_output_is_enabled(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->output[index].enabled;
+}
+
+/**
+ * zl3073x_output_signal_format_get - get output signal format
+ * @zldev: device structure pointer
+ * @index: output index
+ *
+ * Returns signal format of given output
+ */
+static inline
+u8 zl3073x_output_signal_format_get(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->output[index].signal_format;
+}
+
+/**
+ * zl3073x_output_synth_get - get synth connected to given output
+ * @zldev: device structure pointer
+ * @index: output index
+ *
+ * Returns index of synth connected to given output.
+ */
+static inline
+u8 zl3073x_output_synth_get(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->output[index].synth;
+}
+
+/**
+ * zl3073x_synth_dpll_get - get dpll id where the synth is connected to
+ * @zldev: device structure pointer
+ * @index: synth order number
+ *
+ * Returns frequency of given synthetizer
+ */
+static inline
+u64 zl3073x_synth_dpll_get(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->synth[index].dpll;
+}
+
+/**
+ * zl3073x_synth_freq_get - get synth current freq
+ * @zldev: device structure pointer
+ * @index: synth order number
+ *
+ * Returns frequency of given synthetizer
+ */
+static inline
+u64 zl3073x_synth_freq_get(struct zl3073x_dev *zldev, u8 index)
+{
+	return zldev->synth[index].freq;
+}
 
 #endif /* __LINUX_MFD_ZL3073X_H */
