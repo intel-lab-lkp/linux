@@ -483,6 +483,26 @@ static int airoha_ppe_foe_commit_entry(struct airoha_ppe *ppe,
 	return 0;
 }
 
+static void airoha_ppe_foe_flow_remove_entry(struct airoha_ppe *ppe,
+					     struct airoha_flow_table_entry *e)
+{
+	lockdep_assert_held(&ppe_lock);
+
+	if (e->type == FLOW_TYPE_L2) {
+		rhashtable_remove_fast(&ppe->l2_flows, &e->l2_node,
+				       airoha_l2_flow_table_params);
+	} else {
+		hlist_del_init(&e->list);
+		if (e->hash != 0xffff) {
+			e->data.ib1 &= ~AIROHA_FOE_IB1_BIND_STATE;
+			e->data.ib1 |= FIELD_PREP(AIROHA_FOE_IB1_BIND_STATE,
+						  AIROHA_FOE_STATE_INVALID);
+			airoha_ppe_foe_commit_entry(ppe, &e->data, e->hash);
+			e->hash = 0xffff;
+		}
+	}
+}
+
 static void airoha_ppe_foe_insert_entry(struct airoha_ppe *ppe, u32 hash)
 {
 	struct airoha_flow_table_entry *e;
@@ -551,25 +571,12 @@ static int airoha_ppe_foe_flow_commit_entry(struct airoha_ppe *ppe,
 	return 0;
 }
 
-static void airoha_ppe_foe_flow_remove_entry(struct airoha_ppe *ppe,
-					     struct airoha_flow_table_entry *e)
+static void
+airoha_ppe_foe_flow_remove_entry_locked(struct airoha_ppe *ppe,
+					struct airoha_flow_table_entry *e)
 {
 	spin_lock_bh(&ppe_lock);
-
-	if (e->type == FLOW_TYPE_L2) {
-		rhashtable_remove_fast(&ppe->l2_flows, &e->l2_node,
-				       airoha_l2_flow_table_params);
-	} else {
-		hlist_del_init(&e->list);
-		if (e->hash != 0xffff) {
-			e->data.ib1 &= ~AIROHA_FOE_IB1_BIND_STATE;
-			e->data.ib1 |= FIELD_PREP(AIROHA_FOE_IB1_BIND_STATE,
-						  AIROHA_FOE_STATE_INVALID);
-			airoha_ppe_foe_commit_entry(ppe, &e->data, e->hash);
-			e->hash = 0xffff;
-		}
-	}
-
+	airoha_ppe_foe_flow_remove_entry(ppe, e);
 	spin_unlock_bh(&ppe_lock);
 }
 
@@ -762,7 +769,7 @@ static int airoha_ppe_flow_offload_replace(struct airoha_gdm_port *port,
 	return 0;
 
 remove_foe_entry:
-	airoha_ppe_foe_flow_remove_entry(eth->ppe, e);
+	airoha_ppe_foe_flow_remove_entry_locked(eth->ppe, e);
 free_entry:
 	kfree(e);
 
@@ -780,7 +787,7 @@ static int airoha_ppe_flow_offload_destroy(struct airoha_gdm_port *port,
 	if (!e)
 		return -ENOENT;
 
-	airoha_ppe_foe_flow_remove_entry(eth->ppe, e);
+	airoha_ppe_foe_flow_remove_entry_locked(eth->ppe, e);
 	rhashtable_remove_fast(&eth->flow_table, &e->node,
 			       airoha_flow_table_params);
 	kfree(e);
