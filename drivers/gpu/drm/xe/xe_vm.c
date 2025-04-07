@@ -2924,9 +2924,12 @@ static int prefetch_ranges_lock_and_prep(struct xe_vm *vm,
 		if (!xe_vma_is_cpu_addr_mirror(vma))
 			return 0;
 
-		region = op->prefetch_range.region;
+		region = (op->prefetch_range.region == DRM_XE_CONSULT_MEM_ADVISE_PREF_LOC) ?
+			  vma->attr.preferred_loc.devmem_fd : op->prefetch_range.region;
 
-		/* TODO: Threading the migration */
+		/* TODO: Threading the migration
+		 * TODO: Multigpu support migration
+		 */
 		for (i = 0; i < op->prefetch_range.ranges_count; i++) {
 			svm_range = xa_load(&op->prefetch_range.range, i);
 			if (xe_svm_range_needs_migrate_to_vram(svm_range, vma, region)) {
@@ -3001,7 +3004,8 @@ static int op_lock_and_prep(struct drm_exec *exec, struct xe_vm *vm,
 		else
 			region = op->prefetch.region;
 
-		xe_assert(vm->xe, region <= ARRAY_SIZE(region_to_mem_type));
+		xe_assert(vm->xe, region == DRM_XE_CONSULT_MEM_ADVISE_PREF_LOC ||
+			  region <= ARRAY_SIZE(region_to_mem_type));
 
 		err = vma_lock_and_validate(exec,
 					    gpuva_to_vma(op->base.prefetch.va),
@@ -3426,8 +3430,9 @@ static int vm_bind_ioctl_check_args(struct xe_device *xe, struct xe_vm *vm,
 				 op == DRM_XE_VM_BIND_OP_PREFETCH) ||
 		    XE_IOCTL_DBG(xe, prefetch_region &&
 				 op != DRM_XE_VM_BIND_OP_PREFETCH) ||
-		    XE_IOCTL_DBG(xe, !(BIT(prefetch_region) &
-				       xe->info.mem_region_mask)) ||
+		    XE_IOCTL_DBG(xe, (is_cpu_addr_mirror &&
+				      prefetch_region != DRM_XE_CONSULT_MEM_ADVISE_PREF_LOC) &&
+				      !(BIT(prefetch_region) & xe->info.mem_region_mask)) ||
 		    XE_IOCTL_DBG(xe, obj &&
 				 op == DRM_XE_VM_BIND_OP_UNMAP)) {
 			err = -EINVAL;
