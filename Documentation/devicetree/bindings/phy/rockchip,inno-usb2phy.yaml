@@ -78,6 +78,11 @@ properties:
       When set the driver will request its phandle as one companion-grf
       for some special SoCs (e.g rv1108).
 
+  port:
+    $ref: /schemas/graph.yaml#/properties/port
+    description:
+      A port node to link the PHY to a USB connector's "high-speed" port.
+
   host-port:
     type: object
     additionalProperties: false
