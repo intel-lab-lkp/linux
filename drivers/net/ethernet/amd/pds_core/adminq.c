@@ -235,7 +235,7 @@ int pdsc_adminq_post(struct pdsc *pdsc,
 		.wait_completion =
 			COMPLETION_INITIALIZER_ONSTACK(wc.wait_completion),
 	};
-	unsigned long poll_interval = 1;
+	unsigned long poll_interval = 200;
 	unsigned long poll_jiffies;
 	unsigned long time_limit;
 	unsigned long time_start;
@@ -261,7 +261,7 @@ int pdsc_adminq_post(struct pdsc *pdsc,
 	time_limit = time_start + HZ * pdsc->devcmd_timeout;
 	do {
 		/* Timeslice the actual wait to catch IO errors etc early */
-		poll_jiffies = msecs_to_jiffies(poll_interval);
+		poll_jiffies = usecs_to_jiffies(poll_interval);
 		remaining = wait_for_completion_timeout(&wc.wait_completion,
 							poll_jiffies);
 		if (remaining)
