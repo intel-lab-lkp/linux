@@ -555,12 +555,15 @@ static int tegra241_vintf_init_lvcmdq(struct tegra241_vintf *vintf, u16 lidx,
 	return 0;
 }
 
-static void tegra241_vintf_free_lvcmdq(struct tegra241_vintf *vintf, u16 lidx)
+static void tegra241_vintf_free_lvcmdq(struct tegra241_vintf *vintf, u16 lidx,
+				       bool removing_smmu)
 {
 	struct tegra241_vcmdq *vcmdq = vintf->lvcmdqs[lidx];
 	char header[64];
 
-	tegra241_vcmdq_free_smmu_cmdq(vcmdq);
+	/* When removing SMMU, the queue memory space will be freed by devres */
+	if (!removing_smmu)
+		tegra241_vcmdq_free_smmu_cmdq(vcmdq);
 	tegra241_vintf_deinit_lvcmdq(vintf, lidx);
 
 	dev_dbg(vintf->cmdqv->dev,
@@ -641,7 +644,7 @@ static int tegra241_cmdqv_init_vintf(struct tegra241_cmdqv *cmdqv, u16 max_idx,
 static void tegra241_vintf_remove_lvcmdq(struct tegra241_vintf *vintf, u16 lidx)
 {
 	tegra241_vcmdq_hw_deinit(vintf->lvcmdqs[lidx]);
-	tegra241_vintf_free_lvcmdq(vintf, lidx);
+	tegra241_vintf_free_lvcmdq(vintf, lidx, true);
 }
 
 static void tegra241_cmdqv_remove_vintf(struct tegra241_cmdqv *cmdqv, u16 idx)
@@ -792,7 +795,7 @@ static int tegra241_cmdqv_init_structures(struct arm_smmu_device *smmu)
 
 free_lvcmdq:
 	for (lidx--; lidx >= 0; lidx--)
-		tegra241_vintf_free_lvcmdq(vintf, lidx);
+		tegra241_vintf_free_lvcmdq(vintf, lidx, false);
 	tegra241_cmdqv_deinit_vintf(cmdqv, vintf->idx);
 free_vintf:
 	kfree(vintf);
