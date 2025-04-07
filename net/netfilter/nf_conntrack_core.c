@@ -329,9 +329,6 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 #ifdef CONFIG_NF_CT_PROTO_SCTP
 	case IPPROTO_SCTP:
 #endif
-#ifdef CONFIG_NF_CT_PROTO_DCCP
-	case IPPROTO_DCCP:
-#endif
 		/* fallthrough */
 		return nf_ct_get_tuple_ports(skb, dataoff, tuple);
 	default:
@@ -1979,11 +1976,6 @@ static int nf_conntrack_handle_packet(struct nf_conn *ct,
 		return nf_conntrack_sctp_packet(ct, skb, dataoff,
 						ctinfo, state);
 #endif
-#ifdef CONFIG_NF_CT_PROTO_DCCP
-	case IPPROTO_DCCP:
-		return nf_conntrack_dccp_packet(ct, skb, dataoff,
-						ctinfo, state);
-#endif
 #ifdef CONFIG_NF_CT_PROTO_GRE
 	case IPPROTO_GRE:
 		return nf_conntrack_gre_packet(ct, skb, dataoff,
@@ -2118,7 +2110,7 @@ EXPORT_SYMBOL_GPL(nf_ct_kill_acct);
 #include <linux/netfilter/nfnetlink_conntrack.h>
 #include <linux/mutex.h>
 
-/* Generic function for tcp/udp/sctp/dccp and alike. */
+/* Generic function for tcp/udp/sctp and alike. */
 int nf_ct_port_tuple_to_nlattr(struct sk_buff *skb,
 			       const struct nf_conntrack_tuple *tuple)
 {

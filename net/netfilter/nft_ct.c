@@ -1272,7 +1272,6 @@ static int nft_ct_expect_obj_init(const struct nft_ctx *ctx,
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
 	case IPPROTO_UDPLITE:
-	case IPPROTO_DCCP:
 	case IPPROTO_SCTP:
 		break;
 	default:

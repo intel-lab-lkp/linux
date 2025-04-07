@@ -55,8 +55,7 @@ print_ports(const struct sk_buff *skb, uint8_t protocol, int offset)
 	if (protocol == IPPROTO_TCP ||
 	    protocol == IPPROTO_UDP ||
 	    protocol == IPPROTO_UDPLITE ||
-	    protocol == IPPROTO_SCTP ||
-	    protocol == IPPROTO_DCCP) {
+	    protocol == IPPROTO_SCTP) {
 		const struct tcpudphdr *pptr;
 		struct tcpudphdr _ports;
 

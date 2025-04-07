@@ -235,23 +235,6 @@ attribute-sets:
         type: binary
         struct: nf-ct-tcp-flags-mask
   -
-    name: protoinfo-dccp-attrs
-    attributes:
-    -
-        name: dccp-state
-        type: u8
-        doc: dccp connection state
-    -
-        name: dccp-role
-        type: u8
-    -
-        name: dccp-handshake-seq
-        type: u64
-        byte-order: big-endian
-    -
-        name: dccp-pad
-        type: pad
-  -
     name: protoinfo-sctp-attrs
     attributes:
     -
@@ -275,11 +258,6 @@ attribute-sets:
         type: nest
         nested-attributes: protoinfo-tcp-attrs
         doc: conntrack tcp state information
-    -
-        name: protoinfo-dccp
-        type: nest
-        nested-attributes: protoinfo-dccp-attrs
-        doc: conntrack dccp state information
     -
         name: protoinfo-sctp
         type: nest

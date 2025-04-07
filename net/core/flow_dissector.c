@@ -16,7 +16,6 @@
 #include <linux/igmp.h>
 #include <linux/icmp.h>
 #include <linux/sctp.h>
-#include <linux/dccp.h>
 #include <linux/if_tunnel.h>
 #include <linux/if_pppox.h>
 #include <linux/ppp_defs.h>
@@ -1955,9 +1954,6 @@ u32 __skb_get_poff(const struct sk_buff *skb, const void *data,
 		break;
 	case IPPROTO_IGMP:
 		poff += sizeof(struct igmphdr);
-		break;
-	case IPPROTO_DCCP:
-		poff += sizeof(struct dccp_hdr);
 		break;
 	case IPPROTO_SCTP:
 		poff += sizeof(struct sctphdr);
