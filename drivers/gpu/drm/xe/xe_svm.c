@@ -765,6 +765,12 @@ bool xe_svm_range_needs_migrate_to_vram(struct xe_svm_range *range, struct xe_vm
 	return needs_migrate;
 }
 
+static const u32 region_to_mem_type[] = {
+	XE_PL_TT,
+	XE_PL_VRAM0,
+	XE_PL_VRAM1,
+};
+
 /**
  * xe_svm_handle_pagefault() - SVM handle page fault
  * @vm: The VM.
@@ -796,6 +802,7 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
 	struct xe_tile *tile = gt_to_tile(gt);
 	int retry_count = 3;
 	ktime_t end = 0;
+	u32 region;
 	int err;
 
 	lockdep_assert_held_write(&vm->lock);
@@ -820,7 +827,13 @@ retry:
 
 	range_debug(range, "PAGE FAULT");
 
-	if (xe_svm_range_needs_migrate_to_vram(range, vma, IS_DGFX(vm->xe))) {
+	region = vma->attr.preferred_loc.devmem_fd;
+
+	if (xe_svm_range_needs_migrate_to_vram(range, vma, region)) {
+		region = region ? region : 1;
+		/* Need rework for multigpu */
+		tile = &vm->xe->tiles[region_to_mem_type[region] - XE_PL_VRAM0];
+
 		err = xe_svm_alloc_vram(vm, tile, range, &ctx);
 		if (err) {
 			if (retry_count) {

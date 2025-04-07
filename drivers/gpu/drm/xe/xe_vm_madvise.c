@@ -61,7 +61,25 @@ static int madvise_preferred_mem_loc(struct xe_device *xe, struct xe_vm *vm,
 				     struct xe_vma **vmas, int num_vmas,
 				     struct drm_xe_madvise_ops ops)
 {
-	/* Implementation pending */
+	s32 devmem_fd;
+	u32 migration_policy;
+	int i;
+
+	xe_assert(vm->xe, ops.type == DRM_XE_VMA_ATTR_PREFERRED_LOC);
+	vm_dbg(&xe->drm, "migration policy = %d, devmem_fd = %d\n",
+	       ops.preferred_mem_loc.migration_policy,
+	       ops.preferred_mem_loc.devmem_fd);
+
+	devmem_fd = (s32)ops.preferred_mem_loc.devmem_fd;
+	devmem_fd = (devmem_fd < 0) ? 0 : devmem_fd;
+
+	migration_policy = ops.preferred_mem_loc.migration_policy;
+
+	for (i = 0; i < num_vmas; i++) {
+		vmas[i]->attr.preferred_loc.devmem_fd = devmem_fd;
+		vmas[i]->attr.preferred_loc.migration_policy = migration_policy;
+	}
+
 	return 0;
 }
 
