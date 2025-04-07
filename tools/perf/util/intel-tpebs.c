@@ -514,29 +514,48 @@ int evsel__tpebs_read(struct evsel *evsel, int cpu_map_idx, int thread)
 	 * process. Allow the sample reader a chance to read by releasing and
 	 * reacquiring the lock.
 	 */
-	if (&t->nd == tpebs_results.next) {
+	if (t && &t->nd == tpebs_results.next) {
 		ret = tpebs_send_record_cmd(EVLIST_CTL_CMD_PING_TAG);
 		mutex_unlock(tpebs_mtx_get());
 		if (ret)
 			return ret;
 		mutex_lock(tpebs_mtx_get());
 	}
-	switch (tpebs_mode) {
-	case TPEBS_MODE__MIN:
-		val = rint(t->stats.mean);
-		break;
-	case TPEBS_MODE__MAX:
-		val = rint(t->stats.mean);
-		break;
-	case TPEBS_MODE__LAST:
-		val = t->last;
-		break;
-	default:
-	case TPEBS_MODE__MEAN:
-		val = rint(t->stats.mean);
-		break;
+	if (t == NULL || t->stats.n == 0) {
+		/* No sample data, use default. */
+		mutex_unlock(tpebs_mtx_get());
+		val = 0;
+		switch (tpebs_mode) {
+		case TPEBS_MODE__MIN:
+			val = rint(evsel->retirement_latency.min);
+			break;
+		case TPEBS_MODE__MAX:
+			val = rint(evsel->retirement_latency.max);
+			break;
+		default:
+		case TPEBS_MODE__LAST:
+		case TPEBS_MODE__MEAN:
+			val = rint(evsel->retirement_latency.mean);
+			break;
+		}
+	} else {
+		switch (tpebs_mode) {
+		case TPEBS_MODE__MIN:
+			val = rint(t->stats.mean);
+			break;
+		case TPEBS_MODE__MAX:
+			val = rint(t->stats.mean);
+			break;
+		case TPEBS_MODE__LAST:
+			val = t->last;
+			break;
+		default:
+		case TPEBS_MODE__MEAN:
+			val = rint(t->stats.mean);
+			break;
+		}
+		mutex_unlock(tpebs_mtx_get());
 	}
-	mutex_unlock(tpebs_mtx_get());
 
 	if (old_count) {
 		count->val = old_count->val + val;
