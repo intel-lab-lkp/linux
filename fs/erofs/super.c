@@ -356,7 +356,7 @@ static void erofs_default_options(struct erofs_sb_info *sbi)
 
 enum {
 	Opt_user_xattr, Opt_acl, Opt_cache_strategy, Opt_dax, Opt_dax_enum,
-	Opt_device, Opt_fsid, Opt_domain_id, Opt_directio,
+	Opt_device, Opt_fsid, Opt_domain_id, Opt_directio, Opt_offset,
 	Opt_err
 };
 
@@ -384,6 +384,7 @@ static const struct fs_parameter_spec erofs_fs_parameters[] = {
 	fsparam_string("fsid",		Opt_fsid),
 	fsparam_string("domain_id",	Opt_domain_id),
 	fsparam_flag_no("directio",	Opt_directio),
+	fsparam_u64("offset",		Opt_offset),
 	{}
 };
 
@@ -507,6 +508,9 @@ static int erofs_fc_parse_param(struct fs_context *fc,
 		errorfc(fc, "%s option not supported", erofs_fs_parameters[opt].name);
 #endif
 		break;
+	case Opt_offset:
+		sbi->dif0.off = result.uint_64;
+		break;
 	}
 	return 0;
 }
@@ -598,6 +602,22 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 
 		sbi->dif0.dax_dev = fs_dax_get_by_bdev(sb->s_bdev,
 				&sbi->dif0.dax_part_off, NULL, NULL);
+	}
+
+	if (sbi->dif0.off) {
+		loff_t devsz;
+
+		if (sbi->dif0.off & ((1 << sbi->blkszbits) - 1))
+			return invalfc(fc, "offset %lld not aligned to block size",
+				       sbi->dif0.off);
+		if (sb->s_bdev)
+			devsz = bdev_nr_bytes(sb->s_bdev);
+		else if (erofs_is_fileio_mode(sbi))
+			devsz = i_size_read(file_inode(sbi->dif0.file));
+		else
+			return invalfc(fc, "offset only supports file or bdev backing");
+		if (sbi->dif0.off + (1 << sbi->blkszbits) > devsz)
+			return invalfc(fc, "offset exceeds device size");
 	}
 
 	err = erofs_read_superblock(sb);
@@ -948,6 +968,8 @@ static int erofs_show_options(struct seq_file *seq, struct dentry *root)
 	if (sbi->domain_id)
 		seq_printf(seq, ",domain_id=%s", sbi->domain_id);
 #endif
+	if (sbi->dif0.off)
+		seq_printf(seq, ",offset=%lld", sbi->dif0.off);
 	return 0;
 }
 

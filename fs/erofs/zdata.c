@@ -1624,7 +1624,8 @@ static void z_erofs_submit_queue(struct z_erofs_frontend *f,
 				 bool *force_fg, bool readahead)
 {
 	struct super_block *sb = f->inode->i_sb;
-	struct address_space *mc = MNGD_MAPPING(EROFS_SB(sb));
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
+	struct address_space *mc = MNGD_MAPPING(sbi);
 	struct z_erofs_pcluster **qtail[NR_JOBQUEUES];
 	struct z_erofs_decompressqueue *q[NR_JOBQUEUES];
 	struct z_erofs_pcluster *pcl, *next;
@@ -1673,12 +1674,15 @@ static void z_erofs_submit_queue(struct z_erofs_frontend *f,
 			if (bio && (cur != last_pa ||
 				    bio->bi_bdev != mdev.m_bdev)) {
 drain_io:
-				if (erofs_is_fileio_mode(EROFS_SB(sb)))
+				if (erofs_is_fileio_mode(sbi)) {
 					erofs_fileio_submit_bio(bio);
-				else if (erofs_is_fscache_mode(sb))
+				} else if (erofs_is_fscache_mode(sb)) {
 					erofs_fscache_submit_bio(bio);
-				else
+				} else {
+					bio->bi_iter.bi_sector +=
+						sbi->dif0.off >> SECTOR_SHIFT;
 					submit_bio(bio);
+				}
 
 				if (memstall) {
 					psi_memstall_leave(&pflags);
@@ -1703,7 +1707,7 @@ drain_io:
 			}
 
 			if (!bio) {
-				if (erofs_is_fileio_mode(EROFS_SB(sb)))
+				if (erofs_is_fileio_mode(sbi))
 					bio = erofs_fileio_bio_alloc(&mdev);
 				else if (erofs_is_fscache_mode(sb))
 					bio = erofs_fscache_bio_alloc(&mdev);
@@ -1732,12 +1736,14 @@ drain_io:
 	} while (next != Z_EROFS_PCLUSTER_TAIL);
 
 	if (bio) {
-		if (erofs_is_fileio_mode(EROFS_SB(sb)))
+		if (erofs_is_fileio_mode(sbi)) {
 			erofs_fileio_submit_bio(bio);
-		else if (erofs_is_fscache_mode(sb))
+		} else if (erofs_is_fscache_mode(sb)) {
 			erofs_fscache_submit_bio(bio);
-		else
+		} else {
+			bio->bi_iter.bi_sector += sbi->dif0.off >> SECTOR_SHIFT;
 			submit_bio(bio);
+		}
 	}
 	if (memstall)
 		psi_memstall_leave(&pflags);
