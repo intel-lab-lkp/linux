@@ -3968,8 +3968,11 @@ static void ice_deinit_pf(struct ice_pf *pf)
 		pf->avail_rxqs = NULL;
 	}
 
-	if (pf->ptp.clock)
+	if (pf->ptp.clock) {
 		ptp_clock_unregister(pf->ptp.clock);
+		pf->ptp.clock = NULL;
+	}
+	pf->ptp.state = ICE_PTP_UNINIT;
 
 	xa_destroy(&pf->dyn_ports);
 	xa_destroy(&pf->sf_nums);

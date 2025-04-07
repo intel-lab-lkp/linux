@@ -3256,9 +3256,9 @@ void ice_ptp_init(struct ice_pf *pf)
 
 err_exit:
 	/* If we registered a PTP clock, release it */
-	if (pf->ptp.clock) {
+	if (ptp->clock) {
 		ptp_clock_unregister(ptp->clock);
-		pf->ptp.clock = NULL;
+		ptp->clock = NULL;
 	}
 	ptp->state = ICE_PTP_ERROR;
 	dev_err(ice_pf_to_dev(pf), "PTP failed %d\n", err);
