@@ -332,6 +332,39 @@ int strncmp(const char *cs, const char *ct, size_t count)
 EXPORT_SYMBOL(strncmp);
 #endif
 
+/**
+ * str_has_prefix - Test if a string has a given prefix
+ * @str: The string to test
+ * @prefix: The string to see if @str starts with
+ *
+ * A common way to test a prefix of a string is to do:
+ *  strncmp(str, prefix, sizeof(prefix) - 1)
+ *
+ * But this can lead to bugs due to typos, or if prefix is a pointer
+ * and not a constant. Instead use str_has_prefix().
+ *
+ * Returns:
+ * * strlen(@prefix) if @str starts with @prefix
+ * * 0 if @str does not start with @prefix
+ */
+size_t str_has_prefix(const char *str, const char *prefix)
+{
+	const char *p = prefix;
+	unsigned char c1, c2;
+
+	do {
+		c1 = *str++;
+		c2 = *p++;
+
+		if (c1 != c2)
+			return c2 == '\0' ? p - 1 - prefix : 0;
+
+	} while (c2 != '\0');
+
+	return p - 1 - prefix;
+}
+EXPORT_SYMBOL(str_has_prefix);
+
 #ifndef __HAVE_ARCH_STRCHR
 /**
  * strchr - Find the first occurrence of a character in a string
