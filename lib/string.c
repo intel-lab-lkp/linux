@@ -285,6 +285,28 @@ int strcmp(const char *cs, const char *ct)
 EXPORT_SYMBOL(strcmp);
 #endif
 
+/**
+ * strstarts - does @str start with @prefix?
+ * @str: string to examine
+ * @prefix: prefix to look for.
+ */
+bool strstarts(const char *str, const char *prefix)
+{
+	unsigned char c1, c2;
+
+	do {
+		c1 = *str++;
+		c2 = *prefix++;
+
+		if (c1 != c2)
+			return c2 == '\0';
+
+	} while (c2 != '\0');
+
+	return true;
+}
+EXPORT_SYMBOL(strstarts);
+
 #ifndef __HAVE_ARCH_STRNCMP
 /**
  * strncmp - Compare two length-limited strings
