@@ -711,6 +711,15 @@ static int resctrl_arch_offline_cpu(unsigned int cpu)
 	return 0;
 }
 
+void resctrl_arch_mount(void)
+{
+	static bool only_once;
+
+	if (only_once)
+		return;
+	only_once = true;
+}
+
 enum {
 	RDT_FLAG_CMT,
 	RDT_FLAG_MBM_TOTAL,

@@ -421,6 +421,9 @@ void resctrl_offline_cpu(unsigned int cpu);
 int resctrl_set_event_attributes(enum resctrl_event_id evt,
 				 enum resctrl_event_type type, bool any_cpu);
 
+/* Architecture hook called for each file system mount */
+void resctrl_arch_mount(void);
+
 /**
  * resctrl_arch_rmid_read() - Read the eventid counter corresponding to rmid
  *			      for this resource and domain.
