@@ -606,7 +606,7 @@ int fwnode_property_get_reference_args(const struct fwnode_handle *fwnode,
 		return -ENOENT;
 
 	ret = fwnode_call_int_op(fwnode, get_reference_args, prop, nargs_prop,
-				 nargs, index, args);
+				 nargs_prop ? -1 : nargs, index, args);
 	if (ret == 0)
 		return ret;
 
@@ -614,7 +614,7 @@ int fwnode_property_get_reference_args(const struct fwnode_handle *fwnode,
 		return ret;
 
 	return fwnode_call_int_op(fwnode->secondary, get_reference_args, prop, nargs_prop,
-				  nargs, index, args);
+				  nargs_prop ? -1 : nargs, index, args);
 }
 EXPORT_SYMBOL_GPL(fwnode_property_get_reference_args);
 
