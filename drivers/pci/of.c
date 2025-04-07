@@ -709,6 +709,13 @@ void of_pci_make_dev_node(struct pci_dev *pdev)
 	if (ret)
 		goto out_free_node;
 
+	/*
+	 * Set the fwnode.dev in order to have fw_devlink creating links
+	 * pointing to this PCI device instead of walking up to the PCI host
+	 * bridge.
+	 */
+	np->fwnode.dev = &pdev->dev;
+
 	ret = of_changeset_apply(cset);
 	if (ret)
 		goto out_free_node;
