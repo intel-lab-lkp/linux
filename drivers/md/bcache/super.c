@@ -1733,7 +1733,7 @@ static CLOSURE_CALLBACK(cache_set_flush)
 			mutex_unlock(&b->write_lock);
 		}
 
-	if (ca->alloc_thread)
+	if (ca && ca->alloc_thread)
 		kthread_stop(ca->alloc_thread);
 
 	if (c->journal.cur) {
