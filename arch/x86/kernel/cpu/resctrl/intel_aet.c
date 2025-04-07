@@ -42,6 +42,8 @@ struct pmt_event {
 	enum resctrl_event_type	type;
 };
 
+#define EVT(id, offset, _type) { .evtid = id, .evt_offset = offset, .type = _type }
+
 /**
  * struct telem_entry - Summarized form from XML telemetry description
  * @name:			Name for this group of events
@@ -82,8 +84,63 @@ static struct evtinfo {
 
 #define EVT_OFFSET(evtid)	(evtinfo[evtid].pmt_event->evt_offset)
 
+/*
+ * https://github.com/intel/Intel-PMT
+ * xml/CWF/OOBMSM/RMID-ENERGY *.xml
+ */
+#define NUM_RMIDS_0x26696143	576
+#define GUID_0x26696143		0x26696143
+#define NUM_EVENTS_0x26696143	2
+#define EVT_BYTES_0x26696143	(NUM_RMIDS_0x26696143 * NUM_EVENTS_0x26696143 * sizeof(u64))
+
+static struct telem_entry energy_0x26696143 = {
+	.name				= "energy",
+	.guid				= GUID_0x26696143,
+	.size				= EVT_BYTES_0x26696143 + sizeof(u64) * 3,
+	.num_rmids			= NUM_RMIDS_0x26696143,
+	.overflow_counter_off		= EVT_BYTES_0x26696143 + sizeof(u64) * 0,
+	.last_overflow_tstamp_off	= EVT_BYTES_0x26696143 + sizeof(u64) * 1,
+	.last_update_tstamp_off		= EVT_BYTES_0x26696143 + sizeof(u64) * 2,
+	.num_events			= NUM_EVENTS_0x26696143,
+	.evts				= {
+		EVT(PMT_EVENT_ENERGY, 0x0, EVT_TYPE_U46_18),
+		EVT(PMT_EVENT_ACTIVITY, 0x8, EVT_TYPE_U46_18),
+	}
+};
+
+/*
+ * https://github.com/intel/Intel-PMT
+ * xml/CWF/OOBMSM/RMID-PERF *.xml
+ */
+#define NUM_RMIDS_0x26557651	576
+#define GUID_0x26557651		0x26557651
+#define NUM_EVENTS_0x26557651	7
+#define EVT_BYTES_0x26557651	(NUM_RMIDS_0x26557651 * NUM_EVENTS_0x26557651 * sizeof(u64))
+
+static struct telem_entry perf_0x26557651 = {
+	.name				= "perf",
+	.guid				= GUID_0x26557651,
+	.size				= EVT_BYTES_0x26557651 + sizeof(u64) * 3,
+	.num_rmids			= NUM_RMIDS_0x26557651,
+	.overflow_counter_off		= EVT_BYTES_0x26557651 + sizeof(u64) * 0,
+	.last_overflow_tstamp_off	= EVT_BYTES_0x26557651 + sizeof(u64) * 1,
+	.last_update_tstamp_off		= EVT_BYTES_0x26557651 + sizeof(u64) * 2,
+	.num_events			= NUM_EVENTS_0x26557651,
+	.evts				= {
+		EVT(PMT_EVENT_STALLS_LLC_HIT, 0x0, EVT_TYPE_U64),
+		EVT(PMT_EVENT_C1_RES, 0x8, EVT_TYPE_U64),
+		EVT(PMT_EVENT_UNHALTED_CORE_CYCLES, 0x10, EVT_TYPE_U64),
+		EVT(PMT_EVENT_STALLS_LLC_MISS, 0x18, EVT_TYPE_U64),
+		EVT(PMT_EVENT_AUTO_C6_RES, 0x20, EVT_TYPE_U64),
+		EVT(PMT_EVENT_UNHALTED_REF_CYCLES, 0x28, EVT_TYPE_U64),
+		EVT(PMT_EVENT_UOPS_RETIRED, 0x30, EVT_TYPE_U64),
+	}
+};
+
 /* All known telemetry event groups */
 static struct telem_entry *telem_entry[] = {
+	&energy_0x26696143,
+	&perf_0x26557651,
 	NULL
 };
 
