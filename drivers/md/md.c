@@ -8572,50 +8572,51 @@ void md_cluster_stop(struct mddev *mddev)
 	put_cluster_ops(mddev);
 }
 
-static int is_mddev_idle(struct mddev *mddev, int init)
+static bool is_rdev_idle(struct md_rdev *rdev, bool init)
+{
+	int last_events = rdev->last_events;
+
+	if (!bdev_is_partition(rdev->bdev))
+		return true;
+
+	rdev->last_events = (int)part_stat_read_accum(rdev->bdev->bd_disk->part0, sectors) -
+			    (int)part_stat_read_accum(rdev->bdev, sectors);
+
+	if (!init && rdev->last_events > last_events)
+		return false;
+
+	return true;
+}
+
+/*
+ * mddev is idle if following conditions are match since last check:
+ * 1) mddev doesn't have normal IO completed;
+ * 2) mddev doesn't have inflight normal IO;
+ * 3) if any member disk is partition, and other partitions doesn't have IO
+ *    completed;
+ *
+ * Noted this checking rely on IO accounting is enabled.
+ */
+static bool is_mddev_idle(struct mddev *mddev, bool init)
 {
 	struct md_rdev *rdev;
-	int idle;
-	int curr_events;
+	bool idle = true;
 
-	idle = 1;
-	rcu_read_lock();
-	rdev_for_each_rcu(rdev, mddev) {
-		struct gendisk *disk = rdev->bdev->bd_disk;
+	if (!mddev_is_dm(mddev)) {
+		int last_events = mddev->last_events;
 
-		if (!init && !blk_queue_io_stat(disk->queue))
-			continue;
-
-		curr_events = (int)part_stat_read_accum(disk->part0, sectors) -
-			      atomic_read(&disk->sync_io);
-		/* sync IO will cause sync_io to increase before the disk_stats
-		 * as sync_io is counted when a request starts, and
-		 * disk_stats is counted when it completes.
-		 * So resync activity will cause curr_events to be smaller than
-		 * when there was no such activity.
-		 * non-sync IO will cause disk_stat to increase without
-		 * increasing sync_io so curr_events will (eventually)
-		 * be larger than it was before.  Once it becomes
-		 * substantially larger, the test below will cause
-		 * the array to appear non-idle, and resync will slow
-		 * down.
-		 * If there is a lot of outstanding resync activity when
-		 * we set last_event to curr_events, then all that activity
-		 * completing might cause the array to appear non-idle
-		 * and resync will be slowed down even though there might
-		 * not have been non-resync activity.  This will only
-		 * happen once though.  'last_events' will soon reflect
-		 * the state where there is little or no outstanding
-		 * resync requests, and further resync activity will
-		 * always make curr_events less than last_events.
-		 *
-		 */
-		if (init || curr_events - rdev->last_events > 64) {
-			rdev->last_events = curr_events;
-			idle = 0;
-		}
+		mddev->last_events = (int)part_stat_read_accum(mddev->gendisk->part0, sectors);
+		if (!init && (mddev->last_events > last_events ||
+			      part_in_flight(mddev->gendisk->part0)))
+			idle = false;
 	}
+
+	rcu_read_lock();
+	rdev_for_each_rcu(rdev, mddev)
+		if (!is_rdev_idle(rdev, init))
+			idle = false;
 	rcu_read_unlock();
+
 	return idle;
 }
 
@@ -8927,6 +8928,21 @@ static sector_t md_sync_position(struct mddev *mddev, enum sync_action action)
 	}
 }
 
+/*
+ * For raid 456, sync IO is stripe(4k) per IO, for other levels, it's
+ * RESYNC_PAGES(64k) per IO, we limit inflight sync IO for no more than
+ * 8 if sync_speed is above speed_min.
+ */
+static int get_active_threshold(struct mddev *mddev)
+{
+	int max_active = 128 * 8;
+
+	if (mddev->level == 4 || mddev->level == 5 || mddev->level == 6)
+		max_active = 8 * 8;
+
+	return max_active;
+}
+
 #define SYNC_MARKS	10
 #define	SYNC_MARK_STEP	(3*HZ)
 #define UPDATE_FREQUENCY (5*60*HZ)
@@ -8940,6 +8956,7 @@ void md_do_sync(struct md_thread *thread)
 	unsigned long update_time;
 	sector_t mark_cnt[SYNC_MARKS];
 	int last_mark,m;
+	int active_threshold = get_active_threshold(mddev);
 	sector_t last_check;
 	int skipped = 0;
 	struct md_rdev *rdev;
@@ -9195,14 +9212,14 @@ void md_do_sync(struct md_thread *thread)
 				msleep(500);
 				goto repeat;
 			}
-			if (!is_mddev_idle(mddev, 0)) {
+			if (atomic_read(&mddev->recovery_active) >= active_threshold &&
+			    !is_mddev_idle(mddev, 0))
 				/*
 				 * Give other IO more of a chance.
 				 * The faster the devices, the less we wait.
 				 */
 				wait_event(mddev->recovery_wait,
 					   !atomic_read(&mddev->recovery_active));
-			}
 		}
 	}
 	pr_info("md: %s: %s %s.\n",mdname(mddev), desc,

@@ -518,6 +518,7 @@ struct mddev {
 							 * adding a spare
 							 */
 
+	int last_events;		/* IO event timestamp */
 	atomic_t			recovery_active; /* blocks scheduled, but not written */
 	wait_queue_head_t		recovery_wait;
 	sector_t			recovery_cp;
@@ -713,17 +714,6 @@ static inline int mddev_trylock(struct mddev *mddev)
 	return mutex_trylock(&mddev->reconfig_mutex);
 }
 extern void mddev_unlock(struct mddev *mddev);
-
-static inline void md_sync_acct(struct block_device *bdev, unsigned long nr_sectors)
-{
-	if (blk_queue_io_stat(bdev->bd_disk->queue))
-		atomic_add(nr_sectors, &bdev->bd_disk->sync_io);
-}
-
-static inline void md_sync_acct_bio(struct bio *bio, unsigned long nr_sectors)
-{
-	md_sync_acct(bio->bi_bdev, nr_sectors);
-}
 
 struct md_personality
 {
