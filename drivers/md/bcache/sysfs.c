@@ -17,8 +17,6 @@
 #include <linux/sort.h>
 #include <linux/sched/clock.h>
 
-extern bool bcache_is_reboot;
-
 /* Default is 0 ("writethrough") */
 static const char * const bch_cache_modes[] = {
 	"writethrough",

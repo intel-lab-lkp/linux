@@ -1007,6 +1007,7 @@ extern struct workqueue_struct *bch_journal_wq;
 extern struct workqueue_struct *bch_flush_wq;
 extern struct mutex bch_register_lock;
 extern struct list_head bch_cache_sets;
+extern bool bcache_is_reboot;
 
 extern const struct kobj_type bch_cached_dev_ktype;
 extern const struct kobj_type bch_flash_dev_ktype;
