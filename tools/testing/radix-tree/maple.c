@@ -35299,8 +35299,8 @@ static noinline void __init check_rcu_threaded(struct maple_tree *mt)
 	vals.mt = mt;
 	vals.index = 4390;
 	vals.last = 4398;
-	vals.entry1 = xa_mk_value(4390);
-	vals.entry2 = xa_mk_value(439);
+	vals.entry1 = xa_mk_value(439);
+	vals.entry2 = xa_mk_value(4390);
 	vals.entry3 = xa_mk_value(439);
 	vals.seen_entry2 = 0;
 	vals.range_start = 4316;
@@ -35336,8 +35336,8 @@ static noinline void __init check_rcu_threaded(struct maple_tree *mt)
 	vals.mt = mt;
 	vals.index = 4390;
 	vals.last = 4398;
-	vals.entry1 = xa_mk_value(4390);
-	vals.entry2 = xa_mk_value(439);
+	vals.entry1 = xa_mk_value(439);
+	vals.entry2 = xa_mk_value(4390);
 	vals.entry3 = xa_mk_value(4391);
 	vals.seen_toggle = 0;
 	vals.seen_added = 0;
