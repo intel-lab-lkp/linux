@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2012, Sébastien Luttringer
+# Copyright (C) 2024, Francesco Poli <invernomuto@paranoici.org>
+
+# defaults file for linux-cpupower
+
+# --- CPU clock frequency ---
+
+# Define CPU governor
+# valid governors: ondemand, performance, powersave, conservative, userspace.
+#GOVERNOR='ondemand'
+
+# Limit frequency range
+# Valid suffixes: Hz, kHz (default), MHz, GHz, THz
+#MIN_FREQ="2.25GHz"
+#MAX_FREQ="3GHz"
+
+# Specific frequency to be set.
+# Requires userspace governor to be available.
+# If this option is set, all the previous frequency options are ignored
+#FREQ=
+
+# --- CPU policy ---
+
+# Sets a register on supported Intel processore which allows software to convey
+# its policy for the relative importance of performance versus energy savings to
+# the  processor. See man (1) CPUPOWER-SET for additional details.
+#PERF_BIAS=
