@@ -268,3 +268,25 @@ EPP Policy
 The ``energy_performance_preference`` sysfs file can be used to set a bias
 of efficiency or performance for a CPU.  This has a direct relationship on
 the battery life when more heavily biased towards performance.
+
+Random reboot issues
+====================
+When a random reboot occurs, the high-level reason for the reboot is stored
+in a register that will persist onto the next boot.
+
+There are 6 classes of reasons for the reboot:
+ * Software induced
+ * Power state transition
+ * Pin induced
+ * Hardware induced
+ * Remote reset
+ * Internal CPU event
+
+.. csv-table::
+   :header-rows: 1
+   :widths: 1, 1, 1
+   :file: ./amd-reboot-reason.csv
+
+This information is read by the kernel at bootup and is saved into the
+kernel ring buffer. When a random reboot occurs this message can be helpful
+to determine the next component to debug such an issue.

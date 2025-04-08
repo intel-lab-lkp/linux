@@ -1231,3 +1231,72 @@ void amd_check_microcode(void)
 	if (cpu_feature_enabled(X86_FEATURE_ZEN2))
 		on_each_cpu(zenbleed_check_cpu, NULL, 1);
 }
+
+static inline char *get_s5_reset_reason(u32 value)
+{
+	if (value & BIT(0))
+		return "trip of thermal pin BP_THERMTRIP_L";
+	if (value & BIT(1))
+		return "power button";
+	if (value & BIT(2))
+		return "shutdown pin";
+	if (value & BIT(4))
+		return "remote ASF power off command";
+	if (value & BIT(9))
+		return "internal CPU thermal trip";
+	if (value & BIT(16))
+		return "user reset via BP_SYS_RST_L pin";
+	if (value & BIT(17))
+		return "PCI reset";
+	if (value & BIT(18) ||
+	    value & BIT(19) ||
+	    value & BIT(20))
+		return "CF9 reset";
+	if (value & BIT(21))
+		return "power state of acpi state transition";
+	if (value & BIT(22))
+		return "keyboard reset pin KB_RST_L";
+	if (value & BIT(23))
+		return "internal CPU shutdown";
+	if (value & BIT(24))
+		return "failed boot timer";
+	if (value & BIT(25))
+		return "watchdog timer";
+	if (value & BIT(26))
+		return "remote ASF reset command";
+	if (value & BIT(27))
+		return "data fabric sync flood event due to uncorrected error";
+	if (value & BIT(29))
+		return "MP1 watchdog timer timeout";
+	if (value & BIT(30))
+		return "parity error";
+	if (value & BIT(31))
+		return "software sync flood event";
+	return "unknown reason";
+}
+
+static __init int print_s5_reset_status_mmio(void)
+{
+	void __iomem *addr;
+	u32 value;
+
+	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
+		return 0;
+
+	/*
+	 * FCH::PM::S5_RESET_STATUS
+	 * PM Base = 0xFED80300
+	 * S5_RESET_STATUS offset = 0xC0
+	 */
+	addr = ioremap(0xFED803C0, sizeof(value));
+	if (!addr)
+		return 0;
+	value = ioread32(addr);
+	iounmap(addr);
+
+	pr_info("System was reset due to %s (0x%08x)\n",
+		get_s5_reset_reason(value), value);
+
+	return 0;
+}
+late_initcall(print_s5_reset_status_mmio);
