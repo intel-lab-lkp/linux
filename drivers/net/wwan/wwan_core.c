@@ -357,14 +357,17 @@ static struct attribute *wwan_port_attrs[] = {
 };
 ATTRIBUTE_GROUPS(wwan_port);
 
-static void wwan_port_destroy(struct device *dev)
+static void __wwan_port_destroy(struct wwan_port *port)
 {
-	struct wwan_port *port = to_wwan_port(dev);
-
-	ida_free(&minors, MINOR(port->dev.devt));
 	mutex_destroy(&port->data_lock);
 	mutex_destroy(&port->ops_lock);
 	kfree(port);
+}
+
+static void wwan_port_destroy(struct device *dev)
+{
+	ida_free(&minors, MINOR(dev->devt));
+	__wwan_port_destroy(to_wwan_port(dev));
 }
 
 static const struct device_type wwan_port_dev_type = {
@@ -440,55 +443,26 @@ static int __wwan_port_dev_assign_name(struct wwan_port *port, const char *fmt)
 	return dev_set_name(&port->dev, "%s", buf);
 }
 
-struct wwan_port *wwan_create_port(struct device *parent,
-				   enum wwan_port_type type,
-				   const struct wwan_port_ops *ops,
-				   struct wwan_port_caps *caps,
-				   void *drvdata)
+/* Register a regular WWAN port device (e.g. AT, MBIM, etc.)
+ *
+ * NB: in case of error function frees the port memory.
+ */
+static int wwan_port_register_wwan(struct wwan_port *port)
 {
-	struct wwan_device *wwandev;
-	struct wwan_port *port;
+	struct wwan_device *wwandev = to_wwan_dev(port->dev.parent);
 	char namefmt[0x20];
 	int minor, err;
-
-	if (type > WWAN_PORT_MAX || !ops)
-		return ERR_PTR(-EINVAL);
-
-	/* A port is always a child of a WWAN device, retrieve (allocate or
-	 * pick) the WWAN device based on the provided parent device.
-	 */
-	wwandev = wwan_create_dev(parent);
-	if (IS_ERR(wwandev))
-		return ERR_CAST(wwandev);
 
 	/* A port is exposed as character device, get a minor */
 	minor = ida_alloc_range(&minors, 0, WWAN_MAX_MINORS - 1, GFP_KERNEL);
 	if (minor < 0) {
-		err = minor;
-		goto error_wwandev_remove;
+		__wwan_port_destroy(port);
+		return minor;
 	}
 
-	port = kzalloc(sizeof(*port), GFP_KERNEL);
-	if (!port) {
-		err = -ENOMEM;
-		ida_free(&minors, minor);
-		goto error_wwandev_remove;
-	}
-
-	port->type = type;
-	port->ops = ops;
-	port->frag_len = caps ? caps->frag_len : SIZE_MAX;
-	port->headroom_len = caps ? caps->headroom_len : 0;
-	mutex_init(&port->ops_lock);
-	skb_queue_head_init(&port->rxq);
-	init_waitqueue_head(&port->waitqueue);
-	mutex_init(&port->data_lock);
-
-	port->dev.parent = &wwandev->dev;
 	port->dev.class = &wwan_class;
 	port->dev.type = &wwan_port_dev_type;
 	port->dev.devt = MKDEV(wwan_major, minor);
-	dev_set_drvdata(&port->dev, drvdata);
 
 	/* allocate unique name based on wwan device id, port type and number */
 	snprintf(namefmt, sizeof(namefmt), "wwan%u%s%%d", wwandev->id,
@@ -502,14 +476,60 @@ struct wwan_port *wwan_create_port(struct device *parent,
 
 	mutex_unlock(&wwan_register_lock);
 
-	if (err)
-		goto error_put_device;
+	if (err) {
+		put_device(&port->dev);
+		return err;
+	}
 
 	dev_info(&wwandev->dev, "port %s attached\n", dev_name(&port->dev));
+
+	return 0;
+}
+
+struct wwan_port *wwan_create_port(struct device *parent,
+				   enum wwan_port_type type,
+				   const struct wwan_port_ops *ops,
+				   struct wwan_port_caps *caps,
+				   void *drvdata)
+{
+	struct wwan_device *wwandev;
+	struct wwan_port *port;
+	int err;
+
+	if (type > WWAN_PORT_MAX || !ops)
+		return ERR_PTR(-EINVAL);
+
+	/* A port is always a child of a WWAN device, retrieve (allocate or
+	 * pick) the WWAN device based on the provided parent device.
+	 */
+	wwandev = wwan_create_dev(parent);
+	if (IS_ERR(wwandev))
+		return ERR_CAST(wwandev);
+
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
+	if (!port) {
+		err = -ENOMEM;
+		goto error_wwandev_remove;
+	}
+
+	port->type = type;
+	port->ops = ops;
+	port->frag_len = caps ? caps->frag_len : SIZE_MAX;
+	port->headroom_len = caps ? caps->headroom_len : 0;
+	mutex_init(&port->ops_lock);
+	skb_queue_head_init(&port->rxq);
+	init_waitqueue_head(&port->waitqueue);
+	mutex_init(&port->data_lock);
+
+	port->dev.parent = &wwandev->dev;
+	dev_set_drvdata(&port->dev, drvdata);
+
+	err = wwan_port_register_wwan(port);
+	if (err)
+		goto error_wwandev_remove;
+
 	return port;
 
-error_put_device:
-	put_device(&port->dev);
 error_wwandev_remove:
 	wwan_remove_dev(wwandev);
 
