@@ -493,6 +493,11 @@
 
 			#address-cells = <1>;
 			#size-cells = <1>;
+
+			restart-reason@7b0 {
+				compatible = "qcom,restart-reason-info";
+				reg = <0x7b0 0x4>;
+			};
 		};
 
 		usb3: usb3@8a00000 {
