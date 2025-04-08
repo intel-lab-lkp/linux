@@ -341,18 +341,6 @@ static bool veth_skb_is_eligible_for_gro(const struct net_device *dev,
 		 rcv->features & (NETIF_F_GRO_FRAGLIST | NETIF_F_GRO_UDP_FWD));
 }
 
-/* Does specific txq have a real qdisc attached? - see noqueue_init() */
-static inline bool txq_has_qdisc(struct netdev_queue *txq)
-{
-	struct Qdisc *q;
-
-	q = rcu_dereference(txq->qdisc);
-	if (q->enqueue)
-		return true;
-	else
-		return false;
-}
-
 static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct veth_priv *rcv_priv, *priv = netdev_priv(dev);
@@ -399,7 +387,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 		 */
 		txq = netdev_get_tx_queue(dev, rxq);
 
-		if (!txq_has_qdisc(txq)) {
+		if (qdisc_txq_is_noop(txq)) {
 			dev_kfree_skb_any(skb);
 			goto drop;
 		}
