@@ -615,6 +615,28 @@ out:
 	return -ENOMEM;
 }
 
+unsigned int
+xfs_atomic_write_logitems(
+	struct xfs_mount	*mp)
+{
+	unsigned int		efi = xfs_efi_item_overhead(1);
+	unsigned int		rui = xfs_rui_item_overhead(1);
+	unsigned int		cui = xfs_cui_item_overhead(1);
+	unsigned int		bui = xfs_bui_item_overhead(1);
+	unsigned int		logres = M_RES(mp)->tr_write.tr_logres;
+
+	/*
+	 * Maximum overhead to complete an atomic write ioend in software:
+	 * remove data fork extent + remove cow fork extent +
+	 * map extent into data fork
+	 */
+	unsigned int		atomic_logitems =
+		(bui + cui + rui + efi) + (cui + rui) + (bui + rui);
+
+	/* atomic write limits are always a power-of-2 */
+	return rounddown_pow_of_two(logres / (2 * atomic_logitems));
+}
+
 STATIC void
 xfs_destroy_mount_workqueues(
 	struct xfs_mount	*mp)
