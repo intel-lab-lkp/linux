@@ -457,7 +457,6 @@ static int mst_stream_dsc_compute_link_config(struct intel_dp *intel_dp,
 	int num_bpc;
 	u8 dsc_bpc[3] = {};
 	int min_bpp, max_bpp, sink_min_bpp, sink_max_bpp;
-	int min_compressed_bpp, max_compressed_bpp;
 
 	max_bpp = limits->pipe.max_bpp;
 	min_bpp = limits->pipe.min_bpp;
@@ -482,24 +481,20 @@ static int mst_stream_dsc_compute_link_config(struct intel_dp *intel_dp,
 
 	crtc_state->pipe_bpp = max_bpp;
 
-	max_compressed_bpp = fxp_q4_to_int(limits->link.max_bpp_x16);
-	min_compressed_bpp = fxp_q4_to_int_roundup(limits->link.min_bpp_x16);
-
-	drm_dbg_kms(display->drm, "DSC Sink supported compressed min bpp %d compressed max bpp %d\n",
-		    min_compressed_bpp, max_compressed_bpp);
-
-	/* Align compressed bpps according to our own constraints */
-	max_compressed_bpp = intel_dp_dsc_nearest_valid_bpp(display, max_compressed_bpp,
-							    crtc_state->pipe_bpp);
-	min_compressed_bpp = intel_dp_dsc_nearest_valid_bpp(display, min_compressed_bpp,
-							    crtc_state->pipe_bpp);
+	drm_dbg_kms(display->drm,
+		    "DSC Sink supported compressed min bpp " FXP_Q4_FMT " compressed max bpp " FXP_Q4_FMT "\n",
+		    FXP_Q4_ARGS(limits->link.min_bpp_x16), FXP_Q4_ARGS(limits->link.max_bpp_x16));
 
 	crtc_state->lane_count = limits->max_lane_count;
 	crtc_state->port_clock = limits->max_rate;
 
 	return intel_dp_mtp_tu_compute_config(intel_dp, crtc_state, conn_state,
-					      fxp_q4_from_int(min_compressed_bpp),
-					      fxp_q4_from_int(max_compressed_bpp),
+					      intel_dp_dsc_nearest_valid_bpp(display,
+									     limits->link.min_bpp_x16,
+									     crtc_state->pipe_bpp),
+					      intel_dp_dsc_nearest_valid_bpp(display,
+									     limits->link.max_bpp_x16,
+									     crtc_state->pipe_bpp),
 					      fxp_q4_from_int(1), true);
 }
 

@@ -846,21 +846,22 @@ small_joiner_ram_size_bits(struct intel_display *display)
 		return 6144 * 8;
 }
 
-u32 intel_dp_dsc_nearest_valid_bpp(struct intel_display *display, u32 bpp, u32 pipe_bpp)
+int intel_dp_dsc_nearest_valid_bpp(struct intel_display *display, int link_bpp_x16, int pipe_bpp)
 {
-	u32 bits_per_pixel = bpp;
 	int i;
 
 	/* Error out if the max bpp is less than smallest allowed valid bpp */
-	if (bits_per_pixel < valid_dsc_bpp[0]) {
-		drm_dbg_kms(display->drm, "Unsupported BPP %u, min %u\n",
-			    bits_per_pixel, valid_dsc_bpp[0]);
+	if (link_bpp_x16 < fxp_q4_from_int(valid_dsc_bpp[0])) {
+		drm_dbg_kms(display->drm,
+			    "Unsupported BPP " FXP_Q4_FMT ", min " FXP_Q4_FMT "\n",
+			    FXP_Q4_ARGS(link_bpp_x16),
+			    FXP_Q4_ARGS(fxp_q4_from_int(valid_dsc_bpp[0])));
 		return 0;
 	}
 
 	/* From XE_LPD onwards we support from bpc upto uncompressed bpp-1 BPPs */
 	if (DISPLAY_VER(display) >= 13) {
-		bits_per_pixel = min(bits_per_pixel, pipe_bpp - 1);
+		link_bpp_x16 = min(link_bpp_x16, fxp_q4_from_int(pipe_bpp - 1));
 
 		/*
 		 * According to BSpec, 27 is the max DSC output bpp,
@@ -870,26 +871,28 @@ u32 intel_dp_dsc_nearest_valid_bpp(struct intel_display *display, u32 bpp, u32 p
 		 * that and probably means we can't fit the required mode, even with
 		 * DSC enabled.
 		 */
-		if (bits_per_pixel < 8) {
+		if (link_bpp_x16 < fxp_q4_from_int(8)) {
 			drm_dbg_kms(display->drm,
-				    "Unsupported BPP %u, min 8\n",
-				    bits_per_pixel);
+				    "Unsupported BPP " FXP_Q4_FMT ", min " FXP_Q4_FMT "\n",
+				    FXP_Q4_ARGS(link_bpp_x16), FXP_Q4_ARGS(fxp_q4_from_int(8)));
 			return 0;
 		}
-		bits_per_pixel = min_t(u32, bits_per_pixel, 27);
+		link_bpp_x16 = min(link_bpp_x16, fxp_q4_from_int(27));
 	} else {
 		/* Find the nearest match in the array of known BPPs from VESA */
 		for (i = 0; i < ARRAY_SIZE(valid_dsc_bpp) - 1; i++) {
-			if (bits_per_pixel < valid_dsc_bpp[i + 1])
+			if (link_bpp_x16 < fxp_q4_from_int(valid_dsc_bpp[i + 1]))
 				break;
 		}
-		drm_dbg_kms(display->drm, "Set dsc bpp from %d to VESA %d\n",
-			    bits_per_pixel, valid_dsc_bpp[i]);
+		drm_dbg_kms(display->drm,
+			    "Set dsc bpp from " FXP_Q4_FMT " to VESA " FXP_Q4_FMT "\n",
+			    FXP_Q4_ARGS(link_bpp_x16),
+			    FXP_Q4_ARGS(fxp_q4_from_int(valid_dsc_bpp[i])));
 
-		bits_per_pixel = valid_dsc_bpp[i];
+		link_bpp_x16 = fxp_q4_from_int(valid_dsc_bpp[i]);
 	}
 
-	return bits_per_pixel;
+	return link_bpp_x16;
 }
 
 static int bigjoiner_interface_bits(struct intel_display *display)
@@ -955,6 +958,7 @@ u32 get_max_compressed_bpp_with_joiner(struct intel_display *display,
 	return max_bpp;
 }
 
+/* TODO: return a bpp_x16 value */
 u16 intel_dp_dsc_get_max_compressed_bpp(struct intel_display *display,
 					u32 link_clock, u32 lane_count,
 					u32 mode_clock, u32 mode_hdisplay,
@@ -1007,9 +1011,10 @@ u16 intel_dp_dsc_get_max_compressed_bpp(struct intel_display *display,
 							    mode_hdisplay, num_joined_pipes);
 	bits_per_pixel = min(bits_per_pixel, joiner_max_bpp);
 
-	bits_per_pixel = intel_dp_dsc_nearest_valid_bpp(display, bits_per_pixel, pipe_bpp);
+	bits_per_pixel = intel_dp_dsc_nearest_valid_bpp(display,
+							fxp_q4_from_int(bits_per_pixel), pipe_bpp);
 
-	return bits_per_pixel;
+	return fxp_q4_to_int(bits_per_pixel);
 }
 
 u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
