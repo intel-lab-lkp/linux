@@ -20,7 +20,8 @@
 #define DAMOS_MAX_SCORE		(99)
 
 /* Get a random number in [l, r) */
-static inline unsigned long damon_rand(unsigned long l, unsigned long r)
+static inline unsigned long long damon_rand(unsigned long long l,
+					    unsigned long long r)
 {
 	return l + get_random_u32_below(r - l);
 }
@@ -31,8 +32,8 @@ static inline unsigned long damon_rand(unsigned long l, unsigned long r)
  * @end:	End address of the region (exclusive).
  */
 struct damon_addr_range {
-	unsigned long start;
-	unsigned long end;
+	unsigned long long start;
+	unsigned long long end;
 };
 
 /**
@@ -75,7 +76,7 @@ struct damon_size_range {
  */
 struct damon_region {
 	struct damon_addr_range ar;
-	unsigned long sampling_addr;
+	unsigned long long sampling_addr;
 	unsigned int nr_accesses;
 	unsigned int nr_accesses_bp;
 	struct list_head list;
@@ -228,9 +229,9 @@ struct damos_quota_goal {
 struct damos_quota {
 	unsigned long reset_interval;
 	unsigned long ms;
-	unsigned long sz;
+	unsigned long long sz;
 	struct list_head goals;
-	unsigned long esz;
+	unsigned long long esz;
 
 	unsigned int weight_sz;
 	unsigned int weight_nr_accesses;
@@ -238,14 +239,14 @@ struct damos_quota {
 
 /* private: */
 	/* For throughput estimation */
-	unsigned long total_charged_sz;
+	unsigned long long total_charged_sz;
 	unsigned long total_charged_ns;
 
 	/* For charging the quota */
-	unsigned long charged_sz;
+	unsigned long long charged_sz;
 	unsigned long charged_from;
 	struct damon_target *charge_target_from;
-	unsigned long charge_addr_from;
+	unsigned long long charge_addr_from;
 
 	/* For prioritization */
 	unsigned int min_score;
@@ -324,10 +325,10 @@ struct damos_watermarks {
  */
 struct damos_stat {
 	unsigned long nr_tried;
-	unsigned long sz_tried;
+	unsigned long long sz_tried;
 	unsigned long nr_applied;
-	unsigned long sz_applied;
-	unsigned long sz_ops_filter_passed;
+	unsigned long long sz_applied;
+	unsigned long long sz_ops_filter_passed;
 	unsigned long qt_exceeds;
 };
 
@@ -434,7 +435,7 @@ struct damos_walk_control {
  */
 struct damos_access_pattern {
 	unsigned long min_sz_region;
-	unsigned long max_sz_region;
+	unsigned long long max_sz_region;
 	unsigned int min_nr_accesses;
 	unsigned int max_nr_accesses;
 	unsigned int min_age_region;
@@ -592,7 +593,7 @@ struct damon_operations {
 			struct damos *scheme);
 	unsigned long (*apply_scheme)(struct damon_ctx *context,
 			struct damon_target *t, struct damon_region *r,
-			struct damos *scheme, unsigned long *sz_filter_passed);
+			struct damos *scheme, unsigned long long *sz_filter_passed);
 	bool (*target_valid)(struct damon_target *t);
 	void (*cleanup)(struct damon_ctx *context);
 };
@@ -806,7 +807,7 @@ static inline struct damon_region *damon_first_region(struct damon_target *t)
 	return list_first_entry(&t->regions_list, struct damon_region, list);
 }
 
-static inline unsigned long damon_sz_region(struct damon_region *r)
+static inline unsigned long long damon_sz_region(struct damon_region *r)
 {
 	return r->ar.end - r->ar.start;
 }
@@ -853,7 +854,8 @@ static inline unsigned long damon_sz_region(struct damon_region *r)
 
 #ifdef CONFIG_DAMON
 
-struct damon_region *damon_new_region(unsigned long start, unsigned long end);
+struct damon_region *damon_new_region(unsigned long long start,
+				      unsigned long long end);
 
 /*
  * Add a region between two other regions
@@ -933,7 +935,7 @@ int damon_call(struct damon_ctx *ctx, struct damon_call_control *control);
 int damos_walk(struct damon_ctx *ctx, struct damos_walk_control *control);
 
 int damon_set_region_biggest_system_ram_default(struct damon_target *t,
-				unsigned long *start, unsigned long *end);
+			unsigned long long *start, unsigned long long *end);
 
 #endif	/* CONFIG_DAMON */
 

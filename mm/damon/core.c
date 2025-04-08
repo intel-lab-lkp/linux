@@ -118,7 +118,8 @@ int damon_select_ops(struct damon_ctx *ctx, enum damon_ops_id id)
  *
  * Returns the pointer to the new struct if success, or NULL otherwise
  */
-struct damon_region *damon_new_region(unsigned long start, unsigned long end)
+struct damon_region *damon_new_region(unsigned long long start,
+				      unsigned long long end)
 {
 	struct damon_region *region;
 
@@ -1169,11 +1170,11 @@ int damon_nr_running_ctxs(void)
 }
 
 /* Returns the size upper limit for each monitoring region */
-static unsigned long damon_region_sz_limit(struct damon_ctx *ctx)
+static unsigned long long damon_region_sz_limit(struct damon_ctx *ctx)
 {
 	struct damon_target *t;
 	struct damon_region *r;
-	unsigned long sz = 0;
+	unsigned long long sz = 0;
 
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t)
@@ -1181,7 +1182,7 @@ static unsigned long damon_region_sz_limit(struct damon_ctx *ctx)
 	}
 
 	if (ctx->attrs.min_nr_regions)
-		sz /= ctx->attrs.min_nr_regions;
+		sz = div64_u64(sz, ctx->attrs.min_nr_regions);
 	if (sz < DAMON_MIN_REGION)
 		sz = DAMON_MIN_REGION;
 
@@ -1471,7 +1472,7 @@ static void kdamond_tune_intervals(struct damon_ctx *c)
 }
 
 static void damon_split_region_at(struct damon_target *t,
-				  struct damon_region *r, unsigned long sz_r);
+			struct damon_region *r, unsigned long long sz_r);
 
 static bool __damos_valid_target(struct damon_region *r, struct damos *s)
 {
@@ -1525,7 +1526,7 @@ static bool damos_skip_charged_region(struct damon_target *t,
 {
 	struct damon_region *r = *rp;
 	struct damos_quota *quota = &s->quota;
-	unsigned long sz_to_skip;
+	unsigned long long sz_to_skip;
 
 	/* Skip previously charged regions */
 	if (quota->charge_target_from) {
@@ -1560,8 +1561,8 @@ static bool damos_skip_charged_region(struct damon_target *t,
 }
 
 static void damos_update_stat(struct damos *s,
-		unsigned long sz_tried, unsigned long sz_applied,
-		unsigned long sz_ops_filter_passed)
+		unsigned long long sz_tried, unsigned long long sz_applied,
+		unsigned long long sz_ops_filter_passed)
 {
 	s->stat.nr_tried++;
 	s->stat.sz_tried += sz_tried;
@@ -1577,7 +1578,7 @@ static bool damos_filter_match(struct damon_ctx *ctx, struct damon_target *t,
 	bool matched = false;
 	struct damon_target *ti;
 	int target_idx = 0;
-	unsigned long start, end;
+	unsigned long long start, end;
 
 	switch (filter->type) {
 	case DAMOS_FILTER_TYPE_TARGET:
@@ -1726,10 +1727,10 @@ static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 		struct damon_region *r, struct damos *s)
 {
 	struct damos_quota *quota = &s->quota;
-	unsigned long sz = damon_sz_region(r);
+	unsigned long long sz = damon_sz_region(r);
 	struct timespec64 begin, end;
-	unsigned long sz_applied = 0;
-	unsigned long sz_ops_filter_passed = 0;
+	unsigned long long sz_applied = 0;
+	unsigned long long sz_ops_filter_passed = 0;
 	/*
 	 * We plan to support multiple context per kdamond, as DAMON sysfs
 	 * implies with 'nr_contexts' file.  Nevertheless, only single context
@@ -1947,8 +1948,8 @@ static void damos_set_effective_quota(struct damos_quota *quota)
 
 	if (quota->ms) {
 		if (quota->total_charged_ns)
-			throughput = quota->total_charged_sz * 1000000 /
-				quota->total_charged_ns;
+			throughput = div64_u64(quota->total_charged_sz * 1000000,
+						quota->total_charged_ns);
 		else
 			throughput = PAGE_SIZE * 1024;
 		esz = min(throughput * quota->ms, esz);
@@ -2058,12 +2059,13 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 static void damon_merge_two_regions(struct damon_target *t,
 		struct damon_region *l, struct damon_region *r)
 {
-	unsigned long sz_l = damon_sz_region(l), sz_r = damon_sz_region(r);
+	unsigned long long sz_l = damon_sz_region(l), sz_r = damon_sz_region(r);
 
-	l->nr_accesses = (l->nr_accesses * sz_l + r->nr_accesses * sz_r) /
-			(sz_l + sz_r);
+	l->nr_accesses = div64_u64(l->nr_accesses * sz_l + r->nr_accesses * sz_r,
+				    sz_l + sz_r);
+
 	l->nr_accesses_bp = l->nr_accesses * 10000;
-	l->age = (l->age * sz_l + r->age * sz_r) / (sz_l + sz_r);
+	l->age = div64_u64(l->age * sz_l + r->age * sz_r, sz_l + sz_r);
 	l->ar.end = r->ar.end;
 	damon_destroy_region(r, t);
 }
@@ -2076,7 +2078,7 @@ static void damon_merge_two_regions(struct damon_target *t,
  * sz_limit	size upper limit of each region
  */
 static void damon_merge_regions_of(struct damon_target *t, unsigned int thres,
-				   unsigned long sz_limit)
+				   unsigned long long sz_limit)
 {
 	struct damon_region *r, *prev = NULL, *next;
 
@@ -2113,7 +2115,7 @@ static void damon_merge_regions_of(struct damon_target *t, unsigned int thres,
  * met while increasing @threshold up to possible maximum level.
  */
 static void kdamond_merge_regions(struct damon_ctx *c, unsigned int threshold,
-				  unsigned long sz_limit)
+				  unsigned long long sz_limit)
 {
 	struct damon_target *t;
 	unsigned int nr_regions;
@@ -2139,7 +2141,7 @@ static void kdamond_merge_regions(struct damon_ctx *c, unsigned int threshold,
  * sz_r		size of the first sub-region that will be made
  */
 static void damon_split_region_at(struct damon_target *t,
-				  struct damon_region *r, unsigned long sz_r)
+			struct damon_region *r, unsigned long long sz_r)
 {
 	struct damon_region *new;
 
@@ -2161,7 +2163,7 @@ static void damon_split_region_at(struct damon_target *t,
 static void damon_split_regions_of(struct damon_target *t, int nr_subs)
 {
 	struct damon_region *r, *next;
-	unsigned long sz_region, sz_sub = 0;
+	unsigned long long sz_region, sz_sub = 0;
 	int i;
 
 	damon_for_each_region_safe(r, next, t) {
@@ -2173,8 +2175,8 @@ static void damon_split_regions_of(struct damon_target *t, int nr_subs)
 			 * Randomly select size of left sub-region to be at
 			 * least 10 percent and at most 90% of original region
 			 */
-			sz_sub = ALIGN_DOWN(damon_rand(1, 10) *
-					sz_region / 10, DAMON_MIN_REGION);
+			sz_sub = ALIGN_DOWN(div_u64(damon_rand(1, 10) *
+					    sz_region, 10), DAMON_MIN_REGION);
 			/* Do not allow blank region */
 			if (sz_sub == 0 || sz_sub >= sz_region)
 				continue;
@@ -2393,7 +2395,7 @@ static int kdamond_fn(void *data)
 	struct damon_target *t;
 	struct damon_region *r, *next;
 	unsigned int max_nr_accesses = 0;
-	unsigned long sz_limit = 0;
+	unsigned long long sz_limit = 0;
 
 	pr_debug("kdamond (%d) starts\n", current->pid);
 
@@ -2555,8 +2557,8 @@ static int walk_system_ram(struct resource *res, void *arg)
  * Find biggest 'System RAM' resource and store its start and end address in
  * @start and @end, respectively.  If no System RAM is found, returns false.
  */
-static bool damon_find_biggest_system_ram(unsigned long *start,
-						unsigned long *end)
+static bool damon_find_biggest_system_ram(unsigned long long *start,
+						unsigned long long *end)
 
 {
 	struct damon_system_ram_region arg = {};
@@ -2586,7 +2588,7 @@ static bool damon_find_biggest_system_ram(unsigned long *start,
  * Return: 0 on success, negative error code otherwise.
  */
 int damon_set_region_biggest_system_ram_default(struct damon_target *t,
-			unsigned long *start, unsigned long *end)
+			unsigned long long *start, unsigned long long *end)
 {
 	struct damon_addr_range addr_range;
 

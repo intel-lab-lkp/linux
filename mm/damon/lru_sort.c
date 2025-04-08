@@ -99,8 +99,8 @@ DEFINE_DAMON_MODULES_MON_ATTRS_PARAMS(damon_lru_sort_mon_attrs);
  * The start physical address of memory region that DAMON_LRU_SORT will do work
  * against.  By default, biggest System RAM is used as the region.
  */
-static unsigned long monitor_region_start __read_mostly;
-module_param(monitor_region_start, ulong, 0600);
+static unsigned long long monitor_region_start __read_mostly;
+module_param(monitor_region_start, ullong, 0600);
 
 /*
  * End of the target memory region in physical address.
@@ -108,8 +108,8 @@ module_param(monitor_region_start, ulong, 0600);
  * The end physical address of memory region that DAMON_LRU_SORT will do work
  * against.  By default, biggest System RAM is used as the region.
  */
-static unsigned long monitor_region_end __read_mostly;
-module_param(monitor_region_end, ulong, 0600);
+static unsigned long long monitor_region_end __read_mostly;
+module_param(monitor_region_end, ullong, 0600);
 
 /*
  * PID of the DAMON thread
@@ -133,7 +133,7 @@ DEFINE_DAMON_MODULES_DAMOS_STATS_PARAMS(damon_lru_sort_cold_stat,
 static struct damos_access_pattern damon_lru_sort_stub_pattern = {
 	/* Find regions having PAGE_SIZE or larger size */
 	.min_sz_region = PAGE_SIZE,
-	.max_sz_region = ULONG_MAX,
+	.max_sz_region = ULLONG_MAX,
 	/* no matter its access frequency */
 	.min_nr_accesses = 0,
 	.max_nr_accesses = UINT_MAX,

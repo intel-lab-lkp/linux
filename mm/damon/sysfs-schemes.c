@@ -19,7 +19,7 @@ struct damon_sysfs_scheme_region {
 	struct damon_addr_range ar;
 	unsigned int nr_accesses;
 	unsigned int age;
-	unsigned long sz_filter_passed;
+	unsigned long long sz_filter_passed;
 	struct list_head list;
 };
 
@@ -45,7 +45,7 @@ static ssize_t start_show(struct kobject *kobj, struct kobj_attribute *attr,
 	struct damon_sysfs_scheme_region *region = container_of(kobj,
 			struct damon_sysfs_scheme_region, kobj);
 
-	return sysfs_emit(buf, "%lu\n", region->ar.start);
+	return sysfs_emit(buf, "%llu\n", region->ar.start);
 }
 
 static ssize_t end_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -54,7 +54,7 @@ static ssize_t end_show(struct kobject *kobj, struct kobj_attribute *attr,
 	struct damon_sysfs_scheme_region *region = container_of(kobj,
 			struct damon_sysfs_scheme_region, kobj);
 
-	return sysfs_emit(buf, "%lu\n", region->ar.end);
+	return sysfs_emit(buf, "%llu\n", region->ar.end);
 }
 
 static ssize_t nr_accesses_show(struct kobject *kobj,
@@ -81,7 +81,7 @@ static ssize_t sz_filter_passed_show(struct kobject *kobj,
 	struct damon_sysfs_scheme_region *region = container_of(kobj,
 			struct damon_sysfs_scheme_region, kobj);
 
-	return sysfs_emit(buf, "%lu\n", region->sz_filter_passed);
+	return sysfs_emit(buf, "%llu\n", region->sz_filter_passed);
 }
 
 static void damon_sysfs_scheme_region_release(struct kobject *kobj)
@@ -132,7 +132,7 @@ struct damon_sysfs_scheme_regions {
 	struct kobject kobj;
 	struct list_head regions_list;
 	int nr_regions;
-	unsigned long total_bytes;
+	unsigned long long total_bytes;
 };
 
 static struct damon_sysfs_scheme_regions *
@@ -157,7 +157,7 @@ static ssize_t total_bytes_show(struct kobject *kobj,
 	struct damon_sysfs_scheme_regions *regions = container_of(kobj,
 			struct damon_sysfs_scheme_regions, kobj);
 
-	return sysfs_emit(buf, "%lu\n", regions->total_bytes);
+	return sysfs_emit(buf, "%llu\n", regions->total_bytes);
 }
 
 static void damon_sysfs_scheme_regions_rm_dirs(
@@ -199,10 +199,10 @@ static const struct kobj_type damon_sysfs_scheme_regions_ktype = {
 struct damon_sysfs_stats {
 	struct kobject kobj;
 	unsigned long nr_tried;
-	unsigned long sz_tried;
+	unsigned long long sz_tried;
 	unsigned long nr_applied;
-	unsigned long sz_applied;
-	unsigned long sz_ops_filter_passed;
+	unsigned long long sz_applied;
+	unsigned long long sz_ops_filter_passed;
 	unsigned long qt_exceeds;
 };
 
@@ -226,7 +226,7 @@ static ssize_t sz_tried_show(struct kobject *kobj, struct kobj_attribute *attr,
 	struct damon_sysfs_stats *stats = container_of(kobj,
 			struct damon_sysfs_stats, kobj);
 
-	return sysfs_emit(buf, "%lu\n", stats->sz_tried);
+	return sysfs_emit(buf, "%llu\n", stats->sz_tried);
 }
 
 static ssize_t nr_applied_show(struct kobject *kobj,
@@ -244,7 +244,7 @@ static ssize_t sz_applied_show(struct kobject *kobj,
 	struct damon_sysfs_stats *stats = container_of(kobj,
 			struct damon_sysfs_stats, kobj);
 
-	return sysfs_emit(buf, "%lu\n", stats->sz_applied);
+	return sysfs_emit(buf, "%llu\n", stats->sz_applied);
 }
 
 static ssize_t sz_ops_filter_passed_show(struct kobject *kobj,
@@ -253,7 +253,7 @@ static ssize_t sz_ops_filter_passed_show(struct kobject *kobj,
 	struct damon_sysfs_stats *stats = container_of(kobj,
 			struct damon_sysfs_stats, kobj);
 
-	return sysfs_emit(buf, "%lu\n", stats->sz_ops_filter_passed);
+	return sysfs_emit(buf, "%llu\n", stats->sz_ops_filter_passed);
 }
 
 static ssize_t qt_exceeds_show(struct kobject *kobj,
@@ -481,7 +481,7 @@ static ssize_t addr_start_show(struct kobject *kobj,
 	struct damon_sysfs_scheme_filter *filter = container_of(kobj,
 			struct damon_sysfs_scheme_filter, kobj);
 
-	return sysfs_emit(buf, "%lu\n", filter->addr_range.start);
+	return sysfs_emit(buf, "%llu\n", filter->addr_range.start);
 }
 
 static ssize_t addr_start_store(struct kobject *kobj,
@@ -489,7 +489,7 @@ static ssize_t addr_start_store(struct kobject *kobj,
 {
 	struct damon_sysfs_scheme_filter *filter = container_of(kobj,
 			struct damon_sysfs_scheme_filter, kobj);
-	int err = kstrtoul(buf, 0, &filter->addr_range.start);
+	int err = kstrtoull(buf, 0, &filter->addr_range.start);
 
 	return err ? err : count;
 }
@@ -500,7 +500,7 @@ static ssize_t addr_end_show(struct kobject *kobj,
 	struct damon_sysfs_scheme_filter *filter = container_of(kobj,
 			struct damon_sysfs_scheme_filter, kobj);
 
-	return sysfs_emit(buf, "%lu\n", filter->addr_range.end);
+	return sysfs_emit(buf, "%llu\n", filter->addr_range.end);
 }
 
 static ssize_t addr_end_store(struct kobject *kobj,
@@ -508,7 +508,7 @@ static ssize_t addr_end_store(struct kobject *kobj,
 {
 	struct damon_sysfs_scheme_filter *filter = container_of(kobj,
 			struct damon_sysfs_scheme_filter, kobj);
-	int err = kstrtoul(buf, 0, &filter->addr_range.end);
+	int err = kstrtoull(buf, 0, &filter->addr_range.end);
 
 	return err ? err : count;
 }

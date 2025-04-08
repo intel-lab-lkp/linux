@@ -64,9 +64,9 @@ static struct mm_struct *damon_get_mm(struct damon_target *t)
 static int damon_va_evenly_split_region(struct damon_target *t,
 		struct damon_region *r, unsigned int nr_pieces)
 {
-	unsigned long sz_orig, sz_piece, orig_end;
+	unsigned long long sz_orig, sz_piece, orig_end;
 	struct damon_region *n = NULL, *next;
-	unsigned long start;
+	unsigned long long start;
 	unsigned int i;
 
 	if (!r || !nr_pieces)
@@ -77,7 +77,7 @@ static int damon_va_evenly_split_region(struct damon_target *t,
 
 	orig_end = r->ar.end;
 	sz_orig = damon_sz_region(r);
-	sz_piece = ALIGN_DOWN(sz_orig / nr_pieces, DAMON_MIN_REGION);
+	sz_piece = ALIGN_DOWN(div_u64(sz_orig, nr_pieces), DAMON_MIN_REGION);
 
 	if (!sz_piece)
 		return -EINVAL;
@@ -241,7 +241,7 @@ static void __damon_va_init_regions(struct damon_ctx *ctx,
 	struct damon_target *ti;
 	struct damon_region *r;
 	struct damon_addr_range regions[3];
-	unsigned long sz = 0, nr_pieces;
+	unsigned long long sz = 0, nr_pieces;
 	int i, tidx = 0;
 
 	if (damon_va_three_regions(t, regions)) {
@@ -257,7 +257,7 @@ static void __damon_va_init_regions(struct damon_ctx *ctx,
 	for (i = 0; i < 3; i++)
 		sz += regions[i].end - regions[i].start;
 	if (ctx->attrs.min_nr_regions)
-		sz /= ctx->attrs.min_nr_regions;
+		sz = div64_u64(sz, ctx->attrs.min_nr_regions);
 	if (sz < DAMON_MIN_REGION)
 		sz = DAMON_MIN_REGION;
 
@@ -270,7 +270,7 @@ static void __damon_va_init_regions(struct damon_ctx *ctx,
 		}
 		damon_add_region(r, t);
 
-		nr_pieces = (regions[i].end - regions[i].start) / sz;
+		nr_pieces = div64_u64(regions[i].end - regions[i].start, sz);
 		damon_va_evenly_split_region(t, r, nr_pieces);
 	}
 }
@@ -655,7 +655,7 @@ static unsigned long damos_madvise(struct damon_target *target,
 
 static unsigned long damon_va_apply_scheme(struct damon_ctx *ctx,
 		struct damon_target *t, struct damon_region *r,
-		struct damos *scheme, unsigned long *sz_filter_passed)
+		struct damos *scheme, unsigned long long *sz_filter_passed)
 {
 	int madv_action;
 

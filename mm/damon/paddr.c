@@ -58,7 +58,7 @@ static void damon_folio_mkold(struct folio *folio)
 
 }
 
-static void damon_pa_mkold(unsigned long paddr)
+static void damon_pa_mkold(phys_addr_t paddr)
 {
 	struct folio *folio = damon_get_folio(PHYS_PFN(paddr));
 
@@ -156,7 +156,7 @@ static bool damon_folio_young(struct folio *folio)
 	return accessed;
 }
 
-static bool damon_pa_young(unsigned long paddr, unsigned long *folio_sz)
+static bool damon_pa_young(phys_addr_t paddr, unsigned long *folio_sz)
 {
 	struct folio *folio = damon_get_folio(PHYS_PFN(paddr));
 	bool accessed;
@@ -173,7 +173,7 @@ static bool damon_pa_young(unsigned long paddr, unsigned long *folio_sz)
 static void __damon_pa_check_access(struct damon_region *r,
 		struct damon_attrs *attrs)
 {
-	static unsigned long last_addr;
+	static phys_addr_t last_addr;
 	static unsigned long last_folio_sz = PAGE_SIZE;
 	static bool last_accessed;
 
@@ -277,10 +277,10 @@ static bool damon_pa_invalid_damos_folio(struct folio *folio, struct damos *s)
 	return false;
 }
 
-static unsigned long damon_pa_pageout(struct damon_region *r, struct damos *s,
-		unsigned long *sz_filter_passed)
+static unsigned long long damon_pa_pageout(struct damon_region *r, struct damos *s,
+		unsigned long long *sz_filter_passed)
 {
-	unsigned long addr, applied;
+	unsigned long long addr, applied;
 	LIST_HEAD(folio_list);
 	bool install_young_filter = true;
 	struct damos_filter *filter;
@@ -334,11 +334,11 @@ put_folio:
 	return applied * PAGE_SIZE;
 }
 
-static inline unsigned long damon_pa_mark_accessed_or_deactivate(
+static inline unsigned long long damon_pa_mark_accessed_or_deactivate(
 		struct damon_region *r, struct damos *s, bool mark_accessed,
-		unsigned long *sz_filter_passed)
+		unsigned long long *sz_filter_passed)
 {
-	unsigned long addr, applied = 0;
+	unsigned long long addr, applied = 0;
 	struct folio *folio;
 
 	addr = r->ar.start;
@@ -367,15 +367,15 @@ put_folio:
 	return applied * PAGE_SIZE;
 }
 
-static unsigned long damon_pa_mark_accessed(struct damon_region *r,
-	struct damos *s, unsigned long *sz_filter_passed)
+static unsigned long long damon_pa_mark_accessed(struct damon_region *r,
+	struct damos *s, unsigned long long *sz_filter_passed)
 {
 	return damon_pa_mark_accessed_or_deactivate(r, s, true,
 			sz_filter_passed);
 }
 
-static unsigned long damon_pa_deactivate_pages(struct damon_region *r,
-	struct damos *s, unsigned long *sz_filter_passed)
+static unsigned long long damon_pa_deactivate_pages(struct damon_region *r,
+	struct damos *s, unsigned long long *sz_filter_passed)
 {
 	return damon_pa_mark_accessed_or_deactivate(r, s, false,
 			sz_filter_passed);
@@ -502,10 +502,10 @@ static unsigned long damon_pa_migrate_pages(struct list_head *folio_list,
 	return nr_migrated;
 }
 
-static unsigned long damon_pa_migrate(struct damon_region *r, struct damos *s,
-		unsigned long *sz_filter_passed)
+static unsigned long long damon_pa_migrate(struct damon_region *r, struct damos *s,
+		unsigned long long *sz_filter_passed)
 {
-	unsigned long addr, applied;
+	unsigned long long addr, applied;
 	LIST_HEAD(folio_list);
 	struct folio *folio;
 
@@ -545,9 +545,9 @@ static bool damon_pa_scheme_has_filter(struct damos *s)
 }
 
 static unsigned long damon_pa_stat(struct damon_region *r, struct damos *s,
-		unsigned long *sz_filter_passed)
+		unsigned long long *sz_filter_passed)
 {
-	unsigned long addr;
+	unsigned long long addr;
 	LIST_HEAD(folio_list);
 	struct folio *folio;
 
@@ -573,7 +573,7 @@ static unsigned long damon_pa_stat(struct damon_region *r, struct damos *s,
 
 static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 		struct damon_target *t, struct damon_region *r,
-		struct damos *scheme, unsigned long *sz_filter_passed)
+		struct damos *scheme, unsigned long long *sz_filter_passed)
 {
 	switch (scheme->action) {
 	case DAMOS_PAGEOUT:
