@@ -24,6 +24,7 @@
 
 struct of_serial_info {
 	struct clk *clk;
+	struct clk *bus_clk;
 	struct reset_control *rst;
 	int type;
 	int line;
@@ -123,14 +124,34 @@ static int of_platform_serial_setup(struct platform_device *ofdev,
 
 	/* Get clk rate through clk driver if present */
 	if (!port->uartclk) {
-		info->clk = devm_clk_get_enabled(dev, NULL);
+		info->clk = devm_clk_get_optional_enabled(dev, "core");
 		if (IS_ERR(info->clk)) {
-			ret = dev_err_probe(dev, PTR_ERR(info->clk), "failed to get clock\n");
+			ret = dev_err_probe(dev, PTR_ERR(info->clk),
+					    "failed to get core clock\n");
 			goto err_pmruntime;
+		}
+
+		/* If we got the core clock, look for a bus clock */
+		if (info->clk) {
+			info->bus_clk = devm_clk_get_enabled(dev, "bus");
+			if (IS_ERR(info->bus_clk)) {
+				ret = dev_err_probe(dev, PTR_ERR(info->bus_clk),
+					    "failed to get bus clock\n");
+				goto err_pmruntime;
+			}
+		} else {
+			/* Fall back to getting the one unnamed clock */
+			info->clk = devm_clk_get_enabled(dev, NULL);
+			if (IS_ERR(info->clk)) {
+				ret = dev_err_probe(dev, PTR_ERR(info->clk),
+						"failed to get clock\n");
+				goto err_pmruntime;
+			}
 		}
 
 		port->uartclk = clk_get_rate(info->clk);
 	}
+
 	/* If current-speed was set, then try not to change it. */
 	if (of_property_read_u32(np, "current-speed", &spd) == 0)
 		port->custom_divisor = port->uartclk / (16 * spd);
