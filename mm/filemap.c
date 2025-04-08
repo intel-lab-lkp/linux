@@ -1007,6 +1007,15 @@ struct folio *filemap_alloc_folio_noprof(gfp_t gfp, unsigned int order)
 	return folio_alloc_noprof(gfp, order);
 }
 EXPORT_SYMBOL(filemap_alloc_folio_noprof);
+
+struct folio *filemap_alloc_folio_mpol_noprof(gfp_t gfp, unsigned int order,
+		struct mempolicy *mpol, pgoff_t ilx)
+{
+	if (mpol)
+		return folio_alloc_mpol_noprof(gfp, order, mpol,
+					       ilx, numa_node_id());
+	return filemap_alloc_folio_noprof(gfp, order);
+}
 #endif
 
 /*
@@ -1880,11 +1889,14 @@ out:
 }
 
 /**
- * __filemap_get_folio - Find and get a reference to a folio.
+ * __filemap_get_folio_mpol - Find and get a reference to a folio.
  * @mapping: The address_space to search.
  * @index: The page index.
  * @fgp_flags: %FGP flags modify how the folio is returned.
  * @gfp: Memory allocation flags to use if %FGP_CREAT is specified.
+ * @mpol: The mempolicy to apply when allocating a new folio.
+ * @ilx: The interleave index, for use only with MPOL_INTERLEAVE or
+ *       MPOL_WEIGHTED_INTERLEAVE.
  *
  * Looks up the page cache entry at @mapping & @index.
  *
@@ -1895,8 +1907,8 @@ out:
  *
  * Return: The found folio or an ERR_PTR() otherwise.
  */
-struct folio *__filemap_get_folio(struct address_space *mapping, pgoff_t index,
-		fgf_t fgp_flags, gfp_t gfp)
+struct folio *__filemap_get_folio_mpol(struct address_space *mapping, pgoff_t index,
+		fgf_t fgp_flags, gfp_t gfp, struct mempolicy *mpol, pgoff_t ilx)
 {
 	struct folio *folio;
 
@@ -1966,7 +1978,7 @@ no_page:
 			err = -ENOMEM;
 			if (order > min_order)
 				alloc_gfp |= __GFP_NORETRY | __GFP_NOWARN;
-			folio = filemap_alloc_folio(alloc_gfp, order);
+			folio = filemap_alloc_folio_mpol(alloc_gfp, order, mpol, ilx);
 			if (!folio)
 				continue;
 
@@ -2012,6 +2024,13 @@ no_page:
 	if (folio_test_dropbehind(folio) && !(fgp_flags & FGP_DONTCACHE))
 		folio_clear_dropbehind(folio);
 	return folio;
+}
+EXPORT_SYMBOL(__filemap_get_folio_mpol);
+
+struct folio *__filemap_get_folio(struct address_space *mapping, pgoff_t index,
+		fgf_t fgp_flags, gfp_t gfp)
+{
+	return __filemap_get_folio_mpol(mapping, index, fgp_flags, gfp, NULL, 0);
 }
 EXPORT_SYMBOL(__filemap_get_folio);
 
