@@ -1219,6 +1219,8 @@ static int __init gicv5_of_init(struct device_node *node,
 
 	gicv5_irs_its_probe();
 
+	gicv5_iwb_of_probe(node);
+
 	return 0;
 }
 IRQCHIP_DECLARE(gic_v5, "arm,gic-v5", gicv5_of_init);
