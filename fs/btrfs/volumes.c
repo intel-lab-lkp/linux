@@ -3730,7 +3730,7 @@ static int insert_balance_item(struct btrfs_fs_info *fs_info,
 	struct btrfs_trans_handle *trans;
 	struct btrfs_balance_item *item;
 	struct btrfs_disk_balance_args disk_bargs;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
 	int ret, err;
@@ -3740,10 +3740,8 @@ static int insert_balance_item(struct btrfs_fs_info *fs_info,
 		return -ENOMEM;
 
 	trans = btrfs_start_transaction(root, 0);
-	if (IS_ERR(trans)) {
-		btrfs_free_path(path);
+	if (IS_ERR(trans))
 		return PTR_ERR(trans);
-	}
 
 	key.objectid = BTRFS_BALANCE_OBJECTID;
 	key.type = BTRFS_TEMPORARY_ITEM_KEY;
@@ -3767,7 +3765,6 @@ static int insert_balance_item(struct btrfs_fs_info *fs_info,
 	btrfs_set_balance_sys(leaf, item, &disk_bargs);
 	btrfs_set_balance_flags(leaf, item, bctl->flags);
 out:
-	btrfs_free_path(path);
 	err = btrfs_commit_transaction(trans);
 	if (err && !ret)
 		ret = err;
