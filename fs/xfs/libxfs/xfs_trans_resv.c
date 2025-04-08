@@ -47,7 +47,7 @@ xfs_buf_log_overhead(void)
  * will be changed in a transaction.  size is used to tell how many
  * bytes should be reserved per item.
  */
-STATIC uint
+uint
 xfs_calc_buf_res(
 	uint		nbufs,
 	uint		size)
@@ -84,7 +84,7 @@ xfs_allocfree_block_count(
  * in the same transaction as an allocation or a free, so we compute them
  * separately.
  */
-static unsigned int
+unsigned int
 xfs_refcountbt_block_count(
 	struct xfs_mount	*mp,
 	unsigned int		num_ops)
@@ -129,7 +129,7 @@ xfs_rtrefcountbt_block_count(
  *	  additional to the records and pointers that fit inside the inode
  *	  forks.
  */
-STATIC uint
+uint
 xfs_calc_inode_res(
 	struct xfs_mount	*mp,
 	uint			ninodes)
