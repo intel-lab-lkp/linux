@@ -5,6 +5,7 @@
 
 #define pr_fmt(fmt)	"GICv5: " fmt
 
+#include <linux/cpuhotplug.h>
 #include <linux/irqchip.h>
 #include <linux/irqdomain.h>
 #include <linux/maple_tree.h>
@@ -992,6 +993,68 @@ static void gicv5_cpu_enable_interrupts(void)
 	write_sysreg_s(cr0, SYS_ICC_CR0_EL1);
 }
 
+static int base_ipi_virq;
+
+static int gicv5_check_ipi_affinity(unsigned int cpu)
+{
+	int ret;
+	u64 cdrcfg, icsr;
+	u16 programmed_iaffid, requested_iaffid;
+	struct irq_data *d;
+	unsigned int i, virq_base = base_ipi_virq + cpu * GICV5_IPIS_PER_CPU;
+
+	for (i = 0; i < GICV5_IPIS_PER_CPU; i++) {
+		d = irq_get_irq_data(virq_base + i);
+
+		if (WARN_ON(!d))
+			return -ENODEV;
+
+		/*
+		 * We need to know the actual LPI that is being used, rather
+		 * than the IPI domain hwirq.
+		 *
+		 * Hence, use the hwirq from the parent (LPI domain) here.
+		 */
+		cdrcfg = d->parent_data->hwirq |
+			 FIELD_PREP(GICV5_HWIRQ_TYPE, GICV5_HWIRQ_TYPE_LPI);
+		preempt_disable();
+		gic_insn(cdrcfg, GICV5_OP_GIC_CDRCFG);
+		isb();
+		icsr = read_sysreg_s(SYS_ICC_ICSR_EL1);
+		preempt_enable();
+
+		if (FIELD_GET(ICC_ICSR_EL1_F, icsr)) {
+			pr_err("SYS_ID_ICC_ICSR_EL1 is not valid");
+			return -ENXIO;
+		}
+
+		if (!FIELD_GET(ICC_ICSR_EL1_Enabled, icsr)) {
+			pr_err("interrupt is disabled");
+			return -ENXIO;
+		}
+
+		if (FIELD_GET(ICC_ICSR_EL1_IRM, icsr)) {
+			pr_debug("Interrupt not using targeted routing");
+			return -ENXIO;
+		}
+
+		programmed_iaffid = (u16)FIELD_GET(ICC_ICSR_EL1_IAFFID, icsr);
+
+		ret = gicv5_irs_cpu_to_iaffid(cpu, &requested_iaffid);
+		if (ret)
+			return ret;
+
+		if (programmed_iaffid != requested_iaffid) {
+			pr_err("Mismatch between programmed_iaffid (%u) and requested_iaffid (%u)",
+			       programmed_iaffid, requested_iaffid);
+
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
 static int gicv5_starting_cpu(unsigned int cpu)
 {
 	if (WARN(!gicv5_cpuif_has_gcie(),
@@ -1001,6 +1064,25 @@ static int gicv5_starting_cpu(unsigned int cpu)
 	gicv5_cpu_enable_interrupts();
 
 	return gicv5_irs_register_cpu(cpu);
+}
+
+static void __init gicv5_smp_init(void)
+{
+	unsigned int num_ipis = GICV5_IPIS_PER_CPU * nr_cpu_ids;
+
+	cpuhp_setup_state_nocalls(CPUHP_AP_IRQ_GIC_STARTING,
+				  "irqchip/arm/gicv5:starting",
+				  gicv5_starting_cpu, NULL);
+
+	base_ipi_virq = irq_domain_alloc_irqs(gicv5_global_data.ipi_domain,
+					  num_ipis, NUMA_NO_NODE, NULL);
+	if (WARN(base_ipi_virq <= 0, "IPI IRQ allocation was not successful"))
+		return;
+
+	set_smp_ipi_range_percpu(base_ipi_virq, GICV5_IPIS_PER_CPU, nr_cpu_ids);
+
+	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "irqchip/arm/gicv5:online",
+				  gicv5_check_ipi_affinity, NULL);
 }
 
 static void __init gicv5_free_domains(void)
@@ -1132,6 +1214,8 @@ static int __init gicv5_of_init(struct device_node *node,
 		gicv5_cpu_disable_interrupts();
 		return ret;
 	}
+
+	gicv5_smp_init();
 
 	return 0;
 }
