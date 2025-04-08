@@ -3997,6 +3997,13 @@ static void l2cap_connect(struct l2cap_conn *conn, struct l2cap_cmd_hdr *cmd,
 		goto response;
 	}
 
+	/* Check the encryption key size */
+	if (!l2cap_check_enc_key_size(conn->hcon)) {
+		conn->disc_reason = HCI_ERROR_AUTH_FAILURE;
+		result = L2CAP_CR_SEC_BLOCK;
+		goto response;
+	}
+
 	result = L2CAP_CR_NO_MEM;
 
 	/* Check for valid dynamic CID range (as per Erratum 3253) */
