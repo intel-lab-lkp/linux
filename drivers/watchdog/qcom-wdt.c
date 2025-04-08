@@ -9,6 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/watchdog.h>
 
@@ -21,6 +22,8 @@ enum wdt_reg {
 };
 
 #define QCOM_WDT_ENABLE		BIT(0)
+
+#define NON_SECURE_WDT_RESET	0x5
 
 static const u32 reg_offset_data_apcs_tmr[] = {
 	[WDT_RST] = 0x38,
@@ -187,6 +190,39 @@ static const struct qcom_wdt_match_data match_data_kpss = {
 	.max_tick_count = 0xFFFFFU,
 };
 
+static int  qcom_wdt_get_restart_reason(struct qcom_wdt *wdt)
+{
+	struct device_node *np;
+	struct resource imem;
+	void __iomem *base;
+	int ret;
+
+	np = of_find_compatible_node(NULL, NULL, "qcom,restart-reason-info");
+	if (!np)
+		return -ENOENT;
+
+	ret = of_address_to_resource(np, 0, &imem);
+	of_node_put(np);
+	if (ret < 0) {
+		dev_err(wdt->wdd.parent, "can't translate OF node address\n");
+		return ret;
+	}
+
+	base = ioremap(imem.start, resource_size(&imem));
+	if (!base) {
+		dev_err(wdt->wdd.parent, "failed to map restart reason info region\n");
+		return -ENOMEM;
+	}
+
+	memcpy_fromio(&ret, base, sizeof(ret));
+	iounmap(base);
+
+	if (ret == NON_SECURE_WDT_RESET)
+		wdt->wdd.bootstatus = WDIOF_CARDRESET;
+
+	return 0;
+}
+
 static int qcom_wdt_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -267,7 +303,9 @@ static int qcom_wdt_probe(struct platform_device *pdev)
 	wdt->wdd.parent = dev;
 	wdt->layout = data->offset;
 
-	if (readl(wdt_addr(wdt, WDT_STS)) & 1)
+	ret = qcom_wdt_get_restart_reason(wdt);
+	if (ret == -ENOENT &&
+	    readl(wdt_addr(wdt, WDT_STS)) & 1)
 		wdt->wdd.bootstatus = WDIOF_CARDRESET;
 
 	/*
