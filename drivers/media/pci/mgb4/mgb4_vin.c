@@ -604,14 +604,31 @@ static int vidioc_s_dv_timings(struct file *file, void *fh,
 			       struct v4l2_dv_timings *timings)
 {
 	struct mgb4_vin_dev *vindev = video_drvdata(file);
+	struct v4l2_dv_timings active_timings;
 
-	if (timings->bt.width < video_timings_cap.bt.min_width ||
-	    timings->bt.width > video_timings_cap.bt.max_width ||
-	    timings->bt.height < video_timings_cap.bt.min_height ||
-	    timings->bt.height > video_timings_cap.bt.max_height)
+	if (get_timings(vindev, &active_timings) < 0)
+		return -ENODATA;
+	if (timings->bt.width != active_timings.bt.width ||
+	    timings->bt.height != active_timings.bt.height ||
+	    timings->bt.polarities != active_timings.bt.polarities ||
+	    timings->bt.pixelclock != active_timings.bt.pixelclock ||
+	    timings->bt.hfrontporch != active_timings.bt.hfrontporch ||
+	    timings->bt.hsync != active_timings.bt.hsync ||
+	    timings->bt.hbackporch != active_timings.bt.hbackporch ||
+	    timings->bt.vfrontporch != active_timings.bt.vfrontporch ||
+	    timings->bt.vsync != active_timings.bt.vsync ||
+	    timings->bt.vbackporch != active_timings.bt.vbackporch)
 		return -EINVAL;
 	if (timings->bt.width == vindev->timings.bt.width &&
-	    timings->bt.height == vindev->timings.bt.height)
+	    timings->bt.height == vindev->timings.bt.height &&
+	    timings->bt.polarities == vindev->timings.bt.polarities &&
+	    timings->bt.pixelclock == vindev->timings.bt.pixelclock &&
+	    timings->bt.hfrontporch == vindev->timings.bt.hfrontporch &&
+	    timings->bt.hsync == vindev->timings.bt.hsync &&
+	    timings->bt.hbackporch == vindev->timings.bt.hbackporch &&
+	    timings->bt.vfrontporch == vindev->timings.bt.vfrontporch &&
+	    timings->bt.vsync == vindev->timings.bt.vsync &&
+	    timings->bt.vbackporch == vindev->timings.bt.vbackporch)
 		return 0;
 	if (vb2_is_busy(&vindev->queue))
 		return -EBUSY;
@@ -641,7 +658,14 @@ static int vidioc_query_dv_timings(struct file *file, void *fh,
 static int vidioc_enum_dv_timings(struct file *file, void *fh,
 				  struct v4l2_enum_dv_timings *timings)
 {
-	return v4l2_enum_dv_timings_cap(timings, &video_timings_cap, NULL, NULL);
+	struct mgb4_vin_dev *vindev = video_drvdata(file);
+
+	if (timings->index != 0)
+		return -EINVAL;
+	if (get_timings(vindev, &timings->timings) < 0)
+		return -ENODATA;
+
+	return 0;
 }
 
 static int vidioc_dv_timings_cap(struct file *file, void *fh,
