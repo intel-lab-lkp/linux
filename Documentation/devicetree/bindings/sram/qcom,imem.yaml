@@ -56,6 +56,10 @@ patternProperties:
     $ref: /schemas/remoteproc/qcom,pil-info.yaml#
     description: Peripheral image loader relocation region
 
+  "^restart-reason@[0-9a-f]+$":
+    $ref: /schemas/watchdog/qcom,restart-reason.yaml#
+    description: IPQ SoC restart reason region
+
 required:
   - compatible
   - reg
@@ -79,6 +83,26 @@ examples:
             pil-reloc@94c {
                 compatible = "qcom,pil-reloc-info";
                 reg = <0x94c 0xc8>;
+            };
+        };
+    };
+
+  - |
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        sram@8600000 {
+            compatible = "qcom,ipq5424-imem", "syscon", "simple-mfd";
+            reg = <0 0x08600000 0 0x1000>;
+            ranges = <0 0 0x08600000 0x1000>;
+
+            #address-cells = <1>;
+            #size-cells = <1>;
+
+            restart-reason@7b0 {
+                compatible = "qcom,restart-reason-info";
+                reg = <0x7b0 0x4>;
             };
         };
     };
