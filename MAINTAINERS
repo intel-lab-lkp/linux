@@ -1907,6 +1907,8 @@ M:	Marc Zyngier <maz@kernel.org>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/devicetree/bindings/interrupt-controller/arm,gic-v5.yaml
+F:	arch/arm64/include/asm/arch_gicv5.h
+F:	drivers/irqchip/irq-gic-v5*.[ch]
 
 ARM HDLCD DRM DRIVER
 M:	Liviu Dudau <liviu.dudau@arm.com>
