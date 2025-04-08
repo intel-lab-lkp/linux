@@ -99,6 +99,14 @@ int set_memory_block_size_order(unsigned int order);
 #define	MEM_PREPARE_ONLINE	(1<<6)
 #define	MEM_FINISH_OFFLINE	(1<<7)
 
+/* These states are used for numa node notifiers */
+#define NODE_BECOMING_MEM_AWARE		(1<<0)
+#define NODE_BECAME_MEM_AWARE		(1<<1)
+#define NODE_BECOMING_MEMORYLESS	(1<<2)
+#define NODE_BECAME_MEMORYLESS		(1<<3)
+#define NODE_CANCEL_MEM_AWARE		(1<<4)
+#define NODE_CANCEL_MEMORYLESS		(1<<5)
+
 struct memory_notify {
 	/*
 	 * The altmap_start_pfn and altmap_nr_pages fields are designated for
@@ -109,7 +117,10 @@ struct memory_notify {
 	unsigned long altmap_nr_pages;
 	unsigned long start_pfn;
 	unsigned long nr_pages;
-	int status_change_nid_normal;
+	int status_change_nid;
+};
+
+struct node_notify {
 	int status_change_nid;
 };
 
@@ -157,15 +168,34 @@ static inline unsigned long memory_block_advised_max_size(void)
 {
 	return 0;
 }
+
+static inline int register_node_notifier(struct notifier_block *nb)
+{
+	return 0;
+}
+static inline void unregister_node_notifier(struct notifier_block *nb)
+{
+}
+static inline int node_notify(unsigned long val, void *v)
+{
+	return 0;
+}
+static inline int hotplug_node_notifier(notifier_fn_t fn, int pri)
+{
+	return 0;
+}
 #else /* CONFIG_MEMORY_HOTPLUG */
 extern int register_memory_notifier(struct notifier_block *nb);
+extern int register_node_notifier(struct notifier_block *nb);
 extern void unregister_memory_notifier(struct notifier_block *nb);
+extern void unregister_node_notifier(struct notifier_block *nb);
 int create_memory_block_devices(unsigned long start, unsigned long size,
 				struct vmem_altmap *altmap,
 				struct memory_group *group);
 void remove_memory_block_devices(unsigned long start, unsigned long size);
 extern void memory_dev_init(void);
 extern int memory_notify(unsigned long val, void *v);
+extern int node_notify(unsigned long val, void *v);
 extern struct memory_block *find_memory_block(unsigned long section_nr);
 typedef int (*walk_memory_blocks_func_t)(struct memory_block *, void *);
 extern int walk_memory_blocks(unsigned long start, unsigned long size,
@@ -183,6 +213,12 @@ int walk_dynamic_memory_groups(int nid, walk_memory_groups_func_t func,
 	static __meminitdata struct notifier_block fn##_mem_nb =\
 		{ .notifier_call = fn, .priority = pri };\
 	register_memory_notifier(&fn##_mem_nb);			\
+})
+
+#define hotplug_node_notifier(fn, pri) ({		\
+	static __meminitdata struct notifier_block fn##_node_nb =\
+		{ .notifier_call = fn, .priority = pri };\
+	register_node_notifier(&fn##_node_nb);			\
 })
 
 #ifdef CONFIG_NUMA
