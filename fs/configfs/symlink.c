@@ -193,7 +193,7 @@ int configfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	if (ret)
 		goto out_put;
 
-	if (dentry->d_inode || d_unhashed(dentry))
+	if (dentry->d_inode || !d_unhashed(dentry))
 		ret = -EEXIST;
 	else
 		ret = inode_permission(&nop_mnt_idmap, dir,
