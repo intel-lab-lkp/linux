@@ -1044,7 +1044,8 @@ idle_timeout:
 }
 
 static void
-ehci_endpoint_reset(struct usb_hcd *hcd, struct usb_host_endpoint *ep)
+ehci_endpoint_reset(struct usb_hcd *hcd, struct usb_device *udev,
+		    struct usb_host_endpoint *ep)
 {
 	struct ehci_hcd		*ehci = hcd_to_ehci(hcd);
 	struct ehci_qh		*qh;

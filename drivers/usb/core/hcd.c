@@ -1986,7 +1986,7 @@ void usb_hcd_reset_endpoint(struct usb_device *udev,
 	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
 
 	if (hcd->driver->endpoint_reset)
-		hcd->driver->endpoint_reset(hcd, ep);
+		hcd->driver->endpoint_reset(hcd, udev, ep);
 	else {
 		int epnum = usb_endpoint_num(&ep->desc);
 		int is_out = usb_endpoint_dir_out(&ep->desc);
