@@ -18,7 +18,7 @@ struct idpf_vport_max_q;
 #include <linux/ethtool_netlink.h>
 #include <net/gro.h>
 
-#include "virtchnl2.h"
+#include <linux/intel/virtchnl2.h>
 #include "idpf_txrx.h"
 #include "idpf_controlq.h"
 

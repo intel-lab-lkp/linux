@@ -5,7 +5,7 @@
 
 #include <linux/pci.h>
 #include <linux/bitfield.h>
-#include <linux/net/intel/iidc.h>
+#include <linux/intel/iidc.h>
 #include <rdma/ib_verbs.h>
 
 #define STATS_TIMER_DELAY	60000
