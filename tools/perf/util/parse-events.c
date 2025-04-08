@@ -800,6 +800,7 @@ const char *parse_events__term_type_str(enum parse_events__term_type term_type)
 		[PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE]          = "legacy-cache",
 		[PARSE_EVENTS__TERM_TYPE_HARDWARE]              = "hardware",
 		[PARSE_EVENTS__TERM_TYPE_HF_PERIOD]		= "hf-period",
+		[PARSE_EVENTS__TERM_TYPE_HF_RAND]		= "hf-rand",
 	};
 	if ((unsigned int)term_type >= __PARSE_EVENTS__TERM_TYPE_NR)
 		return "unknown term";
@@ -829,6 +830,7 @@ config_term_avail(enum parse_events__term_type term_type, struct parse_events_er
 	case PARSE_EVENTS__TERM_TYPE_METRIC_ID:
 	case PARSE_EVENTS__TERM_TYPE_SAMPLE_PERIOD:
 	case PARSE_EVENTS__TERM_TYPE_HF_PERIOD:
+	case PARSE_EVENTS__TERM_TYPE_HF_RAND:
 	case PARSE_EVENTS__TERM_TYPE_PERCORE:
 		return true;
 	case PARSE_EVENTS__TERM_TYPE_USER:
@@ -987,6 +989,16 @@ do {									   \
 		}
 		attr->hf_sample_period = term->val.num;
 		break;
+	case PARSE_EVENTS__TERM_TYPE_HF_RAND:
+		CHECK_TYPE_VAL(NUM);
+		if ((unsigned int)term->val.num > 15) {
+			parse_events_error__handle(err, term->err_val,
+						strdup("expected a value between 0-15"),
+						NULL);
+			return -EINVAL;
+		}
+		attr->hf_sample_rand = (unsigned int)term->val.num;
+		break;
 	case PARSE_EVENTS__TERM_TYPE_DRV_CFG:
 	case PARSE_EVENTS__TERM_TYPE_USER:
 	case PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE:
@@ -1115,6 +1127,7 @@ static int config_term_tracepoint(struct perf_event_attr *attr,
 	case PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE:
 	case PARSE_EVENTS__TERM_TYPE_HARDWARE:
 	case PARSE_EVENTS__TERM_TYPE_HF_PERIOD:
+	case PARSE_EVENTS__TERM_TYPE_HF_RAND:
 	default:
 		if (err) {
 			parse_events_error__handle(err, term->err_term,
@@ -1250,6 +1263,7 @@ do {								\
 		case PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE:
 		case PARSE_EVENTS__TERM_TYPE_HARDWARE:
 		case PARSE_EVENTS__TERM_TYPE_HF_PERIOD:
+		case PARSE_EVENTS__TERM_TYPE_HF_RAND:
 		default:
 			break;
 		}
@@ -1305,6 +1319,7 @@ static int get_config_chgs(struct perf_pmu *pmu, struct parse_events_terms *head
 		case PARSE_EVENTS__TERM_TYPE_LEGACY_CACHE:
 		case PARSE_EVENTS__TERM_TYPE_HARDWARE:
 		case PARSE_EVENTS__TERM_TYPE_HF_PERIOD:
+		case PARSE_EVENTS__TERM_TYPE_HF_RAND:
 		default:
 			break;
 		}

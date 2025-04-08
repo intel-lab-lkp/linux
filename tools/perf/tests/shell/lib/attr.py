@@ -92,6 +92,7 @@ class Event(dict):
         'sample_regs_user',
         'sample_stack_user',
         'hf_sample_period',
+        'hf_sample_rand',
     ]
 
     def add(self, data):

@@ -181,6 +181,7 @@ static int store_event(struct perf_event_attr *attr, pid_t pid, struct perf_cpu 
 	WRITE_ASS(sample_regs_user,   "llu");
 	WRITE_ASS(sample_stack_user,  PRIu32);
 	WRITE_ASS(hf_sample_period,  PRIu32);
+	WRITE_ASS(hf_sample_rand,	"d");
 
 	fclose(file);
 	return 0;

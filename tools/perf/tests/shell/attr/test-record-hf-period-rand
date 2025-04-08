@@ -1,0 +1,13 @@
+[config]
+command = record
+args    = --no-bpf-event -e cycles/period=3,hf-period=2,hf-rand=7/ -- kill >/dev/null 2>&1
+ret     = 1
+kernel_since = 6.15
+
+[event-10:base-record]
+sample_period=3
+hf_sample_period=2
+hf_sample_rand=7
+
+freq=0
+sample_type=7
