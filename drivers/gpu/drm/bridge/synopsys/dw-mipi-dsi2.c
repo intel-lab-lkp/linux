@@ -342,7 +342,7 @@ static void dw_mipi_dsi2_phy_ratio_cfg(struct dw_mipi_dsi2 *dsi2)
 	/*
 	 * SYS_RATIO_MAN_CFG = MIPI_DCPHY_HSCLK_Freq / MIPI_DCPHY_HSCLK_Freq
 	 */
-	tmp = DIV_ROUND_CLOSEST_ULL(phy_hsclk << 16, sys_clk);
+	tmp = min(DIV_ROUND_CLOSEST_ULL(phy_hsclk << 16, sys_clk), GENMASK(16, 0));
 	regmap_write(dsi2->regmap, DSI2_PHY_SYS_RATIO_MAN_CFG,
 		     PHY_SYS_RATIO(tmp));
 }
