@@ -229,7 +229,11 @@ struct hw_perf_event {
 #define PERF_HES_UPTODATE	0x02 /* event->count up-to-date */
 #define PERF_HES_ARCH		0x04
 
-	int				state;
+	u32				state;
+
+#define PERF_SPS_HF_ON			0x00000001
+#define PERF_SPS_HF_SAMPLE		0x00000002
+	u32				sample_period_state;
 
 	/*
 	 * The last observed hardware counter value, updated with a
@@ -241,6 +245,12 @@ struct hw_perf_event {
 	 * The period to start the next sample with.
 	 */
 	u64				sample_period;
+
+	/*
+	 * The original sample_period value before being modified with
+	 * a high-frequency sampling window.
+	 */
+	u64				sample_period_base;
 
 	union {
 		struct { /* Sampling */

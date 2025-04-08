@@ -4190,19 +4190,19 @@ static void perf_adjust_period(struct perf_event *event, u64 nsec, u64 count, bo
 
 	period = perf_calculate_period(event, nsec, count);
 
-	delta = (s64)(period - hwc->sample_period);
+	delta = (s64)(period - hwc->sample_period_base);
 	if (delta >= 0)
 		delta += 7;
 	else
 		delta -= 7;
 	delta /= 8; /* low pass filter */
 
-	sample_period = hwc->sample_period + delta;
+	sample_period = hwc->sample_period_base + delta;
 
 	if (!sample_period)
 		sample_period = 1;
 
-	hwc->sample_period = sample_period;
+	hwc->sample_period_base = sample_period;
 
 	if (local64_read(&hwc->period_left) > 8*sample_period) {
 		if (disable)
@@ -6174,7 +6174,7 @@ static void __perf_event_period(struct perf_event *event,
 		event->attr.sample_freq = value;
 	} else {
 		event->attr.sample_period = value;
-		event->hw.sample_period = value;
+		event->hw.sample_period_base = value;
 	}
 
 	active = (event->state == PERF_EVENT_STATE_ACTIVE);
@@ -10059,7 +10059,7 @@ __perf_event_account_interrupt(struct perf_event *event, int throttle)
 		}
 	}
 
-	if (event->attr.freq) {
+	if (event->attr.freq && !(hwc->sample_period_state & PERF_SPS_HF_SAMPLE)) {
 		u64 now = perf_clock();
 		s64 delta = now - hwc->freq_time_stamp;
 
@@ -10192,6 +10192,8 @@ static int __perf_event_overflow(struct perf_event *event,
 				 int throttle, struct perf_sample_data *data,
 				 struct pt_regs *regs)
 {
+	struct hw_perf_event *hwc = &event->hw;
+	u64 sample_period;
 	int events = atomic_read(&event->event_limit);
 	int ret = 0;
 
@@ -10206,6 +10208,33 @@ static int __perf_event_overflow(struct perf_event *event,
 
 	if (event->attr.aux_pause)
 		perf_event_aux_pause(event->aux_event, true);
+
+	sample_period = hwc->sample_period_base;
+
+	/*
+	 * High Freq samples are injected inside the larger period:
+	 *
+	 *   |------------|-|------------|-|
+	 *   P0          HF P1          HF
+	 *
+	 * By ignoring the HF samples, we measure the actual period.
+	 */
+	if (hwc->sample_period_state & PERF_SPS_HF_ON) {
+		u64 hf_sample_period = event->attr.hf_sample_period;
+
+		if (sample_period <= hf_sample_period)
+			goto set_period;
+
+		if (hwc->sample_period_state & PERF_SPS_HF_SAMPLE)
+			sample_period = hf_sample_period;
+		else
+			sample_period -= hf_sample_period;
+
+		hwc->sample_period_state ^= PERF_SPS_HF_SAMPLE;
+	}
+
+set_period:
+	hwc->sample_period = sample_period;
 
 	if (event->prog && event->prog->type == BPF_PROG_TYPE_PERF_EVENT &&
 	    !bpf_overflow_handler(event, data, regs))
@@ -11690,6 +11719,7 @@ static void perf_swevent_init_hrtimer(struct perf_event *event)
 		long freq = event->attr.sample_freq;
 
 		event->attr.sample_period = NSEC_PER_SEC / freq;
+		hwc->sample_period_base = event->attr.sample_period;
 		hwc->sample_period = event->attr.sample_period;
 		local64_set(&hwc->period_left, hwc->sample_period);
 		hwc->last_period = hwc->sample_period;
@@ -12671,12 +12701,25 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	pmu = NULL;
 
 	hwc = &event->hw;
+	hwc->sample_period_base = attr->sample_period;
 	hwc->sample_period = attr->sample_period;
-	if (attr->freq && attr->sample_freq)
+	if (attr->freq && attr->sample_freq) {
 		hwc->sample_period = 1;
-	hwc->last_period = hwc->sample_period;
+		hwc->sample_period_base = 1;
+	}
 
-	local64_set(&hwc->period_left, hwc->sample_period);
+	/*
+	 * If the user requested a high-frequency sample period subtract that
+	 * from the first period (the larger one), and set the high-frequency
+	 * value to be used next.
+	 */
+	u64 first_sample_period = hwc->sample_period;
+	if (attr->hf_sample_period && attr->hf_sample_period < hwc->sample_period) {
+		first_sample_period -= attr->hf_sample_period;
+		hwc->sample_period = attr->hf_sample_period;
+	}
+	hwc->last_period = first_sample_period;
+	local64_set(&hwc->period_left, first_sample_period);
 
 	/*
 	 * We do not support PERF_SAMPLE_READ on inherited events unless
@@ -12705,6 +12748,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 		if (err)
 			return ERR_PTR(err);
 	}
+
+	if (attr->hf_sample_period)
+		hwc->sample_period_state |= PERF_SPS_HF_ON;
 
 	/*
 	 * Disallow uncore-task events. Similarly, disallow uncore-cgroup
@@ -13127,6 +13173,12 @@ SYSCALL_DEFINE5(perf_event_open,
 	} else {
 		if (attr.sample_period & (1ULL << 63))
 			return -EINVAL;
+		if (attr.hf_sample_period) {
+			if (!attr.sample_period)
+				return -EINVAL;
+			if (attr.hf_sample_period >= attr.sample_period)
+				return -EINVAL;
+		}
 	}
 
 	/* Only privileged users can get physical addresses */
@@ -14055,6 +14107,7 @@ inherit_event(struct perf_event *parent_event,
 		struct hw_perf_event *hwc = &child_event->hw;
 
 		hwc->sample_period = sample_period;
+		hwc->sample_period_base = sample_period;
 		hwc->last_period   = sample_period;
 
 		local64_set(&hwc->period_left, sample_period);
