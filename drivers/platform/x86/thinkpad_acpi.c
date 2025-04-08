@@ -9997,6 +9997,8 @@ static int __init tpacpi_battery_init(struct ibm_init_struct *ibm)
 	tp_features.battery_force_primary = tpacpi_check_quirks(
 					battery_quirk_table,
 					ARRAY_SIZE(battery_quirk_table));
+	if (!tp_features.battery_force_primary)
+		return -ENODEV;
 
 	battery_hook_register(&battery_hook);
 	return 0;
