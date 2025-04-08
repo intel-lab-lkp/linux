@@ -100,12 +100,12 @@ static int release_lpi_range(u32 min, u32 max)
 	return mtree_store_range(&lpi_mt, min, max, NULL, GFP_KERNEL);
 }
 
-static int gicv5_alloc_lpi_range(u32 nr_lpis, u32 *base)
+int gicv5_alloc_lpi_range(u32 nr_lpis, u32 *base)
 {
 	return alloc_lpi_range(nr_lpis, base);
 }
 
-static int gicv5_free_lpi_range(u32 base, u32 nr_lpis)
+int gicv5_free_lpi_range(u32 base, u32 nr_lpis)
 {
 	if (nr_lpis < 1)
 		return -EINVAL;
@@ -1216,6 +1216,8 @@ static int __init gicv5_of_init(struct device_node *node,
 	}
 
 	gicv5_smp_init();
+
+	gicv5_irs_its_probe();
 
 	return 0;
 }
