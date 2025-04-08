@@ -139,6 +139,9 @@ static void rtl92d_dm_rxgain_tracking_thermalmeter(struct ieee80211_hw *hw)
 	u32 u4tmp;
 
 	idx = rtlpriv->efuse.eeprom_thermalmeter - rtlpriv->dm.thermalvalue_rxgain;
+	if (WARN_ON_ONCE(idx < 0 || idx >= ARRAY_SIZE(index_mapping)))
+		return;
+	idx = array_index_nospec(idx, ARRAY_SIZE(index_mapping));
 	u4tmp = index_mapping[idx] << 12;
 
 	rtl_dbg(rtlpriv, COMP_POWER_TRACKING, DBG_LOUD,
