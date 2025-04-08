@@ -135,7 +135,11 @@ properties:
   clock-frequency: true
 
   clocks:
-    maxItems: 1
+    oneOf:
+      - maxItems: 1
+      - items:
+          - const: core
+          - const: bus
 
   resets:
     maxItems: 1
