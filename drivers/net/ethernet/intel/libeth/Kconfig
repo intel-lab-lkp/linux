@@ -8,6 +8,14 @@ config LIBETH
 	  libeth is a common library containing routines shared between several
 	  drivers, but not yet promoted to the generic kernel API.
 
+config LIBETH_CP
+	tristate
+	select LIBETH
+	select LIBETH_PCI
+	help
+	  Common helper routines to communicate with the device Control Plane
+	  using virtchnl2 or related mailbox protocols.
+
 config LIBETH_PCI
 	tristate
 	help
