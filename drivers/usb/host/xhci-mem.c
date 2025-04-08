@@ -1802,7 +1802,7 @@ xhci_remove_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir)
 	 */
 	if (ir->ir_set) {
 		tmp = readl(&ir->ir_set->erst_size);
-		tmp &= ERST_SIZE_MASK;
+		tmp &= ~ERST_SIZE_MASK;
 		writel(tmp, &ir->ir_set->erst_size);
 
 		xhci_write_64(xhci, ERST_EHB, &ir->ir_set->erst_dequeue);
@@ -2306,7 +2306,7 @@ xhci_add_interrupter(struct xhci_hcd *xhci, struct xhci_interrupter *ir,
 
 	/* set ERST count with the number of entries in the segment table */
 	erst_size = readl(&ir->ir_set->erst_size);
-	erst_size &= ERST_SIZE_MASK;
+	erst_size &= ~ERST_SIZE_MASK;
 	erst_size |= ir->event_ring->num_segs;
 	writel(erst_size, &ir->ir_set->erst_size);
 
