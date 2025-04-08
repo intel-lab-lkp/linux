@@ -4,6 +4,8 @@
 #ifndef __LIBETH_CONTROLQ_H
 #define __LIBETH_CONTROLQ_H
 
+#include <linux/ktime.h>
+
 #include <linux/intel/virtchnl2.h>
 
 #include <net/libeth/pci.h>
@@ -19,6 +21,8 @@
 /* Opcode used to send controlq message to the control plane */
 #define LIBETH_CTLQ_SEND_MSG_TO_CP		0x801
 #define LIBETH_CTLQ_SEND_MSG_TO_PEER		0x804
+
+#define LIBETH_CP_TX_COPYBREAK		128
 
 /**
  * struct libeth_ctlq_ctx - contains controlq info and MMIO region info
@@ -60,11 +64,13 @@ struct libeth_ctlq_reg {
  * @va: virtual address
  * @pa: physical address
  * @size: memory size
+ * @direction: memory to device or device to memory
  */
 struct libeth_cp_dma_mem {
 	void		*va;
 	dma_addr_t	pa;
 	size_t		size;
+	int		direction;
 };
 
 /**
@@ -247,5 +253,168 @@ u32 libeth_ctlq_recv(struct libeth_ctlq_info *ctlq, struct libeth_ctlq_msg *msg,
 		     u32 num_q_msg);
 
 int libeth_ctlq_post_rx_buffs(struct libeth_ctlq_info *ctlq);
+
+/* Only 8 bits are available in descriptor for Xn index */
+#define LIBETH_CTLQ_MAX_XN_ENTRIES		256
+#define LIBETH_CTLQ_XN_COOKIE_M			GENMASK(15, 8)
+#define LIBETH_CTLQ_XN_INDEX_M			GENMASK(7, 0)
+
+/**
+ * enum libeth_ctlq_xn_state - Transaction state of a virtchnl message
+ * @LIBETH_CTLQ_XN_IDLE: transaction is available to use
+ * @LIBETH_CTLQ_XN_WAITING: waiting for transaction to complete
+ * @LIBETH_CTLQ_XN_COMPLETED_SUCCESS: transaction completed with success
+ * @LIBETH_CTLQ_XN_COMPLETED_FAILED: transaction completed with failure
+ * @LIBETH_CTLQ_XN_ASYNC: asynchronous virtchnl message transaction type
+ */
+enum libeth_ctlq_xn_state {
+	LIBETH_CTLQ_XN_IDLE = 0,
+	LIBETH_CTLQ_XN_WAITING,
+	LIBETH_CTLQ_XN_COMPLETED_SUCCESS,
+	LIBETH_CTLQ_XN_COMPLETED_FAILED,
+	LIBETH_CTLQ_XN_ASYNC,
+};
+
+/**
+ * struct libeth_ctlq_xn - structure representing a virtchnl transaction entry
+ * @resp_cb: callback to handle the response of an asynchronous virtchnl message
+ * @xn_lock: lock to protect the transaction entry state
+ * @ctlq: send control queue information
+ * @cmd_completion_event: signal when a reply is available
+ * @dma_mem: DMA memory of send buffer that use stack variable
+ * @send_dma_mem: DMA memory of send buffer
+ * @recv_mem: receive buffer
+ * @send_ctx: context for callback function
+ * @timeout_ms: Xn transaction timeout in msecs
+ * @timestamp: timestamp to record the Xn send
+ * @virtchnl_opcode: virtchnl command opcode used for Xn transaction
+ * @state: transaction state of a virtchnl message
+ * @cookie: unique message identifier
+ * @index: index of the transaction entry
+ */
+struct libeth_ctlq_xn {
+	void (*resp_cb)(void *ctx, struct kvec *mem, int status);
+	spinlock_t			xn_lock;	/* protects state */
+	struct libeth_ctlq_info		*ctlq;
+	struct completion		cmd_completion_event;
+	struct libeth_cp_dma_mem	*dma_mem;
+	struct libeth_cp_dma_mem	send_dma_mem;
+	struct kvec			recv_mem;
+	void				*send_ctx;
+	u64				timeout_ms;
+	ktime_t				timestamp;
+	u32				virtchnl_opcode;
+	enum libeth_ctlq_xn_state	state;
+	u8				cookie;
+	u8				index;
+};
+
+/**
+ * struct libeth_ctlq_xn_manager - structure representing the array of virtchnl
+ *				   transaction entries
+ * @ctx: pointer to controlq context structure
+ * @free_xns_bm_lock: lock to protect the free Xn entries bit map
+ * @free_xns_bm: bitmap that represents the free Xn entries
+ * @ring: array of Xn entries
+ * @cookie: unique message identifier
+ */
+struct libeth_ctlq_xn_manager {
+	struct libeth_ctlq_ctx	*ctx;
+	spinlock_t		free_xns_bm_lock;	/* get/check entries */
+	DECLARE_BITMAP(free_xns_bm, LIBETH_CTLQ_MAX_XN_ENTRIES);
+	struct libeth_ctlq_xn	ring[LIBETH_CTLQ_MAX_XN_ENTRIES];
+	struct completion	can_destroy;
+	bool			shutdown;
+	u8			cookie;
+};
+
+/**
+ * struct libeth_ctlq_xn_send_params - structure representing send Xn entry
+ * @resp_cb: callback to handle the response of an asynchronous virtchnl message
+ * @rel_tx_buf: driver entry point for freeing the send buffer after send
+ * @xnm: Xn manager to process Xn entries
+ * @ctlq: send control queue information
+ * @ctlq_msg: control queue message information
+ * @send_buf: represents the buffer that carries outgoing information
+ * @recv_mem: receive buffer
+ * @send_ctx: context for call back function
+ * @timeout_ms: virtchnl transaction timeout in msecs
+ * @chnl_opcode: virtchnl message opcode
+ */
+struct libeth_ctlq_xn_send_params {
+	void (*resp_cb)(void *ctx, struct kvec *mem, int status);
+	void (*rel_tx_buf)(const void *buf_va);
+	struct libeth_ctlq_xn_manager		*xnm;
+	struct libeth_ctlq_info			*ctlq;
+	struct libeth_ctlq_msg			*ctlq_msg;
+	struct kvec				send_buf;
+	struct kvec				recv_mem;
+	void					*send_ctx;
+	u64					timeout_ms;
+	u32					chnl_opcode;
+};
+
+/**
+ * libeth_cp_can_send_onstack - find if a virtchnl message can be sent using a
+ * stack variable
+ * @size: virtchnl buffer size
+ */
+static inline bool libeth_cp_can_send_onstack(u32 size)
+{
+	return size <= LIBETH_CP_TX_COPYBREAK;
+}
+
+/**
+ * struct libeth_ctlq_xn_recv_params - structure representing receive Xn entry
+ * @ctlq_msg_handler: callback to handle a message originated from the peer
+ * @xnm: Xn manager to process Xn entries
+ * @ctx: pointer to context structure
+ * @ctlq: control queue information
+ */
+struct libeth_ctlq_xn_recv_params {
+	void (*ctlq_msg_handler)(struct libeth_ctlq_ctx *ctx,
+				 struct libeth_ctlq_msg *msg);
+	struct libeth_ctlq_xn_manager		*xnm;
+	struct libeth_ctlq_info			*ctlq;
+};
+
+/**
+ * struct libeth_ctlq_xn_clean_params - Data structure used for cleaning the
+ * control queue messages
+ * @rel_tx_buf: driver entry point for freeing the send buffer after send
+ * @ctx: pointer to context structure
+ * @ctlq: control queue information
+ * @send_ctx: context for call back function
+ * @num_msgs: number of messages to be cleaned
+ */
+struct libeth_ctlq_xn_clean_params {
+	void (*rel_tx_buf)(const void *buf_va);
+	struct libeth_ctlq_ctx			*ctx;
+	struct libeth_ctlq_info			*ctlq;
+	void					*send_ctx;
+	u16					num_msgs;
+};
+
+/**
+ * struct libeth_ctlq_xn_init_params - Data structure used for initializing the
+ * Xn transaction manager
+ * @cctlq_info: control queue information
+ * @ctx: pointer to controlq context structure
+ * @xnm: Xn manager to process Xn entries
+ * @num_qs: number of control queues needs to initialized
+ */
+struct libeth_ctlq_xn_init_params {
+	struct libeth_ctlq_create_info		*cctlq_info;
+	struct libeth_ctlq_ctx			*ctx;
+	struct libeth_ctlq_xn_manager		*xnm;
+	u32					num_qs;
+};
+
+int libeth_ctlq_xn_init(struct libeth_ctlq_xn_init_params *params);
+void libeth_ctlq_xn_deinit(struct libeth_ctlq_xn_manager *xnm,
+			   struct libeth_ctlq_ctx *ctx);
+int libeth_ctlq_xn_send(struct libeth_ctlq_xn_send_params *params);
+bool libeth_ctlq_xn_recv(struct libeth_ctlq_xn_recv_params *params);
+u32 libeth_ctlq_xn_send_clean(const struct libeth_ctlq_xn_clean_params *params);
 
 #endif /* __LIBETH_CONTROLQ_H */
