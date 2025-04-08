@@ -6763,7 +6763,7 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	struct hci_cp_create_conn cp;
 	int err;
 
-	if (!hci_conn_valid(hdev, conn))
+	if (!hci_conn_valid(hdev, conn) || !test_bit(HCI_UP, &hdev->flags))
 		return -ECANCELED;
 
 	/* Many controllers disallow HCI Create Connection while it is doing
