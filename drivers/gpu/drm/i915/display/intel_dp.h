@@ -210,4 +210,6 @@ bool intel_dp_has_connector(struct intel_dp *intel_dp,
 int intel_dp_dsc_max_src_input_bpc(struct intel_display *display);
 int intel_dp_dsc_min_src_input_bpc(void);
 
+int intel_dp_dsc_bpp_step_x16(const struct intel_connector *connector);
+
 #endif /* __INTEL_DP_H__ */

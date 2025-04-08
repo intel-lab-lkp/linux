@@ -495,7 +495,8 @@ static int mst_stream_dsc_compute_link_config(struct intel_dp *intel_dp,
 					      intel_dp_dsc_nearest_valid_bpp(display,
 									     limits->link.max_bpp_x16,
 									     crtc_state->pipe_bpp),
-					      fxp_q4_from_int(1), true);
+					      intel_dp_dsc_bpp_step_x16(connector),
+					      true);
 }
 
 static int mst_stream_update_slots(struct intel_dp *intel_dp,
