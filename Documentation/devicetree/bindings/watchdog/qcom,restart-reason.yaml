@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/watchdog/qcom,restart-reason.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm IPQ SoC restart reason location
+
+maintainers:
+  - Kathiravan Thirumoorthy <kathiravan.thirumoorthy@oss.qualcomm.com>
+
+description:
+  The Qualcomm IPQ SoC restart reason memory region, in IMEM, is used to
+  identify the cause of the system restart. This will be helpful to identify
+  the cause when the RAM dump collection is disabled.
+
+properties:
+  compatible:
+    const: qcom,restart-reason-info
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    imem@8600000 {
+      compatible = "qcom,ipq5424-imem", "syscon", "simple-mfd";
+      reg = <0x08600000 0x1000>;
+
+      #address-cells = <1>;
+      #size-cells = <1>;
+
+      ranges = <0 0x08600000 0x1000>;
+
+      restart-reason@7b0 {
+        compatible = "qcom,restart-reason-info";
+        reg = <0x7b0 0x4>;
+      };
+    };
+...
