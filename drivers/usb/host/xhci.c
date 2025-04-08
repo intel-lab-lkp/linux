@@ -334,6 +334,8 @@ static int xhci_enable_interrupter(struct xhci_interrupter *ir)
 	iman |= IMAN_IE;
 	writel(iman, &ir->ir_set->irq_pending);
 
+	/* Read operation to guarantee the write has been flushed from posted buffers */
+	readl(&ir->ir_set->irq_pending);
 	return 0;
 }
 
@@ -349,6 +351,7 @@ static int xhci_disable_interrupter(struct xhci_interrupter *ir)
 	iman &= ~IMAN_IE;
 	writel(iman, &ir->ir_set->irq_pending);
 
+	readl(&ir->ir_set->irq_pending);
 	return 0;
 }
 
