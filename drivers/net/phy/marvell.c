@@ -843,7 +843,8 @@ error:
 static void marvell_config_led(struct phy_device *phydev)
 {
 	u16 def_config;
-	int err;
+	int num_leds, err;
+	struct device_node *np_leds;
 
 	switch (MARVELL_PHY_FAMILY_ID(phydev->phy_id)) {
 	/* Default PHY LED config: LED[0] .. Link, LED[1] .. Activity */
@@ -857,7 +858,9 @@ static void marvell_config_led(struct phy_device *phydev)
 	 * LED[2] .. Blink, Activity
 	 */
 	case MARVELL_PHY_FAMILY_ID(MARVELL_PHY_ID_88E1510):
-		if (phydev->dev_flags & MARVELL_PHY_LED0_LINK_LED1_ACTIVE)
+		np_leds = of_find_node_by_name(phydev->mdio.dev.of_node, "leds");
+		num_leds = of_get_child_count(np_leds);
+		if (phydev->dev_flags & MARVELL_PHY_LED0_LINK_LED1_ACTIVE || num_leds == 2)
 			def_config = MII_88E1510_PHY_LED0_LINK_LED1_ACTIVE;
 		else
 			def_config = MII_88E1510_PHY_LED_DEF;
