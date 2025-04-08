@@ -5708,6 +5708,7 @@ L:	patches@opensource.cirrus.com
 S:	Supported
 W:	https://github.com/CirrusLogic/linux-drivers/wiki
 T:	git https://github.com/CirrusLogic/linux-drivers.git
+F:	Documentation/devicetree/bindings/mfd/cirrus,cs48l32.yaml
 F:	Documentation/devicetree/bindings/mfd/cirrus,madera.yaml
 F:	Documentation/devicetree/bindings/pinctrl/cirrus,madera.yaml
 F:	Documentation/devicetree/bindings/sound/cirrus,madera.yaml
@@ -5716,6 +5717,8 @@ F:	drivers/irqchip/irq-madera*
 F:	drivers/mfd/cs47l*
 F:	drivers/mfd/madera*
 F:	drivers/pinctrl/cirrus/*
+F:	include/dt-bindings/interrupt-controller/cirrus-cs48l32.h
+F:	include/dt-bindings/sound/cs48l32.h
 F:	include/dt-bindings/sound/madera*
 F:	include/linux/irqchip/irq-madera*
 F:	include/linux/mfd/madera/*
