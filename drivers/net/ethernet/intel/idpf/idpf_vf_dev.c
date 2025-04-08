@@ -9,42 +9,32 @@
 
 /**
  * idpf_vf_ctlq_reg_init - initialize default mailbox registers
- * @cq: pointer to the array of create control queues
+ * @mmio: struct that contains MMIO region info
+ * @cci: struct where the register offset pointer to be copied to
  */
-static void idpf_vf_ctlq_reg_init(struct idpf_ctlq_create_info *cq)
+static void idpf_vf_ctlq_reg_init(struct libeth_mmio_info *mmio,
+				  struct libeth_ctlq_create_info *cci)
 {
-	int i;
+	struct libeth_ctlq_reg *tx_reg = &cci[LIBETH_CTLQ_TYPE_TX].reg;
+	struct libeth_ctlq_reg *rx_reg = &cci[LIBETH_CTLQ_TYPE_RX].reg;
 
-	for (i = 0; i < IDPF_NUM_DFLT_MBX_Q; i++) {
-		struct idpf_ctlq_create_info *ccq = cq + i;
+	tx_reg->head		= libeth_pci_get_mmio_addr(mmio, VF_ATQH);
+	tx_reg->tail		= libeth_pci_get_mmio_addr(mmio, VF_ATQT);
+	tx_reg->len		= libeth_pci_get_mmio_addr(mmio, VF_ATQLEN);
+	tx_reg->addr_high	= libeth_pci_get_mmio_addr(mmio, VF_ATQBAH);
+	tx_reg->addr_low	= libeth_pci_get_mmio_addr(mmio, VF_ATQBAL);
+	tx_reg->len_mask	= VF_ATQLEN_ATQLEN_M;
+	tx_reg->len_ena_mask	= VF_ATQLEN_ATQENABLE_M;
+	tx_reg->head_mask	= VF_ATQH_ATQH_M;
 
-		switch (ccq->type) {
-		case IDPF_CTLQ_TYPE_MAILBOX_TX:
-			/* set head and tail registers in our local struct */
-			ccq->reg.head = VF_ATQH;
-			ccq->reg.tail = VF_ATQT;
-			ccq->reg.len = VF_ATQLEN;
-			ccq->reg.bah = VF_ATQBAH;
-			ccq->reg.bal = VF_ATQBAL;
-			ccq->reg.len_mask = VF_ATQLEN_ATQLEN_M;
-			ccq->reg.len_ena_mask = VF_ATQLEN_ATQENABLE_M;
-			ccq->reg.head_mask = VF_ATQH_ATQH_M;
-			break;
-		case IDPF_CTLQ_TYPE_MAILBOX_RX:
-			/* set head and tail registers in our local struct */
-			ccq->reg.head = VF_ARQH;
-			ccq->reg.tail = VF_ARQT;
-			ccq->reg.len = VF_ARQLEN;
-			ccq->reg.bah = VF_ARQBAH;
-			ccq->reg.bal = VF_ARQBAL;
-			ccq->reg.len_mask = VF_ARQLEN_ARQLEN_M;
-			ccq->reg.len_ena_mask = VF_ARQLEN_ARQENABLE_M;
-			ccq->reg.head_mask = VF_ARQH_ARQH_M;
-			break;
-		default:
-			break;
-		}
-	}
+	rx_reg->head		= libeth_pci_get_mmio_addr(mmio, VF_ARQH);
+	rx_reg->tail		= libeth_pci_get_mmio_addr(mmio, VF_ARQT);
+	rx_reg->len		= libeth_pci_get_mmio_addr(mmio, VF_ARQLEN);
+	rx_reg->addr_high	= libeth_pci_get_mmio_addr(mmio, VF_ARQBAH);
+	rx_reg->addr_low	= libeth_pci_get_mmio_addr(mmio, VF_ARQBAL);
+	rx_reg->len_mask	= VF_ARQLEN_ARQLEN_M;
+	rx_reg->len_ena_mask	= VF_ARQLEN_ARQENABLE_M;
+	rx_reg->head_mask	= VF_ARQH_ARQH_M;
 }
 
 /**
@@ -53,13 +43,14 @@ static void idpf_vf_ctlq_reg_init(struct idpf_ctlq_create_info *cq)
  */
 static void idpf_vf_mb_intr_reg_init(struct idpf_adapter *adapter)
 {
+	struct libeth_mmio_info *mmio = &adapter->ctlq_ctx.mmio_info;
 	struct idpf_intr_reg *intr = &adapter->mb_vector.intr_reg;
 	u32 dyn_ctl = le32_to_cpu(adapter->caps.mailbox_dyn_ctl);
 
-	intr->dyn_ctl = idpf_get_reg_addr(adapter, dyn_ctl);
+	intr->dyn_ctl = libeth_pci_get_mmio_addr(mmio, dyn_ctl);
 	intr->dyn_ctl_intena_m = VF_INT_DYN_CTL0_INTENA_M;
 	intr->dyn_ctl_itridx_m = VF_INT_DYN_CTL0_ITR_INDX_M;
-	intr->icr_ena = idpf_get_reg_addr(adapter, VF_INT_ICR0_ENA1);
+	intr->icr_ena = libeth_pci_get_mmio_addr(mmio, VF_INT_ICR0_ENA1);
 	intr->icr_ena_ctlq_m = VF_INT_ICR0_ENA1_ADMINQ_M;
 }
 
@@ -72,6 +63,7 @@ static int idpf_vf_intr_reg_init(struct idpf_vport *vport)
 	struct idpf_adapter *adapter = vport->adapter;
 	int num_vecs = vport->num_q_vectors;
 	struct idpf_vec_regs *reg_vals;
+	struct libeth_mmio_info *mmio;
 	int num_regs, i, err = 0;
 	u32 rx_itr, tx_itr;
 	u16 total_vecs;
@@ -88,14 +80,17 @@ static int idpf_vf_intr_reg_init(struct idpf_vport *vport)
 		goto free_reg_vals;
 	}
 
+	mmio = &adapter->ctlq_ctx.mmio_info;
+
 	for (i = 0; i < num_vecs; i++) {
 		struct idpf_q_vector *q_vector = &vport->q_vectors[i];
 		u16 vec_id = vport->q_vector_idxs[i] - IDPF_MBX_Q_VEC;
 		struct idpf_intr_reg *intr = &q_vector->intr_reg;
+		struct idpf_vec_regs *reg = &reg_vals[vec_id];
 		u32 spacing;
 
-		intr->dyn_ctl = idpf_get_reg_addr(adapter,
-						  reg_vals[vec_id].dyn_ctl_reg);
+		intr->dyn_ctl =	libeth_pci_get_mmio_addr(mmio,
+							 reg->dyn_ctl_reg);
 		intr->dyn_ctl_intena_m = VF_INT_DYN_CTLN_INTENA_M;
 		intr->dyn_ctl_intena_msk_m = VF_INT_DYN_CTLN_INTENA_MSK_M;
 		intr->dyn_ctl_itridx_s = VF_INT_DYN_CTLN_ITR_INDX_S;
@@ -105,16 +100,14 @@ static int idpf_vf_intr_reg_init(struct idpf_vport *vport)
 		intr->dyn_ctl_sw_itridx_ena_m =
 			VF_INT_DYN_CTLN_SW_ITR_INDX_ENA_M;
 
-		spacing = IDPF_ITR_IDX_SPACING(reg_vals[vec_id].itrn_index_spacing,
+		spacing = IDPF_ITR_IDX_SPACING(reg->itrn_index_spacing,
 					       IDPF_VF_ITR_IDX_SPACING);
 		rx_itr = VF_INT_ITRN_ADDR(VIRTCHNL2_ITR_IDX_0,
-					  reg_vals[vec_id].itrn_reg,
-					  spacing);
+					  reg->itrn_reg, spacing);
 		tx_itr = VF_INT_ITRN_ADDR(VIRTCHNL2_ITR_IDX_1,
-					  reg_vals[vec_id].itrn_reg,
-					  spacing);
-		intr->rx_itr = idpf_get_reg_addr(adapter, rx_itr);
-		intr->tx_itr = idpf_get_reg_addr(adapter, tx_itr);
+					  reg->itrn_reg, spacing);
+		intr->rx_itr = libeth_pci_get_mmio_addr(mmio, rx_itr);
+		intr->tx_itr = libeth_pci_get_mmio_addr(mmio, tx_itr);
 	}
 
 free_reg_vals:
@@ -129,7 +122,9 @@ free_reg_vals:
  */
 static void idpf_vf_reset_reg_init(struct idpf_adapter *adapter)
 {
-	adapter->reset_reg.rstat = idpf_get_reg_addr(adapter, VFGEN_RSTAT);
+	adapter->reset_reg.rstat =
+		libeth_pci_get_mmio_addr(&adapter->ctlq_ctx.mmio_info,
+					 VFGEN_RSTAT);
 	adapter->reset_reg.rstat_m = VFGEN_RSTAT_VFR_STATE_M;
 }
 
@@ -141,10 +136,14 @@ static void idpf_vf_reset_reg_init(struct idpf_adapter *adapter)
 static void idpf_vf_trigger_reset(struct idpf_adapter *adapter,
 				  enum idpf_flags trig_cause)
 {
+	struct libeth_ctlq_xn_send_params xn_params = {
+		.chnl_opcode	= VIRTCHNL2_OP_RESET_VF,
+	};
+
 	/* Do not send VIRTCHNL2_OP_RESET_VF message on driver unload */
 	if (trig_cause == IDPF_HR_FUNC_RESET &&
 	    !test_bit(IDPF_REMOVE_IN_PROG, adapter->flags))
-		idpf_send_mb_msg(adapter, VIRTCHNL2_OP_RESET_VF, 0, NULL, 0);
+		idpf_send_mb_msg(adapter, &xn_params, NULL, 0);
 }
 
 /**

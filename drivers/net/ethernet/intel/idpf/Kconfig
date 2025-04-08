@@ -6,6 +6,7 @@ config IDPF
 	depends on PCI_MSI
 	select DIMLIB
 	select LIBETH
+	select LIBETH_CP
 	help
 	  This driver supports Intel(R) Infrastructure Data Path Function
 	  devices.
