@@ -740,7 +740,7 @@ static inline int pmd_trans_huge(pmd_t pmd)
 	 * as a table, so force the valid bit for the comparison.
 	 */
 	return pmd_val(pmd) && pmd_present(pmd) &&
-	       !pmd_table(__pmd(pmd_val(pmd) | PTE_VALID));
+	       !pmd_table(__pmd(pmd_val(pmd) | PTE_VALID)) && !pmd_devmap(pmd);
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
@@ -1186,7 +1186,8 @@ static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	 */
 	const pteval_t mask = PTE_USER | PTE_PXN | PTE_UXN | PTE_RDONLY |
 			      PTE_PRESENT_INVALID | PTE_VALID | PTE_WRITE |
-			      PTE_GP | PTE_ATTRINDX_MASK | PTE_PO_IDX_MASK;
+			      PTE_GP | PTE_ATTRINDX_MASK | PTE_PO_IDX_MASK |
+			      PTE_DEVMAP;
 
 	/* preserve the hardware dirty information */
 	if (pte_hw_dirty(pte))
