@@ -2641,6 +2641,9 @@ static int __init snp_init_platform_device(void)
 	if (platform_device_register(&sev_guest_device))
 		return -ENODEV;
 
+	if (!sev_cfg.debug)
+		debug_enabled = false;
+
 	pr_info("SNP guest platform device initialized.\n");
 	return 0;
 }

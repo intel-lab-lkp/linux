@@ -44,6 +44,7 @@ static u64 boot_svsm_caa_pa __ro_after_init;
 static struct svsm_ca *svsm_get_caa(void);
 static u64 svsm_get_caa_pa(void);
 static int svsm_perform_call_protocol(struct svsm_call *call);
+static bool debug_enabled = true;
 
 /* I/O parameters for CPUID-related helpers */
 struct cpuid_leaf {
@@ -870,6 +871,40 @@ static enum es_result vc_insn_string_write(struct es_em_ctxt *ctxt,
 #define IOIO_SEG_ES    (0 << 10)
 #define IOIO_SEG_DS    (3 << 10)
 
+static bool sev_allowed_port(int port)
+{
+	switch (port) {
+	/* MC146818 RTC */
+	case 0x70 ... 0x71:
+	/* i8237A DMA controller */
+	case 0x80 ... 0x8f:
+	/* PCI */
+	case 0xcd8 ... 0xcdf:
+	case 0xcf8 ... 0xcff:
+		return true;
+	/* PCIE hotplug device state for Q35 machine type */
+	case 0xcc4:
+	case 0xcc8:
+		return true;
+	/* ACPI ports list:
+	 * 0600-0603 : ACPI PM1a_EVT_BLK
+	 * 0604-0605 : ACPI PM1a_CNT_BLK
+	 * 0608-060b : ACPI PM_TMR
+	 * 0620-062f : ACPI GPE0_BLK
+	 */
+	case 0x600 ... 0x62f:
+		return true;
+	case 0x2e8 ... 0x2ef:
+	case 0x2f8 ... 0x2ff:
+	case 0x3e8 ... 0x3ef:
+	case 0x3f8 ... 0x3ff:
+		/* 16650 serial ports are not to be enabled in production, but help debugging. */
+		return debug_enabled;
+	default:
+		return false;
+	}
+}
+
 static enum es_result vc_ioio_exitinfo(struct es_em_ctxt *ctxt, u64 *exitinfo)
 {
 	struct insn *insn = &ctxt->insn;
@@ -970,10 +1005,16 @@ static enum es_result vc_handle_ioio(struct ghcb *ghcb, struct es_em_ctxt *ctxt)
 	struct pt_regs *regs = ctxt->regs;
 	u64 exit_info_1, exit_info_2;
 	enum es_result ret;
+	u16 port;
 
 	ret = vc_ioio_exitinfo(ctxt, &exit_info_1);
 	if (ret != ES_OK)
 		return ret;
+
+	/* port number is packed [31, 16] */
+	port = (exit_info_1 >> 16) & 0xffff;
+	if (!sev_allowed_port(port))
+		return ES_OK;
 
 	if (exit_info_1 & IOIO_TYPE_STR) {
 
