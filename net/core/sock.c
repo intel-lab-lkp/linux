@@ -3948,6 +3948,9 @@ int sock_prot_inuse_get(struct net *net, struct proto *prot)
 	int cpu, idx = prot->inuse_idx;
 	int res = 0;
 
+	if (unlikely(idx >= PROTO_INUSE_NR))
+		return 0;
+
 	for_each_possible_cpu(cpu)
 		res += per_cpu_ptr(net->core.prot_inuse, cpu)->val[idx];
 
@@ -3999,7 +4002,7 @@ static int assign_proto_idx(struct proto *prot)
 {
 	prot->inuse_idx = find_first_zero_bit(proto_inuse_idx, PROTO_INUSE_NR);
 
-	if (unlikely(prot->inuse_idx == PROTO_INUSE_NR - 1)) {
+	if (unlikely(prot->inuse_idx == PROTO_INUSE_NR)) {
 		pr_err("PROTO_INUSE_NR exhausted\n");
 		return -ENOSPC;
 	}
@@ -4010,7 +4013,7 @@ static int assign_proto_idx(struct proto *prot)
 
 static void release_proto_idx(struct proto *prot)
 {
-	if (prot->inuse_idx != PROTO_INUSE_NR - 1)
+	if (prot->inuse_idx != PROTO_INUSE_NR)
 		clear_bit(prot->inuse_idx, proto_inuse_idx);
 }
 #else

@@ -1421,7 +1421,10 @@ struct prot_inuse {
 static inline void sock_prot_inuse_add(const struct net *net,
 				       const struct proto *prot, int val)
 {
-	this_cpu_add(net->core.prot_inuse->val[prot->inuse_idx], val);
+	unsigned int idx = prot->inuse_idx;
+
+	if (likely(idx < PROTO_INUSE_NR))
+		this_cpu_add(net->core.prot_inuse->val[idx], val);
 }
 
 static inline void sock_inuse_add(const struct net *net, int val)
