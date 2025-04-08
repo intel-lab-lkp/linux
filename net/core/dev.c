@@ -10372,6 +10372,12 @@ u32 dev_get_min_mp_channel_count(const struct net_device *dev)
 	return 0;
 }
 
+bool dev_is_mp_channel(struct net_device *dev, int i)
+{
+	return !!dev->_rx[i].mp_params.mp_priv;
+}
+EXPORT_SYMBOL(dev_is_mp_channel);
+
 /**
  * dev_index_reserve() - allocate an ifindex in a namespace
  * @net: the applicable net namespace
