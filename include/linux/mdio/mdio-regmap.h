@@ -17,10 +17,24 @@ struct mdio_regmap_config {
 	struct regmap *regmap;
 	char name[MII_BUS_ID_SIZE];
 	u8 valid_addr;
+	/* devm_mdio_regmap_init is required with this enabled */
+	bool support_encoded_addr;
 	bool autoscan;
 };
 
 struct mii_bus *devm_mdio_regmap_register(struct device *dev,
 					  const struct mdio_regmap_config *config);
+
+struct mdio_regmap_init_config {
+	const char *name;
+
+	int (*mdio_read)(void *ctx, int addr, int regnum);
+	int (*mdio_write)(void *ctx, int addr, int regnum, u16 val);
+	int (*mdio_read_c45)(void *ctx, int addr, int devnum, int regnum);
+	int (*mdio_write_c45)(void *ctx, int addr, int devnum, int regnum, u16 val);
+};
+
+struct regmap *devm_mdio_regmap_init(struct device *dev, void *priv,
+				     const struct mdio_regmap_init_config *config);
 
 #endif
