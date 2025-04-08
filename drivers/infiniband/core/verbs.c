@@ -2218,7 +2218,7 @@ struct ib_mr *ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 		if (!(pd->device->attrs.kernel_cap_flags &
 		      IBK_ON_DEMAND_PAGING)) {
 			pr_debug("ODP support not available\n");
-			return ERR_PTR(-EINVAL);
+			return ERR_PTR(-EOPNOTSUPP);
 		}
 	}
 

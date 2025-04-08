@@ -568,11 +568,6 @@ void *rds_ib_get_mr(struct scatterlist *sg, unsigned long nents,
 		struct ib_sge sge = {};
 		struct ib_mr *ib_mr;
 
-		if (!rds_ibdev->odp_capable) {
-			ret = -EOPNOTSUPP;
-			goto out;
-		}
-
 		ib_mr = ib_reg_user_mr(rds_ibdev->pd, start, length, virt_addr,
 				       access_flags);
 
