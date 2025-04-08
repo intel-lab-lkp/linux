@@ -212,7 +212,7 @@ struct xhci_op_regs {
 
 /**
  * struct xhci_intr_reg - Interrupt Register Set, v1.2 section 5.5.2.
- * @irq_pending:	IMAN - Interrupt Management Register. Used to enable
+ * @iman:		IMAN - Interrupt Management Register. Used to enable
  *			interrupts and check for pending interrupts.
  * @irq_control:	IMOD - Interrupt Moderation Register. Used to throttle interrupts.
  * @erst_size:		ERSTSZ - Number of segments in the Event Ring Segment Table (ERST).
@@ -227,7 +227,7 @@ struct xhci_op_regs {
  * updates the dequeue pointer.
  */
 struct xhci_intr_reg {
-	__le32	irq_pending;
+	__le32	iman;
 	__le32	irq_control;
 	__le32	erst_size;
 	__le32	rsvd;
@@ -235,7 +235,7 @@ struct xhci_intr_reg {
 	__le64	erst_dequeue;
 };
 
-/* irq_pending bitmasks */
+/* iman bitmasks */
 /* bit 0 - Interrupt Pending (IP), whether there is an interrupt pending. Write-1-to-clear. */
 #define	IMAN_IP			(1 << 0)
 /* bit 1 - Interrupt Enable (IE), whether the interrupter is capable of generating an interrupt */
@@ -1446,7 +1446,7 @@ struct xhci_interrupter {
 	bool			ip_autoclear;
 	u32			isoc_bei_interval;
 	/* For interrupter registers save and restore over suspend/resume */
-	u32	s3_irq_pending;
+	u32	s3_iman;
 	u32	s3_irq_control;
 	u32	s3_erst_size;
 	u64	s3_erst_base;
