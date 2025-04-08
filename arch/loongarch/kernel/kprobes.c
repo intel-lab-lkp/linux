@@ -113,6 +113,7 @@ NOKPROBE_SYMBOL(set_current_kprobe);
 static void save_local_irqflag(struct kprobe_ctlblk *kcb,
 			       struct pt_regs *regs)
 {
+	local_irq_disable();
 	kcb->saved_status = regs->csr_prmd;
 	regs->csr_prmd &= ~CSR_PRMD_PIE;
 }
