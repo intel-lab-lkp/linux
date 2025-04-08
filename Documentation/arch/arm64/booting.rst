@@ -309,6 +309,7 @@ Before jumping into the kernel, the following conditions must be met:
   - If EL2 is present and the kernel is entered at EL1:
 
     - CPTR_EL2.TFP (bit 10) must be initialised to 0b0.
+    - CPTR_EL2.FPEN (bit 21:20) must be initialised to 0b11.
 
   For CPUs with the Scalable Vector Extension (FEAT_SVE) present:
 
