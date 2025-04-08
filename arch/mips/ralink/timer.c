@@ -75,12 +75,16 @@ static int rt_timer_request(struct rt_timer *rt)
 
 static int rt_timer_config(struct rt_timer *rt, unsigned long divisor)
 {
-	if (rt->timer_freq < divisor)
-		rt->timer_div = rt->timer_freq;
-	else
-		rt->timer_div = divisor;
+	u32 t;
 
-	rt_timer_w32(rt, TIMER_REG_TMR0LOAD, rt->timer_freq / rt->timer_div);
+	if (rt->timer_freq < divisor) {
+		rt->timer_div = rt->timer_freq;
+		t = 1;
+	} else {
+		rt->timer_div = divisor;
+		t = rt->timer_freq / rt->timer_div;
+	}
+	rt_timer_w32(rt, TIMER_REG_TMR0LOAD, t);
 
 	return 0;
 }
