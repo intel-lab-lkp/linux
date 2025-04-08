@@ -3498,10 +3498,10 @@ static int test_acomp(struct crypto_acomp *tfm,
 	ret = 0;
 
 out:
-	acomp_request_free(reqs[0]);
 	for (i = 0; i < MAX_MB_MSGS; i++) {
 		kfree(output[i]);
 		kfree(decomp_out[i]);
+		acomp_request_free(reqs[i]);
 	}
 	kfree(dst);
 	kfree(src);
