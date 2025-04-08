@@ -81,6 +81,7 @@ problems and bugs in particular.
    lockup-watchdogs
    RAS/index
    sysrq
+   amd/debugging
 
 
 Core-kernel subsystems
