@@ -32,6 +32,8 @@ use pin_init::{InPlaceWrite, Init, PinInit, ZeroableOption};
 ///
 /// When dropping a [`Box`], the value is also dropped and the heap memory is automatically freed.
 ///
+/// [`Box`]es can also be used to store trait objects by coercing their type.
+///
 /// # Examples
 ///
 /// ```
@@ -62,7 +64,17 @@ use pin_init::{InPlaceWrite, Init, PinInit, ZeroableOption};
 /// `self.0` is always properly aligned and either points to memory allocated with `A` or, for
 /// zero-sized types, is a dangling, well aligned pointer.
 #[repr(transparent)]
-pub struct Box<T: ?Sized, A: Allocator>(NonNull<T>, PhantomData<A>);
+#[cfg_attr(CONFIG_RUSTC_HAS_COERCE_POINTEE, derive(core::marker::CoercePointee))]
+pub struct Box<#[pointee] T: ?Sized, A: Allocator>(NonNull<T>, PhantomData<A>);
+
+// This is to allow coercion from `Box<T>` to `Box<U>` if `T` can be converted to the
+// dynamically-sized type (DST) `U`.
+#[cfg(not(CONFIG_RUSTC_HAS_COERCE_POINTEE))]
+impl<T: ?Sized + core::marker::Unsize<U>, U: ?Sized> core::ops::CoerceUnsized<Box<U>> for Box<T> {}
+
+// This is to allow `Box<U>` to be dispatched on when `Box<T>` can be coerced into `Box<U>`.
+#[cfg(not(CONFIG_RUSTC_HAS_COERCE_POINTEE))]
+impl<T: ?Sized + core::marker::Unsize<U>, U: ?Sized> core::ops::DispatchFromDyn<Box<U>> for Box<T> {}
 
 /// Type alias for [`Box`] with a [`Kmalloc`] allocator.
 ///
