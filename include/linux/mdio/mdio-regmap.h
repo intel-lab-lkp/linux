@@ -17,6 +17,7 @@ struct mdio_regmap_config {
 	struct regmap *regmap;
 	char name[MII_BUS_ID_SIZE];
 	u8 valid_addr;
+	u32 valid_addr_mask;
 	/* devm_mdio_regmap_init is required with this enabled */
 	bool support_encoded_addr;
 	bool autoscan;
