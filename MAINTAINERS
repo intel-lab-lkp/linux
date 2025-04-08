@@ -13451,6 +13451,8 @@ F:	drivers/platform/x86/lenovo-wmi-gamezone.c
 F:	drivers/platform/x86/lenovo-wmi-gamezone.h
 F:	drivers/platform/x86/lenovo-wmi-helpers.c
 F:	drivers/platform/x86/lenovo-wmi-helpers.h
+F:	drivers/platform/x86/lenovo-wmi-other.c
+F:	drivers/platform/x86/lenovo-wmi-other.h
 
 LENOVO WMI HOTKEY UTILITIES DRIVER
 M:	Jackie Dong <xy-jackie@139.com>

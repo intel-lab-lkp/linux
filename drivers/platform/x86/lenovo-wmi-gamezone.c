@@ -22,6 +22,7 @@
 #include "lenovo-wmi-events.h"
 #include "lenovo-wmi-gamezone.h"
 #include "lenovo-wmi-helpers.h"
+#include "lenovo-wmi-other.h"
 
 #define LENOVO_GAMEZONE_GUID "887B54E3-DDDC-4B2C-8B88-68A26A8835D0"
 
@@ -48,6 +49,34 @@ struct quirk_entry {
 static struct quirk_entry quirk_no_extreme_bug = {
 	.extreme_supported = false,
 };
+
+/**
+ * lwmi_gz_mode_call() - Call method for lenovo-wmi-other driver notifier.
+ *
+ * @nb: The notifier_block registered to lenovo-wmi-other driver.
+ * @cmd: The event type.
+ * @data: Thermal mode enum pointer pointer for returning the thermal mode.
+ *
+ * For LWMI_GZ_GET_THERMAL_MODE, retrieve the current thermal mode.
+ *
+ * Return: Notifier_block status.
+ */
+static int lwmi_gz_mode_call(struct notifier_block *nb, unsigned long cmd,
+			     void *data)
+{
+	enum thermal_mode **mode = data;
+	struct lwmi_gz_priv *priv;
+
+	priv = container_of(nb, struct lwmi_gz_priv, mode_nb);
+
+	switch (cmd) {
+	case LWMI_GZ_GET_THERMAL_MODE:
+		**mode = priv->current_mode;
+		return NOTIFY_STOP;
+	default:
+		return NOTIFY_DONE;
+	}
+}
 
 /**
  * lwmi_gz_event_call() - Call method for lenovo-wmi-events driver notifier.
@@ -347,6 +376,11 @@ static int lwmi_gz_probe(struct wmi_device *wdev, const void *context)
 	if (ret)
 		return ret;
 
+	priv->mode_nb.notifier_call = lwmi_gz_mode_call;
+	ret = devm_lwmi_om_register_notifier(&wdev->dev, &priv->mode_nb);
+	if (ret)
+		return ret;
+
 	return 0;
 }
 
@@ -369,6 +403,7 @@ module_wmi_driver(lwmi_gz_driver);
 
 MODULE_IMPORT_NS("LENOVO_WMI_EVENTS");
 MODULE_IMPORT_NS("LENOVO_WMI_HELPERS");
+MODULE_IMPORT_NS("LENOVO_WMI_OTHER");
 MODULE_DEVICE_TABLE(wmi, lwmi_gz_id_table);
 MODULE_AUTHOR("Derek J. Clark <derekjohn.clark@gmail.com>");
 MODULE_DESCRIPTION("Lenovo GameZone WMI Driver");
