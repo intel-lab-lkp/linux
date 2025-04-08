@@ -43,6 +43,7 @@
 #include "intel_ddi.h"
 #include "intel_ddi_buf_trans.h"
 #include "intel_de.h"
+#include "intel_display_device.h"
 #include "intel_display_driver.h"
 #include "intel_display_types.h"
 #include "intel_fdi.h"
@@ -51,6 +52,7 @@
 #include "intel_gmbus.h"
 #include "intel_hotplug.h"
 #include "intel_hotplug_irq.h"
+#include "intel_link_bw.h"
 #include "intel_load_detect.h"
 #include "intel_pch_display.h"
 #include "intel_pch_refclk.h"
@@ -986,13 +988,29 @@ void intel_crt_reset(struct drm_encoder *encoder)
 
 }
 
+static int intel_crt_connector_register(struct drm_connector *_connector)
+{
+	struct intel_connector *connector = to_intel_connector(_connector);
+	struct intel_display *display = to_intel_display(connector);
+	int err;
+
+	err = intel_connector_register(&connector->base);
+	if (err)
+		return err;
+
+	if (HAS_FDI(display))
+		intel_link_bw_connector_debugfs_add(connector);
+
+	return 0;
+}
+
 /*
  * Routines for controlling stuff on the analog port
  */
 
 static const struct drm_connector_funcs intel_crt_connector_funcs = {
 	.fill_modes = drm_helper_probe_single_connector_modes,
-	.late_register = intel_connector_register,
+	.late_register = intel_crt_connector_register,
 	.early_unregister = intel_connector_unregister,
 	.destroy = intel_connector_destroy,
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,

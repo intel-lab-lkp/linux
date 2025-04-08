@@ -45,6 +45,7 @@
 #include "intel_connector.h"
 #include "intel_crtc.h"
 #include "intel_de.h"
+#include "intel_display_device.h"
 #include "intel_display_driver.h"
 #include "intel_display_types.h"
 #include "intel_fdi.h"
@@ -52,6 +53,7 @@
 #include "intel_gmbus.h"
 #include "intel_hdmi.h"
 #include "intel_hotplug.h"
+#include "intel_link_bw.h"
 #include "intel_panel.h"
 #include "intel_sdvo.h"
 #include "intel_sdvo_regs.h"
@@ -2502,12 +2504,28 @@ intel_sdvo_connector_duplicate_state(struct drm_connector *connector)
 	return &state->base.base;
 }
 
+static int intel_sdvo_connector_register(struct drm_connector *_connector)
+{
+	struct intel_connector *connector = to_intel_connector(_connector);
+	struct intel_display *display = to_intel_display(connector);
+	int err;
+
+	err = intel_connector_register(&connector->base);
+	if (err)
+		return err;
+
+	if (HAS_FDI(display))
+		intel_link_bw_connector_debugfs_add(connector);
+
+	return 0;
+}
+
 static const struct drm_connector_funcs intel_sdvo_connector_funcs = {
 	.detect = intel_sdvo_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.atomic_get_property = intel_sdvo_connector_atomic_get_property,
 	.atomic_set_property = intel_sdvo_connector_atomic_set_property,
-	.late_register = intel_connector_register,
+	.late_register = intel_sdvo_connector_register,
 	.early_unregister = intel_connector_unregister,
 	.destroy = intel_connector_destroy,
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,

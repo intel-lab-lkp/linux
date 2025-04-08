@@ -80,6 +80,7 @@
 #include "intel_hdmi.h"
 #include "intel_hotplug.h"
 #include "intel_hotplug_irq.h"
+#include "intel_link_bw.h"
 #include "intel_lspcon.h"
 #include "intel_lvds.h"
 #include "intel_modeset_lock.h"
@@ -5889,6 +5890,8 @@ intel_dp_connector_register(struct drm_connector *_connector)
 	ret = intel_connector_register(&connector->base);
 	if (ret)
 		return ret;
+
+	intel_link_bw_connector_debugfs_add(connector);
 
 	drm_dbg_kms(display->drm, "registering %s bus for %s\n",
 		    intel_dp->aux.name, connector->base.kdev->kobj.name);

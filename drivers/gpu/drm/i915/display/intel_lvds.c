@@ -45,10 +45,12 @@
 #include "intel_backlight.h"
 #include "intel_connector.h"
 #include "intel_de.h"
+#include "intel_display_device.h"
 #include "intel_display_types.h"
 #include "intel_dpll.h"
 #include "intel_fdi.h"
 #include "intel_gmbus.h"
+#include "intel_link_bw.h"
 #include "intel_lvds.h"
 #include "intel_lvds_regs.h"
 #include "intel_panel.h"
@@ -501,6 +503,22 @@ static int intel_lvds_get_modes(struct drm_connector *_connector)
 	return intel_panel_get_modes(connector);
 }
 
+static int intel_lvds_connector_register(struct drm_connector *_connector)
+{
+	struct intel_connector *connector = to_intel_connector(_connector);
+	struct intel_display *display = to_intel_display(connector);
+	int err;
+
+	err = intel_connector_register(&connector->base);
+	if (err)
+		return err;
+
+	if (HAS_FDI(display))
+		intel_link_bw_connector_debugfs_add(connector);
+
+	return 0;
+}
+
 static const struct drm_connector_helper_funcs intel_lvds_connector_helper_funcs = {
 	.get_modes = intel_lvds_get_modes,
 	.mode_valid = intel_lvds_mode_valid,
@@ -512,7 +530,7 @@ static const struct drm_connector_funcs intel_lvds_connector_funcs = {
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.atomic_get_property = intel_digital_connector_atomic_get_property,
 	.atomic_set_property = intel_digital_connector_atomic_set_property,
-	.late_register = intel_connector_register,
+	.late_register = intel_lvds_connector_register,
 	.early_unregister = intel_connector_unregister,
 	.destroy = intel_connector_destroy,
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,

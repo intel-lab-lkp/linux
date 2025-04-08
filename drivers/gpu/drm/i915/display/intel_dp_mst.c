@@ -1445,6 +1445,8 @@ mst_connector_late_register(struct drm_connector *_connector)
 	if (ret < 0)
 		drm_dp_mst_connector_early_unregister(&connector->base, connector->mst.port);
 
+	intel_link_bw_connector_debugfs_add(connector);
+
 	return ret;
 }
 
