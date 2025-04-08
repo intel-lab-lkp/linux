@@ -283,6 +283,7 @@
 #define DMA_LLP_MEM_SIZE		PAGE_SIZE
 
 #define QUIRK_NOL2POLL_IN_PM		BIT(0)
+#define QUIRK_NOLINK_NOPME		BIT(1)
 #define dwc_check_quirk(pci, val)	(pci->quirk_flag & val)
 
 struct dw_pcie;
