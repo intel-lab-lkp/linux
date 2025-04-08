@@ -3775,7 +3775,7 @@ static int del_balance_item(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_root *root = fs_info->tree_root;
 	struct btrfs_trans_handle *trans;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_key key;
 	int ret, err;
 
@@ -3784,10 +3784,8 @@ static int del_balance_item(struct btrfs_fs_info *fs_info)
 		return -ENOMEM;
 
 	trans = btrfs_start_transaction_fallback_global_rsv(root, 0);
-	if (IS_ERR(trans)) {
-		btrfs_free_path(path);
+	if (IS_ERR(trans))
 		return PTR_ERR(trans);
-	}
 
 	key.objectid = BTRFS_BALANCE_OBJECTID;
 	key.type = BTRFS_TEMPORARY_ITEM_KEY;
@@ -3803,7 +3801,6 @@ static int del_balance_item(struct btrfs_fs_info *fs_info)
 
 	ret = btrfs_del_item(trans, root, path);
 out:
-	btrfs_free_path(path);
 	err = btrfs_commit_transaction(trans);
 	if (err && !ret)
 		ret = err;
