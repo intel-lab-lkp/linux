@@ -22,6 +22,9 @@ struct ref_tracker_dir {
 };
 
 #ifdef CONFIG_REF_TRACKER
+#ifdef CONFIG_DEBUG_FS
+extern struct dentry *ref_tracker_debug_dir;
+#endif /* CONFIG_DEBUG_FS */
 
 static inline void ref_tracker_dir_init(struct ref_tracker_dir *dir,
 					unsigned int quarantine_count,
