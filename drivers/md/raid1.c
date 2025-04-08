@@ -2296,6 +2296,12 @@ static void process_checks(struct r1bio *r1_bio)
 			rdev_dec_pending(conf->mirrors[primary].rdev, mddev);
 			break;
 		}
+
+	if (primary >= conf->raid_disks * 2) {
+		pr_err_ratelimited("md/raid1:%s: unable to find source disk\n", mdname(mddev));
+		return;
+	}
+
 	r1_bio->read_disk = primary;
 	for (i = 0; i < conf->raid_disks * 2; i++) {
 		int j = 0;
