@@ -72,4 +72,7 @@ struct xfs_bmap_intent;
 
 void xfs_bmap_defer_add(struct xfs_trans *tp, struct xfs_bmap_intent *bi);
 
+unsigned int xfs_bui_item_overhead(unsigned int nr);
+unsigned int xfs_bud_item_overhead(void);
+
 #endif	/* __XFS_BMAP_ITEM_H__ */

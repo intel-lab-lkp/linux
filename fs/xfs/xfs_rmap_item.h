@@ -75,4 +75,7 @@ struct xfs_rmap_intent;
 
 void xfs_rmap_defer_add(struct xfs_trans *tp, struct xfs_rmap_intent *ri);
 
+unsigned int xfs_rui_item_overhead(unsigned int nr);
+unsigned int xfs_rud_item_overhead(void);
+
 #endif	/* __XFS_RMAP_ITEM_H__ */
