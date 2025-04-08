@@ -346,3 +346,5 @@ static struct platform_driver vf610_gpio_driver = {
 };
 
 builtin_platform_driver(vf610_gpio_driver);
+MODULE_DESCRIPTION("VF610 GPIO driver");
+MODULE_LICENSE("GPL");
