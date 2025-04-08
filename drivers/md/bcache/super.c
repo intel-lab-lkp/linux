@@ -648,7 +648,7 @@ int bch_prio_write(struct cache *ca, bool wait)
 		for (b = ca->buckets + i * prios_per_bucket(ca);
 		     b < ca->buckets + ca->sb.nbuckets && d < end;
 		     b++, d++) {
-			d->prio = cpu_to_le16(b->prio);
+			d->prio = b->prio;
 			d->gen = b->gen;
 		}
 
@@ -721,7 +721,7 @@ static int prio_read(struct cache *ca, uint64_t bucket)
 			d = p->data;
 		}
 
-		b->prio = le16_to_cpu(d->prio);
+		b->prio = d->prio;
 		b->gen = b->last_gc = d->gen;
 	}
 
@@ -832,7 +832,7 @@ static void bcache_device_detach(struct bcache_device *d)
 
 		SET_UUID_FLASH_ONLY(u, 0);
 		memcpy(u->uuid, invalid_uuid, 16);
-		u->invalidated = cpu_to_le32((u32)ktime_get_real_seconds());
+		u->invalidated = (u32)ktime_get_real_seconds();
 		bch_uuid_write(d->c);
 	}
 
@@ -1188,7 +1188,7 @@ void bch_cached_dev_detach(struct cached_dev *dc)
 int bch_cached_dev_attach(struct cached_dev *dc, struct cache_set *c,
 			  uint8_t *set_uuid)
 {
-	uint32_t rtime = cpu_to_le32((u32)ktime_get_real_seconds());
+	uint32_t rtime = (u32)ktime_get_real_seconds();
 	struct uuid_entry *u;
 	struct cached_dev *exist_dc, *t;
 	int ret = 0;
@@ -1230,7 +1230,7 @@ int bch_cached_dev_attach(struct cached_dev *dc, struct cache_set *c,
 	    (BDEV_STATE(&dc->sb) == BDEV_STATE_STALE ||
 	     BDEV_STATE(&dc->sb) == BDEV_STATE_NONE)) {
 		memcpy(u->uuid, invalid_uuid, 16);
-		u->invalidated = cpu_to_le32((u32)ktime_get_real_seconds());
+		u->invalidated = (u32)ktime_get_real_seconds();
 		u = NULL;
 	}
 
@@ -1591,7 +1591,7 @@ int bch_flash_dev_create(struct cache_set *c, uint64_t size)
 
 	get_random_bytes(u->uuid, 16);
 	memset(u->label, 0, 32);
-	u->first_reg = u->last_reg = cpu_to_le32((u32)ktime_get_real_seconds());
+	u->first_reg = u->last_reg = (u32)ktime_get_real_seconds();
 
 	SET_UUID_FLASH_ONLY(u, 1);
 	u->sectors = size >> 9;
