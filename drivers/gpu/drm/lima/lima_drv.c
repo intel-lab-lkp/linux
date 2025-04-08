@@ -254,7 +254,22 @@ static const struct drm_ioctl_desc lima_drm_driver_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(LIMA_CTX_FREE, lima_ioctl_ctx_free, DRM_RENDER_ALLOW),
 };
 
-DEFINE_DRM_GEM_FOPS(lima_drm_driver_fops);
+static int lima_drm_driver_flush(struct file *filp, fl_owner_t id)
+{
+	struct drm_file *file = filp->private_data;
+	struct lima_drm_priv *priv = file->driver_priv;
+	long timeout = MAX_WAIT_SCHED_ENTITY_Q_EMPTY;
+
+	timeout = lima_ctx_mgr_flush(&priv->ctx_mgr, timeout);
+
+	return timeout >= 0 ? 0 : timeout;
+}
+
+static const struct file_operations lima_drm_driver_fops = {
+	.owner = THIS_MODULE,
+	.flush = lima_drm_driver_flush,
+	DRM_GEM_FOPS,
+};
 
 /*
  * Changelog:

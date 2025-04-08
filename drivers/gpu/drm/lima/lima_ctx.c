@@ -100,3 +100,21 @@ void lima_ctx_mgr_fini(struct lima_ctx_mgr *mgr)
 	xa_destroy(&mgr->handles);
 	mutex_destroy(&mgr->lock);
 }
+
+long lima_ctx_mgr_flush(struct lima_ctx_mgr *mgr, long timeout)
+{
+	struct lima_ctx *ctx;
+	unsigned long id;
+
+	mutex_lock(&mgr->lock);
+	xa_for_each(&mgr->handles, id, ctx) {
+		for (int i = 0; i < lima_pipe_num; i++) {
+			struct lima_sched_context *context = &ctx->context[i];
+			struct drm_sched_entity *entity = &context->base;
+
+			timeout = drm_sched_entity_flush(entity, timeout);
+		}
+	}
+	mutex_unlock(&mgr->lock);
+	return timeout;
+}
