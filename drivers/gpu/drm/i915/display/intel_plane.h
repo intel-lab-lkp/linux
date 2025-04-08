@@ -3,8 +3,8 @@
  * Copyright © 2019 Intel Corporation
  */
 
-#ifndef __INTEL_ATOMIC_PLANE_H__
-#define __INTEL_ATOMIC_PLANE_H__
+#ifndef __INTEL_PLANE_H__
+#define __INTEL_PLANE_H__
 
 #include <linux/types.h>
 
@@ -90,4 +90,4 @@ int intel_atomic_check_planes(struct intel_atomic_state *state);
 
 u32 intel_plane_ggtt_offset(const struct intel_plane_state *plane_state);
 
-#endif /* __INTEL_ATOMIC_PLANE_H__ */
+#endif /* __INTEL_PLANE_H__ */
