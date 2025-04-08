@@ -3733,7 +3733,7 @@ static int insert_balance_item(struct btrfs_fs_info *fs_info,
 	BTRFS_PATH_AUTO_FREE(path);
 	struct extent_buffer *leaf;
 	struct btrfs_key key;
-	int ret, err;
+	int ret;
 
 	path = btrfs_alloc_path();
 	if (!path)
@@ -3749,8 +3749,11 @@ static int insert_balance_item(struct btrfs_fs_info *fs_info,
 
 	ret = btrfs_insert_empty_item(trans, root, path, &key,
 				      sizeof(*item));
-	if (ret)
-		goto out;
+	if (ret) {
+		btrfs_abort_transaction(trans, ret);
+		btrfs_end_transaction(trans);
+		return ret;
+	}
 
 	leaf = path->nodes[0];
 	item = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_balance_item);
@@ -3764,11 +3767,8 @@ static int insert_balance_item(struct btrfs_fs_info *fs_info,
 	btrfs_cpu_balance_args_to_disk(&disk_bargs, &bctl->sys);
 	btrfs_set_balance_sys(leaf, item, &disk_bargs);
 	btrfs_set_balance_flags(leaf, item, bctl->flags);
-out:
-	err = btrfs_commit_transaction(trans);
-	if (err && !ret)
-		ret = err;
-	return ret;
+
+	return btrfs_commit_transaction(trans);
 }
 
 static int del_balance_item(struct btrfs_fs_info *fs_info)
