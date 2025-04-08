@@ -330,7 +330,9 @@ static int xhci_enable_interrupter(struct xhci_interrupter *ir)
 		return -EINVAL;
 
 	iman = readl(&ir->ir_set->irq_pending);
-	writel(ER_IRQ_ENABLE(iman), &ir->ir_set->irq_pending);
+	iman &= ~IMAN_IP;
+	iman |= IMAN_IE;
+	writel(iman, &ir->ir_set->irq_pending);
 
 	return 0;
 }
@@ -343,7 +345,9 @@ static int xhci_disable_interrupter(struct xhci_interrupter *ir)
 		return -EINVAL;
 
 	iman = readl(&ir->ir_set->irq_pending);
-	writel(ER_IRQ_DISABLE(iman), &ir->ir_set->irq_pending);
+	iman &= ~IMAN_IP;
+	iman &= ~IMAN_IE;
+	writel(iman, &ir->ir_set->irq_pending);
 
 	return 0;
 }
