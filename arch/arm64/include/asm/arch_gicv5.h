@@ -5,6 +5,7 @@
 #ifndef __ASM_ARCH_GICV5_H
 #define __ASM_ARCH_GICV5_H
 
+#include <asm/cacheflush.h>
 #include <asm/sysreg.h>
 
 #ifndef __ASSEMBLY__

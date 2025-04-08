@@ -6,12 +6,16 @@
 #define __LINUX_IRQCHIP_GIC_V5_H
 
 #include <asm/arch_gicv5.h>
+#include <asm/smp.h>
+
+#define GICV5_IPIS_PER_CPU		MAX_IPI
 
 #define GICV5_HWIRQ_ID			GENMASK(23, 0)
 #define GICV5_HWIRQ_TYPE		GENMASK(31, 29)
 #define GICV5_HWIRQ_INTID		GENMASK_ULL(31, 0)
 
 #define GICV5_HWIRQ_TYPE_PPI		UL(0x1)
+#define GICV5_HWIRQ_TYPE_LPI		UL(0x2)
 #define GICV5_HWIRQ_TYPE_SPI		UL(0x3)
 
 #define GICV5_PPI_HM_EDGE		UL(0x0)
@@ -43,6 +47,10 @@
 #define GICV5_IRS_PE_SELR		0x0140
 #define GICV5_IRS_PE_STATUSR		0x0144
 #define GICV5_IRS_PE_CR0		0x0148
+#define GICV5_IRS_IST_BASER		0x0180
+#define GICV5_IRS_IST_CFGR		0x0190
+#define GICV5_IRS_IST_STATUSR		0x0194
+#define GICV5_IRS_MAP_L2_ISTR		0x01c0
 
 #define GICV5_IRS_IDR1_PRIORITY_BITS	GENMASK(22, 20)
 #define GICV5_IRS_IDR1_IAFFID_BITS	GENMASK(19, 16)
@@ -53,9 +61,21 @@
 #define GICV5_IRS_IDR1_PRIORITY_BITS_4BITS	0b011
 #define GICV5_IRS_IDR1_PRIORITY_BITS_5BITS	0b100
 
+#define GICV5_IRS_IDR2_ISTMD_SZ		GENMASK(19, 15)
+#define GICV5_IRS_IDR2_ISTMD		BIT(14)
+#define GICV5_IRS_IDR2_IST_L2SZ		GENMASK(13, 11)
+#define GICV5_IRS_IDR2_IST_LEVELS	BIT(10)
+#define GICV5_IRS_IDR2_MIN_LPI_ID_BITS	GENMASK(9, 6)
+#define GICV5_IRS_IDR2_LPI		BIT(5)
+#define GICV5_IRS_IDR2_ID_BITS		GENMASK(4, 0)
+
 #define GICV5_IRS_IDR5_SPI_RANGE	GENMASK(24, 0)
 #define GICV5_IRS_IDR6_SPI_IRS_RANGE	GENMASK(24, 0)
 #define GICV5_IRS_IDR7_SPI_BASE		GENMASK(23, 0)
+
+#define GICV5_IRS_IST_L2SZ_SUPPORT_4KB(r)	FIELD_GET(BIT(11), (r))
+#define GICV5_IRS_IST_L2SZ_SUPPORT_16KB(r)	FIELD_GET(BIT(12), (r))
+#define GICV5_IRS_IST_L2SZ_SUPPORT_64KB(r)	FIELD_GET(BIT(13), (r))
 
 #define GICV5_IRS_CR0_IDLE		BIT(1)
 #define GICV5_IRS_CR0_IRSEN		BIT(0)
@@ -88,14 +108,50 @@
 
 #define GICV5_IRS_PE_CR0_DPS		BIT(0)
 
+#define GICV5_IRS_IST_STATUSR_IDLE	BIT(0)
+
+#define GICV5_IRS_IST_CFGR_STRUCTURE	BIT(16)
+#define GICV5_IRS_IST_CFGR_ISTSZ	GENMASK(8, 7)
+#define GICV5_IRS_IST_CFGR_L2SZ		GENMASK(6, 5)
+#define GICV5_IRS_IST_CFGR_LPI_ID_BITS	GENMASK(4, 0)
+
+#define GICV5_IRS_IST_CFGR_STRUCTURE_LINEAR	0b0
+#define GICV5_IRS_IST_CFGR_STRUCTURE_TWO_LEVEL	0b1
+
+#define GICV5_IRS_IST_CFGR_ISTSZ_4	0b00
+#define GICV5_IRS_IST_CFGR_ISTSZ_8	0b01
+#define GICV5_IRS_IST_CFGR_ISTSZ_16	0b10
+
+#define GICV5_IRS_IST_CFGR_L2SZ_4K	0b00
+#define GICV5_IRS_IST_CFGR_L2SZ_16K	0b01
+#define GICV5_IRS_IST_CFGR_L2SZ_64K	0b10
+
+#define GICV5_IRS_IST_BASER_ADDR_MASK	GENMASK_ULL(55, 6)
+#define GICV5_IRS_IST_BASER_VALID	BIT_ULL(0)
+
+#define GICV5_IRS_MAP_L2_ISTR_ID	GENMASK(23, 0)
+
+#define GICV5_ISTL1E_VALID		BIT_ULL(0)
+
+#define GICV5_ISTL1E_L2_ADDR_MASK	GENMASK_ULL(55, 12)
+
 struct gicv5_chip_data {
 	struct fwnode_handle	*fwnode;
 	struct irq_domain	*ppi_domain;
 	struct irq_domain	*spi_domain;
+	struct irq_domain	*lpi_domain;
+	struct irq_domain	*ipi_domain;
 	u32			global_spi_count;
 	u8			cpuif_pri_bits;
+	u8			cpuif_id_bits;
 	u8			irs_pri_bits;
 	u8			irs_iaffid_bits;
+	struct {
+		__le64 *l1ist_addr;
+		u32 l2_size;
+		u8 l2_bits;
+		bool l2;
+	} ist;
 };
 
 extern struct gicv5_chip_data gicv5_global_data __read_mostly;
@@ -110,11 +166,19 @@ struct gicv5_irs_chip_data {
 	raw_spinlock_t		spi_config_lock;
 };
 
+void __init gicv5_init_lpi_domain(void);
+void __init gicv5_free_lpi_domain(void);
+
 int gicv5_irs_of_probe(struct device_node *parent);
 void gicv5_irs_remove(void);
+int gicv5_irs_enable(void);
 int gicv5_irs_register_cpu(int cpuid);
 int gicv5_irs_cpu_to_iaffid(int cpu_id, u16 *iaffid);
 struct gicv5_irs_chip_data *gicv5_irs_lookup_by_spi_id(u32 spi_id);
 int gicv5_spi_irq_set_type(struct irq_data *d, unsigned int type);
+int gicv5_spi_set_type(struct irq_data *d, unsigned int type);
+int gicv5_irs_iste_alloc(u32 lpi);
 
+void gicv5_init_lpi(u32 max);
+void gicv5_free_lpi(void);
 #endif
