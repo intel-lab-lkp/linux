@@ -233,6 +233,7 @@ struct hw_perf_event {
 
 #define PERF_SPS_HF_ON			0x00000001
 #define PERF_SPS_HF_SAMPLE		0x00000002
+#define PERF_SPS_HF_RAND		0x00000004
 	u32				sample_period_state;
 
 	/*

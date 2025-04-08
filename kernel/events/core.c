@@ -56,6 +56,7 @@
 #include <linux/buildid.h>
 #include <linux/task_work.h>
 #include <linux/percpu-rwsem.h>
+#include <linux/prandom.h>
 
 #include "internal.h"
 
@@ -471,6 +472,8 @@ static int perf_sample_period_ns __read_mostly	= DEFAULT_SAMPLE_PERIOD_NS;
 
 static int perf_sample_allowed_ns __read_mostly =
 	DEFAULT_SAMPLE_PERIOD_NS * DEFAULT_CPU_TIME_MAX_PERCENT / 100;
+
+static DEFINE_PER_CPU(struct rnd_state, sample_period_jitter_rnd);
 
 static void update_perf_cpu_limits(void)
 {
@@ -10219,6 +10222,19 @@ static int __perf_event_overflow(struct perf_event *event,
 	 *
 	 * By ignoring the HF samples, we measure the actual period.
 	 */
+
+	/*
+	 * Apply optional jitter to the overall sample period
+	 */
+	if (hwc->sample_period_state & PERF_SPS_HF_RAND
+			&& !(hwc->sample_period_state & PERF_SPS_HF_SAMPLE)) {
+		struct rnd_state *state = &get_cpu_var(sample_period_jitter_rnd);
+		u64 rand_period = 1 << event->attr.hf_sample_rand;
+
+		sample_period -= rand_period / 2;
+		sample_period += prandom_u32_state(state) & (rand_period - 1);
+	}
+
 	if (hwc->sample_period_state & PERF_SPS_HF_ON) {
 		u64 hf_sample_period = event->attr.hf_sample_period;
 
@@ -12752,6 +12768,14 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (attr->hf_sample_period)
 		hwc->sample_period_state |= PERF_SPS_HF_ON;
 
+	if (attr->hf_sample_rand) {
+		/* high-frequency jitter is only valid with a high-freq period */
+		if (!attr->hf_sample_period)
+			return ERR_PTR(-EINVAL);
+
+		hwc->sample_period_state |= PERF_SPS_HF_RAND;
+	}
+
 	/*
 	 * Disallow uncore-task events. Similarly, disallow uncore-cgroup
 	 * events (they don't make sense as the cgroup will be different
@@ -14368,6 +14392,7 @@ static void __init perf_event_init_all_cpus(void)
 	zalloc_cpumask_var(&perf_online_pkg_mask, GFP_KERNEL);
 	zalloc_cpumask_var(&perf_online_sys_mask, GFP_KERNEL);
 
+	prandom_seed_full_state(&sample_period_jitter_rnd);
 
 	for_each_possible_cpu(cpu) {
 		swhash = &per_cpu(swevent_htable, cpu);
@@ -14385,6 +14410,7 @@ static void __init perf_event_init_all_cpus(void)
 		cpuctx->online = cpumask_test_cpu(cpu, perf_online_mask);
 		cpuctx->heap_size = ARRAY_SIZE(cpuctx->heap_default);
 		cpuctx->heap = cpuctx->heap_default;
+
 	}
 }
 
