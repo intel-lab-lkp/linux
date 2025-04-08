@@ -45,6 +45,11 @@ static unsigned int m_hash_shift __ro_after_init;
 static unsigned int mp_hash_mask __ro_after_init;
 static unsigned int mp_hash_shift __ro_after_init;
 
+struct deferred_free_mounts {
+	struct rcu_work rwork;
+	struct hlist_head release_list;
+};
+
 static __initdata unsigned long mhash_entries;
 static int __init set_mhash_entries(char *str)
 {
@@ -1789,11 +1794,29 @@ static bool need_notify_mnt_list(void)
 }
 #endif
 
-static void namespace_unlock(void)
+static void free_mounts(struct hlist_head *mount_list)
 {
-	struct hlist_head head;
 	struct hlist_node *p;
 	struct mount *m;
+
+	hlist_for_each_entry_safe(m, p, mount_list, mnt_umount) {
+		hlist_del(&m->mnt_umount);
+		mntput(&m->mnt);
+	}
+}
+
+static void defer_free_mounts(struct work_struct *work)
+{
+	struct deferred_free_mounts *d = container_of(
+		to_rcu_work(work), struct deferred_free_mounts, rwork);
+
+	free_mounts(&d->release_list);
+	kfree(d);
+}
+
+static void __namespace_unlock(bool lazy)
+{
+	HLIST_HEAD(head);
 	LIST_HEAD(list);
 
 	hlist_move_list(&unmounted, &head);
@@ -1817,12 +1840,27 @@ static void namespace_unlock(void)
 	if (likely(hlist_empty(&head)))
 		return;
 
-	synchronize_rcu_expedited();
+	if (lazy) {
+		struct deferred_free_mounts *d =
+			kmalloc(sizeof(*d), GFP_KERNEL);
 
-	hlist_for_each_entry_safe(m, p, &head, mnt_umount) {
-		hlist_del(&m->mnt_umount);
-		mntput(&m->mnt);
+		if (unlikely(!d))
+			goto out;
+
+		hlist_move_list(&head, &d->release_list);
+		INIT_RCU_WORK(&d->rwork, defer_free_mounts);
+		queue_rcu_work(system_wq, &d->rwork);
+		return;
 	}
+
+out:
+	synchronize_rcu_expedited();
+	free_mounts(&head);
+}
+
+static inline void namespace_unlock(void)
+{
+	__namespace_unlock(false);
 }
 
 static inline void namespace_lock(void)
@@ -2056,7 +2094,7 @@ static int do_umount(struct mount *mnt, int flags)
 	}
 out:
 	unlock_mount_hash();
-	namespace_unlock();
+	__namespace_unlock(flags & MNT_DETACH);
 	return retval;
 }
 
