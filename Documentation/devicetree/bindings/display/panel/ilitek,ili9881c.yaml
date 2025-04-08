@@ -27,6 +27,11 @@ properties:
   reg:
     maxItems: 1
 
+  dsi-lanes:
+    description: Number of DSI lanes to be used must be <2>, <3> or <4>
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [2, 3, 4]
+
   backlight: true
   power-supply: true
   reset-gpios: true
