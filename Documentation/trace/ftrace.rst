@@ -1205,6 +1205,21 @@ Here are the available options:
 	default instance. The only way the top level instance has this flag
 	cleared, is by it being set in another instance.
 
+  redirect_trace_marker
+	This is similar to the trace_printk_dest option above, but it works
+	for the top level trace_marker (/sys/kernel/tracing/trace_marker).
+	If there are applications that hard code writing into the top level
+	trace_marker file, and the tooling would like it to go into an
+	instance, this option can be used. Create an instance and set this
+	option, and then all writes into the top level trace_marker file will
+	be redirected into that instance.
+
+	This flag cannot be cleared by the top level instance, as it is the
+	default instance. The only way the top level instance has this flag
+	cleared, is by it being set in another instance. By setting this flag
+	in the top level instance, it will put the writing into the
+	trace_marker file back into the top level instance buffer.
+
   annotate
 	It is sometimes confusing when the CPU buffers are full
 	and one CPU buffer had a lot of events recently, thus

@@ -492,7 +492,8 @@ EXPORT_SYMBOL_GPL(unregister_ftrace_export);
 	 TRACE_ITER_ANNOTATE | TRACE_ITER_CONTEXT_INFO |		\
 	 TRACE_ITER_RECORD_CMD | TRACE_ITER_OVERWRITE |			\
 	 TRACE_ITER_IRQ_INFO | TRACE_ITER_MARKERS |			\
-	 TRACE_ITER_HASH_PTR | TRACE_ITER_TRACE_PRINTK)
+	 TRACE_ITER_HASH_PTR | TRACE_ITER_TRACE_PRINTK |		\
+	 TRACE_ITER_REDIRECT_MARKER)
 
 /* trace_options that are only supported by global_trace */
 #define TOP_LEVEL_TRACE_FLAGS (TRACE_ITER_PRINTK |			\
@@ -500,7 +501,8 @@ EXPORT_SYMBOL_GPL(unregister_ftrace_export);
 
 /* trace_flags that are default zero for instances */
 #define ZEROED_TRACE_FLAGS \
-	(TRACE_ITER_EVENT_FORK | TRACE_ITER_FUNC_FORK | TRACE_ITER_TRACE_PRINTK)
+	(TRACE_ITER_EVENT_FORK | TRACE_ITER_FUNC_FORK | TRACE_ITER_TRACE_PRINTK | \
+	 TRACE_ITER_REDIRECT_MARKER)
 
 /*
  * The global_trace is the descriptor that holds the top-level tracing
@@ -511,6 +513,7 @@ static struct trace_array global_trace = {
 };
 
 static struct trace_array *printk_trace = &global_trace;
+static struct trace_array *marker_trace = &global_trace;
 
 static __always_inline bool printk_binsafe(struct trace_array *tr)
 {
@@ -531,6 +534,16 @@ static void update_printk_trace(struct trace_array *tr)
 	printk_trace->trace_flags &= ~TRACE_ITER_TRACE_PRINTK;
 	printk_trace = tr;
 	tr->trace_flags |= TRACE_ITER_TRACE_PRINTK;
+}
+
+static void update_marker_trace(struct trace_array *tr)
+{
+	if (marker_trace == tr)
+		return;
+
+	marker_trace->trace_flags &= ~TRACE_ITER_REDIRECT_MARKER;
+	marker_trace = tr;
+	tr->trace_flags |= TRACE_ITER_REDIRECT_MARKER;
 }
 
 void trace_set_ring_buffer_expanded(struct trace_array *tr)
@@ -4764,8 +4777,22 @@ int tracing_single_release_file_tr(struct inode *inode, struct file *filp)
 
 static int tracing_mark_open(struct inode *inode, struct file *filp)
 {
+	struct trace_array *tr = inode->i_private;
+	int ret;
+
 	stream_open(inode, filp);
-	return tracing_open_generic_tr(inode, filp);
+
+	/* The top level marker can have it redirected to an instance */
+	if (tr == &global_trace)
+		tr = marker_trace;
+
+	ret = tracing_check_open_get_tr(tr);
+	if (ret)
+		return ret;
+
+	filp->private_data = tr;
+
+	return 0;
 }
 
 static int tracing_release(struct inode *inode, struct file *file)
@@ -4808,7 +4835,7 @@ static int tracing_release(struct inode *inode, struct file *file)
 
 int tracing_release_generic_tr(struct inode *inode, struct file *file)
 {
-	struct trace_array *tr = inode->i_private;
+	struct trace_array *tr = file->private_data;
 
 	trace_array_put(tr);
 	return 0;
@@ -5198,7 +5225,8 @@ int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled)
 {
 	if ((mask == TRACE_ITER_RECORD_TGID) ||
 	    (mask == TRACE_ITER_RECORD_CMD) ||
-	    (mask == TRACE_ITER_TRACE_PRINTK))
+	    (mask == TRACE_ITER_TRACE_PRINTK) ||
+	    (mask == TRACE_ITER_REDIRECT_MARKER))
 		lockdep_assert_held(&event_mutex);
 
 	/* do nothing if flag is already set */
@@ -5226,6 +5254,25 @@ int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled)
 			 */
 			if (printk_trace == tr)
 				update_printk_trace(&global_trace);
+		}
+	}
+
+	if (mask == TRACE_ITER_REDIRECT_MARKER) {
+		if (enabled) {
+			update_marker_trace(tr);
+		} else {
+			/*
+			 * The global_trace cannot clear this.
+			 * It's flag only gets cleared if another instance sets it.
+			 */
+			if (marker_trace == &global_trace)
+				return -EINVAL;
+			/*
+			 * An instance must always have it set.
+			 * by default, that's the global_trace instane.
+			 */
+			if (marker_trace == tr)
+				update_marker_trace(&global_trace);
 		}
 	}
 
@@ -9898,6 +9945,9 @@ static int __remove_instance(struct trace_array *tr)
 
 	if (printk_trace == tr)
 		update_printk_trace(&global_trace);
+
+	if (marker_trace == tr)
+		update_marker_trace(&global_trace);
 
 	tracing_set_nop(tr);
 	clear_ftrace_function_probes(tr);
