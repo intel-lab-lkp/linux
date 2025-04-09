@@ -53,6 +53,9 @@ static inline u64 hv_get_non_nested_msr(unsigned int reg)
 	return hv_get_msr(reg);
 }
 
+u64 hv_pv_get_synic_register(unsigned int reg, int *err);
+int hv_pv_set_synic_register(unsigned int reg, u64 val);
+
 /* SMCCC hypercall parameters */
 #define HV_SMCCC_FUNC_NUMBER	1
 #define HV_FUNC_ID	ARM_SMCCC_CALL_VAL(			\
