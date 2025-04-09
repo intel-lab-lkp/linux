@@ -867,7 +867,7 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 		master->devs[pos].addr = ret;
 		last_addr = ret;
 
-		ret |= parity8(ret) ? 0 : BIT(7);
+		ret |= parity_odd(ret) ? 0 : BIT(7);
 
 		writel(DEV_ADDR_TABLE_DYNAMIC_ADDR(ret),
 		       master->regs +

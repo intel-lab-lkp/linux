@@ -230,35 +230,40 @@ static inline int get_count_order_long(unsigned long l)
 }
 
 /**
- * parity8 - get the parity of an u8 value
- * @value: the value to be examined
+ * parity_odd - get the parity of an u64 value
+ * @val: the value to be examined
  *
- * Determine the parity of the u8 argument.
+ * Determine the parity of the u64 argument.
  *
  * Returns:
- * 0 for even parity, 1 for odd parity
+ * false for even parity, true for odd parity
  *
  * Note: This function informs you about the current parity. Example to bail
  * out when parity is odd:
  *
- *	if (parity8(val) == 1)
+ *	if (parity_odd(val))
  *		return -EBADMSG;
  *
  * If you need to calculate a parity bit, you need to draw the conclusion from
  * this result yourself. Example to enforce odd parity, parity bit is bit 7:
  *
- *	if (parity8(val) == 0)
+ *	if (!parity_odd(val))
  *		val ^= BIT(7);
  */
-static inline int parity8(u8 val)
+#ifndef parity_odd
+static inline __attribute_const__ bool parity_odd(u64 val)
 {
 	/*
 	 * One explanation of this algorithm:
 	 * https://funloop.org/codex/problem/parity/README.html
 	 */
+	val ^= val >> 32;
+	val ^= val >> 16;
+	val ^= val >> 8;
 	val ^= val >> 4;
 	return (0x6996 >> (val & 0xf)) & 1;
 }
+#endif
 
 /**
  * __ffs64 - find first set bit in a 64 bit word

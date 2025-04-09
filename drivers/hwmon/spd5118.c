@@ -298,7 +298,7 @@ static umode_t spd5118_is_visible(const void *_data, enum hwmon_sensor_types typ
  */
 static bool spd5118_vendor_valid(u8 bank, u8 id)
 {
-	if (parity8(bank) == 0 || parity8(id) == 0)
+	if (!parity_odd(bank) || !parity_odd(id))
 		return false;
 
 	id &= 0x7f;
