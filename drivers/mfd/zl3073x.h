@@ -8,7 +8,7 @@ struct regmap_config;
 struct zl3073x_dev;
 
 struct zl3073x_dev *zl3073x_devm_alloc(struct device *dev);
-int zl3073x_dev_init(struct zl3073x_dev *zldev);
+int zl3073x_dev_init(struct zl3073x_dev *zldev, u8 dev_id);
 const struct regmap_config *zl3073x_get_regmap_config(void);
 
 #endif /* __ZL3073X_CORE_H */

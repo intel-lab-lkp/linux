@@ -16,11 +16,13 @@ struct regmap;
  * struct zl3073x_dev - zl3073x device
  * @dev: pointer to device
  * @regmap: regmap to access HW registers
+ * @clock_id: clock id of the device
  * @lock: lock to be held during access to HW registers
  */
 struct zl3073x_dev {
 	struct device		*dev;
 	struct regmap		*regmap;
+	u64			clock_id;
 	struct mutex		lock;
 };
 
