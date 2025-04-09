@@ -92,6 +92,7 @@ struct sbsa_gwdt {
 };
 
 #define DEFAULT_TIMEOUT		10 /* seconds */
+#define DEFAULT_RESET_ON_PANIC_TIMEOUT		60 /* seconds */
 
 static unsigned int timeout;
 module_param(timeout, uint, 0);
@@ -242,6 +243,7 @@ static const struct watchdog_info sbsa_gwdt_info = {
 	.options	= WDIOF_SETTIMEOUT |
 			  WDIOF_KEEPALIVEPING |
 			  WDIOF_MAGICCLOSE |
+			  WDIOF_OPS_ATOMIC |
 			  WDIOF_CARDRESET,
 };
 
@@ -291,6 +293,7 @@ static int sbsa_gwdt_probe(struct platform_device *pdev)
 	wdd->ops = &sbsa_gwdt_ops;
 	wdd->min_timeout = 1;
 	wdd->timeout = DEFAULT_TIMEOUT;
+	wdd->reset_on_panic = DEFAULT_RESET_ON_PANIC_TIMEOUT;
 	watchdog_set_drvdata(wdd, gwdt);
 	watchdog_set_nowayout(wdd, nowayout);
 	sbsa_gwdt_get_version(wdd);
