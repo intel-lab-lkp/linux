@@ -648,16 +648,22 @@ static void _hci_cmd_sync_cancel_entry(struct hci_dev *hdev,
 	kfree(entry);
 }
 
-void hci_cmd_sync_clear(struct hci_dev *hdev)
+/* Clear remaining entries in cmd_sync_work_list */
+static void hci_cmd_sync_list_clear(struct hci_dev *hdev)
 {
 	struct hci_cmd_sync_work_entry *entry, *tmp;
 
+	list_for_each_entry_safe(entry, tmp, &hdev->cmd_sync_work_list, list)
+		_hci_cmd_sync_cancel_entry(hdev, entry, -ECANCELED);
+}
+
+void hci_cmd_sync_clear(struct hci_dev *hdev)
+{
 	cancel_work_sync(&hdev->cmd_sync_work);
 	cancel_work_sync(&hdev->reenable_adv_work);
 
 	mutex_lock(&hdev->cmd_sync_work_lock);
-	list_for_each_entry_safe(entry, tmp, &hdev->cmd_sync_work_list, list)
-		_hci_cmd_sync_cancel_entry(hdev, entry, -ECANCELED);
+	hci_cmd_sync_list_clear(hdev);
 	mutex_unlock(&hdev->cmd_sync_work_lock);
 }
 
@@ -678,6 +684,7 @@ EXPORT_SYMBOL(hci_cmd_sync_cancel);
  *
  * - Set result and mark status to HCI_REQ_CANCELED
  * - Wakeup command sync thread
+ * - Clear cmd_sync_work_list if the interface is down
  */
 void hci_cmd_sync_cancel_sync(struct hci_dev *hdev, int err)
 {
@@ -692,6 +699,9 @@ void hci_cmd_sync_cancel_sync(struct hci_dev *hdev, int err)
 
 		wake_up_interruptible(&hdev->req_wait_q);
 	}
+
+	if (err == EHOSTDOWN || err == -EHOSTDOWN)
+		hci_cmd_sync_list_clear(hdev);
 }
 EXPORT_SYMBOL(hci_cmd_sync_cancel_sync);
 
@@ -5159,13 +5169,13 @@ int hci_dev_close_sync(struct hci_dev *hdev)
 		disable_delayed_work(&hdev->power_off);
 		disable_delayed_work(&hdev->ncmd_timer);
 		disable_delayed_work(&hdev->le_scan_disable);
+		hci_cmd_sync_cancel_sync(hdev, ENODEV);
 	} else {
 		cancel_delayed_work(&hdev->power_off);
 		cancel_delayed_work(&hdev->ncmd_timer);
 		cancel_delayed_work(&hdev->le_scan_disable);
+		hci_cmd_sync_cancel_sync(hdev, EHOSTDOWN);
 	}
-
-	hci_cmd_sync_cancel_sync(hdev, ENODEV);
 
 	cancel_interleave_scan(hdev);
 
