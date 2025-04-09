@@ -5,4 +5,5 @@
 
 obj-$(CONFIG_DRM_ACCEL_AMDPK) := amdpk.o
 
-amdpk-y := amdpk_drv.o
+amdpk-y := amdpk_drv.o \
+	   amdpk_debugfs.o

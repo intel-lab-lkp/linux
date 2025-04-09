@@ -678,6 +678,7 @@ static int amdpk_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "DRM register failed, ret %d", ret);
 		return ret;
 	}
+	amdpk_debugfs_init(pkdev);
 
 	return amdpk_create_device(pkdev, dev, irq);
 }

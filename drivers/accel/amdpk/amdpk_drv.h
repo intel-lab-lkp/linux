@@ -258,6 +258,8 @@ struct amdpk_user {
 #define to_amdpk_dev(dev) container_of(dev, struct amdpk_dev, ddev)
 #define to_amdpk_work(work) container_of(work, struct amdpk_work, cq_work)
 
+void amdpk_debugfs_init(struct amdpk_dev *pkdev);
+
 static void __maybe_unused pk_wrreg(char __iomem *regs, int addr, u64 val)
 {
 	iowrite64(val, regs + addr);
