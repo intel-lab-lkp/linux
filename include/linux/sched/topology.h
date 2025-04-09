@@ -78,6 +78,7 @@ struct sched_domain_shared {
 	atomic_t	nr_busy_cpus;
 	int		has_idle_cores;
 	int		nr_idle_scan;
+	cpumask_var_t	overloaded_mask;
 };
 
 struct sched_domain {
