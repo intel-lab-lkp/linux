@@ -421,8 +421,7 @@ static int allocate_trash_buffer(struct ipu6_mmu *mmu)
 	int ret;
 
 	/* Allocate 8MB in iova range */
-	iova = alloc_iova(&mmu->dmap->iovad, n_pages,
-			  PHYS_PFN(mmu->dmap->mmu_info->aperture_end), 0);
+	iova = ipu6_alloc_iova(mmu, n_pages);
 	if (!iova) {
 		dev_err(mmu->dev, "cannot allocate iova range for trash\n");
 		return -ENOMEM;

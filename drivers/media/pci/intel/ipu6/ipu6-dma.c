@@ -171,8 +171,7 @@ void *ipu6_dma_alloc(struct ipu6_bus_device *sys, size_t size,
 	size = PAGE_ALIGN(size);
 	count = PHYS_PFN(size);
 
-	iova = alloc_iova(&mmu->dmap->iovad, count,
-			  PHYS_PFN(dma_get_mask(dev)), 0);
+	iova = ipu6_alloc_iova(mmu, count);
 	if (!iova)
 		goto out_kfree;
 
@@ -397,8 +396,7 @@ int ipu6_dma_map_sg(struct ipu6_bus_device *sys, struct scatterlist *sglist,
 	dev_dbg(dev, "dmamap trying to map %d ents %zu pages\n",
 		nents, npages);
 
-	iova = alloc_iova(&mmu->dmap->iovad, npages,
-			  PHYS_PFN(dma_get_mask(dev)), 0);
+	iova = ipu6_alloc_iova(mmu, npages);
 	if (!iova)
 		return 0;
 

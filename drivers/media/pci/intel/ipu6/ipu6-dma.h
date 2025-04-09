@@ -6,19 +6,12 @@
 
 #include <linux/dma-map-ops.h>
 #include <linux/dma-mapping.h>
-#include <linux/iova.h>
-#include <linux/iova.h>
 #include <linux/scatterlist.h>
 #include <linux/types.h>
 
 #include "ipu6-bus.h"
 
 struct ipu6_mmu_info;
-
-struct ipu6_dma_mapping {
-	struct ipu6_mmu_info *mmu_info;
-	struct iova_domain iovad;
-};
 
 void ipu6_dma_sync_single(struct ipu6_bus_device *sys, dma_addr_t dma_handle,
 			  size_t size);

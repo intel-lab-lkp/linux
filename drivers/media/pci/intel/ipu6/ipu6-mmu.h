@@ -7,6 +7,7 @@
 #define ISYS_MMID 1
 #define PSYS_MMID 0
 
+#include <linux/iova.h>
 #include <linux/list.h>
 #include <linux/spinlock_types.h>
 #include <linux/types.h>
@@ -58,6 +59,11 @@ struct ipu6_mmu {
 	void (*tlb_invalidate)(struct ipu6_mmu *mmu);
 };
 
+struct ipu6_dma_mapping {
+	struct ipu6_mmu_info *mmu_info;
+	struct iova_domain iovad;
+};
+
 struct ipu6_mmu *ipu6_mmu_init(struct device *dev,
 			       void __iomem *base, int mmid,
 			       const struct ipu6_hw_variants *hw);
@@ -70,4 +76,11 @@ void ipu6_mmu_unmap(struct ipu6_mmu_info *mmu_info, unsigned long iova,
 		    size_t size);
 phys_addr_t ipu6_mmu_iova_to_phys(struct ipu6_mmu_info *mmu_info,
 				  dma_addr_t iova);
+
+static inline struct iova *ipu_alloc_iova(struct ipu6_mmu *mmu,
+					  unsigned long n_pages)
+{
+	return alloc_iova(&mmu->dmap->iovad, n_pages,
+			  PHYS_PFN(mmu->dmap->mmu_info->aperture_end), 0);
+}
 #endif
