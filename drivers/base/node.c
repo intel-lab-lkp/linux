@@ -20,6 +20,8 @@
 #include <linux/pm_runtime.h>
 #include <linux/swap.h>
 #include <linux/slab.h>
+#include <linux/memblock.h>
+
 
 static const struct bus_type node_subsys = {
 	.name = "node",
@@ -782,16 +784,19 @@ static void do_register_memory_block_under_node(int nid,
 				    ret);
 }
 
-/* register memory section under specified node if it spans that node */
-static int register_mem_block_under_node_early(struct memory_block *mem_blk,
-					       void *arg)
+static int register_mem_block_early_if_dfer_page_init(struct memory_block *mem_blk,
+				unsigned long start_pfn, unsigned long end_pfn, int nid)
 {
-	unsigned long memory_block_pfns = memory_block_size_bytes() / PAGE_SIZE;
-	unsigned long start_pfn = section_nr_to_pfn(mem_blk->start_section_nr);
-	unsigned long end_pfn = start_pfn + memory_block_pfns - 1;
-	int nid = *(int *)arg;
-	unsigned long pfn;
 
+	if (curr_node_memblock_intersect_memory_block(start_pfn, end_pfn, nid))
+		do_register_memory_block_under_node(nid, mem_blk, MEMINIT_EARLY);
+	return 0;
+}
+
+static int register_mem_block_early__normal(struct memory_block *mem_blk,
+				unsigned long start_pfn, unsigned long end_pfn, int nid)
+{
+	unsigned long pfn;
 	for (pfn = start_pfn; pfn <= end_pfn; pfn++) {
 		int page_nid;
 
@@ -820,6 +825,22 @@ static int register_mem_block_under_node_early(struct memory_block *mem_blk,
 	}
 	/* mem section does not span the specified node */
 	return 0;
+}
+/* register memory section under specified node if it spans that node */
+static int register_mem_block_under_node_early(struct memory_block *mem_blk,
+					       void *arg)
+{
+	unsigned long memory_block_pfns = memory_block_size_bytes() / PAGE_SIZE;
+	unsigned long start_pfn = section_nr_to_pfn(mem_blk->start_section_nr);
+	unsigned long end_pfn = start_pfn + memory_block_pfns - 1;
+	int nid = *(int *)arg;
+
+#ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
+	if (system_state < SYSTEM_RUNNING)
+		return register_mem_block_early_if_dfer_page_init(mem_blk, start_pfn, end_pfn, nid);
+#endif
+	return register_mem_block_early__normal(mem_blk, start_pfn, end_pfn, nid);
+
 }
 
 /*
