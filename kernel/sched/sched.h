@@ -721,6 +721,7 @@ struct cfs_rq {
 
 #ifdef CONFIG_CFS_BANDWIDTH
 	int			runtime_enabled;
+	unsigned int		h_nr_throttled;
 	s64			runtime_remaining;
 
 	u64			throttled_pelt_idle;
@@ -732,6 +733,7 @@ struct cfs_rq {
 	u64			throttled_clock_pelt_time;
 	u64			throttled_clock_self;
 	u64			throttled_clock_self_time;
+	u64			throttled_time;
 	int			throttled;
 	int			throttle_count;
 	struct list_head	throttled_list;
@@ -2360,6 +2362,7 @@ extern const u32		sched_prio_to_wmult[40];
 #define DEQUEUE_SPECIAL		0x10
 #define DEQUEUE_MIGRATING	0x100 /* Matches ENQUEUE_MIGRATING */
 #define DEQUEUE_DELAYED		0x200 /* Matches ENQUEUE_DELAYED */
+#define DEQUEUE_THROTTLE	0x800 /* Matches ENQUEUE_THROTTLE */
 
 #define ENQUEUE_WAKEUP		0x01
 #define ENQUEUE_RESTORE		0x02
@@ -2377,6 +2380,7 @@ extern const u32		sched_prio_to_wmult[40];
 #define ENQUEUE_MIGRATING	0x100
 #define ENQUEUE_DELAYED		0x200
 #define ENQUEUE_RQ_SELECTED	0x400
+#define ENQUEUE_THROTTLE	0x800
 
 #define RETRY_TASK		((void *)-1UL)
 
