@@ -289,7 +289,7 @@ static int ovl_mount_dir_check(struct fs_context *fc, const struct path *path,
 	 * failures.
 	 */
 	if (sb_has_encoding(path->mnt->mnt_sb))
-		return invalfc(fc, "case-insensitive capable filesystem on %s not supported", name);
+		ovl->casefold = true;
 
 	if (ovl_dentry_weird(path->dentry, ovl))
 		return invalfc(fc, "filesystem on %s not supported", name);
