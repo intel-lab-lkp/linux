@@ -3438,9 +3438,8 @@ void btrfs_update_ioctl_balance_args(struct btrfs_fs_info *fs_info,
 	memcpy(&bargs->meta, &bctl->meta, sizeof(bargs->meta));
 	memcpy(&bargs->sys, &bctl->sys, sizeof(bargs->sys));
 
-	spin_lock(&fs_info->balance_lock);
+	guard(spinlock)(&fs_info->balance_lock);
 	memcpy(&bargs->stat, &bctl->stat, sizeof(bargs->stat));
-	spin_unlock(&fs_info->balance_lock);
 }
 
 /*
