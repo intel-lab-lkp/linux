@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+#include <linux/device.h>
+#include <linux/dev_printk.h>
+#include <linux/i2c.h>
+#include <linux/mfd/zl3073x.h>
+#include <linux/module.h>
+#include <linux/regmap.h>
+#include "zl3073x.h"
+
+static int zl3073x_i2c_probe(struct i2c_client *client)
+{
+	struct device *dev = &client->dev;
+	struct zl3073x_dev *zldev;
+
+	zldev = zl3073x_devm_alloc(dev);
+	if (!zldev)
+		return -ENOMEM;
+
+	zldev->dev = dev;
+	zldev->regmap = devm_regmap_init_i2c(client, zl3073x_get_regmap_config());
+	if (IS_ERR(zldev->regmap)) {
+		dev_err_probe(dev, PTR_ERR(zldev->regmap),
+			      "Failed to initialize register map\n");
+		return PTR_ERR(zldev->regmap);
+	}
+
+	i2c_set_clientdata(client, zldev);
+
+	return zl3073x_dev_init(zldev);
+}
+
+static const struct i2c_device_id zl3073x_i2c_id[] = {
+	{ "zl3073x-i2c" },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(i2c, zl3073x_i2c_id);
+
+static const struct of_device_id zl3073x_i2c_of_match[] = {
+	{ .compatible = "microchip,zl3073x-i2c" },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, zl3073x_i2c_of_match);
+
+static struct i2c_driver zl3073x_i2c_driver = {
+	.driver = {
+		.name = "zl3073x-i2c",
+		.of_match_table = zl3073x_i2c_of_match,
+	},
+	.probe = zl3073x_i2c_probe,
+	.id_table = zl3073x_i2c_id,
+};
+module_i2c_driver(zl3073x_i2c_driver);
+
+MODULE_AUTHOR("Ivan Vecera <ivecera@redhat.com>");
+MODULE_DESCRIPTION("Microchip ZL3073x I2C driver");
+MODULE_IMPORT_NS("ZL3073X");
+MODULE_LICENSE("GPL");
