@@ -814,7 +814,7 @@ static int _ad74115_get_adc_code(struct ad74115_state *st,
 			return -ETIMEDOUT;
 	} else {
 		unsigned int regval, wait_time;
-		int rate;
+		int rate = 0;
 
 		ret = ad74115_get_adc_rate(st, channel, &rate);
 		if (ret < 0)
