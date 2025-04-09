@@ -2012,7 +2012,7 @@ ice_dpll_init_dpll(struct ice_pf *pf, struct ice_dpll *d, bool cgu,
 	d->pf = pf;
 	if (cgu) {
 		ice_dpll_update_state(pf, d, true);
-		ret = dpll_device_register(d->dpll, type, &ice_dpll_ops, d);
+		ret = dpll_device_register(d->dpll, type, 0, &ice_dpll_ops, d);
 		if (ret) {
 			dpll_device_put(d->dpll);
 			return ret;

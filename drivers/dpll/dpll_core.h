@@ -21,6 +21,7 @@
  * @clock_id:		unique identifier (clock_id) of a dpll
  * @module:		module of creator
  * @type:		type of a dpll
+ * @capabilities:	capabilities of a dpll
  * @pin_refs:		stores pins registered within a dpll
  * @refcount:		refcount
  * @registration_list:	list of registered ops and priv data of dpll owners
@@ -31,6 +32,7 @@ struct dpll_device {
 	u64 clock_id;
 	struct module *module;
 	enum dpll_type type;
+	u32 capabilities;
 	struct xarray pin_refs;
 	refcount_t refcount;
 	struct list_head registration_list;

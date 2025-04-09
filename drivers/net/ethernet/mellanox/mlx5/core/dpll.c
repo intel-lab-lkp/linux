@@ -444,7 +444,7 @@ static int mlx5_dpll_probe(struct auxiliary_device *adev,
 		goto err_free_mdpll;
 	}
 
-	err = dpll_device_register(mdpll->dpll, DPLL_TYPE_EEC,
+	err = dpll_device_register(mdpll->dpll, DPLL_TYPE_EEC, 0,
 				   &mlx5_dpll_device_ops, mdpll);
 	if (err)
 		goto err_put_dpll_device;

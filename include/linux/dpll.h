@@ -171,7 +171,8 @@ dpll_device_get(u64 clock_id, u32 dev_driver_id, struct module *module);
 void dpll_device_put(struct dpll_device *dpll);
 
 int dpll_device_register(struct dpll_device *dpll, enum dpll_type type,
-			 const struct dpll_device_ops *ops, void *priv);
+			 u32 capabilities, const struct dpll_device_ops *ops,
+			 void *priv);
 
 void dpll_device_unregister(struct dpll_device *dpll,
 			    const struct dpll_device_ops *ops, void *priv);

@@ -342,6 +342,7 @@ dpll_device_registration_find(struct dpll_device *dpll,
  * dpll_device_register - register the dpll device in the subsystem
  * @dpll: pointer to a dpll
  * @type: type of a dpll
+ * @capabilities: mask of available features supported by dpll
  * @ops: ops for a dpll device
  * @priv: pointer to private information of owner
  *
@@ -353,7 +354,8 @@ dpll_device_registration_find(struct dpll_device *dpll,
  * * negative - error value
  */
 int dpll_device_register(struct dpll_device *dpll, enum dpll_type type,
-			 const struct dpll_device_ops *ops, void *priv)
+			 u32 capabilities, const struct dpll_device_ops *ops,
+			 void *priv)
 {
 	struct dpll_device_registration *reg;
 	bool first_registration = false;
@@ -382,6 +384,7 @@ int dpll_device_register(struct dpll_device *dpll, enum dpll_type type,
 	reg->ops = ops;
 	reg->priv = priv;
 	dpll->type = type;
+	dpll->capabilities = capabilities;
 	first_registration = list_empty(&dpll->registration_list);
 	list_add_tail(&reg->list, &dpll->registration_list);
 	if (!first_registration) {
