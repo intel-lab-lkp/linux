@@ -1288,7 +1288,7 @@ static int xe_pt_vm_dependencies(struct xe_sched_job *job,
 	while (rtfence) {
 		fence = rtfence->fence;
 
-		if (!dma_fence_is_signaled(fence)) {
+		if (!dma_fence_check_and_signal(fence)) {
 			/*
 			 * Is this a CPU update? GPU is busy updating, so return
 			 * an error

@@ -426,7 +426,7 @@ static void svm_range_bo_release(struct kref *kref)
 		mmput(mm);
 	}
 
-	if (!dma_fence_is_signaled(&svm_bo->eviction_fence->base))
+	if (!dma_fence_check_and_signal(&svm_bo->eviction_fence->base))
 		/* We're not in the eviction worker. Signal the fence. */
 		dma_fence_signal(&svm_bo->eviction_fence->base);
 	dma_fence_put(&svm_bo->eviction_fence->base);

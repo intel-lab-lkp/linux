@@ -95,7 +95,7 @@ static void fence_set_priority(struct dma_fence *fence,
 	struct i915_request *rq;
 	struct intel_engine_cs *engine;
 
-	if (dma_fence_is_signaled(fence) || !dma_fence_is_i915(fence))
+	if (dma_fence_check_and_signal(fence) || !dma_fence_is_i915(fence))
 		return;
 
 	rq = to_request(fence);
@@ -115,7 +115,7 @@ static inline bool __dma_fence_is_chain(const struct dma_fence *fence)
 void i915_gem_fence_wait_priority(struct dma_fence *fence,
 				  const struct i915_sched_attr *attr)
 {
-	if (dma_fence_is_signaled(fence))
+	if (dma_fence_check_and_signal(fence))
 		return;
 
 	local_bh_disable();

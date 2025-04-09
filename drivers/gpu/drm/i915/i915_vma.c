@@ -430,7 +430,7 @@ static int i915_vma_verify_bind_complete(struct i915_vma *vma)
 	if (!fence)
 		return 0;
 
-	if (dma_fence_is_signaled(fence))
+	if (dma_fence_check_and_signal(fence))
 		err = fence->error;
 	else
 		err = -EBUSY;

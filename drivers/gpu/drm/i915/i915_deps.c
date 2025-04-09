@@ -97,7 +97,7 @@ static int i915_deps_grow(struct i915_deps *deps, struct dma_fence *fence,
 	return 0;
 
 sync:
-	if (ctx->no_wait_gpu && !dma_fence_is_signaled(fence)) {
+	if (ctx->no_wait_gpu && !dma_fence_check_and_signal(fence)) {
 		ret = -EBUSY;
 		goto unref;
 	}
@@ -136,7 +136,7 @@ int i915_deps_sync(const struct i915_deps *deps, const struct ttm_operation_ctx 
 	int ret = 0;
 
 	for (i = 0; i < deps->num_deps; ++i, ++fences) {
-		if (ctx->no_wait_gpu && !dma_fence_is_signaled(*fences)) {
+		if (ctx->no_wait_gpu && !dma_fence_check_and_signal(*fences)) {
 			ret = -EBUSY;
 			break;
 		}
@@ -183,7 +183,7 @@ int i915_deps_add_dependency(struct i915_deps *deps,
 	if (!fence)
 		return 0;
 
-	if (dma_fence_is_signaled(fence)) {
+	if (dma_fence_check_and_signal(fence)) {
 		ret = fence->error;
 		if (ret)
 			i915_deps_fini(deps);

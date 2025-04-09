@@ -473,16 +473,16 @@ bool amdgpu_ring_soft_recovery(struct amdgpu_ring *ring, unsigned int vmid,
 		return false;
 
 	spin_lock_irqsave(fence->lock, flags);
-	if (!dma_fence_is_signaled_locked(fence))
+	if (!dma_fence_check_and_signal_locked(fence))
 		dma_fence_set_error(fence, -ENODATA);
 	spin_unlock_irqrestore(fence->lock, flags);
 
 	atomic_inc(&ring->adev->gpu_reset_counter);
-	while (!dma_fence_is_signaled(fence) &&
+	while (!dma_fence_check_and_signal(fence) &&
 	       ktime_to_ns(ktime_sub(deadline, ktime_get())) > 0)
 		ring->funcs->soft_recovery(ring, vmid);
 
-	return dma_fence_is_signaled(fence);
+	return dma_fence_check_and_signal(fence);
 }
 
 /*

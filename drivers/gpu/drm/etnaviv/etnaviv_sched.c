@@ -43,7 +43,7 @@ static enum drm_gpu_sched_stat etnaviv_sched_timedout_job(struct drm_sched_job
 	 * If the GPU managed to complete this jobs fence, the timout is
 	 * spurious. Bail out.
 	 */
-	if (dma_fence_is_signaled(submit->out_fence))
+	if (dma_fence_check_and_signal(submit->out_fence))
 		goto out_no_timeout;
 
 	/*

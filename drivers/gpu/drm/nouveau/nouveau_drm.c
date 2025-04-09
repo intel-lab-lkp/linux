@@ -159,7 +159,7 @@ nouveau_cli_work_ready(struct dma_fence *fence)
 	bool ret = true;
 
 	spin_lock_irq(fence->lock);
-	if (!dma_fence_is_signaled_locked(fence))
+	if (!dma_fence_check_and_signal_locked(fence))
 		ret = false;
 	spin_unlock_irq(fence->lock);
 

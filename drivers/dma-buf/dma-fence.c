@@ -857,7 +857,7 @@ dma_fence_wait_any_timeout(struct dma_fence **fences, uint32_t count,
 
 	if (timeout == 0) {
 		for (i = 0; i < count; ++i)
-			if (dma_fence_is_signaled(fences[i])) {
+			if (dma_fence_check_and_signal(fences[i])) {
 				if (idx)
 					*idx = i;
 				return 1;
@@ -968,7 +968,7 @@ EXPORT_SYMBOL(dma_fence_wait_any_timeout);
  */
 void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 {
-	if (fence->ops->set_deadline && !dma_fence_is_signaled(fence))
+	if (fence->ops->set_deadline && !dma_fence_check_and_signal(fence))
 		fence->ops->set_deadline(fence, deadline);
 }
 EXPORT_SYMBOL(dma_fence_set_deadline);
@@ -985,7 +985,7 @@ void dma_fence_describe(struct dma_fence *fence, struct seq_file *seq)
 	seq_printf(seq, "%s %s seq %llu %ssignalled\n",
 		   fence->ops->get_driver_name(fence),
 		   fence->ops->get_timeline_name(fence), fence->seqno,
-		   dma_fence_is_signaled(fence) ? "" : "un");
+		   dma_fence_check_and_signal(fence) ? "" : "un");
 }
 EXPORT_SYMBOL(dma_fence_describe);
 

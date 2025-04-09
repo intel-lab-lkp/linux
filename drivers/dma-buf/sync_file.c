@@ -201,7 +201,7 @@ static __poll_t sync_file_poll(struct file *file, poll_table *wait)
 			wake_up_all(&sync_file->wq);
 	}
 
-	return dma_fence_is_signaled(sync_file->fence) ? EPOLLIN : 0;
+	return dma_fence_check_and_signal(sync_file->fence) ? EPOLLIN : 0;
 }
 
 static long sync_file_ioctl_merge(struct sync_file *sync_file,
@@ -269,7 +269,7 @@ static int sync_fill_fence_info(struct dma_fence *fence,
 
 	info->status = dma_fence_get_status(fence);
 	info->timestamp_ns =
-		dma_fence_is_signaled(fence) ?
+		dma_fence_check_and_signal(fence) ?
 			ktime_to_ns(dma_fence_timestamp(fence)) :
 			ktime_set(0, 0);
 

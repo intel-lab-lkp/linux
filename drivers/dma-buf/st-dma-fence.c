@@ -121,7 +121,7 @@ static int test_signaling(void *arg)
 
 	dma_fence_enable_sw_signaling(f);
 
-	if (dma_fence_is_signaled(f)) {
+	if (dma_fence_check_and_signal(f)) {
 		pr_err("Fence unexpectedly signaled on creation\n");
 		goto err_free;
 	}
@@ -131,7 +131,7 @@ static int test_signaling(void *arg)
 		goto err_free;
 	}
 
-	if (!dma_fence_is_signaled(f)) {
+	if (!dma_fence_check_and_signal(f)) {
 		pr_err("Fence not reporting signaled\n");
 		goto err_free;
 	}
@@ -427,7 +427,7 @@ static int test_stub(void *arg)
 
 	for (i = 0; i < ARRAY_SIZE(f); i++) {
 		f[i] = dma_fence_get_stub();
-		if (!dma_fence_is_signaled(f[i])) {
+		if (!dma_fence_check_and_signal(f[i])) {
 			pr_err("Obtained unsignaled stub fence!\n");
 			goto err;
 		}
@@ -505,7 +505,7 @@ static int thread_signal_callback(void *arg)
 			pr_err("Callback not seen on thread %d, pass %lu (%lu misses), signaling %s add_callback; fence signaled? %s\n",
 			       t->id, pass, miss,
 			       t->before ? "before" : "after",
-			       dma_fence_is_signaled(f2) ? "yes" : "no");
+			       dma_fence_check_and_signal(f2) ? "yes" : "no");
 			err = -EINVAL;
 		}
 

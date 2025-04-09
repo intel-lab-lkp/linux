@@ -382,7 +382,7 @@ static void drm_sched_run_free_queue(struct drm_gpu_scheduler *sched)
 	spin_lock(&sched->job_list_lock);
 	job = list_first_entry_or_null(&sched->pending_list,
 				       struct drm_sched_job, list);
-	if (job && dma_fence_is_signaled(&job->s_fence->finished))
+	if (job && dma_fence_check_and_signal(&job->s_fence->finished))
 		__drm_sched_run_free_queue(sched);
 	spin_unlock(&sched->job_list_lock);
 }
@@ -1105,7 +1105,7 @@ drm_sched_get_finished_job(struct drm_gpu_scheduler *sched)
 	job = list_first_entry_or_null(&sched->pending_list,
 				       struct drm_sched_job, list);
 
-	if (job && dma_fence_is_signaled(&job->s_fence->finished)) {
+	if (job && dma_fence_check_and_signal(&job->s_fence->finished)) {
 		/* remove job from pending_list */
 		list_del_init(&job->list);
 

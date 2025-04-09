@@ -318,7 +318,7 @@ struct dma_fence *amdgpu_sync_peek_fence(struct amdgpu_sync *sync,
 		struct dma_fence *f = e->fence;
 		struct drm_sched_fence *s_fence = to_drm_sched_fence(f);
 
-		if (dma_fence_is_signaled(f)) {
+		if (dma_fence_check_and_signal(f)) {
 			amdgpu_sync_entry_free(e);
 			continue;
 		}
@@ -327,7 +327,7 @@ struct dma_fence *amdgpu_sync_peek_fence(struct amdgpu_sync *sync,
 			 * when they are scheduled.
 			 */
 			if (s_fence->sched == &ring->sched) {
-				if (dma_fence_is_signaled(&s_fence->scheduled))
+				if (dma_fence_check_and_signal(&s_fence->scheduled))
 					continue;
 
 				return &s_fence->scheduled;
@@ -361,7 +361,7 @@ struct dma_fence *amdgpu_sync_get_fence(struct amdgpu_sync *sync)
 		hash_del(&e->node);
 		kmem_cache_free(amdgpu_sync_slab, e);
 
-		if (!dma_fence_is_signaled(f))
+		if (!dma_fence_check_and_signal(f))
 			return f;
 
 		dma_fence_put(f);
@@ -387,7 +387,7 @@ int amdgpu_sync_clone(struct amdgpu_sync *source, struct amdgpu_sync *clone)
 
 	hash_for_each_safe(source->fences, i, tmp, e, node) {
 		f = e->fence;
-		if (!dma_fence_is_signaled(f)) {
+		if (!dma_fence_check_and_signal(f)) {
 			r = amdgpu_sync_fence(clone, f);
 			if (r)
 				return r;
@@ -415,7 +415,7 @@ int amdgpu_sync_push_to_job(struct amdgpu_sync *sync, struct amdgpu_job *job)
 
 	hash_for_each_safe(sync->fences, i, tmp, e, node) {
 		f = e->fence;
-		if (dma_fence_is_signaled(f)) {
+		if (dma_fence_check_and_signal(f)) {
 			amdgpu_sync_entry_free(e);
 			continue;
 		}

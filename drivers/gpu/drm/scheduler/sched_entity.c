@@ -548,7 +548,7 @@ void drm_sched_entity_select_rq(struct drm_sched_entity *entity)
 	fence = rcu_dereference_check(entity->last_scheduled, true);
 
 	/* stay on the same engine if the previous job hasn't finished */
-	if (fence && !dma_fence_is_signaled(fence))
+	if (fence && !dma_fence_check_and_signal(fence))
 		return;
 
 	spin_lock(&entity->lock);

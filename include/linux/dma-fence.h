@@ -201,7 +201,7 @@ struct dma_fence_ops {
 	 * once indicates as signalled must always return true from this
 	 * callback. This callback may return false even if the fence has
 	 * completed already, in this case information hasn't propogated throug
-	 * the system yet. See also dma_fence_is_signaled().
+	 * the system yet. See also dma_fence_check_and_signal().
 	 *
 	 * May set &dma_fence.error if returning true.
 	 *
@@ -403,8 +403,7 @@ bool dma_fence_remove_callback(struct dma_fence *fence,
 void dma_fence_enable_sw_signaling(struct dma_fence *fence);
 
 /**
- * dma_fence_is_signaled_locked - Return an indication if the fence
- *                                is signaled yet.
+ * dma_fence_check_and_signal_locked - Checks a fence and signals it if necessary
  * @fence: the fence to check
  *
  * Returns true if the fence was already signaled, false if not. Since this
@@ -414,10 +413,10 @@ void dma_fence_enable_sw_signaling(struct dma_fence *fence);
  *
  * This function requires &dma_fence.lock to be held.
  *
- * See also dma_fence_is_signaled().
+ * See also dma_fence_check_and_signal().
  */
 static inline bool
-dma_fence_is_signaled_locked(struct dma_fence *fence)
+dma_fence_check_and_signal_locked(struct dma_fence *fence)
 {
 	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
 		return true;
@@ -431,7 +430,7 @@ dma_fence_is_signaled_locked(struct dma_fence *fence)
 }
 
 /**
- * dma_fence_is_signaled - Return an indication if the fence is signaled yet.
+ * dma_fence_check_and_signal - Checks a fence and signals it if necessary
  * @fence: the fence to check
  *
  * Returns true if the fence was already signaled, false if not. Since this
@@ -444,10 +443,10 @@ dma_fence_is_signaled_locked(struct dma_fence *fence)
  * wraparound between time of issue and time of use by checking the return
  * value of this function before calling hardware-specific wait instructions.
  *
- * See also dma_fence_is_signaled_locked().
+ * See also dma_fence_check_and_signal_locked().
  */
 static inline bool
-dma_fence_is_signaled(struct dma_fence *fence)
+dma_fence_check_and_signal(struct dma_fence *fence)
 {
 	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
 		return true;
@@ -535,9 +534,9 @@ static inline struct dma_fence *dma_fence_later(struct dma_fence *f1,
 	 * here is overkill.
 	 */
 	if (dma_fence_is_later(f1, f2))
-		return dma_fence_is_signaled(f1) ? NULL : f1;
+		return dma_fence_check_and_signal(f1) ? NULL : f1;
 	else
-		return dma_fence_is_signaled(f2) ? NULL : f2;
+		return dma_fence_check_and_signal(f2) ? NULL : f2;
 }
 
 /**
@@ -556,7 +555,7 @@ static inline struct dma_fence *dma_fence_later(struct dma_fence *f1,
  */
 static inline int dma_fence_get_status_locked(struct dma_fence *fence)
 {
-	if (dma_fence_is_signaled_locked(fence))
+	if (dma_fence_check_and_signal_locked(fence))
 		return fence->error ?: 1;
 	else
 		return 0;

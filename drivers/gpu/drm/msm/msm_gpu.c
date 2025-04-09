@@ -726,7 +726,7 @@ static void retire_submits(struct msm_gpu *gpu)
 			 * been signalled, then later submits are not signalled
 			 * either, so we are also done.
 			 */
-			if (submit && dma_fence_is_signaled(submit->hw_fence)) {
+			if (submit && dma_fence_check_and_signal(submit->hw_fence)) {
 				retire_submit(gpu, ring, submit);
 			} else {
 				break;

@@ -483,7 +483,7 @@ int i915_sw_fence_await_dma_fence(struct i915_sw_fence *fence,
 	debug_fence_assert(fence);
 	might_sleep_if(gfpflags_allow_blocking(gfp));
 
-	if (dma_fence_is_signaled(dma)) {
+	if (dma_fence_check_and_signal(dma)) {
 		i915_sw_fence_set_error_once(fence, dma->error);
 		return 0;
 	}
@@ -551,7 +551,7 @@ int __i915_sw_fence_await_dma_fence(struct i915_sw_fence *fence,
 
 	debug_fence_assert(fence);
 
-	if (dma_fence_is_signaled(dma)) {
+	if (dma_fence_check_and_signal(dma)) {
 		i915_sw_fence_set_error_once(fence, dma->error);
 		return 0;
 	}

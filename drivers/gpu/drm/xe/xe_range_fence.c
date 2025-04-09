@@ -60,7 +60,7 @@ int xe_range_fence_insert(struct xe_range_fence_tree *tree,
 
 	__xe_range_fence_tree_cleanup(tree);
 
-	if (dma_fence_is_signaled(fence))
+	if (dma_fence_check_and_signal(fence))
 		goto free;
 
 	rfence->ops = ops;

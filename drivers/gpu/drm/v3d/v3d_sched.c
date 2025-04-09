@@ -519,7 +519,7 @@ v3d_copy_query_results(struct v3d_cpu_job *job)
 
 	for (i = 0; i < timestamp_query->count; i++) {
 		fence = drm_syncobj_fence_get(queries[i].syncobj);
-		available = fence ? dma_fence_is_signaled(fence) : false;
+		available = fence ? dma_fence_check_and_signal(fence) : false;
 
 		write_result = available || copy->do_partial;
 		if (write_result) {
@@ -623,7 +623,7 @@ v3d_copy_performance_query(struct v3d_cpu_job *job)
 
 	for (int i = 0; i < performance_query->count; i++) {
 		fence = drm_syncobj_fence_get(performance_query->queries[i].syncobj);
-		available = fence ? dma_fence_is_signaled(fence) : false;
+		available = fence ? dma_fence_check_and_signal(fence) : false;
 
 		write_result = available || copy->do_partial;
 		if (write_result)

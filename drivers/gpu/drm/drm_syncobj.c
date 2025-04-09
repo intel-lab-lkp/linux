@@ -1093,7 +1093,7 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 			entries[i].fence = dma_fence_get_stub();
 
 		if ((flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE) ||
-		    dma_fence_is_signaled(entries[i].fence)) {
+		    dma_fence_check_and_signal(entries[i].fence)) {
 			if (signaled_count == 0 && idx)
 				*idx = i;
 			signaled_count++;
@@ -1137,7 +1137,7 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 				continue;
 
 			if ((flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE) ||
-			    dma_fence_is_signaled(fence) ||
+			    dma_fence_check_and_signal(fence) ||
 			    (!entries[i].fence_cb.func &&
 			     dma_fence_add_callback(fence,
 						    &entries[i].fence_cb,
@@ -1696,7 +1696,7 @@ int drm_syncobj_query_ioctl(struct drm_device *dev, void *data,
 					dma_fence_put(last_signaled);
 					last_signaled = dma_fence_get(iter);
 				}
-				point = dma_fence_is_signaled(last_signaled) ?
+				point = dma_fence_check_and_signal(last_signaled) ?
 					last_signaled->seqno :
 					to_dma_fence_chain(last_signaled)->prev_seqno;
 			}

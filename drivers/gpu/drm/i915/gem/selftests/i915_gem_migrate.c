@@ -258,7 +258,7 @@ static int __igt_lmem_pages_migrate(struct intel_gt *gt,
 		goto out_put;
 
 	if (spin) {
-		if (dma_fence_is_signaled(spin_fence)) {
+		if (dma_fence_check_and_signal(spin_fence)) {
 			pr_err("Spinner was terminated by hangcheck.\n");
 			err = -EBUSY;
 			goto out_unlock;

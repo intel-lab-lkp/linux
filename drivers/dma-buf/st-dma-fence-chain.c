@@ -484,7 +484,7 @@ static int find_race(void *arg)
 
 	count = 0;
 	for (i = 0; i < data.fc.chain_length; i++)
-		if (dma_fence_is_signaled(data.fc.fences[i]))
+		if (dma_fence_check_and_signal(data.fc.fences[i]))
 			count++;
 	pr_info("Completed %lu cycles\n", count);
 
@@ -506,14 +506,14 @@ static int signal_forward(void *arg)
 	for (i = 0; i < fc.chain_length; i++) {
 		dma_fence_signal(fc.fences[i]);
 
-		if (!dma_fence_is_signaled(fc.chains[i])) {
+		if (!dma_fence_check_and_signal(fc.chains[i])) {
 			pr_err("chain[%d] not signaled!\n", i);
 			err = -EINVAL;
 			goto err;
 		}
 
 		if (i + 1 < fc.chain_length &&
-		    dma_fence_is_signaled(fc.chains[i + 1])) {
+		    dma_fence_check_and_signal(fc.chains[i + 1])) {
 			pr_err("chain[%d] is signaled!\n", i);
 			err = -EINVAL;
 			goto err;
@@ -538,7 +538,7 @@ static int signal_backward(void *arg)
 	for (i = fc.chain_length; i--; ) {
 		dma_fence_signal(fc.fences[i]);
 
-		if (i > 0 && dma_fence_is_signaled(fc.chains[i])) {
+		if (i > 0 && dma_fence_check_and_signal(fc.chains[i])) {
 			pr_err("chain[%d] is signaled!\n", i);
 			err = -EINVAL;
 			goto err;
@@ -546,7 +546,7 @@ static int signal_backward(void *arg)
 	}
 
 	for (i = 0; i < fc.chain_length; i++) {
-		if (!dma_fence_is_signaled(fc.chains[i])) {
+		if (!dma_fence_check_and_signal(fc.chains[i])) {
 			pr_err("chain[%d] was not signaled!\n", i);
 			err = -EINVAL;
 			goto err;

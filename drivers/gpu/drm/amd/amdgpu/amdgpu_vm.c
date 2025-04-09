@@ -775,7 +775,7 @@ int amdgpu_vm_flush(struct amdgpu_ring *ring, struct amdgpu_job *job,
 
 	mutex_lock(&id_mgr->lock);
 	if (id->pasid != job->pasid || !id->pasid_mapping ||
-	    !dma_fence_is_signaled(id->pasid_mapping))
+	    !dma_fence_check_and_signal(id->pasid_mapping))
 		pasid_mapping_needed = true;
 	mutex_unlock(&id_mgr->lock);
 
@@ -1110,7 +1110,7 @@ int amdgpu_vm_update_range(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		goto error_free;
 	}
 
-	if (!unlocked && !dma_fence_is_signaled(vm->last_unlocked)) {
+	if (!unlocked && !dma_fence_check_and_signal(vm->last_unlocked)) {
 		struct dma_fence *tmp = dma_fence_get_stub();
 
 		amdgpu_bo_fence(vm->root.bo, vm->last_unlocked, true);
@@ -2200,7 +2200,7 @@ bool amdgpu_vm_evictable(struct amdgpu_bo *bo)
 		return false;
 
 	/* Don't evict VM page tables while they are updated */
-	if (!dma_fence_is_signaled(bo_base->vm->last_unlocked)) {
+	if (!dma_fence_check_and_signal(bo_base->vm->last_unlocked)) {
 		amdgpu_vm_eviction_unlock(bo_base->vm);
 		return false;
 	}

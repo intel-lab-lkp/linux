@@ -443,7 +443,7 @@ static bool vmw_fence_goal_check_locked(struct vmw_fence_obj *fence)
 	struct vmw_fence_manager *fman = fman_from_fence(fence);
 	u32 goal_seqno;
 
-	if (dma_fence_is_signaled_locked(&fence->base))
+	if (dma_fence_check_and_signal_locked(&fence->base))
 		return false;
 
 	goal_seqno = vmw_fence_goal_read(fman->dev_priv);
@@ -513,7 +513,7 @@ bool vmw_fence_obj_signaled(struct vmw_fence_obj *fence)
 
 	vmw_fences_update(fman);
 
-	return dma_fence_is_signaled(&fence->base);
+	return dma_fence_check_and_signal(&fence->base);
 }
 
 int vmw_fence_obj_wait(struct vmw_fence_obj *fence, bool lazy,
@@ -886,7 +886,7 @@ static void vmw_fence_obj_add_action(struct vmw_fence_obj *fence,
 	spin_lock(&fman->lock);
 
 	fman->pending_actions[action->type]++;
-	if (dma_fence_is_signaled_locked(&fence->base)) {
+	if (dma_fence_check_and_signal_locked(&fence->base)) {
 		struct list_head action_list;
 
 		INIT_LIST_HEAD(&action_list);

@@ -217,7 +217,7 @@ int dma_resv_reserve_fences(struct dma_resv *obj, unsigned int num_fences)
 		struct dma_fence *fence;
 
 		dma_resv_list_entry(old, i, obj, &fence, &usage);
-		if (dma_fence_is_signaled(fence))
+		if (dma_fence_check_and_signal(fence))
 			RCU_INIT_POINTER(new->table[--k], fence);
 		else
 			dma_resv_list_set(new, j++, fence, usage);
@@ -309,7 +309,7 @@ void dma_resv_add_fence(struct dma_resv *obj, struct dma_fence *fence,
 		dma_resv_list_entry(fobj, i, obj, &old, &old_usage);
 		if ((old->context == fence->context && old_usage >= usage &&
 		     dma_fence_is_later_or_same(fence, old)) ||
-		    dma_fence_is_signaled(old)) {
+		    dma_fence_check_and_signal(old)) {
 			dma_resv_list_set(fobj, i, fence, usage);
 			dma_fence_put(old);
 			return;
@@ -398,7 +398,7 @@ static void dma_resv_iter_walk_unlocked(struct dma_resv_iter *cursor)
 			continue;
 		}
 
-		if (!dma_fence_is_signaled(cursor->fence) &&
+		if (!dma_fence_check_and_signal(cursor->fence) &&
 		    cursor->usage >= cursor->fence_usage)
 			break;
 	} while (true);

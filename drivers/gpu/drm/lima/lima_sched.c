@@ -408,7 +408,7 @@ static enum drm_gpu_sched_stat lima_sched_timedout_job(struct drm_sched_job *job
 	 * If the GPU managed to complete this jobs fence, the timeout is
 	 * spurious. Bail out.
 	 */
-	if (dma_fence_is_signaled(task->fence)) {
+	if (dma_fence_check_and_signal(task->fence)) {
 		DRM_WARN("%s spurious timeout\n", lima_ip_name(ip));
 		return DRM_GPU_SCHED_STAT_NOMINAL;
 	}
@@ -425,7 +425,7 @@ static enum drm_gpu_sched_stat lima_sched_timedout_job(struct drm_sched_job *job
 	if (pipe->bcast_processor)
 		synchronize_irq(pipe->bcast_processor->irq);
 
-	if (dma_fence_is_signaled(task->fence)) {
+	if (dma_fence_check_and_signal(task->fence)) {
 		DRM_WARN("%s unexpectedly high interrupt latency\n", lima_ip_name(ip));
 		return DRM_GPU_SCHED_STAT_NOMINAL;
 	}

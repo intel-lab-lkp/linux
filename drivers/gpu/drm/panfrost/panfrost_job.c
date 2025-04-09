@@ -754,7 +754,7 @@ static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
 	 * If the GPU managed to complete this jobs fence, the timeout is
 	 * spurious. Bail out.
 	 */
-	if (dma_fence_is_signaled(job->done_fence))
+	if (dma_fence_check_and_signal(job->done_fence))
 		return DRM_GPU_SCHED_STAT_NOMINAL;
 
 	/*
@@ -768,7 +768,7 @@ static enum drm_gpu_sched_stat panfrost_job_timedout(struct drm_sched_job
 	 */
 	synchronize_irq(pfdev->js->irq);
 
-	if (dma_fence_is_signaled(job->done_fence)) {
+	if (dma_fence_check_and_signal(job->done_fence)) {
 		dev_warn(pfdev->dev, "unexpectedly high interrupt latency\n");
 		return DRM_GPU_SCHED_STAT_NOMINAL;
 	}

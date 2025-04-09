@@ -222,7 +222,7 @@ int vgem_fence_signal_ioctl(struct drm_device *dev,
 	if (IS_ERR(fence))
 		return PTR_ERR(fence);
 
-	if (dma_fence_is_signaled(fence))
+	if (dma_fence_check_and_signal(fence))
 		ret = -ETIMEDOUT;
 
 	dma_fence_signal(fence);

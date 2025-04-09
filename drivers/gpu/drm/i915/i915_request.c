@@ -1932,7 +1932,7 @@ static bool __i915_spin_request(struct i915_request * const rq, int state)
 	timeout_ns = READ_ONCE(rq->engine->props.max_busywait_duration_ns);
 	timeout_ns += local_clock_ns(&cpu);
 	do {
-		if (dma_fence_is_signaled(&rq->fence))
+		if (dma_fence_check_and_signal(&rq->fence))
 			return true;
 
 		if (signal_pending_state(state, current))
@@ -1989,7 +1989,7 @@ long i915_request_wait_timeout(struct i915_request *rq,
 	might_sleep();
 	GEM_BUG_ON(timeout < 0);
 
-	if (dma_fence_is_signaled(&rq->fence))
+	if (dma_fence_check_and_signal(&rq->fence))
 		return timeout ?: 1;
 
 	if (!timeout)
@@ -2072,7 +2072,7 @@ long i915_request_wait_timeout(struct i915_request *rq,
 	for (;;) {
 		set_current_state(state);
 
-		if (dma_fence_is_signaled(&rq->fence))
+		if (dma_fence_check_and_signal(&rq->fence))
 			break;
 
 		if (signal_pending_state(state, current)) {

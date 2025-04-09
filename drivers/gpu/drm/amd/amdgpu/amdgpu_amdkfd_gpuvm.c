@@ -1808,7 +1808,7 @@ int amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu(
 	} else {
 		mutex_lock(&avm->process_info->lock);
 		if (avm->process_info->eviction_fence &&
-		    !dma_fence_is_signaled(&avm->process_info->eviction_fence->base))
+		    !dma_fence_check_and_signal(&avm->process_info->eviction_fence->base))
 			ret = amdgpu_amdkfd_bo_validate_and_fence(bo, domain,
 				&avm->process_info->eviction_fence->base);
 		mutex_unlock(&avm->process_info->lock);
@@ -2369,7 +2369,7 @@ static int import_obj_create(struct amdgpu_device *adev,
 
 	mutex_lock(&avm->process_info->lock);
 	if (avm->process_info->eviction_fence &&
-	    !dma_fence_is_signaled(&avm->process_info->eviction_fence->base))
+	    !dma_fence_check_and_signal(&avm->process_info->eviction_fence->base))
 		ret = amdgpu_amdkfd_bo_validate_and_fence(bo, (*mem)->domain,
 				&avm->process_info->eviction_fence->base);
 	mutex_unlock(&avm->process_info->lock);
@@ -2819,7 +2819,7 @@ static void replace_eviction_fence(struct dma_fence __rcu **ef,
 	 * replace the fence in restore_work that only gets scheduled after
 	 * eviction work signaled the fence.
 	 */
-	WARN_ONCE(!dma_fence_is_signaled(old_ef),
+	WARN_ONCE(!dma_fence_check_and_signal(old_ef),
 		  "Replacing unsignaled eviction fence");
 	dma_fence_put(old_ef);
 }
@@ -2993,7 +2993,7 @@ int amdgpu_amdkfd_gpuvm_restore_process_bos(void *info, struct dma_fence __rcu *
 	 * Anyone signaling an eviction fence must stop the queues first
 	 * and schedule another restore worker.
 	 */
-	if (dma_fence_is_signaled(&process_info->eviction_fence->base)) {
+	if (dma_fence_check_and_signal(&process_info->eviction_fence->base)) {
 		struct amdgpu_amdkfd_fence *new_fence =
 			amdgpu_amdkfd_fence_create(
 				process_info->eviction_fence->base.context,

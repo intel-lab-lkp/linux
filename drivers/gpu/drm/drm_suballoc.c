@@ -133,7 +133,7 @@ static void drm_suballoc_try_free(struct drm_suballoc_manager *sa_manager)
 
 	sa = list_entry(sa_manager->hole->next, struct drm_suballoc, olist);
 	list_for_each_entry_safe_from(sa, tmp, &sa_manager->olist, olist) {
-		if (!sa->fence || !dma_fence_is_signaled(sa->fence))
+		if (!sa->fence || !dma_fence_check_and_signal(sa->fence))
 			return;
 
 		drm_suballoc_remove_locked(sa);
@@ -253,7 +253,7 @@ static bool drm_suballoc_next_hole(struct drm_suballoc_manager *sa_manager,
 		sa = list_first_entry(&sa_manager->flist[i],
 				      struct drm_suballoc, flist);
 
-		if (!dma_fence_is_signaled(sa->fence)) {
+		if (!dma_fence_check_and_signal(sa->fence)) {
 			fences[i] = sa->fence;
 			continue;
 		}
@@ -406,7 +406,7 @@ void drm_suballoc_free(struct drm_suballoc *suballoc,
 	sa_manager = suballoc->manager;
 
 	spin_lock(&sa_manager->wq.lock);
-	if (fence && !dma_fence_is_signaled(fence)) {
+	if (fence && !dma_fence_check_and_signal(fence)) {
 		u32 idx;
 
 		suballoc->fence = dma_fence_get(fence);

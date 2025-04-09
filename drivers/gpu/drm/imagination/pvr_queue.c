@@ -375,7 +375,7 @@ static unsigned long job_count_remaining_native_deps(struct pvr_job *job)
 		if (!jfence)
 			continue;
 
-		if (!dma_fence_is_signaled(&jfence->base))
+		if (!dma_fence_check_and_signal(&jfence->base))
 			remaining_count++;
 	}
 
@@ -480,7 +480,7 @@ pvr_queue_get_paired_frag_job_dep(struct pvr_queue *queue, struct pvr_job *job)
 
 	xa_for_each(&frag_job->base.dependencies, index, f) {
 		/* Skip already signaled fences. */
-		if (dma_fence_is_signaled(f))
+		if (dma_fence_check_and_signal(f))
 			continue;
 
 		/* Skip our own fence. */
@@ -635,7 +635,7 @@ static void pvr_queue_submit_job_to_cccb(struct pvr_job *job)
 		    &job->paired_job->base.s_fence->scheduled == fence)
 			continue;
 
-		if (dma_fence_is_signaled(&jfence->base))
+		if (dma_fence_check_and_signal(&jfence->base))
 			continue;
 
 		pvr_fw_object_get_fw_addr(jfence->queue->timeline_ufo.fw_obj,
@@ -778,7 +778,7 @@ static void pvr_queue_start(struct pvr_queue *queue)
 	*queue->timeline_ufo.value = atomic_read(&queue->job_fence_ctx.seqno);
 
 	list_for_each_entry(job, &queue->scheduler.pending_list, base.list) {
-		if (dma_fence_is_signaled(job->done_fence)) {
+		if (dma_fence_check_and_signal(job->done_fence)) {
 			/* Jobs might have completed after drm_sched_stop() was called.
 			 * In that case, re-assign the parent field to the done_fence.
 			 */
@@ -920,7 +920,7 @@ pvr_queue_signal_done_fences(struct pvr_queue *queue)
 		if ((int)(cur_seqno - lower_32_bits(job->done_fence->seqno)) < 0)
 			break;
 
-		if (!dma_fence_is_signaled(job->done_fence)) {
+		if (!dma_fence_check_and_signal(job->done_fence)) {
 			dma_fence_signal(job->done_fence);
 			pvr_job_release_pm_ref(job);
 			atomic_dec(&queue->in_flight_job_count);

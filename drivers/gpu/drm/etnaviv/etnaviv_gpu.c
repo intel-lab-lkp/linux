@@ -1284,7 +1284,7 @@ int etnaviv_gpu_wait_fence_interruptible(struct etnaviv_gpu *gpu,
 
 	if (!timeout) {
 		/* No timeout was requested: just test for completion */
-		ret = dma_fence_is_signaled(fence) ? 0 : -EBUSY;
+		ret = dma_fence_check_and_signal(fence) ? 0 : -EBUSY;
 	} else {
 		unsigned long remaining = etnaviv_timeout_to_jiffies(timeout);
 

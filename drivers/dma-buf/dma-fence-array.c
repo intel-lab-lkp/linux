@@ -127,7 +127,7 @@ static bool dma_fence_array_signaled(struct dma_fence *fence)
 	}
 
 	for (i = 0; i < array->num_fences; ++i) {
-		if (dma_fence_is_signaled(array->fences[i]) && !--num_pending)
+		if (dma_fence_check_and_signal(array->fences[i]) && !--num_pending)
 			goto signal;
 	}
 	return false;

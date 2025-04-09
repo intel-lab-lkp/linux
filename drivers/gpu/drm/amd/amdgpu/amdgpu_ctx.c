@@ -765,7 +765,7 @@ uint64_t amdgpu_ctx_add_fence(struct amdgpu_ctx *ctx,
 
 	idx = seq & (amdgpu_sched_jobs - 1);
 	other = centity->fences[idx];
-	WARN_ON(other && !dma_fence_is_signaled(other));
+	WARN_ON(other && !dma_fence_check_and_signal(other));
 
 	dma_fence_get(fence);
 

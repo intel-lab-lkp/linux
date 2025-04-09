@@ -93,7 +93,7 @@ struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
 	timestamp = ns_to_ktime(0);
 	for (i = 0; i < num_fences; ++i) {
 		dma_fence_unwrap_for_each(tmp, &iter[i], fences[i]) {
-			if (!dma_fence_is_signaled(tmp)) {
+			if (!dma_fence_check_and_signal(tmp)) {
 				dma_fence_put(unsignaled);
 				unsignaled = dma_fence_get(tmp);
 				++count;
@@ -127,7 +127,7 @@ struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
 	count = 0;
 	for (i = 0; i < num_fences; ++i) {
 		dma_fence_unwrap_for_each(tmp, &iter[i], fences[i]) {
-			if (!dma_fence_is_signaled(tmp)) {
+			if (!dma_fence_check_and_signal(tmp)) {
 				array[count++] = dma_fence_get(tmp);
 			} else {
 				ktime_t t = dma_fence_timestamp(tmp);

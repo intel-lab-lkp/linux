@@ -63,7 +63,7 @@ static long qxl_fence_wait(struct dma_fence *fence, bool intr,
 	qdev = container_of(fence->lock, struct qxl_device, release_lock);
 
 	if (!wait_event_timeout(qdev->release_event,
-				(dma_fence_is_signaled(fence) ||
+				(dma_fence_check_and_signal(fence) ||
 				 (qxl_io_notify_oom(qdev), 0)),
 				timeout))
 		return 0;

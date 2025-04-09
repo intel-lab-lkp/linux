@@ -719,7 +719,7 @@ void amdgpu_fence_driver_clear_job_fences(struct amdgpu_ring *ring)
 			 * and they will remain unsignaled during sa_bo free.
 			 */
 			job = container_of(old, struct amdgpu_job, hw_fence);
-			if (!job->base.s_fence && !dma_fence_is_signaled(old))
+			if (!job->base.s_fence && !dma_fence_check_and_signal(old))
 				dma_fence_signal(old);
 			RCU_INIT_POINTER(*ptr, NULL);
 			dma_fence_put(old);
@@ -745,7 +745,7 @@ void amdgpu_fence_driver_set_error(struct amdgpu_ring *ring, int error)
 
 		fence = rcu_dereference_protected(drv->fences[i],
 						  lockdep_is_held(&drv->lock));
-		if (fence && !dma_fence_is_signaled_locked(fence))
+		if (fence && !dma_fence_check_and_signal_locked(fence))
 			dma_fence_set_error(fence, error);
 	}
 	spin_unlock_irqrestore(&drv->lock, flags);

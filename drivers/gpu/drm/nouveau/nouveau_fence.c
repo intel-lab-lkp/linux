@@ -274,7 +274,7 @@ nouveau_fence_done(struct nouveau_fence *fence)
 			nvif_event_block(&fctx->event);
 		spin_unlock_irqrestore(&fctx->lock, flags);
 	}
-	return dma_fence_is_signaled(&fence->base);
+	return dma_fence_check_and_signal(&fence->base);
 }
 
 static long

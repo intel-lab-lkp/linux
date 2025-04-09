@@ -1176,7 +1176,7 @@ int kgd2kfd_schedule_evict_and_restore_process(struct mm_struct *mm,
 	if (!fence)
 		return -EINVAL;
 
-	if (dma_fence_is_signaled(fence))
+	if (dma_fence_check_and_signal(fence))
 		return 0;
 
 	p = kfd_lookup_process_by_mm(mm);

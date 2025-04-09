@@ -51,12 +51,12 @@ struct dma_fence *dma_fence_chain_walk(struct dma_fence *fence)
 
 		prev_chain = to_dma_fence_chain(prev);
 		if (prev_chain) {
-			if (!dma_fence_is_signaled(prev_chain->fence))
+			if (!dma_fence_check_and_signal(prev_chain->fence))
 				break;
 
 			replacement = dma_fence_chain_get_prev(prev_chain);
 		} else {
-			if (!dma_fence_is_signaled(prev))
+			if (!dma_fence_check_and_signal(prev))
 				break;
 
 			replacement = NULL;
@@ -166,7 +166,7 @@ static bool dma_fence_chain_signaled(struct dma_fence *fence)
 	dma_fence_chain_for_each(fence, fence) {
 		struct dma_fence *f = dma_fence_chain_contained(fence);
 
-		if (!dma_fence_is_signaled(f)) {
+		if (!dma_fence_check_and_signal(f)) {
 			dma_fence_put(fence);
 			return false;
 		}

@@ -123,7 +123,7 @@ static bool amdkfd_fence_enable_signaling(struct dma_fence *f)
 	if (!fence)
 		return false;
 
-	if (dma_fence_is_signaled(f))
+	if (dma_fence_check_and_signal(f))
 		return true;
 
 	if (!fence->svm_bo) {

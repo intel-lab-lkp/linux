@@ -1382,7 +1382,7 @@ static void xe_ttm_bo_release_notify(struct ttm_buffer_object *ttm_bo)
 	dma_resv_for_each_fence(&cursor, ttm_bo->base.resv,
 				DMA_RESV_USAGE_BOOKKEEP, fence) {
 		if (xe_fence_is_xe_preempt(fence) &&
-		    !dma_fence_is_signaled(fence)) {
+		    !dma_fence_check_and_signal(fence)) {
 			if (!replacement)
 				replacement = dma_fence_get_stub();
 

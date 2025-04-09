@@ -204,7 +204,7 @@ static int amdgpu_vmid_grab_idle(struct amdgpu_ring *ring,
 	struct dma_fence **fences;
 	unsigned i;
 
-	if (!dma_fence_is_signaled(ring->vmid_wait)) {
+	if (!dma_fence_check_and_signal(ring->vmid_wait)) {
 		*fence = dma_fence_get(ring->vmid_wait);
 		return 0;
 	}
@@ -287,14 +287,14 @@ static int amdgpu_vmid_grab_reserved(struct amdgpu_vm *vm,
 	    (*id)->flushed_updates < updates ||
 	    !(*id)->last_flush ||
 	    ((*id)->last_flush->context != fence_context &&
-	     !dma_fence_is_signaled((*id)->last_flush))) {
+	     !dma_fence_check_and_signal((*id)->last_flush))) {
 		struct dma_fence *tmp;
 
 		/* Wait for the gang to be assembled before using a
 		 * reserved VMID or otherwise the gang could deadlock.
 		 */
 		tmp = amdgpu_device_get_gang(adev);
-		if (!dma_fence_is_signaled(tmp) && tmp != job->gang_submit) {
+		if (!dma_fence_check_and_signal(tmp) && tmp != job->gang_submit) {
 			*id = NULL;
 			*fence = tmp;
 			return 0;
@@ -372,7 +372,7 @@ static int amdgpu_vmid_grab_used(struct amdgpu_vm *vm,
 
 		if (!(*id)->last_flush ||
 		    ((*id)->last_flush->context != fence_context &&
-		     !dma_fence_is_signaled((*id)->last_flush)))
+		     !dma_fence_check_and_signal((*id)->last_flush)))
 			needs_flush = true;
 
 		if ((*id)->flushed_updates < updates)

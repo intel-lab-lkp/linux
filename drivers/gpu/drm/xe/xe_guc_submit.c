@@ -2221,9 +2221,9 @@ xe_guc_exec_queue_snapshot_capture(struct xe_exec_queue *q)
 			snapshot->pending_list[i].seqno =
 				xe_sched_job_seqno(job_iter);
 			snapshot->pending_list[i].fence =
-				dma_fence_is_signaled(job_iter->fence) ? 1 : 0;
+				dma_fence_check_and_signal(job_iter->fence) ? 1 : 0;
 			snapshot->pending_list[i].finished =
-				dma_fence_is_signaled(&job_iter->drm.s_fence->finished)
+				dma_fence_check_and_signal(&job_iter->drm.s_fence->finished)
 				? 1 : 0;
 			i++;
 		}

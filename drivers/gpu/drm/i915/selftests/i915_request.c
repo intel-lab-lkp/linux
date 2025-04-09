@@ -170,7 +170,7 @@ static int igt_fence_wait(void *arg)
 
 	i915_request_add(request);
 
-	if (dma_fence_is_signaled(&request->fence)) {
+	if (dma_fence_check_and_signal(&request->fence)) {
 		pr_err("fence signaled immediately!\n");
 		goto out;
 	}
@@ -185,7 +185,7 @@ static int igt_fence_wait(void *arg)
 		goto out;
 	}
 
-	if (!dma_fence_is_signaled(&request->fence)) {
+	if (!dma_fence_check_and_signal(&request->fence)) {
 		pr_err("fence unsignaled after waiting!\n");
 		goto out;
 	}
