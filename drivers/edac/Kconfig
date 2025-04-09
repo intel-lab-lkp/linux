@@ -576,4 +576,13 @@ config EDAC_LOONGSON
 	  errors (CE) only. Loongson-3A5000/3C5000/3D5000/3A6000/3C6000
 	  are compatible.
 
+config EDAC_CORTEX_ARM64_L1_L2
+	tristate "ARM Cortex A72/A57/A53"
+	depends on ARM64
+	help
+	  Support for L1/L2 cache error detection is provided for ARM Cortex
+	  A72, A57, and A53 processors. The selected subset of errors is common
+	  across these three MPCore processors, featuring compatible bit
+	  assignments in their CPU/L2 memory error syndrome registers.
+
 endif # EDAC
