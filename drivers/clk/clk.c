@@ -4242,7 +4242,6 @@ static int clk_core_populate_parent_map(struct clk_core *core,
 	 * having a cache of names/clk_hw pointers to clk_core pointers.
 	 */
 	parents = kcalloc(num_parents, sizeof(*parents), GFP_KERNEL);
-	core->parents = parents;
 	if (!parents)
 		return -ENOMEM;
 
@@ -4283,6 +4282,8 @@ static int clk_core_populate_parent_map(struct clk_core *core,
 		}
 	}
 
+	core->parents = parents;
+
 	return 0;
 }
 
@@ -4290,7 +4291,7 @@ static void clk_core_free_parent_map(struct clk_core *core)
 {
 	int i = core->num_parents;
 
-	if (!core->num_parents)
+	if (!core->parents)
 		return;
 
 	while (--i >= 0) {
