@@ -91,6 +91,7 @@ static const struct ixgbe_stats ixgbe_gstrings_stats[] = {
 	{"rx_hwtstamp_cleared", IXGBE_STAT(rx_hwtstamp_cleared)},
 	{"tx_ipsec", IXGBE_STAT(tx_ipsec)},
 	{"rx_ipsec", IXGBE_STAT(rx_ipsec)},
+	{"link_down_events", IXGBE_STAT(link_down_events)},
 #ifdef IXGBE_FCOE
 	{"fcoe_bad_fccrc", IXGBE_STAT(stats.fccrc)},
 	{"rx_fcoe_dropped", IXGBE_STAT(stats.fcoerpdc)},
