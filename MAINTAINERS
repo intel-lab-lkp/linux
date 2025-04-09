@@ -14155,6 +14155,7 @@ F:	net/mac80211/
 MAILBOX API
 M:	Jassi Brar <jassisinghbrar@gmail.com>
 L:	linux-kernel@vger.kernel.org
+L:	mailbox@lists.linux.dev
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/jassibrar/mailbox.git for-next
 F:	Documentation/devicetree/bindings/mailbox/
