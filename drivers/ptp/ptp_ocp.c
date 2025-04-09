@@ -2434,15 +2434,19 @@ ptp_ocp_dcf_in(struct ptp_ocp *bp, bool enable)
 static void
 __handle_signal_outputs(struct ptp_ocp *bp, u32 val)
 {
-	ptp_ocp_irig_out(bp, val & 0x00100010);
-	ptp_ocp_dcf_out(bp, val & 0x00200020);
+	if (bp->irig_out)
+		ptp_ocp_irig_out(bp, val & 0x00100010);
+	if (bp->dcf_out)
+		ptp_ocp_dcf_out(bp, val & 0x00200020);
 }
 
 static void
 __handle_signal_inputs(struct ptp_ocp *bp, u32 val)
 {
-	ptp_ocp_irig_in(bp, val & 0x00100010);
-	ptp_ocp_dcf_in(bp, val & 0x00200020);
+	if (bp->irig_out)
+		ptp_ocp_irig_in(bp, val & 0x00100010);
+	if (bp->dcf_out)
+		ptp_ocp_dcf_in(bp, val & 0x00200020);
 }
 
 static u32
