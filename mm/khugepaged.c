@@ -696,14 +696,16 @@ next:
 		result = SCAN_LACK_REFERENCED_PAGE;
 	} else {
 		result = SCAN_SUCCEED;
-		trace_mm_collapse_huge_page_isolate(&folio->page, none_or_zero,
-						    referenced, writable, result);
+		trace_mm_collapse_huge_page_isolate(folio_page(folio, 0),
+						    none_or_zero, referenced,
+						    writable, result);
 		return result;
 	}
 out:
 	release_pte_pages(pte, _pte, compound_pagelist);
-	trace_mm_collapse_huge_page_isolate(&folio->page, none_or_zero,
-					    referenced, writable, result);
+	trace_mm_collapse_huge_page_isolate(folio_page(folio, 0),
+					    none_or_zero, referenced,
+					    writable, result);
 	return result;
 }
 
@@ -1435,8 +1437,9 @@ out_unmap:
 		*mmap_locked = false;
 	}
 out:
-	trace_mm_khugepaged_scan_pmd(mm, &folio->page, writable, referenced,
-				     none_or_zero, result, unmapped);
+	trace_mm_khugepaged_scan_pmd(mm, folio_page(folio, 0), writable,
+				     referenced, none_or_zero, result,
+				     unmapped);
 	return result;
 }
 
@@ -1689,7 +1692,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 maybe_install_pmd:
 	/* step 5: install pmd entry */
 	result = install_pmd
-			? set_huge_pmd(vma, haddr, pmd, &folio->page)
+			? set_huge_pmd(vma, haddr, pmd, folio_page(folio, 0))
 			: SCAN_SUCCEED;
 	goto drop_folio;
 abort:

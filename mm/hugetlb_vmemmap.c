@@ -454,7 +454,7 @@ static int __hugetlb_vmemmap_restore_folio(const struct hstate *h,
 					   struct folio *folio, unsigned long flags)
 {
 	int ret;
-	unsigned long vmemmap_start = (unsigned long)&folio->page, vmemmap_end;
+	unsigned long vmemmap_start = (unsigned long)folio_page(folio, 0), vmemmap_end;
 	unsigned long vmemmap_reuse;
 
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_hugetlb(folio), folio);
@@ -566,7 +566,7 @@ static int __hugetlb_vmemmap_optimize_folio(const struct hstate *h,
 					    unsigned long flags)
 {
 	int ret = 0;
-	unsigned long vmemmap_start = (unsigned long)&folio->page, vmemmap_end;
+	unsigned long vmemmap_start = (unsigned long)folio_page(folio, 0), vmemmap_end;
 	unsigned long vmemmap_reuse;
 
 	VM_WARN_ON_ONCE_FOLIO(!folio_test_hugetlb(folio), folio);
@@ -632,7 +632,7 @@ void hugetlb_vmemmap_optimize_folio(const struct hstate *h, struct folio *folio)
 
 static int hugetlb_vmemmap_split_folio(const struct hstate *h, struct folio *folio)
 {
-	unsigned long vmemmap_start = (unsigned long)&folio->page, vmemmap_end;
+	unsigned long vmemmap_start = (unsigned long)folio_page(folio, 0), vmemmap_end;
 	unsigned long vmemmap_reuse;
 
 	if (!vmemmap_should_optimize_folio(h, folio))
@@ -668,13 +668,13 @@ static void __hugetlb_vmemmap_optimize_folios(struct hstate *h,
 			 * Already optimized by pre-HVO, just map the
 			 * mirrored tail page structs RO.
 			 */
-			spfn = (unsigned long)&folio->page;
+			spfn = (unsigned long)folio_page(folio, 0);
 			epfn = spfn + pages_per_huge_page(h);
 			vmemmap_wrprotect_hvo(spfn, epfn, folio_nid(folio),
 					HUGETLB_VMEMMAP_RESERVE_SIZE);
 			register_page_bootmem_memmap(pfn_to_section_nr(spfn),
-					&folio->page,
-					HUGETLB_VMEMMAP_RESERVE_SIZE);
+						     folio_page(folio, 0),
+						     HUGETLB_VMEMMAP_RESERVE_SIZE);
 			static_branch_inc(&hugetlb_optimize_vmemmap_key);
 			continue;
 		}
