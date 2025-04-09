@@ -362,6 +362,8 @@ static void lnl_alpm_configure(struct intel_dp *intel_dp,
 	if (crtc_state->has_lobf) {
 		alpm_ctl |= ALPM_CTL_LOBF_ENABLE;
 		drm_dbg_kms(display->drm, "Link off between frames (LOBF) enabled\n");
+	} else {
+		drm_dbg_kms(display->drm, "Link off between frames (LOBF) disabled\n");
 	}
 
 	alpm_ctl |= ALPM_CTL_ALPM_ENTRY_CHECK(intel_dp->alpm_parameters.check_entry_lines);
@@ -382,9 +384,12 @@ void intel_alpm_post_plane_update(struct intel_atomic_state *state,
 	struct intel_display *display = to_intel_display(state);
 	const struct intel_crtc_state *crtc_state =
 		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct intel_crtc_state *old_crtc_state =
+		intel_atomic_get_old_crtc_state(state, crtc);
 	struct intel_encoder *encoder;
 
-	if (!crtc_state->has_lobf && !crtc_state->has_psr)
+	if (crtc_state->has_lobf == old_crtc_state->has_lobf &&
+	    !crtc_state->has_psr)
 		return;
 
 	for_each_intel_encoder_mask(display->drm, encoder,
