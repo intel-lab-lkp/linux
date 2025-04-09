@@ -34,6 +34,7 @@
 #include "constants.h"
 #include "ptp.h"
 #include "time_sync.h"
+#include "ftm-initiator.h"
 
 /**
  * DOC: Introduction
@@ -277,11 +278,7 @@ struct iwl_mld {
 
 	struct iwl_mld_time_sync_data __rcu *time_sync;
 
-	struct {
-		struct cfg80211_pmsr_request *req;
-		struct wireless_dev *req_wdev;
-		int responses[IWL_TOF_MAX_APS];
-	} ftm_initiator;
+	struct ftm_initiator_data ftm_initiator;
 };
 
 /* memset the part of the struct that requires cleanup on restart */
@@ -296,7 +293,9 @@ iwl_cleanup_mld(struct iwl_mld *mld)
 	CLEANUP_STRUCT(mld);
 	CLEANUP_STRUCT(&mld->scan);
 
+#ifdef CONFIG_PM_SLEEP
 	mld->fw_status.in_d3 = false;
+#endif
 
 	iwl_mld_low_latency_restart_cleanup(mld);
 
@@ -337,7 +336,6 @@ iwl_mld_add_debugfs_files(struct iwl_mld *mld, struct dentry *debugfs_dir)
 {}
 #endif
 
-int iwl_mld_run_fw_init_sequence(struct iwl_mld *mld);
 int iwl_mld_load_fw(struct iwl_mld *mld);
 void iwl_mld_stop_fw(struct iwl_mld *mld);
 int iwl_mld_start_fw(struct iwl_mld *mld);

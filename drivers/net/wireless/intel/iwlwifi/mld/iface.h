@@ -24,7 +24,6 @@ enum iwl_mld_cca_40mhz_wa_status {
  *
  * @IWL_MLD_EMLSR_BLOCKED_PREVENTION: Prevent repeated EMLSR enter/exit
  * @IWL_MLD_EMLSR_BLOCKED_WOWLAN: WOWLAN is preventing EMLSR
- * @IWL_MLD_EMLSR_BLOCKED_FW: FW did not recommend MLO
  * @IWL_MLD_EMLSR_BLOCKED_ROC: remain-on-channel is preventing EMLSR
  * @IWL_MLD_EMLSR_BLOCKED_NON_BSS: An active non-BSS interface's link is
  *      preventing EMLSR
@@ -36,11 +35,10 @@ enum iwl_mld_cca_40mhz_wa_status {
 enum iwl_mld_emlsr_blocked {
 	IWL_MLD_EMLSR_BLOCKED_PREVENTION	= 0x1,
 	IWL_MLD_EMLSR_BLOCKED_WOWLAN		= 0x2,
-	IWL_MLD_EMLSR_BLOCKED_FW		= 0x4,
-	IWL_MLD_EMLSR_BLOCKED_ROC		= 0x8,
-	IWL_MLD_EMLSR_BLOCKED_NON_BSS		= 0x10,
-	IWL_MLD_EMLSR_BLOCKED_TMP_NON_BSS	= 0x20,
-	IWL_MLD_EMLSR_BLOCKED_TPT		= 0x40,
+	IWL_MLD_EMLSR_BLOCKED_ROC		= 0x4,
+	IWL_MLD_EMLSR_BLOCKED_NON_BSS		= 0x8,
+	IWL_MLD_EMLSR_BLOCKED_TMP_NON_BSS	= 0x10,
+	IWL_MLD_EMLSR_BLOCKED_TPT		= 0x20,
 };
 
 /**
@@ -54,14 +52,13 @@ enum iwl_mld_emlsr_blocked {
  * @IWL_MLD_EMLSR_EXIT_FAIL_ENTRY: FW failed to enter EMLSR
  * @IWL_MLD_EMLSR_EXIT_CSA: EMLSR prevented due to channel switch on link
  * @IWL_MLD_EMLSR_EXIT_EQUAL_BAND: EMLSR prevented as both links share the band
- * @IWL_MLD_EMLSR_EXIT_BANDWIDTH: Bandwidths of primary and secondary links are
- *      not equal
  * @IWL_MLD_EMLSR_EXIT_LOW_RSSI: Link RSSI is unsuitable for EMLSR
  * @IWL_MLD_EMLSR_EXIT_LINK_USAGE: Exit EMLSR due to low TPT on secondary link
  * @IWL_MLD_EMLSR_EXIT_BT_COEX: Exit EMLSR due to BT coexistence
  * @IWL_MLD_EMLSR_EXIT_CHAN_LOAD: Exit EMLSR because the primary channel is not
  *	loaded enough to justify EMLSR.
  * @IWL_MLD_EMLSR_EXIT_RFI: Exit EMLSR due to RFI
+ * @IWL_MLD_EMLSR_EXIT_FW_REQUEST: Exit EMLSR because the FW requested it
  */
 enum iwl_mld_emlsr_exit {
 	IWL_MLD_EMLSR_EXIT_BLOCK		= 0x1,
@@ -69,12 +66,12 @@ enum iwl_mld_emlsr_exit {
 	IWL_MLD_EMLSR_EXIT_FAIL_ENTRY		= 0x4,
 	IWL_MLD_EMLSR_EXIT_CSA			= 0x8,
 	IWL_MLD_EMLSR_EXIT_EQUAL_BAND		= 0x10,
-	IWL_MLD_EMLSR_EXIT_BANDWIDTH		= 0x20,
-	IWL_MLD_EMLSR_EXIT_LOW_RSSI		= 0x40,
-	IWL_MLD_EMLSR_EXIT_LINK_USAGE		= 0x80,
-	IWL_MLD_EMLSR_EXIT_BT_COEX		= 0x100,
-	IWL_MLD_EMLSR_EXIT_CHAN_LOAD		= 0x200,
-	IWL_MLD_EMLSR_EXIT_RFI			= 0x400,
+	IWL_MLD_EMLSR_EXIT_LOW_RSSI		= 0x20,
+	IWL_MLD_EMLSR_EXIT_LINK_USAGE		= 0x40,
+	IWL_MLD_EMLSR_EXIT_BT_COEX		= 0x80,
+	IWL_MLD_EMLSR_EXIT_CHAN_LOAD		= 0x100,
+	IWL_MLD_EMLSR_EXIT_RFI			= 0x200,
+	IWL_MLD_EMLSR_EXIT_FW_REQUEST		= 0x400,
 };
 
 /**
@@ -134,6 +131,7 @@ struct iwl_mld_emlsr {
  * @beacon_inject_active: indicates an active debugfs beacon ie injection
  * @low_latency_causes: bit flags, indicating the causes for low-latency,
  *	see @iwl_mld_low_latency_cause.
+ * @ps_disabled: indicates that PS is disabled for this interface
  * @mld: pointer to the mld structure.
  * @deflink: default link data, for use in non-MLO,
  * @link: reference to link data for each valid link, for use in MLO.
@@ -159,6 +157,7 @@ struct iwl_mld_vif {
 		bool beacon_inject_active;
 #endif
 		u8 low_latency_causes;
+		bool ps_disabled;
 	);
 	/* And here fields that survive a fw restart */
 	struct iwl_mld *mld;

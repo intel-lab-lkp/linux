@@ -20,7 +20,7 @@
 #define AIROHA_MAX_DSA_PORTS		7
 #define AIROHA_MAX_NUM_RSTS		3
 #define AIROHA_MAX_NUM_XSI_RSTS		5
-#define AIROHA_MAX_MTU			2000
+#define AIROHA_MAX_MTU			9216
 #define AIROHA_MAX_PACKET_SIZE		2048
 #define AIROHA_NUM_QOS_CHANNELS		4
 #define AIROHA_NUM_QOS_QUEUES		8
@@ -176,6 +176,7 @@ struct airoha_queue {
 
 	struct napi_struct napi;
 	struct page_pool *page_pool;
+	struct sk_buff *skb;
 };
 
 struct airoha_tx_irq_queue {
@@ -531,6 +532,9 @@ u32 airoha_rmw(void __iomem *base, u32 offset, u32 mask, u32 val);
 #define airoha_qdma_clear(qdma, offset, val)			\
 	airoha_rmw((qdma)->regs, (offset), (val), 0)
 
+bool airoha_is_valid_gdm_port(struct airoha_eth *eth,
+			      struct airoha_gdm_port *port);
+
 void airoha_ppe_check_skb(struct airoha_ppe *ppe, u16 hash);
 int airoha_ppe_setup_tc_block_cb(enum tc_setup_type type, void *type_data,
 				 void *cb_priv);
@@ -539,7 +543,7 @@ void airoha_ppe_deinit(struct airoha_eth *eth);
 struct airoha_foe_entry *airoha_ppe_foe_get_entry(struct airoha_ppe *ppe,
 						  u32 hash);
 
-#if CONFIG_DEBUG_FS
+#ifdef CONFIG_DEBUG_FS
 int airoha_ppe_debugfs_init(struct airoha_ppe *ppe);
 #else
 static inline int airoha_ppe_debugfs_init(struct airoha_ppe *ppe)

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <linux/ethtool_netlink.h>
 #include <linux/netdevice.h>
+#include <net/netdev_lock.h>
 #include <net/netdev_queues.h>
 #include <net/netdev_rx_queue.h>
 #include <net/page_pool/memory_provider.h>
@@ -18,7 +20,7 @@ int netdev_rx_queue_restart(struct net_device *dev, unsigned int rxq_idx)
 	    !qops->ndo_queue_mem_alloc || !qops->ndo_queue_start)
 		return -EOPNOTSUPP;
 
-	ASSERT_RTNL();
+	netdev_assert_locked(dev);
 
 	new_mem = kvzalloc(qops->ndo_queue_mem_size, GFP_KERNEL);
 	if (!new_mem)
@@ -85,22 +87,51 @@ err_free_new_mem:
 }
 EXPORT_SYMBOL_NS_GPL(netdev_rx_queue_restart, "NETDEV_INTERNAL");
 
-static int __net_mp_open_rxq(struct net_device *dev, unsigned ifq_idx,
-			     struct pp_memory_provider_params *p)
+int __net_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
+		      const struct pp_memory_provider_params *p,
+		      struct netlink_ext_ack *extack)
 {
 	struct netdev_rx_queue *rxq;
 	int ret;
 
-	if (ifq_idx >= dev->real_num_rx_queues)
-		return -EINVAL;
-	ifq_idx = array_index_nospec(ifq_idx, dev->real_num_rx_queues);
+	if (!netdev_need_ops_lock(dev))
+		return -EOPNOTSUPP;
 
-	rxq = __netif_get_rx_queue(dev, ifq_idx);
-	if (rxq->mp_params.mp_ops)
+	if (rxq_idx >= dev->real_num_rx_queues)
+		return -EINVAL;
+	rxq_idx = array_index_nospec(rxq_idx, dev->real_num_rx_queues);
+
+	if (rxq_idx >= dev->real_num_rx_queues) {
+		NL_SET_ERR_MSG(extack, "rx queue index out of range");
+		return -ERANGE;
+	}
+	if (dev->cfg->hds_config != ETHTOOL_TCP_DATA_SPLIT_ENABLED) {
+		NL_SET_ERR_MSG(extack, "tcp-data-split is disabled");
+		return -EINVAL;
+	}
+	if (dev->cfg->hds_thresh) {
+		NL_SET_ERR_MSG(extack, "hds-thresh is not zero");
+		return -EINVAL;
+	}
+	if (dev_xdp_prog_count(dev)) {
+		NL_SET_ERR_MSG(extack, "unable to custom memory provider to device with XDP program attached");
 		return -EEXIST;
+	}
+
+	rxq = __netif_get_rx_queue(dev, rxq_idx);
+	if (rxq->mp_params.mp_ops) {
+		NL_SET_ERR_MSG(extack, "designated queue already memory provider bound");
+		return -EEXIST;
+	}
+#ifdef CONFIG_XDP_SOCKETS
+	if (rxq->pool) {
+		NL_SET_ERR_MSG(extack, "designated queue already in use by AF_XDP");
+		return -EBUSY;
+	}
+#endif
 
 	rxq->mp_params = *p;
-	ret = netdev_rx_queue_restart(dev, ifq_idx);
+	ret = netdev_rx_queue_restart(dev, rxq_idx);
 	if (ret) {
 		rxq->mp_params.mp_ops = NULL;
 		rxq->mp_params.mp_priv = NULL;
@@ -108,21 +139,22 @@ static int __net_mp_open_rxq(struct net_device *dev, unsigned ifq_idx,
 	return ret;
 }
 
-int net_mp_open_rxq(struct net_device *dev, unsigned ifq_idx,
+int net_mp_open_rxq(struct net_device *dev, unsigned int rxq_idx,
 		    struct pp_memory_provider_params *p)
 {
 	int ret;
 
-	rtnl_lock();
-	ret = __net_mp_open_rxq(dev, ifq_idx, p);
-	rtnl_unlock();
+	netdev_lock(dev);
+	ret = __net_mp_open_rxq(dev, rxq_idx, p, NULL);
+	netdev_unlock(dev);
 	return ret;
 }
 
-static void __net_mp_close_rxq(struct net_device *dev, unsigned ifq_idx,
-			      struct pp_memory_provider_params *old_p)
+void __net_mp_close_rxq(struct net_device *dev, unsigned int ifq_idx,
+			const struct pp_memory_provider_params *old_p)
 {
 	struct netdev_rx_queue *rxq;
+	int err;
 
 	if (WARN_ON_ONCE(ifq_idx >= dev->real_num_rx_queues))
 		return;
@@ -142,13 +174,14 @@ static void __net_mp_close_rxq(struct net_device *dev, unsigned ifq_idx,
 
 	rxq->mp_params.mp_ops = NULL;
 	rxq->mp_params.mp_priv = NULL;
-	WARN_ON(netdev_rx_queue_restart(dev, ifq_idx));
+	err = netdev_rx_queue_restart(dev, ifq_idx);
+	WARN_ON(err && err != -ENETDOWN);
 }
 
 void net_mp_close_rxq(struct net_device *dev, unsigned ifq_idx,
 		      struct pp_memory_provider_params *old_p)
 {
-	rtnl_lock();
+	netdev_lock(dev);
 	__net_mp_close_rxq(dev, ifq_idx, old_p);
-	rtnl_unlock();
+	netdev_unlock(dev);
 }

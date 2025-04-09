@@ -134,9 +134,10 @@ static int mana_gd_detect_devices(struct pci_dev *pdev)
 	struct gdma_list_devices_resp resp = {};
 	struct gdma_general_req req = {};
 	struct gdma_dev_id dev;
-	u32 i, max_num_devs;
+	int found_dev = 0;
 	u16 dev_type;
 	int err;
+	u32 i;
 
 	mana_gd_init_req_hdr(&req.hdr, GDMA_LIST_DEVICES, sizeof(req),
 			     sizeof(resp));
@@ -148,11 +149,16 @@ static int mana_gd_detect_devices(struct pci_dev *pdev)
 		return err ? err : -EPROTO;
 	}
 
-	max_num_devs = min_t(u32, MAX_NUM_GDMA_DEVICES, resp.num_of_devs);
-
-	for (i = 0; i < max_num_devs; i++) {
+	for (i = 0; i < GDMA_DEV_LIST_SIZE &&
+	     found_dev < resp.num_of_devs; i++) {
 		dev = resp.devs[i];
 		dev_type = dev.type;
+
+		/* Skip empty devices */
+		if (dev.as_uint32 == 0)
+			continue;
+
+		found_dev++;
 
 		/* HWC is already detected in mana_hwc_create_channel(). */
 		if (dev_type == GDMA_DEVICE_HWC)
@@ -331,6 +337,7 @@ void mana_gd_wq_ring_doorbell(struct gdma_context *gc, struct gdma_queue *queue)
 	mana_gd_ring_doorbell(gc, queue->gdma_dev->doorbell, queue->type,
 			      queue->id, queue->head * GDMA_WQE_BU_SIZE, 0);
 }
+EXPORT_SYMBOL_NS(mana_gd_wq_ring_doorbell, "NET_MANA");
 
 void mana_gd_ring_cq(struct gdma_queue *cq, u8 arm_bit)
 {
@@ -343,6 +350,7 @@ void mana_gd_ring_cq(struct gdma_queue *cq, u8 arm_bit)
 	mana_gd_ring_doorbell(gc, cq->gdma_dev->doorbell, cq->type, cq->id,
 			      head, arm_bit);
 }
+EXPORT_SYMBOL_NS(mana_gd_ring_cq, "NET_MANA");
 
 static void mana_gd_process_eqe(struct gdma_queue *eq)
 {
@@ -888,6 +896,7 @@ free_q:
 	kfree(queue);
 	return err;
 }
+EXPORT_SYMBOL_NS(mana_gd_create_mana_wq_cq, "NET_MANA");
 
 void mana_gd_destroy_queue(struct gdma_context *gc, struct gdma_queue *queue)
 {
@@ -1062,7 +1071,7 @@ static u32 mana_gd_write_client_oob(const struct gdma_wqe_request *wqe_req,
 	header->inline_oob_size_div4 = client_oob_size / sizeof(u32);
 
 	if (oob_in_sgl) {
-		WARN_ON_ONCE(!pad_data || wqe_req->num_sge < 2);
+		WARN_ON_ONCE(wqe_req->num_sge < 2);
 
 		header->client_oob_in_sgl = 1;
 
@@ -1169,6 +1178,7 @@ int mana_gd_post_work_request(struct gdma_queue *wq,
 
 	return 0;
 }
+EXPORT_SYMBOL_NS(mana_gd_post_work_request, "NET_MANA");
 
 int mana_gd_post_and_ring(struct gdma_queue *queue,
 			  const struct gdma_wqe_request *wqe_req,
@@ -1242,6 +1252,7 @@ int mana_gd_poll_cq(struct gdma_queue *cq, struct gdma_comp *comp, int num_cqe)
 
 	return cqe_idx;
 }
+EXPORT_SYMBOL_NS(mana_gd_poll_cq, "NET_MANA");
 
 static irqreturn_t mana_gd_intr(int irq, void *arg)
 {
@@ -1579,6 +1590,7 @@ unmap_bar:
 	 * adapter-MTU file and apc->mana_pci_debugfs folder.
 	 */
 	debugfs_remove_recursive(gc->mana_pci_debugfs);
+	gc->mana_pci_debugfs = NULL;
 	pci_iounmap(pdev, bar0_va);
 free_gc:
 	pci_set_drvdata(pdev, NULL);
@@ -1600,6 +1612,8 @@ static void mana_gd_remove(struct pci_dev *pdev)
 	mana_gd_cleanup(pdev);
 
 	debugfs_remove_recursive(gc->mana_pci_debugfs);
+
+	gc->mana_pci_debugfs = NULL;
 
 	pci_iounmap(pdev, gc->bar0_va);
 
@@ -1656,6 +1670,8 @@ static void mana_gd_shutdown(struct pci_dev *pdev)
 
 	debugfs_remove_recursive(gc->mana_pci_debugfs);
 
+	gc->mana_pci_debugfs = NULL;
+
 	pci_disable_device(pdev);
 }
 
@@ -1682,8 +1698,10 @@ static int __init mana_driver_init(void)
 	mana_debugfs_root = debugfs_create_dir("mana", NULL);
 
 	err = pci_register_driver(&mana_driver);
-	if (err)
+	if (err) {
 		debugfs_remove(mana_debugfs_root);
+		mana_debugfs_root = NULL;
+	}
 
 	return err;
 }
@@ -1693,6 +1711,8 @@ static void __exit mana_driver_exit(void)
 	pci_unregister_driver(&mana_driver);
 
 	debugfs_remove(mana_debugfs_root);
+
+	mana_debugfs_root = NULL;
 }
 
 module_init(mana_driver_init);

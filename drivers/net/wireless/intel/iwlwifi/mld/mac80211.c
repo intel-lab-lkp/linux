@@ -164,14 +164,6 @@ static void iwl_mld_hw_set_security(struct iwl_mld *mld)
 			      NL80211_EXT_FEATURE_BEACON_PROTECTION);
 }
 
-static void iwl_mld_hw_set_regulatory(struct iwl_mld *mld)
-{
-	struct wiphy *wiphy = mld->wiphy;
-
-	wiphy->regulatory_flags |= REGULATORY_WIPHY_SELF_MANAGED;
-	wiphy->regulatory_flags |= REGULATORY_ENABLE_RELAX_NO_IR;
-}
-
 static void iwl_mld_hw_set_antennas(struct iwl_mld *mld)
 {
 	struct wiphy *wiphy = mld->wiphy;
@@ -415,7 +407,6 @@ int iwl_mld_register_hw(struct iwl_mld *mld)
 	iwl_mld_hw_set_addresses(mld);
 	iwl_mld_hw_set_channels(mld);
 	iwl_mld_hw_set_security(mld);
-	iwl_mld_hw_set_regulatory(mld);
 	iwl_mld_hw_set_pm(mld);
 	iwl_mld_hw_set_antennas(mld);
 	iwl_mac_hw_set_radiotap(mld);
@@ -847,8 +838,9 @@ int iwl_mld_add_chanctx(struct ieee80211_hw *hw,
 	if (fw_id < 0)
 		return fw_id;
 
+	phy->mld = mld;
 	phy->fw_id = fw_id;
-	phy->chandef = *iwl_mld_get_chandef_from_chanctx(ctx);
+	phy->chandef = *iwl_mld_get_chandef_from_chanctx(mld, ctx);
 
 	ret = iwl_mld_phy_fw_action(mld, ctx, FW_CTXT_ACTION_ADD);
 	if (ret) {
@@ -880,7 +872,7 @@ void iwl_mld_change_chanctx(struct ieee80211_hw *hw,
 	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);
 	struct iwl_mld_phy *phy = iwl_mld_phy_from_mac80211(ctx);
 	struct cfg80211_chan_def *chandef =
-		iwl_mld_get_chandef_from_chanctx(ctx);
+		iwl_mld_get_chandef_from_chanctx(mld, ctx);
 
 	/* We don't care about these */
 	if (!(changed & ~(IEEE80211_CHANCTX_CHANGE_RX_CHAINS |
@@ -1195,10 +1187,11 @@ iwl_mld_mac80211_link_info_changed_sta(struct iwl_mld *mld,
 		bw = ieee80211_chan_width_to_rx_bw(link_conf->chanreq.oper.width);
 
 		iwl_mld_omi_ap_changed_bw(mld, link_conf, bw);
+
 	}
 
 	if (changes & BSS_CHANGED_BANDWIDTH)
-		iwl_mld_emlsr_check_equal_bw(mld, vif, link_conf);
+		iwl_mld_retry_emlsr(mld, vif);
 }
 
 static int iwl_mld_update_mu_groups(struct iwl_mld *mld,
@@ -1262,6 +1255,23 @@ iwl_mld_mac80211_link_info_changed(struct ieee80211_hw *hw,
 		iwl_mld_set_tx_power(mld, link_conf, link_conf->txpower);
 }
 
+static void
+iwl_mld_smps_wa(struct iwl_mld *mld, struct ieee80211_vif *vif, bool enable)
+{
+	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
+
+	/* Send the device-level power commands since the
+	 * firmware checks the POWER_TABLE_CMD's POWER_SAVE_EN bit to
+	 * determine SMPS mode.
+	 */
+	if (mld_vif->ps_disabled == !enable)
+		return;
+
+	mld_vif->ps_disabled = !enable;
+
+	iwl_mld_update_device_power(mld, false);
+}
+
 static
 void iwl_mld_mac80211_vif_cfg_changed(struct ieee80211_hw *hw,
 				      struct ieee80211_vif *vif,
@@ -1295,11 +1305,7 @@ void iwl_mld_mac80211_vif_cfg_changed(struct ieee80211_hw *hw,
 	}
 
 	if (changes & BSS_CHANGED_PS) {
-		/* Send both device-level and MAC-level power commands since the
-		 * firmware checks the POWER_TABLE_CMD's POWER_SAVE_EN bit to
-		 * determine SMPS mode.
-		 */
-		iwl_mld_update_device_power(mld, false);
+		iwl_mld_smps_wa(mld, vif, vif->cfg.ps);
 		iwl_mld_update_mac_power(mld, vif, false);
 	}
 
@@ -1707,15 +1713,12 @@ static int iwl_mld_move_sta_state_up(struct iwl_mld *mld,
 						    IWL_MLD_EMLSR_BLOCKED_TPT,
 						    0);
 
-			/* Wait for the FW to send a recommendation */
-			iwl_mld_block_emlsr(mld, vif,
-					    IWL_MLD_EMLSR_BLOCKED_FW, 0);
-
 			/* clear COEX_HIGH_PRIORITY_ENABLE */
 			ret = iwl_mld_mac_fw_action(mld, vif,
 						    FW_CTXT_ACTION_MODIFY);
 			if (ret)
 				return ret;
+			iwl_mld_smps_wa(mld, vif, vif->cfg.ps);
 		}
 
 		/* MFP is set by default before the station is authorized.
@@ -1758,6 +1761,7 @@ static int iwl_mld_move_sta_state_down(struct iwl_mld *mld,
 						  &mld_vif->emlsr.check_tpt_wk);
 
 			iwl_mld_reset_cca_40mhz_workaround(mld, vif);
+			iwl_mld_smps_wa(mld, vif, true);
 		}
 
 		/* once we move into assoc state, need to update the FW to
@@ -2452,13 +2456,8 @@ iwl_mld_change_vif_links(struct ieee80211_hw *hw,
 		added |= BIT(0);
 
 	for (int i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {
-		if (removed & BIT(i)) {
-			link_conf = old[i];
-
-			err = iwl_mld_remove_link(mld, link_conf);
-			if (err)
-				return err;
-		}
+		if (removed & BIT(i))
+			iwl_mld_remove_link(mld, old[i]);
 	}
 
 	for (int i = 0; i < IEEE80211_MLD_MAX_NUM_LINKS; i++) {

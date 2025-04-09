@@ -67,7 +67,7 @@ static void iwl_mld_fill_rates(struct iwl_mld *mld,
 			       __le32 *cck_rates, __le32 *ofdm_rates)
 {
 	struct cfg80211_chan_def *chandef =
-		iwl_mld_get_chandef_from_chanctx(chan_ctx);
+		iwl_mld_get_chandef_from_chanctx(mld, chan_ctx);
 	struct ieee80211_supported_band *sband =
 		mld->hw->wiphy->bands[chandef->chan->band];
 	unsigned long basic = link->basic_rates;
@@ -455,7 +455,7 @@ void iwl_mld_deactivate_link(struct iwl_mld *mld,
 					       mld_link->fw_id);
 }
 
-static int
+static void
 iwl_mld_rm_link_from_fw(struct iwl_mld *mld, struct ieee80211_bss_conf *link)
 {
 	struct iwl_mld_link *mld_link = iwl_mld_link_from_mac80211(link);
@@ -464,13 +464,13 @@ iwl_mld_rm_link_from_fw(struct iwl_mld *mld, struct ieee80211_bss_conf *link)
 	lockdep_assert_wiphy(mld->wiphy);
 
 	if (WARN_ON(!mld_link))
-		return -EINVAL;
+		return;
 
 	cmd.link_id = cpu_to_le32(mld_link->fw_id);
 	cmd.spec_link_id = link->link_id;
 	cmd.phy_id = cpu_to_le32(FW_CTXT_ID_INVALID);
 
-	return iwl_mld_send_link_cmd(mld, &cmd, FW_CTXT_ACTION_REMOVE);
+	iwl_mld_send_link_cmd(mld, &cmd, FW_CTXT_ACTION_REMOVE);
 }
 
 static void iwl_mld_omi_bw_update(struct iwl_mld *mld,
@@ -760,8 +760,8 @@ void iwl_mld_check_omi_bw_reduction(struct iwl_mld *mld)
 		return;
 	}
 
-	if (time_is_before_jiffies(mld_link->rx_omi.exit_ts +
-				   msecs_to_jiffies(IWL_MLD_OMI_EXIT_PROTECTION)))
+	if (time_is_after_jiffies(mld_link->rx_omi.exit_ts +
+				  msecs_to_jiffies(IWL_MLD_OMI_EXIT_PROTECTION)))
 		return;
 
 	/* reduce bandwidth to 80 MHz to save power */
@@ -832,18 +832,17 @@ free:
 }
 
 /* Remove link from fw, unmap the bss_conf, and destroy the link structure */
-int iwl_mld_remove_link(struct iwl_mld *mld,
-			struct ieee80211_bss_conf *bss_conf)
+void iwl_mld_remove_link(struct iwl_mld *mld,
+			 struct ieee80211_bss_conf *bss_conf)
 {
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(bss_conf->vif);
 	struct iwl_mld_link *link = iwl_mld_link_from_mac80211(bss_conf);
 	bool is_deflink = link == &mld_vif->deflink;
-	int ret;
 
 	if (WARN_ON(!link || link->active))
-		return -EINVAL;
+		return;
 
-	ret = iwl_mld_rm_link_from_fw(mld, bss_conf);
+	iwl_mld_rm_link_from_fw(mld, bss_conf);
 	/* Continue cleanup on failure */
 
 	if (!is_deflink)
@@ -854,11 +853,9 @@ int iwl_mld_remove_link(struct iwl_mld *mld,
 	wiphy_delayed_work_cancel(mld->wiphy, &link->rx_omi.finished_work);
 
 	if (WARN_ON(link->fw_id >= mld->fw->ucode_capa.num_links))
-		return -EINVAL;
+		return;
 
 	RCU_INIT_POINTER(mld->fw_id_to_bss_conf[link->fw_id], NULL);
-
-	return ret;
 }
 
 void iwl_mld_handle_missed_beacon_notif(struct iwl_mld *mld,
@@ -913,7 +910,7 @@ void iwl_mld_handle_missed_beacon_notif(struct iwl_mld *mld,
 		ieee80211_cqm_beacon_loss_notify(vif, GFP_ATOMIC);
 
 		/* try to switch links, no-op if we don't have MLO */
-		iwl_mld_trigger_link_selection(mld, vif);
+		iwl_mld_int_mlo_scan(mld, vif);
 	}
 
 	/* no more logic if we're not in EMLSR */

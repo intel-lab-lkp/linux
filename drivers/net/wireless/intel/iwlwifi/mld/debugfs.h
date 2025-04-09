@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2024 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #include "iface.h"
 #include "sta.h"
@@ -67,7 +67,7 @@ static const struct file_operations iwl_dbgfs_##name##_ops = {		\
 	.release = _iwl_dbgfs_release,					\
 }
 
-#define WIPHY_DEBUGFS_HANDLER_WRAPPER(name)				\
+#define WIPHY_DEBUGFS_WRITE_HANDLER_WRAPPER(name)			\
 static ssize_t iwl_dbgfs_##name##_write_handler(struct wiphy *wiphy,	\
 				       struct file *file, char *buf,	\
 				       size_t count, void *data)	\
@@ -97,7 +97,7 @@ static inline struct iwl_mld *iwl_mld_from_vif(struct ieee80211_vif *vif)
 }
 
 #define WIPHY_DEBUGFS_WRITE_WRAPPER(name, bufsz, objtype)		\
-WIPHY_DEBUGFS_HANDLER_WRAPPER(name)					\
+WIPHY_DEBUGFS_WRITE_HANDLER_WRAPPER(name)				\
 static ssize_t __iwl_dbgfs_##name##_write(struct file *file,		\
 					  const char __user *user_buf,	\
 					  size_t count, loff_t *ppos)	\
@@ -121,7 +121,17 @@ static ssize_t __iwl_dbgfs_##name##_write(struct file *file,		\
 		.llseek = generic_file_llseek,				\
 	}
 
-#define WIPHY_DEBUGFS_HANDLER_WRAPPER_MLD(name)				\
+#define WIPHY_DEBUGFS_READ_HANDLER_WRAPPER_MLD(name)			\
+static ssize_t iwl_dbgfs_##name##_read_handler(struct wiphy *wiphy,	\
+				       struct file *file, char *buf,	\
+				       size_t count, void *data)	\
+{									\
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);		\
+	struct iwl_mld *mld = IWL_MAC80211_GET_MLD(hw);			\
+	return iwl_dbgfs_##name##_read(mld, buf, count);		\
+}
+
+#define WIPHY_DEBUGFS_WRITE_HANDLER_WRAPPER_MLD(name)			\
 static ssize_t iwl_dbgfs_##name##_write_handler(struct wiphy *wiphy,	\
 				       struct file *file, char *buf,	\
 				       size_t count, void *data)	\
@@ -132,7 +142,7 @@ static ssize_t iwl_dbgfs_##name##_write_handler(struct wiphy *wiphy,	\
 }
 
 #define WIPHY_DEBUGFS_WRITE_WRAPPER_MLD(name)				\
-WIPHY_DEBUGFS_HANDLER_WRAPPER_MLD(name)					\
+WIPHY_DEBUGFS_WRITE_HANDLER_WRAPPER_MLD(name)				\
 static ssize_t __iwl_dbgfs_##name##_write(struct file *file,		\
 					  const char __user *user_buf,	\
 					  size_t count, loff_t *ppos)	\
@@ -147,6 +157,40 @@ static ssize_t __iwl_dbgfs_##name##_write(struct file *file,		\
 				NULL);					\
 }
 
+#define WIPHY_DEBUGFS_READ_WRAPPER_MLD(name)				\
+WIPHY_DEBUGFS_READ_HANDLER_WRAPPER_MLD(name)				\
+static ssize_t __iwl_dbgfs_##name##_read(struct file *file,		\
+					char __user *user_buf,		\
+					size_t count, loff_t *ppos)	\
+{									\
+	struct dbgfs_##name##_data *data = file->private_data;		\
+	struct iwl_mld *mld = data->arg;				\
+									\
+	if (!data->read_done) {						\
+		data->read_done = true;					\
+		data->rlen = wiphy_locked_debugfs_read(mld->wiphy,	\
+				file, data->buf, sizeof(data->buf),	\
+				user_buf, count, ppos,			\
+				iwl_dbgfs_##name##_read_handler, NULL);	\
+		return data->rlen;					\
+	}								\
+									\
+	if (data->rlen < 0)						\
+		return data->rlen;					\
+	return simple_read_from_buffer(user_buf, count, ppos,		\
+				       data->buf, data->rlen);		\
+}
+
+#define WIPHY_DEBUGFS_READ_FILE_OPS_MLD(name, bufsz)			\
+	MLD_DEBUGFS_OPEN_WRAPPER(name, bufsz, struct iwl_mld)		\
+	WIPHY_DEBUGFS_READ_WRAPPER_MLD(name)				\
+	static const struct file_operations iwl_dbgfs_##name##_ops = {	\
+		.read = __iwl_dbgfs_##name##_read,			\
+		.open = _iwl_dbgfs_##name##_open,			\
+		.llseek = generic_file_llseek,				\
+		.release = _iwl_dbgfs_release,				\
+	}
+
 #define WIPHY_DEBUGFS_WRITE_FILE_OPS_MLD(name, bufsz)			\
 	MLD_DEBUGFS_OPEN_WRAPPER(name, bufsz, struct iwl_mld)		\
 	WIPHY_DEBUGFS_WRITE_WRAPPER_MLD(name)				\
@@ -160,17 +204,17 @@ static ssize_t __iwl_dbgfs_##name##_write(struct file *file,		\
 #define WIPHY_DEBUGFS_READ_WRITE_FILE_OPS_MLD(name, bufsz)		\
 	MLD_DEBUGFS_OPEN_WRAPPER(name, bufsz, struct iwl_mld)		\
 	WIPHY_DEBUGFS_WRITE_WRAPPER_MLD(name)				\
-	MLD_DEBUGFS_READ_WRAPPER(name)					\
+	WIPHY_DEBUGFS_READ_WRAPPER_MLD(name)				\
 	static const struct file_operations iwl_dbgfs_##name##_ops = {	\
 		.write = __iwl_dbgfs_##name##_write,			\
-		.read = _iwl_dbgfs_##name##_read,			\
+		.read = __iwl_dbgfs_##name##_read,			\
 		.open = _iwl_dbgfs_##name##_open,			\
 		.llseek = generic_file_llseek,				\
 		.release = _iwl_dbgfs_release,				\
 	}
 
 #define WIPHY_DEBUGFS_WRITE_WRAPPER_IEEE80211(name, bufsz, objtype)	\
-WIPHY_DEBUGFS_HANDLER_WRAPPER(name)					\
+WIPHY_DEBUGFS_WRITE_HANDLER_WRAPPER(name)				\
 static ssize_t _iwl_dbgfs_##name##_write(struct file *file,		\
 					  const char __user *user_buf,	\
 					  size_t count, loff_t *ppos)	\

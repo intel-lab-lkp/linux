@@ -257,7 +257,7 @@ alive_failure:
 	return ret;
 }
 
-int iwl_mld_run_fw_init_sequence(struct iwl_mld *mld)
+static int iwl_mld_run_fw_init_sequence(struct iwl_mld *mld)
 {
 	struct iwl_notification_wait init_wait;
 	struct iwl_init_extended_cfg_cmd init_cfg = {};
@@ -336,6 +336,10 @@ int iwl_mld_load_fw(struct iwl_mld *mld)
 		return ret;
 
 	ret = iwl_mld_run_fw_init_sequence(mld);
+	if (ret)
+		return ret;
+
+	ret = iwl_mld_init_mcc(mld);
 	if (ret)
 		return ret;
 
@@ -478,10 +482,6 @@ static int iwl_mld_config_fw(struct iwl_mld *mld)
 		return ret;
 
 	ret = iwl_mld_update_device_power(mld, false);
-	if (ret)
-		return ret;
-
-	ret = iwl_mld_init_mcc(mld);
 	if (ret)
 		return ret;
 

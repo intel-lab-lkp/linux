@@ -1228,8 +1228,11 @@ int gen10g_config_aneg(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(gen10g_config_aneg);
 
-int genphy_c45_loopback(struct phy_device *phydev, bool enable)
+int genphy_c45_loopback(struct phy_device *phydev, bool enable, int speed)
 {
+	if (enable && speed)
+		return -EOPNOTSUPP;
+
 	return phy_modify_mmd(phydev, MDIO_MMD_PCS, MDIO_CTRL1,
 			      MDIO_PCS_CTRL1_LOOPBACK,
 			      enable ? MDIO_PCS_CTRL1_LOOPBACK : 0);
@@ -1475,6 +1478,9 @@ int genphy_c45_eee_is_active(struct phy_device *phydev, unsigned long *lp)
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(tmp_lp) = {};
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(common);
 	int ret;
+
+	if (!phydev->eee_cfg.eee_enabled)
+		return 0;
 
 	ret = genphy_c45_read_eee_lpa(phydev, tmp_lp);
 	if (ret)

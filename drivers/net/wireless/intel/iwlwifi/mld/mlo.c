@@ -3,12 +3,12 @@
  * Copyright (C) 2024-2025 Intel Corporation
  */
 #include "mlo.h"
+#include "phy.h"
 
 /* Block reasons helper */
 #define HANDLE_EMLSR_BLOCKED_REASONS(HOW)	\
 	HOW(PREVENTION)			\
 	HOW(WOWLAN)			\
-	HOW(FW)				\
 	HOW(ROC)			\
 	HOW(NON_BSS)			\
 	HOW(TMP_NON_BSS)		\
@@ -47,12 +47,12 @@ static void iwl_mld_print_emlsr_blocked(struct iwl_mld *mld, u32 mask)
 	HOW(FAIL_ENTRY)			\
 	HOW(CSA)			\
 	HOW(EQUAL_BAND)			\
-	HOW(BANDWIDTH)			\
 	HOW(LOW_RSSI)			\
 	HOW(LINK_USAGE)			\
 	HOW(BT_COEX)			\
 	HOW(CHAN_LOAD)			\
-	HOW(RFI)
+	HOW(RFI)			\
+	HOW(FW_REQUEST)
 
 static const char *
 iwl_mld_get_emlsr_exit_string(enum iwl_mld_emlsr_exit exit)
@@ -99,7 +99,7 @@ void iwl_mld_emlsr_tmp_non_bss_done_wk(struct wiphy *wiphy,
 				       struct wiphy_work *wk)
 {
 	struct iwl_mld_vif *mld_vif = container_of(wk, struct iwl_mld_vif,
-						   emlsr.prevent_done_wk.work);
+						   emlsr.tmp_non_bss_done_wk.work);
 	struct ieee80211_vif *vif =
 		container_of((void *)mld_vif, struct ieee80211_vif, drv_priv);
 
@@ -115,8 +115,9 @@ void iwl_mld_emlsr_tmp_non_bss_done_wk(struct wiphy *wiphy,
 #define IWL_MLD_SCAN_EXPIRE_TIME	(HZ * IWL_MLD_SCAN_EXPIRE_TIME_SEC)
 
 /* Exit reasons that can cause longer EMLSR prevention */
-#define IWL_MLD_PREVENT_EMLSR_REASONS	(IWL_MLD_EMLSR_EXIT_MISSED_BEACON | \
-					 IWL_MLD_EMLSR_EXIT_LINK_USAGE)
+#define IWL_MLD_PREVENT_EMLSR_REASONS	(IWL_MLD_EMLSR_EXIT_MISSED_BEACON	| \
+					 IWL_MLD_EMLSR_EXIT_LINK_USAGE		| \
+					 IWL_MLD_EMLSR_EXIT_FW_REQUEST)
 #define IWL_MLD_PREVENT_EMLSR_TIMEOUT	(HZ * 400)
 
 #define IWL_MLD_EMLSR_PREVENT_SHORT	(HZ * 300)
@@ -177,6 +178,19 @@ static void iwl_mld_check_emlsr_prevention(struct iwl_mld *mld,
 				 &mld_vif->emlsr.prevent_done_wk, delay);
 }
 
+static void iwl_mld_clear_avg_chan_load_iter(struct ieee80211_hw *hw,
+					     struct ieee80211_chanctx_conf *ctx,
+					     void *dat)
+{
+	struct iwl_mld_phy *phy = iwl_mld_phy_from_mac80211(ctx);
+
+	/* It is ok to do it for all chanctx (and not only for the ones that
+	 * belong to the EMLSR vif) since EMLSR is not allowed if there is
+	 * another vif.
+	 */
+	phy->avg_channel_load_not_by_us = 0;
+}
+
 static int _iwl_mld_exit_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif,
 			       enum iwl_mld_emlsr_exit exit, u8 link_to_keep,
 			       bool sync)
@@ -214,6 +228,13 @@ static int _iwl_mld_exit_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif,
 
 	/* Update latest exit reason and check EMLSR prevention */
 	iwl_mld_check_emlsr_prevention(mld, mld_vif, exit);
+
+	/* channel_load_not_by_us is invalid when in EMLSR.
+	 * Clear it so wrong values won't be used.
+	 */
+	ieee80211_iter_chan_contexts_atomic(mld->hw,
+					    iwl_mld_clear_avg_chan_load_iter,
+					    NULL);
 
 	return ret;
 }
@@ -268,22 +289,6 @@ int iwl_mld_block_emlsr_sync(struct iwl_mld *mld, struct ieee80211_vif *vif,
 static void _iwl_mld_select_links(struct iwl_mld *mld,
 				  struct ieee80211_vif *vif);
 
-void iwl_mld_trigger_link_selection(struct iwl_mld *mld,
-				    struct ieee80211_vif *vif)
-{
-	bool last_scan_was_recent =
-		time_before(jiffies, mld->scan.last_mlo_scan_jiffies +
-				     IWL_MLD_SCAN_EXPIRE_TIME);
-
-	if (last_scan_was_recent) {
-		IWL_DEBUG_EHT(mld, "MLO scan was recent, skip.\n");
-		_iwl_mld_select_links(mld, vif);
-	} else {
-		IWL_DEBUG_EHT(mld, "Doing link selection after MLO scan\n");
-		iwl_mld_int_mlo_scan(mld, vif);
-	}
-}
-
 void iwl_mld_unblock_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif,
 			   enum iwl_mld_emlsr_blocked reason)
 {
@@ -313,7 +318,7 @@ void iwl_mld_unblock_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif,
 		return;
 
 	IWL_DEBUG_INFO(mld, "EMLSR is unblocked\n");
-	iwl_mld_trigger_link_selection(mld, vif);
+	iwl_mld_int_mlo_scan(mld, vif);
 }
 
 static void
@@ -327,18 +332,14 @@ iwl_mld_vif_iter_emlsr_mode_notif(void *data, u8 *mac,
 		return;
 
 	switch (le32_to_cpu(notif->action)) {
-	case ESR_RECOMMEND_ENTER:
-		iwl_mld_unblock_emlsr(mld_vif->mld, vif,
-				      IWL_MLD_EMLSR_BLOCKED_FW);
-		break;
 	case ESR_RECOMMEND_LEAVE:
-		iwl_mld_block_emlsr(mld_vif->mld, vif,
-				    IWL_MLD_EMLSR_BLOCKED_FW,
-				    iwl_mld_get_primary_link(vif));
+		iwl_mld_exit_emlsr(mld_vif->mld, vif,
+				   IWL_MLD_EMLSR_EXIT_FW_REQUEST,
+				   iwl_mld_get_primary_link(vif));
 		break;
+	case ESR_RECOMMEND_ENTER:
 	case ESR_FORCE_LEAVE:
 	default:
-		/* ESR_FORCE_LEAVE should not happen at this point */
 		IWL_WARN(mld_vif->mld, "Unexpected EMLSR notification: %d\n",
 			 le32_to_cpu(notif->action));
 	}
@@ -601,12 +602,6 @@ void iwl_mld_emlsr_unblock_tpt_wk(struct wiphy *wiphy, struct wiphy_work *wk)
 /*
  * Link selection
  */
-struct iwl_mld_link_sel_data {
-	u8 link_id;
-	const struct cfg80211_chan_def *chandef;
-	s32 signal;
-	u16 grade;
-};
 
 s8 iwl_mld_get_emlsr_rssi_thresh(struct iwl_mld *mld,
 				 const struct cfg80211_chan_def *chandef,
@@ -699,10 +694,9 @@ iwl_mld_set_link_sel_data(struct iwl_mld *mld,
 		if (WARN_ON_ONCE(!link_conf))
 			continue;
 
-		/* Ignore any BSS that was not seen in the last 5 seconds */
+		/* Ignore any BSS that was not seen in the last MLO scan */
 		if (ktime_before(link_conf->bss->ts_boottime,
-				 ktime_sub_ns(ktime_get_boottime_ns(),
-					      (u64)5 * NSEC_PER_SEC)))
+				 mld->scan.last_mlo_scan_time))
 			continue;
 
 		data[n_data].link_id = link_id;
@@ -720,6 +714,82 @@ iwl_mld_set_link_sel_data(struct iwl_mld *mld,
 	return n_data;
 }
 
+static u32
+iwl_mld_get_min_chan_load_thresh(struct ieee80211_chanctx_conf *chanctx)
+{
+	const struct iwl_mld_phy *phy = iwl_mld_phy_from_mac80211(chanctx);
+
+	switch (phy->chandef.width) {
+	case NL80211_CHAN_WIDTH_320:
+	case NL80211_CHAN_WIDTH_160:
+		return 5;
+	case NL80211_CHAN_WIDTH_80:
+		return 7;
+	default:
+		break;
+	}
+	return 10;
+}
+
+VISIBLE_IF_IWLWIFI_KUNIT bool
+iwl_mld_channel_load_allows_emlsr(struct iwl_mld *mld,
+				  struct ieee80211_vif *vif,
+				  const struct iwl_mld_link_sel_data *a,
+				  const struct iwl_mld_link_sel_data *b)
+{
+	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
+	struct iwl_mld_link *link_a =
+		iwl_mld_link_dereference_check(mld_vif, a->link_id);
+	struct ieee80211_chanctx_conf *chanctx_a = NULL;
+	u32 bw_a, bw_b, ratio;
+	u32 primary_load_perc;
+
+	if (!link_a || !link_a->active) {
+		IWL_DEBUG_EHT(mld, "Primary link is not active. Can't enter EMLSR\n");
+		return false;
+	}
+
+	chanctx_a = wiphy_dereference(mld->wiphy, link_a->chan_ctx);
+
+	if (WARN_ON(!chanctx_a))
+		return false;
+
+	primary_load_perc =
+		iwl_mld_phy_from_mac80211(chanctx_a)->avg_channel_load_not_by_us;
+
+	IWL_DEBUG_EHT(mld, "Average channel load not by us: %u\n", primary_load_perc);
+
+	if (primary_load_perc < iwl_mld_get_min_chan_load_thresh(chanctx_a)) {
+		IWL_DEBUG_EHT(mld, "Channel load is below the minimum threshold\n");
+		return false;
+	}
+
+	if (iwl_mld_vif_low_latency(mld_vif)) {
+		IWL_DEBUG_EHT(mld, "Low latency vif, EMLSR is allowed\n");
+		return true;
+	}
+
+	if (a->chandef->width <= b->chandef->width)
+		return true;
+
+	bw_a = nl80211_chan_width_to_mhz(a->chandef->width);
+	bw_b = nl80211_chan_width_to_mhz(b->chandef->width);
+	ratio = bw_a / bw_b;
+
+	switch (ratio) {
+	case 2:
+		return primary_load_perc > 25;
+	case 4:
+		return primary_load_perc > 40;
+	case 8:
+	case 16:
+		return primary_load_perc > 50;
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_IF_IWLWIFI_KUNIT(iwl_mld_channel_load_allows_emlsr);
+
 static bool
 iwl_mld_valid_emlsr_pair(struct ieee80211_vif *vif,
 			 struct iwl_mld_link_sel_data *a,
@@ -727,23 +797,19 @@ iwl_mld_valid_emlsr_pair(struct ieee80211_vif *vif,
 {
 	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
 	struct iwl_mld *mld = mld_vif->mld;
-	enum iwl_mld_emlsr_exit ret = 0;
+	u32 reason_mask = 0;
 
 	/* Per-link considerations */
 	if (iwl_mld_emlsr_disallowed_with_link(mld, vif, a, true) ||
 	    iwl_mld_emlsr_disallowed_with_link(mld, vif, b, false))
 		return false;
 
-	if (a->chandef->chan->band == b->chandef->chan->band) {
-		ret |= IWL_MLD_EMLSR_EXIT_EQUAL_BAND;
-	} else if (a->chandef->width != b->chandef->width) {
-		/* TODO: task=EMLSR task=statistics
-		 * replace BANDWIDTH exit reason with channel load criteria
-		 */
-		ret |= IWL_MLD_EMLSR_EXIT_BANDWIDTH;
-	}
+	if (a->chandef->chan->band == b->chandef->chan->band)
+		reason_mask |= IWL_MLD_EMLSR_EXIT_EQUAL_BAND;
+	if (!iwl_mld_channel_load_allows_emlsr(mld, vif, a, b))
+		reason_mask |= IWL_MLD_EMLSR_EXIT_CHAN_LOAD;
 
-	if (ret) {
+	if (reason_mask) {
 		IWL_DEBUG_INFO(mld,
 			       "Links %d and %d are not a valid pair for EMLSR\n",
 			       a->link_id, b->link_id);
@@ -751,7 +817,7 @@ iwl_mld_valid_emlsr_pair(struct ieee80211_vif *vif,
 			       "Links bandwidth are: %d and %d\n",
 			       nl80211_chan_width_to_mhz(a->chandef->width),
 			       nl80211_chan_width_to_mhz(b->chandef->width));
-		iwl_mld_print_emlsr_exit(mld, ret);
+		iwl_mld_print_emlsr_exit(mld, reason_mask);
 		return false;
 	}
 
@@ -814,8 +880,9 @@ static void _iwl_mld_select_links(struct iwl_mld *mld,
 	if (!mld_vif->authorized || hweight16(usable_links) <= 1)
 		return;
 
-	if (WARN(time_before(mld->scan.last_mlo_scan_jiffies,
-			     jiffies - IWL_MLD_SCAN_EXPIRE_TIME),
+	if (WARN(ktime_before(mld->scan.last_mlo_scan_time,
+			      ktime_sub_ns(ktime_get_boottime_ns(),
+					   5ULL * NSEC_PER_SEC)),
 		"Last MLO scan was too long ago, can't select links\n"))
 		return;
 
@@ -890,24 +957,6 @@ void iwl_mld_select_links(struct iwl_mld *mld)
 						NULL);
 }
 
-void iwl_mld_emlsr_check_equal_bw(struct iwl_mld *mld,
-				  struct ieee80211_vif *vif,
-				  struct ieee80211_bss_conf *link)
-{
-	u8 other_link_id = iwl_mld_get_other_link(vif, link->link_id);
-	struct ieee80211_bss_conf *other_link =
-		link_conf_dereference_check(vif, other_link_id);
-
-	if (!ieee80211_vif_link_active(vif, link->link_id) ||
-	    !iwl_mld_emlsr_active(vif) ||
-	    WARN_ON(link->link_id == other_link_id || !other_link))
-		return;
-
-	if (link->chanreq.oper.width != other_link->chanreq.oper.width)
-		iwl_mld_exit_emlsr(mld, vif, IWL_MLD_EMLSR_EXIT_BANDWIDTH,
-				   iwl_mld_get_primary_link(vif));
-}
-
 static void iwl_mld_emlsr_check_bt_iter(void *_data, u8 *mac,
 					struct ieee80211_vif *vif)
 {
@@ -947,39 +996,72 @@ void iwl_mld_emlsr_check_bt(struct iwl_mld *mld)
 						NULL);
 }
 
-static void iwl_mld_emlsr_check_chan_load_iter(void *_data, u8 *mac,
-					       struct ieee80211_vif *vif)
+struct iwl_mld_chan_load_data {
+	struct iwl_mld_phy *phy;
+	u32 prev_chan_load_not_by_us;
+};
+
+static void iwl_mld_chan_load_update_iter(void *_data, u8 *mac,
+					  struct ieee80211_vif *vif)
 {
-	struct iwl_mld *mld = (struct iwl_mld *)_data;
+	struct iwl_mld_chan_load_data *data = _data;
+	const struct iwl_mld_phy *phy = data->phy;
+	struct ieee80211_chanctx_conf *chanctx =
+		container_of((const void *)phy, struct ieee80211_chanctx_conf,
+			     drv_priv);
+	struct iwl_mld *mld = iwl_mld_vif_from_mac80211(vif)->mld;
 	struct ieee80211_bss_conf *prim_link;
 	unsigned int prim_link_id;
-	int chan_load;
-
-	if (!iwl_mld_emlsr_active(vif))
-		return;
 
 	prim_link_id = iwl_mld_get_primary_link(vif);
 	prim_link = link_conf_dereference_protected(vif, prim_link_id);
+
 	if (WARN_ON(!prim_link))
 		return;
 
-	chan_load = iwl_mld_get_chan_load_by_others(mld, prim_link, true);
-
-	if (chan_load < 0)
+	if (chanctx != rcu_access_pointer(prim_link->chanctx_conf))
 		return;
 
-	/* chan_load is in range [0,255] */
-	if (chan_load < NORMALIZE_PERCENT_TO_255(IWL_MLD_CHAN_LOAD_THRESH))
-		iwl_mld_exit_emlsr(mld, vif, IWL_MLD_EMLSR_EXIT_CHAN_LOAD,
-				   prim_link_id);
+	if (iwl_mld_emlsr_active(vif)) {
+		int chan_load = iwl_mld_get_chan_load_by_others(mld, prim_link,
+								true);
+
+		if (chan_load < 0)
+			return;
+
+		/* chan_load is in range [0,255] */
+		if (chan_load < NORMALIZE_PERCENT_TO_255(IWL_MLD_EXIT_EMLSR_CHAN_LOAD))
+			iwl_mld_exit_emlsr(mld, vif,
+					   IWL_MLD_EMLSR_EXIT_CHAN_LOAD,
+					   prim_link_id);
+	} else {
+		u32 old_chan_load = data->prev_chan_load_not_by_us;
+		u32 new_chan_load = phy->avg_channel_load_not_by_us;
+		u32 min_thresh = iwl_mld_get_min_chan_load_thresh(chanctx);
+
+#define THRESHOLD_CROSSED(threshold) \
+	(old_chan_load <= (threshold) && new_chan_load > (threshold))
+
+		if (THRESHOLD_CROSSED(min_thresh) || THRESHOLD_CROSSED(25) ||
+		    THRESHOLD_CROSSED(40) || THRESHOLD_CROSSED(50))
+			iwl_mld_retry_emlsr(mld, vif);
+#undef THRESHOLD_CROSSED
+	}
 }
 
-void iwl_mld_emlsr_check_chan_load(struct iwl_mld *mld)
+void iwl_mld_emlsr_check_chan_load(struct ieee80211_hw *hw,
+				   struct iwl_mld_phy *phy,
+				   u32 prev_chan_load_not_by_us)
 {
-	ieee80211_iterate_active_interfaces_mtx(mld->hw,
+	struct iwl_mld_chan_load_data data = {
+		.phy = phy,
+		.prev_chan_load_not_by_us = prev_chan_load_not_by_us,
+	};
+
+	ieee80211_iterate_active_interfaces_mtx(hw,
 						IEEE80211_IFACE_ITER_NORMAL,
-						iwl_mld_emlsr_check_chan_load_iter,
-						(void *)(uintptr_t)mld);
+						iwl_mld_chan_load_update_iter,
+						&data);
 }
 
 void iwl_mld_retry_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif)
@@ -990,5 +1072,5 @@ void iwl_mld_retry_emlsr(struct iwl_mld *mld, struct ieee80211_vif *vif)
 	    mld_vif->emlsr.blocked_reasons)
 		return;
 
-	iwl_mld_trigger_link_selection(mld, vif);
+	iwl_mld_int_mlo_scan(mld, vif);
 }

@@ -7,6 +7,7 @@
 #include "low_latency.h"
 #include "hcmd.h"
 #include "power.h"
+#include "mlo.h"
 
 #define MLD_LL_WK_INTERVAL_MSEC 500
 #define MLD_LL_PERIOD (HZ * MLD_LL_WK_INTERVAL_MSEC / 1000)
@@ -120,9 +121,9 @@ static void iwl_mld_low_latency_wk(struct wiphy *wiphy, struct wiphy_work *wk)
 		wiphy_delayed_work_queue(mld->wiphy, &mld->low_latency.work,
 					 MLD_LL_ACTIVE_WK_PERIOD);
 
-	ieee80211_iterate_active_interfaces(mld->hw,
-					    IEEE80211_IFACE_ITER_NORMAL,
-					    iwl_mld_low_latency_iter, mld);
+	ieee80211_iterate_active_interfaces_mtx(mld->hw,
+						IEEE80211_IFACE_ITER_NORMAL,
+						iwl_mld_low_latency_iter, mld);
 }
 
 int iwl_mld_low_latency_init(struct iwl_mld *mld)
@@ -230,6 +231,9 @@ void iwl_mld_vif_update_low_latency(struct iwl_mld *mld,
 		return;
 
 	iwl_mld_update_mac_power(mld, vif, false);
+
+	if (low_latency)
+		iwl_mld_retry_emlsr(mld, vif);
 }
 
 static bool iwl_mld_is_vo_vi_pkt(struct ieee80211_hdr *hdr)
