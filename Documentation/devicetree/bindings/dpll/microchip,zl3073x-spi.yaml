@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dpll/microchip,zl3073x-spi.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SPI-attached Microchip Azurite DPLL device
+
+maintainers:
+  - Ivan Vecera <ivecera@redhat.com>
+
+description:
+  Microchip Azurite DPLL (ZL3073x) is a family of DPLL devices that
+  provides 2 independent DPLL channels, up to 10 differential or
+  single-ended inputs and up to 20 differential or 20 single-ended outputs.
+  It can be connected via multiple busses, one of them being I2C.
+
+properties:
+  compatible:
+    enum:
+      - microchip,zl3073x-spi
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+allOf:
+  - $ref: /schemas/dpll/dpll-device.yaml#
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    spi {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      dpll@70 {
+        compatible = "microchip,zl3073x-spi";
+        reg = <0x70>;
+        #address-cells = <0>;
+        #size-cells = <0>;
+        spi-max-frequency = <12500000>;
+
+        dpll-types = "pps", "eec";
+
+        input-pins {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          pin@0 { /* REF0P */
+            reg = <0>;
+            label = "Input 0";
+            supported-frequencies = /bits/ 64 <1 1000>;
+            type = "ext";
+          };
+        };
+
+        output-pins {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          pin@3 { /* OUT1N */
+            reg = <3>;
+            esync-control;
+            label = "Output 1";
+            supported-frequencies = /bits/ 64 <1 10000>;
+            type = "gnss";
+          };
+        };
+      };
+    };
+...
