@@ -66,7 +66,7 @@ static int smapi_request(unsigned short inBX, unsigned short inCX,
 	unsigned short myoutDX = 5, *pmyoutDX = &myoutDX;
 	unsigned short myoutDI = 6, *pmyoutDI = &myoutDI;
 	unsigned short myoutSI = 7, *pmyoutSI = &myoutSI;
-	unsigned short usSmapiOK = -EIO, *pusSmapiOK = &usSmapiOK;
+	short usSmapiOK = -EIO, *pusSmapiOK = &usSmapiOK;
 	unsigned int inBXCX = (inBX << 16) | inCX;
 	unsigned int inDISI = (inDI << 16) | inSI;
 	int retval = 0;
