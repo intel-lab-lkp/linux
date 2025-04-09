@@ -2206,6 +2206,18 @@ static inline bool task_is_runnable(struct task_struct *p)
 	return p->on_rq && !p->se.sched_delayed;
 }
 
+#ifdef CONFIG_RT_MUTEXES
+static inline bool tsk_is_pi_blocked_on(struct task_struct *tsk)
+{
+	return tsk->pi_blocked_on != NULL;
+}
+#else
+static inline bool tsk_is_pi_blocked_on(strut task_struct *tsk)
+{
+	return false;
+}
+#endif
+
 extern bool sched_task_on_rq(struct task_struct *p);
 extern unsigned long get_wchan(struct task_struct *p);
 extern struct task_struct *cpu_curr_snapshot(int cpu);
