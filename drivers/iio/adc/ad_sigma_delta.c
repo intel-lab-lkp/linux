@@ -568,6 +568,11 @@ static irqreturn_t ad_sd_trigger_handler(int irq, void *p)
 	else
 		transfer_size = reg_size;
 
+	if (reg_size != 1 && reg_size != 2 && reg_size != 3 && reg_size != 4) {
+		dev_err(&indio_dev->dev, "Unsupported reg_size: %u\n", reg_size);
+		return IRQ_HANDLED;
+	}
+
 	switch (reg_size) {
 	case 4:
 	case 2:
