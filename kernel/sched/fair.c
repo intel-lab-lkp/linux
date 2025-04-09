@@ -8559,6 +8559,24 @@ unlock:
 	return target;
 }
 
+static inline void update_overloaded_mask(int cpu, bool contains_pushable)
+{
+	struct sched_domain_shared *sd_share = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+	cpumask_var_t overloaded_mask;
+
+	if (!sd_share)
+		return;
+
+	overloaded_mask = sd_share->overloaded_mask;
+	if (!overloaded_mask)
+		return;
+
+	if (contains_pushable)
+		cpumask_set_cpu(cpu, overloaded_mask);
+	else
+		cpumask_clear_cpu(cpu, overloaded_mask);
+}
+
 static inline bool fair_push_task(struct task_struct *p)
 {
 	if (!task_on_rq_queued(p))
@@ -8606,11 +8624,17 @@ static inline void fair_queue_pushable_tasks(struct rq *rq)
 static void fair_remove_pushable_task(struct rq *rq, struct task_struct *p)
 {
 	plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+
+	if (!has_pushable_tasks(rq))
+		update_overloaded_mask(rq->cpu, false);
 }
 
 static void fair_add_pushable_task(struct rq *rq, struct task_struct *p)
 {
 	if (fair_push_task(p)) {
+		if (!has_pushable_tasks(rq))
+			update_overloaded_mask(rq->cpu, true);
+
 		plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
 		plist_node_init(&p->pushable_tasks, p->prio);
 		plist_add(&p->pushable_tasks, &rq->cfs.pushable_tasks);
