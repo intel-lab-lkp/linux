@@ -617,6 +617,33 @@ static ssize_t pretimeout_governor_store(struct device *dev,
 }
 static DEVICE_ATTR_RW(pretimeout_governor);
 
+static ssize_t reset_on_panic_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct watchdog_device *wdd = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u\n", wdd->reset_on_panic);
+}
+
+static ssize_t reset_on_panic_store(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	struct watchdog_device *wdd = dev_get_drvdata(dev);
+	unsigned int value;
+	int ret;
+
+	ret = kstrtouint(buf, 0, &value);
+	if (ret)
+		return ret;
+
+	wdd->reset_on_panic = value;
+
+	return count;
+}
+static DEVICE_ATTR_RW(reset_on_panic);
+
 static umode_t wdt_is_visible(struct kobject *kobj, struct attribute *attr,
 				int n)
 {
@@ -648,6 +675,7 @@ static struct attribute *wdt_attrs[] = {
 	&dev_attr_bootstatus.attr,
 	&dev_attr_status.attr,
 	&dev_attr_nowayout.attr,
+	&dev_attr_reset_on_panic.attr,
 	&dev_attr_pretimeout_governor.attr,
 	&dev_attr_pretimeout_available_governors.attr,
 	NULL,
