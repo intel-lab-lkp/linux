@@ -19,6 +19,9 @@
 /* Override for DMA direct allocation check - ARCH_HAS_FORCE_DMA_UNENCRYPTED */
 bool force_dma_unencrypted(struct device *dev)
 {
+	if (dev->use_priv_pages_for_io)
+		return false;
+
 	/*
 	 * For SEV, all DMA must be to unencrypted addresses.
 	 */

@@ -725,6 +725,8 @@ struct device_physical_location {
  * @dma_skip_sync: DMA sync operations can be skipped for coherent buffers.
  * @dma_iommu: Device is using default IOMMU implementation for DMA and
  *		doesn't rely on dma_ops structure.
+ * @use_priv_pages_for_io: Device is using private pages for I/O, no need to
+ *		bounce-buffer.
  *
  * At the lowest level, every device in a Linux system is represented by an
  * instance of struct device. The device structure contains the information
@@ -843,6 +845,7 @@ struct device {
 #ifdef CONFIG_IOMMU_DMA
 	bool			dma_iommu:1;
 #endif
+	bool			use_priv_pages_for_io:1;
 };
 
 /**
@@ -1077,6 +1080,11 @@ static inline bool dev_is_removable(struct device *dev)
 static inline bool dev_removable_is_valid(struct device *dev)
 {
 	return dev->removable != DEVICE_REMOVABLE_NOT_SUPPORTED;
+}
+
+static inline bool dev_priv_pages_for_io(struct device *dev)
+{
+	return dev->use_priv_pages_for_io;
 }
 
 /*
