@@ -192,6 +192,17 @@ enum dpll_pin_capabilities {
 
 #define DPLL_PHASE_OFFSET_DIVIDER	1000
 
+/**
+ * enum dpll_features - Allow simple control (enable/disable) and status
+ *   checking over features available per single dpll device.
+ * @DPLL_FEATURES_ALL_INPUTS_PHASE_OFFSET_MONITOR: select if phase offset
+ *   values are measured and reported for all the input pins available for
+ *   given dpll device
+ */
+enum dpll_features {
+	DPLL_FEATURES_ALL_INPUTS_PHASE_OFFSET_MONITOR = 1,
+};
+
 enum dpll_a {
 	DPLL_A_ID = 1,
 	DPLL_A_MODULE_NAME,
@@ -204,6 +215,8 @@ enum dpll_a {
 	DPLL_A_TYPE,
 	DPLL_A_LOCK_STATUS_ERROR,
 	DPLL_A_CLOCK_QUALITY_LEVEL,
+	DPLL_A_CAPABILITIES,
+	DPLL_A_FEATURES,
 
 	__DPLL_A_MAX,
 	DPLL_A_MAX = (__DPLL_A_MAX - 1)
