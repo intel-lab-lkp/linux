@@ -2700,8 +2700,11 @@ static bool should_clear_pmd_young(void)
 		READ_ONCE((lruvec)->lrugen.min_seq[LRU_GEN_FILE]),	\
 	}
 
+#define max_evictable_type(swappiness)						\
+	((swappiness) != SWAPPINESS_ANON_ONLY)
+
 #define evictable_min_seq(min_seq, swappiness)				\
-	min((min_seq)[!(swappiness)], (min_seq)[(swappiness) <= MAX_SWAPPINESS])
+	min((min_seq)[!(swappiness)], (min_seq)[max_evictable_type(swappiness)])
 
 #define for_each_gen_type_zone(gen, type, zone)				\
 	for ((gen) = 0; (gen) < MAX_NR_GENS; (gen)++)			\
@@ -2709,7 +2712,7 @@ static bool should_clear_pmd_young(void)
 			for ((zone) = 0; (zone) < MAX_NR_ZONES; (zone)++)
 
 #define for_each_evictable_type(type, swappiness)			\
-	for ((type) = !(swappiness); (type) <= ((swappiness) <= MAX_SWAPPINESS); (type)++)
+	for ((type) = !(swappiness); (type) <= max_evictable_type(swappiness); (type)++)
 
 #define get_memcg_gen(seq)	((seq) % MEMCG_NR_GENS)
 #define get_memcg_bin(bin)	((bin) % MEMCG_NR_BINS)
@@ -3860,7 +3863,7 @@ static bool inc_min_seq(struct lruvec *lruvec, int type, int swappiness)
 	int hist = lru_hist_from_seq(lrugen->min_seq[type]);
 	int new_gen, old_gen = lru_gen_from_seq(lrugen->min_seq[type]);
 
-	if (type ? swappiness > MAX_SWAPPINESS : !swappiness)
+	if (type ? (swappiness == SWAPPINESS_ANON_ONLY) : !swappiness)
 		goto done;
 
 	/* prevent cold/hot inversion if the type is evictable */
@@ -5531,7 +5534,7 @@ static int run_cmd(char cmd, int memcg_id, int nid, unsigned long seq,
 
 	if (swappiness < MIN_SWAPPINESS)
 		swappiness = get_swappiness(lruvec, sc);
-	else if (swappiness > MAX_SWAPPINESS + 1)
+	else if (swappiness > SWAPPINESS_ANON_ONLY)
 		goto done;
 
 	switch (cmd) {
@@ -5588,7 +5591,7 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 	while ((cur = strsep(&next, ",;\n"))) {
 		int n;
 		int end;
-		char cmd;
+		char cmd, swap_string[5];
 		unsigned int memcg_id;
 		unsigned int nid;
 		unsigned long seq;
@@ -5599,11 +5602,20 @@ static ssize_t lru_gen_seq_write(struct file *file, const char __user *src,
 		if (!*cur)
 			continue;
 
-		n = sscanf(cur, "%c %u %u %lu %n %u %n %lu %n", &cmd, &memcg_id, &nid,
-			   &seq, &end, &swappiness, &end, &opt, &end);
+		n = sscanf(cur, "%c %u %u %lu %n %4s %n %lu %n", &cmd, &memcg_id, &nid,
+			   &seq, &end, swap_string, &end, &opt, &end);
 		if (n < 4 || cur[end]) {
 			err = -EINVAL;
 			break;
+		}
+
+		/* set by userspace for anonymous memory only */
+		if (!strncmp("max", swap_string, sizeof("max"))) {
+			swappiness = SWAPPINESS_ANON_ONLY;
+		} else {
+			err = kstrtouint(swap_string, 0, &swappiness);
+			if (err)
+				break;
 		}
 
 		err = run_cmd(cmd, memcg_id, nid, seq, &sc, swappiness, opt);
