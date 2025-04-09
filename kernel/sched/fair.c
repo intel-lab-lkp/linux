@@ -5882,6 +5882,20 @@ void init_cfs_throttle_work(struct task_struct *p)
 	INIT_LIST_HEAD(&p->throttle_node);
 }
 
+static void dequeue_throttled_task(struct task_struct *p, int flags)
+{
+	/*
+	 * Task is throttled and someone wants to dequeue it again:
+	 * it must be sched/core when core needs to do things like
+	 * task affinity change, task group change, task sched class
+	 * change etc.
+	 */
+	WARN_ON_ONCE(p->se.on_rq);
+	WARN_ON_ONCE(flags & DEQUEUE_SLEEP);
+
+	list_del_init(&p->throttle_node);
+}
+
 static void enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags);
 static int tg_unthrottle_up(struct task_group *tg, void *data)
 {
@@ -6716,6 +6730,7 @@ static inline void sync_throttle(struct task_group *tg, int cpu) {}
 static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq) {}
 static void task_throttle_setup_work(struct task_struct *p) {}
 static bool task_is_throttled(struct task_struct *p) { return false; }
+static void dequeue_throttled_task(struct task_struct *p, int flags) {}
 
 static inline int cfs_rq_throttled(struct cfs_rq *cfs_rq)
 {
@@ -7146,6 +7161,11 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
  */
 static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 {
+	if (unlikely(task_is_throttled(p))) {
+		dequeue_throttled_task(p, flags);
+		return true;
+	}
+
 	if (!(p->se.sched_delayed && (task_on_rq_migrating(p) || (flags & DEQUEUE_SAVE))))
 		util_est_dequeue(&rq->cfs, p);
 
