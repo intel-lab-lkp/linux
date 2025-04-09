@@ -8,6 +8,7 @@
 #include <linux/mfd/zl3073x.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <net/devlink.h>
 #include "zl3073x.h"
 
 /*
@@ -58,6 +59,14 @@ const struct regmap_config *zl3073x_get_regmap_config(void)
 }
 EXPORT_SYMBOL_NS_GPL(zl3073x_get_regmap_config, "ZL3073X");
 
+static const struct devlink_ops zl3073x_devlink_ops = {
+};
+
+static void zl3073x_devlink_free(void *ptr)
+{
+	devlink_free(ptr);
+}
+
 /**
  * zl3073x_devm_alloc - allocates zl3073x device structure
  * @dev: pointer to device structure
@@ -68,11 +77,24 @@ EXPORT_SYMBOL_NS_GPL(zl3073x_get_regmap_config, "ZL3073X");
  */
 struct zl3073x_dev *zl3073x_devm_alloc(struct device *dev)
 {
-	struct zl3073x_dev *zldev;
+	struct devlink *devlink;
 
-	return devm_kzalloc(dev, sizeof(*zldev), GFP_KERNEL);
+	devlink = devlink_alloc(&zl3073x_devlink_ops,
+				sizeof(struct zl3073x_dev), dev);
+	if (!devlink)
+		return NULL;
+
+	if (devm_add_action_or_reset(dev, zl3073x_devlink_free, devlink))
+		return NULL;
+
+	return devlink_priv(devlink);
 }
 EXPORT_SYMBOL_NS_GPL(zl3073x_devm_alloc, "ZL3073X");
+
+static void zl3073x_devlink_unregister(void *ptr)
+{
+	devlink_unregister(ptr);
+}
 
 /**
  * zl3073x_dev_init - initialize zl3073x device
@@ -84,6 +106,7 @@ EXPORT_SYMBOL_NS_GPL(zl3073x_devm_alloc, "ZL3073X");
  */
 int zl3073x_dev_init(struct zl3073x_dev *zldev)
 {
+	struct devlink *devlink;
 	int rc;
 
 	rc = devm_mutex_init(zldev->dev, &zldev->lock);
@@ -91,6 +114,14 @@ int zl3073x_dev_init(struct zl3073x_dev *zldev)
 		dev_err_probe(zldev->dev, rc, "Failed to initialize mutex\n");
 		return rc;
 	}
+
+	devlink = priv_to_devlink(zldev);
+	devlink_register(devlink);
+
+	rc = devm_add_action_or_reset(zldev->dev, zl3073x_devlink_unregister,
+				      devlink);
+	if (rc)
+		return rc;
 
 	return 0;
 }
