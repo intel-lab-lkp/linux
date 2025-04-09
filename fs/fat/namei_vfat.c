@@ -195,16 +195,6 @@ static const struct dentry_operations vfat_dentry_ops = {
 	.d_compare	= vfat_cmp,
 };
 
-/* Characters that are undesirable in an MS-DOS file name */
-
-static inline bool vfat_bad_char(wchar_t w)
-{
-	return (w < 0x0020)
-	    || (w == '*') || (w == '?') || (w == '<') || (w == '>')
-	    || (w == '|') || (w == '"') || (w == ':') || (w == '/')
-	    || (w == '\\');
-}
-
 static inline bool vfat_replace_char(wchar_t w)
 {
 	return (w == '[') || (w == ']') || (w == ';') || (w == ',')
@@ -220,10 +210,17 @@ static inline int vfat_is_used_badchars(const wchar_t *s, int len)
 {
 	int i;
 
-	for (i = 0; i < len; i++)
-		if (vfat_bad_char(s[i]))
-			return -EINVAL;
+	for (i = 0; i < len; i++) {
+		if (i == 0 && s[0] == 0x05)
+			continue;
 
+		/* Characters that are undesirable in an MS-DOS file name */
+		if ((s[i] < 0x0020) || (s[i] == '*') || (s[i] == '?') ||
+			(s[i] == '<') || (s[i] == '>') || (s[i] == '|')
+			|| (s[i] == '"') || (s[i] == ':') || (s[i] == '/')
+			|| (s[i] == '\\') || (s[i] == 0x7f))
+			return -EINVAL;
+	}
 	if (s[i - 1] == ' ') /* last character cannot be space */
 		return -EINVAL;
 
