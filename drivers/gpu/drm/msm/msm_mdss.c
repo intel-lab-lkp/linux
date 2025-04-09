@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+#include <linux/soc/qcom/smem.h>
 
 #include "msm_mdss.h"
 #include "msm_kms.h"
@@ -166,8 +167,14 @@ static int _msm_mdss_irq_domain_add(struct msm_mdss *msm_mdss)
 static void msm_mdss_setup_ubwc_dec_20(struct msm_mdss *msm_mdss)
 {
 	const struct msm_mdss_data *data = msm_mdss->mdss_data;
-	u32 value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle) |
-		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(data->highest_bank_bit);
+	u32 hbb = qcom_smem_dram_get_hbb() - 13;
+	u32 value;
+
+	if (hbb < 0)
+		hbb = data->highest_bank_bit;
+
+	value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle) |
+		MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(hbb);
 
 	if (data->ubwc_bank_spread)
 		value |= MDSS_UBWC_STATIC_UBWC_BANK_SPREAD;
@@ -181,8 +188,14 @@ static void msm_mdss_setup_ubwc_dec_20(struct msm_mdss *msm_mdss)
 static void msm_mdss_setup_ubwc_dec_30(struct msm_mdss *msm_mdss)
 {
 	const struct msm_mdss_data *data = msm_mdss->mdss_data;
-	u32 value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle & 0x1) |
-		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(data->highest_bank_bit);
+	u32 hbb = qcom_smem_dram_get_hbb() - 13;
+	u32 value;
+
+	if (hbb < 0)
+		hbb = data->highest_bank_bit;
+
+	value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle & 0x1) |
+		MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(hbb);
 
 	if (data->macrotile_mode)
 		value |= MDSS_UBWC_STATIC_MACROTILE_MODE;
@@ -199,8 +212,14 @@ static void msm_mdss_setup_ubwc_dec_30(struct msm_mdss *msm_mdss)
 static void msm_mdss_setup_ubwc_dec_40(struct msm_mdss *msm_mdss)
 {
 	const struct msm_mdss_data *data = msm_mdss->mdss_data;
-	u32 value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle) |
-		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(data->highest_bank_bit);
+	u32 hbb = qcom_smem_dram_get_hbb() - 13;
+	u32 value;
+
+	if (hbb < 0)
+		hbb = data->highest_bank_bit;
+
+	value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle) |
+		MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(hbb);
 
 	if (data->ubwc_bank_spread)
 		value |= MDSS_UBWC_STATIC_UBWC_BANK_SPREAD;
@@ -537,6 +556,10 @@ static int mdss_probe(struct platform_device *pdev)
 	bool is_mdp5 = of_device_is_compatible(pdev->dev.of_node, "qcom,mdss");
 	struct device *dev = &pdev->dev;
 	int ret;
+
+	/* We need data from SMEM to retrieve HBB in _setup_ubwc_dec_() */
+	if (!qcom_smem_is_available())
+		return -EPROBE_DEFER;
 
 	mdss = msm_mdss_init(pdev, is_mdp5);
 	if (IS_ERR(mdss))
