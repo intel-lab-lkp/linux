@@ -46,6 +46,7 @@ pub mod cred;
 pub mod device;
 pub mod device_id;
 pub mod devres;
+#[cfg(CONFIG_HAS_DMA)]
 pub mod dma;
 pub mod driver;
 pub mod error;
