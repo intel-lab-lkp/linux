@@ -45,7 +45,9 @@ class dirinfo(object):
                 self.files.append(fname)
 
 # Read the spdx data from the LICENSES directory
-def read_spdxdata(repo):
+def read_spdxdata():
+    repo = git.Repo(os.getcwd())
+    assert not repo.bare
 
     # The subdirectories of LICENSES in the kernel source
     # Note: exceptions needs to be parsed as last directory.
@@ -295,7 +297,15 @@ def exclude_file(fpath):
             return True
     return False
 
-def scan_git_tree(tree, basedir, dirdepth):
+def scan_git_tree(basedir, dirdepth):
+    repo = git.Repo(os.getcwd())
+    tree = repo.head.commit.tree
+
+    basedir = basedir.strip('/')
+    if basedir != '.':
+        for p in basedir.split('/'):
+            tree = tree[p]
+
     parser.set_dirinfo(basedir, dirdepth)
     for el in tree.traverse():
         if not os.path.isfile(el.path):
@@ -305,11 +315,6 @@ def scan_git_tree(tree, basedir, dirdepth):
             continue
         with open(el.path, 'rb') as fd:
             parser.parse_lines(fd, args.maxlines, el.path)
-
-def scan_git_subtree(tree, path, dirdepth):
-    for p in path.strip('/').split('/'):
-        tree = tree[p]
-    scan_git_tree(tree, path.strip('/'), dirdepth)
 
 def read_exclude_file(fname):
     rules = []
@@ -348,12 +353,8 @@ if __name__ == '__main__':
         sys.exit(1)
 
     try:
-        # Use git to get the valid license expressions
-        repo = git.Repo(os.getcwd())
-        assert not repo.bare
-
         # Initialize SPDX data
-        spdx = read_spdxdata(repo)
+        spdx = read_spdxdata()
 
         # Initialize the parser
         parser = id_parser(spdx)
@@ -389,14 +390,13 @@ if __name__ == '__main__':
                     if os.path.isfile(p):
                         parser.parse_lines(open(p, 'rb'), args.maxlines, p)
                     elif os.path.isdir(p):
-                        scan_git_subtree(repo.head.reference.commit.tree, p,
-                                         args.depth)
+                        scan_git_tree(p, args.depth)
                     else:
                         sys.stderr.write('path %s does not exist\n' %p)
                         sys.exit(1)
             else:
                 # Full git tree scan
-                scan_git_tree(repo.head.commit.tree, '.', args.depth)
+                scan_git_tree('.', args.depth)
 
             ndirs = len(parser.spdx_dirs)
             dirsok = 0
