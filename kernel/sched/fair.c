@@ -8596,12 +8596,71 @@ static inline int has_pushable_tasks(struct rq *rq)
 	return !plist_head_empty(&rq->cfs.pushable_tasks);
 }
 
+static struct task_struct *pick_next_pushable_fair_task(struct rq *rq)
+{
+	struct task_struct *p;
+
+	if (!has_pushable_tasks(rq))
+		return NULL;
+
+	p = plist_first_entry(&rq->cfs.pushable_tasks,
+			      struct task_struct, pushable_tasks);
+
+	WARN_ON_ONCE(rq->cpu != task_cpu(p));
+	WARN_ON_ONCE(task_current(rq, p));
+	WARN_ON_ONCE(p->nr_cpus_allowed <= 1);
+	WARN_ON_ONCE(!task_on_rq_queued(p));
+
+	/*
+	 * Remove task from the pushable list as we try only once after that
+	 * the task has been put back in enqueued list.
+	 */
+	plist_del(&p->pushable_tasks, &rq->cfs.pushable_tasks);
+
+	return p;
+}
+
+static void fair_add_pushable_task(struct rq *rq, struct task_struct *p);
+static void attach_one_task(struct rq *rq, struct task_struct *p);
+
 /*
  * See if the non running fair tasks on this rq can be sent on other CPUs
  * that fits better with their profile.
  */
 static bool push_fair_task(struct rq *rq)
 {
+	struct cpumask *cpus = this_cpu_cpumask_var_ptr(load_balance_mask);
+	struct task_struct *p = pick_next_pushable_fair_task(rq);
+	int cpu, this_cpu = cpu_of(rq);
+
+	if (!p)
+		return false;
+
+	if (!cpumask_and(cpus, nohz.idle_cpus_mask, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE)))
+		goto requeue;
+
+	if (!cpumask_and(cpus, cpus, p->cpus_ptr))
+		goto requeue;
+
+	for_each_cpu_wrap(cpu, cpus, this_cpu + 1) {
+		struct rq *target_rq;
+
+		if (!idle_cpu(cpu))
+			continue;
+
+		target_rq = cpu_rq(cpu);
+		deactivate_task(rq, p, 0);
+		set_task_cpu(p, cpu);
+		raw_spin_rq_unlock(rq);
+
+		attach_one_task(target_rq, p);
+		raw_spin_rq_lock(rq);
+
+		return true;
+	}
+
+requeue:
+	fair_add_pushable_task(rq, p);
 	return false;
 }
 
