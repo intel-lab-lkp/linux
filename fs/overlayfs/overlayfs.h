@@ -445,7 +445,7 @@ void ovl_dentry_init_reval(struct dentry *dentry, struct dentry *upperdentry,
 			   struct ovl_entry *oe);
 void ovl_dentry_init_flags(struct dentry *dentry, struct dentry *upperdentry,
 			   struct ovl_entry *oe, unsigned int mask);
-bool ovl_dentry_weird(struct dentry *dentry);
+bool ovl_dentry_weird(struct dentry *dentry, struct ovl_fs *ovl);
 enum ovl_path_type ovl_path_type(struct dentry *dentry);
 void ovl_path_upper(struct dentry *dentry, struct path *path);
 void ovl_path_lower(struct dentry *dentry, struct path *path);

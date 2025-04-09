@@ -200,15 +200,17 @@ void ovl_dentry_init_flags(struct dentry *dentry, struct dentry *upperdentry,
 	spin_unlock(&dentry->d_lock);
 }
 
-bool ovl_dentry_weird(struct dentry *dentry)
+bool ovl_dentry_weird(struct dentry *dentry, struct ovl_fs *ovl)
 {
+	int flags = DCACHE_NEED_AUTOMOUNT | DCACHE_MANAGE_TRANSIT;
+
+	if (!ovl->casefold)
+		flags |= DCACHE_OP_HASH | DCACHE_OP_COMPARE;
+
 	if (!d_can_lookup(dentry) && !d_is_file(dentry) && !d_is_symlink(dentry))
 		return true;
 
-	return dentry->d_flags & (DCACHE_NEED_AUTOMOUNT |
-				  DCACHE_MANAGE_TRANSIT |
-				  DCACHE_OP_HASH |
-				  DCACHE_OP_COMPARE);
+	return dentry->d_flags & flags;
 }
 
 enum ovl_path_type ovl_path_type(struct dentry *dentry)

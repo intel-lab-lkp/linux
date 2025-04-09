@@ -192,7 +192,7 @@ struct dentry *ovl_decode_real_fh(struct ovl_fs *ofs, struct ovl_fh *fh,
 		return real;
 	}
 
-	if (ovl_dentry_weird(real)) {
+	if (ovl_dentry_weird(real, ofs)) {
 		dput(real);
 		return NULL;
 	}
@@ -244,7 +244,7 @@ static int ovl_lookup_single(struct dentry *base, struct ovl_lookup_data *d,
 		goto out_err;
 	}
 
-	if (ovl_dentry_weird(this)) {
+	if (ovl_dentry_weird(this, ofs)) {
 		/* Don't support traversing automounts and other weirdness */
 		err = -EREMOTE;
 		goto out_err;
@@ -365,6 +365,7 @@ static int ovl_lookup_data_layer(struct dentry *dentry, const char *redirect,
 				 struct path *datapath)
 {
 	int err;
+	struct ovl_fs *ovl = OVL_FS(layer->fs->sb);
 
 	err = vfs_path_lookup(layer->mnt->mnt_root, layer->mnt, redirect,
 			LOOKUP_BENEATH | LOOKUP_NO_SYMLINKS | LOOKUP_NO_XDEV,
@@ -376,7 +377,7 @@ static int ovl_lookup_data_layer(struct dentry *dentry, const char *redirect,
 		return err;
 
 	err = -EREMOTE;
-	if (ovl_dentry_weird(datapath->dentry))
+	if (ovl_dentry_weird(datapath->dentry, ovl))
 		goto out_path_put;
 
 	err = -ENOENT;
@@ -767,7 +768,7 @@ struct dentry *ovl_get_index_fh(struct ovl_fs *ofs, struct ovl_fh *fh)
 
 	if (ovl_is_whiteout(index))
 		err = -ESTALE;
-	else if (ovl_dentry_weird(index))
+	else if (ovl_dentry_weird(index, ofs))
 		err = -EIO;
 	else
 		return index;
@@ -815,7 +816,7 @@ struct dentry *ovl_lookup_index(struct ovl_fs *ofs, struct dentry *upper,
 		dput(index);
 		index = ERR_PTR(-ESTALE);
 		goto out;
-	} else if (ovl_dentry_weird(index) || ovl_is_whiteout(index) ||
+	} else if (ovl_dentry_weird(index, ofs) || ovl_is_whiteout(index) ||
 		   inode_wrong_type(inode, d_inode(origin)->i_mode)) {
 		/*
 		 * Index should always be of the same file type as origin
