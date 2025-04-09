@@ -237,4 +237,14 @@ config VZ89X
 	  Sensortech MiCS VZ89X VOC (Volatile Organic Compounds)
 	  sensors
 
+config WINSEN_MHZ19B
+	tristate "Winsen MHZ19B CO2 sensor"
+	depends on SERIAL_DEV_BUS
+	help
+	  Say Y here to build Serdev interface support for the Winsen
+	  MHZ19B CO2 sensor.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called mhz19b.
+
 endmenu

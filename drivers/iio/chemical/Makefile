@@ -27,3 +27,4 @@ obj-$(CONFIG_SPS30) += sps30.o
 obj-$(CONFIG_SPS30_I2C) += sps30_i2c.o
 obj-$(CONFIG_SPS30_SERIAL) += sps30_serial.o
 obj-$(CONFIG_VZ89X)		+= vz89x.o
+obj-$(CONFIG_WINSEN_MHZ19B) += mhz19b.o
