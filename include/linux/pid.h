@@ -65,6 +65,7 @@ struct pid
 	struct hlist_head inodes;
 	/* wait queue for pidfd notifications */
 	wait_queue_head_t wait_pidfd;
+	seqcount_rwlock_t pid_seq;
 	struct rcu_head rcu;
 	struct upid numbers[];
 };

@@ -2109,24 +2109,26 @@ static int __pidfd_prepare(struct pid *pid, unsigned int flags, struct file **re
 int pidfd_prepare(struct pid *pid, unsigned int flags, struct file **ret)
 {
 	int err = 0;
+	unsigned int seq;
 
-	if (!(flags & PIDFD_THREAD)) {
+	do {
+		seq = raw_seqcount_begin(&pid->pid_seq);
 		/*
 		 * If this is struct pid isn't used as a thread-group
 		 * leader pid but the caller requested to create a
 		 * thread-group leader pidfd then report ENOENT to the
 		 * caller as a hint.
 		 */
-		if (!pid_has_task(pid, PIDTYPE_TGID))
+		if (!(flags & PIDFD_THREAD) && !pid_has_task(pid, PIDTYPE_TGID))
 			err = -ENOENT;
-	}
-
-	/*
-	 * If this wasn't a thread-group leader struct pid or the task
-	 * got reaped in the meantime report -ESRCH to userspace.
-	 */
-	if (!pid_has_task(pid, PIDTYPE_PID))
-		err = -ESRCH;
+		/*
+		 * If this wasn't a thread-group leader struct pid or
+		 * the task got reaped in the meantime report -ESRCH to
+		 * userspace.
+		 */
+		if (!pid_has_task(pid, PIDTYPE_PID))
+			err = -ESRCH;
+	} while (read_seqcount_retry(&pid->pid_seq, seq));
 	if (err)
 		return err;
 

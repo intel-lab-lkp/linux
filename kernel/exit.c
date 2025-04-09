@@ -133,17 +133,28 @@ struct release_task_post {
 static void __unhash_process(struct release_task_post *post, struct task_struct *p,
 			     bool group_dead)
 {
+	struct pid *pid;
+
+	lockdep_assert_held_write(&tasklist_lock);
+
 	nr_threads--;
+
+	pid = task_pid(p);
+	raw_write_seqcount_begin(&pid->pid_seq);
 	detach_pid(post->pids, p, PIDTYPE_PID);
 	if (group_dead) {
 		detach_pid(post->pids, p, PIDTYPE_TGID);
 		detach_pid(post->pids, p, PIDTYPE_PGID);
 		detach_pid(post->pids, p, PIDTYPE_SID);
+	}
+	raw_write_seqcount_end(&pid->pid_seq);
 
+	if (group_dead) {
 		list_del_rcu(&p->tasks);
 		list_del_init(&p->sibling);
 		__this_cpu_dec(process_counts);
 	}
+
 	list_del_rcu(&p->thread_node);
 }
 

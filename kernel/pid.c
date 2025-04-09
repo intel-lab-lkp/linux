@@ -271,6 +271,7 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	upid = pid->numbers + ns->level;
 	idr_preload(GFP_KERNEL);
 	spin_lock(&pidmap_lock);
+	seqcount_rwlock_init(&pid->pid_seq, &tasklist_lock);
 	if (!(ns->pid_allocated & PIDNS_ADDING))
 		goto out_unlock;
 	pidfs_add_pid(pid);
