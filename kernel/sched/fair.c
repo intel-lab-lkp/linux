@@ -12864,6 +12864,100 @@ static inline bool nohz_idle_balance(struct rq *this_rq, enum cpu_idle_type idle
 static inline void nohz_newidle_balance(struct rq *this_rq) { }
 #endif /* CONFIG_NO_HZ_COMMON */
 
+static inline bool sched_newidle_continue_balance(struct rq *rq)
+{
+	return !rq->nr_running && !rq->ttwu_pending;
+}
+
+static inline int sched_newidle_pull_overloaded(struct sched_domain *sd,
+						struct rq *this_rq,
+						int *continue_balancing)
+{
+	struct cpumask *cpus = this_cpu_cpumask_var_ptr(load_balance_mask);
+	int cpu, this_cpu = cpu_of(this_rq);
+	struct sched_domain *sd_parent;
+	struct lb_env env = {
+		.dst_cpu	= this_cpu,
+		.dst_rq		= this_rq,
+		.idle		= CPU_NEWLY_IDLE,
+	};
+
+
+	cpumask_and(cpus, sched_domain_span(sd), cpu_active_mask);
+
+next_domain:
+	env.sd = sd;
+	/* Allow migrating cache_hot tasks too. */
+	sd->nr_balance_failed = sd->cache_nice_tries + 1;
+
+	for_each_cpu_wrap(cpu, cpus, this_cpu) {
+		struct sched_domain_shared *sd_share;
+		struct cpumask *overloaded_mask;
+		struct sched_domain *cpu_llc;
+		int overloaded_cpu;
+
+		cpu_llc = rcu_dereference(per_cpu(sd_llc, cpu));
+		if (!cpu_llc)
+			break;
+
+		sd_share = cpu_llc->shared;
+		if (!sd_share)
+			break;
+
+		overloaded_mask = sd_share->overloaded_mask;
+		if (!overloaded_mask)
+			break;
+
+		for_each_cpu_wrap(overloaded_cpu, overloaded_mask, this_cpu + 1) {
+			struct rq *overloaded_rq = cpu_rq(overloaded_cpu);
+			struct task_struct *p = NULL;
+
+			if (sched_newidle_continue_balance(this_rq)) {
+				*continue_balancing = 0;
+				return 0;
+			}
+
+			/* Quick peek to find if pushable tasks exist. */
+			if (!has_pushable_tasks(overloaded_rq))
+				continue;
+
+			scoped_guard (rq_lock, overloaded_rq) {
+				update_rq_clock(overloaded_rq);
+
+				if (!has_pushable_tasks(overloaded_rq))
+					break;
+
+				env.src_cpu = overloaded_cpu;
+				env.src_rq = overloaded_rq;
+
+				p = detach_one_task(&env);
+			}
+
+			if (!p)
+				continue;
+
+			attach_one_task(this_rq, p);
+			return 1;
+		}
+
+		cpumask_andnot(cpus, cpus, sched_domain_span(cpu_llc));
+	}
+
+	if (sched_newidle_continue_balance(this_rq)) {
+		*continue_balancing = 0;
+		return 0;
+	}
+
+	sd_parent = sd->parent;
+	if (sd_parent && !(sd_parent->flags & SD_NUMA)) {
+		cpumask_andnot(cpus, sched_domain_span(sd_parent), sched_domain_span(sd));
+		sd = sd_parent;
+		goto next_domain;
+	}
+
+	return 0;
+}
+
 /*
  * sched_balance_newidle is called by schedule() if this_cpu is about to become
  * idle. Attempts to pull tasks from other CPUs.
@@ -12881,6 +12975,7 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	u64 t0, t1, curr_cost = 0;
 	struct sched_domain *sd;
 	int pulled_task = 0;
+	u64 domain_cost;
 
 	update_misfit_status(NULL, this_rq);
 
@@ -12913,28 +13008,34 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 	rq_unpin_lock(this_rq, rf);
 
 	rcu_read_lock();
-	sd = rcu_dereference_check_sched_domain(this_rq->sd);
-
-	if (!get_rd_overloaded(this_rq->rd) ||
-	    (sd && this_rq->avg_idle < sd->max_newidle_lb_cost)) {
-
-		if (sd)
-			update_next_balance(sd, &next_balance);
+	if (!get_rd_overloaded(this_rq->rd)) {
 		rcu_read_unlock();
-
 		goto out;
 	}
 	rcu_read_unlock();
 
 	raw_spin_rq_unlock(this_rq);
 
+	rcu_read_lock();
 	t0 = sched_clock_cpu(this_cpu);
+
+	sd = rcu_dereference(per_cpu(sd_llc, this_cpu));
+	if (sd) {
+		pulled_task = sched_newidle_pull_overloaded(sd, this_rq, &continue_balancing);
+
+		t1 = sched_clock_cpu(this_cpu);
+		domain_cost = t1 - t0;
+		curr_cost += domain_cost;
+		t0 = t1;
+
+		if (pulled_task || !continue_balancing)
+			goto skip_numa;
+	}
+
 	sched_balance_update_blocked_averages(this_cpu);
 
-	rcu_read_lock();
-	for_each_domain(this_cpu, sd) {
-		u64 domain_cost;
-
+	sd = rcu_dereference(per_cpu(sd_numa, this_cpu));
+	while (sd) {
 		update_next_balance(sd, &next_balance);
 
 		if (this_rq->avg_idle < curr_cost + sd->max_newidle_lb_cost)
@@ -12960,7 +13061,11 @@ static int sched_balance_newidle(struct rq *this_rq, struct rq_flags *rf)
 		 */
 		if (pulled_task || !continue_balancing)
 			break;
+
+		sd = sd->parent;
 	}
+
+skip_numa:
 	rcu_read_unlock();
 
 	raw_spin_rq_lock(this_rq);
