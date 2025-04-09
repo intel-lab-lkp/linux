@@ -6387,8 +6387,6 @@ static void hci_le_pa_sync_estabilished_evt(struct hci_dev *hdev, void *data,
 		goto unlock;
 	}
 
-	clear_bit(HCI_CONN_CREATE_PA_SYNC, &conn->flags);
-
 	conn->sync_handle = le16_to_cpu(ev->handle);
 	conn->sid = HCI_SID_INVALID;
 
@@ -6418,8 +6416,6 @@ static void hci_le_pa_sync_estabilished_evt(struct hci_dev *hdev, void *data,
 	}
 
 unlock:
-	/* Handle any other pending PA sync command */
-	hci_pa_create_sync_pending(hdev);
 
 	hci_dev_unlock(hdev);
 }
