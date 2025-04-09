@@ -92,21 +92,31 @@ static bool ovl_cache_entry_find_link(const char *name, int len,
 }
 
 static struct ovl_cache_entry *ovl_cache_entry_find(struct rb_root *root,
-						    const char *name, int len)
+						    const char *name, int len,
+						    struct dentry *upper)
 {
+	struct ovl_fs *ofs = OVL_FS(upper->d_sb);
 	struct rb_node *node = root->rb_node;
-	int cmp;
+	struct qstr q = { .name = name, .len = len };
 
 	while (node) {
 		struct ovl_cache_entry *p = ovl_cache_entry_from_node(node);
+		struct dentry *p_dentry, *real_dentry = NULL;
 
-		cmp = strncmp(name, p->name, len);
-		if (cmp > 0)
-			node = p->node.rb_right;
-		else if (cmp < 0 || len < p->len)
-			node = p->node.rb_left;
-		else
-			return p;
+		if (ofs->casefold && upper) {
+			p_dentry = ovl_lookup_upper(ofs, p->name, upper, p->len);
+			if (!IS_ERR(p_dentry)) {
+				real_dentry = ovl_dentry_real(p_dentry);
+				if (d_same_name(real_dentry, real_dentry->d_parent, &q))
+					return p;
+			}
+		}
+
+		if (!real_dentry)
+			if (!strncmp(name, p->name, len))
+				return p;
+
+		node = rb_next(&p->node);
 	}
 
 	return NULL;
@@ -204,7 +214,7 @@ static bool ovl_fill_lowest(struct ovl_readdir_data *rdd,
 {
 	struct ovl_cache_entry *p;
 
-	p = ovl_cache_entry_find(rdd->root, name, namelen);
+	p = ovl_cache_entry_find(rdd->root, name, namelen, rdd->dentry);
 	if (p) {
 		list_move_tail(&p->l_node, &rdd->middle);
 	} else {
@@ -678,7 +688,7 @@ static bool ovl_fill_real(struct dir_context *ctx, const char *name,
 	} else if (rdt->cache) {
 		struct ovl_cache_entry *p;
 
-		p = ovl_cache_entry_find(&rdt->cache->root, name, namelen);
+		p = ovl_cache_entry_find(&rdt->cache->root, name, namelen, NULL);
 		if (p)
 			ino = p->ino;
 	} else if (rdt->xinobits) {
