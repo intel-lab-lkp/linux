@@ -252,7 +252,9 @@ static int filesystems_proc_show(struct seq_file *m, void *v)
 
 static int __init proc_filesystems_init(void)
 {
-	proc_create_single("filesystems", 0, NULL, filesystems_proc_show);
+	struct proc_dir_entry *pde =
+		proc_create_single("filesystems", 0, NULL, filesystems_proc_show);
+	proc_make_permanent(pde);
 	return 0;
 }
 module_init(proc_filesystems_init);
