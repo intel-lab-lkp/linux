@@ -62,6 +62,79 @@
  */
 
 /**
+ * DOC: bridge lifecycle
+ *
+ * In some use cases such as hot-plugging a DRM bridge device can
+ * physically disappear and reappear at runtime. To handle such cases
+ * without destroying and recreating the entire DRM pipeline, DRM bridge
+ * lifetime is managed using reference counting:
+ *
+ * - each &struct drm_bridge is reference counted since its allocation
+ * - any code taking a pointer to a bridge has APIs to get a reference and
+ *   put it when done, to ensure the memory allocated for the bridge won't
+ *   be deallocated while there is still a reference to it
+ * - the driver implementing the bridge also holds a reference, but the
+ *   allocated struct can survive the driver in case other references still
+ *   exist
+ * - deallocation is done when the last put happens, dropping the refcount
+ *   to zero
+ *
+ * Usage of refcounted bridges happens in two sides: the bridge *provider*
+ * and the bridge *consumers*. The bridge provider is the driver
+ * implementing the bridge. The bridge consumers are all parts of the
+ * kernel taking a &struct drm_bridge pointer, including other bridges,
+ * encoders and the DRM core.
+ *
+ * For bridge **providers**, the bridge driver declares a driver-specific
+ * struct embedding a &struct drm_bridge. E.g.::
+ *
+ *   struct my_bridge {
+ *       ...
+ *       struct drm_bridge bridge;
+ *       ...
+ *   };
+ *
+ * The driver must allocate and initialize ``struct my_bridge`` using
+ * devm_drm_bridge_alloc(), as in this example::
+ *
+ *     static int my_bridge_probe(...)
+ *     {
+ *         struct device *dev = ...;
+ *         struct my_bridge *mybr;
+ *
+ *         mybr = devm_drm_bridge_alloc(dev, struct my_bridge, bridge, &my_bridge_funcs);
+ *         if (IS_ERR(mybr))
+ *             return PTR_ERR(mybr);
+ *
+ *         // Get resources, initialize my_bridge members...
+ *         drm_bridge_add(&mybr->bridge);
+ *         ...
+ *     }
+ *
+ *     static void my_bridge_remove(...)
+ *     {
+ *         struct my_bridge *mybr = ...;
+ *
+ *         drm_bridge_remove(&mybr->bridge);
+ *         // Free resources
+ *         // ... NO kfree here!
+ *     }
+ *
+ * Bridge **consumers** need to handle the case of a bridge being removed
+ * while they have a pointer to it. As this can happen at any time, such
+ * code can incur in use-after-free. To avoid that, consumers have to call
+ * drm_bridge_get() when taking a pointer and drm_bridge_put() after they
+ * are done using it. This will extend the allocation lifetime of the
+ * bridge struct until the last reference has been put, potentially a long
+ * time after the bridge device has been removed from the kernel.
+ *
+ * Functions that return a pointer to a bridge, such as
+ * of_drm_find_bridge(), internally call drm_bridge_get() on the bridge
+ * they are about to return, so users using such functions to get a bridge
+ * pointer only have to take care of calling drm_bridge_put().
+ */
+
+/**
  * DOC:	display driver integration
  *
  * Display drivers are responsible for linking encoders with the first bridge
