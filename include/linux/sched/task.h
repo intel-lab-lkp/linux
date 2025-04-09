@@ -131,14 +131,22 @@ extern void __put_task_struct_rcu_cb(struct rcu_head *rhp);
 
 static inline void put_task_struct(struct task_struct *t)
 {
+	bool defer = false;
+
 	if (!refcount_dec_and_test(&t->usage))
 		return;
 
 	/*
 	 * In !RT, it is always safe to call __put_task_struct().
-	 * Under RT, we can only call it in preemptible context.
+	 * Under RT, we can only call it in preemptible context,
+	 * when not blocked on a PI chain.
 	 */
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT) || preemptible()) {
+#ifdef CONFIG_PREEMPT_RT
+	if (!preemptible() || current->pi_blocked_on)
+		defer = true;
+#endif
+
+	if (!defer) {
 		static DEFINE_WAIT_OVERRIDE_MAP(put_task_map, LD_WAIT_SLEEP);
 
 		lock_map_acquire_try(&put_task_map);
@@ -150,7 +158,9 @@ static inline void put_task_struct(struct task_struct *t)
 	/*
 	 * under PREEMPT_RT, we can't call put_task_struct
 	 * in atomic context because it will indirectly
-	 * acquire sleeping locks.
+	 * acquire sleeping locks. The same is true if the
+	 * current process has a mutex enqueued (blocked on
+	 * a PI chain).
 	 *
 	 * call_rcu() will schedule delayed_put_task_struct_rcu()
 	 * to be called in process context.
