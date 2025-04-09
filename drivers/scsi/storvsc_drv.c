@@ -686,6 +686,8 @@ static void handle_sc_creation(struct vmbus_channel *new_sc)
 	struct vmstorage_channel_properties props;
 	int ret;
 
+	dev->use_priv_pages_for_io = new_sc->confidential_external_memory;
+
 	stor_device = get_out_stor_device(device);
 	if (!stor_device)
 		return;
