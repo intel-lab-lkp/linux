@@ -62,7 +62,7 @@ static int nf_br_ip_fragment(struct net *net, struct sock *sk,
 
 		if (first_len - hlen > mtu ||
 		    skb_headroom(skb) < ll_rs)
-			goto blackhole;
+			goto expand_headroom;
 
 		if (skb_cloned(skb))
 			goto slow_path;
@@ -70,7 +70,7 @@ static int nf_br_ip_fragment(struct net *net, struct sock *sk,
 		skb_walk_frags(skb, frag) {
 			if (frag->len > mtu ||
 			    skb_headroom(frag) < hlen + ll_rs)
-				goto blackhole;
+				goto expand_headroom;
 
 			if (skb_shared(frag))
 				goto slow_path;
@@ -97,6 +97,16 @@ static int nf_br_ip_fragment(struct net *net, struct sock *sk,
 
 		return err;
 	}
+
+expand_headroom:
+	struct sk_buff *expand_skb;
+
+	expand_skb = skb_copy_expand(skb, ll_rs, skb_tailroom(skb), GFP_ATOMIC);
+	if (unlikely(!expand_skb))
+		goto blackhole;
+	kfree_skb(skb);
+	skb = expand_skb;
+
 slow_path:
 	/* This is a linearized skbuff, the original geometry is lost for us.
 	 * This may also be a clone skbuff, we could preserve the geometry for
