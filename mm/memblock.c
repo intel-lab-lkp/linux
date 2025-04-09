@@ -6,6 +6,8 @@
  * Copyright (C) 2001 Peter Bergner.
  */
 
+#include "linux/stddef.h"
+#include "linux/types.h"
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/init.h>
@@ -17,7 +19,7 @@
 #include <linux/seq_file.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
-
+#include <linux/minmax.h>
 #include <asm/sections.h>
 #include <linux/io.h>
 
@@ -1908,6 +1910,69 @@ bool __init_memblock memblock_is_map_memory(phys_addr_t addr)
 		return false;
 	return !memblock_is_nomap(&memblock.memory.regions[i]);
 }
+
+/**
+ * curr_node_memblock_intersect_memory_block:  checks if the current node's memblock
+ * region intersects with the memory block.
+ * @start_pfn: memory block start pfn
+ * @end_pfn: memory block end_pfn
+ * @curr_nid: Current node
+ *
+ * This function takes the start and end PFN of a memory block, as well as the node ID
+ * that is being registered. It then finds the memblock region of the current node and
+ * checks if the passed memory block intersects with the memblock. If there is an
+ * intersection, the function returns true; otherwise, it returns false.
+ *
+ * Return:
+ * If the current node's memblock region intersects with the memory block, it returns
+ * true; otherwise, it returns false.
+ */
+bool __init_memblock curr_node_memblock_intersect_memory_block(unsigned long start_pfn,
+						unsigned long end_pfn, int curr_nid)
+{
+	struct memblock_region *r;
+	unsigned long r_start, r_end;
+	unsigned long size = end_pfn - start_pfn;
+	unsigned long r_size = 0;
+
+	for_each_mem_region(r) {
+		r_start = PFN_DOWN(r->base);
+		r_end = PFN_DOWN(r->base + r->size);
+		r_size = r_end - r_start;
+
+		if (r->nid == curr_nid) {
+			if (size > r_size) {
+				/*
+				 * The memory block size is greater than the memblock
+				 * region size, meaning multiple memblocks can be present
+				 * within a single memory block. If the memblock's start
+				 * or end is within the memory block's start and end, It
+				 * indicates that the memblock is part of this memory block.
+				 * Therefore, the memory block can be added to the node
+				 * where the memblock resides.
+				 */
+				if (in_range(r_start, start_pfn, size) ||
+						in_range(r_end, start_pfn, size))
+					return true;
+			} else {
+				/*
+				 * The memory block size is less than or equal to the
+				 * memblock size, meaning multiple memory blocks can
+				 * be part of a single memblock region. If the memory
+				 * block's start or end is within the memblock's start
+				 * and end, it indicates that the memory block is part of
+				 * the memblock. Therefore, the memory block can be added
+				 * to the node where the memblock resides.
+				 */
+				if (in_range(start_pfn, r_start, r_size) ||
+						in_range(end_pfn, r_start, r_size))
+					return true;
+			}
+		}
+	}
+	return false;
+}
+
 
 int __init_memblock memblock_search_pfn_nid(unsigned long pfn,
 			 unsigned long *start_pfn, unsigned long *end_pfn)

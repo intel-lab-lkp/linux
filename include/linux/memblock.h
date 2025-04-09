@@ -277,6 +277,8 @@ static inline bool memblock_is_driver_managed(struct memblock_region *m)
 
 int memblock_search_pfn_nid(unsigned long pfn, unsigned long *start_pfn,
 			    unsigned long  *end_pfn);
+bool curr_node_memblock_intersect_memory_block(unsigned long start_pfn,
+				unsigned long end_pfn, int curr_nid);
 void __next_mem_pfn_range(int *idx, int nid, unsigned long *out_start_pfn,
 			  unsigned long *out_end_pfn, int *out_nid);
 
