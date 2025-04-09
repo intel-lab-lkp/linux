@@ -25,6 +25,16 @@ properties:
   compatible:
     const: thead,th1520-aon
 
+  clocks:
+    items:
+      - description: GPU core clock
+      - description: GPU sys clock
+
+  clock-names:
+    items:
+      - const: gpu-core
+      - const: gpu-sys
+
   mboxes:
     maxItems: 1
 
@@ -32,13 +42,27 @@ properties:
     items:
       - const: aon
 
+  resets:
+    items:
+      - description: GPU reset
+      - description: GPU CLKGEN reset
+
+  reset-names:
+    items:
+      - const: gpu
+      - const: gpu-clkgen
+
   "#power-domain-cells":
     const: 1
 
 required:
   - compatible
+  - clocks
+  - clock-names
   - mboxes
   - mbox-names
+  - resets
+  - reset-names
   - "#power-domain-cells"
 
 additionalProperties: false
@@ -47,7 +71,11 @@ examples:
   - |
     aon: aon {
         compatible = "thead,th1520-aon";
+        clocks = <&clk_vo 0>, <&clk_vo 1>;
+        clock-names = "gpu-core", "gpu-sys";
         mboxes = <&mbox_910t 1>;
         mbox-names = "aon";
+        resets = <&rst 0>, <&rst 1>;
+        reset-names = "gpu", "gpu-clkgen";
         #power-domain-cells = <1>;
     };
