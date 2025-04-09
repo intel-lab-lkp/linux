@@ -99,6 +99,28 @@
 EXPORT_TRACEPOINT_SYMBOL_GPL(ipi_send_cpu);
 EXPORT_TRACEPOINT_SYMBOL_GPL(ipi_send_cpumask);
 
+#ifdef CONFIG_SMP
+static unsigned int cfs_rq_util_est(struct cfs_rq *cfs_rq)
+{
+	return cfs_rq ? cfs_rq->avg.util_est: 0;
+}
+
+static unsigned int se_util_est(struct sched_entity *se)
+{
+	return se ? se->avg.util_est & ~UTIL_AVG_UNCHANGED : 0;
+}
+#endif /* CONFIG_SMP */
+
+static unsigned long rq_cpu_current_capacity(struct rq *rq)
+{
+	if (rq == NULL)
+		return 0;
+
+        unsigned long capacity_orig = arch_scale_cpu_capacity(cpu_of(rq));
+	unsigned long scale_freq = arch_scale_freq_capacity(cpu_of(rq));
+	return cap_scale(capacity_orig, scale_freq);
+}
+
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -8526,10 +8548,18 @@ LIST_HEAD(task_groups);
 static struct kmem_cache *task_group_cache __ro_after_init;
 #endif
 
+struct sched_tp_callbacks sched_tp_callbacks;
+
 void __init sched_init(void)
 {
 	unsigned long ptr = 0;
 	int i;
+
+#ifdef CONFIG_SMP
+	sched_tp_callbacks.cfs_rq_util_est = cfs_rq_util_est;
+	sched_tp_callbacks.se_util_est = se_util_est;
+#endif /* CONFIG_SMP */
+	sched_tp_callbacks.rq_cpu_current_capacity = rq_cpu_current_capacity;
 
 	/* Make sure the linker didn't screw up */
 #ifdef CONFIG_SMP
