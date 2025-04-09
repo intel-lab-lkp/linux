@@ -379,9 +379,18 @@ static unsigned int get_perf_level_count(struct cpufreq_policy *policy)
 	return 1 + max_cap / CPPC_EM_CAP_STEP - min_cap / CPPC_EM_CAP_STEP;
 }
 
-/*
- * The cost is defined as:
- *   cost = power * max_frequency / frequency
+/**
+ * compute_cost - Calculate the cost for a given CPU and performance level step
+ * @cpu:  Target CPU
+ * @step: Performance level step
+ *
+ * CPPC uses a linear cost model since it only provides relative efficiency ratios:
+ *   Base cost (per CPU):    CPPC_EM_COST_GAP * efficiency_class
+ *   Step cost (per level):  step * CPPC_EM_COST_STEP
+ *
+ * Lower cost implies higher efficiency. The model ensures:
+ *   1. Higher efficiency CPUs (low efficiency_class) always have lower cost.
+ *   2. Higher performance levels (larger step) linearly increase cost.
  */
 static inline unsigned long compute_cost(int cpu, int step)
 {
