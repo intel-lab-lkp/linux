@@ -1161,6 +1161,8 @@ L:	dri-devel@lists.freedesktop.org
 S:	Maintained
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	Documentation/devicetree/bindings/accel/amd,versal-net-pki.yaml
+F:	drivers/accel/amdpk/
+F:	include/uapi/drm/amdpk.h
 
 AMD PMC DRIVER
 M:	Shyam Sundar S K <Shyam-sundar.S-k@amd.com>

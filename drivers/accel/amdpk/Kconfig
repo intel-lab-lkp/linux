@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Makefile for AMD PKI accelerator for versal-net
+#
+
+config DRM_ACCEL_AMDPK
+	tristate "AMD PKI accelerator for versal-net"
+	depends on DRM_ACCEL
+	depends on ARM64 || COMPILE_TEST
+	help
+	  Enables platform driver for AMD PKI accelerator that are designed
+	  for high performance Public Key asymmetric crypto operations on AMD
+	  versal-net.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called amdpk.
