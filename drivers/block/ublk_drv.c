@@ -212,7 +212,7 @@ struct ublk_params_header {
 static bool ublk_abort_requests(struct ublk_device *ub, struct ublk_queue *ubq);
 
 static inline struct request *__ublk_check_and_get_req(struct ublk_device *ub,
-		struct ublk_queue *ubq, int tag, size_t offset);
+		struct ublk_queue *ubq, unsigned tag, size_t offset);
 static inline unsigned int ublk_req_build_flags(struct request *req);
 static inline struct ublksrv_io_desc *ublk_get_iod(struct ublk_queue *ubq,
 						   int tag);
@@ -1517,7 +1517,7 @@ static void ublk_commit_completion(struct ublk_device *ub,
 	io->res = ub_cmd->result;
 
 	/* find the io request and complete */
-	req = blk_mq_tag_to_rq(ub->tag_set.tags[qid], tag);
+	req = ub->tag_set.tags[qid]->rqs[tag];
 	if (WARN_ON_ONCE(unlikely(!req)))
 		return;
 
@@ -1535,7 +1535,7 @@ static void ublk_commit_completion(struct ublk_device *ub,
  */
 static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 {
-	int i;
+	unsigned i;
 
 	for (i = 0; i < ubq->q_depth; i++) {
 		struct ublk_io *io = &ubq->ios[i];
@@ -1547,7 +1547,7 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 			 * Either we fail the request or ublk_rq_task_work_cb
 			 * will do it
 			 */
-			rq = blk_mq_tag_to_rq(ub->tag_set.tags[ubq->q_id], i);
+			rq = ub->tag_set.tags[ubq->q_id]->rqs[i];
 			if (rq && blk_mq_request_started(rq)) {
 				io->flags |= UBLK_IO_FLAG_ABORTED;
 				__ublk_fail_req(ubq, io, rq);
@@ -1826,10 +1826,10 @@ static void ublk_mark_io_ready(struct ublk_device *ub, struct ublk_queue *ubq)
 }
 
 static void ublk_handle_need_get_data(struct ublk_device *ub, int q_id,
-		int tag)
+		unsigned tag)
 {
 	struct ublk_queue *ubq = ublk_get_queue(ub, q_id);
-	struct request *req = blk_mq_tag_to_rq(ub->tag_set.tags[q_id], tag);
+	struct request *req = ub->tag_set.tags[q_id]->rqs[tag];
 
 	ublk_queue_cmd(ubq, req);
 }
@@ -1991,7 +1991,7 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 		ublk_mark_io_ready(ub, ubq);
 		break;
 	case UBLK_IO_COMMIT_AND_FETCH_REQ:
-		req = blk_mq_tag_to_rq(ub->tag_set.tags[ub_cmd->q_id], tag);
+		req = ub->tag_set.tags[ub_cmd->q_id]->rqs[tag];
 
 		if (!(io->flags & UBLK_IO_FLAG_OWNED_BY_SRV))
 			goto out;
@@ -2035,14 +2035,14 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 }
 
 static inline struct request *__ublk_check_and_get_req(struct ublk_device *ub,
-		struct ublk_queue *ubq, int tag, size_t offset)
+		struct ublk_queue *ubq, unsigned tag, size_t offset)
 {
 	struct request *req;
 
 	if (!ublk_need_req_ref(ubq))
 		return NULL;
 
-	req = blk_mq_tag_to_rq(ub->tag_set.tags[ubq->q_id], tag);
+	req = ub->tag_set.tags[ubq->q_id]->rqs[tag];
 	if (!req)
 		return NULL;
 
