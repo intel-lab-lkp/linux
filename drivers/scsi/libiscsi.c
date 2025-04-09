@@ -2252,20 +2252,23 @@ static void iscsi_check_transport_timeouts(struct timer_list *t)
 	if (!recv_timeout)
 		goto done;
 
-	recv_timeout *= HZ;
 	last_recv = conn->last_recv;
 
 	if (iscsi_has_ping_timed_out(conn)) {
-		iscsi_conn_printk(KERN_ERR, conn, "ping timeout of %d secs "
-				  "expired, recv timeout %d, last rx %lu, "
-				  "last ping %lu, now %lu\n",
-				  conn->ping_timeout, conn->recv_timeout,
-				  last_recv, conn->last_ping, jiffies);
+		int ping_timeout = conn->ping_timeout;
+		unsigned long last_ping = conn->last_ping;
+
 		spin_unlock(&session->frwd_lock);
+		iscsi_conn_printk(KERN_ERR, conn, "ping timeout of %d secs "
+				  "expired, recv timeout %lu, last rx %lu, "
+				  "last ping %lu, now %lu\n",
+				  ping_timeout, recv_timeout,
+				  last_recv, last_ping, jiffies);
 		iscsi_conn_failure(conn, ISCSI_ERR_NOP_TIMEDOUT);
 		return;
 	}
 
+	recv_timeout *= HZ;
 	if (time_before_eq(last_recv + recv_timeout, jiffies)) {
 		/* send a ping to try to provoke some traffic */
 		ISCSI_DBG_CONN(conn, "Sending nopout as ping\n");
