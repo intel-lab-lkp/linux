@@ -358,7 +358,34 @@ static void cppc_cpufreq_register_em(struct cpufreq_policy *policy);
 #define CPPC_EM_CAP_STEP	(20)
 /* Increase the cost value by CPPC_EM_COST_STEP every performance state. */
 #define CPPC_EM_COST_STEP	(1)
-/* Add a cost gap correspnding to the energy of 4 CPUs. */
+
+/*
+ * In the current EM (Energy Model), energy consumption is calculated as:
+ *   ps->cost * sum_util;
+ *
+ * For CPPC, the cost calculation uses a linear model: cost = a + b * step.
+ *
+ * For a task A with utilization 'util' in a performance domain (pd):
+ * Before placement:
+ *   energy_pd_before = a * sum_util_pd + b * step * sum_util_pd;
+ * After placement:
+ *   energy_pd_after = a * (sum_util_pd + util) + b * (sum_util_pd + util) *
+ *                    (step + util/CPPC_EM_CAP_STEP);
+ * Energy difference:
+ *   energy_diff = a * util + b * util * step_pd +
+ *                 b * (sum_util_pd + util) * util/cap_step
+ *
+ * The placement decision depends on the bias 'a' and slope 'b'. Considering the
+ * extreme case where little cores are nearly full and big cores are nearly idle:
+ *   energy_diff_pd = a_diff * util - b * util * step_pd_small -
+ *                 b * util * sum_util_pd_small/cap_step
+ *
+ * Ignoring smaller terms, the key condition becomes:
+ *   a_diff > b * sum_util_pd_small / step_cap
+ *
+ * Therefore, for a pd domain with 4 CPUs, for ensures the scheduler will prefer
+ * placing it.we can configure accordingly.
+ */
 #define CPPC_EM_COST_GAP	(4 * SCHED_CAPACITY_SCALE * CPPC_EM_COST_STEP \
 				/ CPPC_EM_CAP_STEP)
 
