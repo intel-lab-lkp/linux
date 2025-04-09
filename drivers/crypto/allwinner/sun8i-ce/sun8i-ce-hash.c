@@ -399,14 +399,14 @@ int sun8i_ce_hash_run(struct crypto_engine *engine, void *breq)
 	}
 	if (len > 0) {
 		dev_err(ce->dev, "remaining len %d\n", len);
-		err = -EINVAL;
-		goto err_unmap_src;
+		goto e_inval_src;
 	}
 	addr_res = dma_map_single(ce->dev, result, digestsize, DMA_FROM_DEVICE);
 	cet->t_dst[0].addr = desc_addr_val_le32(ce, addr_res);
 	cet->t_dst[0].len = cpu_to_le32(digestsize / 4);
 	if (dma_mapping_error(ce->dev, addr_res)) {
 		dev_err(ce->dev, "DMA map dest\n");
+e_inval_src:
 		err = -EINVAL;
 		goto err_unmap_src;
 	}
@@ -428,16 +428,15 @@ int sun8i_ce_hash_run(struct crypto_engine *engine, void *breq)
 		j = hash_pad(bf, 2 * bs, j, byte_count, false, bs);
 		break;
 	}
-	if (!j) {
-		err = -EINVAL;
-		goto err_unmap_result;
-	}
+	if (!j)
+		goto e_inval_result;
 
 	addr_pad = dma_map_single(ce->dev, buf, j * 4, DMA_TO_DEVICE);
 	cet->t_src[i].addr = desc_addr_val_le32(ce, addr_pad);
 	cet->t_src[i].len = cpu_to_le32(j);
 	if (dma_mapping_error(ce->dev, addr_pad)) {
 		dev_err(ce->dev, "DMA error on padding SG\n");
+e_inval_result:
 		err = -EINVAL;
 		goto err_unmap_result;
 	}
