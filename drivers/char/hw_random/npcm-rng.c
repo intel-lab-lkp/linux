@@ -54,10 +54,11 @@ static void npcm_rng_cleanup(struct hwrng *rng)
 static int npcm_rng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
 {
 	struct npcm_rng *priv = to_npcm_rng(rng);
+	struct device *dev = (struct device *)priv->rng.priv
 	int retval = 0;
 	int ready;
 
-	pm_runtime_get_sync((struct device *)priv->rng.priv);
+	pm_runtime_get_sync(dev);
 
 	while (max) {
 		if (wait) {
@@ -79,8 +80,8 @@ static int npcm_rng_read(struct hwrng *rng, void *buf, size_t max, bool wait)
 		max--;
 	}
 
-	pm_runtime_mark_last_busy((struct device *)priv->rng.priv);
-	pm_runtime_put_sync_autosuspend((struct device *)priv->rng.priv);
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_put_sync_autosuspend(dev);
 
 	return retval || !wait ? retval : -EIO;
 }
