@@ -380,3 +380,31 @@ impl PartialEq for Kuid {
 }
 
 impl Eq for Kuid {}
+
+/// Annotation for functions that can sleep.
+///
+/// Equivalent to the C side [`might_sleep()`], this function serves as
+/// a debugging aid and a potential scheduling point.
+///
+/// This function can only be used in a nonatomic context.
+#[track_caller]
+#[inline]
+pub fn might_sleep() {
+    #[cfg(CONFIG_DEBUG_ATOMIC_SLEEP)]
+    {
+        let loc = core::panic::Location::caller();
+        let file = loc.file();
+
+        // SAFETY: `file.as_ptr()` is valid for reading for `file.len()` bytes.
+        unsafe {
+            crate::bindings::__might_sleep_precision(
+                file.as_ptr().cast(),
+                file.len() as i32,
+                loc.line() as i32,
+            )
+        }
+    }
+
+    // SAFETY: Always safe to call.
+    unsafe { crate::bindings::might_resched() }
+}
