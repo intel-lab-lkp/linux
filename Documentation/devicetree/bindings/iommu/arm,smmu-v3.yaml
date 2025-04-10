@@ -56,6 +56,13 @@ properties:
       NOTE: this only applies to the SMMU itself, not masters connected
       upstream of the SMMU.
 
+  arm,smmu-faulty-msi-iova:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Specifies a faulty PCI MSI base I/O Virtual Address. If this is passed
+      via dts then arm SMMU driver appropriately select suitable MSI_IOVA base
+      which does not intersect with faulty MSI IOVA passed in this dts property.
+
   msi-parent: true
 
   hisilicon,broken-prefetch-cmd:
@@ -92,4 +99,5 @@ examples:
             dma-coherent;
             #iommu-cells = <1>;
             msi-parent = <&its 0xff0000>;
+            arm,smmu-faulty-msi-iova = <0x8000000>;
     };

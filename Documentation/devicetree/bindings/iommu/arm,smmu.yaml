@@ -208,6 +208,13 @@ properties:
       NOTE: this only applies to the SMMU itself, not masters connected
       upstream of the SMMU.
 
+  arm,smmu-faulty-msi-iova:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Specifies a faulty PCI MSI base I/O Virtual Address. If this is passed
+      via dts then ARM SMMU driver appropriately select suitable MSI_IOVA base
+      which does not intersect with faulty MSI IOVA passed in this dts property.
+
   calxeda,smmu-secure-config-access:
     type: boolean
     description:
@@ -680,6 +687,7 @@ examples:
             #iommu-cells = <1>;
             /* always ignore appended 5-bit TBU number */
             stream-match-mask = <0x7c00>;
+            arm,smmu-faulty-msi-iova = <0x8000000>;
     };
 
     bus {
