@@ -123,6 +123,13 @@ struct elevator_queue
 #define ELEVATOR_FLAG_REGISTERED	0
 #define ELEVATOR_FLAG_DISABLE_WBT	1
 
+/* Holding data for changing elevator */
+struct elev_change_ctx {
+	const char *name;
+	unsigned int force:1;
+	unsigned int uevent:1;
+};
+
 /*
  * block elevator interface
  */

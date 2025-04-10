@@ -4984,12 +4984,16 @@ reregister:
 	}
 
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
-		const char *name = "none";
+		struct elev_change_ctx ctx = {
+			.name	= "none",
+			.force	= 1,
+			.uevent	= 1,
+		};
 
 		mutex_lock(&q->elevator_lock);
 		if (q->elevator && !blk_queue_dying(q))
-			name = q->elevator->type->elevator_name;
-		__elevator_change(q, name, true);
+			ctx.name = q->elevator->type->elevator_name;
+		__elevator_change(q, &ctx);
 		mutex_unlock(&q->elevator_lock);
 	}
 
