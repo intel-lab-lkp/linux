@@ -527,6 +527,7 @@ struct blk_mq_tag_set {
 	struct mutex		tag_list_lock;
 	struct list_head	tag_list;
 	struct srcu_struct	*srcu;
+	struct srcu_struct	update_nr_hwq_srcu;
 };
 
 /**
@@ -681,7 +682,14 @@ enum {
 	 */
 	BLK_MQ_F_NO_SCHED_BY_DEFAULT	= 1 << 6,
 
-	BLK_MQ_F_MAX = 1 << 7,
+	/*
+	 * True when updating nr_hw_queues is in-progress
+	 *
+	 * tag_set only flag, not usable for hctx
+	 */
+	BLK_MQ_F_UPDATE_HW_QUEUES	= 1 << 7,
+
+	BLK_MQ_F_MAX = 1 << 8,
 };
 
 #define BLK_MQ_MAX_DEPTH	(10240)

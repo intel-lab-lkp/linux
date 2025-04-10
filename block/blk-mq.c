@@ -4784,12 +4784,16 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 			goto out_free_srcu;
 	}
 
+	ret = init_srcu_struct(&set->update_nr_hwq_srcu);
+	if (ret)
+		goto out_cleanup_srcu;
+
 	ret = -ENOMEM;
 	set->tags = kcalloc_node(set->nr_hw_queues,
 				 sizeof(struct blk_mq_tags *), GFP_KERNEL,
 				 set->numa_node);
 	if (!set->tags)
-		goto out_cleanup_srcu;
+		goto out_cleanup_hwq_srcu;
 
 	for (i = 0; i < set->nr_maps; i++) {
 		set->map[i].mq_map = kcalloc_node(nr_cpu_ids,
@@ -4818,6 +4822,8 @@ out_free_mq_map:
 	}
 	kfree(set->tags);
 	set->tags = NULL;
+out_cleanup_hwq_srcu:
+	cleanup_srcu_struct(&set->update_nr_hwq_srcu);
 out_cleanup_srcu:
 	if (set->flags & BLK_MQ_F_BLOCKING)
 		cleanup_srcu_struct(set->srcu);
@@ -5080,7 +5086,18 @@ switch_back:
 void blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set, int nr_hw_queues)
 {
 	mutex_lock(&set->tag_list_lock);
+	/*
+	 * Mark us in updating nr_hw_queues for preventing switching
+	 * elevator
+	 *
+	 * Elevator switch code can _not_ acquire ->tag_list_lock
+	 */
+	set->flags |= BLK_MQ_F_UPDATE_HW_QUEUES;
+	synchronize_srcu(&set->update_nr_hwq_srcu);
+
 	__blk_mq_update_nr_hw_queues(set, nr_hw_queues);
+
+	set->flags &= BLK_MQ_F_UPDATE_HW_QUEUES;
 	mutex_unlock(&set->tag_list_lock);
 }
 EXPORT_SYMBOL_GPL(blk_mq_update_nr_hw_queues);
