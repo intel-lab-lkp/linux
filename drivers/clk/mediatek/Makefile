@@ -36,6 +36,13 @@ obj-$(CONFIG_COMMON_CLK_MT6797_VDECSYS) += clk-mt6797-vdec.o
 obj-$(CONFIG_COMMON_CLK_MT6797_VENCSYS) += clk-mt6797-venc.o
 obj-$(CONFIG_COMMON_CLK_MT6893) += clk-mt6893-apmixedsys.o clk-mt6893-topckgen.o \
 				   clk-mt6893-infra_ao.o
+obj-$(CONFIG_COMMON_CLK_MT6893_IMP_IIC_WRAP) += clk-mt6893-imp_iic_wrap.o
+obj-$(CONFIG_COMMON_CLK_MT6893_MDPSYS) += clk-mt6893-mdp.o
+obj-$(CONFIG_COMMON_CLK_MT6893_MFGCFG) += clk-mt6893-mfg.o
+obj-$(CONFIG_COMMON_CLK_MT6893_MMSYS) += clk-mt6893-mm.o
+obj-$(CONFIG_COMMON_CLK_MT6893_SCP_ADSP) += clk-mt6893-scp_adsp.o
+obj-$(CONFIG_COMMON_CLK_MT6893_VDECSYS) += clk-mt6893-vdec.o
+obj-$(CONFIG_COMMON_CLK_MT6893_VENCSYS) += clk-mt6893-venc.o
 
 obj-$(CONFIG_COMMON_CLK_MT2701) += clk-mt2701.o
 obj-$(CONFIG_COMMON_CLK_MT2701_AUDSYS) += clk-mt2701-aud.o

@@ -382,6 +382,55 @@ config COMMON_CLK_MT6893
 	help
 	  This driver supports MediaTek Dimensity 1200 MT6893 basic clocks.
 
+config COMMON_CLK_MT6893_IMP_IIC_WRAP
+	tristate "Clock driver for MediaTek MT6893 imp_iic_wrap"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 imp_iic_wrap clocks.
+
+config COMMON_CLK_MT6893_MDPSYS
+	tristate "Clock driver for MediaTek MT6893 mdpsys"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 mdpsys clocks.
+
+config COMMON_CLK_MT6893_MFGCFG
+	tristate "Clock driver for MediaTek MT6893 mfgcfg"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 mfgcfg clocks.
+
+config COMMON_CLK_MT6893_MMSYS
+	tristate "Clock driver for MediaTek MT6893 mmsys"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 mmsys clocks.
+
+config COMMON_CLK_MT6893_SCP_ADSP
+	tristate "Clock driver for MediaTek MT6893 scp_adsp"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 scp_adsp clocks.
+
+config COMMON_CLK_MT6893_VDECSYS
+	tristate "Clock driver for MediaTek MT6893 vdecsys"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 vdecsys and vdecsys_soc clocks.
+
+config COMMON_CLK_MT6893_VENCSYS
+	tristate "Clock driver for MediaTek MT6893 vencsys"
+	depends on COMMON_CLK_MT6893
+	default COMMON_CLK_MT6893
+	help
+	  This driver supports MediaTek MT6893 vencsys clocks.
+
 config COMMON_CLK_MT7622
 	tristate "Clock driver for MediaTek MT7622"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
