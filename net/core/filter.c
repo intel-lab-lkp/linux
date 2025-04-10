@@ -970,6 +970,65 @@ error:
 	return ret;
 }
 
+/* Security:
+ *
+ * As it is possible to abuse the JIT compiler to produce instructions for
+ * code re-use, remove anything which is not reachable in a benign program
+ * anyways
+ */
+static int remove_dead_code(struct sock_filter *filter, int flen)
+{
+	int pc;
+	unsigned long *live;
+
+	if (flen == 0)
+		return 0;
+
+	live = bitmap_zalloc(flen, GFP_KERNEL);
+	if (!live)
+		return -ENOMEM;
+
+	/* No back jumps and no loops, can do a single forward pass here */
+	set_bit(0, live);
+	for (pc = 0; pc < flen; pc++) {
+		if (!test_bit(pc, live)) {
+			/* Dead. Some arbitrary instruction here. */
+			filter[pc].code = BPF_LD | BPF_IMM;
+			filter[pc].k = 0;
+			filter[pc].jt = 0;
+			filter[pc].jf = 0;
+			continue;
+		}
+
+		switch (filter[pc].code) {
+		case BPF_RET | BPF_K:
+		case BPF_RET | BPF_A:
+			break;
+		case BPF_JMP | BPF_JA:
+			set_bit(pc + 1 + filter[pc].k, live);
+			break;
+		case BPF_JMP | BPF_JEQ | BPF_K:
+		case BPF_JMP | BPF_JEQ | BPF_X:
+		case BPF_JMP | BPF_JGE | BPF_K:
+		case BPF_JMP | BPF_JGE | BPF_X:
+		case BPF_JMP | BPF_JGT | BPF_K:
+		case BPF_JMP | BPF_JGT | BPF_X:
+		case BPF_JMP | BPF_JSET | BPF_K:
+		case BPF_JMP | BPF_JSET | BPF_X:
+			set_bit(pc + 1 + filter[pc].jt, live);
+			set_bit(pc + 1 + filter[pc].jf, live);
+			break;
+		default:
+			/* Continue to next instruction */
+			set_bit(pc + 1, live);
+			break;
+		}
+	}
+
+	kfree(live);
+	return 0;
+}
+
 static bool chk_code_allowed(u16 code_to_probe)
 {
 	static const bool codes[] = {
@@ -1061,11 +1120,11 @@ static bool bpf_check_basics_ok(const struct sock_filter *filter,
  *
  * Returns 0 if the rule set is legal or -EINVAL if not.
  */
-static int bpf_check_classic(const struct sock_filter *filter,
+static int bpf_check_classic(struct sock_filter *filter,
 			     unsigned int flen)
 {
 	bool anc_found;
-	int pc;
+	int pc, ret;
 
 	/* Check the filter code now */
 	for (pc = 0; pc < flen; pc++) {
@@ -1133,7 +1192,10 @@ static int bpf_check_classic(const struct sock_filter *filter,
 	switch (filter[flen - 1].code) {
 	case BPF_RET | BPF_K:
 	case BPF_RET | BPF_A:
-		return check_load_and_stores(filter, flen);
+		ret = check_load_and_stores(filter, flen);
+		if (ret)
+			return ret;
+		return remove_dead_code(filter, flen);
 	}
 
 	return -EINVAL;
