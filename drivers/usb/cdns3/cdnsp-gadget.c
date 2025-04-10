@@ -139,6 +139,21 @@ static void cdnsp_clear_port_change_bit(struct cdnsp_device *pdev,
 	       (portsc & PORT_CHANGE_BITS), port_regs);
 }
 
+static void cdnsp_set_apb_timeout_value(struct cdnsp_device *pdev)
+{
+	__le32 __iomem *reg;
+	void __iomem *base;
+	u32 offset = 0;
+	u32 val;
+
+	base = &pdev->cap_regs->hc_capbase;
+	offset = cdnsp_find_next_ext_cap(base, offset, D_XEC_PRE_REGS_CAP);
+	reg = base + offset + REG_CHICKEN_BITS_3_OFFSET;
+
+	val  = le32_to_cpu(readl(reg));
+	writel(cpu_to_le32(CHICKEN_APB_TIMEOUT_SET(val)), reg);
+}
+
 static void cdnsp_set_chicken_bits_2(struct cdnsp_device *pdev, u32 bit)
 {
 	__le32 __iomem *reg;
@@ -1797,6 +1812,13 @@ static int cdnsp_gen_setup(struct cdnsp_device *pdev)
 	pdev->hcc_params = readl(&pdev->cap_regs->hc_capbase);
 	pdev->hci_version = HC_VERSION(pdev->hcc_params);
 	pdev->hcc_params = readl(&pdev->cap_regs->hcc_params);
+
+	/* In very rare cases after resuming controller from L1 to L0 it reads
+	 * registers before the clock has been enabled and as the result driver
+	 * reads incorrect value.
+	 * To fix this issue driver increases APB timeout value.
+	 */
+	cdnsp_set_apb_timeout_value(pdev);
 
 	cdnsp_get_rev_cap(pdev);
 
