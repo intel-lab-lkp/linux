@@ -2535,13 +2535,11 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 						      htonl(0x000fffff));
 	}
 
-	if ((pkt_dev->flags & F_VID_RND) && (pkt_dev->vlan_id != 0xffff)) {
+	if ((pkt_dev->flags & F_VID_RND) && (pkt_dev->vlan_id != 0xffff))
 		pkt_dev->vlan_id = get_random_u32_below(4096);
-	}
 
-	if ((pkt_dev->flags & F_SVID_RND) && (pkt_dev->svlan_id != 0xffff)) {
+	if ((pkt_dev->flags & F_SVID_RND) && (pkt_dev->svlan_id != 0xffff))
 		pkt_dev->svlan_id = get_random_u32_below(4096);
-	}
 
 	if (pkt_dev->udp_src_min < pkt_dev->udp_src_max) {
 		if (pkt_dev->flags & F_UDPSRC_RND)
@@ -2608,9 +2606,8 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 				} else {
 					t = ntohl(pkt_dev->cur_daddr);
 					t++;
-					if (t > imx) {
+					if (t > imx)
 						t = imn;
-					}
 					pkt_dev->cur_daddr = htonl(t);
 				}
 			}
