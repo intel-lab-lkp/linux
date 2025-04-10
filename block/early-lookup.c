@@ -121,7 +121,7 @@ static int __init devt_from_partlabel(const char *label, dev_t *devt)
 	return 0;
 }
 
-static dev_t __init blk_lookup_devt(const char *name, int partno)
+static dev_t __init blk_lookup_devt(const char *name, int partno, bool ready)
 {
 	dev_t devt = MKDEV(0, 0);
 	struct class_dev_iter iter;
@@ -134,7 +134,7 @@ static dev_t __init blk_lookup_devt(const char *name, int partno)
 		if (strcmp(dev_name(dev), name))
 			continue;
 
-		if (partno < disk->minors) {
+		if (!ready && partno < disk->minors) {
 			/* We need to return the right devno, even
 			 * if the partition doesn't exist yet.
 			 */
@@ -150,7 +150,7 @@ static dev_t __init blk_lookup_devt(const char *name, int partno)
 	return devt;
 }
 
-static int __init devt_from_devname(const char *name, dev_t *devt)
+static int __init devt_from_devname(const char *name, dev_t *devt, bool ready)
 {
 	int part;
 	char s[32];
@@ -164,7 +164,7 @@ static int __init devt_from_devname(const char *name, dev_t *devt)
 			*p = '!';
 	}
 
-	*devt = blk_lookup_devt(s, 0);
+	*devt = blk_lookup_devt(s, 0, ready);
 	if (*devt)
 		return 0;
 
@@ -180,7 +180,7 @@ static int __init devt_from_devname(const char *name, dev_t *devt)
 	/* try disk name without <part number> */
 	part = simple_strtoul(p, NULL, 10);
 	*p = '\0';
-	*devt = blk_lookup_devt(s, part);
+	*devt = blk_lookup_devt(s, part, ready);
 	if (*devt)
 		return 0;
 
@@ -188,7 +188,7 @@ static int __init devt_from_devname(const char *name, dev_t *devt)
 	if (p < s + 2 || !isdigit(p[-2]) || p[-1] != 'p')
 		return -ENODEV;
 	p[-1] = '\0';
-	*devt = blk_lookup_devt(s, part);
+	*devt = blk_lookup_devt(s, part, ready);
 	if (*devt)
 		return 0;
 	return -ENODEV;
@@ -241,15 +241,25 @@ static int __init devt_from_devnum(const char *name, dev_t *devt)
  *	name contains slashes, the device name has them replaced with
  *	bangs.
  */
-int __init early_lookup_bdev(const char *name, dev_t *devt)
+int __init __early_lookup_bdev(const char *name, dev_t *devt, bool ready)
 {
 	if (strncmp(name, "PARTUUID=", 9) == 0)
 		return devt_from_partuuid(name + 9, devt);
 	if (strncmp(name, "PARTLABEL=", 10) == 0)
 		return devt_from_partlabel(name + 10, devt);
 	if (strncmp(name, "/dev/", 5) == 0)
-		return devt_from_devname(name + 5, devt);
+		return devt_from_devname(name + 5, devt, ready);
 	return devt_from_devnum(name, devt);
+}
+
+int __init early_lookup_bdev(const char *name, dev_t *devt)
+{
+	return __early_lookup_bdev(name, devt, 0);
+}
+
+int __init early_lookup_ready_bdev(const char *name, dev_t *devt)
+{
+	return __early_lookup_bdev(name, devt, 1);
 }
 
 static char __init *bdevt_str(dev_t devt, char *buf)

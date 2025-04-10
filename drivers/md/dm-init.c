@@ -298,7 +298,7 @@ static int __init dm_init_init(void)
 			dev_t dev;
 
 			DMINFO("waiting for device %s ...", waitfor[i]);
-			while (early_lookup_bdev(waitfor[i], &dev))
+			while (early_lookup_ready_bdev(waitfor[i], &dev))
 				fsleep(5000);
 		}
 	}
