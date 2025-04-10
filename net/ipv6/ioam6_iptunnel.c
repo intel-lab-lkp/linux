@@ -38,6 +38,7 @@ struct ioam6_lwt_freq {
 };
 
 struct ioam6_lwt {
+	struct dst_entry null_dst;
 	struct dst_cache cache;
 	struct ioam6_lwt_freq freq;
 	atomic_t pkt_cnt;
@@ -176,6 +177,16 @@ static int ioam6_build_state(struct net *net, struct nlattr *nla,
 	err = dst_cache_init(&ilwt->cache, GFP_ATOMIC);
 	if (err)
 		goto free_lwt;
+
+	/* We set DST_NOCOUNT, even though this "fake" dst_entry will be stored
+	 * in a dst_cache, which will call dst_hold() and dst_release() on it.
+	 * These functions don't check for DST_NOCOUNT and modify the reference
+	 * count anyway. This is not really a problem, as long as we make sure
+	 * that dst_destroy() won't be called (which is the case since the
+	 * initial refcount is 1, then +1 to store it in the cache, and then
+	 * +1/-1 each time we read the cache and release it).
+	 */
+	dst_init(&ilwt->null_dst, NULL, NULL, DST_OBSOLETE_NONE, DST_NOCOUNT);
 
 	atomic_set(&ilwt->pkt_cnt, 0);
 	ilwt->freq.k = freq_k;
@@ -356,6 +367,17 @@ static int ioam6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	dst = dst_cache_get(&ilwt->cache);
 	local_bh_enable();
 
+	/* This is how we notify that the destination does not change after
+	 * transformation and that we need to use orig_dst instead of the cache
+	 */
+	if (dst == &ilwt->null_dst) {
+		dst_release(dst);
+
+		dst = orig_dst;
+		/* keep refcount balance: dst_release() is called at the end */
+		dst_hold(dst);
+	}
+
 	switch (ilwt->mode) {
 	case IOAM6_IPTUNNEL_MODE_INLINE:
 do_inline:
@@ -408,8 +430,18 @@ do_encap:
 			goto drop;
 		}
 
-		/* cache only if we don't create a dst reference loop */
-		if (orig_dst->lwtstate != dst->lwtstate) {
+		/* If the destination is the same after transformation (which is
+		 * a valid use case for IOAM), then we don't want to add it to
+		 * the cache in order to avoid a reference loop. Instead, we add
+		 * our fake dst_entry to the cache as a way to detect this case.
+		 * Otherwise, we add the resolved destination to the cache.
+		 */
+		if (orig_dst->lwtstate == dst->lwtstate) {
+			local_bh_disable();
+			dst_cache_set_ip6(&ilwt->cache,
+					  &ilwt->null_dst, &fl6.saddr);
+			local_bh_enable();
+		} else {
 			local_bh_disable();
 			dst_cache_set_ip6(&ilwt->cache, dst, &fl6.saddr);
 			local_bh_enable();
@@ -439,6 +471,10 @@ drop:
 
 static void ioam6_destroy_state(struct lwtunnel_state *lwt)
 {
+	/* Since the refcount of per-cpu dst_entry caches will never be 0 (see
+	 * why above) when our "fake" dst_entry is used, it is not necessary to
+	 * remove them before calling dst_cache_destroy()
+	 */
 	dst_cache_destroy(&ioam6_lwt_state(lwt)->cache);
 }
 
