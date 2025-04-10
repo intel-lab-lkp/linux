@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt6893-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Functional Clock Controller for MT6893
+
+maintainers:
+  - AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+
+description: |
+  The clock architecture in MediaTek SoCs is structured like below:
+  PLLs -->
+          dividers -->
+                      muxes
+                           -->
+                              clock gate
+
+  The devices provide clock gate control in different IP blocks.
+
+properties:
+  compatible:
+    enum:
+      - mediatek,mt6893-scp-adsp
+      - mediatek,mt6893-imp-iic-wrap-c
+      - mediatek,mt6893-imp-iic-wrap-e
+      - mediatek,mt6893-imp-iic-wrap-n
+      - mediatek,mt6893-imp-iic-wrap-s
+      - mediatek,mt6893-mdpsys
+      - mediatek,mt6893-mfgcfg
+      - mediatek,mt6893-vdecsys
+      - mediatek,mt6893-vdecsys-soc
+      - mediatek,mt6893-vencsys-c0
+      - mediatek,mt6893-vencsys-c1
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@11008000 {
+        compatible = "mediatek,mt6893-imp-iic-wrap-c";
+        reg = <0x11008000 0x1000>;
+        #clock-cells = <1>;
+    };
