@@ -119,7 +119,7 @@ static struct btrfs_delayed_node *btrfs_get_delayed_node(
 	return NULL;
 }
 
-/* Will return either the node or PTR_ERR(-ENOMEM) */
+/* Will return either the node or ERR_PTR(-ENOMEM) */
 static struct btrfs_delayed_node *btrfs_get_or_create_delayed_node(
 		struct btrfs_inode *btrfs_inode)
 {
