@@ -158,7 +158,7 @@ int dwc3_host_init(struct dwc3 *dwc)
 		goto err;
 	}
 
-	memset(props, 0, sizeof(struct property_entry) * ARRAY_SIZE(props));
+	memset(props, 0, sizeof(props));
 
 	props[prop_idx++] = PROPERTY_ENTRY_BOOL("xhci-sg-trb-cache-size-quirk");
 
