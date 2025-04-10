@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 config DRM_ARMADA
 	tristate "DRM support for Marvell Armada SoCs"
-	depends on DRM && HAVE_CLK && ARM && MMU
+	depends on DRM && HAVE_CLK && MMU && (ARM || COMPILE_TEST)
 	select DRM_CLIENT_SELECTION
 	select DRM_KMS_HELPER
 	select FB_IOMEM_HELPERS if DRM_FBDEV_EMULATION
