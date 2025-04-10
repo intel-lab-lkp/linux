@@ -74,7 +74,6 @@ static int ath_ahb_probe(struct platform_device *pdev)
 	void __iomem *mem;
 	struct ath_softc *sc;
 	struct ieee80211_hw *hw;
-	struct resource *res;
 	const struct platform_device_id *id = platform_get_device_id(pdev);
 	int irq;
 	int ret = 0;
@@ -86,16 +85,10 @@ static int ath_ahb_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (res == NULL) {
-		dev_err(&pdev->dev, "no memory resource found\n");
-		return -ENXIO;
-	}
-
-	mem = devm_ioremap(&pdev->dev, res->start, resource_size(res));
-	if (mem == NULL) {
+	mem = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(mem)) {
 		dev_err(&pdev->dev, "ioremap failed\n");
-		return -ENOMEM;
+		return PTR_ERR(mem);
 	}
 
 	irq = platform_get_irq(pdev, 0);
@@ -118,16 +111,16 @@ static int ath_ahb_probe(struct platform_device *pdev)
 	sc->mem = mem;
 	sc->irq = irq;
 
-	ret = request_irq(irq, ath_isr, IRQF_SHARED, "ath9k", sc);
+	ret = devm_request_irq(&pdev->dev, irq, ath_isr, IRQF_SHARED, "ath9k", sc);
 	if (ret) {
 		dev_err(&pdev->dev, "request_irq failed\n");
-		goto err_free_hw;
+		return ret;
 	}
 
 	ret = ath9k_init_device(id->driver_data, sc, &ath_ahb_bus_ops);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to initialize device\n");
-		goto err_irq;
+		goto err_free_hw;
 	}
 
 	ah = sc->sc_ah;
@@ -137,8 +130,6 @@ static int ath_ahb_probe(struct platform_device *pdev)
 
 	return 0;
 
- err_irq:
-	free_irq(irq, sc);
  err_free_hw:
 	ieee80211_free_hw(hw);
 	return ret;
@@ -152,7 +143,6 @@ static void ath_ahb_remove(struct platform_device *pdev)
 		struct ath_softc *sc = hw->priv;
 
 		ath9k_deinit_device(sc);
-		free_irq(sc->irq, sc);
 		ieee80211_free_hw(sc->hw);
 	}
 }
