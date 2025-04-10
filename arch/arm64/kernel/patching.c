@@ -102,9 +102,9 @@ noinstr int aarch64_insn_write_literal_u64(void *addr, u64 val)
 	return ret;
 }
 
-typedef void text_poke_f(void *dst, void *src, size_t patched, size_t len);
+typedef void text_poke_f(void *dst, const void *src, size_t patched, size_t len);
 
-static void *__text_poke(text_poke_f func, void *addr, void *src, size_t len)
+static void *__text_poke(text_poke_f func, void *addr, const void *src, size_t len)
 {
 	unsigned long flags;
 	size_t patched = 0;
@@ -132,12 +132,12 @@ static void *__text_poke(text_poke_f func, void *addr, void *src, size_t len)
 	return addr;
 }
 
-static void text_poke_memcpy(void *dst, void *src, size_t patched, size_t len)
+static void text_poke_memcpy(void *dst, const void *src, size_t patched, size_t len)
 {
 	copy_to_kernel_nofault(dst, src + patched, len);
 }
 
-static void text_poke_memset(void *dst, void *src, size_t patched, size_t len)
+static void text_poke_memset(void *dst, const void *src, size_t patched, size_t len)
 {
 	u32 c = *(u32 *)src;
 
@@ -152,7 +152,7 @@ static void text_poke_memset(void *dst, void *src, size_t patched, size_t len)
  *
  * Useful for JITs to dump new code blocks into unused regions of RX memory.
  */
-noinstr void *aarch64_insn_copy(void *dst, void *src, size_t len)
+noinstr void *aarch64_insn_copy(void *dst, const void *src, size_t len)
 {
 	/* A64 instructions must be word aligned */
 	if ((uintptr_t)dst & 0x3)
