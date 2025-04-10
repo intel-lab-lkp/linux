@@ -122,6 +122,7 @@ struct elevator_queue
 
 #define ELEVATOR_FLAG_REGISTERED	0
 #define ELEVATOR_FLAG_DISABLE_WBT	1
+#define ELEVATOR_FLAG_ENABLE_WBT_ON_EXIT	2
 
 /* Holding data for changing elevator */
 struct elev_change_ctx {
