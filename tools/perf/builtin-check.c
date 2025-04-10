@@ -180,9 +180,5 @@ int cmd_check(int argc, const char **argv)
 	/* If no subcommand matched above, print usage help */
 	pr_err("Unknown subcommand: %s\n", argv[0]);
 	usage_with_options(check_usage, check_options);
-
-	/* free usage string allocated by parse_options_subcommand */
-	free((void *)check_usage[0]);
-
-	return 0;
+	__builtin_unreachable();
 }

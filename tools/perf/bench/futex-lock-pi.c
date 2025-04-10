@@ -249,5 +249,5 @@ int bench_futex_lock_pi(int argc, const char **argv)
 	return ret;
 err:
 	usage_with_options(bench_futex_lock_pi_usage, options);
-	exit(EXIT_FAILURE);
+	__builtin_unreachable();
 }

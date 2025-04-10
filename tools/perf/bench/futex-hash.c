@@ -135,7 +135,7 @@ int bench_futex_hash(int argc, const char **argv)
 	argc = parse_options(argc, argv, options, bench_futex_hash_usage, 0);
 	if (argc) {
 		usage_with_options(bench_futex_hash_usage, options);
-		exit(EXIT_FAILURE);
+		__builtin_unreachable();
 	}
 
 	cpu = perf_cpu_map__new_online_cpus();

@@ -119,7 +119,7 @@ int bench_breakpoint_thread(int argc, const char **argv)
 
 	if (parse_options(argc, argv, thread_options, thread_usage, 0)) {
 		usage_with_options(thread_usage, thread_options);
-		exit(EXIT_FAILURE);
+		__builtin_unreachable();
 	}
 	breakpoints = calloc(thread_params.nbreakpoints, sizeof(breakpoints[0]));
 	parallel = calloc(thread_params.nparallel, sizeof(parallel[0]));
@@ -205,7 +205,7 @@ int bench_breakpoint_enable(int argc, const char **argv)
 
 	if (parse_options(argc, argv, enable_options, enable_usage, 0)) {
 		usage_with_options(enable_usage, enable_options);
-		exit(EXIT_FAILURE);
+		__builtin_unreachable();
 	}
 	fd = breakpoint_setup(&watched);
 

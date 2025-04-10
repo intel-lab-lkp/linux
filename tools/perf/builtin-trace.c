@@ -4378,25 +4378,34 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	trace->live = true;
 
 	if (!trace->raw_augmented_syscalls) {
-		if (trace->trace_syscalls && trace__add_syscall_newtp(trace))
-			goto out_error_raw_syscalls;
+		if (trace->trace_syscalls && trace__add_syscall_newtp(trace)) {
+			char errbuf[BUFSIZ];
 
+			tracing_path__strerror_open_tp(errno, errbuf, sizeof(errbuf),
+						       "raw_syscalls", "sys_(enter|exit)");
+			fprintf(trace->output, "%s\n", errbuf);
+			goto out_delete_evlist;
+		}
 		if (trace->trace_syscalls)
 			trace->vfs_getname = evlist__add_vfs_getname(evlist);
 	}
 
 	if ((trace->trace_pgfaults & TRACE_PFMAJ)) {
 		pgfault_maj = evsel__new_pgfault(PERF_COUNT_SW_PAGE_FAULTS_MAJ);
-		if (pgfault_maj == NULL)
-			goto out_error_mem;
+		if (pgfault_maj == NULL) {
+			fprintf(trace->output, "Not enough memory to run!\n");
+			goto out_delete_evlist;
+		}
 		evsel__config_callchain(pgfault_maj, &trace->opts, &callchain_param);
 		evlist__add(evlist, pgfault_maj);
 	}
 
 	if ((trace->trace_pgfaults & TRACE_PFMIN)) {
 		pgfault_min = evsel__new_pgfault(PERF_COUNT_SW_PAGE_FAULTS_MIN);
-		if (pgfault_min == NULL)
-			goto out_error_mem;
+		if (pgfault_min == NULL) {
+			fprintf(trace->output, "Not enough memory to run!\n");
+			goto out_delete_evlist;
+		}
 		evsel__config_callchain(pgfault_min, &trace->opts, &callchain_param);
 		evlist__add(evlist, pgfault_min);
 	}
@@ -4405,8 +4414,14 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	trace->opts.ignore_missing_thread = trace->opts.target.uid != UINT_MAX || trace->opts.target.pid;
 
 	if (trace->sched &&
-	    evlist__add_newtp(evlist, "sched", "sched_stat_runtime", trace__sched_stat_runtime))
-		goto out_error_sched_stat_runtime;
+	    evlist__add_newtp(evlist, "sched", "sched_stat_runtime", trace__sched_stat_runtime)) {
+		char errbuf[BUFSIZ];
+
+		tracing_path__strerror_open_tp(errno, errbuf, sizeof(errbuf),
+					       "sched", "sched_stat_runtime");
+		fprintf(trace->output, "%s\n", errbuf);
+		goto out_delete_evlist;
+	}
 	/*
 	 * If a global cgroup was set, apply it to all the events without an
 	 * explicit cgroup. I.e.:
@@ -4465,8 +4480,13 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	}
 
 	err = evlist__open(evlist);
-	if (err < 0)
-		goto out_error_open;
+	if (err < 0) {
+		char errbuf[BUFSIZ];
+
+		evlist__strerror_open(evlist, errno, errbuf, sizeof(errbuf));
+		fprintf(trace->output, "%s\n", errbuf);
+		goto out_delete_evlist;
+	}
 #ifdef HAVE_BPF_SKEL
 	if (trace->syscalls.events.bpf_output) {
 		struct perf_cpu cpu;
@@ -4490,8 +4510,10 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 		trace->filter_pids.map = trace->skel->maps.pids_filtered;
 #endif
 	err = trace__set_filter_pids(trace);
-	if (err < 0)
-		goto out_error_mem;
+	if (err < 0) {
+		fprintf(trace->output, "Not enough memory to run!\n");
+		goto out_delete_evlist;
+	}
 
 #ifdef HAVE_BPF_SKEL
 	if (trace->skel && trace->skel->progs.sys_enter) {
@@ -4505,9 +4527,10 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 
 	if (trace->ev_qualifier_ids.nr > 0) {
 		err = trace__set_ev_qualifier_filter(trace);
-		if (err < 0)
-			goto out_errno;
-
+		if (err < 0) {
+			fprintf(trace->output, "errno=%d,%s\n", errno, strerror(errno));
+			goto out_delete_evlist;
+		}
 		if (trace->syscalls.events.sys_exit) {
 			pr_debug("event qualifier tracepoint filter: %s\n",
 				 trace->syscalls.events.sys_exit->filter);
@@ -4532,13 +4555,24 @@ static int trace__run(struct trace *trace, int argc, const char **argv)
 	if (err)
 		goto out_delete_evlist;
 	err = evlist__apply_filters(evlist, &evsel, &trace->opts.target);
-	if (err < 0)
-		goto out_error_apply_filters;
+	if (err < 0) {
+		char errbuf[BUFSIZ];
+
+		fprintf(trace->output,
+			"Failed to set filter \"%s\" on event %s with %d (%s)\n",
+			evsel->filter, evsel__name(evsel), errno,
+			str_error_r(errno, errbuf, sizeof(errbuf)));
+		goto out_delete_evlist;
+	}
 
 	err = evlist__mmap(evlist, trace->opts.mmap_pages);
-	if (err < 0)
-		goto out_error_mmap;
+	if (err < 0) {
+		char errbuf[BUFSIZ];
 
+		evlist__strerror_mmap(evlist, errno, errbuf, sizeof(errbuf));
+		fprintf(trace->output, "%s\n", errbuf);
+		goto out_delete_evlist;
+	}
 	if (!target__none(&trace->opts.target) && !trace->opts.target.initial_delay)
 		evlist__enable(evlist);
 
@@ -4646,42 +4680,6 @@ out_delete_evlist:
 	trace->evlist = NULL;
 	trace->live = false;
 	return err;
-{
-	char errbuf[BUFSIZ];
-
-out_error_sched_stat_runtime:
-	tracing_path__strerror_open_tp(errno, errbuf, sizeof(errbuf), "sched", "sched_stat_runtime");
-	goto out_error;
-
-out_error_raw_syscalls:
-	tracing_path__strerror_open_tp(errno, errbuf, sizeof(errbuf), "raw_syscalls", "sys_(enter|exit)");
-	goto out_error;
-
-out_error_mmap:
-	evlist__strerror_mmap(evlist, errno, errbuf, sizeof(errbuf));
-	goto out_error;
-
-out_error_open:
-	evlist__strerror_open(evlist, errno, errbuf, sizeof(errbuf));
-
-out_error:
-	fprintf(trace->output, "%s\n", errbuf);
-	goto out_delete_evlist;
-
-out_error_apply_filters:
-	fprintf(trace->output,
-		"Failed to set filter \"%s\" on event %s with %d (%s)\n",
-		evsel->filter, evsel__name(evsel), errno,
-		str_error_r(errno, errbuf, sizeof(errbuf)));
-	goto out_delete_evlist;
-}
-out_error_mem:
-	fprintf(trace->output, "Not enough memory to run!\n");
-	goto out_delete_evlist;
-
-out_errno:
-	fprintf(trace->output, "errno=%d,%s\n", errno, strerror(errno));
-	goto out_delete_evlist;
 }
 
 static int trace__replay(struct trace *trace)

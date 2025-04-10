@@ -67,7 +67,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	     found_ld_mmap = false;
 	int err = -1, errs = 0, i, wakeups = 0;
 	u32 cpu;
-	int total_events = 0, nr_events[PERF_RECORD_MAX] = { 0, };
+	int /*total_events = 0, */ nr_events[PERF_RECORD_MAX] = { 0, };
 	char sbuf[STRERR_BUFSIZE];
 
 	perf_sample__init(&sample, /*all=*/false);
@@ -165,7 +165,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	evlist__start_workload(evlist);
 
 	while (1) {
-		int before = total_events;
+		// int before = total_events;
 
 		for (i = 0; i < evlist->core.nr_mmaps; i++) {
 			union perf_event *event;
@@ -179,7 +179,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 				const u32 type = event->header.type;
 				const char *name = perf_event__name(type);
 
-				++total_events;
+				//++total_events;
 				if (type < PERF_RECORD_MAX)
 					nr_events[type]++;
 
@@ -288,8 +288,8 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 		 * PERF_RECORD_{!SAMPLE} events don't honour
 		 * perf_event_attr.wakeup_events, just PERF_EVENT_SAMPLE does.
 		 */
-		if (total_events == before && false)
-			evlist__poll(evlist, -1);
+		// if (total_events == before && false)
+		//	evlist__poll(evlist, -1);
 
 		sleep(1);
 		if (++wakeups > 5) {

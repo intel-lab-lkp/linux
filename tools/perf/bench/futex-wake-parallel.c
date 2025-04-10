@@ -251,7 +251,7 @@ int bench_futex_wake_parallel(int argc, const char **argv)
 			     bench_futex_wake_parallel_usage, 0);
 	if (argc) {
 		usage_with_options(bench_futex_wake_parallel_usage, options);
-		exit(EXIT_FAILURE);
+		__builtin_unreachable();
 	}
 
 	memset(&act, 0, sizeof(act));

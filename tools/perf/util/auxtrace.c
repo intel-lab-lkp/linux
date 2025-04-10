@@ -384,7 +384,7 @@ static int auxtrace_queues__add_buffer(struct auxtrace_queues *queues,
 		if (!buffer->data)
 			goto out_free;
 		buffer->data_needs_freeing = true;
-	} else if (BITS_PER_LONG == 32 &&
+	} else if (BITS_PER_LONG == (32) &&
 		   buffer->size > BUFFER_LIMIT_FOR_32_BIT) {
 		err = auxtrace_queues__split_buffer(queues, idx, buffer);
 		if (err)

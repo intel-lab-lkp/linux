@@ -116,7 +116,7 @@ static void handler_call_die(const char *handler_name)
 	Py_FatalError("problem in Python trace event handler");
 	// Py_FatalError does not return
 	// but we have to make the compiler happy
-	abort();
+	__builtin_unreachable();
 }
 
 /*

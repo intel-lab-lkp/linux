@@ -129,7 +129,7 @@ int bench_mem_find_bit(int argc, const char **argv)
 	argc = parse_options(argc, argv, options, bench_usage, 0);
 	if (argc) {
 		usage_with_options(bench_usage, options);
-		exit(EXIT_FAILURE);
+		__builtin_unreachable();
 	}
 
 	for (i = 1; i <= 2048; i <<= 1)

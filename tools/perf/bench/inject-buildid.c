@@ -478,7 +478,7 @@ int bench_inject_build_id(int argc, const char **argv)
 	argc = parse_options(argc, argv, options, bench_usage, 0);
 	if (argc) {
 		usage_with_options(bench_usage, options);
-		exit(EXIT_FAILURE);
+		__builtin_unreachable();
 	}
 
 	return do_inject_loops(&data);
