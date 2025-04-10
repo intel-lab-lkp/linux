@@ -1966,7 +1966,7 @@ static struct se_portal_group *sbp_make_tpg(struct se_wwn *wwn,
 
 	if (strstr(name, "tpgt_") != name)
 		return ERR_PTR(-EINVAL);
-	if (kstrtoul(name + 5, 10, &tpgt) || tpgt > UINT_MAX)
+	if (kstrtoul(name + 5, 10, &tpgt) || tpgt > USHRT_MAX)
 		return ERR_PTR(-EINVAL);
 
 	if (tport->tpg) {
