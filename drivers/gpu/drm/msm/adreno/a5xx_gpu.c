@@ -9,6 +9,7 @@
 #include <linux/pm_opp.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/slab.h>
+#include <linux/soc/qcom/smem.h>
 #include "msm_gem.h"
 #include "msm_mmu.h"
 #include "a5xx_gpu.h"
@@ -1758,7 +1759,11 @@ struct msm_gpu *a5xx_gpu_init(struct drm_device *dev)
 	struct adreno_gpu *adreno_gpu;
 	struct msm_gpu *gpu;
 	unsigned int nr_rings;
-	int ret;
+	int hbb, ret;
+
+	/* We need data from SMEM to retrieve HBB below */
+	if (!qcom_smem_is_available())
+		return ERR_PTR(-EPROBE_DEFER);
 
 	a5xx_gpu = kzalloc(sizeof(*a5xx_gpu), GFP_KERNEL);
 	if (!a5xx_gpu)
@@ -1795,6 +1800,11 @@ struct msm_gpu *a5xx_gpu_init(struct drm_device *dev)
 		adreno_gpu->ubwc_config.highest_bank_bit = 15;
 	else
 		adreno_gpu->ubwc_config.highest_bank_bit = 14;
+
+	/* Attempt to retrieve HBB data from SMEM, keep the above defaults in case of error */
+	hbb = qcom_smem_dram_get_hbb();
+	if (hbb > 0)
+		adreno_gpu->ubwc_config.highest_bank_bit = hbb;
 
 	/* a5xx only supports UBWC 1.0, these are not configurable */
 	adreno_gpu->ubwc_config.macrotile_mode = 0;
