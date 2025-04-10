@@ -50,6 +50,8 @@
  */
 #define QCOM_DUMMY_VAL -1
 
+u32 msi_iova_base;
+
 static int force_stage;
 module_param(force_stage, int, S_IRUGO);
 MODULE_PARM_DESC(force_stage,
@@ -1594,8 +1596,8 @@ static void arm_smmu_get_resv_regions(struct device *dev,
 	struct iommu_resv_region *region;
 	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
 
-	region = iommu_alloc_resv_region(MSI_IOVA_BASE, MSI_IOVA_LENGTH,
-					 prot, IOMMU_RESV_SW_MSI, GFP_KERNEL);
+	region = iommu_alloc_resv_region(msi_iova_base, MSI_IOVA_LENGTH, prot,
+					 IOMMU_RESV_SW_MSI, GFP_KERNEL);
 	if (!region)
 		return;
 
@@ -2030,6 +2032,9 @@ static int arm_smmu_device_dt_probe(struct arm_smmu_device *smmu,
 	const struct arm_smmu_match_data *data;
 	struct device *dev = smmu->dev;
 	bool legacy_binding;
+	u32 *msi_iova_ptr = &msi_iova_base;
+
+	iommu_configure_msi_iova(dev, "arm,smmu-faulty-msi-iova", msi_iova_ptr);
 
 	if (of_property_read_u32(dev->of_node, "#global-interrupts", global_irqs))
 		return dev_err_probe(dev, -ENODEV,

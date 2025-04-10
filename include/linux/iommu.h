@@ -1526,10 +1526,59 @@ static inline void iommu_debugfs_setup(void) {}
 
 #ifdef CONFIG_IOMMU_DMA
 #define MSI_IOVA_BASE        0x8000000
+#define MSI_IOVA_BASE2       0xa0000000
 #define MSI_IOVA_LENGTH      0x100000
+
+static inline u32 select_msi_iova_base(u32 erratic_iova_addr)
+{
+	phys_addr_t start, end, msi_iova_end;
+
+	if (!erratic_iova_addr)
+		return MSI_IOVA_BASE;
+
+	start = erratic_iova_addr;
+	end = start + MSI_IOVA_LENGTH - 1;
+	msi_iova_end = MSI_IOVA_BASE + MSI_IOVA_LENGTH - 1;
+
+	/* return non-overlapping address */
+	return (start > MSI_IOVA_BASE ||
+			end < msi_iova_end) ? MSI_IOVA_BASE : MSI_IOVA_BASE2;
+}
+
+static inline void iommu_configure_msi_iova(struct device *iommu_dev,
+					    const char *faulty_msi_iova_prop,
+					    u32 *msi_iova)
+{
+	static bool is_msi_iova_selected;
+	u32 faulty_msi_iova_from_dt;
+	int rc;
+
+	rc = of_property_read_u32(iommu_dev->of_node, faulty_msi_iova_prop,
+				  &faulty_msi_iova_from_dt);
+	if (!is_msi_iova_selected) {
+		*msi_iova = select_msi_iova_base(rc ? 0 : faulty_msi_iova_from_dt);
+		dev_dbg(iommu_dev, "setting custom MSI IOVA base to 0x%x\n", *msi_iova);
+		is_msi_iova_selected = true;
+		return;
+	}
+
+	dev_dbg(iommu_dev, "custom MSI IOVA base already set to 0x%x\n", *msi_iova);
+}
 
 int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base);
 #else /* CONFIG_IOMMU_DMA */
+
+static inline u32 select_msi_iova_base(u32 erratic_iova_addr)
+{
+}
+
+static inline void iommu_configure_msi_iova(struct device *iommu_dev,
+					    const char *faulty_msi_iova_prop,
+					    u32 *msi_iova)
+{
+}
+
+
 static inline int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 {
 	return -ENODEV;
