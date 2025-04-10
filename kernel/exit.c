@@ -916,11 +916,17 @@ void __noreturn do_exit(long code)
 	if (group_dead) {
 		/*
 		 * If the last thread of global init has exited, panic
-		 * immediately to get a useable coredump.
+		 * immediately to get a usable coredump, except when the
+		 * device is currently powering off or restarting.
 		 */
-		if (unlikely(is_global_init(tsk)))
-			panic("Attempted to kill init! exitcode=0x%08x\n",
-				tsk->signal->group_exit_code ?: (int)code);
+		if (unlikely(is_global_init(tsk))) {
+			if (system_state != SYSTEM_POWER_OFF &&
+			    system_state != SYSTEM_RESTART)
+				panic("Attempted to kill init! exitcode=0x%08x\n",
+				      tsk->signal->group_exit_code ?: (int)code);
+			WARN(1, "Attempted to kill init! exitcode=0x%08x\n",
+			     tsk->signal->group_exit_code ?: (int)code);
+		}
 
 #ifdef CONFIG_POSIX_TIMERS
 		hrtimer_cancel(&tsk->signal->real_timer);
