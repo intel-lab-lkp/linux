@@ -2474,6 +2474,17 @@ static inline void __mod_objcg_mlstate(struct obj_cgroup *objcg,
 	rcu_read_unlock();
 }
 
+static inline void mod_objcg_mlstate(struct obj_cgroup *objcg,
+				     struct pglist_data *pgdat,
+				     enum node_stat_item idx, int nr)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	__mod_objcg_mlstate(objcg, pgdat, idx, nr);
+	local_irq_restore(flags);
+}
+
 static __always_inline
 struct mem_cgroup *mem_cgroup_from_obj_folio(struct folio *folio, void *p)
 {
@@ -2920,6 +2931,13 @@ static void refill_obj_stock(struct obj_cgroup *objcg, unsigned int nr_bytes,
 	struct memcg_stock_pcp *stock;
 	unsigned long flags;
 	unsigned int nr_pages = 0;
+
+	if (unlikely(percpu_ref_is_dying(&objcg->refcnt))) {
+		atomic_add(nr_bytes, &objcg->nr_charged_bytes);
+		if (pgdat)
+			mod_objcg_mlstate(objcg, pgdat, idx, nr_acct);
+		return;
+	}
 
 	local_lock_irqsave(&memcg_stock.stock_lock, flags);
 
