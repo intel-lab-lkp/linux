@@ -271,6 +271,14 @@ struct nfsd_file *nfs_open_local_fh(nfs_uuid_t *uuid,
 }
 EXPORT_SYMBOL_GPL(nfs_open_local_fh);
 
+/*
+ * nfsd_file structure is purposely kept opaque to NFS client.
+ * This is a dummy definition to make RCU compilation happy.
+ */
+struct nfsd_file {
+	int undefined__;
+};
+
 void nfs_close_local_fh(struct nfs_file_localio *nfl)
 {
 	struct nfsd_file *ro_nf = NULL;

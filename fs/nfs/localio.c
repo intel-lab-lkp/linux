@@ -46,6 +46,14 @@ struct nfs_local_fsync_ctx {
 	struct completion	*done;
 };
 
+/*
+ * nfsd_file structure is purposely kept opaque to NFS client.
+ * This is a dummy definition to make RCU compilation happy.
+ */
+struct nfsd_file {
+	int undefined__;
+};
+
 static bool localio_enabled __read_mostly = true;
 module_param(localio_enabled, bool, 0644);
 
