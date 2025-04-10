@@ -933,6 +933,7 @@ fwnode_create_software_node(const struct property_entry *properties,
 	struct software_node *node;
 	struct swnode *p;
 
+	/* Only cast away the const by ERR_CAST() */
 	if (IS_ERR(parent))
 		return ERR_CAST(parent);
 
