@@ -52,9 +52,8 @@ static u8 odm_evm_db_to_percentage(s8 value)
 	/*  */
 	/*  -33dB~0dB to 0%~99% */
 	/*  */
-	s8 ret_val;
+	s8 ret_val = value;
 
-	ret_val = value;
 	ret_val /= 2;
 
 	if (ret_val >= 0)
