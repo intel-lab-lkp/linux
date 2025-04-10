@@ -63,11 +63,7 @@ static inline void housekeeping_init(void) { }
 
 static inline bool housekeeping_cpu(int cpu, enum hk_type type)
 {
-#ifdef CONFIG_CPU_ISOLATION
-	if (static_branch_unlikely(&housekeeping_overridden))
-		return housekeeping_test_cpu(cpu, type);
-#endif
-	return true;
+	return housekeeping_test_cpu(cpu, type);
 }
 
 static inline bool cpu_is_isolated(int cpu)
