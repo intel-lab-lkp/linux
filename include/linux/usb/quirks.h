@@ -75,4 +75,7 @@
 /* short SET_ADDRESS request timeout */
 #define USB_QUIRK_SHORT_SET_ADDRESS_REQ_TIMEOUT	BIT(16)
 
+/* force selection of vendor-specific configuration*/
+#define USB_QUIRK_CHOOSE_VENDOR_SPEC_CFG	BIT(17)
+
 #endif /* __LINUX_USB_QUIRKS_H */

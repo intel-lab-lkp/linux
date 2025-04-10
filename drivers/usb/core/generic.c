@@ -23,6 +23,7 @@
 #include <linux/usb/hcd.h>
 #include <linux/string_choices.h>
 #include <uapi/linux/usb/audio.h>
+#include <linux/usb/quirks.h>
 #include "usb.h"
 
 static int is_rndis(struct usb_interface_descriptor *desc)
@@ -153,6 +154,20 @@ int usb_choose_configuration(struct usb_device *udev)
 			 * we don't want.
 			 */
 			continue;
+		}
+
+		/* This quirk forces the selection of a vendor-specific
+		 * interface class configuration when multiple configurations
+		 * are present.
+		 */
+		if (num_configs > 1 &&
+			udev->descriptor.bDeviceClass ==
+						USB_CLASS_PER_INTERFACE &&
+				udev->quirks & USB_QUIRK_CHOOSE_VENDOR_SPEC_CFG
+				&& (desc && desc->bInterfaceClass ==
+						USB_CLASS_VENDOR_SPEC)) {
+			best = c;
+			break;
 		}
 
 		/* When the first config's first interface is one of Microsoft's
