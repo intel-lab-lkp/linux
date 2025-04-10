@@ -104,6 +104,7 @@ struct arm_ni_cd {
 	u16 id;
 	int num_units;
 	int irq;
+	s8 irq_friend;
 	int cpu;
 	struct hlist_node cpuhp_node;
 	struct pmu pmu;
@@ -445,26 +446,31 @@ static irqreturn_t arm_ni_handle_irq(int irq, void *dev_id)
 {
 	struct arm_ni_cd *cd = dev_id;
 	irqreturn_t ret = IRQ_NONE;
-	u32 reg = readl_relaxed(cd->pmu_base + NI_PMOVSCLR);
+	u32 reg;
 
-	if (reg & (1U << NI_CCNT_IDX)) {
-		ret = IRQ_HANDLED;
-		if (!(WARN_ON(!cd->ccnt))) {
-			arm_ni_event_read(cd->ccnt);
-			arm_ni_init_ccnt(cd);
+	for (;;) {
+		reg = readl_relaxed(cd->pmu_base + NI_PMOVSCLR);
+		if (reg & (1U << NI_CCNT_IDX)) {
+			ret = IRQ_HANDLED;
+			if (!(WARN_ON(!cd->ccnt))) {
+				arm_ni_event_read(cd->ccnt);
+				arm_ni_init_ccnt(cd);
+			}
 		}
-	}
-	for (int i = 0; i < NI_NUM_COUNTERS; i++) {
-		if (!(reg & (1U << i)))
-			continue;
-		ret = IRQ_HANDLED;
-		if (!(WARN_ON(!cd->evcnt[i]))) {
-			arm_ni_event_read(cd->evcnt[i]);
-			arm_ni_init_evcnt(cd, i);
+		for (int i = 0; i < NI_NUM_COUNTERS; i++) {
+			if (!(reg & (1U << i)))
+				continue;
+			ret = IRQ_HANDLED;
+			if (!(WARN_ON(!cd->evcnt[i]))) {
+				arm_ni_event_read(cd->evcnt[i]);
+				arm_ni_init_evcnt(cd, i);
+			}
 		}
+		writel_relaxed(reg, cd->pmu_base + NI_PMOVSCLR);
+		if (!cd->irq_friend)
+			return ret;
+		cd += cd->irq_friend;
 	}
-	writel_relaxed(reg, cd->pmu_base + NI_PMOVSCLR);
-	return ret;
 }
 
 static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_start)
@@ -537,12 +543,6 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 	if (cd->irq < 0)
 		return cd->irq;
 
-	err = devm_request_irq(ni->dev, cd->irq, arm_ni_handle_irq,
-			       IRQF_NOBALANCING | IRQF_NO_THREAD,
-			       dev_name(ni->dev), cd);
-	if (err)
-		return err;
-
 	cd->cpu = cpumask_local_spread(0, dev_to_node(ni->dev));
 	cd->pmu = (struct pmu) {
 		.module = THIS_MODULE,
@@ -602,6 +602,30 @@ static void arm_ni_probe_domain(void __iomem *base, struct arm_ni_node *node)
 	node->num_components = readl_relaxed(base + NI_CHILD_NODE_INFO);
 }
 
+static int arm_ni_irq_init(struct arm_ni *ni)
+{
+	int irq;
+	int err = 0;
+
+	for (int i = 0; i < ni->num_cds; i++) {
+		irq = ni->cds[i].irq;
+		for (int j = i; j--; ) {
+			if (ni->cds[j].irq == irq) {
+				ni->cds[j].irq_friend = i-j;
+				goto next;
+			}
+		}
+		err =  devm_request_irq(ni->dev, irq, arm_ni_handle_irq,
+					IRQF_NOBALANCING | IRQF_NO_THREAD,
+					 dev_name(ni->dev), &ni->cds[i]);
+		if (err)
+			return err;
+next:
+		;
+	}
+	return 0;
+}
+
 static int arm_ni_probe(struct platform_device *pdev)
 {
 	struct arm_ni_node cfg, vd, pd, cd;
@@ -610,6 +634,7 @@ static int arm_ni_probe(struct platform_device *pdev)
 	void __iomem *base;
 	static atomic_t id;
 	int num_cds;
+	int ret;
 	u32 reg, part;
 
 	/*
@@ -668,8 +693,6 @@ static int arm_ni_probe(struct platform_device *pdev)
 			reg = readl_relaxed(vd.base + NI_CHILD_PTR(p));
 			arm_ni_probe_domain(base + reg, &pd);
 			for (int c = 0; c < pd.num_components; c++) {
-				int ret;
-
 				reg = readl_relaxed(pd.base + NI_CHILD_PTR(c));
 				arm_ni_probe_domain(base + reg, &cd);
 				ret = arm_ni_init_cd(ni, &cd, res->start);
@@ -680,6 +703,12 @@ static int arm_ni_probe(struct platform_device *pdev)
 				}
 			}
 		}
+	}
+
+	ret = arm_ni_irq_init(ni);
+	if (ret) {
+		arm_ni_remove(pdev);
+		return ret;
 	}
 
 	return 0;
