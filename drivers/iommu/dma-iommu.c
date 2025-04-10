@@ -1739,6 +1739,11 @@ out_err:
 	dev->dma_iommu = false;
 }
 
+void iommu_clear_dma_ops(struct device *dev)
+{
+	dev->dma_iommu = false;
+}
+
 static bool has_msi_cookie(const struct iommu_domain *domain)
 {
 	return domain && (domain->cookie_type == IOMMU_COOKIE_DMA_IOVA ||

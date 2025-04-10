@@ -677,6 +677,8 @@ static void __iommu_group_remove_device(struct device *dev)
 	struct iommu_group *group = dev->iommu_group;
 	struct group_device *device;
 
+	iommu_clear_dma_ops(dev);
+
 	mutex_lock(&group->mutex);
 	for_each_group_device(group, device) {
 		if (device->dev != dev)
