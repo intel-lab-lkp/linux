@@ -42,6 +42,7 @@ my $latest_avail_ver;
 my $pdf = 1;
 my $virtualenv = 1;
 my $version_check = 0;
+my $interactive = 0;
 
 #
 # List of required texlive packages on Fedora and OpenSuse
@@ -338,6 +339,21 @@ sub which($)
 	return undef;
 }
 
+sub run_if_interactive($)
+{
+	my $command = shift;
+
+	if ($interactive) {
+		printf("Do you want to run the command now [Y/n]: ");
+		my $user_input = <STDIN>;
+		chomp $user_input;
+		if ($user_input =~ /Y|y/) {
+			printf("\$ $command\n");
+			system($command);
+		}
+	}
+}
+
 #
 # Subroutines that check distro-specific hints
 #
@@ -374,7 +390,9 @@ sub give_debian_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo apt-get install $install\n");
+	my $command = "sudo apt-get install $install";
+	printf("\n\t$command\n");
+	run_if_interactive($command);
 }
 
 sub give_redhat_hints()
@@ -1002,12 +1020,15 @@ while (@ARGV) {
 		$pdf = 0;
 	} elsif ($arg eq "--version-check"){
 		$version_check = 1;
+	} elsif ($arg eq "--interactive") {
+		$interactive = 1;
 	} else {
-		print "Usage:\n\t$0 <--no-virtualenv> <--no-pdf> <--version-check>\n\n";
+		print "Usage:\n\t$0 <--no-virtualenv> <--no-pdf> <--version-check> <--interactive>\n\n";
 		print "Where:\n";
 		print "\t--no-virtualenv\t- Recommend installing Sphinx instead of using a virtualenv\n";
 		print "\t--version-check\t- if version is compatible, don't check for missing dependencies\n";
-		print "\t--no-pdf\t- don't check for dependencies required to build PDF docs\n\n";
+		print "\t--no-pdf\t- don't check for dependencies required to build PDF docs\n";
+		print "\t--interactive\t- Ask to install missing dependencies\n\n";
 		exit -1;
 	}
 }
