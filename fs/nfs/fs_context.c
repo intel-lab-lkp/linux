@@ -35,6 +35,7 @@
 #endif
 
 #define NFS_MAX_CONNECTIONS 16
+#define NFS_MAX_UDP_RETRANS 15
 
 enum nfs_param {
 	Opt_ac,
@@ -360,6 +361,15 @@ static int nfs_validate_transport_protocol(struct fs_context *fc,
 	case XPRT_TRANSPORT_UDP:
 		if (nfs_server_transport_udp_invalid(ctx))
 			goto out_invalid_transport_udp;
+		/*
+		 * For UDP transport, retrans is used as a shift value in
+		 * xprt_calc_majortimeo(). To prevent shift-out-of-bounds
+		 * and overflow, limit it to 15 bits which is a reasonable
+		 * upper limit for any real-world scenario (typical values
+		 * are 3-5).
+		 */
+		if (ctx->retrans > NFS_MAX_UDP_RETRANS)
+			goto out_invalid_udp_retrans;
 		break;
 	case XPRT_TRANSPORT_TCP:
 	case XPRT_TRANSPORT_RDMA:
@@ -380,6 +390,9 @@ static int nfs_validate_transport_protocol(struct fs_context *fc,
 	return 0;
 out_invalid_transport_udp:
 	return nfs_invalf(fc, "NFS: Unsupported transport protocol udp");
+out_invalid_udp_retrans:
+	return nfs_invalf(fc, "NFS: UDP protocol requires retrans <= %d (got %d)",
+			  NFS_MAX_UDP_RETRANS, ctx->retrans);
 out_invalid_xprtsec_policy:
 	return nfs_invalf(fc, "NFS: Transport does not support xprtsec");
 }
@@ -1158,15 +1171,6 @@ static int nfs23_parse_monolithic(struct fs_context *fc,
 			       sizeof(mntfh->data) - mntfh->size);
 
 		/*
-		 * for proto == XPRT_TRANSPORT_UDP, which is what uses
-		 * to_exponential, implying shift: limit the shift value
-		 * to BITS_PER_LONG (majortimeo is unsigned long)
-		 */
-		if (!(data->flags & NFS_MOUNT_TCP)) /* this will be UDP */
-			if (data->retrans >= 64) /* shift value is too large */
-				goto out_invalid_data;
-
-		/*
 		 * Translate to nfs_fs_context, which nfs_fill_super
 		 * can deal with.
 		 */
@@ -1272,9 +1276,6 @@ out_no_address:
 
 out_invalid_fh:
 	return nfs_invalf(fc, "NFS: invalid root filehandle");
-
-out_invalid_data:
-	return nfs_invalf(fc, "NFS: invalid binary mount data");
 }
 
 #if IS_ENABLED(CONFIG_NFS_V4)
