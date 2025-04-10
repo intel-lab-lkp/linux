@@ -570,6 +570,12 @@ MODULE_PARM_DESC(annex,
 #define LOAD_INTERNAL     0xA0
 #define F8051_USBCS       0x7f92
 
+struct uea_interface_data {
+	struct completion fw_upload_complete;
+	struct usb_device *usb;
+	struct usb_interface *intf;
+};
+
 /*
  * uea_send_modem_cmd - Send a command for pre-firmware devices.
  */
@@ -599,7 +605,8 @@ static int uea_send_modem_cmd(struct usb_device *usb,
 static void uea_upload_pre_firmware(const struct firmware *fw_entry,
 								void *context)
 {
-	struct usb_device *usb = context;
+	struct uea_interface_data *uea_intf_data = context;
+	struct usb_device *usb = uea_intf_data->usb;
 	const u8 *pfw;
 	u8 value;
 	u32 crc = 0;
@@ -669,15 +676,17 @@ err_fw_corrupted:
 	uea_err(usb, "firmware is corrupted\n");
 err:
 	release_firmware(fw_entry);
+	complete(&uea_intf_data->fw_upload_complete);
 	uea_leaves(usb);
 }
 
 /*
  * uea_load_firmware - Load usb firmware for pre-firmware devices.
  */
-static int uea_load_firmware(struct usb_device *usb, unsigned int ver)
+static int uea_load_firmware(struct uea_interface_data *uea_intf_data, unsigned int ver)
 {
 	int ret;
+	struct usb_device *usb = uea_intf_data->usb;
 	char *fw_name = EAGLE_FIRMWARE;
 
 	uea_enters(usb);
@@ -702,7 +711,7 @@ static int uea_load_firmware(struct usb_device *usb, unsigned int ver)
 	}
 
 	ret = request_firmware_nowait(THIS_MODULE, 1, fw_name, &usb->dev,
-					GFP_KERNEL, usb,
+					GFP_KERNEL, uea_intf_data,
 					uea_upload_pre_firmware);
 	if (ret)
 		uea_err(usb, "firmware %s is not available\n", fw_name);
@@ -2586,6 +2595,7 @@ static struct usbatm_driver uea_usbatm_driver = {
 static int uea_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *usb = interface_to_usbdev(intf);
+	struct uea_interface_data *uea_intf_data;
 	int ret;
 
 	uea_enters(usb);
@@ -2597,8 +2607,23 @@ static int uea_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 	usb_reset_device(usb);
 
-	if (UEA_IS_PREFIRM(id))
-		return uea_load_firmware(usb, UEA_CHIP_VERSION(id));
+	if (UEA_IS_PREFIRM(id)) {
+		uea_intf_data = devm_kzalloc(&usb->dev, sizeof(*uea_intf_data), GFP_KERNEL);
+		if (!uea_intf_data)
+			return -ENOMEM;
+
+		init_completion(&uea_intf_data->fw_upload_complete);
+		uea_intf_data->usb = usb;
+		uea_intf_data->intf = intf;
+
+		usb_set_intfdata(intf, uea_intf_data);
+
+		ret = uea_load_firmware(uea_intf_data, UEA_CHIP_VERSION(id));
+		if (ret)
+			complete(&uea_intf_data->fw_upload_complete);
+
+		return ret;
+	}
 
 	ret = usbatm_usb_probe(intf, id, &uea_usbatm_driver);
 	if (ret == 0) {
@@ -2618,6 +2643,7 @@ static int uea_probe(struct usb_interface *intf, const struct usb_device_id *id)
 static void uea_disconnect(struct usb_interface *intf)
 {
 	struct usb_device *usb = interface_to_usbdev(intf);
+	struct uea_interface_data *uea_intf_data;
 	int ifnum = intf->altsetting->desc.bInterfaceNumber;
 	uea_enters(usb);
 
@@ -2629,6 +2655,10 @@ static void uea_disconnect(struct usb_interface *intf)
 		usbatm_usb_disconnect(intf);
 		mutex_unlock(&uea_mutex);
 		uea_info(usb, "ADSL device removed\n");
+	} else {
+		uea_intf_data = usb_get_intfdata(intf);
+		uea_info(usb, "wait for completion uploading firmware\n");
+		wait_for_completion(&uea_intf_data->fw_upload_complete);
 	}
 
 	uea_leaves(usb);
