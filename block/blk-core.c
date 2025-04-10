@@ -1230,6 +1230,7 @@ void __blk_flush_plug(struct blk_plug *plug, bool from_schedule)
 	plug->cur_ktime = 0;
 	current->flags &= ~PF_BLOCK_TS;
 }
+EXPORT_SYMBOL(__blk_flush_plug);
 
 /**
  * blk_finish_plug - mark the end of a batch of submitted I/O
