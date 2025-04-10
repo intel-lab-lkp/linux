@@ -558,10 +558,13 @@ static int max31827_init_client(struct max31827_state *st,
 		/*
 		 * Convert the desired fault queue into register bits.
 		 */
-		if (data != 0)
-			lsb_idx = __ffs(data);
+		if (data == 0 || hweight32(data) != 1) {
+			dev_err(dev, "Invalid data in adi,fault-q\n");
+			return -EINVAL;
+		}
 
-		if (hweight32(data) != 1 || lsb_idx > 4) {
+		lsb_idx = __ffs(data);
+		if (lsb_idx > 4) {
 			dev_err(dev, "Invalid data in adi,fault-q\n");
 			return -EINVAL;
 		}
