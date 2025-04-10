@@ -292,8 +292,7 @@ static int cmd_go(void *data, u64 value)
 	finish_t = ktime_get();
 
 out:
-	if (fw)
-		release_firmware(fw);
+	release_firmware(fw);
 
 	pm_runtime_mark_last_busy(&slave->dev);
 	pm_runtime_put(&slave->dev);
