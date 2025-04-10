@@ -61,18 +61,14 @@ static int nf_br_ip_fragment(struct net *net, struct sock *sk,
 		struct sk_buff *frag;
 
 		if (first_len - hlen > mtu ||
-		    skb_headroom(skb) < ll_rs)
-			goto blackhole;
-
-		if (skb_cloned(skb))
+		    (skb_headroom(skb) < ll_rs) ||
+		    skb_cloned(skb))
 			goto slow_path;
 
 		skb_walk_frags(skb, frag) {
 			if (frag->len > mtu ||
-			    skb_headroom(frag) < hlen + ll_rs)
-				goto blackhole;
-
-			if (skb_shared(frag))
+			    (skb_headroom(frag) < hlen + ll_rs) ||
+			    skb_shared(frag))
 				goto slow_path;
 		}
 

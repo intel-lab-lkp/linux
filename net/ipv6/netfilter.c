@@ -165,19 +165,14 @@ int br_ip6_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 		struct sk_buff *frag2;
 
 		if (first_len - hlen > mtu ||
-		    skb_headroom(skb) < (hroom + sizeof(struct frag_hdr)))
-			goto blackhole;
-
-		if (skb_cloned(skb))
+		    skb_headroom(skb) < (hroom + sizeof(struct frag_hdr)) ||
+		    skb_cloned(skb))
 			goto slow_path;
 
 		skb_walk_frags(skb, frag2) {
 			if (frag2->len > mtu ||
-			    skb_headroom(frag2) < (hlen + hroom + sizeof(struct frag_hdr)))
-				goto blackhole;
-
-			/* Partially cloned skb? */
-			if (skb_shared(frag2))
+			    skb_headroom(frag2) < (hlen + hroom + sizeof(struct frag_hdr)) ||
+			    skb_shared(frag2))
 				goto slow_path;
 		}
 
