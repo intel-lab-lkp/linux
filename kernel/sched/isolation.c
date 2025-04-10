@@ -103,10 +103,10 @@ void __init housekeeping_init(void)
 static void __init housekeeping_setup_type(enum hk_type type,
 					   cpumask_var_t housekeeping_staging)
 {
+	if (cpumask_empty(housekeeping.cpumasks[type]))
+		alloc_bootmem_cpumask_var(&housekeeping.cpumasks[type]);
 
-	alloc_bootmem_cpumask_var(&housekeeping.cpumasks[type]);
-	cpumask_copy(housekeeping.cpumasks[type],
-		     housekeeping_staging);
+	cpumask_copy(housekeeping.cpumasks[type], housekeeping_staging);
 }
 
 static int __init housekeeping_setup(char *str, unsigned long flags)
