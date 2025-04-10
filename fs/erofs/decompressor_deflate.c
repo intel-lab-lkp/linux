@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <linux/zlib.h>
+#include <linux/scatterlist.h>
+#include <crypto/acompress.h>
+
 #include "compress.h"
 
 struct z_erofs_deflate {
@@ -97,7 +100,7 @@ failed:
 	return -ENOMEM;
 }
 
-static int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
+static int __z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
 				      struct page **pgpl)
 {
 	struct super_block *sb = rq->sb;
@@ -176,6 +179,146 @@ failed_zinit:
 	spin_unlock(&z_erofs_deflate_lock);
 	wake_up(&z_erofs_deflate_wq);
 	return err;
+}
+
+static int z_erofs_crypto_decompress_mem(struct z_erofs_decompress_req *rq)
+{
+	struct erofs_sb_info *sbi = EROFS_SB(rq->sb);
+	unsigned int nrpages_out =
+				PAGE_ALIGN(rq->pageofs_out + rq->outputsize) >> PAGE_SHIFT;
+	unsigned int nrpages_in = PAGE_ALIGN(rq->inputsize) >> PAGE_SHIFT;
+	struct sg_table st_src, st_dst;
+	struct scatterlist *sg_src, *sg_dst;
+	struct acomp_req *req;
+	struct crypto_wait wait;
+	u8 *headpage;
+	int ret, i;
+
+	WARN_ON(!*rq->in);
+	headpage = kmap_local_page(*rq->in);
+
+	ret = z_erofs_fixup_insize(rq, headpage + rq->pageofs_in,
+				min_t(unsigned int, rq->inputsize,
+							rq->sb->s_blocksize - rq->pageofs_in));
+
+	kunmap_local(headpage);
+	if (ret) {
+		return ret;
+	}
+
+	req = acomp_request_alloc(sbi->erofs_tfm);
+	if (!req) {
+		erofs_err(rq->sb, "failed to alloc decompress request");
+		return -ENOMEM;
+	}
+
+	if (sg_alloc_table(&st_src, nrpages_in, GFP_KERNEL)) {
+		acomp_request_free(req);
+		return -ENOMEM;
+	}
+
+	if (sg_alloc_table(&st_dst, nrpages_out, GFP_KERNEL)) {
+		acomp_request_free(req);
+		sg_free_table(&st_src);
+		return -ENOMEM;
+	}
+
+	for_each_sg(st_src.sgl, sg_src, nrpages_in, i) {
+		if (i == 0)
+			sg_set_page(sg_src, rq->in[0],
+					PAGE_SIZE - rq->pageofs_in, rq->pageofs_in);
+		else
+			sg_set_page(sg_src, rq->in[i], PAGE_SIZE, 0);
+	}
+
+	i = 0;
+	for_each_sg(st_dst.sgl, sg_dst, nrpages_out, i) {
+		if (i == 0)
+			sg_set_page(sg_dst, rq->out[0],
+					PAGE_SIZE - rq->pageofs_out, rq->pageofs_out);
+		 else
+			sg_set_page(sg_dst, rq->out[i], PAGE_SIZE, 0);
+	}
+
+	acomp_request_set_params(req, st_src.sgl,
+				st_dst.sgl, rq->inputsize, rq->outputsize);
+
+	crypto_init_wait(&wait);
+	acomp_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+						crypto_req_done, &wait);
+
+	ret = crypto_wait_req(crypto_acomp_decompress(req), &wait);
+	if (ret < 0) {
+		if (ret == -EBADMSG && rq->partial_decoding) {
+			ret = 0;
+		} else {
+			erofs_err(rq->sb, "failed to decompress %d in[%u, %u] out[%u]",
+					ret, rq->inputsize, rq->pageofs_in, rq->outputsize);
+			ret = -EIO;
+		}
+	} else {
+		ret = 0;
+	}
+
+	acomp_request_free(req);
+	sg_free_table(&st_src);
+	sg_free_table(&st_dst);
+	return ret;
+}
+
+static int z_erofs_crypto_prepare_dstpages(struct z_erofs_decompress_req *rq,
+							struct page **pagepool)
+{
+	const unsigned int nr =
+				PAGE_ALIGN(rq->pageofs_out + rq->outputsize) >> PAGE_SHIFT;
+	unsigned int i;
+
+	for (i = 0; i < nr; ++i) {
+		struct page *const page = rq->out[i];
+		struct page *victim;
+
+		if (!page) {
+			victim = __erofs_allocpage(pagepool, rq->gfp, true);
+			if (!victim)
+				return -ENOMEM;
+			set_page_private(victim, Z_EROFS_SHORTLIVED_PAGE);
+			rq->out[i] = victim;
+		}
+	}
+	return 0;
+}
+
+static int __z_erofs_deflate_crypto_decompress(struct z_erofs_decompress_req *rq,
+									 struct page **pgpl)
+{
+	const unsigned int nrpages_out =
+			PAGE_ALIGN(rq->pageofs_out + rq->outputsize) >> PAGE_SHIFT;
+	int ret;
+
+	/* one optimized fast path only for non bigpcluster cases yet */
+	if (rq->inputsize <= PAGE_SIZE && nrpages_out == 1 && !rq->inplace_io) {
+		WARN_ON(!*rq->out);
+		goto dstmap_out;
+	}
+
+	ret = z_erofs_crypto_prepare_dstpages(rq, pgpl);
+	if (ret < 0)
+		return ret;
+
+dstmap_out:
+	return z_erofs_crypto_decompress_mem(rq);
+}
+
+static int z_erofs_deflate_decompress(struct z_erofs_decompress_req *rq,
+				struct page **pgpl)
+{
+	struct super_block *sb = rq->sb;
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
+
+	if (sbi->erofs_tfm)
+		return __z_erofs_deflate_crypto_decompress(rq, pgpl);
+	else
+		return __z_erofs_deflate_decompress(rq, pgpl);
 }
 
 const struct z_erofs_decompressor z_erofs_deflate_decomp = {

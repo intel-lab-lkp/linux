@@ -5,6 +5,7 @@
  */
 #include <linux/sysfs.h>
 #include <linux/kobject.h>
+#include <crypto/acompress.h>
 
 #include "internal.h"
 
@@ -13,6 +14,7 @@ enum {
 	attr_drop_caches,
 	attr_pointer_ui,
 	attr_pointer_bool,
+	attr_comp_crypto,
 };
 
 enum {
@@ -59,12 +61,14 @@ static struct erofs_attr erofs_attr_##_name = {			\
 #ifdef CONFIG_EROFS_FS_ZIP
 EROFS_ATTR_RW_UI(sync_decompress, erofs_mount_opts);
 EROFS_ATTR_FUNC(drop_caches, 0200);
+EROFS_ATTR_FUNC(comp_crypto, 0644);
 #endif
 
 static struct attribute *erofs_attrs[] = {
 #ifdef CONFIG_EROFS_FS_ZIP
 	ATTR_LIST(sync_decompress),
 	ATTR_LIST(drop_caches),
+	ATTR_LIST(comp_crypto),
 #endif
 	NULL,
 };
@@ -128,6 +132,12 @@ static ssize_t erofs_attr_show(struct kobject *kobj,
 		if (!ptr)
 			return 0;
 		return sysfs_emit(buf, "%d\n", *(bool *)ptr);
+	case attr_comp_crypto:
+		if (sbi->erofs_tfm)
+			return sysfs_emit(buf, "%s\n",
+				crypto_comp_alg_common(sbi->erofs_tfm)->base.cra_driver_name);
+		else
+			return sysfs_emit(buf, "NONE\n");
 	}
 	return 0;
 }
@@ -181,6 +191,26 @@ static ssize_t erofs_attr_store(struct kobject *kobj, struct attribute *attr,
 		if (t & 1)
 			invalidate_mapping_pages(MNGD_MAPPING(sbi), 0, -1);
 		return len;
+	case attr_comp_crypto:
+		buf = skip_spaces(buf);
+		if (!strncmp(buf, "none", 4)) {
+			if (sbi->erofs_tfm)
+				crypto_free_acomp(sbi->erofs_tfm);
+			sbi->erofs_tfm = NULL;
+			return len;
+		}
+
+		if (!strncmp(buf, "qat_deflate", 11)) {
+			if (sbi->erofs_tfm)
+				crypto_free_acomp(sbi->erofs_tfm);
+			sbi->erofs_tfm = crypto_alloc_acomp("qat_deflate", 0, 0);
+			if (IS_ERR(sbi->erofs_tfm)) {
+				sbi->erofs_tfm = NULL;
+				return -ENODEV;
+			}
+			return len;
+		}
+		return -EINVAL;
 #endif
 	}
 	return 0;
