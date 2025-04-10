@@ -9,6 +9,8 @@
 
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
+#include <linux/phy.h>
+#include <linux/phy/phy.h>
 #include <linux/property.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
@@ -28,6 +30,7 @@ struct starfive_dwmac_data {
 struct starfive_dwmac {
 	struct device *dev;
 	const struct starfive_dwmac_data *data;
+	struct phy *serdes_phy;
 };
 
 static int starfive_dwmac_set_mode(struct plat_stmmacenet_data *plat_dat)
@@ -80,6 +83,26 @@ static int starfive_dwmac_set_mode(struct plat_stmmacenet_data *plat_dat)
 	return 0;
 }
 
+static int starfive_dwmac_serdes_powerup(struct net_device *ndev, void *priv)
+{
+	struct starfive_dwmac *dwmac = priv;
+	int ret;
+
+	ret = phy_init(dwmac->serdes_phy);
+	if (ret)
+		return ret;
+
+	return phy_power_on(dwmac->serdes_phy);
+}
+
+static void starfive_dwmac_serdes_powerdown(struct net_device *ndev, void *priv)
+{
+	struct starfive_dwmac *dwmac = priv;
+
+	phy_power_off(dwmac->serdes_phy);
+	phy_exit(dwmac->serdes_phy);
+}
+
 static int starfive_dwmac_probe(struct platform_device *pdev)
 {
 	struct plat_stmmacenet_data *plat_dat;
@@ -101,6 +124,11 @@ static int starfive_dwmac_probe(struct platform_device *pdev)
 	dwmac = devm_kzalloc(&pdev->dev, sizeof(*dwmac), GFP_KERNEL);
 	if (!dwmac)
 		return -ENOMEM;
+
+	dwmac->serdes_phy = devm_phy_optional_get(&pdev->dev, NULL);
+	if (IS_ERR(dwmac->serdes_phy))
+		return dev_err_probe(&pdev->dev, PTR_ERR(dwmac->serdes_phy),
+				     "Failed to get serdes phy\n");
 
 	dwmac->data = device_get_match_data(&pdev->dev);
 
@@ -131,6 +159,11 @@ static int starfive_dwmac_probe(struct platform_device *pdev)
 	err = starfive_dwmac_set_mode(plat_dat);
 	if (err)
 		return err;
+
+	if (dwmac->serdes_phy) {
+		plat_dat->serdes_powerup = starfive_dwmac_serdes_powerup;
+		plat_dat->serdes_powerdown  = starfive_dwmac_serdes_powerdown;
+	}
 
 	return stmmac_dvr_probe(&pdev->dev, plat_dat, &stmmac_res);
 }
