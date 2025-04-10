@@ -12227,6 +12227,16 @@ error:
 	return libbpf_err_ptr(err);
 }
 
+static const char *get_last_part(const char *path)
+{
+	const char *last_slash = strrchr(path, '/');
+
+	if (last_slash != NULL)
+		return last_slash + 1;
+	else
+		return path;
+}
+
 LIBBPF_API struct bpf_link *
 bpf_program__attach_uprobe_opts(const struct bpf_program *prog, pid_t pid,
 				const char *binary_path, size_t func_offset,
@@ -12241,7 +12251,7 @@ bpf_program__attach_uprobe_opts(const struct bpf_program *prog, pid_t pid,
 	size_t ref_ctr_off;
 	int pfd, err;
 	bool retprobe, legacy;
-	const char *func_name;
+	const char *func_name, *binary_name;
 
 	if (!OPTS_VALID(opts, bpf_uprobe_opts))
 		return libbpf_err_ptr(-EINVAL);
@@ -12254,6 +12264,7 @@ bpf_program__attach_uprobe_opts(const struct bpf_program *prog, pid_t pid,
 	if (!binary_path)
 		return libbpf_err_ptr(-EINVAL);
 
+	binary_name = get_last_part(binary_path);
 	/* Check if "binary_path" refers to an archive. */
 	archive_sep = strstr(binary_path, "!/");
 	if (archive_sep) {
@@ -12318,7 +12329,7 @@ bpf_program__attach_uprobe_opts(const struct bpf_program *prog, pid_t pid,
 			return libbpf_err_ptr(-EINVAL);
 
 		gen_uprobe_legacy_event_name(probe_name, sizeof(probe_name),
-					     binary_path, func_offset);
+					     binary_name, func_offset);
 
 		legacy_probe = strdup(probe_name);
 		if (!legacy_probe)
