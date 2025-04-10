@@ -590,6 +590,14 @@ static int pcf85063_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, pcf85063);
 
+	if (of_property_read_bool(client->dev.of_node, "no-battery")) {
+		err = regmap_update_bits(pcf85063->regmap, PCF85063_REG_SC,
+					 PCF85063_REG_SC_OS, 0);
+		if (err)
+			return dev_err_probe(&client->dev, err,
+					"Failed to start the oscillator\n");
+	}
+
 	err = regmap_read(pcf85063->regmap, PCF85063_REG_SC, &tmp);
 	if (err)
 		return dev_err_probe(&client->dev, err, "RTC chip is not present\n");
