@@ -231,9 +231,11 @@ static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 			    unsigned long flags)
 {
 	unsigned long prev_cost = ULONG_MAX;
+	u64 fmax;
 	int i, ret;
 
 	/* Compute the cost of each performance state. */
+	fmax = (u64) table[nr_states - 1].frequency;
 	for (i = nr_states - 1; i >= 0; i--) {
 		unsigned long power_res, cost;
 
@@ -245,9 +247,15 @@ static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 				return -EINVAL;
 			}
 		} else {
-			/* increase resolution of 'cost' precision */
-			power_res = table[i].power * 10;
-			cost = power_res / table[i].performance;
+			if (_is_cpu_device(dev)) {
+				/* increase resolution of 'cost' precision */
+				power_res = table[i].power * 10;
+				cost = power_res / table[i].performance;
+			} else {
+				power_res = table[i].power;
+				cost = div64_u64(fmax * power_res, table[i].frequency);
+
+			}
 		}
 
 		table[i].cost = cost;
