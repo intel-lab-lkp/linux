@@ -15,6 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+#include <linux/soc/qcom/smem.h>
 
 #include "msm_mdss.h"
 #include "msm_kms.h"
@@ -163,11 +164,11 @@ static int _msm_mdss_irq_domain_add(struct msm_mdss *msm_mdss)
 	return 0;
 }
 
-static void msm_mdss_setup_ubwc_dec_20(struct msm_mdss *msm_mdss)
+static void msm_mdss_setup_ubwc_dec_20(struct msm_mdss *msm_mdss, int hbb)
 {
 	const struct msm_mdss_data *data = msm_mdss->mdss_data;
 	u32 value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle) |
-		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(data->highest_bank_bit);
+		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(hbb);
 
 	if (data->ubwc_bank_spread)
 		value |= MDSS_UBWC_STATIC_UBWC_BANK_SPREAD;
@@ -178,11 +179,11 @@ static void msm_mdss_setup_ubwc_dec_20(struct msm_mdss *msm_mdss)
 	writel_relaxed(value, msm_mdss->mmio + REG_MDSS_UBWC_STATIC);
 }
 
-static void msm_mdss_setup_ubwc_dec_30(struct msm_mdss *msm_mdss)
+static void msm_mdss_setup_ubwc_dec_30(struct msm_mdss *msm_mdss, int hbb)
 {
 	const struct msm_mdss_data *data = msm_mdss->mdss_data;
 	u32 value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle & 0x1) |
-		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(data->highest_bank_bit);
+		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(hbb);
 
 	if (data->macrotile_mode)
 		value |= MDSS_UBWC_STATIC_MACROTILE_MODE;
@@ -196,11 +197,11 @@ static void msm_mdss_setup_ubwc_dec_30(struct msm_mdss *msm_mdss)
 	writel_relaxed(value, msm_mdss->mmio + REG_MDSS_UBWC_STATIC);
 }
 
-static void msm_mdss_setup_ubwc_dec_40(struct msm_mdss *msm_mdss)
+static void msm_mdss_setup_ubwc_dec_40(struct msm_mdss *msm_mdss, int hbb)
 {
 	const struct msm_mdss_data *data = msm_mdss->mdss_data;
 	u32 value = MDSS_UBWC_STATIC_UBWC_SWIZZLE(data->ubwc_swizzle) |
-		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(data->highest_bank_bit);
+		    MDSS_UBWC_STATIC_HIGHEST_BANK_BIT(hbb);
 
 	if (data->ubwc_bank_spread)
 		value |= MDSS_UBWC_STATIC_UBWC_BANK_SPREAD;
@@ -287,7 +288,7 @@ const struct msm_mdss_data *msm_mdss_get_mdss_data(struct device *dev)
 
 static int msm_mdss_enable(struct msm_mdss *msm_mdss)
 {
-	int ret, i;
+	int hbb, ret, i;
 
 	/*
 	 * Several components have AXI clocks that can only be turned on if
@@ -317,6 +318,11 @@ static int msm_mdss_enable(struct msm_mdss *msm_mdss)
 	if (msm_mdss->is_mdp5 || !msm_mdss->mdss_data)
 		return 0;
 
+	/* Attempt to retrieve HBB data from SMEM, keep reasonable defaults in case of error */
+	hbb = qcom_smem_dram_get_hbb() - 13;
+	if (hbb < 0)
+		hbb = msm_mdss->mdss_data->highest_bank_bit;
+
 	/*
 	 * ubwc config is part of the "mdss" region which is not accessible
 	 * from the rest of the driver. hardcode known configurations here
@@ -330,14 +336,14 @@ static int msm_mdss_enable(struct msm_mdss *msm_mdss)
 		/* do nothing */
 		break;
 	case UBWC_2_0:
-		msm_mdss_setup_ubwc_dec_20(msm_mdss);
+		msm_mdss_setup_ubwc_dec_20(msm_mdss, hbb);
 		break;
 	case UBWC_3_0:
-		msm_mdss_setup_ubwc_dec_30(msm_mdss);
+		msm_mdss_setup_ubwc_dec_30(msm_mdss, hbb);
 		break;
 	case UBWC_4_0:
 	case UBWC_4_3:
-		msm_mdss_setup_ubwc_dec_40(msm_mdss);
+		msm_mdss_setup_ubwc_dec_40(msm_mdss, hbb);
 		break;
 	default:
 		dev_err(msm_mdss->dev, "Unsupported UBWC decoder version %x\n",
@@ -537,6 +543,10 @@ static int mdss_probe(struct platform_device *pdev)
 	bool is_mdp5 = of_device_is_compatible(pdev->dev.of_node, "qcom,mdss");
 	struct device *dev = &pdev->dev;
 	int ret;
+
+	/* We need data from SMEM to retrieve HBB msm_mdss_enable() */
+	if (!qcom_smem_is_available())
+		return -EPROBE_DEFER;
 
 	mdss = msm_mdss_init(pdev, is_mdp5);
 	if (IS_ERR(mdss))
