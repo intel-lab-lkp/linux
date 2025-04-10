@@ -1173,8 +1173,9 @@ int mhi_prepare_for_power_up(struct mhi_controller *mhi_cntrl)
 		/*
 		 * Allocate RDDM table for debugging purpose if specified
 		 */
-		mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->rddm_image,
-				     mhi_cntrl->rddm_size);
+		if (!mhi_cntrl->rddm_image)
+			mhi_alloc_bhie_table(mhi_cntrl, &mhi_cntrl->rddm_image,
+					     mhi_cntrl->rddm_size);
 		if (mhi_cntrl->rddm_image) {
 			ret = mhi_rddm_prepare(mhi_cntrl,
 					       mhi_cntrl->rddm_image);
@@ -1212,12 +1213,18 @@ void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
 		mhi_cntrl->rddm_image = NULL;
 	}
 
+	mhi_partial_unprepare_after_power_down(mhi_cntrl);
+}
+EXPORT_SYMBOL_GPL(mhi_unprepare_after_power_down);
+
+void mhi_partial_unprepare_after_power_down(struct mhi_controller *mhi_cntrl)
+{
 	mhi_cntrl->bhi = NULL;
 	mhi_cntrl->bhie = NULL;
 
 	mhi_deinit_dev_ctxt(mhi_cntrl);
 }
-EXPORT_SYMBOL_GPL(mhi_unprepare_after_power_down);
+EXPORT_SYMBOL_GPL(mhi_partial_unprepare_after_power_down);
 
 static void mhi_release_device(struct device *dev)
 {

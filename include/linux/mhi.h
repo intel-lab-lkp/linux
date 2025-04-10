@@ -382,6 +382,7 @@ struct mhi_controller {
 	const char *fw_image;
 	const u8 *fw_data;
 	size_t fw_sz;
+	size_t prev_fw_sz;
 	const char *edl_image;
 	size_t rddm_size;
 	size_t sbl_size;
@@ -661,6 +662,12 @@ void mhi_power_down_keep_dev(struct mhi_controller *mhi_cntrl, bool graceful);
  * @mhi_cntrl: MHI controller
  */
 void mhi_unprepare_after_power_down(struct mhi_controller *mhi_cntrl);
+
+/**
+ * mhi_partial_unprepare_after_power_down - Free any allocated memory after power down partially
+ * @mhi_cntrl: MHI controller
+ */
+void mhi_partial_unprepare_after_power_down(struct mhi_controller *mhi_cntrl);
 
 /**
  * mhi_pm_suspend - Move MHI into a suspended state
