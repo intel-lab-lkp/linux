@@ -127,6 +127,17 @@ struct mtk_vcodec_dec_pdata {
 };
 
 /**
+ * struct mtk_request - Media request private data.
+ *
+ * @req_state: Request completion state
+ * @req: Media Request structure
+ */
+struct mtk_request {
+	enum mtk_request_state req_state;
+	struct media_request req;
+};
+
+/**
  * struct mtk_vcodec_dec_ctx - Context (instance) private data.
  *
  * @type: type of decoder instance
@@ -317,6 +328,11 @@ static inline struct mtk_vcodec_dec_ctx *ctrl_to_dec_ctx(struct v4l2_ctrl *ctrl)
 	return container_of(ctrl->handler, struct mtk_vcodec_dec_ctx, ctrl_hdl);
 }
 
+static inline struct mtk_request *req_to_mtk_req(struct media_request *req)
+{
+	return container_of(req, struct mtk_request, req);
+}
+
 /* Wake up context wait_queue */
 static inline void
 wake_up_dec_ctx(struct mtk_vcodec_dec_ctx *ctx, unsigned int reason, unsigned int hw_id)
@@ -325,6 +341,9 @@ wake_up_dec_ctx(struct mtk_vcodec_dec_ctx *ctx, unsigned int reason, unsigned in
 	ctx->int_type[hw_id] = reason;
 	wake_up_interruptible(&ctx->queue[hw_id]);
 }
+
+void mtk_request_complete(struct mtk_vcodec_dec_ctx *ctx, enum mtk_request_state state,
+			  enum vb2_buffer_state buffer_state, struct media_request *src_buf_req);
 
 #define mtk_vdec_err(ctx, fmt, args...)                               \
 	mtk_vcodec_err((ctx)->id, (ctx)->dev->plat_dev, fmt, ##args)

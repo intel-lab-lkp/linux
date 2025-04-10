@@ -26,6 +26,56 @@
 #include "mtk_vcodec_dec_pm.h"
 #include "../common/mtk_vcodec_intr.h"
 
+static const char *state_to_str(enum mtk_request_state state)
+{
+	switch (state) {
+	case MTK_REQUEST_RECEIVED:
+		return "RECEIVED";
+	case MTK_REQUEST_LAT_DONE:
+		return "LAT_DONE";
+	case MTK_REQUEST_CORE_DONE:
+		return "CORE_DONE";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+void mtk_request_complete(struct mtk_vcodec_dec_ctx *ctx, enum mtk_request_state state,
+			  enum vb2_buffer_state buffer_state, struct media_request *src_buf_req)
+{
+	struct mtk_request *req = req_to_mtk_req(src_buf_req);
+	struct vb2_v4l2_buffer *src_buf, *dst_buf;
+
+	mutex_lock(&ctx->lock);
+
+	if (req->req_state >= state) {
+		mutex_unlock(&ctx->lock);
+		return;
+	}
+
+	switch (req->req_state) {
+	case MTK_REQUEST_RECEIVED:
+		v4l2_ctrl_request_complete(src_buf_req, &ctx->ctrl_hdl);
+		src_buf = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+		v4l2_m2m_buf_done(src_buf, buffer_state);
+		if (state == MTK_REQUEST_LAT_DONE)
+			break;
+		fallthrough;
+	case MTK_REQUEST_LAT_DONE:
+		dst_buf = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
+		v4l2_m2m_buf_done(dst_buf, buffer_state);
+		media_request_manual_complete(src_buf_req);
+		break;
+	default:
+		break;
+	}
+
+	mtk_v4l2_vdec_dbg(3, ctx, "Switch state from %s to %s.\n",
+			  state_to_str(req->req_state), state_to_str(state));
+	req->req_state = state;
+	mutex_unlock(&ctx->lock);
+}
+
 static int mtk_vcodec_get_hw_count(struct mtk_vcodec_dec_ctx *ctx, struct mtk_vcodec_dec_dev *dev)
 {
 	switch (dev->vdec_pdata->hw_arch) {
