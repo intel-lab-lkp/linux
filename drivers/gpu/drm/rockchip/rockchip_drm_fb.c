@@ -51,7 +51,7 @@ rockchip_fb_create(struct drm_device *dev, struct drm_file *file,
 	if (drm_is_afbc(mode_cmd->modifier[0])) {
 		int ret, i;
 
-		ret = drm_gem_fb_afbc_init(dev, mode_cmd, afbc_fb);
+		ret = drm_gem_fb_afbc_init(dev, info, mode_cmd, afbc_fb);
 		if (ret) {
 			struct drm_gem_object **obj = afbc_fb->base.obj;
 
