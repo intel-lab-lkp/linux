@@ -125,7 +125,10 @@ static inline void tilcdc_write64(struct drm_device *dev, u32 reg, u64 data)
 #if defined(iowrite64) && !defined(iowrite64_is_nonatomic)
 	iowrite64(data, addr);
 #else
+	/* allow compilation without __iowmb() for COMPILE_TEST */
+#ifdef __iowmb
 	__iowmb();
+#endif
 	/* This compiles to strd (=64-bit write) on ARM7 */
 	*(volatile u64 __force *)addr = __cpu_to_le64(data);
 #endif
