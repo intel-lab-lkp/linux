@@ -1339,11 +1339,11 @@ int __init btrfs_delayed_ref_init(void)
 {
 	btrfs_delayed_ref_head_cachep = KMEM_CACHE(btrfs_delayed_ref_head, 0);
 	if (!btrfs_delayed_ref_head_cachep)
-		goto fail;
+		return -ENOMEM;
 
 	btrfs_delayed_ref_node_cachep = KMEM_CACHE(btrfs_delayed_ref_node, 0);
 	if (!btrfs_delayed_ref_node_cachep)
-		goto fail;
+		goto out;
 
 	btrfs_delayed_extent_op_cachep = KMEM_CACHE(btrfs_delayed_extent_op, 0);
 	if (!btrfs_delayed_extent_op_cachep)
@@ -1351,6 +1351,8 @@ int __init btrfs_delayed_ref_init(void)
 
 	return 0;
 fail:
-	btrfs_delayed_ref_exit();
+	kmem_cache_destroy(btrfs_delayed_ref_node_cachep);
+out:
+	kmem_cache_destroy(btrfs_delayed_ref_head_cachep);
 	return -ENOMEM;
 }
