@@ -8,11 +8,14 @@
  * Author: Mario Limonciello <mario.limonciello@amd.com>
  */
 
+#include <asm/amd_node.h>
 #include <linux/dmi.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
 
 #include "pmc.h"
+
+#define FCH_PM_SCRATCH	0x80
 
 struct quirk_entry {
 	u32 s2idle_bug_mmio;
@@ -20,7 +23,7 @@ struct quirk_entry {
 };
 
 static struct quirk_entry quirk_s2idle_bug = {
-	.s2idle_bug_mmio = 0xfed80380,
+	.s2idle_bug_mmio = FCH_PM_BASE + FCH_PM_SCRATCH,
 };
 
 static struct quirk_entry quirk_spurious_8042 = {
