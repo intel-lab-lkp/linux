@@ -53,9 +53,8 @@ static void hal_sdio_get_cmd_addr_8723b(
 static u8 get_deviceid(u32 addr)
 {
 	u8 devide_id;
-	u16 pseudo_id;
+	u16 pseudo_id = (u16)(addr >> 16);
 
-	pseudo_id = (u16)(addr >> 16);
 	switch (pseudo_id) {
 	case 0x1025:
 		devide_id = SDIO_LOCAL_DEVICE_ID;
@@ -150,7 +149,7 @@ static u16 sdio_read16(struct intf_hdl *intfhdl, u32 addr)
 
 static u32 sdio_read32(struct intf_hdl *intfhdl, u32 addr)
 {
-	struct adapter *adapter;
+	struct adapter *adapter = intfhdl->padapter;
 	u8 mac_pwr_ctrl_on;
 	u8 device_id;
 	u16 offset;
@@ -160,7 +159,6 @@ static u32 sdio_read32(struct intf_hdl *intfhdl, u32 addr)
 	s32 __maybe_unused err;
 	__le32 le_tmp;
 
-	adapter = intfhdl->padapter;
 	ftaddr = _cvrt2ftaddr(addr, &device_id, &offset);
 
 	rtw_hal_get_hwreg(adapter, HW_VAR_APFM_ON_MAC, &mac_pwr_ctrl_on);
@@ -196,16 +194,13 @@ static u32 sdio_read32(struct intf_hdl *intfhdl, u32 addr)
 
 static s32 sdio_readN(struct intf_hdl *intfhdl, u32 addr, u32 cnt, u8 *buf)
 {
-	struct adapter *adapter;
+	struct adapter *adapter = intfhdl->padapter;
 	u8 mac_pwr_ctrl_on;
 	u8 device_id;
 	u16 offset;
 	u32 ftaddr;
 	u8 shift;
-	s32 err;
-
-	adapter = intfhdl->padapter;
-	err = 0;
+	s32 err = 0;
 
 	ftaddr = _cvrt2ftaddr(addr, &device_id, &offset);
 
@@ -262,17 +257,14 @@ static s32 sdio_write16(struct intf_hdl *intfhdl, u32 addr, u16 val)
 
 static s32 sdio_write32(struct intf_hdl *intfhdl, u32 addr, u32 val)
 {
-	struct adapter *adapter;
+	struct adapter *adapter = intfhdl->padapter;
 	u8 mac_pwr_ctrl_on;
 	u8 device_id;
 	u16 offset;
 	u32 ftaddr;
 	u8 shift;
-	s32 err;
+	s32 err = 0;
 	__le32 le_tmp;
-
-	adapter = intfhdl->padapter;
-	err = 0;
 
 	ftaddr = _cvrt2ftaddr(addr, &device_id, &offset);
 
@@ -300,16 +292,13 @@ static s32 sdio_write32(struct intf_hdl *intfhdl, u32 addr, u32 val)
 
 static s32 sdio_writeN(struct intf_hdl *intfhdl, u32 addr, u32 cnt, u8 *buf)
 {
-	struct adapter *adapter;
+	struct adapter *adapter = intfhdl->padapter;
 	u8 mac_pwr_ctrl_on;
 	u8 device_id;
 	u16 offset;
 	u32 ftaddr;
 	u8 shift;
-	s32 err;
-
-	adapter = intfhdl->padapter;
-	err = 0;
+	s32 err = 0;
 
 	ftaddr = _cvrt2ftaddr(addr, &device_id, &offset);
 
@@ -388,13 +377,11 @@ static u32 sdio_read_port(
 	u8 *mem
 )
 {
-	struct adapter *adapter;
-	struct sdio_data *psdio;
+	struct adapter *adapter = intfhdl->padapter;
+	struct sdio_data *psdio = &adapter_to_dvobj(adapter)->intf_data;
 	struct hal_com_data *hal;
 	s32 err;
 
-	adapter = intfhdl->padapter;
-	psdio = &adapter_to_dvobj(adapter)->intf_data;
 	hal = GET_HAL_DATA(adapter);
 
 	hal_sdio_get_cmd_addr_8723b(adapter, addr, hal->SdioRxFIFOCnt++, &addr);
@@ -432,13 +419,10 @@ static u32 sdio_write_port(
 	u8 *mem
 )
 {
-	struct adapter *adapter;
-	struct sdio_data *psdio;
+	struct adapter *adapter = intfhdl->padapter;
+	struct sdio_data *psdio = &adapter_to_dvobj(adapter)->intf_data;
 	s32 err;
 	struct xmit_buf *xmitbuf = (struct xmit_buf *)mem;
-
-	adapter = intfhdl->padapter;
-	psdio = &adapter_to_dvobj(adapter)->intf_data;
 
 	if (!adapter->hw_init_completed)
 		return _FAIL;
@@ -487,13 +471,11 @@ static s32 _sdio_local_read(
 	u8 *buf
 )
 {
-	struct intf_hdl *intfhdl;
+	struct intf_hdl *intfhdl = &adapter->iopriv.intf;
 	u8 mac_pwr_ctrl_on;
 	s32 err;
 	u8 *tmpbuf;
 	u32 n;
-
-	intfhdl = &adapter->iopriv.intf;
 
 	hal_sdio_get_cmd_addr_8723b(adapter, SDIO_LOCAL_DEVICE_ID, addr, &addr);
 
@@ -525,13 +507,11 @@ s32 sdio_local_read(
 	u8 *buf
 )
 {
-	struct intf_hdl *intfhdl;
+	struct intf_hdl *intfhdl = &adapter->iopriv.intf;
 	u8 mac_pwr_ctrl_on;
 	s32 err;
 	u8 *tmpbuf;
 	u32 n;
-
-	intfhdl = &adapter->iopriv.intf;
 
 	hal_sdio_get_cmd_addr_8723b(adapter, SDIO_LOCAL_DEVICE_ID, addr, &addr);
 
@@ -566,12 +546,10 @@ s32 sdio_local_write(
 	u8 *buf
 )
 {
-	struct intf_hdl *intfhdl;
+	struct intf_hdl *intfhdl = &adapter->iopriv.intf;
 	u8 mac_pwr_ctrl_on;
 	s32 err;
 	u8 *tmpbuf;
-
-	intfhdl = &adapter->iopriv.intf;
 
 	hal_sdio_get_cmd_addr_8723b(adapter, SDIO_LOCAL_DEVICE_ID, addr, &addr);
 
@@ -839,11 +817,8 @@ static struct recv_buf *sd_recv_rxfifo(struct adapter *adapter, u32 size)
 
 static void sd_rxhandler(struct adapter *adapter, struct recv_buf *recvbuf)
 {
-	struct recv_priv *recv_priv;
-	struct __queue *pending_queue;
-
-	recv_priv = &adapter->recvpriv;
-	pending_queue = &recv_priv->recv_buf_pending_queue;
+	struct recv_priv *recv_priv = &adapter->recvpriv;
+	struct __queue *pending_queue = &recv_priv->recv_buf_pending_queue;
 
 	/* 3 1. enqueue recvbuf */
 	rtw_enqueue_recvbuf(recvbuf, pending_queue);
