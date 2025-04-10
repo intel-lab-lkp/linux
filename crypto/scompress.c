@@ -106,13 +106,10 @@ error:
 	return -ENOMEM;
 }
 
-static void scomp_free_streams(struct scomp_alg *alg)
+static void __scomp_free_streams(struct scomp_alg *alg,
+				 struct crypto_acomp_stream __percpu *stream)
 {
-	struct crypto_acomp_stream __percpu *stream = alg->stream;
 	int i;
-
-	if (!stream)
-		return;
 
 	for_each_possible_cpu(i) {
 		struct crypto_acomp_stream *ps = per_cpu_ptr(stream, i);
@@ -124,6 +121,16 @@ static void scomp_free_streams(struct scomp_alg *alg)
 	}
 
 	free_percpu(stream);
+}
+
+static void scomp_free_streams(struct scomp_alg *alg)
+{
+	struct crypto_acomp_stream __percpu *stream = alg->stream;
+
+	if (!stream)
+		return;
+
+	__scomp_free_streams(alg, stream);
 }
 
 static int scomp_alloc_streams(struct scomp_alg *alg)
@@ -140,8 +147,11 @@ static int scomp_alloc_streams(struct scomp_alg *alg)
 
 		ps->ctx = alg->alloc_ctx();
 		if (IS_ERR(ps->ctx)) {
-			scomp_free_streams(alg);
-			return PTR_ERR(ps->ctx);
+			int err = PTR_ERR(ps->ctx);
+
+			ps->ctx = NULL;
+			__scomp_free_streams(alg, stream);
+			return err;
 		}
 
 		spin_lock_init(&ps->lock);
