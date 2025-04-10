@@ -3151,3 +3151,25 @@ void dev_pm_opp_remove_table(struct device *dev)
 	dev_pm_opp_put_opp_table(opp_table);
 }
 EXPORT_SYMBOL_GPL(dev_pm_opp_remove_table);
+
+/*
+ * dev_pm_opp_set_level() - Configure device for a level
+ * @dev: device for which we do this operation
+ * @level: level to set to
+ *
+ * Return: 0 on success, a negative error number otherwise.
+ */
+int dev_pm_opp_set_level(struct device *dev, unsigned int level)
+{
+	struct dev_pm_opp *opp = dev_pm_opp_find_level_exact(dev, level);
+	int ret;
+
+	if (IS_ERR(opp))
+		return -EINVAL;
+
+	ret = dev_pm_opp_set_opp(dev, opp);
+	dev_pm_opp_put(opp);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(dev_pm_opp_set_level);
