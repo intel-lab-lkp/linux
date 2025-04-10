@@ -453,11 +453,8 @@ static void _InitRetryFunction(struct adapter *padapter)
 
 static void HalRxAggr8723BSdio(struct adapter *padapter)
 {
-	u8 valueDMATimeout;
-	u8 valueDMAPageCount;
-
-	valueDMATimeout = 0x06;
-	valueDMAPageCount = 0x06;
+	u8 valueDMATimeout = 0x06;
+	u8 valueDMAPageCount = 0x06;
 
 	rtw_write8(padapter, REG_RXDMA_AGG_PG_TH + 1, valueDMATimeout);
 	rtw_write8(padapter, REG_RXDMA_AGG_PG_TH, valueDMAPageCount);
@@ -498,10 +495,8 @@ static void _initSdioAggregationSetting(struct adapter *padapter)
 
 static void _InitOperationMode(struct adapter *padapter)
 {
-	struct mlme_ext_priv *pmlmeext;
+	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	u8 regBwOpMode = 0;
-
-	pmlmeext = &padapter->mlmeextpriv;
 
 	/* 1 This part need to modified according to the rate set we filtered!! */
 	/*  */
