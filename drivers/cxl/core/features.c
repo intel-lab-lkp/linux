@@ -259,6 +259,17 @@ size_t cxl_get_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 	return data_rcvd_size;
 }
 
+static bool is_last_feat_transfer(struct cxl_mbox_set_feat_in *pi)
+{
+	switch (le32_to_cpu(pi->flags) & CXL_SET_FEAT_FLAG_DATA_TRANSFER_MASK) {
+	case CXL_SET_FEAT_FLAG_FULL_DATA_TRANSFER:
+	case CXL_SET_FEAT_FLAG_FINISH_DATA_TRANSFER:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /*
  * FEAT_DATA_MIN_PAYLOAD_SIZE - min extra number of bytes should be
  * available in the mailbox for storing the actual feature data so that
@@ -294,14 +305,14 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox,
 	if (hdr_size + FEAT_DATA_MIN_PAYLOAD_SIZE > cxl_mbox->payload_size)
 		return -ENOMEM;
 
-	if (hdr_size + feat_data_size <= cxl_mbox->payload_size) {
+	if (hdr_size + feat_data_size <= cxl_mbox->payload_size && !offset) {
 		pi->flags = cpu_to_le32(feat_flag |
 					CXL_SET_FEAT_FLAG_FULL_DATA_TRANSFER);
 		data_in_size = feat_data_size;
 	} else {
 		pi->flags = cpu_to_le32(feat_flag |
 					CXL_SET_FEAT_FLAG_INITIATE_DATA_TRANSFER);
-		data_in_size = cxl_mbox->payload_size - hdr_size;
+		data_in_size = min(feat_data_size, cxl_mbox->payload_size - hdr_size);
 	}
 
 	do {
@@ -322,7 +333,8 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox,
 		}
 
 		data_sent_size += data_in_size;
-		if (data_sent_size >= feat_data_size) {
+		if (data_sent_size >= feat_data_size &&
+		    is_last_feat_transfer(pi)) {
 			if (return_code)
 				*return_code = CXL_MBOX_CMD_RC_SUCCESS;
 			return 0;
