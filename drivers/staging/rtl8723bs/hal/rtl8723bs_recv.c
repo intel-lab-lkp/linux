@@ -367,13 +367,10 @@ static void rtl8723bs_recv_tasklet(struct tasklet_struct *t)
  */
 s32 rtl8723bs_init_recv_priv(struct adapter *padapter)
 {
-	s32 res;
+	s32 res = _SUCCESS;
 	u32 i, n;
-	struct recv_priv *precvpriv;
+	struct recv_priv *precvpriv = &padapter->recvpriv;
 	struct recv_buf *precvbuf;
-
-	res = _SUCCESS;
-	precvpriv = &padapter->recvpriv;
 
 	/* 3 1. init recv buffer */
 	INIT_LIST_HEAD(&precvpriv->free_recv_buf_queue.queue);
@@ -453,10 +450,8 @@ exit:
 void rtl8723bs_free_recv_priv(struct adapter *padapter)
 {
 	u32 i;
-	struct recv_priv *precvpriv;
+	struct recv_priv *precvpriv = &padapter->recvpriv;
 	struct recv_buf *precvbuf;
-
-	precvpriv = &padapter->recvpriv;
 
 	/* 3 1. kill tasklet */
 	tasklet_kill(&precvpriv->recv_tasklet);
