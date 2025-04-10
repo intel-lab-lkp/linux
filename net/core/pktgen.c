@@ -1307,8 +1307,7 @@ static ssize_t pktgen_if_write(struct file *file,
 				put_page(pkt_dev->page);
 				pkt_dev->page = NULL;
 			}
-		}
-		else
+		} else
 			sprintf(pg_result, "ERROR: node not possible");
 		return count;
 	}
