@@ -20,6 +20,7 @@
 #include <linux/pci.h>
 
 #define FCH_PM_BASE		0xFED80300
+#define FCH_PM_S5_RESET_STATUS	0xC0
 
 #define MAX_AMD_NUM_NODES	8
 #define AMD_NODE0_PCI_SLOT	0x18
