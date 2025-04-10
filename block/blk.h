@@ -321,6 +321,7 @@ bool blk_bio_list_merge(struct request_queue *q, struct list_head *list,
 bool blk_insert_flush(struct request *rq);
 
 int __elevator_change(struct request_queue *q, struct elev_change_ctx *ctx);
+int elevator_change_done(struct request_queue *q, struct elev_change_ctx *ctx);
 void elevator_set_default(struct request_queue *q);
 void elevator_set_none(struct request_queue *q);
 

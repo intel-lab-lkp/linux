@@ -128,6 +128,11 @@ struct elev_change_ctx {
 	const char *name;
 	unsigned int force:1;
 	unsigned int uevent:1;
+
+	/* for unregistering old elevator */
+	struct elevator_queue *old;
+	/* for registering new elevator */
+	struct elevator_queue *new;
 };
 
 /*
