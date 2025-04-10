@@ -15,11 +15,14 @@
 
 #define pr_fmt(fmt) "ACPI: thermal: " fmt
 
+#include <linux/cleanup.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/dmi.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/jiffies.h>
 #include <linux/kmod.h>
@@ -40,7 +43,6 @@
 #define ACPI_THERMAL_NOTIFY_DEVICES	0x82
 #define ACPI_THERMAL_NOTIFY_CRITICAL	0xF0
 #define ACPI_THERMAL_NOTIFY_HOT		0xF1
-#define ACPI_THERMAL_MODE_ACTIVE	0x00
 
 #define ACPI_THERMAL_MAX_ACTIVE		10
 #define ACPI_THERMAL_MAX_LIMIT_STR_LEN	65
@@ -85,6 +87,16 @@ MODULE_PARM_DESC(psv, "Disable or override all passive trip points.");
 
 static struct workqueue_struct *acpi_thermal_pm_queue;
 
+enum acpi_thermal_cooling_mode {
+	ACPI_THERMAL_MODE_ACTIVE	= 0x00,
+	ACPI_THERMAL_MODE_PASSIVE	= 0x01,
+};
+
+static const char * const acpi_thermal_cooling_mode_strings[] = {
+	[ACPI_THERMAL_MODE_ACTIVE]	= "active",
+	[ACPI_THERMAL_MODE_PASSIVE]	= "passive",
+};
+
 struct acpi_thermal_trip {
 	unsigned long temp_dk;
 	struct acpi_handle_list devices;
@@ -119,6 +131,9 @@ struct acpi_thermal {
 	struct work_struct thermal_check_work;
 	struct mutex thermal_check_lock;
 	refcount_t thermal_check_count;
+	bool supports_cooling_mode;
+	struct mutex cooling_mode_lock;       /* Protects cooling mode updates */
+	enum acpi_thermal_cooling_mode cooling_mode;
 };
 
 /* --------------------------------------------------------------------------
@@ -328,7 +343,6 @@ static void acpi_queue_thermal_check(struct acpi_thermal *tz)
 static void acpi_thermal_trips_update(struct acpi_thermal *tz, u32 event)
 {
 	struct adjust_trip_data atd = { .tz = tz, .event = event };
-	struct acpi_device *adev = tz->device;
 
 	/*
 	 * Use thermal_zone_for_each_trip() to carry out the trip points
@@ -340,8 +354,6 @@ static void acpi_thermal_trips_update(struct acpi_thermal *tz, u32 event)
 	thermal_zone_for_each_trip(tz->thermal_zone,
 				   acpi_thermal_adjust_trip, &atd);
 	acpi_queue_thermal_check(tz);
-	acpi_bus_generate_netlink_event(adev->pnp.device_class,
-					dev_name(&adev->dev), event, 0);
 }
 
 static int acpi_thermal_get_critical_trip(struct acpi_thermal *tz)
@@ -471,6 +483,18 @@ static void acpi_thermal_get_trip_points(struct acpi_thermal *tz)
 
 	while (++i < ACPI_THERMAL_MAX_ACTIVE)
 		tz->trips.active[i].trip.temp_dk = THERMAL_TEMP_INVALID;
+}
+
+static int acpi_thermal_set_cooling_mode(struct acpi_thermal *tz,
+					 enum acpi_thermal_cooling_mode mode)
+{
+	acpi_status status;
+
+	status = acpi_execute_simple_method(tz->device->handle, "_SCP", mode);
+	if (ACPI_FAILURE(status))
+		return -EIO;
+
+	return 0;
 }
 
 /* sys I/F for generic thermal sysfs support */
@@ -683,6 +707,8 @@ static void acpi_thermal_notify(acpi_handle handle, u32 event, void *data)
 	case ACPI_THERMAL_NOTIFY_THRESHOLDS:
 	case ACPI_THERMAL_NOTIFY_DEVICES:
 		acpi_thermal_trips_update(tz, event);
+		acpi_bus_generate_netlink_event(device->pnp.device_class, dev_name(&device->dev),
+						event, 0);
 		break;
 	default:
 		acpi_handle_debug(device->handle, "Unsupported event [0x%x]\n",
@@ -777,6 +803,65 @@ static void acpi_thermal_free_thermal_zone(struct acpi_thermal *tz)
 	kfree(tz);
 }
 
+static ssize_t cooling_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct acpi_thermal *tz = acpi_driver_data(to_acpi_device(dev));
+
+	guard(mutex)(&tz->cooling_mode_lock);
+
+	return sysfs_emit(buf, "%s\n", acpi_thermal_cooling_mode_strings[tz->cooling_mode]);
+}
+
+static ssize_t cooling_mode_store(struct device *dev, struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct acpi_thermal *tz = acpi_driver_data(to_acpi_device(dev));
+	int ret, mode;
+
+	mode = sysfs_match_string(acpi_thermal_cooling_mode_strings, buf);
+	if (mode < 0)
+		return mode;
+
+	guard(mutex)(&tz->cooling_mode_lock);
+
+	ret = acpi_thermal_set_cooling_mode(tz, mode);
+	if (ret < 0)
+		return ret;
+
+	tz->cooling_mode = mode;
+	acpi_thermal_trips_update(tz, ACPI_THERMAL_NOTIFY_THRESHOLDS);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(cooling_mode);
+
+static struct attribute *acpi_thermal_attrs[] = {
+	&dev_attr_cooling_mode.attr,
+	NULL
+};
+
+static umode_t acpi_thermal_group_is_visible(struct kobject *kobj, struct attribute *attr, int idx)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct acpi_thermal *tz = acpi_driver_data(to_acpi_device(dev));
+
+	if (tz->supports_cooling_mode)
+		return attr->mode;
+
+	return 0;
+}
+
+static const struct attribute_group acpi_thermal_group = {
+	.is_visible = acpi_thermal_group_is_visible,
+	.attrs = acpi_thermal_attrs,
+};
+
+static const struct attribute_group *acpi_thermal_groups[] = {
+	&acpi_thermal_group,
+	NULL
+};
+
 static int acpi_thermal_add(struct acpi_device *device)
 {
 	struct thermal_trip trip_table[ACPI_THERMAL_MAX_NR_TRIPS] = { 0 };
@@ -786,7 +871,7 @@ static int acpi_thermal_add(struct acpi_device *device)
 	int crit_temp, hot_temp;
 	int passive_delay = 0;
 	int result;
-	int i;
+	int ret, i;
 
 	if (!device)
 		return -EINVAL;
@@ -794,6 +879,10 @@ static int acpi_thermal_add(struct acpi_device *device)
 	tz = kzalloc(sizeof(struct acpi_thermal), GFP_KERNEL);
 	if (!tz)
 		return -ENOMEM;
+
+	ret = devm_mutex_init(&device->dev, &tz->cooling_mode_lock);
+	if (ret < 0)
+		return ret;
 
 	tz->device = device;
 	strscpy(tz->name, device->pnp.bus_id);
@@ -803,11 +892,18 @@ static int acpi_thermal_add(struct acpi_device *device)
 
 	acpi_thermal_aml_dependency_fix(tz);
 
-	/*
-	 * Set the cooling mode [_SCP] to active cooling. This needs to happen before
-	 * we retrieve the trip point values.
-	 */
-	acpi_execute_simple_method(tz->device->handle, "_SCP", ACPI_THERMAL_MODE_ACTIVE);
+	tz->supports_cooling_mode = acpi_has_method(tz->device->handle, "_SCP");
+	if (tz->supports_cooling_mode) {
+		/*
+		 * Set the initial cooling mode to active cooling. This needs to happen
+		 * before we retrieve the trip point values.
+		 */
+		ret = acpi_thermal_set_cooling_mode(tz, ACPI_THERMAL_MODE_ACTIVE);
+		if (ret < 0)
+			dev_err(&tz->device->dev, "Failed to set initial cooling mode\n");
+
+		tz->cooling_mode = ACPI_THERMAL_MODE_ACTIVE;
+	}
 
 	/* Get trip points [_ACi, _PSV, etc.] (required). */
 	acpi_thermal_get_trip_points(tz);
@@ -924,7 +1020,7 @@ static int acpi_thermal_suspend(struct device *dev)
 static int acpi_thermal_resume(struct device *dev)
 {
 	struct acpi_thermal *tz;
-	int i, j, power_state;
+	int ret, i, j, power_state;
 
 	if (!dev)
 		return -EINVAL;
@@ -932,6 +1028,12 @@ static int acpi_thermal_resume(struct device *dev)
 	tz = acpi_driver_data(to_acpi_device(dev));
 	if (!tz)
 		return -EINVAL;
+
+	if (tz->supports_cooling_mode) {
+		ret = acpi_thermal_set_cooling_mode(tz, tz->cooling_mode);
+		if (ret < 0)
+			dev_err(&tz->device->dev, "Failed to restore cooling mode\n");
+	}
 
 	for (i = 0; i < ACPI_THERMAL_MAX_ACTIVE; i++) {
 		struct acpi_thermal_trip *acpi_trip = &tz->trips.active[i].trip;
@@ -969,7 +1071,10 @@ static struct acpi_driver acpi_thermal_driver = {
 		.add = acpi_thermal_add,
 		.remove = acpi_thermal_remove,
 		},
-	.drv.pm = &acpi_thermal_pm,
+	.drv = {
+		.dev_groups = acpi_thermal_groups,
+		.pm = &acpi_thermal_pm,
+	},
 };
 
 static int thermal_act(const struct dmi_system_id *d)

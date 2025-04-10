@@ -382,6 +382,7 @@ R:	Zhang Rui <rui.zhang@intel.com>
 L:	linux-acpi@vger.kernel.org
 S:	Supported
 B:	https://bugzilla.kernel.org
+F:	Documentation/ABI/testing/sysfs-driver-thermal
 F:	drivers/acpi/*thermal*
 
 ACPI VIOT DRIVER

@@ -1,0 +1,14 @@
+What:		/sys/bus/acpi/devices/LNXTHERM:*/cooling_mode
+Date:		April 2025
+KernelVersion:	6.16
+Contact:	Armin Wolf <W_Armin@gmx.de>
+Description:
+		A string representing the preferred cooling mode of the
+		associated ACPI thermal zone:
+
+		- "active" for preferring active cooling
+
+		- "passive" for preferring passive cooling
+
+		The exact characteristics of both cooling modes depend
+		on the underlying ACPI firmware implementation.
