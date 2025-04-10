@@ -226,9 +226,9 @@ static char *pkt_flag_names[] = {
 #define T_REMDEV      (1<<3)	/* Remove one dev */
 
 /* Xmit modes */
-#define M_START_XMIT		0	/* Default normal TX */
-#define M_NETIF_RECEIVE 	1	/* Inject packets into stack */
-#define M_QUEUE_XMIT		2	/* Inject packet into qdisc */
+#define M_START_XMIT      0	/* Default normal TX */
+#define M_NETIF_RECEIVE   1	/* Inject packets into stack */
+#define M_QUEUE_XMIT      2	/* Inject packet into qdisc */
 
 /* If lock -- protects updating of if_list */
 #define   if_lock(t)           mutex_lock(&(t->if_lock));
