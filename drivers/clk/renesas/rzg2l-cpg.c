@@ -1324,6 +1324,9 @@ static struct mstp_clock
 
 		hw = __clk_get_hw(priv->clks[priv->num_core_clks + i]);
 		clk = to_mod_clock(hw);
+		if (clk == clock)
+			continue;
+
 		if (clock->off == clk->off && clock->bit == clk->bit)
 			return clk;
 	}
