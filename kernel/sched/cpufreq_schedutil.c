@@ -82,7 +82,6 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 		return false;
 
 	if (unlikely(sg_policy->limits_changed)) {
-		sg_policy->limits_changed = false;
 		sg_policy->need_freq_update = cpufreq_driver_test_flags(CPUFREQ_NEED_UPDATE_LIMITS);
 		return true;
 	}
@@ -171,9 +170,11 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	freq = get_capacity_ref_freq(policy);
 	freq = map_util_freq(util, freq, max);
 
-	if (freq == sg_policy->cached_raw_freq && !sg_policy->need_freq_update)
+	if (freq == sg_policy->cached_raw_freq && !sg_policy->limits_changed &&
+	    !sg_policy->need_freq_update)
 		return sg_policy->next_freq;
 
+	sg_policy->limits_changed = false;
 	sg_policy->cached_raw_freq = freq;
 	return cpufreq_driver_resolve_freq(policy, freq);
 }
