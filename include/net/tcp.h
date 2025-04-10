@@ -1010,6 +1010,27 @@ enum tcp_skb_cb_sacked_flags {
  * If this grows please adjust skbuff.h:skbuff->cb[xxx] size appropriately.
  */
 struct tcp_skb_cb {
+	union {
+		struct {
+#define TCPCB_DELIVERED_CE_MASK ((1U<<20) - 1)
+			/* There is space for up to 24 bytes */
+			__u32 is_app_limited:1, /* cwnd not fully used? */
+			      delivered_ce:20,
+			      unused:11;
+			/* pkts S/ACKed so far upon tx of skb, incl retrans: */
+			__u32 delivered;
+			/* start of send pipeline phase */
+			u64 first_tx_mstamp;
+			/* when we reached the "delivered" count */
+			u64 delivered_mstamp;
+		} tx;   /* only used for outgoing skbs */
+		union {
+			struct inet_skb_parm	h4;
+#if IS_ENABLED(CONFIG_IPV6)
+			struct inet6_skb_parm	h6;
+#endif
+		} header;	/* For incoming skbs */
+	};
 	__u32		seq;		/* Starting sequence number	*/
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
 	union {
@@ -1033,28 +1054,13 @@ struct tcp_skb_cb {
 			has_rxtstamp:1,	/* SKB has a RX timestamp	*/
 			unused:4;
 	__u32		ack_seq;	/* Sequence number ACK'd	*/
-	union {
-		struct {
-#define TCPCB_DELIVERED_CE_MASK ((1U<<20) - 1)
-			/* There is space for up to 24 bytes */
-			__u32 is_app_limited:1, /* cwnd not fully used? */
-			      delivered_ce:20,
-			      unused:11;
-			/* pkts S/ACKed so far upon tx of skb, incl retrans: */
-			__u32 delivered;
-			/* start of send pipeline phase */
-			u64 first_tx_mstamp;
-			/* when we reached the "delivered" count */
-			u64 delivered_mstamp;
-		} tx;   /* only used for outgoing skbs */
-		union {
-			struct inet_skb_parm	h4;
-#if IS_ENABLED(CONFIG_IPV6)
-			struct inet6_skb_parm	h6;
-#endif
-		} header;	/* For incoming skbs */
-	};
 };
+
+static_assert(sizeof(struct tcp_skb_cb) <= sizeof_field(struct sk_buff, cb));
+static_assert(offsetof(struct tcp_skb_cb, header.h4) == 0);
+#if IS_ENABLED(CONFIG_IPV6)
+static_assert(offsetof(struct tcp_skb_cb, header.h6) == 0);
+#endif
 
 #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
 

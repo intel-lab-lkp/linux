@@ -2153,22 +2153,9 @@ int tcp_filter(struct sock *sk, struct sk_buff *skb)
 }
 EXPORT_IPV6_MOD(tcp_filter);
 
-static void tcp_v4_restore_cb(struct sk_buff *skb)
-{
-	memmove(IPCB(skb), &TCP_SKB_CB(skb)->header.h4,
-		sizeof(struct inet_skb_parm));
-}
-
 static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 			   const struct tcphdr *th)
 {
-	/* This is tricky : We move IPCB at its correct location into TCP_SKB_CB()
-	 * barrier() makes sure compiler wont play fool^Waliasing games.
-	 */
-	memmove(&TCP_SKB_CB(skb)->header.h4, IPCB(skb),
-		sizeof(struct inet_skb_parm));
-	barrier();
-
 	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
 	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
 				    skb->len - th->doff * 4);
@@ -2293,7 +2280,6 @@ lookup:
 				 * Try to feed this packet to this socket
 				 * instead of discarding it.
 				 */
-				tcp_v4_restore_cb(skb);
 				sock_put(sk);
 				goto lookup;
 			}
@@ -2302,7 +2288,6 @@ lookup:
 		nf_reset_ct(skb);
 		if (nsk == sk) {
 			reqsk_put(req);
-			tcp_v4_restore_cb(skb);
 		} else {
 			drop_reason = tcp_child_process(sk, nsk, skb);
 			if (drop_reason) {
@@ -2430,7 +2415,6 @@ do_time_wait:
 		if (sk2) {
 			inet_twsk_deschedule_put(inet_twsk(sk));
 			sk = sk2;
-			tcp_v4_restore_cb(skb);
 			refcounted = false;
 			__this_cpu_write(tcp_tw_isn, isn);
 			goto process;
