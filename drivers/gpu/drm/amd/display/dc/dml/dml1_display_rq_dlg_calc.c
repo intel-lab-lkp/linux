@@ -1027,7 +1027,6 @@ void dml1_rq_dlg_get_dlg_params(
 	unsigned int dlg_vblank_start;
 	bool dcc_en;
 	bool dual_plane;
-	bool mode_422;
 	unsigned int access_dir;
 	unsigned int bytes_per_element_l;
 	unsigned int bytes_per_element_c;
@@ -1199,7 +1198,6 @@ void dml1_rq_dlg_get_dlg_params(
 	dcc_en = e2e_pipe_param->pipe.src.dcc;
 	dual_plane = is_dual_plane(
 			(enum source_format_class) e2e_pipe_param->pipe.src.source_format);
-	mode_422 = 0; /* TODO */
 	access_dir = (e2e_pipe_param->pipe.src.source_scan == dm_vert); /* vp access direction: horizontal or vertical accessed */
 	bytes_per_element_l = get_bytes_per_element(
 			(enum source_format_class) e2e_pipe_param->pipe.src.source_format,
@@ -1548,8 +1546,8 @@ void dml1_rq_dlg_get_dlg_params(
 	req_per_swath_ub_l = rq_dlg_param->rq_l.req_per_swath_ub;
 	req_per_swath_ub_c = rq_dlg_param->rq_c.req_per_swath_ub;
 	meta_row_height_l = rq_dlg_param->rq_l.meta_row_height;
-	swath_width_pixels_ub_l = 0;
-	swath_width_pixels_ub_c = 0;
+	swath_width_pixels_ub_l = swath_width_ub_l;
+	swath_width_pixels_ub_c = swath_width_ub_c;
 	scaler_rec_in_width_l = 0;
 	scaler_rec_in_width_c = 0;
 	dpte_row_height_l = rq_dlg_param->rq_l.dpte_row_height;
@@ -1586,14 +1584,6 @@ void dml1_rq_dlg_get_dlg_params(
 			/ (double) meta_chunks_per_row_ub_l);
 	if (disp_dlg_regs->refcyc_per_meta_chunk_nom_l >= (unsigned int) dml_pow(2, 23))
 		disp_dlg_regs->refcyc_per_meta_chunk_nom_l = dml_pow(2, 23) - 1;
-
-	if (mode_422) {
-		swath_width_pixels_ub_l = swath_width_ub_l * 2; /* *2 for 2 pixel per element */
-		swath_width_pixels_ub_c = swath_width_ub_c * 2;
-	} else {
-		swath_width_pixels_ub_l = swath_width_ub_l * 1;
-		swath_width_pixels_ub_c = swath_width_ub_c * 1;
-	}
 
 	if (htaps_l <= 1)
 		min_hratio_fact_l = 2.0;
