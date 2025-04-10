@@ -964,6 +964,7 @@ static int atk_enumerate_old_hwmon(struct atk_data *data)
 			count++;
 	}
 	ACPI_FREE(buf.pointer);
+	buf.pointer = NULL;
 
 	/* Temperatures */
 	buf.length = ACPI_ALLOCATE_BUFFER;
@@ -985,6 +986,7 @@ static int atk_enumerate_old_hwmon(struct atk_data *data)
 			count++;
 	}
 	ACPI_FREE(buf.pointer);
+	buf.pointer = NULL;
 
 	/* Fans */
 	buf.length = ACPI_ALLOCATE_BUFFER;
@@ -1006,6 +1008,7 @@ static int atk_enumerate_old_hwmon(struct atk_data *data)
 			count++;
 	}
 	ACPI_FREE(buf.pointer);
+	buf.pointer = NULL;
 
 	return count;
 }
