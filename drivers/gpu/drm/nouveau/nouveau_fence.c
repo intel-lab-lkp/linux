@@ -256,6 +256,12 @@ nouveau_fence_emit(struct nouveau_fence *fence)
 	return ret;
 }
 
+static inline bool
+nouveau_fence_base_is_signaled(struct nouveau_fence *fence)
+{
+	return test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->base.flags);
+}
+
 bool
 nouveau_fence_done(struct nouveau_fence *fence)
 {
@@ -263,7 +269,7 @@ nouveau_fence_done(struct nouveau_fence *fence)
 	struct nouveau_channel *chan;
 	unsigned long flags;
 
-	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->base.flags))
+	if (nouveau_fence_base_is_signaled(fence))
 		return true;
 
 	spin_lock_irqsave(&fctx->lock, flags);
@@ -272,7 +278,7 @@ nouveau_fence_done(struct nouveau_fence *fence)
 		nvif_event_block(&fctx->event);
 	spin_unlock_irqrestore(&fctx->lock, flags);
 
-	return test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->base.flags);
+	return nouveau_fence_base_is_signaled(fence);
 }
 
 static long
