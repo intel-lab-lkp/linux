@@ -73,14 +73,14 @@ void housekeeping_affine(struct task_struct *t, enum hk_type type)
 }
 EXPORT_SYMBOL_GPL(housekeeping_affine);
 
-bool housekeeping_test_cpu(int cpu, enum hk_type type)
+bool housekeeping_cpu(int cpu, enum hk_type type)
 {
 	if (static_branch_unlikely(&housekeeping_overridden))
 		if (housekeeping.flags & BIT(type))
 			return cpumask_test_cpu(cpu, housekeeping.cpumasks[type]);
 	return true;
 }
-EXPORT_SYMBOL_GPL(housekeeping_test_cpu);
+EXPORT_SYMBOL_GPL(housekeeping_cpu);
 
 void __init housekeeping_init(void)
 {
