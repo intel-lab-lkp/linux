@@ -1316,6 +1316,9 @@ PAGE_SIZE multiple when read back.
 	Caller could retry them differently, return into userspace
 	as -ENOMEM or silently ignore in cases like disk readahead.
 
+        Note that the value set for memory.max is reported in units
+        corresponding to the system's page size.
+
   memory.reclaim
 	A write-only nested-keyed file which exists for all cgroups.
 
