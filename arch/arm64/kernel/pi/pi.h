@@ -34,3 +34,4 @@ void map_range(u64 *pgd, u64 start, u64 end, u64 pa, pgprot_t prot,
 asmlinkage void early_map_kernel(u64 boot_status, void *fdt);
 
 asmlinkage u64 create_init_idmap(pgd_t *pgd, pteval_t clrmask);
+asmlinkage void load_pir_data(u64 pir_data[]);

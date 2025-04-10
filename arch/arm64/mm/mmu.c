@@ -58,6 +58,7 @@ static bool rodata_is_rw __ro_after_init = true;
  * with MMU turned off.
  */
 long __section(".mmuoff.data.write") __early_cpu_boot_status;
+unsigned long __section(".mmuoff.data.write") pir_data[2];
 
 /*
  * Empty_zero_page is a special page that is used for zero-initialized data

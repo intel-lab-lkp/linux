@@ -103,3 +103,9 @@ asmlinkage u64 __init create_init_idmap(pgd_t *pg_dir, pteval_t clrmask)
 
 	return ptep;
 }
+
+asmlinkage void __init load_pir_data(u64 pir_data[])
+{
+	pir_data[0] = PIE_E0;
+	pir_data[1] = PIE_E1;
+}
