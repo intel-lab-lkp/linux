@@ -745,12 +745,10 @@ u8 GetHalDefVar(
 	switch (variable) {
 	case HAL_DEF_UNDERCORATEDSMOOTHEDPWDB:
 		{
-			struct mlme_priv *pmlmepriv;
-			struct sta_priv *pstapriv;
+			struct mlme_priv *pmlmepriv = &adapter->mlmepriv;
+			struct sta_priv *pstapriv = &adapter->stapriv;
 			struct sta_info *psta;
 
-			pmlmepriv = &adapter->mlmepriv;
-			pstapriv = &adapter->stapriv;
 			psta = rtw_get_stainfo(pstapriv, pmlmepriv->cur_network.network.mac_address);
 			if (psta)
 				*((int *)value) = psta->rssi_stat.UndecoratedSmoothedPWDB;
