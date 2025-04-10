@@ -21,7 +21,7 @@ struct nft_quota {
 static inline bool nft_overquota(struct nft_quota *priv,
 				 const struct sk_buff *skb)
 {
-	return atomic64_add_return(skb->len, priv->consumed) >=
+	return atomic64_add_return(skb->len, priv->consumed) >
 	       atomic64_read(&priv->quota);
 }
 
