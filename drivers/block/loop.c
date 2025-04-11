@@ -447,7 +447,6 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	cmd->iocb.ki_filp = file;
 	cmd->iocb.ki_complete = lo_rw_aio_complete;
 	cmd->iocb.ki_flags = IOCB_DIRECT;
-	cmd->iocb.ki_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_NONE, 0);
 
 	if (rw == ITER_SOURCE)
 		ret = file->f_op->write_iter(&cmd->iocb, &iter);
@@ -1891,6 +1890,9 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 		cmd->use_aio = lo->lo_flags & LO_FLAGS_DIRECT_IO;
 		break;
 	}
+
+	/* get original request ioprio */
+	cmd->iocb.ki_ioprio = req_get_ioprio(rq);
 
 	/* always use the first bio's css */
 	cmd->blkcg_css = NULL;
