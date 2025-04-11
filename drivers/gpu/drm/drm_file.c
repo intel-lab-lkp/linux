@@ -977,6 +977,36 @@ void drm_show_fdinfo(struct seq_file *m, struct file *f)
 EXPORT_SYMBOL(drm_show_fdinfo);
 
 /**
+ * drm_process_info - Fill info string with process name and pid
+ * @file_priv: context of interest for process name and pid
+ * @proc_info: user char ptr to write the string to
+ * @buff_size: size of the buffer passed for the string
+ *
+ * This update the user provided buffer with process
+ * name and pid information for @file_priv
+ */
+void drm_process_info(struct drm_file *file_priv, char *proc_info, size_t buff_size)
+{
+	struct task_struct *task;
+	struct pid *pid;
+	struct drm_device *dev = file_priv->minor->dev;
+
+	if (!proc_info) {
+		drm_err(dev, "Invalid user buffer\n");
+		return;
+	}
+
+	rcu_read_lock();
+	pid = rcu_dereference(file_priv->pid);
+	task = pid_task(pid, PIDTYPE_TGID);
+	if (task)
+		snprintf(proc_info, buff_size, "comm:%s pid:%d", task->comm, task->pid);
+
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL(drm_process_info);
+
+/**
  * mock_drm_getfile - Create a new struct file for the drm device
  * @minor: drm minor to wrap (e.g. #drm_device.primary)
  * @flags: file creation mode (O_RDWR etc)
