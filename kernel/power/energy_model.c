@@ -244,7 +244,7 @@ static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 					cost, ret);
 				return -EINVAL;
 			}
-		} else {
+		} else if (_is_cpu_device(dev)) {
 			/* increase resolution of 'cost' precision */
 			power_res = table[i].power * 10;
 			cost = power_res / table[i].performance;
