@@ -1388,7 +1388,7 @@ static void smcr_buf_free(struct smc_link_group *lgr, bool is_rmb,
 	if (!buf_desc->is_vm && buf_desc->pages)
 		__free_pages(buf_desc->pages, buf_desc->order);
 	else if (buf_desc->is_vm && buf_desc->cpu_addr)
-		vfree(buf_desc->cpu_addr);
+		kvfree_sensitive(buf_desc->cpu_addr, buf_desc->len);
 	kfree(buf_desc);
 }
 
@@ -1400,7 +1400,7 @@ static void smcd_buf_free(struct smc_link_group *lgr, bool is_dmb,
 		buf_desc->len += sizeof(struct smcd_cdc_msg);
 		smc_ism_unregister_dmb(lgr->smcd, buf_desc);
 	} else {
-		kfree(buf_desc->cpu_addr);
+		kfree_sensitive(buf_desc->cpu_addr);
 	}
 	kfree(buf_desc);
 }
