@@ -1762,8 +1762,25 @@ static int arm_smmu_streams_cmp_key(const void *lhs, const struct rb_node *rhs)
 static int arm_smmu_streams_cmp_node(struct rb_node *lhs,
 				     const struct rb_node *rhs)
 {
-	return arm_smmu_streams_cmp_key(
-		&rb_entry(lhs, struct arm_smmu_stream, node)->id, rhs);
+	struct arm_smmu_stream *stream_lhs =
+		rb_entry(lhs, struct arm_smmu_stream, node);
+	struct arm_smmu_stream *stream_rhs =
+		rb_entry(rhs, struct arm_smmu_stream, node);
+
+	if (stream_lhs->id < stream_rhs->id)
+		return -1;
+	if (stream_lhs->id > stream_rhs->id)
+		return 1;
+
+	/*
+	 * The stream table can have multiple nodes with the same ID if there
+	 * are DMA aliases.
+	 */
+	if (stream_lhs < stream_rhs)
+		return -1;
+	if (stream_lhs > stream_rhs)
+		return 1;
+	return 0;
 }
 
 static struct arm_smmu_master *
@@ -1775,6 +1792,16 @@ arm_smmu_find_master(struct arm_smmu_device *smmu, u32 sid)
 
 	node = rb_find(&sid, &smmu->streams, arm_smmu_streams_cmp_key);
 	if (!node)
+		return NULL;
+	/*
+	 * If there are DMA alises then there are multiple devices with the same
+	 * stream ID and we cannot reliably convert from SID to master.
+	 */
+	if (node->rb_left &&
+	    rb_entry(node->rb_left, struct arm_smmu_stream, node)->id == sid)
+		return NULL;
+	if (node->rb_right &&
+	    rb_entry(node->rb_right, struct arm_smmu_stream, node)->id == sid)
 		return NULL;
 	return rb_entry(node, struct arm_smmu_stream, node)->master;
 }
