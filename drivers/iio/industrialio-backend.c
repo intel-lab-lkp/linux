@@ -833,6 +833,36 @@ int iio_backend_data_alignment_disable(struct iio_backend *back)
 EXPORT_SYMBOL_NS_GPL(iio_backend_data_alignment_disable, "IIO_BACKEND");
 
 /**
+ * iio_backend_self_sync_enable - Enable the self sync data capture.
+ * @back: Backend device
+ *
+ * Data capture synchronization is done through bit-slip.
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_self_sync_enable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, self_sync_enable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_self_sync_enable, "IIO_BACKEND");
+
+/**
+ * iio_backend_self_sync_disable - Disable the self sync data capture.
+ * @back: Backend device
+ *
+ * Data capture synchronization is done through CNV signal.
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_self_sync_disable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, self_sync_disable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_self_sync_disable, "IIO_BACKEND");
+
+/**
  * iio_backend_ddr_enable - Enable interface DDR (Double Data Rate) mode
  * @back: Backend device
  *
