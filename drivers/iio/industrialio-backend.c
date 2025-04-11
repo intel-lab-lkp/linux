@@ -781,6 +781,32 @@ static int __devm_iio_backend_get(struct device *dev, struct iio_backend *back)
 }
 
 /**
+ * iio_backend_filter_enable - Enable filter
+ * @back: Backend device
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_filter_enable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, filter_enable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_filter_enable, "IIO_BACKEND");
+
+/**
+ * iio_backend_filter_disable - Disable filter
+ * @back: Backend device
+ *
+ * RETURNS:
+ * 0 on success, negative error number on failure.
+ */
+int iio_backend_filter_disable(struct iio_backend *back)
+{
+	return iio_backend_op_call(back, filter_disable);
+}
+EXPORT_SYMBOL_NS_GPL(iio_backend_filter_disable, "IIO_BACKEND");
+
+/**
  * iio_backend_ddr_enable - Enable interface DDR (Double Data Rate) mode
  * @back: Backend device
  *
