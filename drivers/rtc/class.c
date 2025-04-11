@@ -282,7 +282,7 @@ static void rtc_device_get_offset(struct rtc_device *rtc)
 	 * then we can not expand the RTC range by adding or subtracting one
 	 * offset.
 	 */
-	if (rtc->range_min == rtc->range_max)
+	if (rtc->range_min == (time64_t)rtc->range_max)
 		return;
 
 	ret = device_property_read_u32(rtc->dev.parent, "start-year",
@@ -299,7 +299,7 @@ static void rtc_device_get_offset(struct rtc_device *rtc)
 	if (!rtc->set_start_time)
 		return;
 
-	range_secs = rtc->range_max - rtc->range_min + 1;
+	range_secs = (time64_t)rtc->range_max - rtc->range_min + 1;
 
 	/*
 	 * If the start_secs is larger than the maximum seconds (rtc->range_max)
@@ -327,7 +327,7 @@ static void rtc_device_get_offset(struct rtc_device *rtc)
 	 *
 	 * Otherwise the offset seconds should be 0.
 	 */
-	if (rtc->start_secs > rtc->range_max ||
+	if (rtc->start_secs > (time64_t)rtc->range_max ||
 	    rtc->start_secs + range_secs - 1 < rtc->range_min)
 		rtc->offset_secs = rtc->start_secs - rtc->range_min;
 	else if (rtc->start_secs > rtc->range_min)

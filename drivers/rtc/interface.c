@@ -37,7 +37,7 @@ static void rtc_add_offset(struct rtc_device *rtc, struct rtc_time *tm)
 	 */
 	if ((rtc->start_secs > rtc->range_min && secs >= rtc->start_secs) ||
 	    (rtc->start_secs < rtc->range_min &&
-	     secs <= (rtc->start_secs + rtc->range_max - rtc->range_min)))
+	     secs <= (time64_t)(rtc->start_secs + rtc->range_max - rtc->range_min)))
 		return;
 
 	rtc_time64_to_tm(secs + rtc->offset_secs, tm);
@@ -58,7 +58,7 @@ static void rtc_subtract_offset(struct rtc_device *rtc, struct rtc_time *tm)
 	 * device. Otherwise we need to subtract the offset to make the time
 	 * values are valid for RTC hardware device.
 	 */
-	if (secs >= rtc->range_min && secs <= rtc->range_max)
+	if (secs >= rtc->range_min && secs <= (time64_t)rtc->range_max)
 		return;
 
 	rtc_time64_to_tm(secs - rtc->offset_secs, tm);
@@ -66,7 +66,7 @@ static void rtc_subtract_offset(struct rtc_device *rtc, struct rtc_time *tm)
 
 static int rtc_valid_range(struct rtc_device *rtc, struct rtc_time *tm)
 {
-	if (rtc->range_min != rtc->range_max) {
+	if (rtc->range_min != (time64_t)rtc->range_max) {
 		time64_t time = rtc_tm_to_time64(tm);
 		time64_t range_min = rtc->set_start_time ? rtc->start_secs :
 			rtc->range_min;
@@ -74,7 +74,7 @@ static int rtc_valid_range(struct rtc_device *rtc, struct rtc_time *tm)
 			(rtc->start_secs + rtc->range_max - rtc->range_min) :
 			rtc->range_max;
 
-		if (time < range_min || time > range_max)
+		if (time < range_min || time > (time64_t)range_max)
 			return -ERANGE;
 	}
 
