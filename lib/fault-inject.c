@@ -176,6 +176,9 @@ fail:
 	if (atomic_read(&attr->times) != -1)
 		atomic_dec_not_zero(&attr->times);
 
+	if (pr_notice_once("Tainting kernel with TAINT_FAULT_INJECTION\n"))
+		add_taint(TAINT_FAULT_INJECTION, LOCKDEP_STILL_OK);
+
 	return true;
 }
 
