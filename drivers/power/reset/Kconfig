@@ -316,3 +316,28 @@ config POWER_MLXBF
 	  This driver supports reset or low power mode handling for Mellanox BlueField.
 
 endif
+
+menuconfig PSCRR
+	bool "Power State Change Reasons Recording (PSCRR) Framework"
+	help
+	  Enables the Power State Change Reasons Recording (PSCRR) framework.
+
+	  This framework allows software to store a reason for system shutdown
+	  or reboot in non-volatile storage. It is useful on systems where
+	  power failures can be detected in advance, giving software a short
+	  window (e.g., via backup capacitors) to persist a shutdown reason
+	  before full power loss.
+
+	  This mechanism supports diagnostics and recovery logic in bootloaders
+	  or early-stage software. It avoids reliance on block-based storage,
+	  which may not survive hard shutdowns.
+
+	  The framework is designed to be extensible and can also support
+	  hardware-backed reset reason sources (e.g., PMIC or watchdog
+	  registers), allowing a uniform interface for both software-defined
+	  and hardware-reported reasons.
+
+	  Sudden power cuts, CPU freezes, or other uncontrolled resets may not
+	  be recorded unless hardware provides the reset cause.
+
+	  If unsure, say N.
