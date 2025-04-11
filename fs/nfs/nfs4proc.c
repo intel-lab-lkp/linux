@@ -7933,6 +7933,11 @@ static int nfs4_xattr_set_nfs4_acl(const struct xattr_handler *handler,
 				   const char *key, const void *buf,
 				   size_t buflen, int flags)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_proc_set_acl(inode, buf, buflen, NFS4ACL_ACL);
 }
 
@@ -7940,11 +7945,21 @@ static int nfs4_xattr_get_nfs4_acl(const struct xattr_handler *handler,
 				   struct dentry *unused, struct inode *inode,
 				   const char *key, void *buf, size_t buflen)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_ACL);
 }
 
 static bool nfs4_xattr_list_nfs4_acl(struct dentry *dentry)
 {
+	struct nfs_fh *fh = NFS_FH(d_inode(dentry));
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_server_supports_acls(NFS_SB(dentry->d_sb), NFS4ACL_ACL);
 }
 
@@ -7957,6 +7972,11 @@ static int nfs4_xattr_set_nfs4_dacl(const struct xattr_handler *handler,
 				    const char *key, const void *buf,
 				    size_t buflen, int flags)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_proc_set_acl(inode, buf, buflen, NFS4ACL_DACL);
 }
 
@@ -7964,11 +7984,21 @@ static int nfs4_xattr_get_nfs4_dacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
 				    const char *key, void *buf, size_t buflen)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_DACL);
 }
 
 static bool nfs4_xattr_list_nfs4_dacl(struct dentry *dentry)
 {
+	struct nfs_fh *fh = NFS_FH(d_inode(dentry));
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_server_supports_acls(NFS_SB(dentry->d_sb), NFS4ACL_DACL);
 }
 
@@ -7980,6 +8010,11 @@ static int nfs4_xattr_set_nfs4_sacl(const struct xattr_handler *handler,
 				    const char *key, const void *buf,
 				    size_t buflen, int flags)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_proc_set_acl(inode, buf, buflen, NFS4ACL_SACL);
 }
 
@@ -7987,11 +8022,21 @@ static int nfs4_xattr_get_nfs4_sacl(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
 				    const char *key, void *buf, size_t buflen)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_proc_get_acl(inode, buf, buflen, NFS4ACL_SACL);
 }
 
 static bool nfs4_xattr_list_nfs4_sacl(struct dentry *dentry)
 {
+	struct nfs_fh *fh = NFS_FH(d_inode(dentry));
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	return nfs4_server_supports_acls(NFS_SB(dentry->d_sb), NFS4ACL_SACL);
 }
 
@@ -8005,6 +8050,11 @@ static int nfs4_xattr_set_nfs4_label(const struct xattr_handler *handler,
 				     const char *key, const void *buf,
 				     size_t buflen, int flags)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	if (security_ismaclabel(key))
 		return nfs4_set_security_label(inode, buf, buflen);
 
@@ -8015,6 +8065,11 @@ static int nfs4_xattr_get_nfs4_label(const struct xattr_handler *handler,
 				     struct dentry *unused, struct inode *inode,
 				     const char *key, void *buf, size_t buflen)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
+
 	if (security_ismaclabel(key))
 		return nfs4_get_security_label(inode, buf, buflen);
 	return -EOPNOTSUPP;
@@ -8023,7 +8078,11 @@ static int nfs4_xattr_get_nfs4_label(const struct xattr_handler *handler,
 static ssize_t
 nfs4_listxattr_nfs4_label(struct inode *inode, char *list, size_t list_len)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
 	int len = 0;
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
 
 	if (nfs_server_capable(inode, NFS_CAP_SECURITY_LABEL)) {
 		len = security_inode_listsecurity(inode, list, list_len);
@@ -8056,8 +8115,12 @@ static int nfs4_xattr_set_nfs4_user(const struct xattr_handler *handler,
 				    const char *key, const void *buf,
 				    size_t buflen, int flags)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
 	u32 mask;
 	int ret;
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
 
 	if (!nfs_server_capable(inode, NFS_CAP_XATTR))
 		return -EOPNOTSUPP;
@@ -8093,8 +8156,12 @@ static int nfs4_xattr_get_nfs4_user(const struct xattr_handler *handler,
 				    struct dentry *unused, struct inode *inode,
 				    const char *key, void *buf, size_t buflen)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
 	u32 mask;
 	ssize_t ret;
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
 
 	if (!nfs_server_capable(inode, NFS_CAP_XATTR))
 		return -EOPNOTSUPP;
@@ -8120,12 +8187,16 @@ static int nfs4_xattr_get_nfs4_user(const struct xattr_handler *handler,
 static ssize_t
 nfs4_listxattr_nfs4_user(struct inode *inode, char *list, size_t list_len)
 {
+	struct nfs_fh *fh = NFS_FH(inode);
 	u64 cookie;
 	bool eof;
 	ssize_t ret, size;
 	char *buf;
 	size_t buflen;
 	u32 mask;
+
+	if (unlikely(fh->size == 0))
+		return -ENODATA;
 
 	if (!nfs_server_capable(inode, NFS_CAP_XATTR))
 		return 0;
