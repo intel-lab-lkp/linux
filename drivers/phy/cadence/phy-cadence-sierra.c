@@ -1263,11 +1263,17 @@ static int cdns_sierra_phy_configure_multilink(struct cdns_sierra_phy *sp)
 	clk_set_rate(sp->input_clks[CMN_REFCLK_DIG_DIV], 25000000);
 	clk_set_rate(sp->input_clks[CMN_REFCLK1_DIG_DIV], 25000000);
 
-	/* PHY configured to use both PLL LC and LC1 */
-	regmap_field_write(sp->phy_pll_cfg_1, 0x1);
-
 	phy_t1 = sp->phys[0].phy_type;
 	phy_t2 = sp->phys[1].phy_type;
+
+
+	/*
+	 * Configure both PLL LC and LC1 when link types are different.
+	 * If both links are of the same type, there is no need to use
+	 * a second PLL.
+	 */
+	if (phy_t1 != phy_t2)
+		regmap_field_write(sp->phy_pll_cfg_1, 0x1);
 
 	/*
 	 * PHY configuration for multi-link operation is done in two steps.
@@ -2542,6 +2548,9 @@ static const struct cdns_sierra_data cdns_map_sierra = {
 			[TYPE_NONE] = {
 				[NO_SSC] = &sgmii_cmn_vals,
 			},
+			[TYPE_SGMII] = {
+				[NO_SSC] = &sgmii_cmn_vals,
+			},
 			[TYPE_PCIE] = {
 				[NO_SSC] = &sgmii_100_no_ssc_plllc1_opt3_cmn_vals,
 				[EXTERNAL_SSC] = &sgmii_100_no_ssc_plllc1_opt3_cmn_vals,
@@ -2581,6 +2590,9 @@ static const struct cdns_sierra_data cdns_map_sierra = {
 		},
 		[TYPE_SGMII] = {
 			[TYPE_NONE] = {
+				[NO_SSC] = &sgmii_pma_ln_vals,
+			},
+			[TYPE_SGMII] = {
 				[NO_SSC] = &sgmii_pma_ln_vals,
 			},
 			[TYPE_PCIE] = {
