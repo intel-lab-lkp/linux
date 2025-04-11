@@ -107,6 +107,7 @@ enum iio_backend_interface_type {
  * @self_sync_enable: Enable the self sync data capture.
  * @self_sync_disable: Disable the self sync data capture.
  * @sync_status_get: Get the syncronization status (enabled/disabled).
+ * @num_lanes_set: Set the number of lanes enabled.
  * @ddr_enable: Enable interface DDR (Double Data Rate) mode.
  * @ddr_disable: Disable interface DDR (Double Data Rate) mode.
  * @data_stream_enable: Enable data stream.
@@ -164,6 +165,7 @@ struct iio_backend_ops {
 	int (*self_sync_enable)(struct iio_backend *back);
 	int (*self_sync_disable)(struct iio_backend *back);
 	int (*sync_status_get)(struct iio_backend *back, bool *sync_en);
+	int (*num_lanes_set)(struct iio_backend *back, unsigned int num_lanes);
 	int (*ddr_enable)(struct iio_backend *back);
 	int (*ddr_disable)(struct iio_backend *back);
 	int (*data_stream_enable)(struct iio_backend *back);
@@ -211,6 +213,7 @@ int iio_backend_data_alignment_disable(struct iio_backend *back);
 int iio_backend_self_sync_enable(struct iio_backend *back);
 int iio_backend_self_sync_disable(struct iio_backend *back);
 int iio_backend_sync_status_get(struct iio_backend *back, bool *sync_en);
+int iio_backend_num_lanes_set(struct iio_backend *back, unsigned int num_lanes);
 int iio_backend_ddr_enable(struct iio_backend *back);
 int iio_backend_ddr_disable(struct iio_backend *back);
 int iio_backend_data_stream_enable(struct iio_backend *back);
