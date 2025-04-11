@@ -1187,9 +1187,9 @@ static unsigned int pci_oxsemi_tornado_get_divisor(struct uart_port *port,
 	unsigned int sdiv = DIV_ROUND_CLOSEST(sclk, baud);
 	unsigned int best_squot;
 	unsigned int squot;
-	unsigned int quot;
-	u16 cpr;
-	u8 tcr;
+	unsigned int quot = 1;
+	u16 cpr = OXSEMI_TORNADO_CPR_DEF;  /* Default Control Prescaler Register */
+	u8 tcr = 16;  /* Typical default value for the Timer Control Register */
 	int i;
 
 	/* Old custom speed handling.  */
