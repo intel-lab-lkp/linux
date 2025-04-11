@@ -4020,7 +4020,7 @@ drm_edp_backlight_set_enable(struct drm_dp_aux *aux, const struct drm_edp_backli
  * Returns: %0 on success, negative error code on failure.
  */
 int drm_edp_backlight_enable(struct drm_dp_aux *aux, const struct drm_edp_backlight_info *bl,
-			     const u16 level)
+			     const u32 level)
 {
 	int ret;
 	u8 dpcd_buf;
@@ -4055,7 +4055,7 @@ int drm_edp_backlight_enable(struct drm_dp_aux *aux, const struct drm_edp_backli
 		return ret < 0 ? ret : -EIO;
 	}
 
-	ret = drm_edp_backlight_set_level(aux, bl, (u32)level);
+	ret = drm_edp_backlight_set_level(aux, bl, level);
 	if (ret < 0)
 		return ret;
 	ret = drm_edp_backlight_set_enable(aux, bl, true);
@@ -4331,7 +4331,7 @@ static int dp_aux_backlight_update_status(struct backlight_device *bd)
 
 	if (!backlight_is_blank(bd)) {
 		if (!bl->enabled) {
-			drm_edp_backlight_enable(bl->aux, &bl->info, brightness);
+			drm_edp_backlight_enable(bl->aux, &bl->info, (u32)brightness);
 			bl->enabled = true;
 			return 0;
 		}
