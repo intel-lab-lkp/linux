@@ -3410,6 +3410,7 @@ static struct sock *bpf_iter_udp_batch(struct seq_file *seq)
 	unsigned int batch_sks = 0;
 	bool resized = false;
 	struct sock *sk;
+	int err = 0;
 
 	resume_bucket = state->bucket;
 	resume_offset = iter->offset;
@@ -3475,7 +3476,11 @@ again:
 		iter->st_bucket_done = true;
 		goto done;
 	}
-	if (!resized && !bpf_iter_udp_realloc_batch(iter, batch_sks * 3 / 2)) {
+	if (!resized) {
+		err = bpf_iter_udp_realloc_batch(iter, batch_sks * 3 / 2);
+		if (err)
+			return ERR_PTR(err);
+
 		resized = true;
 		/* After allocating a larger batch, retry one more time to grab
 		 * the whole bucket.
