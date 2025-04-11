@@ -2114,6 +2114,23 @@ xfs_fs_reconfigure(
 	if (error)
 		return error;
 
+	/* attr2 -> noattr2 */
+	if (xfs_has_noattr2(new_mp)) {
+		if (xfs_has_crc(mp)) {
+			xfs_warn(mp, "attr2 and noattr2 cannot both be specified.");
+			return -EINVAL;
+		}
+		else {
+			mp->m_features &= ~XFS_FEAT_ATTR2;
+			mp->m_features |= XFS_FEAT_NOATTR2;
+		}
+
+	} else if (xfs_has_attr2(new_mp)) {
+			/* noattr2 -> attr2 */
+			mp->m_features &= ~XFS_FEAT_NOATTR2;
+			mp->m_features |= XFS_FEAT_ATTR2;
+	}
+
 	/* inode32 -> inode64 */
 	if (xfs_has_small_inums(mp) && !xfs_has_small_inums(new_mp)) {
 		mp->m_features &= ~XFS_FEAT_SMALL_INUMS;
