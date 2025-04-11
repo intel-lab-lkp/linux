@@ -573,6 +573,9 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 	pte_t *pte, *mapped_pte;
 	pte_t ptent;
 	spinlock_t *ptl;
+	int max_nr;
+	const fpb_t fpb_flags = FPB_IGNORE_DIRTY | FPB_IGNORE_SOFT_DIRTY;
+	int nr = 1;
 
 	ptl = pmd_trans_huge_lock(pmd, vma);
 	if (ptl) {
@@ -586,7 +589,8 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 		walk->action = ACTION_AGAIN;
 		return 0;
 	}
-	for (; addr != end; pte++, addr += PAGE_SIZE) {
+	for (; addr != end; pte += nr, addr += nr * PAGE_SIZE) {
+		nr = 1;
 		ptent = ptep_get(pte);
 		if (pte_none(ptent))
 			continue;
@@ -607,6 +611,11 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 		if (!queue_folio_required(folio, qp))
 			continue;
 		if (folio_test_large(folio)) {
+			max_nr = (end - addr) >> PAGE_SHIFT;
+			if (max_nr != 1)
+				nr = folio_pte_batch(folio, addr, pte, ptent,
+						     max_nr, fpb_flags,
+						     NULL, NULL, NULL);
 			/*
 			 * A large folio can only be isolated from LRU once,
 			 * but may be mapped by many PTEs (and Copy-On-Write may
@@ -633,6 +642,7 @@ static int queue_folios_pte_range(pmd_t *pmd, unsigned long addr,
 			qp->nr_failed++;
 			if (strictly_unmovable(flags))
 				break;
+			qp->nr_failed += nr - 1;
 		}
 	}
 	pte_unmap_unlock(mapped_pte, ptl);
