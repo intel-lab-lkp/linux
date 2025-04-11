@@ -491,9 +491,14 @@ out:
 
 static void rds_ib_unregister_client(void)
 {
+	int i;
+
 	ib_unregister_client(&rds_ib_client);
 	/* wait for rds_ib_dev_free() to complete */
 	flush_workqueue(rds_wq);
+
+	for (i = 0; i < RDS_NMBR_CP_WQS; ++i)
+		flush_workqueue(rds_cp_wqs[i]);
 }
 
 static void rds_ib_set_unloading(void)
