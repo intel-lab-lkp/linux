@@ -2390,11 +2390,13 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	else
 		xhci->segment_pool = dma_pool_create("xHCI ring segments", dev,
 				TRB_SEGMENT_SIZE, TRB_SEGMENT_SIZE, xhci->page_size);
+	if (!xhci->segment_pool)
+		goto fail;
 
 	/* See Table 46 and Note on Figure 55 */
 	xhci->device_pool = dma_pool_create("xHCI input/output contexts", dev,
 			2112, 64, xhci->page_size);
-	if (!xhci->segment_pool || !xhci->device_pool)
+	if (!xhci->device_pool)
 		goto fail;
 
 	/* Linear stream context arrays don't have any boundary restrictions,
@@ -2403,6 +2405,9 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	xhci->small_streams_pool =
 		dma_pool_create("xHCI 256 byte stream ctx arrays",
 			dev, SMALL_STREAM_ARRAY_SIZE, 16, 0);
+	if (!xhci->small_streams_pool)
+		goto fail;
+
 	xhci->medium_streams_pool =
 		dma_pool_create("xHCI 1KB stream ctx arrays",
 			dev, MEDIUM_STREAM_ARRAY_SIZE, 16, 0);
@@ -2410,7 +2415,7 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 	 * will be allocated with dma_alloc_coherent()
 	 */
 
-	if (!xhci->small_streams_pool || !xhci->medium_streams_pool)
+	if (!xhci->medium_streams_pool)
 		goto fail;
 
 	/* Set up the command ring to have one segments for now. */
@@ -2433,6 +2438,8 @@ int xhci_mem_init(struct xhci_hcd *xhci, gfp_t flags)
 		       "Allocating primary event ring");
 	xhci->interrupters = kcalloc_node(xhci->max_interrupters, sizeof(*xhci->interrupters),
 					  flags, dev_to_node(dev));
+	if (!xhci->interrupters)
+		goto fail;
 
 	xhci->interrupters[0] = xhci_alloc_interrupter(xhci, 0, flags);
 	if (!xhci->interrupters[0])
