@@ -29,8 +29,8 @@
 #include <malloc.h>
 #include <poll.h>
 #include <stdint.h>
-#include <string.h>
 #include <unistd.h>
+#include <linux/string.h>
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -71,7 +71,7 @@ int sync_merge(const char *name, int fd1, int fd2)
 	int err;
 
 	data.fd2 = fd2;
-	strncpy(data.name, name, sizeof(data.name) - 1);
+	strscpy(data.name, name, sizeof(data.name) - 1);
 	data.name[sizeof(data.name) - 1] = '\0';
 
 	err = ioctl(fd1, SYNC_IOC_MERGE, &data);
@@ -198,7 +198,7 @@ int sw_sync_fence_create(int fd, const char *name, unsigned int value)
 	int err;
 
 	data.value = value;
-	strncpy(data.name, name, sizeof(data.name) - 1);
+	strscpy(data.name, name, sizeof(data.name) - 1);
 	data.name[sizeof(data.name) - 1] = '\0';
 
 	err = ioctl(fd, SW_SYNC_IOC_CREATE_FENCE, &data);
