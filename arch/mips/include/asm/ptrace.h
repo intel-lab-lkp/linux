@@ -48,7 +48,6 @@ struct pt_regs {
 	unsigned long long mpl[6];        /* MTM{0-5} */
 	unsigned long long mtp[6];        /* MTP{0-5} */
 #endif
-	unsigned long __last[0];
 } __aligned(8);
 
 static inline unsigned long kernel_stack_pointer(struct pt_regs *regs)
@@ -65,7 +64,7 @@ static inline void instruction_pointer_set(struct pt_regs *regs,
 
 /* Query offset/name of register from its name/offset */
 extern int regs_query_register_offset(const char *name);
-#define MAX_REG_OFFSET (offsetof(struct pt_regs, __last))
+#define MAX_REG_OFFSET (sizeof(struct pt_regs))
 
 /**
  * regs_get_register() - get register value from its offset
