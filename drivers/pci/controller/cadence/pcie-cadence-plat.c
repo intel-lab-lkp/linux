@@ -24,6 +24,15 @@ struct cdns_plat_pcie {
 
 struct cdns_plat_pcie_of_data {
 	bool is_rc;
+	bool is_hpa;
+	u32  ip_reg_bank_off;
+	u32  ip_cfg_ctrl_reg_off;
+	u32  axi_mstr_common_off;
+	u32  axi_slave_off;
+	u32  axi_master_off;
+	u32  axi_hls_off;
+	u32  axi_ras_off;
+	u32  axi_dti_off;
 };
 
 static const struct of_device_id cdns_plat_pcie_of_match[];
@@ -72,6 +81,19 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 		rc = pci_host_bridge_priv(bridge);
 		rc->pcie.dev = dev;
 		rc->pcie.ops = &cdns_plat_ops;
+		rc->pcie.is_hpa = data->is_hpa;
+		rc->pcie.is_rc = data->is_rc;
+
+		/* Store all the register bank offsets */
+		rc->pcie.cdns_pcie_reg_offsets.ip_reg_bank_off = data->ip_reg_bank_off;
+		rc->pcie.cdns_pcie_reg_offsets.ip_cfg_ctrl_reg_off = data->ip_cfg_ctrl_reg_off;
+		rc->pcie.cdns_pcie_reg_offsets.axi_mstr_common_off = data->axi_mstr_common_off;
+		rc->pcie.cdns_pcie_reg_offsets.axi_master_off = data->axi_master_off;
+		rc->pcie.cdns_pcie_reg_offsets.axi_slave_off = data->axi_slave_off;
+		rc->pcie.cdns_pcie_reg_offsets.axi_hls_off = data->axi_hls_off;
+		rc->pcie.cdns_pcie_reg_offsets.axi_ras_off = data->axi_ras_off;
+		rc->pcie.cdns_pcie_reg_offsets.axi_dti_off = data->axi_dti_off;
+
 		cdns_plat_pcie->pcie = &rc->pcie;
 
 		ret = cdns_pcie_init_phy(dev, cdns_plat_pcie->pcie);
@@ -99,6 +121,19 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 
 		ep->pcie.dev = dev;
 		ep->pcie.ops = &cdns_plat_ops;
+		ep->pcie.is_hpa = data->is_hpa;
+		ep->pcie.is_rc = data->is_rc;
+
+		/* Store all the register bank offset */
+		ep->pcie.cdns_pcie_reg_offsets.ip_reg_bank_off = data->ip_reg_bank_off;
+		ep->pcie.cdns_pcie_reg_offsets.ip_cfg_ctrl_reg_off = data->ip_cfg_ctrl_reg_off;
+		ep->pcie.cdns_pcie_reg_offsets.axi_mstr_common_off = data->axi_mstr_common_off;
+		ep->pcie.cdns_pcie_reg_offsets.axi_master_off = data->axi_master_off;
+		ep->pcie.cdns_pcie_reg_offsets.axi_slave_off = data->axi_slave_off;
+		ep->pcie.cdns_pcie_reg_offsets.axi_hls_off = data->axi_hls_off;
+		ep->pcie.cdns_pcie_reg_offsets.axi_ras_off = data->axi_ras_off;
+		ep->pcie.cdns_pcie_reg_offsets.axi_dti_off = data->axi_dti_off;
+
 		cdns_plat_pcie->pcie = &ep->pcie;
 
 		ret = cdns_pcie_init_phy(dev, cdns_plat_pcie->pcie);
@@ -150,10 +185,54 @@ static void cdns_plat_pcie_shutdown(struct platform_device *pdev)
 
 static const struct cdns_plat_pcie_of_data cdns_plat_pcie_host_of_data = {
 	.is_rc = true,
+	.is_hpa = false,
+	.ip_reg_bank_off = 0x0,
+	.ip_cfg_ctrl_reg_off = 0x0,
+	.axi_mstr_common_off = 0x0,
+	.axi_slave_off = 0x0,
+	.axi_master_off = 0x0,
+	.axi_hls_off = 0x0,
+	.axi_ras_off = 0x0,
+	.axi_dti_off = 0x0,
 };
 
 static const struct cdns_plat_pcie_of_data cdns_plat_pcie_ep_of_data = {
 	.is_rc = false,
+	.is_hpa = false,
+	.ip_reg_bank_off = 0x0,
+	.ip_cfg_ctrl_reg_off = 0x0,
+	.axi_mstr_common_off = 0x0,
+	.axi_slave_off = 0x0,
+	.axi_master_off = 0x0,
+	.axi_hls_off = 0x0,
+	.axi_ras_off = 0x0,
+	.axi_dti_off = 0x0,
+};
+
+static const struct cdns_plat_pcie_of_data cdns_plat_pcie_hpa_host_of_data = {
+	.is_rc = true,
+	.is_hpa = true,
+	.ip_reg_bank_off = CDNS_PCIE_HPA_IP_REG_BANK,
+	.ip_cfg_ctrl_reg_off = CDNS_PCIE_HPA_IP_CFG_CTRL_REG_BANK,
+	.axi_mstr_common_off = CDNS_PCIE_HPA_IP_AXI_MASTER_COMMON,
+	.axi_slave_off = CDNS_PCIE_HPA_AXI_SLAVE,
+	.axi_master_off = CDNS_PCIE_HPA_AXI_MASTER,
+	.axi_hls_off = 0,
+	.axi_ras_off = 0,
+	.axi_dti_off = 0,
+};
+
+static const struct cdns_plat_pcie_of_data cdns_plat_pcie_hpa_ep_of_data = {
+	.is_rc = false,
+	.is_hpa = true,
+	.ip_reg_bank_off = CDNS_PCIE_HPA_IP_REG_BANK,
+	.ip_cfg_ctrl_reg_off = CDNS_PCIE_HPA_IP_CFG_CTRL_REG_BANK,
+	.axi_mstr_common_off = CDNS_PCIE_HPA_IP_AXI_MASTER_COMMON,
+	.axi_slave_off = CDNS_PCIE_HPA_AXI_SLAVE,
+	.axi_master_off = CDNS_PCIE_HPA_AXI_MASTER,
+	.axi_hls_off = 0,
+	.axi_ras_off = 0,
+	.axi_dti_off = 0,
 };
 
 static const struct of_device_id cdns_plat_pcie_of_match[] = {
@@ -164,6 +243,14 @@ static const struct of_device_id cdns_plat_pcie_of_match[] = {
 	{
 		.compatible = "cdns,cdns-pcie-ep",
 		.data = &cdns_plat_pcie_ep_of_data,
+	},
+	{
+		.compatible = "cdns,cdns-pcie-hpa-host",
+		.data = &cdns_plat_pcie_hpa_host_of_data,
+	},
+	{
+		.compatible = "cdns,cdns-pcie-hpa-ep",
+		.data = &cdns_plat_pcie_hpa_ep_of_data,
 	},
 	{},
 };
