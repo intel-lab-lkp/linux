@@ -2057,8 +2057,8 @@ int vt_do_kdgkb_ioctl(int cmd, struct kbsentry __user *user_kdgkb, int perm)
 {
 	unsigned char kb_func;
 	unsigned long flags;
-	char *kbs;
-	int ret;
+	char *kbs = NULL;
+	int ret = -EINVAL;
 
 	if (get_user(kb_func, &user_kdgkb->kb_func))
 		return -EFAULT;
@@ -2100,6 +2100,10 @@ int vt_do_kdgkb_ioctl(int cmd, struct kbsentry __user *user_kdgkb, int perm)
 		spin_unlock_irqrestore(&func_buf_lock, flags);
 
 		ret = 0;
+		break;
+
+	default:
+		/* unknown command, ret already set to -EINVAL */
 		break;
 	}
 
