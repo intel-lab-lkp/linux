@@ -570,6 +570,13 @@
 	maximum-speed = "high-speed";
 };
 
+&hbmc {
+	bootph-all;
+	flash@0,0 {
+		bootph-all;
+	};
+};
+
 &ospi1 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&mcu_fss0_ospi1_pins_default>;
