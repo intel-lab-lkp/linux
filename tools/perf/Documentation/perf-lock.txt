@@ -216,6 +216,9 @@ CONTENTION OPTIONS
 --cgroup-filter=<value>::
 	Show lock contention only in the given cgroups (comma separated list).
 
+--duration-filter=<value>::
+  Filter out lock contention samples which durations less than the specified
+  value (default: 0). The unit is nanoseconds (ns).
 
 SEE ALSO
 --------

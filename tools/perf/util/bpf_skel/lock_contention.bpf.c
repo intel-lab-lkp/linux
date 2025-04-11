@@ -176,6 +176,7 @@ const volatile int stack_skip;
 const volatile int lock_owner;
 const volatile int use_cgroup_v2;
 const volatile int max_stack;
+const volatile int duration_filter;
 
 /* determine the key of lock stat */
 const volatile int aggr_mode;
@@ -457,6 +458,9 @@ static inline void update_contention_data(struct contention_data *data, u64 dura
 
 static inline void update_owner_stat(u32 id, u64 duration, u32 flags)
 {
+	if (duration < duration_filter)
+		return;
+
 	struct contention_key key = {
 		.stack_id = id,
 		.pid = 0,
@@ -707,6 +711,9 @@ int contention_end(u64 *ctx)
 		}
 	}
 skip_owner:
+	if (duration < duration_filter)
+		goto out;
+
 	switch (aggr_mode) {
 	case LOCK_AGGR_CALLER:
 		key.stack_id = pelem->stack_id;

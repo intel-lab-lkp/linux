@@ -203,6 +203,7 @@ int lock_contention_prepare(struct lock_contention *con)
 	skel->rodata->aggr_mode = con->aggr_mode;
 	skel->rodata->needs_callstack = con->save_callstack;
 	skel->rodata->lock_owner = con->owner;
+	skel->rodata->duration_filter = con->duration_filter;
 
 	if (con->aggr_mode == LOCK_AGGR_CGROUP || con->filters->nr_cgrps) {
 		if (cgroup_is_v2("perf_event"))
@@ -568,12 +569,23 @@ struct lock_stat *pop_owner_stack_trace(struct lock_contention *con)
 	if (stack_trace == NULL)
 		goto out_err;
 
-	if (bpf_map_get_next_key(stacks_fd, NULL, stack_trace))
-		goto out_err;
+	/*
+	 * `owner_stacks` contains stacks recorded in `contention_begin()` that either never reached
+	 * `contention_end()` or were filtered out and not stored in `owner_stat`. We skip if we
+	 * cannot find corresponding `contention_data` in `owner_stat` with the given `stack_id`.
+	 */
+	while (true) {
+		if (bpf_map_get_next_key(stacks_fd, NULL, stack_trace))
+			goto out_err;
 
-	bpf_map_lookup_elem(stacks_fd, stack_trace, &stack_id);
-	ckey.stack_id = stack_id;
-	bpf_map_lookup_elem(stat_fd, &ckey, &cdata);
+		bpf_map_lookup_elem(stacks_fd, stack_trace, &stack_id);
+		ckey.stack_id = stack_id;
+		if (bpf_map_lookup_elem(stat_fd, &ckey, &cdata) == 0)
+			break;
+
+		/* Can not find `contention_data`, delete and skip. */
+		bpf_map_delete_elem(stacks_fd, stack_trace);
+	}
 
 	st = zalloc(sizeof(struct lock_stat));
 	if (!st)

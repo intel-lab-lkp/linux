@@ -60,6 +60,7 @@ static int stack_skip = CONTENTION_STACK_SKIP;
 static int print_nr_entries = INT_MAX / 2;
 static const char *output_name = NULL;
 static FILE *lock_output;
+static int duration_filter;
 
 static struct lock_filter filters;
 
@@ -2004,6 +2005,7 @@ static int __cmd_contention(int argc, const char **argv)
 		.save_callstack = needs_callstack(),
 		.owner = show_lock_owner,
 		.cgroups = RB_ROOT,
+		.duration_filter = duration_filter,
 	};
 
 	lockhash_table = calloc(LOCKHASH_SIZE, sizeof(*lockhash_table));
@@ -2580,6 +2582,7 @@ int cmd_lock(int argc, const char **argv)
 	OPT_BOOLEAN(0, "lock-cgroup", &show_lock_cgroups, "show lock stats by cgroup"),
 	OPT_CALLBACK('G', "cgroup-filter", NULL, "CGROUPS",
 		     "Filter specific cgroups", parse_cgroup_filter),
+	OPT_INTEGER(0, "duration-filter", &duration_filter, "Filter samples by duration"),
 	OPT_PARENT(lock_options)
 	};
 

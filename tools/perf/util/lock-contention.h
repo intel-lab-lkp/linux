@@ -149,6 +149,7 @@ struct lock_contention {
 	int owner;
 	int nr_filtered;
 	bool save_callstack;
+	int duration_filter;
 };
 
 struct option;
