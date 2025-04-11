@@ -215,7 +215,10 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
 macro_rules! container_of {
     ($ptr:expr, $type:ty, $($f:tt)*) => {{
         let offset: usize = ::core::mem::offset_of!($type, $($f)*);
-        $ptr.byte_sub(offset).cast::<$type>()
+        let container = $ptr.byte_sub(offset).cast::<$type>();
+        fn assert_same_type<T>(_: T, _: T) {}
+        assert_same_type($ptr, ::core::ptr::addr_of!((*container).$($f)*).cast_mut());
+        container
     }}
 }
 
