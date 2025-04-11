@@ -158,7 +158,7 @@ static int q6usb_usb_mixer_enabled(struct snd_soc_dapm_widget *w)
 
 	/* Checks to ensure USB path is enabled/connected */
 	snd_soc_dapm_widget_for_each_sink_path(w, p)
-		if (!strcmp(p->sink->name, "USB Mixer") && p->connect)
+		if (!strcmp(p->sink->name, "USB_RX Audio Mixer") && p->connect)
 			return 1;
 
 	return 0;
@@ -173,7 +173,7 @@ static int q6usb_get_pcm_id(struct snd_soc_component *component)
 	/*
 	 * Traverse widgets to find corresponding FE widget.  The DAI links are
 	 * built like the following:
-	 *    MultiMedia* <-> MM_DL* <-> USB Mixer*
+	 *    MultiMedia* <-> MM_DL* <-> USB_RX Audio Mixer*
 	 */
 	for_each_card_widgets(component->card, w) {
 		if (!strncmp(w->name, "MultiMedia", 10)) {
