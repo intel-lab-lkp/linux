@@ -31,6 +31,7 @@ all_files := \
 		ctype.h \
 		dirent.h \
 		errno.h \
+		getopt.h \
 		limits.h \
 		nolibc.h \
 		signal.h \
