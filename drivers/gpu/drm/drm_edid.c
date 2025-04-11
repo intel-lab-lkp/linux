@@ -7508,3 +7508,21 @@ bool drm_edid_is_digital(const struct drm_edid *drm_edid)
 		drm_edid->edid->input & DRM_EDID_INPUT_DIGITAL;
 }
 EXPORT_SYMBOL(drm_edid_is_digital);
+
+/**
+ * drm_edid_is_edid_eq - Check if it the EDID is equal
+ *
+ * @drm_edid_old: old drm_edid to compare edid
+ * @drm_edid_new: new drm_edid to compare edid
+ *
+ * Return true if the EDID is equal
+ */
+bool drm_edid_is_edid_eq(const struct drm_edid *drm_edid_old,
+			 const struct drm_edid *drm_edid_new)
+{
+	const void *old_edid = drm_edid_old->edid;
+	size_t old_edid_size = drm_edid_old->size;
+
+	return drm_edid_eq(drm_edid_new, old_edid, old_edid_size);
+}
+EXPORT_SYMBOL(drm_edid_is_edid_eq);
