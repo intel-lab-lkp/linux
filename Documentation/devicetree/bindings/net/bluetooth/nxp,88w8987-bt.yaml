@@ -48,6 +48,12 @@ properties:
     description:
       The GPIO number of the NXP chipset used for BT_WAKE_IN.
 
+  host-wakeup-gpios:
+    maxItems: 1
+    description:
+      Host wakeup by falling edge interrupt on this GPIO which
+      is connected to BT_WAKE_OUT pin of the NXP chipset.
+
   nxp,wakeout-pin:
     $ref: /schemas/types.yaml#/definitions/uint8
     description:
@@ -68,6 +74,7 @@ examples:
             firmware-name = "uartuart8987_bt_v0.bin";
             device-wakeup-gpios = <&gpio 11 GPIO_ACTIVE_HIGH>;
             nxp,wakein-pin = /bits/ 8 <18>;
+            host-wakeup-gpios = <&gpio 12 GPIO_ACTIVE_HIGH>;
             nxp,wakeout-pin = /bits/ 8 <19>;
             local-bd-address = [66 55 44 33 22 11];
         };
