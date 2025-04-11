@@ -597,7 +597,8 @@ int pt_dmaengine_register(struct pt_device *pt)
 
 	pt->dma_desc_cache = kmem_cache_create(desc_cache_name,
 					       sizeof(struct pt_dma_desc), 0,
-					       SLAB_HWCACHE_ALIGN, NULL);
+					       SLAB_HWCACHE_ALIGN |
+					       SLAB_TYPESAFE_BY_RCU, NULL);
 	if (!pt->dma_desc_cache) {
 		ret = -ENOMEM;
 		goto err_cache;
