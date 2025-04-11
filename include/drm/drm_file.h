@@ -507,6 +507,7 @@ void drm_print_memory_stats(struct drm_printer *p,
 
 void drm_show_memory_stats(struct drm_printer *p, struct drm_file *file);
 void drm_show_fdinfo(struct seq_file *m, struct file *f);
+void drm_process_info(struct drm_file *file_priv, char *proc_info, size_t buff_size);
 
 struct file *mock_drm_getfile(struct drm_minor *minor, unsigned int flags);
 
