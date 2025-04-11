@@ -816,6 +816,14 @@ int cdns_pcie_host_bar_ib_config(struct cdns_pcie_rc *rc,
 				 enum cdns_pcie_rp_bar bar,
 				 u64 cpu_addr, u64 size,
 				 unsigned long flags);
+void __iomem *cdns_pci_hpa_map_bus(struct pci_bus *bus, unsigned int devfn,
+				   int where);
+int cdns_pcie_hpa_host_init_root_port(struct cdns_pcie_rc *rc);
+int cdns_pcie_hpa_host_bar_ib_config(struct cdns_pcie_rc *rc,
+				     enum cdns_pcie_rp_bar bar,
+				     u64 cpu_addr, u64 size,
+				     unsigned long flags);
+int cdns_pcie_hpa_host_init_address_translation(struct cdns_pcie_rc *rc);
 #else
 static inline int cdns_pcie_host_link_setup(struct cdns_pcie_rc *rc)
 {
@@ -865,6 +873,10 @@ static inline int cdns_pcie_ep_setup(struct cdns_pcie_ep *ep)
 }
 #endif
 
+bool cdns_pcie_linkup(struct cdns_pcie *pcie);
+bool cdns_pcie_hpa_linkup(struct cdns_pcie *pcie);
+int cdns_pcie_hpa_start_link(struct cdns_pcie *pcie);
+void cdns_pcie_hpa_stop_link(struct cdns_pcie *pcie);
 void cdns_pcie_detect_quiet_min_delay_set(struct cdns_pcie *pcie);
 
 void cdns_pcie_set_outbound_region(struct cdns_pcie *pcie, u8 busnr, u8 fn,
