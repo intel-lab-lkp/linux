@@ -586,7 +586,18 @@ static int vpu_core_parse_dt(struct vpu_core *core, struct device_node *np)
 	}
 
 	core->fw.virt = memremap(core->fw.phys, core->fw.length, MEMREMAP_WC);
+	if (!core->fw.virt) {
+		dev_err(core->dev, "failed to remap fw region\n");
+		of_node_put(node);
+		return -ENOMEM;
+	}
 	core->rpc.virt = memremap(core->rpc.phys, core->rpc.length, MEMREMAP_WC);
+	if (!core->rpc.virt) {
+		dev_err(core->dev, "failed to remap rpc region\n");
+		memunmap(core->fw.virt);
+		of_node_put(node);
+		return -ENOMEM;
+	}
 	memset(core->rpc.virt, 0, core->rpc.length);
 
 	ret = vpu_iface_check_memory_region(core, core->rpc.phys, core->rpc.length);
