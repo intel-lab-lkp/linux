@@ -3400,9 +3400,9 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 		/* Insert into SID tree */
 		if (rb_find_add(&new_stream->node, &smmu->streams,
 				arm_smmu_streams_cmp_node)) {
-			dev_warn(master->dev, "stream %u already in tree\n",
+			dev_warn(master->dev, "Aliasing StreamID 0x%x unsupported, expect DMA to be broken\n",
 				 sid);
-			ret = -EINVAL;
+			ret = -ENODEV;
 			break;
 		}
 	}
