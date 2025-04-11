@@ -1786,7 +1786,7 @@ out:
 }
 
 /*
- * hl_cs_signal_sob_wraparound_handler: handle SOB value wrapaound case.
+ * hl_cs_signal_sob_wraparound_handler: handle SOB value wraparound case.
  * if the SOB value reaches the max value move to the other SOB reserved
  * to the queue.
  * @hdev: pointer to device structure
