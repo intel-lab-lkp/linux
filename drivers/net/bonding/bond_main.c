@@ -3105,7 +3105,13 @@ struct bond_vlan_tag *bond_verify_device_path(struct net_device *start_dev,
 	struct net_device *upper;
 	struct list_head  *iter;
 
-	if (start_dev == end_dev) {
+	/* If start_dev is an OVS port then we have encountered an openVswitch
+	 * bridge and can't go any further. The programming of the switch table
+	 * will determine what packets will be sent to the bond. We can make no
+	 * further assumptions about the network above the bond.
+	 */
+
+	if (start_dev == end_dev || netif_is_ovs_port(start_dev)) {
 		tags = kcalloc(level + 1, sizeof(*tags), GFP_ATOMIC);
 		if (!tags)
 			return ERR_PTR(-ENOMEM);
