@@ -17,6 +17,8 @@
 #include <linux/crc32.h>
 #include <linux/string_helpers.h>
 #include <linux/gpio/consumer.h>
+#include <linux/of_irq.h>
+#include <linux/suspend.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -144,6 +146,8 @@ struct ps_data {
 	u16   h2c_ps_interval;
 	u16   c2h_ps_interval;
 	struct gpio_desc *h2c_ps_gpio;
+	struct gpio_desc *c2h_ps_gpio;
+	s32 irq_handler;
 	struct hci_dev *hdev;
 	struct work_struct work;
 	struct timer_list ps_timer;
@@ -476,11 +480,13 @@ static void ps_timeout_func(struct timer_list *t)
 	}
 }
 
+static irqreturn_t btnxpuart_host_wakeup_irq_handler(int irq, void *priv);
 static int ps_setup(struct hci_dev *hdev)
 {
 	struct btnxpuart_dev *nxpdev = hci_get_drvdata(hdev);
 	struct serdev_device *serdev = nxpdev->serdev;
 	struct ps_data *psdata = &nxpdev->psdata;
+	int ret;
 
 	psdata->h2c_ps_gpio = devm_gpiod_get_optional(&serdev->dev, "device-wakeup",
 						      GPIOD_OUT_LOW);
@@ -493,11 +499,41 @@ static int ps_setup(struct hci_dev *hdev)
 	if (device_property_read_u8(&serdev->dev, "nxp,wakein-pin", &psdata->h2c_wakeup_gpio)) {
 		psdata->h2c_wakeup_gpio = 0xff; /* 0xff: use default pin/gpio */
 	} else if (!psdata->h2c_ps_gpio) {
-		bt_dev_warn(hdev, "nxp,wakein-pin property without device-wakeup GPIO");
+		bt_dev_warn(hdev, "nxp,wakein-pin property without device-wakeup-gpios");
 		psdata->h2c_wakeup_gpio = 0xff;
 	}
 
-	device_property_read_u8(&serdev->dev, "nxp,wakeout-pin", &psdata->c2h_wakeup_gpio);
+	psdata->c2h_ps_gpio = devm_gpiod_get_optional(&serdev->dev, "host-wakeup",
+						      GPIOD_IN);
+	if (IS_ERR(psdata->c2h_ps_gpio)) {
+		bt_dev_err(hdev, "Error fetching host-wakeup-gpios: %ld",
+			   PTR_ERR(psdata->h2c_ps_gpio));
+		return PTR_ERR(psdata->c2h_ps_gpio);
+	}
+
+	if (device_property_read_u8(&serdev->dev, "nxp,wakeout-pin", &psdata->c2h_wakeup_gpio)) {
+		psdata->c2h_wakeup_gpio = 0xff;
+		if (psdata->c2h_ps_gpio) {
+			bt_dev_warn(hdev, "host-wakeup-gpios property without nxp,wakeout-pin");
+			gpiod_put(psdata->c2h_ps_gpio);
+			psdata->c2h_ps_gpio = NULL;
+		}
+	} else if (!psdata->c2h_ps_gpio) {
+		bt_dev_warn(hdev, "nxp,wakeout-pin property without host-wakeup-gpios");
+		psdata->c2h_wakeup_gpio = 0xff;
+	}
+
+	if (psdata->c2h_ps_gpio) {
+		psdata->irq_handler = gpiod_to_irq(psdata->c2h_ps_gpio);
+		bt_dev_dbg(nxpdev->hdev, "host-wakeup irq_handler: %d", psdata->irq_handler);
+
+		ret = devm_request_irq(&serdev->dev, psdata->irq_handler,
+				       btnxpuart_host_wakeup_irq_handler,
+				       IRQF_ONESHOT | IRQF_TRIGGER_FALLING,
+				       dev_name(&serdev->dev), nxpdev);
+		disable_irq(psdata->irq_handler);
+		device_init_wakeup(&serdev->dev, true);
+	}
 
 	psdata->hdev = hdev;
 	INIT_WORK(&psdata->work, ps_work_func);
@@ -637,12 +673,10 @@ static void ps_init(struct hci_dev *hdev)
 
 	psdata->ps_state = PS_STATE_AWAKE;
 
-	if (psdata->c2h_wakeup_gpio) {
+	if (psdata->c2h_wakeup_gpio != 0xff)
 		psdata->c2h_wakeupmode = BT_HOST_WAKEUP_METHOD_GPIO;
-	} else {
+	else
 		psdata->c2h_wakeupmode = BT_HOST_WAKEUP_METHOD_NONE;
-		psdata->c2h_wakeup_gpio = 0xff;
-	}
 
 	psdata->cur_h2c_wakeupmode = WAKEUP_METHOD_INVALID;
 	if (psdata->h2c_ps_gpio)
@@ -1697,6 +1731,15 @@ static size_t btnxpuart_receive_buf(struct serdev_device *serdev,
 	return count;
 }
 
+static irqreturn_t btnxpuart_host_wakeup_irq_handler(int irq, void *priv)
+{
+	struct btnxpuart_dev *nxpdev = (struct btnxpuart_dev *)priv;
+
+	bt_dev_dbg(nxpdev->hdev, "Host wakeup interrupt");
+
+	return IRQ_HANDLED;
+}
+
 static void btnxpuart_write_wakeup(struct serdev_device *serdev)
 {
 	serdev_device_write_wakeup(serdev);
@@ -1821,6 +1864,12 @@ static int nxp_serdev_suspend(struct device *dev)
 	struct ps_data *psdata = &nxpdev->psdata;
 
 	ps_control(psdata->hdev, PS_STATE_SLEEP);
+
+	if (psdata->irq_handler > 0 &&
+	    device_may_wakeup(&nxpdev->serdev->dev)) {
+		enable_irq_wake(psdata->irq_handler);
+		enable_irq(psdata->irq_handler);
+	}
 	return 0;
 }
 
@@ -1828,6 +1877,11 @@ static int nxp_serdev_resume(struct device *dev)
 {
 	struct btnxpuart_dev *nxpdev = dev_get_drvdata(dev);
 	struct ps_data *psdata = &nxpdev->psdata;
+
+	if (psdata->irq_handler > 0) {
+		disable_irq(psdata->irq_handler);
+		disable_irq_wake(psdata->irq_handler);
+	}
 
 	ps_control(psdata->hdev, PS_STATE_AWAKE);
 	return 0;
