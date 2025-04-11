@@ -46,6 +46,7 @@ static unsigned int	rds_exthdr_size[__RDS_EXTHDR_MAX] = {
 [RDS_EXTHDR_RDMA_DEST]	= sizeof(struct rds_ext_header_rdma_dest),
 [RDS_EXTHDR_NPATHS]	= sizeof(u16),
 [RDS_EXTHDR_GEN_NUM]	= sizeof(u32),
+[RDS_EXTHDR_SPORT_IDX]  = 1,
 };
 
 void rds_message_addref(struct rds_message *rm)
