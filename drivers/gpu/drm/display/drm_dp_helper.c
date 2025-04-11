@@ -3933,7 +3933,7 @@ EXPORT_SYMBOL(drm_dp_pcon_convert_rgb_to_ycbcr);
  * Returns: %0 on success, negative error code on failure
  */
 int drm_edp_backlight_set_level(struct drm_dp_aux *aux, const struct drm_edp_backlight_info *bl,
-				u16 level)
+				u32 level)
 {
 	int ret;
 	u8 buf[2] = { 0 };
@@ -4047,7 +4047,7 @@ int drm_edp_backlight_enable(struct drm_dp_aux *aux, const struct drm_edp_backli
 		return ret < 0 ? ret : -EIO;
 	}
 
-	ret = drm_edp_backlight_set_level(aux, bl, level);
+	ret = drm_edp_backlight_set_level(aux, bl, (u32)level);
 	if (ret < 0)
 		return ret;
 	ret = drm_edp_backlight_set_enable(aux, bl, true);
@@ -4327,7 +4327,7 @@ static int dp_aux_backlight_update_status(struct backlight_device *bd)
 			bl->enabled = true;
 			return 0;
 		}
-		ret = drm_edp_backlight_set_level(bl->aux, &bl->info, brightness);
+		ret = drm_edp_backlight_set_level(bl->aux, &bl->info, (u32)brightness);
 	} else {
 		if (bl->enabled) {
 			drm_edp_backlight_disable(bl->aux, &bl->info);
