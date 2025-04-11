@@ -17,16 +17,6 @@
 
 #include "kernfs-internal.h"
 
-/*
- * Don't use rename_lock to piggy back on pr_cont_buf. We don't want to
- * call pr_cont() while holding rename_lock. Because sometimes pr_cont()
- * will perform wakeups when releasing console_sem. Holding rename_lock
- * will introduce deadlock if the scheduler reads the kernfs_name in the
- * wakeup path.
- */
-static DEFINE_SPINLOCK(kernfs_pr_cont_lock);
-static char kernfs_pr_cont_buf[PATH_MAX];	/* protected by pr_cont_lock */
-
 #define rb_to_kn(X) rb_entry((X), struct kernfs_node, rb)
 
 static bool __kernfs_active(struct kernfs_node *kn)
@@ -244,13 +234,15 @@ EXPORT_SYMBOL_GPL(kernfs_path_from_node);
 void pr_cont_kernfs_name(struct kernfs_node *kn)
 {
 	unsigned long flags;
+	struct kernfs_root *root = kernfs_root(kn);
 
-	spin_lock_irqsave(&kernfs_pr_cont_lock, flags);
+	spin_lock_irqsave(&root->kernfs_pr_cont_lock, flags);
 
-	kernfs_name(kn, kernfs_pr_cont_buf, sizeof(kernfs_pr_cont_buf));
-	pr_cont("%s", kernfs_pr_cont_buf);
+	kernfs_name(kn, root->kernfs_pr_cont_buf,
+			sizeof(root->kernfs_pr_cont_buf));
+	pr_cont("%s", root->kernfs_pr_cont_buf);
 
-	spin_unlock_irqrestore(&kernfs_pr_cont_lock, flags);
+	spin_unlock_irqrestore(&root->kernfs_pr_cont_lock, flags);
 }
 
 /**
@@ -263,11 +255,12 @@ void pr_cont_kernfs_path(struct kernfs_node *kn)
 {
 	unsigned long flags;
 	int sz;
+	struct kernfs_root *root = kernfs_root(kn);
 
-	spin_lock_irqsave(&kernfs_pr_cont_lock, flags);
+	spin_lock_irqsave(&root->kernfs_pr_cont_lock, flags);
 
-	sz = kernfs_path_from_node(kn, NULL, kernfs_pr_cont_buf,
-				   sizeof(kernfs_pr_cont_buf));
+	sz = kernfs_path_from_node(kn, NULL, root->kernfs_pr_cont_buf,
+				   sizeof(root->kernfs_pr_cont_buf));
 	if (sz < 0) {
 		if (sz == -E2BIG)
 			pr_cont("(name too long)");
@@ -276,10 +269,10 @@ void pr_cont_kernfs_path(struct kernfs_node *kn)
 		goto out;
 	}
 
-	pr_cont("%s", kernfs_pr_cont_buf);
+	pr_cont("%s", root->kernfs_pr_cont_buf);
 
 out:
-	spin_unlock_irqrestore(&kernfs_pr_cont_lock, flags);
+	spin_unlock_irqrestore(&root->kernfs_pr_cont_lock, flags);
 }
 
 /**
@@ -888,19 +881,21 @@ static struct kernfs_node *kernfs_walk_ns(struct kernfs_node *parent,
 {
 	ssize_t len;
 	char *p, *name;
+	struct kernfs_root *root = kernfs_root(parent);
 
-	lockdep_assert_held_read(&kernfs_root(parent)->kernfs_rwsem);
+	lockdep_assert_held_read(&root->kernfs_rwsem);
 
-	spin_lock_irq(&kernfs_pr_cont_lock);
+	spin_lock_irq(&root->kernfs_pr_cont_lock);
 
-	len = strscpy(kernfs_pr_cont_buf, path, sizeof(kernfs_pr_cont_buf));
+	len = strscpy(root->kernfs_pr_cont_buf, path,
+			sizeof(root->kernfs_pr_cont_buf));
 
 	if (len < 0) {
-		spin_unlock_irq(&kernfs_pr_cont_lock);
+		spin_unlock_irq(&root->kernfs_pr_cont_lock);
 		return NULL;
 	}
 
-	p = kernfs_pr_cont_buf;
+	p = root->kernfs_pr_cont_buf;
 
 	while ((name = strsep(&p, "/")) && parent) {
 		if (*name == '\0')
@@ -908,7 +903,7 @@ static struct kernfs_node *kernfs_walk_ns(struct kernfs_node *parent,
 		parent = kernfs_find_ns(parent, name, ns);
 	}
 
-	spin_unlock_irq(&kernfs_pr_cont_lock);
+	spin_unlock_irq(&root->kernfs_pr_cont_lock);
 
 	return parent;
 }
@@ -995,6 +990,7 @@ struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 	init_rwsem(&root->kernfs_supers_rwsem);
 	INIT_LIST_HEAD(&root->supers);
 	rwlock_init(&root->kernfs_rename_lock);
+	spin_lock_init(&root->kernfs_pr_cont_lock);
 
 	/*
 	 * On 64bit ino setups, id is ino.  On 32bit, low 32bits are ino.

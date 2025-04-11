@@ -55,6 +55,17 @@ struct kernfs_root {
 	rwlock_t		kernfs_rename_lock;
 
 	struct rcu_head		rcu;
+
+	/*
+	 * Don't use rename_lock to piggy back on pr_cont_buf. We don't want to
+	 * call pr_cont() while holding rename_lock. Because sometimes pr_cont()
+	 * will perform wakeups when releasing console_sem. Holding rename_lock
+	 * will introduce deadlock if the scheduler reads the kernfs_name in the
+	 * wakeup path.
+	 */
+	spinlock_t		kernfs_pr_cont_lock;
+	/* protected by pr_cont_lock */
+	char			kernfs_pr_cont_buf[PATH_MAX];
 };
 
 /* +1 to avoid triggering overflow warning when negating it */
