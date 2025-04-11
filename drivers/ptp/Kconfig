@@ -184,6 +184,10 @@ config PTP_1588_CLOCK_FC3W
 	  To compile this driver as a module, choose M here: the module
 	  will be called ptp_fc3.
 
+config PTP_1588_CLOCK_MARVELL
+	tristate
+	depends on PTP_1588_CLOCK
+
 config PTP_1588_CLOCK_MOCK
 	tristate "Mock-up PTP clock"
 	depends on PTP_1588_CLOCK
