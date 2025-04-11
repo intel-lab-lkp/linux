@@ -1047,8 +1047,36 @@ static void igt_make_evictable(struct list_head *objects)
 	cond_resched();
 }
 
+static int igt_try_pinning_pages(struct drm_i915_gem_object *obj,
+				 bool force_pin)
+{
+	int retries;
+	int max_retries;
+	int err;
+
+	retries = 0;
+	max_retries = 10;
+	do {
+		err = i915_gem_object_pin_pages_unlocked(obj);
+		if (!err)
+			break;
+
+		if (err != -ENXIO && err != -ENOMEM)
+			break;
+
+		if (!force_pin)
+			break;
+
+		retries++;
+		msleep(20);
+	} while (retries < max_retries);
+
+	return err;
+}
+
 static int igt_fill_mappable(struct intel_memory_region *mr,
-			     struct list_head *objects)
+			     struct list_head *objects,
+			     bool force_fill)
 {
 	u64 size, total;
 	int err;
@@ -1066,7 +1094,7 @@ static int igt_fill_mappable(struct intel_memory_region *mr,
 
 		list_add(&obj->st_link, objects);
 
-		err = i915_gem_object_pin_pages_unlocked(obj);
+		err = igt_try_pinning_pages(obj, force_fill);
 		if (err) {
 			if (err != -ENXIO && err != -ENOMEM)
 				goto err_close;
@@ -1208,7 +1236,8 @@ static int __igt_mmap_migrate(struct intel_memory_region **placements,
 	}
 
 	if (flags & IGT_MMAP_MIGRATE_FILL) {
-		err = igt_fill_mappable(placements[0], &objects);
+		err = igt_fill_mappable(placements[0], &objects,
+				flags & IGT_MMAP_MIGRATE_UNFAULTABLE);
 		if (err)
 			goto out_put;
 	}
