@@ -79,7 +79,11 @@ int mv88e6xxx_get_ts_info(struct dsa_switch *ds, int port,
 		SOF_TIMESTAMPING_TX_HARDWARE |
 		SOF_TIMESTAMPING_RX_HARDWARE |
 		SOF_TIMESTAMPING_RAW_HARDWARE;
+#ifdef USE_MARVELL_TAI
+	info->phc_index = marvell_tai_ptp_clock_index(chip->tai);
+#else
 	info->phc_index = ptp_clock_index(chip->ptp_clock);
+#endif
 	info->tx_types =
 		(1 << HWTSTAMP_TX_OFF) |
 		(1 << HWTSTAMP_TX_ON);
@@ -293,9 +297,13 @@ static void mv88e6xxx_get_rxts(struct mv88e6xxx_chip *chip,
 		if (mv88e6xxx_ts_valid(status) && seq_match(skb, seq_id)) {
 			ns = timehi << 16 | timelo;
 
+#ifdef USE_MARVELL_TAI
+			ns = marvell_tai_cyc2time(chip->tai, ns);
+#else
 			mv88e6xxx_reg_lock(chip);
 			ns = timecounter_cyc2time(&chip->tstamp_tc, ns);
 			mv88e6xxx_reg_unlock(chip);
+#endif
 			shwt = skb_hwtstamps(skb);
 			memset(shwt, 0, sizeof(*shwt));
 			shwt->hwtstamp = ns_to_ktime(ns);
@@ -352,7 +360,11 @@ bool mv88e6xxx_port_rxtstamp(struct dsa_switch *ds, int port,
 	else
 		skb_queue_tail(&ps->rx_queue, skb);
 
+#ifdef USE_MARVELL_TAI
+	marvell_tai_schedule(chip->tai, 0);
+#else
 	ptp_schedule_worker(chip->ptp_clock, 0);
+#endif
 
 	return true;
 }
@@ -413,9 +425,13 @@ static int mv88e6xxx_txtstamp_work(struct mv88e6xxx_chip *chip,
 
 	memset(&shhwtstamps, 0, sizeof(shhwtstamps));
 	time_raw = ((u32)departure_block[2] << 16) | departure_block[1];
+#ifdef USE_MARVELL_TAI
+	ns = marvell_tai_cyc2time(chip->tai, time_raw);
+#else
 	mv88e6xxx_reg_lock(chip);
 	ns = timecounter_cyc2time(&chip->tstamp_tc, time_raw);
 	mv88e6xxx_reg_unlock(chip);
+#endif
 	shhwtstamps.hwtstamp = ns_to_ktime(ns);
 
 	dev_dbg(chip->dev,
@@ -443,9 +459,8 @@ free_and_clear_skb:
 	return 0;
 }
 
-long mv88e6xxx_hwtstamp_work(struct ptp_clock_info *ptp)
+long mv88e6xxx_hwtstamp_work(struct mv88e6xxx_chip *chip)
 {
-	struct mv88e6xxx_chip *chip = ptp_to_chip(ptp);
 	struct dsa_switch *ds = chip->ds;
 	struct mv88e6xxx_port_hwtstamp *ps;
 	int i, restart = 0;
@@ -495,7 +510,11 @@ void mv88e6xxx_port_txtstamp(struct dsa_switch *ds, int port,
 	ps->tx_tstamp_start = jiffies;
 	ps->tx_seq_id = be16_to_cpu(hdr->sequence_id);
 
+#ifdef USE_MARVELL_TAI
+	marvell_tai_schedule(chip->tai, 0);
+#else
 	ptp_schedule_worker(chip->ptp_clock, 0);
+#endif
 }
 
 int mv88e6165_global_disable(struct mv88e6xxx_chip *chip)

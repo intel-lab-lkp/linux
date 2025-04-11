@@ -87,6 +87,7 @@ static int mv88e6xxx_tai_read(struct mv88e6xxx_chip *chip, int addr,
 	return chip->info->ops->avb_ops->tai_read(chip, addr, data, len);
 }
 
+#ifndef USE_MARVELL_TAI
 static int mv88e6xxx_tai_write(struct mv88e6xxx_chip *chip, int addr, u16 data)
 {
 	if (!chip->info->ops->avb_ops->tai_write)
@@ -94,6 +95,7 @@ static int mv88e6xxx_tai_write(struct mv88e6xxx_chip *chip, int addr, u16 data)
 
 	return chip->info->ops->avb_ops->tai_write(chip, addr, data);
 }
+#endif
 
 /* TODO: places where this are called should be using pinctrl */
 static int mv88e6352_set_gpio_func(struct mv88e6xxx_chip *chip, int pin,
@@ -138,9 +140,8 @@ mv88e6xxx_cc_coeff_get(struct mv88e6xxx_chip *chip)
 	}
 }
 
-static u64 mv88e6352_ptp_clock_read(const struct cyclecounter *cc)
+static u64 mv88e6352_ptp_clock_read(struct mv88e6xxx_chip *chip)
 {
-	struct mv88e6xxx_chip *chip = cc_to_chip(cc);
 	u16 phc_time[2];
 	int err;
 
@@ -152,9 +153,8 @@ static u64 mv88e6352_ptp_clock_read(const struct cyclecounter *cc)
 		return ((u32)phc_time[1] << 16) | phc_time[0];
 }
 
-static u64 mv88e6165_ptp_clock_read(const struct cyclecounter *cc)
+static u64 mv88e6165_ptp_clock_read(struct mv88e6xxx_chip *chip)
 {
-	struct mv88e6xxx_chip *chip = cc_to_chip(cc);
 	u16 phc_time[2];
 	int err;
 
@@ -166,6 +166,7 @@ static u64 mv88e6165_ptp_clock_read(const struct cyclecounter *cc)
 		return ((u32)phc_time[1] << 16) | phc_time[0];
 }
 
+#ifndef USE_MARVELL_TAI
 /* mv88e6352_config_eventcap - configure TAI event capture
  * @event: PTP_CLOCK_PPS (internal) or PTP_CLOCK_EXTTS (external)
  * @rising: zero for falling-edge trigger, else rising-edge trigger
@@ -324,6 +325,52 @@ static int mv88e6xxx_ptp_settime(struct ptp_clock_info *ptp,
 	return 0;
 }
 
+static int mv88e6xxx_ptp_enable_extts(struct mv88e6xxx_chip *chip,
+				      struct ptp_extts_request *req, int on)
+{
+	int pin;
+
+	/* Reject requests with unsupported flags */
+	if (req->flags & ~(PTP_ENABLE_FEATURE |
+			   PTP_RISING_EDGE |
+			   PTP_FALLING_EDGE |
+			   PTP_STRICT_FLAGS))
+		return -EOPNOTSUPP;
+
+	if (!chip->info->ops->ptp_ops->ptp_enable_extts)
+		return -EOPNOTSUPP;
+
+	pin = ptp_find_pin(chip->ptp_clock, PTP_PF_EXTTS, req->index);
+	if (pin < 0)
+		return -EBUSY;
+
+	return chip->info->ops->ptp_ops->ptp_enable_extts(chip, rq, on);
+}
+
+static int mv88e6xxx_ptp_enable(struct ptp_clock_info *ptp,
+				struct ptp_clock_request *rq, int on)
+{
+	struct mv88e6xxx_chip *chip = ptp_to_chip(ptp);
+
+	switch (rq->type) {
+	case PTP_CLK_REQ_EXTTS:
+		return mv88e6xxx_ptp_enable_extts(chip, &rq->extts, on);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static int mv88e6xxx_ptp_verify(struct ptp_clock_info *ptp, unsigned int pin,
+				enum ptp_pin_function func, unsigned int chan)
+{
+	struct mv88e6xxx_chip *chip = ptp_to_chip(ptp);
+
+	if (!chip->info->ops->ptp_ops->ptp_verify)
+		return -EOPNOTSUPP;
+
+	return chip->info->ops->ptp_ops->ptp_verify(chip, pin, func, chan);
+}
+
 static int mv88e6352_ptp_enable_extts(struct mv88e6xxx_chip *chip,
 				      struct ptp_clock_request *rq, int on)
 {
@@ -376,21 +423,30 @@ out:
 
 	return err;
 }
+#endif
 
-static int mv88e6352_ptp_enable(struct ptp_clock_info *ptp,
-				struct ptp_clock_request *rq, int on)
+static int mv88e6352_ptp_pin_setup(struct mv88e6xxx_chip *chip,
+				   int pin, unsigned int flags, int enable)
 {
-	struct mv88e6xxx_chip *chip = ptp_to_chip(ptp);
+	int func, err;
 
-	switch (rq->type) {
-	case PTP_CLK_REQ_EXTTS:
-		return mv88e6352_ptp_enable_extts(chip, rq, on);
-	default:
+	/* Reject requests to enable time stamping on both edges. */
+	if (flags & PTP_STRICT_FLAGS &&
+	    flags & PTP_ENABLE_FEATURE &&
+	    (flags & PTP_EXTTS_EDGES) == PTP_EXTTS_EDGES)
 		return -EOPNOTSUPP;
-	}
+
+	if (enable)
+		func = MV88E6352_G2_SCRATCH_GPIO_PCTL_EVREQ;
+	else
+		func = MV88E6352_G2_SCRATCH_GPIO_PCTL_GPIO;
+
+	err = mv88e6352_set_gpio_func(chip, pin, func, true);
+
+	return enable ? err : 0;
 }
 
-static int mv88e6352_ptp_verify(struct ptp_clock_info *ptp, unsigned int pin,
+static int mv88e6352_ptp_verify(struct mv88e6xxx_chip *chip, unsigned int pin,
 				enum ptp_pin_function func, unsigned int chan)
 {
 	switch (func) {
@@ -422,9 +478,13 @@ const struct mv88e6xxx_ptp_ops mv88e6165_ptp_ops = {
 
 const struct mv88e6xxx_ptp_ops mv88e6250_ptp_ops = {
 	.clock_read = mv88e6352_ptp_clock_read,
-	.ptp_enable = mv88e6352_ptp_enable,
 	.ptp_verify = mv88e6352_ptp_verify,
+#ifndef USE_MARVELL_TAI
+	.ptp_enable_extts = mv88e6352_ptp_enable_extts,
 	.event_work = mv88e6352_tai_event_work,
+#else
+	.ptp_pin_setup = mv88e6352_ptp_pin_setup,
+#endif
 	.port_enable = mv88e6352_hwtstamp_port_enable,
 	.port_disable = mv88e6352_hwtstamp_port_disable,
 	.n_ext_ts = 1,
@@ -445,9 +505,13 @@ const struct mv88e6xxx_ptp_ops mv88e6250_ptp_ops = {
 
 const struct mv88e6xxx_ptp_ops mv88e6352_ptp_ops = {
 	.clock_read = mv88e6352_ptp_clock_read,
-	.ptp_enable = mv88e6352_ptp_enable,
 	.ptp_verify = mv88e6352_ptp_verify,
+#ifndef USE_MARVELL_TAI
+	.ptp_enable_extts = mv88e6352_ptp_enable_extts,
 	.event_work = mv88e6352_tai_event_work,
+#else
+	.ptp_pin_setup = mv88e6352_ptp_pin_setup,
+#endif
 	.port_enable = mv88e6352_hwtstamp_port_enable,
 	.port_disable = mv88e6352_hwtstamp_port_disable,
 	.n_ext_ts = 1,
@@ -468,9 +532,13 @@ const struct mv88e6xxx_ptp_ops mv88e6352_ptp_ops = {
 
 const struct mv88e6xxx_ptp_ops mv88e6390_ptp_ops = {
 	.clock_read = mv88e6352_ptp_clock_read,
-	.ptp_enable = mv88e6352_ptp_enable,
 	.ptp_verify = mv88e6352_ptp_verify,
+#ifndef USE_MARVELL_TAI
+	.ptp_enable_extts = mv88e6352_ptp_enable_extts,
 	.event_work = mv88e6352_tai_event_work,
+#else
+	.ptp_pin_setup = mv88e6352_ptp_pin_setup,
+#endif
 	.port_enable = mv88e6352_hwtstamp_port_enable,
 	.port_disable = mv88e6352_hwtstamp_port_disable,
 	.set_ptp_cpu_port = mv88e6390_g1_set_ptp_cpu_port,
@@ -490,12 +558,32 @@ const struct mv88e6xxx_ptp_ops mv88e6390_ptp_ops = {
 		(1 << HWTSTAMP_FILTER_PTP_V2_DELAY_REQ),
 };
 
+static int mv88e6xxx_set_ptp_cpu_port(struct mv88e6xxx_chip *chip)
+{
+	const struct mv88e6xxx_ptp_ops *ptp_ops = chip->info->ops->ptp_ops;
+	struct dsa_port *dp;
+	int upstream = 0;
+	int err;
+
+	dsa_switch_for_each_user_port(dp, chip->ds) {
+		upstream = dsa_upstream_port(chip->ds, dp->index);
+		break;
+	}
+
+	err = ptp_ops->set_ptp_cpu_port(chip, upstream);
+	if (err)
+		dev_err(chip->dev, "Failed to set PTP CPU destination port!\n");
+
+	return err;
+}
+
+#ifndef USE_MARVELL_TAI
 static u64 mv88e6xxx_ptp_clock_read(const struct cyclecounter *cc)
 {
 	struct mv88e6xxx_chip *chip = cc_to_chip(cc);
 
 	if (chip->info->ops->ptp_ops->clock_read)
-		return chip->info->ops->ptp_ops->clock_read(cc);
+		return chip->info->ops->ptp_ops->clock_read(chip);
 
 	return 0;
 }
@@ -514,6 +602,11 @@ static void mv88e6xxx_ptp_overflow_check(struct work_struct *work)
 
 	schedule_delayed_work(&chip->overflow_work,
 			      MV88E6XXX_TAI_OVERFLOW_PERIOD);
+}
+
+static long mv88e6xxx_ptp_aux_work(struct ptp_clock_info *ptp)
+{
+	return mv88e6xxx_hwtstamp_work(ptp_to_chip(ptp));
 }
 
 int mv88e6xxx_ptp_setup(struct mv88e6xxx_chip *chip)
@@ -555,6 +648,7 @@ int mv88e6xxx_ptp_setup(struct mv88e6xxx_chip *chip)
 		ppd->index = i;
 		ppd->func = PTP_PF_NONE;
 	}
+
 	chip->ptp_clock_info.pin_config = chip->pin_config;
 
 	chip->ptp_clock_info.max_adj    = MV88E6XXX_MAX_ADJ_PPB;
@@ -562,25 +656,14 @@ int mv88e6xxx_ptp_setup(struct mv88e6xxx_chip *chip)
 	chip->ptp_clock_info.adjtime	= mv88e6xxx_ptp_adjtime;
 	chip->ptp_clock_info.gettime64	= mv88e6xxx_ptp_gettime;
 	chip->ptp_clock_info.settime64	= mv88e6xxx_ptp_settime;
-	chip->ptp_clock_info.enable	= ptp_ops->ptp_enable;
-	chip->ptp_clock_info.verify	= ptp_ops->ptp_verify;
-	chip->ptp_clock_info.do_aux_work = mv88e6xxx_hwtstamp_work;
+	chip->ptp_clock_info.enable	= mv88e6xxx_ptp_enable;
+	chip->ptp_clock_info.verify	= mv88e6xxx_ptp_verify;
+	chip->ptp_clock_info.do_aux_work = mv88e6xxx_ptp_aux_work;
 
 	if (ptp_ops->set_ptp_cpu_port) {
-		struct dsa_port *dp;
-		int upstream = 0;
-		int err;
-
-		dsa_switch_for_each_user_port(dp, chip->ds) {
-			upstream = dsa_upstream_port(chip->ds, dp->index);
-			break;
-		}
-
-		err = ptp_ops->set_ptp_cpu_port(chip, upstream);
-		if (err) {
-			dev_err(chip->dev, "Failed to set PTP CPU destination port!\n");
+		err = mv88e6xxx_set_ptp_cpu_port(chip);
+		if (err)
 			return err;
-		}
 	}
 
 	chip->ptp_clock = ptp_clock_register(&chip->ptp_clock_info, chip->dev);
@@ -604,3 +687,208 @@ void mv88e6xxx_ptp_free(struct mv88e6xxx_chip *chip)
 		chip->ptp_clock = NULL;
 	}
 }
+#else
+static struct mv88e6xxx_chip *dev_to_chip(struct device *dev)
+{
+	struct dsa_switch *ds = dev_get_drvdata(dev);
+
+	return ds->priv;
+}
+
+static int mv88e6xxx_tai_enable(struct device *dev)
+{
+	return 0;
+}
+
+static u64 mv88e6xxx_tai_clock_read(struct device *dev,
+				    struct ptp_system_timestamp *sts)
+{
+	struct mv88e6xxx_chip *chip = dev_to_chip(dev);
+	int err = 0;
+
+	if (chip->info->ops->ptp_ops->clock_read) {
+		mv88e6xxx_reg_lock(chip);
+		ptp_read_system_prets(sts);
+		err = chip->info->ops->ptp_ops->clock_read(chip);
+		ptp_read_system_postts(sts);
+		mv88e6xxx_reg_unlock(chip);
+	}
+
+	return err;
+}
+
+static int mv88e6xxx_tai_extts_read(struct device *dev, int reg,
+				    struct marvell_extts *extts)
+{
+	struct mv88e6xxx_chip *chip = dev_to_chip(dev);
+	u16 regs[3];
+	int ret;
+
+	mv88e6xxx_reg_lock(chip);
+	ret = chip->info->ops->avb_ops->tai_read(chip, reg, regs, 3);
+	if (ret < 0)
+		goto unlock;
+
+	extts->status = regs[0];
+	extts->time = regs[1] | regs[2] << 16;
+
+	/* Clear valid if set */
+	if (regs[0] & MV_STATUS_EVENTCAPVALID) {
+		chip->info->ops->avb_ops->tai_write(chip, reg, 0);
+		ret = 1;
+	} else {
+		ret = 0;
+	}
+
+unlock:
+	mv88e6xxx_reg_unlock(chip);
+
+	return ret;
+}
+
+static int mv88e6xxx_tai_pin_verify(struct device *dev, int pin,
+				    enum ptp_pin_function func,
+				    unsigned int chan)
+{
+	struct mv88e6xxx_chip *chip = dev_to_chip(dev);
+
+	if (!chip->info->ops->ptp_ops->ptp_verify)
+		return -EOPNOTSUPP;
+
+	return chip->info->ops->ptp_ops->ptp_verify(chip, pin, func, chan);
+}
+
+static int mv88e6xxx_tai_pin_setup(struct device *dev, int pin,
+				   unsigned int flags, int enable)
+{
+	struct mv88e6xxx_chip *chip = dev_to_chip(dev);
+
+	if (!chip->info->ops->ptp_ops->ptp_pin_setup)
+		return -EOPNOTSUPP;
+
+	return chip->info->ops->ptp_ops->ptp_pin_setup(chip, pin, flags,
+						       enable);
+}
+
+static int mv88e6xxx_tai_write(struct device *dev, u8 reg, u16 val)
+{
+	struct mv88e6xxx_chip *chip = dev_to_chip(dev);
+	int err;
+
+	mv88e6xxx_reg_lock(chip);
+	err = chip->info->ops->avb_ops->tai_write(chip, reg, val);
+	mv88e6xxx_reg_unlock(chip);
+
+	return err;
+}
+
+static int mv88e6xxx_tai_modify(struct device *dev, u8 reg, u16 mask, u16 val)
+{
+	struct mv88e6xxx_chip *chip = dev_to_chip(dev);
+	u16 old, new;
+	int err;
+
+	mv88e6xxx_reg_lock(chip);
+	err = chip->info->ops->avb_ops->tai_read(chip, reg, &old, 1);
+	if (err < 0)
+		goto unlock;
+
+	new = (old & ~mask) | val;
+	if (new != old)
+		err = chip->info->ops->avb_ops->tai_write(chip, reg, new);
+
+unlock:
+	mv88e6xxx_reg_unlock(chip);
+	return err;
+}
+
+static int mv88e6xxx_ptp_global_write(struct device *dev, u8 reg, u16 val)
+{
+	return 0;
+}
+
+static int mv88e6xxx_ptp_port_read_ts(struct device *dev, struct marvell_ts *ts,
+				      u8 reg)
+{
+	return 0;
+}
+
+static int mv88e6xxx_ptp_port_write(struct device *dev, u8 reg, u16 val)
+{
+	return 0;
+}
+
+static int mv88e6xxx_ptp_port_modify(struct device *dev, u8 reg, u16 mask,
+				     u16 val)
+{
+	return 0;
+}
+
+static long mv88e6xxx_ptp_aux_work(struct device *dev)
+{
+	return mv88e6xxx_hwtstamp_work(dev_to_chip(dev));
+}
+
+static const struct marvell_ptp_ops mv88e6xxx_ptp_ops = {
+	.tai_enable = mv88e6xxx_tai_enable,
+	.tai_clock_read = mv88e6xxx_tai_clock_read,
+	.tai_extts_read = mv88e6xxx_tai_extts_read,
+	.tai_pin_verify = mv88e6xxx_tai_pin_verify,
+	.tai_pin_setup = mv88e6xxx_tai_pin_setup,
+	.tai_write = mv88e6xxx_tai_write,
+	.tai_modify = mv88e6xxx_tai_modify,
+	.ptp_global_write = mv88e6xxx_ptp_global_write,
+	.ptp_port_read_ts = mv88e6xxx_ptp_port_read_ts,
+	.ptp_port_write = mv88e6xxx_ptp_port_write,
+	.ptp_port_modify = mv88e6xxx_ptp_port_modify,
+	.ptp_aux_work = mv88e6xxx_ptp_aux_work,
+};
+
+int mv88e6xxx_ptp_setup(struct mv88e6xxx_chip *chip)
+{
+	const struct mv88e6xxx_ptp_ops *ptp_ops = chip->info->ops->ptp_ops;
+	struct marvell_tai_param tai_param;
+	int i, n_pins, err;
+
+	/* Set up the cycle counter */
+	chip->cc_coeffs = mv88e6xxx_cc_coeff_get(chip);
+	if (IS_ERR(chip->cc_coeffs))
+		return PTR_ERR(chip->cc_coeffs);
+
+	if (ptp_ops->set_ptp_cpu_port) {
+		err = mv88e6xxx_set_ptp_cpu_port(chip);
+		if (err)
+			return err;
+	}
+
+	memset(&tai_param, 0, sizeof(tai_param));
+	tai_param.cc_mult_num = chip->cc_coeffs->cc_mult_num;
+	tai_param.cc_mult_den = chip->cc_coeffs->cc_mult_dem;
+	tai_param.cc_mult = chip->cc_coeffs->cc_mult;
+	tai_param.cc_shift = chip->cc_coeffs->cc_shift;
+	tai_param.n_ext_ts = ptp_ops->n_ext_ts;
+
+	n_pins = mv88e6xxx_num_gpio(chip);
+	for (i = 0; i < n_pins; ++i) {
+		struct ptp_pin_desc *ppd = &chip->pin_config[i];
+
+		snprintf(ppd->name, sizeof(ppd->name), "mv88e6xxx_gpio%d", i);
+		ppd->index = i;
+		ppd->func = PTP_PF_NONE;
+	}
+
+	mv88e6xxx_reg_unlock(chip);
+	err = marvell_tai_probe(&chip->tai, &mv88e6xxx_ptp_ops, &tai_param,
+				chip->pin_config, n_pins,
+				dev_name(chip->dev), chip->dev);
+	mv88e6xxx_reg_lock(chip);
+
+	return err;
+}
+
+void mv88e6xxx_ptp_free(struct mv88e6xxx_chip *chip)
+{
+	if (chip->tai)
+		marvell_tai_remove(chip->tai);
+}
+#endif

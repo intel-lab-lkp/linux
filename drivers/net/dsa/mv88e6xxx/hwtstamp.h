@@ -129,6 +129,7 @@ int mv88e6352_hwtstamp_port_enable(struct mv88e6xxx_chip *chip, int port);
 int mv88e6352_hwtstamp_port_disable(struct mv88e6xxx_chip *chip, int port);
 int mv88e6165_global_enable(struct mv88e6xxx_chip *chip);
 int mv88e6165_global_disable(struct mv88e6xxx_chip *chip);
+long mv88e6xxx_hwtstamp_work(struct mv88e6xxx_chip *chip);
 
 #else /* !CONFIG_NET_DSA_MV88E6XXX_PTP */
 
