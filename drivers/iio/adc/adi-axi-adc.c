@@ -53,6 +53,7 @@
 #define   AXI_AD485X_PACKET_FORMAT_20BIT	0x0
 #define   AXI_AD485X_PACKET_FORMAT_24BIT	0x1
 #define   AXI_AD485X_PACKET_FORMAT_32BIT	0x2
+#define   AXI_AD408X_CNTRL_3_SELF_SYNC_EN_MSK	BIT(1)
 #define   AXI_AD408X_CNTRL_3_FILTER_EN_MSK	BIT(0)
 
 #define ADI_AXI_ADC_REG_DRP_STATUS		0x0074
@@ -436,6 +437,22 @@ static int axi_adc_ad408x_bitslip_disable(struct iio_backend *back)
 				 AXI_AD408X_CTRL_BITSLIP_EN_MSK);
 }
 
+static int axi_adc_ad408x_self_sync_enable(struct iio_backend *back)
+{
+	struct adi_axi_adc_state *st = iio_backend_get_priv(back);
+
+	return regmap_set_bits(st->regmap, ADI_AXI_ADC_REG_CNTRL_3,
+			       AXI_AD408X_CNTRL_3_SELF_SYNC_EN_MSK);
+}
+
+static int axi_adc_ad408x_self_sync_disable(struct iio_backend *back)
+{
+	struct adi_axi_adc_state *st = iio_backend_get_priv(back);
+
+	return regmap_clear_bits(st->regmap, ADI_AXI_ADC_REG_CNTRL_3,
+				 AXI_AD408X_CNTRL_3_SELF_SYNC_EN_MSK);
+}
+
 static struct iio_buffer *axi_adc_request_buffer(struct iio_backend *back,
 						 struct iio_dev *indio_dev)
 {
@@ -628,6 +645,8 @@ static const struct iio_backend_ops adi_ad408x_ops = {
 	.filter_disable = axi_adc_ad408x_filter_disable,
 	.data_alignment_enable = axi_adc_ad408x_bitslip_enable,
 	.data_alignment_disable = axi_adc_ad408x_bitslip_disable,
+	.self_sync_enable = axi_adc_ad408x_self_sync_enable,
+	.self_sync_disable = axi_adc_ad408x_self_sync_disable,
 	.debugfs_reg_access = iio_backend_debugfs_ptr(axi_adc_reg_access),
 	.debugfs_print_chan_status = iio_backend_debugfs_ptr(axi_adc_debugfs_print_chan_status),
 };
