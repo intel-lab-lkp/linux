@@ -191,7 +191,12 @@ static inline int range_is_allowed(unsigned long pfn, unsigned long size)
 	u64 cursor = from;
 
 	while (cursor < to) {
-		if (!devmem_is_allowed(pfn))
+		/*
+		 * Any restricted access is treated as "no access", i.e.
+		 * handle devmem_is_allowed() returning "2" to indicate
+		 * restricted access.
+		 */
+		if (devmem_is_allowed(pfn) != 1)
 			return 0;
 		cursor += PAGE_SIZE;
 		pfn++;
