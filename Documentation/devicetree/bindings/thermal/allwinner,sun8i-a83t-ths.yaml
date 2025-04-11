@@ -24,17 +24,21 @@ properties:
       - allwinner,sun50i-h5-ths
       - allwinner,sun50i-h6-ths
       - allwinner,sun50i-h616-ths
+      - allwinner,sun55i-a523-ths0
+      - allwinner,sun55i-a523-ths1
 
   clocks:
     minItems: 1
     items:
       - description: Bus Clock
+      - description: GPADC Clock
       - description: Module Clock
 
   clock-names:
     minItems: 1
     items:
       - const: bus
+      - const: gpadc
       - const: mod
 
   reg:
@@ -107,6 +111,7 @@ allOf:
             enum:
               - allwinner,sun8i-h3-ths
               - allwinner,sun20i-d1-ths
+              - allwinner,sun55i-a523-ths0
 
     then:
       properties:
