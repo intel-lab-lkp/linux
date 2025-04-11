@@ -229,7 +229,7 @@ int rxe_odp_mr_copy(struct rxe_mr *mr, u64 iova, void *addr, int length,
 	if (length == 0)
 		return 0;
 
-	if (unlikely(!mr->umem->is_odp))
+	if (unlikely(!(mr->umem && mr->umem->is_odp)))
 		return -EOPNOTSUPP;
 
 	switch (dir) {
