@@ -62,12 +62,17 @@ amdgpu_userqueue_cleanup(struct amdgpu_userq_mgr *uq_mgr,
 	struct amdgpu_device *adev = uq_mgr->adev;
 	const struct amdgpu_userq_funcs *uq_funcs = adev->userq_funcs[queue->queue_type];
 	struct dma_fence *f = queue->last_fence;
+	struct drm_file *file;
+	char proc_log[50];
 	int ret;
 
 	if (f && !dma_fence_is_signaled(f)) {
 		ret = dma_fence_wait_timeout(f, true, msecs_to_jiffies(100));
 		if (ret <= 0) {
-			DRM_ERROR("Timed out waiting for fence f=%p\n", f);
+			file = uq_mgr->file;
+			drm_process_info(file, proc_log, sizeof(proc_log));
+			DRM_ERROR("Timed out waiting for fence f=%p for %s\n",
+				  f, proc_log);
 			return;
 		}
 	}
@@ -427,6 +432,8 @@ amdgpu_userqueue_resume_all(struct amdgpu_userq_mgr *uq_mgr)
 	const struct amdgpu_userq_funcs *userq_funcs;
 	struct amdgpu_usermode_queue *queue;
 	int queue_id;
+	struct drm_file *file;
+	char proc_log[50];
 	int ret = 0;
 
 	/* Resume all the queues for this process */
@@ -435,8 +442,12 @@ amdgpu_userqueue_resume_all(struct amdgpu_userq_mgr *uq_mgr)
 		ret = userq_funcs->resume(uq_mgr, queue);
 	}
 
-	if (ret)
-		DRM_ERROR("Failed to resume all the queue\n");
+	if (ret) {
+		file = uq_mgr->file;
+		drm_process_info(file, proc_log, sizeof(proc_log));
+		DRM_ERROR("Failed to resume all the queue for %s\n",
+			  proc_log);
+		}
 	return ret;
 }
 
@@ -585,6 +596,8 @@ amdgpu_userqueue_suspend_all(struct amdgpu_userq_mgr *uq_mgr)
 	const struct amdgpu_userq_funcs *userq_funcs;
 	struct amdgpu_usermode_queue *queue;
 	int queue_id;
+	struct drm_file *file;
+	char proc_log[50];
 	int ret = 0;
 
 	/* Try to suspend all the queues in this process ctx */
@@ -593,8 +606,12 @@ amdgpu_userqueue_suspend_all(struct amdgpu_userq_mgr *uq_mgr)
 		ret += userq_funcs->suspend(uq_mgr, queue);
 	}
 
-	if (ret)
-		DRM_ERROR("Couldn't suspend all the queues\n");
+	if (ret) {
+		file = uq_mgr->file;
+		drm_process_info(file, proc_log, sizeof(proc_log));
+		DRM_ERROR("Couldn't suspend all the queues for %s\n",
+			  proc_log);
+		}
 	return ret;
 }
 
@@ -602,6 +619,8 @@ static int
 amdgpu_userqueue_wait_for_signal(struct amdgpu_userq_mgr *uq_mgr)
 {
 	struct amdgpu_usermode_queue *queue;
+	struct drm_file *file;
+	char proc_log[50];
 	int queue_id, ret;
 
 	idr_for_each_entry(&uq_mgr->userq_idr, queue, queue_id) {
@@ -611,7 +630,10 @@ amdgpu_userqueue_wait_for_signal(struct amdgpu_userq_mgr *uq_mgr)
 			continue;
 		ret = dma_fence_wait_timeout(f, true, msecs_to_jiffies(100));
 		if (ret <= 0) {
-			DRM_ERROR("Timed out waiting for fence f=%p\n", f);
+			file = uq_mgr->file;
+			drm_process_info(file, proc_log, sizeof(proc_log));
+			DRM_ERROR("Timed out waiting for fence f=%p for %s\n",
+				  f, proc_log);
 			return -ETIMEDOUT;
 		}
 	}
@@ -624,19 +646,26 @@ amdgpu_userqueue_suspend(struct amdgpu_userq_mgr *uq_mgr,
 			 struct amdgpu_eviction_fence *ev_fence)
 {
 	int ret;
+	struct drm_file *file;
+	char proc_log[50];
 	struct amdgpu_fpriv *fpriv = uq_mgr_to_fpriv(uq_mgr);
 	struct amdgpu_eviction_fence_mgr *evf_mgr = &fpriv->evf_mgr;
 
 	/* Wait for any pending userqueue fence work to finish */
 	ret = amdgpu_userqueue_wait_for_signal(uq_mgr);
 	if (ret) {
-		DRM_ERROR("Not suspending userqueue, timeout waiting for work\n");
+		file = uq_mgr->file;
+		drm_process_info(file, proc_log, sizeof(proc_log));
+		DRM_ERROR("Not suspending userqueue, timeout waiting for %s\n",
+			  proc_log);
 		return;
 	}
 
 	ret = amdgpu_userqueue_suspend_all(uq_mgr);
 	if (ret) {
-		DRM_ERROR("Failed to evict userqueue\n");
+		file = uq_mgr->file;
+		drm_process_info(file, proc_log, sizeof(proc_log));
+		DRM_ERROR("Failed to evict userqueue for %s\n", proc_log);
 		return;
 	}
 
