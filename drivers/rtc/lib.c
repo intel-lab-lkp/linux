@@ -46,7 +46,6 @@ EXPORT_SYMBOL(rtc_year_days);
  * rtc_time64_to_tm - converts time64_t to rtc_time.
  *
  * @time:	The number of seconds since 01-01-1970 00:00:00.
- *		(Must be positive.)
  * @tm:		Pointer to the struct rtc_time.
  */
 void rtc_time64_to_tm(time64_t time, struct rtc_time *tm)
@@ -59,11 +58,39 @@ void rtc_time64_to_tm(time64_t time, struct rtc_time *tm)
 		day_of_year, month, day;
 	bool is_Jan_or_Feb, is_leap_year;
 
-	/* time must be positive */
-	days = div_s64_rem(time, 86400, &secs);
+	bool is_negative = false;
+
+	/* Handle negative time values (dates before 1970-01-01) */
+	if (time < 0) {
+		/* Store that we had a negative value */
+		is_negative = true;
+
+		/* Convert to positive value for the algorithm, but
+		 * we'll subtract one more day to handle the boundary correctly
+		 */
+		time = -time;
+
+		/* Get days and seconds */
+		days = div_s64_rem(time, 86400, &secs);
+
+		/* If we have seconds, we need to adjust to the previous day */
+		if (secs > 0) {
+			days += 1;
+			secs = 86400 - secs;
+		}
+
+		/* Make days negative again */
+		days = -days;
+	} else {
+		/* Positive time value - normal case */
+		days = div_s64_rem(time, 86400, &secs);
+	}
 
 	/* day of the week, 1970-01-01 was a Thursday */
 	tm->tm_wday = (days + 4) % 7;
+	/* Ensure tm_wday is always positive */
+	if (tm->tm_wday < 0)
+		tm->tm_wday += 7;
 
 	/*
 	 * The following algorithm is, basically, Proposition 6.3 of Neri
@@ -93,7 +120,7 @@ void rtc_time64_to_tm(time64_t time, struct rtc_time *tm)
 	 * thus, is slightly different from [1].
 	 */
 
-	udays		= ((u32) days) + 719468;
+	udays		= days + 719468;
 
 	u32tmp		= 4 * udays + 3;
 	century		= u32tmp / 146097;
@@ -146,8 +173,7 @@ EXPORT_SYMBOL(rtc_time64_to_tm);
  */
 int rtc_valid_tm(struct rtc_time *tm)
 {
-	if (tm->tm_year < 70 ||
-	    tm->tm_year > (INT_MAX - 1900) ||
+	if (tm->tm_year > (INT_MAX - 1900) ||
 	    ((unsigned int)tm->tm_mon) >= 12 ||
 	    tm->tm_mday < 1 ||
 	    tm->tm_mday > rtc_month_days(tm->tm_mon,
