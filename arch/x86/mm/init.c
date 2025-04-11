@@ -861,18 +861,23 @@ void __init poking_init(void)
  * area traditionally contains BIOS code and data regions used by X, dosemu,
  * and similar apps. Since they map the entire memory range, the whole range
  * must be allowed (for mapping), but any areas that would otherwise be
- * disallowed are flagged as being "zero filled" instead of rejected.
+ * disallowed are flagged as being "zero filled" instead of rejected, for
+ * read()/write().
+ *
  * Access has to be given to non-kernel-ram areas as well, these contain the
  * PCI mmio resources as well as potential bios/acpi data regions.
  */
 int devmem_is_allowed(unsigned long pagenr)
 {
+	bool platform_allowed = x86_platform.devmem_is_allowed(pagenr);
+
 	if (region_intersects(PFN_PHYS(pagenr), PAGE_SIZE,
 				IORESOURCE_SYSTEM_RAM, IORES_DESC_NONE)
 			!= REGION_DISJOINT) {
 		/*
-		 * For disallowed memory regions in the low 1MB range,
-		 * request that the page be shown as all zeros.
+		 * For disallowed memory regions in the low 1MB range, request
+		 * that the page be shown as all zeros for read()/write(), fail
+		 * mmap()
 		 */
 		if (pagenr < 256)
 			return 2;
@@ -885,14 +890,20 @@ int devmem_is_allowed(unsigned long pagenr)
 	 * restricted resource under CONFIG_STRICT_DEVMEM.
 	 */
 	if (iomem_is_exclusive(pagenr << PAGE_SHIFT)) {
-		/* Low 1MB bypasses iomem restrictions. */
-		if (pagenr < 256)
+		/*
+		 * Low 1MB bypasses iomem restrictions unless the platform says
+		 * the physical address is not suitable for direct access.
+		 */
+		if (pagenr < 256) {
+			if (!platform_allowed)
+				return 2;
 			return 1;
+		}
 
 		return 0;
 	}
 
-	return 1;
+	return platform_allowed;
 }
 
 void free_init_pages(const char *what, unsigned long begin, unsigned long end)
