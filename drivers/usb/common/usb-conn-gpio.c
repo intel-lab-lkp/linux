@@ -155,13 +155,19 @@ static int usb_charger_get_property(struct power_supply *psy,
 
 static int usb_conn_psy_register(struct usb_conn_info *info)
 {
+	static atomic_t usb_conn_no = ATOMIC_INIT(0);
+	unsigned long n;
 	struct device *dev = info->dev;
 	struct power_supply_desc *desc = &info->desc;
 	struct power_supply_config cfg = {
 		.fwnode = dev_fwnode(dev),
 	};
 
-	desc->name = "usb-charger";
+	n = atomic_inc_return(&usb_conn_no) - 1;
+	desc->name = devm_kasprintf(dev, GFP_KERNEL, "usb-charger-%ld", n);
+	if (!desc->name)
+		return -ENOMEM;
+
 	desc->properties = usb_charger_properties;
 	desc->num_properties = ARRAY_SIZE(usb_charger_properties);
 	desc->get_property = usb_charger_get_property;
