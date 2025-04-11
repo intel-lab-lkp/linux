@@ -240,6 +240,19 @@ config MARVELL_PHY
 	help
 	  Currently has a driver for the 88E1XXX
 
+config MARVELL_PHY_PTP
+	bool "Marvell PHY PTP support"
+	depends on NETWORK_PHY_TIMESTAMPING
+	depends on (PTP_1588_CLOCK = y && MARVELL_PHY = y) || \
+		   (PTP_1588_CLOCK && MARVELL_PHY = m)
+	select PTP_1588_CLOCK_MARVELL
+	help
+	  Support PHY timestamping on Marvell 88E1510, 88E1512, 88E1514
+	  and 88E1518 PHYs.
+
+	  N.B. In order for this to be fully functional, your MAC driver
+	  must call the skb_tx_timestamp() function.
+
 config MARVELL_10G_PHY
 	tristate "Marvell Alaska 10Gbit PHYs"
 	help

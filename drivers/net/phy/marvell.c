@@ -38,6 +38,8 @@
 #include <asm/irq.h>
 #include <linux/uaccess.h>
 
+#include "marvell_ptp.h"
+
 #define MII_MARVELL_PHY_PAGE		22
 #define MII_MARVELL_COPPER_PAGE		0x00
 #define MII_MARVELL_FIBER_PAGE		0x01
@@ -3647,7 +3649,7 @@ static const struct sfp_upstream_ops m88e1510_sfp_ops = {
 	.disconnect_phy = phy_sfp_disconnect_phy,
 };
 
-static int m88e1510_probe(struct phy_device *phydev)
+static int m88e15xx_probe(struct phy_device *phydev)
 {
 	int err;
 
@@ -3656,6 +3658,22 @@ static int m88e1510_probe(struct phy_device *phydev)
 		return err;
 
 	return phy_sfp_probe(phydev, &m88e1510_sfp_ops);
+}
+
+static int m88e1510_probe(struct phy_device *phydev)
+{
+	int err;
+
+	err = m88e15xx_probe(phydev);
+	if (err)
+		return err;
+
+	return marvell_phy_ptp_probe(phydev);
+}
+
+static void m88e1510_remove(struct phy_device *phydev)
+{
+	marvell_phy_ptp_remove(phydev);
 }
 
 static struct phy_driver marvell_drivers[] = {
@@ -3916,6 +3934,7 @@ static struct phy_driver marvell_drivers[] = {
 		.features = PHY_GBIT_FIBRE_FEATURES,
 		.flags = PHY_POLL_CABLE_TEST,
 		.probe = m88e1510_probe,
+		.remove = m88e1510_remove,
 		.config_init = m88e1510_config_init,
 		.config_aneg = m88e1510_config_aneg,
 		.read_status = marvell_read_status,
