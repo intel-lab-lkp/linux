@@ -7,14 +7,16 @@ $schema: http://devicetree.org/meta-schemas/core.yaml#
 title: Cadence PCIe host controller
 
 maintainers:
-  - Tom Joseph <tjoseph@cadence.com>
+  - Manikandan K Pillai <mpillai@cadence.com>
 
 allOf:
   - $ref: cdns-pcie-host.yaml#
 
 properties:
   compatible:
-    const: cdns,cdns-pcie-host
+    enum:
+      - cdns,cdns-pcie-host
+      - cdns,cdns-pcie-hpa-host
 
   reg:
     maxItems: 2
