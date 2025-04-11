@@ -1052,6 +1052,55 @@ static int ionic_get_module_eeprom(struct net_device *netdev,
 	return err;
 }
 
+static int ionic_get_module_eeprom_by_page(struct net_device *netdev,
+					   const struct ethtool_module_eeprom *page_data,
+					   struct netlink_ext_ack *extack)
+{
+	struct ionic_lif *lif = netdev_priv(netdev);
+	struct ionic_dev *idev = &lif->ionic->idev;
+	u32 err = -EINVAL;
+	u8 *src;
+
+	if (!page_data->length)
+		return -EINVAL;
+
+	if (page_data->bank != 0) {
+		NL_SET_ERR_MSG_MOD(extack, "Only bank 0 is supported");
+		return -EINVAL;
+	}
+
+	if (page_data->offset < 128 && page_data->page != 0) {
+		NL_SET_ERR_MSG_MOD(extack, "High side only for pages other than 0");
+		return -EINVAL;
+	}
+
+	if ((page_data->length + page_data->offset) > 256) {
+		NL_SET_ERR_MSG_MOD(extack, "Read past the end of the page");
+		return -EINVAL;
+	}
+
+	switch (page_data->page) {
+	case 0:
+		src = &idev->port_info->status.xcvr.sprom[page_data->offset];
+		break;
+	case 1:
+		src = &idev->port_info->sprom_page1[page_data->offset - 128];
+		break;
+	case 2:
+		src = &idev->port_info->sprom_page2[page_data->offset - 128];
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	memset(page_data->data, 0, page_data->length);
+	err = ionic_do_module_copy(page_data->data, src, page_data->length);
+	if (err)
+		return err;
+
+	return page_data->length;
+}
+
 static int ionic_get_ts_info(struct net_device *netdev,
 			     struct kernel_ethtool_ts_info *info)
 {
@@ -1199,6 +1248,7 @@ static const struct ethtool_ops ionic_ethtool_ops = {
 	.set_tunable		= ionic_set_tunable,
 	.get_module_info	= ionic_get_module_info,
 	.get_module_eeprom	= ionic_get_module_eeprom,
+	.get_module_eeprom_by_page	= ionic_get_module_eeprom_by_page,
 	.get_pauseparam		= ionic_get_pauseparam,
 	.set_pauseparam		= ionic_set_pauseparam,
 	.get_fecparam		= ionic_get_fecparam,
