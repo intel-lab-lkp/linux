@@ -143,6 +143,10 @@ static int acpi_wakeup_cpu(u32 apicid, unsigned long start_ip)
 		acpi_mp_wake_mailbox = memremap(acpi_mp_wake_mailbox_paddr,
 						sizeof(*acpi_mp_wake_mailbox),
 						MEMREMAP_WB);
+		if (!acpi_mp_wake_mailbox) {
+			pr_err("Failed to remap MADT mailbox\n");
+			return -ENOMEM;
+		}
 	}
 
 	/*
