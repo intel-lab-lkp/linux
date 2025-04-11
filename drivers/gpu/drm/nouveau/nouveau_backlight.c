@@ -234,6 +234,8 @@ nv50_backlight_init(struct nouveau_backlight *bl,
 		    const struct backlight_ops **ops)
 {
 	struct nouveau_drm *drm = nouveau_drm(nv_encoder->base.base.dev);
+	struct drm_luminance_range_info *luminance_range =
+		&nv_conn->base.display_info.luminance_range;
 
 	/*
 	 * Note when this runs the connectors have not been probed yet,
@@ -261,7 +263,8 @@ nv50_backlight_init(struct nouveau_backlight *bl,
 			NV_DEBUG(drm, "DPCD backlight controls supported on %s\n",
 				 nv_conn->base.name);
 
-			ret = drm_edp_backlight_init(&nv_conn->aux, &bl->edp_info, 0, edp_dpcd,
+			ret = drm_edp_backlight_init(&nv_conn->aux, &bl->edp_info,
+						     luminance_range, 0, edp_dpcd,
 						     &current_level, &current_mode, false);
 			if (ret < 0)
 				return ret;
