@@ -7,7 +7,7 @@
 
 #ifndef _MV88E6XXX_CHIP_H
 #define _MV88E6XXX_CHIP_H
-#define USE_MARVELL_TAI
+
 #include <linux/idr.h>
 #include <linux/if_vlan.h>
 #include <linux/irq.h>
@@ -413,29 +413,9 @@ struct mv88e6xxx_chip {
 	/* GPIO resources */
 	u8 gpio_data[2];
 
-#ifdef USE_MARVELL_TAI
 	struct marvell_tai	*tai;
-#else
 
-	/* This cyclecounter abstracts the switch PTP time.
-	 * reg_lock must be held for any operation that read()s.
-	 */
-	struct cyclecounter	tstamp_cc;
-	struct timecounter	tstamp_tc;
-	struct delayed_work	overflow_work;
-#endif
-	const struct mv88e6xxx_cc_coeffs *cc_coeffs;
-
-#ifndef USE_MARVELL_TAI
-	struct ptp_clock	*ptp_clock;
-	struct ptp_clock_info	ptp_clock_info;
-	struct delayed_work	tai_event_work;
-#endif
 	struct ptp_pin_desc	pin_config[MV88E6XXX_MAX_GPIO];
-#ifndef USE_MARVELL_TAI
-	u16 trig_config;
-	u16 evcap_config;
-#endif
 	u16 enable_count;
 
 	/* Current ingress and egress monitor ports */
