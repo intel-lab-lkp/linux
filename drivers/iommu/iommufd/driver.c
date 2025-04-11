@@ -50,6 +50,46 @@ void iommufd_object_abort(struct iommufd_ctx *ictx, struct iommufd_object *obj)
 }
 EXPORT_SYMBOL_NS_GPL(iommufd_object_abort, "IOMMUFD");
 
+/* Driver should report the immap_id to user space for mmap() syscalls */
+int iommufd_ctx_alloc_mmap(struct iommufd_ctx *ictx, phys_addr_t base,
+			   size_t size, bool is_io, unsigned long *immap_id)
+{
+	struct iommufd_mmap *immap;
+	int rc;
+
+	if (WARN_ON_ONCE(!immap_id))
+		return -EINVAL;
+	if (base & ~PAGE_MASK)
+		return -EINVAL;
+	if (!size || size & ~PAGE_MASK)
+		return -EINVAL;
+
+	immap = kzalloc(sizeof(*immap), GFP_KERNEL);
+	if (!immap)
+		return -ENOMEM;
+	immap->pfn_start = base >> PAGE_SHIFT;
+	immap->pfn_end = immap->pfn_start + (size >> PAGE_SHIFT) - 1;
+	immap->is_io = is_io;
+
+	rc = mtree_alloc_range(&ictx->mt_mmap, immap_id, immap, sizeof(immap),
+			       0, LONG_MAX >> PAGE_SHIFT, GFP_KERNEL);
+	if (rc < 0) {
+		kfree(immap);
+		return rc;
+	}
+
+	/* mmap() syscall would right-shift the immap_id to vma->vm_pgoff */
+	*immap_id <<= PAGE_SHIFT;
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(iommufd_ctx_alloc_mmap, "IOMMUFD");
+
+void iommufd_ctx_free_mmap(struct iommufd_ctx *ictx, unsigned long immap_id)
+{
+	kfree(mtree_erase(&ictx->mt_mmap, immap_id >> PAGE_SHIFT));
+}
+EXPORT_SYMBOL_NS_GPL(iommufd_ctx_free_mmap, "IOMMUFD");
+
 /* Caller should xa_lock(&viommu->vdevs) to protect the return value */
 struct device *iommufd_viommu_find_dev(struct iommufd_viommu *viommu,
 				       unsigned long vdev_id)
