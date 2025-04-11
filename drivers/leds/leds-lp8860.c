@@ -91,7 +91,6 @@
  * @regmap: Devices register map
  * @eeprom_regmap: EEPROM register map
  * @enable_gpio: VDDIO/EN gpio to enable communication interface
- * @regulator: LED supply regulator pointer
  */
 struct lp8860_led {
 	struct mutex lock;
