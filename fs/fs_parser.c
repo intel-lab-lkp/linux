@@ -399,6 +399,9 @@ bool validate_constant_table(const struct constant_table *tbl, size_t tbl_size,
 	}
 
 	for (i = 0; i < tbl_size; i++) {
+		if (!tbl[i].name && (i + 1 == tbl_size))
+			break;
+
 		if (!tbl[i].name) {
 			pr_err("VALIDATE C-TBL[%zu]: Null\n", i);
 			good = false;
@@ -411,13 +414,13 @@ bool validate_constant_table(const struct constant_table *tbl, size_t tbl_size,
 				good = false;
 			}
 			if (c > 0) {
-				pr_err("VALIDATE C-TBL[%zu]: Missorted %s>=%s\n",
+				pr_err("VALIDATE C-TBL[%zu]: Missorted %s>%s\n",
 				       i, tbl[i-1].name, tbl[i].name);
 				good = false;
 			}
 		}
 
-		if (tbl[i].value != special &&
+		if (tbl[i].name && tbl[i].value != special &&
 		    (tbl[i].value < low || tbl[i].value > high)) {
 			pr_err("VALIDATE C-TBL[%zu]: %s->%d const out of range (%d-%d)\n",
 			       i, tbl[i].name, tbl[i].value, low, high);
