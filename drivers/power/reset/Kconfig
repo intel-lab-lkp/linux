@@ -341,3 +341,25 @@ menuconfig PSCRR
 	  be recorded unless hardware provides the reset cause.
 
 	  If unsure, say N.
+
+if PSCRR
+
+config PSCRR_NVMEM
+	tristate "Generic NVMEM-based Power State Change Reason Recorder"
+	depends on NVMEM || !NVMEM
+	help
+	  This option enables support for storing power state change reasons
+	  (such as shutdown, reboot, or power failure events) into a designated
+	  NVMEM (Non-Volatile Memory) cell.
+
+	  This feature allows embedded systems to retain power transition
+	  history even after a full system restart or power loss. It is useful
+	  for post-mortem debugging, automated recovery strategies, and
+	  improving system reliability.
+
+	  The NVMEM cell used for storing these reasons can be dynamically
+	  configured via module parameters.
+
+	  If unsure, say N.
+
+endif
