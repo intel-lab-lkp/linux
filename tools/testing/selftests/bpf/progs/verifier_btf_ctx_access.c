@@ -65,4 +65,13 @@ __naked void ctx_access_u32_pointer_reject_8(void)
 "	::: __clobber_all);
 }
 
+SEC("tp_btf/kfree")
+__description("btf_ctx_access const void pointer accept")
+int ctx_access_const_void_pointer_accept(void)
+{
+	/* load 2nd argument value (const void pointer) */
+	asm volatile ("r2 = *(u64 *)(r1 + 8); ");
+	return 0;
+}
+
 char _license[] SEC("license") = "GPL";
