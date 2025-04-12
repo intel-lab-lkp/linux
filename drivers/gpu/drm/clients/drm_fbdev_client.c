@@ -152,7 +152,11 @@ int drm_fbdev_client_setup(struct drm_device *dev, const struct drm_format_info 
 
 	ret = drm_client_init(dev, &fb_helper->client, "fbdev", &drm_fbdev_client_funcs);
 	if (ret) {
-		drm_err(dev, "Failed to register client: %d\n", ret);
+		if (ret != -EOPNOTSUPP)
+			drm_err(dev, "Failed to register client: %d\n", ret);
+		else
+			ret = 0;
+
 		goto err_drm_client_init;
 	}
 
