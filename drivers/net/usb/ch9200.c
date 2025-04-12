@@ -304,24 +304,27 @@ static int ch9200_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 
 static int get_mac_address(struct usbnet *dev, unsigned char *data)
 {
-	int err = 0;
 	unsigned char mac_addr[0x06];
-	int rd_mac_len = 0;
+	int rd_mac_len;
 
 	netdev_dbg(dev->net, "%s:\n\tusbnet VID:%0x PID:%0x\n", __func__,
 		   le16_to_cpu(dev->udev->descriptor.idVendor),
 		   le16_to_cpu(dev->udev->descriptor.idProduct));
 
-	memset(mac_addr, 0, sizeof(mac_addr));
-	rd_mac_len = control_read(dev, REQUEST_READ, 0,
-				  MAC_REG_STATION_L, mac_addr, 0x02,
-				  CONTROL_TIMEOUT_MS);
-	rd_mac_len += control_read(dev, REQUEST_READ, 0, MAC_REG_STATION_M,
-				   mac_addr + 2, 0x02, CONTROL_TIMEOUT_MS);
-	rd_mac_len += control_read(dev, REQUEST_READ, 0, MAC_REG_STATION_H,
-				   mac_addr + 4, 0x02, CONTROL_TIMEOUT_MS);
-	if (rd_mac_len != ETH_ALEN)
-		err = -EINVAL;
+	rd_mac_len = control_read(dev, REQUEST_READ, 0, MAC_REG_STATION_L,
+				  mac_addr, 0x02, CONTROL_TIMEOUT_MS);
+	if (rd_mac_len < 0)
+		return rd_mac_len;
+
+	rd_mac_len = control_read(dev, REQUEST_READ, 0, MAC_REG_STATION_M,
+				  mac_addr + 2, 0x02, CONTROL_TIMEOUT_MS);
+	if (rd_mac_len < 0)
+		return rd_mac_len;
+
+	rd_mac_len = control_read(dev, REQUEST_READ, 0, MAC_REG_STATION_H,
+				  mac_addr + 4, 0x02, CONTROL_TIMEOUT_MS);
+	if (rd_mac_len < 0)
+		return rd_mac_len;
 
 	data[0] = mac_addr[5];
 	data[1] = mac_addr[4];
@@ -330,7 +333,7 @@ static int get_mac_address(struct usbnet *dev, unsigned char *data)
 	data[4] = mac_addr[1];
 	data[5] = mac_addr[0];
 
-	return err;
+	return 0;
 }
 
 static int ch9200_bind(struct usbnet *dev, struct usb_interface *intf)
@@ -386,6 +389,9 @@ static int ch9200_bind(struct usbnet *dev, struct usb_interface *intf)
 			       CONTROL_TIMEOUT_MS);
 
 	retval = get_mac_address(dev, addr);
+	if (retval < 0)
+		return retval;
+
 	eth_hw_addr_set(dev->net, addr);
 
 	return retval;
