@@ -139,6 +139,7 @@ unsigned int part_in_flight(struct block_device *part)
 
 	return inflight;
 }
+EXPORT_SYMBOL_GPL(part_in_flight);
 
 static void part_in_flight_rw(struct block_device *part,
 		unsigned int inflight[2])

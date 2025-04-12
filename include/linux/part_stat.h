@@ -79,4 +79,5 @@ static inline void part_stat_set_all(struct block_device *part, int value)
 #define part_stat_local_read_cpu(part, field, cpu)			\
 	local_read(&(part_stat_get_cpu(part, field, cpu)))
 
+unsigned int part_in_flight(struct block_device *part);
 #endif /* _LINUX_PART_STAT_H */
