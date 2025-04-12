@@ -484,11 +484,14 @@ static int samsung_keypad_runtime_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct samsung_keypad *keypad = platform_get_drvdata(pdev);
 	unsigned int val;
+	int ret;
 
 	if (keypad->stopped)
 		return 0;
 
-	clk_enable(keypad->clk);
+	ret = clk_enable(keypad->clk);
+	if (ret)
+		return ret;
 
 	val = readl(keypad->base + SAMSUNG_KEYIFCON);
 	val &= ~SAMSUNG_KEYIFCON_WAKEUPEN;
