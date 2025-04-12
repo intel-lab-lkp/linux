@@ -247,7 +247,16 @@ xfs_da3_node_verify(
 	    ichdr.count > mp->m_attr_geo->node_ents)
 		return __this_address;
 
-	/* XXX: hash order check? */
+	/* Check hash order */
+	uint32_t prev_hash = be32_to_cpu(ichdr.btree[0].hashval);
+
+	for (int i = 1; i < ichdr.count; i++) {
+		uint32_t curr_hash = be32_to_cpu(ichdr.btree[i].hashval);
+
+		if (curr_hash <= prev_hash)
+			return __this_address;
+		prev_hash = curr_hash;
+	}
 
 	return NULL;
 }
