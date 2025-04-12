@@ -268,6 +268,10 @@ static void i2c_dw_xfer_init(struct dw_i2c_dev *dev)
 	regmap_update_bits(dev->map, DW_IC_CON, DW_IC_CON_10BITADDR_MASTER,
 			   ic_con);
 
+	/* i2c-core-smbus.c: Only I2C_SMBUS_QUICK has msg[0].len = 0 */
+	if (dev->msgs[0].len == 0)
+		ic_tar |= DW_IC_TAR_SMBUS_QUICK_CMD | DW_IC_TAR_SPECIAL;
+
 	/*
 	 * Set the slave (target) address and enable 10-bit addressing mode
 	 * if applicable.
@@ -473,6 +477,16 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 
 		regmap_read(dev->map, DW_IC_RXFLR, &flr);
 		rx_limit = dev->rx_fifo_depth - flr;
+
+		/* i2c-core-smbus.c: Only I2C_SMBUS_QUICK has msg[0].len = 0 */
+		if (buf_len == 0) {
+			regmap_write(
+				dev->map, DW_IC_DATA_CMD,
+				*buf | DW_IC_DATA_CMD_STOP |
+				((msgs[dev->msg_write_idx].flags & I2C_M_RD) ?
+				DW_IC_DATA_CMD_CMD : 0)
+			);
+		}
 
 		while (buf_len > 0 && tx_limit > 0 && rx_limit > 0) {
 			u32 cmd = 0;
@@ -919,7 +933,9 @@ void i2c_dw_configure_master(struct dw_i2c_dev *dev)
 {
 	struct i2c_timings *t = &dev->timings;
 
-	dev->functionality = I2C_FUNC_10BIT_ADDR | DW_IC_DEFAULT_FUNCTIONALITY;
+	dev->functionality = I2C_FUNC_10BIT_ADDR |
+			     I2C_FUNC_SMBUS_QUICK |
+			     DW_IC_DEFAULT_FUNCTIONALITY;
 
 	dev->master_cfg = DW_IC_CON_MASTER | DW_IC_CON_SLAVE_DISABLE |
 			  DW_IC_CON_RESTART_EN;
