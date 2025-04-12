@@ -6383,6 +6383,14 @@ struct btf *bpf_prog_get_target_btf(const struct bpf_prog *prog)
 		return prog->aux->attach_btf;
 }
 
+static bool is_void_ptr(struct btf *btf, const struct btf_type *t)
+{
+	/* skip modifiers */
+	t = btf_type_skip_modifiers(btf, t->type, NULL);
+
+	return t->type == 0;
+}
+
 static bool is_int_ptr(struct btf *btf, const struct btf_type *t)
 {
 	/* skip modifiers */
@@ -6776,7 +6784,7 @@ bool btf_ctx_access(int off, int size, enum bpf_access_type type,
 		}
 	}
 
-	if (t->type == 0)
+	if (is_void_ptr(btf, t))
 		/* This is a pointer to void.
 		 * It is the same as scalar from the verifier safety pov.
 		 * No further pointer walking is allowed.
