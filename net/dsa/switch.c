@@ -702,22 +702,24 @@ static int dsa_port_do_vlan_add(struct dsa_port *dp,
 		return err;
 	}
 
-	/* No need to propagate on shared ports the existing VLANs that were
-	 * re-notified after just the flags have changed. This would cause a
-	 * refcount bump which we need to avoid, since it unbalances the
-	 * additions with the deletions.
-	 */
-	if (vlan->changed)
-		return 0;
-
 	mutex_lock(&dp->vlans_lock);
 
 	v = dsa_vlan_find(&dp->vlans, vlan);
 	if (v) {
-		refcount_inc(&v->refcount);
-		trace_dsa_vlan_add_bump(dp, vlan, &v->refcount);
+		/* Do not update the refcount for updated VLANs. This would
+		 * cause an imbalance with deletions.
+		 */
+		if (vlan->changed) {
+			err = ds->ops->port_vlan_add(ds, port, vlan, extack);
+			trace_dsa_vlan_add_hw(dp, vlan, err);
+		} else {
+			refcount_inc(&v->refcount);
+			trace_dsa_vlan_add_bump(dp, vlan, &v->refcount);
+		}
 		goto out;
 	}
+
+	WARN_ON(vlan->changed);
 
 	v = kzalloc(sizeof(*v), GFP_KERNEL);
 	if (!v) {
