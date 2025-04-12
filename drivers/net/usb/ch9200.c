@@ -338,12 +338,12 @@ static int get_mac_address(struct usbnet *dev, unsigned char *data)
 
 static int ch9200_bind(struct usbnet *dev, struct usb_interface *intf)
 {
-	int retval = 0;
+	int retval;
 	unsigned char data[2];
 	u8 addr[ETH_ALEN];
 
 	retval = usbnet_get_endpoints(dev, intf);
-	if (retval)
+	if (retval < 0)
 		return retval;
 
 	dev->mii.dev = dev->net;
@@ -361,32 +361,44 @@ static int ch9200_bind(struct usbnet *dev, struct usb_interface *intf)
 	data[1] = 0x0F;
 	retval = control_write(dev, REQUEST_WRITE, 0, MAC_REG_THRESHOLD, data,
 			       0x02, CONTROL_TIMEOUT_MS);
+	if (retval < 0)
+		return retval;
 
 	data[0] = 0xA0;
 	data[1] = 0x90;
 	retval = control_write(dev, REQUEST_WRITE, 0, MAC_REG_FIFO_DEPTH, data,
 			       0x02, CONTROL_TIMEOUT_MS);
+	if (retval < 0)
+		return retval;
 
 	data[0] = 0x30;
 	data[1] = 0x00;
 	retval = control_write(dev, REQUEST_WRITE, 0, MAC_REG_PAUSE, data,
 			       0x02, CONTROL_TIMEOUT_MS);
+	if (retval < 0)
+		return retval;
 
 	data[0] = 0x17;
 	data[1] = 0xD8;
 	retval = control_write(dev, REQUEST_WRITE, 0, MAC_REG_FLOW_CONTROL,
 			       data, 0x02, CONTROL_TIMEOUT_MS);
+	if (retval < 0)
+		return retval;
 
 	/* Undocumented register */
 	data[0] = 0x01;
 	data[1] = 0x00;
 	retval = control_write(dev, REQUEST_WRITE, 0, 254, data, 0x02,
 			       CONTROL_TIMEOUT_MS);
+	if (retval < 0)
+		return retval;
 
 	data[0] = 0x5F;
 	data[1] = 0x0D;
 	retval = control_write(dev, REQUEST_WRITE, 0, MAC_REG_CTRL, data, 0x02,
 			       CONTROL_TIMEOUT_MS);
+	if (retval < 0)
+		return retval;
 
 	retval = get_mac_address(dev, addr);
 	if (retval < 0)
@@ -394,7 +406,7 @@ static int ch9200_bind(struct usbnet *dev, struct usb_interface *intf)
 
 	eth_hw_addr_set(dev->net, addr);
 
-	return retval;
+	return 0;
 }
 
 static const struct driver_info ch9200_info = {
