@@ -1167,6 +1167,10 @@ static int gfs2_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* Set up the buffer cache and fill in some fake block size values
 	   to allow us to read-in the on-disk superblock. */
 	sdp->sd_sb.sb_bsize = sb_min_blocksize(sb, 512);
+	if (!sdp->sd_sb.sb_bsize) {
+		error = -EINVAL;
+		goto fail_free;
+	}
 	sdp->sd_sb.sb_bsize_shift = sb->s_blocksize_bits;
 	sdp->sd_fsb2bb_shift = sdp->sd_sb.sb_bsize_shift - 9;
 	sdp->sd_fsb2bb = BIT(sdp->sd_fsb2bb_shift);
