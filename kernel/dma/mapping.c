@@ -918,7 +918,7 @@ EXPORT_SYMBOL(dma_set_coherent_mask);
  * the system, else %false.  Lack of addressing bits is the prime reason for
  * bounce buffering, but might not be the only one.
  */
-bool dma_addressing_limited(struct device *dev)
+static bool __dma_addressing_limited(struct device *dev)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 
@@ -929,6 +929,17 @@ bool dma_addressing_limited(struct device *dev)
 	if (unlikely(ops) || use_dma_iommu(dev))
 		return false;
 	return !dma_direct_all_ram_mapped(dev);
+}
+
+bool dma_addressing_limited(struct device *dev)
+{
+	bool ret = __dma_addressing_limited(dev);
+
+	WARN_ONCE((ret == true),
+		"%s might have lower performance due to bounce buffering",
+		dev_name(dev));
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(dma_addressing_limited);
 
