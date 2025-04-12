@@ -122,6 +122,8 @@ static int sunxi_sram_show(struct seq_file *s, void *data)
 			continue;
 
 		sram_addr_p = of_get_address(sram_node, 0, NULL, NULL);
+		if (!sram_addr_p)
+			continue;
 
 		seq_printf(s, "sram@%08x\n",
 			   be32_to_cpu(*sram_addr_p));
@@ -134,6 +136,8 @@ static int sunxi_sram_show(struct seq_file *s, void *data)
 
 			section_addr_p = of_get_address(section_node, 0,
 							NULL, NULL);
+			if (!section_addr_p)
+				continue;
 
 			seq_printf(s, "\tsection@%04x\t(%s)\n",
 				   be32_to_cpu(*section_addr_p),
