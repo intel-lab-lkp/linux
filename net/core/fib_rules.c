@@ -268,7 +268,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 		goto out;
 
 	oifindex = READ_ONCE(rule->oifindex);
-	if (oifindex && (oifindex != fl->flowi_oif))
+	if (oifindex && (oifindex != (fl->flowi_l3mdev ? : fl->flowi_oif)))
 		goto out;
 
 	if ((rule->mark ^ fl->flowi_mark) & rule->mark_mask)
