@@ -4114,6 +4114,13 @@ static int intel_pmu_hw_config(struct perf_event *event)
 			event->hw.flags |= PERF_X86_EVENT_NEEDS_BRANCH_STACK;
 	}
 
+	/*
+	 * Force the leader to be a LBR event. So LBRs can be reset
+	 * with the leader event. See intel_pmu_lbr_del() for details.
+	 */
+	if (has_branch_stack(event) && !has_branch_stack(event->group_leader))
+		return -EINVAL;
+
 	if (branch_sample_counters(event)) {
 		struct perf_event *leader, *sibling;
 		int num = 0;
@@ -4157,13 +4164,6 @@ static int intel_pmu_hw_config(struct perf_event *event)
 			  ~(PERF_SAMPLE_BRANCH_PLM_ALL |
 			    PERF_SAMPLE_BRANCH_COUNTERS)))
 			event->hw.flags  &= ~PERF_X86_EVENT_NEEDS_BRANCH_STACK;
-
-		/*
-		 * Force the leader to be a LBR event. So LBRs can be reset
-		 * with the leader event. See intel_pmu_lbr_del() for details.
-		 */
-		if (!intel_pmu_needs_branch_stack(leader))
-			return -EINVAL;
 	}
 
 	if (intel_pmu_needs_branch_stack(event)) {
