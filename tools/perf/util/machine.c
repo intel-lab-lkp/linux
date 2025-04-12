@@ -128,14 +128,14 @@ out:
 	return 0;
 }
 
-struct machine *machine__new_host(void)
+struct machine *machine__new_host(bool create_kmaps)
 {
 	struct machine *machine = malloc(sizeof(*machine));
 
 	if (machine != NULL) {
 		machine__init(machine, "", HOST_KERNEL_ID);
 
-		if (machine__create_kernel_maps(machine) < 0)
+		if (create_kmaps && machine__create_kernel_maps(machine) < 0)
 			goto out_delete;
 
 		machine->env = &perf_env;
@@ -149,7 +149,7 @@ out_delete:
 
 struct machine *machine__new_kallsyms(void)
 {
-	struct machine *machine = machine__new_host();
+	struct machine *machine = machine__new_host(true);
 	/*
 	 * FIXME:
 	 * 1) We should switch to machine__load_kallsyms(), i.e. not explicitly

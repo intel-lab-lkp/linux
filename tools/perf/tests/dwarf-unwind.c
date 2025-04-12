@@ -203,7 +203,7 @@ noinline int test__dwarf_unwind(struct test_suite *test __maybe_unused,
 	struct thread *thread;
 	int err = -1;
 
-	machine = machine__new_host();
+	machine = machine__new_host(true);
 	if (!machine) {
 		pr_err("Could not get machine\n");
 		return -1;
