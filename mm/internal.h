@@ -11,6 +11,7 @@
 #include <linux/khugepaged.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>
+#include <linux/oom.h>
 #include <linux/pagemap.h>
 #include <linux/pagewalk.h>
 #include <linux/rmap.h>
@@ -128,6 +129,24 @@ static inline int folio_nr_pages_mapped(const struct folio *folio)
 	if (IS_ENABLED(CONFIG_NO_PAGE_MAPCOUNT))
 		return -1;
 	return atomic_read(&folio->_nr_pages_mapped) & FOLIO_PAGES_MAPPED;
+}
+
+/*
+ * Return true if a folio is exclusive and belongs to an exiting or
+ * oom-reaped process; otherwise, return false.
+ */
+static inline bool exclusive_folio_of_dying_process(struct folio *folio,
+		struct vm_area_struct *vma)
+{
+	if (folio_maybe_mapped_shared(folio))
+		return false;
+
+	if (!atomic_read(&vma->vm_mm->mm_users))
+		return true;
+	if (check_stable_address_space(vma->vm_mm))
+		return true;
+
+	return false;
 }
 
 /*

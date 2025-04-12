@@ -1515,7 +1515,14 @@ static __always_inline void zap_present_folio_ptes(struct mmu_gather *tlb,
 				*force_flush = true;
 			}
 		}
-		if (pte_young(ptent) && likely(vma_has_recency(vma)))
+
+		/*
+		 * Skip marking exclusive file folios as accessed for processes that are
+		 * exiting or have been reaped due to OOM. This prevents unnecessary
+		 * promotion of folios that won't benefit the new process being launched.
+		 */
+		if (!exclusive_folio_of_dying_process(folio, vma) && pte_young(ptent) &&
+				likely(vma_has_recency(vma)))
 			folio_mark_accessed(folio);
 		rss[mm_counter(folio)] -= nr;
 	} else {
