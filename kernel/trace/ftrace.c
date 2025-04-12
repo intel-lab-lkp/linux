@@ -5954,7 +5954,7 @@ int register_ftrace_direct(struct ftrace_ops *ops, unsigned long addr)
 
 	/* Make a copy hash to place the new and the old entries in */
 	size = hash->count + direct_functions->count;
-	if (size > 32)
+	if (size < 32)
 		size = 32;
 	new_hash = alloc_ftrace_hash(fls(size));
 	if (!new_hash)
