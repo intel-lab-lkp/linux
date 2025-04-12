@@ -238,7 +238,6 @@ struct crypto_ahash {
 };
 
 struct crypto_shash {
-	unsigned int descsize;
 	struct crypto_tfm base;
 };
 
@@ -820,7 +819,7 @@ static inline void crypto_shash_clear_flags(struct crypto_shash *tfm, u32 flags)
  */
 static inline unsigned int crypto_shash_descsize(struct crypto_shash *tfm)
 {
-	return tfm->descsize;
+	return crypto_shash_alg(tfm)->descsize;
 }
 
 static inline void *shash_desc_ctx(struct shash_desc *desc)
