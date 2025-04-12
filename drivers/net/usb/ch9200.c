@@ -182,7 +182,7 @@ static int ch9200_mdio_read(struct net_device *netdev, int phy_id, int loc)
 		   __func__, phy_id, loc);
 
 	if (phy_id != 0)
-		return -ENODEV;
+		return 0;
 
 	ret = control_read(dev, REQUEST_READ, 0, loc * 2, buff, 0x02,
 			   CONTROL_TIMEOUT_MS);
