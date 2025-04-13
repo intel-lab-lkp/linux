@@ -637,14 +637,13 @@ static int nfs_page_async_flush(struct folio *folio,
 				struct nfs_pageio_descriptor *pgio)
 {
 	struct nfs_page *req;
-	int ret = 0;
+	int ret;
 
 	req = nfs_lock_and_join_requests(folio);
-	if (!req)
+	if (IS_ERR_OR_NULL(req)) {
+		ret = PTR_ERR_OR_ZERO(req);
 		goto out;
-	ret = PTR_ERR(req);
-	if (IS_ERR(req))
-		goto out;
+	}
 
 	nfs_folio_set_writeback(folio);
 	WARN_ON_ONCE(test_bit(PG_CLEAN, &req->wb_flags));
