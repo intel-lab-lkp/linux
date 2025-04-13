@@ -355,8 +355,6 @@ int qxl_io_update_area(struct qxl_device *qdev, struct qxl_bo *surf,
 void qxl_io_reset(struct qxl_device *qdev);
 void qxl_io_monitors_config(struct qxl_device *qdev);
 int qxl_ring_push(struct qxl_ring *ring, const void *new_elt, bool interruptible);
-void qxl_io_flush_release(struct qxl_device *qdev);
-void qxl_io_flush_surfaces(struct qxl_device *qdev);
 
 union qxl_release_info *qxl_release_map(struct qxl_device *qdev,
 					struct qxl_release *release);

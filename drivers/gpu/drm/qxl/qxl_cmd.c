@@ -356,16 +356,6 @@ void qxl_io_notify_oom(struct qxl_device *qdev)
 	outb(0, qdev->io_base + QXL_IO_NOTIFY_OOM);
 }
 
-void qxl_io_flush_release(struct qxl_device *qdev)
-{
-	outb(0, qdev->io_base + QXL_IO_FLUSH_RELEASE);
-}
-
-void qxl_io_flush_surfaces(struct qxl_device *qdev)
-{
-	wait_for_io_cmd(qdev, 0, QXL_IO_FLUSH_SURFACES_ASYNC);
-}
-
 void qxl_io_destroy_primary(struct qxl_device *qdev)
 {
 	wait_for_io_cmd(qdev, 0, QXL_IO_DESTROY_PRIMARY_ASYNC);
