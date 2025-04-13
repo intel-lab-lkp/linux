@@ -1226,6 +1226,11 @@ static void mac80211_hwsim_set_tsf(struct ieee80211_hw *hw,
 {
 	struct mac80211_hwsim_data *data = hw->priv;
 	u64 now = mac80211_hwsim_get_tsf(hw, vif);
+	struct ieee80211_bss_conf *conf = link_conf_dereference_protected(vif,
+			data->link_data[0].link_id);
+
+	if (conf && !conf->enable_beacon)
+		return;
 	/* MLD not supported here */
 	u32 bcn_int = data->link_data[0].beacon_int;
 	u64 delta = abs(tsf - now);
