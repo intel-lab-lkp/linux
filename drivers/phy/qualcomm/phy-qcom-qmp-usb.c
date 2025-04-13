@@ -2152,6 +2152,8 @@ static int qmp_usb_parse_dt_legacy(struct qmp_usb *qmp, struct device_node *np)
 		return PTR_ERR(qmp->rx);
 
 	qmp->pcs = qmp_usb_iomap(dev, np, 2, exclusive);
+	if (!qmp->pcs)
+		return -ENOMEM;
 	if (IS_ERR(qmp->pcs))
 		return PTR_ERR(qmp->pcs);
 
