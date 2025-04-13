@@ -59,8 +59,6 @@ struct iosys_map;
 #define DRIVER_MINOR 1
 #define DRIVER_PATCHLEVEL 0
 
-#define QXL_DEBUGFS_MAX_COMPONENTS		32
-
 extern int qxl_num_crtc;
 
 #define QXL_INTERRUPT_MASK (\
@@ -226,10 +224,6 @@ struct qxl_device {
 	wait_queue_head_t cursor_event;
 	wait_queue_head_t io_cmd_event;
 	struct work_struct client_monitors_config_work;
-
-	/* debugfs */
-	struct qxl_debugfs	debugfs[QXL_DEBUGFS_MAX_COMPONENTS];
-	unsigned int debugfs_count;
 
 	struct mutex		update_area_mutex;
 
@@ -422,10 +416,6 @@ void qxl_gem_prime_vunmap(struct drm_gem_object *obj,
 
 /* qxl_irq.c */
 int qxl_irq_init(struct qxl_device *qdev);
-
-void qxl_debugfs_add_files(struct qxl_device *qdev,
-			   struct drm_info_list *files,
-			   unsigned int nfiles);
 
 int qxl_surface_id_alloc(struct qxl_device *qdev,
 			 struct qxl_bo *surf);
