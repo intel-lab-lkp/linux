@@ -1787,13 +1787,13 @@ static inline struct phy_device *device_phy_find_device(struct device *dev)
 static inline
 struct fwnode_handle *fwnode_get_phy_node(struct fwnode_handle *fwnode)
 {
-	return NULL;
+	return ERR_PTR(-ENXIO);
 }
 
 static inline
 struct phy_device *get_phy_device(struct mii_bus *bus, int addr, bool is_c45)
 {
-	return NULL;
+	return ERR_PTR(-ENXIO);
 }
 
 static inline int phy_device_register(struct phy_device *phy)
