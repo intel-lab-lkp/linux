@@ -7,7 +7,7 @@ use super::HrTimerHandle;
 use super::HrTimerPointer;
 use super::RawHrTimerCallback;
 use crate::prelude::*;
-use crate::time::Ktime;
+use crate::time::Instant;
 use core::ptr::NonNull;
 
 /// A handle for a [`Box<HasHrTimer<T>>`] returned by a call to
@@ -66,7 +66,7 @@ where
 {
     type TimerHandle = BoxHrTimerHandle<T, A>;
 
-    fn start(self, expires: Ktime) -> Self::TimerHandle {
+    fn start(self, expires: Instant) -> Self::TimerHandle {
         // SAFETY:
         //  - We will not move out of this box during timer callback (we pass an
         //    immutable reference to the callback).
