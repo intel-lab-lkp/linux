@@ -2057,7 +2057,7 @@ flowlabel_state_ranges - BOOLEAN
 	- TRUE: enabled
 	- FALSE: disabled
 
-	Default: true
+	Default: FALSE
 
 flowlabel_reflect - INTEGER
 	Control flow label reflection. Needed for Path MTU
