@@ -1157,7 +1157,7 @@ static struct pstore_zone *psz_init_zone(enum pstore_type_id type,
 	const char *name = pstore_type_to_name(type);
 
 	if (!size)
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	if (*off + size > info->total_size) {
 		pr_err("no room for %s (0x%zx@0x%llx over 0x%lx)\n",
@@ -1203,7 +1203,7 @@ static struct pstore_zone **psz_init_zones(enum pstore_type_id type,
 
 	*cnt = 0;
 	if (!total_size || !record_size)
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	if (*off + total_size > info->total_size) {
 		pr_err("no room for zones %s (0x%zx@0x%llx over 0x%lx)\n",
@@ -1225,7 +1225,7 @@ static struct pstore_zone **psz_init_zones(enum pstore_type_id type,
 
 	for (i = 0; i < c; i++) {
 		zone = psz_init_zone(type, off, record_size);
-		if (!zone || IS_ERR(zone)) {
+		if (IS_ERR(zone)) {
 			pr_err("initialize zones %s failed\n", name);
 			psz_free_zones(&zones, &i);
 			return (void *)zone;
