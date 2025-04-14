@@ -38,7 +38,7 @@ static inline long kvm_hypercall0(unsigned int nr)
 	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
 		return tdx_kvm_hypercall(nr, 0, 0, 0, 0);
 
-	asm volatile(KVM_HYPERCALL
+	asm_inline volatile(KVM_HYPERCALL
 		     : "=a"(ret)
 		     : "a"(nr)
 		     : "memory");
@@ -52,7 +52,7 @@ static inline long kvm_hypercall1(unsigned int nr, unsigned long p1)
 	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
 		return tdx_kvm_hypercall(nr, p1, 0, 0, 0);
 
-	asm volatile(KVM_HYPERCALL
+	asm_inline volatile(KVM_HYPERCALL
 		     : "=a"(ret)
 		     : "a"(nr), "b"(p1)
 		     : "memory");
@@ -67,7 +67,7 @@ static inline long kvm_hypercall2(unsigned int nr, unsigned long p1,
 	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
 		return tdx_kvm_hypercall(nr, p1, p2, 0, 0);
 
-	asm volatile(KVM_HYPERCALL
+	asm_inline volatile(KVM_HYPERCALL
 		     : "=a"(ret)
 		     : "a"(nr), "b"(p1), "c"(p2)
 		     : "memory");
@@ -82,7 +82,7 @@ static inline long kvm_hypercall3(unsigned int nr, unsigned long p1,
 	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
 		return tdx_kvm_hypercall(nr, p1, p2, p3, 0);
 
-	asm volatile(KVM_HYPERCALL
+	asm_inline volatile(KVM_HYPERCALL
 		     : "=a"(ret)
 		     : "a"(nr), "b"(p1), "c"(p2), "d"(p3)
 		     : "memory");
@@ -98,7 +98,7 @@ static inline long kvm_hypercall4(unsigned int nr, unsigned long p1,
 	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
 		return tdx_kvm_hypercall(nr, p1, p2, p3, p4);
 
-	asm volatile(KVM_HYPERCALL
+	asm_inline volatile(KVM_HYPERCALL
 		     : "=a"(ret)
 		     : "a"(nr), "b"(p1), "c"(p2), "d"(p3), "S"(p4)
 		     : "memory");
