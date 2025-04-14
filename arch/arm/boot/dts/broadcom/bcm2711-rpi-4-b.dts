@@ -152,6 +152,66 @@
 	status = "okay";
 };
 
+&i2c1 {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		led-controller@1b {
+				compatible = "ti,lp5812";
+				reg = <0x1b>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				led@0 {
+					reg = <0x0>;
+					chan-name = "a0";
+				};
+				led@1 {
+					reg = <0x1>;
+					chan-name = "a1";
+				};
+				led@2 {
+					reg = <0x2>;
+					chan-name = "a2";
+				};
+				led@3 {
+					reg = <0x3>;
+					chan-name = "b0";
+				};
+				led@4 {
+					reg = <0x4>;
+					chan-name = "b1";
+				};
+				led@5 {
+					reg = <0x5>;
+					chan-name = "b2";
+				};
+				led@6 {
+					reg = <0x6>;
+					chan-name = "c0";
+				};
+				led@7 {
+					reg = <0x7>;
+					chan-name = "c1";
+				};
+				led@8 {
+					reg = <0x8>;
+					chan-name = "c2";
+				};
+				led@9 {
+					reg = <0x9>;
+					chan-name = "d0";
+				};
+				led@a {
+					reg = <0xa>;
+					chan-name = "d1";
+				};
+				led@b {
+					reg = <0xb>;
+					chan-name = "d2";
+				};
+		};
+};
+
 &led_act {
 	gpios = <&gpio 42 GPIO_ACTIVE_HIGH>;
 };
