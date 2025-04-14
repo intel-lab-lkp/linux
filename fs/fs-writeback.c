@@ -133,11 +133,24 @@ static bool inode_io_list_move_locked(struct inode *inode,
 	return false;
 }
 
-static void wb_wakeup(struct bdi_writeback *wb)
+static void wb_wakeup_work(struct bdi_writeback *wb,
+		struct delayed_work *dwork)
 {
 	spin_lock_irq(&wb->work_lock);
 	if (test_bit(WB_registered, &wb->state))
-		mod_delayed_work(bdi_wq, &wb->dwork, 0);
+		mod_delayed_work(bdi_wq, dwork, 0);
+	spin_unlock_irq(&wb->work_lock);
+}
+
+static void wb_wakeup(struct bdi_writeback *wb)
+{
+	spin_lock_irq(&wb->work_lock);
+	if (test_bit(WB_registered, &wb->state)) {
+		mod_delayed_work(bdi_wq,
+				 &wb->wb_dwork[wb->wb_idx].dwork,
+				 0);
+		wb->wb_idx = (wb->wb_idx + 1) % NUM_WB;
+	}
 	spin_unlock_irq(&wb->work_lock);
 }
 
@@ -161,8 +174,24 @@ static void wb_wakeup_delayed(struct bdi_writeback *wb)
 
 	timeout = msecs_to_jiffies(dirty_writeback_interval * 10);
 	spin_lock_irq(&wb->work_lock);
+	if (test_bit(WB_registered, &wb->state)) {
+		queue_delayed_work(bdi_wq,
+				   &wb->wb_dwork[wb->wb_idx].dwork,
+				   timeout);
+		wb->wb_idx = (wb->wb_idx + 1) % NUM_WB;
+	}
+	spin_unlock_irq(&wb->work_lock);
+}
+
+static void wb_wakeup_delayed_work(struct bdi_writeback *wb,
+				   struct delayed_work *dwork)
+{
+	unsigned long timeout;
+
+	timeout = msecs_to_jiffies(dirty_writeback_interval * 10);
+	spin_lock_irq(&wb->work_lock);
 	if (test_bit(WB_registered, &wb->state))
-		queue_delayed_work(bdi_wq, &wb->dwork, timeout);
+		queue_delayed_work(bdi_wq, dwork, timeout);
 	spin_unlock_irq(&wb->work_lock);
 }
 
@@ -193,7 +222,10 @@ static void wb_queue_work(struct bdi_writeback *wb,
 
 	if (test_bit(WB_registered, &wb->state)) {
 		list_add_tail(&work->list, &wb->work_list);
-		mod_delayed_work(bdi_wq, &wb->dwork, 0);
+		mod_delayed_work(bdi_wq,
+				 &wb->wb_dwork[wb->wb_idx].dwork,
+				 0);
+		wb->wb_idx = (wb->wb_idx + 1) % NUM_WB;
 	} else
 		finish_writeback_work(work);
 
@@ -2325,8 +2357,9 @@ static long wb_do_writeback(struct bdi_writeback *wb)
  */
 void wb_workfn(struct work_struct *work)
 {
-	struct bdi_writeback *wb = container_of(to_delayed_work(work),
-						struct bdi_writeback, dwork);
+	struct delayed_work *p_dwork = to_delayed_work(work);
+	struct mul_dwork *md = container_of(p_dwork, struct mul_dwork, dwork);
+	struct bdi_writeback *wb =  md->p_wb;
 	long pages_written;
 
 	set_worker_desc("flush-%s", bdi_dev_name(wb->bdi));
@@ -2355,9 +2388,9 @@ void wb_workfn(struct work_struct *work)
 	}
 
 	if (!list_empty(&wb->work_list))
-		wb_wakeup(wb);
+		wb_wakeup_work(wb, p_dwork);
 	else if (wb_has_dirty_io(wb) && dirty_writeback_interval)
-		wb_wakeup_delayed(wb);
+		wb_wakeup_delayed_work(wb, p_dwork);
 }
 
 /*

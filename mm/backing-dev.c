@@ -536,7 +536,11 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 
 	spin_lock_init(&wb->work_lock);
 	INIT_LIST_HEAD(&wb->work_list);
-	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
+	wb->wb_idx = 0;
+	for (int i = 0; i < NUM_WB; i++) {
+		INIT_DELAYED_WORK(&wb->wb_dwork[i].dwork, wb_workfn);
+		wb->wb_dwork[i].p_wb = wb;
+	}
 	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
 
 	err = fprop_local_init_percpu(&wb->completions, gfp);
@@ -571,15 +575,19 @@ static void wb_shutdown(struct bdi_writeback *wb)
 	 * tells wb_workfn() that @wb is dying and its work_list needs to
 	 * be drained no matter what.
 	 */
-	mod_delayed_work(bdi_wq, &wb->dwork, 0);
-	flush_delayed_work(&wb->dwork);
+	for (int i = 0; i < NUM_WB; i++) {
+		mod_delayed_work(bdi_wq, &wb->wb_dwork[i].dwork, 0);
+		flush_delayed_work(&wb->wb_dwork[i].dwork);
+	}
 	WARN_ON(!list_empty(&wb->work_list));
 	flush_delayed_work(&wb->bw_dwork);
 }
 
 static void wb_exit(struct bdi_writeback *wb)
 {
-	WARN_ON(delayed_work_pending(&wb->dwork));
+	for (int i = 0; i < NUM_WB; i++)
+		WARN_ON(delayed_work_pending(&wb->wb_dwork[i].dwork));
+
 	percpu_counter_destroy_many(wb->stat, NR_WB_STAT_ITEMS);
 	fprop_local_destroy_percpu(&wb->completions);
 }

@@ -18,6 +18,8 @@ struct page;
 struct device;
 struct dentry;
 
+#define NUM_WB 4
+
 /*
  * Bits in bdi_writeback.state
  */
@@ -80,6 +82,11 @@ struct wb_completion {
 #define DEFINE_WB_COMPLETION(cmpl, bdi)	\
 	struct wb_completion cmpl = WB_COMPLETION_INIT(bdi)
 
+struct mul_dwork {
+	struct delayed_work dwork;
+	struct bdi_writeback *p_wb;
+};
+
 /*
  * Each wb (bdi_writeback) can perform writeback operations, is measured
  * and throttled, independently.  Without cgroup writeback, each bdi
@@ -138,7 +145,8 @@ struct bdi_writeback {
 
 	spinlock_t work_lock;		/* protects work_list & dwork scheduling */
 	struct list_head work_list;
-	struct delayed_work dwork;	/* work item used for writeback */
+	struct mul_dwork wb_dwork[NUM_WB];   /* multiple dworks */
+	int wb_idx;
 	struct delayed_work bw_dwork;	/* work item used for bandwidth estimate */
 
 	struct list_head bdi_node;	/* anchored at bdi->wb_list */
