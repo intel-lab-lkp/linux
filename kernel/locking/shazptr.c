@@ -14,10 +14,16 @@
 #include <linux/completion.h>
 #include <linux/kthread.h>
 #include <linux/list.h>
+#include <linux/moduleparam.h>
 #include <linux/mutex.h>
 #include <linux/shazptr.h>
 #include <linux/slab.h>
 #include <linux/sort.h>
+
+#ifdef MODULE_PARAM_PREFIX
+#undef MODULE_PARAM_PREFIX
+#endif
+#define MODULE_PARAM_PREFIX "shazptr."
 
 DEFINE_PER_CPU_SHARED_ALIGNED(void *, shazptr_slots);
 EXPORT_PER_CPU_SYMBOL_GPL(shazptr_slots);
@@ -252,6 +258,10 @@ static void synchronize_shazptr_busywait(void *ptr)
 	}
 }
 
+/* Disabled by default. */
+static int skip_synchronize_self_scan;
+module_param(skip_synchronize_self_scan, int, 0644);
+
 static void synchronize_shazptr_normal(void *ptr)
 {
 	int cpu;
@@ -259,15 +269,19 @@ static void synchronize_shazptr_normal(void *ptr)
 
 	smp_mb(); /* Synchronize with the smp_mb() in shazptr_acquire(). */
 
-	for_each_possible_cpu(cpu) {
-		void **slot = per_cpu_ptr(&shazptr_slots, cpu);
-		void *val;
+	if (unlikely(skip_synchronize_self_scan)) {
+		blocking_grp_mask = ~0UL;
+	} else {
+		for_each_possible_cpu(cpu) {
+			void **slot = per_cpu_ptr(&shazptr_slots, cpu);
+			void *val;
 
-		/* Pair with smp_store_release() in shazptr_clear(). */
-		val = smp_load_acquire(slot);
+			/* Pair with smp_store_release() in shazptr_clear(). */
+			val = smp_load_acquire(slot);
 
-		if (val == ptr || val == SHAZPTR_WILDCARD)
-			blocking_grp_mask |= 1UL << (cpu / shazptr_scan.cpu_grp_size);
+			if (val == ptr || val == SHAZPTR_WILDCARD)
+				blocking_grp_mask |= 1UL << (cpu / shazptr_scan.cpu_grp_size);
+		}
 	}
 
 	/* Found blocking slots, prepare to wait. */
