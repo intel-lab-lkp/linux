@@ -871,11 +871,11 @@ static const struct phylink_mac_ops mtk_phylink_ops = {
 	.mac_enable_tx_lpi = mtk_mac_enable_tx_lpi,
 };
 
-static int mtk_mdio_init(struct mtk_eth *eth)
+static int mtk_mdio_config(struct mtk_eth *eth)
 {
 	unsigned int max_clk = 2500000, divider;
 	struct device_node *mii_np;
-	int ret;
+	int ret = 0;
 	u32 val;
 
 	mii_np = of_get_available_child_by_name(eth->dev->of_node, "mdio-bus");
@@ -883,22 +883,6 @@ static int mtk_mdio_init(struct mtk_eth *eth)
 		dev_err(eth->dev, "no %s child node found", "mdio-bus");
 		return -ENODEV;
 	}
-
-	eth->mii_bus = devm_mdiobus_alloc(eth->dev);
-	if (!eth->mii_bus) {
-		ret = -ENOMEM;
-		goto err_put_node;
-	}
-
-	eth->mii_bus->name = "mdio";
-	eth->mii_bus->read = mtk_mdio_read_c22;
-	eth->mii_bus->write = mtk_mdio_write_c22;
-	eth->mii_bus->read_c45 = mtk_mdio_read_c45;
-	eth->mii_bus->write_c45 = mtk_mdio_write_c45;
-	eth->mii_bus->priv = eth;
-	eth->mii_bus->parent = eth->dev;
-
-	snprintf(eth->mii_bus->id, MII_BUS_ID_SIZE, "%pOFn", mii_np);
 
 	if (!of_property_read_u32(mii_np, "clock-frequency", &val)) {
 		if (val > MDC_MAX_FREQ || val < MDC_MAX_FREQ / MDC_MAX_DIVIDER) {
@@ -922,6 +906,42 @@ static int mtk_mdio_init(struct mtk_eth *eth)
 
 	dev_dbg(eth->dev, "MDC is running on %d Hz\n", MDC_MAX_FREQ / divider);
 
+err_put_node:
+	of_node_put(mii_np);
+	return ret;
+}
+
+static int mtk_mdio_init(struct mtk_eth *eth)
+{
+	struct device_node *mii_np;
+	int ret;
+
+	mii_np = of_get_child_by_name(eth->dev->of_node, "mdio-bus");
+	if (!mii_np) {
+		dev_err(eth->dev, "no %s child node found", "mdio-bus");
+		return -ENODEV;
+	}
+
+	if (!of_device_is_available(mii_np)) {
+		ret = -ENODEV;
+		goto err_put_node;
+	}
+
+	eth->mii_bus = devm_mdiobus_alloc(eth->dev);
+	if (!eth->mii_bus) {
+		ret = -ENOMEM;
+		goto err_put_node;
+	}
+
+	eth->mii_bus->name = "mdio";
+	eth->mii_bus->read = mtk_mdio_read_c22;
+	eth->mii_bus->write = mtk_mdio_write_c22;
+	eth->mii_bus->read_c45 = mtk_mdio_read_c45;
+	eth->mii_bus->write_c45 = mtk_mdio_write_c45;
+	eth->mii_bus->priv = eth;
+	eth->mii_bus->parent = eth->dev;
+
+	snprintf(eth->mii_bus->id, MII_BUS_ID_SIZE, "%pOFn", mii_np);
 	ret = of_mdiobus_register(eth->mii_bus, mii_np);
 
 err_put_node:
@@ -3973,6 +3993,10 @@ static int mtk_hw_init(struct mtk_eth *eth, bool reset)
 		mtk_hw_warm_reset(eth);
 	else
 		mtk_hw_reset(eth);
+
+	/* No MT7628/88 support yet */
+	if (!MTK_HAS_CAPS(eth->soc->caps, MTK_SOC_MT7628))
+		mtk_mdio_config(eth);
 
 	if (mtk_is_netsys_v3_or_greater(eth)) {
 		/* Set FE to PDMAv2 if necessary */
