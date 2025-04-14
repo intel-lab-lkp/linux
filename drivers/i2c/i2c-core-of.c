@@ -107,6 +107,7 @@ void of_i2c_register_devices(struct i2c_adapter *adap)
 				 "Failed to create I2C device for %pOF\n",
 				 node);
 			of_node_clear_flag(node, OF_POPULATED);
+			of_node_put(node);
 		}
 	}
 
