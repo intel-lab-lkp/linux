@@ -62,6 +62,7 @@ union rkisp1_ext_params_config {
 	struct rkisp1_ext_params_compand_bls_config compand_bls;
 	struct rkisp1_ext_params_compand_curve_config compand_curve;
 	struct rkisp1_ext_params_wdr_config wdr;
+	struct rkisp1_ext_params_awb64_meas_config awb64;
 };
 
 enum rkisp1_params_formats {
@@ -673,6 +674,105 @@ rkisp1_awb_meas_enable_v12(struct rkisp1_params *params,
 			     reg_val);
 		rkisp1_param_clear_bits(params, RKISP1_CIF_ISP_CTRL,
 					RKISP1_CIF_ISP_CTRL_ISP_AWB_ENA);
+	}
+}
+
+/* ISP White Balance Mode */
+static void
+rkisp1_awb64_meas_config(struct rkisp1_params *params,
+			 const struct rkisp1_cif_isp_awb64_meas_config *arg)
+{
+	u32 reg_val =
+		rkisp1_read(params->rkisp1, RKISP1_CIF_ISP_AWB64_MEAS_MODE);
+
+	/* Measurement mode */
+	if (arg->enable_median_filter)
+		reg_val |= RKISP1_CIF_ISP_AWB64_PRE_FILTER_EN;
+	else
+		reg_val &= ~RKISP1_CIF_ISP_AWB64_PRE_FILTER_EN;
+
+	if (arg->chrom_switch)
+		reg_val |= RKISP1_CIF_ISP_AWB64_CHROM_SWITCH;
+	else
+		reg_val &= ~RKISP1_CIF_ISP_AWB64_CHROM_SWITCH;
+
+	reg_val |= (arg->ellip_unite & RKISP1_CIF_ISP_AWB64_UNITE_MASK)
+		   << RKISP1_CIF_ISP_AWB64_UNITE_SHIFT;
+
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_MEAS_MODE,
+		     reg_val);
+
+	/* Measurement window */
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_V_OFFS,
+		     arg->awb_wnd.v_offs);
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_H_OFFS,
+		     arg->awb_wnd.h_offs);
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_V_SIZE,
+		     arg->awb_wnd.v_size);
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_H_SIZE,
+		     arg->awb_wnd.h_size);
+
+	/* RGB thresholds for measurement */
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_R_MIN_MAX,
+		     arg->min_max_r);
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_G_MIN_MAX,
+		     arg->min_max_g);
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_B_MIN_MAX,
+		     arg->min_max_b);
+
+	/* Minimum input divider threshold */
+	rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_MIN_DIVIDER,
+		     arg->min_div & RKISP1_CIF_ISP_AWB64_MIN_DIV_MASK);
+
+	/* Colorspace matrix coefficients */
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++)
+			rkisp1_write(params->rkisp1,
+				     RKISP1_CIF_ISP_AWB64_CC_COEFF(i * 3 + j),
+				     arg->cc_coeff[i][j]);
+	}
+
+	/* Ellipse configuration */
+	for (int i = 0; i < RKISP1_CIF_ISP_AWB64_MAX_ELLIPSE; i++) {
+		const struct rkisp1_cif_isp_awb64_ellip *ellip = &arg->ellip[i];
+
+		/* Center */
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_CEN_X(i),
+			     ellip->cen_x & RKISP1_CIF_ISP_AWB64_ELLIP_CEN_MASK);
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_CEN_Y(i),
+			     ellip->cen_y & RKISP1_CIF_ISP_AWB64_ELLIP_CEN_MASK);
+		/* Radius */
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_RMAX(i),
+			     ellip->rmax & RKISP1_CIF_ISP_AWB64_ELLIP_RMAX_MASK);
+		/* CTM */
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_A1(i),
+			     ellip->ctm[0] &
+				     RKISP1_CIF_ISP_AWB64_ELLIP_A1_A3_MASK);
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_A2(i),
+			     ellip->ctm[1] &
+				     RKISP1_CIF_ISP_AWB64_ELLIP_A2_A4_MASK);
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_A3(i),
+			     ellip->ctm[2] &
+				     RKISP1_CIF_ISP_AWB64_ELLIP_A1_A3_MASK);
+		rkisp1_write(params->rkisp1, RKISP1_CIF_ISP_AWB64_ELLIP_A4(i),
+			     ellip->ctm[3] &
+				     RKISP1_CIF_ISP_AWB64_ELLIP_A2_A4_MASK);
+	}
+}
+
+static void
+rkisp1_awb64_meas_enable(struct rkisp1_params *params,
+			 const struct rkisp1_cif_isp_awb64_meas_config *arg,
+			 bool en)
+{
+	if (en) {
+		rkisp1_param_set_bits(params, RKISP1_CIF_ISP_AWB64_MEAS_MODE,
+				      RKISP1_CIF_ISP_AWB64_MEAS_EN |
+					      RKISP1_CIF_ISP_AWB64_IRQ_EN);
+	} else {
+		rkisp1_param_clear_bits(params, RKISP1_CIF_ISP_AWB64_MEAS_MODE,
+					RKISP1_CIF_ISP_AWB64_MEAS_EN |
+						RKISP1_CIF_ISP_AWB64_IRQ_EN);
 	}
 }
 
@@ -2090,6 +2190,23 @@ static void rkisp1_ext_params_wdr(struct rkisp1_params *params,
 				      RKISP1_CIF_ISP_WDR_CTRL_ENABLE);
 }
 
+static void rkisp1_ext_params_awb64(struct rkisp1_params *params,
+				    const union rkisp1_ext_params_config *block)
+{
+	const struct rkisp1_ext_params_awb64_meas_config *awb64 = &block->awb64;
+
+	if (awb64->header.flags & RKISP1_EXT_PARAMS_FL_BLOCK_DISABLE) {
+		rkisp1_awb64_meas_enable(params, &awb64->config, false);
+		return;
+	}
+
+	rkisp1_awb64_meas_config(params, &awb64->config);
+
+	if ((awb64->header.flags & RKISP1_EXT_PARAMS_FL_BLOCK_ENABLE) &&
+	    !(params->enabled_blocks & BIT(awb64->header.type)))
+		rkisp1_awb64_meas_enable(params, &awb64->config, true);
+}
+
 typedef void (*rkisp1_block_handler)(struct rkisp1_params *params,
 			     const union rkisp1_ext_params_config *config);
 
@@ -2207,6 +2324,12 @@ static const struct rkisp1_ext_params_handler {
 		.size		= sizeof(struct rkisp1_ext_params_wdr_config),
 		.handler	= rkisp1_ext_params_wdr,
 		.group		= RKISP1_EXT_PARAMS_BLOCK_GROUP_OTHERS,
+	},
+	[RKISP1_EXT_PARAMS_BLOCK_TYPE_AWB64_MEAS] = {
+		.size		= sizeof(struct rkisp1_ext_params_awb64_meas_config),
+		.handler	= rkisp1_ext_params_awb64,
+		.group		= RKISP1_EXT_PARAMS_BLOCK_GROUP_OTHERS,
+		.features	= RKISP1_FEATURE_AWB64,
 	},
 };
 
