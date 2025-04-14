@@ -182,7 +182,8 @@ mic_fail_no_key:
 	 * a driver that supports HW encryption. Send up the key idx only if
 	 * the key is set.
 	 */
-	cfg80211_michael_mic_failure(rx->sdata->dev, hdr->addr2,
+	if (rx->sdata->dev)
+		cfg80211_michael_mic_failure(rx->sdata->dev, hdr->addr2,
 				     is_multicast_ether_addr(hdr->addr1) ?
 				     NL80211_KEYTYPE_GROUP :
 				     NL80211_KEYTYPE_PAIRWISE,

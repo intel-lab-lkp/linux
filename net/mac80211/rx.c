@@ -1520,7 +1520,7 @@ ieee80211_rx_h_check(struct ieee80211_rx_data *rx)
 				return RX_CONTINUE;
 		}
 
-		if (rx->sdata->vif.type == NL80211_IFTYPE_AP &&
+		if (rx->sdata->vif.type == NL80211_IFTYPE_AP && rx->sdata->dev &&
 		    cfg80211_rx_spurious_frame(rx->sdata->dev,
 					       hdr->addr2,
 					       GFP_ATOMIC))
@@ -2469,8 +2469,8 @@ ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 				 */
 				if (!rx->key)
 					return RX_CONTINUE;
-
-				cfg80211_rx_unprot_mlme_mgmt(rx->sdata->dev,
+				if (rx->sdata->dev)
+					cfg80211_rx_unprot_mlme_mgmt(rx->sdata->dev,
 							     rx->skb->data,
 							     rx->skb->len);
 			}
@@ -2479,15 +2479,16 @@ ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 		/* BIP does not use Protected field, so need to check MMIE */
 		if (unlikely(ieee80211_is_multicast_robust_mgmt_frame(rx->skb) &&
 			     ieee80211_get_mmie_keyidx(rx->skb) < 0)) {
-			if (ieee80211_is_deauth(fc) ||
-			    ieee80211_is_disassoc(fc))
+			if ((ieee80211_is_deauth(fc) ||
+			     ieee80211_is_disassoc(fc)) && rx->sdata->dev)
 				cfg80211_rx_unprot_mlme_mgmt(rx->sdata->dev,
 							     rx->skb->data,
 							     rx->skb->len);
 			return RX_DROP_U_UNPROT_MCAST_MGMT;
 		}
 		if (unlikely(ieee80211_is_beacon(fc) && rx->key &&
-			     ieee80211_get_mmie_keyidx(rx->skb) < 0)) {
+				 ieee80211_get_mmie_keyidx(rx->skb) < 0) &&
+				 rx->sdata->dev) {
 			cfg80211_rx_unprot_mlme_mgmt(rx->sdata->dev,
 						     rx->skb->data,
 						     rx->skb->len);
@@ -3185,7 +3186,8 @@ ieee80211_rx_h_data(struct ieee80211_rx_data *rx)
 	if (ieee80211_has_a4(hdr->frame_control) &&
 	    sdata->vif.type == NL80211_IFTYPE_AP) {
 		if (rx->sta &&
-		    !test_and_set_sta_flag(rx->sta, WLAN_STA_4ADDR_EVENT))
+		    !test_and_set_sta_flag(rx->sta, WLAN_STA_4ADDR_EVENT) &&
+			rx->sdata->dev)
 			cfg80211_rx_unexpected_4addr_frame(
 				rx->sdata->dev, rx->sta->sta.addr, GFP_ATOMIC);
 		return RX_DROP;
