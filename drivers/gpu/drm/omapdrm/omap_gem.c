@@ -1222,7 +1222,7 @@ static void omap_gem_free_object(struct drm_gem_object *obj)
 			    omap_obj->dma_addr);
 	} else if (omap_obj->vaddr) {
 		vunmap(omap_obj->vaddr);
-	} else if (obj->import_attach) {
+	} else if (drm_gem_is_imported(obj)) {
 		drm_prime_gem_destroy(obj, omap_obj->sgt);
 	}
 
