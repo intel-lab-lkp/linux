@@ -1061,7 +1061,7 @@ static int cxl_rcrb_get_comp_regs(struct pci_dev *pdev,
 }
 
 int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
-		       struct cxl_register_map *map)
+		       struct cxl_register_map *map, unsigned long *caps)
 {
 	int rc;
 
@@ -1091,7 +1091,7 @@ int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 		return rc;
 	}
 
-	return cxl_setup_regs(map);
+	return cxl_setup_regs(map, caps);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_pci_setup_regs, "CXL");
 
@@ -1214,3 +1214,34 @@ int cxl_gpf_port_setup(struct device *dport_dev, struct cxl_port *port)
 
 	return 0;
 }
+
+int cxl_check_caps(struct pci_dev *pdev, unsigned long *expected,
+		   unsigned long *found)
+{
+	DECLARE_BITMAP(missing, CXL_MAX_CAPS);
+
+	if (bitmap_subset(expected, found, CXL_MAX_CAPS))
+		/* all good */
+		return 0;
+
+	bitmap_andnot(missing, expected, found, CXL_MAX_CAPS);
+
+	if (test_bit(CXL_DEV_CAP_RAS, missing))
+		dev_err(&pdev->dev, "RAS capability not found\n");
+
+	if (test_bit(CXL_DEV_CAP_HDM, missing))
+		dev_err(&pdev->dev, "HDM decoder capability not found\n");
+
+	if (test_bit(CXL_DEV_CAP_DEV_STATUS, missing))
+		dev_err(&pdev->dev, "Device Status capability not found\n");
+
+	if (test_bit(CXL_DEV_CAP_MAILBOX_PRIMARY, missing))
+		dev_err(&pdev->dev, "Primary Mailbox capability not found\n");
+
+	if (test_bit(CXL_DEV_CAP_MEMDEV, missing))
+		dev_err(&pdev->dev,
+			"Memory Device Status capability not found\n");
+
+	return -1;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_check_caps, "CXL");
