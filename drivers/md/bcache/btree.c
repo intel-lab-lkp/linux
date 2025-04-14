@@ -88,11 +88,8 @@
  * Test module load/unload
  */
 
-#define MAX_NEED_GC		64
-#define MAX_SAVE_PRIO		72
-#define MAX_GC_TIMES		100
-#define MIN_GC_NODES		100
-#define GC_SLEEP_MS		100
+#define GC_MIN_NODES		10
+#define GC_SLEEP_MS		10
 
 #define PTR_DIRTY_BIT		(((uint64_t) 1 << 36))
 
@@ -1585,25 +1582,24 @@ static unsigned int btree_gc_count_keys(struct btree *b)
 
 static size_t btree_gc_min_nodes(struct cache_set *c)
 {
-	size_t min_nodes;
+	size_t min_nodes = GC_MIN_NODES;
+	uint64_t gc_max_ms = time_stat_average(&c->btree_gc_time, frequency, ms) / 2;
 
 	/*
-	 * Since incremental GC would stop 100ms when front
-	 * side I/O comes, so when there are many btree nodes,
-	 * if GC only processes constant (100) nodes each time,
-	 * GC would last a long time, and the front side I/Os
-	 * would run out of the buckets (since no new bucket
-	 * can be allocated during GC), and be blocked again.
-	 * So GC should not process constant nodes, but varied
-	 * nodes according to the number of btree nodes, which
-	 * realized by dividing GC into constant(100) times,
-	 * so when there are many btree nodes, GC can process
-	 * more nodes each time, otherwise, GC will process less
-	 * nodes each time (but no less than MIN_GC_NODES)
+	 * The incremental garbage collector operates by processing
+	 * GC_MIN_NODES at a time, pausing for GC_SLEEP_MS between
+	 * each interval. If historical garbage collection statistics
+	 * (btree_gc_time) is available, the maximum allowable GC
+	 * duration is set to half of this observed frequency. To
+	 * prevent exceeding this maximum duration, the number of
+	 * nodes processed in the current step may be increased if
+	 * the projected completion time based on the current pace
+	 * extends beyond the allowed limit. This ensures timely GC
+	 * completion before the next GC is due.
 	 */
-	min_nodes = c->gc_stats.nodes / MAX_GC_TIMES;
-	if (min_nodes < MIN_GC_NODES)
-		min_nodes = MIN_GC_NODES;
+	if ((gc_max_ms >= GC_SLEEP_MS) &&
+	    (GC_SLEEP_MS * (c->gc_stats.nodes / min_nodes)) > gc_max_ms)
+		min_nodes = c->gc_stats.nodes / (gc_max_ms / GC_SLEEP_MS);
 
 	return min_nodes;
 }
