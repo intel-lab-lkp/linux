@@ -1022,7 +1022,7 @@
  * Kondo Kagaku Co.Ltd.
  * http://www.kondo-robot.com/EN
  */
-#define KONDO_VID 		0x165c
+#define KONDO_VID		0x165c
 #define KONDO_USB_SERIAL_PID	0x0002
 
 /*
@@ -1446,7 +1446,7 @@
 /*
  * Accesio USB Data Acquisition products (http://www.accesio.com/)
  */
-#define ACCESIO_COM4SM_PID 	0xD578
+#define ACCESIO_COM4SM_PID	0xD578
 
 /* www.sciencescope.co.uk educational dataloggers */
 #define FTDI_SCIENCESCOPE_LOGBOOKML_PID		0xFF18
