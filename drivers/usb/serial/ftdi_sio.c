@@ -1143,6 +1143,7 @@ static unsigned short int ftdi_232am_baud_base_to_divisor(int baud, int base)
 	unsigned short int divisor;
 	/* divisor shifted 3 bits to the left */
 	int divisor3 = DIV_ROUND_CLOSEST(base, 2 * baud);
+
 	if ((divisor3 & 0x7) == 7)
 		divisor3++; /* round x.7/8 up to x+1 */
 	divisor = divisor3 >> 3;
@@ -1169,6 +1170,7 @@ static u32 ftdi_232bm_baud_base_to_divisor(int baud, int base)
 	u32 divisor;
 	/* divisor shifted 3 bits to the left */
 	int divisor3 = DIV_ROUND_CLOSEST(base, 2 * baud);
+
 	divisor = divisor3 >> 3;
 	divisor |= (u32)divfrac[divisor3 & 0x7] << 14;
 	/* Deal with special cases for highest baud rates. */
@@ -1657,6 +1659,7 @@ static ssize_t latency_timer_show(struct device *dev,
 {
 	struct usb_serial_port *port = to_usb_serial_port(dev);
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
+
 	if (priv->flags & ASYNC_LOW_LATENCY)
 		return sprintf(buf, "1\n");
 	else
@@ -2194,6 +2197,7 @@ static int ftdi_probe(struct usb_serial *serial, const struct usb_device_id *id)
 
 	if (quirk && quirk->probe) {
 		int ret = quirk->probe(serial);
+
 		if (ret != 0)
 			return ret;
 	}
