@@ -1357,6 +1357,13 @@ update_stats_dequeue_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se,
 	if (rt_entity_is_task(rt_se))
 		p = rt_task_of(rt_se);
 
+	/*
+	 * Mark the end of the wait period if dequeueing a
+	 * waiting task:
+	 */
+	if (p && !task_on_cpu(task_rq(p), p))
+		update_stats_wait_end_rt(rt_rq, rt_se);
+
 	if ((flags & DEQUEUE_SLEEP) && p) {
 		unsigned int state;
 
