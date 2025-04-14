@@ -2425,6 +2425,15 @@ config PERCPU_TEST
 
 	  If unsure, say N.
 
+config PERCPU_TEST_RUST
+	tristate "Rust per cpu operations test"
+	depends on m && DEBUG_KERNEL && RUST
+	help
+	  Enable this option to build a test module which validates Rust per-cpu
+	  operations.
+
+	  If unsure, say N.
+
 config ATOMIC64_SELFTEST
 	tristate "Perform an atomic64_t self-test"
 	help
