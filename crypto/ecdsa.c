@@ -96,10 +96,12 @@ static int ecdsa_ecc_ctx_init(struct ecc_ctx *ctx, unsigned int curve_id)
 	return 0;
 }
 
-
 static void ecdsa_ecc_ctx_deinit(struct ecc_ctx *ctx)
 {
 	ctx->pub_key_set = false;
+
+	memzero_explicit(ctx->x, sizeof(ctx->x));
+	memzero_explicit(ctx->y, sizeof(ctx->y));
 }
 
 static int ecdsa_ecc_ctx_reset(struct ecc_ctx *ctx)
