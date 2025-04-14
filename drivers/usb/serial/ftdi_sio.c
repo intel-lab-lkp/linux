@@ -1161,7 +1161,7 @@ static unsigned short int ftdi_232am_baud_base_to_divisor(int baud, int base)
 
 static unsigned short int ftdi_232am_baud_to_divisor(int baud)
 {
-	 return ftdi_232am_baud_base_to_divisor(baud, 48000000);
+	return ftdi_232am_baud_base_to_divisor(baud, 48000000);
 }
 
 static u32 ftdi_232bm_baud_base_to_divisor(int baud, int base)
@@ -1183,7 +1183,7 @@ static u32 ftdi_232bm_baud_base_to_divisor(int baud, int base)
 
 static u32 ftdi_232bm_baud_to_divisor(int baud)
 {
-	 return ftdi_232bm_baud_base_to_divisor(baud, 48000000);
+	return ftdi_232bm_baud_base_to_divisor(baud, 48000000);
 }
 
 static u32 ftdi_2232h_baud_base_to_divisor(int baud, int base)
@@ -1213,7 +1213,7 @@ static u32 ftdi_2232h_baud_base_to_divisor(int baud, int base)
 
 static u32 ftdi_2232h_baud_to_divisor(int baud)
 {
-	 return ftdi_2232h_baud_base_to_divisor(baud, 120000000);
+	return ftdi_2232h_baud_base_to_divisor(baud, 120000000);
 }
 
 #define set_mctrl(port, set)		update_mctrl((port), (set), 0)
