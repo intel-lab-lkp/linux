@@ -206,6 +206,11 @@ enum misaligned_access_type {
 static void do_trap_misaligned(struct pt_regs *regs, enum misaligned_access_type type)
 {
 	irqentry_state_t state = irqentry_enter(regs);
+	bool enable_irqs = !regs_irqs_disabled(regs);
+
+	/* Enable interrupts if they were enabled in the interrupted context. */
+	if (enable_irqs)
+		local_irq_enable();
 
 	if (type ==  MISALIGNED_LOAD) {
 		if (handle_misaligned_load(regs))
@@ -216,6 +221,9 @@ static void do_trap_misaligned(struct pt_regs *regs, enum misaligned_access_type
 			do_trap_error(regs, SIGBUS, BUS_ADRALN, regs->epc,
 				      "Oops - store (or AMO) address misaligned");
 	}
+
+	if (enable_irqs)
+		local_irq_disable();
 
 	irqentry_exit(regs, state);
 }
