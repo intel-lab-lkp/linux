@@ -4163,6 +4163,7 @@ enum mf_action_page_type {
 };
 
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) || defined(CONFIG_HUGETLBFS)
+void folio_zero_user_preemptible(struct folio *fio, unsigned long addr_hint);
 void folio_zero_user(struct folio *folio, unsigned long addr_hint);
 int copy_user_large_folio(struct folio *dst, struct folio *src,
 			  unsigned long addr_hint,
