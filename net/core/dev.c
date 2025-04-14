@@ -10994,6 +10994,8 @@ int register_netdevice(struct net_device *dev)
 	    dev->rtnl_link_state == RTNL_LINK_INITIALIZED)
 		rtmsg_ifinfo(RTM_NEWLINK, dev, ~0U, GFP_KERNEL, 0, NULL);
 
+	/* Register debugfs file for the refcount tracker */
+	ref_tracker_dir_debugfs(&dev->refcnt_tracker, dev->name);
 out:
 	return ret;
 
