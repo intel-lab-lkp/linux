@@ -476,11 +476,85 @@ static int anx7625_set_k_value(struct anx7625_data *ctx)
 				 MIPI_DIGITAL_ADJ_1, 0x3D);
 }
 
+static bool anx7625_dsc_check(struct anx7625_data *ctx)
+{
+	if (ctx->dt.pixelclock.min > DSC_PIXEL_CLOCK)
+		return true;
+
+	return false;
+}
+
+static inline int anx7625_h_timing_reg_write(struct anx7625_data *ctx,
+					     struct i2c_client *client,
+					     u8 reg_addr, u16 val,
+					     bool dsc_check)
+{
+	int ret;
+
+	if (dsc_check && anx7625_dsc_check(ctx))
+		val = dsc_div(val);
+
+	ret = anx7625_reg_write(ctx, client, reg_addr, val);
+	ret |= anx7625_reg_write(ctx, client, reg_addr + 1, val >> 8);
+
+	return ret;
+}
+
+static int anx7625_h_timing_write(struct anx7625_data *ctx,
+				  struct i2c_client *client,
+				  bool dsc_check)
+{
+	u16 htotal;
+	int ret;
+
+	htotal = ctx->dt.hactive.min + ctx->dt.hfront_porch.min +
+			 ctx->dt.hback_porch.min + ctx->dt.hsync_len.min;
+	/* Htotal */
+	ret = anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_TOTAL_PIXELS_L,
+					 htotal, dsc_check);
+	/* Hactive */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_ACTIVE_PIXELS_L,
+					  ctx->dt.hactive.min, dsc_check);
+	/* HFP */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_FRONT_PORCH_L,
+					  ctx->dt.hfront_porch.min, dsc_check);
+	/* HWS */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_SYNC_WIDTH_L,
+					  ctx->dt.hsync_len.min, dsc_check);
+	/* HBP */
+	ret |= anx7625_h_timing_reg_write(ctx, client, HORIZONTAL_BACK_PORCH_L,
+					  ctx->dt.hback_porch.min, dsc_check);
+
+	return ret;
+}
+
+static int anx7625_v_timing_write(struct anx7625_data *ctx,
+				  struct i2c_client *client)
+{
+	int ret;
+
+	/* Vactive */
+	ret = anx7625_reg_write(ctx, client, ACTIVE_LINES_L,
+				ctx->dt.vactive.min);
+	ret |= anx7625_reg_write(ctx, client, ACTIVE_LINES_H,
+				 ctx->dt.vactive.min >> 8);
+	/* VFP */
+	ret |= anx7625_reg_write(ctx, client, VERTICAL_FRONT_PORCH,
+				 ctx->dt.vfront_porch.min);
+	/* VWS */
+	ret |= anx7625_reg_write(ctx, client, VERTICAL_SYNC_WIDTH,
+				 ctx->dt.vsync_len.min);
+	/* VBP */
+	ret |= anx7625_reg_write(ctx, client, VERTICAL_BACK_PORCH,
+				 ctx->dt.vback_porch.min);
+
+	return ret;
+}
+
 static int anx7625_dsi_video_timing_config(struct anx7625_data *ctx)
 {
 	struct device *dev = ctx->dev;
 	unsigned long m, n;
-	u16 htotal;
 	int ret;
 	u8 post_divider = 0;
 
@@ -506,48 +580,12 @@ static int anx7625_dsi_video_timing_config(struct anx7625_data *ctx)
 	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p1_client,
 				MIPI_LANE_CTRL_0, ctx->pdata.mipi_lanes - 1);
 
-	/* Htotal */
-	htotal = ctx->dt.hactive.min + ctx->dt.hfront_porch.min +
-		ctx->dt.hback_porch.min + ctx->dt.hsync_len.min;
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_TOTAL_PIXELS_L, htotal & 0xFF);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_TOTAL_PIXELS_H, htotal >> 8);
-	/* Hactive */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_ACTIVE_PIXELS_L, ctx->dt.hactive.min & 0xFF);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_ACTIVE_PIXELS_H, ctx->dt.hactive.min >> 8);
-	/* HFP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_FRONT_PORCH_L, ctx->dt.hfront_porch.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_FRONT_PORCH_H,
-			ctx->dt.hfront_porch.min >> 8);
-	/* HWS */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_SYNC_WIDTH_L, ctx->dt.hsync_len.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_SYNC_WIDTH_H, ctx->dt.hsync_len.min >> 8);
-	/* HBP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_BACK_PORCH_L, ctx->dt.hback_porch.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			HORIZONTAL_BACK_PORCH_H, ctx->dt.hback_porch.min >> 8);
-	/* Vactive */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client, ACTIVE_LINES_L,
-			ctx->dt.vactive.min);
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client, ACTIVE_LINES_H,
-			ctx->dt.vactive.min >> 8);
-	/* VFP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			VERTICAL_FRONT_PORCH, ctx->dt.vfront_porch.min);
-	/* VWS */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			VERTICAL_SYNC_WIDTH, ctx->dt.vsync_len.min);
-	/* VBP */
-	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p2_client,
-			VERTICAL_BACK_PORCH, ctx->dt.vback_porch.min);
+	/* Video Horizontal timing */
+	ret |= anx7625_h_timing_write(ctx, ctx->i2c.rx_p2_client, true);
+
+	/* Video Vertical timing */
+	ret |= anx7625_v_timing_write(ctx, ctx->i2c.rx_p2_client);
+
 	/* M value */
 	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p1_client,
 			MIPI_PLL_M_NUM_23_16, (m >> 16) & 0xff);

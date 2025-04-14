@@ -166,6 +166,10 @@
 #define  HORIZONTAL_BACK_PORCH_L      0x21
 #define  HORIZONTAL_BACK_PORCH_H      0x22  /* Bit[7:4] are reserved */
 
+#define  DSC_COMPRESS_RATIO           3
+#define  dsc_div(X)                   ((X) / DSC_COMPRESS_RATIO)
+#define  DSC_PIXEL_CLOCK              250000
+
 /******** END of I2C Address 0x72 *********/
 
 /***************************************************************/
