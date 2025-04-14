@@ -724,7 +724,7 @@ static int xe_bo_move_notify(struct xe_bo *bo,
 		return ret;
 
 	/* Don't call move_notify() for imported dma-bufs. */
-	if (ttm_bo->base.dma_buf && !ttm_bo->base.import_attach)
+	if (ttm_bo->base.dma_buf && !drm_gem_is_imported(&ttm_bo->base))
 		dma_buf_move_notify(ttm_bo->base.dma_buf);
 
 	/*
@@ -1430,7 +1430,7 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 	struct xe_tile *tile;
 	u8 id;
 
-	if (bo->ttm.base.import_attach)
+	if (drm_gem_is_imported(&bo->ttm.base))
 		drm_prime_gem_destroy(&bo->ttm.base, NULL);
 	drm_gem_object_release(&bo->ttm.base);
 
@@ -2140,7 +2140,7 @@ int xe_bo_pin(struct xe_bo *bo)
 	 * No reason we can't support pinning imported dma-bufs we just don't
 	 * expect to pin an imported dma-buf.
 	 */
-	xe_assert(xe, !bo->ttm.base.import_attach);
+	xe_assert(xe, !drm_gem_is_imported(&bo->ttm.base));
 
 	/* We only expect at most 1 pin */
 	xe_assert(xe, !xe_bo_is_pinned(bo));
@@ -2223,7 +2223,7 @@ void xe_bo_unpin(struct xe_bo *bo)
 	struct ttm_place *place = &bo->placements[0];
 	struct xe_device *xe = xe_bo_device(bo);
 
-	xe_assert(xe, !bo->ttm.base.import_attach);
+	xe_assert(xe, !drm_gem_is_imported(&bo->ttm.base));
 	xe_assert(xe, xe_bo_is_pinned(bo));
 
 	if (mem_type_is_vram(place->mem_type) || bo->flags & XE_BO_FLAG_GGTT) {
