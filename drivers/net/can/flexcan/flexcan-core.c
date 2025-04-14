@@ -2056,6 +2056,26 @@ static int flexcan_setup_stop_mode(struct platform_device *pdev)
 	return 0;
 }
 
+static unsigned long get_per_clk_rate(struct clk *clk)
+{
+	unsigned long rate;
+	int err;
+
+	rate = clk_get_rate(clk);
+	if (rate)
+		return rate;
+
+	/* Just in case this clock is disabled by default */
+	err = clk_prepare_enable(clk);
+	if (err)
+		return 0;
+
+	rate = clk_get_rate(clk);
+	clk_disable_unprepare(clk);
+
+	return rate;
+}
+
 static const struct of_device_id flexcan_of_match[] = {
 	{ .compatible = "fsl,imx8qm-flexcan", .data = &fsl_imx8qm_devtype_data, },
 	{ .compatible = "fsl,imx8mp-flexcan", .data = &fsl_imx8mp_devtype_data, },
@@ -2137,7 +2157,7 @@ static int flexcan_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "no per clock defined\n");
 			return PTR_ERR(clk_per);
 		}
-		clock_freq = clk_get_rate(clk_per);
+		clock_freq = get_per_clk_rate(clk_per);
 	}
 
 	irq = platform_get_irq(pdev, 0);
