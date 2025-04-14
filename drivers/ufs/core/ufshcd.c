@@ -4351,6 +4351,16 @@ int ufshcd_send_bsg_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 		goto out;
 	}
 
+	if (uic_cmd->command == UIC_CMD_DME_HIBER_ENTER) {
+		ret = ufshcd_uic_hibern8_enter(hba);
+		goto out;
+	}
+
+	if (uic_cmd->command == UIC_CMD_DME_HIBER_EXIT) {
+		ret = ufshcd_uic_hibern8_exit(hba, uic_cmd);
+		goto out;
+	}
+
 	mutex_lock(&hba->uic_cmd_mutex);
 	ufshcd_add_delay_before_dme_cmd(hba);
 
