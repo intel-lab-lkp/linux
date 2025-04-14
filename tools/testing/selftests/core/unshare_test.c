@@ -28,8 +28,8 @@ TEST(unshare_EMFILE)
 	int fd;
 	ssize_t n, n2;
 	static char buf[512], buf2[512];
-	struct rlimit rlimit;
 	int nr_open;
+	int bits_per_long = sizeof(long) * 8;
 
 	fd = open("/proc/sys/fs/nr_open", O_RDWR);
 	ASSERT_GE(fd, 0);
@@ -40,24 +40,8 @@ TEST(unshare_EMFILE)
 
 	ASSERT_EQ(sscanf(buf, "%d", &nr_open), 1);
 
-	ASSERT_EQ(0, getrlimit(RLIMIT_NOFILE, &rlimit));
-
-	/* bump fs.nr_open */
-	n2 = sprintf(buf2, "%d\n", nr_open + 1024);
-	lseek(fd, 0, SEEK_SET);
-	write(fd, buf2, n2);
-
-	/* bump ulimit -n */
-	rlimit.rlim_cur = nr_open + 1024;
-	rlimit.rlim_max = nr_open + 1024;
-	EXPECT_EQ(0, setrlimit(RLIMIT_NOFILE, &rlimit)) {
-		lseek(fd, 0, SEEK_SET);
-		write(fd, buf, n);
-		exit(EXIT_FAILURE);
-	}
-
-	/* get a descriptor past the old fs.nr_open */
-	EXPECT_GE(dup2(2, nr_open + 64), 0) {
+	/* get a descriptor >= bits_per_long */
+	EXPECT_GE(dup2(2, bits_per_long+1), 0) {
 		lseek(fd, 0, SEEK_SET);
 		write(fd, buf, n);
 		exit(EXIT_FAILURE);
@@ -74,15 +58,21 @@ TEST(unshare_EMFILE)
 	if (pid == 0) {
 		int err;
 
-		/* restore fs.nr_open */
+		/* set nr_open == bits_per_long */
+		n2 = sprintf(buf2, "%d\n", bits_per_long);
 		lseek(fd, 0, SEEK_SET);
-		write(fd, buf, n);
+		write(fd, buf2, n2);
+
 		/* ... and now unshare(CLONE_FILES) must fail with EMFILE */
 		err = unshare(CLONE_FILES);
 		EXPECT_EQ(err, -1)
 			exit(EXIT_FAILURE);
 		EXPECT_EQ(errno, EMFILE)
 			exit(EXIT_FAILURE);
+
+		/* restore fs.nr_open */
+		lseek(fd, 0, SEEK_SET);
+		write(fd, buf, n);
 		exit(EXIT_SUCCESS);
 	}
 
