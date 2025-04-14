@@ -602,11 +602,11 @@ static struct platform_driver brcmf_pd = {
 
 static int __init brcmfmac_module_init(void)
 {
-	int err;
+	int err, probe;
 
 	/* Get the platform data (if available) for our devices */
-	err = platform_driver_probe(&brcmf_pd, brcmf_common_pd_probe);
-	if (err == -ENODEV)
+	probe = platform_driver_probe(&brcmf_pd, brcmf_common_pd_probe);
+	if (probe == -ENODEV)
 		brcmf_dbg(INFO, "No platform data available.\n");
 
 	/* Initialize global module paramaters */
@@ -615,7 +615,7 @@ static int __init brcmfmac_module_init(void)
 	/* Continue the initialization by registering the different busses */
 	err = brcmf_core_init();
 	if (err) {
-		if (brcmfmac_pdata)
+		if (probe != -ENODEV)
 			platform_driver_unregister(&brcmf_pd);
 	}
 
