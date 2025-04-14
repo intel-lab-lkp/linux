@@ -568,8 +568,10 @@ rcu_scale_writer(void *arg)
 		if (gp_exp) {
 			b_rcu_gp_test_started =
 				cur_ops->exp_completed() / 2;
-		} else {
+		} else if (cur_ops->get_gp_seq) {
 			b_rcu_gp_test_started = cur_ops->get_gp_seq();
+		} else {
+			b_rcu_gp_test_started = 0;
 		}
 	}
 
@@ -625,9 +627,11 @@ rcu_scale_writer(void *arg)
 				if (gp_exp) {
 					b_rcu_gp_test_finished =
 						cur_ops->exp_completed() / 2;
-				} else {
+				} else if (cur_ops->get_gp_seq) {
 					b_rcu_gp_test_finished =
 						cur_ops->get_gp_seq();
+				} else {
+					b_rcu_gp_test_finished = 0;
 				}
 				if (shutdown) {
 					smp_mb(); /* Assign before wake. */
