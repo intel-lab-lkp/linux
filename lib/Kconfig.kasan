@@ -31,6 +31,10 @@ config CC_HAS_KASAN_SW_TAGS
 config CC_HAS_WORKING_NOSANITIZE_ADDRESS
 	def_bool !CC_IS_GCC || GCC_VERSION >= 80300
 
+config KASAN_COMPILE_TEST
+	tristate "KASAN compile test"
+	depends on COMPILE_TEST && 64BIT && X86
+
 menuconfig KASAN
 	bool "KASAN: dynamic memory safety error detector"
 	depends on (((HAVE_ARCH_KASAN && CC_HAS_KASAN_GENERIC) || \
@@ -38,6 +42,7 @@ menuconfig KASAN
 		    CC_HAS_WORKING_NOSANITIZE_ADDRESS) || \
 		   HAVE_ARCH_KASAN_HW_TAGS
 	depends on SYSFS && !SLUB_TINY
+	depends on KASAN_COMPILE_TEST!=y
 	select STACKDEPOT_ALWAYS_INIT
 	help
 	  Enables KASAN (Kernel Address Sanitizer) - a dynamic memory safety
