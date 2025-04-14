@@ -1103,8 +1103,8 @@ kci_test_bridge_parent_id()
 	dev10=`ls ${sysfsnet}10/net/`
 	dev20=`ls ${sysfsnet}20/net/`
 	run_cmd ip link add name test-bond0 type bond mode 802.3ad
-	run_cmd ip link set dev $dev10 master test-bond0
-	run_cmd ip link set dev $dev20 master test-bond0
+	run_cmd ip link set dev $dev10 master test-bond0 down
+	run_cmd ip link set dev $dev20 master test-bond0 down
 	run_cmd ip link add name test-br0 type bridge
 	run_cmd ip link set dev test-bond0 master test-br0
 
