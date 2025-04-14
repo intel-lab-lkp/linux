@@ -99,11 +99,13 @@ struct mipi_dsi_host_ops {
 /**
  * struct mipi_dsi_host - DSI host device
  * @dev: driver model device node for this DSI host
+ * @compression_supported: DSI host support DSC feature
  * @ops: DSI host operations
  * @list: list management
  */
 struct mipi_dsi_host {
 	struct device *dev;
+	bool compression_supported;
 	const struct mipi_dsi_host_ops *ops;
 	struct list_head list;
 };
