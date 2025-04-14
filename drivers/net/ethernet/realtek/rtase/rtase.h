@@ -259,7 +259,7 @@ union rtase_rx_desc {
 #define RTASE_VLAN_TAG_MASK     GENMASK(15, 0)
 #define RTASE_RX_PKT_SIZE_MASK  GENMASK(13, 0)
 
-#define RTASE_IVEC_NAME_SIZE (IFNAMSIZ + 10)
+#define RTASE_IVEC_NAME_SIZE (IFNAMSIZ + 14)
 
 struct rtase_int_vector {
 	struct rtase_private *tp;
