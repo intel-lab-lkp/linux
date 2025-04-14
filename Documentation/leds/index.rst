@@ -30,3 +30,4 @@ LEDs
    leds-sc27xx
    leds-st1202
    leds-qcom-lpg
+   leds-wl-icled
