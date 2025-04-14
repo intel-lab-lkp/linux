@@ -110,7 +110,7 @@ struct drm_framebuffer *armada_fb_create(struct drm_device *dev,
 		goto err;
 	}
 
-	if (obj->obj.import_attach && !obj->sgt) {
+	if (drm_gem_is_imported(&obj->obj) && !obj->sgt) {
 		ret = armada_gem_map_import(obj);
 		if (ret)
 			goto err_unref;

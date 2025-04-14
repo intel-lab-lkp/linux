@@ -63,7 +63,7 @@ void armada_gem_free_object(struct drm_gem_object *obj)
 			iounmap(dobj->addr);
 	}
 
-	if (dobj->obj.import_attach) {
+	if (drm_gem_is_imported(&dobj->obj)) {
 		/* We only ever display imported data */
 		if (dobj->sgt)
 			dma_buf_unmap_attachment_unlocked(dobj->obj.import_attach,
