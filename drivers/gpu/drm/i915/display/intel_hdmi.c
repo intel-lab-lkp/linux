@@ -991,7 +991,7 @@ static bool intel_hdmi_set_gcp_infoframe(struct intel_encoder *encoder,
 		reg = HSW_TVIDEO_DIP_GCP(display, crtc_state->cpu_transcoder);
 	else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
 		reg = VLV_TVIDEO_DIP_GCP(crtc->pipe);
-	else if (HAS_PCH_SPLIT(dev_priv))
+	else if (HAS_PCH_SPLIT(display))
 		reg = TVIDEO_DIP_GCP(crtc->pipe);
 	else
 		return false;
@@ -1017,7 +1017,7 @@ void intel_hdmi_read_gcp_infoframe(struct intel_encoder *encoder,
 		reg = HSW_TVIDEO_DIP_GCP(display, crtc_state->cpu_transcoder);
 	else if (IS_VALLEYVIEW(dev_priv) || IS_CHERRYVIEW(dev_priv))
 		reg = VLV_TVIDEO_DIP_GCP(crtc->pipe);
-	else if (HAS_PCH_SPLIT(dev_priv))
+	else if (HAS_PCH_SPLIT(display))
 		reg = TVIDEO_DIP_GCP(crtc->pipe);
 	else
 		return;
@@ -2811,7 +2811,7 @@ static u8 mcc_encoder_to_ddc_pin(struct intel_encoder *encoder)
 
 static u8 rkl_encoder_to_ddc_pin(struct intel_encoder *encoder)
 {
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
+	struct intel_display *display = to_intel_display(encoder);
 	enum phy phy = intel_encoder_to_phy(encoder);
 
 	WARN_ON(encoder->port == PORT_C);
@@ -2822,7 +2822,7 @@ static u8 rkl_encoder_to_ddc_pin(struct intel_encoder *encoder)
 	 * combo outputs.  With CMP, the traditional DDI A-D pins are used for
 	 * all outputs.
 	 */
-	if (INTEL_PCH_TYPE(dev_priv) >= PCH_TGP && phy >= PHY_C)
+	if (INTEL_PCH_TYPE(display) >= PCH_TGP && phy >= PHY_C)
 		return GMBUS_PIN_9_TC1_ICP + phy - PHY_C;
 
 	return GMBUS_PIN_1_BXT + phy;
@@ -2831,7 +2831,6 @@ static u8 rkl_encoder_to_ddc_pin(struct intel_encoder *encoder)
 static u8 gen9bc_tgp_encoder_to_ddc_pin(struct intel_encoder *encoder)
 {
 	struct intel_display *display = to_intel_display(encoder);
-	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	enum phy phy = intel_encoder_to_phy(encoder);
 
 	drm_WARN_ON(display->drm, encoder->port == PORT_A);
@@ -2842,7 +2841,7 @@ static u8 gen9bc_tgp_encoder_to_ddc_pin(struct intel_encoder *encoder)
 	 * combo outputs.  With CMP, the traditional DDI A-D pins are used for
 	 * all outputs.
 	 */
-	if (INTEL_PCH_TYPE(i915) >= PCH_TGP && phy >= PHY_C)
+	if (INTEL_PCH_TYPE(display) >= PCH_TGP && phy >= PHY_C)
 		return GMBUS_PIN_9_TC1_ICP + phy - PHY_C;
 
 	return GMBUS_PIN_1_BXT + phy;
@@ -2900,18 +2899,18 @@ static u8 intel_hdmi_default_ddc_pin(struct intel_encoder *encoder)
 
 	if (IS_ALDERLAKE_S(dev_priv))
 		ddc_pin = adls_encoder_to_ddc_pin(encoder);
-	else if (INTEL_PCH_TYPE(dev_priv) >= PCH_DG1)
+	else if (INTEL_PCH_TYPE(display) >= PCH_DG1)
 		ddc_pin = dg1_encoder_to_ddc_pin(encoder);
 	else if (IS_ROCKETLAKE(dev_priv))
 		ddc_pin = rkl_encoder_to_ddc_pin(encoder);
-	else if (DISPLAY_VER(display) == 9 && HAS_PCH_TGP(dev_priv))
+	else if (DISPLAY_VER(display) == 9 && HAS_PCH_TGP(display))
 		ddc_pin = gen9bc_tgp_encoder_to_ddc_pin(encoder);
 	else if ((IS_JASPERLAKE(dev_priv) || IS_ELKHARTLAKE(dev_priv)) &&
-		 HAS_PCH_TGP(dev_priv))
+		 HAS_PCH_TGP(display))
 		ddc_pin = mcc_encoder_to_ddc_pin(encoder);
-	else if (INTEL_PCH_TYPE(dev_priv) >= PCH_ICP)
+	else if (INTEL_PCH_TYPE(display) >= PCH_ICP)
 		ddc_pin = icl_encoder_to_ddc_pin(encoder);
-	else if (HAS_PCH_CNP(dev_priv))
+	else if (HAS_PCH_CNP(display))
 		ddc_pin = cnp_encoder_to_ddc_pin(encoder);
 	else if (IS_GEMINILAKE(dev_priv) || IS_BROXTON(dev_priv))
 		ddc_pin = bxt_encoder_to_ddc_pin(encoder);
@@ -3014,7 +3013,7 @@ void intel_infoframe_init(struct intel_digital_port *dig_port)
 			dig_port->set_infoframes = hsw_set_infoframes;
 			dig_port->infoframes_enabled = hsw_infoframes_enabled;
 		}
-	} else if (HAS_PCH_IBX(dev_priv)) {
+	} else if (HAS_PCH_IBX(display)) {
 		dig_port->write_infoframe = ibx_write_infoframe;
 		dig_port->read_infoframe = ibx_read_infoframe;
 		dig_port->set_infoframes = ibx_set_infoframes;

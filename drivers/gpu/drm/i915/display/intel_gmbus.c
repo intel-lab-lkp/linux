@@ -156,19 +156,19 @@ static const struct gmbus_pin *get_gmbus_pin(struct intel_display *display,
 	const struct gmbus_pin *pins;
 	size_t size;
 
-	if (INTEL_PCH_TYPE(i915) >= PCH_MTL) {
+	if (INTEL_PCH_TYPE(display) >= PCH_MTL) {
 		pins = gmbus_pins_mtp;
 		size = ARRAY_SIZE(gmbus_pins_mtp);
-	} else if (INTEL_PCH_TYPE(i915) >= PCH_DG2) {
+	} else if (INTEL_PCH_TYPE(display) >= PCH_DG2) {
 		pins = gmbus_pins_dg2;
 		size = ARRAY_SIZE(gmbus_pins_dg2);
-	} else if (INTEL_PCH_TYPE(i915) >= PCH_DG1) {
+	} else if (INTEL_PCH_TYPE(display) >= PCH_DG1) {
 		pins = gmbus_pins_dg1;
 		size = ARRAY_SIZE(gmbus_pins_dg1);
-	} else if (INTEL_PCH_TYPE(i915) >= PCH_ICP) {
+	} else if (INTEL_PCH_TYPE(display) >= PCH_ICP) {
 		pins = gmbus_pins_icp;
 		size = ARRAY_SIZE(gmbus_pins_icp);
-	} else if (HAS_PCH_CNP(i915)) {
+	} else if (HAS_PCH_CNP(display)) {
 		pins = gmbus_pins_cnp;
 		size = ARRAY_SIZE(gmbus_pins_cnp);
 	} else if (IS_GEMINILAKE(i915) || IS_BROXTON(i915)) {
@@ -637,7 +637,7 @@ do_gmbus_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs, int num,
 	/* Display WA #0868: skl,bxt,kbl,cfl,glk */
 	if (IS_GEMINILAKE(i915) || IS_BROXTON(i915))
 		bxt_gmbus_clock_gating(display, false);
-	else if (HAS_PCH_SPT(i915) || HAS_PCH_CNP(i915))
+	else if (HAS_PCH_SPT(display) || HAS_PCH_CNP(display))
 		pch_gmbus_clock_gating(display, false);
 
 retry:
@@ -750,7 +750,7 @@ out:
 	/* Display WA #0868: skl,bxt,kbl,cfl,glk */
 	if (IS_GEMINILAKE(i915) || IS_BROXTON(i915))
 		bxt_gmbus_clock_gating(display, true);
-	else if (HAS_PCH_SPT(i915) || HAS_PCH_CNP(i915))
+	else if (HAS_PCH_SPT(display) || HAS_PCH_CNP(display))
 		pch_gmbus_clock_gating(display, true);
 
 	return ret;
