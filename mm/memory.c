@@ -7275,12 +7275,20 @@ static int clear_subpage(unsigned long addr, int idx, void *arg)
 	return 0;
 }
 
-/**
- * folio_zero_user - Zero a folio which will be mapped to userspace.
- * @folio: The folio to zero.
- * @addr_hint: The address will be accessed or the base address if uncelar.
+/*
+ * __folio_zero_user - page-at-a-time zeroing.
+ *
+ * Handle cases where we have nothing better available. This could be
+ * for a few reasons:
+ *
+ *   - the architecture does not support multi-page zeroing (no override
+ *     for folio_zero_user_preemptible()): because there might be no
+ *     optimized zeroing primitive, or because CONFIG_HIGHMEM is supported.
+ *
+ *   - !preempt_model_preemptible(): need to call cond_resched()
+ *     periodically to provide reasonable latency.
  */
-void folio_zero_user(struct folio *folio, unsigned long addr_hint)
+static void __folio_zero_user(struct folio *folio, unsigned long addr_hint)
 {
 	unsigned int nr_pages = folio_nr_pages(folio);
 
@@ -7288,6 +7296,26 @@ void folio_zero_user(struct folio *folio, unsigned long addr_hint)
 		clear_gigantic_page(folio, addr_hint, nr_pages);
 	else
 		process_huge_page(addr_hint, nr_pages, clear_subpage, folio);
+}
+
+void __weak folio_zero_user_preemptible(struct folio *, unsigned long)
+	__alias(__folio_zero_user);
+
+/**
+ * folio_zero_user - Zero a folio which will be mapped to userspace.
+ * @folio: The folio to zero.
+ * @addr_hint: The address will be accessed or the base address if uncelar.
+ */
+void folio_zero_user(struct folio *folio, unsigned long addr_hint)
+{
+	/*
+	 * Use the arch optimized version if we are preemptible and can
+	 * do zeroing of extended extents without worrying about latency.
+	 */
+	if (preempt_model_preemptible())
+		folio_zero_user_preemptible(folio, addr_hint);
+	else
+		__folio_zero_user(folio, addr_hint);
 }
 
 static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
