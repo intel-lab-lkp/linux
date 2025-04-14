@@ -898,6 +898,44 @@ static const struct ref_scale_ops shazptr_ops = {
 	.name		= "shazptr"
 };
 
+static void ref_shazptr_wc_read_section(const int nloops)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		preempt_disable();
+		{
+			guard(shazptr)(ref_shazptr_read_section);
+			/* Trigger wildcard logic */
+			guard(shazptr)(ref_shazptr_wc_read_section);
+		}
+		preempt_enable();
+	}
+}
+
+static void ref_shazptr_wc_delay_section(const int nloops, const int udl, const int ndl)
+{
+	int i;
+
+	for (i = nloops; i >= 0; i--) {
+		preempt_disable();
+		{
+			guard(shazptr)(ref_shazptr_delay_section);
+			/* Trigger wildcard logic */
+			guard(shazptr)(ref_shazptr_wc_delay_section);
+			un_delay(udl, ndl);
+		}
+		preempt_enable();
+	}
+}
+
+static const struct ref_scale_ops shazptr_wildcard_ops = {
+	.init		= ref_shazptr_init,
+	.readsection	= ref_shazptr_wc_read_section,
+	.delaysection	= ref_shazptr_wc_delay_section,
+	.name		= "shazptr_wildcard"
+};
+
 static void rcu_scale_one_reader(void)
 {
 	if (readdelay <= 0)
@@ -1205,7 +1243,7 @@ ref_scale_init(void)
 		&refcnt_ops, &rwlock_ops, &rwsem_ops, &lock_ops, &lock_irq_ops,
 		&acqrel_ops, &sched_clock_ops, &clock_ops, &jiffies_ops,
 		&typesafe_ref_ops, &typesafe_lock_ops, &typesafe_seqlock_ops,
-		&shazptr_ops,
+		&shazptr_ops, &shazptr_wildcard_ops,
 	};
 
 	if (!torture_init_begin(scale_type, verbose))
