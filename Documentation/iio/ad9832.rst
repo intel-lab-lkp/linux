@@ -1,0 +1,119 @@
+.. SPDX-License-Identifier: GPL-2.0-only
+
+================
+AD9832 driver
+================
+
+Direct Digital Synthesizer driver for Analog Devices Inc. AD9832 and AD9835.
+
+Supported devices
+=================
+
+The following chips are supported by this driver:
+
+* `AD9832 <https://www.analog.com/AD9832>`_
+* `AD9835 <https://www.analog.com/AD9835>`_
+
+The AD9832 is a numerically controlled oscillator employing
+a phase accumulator, a sine look-up table, and a 10-bit digital-
+to-analog converter (DAC) integrated on a single CMOS chip.
+
+Supported features
+==================
+
+SPI wiring modes
+----------------
+
+The driver currently supports the following SPI wiring configuration:
+
+3-wire mode
+^^^^^^^^^^^
+
+In this mode, communication occurs via SCLK, SDATA, and FSYNC signals.
+
+.. code-block::
+
+    +-------------+         +-------------+
+    |       FSYNC |<--------| CS/GPIO     |
+    |             |         |             |
+    |    AD983X   |         |     HOST    |
+    |             |         |             |
+    |       SDATA |<--------| MOSI        |
+    |        SCLK |<--------| SCK         |
+    +-------------+         +-------------+
+
+
+Channel configuration
+---------------------
+
+The AD9832 features two frequency registers (FREQ0 and FREQ1) and
+four phase registers (PHASE0, PHASE1, PHASE2, and PHASE3).
+The selection of which of these registers is actively used to generate
+the output waveform can be controlled in two ways: via external pins or
+via internal control bits.
+
+* Pin Control: The ``FSELECT`` pin determines whether FREQ0 REG or FREQ1
+  REG is used.
+* The ``PSEL0`` and ``PSEL1`` pins select which of the four PHASE registers
+  is active.
+* These pins are sampled on the rising edge of the master clock (MCLK).
+* Bit Control: This is utilized by the driver for the selection of the
+  frequency and phase registers can be controlled using internal bits.
+* Bit D11 (within a control word) can select the FREQx REG, and Bits D9 and
+  D10 can select the PHASEx REG.
+
+The source of control, whether from the external pins or the internal bits,
+is determined by the SELSRC bit (Select Source bit, D12) within a control
+register.
+When SELSRC = 0, the pins are used for selection, which is the default state
+after the CLR (Clear) bit is set high. When SELSRC = 1,
+the internal bits are used for selection.
+
+Synchronization
+---------------
+
+The SYNC bit (D13) determines how the reading of the FSELECT, PSEL0, and
+PSEL1 pins (when SELSRC = 0) is synchronized with the master clock (MCLK):
+
+When SYNC = 1: The reading of the pins is synchronized with the rising edge
+of MCLK. This ensures the inputs are valid at the sampling instant, even if
+the setup and hold times are violated. This mode introduces a latency of 8
+MCLK cycles.
+When SYNC = 0: The sampling occurs asynchronously, and the latency is reduced
+to 6 MCLK cycles if the timing characteristics are met.
+
+The SYNC bit is particularly important in applications where the timing of
+register selection changes is critical or when interfacing with control systems
+that may not strictly adhere to the setup and hold time requirements.
+
+Power Supply
+------------
+
+The AD9832 supports separate power supply pins for the analog and digital
+sections via the ``AVDD`` and ``DVDD`` inputs. Both pins support voltage
+ranges from 2.97V to 5.5V (5V ±10% or 3.3V ±10%).
+
+Proper decoupling is critical: both AVDD and DVDD should be decoupled with
+0.1µF ceramic capacitors in parallel with 10µF tantalum capacitors to AGND
+and DGND respectively.
+
+The device also supports a low power sleep mode, reducing current
+consumption to 350µA maximum. When powered down using the power-down bit,
+power consumption is reduced to 5mW (5V) or 3mW (3V).
+
+Reference Voltage
+-----------------
+
+The AD9832 supports using either an internal 1.21V reference or an external
+reference voltage via the ``REFIN`` input.
+
+If ``refin-supply`` is present, then an external reference of 1.21V nominal is
+supplied to the REFIN pin. If not specified, the internal reference is used
+and is available at the ``REFOUT`` pin.
+
+The internal reference has an accuracy of 1.21V ±7% min/max across the full
+temperature range (-40°C to +85°C) with a typical temperature coefficient of
+100 ppm/°C. The REFOUT pin should be decoupled with a 10nF capacitor to AGND.
+
+For applications requiring reduced wake-up time at low power supplies and
+low temperatures, the use of an external reference is recommended.
