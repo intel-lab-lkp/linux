@@ -9,6 +9,7 @@
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
+#include <linux/math64.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
@@ -22,6 +23,7 @@
 
 #include <drm/display/drm_dp_aux_bus.h>
 #include <drm/display/drm_dp_helper.h>
+#include <drm/display/drm_dsc_helper.h>
 #include <drm/display/drm_hdcp_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
@@ -476,9 +478,14 @@ static int anx7625_set_k_value(struct anx7625_data *ctx)
 				 MIPI_DIGITAL_ADJ_1, 0x3D);
 }
 
-static bool anx7625_dsc_check(struct anx7625_data *ctx)
+static bool anx7625_dsc_check(struct anx7625_data *ctx, int pixelclock)
 {
-	if (ctx->dt.pixelclock.min > DSC_PIXEL_CLOCK)
+	struct mipi_dsi_host *host = ctx->host;
+
+	if (!host)
+		return false;
+
+	if (host->compression_supported && pixelclock > DSC_PIXEL_CLOCK)
 		return true;
 
 	return false;
@@ -491,7 +498,7 @@ static inline int anx7625_h_timing_reg_write(struct anx7625_data *ctx,
 {
 	int ret;
 
-	if (dsc_check && anx7625_dsc_check(ctx))
+	if (dsc_check && anx7625_dsc_check(ctx, ctx->dt.pixelclock.min))
 		val = dsc_div(val);
 
 	ret = anx7625_reg_write(ctx, client, reg_addr, val);
@@ -547,6 +554,79 @@ static int anx7625_v_timing_write(struct anx7625_data *ctx,
 	/* VBP */
 	ret |= anx7625_reg_write(ctx, client, VERTICAL_BACK_PORCH,
 				 ctx->dt.vback_porch.min);
+
+	return ret;
+}
+
+static int anx7625_set_dsc_params(struct anx7625_data *ctx)
+{
+	int ret, i;
+	u16 htotal, vtotal;
+
+	/* Video Horizontal timing */
+	ret = anx7625_h_timing_write(ctx, ctx->i2c.tx_p2_client, false);
+
+	/* Video Vertical timing */
+	ret |= anx7625_v_timing_write(ctx, ctx->i2c.tx_p2_client);
+
+	/* Vtotal */
+	vtotal = ctx->dt.vactive.min + ctx->dt.vfront_porch.min +
+		 ctx->dt.vback_porch.min + ctx->dt.vsync_len.min;
+	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p2_client, TOTAL_LINES_L,
+				 vtotal);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.tx_p2_client, TOTAL_LINES_H,
+				 vtotal >> 8);
+	/* Htotal */
+	htotal = ctx->dt.hactive.min + ctx->dt.hfront_porch.min +
+			 ctx->dt.hback_porch.min + ctx->dt.hsync_len.min;
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client, TOTAL_PIXEL_L_7E,
+				 htotal);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client, TOTAL_PIXEL_H_7E,
+				 htotal >> 8);
+	/* Hactive */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 ACTIVE_PIXEL_L_7E, ctx->dt.hactive.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 ACTIVE_PIXEL_H_7E, ctx->dt.hactive.min >> 8);
+	/* HFP */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 HORIZON_FRONT_PORCH_L_7E,
+				 ctx->dt.hfront_porch.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 HORIZON_FRONT_PORCH_H_7E,
+				 ctx->dt.hfront_porch.min >> 8);
+	/* HWS */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 HORIZON_SYNC_WIDTH_L_7E,
+				 ctx->dt.hsync_len.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 HORIZON_SYNC_WIDTH_H_7E,
+				 ctx->dt.hsync_len.min >> 8);
+	/* HBP */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 HORIZON_BACK_PORCH_L_7E,
+				 ctx->dt.hback_porch.min);
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p0_client,
+				 HORIZON_BACK_PORCH_H_7E,
+				 ctx->dt.hback_porch.min >> 8);
+
+	/* Config DSC decoder internal blank timing for decoder to start */
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p1_client,
+				 H_BLANK_L,
+				 dsc_div(htotal - ctx->dt.hactive.min));
+	ret |= anx7625_reg_write(ctx, ctx->i2c.rx_p1_client,
+				 H_BLANK_H,
+				 dsc_div(htotal - ctx->dt.hactive.min) >> 8);
+
+	/* Compress ratio  RATIO bit[7:6] */
+	ret |= anx7625_write_and(ctx, ctx->i2c.rx_p0_client, R_I2C_1, 0x3F);
+	ret |= anx7625_write_or(ctx, ctx->i2c.rx_p0_client, R_I2C_1,
+				(5 - DSC_COMPRESS_RATIO) << 6);
+	/*PPS table*/
+	for (i = 0; i < PPS_SIZE; i += PPS_BLOCK_SIZE)
+		ret |= anx7625_reg_block_write(ctx, ctx->i2c.rx_p2_client,
+					       R_PPS_REG_0 + i, PPS_BLOCK_SIZE,
+					       &ctx->pps_table[i]);
 
 	return ret;
 }
@@ -697,13 +777,20 @@ static int anx7625_api_dsi_config(struct anx7625_data *ctx)
 static int anx7625_dsi_config(struct anx7625_data *ctx)
 {
 	struct device *dev = ctx->dev;
-	int ret;
+	int ret = 0;
 
 	DRM_DEV_DEBUG_DRIVER(dev, "config dsi.\n");
 
-	/* DSC disable */
-	ret = anx7625_write_and(ctx, ctx->i2c.rx_p0_client,
-				R_DSC_CTRL_0, ~DSC_EN);
+	if (anx7625_dsc_check(ctx, ctx->dt.pixelclock.min)) {
+		ret = anx7625_set_dsc_params(ctx);
+		/* DSC enable */
+		ret |= anx7625_write_or(ctx, ctx->i2c.rx_p0_client,
+					R_DSC_CTRL_0, DSC_EN);
+	} else {
+		/* DSC disable */
+		ret = anx7625_write_and(ctx, ctx->i2c.rx_p0_client,
+					R_DSC_CTRL_0, ~DSC_EN);
+	}
 
 	ret |= anx7625_api_dsi_config(ctx);
 
@@ -2121,6 +2208,8 @@ static int anx7625_setup_dsi_device(struct anx7625_data *ctx)
 		MIPI_DSI_MODE_VIDEO_HSE	|
 		MIPI_DSI_HS_PKT_END_ALIGNED;
 
+	dsi->host = host;
+	dsi->dsc = &ctx->dsc;
 	ctx->dsi = dsi;
 
 	return 0;
@@ -2223,19 +2312,77 @@ anx7625_bridge_mode_valid(struct drm_bridge *bridge,
 {
 	struct anx7625_data *ctx = bridge_to_anx7625(bridge);
 	struct device *dev = ctx->dev;
+	int maximum_pixelclock = SUPPORT_PIXEL_CLOCK;
 
 	DRM_DEV_DEBUG_DRIVER(dev, "drm mode checking\n");
+	if (!ctx->host->compression_supported) {
+		DRM_DEV_DEBUG_DRIVER(dev, "host not support DSC");
+		maximum_pixelclock = DSC_PIXEL_CLOCK;
+	}
 
-	/* Max 1200p at 5.4 Ghz, one lane, pixel clock 300M */
-	if (mode->clock > SUPPORT_PIXEL_CLOCK) {
+	if (mode->clock > maximum_pixelclock) {
 		DRM_DEV_DEBUG_DRIVER(dev,
 				     "drm mode invalid, pixelclock too high.\n");
 		return MODE_CLOCK_HIGH;
 	}
 
+	if (mode->clock < SUPPORT_MIN_PIXEL_CLOCK)
+		return MODE_CLOCK_LOW;
+
+	/*
+	 * If hdisplay cannot be divided by DSC compress ratio, then display
+	 * will have overlap/shift issue
+	 */
+	if (mode->clock > DSC_PIXEL_CLOCK &&
+	    (mode->hdisplay % DSC_COMPRESS_RATIO != 0))
+		return MODE_CLOCK_HIGH;
+
 	DRM_DEV_DEBUG_DRIVER(dev, "drm mode valid.\n");
 
 	return MODE_OK;
+}
+
+static void anx7625_dsc_enable(struct anx7625_data *ctx, bool en)
+{
+	int ret;
+	struct device *dev = ctx->dev;
+
+	if (en) {
+		ctx->dsc.dsc_version_major = 1;
+		ctx->dsc.dsc_version_minor = 1;
+		ctx->dsc.slice_height = 8;
+		ctx->dsc.slice_width = ctx->dt.hactive.min / DSC_SLICE_NUM;
+		ctx->dsc.slice_count = DSC_SLICE_NUM;
+		ctx->dsc.bits_per_component = 8;
+		ctx->dsc.bits_per_pixel = 8 << 4; /* 4 fractional bits */
+		ctx->dsc.block_pred_enable = true;
+		ctx->dsc.native_420 = false;
+		ctx->dsc.native_422 = false;
+		ctx->dsc.simple_422 = false;
+		ctx->dsc.vbr_enable = false;
+		ctx->dsc.convert_rgb = 1;
+
+		drm_dsc_set_rc_buf_thresh(&ctx->dsc);
+		drm_dsc_set_const_params(&ctx->dsc);
+
+		ctx->dsc.initial_scale_value = drm_dsc_initial_scale_value(&ctx->dsc);
+		ctx->dsc.line_buf_depth = ctx->dsc.bits_per_component + 1;
+		ret = drm_dsc_setup_rc_params(&ctx->dsc, DRM_DSC_1_2_444);
+		if (ret < 0)
+			dev_warn(dev, "drm_dsc_setup_rc_params ret %d\n", ret);
+
+		ret = drm_dsc_compute_rc_parameters(&ctx->dsc);
+		if (ret)
+			dev_warn(dev, "drm dsc compute rc parameters failed ret %d\n", ret);
+
+		drm_dsc_pps_payload_pack((struct drm_dsc_picture_parameter_set *)&ctx->pps_table,
+					 &ctx->dsc);
+		dev_dbg(dev, "anx7625 enable dsc\n");
+	} else {
+		ctx->dsc.dsc_version_major = 0;
+		ctx->dsc.dsc_version_minor = 0;
+		dev_dbg(dev, "anx7625 disable dsc\n");
+	}
 }
 
 static void anx7625_bridge_mode_set(struct drm_bridge *bridge,
@@ -2282,6 +2429,8 @@ static void anx7625_bridge_mode_set(struct drm_bridge *bridge,
 	DRM_DEV_DEBUG_DRIVER(dev, "vsync_end(%d),vtotal(%d).\n",
 			     mode->vsync_end,
 			     mode->vtotal);
+
+	anx7625_dsc_enable(ctx, anx7625_dsc_check(ctx, ctx->dt.pixelclock.min));
 }
 
 static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
@@ -2296,10 +2445,6 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 
 	DRM_DEV_DEBUG_DRIVER(dev, "drm mode fixup set\n");
 
-	/* No need fixup for external monitor */
-	if (!ctx->pdata.panel_bridge)
-		return true;
-
 	hsync = mode->hsync_end - mode->hsync_start;
 	hfp = mode->hsync_start - mode->hdisplay;
 	hbp = mode->htotal - mode->hsync_end;
@@ -2310,11 +2455,23 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 			     hsync, hfp, hbp, adj->clock);
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync_start(%d), hsync_end(%d), htot(%d)\n",
 			     adj->hsync_start, adj->hsync_end, adj->htotal);
-
 	adj_hfp = hfp;
 	adj_hsync = hsync;
 	adj_hbp = hbp;
 	adj_hblanking = hblanking;
+
+	if (anx7625_dsc_check(ctx, mode->clock)) {
+		adj_hsync = DSC_HSYNC_LEN;
+		adj_hfp = DSC_HFP_LEN;
+		adj_hbp = DSC_HBP_LEN;
+		vref = (u32)div_u64((u64)adj->clock * 1000 * 1000,
+				    adj->htotal * adj->vtotal);
+		goto calculate_timing;
+	}
+
+	/* No need fixup for external monitor */
+	if (!ctx->pdata.panel_bridge)
+		return true;
 
 	/* HFP needs to be even */
 	if (hfp & 0x1) {
@@ -2387,6 +2544,8 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 			adj_hfp -= delta_adj;
 	}
 
+calculate_timing:
+
 	DRM_DEV_DEBUG_DRIVER(dev, "after mode fixup\n");
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync(%d), hfp(%d), hbp(%d), clock(%d)\n",
 			     adj_hsync, adj_hfp, adj_hbp, adj->clock);
@@ -2395,6 +2554,10 @@ static bool anx7625_bridge_mode_fixup(struct drm_bridge *bridge,
 	adj->hsync_start = adj->hdisplay + adj_hfp;
 	adj->hsync_end = adj->hsync_start + adj_hsync;
 	adj->htotal = adj->hsync_end + adj_hbp;
+	if (anx7625_dsc_check(ctx, mode->clock))
+		adj->clock = (u32)div_u64((u64)vref * adj->htotal * adj->vtotal,
+					  1000 * 1000);
+
 	DRM_DEV_DEBUG_DRIVER(dev, "hsync_start(%d), hsync_end(%d), htot(%d)\n",
 			     adj->hsync_start, adj->hsync_end, adj->htotal);
 

@@ -149,6 +149,8 @@
 #define HFP_HBP_DEF		((HBLANKING_MIN - SYNC_LEN_DEF) / 2)
 #define VIDEO_CONTROL_0	0x08
 
+#define  TOTAL_LINES_L          0x12
+#define  TOTAL_LINES_H          0x13
 #define  ACTIVE_LINES_L         0x14
 #define  ACTIVE_LINES_H         0x15  /* Bit[7:6] are reserved */
 #define  VERTICAL_FRONT_PORCH   0x16
@@ -168,7 +170,27 @@
 
 #define  DSC_COMPRESS_RATIO           3
 #define  dsc_div(X)                   ((X) / DSC_COMPRESS_RATIO)
+#define  DSC_SLICE_NUM                2
 #define  DSC_PIXEL_CLOCK              250000
+#define  DSC_HSYNC_LEN                90
+#define  DSC_HFP_LEN                  177
+#define  DSC_HBP_LEN                  297
+
+#define  TOTAL_PIXEL_L_7E             0x50
+#define  TOTAL_PIXEL_H_7E             0x51  /* bit[7:6] are reserved */
+#define  ACTIVE_PIXEL_L_7E            0x52
+#define  ACTIVE_PIXEL_H_7E            0x53  /* bit[7:6] are reserved */
+#define  HORIZON_FRONT_PORCH_L_7E     0x54
+#define  HORIZON_FRONT_PORCH_H_7E     0x55
+#define  HORIZON_SYNC_WIDTH_L_7E      0x56
+#define  HORIZON_SYNC_WIDTH_H_7E      0x57
+#define  HORIZON_BACK_PORCH_L_7E      0x58
+#define  HORIZON_BACK_PORCH_H_7E      0x59
+
+#define  PPS_SIZE                     128
+#define  PPS_BLOCK_SIZE               32
+#define  R_PPS_REG_0                  0x80
+#define  R_I2C_1                      0x81
 
 /******** END of I2C Address 0x72 *********/
 
@@ -419,6 +441,7 @@ enum audio_wd_len {
 #define MAX_EDID_BLOCK	3
 #define EDID_TRY_CNT	3
 #define SUPPORT_PIXEL_CLOCK	300000
+#define SUPPORT_MIN_PIXEL_CLOCK	38000
 
 /***************** Display End *****************/
 
@@ -482,7 +505,10 @@ struct anx7625_data {
 	u8 bridge_attached;
 	struct drm_connector *connector;
 	struct mipi_dsi_device *dsi;
+	struct mipi_dsi_host *host;
 	struct drm_dp_aux aux;
+	struct drm_dsc_config dsc;
+	char pps_table[PPS_SIZE];
 };
 
 #endif  /* __ANX7625_H__ */
