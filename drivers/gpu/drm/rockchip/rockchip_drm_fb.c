@@ -18,6 +18,8 @@
 #include "rockchip_drm_fb.h"
 #include "rockchip_drm_gem.h"
 
+#define ROCKCHIP_AFBC_MAX_WIDTH		2560
+
 static const struct drm_framebuffer_funcs rockchip_drm_fb_funcs = {
 	.destroy       = drm_gem_fb_destroy,
 	.create_handle = drm_gem_fb_create_handle,
@@ -52,6 +54,13 @@ rockchip_fb_create(struct drm_device *dev, struct drm_file *file,
 	}
 
 	if (drm_is_afbc(mode_cmd->modifier[0])) {
+		if (mode_cmd->width > ROCKCHIP_AFBC_MAX_WIDTH) {
+			DRM_DEBUG_KMS("AFBC is not supported for the width %d (max %d)\n",
+				      mode_cmd->width,
+				      ROCKCHIP_AFBC_MAX_WIDTH);
+			return ERR_PTR(-EINVAL);
+		};
+
 		int ret, i;
 
 		ret = drm_gem_fb_afbc_init(dev, mode_cmd, afbc_fb);
