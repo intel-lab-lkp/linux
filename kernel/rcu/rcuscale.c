@@ -32,6 +32,7 @@
 #include <linux/freezer.h>
 #include <linux/cpu.h>
 #include <linux/delay.h>
+#include <linux/shazptr.h>
 #include <linux/stat.h>
 #include <linux/srcu.h>
 #include <linux/slab.h>
@@ -428,6 +429,54 @@ static struct rcu_scale_ops tasks_tracing_ops = {
 #define TASKS_TRACING_OPS
 
 #endif // #else // #ifdef CONFIG_TASKS_TRACE_RCU
+
+static int shazptr_scale_read_lock(void)
+{
+	long cpu = raw_smp_processor_id();
+
+	/* Use cpu + 1 as the key */
+	guard(shazptr)((void *)(cpu + 1));
+
+	return 0;
+}
+
+static int shazptr_scale_wc_read_lock(void)
+{
+	guard(shazptr)(SHAZPTR_WILDCARD);
+
+	return 0;
+}
+
+
+static void shazptr_scale_read_unlock(int idx)
+{
+	/* Do nothing, it's OK since readers are doing back-to-back lock+unlock*/
+}
+
+static void shazptr_scale_sync(void)
+{
+	long cpu = raw_smp_processor_id();
+
+	synchronize_shazptr((void *)(cpu + 1));
+}
+
+static struct rcu_scale_ops shazptr_ops = {
+	.ptype		= RCU_FLAVOR,
+	.readlock	= shazptr_scale_read_lock,
+	.readunlock	= shazptr_scale_read_unlock,
+	.sync		= shazptr_scale_sync,
+	.exp_sync	= shazptr_scale_sync,
+	.name		= "shazptr"
+};
+
+static struct rcu_scale_ops shazptr_wc_ops = {
+	.ptype		= RCU_FLAVOR,
+	.readlock	= shazptr_scale_wc_read_lock,
+	.readunlock	= shazptr_scale_read_unlock,
+	.sync		= shazptr_scale_sync,
+	.exp_sync	= shazptr_scale_sync,
+	.name		= "shazptr_wildcard"
+};
 
 static unsigned long rcuscale_seq_diff(unsigned long new, unsigned long old)
 {
@@ -1090,7 +1139,8 @@ rcu_scale_init(void)
 	long i;
 	long j;
 	static struct rcu_scale_ops *scale_ops[] = {
-		&rcu_ops, &srcu_ops, &srcud_ops, TASKS_OPS TASKS_RUDE_OPS TASKS_TRACING_OPS
+		&rcu_ops, &srcu_ops, &srcud_ops, &shazptr_ops, &shazptr_wc_ops,
+		TASKS_OPS TASKS_RUDE_OPS TASKS_TRACING_OPS
 	};
 
 	if (!torture_init_begin(scale_type, verbose))
