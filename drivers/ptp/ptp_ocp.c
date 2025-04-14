@@ -3963,6 +3963,9 @@ _signal_summary_show(struct seq_file *s, struct ptp_ocp *bp, int nr)
 	bool on;
 	u32 val;
 
+	if (!bp->signal_out[nr])
+		return;
+
 	on = signal->running;
 	sprintf(label, "GEN%d", nr + 1);
 	seq_printf(s, "%7s: %s, period:%llu duty:%d%% phase:%llu pol:%d",
