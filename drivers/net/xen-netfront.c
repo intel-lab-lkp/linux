@@ -987,6 +987,10 @@ static u32 xennet_run_xdp(struct netfront_queue *queue, struct page *pdata,
 	case XDP_TX:
 		get_page(pdata);
 		xdpf = xdp_convert_buff_to_frame(xdp);
+		if (unlikely(!xdpf)) {
+			trace_xdp_exception(queue->info->netdev, prog, act);
+			break;
+		}
 		err = xennet_xdp_xmit(queue->info->netdev, 1, &xdpf, 0);
 		if (unlikely(!err))
 			xdp_return_frame_rx_napi(xdpf);
