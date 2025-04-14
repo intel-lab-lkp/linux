@@ -803,6 +803,11 @@ static inline bool qdisc_tx_changing(const struct net_device *dev)
 	return false;
 }
 
+static inline bool qdisc_txq_is_noop(const struct netdev_queue *txq)
+{
+	return rcu_access_pointer(txq->qdisc) == &noop_qdisc;
+}
+
 /* Is the device using the noop qdisc on all queues?  */
 static inline bool qdisc_tx_is_noop(const struct net_device *dev)
 {
@@ -810,7 +815,7 @@ static inline bool qdisc_tx_is_noop(const struct net_device *dev)
 
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		struct netdev_queue *txq = netdev_get_tx_queue(dev, i);
-		if (rcu_access_pointer(txq->qdisc) != &noop_qdisc)
+		if (!qdisc_txq_is_noop(txq))
 			return false;
 	}
 	return true;
