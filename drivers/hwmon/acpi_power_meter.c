@@ -890,8 +890,12 @@ static int acpi_power_meter_add(struct acpi_device *device)
 	resource->sensors_valid = 0;
 	resource->acpi_dev = device;
 	mutex_init(&resource->lock);
-	strcpy(acpi_device_name(device), ACPI_POWER_METER_DEVICE_NAME);
-	strcpy(acpi_device_class(device), ACPI_POWER_METER_CLASS);
+	strscpy(acpi_device_name(device), 
+		ACPI_POWER_METER_DEVICE_NAME,
+	        MAX_ACPI_DEVICE_NAME_LEN);
+	strscpy(acpi_device_class(device), 
+		ACPI_POWER_METER_CLASS,
+		MAX_ACPI_CLASS_NAME_LEN);
 	device->driver_data = resource;
 
 #if IS_REACHABLE(CONFIG_ACPI_IPMI)
