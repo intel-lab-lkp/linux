@@ -58,6 +58,7 @@
 #include <linux/context_tracking.h>
 #include <linux/console.h>
 #include <linux/kasan.h>
+#include <linux/shazptr.h>
 
 #include <asm/sections.h>
 
@@ -1265,14 +1266,18 @@ static bool is_dynamic_key(const struct lock_class_key *key)
 
 	hash_head = keyhashentry(key);
 
-	rcu_read_lock();
+	/* Need preemption disable for using shazptr. */
+	guard(preempt)();
+
+	/* Protect the list search with shazptr. */
+	guard(shazptr)(hash_head);
+
 	hlist_for_each_entry_rcu(k, hash_head, hash_entry) {
 		if (k == key) {
 			found = true;
 			break;
 		}
 	}
-	rcu_read_unlock();
 
 	return found;
 }
@@ -6611,7 +6616,7 @@ void lockdep_unregister_key(struct lock_class_key *key)
 		call_rcu(&delayed_free.rcu_head, free_zapped_rcu);
 
 	/* Wait until is_dynamic_key() has finished accessing k->hash_entry. */
-	synchronize_rcu();
+	synchronize_shazptr(keyhashentry(key));
 }
 EXPORT_SYMBOL_GPL(lockdep_unregister_key);
 
