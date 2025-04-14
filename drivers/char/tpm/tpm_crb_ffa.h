@@ -14,9 +14,9 @@ int tpm_crb_ffa_init(void);
 int tpm_crb_ffa_get_interface_version(u16 *major, u16 *minor);
 int tpm_crb_ffa_start(int request_type, int locality);
 #else
-static inline int tpm_crb_ffa_init(void) { return 0; }
-static inline int tpm_crb_ffa_get_interface_version(u16 *major, u16 *minor) { return 0; }
-static inline int tpm_crb_ffa_start(int request_type, int locality) { return 0; }
+static inline int tpm_crb_ffa_init(void) { return -ENODEV; }
+static inline int tpm_crb_ffa_get_interface_version(u16 *major, u16 *minor) { return -ENODEV; }
+static inline int tpm_crb_ffa_start(int request_type, int locality) { return -ENODEV; }
 #endif
 
 #define CRB_FFA_START_TYPE_COMMAND 0
