@@ -18,6 +18,14 @@ DEFINE_STATIC_KEY_FALSE(delayacct_key);
 int delayacct_on __read_mostly;	/* Delay accounting turned on/off */
 struct kmem_cache *delayacct_cache;
 
+#define DELAYACCT_END(task, type) \
+	delayacct_end(&(task)->delays->lock, \
+		      &(task)->delays->type##_start, \
+		      &(task)->delays->type##_delay, \
+		      &(task)->delays->type##_count, \
+		      &(task)->delays->type##_delay_max, \
+		      &(task)->delays->type##_delay_min)
+
 static void set_delayacct(bool enabled)
 {
 	if (enabled) {
@@ -123,12 +131,7 @@ void __delayacct_blkio_start(void)
  */
 void __delayacct_blkio_end(struct task_struct *p)
 {
-	delayacct_end(&p->delays->lock,
-		      &p->delays->blkio_start,
-		      &p->delays->blkio_delay,
-		      &p->delays->blkio_count,
-		      &p->delays->blkio_delay_max,
-		      &p->delays->blkio_delay_min);
+	DELAYACCT_END(p, blkio);
 }
 
 int delayacct_add_tsk(struct taskstats *d, struct task_struct *tsk)
@@ -231,12 +234,7 @@ void __delayacct_freepages_start(void)
 
 void __delayacct_freepages_end(void)
 {
-	delayacct_end(&current->delays->lock,
-		      &current->delays->freepages_start,
-		      &current->delays->freepages_delay,
-		      &current->delays->freepages_count,
-		      &current->delays->freepages_delay_max,
-		      &current->delays->freepages_delay_min);
+	DELAYACCT_END(current, freepages);
 }
 
 void __delayacct_thrashing_start(bool *in_thrashing)
@@ -255,12 +253,7 @@ void __delayacct_thrashing_end(bool *in_thrashing)
 		return;
 
 	current->in_thrashing = 0;
-	delayacct_end(&current->delays->lock,
-		      &current->delays->thrashing_start,
-		      &current->delays->thrashing_delay,
-		      &current->delays->thrashing_count,
-		      &current->delays->thrashing_delay_max,
-		      &current->delays->thrashing_delay_min);
+	DELAYACCT_END(current, thrashing);
 }
 
 void __delayacct_swapin_start(void)
@@ -270,12 +263,7 @@ void __delayacct_swapin_start(void)
 
 void __delayacct_swapin_end(void)
 {
-	delayacct_end(&current->delays->lock,
-		      &current->delays->swapin_start,
-		      &current->delays->swapin_delay,
-		      &current->delays->swapin_count,
-		      &current->delays->swapin_delay_max,
-		      &current->delays->swapin_delay_min);
+	DELAYACCT_END(current, swapin);
 }
 
 void __delayacct_compact_start(void)
@@ -285,12 +273,7 @@ void __delayacct_compact_start(void)
 
 void __delayacct_compact_end(void)
 {
-	delayacct_end(&current->delays->lock,
-		      &current->delays->compact_start,
-		      &current->delays->compact_delay,
-		      &current->delays->compact_count,
-		      &current->delays->compact_delay_max,
-		      &current->delays->compact_delay_min);
+	DELAYACCT_END(current, compact);
 }
 
 void __delayacct_wpcopy_start(void)
@@ -300,12 +283,7 @@ void __delayacct_wpcopy_start(void)
 
 void __delayacct_wpcopy_end(void)
 {
-	delayacct_end(&current->delays->lock,
-		      &current->delays->wpcopy_start,
-		      &current->delays->wpcopy_delay,
-		      &current->delays->wpcopy_count,
-		      &current->delays->wpcopy_delay_max,
-		      &current->delays->wpcopy_delay_min);
+	DELAYACCT_END(current, wpcopy);
 }
 
 void __delayacct_irq(struct task_struct *task, u32 delta)
