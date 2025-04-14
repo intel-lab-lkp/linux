@@ -950,6 +950,16 @@ config LEDS_SPI_BYTE
 	  for controlling the brightness. Currently the following controller is
 	  supported: Ubiquiti airCube ISP microcontroller based LED controller.
 
+config LEDS_WL_ICLED
+	tristate "LED Support for WL-ICLED RGB LEDs"
+	depends on LEDS_CLASS
+	depends on SPI
+	depends on OF
+	depends on LEDS_CLASS_MULTICOLOR
+	help
+	  Say yes to get support for the Wurth Elektronik WL-ICLED series RGB
+	  LEDs with integrated controller.
+
 config LEDS_TI_LMU_COMMON
 	tristate "LED driver for TI LMU" if COMPILE_TEST
 	select REGMAP
