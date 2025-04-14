@@ -8,6 +8,7 @@
 #include <linux/string.h>
 #include <linux/etherdevice.h>
 #include <linux/phylink.h>
+#include <net/udp_tunnel.h>
 #include <net/ip.h>
 #include <linux/if_vlan.h>
 
@@ -392,6 +393,8 @@ static int txgbe_open(struct net_device *netdev)
 
 	txgbe_up_complete(wx);
 
+	udp_tunnel_nic_reset_ntf(netdev);
+
 	return 0;
 
 err_free_irq:
@@ -537,6 +540,87 @@ void txgbe_do_reset(struct net_device *netdev)
 		txgbe_reset(wx);
 }
 
+static int txgbe_udp_tunnel_set(struct net_device *dev, unsigned int table,
+				unsigned int entry, struct udp_tunnel_info *ti)
+{
+	struct wx *wx = netdev_priv(dev);
+	struct txgbe *txgbe = wx->priv;
+
+	switch (ti->type) {
+	case UDP_TUNNEL_TYPE_VXLAN:
+		if (txgbe->vxlan_port == ti->port)
+			break;
+
+		if (txgbe->vxlan_port) {
+			wx_err(wx, "VXLAN port %d set, not adding port %d\n",
+			       txgbe->vxlan_port, ti->port);
+			return -EINVAL;
+		}
+
+		txgbe->vxlan_port = ti->port;
+		wr32(wx, TXGBE_CFG_VXLAN, ntohs(ti->port));
+		break;
+	case UDP_TUNNEL_TYPE_VXLAN_GPE:
+		if (txgbe->vxlan_gpe_port == ti->port)
+			break;
+
+		if (txgbe->vxlan_gpe_port) {
+			wx_err(wx, "VXLAN-GPE port %d set, not adding port %d\n",
+			       txgbe->vxlan_gpe_port, ti->port);
+			return -EINVAL;
+		}
+
+		txgbe->vxlan_gpe_port = ti->port;
+		wr32(wx, TXGBE_CFG_VXLAN_GPE, ntohs(ti->port));
+		break;
+	case UDP_TUNNEL_TYPE_GENEVE:
+		if (txgbe->geneve_port == ti->port)
+			break;
+
+		if (txgbe->geneve_port) {
+			wx_err(wx, "GENEVE port %d set, not adding port %d\n",
+			       txgbe->geneve_port, ti->port);
+			return -EINVAL;
+		}
+
+		txgbe->geneve_port = ti->port;
+		wr32(wx, TXGBE_CFG_GENEVE, ntohs(ti->port));
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static int txgbe_udp_tunnel_unset(struct net_device *dev,
+				  unsigned int table, unsigned int entry,
+				  struct udp_tunnel_info *ti)
+{
+	struct wx *wx = netdev_priv(dev);
+	struct txgbe *txgbe = wx->priv;
+
+	if (ti->type == UDP_TUNNEL_TYPE_VXLAN)
+		txgbe->vxlan_port = 0;
+	else if (ti->type == UDP_TUNNEL_TYPE_VXLAN_GPE)
+		txgbe->vxlan_gpe_port = 0;
+	else
+		txgbe->geneve_port = 0;
+
+	return 0;
+}
+
+static const struct udp_tunnel_nic_info txgbe_udp_tunnels = {
+	.set_port	= txgbe_udp_tunnel_set,
+	.unset_port	= txgbe_udp_tunnel_unset,
+	.flags		= UDP_TUNNEL_NIC_INFO_MAY_SLEEP,
+	.tables		= {
+		{ .n_entries = 1, .tunnel_types = UDP_TUNNEL_TYPE_VXLAN, },
+		{ .n_entries = 1, .tunnel_types = UDP_TUNNEL_TYPE_VXLAN_GPE, },
+		{ .n_entries = 1, .tunnel_types = UDP_TUNNEL_TYPE_GENEVE, },
+	},
+};
+
 static const struct net_device_ops txgbe_netdev_ops = {
 	.ndo_open               = txgbe_open,
 	.ndo_stop               = txgbe_close,
@@ -632,6 +716,7 @@ static int txgbe_probe(struct pci_dev *pdev,
 	wx->driver_name = txgbe_driver_name;
 	txgbe_set_ethtool_ops(netdev);
 	netdev->netdev_ops = &txgbe_netdev_ops;
+	netdev->udp_tunnel_nic_info = &txgbe_udp_tunnels;
 
 	/* setup the private structure */
 	err = txgbe_sw_init(wx);
@@ -677,6 +762,7 @@ static int txgbe_probe(struct pci_dev *pdev,
 	netdev->features |= NETIF_F_HIGHDMA;
 	netdev->hw_features |= NETIF_F_GRO;
 	netdev->features |= NETIF_F_GRO;
+	netdev->features |= NETIF_F_RX_UDP_TUNNEL_PORT;
 
 	netdev->priv_flags |= IFF_UNICAST_FLT;
 	netdev->priv_flags |= IFF_SUPP_NOFCS;

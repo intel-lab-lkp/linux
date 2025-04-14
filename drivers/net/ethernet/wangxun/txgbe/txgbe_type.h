@@ -88,6 +88,9 @@
 /* Port cfg registers */
 #define TXGBE_CFG_PORT_ST                       0x14404
 #define TXGBE_CFG_PORT_ST_LINK_UP               BIT(0)
+#define TXGBE_CFG_VXLAN                         0x14410
+#define TXGBE_CFG_VXLAN_GPE                     0x14414
+#define TXGBE_CFG_GENEVE                        0x14418
 
 /* I2C registers */
 #define TXGBE_I2C_BASE                          0x14900
@@ -359,6 +362,11 @@ struct txgbe {
 	union txgbe_atr_input fdir_mask;
 	int fdir_filter_count;
 	spinlock_t fdir_perfect_lock; /* spinlock for FDIR */
+
+	/* tunnel port */
+	__be16 vxlan_port;
+	__be16 vxlan_gpe_port;
+	__be16 geneve_port;
 };
 
 #endif /* _TXGBE_TYPE_H_ */
