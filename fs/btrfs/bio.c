@@ -892,6 +892,14 @@ fail:
 	btrfs_bio_end_io(bbio, errno_to_blk_status(ret));
 }
 
+void __cold btrfs_bioset_exit(void)
+{
+	mempool_exit(&btrfs_failed_bio_pool);
+	bioset_exit(&btrfs_repair_bioset);
+	bioset_exit(&btrfs_clone_bioset);
+	bioset_exit(&btrfs_bioset);
+}
+
 int __init btrfs_bioset_init(void)
 {
 	if (bioset_init(&btrfs_bioset, BIO_POOL_SIZE,
@@ -900,29 +908,17 @@ int __init btrfs_bioset_init(void)
 		return -ENOMEM;
 	if (bioset_init(&btrfs_clone_bioset, BIO_POOL_SIZE,
 			offsetof(struct btrfs_bio, bio), 0))
-		goto out_free_bioset;
+		goto out;
 	if (bioset_init(&btrfs_repair_bioset, BIO_POOL_SIZE,
 			offsetof(struct btrfs_bio, bio),
 			BIOSET_NEED_BVECS))
-		goto out_free_clone_bioset;
+		goto out;
 	if (mempool_init_kmalloc_pool(&btrfs_failed_bio_pool, BIO_POOL_SIZE,
 				      sizeof(struct btrfs_failed_bio)))
-		goto out_free_repair_bioset;
+		goto out;
 	return 0;
 
-out_free_repair_bioset:
-	bioset_exit(&btrfs_repair_bioset);
-out_free_clone_bioset:
-	bioset_exit(&btrfs_clone_bioset);
-out_free_bioset:
-	bioset_exit(&btrfs_bioset);
+out:
+	btrfs_bioset_exit();
 	return -ENOMEM;
-}
-
-void __cold btrfs_bioset_exit(void)
-{
-	mempool_exit(&btrfs_failed_bio_pool);
-	bioset_exit(&btrfs_repair_bioset);
-	bioset_exit(&btrfs_clone_bioset);
-	bioset_exit(&btrfs_bioset);
 }
