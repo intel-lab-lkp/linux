@@ -173,13 +173,11 @@ Destroying the PHY
 ==================
 
 When the driver that created the PHY is unloaded, it should destroy the PHY it
-created using one of the following 2 APIs::
+created using the following API::
 
 	void phy_destroy(struct phy *phy);
-	void devm_phy_destroy(struct device *dev, struct phy *phy);
 
-Both these APIs destroy the PHY and devm_phy_destroy destroys the devres
-associated with this PHY.
+The API destroys the PHY.
 
 PM Runtime
 ==========
