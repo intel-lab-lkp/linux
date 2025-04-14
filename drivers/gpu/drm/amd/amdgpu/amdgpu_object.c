@@ -62,7 +62,7 @@ static void amdgpu_bo_destroy(struct ttm_buffer_object *tbo)
 
 	amdgpu_bo_kunmap(bo);
 
-	if (bo->tbo.base.import_attach)
+	if (drm_gem_is_imported(&bo->tbo.base))
 		drm_prime_gem_destroy(&bo->tbo.base, bo->tbo.sg);
 	drm_gem_object_release(&bo->tbo.base);
 	amdgpu_bo_unref(&bo->parent);
@@ -939,7 +939,7 @@ int amdgpu_bo_pin(struct amdgpu_bo *bo, u32 domain)
 		domain = bo->preferred_domains & domain;
 
 	/* A shared bo cannot be migrated to VRAM */
-	if (bo->tbo.base.import_attach) {
+	if (drm_gem_is_imported(&bo->tbo.base)) {
 		if (domain & AMDGPU_GEM_DOMAIN_GTT)
 			domain = AMDGPU_GEM_DOMAIN_GTT;
 		else
@@ -967,7 +967,7 @@ int amdgpu_bo_pin(struct amdgpu_bo *bo, u32 domain)
 	 */
 	domain = amdgpu_bo_get_preferred_domain(adev, domain);
 
-	if (bo->tbo.base.import_attach)
+	if (drm_gem_is_imported(&bo->tbo.base))
 		dma_buf_pin(bo->tbo.base.import_attach);
 
 	/* force to pin into visible video ram */
@@ -1018,7 +1018,7 @@ void amdgpu_bo_unpin(struct amdgpu_bo *bo)
 	if (bo->tbo.pin_count)
 		return;
 
-	if (bo->tbo.base.import_attach)
+	if (drm_gem_is_imported(&bo->tbo.base))
 		dma_buf_unpin(bo->tbo.base.import_attach);
 
 	if (bo->tbo.resource->mem_type == TTM_PL_VRAM) {
@@ -1262,7 +1262,7 @@ void amdgpu_bo_move_notify(struct ttm_buffer_object *bo,
 
 	amdgpu_bo_kunmap(abo);
 
-	if (abo->tbo.base.dma_buf && !abo->tbo.base.import_attach &&
+	if (abo->tbo.base.dma_buf && !drm_gem_is_imported(&abo->tbo.base) &&
 	    old_mem && old_mem->mem_type != TTM_PL_SYSTEM)
 		dma_buf_move_notify(abo->tbo.base.dma_buf);
 
@@ -1567,7 +1567,6 @@ uint32_t amdgpu_bo_get_preferred_domain(struct amdgpu_device *adev,
 u64 amdgpu_bo_print_info(int id, struct amdgpu_bo *bo, struct seq_file *m)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
-	struct dma_buf_attachment *attachment;
 	struct dma_buf *dma_buf;
 	const char *placement;
 	unsigned int pin_count;
@@ -1622,9 +1621,8 @@ u64 amdgpu_bo_print_info(int id, struct amdgpu_bo *bo, struct seq_file *m)
 		seq_printf(m, " pin count %d", pin_count);
 
 	dma_buf = READ_ONCE(bo->tbo.base.dma_buf);
-	attachment = READ_ONCE(bo->tbo.base.import_attach);
 
-	if (attachment)
+	if (drm_gem_is_imported(&bo->tbo.base))
 		seq_printf(m, " imported from ino:%lu", file_inode(dma_buf->file)->i_ino);
 	else if (dma_buf)
 		seq_printf(m, " exported as ino:%lu", file_inode(dma_buf->file)->i_ino);
