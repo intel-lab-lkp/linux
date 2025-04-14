@@ -2020,6 +2020,29 @@ static int submit_eb_subpage(struct folio *folio, struct writeback_control *wbc)
 		}
 		free_extent_buffer(eb);
 	}
+	/*
+	 * Normally folio_start_writeback() will clear TAG_TOWRITE, but for
+	 * subpage we use __folio_start_writeback(folio, true), which keeps it
+	 * from clearing TOWRITE.  This is because we walk the bitmap and
+	 * process each eb one at a time, and then locking the folio when we
+	 * process the eb.  We could have somebody dirty behind us, and then
+	 * subsequently mark this range as TOWRITE.  In that case we must not
+	 * clear TOWRITE or we will skip writing back the dirty folio.
+	 *
+	 * So here lock the folio, if it is clean we know we are done with it,
+	 * and we can clear TOWRITE.
+	 */
+	folio_lock(folio);
+	if (!folio_test_dirty(folio)) {
+		XA_STATE(xas, &folio->mapping->i_pages, folio_index(folio));
+		unsigned long flags;
+
+		xas_lock_irqsave(&xas, flags);
+		xas_load(&xas);
+		xas_clear_mark(&xas, PAGECACHE_TAG_TOWRITE);
+		xas_unlock_irqrestore(&xas, flags);
+	}
+	folio_unlock(folio);
 	return submitted;
 }
 
