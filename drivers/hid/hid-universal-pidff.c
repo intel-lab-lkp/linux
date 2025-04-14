@@ -56,7 +56,8 @@ static int universal_pidff_input_mapping(struct hid_device *hdev,
 static int universal_pidff_probe(struct hid_device *hdev,
 				 const struct hid_device_id *id)
 {
-	int i, error;
+	int error;
+
 	error = hid_parse(hdev);
 	if (error) {
 		hid_err(hdev, "HID parse failed\n");
@@ -71,7 +72,7 @@ static int universal_pidff_probe(struct hid_device *hdev,
 
 	/* Check if device contains PID usage page */
 	error = 1;
-	for (i = 0; i < hdev->collection_size; i++)
+	for (int i = 0; i < hdev->collection_size; i++)
 		if ((hdev->collection[i].usage & HID_USAGE_PAGE) == HID_UP_PID) {
 			error = 0;
 			hid_dbg(hdev, "PID usage page found\n");
@@ -91,8 +92,8 @@ static int universal_pidff_probe(struct hid_device *hdev,
 
 	/* Check if HID_PID support is enabled */
 	int (*init_function)(struct hid_device *, u32);
-	init_function = hid_pidff_init_with_quirks;
 
+	init_function = hid_pidff_init_with_quirks;
 	if (!init_function) {
 		hid_warn(hdev, "HID_PID support not enabled!\n");
 		return 0;
@@ -114,14 +115,13 @@ err:
 static int universal_pidff_input_configured(struct hid_device *hdev,
 					    struct hid_input *hidinput)
 {
-	int axis;
 	struct input_dev *input = hidinput->input;
 
 	if (!input->absinfo)
 		return 0;
 
 	/* Decrease fuzz and deadzone on available axes */
-	for (axis = ABS_X; axis <= ABS_BRAKE; axis++) {
+	for (int axis = ABS_X; axis <= ABS_BRAKE; axis++) {
 		if (!test_bit(axis, input->absbit))
 			continue;
 
