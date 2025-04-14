@@ -121,7 +121,7 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem *exynos_gem)
 	 * the region will be released by exporter
 	 * once dmabuf's refcount becomes 0.
 	 */
-	if (obj->import_attach)
+	if (drm_gem_is_imported(obj))
 		drm_prime_gem_destroy(obj, exynos_gem->sgt);
 	else
 		exynos_drm_free_buf(exynos_gem);
@@ -365,7 +365,7 @@ static int exynos_drm_gem_mmap(struct drm_gem_object *obj, struct vm_area_struct
 	struct exynos_drm_gem *exynos_gem = to_exynos_gem(obj);
 	int ret;
 
-	if (obj->import_attach)
+	if (drm_gem_is_imported(obj))
 		return dma_buf_mmap(obj->dma_buf, vma, 0);
 
 	vm_flags_set(vma, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
