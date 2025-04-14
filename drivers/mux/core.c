@@ -544,8 +544,13 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 			index = of_property_match_string(np, "mux-control-names",
 							 mux_name);
 		if (index < 0) {
-			dev_err(dev, "mux controller '%s' not found\n",
-				mux_name);
+			if (!state && index == -EINVAL)
+				index = -ENOENT;
+
+			if (index != -ENOENT) {
+				dev_err(dev, "mux controller '%s' not found\n",
+					mux_name);
+			}
 			return ERR_PTR(index);
 		}
 	}
@@ -559,8 +564,11 @@ static struct mux_control *mux_get(struct device *dev, const char *mux_name,
 						 "mux-controls", "#mux-control-cells",
 						 index, &args);
 	if (ret) {
-		dev_err(dev, "%pOF: failed to get mux-%s %s(%i)\n",
-			np, state ? "state" : "control", mux_name ?: "", index);
+		if (state || ret != -ENOENT) {
+			dev_err(dev, "%pOF: failed to get mux-%s %s(%i)\n",
+				np, state ? "state" : "control",
+				mux_name ?: "", index);
+		}
 		return ERR_PTR(ret);
 	}
 
