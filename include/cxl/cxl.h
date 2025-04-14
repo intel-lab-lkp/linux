@@ -231,4 +231,8 @@ struct cxl_dev_state *_cxl_dev_state_create(struct device *dev,
 struct pci_dev;
 int cxl_check_caps(struct pci_dev *pdev, unsigned long *expected,
 		   unsigned long *found);
+
+struct cxl_memdev_state;
+int cxl_pci_accel_setup_regs(struct pci_dev *pdev, struct cxl_dev_state *cxlmds,
+			     unsigned long *caps);
 #endif /* __CXL_CXL_H__ */
