@@ -170,6 +170,11 @@ int load_other_segments(struct kimage *image,
 	/* trim it */
 	fdt_pack(dtb);
 	dtb_len = fdt_totalsize(dtb);
+	if (dtb_len > MAX_FDT_SIZE) {
+		pr_err("DTB exceeds the maximum size: 0x%lx > 0x%x", dtb_len, MAX_FDT_SIZE);
+		goto out_err;
+	}
+	pr_info("DTB successfully created at 0x%lx (length 0x%lx)", (unsigned long)dtb, dtb_len);
 	kbuf.buffer = dtb;
 	kbuf.bufsz = dtb_len;
 	kbuf.mem = KEXEC_BUF_MEM_UNKNOWN;

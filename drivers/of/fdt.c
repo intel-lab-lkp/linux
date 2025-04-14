@@ -1019,6 +1019,18 @@ int __init early_init_dt_scan_memory(void)
 	return found_memory;
 }
 
+static int check_randomness_nonzero(const uint8_t *rng_seed, int len)
+{
+	int i;
+
+	for (i = 0; i < len; i++)
+		if (rng_seed[i] != 0)
+			return true;
+
+	pr_warn("Provided rng-seed value is all zeros!");
+	return false;
+}
+
 int __init early_init_dt_scan_chosen(char *cmdline)
 {
 	int l, node;
@@ -1039,11 +1051,11 @@ int __init early_init_dt_scan_chosen(char *cmdline)
 	early_init_dt_check_for_elfcorehdr(node);
 
 	rng_seed = of_get_flat_dt_prop(node, "rng-seed", &l);
-	if (rng_seed && l > 0) {
+	if (rng_seed && l > 0 && check_randomness_nonzero(rng_seed, l)) {
 		add_bootloader_randomness(rng_seed, l);
 
-		/* try to clear seed so it won't be found. */
-		fdt_nop_property(initial_boot_params, node, "rng-seed");
+		/* Zero out the rng-seed property */
+		memset((void *)rng_seed, 0, l);
 
 		/* update CRC check value */
 		of_fdt_crc32 = crc32_be(~0, initial_boot_params,

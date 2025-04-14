@@ -453,8 +453,18 @@ void *of_kexec_alloc_and_setup_fdt(const struct kimage *image,
 			goto out;
 		get_random_bytes(rng_seed, RNG_SEED_SIZE);
 	} else {
-		pr_notice("RNG is not initialised: omitting \"%s\" property\n",
+		pr_notice("RNG is not initialised: deleting \"%s\" property\n",
 			  "rng-seed");
+		/*
+		 * The rng-seed property may exist as zeroed stub. If so,
+		 * remove it to not confuse the incoming kernel.
+		 */
+		ret = fdt_delprop(fdt, chosen_node, "rng-seed");
+		if (ret == -FDT_ERR_NOTFOUND)
+			/* It's fine */
+			ret = 0;
+		else if (ret)
+			goto out;
 	}
 
 	ret = fdt_setprop(fdt, chosen_node, "linux,booted-from-kexec", NULL, 0);
