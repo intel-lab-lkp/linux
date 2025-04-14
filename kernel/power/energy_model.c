@@ -235,7 +235,7 @@ static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 
 	/* Compute the cost of each performance state. */
 	for (i = nr_states - 1; i >= 0; i--) {
-		unsigned long power_res, cost;
+		unsigned long power_res, cost = 0;
 
 		if ((flags & EM_PERF_DOMAIN_ARTIFICIAL) && cb->get_cost) {
 			ret = cb->get_cost(dev, table[i].frequency, &cost);
@@ -244,7 +244,7 @@ static int em_compute_costs(struct device *dev, struct em_perf_state *table,
 					cost, ret);
 				return -EINVAL;
 			}
-		} else {
+		} else if (_is_cpu_device(dev)) {
 			/* increase resolution of 'cost' precision */
 			power_res = table[i].power * 10;
 			cost = power_res / table[i].performance;
