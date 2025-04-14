@@ -22,6 +22,12 @@ static inline void clear_page(void *page)
 	memset(page, 0, PAGE_SIZE);
 }
 
+static inline void clear_pages(void *page, unsigned int nsubpages)
+{
+	for (int i = 0; i < nsubpages; i++)
+		clear_page(page + i * PAGE_SIZE);
+}
+
 static inline void copy_page(void *to, void *from)
 {
 	memcpy(to, from, PAGE_SIZE);
