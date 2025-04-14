@@ -5,6 +5,7 @@
 #include <linux/types.h>
 #include <linux/spinlock.h>
 #include <linux/stackdepot.h>
+#include <linux/seq_file.h>
 
 struct ref_tracker;
 
@@ -17,6 +18,9 @@ struct ref_tracker_dir {
 	bool			dead;
 	struct list_head	list; /* List of active trackers */
 	struct list_head	quarantine; /* List of dead trackers */
+#ifdef CONFIG_DEBUG_FS
+	struct dentry		*dentry;
+#endif
 	char			name[32];
 #endif
 };
@@ -34,9 +38,14 @@ static inline void ref_tracker_dir_init(struct ref_tracker_dir *dir,
 	dir->dead = false;
 	refcount_set(&dir->untracked, 1);
 	refcount_set(&dir->no_tracker, 1);
+#ifdef CONFIG_DEBUG_FS
+	dir->dentry = NULL;
+#endif
 	strscpy(dir->name, name, sizeof(dir->name));
 	stack_depot_init();
 }
+
+void ref_tracker_dir_debugfs(struct ref_tracker_dir *dir, const char *name);
 
 void ref_tracker_dir_exit(struct ref_tracker_dir *dir);
 
@@ -59,6 +68,10 @@ int ref_tracker_free(struct ref_tracker_dir *dir,
 static inline void ref_tracker_dir_init(struct ref_tracker_dir *dir,
 					unsigned int quarantine_count,
 					const char *name)
+{
+}
+
+static inline void ref_tracker_dir_debugfs(struct ref_tracker_dir *dir, const char *name)
 {
 }
 

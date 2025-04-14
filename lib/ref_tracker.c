@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/stacktrace.h>
 #include <linux/stackdepot.h>
+#include <linux/seq_file.h>
 
 #define REF_TRACKER_STACK_ENTRIES 16
 #define STACK_BUF_SIZE 1024
@@ -29,6 +30,14 @@ struct ref_tracker_dir_stats {
 		unsigned int count;
 	} stacks[];
 };
+
+#ifdef CONFIG_DEBUG_FS
+static void ref_tracker_debugfs_remove(struct ref_tracker_dir *dir);
+#else
+static inline void ref_tracker_debugfs_remove(struct ref_tracker_dir *dir)
+{
+}
+#endif
 
 static struct ref_tracker_dir_stats *
 ref_tracker_get_stats(struct ref_tracker_dir *dir, unsigned int limit)
@@ -66,6 +75,7 @@ ref_tracker_get_stats(struct ref_tracker_dir *dir, unsigned int limit)
 
 struct ostream {
 	char *buf;
+	struct seq_file *seq;
 	int size, used;
 };
 
@@ -73,7 +83,9 @@ struct ostream {
 ({ \
 	struct ostream *_s = (stream); \
 \
-	if (!_s->buf) { \
+	if (_s->seq) { \
+		seq_printf(_s->seq, fmt, ##args); \
+	} else if (!_s->buf) { \
 		pr_err(fmt, ##args); \
 	} else { \
 		int ret, len = _s->size - _s->used; \
@@ -163,6 +175,7 @@ void ref_tracker_dir_exit(struct ref_tracker_dir *dir)
 	bool leak = false;
 
 	dir->dead = true;
+	ref_tracker_debugfs_remove(dir);
 	spin_lock_irqsave(&dir->lock, flags);
 	list_for_each_entry_safe(tracker, n, &dir->quarantine, head) {
 		list_del(&tracker->head);
@@ -279,7 +292,72 @@ EXPORT_SYMBOL_GPL(ref_tracker_free);
 #ifdef CONFIG_DEBUG_FS
 #include <linux/debugfs.h>
 
-static int __init ref_tracker_debug_init(void)
+static int ref_tracker_dir_seq_print(struct ref_tracker_dir *dir, struct seq_file *seq)
+{
+	struct ostream os = { .seq = seq };
+	unsigned long flags;
+
+	spin_lock_irqsave(&dir->lock, flags);
+	__ref_tracker_dir_pr_ostream(dir, 16, &os);
+	spin_unlock_irqrestore(&dir->lock, flags);
+
+	return os.used;
+}
+
+static int ref_tracker_debugfs_show(struct seq_file *f, void *v)
+{
+	struct ref_tracker_dir *dir = f->private;
+
+	return ref_tracker_dir_seq_print(dir, f);
+}
+
+static int ref_tracker_debugfs_open(struct inode *inode, struct file *filp)
+{
+	struct ref_tracker_dir *dir = inode->i_private;
+
+	return single_open(filp, ref_tracker_debugfs_show, dir);
+}
+
+static const struct file_operations ref_tracker_debugfs_fops = {
+	.owner		= THIS_MODULE,
+	.open		= ref_tracker_debugfs_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+/**
+ * ref_tracker_dir_debugfs - create debugfs file for ref_tracker_dir
+ * @dir: ref_tracker_dir to finalize
+ * @name: updated name of the ref_tracker_dir
+ *
+ * In some cases, the name given to a ref_tracker_dir is based on incomplete information,
+ * and may not be unique. Call this to finalize the name of @dir, and create a debugfs
+ * file for it.
+ */
+void ref_tracker_dir_debugfs(struct ref_tracker_dir *dir, const char *name)
+{
+	strscpy(dir->name, name, sizeof(dir->name));
+
+	if (ref_tracker_debug_dir) {
+		dir->dentry = debugfs_create_file(dir->name, S_IFREG | 0400,
+						  ref_tracker_debug_dir, dir,
+						  &ref_tracker_debugfs_fops);
+		if (IS_ERR(dir->dentry)) {
+			pr_warn("ref_tracker: unable to create debugfs file for %s: %pe\n",
+				dir->name, dir->dentry);
+			dir->dentry = NULL;
+		}
+	}
+}
+EXPORT_SYMBOL(ref_tracker_dir_debugfs);
+
+static void ref_tracker_debugfs_remove(struct ref_tracker_dir *dir)
+{
+	debugfs_remove(dir->dentry);
+}
+
+static int __init ref_tracker_debugfs_init(void)
 {
 	ref_tracker_debug_dir = debugfs_create_dir("ref_tracker", NULL);
 	if (IS_ERR(ref_tracker_debug_dir)) {
@@ -289,5 +367,5 @@ static int __init ref_tracker_debug_init(void)
 	}
 	return 0;
 }
-late_initcall(ref_tracker_debug_init);
+late_initcall(ref_tracker_debugfs_init);
 #endif /* CONFIG_DEBUG_FS */
