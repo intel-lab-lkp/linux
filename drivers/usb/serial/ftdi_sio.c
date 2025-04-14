@@ -2625,8 +2625,8 @@ static bool ftdi_tx_empty(struct usb_serial_port *port)
  * WARNING: set_termios calls this with old_termios in kernel space
  */
 static void ftdi_set_termios(struct tty_struct *tty,
-		             struct usb_serial_port *port,
-		             const struct ktermios *old_termios)
+			     struct usb_serial_port *port,
+			     const struct ktermios *old_termios)
 {
 	struct usb_device *dev = port->serial->dev;
 	struct device *ddev = &port->dev;
