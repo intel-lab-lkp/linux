@@ -857,13 +857,13 @@ struct arm_smmu_domain {
 
 	enum arm_smmu_domain_stage	stage;
 	union {
-		struct arm_smmu_ctx_desc	cd;
-		struct arm_smmu_s2_cfg		s2_cfg;
+		struct arm_smmu_ctx_desc cd;	/* S1 */
+		struct arm_smmu_s2_cfg s2_cfg;	/* S2 && !nest_parent */
+		struct {			/* S2 && nest_parent */
+			struct list_head list;
+			spinlock_t lock;
+		} vsmmus;
 	};
-	struct {
-		struct list_head list;
-		spinlock_t lock;
-	} vsmmus;
 
 	struct iommu_domain		domain;
 

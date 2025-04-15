@@ -2474,7 +2474,7 @@ static void arm_smmu_domain_free_paging(struct iommu_domain *domain)
 		mutex_lock(&arm_smmu_asid_lock);
 		xa_erase(&arm_smmu_asid_xa, smmu_domain->cd.asid);
 		mutex_unlock(&arm_smmu_asid_lock);
-	} else {
+	} else if (!smmu_domain->nest_parent) {
 		struct arm_smmu_s2_cfg *cfg = &smmu_domain->s2_cfg;
 		if (cfg->vmid)
 			ida_free(&smmu->vmid_map, cfg->vmid);
@@ -2503,7 +2503,10 @@ static int arm_smmu_domain_finalise_s2(struct arm_smmu_device *smmu,
 				       struct arm_smmu_domain *smmu_domain)
 {
 	int vmid;
-	struct arm_smmu_s2_cfg *cfg = &smmu_domain->s2_cfg;
+
+	/* nest_parent stores vmid in vSMMU instead of a shared S2 domain */
+	if (smmu_domain->nest_parent)
+		return 0;
 
 	/* Reserve VMID 0 for stage-2 bypass STEs */
 	vmid = ida_alloc_range(&smmu->vmid_map, 1, (1 << smmu->vmid_bits) - 1,
@@ -2511,7 +2514,7 @@ static int arm_smmu_domain_finalise_s2(struct arm_smmu_device *smmu,
 	if (vmid < 0)
 		return vmid;
 
-	cfg->vmid	= (u16)vmid;
+	smmu_domain->s2_cfg.vmid = (u16)vmid;
 	return 0;
 }
 

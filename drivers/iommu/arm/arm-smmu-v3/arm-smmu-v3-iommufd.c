@@ -118,6 +118,7 @@ static void arm_vsmmu_destroy(struct iommufd_viommu *viommu)
 	/* Must flush S2 vmid after delinking vSMMU */
 	arm_smmu_tlb_inv_vmid(vsmmu->smmu, vsmmu->vmid);
 	arm_vsmmu_atc_inv_domain(vsmmu, 0, 0);
+	ida_free(&vsmmu->smmu->vmid_map, vsmmu->vmid);
 }
 
 static void arm_smmu_make_nested_cd_table_ste(
@@ -511,6 +512,7 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	struct arm_smmu_domain *s2_parent = to_smmu_domain(parent);
 	struct arm_vsmmu *vsmmu;
 	unsigned long flags;
+	int vmid;
 
 	if (viommu_type != IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
 		return ERR_PTR(-EOPNOTSUPP);
@@ -541,15 +543,22 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	    !(smmu->features & ARM_SMMU_FEAT_S2FWB))
 		return ERR_PTR(-EOPNOTSUPP);
 
+	vmid = ida_alloc_range(&smmu->vmid_map, 1, (1 << smmu->vmid_bits) - 1,
+			       GFP_KERNEL);
+	if (vmid < 0)
+		return ERR_PTR(vmid);
+
 	vsmmu = iommufd_viommu_alloc(ictx, struct arm_vsmmu, core,
 				     &arm_vsmmu_ops);
-	if (IS_ERR(vsmmu))
+	if (IS_ERR(vsmmu)) {
+		ida_free(&smmu->vmid_map, vmid);
 		return ERR_CAST(vsmmu);
+	}
 
 	vsmmu->smmu = smmu;
+	vsmmu->vmid = (u16)vmid;
 	vsmmu->s2_parent = s2_parent;
-	/* FIXME Move VMID allocation from the S2 domain allocation to here */
-	vsmmu->vmid = s2_parent->s2_cfg.vmid;
+
 	spin_lock_irqsave(&s2_parent->vsmmus.lock, flags);
 	list_add_tail(&vsmmu->vsmmus_elm, &s2_parent->vsmmus.list);
 	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
