@@ -11,6 +11,7 @@
 
 #include "protocols.h"
 #include "notify.h"
+#include "quirks.h"
 
 /* Updated only after ALL the mandatory features for that version are merged */
 #define SCMI_PROTOCOL_SUPPORTED_VERSION		0x30000
@@ -429,6 +430,31 @@ static void iter_clk_describe_prepare_message(void *message,
 	msg->rate_index = cpu_to_le32(desc_index);
 }
 
+#define QUIRK_OUT_OF_SPEC_TRIPLET					       \
+	({								       \
+	/* Warn about out of spec replies ... */			       \
+	if (!p->clk->rate_discrete &&					       \
+	    (st->num_returned != 3 || st->num_remaining != 0)) {	       \
+		dev_warn(p->dev,					       \
+			 "Out-of-spec CLOCK_DESCRIBE_RATES reply for %s - returned:%d remaining:%d rx_len:%zd\n",\
+			 p->clk->name, st->num_returned, st->num_remaining,    \
+			 st->rx_len);					       \
+		/*							       \
+		 * A known quirk: a triplet is returned but num_returned != 3  \
+		 * Check for a safe payload size and fix.		       \
+		 */							       \
+		if (st->num_returned != 3 && st->num_remaining == 0 &&	       \
+		    st->rx_len == sizeof(*r) + sizeof(__le32) * 2 * 3) {       \
+			st->num_returned = 3;				       \
+			st->num_remaining = 0;				       \
+		} else {						       \
+			dev_err(p->dev,					       \
+				"Cannot fix out-of-spec reply !\n");	       \
+			return -EPROTO;					       \
+		}							       \
+	}								       \
+	})
+
 static int
 iter_clk_describe_update_state(struct scmi_iterator_state *st,
 			       const void *response, void *priv)
@@ -442,28 +468,7 @@ iter_clk_describe_update_state(struct scmi_iterator_state *st,
 	st->num_returned = NUM_RETURNED(flags);
 	p->clk->rate_discrete = RATE_DISCRETE(flags);
 
-	/* Warn about out of spec replies ... */
-	if (!p->clk->rate_discrete &&
-	    (st->num_returned != 3 || st->num_remaining != 0)) {
-		dev_warn(p->dev,
-			 "Out-of-spec CLOCK_DESCRIBE_RATES reply for %s - returned:%d remaining:%d rx_len:%zd\n",
-			 p->clk->name, st->num_returned, st->num_remaining,
-			 st->rx_len);
-
-		/*
-		 * A known quirk: a triplet is returned but num_returned != 3
-		 * Check for a safe payload size and fix.
-		 */
-		if (st->num_returned != 3 && st->num_remaining == 0 &&
-		    st->rx_len == sizeof(*r) + sizeof(__le32) * 2 * 3) {
-			st->num_returned = 3;
-			st->num_remaining = 0;
-		} else {
-			dev_err(p->dev,
-				"Cannot fix out-of-spec reply !\n");
-			return -EPROTO;
-		}
-	}
+	SCMI_QUIRK(clock_rates_triplet_out_of_spec, QUIRK_OUT_OF_SPEC_TRIPLET);
 
 	return 0;
 }
