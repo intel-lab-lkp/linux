@@ -305,6 +305,13 @@ static inline unsigned int local_clock_us(void)
 #define NSEC_PER_ms			NSEC_PER_MSEC
 #define NSEC_PER_sec			NSEC_PER_SEC
 
+/*
+ * time_stat_average - return the average duration/frequency stat of a time
+ * stats in the desired unit.
+ */
+#define time_stat_average(stats, stat, units)				\
+	div_u64((stats)->average_ ## stat >> 8, NSEC_PER_ ## units)
+
 #define __print_time_stat(stats, name, stat, units)			\
 	sysfs_print(name ## _ ## stat ## _ ## units,			\
 		    div_u64((stats)->stat >> 8, NSEC_PER_ ## units))
