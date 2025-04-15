@@ -1509,9 +1509,10 @@ int ata_eh_get_ncq_success_sense(struct ata_link *link)
 	struct ata_queued_cmd *qc;
 	unsigned int err_mask, tag;
 	u8 *sense, sk = 0, asc = 0, ascq = 0;
-	u64 sense_valid, val;
 	u16 extended_sense;
 	bool aux_icc_valid;
+	u32 sense_valid;
+	u64 val;
 	int ret = 0;
 
 	err_mask = ata_read_log_page(dev, ATA_LOG_SENSE_NCQ, 0, buf, 2);
@@ -1529,8 +1530,7 @@ int ata_eh_get_ncq_success_sense(struct ata_link *link)
 		return -EIO;
 	}
 
-	sense_valid = (u64)buf[8] | ((u64)buf[9] << 8) |
-		((u64)buf[10] << 16) | ((u64)buf[11] << 24);
+	sense_valid = get_unaligned_le32(&buf[8]);
 	extended_sense = get_unaligned_le16(&buf[14]);
 	aux_icc_valid = extended_sense & BIT(15);
 
