@@ -1166,14 +1166,28 @@
 	__val;							\
 })
 
+#define __sysreg_is_hcr_el2(r)					\
+	(__builtin_strcmp("hcr_el2", __stringify(r)) == 0)
+#define __hcr_el2_ac03_cpu_36(r)				\
+	(IS_ENABLED(CONFIG_AMPERE_ERRATUM_AC03_CPU_36) &&	\
+	 __sysreg_is_hcr_el2(r) &&				\
+	 alternative_has_cap_unlikely(ARM64_WORKAROUND_AMPERE_AC03_CPU_36))
+
 /*
  * The "Z" constraint normally means a zero immediate, but when combined with
  * the "%x0" template means XZR.
  */
 #define write_sysreg(v, r) do {					\
 	u64 __val = (u64)(v);					\
-	asm volatile("msr " __stringify(r) ", %x0"		\
-		     : : "rZ" (__val));				\
+	if (__hcr_el2_ac03_cpu_36(r)) {				\
+		u64 __daif;					\
+		asm volatile("mrs %0, daif; msr daifset, #0xf;"	\
+			     "msr hcr_el2, %x1; msr daif, %0"	\
+		: "=&r"(__daif) : "rZ" (__val));		\
+	} else {						\
+		asm volatile("msr " __stringify(r) ", %x0"	\
+			     : : "rZ" (__val));			\
+	}							\
 } while (0)
 
 /*

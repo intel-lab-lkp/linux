@@ -442,6 +442,23 @@ menu "Kernel Features"
 
 menu "ARM errata workarounds via the alternatives framework"
 
+config AMPERE_ERRATUM_AC03_CPU_36
+        bool "AmpereOne: AC03_CPU_36: CPU can take an invalid exception, if an asynchronous exception to EL2 occurs while EL2 software is changing the EL2 exception controls."
+	default y
+	help
+	  This option adds an alternative code sequence to work around Ampere
+	  errata AC03_CPU_36 on AmpereOne.
+
+	  If an async exception happens at the same time as an update to the
+	  controls for the target EL for async exceptions, an exception can be
+	  delivered to the wrong EL. For example, an EL may be routed from EL2
+	  to EL1.
+
+	  The workaround masks all asynchronous exception types when writing
+	  to HCR_EL2.
+
+	  If unsure, say Y.
+
 config AMPERE_ERRATUM_AC03_CPU_38
         bool "AmpereOne: AC03_CPU_38: Certain bits in the Virtualization Translation Control Register and Translation Control Registers do not follow RES0 semantics"
 	default y
