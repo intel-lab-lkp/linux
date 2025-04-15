@@ -30,6 +30,54 @@ void *arm_smmu_hw_info(struct device *dev, u32 *length, u32 *type)
 	return info;
 }
 
+void arm_smmu_s2_parent_tlb_inv_domain(struct arm_smmu_domain *s2_parent)
+{
+	struct arm_vsmmu *vsmmu, *next;
+	unsigned long flags;
+
+	spin_lock_irqsave(&s2_parent->vsmmus.lock, flags);
+	list_for_each_entry_safe(vsmmu, next, &s2_parent->vsmmus.list,
+				 vsmmus_elm) {
+		arm_smmu_tlb_inv_vmid(vsmmu->smmu, vsmmu->vmid);
+	}
+	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
+}
+
+void arm_smmu_s2_parent_tlb_inv_range(struct arm_smmu_domain *s2_parent,
+				      unsigned long iova, size_t size,
+				      size_t granule, bool leaf)
+{
+	struct arm_smmu_cmdq_ent cmd = { .tlbi = { .leaf = leaf } };
+	struct arm_vsmmu *vsmmu, *next;
+	unsigned long flags;
+
+	spin_lock_irqsave(&s2_parent->vsmmus.lock, flags);
+	list_for_each_entry_safe(vsmmu, next, &s2_parent->vsmmus.list,
+				 vsmmus_elm) {
+		cmd.tlbi.vmid = vsmmu->vmid;
+
+		/* Must flush all the nested S1 ASIDs when S2 domain changes */
+		cmd.opcode = CMDQ_OP_TLBI_NH_ALL;
+		arm_smmu_cmdq_issue_cmd_with_sync(vsmmu->smmu, &cmd);
+		cmd.opcode = CMDQ_OP_TLBI_S2_IPA;
+		__arm_smmu_tlb_inv_range(vsmmu->smmu, &cmd, iova, size, granule,
+					 &s2_parent->domain);
+	}
+	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
+}
+
+static void arm_vsmmu_destroy(struct iommufd_viommu *viommu)
+{
+	struct arm_vsmmu *vsmmu = container_of(viommu, struct arm_vsmmu, core);
+	unsigned long flags;
+
+	spin_lock_irqsave(&vsmmu->s2_parent->vsmmus.lock, flags);
+	list_del(&vsmmu->vsmmus_elm);
+	spin_unlock_irqrestore(&vsmmu->s2_parent->vsmmus.lock, flags);
+	/* Must flush S2 vmid after delinking vSMMU */
+	arm_smmu_tlb_inv_vmid(vsmmu->smmu, vsmmu->vmid);
+}
+
 static void arm_smmu_make_nested_cd_table_ste(
 	struct arm_smmu_ste *target, struct arm_smmu_master *master,
 	struct arm_smmu_nested_domain *nested_domain, bool ats_enabled)
@@ -380,6 +428,7 @@ out:
 }
 
 static const struct iommufd_viommu_ops arm_vsmmu_ops = {
+	.destroy = arm_vsmmu_destroy,
 	.alloc_domain_nested = arm_vsmmu_alloc_domain_nested,
 	.cache_invalidate = arm_vsmmu_cache_invalidate,
 };
@@ -394,6 +443,7 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 	struct arm_smmu_domain *s2_parent = to_smmu_domain(parent);
 	struct arm_vsmmu *vsmmu;
+	unsigned long flags;
 
 	if (viommu_type != IOMMU_VIOMMU_TYPE_ARM_SMMUV3)
 		return ERR_PTR(-EOPNOTSUPP);
@@ -433,6 +483,9 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	vsmmu->s2_parent = s2_parent;
 	/* FIXME Move VMID allocation from the S2 domain allocation to here */
 	vsmmu->vmid = s2_parent->s2_cfg.vmid;
+	spin_lock_irqsave(&s2_parent->vsmmus.lock, flags);
+	list_add_tail(&vsmmu->vsmmus_elm, &s2_parent->vsmmus.list);
+	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
 
 	return &vsmmu->core;
 }

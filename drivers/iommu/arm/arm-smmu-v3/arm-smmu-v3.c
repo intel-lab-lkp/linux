@@ -3256,6 +3256,8 @@ arm_smmu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 		}
 		smmu_domain->stage = ARM_SMMU_DOMAIN_S2;
 		smmu_domain->nest_parent = true;
+		INIT_LIST_HEAD(&smmu_domain->vsmmus.list);
+		spin_lock_init(&smmu_domain->vsmmus.lock);
 		break;
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING:
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING | IOMMU_HWPT_ALLOC_PASID:

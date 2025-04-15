@@ -859,6 +859,10 @@ struct arm_smmu_domain {
 		struct arm_smmu_ctx_desc	cd;
 		struct arm_smmu_s2_cfg		s2_cfg;
 	};
+	struct {
+		struct list_head list;
+		spinlock_t lock;
+	} vsmmus;
 
 	struct iommu_domain		domain;
 
@@ -1081,6 +1085,7 @@ struct arm_vsmmu {
 	struct arm_smmu_device *smmu;
 	struct arm_smmu_domain *s2_parent;
 	u16 vmid;
+	struct list_head vsmmus_elm; /* arm_smmu_domain::vsmmus::list */
 };
 
 #if IS_ENABLED(CONFIG_ARM_SMMU_V3_IOMMUFD)
@@ -1094,6 +1099,11 @@ int arm_vsmmu_attach_prepare(struct arm_smmu_attach_state *state,
 void arm_smmu_attach_commit_vmaster(struct arm_smmu_attach_state *state);
 void arm_smmu_master_clear_vmaster(struct arm_smmu_master *master);
 int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster, u64 *evt);
+
+void arm_smmu_s2_parent_tlb_inv_domain(struct arm_smmu_domain *s2_parent);
+void arm_smmu_s2_parent_tlb_inv_range(struct arm_smmu_domain *s2_parent,
+				      unsigned long iova, size_t size,
+				      size_t granule, bool leaf);
 #else
 #define arm_smmu_hw_info NULL
 #define arm_vsmmu_alloc NULL
@@ -1118,6 +1128,18 @@ static inline int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster,
 					   u64 *evt)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline void
+arm_smmu_s2_parent_tlb_inv_domain(struct arm_smmu_domain *s2_parent)
+{
+}
+
+static inline void
+arm_smmu_s2_parent_tlb_inv_range(struct arm_smmu_domain *s2_parent,
+				 unsigned long iova, size_t size,
+				 size_t granule, bool leaf)
+{
 }
 #endif /* CONFIG_ARM_SMMU_V3_IOMMUFD */
 
