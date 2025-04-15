@@ -2255,6 +2255,10 @@ static void arm_smmu_tlb_inv_context(void *cookie)
 	 * insertion to guarantee those are observed before the TLBI. Do be
 	 * careful, 007.
 	 */
+
+	if (smmu_domain->nest_parent)
+		return arm_smmu_s2_parent_tlb_inv_domain(smmu_domain);
+
 	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1)
 		arm_smmu_tlb_inv_asid(smmu, smmu_domain->cd.asid);
 	else
@@ -2342,6 +2346,11 @@ static void arm_smmu_tlb_inv_range_domain(unsigned long iova, size_t size,
 		},
 	};
 
+	if (smmu_domain->nest_parent) {
+		return arm_smmu_s2_parent_tlb_inv_range(smmu_domain, iova, size,
+							granule, leaf);
+	}
+
 	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1) {
 		cmd.opcode	= smmu_domain->smmu->features & ARM_SMMU_FEAT_E2H ?
 				  CMDQ_OP_TLBI_EL2_VA : CMDQ_OP_TLBI_NH_VA;
@@ -2352,15 +2361,6 @@ static void arm_smmu_tlb_inv_range_domain(unsigned long iova, size_t size,
 	}
 	__arm_smmu_tlb_inv_range(smmu_domain->smmu, &cmd, iova, size, granule,
 				 &smmu_domain->domain);
-
-	if (smmu_domain->nest_parent) {
-		/*
-		 * When the S2 domain changes all the nested S1 ASIDs have to be
-		 * flushed too.
-		 */
-		cmd.opcode = CMDQ_OP_TLBI_NH_ALL;
-		arm_smmu_cmdq_issue_cmd_with_sync(smmu_domain->smmu, &cmd);
-	}
 
 	/*
 	 * Unfortunately, this can't be leaf-only since we may have
@@ -2765,8 +2765,11 @@ static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
 	if (!smmu_domain)
 		return;
 
-	if (domain->type == IOMMU_DOMAIN_NESTED)
-		nested_ats_flush = to_smmu_nested_domain(domain)->enable_ats;
+	if (domain->type == IOMMU_DOMAIN_NESTED &&
+	    to_smmu_nested_domain(domain)->enable_ats) {
+		return arm_vsmmu_remove_ats_device(
+			to_smmu_nested_domain(domain)->vsmmu, master);
+	}
 
 	spin_lock_irqsave(&smmu_domain->devices_lock, flags);
 	master_domain = arm_smmu_find_master_domain(smmu_domain, master, ssid,
@@ -2837,20 +2840,17 @@ int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 				     arm_smmu_ats_supported(master);
 	}
 
-	if (smmu_domain) {
-		if (new_domain->type == IOMMU_DOMAIN_NESTED) {
-			ret = arm_vsmmu_attach_prepare(
-				state,
-				to_smmu_nested_domain(new_domain)->vsmmu);
-			if (ret)
-				return ret;
-		}
+	if (new_domain->type == IOMMU_DOMAIN_NESTED) {
+		struct arm_smmu_nested_domain *nested_domain =
+			to_smmu_nested_domain(new_domain);
 
+		ret = arm_vsmmu_attach_prepare(state, nested_domain->vsmmu);
+		if (ret)
+			return ret;
+	} else if (smmu_domain) {
 		master_domain = kzalloc(sizeof(*master_domain), GFP_KERNEL);
-		if (!master_domain) {
-			kfree(state->vmaster);
+		if (!master_domain)
 			return -ENOMEM;
-		}
 		master_domain->master = master;
 		master_domain->ssid = state->ssid;
 		if (new_domain->type == IOMMU_DOMAIN_NESTED)
@@ -2877,7 +2877,6 @@ int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 			spin_unlock_irqrestore(&smmu_domain->devices_lock,
 					       flags);
 			kfree(master_domain);
-			kfree(state->vmaster);
 			return -EINVAL;
 		}
 

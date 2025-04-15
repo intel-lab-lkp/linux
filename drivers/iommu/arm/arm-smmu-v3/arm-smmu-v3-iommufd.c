@@ -182,11 +182,13 @@ static void arm_smmu_make_nested_domain_ste(
 int arm_vsmmu_attach_prepare(struct arm_smmu_attach_state *state,
 			     struct arm_vsmmu *vsmmu)
 {
+	struct arm_smmu_master *master = state->master;
 	struct arm_smmu_vmaster *vmaster;
+	unsigned long flags;
 	unsigned long vsid;
 	int ret;
 
-	iommu_group_mutex_assert(state->master->dev);
+	iommu_group_mutex_assert(master->dev);
 
 	ret = iommufd_viommu_get_vdev_id(&vsmmu->core,
 					 state->master->dev, &vsid);
@@ -199,6 +201,12 @@ int arm_vsmmu_attach_prepare(struct arm_smmu_attach_state *state,
 	vmaster->vsmmu = vsmmu;
 	vmaster->vsid = vsid;
 	state->vmaster = vmaster;
+
+	if (state->ats_enabled) {
+		spin_lock_irqsave(&vsmmu->ats_devices.lock, flags);
+		list_add(&master->devices_elm, &vsmmu->ats_devices.list);
+		spin_unlock_irqrestore(&vsmmu->ats_devices.lock, flags);
+	}
 
 	return 0;
 }
@@ -218,6 +226,23 @@ void arm_smmu_master_clear_vmaster(struct arm_smmu_master *master)
 	struct arm_smmu_attach_state state = { .master = master };
 
 	arm_smmu_attach_commit_vmaster(&state);
+}
+
+void arm_vsmmu_remove_ats_device(struct arm_vsmmu *vsmmu,
+				 struct arm_smmu_master *master)
+{
+	struct arm_smmu_cmdq_ent cmd = { .opcode = CMDQ_OP_ATC_INV };
+	struct arm_smmu_cmdq_batch cmds;
+	unsigned long flags;
+
+	arm_smmu_cmdq_batch_init(vsmmu->smmu, &cmds, &cmd);
+
+	spin_lock_irqsave(&vsmmu->ats_devices.lock, flags);
+	list_del(&master->devices_elm);
+	arm_vsmmu_cmdq_batch_add_atc_inv(vsmmu, master, &cmds, &cmd);
+	spin_unlock_irqrestore(&vsmmu->ats_devices.lock, flags);
+
+	arm_smmu_cmdq_batch_submit(vsmmu->smmu, &cmds);
 }
 
 static int arm_smmu_attach_dev_nested(struct iommu_domain *domain,

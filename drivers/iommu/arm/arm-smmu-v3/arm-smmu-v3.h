@@ -1104,6 +1104,8 @@ int arm_vsmmu_attach_prepare(struct arm_smmu_attach_state *state,
 			     struct arm_vsmmu *vsmmu);
 void arm_smmu_attach_commit_vmaster(struct arm_smmu_attach_state *state);
 void arm_smmu_master_clear_vmaster(struct arm_smmu_master *master);
+void arm_vsmmu_remove_ats_device(struct arm_vsmmu *vsmmu,
+				 struct arm_smmu_master *master);
 int arm_vmaster_report_event(struct arm_smmu_vmaster *vmaster, u64 *evt);
 
 void arm_smmu_s2_parent_tlb_inv_domain(struct arm_smmu_domain *s2_parent);
@@ -1127,6 +1129,11 @@ arm_smmu_attach_commit_vmaster(struct arm_smmu_attach_state *state)
 
 static inline void
 arm_smmu_master_clear_vmaster(struct arm_smmu_master *master)
+{
+}
+
+static inline void arm_vsmmu_remove_ats_device(struct arm_vsmmu *vsmmu,
+					       struct arm_smmu_master *master)
 {
 }
 
