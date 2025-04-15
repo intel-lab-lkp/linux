@@ -8,6 +8,7 @@
 #define pr_fmt(fmt) "SCMI Notifications BASE - " fmt
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/scmi_protocol.h>
 
 #include "common.h"
