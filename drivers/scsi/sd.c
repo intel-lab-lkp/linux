@@ -4064,6 +4064,7 @@ static int sd_remove(struct device *dev)
 
 	device_del(&sdkp->disk_dev);
 	del_gendisk(sdkp->disk);
+	sdkp->remove = 1;
 	if (!sdkp->suspended)
 		sd_shutdown(dev);
 
@@ -4161,6 +4162,9 @@ static void sd_shutdown(struct device *dev)
 
 	if (!sdkp)
 		return;         /* this can happen */
+
+	if (sdkp->device->removable && !sdkp->remove)
+		disk_block_events(sdkp->disk);
 
 	if (pm_runtime_suspended(dev))
 		return;

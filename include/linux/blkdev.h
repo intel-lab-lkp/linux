@@ -879,6 +879,7 @@ int __register_blkdev(unsigned int major, const char *name,
 void unregister_blkdev(unsigned int major, const char *name);
 
 bool disk_check_media_change(struct gendisk *disk);
+void disk_block_events(struct gendisk *disk);
 void set_capacity(struct gendisk *disk, sector_t size);
 
 #ifdef CONFIG_BLOCK_HOLDER_DEPRECATED
