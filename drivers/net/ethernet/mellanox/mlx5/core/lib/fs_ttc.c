@@ -651,6 +651,7 @@ struct mlx5_ttc_table *mlx5_create_inner_ttc_table(struct mlx5_core_dev *dev,
 			MLX5_CAP_NIC_RX_FT_FIELD_SUPPORT_2(dev, inner_l4_type);
 		break;
 	default:
+		kvfree(ttc);
 		return ERR_PTR(-EINVAL);
 	}
 
@@ -729,6 +730,7 @@ struct mlx5_ttc_table *mlx5_create_ttc_table(struct mlx5_core_dev *dev,
 			MLX5_CAP_NIC_RX_FT_FIELD_SUPPORT_2(dev, outer_l4_type);
 		break;
 	default:
+		kvfree(ttc);
 		return ERR_PTR(-EINVAL);
 	}
 
