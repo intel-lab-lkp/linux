@@ -84,11 +84,12 @@ void
 nouveau_fence_context_kill(struct nouveau_fence_chan *fctx, int error)
 {
 	struct nouveau_fence *fence;
+	struct list_head *pos, *tmp;
 	unsigned long flags;
 
 	spin_lock_irqsave(&fctx->lock, flags);
-	while (!list_empty(&fctx->pending)) {
-		fence = list_entry(fctx->pending.next, typeof(*fence), head);
+	list_for_each_safe(pos, tmp, &fctx->pending) {
+		fence = list_entry(pos, struct nouveau_fence, head);
 
 		if (error && !dma_fence_is_signaled_locked(&fence->base))
 			dma_fence_set_error(&fence->base, error);
@@ -131,11 +132,12 @@ static int
 nouveau_fence_update(struct nouveau_channel *chan, struct nouveau_fence_chan *fctx)
 {
 	struct nouveau_fence *fence;
+	struct list_head *pos, *tmp;
 	int drop = 0;
 	u32 seq = fctx->read(chan);
 
-	while (!list_empty(&fctx->pending)) {
-		fence = list_entry(fctx->pending.next, typeof(*fence), head);
+	list_for_each_safe(pos, tmp, &fctx->pending) {
+		fence = list_entry(pos, struct nouveau_fence, head);
 
 		if ((int)(seq - fence->base.seqno) < 0)
 			break;
