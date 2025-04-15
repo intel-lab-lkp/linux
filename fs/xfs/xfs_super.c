@@ -111,7 +111,7 @@ enum {
 	Opt_prjquota, Opt_uquota, Opt_gquota, Opt_pquota,
 	Opt_uqnoenforce, Opt_gqnoenforce, Opt_pqnoenforce, Opt_qnoenforce,
 	Opt_discard, Opt_nodiscard, Opt_dax, Opt_dax_enum, Opt_max_open_zones,
-	Opt_lifetime, Opt_nolifetime,
+	Opt_lifetime, Opt_nolifetime, Opt_max_atomic_write,
 };
 
 static const struct fs_parameter_spec xfs_fs_parameters[] = {
@@ -159,6 +159,7 @@ static const struct fs_parameter_spec xfs_fs_parameters[] = {
 	fsparam_u32("max_open_zones",	Opt_max_open_zones),
 	fsparam_flag("lifetime",	Opt_lifetime),
 	fsparam_flag("nolifetime",	Opt_nolifetime),
+	fsparam_string("max_atomic_write",	Opt_max_atomic_write),
 	{}
 };
 
@@ -241,6 +242,9 @@ xfs_fs_show_options(
 
 	if (mp->m_max_open_zones)
 		seq_printf(m, ",max_open_zones=%u", mp->m_max_open_zones);
+	if (mp->m_awu_max_bytes)
+		seq_printf(m, ",max_atomic_write=%uk",
+				mp->m_awu_max_bytes >> 10);
 
 	return 0;
 }
@@ -1518,6 +1522,13 @@ xfs_fs_parse_param(
 	case Opt_nolifetime:
 		parsing_mp->m_features |= XFS_FEAT_NOLIFETIME;
 		return 0;
+	case Opt_max_atomic_write:
+		if (suffix_kstrtoint(param->string, 10,
+				     &parsing_mp->m_awu_max_bytes))
+			return -EINVAL;
+		if (parsing_mp->m_awu_max_bytes < 0)
+			return -EINVAL;
+		return 0;
 	default:
 		xfs_warn(parsing_mp, "unknown mount option [%s].", param->key);
 		return -EINVAL;
@@ -2114,6 +2125,16 @@ xfs_fs_reconfigure(
 	if (error)
 		return error;
 
+	/* validate new max_atomic_write option before making other changes */
+	if (mp->m_awu_max_bytes != new_mp->m_awu_max_bytes) {
+		if (!xfs_calc_atomic_write_reservation(mp,
+					new_mp->m_awu_max_bytes)) {
+			xfs_warn(mp, "cannot support atomic writes of %u bytes",
+					new_mp->m_awu_max_bytes);
+			return -EINVAL;
+		}
+	}
+
 	/* inode32 -> inode64 */
 	if (xfs_has_small_inums(mp) && !xfs_has_small_inums(new_mp)) {
 		mp->m_features &= ~XFS_FEAT_SMALL_INUMS;
@@ -2140,6 +2161,11 @@ xfs_fs_reconfigure(
 			return error;
 	}
 
+	/* set new atomic write max here */
+	if (mp->m_awu_max_bytes != new_mp->m_awu_max_bytes) {
+		xfs_compute_atomic_write_unit_max(mp);
+		mp->m_awu_max_bytes = new_mp->m_awu_max_bytes;
+	}
 	return 0;
 }
 

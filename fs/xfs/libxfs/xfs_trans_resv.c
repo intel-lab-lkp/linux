@@ -1475,3 +1475,57 @@ xfs_calc_max_atomic_write_fsblocks(
 
 	return ret;
 }
+
+/*
+ * Compute the log reservation needed to complete an atomic write of a given
+ * number of blocks.  Worst case, each block requires separate handling.
+ * Returns true if the blockcount is supported, false otherwise.
+ */
+bool
+xfs_calc_atomic_write_reservation(
+	struct xfs_mount	*mp,
+	int			bytes)
+{
+	struct xfs_trans_res	*curr_res = &M_RES(mp)->tr_atomic_ioend;
+	unsigned int		per_intent, step_size;
+	unsigned int		logres;
+	xfs_extlen_t		blockcount = XFS_B_TO_FSBT(mp, bytes);
+	uint			old_logres =
+		M_RES(mp)->tr_atomic_ioend.tr_logres;
+	int			min_logblocks;
+
+	/*
+	 * If the caller doesn't ask for a specific atomic write size, then
+	 * we'll use conservatively use tr_itruncate as the basis for computing
+	 * a reasonable maximum.
+	 */
+	if (blockcount == 0) {
+		curr_res->tr_logres = M_RES(mp)->tr_itruncate.tr_logres;
+		return true;
+	}
+
+	/* Untorn write completions require out of place write remapping */
+	if (!xfs_has_reflink(mp))
+		return false;
+
+	per_intent = xfs_calc_atomic_write_ioend_geometry(mp, &step_size);
+
+	if (check_mul_overflow(blockcount, per_intent, &logres))
+		return false;
+	if (check_add_overflow(logres, step_size, &logres))
+		return false;
+
+	curr_res->tr_logres = logres;
+	min_logblocks = xfs_log_calc_minimum_size(mp);
+
+	trace_xfs_calc_max_atomic_write_reservation(mp, per_intent, step_size,
+			blockcount, min_logblocks, curr_res->tr_logres);
+
+	if (min_logblocks > mp->m_sb.sb_logblocks) {
+		/* Log too small, revert changes. */
+		curr_res->tr_logres = old_logres;
+		return false;
+	}
+
+	return true;
+}
