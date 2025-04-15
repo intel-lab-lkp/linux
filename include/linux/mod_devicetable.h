@@ -605,7 +605,7 @@ struct dmi_system_id {
 #define PLATFORM_MODULE_PREFIX	"platform:"
 
 struct platform_device_id {
-	char name[PLATFORM_NAME_SIZE];
+	char name[PLATFORM_NAME_SIZE] __attribute__((nonstring));
 	kernel_ulong_t driver_data;
 };
 
