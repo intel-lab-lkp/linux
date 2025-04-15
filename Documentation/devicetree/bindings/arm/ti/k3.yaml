@@ -135,6 +135,8 @@ properties:
       - description: K3 J721s2 SoC
         items:
           - enum:
+              - phytec,am68-phyboard-izar
+              - phytec,am68-phycore-som
               - ti,am68-sk
               - ti,j721s2-evm
           - const: ti,j721s2
