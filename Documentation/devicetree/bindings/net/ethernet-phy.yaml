@@ -134,30 +134,6 @@ properties:
       Mark the corresponding energy efficient ethernet mode as
       broken and request the ethernet to stop advertising it.
 
-  eee-broken-10gt:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      Mark the corresponding energy efficient ethernet mode as
-      broken and request the ethernet to stop advertising it.
-
-  eee-broken-1000kx:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      Mark the corresponding energy efficient ethernet mode as
-      broken and request the ethernet to stop advertising it.
-
-  eee-broken-10gkx4:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      Mark the corresponding energy efficient ethernet mode as
-      broken and request the ethernet to stop advertising it.
-
-  eee-broken-10gkr:
-    $ref: /schemas/types.yaml#/definitions/flag
-    description:
-      Mark the corresponding energy efficient ethernet mode as
-      broken and request the ethernet to stop advertising it.
-
   timing-role:
     $ref: /schemas/types.yaml#/definitions/string
     enum:
