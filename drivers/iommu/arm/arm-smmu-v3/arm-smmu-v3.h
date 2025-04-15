@@ -955,6 +955,10 @@ void arm_smmu_tlb_inv_range_asid(unsigned long iova, size_t size, int asid,
 				 struct arm_smmu_domain *smmu_domain);
 int arm_smmu_atc_inv_domain(struct arm_smmu_domain *smmu_domain,
 			    unsigned long iova, size_t size);
+void __arm_smmu_tlb_inv_range(struct arm_smmu_device *smmu,
+			      struct arm_smmu_cmdq_ent *cmd, unsigned long iova,
+			      size_t size, size_t granule,
+			      struct iommu_domain *domain);
 
 void __arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu,
 			      struct arm_smmu_cmdq *cmdq);

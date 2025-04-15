@@ -2267,12 +2267,11 @@ static void arm_smmu_tlb_inv_context(void *cookie)
 	arm_smmu_atc_inv_domain(smmu_domain, 0, 0);
 }
 
-static void __arm_smmu_tlb_inv_range(struct arm_smmu_cmdq_ent *cmd,
-				     unsigned long iova, size_t size,
-				     size_t granule,
-				     struct arm_smmu_domain *smmu_domain)
+void __arm_smmu_tlb_inv_range(struct arm_smmu_device *smmu,
+			      struct arm_smmu_cmdq_ent *cmd, unsigned long iova,
+			      size_t size, size_t granule,
+			      struct iommu_domain *domain)
 {
-	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	unsigned long end = iova + size, num_pages = 0, tg = 0;
 	size_t inv_range = granule;
 	struct arm_smmu_cmdq_batch cmds;
@@ -2282,7 +2281,7 @@ static void __arm_smmu_tlb_inv_range(struct arm_smmu_cmdq_ent *cmd,
 
 	if (smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
 		/* Get the leaf page size */
-		tg = __ffs(smmu_domain->domain.pgsize_bitmap);
+		tg = __ffs(domain->pgsize_bitmap);
 
 		num_pages = size >> tg;
 
@@ -2356,7 +2355,8 @@ static void arm_smmu_tlb_inv_range_domain(unsigned long iova, size_t size,
 		cmd.opcode	= CMDQ_OP_TLBI_S2_IPA;
 		cmd.tlbi.vmid	= smmu_domain->s2_cfg.vmid;
 	}
-	__arm_smmu_tlb_inv_range(&cmd, iova, size, granule, smmu_domain);
+	__arm_smmu_tlb_inv_range(smmu_domain->smmu, &cmd, iova, size, granule,
+				 &smmu_domain->domain);
 
 	if (smmu_domain->nest_parent) {
 		/*
@@ -2387,7 +2387,8 @@ void arm_smmu_tlb_inv_range_asid(unsigned long iova, size_t size, int asid,
 		},
 	};
 
-	__arm_smmu_tlb_inv_range(&cmd, iova, size, granule, smmu_domain);
+	__arm_smmu_tlb_inv_range(smmu_domain->smmu, &cmd, iova, size, granule,
+				 &smmu_domain->domain);
 }
 
 static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
