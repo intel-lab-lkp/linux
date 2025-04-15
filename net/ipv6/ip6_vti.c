@@ -530,6 +530,7 @@ xmit:
 	skb_scrub_packet(skb, !net_eq(t->net, dev_net(dev)));
 	skb_dst_set(skb, dst);
 	skb->dev = skb_dst(skb)->dev;
+	skb_orphan(skb);
 
 	err = dst_output(t->net, skb->sk, skb);
 	if (net_xmit_eval(err) == 0)
