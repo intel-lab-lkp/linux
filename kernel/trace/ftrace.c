@@ -1658,8 +1658,13 @@ unsigned long ftrace_location(unsigned long ip)
 			return 0;
 
 		/* map sym+0 to __fentry__ */
-		if (!offset)
-			loc = ftrace_location_range(ip, ip + size - 1);
+		if (!offset) {
+			size -= 1;
+#ifdef FTRACE_MCOUNT_MAX_OFFSET
+			size = min(size, FTRACE_MCOUNT_MAX_OFFSET);
+#endif
+			loc = ftrace_location_range(ip, ip + size);
+		}
 	}
 	return loc;
 }
