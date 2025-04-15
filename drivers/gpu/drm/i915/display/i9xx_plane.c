@@ -2,6 +2,7 @@
 /*
  * Copyright © 2020 Intel Corporation
  */
+
 #include <linux/kernel.h>
 
 #include <drm/drm_atomic_helper.h>
@@ -16,6 +17,7 @@
 #include "intel_atomic_plane.h"
 #include "intel_de.h"
 #include "intel_display_irq.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_fb.h"
 #include "intel_fbc.h"

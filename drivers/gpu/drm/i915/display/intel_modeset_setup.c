@@ -6,8 +6,8 @@
  * state.
  */
 
-#include <drm/drm_atomic_uapi.h>
 #include <drm/drm_atomic_state_helper.h>
+#include <drm/drm_atomic_uapi.h>
 #include <drm/drm_vblank.h>
 
 #include "i915_drv.h"
@@ -23,6 +23,7 @@
 #include "intel_de.h"
 #include "intel_display.h"
 #include "intel_display_power.h"
+#include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dmc.h"
 #include "intel_fifo_underrun.h"
