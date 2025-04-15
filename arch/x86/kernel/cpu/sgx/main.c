@@ -32,6 +32,11 @@ static DEFINE_XARRAY(sgx_epc_address_space);
 static LIST_HEAD(sgx_active_page_list);
 static DEFINE_SPINLOCK(sgx_reclaimer_lock);
 
+/* This lock is held to prevent new EPC pages from being created
+ * during the execution of ENCLS[EUPDATESVN].
+ */
+static DEFINE_SPINLOCK(sgx_epc_eupdatesvn_lock);
+
 static atomic_long_t sgx_nr_used_pages = ATOMIC_LONG_INIT(0);
 static unsigned long sgx_nr_total_pages;
 
@@ -444,6 +449,7 @@ static struct sgx_epc_page *__sgx_alloc_epc_page_from_node(int nid)
 {
 	struct sgx_numa_node *node = &sgx_numa_nodes[nid];
 	struct sgx_epc_page *page = NULL;
+	bool ret;
 
 	spin_lock(&node->lock);
 
@@ -452,12 +458,33 @@ static struct sgx_epc_page *__sgx_alloc_epc_page_from_node(int nid)
 		return NULL;
 	}
 
+	if (!atomic_long_inc_not_zero(&sgx_nr_used_pages)) {
+		spin_lock(&sgx_epc_eupdatesvn_lock);
+		/*
+		 * Only call sgx_updatesvn() once the first enclave's
+		 * page is allocated from EPC
+		 */
+		if (atomic_long_read(&sgx_nr_used_pages) == 0) {
+			ret = sgx_updatesvn();
+			if (!ret) {
+				/*
+				 * sgx_updatesvn() returned unknown error, smth
+				 * must be broken, do not allocate a page from EPC
+				 */
+				spin_unlock(&sgx_epc_eupdatesvn_lock);
+				spin_unlock(&node->lock);
+				return NULL;
+			}
+		}
+		atomic_long_inc(&sgx_nr_used_pages);
+		spin_unlock(&sgx_epc_eupdatesvn_lock);
+	}
+
 	page = list_first_entry(&node->free_page_list, struct sgx_epc_page, list);
 	list_del_init(&page->list);
 	page->flags = 0;
 
 	spin_unlock(&node->lock);
-	atomic_long_inc(&sgx_nr_used_pages);
 
 	return page;
 }
@@ -974,3 +1001,56 @@ err_page_cache:
 }
 
 device_initcall(sgx_init);
+
+/**
+ * sgx_updatesvn() - Issue ENCLS[EUPDATESVN]
+ * If EPC is ready, this instruction will update CPUSVN to the currently
+ * loaded microcode update SVN and generate new cryptographic assets.
+ *
+ * Return:
+ * True: success or EUPDATESVN can be safely retried next time
+ * False: Unexpected error occurred
+ */
+bool sgx_updatesvn(void)
+{
+	int retry = 10;
+	int ret;
+
+	lockdep_assert_held(&sgx_epc_eupdatesvn_lock);
+
+	if (!(cpuid_eax(SGX_CPUID) & SGX_CPUID_EUPDATESVN))
+		return true;
+
+	/*
+	 * Do not execute ENCLS[EUPDATESVN] if running in a VM since
+	 * microcode updates are only meaningful to be applied on the host.
+	 */
+	if (boot_cpu_has(X86_FEATURE_HYPERVISOR))
+		return true;
+
+	do {
+		ret = __eupdatesvn();
+		if (ret != SGX_INSUFFICIENT_ENTROPY)
+			break;
+
+	} while (--retry);
+
+	switch (ret) {
+	case 0:
+		pr_info("EUPDATESVN: success\n");
+		break;
+	case SGX_EPC_NOT_READY:
+	case SGX_INSUFFICIENT_ENTROPY:
+	case SGX_EPC_PAGE_CONFLICT:
+		ENCLS_WARN(ret, "EUPDATESVN");
+		break;
+	case SGX_NO_UPDATE:
+		break;
+	default:
+		ENCLS_WARN(ret, "EUPDATESVN");
+		return false;
+	}
+
+	return true;
+
+}

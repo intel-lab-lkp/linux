@@ -103,5 +103,6 @@ static inline int __init sgx_vepc_init(void)
 #endif
 
 void sgx_update_lepubkeyhash(u64 *lepubkeyhash);
+bool sgx_updatesvn(void);
 
 #endif /* _X86_SGX_H */
