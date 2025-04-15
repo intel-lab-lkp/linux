@@ -671,7 +671,7 @@ static inline unsigned int max_pow_of_two_factor(const unsigned int nr)
 	return 1 << (ffs(nr) - 1);
 }
 
-static inline void
+void
 xfs_compute_atomic_write_unit_max(
 	struct xfs_mount	*mp)
 {
@@ -1160,6 +1160,12 @@ xfs_mountfs(
 	 * derived from transaction reservations, so we must do this after the
 	 * log is fully initialized.
 	 */
+	if (!xfs_calc_atomic_write_reservation(mp, mp->m_awu_max_bytes)) {
+		xfs_warn(mp, "cannot support atomic writes of %u bytes",
+				mp->m_awu_max_bytes);
+		error = -EINVAL;
+		goto out_agresv;
+	}
 	xfs_compute_atomic_write_unit_max(mp);
 
 	return 0;

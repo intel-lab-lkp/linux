@@ -236,6 +236,9 @@ typedef struct xfs_mount {
 	bool			m_update_sb;	/* sb needs update in mount */
 	unsigned int		m_max_open_zones;
 
+	/* max_atomic_write mount option value */
+	unsigned int		m_awu_max_bytes;
+
 	/*
 	 * Bitsets of per-fs metadata that have been checked and/or are sick.
 	 * Callers must hold m_sb_lock to access these two fields.
@@ -797,5 +800,7 @@ static inline void xfs_mod_sb_delalloc(struct xfs_mount *mp, int64_t delta)
 {
 	percpu_counter_add(&mp->m_delalloc_blks, delta);
 }
+
+void xfs_compute_atomic_write_unit_max(struct xfs_mount *mp);
 
 #endif	/* __XFS_MOUNT_H__ */
