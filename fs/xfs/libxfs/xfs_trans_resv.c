@@ -1378,4 +1378,10 @@ xfs_trans_resv_calc(
 	resp->tr_itruncate.tr_logcount += logcount_adj;
 	resp->tr_write.tr_logcount += logcount_adj;
 	resp->tr_qm_dqalloc.tr_logcount += logcount_adj;
+
+	/*
+	 * Now that we've finished computing tr_itruncate, use it as the
+	 * default for atomic write ioends.
+	 */
+	resp->tr_atomic_ioend = resp->tr_itruncate;
 }
