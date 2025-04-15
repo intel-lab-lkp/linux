@@ -4879,7 +4879,8 @@ static int rtl8169_close(struct net_device *dev)
 	pm_runtime_get_sync(&pdev->dev);
 
 	netif_stop_queue(dev);
-	rtl8169_down(tp);
+	if (netif_device_present(tp->dev))
+		rtl8169_down(tp);
 	rtl8169_rx_clear(tp);
 
 	free_irq(tp->irq, tp);
