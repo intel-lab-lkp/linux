@@ -1233,8 +1233,10 @@ static u64 __kvm_at_s1e01_fast(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
 	 * the right one (as we trapped from vEL2). If not, save the
 	 * full MMU context.
 	 */
-	if (vcpu_el2_e2h_is_set(vcpu) && vcpu_el2_tge_is_set(vcpu))
+	if (vcpu_el2_e2h_is_set(vcpu) && vcpu_el2_tge_is_set(vcpu)) {
+		config.hcr = read_sysreg(hcr_el2);
 		goto skip_mmu_switch;
+	}
 
 	/*
 	 * Obtaining the S2 MMU for a L2 is horribly racy, and we may not
@@ -1299,7 +1301,9 @@ skip_mmu_switch:
 	if (!fail)
 		par = read_sysreg_par();
 
-	if (!(vcpu_el2_e2h_is_set(vcpu) && vcpu_el2_tge_is_set(vcpu)))
+	if (vcpu_el2_e2h_is_set(vcpu) && vcpu_el2_tge_is_set(vcpu))
+		write_sysreg(config.hcr, hcr_el2);
+	else
 		__mmu_config_restore(&config);
 
 	return par;
