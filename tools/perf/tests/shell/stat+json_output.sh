@@ -176,6 +176,11 @@ check_per_socket()
 check_metric_only()
 {
 	echo -n "Checking json output: metric only "
+	if [ "$(uname -m)" = "s390x" ] && grep -q z/VM /proc/sysinfo
+	then
+		echo "[Skip] not supported on z/VM"
+		return
+	fi
 	perf stat -j --metric-only -e instructions,cycles -o "${stat_output}" true
 	$PYTHON $pythonchecker --metric-only --file "${stat_output}"
 	echo "[Success]"
