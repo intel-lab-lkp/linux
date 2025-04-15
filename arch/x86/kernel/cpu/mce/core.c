@@ -715,6 +715,61 @@ static noinstr void mce_read_aux(struct mce_hw_err *err, int i)
 DEFINE_PER_CPU(unsigned, mce_poll_count);
 
 /*
+ * We have three scenarios for checking for Deferred errors:
+ *
+ * 1) Non-SMCA systems check MCA_STATUS and log error if found.
+ * 2) SMCA systems check MCA_STATUS. If error is found then log it and also
+ *    clear MCA_DESTAT.
+ * 3) SMCA systems check MCA_DESTAT, if error was not found in MCA_STATUS, and
+ *    log it.
+ */
+static bool smca_should_log_poll_error(enum mcp_flags flags, struct mce_hw_err *err)
+{
+	struct mce *m = &err->m;
+
+	/*
+	 * If this is a deferred error found in MCA_STATUS, then clear
+	 * the redundant data from the MCA_DESTAT register.
+	 */
+	if (m->status & MCI_STATUS_VAL) {
+		if (m->status & MCI_STATUS_DEFERRED)
+			mce_wrmsrq(MSR_AMD64_SMCA_MCx_DESTAT(m->bank), 0);
+
+		return true;
+	}
+
+	/*
+	 * If the MCA_DESTAT register has valid data, then use
+	 * it as the status register.
+	 */
+	m->status = mce_rdmsrq(MSR_AMD64_SMCA_MCx_DESTAT(m->bank));
+
+	if (!(m->status & MCI_STATUS_VAL))
+		return false;
+
+	/*
+	 * Gather all relevant data now and log the record before clearing
+	 * the deferred status register. This avoids needing to go back to
+	 * the polling function for these actions.
+	 */
+	mce_read_aux(err, m->bank);
+
+	if (m->status & MCI_STATUS_ADDRV)
+		m->addr = mce_rdmsrq(MSR_AMD64_SMCA_MCx_DEADDR(m->bank));
+
+	smca_extract_err_addr(m);
+	m->severity = mce_severity(m, NULL, NULL, false);
+
+	if (flags & MCP_QUEUE_LOG)
+		mce_gen_pool_add(err);
+	else
+		mce_log(err);
+
+	mce_wrmsrq(MSR_AMD64_SMCA_MCx_DESTAT(m->bank), 0);
+	return false;
+}
+
+/*
  * Newer Intel systems that support software error
  * recovery need to make additional checks. Other
  * CPUs should skip over uncorrected errors, but log
@@ -739,6 +794,9 @@ static bool ser_should_log_poll_error(struct mce *m)
 static bool should_log_poll_error(enum mcp_flags flags, struct mce_hw_err *err)
 {
 	struct mce *m = &err->m;
+
+	if (mce_flags.smca)
+		return smca_should_log_poll_error(flags, err);
 
 	/* If this entry is not valid, ignore it. */
 	if (!(m->status & MCI_STATUS_VAL))
@@ -2226,7 +2284,7 @@ void cpu_mca_init(struct cpuinfo_x86 *c)
 	if (mce_flags.smca)
 		mce_smca_cpu_init();
 
-	rdmsrl(MSR_IA32_MCG_CAP, cap);
+	rdmsrq(MSR_IA32_MCG_CAP, cap);
 
 	/* Use accurate RIP reporting if available. */
 	if ((cap & MCG_EXT_P) && MCG_EXT_CNT(cap) >= 9)
