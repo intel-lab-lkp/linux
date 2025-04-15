@@ -3605,7 +3605,7 @@ after_split:
 	folio_ref_unfreeze(origin_folio, 1 +
 		((mapping || swap_cache) ? folio_nr_pages(origin_folio) : 0));
 
-	unlock_page_lruvec(lruvec);
+	lruvec_unlock(lruvec);
 
 	if (swap_cache)
 		xa_unlock(&swap_cache->i_pages);
