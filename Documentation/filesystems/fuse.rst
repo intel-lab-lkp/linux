@@ -103,6 +103,11 @@ blksize=N
   Set the block size for the filesystem.  The default is 512.  This
   option is only valid for 'fuseblk' type mounts.
 
+inval_wq=N
+  Enable a workqueue that will periodically invalidate dentries that
+  have expired.  'N' is a value in seconds and has to be bigger than
+  5 seconds.
+
 Control filesystem
 ==================
 

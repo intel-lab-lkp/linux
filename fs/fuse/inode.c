@@ -769,6 +769,7 @@ enum {
 	OPT_ALLOW_OTHER,
 	OPT_MAX_READ,
 	OPT_BLKSIZE,
+	OPT_INVAL_WQ,
 	OPT_ERR
 };
 
@@ -783,6 +784,7 @@ static const struct fs_parameter_spec fuse_fs_parameters[] = {
 	fsparam_u32	("max_read",		OPT_MAX_READ),
 	fsparam_u32	("blksize",		OPT_BLKSIZE),
 	fsparam_string	("subtype",		OPT_SUBTYPE),
+	fsparam_u32	("inval_wq",		OPT_INVAL_WQ),
 	{}
 };
 
@@ -878,6 +880,12 @@ static int fuse_parse_param(struct fs_context *fsc, struct fs_parameter *param)
 		ctx->blksize = result.uint_32;
 		break;
 
+	case OPT_INVAL_WQ:
+		if (result.uint_32 < 5)
+			return invalfc(fsc, "Workqueue period is < 5s");
+		ctx->inval_wq = result.uint_32;
+		break;
+
 	default:
 		return -EINVAL;
 	}
@@ -911,6 +919,8 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 			seq_puts(m, ",allow_other");
 		if (fc->max_read != ~0)
 			seq_printf(m, ",max_read=%u", fc->max_read);
+		if (fc->inval_wq != 0)
+			seq_printf(m, ",inval_wq=%u", fc->inval_wq);
 		if (sb->s_bdev && sb->s_blocksize != FUSE_DEFAULT_BLKSIZE)
 			seq_printf(m, ",blksize=%lu", sb->s_blocksize);
 	}
@@ -959,6 +969,7 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	memset(fc, 0, sizeof(*fc));
 	spin_lock_init(&fc->lock);
 	spin_lock_init(&fc->bg_lock);
+	spin_lock_init(&fc->dentry_tree_lock);
 	init_rwsem(&fc->killsb);
 	refcount_set(&fc->count, 1);
 	atomic_set(&fc->dev_count, 1);
@@ -968,6 +979,8 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	INIT_LIST_HEAD(&fc->bg_queue);
 	INIT_LIST_HEAD(&fc->entry);
 	INIT_LIST_HEAD(&fc->devices);
+	fc->dentry_tree = RB_ROOT;
+	fc->inval_wq = 0;
 	atomic_set(&fc->num_waiting, 0);
 	fc->max_background = FUSE_DEFAULT_MAX_BACKGROUND;
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
@@ -1844,6 +1857,9 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	fc->group_id = ctx->group_id;
 	fc->legacy_opts_show = ctx->legacy_opts_show;
 	fc->max_read = max_t(unsigned int, 4096, ctx->max_read);
+	fc->inval_wq = ctx->inval_wq;
+	if (fc->inval_wq > 0)
+		INIT_DELAYED_WORK(&fc->dentry_tree_work, fuse_dentry_tree_work);
 	fc->destroy = ctx->destroy;
 	fc->no_control = ctx->no_control;
 	fc->no_force_umount = ctx->no_force_umount;
@@ -2009,6 +2025,7 @@ static int fuse_init_fs_context(struct fs_context *fsc)
 		return -ENOMEM;
 
 	ctx->max_read = ~0;
+	ctx->inval_wq = 0;
 	ctx->blksize = FUSE_DEFAULT_BLKSIZE;
 	ctx->legacy_opts_show = true;
 
@@ -2048,6 +2065,7 @@ void fuse_conn_destroy(struct fuse_mount *fm)
 
 	fuse_abort_conn(fc);
 	fuse_wait_aborted(fc);
+	fuse_dentry_tree_prune(fc);
 
 	if (!list_empty(&fc->entry)) {
 		mutex_lock(&fuse_mutex);

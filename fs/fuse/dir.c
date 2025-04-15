@@ -62,6 +62,151 @@ static inline u64 fuse_dentry_time(const struct dentry *entry)
 }
 #endif
 
+struct dentry_node {
+	struct rb_node node;
+	struct dentry *dentry;
+};
+
+static void fuse_dentry_tree_add_node(struct dentry *dentry)
+{
+	struct fuse_conn *fc = get_fuse_conn_super(dentry->d_sb);
+	struct dentry_node *dn, *cur;
+	struct rb_node **p, *parent = NULL;
+	bool start_work = false;
+
+	if (!fc->inval_wq)
+		return;
+
+	dn = kmalloc(sizeof(*dn), GFP_KERNEL);
+	if (!dn)
+		return;
+	dn->dentry = dget(dentry);
+	spin_lock(&fc->dentry_tree_lock);
+	start_work = RB_EMPTY_ROOT(&fc->dentry_tree);
+	p = &fc->dentry_tree.rb_node;
+	while (*p) {
+		parent = *p;
+		cur = rb_entry(*p, struct dentry_node, node);
+		if (fuse_dentry_time(dn->dentry) >
+		    fuse_dentry_time(cur->dentry))
+			p = &(*p)->rb_left;
+		else
+			p = &(*p)->rb_right;
+	}
+	rb_link_node(&dn->node, parent, p);
+	rb_insert_color(&dn->node, &fc->dentry_tree);
+	spin_unlock(&fc->dentry_tree_lock);
+	if (start_work)
+		schedule_delayed_work(&fc->dentry_tree_work,
+				      secs_to_jiffies(fc->inval_wq));
+}
+
+static void fuse_dentry_tree_del_node(struct dentry *dentry)
+{
+	struct fuse_conn *fc = get_fuse_conn_super(dentry->d_sb);
+	struct dentry_node *cur;
+	struct rb_node **p;
+
+	if (!fc->inval_wq)
+		return;
+
+	spin_lock(&fc->dentry_tree_lock);
+	p = &fc->dentry_tree.rb_node;
+	while (*p) {
+		cur = rb_entry(*p, struct dentry_node, node);
+		if (fuse_dentry_time(dentry) > fuse_dentry_time(cur->dentry))
+			p = &(*p)->rb_left;
+		else if (fuse_dentry_time(dentry) <
+			 fuse_dentry_time(cur->dentry))
+			p = &(*p)->rb_right;
+		else {
+			rb_erase(*p, &fc->dentry_tree);
+			dput(cur->dentry);
+			kfree(cur);
+			break;
+		}
+	}
+	spin_unlock(&fc->dentry_tree_lock);
+}
+
+void fuse_dentry_tree_prune(struct fuse_conn *fc)
+{
+	struct rb_node *n;
+	struct dentry_node *dn;
+
+	if (!fc->inval_wq)
+		return;
+
+	fc->inval_wq = 0;
+	cancel_delayed_work_sync(&fc->dentry_tree_work);
+
+	spin_lock(&fc->dentry_tree_lock);
+	while (!RB_EMPTY_ROOT(&fc->dentry_tree)) {
+		n = rb_first(&fc->dentry_tree);
+		dn = rb_entry(n, struct dentry_node, node);
+		rb_erase(n, &fc->dentry_tree);
+		dput(dn->dentry);
+		kfree(dn);
+	}
+	spin_unlock(&fc->dentry_tree_lock);
+}
+
+/*
+ * Global workqueue task that will periodically check for expired dentries in
+ * the dentries tree.
+ *
+ * A dentry has expired if:
+ *   1) it has been around for too long or
+ *   2) the connection epoch has been incremented
+ * For this second case, all dentries will be expired.
+ *
+ * The task will be rescheduled as long as the dentries tree is not empty.
+ */
+void fuse_dentry_tree_work(struct work_struct *work)
+{
+	struct fuse_conn *fc = container_of(work, struct fuse_conn,
+					    dentry_tree_work.work);
+	struct dentry_node *dn;
+	struct rb_node *node;
+	struct dentry *entry;
+	u64 now;
+	int epoch;
+	bool expire_all = false;
+	bool is_first = true;
+	bool reschedule;
+
+	spin_lock(&fc->dentry_tree_lock);
+	now = get_jiffies_64();
+	epoch = atomic_read(&fc->epoch);
+
+	node = rb_first(&fc->dentry_tree);
+
+	while (node) {
+		dn = rb_entry(node, struct dentry_node, node);
+		node = rb_next(node);
+		entry = dn->dentry;
+		if (is_first) {
+			/* expire all entries if epoch was incremented */
+			if (entry->d_time < epoch)
+				expire_all = true;
+			is_first = false;
+		}
+		if (expire_all || (fuse_dentry_time(entry) < now)) {
+			rb_erase(&dn->node, &fc->dentry_tree);
+			d_invalidate(entry);
+			dput(entry);
+			kfree(dn);
+		} else
+			break;
+	}
+	reschedule = !RB_EMPTY_ROOT(&fc->dentry_tree);
+	spin_unlock(&fc->dentry_tree_lock);
+
+	if (reschedule)
+		schedule_delayed_work(&fc->dentry_tree_work,
+				      secs_to_jiffies(fc->inval_wq));
+}
+
 static void fuse_dentry_settime(struct dentry *dentry, u64 time)
 {
 	struct fuse_conn *fc = get_fuse_conn_super(dentry->d_sb);
@@ -81,6 +226,7 @@ static void fuse_dentry_settime(struct dentry *dentry, u64 time)
 	}
 
 	__fuse_dentry_settime(dentry, time);
+	fuse_dentry_tree_add_node(dentry);
 }
 
 /*
@@ -280,6 +426,7 @@ out:
 
 invalid:
 	ret = 0;
+	fuse_dentry_tree_del_node(entry);
 	goto out;
 }
 
