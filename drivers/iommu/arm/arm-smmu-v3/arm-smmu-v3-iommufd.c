@@ -30,6 +30,41 @@ void *arm_smmu_hw_info(struct device *dev, u32 *length, u32 *type)
 	return info;
 }
 
+static void arm_vsmmu_cmdq_batch_add_atc_inv(struct arm_vsmmu *vsmmu,
+					     struct arm_smmu_master *master,
+					     struct arm_smmu_cmdq_batch *cmds,
+					     struct arm_smmu_cmdq_ent *cmd)
+{
+	int i;
+
+	lockdep_assert_held(&vsmmu->ats_devices.lock);
+
+	arm_smmu_atc_inv_to_cmd(IOMMU_NO_PASID, 0, 0, cmd);
+	for (i = 0; i < master->num_streams; i++) {
+		cmd->atc.sid = master->streams[i].id;
+		arm_smmu_cmdq_batch_add(vsmmu->smmu, cmds, cmd);
+	}
+}
+
+static int arm_vsmmu_atc_inv_domain(struct arm_vsmmu *vsmmu, unsigned long iova,
+				    size_t size)
+{
+	struct arm_smmu_cmdq_ent cmd = { .opcode = CMDQ_OP_ATC_INV };
+	struct arm_smmu_master *master, *next;
+	struct arm_smmu_cmdq_batch cmds;
+	unsigned long flags;
+
+	arm_smmu_cmdq_batch_init(vsmmu->smmu, &cmds, &cmd);
+
+	spin_lock_irqsave(&vsmmu->ats_devices.lock, flags);
+	list_for_each_entry_safe(master, next, &vsmmu->ats_devices.list,
+				 devices_elm)
+		arm_vsmmu_cmdq_batch_add_atc_inv(vsmmu, master, &cmds, &cmd);
+	spin_unlock_irqrestore(&vsmmu->ats_devices.lock, flags);
+
+	return arm_smmu_cmdq_batch_submit(vsmmu->smmu, &cmds);
+}
+
 void arm_smmu_s2_parent_tlb_inv_domain(struct arm_smmu_domain *s2_parent)
 {
 	struct arm_vsmmu *vsmmu, *next;
@@ -39,6 +74,7 @@ void arm_smmu_s2_parent_tlb_inv_domain(struct arm_smmu_domain *s2_parent)
 	list_for_each_entry_safe(vsmmu, next, &s2_parent->vsmmus.list,
 				 vsmmus_elm) {
 		arm_smmu_tlb_inv_vmid(vsmmu->smmu, vsmmu->vmid);
+		arm_vsmmu_atc_inv_domain(vsmmu, 0, 0);
 	}
 	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
 }
@@ -62,6 +98,11 @@ void arm_smmu_s2_parent_tlb_inv_range(struct arm_smmu_domain *s2_parent,
 		cmd.opcode = CMDQ_OP_TLBI_S2_IPA;
 		__arm_smmu_tlb_inv_range(vsmmu->smmu, &cmd, iova, size, granule,
 					 &s2_parent->domain);
+		/*
+		 * Unfortunately, this can't be leaf-only since we may have
+		 * zapped an entire table.
+		 */
+		arm_vsmmu_atc_inv_domain(vsmmu, iova, size);
 	}
 	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
 }
@@ -76,6 +117,7 @@ static void arm_vsmmu_destroy(struct iommufd_viommu *viommu)
 	spin_unlock_irqrestore(&vsmmu->s2_parent->vsmmus.lock, flags);
 	/* Must flush S2 vmid after delinking vSMMU */
 	arm_smmu_tlb_inv_vmid(vsmmu->smmu, vsmmu->vmid);
+	arm_vsmmu_atc_inv_domain(vsmmu, 0, 0);
 }
 
 static void arm_smmu_make_nested_cd_table_ste(
@@ -486,6 +528,9 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	spin_lock_irqsave(&s2_parent->vsmmus.lock, flags);
 	list_add_tail(&vsmmu->vsmmus_elm, &s2_parent->vsmmus.list);
 	spin_unlock_irqrestore(&s2_parent->vsmmus.lock, flags);
+
+	INIT_LIST_HEAD(&vsmmu->ats_devices.list);
+	spin_lock_init(&vsmmu->ats_devices.lock);
 
 	return &vsmmu->core;
 }

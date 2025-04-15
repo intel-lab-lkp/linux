@@ -840,6 +840,7 @@ struct arm_smmu_master {
 	bool				sva_enabled;
 	bool				iopf_enabled;
 	unsigned int			ssid_bits;
+	struct list_head		devices_elm; /* vsmmu->ats_devices */
 };
 
 /* SMMU private data for an IOMMU domain */
@@ -1086,6 +1087,11 @@ struct arm_vsmmu {
 	struct arm_smmu_domain *s2_parent;
 	u16 vmid;
 	struct list_head vsmmus_elm; /* arm_smmu_domain::vsmmus::list */
+	/* List of struct arm_smmu_master that enables ATS */
+	struct {
+		struct list_head list;
+		spinlock_t lock;
+	} ats_devices;
 };
 
 #if IS_ENABLED(CONFIG_ARM_SMMU_V3_IOMMUFD)
