@@ -8,5 +8,6 @@
 /* register offsets from PM base */
 #define FCH_PM_DECODEEN			0x00
 #define FCH_PM_DECODEEN_SMBUS0SEL	GENMASK(20, 19)
+#define FCH_PM_SCRATCH			0x80
 
 #endif
