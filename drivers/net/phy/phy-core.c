@@ -209,14 +209,6 @@ void of_set_phy_eee_broken(struct phy_device *phydev)
 		linkmode_set_bit(ETHTOOL_LINK_MODE_100baseT_Full_BIT, modes);
 	if (of_property_read_bool(node, "eee-broken-1000t"))
 		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseT_Full_BIT, modes);
-	if (of_property_read_bool(node, "eee-broken-10gt"))
-		linkmode_set_bit(ETHTOOL_LINK_MODE_10000baseT_Full_BIT, modes);
-	if (of_property_read_bool(node, "eee-broken-1000kx"))
-		linkmode_set_bit(ETHTOOL_LINK_MODE_1000baseKX_Full_BIT, modes);
-	if (of_property_read_bool(node, "eee-broken-10gkx4"))
-		linkmode_set_bit(ETHTOOL_LINK_MODE_10000baseKX4_Full_BIT, modes);
-	if (of_property_read_bool(node, "eee-broken-10gkr"))
-		linkmode_set_bit(ETHTOOL_LINK_MODE_10000baseKR_Full_BIT, modes);
 }
 
 /**
