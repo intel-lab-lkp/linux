@@ -8962,7 +8962,7 @@ exit:
 	return ret;
 }
 
-static void ath11k_mac_put_chain_rssi(struct station_info *sinfo,
+static void ath11k_mac_put_chain_rssi(struct link_station_info *sinfo,
 				      struct ath11k_sta *arsta,
 				      char *pre,
 				      bool clear)
@@ -8994,7 +8994,7 @@ static void ath11k_mac_put_chain_rssi(struct station_info *sinfo,
 static void ath11k_mac_op_sta_statistics(struct ieee80211_hw *hw,
 					 struct ieee80211_vif *vif,
 					 struct ieee80211_sta *sta,
-					 struct station_info *sinfo)
+					 struct link_station_info *sinfo)
 {
 	struct ath11k_sta *arsta = ath11k_sta_to_arsta(sta);
 	struct ath11k *ar = arsta->arvif->ar;
@@ -9778,7 +9778,7 @@ static const struct ieee80211_ops ath11k_ops = {
 	.set_bitrate_mask		= ath11k_mac_op_set_bitrate_mask,
 	.get_survey			= ath11k_mac_op_get_survey,
 	.flush				= ath11k_mac_op_flush,
-	.sta_statistics			= ath11k_mac_op_sta_statistics,
+	.link_sta_statistics		= ath11k_mac_op_sta_statistics,
 	CFG80211_TESTMODE_CMD(ath11k_tm_cmd)
 
 #ifdef CONFIG_PM

@@ -3028,7 +3028,7 @@ static void brcmf_convert_sta_flags(u32 fw_sta_flags, struct station_info *si)
 		sfu->set |= BIT(NL80211_STA_FLAG_AUTHORIZED);
 }
 
-static void brcmf_fill_bss_param(struct brcmf_if *ifp, struct station_info *si)
+static void brcmf_fill_bss_param(struct brcmf_if *ifp, struct link_station_info *si)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
 	struct {
@@ -3066,7 +3066,7 @@ out_kfree:
 
 static s32
 brcmf_cfg80211_get_station_ibss(struct brcmf_if *ifp,
-				struct station_info *sinfo)
+				struct link_station_info *sinfo)
 {
 	struct brcmf_pub *drvr = ifp->drvr;
 	struct brcmf_scb_val_le scbval;
@@ -3135,8 +3135,17 @@ brcmf_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 	if (!check_vif_up(ifp->vif))
 		return -EIO;
 
-	if (brcmf_is_ibssmode(ifp->vif))
-		return brcmf_cfg80211_get_station_ibss(ifp, sinfo);
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
+	if (brcmf_is_ibssmode(ifp->vif)) {
+		err = brcmf_cfg80211_get_station_ibss(ifp, sinfo->links[0]);
+		if (err) {
+			kfree(sinfo->links[0]);
+			return err;
+		}
+	}
 
 	memset(&sta_info_le, 0, sizeof(sta_info_le));
 	memcpy(&sta_info_le, mac, ETH_ALEN);
@@ -3150,12 +3159,13 @@ brcmf_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 					       sizeof(sta_info_le));
 		if (err < 0) {
 			bphy_err(drvr, "GET STA INFO failed, %d\n", err);
+			kfree(sinfo->links[0]);
 			goto done;
 		}
 	}
 	brcmf_dbg(TRACE, "version %d\n", le16_to_cpu(sta_info_le.ver));
-	sinfo->filled = BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME);
-	sinfo->inactive_time = le32_to_cpu(sta_info_le.idle) * 1000;
+	sinfo->links[0]->filled = BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME);
+	sinfo->links[0]->inactive_time = le32_to_cpu(sta_info_le.idle) * 1000;
 	sta_flags = le32_to_cpu(sta_info_le.flags);
 	brcmf_convert_sta_flags(sta_flags, sinfo);
 	sinfo->sta_flags.mask |= BIT(NL80211_STA_FLAG_TDLS_PEER);
@@ -3166,54 +3176,54 @@ brcmf_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 	if (sta_flags & BRCMF_STA_ASSOC) {
 		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CONNECTED_TIME);
 		sinfo->connected_time = le32_to_cpu(sta_info_le.in);
-		brcmf_fill_bss_param(ifp, sinfo);
+		brcmf_fill_bss_param(ifp, sinfo->links[0]);
 	}
 	if (sta_flags & BRCMF_STA_SCBSTATS) {
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_FAILED);
-		sinfo->tx_failed = le32_to_cpu(sta_info_le.tx_failures);
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
-		sinfo->tx_packets = le32_to_cpu(sta_info_le.tx_pkts);
-		sinfo->tx_packets += le32_to_cpu(sta_info_le.tx_mcast_pkts);
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
-		sinfo->rx_packets = le32_to_cpu(sta_info_le.rx_ucast_pkts);
-		sinfo->rx_packets += le32_to_cpu(sta_info_le.rx_mcast_pkts);
-		if (sinfo->tx_packets) {
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
-			sinfo->txrate.legacy =
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_FAILED);
+		sinfo->links[0]->tx_failed = le32_to_cpu(sta_info_le.tx_failures);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
+		sinfo->links[0]->tx_packets = le32_to_cpu(sta_info_le.tx_pkts);
+		sinfo->links[0]->tx_packets += le32_to_cpu(sta_info_le.tx_mcast_pkts);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
+		sinfo->links[0]->rx_packets = le32_to_cpu(sta_info_le.rx_ucast_pkts);
+		sinfo->links[0]->rx_packets += le32_to_cpu(sta_info_le.rx_mcast_pkts);
+		if (sinfo->links[0]->tx_packets) {
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
+			sinfo->links[0]->txrate.legacy =
 				le32_to_cpu(sta_info_le.tx_rate) / 100;
 		}
-		if (sinfo->rx_packets) {
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BITRATE);
-			sinfo->rxrate.legacy =
+		if (sinfo->links[0]->rx_packets) {
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_RX_BITRATE);
+			sinfo->links[0]->rxrate.legacy =
 				le32_to_cpu(sta_info_le.rx_rate) / 100;
 		}
 		if (le16_to_cpu(sta_info_le.ver) >= 4) {
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES);
-			sinfo->tx_bytes = le64_to_cpu(sta_info_le.tx_tot_bytes);
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_BYTES);
-			sinfo->rx_bytes = le64_to_cpu(sta_info_le.rx_tot_bytes);
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES);
+			sinfo->links[0]->tx_bytes = le64_to_cpu(sta_info_le.tx_tot_bytes);
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_RX_BYTES);
+			sinfo->links[0]->rx_bytes = le64_to_cpu(sta_info_le.rx_tot_bytes);
 		}
 		for (i = 0; i < BRCMF_ANT_MAX; i++) {
 			if (sta_info_le.rssi[i] == 0 ||
 			    sta_info_le.rx_lastpkt_rssi[i] == 0)
 				continue;
-			sinfo->chains |= BIT(count_rssi);
-			sinfo->chain_signal[count_rssi] =
+			sinfo->links[0]->chains |= BIT(count_rssi);
+			sinfo->links[0]->chain_signal[count_rssi] =
 				sta_info_le.rx_lastpkt_rssi[i];
-			sinfo->chain_signal_avg[count_rssi] =
+			sinfo->links[0]->chain_signal_avg[count_rssi] =
 				sta_info_le.rssi[i];
 			total_rssi += sta_info_le.rx_lastpkt_rssi[i];
 			total_rssi_avg += sta_info_le.rssi[i];
 			count_rssi++;
 		}
 		if (count_rssi) {
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL_AVG);
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL);
-			sinfo->filled |=
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL_AVG);
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL);
+			sinfo->links[0]->filled |=
 				BIT_ULL(NL80211_STA_INFO_CHAIN_SIGNAL_AVG);
-			sinfo->signal = total_rssi / count_rssi;
-			sinfo->signal_avg = total_rssi_avg / count_rssi;
+			sinfo->links[0]->signal = total_rssi / count_rssi;
+			sinfo->links[0]->signal_avg = total_rssi_avg / count_rssi;
 		} else if (test_bit(BRCMF_VIF_STATUS_CONNECTED,
 			&ifp->vif->sme_state)) {
 			memset(&scb_val, 0, sizeof(scb_val));
@@ -3222,11 +3232,13 @@ brcmf_cfg80211_get_station(struct wiphy *wiphy, struct net_device *ndev,
 			if (err) {
 				bphy_err(drvr, "Could not get rssi (%d)\n",
 					 err);
+				kfree(sinfo->links[0]);
 				goto done;
 			} else {
 				rssi = le32_to_cpu(scb_val.val);
-				sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
-				sinfo->signal = rssi;
+				sinfo->links[0]->filled |=
+					BIT_ULL(NL80211_STA_INFO_SIGNAL);
+				sinfo->links[0]->signal = rssi;
 				brcmf_dbg(CONN, "RSSI %d dBm\n", rssi);
 			}
 		}

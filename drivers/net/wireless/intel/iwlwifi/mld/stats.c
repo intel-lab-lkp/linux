@@ -38,7 +38,7 @@ int iwl_mld_clear_stats_in_fw(struct iwl_mld *mld)
 static void
 iwl_mld_fill_stats_from_oper_notif(struct iwl_mld *mld,
 				   struct iwl_rx_packet *pkt,
-				   u8 fw_sta_id, struct station_info *sinfo)
+				   u8 fw_sta_id, struct link_station_info *sinfo)
 {
 	const struct iwl_system_statistics_notif_oper *notif =
 		(void *)&pkt->data;
@@ -73,7 +73,7 @@ unlock:
 
 struct iwl_mld_stats_data {
 	u8 fw_sta_id;
-	struct station_info *sinfo;
+	struct link_station_info *sinfo;
 	struct iwl_mld *mld;
 };
 
@@ -100,7 +100,7 @@ static bool iwl_mld_wait_stats_handler(struct iwl_notif_wait_data *notif_data,
 
 static int
 iwl_mld_fw_stats_to_mac80211(struct iwl_mld *mld, struct iwl_mld_sta *mld_sta,
-			     struct station_info *sinfo)
+			     struct link_station_info *sinfo)
 {
 	u32 cfg_mask = IWL_STATS_CFG_FLG_ON_DEMAND_NTFY_MSK |
 		       IWL_STATS_CFG_FLG_RESET_MSK;
@@ -164,7 +164,7 @@ int iwl_mld_request_periodic_fw_stats(struct iwl_mld *mld, bool enable)
 }
 
 static void iwl_mld_sta_stats_fill_txrate(struct iwl_mld_sta *mld_sta,
-					  struct station_info *sinfo)
+					  struct link_station_info *sinfo)
 {
 	struct rate_info *rinfo = &sinfo->txrate;
 	u32 rate_n_flags = mld_sta->deflink.last_rate_n_flags;
@@ -305,7 +305,7 @@ static void iwl_mld_sta_stats_fill_txrate(struct iwl_mld_sta *mld_sta,
 void iwl_mld_mac80211_sta_statistics(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_sta *sta,
-				     struct station_info *sinfo)
+				     struct link_station_info *sinfo)
 {
 	struct iwl_mld_sta *mld_sta = iwl_mld_sta_from_mac80211(sta);
 

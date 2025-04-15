@@ -1612,27 +1612,31 @@ static int lbs_cfg_get_station(struct wiphy *wiphy, struct net_device *dev,
 	int ret;
 	size_t i;
 
-	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
+	sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
 			 BIT_ULL(NL80211_STA_INFO_TX_PACKETS) |
 			 BIT_ULL(NL80211_STA_INFO_RX_BYTES) |
 			 BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
-	sinfo->tx_bytes = priv->dev->stats.tx_bytes;
-	sinfo->tx_packets = priv->dev->stats.tx_packets;
-	sinfo->rx_bytes = priv->dev->stats.rx_bytes;
-	sinfo->rx_packets = priv->dev->stats.rx_packets;
+	sinfo->links[0]->tx_bytes = priv->dev->stats.tx_bytes;
+	sinfo->links[0]->tx_packets = priv->dev->stats.tx_packets;
+	sinfo->links[0]->rx_bytes = priv->dev->stats.rx_bytes;
+	sinfo->links[0]->rx_packets = priv->dev->stats.rx_packets;
 
 	/* Get current RSSI */
 	ret = lbs_get_rssi(priv, &signal, &noise);
 	if (ret == 0) {
-		sinfo->signal = signal;
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+		sinfo->links[0]->signal = signal;
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
 	}
 
 	/* Convert priv->cur_rate from hw_value to NL80211 value */
 	for (i = 0; i < ARRAY_SIZE(lbs_rates); i++) {
 		if (priv->cur_rate == lbs_rates[i].hw_value) {
-			sinfo->txrate.legacy = lbs_rates[i].bitrate;
-			sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
+			sinfo->links[0]->txrate.legacy = lbs_rates[i].bitrate;
+			sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
 			break;
 		}
 	}

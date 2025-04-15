@@ -10,7 +10,7 @@ int iwl_mld_request_periodic_fw_stats(struct iwl_mld *mld, bool enable);
 void iwl_mld_mac80211_sta_statistics(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_sta *sta,
-				     struct station_info *sinfo);
+				     struct link_station_info *sinfo);
 
 void iwl_mld_handle_stats_oper_notif(struct iwl_mld *mld,
 				     struct iwl_rx_packet *pkt);

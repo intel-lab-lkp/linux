@@ -969,8 +969,6 @@ static int cfg80211_rtw_get_station(struct wiphy *wiphy,
 	struct sta_info *psta = NULL;
 	struct sta_priv *pstapriv = &padapter->stapriv;
 
-	sinfo->filled = 0;
-
 	if (!mac) {
 		ret = -ENOENT;
 		goto exit;
@@ -982,6 +980,12 @@ static int cfg80211_rtw_get_station(struct wiphy *wiphy,
 		goto exit;
 	}
 
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
+	sinfo->links[0]->filled = 0;
+
 	/* for infra./P2PClient mode */
 	if (check_fwstate(pmlmepriv, WIFI_STATION_STATE)
 		&& check_fwstate(pmlmepriv, _FW_LINKED)) {
@@ -989,21 +993,23 @@ static int cfg80211_rtw_get_station(struct wiphy *wiphy,
 
 		if (memcmp((u8 *)mac, cur_network->network.mac_address, ETH_ALEN)) {
 			ret = -ENOENT;
+			kfree(sinfo->links[0]);
 			goto exit;
 		}
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
-		sinfo->signal = translate_percentage_to_dbm(padapter->recvpriv.signal_strength);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+		sinfo->links[0]->signal =
+			translate_percentage_to_dbm(padapter->recvpriv.signal_strength);
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
-		sinfo->txrate.legacy = rtw_get_cur_max_rate(padapter);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
+		sinfo->links[0]->txrate.legacy = rtw_get_cur_max_rate(padapter);
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
-		sinfo->rx_packets = sta_rx_data_pkts(psta);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_RX_PACKETS);
+		sinfo->links[0]->rx_packets = sta_rx_data_pkts(psta);
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
-		sinfo->tx_packets = psta->sta_stats.tx_pkts;
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_TX_FAILED);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_PACKETS);
+		sinfo->links[0]->tx_packets = psta->sta_stats.tx_pkts;
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_TX_FAILED);
 	}
 
 	/* for Ad-Hoc/AP mode */
@@ -2432,8 +2438,13 @@ static int	cfg80211_rtw_dump_station(struct wiphy *wiphy,
 		goto exit;
 	}
 	memcpy(mac, psta->hwaddr, ETH_ALEN);
-	sinfo->filled = BIT_ULL(NL80211_STA_INFO_SIGNAL);
-	sinfo->signal = psta->rssi;
+
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
+	sinfo->links[0]->filled = BIT_ULL(NL80211_STA_INFO_SIGNAL);
+	sinfo->links[0]->signal = psta->rssi;
 
 exit:
 	return ret;

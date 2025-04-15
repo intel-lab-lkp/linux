@@ -328,15 +328,19 @@ static int virt_wifi_get_station(struct wiphy *wiphy, struct net_device *dev,
 	if (!priv->is_connected || !ether_addr_equal(mac, fake_router_bssid))
 		return -ENOENT;
 
-	sinfo->filled = BIT_ULL(NL80211_STA_INFO_TX_PACKETS) |
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
+	sinfo->links[0]->filled = BIT_ULL(NL80211_STA_INFO_TX_PACKETS) |
 		BIT_ULL(NL80211_STA_INFO_TX_FAILED) |
 		BIT_ULL(NL80211_STA_INFO_SIGNAL) |
 		BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
-	sinfo->tx_packets = priv->tx_packets;
-	sinfo->tx_failed = priv->tx_failed;
+	sinfo->links[0]->tx_packets = priv->tx_packets;
+	sinfo->links[0]->tx_failed = priv->tx_failed;
 	/* For CFG80211_SIGNAL_TYPE_MBM, value is expressed in _dBm_ */
-	sinfo->signal = -50;
-	sinfo->txrate = (struct rate_info) {
+	sinfo->links[0]->signal = -50;
+	sinfo->links[0]->txrate = (struct rate_info) {
 		.legacy = 10, /* units are 100kbit/s */
 	};
 	return 0;

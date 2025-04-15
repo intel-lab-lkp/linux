@@ -2048,17 +2048,18 @@ struct cfg80211_tid_stats {
 #define IEEE80211_MAX_CHAINS	4
 
 /**
- * struct station_info - station information
+ * struct link_station_info - link station information
  *
- * Station information filled by driver for get_station() and dump_station.
+ * Link station information filled by driver for get_station() and dump_station.
  *
+ * @link_id: Link ID uniquely identifying the link STA. This is -1 for non-ML
  * @filled: bitflag of flags using the bits of &enum nl80211_sta_info to
  *	indicate the relevant values in this struct for them
- * @connected_time: time(in secs) since a station is last connected
- * @inactive_time: time since last station activity (tx/rx) in milliseconds
- * @assoc_at: bootime (ns) of the last association
- * @rx_bytes: bytes (size of MPDUs) received from this station
- * @tx_bytes: bytes (size of MPDUs) transmitted to this station
+ * @connected_time: time(in secs) since a link station is last connected
+ * @inactive_time: time since last link station activity (tx/rx) in milliseconds
+ * @assoc_at: bootime (ns) of the last link station association
+ * @rx_bytes: bytes (size of MPDUs) received from this link station
+ * @tx_bytes: bytes (size of MPDUs) transmitted to this link station
  * @signal: The signal strength, type depends on the wiphy's signal_type.
  *	For CFG80211_SIGNAL_TYPE_MBM, value is expressed in _dBm_.
  * @signal_avg: Average signal strength, type depends on the wiphy's signal_type.
@@ -2066,37 +2067,17 @@ struct cfg80211_tid_stats {
  * @chains: bitmask for filled values in @chain_signal, @chain_signal_avg
  * @chain_signal: per-chain signal strength of last received packet in dBm
  * @chain_signal_avg: per-chain signal strength average in dBm
- * @txrate: current unicast bitrate from this station
- * @rxrate: current unicast bitrate to this station
- * @rx_packets: packets (MSDUs & MMPDUs) received from this station
- * @tx_packets: packets (MSDUs & MMPDUs) transmitted to this station
+ * @txrate: current unicast bitrate from this link station
+ * @rxrate: current unicast bitrate to this link station
+ * @rx_packets: packets (MSDUs & MMPDUs) received from this link station
+ * @tx_packets: packets (MSDUs & MMPDUs) transmitted to thislink station
  * @tx_retries: cumulative retry counts (MPDUs)
  * @tx_failed: number of failed transmissions (MPDUs) (retries exceeded, no ACK)
  * @rx_dropped_misc:  Dropped for un-specified reason.
  * @bss_param: current BSS parameters
- * @generation: generation number for nl80211 dumps.
- *	This number should increase every time the list of stations
- *	changes, i.e. when a station is added or removed, so that
- *	userspace can tell whether it got a consistent snapshot.
  * @beacon_loss_count: Number of times beacon loss event has triggered.
- * @assoc_req_ies: IEs from (Re)Association Request.
- *	This is used only when in AP mode with drivers that do not use
- *	user space MLME/SME implementation. The information is provided for
- *	the cfg80211_new_sta() calls to notify user space of the IEs.
- * @assoc_req_ies_len: Length of assoc_req_ies buffer in octets.
- * @sta_flags: station flags mask & values
- * @t_offset: Time offset of the station relative to this host.
- * @llid: mesh local link id
- * @plid: mesh peer link id
- * @plink_state: mesh peer link state
- * @connected_to_gate: true if mesh STA has a path to mesh gate
- * @connected_to_as: true if mesh STA has a path to authentication server
- * @airtime_link_metric: mesh airtime link metric.
- * @local_pm: local mesh STA power save mode
- * @peer_pm: peer mesh STA power save mode
- * @nonpeer_pm: non-peer mesh STA power save mode
  * @expected_throughput: expected throughput in kbps (including 802.11 headers)
- *	towards this station.
+ *	towards this link station.
  * @rx_beacon: number of beacons received from this peer
  * @rx_beacon_signal_avg: signal strength average (in dBm) for beacons received
  *	from this peer
@@ -2109,30 +2090,15 @@ struct cfg80211_tid_stats {
  * @ack_signal: signal strength (in dBm) of the last ACK frame.
  * @avg_ack_signal: average rssi value of ack packet for the no of msdu's has
  *	been sent.
- * @rx_mpdu_count: number of MPDUs received from this station
- * @fcs_err_count: number of packets (MPDUs) received from this station with
+ * @rx_mpdu_count: number of MPDUs received from this link station
+ * @fcs_err_count: number of packets (MPDUs) received from this link station with
  *	an FCS error. This counter should be incremented only when TA of the
  *	received packet with an FCS error matches the peer MAC address.
- * @mlo_params_valid: Indicates @assoc_link_id and @mld_addr fields are filled
- *	by driver. Drivers use this only in cfg80211_new_sta() calls when AP
- *	MLD's MLME/SME is offload to driver. Drivers won't fill this
- *	information in cfg80211_del_sta_sinfo(), get_station() and
- *	dump_station() callbacks.
- * @assoc_link_id: Indicates MLO link ID of the AP, with which the station
- *	completed (re)association. This information filled for both MLO
- *	and non-MLO STA connections when the AP affiliated with an MLD.
- * @mld_addr: For MLO STA connection, filled with MLD address of the station.
+ * @addr: For MLO STA connection, filled with address of the link station.
  *	For non-MLO STA connection, filled with all zeros.
- * @assoc_resp_ies: IEs from (Re)Association Response.
- *	This is used only when in AP mode with drivers that do not use user
- *	space MLME/SME implementation. The information is provided only for the
- *	cfg80211_new_sta() calls to notify user space of the IEs. Drivers won't
- *	fill this information in cfg80211_del_sta_sinfo(), get_station() and
- *	dump_station() callbacks. User space needs this information to determine
- *	the accepted and rejected affiliated links of the connected station.
- * @assoc_resp_ies_len: Length of @assoc_resp_ies buffer in octets.
  */
-struct station_info {
+struct link_station_info {
+	int link_id;
 	u64 filled;
 	u32 connected_time;
 	u32 inactive_time;
@@ -2154,11 +2120,88 @@ struct station_info {
 	u32 tx_failed;
 	u32 rx_dropped_misc;
 	struct sta_bss_parameters bss_param;
+
+	u32 beacon_loss_count;
+
+	u32 expected_throughput;
+
+	u64 tx_duration;
+	u64 rx_duration;
+	u64 rx_beacon;
+	u8 rx_beacon_signal_avg;
+
+	u16 airtime_weight;
+
+	s8 ack_signal;
+	s8 avg_ack_signal;
+	struct cfg80211_tid_stats *pertid;
+
+	u32 rx_mpdu_count;
+	u32 fcs_err_count;
+
+	u8 addr[ETH_ALEN] __aligned(2);
+};
+
+/**
+ * struct station_info - station information
+ *
+ * Station information filled by driver for get_station() and dump_station.
+ *
+ * @filled: bitflag of flags using the bits of &enum nl80211_sta_info to
+ *	indicate the relevant values in this struct for them
+ * @connected_time: time(in secs) since a station is last connected
+ * @assoc_at: bootime (ns) of the last association
+ * @sta_flags: station flags mask & values
+ * @generation: generation number for nl80211 dumps.
+ *	This number should increase every time the list of stations
+ *	changes, i.e. when a station is added or removed, so that
+ *	userspace can tell whether it got a consistent snapshot.
+ * @assoc_req_ies: IEs from (Re)Association Request.
+ *	This is used only when in AP mode with drivers that do not use
+ *	user space MLME/SME implementation. The information is provided for
+ *	the cfg80211_new_sta() calls to notify user space of the IEs.
+ * @assoc_req_ies_len: Length of assoc_req_ies buffer in octets.
+ * @sta_flags: station flags mask & values
+ * @t_offset: Time offset of the station relative to this host.
+ * @llid: mesh local link id
+ * @plid: mesh peer link id
+ * @plink_state: mesh peer link state
+ * @connected_to_gate: true if mesh STA has a path to mesh gate
+ * @connected_to_as: true if mesh STA has a path to authentication server
+ * @airtime_link_metric: mesh airtime link metric.
+ * @local_pm: local mesh STA power save mode
+ * @peer_pm: peer mesh STA power save mode
+ * @nonpeer_pm: non-peer mesh STA power save mode
+ * @mlo_params_valid: Indicates @assoc_link_id and @mld_addr fields are filled
+ *	by driver. Drivers use this only in cfg80211_new_sta() calls when AP
+ *	MLD's MLME/SME is offload to driver. Drivers won't fill this
+ *	information in cfg80211_del_sta_sinfo(), get_station() and
+ *	dump_station() callbacks.
+ * @assoc_link_id: Indicates MLO link ID of the AP, with which the station
+ *	completed (re)association. This information filled for both MLO
+ *	and non-MLO STA connections when the AP affiliated with an MLD.
+ * @mld_addr: For MLO STA connection, filled with MLD address of the station.
+ *	For non-MLO STA connection, filled with all zeros.
+ * @assoc_resp_ies: IEs from (Re)Association Response.
+ *	This is used only when in AP mode with drivers that do not use user
+ *	space MLME/SME implementation. The information is provided only for the
+ *	cfg80211_new_sta() calls to notify user space of the IEs. Drivers won't
+ *	fill this information in cfg80211_del_sta_sinfo(), get_station() and
+ *	dump_station() callbacks. User space needs this information to determine
+ *	the accepted and rejected affiliated links of the connected station.
+ * @assoc_resp_ies_len: Length of @assoc_resp_ies buffer in octets.
+ * @links: reference to Link sta entries for MLO STA. For non-MLO STA
+ *	and case where the driver offload link decisions and do not provide
+ *	per-link statistics, all link specific information is accessed
+ *	through links[0].
+ */
+struct station_info {
+	u64 filled;
+	u64 assoc_at;
+	u32 connected_time;
 	struct nl80211_sta_flag_update sta_flags;
 
 	int generation;
-
-	u32 beacon_loss_count;
 
 	const u8 *assoc_req_ies;
 	size_t assoc_req_ies_len;
@@ -2174,27 +2217,13 @@ struct station_info {
 	enum nl80211_mesh_power_mode peer_pm;
 	enum nl80211_mesh_power_mode nonpeer_pm;
 
-	u32 expected_throughput;
-
-	u16 airtime_weight;
-
-	s8 ack_signal;
-	s8 avg_ack_signal;
-	struct cfg80211_tid_stats *pertid;
-
-	u64 tx_duration;
-	u64 rx_duration;
-	u64 rx_beacon;
-	u8 rx_beacon_signal_avg;
-
-	u32 rx_mpdu_count;
-	u32 fcs_err_count;
-
 	bool mlo_params_valid;
 	u8 assoc_link_id;
 	u8 mld_addr[ETH_ALEN] __aligned(2);
 	const u8 *assoc_resp_ies;
 	size_t assoc_resp_ies_len;
+
+	struct link_station_info *links[IEEE80211_MLD_MAX_NUM_LINKS];
 };
 
 /**
@@ -8493,7 +8522,7 @@ void cfg80211_tx_mgmt_expired(struct wireless_dev *wdev, u64 cookie,
  *
  * Return: 0 on success. Non-zero on error.
  */
-int cfg80211_sinfo_alloc_tid_stats(struct station_info *sinfo, gfp_t gfp);
+int cfg80211_sinfo_alloc_tid_stats(struct link_station_info *sinfo, gfp_t gfp);
 
 /**
  * cfg80211_sinfo_release_content - release contents of station info
@@ -8505,7 +8534,10 @@ int cfg80211_sinfo_alloc_tid_stats(struct station_info *sinfo, gfp_t gfp);
  */
 static inline void cfg80211_sinfo_release_content(struct station_info *sinfo)
 {
-	kfree(sinfo->pertid);
+	if (sinfo->links[0]) {
+		kfree(sinfo->links[0]->pertid);
+		kfree(sinfo->links[0]);
+	}
 }
 
 /**

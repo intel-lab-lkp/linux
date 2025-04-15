@@ -1461,32 +1461,39 @@ mwifiex_dump_station_info(struct mwifiex_private *priv,
 {
 	u32 rate;
 
-	sinfo->filled = BIT_ULL(NL80211_STA_INFO_RX_BYTES) | BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
+	sinfo->links[0]->filled = BIT_ULL(NL80211_STA_INFO_RX_BYTES) |
+			BIT_ULL(NL80211_STA_INFO_TX_BYTES) |
 			BIT_ULL(NL80211_STA_INFO_RX_PACKETS) | BIT_ULL(NL80211_STA_INFO_TX_PACKETS) |
 			BIT_ULL(NL80211_STA_INFO_TX_BITRATE) |
 			BIT_ULL(NL80211_STA_INFO_SIGNAL) | BIT_ULL(NL80211_STA_INFO_SIGNAL_AVG);
 
 	if (GET_BSS_ROLE(priv) == MWIFIEX_BSS_ROLE_UAP) {
-		if (!node)
+		if (!node) {
+			kfree(sinfo->links[0]);
 			return -ENOENT;
+		}
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME) |
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME) |
 				BIT_ULL(NL80211_STA_INFO_TX_FAILED);
-		sinfo->inactive_time =
+		sinfo->links[0]->inactive_time =
 			jiffies_to_msecs(jiffies - node->stats.last_rx);
 
-		sinfo->signal = node->stats.rssi;
-		sinfo->signal_avg = node->stats.rssi;
-		sinfo->rx_bytes = node->stats.rx_bytes;
-		sinfo->tx_bytes = node->stats.tx_bytes;
-		sinfo->rx_packets = node->stats.rx_packets;
-		sinfo->tx_packets = node->stats.tx_packets;
-		sinfo->tx_failed = node->stats.tx_failed;
+		sinfo->links[0]->signal = node->stats.rssi;
+		sinfo->links[0]->signal_avg = node->stats.rssi;
+		sinfo->links[0]->rx_bytes = node->stats.rx_bytes;
+		sinfo->links[0]->tx_bytes = node->stats.tx_bytes;
+		sinfo->links[0]->rx_packets = node->stats.rx_packets;
+		sinfo->links[0]->tx_packets = node->stats.tx_packets;
+		sinfo->links[0]->tx_failed = node->stats.tx_failed;
 
 		mwifiex_parse_htinfo(priv, priv->tx_rate,
 				     node->stats.last_tx_htinfo,
-				     &sinfo->txrate);
-		sinfo->txrate.legacy = node->stats.last_tx_rate * 5;
+				     &sinfo->links[0]->txrate);
+		sinfo->links[0]->txrate.legacy = node->stats.last_tx_rate * 5;
 
 		return 0;
 	}
@@ -1496,12 +1503,14 @@ mwifiex_dump_station_info(struct mwifiex_private *priv,
 			     HostCmd_ACT_GEN_GET, 0, NULL, true)) {
 		mwifiex_dbg(priv->adapter, ERROR,
 			    "failed to get signal information\n");
+		kfree(sinfo->links[0]);
 		return -EFAULT;
 	}
 
 	if (mwifiex_drv_get_data_rate(priv, &rate)) {
 		mwifiex_dbg(priv->adapter, ERROR,
 			    "getting data rate error\n");
+		kfree(sinfo->links[0]);
 		return -EFAULT;
 	}
 
@@ -1511,34 +1520,34 @@ mwifiex_dump_station_info(struct mwifiex_private *priv,
 			 &priv->dtim_period, true);
 
 	mwifiex_parse_htinfo(priv, priv->tx_rate, priv->tx_htinfo,
-			     &sinfo->txrate);
+			     &sinfo->links[0]->txrate);
 
-	sinfo->signal_avg = priv->bcn_rssi_avg;
-	sinfo->rx_bytes = priv->stats.rx_bytes;
-	sinfo->tx_bytes = priv->stats.tx_bytes;
-	sinfo->rx_packets = priv->stats.rx_packets;
-	sinfo->tx_packets = priv->stats.tx_packets;
-	sinfo->signal = priv->bcn_rssi_avg;
+	sinfo->links[0]->signal_avg = priv->bcn_rssi_avg;
+	sinfo->links[0]->rx_bytes = priv->stats.rx_bytes;
+	sinfo->links[0]->tx_bytes = priv->stats.tx_bytes;
+	sinfo->links[0]->rx_packets = priv->stats.rx_packets;
+	sinfo->links[0]->tx_packets = priv->stats.tx_packets;
+	sinfo->links[0]->signal = priv->bcn_rssi_avg;
 	/* bit rate is in 500 kb/s units. Convert it to 100kb/s units */
-	sinfo->txrate.legacy = rate * 5;
+	sinfo->links[0]->txrate.legacy = rate * 5;
 
-	sinfo->filled |= BIT(NL80211_STA_INFO_RX_BITRATE);
+	sinfo->links[0]->filled |= BIT(NL80211_STA_INFO_RX_BITRATE);
 	mwifiex_parse_htinfo(priv, priv->rxpd_rate, priv->rxpd_htinfo,
-			     &sinfo->rxrate);
+			     &sinfo->links[0]->rxrate);
 
 	if (priv->bss_mode == NL80211_IFTYPE_STATION) {
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_BSS_PARAM);
-		sinfo->bss_param.flags = 0;
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_BSS_PARAM);
+		sinfo->links[0]->bss_param.flags = 0;
 		if (priv->curr_bss_params.bss_descriptor.cap_info_bitmap &
 						WLAN_CAPABILITY_SHORT_PREAMBLE)
-			sinfo->bss_param.flags |=
+			sinfo->links[0]->bss_param.flags |=
 					BSS_PARAM_FLAGS_SHORT_PREAMBLE;
 		if (priv->curr_bss_params.bss_descriptor.cap_info_bitmap &
 						WLAN_CAPABILITY_SHORT_SLOT_TIME)
-			sinfo->bss_param.flags |=
+			sinfo->links[0]->bss_param.flags |=
 					BSS_PARAM_FLAGS_SHORT_SLOT_TIME;
-		sinfo->bss_param.dtim_period = priv->dtim_period;
-		sinfo->bss_param.beacon_interval =
+		sinfo->links[0]->bss_param.dtim_period = priv->dtim_period;
+		sinfo->links[0]->bss_param.beacon_interval =
 			priv->curr_bss_params.bss_descriptor.beacon_period;
 	}
 

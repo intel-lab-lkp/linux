@@ -132,19 +132,20 @@ static bool batadv_v_elp_get_throughput(struct batadv_hardif_neigh_node *neigh,
 			*pthroughput = 0;
 			return true;
 		}
-		if (ret)
+		if (ret || !sinfo.links[0])
 			goto default_throughput;
 
-		if (sinfo.filled & BIT(NL80211_STA_INFO_EXPECTED_THROUGHPUT)) {
-			*pthroughput = sinfo.expected_throughput / 100;
+		if (sinfo.links[0]->filled & BIT(NL80211_STA_INFO_EXPECTED_THROUGHPUT)) {
+			*pthroughput = sinfo.links[0]->expected_throughput / 100;
 			return true;
 		}
 
 		/* try to estimate the expected throughput based on reported tx
 		 * rates
 		 */
-		if (sinfo.filled & BIT(NL80211_STA_INFO_TX_BITRATE)) {
-			*pthroughput = cfg80211_calculate_bitrate(&sinfo.txrate) / 3;
+		if (sinfo.links[0]->filled & BIT(NL80211_STA_INFO_TX_BITRATE)) {
+			*pthroughput =
+				cfg80211_calculate_bitrate(&sinfo.links[0]->txrate) / 3;
 			return true;
 		}
 

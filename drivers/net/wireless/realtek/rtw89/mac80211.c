@@ -1013,7 +1013,7 @@ static int rtw89_ops_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
 static void rtw89_ops_sta_statistics(struct ieee80211_hw *hw,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_sta *sta,
-				     struct station_info *sinfo)
+				     struct link_station_info *sinfo)
 {
 	struct rtw89_sta *rtwsta = sta_to_rtwsta(sta);
 	struct rtw89_sta_link *rtwsta_link;
@@ -1772,7 +1772,7 @@ const struct ieee80211_ops rtw89_ops = {
 	.set_key		= rtw89_ops_set_key,
 	.ampdu_action		= rtw89_ops_ampdu_action,
 	.set_rts_threshold	= rtw89_ops_set_rts_threshold,
-	.sta_statistics		= rtw89_ops_sta_statistics,
+	.link_sta_statistics	= rtw89_ops_sta_statistics,
 	.flush			= rtw89_ops_flush,
 	.set_bitrate_mask	= rtw89_ops_set_bitrate_mask,
 	.set_antenna		= rtw89_ops_set_antenna,

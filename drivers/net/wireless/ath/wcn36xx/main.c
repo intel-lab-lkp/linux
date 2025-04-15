@@ -1332,7 +1332,8 @@ static int wcn36xx_get_survey(struct ieee80211_hw *hw, int idx,
 }
 
 static void wcn36xx_sta_statistics(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-				   struct ieee80211_sta *sta, struct station_info *sinfo)
+				   struct ieee80211_sta *sta,
+				   struct link_station_info *sinfo)
 {
 	struct wcn36xx *wcn;
 	u8 sta_index;
@@ -1374,7 +1375,7 @@ static const struct ieee80211_ops wcn36xx_ops = {
 	.set_rts_threshold	= wcn36xx_set_rts_threshold,
 	.sta_add		= wcn36xx_sta_add,
 	.sta_remove		= wcn36xx_sta_remove,
-	.sta_statistics		= wcn36xx_sta_statistics,
+	.link_sta_statistics	= wcn36xx_sta_statistics,
 	.ampdu_action		= wcn36xx_ampdu_action,
 #if IS_ENABLED(CONFIG_IPV6)
 	.ipv6_addr_change	= wcn36xx_ipv6_addr_change,

@@ -746,6 +746,10 @@ static int get_station(struct wiphy *wiphy, struct net_device *dev,
 	u32 associatedsta = ~0;
 	u32 inactive_time = 0;
 
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
+
 	if (vif->iftype == WILC_AP_MODE || vif->iftype == WILC_GO_MODE) {
 		for (i = 0; i < NUM_STA_ASSOCIATED; i++) {
 			if (!(memcmp(mac,
@@ -758,32 +762,35 @@ static int get_station(struct wiphy *wiphy, struct net_device *dev,
 
 		if (associatedsta == ~0) {
 			netdev_err(dev, "sta required is not associated\n");
+			kfree(sinfo->links[0]);
 			return -ENOENT;
 		}
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME);
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_INACTIVE_TIME);
 
 		wilc_get_inactive_time(vif, mac, &inactive_time);
-		sinfo->inactive_time = 1000 * inactive_time;
+		sinfo->links[0]->inactive_time = 1000 * inactive_time;
 	} else if (vif->iftype == WILC_STATION_MODE) {
 		struct rf_info stats;
 
-		if (!wilc->initialized)
+		if (!wilc->initialized) {
+			kfree(sinfo->links[0]);
 			return -EBUSY;
+		}
 
 		wilc_get_statistics(vif, &stats);
 
-		sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL) |
+		sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL) |
 				 BIT_ULL(NL80211_STA_INFO_RX_PACKETS) |
 				 BIT_ULL(NL80211_STA_INFO_TX_PACKETS) |
 				 BIT_ULL(NL80211_STA_INFO_TX_FAILED) |
 				 BIT_ULL(NL80211_STA_INFO_TX_BITRATE);
 
-		sinfo->signal = stats.rssi;
-		sinfo->rx_packets = stats.rx_cnt;
-		sinfo->tx_packets = stats.tx_cnt + stats.tx_fail_cnt;
-		sinfo->tx_failed = stats.tx_fail_cnt;
-		sinfo->txrate.legacy = stats.link_speed * 10;
+		sinfo->links[0]->signal = stats.rssi;
+		sinfo->links[0]->rx_packets = stats.rx_cnt;
+		sinfo->links[0]->tx_packets = stats.tx_cnt + stats.tx_fail_cnt;
+		sinfo->links[0]->tx_failed = stats.tx_fail_cnt;
+		sinfo->links[0]->txrate.legacy = stats.link_speed * 10;
 
 		if (stats.link_speed > TCP_ACK_FILTER_LINK_SPEED_THRESH &&
 		    stats.link_speed != DEFAULT_LINK_SPEED)
@@ -1330,11 +1337,16 @@ static int dump_station(struct wiphy *wiphy, struct net_device *dev,
 	if (idx != 0)
 		return -ENOENT;
 
-	ret = wilc_get_rssi(vif, &sinfo->signal);
-	if (ret)
-		return ret;
+	sinfo->links[0] = kzalloc(sizeof(*sinfo->links[0]), GFP_KERNEL);
+	if (!sinfo->links[0])
+		return -ENOMEM;
 
-	sinfo->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
+	ret = wilc_get_rssi(vif, &sinfo->links[0]->signal);
+	if (ret) {
+		kfree(sinfo->links[0]);
+		return ret;
+	}
+	sinfo->links[0]->filled |= BIT_ULL(NL80211_STA_INFO_SIGNAL);
 	memcpy(mac, vif->priv.associated_bss, ETH_ALEN);
 	return 0;
 }
