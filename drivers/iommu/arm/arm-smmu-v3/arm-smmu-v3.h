@@ -1009,6 +1009,16 @@ void arm_smmu_cmdq_batch_add(struct arm_smmu_device *smmu,
 int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 			       struct arm_smmu_cmdq_batch *cmds);
 
+static inline void arm_smmu_tlb_inv_vmid(struct arm_smmu_device *smmu, u16 vmid)
+{
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode = CMDQ_OP_TLBI_S12_VMALL,
+		.tlbi.vmid = vmid,
+	};
+
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
+}
+
 #ifdef CONFIG_ARM_SMMU_V3_SVA
 bool arm_smmu_sva_supported(struct arm_smmu_device *smmu);
 bool arm_smmu_master_sva_supported(struct arm_smmu_master *master);
