@@ -21,7 +21,7 @@ struct ref_tracker_dir {
 #ifdef CONFIG_DEBUG_FS
 	struct dentry		*dentry;
 #endif
-	char			name[32];
+	char			name[64];
 #endif
 };
 
