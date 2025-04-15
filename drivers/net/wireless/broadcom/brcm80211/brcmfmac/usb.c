@@ -744,12 +744,16 @@ static int brcmf_usb_dl_cmd(struct brcmf_usbdev_info *devinfo, u8 cmd,
 	char *tmpbuf;
 	u16 size;
 
-	if ((!devinfo) || (devinfo->ctl_urb == NULL))
-		return -EINVAL;
+	if (!devinfo || !devinfo->ctl_urb) {
+		ret = -EINVAL;
+		goto err;
+	}
 
 	tmpbuf = kmalloc(buflen, GFP_ATOMIC);
-	if (!tmpbuf)
-		return -ENOMEM;
+	if (!tmpbuf) {
+		ret = -ENOMEM;
+		goto err;
+	}
 
 	size = buflen;
 	devinfo->ctl_urb->transfer_buffer_length = size;
@@ -782,6 +786,10 @@ static int brcmf_usb_dl_cmd(struct brcmf_usbdev_info *devinfo, u8 cmd,
 
 finalize:
 	kfree(tmpbuf);
+	return ret;
+
+err:
+	brcmf_err("dl cmd %u failed: err=%d\n", cmd, ret);
 	return ret;
 }
 
