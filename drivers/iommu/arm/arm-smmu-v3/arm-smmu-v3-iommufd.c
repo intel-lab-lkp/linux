@@ -89,8 +89,8 @@ static void arm_smmu_make_nested_domain_ste(
 	}
 }
 
-int arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
-				    struct arm_smmu_nested_domain *nested_domain)
+int arm_vsmmu_attach_prepare(struct arm_smmu_attach_state *state,
+			     struct arm_vsmmu *vsmmu)
 {
 	struct arm_smmu_vmaster *vmaster;
 	unsigned long vsid;
@@ -98,7 +98,7 @@ int arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
 
 	iommu_group_mutex_assert(state->master->dev);
 
-	ret = iommufd_viommu_get_vdev_id(&nested_domain->vsmmu->core,
+	ret = iommufd_viommu_get_vdev_id(&vsmmu->core,
 					 state->master->dev, &vsid);
 	if (ret)
 		return ret;
@@ -106,7 +106,7 @@ int arm_smmu_attach_prepare_vmaster(struct arm_smmu_attach_state *state,
 	vmaster = kzalloc(sizeof(*vmaster), GFP_KERNEL);
 	if (!vmaster)
 		return -ENOMEM;
-	vmaster->vsmmu = nested_domain->vsmmu;
+	vmaster->vsmmu = vsmmu;
 	vmaster->vsid = vsid;
 	state->vmaster = vmaster;
 

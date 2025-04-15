@@ -2839,8 +2839,9 @@ int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 
 	if (smmu_domain) {
 		if (new_domain->type == IOMMU_DOMAIN_NESTED) {
-			ret = arm_smmu_attach_prepare_vmaster(
-				state, to_smmu_nested_domain(new_domain));
+			ret = arm_vsmmu_attach_prepare(
+				state,
+				to_smmu_nested_domain(new_domain)->vsmmu);
 			if (ret)
 				return ret;
 		}
