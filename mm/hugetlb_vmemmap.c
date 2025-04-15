@@ -498,6 +498,12 @@ static int __hugetlb_vmemmap_restore_folio(const struct hstate *h,
  */
 int hugetlb_vmemmap_restore_folio(const struct hstate *h, struct folio *folio)
 {
+	/*
+	 * Before restoring vmemmap, make sure to reset mapping to TAIL_MAPPING,
+	 * so tail pages that were reset will have the right thing after being
+	 * restored, and the checks in free_tail_page_prepare() will pass.
+	 */
+	set_hugetlb_cgroup(folio, TAIL_MAPPING);
 	return __hugetlb_vmemmap_restore_folio(h, folio, VMEMMAP_SYNCHRONIZE_RCU);
 }
 
