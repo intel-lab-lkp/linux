@@ -797,20 +797,17 @@ void __mod_lruvec_state(struct lruvec *lruvec, enum node_stat_item idx,
 void __lruvec_stat_mod_folio(struct folio *folio, enum node_stat_item idx,
 			     int val)
 {
-	struct mem_cgroup *memcg;
 	pg_data_t *pgdat = folio_pgdat(folio);
 	struct lruvec *lruvec;
 
-	rcu_read_lock();
-	memcg = folio_memcg(folio);
-	/* Untracked pages have no memcg, no lruvec. Update only the node */
-	if (!memcg) {
-		rcu_read_unlock();
+	if (!folio_memcg_charged(folio)) {
+		/* Untracked pages have no memcg, no lruvec. Update only the node */
 		__mod_node_page_state(pgdat, idx, val);
 		return;
 	}
 
-	lruvec = mem_cgroup_lruvec(memcg, pgdat);
+	rcu_read_lock();
+	lruvec = mem_cgroup_lruvec(folio_memcg(folio), pgdat);
 	__mod_lruvec_state(lruvec, idx, val);
 	rcu_read_unlock();
 }
