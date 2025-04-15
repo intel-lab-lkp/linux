@@ -666,6 +666,79 @@ xfs_agbtree_compute_maxlevels(
 	mp->m_agbtree_maxlevels = max(levels, mp->m_refc_maxlevels);
 }
 
+static inline unsigned int max_pow_of_two_factor(const unsigned int nr)
+{
+	return 1 << (ffs(nr) - 1);
+}
+
+static inline void
+xfs_compute_atomic_write_unit_max(
+	struct xfs_mount	*mp)
+{
+	struct xfs_groups	*ags = &mp->m_groups[XG_TYPE_AG];
+	struct xfs_groups	*rgs = &mp->m_groups[XG_TYPE_RTG];
+
+	/* Maximum write IO size that the kernel allows. */
+	const unsigned int	max_write =
+		rounddown_pow_of_two(XFS_B_TO_FSB(mp, MAX_RW_COUNT));
+
+	/*
+	 * Maximum atomic write ioend that we can handle.  The atomic write
+	 * fallback requires reflink to handle an out of place write, so we
+	 * don't support atomic writes at all unless reflink is enabled.
+	 */
+	const unsigned int	max_ioend = xfs_reflink_max_atomic_cow(mp);
+
+	unsigned int		max_agsize;
+	unsigned int		max_rgsize;
+
+	/*
+	 * If the data device advertises atomic write support, limit the size
+	 * of data device atomic writes to the greatest power-of-two factor of
+	 * the AG size so that every atomic write unit aligns with the start
+	 * of every AG.  This is required so that the per-AG allocations for an
+	 * atomic write will always be aligned compatibly with the alignment
+	 * requirements of the storage.
+	 *
+	 * If the data device doesn't advertise atomic writes, then there are
+	 * no alignment restrictions and the largest out-of-place write we can
+	 * do ourselves is the number of blocks that user files can allocate
+	 * from any AG.
+	 */
+
+	if (mp->m_ddev_targp->bt_bdev_awu_min > 0)
+		max_agsize = max_pow_of_two_factor(mp->m_sb.sb_agblocks);
+	else
+		max_agsize = mp->m_ag_max_usable;
+
+	/*
+	 * Reflink on the realtime device requires rtgroups and rt reflink
+	 * requires rtgroups.
+	 *
+	 * If the realtime device advertises atomic write support, limit the
+	 * size of data device atomic writes to the greatest power-of-two
+	 * factor of the rtgroup size so that every atomic write unit aligns
+	 * with the start of every rtgroup.  This is required so that the
+	 * per-rtgroup allocations for an atomic write will always be aligned
+	 * compatibly with the alignment requirements of the storage.
+	 *
+	 * If the rt device doesn't advertise atomic writes, then there are
+	 * no alignment restrictions and the largest out-of-place write we can
+	 * do ourselves is the number of blocks that user files can allocate
+	 * from any rtgroup.
+	 */
+	if (mp->m_rtdev_targp && mp->m_rtdev_targp->bt_bdev_awu_min > 0)
+		max_rgsize = max_pow_of_two_factor(rgs->blocks);
+	else
+		max_rgsize = rgs->blocks;
+
+	ags->awu_max = min3(max_write, max_ioend, max_agsize);
+	rgs->awu_max = min3(max_write, max_ioend, max_rgsize);
+
+	trace_xfs_compute_atomic_write_unit_max(mp, max_write, max_ioend,
+			max_agsize, max_rgsize);
+}
+
 /* Compute maximum possible height for realtime btree types for this fs. */
 static inline void
 xfs_rtbtree_compute_maxlevels(
@@ -1081,6 +1154,13 @@ xfs_mountfs(
 
 		xfs_zone_gc_start(mp);
 	}
+
+	/*
+	 * Pre-calculate atomic write unit max.  This involves computations
+	 * derived from transaction reservations, so we must do this after the
+	 * log is fully initialized.
+	 */
+	xfs_compute_atomic_write_unit_max(mp);
 
 	return 0;
 
