@@ -132,6 +132,7 @@ struct qfq_class {
 
 	struct gnet_stats_basic_sync bstats;
 	struct gnet_stats_queue qstats;
+	u8 cl_initialised;
 	struct net_rate_estimator __rcu *rate_est;
 	struct Qdisc *qdisc;
 	struct list_head alist;		/* Link for active-classes list. */
@@ -348,6 +349,7 @@ static void qfq_deactivate_class(struct qfq_sched *q, struct qfq_class *cl)
 
 
 	list_del_init(&cl->alist); /* remove from RR queue of the aggregate */
+	cl->cl_initialised = 0;
 	if (list_empty(&agg->active)) /* agg is now inactive */
 		qfq_deactivate_agg(q, agg);
 }
@@ -982,9 +984,10 @@ static struct sk_buff *agg_dequeue(struct qfq_aggregate *agg,
 
 	cl->deficit -= (int) len;
 
-	if (cl->qdisc->q.qlen == 0) /* no more packets, remove from list */
+	if (cl->qdisc->q.qlen == 0) { /* no more packets, remove from list */
+		cl->cl_initialised = 0;
 		list_del_init(&cl->alist);
-	else if (cl->deficit < qdisc_pkt_len(cl->qdisc->ops->peek(cl->qdisc))) {
+	} else if (cl->deficit < qdisc_pkt_len(cl->qdisc->ops->peek(cl->qdisc))) {
 		cl->deficit += agg->lmax;
 		list_move_tail(&cl->alist, &agg->active);
 	}
@@ -1214,8 +1217,8 @@ static int qfq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	struct qfq_sched *q = qdisc_priv(sch);
 	struct qfq_class *cl;
 	struct qfq_aggregate *agg;
+	bool is_empty;
 	int err = 0;
-	bool first;
 
 	cl = qfq_classify(skb, sch, &err);
 	if (cl == NULL) {
@@ -1237,7 +1240,7 @@ static int qfq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	}
 
 	gso_segs = skb_is_gso(skb) ? skb_shinfo(skb)->gso_segs : 1;
-	first = !cl->qdisc->q.qlen;
+	is_empty = !cl->qdisc->q.qlen;
 	err = qdisc_enqueue(skb, cl->qdisc, to_free);
 	if (unlikely(err != NET_XMIT_SUCCESS)) {
 		pr_debug("qfq_enqueue: enqueue failed %d\n", err);
@@ -1254,18 +1257,22 @@ static int qfq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 
 	agg = cl->agg;
 	/* if the queue was not empty, then done here */
-	if (!first) {
+	if (!is_empty) {
 		if (unlikely(skb == cl->qdisc->ops->peek(cl->qdisc)) &&
 		    list_first_entry(&agg->active, struct qfq_class, alist)
 		    == cl && cl->deficit < len)
 			list_move_tail(&cl->alist, &agg->active);
 
 		return err;
+	/* cater for recursive call */
+	} else if (cl->cl_initialised) {
+		return err;
 	}
 
 	/* schedule class for service within the aggregate */
 	cl->deficit = agg->lmax;
 	list_add_tail(&cl->alist, &agg->active);
+	cl->cl_initialised = 1;
 
 	if (list_first_entry(&agg->active, struct qfq_class, alist) != cl ||
 	    q->in_serv_agg == agg)
