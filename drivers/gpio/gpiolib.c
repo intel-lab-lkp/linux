@@ -421,11 +421,8 @@ int gpiod_get_direction(struct gpio_desc *desc)
 	unsigned int offset;
 	int ret;
 
-	/*
-	 * We cannot use VALIDATE_DESC() as we must not return 0 for a NULL
-	 * descriptor like we usually do.
-	 */
-	if (IS_ERR_OR_NULL(desc))
+	ret = validate_desc(desc, __func__);
+	if (ret <= 0)
 		return -EINVAL;
 
 	CLASS(gpio_chip_guard, guard)(desc);
@@ -3984,13 +3981,10 @@ int gpiod_to_irq(const struct gpio_desc *desc)
 	struct gpio_device *gdev;
 	struct gpio_chip *gc;
 	int offset;
+	int ret;
 
-	/*
-	 * Cannot VALIDATE_DESC() here as gpiod_to_irq() consumer semantics
-	 * requires this function to not return zero on an invalid descriptor
-	 * but rather a negative error number.
-	 */
-	if (IS_ERR_OR_NULL(desc))
+	ret = validate_desc(desc, __func__);
+	if (ret <= 0)
 		return -EINVAL;
 
 	gdev = desc->gdev;
@@ -4002,13 +3996,12 @@ int gpiod_to_irq(const struct gpio_desc *desc)
 
 	offset = gpio_chip_hwgpio(desc);
 	if (gc->to_irq) {
-		int retirq = gc->to_irq(gc, offset);
+		ret = gc->to_irq(gc, offset);
+		if (ret)
+			return ret;
 
 		/* Zero means NO_IRQ */
-		if (!retirq)
-			return -ENXIO;
-
-		return retirq;
+		return -ENXIO;
 	}
 #ifdef CONFIG_GPIOLIB_IRQCHIP
 	if (gc->irq.chip) {
