@@ -88,6 +88,11 @@ struct pdsc_buf_info {
 	u32 len;
 };
 
+struct pdsc_wait_context {
+	struct pdsc_qcq *qcq;
+	struct completion wait_completion;
+};
+
 struct pdsc_q_info {
 	union {
 		void *desc;
@@ -96,7 +101,7 @@ struct pdsc_q_info {
 	unsigned int bytes;
 	unsigned int nbufs;
 	struct pdsc_buf_info bufs[PDS_CORE_MAX_FRAGS];
-	struct pdsc_wait_context *wc;
+	struct pdsc_wait_context wc;
 	void *dest;
 };
 
