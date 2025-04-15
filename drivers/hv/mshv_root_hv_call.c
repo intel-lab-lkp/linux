@@ -21,22 +21,6 @@
 #define HV_PAGE_COUNT_2M_ALIGNED(pg_count) (!((pg_count) & (0x200 - 1)))
 
 #define HV_WITHDRAW_BATCH_SIZE	(HV_HYP_PAGE_SIZE / sizeof(u64))
-#define HV_MAP_GPA_BATCH_SIZE	\
-	((HV_HYP_PAGE_SIZE - sizeof(struct hv_input_map_gpa_pages)) \
-		/ sizeof(u64))
-#define HV_GET_VP_STATE_BATCH_SIZE	\
-	((HV_HYP_PAGE_SIZE - sizeof(struct hv_input_get_vp_state)) \
-		/ sizeof(u64))
-#define HV_SET_VP_STATE_BATCH_SIZE	\
-	((HV_HYP_PAGE_SIZE - sizeof(struct hv_input_set_vp_state)) \
-		/ sizeof(u64))
-#define HV_GET_GPA_ACCESS_STATES_BATCH_SIZE	\
-	((HV_HYP_PAGE_SIZE - sizeof(union hv_gpa_page_access_state)) \
-		/ sizeof(union hv_gpa_page_access_state))
-#define HV_MODIFY_SPARSE_SPA_PAGE_HOST_ACCESS_MAX_PAGE_COUNT		       \
-	((HV_HYP_PAGE_SIZE -						       \
-	  sizeof(struct hv_input_modify_sparse_spa_page_host_access)) /        \
-	 sizeof(u64))
 
 int hv_call_withdraw_memory(u64 count, int node, u64 partition_id)
 {
@@ -57,9 +41,7 @@ int hv_call_withdraw_memory(u64 count, int node, u64 partition_id)
 	while (remaining) {
 		local_irq_save(flags);
 
-		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
-		memset(input_page, 0, sizeof(*input_page));
+		hv_hvcall_in(&input_page, sizeof(*input_page));
 		input_page->partition_id = partition_id;
 		status = hv_do_rep_hypercall(HVCALL_WITHDRAW_MEMORY,
 					     min(remaining, HV_WITHDRAW_BATCH_SIZE),
@@ -98,10 +80,7 @@ int hv_call_create_partition(u64 flags,
 
 	do {
 		local_irq_save(irq_flags);
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		output = *this_cpu_ptr(hyperv_pcpu_output_arg);
-
-		memset(input, 0, sizeof(*input));
+		hv_hvcall_inout(&input, sizeof(*input), &output, sizeof(*output));
 		input->flags = flags;
 		input->compatibility_version = HV_COMPATIBILITY_21_H2;
 
@@ -205,11 +184,12 @@ static int hv_do_map_gpa_hcall(u64 partition_id, u64 gfn, u64 page_struct_count,
 
 	while (done < page_count) {
 		ulong i, completed, remain = page_count - done;
-		int rep_count = min(remain, HV_MAP_GPA_BATCH_SIZE);
+		ulong rep_count, batch_size;
 
 		local_irq_save(irq_flags);
-		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
+		batch_size = hv_hvcall_in_array(&input_page, sizeof(*input_page),
+				   sizeof(input_page->source_gpa_page_list[0]));
+		rep_count = min(remain, batch_size);
 		input_page->target_partition_id = partition_id;
 		input_page->target_gpa_base = gfn + (done << large_shift);
 		input_page->map_flags = flags;
@@ -310,7 +290,7 @@ int hv_call_unmap_gpa_pages(u64 partition_id, u64 gfn, u64 page_count_4k,
 		int rep_count = min(remain, HV_UMAP_GPA_PAGES);
 
 		local_irq_save(irq_flags);
-		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
+		hv_hvcall_in(&input_page, sizeof(*input_page));
 
 		input_page->target_partition_id = partition_id;
 		input_page->target_gpa_base = gfn + (done << large_shift);
@@ -339,7 +319,7 @@ int hv_call_get_gpa_access_states(u64 partition_id, u32 count, u64 gpa_base_pfn,
 	struct hv_input_get_gpa_pages_access_state *input_page;
 	union hv_gpa_page_access_state *output_page;
 	int completed = 0;
-	unsigned long remaining = count;
+	unsigned long batch_size, remaining = count;
 	int rep_count, i;
 	u64 status = 0;
 	unsigned long flags;
@@ -347,13 +327,13 @@ int hv_call_get_gpa_access_states(u64 partition_id, u32 count, u64 gpa_base_pfn,
 	*written_total = 0;
 	while (remaining) {
 		local_irq_save(flags);
-		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		output_page = *this_cpu_ptr(hyperv_pcpu_output_arg);
+		batch_size = hv_hvcall_inout_array(&input_page, sizeof(*input_page),
+					0, &output_page, 0, sizeof(*output_page));
 
 		input_page->partition_id = partition_id;
 		input_page->hv_gpa_page_number = gpa_base_pfn + *written_total;
 		input_page->flags = state_flags;
-		rep_count = min(remaining, HV_GET_GPA_ACCESS_STATES_BATCH_SIZE);
+		rep_count = min(remaining, batch_size);
 
 		status = hv_do_rep_hypercall(HVCALL_GET_GPA_PAGES_ACCESS_STATES, rep_count,
 					     0, input_page, output_page);
@@ -383,8 +363,7 @@ int hv_call_assert_virtual_interrupt(u64 partition_id, u32 vector,
 	u64 status;
 
 	local_irq_save(flags);
-	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-	memset(input, 0, sizeof(*input));
+	hv_hvcall_in(&input, sizeof(*input));
 	input->partition_id = partition_id;
 	input->vector = vector;
 	input->dest_addr = dest_addr;
@@ -421,21 +400,21 @@ int hv_call_get_vp_state(u32 vp_index, u64 partition_id,
 	u64 status;
 	int i;
 	u64 control;
-	unsigned long flags;
+	unsigned long flags, batch_size;
 	int ret = 0;
-
-	if (page_count > HV_GET_VP_STATE_BATCH_SIZE)
-		return -EINVAL;
 
 	if (!page_count && !ret_output)
 		return -EINVAL;
 
 	do {
 		local_irq_save(flags);
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		output = *this_cpu_ptr(hyperv_pcpu_output_arg);
-		memset(input, 0, sizeof(*input));
-		memset(output, 0, sizeof(*output));
+		batch_size = hv_hvcall_inout_array(&input, sizeof(*input),
+				sizeof(input->output_data_pfns[0]),
+				&output, sizeof(*output), 0);
+		if (page_count > batch_size) {
+			local_irq_restore(flags);
+			return -EINVAL;
+		}
 
 		input->partition_id = partition_id;
 		input->vp_index = vp_index;
@@ -477,11 +456,7 @@ int hv_call_set_vp_state(u32 vp_index, u64 partition_id,
 	unsigned long flags;
 	int ret = 0;
 	u16 varhead_sz;
-
-	if (page_count > HV_SET_VP_STATE_BATCH_SIZE)
-		return -EINVAL;
-	if (sizeof(*input) + num_bytes > HV_HYP_PAGE_SIZE)
-		return -EINVAL;
+	u64 batch_size;
 
 	if (num_bytes)
 		/* round up to 8 and divide by 8 */
@@ -493,18 +468,26 @@ int hv_call_set_vp_state(u32 vp_index, u64 partition_id,
 
 	do {
 		local_irq_save(flags);
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		memset(input, 0, sizeof(*input));
 
-		input->partition_id = partition_id;
-		input->vp_index = vp_index;
-		input->state_data = state_data;
 		if (num_bytes) {
+			batch_size = hv_hvcall_in_array(&input, sizeof(*input),
+						sizeof(input->data[0].bytes));
+			if (num_bytes > batch_size)
+				goto size_error;
+
 			memcpy((u8 *)input->data, bytes, num_bytes);
 		} else {
+			batch_size = hv_hvcall_in_array(&input, sizeof(*input),
+						sizeof(input->data[0].pfns));
+			if (page_count > batch_size)
+				goto size_error;
+
 			for (i = 0; i < page_count; i++)
 				input->data[i].pfns = page_to_pfn(pages[i]);
 		}
+		input->partition_id = partition_id;
+		input->vp_index = vp_index;
+		input->state_data = state_data;
 
 		control = (HVCALL_SET_VP_STATE) |
 			  (varhead_sz << HV_HYPERCALL_VARHEAD_OFFSET);
@@ -523,6 +506,10 @@ int hv_call_set_vp_state(u32 vp_index, u64 partition_id,
 	} while (!ret);
 
 	return ret;
+
+size_error:
+	local_irq_restore(flags);
+	return -EINVAL;
 }
 
 int hv_call_map_vp_state_page(u64 partition_id, u32 vp_index, u32 type,
@@ -538,8 +525,7 @@ int hv_call_map_vp_state_page(u64 partition_id, u32 vp_index, u32 type,
 	do {
 		local_irq_save(flags);
 
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		output = *this_cpu_ptr(hyperv_pcpu_output_arg);
+		hv_hvcall_inout(&input, sizeof(*input), &output, sizeof(*output));
 
 		input->partition_id = partition_id;
 		input->vp_index = vp_index;
@@ -573,9 +559,7 @@ int hv_call_unmap_vp_state_page(u64 partition_id, u32 vp_index, u32 type,
 
 	local_irq_save(flags);
 
-	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
-	memset(input, 0, sizeof(*input));
+	hv_hvcall_in(&input, sizeof(*input));
 
 	input->partition_id = partition_id;
 	input->vp_index = vp_index;
@@ -613,8 +597,7 @@ hv_call_create_port(u64 port_partition_id, union hv_port_id port_id,
 
 	do {
 		local_irq_save(flags);
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		memset(input, 0, sizeof(*input));
+		hv_hvcall_in(&input, sizeof(*input));
 
 		input->port_partition_id = port_partition_id;
 		input->port_id = port_id;
@@ -667,8 +650,7 @@ hv_call_connect_port(u64 port_partition_id, union hv_port_id port_id,
 
 	do {
 		local_irq_save(flags);
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		memset(input, 0, sizeof(*input));
+		hv_hvcall_in(&input, sizeof(*input));
 		input->port_partition_id = port_partition_id;
 		input->port_id = port_id;
 		input->connection_partition_id = connection_partition_id;
@@ -735,10 +717,7 @@ int hv_call_map_stat_page(enum hv_stats_object_type type,
 
 	do {
 		local_irq_save(flags);
-		input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-		output = *this_cpu_ptr(hyperv_pcpu_output_arg);
-
-		memset(input, 0, sizeof(*input));
+		hv_hvcall_inout(&input, sizeof(*input), &output, sizeof(*output));
 		input->type = type;
 		input->identity = *identity;
 
@@ -772,9 +751,7 @@ int hv_call_unmap_stat_page(enum hv_stats_object_type type,
 	u64 status;
 
 	local_irq_save(flags);
-	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
-
-	memset(input, 0, sizeof(*input));
+	hv_hvcall_in(&input, sizeof(*input));
 	input->type = type;
 	input->identity = *identity;
 
@@ -807,14 +784,14 @@ int hv_call_modify_spa_host_access(u64 partition_id, struct page **pages,
 	}
 
 	while (done < page_count) {
-		ulong i, completed, remain = page_count - done;
-		int rep_count = min(remain,
-				    HV_MODIFY_SPARSE_SPA_PAGE_HOST_ACCESS_MAX_PAGE_COUNT);
+		ulong i, batch_size, completed, remain = page_count - done;
+		ulong rep_count;
 
 		local_irq_save(irq_flags);
-		input_page = *this_cpu_ptr(hyperv_pcpu_input_arg);
+		batch_size = hv_hvcall_in_array(&input_page, sizeof(*input_page),
+						sizeof(input_page->spa_page_list[0]));
+		rep_count = min(remain, batch_size);
 
-		memset(input_page, 0, sizeof(*input_page));
 		/* Only set the partition id if you are making the pages
 		 * exclusive
 		 */
