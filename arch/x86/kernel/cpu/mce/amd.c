@@ -1218,3 +1218,21 @@ void mce_threshold_create_device(unsigned int cpu)
 		mce_threshold_vector = amd_threshold_interrupt;
 	return;
 }
+
+void mce_amd_handle_storm(unsigned int bank, bool on)
+{
+	struct threshold_bank **thr_banks = this_cpu_read(threshold_banks);
+	struct threshold_block *block, *tmp;
+	struct thresh_restart tr;
+
+	if (!thr_banks || !thr_banks[bank])
+		return;
+
+	memset(&tr, 0, sizeof(tr));
+
+	list_for_each_entry_safe(block, tmp, &thr_banks[bank]->miscj, miscj) {
+		tr.b = block;
+		tr.b->interrupt_enable = on;
+		threshold_restart_bank(&tr);
+	}
+}
