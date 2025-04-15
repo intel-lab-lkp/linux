@@ -243,6 +243,7 @@ out:
  */
 static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 				     struct btrfs_root *root,
+				     struct btrfs_path *path,
 				     const struct fscrypt_str *name,
 				     u64 inode_objectid, u64 ref_objectid,
 				     u64 index)
@@ -251,17 +252,12 @@ static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 	int ret;
 	int ins_len = name->len + sizeof(*extref);
 	unsigned long ptr;
-	struct btrfs_path *path;
 	struct btrfs_key key;
 	struct extent_buffer *leaf;
 
 	key.objectid = inode_objectid;
 	key.type = BTRFS_INODE_EXTREF_KEY;
 	key.offset = btrfs_extref_hash(ref_objectid, name->name, name->len);
-
-	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
 
 	ret = btrfs_insert_empty_item(trans, root, path, &key,
 				      ins_len);
@@ -270,13 +266,13 @@ static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 						   path->slots[0],
 						   ref_objectid,
 						   name))
-			goto out;
+			return ret;
 
 		btrfs_extend_item(trans, path, ins_len);
 		ret = 0;
 	}
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	leaf = path->nodes[0];
 	ptr = (unsigned long)btrfs_item_ptr(leaf, path->slots[0], char);
@@ -289,9 +285,8 @@ static int btrfs_insert_inode_extref(struct btrfs_trans_handle *trans,
 
 	ptr = (unsigned long)&extref->name;
 	write_extent_buffer(path->nodes[0], name->name, ptr, name->len);
-out:
-	btrfs_free_path(path);
-	return ret;
+
+	return 0;
 }
 
 /* Will return 0, -ENOMEM, -EMLINK, or -EEXIST or anything from the CoW path */
@@ -300,7 +295,7 @@ int btrfs_insert_inode_ref(struct btrfs_trans_handle *trans,
 			   u64 inode_objectid, u64 ref_objectid, u64 index)
 {
 	struct btrfs_fs_info *fs_info = root->fs_info;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_key key;
 	struct btrfs_inode_ref *ref;
 	unsigned long ptr;
@@ -353,7 +348,7 @@ int btrfs_insert_inode_ref(struct btrfs_trans_handle *trans,
 	}
 	write_extent_buffer(path->nodes[0], name->name, ptr, name->len);
 out:
-	btrfs_free_path(path);
+	btrfs_release_path(path);
 
 	if (ret == -EMLINK) {
 		struct btrfs_super_block *disk_super = fs_info->super_copy;
@@ -361,7 +356,7 @@ out:
 		 * add an extended ref. */
 		if (btrfs_super_incompat_flags(disk_super)
 		    & BTRFS_FEATURE_INCOMPAT_EXTENDED_IREF)
-			ret = btrfs_insert_inode_extref(trans, root, name,
+			ret = btrfs_insert_inode_extref(trans, root, path, name,
 							inode_objectid,
 							ref_objectid, index);
 	}
