@@ -68,6 +68,16 @@ config MTD_SPI_NOR_SWP_KEEP
 
 endchoice
 
+config MTD_SPI_NOR_PARANOID
+	bool "Read back written data (paranoid mode)"
+	help
+	  This option makes the SPI NOR core read back all data on a write
+	  and report an error if it doesn't match the written data. This can
+	  safeguard against silent bit errors resulting from a faulty Flash,
+	  controller oddities, bus noise etc.
+
+	  If you are unsure, select 'n'.
+
 source "drivers/mtd/spi-nor/controllers/Kconfig"
 
 endif # MTD_SPI_NOR

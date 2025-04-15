@@ -2063,6 +2063,7 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
 	size_t *retlen, const u_char *buf)
 {
 	struct spi_nor *nor = mtd_to_spi_nor(mtd);
+	u_char *verify_buf = NULL;
 	size_t i;
 	ssize_t ret;
 	u32 page_size = nor->params->page_size;
@@ -2072,6 +2073,14 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
 	ret = spi_nor_prep_and_lock_pe(nor, to, len);
 	if (ret)
 		return ret;
+
+#if IS_ENABLED(CONFIG_MTD_SPI_NOR_PARANOID)
+	verify_buf = devm_kmalloc(nor->dev, page_size, GFP_KERNEL);
+	if (!verify_buf) {
+		ret = -ENOMEM;
+		goto write_err;
+	}
+#endif
 
 	for (i = 0; i < len; ) {
 		ssize_t written;
@@ -2099,11 +2108,35 @@ static int spi_nor_write(struct mtd_info *mtd, loff_t to, size_t len,
 		ret = spi_nor_wait_till_ready(nor);
 		if (ret)
 			goto write_err;
+
+#if IS_ENABLED(CONFIG_MTD_SPI_NOR_PARANOID)
+		/* read back to make sure it's correct */
+		ret = spi_nor_read_data(nor, addr, written, verify_buf);
+		if (ret < 0)
+			goto write_err;
+		if (ret != written) {
+			/* We shouldn't see short reads */
+			dev_err(nor->dev, "Verify failed, written %zd but only read %zd",
+				written, ret);
+			ret = -EIO;
+			goto write_err;
+		}
+
+		if (memcmp(verify_buf, buf + i, written)) {
+			dev_err(nor->dev, "Verify failed, compare mismatch!");
+			ret = -EIO;
+			goto write_err;
+		}
+#endif
+
+		ret = 0;
+
 		*retlen += written;
 		i += written;
 	}
 
 write_err:
+	devm_kfree(nor->dev, verify_buf);
 	spi_nor_unlock_and_unprep_pe(nor, to, len);
 
 	return ret;
