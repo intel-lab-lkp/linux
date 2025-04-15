@@ -467,7 +467,8 @@ static int vpif_probe(struct platform_device *pdev)
 	 */
 	endpoint = of_graph_get_endpoint_by_regs(pdev->dev.of_node, 0, -1);
 	if (!endpoint)
-		return 0;
+		ret = -ENODEV;
+		goto err_put_rpm;
 	of_node_put(endpoint);
 
 	/*
@@ -527,6 +528,7 @@ static int vpif_probe(struct platform_device *pdev)
 
 err_put_pdev_display:
 	platform_device_put(pdev_display);
+	platform_device_del(pdev_capture);
 err_put_pdev_capture:
 	platform_device_put(pdev_capture);
 err_put_rpm:
