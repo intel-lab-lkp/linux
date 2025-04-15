@@ -59,7 +59,7 @@ static void isp1760_udc_write(struct isp1760_udc *udc, u16 field, u32 val)
 
 static u32 isp1760_udc_read_raw(struct isp1760_udc *udc, u16 reg)
 {
-	__le32 val;
+	__le32 val = 0;
 
 	regmap_raw_read(udc->regs, reg, &val, 4);
 
@@ -68,7 +68,7 @@ static u32 isp1760_udc_read_raw(struct isp1760_udc *udc, u16 reg)
 
 static u16 isp1760_udc_read_raw16(struct isp1760_udc *udc, u16 reg)
 {
-	__le16 val;
+	__le16 val = 0;
 
 	regmap_raw_read(udc->regs, reg, &val, 2);
 

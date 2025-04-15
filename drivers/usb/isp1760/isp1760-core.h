@@ -58,7 +58,7 @@ void isp1760_set_pullup(struct isp1760_device *isp, bool enable);
 
 static inline u32 isp1760_field_read(struct regmap_field **fields, u32 field)
 {
-	unsigned int val;
+	unsigned int val = 0;
 
 	regmap_field_read(fields[field], &val);
 
