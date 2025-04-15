@@ -496,6 +496,11 @@ static int __init __reserved_mem_init_node(struct reserved_mem *rmem)
 		if (!of_flat_dt_is_compatible(rmem->fdt_node, compat))
 			continue;
 
+		if (!initfn) {
+			pr_warn("no init function for %s\n", rmem->name);
+			continue;
+		}
+
 		ret = initfn(rmem);
 		if (ret == 0) {
 			pr_info("initialized node %s, compatible id %s\n",
