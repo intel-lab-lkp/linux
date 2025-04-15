@@ -1172,6 +1172,10 @@
 	(IS_ENABLED(CONFIG_AMPERE_ERRATUM_AC03_CPU_36) &&	\
 	 __sysreg_is_hcr_el2(r) &&				\
 	 alternative_has_cap_unlikely(ARM64_WORKAROUND_AMPERE_AC03_CPU_36))
+#define __hcr_el2_ac04_cpu_23(r)				\
+	(IS_ENABLED(CONFIG_AMPERE_ERRATUM_AC04_CPU_23) &&	\
+	 __sysreg_is_hcr_el2(r) &&				\
+	 alternative_has_cap_unlikely(ARM64_WORKAROUND_AMPERE_AC04_CPU_23))
 
 /*
  * The "Z" constraint normally means a zero immediate, but when combined with
@@ -1184,6 +1188,9 @@
 		asm volatile("mrs %0, daif; msr daifset, #0xf;"	\
 			     "msr hcr_el2, %x1; msr daif, %0"	\
 		: "=&r"(__daif) : "rZ" (__val));		\
+	} else if (__hcr_el2_ac04_cpu_23(r)) {			\
+		asm volatile("dsb nsh; msr hcr_el2, %x0; isb"	\
+			     : : "rZ" (__val));			\
 	} else {						\
 		asm volatile("msr " __stringify(r) ", %x0"	\
 			     : : "rZ" (__val));			\
