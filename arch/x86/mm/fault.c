@@ -1452,23 +1452,9 @@ done:
 NOKPROBE_SYMBOL(do_user_addr_fault);
 
 static __always_inline void
-trace_page_fault_entries(struct pt_regs *regs, unsigned long error_code,
-			 unsigned long address)
-{
-	if (!trace_pagefault_enabled())
-		return;
-
-	if (user_mode(regs))
-		trace_page_fault_user(address, regs, error_code);
-	else
-		trace_page_fault_kernel(address, regs, error_code);
-}
-
-static __always_inline void
 handle_page_fault(struct pt_regs *regs, unsigned long error_code,
 			      unsigned long address)
 {
-	trace_page_fault_entries(regs, error_code, address);
 
 	if (unlikely(kmmio_fault(regs, address)))
 		return;
@@ -1535,7 +1521,9 @@ DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
 	state = irqentry_enter(regs);
 
 	instrumentation_begin();
+	trace_page_fault_enter(address, regs, error_code);
 	handle_page_fault(regs, error_code, address);
+	trace_page_fault_exit(address, regs, error_code);
 	instrumentation_end();
 
 	irqentry_exit(regs, state);
