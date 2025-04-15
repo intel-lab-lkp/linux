@@ -1100,8 +1100,14 @@ static struct deferred_split *folio_split_queue_lock(struct folio *folio)
 {
 	struct deferred_split *queue;
 
+	rcu_read_lock();
+retry:
 	queue = folio_split_queue(folio);
 	spin_lock(&queue->split_queue_lock);
+	if (unlikely(folio_split_queue_memcg(folio, queue) != folio_memcg(folio))) {
+		spin_unlock(&queue->split_queue_lock);
+		goto retry;
+	}
 
 	return queue;
 }
@@ -1111,8 +1117,14 @@ folio_split_queue_lock_irqsave(struct folio *folio, unsigned long *flags)
 {
 	struct deferred_split *queue;
 
+	rcu_read_lock();
+retry:
 	queue = folio_split_queue(folio);
 	spin_lock_irqsave(&queue->split_queue_lock, *flags);
+	if (unlikely(folio_split_queue_memcg(folio, queue) != folio_memcg(folio))) {
+		spin_unlock_irqrestore(&queue->split_queue_lock, *flags);
+		goto retry;
+	}
 
 	return queue;
 }
@@ -1120,12 +1132,14 @@ folio_split_queue_lock_irqsave(struct folio *folio, unsigned long *flags)
 static inline void split_queue_unlock(struct deferred_split *queue)
 {
 	spin_unlock(&queue->split_queue_lock);
+	rcu_read_unlock();
 }
 
 static inline void split_queue_unlock_irqrestore(struct deferred_split *queue,
 						 unsigned long flags)
 {
 	spin_unlock_irqrestore(&queue->split_queue_lock, flags);
+	rcu_read_unlock();
 }
 
 static inline bool is_transparent_hugepage(const struct folio *folio)
