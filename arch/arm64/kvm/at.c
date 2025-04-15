@@ -1073,7 +1073,7 @@ static void compute_s1_overlay_permissions(struct kvm_vcpu *vcpu,
 {
 	u8 idx, pov_perms, uov_perms;
 
-	idx = FIELD_GET(PTE_PO_IDX_MASK, wr->desc);
+	idx = pte_po_index(__pte(wr->desc));
 
 	switch (wi->regime) {
 	case TR_EL10:
