@@ -501,6 +501,25 @@ static const struct iommufd_viommu_ops arm_vsmmu_ops = {
 	.cache_invalidate = arm_vsmmu_cache_invalidate,
 };
 
+static bool arm_smmu_s2_parent_can_share(struct arm_smmu_domain *s2_parent,
+					 struct arm_smmu_device *smmu)
+{
+	struct arm_smmu_device *s2_smmu = s2_parent->smmu;
+
+	if (s2_smmu == smmu)
+		return true;
+	if (s2_smmu->iommu.ops != smmu->iommu.ops)
+		return false;
+	if (s2_smmu->ias > smmu->ias || s2_smmu->oas > smmu->oas)
+		return false;
+	if (s2_smmu->pgsize_bitmap != smmu->pgsize_bitmap)
+		return false;
+	if ((s2_smmu->features & ARM_SMMU_FEAT_COHERENCY) !=
+	    (smmu->features & ARM_SMMU_FEAT_COHERENCY))
+		return false;
+	return true;
+}
+
 struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 				       struct iommu_domain *parent,
 				       struct iommufd_ctx *ictx,
@@ -520,7 +539,7 @@ struct iommufd_viommu *arm_vsmmu_alloc(struct device *dev,
 	if (!(smmu->features & ARM_SMMU_FEAT_NESTING))
 		return ERR_PTR(-EOPNOTSUPP);
 
-	if (s2_parent->smmu != master->smmu)
+	if (!arm_smmu_s2_parent_can_share(s2_parent, master->smmu))
 		return ERR_PTR(-EINVAL);
 
 	/*
