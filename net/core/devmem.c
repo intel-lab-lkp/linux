@@ -379,6 +379,11 @@ static void mp_dmabuf_devmem_uninstall(void *mp_priv,
 	xa_for_each(&binding->bound_rxqs, xa_idx, bound_rxq) {
 		if (bound_rxq == rxq) {
 			xa_erase(&binding->bound_rxqs, xa_idx);
+
+			if (xa_empty(&binding->bound_rxqs)) {
+				list_del(&binding->list);
+				net_devmem_dmabuf_binding_put(binding);
+			}
 			break;
 		}
 	}
