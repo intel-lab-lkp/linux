@@ -152,6 +152,16 @@ void __contpte_try_unfold(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL_GPL(__contpte_try_unfold);
 
+/* Note: in order to improve efficiency, using this macro will modify the
+ * passed-in parameters.*/
+#define CHECK_CONTPTE_FLAG(start, ptep, orig_pte, flag) \
+    for (; (start) < CONT_PTES; (start)++, (ptep)++) { \
+		if (pte_##flag(__ptep_get(ptep))) { \
+				orig_pte = pte_mk##flag(orig_pte); \
+				break; \
+		} \
+    }
+
 pte_t contpte_ptep_get(pte_t *ptep, pte_t orig_pte)
 {
 	/*
@@ -169,11 +179,17 @@ pte_t contpte_ptep_get(pte_t *ptep, pte_t orig_pte)
 	for (i = 0; i < CONT_PTES; i++, ptep++) {
 		pte = __ptep_get(ptep);
 
-		if (pte_dirty(pte))
+		if (pte_dirty(pte)) {
 			orig_pte = pte_mkdirty(orig_pte);
+			CHECK_CONTPTE_FLAG(i, ptep, orig_pte, young);
+			break;
+		}
 
-		if (pte_young(pte))
+		if (pte_young(pte)) {
 			orig_pte = pte_mkyoung(orig_pte);
+			CHECK_CONTPTE_FLAG(i, ptep, orig_pte, dirty);
+			break;
+		}
 	}
 
 	return orig_pte;
