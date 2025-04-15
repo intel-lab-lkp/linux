@@ -1,0 +1,17 @@
+What:		/sys/bus/iio/devices/iio:deviceX/running_average_window
+KernelVersion:	6.14
+Contact:	linux-iio@vger.kernel.org
+Description:
+		This attribute controls the number of samples for the 
+		running average window applied to External Channel 1.
+		Using this method the temperature spikes are reduced.
+		X is the IIO index of the device.
+
+What:		/sys/bus/iio/devices/iio:deviceX/running_average_window_available
+KernelVersion:	6.14
+Contact:	linux-iio@vger.kernel.org
+Description:
+		Reading returns a list with the possible number of samples used
+		in the running average window. The window can be composed of 1,
+		4 or 8 previous samples. X is the IIO index of the device.
+
