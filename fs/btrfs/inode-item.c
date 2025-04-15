@@ -105,11 +105,11 @@ btrfs_lookup_inode_extref(struct btrfs_trans_handle *trans,
 
 static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 				  struct btrfs_root *root,
+				  struct btrfs_path *path,
 				  const struct fscrypt_str *name,
 				  u64 inode_objectid, u64 ref_objectid,
 				  u64 *index)
 {
-	struct btrfs_path *path;
 	struct btrfs_key key;
 	struct btrfs_inode_extref *extref;
 	struct extent_buffer *leaf;
@@ -123,15 +123,11 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 	key.type = BTRFS_INODE_EXTREF_KEY;
 	key.offset = btrfs_extref_hash(ref_objectid, name->name, name->len);
 
-	path = btrfs_alloc_path();
-	if (!path)
-		return -ENOMEM;
-
 	ret = btrfs_search_slot(trans, root, &key, path, -1, 1);
 	if (ret > 0)
 		ret = -ENOENT;
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	/*
 	 * Sanity check - did we find the right item for this name?
@@ -142,8 +138,7 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 						ref_objectid, name);
 	if (!extref) {
 		btrfs_abort_transaction(trans, -ENOENT);
-		ret = -ENOENT;
-		goto out;
+		return -ENOENT;
 	}
 
 	leaf = path->nodes[0];
@@ -156,8 +151,7 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 		 * Common case only one ref in the item, remove the
 		 * whole item.
 		 */
-		ret = btrfs_del_item(trans, root, path);
-		goto out;
+		return btrfs_del_item(trans, root, path);
 	}
 
 	ptr = (unsigned long)extref;
@@ -168,17 +162,14 @@ static int btrfs_del_inode_extref(struct btrfs_trans_handle *trans,
 
 	btrfs_truncate_item(trans, path, item_size - del_len, 1);
 
-out:
-	btrfs_free_path(path);
-
-	return ret;
+	return 0;
 }
 
 int btrfs_del_inode_ref(struct btrfs_trans_handle *trans,
 			struct btrfs_root *root, const struct fscrypt_str *name,
 			u64 inode_objectid, u64 ref_objectid, u64 *index)
 {
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_key key;
 	struct btrfs_inode_ref *ref;
 	struct extent_buffer *leaf;
@@ -230,7 +221,7 @@ int btrfs_del_inode_ref(struct btrfs_trans_handle *trans,
 			      item_size - (ptr + sub_item_len - item_start));
 	btrfs_truncate_item(trans, path, item_size - sub_item_len, 1);
 out:
-	btrfs_free_path(path);
+	btrfs_release_path(path);
 
 	if (search_ext_refs) {
 		/*
@@ -238,7 +229,7 @@ out:
 		 * name in our ref array. Find and remove the extended
 		 * inode ref then.
 		 */
-		return btrfs_del_inode_extref(trans, root, name,
+		return btrfs_del_inode_extref(trans, root, path, name,
 					      inode_objectid, ref_objectid, index);
 	}
 
