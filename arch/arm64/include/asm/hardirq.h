@@ -41,7 +41,8 @@ do {									\
 									\
 	___hcr = read_sysreg(hcr_el2);					\
 	if (!(___hcr & HCR_TGE)) {					\
-		write_sysreg(___hcr | HCR_TGE, hcr_el2);		\
+		write_sysreg((___hcr & ~(HCR_AMO | HCR_IMO | HCR_FMO)) |\
+			     HCR_TGE, hcr_el2);				\
 		isb();							\
 	}								\
 	/*								\

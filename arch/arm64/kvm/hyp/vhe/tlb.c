@@ -55,6 +55,15 @@ static void enter_vmid_context(struct kvm_s2_mmu *mmu,
 	 * bits. Changing E2H is impossible (goodbye TTBR1_EL2), so
 	 * let's flip TGE before executing the TLB operation.
 	 *
+	 * One other fun complication to consider is the target EL for
+	 * asynchronous exceptions. We want to allow NMIs during tlb flushing,
+	 * so we need to ensure that the target EL for IRQs remains as EL2.
+	 * HCR_EL2.{E2H,TGE,IMO} = {1,0,0} would set the target EL for IRQs as
+	 * EL1, and IRQs at EL2 would be "C" (Interrupts not taken regardless
+	 * of the value of interrupt masks). So we need to set
+	 * HCR_EL2.{E2H,TGE,IMO} = {1,0,1} so that NMIs will still be
+	 * delivered.
+	 *
 	 * ARM erratum 1165522 requires some special handling (again),
 	 * as we need to make sure both stages of translation are in
 	 * place before clearing TGE. __load_stage2() already
@@ -63,6 +72,7 @@ static void enter_vmid_context(struct kvm_s2_mmu *mmu,
 	__load_stage2(mmu, mmu->arch);
 	val = read_sysreg(hcr_el2);
 	val &= ~HCR_TGE;
+	val |= HCR_AMO | HCR_IMO | HCR_FMO;
 	write_sysreg(val, hcr_el2);
 	isb();
 }

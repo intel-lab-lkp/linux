@@ -1269,7 +1269,9 @@ static u64 __kvm_at_s1e01_fast(struct kvm_vcpu *vcpu, u32 op, u64 vaddr)
 
 skip_mmu_switch:
 	/* Clear TGE, enable S2 translation, we're rolling */
-	write_sysreg((config.hcr & ~HCR_TGE) | HCR_VM,	hcr_el2);
+	write_sysreg((config.hcr & ~HCR_TGE) |
+		     HCR_AMO | HCR_IMO | HCR_FMO | HCR_VM,
+		     hcr_el2);
 	isb();
 
 	switch (op) {
