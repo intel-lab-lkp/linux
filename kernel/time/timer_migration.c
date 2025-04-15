@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/timerqueue.h>
 #include <trace/events/ipi.h>
+#include <linux/sched/isolation.h>
 
 #include "timer_migration.h"
 #include "tick-internal.h"
@@ -1445,7 +1446,7 @@ static long tmigr_trigger_active(void *unused)
 
 static int tmigr_cpu_unavailable(unsigned int cpu)
 {
-	struct tmigr_cpu *tmc = this_cpu_ptr(&tmigr_cpu);
+	struct tmigr_cpu *tmc = per_cpu_ptr(&tmigr_cpu, cpu);
 	int migrator;
 	u64 firstexp;
 
@@ -1472,21 +1473,38 @@ static int tmigr_cpu_unavailable(unsigned int cpu)
 
 static int tmigr_cpu_available(unsigned int cpu)
 {
-	struct tmigr_cpu *tmc = this_cpu_ptr(&tmigr_cpu);
+	struct tmigr_cpu *tmc = per_cpu_ptr(&tmigr_cpu, cpu);
 
 	/* Check whether CPU data was successfully initialized */
 	if (WARN_ON_ONCE(!tmc->tmgroup))
 		return -EINVAL;
 
+	/* Isolated CPUs don't participate in timer migration */
+	if (cpu_is_isolated(cpu))
+		return 0;
 	raw_spin_lock_irq(&tmc->lock);
 	trace_tmigr_cpu_available(tmc);
-	tmc->idle = timer_base_is_idle();
+	tmc->idle = timer_base_remote_is_idle(cpu);
 	if (!tmc->idle)
 		__tmigr_cpu_activate(tmc);
 	tmc->available = true;
 	cpumask_set_cpu(cpu, tmigr_available_cpumask);
 	raw_spin_unlock_irq(&tmc->lock);
 	return 0;
+}
+
+void tmigr_isolated_exclude_cpumask(cpumask_var_t exclude_cpumask)
+{
+	int cpu;
+
+	lockdep_assert_cpus_held();
+
+	for_each_cpu_and(cpu, exclude_cpumask, tmigr_available_cpumask)
+		tmigr_cpu_unavailable(cpu);
+
+	for_each_cpu_andnot(cpu, cpu_online_mask, exclude_cpumask)
+		if (!cpumask_test_cpu(cpu, tmigr_available_cpumask))
+			tmigr_cpu_available(cpu);
 }
 
 static void tmigr_init_group(struct tmigr_group *group, unsigned int lvl,
