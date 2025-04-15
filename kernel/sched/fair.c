@@ -49,6 +49,7 @@
 #include <linux/ratelimit.h>
 #include <linux/task_work.h>
 #include <linux/rbtree_augmented.h>
+#include <linux/prctl.h>
 
 #include <asm/switch_to.h>
 
@@ -3670,6 +3671,69 @@ static void update_scan_period(struct task_struct *p, int new_cpu)
 	p->numa_scan_period = task_scan_start(p);
 }
 
+/*
+ * Enable setting task->numa_preferred_nid directly
+ */
+int prctl_chg_pref_nid(unsigned long cmd, pid_t pid, int nid,
+		       unsigned long uaddr)
+{
+	struct task_struct *task;
+	struct rq_flags rf;
+	struct rq *rq;
+	int err = 0;
+
+	if (cmd >= PR_PREFERRED_NID_CMD_MAX)
+		return -ERANGE;
+
+	rcu_read_lock();
+	if (pid == 0) {
+		task = current;
+	} else {
+		task = find_task_by_vpid((pid_t)pid);
+		if (!task) {
+			rcu_read_unlock();
+			return -ESRCH;
+		}
+	}
+	get_task_struct(task);
+	rcu_read_unlock();
+
+	/*
+	 * Check if this process has the right to modify the specified
+	 * process. Use the regular "ptrace_may_access()" checks.
+	 */
+	if (!ptrace_may_access(task, PTRACE_MODE_READ_REALCREDS)) {
+		err = -EPERM;
+		goto out;
+	}
+
+	switch (cmd) {
+	case PR_PREFERRED_NID_GET:
+		if (uaddr & 0x3) {
+			err = -EINVAL;
+			goto out;
+		}
+		err = put_user(task->numa_preferred_nid_force,
+			       (int __user *)uaddr);
+		break;
+
+	case PR_PREFERRED_NID_SET:
+		if (!(-1 <= nid && nid < num_possible_nodes())) {
+			err = -EINVAL;
+			goto out;
+		}
+
+		rq = task_rq_lock(task, &rf);
+		task->numa_preferred_nid_force = nid;
+		task_rq_unlock(rq, task, &rf);
+		sched_setnuma(task, nid);
+		break;
+	}
+
+out:
+	put_task_struct(task);
+	return err;
+}
 #else
 static void task_tick_numa(struct rq *rq, struct task_struct *curr)
 {

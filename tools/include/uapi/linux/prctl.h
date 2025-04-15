@@ -328,4 +328,10 @@ struct prctl_mm_map {
 # define PR_PPC_DEXCR_CTRL_CLEAR_ONEXEC	0x10 /* Clear the aspect on exec */
 # define PR_PPC_DEXCR_CTRL_MASK		0x1f
 
+/* Set or get a task's numa_preferred_nid
+ */
+#define PR_PREFERRED_NID		78
+# define PR_PREFERRED_NID_GET		0
+# define PR_PREFERRED_NID_SET		1
+# define PR_PREFERRED_NID_CMD_MAX	2
 #endif /* _LINUX_PRCTL_H */
