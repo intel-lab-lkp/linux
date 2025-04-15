@@ -6,10 +6,6 @@
 #define _TRACE_PAGE_FAULT_H
 
 #include <linux/tracepoint.h>
-#include <asm/trace/common.h>
-
-extern int trace_pagefault_reg(void);
-extern void trace_pagefault_unreg(void);
 
 DECLARE_EVENT_CLASS(x86_exceptions,
 
@@ -21,17 +17,20 @@ DECLARE_EVENT_CLASS(x86_exceptions,
 	TP_STRUCT__entry(
 		__field(		unsigned long, address	)
 		__field(		unsigned long, ip	)
+		__field(		bool         , user_mode)
 		__field(		unsigned long, error_code )
 	),
 
 	TP_fast_assign(
 		__entry->address = address;
 		__entry->ip = regs->ip;
+		__entry->user_mode = user_mode(regs);
 		__entry->error_code = error_code;
 	),
 
-	TP_printk("address=%ps ip=%ps error_code=0x%lx",
+	TP_printk("address=%ps ip=%ps %s error_code=0x%lx",
 		  (void *)__entry->address, (void *)__entry->ip,
+		  __entry->user_mode ? "user" : "kernel",
 		  __entry->error_code) );
 
 #define DEFINE_PAGE_FAULT_EVENT(name)				\
@@ -39,10 +38,10 @@ DEFINE_EVENT_FN(x86_exceptions, name,				\
 	TP_PROTO(unsigned long address,	struct pt_regs *regs,	\
 		 unsigned long error_code),			\
 	TP_ARGS(address, regs, error_code),			\
-	trace_pagefault_reg, trace_pagefault_unreg);
+	NULL, NULL)
 
-DEFINE_PAGE_FAULT_EVENT(page_fault_user);
-DEFINE_PAGE_FAULT_EVENT(page_fault_kernel);
+DEFINE_PAGE_FAULT_EVENT(page_fault_enter);
+DEFINE_PAGE_FAULT_EVENT(page_fault_exit);
 
 #undef TRACE_INCLUDE_PATH
 #undef TRACE_INCLUDE_FILE
