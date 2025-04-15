@@ -74,19 +74,21 @@ properties:
       - rev-rmii
       - moca
 
-      # RX and TX delays are added by the MAC when required
+      # RX and TX delays are part of the board design (through PCB traces). MAC
+      # and PHY must not add delays.
       - rgmii
 
-      # RGMII with internal RX and TX delays provided by the PHY,
-      # the MAC should not add the RX or TX delays in this case
+      # RGMII with internal RX and TX delays provided by the MAC or PHY. No
+      # delays are included in the board design; this is the most common case
+      # in modern designs.
       - rgmii-id
 
-      # RGMII with internal RX delay provided by the PHY, the MAC
-      # should not add an RX delay in this case
+      # RGMII with internal RX delay provided by the MAC or PHY. TX delay is
+      # part of the board design.
       - rgmii-rxid
 
-      # RGMII with internal TX delay provided by the PHY, the MAC
-      # should not add an TX delay in this case
+      # RGMII with internal TX delay provided by the MAC or PHY. RX delay is
+      # part of the board design.
       - rgmii-txid
       - rtbi
       - smii
