@@ -1388,6 +1388,7 @@ static int imx214_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct imx214 *imx214;
+	u32 xclk_freq;
 	int ret;
 
 	imx214 = devm_kzalloc(dev, sizeof(*imx214), GFP_KERNEL);
@@ -1401,7 +1402,14 @@ static int imx214_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(imx214->xclk),
 				     "failed to get xclk\n");
 
-	ret = clk_set_rate(imx214->xclk, IMX214_DEFAULT_CLK_FREQ);
+	ret = device_property_read_u32(dev, "clock-frequency", &xclk_freq);
+	if (ret) {
+		dev_warn(dev,
+			 "clock-frequency not set, please review your DT. Fallback to default\n");
+		xclk_freq = IMX214_DEFAULT_CLK_FREQ;
+	}
+
+	ret = clk_set_rate(imx214->xclk, xclk_freq);
 	if (ret)
 		return dev_err_probe(dev, ret,
 				     "failed to set xclk frequency\n");
