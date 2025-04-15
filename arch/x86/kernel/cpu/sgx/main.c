@@ -32,7 +32,8 @@ static DEFINE_XARRAY(sgx_epc_address_space);
 static LIST_HEAD(sgx_active_page_list);
 static DEFINE_SPINLOCK(sgx_reclaimer_lock);
 
-static atomic_long_t sgx_nr_free_pages = ATOMIC_LONG_INIT(0);
+static atomic_long_t sgx_nr_used_pages = ATOMIC_LONG_INIT(0);
+static unsigned long sgx_nr_total_pages;
 
 /* Nodes with one or more EPC sections. */
 static nodemask_t sgx_numa_mask;
@@ -378,8 +379,8 @@ skip:
 
 static bool sgx_should_reclaim(unsigned long watermark)
 {
-	return atomic_long_read(&sgx_nr_free_pages) < watermark &&
-	       !list_empty(&sgx_active_page_list);
+	return (sgx_nr_total_pages - atomic_long_read(&sgx_nr_used_pages))
+	       < watermark && !list_empty(&sgx_active_page_list);
 }
 
 /*
@@ -456,7 +457,7 @@ static struct sgx_epc_page *__sgx_alloc_epc_page_from_node(int nid)
 	page->flags = 0;
 
 	spin_unlock(&node->lock);
-	atomic_long_dec(&sgx_nr_free_pages);
+	atomic_long_inc(&sgx_nr_used_pages);
 
 	return page;
 }
@@ -616,7 +617,7 @@ void sgx_free_epc_page(struct sgx_epc_page *page)
 	page->flags = SGX_EPC_PAGE_IS_FREE;
 
 	spin_unlock(&node->lock);
-	atomic_long_inc(&sgx_nr_free_pages);
+	atomic_long_dec(&sgx_nr_used_pages);
 }
 
 static bool __init sgx_setup_epc_section(u64 phys_addr, u64 size,
@@ -647,6 +648,8 @@ static bool __init sgx_setup_epc_section(u64 phys_addr, u64 size,
 		section->pages[i].poison = 0;
 		list_add_tail(&section->pages[i].list, &sgx_dirty_page_list);
 	}
+
+	sgx_nr_total_pages += nr_pages;
 
 	return true;
 }
@@ -847,6 +850,8 @@ static bool __init sgx_page_cache_init(void)
 		pr_err("There are zero EPC sections.\n");
 		return false;
 	}
+
+	atomic_long_set(&sgx_nr_used_pages, sgx_nr_total_pages);
 
 	for_each_online_node(nid) {
 		if (!node_isset(nid, sgx_numa_mask) &&
