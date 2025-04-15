@@ -14,6 +14,7 @@
 #include <linux/cpumask.h>
 #include <linux/debugfs.h>
 #include <linux/energy_model.h>
+#include <linux/fsnotify.h>
 #include <linux/sched/topology.h>
 #include <linux/slab.h>
 
@@ -156,9 +157,53 @@ static int __init em_debug_init(void)
 	return 0;
 }
 fs_initcall(em_debug_init);
+
+static void em_debug_update_ps(struct em_perf_domain *em_pd, int i,
+			       struct dentry *pd)
+{
+	static const char *names[] = {
+		"frequency",
+		"power",
+		"cost",
+		"performance",
+		"inefficient",
+	};
+	struct em_perf_state *table;
+	unsigned long freq;
+	struct dentry *d, *cd;
+	char name[24];
+	int j;
+
+	rcu_read_lock();
+	table = em_perf_state_from_pd(em_pd);
+	freq = table[i].frequency;
+	rcu_read_unlock();
+
+	snprintf(name, sizeof(name), "ps:%lu", freq);
+	d = debugfs_lookup(name, pd);
+
+	for (j = 0; j < ARRAY_SIZE(names); j++) {
+		cd = debugfs_lookup(names[j], d);
+		if (!cd)
+			return;
+		fsnotify_dentry(cd, FS_MODIFY);
+		cond_resched();
+	}
+}
+
+static void em_debug_update(struct device *dev)
+{
+	struct dentry *d;
+	int i;
+
+	d = debugfs_lookup(dev_name(dev), rootdir);
+	for (i = 0; i < dev->em_pd->nr_perf_states; i++)
+		em_debug_update_ps(dev->em_pd, i, d);
+}
 #else /* CONFIG_DEBUG_FS */
 static void em_debug_create_pd(struct device *dev) {}
 static void em_debug_remove_pd(struct device *dev) {}
+static void em_debug_update(struct device *dev) {}
 #endif
 
 static void em_release_table_kref(struct kref *kref)
@@ -322,6 +367,8 @@ int em_dev_update_perf_domain(struct device *dev,
 	em_cpufreq_update_efficiencies(dev, new_table->state);
 
 	em_table_free(old_table);
+
+	em_debug_update(dev);
 
 	mutex_unlock(&em_pd_mutex);
 	return 0;
