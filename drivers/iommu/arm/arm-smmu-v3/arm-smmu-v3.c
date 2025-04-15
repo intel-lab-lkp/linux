@@ -929,23 +929,23 @@ static int arm_smmu_cmdq_issue_cmd(struct arm_smmu_device *smmu,
 	return __arm_smmu_cmdq_issue_cmd(smmu, ent, false);
 }
 
-static int arm_smmu_cmdq_issue_cmd_with_sync(struct arm_smmu_device *smmu,
-					     struct arm_smmu_cmdq_ent *ent)
+int arm_smmu_cmdq_issue_cmd_with_sync(struct arm_smmu_device *smmu,
+				      struct arm_smmu_cmdq_ent *ent)
 {
 	return __arm_smmu_cmdq_issue_cmd(smmu, ent, true);
 }
 
-static void arm_smmu_cmdq_batch_init(struct arm_smmu_device *smmu,
-				     struct arm_smmu_cmdq_batch *cmds,
-				     struct arm_smmu_cmdq_ent *ent)
+void arm_smmu_cmdq_batch_init(struct arm_smmu_device *smmu,
+			      struct arm_smmu_cmdq_batch *cmds,
+			      struct arm_smmu_cmdq_ent *ent)
 {
 	cmds->num = 0;
 	cmds->cmdq = arm_smmu_get_cmdq(smmu, ent);
 }
 
-static void arm_smmu_cmdq_batch_add(struct arm_smmu_device *smmu,
-				    struct arm_smmu_cmdq_batch *cmds,
-				    struct arm_smmu_cmdq_ent *cmd)
+void arm_smmu_cmdq_batch_add(struct arm_smmu_device *smmu,
+			     struct arm_smmu_cmdq_batch *cmds,
+			     struct arm_smmu_cmdq_ent *cmd)
 {
 	bool unsupported_cmd = !arm_smmu_cmdq_supports_cmd(cmds->cmdq, cmd);
 	bool force_sync = (cmds->num == CMDQ_BATCH_ENTRIES - 1) &&
@@ -974,8 +974,8 @@ static void arm_smmu_cmdq_batch_add(struct arm_smmu_device *smmu,
 	cmds->num++;
 }
 
-static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
-				      struct arm_smmu_cmdq_batch *cmds)
+int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
+			       struct arm_smmu_cmdq_batch *cmds)
 {
 	return arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
 					   cmds->num, true);
@@ -2096,9 +2096,8 @@ static irqreturn_t arm_smmu_combined_irq_handler(int irq, void *dev)
 	return IRQ_WAKE_THREAD;
 }
 
-static void
-arm_smmu_atc_inv_to_cmd(int ssid, unsigned long iova, size_t size,
-			struct arm_smmu_cmdq_ent *cmd)
+void arm_smmu_atc_inv_to_cmd(int ssid, unsigned long iova, size_t size,
+			     struct arm_smmu_cmdq_ent *cmd)
 {
 	size_t log2_span;
 	size_t span_mask;
