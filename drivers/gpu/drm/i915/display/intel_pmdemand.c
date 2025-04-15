@@ -478,6 +478,22 @@ static bool intel_pmdemand_req_complete(struct intel_display *display)
 		 XELPDP_PMDEMAND_REQ_ENABLE);
 }
 
+static void intel_pmdemand_poll(struct intel_display *display)
+{
+	const unsigned int timeout_ms = 10;
+	u32 status;
+	int ret;
+
+	ret = intel_de_wait_custom(display, XELPDP_INITIATE_PMDEMAND_REQUEST(1),
+				   XELPDP_PMDEMAND_REQ_ENABLE, 0,
+				   50, timeout_ms, &status);
+
+	if (ret == -ETIMEDOUT)
+		drm_err(display->drm,
+			"timeout within %ums (status 0x%08x)\n",
+			timeout_ms, status);
+}
+
 static void intel_pmdemand_wait(struct intel_display *display)
 {
 	if (!wait_event_timeout(display->pmdemand.waitqueue,
@@ -508,7 +524,11 @@ void intel_pmdemand_program_dbuf(struct intel_display *display,
 	intel_de_rmw(display, XELPDP_INITIATE_PMDEMAND_REQUEST(1), 0,
 		     XELPDP_PMDEMAND_REQ_ENABLE);
 
-	intel_pmdemand_wait(display);
+	/* Wa_14024400148 For lnl use polling method */
+	if (DISPLAY_VER(display) == 20)
+		intel_pmdemand_poll(display);
+	else
+		intel_pmdemand_wait(display);
 
 unlock:
 	mutex_unlock(&display->pmdemand.lock);
@@ -617,7 +637,10 @@ intel_pmdemand_program_params(struct intel_display *display,
 	intel_de_rmw(display, XELPDP_INITIATE_PMDEMAND_REQUEST(1), 0,
 		     XELPDP_PMDEMAND_REQ_ENABLE);
 
-	intel_pmdemand_wait(display);
+	if (DISPLAY_VER(display) == 20)
+		intel_pmdemand_poll(display);
+	else
+		intel_pmdemand_wait(display);
 
 unlock:
 	mutex_unlock(&display->pmdemand.lock);
