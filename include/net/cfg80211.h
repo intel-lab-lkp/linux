@@ -2195,6 +2195,12 @@ struct link_station_info {
  * @beacon_loss_count: Number of times beacon loss event has triggered.
  * @expected_throughput: aggregated expected throughput in kbps (including
  *	802.11 headers) towards this station.
+ * @inactive_time: time since last station activity (tx/rx) in milliseconds
+ * @bss_param: current BSS parameters
+ * @signal: The signal strength, type depends on the wiphy's signal_type.
+ *	For CFG80211_SIGNAL_TYPE_MBM, value is expressed in _dBm_.
+ * @txrate: last updated unicast bitrate from this station
+ * @rxrate: last updated unicast bitrate to this station
  * @valid_links: bitmap of valid links, or 0 for non-MLO. Drivers fill this
  *	information in cfg80211_new_sta(), cfg80211_del_sta_sinfo(),
  *	get_station() and dump_station() callbacks.
@@ -2239,6 +2245,12 @@ struct station_info {
 	u32 rx_dropped_misc;
 	u32 beacon_loss_count;
 	u32 expected_throughput;
+
+	u32 inactive_time;
+	struct sta_bss_parameters bss_param;
+	s8 signal;
+	struct rate_info txrate;
+	struct rate_info rxrate;
 
 	u16 valid_links;
 	struct link_station_info *links[IEEE80211_MLD_MAX_NUM_LINKS];
