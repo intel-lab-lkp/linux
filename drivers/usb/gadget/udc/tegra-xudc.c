@@ -2661,6 +2661,10 @@ static void tegra_xudc_handle_transfer_completion(struct tegra_xudc *xudc,
 	trb = trb_phys_to_virt(ep, trb_read_data_ptr(event));
 	req = trb_to_request(ep, trb);
 
+	/* tegra_xudc_req_done() dereferences ep->desc; check it here */
+	if (!ep || !ep->desc)
+		return;
+
 	/*
 	 * TDs are complete on short packet or when the completed TRB is the
 	 * last TRB in the TD (the CHAIN bit is unset).
@@ -2678,7 +2682,7 @@ static void tegra_xudc_handle_transfer_completion(struct tegra_xudc *xudc,
 
 		tegra_xudc_req_done(ep, req, 0);
 
-		if (ep->desc && usb_endpoint_xfer_control(ep->desc))
+		if (usb_endpoint_xfer_control(ep->desc))
 			tegra_xudc_ep0_req_done(xudc);
 
 		/*
@@ -2694,8 +2698,7 @@ static void tegra_xudc_handle_transfer_completion(struct tegra_xudc *xudc,
 		dev_warn(xudc->dev, "transfer event on dequeued request\n");
 	}
 
-	if (ep->desc)
-		tegra_xudc_ep_kick_queue(ep);
+	tegra_xudc_ep_kick_queue(ep);
 }
 
 static void tegra_xudc_handle_transfer_event(struct tegra_xudc *xudc,
