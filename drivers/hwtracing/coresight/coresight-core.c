@@ -484,8 +484,10 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 			 * that need disabling. Disabling the path here
 			 * would mean we could disrupt an existing session.
 			 */
-			if (ret)
+			if (ret) {
+				coresight_disable_helpers(csdev, path);
 				goto out;
+			}
 			break;
 		case CORESIGHT_DEV_TYPE_SOURCE:
 			/* sources are enabled from either sysFS or Perf */
@@ -495,15 +497,17 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 			child = list_next_entry(nd, link)->csdev;
 			ret = coresight_enable_link(csdev, parent, child, source);
 			if (ret)
-				goto err;
+				goto err_disable_helpers;
 			break;
 		default:
-			goto err;
+			goto err_disable_helpers;
 		}
 	}
 
 out:
 	return ret;
+err_disable_helpers:
+	coresight_disable_helpers(csdev, path);
 err:
 	coresight_disable_path_from(path, nd);
 	goto out;
