@@ -4861,6 +4861,7 @@ static void _dwc2_hcd_endpoint_disable(struct usb_hcd *hcd,
  * routine.
  */
 static void _dwc2_hcd_endpoint_reset(struct usb_hcd *hcd,
+				     struct usb_device *udev,
 				     struct usb_host_endpoint *ep)
 {
 	struct dwc2_hsotg *hsotg = dwc2_hcd_to_hsotg(hcd);

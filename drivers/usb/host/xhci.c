@@ -3162,11 +3162,10 @@ done:
  * resume. A new vdev will be allocated later by xhci_discover_or_reset_device()
  */
 
-static void xhci_endpoint_reset(struct usb_hcd *hcd,
+static void xhci_endpoint_reset(struct usb_hcd *hcd, struct usb_device *udev,
 		struct usb_host_endpoint *host_ep)
 {
 	struct xhci_hcd *xhci;
-	struct usb_device *udev;
 	struct xhci_virt_device *vdev;
 	struct xhci_virt_ep *ep;
 	struct xhci_input_control_ctx *ctrl_ctx;
@@ -3176,7 +3175,12 @@ static void xhci_endpoint_reset(struct usb_hcd *hcd,
 	u32 ep_flag;
 	int err;
 
+	err = xhci_check_args(hcd, udev, host_ep, 1, true, __func__);
+	if (err <= 0)
+		return;
+
 	xhci = hcd_to_xhci(hcd);
+	vdev = xhci->devs[udev->slot_id];
 	ep_index = xhci_get_endpoint_index(&host_ep->desc);
 
 	/*
@@ -3186,27 +3190,12 @@ static void xhci_endpoint_reset(struct usb_hcd *hcd,
 	 */
 	if (usb_endpoint_xfer_control(&host_ep->desc) && ep_index == 0) {
 
-		udev = container_of(host_ep, struct usb_device, ep0);
-		if (udev->speed != USB_SPEED_FULL || !udev->slot_id)
-			return;
-
-		vdev = xhci->devs[udev->slot_id];
-		if (!vdev || vdev->udev != udev)
-			return;
-
-		xhci_check_ep0_maxpacket(xhci, vdev);
+		if (udev->speed == USB_SPEED_FULL)
+			xhci_check_ep0_maxpacket(xhci, vdev);
 
 		/* Nothing else should be done here for ep0 during ep reset */
 		return;
 	}
-
-	if (!host_ep->hcpriv)
-		return;
-	udev = (struct usb_device *) host_ep->hcpriv;
-	vdev = xhci->devs[udev->slot_id];
-
-	if (!udev->slot_id || !vdev)
-		return;
 
 	ep = &vdev->eps[ep_index];
 

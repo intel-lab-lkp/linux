@@ -304,7 +304,7 @@ struct hc_driver {
 
 	/* (optional) reset any endpoint state such as sequence number
 	   and current window */
-	void	(*endpoint_reset)(struct usb_hcd *hcd,
+	void	(*endpoint_reset)(struct usb_hcd *hcd, struct usb_device *udev,
 			struct usb_host_endpoint *ep);
 
 	/* root hub support */

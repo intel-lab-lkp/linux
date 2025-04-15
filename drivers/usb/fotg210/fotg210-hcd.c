@@ -5426,7 +5426,7 @@ done:
 	spin_unlock_irqrestore(&fotg210->lock, flags);
 }
 
-static void fotg210_endpoint_reset(struct usb_hcd *hcd,
+static void fotg210_endpoint_reset(struct usb_hcd *hcd, struct usb_device *dev,
 		struct usb_host_endpoint *ep)
 {
 	struct fotg210_hcd *fotg210 = hcd_to_fotg210(hcd);
