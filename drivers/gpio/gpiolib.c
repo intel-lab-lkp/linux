@@ -916,14 +916,12 @@ static void machine_gpiochip_add(struct gpio_chip *gc)
 {
 	struct gpiod_hog *hog;
 
-	mutex_lock(&gpio_machine_hogs_mutex);
+	guard(mutex)(&gpio_machine_hogs_mutex);
 
 	list_for_each_entry(hog, &gpio_machine_hogs, list) {
 		if (!strcmp(gc->label, hog->chip_label))
 			gpiochip_machine_hog(gc, hog);
 	}
-
-	mutex_unlock(&gpio_machine_hogs_mutex);
 }
 
 static void gpiochip_setup_devs(void)
@@ -4432,7 +4430,7 @@ void gpiod_add_hogs(struct gpiod_hog *hogs)
 {
 	struct gpiod_hog *hog;
 
-	mutex_lock(&gpio_machine_hogs_mutex);
+	guard(mutex)(&gpio_machine_hogs_mutex);
 
 	for (hog = &hogs[0]; hog->chip_label; hog++) {
 		list_add_tail(&hog->list, &gpio_machine_hogs);
@@ -4446,8 +4444,6 @@ void gpiod_add_hogs(struct gpiod_hog *hogs)
 		if (gdev)
 			gpiochip_machine_hog(gpio_device_get_chip(gdev), hog);
 	}
-
-	mutex_unlock(&gpio_machine_hogs_mutex);
 }
 EXPORT_SYMBOL_GPL(gpiod_add_hogs);
 
@@ -4455,10 +4451,10 @@ void gpiod_remove_hogs(struct gpiod_hog *hogs)
 {
 	struct gpiod_hog *hog;
 
-	mutex_lock(&gpio_machine_hogs_mutex);
+	guard(mutex)(&gpio_machine_hogs_mutex);
+
 	for (hog = &hogs[0]; hog->chip_label; hog++)
 		list_del(&hog->list);
-	mutex_unlock(&gpio_machine_hogs_mutex);
 }
 EXPORT_SYMBOL_GPL(gpiod_remove_hogs);
 
