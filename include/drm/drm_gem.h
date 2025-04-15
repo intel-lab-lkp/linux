@@ -577,6 +577,21 @@ static inline bool drm_gem_object_is_shared_for_memory_stats(struct drm_gem_obje
 }
 
 /**
+ * drm_gem_owns_dma_buf() - Tests if GEM object backs a DMA-buffer object
+ * @obj: the GEM object
+ * @obj: the DMA buffer
+ *
+ * Returns:
+ * True if the DMA buffer refers to the GEM object's buffer.
+ */
+static inline bool drm_gem_owns_dma_buf(const struct drm_gem_object *obj,
+					const struct dma_buf *dma_buf)
+{
+	/* The dma-buf's priv field points to the original GEM object. */
+	return dma_buf->priv == obj;
+}
+
+/**
  * drm_gem_is_imported() - Tests if GEM object's buffer has been imported
  * @obj: the GEM object
  *
@@ -585,8 +600,15 @@ static inline bool drm_gem_object_is_shared_for_memory_stats(struct drm_gem_obje
  */
 static inline bool drm_gem_is_imported(const struct drm_gem_object *obj)
 {
-	/* The dma-buf's priv field points to the original GEM object. */
-	return obj->dma_buf && (obj->dma_buf->priv != obj);
+	const struct dma_buf *dma_buf = NULL;
+
+	if (!obj->import_attach)
+		return false;
+
+	dma_buf = obj->import_attach->dmabuf;
+
+	/* Warn if we somehow reimported our own buffer. */
+	return !drm_WARN_ON_ONCE(obj->dev, !dma_buf || drm_gem_owns_dma_buf(obj, dma_buf));
 }
 
 #ifdef CONFIG_LOCKDEP
