@@ -4088,6 +4088,13 @@
 			/sys/module/printk/parameters/console_suspend) to
 			turn on/off it dynamically.
 
+	nodebugmon
+			[HW,ARM64] Disable debug monitor
+			Disables the debug monitor exception handling on the platform
+			regardless whether breakpoints and watchpoints are programmed
+			or not. This prevents debug exceptions from being enabled via
+			MDSCR_EL1 register.
+
 	no_debug_objects
 			[KNL,EARLY] Disable object debugging
 
