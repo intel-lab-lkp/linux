@@ -249,22 +249,53 @@ static void init_space_info(struct btrfs_fs_info *info,
 	INIT_LIST_HEAD(&space_info->priority_tickets);
 	space_info->clamp = 1;
 	btrfs_update_space_info_chunk_size(space_info, calc_chunk_size(info, flags));
+	space_info->subgroup_id = SUB_GROUP_PRIMARY;
 
 	if (btrfs_is_zoned(info))
 		space_info->bg_reclaim_threshold = BTRFS_DEFAULT_ZONED_RECLAIM_THRESH;
+}
+
+static int create_space_info_sub_group(struct btrfs_space_info *parent, u64 flags,
+				       enum btrfs_space_info_sub_group id)
+{
+	struct btrfs_fs_info *fs_info = parent->fs_info;
+	struct btrfs_space_info *sub_space;
+
+	ASSERT(parent->subgroup_id == SUB_GROUP_PRIMARY);
+	ASSERT(id != SUB_GROUP_PRIMARY);
+
+	sub_space = kzalloc(sizeof(*sub_space), GFP_NOFS);
+	if (!sub_space)
+		return -ENOMEM;
+
+	init_space_info(fs_info, sub_space, flags);
+	parent->sub_group[id] = sub_space;
+	sub_space->parent = parent;
+	sub_space->subgroup_id = id;
+
+	return btrfs_sysfs_add_space_info_type(fs_info, sub_space);
 }
 
 static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 {
 
 	struct btrfs_space_info *space_info;
-	int ret;
+	int ret = 0;
 
 	space_info = kzalloc(sizeof(*space_info), GFP_NOFS);
 	if (!space_info)
 		return -ENOMEM;
 
 	init_space_info(info, space_info, flags);
+
+	if (btrfs_is_zoned(info)) {
+		if (flags & BTRFS_BLOCK_GROUP_DATA)
+			ret = create_space_info_sub_group(space_info, flags,
+							  SUB_GROUP_DATA_RELOC);
+		if (ret == -ENOMEM)
+			return ret;
+		ASSERT(!ret);
+	}
 
 	ret = btrfs_sysfs_add_space_info_type(info, space_info);
 	if (ret)
@@ -561,8 +592,9 @@ static void __btrfs_dump_space_info(const struct btrfs_fs_info *fs_info,
 	lockdep_assert_held(&info->lock);
 
 	/* The free space could be negative in case of overcommit */
-	btrfs_info(fs_info, "space_info %s has %lld free, is %sfull",
-		   flag_str,
+	btrfs_info(fs_info,
+		   "space_info %s (sub-group id %d) has %lld free, is %sfull",
+		   flag_str, info->subgroup_id,
 		   (s64)(info->total_bytes - btrfs_space_info_used(info, true)),
 		   info->full ? "" : "not ");
 	btrfs_info(fs_info,
