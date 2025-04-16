@@ -418,6 +418,12 @@ void btrfs_init_root_block_rsv(struct btrfs_root *root)
 	case BTRFS_CHUNK_TREE_OBJECTID:
 		root->block_rsv = &fs_info->chunk_block_rsv;
 		break;
+	case BTRFS_TREE_LOG_OBJECTID:
+		if (btrfs_is_zoned(fs_info))
+			root->block_rsv = &fs_info->treelog_rsv;
+		else
+			root->block_rsv = NULL;
+		break;
 	default:
 		root->block_rsv = NULL;
 		break;
@@ -437,6 +443,12 @@ void btrfs_init_global_block_rsv(struct btrfs_fs_info *fs_info)
 	fs_info->empty_block_rsv.space_info = space_info;
 	fs_info->delayed_block_rsv.space_info = space_info;
 	fs_info->delayed_refs_rsv.space_info = space_info;
+
+	/* The treelog_rsv uses a dedicated space_info on the zoned mode. */
+	if (!btrfs_is_zoned(fs_info))
+		fs_info->treelog_rsv.space_info = space_info;
+	else
+		fs_info->treelog_rsv.space_info = space_info->sub_group[SUB_GROUP_METADATA_TREELOG];
 
 	btrfs_update_global_block_rsv(fs_info);
 }
