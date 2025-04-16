@@ -4216,8 +4216,7 @@ static void hidpp_connect_event(struct work_struct *work)
 	if (hidpp->name == hdev->name && hidpp->protocol_major >= 2) {
 		name = hidpp_get_device_name(hidpp);
 		if (name) {
-			devm_name = devm_kasprintf(&hdev->dev, GFP_KERNEL,
-						   "%s", name);
+			devm_name = devm_kstrdup(&hdev->dev, name, GFP_KERNEL);
 			kfree(name);
 			if (!devm_name)
 				return;
