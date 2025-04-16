@@ -202,6 +202,11 @@ struct qfq_sched {
  */
 enum update_reason {enqueue, requeue};
 
+static bool cl_is_initialised(struct qfq_class *cl)
+{
+	return !list_empty(&cl->alist);
+}
+
 static struct qfq_class *qfq_find_class(struct Qdisc *sch, u32 classid)
 {
 	struct qfq_sched *q = qdisc_priv(sch);
@@ -1260,6 +1265,9 @@ static int qfq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		    == cl && cl->deficit < len)
 			list_move_tail(&cl->alist, &agg->active);
 
+		return err;
+	/* cater for reentrant call */
+	} else if (cl_is_initialised(cl)) {
 		return err;
 	}
 
