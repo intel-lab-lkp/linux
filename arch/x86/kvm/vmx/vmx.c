@@ -2194,6 +2194,17 @@ static u64 vmx_get_supported_debugctl(struct kvm_vcpu *vcpu, bool host_initiated
 	return debugctl;
 }
 
+static u64 vmx_get_host_preserved_debugctl(struct kvm_vcpu *vcpu)
+{
+	/*
+	 * Bits of host's DEBUGCTL that we should preserve while the guest is
+	 * running.
+	 *
+	 * Some of those bits might still be emulated for the guest own use.
+	 */
+	return DEBUGCTLMSR_FREEZE_IN_SMM;
+}
+
 u64 vmx_get_guest_debugctl(struct kvm_vcpu *vcpu)
 {
 	return to_vmx(vcpu)->msr_ia32_debugctl;
@@ -2202,9 +2213,11 @@ u64 vmx_get_guest_debugctl(struct kvm_vcpu *vcpu)
 static void __vmx_set_guest_debugctl(struct kvm_vcpu *vcpu, u64 data)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
+	u64 host_mask = vmx_get_host_preserved_debugctl(vcpu);
 
 	vmx->msr_ia32_debugctl = data;
-	vmcs_write64(GUEST_IA32_DEBUGCTL, data);
+	vmcs_write64(GUEST_IA32_DEBUGCTL,
+		     (vcpu->arch.host_debugctl & host_mask) | (data & ~host_mask));
 }
 
 bool vmx_set_guest_debugctl(struct kvm_vcpu *vcpu, u64 data, bool host_initiated)
@@ -2231,6 +2244,7 @@ bool vmx_set_guest_debugctl(struct kvm_vcpu *vcpu, u64 data, bool host_initiated
 	__vmx_set_guest_debugctl(vcpu, data);
 	return true;
 }
+
 
 /*
  * Writes msr value into the appropriate "register".
@@ -7349,6 +7363,7 @@ fastpath_t vmx_vcpu_run(struct kvm_vcpu *vcpu, bool force_immediate_exit)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	unsigned long cr3, cr4;
+	u64 old_debugctl;
 
 	/* Record the guest's net vcpu time for enforced NMI injections. */
 	if (unlikely(!enable_vnmi &&
@@ -7378,6 +7393,17 @@ fastpath_t vmx_vcpu_run(struct kvm_vcpu *vcpu, bool force_immediate_exit)
 		vmx->ple_window_dirty = false;
 		vmcs_write32(PLE_WINDOW, vmx->ple_window);
 	}
+
+	old_debugctl = vcpu->arch.host_debugctl;
+	vcpu->arch.host_debugctl = get_debugctlmsr();
+
+	/*
+	 * In case the host DEBUGCTL had changed since the last time we
+	 * read it, update the guest's GUEST_IA32_DEBUGCTL with
+	 * the host's bits.
+	 */
+	if (old_debugctl != vcpu->arch.host_debugctl)
+		__vmx_set_guest_debugctl(vcpu, vmx->msr_ia32_debugctl);
 
 	/*
 	 * We did this in prepare_switch_to_guest, because it needs to
