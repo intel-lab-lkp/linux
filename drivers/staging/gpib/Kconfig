@@ -41,10 +41,11 @@ config GPIB_AGILENT_82357A
 	select GPIB_COMMON
 	depends on USB
 	help
-	  Enable support for Agilent/Keysight 82357x USB dongles.
+	  Enable support for the Agilent/Keysight 82357A and 82357B USB-to-GPIB adapters.
+	  This device allows GPIB instruments to be controlled over a USB connection.
 
-	  To compile this driver as a module, choose M here: the module will be
-	  called agilent_82357a.
+	  To compile this driver as a module, choose M here. The resulting module will be
+	  named agilent_82357a.
 
 config GPIB_CEC_PCI
 	tristate "CEC PCI board"
