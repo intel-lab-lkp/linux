@@ -16,7 +16,11 @@ extern unsigned long alloc_tag_ref_mask;
 extern int alloc_tag_ref_offs;
 extern struct alloc_tag_kernel_section kernel_tags;
 
+#ifdef CONFIG_MEM_ALLOC_PROFILING_COMPRESSED_ENABLED_BY_DEFAULT
+DECLARE_STATIC_KEY_TRUE(mem_profiling_compressed);
+#else
 DECLARE_STATIC_KEY_FALSE(mem_profiling_compressed);
+#endif
 
 typedef u16	pgalloc_tag_idx;
 

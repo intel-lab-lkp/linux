@@ -1028,6 +1028,11 @@ config MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT
 	default y
 	depends on MEM_ALLOC_PROFILING
 
+config MEM_ALLOC_PROFILING_COMPRESSED_ENABLED_BY_DEFAULT
+	bool "store page allocation tag references in the page flags by default"
+	default y
+	depends on MEM_ALLOC_PROFILING
+
 config MEM_ALLOC_PROFILING_DEBUG
 	bool "Memory allocation profiler debugging"
 	default n

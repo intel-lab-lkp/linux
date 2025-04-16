@@ -31,7 +31,11 @@ DEFINE_STATIC_KEY_MAYBE(CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT,
 			mem_alloc_profiling_key);
 EXPORT_SYMBOL(mem_alloc_profiling_key);
 
+#ifdef CONFIG_MEM_ALLOC_PROFILING_COMPRESSED_ENABLED_BY_DEFAULT
+DEFINE_STATIC_KEY_TRUE(mem_profiling_compressed);
+#else
 DEFINE_STATIC_KEY_FALSE(mem_profiling_compressed);
+#endif
 
 struct alloc_tag_kernel_section kernel_tags = { NULL, 0 };
 unsigned long alloc_tag_ref_mask;
