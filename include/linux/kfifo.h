@@ -589,7 +589,7 @@ __kfifo_uint_must_check_helper( \
  * @buf: pointer to the storage buffer
  * @n: max. number of elements to get
  *
- * This macro gets some data from the fifo and returns the numbers of elements
+ * This macro gets some data from the fifo and returns the number of elements
  * copied.
  *
  * Note that with only one concurrent reader and one concurrent
@@ -616,7 +616,7 @@ __kfifo_uint_must_check_helper( \
  * @n: max. number of elements to get
  * @lock: pointer to the spinlock to use for locking
  *
- * This macro gets the data from the fifo and returns the numbers of elements
+ * This macro gets the data from the fifo and returns the number of elements
  * copied.
  */
 #define	kfifo_out_spinlocked(fifo, buf, n, lock) \
@@ -822,7 +822,7 @@ __kfifo_int_must_check_helper( \
  * @buf: pointer to the storage buffer
  * @n: max. number of elements to get
  *
- * This macro gets the data from the fifo and returns the numbers of elements
+ * This macro gets the data from the fifo and returns the number of elements
  * copied. The data is not removed from the fifo.
  *
  * Note that with only one concurrent reader and one concurrent
@@ -850,7 +850,7 @@ __kfifo_uint_must_check_helper( \
  *
  * This macro obtains the offset (tail) to the available data in the fifo
  * buffer and returns the
- * numbers of elements available. It returns the available count till the end
+ * number of elements available. It returns the available count till the end
  * of data or till the end of the buffer. So that it can be used for linear
  * data processing (like memcpy() of (@fifo->data + @tail) with count
  * returned).
@@ -879,7 +879,7 @@ __kfifo_uint_must_check_helper( \
  * @n: max. number of elements to point at
  *
  * Similarly to kfifo_out_linear(), this macro obtains the pointer to the
- * available data in the fifo buffer and returns the numbers of elements
+ * available data in the fifo buffer and returns the number of elements
  * available. It returns the available count till the end of available data or
  * till the end of the buffer. So that it can be used for linear data
  * processing (like memcpy() of @ptr with count returned).
