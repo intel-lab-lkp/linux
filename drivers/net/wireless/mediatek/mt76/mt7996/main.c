@@ -391,25 +391,60 @@ void mt7996_vif_link_remove(struct mt76_phy *mphy, struct ieee80211_vif *vif,
 static void mt7996_phy_set_rxfilter(struct mt7996_phy *phy)
 {
 	struct mt7996_dev *dev = phy->dev;
-	u32 ctl_flags = MT_WF_RFCR1_DROP_ACK |
-			MT_WF_RFCR1_DROP_BF_POLL |
-			MT_WF_RFCR1_DROP_BA |
-			MT_WF_RFCR1_DROP_CFEND |
-			MT_WF_RFCR1_DROP_CFACK;
-	u32 filter = phy->rxfilter;
+	u32 supported_flags = 0;
 
-	if (filter & MT_WF_RFCR_DROP_OTHER_UC) {
-		filter |= MT_WF_RFCR_DROP_CTS |
-			  MT_WF_RFCR_DROP_RTS |
-			  MT_WF_RFCR_DROP_CTL_RSV |
-			  MT_WF_RFCR_DROP_FCSFAIL;
-	}
+	/* Initially reset the filter */
+	phy->rxfilter.cr = 0;
+	phy->rxfilter.cr1 = 0;
 
-	mt76_wr(dev, MT_WF_RFCR(phy->mt76->band_idx), filter);
-	if (filter & MT_WF_RFCR_DROP_CTL_RSV)
-		mt76_set(dev, MT_WF_RFCR1(phy->mt76->band_idx), ctl_flags);
-	else
-		mt76_clear(dev, MT_WF_RFCR1(phy->mt76->band_idx), ctl_flags);
+	/* The following HW flags should never be set here:
+	 * MT_WF_RFCR_DROP_OTHER_BSS
+	 * MT_WF_RFCR_DROP_OTHER_BEACON
+	 * MT_WF_RFCR_DROP_FRAME_REPORT
+	 * MT_WF_RFCR_DROP_PROBEREQ
+	 * MT_WF_RFCR_DROP_MCAST_FILTERED
+	 * MT_WF_RFCR_DROP_MCAST
+	 * MT_WF_RFCR_DROP_BCAST
+	 * MT_WF_RFCR_DROP_DUPLICATE
+	 * MT_WF_RFCR_DROP_A2_BSSID
+	 * MT_WF_RFCR_DROP_UNWANTED_CTL
+	 * MT_WF_RFCR_DROP_STBC_MULTI
+	 */
+
+	supported_flags |= FIF_OTHER_BSS;
+	if (!(phy->mac80211_rxfilter_flags & FIF_OTHER_BSS))
+		phy->rxfilter.cr |= MT_WF_RFCR_DROP_OTHER_TIM |
+				    MT_WF_RFCR_DROP_A3_MAC |
+				    MT_WF_RFCR_DROP_A3_BSSID;
+
+	supported_flags |= FIF_FCSFAIL;
+	if (!(phy->mac80211_rxfilter_flags & FIF_FCSFAIL))
+		phy->rxfilter.cr |= MT_WF_RFCR_DROP_FCSFAIL;
+
+	supported_flags |= FIF_CONTROL;
+	if (!(phy->mac80211_rxfilter_flags & FIF_CONTROL))
+		phy->rxfilter.cr |= MT_WF_RFCR_DROP_CTS |
+				    MT_WF_RFCR_DROP_RTS |
+				    MT_WF_RFCR_DROP_CTL_RSV;
+
+	if (!phy->monitor_enabled)
+		phy->rxfilter.cr |= MT_WF_RFCR_DROP_CTS |
+				    MT_WF_RFCR_DROP_RTS |
+				    MT_WF_RFCR_DROP_CTL_RSV |
+				    MT_WF_RFCR_DROP_FCSFAIL |
+				    MT_WF_RFCR_DROP_OTHER_UC;
+
+	if (!((phy->mac80211_rxfilter_flags & FIF_CONTROL) || phy->monitor_enabled))
+		phy->rxfilter.cr1 |= MT_WF_RFCR1_DROP_ACK |
+				     MT_WF_RFCR1_DROP_BF_POLL |
+				     MT_WF_RFCR1_DROP_BA |
+				     MT_WF_RFCR1_DROP_CFEND |
+				     MT_WF_RFCR1_DROP_CFACK;
+
+	phy->mac80211_rxfilter_flags &= supported_flags;
+
+	mt76_wr(dev, MT_WF_RFCR(phy->mt76->band_idx), phy->rxfilter.cr);
+	mt76_wr(dev, MT_WF_RFCR1(phy->mt76->band_idx), phy->rxfilter.cr1);
 }
 
 static void mt7996_set_monitor(struct mt7996_phy *phy, bool enabled)
@@ -419,13 +454,10 @@ static void mt7996_set_monitor(struct mt7996_phy *phy, bool enabled)
 	if (!phy)
 		return;
 
-	if (enabled == !(phy->rxfilter & MT_WF_RFCR_DROP_OTHER_UC))
+	if (enabled == phy->monitor_enabled)
 		return;
 
-	if (!enabled)
-		phy->rxfilter |= MT_WF_RFCR_DROP_OTHER_UC;
-	else
-		phy->rxfilter &= ~MT_WF_RFCR_DROP_OTHER_UC;
+	phy->monitor_enabled = enabled;
 
 	mt76_rmw_field(dev, MT_DMA_DCR0(phy->mt76->band_idx),
 		       MT_DMA_DCR0_RXD_G5_EN, enabled);
@@ -620,45 +652,17 @@ static void mt7996_configure_filter(struct ieee80211_hw *hw,
 {
 	struct mt7996_dev *dev = mt7996_hw_dev(hw);
 	struct mt7996_phy *phy;
-	u32 filter_mask = 0, filter_set = 0;
 	u32 flags = 0;
-
-#define MT76_FILTER(_flag, _hw) do {				\
-		flags |= *total_flags & FIF_##_flag;		\
-		filter_mask |= (_hw);				\
-		filter_set |= !(flags & FIF_##_flag) * (_hw);	\
-	} while (0)
 
 	mutex_lock(&dev->mt76.mutex);
 
-	MT76_FILTER(OTHER_BSS, MT_WF_RFCR_DROP_OTHER_TIM |
-			       MT_WF_RFCR_DROP_A3_MAC |
-			       MT_WF_RFCR_DROP_A3_BSSID);
-
-	MT76_FILTER(FCSFAIL, MT_WF_RFCR_DROP_FCSFAIL);
-
-	MT76_FILTER(CONTROL, MT_WF_RFCR_DROP_CTS |
-			     MT_WF_RFCR_DROP_RTS |
-			     MT_WF_RFCR_DROP_CTL_RSV);
+	mt7996_for_each_phy(dev, phy) {
+		phy->mac80211_rxfilter_flags = *total_flags;
+		mt7996_phy_set_rxfilter(phy);
+		flags |= phy->mac80211_rxfilter_flags;
+	}
 
 	*total_flags = flags;
-
-	mt7996_for_each_phy(dev, phy) {
-		phy->rxfilter &= ~(MT_WF_RFCR_DROP_OTHER_BSS |
-				   MT_WF_RFCR_DROP_OTHER_BEACON |
-				   MT_WF_RFCR_DROP_FRAME_REPORT |
-				   MT_WF_RFCR_DROP_PROBEREQ |
-				   MT_WF_RFCR_DROP_MCAST_FILTERED |
-				   MT_WF_RFCR_DROP_MCAST |
-				   MT_WF_RFCR_DROP_BCAST |
-				   MT_WF_RFCR_DROP_DUPLICATE |
-				   MT_WF_RFCR_DROP_A2_BSSID |
-				   MT_WF_RFCR_DROP_UNWANTED_CTL |
-				   MT_WF_RFCR_DROP_STBC_MULTI |
-				   filter_mask);
-		phy->rxfilter |= filter_set;
-		mt7996_phy_set_rxfilter(phy);
-	}
 
 	mutex_unlock(&dev->mt76.mutex);
 }
