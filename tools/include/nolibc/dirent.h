@@ -58,6 +58,7 @@ int closedir(DIR *dirp)
 static __attribute__((unused))
 int readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
 {
+	__attribute__((aligned(__alignof__(struct linux_dirent64))))
 	char buf[sizeof(struct linux_dirent64) + NAME_MAX + 1];
 	struct linux_dirent64 *ldir = (void *)buf;
 	intptr_t i = (intptr_t)dirp;
