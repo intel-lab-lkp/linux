@@ -479,7 +479,7 @@ static void agilent_82350b_return_to_local(struct gpib_board *board)
 
 static int agilent_82350b_allocate_private(struct gpib_board *board)
 {
-	board->private_data = kzalloc(sizeof(struct agilent_82350b_priv), GFP_KERNEL);
+	board->private_data = kzalloc(sizeof(struct * board->private_data), GFP_KERNEL);
 	if (!board->private_data)
 		return -ENOMEM;
 	return 0;
