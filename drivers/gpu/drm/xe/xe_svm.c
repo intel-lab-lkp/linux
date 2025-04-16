@@ -780,6 +780,7 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
 		.check_pages_threshold = IS_DGFX(vm->xe) &&
 			IS_ENABLED(CONFIG_DRM_XE_DEVMEM_MIRROR) ? SZ_64K : 0,
 		.vram_only = atomic,
+		.timeslice_ms = atomic ? 10 : 0,
 	};
 	struct xe_svm_range *range;
 	struct drm_gpusvm_range *r;
