@@ -27,6 +27,8 @@ struct gpiochip_fwd {
 	unsigned long tmp[];		/* values and descs for multiple ops */
 };
 
+int gpio_fwd_request(struct gpio_chip *chip, unsigned int offset);
+
 int gpio_fwd_get_direction(struct gpio_chip *chip, unsigned int offset);
 
 int gpio_fwd_direction_input(struct gpio_chip *chip, unsigned int offset);

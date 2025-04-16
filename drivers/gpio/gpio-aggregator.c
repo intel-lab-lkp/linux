@@ -260,6 +260,14 @@ static void __exit gpio_aggregator_remove_all(void)
 
 #define fwd_tmp_size(ngpios)	(BITS_TO_LONGS((ngpios)) + (ngpios))
 
+int gpio_fwd_request(struct gpio_chip *chip, unsigned int offset)
+{
+	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
+
+	return fwd->descs[offset] ? 0 : -ENODEV;
+}
+EXPORT_SYMBOL_NS_GPL(gpio_fwd_request, "GPIO_FORWARDER");
+
 int gpio_fwd_get_direction(struct gpio_chip *chip, unsigned int offset)
 {
 	struct gpiochip_fwd *fwd = gpiochip_get_data(chip);
@@ -513,6 +521,7 @@ devm_gpio_fwd_alloc(struct device *dev, unsigned int ngpios)
 	chip->label = label;
 	chip->parent = dev;
 	chip->owner = THIS_MODULE;
+	chip->request = gpio_fwd_request;
 	chip->get_direction = gpio_fwd_get_direction;
 	chip->direction_input = gpio_fwd_direction_input;
 	chip->direction_output = gpio_fwd_direction_output;
@@ -531,7 +540,6 @@ EXPORT_SYMBOL_NS_GPL(devm_gpio_fwd_alloc, "GPIO_FORWARDER");
 int gpio_fwd_add_gpio_desc(struct gpiochip_fwd *fwd, struct gpio_desc *desc,
 			   unsigned int offset)
 {
-	struct gpio_chip *parent = gpiod_to_chip(desc);
 	struct gpio_chip *chip = &fwd->chip;
 
 	if (offset > chip->ngpio)
@@ -543,14 +551,9 @@ int gpio_fwd_add_gpio_desc(struct gpiochip_fwd *fwd, struct gpio_desc *desc,
 	/*
 	 * If any of the GPIO lines are sleeping, then the entire forwarder
 	 * will be sleeping.
-	 * If any of the chips support .set_config(), then the forwarder will
-	 * support setting configs.
 	 */
 	if (gpiod_cansleep(desc))
 		chip->can_sleep = true;
-
-	if (parent && parent->set_config)
-		chip->set_config = gpio_fwd_set_config;
 
 	fwd->descs[offset] = desc;
 
@@ -564,7 +567,19 @@ EXPORT_SYMBOL_NS_GPL(gpio_fwd_add_gpio_desc, "GPIO_FORWARDER");
 int gpio_fwd_register(struct gpiochip_fwd *fwd)
 {
 	struct gpio_chip *chip = &fwd->chip;
+	unsigned int ndescs = 0, i;
 	int error;
+
+	for (i = 0; i < chip->ngpio; i++)
+		if (fwd->descs[i])
+			ndescs++;
+
+	/*
+	 * Some gpio_desc were not registers. They will be registered at runtime
+	 * but we have to suppose they can sleep.
+	 */
+	if (ndescs != chip->ngpio)
+		chip->can_sleep = true;
 
 	if (chip->can_sleep)
 		mutex_init(&fwd->mlock);
