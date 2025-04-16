@@ -9,12 +9,15 @@
 #include <linux/acpi.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_graph.h>
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_usbpd_notify.h>
 #include <linux/platform_device.h>
 #include <linux/usb/pd_vdo.h>
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_tbt.h>
+
+#include <drm/drm_bridge.h>
 
 #include "cros_ec_typec.h"
 #include "cros_typec_vdm.h"
@@ -337,6 +340,9 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	u32 port_num = 0;
 
 	nports = device_get_child_node_count(dev);
+	/* Don't count any 'ports' child node */
+	if (of_graph_is_present(dev->of_node))
+		nports--;
 	if (nports == 0) {
 		dev_err(dev, "No port entries found.\n");
 		return -ENODEV;
@@ -350,6 +356,10 @@ static int cros_typec_init_ports(struct cros_typec_data *typec)
 	/* DT uses "reg" to specify port number. */
 	port_prop = dev->of_node ? "reg" : "port-number";
 	device_for_each_child_node(dev, fwnode) {
+		/* An OF graph isn't a connector */
+		if (fwnode_name_eq(fwnode, "ports"))
+			continue;
+
 		if (fwnode_property_read_u32(fwnode, port_prop, &port_num)) {
 			ret = -EINVAL;
 			dev_err(dev, "No port-number for port, aborting.\n");
@@ -415,6 +425,42 @@ unregister_ports:
 	fwnode_handle_put(fwnode);
 	cros_unregister_ports(typec);
 	return ret;
+}
+
+static int cros_typec_dp_bridge_attach(struct drm_bridge *bridge,
+				       enum drm_bridge_attach_flags flags)
+{
+	return flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR ? 0 : -EINVAL;
+}
+
+static const struct drm_bridge_funcs cros_typec_dp_bridge_funcs = {
+	.attach	= cros_typec_dp_bridge_attach,
+};
+
+static int cros_typec_init_dp_bridge(struct cros_typec_data *typec)
+{
+	struct device *dev = typec->dev;
+	struct cros_typec_dp_bridge *dp_bridge;
+	struct drm_bridge *bridge;
+	struct device_node *np = dev->of_node;
+
+	/* Not capable of DP altmode switching. Ignore. */
+	if (!of_graph_is_present(np))
+		return 0;
+
+	dp_bridge = devm_kzalloc(dev, sizeof(*dp_bridge), GFP_KERNEL);
+	if (!dp_bridge)
+		return -ENOMEM;
+	typec->dp_bridge = dp_bridge;
+
+	bridge = &dp_bridge->bridge;
+	bridge->funcs = &cros_typec_dp_bridge_funcs;
+	bridge->of_node = np;
+	bridge->type = DRM_MODE_CONNECTOR_DisplayPort;
+	if (!device_property_read_bool(dev, "no-hpd"))
+		bridge->ops |= DRM_BRIDGE_OP_HPD;
+
+	return devm_drm_bridge_add(dev, bridge);
 }
 
 static int cros_typec_usb_safe_state(struct cros_typec_port *port)
@@ -1275,6 +1321,10 @@ static int cros_typec_probe(struct platform_device *pdev)
 			 typec->num_ports, EC_USB_PD_MAX_PORTS);
 		typec->num_ports = EC_USB_PD_MAX_PORTS;
 	}
+
+	ret = cros_typec_init_dp_bridge(typec);
+	if (ret < 0)
+		return ret;
 
 	ret = cros_typec_init_ports(typec);
 	if (ret < 0)
