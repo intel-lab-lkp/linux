@@ -2154,7 +2154,7 @@ int vmx_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			msr_info->data = vmx->pt_desc.guest.addr_a[index / 2];
 		break;
 	case MSR_IA32_DEBUGCTLMSR:
-		msr_info->data = vmcs_read64(GUEST_IA32_DEBUGCTL);
+		msr_info->data = vmx_get_guest_debugctl(vcpu);
 		break;
 	default:
 	find_uret_msr:
@@ -2192,6 +2192,41 @@ static u64 vmx_get_supported_debugctl(struct kvm_vcpu *vcpu, bool host_initiated
 		debugctl |= DEBUGCTLMSR_LBR | DEBUGCTLMSR_FREEZE_LBRS_ON_PMI;
 
 	return debugctl;
+}
+
+u64 vmx_get_guest_debugctl(struct kvm_vcpu *vcpu)
+{
+	return vmcs_read64(GUEST_IA32_DEBUGCTL);
+}
+
+static void __vmx_set_guest_debugctl(struct kvm_vcpu *vcpu, u64 data)
+{
+	vmcs_write64(GUEST_IA32_DEBUGCTL, data);
+}
+
+bool vmx_set_guest_debugctl(struct kvm_vcpu *vcpu, u64 data, bool host_initiated)
+{
+	u64 invalid = data & ~vmx_get_supported_debugctl(vcpu, host_initiated);
+
+	if (invalid & (DEBUGCTLMSR_BTF|DEBUGCTLMSR_LBR)) {
+		kvm_pr_unimpl_wrmsr(vcpu, MSR_IA32_DEBUGCTLMSR, data);
+		data &= ~(DEBUGCTLMSR_BTF|DEBUGCTLMSR_LBR);
+		invalid &= ~(DEBUGCTLMSR_BTF|DEBUGCTLMSR_LBR);
+	}
+
+	if (invalid)
+		return false;
+
+	if (is_guest_mode(vcpu) && (get_vmcs12(vcpu)->vm_exit_controls &
+					VM_EXIT_SAVE_DEBUG_CONTROLS))
+		get_vmcs12(vcpu)->guest_ia32_debugctl = data;
+
+	if (intel_pmu_lbr_is_enabled(vcpu) && !to_vmx(vcpu)->lbr_desc.event &&
+	    (data & DEBUGCTLMSR_LBR))
+		intel_pmu_create_guest_lbr_event(vcpu);
+
+	__vmx_set_guest_debugctl(vcpu, data);
+	return true;
 }
 
 /*
@@ -2263,26 +2298,9 @@ int vmx_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		vmcs_writel(GUEST_SYSENTER_ESP, data);
 		break;
 	case MSR_IA32_DEBUGCTLMSR: {
-		u64 invalid;
-
-		invalid = data & ~vmx_get_supported_debugctl(vcpu, msr_info->host_initiated);
-		if (invalid & (DEBUGCTLMSR_BTF|DEBUGCTLMSR_LBR)) {
-			kvm_pr_unimpl_wrmsr(vcpu, msr_index, data);
-			data &= ~(DEBUGCTLMSR_BTF|DEBUGCTLMSR_LBR);
-			invalid &= ~(DEBUGCTLMSR_BTF|DEBUGCTLMSR_LBR);
-		}
-
-		if (invalid)
+		if (!vmx_set_guest_debugctl(vcpu, data, msr_info->host_initiated))
 			return 1;
 
-		if (is_guest_mode(vcpu) && get_vmcs12(vcpu)->vm_exit_controls &
-						VM_EXIT_SAVE_DEBUG_CONTROLS)
-			get_vmcs12(vcpu)->guest_ia32_debugctl = data;
-
-		vmcs_write64(GUEST_IA32_DEBUGCTL, data);
-		if (intel_pmu_lbr_is_enabled(vcpu) && !to_vmx(vcpu)->lbr_desc.event &&
-		    (data & DEBUGCTLMSR_LBR))
-			intel_pmu_create_guest_lbr_event(vcpu);
 		return 0;
 	}
 	case MSR_IA32_BNDCFGS:
@@ -4795,7 +4813,7 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 	vmcs_write32(GUEST_SYSENTER_CS, 0);
 	vmcs_writel(GUEST_SYSENTER_ESP, 0);
 	vmcs_writel(GUEST_SYSENTER_EIP, 0);
-	vmcs_write64(GUEST_IA32_DEBUGCTL, 0);
+	__vmx_set_guest_debugctl(&vmx->vcpu, 0);
 
 	if (cpu_has_vmx_tpr_shadow()) {
 		vmcs_write64(VIRTUAL_APIC_PAGE_ADDR, 0);
