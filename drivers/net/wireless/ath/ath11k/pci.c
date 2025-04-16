@@ -368,9 +368,12 @@ static void ath11k_pci_sw_reset(struct ath11k_base *ab, bool power_on)
 	}
 
 	ath11k_mhi_clear_vector(ab);
-	ath11k_pci_clear_dbg_registers(ab);
-	ath11k_pci_soc_global_reset(ab);
-	ath11k_mhi_set_mhictrl_reset(ab);
+
+	if (power_on) {
+		ath11k_pci_clear_dbg_registers(ab);
+		ath11k_pci_soc_global_reset(ab);
+		ath11k_mhi_set_mhictrl_reset(ab);
+	}
 }
 
 static void ath11k_pci_init_qmi_ce_config(struct ath11k_base *ab)
