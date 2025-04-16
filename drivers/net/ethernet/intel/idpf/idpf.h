@@ -248,7 +248,21 @@ struct idpf_port_stats {
 	u64_stats_t tx_busy;
 	u64_stats_t tx_drops;
 	u64_stats_t tx_dma_map_errs;
+	u64_stats_t tx_hwtstamp_skipped;
 	struct virtchnl2_vport_stats vport_stats;
+};
+
+/**
+ * struct idpf_tx_tstamp_stats - Tx timestamp statistics
+ * @tx_hwtstamp_lock: Lock to protect Tx tstamp stats
+ * @tx_hwtstamp_discarded: Number of Tx skbs discarded due to cached PHC time
+ *			   being too old to correctly extend timestamp
+ * @tx_hwtstamp_flushed: Number of Tx skbs flushed due to interface closed
+ */
+struct idpf_tx_tstamp_stats {
+	struct mutex tx_hwtstamp_lock;
+	u32 tx_hwtstamp_discarded;
+	u32 tx_hwtstamp_flushed;
 };
 
 /**
@@ -295,6 +309,9 @@ struct idpf_port_stats {
  * @link_up: True if link is up
  * @sw_marker_wq: workqueue for marker packets
  * @tx_tstamp_caps: Capabilities negotiated for Tx timestamping
+ * @tstamp_config: The Tx tstamp config
+ * @tstamp_task: Tx timestamping task
+ * @tstamp_stats: Tx timestamping statistics
  */
 struct idpf_vport {
 	u16 num_txq;
@@ -341,6 +358,9 @@ struct idpf_vport {
 	wait_queue_head_t sw_marker_wq;
 
 	struct idpf_ptp_vport_tx_tstamp_caps *tx_tstamp_caps;
+	struct kernel_hwtstamp_config tstamp_config;
+	struct work_struct tstamp_task;
+	struct idpf_tx_tstamp_stats tstamp_stats;
 };
 
 /**
