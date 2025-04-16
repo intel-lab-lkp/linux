@@ -9,6 +9,7 @@
 
 #include "stdint.h"
 #include "types.h"
+#include "fcntl.h"
 
 #include <linux/limits.h>
 
