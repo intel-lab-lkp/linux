@@ -5,6 +5,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/cpufeature.h>
+#include <linux/uaccess.h>
 #include <asm/simd.h>
 #include <asm/switch_to.h>
 
