@@ -117,12 +117,14 @@ do {								\
 	yyless(0);						\
 } while (0)
 
-static int sym(yyscan_t scanner, int config)
+static int sw(yyscan_t scanner, int config)
 {
 	YYSTYPE *yylval = parse_events_get_lval(scanner);
+	char *text = parse_events_get_text(scanner);
 
-	yylval->num = config;
-	return PE_VALUE_SYM_SW;
+	yylval->legacy_event.str = strdup(text);
+	yylval->legacy_event.num = config;
+	return PE_TERM_SW;
 }
 
 static int term(yyscan_t scanner, enum parse_events__term_type type)
@@ -138,8 +140,8 @@ static int hw(yyscan_t scanner, int config)
 	YYSTYPE *yylval = parse_events_get_lval(scanner);
 	char *text = parse_events_get_text(scanner);
 
-	yylval->hardware_event.str = strdup(text);
-	yylval->hardware_event.num = config;
+	yylval->legacy_event.str = strdup(text);
+	yylval->legacy_event.num = config;
 	return PE_TERM_HW;
 }
 
@@ -345,6 +347,18 @@ branch-instructions|branches			{ return hw(yyscanner, PERF_COUNT_HW_BRANCH_INSTR
 branch-misses					{ return hw(yyscanner, PERF_COUNT_HW_BRANCH_MISSES); }
 bus-cycles					{ return hw(yyscanner, PERF_COUNT_HW_BUS_CYCLES); }
 ref-cycles					{ return hw(yyscanner, PERF_COUNT_HW_REF_CPU_CYCLES); }
+cpu-clock					{ return sw(yyscanner, PERF_COUNT_SW_CPU_CLOCK); }
+task-clock					{ return sw(yyscanner, PERF_COUNT_SW_TASK_CLOCK); }
+page-faults|faults				{ return sw(yyscanner, PERF_COUNT_SW_PAGE_FAULTS); }
+minor-faults					{ return sw(yyscanner, PERF_COUNT_SW_PAGE_FAULTS_MIN); }
+major-faults					{ return sw(yyscanner, PERF_COUNT_SW_PAGE_FAULTS_MAJ); }
+context-switches|cs				{ return sw(yyscanner, PERF_COUNT_SW_CONTEXT_SWITCHES); }
+cpu-migrations|migrations			{ return sw(yyscanner, PERF_COUNT_SW_CPU_MIGRATIONS); }
+alignment-faults				{ return sw(yyscanner, PERF_COUNT_SW_ALIGNMENT_FAULTS); }
+emulation-faults				{ return sw(yyscanner, PERF_COUNT_SW_EMULATION_FAULTS); }
+dummy						{ return sw(yyscanner, PERF_COUNT_SW_DUMMY); }
+bpf-output					{ return sw(yyscanner, PERF_COUNT_SW_BPF_OUTPUT); }
+cgroup-switches					{ return sw(yyscanner, PERF_COUNT_SW_CGROUP_SWITCHES); }
 r{num_raw_hex}		{ return str(yyscanner, PE_RAW); }
 r0x{num_raw_hex}	{ return str(yyscanner, PE_RAW); }
 ,			{ return ','; }
@@ -400,18 +414,18 @@ branch-instructions|branches			{ return hw(yyscanner, PERF_COUNT_HW_BRANCH_INSTR
 branch-misses					{ return hw(yyscanner, PERF_COUNT_HW_BRANCH_MISSES); }
 bus-cycles					{ return hw(yyscanner, PERF_COUNT_HW_BUS_CYCLES); }
 ref-cycles					{ return hw(yyscanner, PERF_COUNT_HW_REF_CPU_CYCLES); }
-cpu-clock					{ return sym(yyscanner, PERF_COUNT_SW_CPU_CLOCK); }
-task-clock					{ return sym(yyscanner, PERF_COUNT_SW_TASK_CLOCK); }
-page-faults|faults				{ return sym(yyscanner, PERF_COUNT_SW_PAGE_FAULTS); }
-minor-faults					{ return sym(yyscanner, PERF_COUNT_SW_PAGE_FAULTS_MIN); }
-major-faults					{ return sym(yyscanner, PERF_COUNT_SW_PAGE_FAULTS_MAJ); }
-context-switches|cs				{ return sym(yyscanner, PERF_COUNT_SW_CONTEXT_SWITCHES); }
-cpu-migrations|migrations			{ return sym(yyscanner, PERF_COUNT_SW_CPU_MIGRATIONS); }
-alignment-faults				{ return sym(yyscanner, PERF_COUNT_SW_ALIGNMENT_FAULTS); }
-emulation-faults				{ return sym(yyscanner, PERF_COUNT_SW_EMULATION_FAULTS); }
-dummy						{ return sym(yyscanner, PERF_COUNT_SW_DUMMY); }
-bpf-output					{ return sym(yyscanner, PERF_COUNT_SW_BPF_OUTPUT); }
-cgroup-switches					{ return sym(yyscanner, PERF_COUNT_SW_CGROUP_SWITCHES); }
+cpu-clock					{ return sw(yyscanner, PERF_COUNT_SW_CPU_CLOCK); }
+task-clock					{ return sw(yyscanner, PERF_COUNT_SW_TASK_CLOCK); }
+page-faults|faults				{ return sw(yyscanner, PERF_COUNT_SW_PAGE_FAULTS); }
+minor-faults					{ return sw(yyscanner, PERF_COUNT_SW_PAGE_FAULTS_MIN); }
+major-faults					{ return sw(yyscanner, PERF_COUNT_SW_PAGE_FAULTS_MAJ); }
+context-switches|cs				{ return sw(yyscanner, PERF_COUNT_SW_CONTEXT_SWITCHES); }
+cpu-migrations|migrations			{ return sw(yyscanner, PERF_COUNT_SW_CPU_MIGRATIONS); }
+alignment-faults				{ return sw(yyscanner, PERF_COUNT_SW_ALIGNMENT_FAULTS); }
+emulation-faults				{ return sw(yyscanner, PERF_COUNT_SW_EMULATION_FAULTS); }
+dummy						{ return sw(yyscanner, PERF_COUNT_SW_DUMMY); }
+bpf-output					{ return sw(yyscanner, PERF_COUNT_SW_BPF_OUTPUT); }
+cgroup-switches					{ return sw(yyscanner, PERF_COUNT_SW_CGROUP_SWITCHES); }
 
 {lc_type}			{ return str(yyscanner, PE_LEGACY_CACHE); }
 {lc_type}-{lc_op_result}	{ return str(yyscanner, PE_LEGACY_CACHE); }

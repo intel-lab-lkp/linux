@@ -55,7 +55,7 @@ static void free_list_evsel(struct list_head* list_evsel)
 %}
 
 %token PE_START_EVENTS PE_START_TERMS
-%token PE_VALUE PE_VALUE_SYM_SW PE_TERM
+%token PE_VALUE PE_TERM
 %token PE_EVENT_NAME
 %token PE_RAW PE_NAME
 %token PE_MODIFIER_EVENT PE_MODIFIER_BP PE_BP_COLON PE_BP_SLASH
@@ -63,9 +63,8 @@ static void free_list_evsel(struct list_head* list_evsel)
 %token PE_PREFIX_MEM
 %token PE_ERROR
 %token PE_DRV_CFG_TERM
-%token PE_TERM_HW
+%token PE_TERM_HW PE_TERM_SW
 %type <num> PE_VALUE
-%type <num> PE_VALUE_SYM_SW
 %type <mod> PE_MODIFIER_EVENT
 %type <term_type> PE_TERM
 %type <str> PE_RAW
@@ -101,8 +100,9 @@ static void free_list_evsel(struct list_head* list_evsel)
 %destructor { free_list_evsel ($$); } <list_evsel>
 %type <tracepoint_name> tracepoint_name
 %destructor { free ($$.sys); free ($$.event); } <tracepoint_name>
-%type <hardware_event> PE_TERM_HW
-%destructor { free ($$.str); } <hardware_event>
+%type <legacy_event> PE_TERM_HW
+%type <legacy_event> PE_TERM_SW
+%destructor { free ($$.str); } <legacy_event>
 
 %union
 {
@@ -117,10 +117,10 @@ static void free_list_evsel(struct list_head* list_evsel)
 		char *sys;
 		char *event;
 	} tracepoint_name;
-	struct hardware_event {
+	struct legacy_event {
 		char *str;
 		u64 num;
-	} hardware_event;
+	} legacy_event;
 }
 %%
 
@@ -334,16 +334,17 @@ PE_TERM_HW sep_dc
 }
 
 event_legacy_symbol:
-PE_VALUE_SYM_SW '/' event_config '/'
+PE_TERM_SW '/' event_config '/'
 {
 	struct list_head *list;
 	int err;
 
+	free($1.str);
 	list = alloc_list();
 	if (!list)
 		YYNOMEM;
 	err = parse_events_add_numeric(_parse_state, list,
-				/*type=*/PERF_TYPE_SOFTWARE, /*config=*/$1,
+				/*type=*/PERF_TYPE_SOFTWARE, /*config=*/$1.num,
 				$3, /*wildcard=*/false);
 	parse_events_terms__delete($3);
 	if (err) {
@@ -353,16 +354,17 @@ PE_VALUE_SYM_SW '/' event_config '/'
 	$$ = list;
 }
 |
-PE_VALUE_SYM_SW sep_slash_slash_dc
+PE_TERM_SW sep_slash_slash_dc
 {
 	struct list_head *list;
 	int err;
 
+	free($1.str);
 	list = alloc_list();
 	if (!list)
 		YYNOMEM;
 	err = parse_events_add_numeric(_parse_state, list,
-				/*type=*/PERF_TYPE_SOFTWARE, /*config=*/$1,
+				/*type=*/PERF_TYPE_SOFTWARE, /*config=*/$1.num,
 				/*head_config=*/NULL, /*wildcard=*/false);
 	if (err)
 		PE_ABORT(err);
@@ -615,6 +617,11 @@ PE_TERM_HW
 {
 	$$ = $1.str;
 }
+|
+PE_TERM_SW
+{
+	$$ = $1.str;
+}
 
 event_term:
 PE_RAW
@@ -686,6 +693,20 @@ PE_TERM_HW
 {
 	struct parse_events_term *term;
 	int err = parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_HARDWARE,
+					 $1.str, $1.num & 255, /*novalue=*/false,
+					 &@1, /*loc_val=*/NULL);
+
+	if (err) {
+		free($1.str);
+		PE_ABORT(err);
+	}
+	$$ = term;
+}
+|
+PE_TERM_SW
+{
+	struct parse_events_term *term;
+	int err = parse_events_term__num(&term, PARSE_EVENTS__TERM_TYPE_SOFTWARE,
 					 $1.str, $1.num & 255, /*novalue=*/false,
 					 &@1, /*loc_val=*/NULL);
 
