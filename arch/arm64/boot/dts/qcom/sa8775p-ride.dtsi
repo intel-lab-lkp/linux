@@ -714,11 +714,6 @@
 		};
 	};
 
-	qup_uart10_default: qup-uart10-state {
-		pins = "gpio46", "gpio47";
-		function = "qup1_se3";
-	};
-
 	qup_spi16_default: qup-spi16-state {
 		pins = "gpio86", "gpio87", "gpio88", "gpio89";
 		function = "qup2_se2";
@@ -919,8 +914,6 @@
 
 &uart10 {
 	compatible = "qcom,geni-debug-uart";
-	pinctrl-0 = <&qup_uart10_default>;
-	pinctrl-names = "default";
 	status = "okay";
 };
 
