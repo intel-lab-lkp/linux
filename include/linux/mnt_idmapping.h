@@ -140,22 +140,153 @@ static inline bool vfsgid_eq_kgid(vfsgid_t vfsgid, kgid_t kgid)
 #define AS_KUIDT(val) (kuid_t){ __vfsuid_val(val) }
 #define AS_KGIDT(val) (kgid_t){ __vfsgid_val(val) }
 
+/*
+ * Outside of this file vfs{g,u}id_t are always created from k{g,u}id_t,
+ * never from raw values. These are just internal helpers.
+ */
+#define VFSUIDT_INIT_RAW(val) (vfsuid_t){ val }
+#define VFSGIDT_INIT_RAW(val) (vfsgid_t){ val }
+
 int vfsgid_in_group_p(vfsgid_t vfsgid);
 
 struct mnt_idmap *mnt_idmap_get(struct mnt_idmap *idmap);
 void mnt_idmap_put(struct mnt_idmap *idmap);
 
-vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
-		     struct user_namespace *fs_userns, kuid_t kuid);
+/**
+ * make_vfsuid - map a filesystem kuid according to an idmapping
+ * @idmap: the mount's idmapping
+ * @fs_userns: the filesystem's idmapping
+ * @kuid : kuid to be mapped
+ *
+ * Take a @kuid and remap it from @fs_userns into @idmap. Use this
+ * function when preparing a @kuid to be reported to userspace.
+ *
+ * If initial_idmapping() determines that this is not an idmapped mount
+ * we can simply return @kuid unchanged.
+ * If initial_idmapping() tells us that the filesystem is not mounted with an
+ * idmapping we know the value of @kuid won't change when calling
+ * from_kuid() so we can simply retrieve the value via __kuid_val()
+ * directly.
+ *
+ * Return: @kuid mapped according to @idmap.
+ * If @kuid has no mapping in either @idmap or @fs_userns INVALID_UID is
+ * returned.
+ */
+static inline vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
+				   struct user_namespace *fs_userns,
+				   kuid_t kuid)
+{
+	uid_t uid;
 
-vfsgid_t make_vfsgid(struct mnt_idmap *idmap,
-		     struct user_namespace *fs_userns, kgid_t kgid);
+	if (likely(idmap == &nop_mnt_idmap))
+		return VFSUIDT_INIT(kuid);
+	if (unlikely(idmap == &invalid_mnt_idmap))
+		return INVALID_VFSUID;
+	if (likely(initial_idmapping(fs_userns)))
+		uid = __kuid_val(kuid);
+	else
+		uid = from_kuid(fs_userns, kuid);
+	if (unlikely(uid == (uid_t)-1))
+		return INVALID_VFSUID;
+	return VFSUIDT_INIT_RAW(map_id_down(&idmap->uid_map, uid));
+}
 
-kuid_t from_vfsuid(struct mnt_idmap *idmap,
-		   struct user_namespace *fs_userns, vfsuid_t vfsuid);
+/**
+ * make_vfsgid - map a filesystem kgid according to an idmapping
+ * @idmap: the mount's idmapping
+ * @fs_userns: the filesystem's idmapping
+ * @kgid : kgid to be mapped
+ *
+ * Take a @kgid and remap it from @fs_userns into @idmap. Use this
+ * function when preparing a @kgid to be reported to userspace.
+ *
+ * If initial_idmapping() determines that this is not an idmapped mount
+ * we can simply return @kgid unchanged.
+ * If initial_idmapping() tells us that the filesystem is not mounted with an
+ * idmapping we know the value of @kgid won't change when calling
+ * from_kgid() so we can simply retrieve the value via __kgid_val()
+ * directly.
+ *
+ * Return: @kgid mapped according to @idmap.
+ * If @kgid has no mapping in either @idmap or @fs_userns INVALID_GID is
+ * returned.
+ */
+static inline vfsgid_t make_vfsgid(struct mnt_idmap *idmap,
+				   struct user_namespace *fs_userns,
+				   kgid_t kgid)
+{
+	gid_t gid;
 
-kgid_t from_vfsgid(struct mnt_idmap *idmap,
-		   struct user_namespace *fs_userns, vfsgid_t vfsgid);
+	if (likely(idmap == &nop_mnt_idmap))
+		return VFSGIDT_INIT(kgid);
+	if (unlikely(idmap == &invalid_mnt_idmap))
+		return INVALID_VFSGID;
+	if (likely(initial_idmapping(fs_userns)))
+		gid = __kgid_val(kgid);
+	else
+		gid = from_kgid(fs_userns, kgid);
+	if (unlikely(gid == (gid_t)-1))
+		return INVALID_VFSGID;
+	return VFSGIDT_INIT_RAW(map_id_down(&idmap->gid_map, gid));
+}
+
+/**
+ * from_vfsuid - map a vfsuid into the filesystem idmapping
+ * @idmap: the mount's idmapping
+ * @fs_userns: the filesystem's idmapping
+ * @vfsuid : vfsuid to be mapped
+ *
+ * Map @vfsuid into the filesystem idmapping. This function has to be used in
+ * order to e.g. write @vfsuid to inode->i_uid.
+ *
+ * Return: @vfsuid mapped into the filesystem idmapping
+ */
+static inline kuid_t from_vfsuid(struct mnt_idmap *idmap,
+				 struct user_namespace *fs_userns,
+				 vfsuid_t vfsuid)
+{
+	uid_t uid;
+
+	if (likely(idmap == &nop_mnt_idmap))
+		return AS_KUIDT(vfsuid);
+	if (unlikely(idmap == &invalid_mnt_idmap))
+		return INVALID_UID;
+	uid = map_id_up(&idmap->uid_map, __vfsuid_val(vfsuid));
+	if (unlikely(uid == (uid_t)-1))
+		return INVALID_UID;
+	if (likely(initial_idmapping(fs_userns)))
+		return KUIDT_INIT(uid);
+	return make_kuid(fs_userns, uid);
+}
+
+/**
+ * from_vfsgid - map a vfsgid into the filesystem idmapping
+ * @idmap: the mount's idmapping
+ * @fs_userns: the filesystem's idmapping
+ * @vfsgid : vfsgid to be mapped
+ *
+ * Map @vfsgid into the filesystem idmapping. This function has to be used in
+ * order to e.g. write @vfsgid to inode->i_gid.
+ *
+ * Return: @vfsgid mapped into the filesystem idmapping
+ */
+static inline kgid_t from_vfsgid(struct mnt_idmap *idmap,
+				 struct user_namespace *fs_userns,
+				 vfsgid_t vfsgid)
+{
+	gid_t gid;
+
+	if (likely(idmap == &nop_mnt_idmap))
+		return AS_KGIDT(vfsgid);
+	if (unlikely(idmap == &invalid_mnt_idmap))
+		return INVALID_GID;
+	gid = map_id_up(&idmap->gid_map, __vfsgid_val(vfsgid));
+	if (unlikely(gid == (gid_t)-1))
+		return INVALID_GID;
+	if (likely(initial_idmapping(fs_userns)))
+		return KGIDT_INIT(gid);
+	return make_kgid(fs_userns, gid);
+}
 
 /**
  * vfsuid_has_fsmapping - check whether a vfsuid maps into the filesystem

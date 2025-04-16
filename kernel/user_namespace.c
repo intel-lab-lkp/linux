@@ -336,6 +336,7 @@ u32 map_id_down(struct uid_gid_map *map, u32 id)
 {
 	return map_id_range_down(map, id, 1);
 }
+EXPORT_SYMBOL_GPL(map_id_down);
 
 /*
  * map_id_up_base - Find idmap via binary search in static extent array.
@@ -402,6 +403,7 @@ u32 map_id_up(struct uid_gid_map *map, u32 id)
 {
 	return map_id_range_up(map, id, 1);
 }
+EXPORT_SYMBOL_GPL(map_id_up);
 
 /**
  *	make_kuid - Map a user-namespace uid pair into a kuid.
