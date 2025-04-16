@@ -8,6 +8,13 @@
 struct mnt_idmap;
 struct user_namespace;
 
+/* Don't touch directly! All fields private. */
+struct mnt_idmap {
+	struct uid_gid_map uid_map;
+	struct uid_gid_map gid_map;
+	refcount_t count;
+};
+
 extern struct mnt_idmap nop_mnt_idmap;
 extern struct mnt_idmap invalid_mnt_idmap;
 extern struct user_namespace init_user_ns;

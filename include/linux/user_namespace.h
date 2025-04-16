@@ -12,28 +12,7 @@
 #include <linux/rwsem.h>
 #include <linux/sysctl.h>
 #include <linux/err.h>
-
-#define UID_GID_MAP_MAX_BASE_EXTENTS 5
-#define UID_GID_MAP_MAX_EXTENTS 340
-
-struct uid_gid_extent {
-	u32 first;
-	u32 lower_first;
-	u32 count;
-};
-
-struct uid_gid_map { /* 64 bytes -- 1 cache line */
-	union {
-		struct {
-			struct uid_gid_extent extent[UID_GID_MAP_MAX_BASE_EXTENTS];
-			u32 nr_extents;
-		};
-		struct {
-			struct uid_gid_extent *forward;
-			struct uid_gid_extent *reverse;
-		};
-	};
-};
+#include <linux/uidgid.h>
 
 #define USERNS_SETGROUPS_ALLOWED 1UL
 
