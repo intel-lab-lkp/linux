@@ -29,6 +29,7 @@
 #include <asm/set_memory.h>
 #include <asm/cpu.h>
 #include <asm/efi.h>
+#include <asm/tdx.h>
 
 #ifdef CONFIG_ACPI
 /*
@@ -310,6 +311,19 @@ int machine_kexec_prepare(struct kimage *image)
 	unsigned long reloc_start = (unsigned long)__relocate_kernel_start;
 	unsigned long reloc_end = (unsigned long)__relocate_kernel_end;
 	int result;
+
+	/*
+	 * Kexec doesn't play nice with TDX because there are issues
+	 * like needing to flush cache and resetting TDX private memory.
+	 *
+	 * The kernel doesn't support those things for TDX.  Try to
+	 * disable TDX permanently so that kexec can move on.  If TDX
+	 * has already been enabled, fail kexec.
+	 */
+	if (!tdx_try_disable()) {
+		pr_info_once("Disabled: TDX is enabled");
+		return -EOPNOTSUPP;
+	}
 
 	/* Setup the identity mapped 64bit page table */
 	result = init_pgtable(image, __pa(control_page));

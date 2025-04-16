@@ -1456,3 +1456,29 @@ void __init tdx_init(void)
 
 	check_tdx_erratum();
 }
+
+/*
+ * Disable TDX permanently if the module hasn't been initialized
+ * (otherwise does nothing).  Return whether TDX is disabled.
+ *
+ * This function only prevents running concurrently with tdx_enable().
+ * tdx_cpu_enable() can still run successfully even this function
+ * disables TDX successfully.
+ */
+bool tdx_try_disable(void)
+{
+	bool disabled;
+
+	mutex_lock(&tdx_module_lock);
+
+	if (tdx_module_status == TDX_MODULE_UNINITIALIZED) {
+		pr_info("explicitly disabled\n");
+		tdx_module_status = TDX_MODULE_DISABLED;
+	}
+
+	disabled = (tdx_module_status != TDX_MODULE_INITIALIZED);
+
+	mutex_unlock(&tdx_module_lock);
+
+	return disabled;
+}

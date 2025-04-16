@@ -146,8 +146,14 @@ Kexec()
 ~~~~~~~
 
 TDX host support currently lacks the ability to handle kexec.  For
-simplicity only one of them can be enabled in the Kconfig.  This will be
-fixed in the future.
+simplicity, whichever gets run first disables the other.  I.e., loading
+kexec kernel image tries to disable TDX permanently, otherwise it fails
+due to that TDX has already been enabled.  This will be fixed in the
+future.
+
+It is possible that kexec can race with the per-cpu initialization of
+TDX.  In the case of losing this race, TDX will not be usable in the
+second kernel, but otherwise kexec will happen normally.
 
 Erratum
 ~~~~~~~

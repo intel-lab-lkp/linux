@@ -64,7 +64,8 @@ struct tdmr_info {
 enum tdx_module_status_t {
 	TDX_MODULE_UNINITIALIZED,
 	TDX_MODULE_INITIALIZED,
-	TDX_MODULE_ERROR
+	TDX_MODULE_ERROR,
+	TDX_MODULE_DISABLED
 };
 
 struct tdx_memblock {
