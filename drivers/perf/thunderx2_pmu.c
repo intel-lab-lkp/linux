@@ -736,9 +736,7 @@ static int tx2_uncore_pmu_register(
 		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
-	tx2_pmu->pmu.name = devm_kasprintf(dev, GFP_KERNEL,
-			"%s", name);
-
+	tx2_pmu->pmu.name = devm_kstrdup(dev, name, GFP_KERNEL);
 	return perf_pmu_register(&tx2_pmu->pmu, tx2_pmu->pmu.name, -1);
 }
 
