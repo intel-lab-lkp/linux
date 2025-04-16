@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config SECURITY_RUST_LSM
+	bool "Rust example LSM Support"
+	depends on RUST && SECURITY
+	default n
+	help
+	  Enable the Rust example LSM.
+
+	  If you are unsure how to answer this question, answer N.
