@@ -82,6 +82,7 @@ static int cros_typec_altmode_enter(struct typec_altmode *alt, u32 *vdo)
 		if (ret < 0)
 			return ret;
 
+		cros_typec_check_dp(adata->port->typec_data, &resp, adata->port);
 		if (!(resp.flags & flags))
 			return -EINVAL;
 	} else {
@@ -147,6 +148,7 @@ static int cros_typec_altmode_exit(struct typec_altmode *alt)
 		if (ret < 0)
 			return ret;
 
+		cros_typec_check_dp(adata->port->typec_data, &resp, adata->port);
 		if (resp.flags & flags)
 			return -EINVAL;
 	} else {
