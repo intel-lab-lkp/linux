@@ -223,7 +223,7 @@ static int scmi_regulator_common_init(struct scmi_regulator *sreg)
 		return -EOPNOTSUPP;
 	}
 
-	sreg->desc.name = devm_kasprintf(dev, GFP_KERNEL, "%s", vinfo->name);
+	sreg->desc.name = devm_kstrdup(dev, vinfo->name, GFP_KERNEL);
 	if (!sreg->desc.name)
 		return -ENOMEM;
 
