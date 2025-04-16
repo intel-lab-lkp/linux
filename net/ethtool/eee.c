@@ -137,17 +137,26 @@ ethnl_set_eee(struct ethnl_req_info *req_info, struct genl_info *info)
 	if (ret < 0)
 		return ret;
 
-	ret = ethnl_update_bitset(eee.advertised,
-				  __ETHTOOL_LINK_MODE_MASK_NBITS,
-				  tb[ETHTOOL_A_EEE_MODES_OURS],
-				  link_mode_names, info->extack, &mod);
-	if (ret < 0)
-		return ret;
-	ethnl_update_bool(&eee.eee_enabled, tb[ETHTOOL_A_EEE_ENABLED], &mod);
-	ethnl_update_bool(&eee.tx_lpi_enabled, tb[ETHTOOL_A_EEE_TX_LPI_ENABLED],
-			  &mod);
-	ethnl_update_u32(&eee.tx_lpi_timer, tb[ETHTOOL_A_EEE_TX_LPI_TIMER],
-			 &mod);
+	if (tb[ETHTOOL_A_EEE_MODES_OURS]) {
+		ret = ethnl_update_bitset(eee.advertised,
+					  __ETHTOOL_LINK_MODE_MASK_NBITS,
+					  tb[ETHTOOL_A_EEE_MODES_OURS],
+					  link_mode_names, info->extack, &mod);
+		if (ret < 0)
+			return ret;
+	}
+
+	if (tb[ETHTOOL_A_EEE_ENABLED])
+		ethnl_update_bool(&eee.eee_enabled, tb[ETHTOOL_A_EEE_ENABLED], &mod);
+
+	if (tb[ETHTOOL_A_EEE_TX_LPI_ENABLED])
+		ethnl_update_bool(&eee.tx_lpi_enabled, tb[ETHTOOL_A_EEE_TX_LPI_ENABLED],
+				  &mod);
+
+	if (tb[ETHTOOL_A_EEE_TX_LPI_TIMER])
+		ethnl_update_u32(&eee.tx_lpi_timer, tb[ETHTOOL_A_EEE_TX_LPI_TIMER],
+				 &mod);
+
 	if (!mod)
 		return 0;
 
