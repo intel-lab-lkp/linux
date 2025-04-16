@@ -270,3 +270,30 @@ failed:
 
 	return status;
 }
+
+static pci_ers_result_t pcie_do_slot_reset(struct pci_dev *dev)
+{
+	int ret;
+
+	ret = pci_bus_error_reset(dev);
+	if (ret) {
+		pci_err(dev, "Failed to reset slot: %d\n", ret);
+		return PCI_ERS_RESULT_DISCONNECT;
+	}
+
+	pci_info(dev, "Slot has been reset\n");
+
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
+void pcie_do_recover_slots(struct pci_host_bridge *host)
+{
+	struct pci_bus *bus = host->bus;
+	struct pci_dev *dev;
+
+	for_each_pci_bridge(dev, bus) {
+		if (pci_is_root_bus(bus))
+			pcie_do_recovery(dev, pci_channel_io_frozen,
+					 pcie_do_slot_reset);
+	}
+}
