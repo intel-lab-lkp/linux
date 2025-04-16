@@ -414,7 +414,7 @@ static int qcom_mpm_init(struct device_node *np, struct device_node *parent)
 	genpd->flags = GENPD_FLAG_IRQ_SAFE;
 	genpd->power_off = mpm_pd_power_off;
 
-	genpd->name = devm_kasprintf(dev, GFP_KERNEL, "%s", dev_name(dev));
+	genpd->name = devm_kstrdup(dev, dev_name(dev), GFP_KERNEL);
 	if (!genpd->name)
 		return -ENOMEM;
 
