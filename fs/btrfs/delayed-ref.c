@@ -613,7 +613,7 @@ static bool insert_delayed_ref(struct btrfs_trans_handle *trans,
 				ASSERT(!list_empty(&exist->add_list));
 				list_del_init(&exist->add_list);
 			} else {
-				ASSERT(0);
+				DEBUG_WARN("unknown ref->action=%d", ref->action);
 			}
 		} else
 			mod = -ref->ref_mod;

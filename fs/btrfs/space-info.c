@@ -1584,7 +1584,7 @@ static int handle_reserve_ticket(struct btrfs_fs_info *fs_info,
 		priority_reclaim_data_space(fs_info, space_info, ticket);
 		break;
 	default:
-		ASSERT(0);
+		DEBUG_WARN("unknown flush state %d", flush);
 		break;
 	}
 
