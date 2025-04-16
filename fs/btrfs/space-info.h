@@ -100,6 +100,7 @@ enum btrfs_flush_state {
 
 enum btrfs_space_info_sub_group {
 	SUB_GROUP_DATA_RELOC = 0,
+	SUB_GROUP_METADATA_TREELOG = 0,
 	SUB_GROUP_PRIMARY = -1,
 };
 #define BTRFS_SPACE_INFO_SUB_GROUP_MAX 1

@@ -292,6 +292,10 @@ static int create_space_info(struct btrfs_fs_info *info, u64 flags)
 		if (flags & BTRFS_BLOCK_GROUP_DATA)
 			ret = create_space_info_sub_group(space_info, flags,
 							  SUB_GROUP_DATA_RELOC);
+		else if (flags & BTRFS_BLOCK_GROUP_METADATA)
+			ret = create_space_info_sub_group(space_info, flags,
+							  SUB_GROUP_METADATA_TREELOG);
+
 		if (ret == -ENOMEM)
 			return ret;
 		ASSERT(!ret);

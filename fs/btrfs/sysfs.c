@@ -1938,7 +1938,15 @@ static const char *alloc_name(struct btrfs_space_info *space_info)
 	case BTRFS_BLOCK_GROUP_METADATA | BTRFS_BLOCK_GROUP_DATA:
 		return "mixed";
 	case BTRFS_BLOCK_GROUP_METADATA:
-		return "metadata";
+		switch (space_info->subgroup_id) {
+		case SUB_GROUP_PRIMARY:
+			return "metadata";
+		case SUB_GROUP_METADATA_TREELOG:
+			return "metadata-treelog";
+		default:
+			WARN_ON_ONCE(1);
+			return "metadata (unknown sub-group)";
+		}
 	case BTRFS_BLOCK_GROUP_DATA:
 		switch (space_info->subgroup_id) {
 		case SUB_GROUP_PRIMARY:
