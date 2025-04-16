@@ -47,6 +47,7 @@
 #include <linux/vga_switcheroo.h>
 #include <linux/efi.h>
 #include "amdgpu.h"
+#include "amdgpu_irq.h"
 #include "amdgpu_trace.h"
 #include "amdgpu_i2c.h"
 #include "atom.h"
@@ -4374,7 +4375,9 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	ratelimit_set_flags(&adev->throttling_logging_rs, RATELIMIT_MSG_ON_RELEASE);
 
 	/* Registers mapping */
-	/* TODO: block userspace mapping of io register */
+	/* Block userspace mapping of io register */
+	amdgpu_irq_put(adev, &adev->crtc_irq, 0);
+
 	if (adev->asic_type >= CHIP_BONAIRE) {
 		adev->rmmio_base = pci_resource_start(adev->pdev, 5);
 		adev->rmmio_size = pci_resource_len(adev->pdev, 5);
@@ -4387,6 +4390,9 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 		atomic_set(&adev->pm.pwr_state[i], POWER_STATE_UNKNOWN);
 
 	adev->rmmio = ioremap(adev->rmmio_base, adev->rmmio_size);
+
+	amdgpu_irq_get(adev, &adev->crtc_irq, 0);
+
 	if (!adev->rmmio)
 		return -ENOMEM;
 
