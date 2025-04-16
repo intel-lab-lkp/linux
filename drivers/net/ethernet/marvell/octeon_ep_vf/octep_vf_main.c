@@ -819,7 +819,6 @@ static void octep_vf_tx_timeout_task(struct work_struct *work)
 		octep_vf_open(netdev);
 	}
 	rtnl_unlock();
-	netdev_put(netdev, NULL);
 }
 
 /**
@@ -834,7 +833,6 @@ static void octep_vf_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 {
 	struct octep_vf_device *oct = netdev_priv(netdev);
 
-	netdev_hold(netdev, NULL, GFP_ATOMIC);
 	schedule_work(&oct->tx_timeout_task);
 }
 
