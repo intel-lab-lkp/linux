@@ -406,6 +406,16 @@ config RTC_DRV_MAX77686
 	  This driver can also be built as a module. If so, the module
 	  will be called rtc-max77686.
 
+config RTC_DRV_NVVRS_PSEQ
+	tristate "NVIDIA VRS Power Sequencer RTC device"
+	depends on MFD_NVVRS_PSEQ
+	help
+	  If you say yes here you will get support for the battery backed RTC device
+	  of NVIDIA VRS Power Sequencer. The RTC is connected via I2C interface and
+	  supports alarm functionality.
+	  This driver can also be built as a module. If so, the module will be called
+	  rtc-nvidia-vrs-pseq.
+
 config RTC_DRV_NCT3018Y
 	tristate "Nuvoton NCT3018Y"
 	depends on OF
