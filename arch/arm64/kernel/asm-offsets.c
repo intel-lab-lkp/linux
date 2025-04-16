@@ -182,5 +182,21 @@ int main(void)
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
   DEFINE(FTRACE_OPS_DIRECT_CALL,	offsetof(struct ftrace_ops, direct_call));
 #endif
+	/*
+	 * The PROT_* macros describing the various memory types may resolve to
+	 * C expressions if they include the PTE_MAYBE_* macros, and so they
+	 * can only be used from C code. The PIE_E* constants below are also
+	 * defined in terms of those macros, but will mask out those
+	 * PTE_MAYBE_* constants, whether they are set or not. So #define them
+	 * as 0x0 here so we can evaluate the PIE_E* constants in asm context.
+	 */
+#undef PTE_MAYBE_NG
+#define PTE_MAYBE_NG		0
+
+#undef PTE_MAYBE_SHARED
+#define PTE_MAYBE_SHARED	0
+
+  DEFINE(PIE_E0_ASM, PIE_E0);
+  DEFINE(PIE_E1_ASM, PIE_E1);
   return 0;
 }
