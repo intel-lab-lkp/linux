@@ -477,6 +477,22 @@ static irqreturn_t rockchip_pcie_ep_sys_irq_thread(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
+static void rockchip_pcie_set_max_payload(struct rockchip_pcie *rockchip)
+{
+	struct dw_pcie *pci = &rockchip->pci;
+	u32 dev_cap, dev_ctrl;
+	u16 offset;
+
+	offset = dw_pcie_find_capability(pci, PCI_CAP_ID_EXP);
+	dev_cap = dw_pcie_readl_dbi(pci, offset + PCI_EXP_DEVCAP);
+	dev_cap &= PCI_EXP_DEVCAP_PAYLOAD;
+
+	dev_ctrl = dw_pcie_readl_dbi(pci, offset + PCI_EXP_DEVCTL);
+	dev_ctrl &= ~PCI_EXP_DEVCTL_PAYLOAD;
+	dev_ctrl |= dev_cap << 5;
+	dw_pcie_writel_dbi(pci, offset + PCI_EXP_DEVCTL, dev_ctrl);
+}
+
 static int rockchip_pcie_configure_rc(struct platform_device *pdev,
 				      struct rockchip_pcie *rockchip)
 {
@@ -510,6 +526,8 @@ static int rockchip_pcie_configure_rc(struct platform_device *pdev,
 	pp = &rockchip->pci.pp;
 	pp->ops = &rockchip_pcie_host_ops;
 	pp->use_linkup_irq = true;
+
+	rockchip_pcie_set_max_payload(rockchip);
 
 	ret = dw_pcie_host_init(pp);
 	if (ret) {
