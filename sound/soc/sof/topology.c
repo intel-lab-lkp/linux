@@ -572,8 +572,9 @@ static int sof_copy_tuples(struct snd_sof_dev *sdev, struct snd_soc_tplg_vendor_
 
 					tuples[*num_copied_tuples].token = tokens[j].token;
 					tuples[*num_copied_tuples].value.s =
-						devm_kasprintf(sdev->dev, GFP_KERNEL,
-							       "%s", elem->string);
+						devm_kstrdup(sdev->dev,
+							     elem->string,
+							     GFP_KERNEL);
 					if (!tuples[*num_copied_tuples].value.s)
 						return -ENOMEM;
 				} else {
