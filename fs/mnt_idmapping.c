@@ -43,20 +43,6 @@ struct mnt_idmap invalid_mnt_idmap = {
 EXPORT_SYMBOL_GPL(invalid_mnt_idmap);
 
 /**
- * initial_idmapping - check whether this is the initial mapping
- * @ns: idmapping to check
- *
- * Check whether this is the initial mapping, mapping 0 to 0, 1 to 1,
- * [...], 1000 to 1000 [...].
- *
- * Return: true if this is the initial mapping, false if not.
- */
-static inline bool initial_idmapping(const struct user_namespace *ns)
-{
-	return ns == &init_user_ns;
-}
-
-/**
  * make_vfsuid - map a filesystem kuid according to an idmapping
  * @idmap: the mount's idmapping
  * @fs_userns: the filesystem's idmapping

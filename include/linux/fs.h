@@ -663,6 +663,7 @@ is_uncached_acl(struct posix_acl *acl)
 #define IOP_DEFAULT_READLINK	0x0010
 #define IOP_MGTIME	0x0020
 #define IOP_CACHED_LINK	0x0040
+#define IOP_USERNS	0x0080
 
 /*
  * Keep mostly read-only and often accessed (especially for
@@ -1454,7 +1455,9 @@ struct super_block {
 
 static inline struct user_namespace *i_user_ns(const struct inode *inode)
 {
-	return inode->i_sb->s_user_ns;
+	if (unlikely(inode->i_opflags & IOP_USERNS))
+		return inode->i_sb->s_user_ns;
+	return &init_user_ns;
 }
 
 /* Helper functions so that in most cases filesystems will
