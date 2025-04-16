@@ -363,6 +363,7 @@ struct gdma_irq_context {
 	spinlock_t lock;
 	struct list_head eq_list;
 	char name[MANA_IRQ_NAME_SZ];
+	struct list_head gic_list;
 };
 
 struct gdma_context {
@@ -373,7 +374,9 @@ struct gdma_context {
 	unsigned int		max_num_queues;
 	unsigned int		max_num_msix;
 	unsigned int		num_msix_usable;
-	struct gdma_irq_context	*irq_contexts;
+	struct list_head	irq_contexts;
+	/* Protect the irq_contexts list */
+	spinlock_t		irq_ctxs_lock;
 
 	/* L2 MTU */
 	u16 adapter_mtu;
