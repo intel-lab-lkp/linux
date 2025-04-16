@@ -2833,7 +2833,7 @@ mwifiex_cfg80211_sched_scan_start(struct wiphy *wiphy,
 				request->scan_plans->interval :
 				MWIFIEX_BGSCAN_INTERVAL;
 
-	bgscan_cfg->repeat_count = MWIFIEX_BGSCAN_REPEAT_COUNT;
+	bgscan_cfg->repeat_count = request->scan_plans->iterations;
 	bgscan_cfg->report_condition = MWIFIEX_BGSCAN_SSID_MATCH |
 				MWIFIEX_BGSCAN_WAIT_ALL_CHAN_DONE;
 	bgscan_cfg->bss_type = MWIFIEX_BSS_MODE_INFRA;
