@@ -4,7 +4,6 @@
 
 extern struct ghcb boot_ghcb_page;
 extern struct ghcb *boot_ghcb;
-extern u64 sev_hv_features;
 
 /* #VC handler runtime per-CPU data */
 struct sev_es_runtime_data {
@@ -117,6 +116,6 @@ enum es_result sev_es_ghcb_hv_call(struct ghcb *ghcb,
 void snp_register_ghcb_early(unsigned long paddr);
 bool sev_es_negotiate_protocol(void);
 bool sev_es_check_cpu_features(void);
-u64 get_hv_features(void);
+void check_hv_features(void);
 
 const struct snp_cpuid_table *snp_cpuid_get_table(void);
