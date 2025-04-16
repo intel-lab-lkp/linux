@@ -440,6 +440,7 @@
 	pinctrl-0 = <&mcu_fss0_hpb0_pins_default>;
 	ranges = <0x00 0x00 0x05 0x00000000 0x4000000>, /* 64MB Flash on CS0 */
 		 <0x01 0x00 0x05 0x04000000 0x800000>; /* 8MB RAM on CS1 */
+	bootph-all;
 
 	flash@0,0 {
 		compatible = "cypress,hyperflash", "cfi-flash";
