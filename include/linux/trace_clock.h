@@ -15,6 +15,8 @@
 
 #include <asm/trace_clock.h>
 
+#define TRACE_CLOCK_NAME_MAX 16
+
 extern u64 notrace trace_clock_local(void);
 extern u64 notrace trace_clock(void);
 extern u64 notrace trace_clock_jiffies(void);

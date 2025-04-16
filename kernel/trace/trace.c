@@ -6013,6 +6013,7 @@ struct trace_mod_entry {
 };
 
 struct trace_scratch {
+	char			clock[TRACE_CLOCK_NAME_MAX];
 	unsigned long		text_addr;
 	unsigned long		nr_entries;
 	struct trace_mod_entry	entries[];
@@ -6123,6 +6124,8 @@ static void update_last_data(struct trace_array *tr)
 	if (tr->scratch) {
 		struct trace_scratch *tscratch = tr->scratch;
 
+		strscpy(tscratch->clock, trace_clocks[tr->clock_id].name,
+			TRACE_CLOCK_NAME_MAX);
 		memset(tscratch->entries, 0,
 		       flex_array_size(tscratch, entries, tscratch->nr_entries));
 		tscratch->nr_entries = 0;
@@ -7009,9 +7012,10 @@ static void show_last_boot_header(struct seq_file *m, struct trace_array *tr)
 	 * Otherwise it shows the KASLR address from the previous boot which
 	 * should not be the same as the current boot.
 	 */
-	if (tscratch && (tr->flags & TRACE_ARRAY_FL_LAST_BOOT))
+	if (tscratch && (tr->flags & TRACE_ARRAY_FL_LAST_BOOT)) {
+		seq_printf(m, "trace_clock: %s\n", tscratch->clock);
 		seq_printf(m, "%lx\t[kernel]\n", tscratch->text_addr);
-	else
+	} else
 		seq_puts(m, "# Current\n");
 }
 
@@ -7297,6 +7301,12 @@ int tracing_set_clock(struct trace_array *tr, const char *clockstr)
 		ring_buffer_set_clock(tr->max_buffer.buffer, trace_clocks[i].func);
 	tracing_reset_online_cpus(&tr->max_buffer);
 #endif
+
+	if (tr->scratch && !(tr->flags & TRACE_ARRAY_FL_LAST_BOOT)) {
+		struct trace_scratch *tscratch = tr->scratch;
+
+		strscpy(tscratch->clock, trace_clocks[i].name, TRACE_CLOCK_NAME_MAX);
+	}
 
 	mutex_unlock(&trace_types_lock);
 
