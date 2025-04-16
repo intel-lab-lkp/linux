@@ -179,6 +179,12 @@ properties:
             $ref: /schemas/types.yaml#/definitions/uint32
             description: VDO returned by Discover Modes USB PD command.
 
+          port:
+            $ref: /schemas/graph.yaml#/properties/port
+            description: OF graph bindings modeling a data bus to the
+              DisplayPort altmode from the DisplayPort controller. Used when
+              the altmode switch is part of the port manager.
+
   port:
     $ref: /schemas/graph.yaml#/properties/port
     description: OF graph bindings modeling a data bus to the connector, e.g.

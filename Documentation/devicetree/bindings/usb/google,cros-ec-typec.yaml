@@ -26,6 +26,55 @@ properties:
   '#size-cells':
     const: 0
 
+  mux-gpios:
+    description: GPIOs indicating which way the DisplayPort mux is steered
+    minItems: 1
+    maxItems: 3
+
+  no-hpd:
+    description: Indicates this device doesn't signal HPD for DisplayPort
+    type: boolean
+
+  ports:
+    $ref: /schemas/graph.yaml#/properties/ports
+
+    properties:
+      port@0:
+        $ref: /schemas/graph.yaml#/properties/port
+        description:
+          Port for DisplayPort (DP) data
+
+        properties:
+          endpoint@0:
+            $ref: /schemas/graph.yaml#/properties/endpoint
+            description: Input DP port
+
+        patternProperties:
+          '^endpoint@[1-8]$':
+            $ref: /schemas/graph.yaml#/properties/endpoint
+            description: Output to the usb-c connector's DP altmode
+
+        required:
+          - endpoint@0
+
+        anyOf:
+          - required:
+              - endpoint@1
+          - required:
+              - endpoint@2
+          - required:
+              - endpoint@3
+          - required:
+              - endpoint@4
+          - required:
+              - endpoint@5
+          - required:
+              - endpoint@6
+          - required:
+              - endpoint@7
+          - required:
+              - endpoint@8
+
 patternProperties:
   '^connector@[0-9a-f]+$':
     $ref: /schemas/connector/usb-connector.yaml#
@@ -35,10 +84,30 @@ patternProperties:
 required:
   - compatible
 
+allOf:
+  - if:
+      required:
+        - no-hpd
+    then:
+      properties:
+        ports:
+          required:
+            - port@0
+  - if:
+      required:
+        - mux-gpios
+    then:
+      properties:
+        ports:
+          required:
+            - port@0
+
 additionalProperties: false
 
 examples:
   - |+
+    #include <dt-bindings/gpio/gpio.h>
+
     spi {
       #address-cells = <1>;
       #size-cells = <0>;
@@ -47,6 +116,8 @@ examples:
         compatible = "google,cros-ec-spi";
         reg = <0>;
         interrupts = <35 0>;
+        #gpio-cells = <2>;
+        gpio-controller;
 
         typec {
           compatible = "google,cros-ec-typec";
@@ -54,12 +125,106 @@ examples:
           #address-cells = <1>;
           #size-cells = <0>;
 
+          mux-gpios = <&cros_ec 42 GPIO_ACTIVE_HIGH>, <&cros_ec 3 GPIO_ACTIVE_HIGH>;
+
           connector@0 {
             compatible = "usb-c-connector";
             reg = <0>;
             power-role = "dual";
             data-role = "dual";
             try-power-role = "source";
+
+            altmodes {
+              displayport {
+                port {
+                  usbc0_dp: endpoint {
+                    remote-endpoint = <&dp_out0>;
+                  };
+                };
+              };
+            };
+
+            ports {
+              #address-cells = <1>;
+              #size-cells = <0>;
+
+              port@0 {
+                reg = <0>;
+                usb_c0_hs: endpoint {
+                  remote-endpoint = <&usb_hub_dfp3_hs>;
+                };
+              };
+
+              port@1 {
+                reg = <1>;
+                usb_c0_ss: endpoint {
+                  remote-endpoint = <&usb_hub_dfp3_ss>;
+                };
+              };
+            };
+          };
+
+          connector@1 {
+            compatible = "usb-c-connector";
+            reg = <1>;
+            power-role = "dual";
+            data-role = "dual";
+            try-power-role = "source";
+
+            altmodes {
+              displayport {
+                port {
+                  usbc1_dp: endpoint {
+                    remote-endpoint = <&dp_out1>;
+                  };
+                };
+              };
+            };
+
+            ports {
+              #address-cells = <1>;
+              #size-cells = <0>;
+
+              port@0 {
+                reg = <0>;
+                usb_c1_hs: endpoint {
+                  remote-endpoint = <&usb_hub_dfp2_hs>;
+                };
+              };
+
+              port@1 {
+                reg = <1>;
+                usb_c1_ss: endpoint {
+                  remote-endpoint = <&usb_hub_dfp2_ss>;
+                };
+              };
+            };
+          };
+
+          ports {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            port@0 {
+              reg = <0>;
+              #address-cells = <1>;
+              #size-cells = <0>;
+
+              dp_in: endpoint@0 {
+                reg = <0>;
+                remote-endpoint = <&dp_phy>;
+              };
+
+              dp_out0: endpoint@1 {
+                reg = <1>;
+                remote-endpoint = <&usbc0_dp>;
+              };
+
+              dp_out1: endpoint@2 {
+                reg = <2>;
+                remote-endpoint = <&usbc1_dp>;
+              };
+            };
           };
         };
       };
