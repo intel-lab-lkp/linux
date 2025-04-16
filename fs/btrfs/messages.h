@@ -175,10 +175,33 @@ do {								\
 	BUG();								\
 })
 
+__printf(4, 5)
+__cold
+static inline void btrfs_assertfail_verbose(const char *str_expr,
+					    const char *file, int line,
+					    const char *fmt, ...) {
+	struct va_format vaf;
+	va_list args;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+
+	pr_err("assertion failed: %s, in %s:%d (%pV)\n", str_expr, file, line, &vaf);
+	va_end(args);
+	BUG();
+}
+
 #define ASSERT(expr)						\
 	(likely(expr) ? (void)0 : btrfs_assertfail(#expr, __FILE__, __LINE__))
+
+/* Verbose assert, use to print any relevant values of the condition. */
+#define VASSERT(expr, fmt, ...)					\
+	(likely(expr) ? (void)0 : btrfs_assertfail_verbose(#expr, __FILE__, __LINE__, \
+							   fmt, __VA_ARGS__))
 #else
 #define ASSERT(expr)	(void)(expr)
+#define VASSERT(expr, fmt, ...)		(void)(expr)
 #endif
 
 __printf(5, 6)
