@@ -903,21 +903,22 @@ unsigned int irq_get_next_irq(unsigned int offset)
 struct irq_desc *
 __irq_get_desc_lock(unsigned int irq, unsigned long *flags, bool bus,
 		    unsigned int check)
+	__acquires(&desc->lock)
 {
 	struct irq_desc *desc;
 
 	desc = irq_to_desc(irq);
 	if (!desc)
-		return NULL;
+		goto lock;
 
 	if (check & _IRQ_DESC_CHECK) {
 		if ((check & _IRQ_DESC_PERCPU) &&
 		    !irq_settings_is_per_cpu_devid(desc))
-			return NULL;
+			goto lock;
 
 		if (!(check & _IRQ_DESC_PERCPU) &&
 		    irq_settings_is_per_cpu_devid(desc))
-			return NULL;
+			goto lock;
 	}
 
 	if (bus)
@@ -925,6 +926,10 @@ __irq_get_desc_lock(unsigned int irq, unsigned long *flags, bool bus,
 	raw_spin_lock_irqsave(&desc->lock, *flags);
 
 	return desc;
+
+lock:
+	__acquire(&desc->lock);
+	return NULL;
 }
 
 void __irq_put_desc_unlock(struct irq_desc *desc, unsigned long flags, bool bus)
