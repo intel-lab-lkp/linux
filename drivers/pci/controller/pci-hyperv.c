@@ -598,7 +598,8 @@ static unsigned int hv_msi_get_int_vector(struct irq_data *data)
 	return cfg->vector;
 }
 
-#define hv_msi_prepare		pci_msi_prepare
+#define hv_msi_prepare			pci_msi_prepare
+#define hv_msix_prepare_desc		pci_msix_prepare_desc
 
 /**
  * hv_arch_irq_unmask() - "Unmask" the IRQ by setting its current
@@ -727,6 +728,7 @@ out:
 #define FLOW_HANDLER		NULL
 #define FLOW_NAME		NULL
 #define hv_msi_prepare		NULL
+#define hv_msix_prepare_desc	NULL
 
 struct hv_pci_chip_data {
 	DECLARE_BITMAP(spi_map, HV_PCI_MSI_SPI_NR);
@@ -2063,6 +2065,7 @@ static struct irq_chip hv_msi_irq_chip = {
 static struct msi_domain_ops hv_msi_ops = {
 	.msi_prepare	= hv_msi_prepare,
 	.msi_free	= hv_msi_free,
+	.prepare_desc	= hv_msix_prepare_desc,
 };
 
 /**
@@ -2084,7 +2087,7 @@ static int hv_pcie_init_irq_domain(struct hv_pcibus_device *hbus)
 	hbus->msi_info.ops = &hv_msi_ops;
 	hbus->msi_info.flags = (MSI_FLAG_USE_DEF_DOM_OPS |
 		MSI_FLAG_USE_DEF_CHIP_OPS | MSI_FLAG_MULTI_PCI_MSI |
-		MSI_FLAG_PCI_MSIX);
+		MSI_FLAG_PCI_MSIX | MSI_FLAG_PCI_MSIX_ALLOC_DYN);
 	hbus->msi_info.handler = FLOW_HANDLER;
 	hbus->msi_info.handler_name = FLOW_NAME;
 	hbus->msi_info.data = hbus;
