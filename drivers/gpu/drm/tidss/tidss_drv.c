@@ -34,8 +34,22 @@ int tidss_runtime_get(struct tidss_device *tidss)
 	dev_dbg(tidss->dev, "%s\n", __func__);
 
 	r = pm_runtime_resume_and_get(tidss->dev);
-	WARN_ON(r < 0);
-	return r;
+	if (WARN_ON(r < 0))
+		return r;
+
+	if (tidss->boot_enabled_vp_mask) {
+		/*
+		 * If 'boot_enabled_vp_mask' is set, it means that the DSS is
+		 * enabled and bootloader splash-screen is still on the screen,
+		 * using bootloader's DSS HW config.
+		 *
+		 * This is the first time the driver is about to use the HW, and
+		 * we need to do some cleanup and initial setup.
+		 */
+		dispc_splash_fini(tidss->dispc);
+	}
+
+	return 0;
 }
 
 void tidss_runtime_put(struct tidss_device *tidss)
@@ -147,6 +161,12 @@ static int tidss_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = dispc_init_hw(tidss->dispc);
+	if (ret) {
+		dev_err(dev, "failed to initialize dispc HW: %d\n", ret);
+		return ret;
+	}
+
 	pm_runtime_enable(dev);
 
 	pm_runtime_set_autosuspend_delay(dev, 1000);
@@ -197,11 +217,14 @@ err_irq_uninstall:
 	tidss_irq_uninstall(ddev);
 
 err_runtime_suspend:
+
 #ifndef CONFIG_PM
 	dispc_runtime_suspend(tidss->dispc);
 #endif
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
+
+	dispc_init_hw_cleanup(tidss->dispc);
 
 	return ret;
 }
@@ -226,6 +249,8 @@ static void tidss_remove(struct platform_device *pdev)
 #endif
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_disable(dev);
+
+	dispc_init_hw_cleanup(tidss->dispc);
 
 	/* devm allocated dispc goes away with the dev so mark it NULL */
 	dispc_remove(tidss);
