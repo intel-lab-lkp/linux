@@ -763,7 +763,7 @@ static int rvu_rep_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return err;
 	}
 
-	err = pci_request_regions(pdev, DRV_NAME);
+	err = pcim_request_all_regions(pdev, DRV_NAME);
 	if (err) {
 		dev_err(dev, "PCI request regions failed 0x%x\n", err);
 		return err;
@@ -822,7 +822,6 @@ err_detach_rsrc:
 	pci_free_irq_vectors(pdev);
 err_release_regions:
 	pci_set_drvdata(pdev, NULL);
-	pci_release_regions(pdev);
 	return err;
 }
 
@@ -842,7 +841,6 @@ static void rvu_rep_remove(struct pci_dev *pdev)
 	otx2_pfaf_mbox_destroy(priv);
 	pci_free_irq_vectors(priv->pdev);
 	pci_set_drvdata(pdev, NULL);
-	pci_release_regions(pdev);
 }
 
 static struct pci_driver rvu_rep_driver = {
