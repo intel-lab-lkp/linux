@@ -291,6 +291,7 @@ struct vcpu_vmx {
 	/* SGX Launch Control public key hash */
 	u64 msr_ia32_sgxlepubkeyhash[4];
 	u64 msr_ia32_mcu_opt_ctrl;
+	u64 msr_ia32_debugctl;
 	bool disable_fb_clear;
 
 	struct pt_desc pt_desc;

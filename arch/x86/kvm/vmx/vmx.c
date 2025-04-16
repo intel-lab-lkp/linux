@@ -2196,11 +2196,14 @@ static u64 vmx_get_supported_debugctl(struct kvm_vcpu *vcpu, bool host_initiated
 
 u64 vmx_get_guest_debugctl(struct kvm_vcpu *vcpu)
 {
-	return vmcs_read64(GUEST_IA32_DEBUGCTL);
+	return to_vmx(vcpu)->msr_ia32_debugctl;
 }
 
 static void __vmx_set_guest_debugctl(struct kvm_vcpu *vcpu, u64 data)
 {
+	struct vcpu_vmx *vmx = to_vmx(vcpu);
+
+	vmx->msr_ia32_debugctl = data;
 	vmcs_write64(GUEST_IA32_DEBUGCTL, data);
 }
 
