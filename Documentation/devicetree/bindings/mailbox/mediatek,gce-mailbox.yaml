@@ -19,6 +19,7 @@ properties:
     oneOf:
       - enum:
           - mediatek,mt6779-gce
+          - mediatek,mt6893-gce
           - mediatek,mt8173-gce
           - mediatek,mt8183-gce
           - mediatek,mt8186-gce
@@ -29,6 +30,9 @@ properties:
       - items:
           - const: mediatek,mt6795-gce
           - const: mediatek,mt8173-gce
+      - items:
+          - const: mediatek,mt6893-gce
+          - const: mediatek,mt8195-gce
 
   "#mbox-cells":
     const: 2
