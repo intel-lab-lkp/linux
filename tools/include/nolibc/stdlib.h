@@ -271,16 +271,12 @@ int utoa_r(unsigned long in, char *buffer)
 static __attribute__((unused))
 int itoa_r(long in, char *buffer)
 {
-	char *ptr = buffer;
-	int len = 0;
-
 	if (in < 0) {
-		in = -in;
-		*(ptr++) = '-';
-		len++;
+		*(buffer++) = '-';
+		return 1 + utoa_r(-(unsigned long)in, buffer);
 	}
-	len += utoa_r(in, ptr);
-	return len;
+
+	return utoa_r(in, buffer);
 }
 
 /* for historical compatibility, same as above but returns the pointer to the
@@ -407,16 +403,12 @@ int u64toa_r(uint64_t in, char *buffer)
 static __attribute__((unused))
 int i64toa_r(int64_t in, char *buffer)
 {
-	char *ptr = buffer;
-	int len = 0;
-
 	if (in < 0) {
-		in = -in;
-		*(ptr++) = '-';
-		len++;
+		*(buffer++) = '-';
+		return 1 + u64toa_r(-(unsigned long long)in, buffer);
 	}
-	len += u64toa_r(in, ptr);
-	return len;
+
+	return u64toa_r(in, buffer);
 }
 
 /* converts int64_t <in> to a string using the static itoa_buffer and returns
