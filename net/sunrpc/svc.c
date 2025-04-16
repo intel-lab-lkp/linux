@@ -674,6 +674,7 @@ svc_rqst_free(struct svc_rqst *rqstp)
 {
 	folio_batch_release(&rqstp->rq_fbatch);
 	kfree(rqstp->rq_bvec);
+	kfree(rqstp->rq_vec);
 	svc_release_buffer(rqstp);
 	if (rqstp->rq_scratch_page)
 		put_page(rqstp->rq_scratch_page);
@@ -710,6 +711,11 @@ svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
 		goto out_enomem;
 
 	if (!svc_init_buffer(rqstp, serv->sv_max_mesg, node))
+		goto out_enomem;
+
+	rqstp->rq_vec = kcalloc_node(RPCSVC_MAXPAGES, sizeof(struct kvec),
+				      GFP_KERNEL, node);
+	if (!rqstp->rq_vec)
 		goto out_enomem;
 
 	rqstp->rq_bvec = kcalloc_node(RPCSVC_MAXPAGES, sizeof(struct bio_vec),
@@ -1754,7 +1760,7 @@ unsigned int svc_fill_write_vector(struct svc_rqst *rqstp,
 		++pages;
 	}
 
-	WARN_ON_ONCE(i > ARRAY_SIZE(rqstp->rq_vec));
+	WARN_ON_ONCE(i > RPCSVC_MAXPAGES);
 	return i;
 }
 EXPORT_SYMBOL_GPL(svc_fill_write_vector);
