@@ -1096,6 +1096,9 @@ static int io_import_fixed(int ddir, struct iov_iter *iter,
 			iter->iov_offset = offset & ((1UL << imu->folio_shift) - 1);
 		}
 	}
+	iter->nr_segs = (iter->bvec->bv_offset + iter->iov_offset +
+		iter->count + ((1UL << imu->folio_shift) - 1)) /
+		(1UL << imu->folio_shift);
 
 	return 0;
 }
