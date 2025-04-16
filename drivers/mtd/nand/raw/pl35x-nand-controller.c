@@ -1071,8 +1071,8 @@ static int pl35x_nand_chip_init(struct pl35x_nandc *nfc,
 	mtd->dev.parent = nfc->dev;
 	nand_set_flash_node(chip, np);
 	if (!mtd->name) {
-		mtd->name = devm_kasprintf(nfc->dev, GFP_KERNEL,
-					   "%s", PL35X_NANDC_DRIVER_NAME);
+		mtd->name = devm_kstrdup(nfc->dev, PL35X_NANDC_DRIVER_NAME,
+					 GFP_KERNEL);
 		if (!mtd->name) {
 			dev_err(nfc->dev, "Failed to allocate mtd->name\n");
 			return -ENOMEM;
