@@ -20,7 +20,6 @@ properties:
               - qcom,kpss-wdt-ipq4019
               - qcom,apss-wdt-ipq5018
               - qcom,apss-wdt-ipq5332
-              - qcom,apss-wdt-ipq5424
               - qcom,apss-wdt-ipq9574
               - qcom,apss-wdt-msm8226
               - qcom,apss-wdt-msm8974
@@ -56,6 +55,8 @@ properties:
               - qcom,kpss-wdt-msm8960
           - const: qcom,kpss-timer
           - const: qcom,msm-timer
+      - items:
+          - const: qcom,apss-wdt-ipq5424
 
   reg:
     maxItems: 1
@@ -93,7 +94,9 @@ allOf:
       properties:
         compatible:
           contains:
-            const: qcom,kpss-wdt
+            enum:
+              - qcom,apss-wdt-ipq5424
+              - qcom,kpss-wdt
     then:
       properties:
         clock-frequency: false
