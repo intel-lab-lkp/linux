@@ -45,6 +45,7 @@ struct phylink {
 	struct phylink_pcs *pcs;
 	struct device *dev;
 	unsigned int old_link_state:1;
+	unsigned int link_balanced:1;
 
 	unsigned long phylink_disable_state; /* bitmask of disables */
 	struct phy_device *phydev;
@@ -1553,7 +1554,8 @@ static void phylink_link_down(struct phylink *pl)
 
 	pl->mac_ops->mac_link_down(pl->config, pl->act_link_an_mode,
 				   pl->cur_interface);
-	phylink_info(pl, "Link is Down\n");
+	if (pl->link_balanced)
+		phylink_info(pl, "Link is Down\n");
 }
 
 static bool phylink_link_is_up(struct phylink *pl)
@@ -1658,12 +1660,13 @@ static void phylink_resolve(struct work_struct *w)
 	if (pl->major_config_failed)
 		link_state.link = false;
 
-	if (link_state.link != cur_link_state) {
+	if (link_state.link != cur_link_state || !pl->link_balanced) {
 		pl->old_link_state = link_state.link;
 		if (!link_state.link)
 			phylink_link_down(pl);
 		else
 			phylink_link_up(pl, link_state);
+		pl->link_balanced = true;
 	}
 	if (!link_state.link && retrigger) {
 		pl->link_failed = false;
@@ -2546,6 +2549,7 @@ void phylink_suspend(struct phylink *pl, bool mac_wol)
 			netif_carrier_off(pl->netdev);
 		else
 			pl->old_link_state = false;
+		pl->link_balanced = false;
 
 		/* We do not call mac_link_down() here as we want the
 		 * link to remain up to receive the WoL packets.
@@ -2595,16 +2599,6 @@ void phylink_resume(struct phylink *pl)
 
 	if (test_bit(PHYLINK_DISABLE_MAC_WOL, &pl->phylink_disable_state)) {
 		/* Wake-on-Lan enabled, MAC handling */
-
-		/* Call mac_link_down() so we keep the overall state balanced.
-		 * Do this under the state_mutex lock for consistency. This
-		 * will cause a "Link Down" message to be printed during
-		 * resume, which is harmless - the true link state will be
-		 * printed when we run a resolve.
-		 */
-		mutex_lock(&pl->state_mutex);
-		phylink_link_down(pl);
-		mutex_unlock(&pl->state_mutex);
 
 		/* Re-apply the link parameters so that all the settings get
 		 * restored to the MAC.
