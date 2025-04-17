@@ -391,7 +391,7 @@ static int octep_iomap_region(struct pci_dev *pdev, u8 __iomem **tbl, u8 bar)
 {
 	int ret;
 
-	ret = pci_request_region(pdev, bar, OCTEP_VDPA_DRIVER_NAME);
+	ret = pcim_request_region(pdev, bar, OCTEP_VDPA_DRIVER_NAME);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to request BAR:%u region\n", bar);
 		return ret;
@@ -400,7 +400,6 @@ static int octep_iomap_region(struct pci_dev *pdev, u8 __iomem **tbl, u8 bar)
 	tbl[bar] = pci_iomap(pdev, bar, pci_resource_len(pdev, bar));
 	if (!tbl[bar]) {
 		dev_err(&pdev->dev, "Failed to iomap BAR:%u\n", bar);
-		pci_release_region(pdev, bar);
 		ret = -ENOMEM;
 	}
 
@@ -410,7 +409,6 @@ static int octep_iomap_region(struct pci_dev *pdev, u8 __iomem **tbl, u8 bar)
 static void octep_iounmap_region(struct pci_dev *pdev, u8 __iomem **tbl, u8 bar)
 {
 	pci_iounmap(pdev, tbl[bar]);
-	pci_release_region(pdev, bar);
 }
 
 static void octep_vdpa_pf_bar_shrink(struct octep_pf *octpf)
