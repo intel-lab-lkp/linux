@@ -88,4 +88,5 @@ struct k3_rproc {
 	void *priv;
 };
 
+void k3_rproc_mbox_callback(struct mbox_client *client, void *data);
 #endif /* REMOTEPROC_TI_K3_COMMON_H */
