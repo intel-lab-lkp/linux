@@ -4,7 +4,7 @@ menu "Accelerated Cryptographic Algorithms for CPU (sparc64)"
 
 config CRYPTO_DES_SPARC64
 	tristate "Ciphers: DES and Triple DES EDE, modes: ECB/CBC"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_ALGAPI
 	select CRYPTO_LIB_DES
 	select CRYPTO_SKCIPHER
@@ -18,7 +18,7 @@ config CRYPTO_DES_SPARC64
 
 config CRYPTO_MD5_SPARC64
 	tristate "Digests: MD5"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_MD5
 	select CRYPTO_HASH
 	help
@@ -28,7 +28,7 @@ config CRYPTO_MD5_SPARC64
 
 config CRYPTO_SHA1_SPARC64
 	tristate "Hash functions: SHA-1"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_SHA1
 	select CRYPTO_HASH
 	help
@@ -38,7 +38,7 @@ config CRYPTO_SHA1_SPARC64
 
 config CRYPTO_SHA256_SPARC64
 	tristate "Hash functions: SHA-224 and SHA-256"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_SHA256
 	select CRYPTO_HASH
 	help
@@ -48,7 +48,7 @@ config CRYPTO_SHA256_SPARC64
 
 config CRYPTO_SHA512_SPARC64
 	tristate "Hash functions: SHA-384 and SHA-512"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_SHA512
 	select CRYPTO_HASH
 	help
@@ -58,7 +58,7 @@ config CRYPTO_SHA512_SPARC64
 
 config CRYPTO_AES_SPARC64
 	tristate "Ciphers: AES, modes: ECB, CBC, CTR"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_SKCIPHER
 	help
 	  Block ciphers: AES cipher algorithms (FIPS-197)
@@ -68,7 +68,7 @@ config CRYPTO_AES_SPARC64
 
 config CRYPTO_CAMELLIA_SPARC64
 	tristate "Ciphers: Camellia, modes: ECB, CBC"
-	depends on SPARC64
+	depends on CRYPTO && SPARC64
 	select CRYPTO_ALGAPI
 	select CRYPTO_SKCIPHER
 	help

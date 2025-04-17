@@ -409,6 +409,8 @@ config UBOOT_ENTRY_ADDR
 	 This is the virtual address u-boot jumps to when booting the Linux
 	 Kernel.
 
+source "arch/sparc/crypto/Kconfig"
+
 endmenu
 endif
 

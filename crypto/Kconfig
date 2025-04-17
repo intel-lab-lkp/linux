@@ -1426,9 +1426,6 @@ config CRYPTO_HASH_INFO
 	bool
 
 if !KMSAN # avoid false positives from assembly
-if SPARC
-source "arch/sparc/crypto/Kconfig"
-endif
 if X86
 source "arch/x86/crypto/Kconfig"
 endif
