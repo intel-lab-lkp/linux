@@ -345,15 +345,12 @@ static void chaos_read_callback(struct urb *urb)
 	wake_up(&dev->wait_q);
 }
 
-/* Fill the buffer. Called with dev->lock held
- */
-static int _chaoskey_fill(struct chaoskey *dev)
+static int chaoskey_request_fill(struct chaoskey *dev)
 {
 	DEFINE_WAIT(wait);
 	int result;
-	bool started;
 
-	usb_dbg(dev->interface, "fill");
+	usb_dbg(dev->interface, "request fill");
 
 	/* Return immediately if someone called before the buffer was
 	 * empty */
@@ -378,19 +375,27 @@ static int _chaoskey_fill(struct chaoskey *dev)
 
 	dev->reading = true;
 	result = usb_submit_urb(dev->urb, GFP_KERNEL);
-	if (result < 0) {
-		result = usb_translate_errors(result);
-		dev->reading = false;
+	if (result < 0)
 		goto out;
-	}
 
-	/* The first read on the Alea takes a little under 2 seconds.
-	 * Reads after the first read take only a few microseconds
-	 * though.  Presumably the entropy-generating circuit needs
-	 * time to ramp up.  So, we wait longer on the first read.
+	/*
+	 * powering down while a read is under way
+	 * is blocked in suspend()
 	 */
-	started = dev->reads_started;
-	dev->reads_started = true;
+	usb_autopm_put_interface(dev->interface);
+	return 0;
+out:
+	dev->reading = false;
+	usb_autopm_put_interface(dev->interface);
+	return usb_translate_errors(result);
+}
+
+static int chaoskey_wait_fill(struct chaoskey *dev)
+{
+	DEFINE_WAIT(wait);
+	int result;
+	bool started = dev->reads_started;
+
 	result = wait_event_interruptible_timeout(
 		dev->wait_q,
 		!dev->reading,
@@ -406,10 +411,17 @@ static int _chaoskey_fill(struct chaoskey *dev)
 		usb_kill_urb(dev->urb);
 	} else {
 		result = dev->valid;
+
+		/* The first read on the Alea takes a little under 2 seconds.
+		 * Reads after the first read take only a few microseconds
+		 * though.  Presumably the entropy-generating circuit needs
+		 * time to ramp up.  So, we waited longer on the first read.
+		 */
+		dev->reads_started = true;
 	}
+
 out:
 	/* Let the device go back to sleep eventually */
-	usb_autopm_put_interface(dev->interface);
 
 	usb_dbg(dev->interface, "read %d bytes", dev->valid);
 
@@ -458,7 +470,12 @@ static ssize_t chaoskey_read(struct file *file,
 				goto bail;
 		}
 		if (dev->valid == dev->used) {
-			result = _chaoskey_fill(dev);
+			result = chaoskey_request_fill(dev);
+			if (result < 0) {
+				mutex_unlock(&dev->lock);
+				goto bail;
+			}
+			result = chaoskey_wait_fill(dev);
 			if (result < 0) {
 				mutex_unlock(&dev->lock);
 				goto bail;
@@ -526,7 +543,7 @@ static int chaoskey_rng_read(struct hwrng *rng, void *data,
 	 * the buffer will still be empty
 	 */
 	if (dev->valid == dev->used)
-		(void) _chaoskey_fill(dev);
+		(void) chaoskey_request_fill(dev);
 
 	this_time = dev->valid - dev->used;
 	if (this_time > max)
@@ -546,6 +563,11 @@ static int chaoskey_rng_read(struct hwrng *rng, void *data,
 static int chaoskey_suspend(struct usb_interface *interface,
 			    pm_message_t message)
 {
+	struct chaoskey *dev = usb_get_intfdata(interface);
+
+	if (dev->reading && PMSG_IS_AUTO(message))
+		return -EBUSY;
+
 	usb_dbg(interface, "suspend");
 	return 0;
 }
