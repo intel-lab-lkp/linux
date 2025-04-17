@@ -2560,6 +2560,34 @@ static bool genpd_present(const struct generic_pm_domain *genpd)
 }
 
 /**
+ * of_genpd_sync_state() - A common sync_state function for genpd providers
+ * @dev: The device the genpd provider is associated with.
+ *
+ * The @dev that corresponds to a genpd provider may provide one or multiple
+ * genpds. This function makes use of the device node for @dev to find the
+ * genpds that belongs to the provider. For each genpd we try a power-off.
+ */
+void of_genpd_sync_state(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	struct generic_pm_domain *genpd;
+
+	if (!np)
+		return;
+
+	mutex_lock(&gpd_list_lock);
+	list_for_each_entry(genpd, &gpd_list, gpd_list_node) {
+		if (genpd->provider == &np->fwnode) {
+			genpd_lock(genpd);
+			genpd_power_off(genpd, false, 0);
+			genpd_unlock(genpd);
+		}
+	}
+	mutex_unlock(&gpd_list_lock);
+}
+EXPORT_SYMBOL_GPL(of_genpd_sync_state);
+
+/**
  * of_genpd_add_provider_simple() - Register a simple PM domain provider
  * @np: Device node pointer associated with the PM domain provider.
  * @genpd: Pointer to PM domain associated with the PM domain provider.
