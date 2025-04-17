@@ -1755,3 +1755,5 @@ config ARCH_HIBERNATION_POSSIBLE
 	default y if ARCH_SUSPEND_POSSIBLE
 
 endmenu
+
+source "arch/arm/crypto/Kconfig"
