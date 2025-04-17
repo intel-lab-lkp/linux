@@ -1341,6 +1341,31 @@ static inline bool spi_is_bpw_supported(struct spi_device *spi, u32 bpw)
 }
 
 /**
+ * spi_bpw_to_bytes - Covert bits per word to bytes
+ * @bpw: Bits per word
+ *
+ * This function converts the given @bpw to bytes. The result is always
+ * power-of-two, e.g.,
+ *
+ *  ===============    =================
+ *  Input (in bits)    Output (in bytes)
+ *  ===============    =================
+ *          0                   0
+ *          5                   1
+ *          9                   2
+ *          2                   4
+ *          3                   8
+ *  ===============    =================
+ *
+ * Returns:
+ * Bytes for the given @bpw.
+ */
+static inline u32 spi_bpw_to_bytes(u32 bpw)
+{
+	return roundup_pow_of_two(BITS_TO_BYTES(bpw));
+}
+
+/**
  * spi_controller_xfer_timeout - Compute a suitable timeout value
  * @ctlr: SPI device
  * @xfer: Transfer descriptor
