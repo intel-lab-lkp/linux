@@ -845,6 +845,7 @@ int usb_otg_start(struct platform_device *pdev)
 
 	/* Initialize the state machine structure with default values */
 	SET_OTG_STATE(otg_trans, OTG_STATE_UNDEFINED);
+	INIT_DELAYED_WORK(&fsm->hnp_polling_work, otg_hnp_polling_work);
 	fsm->otg = p_otg->phy.otg;
 
 	/* We don't require predefined MEM/IRQ resource index */

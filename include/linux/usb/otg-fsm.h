@@ -183,7 +183,6 @@ struct otg_fsm {
 	struct mutex lock;
 	u8 *host_req_flag;
 	struct delayed_work hnp_polling_work;
-	bool hnp_work_inited;
 	bool state_changed;
 };
 
@@ -308,5 +307,6 @@ static inline int otg_start_gadget(struct otg_fsm *fsm, int on)
 }
 
 int otg_statemachine(struct otg_fsm *fsm);
+void otg_hnp_polling_work(struct work_struct *work);
 
 #endif /* __LINUX_USB_OTG_FSM_H */
