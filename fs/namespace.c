@@ -1972,10 +1972,6 @@ static void umount_tree(struct mount *mnt, enum umount_tree_flags how)
 		 */
 		mnt_notify_add(p);
 	}
-
-	/* Let namespace_unlock() know that it can defer freeing the mounts. */
-	if (!(how & UMOUNT_SYNC))
-		defer_unmount = true;
 }
 
 static void shrink_submounts(struct mount *mnt);
@@ -2081,8 +2077,10 @@ static int do_umount(struct mount *mnt, int flags)
 
 	event++;
 	if (flags & MNT_DETACH) {
-		if (mnt_ns_attached(mnt) || !list_empty(&mnt->mnt_list))
+		if (mnt_ns_attached(mnt) || !list_empty(&mnt->mnt_list)) {
 			umount_tree(mnt, UMOUNT_PROPAGATE);
+			defer_unmount = true;
+		}
 		retval = 0;
 	} else {
 		shrink_submounts(mnt);
