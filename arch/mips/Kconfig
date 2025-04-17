@@ -3138,6 +3138,8 @@ source "drivers/cpuidle/Kconfig"
 
 endmenu
 
+source "arch/mips/crypto/Kconfig"
+
 source "arch/mips/kvm/Kconfig"
 
 source "arch/mips/vdso/Kconfig"

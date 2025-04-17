@@ -1426,9 +1426,6 @@ config CRYPTO_HASH_INFO
 	bool
 
 if !KMSAN # avoid false positives from assembly
-if MIPS
-source "arch/mips/crypto/Kconfig"
-endif
 if PPC
 source "arch/powerpc/crypto/Kconfig"
 endif
