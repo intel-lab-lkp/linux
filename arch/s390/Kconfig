@@ -681,6 +681,10 @@ config KERNEL_IMAGE_BASE
 	  the virtual memory where other data structures are located, this
 	  option is ignored and the image is loaded above the structures.
 
+if !KMSAN # avoid false positives from assembly
+source "arch/s390/crypto/Kconfig"
+endif
+
 endmenu
 
 menu "Memory setup"

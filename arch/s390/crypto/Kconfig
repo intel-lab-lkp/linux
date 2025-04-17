@@ -4,6 +4,7 @@ menu "Accelerated Cryptographic Algorithms for CPU (s390)"
 
 config CRYPTO_SHA512_S390
 	tristate "Hash functions: SHA-384 and SHA-512"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  SHA-384 and SHA-512 secure hash algorithms (FIPS 180)
@@ -14,6 +15,7 @@ config CRYPTO_SHA512_S390
 
 config CRYPTO_SHA1_S390
 	tristate "Hash functions: SHA-1"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  SHA-1 secure hash algorithm (FIPS 180)
@@ -24,6 +26,7 @@ config CRYPTO_SHA1_S390
 
 config CRYPTO_SHA256_S390
 	tristate "Hash functions: SHA-224 and SHA-256"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  SHA-224 and SHA-256 secure hash algorithms (FIPS 180)
@@ -34,6 +37,7 @@ config CRYPTO_SHA256_S390
 
 config CRYPTO_SHA3_256_S390
 	tristate "Hash functions: SHA3-224 and SHA3-256"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  SHA3-224 and SHA3-256 secure hash algorithms (FIPS 202)
@@ -44,6 +48,7 @@ config CRYPTO_SHA3_256_S390
 
 config CRYPTO_SHA3_512_S390
 	tristate "Hash functions: SHA3-384 and SHA3-512"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  SHA3-384 and SHA3-512 secure hash algorithms (FIPS 202)
@@ -54,6 +59,7 @@ config CRYPTO_SHA3_512_S390
 
 config CRYPTO_GHASH_S390
 	tristate "Hash functions: GHASH"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  GCM GHASH hash function (NIST SP800-38D)
@@ -64,6 +70,7 @@ config CRYPTO_GHASH_S390
 
 config CRYPTO_AES_S390
 	tristate "Ciphers: AES, modes: ECB, CBC, CTR, XTS, GCM"
+	depends on CRYPTO
 	select CRYPTO_ALGAPI
 	select CRYPTO_SKCIPHER
 	help
@@ -85,6 +92,7 @@ config CRYPTO_AES_S390
 
 config CRYPTO_DES_S390
 	tristate "Ciphers: DES and Triple DES EDE, modes: ECB, CBC, CTR"
+	depends on CRYPTO
 	select CRYPTO_ALGAPI
 	select CRYPTO_SKCIPHER
 	select CRYPTO_LIB_DES
@@ -107,6 +115,7 @@ config CRYPTO_CHACHA_S390
 
 config CRYPTO_HMAC_S390
 	tristate "Keyed-hash message authentication code: HMAC"
+	depends on CRYPTO
 	select CRYPTO_HASH
 	help
 	  s390 specific HMAC hardware support for SHA224, SHA256, SHA384 and
