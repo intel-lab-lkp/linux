@@ -450,20 +450,6 @@ bool rxrpc_kernel_check_life(const struct socket *sock,
 EXPORT_SYMBOL(rxrpc_kernel_check_life);
 
 /**
- * rxrpc_kernel_get_epoch - Retrieve the epoch value from a call.
- * @sock: The socket the call is on
- * @call: The call to query
- *
- * Allow a kernel service to retrieve the epoch value from a service call to
- * see if the client at the other end rebooted.
- */
-u32 rxrpc_kernel_get_epoch(struct socket *sock, struct rxrpc_call *call)
-{
-	return call->conn->proto.epoch;
-}
-EXPORT_SYMBOL(rxrpc_kernel_get_epoch);
-
-/**
  * rxrpc_kernel_new_call_notification - Get notifications of new calls
  * @sock: The socket to intercept received messages on
  * @notify_new_call: Function to be called when new calls appear
@@ -482,31 +468,6 @@ void rxrpc_kernel_new_call_notification(
 	rx->discard_new_call = discard_new_call;
 }
 EXPORT_SYMBOL(rxrpc_kernel_new_call_notification);
-
-/**
- * rxrpc_kernel_set_max_life - Set maximum lifespan on a call
- * @sock: The socket the call is on
- * @call: The call to configure
- * @hard_timeout: The maximum lifespan of the call in ms
- *
- * Set the maximum lifespan of a call.  The call will end with ETIME or
- * ETIMEDOUT if it takes longer than this.
- */
-void rxrpc_kernel_set_max_life(struct socket *sock, struct rxrpc_call *call,
-			       unsigned long hard_timeout)
-{
-	ktime_t delay = ms_to_ktime(hard_timeout), expect_term_by;
-
-	mutex_lock(&call->user_mutex);
-
-	expect_term_by = ktime_add(ktime_get_real(), delay);
-	WRITE_ONCE(call->expect_term_by, expect_term_by);
-	trace_rxrpc_timer_set(call, delay, rxrpc_timer_trace_hard);
-	rxrpc_poke_call(call, rxrpc_call_poke_set_timeout);
-
-	mutex_unlock(&call->user_mutex);
-}
-EXPORT_SYMBOL(rxrpc_kernel_set_max_life);
 
 /*
  * connect an RxRPC socket
