@@ -2794,49 +2794,56 @@ static struct kunit_suite clk_register_clk_parent_data_of_suite = {
 };
 
 /**
- * struct clk_register_clk_parent_data_device_ctx - Context for clk_parent_data device tests
+ * struct clk_register_device_ctx - Context for clock device tests
  * @dev: device of clk under test
  * @hw: clk_hw for clk under test
  * @pdrv: driver to attach to find @dev
  */
-struct clk_register_clk_parent_data_device_ctx {
+struct clk_register_device_ctx {
 	struct device *dev;
 	struct clk_hw hw;
 	struct platform_driver pdrv;
 };
 
-static inline struct clk_register_clk_parent_data_device_ctx *
-clk_register_clk_parent_data_driver_to_test_context(struct platform_device *pdev)
+static inline struct clk_register_device_ctx *
+clk_register_device_to_test_context(struct platform_device *pdev)
 {
 	return container_of(to_platform_driver(pdev->dev.driver),
-			    struct clk_register_clk_parent_data_device_ctx, pdrv);
+			    struct clk_register_device_ctx, pdrv);
 }
 
-static int clk_register_clk_parent_data_device_probe(struct platform_device *pdev)
+static int clk_register_device_probe(struct platform_device *pdev)
 {
-	struct clk_register_clk_parent_data_device_ctx *ctx;
+	struct clk_register_device_ctx *ctx;
 
-	ctx = clk_register_clk_parent_data_driver_to_test_context(pdev);
+	ctx = clk_register_device_to_test_context(pdev);
 	ctx->dev = &pdev->dev;
 
 	return 0;
 }
 
-static void clk_register_clk_parent_data_device_driver(struct kunit *test)
+static void clk_register_of_device_driver(struct kunit *test,
+					  const struct of_device_id *match_table)
 {
-	struct clk_register_clk_parent_data_device_ctx *ctx = test->priv;
-	static const struct of_device_id match_table[] = {
-		{ .compatible = "test,clk-parent-data" },
-		{ }
-	};
+	struct clk_register_device_ctx *ctx = test->priv;
 
-	ctx->pdrv.probe = clk_register_clk_parent_data_device_probe;
+	ctx->pdrv.probe = clk_register_device_probe;
 	ctx->pdrv.driver.of_match_table = match_table;
 	ctx->pdrv.driver.name = __func__;
 	ctx->pdrv.driver.owner = THIS_MODULE;
 
 	KUNIT_ASSERT_EQ(test, 0, kunit_platform_driver_register(test, &ctx->pdrv));
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->dev);
+}
+
+static void clk_register_clk_parent_data_device_driver(struct kunit *test)
+{
+	static const struct of_device_id match_table[] = {
+		{ .compatible = "test,clk-parent-data" },
+		{ }
+	};
+
+	clk_register_of_device_driver(test, match_table);
 }
 
 static const struct clk_register_clk_parent_data_test_case
@@ -2909,7 +2916,7 @@ KUNIT_ARRAY_PARAM(clk_register_clk_parent_data_device_test,
  */
 static void clk_register_clk_parent_data_device_test(struct kunit *test)
 {
-	struct clk_register_clk_parent_data_device_ctx *ctx;
+	struct clk_register_device_ctx *ctx;
 	const struct clk_register_clk_parent_data_test_case *test_param;
 	struct clk_hw *parent_hw;
 	struct clk_init_data init = { };
@@ -3016,7 +3023,7 @@ KUNIT_ARRAY_PARAM(clk_register_clk_parent_data_device_hw_test,
  */
 static void clk_register_clk_parent_data_device_hw_test(struct kunit *test)
 {
-	struct clk_register_clk_parent_data_device_ctx *ctx;
+	struct clk_register_device_ctx *ctx;
 	const struct clk_register_clk_parent_data_test_case *test_param;
 	struct clk_dummy_context *parent;
 	struct clk_hw *parent_hw;
@@ -3395,6 +3402,178 @@ static struct kunit_suite clk_assigned_rates_suite = {
 	.init = clk_assigned_rates_test_init,
 };
 
+/*
+ * struct clk_hw_get_dev_of_node_test_param - Test parameters clk_hw_get_dev/of_node tests
+ * @desc: Test description
+ * @has_ref: whether or not to pass the device/of_node to the register function
+ */
+struct clk_hw_get_dev_of_node_test_param {
+	const char *desc;
+	bool has_ref;
+};
+
+static const struct clk_hw_get_dev_of_node_test_param
+clk_hw_get_dev_test_params[] = {
+	{
+		.desc = "clock with device reference",
+		.has_ref = true,
+	}, {
+		.desc = "clock missing device reference",
+		.has_ref = false,
+	},
+};
+KUNIT_ARRAY_PARAM_DESC(clk_hw_get_dev, clk_hw_get_dev_test_params, desc)
+
+static const struct clk_init_data clk_hw_get_dev_of_node_init_data = {
+	.name = "clk_hw_get_dev_of_node",
+	.ops = &empty_clk_ops,
+};
+
+static void clk_hw_register_get_dev_test(struct kunit *test)
+{
+	const struct clk_hw_get_dev_of_node_test_param *test_param = test->param_value;
+	struct clk_register_device_ctx *ctx = test->priv;
+	struct device *dev = test_param->has_ref ? ctx->dev : NULL;
+
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, dev, &ctx->hw));
+
+	KUNIT_EXPECT_PTR_EQ(test, dev, clk_hw_get_dev(&ctx->hw));
+}
+
+static void clk_hw_register_get_of_node_test(struct kunit *test)
+{
+	const struct clk_hw_get_dev_of_node_test_param *test_param = test->param_value;
+	struct clk_register_device_ctx *ctx = test->priv;
+	struct device *dev = test_param->has_ref ? ctx->dev : NULL;
+	struct device_node *np = NULL;
+
+	if (dev) {
+		np = dev_of_node(dev);
+
+		if (!np)
+			np = dev_of_node(dev->parent);
+	}
+
+	KUNIT_ASSERT_EQ(test, 0, clk_hw_register_kunit(test, dev, &ctx->hw));
+
+	KUNIT_EXPECT_PTR_EQ(test, np, clk_hw_get_of_node(&ctx->hw));
+}
+
+static int clk_hw_register_get_dev_of_node_test_init(struct kunit *test)
+{
+	struct clk_register_device_ctx *ctx;
+	static const struct of_device_id match_table[] = {
+		{ .compatible = "test,clk-hw-get-dev-of-node" },
+		{ }
+	};
+
+	KUNIT_ASSERT_EQ(test, 0,
+			of_overlay_apply_kunit(test, kunit_clk_hw_get_dev_of_node));
+
+	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
+	test->priv = ctx;
+
+	clk_register_of_device_driver(test, match_table);
+	ctx->hw.init = &clk_hw_get_dev_of_node_init_data;
+
+	return 0;
+}
+
+static struct kunit_case clk_hw_register_get_dev_of_node_test_cases[] = {
+	KUNIT_CASE_PARAM(clk_hw_register_get_dev_test,
+			 clk_hw_get_dev_gen_params),
+	KUNIT_CASE_PARAM(clk_hw_register_get_of_node_test,
+			 clk_hw_get_dev_gen_params),
+	{}
+};
+
+/*
+ * Test suite to verify clk_hw_get_dev() and clk_hw_get_of_node() with
+ * registered through clk_hw_register()
+ */
+static struct kunit_suite clk_hw_register_get_dev_of_node_test_suite = {
+	.name = "clk_hw_register_get_dev_of_node_test_suite",
+	.init = clk_hw_register_get_dev_of_node_test_init,
+	.test_cases = clk_hw_register_get_dev_of_node_test_cases,
+};
+
+struct of_clk_register_ctx {
+	struct device_node *np;
+	struct clk_hw hw;
+};
+
+static const struct clk_hw_get_dev_of_node_test_param
+clk_hw_get_of_node_test_params[] = {
+	{
+		.desc = "clock with of_node reference",
+		.has_ref = true,
+	}, {
+		.desc = "clock missing of_node reference",
+		.has_ref = false,
+	},
+};
+KUNIT_ARRAY_PARAM_DESC(clk_hw_get_of_node, clk_hw_get_of_node_test_params, desc)
+
+static void of_clk_hw_register_get_dev_test(struct kunit *test)
+{
+	const struct clk_hw_get_dev_of_node_test_param *test_param = test->param_value;
+	struct of_clk_register_ctx *ctx = test->priv;
+	struct device_node *np = test_param->has_ref ? ctx->np : NULL;
+
+	KUNIT_ASSERT_EQ(test, 0, of_clk_hw_register_kunit(test, np, &ctx->hw));
+
+	KUNIT_EXPECT_PTR_EQ(test, NULL, clk_hw_get_dev(&ctx->hw));
+}
+
+static void of_clk_hw_register_get_of_node_test(struct kunit *test)
+{
+	const struct clk_hw_get_dev_of_node_test_param *test_param = test->param_value;
+	struct of_clk_register_ctx *ctx = test->priv;
+	struct device_node *np = test_param->has_ref ? ctx->np : NULL;
+
+	KUNIT_ASSERT_EQ(test, 0, of_clk_hw_register_kunit(test, np, &ctx->hw));
+
+	KUNIT_EXPECT_PTR_EQ(test, np, clk_hw_get_of_node(&ctx->hw));
+}
+
+static int of_clk_hw_register_get_dev_of_node_test_init(struct kunit *test)
+{
+	struct of_clk_register_ctx *ctx;
+
+	KUNIT_ASSERT_EQ(test, 0,
+			of_overlay_apply_kunit(test, kunit_clk_hw_get_dev_of_node));
+
+	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
+	test->priv = ctx;
+
+	ctx->np = of_find_compatible_node(NULL, NULL, "test,clk-hw-get-dev-of-node");
+	of_node_put_kunit(test, ctx->np);
+
+	ctx->hw.init = &clk_hw_get_dev_of_node_init_data;
+
+	return 0;
+}
+
+static struct kunit_case of_clk_hw_register_get_dev_of_node_test_cases[] = {
+	KUNIT_CASE_PARAM(of_clk_hw_register_get_dev_test,
+			 clk_hw_get_of_node_gen_params),
+	KUNIT_CASE_PARAM(of_clk_hw_register_get_of_node_test,
+			 clk_hw_get_of_node_gen_params),
+	{}
+};
+
+/*
+ * Test suite to verify clk_hw_get_dev() and clk_hw_get_of_node() with
+ * registered through of_clk_hw_register()
+ */
+static struct kunit_suite of_clk_hw_register_get_dev_of_node_test_suite = {
+	.name = "of_clk_hw_register_get_dev_of_node_test_suite",
+	.init = of_clk_hw_register_get_dev_of_node_test_init,
+	.test_cases = of_clk_hw_register_get_dev_of_node_test_cases,
+};
+
 kunit_test_suites(
 	&clk_assigned_rates_suite,
 	&clk_leaf_mux_set_rate_parent_test_suite,
@@ -3412,6 +3591,8 @@ kunit_test_suites(
 	&clk_register_clk_parent_data_device_suite,
 	&clk_single_parent_mux_test_suite,
 	&clk_uncached_test_suite,
+	&clk_hw_register_get_dev_of_node_test_suite,
+	&of_clk_hw_register_get_dev_of_node_test_suite,
 );
 MODULE_DESCRIPTION("Kunit tests for clk framework");
 MODULE_LICENSE("GPL v2");
