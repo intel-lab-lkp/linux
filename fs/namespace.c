@@ -45,6 +45,11 @@ static unsigned int m_hash_shift __ro_after_init;
 static unsigned int mp_hash_mask __ro_after_init;
 static unsigned int mp_hash_shift __ro_after_init;
 
+struct deferred_free_mounts {
+	struct rcu_work rwork;
+	struct hlist_head release_list;
+};
+
 static __initdata unsigned long mhash_entries;
 static int __init set_mhash_entries(char *str)
 {
@@ -77,8 +82,9 @@ static struct hlist_head *mount_hashtable __ro_after_init;
 static struct hlist_head *mountpoint_hashtable __ro_after_init;
 static struct kmem_cache *mnt_cache __ro_after_init;
 static DECLARE_RWSEM(namespace_sem);
-static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
-static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
+static bool defer_unmount;		/* protected by namespace_sem */
+static HLIST_HEAD(unmounted);		/* protected by namespace_sem */
+static LIST_HEAD(ex_mountpoints);	/* protected by namespace_sem */
 static DEFINE_SEQLOCK(mnt_ns_tree_lock);
 
 #ifdef CONFIG_FSNOTIFY
@@ -1789,15 +1795,35 @@ static bool need_notify_mnt_list(void)
 }
 #endif
 
-static void namespace_unlock(void)
+static void free_mounts(struct hlist_head *mount_list)
 {
-	struct hlist_head head;
 	struct hlist_node *p;
 	struct mount *m;
+
+	hlist_for_each_entry_safe(m, p, mount_list, mnt_umount) {
+		hlist_del(&m->mnt_umount);
+		mntput(&m->mnt);
+	}
+}
+
+static void defer_free_mounts(struct work_struct *work)
+{
+	struct deferred_free_mounts *d;
+
+	d = container_of(to_rcu_work(work), struct deferred_free_mounts, rwork);
+	free_mounts(&d->release_list);
+	kfree(d);
+}
+
+static void namespace_unlock(void)
+{
+	HLIST_HEAD(head);
 	LIST_HEAD(list);
+	bool defer = defer_unmount;
 
 	hlist_move_list(&unmounted, &head);
 	list_splice_init(&ex_mountpoints, &list);
+	defer_unmount = false;
 
 	if (need_notify_mnt_list()) {
 		/*
@@ -1817,12 +1843,19 @@ static void namespace_unlock(void)
 	if (likely(hlist_empty(&head)))
 		return;
 
-	synchronize_rcu_expedited();
+	if (defer) {
+		struct deferred_free_mounts *d;
 
-	hlist_for_each_entry_safe(m, p, &head, mnt_umount) {
-		hlist_del(&m->mnt_umount);
-		mntput(&m->mnt);
+		d = kmalloc(sizeof(struct deferred_free_mounts), GFP_KERNEL);
+		if (d) {
+			hlist_move_list(&head, &d->release_list);
+			INIT_RCU_WORK(&d->rwork, defer_free_mounts);
+			queue_rcu_work(system_unbound_wq, &d->rwork);
+			return;
+		}
 	}
+	synchronize_rcu_expedited();
+	free_mounts(&head);
 }
 
 static inline void namespace_lock(void)
@@ -2044,8 +2077,10 @@ static int do_umount(struct mount *mnt, int flags)
 
 	event++;
 	if (flags & MNT_DETACH) {
-		if (mnt_ns_attached(mnt) || !list_empty(&mnt->mnt_list))
+		if (mnt_ns_attached(mnt) || !list_empty(&mnt->mnt_list)) {
 			umount_tree(mnt, UMOUNT_PROPAGATE);
+			defer_unmount = true;
+		}
 		retval = 0;
 	} else {
 		shrink_submounts(mnt);
@@ -5839,12 +5874,28 @@ static int do_statmount(struct kstatmount *s, u64 mnt_id, u64 mnt_ns_id,
 		return err;
 
 	s->root = root;
-	s->idmap = mnt_idmap(s->mnt);
-	if (s->mask & STATMOUNT_SB_BASIC)
-		statmount_sb_basic(s);
 
+	/*
+	 * Note that mount properties in mnt->mnt_flags, mnt->mnt_idmap
+	 * can change concurrently as we only hold the read-side of the
+	 * namespace semaphore and mount properties may change with only
+	 * the mount lock held.
+	 *
+	 * We could sample the mount lock sequence counter to detect
+	 * those changes and retry. But it's not worth it. Worst that
+	 * happens is that the mnt->mnt_idmap pointer is already changed
+	 * while mnt->mnt_flags isn't or vica versa. So what.
+	 *
+	 * Both mnt->mnt_flags and mnt->mnt_idmap are set and retrieved
+	 * via READ_ONCE()/WRITE_ONCE() and guard against theoretical
+	 * torn read/write. That's all we care about right now.
+	 */
+	s->idmap = mnt_idmap(s->mnt);
 	if (s->mask & STATMOUNT_MNT_BASIC)
 		statmount_mnt_basic(s);
+
+	if (s->mask & STATMOUNT_SB_BASIC)
+		statmount_sb_basic(s);
 
 	if (s->mask & STATMOUNT_PROPAGATE_FROM)
 		statmount_propagate_from(s);
@@ -6157,6 +6208,10 @@ SYSCALL_DEFINE4(listmount, const struct mnt_id_req __user *, req,
 	    !ns_capable_noaudit(ns->user_ns, CAP_SYS_ADMIN))
 		return -ENOENT;
 
+	/*
+	 * We only need to guard against mount topology changes as
+	 * listmount() doesn't care about any mount properties.
+	 */
 	scoped_guard(rwsem_read, &namespace_sem)
 		ret = do_listmount(ns, kreq.mnt_id, last_mnt_id, kmnt_ids,
 				   nr_mnt_ids, (flags & LISTMOUNT_REVERSE));
