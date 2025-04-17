@@ -129,8 +129,17 @@ do {								\
 		local_lock_acquire(this_cpu_ptr(lock));	\
 	} while (0)
 
+#define __local_lock_nested_bh_this(lock)			\
+	do {							\
+		lockdep_assert_in_softirq();			\
+		local_lock_acquire(lock);	\
+	} while (0)
+
 #define __local_unlock_nested_bh(lock)				\
 	local_lock_release(this_cpu_ptr(lock))
+
+#define __local_unlock_nested_bh_this(lock)			\
+	local_lock_release(lock)
 
 /* localtry_lock_t variants */
 
@@ -278,9 +287,20 @@ do {								\
 	spin_lock(this_cpu_ptr(lock));				\
 } while (0)
 
+#define __local_lock_nested_bh_this(lock)			\
+do {								\
+	lockdep_assert_in_softirq_func();			\
+	spin_lock(lock);					\
+} while (0)
+
 #define __local_unlock_nested_bh(lock)				\
 do {								\
 	spin_unlock(this_cpu_ptr((lock)));			\
+} while (0)
+
+#define __local_unlock_nested_bh_this(lock)			\
+do {								\
+	spin_unlock(lock);					\
 } while (0)
 
 /* localtry_lock_t variants */

@@ -138,6 +138,12 @@ DEFINE_LOCK_GUARD_1(local_lock_irqsave, local_lock_t __percpu,
 #define local_unlock_nested_bh(_lock)				\
 	__local_unlock_nested_bh(_lock)
 
+#define local_lock_nested_bh_this(_lock)			\
+	__local_lock_nested_bh_this(_lock)
+
+#define local_unlock_nested_bh_this(_lock)			\
+	__local_unlock_nested_bh_this(_lock)
+
 DEFINE_GUARD(local_lock_nested_bh, local_lock_t __percpu*,
 	     local_lock_nested_bh(_T),
 	     local_unlock_nested_bh(_T))
