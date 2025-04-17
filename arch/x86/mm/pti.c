@@ -38,6 +38,7 @@
 #include <asm/desc.h>
 #include <asm/sections.h>
 #include <asm/set_memory.h>
+#include <asm/pgalloc.h>
 
 #undef pr_fmt
 #define pr_fmt(fmt)     "Kernel/User page tables isolation: " fmt
@@ -96,6 +97,8 @@ void __init pti_check_boottime_disable(void)
 
 	if (pti_mode == PTI_AUTO && !boot_cpu_has_bug(X86_BUG_CPU_MELTDOWN))
 		return;
+
+	pgd_allocation_order = 1;
 
 	setup_force_cpu_cap(X86_FEATURE_PTI);
 }

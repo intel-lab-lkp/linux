@@ -34,8 +34,13 @@ static inline void paravirt_release_p4d(unsigned long pfn) {}
  * Instead of one PGD, we acquire two PGDs.  Being order-1, it is
  * both 8k in size and 8k-aligned.  That lets us just flip bit 12
  * in a pointer to swap between the two 4k halves.
+ *
+ * As PTI can be runtime disabled (either via boot parameter or due to
+ * running as a Xen PV guest), store the actually needed allocation
+ * order in a global variable.
  */
-#define PGD_ALLOCATION_ORDER 1
+#define PGD_ALLOCATION_ORDER pgd_allocation_order
+extern unsigned int pgd_allocation_order;
 #else
 #define PGD_ALLOCATION_ORDER 0
 #endif

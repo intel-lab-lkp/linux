@@ -12,6 +12,10 @@ phys_addr_t physical_mask __ro_after_init = (1ULL << __PHYSICAL_MASK_SHIFT) - 1;
 EXPORT_SYMBOL(physical_mask);
 #endif
 
+#ifdef CONFIG_MITIGATION_PAGE_TABLE_ISOLATION
+unsigned int pgd_allocation_order = 0;
+#endif
+
 pgtable_t pte_alloc_one(struct mm_struct *mm)
 {
 	return __pte_alloc_one(mm, GFP_PGTABLE_USER);
