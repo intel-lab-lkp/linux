@@ -66,6 +66,7 @@
 
 /* Current measurement into module VCC */
 &hwmon {
+	vs-supply = <&reg_3p3v>;
 	status = "okay";
 };
 
