@@ -2746,9 +2746,18 @@ static void intel_set_transcoder_timings_lrr(const struct intel_crtc_state *crtc
 	}
 
 	if (DISPLAY_VER(display) >= 13) {
+		/*
+		 * Comment on SRD_STATUS register in Bspec:
+		 *
+		 * To deterministically capture the transition of the state
+		 * machine going from SRDOFFACK to IDLE, the delayed V. Blank
+		 * should be at least one line after the non-delayed V. Blank.
+		 *
+		 * Legacy TG: TRANS_SET_CONTEXT_LATENCY > 0
+		 */
 		intel_de_write(display,
 			       TRANS_SET_CONTEXT_LATENCY(display, cpu_transcoder),
-			       crtc_vblank_start - crtc_vdisplay);
+			       max(crtc_vblank_start - crtc_vdisplay, 1));
 
 		/*
 		 * VBLANK_START not used by hw, just clear it
