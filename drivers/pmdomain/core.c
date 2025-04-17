@@ -2314,6 +2314,7 @@ int pm_genpd_init(struct generic_pm_domain *genpd,
 	INIT_WORK(&genpd->power_off_work, genpd_power_off_work_fn);
 	atomic_set(&genpd->sd_count, 0);
 	genpd->status = is_off ? GENPD_STATE_OFF : GENPD_STATE_ON;
+	genpd->sync_state = GENPD_SYNC_STATE_OFF;
 	genpd->device_count = 0;
 	genpd->provider = NULL;
 	genpd->device_id = -ENXIO;
@@ -2596,6 +2597,7 @@ int of_genpd_add_provider_simple(struct device_node *np,
 				 struct generic_pm_domain *genpd)
 {
 	struct fwnode_handle *fwnode;
+	struct device *dev;
 	int ret;
 
 	if (!np || !genpd)
@@ -2605,6 +2607,10 @@ int of_genpd_add_provider_simple(struct device_node *np,
 		return -EINVAL;
 
 	fwnode = &np->fwnode;
+	dev = fwnode->dev;
+
+	if (!dev)
+		genpd->sync_state = GENPD_SYNC_STATE_SIMPLE;
 
 	device_set_node(&genpd->dev, fwnode);
 
@@ -2658,8 +2664,10 @@ int of_genpd_add_provider_onecell(struct device_node *np,
 {
 	struct generic_pm_domain *genpd;
 	struct fwnode_handle *fwnode;
+	struct device *dev;
 	unsigned int i;
 	int ret = -EINVAL;
+	bool sync_state = false;
 
 	if (!np || !data)
 		return -EINVAL;
@@ -2668,6 +2676,10 @@ int of_genpd_add_provider_onecell(struct device_node *np,
 		data->xlate = genpd_xlate_onecell;
 
 	fwnode = &np->fwnode;
+	dev = fwnode->dev;
+
+	if (!dev)
+		sync_state = true;
 
 	for (i = 0; i < data->num_domains; i++) {
 		genpd = data->domains[i];
@@ -2676,6 +2688,11 @@ int of_genpd_add_provider_onecell(struct device_node *np,
 			continue;
 		if (!genpd_present(genpd))
 			goto error;
+
+		if (sync_state) {
+			genpd->sync_state = GENPD_SYNC_STATE_ONECELL;
+			sync_state = false;
+		}
 
 		device_set_node(&genpd->dev, fwnode);
 
@@ -3393,6 +3410,25 @@ static void genpd_provider_remove(struct device *dev)
 
 static void genpd_provider_sync_state(struct device *dev)
 {
+	struct generic_pm_domain *genpd = container_of(dev, struct generic_pm_domain, dev);
+
+	switch (genpd->sync_state) {
+	case GENPD_SYNC_STATE_OFF:
+		break;
+
+	case GENPD_SYNC_STATE_ONECELL:
+		of_genpd_sync_state(dev);
+		break;
+
+	case GENPD_SYNC_STATE_SIMPLE:
+		genpd_lock(genpd);
+		genpd_power_off(genpd, false, 0);
+		genpd_unlock(genpd);
+		break;
+
+	default:
+		break;
+	}
 }
 
 static struct genpd_provider_drv genpd_provider_drv = {
