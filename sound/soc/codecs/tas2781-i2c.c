@@ -328,6 +328,24 @@ static int tasdev_cali_data_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int tasdev_acoustic_data_get(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *comp = snd_soc_kcontrol_component(kcontrol);
+	struct tasdevice_priv *priv = snd_soc_component_get_drvdata(comp);
+	struct soc_bytes_ext *bytes_ext =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	unsigned char *dst = ucontrol->value.bytes.data;
+	struct acoustic_data *p = &priv->acou_data;
+
+	if (p->id == 'r' && p->len <= bytes_ext->max)
+		memcpy(dst, p, p->len);
+	else
+		dev_err(priv->dev, "Not ready for get.\n");
+
+	return 0;
+}
+
 static int calib_data_get(struct tasdevice_priv *tas_priv, int reg,
 	unsigned char *dst)
 {
@@ -700,6 +718,84 @@ static int tasdev_tf_data_get(struct snd_kcontrol *kcontrol,
 	return calib_data_get(tas_priv, reg, &dst[1]);
 }
 
+static int tasdev_acoustic_data_put(struct snd_kcontrol *kcontrol,
+	struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *comp = snd_soc_kcontrol_component(kcontrol);
+	struct tasdevice_priv *priv = snd_soc_component_get_drvdata(comp);
+	struct soc_bytes_ext *bytes_ext =
+		(struct soc_bytes_ext *) kcontrol->private_value;
+	unsigned char *src = ucontrol->value.bytes.data;
+	int j, len, ret, value, reg;
+	unsigned short chn;
+
+	if (src[0] > bytes_ext->max) {
+		dev_err(priv->dev, "pkg len(%u) is larger than max(%d).\n",
+			src[0], bytes_ext->max);
+		return 0;
+	}
+
+	switch (src[1]) {
+	case 'r':
+		/* length of data to read */
+		len = src[6];
+		break;
+	case 'w':
+		/* Skip 6 bytes for package type and register address */
+		len = src[0] - 6;
+		break;
+	default:
+		dev_err(priv->dev, "%s Wrong code %02x.\n", __func__, src[1]);
+		return 0;
+	}
+
+	if (len < 1) {
+		dev_err(priv->dev, "pkg fmt invalid %02x.\n", len);
+		return 0;
+	}
+
+	for (j = 0; j < priv->ndev; j++)
+		if (src[2] == priv->tasdevice[j].dev_addr) {
+			chn = j;
+			break;
+		}
+	if (j >= priv->ndev) {
+		dev_err(priv->dev, "no such device 0x%02x.\n", src[2]);
+		return 0;
+	}
+
+	reg = TASDEVICE_REG(src[3], src[4], src[5]);
+
+	guard(mutex)(&priv->codec_lock);
+
+	if (src[1] == 'w') {
+		if (len > 1)
+			ret = tasdevice_dev_bulk_write(priv, chn, reg,
+				 &src[6], len);
+		else
+			ret = tasdevice_dev_write(priv, chn, reg, src[6]);
+	} else {
+		struct acoustic_data *p = &priv->acou_data;
+
+		memcpy(p, src, 6);
+		if (len > 1) {
+			ret = tasdevice_dev_bulk_read(priv, chn, reg,
+				p->data, len);
+		} else {
+			ret = tasdevice_dev_read(priv, chn, reg, &value);
+			p->data[0] = value;
+		}
+		p->len = len + 6;
+	}
+
+	if (ret) {
+		dev_err(priv->dev, "i2c communication error.\n");
+		return 0;
+	}
+
+	return 1;
+}
+
 static int tasdev_re_data_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -1043,10 +1139,11 @@ static int tasdevice_get_chip_id(struct snd_kcontrol *kcontrol,
 static int tasdevice_create_control(struct tasdevice_priv *tas_priv)
 {
 	struct snd_kcontrol_new *prof_ctrls;
-	int nr_controls = 1;
+	struct soc_bytes_ext *ext_acoustic;
+	char *acoustic_name, *name;
+	int nr_controls = 2;
 	int mix_index = 0;
 	int ret;
-	char *name;
 
 	prof_ctrls = devm_kcalloc(tas_priv->dev, nr_controls,
 		sizeof(prof_ctrls[0]), GFP_KERNEL);
@@ -1066,6 +1163,43 @@ static int tasdevice_create_control(struct tasdevice_priv *tas_priv)
 	prof_ctrls[mix_index].info = tasdevice_info_profile;
 	prof_ctrls[mix_index].get = tasdevice_get_profile_id;
 	prof_ctrls[mix_index].put = tasdevice_set_profile_id;
+	mix_index++;
+
+	ext_acoustic = devm_kzalloc(tas_priv->dev, sizeof(*ext_acoustic),
+				 GFP_KERNEL);
+	if (!ext_acoustic)
+		return -ENOMEM;
+
+	/*
+	 * This kcontrol is a bridge to the acoustic tuning application
+	 * tool which can tune the chips' acoustic effect.
+	 */
+	acoustic_name = devm_kstrdup(tas_priv->dev, "Acoustic Tuning",
+		GFP_KERNEL);
+	if (!acoustic_name)
+		return -ENOMEM;
+	/*
+	 * package structure for PPC3 communications:
+	 *	Pkg len (1 byte)
+	 *	Pkg id (1 byte, 'r' or 'w')
+	 *	Dev id (1 byte, i2c address)
+	 *	Book id (1 byte)
+	 *	Page id (1 byte)
+	 *	Reg id (1 byte)
+	 *	switch (pkg id) {
+	 *	case 'w':
+	 *		1 byte, length of data to read
+	 *	case 'r':
+	 *		data payload (1~128 bytes)
+	 *	}
+	 */
+	ext_acoustic->max = sizeof(tas_priv->acou_data);
+	prof_ctrls[mix_index].name = acoustic_name;
+	prof_ctrls[mix_index].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	prof_ctrls[mix_index].info = snd_soc_bytes_info_ext;
+	prof_ctrls[mix_index].put = tasdev_acoustic_data_put;
+	prof_ctrls[mix_index].get = tasdev_acoustic_data_get;
+	prof_ctrls[mix_index].private_value = (unsigned long)ext_acoustic;
 	mix_index++;
 
 	ret = snd_soc_add_component_controls(tas_priv->codec,

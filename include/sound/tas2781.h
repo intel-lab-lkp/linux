@@ -32,6 +32,8 @@
 	SNDRV_PCM_FMTBIT_S24_LE | \
 	SNDRV_PCM_FMTBIT_S32_LE)
 
+#define TASDEV_DATA_PAYLOAD_SIZE	128
+
 /* PAGE Control Register (available in page0 of each book) */
 #define TASDEVICE_PAGE_SELECT		0x00
 #define TASDEVICE_BOOKCTL_PAGE		0x00
@@ -159,10 +161,21 @@ struct calidata {
 	unsigned int cali_dat_sz_per_dev;
 };
 
+struct acoustic_data {
+	unsigned char len;
+	unsigned char id;
+	unsigned char addr;
+	unsigned char book;
+	unsigned char page;
+	unsigned char reg;
+	unsigned char data[TASDEV_DATA_PAYLOAD_SIZE];
+};
+
 struct tasdevice_priv {
 	struct tasdevice tasdevice[TASDEVICE_MAX_CHANNELS];
 	struct tasdevice_rca rcabin;
 	struct calidata cali_data;
+	struct acoustic_data acou_data;
 	struct tasdevice_fw *fmw;
 	struct gpio_desc *speaker_id;
 	struct gpio_desc *reset;
