@@ -211,6 +211,19 @@ static void ufshcd_init_lanes_per_dir(struct ufs_hba *hba)
 }
 
 /**
+ * ufshcd_parse_lpm_support - read from DT whether LPM modes should be disabled.
+ * @hba: host controller instance
+ */
+static void ufshcd_parse_lpm_support(struct ufs_hba *hba)
+{
+	struct device *dev = hba->dev;
+
+	hba->disable_lpm = of_property_read_bool(dev->of_node, "disable-lpm");
+	if (hba->disable_lpm)
+		dev_info(hba->dev, "UFS LPM is disabled\n");
+}
+
+/**
  * ufshcd_parse_clock_min_max_freq  - Parse MIN and MAX clocks freq
  * @hba: per adapter instance
  *
@@ -494,6 +507,8 @@ int ufshcd_pltfrm_init(struct platform_device *pdev,
 	}
 
 	ufshcd_init_lanes_per_dir(hba);
+
+	ufshcd_parse_lpm_support(hba);
 
 	err = ufshcd_parse_operating_points(hba);
 	if (err) {
