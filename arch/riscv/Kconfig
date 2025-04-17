@@ -1351,6 +1351,8 @@ source "drivers/cpufreq/Kconfig"
 
 endmenu # "CPU Power Management"
 
+source "arch/riscv/crypto/Kconfig"
+
 source "arch/riscv/kvm/Kconfig"
 
 source "drivers/acpi/Kconfig"
