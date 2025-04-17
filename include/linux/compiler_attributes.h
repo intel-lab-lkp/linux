@@ -232,6 +232,21 @@
 
 /*
  * Optional: only supported since gcc >= 8
+ * Optional: Not supported by clang. "optnone" is used to
+ *	     disable all otipmizations
+ *
+ * gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-noipa-function-attribute
+ */
+#if __has_attribute(__noipa__)
+#define   noipa                      __attribute__((__noipa__))
+#elif __has_attribute(__optnone__)
+#define   noipa                      __attribute__((__optnone__))
+#else
+#define   noipa
+#endif
+
+/*
+ * Optional: only supported since gcc >= 8
  * Optional: not supported by clang
  *
  *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Common-Variable-Attributes.html#index-nonstring-variable-attribute
