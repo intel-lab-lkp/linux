@@ -443,8 +443,16 @@ static void loop_reread_partitions(struct loop_device *lo)
 static unsigned int loop_query_min_dio_size(struct loop_device *lo)
 {
 	struct file *file = lo->lo_backing_file;
-	struct block_device *sb_bdev = file->f_mapping->host->i_sb->s_bdev;
+	struct inode *inode = file->f_mapping->host;
+	struct block_device *sb_bdev = inode->i_sb->s_bdev;
 	struct kstat st;
+
+	/*
+	 * If the backing device is a block device, don't send directios
+	 * smaller than its LBA size.
+	 */
+	if (S_ISBLK(inode->i_mode))
+		return bdev_logical_block_size(I_BDEV(inode));
 
 	/*
 	 * Use the minimal dio alignment of the file system if provided.
