@@ -462,8 +462,8 @@ DEFINE_SHOW_ATTRIBUTE(pmc_core_pll);
 
 int pmc_core_send_ltr_ignore(struct pmc_dev *pmcdev, u32 value, int ignore)
 {
-	struct pmc *pmc;
-	const struct pmc_reg_map *map;
+	struct pmc *pmc = NULL;
+	const struct pmc_reg_map *map = NULL;
 	u32 reg;
 	unsigned int pmc_index;
 	int ltr_index;
@@ -480,6 +480,9 @@ int pmc_core_send_ltr_ignore(struct pmc_dev *pmcdev, u32 value, int ignore)
 			continue;
 
 		map = pmc->map;
+		if (!map)
+			continue;
+
 		if (ltr_index <= map->ltr_ignore_max)
 			break;
 
@@ -491,7 +494,7 @@ int pmc_core_send_ltr_ignore(struct pmc_dev *pmcdev, u32 value, int ignore)
 		ltr_index = ltr_index - (map->ltr_ignore_max + 2) - 1;
 	}
 
-	if (pmc_index >= ARRAY_SIZE(pmcdev->pmcs) || ltr_index < 0)
+	if (pmc_index >= ARRAY_SIZE(pmcdev->pmcs) || ltr_index < 0 || !pmc || !map)
 		return -EINVAL;
 
 	pr_debug("ltr_ignore for pmc%d: ltr_index:%d\n", pmc_index, ltr_index);
