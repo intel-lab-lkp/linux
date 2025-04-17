@@ -41,7 +41,7 @@ struct mpr_ops;
  */
 struct mpr_chan {
 	s32 pres;
-	s64 ts;
+	aligned_s64 ts;
 };
 
 enum mpr_func_id {
