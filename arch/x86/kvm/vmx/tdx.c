@@ -472,7 +472,7 @@ out:
 		pr_tdx_error(TDH_PHYMEM_CACHE_WB, err);
 }
 
-void tdx_mmu_release_hkid(struct kvm *kvm)
+static void __tdx_release_hkid(struct kvm *kvm, bool terminate)
 {
 	bool packages_allocated, targets_allocated;
 	struct kvm_tdx *kvm_tdx = to_kvm_tdx(kvm);
@@ -485,10 +485,11 @@ void tdx_mmu_release_hkid(struct kvm *kvm)
 	if (!is_hkid_assigned(kvm_tdx))
 		return;
 
+	if (KVM_BUG_ON(refcount_read(&kvm->users_count) && !terminate, kvm))
+		return;
+
 	packages_allocated = zalloc_cpumask_var(&packages, GFP_KERNEL);
 	targets_allocated = zalloc_cpumask_var(&targets, GFP_KERNEL);
-	cpus_read_lock();
-
 	kvm_for_each_vcpu(j, vcpu, kvm)
 		tdx_flush_vp_on_cpu(vcpu);
 
@@ -500,14 +501,7 @@ void tdx_mmu_release_hkid(struct kvm *kvm)
 	 */
 	mutex_lock(&tdx_lock);
 
-	/*
-	 * Releasing HKID is in vm_destroy().
-	 * After the above flushing vps, there should be no more vCPU
-	 * associations, as all vCPU fds have been released at this stage.
-	 */
 	err = tdh_mng_vpflushdone(&kvm_tdx->td);
-	if (err == TDX_FLUSHVP_NOT_DONE)
-		goto out;
 	if (KVM_BUG_ON(err, kvm)) {
 		pr_tdx_error(TDH_MNG_VPFLUSHDONE, err);
 		pr_err("tdh_mng_vpflushdone() failed. HKID %d is leaked.\n",
@@ -515,6 +509,7 @@ void tdx_mmu_release_hkid(struct kvm *kvm)
 		goto out;
 	}
 
+	write_lock(&kvm->mmu_lock);
 	for_each_online_cpu(i) {
 		if (packages_allocated &&
 		    cpumask_test_and_set_cpu(topology_physical_package_id(i),
@@ -539,12 +534,18 @@ void tdx_mmu_release_hkid(struct kvm *kvm)
 	} else {
 		tdx_hkid_free(kvm_tdx);
 	}
-
+	write_unlock(&kvm->mmu_lock);
 out:
 	mutex_unlock(&tdx_lock);
-	cpus_read_unlock();
 	free_cpumask_var(targets);
 	free_cpumask_var(packages);
+}
+
+void tdx_mmu_release_hkid(struct kvm *kvm)
+{
+	cpus_read_lock();
+	__tdx_release_hkid(kvm, false);
+	cpus_read_unlock();
 }
 
 static void tdx_reclaim_td_control_pages(struct kvm *kvm)
@@ -1789,13 +1790,13 @@ int tdx_sept_remove_private_spte(struct kvm *kvm, gfn_t gfn,
 	struct page *page = pfn_to_page(pfn);
 	int ret;
 
-	/*
-	 * HKID is released after all private pages have been removed, and set
-	 * before any might be populated. Warn if zapping is attempted when
-	 * there can't be anything populated in the private EPT.
-	 */
-	if (KVM_BUG_ON(!is_hkid_assigned(to_kvm_tdx(kvm)), kvm))
-		return -EINVAL;
+	if (!is_hkid_assigned(to_kvm_tdx(kvm))) {
+		WARN_ON_ONCE(!kvm->vm_dead);
+		ret = tdx_reclaim_page(page);
+		if (!ret)
+			tdx_unpin(kvm, page);
+		return ret;
+	}
 
 	ret = tdx_sept_zap_private_spte(kvm, gfn, level, page);
 	if (ret <= 0)
@@ -2790,6 +2791,27 @@ static int tdx_td_finalize(struct kvm *kvm, struct kvm_tdx_cmd *cmd)
 	return 0;
 }
 
+static int tdx_terminate_vm(struct kvm *kvm)
+{
+	int r = 0;
+
+	guard(mutex)(&kvm->lock);
+	cpus_read_lock();
+
+	if (!kvm_trylock_all_vcpus(kvm)) {
+		r = -EBUSY;
+		goto out;
+	}
+
+	kvm_vm_dead(kvm);
+	kvm_unlock_all_vcpus(kvm);
+
+	__tdx_release_hkid(kvm, true);
+out:
+	cpus_read_unlock();
+	return r;
+}
+
 int tdx_vm_ioctl(struct kvm *kvm, void __user *argp)
 {
 	struct kvm_tdx_cmd tdx_cmd;
@@ -2804,6 +2826,9 @@ int tdx_vm_ioctl(struct kvm *kvm, void __user *argp)
 	 */
 	if (tdx_cmd.hw_error)
 		return -EINVAL;
+
+	if (tdx_cmd.id == KVM_TDX_TERMINATE_VM)
+		return tdx_terminate_vm(kvm);
 
 	mutex_lock(&kvm->lock);
 
