@@ -1604,3 +1604,85 @@ Description:
 		prevent the UFS from frequently performing clock gating/ungating.
 
 		The attribute is read/write.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/hid_trigger
+What:		/sys/bus/platform/devices/*.ufs/hid_trigger
+Date:		April 2025
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The host can enable or disable complete HID.
+
+		========  ============
+		enable    Let kworker(ufs_hid_enable_work) execute the complete HID
+		disable   Cancel kworker(ufs_hid_enable_work) and disable HID
+		========  ============
+
+		The file is write only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/defrag_operation
+What:		/sys/bus/platform/devices/*.ufs/attributes/defrag_operation
+Date:		April 2025
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The host can enable or disable HID analysis and HID defrag operations.
+
+		===============  ==================================================
+		all_disable      HID analysis and HID defrag operation are disabled
+		analysis_enable  HID analysis is enabled
+		all_enable       HID analysis and HID defrag operation are enabled
+		===============  ==================================================
+
+		The attribute is read/write.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/hid_available_size
+What:		/sys/bus/platform/devices/*.ufs/attributes/hid_available_size
+Date:		April 2025
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The total fragmented size in the device is reported through this
+		attribute.
+
+		The attribute is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/hid_size
+What:		/sys/bus/platform/devices/*.ufs/attributes/hid_size
+Date:		April 2025
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The host sets the size to be defragmented by an HID defrag operation.
+
+		The attribute is read/write.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/hid_progress_ratio
+What:		/sys/bus/platform/devices/*.ufs/attributes/hid_progress_ratio
+Date:		April 2025
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		Defrag progress is reported by this attribute,indicates the ratio of
+		the completed defrag size over the requested defrag size.
+
+		====  ======================================
+		01h   1%
+		...
+		64h   100%
+		====  ======================================
+
+		The attribute is read only.
+
+What:		/sys/bus/platform/drivers/ufshcd/*/attributes/hid_state
+What:		/sys/bus/platform/devices/*.ufs/attributes/hid_state
+Date:		April 2025
+Contact:	Huan Tang <tanghuan@vivo.com>
+Description:
+		The HID state is reported by this attribute.
+
+		====   ======================================
+		00h    Idle(analysis required)
+		01h    Analysis in progress
+		02h    Defrag required
+		03h    Defrag in progress
+		04h    Defrag completed
+		05h    Defrag is not required
+		====  ======================================
+
+		The attribute is read only.

@@ -81,6 +81,21 @@ static const char *ufshcd_ufs_dev_pwr_mode_to_string(
 	}
 }
 
+static const char *ufs_hid_defrag_operation_to_string(
+			enum ufs_hid_defrag_operation op)
+{
+	switch (op) {
+	case HID_ANALYSIS_AND_DEFRAG_DISABLE:
+		return "all_disable";
+	case HID_ANALYSIS_ENABLE:
+		return "analysis_enable";
+	case HID_ANALYSIS_AND_DEFRAG_ENABLE:
+		return "all_enable";
+	default:
+		return "unknown";
+	}
+}
+
 static inline ssize_t ufs_sysfs_pm_lvl_store(struct device *dev,
 					     struct device_attribute *attr,
 					     const char *buf, size_t count,
@@ -466,6 +481,34 @@ static ssize_t critical_health_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", hba->critical_health_count);
 }
 
+static const char * const hid_trigger_mode[] = {
+	"disable", "enable"
+};
+
+static ssize_t hid_trigger_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	int mode;
+	int ret = 0;
+
+	if (!hba->dev_info.hid_sup)
+		return -EOPNOTSUPP;
+
+	mode = sysfs_match_string(hid_trigger_mode, buf);
+	if (mode < 0)
+		return -EINVAL;
+
+	if (mode)
+		schedule_delayed_work(&hba->ufs_hid_enable_work, 0);
+	else {
+		cancel_delayed_work_sync(&hba->ufs_hid_enable_work);
+		ret = ufs_hid_disable(hba);
+	}
+
+	return ret < 0 ? ret : count;
+}
+
 static DEVICE_ATTR_RW(rpm_lvl);
 static DEVICE_ATTR_RO(rpm_target_dev_state);
 static DEVICE_ATTR_RO(rpm_target_link_state);
@@ -479,6 +522,7 @@ static DEVICE_ATTR_RW(wb_flush_threshold);
 static DEVICE_ATTR_RW(rtc_update_ms);
 static DEVICE_ATTR_RW(pm_qos_enable);
 static DEVICE_ATTR_RO(critical_health);
+static DEVICE_ATTR_WO(hid_trigger);
 
 static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rpm_lvl.attr,
@@ -494,6 +538,7 @@ static struct attribute *ufs_sysfs_ufshcd_attrs[] = {
 	&dev_attr_rtc_update_ms.attr,
 	&dev_attr_pm_qos_enable.attr,
 	&dev_attr_critical_health.attr,
+	&dev_attr_hid_trigger.attr,
 	NULL
 };
 
@@ -1495,6 +1540,101 @@ static inline bool ufshcd_is_wb_attrs(enum attr_idn idn)
 		idn <= QUERY_ATTR_IDN_CURR_WB_BUFF_SIZE;
 }
 
+static int hid_query_attr(struct ufs_hba *hba, enum query_opcode opcode,
+				enum attr_idn idn, u32 *attr_val)
+{
+	int ret;
+
+	if (!hba->dev_info.hid_sup)
+		return -EOPNOTSUPP;
+
+	down(&hba->host_sem);
+	if (!ufshcd_is_user_access_allowed(hba)) {
+		up(&hba->host_sem);
+		return -EBUSY;
+	}
+
+	ufshcd_rpm_get_sync(hba);
+	ret = ufshcd_query_attr(hba, opcode, idn, 0, 0, attr_val);
+	ufshcd_rpm_put_sync(hba);
+
+	up(&hba->host_sem);
+	return ret;
+}
+
+static ssize_t defrag_operation_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	int ret;
+
+	ret = hid_query_attr(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+				QUERY_ATTR_IDN_HID_DEFRAG_OPERATION, &value);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%s\n", ufs_hid_defrag_operation_to_string(value));
+}
+
+static const char * const hid_defrag_operation[] = {
+	[HID_ANALYSIS_AND_DEFRAG_DISABLE]	= "all_disable",
+	[HID_ANALYSIS_ENABLE]	= "analysis_enable",
+	[HID_ANALYSIS_AND_DEFRAG_ENABLE]	= "all_enable",
+};
+
+static ssize_t defrag_operation_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	int defrag_op;
+	int ret;
+
+	defrag_op = sysfs_match_string(hid_defrag_operation, buf);
+	if (defrag_op < 0)
+		return -EINVAL;
+
+	ret = hid_query_attr(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
+				QUERY_ATTR_IDN_HID_DEFRAG_OPERATION, &defrag_op);
+
+	return ret < 0 ? ret : count;
+}
+
+static DEVICE_ATTR_RW(defrag_operation);
+
+static ssize_t hid_size_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	u32 value;
+	int ret;
+
+	ret = hid_query_attr(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+				QUERY_ATTR_IDN_HID_SIZE, &value);
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "0x%08X\n", value);
+}
+
+static ssize_t hid_size_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	int value;
+	int ret;
+
+	if (kstrtou32(buf, 0, &value))
+		return -EINVAL;
+
+	ret = hid_query_attr(hba, UPIU_QUERY_OPCODE_WRITE_ATTR,
+					QUERY_ATTR_IDN_HID_SIZE, &value);
+
+	return ret < 0 ? ret : count;
+}
+
+static DEVICE_ATTR_RW(hid_size);
+
 #define UFS_ATTRIBUTE(_name, _uname)					\
 static ssize_t _name##_show(struct device *dev,				\
 	struct device_attribute *attr, char *buf)			\
@@ -1545,7 +1685,9 @@ UFS_ATTRIBUTE(wb_flush_status, _WB_FLUSH_STATUS);
 UFS_ATTRIBUTE(wb_avail_buf, _AVAIL_WB_BUFF_SIZE);
 UFS_ATTRIBUTE(wb_life_time_est, _WB_BUFF_LIFE_TIME_EST);
 UFS_ATTRIBUTE(wb_cur_buf, _CURR_WB_BUFF_SIZE);
-
+UFS_ATTRIBUTE(hid_available_size, _HID_AVAILABLE_SIZE);
+UFS_ATTRIBUTE(hid_progress_ratio, _HID_PROGRESS_RATIO);
+UFS_ATTRIBUTE(hid_state, _HID_STATE);
 
 static struct attribute *ufs_sysfs_attributes[] = {
 	&dev_attr_boot_lun_enabled.attr,
@@ -1568,6 +1710,11 @@ static struct attribute *ufs_sysfs_attributes[] = {
 	&dev_attr_wb_avail_buf.attr,
 	&dev_attr_wb_life_time_est.attr,
 	&dev_attr_wb_cur_buf.attr,
+	&dev_attr_defrag_operation.attr,
+	&dev_attr_hid_available_size.attr,
+	&dev_attr_hid_size.attr,
+	&dev_attr_hid_progress_ratio.attr,
+	&dev_attr_hid_state.attr,
 	NULL,
 };
 

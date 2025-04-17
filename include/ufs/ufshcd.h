@@ -1138,6 +1138,8 @@ struct ufs_hba {
 	bool pm_qos_enabled;
 
 	int critical_health_count;
+
+	struct delayed_work ufs_hid_enable_work;
 };
 
 /**

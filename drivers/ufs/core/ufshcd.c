@@ -6551,6 +6551,9 @@ static void ufshcd_err_handler(struct work_struct *work)
 		 hba->saved_uic_err, hba->force_reset,
 		 ufshcd_is_link_broken(hba) ? "; link is broken" : "");
 
+	if (hba->dev_info.hid_sup)
+		cancel_delayed_work_sync(&hba->ufs_hid_enable_work);
+
 	down(&hba->host_sem);
 	spin_lock_irqsave(hba->host->host_lock, flags);
 	if (ufshcd_err_handling_should_stop(hba)) {
@@ -8332,6 +8335,8 @@ static int ufs_get_device_desc(struct ufs_hba *hba)
 
 	ufshcd_temp_notif_probe(hba, desc_buf);
 
+	ufs_hid_init(hba, desc_buf);
+
 	if (dev_info->wspecversion >= 0x410) {
 		hba->critical_health_count = 0;
 		ufshcd_enable_ee(hba, MASK_EE_HEALTH_CRITICAL);
@@ -9629,6 +9634,8 @@ static int __ufshcd_wl_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 		req_link_state = UIC_LINK_OFF_STATE;
 	}
 
+	if (hba->dev_info.hid_sup)
+		cancel_delayed_work_sync(&hba->ufs_hid_enable_work);
 	/*
 	 * If we can't transition into any of the low power modes
 	 * just gate the clocks.

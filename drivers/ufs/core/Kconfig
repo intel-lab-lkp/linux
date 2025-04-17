@@ -50,3 +50,12 @@ config SCSI_UFS_HWMON
 	  a hardware monitoring device will be created for the UFS device.
 
 	  If unsure, say N.
+
+config SCSI_UFS_HID
+	bool "Support UFS Host Initiated Defrag"
+	help
+	  The UFS HID feature allows the host to check the status of whether
+	  defragmentation is needed or not and enable the device's internal
+	  defrag operation explicitly.
+
+	  If unsure, say N.

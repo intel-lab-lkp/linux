@@ -42,6 +42,14 @@ static inline void ufs_hwmon_remove(struct ufs_hba *hba) {}
 static inline void ufs_hwmon_notify_event(struct ufs_hba *hba, u8 ee_mask) {}
 #endif
 
+#ifdef CONFIG_SCSI_UFS_HID
+void ufs_hid_init(struct ufs_hba *hba, const u8 *desc_buf);
+int ufs_hid_disable(struct ufs_hba *hba);
+#else
+static inline void ufs_hid_init(struct ufs_hba *hba, const u8 *desc_buf) {}
+static inline int ufs_hid_disable(struct ufs_hba *hba) {return 0; }
+#endif
+
 int ufshcd_query_descriptor_retry(struct ufs_hba *hba,
 				  enum query_opcode opcode,
 				  enum desc_idn idn, u8 index,

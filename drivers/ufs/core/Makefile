@@ -7,3 +7,4 @@ ufshcd-core-$(CONFIG_SCSI_UFS_BSG)	+= ufs_bsg.o
 ufshcd-core-$(CONFIG_SCSI_UFS_CRYPTO)	+= ufshcd-crypto.o
 ufshcd-core-$(CONFIG_SCSI_UFS_FAULT_INJECTION) += ufs-fault-injection.o
 ufshcd-core-$(CONFIG_SCSI_UFS_HWMON)	+= ufs-hwmon.o
+ufshcd-core-$(CONFIG_SCSI_UFS_HID)	+= ufs-hid.o
