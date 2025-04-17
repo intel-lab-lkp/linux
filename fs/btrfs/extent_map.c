@@ -313,7 +313,7 @@ static void dump_extent_map(struct btrfs_fs_info *fs_info, const char *prefix,
 "%s, start=%llu len=%llu disk_bytenr=%llu disk_num_bytes=%llu ram_bytes=%llu offset=%llu flags=0x%x",
 		prefix, em->start, em->len, em->disk_bytenr, em->disk_num_bytes,
 		em->ram_bytes, em->offset, em->flags);
-	ASSERT(0);
+	BUG();
 }
 
 /* Internal sanity checks for btrfs debug builds. */
