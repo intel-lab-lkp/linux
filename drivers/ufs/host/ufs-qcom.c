@@ -1014,13 +1014,14 @@ static void ufs_qcom_set_host_caps(struct ufs_hba *hba)
 
 static void ufs_qcom_set_caps(struct ufs_hba *hba)
 {
-	hba->caps |= UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
-	hba->caps |= UFSHCD_CAP_CLK_SCALING | UFSHCD_CAP_WB_WITH_CLK_SCALING;
-	hba->caps |= UFSHCD_CAP_AUTO_BKOPS_SUSPEND;
-	hba->caps |= UFSHCD_CAP_WB_EN;
-	hba->caps |= UFSHCD_CAP_AGGR_POWER_COLLAPSE;
-	hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
-
+	if (!hba->disable_lpm) {
+		hba->caps |= UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_HIBERN8_WITH_CLK_GATING;
+		hba->caps |= UFSHCD_CAP_CLK_SCALING | UFSHCD_CAP_WB_WITH_CLK_SCALING;
+		hba->caps |= UFSHCD_CAP_AUTO_BKOPS_SUSPEND;
+		hba->caps |= UFSHCD_CAP_WB_EN;
+		hba->caps |= UFSHCD_CAP_AGGR_POWER_COLLAPSE;
+		hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
+	}
 	ufs_qcom_set_host_caps(hba);
 }
 
