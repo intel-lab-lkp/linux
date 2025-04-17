@@ -1425,12 +1425,6 @@ endmenu
 config CRYPTO_HASH_INFO
 	bool
 
-if !KMSAN # avoid false positives from assembly
-if X86
-source "arch/x86/crypto/Kconfig"
-endif
-endif
-
 source "drivers/crypto/Kconfig"
 source "crypto/asymmetric_keys/Kconfig"
 source "certs/Kconfig"
