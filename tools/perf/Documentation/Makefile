@@ -203,6 +203,8 @@ install-man: check-man-tools man do-install-man
 
 ifdef missing_tools
   DO_INSTALL_MAN = $(warning Please install $(missing_tools) to have the man pages installed)
+else ifeq ($(NO_DOCS),1)
+  DO_INSTALL_MAN = $(warning man pages will not be installed because NO_DOCS is defined)
 else
   DO_INSTALL_MAN = do-install-man
 endif
