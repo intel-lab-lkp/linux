@@ -1750,7 +1750,7 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 	unsigned int segno = start_segno;
 	unsigned int end_segno = start_segno + SEGS_PER_SEC(sbi);
 	unsigned int sec_end_segno;
-	unsigned int window_granularity = 1;
+	unsigned int migration_granularity = sbi->migration_granularity;
 	int seg_freed = 0, migrated = 0;
 	unsigned char type = IS_DATASEG(get_seg_entry(sbi, segno)->type) ?
 						SUM_TYPE_DATA : SUM_TYPE_NODE;
@@ -1773,14 +1773,16 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 					f2fs_usable_segs_in_sec(sbi);
 
 		if (gc_type == BG_GC || one_time) {
-			window_granularity =
-				sbi->migration_window_granularity;
 
 			if (f2fs_sb_has_blkzoned(sbi) &&
 					!has_enough_free_blocks(sbi,
 					sbi->gc_thread->boost_zoned_gc_percent))
-				window_granularity *=
+				migration_granularity *=
 					BOOST_GC_MULTIPLE;
+		}
+
+		if (gc_type == FG_GC) {
+			migration_granularity = sec_end_segno - start_segno;
 		}
 
 		if (end_segno > sec_end_segno)
@@ -1789,13 +1791,14 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 
 	sanity_check_seg_type(sbi, get_seg_entry(sbi, segno)->type);
 
+
 	for (segno = start_segno; segno < end_segno; segno++) {
 		if (!get_valid_blocks(sbi, segno, false))
 			continue;
 
 		/* readahead multi ssa blocks those have contiguous address */
 		f2fs_ra_meta_pages(sbi, GET_SUM_BLOCK(sbi, segno),
-				window_granularity, META_SSA, true);
+				migration_granularity, META_SSA, true);
 
 		/* reference all summary page */
 		sum_page = f2fs_get_sum_page(sbi, segno);
@@ -1806,7 +1809,7 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 		}
 		add_gc_page_entry(&gc_page_list, sum_page, segno);
 		unlock_page(sum_page);
-		if (++gc_list_count >= window_granularity)
+		if (++gc_list_count >= migration_granularity)
 			break;
 	}
 
