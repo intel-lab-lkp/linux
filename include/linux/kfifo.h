@@ -389,7 +389,6 @@ __kfifo_int_must_check_helper( \
  *
  * This macro initializes a fifo using a preallocated buffer.
  *
- * The number of elements will be rounded-up to a power of 2.
  * Return 0 if no error, otherwise an error code.
  */
 #define kfifo_init(fifo, buffer, size) \
