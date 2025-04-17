@@ -144,12 +144,25 @@ static void savic_write(u32 reg, u32 data)
 	}
 }
 
+static void init_apic_page(void)
+{
+	u32 apic_id;
+
+	/*
+	 * Before Secure AVIC is enabled, APIC msr reads are intercepted.
+	 * APIC_ID msr read returns the value from the Hypervisor.
+	 */
+	apic_id = native_apic_msr_read(APIC_ID);
+	set_reg(APIC_ID, apic_id);
+}
+
 static void savic_setup(void)
 {
 	void *backing_page;
 	enum es_result res;
 	unsigned long gpa;
 
+	init_apic_page();
 	backing_page = this_cpu_ptr(apic_page);
 	gpa = __pa(backing_page);
 
