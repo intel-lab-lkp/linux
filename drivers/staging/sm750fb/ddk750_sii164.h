@@ -16,16 +16,16 @@ enum sii164_hot_plug_mode {
 };
 
 /* Silicon Image SiI164 chip prototype */
-long sii164_init_chip(unsigned char edgeSelect,
-		      unsigned char busSelect,
-		      unsigned char dualEdgeClkSelect,
-		      unsigned char hsyncEnable,
-		      unsigned char vsyncEnable,
-		      unsigned char deskewEnable,
-		      unsigned char deskewSetting,
-		      unsigned char continuousSyncEnable,
-		      unsigned char pllFilterEnable,
-		      unsigned char pllFilterValue);
+long sii164_init_chip(unsigned char edge_select,
+		      unsigned char bus_select,
+		      unsigned char dual_edge_clk_select,
+		      unsigned char hsync_enable,
+		      unsigned char vsync_enable,
+		      unsigned char deskew_enable,
+		      unsigned char deskew_setting,
+		      unsigned char continuous_sync_enable,
+		      unsigned char pll_filter_enable,
+		      unsigned char pll_filter_value);
 
 unsigned short sii164_get_vendor_id(void);
 unsigned short sii164_get_device_id(void);
@@ -33,7 +33,7 @@ unsigned short sii164_get_device_id(void);
 #ifdef SII164_FULL_FUNCTIONS
 void sii164_reset_chip(void);
 char *sii164_get_chip_string(void);
-void sii164_set_power(unsigned char powerUp);
+void sii164_set_power(unsigned char power);
 void sii164_enable_hot_plug_detection(unsigned char enable_hot_plug);
 unsigned char sii164_is_connected(void);
 unsigned char sii164_check_interrupt(void);
@@ -96,9 +96,7 @@ void sii164_clear_interrupt(void);
 #define SII164_CONFIGURATION_VSYNC_FORCE_LOW        0x00
 #define SII164_CONFIGURATION_VSYNC_AS_IS            0x20
 
-/*
- * Detection registers
- */
+/* Detection registers */
 #define SII164_DETECT                               0x09
 
 /* Monitor Detect Interrupt (MDI) */
