@@ -89,6 +89,11 @@ properties:
 
   msi-parent: true
 
+  disable-lpm:
+    type: boolean
+    description:
+      Disable UFS LPM features.
+
 dependencies:
   freq-table-hz: [ clocks ]
   operating-points-v2: [ clocks, clock-names ]
