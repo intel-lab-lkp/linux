@@ -2611,6 +2611,8 @@ int of_genpd_add_provider_simple(struct device_node *np,
 
 	if (!dev)
 		genpd->sync_state = GENPD_SYNC_STATE_SIMPLE;
+	else if (!dev_has_sync_state(dev))
+		dev_set_drv_sync_state(dev, of_genpd_sync_state);
 
 	device_set_node(&genpd->dev, fwnode);
 
@@ -2680,6 +2682,8 @@ int of_genpd_add_provider_onecell(struct device_node *np,
 
 	if (!dev)
 		sync_state = true;
+	else if (!dev_has_sync_state(dev))
+		dev_set_drv_sync_state(dev, of_genpd_sync_state);
 
 	for (i = 0; i < data->num_domains; i++) {
 		genpd = data->domains[i];
