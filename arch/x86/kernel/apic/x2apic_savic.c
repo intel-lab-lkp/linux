@@ -43,6 +43,34 @@ static __always_inline void set_reg(unsigned int offset, u32 val)
 	WRITE_ONCE(this_cpu_ptr(apic_page)->regs[offset >> 2], val);
 }
 
+static inline unsigned long *get_reg_bitmap(unsigned int cpu, unsigned int offset)
+{
+	struct apic_page *ap = per_cpu_ptr(apic_page, cpu);
+
+	return (unsigned long *) &ap->bytes[offset];
+}
+
+static inline unsigned int get_vec_bit(unsigned int vector)
+{
+	/*
+	 * The registers are 32-bit wide and 16-byte aligned.
+	 * Compensate for the resulting bit number spacing.
+	 */
+	return vector + 96 * (vector / 32);
+}
+
+static inline void update_vector(unsigned int cpu, unsigned int offset,
+				 unsigned int vector, bool set)
+{
+	unsigned long *reg = get_reg_bitmap(cpu, offset);
+	unsigned int bit = get_vec_bit(vector);
+
+	if (set)
+		set_bit(bit, reg);
+	else
+		clear_bit(bit, reg);
+}
+
 #define SAVIC_ALLOWED_IRR	0x204
 
 static u32 savic_read(u32 reg)
@@ -144,6 +172,11 @@ static void savic_write(u32 reg, u32 data)
 	}
 }
 
+static void savic_update_vector(unsigned int cpu, unsigned int vector, bool set)
+{
+	update_vector(cpu, SAVIC_ALLOWED_IRR, vector, set);
+}
+
 static void init_apic_page(void)
 {
 	u32 apic_id;
@@ -225,6 +258,8 @@ static struct apic apic_x2apic_savic __ro_after_init = {
 	.eoi				= native_apic_msr_eoi,
 	.icr_read			= native_x2apic_icr_read,
 	.icr_write			= native_x2apic_icr_write,
+
+	.update_vector			= savic_update_vector,
 };
 
 apic_driver(apic_x2apic_savic);
