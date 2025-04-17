@@ -66,7 +66,7 @@ static int smapi_request(unsigned short inBX, unsigned short inCX,
 	unsigned short myoutDX = 5, *pmyoutDX = &myoutDX;
 	unsigned short myoutDI = 6, *pmyoutDI = &myoutDI;
 	unsigned short myoutSI = 7, *pmyoutSI = &myoutSI;
-	unsigned short usSmapiOK = -EIO, *pusSmapiOK = &usSmapiOK;
+	s16 SmapiOK = -EIO, *pSmapiOK = &SmapiOK;
 	unsigned int inBXCX = (inBX << 16) | inCX;
 	unsigned int inDISI = (inDI << 16) | inSI;
 	int retval = 0;
@@ -102,15 +102,15 @@ static int smapi_request(unsigned short inBX, unsigned short inCX,
 			    "=m"(*(unsigned short *) pmyoutDX),
 			    "=m"(*(unsigned short *) pmyoutDI),
 			    "=m"(*(unsigned short *) pmyoutSI),
-			    "=m"(*(unsigned short *) pusSmapiOK)
+			    "=m"(*(unsigned short *) pSmapiOK)
 			    :"m"(inBXCX), "m"(inDISI), "m"(g_usSmapiPort)
 			    :"%eax", "%ebx", "%ecx", "%edx", "%edi",
 			    "%esi");
 
 	PRINTK_8(TRACE_SMAPI,
-		"myoutAX %x myoutBX %x myoutCX %x myoutDX %x myoutDI %x myoutSI %x usSmapiOK %x\n",
+		"myoutAX %x myoutBX %x myoutCX %x myoutDX %x myoutDI %x myoutSI %x SmapiOK %x\n",
 		myoutAX, myoutBX, myoutCX, myoutDX, myoutDI, myoutSI,
-		usSmapiOK);
+		SmapiOK);
 	*outAX = myoutAX;
 	*outBX = myoutBX;
 	*outCX = myoutCX;
@@ -118,7 +118,7 @@ static int smapi_request(unsigned short inBX, unsigned short inCX,
 	*outDI = myoutDI;
 	*outSI = myoutSI;
 
-	retval = (usSmapiOK == 1) ? 0 : -EIO;
+	retval = (SmapiOK == 1) ? 0 : -EIO;
 	PRINTK_2(TRACE_SMAPI, "smapi::smapi_request exit retval %x\n", retval);
 	return retval;
 }
