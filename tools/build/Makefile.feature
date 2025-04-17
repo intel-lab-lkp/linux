@@ -42,17 +42,12 @@ endef
 #
 #   All the others should have lines in tools/build/feature/test-all.c like:
 #
-#    #define main main_test_disassembler_init_styled
-#    # include "test-disassembler-init-styled.c"
-#    #undef main
-#
 #    #define main main_test_libzstd
 #    # include "test-libzstd.c"
 #    #undef main
 #
 #    int main(int argc, char *argv[])
 #    {
-#      main_test_disassembler_four_args();
 #      main_test_libzstd();
 #      return 0;
 #    }
@@ -60,7 +55,6 @@ endef
 #    If the sample above works, then we end up with these lines in the FEATURE-DUMP
 #    file:
 #
-#    feature-disassembler-four-args=1
 #    feature-libzstd=1
 #
 FEATURE_TESTS_BASIC :=                  \
@@ -71,8 +65,6 @@ FEATURE_TESTS_BASIC :=                  \
         get_current_dir_name            \
         gettid				\
         glibc                           \
-        libbfd                          \
-        libbfd-buildid			\
         libelf                          \
         libelf-getphdrnum               \
         libelf-gelf_getnote             \
@@ -102,8 +94,6 @@ FEATURE_TESTS_BASIC :=                  \
         setns				\
         libaio				\
         libzstd				\
-        disassembler-four-args		\
-        disassembler-init-styled	\
         file-handle
 
 # FEATURE_TESTS_BASIC + FEATURE_TESTS_EXTRA is the complete list
@@ -119,8 +109,6 @@ FEATURE_TESTS_EXTRA :=                  \
          hello                          \
          libbabeltrace                  \
          libcapstone                    \
-         libbfd-liberty                 \
-         libbfd-liberty-z               \
          libopencsd                     \
          cxx                            \
          llvm                           \
