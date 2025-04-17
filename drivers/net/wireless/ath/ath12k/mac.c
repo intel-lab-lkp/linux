@@ -11461,6 +11461,8 @@ static int ath12k_mac_hw_register(struct ath12k_hw *ah)
 	 */
 	wiphy->flags |= WIPHY_FLAG_DISABLE_WEXT;
 
+	wiphy->flags |= WIPHY_FLAG_SUPPORTS_MLO_STA_PER_LINK_STATS;
+
 	/* Copy over MLO related capabilities received from
 	 * WMI_SERVICE_READY_EXT2_EVENT if single_chip_mlo_supp is set.
 	 */
