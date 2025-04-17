@@ -132,9 +132,9 @@ struct kfifo_rec_ptr_2 __STRUCT_KFIFO_PTR(unsigned char, 2, void);
 	struct __kfifo *__kfifo = &__tmp->kfifo; \
 	__kfifo->in = 0; \
 	__kfifo->out = 0; \
-	__kfifo->mask = __is_kfifo_ptr(__tmp) ? 0 : ARRAY_SIZE(__tmp->buf) - 1;\
+	__kfifo->mask = __is_kfifo_ptr(__tmp) ? 0 : ARRAY_SIZE(__tmp->buf) - 1; \
 	__kfifo->esize = sizeof(*__tmp->buf); \
-	__kfifo->data = __is_kfifo_ptr(__tmp) ?  NULL : __tmp->buf; \
+	__kfifo->data = __is_kfifo_ptr(__tmp) ? NULL : __tmp->buf; \
 })
 
 /**
@@ -268,7 +268,7 @@ __kfifo_int_must_check_helper(int val)
 })
 
 /**
- * kfifo_is_empty_spinlocked_noirqsave  - returns true if the fifo is empty
+ * kfifo_is_empty_spinlocked_noirqsave - returns true if the fifo is empty
  * using a spinlock for locking, doesn't disable interrupts
  * @fifo: address of the fifo to be used
  * @lock: spinlock to be used for locking
@@ -679,7 +679,7 @@ __kfifo_uint_must_check_helper( \
 	const size_t __recsize = sizeof(*__tmp->rectype); \
 	struct __kfifo *__kfifo = &__tmp->kfifo; \
 	(__recsize) ? \
-	__kfifo_from_user_r(__kfifo, __from, __len,  __copied, __recsize) : \
+	__kfifo_from_user_r(__kfifo, __from, __len, __copied, __recsize) : \
 	__kfifo_from_user(__kfifo, __from, __len, __copied); \
 }) \
 )
@@ -784,7 +784,7 @@ __kfifo_int_must_check_helper( \
  */
 #define	kfifo_dma_out_prepare_mapped(fifo, sgl, nents, len, dma) \
 ({ \
-	typeof((fifo) + 1) __tmp = (fifo);  \
+	typeof((fifo) + 1) __tmp = (fifo); \
 	struct scatterlist *__sgl = (sgl); \
 	int __nents = (nents); \
 	unsigned int __len = (len); \
