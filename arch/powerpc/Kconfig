@@ -1348,6 +1348,8 @@ endif
 config PPC_LIB_RHEAP
 	bool
 
+source "arch/powerpc/crypto/Kconfig"
+
 source "arch/powerpc/kvm/Kconfig"
 
 source "kernel/livepatch/Kconfig"
