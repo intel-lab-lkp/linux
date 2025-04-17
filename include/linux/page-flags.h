@@ -1232,6 +1232,8 @@ static inline int folio_has_private(const struct folio *folio)
 
 static inline bool folio_test_large_maybe_mapped_shared(const struct folio *folio)
 {
+	/* This function should never be called without CONFIG_MM_ID enabled. */
+	BUILD_BUG_ON(!IS_ENABLED(CONFIG_MM_ID));
 	return test_bit(FOLIO_MM_IDS_SHARED_BITNUM, &folio->_mm_ids);
 }
 #undef PF_ANY
