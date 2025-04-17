@@ -2283,6 +2283,7 @@ int pm_genpd_init(struct generic_pm_domain *genpd,
 	genpd->provider = NULL;
 	genpd->device_id = -ENXIO;
 	genpd->has_provider = false;
+	genpd->opp_table = NULL;
 	genpd->accounting_time = ktime_get_mono_fast_ns();
 	genpd->domain.ops.runtime_suspend = genpd_runtime_suspend;
 	genpd->domain.ops.runtime_resume = genpd_runtime_resume;
@@ -2557,7 +2558,7 @@ int of_genpd_add_provider_simple(struct device_node *np,
 
 	ret = genpd_add_provider(np, genpd_xlate_simple, genpd);
 	if (ret) {
-		if (!genpd_is_opp_table_fw(genpd) && genpd->set_performance_state) {
+		if (genpd->opp_table) {
 			dev_pm_opp_put_opp_table(genpd->opp_table);
 			dev_pm_opp_of_remove_table(&genpd->dev);
 		}
@@ -2637,7 +2638,7 @@ error:
 		genpd->provider = NULL;
 		genpd->has_provider = false;
 
-		if (!genpd_is_opp_table_fw(genpd) && genpd->set_performance_state) {
+		if (genpd->opp_table) {
 			dev_pm_opp_put_opp_table(genpd->opp_table);
 			dev_pm_opp_of_remove_table(&genpd->dev);
 		}
@@ -2669,11 +2670,10 @@ void of_genpd_del_provider(struct device_node *np)
 				if (gpd->provider == &np->fwnode) {
 					gpd->has_provider = false;
 
-					if (genpd_is_opp_table_fw(gpd) || !gpd->set_performance_state)
-						continue;
-
-					dev_pm_opp_put_opp_table(gpd->opp_table);
-					dev_pm_opp_of_remove_table(&gpd->dev);
+					if (gpd->opp_table) {
+						dev_pm_opp_put_opp_table(gpd->opp_table);
+						dev_pm_opp_of_remove_table(&gpd->dev);
+					}
 				}
 			}
 
