@@ -475,10 +475,14 @@ static ssize_t chaoskey_read(struct file *file,
 				mutex_unlock(&dev->lock);
 				goto bail;
 			}
-			result = chaoskey_wait_fill(dev);
-			if (result < 0) {
-				mutex_unlock(&dev->lock);
-				goto bail;
+			if (!(file->f_flags & O_NONBLOCK)) {
+				result = chaoskey_wait_fill(dev);
+				if (result < 0) {
+					mutex_unlock(&dev->lock);
+					goto bail;
+				}
+			} else {
+				result = -EAGAIN;
 			}
 		}
 
