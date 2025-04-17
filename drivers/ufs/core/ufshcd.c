@@ -2536,6 +2536,9 @@ ufshcd_wait_for_uic_cmd(struct ufs_hba *hba, struct uic_command *uic_cmd)
 	hba->active_uic_cmd = NULL;
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
 
+	if (ret)
+		ufshcd_add_uic_command_trace(hba, uic_cmd, UFS_CMD_ERR);
+
 	return ret;
 }
 
@@ -4308,6 +4311,8 @@ check_upmcrs:
 	}
 out:
 	if (ret) {
+		ufshcd_add_uic_command_trace(hba, hba->active_uic_cmd,
+					     UFS_CMD_ERR);
 		ufshcd_print_host_state(hba);
 		ufshcd_print_pwr_info(hba);
 		ufshcd_print_evt_hist(hba);
