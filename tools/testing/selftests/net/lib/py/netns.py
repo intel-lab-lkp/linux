@@ -35,8 +35,8 @@ class NetNS:
 
 
 class NetNSEnter:
-    def __init__(self, ns_name):
-        self.ns_path = f"/run/netns/{ns_name}"
+    def __init__(self, ns_name, ns_path="/run/netns/"):
+        self.ns_path = f"{ns_path}{ns_name}"
 
     def __enter__(self):
         self.saved = open("/proc/thread-self/ns/net")
