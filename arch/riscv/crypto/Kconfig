@@ -26,7 +26,7 @@ config CRYPTO_CHACHA_RISCV64
 	default CRYPTO_LIB_CHACHA_INTERNAL
 
 config CRYPTO_GHASH_RISCV64
-	tristate "Hash functions: GHASH"
+	tristate "Hash functions: GHASH (vector accelarated)"
 	depends on 64BIT && RISCV_ISA_V && TOOLCHAIN_HAS_VECTOR_CRYPTO
 	select CRYPTO_GCM
 	help
@@ -34,6 +34,20 @@ config CRYPTO_GHASH_RISCV64
 
 	  Architecture: riscv64 using:
 	  - Zvkg vector crypto extension
+
+config CRYPTO_GHASH_RISCV64_CLMUL
+	tristate "Hash functions: GHASH (CLMUL scalar accelerated)"
+	depends on 64BIT && TOOLCHAIN_HAS_ZBB && TOOLCHAIN_HAS_ZBC
+	select CRYPTO_GCM
+	help
+	  GCM GHASH function (NIST SP 800-38D)
+
+	  Architecture: riscv64 using:
+	  - Zbb Bitmanipulation extension
+	  - Zbc Carry-less multiplication
+	    OR
+	  - Zbkb Bit-manipulation for Cryptography
+	  - Zbkc Carry-less multiplication for Cryptography
 
 config CRYPTO_SHA256_RISCV64
 	tristate "Hash functions: SHA-224 and SHA-256"
