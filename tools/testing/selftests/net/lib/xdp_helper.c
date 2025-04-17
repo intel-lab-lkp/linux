@@ -81,8 +81,9 @@ int main(int argc, char **argv)
 	int sock_fd;
 	int queue;
 
-	if (argc != 3) {
-		fprintf(stderr, "Usage: %s ifindex queue_id\n", argv[0]);
+	if (argc != 3 && argc != 4) {
+		fprintf(stderr, "Usage: %s ifindex queue_id [-z]\n\n"
+			"where:\n\t-z: force zerocopy mode", argv[0]);
 		return 1;
 	}
 
@@ -131,6 +132,14 @@ int main(int argc, char **argv)
 	sxdp.sxdp_ifindex = ifindex;
 	sxdp.sxdp_queue_id = queue;
 	sxdp.sxdp_flags = 0;
+
+	if (argc == 4 && strcmp(argv[3], "-z")) {
+		fprintf(stderr, "Usage: %s ifindex queue_id [-z]\n\n"
+			"where:\n\t-z: force zerocopy mode\n", argv[0]);
+		return 1;
+	} else if (argc == 4) {
+		sxdp.sxdp_flags = XDP_ZEROCOPY;
+	}
 
 	if (bind(sock_fd, (struct sockaddr *)&sxdp, sizeof(sxdp)) != 0) {
 		munmap(umem_area, UMEM_SZ);
