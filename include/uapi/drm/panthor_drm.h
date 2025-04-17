@@ -293,6 +293,18 @@ struct drm_panthor_gpu_info {
 	/** @as_present: Bitmask encoding the number of address-space exposed by the MMU. */
 	__u32 as_present;
 
+	/**
+	 * @garbage: Unused field that's not even zero-checked.
+	 *
+	 * This originates from a missing padding that leaked in the initial driver submission
+	 * and was only found when testing the driver in a 32-bit x86 environment, where
+	 * u64 field alignment rules are relaxed compared to aarch32.
+	 *
+	 * This field can't be repurposed, because it's never been checked by the driver and
+	 * userspace is not guaranteed to zero it out.
+	 */
+	__u32 garbage;
+
 	/** @shader_present: Bitmask encoding the shader cores exposed by the GPU. */
 	__u64 shader_present;
 
