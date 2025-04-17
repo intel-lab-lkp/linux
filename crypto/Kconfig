@@ -1426,9 +1426,6 @@ config CRYPTO_HASH_INFO
 	bool
 
 if !KMSAN # avoid false positives from assembly
-if ARM64
-source "arch/arm64/crypto/Kconfig"
-endif
 if LOONGARCH
 source "arch/loongarch/crypto/Kconfig"
 endif
