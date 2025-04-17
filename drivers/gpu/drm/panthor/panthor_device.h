@@ -10,6 +10,7 @@
 #include <linux/io-pgtable.h>
 #include <linux/regulator/consumer.h>
 #include <linux/pm_runtime.h>
+#include <linux/rwsem.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
 
@@ -218,6 +219,23 @@ struct panthor_gpu_usage {
 struct panthor_file {
 	/** @ptdev: Device attached to this file. */
 	struct panthor_device *ptdev;
+
+	/** @user_mmio: User MMIO related fields. */
+	struct {
+		/** @offset: Offset used for user MMIO mappings. */
+		u64 offset;
+
+		/**
+		 * @offset_immutable: True if the user MMIO offset became immutable.
+		 *
+		 * Set to true after the first mmap() targeting a page in the user MMIO range.
+		 * After this point, the user MMIO offset can't be changed.
+		 */
+		bool offset_immutable;
+
+		/** @offset_lock: Lock used to protect offset changes. */
+		struct rw_semaphore offset_lock;
+	} user_mmio;
 
 	/** @vms: VM pool attached to this file. */
 	struct panthor_vm_pool *vms;
