@@ -219,6 +219,24 @@ struct panthor_file {
 	/** @ptdev: Device attached to this file. */
 	struct panthor_device *ptdev;
 
+	/** @user_mmio: User MMIO related fields. */
+	struct {
+		/**
+		 * @offset: Offset used for user MMIO mappings.
+		 *
+		 * This offset should not be used to check the type of mapping
+		 * except in panthor_mmap(). After that point, MMIO mapping
+		 * offsets have been adjusted to match
+		 * DRM_PANTHOR_USER_MMIO_OFFSET and this macro should be used
+		 * instead.
+		 * Make sure this rule is followed at all times, because
+		 * userspace is in control of the offset, and can change the
+		 * value behind out back, potentially leading to erronous
+		 * branching happening in kernel space.
+		 */
+		u64 offset;
+	} user_mmio;
+
 	/** @vms: VM pool attached to this file. */
 	struct panthor_vm_pool *vms;
 

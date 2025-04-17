@@ -127,6 +127,20 @@ enum drm_panthor_ioctl_id {
 
 	/** @DRM_PANTHOR_TILER_HEAP_DESTROY: Destroy a tiler heap. */
 	DRM_PANTHOR_TILER_HEAP_DESTROY,
+
+	/**
+	 * @DRM_PANTHOR_SET_USER_MMIO_OFFSET: Set the offset to use as the user MMIO offset.
+	 *
+	 * The default behavior is to pick the MMIO offset based on the size of the pgoff_t
+	 * type seen by the process that manipulates the FD, such that a 32-bit process can
+	 * always map the user MMIO ranges. But this approach doesn't work well for emulators
+	 * like FEX, where the emulator is an 64-bit binary which might be executing 32-bit
+	 * code. In that case, the kernel thinks it's the 64-bit process and assumes
+	 * DRM_PANTHOR_USER_MMIO_OFFSET_64BIT is in use, but the UMD library expects
+	 * DRM_PANTHOR_USER_MMIO_OFFSET_32BIT, because it can't mmap() anything above the
+	 * pgoff_t size.
+	 */
+	DRM_PANTHOR_SET_USER_MMIO_OFFSET,
 };
 
 /**
@@ -981,6 +995,28 @@ struct drm_panthor_tiler_heap_destroy {
 };
 
 /**
+ * struct drm_panthor_set_user_mmio_offset - Arguments passed to
+ * DRM_IOCTL_PANTHOR_SET_USER_MMIO_OFFSET
+ *
+ * This ioctl is only really useful if you want to support userspace
+ * CPU emulation environments where the size of an unsigned long differs
+ * between the host and the guest architectures.
+ */
+struct drm_panthor_set_user_mmio_offset {
+	/**
+	 * @offset: User MMIO offset to use.
+	 *
+	 * Must be either DRM_PANTHOR_USER_MMIO_OFFSET_32BIT or
+	 * DRM_PANTHOR_USER_MMIO_OFFSET_64BIT.
+	 *
+	 * Use DRM_PANTHOR_USER_MMIO_OFFSET (which selects OFFSET_32BIT or
+	 * OFFSET_64BIT based on the size of an unsigned long) unless you
+	 * have a very good reason to overrule this decision.
+	 */
+	__u64 offset;
+};
+
+/**
  * DRM_IOCTL_PANTHOR() - Build a Panthor IOCTL number
  * @__access: Access type. Must be R, W or RW.
  * @__id: One of the DRM_PANTHOR_xxx id.
@@ -1022,6 +1058,8 @@ enum {
 		DRM_IOCTL_PANTHOR(WR, TILER_HEAP_CREATE, tiler_heap_create),
 	DRM_IOCTL_PANTHOR_TILER_HEAP_DESTROY =
 		DRM_IOCTL_PANTHOR(WR, TILER_HEAP_DESTROY, tiler_heap_destroy),
+	DRM_IOCTL_PANTHOR_SET_USER_MMIO_OFFSET =
+		DRM_IOCTL_PANTHOR(WR, SET_USER_MMIO_OFFSET, set_user_mmio_offset),
 };
 
 #if defined(__cplusplus)
