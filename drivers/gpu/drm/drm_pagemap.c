@@ -276,7 +276,8 @@ npages_in_range(unsigned long start, unsigned long end)
  * The caller should hold a reference to the device memory allocation,
  * and the reference is consumed by this function unless it returns with
  * an error.
- * @mm: Pointer to the struct mm_struct.
+ * @mm: Pointer to the struct mm_struct. This pointer should hold a reference to
+ * the mm, and the mm should be locked on entry.
  * @start: Start of the virtual address range to migrate.
  * @end: End of the virtual address range to migrate.
  * @pgmap_owner: Not used currently, since only system memory is considered.
@@ -814,3 +815,4 @@ int drm_pagemap_populate_mm(struct drm_pagemap *dpagemap,
 
 	return err;
 }
+EXPORT_SYMBOL(drm_pagemap_populate_mm);
