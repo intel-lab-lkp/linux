@@ -873,7 +873,12 @@ struct gve_priv {
 	struct gve_rss_config rss_config;
 
 	/* True if the device supports reading the nic clock */
+	struct workqueue_struct *gve_ts_wq;
 	bool nic_timestamp_supported;
+	struct delayed_work nic_ts_sync_task;
+	struct gve_nic_ts_report *nic_ts_report;
+	dma_addr_t nic_ts_report_bus;
+	u64 last_sync_nic_counter; /* Clock counter from last NIC TS report */
 };
 
 enum gve_service_task_flags_bit {
@@ -1255,6 +1260,9 @@ int gve_flow_rules_reset(struct gve_priv *priv);
 int gve_init_rss_config(struct gve_priv *priv, u16 num_queues);
 /* report stats handling */
 void gve_handle_report_stats(struct gve_priv *priv);
+/* Timestamping */
+int gve_init_clock(struct gve_priv *priv);
+void gve_teardown_clock(struct gve_priv *priv);
 /* exported by ethtool.c */
 extern const struct ethtool_ops gve_ethtool_ops;
 /* needed by ethtool */
