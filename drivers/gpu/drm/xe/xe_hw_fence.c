@@ -37,7 +37,16 @@ void xe_hw_fence_module_exit(void)
 
 static struct xe_hw_fence *fence_alloc(void)
 {
-	return kmem_cache_zalloc(xe_hw_fence_slab, GFP_KERNEL);
+	struct xe_hw_fence *fence;
+
+	if (!try_module_get(THIS_MODULE))
+		return NULL;
+
+	fence = kmem_cache_zalloc(xe_hw_fence_slab, GFP_KERNEL);
+	if (!fence)
+		module_put(THIS_MODULE);
+
+	return fence;
 }
 
 static void fence_free(struct rcu_head *rcu)
@@ -189,6 +198,7 @@ static void xe_hw_fence_release(struct dma_fence *dma_fence)
 
 	XE_WARN_ON(!list_empty(&fence->irq_link));
 	call_rcu(&dma_fence->rcu, fence_free);
+	module_put(THIS_MODULE);
 }
 
 static const struct dma_fence_ops xe_hw_fence_ops = {
@@ -235,6 +245,7 @@ struct dma_fence *xe_hw_fence_alloc(void)
 void xe_hw_fence_free(struct dma_fence *fence)
 {
 	fence_free(&fence->rcu);
+	module_put(THIS_MODULE);
 }
 
 /**
