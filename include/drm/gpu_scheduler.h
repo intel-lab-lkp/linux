@@ -504,6 +504,26 @@ struct drm_sched_backend_ops {
 	enum drm_gpu_sched_stat (*timedout_job)(struct drm_sched_job *sched_job);
 
 	/**
+	 * @cancel_job: Called during pending job cleanup on scheduler destroy
+	 *
+	 * @sched_job: The job to cancel
+	 *
+	 * Called from drm_sched_fini() for every job on the
+	 * &drm_sched.pending_list after scheduler workqueues have been stopped
+	 * in drm_sched_fini().
+	 *
+	 * Job should either be allowed to finish or revoked from the backend
+	 * and signaled with an appropriate fence errno (-ECANCELED). After the
+	 * callback returns scheduler will call
+	 * &drm_sched_backend_ops.free_job() after which scheduler teardown will
+	 * proceed.
+	 *
+	 * Callback is optional but recommended for avoiding memory leaks after
+	 * scheduler tear down.
+	 */
+	void (*cancel_job)(struct drm_sched_job *sched_job);
+
+	/**
          * @free_job: Called once the job's finished fence has been signaled
          * and it's time to clean it up.
 	 */

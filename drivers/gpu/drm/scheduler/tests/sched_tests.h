@@ -49,7 +49,6 @@ struct drm_mock_scheduler {
 
 	spinlock_t		lock;
 	struct list_head	job_list;
-	struct list_head	done_list;
 
 	struct {
 		u64		context;
@@ -97,7 +96,8 @@ struct drm_mock_sched_job {
 	struct completion	done;
 
 #define DRM_MOCK_SCHED_JOB_DONE		0x1
-#define DRM_MOCK_SCHED_JOB_TIMEDOUT	0x2
+#define DRM_MOCK_SCHED_JOB_CANCELED	0x2
+#define DRM_MOCK_SCHED_JOB_TIMEDOUT	0x4
 	unsigned long		flags;
 
 	struct list_head	link;
@@ -145,6 +145,8 @@ void drm_mock_sched_entity_free(struct drm_mock_sched_entity *entity);
 struct drm_mock_sched_job *
 drm_mock_sched_job_new(struct kunit *test,
 		       struct drm_mock_sched_entity *entity);
+
+void drm_mock_sched_job_free(struct drm_sched_job *sched_job);
 
 /**
  * drm_mock_sched_job_submit - Arm and submit a job in one go

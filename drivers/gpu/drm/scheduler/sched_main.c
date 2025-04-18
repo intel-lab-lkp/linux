@@ -1349,25 +1349,23 @@ Out_check_own:
 EXPORT_SYMBOL(drm_sched_init);
 
 /**
- * drm_sched_fini - Destroy a gpu scheduler
+ * drm_sched_fini - Tear down and clean up the scheduler
  *
  * @sched: scheduler instance
  *
- * Tears down and cleans up the scheduler.
+ * In the process of tear down and cleanup this stops submission of new jobs to
+ * the hardware through drm_sched_backend_ops.run_job(), as well as freeing of
+ * completed jobs via drm_sched_backend_ops.free_job().
  *
- * This stops submission of new jobs to the hardware through
- * drm_sched_backend_ops.run_job(). Consequently, drm_sched_backend_ops.free_job()
- * will not be called for all jobs still in drm_gpu_scheduler.pending_list.
- * There is no solution for this currently. Thus, it is up to the driver to make
- * sure that:
+ * If the driver does not implement drm_sched_backend_ops.cleanup_job(), which
+ * is recommended, drm_sched_backend_ops.free_job() will not be called for all
+ * jobs still in drm_gpu_scheduler.pending_list. In this case it is up to the
+ * driver to make sure that:
  *
- *  a) drm_sched_fini() is only called after for all submitted jobs
- *     drm_sched_backend_ops.free_job() has been called or that
- *  b) the jobs for which drm_sched_backend_ops.free_job() has not been called
+ *  a) Drm_sched_fini() is only called after for all submitted jobs
+ *     drm_sched_backend_ops.free_job() has been called or that;
+ *  b) The jobs for which drm_sched_backend_ops.free_job() has not been called
  *     after drm_sched_fini() ran are freed manually.
- *
- * FIXME: Take care of the above problem and prevent this function from leaking
- * the jobs in drm_gpu_scheduler.pending_list under any circumstances.
  */
 void drm_sched_fini(struct drm_gpu_scheduler *sched)
 {
@@ -1396,6 +1394,15 @@ void drm_sched_fini(struct drm_gpu_scheduler *sched)
 
 	/* Confirm no work left behind accessing device structures */
 	cancel_delayed_work_sync(&sched->work_tdr);
+
+	if (sched->ops->cancel_job) {
+		struct drm_sched_job *job;
+
+		list_for_each_entry_reverse(job, &sched->pending_list, list) {
+			sched->ops->cancel_job(job);
+			sched->ops->free_job(job);
+		}
+	}
 
 	if (sched->own_submit_wq)
 		destroy_workqueue(sched->submit_wq);

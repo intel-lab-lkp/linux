@@ -241,6 +241,7 @@ static void drm_sched_basic_timeout(struct kunit *test)
 			job->flags & DRM_MOCK_SCHED_JOB_TIMEDOUT,
 			DRM_MOCK_SCHED_JOB_TIMEDOUT);
 
+	drm_mock_sched_job_free(&job->base);
 	drm_mock_sched_entity_free(entity);
 }
 
