@@ -120,10 +120,6 @@ DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 /*
  * Debugging: various feature bits
- *
- * If SCHED_DEBUG is disabled, each compilation unit has its own copy of
- * sysctl_sched_features, defined in sched.h, to allow constants propagation
- * at compile time and compiler optimization based on features default.
  */
 #define SCHED_FEAT(name, enabled)	\
 	(1UL << __SCHED_FEAT_##name) * enabled |
