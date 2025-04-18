@@ -456,8 +456,7 @@ struct bmp280_data {
 	 * Data to push to userspace triggered buffer. Up to 3 channels and
 	 * s64 timestamp, aligned.
 	 */
-	u8 sensor_data[ALIGN(sizeof(s32) * BME280_NUM_MAX_CHANNELS, sizeof(s64))
-		       + sizeof(s64)] __aligned(sizeof(s64));
+	IIO_DECLARE_BUFFER_WITH_TS(s32, sensor_data, BME280_NUM_MAX_CHANNELS);
 
 	/* Value to hold the current operation mode of the device */
 	enum bmp280_op_mode op_mode;

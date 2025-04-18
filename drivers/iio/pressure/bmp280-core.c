@@ -1107,7 +1107,7 @@ static irqreturn_t bmp280_trigger_handler(int irq, void *p)
 	struct bmp280_data *data = iio_priv(indio_dev);
 	u32 adc_temp, adc_press, comp_press;
 	s32 t_fine, comp_temp;
-	s32 *chans = (s32 *)data->sensor_data;
+	s32 *chans = data->sensor_data;
 	int ret;
 
 	guard(mutex)(&data->lock);
@@ -1228,7 +1228,7 @@ static irqreturn_t bme280_trigger_handler(int irq, void *p)
 	struct bmp280_data *data = iio_priv(indio_dev);
 	u32 adc_temp, adc_press, adc_humidity, comp_press, comp_humidity;
 	s32 t_fine, comp_temp;
-	s32 *chans = (s32 *)data->sensor_data;
+	s32 *chans = data->sensor_data;
 	int ret;
 
 	guard(mutex)(&data->lock);
@@ -1903,7 +1903,7 @@ static irqreturn_t bmp380_trigger_handler(int irq, void *p)
 	struct bmp280_data *data = iio_priv(indio_dev);
 	u32 adc_temp, adc_press, comp_press;
 	s32 t_fine, comp_temp;
-	s32 *chans = (s32 *)data->sensor_data;
+	s32 *chans = data->sensor_data;
 	int ret;
 
 	guard(mutex)(&data->lock);
@@ -2957,7 +2957,7 @@ static irqreturn_t bmp180_trigger_handler(int irq, void *p)
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct bmp280_data *data = iio_priv(indio_dev);
 	int ret, comp_temp, comp_press;
-	s32 *chans = (s32 *)data->sensor_data;
+	s32 *chans = data->sensor_data;
 
 	guard(mutex)(&data->lock);
 
