@@ -349,6 +349,33 @@ tegra241_cmdqv_get_cmdq(struct arm_smmu_device *smmu,
 	return &vcmdq->cmdq;
 }
 
+static int tegra241_cmdqv_drain_hyp_vcmdqs(struct arm_smmu_device *smmu)
+{
+	struct tegra241_cmdqv *cmdqv =
+		container_of(smmu, struct tegra241_cmdqv, smmu);
+	struct tegra241_vintf *vintf = cmdqv->vintfs[0];
+	struct tegra241_vcmdq *vcmdq;
+	int ret = 0;
+	u16 i;
+
+	/* Kernel only uses VINTF0 return if it's disabled */
+	if (!READ_ONCE(vintf->enabled))
+		return 0;
+
+	for (i = 0; i < cmdqv->num_lvcmdqs_per_vintf; i++) {
+		vcmdq = vintf->lvcmdqs[i];
+
+		if (!vcmdq || !READ_ONCE(vcmdq->enabled))
+			continue;
+
+		ret = arm_smmu_queue_poll_until_empty(smmu, &vcmdq->cmdq.q);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+
 /* HW Reset Functions */
 
 static void tegra241_vcmdq_hw_deinit(struct tegra241_vcmdq *vcmdq)
@@ -691,6 +718,7 @@ static struct arm_smmu_impl_ops tegra241_cmdqv_impl_ops = {
 	.get_secondary_cmdq = tegra241_cmdqv_get_cmdq,
 	.device_reset = tegra241_cmdqv_hw_reset,
 	.device_remove = tegra241_cmdqv_remove,
+	.drain_queues = tegra241_cmdqv_drain_hyp_vcmdqs,
 };
 
 /* Probe Functions */

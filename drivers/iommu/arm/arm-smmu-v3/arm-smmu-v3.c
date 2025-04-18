@@ -981,8 +981,8 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 					   cmds->num, true);
 }
 
-static int arm_smmu_queue_poll_until_empty(struct arm_smmu_device *smmu,
-					   struct arm_smmu_queue *q)
+int arm_smmu_queue_poll_until_empty(struct arm_smmu_device *smmu,
+				    struct arm_smmu_queue *q)
 {
 	struct arm_smmu_queue_poll qp;
 	struct arm_smmu_ll_queue *llq = &q->llq;
@@ -1024,7 +1024,11 @@ static int arm_smmu_drain_queues(struct arm_smmu_device *smmu)
 			return ret;
 	}
 
-	return 0;
+	/* Drain all implementation-specific queues */
+	if (smmu->impl_ops && smmu->impl_ops->drain_queues)
+		ret = smmu->impl_ops->drain_queues(smmu);
+
+	return ret;
 }
 
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
