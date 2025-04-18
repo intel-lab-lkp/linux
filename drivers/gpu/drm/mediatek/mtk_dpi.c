@@ -62,6 +62,29 @@ enum mtk_dpi_out_color_format {
 	MTK_DPI_COLOR_FORMAT_YCBCR_422
 };
 
+enum mtk_dpi_golden_setting_level {
+	MTK_DPI_FHD_60FPS_1920 = 0,
+	MTK_DPI_FHD_60FPS_2180,
+	MTK_DPI_FHD_60FPS_2400,
+	MTK_DPI_FHD_60FPS_2520,
+	MTK_DPI_FHD_90FPS,
+	MTK_DPI_FHD_120FPS,
+	MTK_DPI_WQHD_60FPS,
+	MTK_DPI_WQHD_120FPS,
+	MTK_DPI_8K_30FPS,
+	MTK_DPI_GSL_MAX,
+};
+
+enum mtk_dpi_type {
+	MTK_DISP_DPI = 0,
+	MTK_DSIP_DVO,
+};
+
+struct mtk_dpi_gs_info {
+	u32 dpi_buf_sodi_high;
+	u32 dpi_buf_sodi_low;
+};
+
 struct mtk_dpi {
 	struct drm_encoder encoder;
 	struct drm_bridge bridge;
@@ -73,6 +96,7 @@ struct mtk_dpi {
 	struct clk *engine_clk;
 	struct clk *pixel_clk;
 	struct clk *tvd_clk;
+	struct clk *hf_fdpi_clk;
 	int irq;
 	struct drm_display_mode mode;
 	const struct mtk_dpi_conf *conf;
@@ -85,6 +109,7 @@ struct mtk_dpi {
 	struct pinctrl_state *pins_dpi;
 	u32 output_fmt;
 	int refcount;
+	enum mtk_dpi_golden_setting_level gs_level;
 };
 
 static inline struct mtk_dpi *bridge_to_dpi(struct drm_bridge *b)
@@ -171,6 +196,13 @@ struct mtk_dpi_conf {
 	bool edge_cfg_in_mmsys;
 	bool clocked_by_hdmi;
 	bool output_1pixel;
+	u32 out_np_sel;
+	u8 dpi_ver;
+};
+
+static struct mtk_dpi_gs_info mtk_dpi_gs[MTK_DPI_GSL_MAX] = {
+	[MTK_DPI_FHD_60FPS_1920] = {6880, 511},
+	[MTK_DPI_8K_30FPS] = {5255, 3899},
 };
 
 static void mtk_dpi_mask(struct mtk_dpi *dpi, u32 offset, u32 val, u32 mask)
@@ -206,6 +238,86 @@ static void mtk_dpi_enable(struct mtk_dpi *dpi)
 static void mtk_dpi_disable(struct mtk_dpi *dpi)
 {
 	mtk_dpi_mask(dpi, DPI_EN, 0, EN);
+}
+
+static void mtk_dpi_irq_enable(struct mtk_dpi *dpi)
+{
+	mtk_dpi_mask(dpi, DPI_INTEN, INT_VDE_END_EN, INT_VDE_END_EN);
+}
+
+static void mtk_dpi_info_queue_start(struct mtk_dpi *dpi)
+{
+	mtk_dpi_mask(dpi, DPI_TGEN_INFOQ_LATENCY, 0,
+		     INFOQ_START_LATENCY_MASK | INFOQ_END_LATENCY_MASK);
+}
+
+static void mtk_dpi_buffer_ctrl(struct mtk_dpi *dpi)
+{
+	mtk_dpi_mask(dpi, DPI_BUF_CON0, DISP_BUF_EN, DISP_BUF_EN);
+	mtk_dpi_mask(dpi, DPI_BUF_CON0, FIFO_UNDERFLOW_DONE_BLOCK, FIFO_UNDERFLOW_DONE_BLOCK);
+}
+
+static void mtk_dpi_trailing_blank_setting(struct mtk_dpi *dpi)
+{
+	mtk_dpi_mask(dpi, DPI_TGEN_V_LAST_TRAILING_BLANK, 0x20, V_LAST_TRAILING_BLANK_MASK);
+	mtk_dpi_mask(dpi, DPI_TGEN_OUTPUT_DELAY_LINE, 0x20, EXT_TG_DLY_LINE_MASK);
+}
+
+static void mtk_dpi_get_gs_level(struct mtk_dpi *dpi)
+{
+	struct drm_display_mode *mode = &dpi->mode;
+	enum mtk_dpi_golden_setting_level *gsl = &dpi->gs_level;
+
+	if (mode->hdisplay == 1920 && mode->vdisplay == 1080)
+		*gsl = MTK_DPI_FHD_60FPS_1920;
+	else
+		*gsl = MTK_DPI_8K_30FPS;
+}
+
+static void mtk_dpi_golden_setting(struct mtk_dpi *dpi)
+{
+	struct mtk_dpi_gs_info *gs_info = NULL;
+
+	if (dpi->gs_level >= MTK_DPI_GSL_MAX) {
+		dev_info(dpi->dev, "%s invalid gs_level %d\n",
+			 __func__, dpi->gs_level);
+		return;
+	}
+
+	gs_info = &mtk_dpi_gs[dpi->gs_level];
+
+	mtk_dpi_mask(dpi, DPI_BUF_SODI_HIGHT, gs_info->dpi_buf_sodi_high, GENMASK(31, 0));
+	mtk_dpi_mask(dpi, DPI_BUF_SODI_LOW, gs_info->dpi_buf_sodi_low, GENMASK(31, 0));
+}
+
+static void mtk_dpi_shadow_ctrl(struct mtk_dpi *dpi)
+{
+	mtk_dpi_mask(dpi, DPI_SHADOW_CTRL, 0, BYPASS_SHADOW);
+	mtk_dpi_mask(dpi, DPI_SHADOW_CTRL, FORCE_COMMIT, FORCE_COMMIT);
+}
+
+static void mtk_dpi_config_timing(struct mtk_dpi *dpi,
+				 struct mtk_dpi_sync_param *hsync,
+				 struct mtk_dpi_sync_param *vsync)
+{
+	mtk_dpi_mask(dpi, DPI_TGEN_H0,
+		     hsync->sync_width << HSYNC,
+		     dpi->conf->dimension_mask << HSYNC);
+	mtk_dpi_mask(dpi, DPI_TGEN_H0,
+		     hsync->front_porch << DPI_HFP,
+		     dpi->conf->dimension_mask << DPI_HFP);
+	mtk_dpi_mask(dpi, DPI_TGEN_H1,
+		     (hsync->back_porch + hsync->sync_width) << HSYNC2ACT,
+		     dpi->conf->dimension_mask << HSYNC2ACT);
+	mtk_dpi_mask(dpi, DPI_TGEN_V0,
+		     vsync->sync_width << VSYNC,
+		     dpi->conf->dimension_mask << VSYNC);
+	mtk_dpi_mask(dpi, DPI_TGEN_V0,
+		     vsync->front_porch << VFP,
+		     dpi->conf->dimension_mask << VFP);
+	mtk_dpi_mask(dpi, DPI_TGEN_V1,
+		     (vsync->back_porch + vsync->sync_width) << VSYNC2ACT,
+		     dpi->conf->dimension_mask << VSYNC2ACT);
 }
 
 static void mtk_dpi_config_hsync(struct mtk_dpi *dpi,
@@ -296,10 +408,27 @@ static void mtk_dpi_config_interface(struct mtk_dpi *dpi, bool inter)
 
 static void mtk_dpi_config_fb_size(struct mtk_dpi *dpi, u32 width, u32 height)
 {
-	mtk_dpi_mask(dpi, DPI_SIZE, width << HSIZE,
-		     dpi->conf->hvsize_mask << HSIZE);
-	mtk_dpi_mask(dpi, DPI_SIZE, height << VSIZE,
-		     dpi->conf->hvsize_mask << VSIZE);
+	if (dpi->conf->dpi_ver == MTK_DSIP_DVO) {
+		mtk_dpi_mask(dpi, DPI_SRC_SIZE, width << SRC_HSIZE,
+			dpi->conf->hvsize_mask << SRC_HSIZE);
+		mtk_dpi_mask(dpi, DPI_SRC_SIZE, height << SRC_VSIZE,
+			dpi->conf->hvsize_mask << SRC_VSIZE);
+
+		mtk_dpi_mask(dpi, DPI_PIC_SIZE, width << PIC_HSIZE,
+			dpi->conf->hvsize_mask << PIC_HSIZE);
+		mtk_dpi_mask(dpi, DPI_PIC_SIZE, height << PIC_VSIZE,
+			dpi->conf->hvsize_mask << PIC_VSIZE);
+
+		mtk_dpi_mask(dpi, DPI_TGEN_H1, (width / dpi->conf->pixels_per_iter) << HACT,
+			dpi->conf->hvsize_mask << HACT);
+		mtk_dpi_mask(dpi, DPI_TGEN_V1, height << VACT,
+			dpi->conf->hvsize_mask << VACT);
+	} else {
+		mtk_dpi_mask(dpi, DPI_SIZE, width << HSIZE,
+			dpi->conf->hvsize_mask << HSIZE);
+		mtk_dpi_mask(dpi, DPI_SIZE, height << VSIZE,
+			dpi->conf->hvsize_mask << VSIZE);
+	}
 }
 
 static void mtk_dpi_config_channel_limit(struct mtk_dpi *dpi)
@@ -501,6 +630,7 @@ static void mtk_dpi_power_off(struct mtk_dpi *dpi)
 	clk_disable_unprepare(dpi->pixel_clk);
 	clk_disable_unprepare(dpi->tvd_clk);
 	clk_disable_unprepare(dpi->engine_clk);
+	clk_disable_unprepare(dpi->hf_fdpi_clk);
 }
 
 static int mtk_dpi_power_on(struct mtk_dpi *dpi)
@@ -528,8 +658,16 @@ static int mtk_dpi_power_on(struct mtk_dpi *dpi)
 		goto err_pixel;
 	}
 
+	ret = clk_prepare_enable(dpi->hf_fdpi_clk);
+	if (ret) {
+		dev_err(dpi->dev, "Failed to enable hf_fdpi_clk clock: %d\n", ret);
+		goto err_hf_fdpi_clk;
+	}
+
 	return 0;
 
+err_hf_fdpi_clk:
+	clk_disable_unprepare(dpi->hf_fdpi_clk);
 err_pixel:
 	clk_disable_unprepare(dpi->tvd_clk);
 err_engine:
@@ -610,7 +748,6 @@ static int mtk_dpi_set_display_mode(struct mtk_dpi *dpi,
 			    MTK_DPI_POLARITY_FALLING : MTK_DPI_POLARITY_RISING;
 	dpi_pol.vsync_pol = vm.flags & DISPLAY_FLAGS_VSYNC_HIGH ?
 			    MTK_DPI_POLARITY_FALLING : MTK_DPI_POLARITY_RISING;
-
 	/*
 	 * Depending on the IP version, we may output a different amount of
 	 * pixels for each iteration: divide the clock by this number and
@@ -643,14 +780,18 @@ static int mtk_dpi_set_display_mode(struct mtk_dpi *dpi,
 	}
 	mtk_dpi_sw_reset(dpi, true);
 	mtk_dpi_config_pol(dpi, &dpi_pol);
+	if (dpi->conf->dpi_ver == MTK_DSIP_DVO) {
+		mtk_dpi_irq_enable(dpi);
+		mtk_dpi_config_timing(dpi, &hsync, &vsync_lodd);
+	} else {
+		mtk_dpi_config_hsync(dpi, &hsync);
+		mtk_dpi_config_vsync_lodd(dpi, &vsync_lodd);
+		mtk_dpi_config_vsync_rodd(dpi, &vsync_rodd);
+		mtk_dpi_config_vsync_leven(dpi, &vsync_leven);
+		mtk_dpi_config_vsync_reven(dpi, &vsync_reven);
+		mtk_dpi_config_3d(dpi, !!(mode->flags & DRM_MODE_FLAG_3D_MASK));
+	}
 
-	mtk_dpi_config_hsync(dpi, &hsync);
-	mtk_dpi_config_vsync_lodd(dpi, &vsync_lodd);
-	mtk_dpi_config_vsync_rodd(dpi, &vsync_rodd);
-	mtk_dpi_config_vsync_leven(dpi, &vsync_leven);
-	mtk_dpi_config_vsync_reven(dpi, &vsync_reven);
-
-	mtk_dpi_config_3d(dpi, !!(mode->flags & DRM_MODE_FLAG_3D_MASK));
 	mtk_dpi_config_interface(dpi, !!(vm.flags &
 					 DISPLAY_FLAGS_INTERLACED));
 	if (vm.flags & DISPLAY_FLAGS_INTERLACED)
@@ -658,26 +799,41 @@ static int mtk_dpi_set_display_mode(struct mtk_dpi *dpi,
 	else
 		mtk_dpi_config_fb_size(dpi, vm.hactive, vm.vactive);
 
-	mtk_dpi_config_channel_limit(dpi);
-	mtk_dpi_config_bit_num(dpi, dpi->bit_num);
-	mtk_dpi_config_channel_swap(dpi, dpi->channel_swap);
-	mtk_dpi_config_color_format(dpi, dpi->color_format);
-	if (dpi->conf->support_direct_pin) {
-		mtk_dpi_config_yc_map(dpi, dpi->yc_map);
-		mtk_dpi_config_2n_h_fre(dpi);
+	if (dpi->conf->dpi_ver == MTK_DSIP_DVO) {
+		mtk_dpi_info_queue_start(dpi);
+		mtk_dpi_buffer_ctrl(dpi);
+		mtk_dpi_trailing_blank_setting(dpi);
+		mtk_dpi_get_gs_level(dpi);
+		mtk_dpi_golden_setting(dpi);
+		mtk_dpi_shadow_ctrl(dpi);
+		mtk_dpi_mask(dpi, DPI_OUTPUT_SET, dpi->conf->out_np_sel, OUT_NP_SEL);
+	} else {
+		mtk_dpi_config_channel_limit(dpi);
+		mtk_dpi_config_bit_num(dpi, dpi->bit_num);
+		mtk_dpi_config_channel_swap(dpi, dpi->channel_swap);
+		mtk_dpi_config_color_format(dpi, dpi->color_format);
+		if (dpi->conf->support_direct_pin) {
+			mtk_dpi_config_yc_map(dpi, dpi->yc_map);
+			mtk_dpi_config_2n_h_fre(dpi);
 
-		/* DPI can connect to either an external bridge or the internal HDMI encoder */
-		if (dpi->conf->output_1pixel)
-			mtk_dpi_mask(dpi, DPI_CON, DPI_OUTPUT_1T1P_EN, DPI_OUTPUT_1T1P_EN);
-		else
-			mtk_dpi_dual_edge(dpi);
+			/*
+			 * DPI can connect to either an external bridge
+			 * or the internal HDMI encoder
+			 */
+			if (dpi->conf->output_1pixel)
+				mtk_dpi_mask(dpi, DPI_CON,
+						  DPI_OUTPUT_1T1P_EN, DPI_OUTPUT_1T1P_EN);
+			else
+				mtk_dpi_dual_edge(dpi);
 
-		mtk_dpi_config_disable_edge(dpi);
+			mtk_dpi_config_disable_edge(dpi);
+		}
+		if (dpi->conf->input_2p_en_bit) {
+			mtk_dpi_mask(dpi, DPI_CON, dpi->conf->input_2p_en_bit,
+				dpi->conf->input_2p_en_bit);
+		}
 	}
-	if (dpi->conf->input_2p_en_bit) {
-		mtk_dpi_mask(dpi, DPI_CON, dpi->conf->input_2p_en_bit,
-			     dpi->conf->input_2p_en_bit);
-	}
+
 	mtk_dpi_sw_reset(dpi, false);
 
 	return 0;
@@ -700,7 +856,7 @@ static u32 *mtk_dpi_bridge_atomic_get_output_bus_fmts(struct drm_bridge *bridge,
 	}
 
 	output_fmts = kcalloc(dpi->conf->num_output_fmts, sizeof(*output_fmts),
-			     GFP_KERNEL);
+			      GFP_KERNEL);
 	if (!output_fmts)
 		return NULL;
 
@@ -1172,6 +1328,20 @@ static const struct mtk_dpi_conf mt8195_dpintf_conf = {
 	.input_2p_en_bit = DPINTF_INPUT_2P_EN,
 };
 
+static const struct mtk_dpi_conf mt8196_conf = {
+	.dpi_factor = dpi_factor_mt8195_dp_intf,
+	.num_dpi_factor = ARRAY_SIZE(dpi_factor_mt8195_dp_intf),
+	.out_np_sel = 0x2,
+	.reg_h_fre_con = 0xb0,
+	.max_clock_khz = 1330000,
+	.output_fmts = mt8195_output_fmts,
+	.num_output_fmts = ARRAY_SIZE(mt8195_output_fmts),
+	.pixels_per_iter = 4,
+	.dimension_mask = DPINTF_HPW_MASK,
+	.hvsize_mask = PIC_HSIZE_MASK,
+	.dpi_ver = MTK_DSIP_DVO,
+};
+
 static int mtk_dpi_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1226,6 +1396,11 @@ static int mtk_dpi_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(dpi->tvd_clk),
 				     "Failed to get tvdpll clock\n");
 
+	dpi->hf_fdpi_clk = devm_clk_get_optional(dev, "hf_fdvo_clk");
+	if (IS_ERR(dpi->hf_fdpi_clk))
+		return dev_err_probe(dev, PTR_ERR(dpi->hf_fdpi_clk),
+				     "Failed to get hf_fdpi_clk clock\n");
+
 	dpi->irq = platform_get_irq(pdev, 0);
 	if (dpi->irq < 0)
 		return dpi->irq;
@@ -1261,6 +1436,7 @@ static const struct of_device_id mtk_dpi_of_ids[] = {
 	{ .compatible = "mediatek,mt8192-dpi", .data = &mt8192_conf },
 	{ .compatible = "mediatek,mt8195-dp-intf", .data = &mt8195_dpintf_conf },
 	{ .compatible = "mediatek,mt8195-dpi", .data = &mt8195_conf },
+	{ .compatible = "mediatek,mt8196-edp-dvo", .data = &mt8196_conf },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, mtk_dpi_of_ids);

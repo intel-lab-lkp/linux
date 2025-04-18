@@ -16,6 +16,7 @@
 #define INT_VSYNC_EN			BIT(0)
 #define INT_VDE_EN			BIT(1)
 #define INT_UNDERFLOW_EN		BIT(2)
+#define INT_VDE_END_EN			BIT(4)
 
 #define DPI_INTSTA		0x0C
 #define INT_VSYNC_STA			BIT(0)
@@ -239,6 +240,71 @@
 #define INT_MATRIX_SEL_MASK		GENMASK(4, 0)
 #define MATRIX_SEL_RGB_TO_JPEG		0
 #define MATRIX_SEL_RGB_TO_BT601		2
+
+#define DPI_TGEN_INFOQ_LATENCY	0x80
+#define INFOQ_START_LATENCY		0
+#define INFOQ_START_LATENCY_MASK	(0xffff << 0)
+#define INFOQ_END_LATENCY		16
+#define INFOQ_END_LATENCY_MASK		(0xffff << 16)
+
+#define DPI_BUF_CON0		0x220
+#define DISP_BUF_EN			BIT(0)
+#define FIFO_UNDERFLOW_DONE_BLOCK	BIT(4)
+
+#define DPI_TGEN_V_LAST_TRAILING_BLANK	0x6c
+#define V_LAST_TRAILING_BLANK			0
+#define V_LAST_TRAILING_BLANK_MASK		(0xffff << 0)
+
+#define DPI_TGEN_OUTPUT_DELAY_LINE	0x7c
+#define EXT_TG_DLY_LINE				0
+#define EXT_TG_DLY_LINE_MASK			(0xffff << 0)
+
+#define DPI_SHADOW_CTRL			0x190
+#define FORCE_COMMIT				BIT(0)
+#define BYPASS_SHADOW				BIT(1)
+#define READ_WRK_REG				BIT(2)
+
+#define DPI_BUF_SODI_HIGHT		0x230
+#define DPI_BUF_SODI_LOW		0x234
+
+#define DPI_OUTPUT_SET		0x18
+#define OUT_NP_SEL			(0x3 << 0)
+
+#define DPI_SRC_SIZE		0x20
+#define SRC_HSIZE			0
+#define SRC_HSIZE_MASK			(0xffff << 0)
+#define SRC_VSIZE			16
+#define SRC_VSIZE_MASK			(0xffff << 16)
+
+#define DPI_PIC_SIZE		0x24
+#define PIC_HSIZE			0
+#define PIC_HSIZE_MASK			(0xffff << 0)
+#define PIC_VSIZE			16
+#define PIC_VSIZE_MASK			(0xffff << 16)
+
+#define DPI_TGEN_H0		0x50
+#define DPI_HFP				0
+#define DPI_HFP_MASK			(0xffff << 0)
+#define HSYNC				16
+#define HSYNC_MASK			(0xffff << 16)
+
+#define DPI_TGEN_H1		0x54
+#define HSYNC2ACT			0
+#define HSYNC2ACT_MASK			(0xffff << 0)
+#define HACT				16
+#define HACT_MASK			(0xffff << 16)
+
+#define DPI_TGEN_V0		0x58
+#define VFP				0
+#define VFP_MASK			(0xffff << 0)
+#define VSYNC				16
+#define VSYNC_MASK			(0xffff << 16)
+
+#define DPI_TGEN_V1		0x5c
+#define VSYNC2ACT			0
+#define VSYNC2ACT_MASK			(0xffff << 0)
+#define VACT				16
+#define VACT_MASK			(0xffff << 16)
 
 #define DPI_PATTERN0		0xf00
 #define DPI_PAT_EN			BIT(0)
