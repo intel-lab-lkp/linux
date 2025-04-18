@@ -33,6 +33,13 @@
 #include "blk-rq-qos.h"
 #include "blk-cgroup.h"
 
+struct gendisk_data {
+	struct gendisk *disk;
+	struct device *parent;
+	const struct attribute_group **groups;
+	struct fwnode_handle *fwnode;
+};
+
 static struct kobject *block_depr;
 
 /*
@@ -389,21 +396,9 @@ int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode)
 	return ret;
 }
 
-/**
- * add_disk_fwnode - add disk information to kernel list with fwnode
- * @parent: parent device for the disk
- * @disk: per-device partitioning information
- * @groups: Additional per-device sysfs groups
- * @fwnode: attached disk fwnode
- *
- * This function registers the partitioning information in @disk
- * with the kernel. Also attach a fwnode to the disk device.
- */
-int __must_check add_disk_fwnode(struct device *parent, struct gendisk *disk,
-				 const struct attribute_group **groups,
-				 struct fwnode_handle *fwnode)
-
+static int __add_disk_fwnode(struct gendisk_data *data)
 {
+	struct gendisk *disk = data->disk;
 	struct device *ddev = disk_to_dev(disk);
 	int ret;
 
@@ -463,11 +458,11 @@ int __must_check add_disk_fwnode(struct device *parent, struct gendisk *disk,
 	/* delay uevents, until we scanned partition table */
 	dev_set_uevent_suppress(ddev, 1);
 
-	ddev->parent = parent;
-	ddev->groups = groups;
+	ddev->parent = data->parent;
+	ddev->groups = data->groups;
 	dev_set_name(ddev, "%s", disk->disk_name);
-	if (fwnode)
-		device_set_node(ddev, fwnode);
+	if (data->fwnode)
+		device_set_node(ddev, data->fwnode);
 	if (!(disk->flags & GENHD_FL_HIDDEN))
 		ddev->devt = MKDEV(disk->major, disk->first_minor);
 	ret = device_add(ddev);
@@ -572,6 +567,30 @@ out_exit_elevator:
 	}
 	return ret;
 }
+
+/**
+ * add_disk_fwnode - add disk information to kernel list with fwnode
+ * @parent: parent device for the disk
+ * @disk: per-device partitioning information
+ * @groups: Additional per-device sysfs groups
+ * @fwnode: attached disk fwnode
+ *
+ * This function registers the partitioning information in @disk
+ * with the kernel. Also attach a fwnode to the disk device.
+ */
+int __must_check add_disk_fwnode(struct device *parent, struct gendisk *disk,
+				 const struct attribute_group **groups,
+				 struct fwnode_handle *fwnode)
+{
+	struct gendisk_data data = {
+		.disk	= disk,
+		.parent	= parent,
+		.groups	= groups,
+		.fwnode = fwnode,
+	};
+
+	return __add_disk_fwnode(&data);
+}
 EXPORT_SYMBOL_GPL(add_disk_fwnode);
 
 /**
@@ -652,27 +671,9 @@ void blk_mark_disk_dead(struct gendisk *disk)
 }
 EXPORT_SYMBOL_GPL(blk_mark_disk_dead);
 
-/**
- * del_gendisk - remove the gendisk
- * @disk: the struct gendisk to remove
- *
- * Removes the gendisk and all its associated resources. This deletes the
- * partitions associated with the gendisk, and unregisters the associated
- * request_queue.
- *
- * This is the counter to the respective __device_add_disk() call.
- *
- * The final removal of the struct gendisk happens when its refcount reaches 0
- * with put_disk(), which should be called after del_gendisk(), if
- * __device_add_disk() was used.
- *
- * Drivers exist which depend on the release of the gendisk to be synchronous,
- * it should not be deferred.
- *
- * Context: can sleep
- */
-void del_gendisk(struct gendisk *disk)
+static void __del_gendisk(struct gendisk_data *data)
 {
+	struct gendisk *disk = data->disk;
 	struct request_queue *q = disk->queue;
 	struct block_device *part;
 	unsigned long idx;
@@ -765,6 +766,34 @@ void del_gendisk(struct gendisk *disk)
 		blk_unfreeze_release_lock(q);
 }
 EXPORT_SYMBOL(del_gendisk);
+
+/**
+ * del_gendisk - remove the gendisk
+ * @disk: the struct gendisk to remove
+ *
+ * Removes the gendisk and all its associated resources. This deletes the
+ * partitions associated with the gendisk, and unregisters the associated
+ * request_queue.
+ *
+ * This is the counter to the respective __device_add_disk() call.
+ *
+ * The final removal of the struct gendisk happens when its refcount reaches 0
+ * with put_disk(), which should be called after del_gendisk(), if
+ * __device_add_disk() was used.
+ *
+ * Drivers exist which depend on the release of the gendisk to be synchronous,
+ * it should not be deferred.
+ *
+ * Context: can sleep
+ */
+void del_gendisk(struct gendisk *disk)
+{
+	struct gendisk_data data = {
+		.disk	= disk,
+	};
+
+	__del_gendisk(&data);
+}
 
 /**
  * invalidate_disk - invalidate the disk
