@@ -79,4 +79,14 @@ static inline void part_stat_set_all(struct block_device *part, int value)
 #define part_stat_local_read_cpu(part, field, cpu)			\
 	local_read(&(part_stat_get_cpu(part, field, cpu)))
 
+void bdev_count_inflight_rw(struct block_device *bdev, unsigned int inflight[2]);
+
+static inline unsigned int bdev_count_inflight(struct block_device *bdev)
+{
+	unsigned int inflight[2];
+
+	bdev_count_inflight_rw(bdev, inflight);
+
+	return inflight[0] + inflight[1];
+}
 #endif /* _LINUX_PART_STAT_H */

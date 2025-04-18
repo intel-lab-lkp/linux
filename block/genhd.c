@@ -125,37 +125,35 @@ static void part_stat_read_all(struct block_device *part,
 	}
 }
 
-unsigned int part_in_flight(struct block_device *part)
-{
-	unsigned int inflight = 0;
-	int cpu;
-
-	for_each_possible_cpu(cpu) {
-		inflight += part_stat_local_read_cpu(part, in_flight[0], cpu) +
-			    part_stat_local_read_cpu(part, in_flight[1], cpu);
-	}
-	if ((int)inflight < 0)
-		inflight = 0;
-
-	return inflight;
-}
-
-static void part_in_flight_rw(struct block_device *part,
-		unsigned int inflight[2])
+/**
+ * bdev_count_inflight_rw - get the number of inflight IOs for a block device.
+ *
+ * @bdev:	the block device.
+ * @inflight:	return number of inflight IOs, @inflight[0] for read and
+ *		@inflight[1] for write.
+ *
+ * For bio-based block device, IO is inflight from bdev_start_io_acct(), and for
+ * rq-based block device, IO is inflight from blk_account_io_start().
+ *
+ * Noted, for rq-based block device, use blk_mq_count_in_driver_rw() to get the
+ * number of requests issued to driver.
+ */
+void bdev_count_inflight_rw(struct block_device *bdev, unsigned int inflight[2])
 {
 	int cpu;
 
 	inflight[0] = 0;
 	inflight[1] = 0;
 	for_each_possible_cpu(cpu) {
-		inflight[0] += part_stat_local_read_cpu(part, in_flight[0], cpu);
-		inflight[1] += part_stat_local_read_cpu(part, in_flight[1], cpu);
+		inflight[0] += part_stat_local_read_cpu(bdev, in_flight[0], cpu);
+		inflight[1] += part_stat_local_read_cpu(bdev, in_flight[1], cpu);
 	}
-	if ((int)inflight[0] < 0)
+	if (WARN_ON_ONCE((int)inflight[0] < 0))
 		inflight[0] = 0;
-	if ((int)inflight[1] < 0)
+	if (WARN_ON_ONCE((int)inflight[1] < 0))
 		inflight[1] = 0;
 }
+EXPORT_SYMBOL_GPL(bdev_count_inflight_rw);
 
 /*
  * Can be deleted altogether. Later.
@@ -1005,7 +1003,7 @@ ssize_t part_stat_show(struct device *dev,
 	struct disk_stats stat;
 	unsigned int inflight;
 
-	inflight = part_in_flight(bdev);
+	inflight = bdev_count_inflight(bdev);
 	if (inflight) {
 		part_stat_lock();
 		update_io_ticks(bdev, jiffies, true);
@@ -1050,9 +1048,9 @@ ssize_t part_inflight_show(struct device *dev, struct device_attribute *attr,
 	unsigned int inflight[2];
 
 	if (queue_is_mq(q))
-		blk_mq_in_flight_rw(q, bdev, inflight);
+		blk_mq_count_in_driver_rw(q, bdev, inflight);
 	else
-		part_in_flight_rw(bdev, inflight);
+		bdev_count_inflight_rw(bdev, inflight);
 
 	return sysfs_emit(buf, "%8u %8u\n", inflight[0], inflight[1]);
 }
@@ -1307,7 +1305,7 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 		if (bdev_is_partition(hd) && !bdev_nr_sectors(hd))
 			continue;
 
-		inflight = part_in_flight(hd);
+		inflight = bdev_count_inflight(hd);
 		if (inflight) {
 			part_stat_lock();
 			update_io_ticks(hd, jiffies, true);
