@@ -4279,6 +4279,23 @@ static ssize_t memory_high_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+static ssize_t memory_high_nonblock_write(struct kernfs_open_file *of,
+					  char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned long high;
+	int err;
+
+	buf = strstrip(buf);
+	err = page_counter_memparse(buf, "max", &high);
+	if (err)
+		return err;
+
+	page_counter_set_high(&memcg->memory, high);
+	memcg_wb_domain_size_changed(memcg);
+	return nbytes;
+}
+
 static int memory_max_show(struct seq_file *m, void *v)
 {
 	return seq_puts_memcg_tunable(m,
@@ -4329,6 +4346,23 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 		cond_resched();
 	}
 
+	memcg_wb_domain_size_changed(memcg);
+	return nbytes;
+}
+
+static ssize_t memory_max_nonblock_write(struct kernfs_open_file *of,
+					 char *buf, size_t nbytes, loff_t off)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(of_css(of));
+	unsigned long max;
+	int err;
+
+	buf = strstrip(buf);
+	err = page_counter_memparse(buf, "max", &max);
+	if (err)
+		return err;
+
+	xchg(&memcg->memory.max, max);
 	memcg_wb_domain_size_changed(memcg);
 	return nbytes;
 }
@@ -4558,10 +4592,22 @@ static struct cftype memory_files[] = {
 		.write = memory_high_write,
 	},
 	{
+		.name = "high.nonblock",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_high_show,
+		.write = memory_high_nonblock_write,
+	},
+	{
 		.name = "max",
 		.flags = CFTYPE_NOT_ON_ROOT,
 		.seq_show = memory_max_show,
 		.write = memory_max_write,
+	},
+	{
+		.name = "max.nonblock",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_max_show,
+		.write = memory_max_nonblock_write,
 	},
 	{
 		.name = "events",

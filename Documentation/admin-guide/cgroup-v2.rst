@@ -1299,6 +1299,14 @@ PAGE_SIZE multiple when read back.
 	monitors the limited cgroup to alleviate heavy reclaim
 	pressure.
 
+  memory.high.nonblock
+        This is the same limit as memory.high but have different
+        behaviour for the writer of this interface. The program setting
+        the limit will not trigger reclaim synchronously if the
+        usage is higher than the limit and let the processes in the
+        target cgroup to trigger reclaim and/or get throttled on
+        hitting the high limit.
+
   memory.max
 	A read-write single value file which exists on non-root
 	cgroups.  The default is "max".
@@ -1315,6 +1323,14 @@ PAGE_SIZE multiple when read back.
 	Some kinds of allocations don't invoke the OOM killer.
 	Caller could retry them differently, return into userspace
 	as -ENOMEM or silently ignore in cases like disk readahead.
+
+  memory.max.nonblock
+        This is the same limit as memory.max but have different
+        behaviour for the writer of this interface. The program setting
+        the limit will not trigger reclaim synchronously and/or trigger
+        the oom-kill if the usage is higher than the limit and let the
+        processes in the target cgroup to trigger reclaim and/or get
+        oom-killed on hitting their max limit.
 
   memory.reclaim
 	A write-only nested-keyed file which exists for all cgroups.
