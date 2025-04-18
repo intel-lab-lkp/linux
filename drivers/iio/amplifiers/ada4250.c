@@ -13,8 +13,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
-
-#include <linux/unaligned.h>
+#include <linux/types.h>
 
 /* ADA4250 Register Map */
 #define ADA4250_REG_GAIN_MUX        0x00
@@ -299,25 +298,23 @@ static void ada4250_reg_disable(void *data)
 
 static int ada4250_init(struct ada4250_state *st)
 {
+	struct device *dev = &st->spi->dev;
 	int ret;
-	u16 chip_id;
-	u8 data[2] __aligned(8) = {};
-	struct spi_device *spi = st->spi;
+	__le16 chip_id;
 
-	st->refbuf_en = device_property_read_bool(&spi->dev, "adi,refbuf-enable");
+	st->refbuf_en = device_property_read_bool(dev, "adi,refbuf-enable");
 
-	st->reg = devm_regulator_get(&spi->dev, "avdd");
+	st->reg = devm_regulator_get(dev, "avdd");
 	if (IS_ERR(st->reg))
-		return dev_err_probe(&spi->dev, PTR_ERR(st->reg),
+		return dev_err_probe(dev, PTR_ERR(st->reg),
 				     "failed to get the AVDD voltage\n");
 
 	ret = regulator_enable(st->reg);
-	if (ret) {
-		dev_err(&spi->dev, "Failed to enable specified AVDD supply\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret,
+				     "Failed to enable specified AVDD supply\n");
 
-	ret = devm_add_action_or_reset(&spi->dev, ada4250_reg_disable, st->reg);
+	ret = devm_add_action_or_reset(dev, ada4250_reg_disable, st->reg);
 	if (ret)
 		return ret;
 
@@ -326,16 +323,13 @@ static int ada4250_init(struct ada4250_state *st)
 	if (ret)
 		return ret;
 
-	ret = regmap_bulk_read(st->regmap, ADA4250_REG_CHIP_ID, data, 2);
+	ret = regmap_bulk_read(st->regmap, ADA4250_REG_CHIP_ID, &chip_id,
+			       sizeof(chip_id));
 	if (ret)
 		return ret;
 
-	chip_id = get_unaligned_le16(data);
-
-	if (chip_id != ADA4250_CHIP_ID) {
-		dev_err(&spi->dev, "Invalid chip ID.\n");
-		return -EINVAL;
-	}
+	if (le16_to_cpu(chip_id) != ADA4250_CHIP_ID)
+		return dev_err_probe(dev, -EINVAL, "Invalid chip ID.\n");
 
 	return regmap_write(st->regmap, ADA4250_REG_REFBUF_EN,
 			    FIELD_PREP(ADA4250_REFBUF_MSK, st->refbuf_en));
