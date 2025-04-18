@@ -155,9 +155,9 @@ struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
 			kfree(ff->args);
 			ff->args = NULL;
 			if (isdir)
-				fc->no_opendir = 1;
+				fc->no_opendir = true;
 			else
-				fc->no_open = 1;
+				fc->no_open = true;
 		}
 	}
 
@@ -474,7 +474,7 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fm->fc->no_flush = 1;
+		fm->fc->no_flush = true;
 		err = 0;
 	}
 
@@ -549,7 +549,7 @@ static int fuse_fsync(struct file *file, loff_t start, loff_t end,
 
 	err = fuse_fsync_common(file, start, end, datasync, FUSE_FSYNC);
 	if (err == -ENOSYS) {
-		fc->no_fsync = 1;
+		fc->no_fsync = true;
 		err = 0;
 	}
 out:
@@ -2548,7 +2548,7 @@ static sector_t fuse_bmap(struct address_space *mapping, sector_t block)
 	args.out_args[0].value = &outarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS)
-		fm->fc->no_bmap = 1;
+		fm->fc->no_bmap = true;
 
 	return err ? 0 : outarg.block;
 }
@@ -2581,7 +2581,7 @@ static loff_t fuse_lseek(struct file *file, loff_t offset, int whence)
 	err = fuse_simple_request(fm, &args);
 	if (err) {
 		if (err == -ENOSYS) {
-			fm->fc->no_lseek = 1;
+			fm->fc->no_lseek = true;
 			goto fallback;
 		}
 		return err;
@@ -2716,7 +2716,7 @@ __poll_t fuse_file_poll(struct file *file, poll_table *wait)
 	if (!err)
 		return demangle_poll(outarg.revents);
 	if (err == -ENOSYS) {
-		fm->fc->no_poll = 1;
+		fm->fc->no_poll = true;
 		return DEFAULT_POLLMASK;
 	}
 	return EPOLLERR;
@@ -2935,7 +2935,7 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 	args.in_args[0].value = &inarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fm->fc->no_fallocate = 1;
+		fm->fc->no_fallocate = true;
 		err = -EOPNOTSUPP;
 	}
 	if (err)
@@ -3047,7 +3047,7 @@ static ssize_t __fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 	args.out_args[0].value = &outarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fc->no_copy_file_range = 1;
+		fc->no_copy_file_range = true;
 		err = -EOPNOTSUPP;
 	}
 	if (err)

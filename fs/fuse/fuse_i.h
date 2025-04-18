@@ -699,12 +699,12 @@ struct fuse_conn {
 
 	/** Flag indicating that INIT reply has been received. Allocating
 	 * any fuse request will be suspended until the flag is set */
-	int initialized:1;
+	bool initialized:1;
 
 	/** Flag indicating if connection is blocked.  This will be
 	    the case before the INIT reply is received, and if there
 	    are too many outstanding backgrounds requests */
-	int blocked:1;
+	bool blocked:1;
 
 	/** Connection aborted via sysfs */
 	bool aborted:1;
@@ -712,37 +712,37 @@ struct fuse_conn {
 	/** Connection failed (version mismatch).  Cannot race with
 	    setting other bitfields since it is only set once in INIT
 	    reply, before any other request, and never cleared */
-	unsigned conn_error:1;
+	bool conn_error:1;
 
 	/** Connection successful.  Only set in INIT */
-	unsigned conn_init:1;
+	bool conn_init:1;
 
 	/** Do readahead asynchronously?  Only set in INIT */
-	unsigned async_read:1;
+	bool async_read:1;
 
 	/** Return an unique read error after abort.  Only set in INIT */
-	unsigned abort_err:1;
+	bool abort_err:1;
 
 	/** Do not send separate SETATTR request before open(O_TRUNC)  */
-	unsigned atomic_o_trunc:1;
+	bool atomic_o_trunc:1;
 
 	/** Filesystem supports NFS exporting.  Only set in INIT */
-	unsigned export_support:1;
+	bool export_support:1;
 
 	/** write-back cache policy (default is write-through) */
-	unsigned writeback_cache:1;
+	bool writeback_cache:1;
 
 	/** allow parallel lookups and readdir (default is serialized) */
-	unsigned parallel_dirops:1;
+	bool parallel_dirops:1;
 
 	/** handle fs handles killing suid/sgid/cap on write/chown/trunc */
-	unsigned handle_killpriv:1;
+	bool handle_killpriv:1;
 
 	/** cache READLINK responses in page cache */
-	unsigned cache_symlinks:1;
+	bool cache_symlinks:1;
 
 	/* show legacy mount options */
-	unsigned int legacy_opts_show:1;
+	bool legacy_opts_show:1;
 
 	/*
 	 * fs kills suid/sgid/cap on write/chown/trunc. suid is killed on
@@ -750,7 +750,7 @@ struct fuse_conn {
 	 * on write/truncate only if caller did not have CAP_FSETID as well as
 	 * file has group execute permission.
 	 */
-	unsigned handle_killpriv_v2:1;
+	bool handle_killpriv_v2:1;
 
 	/*
 	 * The following bitfields are only for optimization purposes
@@ -758,145 +758,145 @@ struct fuse_conn {
 	 */
 
 	/** Is open/release not implemented by fs? */
-	unsigned no_open:1;
+	bool no_open:1;
 
 	/** Is opendir/releasedir not implemented by fs? */
-	unsigned no_opendir:1;
+	bool no_opendir:1;
 
 	/** Is fsync not implemented by fs? */
-	unsigned no_fsync:1;
+	bool no_fsync:1;
 
 	/** Is fsyncdir not implemented by fs? */
-	unsigned no_fsyncdir:1;
+	bool no_fsyncdir:1;
 
 	/** Is flush not implemented by fs? */
-	unsigned no_flush:1;
+	bool no_flush:1;
 
 	/** Is setxattr not implemented by fs? */
-	unsigned no_setxattr:1;
+	bool no_setxattr:1;
 
 	/** Does file server support extended setxattr */
-	unsigned setxattr_ext:1;
+	bool setxattr_ext:1;
 
 	/** Is getxattr not implemented by fs? */
-	unsigned no_getxattr:1;
+	bool no_getxattr:1;
 
 	/** Is listxattr not implemented by fs? */
-	unsigned no_listxattr:1;
+	bool no_listxattr:1;
 
 	/** Is removexattr not implemented by fs? */
-	unsigned no_removexattr:1;
+	bool no_removexattr:1;
 
 	/** Are posix file locking primitives not implemented by fs? */
-	unsigned no_lock:1;
+	bool no_lock:1;
 
 	/** Is access not implemented by fs? */
-	unsigned no_access:1;
+	bool no_access:1;
 
 	/** Is create not implemented by fs? */
-	unsigned no_create:1;
+	bool no_create:1;
 
 	/** Is interrupt not implemented by fs? */
-	unsigned no_interrupt:1;
+	bool no_interrupt:1;
 
 	/** Is bmap not implemented by fs? */
-	unsigned no_bmap:1;
+	bool no_bmap:1;
 
 	/** Is poll not implemented by fs? */
-	unsigned no_poll:1;
+	bool no_poll:1;
 
 	/** Do multi-page cached writes */
-	unsigned big_writes:1;
+	bool big_writes:1;
 
 	/** Don't apply umask to creation modes */
-	unsigned dont_mask:1;
+	bool dont_mask:1;
 
 	/** Are BSD file locking primitives not implemented by fs? */
-	unsigned no_flock:1;
+	bool no_flock:1;
 
 	/** Is fallocate not implemented by fs? */
-	unsigned no_fallocate:1;
+	bool no_fallocate:1;
 
 	/** Is rename with flags implemented by fs? */
-	unsigned no_rename2:1;
+	bool no_rename2:1;
 
 	/** Use enhanced/automatic page cache invalidation. */
-	unsigned auto_inval_data:1;
+	bool auto_inval_data:1;
 
 	/** Filesystem is fully responsible for page cache invalidation. */
-	unsigned explicit_inval_data:1;
+	bool explicit_inval_data:1;
 
 	/** Does the filesystem support readdirplus? */
-	unsigned do_readdirplus:1;
+	bool do_readdirplus:1;
 
 	/** Does the filesystem want adaptive readdirplus? */
-	unsigned readdirplus_auto:1;
+	bool readdirplus_auto:1;
 
 	/** Does the filesystem support asynchronous direct-IO submission? */
-	unsigned async_dio:1;
+	bool async_dio:1;
 
 	/** Is lseek not implemented by fs? */
-	unsigned no_lseek:1;
+	bool no_lseek:1;
 
 	/** Does the filesystem support posix acls? */
-	unsigned posix_acl:1;
+	bool posix_acl:1;
 
 	/** Check permissions based on the file mode or not? */
-	unsigned default_permissions:1;
+	bool default_permissions:1;
 
 	/** Allow other than the mounter user to access the filesystem ? */
-	unsigned allow_other:1;
+	bool allow_other:1;
 
 	/** Does the filesystem support copy_file_range? */
-	unsigned no_copy_file_range:1;
+	bool no_copy_file_range:1;
 
 	/* Send DESTROY request */
-	unsigned int destroy:1;
+	bool destroy:1;
 
 	/* Delete dentries that have gone stale */
-	unsigned int delete_stale:1;
+	bool delete_stale:1;
 
 	/** Do not create entry in fusectl fs */
-	unsigned int no_control:1;
+	bool no_control:1;
 
 	/** Do not allow MNT_FORCE umount */
-	unsigned int no_force_umount:1;
+	bool no_force_umount:1;
 
 	/* Auto-mount submounts announced by the server */
-	unsigned int auto_submounts:1;
+	bool auto_submounts:1;
 
 	/* Propagate syncfs() to server */
-	unsigned int sync_fs:1;
+	bool sync_fs:1;
 
 	/* Initialize security xattrs when creating a new inode */
-	unsigned int init_security:1;
+	bool init_security:1;
 
 	/* Add supplementary group info when creating a new inode */
-	unsigned int create_supp_group:1;
+	bool create_supp_group:1;
 
 	/* Does the filesystem support per inode DAX? */
-	unsigned int inode_dax:1;
+	bool inode_dax:1;
 
 	/* Is tmpfile not implemented by fs? */
-	unsigned int no_tmpfile:1;
+	bool no_tmpfile:1;
 
 	/* Relax restrictions to allow shared mmap in FOPEN_DIRECT_IO mode */
-	unsigned int direct_io_allow_mmap:1;
+	bool direct_io_allow_mmap:1;
 
 	/* Is statx not implemented by fs? */
-	unsigned int no_statx:1;
+	bool no_statx:1;
 
 	/** Passthrough support for read/write IO */
-	unsigned int passthrough:1;
+	bool passthrough:1;
 
 	/* Use pages instead of pointer for kernel I/O */
-	unsigned int use_pages_for_kvec_io:1;
+	bool use_pages_for_kvec_io:1;
 
 	/* Is link not implemented by fs? */
-	unsigned int no_link:1;
+	bool no_link:1;
 
 	/* Use io_uring for communication */
-	unsigned int io_uring:1;
+	bool io_uring:1;
 
 	/** Maximum stack depth for passthrough backing files */
 	int max_stack_depth;

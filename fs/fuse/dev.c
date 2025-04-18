@@ -166,7 +166,7 @@ void fuse_set_initialized(struct fuse_conn *fc)
 {
 	/* Make sure stores before this are seen on another CPU */
 	smp_wmb();
-	fc->initialized = 1;
+	fc->initialized = true;
 }
 
 static bool fuse_block_alloc(struct fuse_conn *fc, bool for_background)
@@ -460,7 +460,7 @@ void fuse_request_end(struct fuse_req *req)
 		spin_lock(&fc->bg_lock);
 		clear_bit(FR_BACKGROUND, &req->flags);
 		if (fc->num_background == fc->max_background) {
-			fc->blocked = 0;
+			fc->blocked = false;
 			wake_up(&fc->blocked_waitq);
 		} else if (!fc->blocked) {
 			/*
@@ -720,7 +720,7 @@ static int fuse_request_queue_background(struct fuse_req *req)
 	if (likely(fc->connected)) {
 		fc->num_background++;
 		if (fc->num_background == fc->max_background)
-			fc->blocked = 1;
+			fc->blocked = true;
 		list_add_tail(&req->list, &fc->bg_queue);
 		flush_bg_queue(fc);
 		queued = true;
@@ -2173,7 +2173,7 @@ static ssize_t fuse_dev_do_write(struct fuse_dev *fud,
 		if (nbytes != sizeof(struct fuse_out_header))
 			err = -EINVAL;
 		else if (oh.error == -ENOSYS)
-			fc->no_interrupt = 1;
+			fc->no_interrupt = true;
 		else if (oh.error == -EAGAIN)
 			err = queue_interrupt(req);
 
@@ -2435,7 +2435,7 @@ void fuse_abort_conn(struct fuse_conn *fc)
 			spin_unlock(&fpq->lock);
 		}
 		spin_lock(&fc->bg_lock);
-		fc->blocked = 0;
+		fc->blocked = false;
 		fc->max_background = UINT_MAX;
 		flush_bg_queue(fc);
 		spin_unlock(&fc->bg_lock);

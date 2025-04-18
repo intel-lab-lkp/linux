@@ -523,7 +523,7 @@ static int cuse_channel_open(struct inode *inode, struct file *file)
 
 	INIT_LIST_HEAD(&cc->list);
 
-	cc->fc.initialized = 1;
+	cc->fc.initialized = true;
 	rc = cuse_send_init(cc);
 	if (rc) {
 		fuse_dev_free(fud);

@@ -1169,7 +1169,7 @@ int fuse_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 		if (err) {
 			pr_info_once("FUSE_IO_URING_CMD_REGISTER failed err=%d\n",
 				     err);
-			fc->io_uring = 0;
+			fc->io_uring = false;
 			wake_up_all(&fc->blocked_waitq);
 			return err;
 		}
@@ -1325,7 +1325,7 @@ bool fuse_uring_queue_bq_req(struct fuse_req *req)
 	spin_lock(&fc->bg_lock);
 	fc->num_background++;
 	if (fc->num_background == fc->max_background)
-		fc->blocked = 1;
+		fc->blocked = true;
 	fuse_uring_flush_bg(queue);
 	spin_unlock(&fc->bg_lock);
 

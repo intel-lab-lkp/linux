@@ -751,7 +751,7 @@ static int fuse_sync_fs(struct super_block *sb, int wait)
 
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fc->sync_fs = 0;
+		fc->sync_fs = false;
 		err = 0;
 	}
 
@@ -973,9 +973,9 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 	fc->congestion_threshold = FUSE_DEFAULT_CONGESTION_THRESHOLD;
 	atomic64_set(&fc->khctr, 0);
 	fc->polled_files = RB_ROOT;
-	fc->blocked = 0;
-	fc->initialized = 0;
-	fc->connected = 1;
+	fc->blocked = false;
+	fc->initialized = false;
+	fc->connected = true;
 	atomic64_set(&fc->attr_version, 1);
 	atomic64_set(&fc->evict_ctr, 1);
 	get_random_bytes(&fc->scramble_key, sizeof(fc->scramble_key));
@@ -1323,54 +1323,54 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 
 			ra_pages = arg->max_readahead / PAGE_SIZE;
 			if (flags & FUSE_ASYNC_READ)
-				fc->async_read = 1;
+				fc->async_read = true;
 			if (!(flags & FUSE_POSIX_LOCKS))
-				fc->no_lock = 1;
+				fc->no_lock = true;
 			if (arg->minor >= 17) {
 				if (!(flags & FUSE_FLOCK_LOCKS))
-					fc->no_flock = 1;
+					fc->no_flock = true;
 			} else {
 				if (!(flags & FUSE_POSIX_LOCKS))
-					fc->no_flock = 1;
+					fc->no_flock = true;
 			}
 			if (flags & FUSE_ATOMIC_O_TRUNC)
-				fc->atomic_o_trunc = 1;
+				fc->atomic_o_trunc = true;
 			if (arg->minor >= 9) {
 				/* LOOKUP has dependency on proto version */
 				if (flags & FUSE_EXPORT_SUPPORT)
-					fc->export_support = 1;
+					fc->export_support = true;
 			}
 			if (flags & FUSE_BIG_WRITES)
-				fc->big_writes = 1;
+				fc->big_writes = true;
 			if (flags & FUSE_DONT_MASK)
-				fc->dont_mask = 1;
+				fc->dont_mask = true;
 			if (flags & FUSE_AUTO_INVAL_DATA)
-				fc->auto_inval_data = 1;
+				fc->auto_inval_data = true;
 			else if (flags & FUSE_EXPLICIT_INVAL_DATA)
-				fc->explicit_inval_data = 1;
+				fc->explicit_inval_data = true;
 			if (flags & FUSE_DO_READDIRPLUS) {
-				fc->do_readdirplus = 1;
+				fc->do_readdirplus = true;
 				if (flags & FUSE_READDIRPLUS_AUTO)
-					fc->readdirplus_auto = 1;
+					fc->readdirplus_auto = true;
 			}
 			if (flags & FUSE_ASYNC_DIO)
-				fc->async_dio = 1;
+				fc->async_dio = true;
 			if (flags & FUSE_WRITEBACK_CACHE)
-				fc->writeback_cache = 1;
+				fc->writeback_cache = true;
 			if (flags & FUSE_PARALLEL_DIROPS)
-				fc->parallel_dirops = 1;
+				fc->parallel_dirops = true;
 			if (flags & FUSE_HANDLE_KILLPRIV)
-				fc->handle_killpriv = 1;
+				fc->handle_killpriv = true;
 			if (arg->time_gran && arg->time_gran <= 1000000000)
 				fm->sb->s_time_gran = arg->time_gran;
 			if ((flags & FUSE_POSIX_ACL)) {
-				fc->default_permissions = 1;
-				fc->posix_acl = 1;
+				fc->default_permissions = true;
+				fc->posix_acl = true;
 			}
 			if (flags & FUSE_CACHE_SYMLINKS)
-				fc->cache_symlinks = 1;
+				fc->cache_symlinks = true;
 			if (flags & FUSE_ABORT_ERROR)
-				fc->abort_err = 1;
+				fc->abort_err = true;
 			if (flags & FUSE_MAX_PAGES) {
 				fc->max_pages =
 					min_t(unsigned int, fc->max_pages_limit,
@@ -1389,20 +1389,20 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 					ok = false;
 				}
 				if (flags & FUSE_HAS_INODE_DAX)
-					fc->inode_dax = 1;
+					fc->inode_dax = true;
 			}
 			if (flags & FUSE_HANDLE_KILLPRIV_V2) {
-				fc->handle_killpriv_v2 = 1;
+				fc->handle_killpriv_v2 = true;
 				fm->sb->s_flags |= SB_NOSEC;
 			}
 			if (flags & FUSE_SETXATTR_EXT)
-				fc->setxattr_ext = 1;
+				fc->setxattr_ext = true;
 			if (flags & FUSE_SECURITY_CTX)
-				fc->init_security = 1;
+				fc->init_security = true;
 			if (flags & FUSE_CREATE_SUPP_GROUP)
-				fc->create_supp_group = 1;
+				fc->create_supp_group = true;
 			if (flags & FUSE_DIRECT_IO_ALLOW_MMAP)
-				fc->direct_io_allow_mmap = 1;
+				fc->direct_io_allow_mmap = true;
 			/*
 			 * max_stack_depth is the max stack depth of FUSE fs,
 			 * so it has to be at least 1 to support passthrough
@@ -1422,7 +1422,7 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 			    arg->max_stack_depth > 0 &&
 			    arg->max_stack_depth <= FILESYSTEM_MAX_STACK_DEPTH &&
 			    !(flags & FUSE_WRITEBACK_CACHE))  {
-				fc->passthrough = 1;
+				fc->passthrough = true;
 				fc->max_stack_depth = arg->max_stack_depth;
 				fm->sb->s_stack_depth = arg->max_stack_depth;
 			}
@@ -1435,14 +1435,14 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 					ok = false;
 			}
 			if (flags & FUSE_OVER_IO_URING && fuse_uring_enabled())
-				fc->io_uring = 1;
+				fc->io_uring = true;
 
 			if (flags & FUSE_REQUEST_TIMEOUT)
 				timeout = arg->request_timeout;
 		} else {
 			ra_pages = fc->max_read / PAGE_SIZE;
-			fc->no_lock = 1;
-			fc->no_flock = 1;
+			fc->no_lock = true;
+			fc->no_flock = true;
 		}
 
 		init_server_timeout(fc, timeout);
@@ -1452,13 +1452,13 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 		fc->minor = arg->minor;
 		fc->max_write = arg->minor < 5 ? 4096 : arg->max_write;
 		fc->max_write = max_t(unsigned, 4096, fc->max_write);
-		fc->conn_init = 1;
+		fc->conn_init = true;
 	}
 	kfree(ia);
 
 	if (!ok) {
-		fc->conn_init = 0;
-		fc->conn_error = 1;
+		fc->conn_init = false;
+		fc->conn_error = true;
 	}
 
 	fuse_set_initialized(fc);
@@ -1835,7 +1835,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 
 	/* Handle umasking inside the fuse code */
 	if (sb->s_flags & SB_POSIXACL)
-		fc->dont_mask = 1;
+		fc->dont_mask = true;
 	sb->s_flags |= SB_POSIXACL;
 
 	fc->default_permissions = ctx->default_permissions;

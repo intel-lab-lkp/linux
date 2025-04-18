@@ -1531,8 +1531,8 @@ static const struct fuse_iqueue_ops virtio_fs_fiq_ops = {
 static inline void virtio_fs_ctx_set_defaults(struct fuse_fs_context *ctx)
 {
 	ctx->rootmode = S_IFDIR;
-	ctx->default_permissions = 1;
-	ctx->allow_other = 1;
+	ctx->default_permissions = true;
+	ctx->allow_other = true;
 	ctx->max_read = UINT_MAX;
 	ctx->blksize = 512;
 	ctx->destroy = true;

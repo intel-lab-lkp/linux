@@ -774,7 +774,7 @@ static int fuse_atomic_open(struct inode *dir, struct dentry *entry,
 
 	err = fuse_create_open(idmap, dir, entry, file, flags, mode, FUSE_CREATE);
 	if (err == -ENOSYS) {
-		fc->no_create = 1;
+		fc->no_create = true;
 		goto mknod;
 	} else if (err == -EEXIST)
 		fuse_invalidate_entry(entry);
@@ -923,7 +923,7 @@ static int fuse_tmpfile(struct mnt_idmap *idmap, struct inode *dir,
 	err = fuse_create_open(idmap, dir, file->f_path.dentry, file,
 			       file->f_flags, mode, FUSE_TMPFILE);
 	if (err == -ENOSYS) {
-		fc->no_tmpfile = 1;
+		fc->no_tmpfile = true;
 		err = -EOPNOTSUPP;
 	}
 	return err;
@@ -1133,7 +1133,7 @@ static int fuse_rename2(struct mnt_idmap *idmap, struct inode *olddir,
 					 FUSE_RENAME2,
 					 sizeof(struct fuse_rename2_in));
 		if (err == -ENOSYS) {
-			fc->no_rename2 = 1;
+			fc->no_rename2 = true;
 			err = -EINVAL;
 		}
 	} else {
@@ -1172,7 +1172,7 @@ static int fuse_link(struct dentry *entry, struct inode *newdir,
 		fuse_invalidate_attr(inode);
 
 	if (err == -ENOSYS)
-		fm->fc->no_link = 1;
+		fm->fc->no_link = true;
 out:
 	if (fm->fc->no_link)
 		return -EPERM;
@@ -1376,7 +1376,7 @@ retry:
 		if (!fc->no_statx && (request_mask & ~STATX_BASIC_STATS)) {
 			err = fuse_do_statx(idmap, inode, file, stat);
 			if (err == -ENOSYS) {
-				fc->no_statx = 1;
+				fc->no_statx = true;
 				err = 0;
 				goto retry;
 			}
@@ -1521,7 +1521,7 @@ static int fuse_access(struct inode *inode, int mask)
 	/*
 	 * We should not send FUSE_ACCESS to the userspace
 	 * when idmapped mounts are enabled as for this case
-	 * we have fc->default_permissions = 1 and access
+	 * we have fc->default_permissions = true and access
 	 * permission checks are done on the kernel side.
 	 */
 	WARN_ON_ONCE(!(fm->sb->s_iflags & SB_I_NOIDMAP));
@@ -1538,7 +1538,7 @@ static int fuse_access(struct inode *inode, int mask)
 	args.in_args[0].value = &inarg;
 	err = fuse_simple_request(fm, &args);
 	if (err == -ENOSYS) {
-		fm->fc->no_access = 1;
+		fm->fc->no_access = true;
 		err = 0;
 	}
 	return err;
@@ -1754,7 +1754,7 @@ static int fuse_dir_fsync(struct file *file, loff_t start, loff_t end,
 	inode_lock(inode);
 	err = fuse_fsync_common(file, start, end, datasync, FUSE_FSYNCDIR);
 	if (err == -ENOSYS) {
-		fc->no_fsyncdir = 1;
+		fc->no_fsyncdir = true;
 		err = 0;
 	}
 	inode_unlock(inode);
