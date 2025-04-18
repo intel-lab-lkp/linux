@@ -5040,10 +5040,28 @@ static void arm_smmu_device_shutdown(struct platform_device *pdev)
 	arm_smmu_device_disable(smmu);
 }
 
+static bool arm_smmu_suspend_is_safe(struct arm_smmu_device *smmu)
+{
+	unsigned long flags;
+	bool is_empty;
+
+	spin_lock_irqsave(&smmu->attach_lock, flags);
+	is_empty = list_empty(&smmu->insecure_attachments);
+	spin_unlock_irqrestore(&smmu->attach_lock, flags);
+
+	return is_empty;
+}
+
 static int __maybe_unused arm_smmu_runtime_suspend(struct device *dev)
 {
 	struct arm_smmu_device *smmu = dev_get_drvdata(dev);
 	int ret;
+
+	/* Refuse to suspend if user-space controls DMA */
+	if (!arm_smmu_suspend_is_safe(smmu)) {
+		dev_err(smmu->dev, "Suspend deferred due to unsafe DMA owners\n");
+		return -EAGAIN;
+	}
 
 	/*
 	 * Since suspend is invoked when all clients have been suspended,

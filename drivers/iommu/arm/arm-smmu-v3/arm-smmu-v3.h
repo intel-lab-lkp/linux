@@ -796,7 +796,7 @@ struct arm_smmu_device {
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
 
-	/* Insecure Attach handles */
+	/* Insecure attach handles */
 	struct list_head		insecure_attachments;
 	/* Lock for the list */
 	spinlock_t			attach_lock;
