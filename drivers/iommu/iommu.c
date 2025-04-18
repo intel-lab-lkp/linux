@@ -3344,6 +3344,25 @@ bool iommu_group_dma_owner_claimed(struct iommu_group *group)
 }
 EXPORT_SYMBOL_GPL(iommu_group_dma_owner_claimed);
 
+/**
+ * iommu_group_dma_owner_kernel() - Query if kernel owns the group dma
+ * @group: The group.
+ *
+ * This provides status query on a given group. It is racy and only for
+ * non-binding status reporting.
+ */
+bool iommu_group_dma_owner_user(struct iommu_group *group)
+{
+	void *user;
+
+	mutex_lock(&group->mutex);
+	user = group->owner;
+	mutex_unlock(&group->mutex);
+
+	return user ? true : false;
+}
+EXPORT_SYMBOL_GPL(iommu_group_dma_owner_user);
+
 static void iommu_remove_dev_pasid(struct device *dev, ioasid_t pasid,
 				   struct iommu_domain *domain)
 {
