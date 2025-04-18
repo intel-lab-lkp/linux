@@ -2913,6 +2913,8 @@ error_hw_cleanup:
 		}
 	}
 	free_netdev(eth->napi_dev);
+
+	airoha_ppe_deinit(eth);
 	platform_set_drvdata(pdev, NULL);
 
 	return err;
