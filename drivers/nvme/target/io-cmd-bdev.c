@@ -100,7 +100,9 @@ int nvmet_bdev_ns_enable(struct nvmet_ns *ns)
 	}
 	ns->bdev = file_bdev(ns->bdev_file);
 	ns->size = bdev_nr_bytes(ns->bdev);
-	ns->blksize_shift = blksize_bits(bdev_logical_block_size(ns->bdev));
+
+	if (!ns->blksize_shift)
+		ns->blksize_shift = blksize_bits(bdev_logical_block_size(ns->bdev));
 
 	ns->pi_type = 0;
 	ns->metadata_size = 0;

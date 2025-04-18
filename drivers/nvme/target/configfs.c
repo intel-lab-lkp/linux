@@ -797,6 +797,35 @@ static ssize_t nvmet_ns_resv_enable_store(struct config_item *item,
 }
 CONFIGFS_ATTR(nvmet_ns_, resv_enable);
 
+static ssize_t nvmet_ns_blksize_shift_show(struct config_item *item, char *page)
+{
+	return sysfs_emit(page, "%d\n", to_nvmet_ns(item)->blksize_shift);
+}
+
+static ssize_t nvmet_ns_blksize_shift_store(struct config_item *item,
+		const char *page, size_t count)
+{
+	struct nvmet_ns *ns = to_nvmet_ns(item);
+	u32 shift;
+	int ret;
+
+	ret = kstrtou32(page, 0, &shift);
+	if (ret)
+		return ret;
+
+	mutex_lock(&ns->subsys->lock);
+	if (ns->enabled) {
+		pr_err("the ns:%d is already enabled.\n", ns->nsid);
+		mutex_unlock(&ns->subsys->lock);
+		return -EINVAL;
+	}
+	ns->blksize_shift = shift;
+	mutex_unlock(&ns->subsys->lock);
+
+	return count;
+}
+CONFIGFS_ATTR(nvmet_ns_, blksize_shift);
+
 static struct configfs_attribute *nvmet_ns_attrs[] = {
 	&nvmet_ns_attr_device_path,
 	&nvmet_ns_attr_device_nguid,
@@ -806,6 +835,7 @@ static struct configfs_attribute *nvmet_ns_attrs[] = {
 	&nvmet_ns_attr_buffered_io,
 	&nvmet_ns_attr_revalidate_size,
 	&nvmet_ns_attr_resv_enable,
+	&nvmet_ns_attr_blksize_shift,
 #ifdef CONFIG_PCI_P2PDMA
 	&nvmet_ns_attr_p2pmem,
 #endif
