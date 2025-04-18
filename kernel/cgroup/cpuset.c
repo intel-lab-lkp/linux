@@ -4275,6 +4275,28 @@ bool cpuset_current_node_allowed(int node, gfp_t gfp_mask)
 	return allowed;
 }
 
+bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
+{
+	struct cgroup_subsys_state *css;
+	unsigned long flags;
+	struct cpuset *cs;
+	bool allowed;
+
+	css = cgroup_get_e_css(cgroup, &cpuset_cgrp_subsys);
+	if (!css)
+		return true;
+
+	cs = container_of(css, struct cpuset, css);
+	spin_lock_irqsave(&callback_lock, flags);
+	/* At least one parent must have a valid node list */
+	while (nodes_empty(cs->effective_mems))
+		cs = parent_cs(cs);
+	allowed = node_isset(nid, cs->effective_mems);
+	spin_unlock_irqrestore(&callback_lock, flags);
+	css_put(css);
+	return allowed;
+}
+
 /**
  * cpuset_spread_node() - On which node to begin search for a page
  * @rotor: round robin rotor
