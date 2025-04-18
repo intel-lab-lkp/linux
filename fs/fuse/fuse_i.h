@@ -690,24 +690,24 @@ struct fuse_conn {
 	 * active_background, bg_queue, blocked */
 	spinlock_t bg_lock;
 
-	/** Flag indicating that INIT reply has been received. Allocating
-	 * any fuse request will be suspended until the flag is set */
-	int initialized;
-
-	/** Flag indicating if connection is blocked.  This will be
-	    the case before the INIT reply is received, and if there
-	    are too many outstading backgrounds requests */
-	int blocked;
-
 	/** waitq for blocked connection */
 	wait_queue_head_t blocked_waitq;
 
 	/** Connection established, cleared on umount, connection
 	    abort and device release */
-	unsigned connected;
+	bool connected;
+
+	/** Flag indicating that INIT reply has been received. Allocating
+	 * any fuse request will be suspended until the flag is set */
+	int initialized:1;
+
+	/** Flag indicating if connection is blocked.  This will be
+	    the case before the INIT reply is received, and if there
+	    are too many outstanding backgrounds requests */
+	int blocked:1;
 
 	/** Connection aborted via sysfs */
-	bool aborted;
+	bool aborted:1;
 
 	/** Connection failed (version mismatch).  Cannot race with
 	    setting other bitfields since it is only set once in INIT
@@ -896,7 +896,7 @@ struct fuse_conn {
 	unsigned int no_link:1;
 
 	/* Use io_uring for communication */
-	unsigned int io_uring;
+	unsigned int io_uring:1;
 
 	/** Maximum stack depth for passthrough backing files */
 	int max_stack_depth;
