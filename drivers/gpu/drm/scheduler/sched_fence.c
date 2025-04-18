@@ -115,8 +115,10 @@ static void drm_sched_fence_free_rcu(struct rcu_head *rcu)
 void drm_sched_fence_free(struct drm_sched_fence *fence)
 {
 	/* This function should not be called if the fence has been initialized. */
-	if (!WARN_ON_ONCE(fence->sched))
+	if (!WARN_ON_ONCE(fence->sched)) {
 		kmem_cache_free(sched_fence_slab, fence);
+		module_put(THIS_MODULE);
+	}
 }
 
 /**
@@ -133,6 +135,7 @@ static void drm_sched_fence_release_scheduled(struct dma_fence *f)
 
 	dma_fence_put(fence->parent);
 	call_rcu(&fence->finished.rcu, drm_sched_fence_free_rcu);
+	module_put(THIS_MODULE);
 }
 
 /**
@@ -210,9 +213,14 @@ struct drm_sched_fence *drm_sched_fence_alloc(struct drm_sched_entity *entity,
 {
 	struct drm_sched_fence *fence = NULL;
 
-	fence = kmem_cache_zalloc(sched_fence_slab, GFP_KERNEL);
-	if (fence == NULL)
+	if (!try_module_get(THIS_MODULE))
 		return NULL;
+
+	fence = kmem_cache_zalloc(sched_fence_slab, GFP_KERNEL);
+	if (!fence) {
+		module_put(THIS_MODULE);
+		return NULL;
+	}
 
 	fence->owner = owner;
 	spin_lock_init(&fence->lock);
