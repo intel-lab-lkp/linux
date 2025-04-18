@@ -234,24 +234,6 @@ void rxe_cleanup_task(struct rxe_task *task)
 	spin_unlock_irqrestore(&task->lock, flags);
 }
 
-/* run the task inline if it is currently idle
- * cannot call do_task holding the lock
- */
-void rxe_run_task(struct rxe_task *task)
-{
-	unsigned long flags;
-	bool run;
-
-	WARN_ON(rxe_read(task->qp) <= 0);
-
-	spin_lock_irqsave(&task->lock, flags);
-	run = __reserve_if_idle(task);
-	spin_unlock_irqrestore(&task->lock, flags);
-
-	if (run)
-		do_task(task);
-}
-
 /* schedule the task to run later as a work queue entry.
  * the queue_work call can be called holding
  * the lock.
