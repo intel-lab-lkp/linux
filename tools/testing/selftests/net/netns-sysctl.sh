@@ -20,21 +20,31 @@ fail() {
 setup_ns test_ns
 
 for sc in {r,w}mem_{default,max}; do
-	# check that this is writable in a netns
+	initial_value="$(sysctl -n "net.core.$sc")"
+
+	# check that this is writable in the init netns
 	[ -w "/proc/sys/net/core/$sc" ] ||
 		fail "$sc isn't writable in the init netns!"
 
-	# change the value in the host netns
+	# change the value in the init netns
 	sysctl -qw "net.core.$sc=300000" ||
 		fail "Can't write $sc in init netns!"
 
-	# check that the value is read from the init netns
-	[ "$(ip netns exec $test_ns sysctl -n "net.core.$sc")" -eq 300000 ] ||
+	# check that the value did not change in the test netns
+	[ "$(ip netns exec $test_ns sysctl -n "net.core.$sc")" -eq "$initial_value" ] ||
 		fail "Value for $sc mismatch!"
 
-	# check that this isn't writable in a netns
-	ip netns exec $test_ns [ -w "/proc/sys/net/core/$sc" ] &&
-		fail "$sc is writable in a netns!"
+	# check that this is also writable in the test netns
+	ip netns exec $test_ns [ -w "/proc/sys/net/core/$sc" ] ||
+		fail "$sc isn't writable in the test netns!"
+
+	# change the value in the test netns
+	ip netns exec $test_ns sysctl -qw "net.core.$sc=200000" ||
+		fail "Can't write $sc in test netns!"
+
+	# check that the value is read from the test netns
+	[ "$(ip netns exec $test_ns sysctl -n "net.core.$sc")" -eq 200000 ] ||
+		fail "Value for $sc mismatch!"
 done
 
 echo 'Test passed OK'
