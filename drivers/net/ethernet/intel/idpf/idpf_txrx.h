@@ -1012,14 +1012,18 @@ static inline void idpf_vport_intr_set_wb_on_itr(struct idpf_q_vector *q_vector)
 
 int idpf_vport_singleq_napi_poll(struct napi_struct *napi, int budget);
 void idpf_vport_init_num_qs(struct idpf_vport *vport,
-			    struct virtchnl2_create_vport *vport_msg);
-void idpf_vport_calc_num_q_desc(struct idpf_vport *vport);
+			    struct virtchnl2_create_vport *vport_msg,
+			    struct idpf_q_vec_rsrc *rsrc);
+void idpf_vport_calc_num_q_desc(struct idpf_vport *vport,
+				struct idpf_q_vec_rsrc *rsrc);
 int idpf_vport_calc_total_qs(struct idpf_adapter *adapter, u16 vport_index,
 			     struct virtchnl2_create_vport *vport_msg,
 			     struct idpf_vport_max_q *max_q);
-void idpf_vport_calc_num_q_groups(struct idpf_vport *vport);
-int idpf_vport_queues_alloc(struct idpf_vport *vport);
-void idpf_vport_queues_rel(struct idpf_vport *vport);
+void idpf_vport_calc_num_q_groups(struct idpf_q_vec_rsrc *rsrc);
+int idpf_vport_queues_alloc(struct idpf_vport *vport,
+			    struct idpf_q_vec_rsrc *rsrc);
+void idpf_vport_queues_rel(struct idpf_vport *vport,
+			   struct idpf_q_vec_rsrc *rsrc);
 void idpf_vport_intr_rel(struct idpf_q_vec_rsrc *rsrc);
 int idpf_vport_intr_alloc(struct idpf_vport *vport,
 			  struct idpf_q_vec_rsrc *rsrc);
@@ -1033,7 +1037,7 @@ void idpf_vport_intr_ena(struct idpf_vport *vport,
 int idpf_config_rss(struct idpf_vport *vport);
 int idpf_init_rss(struct idpf_vport *vport);
 void idpf_deinit_rss(struct idpf_vport *vport);
-int idpf_rx_bufs_init_all(struct idpf_vport *vport);
+int idpf_rx_bufs_init_all(struct idpf_q_vec_rsrc *rsrc);
 void idpf_rx_add_frag(struct idpf_rx_buf *rx_buf, struct sk_buff *skb,
 		      unsigned int size);
 struct sk_buff *idpf_rx_build_skb(const struct libeth_fqe *buf, u32 size);
