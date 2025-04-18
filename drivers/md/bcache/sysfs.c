@@ -151,6 +151,7 @@ rw_attribute(copy_gc_enabled);
 rw_attribute(idle_max_writeback_rate);
 rw_attribute(gc_after_writeback);
 rw_attribute(size);
+rw_attribute(deferred_flush);
 
 static ssize_t bch_snprint_string_list(char *buf,
 				       size_t size,
@@ -283,6 +284,8 @@ SHOW(__bch_cached_dev)
 		return strlen(buf);
 	}
 
+	sysfs_print(deferred_flush,	BDEV_DEFERRED_FLUSH(&dc->sb));
+
 #undef var
 	return 0;
 }
@@ -295,6 +298,7 @@ STORE(__cached_dev)
 	ssize_t v;
 	struct cache_set *c;
 	struct kobj_uevent_env *env;
+	struct bio flush;
 
 	/* no user space access if system is rebooting */
 	if (bcache_is_reboot)
@@ -383,6 +387,12 @@ STORE(__cached_dev)
 			SET_BDEV_CACHE_MODE(&dc->sb, v);
 			bch_write_bdev_super(dc, NULL);
 		}
+
+		/* It's not the writeback mode that can't enable deferred_flush */
+		if (BDEV_DEFERRED_FLUSH(&dc->sb) && ((unsigned int) v != CACHE_MODE_WRITEBACK)) {
+			SET_BDEV_DEFERRED_FLUSH(&dc->sb, 0);
+			bch_write_bdev_super(dc, NULL);
+		}
 	}
 
 	if (attr == &sysfs_readahead_cache_policy) {
@@ -450,6 +460,24 @@ STORE(__cached_dev)
 
 	if (attr == &sysfs_stop)
 		bcache_device_stop(&dc->disk);
+
+	if (attr == &sysfs_deferred_flush) {
+		bool deferred_flush = strtoul_or_return(buf);
+
+		if (deferred_flush != BDEV_DEFERRED_FLUSH(&dc->sb)) {
+			if (deferred_flush && (BDEV_CACHE_MODE(&dc->sb) != CACHE_MODE_WRITEBACK)) {
+				pr_err("It's not the writeback mode that can't enable deferred_flush.\n");
+				return size;
+			}
+			SET_BDEV_DEFERRED_FLUSH(&dc->sb, deferred_flush);
+			bch_write_bdev_super(dc, NULL);
+			if (deferred_flush) {
+				bio_init(&flush, dc->bdev, NULL, 0, REQ_OP_WRITE | REQ_PREFLUSH);
+				/* I/O request sent to backing device */
+				submit_bio_wait(&flush);
+			}
+		}
+	}
 
 	return size;
 }
@@ -541,6 +569,7 @@ static struct attribute *bch_cached_dev_attrs[] = {
 #endif
 	&sysfs_backing_dev_name,
 	&sysfs_backing_dev_uuid,
+	&sysfs_deferred_flush,
 	NULL
 };
 ATTRIBUTE_GROUPS(bch_cached_dev);

@@ -1030,7 +1030,11 @@ static void cached_dev_write(struct cached_dev *dc, struct search *s)
 		bch_writeback_add(dc);
 		s->iop.bio = bio;
 
-		if (bio->bi_opf & REQ_PREFLUSH) {
+		/* When DEFERRED_FLUSH is enabled, REQ_PREFLUSH is not sent
+		 * to the backend disk. Data security is ensured during the
+		 * writeback phase.
+		 */
+		if ((bio->bi_opf & REQ_PREFLUSH) && !BDEV_DEFERRED_FLUSH(&dc->sb)) {
 			/*
 			 * Also need to send a flush to the backing
 			 * device.
@@ -1066,14 +1070,25 @@ static CLOSURE_CALLBACK(cached_dev_nodata)
 {
 	closure_type(s, struct search, cl);
 	struct bio *bio = &s->bio.bio;
+	struct cached_dev *dc = container_of(s->d, struct cached_dev, disk);
 
-	if (s->iop.flush_journal)
+	if (s->iop.flush_journal) {
 		bch_journal_meta(s->iop.c, cl);
+
+		/* When DEFERRED_FLUSH is turned on, the request is not sent
+		 * to the backend disk.
+		 */
+		if (BDEV_DEFERRED_FLUSH(&dc->sb)) {
+			s->iop.status = BLK_STS_OK;
+			goto end;
+		}
+	}
 
 	/* If it's a flush, we send the flush to the backing device too */
 	bio->bi_end_io = backing_request_endio;
 	closure_bio_submit(s->iop.c, bio, cl);
 
+end:
 	continue_at(cl, cached_dev_bio_complete, NULL);
 }
 

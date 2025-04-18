@@ -117,6 +117,9 @@ static inline bool should_writeback(struct cached_dev *dc, struct bio *bio,
 				    bio_sectors(bio)))
 		return true;
 
+	if (BDEV_DEFERRED_FLUSH(&dc->sb))
+		return true;
+
 	if (would_skip)
 		return false;
 
