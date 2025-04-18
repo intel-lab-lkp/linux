@@ -578,7 +578,7 @@ static bool memremap_should_map_decrypted(resource_size_t phys_addr,
 	}
 
 	/* Check if the address is outside kernel usable area */
-	switch (e820__get_entry_type(phys_addr, phys_addr + size - 1)) {
+	switch (e820__get_entry_type(phys_addr, phys_addr + size)) {
 	case E820_TYPE_RESERVED:
 	case E820_TYPE_ACPI:
 	case E820_TYPE_NVS:
