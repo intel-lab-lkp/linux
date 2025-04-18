@@ -486,6 +486,11 @@ static inline void crypto_request_chain(struct crypto_async_request *req,
 	list_add_tail(&req->list, &head->list);
 }
 
+static inline void crypto_request_unchain(struct crypto_async_request *req)
+{
+	list_del(&req->list);
+}
+
 static inline bool crypto_tfm_is_async(struct crypto_tfm *tfm)
 {
 	return tfm->__crt_alg->cra_flags & CRYPTO_ALG_ASYNC;

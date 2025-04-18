@@ -310,6 +310,20 @@ static inline void *acomp_request_extra(struct acomp_req *req)
 	return (void *)((char *)req + len);
 }
 
+static inline void acomp_request_chain(struct acomp_req *req,
+				       struct acomp_req *head)
+{
+	crypto_request_chain(&req->base, &head->base);
+}
+
+static inline void acomp_request_unchain(struct acomp_req *req)
+{
+	crypto_request_unchain(&req->base);
+}
+
+#define acomp_request_for_each(this, tmp, head) \
+	list_for_each_entry_safe((this), (tmp), &(head)->base.list, base.list)
+
 /**
  * acomp_request_free() -- zeroize and free asynchronous (de)compression
  *			   request as well as the output buffer if allocated
@@ -319,8 +333,16 @@ static inline void *acomp_request_extra(struct acomp_req *req)
  */
 static inline void acomp_request_free(struct acomp_req *req)
 {
+	struct acomp_req *this, *tmp;
+
 	if (!req || (req->base.flags & CRYPTO_TFM_REQ_ON_STACK))
 		return;
+
+	acomp_request_for_each(this, tmp, req) {
+		acomp_request_unchain(this);
+		kfree_sensitive(this);
+	}
+
 	kfree_sensitive(req);
 }
 
@@ -556,12 +578,6 @@ static inline void acomp_request_set_dst_folio(struct acomp_req *req,
 	req->base.flags &= ~CRYPTO_ACOMP_REQ_DST_NONDMA;
 	req->base.flags &= ~CRYPTO_ACOMP_REQ_DST_VIRT;
 	req->base.flags |= CRYPTO_ACOMP_REQ_DST_FOLIO;
-}
-
-static inline void acomp_request_chain(struct acomp_req *req,
-				       struct acomp_req *head)
-{
-	crypto_request_chain(&req->base, &head->base);
 }
 
 /**
