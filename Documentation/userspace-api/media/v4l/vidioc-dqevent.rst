@@ -369,6 +369,18 @@ call.
 	loss of signal and so restarting streaming I/O is required in order for
 	the hardware to synchronize to the video signal.
 
+    * - ``V4L2_EVENT_SRC_CH_COLORSPACE``
+      - 0x0002
+      - This event gets triggered when a colorspace change is detected at
+	an input. This can come from a video decoder or a video receiver.
+	Applications will query the new colorspace information
+	(if any, the signal may also have been lost). If the signal is lost,
+	then that is a CH_RESOLUTION change, not CH_COLORSPACE.
+
+	For stateful decoders follow the guidelines in :ref:`decoder`.
+	If CH_COLORSPACE is set, but not CH_RESOLUTION, then only the
+	colorspace changed and there is no need to reallocate buffers.
+
 Return Value
 ============
 
