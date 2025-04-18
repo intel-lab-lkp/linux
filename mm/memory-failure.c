@@ -486,15 +486,6 @@ static void __add_to_kill(struct task_struct *tsk, const struct page *p,
 	list_add_tail(&tk->nd, to_kill);
 }
 
-static void add_to_kill_anon_file(struct task_struct *tsk, const struct page *p,
-		struct vm_area_struct *vma, struct list_head *to_kill,
-		unsigned long addr)
-{
-	if (addr == -EFAULT)
-		return;
-	__add_to_kill(tsk, p, vma, to_kill, addr);
-}
-
 #ifdef CONFIG_KSM
 static bool task_in_to_kill_list(struct list_head *to_kill,
 				 struct task_struct *tsk)
@@ -634,7 +625,8 @@ static void collect_procs_anon(const struct folio *folio,
 			if (vma->vm_mm != t->mm)
 				continue;
 			addr = page_mapped_in_vma(page, vma);
-			add_to_kill_anon_file(t, page, vma, to_kill, addr);
+			if (addr != -EFAULT)
+				__add_to_kill(t, page, vma, to_kill, addr);
 		}
 	}
 	rcu_read_unlock();
@@ -674,7 +666,8 @@ static void collect_procs_file(const struct folio *folio,
 			if (vma->vm_mm != t->mm)
 				continue;
 			addr = page_address_in_vma(folio, page, vma);
-			add_to_kill_anon_file(t, page, vma, to_kill, addr);
+			if (addr != -EFAULT)
+				__add_to_kill(t, page, vma, to_kill, addr);
 		}
 	}
 	rcu_read_unlock();
