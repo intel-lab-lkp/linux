@@ -133,22 +133,22 @@ static void copy_to_brd(struct brd_device *brd, const void *src,
 
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	page = brd_lookup_page(brd, sector);
-	BUG_ON(!page);
-
-	dst = kmap_atomic(page);
-	memcpy(dst + offset, src, copy);
-	kunmap_atomic(dst);
+	if (page) {
+		dst = kmap_local_page(page);
+		memcpy(dst + offset, src, copy);
+		kunmap_local(dst);
+	}
 
 	if (copy < n) {
 		src += copy;
 		sector += copy >> SECTOR_SHIFT;
 		copy = n - copy;
 		page = brd_lookup_page(brd, sector);
-		BUG_ON(!page);
-
-		dst = kmap_atomic(page);
-		memcpy(dst, src, copy);
-		kunmap_atomic(dst);
+		if (page) {
+			dst = kmap_local_page(page);
+			memcpy(dst, src, copy);
+			kunmap_local(dst);
+		}
 	}
 }
 
@@ -166,9 +166,9 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 	copy = min_t(size_t, n, PAGE_SIZE - offset);
 	page = brd_lookup_page(brd, sector);
 	if (page) {
-		src = kmap_atomic(page);
+		src = kmap_local_page(page);
 		memcpy(dst, src + offset, copy);
-		kunmap_atomic(src);
+		kunmap_local(src);
 	} else
 		memset(dst, 0, copy);
 
@@ -178,9 +178,9 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 		copy = n - copy;
 		page = brd_lookup_page(brd, sector);
 		if (page) {
-			src = kmap_atomic(page);
+			src = kmap_local_page(page);
 			memcpy(dst, src, copy);
-			kunmap_atomic(src);
+			kunmap_local(src);
 		} else
 			memset(dst, 0, copy);
 	}
@@ -208,7 +208,7 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 			goto out;
 	}
 
-	mem = kmap_atomic(page);
+	mem = kmap_local_page(page);
 	if (!op_is_write(opf)) {
 		copy_from_brd(mem + off, brd, sector, len);
 		flush_dcache_page(page);
@@ -216,7 +216,7 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 		flush_dcache_page(page);
 		copy_to_brd(brd, mem + off, sector, len);
 	}
-	kunmap_atomic(mem);
+	kunmap_local(mem);
 
 out:
 	return err;
