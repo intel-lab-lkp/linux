@@ -122,6 +122,13 @@ struct elevator_queue
 
 #define ELEVATOR_FLAG_REGISTERED	0
 
+/* Holding context data for changing elevator */
+struct elv_change_ctx {
+	const char *name;
+	bool force;
+	bool uevent;
+};
+
 /*
  * block elevator interface
  */

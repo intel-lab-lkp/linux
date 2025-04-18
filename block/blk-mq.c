@@ -5004,16 +5004,20 @@ reregister:
 	}
 
 	list_for_each_entry(q, &set->tag_list, tag_set_list) {
-		const char *name = "none";
-
-		mutex_lock(&q->elevator_lock);
-		if (q->elevator && !blk_queue_dying(q))
-			name = q->elevator->type->elevator_name;
 		/*
 		 * nr_hw_queues is changed and elevator data depends on
 		 * it, so we have to force to rebuild elevator
 		 */
-		__elevator_change(q, name, true);
+		struct elv_change_ctx ctx = {
+			.name	= "none",
+			.force	= true,
+			.uevent	= true,
+		};
+
+		mutex_lock(&q->elevator_lock);
+		if (q->elevator && !blk_queue_dying(q))
+			ctx.name = q->elevator->type->elevator_name;
+		__elevator_change(q, &ctx);
 		mutex_unlock(&q->elevator_lock);
 	}
 
