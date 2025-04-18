@@ -461,6 +461,8 @@ static int catu_enable(struct coresight_device *csdev, enum cs_mode mode,
 	int rc;
 	struct catu_drvdata *catu_drvdata = csdev_to_catu_drvdata(csdev);
 
+	guard(spinlock_irqsave)(&catu_drvdata->spinlock);
+
 	CS_UNLOCK(catu_drvdata->base);
 	rc = catu_enable_hw(catu_drvdata, mode, data);
 	CS_LOCK(catu_drvdata->base);
@@ -488,6 +490,8 @@ static int catu_disable(struct coresight_device *csdev, void *__unused)
 {
 	int rc;
 	struct catu_drvdata *catu_drvdata = csdev_to_catu_drvdata(csdev);
+
+	guard(spinlock_irqsave)(&catu_drvdata->spinlock);
 
 	CS_UNLOCK(catu_drvdata->base);
 	rc = catu_disable_hw(catu_drvdata);
@@ -522,6 +526,8 @@ static int __catu_probe(struct device *dev, struct resource *res)
 		ret = PTR_ERR(base);
 		goto out;
 	}
+
+	spin_lock_init(&drvdata->spinlock);
 
 	/* Setup dma mask for the device */
 	dma_mask = readl_relaxed(base + CORESIGHT_DEVID) & 0x3f;
