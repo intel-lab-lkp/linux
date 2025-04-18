@@ -224,6 +224,21 @@ out:
 	return err;
 }
 
+static void brd_zero_range(struct brd_device *brd, sector_t sector, u32 size)
+{
+	unsigned int offset = (sector & (PAGE_SECTORS-1)) << SECTOR_SHIFT;
+	struct page *page;
+	void *dst;
+
+	page = brd_lookup_page(brd, sector);
+	if (!page)
+		return;
+
+	dst = kmap_local_page(page);
+	memset(dst + offset, 0, size);
+	kunmap_local(dst);
+}
+
 static void brd_free_one_page(struct rcu_head *head)
 {
 	struct page *page = container_of(head, struct page, rcu_head);
@@ -234,9 +249,16 @@ static void brd_free_one_page(struct rcu_head *head)
 static void brd_do_discard(struct brd_device *brd, sector_t sector, u32 size)
 {
 	sector_t aligned_sector = round_up(sector, PAGE_SECTORS);
-	sector_t aligned_end = round_down(sector + (size >> SECTOR_SHIFT),
-					  PAGE_SECTORS);
+	sector_t sector_end = sector + (size >> SECTOR_SHIFT);
+	sector_t aligned_end = round_down(sector_end, PAGE_SECTORS);
 	struct page *page;
+
+	if (aligned_sector > sector)
+		brd_zero_range(brd, sector,
+			       (aligned_sector - sector) << SECTOR_SHIFT);
+	if (aligned_end < sector_end)
+		brd_zero_range(brd, aligned_end,
+			       (sector_end - aligned_end) << SECTOR_SHIFT);
 
 	if (aligned_end <= aligned_sector)
 		return;
