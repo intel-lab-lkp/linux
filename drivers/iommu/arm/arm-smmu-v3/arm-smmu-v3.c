@@ -3018,6 +3018,62 @@ void arm_smmu_attach_commit(struct arm_smmu_attach_state *state)
 	arm_smmu_remove_master_domain(master, state->old_domain, state->ssid);
 }
 
+static int arm_smmu_insert_insecure_master(struct arm_smmu_device *smmu,
+					   struct arm_smmu_master *master)
+{
+	struct arm_smmu_unsafe_master *umaster;
+	unsigned long flags;
+
+	umaster = kzalloc(sizeof(umaster), GFP_KERNEL);
+	if (!umaster)
+		return -ENOMEM;
+	umaster->master = master;
+
+	spin_lock_irqsave(&smmu->attach_lock, flags);
+	list_add_tail(&umaster->masters, &smmu->insecure_attachments);
+	spin_unlock_irqrestore(&smmu->attach_lock, flags);
+
+	return 0;
+}
+
+static struct arm_smmu_master *
+arm_smmu_find_insecure_master(struct arm_smmu_device *smmu,
+			      struct arm_smmu_master *master)
+{
+	struct arm_smmu_unsafe_master *iter, *umaster = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&smmu->attach_lock, flags);
+	list_for_each_entry(iter, &smmu->insecure_attachments, masters) {
+		if (iter->master == master) {
+			umaster = iter;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&smmu->attach_lock, flags);
+
+	return umaster ? umaster->master : NULL;
+}
+
+static void arm_smmu_remove_insecure_master(struct arm_smmu_device *smmu,
+					    struct arm_smmu_master *master)
+{
+	struct arm_smmu_unsafe_master *iter, *tmp, *node_to_free = NULL;
+	unsigned long flags;
+
+	spin_lock_irqsave(&smmu->attach_lock, flags);
+
+	list_for_each_entry_safe(iter, tmp, &smmu->insecure_attachments, masters) {
+		if (iter->master == master) {
+			list_del(&iter->masters);
+			node_to_free = iter;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&smmu->attach_lock, flags);
+	kfree(node_to_free);
+}
+
 static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 {
 	int ret = 0;
@@ -3040,6 +3096,16 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev)
 
 	if (smmu_domain->smmu != smmu)
 		return ret;
+
+	/* Check if the master is owned by user */
+	if (iommu_group_dma_owner_user(dev->iommu_group)) {
+		if (!arm_smmu_find_insecure_master(smmu, master))
+			arm_smmu_insert_insecure_master(smmu, master);
+
+	} else if (arm_smmu_find_insecure_master(smmu, master)) {
+		/* Remove if the master isn't user-owned anymore */
+		arm_smmu_remove_insecure_master(smmu, master);
+	}
 
 	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1) {
 		cdptr = arm_smmu_alloc_cd_ptr(master, IOMMU_NO_PASID);
@@ -3943,6 +4009,9 @@ static int arm_smmu_init_structures(struct arm_smmu_device *smmu)
 
 	mutex_init(&smmu->streams_mutex);
 	smmu->streams = RB_ROOT;
+
+	INIT_LIST_HEAD(&smmu->insecure_attachments);
+	spin_lock_init(&smmu->attach_lock);
 
 	ret = arm_smmu_init_queues(smmu);
 	if (ret)

@@ -795,12 +795,22 @@ struct arm_smmu_device {
 
 	struct rb_root			streams;
 	struct mutex			streams_mutex;
+
+	/* Insecure Attach handles */
+	struct list_head		insecure_attachments;
+	/* Lock for the list */
+	spinlock_t			attach_lock;
 };
 
 struct arm_smmu_stream {
 	u32				id;
 	struct arm_smmu_master		*master;
 	struct rb_node			node;
+};
+
+struct arm_smmu_unsafe_master {
+	struct list_head		masters;
+	struct arm_smmu_master		*master;
 };
 
 struct arm_smmu_vmaster {
