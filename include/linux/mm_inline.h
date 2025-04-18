@@ -434,6 +434,21 @@ static inline bool anon_vma_name_eq(struct anon_vma_name *anon_name1,
 
 struct anon_vma_name *anon_vma_name_get_rcu(struct vm_area_struct *vma);
 
+/*
+ * Takes a reference if anon_vma is valid and stable (has references).
+ * Fails only if anon_vma is valid but we failed to get a reference.
+ */
+static inline bool anon_vma_name_get_if_valid(struct vm_area_struct *vma)
+{
+	return !vma->anon_name || anon_vma_name_get_rcu(vma);
+}
+
+static inline void anon_vma_name_put_if_valid(struct vm_area_struct *vma)
+{
+	if (vma->anon_name)
+		anon_vma_name_put(vma->anon_name);
+}
+
 #else /* CONFIG_ANON_VMA_NAME */
 static inline void anon_vma_name_get(struct anon_vma_name *anon_name) {}
 static inline void anon_vma_name_put(struct anon_vma_name *anon_name) {}
@@ -452,6 +467,9 @@ struct anon_vma_name *anon_vma_name_get_rcu(struct vm_area_struct *vma)
 {
 	return NULL;
 }
+
+static inline bool anon_vma_name_get_if_valid(struct vm_area_struct *vma) { return true; }
+static inline void anon_vma_name_put_if_valid(struct vm_area_struct *vma) {}
 
 #endif  /* CONFIG_ANON_VMA_NAME */
 

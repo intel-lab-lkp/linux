@@ -127,13 +127,130 @@ static void release_task_mempolicy(struct proc_maps_private *priv)
 }
 #endif
 
-static struct vm_area_struct *proc_get_vma(struct proc_maps_private *priv,
-						loff_t *ppos)
+#ifdef CONFIG_PER_VMA_LOCK
+
+static const struct seq_operations proc_pid_maps_op;
+
+/*
+ * Take VMA snapshot and pin vm_file and anon_name as they are used by
+ * show_map_vma.
+ */
+static int get_vma_snapshot(struct proc_maps_private *priv, struct vm_area_struct *vma)
 {
+	struct vm_area_struct *copy = &priv->vma_copy;
+	int ret = -EAGAIN;
+
+	memcpy(copy, vma, sizeof(*vma));
+	if (copy->vm_file && !get_file_rcu(&copy->vm_file))
+		goto out;
+
+	if (!anon_vma_name_get_if_valid(copy))
+		goto put_file;
+
+	if (!mmap_lock_speculate_retry(priv->mm, priv->mm_wr_seq))
+		return 0;
+
+	/* Address space got modified, vma might be stale. Re-lock and retry. */
+	rcu_read_unlock();
+	ret = mmap_read_lock_killable(priv->mm);
+	if (!ret) {
+		/* mmap_lock_speculate_try_begin() succeeds when holding mmap_read_lock */
+		mmap_lock_speculate_try_begin(priv->mm, &priv->mm_wr_seq);
+		mmap_read_unlock(priv->mm);
+		ret = -EAGAIN;
+	}
+
+	rcu_read_lock();
+
+	anon_vma_name_put_if_valid(copy);
+put_file:
+	if (copy->vm_file)
+		fput(copy->vm_file);
+out:
+	return ret;
+}
+
+static void put_vma_snapshot(struct proc_maps_private *priv)
+{
+	struct vm_area_struct *vma = &priv->vma_copy;
+
+	anon_vma_name_put_if_valid(vma);
+	if (vma->vm_file)
+		fput(vma->vm_file);
+}
+
+static inline bool drop_mmap_lock(struct seq_file *m, struct proc_maps_private *priv)
+{
+	/*
+	 * smaps and numa_maps perform page table walk, therefore require
+	 * mmap_lock but maps can be read under RCU.
+	 */
+	if (m->op != &proc_pid_maps_op)
+		return false;
+
+	/* mmap_lock_speculate_try_begin() succeeds when holding mmap_read_lock */
+	mmap_lock_speculate_try_begin(priv->mm, &priv->mm_wr_seq);
+	mmap_read_unlock(priv->mm);
+	rcu_read_lock();
+	memset(&priv->vma_copy, 0, sizeof(priv->vma_copy));
+
+	return true;
+}
+
+static struct vm_area_struct *get_stable_vma(struct vm_area_struct *vma,
+					     struct proc_maps_private *priv,
+					     loff_t last_pos)
+{
+	int ret;
+
+	put_vma_snapshot(priv);
+	while ((ret = get_vma_snapshot(priv, vma)) == -EAGAIN) {
+		/* lookup the vma at the last position again */
+		vma_iter_init(&priv->iter, priv->mm, last_pos);
+		vma = vma_next(&priv->iter);
+	}
+
+	return ret ? ERR_PTR(ret) : &priv->vma_copy;
+}
+
+#else /* CONFIG_PER_VMA_LOCK */
+
+/* Without per-vma locks VMA access is not RCU-safe */
+static inline bool drop_mmap_lock(struct seq_file *m,
+				  struct proc_maps_private *priv)
+{
+	return false;
+}
+
+static struct vm_area_struct *get_stable_vma(struct vm_area_struct *vma,
+					     struct proc_maps_private *priv,
+					     loff_t last_pos)
+{
+	return vma;
+}
+
+#endif /* CONFIG_PER_VMA_LOCK */
+
+static struct vm_area_struct *proc_get_vma(struct seq_file *m, loff_t *ppos)
+{
+	struct proc_maps_private *priv = m->private;
 	struct vm_area_struct *vma = vma_next(&priv->iter);
 
+	if (vma && !priv->mmap_locked)
+		vma = get_stable_vma(vma, priv, *ppos);
+
+	if (IS_ERR(vma))
+		return vma;
+
 	if (vma) {
-		*ppos = vma->vm_start;
+		/* Store previous position to be able to restart if needed */
+		priv->last_pos = *ppos;
+		/*
+		 * Track the end of the reported vma to ensure position changes
+		 * even if previous vma was merged with the next vma and we
+		 * found the extended vma with the same vm_start.
+		 */
+		*ppos = vma->vm_end;
 	} else {
 		*ppos = -2UL;
 		vma = get_gate_vma(priv->mm);
@@ -148,6 +265,7 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 	unsigned long last_addr = *ppos;
 	struct mm_struct *mm;
 
+	priv->mmap_locked = true;
 	/* See m_next(). Zero at the start or after lseek. */
 	if (last_addr == -1UL)
 		return NULL;
@@ -170,12 +288,18 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 		return ERR_PTR(-EINTR);
 	}
 
+	/* Drop mmap_lock if possible */
+	if (drop_mmap_lock(m, priv))
+		priv->mmap_locked = false;
+
+	if (last_addr > 0)
+		*ppos = last_addr = priv->last_pos;
 	vma_iter_init(&priv->iter, mm, last_addr);
 	hold_task_mempolicy(priv);
 	if (last_addr == -2UL)
 		return get_gate_vma(mm);
 
-	return proc_get_vma(priv, ppos);
+	return proc_get_vma(m, ppos);
 }
 
 static void *m_next(struct seq_file *m, void *v, loff_t *ppos)
@@ -184,7 +308,7 @@ static void *m_next(struct seq_file *m, void *v, loff_t *ppos)
 		*ppos = -1UL;
 		return NULL;
 	}
-	return proc_get_vma(m->private, ppos);
+	return proc_get_vma(m, ppos);
 }
 
 static void m_stop(struct seq_file *m, void *v)
@@ -196,7 +320,10 @@ static void m_stop(struct seq_file *m, void *v)
 		return;
 
 	release_task_mempolicy(priv);
-	mmap_read_unlock(mm);
+	if (priv->mmap_locked)
+		mmap_read_unlock(mm);
+	else
+		rcu_read_unlock();
 	mmput(mm);
 	put_task_struct(priv->task);
 	priv->task = NULL;
@@ -243,13 +370,19 @@ static int do_maps_open(struct inode *inode, struct file *file,
 static void get_vma_name(struct vm_area_struct *vma,
 			 const struct path **path,
 			 const char **name,
-			 const char **name_fmt)
+			 const char **name_fmt, bool mmap_locked)
 {
-	struct anon_vma_name *anon_name = vma->vm_mm ? anon_vma_name(vma) : NULL;
+	struct anon_vma_name *anon_name;
 
 	*name = NULL;
 	*path = NULL;
 	*name_fmt = NULL;
+
+	if (vma->vm_mm)
+		anon_name = mmap_locked ? anon_vma_name(vma) :
+					  anon_vma_name_get_rcu(vma);
+	else
+		anon_name = NULL;
 
 	/*
 	 * Print the dentry name for named mappings, and a
@@ -266,39 +399,41 @@ static void get_vma_name(struct vm_area_struct *vma,
 		} else {
 			*path = file_user_path(vma->vm_file);
 		}
-		return;
+		goto out;
 	}
 
 	if (vma->vm_ops && vma->vm_ops->name) {
 		*name = vma->vm_ops->name(vma);
 		if (*name)
-			return;
+			goto out;
 	}
 
 	*name = arch_vma_name(vma);
 	if (*name)
-		return;
+		goto out;
 
 	if (!vma->vm_mm) {
 		*name = "[vdso]";
-		return;
+		goto out;
 	}
 
 	if (vma_is_initial_heap(vma)) {
 		*name = "[heap]";
-		return;
+		goto out;
 	}
 
 	if (vma_is_initial_stack(vma)) {
 		*name = "[stack]";
-		return;
+		goto out;
 	}
 
 	if (anon_name) {
 		*name_fmt = "[anon:%s]";
 		*name = anon_name->name;
-		return;
 	}
+out:
+	if (anon_name && !mmap_locked)
+		anon_vma_name_put(anon_name);
 }
 
 static void show_vma_header_prefix(struct seq_file *m,
@@ -324,6 +459,7 @@ static void show_vma_header_prefix(struct seq_file *m,
 static void
 show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 {
+	struct proc_maps_private *priv = m->private;
 	const struct path *path;
 	const char *name_fmt, *name;
 	vm_flags_t flags = vma->vm_flags;
@@ -344,7 +480,7 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	end = vma->vm_end;
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
 
-	get_vma_name(vma, &path, &name, &name_fmt);
+	get_vma_name(vma, &path, &name, &name_fmt, priv->mmap_locked);
 	if (path) {
 		seq_pad(m, ' ');
 		seq_path(m, path, "\n");
@@ -549,7 +685,7 @@ static int do_procmap_query(struct proc_maps_private *priv, void __user *uarg)
 		const char *name_fmt;
 		size_t name_sz = 0;
 
-		get_vma_name(vma, &path, &name, &name_fmt);
+		get_vma_name(vma, &path, &name, &name_fmt, true);
 
 		if (path || name_fmt || name) {
 			name_buf = kmalloc(name_buf_sz, GFP_KERNEL);
