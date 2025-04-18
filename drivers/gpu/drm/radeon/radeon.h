@@ -686,7 +686,6 @@ struct radeon_doorbell {
 };
 
 int radeon_doorbell_get(struct radeon_device *rdev, u32 *page);
-void radeon_doorbell_free(struct radeon_device *rdev, u32 doorbell);
 
 /*
  * IRQS.

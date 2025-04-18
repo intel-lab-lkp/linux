@@ -392,20 +392,6 @@ int radeon_doorbell_get(struct radeon_device *rdev, u32 *doorbell)
 	}
 }
 
-/**
- * radeon_doorbell_free - Free a doorbell entry
- *
- * @rdev: radeon_device pointer
- * @doorbell: doorbell index
- *
- * Free a doorbell allocated for use by the driver (all asics)
- */
-void radeon_doorbell_free(struct radeon_device *rdev, u32 doorbell)
-{
-	if (doorbell < rdev->doorbell.num_doorbells)
-		__clear_bit(doorbell, rdev->doorbell.used);
-}
-
 /*
  * radeon_wb_*()
  * Writeback is the method by which the GPU updates special pages
