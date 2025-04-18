@@ -683,15 +683,17 @@ u64 avg_vruntime(struct cfs_rq *cfs_rq)
  * is possible -- by addition/removal/reweight to the tree -- to move V around
  * and end up with a larger lag than we started with.
  *
- * Limit this to either double the slice length with a minimum of TICK_NSEC
- * since that is the timing granularity.
- *
- * EEVDF gives the following limit for a steady state system:
+ * Limit this to the max allowed custom slice length which is higher than the
+ * timing granularity (the tick) and EEVDF gives the following limit for
+ * a steady state system:
  *
  *   -r_max < lag < max(r_max, q)
  *
  * XXX could add max_slice to the augmented data to track this.
  */
+#define SCHED_SLICE_MIN		(NSEC_PER_MSEC/10)  /* HZ=1000 * 10 */
+#define SCHED_SLICE_MAX		(NSEC_PER_MSEC*100) /* HZ=100  / 10 */
+
 static void update_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	s64 vlag, limit;
@@ -699,7 +701,7 @@ static void update_entity_lag(struct cfs_rq *cfs_rq, struct sched_entity *se)
 	WARN_ON_ONCE(!se->on_rq);
 
 	vlag = avg_vruntime(cfs_rq) - se->vruntime;
-	limit = calc_delta_fair(max_t(u64, 2*se->slice, TICK_NSEC), se);
+	limit = calc_delta_fair(SCHED_SLICE_MAX, se);
 
 	se->vlag = clamp(vlag, -limit, limit);
 }
@@ -5184,8 +5186,8 @@ void __setparam_fair(struct task_struct *p, const struct sched_attr *attr)
 	if (attr->sched_runtime) {
 		se->custom_slice = 1;
 		se->slice = clamp_t(u64, attr->sched_runtime,
-				      NSEC_PER_MSEC/10,   /* HZ=1000 * 10 */
-				      NSEC_PER_MSEC*100); /* HZ=100  / 10 */
+				      SCHED_SLICE_MIN,
+				      SCHED_SLICE_MAX);
 	} else {
 		se->custom_slice = 0;
 		se->slice = sysctl_sched_base_slice;
