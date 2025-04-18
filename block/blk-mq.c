@@ -5013,16 +5013,17 @@ reregister:
 			.force	= true,
 			.uevent	= true,
 		};
+		int ret = -ENODEV;
 
 		mutex_lock(&q->elevator_lock);
 		if (q->elevator && !blk_queue_dying(q))
 			ctx.name = q->elevator->type->elevator_name;
-		__elevator_change(q, &ctx);
+		ret = __elevator_change(q, &ctx);
 		mutex_unlock(&q->elevator_lock);
-	}
-
-	list_for_each_entry(q, &set->tag_list, tag_set_list)
 		blk_mq_unfreeze_queue_nomemrestore(q);
+		if (!ret)
+			WARN_ON_ONCE(elevator_change_done(q, &ctx));
+	}
 	memalloc_noio_restore(memflags);
 
 	/* Free the excess tags when nr_hw_queues shrink. */

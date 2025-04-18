@@ -323,6 +323,7 @@ bool blk_insert_flush(struct request *rq);
 int __elevator_change(struct request_queue *q, struct elv_change_ctx *ctx);
 void elevator_set_default(struct request_queue *q);
 void elevator_set_none(struct request_queue *q);
+int elevator_change_done(struct request_queue *q, struct elv_change_ctx *ctx);
 
 ssize_t part_size_show(struct device *dev, struct device_attribute *attr,
 		char *buf);

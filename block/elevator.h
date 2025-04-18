@@ -129,6 +129,11 @@ struct elv_change_ctx {
 	bool force;
 	bool uevent;
 	bool init;
+
+	/* for unregistering old elevator */
+	struct elevator_queue *old;
+	/* for registering new elevator */
+	struct elevator_queue *new;
 };
 
 /*
