@@ -396,6 +396,33 @@ int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode)
 	return ret;
 }
 
+static int retry_on_updating_nr_hwq(struct gendisk_data *data,
+				    int (*cb)(struct gendisk_data *data))
+{
+	struct gendisk *disk = data->disk;
+	struct blk_mq_tag_set *set;
+
+	if (!queue_is_mq(disk->queue))
+		return cb(data);
+
+	set = disk->queue->tag_set;
+	do {
+		int idx, ret;
+
+		idx = srcu_read_lock(&set->update_nr_hwq_srcu);
+		if (set->updating_nr_hwq) {
+			srcu_read_unlock(&set->update_nr_hwq_srcu, idx);
+			goto wait;
+		}
+		ret = cb(data);
+		srcu_read_unlock(&set->update_nr_hwq_srcu, idx);
+		return ret;
+ wait:
+		wait_event_interruptible(set->update_nr_hwq_wq,
+				!set->updating_nr_hwq);
+	} while (true);
+}
+
 static int __add_disk_fwnode(struct gendisk_data *data)
 {
 	struct gendisk *disk = data->disk;
@@ -589,7 +616,7 @@ int __must_check add_disk_fwnode(struct device *parent, struct gendisk *disk,
 		.fwnode = fwnode,
 	};
 
-	return __add_disk_fwnode(&data);
+	return retry_on_updating_nr_hwq(&data, __add_disk_fwnode);
 }
 EXPORT_SYMBOL_GPL(add_disk_fwnode);
 
@@ -671,7 +698,7 @@ void blk_mark_disk_dead(struct gendisk *disk)
 }
 EXPORT_SYMBOL_GPL(blk_mark_disk_dead);
 
-static void __del_gendisk(struct gendisk_data *data)
+static int __del_gendisk(struct gendisk_data *data)
 {
 	struct gendisk *disk = data->disk;
 	struct request_queue *q = disk->queue;
@@ -682,7 +709,7 @@ static void __del_gendisk(struct gendisk_data *data)
 	might_sleep();
 
 	if (WARN_ON_ONCE(!disk_live(disk) && !(disk->flags & GENHD_FL_HIDDEN)))
-		return;
+		return 0;
 
 	disk_del_events(disk);
 
@@ -764,6 +791,7 @@ static void __del_gendisk(struct gendisk_data *data)
 
 	if (start_drain)
 		blk_unfreeze_release_lock(q);
+	return 0;
 }
 EXPORT_SYMBOL(del_gendisk);
 
@@ -792,7 +820,7 @@ void del_gendisk(struct gendisk *disk)
 		.disk	= disk,
 	};
 
-	__del_gendisk(&data);
+	retry_on_updating_nr_hwq(&data, __del_gendisk);
 }
 
 /**

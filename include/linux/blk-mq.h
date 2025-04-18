@@ -527,6 +527,11 @@ struct blk_mq_tag_set {
 	struct mutex		tag_list_lock;
 	struct list_head	tag_list;
 	struct srcu_struct	*srcu;
+
+	bool			updating_nr_hwq;
+	struct mutex		update_nr_hwq_lock;
+	struct srcu_struct	update_nr_hwq_srcu;
+	wait_queue_head_t	update_nr_hwq_wq;
 };
 
 /**
