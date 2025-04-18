@@ -127,6 +127,7 @@ struct elv_change_ctx {
 	const char *name;
 	bool force;
 	bool uevent;
+	bool init;
 };
 
 /*
