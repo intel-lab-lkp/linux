@@ -2229,22 +2229,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <150>;
 			thermal-sensors = <&lvts MT8186_LITTLE_CPU0>;
+			sustainable-power = <1500>;
 
 			trips {
-				cpu_little0_alert0: trip-alert0 {
-					temperature = <85000>;
+				cpu_little0_pa_switch_on: trip_pa_switch_on {
+					temperature = <58000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
-				cpu_little0_alert1: trip-alert1 {
-					temperature = <95000>;
+				cpu_little0_alert0: trip-alert {
+					temperature = <82000>;
 					hysteresis = <2000>;
-					type = "hot";
+					type = "passive";
 				};
 
 				cpu_little0_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <103000>;
 					hysteresis = <0>;
 					type = "critical";
 				};
@@ -2267,22 +2268,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <150>;
 			thermal-sensors = <&lvts MT8186_LITTLE_CPU1>;
+			sustainable-power = <1500>;
 
 			trips {
-				cpu_little1_alert0: trip-alert0 {
-					temperature = <85000>;
+				cpu_little1_pa_switch_on: trip_pa_switch_on {
+					temperature = <58000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
-				cpu_little1_alert1: trip-alert1 {
-					temperature = <95000>;
+				cpu_little1_alert0: trip-alert {
+					temperature = <82000>;
 					hysteresis = <2000>;
-					type = "hot";
+					type = "passive";
 				};
 
 				cpu_little1_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <103000>;
 					hysteresis = <0>;
 					type = "critical";
 				};
@@ -2305,22 +2307,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <150>;
 			thermal-sensors = <&lvts MT8186_LITTLE_CPU2>;
+			sustainable-power = <1500>;
 
 			trips {
-				cpu_little2_alert0: trip-alert0 {
-					temperature = <85000>;
+				cpu_little2_pa_switch_on: trip_pa_switch_on {
+					temperature = <58000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
-				cpu_little2_alert1: trip-alert1 {
-					temperature = <95000>;
+				cpu_little2_alert0: trip-alert {
+					temperature = <82000>;
 					hysteresis = <2000>;
-					type = "hot";
+					type = "passive";
 				};
 
 				cpu_little2_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <103000>;
 					hysteresis = <0>;
 					type = "critical";
 				};
@@ -2454,22 +2457,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts MT8186_BIG_CPU0>;
+			sustainable-power = <1500>;
 
 			trips {
-				cpu_big0_alert0: trip-alert0 {
-					temperature = <85000>;
+				cpu_big0_pa_switch_on: trip_pa_switch_on {
+					temperature = <58000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
-				cpu_big0_alert1: trip-alert1 {
-					temperature = <95000>;
+				cpu_big0_alert0: trip-alert {
+					temperature = <82000>;
 					hysteresis = <2000>;
-					type = "hot";
+					type = "passive";
 				};
 
 				cpu_big0_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <103000>;
 					hysteresis = <0>;
 					type = "critical";
 				};
@@ -2488,22 +2492,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts MT8186_BIG_CPU1>;
+			sustainable-power = <1500>;
 
 			trips {
-				cpu_big1_alert0: trip-alert0 {
-					temperature = <85000>;
+				cpu_big1_pa_switch_on: trip_pa_switch_on {
+					temperature = <58000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
-				cpu_big1_alert1: trip-alert1 {
-					temperature = <95000>;
+				cpu_big1_alert0: trip-alert {
+					temperature = <82000>;
 					hysteresis = <2000>;
-					type = "hot";
+					type = "passive";
 				};
 
 				cpu_big1_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <103000>;
 					hysteresis = <0>;
 					type = "critical";
 				};

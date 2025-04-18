@@ -3729,16 +3729,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_LITTLE_CPU0>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu0_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu0_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu0_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3759,16 +3766,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_LITTLE_CPU1>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu1_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu1_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu1_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3789,16 +3803,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_LITTLE_CPU2>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu2_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu2_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu2_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3819,16 +3840,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_LITTLE_CPU3>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu3_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu3_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu3_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3849,16 +3877,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_BIG_CPU0>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu4_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu4_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu4_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3879,16 +3914,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_BIG_CPU1>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu5_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu5_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu5_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3909,16 +3951,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_BIG_CPU2>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu6_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu6_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu6_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
@@ -3939,16 +3988,23 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <250>;
 			thermal-sensors = <&lvts_mcu MT8195_MCU_BIG_CPU3>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu7_pa_switch_on: trip_pa_switch_on {
+						temperature = <68000>;
+						hysteresis = <2000>;
+						type = "passive";
+				};
+
 				cpu7_alert: trip-alert {
-					temperature = <85000>;
+					temperature = <90000>;
 					hysteresis = <2000>;
 					type = "passive";
 				};
 
 				cpu7_crit: trip-crit {
-					temperature = <100000>;
+					temperature = <115000>;
 					hysteresis = <2000>;
 					type = "critical";
 				};
