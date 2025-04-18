@@ -253,6 +253,9 @@ impl<T, F: FnOnce(T)> Drop for ScopeGuard<T, F> {
 ///
 /// [`Opaque<T>`] is meant to be used with FFI objects that are never interpreted by Rust code.
 ///
+/// In cases where the contained data is only used by Rust, is not allowed to be
+/// uninitialized and automatic [`Drop`] is desired [`UnsafePinned`] should be used instead.
+///
 /// It is used to wrap structs from the C side, like for example `Opaque<bindings::mutex>`.
 /// It gets rid of all the usual assumptions that Rust has for a value:
 ///
@@ -578,3 +581,34 @@ pub type NotThreadSafe = PhantomData<*mut ()>;
 /// [`NotThreadSafe`]: type@NotThreadSafe
 #[allow(non_upper_case_globals)]
 pub const NotThreadSafe: NotThreadSafe = PhantomData;
+
+// When available use the upstream `UnsafePinned` type
+#[cfg(CONFIG_RUSTC_HAS_UNSAFE_PINNED)]
+pub use core::pin::UnsafePinned;
+
+// Otherwise us the kernel implementation of `UnsafePinned`
+#[cfg(not(CONFIG_RUSTC_HAS_UNSAFE_PINNED))]
+mod unsafe_pinned;
+#[cfg(not(CONFIG_RUSTC_HAS_UNSAFE_PINNED))]
+pub use unsafe_pinned::UnsafePinned;
+
+/// Trait for creating a [`PinInit`]ialized wrapper containing `T`.
+// Needs to be defined in kernel crate to get around the Orphan Rule when upstream `UnsafePinned`
+// is used.
+pub trait TryPinInitWrapper<T: ?Sized> {
+    /// Create an [`Self`] pin-initializer which contains `T`
+    fn try_pin_init<E>(value: impl PinInit<T, E>) -> impl PinInit<Self, E>;
+}
+impl<T: ?Sized> TryPinInitWrapper<T> for UnsafePinned<T> {
+    fn try_pin_init<E>(value: impl PinInit<T, E>) -> impl PinInit<Self, E> {
+        // SAFETY:
+        //   - In case of an error in `value` the error is returned, otherwise `slot` is fully
+        //     initialized, since `self.value` is initialized and `_pin` is a zero sized type.
+        //   - The `Pin` invariants of `self.value` are upheld, since no moving occurs.
+        unsafe {
+            pin_init::pin_init_from_closure(move |slot| {
+                value.__pinned_init(Self::raw_get_mut(slot))
+            })
+        }
+    }
+}
