@@ -1449,7 +1449,7 @@ iwl_pci_find_dev_info(u16 device, u16 subsystem_device,
 		 * !bw_limit to have a match.
 		 */
 		if (dev_info->bw_limit != IWL_CFG_BW_ANY &&
-		    (dev_info->bw_limit == IWL_CFG_BW_NO_LIM) == !!bw_limit)
+		    (dev_info->bw_limit == IWL_CFG_BW_NO_LIM) == !bw_limit)
 			continue;
 
 		if (dev_info->cores != (u8)IWL_CFG_ANY &&
