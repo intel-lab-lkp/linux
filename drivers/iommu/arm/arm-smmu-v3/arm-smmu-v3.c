@@ -981,6 +981,52 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 					   cmds->num, true);
 }
 
+static int arm_smmu_queue_poll_until_empty(struct arm_smmu_device *smmu,
+					   struct arm_smmu_queue *q)
+{
+	struct arm_smmu_queue_poll qp;
+	struct arm_smmu_ll_queue *llq = &q->llq;
+	int ret = 0;
+
+	queue_poll_init(smmu, &qp);
+	llq->val = READ_ONCE(q->llq.val);
+	do {
+		if (queue_empty(llq))
+			break;
+
+		ret = queue_poll(&qp);
+		llq->cons = readl(q->cons_reg);
+	} while (!ret);
+
+	return ret;
+}
+
+static int arm_smmu_drain_queues(struct arm_smmu_device *smmu)
+{
+	int ret;
+
+	/* cmdq */
+	arm_smmu_cmdq_shared_lock(&smmu->cmdq);
+	ret = arm_smmu_queue_poll_until_empty(smmu, &smmu->cmdq.q);
+	arm_smmu_cmdq_shared_unlock(&smmu->cmdq);
+	if (ret)
+		return ret;
+
+	/* evtq */
+	ret = arm_smmu_queue_poll_until_empty(smmu, &smmu->evtq.q);
+	if (ret)
+		return ret;
+
+	/* priq */
+	if ((smmu->features & ARM_SMMU_FEAT_PRI)) {
+		ret = arm_smmu_queue_poll_until_empty(smmu, &smmu->priq.q);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
 				   struct iommu_page_response *resp)
 {
