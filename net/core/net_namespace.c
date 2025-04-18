@@ -761,12 +761,44 @@ struct net *get_net_ns_by_pid(pid_t pid)
 }
 EXPORT_SYMBOL_GPL(get_net_ns_by_pid);
 
+#ifdef CONFIG_NET_NS_REFCNT_TRACKER
+static void net_ns_net_debugfs(struct net *net)
+{
+	char name[NAME_MAX + 1];
+	size_t len;
+
+	len = snprintf(name, sizeof(name), "netns-%u-refcnt", net->ns.inum);
+	if (len < sizeof(name))
+		ref_tracker_dir_debugfs(&net->refcnt_tracker, name);
+
+	len = snprintf(name, sizeof(name), "netns-%u-notrefcnt", net->ns.inum);
+	if (len < sizeof(name))
+		ref_tracker_dir_debugfs(&net->notrefcnt_tracker, name);
+}
+
+static int __init init_net_debugfs(void)
+{
+	net_ns_net_debugfs(&init_net);
+	return 0;
+}
+late_initcall(init_net_debugfs);
+#else
+static void net_ns_net_debugfs(struct net *net)
+{
+}
+#endif
+
 static __net_init int net_ns_net_init(struct net *net)
 {
+	int ret;
+
 #ifdef CONFIG_NET_NS
 	net->ns.ops = &netns_operations;
 #endif
-	return ns_alloc_inum(&net->ns);
+	ret = ns_alloc_inum(&net->ns);
+	if (!ret)
+		net_ns_net_debugfs(net);
+	return ret;
 }
 
 static __net_exit void net_ns_net_exit(struct net *net)
