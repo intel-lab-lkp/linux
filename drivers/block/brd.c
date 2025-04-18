@@ -208,6 +208,7 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 			goto out;
 	}
 
+	rcu_read_lock();
 	mem = kmap_local_page(page);
 	if (!op_is_write(opf)) {
 		copy_from_brd(mem + off, brd, sector, len);
@@ -217,9 +218,17 @@ static int brd_do_bvec(struct brd_device *brd, struct page *page,
 		copy_to_brd(brd, mem + off, sector, len);
 	}
 	kunmap_local(mem);
+	rcu_read_unlock();
 
 out:
 	return err;
+}
+
+static void brd_free_one_page(struct rcu_head *head)
+{
+	struct page *page = container_of(head, struct page, rcu_head);
+
+	__free_page(page);
 }
 
 static void brd_do_discard(struct brd_device *brd, sector_t sector, u32 size)
@@ -232,7 +241,7 @@ static void brd_do_discard(struct brd_device *brd, sector_t sector, u32 size)
 	while (size >= PAGE_SIZE && aligned_sector < rd_size * 2) {
 		page = __xa_erase(&brd->brd_pages, aligned_sector >> PAGE_SECTORS_SHIFT);
 		if (page) {
-			__free_page(page);
+			call_rcu(&page->rcu_head, brd_free_one_page);
 			brd->brd_nr_pages--;
 		}
 		aligned_sector += PAGE_SECTORS;
