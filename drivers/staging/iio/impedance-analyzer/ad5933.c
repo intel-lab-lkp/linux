@@ -28,7 +28,7 @@
 #define AD5933_REG_FREQ_START		0x82	/* R/W, 3 bytes */
 #define AD5933_REG_FREQ_INC		0x85	/* R/W, 3 bytes */
 #define AD5933_REG_INC_NUM		0x88	/* R/W, 2 bytes, 9 bit */
-#define AD5933_REG_SETTLING_CYCLES	0x8A	/* R/W, 2 bytes */
+#define AD5933_REG_SETTLING_CYCLES	0x8A	/* R/W, 2 bytes, 11 + 2 bit */
 #define AD5933_REG_STATUS		0x8F	/* R, 1 byte */
 #define AD5933_REG_TEMP_DATA		0x92	/* R, 2 bytes*/
 #define AD5933_REG_REAL_DATA		0x94	/* R, 2 bytes*/
@@ -71,6 +71,8 @@
 #define AD5933_INT_OSC_FREQ_Hz		16776000
 #define AD5933_MAX_OUTPUT_FREQ_Hz	100000
 #define AD5933_MAX_RETRIES		100
+#define AD5933_MAX_FREQ_POINTS		511
+#define AD5933_MAX_SETTLING_CYCLES	2044 /* 511 * 4 */
 
 #define AD5933_OUT_RANGE		1
 #define AD5933_OUT_RANGE_AVAIL		2
@@ -81,6 +83,12 @@
 
 #define AD5933_POLL_TIME_ms		10
 #define AD5933_INIT_EXCITATION_TIME_ms	100
+
+/* Settling cycles multiplier bits D10, D9 */
+#define AD5933_SETTLE_MUL_MASK		(BIT(10) | BIT(9))
+#define AD5933_SETTLE_MUL_1X		0
+#define AD5933_SETTLE_MUL_2X		BIT(9)
+#define AD5933_SETTLE_MUL_4X		(BIT(10) | BIT(9))
 
 struct ad5933_state {
 	struct i2c_client		*client;
@@ -413,14 +421,15 @@ static ssize_t ad5933_store(struct device *dev,
 		ret = ad5933_cmd(st, 0);
 		break;
 	case AD5933_OUT_SETTLING_CYCLES:
-		val = clamp(val, (u16)0, (u16)0x7FF);
+		val = clamp(val, (u16)0, (u16)AD5933_MAX_SETTLING_CYCLES);
 		st->settling_cycles = val;
 
-		/* 2x, 4x handling, see datasheet */
+		/* Encode value for register: D10..D0 */
+		/* Datasheet Table 13: If cycles > 1022 -> val/4, set bits D10=1, D9=1 */
 		if (val > 1022)
-			val = (val >> 2) | (3 << 9);
-		else if (val > 511)
-			val = (val >> 1) | BIT(9);
+			val = (val >> 2) | AD5933_SETTLE_MUL_4X;
+		else if (val > 511) /* Datasheet: If cycles > 511 -> val/2, set bit D9=1 */
+			val = (val >> 1) | AD5933_SETTLE_MUL_2X;
 
 		dat = cpu_to_be16(val);
 		ret = ad5933_i2c_write(st->client,
@@ -428,7 +437,7 @@ static ssize_t ad5933_store(struct device *dev,
 				       2, (u8 *)&dat);
 		break;
 	case AD5933_FREQ_POINTS:
-		val = clamp(val, (u16)0, (u16)511);
+		val = clamp(val, (u16)0, (u16)AD5933_MAX_FREQ_POINTS);
 		st->freq_points = val;
 
 		dat = cpu_to_be16(val);
