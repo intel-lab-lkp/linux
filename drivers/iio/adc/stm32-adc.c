@@ -27,6 +27,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
+#include <linux/types.h>
 
 #include "stm32-adc-core.h"
 
@@ -261,7 +262,10 @@ struct stm32_adc {
 	u32			offset;
 	const struct stm32_adc_cfg	*cfg;
 	struct completion	completion;
-	u16			buffer[STM32_ADC_MAX_SQ + 4] __aligned(8);
+	struct {
+		u16 data[STM32_ADC_MAX_SQ];
+		aligned_s64 timestamp;
+	} buffer;
 	struct clk		*clk;
 	int			irq;
 	spinlock_t		lock;		/* interrupt lock */
@@ -1447,7 +1451,7 @@ static int stm32_adc_single_conv(struct iio_dev *indio_dev,
 	} else if (time_left < 0) {
 		ret = time_left;
 	} else {
-		*res = adc->buffer[0];
+		*res = adc->buffer.data[0];
 		ret = IIO_VAL_INT;
 	}
 
@@ -1559,7 +1563,7 @@ static irqreturn_t stm32_adc_isr(int irq, void *data)
 
 	if (status & regs->isr_eoc.mask) {
 		/* Reading DR also clears EOC status flag */
-		adc->buffer[adc->bufi] = stm32_adc_readw(adc, regs->dr);
+		adc->buffer.data[adc->bufi] = stm32_adc_readw(adc, regs->dr);
 		if (iio_buffer_enabled(indio_dev)) {
 			adc->bufi++;
 			if (adc->bufi >= adc->num_conv) {
@@ -1858,7 +1862,7 @@ static irqreturn_t stm32_adc_trigger_handler(int irq, void *p)
 
 	/* reset buffer index */
 	adc->bufi = 0;
-	iio_push_to_buffers_with_ts(indio_dev, adc->buffer, sizeof(adc->buffer),
+	iio_push_to_buffers_with_ts(indio_dev, &adc->buffer, sizeof(adc->buffer),
 				    pf->timestamp);
 	iio_trigger_notify_done(indio_dev->trig);
 
