@@ -972,7 +972,7 @@ static void __init memmap_init_zone_range(struct zone *zone,
 static void __init memmap_init(void)
 {
 	unsigned long start_pfn, end_pfn;
-	unsigned long hole_pfn = 0;
+	unsigned long hole_pfn = ARCH_PFN_OFFSET;
 	int i, j, zone_id = 0, nid;
 
 	for_each_mem_pfn_range(i, MAX_NUMNODES, &start_pfn, &end_pfn, &nid) {
