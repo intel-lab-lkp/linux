@@ -4176,7 +4176,9 @@ kvm_put_xa_erase:
 	xa_erase(&kvm->vcpu_array, vcpu->vcpu_idx);
 unlock_vcpu_destroy:
 	mutex_unlock(&kvm->lock);
+	kvm_arch_vcpu_destroy(vcpu);
 	kvm_dirty_ring_free(&vcpu->dirty_ring);
+	goto vcpu_free_run_page;
 arch_vcpu_destroy:
 	kvm_arch_vcpu_destroy(vcpu);
 vcpu_free_run_page:
