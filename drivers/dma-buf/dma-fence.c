@@ -968,7 +968,7 @@ EXPORT_SYMBOL(dma_fence_wait_any_timeout);
  */
 void dma_fence_set_deadline(struct dma_fence *fence, ktime_t deadline)
 {
-	if (fence->ops->set_deadline && !dma_fence_is_signaled(fence))
+	if (!dma_fence_is_signaled(fence) && fence->ops->set_deadline)
 		fence->ops->set_deadline(fence, deadline);
 }
 EXPORT_SYMBOL(dma_fence_set_deadline);
