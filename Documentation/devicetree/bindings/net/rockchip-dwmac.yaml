@@ -25,6 +25,7 @@ select:
           - rockchip,rk3368-gmac
           - rockchip,rk3399-gmac
           - rockchip,rk3528-gmac
+          - rockchip,rk3562-gmac
           - rockchip,rk3568-gmac
           - rockchip,rk3576-gmac
           - rockchip,rk3588-gmac
@@ -51,6 +52,7 @@ properties:
       - items:
           - enum:
               - rockchip,rk3528-gmac
+              - rockchip,rk3562-gmac
               - rockchip,rk3568-gmac
               - rockchip,rk3576-gmac
               - rockchip,rk3588-gmac
@@ -149,6 +151,7 @@ allOf:
             contains:
               enum:
                 - rockchip,rk3528-gmac
+                - rockchip,rk3562-gmac
     then:
       properties:
         clocks:
