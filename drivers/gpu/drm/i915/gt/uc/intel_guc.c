@@ -313,8 +313,12 @@ static u32 guc_ctl_wa_flags(struct intel_guc *guc)
 	 *
 	 * The same WA bit is used for both and 22011391025 is applicable to
 	 * all DG2.
+	 *
+	 * Platforms post DG2 prevent behavior in hardware. This is implicitly
+	 * enabled to give guc management over CCS scheduling.
 	 */
-	if (IS_DG2(gt->i915))
+	if (IS_DG2(gt->i915) ||
+	    (CCS_MASK(gt) && IS_GFX_GT_IP_ATLEAST(gt, IP_VER(12, 70))))
 		flags |= GUC_WA_DUAL_QUEUE;
 
 	/* Wa_22011802037: graphics version 11/12 */
@@ -322,8 +326,7 @@ static u32 guc_ctl_wa_flags(struct intel_guc *guc)
 		flags |= GUC_WA_PRE_PARSER;
 
 	/*
-	 * Wa_22012727170
-	 * Wa_22012727685
+	 * Wa_22012727170 Wa_22012727685
 	 */
 	if (IS_DG2_G11(gt->i915))
 		flags |= GUC_WA_CONTEXT_ISOLATION;

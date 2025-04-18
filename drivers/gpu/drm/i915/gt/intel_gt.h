@@ -25,6 +25,14 @@ struct drm_printer;
 	 GRAPHICS_VER_FULL((gt)->i915) <= (until)))
 
 /*
+ * Check that the GT is a graphics GT and has atleast minimum IP version.
+ */
+#define IS_GFX_GT_IP_ATLEAST(gt, from) ( \
+	BUILD_BUG_ON_ZERO((from) < IP_VER(2, 0)) + \
+	((gt)->type != GT_MEDIA && \
+	 GRAPHICS_VER_FULL((gt)->i915) >= (from)))
+
+/*
  * Check that the GT is a media GT and has an IP version within the
  * specified range (inclusive).
  *
