@@ -28,6 +28,7 @@ properties:
           - mediatek,mt8192-dpi
           - mediatek,mt8195-dp-intf
           - mediatek,mt8195-dpi
+          - mediatek,mt8196-edp-dvo
       - items:
           - enum:
               - mediatek,mt6795-dpi
