@@ -3897,6 +3897,15 @@ static int ata_mselect_control_ata_feature(struct ata_queued_cmd *qc,
 	u8 cdl_action;
 
 	/*
+	 * The sub-page f2h should only be supported for devices that support
+	 * the T2A and T2B command duration limits mode pages (note here the
+	 * "should" which is what SAT-6 defines). So fail this command if the
+	 * device does not support CDL.
+	 */
+	if (!(dev->flags & ATA_DFLAG_CDL))
+		return -EOPNOTSUPP;
+
+	/*
 	 * The first four bytes of ATA Feature Control mode page are a header,
 	 * so offsets in mpage are off by 4 compared to buf.  Same for len.
 	 */
@@ -4101,6 +4110,8 @@ static unsigned int ata_scsi_mode_select_xlat(struct ata_queued_cmd *qc)
 	case CONTROL_MPAGE:
 		ret = ata_mselect_control(qc, spg, p, pg_len, &fp);
 		if (ret < 0) {
+			if (ret == -EOPNOTSUPP)
+				goto invalid_fld;
 			fp += hdr_len + bd_len;
 			goto invalid_param;
 		}
