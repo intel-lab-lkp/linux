@@ -10834,8 +10834,9 @@ static void netdev_free_phy_link_topology(struct net_device *dev)
  */
 int register_netdevice(struct net_device *dev)
 {
-	int ret;
 	struct net *net = dev_net(dev);
+	char name[NAME_MAX + 1];
+	int ret;
 
 	BUILD_BUG_ON(sizeof(netdev_features_t) * BITS_PER_BYTE <
 		     NETDEV_FEATURE_COUNT);
@@ -10994,6 +10995,9 @@ int register_netdevice(struct net_device *dev)
 	    dev->rtnl_link_state == RTNL_LINK_INITIALIZED)
 		rtmsg_ifinfo(RTM_NEWLINK, dev, ~0U, GFP_KERNEL, 0, NULL);
 
+	/* Register debugfs file for the refcount tracker */
+	if (snprintf(name, sizeof(name), "netdev-%s@%p", dev->name, dev) < sizeof(name))
+		ref_tracker_dir_debugfs(&dev->refcnt_tracker, name);
 out:
 	return ret;
 
