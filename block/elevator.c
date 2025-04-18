@@ -53,6 +53,8 @@ static LIST_HEAD(elv_list);
  */
 #define rq_hash_key(rq)		(blk_rq_pos(rq) + blk_rq_sectors(rq))
 
+static int elevator_change(struct request_queue *q, const char *name);
+
 /*
  * Query io scheduler to see if the current process issuing bio may be
  * merged with rq.
@@ -705,6 +707,28 @@ int __elevator_change(struct request_queue *q, const char *elevator_name,
 	return ret;
 }
 
+static int elevator_change(struct request_queue *q, const char *name)
+{
+	struct blk_mq_tag_set *set = q->tag_set;
+	unsigned int memflags;
+	int ret, idx;
+
+	idx = srcu_read_lock(&set->update_nr_hwq_srcu);
+	if (set->updating_nr_hwq) {
+		ret = -EBUSY;
+		goto exit;
+	}
+
+	memflags = blk_mq_freeze_queue(q);
+	mutex_lock(&q->elevator_lock);
+	ret = __elevator_change(q, name, false);
+	mutex_unlock(&q->elevator_lock);
+	blk_mq_unfreeze_queue(q, memflags);
+exit:
+	srcu_read_unlock(&set->update_nr_hwq_srcu, idx);
+	return ret;
+}
+
 static void elv_iosched_load_module(char *elevator_name)
 {
 	struct elevator_type *found;
@@ -720,12 +744,10 @@ static void elv_iosched_load_module(char *elevator_name)
 ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 			  size_t count)
 {
+	struct request_queue *q = disk->queue;
 	char elevator_name[ELV_NAME_MAX];
 	char *name;
-	int ret, idx;
-	unsigned int memflags;
-	struct request_queue *q = disk->queue;
-	struct blk_mq_tag_set *set = q->tag_set;
+	int ret;
 
 	/*
 	 * If the attribute needs to load a module, do it before freezing the
@@ -737,21 +759,9 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 
 	elv_iosched_load_module(name);
 
-	idx = srcu_read_lock(&set->update_nr_hwq_srcu);
-	if (set->updating_nr_hwq) {
-		ret = -EBUSY;
-		goto exit;
-	}
-
-	memflags = blk_mq_freeze_queue(q);
-	mutex_lock(&q->elevator_lock);
-	ret = __elevator_change(q, name, false);
+	ret = elevator_change(q, name);
 	if (!ret)
 		ret = count;
-	mutex_unlock(&q->elevator_lock);
-	blk_mq_unfreeze_queue(q, memflags);
-exit:
-	srcu_read_unlock(&set->update_nr_hwq_srcu, idx);
 	return ret;
 }
 
