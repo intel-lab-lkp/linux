@@ -621,7 +621,7 @@ void elevator_init_mq(struct request_queue *q)
  * If switching fails, we are most likely running out of memory and not able
  * to restore the old io scheduler, so leaving the io scheduler being none.
  */
-int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
+static int elevator_switch(struct request_queue *q, struct elevator_type *new_e)
 {
 	int ret;
 
@@ -657,7 +657,7 @@ out_unfreeze:
 	return ret;
 }
 
-void elevator_disable(struct request_queue *q)
+static void elevator_disable(struct request_queue *q)
 {
 	WARN_ON_ONCE(q->mq_freeze_depth == 0);
 	lockdep_assert_held(&q->elevator_lock);
@@ -677,7 +677,8 @@ void elevator_disable(struct request_queue *q)
 /*
  * Switch this queue to the given IO scheduler.
  */
-static int elevator_change(struct request_queue *q, const char *elevator_name)
+int __elevator_change(struct request_queue *q, const char *elevator_name,
+		      bool force)
 {
 	struct elevator_type *e;
 	int ret;
@@ -692,7 +693,8 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
 		return 0;
 	}
 
-	if (q->elevator && elevator_match(q->elevator->type, elevator_name))
+	if (!force && q->elevator &&
+	    elevator_match(q->elevator->type, elevator_name))
 		return 0;
 
 	e = elevator_find_get(elevator_name);
@@ -743,7 +745,7 @@ ssize_t elv_iosched_store(struct gendisk *disk, const char *buf,
 
 	memflags = blk_mq_freeze_queue(q);
 	mutex_lock(&q->elevator_lock);
-	ret = elevator_change(q, name);
+	ret = __elevator_change(q, name, false);
 	if (!ret)
 		ret = count;
 	mutex_unlock(&q->elevator_lock);
