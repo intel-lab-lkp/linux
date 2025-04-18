@@ -12,6 +12,9 @@
 
 #include <linux/platform_device.h>
 
+/* TODO: Convert the platform device abusers and remove this flag */
+#define MFD_AUX_TYPE	BIT(31)
+
 #define MFD_RES_SIZE(arr) (sizeof(arr) / sizeof(struct resource))
 
 #define MFD_CELL_ALL(_name, _res, _pdata, _pdsize, _id, _compat, _of_reg, _use_of_reg, _match) \

@@ -8,6 +8,7 @@ menu "Multifunction device drivers"
 
 config MFD_CORE
 	tristate
+	select AUXILIARY_BUS
 	select IRQ_DOMAIN
 	default n
 
