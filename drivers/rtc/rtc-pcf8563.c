@@ -103,7 +103,7 @@ static int pcf8563_set_alarm_mode(struct pcf8563 *pcf8563, bool on)
 	return regmap_write(pcf8563->regmap, PCF8563_REG_ST2, buf);
 }
 
-static int pcf8563_get_alarm_mode(struct pcf8563 *pcf8563, unsigned char *en,
+static int pcf8563_read_alarm_mode(struct pcf8563 *pcf8563, unsigned char *en,
 				  unsigned char *pen)
 {
 	u32 buf;
@@ -127,7 +127,7 @@ static irqreturn_t pcf8563_irq(int irq, void *dev_id)
 	char pending;
 	int err;
 
-	err = pcf8563_get_alarm_mode(pcf8563, NULL, &pending);
+	err = pcf8563_read_alarm_mode(pcf8563, NULL, &pending);
 	if (err)
 		return IRQ_NONE;
 
@@ -262,7 +262,7 @@ static int pcf8563_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *tm)
 	tm->time.tm_mday = bcd2bin(buf[2] & 0x3F);
 	tm->time.tm_wday = bcd2bin(buf[3] & 0x7);
 
-	err = pcf8563_get_alarm_mode(pcf8563, &tm->enabled, &tm->pending);
+	err = pcf8563_read_alarm_mode(pcf8563, &tm->enabled, &tm->pending);
 	if (err < 0)
 		return err;
 
@@ -285,7 +285,7 @@ static int pcf8563_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *tm)
 	buf[2] = bin2bcd(tm->time.tm_mday);
 	buf[3] = tm->time.tm_wday & 0x07;
 
-	err = regmap_bulk_write(pcf8563->regmap, PCF8563_REG_SC, buf,
+	err = regmap_bulk_write(pcf8563->regmap, PCF8563_REG_AMN, buf,
 				sizeof(buf));
 	if (err)
 		return err;
