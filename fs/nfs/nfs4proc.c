@@ -7112,13 +7112,16 @@ static void nfs4_locku_done(struct rpc_task *task, void *data)
 		.inode = calldata->lsp->ls_state->inode,
 		.stateid = &calldata->arg.stateid,
 	};
+	struct nfs4_state_owner *sp = calldata->ctx->state->owner;
 
 	if (!nfs4_sequence_done(task, &calldata->res.seq_res))
 		return;
 	switch (task->tk_status) {
 		case 0:
 			renew_lease(calldata->server, calldata->timestamp);
+			mutex_lock(&sp->so_delegreturn_mutex);
 			locks_lock_inode_wait(calldata->lsp->ls_state->inode, &calldata->fl);
+			mutex_unlock(&sp->so_delegreturn_mutex);
 			if (nfs4_update_lock_stateid(calldata->lsp,
 					&calldata->res.stateid))
 				break;
@@ -7375,6 +7378,7 @@ static void nfs4_lock_done(struct rpc_task *task, void *calldata)
 {
 	struct nfs4_lockdata *data = calldata;
 	struct nfs4_lock_state *lsp = data->lsp;
+	struct nfs4_state_owner *sp = data->ctx->state->owner;
 
 	if (!nfs4_sequence_done(task, &data->res.seq_res))
 		return;
@@ -7386,8 +7390,12 @@ static void nfs4_lock_done(struct rpc_task *task, void *calldata)
 				data->timestamp);
 		if (data->arg.new_lock && !data->cancelled) {
 			data->fl.c.flc_flags &= ~(FL_SLEEP | FL_ACCESS);
-			if (locks_lock_inode_wait(lsp->ls_state->inode, &data->fl) < 0)
+			mutex_lock(&sp->so_delegreturn_mutex);
+			if (locks_lock_inode_wait(lsp->ls_state->inode, &data->fl) < 0) {
+				mutex_unlock(&sp->so_delegreturn_mutex);
 				goto out_restart;
+			}
+			mutex_unlock(&sp->so_delegreturn_mutex);
 		}
 		if (data->arg.new_lock_owner != 0) {
 			nfs_confirm_seqid(&lsp->ls_seqid, 0);
@@ -7597,11 +7605,14 @@ static int _nfs4_proc_setlk(struct nfs4_state *state, int cmd, struct file_lock 
 	int status;
 
 	request->c.flc_flags |= FL_ACCESS;
-	status = locks_lock_inode_wait(state->inode, request);
-	if (status < 0)
-		goto out;
 	mutex_lock(&sp->so_delegreturn_mutex);
 	down_read(&nfsi->rwsem);
+	status = locks_lock_inode_wait(state->inode, request);
+	if (status < 0) {
+		up_read(&nfsi->rwsem);
+		mutex_unlock(&sp->so_delegreturn_mutex);
+		goto out;
+	}
 	if (test_bit(NFS_DELEGATED_STATE, &state->flags)) {
 		/* Yes: cache locks! */
 		/* ...but avoid races with delegation recall... */
