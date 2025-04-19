@@ -133,15 +133,16 @@ __STRUCT_FRACT(u32)
 #undef __STRUCT_FRACT
 
 /* Calculate "x * n / d" without unnecessary overflow or loss of precision. */
-#define mult_frac(x, n, d)	\
-({				\
-	typeof(x) x_ = (x);	\
-	typeof(n) n_ = (n);	\
-	typeof(d) d_ = (d);	\
-				\
-	typeof(x_) q = x_ / d_;	\
-	typeof(x_) r = x_ % d_;	\
-	q * n_ + r * n_ / d_;	\
+#define mult_frac(x, n, d)		\
+({					\
+	typeof(x) x_ = (x);		\
+	typeof(n) n_ = (n);		\
+	typeof(d) d_ = (d);		\
+					\
+	typeof(x_) r = do_div(x_, d_);	\
+	r *= n_;			\
+	do_div(r, d_);			\
+	x_ * n_ + r;			\
 })
 
 #define sector_div(a, b) do_div(a, b)
