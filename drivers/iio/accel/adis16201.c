@@ -133,7 +133,7 @@ static int adis16201_read_raw(struct iio_dev *indio_dev,
 			 * 1 LSB represents 0.244 mg.
 			 */
 			*val = 0;
-			*val2 = IIO_G_TO_M_S_2(462400);
+			*val2 = IIO_G_TO_M_S_2(462500);
 			return IIO_VAL_INT_PLUS_NANO;
 		case IIO_INCLI:
 			*val = 0;
