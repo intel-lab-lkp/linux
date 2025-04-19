@@ -42,4 +42,4 @@ ENTRY(v6_early_abort)
 	orreq	r1, r1, #1 << 11		@ yes.
 #endif
 1:	uaccess_disable ip			@ disable userspace access
-	b	do_DataAbort
+	b	arm_dabt_handler

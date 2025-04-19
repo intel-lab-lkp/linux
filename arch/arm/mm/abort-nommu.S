@@ -17,5 +17,5 @@
 ENTRY(nommu_early_abort)
 	mov	r0, #0				@ clear r0, r1 (no FSR/FAR)
 	mov	r1, #0
-	b	do_DataAbort
+	b	arm_dabt_handler
 ENDPROC(nommu_early_abort)
