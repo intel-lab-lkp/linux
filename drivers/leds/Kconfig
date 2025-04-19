@@ -483,6 +483,22 @@ config LEDS_LP5569
 	  Driver provides direct control via LED class and interface for
 	  programming the engines.
 
+config LEDS_LP5812
+	tristate "Enable LP5812 support LED matrix 4x3"
+	depends on LEDS_CLASS && I2C
+	depends on LEDS_CLASS_MULTICOLOR
+	help
+	  If you say Y here you get support for TI LP5812 LED driver.
+
+	  The LP5812 is an I2C-based RGB LED driver that supports a 4x3 LED matrix.
+	  It provides independent brightness control and color mixing for each LED.
+	  This driver integrates with the Linux LED framework and LED multicolor class.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called leds-lp5812.
+
+	  If unsure, say N.
+
 config LEDS_LP8501
 	tristate "LED Support for TI LP8501 LED driver chip"
 	depends on LEDS_CLASS && I2C
