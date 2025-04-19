@@ -23938,6 +23938,7 @@ TEXAS INSTRUMENTS' LP5812 LED DRIVER
 M:	Nam Tran <trannamatk@gmail.com>
 L:	linux-leds@vger.kernel.org
 S:	Maintained
+F:	Documentation/ABI/testing/sysfs-bus-i2c-devices-lp5812
 F:	Documentation/devicetree/bindings/leds/ti,lp5812.yaml
 F:	drivers/leds/Kconfig
 F:	drivers/leds/Makefile
