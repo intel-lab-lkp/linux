@@ -1266,8 +1266,8 @@ static int check_interleave_cap(struct cxl_decoder *cxld, int iw, int ig)
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
 	struct cxl_hdm *cxlhdm = dev_get_drvdata(&port->dev);
 	unsigned int interleave_mask;
-	u8 eiw;
-	u16 eig;
+	u8 eiw = 0;
+	u16 eig = 0;
 	int high_pos, low_pos;
 
 	if (!test_bit(iw, &cxlhdm->iw_cap_mask))
