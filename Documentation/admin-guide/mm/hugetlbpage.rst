@@ -239,6 +239,17 @@ this condition holds--that is, until ``nr_hugepages+nr_overcommit_hugepages`` is
 increased sufficiently, or the surplus huge pages go out of use and are freed--
 no more surplus huge pages will be allowed to be allocated.
 
+Caveat: Shrinking the persistent huge page pool via ``nr_hugepages`` may be
+concurrent with freeing in-use huge pages to the huge page pool, leading to some
+huge pages are still in the huge page pool and accounted as surplus. Besides,
+When the feature of freeing unused vmemmap pages associated with each hugetlb page
+is enabled, free huge page may be accounted as surplus too. In such two cases, users
+couldn't directly shrink the huge page pool via echo 0 to ``nr_hugepages``, should
+echo $nr_surplus to ``nr_hugepages`` to convert the surplus free huge pages to
+persistent free huge pages first, and then echo 0 to ``nr_hugepages`` to destroy
+these huge pages. Another way to destroy is allocating these free surplus huge
+pages and these huge pages will be tried to destroy when they are freed.
+
 With support for multiple huge page pools at run-time available, much of
 the huge page userspace interface in ``/proc/sys/vm`` has been duplicated in
 sysfs.
