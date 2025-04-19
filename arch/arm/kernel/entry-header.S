@@ -203,10 +203,6 @@
 
 	@ IRQs off again before pulling preserved data off the stack
 	disable_irq_notrace
-
-	mov	r0, sp				@ 'regs'
-	bl	irqentry_exit_to_kernel_mode
-
 	uaccess_exit tsk, r0, r1
 
 #ifndef CONFIG_THUMB2_KERNEL
@@ -338,20 +334,6 @@ ALT_UP_B(.L1_\@)
 	movs	pc, lr				@ return & move spsr_svc into cpsr
 1:	bug	"Returning to usermode but unexpected PSR bits set?", \@
 #endif	/* !CONFIG_THUMB2_KERNEL */
-	.endm
-
-/*
- * Context tracking and other mode transitions. Used to instrument transitions
- * between user and kernel mode.
-*/
-	.macro asm_irqentry_enter_from_user_mode
-	mov	r0, sp				@ regs
-	bl	irqentry_enter_from_user_mode
-	.endm
-
-	.macro asm_irqentry_exit_to_user_mode
-	mov	r0, sp				@ regs
-	bl	irqentry_exit_to_user_mode
 	.endm
 
 /*

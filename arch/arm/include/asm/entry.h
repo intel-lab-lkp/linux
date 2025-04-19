@@ -4,15 +4,8 @@
 
 struct pt_regs;
 
-/*
- * These are copies of generic entry headers so we can transition
- * to generic entry once they are semantically equivalent.
- */
-long syscall_enter_from_user_mode(struct pt_regs *regs, long);
-void syscall_exit_to_user_mode(struct pt_regs *regs);
-void irqentry_enter_from_user_mode(struct pt_regs *regs);
-void irqentry_exit_to_user_mode(struct pt_regs *regs);
-void irqentry_enter_from_kernel_mode(struct pt_regs *regs);
-void irqentry_exit_to_kernel_mode(struct pt_regs *regs);
+void arm_irq_handler(struct pt_regs *regs, int mode);
+void arm_fiq_handler(struct pt_regs *regs);
+void arm_exit_to_user_mode(struct pt_regs *regs);
 
 #endif /* __ASM_ENTRY_H__ */

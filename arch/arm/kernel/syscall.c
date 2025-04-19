@@ -1,25 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/entry-common.h>
 #include <linux/syscalls.h>
 #include <asm/syscall.h>
-
-static inline bool has_syscall_work(unsigned long flags)
-{
-	return unlikely(flags & _TIF_SYSCALL_WORK);
-}
 
 int invoke_syscall_asm(void *table, struct pt_regs *regs, int scno);
 __ADDRESSABLE(invoke_syscall_asm);
 
-__visible int invoke_syscall(void *table, struct pt_regs *regs, int scno)
+__visible void invoke_syscall(void *table, struct pt_regs *regs, int scno)
 {
-	unsigned long flags = read_thread_flags();
 	int ret;
 
-	if (has_syscall_work(flags)) {
-		scno = syscall_trace_enter(regs);
-		if (scno == -1)
-			goto trace_exit_nosave;
+	scno = syscall_enter_from_user_mode(regs, scno);
+	/* When tracing syscall -1 means "skip syscall" */
+	if (scno < 0) {
+		ret = 0;
+		goto exit_save;
 	}
 
 	if (scno < NR_syscalls) {
@@ -35,13 +31,7 @@ __visible int invoke_syscall(void *table, struct pt_regs *regs, int scno)
 	ret = sys_ni_syscall();
 
 exit_save:
-	/* Save return value from syscall */
-	regs->ARM_r0 = ret;
-	if (!has_syscall_work(flags))
-		return 0;
+	syscall_set_return_value(current, regs, 0, ret);
 
-trace_exit_nosave:
-	local_irq_enable();
-	syscall_trace_exit(regs);
-	return 1;
+	syscall_exit_to_user_mode(regs);
 }
