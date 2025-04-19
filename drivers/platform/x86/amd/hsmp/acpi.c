@@ -27,7 +27,7 @@
 
 #include "hsmp.h"
 
-#define DRIVER_NAME		"amd_hsmp"
+#define DRIVER_NAME		"hsmp_acpi"
 #define DRIVER_VERSION		"2.3"
 #define ACPI_HSMP_DEVICE_HID	"AMDI0097"
 
