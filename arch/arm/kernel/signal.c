@@ -541,7 +541,8 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 	unsigned int retval = 0, continue_addr = 0, restart_addr = 0;
 	bool syscall = (syscall_get_nr(current, regs) != -1);
 	struct ksignal ksig;
-	int restart = 0;
+	bool restart = false;
+	bool restart_block = false;
 
 	/*
 	 * If we were from a system call, check for system call restarting...
@@ -557,12 +558,12 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 		 */
 		switch (retval) {
 		case -ERESTART_RESTARTBLOCK:
-			restart -= 2;
+			restart_block = true;
 			fallthrough;
 		case -ERESTARTNOHAND:
 		case -ERESTARTSYS:
 		case -ERESTARTNOINTR:
-			restart++;
+			restart = true;
 			regs->ARM_r0 = regs->ARM_ORIG_r0;
 			regs->ARM_pc = restart_addr;
 			break;
@@ -593,8 +594,16 @@ void arch_do_signal_or_restart(struct pt_regs *regs)
 	} else {
 		/* no handler */
 		restore_saved_sigmask();
-		if (unlikely(restart) && regs->ARM_pc == restart_addr)
+		if (unlikely(restart) && regs->ARM_pc == restart_addr) {
+			/*
+			 * These flags will be picked up in the syscall invocation code,
+			 * and a local restart will be issued without exiting the kernel.
+			 */
+			set_thread_flag(TIF_LOCAL_RESTART);
+			if (restart_block)
+				set_thread_flag(TIF_LOCAL_RESTART_BLOCK);
 			regs->ARM_pc = continue_addr;
+		}
 	}
 	return;
 }

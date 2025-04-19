@@ -150,6 +150,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
 #define TIF_USING_IWMMXT	17
 #define TIF_MEMDIE		18	/* is terminating due to OOM killer */
 #define TIF_RESTORE_SIGMASK	19
+#define TIF_LOCAL_RESTART	20
+#define TIF_LOCAL_RESTART_BLOCK	21
 
 #define _TIF_SIGPENDING		(1 << TIF_SIGPENDING)
 #define _TIF_NEED_RESCHED	(1 << TIF_NEED_RESCHED)
@@ -157,6 +159,8 @@ extern int vfp_restore_user_hwstate(struct user_vfp *,
 #define _TIF_UPROBE		(1 << TIF_UPROBE)
 #define _TIF_NOTIFY_SIGNAL	(1 << TIF_NOTIFY_SIGNAL)
 #define _TIF_USING_IWMMXT	(1 << TIF_USING_IWMMXT)
+#define _TIF_LOCAL_RESTART	(1 << TIF_LOCAL_RESTART)
+#define _TIF_LOCAL_RESTART_BLOCK (1 << TIF_LOCAL_RESTART_BLOCK)
 
 #define _TIF_WORK_MASK		(_TIF_NEED_RESCHED | _TIF_SIGPENDING | \
 				 _TIF_NOTIFY_RESUME | _TIF_UPROBE | \
