@@ -7075,24 +7075,27 @@ static struct nfs4_unlockdata *nfs4_alloc_unlockdata(struct file_lock *fl,
 	struct nfs4_state *state = lsp->ls_state;
 	struct inode *inode = state->inode;
 	struct nfs_lock_context *l_ctx;
+	struct nfs_open_context *open_ctx;
 
 	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (p == NULL)
 		return NULL;
 	l_ctx = nfs_get_lock_context(ctx);
-	if (!IS_ERR(l_ctx)) {
+	if (!IS_ERR(l_ctx))
 		p->l_ctx = l_ctx;
-	} else {
-		kfree(p);
-		return NULL;
-	}
+	else
+		goto out_free;
+	/* Ensure we don't close file until we're done freeing locks! */
+	open_ctx = get_nfs_open_context(ctx);
+	if (open_ctx)
+		p->ctx = open_ctx;
+	else
+		goto out_free;
 	p->arg.fh = NFS_FH(inode);
 	p->arg.fl = &p->fl;
 	p->arg.seqid = seqid;
 	p->res.seqid = seqid;
 	p->lsp = lsp;
-	/* Ensure we don't close file until we're done freeing locks! */
-	p->ctx = get_nfs_open_context(ctx);
 	locks_init_lock(&p->fl);
 	locks_copy_lock(&p->fl, fl);
 	p->server = NFS_SERVER(inode);
@@ -7100,6 +7103,9 @@ static struct nfs4_unlockdata *nfs4_alloc_unlockdata(struct file_lock *fl,
 	nfs4_stateid_copy(&p->arg.stateid, &lsp->ls_stateid);
 	spin_unlock(&state->state_lock);
 	return p;
+out_free:
+	kfree(p);
+	return NULL;
 }
 
 static void nfs4_locku_release_calldata(void *data)
@@ -7327,6 +7333,8 @@ static struct nfs4_lockdata *nfs4_alloc_lockdata(struct file_lock *fl,
 	p->lsp = lsp;
 	p->server = server;
 	p->ctx = get_nfs_open_context(ctx);
+	if (!p->ctx)
+		goto out_free_seqid;
 	locks_init_lock(&p->fl);
 	locks_copy_lock(&p->fl, fl);
 	return p;
