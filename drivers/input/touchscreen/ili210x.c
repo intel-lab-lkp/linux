@@ -586,8 +586,8 @@ static const u8 *ili251x_firmware_to_buffer(const struct firmware *fw,
 					    u16 *ac_end, u16 *df_end)
 {
 	const struct ihex_binrec *rec;
-	u32 fw_addr, fw_last_addr = 0;
-	u16 fw_len;
+	u32 fw_addr = 0, fw_last_addr = 0;
+	u16 fw_len = 0;
 
 	/*
 	 * The firmware ihex blob can never be bigger than 64 kiB, so make this
