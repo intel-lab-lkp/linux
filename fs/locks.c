@@ -12,7 +12,7 @@
  * If multiple threads attempt to lock the same byte (or flock the same file)
  * only one can be granted the lock, and other must wait their turn.
  * The first lock has been "applied" or "granted", the others are "waiting"
- * and are "blocked" by the "applied" lock..
+ * and are "blocked" by the "applied" lock.
  *
  * Waiting and applied locks are all kept in trees whose properties are:
  *
@@ -43,7 +43,7 @@
  * waiting for the lock so it can continue handling as follows: if the
  * root of the tree applies, we do so (3).  If it doesn't, it must
  * conflict with some applied lock.  We remove (wake up) all of its children
- * (2), and add it is a new leaf to the tree rooted in the applied
+ * (2), and add it as a new leaf to the tree rooted in the applied
  * lock (1).  We then repeat the process recursively with those
  * children.
  *
@@ -1327,7 +1327,7 @@ retry:
 	 * replacing. If new lock(s) need to be inserted all modifications are
 	 * done below this, so it's safe yet to bail out.
 	 */
-	error = -ENOLCK; /* "no luck" */
+	error = -ENOLCK; /* "no lock" */
 	if (right && left == right && !new_fl2)
 		goto out;
 
@@ -2862,7 +2862,7 @@ static int locks_show(struct seq_file *f, void *v)
 		return 0;
 
 	/* View this crossed linked list as a binary tree, the first member of flc_blocked_requests
-	 * is the left child of current node, the next silibing in flc_blocked_member is the
+	 * is the left child of current node, the next sibling in flc_blocked_member is the
 	 * right child, we can alse get the parent of current node from flc_blocker, so this
 	 * question becomes traversal of a binary tree
 	 */
