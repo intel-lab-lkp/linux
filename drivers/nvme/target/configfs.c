@@ -2128,7 +2128,7 @@ static ssize_t nvmet_host_dhchap_key_store(struct config_item *item,
 	return ret < 0 ? ret : count;
 }
 
-CONFIGFS_ATTR(nvmet_host_, dhchap_key);
+CONFIGFS_ATTR_PERM(nvmet_host_, dhchap_key, S_IRUSR | S_IWUSR);
 
 static ssize_t nvmet_host_dhchap_ctrl_key_show(struct config_item *item,
 		char *page)
@@ -2161,7 +2161,7 @@ static ssize_t nvmet_host_dhchap_ctrl_key_store(struct config_item *item,
 	return ret < 0 ? ret : count;
 }
 
-CONFIGFS_ATTR(nvmet_host_, dhchap_ctrl_key);
+CONFIGFS_ATTR_PERM(nvmet_host_, dhchap_ctrl_key, S_IRUSR | S_IWUSR);
 
 static ssize_t nvmet_host_dhchap_hash_show(struct config_item *item,
 		char *page)
@@ -2187,7 +2187,7 @@ static ssize_t nvmet_host_dhchap_hash_store(struct config_item *item,
 	return count;
 }
 
-CONFIGFS_ATTR(nvmet_host_, dhchap_hash);
+CONFIGFS_ATTR_PERM(nvmet_host_, dhchap_hash, S_IRUSR | S_IWUSR);
 
 static ssize_t nvmet_host_dhchap_dhgroup_show(struct config_item *item,
 		char *page)
@@ -2217,7 +2217,7 @@ static ssize_t nvmet_host_dhchap_dhgroup_store(struct config_item *item,
 	return count;
 }
 
-CONFIGFS_ATTR(nvmet_host_, dhchap_dhgroup);
+CONFIGFS_ATTR_PERM(nvmet_host_, dhchap_dhgroup, S_IRUSR | S_IWUSR);
 
 static struct configfs_attribute *nvmet_host_attrs[] = {
 	&nvmet_host_attr_dhchap_key,
