@@ -772,8 +772,13 @@ static inline void prep_compound_head(struct page *page, unsigned int order)
 		atomic_set(&folio->_nr_pages_mapped, 0);
 	if (IS_ENABLED(CONFIG_MM_ID)) {
 		folio->_mm_ids = 0;
-		folio->_mm_id_mapcount[0] = -1;
-		folio->_mm_id_mapcount[1] = -1;
+		/*
+		 * One-shot initialization of both mapcount slots to -1.
+		 * Using 'unsigned long' ensures cross-arch compatibility:
+		 * - 32-bit: Fills both short slots (0xFFFF each)
+		 * - 64-bit: Fills both int slots (0xFFFFFFFF each)
+		 */
+		folio->_mm_id_mapcounts = -1UL;
 	}
 	if (IS_ENABLED(CONFIG_64BIT) || order > 1) {
 		atomic_set(&folio->_pincount, 0);

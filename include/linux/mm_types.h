@@ -363,6 +363,7 @@ typedef unsigned short mm_id_t;
  * @_mm_id: Do not use outside of rmap code.
  * @_mm_ids: Do not use outside of rmap code.
  * @_mm_id_mapcount: Do not use outside of rmap code.
+ * @_mm_id_mapcounts: Do not use outside of rmap code.
  * @_hugetlb_subpool: Do not use directly, use accessor in hugetlb.h.
  * @_hugetlb_cgroup: Do not use directly, use accessor in hugetlb_cgroup.h.
  * @_hugetlb_cgroup_rsvd: Do not use directly, use accessor in hugetlb_cgroup.h.
@@ -435,7 +436,10 @@ struct folio {
 					atomic_t _entire_mapcount;
 					atomic_t _pincount;
 #endif /* CONFIG_64BIT */
-					mm_id_mapcount_t _mm_id_mapcount[2];
+					union {
+						mm_id_mapcount_t _mm_id_mapcount[2];
+						unsigned long _mm_id_mapcounts;
+					};
 					union {
 						mm_id_t _mm_id[2];
 						unsigned long _mm_ids;

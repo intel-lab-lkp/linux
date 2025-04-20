@@ -976,12 +976,11 @@ static int free_tail_page_prepare(struct page *head_page, struct page *page)
 			goto out;
 		}
 		if (IS_ENABLED(CONFIG_MM_ID)) {
-			if (unlikely(folio->_mm_id_mapcount[0] != -1)) {
-				bad_page(page, "nonzero mm mapcount 0");
-				goto out;
-			}
-			if (unlikely(folio->_mm_id_mapcount[1] != -1)) {
-				bad_page(page, "nonzero mm mapcount 1");
+			if (unlikely(folio->_mm_id_mapcounts != -1UL)) {
+				if (folio->_mm_id_mapcount[0] != -1)
+					bad_page(page, "nonzero mm mapcount 0");
+				if (folio->_mm_id_mapcount[1] != -1)
+					bad_page(page, "nonzero mm mapcount 1");
 				goto out;
 			}
 		}

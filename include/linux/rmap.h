@@ -231,8 +231,7 @@ static __always_inline void folio_set_large_mapcount(struct folio *folio,
 {
 	__folio_large_mapcount_sanity_checks(folio, mapcount, vma->vm_mm->mm_id);
 
-	VM_WARN_ON_ONCE(folio_mm_id(folio, 0) != MM_ID_DUMMY);
-	VM_WARN_ON_ONCE(folio_mm_id(folio, 1) != MM_ID_DUMMY);
+	VM_WARN_ON_ONCE(folio->_mm_ids != MM_ID_DUMMY);
 
 	/* Note: mapcounts start at -1. */
 	atomic_set(&folio->_large_mapcount, mapcount - 1);
