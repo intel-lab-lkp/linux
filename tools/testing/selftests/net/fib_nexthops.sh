@@ -31,6 +31,7 @@ IPV4_TESTS="
 	ipv4_compat_mode
 	ipv4_fdb_grp_fcnal
 	ipv4_mpath_select
+	ipv4_mpath_balance
 	ipv4_torture
 	ipv4_res_torture
 "
@@ -45,6 +46,7 @@ IPV6_TESTS="
 	ipv6_compat_mode
 	ipv6_fdb_grp_fcnal
 	ipv6_mpath_select
+	ipv6_mpath_balance
 	ipv6_torture
 	ipv6_res_torture
 "
@@ -2108,6 +2110,87 @@ ipv4_res_torture()
 
 	# if we did not crash, success
 	log_test 0 0 "IPv4 resilient nexthop group torture test"
+}
+
+# Install a prio qdisc with separate bands counting IPv4 and IPv6 SYNs
+tc_add_syn_counter() {
+	local -r dev=$1
+
+	# qdisc with band 1 for no-match, band 2 for ipv4, band 3 for ipv6
+	ip netns exec $me tc qdisc add dev $dev root handle 1: prio bands 3 \
+		priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+	ip netns exec $me tc qdisc add dev $dev parent 1:1 handle 2: pfifo
+	ip netns exec $me tc qdisc add dev $dev parent 1:2 handle 4: pfifo
+	ip netns exec $me tc qdisc add dev $dev parent 1:3 handle 6: pfifo
+
+	# ipv4 filter on SYN flag set: band 2
+	ip netns exec $me tc filter add dev $dev parent 1: protocol ip u32 \
+		match ip protocol 6 0xff \
+		match ip dport 8000 0xffff \
+		match u8 0x02 0xff at 33 \
+		flowid 1:2
+
+	# ipv6 filter on SYN flag set: band 3
+	ip netns exec $me tc filter add dev $dev parent 1: protocol ipv6 u32 \
+		match ip6 protocol 6 0xff \
+		match ip6 dport 8000 0xffff \
+		match u8 0x02 0xff at 53 \
+		flowid 1:3
+}
+
+tc_get_syn_counter() {
+	ip netns exec $me tc -j -s qdisc show dev $1 handle $2 | jq .[0].packets
+}
+
+ip_mpath_balance() {
+	local -r ipver="-$1"
+	local -r daddr=$2
+	local -r handle="$1:"
+	local -r num_conn=20
+
+	tc_add_syn_counter veth1
+	tc_add_syn_counter veth3
+
+	for i in $(seq 1 $num_conn); do
+		ip netns exec $remote nc $ipver -l -p 8000 >/dev/null &
+		echo -n a | ip netns exec $me nc $ipver -q 0 $daddr 8000
+	done
+
+	local -r syn0="$(tc_get_syn_counter veth1 $handle)"
+	local -r syn1="$(tc_get_syn_counter veth3 $handle)"
+	local -r syns=$((syn0+syn1))
+
+	[ "$VERBOSE" = "1" ] && echo "multipath: syns seen: ($syn0,$syn1)"
+
+	[[ $syns -ge $num_conn ]] && [[ $syn0 -gt 0 ]] && [[ $syn1 -gt 0 ]]
+}
+
+ipv4_mpath_balance()
+{
+	$IP route add 172.16.101.1 \
+		nexthop via 172.16.1.2 \
+		nexthop via 172.16.2.2
+
+	ip netns exec $me \
+		sysctl -q -w net.ipv4.fib_multipath_hash_policy=1
+
+	ip_mpath_balance 4 172.16.101.1
+
+	log_test $? 0 "Multipath loadbalance"
+}
+
+ipv6_mpath_balance()
+{
+	$IP route add 2001:db8:101::1\
+		nexthop via 2001:db8:91::2 \
+		nexthop via 2001:db8:92::2
+
+	ip netns exec $me \
+		sysctl -q -w net.ipv6.fib_multipath_hash_policy=1
+
+	ip_mpath_balance 6 2001:db8:101::1
+
+	log_test $? 0 "Multipath loadbalance"
 }
 
 basic()
