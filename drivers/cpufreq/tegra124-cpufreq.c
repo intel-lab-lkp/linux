@@ -211,5 +211,7 @@ static int __init tegra_cpufreq_init(void)
 }
 module_init(tegra_cpufreq_init);
 
+MODULE_SOFTDEP("pre: cpufreq-dt");
 MODULE_AUTHOR("Tuomas Tynkkynen <ttynkkynen@nvidia.com>");
 MODULE_DESCRIPTION("cpufreq driver for NVIDIA Tegra124");
+MODULE_LICENSE("GPL");
