@@ -95,7 +95,6 @@ static inline void device_set_wakeup_path(struct device *dev)
 }
 
 /* drivers/base/power/wakeup.c */
-extern struct wakeup_source *wakeup_source_create(const char *name);
 extern void wakeup_source_destroy(struct wakeup_source *ws);
 extern void wakeup_source_add(struct wakeup_source *ws);
 extern void wakeup_source_remove(struct wakeup_source *ws);
@@ -127,11 +126,6 @@ static inline void device_set_wakeup_capable(struct device *dev, bool capable)
 static inline bool device_can_wakeup(struct device *dev)
 {
 	return dev->power.can_wakeup;
-}
-
-static inline struct wakeup_source *wakeup_source_create(const char *name)
-{
-	return NULL;
 }
 
 static inline void wakeup_source_destroy(struct wakeup_source *ws) {}
