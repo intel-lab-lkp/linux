@@ -769,13 +769,17 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 			break;
 		/* Nothing new?  Wait for eventfd to tell us they refilled. */
 		if (head == vq->num) {
+			/* If interrupted while doing busy polling, requeue
+			 * the handler to be fair handle_rx as well as other
+			 * tasks waiting on cpu
+			 */
 			if (unlikely(busyloop_intr)) {
 				vhost_poll_queue(&vq->poll);
-			} else if (unlikely(vhost_enable_notify(&net->dev,
-								vq))) {
-				vhost_disable_notify(&net->dev, vq);
-				continue;
 			}
+			/* Kicks are disabled at this point, break loop and
+			 * process any remaining batched packets. Queue will
+			 * be re-enabled afterwards.
+			 */
 			break;
 		}
 
@@ -825,7 +829,14 @@ done:
 		++nvq->done_idx;
 	} while (likely(!vhost_exceeds_weight(vq, ++sent_pkts, total_len)));
 
+	/* Kicks are still disabled, dispatch any remaining batched msgs. */
 	vhost_tx_batch(net, nvq, sock, &msg);
+
+	/* All of our work has been completed; however, before leaving the
+	 * TX handler, do one last check for work, and requeue handler if
+	 * necessary. If there is no work, queue will be reenabled.
+	 */
+	vhost_net_busy_poll_try_queue(net, vq);
 }
 
 static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
