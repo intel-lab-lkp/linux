@@ -1145,7 +1145,7 @@ void dump_unreclaimable_slab(void)
 	}
 
 	pr_info("Unreclaimable slab info:\n");
-	pr_info("Name                      Used          Total\n");
+	pr_info("Name                            Active_objs   Total_objs       Memory\n");
 
 	list_for_each_entry(s, &slab_caches, list) {
 		if (s->flags & SLAB_RECLAIM_ACCOUNT)
@@ -1154,9 +1154,10 @@ void dump_unreclaimable_slab(void)
 		get_slabinfo(s, &sinfo);
 
 		if (sinfo.num_objs > 0)
-			pr_info("%-17s %10luKB %10luKB\n", s->name,
-				(sinfo.active_objs * s->size) / 1024,
-				(sinfo.num_objs * s->size) / 1024);
+			pr_info("%-30s %10luKB %10luKB %10luKB\n", s->name,
+				(sinfo.active_objs * s->size) >> 10,
+				(sinfo.num_objs * s->size) >> 10,
+				sinfo.num_slabs << (sinfo.cache_order + PAGE_SHIFT - 10));
 	}
 	mutex_unlock(&slab_mutex);
 }
