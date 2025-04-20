@@ -173,13 +173,19 @@ static ssize_t ad9832_write_powerdown(struct device *dev, struct device_attribut
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad9832_state *st = iio_priv(indio_dev);
 	int ret;
-	unsigned long val;
+	bool val;
+	bool cur;
 
-	ret = kstrtoul(buf, 10, &val);
+	ret = kstrtobool(buf, &val);
 	if (ret)
-		goto error_ret;
+		return ret;
 
 	mutex_lock(&st->lock);
+
+	cur = !!(st->ctrl_src & AD9832_SLEEP);
+	if (val == cur)
+		goto unlock;
+
 	if (val)
 		st->ctrl_src |= AD9832_SLEEP;
 	else
@@ -189,10 +195,10 @@ static ssize_t ad9832_write_powerdown(struct device *dev, struct device_attribut
 	st->data = cpu_to_be16((AD9832_CMD_SLEEPRESCLR << CMD_SHIFT) |
 				st->ctrl_src);
 	ret = spi_sync(st->spi, &st->msg);
-	mutex_unlock(&st->lock);
 
-error_ret:
-	return ret ? ret : len;
+unlock:
+	mutex_unlock(&st->lock);
+	return len;
 }
 
 static ssize_t ad9832_write(struct device *dev, struct device_attribute *attr,
