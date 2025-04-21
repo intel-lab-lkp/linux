@@ -146,7 +146,19 @@ allOf:
       properties:
         compatible:
           contains:
-            pattern: '^qcom,adreno-[3-5][0-9][0-9]\.[0-9]+$'
+            enum:
+              - qcom,adreno-305.18
+              - qcom,adreno-306.0
+              - qcom,adreno-306.32
+              - qcom,adreno-320.2
+              - qcom,adreno-330.1
+              - qcom,adreno-330.2
+              - qcom,adreno-405.0
+              - qcom,adreno-508.0
+              - qcom,adreno-509.0
+              - qcom,adreno-512.0
+              - qcom,adreno-530.2
+              - qcom,adreno-540.1
 
     then:
       properties:
@@ -175,6 +187,75 @@ allOf:
                 description: GPU RB Core Power Reduction clock
           minItems: 2
           maxItems: 7
+
+      required:
+        - clocks
+        - clock-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,adreno-505.0
+              - qcom,adreno-506.0
+
+    then:
+      properties:
+        clocks:
+          minItems: 6
+          maxItems: 6
+
+        clock-names:
+          items:
+            - const: alt_mem_iface
+              description: GPU Alternative Memory Interface clock
+            - const: alwayson
+              description: GPU Always-On clock
+            - const: core
+              description: GPU Core clock
+            - const: iface
+              description: GPU Interface clock
+            - const: mem_iface
+              description: GPU Memory Interface clock
+            - const: rbbmtimer
+              description: GPU RBBM Timer for Adreno 5xx series
+          minItems: 6
+          maxItems: 6
+
+      required:
+        - clocks
+        - clock-names
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,adreno-510.0
+
+    then:
+      properties:
+        clocks:
+          minItems: 6
+          maxItems: 6
+
+        clock-names:
+          items:
+            - const: alwayson
+              description: GPU Always-On clock
+            - const: core
+              description: GPU Core clock
+            - const: iface
+              description: GPU Interface clock
+            - const: mem
+              description: GPU Memory clock
+            - const: mem_iface
+              description: GPU Memory Interface clock
+            - const: rbbmtimer
+              description: GPU RBBM Timer for Adreno 5xx series
+          minItems: 6
+          maxItems: 6
 
       required:
         - clocks
