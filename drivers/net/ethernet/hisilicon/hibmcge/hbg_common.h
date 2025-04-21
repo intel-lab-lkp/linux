@@ -84,6 +84,8 @@ enum hbg_hw_event_type {
 	HBG_HW_EVENT_INIT, /* driver is loading */
 	HBG_HW_EVENT_RESET,
 	HBG_HW_EVENT_CORE_RESET,
+	HBG_HW_EVENT_SERDES_LOOP_ENABLE,
+	HBG_HW_EVENT_SERDES_LOOP_DISABLE = 5,
 };
 
 struct hbg_dev_specs {

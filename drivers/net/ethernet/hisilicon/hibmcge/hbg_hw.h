@@ -59,5 +59,6 @@ void hbg_hw_set_mac_filter_enable(struct hbg_priv *priv, u32 enable);
 void hbg_hw_set_pause_enable(struct hbg_priv *priv, u32 tx_en, u32 rx_en);
 void hbg_hw_get_pause_enable(struct hbg_priv *priv, u32 *tx_en, u32 *rx_en);
 void hbg_hw_set_rx_pause_mac_addr(struct hbg_priv *priv, u64 mac_addr);
+void hbg_hw_loop_enable(struct hbg_priv *priv, u32 enable);
 
 #endif

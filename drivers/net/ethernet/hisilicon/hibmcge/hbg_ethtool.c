@@ -4,6 +4,7 @@
 #include <linux/ethtool.h>
 #include <linux/phy.h>
 #include <linux/rtnetlink.h>
+#include <net/selftests.h>
 #include "hbg_common.h"
 #include "hbg_err.h"
 #include "hbg_ethtool.h"
@@ -339,12 +340,55 @@ void hbg_update_stats(struct hbg_priv *priv)
 				 ARRAY_SIZE(hbg_ethtool_ctrl_stats_info));
 }
 
+static int hbg_test_mac_loopback_enable(struct net_device *ndev,
+					bool enable)
+{
+	struct hbg_priv *priv = netdev_priv(ndev);
+
+	hbg_hw_loop_enable(priv, enable);
+	return 0;
+}
+
+static int hbg_test_serdes_loopback_enable(struct net_device *ndev,
+					   bool enable)
+{
+	struct hbg_priv *priv = netdev_priv(ndev);
+	u32 event = enable ? HBG_HW_EVENT_SERDES_LOOP_ENABLE :
+			     HBG_HW_EVENT_SERDES_LOOP_DISABLE;
+
+	return hbg_hw_event_notify(priv, event);
+}
+
+static const struct net_test hbg_test = {
+	.extra_flags = NET_EXTRA_CARRIER_TEST |
+		       NET_EXTRA_FULL_DUPLEX_TEST |
+		       NET_EXTRA_PHY_TEST,
+	.entries = {
+		NET_TEST_E("MAC internal loopback",
+			   hbg_test_mac_loopback_enable,
+			   NET_TEST_UDP_MAX_MTU | NET_TEST_TCP),
+		NET_TEST_E("Serdes internal loopback",
+			   hbg_test_serdes_loopback_enable,
+			   NET_TEST_UDP_MAX_MTU | NET_TEST_TCP),
+	},
+	.count = 2,
+};
+
+static void hbg_ethtool_self_test(struct net_device *netdev,
+				  struct ethtool_test *etest,
+				  u64 *buf)
+{
+	net_selftest_custom(netdev, &hbg_test, etest, buf);
+}
+
 static int hbg_ethtool_get_sset_count(struct net_device *netdev, int stringset)
 {
-	if (stringset != ETH_SS_STATS)
-		return -EOPNOTSUPP;
+	if (stringset == ETH_SS_STATS)
+		return ARRAY_SIZE(hbg_ethtool_stats_info);
+	else if (stringset == ETH_SS_TEST)
+		return net_selftest_get_count_custom(&hbg_test);
 
-	return ARRAY_SIZE(hbg_ethtool_stats_info);
+	return -EOPNOTSUPP;
 }
 
 static void hbg_ethtool_get_strings(struct net_device *netdev,
@@ -352,11 +396,12 @@ static void hbg_ethtool_get_strings(struct net_device *netdev,
 {
 	u32 i;
 
-	if (stringset != ETH_SS_STATS)
-		return;
+	if (stringset == ETH_SS_STATS)
+		for (i = 0; i < ARRAY_SIZE(hbg_ethtool_stats_info); i++)
+			ethtool_puts(&data, hbg_ethtool_stats_info[i].name);
+	else if (stringset == ETH_SS_TEST)
+		net_selftest_get_strings_custom(&hbg_test, data);
 
-	for (i = 0; i < ARRAY_SIZE(hbg_ethtool_stats_info); i++)
-		ethtool_puts(&data, hbg_ethtool_stats_info[i].name);
 }
 
 static void hbg_ethtool_get_stats(struct net_device *netdev,
@@ -488,6 +533,7 @@ static const struct ethtool_ops hbg_ethtool_ops = {
 	.get_eth_mac_stats	= hbg_ethtool_get_eth_mac_stats,
 	.get_eth_ctrl_stats	= hbg_ethtool_get_eth_ctrl_stats,
 	.get_rmon_stats		= hbg_ethtool_get_rmon_stats,
+	.self_test		= hbg_ethtool_self_test,
 };
 
 void hbg_ethtool_set_ops(struct net_device *netdev)

@@ -258,7 +258,8 @@ static bool hbg_rx_check_l3l4_error(struct hbg_priv *priv,
 		break;
 	case HBG_L4_ZERO_PORT_NUM:
 		priv->stats.rx_desc_l4_zero_port_num_cnt++;
-		return false;
+		/* Don't drop packets whose L4 port number is 0. */
+		break;
 	default:
 		priv->stats.rx_desc_l4_other_cnt++;
 		return false;
