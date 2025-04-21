@@ -981,6 +981,15 @@ static int __init arch_hw_breakpoint_init(void)
 {
 	int ret;
 
+	/*
+	 * Maximum supported breakpoint and watchpoint registers must
+	 * always be the same - regardless of actual register numbers
+	 * found on a given platform. This is because the user facing
+	 * ptrace structure 'user_hwdebug_state' actually depends on
+	 * these macros to be the same.
+	 */
+	BUILD_BUG_ON(ARM_MAX_BRP != ARM_MAX_WRP);
+
 	core_num_brps = get_num_brps();
 	core_num_wrps = get_num_wrps();
 

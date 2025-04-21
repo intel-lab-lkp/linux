@@ -99,6 +99,14 @@ struct user_fpsimd_state {
 	__u32		__reserved[2];
 };
 
+/*
+ * Maximum number of breakpoint and watchpoint registers
+ * on the platform. These macros get used both in kernel
+ * and user space as well.
+ */
+#define ARM_MAX_BRP		16
+#define ARM_MAX_WRP		16
+
 struct user_hwdebug_state {
 	__u32		dbg_info;
 	__u32		pad;
@@ -106,7 +114,7 @@ struct user_hwdebug_state {
 		__u64	addr;
 		__u32	ctrl;
 		__u32	pad;
-	}		dbg_regs[16];
+	}		dbg_regs[ARM_MAX_BRP];	/* Or ARM_MAX_WRP */
 };
 
 /* SVE/FP/SIMD state (NT_ARM_SVE & NT_ARM_SSVE) */

@@ -75,13 +75,6 @@ static inline void decode_ctrl_reg(u32 reg,
 #define ARM_KERNEL_STEP_ACTIVE	1
 #define ARM_KERNEL_STEP_SUSPEND	2
 
-/*
- * Limits.
- * Changing these will require modifications to the register accessors.
- */
-#define ARM_MAX_BRP		16
-#define ARM_MAX_WRP		16
-
 /* Virtual debug register bases. */
 #define AARCH64_DBG_REG_BVR	0
 #define AARCH64_DBG_REG_BCR	(AARCH64_DBG_REG_BVR + ARM_MAX_BRP)
