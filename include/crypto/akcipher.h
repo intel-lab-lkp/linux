@@ -10,6 +10,7 @@
 
 #include <linux/atomic.h>
 #include <linux/crypto.h>
+#include <linux/overflow.h>
 
 /**
  * struct akcipher_request - public key cipher request
@@ -184,7 +185,8 @@ static inline struct akcipher_request *akcipher_request_alloc(
 {
 	struct akcipher_request *req;
 
-	req = kmalloc(sizeof(*req) + crypto_akcipher_reqsize(tfm), gfp);
+	req = kmalloc(size_add(sizeof(*req),
+			       crypto_akcipher_reqsize(tfm)), gfp);
 	if (likely(req))
 		akcipher_request_set_tfm(req, tfm);
 
