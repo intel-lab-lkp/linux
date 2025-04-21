@@ -34,6 +34,7 @@
 #endif
 #include <asm/ultravisor.h>
 #include <asm/setup.h>
+#include <linux/entry-kvm.h>
 
 #include "timing.h"
 #include "../mm/mmu_decl.h"
@@ -80,24 +81,17 @@ int kvmppc_prepare_to_enter(struct kvm_vcpu *vcpu)
 {
 	int r;
 
+	/* use generic framework to handle need resched and signals */
+	if (__xfer_to_guest_mode_work_pending()) {
+		r = xfer_to_guest_mode_handle_work(vcpu);
+		if (r)
+			return r;
+	}
+
 	WARN_ON(irqs_disabled());
 	hard_irq_disable();
 
 	while (true) {
-		if (need_resched()) {
-			local_irq_enable();
-			cond_resched();
-			hard_irq_disable();
-			continue;
-		}
-
-		if (signal_pending(current)) {
-			kvmppc_account_exit(vcpu, SIGNAL_EXITS);
-			vcpu->run->exit_reason = KVM_EXIT_INTR;
-			r = -EINTR;
-			break;
-		}
-
 		vcpu->mode = IN_GUEST_MODE;
 
 		/*

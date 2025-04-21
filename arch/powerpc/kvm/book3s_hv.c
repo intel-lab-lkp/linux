@@ -80,8 +80,8 @@
 #include <asm/ultravisor.h>
 #include <asm/dtl.h>
 #include <asm/plpar_wrappers.h>
-
 #include <trace/events/ipi.h>
+#include <linux/entry-kvm.h>
 
 #include "book3s.h"
 #include "book3s_hv.h"
@@ -4901,7 +4901,7 @@ int kvmhv_run_single_vcpu(struct kvm_vcpu *vcpu, u64 time_limit,
 	}
 
 	if (need_resched())
-		cond_resched();
+		schedule();
 
 	kvmppc_update_vpas(vcpu);
 
@@ -5097,10 +5097,11 @@ static int kvmppc_vcpu_run_hv(struct kvm_vcpu *vcpu)
 		return -EINVAL;
 	}
 
-	/* No need to go into the guest when all we'll do is come back out */
-	if (signal_pending(current)) {
-		run->exit_reason = KVM_EXIT_INTR;
-		return -EINTR;
+	/* use generic frameworks to handle signals, need_resched  */
+	if (__xfer_to_guest_mode_work_pending()) {
+		r = xfer_to_guest_mode_handle_work(vcpu);
+		if (r)
+			return r;
 	}
 
 #ifdef CONFIG_PPC_TRANSACTIONAL_MEM
