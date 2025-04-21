@@ -112,7 +112,7 @@ static bool use_mcq_mode = true;
 
 static bool is_mcq_supported(struct ufs_hba *hba)
 {
-	return hba->mcq_sup && use_mcq_mode;
+	return hba->mcq_sup && use_mcq_mode && (hba->caps & UFSHCD_CAP_MCQ_EN);
 }
 
 module_param(use_mcq_mode, bool, 0644);
@@ -10389,6 +10389,7 @@ int ufshcd_alloc_host(struct device *dev, struct ufs_hba **hba_handle)
 	hba->dev = dev;
 	hba->dev_ref_clk_freq = REF_CLK_FREQ_INVAL;
 	hba->nop_out_timeout = NOP_OUT_TIMEOUT;
+	hba->caps |= UFSHCD_CAP_MCQ_EN;
 	ufshcd_set_sg_entry_size(hba, sizeof(struct ufshcd_sg_entry));
 	INIT_LIST_HEAD(&hba->clk_list_head);
 	spin_lock_init(&hba->outstanding_lock);

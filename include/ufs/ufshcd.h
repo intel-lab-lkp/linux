@@ -771,6 +771,12 @@ enum ufshcd_caps {
 	 * WriteBooster when scaling the clock down.
 	 */
 	UFSHCD_CAP_WB_WITH_CLK_SCALING			= 1 << 12,
+
+	/*
+	 * This capability allows the host controller driver to use the
+	 * multi-circular queue, if it is present
+	 */
+	UFSHCD_CAP_MCQ_EN				= 1 << 13,
 };
 
 struct ufs_hba_variant_params {
