@@ -2205,13 +2205,16 @@ ahd_handle_seqint(struct ahd_softc *ahd, u_int intstat)
 			ahd_print_path(ahd, scb);
 			printk("data overrun detected %s.  Tag == 0x%x.\n",
 			       ahd_lookup_phase_entry(lastphase)->phasemsg,
-			       SCB_GET_TAG(scb));
+			       scb != NULL ? SCB_GET_TAG(scb) : 0);
 			ahd_print_path(ahd, scb);
 			printk("%s seen Data Phase.  Length = %ld.  "
 			       "NumSGs = %d.\n",
 			       ahd_inb(ahd, SEQ_FLAGS) & DPHASE
 			       ? "Have" : "Haven't",
-			       ahd_get_transfer_length(scb), scb->sg_count);
+			       scb != NULL ? ahd_get_transfer_length(scb) : -1,
+			       scb != NULL ? scb->sg_count : -1);
+			if (scb == NULL)
+				break;
 			ahd_dump_sglist(scb);
 		}
 #endif
