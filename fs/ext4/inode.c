@@ -5653,6 +5653,7 @@ int ext4_getattr(struct mnt_idmap *idmap, const struct path *path,
 	struct inode *inode = d_inode(path->dentry);
 	struct ext4_inode *raw_inode;
 	struct ext4_inode_info *ei = EXT4_I(inode);
+	struct block_device *bdev = inode->i_sb->s_bdev;
 	unsigned int flags;
 
 	if ((request_mask & STATX_BTIME) &&
@@ -5672,8 +5673,6 @@ int ext4_getattr(struct mnt_idmap *idmap, const struct path *path,
 
 		stat->result_mask |= STATX_DIOALIGN;
 		if (dio_align == 1) {
-			struct block_device *bdev = inode->i_sb->s_bdev;
-
 			/* iomap defaults */
 			stat->dio_mem_align = bdev_dma_alignment(bdev) + 1;
 			stat->dio_offset_align = bdev_logical_block_size(bdev);
@@ -5695,6 +5694,9 @@ int ext4_getattr(struct mnt_idmap *idmap, const struct path *path,
 		generic_fill_statx_atomic_writes(stat, awu_min, awu_max);
 	}
 
+	if (S_ISREG(inode->i_mode) && bdev_write_zeroes_unmap(bdev))
+		stat->attributes |= STATX_ATTR_WRITE_ZEROES_UNMAP;
+
 	flags = ei->i_flags & EXT4_FL_USER_VISIBLE;
 	if (flags & EXT4_APPEND_FL)
 		stat->attributes |= STATX_ATTR_APPEND;
@@ -5714,7 +5716,8 @@ int ext4_getattr(struct mnt_idmap *idmap, const struct path *path,
 				  STATX_ATTR_ENCRYPTED |
 				  STATX_ATTR_IMMUTABLE |
 				  STATX_ATTR_NODUMP |
-				  STATX_ATTR_VERITY);
+				  STATX_ATTR_VERITY |
+				  STATX_ATTR_WRITE_ZEROES_UNMAP);
 
 	generic_fillattr(idmap, request_mask, inode, stat);
 	return 0;

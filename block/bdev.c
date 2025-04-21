@@ -1304,6 +1304,10 @@ void bdev_statx(struct path *path, struct kstat *stat,
 			queue_atomic_write_unit_max_bytes(bd_queue));
 	}
 
+	if (bdev_write_zeroes_unmap(bdev))
+		stat->attributes |= STATX_ATTR_WRITE_ZEROES_UNMAP;
+	stat->attributes_mask |= STATX_ATTR_WRITE_ZEROES_UNMAP;
+
 	stat->blksize = bdev_io_min(bdev);
 
 	blkdev_put_no_open(bdev);
