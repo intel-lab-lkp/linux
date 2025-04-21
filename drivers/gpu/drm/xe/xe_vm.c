@@ -27,7 +27,9 @@
 #include "xe_device.h"
 #include "xe_drm_client.h"
 #include "xe_exec_queue.h"
+#include "xe_gt.h"
 #include "xe_gt_pagefault.h"
+#include "xe_gt_pagefault_types.h"
 #include "xe_gt_tlb_invalidation.h"
 #include "xe_migrate.h"
 #include "xe_pat.h"
@@ -776,6 +778,87 @@ int xe_vm_userptr_check_repin(struct xe_vm *vm)
 {
 	return (list_empty_careful(&vm->userptr.repin_list) &&
 		list_empty_careful(&vm->userptr.invalidated)) ? 0 : -EAGAIN;
+}
+
+static struct xe_hw_engine *
+hw_engine_lookup_class_instance(struct xe_vm *vm,
+				enum xe_engine_class class,
+				u16 instance)
+{
+	struct xe_device *xe = vm->xe;
+	struct xe_hw_engine *hwe;
+	enum xe_hw_engine_id id;
+	struct xe_gt *gt;
+	u8 gt_id;
+
+	for_each_gt(gt, xe, gt_id)
+		for_each_hw_engine(hwe, gt, id)
+			if (hwe->class == class && hwe->instance == instance)
+				return hwe;
+	return NULL;
+}
+
+/**
+ * xe_vm_add_fault_entry_pf() - Add pagefault to vm fault list
+ * @vm: The VM.
+ * @pf: The pagefault.
+ *
+ * This function takes the data from the pagefault @pf and saves it to @vm->faults.list.
+ *
+ * The function exits silently if the list is full, and reports a warning if the pagefault
+ * could not be saved to the list.
+ */
+void xe_vm_add_fault_entry_pf(struct xe_vm *vm, struct xe_gt_pagefault *pf)
+{
+	struct xe_vm_fault_entry *e = NULL;
+	struct xe_hw_engine *hwe;
+
+	/* Do not report faults on reserved engines */
+	hwe = hw_engine_lookup_class_instance(vm, pf->engine_class, pf->engine_instance);
+	if (!hwe || xe_hw_engine_is_reserved(hwe))
+		return;
+
+	e = kzalloc(sizeof(*e), GFP_KERNEL);
+	if (!e) {
+		drm_warn(&vm->xe->drm,
+			 "Could not allocate memory for fault!\n");
+		return;
+	}
+
+	spin_lock(&vm->faults.lock);
+
+	/*
+	 * Limit the number of faults in the fault list to prevent
+	 * memory overuse.
+	 */
+	if (vm->faults.len >= MAX_FAULTS_SAVED_PER_VM) {
+		kfree(e);
+		goto out;
+	}
+
+	e->address = pf->page_addr;
+	e->address_precision = 1;
+	e->access_type = pf->access_type;
+	e->fault_type = pf->fault_type;
+	e->fault_level = pf->fault_level;
+
+	list_add_tail(&e->list, &vm->faults.list);
+	vm->faults.len++;
+out:
+	spin_unlock(&vm->faults.lock);
+}
+
+static void xe_vm_clear_fault_entries(struct xe_vm *vm)
+{
+	struct xe_vm_fault_entry *e, *tmp;
+
+	spin_lock(&vm->faults.lock);
+	list_for_each_entry_safe(e, tmp, &vm->faults.list, list) {
+		list_del(&e->list);
+		kfree(e);
+	}
+	vm->faults.len = 0;
+	spin_unlock(&vm->faults.lock);
 }
 
 static int xe_vma_ops_alloc(struct xe_vma_ops *vops, bool array_of_binds)
@@ -1660,6 +1743,9 @@ struct xe_vm *xe_vm_create(struct xe_device *xe, u32 flags)
 	init_rwsem(&vm->userptr.notifier_lock);
 	spin_lock_init(&vm->userptr.invalidated_lock);
 
+	INIT_LIST_HEAD(&vm->faults.list);
+	spin_lock_init(&vm->faults.lock);
+
 	ttm_lru_bulk_move_init(&vm->lru_bulk_move);
 
 	INIT_WORK(&vm->destroy_work, vm_destroy_work_func);
@@ -1929,6 +2015,8 @@ void xe_vm_close_and_put(struct xe_vm *vm)
 		xe_assert(xe, lookup == vm);
 	}
 	up_write(&xe->usm.lock);
+
+	xe_vm_clear_fault_entries(vm);
 
 	for_each_tile(tile, xe, id)
 		xe_range_fence_tree_fini(&vm->rftree[id]);
