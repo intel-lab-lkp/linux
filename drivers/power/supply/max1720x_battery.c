@@ -37,6 +37,7 @@
 #define MAX172XX_REPCAP			0x05	/* Average capacity */
 #define MAX172XX_REPSOC			0x06	/* Percentage of charge */
 #define MAX172XX_TEMP			0x08	/* Temperature */
+#define MAX172XX_VCELL			0x09	/* Lowest cell voltage */
 #define MAX172XX_CURRENT		0x0A	/* Actual current */
 #define MAX172XX_AVG_CURRENT		0x0B	/* Average current */
 #define MAX172XX_FULL_CAP		0x10	/* Calculated full capacity */
@@ -50,19 +51,32 @@
 #define MAX172XX_DEV_NAME_TYPE_MASK	GENMASK(3, 0)
 #define MAX172XX_DEV_NAME_TYPE_MAX17201	BIT(0)
 #define MAX172XX_DEV_NAME_TYPE_MAX17205	(BIT(0) | BIT(2))
+#define MAX77759_DEV_NAME_TYPE_MASK	GENMASK(15, 9)
+#define MAX77759_DEV_NAME_TYPE_MAX77759	0x31
 #define MAX172XX_QR_TABLE10		0x22
+#define MAX77759_TASKPERIOD		0x3C
+#define MAX77759_TASKPERIOD_175MS	0x1680
+#define MAX77759_TASKPERIOD_351MS	0x2D00
 #define MAX172XX_BATT			0xDA	/* Battery voltage */
 #define MAX172XX_ATAVCAP		0xDF
 
 static const char *const max1720x_manufacturer = "Maxim Integrated";
 static const char *const max17201_model = "MAX17201";
 static const char *const max17205_model = "MAX17205";
+static const char *const max77759_model = "MAX77759";
+
+enum chip_id {
+	MAX1720X_ID,
+	MAX77759_ID,
+};
 
 struct max1720x_device_info {
 	struct regmap *regmap;
 	struct regmap *regmap_nv;
 	struct i2c_client *ancillary;
 	int rsense;
+	int charge_full_design;
+	enum chip_id id;
 };
 
 /*
@@ -271,6 +285,80 @@ static const enum power_supply_property max1720x_battery_props[] = {
 	POWER_SUPPLY_PROP_MANUFACTURER,
 };
 
+/*
+ * Registers 0x80 up to 0xaf which contain the model for the fuel gauge
+ * algorithm (stored in nvmem for the max1720x) are locked. They can
+ * be unlocked by writing 0x59 to 0x62 and 0xc4 to 0x63. They should be
+ * enabled in the regmap if the driver is extended to manage the model.
+ */
+static const struct regmap_range max77759_registers[] = {
+	regmap_reg_range(0x00, 0x4f),
+	regmap_reg_range(0xb0, 0xbf),
+	regmap_reg_range(0xd0, 0xd0),
+	regmap_reg_range(0xdc, 0xdf),
+	regmap_reg_range(0xfb, 0xfb),
+	regmap_reg_range(0xff, 0xff),
+};
+
+static const struct regmap_range max77759_ro_registers[] = {
+	regmap_reg_range(0x3d, 0x3d),
+	regmap_reg_range(0xfb, 0xfb),
+	regmap_reg_range(0xff, 0xff),
+};
+
+static const struct regmap_access_table max77759_write_table = {
+	.no_ranges = max77759_ro_registers,
+	.n_no_ranges = ARRAY_SIZE(max77759_ro_registers),
+};
+
+static const struct regmap_access_table max77759_rd_table = {
+	.yes_ranges = max77759_registers,
+	.n_yes_ranges = ARRAY_SIZE(max77759_registers),
+};
+
+static const struct regmap_config max77759_regmap_cfg = {
+	.reg_bits = 8,
+	.val_bits = 16,
+	.max_register = 0xff,
+	.wr_table = &max77759_write_table,
+	.rd_table = &max77759_rd_table,
+	.val_format_endian = REGMAP_ENDIAN_LITTLE,
+	.cache_type = REGCACHE_NONE,
+};
+
+static const enum power_supply_property max77759_battery_props[] = {
+	POWER_SUPPLY_PROP_PRESENT,
+	POWER_SUPPLY_PROP_CAPACITY,
+	POWER_SUPPLY_PROP_VOLTAGE_NOW,
+	POWER_SUPPLY_PROP_CHARGE_FULL,
+	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
+	POWER_SUPPLY_PROP_CHARGE_AVG,
+	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
+	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_MODEL_NAME,
+	POWER_SUPPLY_PROP_MANUFACTURER,
+};
+
+
+struct chip_data {
+	bool has_nvmem;
+	const struct regmap_config *regmap_cfg;
+	enum chip_id id;
+};
+
+static const struct chip_data max1720x_data  = {
+	.has_nvmem = true,
+	.regmap_cfg = &max1720x_regmap_cfg,
+	.id = MAX1720X_ID,
+};
+
+static const struct chip_data max77759_data = {
+	.has_nvmem = false,
+	.regmap_cfg = &max77759_regmap_cfg,
+	.id = MAX77759_ID,
+};
+
 /* Convert regs value to power_supply units */
 
 static int max172xx_time_to_ps(unsigned int reg)
@@ -288,10 +376,36 @@ static int max172xx_voltage_to_ps(unsigned int reg)
 	return reg * 1250;	/* in uV */
 }
 
-static int max172xx_capacity_to_ps(unsigned int reg,
-				   struct max1720x_device_info *info)
+static int max172xx_cell_voltage_to_ps(unsigned int reg)
 {
-	return reg * (500000 / info->rsense);	/* in uAh */
+	return reg * 625 / 8;	/* in uV */
+}
+
+static int max172xx_capacity_to_ps(unsigned int reg,
+				   struct max1720x_device_info *info,
+				   int *intval)
+{
+	int lsb = 1;
+	int reg_val;
+	int ret;
+
+	if (info->id == MAX77759_ID) {
+		ret = regmap_read(info->regmap, MAX77759_TASKPERIOD, &reg_val);
+		if (ret)
+			return ret;
+
+		switch (reg_val) {
+		case MAX77759_TASKPERIOD_175MS:
+			break;
+		case MAX77759_TASKPERIOD_351MS:
+			lsb = 2;
+			break;
+		default:
+			return -ENODEV;
+		}
+	}
+	*intval = reg * (500000 / info->rsense) * lsb;	/* in uAh */
+	return 0;
 }
 
 /*
@@ -304,6 +418,28 @@ static int max172xx_temperature_to_ps(unsigned int reg)
 	int val = (int16_t)reg;
 
 	return val * 10 / 256; /* in tenths of deg. C */
+}
+
+static const char *max1720x_devname_to_model(unsigned int reg_val,
+					     union power_supply_propval *val,
+					     struct max1720x_device_info *info)
+{
+	switch (info->id) {
+	case MAX1720X_ID:
+		reg_val = FIELD_GET(MAX172XX_DEV_NAME_TYPE_MASK, reg_val);
+		if (reg_val == MAX172XX_DEV_NAME_TYPE_MAX17201)
+			return max17201_model;
+		else if (reg_val == MAX172XX_DEV_NAME_TYPE_MAX17205)
+			return max17205_model;
+		return NULL;
+	case MAX77759_ID:
+		reg_val = FIELD_GET(MAX77759_DEV_NAME_TYPE_MASK, reg_val);
+		if (reg_val == MAX77759_DEV_NAME_TYPE_MAX77759)
+			return max77759_model;
+		return NULL;
+	default:
+		return NULL;
+	}
 }
 
 /*
@@ -390,19 +526,31 @@ static int max1720x_battery_get_property(struct power_supply *psy,
 		val->intval = max172xx_percent_to_ps(reg_val);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		ret = regmap_read(info->regmap, MAX172XX_BATT, &reg_val);
-		val->intval = max172xx_voltage_to_ps(reg_val);
+		if (info->id == MAX1720X_ID) {
+			ret = regmap_read(info->regmap, MAX172XX_BATT, &reg_val);
+			val->intval = max172xx_voltage_to_ps(reg_val);
+		} else if (info->id == MAX77759_ID) {
+			ret = regmap_read(info->regmap, MAX172XX_VCELL, &reg_val);
+			val->intval = max172xx_cell_voltage_to_ps(reg_val);
+		} else
+			return -ENODEV;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 		ret = regmap_read(info->regmap, MAX172XX_DESIGN_CAP, &reg_val);
-		val->intval = max172xx_capacity_to_ps(reg_val);
+		if (ret)
+			break;
+		ret = max172xx_capacity_to_ps(reg_val, info, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_AVG:
 		ret = regmap_read(info->regmap, MAX172XX_REPCAP, &reg_val);
-		val->intval = max172xx_capacity_to_ps(reg_val);
+		if (ret)
+			break;
+
+		ret = max172xx_capacity_to_ps(reg_val, info, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_EMPTY_AVG:
 		ret = regmap_read(info->regmap, MAX172XX_TTE, &reg_val);
+		pr_info("RAW TTE: %d", reg_val);
 		val->intval = max172xx_time_to_ps(reg_val);
 		break;
 	case POWER_SUPPLY_PROP_TIME_TO_FULL_AVG:
@@ -423,17 +571,15 @@ static int max1720x_battery_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
 		ret = regmap_read(info->regmap, MAX172XX_FULL_CAP, &reg_val);
-		val->intval = max172xx_capacity_to_ps(reg_val);
+		if (ret)
+			break;
+		ret = max172xx_capacity_to_ps(reg_val, info, &val->intval);
 		break;
 	case POWER_SUPPLY_PROP_MODEL_NAME:
 		ret = regmap_read(info->regmap, MAX172XX_DEV_NAME, &reg_val);
-		reg_val = FIELD_GET(MAX172XX_DEV_NAME_TYPE_MASK, reg_val);
-		if (reg_val == MAX172XX_DEV_NAME_TYPE_MAX17201)
-			val->strval = max17201_model;
-		else if (reg_val == MAX172XX_DEV_NAME_TYPE_MAX17205)
-			val->strval = max17205_model;
-		else
-			return -ENODEV;
+		val->strval = max1720x_devname_to_model(reg_val, val, info);
+		if (!val->strval)
+			ret = -ENODEV;
 		break;
 	case POWER_SUPPLY_PROP_MANUFACTURER:
 		val->strval = max1720x_manufacturer;
@@ -527,7 +673,6 @@ static int max1720x_probe_nvmem(struct i2c_client *client,
 		.priv = info,
 	};
 	struct nvmem_device *nvmem;
-	unsigned int val;
 	int ret;
 
 	info->ancillary = i2c_new_ancillary_device(client, "nvmem", 0xb);
@@ -549,22 +694,42 @@ static int max1720x_probe_nvmem(struct i2c_client *client,
 		return PTR_ERR(info->regmap_nv);
 	}
 
-	ret = regmap_read(info->regmap_nv, MAX1720X_NRSENSE, &val);
-	if (ret < 0) {
-		dev_err(dev, "Failed to read sense resistor value\n");
-		return ret;
-	}
-
-	info->rsense = val;
-	if (!info->rsense) {
-		dev_warn(dev, "RSense not calibrated, set 10 mOhms!\n");
-		info->rsense = 1000; /* in regs in 10^-5 */
-	}
-
 	nvmem = devm_nvmem_register(dev, &nvmem_config);
 	if (IS_ERR(nvmem)) {
 		dev_err(dev, "Could not register nvmem!");
 		return PTR_ERR(nvmem);
+	}
+
+	return 0;
+}
+
+static int max1720x_get_rsense(struct device *dev,
+			       struct max1720x_device_info *info,
+			       const struct chip_data *data)
+{
+	unsigned int val;
+	int ret;
+
+	if (data->has_nvmem) {
+		ret = regmap_read(info->regmap_nv, MAX1720X_NRSENSE, &val);
+		if (ret < 0) {
+			dev_err(dev, "Failed to read RSense from nvmem\n");
+			return ret;
+		}
+
+		info->rsense = val;
+		if (!info->rsense) {
+			dev_warn(dev, "RSense not calibrated, set 10 mOhms!\n");
+			info->rsense = 1000; /* in regs in 10^-5 */
+		}
+	} else {
+		ret = of_property_read_u32(dev->of_node,
+					   "shunt-resistor-micro-ohms", &val);
+		if (ret) {
+			dev_err(dev, "Failed to read RSense from devicetree\n");
+			return ret;
+		}
+		info->rsense = val/10;
 	}
 
 	return 0;
@@ -579,32 +744,70 @@ static const struct power_supply_desc max1720x_bat_desc = {
 	.get_property = max1720x_battery_get_property,
 };
 
+static const struct power_supply_desc max77759_bat_desc = {
+	.name = "max77759-fg",
+	.no_thermal = true,
+	.type = POWER_SUPPLY_TYPE_BATTERY,
+	.properties = max77759_battery_props,
+	.num_properties = ARRAY_SIZE(max77759_battery_props),
+	.get_property = max1720x_battery_get_property,
+};
+
 static int max1720x_probe(struct i2c_client *client)
 {
 	struct power_supply_config psy_cfg = {};
 	struct device *dev = &client->dev;
 	struct max1720x_device_info *info;
 	struct power_supply *bat;
+	const struct chip_data *data;
+	const struct power_supply_desc *bat_desc;
 	int ret;
 
 	info = devm_kzalloc(dev, sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
+	data = device_get_match_data(dev);
+	if (!data)
+		return dev_err_probe(dev, -EINVAL, "Failed to get chip data\n");
+
 	psy_cfg.drv_data = info;
 	psy_cfg.fwnode = dev_fwnode(dev);
-	psy_cfg.attr_grp = max1720x_groups;
+	switch (data->id) {
+	case MAX1720X_ID:
+		psy_cfg.attr_grp = max1720x_groups;
+		bat_desc = &max1720x_bat_desc;
+		break;
+	case MAX77759_ID:
+		bat_desc = &max77759_bat_desc;
+		break;
+	default:
+		return dev_err_probe(dev, -EINVAL, "Unsupported chip\n");
+	}
 	i2c_set_clientdata(client, info);
-	info->regmap = devm_regmap_init_i2c(client, &max1720x_regmap_cfg);
+
+	info->id = data->id;
+	info->regmap = devm_regmap_init_i2c(client, data->regmap_cfg);
 	if (IS_ERR(info->regmap))
 		return dev_err_probe(dev, PTR_ERR(info->regmap),
 				     "regmap initialization failed\n");
 
-	ret = max1720x_probe_nvmem(client, info);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to probe nvmem\n");
+	if (data->has_nvmem) {
+		ret = max1720x_probe_nvmem(client, info);
+		if (ret)
+			return dev_err_probe(dev, ret, "Failed to probe nvmem\n");
+	}
 
-	bat = devm_power_supply_register(dev, &max1720x_bat_desc, &psy_cfg);
+	ret = of_property_read_u32(dev->of_node,
+				   "charge-full-design-microamp-hours", &info->charge_full_design);
+	if (ret)
+		info->charge_full_design = 0;
+
+	ret = max1720x_get_rsense(dev, info, data);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get RSense\n");
+
+	bat = devm_power_supply_register(dev, bat_desc, &psy_cfg);
 	if (IS_ERR(bat))
 		return dev_err_probe(dev, PTR_ERR(bat),
 				     "Failed to register power supply\n");
@@ -613,7 +816,8 @@ static int max1720x_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id max1720x_of_match[] = {
-	{ .compatible = "maxim,max17201" },
+	{ .compatible = "maxim,max17201", .data = (void *) &max1720x_data },
+	{ .compatible = "maxim,max77759-fg", .data = (void *) &max77759_data },
 	{}
 };
 MODULE_DEVICE_TABLE(of, max1720x_of_match);
