@@ -110,8 +110,11 @@ struct svsm_ca boot_svsm_ca_page __aligned(PAGE_SIZE);
 
 DEFINE_PER_CPU(struct sev_es_runtime_data*, runtime_data);
 DEFINE_PER_CPU(struct sev_es_save_area *, sev_vmsa);
+DEFINE_PER_CPU(int, sev_vcpu_apic_id);
 DEFINE_PER_CPU(struct svsm_ca *, svsm_caa);
 DEFINE_PER_CPU(u64, svsm_caa_pa);
+
+static void snp_cleanup_vmsa(struct sev_es_save_area *vmsa, int apic_id);
 
 static __always_inline bool on_vc_stack(struct pt_regs *regs)
 {
@@ -973,6 +976,104 @@ void snp_kexec_begin(void)
 		pr_warn("Failed to stop shared<->private conversions\n");
 }
 
+/*
+ * kexec/kdump should be shutting down all APs except the one handling
+ * kexec/kdump and clearing the VMSA tag on those AP's VMSA pages as they
+ * are not being used as a VMSA page anymore, so that a random page in
+ * the kexec'ed guest which remains a VMSA page cannot cause unrecoverable
+ * RMP faults, kdump will anyway reboot afterwards while kexec will set new
+ * VMSA pages for all the APs to come up. Kdump while doing vmcore generation
+ * and page walking can cause unrecoverable #NPF/RMP faults when walking guest
+ * memory for dumping when it touches the VMSA page of the currently running
+ * vCPU while kexec can randomly use this pages when it is re-allocated after
+ * kexec via the page-allocator.
+ */
+static void sev_snp_shutdown_all_aps(void)
+{
+	struct sev_es_save_area *vmsa;
+	struct ghcb_state state;
+	unsigned long flags;
+	struct ghcb *ghcb;
+	int apic_id, cpu;
+
+	/*
+	 * APs are already in HLT loop when kexec_finish() is invoked.
+	 */
+	for_each_present_cpu(cpu) {
+		vmsa = per_cpu(sev_vmsa, cpu);
+
+		/*
+		 * BSP does not have guest allocated VMSA, so that in-use/busy
+		 * VMSA cannot hit a guest page and there is no need to clear
+		 * the VMSA tag for this page.
+		 */
+		if (!vmsa)
+			continue;
+
+		/*
+		 * Cannot clear the VMSA tag for the currently running vCPU.
+		 */
+		if (get_cpu() == cpu) {
+			unsigned long pa;
+			struct page *p;
+
+			pa = __pa(vmsa);
+			p = pfn_to_online_page(pa >> PAGE_SHIFT);
+			/*
+			 * Mark the VMSA page of the running vCPU as Offline
+			 * so that is excluded and not touched by makedumpfile
+			 * while generating vmcore during kdump boot.
+			 */
+			if (p)
+				__SetPageOffline(p);
+			put_cpu();
+			continue;
+		}
+		put_cpu();
+
+		apic_id = per_cpu(sev_vcpu_apic_id, cpu);
+
+		/*
+		 * Issue AP destroy on all APs (to ensure they are kicked out
+		 * of guest mode) to allow using RMPADJUST to remove the VMSA
+		 * tag on VMSA pages especially for guests that allow HLT to
+		 * not be intercepted.
+		 */
+
+		local_irq_save(flags);
+
+		ghcb = __sev_get_ghcb(&state);
+
+		vc_ghcb_invalidate(ghcb);
+		ghcb_set_rax(ghcb, vmsa->sev_features);
+
+		/* Issue VMGEXIT AP Destroy NAE event */
+
+		ghcb_set_sw_exit_code(ghcb, SVM_VMGEXIT_AP_CREATION);
+		ghcb_set_sw_exit_info_1(ghcb,
+					((u64)apic_id << 32)	|
+					((u64)snp_vmpl << 16)	|
+					SVM_VMGEXIT_AP_DESTROY);
+		ghcb_set_sw_exit_info_2(ghcb, __pa(vmsa));
+
+		sev_es_wr_ghcb_msr(__pa(ghcb));
+		VMGEXIT();
+
+		if (!ghcb_sw_exit_info_1_is_valid(ghcb) ||
+		    lower_32_bits(ghcb->save.sw_exit_info_1)) {
+			pr_err("SNP AP Destroy error\n");
+			local_irq_restore(flags);
+			return;
+		}
+
+		__sev_put_ghcb(&state);
+
+		local_irq_restore(flags);
+
+		snp_cleanup_vmsa(vmsa, apic_id);
+	}
+}
+
 void snp_kexec_finish(void)
 {
 	struct sev_es_runtime_data *data;
@@ -986,6 +1087,8 @@ void snp_kexec_finish(void)
 
 	if (!IS_ENABLED(CONFIG_KEXEC_CORE))
 		return;
+
+	sev_snp_shutdown_all_aps();
 
 	unshare_all_memory();
 
@@ -1253,6 +1356,8 @@ static int wakeup_cpu_via_vmgexit(u32 apic_id, unsigned long start_ip)
 
 	/* Record the current VMSA page */
 	per_cpu(sev_vmsa, cpu) = vmsa;
+
+	per_cpu(sev_vcpu_apic_id, cpu) = apic_id;
 
 	return ret;
 }
