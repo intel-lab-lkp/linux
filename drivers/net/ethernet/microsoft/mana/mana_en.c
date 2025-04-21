@@ -16,9 +16,12 @@
 #include <net/netdev_lock.h>
 #include <net/page_pool/helpers.h>
 #include <net/xdp.h>
+#include <net/pkt_cls.h>
 
 #include <net/mana/mana.h>
 #include <net/mana/mana_auxiliary.h>
+
+#define MIN_BANDWIDTH 100
 
 static DEFINE_IDA(mana_adev_ida);
 
@@ -719,6 +722,99 @@ out:
 	return err;
 }
 
+static int mana_tc_htb_handle_leaf_queue(struct mana_port_context *mpc,
+					 struct tc_htb_qopt_offload *opt,
+					 bool alloc)
+{
+	u32 rate, old_speed;
+	int err;
+
+	if (opt->command == TC_HTB_LEAF_ALLOC_QUEUE) {
+		if (opt->parent_classid != TC_HTB_CLASSID_ROOT) {
+			NL_SET_ERR_MSG_MOD(opt->extack, "invalid parent classid");
+			return -EINVAL;
+		} else if (mpc->classid) {
+			NL_SET_ERR_MSG_MOD(opt->extack, "Cannot create multiple classes");
+			return -EOPNOTSUPP;
+		}
+		mpc->classid = opt->classid;
+	}
+
+	rate = div_u64(opt->rate, 1000) << 3; //Convert Bps to Kbps
+	rate = div_u64(rate, 1000);	      //Convert Kbps to Mbps
+
+	/*Get current speed*/
+	err = mana_query_link_cfg(mpc);
+	old_speed = (err) ? SPEED_UNKNOWN : mpc->speed;
+
+	if (!err) {
+		if (alloc) {
+			/*Support only multiples of 100Mbps for rate parameter*/
+			rate = max(rate, MIN_BANDWIDTH);
+			rate = rounddown(rate, MIN_BANDWIDTH);
+
+			err = mana_set_bw_clamp(mpc, rate, TRI_STATE_TRUE);
+			mpc->speed = (err) ? old_speed : rate;
+		} else {
+			err = mana_set_bw_clamp(mpc, rate, TRI_STATE_FALSE);
+			mpc->classid = (err) ? : 0;
+		}
+	}
+
+	return err;
+}
+
+static int mana_create_tc_htb(struct mana_port_context *mpc)
+{
+	int err;
+
+	/*Check for hardware support*/
+	err = mana_query_link_cfg(mpc);
+	if (err == -EINVAL)
+		netdev_info(mpc->ndev, "QoS is not configured yet\n");
+
+	return err;
+}
+
+static int mana_tc_setup_htb(struct mana_port_context *mpc,
+			     struct tc_htb_qopt_offload *opt)
+{
+	int err;
+
+	switch (opt->command) {
+	case TC_HTB_CREATE:
+		err = mana_create_tc_htb(mpc);
+		return err;
+	case TC_HTB_NODE_MODIFY:
+	case TC_HTB_LEAF_ALLOC_QUEUE:
+		err = mana_tc_htb_handle_leaf_queue(mpc, opt, 1);
+		return err;
+	case TC_HTB_DESTROY:
+	case TC_HTB_LEAF_DEL:
+	case TC_HTB_LEAF_DEL_LAST:
+	case TC_HTB_LEAF_DEL_LAST_FORCE:
+		return mana_tc_htb_handle_leaf_queue(mpc, opt, 0);
+	case TC_HTB_LEAF_QUERY_QUEUE:
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	return 0;
+}
+
+static int mana_setup_tc(struct net_device *dev, enum tc_setup_type type,
+			 void *type_data)
+{
+	struct mana_port_context *mpc = netdev_priv(dev);
+
+	switch (type) {
+	case TC_SETUP_QDISC_HTB:
+		return mana_tc_setup_htb(mpc, type_data);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
 static const struct net_device_ops mana_devops = {
 	.ndo_open		= mana_open,
 	.ndo_stop		= mana_close,
@@ -729,6 +825,7 @@ static const struct net_device_ops mana_devops = {
 	.ndo_bpf		= mana_bpf,
 	.ndo_xdp_xmit		= mana_xdp_xmit,
 	.ndo_change_mtu		= mana_change_mtu,
+	.ndo_setup_tc		= mana_setup_tc,
 };
 
 static void mana_cleanup_port_context(struct mana_port_context *apc)
@@ -1196,6 +1293,46 @@ int mana_query_link_cfg(struct mana_port_context *apc)
 
 out:
 	return err;
+}
+
+int mana_set_bw_clamp(struct mana_port_context *apc, u32 speed,
+		      int enable_clamping)
+{
+	struct mana_set_bw_clamp_resp resp = {};
+	struct mana_set_bw_clamp_req req = {};
+	struct net_device *ndev = apc->ndev;
+	int err;
+
+	mana_gd_init_req_hdr(&req.hdr, MANA_SET_BW_CLAMP,
+			     sizeof(req), sizeof(resp));
+	req.vport = apc->port_handle;
+	req.link_speed_mbps = speed;
+	req.enable_clamping = enable_clamping;
+
+	err = mana_send_request(apc->ac, &req, sizeof(req), &resp,
+				sizeof(resp));
+
+	if (err) {
+		netdev_err(ndev, "Failed to set bandwidth clamp for speed %u, err = %d",
+			   speed, err);
+		return err;
+	}
+
+	err = mana_verify_resp_hdr(&resp.hdr, MANA_SET_BW_CLAMP,
+				   sizeof(resp));
+
+	if (err || resp.hdr.status) {
+		netdev_err(ndev, "Failed to set bandwidth clamp: %d, 0x%x\n", err,
+			   resp.hdr.status);
+		if (!err)
+			err = -EOPNOTSUPP;
+		return err;
+	}
+
+	if (resp.qos_unconfigured)
+		netdev_info(ndev, "QoS is unconfigured\n");
+
+	return 0;
 }
 
 int mana_create_wq_obj(struct mana_port_context *apc,
@@ -2942,6 +3079,7 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 	ndev->hw_features |= NETIF_F_RXCSUM;
 	ndev->hw_features |= NETIF_F_TSO | NETIF_F_TSO6;
 	ndev->hw_features |= NETIF_F_RXHASH;
+	ndev->hw_features |= NETIF_F_HW_TC;
 	ndev->features = ndev->hw_features | NETIF_F_HW_VLAN_CTAG_TX |
 			 NETIF_F_HW_VLAN_CTAG_RX;
 	ndev->vlan_features = ndev->features;
