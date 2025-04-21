@@ -174,4 +174,13 @@
 #define _PIPEDMC_DCB_VMAX_F			0x555A8
 #define PIPEDMC_DCB_VMAX(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_VMAX_A)
 
+#define _PIPEDMC_DCB_CTL_A			0x5F1A0
+#define _PIPEDMC_DCB_CTL_B			0x5F5A0
+#define _PIPEDMC_DCB_CTL_C			0x5F9A0
+#define _PIPEDMC_DCB_CTL_D			0x5FDA0
+#define _PIPEDMC_DCB_CTL_E			0x551A0
+#define _PIPEDMC_DCB_CTL_F			0x555A0
+#define PIPEDMC_DCB_CTL(dev_priv, trans)	_MMIO_TRANS2(dev_priv, trans, _PIPEDMC_DCB_CTL_A)
+#define PIPEDMC_ADAPTIVE_DCB_ENABLE		REG_BIT(31)
+
 #endif /* __INTEL_DMC_REGS_H__ */
