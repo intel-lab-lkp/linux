@@ -48,7 +48,7 @@ struct rtsx_usb_sdmmc {
 	bool			ddr_mode;
 
 	unsigned char		power_mode;
-
+	unsigned char		prev_power_mode;
 #ifdef RTSX_USB_USE_LEDS_CLASS
 	struct led_classdev	led;
 	char			led_name[32];
@@ -1014,6 +1014,16 @@ static int sd_set_power_mode(struct rtsx_usb_sdmmc *host,
 		unsigned char power_mode)
 {
 	int err;
+	int power_mode_temp;
+	struct rtsx_ucr *ucr = host->ucr;
+
+	power_mode_temp = power_mode;
+
+	if ((power_mode == MMC_POWER_ON) && (host->power_mode == MMC_POWER_ON) &&
+			(host->prev_power_mode == MMC_POWER_UP)) {
+		host->prev_power_mode = MMC_POWER_ON;
+		rtsx_usb_write_register(ucr, SD_BUS_STAT, SD_CLK_TOGGLE_EN, 0x00);
+	}
 
 	if (power_mode != MMC_POWER_OFF)
 		power_mode = MMC_POWER_ON;
@@ -1029,9 +1039,18 @@ static int sd_set_power_mode(struct rtsx_usb_sdmmc *host,
 		err = sd_power_on(host);
 	}
 
-	if (!err)
-		host->power_mode = power_mode;
+	if (!err) {
+		if ((power_mode_temp == MMC_POWER_UP) && (host->power_mode == MMC_POWER_OFF)) {
+			host->prev_power_mode = MMC_POWER_UP;
+			rtsx_usb_write_register(ucr, SD_BUS_STAT, SD_CLK_TOGGLE_EN,
+					SD_CLK_TOGGLE_EN);
+		}
 
+		if ((power_mode_temp == MMC_POWER_OFF) && (host->power_mode == MMC_POWER_ON))
+			host->prev_power_mode = MMC_POWER_OFF;
+
+		host->power_mode = power_mode;
+	}
 	return err;
 }
 
@@ -1316,6 +1335,7 @@ static void rtsx_usb_init_host(struct rtsx_usb_sdmmc *host)
 	mmc->max_req_size = 524288;
 
 	host->power_mode = MMC_POWER_OFF;
+	host->prev_power_mode = MMC_POWER_OFF;
 }
 
 static int rtsx_usb_sdmmc_drv_probe(struct platform_device *pdev)
