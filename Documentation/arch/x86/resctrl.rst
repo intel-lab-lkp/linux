@@ -169,6 +169,27 @@ related to allocation:
 		When CDP is enabled, io_alloc routes I/O traffic using the highest
 		CLOSID allocated for the instruction cache (L3CODE).
 
+"io_alloc_cbm":
+		Capacity Bit Masks (CBMs) available to supported IO devices which
+		can directly insert cache lines in L3 which can help to reduce the
+		latency. CBM can be configured by writing to the interface in the
+		following format::
+
+			<resource_name>:<cache_id0>=<cbm>;<cache_id1>=<cbm>;...
+
+		Example::
+
+			# cat /sys/fs/resctrl/info/L3/io_alloc_cbm
+			L3:0=ffff;1=ffff
+
+			# echo L3:1=FF > /sys/fs/resctrl/info/L3/io_alloc_cbm
+			# cat /sys/fs/resctrl/info/L3/io_alloc_cbm
+			L3:0=ffff;1=00ff
+
+		When CDP is enabled, L3 control is divided into two separate resources:
+		L3CODE and L3DATA. However, the CBM can only be updated on the L3CODE
+		resource.
+
 Memory bandwidth(MB) subdirectory contains the following files
 with respect to allocation:
 
