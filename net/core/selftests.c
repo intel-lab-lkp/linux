@@ -289,6 +289,11 @@ static int net_test_netif_carrier(struct net_device *ndev)
 	return netif_carrier_ok(ndev) ? 0 : -ENOLINK;
 }
 
+static int net_test_full_duplex(struct net_device *ndev)
+{
+	return ndev->phydev->duplex == DUPLEX_FULL ? 0 : -EINVAL;
+}
+
 static int net_test_phy_phydev(struct net_device *ndev)
 {
 	return ndev->phydev ? 0 : -EOPNOTSUPP;
@@ -336,10 +341,7 @@ static int net_test_phy_loopback_tcp(struct net_device *ndev)
 	return __net_test_loopback(ndev, &attr);
 }
 
-static const struct net_test {
-	char name[ETH_GSTRING_LEN];
-	int (*fn)(struct net_device *ndev);
-} net_selftests[] = {
+static const struct net_test_entry net_selftests[] = {
 	{
 		.name = "Carrier                       ",
 		.fn = net_test_netif_carrier,
@@ -404,6 +406,184 @@ void net_selftest_get_strings(u8 *data)
 				net_selftests[i].name);
 }
 EXPORT_SYMBOL_GPL(net_selftest_get_strings);
+
+static const struct net_do_test_func {
+	int flag;
+	int (*fn)(struct net_device *ndev);
+} net_do_test_funcs[] = {
+	{ NET_TEST_NETIF_CARRIER, net_test_netif_carrier },
+	{ NET_TEST_FULL_DUPLEX, net_test_full_duplex },
+	{ NET_TEST_UDP, net_test_phy_loopback_udp },
+	{ NET_TEST_TCP, net_test_phy_loopback_tcp },
+	{ NET_TEST_UDP_MAX_MTU, net_test_phy_loopback_udp_mtu },
+};
+
+static int net_do_test(struct net_device *ndev,
+		       const struct net_test_entry *entry)
+{
+	int ret = -EOPNOTSUPP;
+	u32 i;
+
+	if (!entry->flags && entry->fn)
+		return entry->fn(ndev);
+
+	for (i = 0; i < ARRAY_SIZE(net_do_test_funcs); i++) {
+		if (!(entry->flags & net_do_test_funcs[i].flag))
+			continue;
+
+		ret = net_do_test_funcs[i].fn(ndev);
+		if (ret) {
+			netdev_err(ndev, "failed to do test, bit: %#x\n",
+				   net_do_test_funcs[i].flag);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
+static int net_selftest_entry(struct net_device *ndev,
+			      const struct net_test_entry *entry)
+{
+	int ret;
+
+	if (entry->enable) {
+		ret = entry->enable(ndev, true);
+		if (ret) {
+			netdev_err(ndev,
+				   "failed to enable test, ret = %d\n", ret);
+			return ret;
+		}
+	}
+
+	ret = net_do_test(ndev, entry);
+	if (entry->enable)
+		entry->enable(ndev, false);
+	return ret;
+}
+
+static void net_selftest_check_result(struct net_device *ndev,
+				      const struct net_test_entry *entry,
+				      struct ethtool_test *etest, u64 *result)
+{
+	*result = net_selftest_entry(ndev, entry);
+	if (*result)
+		etest->flags |= ETH_TEST_FL_FAILED;
+}
+
+static int net_test_prepare(struct net_device *ndev,
+			    const struct net_test *test,
+			    struct ethtool_test *etest, u64 *buf)
+{
+	u32 i;
+
+	/* first set all results to -ENOEXEC,
+	 * test->count is also checked in .net_selftest_get_count_custom()
+	 */
+	for (i = 0; i < net_selftest_get_count_custom(test); i++)
+		buf[i] = -ENOEXEC;
+
+	if (etest->flags != ETH_TEST_FL_OFFLINE) {
+		netdev_err(ndev, "Only offline tests are supported\n");
+		etest->flags |= ETH_TEST_FL_FAILED;
+		return -EOPNOTSUPP;
+	}
+
+	if (test->count > ARRAY_SIZE(test->entries)) {
+		netdev_err(ndev, "The count of entries exceeds the maximum\n");
+		etest->flags |= ETH_TEST_FL_FAILED;
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int net_test_phy_enable(struct net_device *ndev, bool enable)
+{
+	if (!ndev->phydev)
+		return -EOPNOTSUPP;
+
+	return phy_loopback(ndev->phydev, enable, 0);
+}
+
+static const struct net_extra_test {
+	int flag;
+	struct net_test_entry entry;
+} net_extra_tests[] = {
+	{
+		.flag = NET_EXTRA_CARRIER_TEST,
+		.entry = NET_TEST_E("Carrier", NULL, NET_TEST_NETIF_CARRIER),
+	}, {
+		.flag = NET_EXTRA_FULL_DUPLEX_TEST,
+		.entry = NET_TEST_E("Full Duplex", NULL, NET_TEST_FULL_DUPLEX),
+	}, {
+		/* this test must be the last one */
+		.flag = NET_EXTRA_PHY_TEST,
+		.entry = NET_TEST_E("PHY internal loopback",
+				    net_test_phy_enable,
+				    NET_TEST_UDP_MAX_MTU | NET_TEST_TCP),
+	}
+};
+
+void net_selftest_custom(struct net_device *ndev, const struct net_test *test,
+			 struct ethtool_test *etest, u64 *buf)
+{
+	u32 i, j = 0;
+	int ret;
+
+	ret = net_test_prepare(ndev, test, etest, buf);
+	if (ret)
+		return;
+
+	for (i = 0; i < test->count; i++)
+		net_selftest_check_result(ndev, &test->entries[i],
+					  etest, &buf[j++]);
+
+	for (i = 0; i < ARRAY_SIZE(net_extra_tests); i++)
+		if (test->extra_flags & net_extra_tests[i].flag)
+			net_selftest_check_result(ndev,
+						  &net_extra_tests[i].entry,
+						  etest, &buf[j++]);
+}
+EXPORT_SYMBOL_GPL(net_selftest_custom);
+
+int net_selftest_get_count_custom(const struct net_test *test)
+{
+	u32 i, exter_count = 0;
+
+	if (test->count > ARRAY_SIZE(test->entries))
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(net_extra_tests); i++)
+		if (test->extra_flags & net_extra_tests[i].flag)
+			exter_count++;
+
+	return test->count + exter_count;
+}
+EXPORT_SYMBOL_GPL(net_selftest_get_count_custom);
+
+static void net_selftest_get_entry_string(const struct net_test_entry *entry,
+					  u32 index, u8 **data)
+{
+	ethtool_sprintf(data, "%2d. %-30s", index, entry->name);
+}
+
+void net_selftest_get_strings_custom(const struct net_test *test, u8 *data)
+{
+	u32 i, j = 1;
+
+	if (test->count > ARRAY_SIZE(test->entries))
+		return;
+
+	for (i = 0; i < test->count; i++)
+		net_selftest_get_entry_string(&test->entries[i], j++, &data);
+
+	for (i = 0; i < ARRAY_SIZE(net_extra_tests); i++)
+		if (test->extra_flags & net_extra_tests[i].flag)
+			net_selftest_get_entry_string(&net_extra_tests[i].entry,
+						      j++, &data);
+}
+EXPORT_SYMBOL_GPL(net_selftest_get_strings_custom);
 
 MODULE_DESCRIPTION("Common library for generic PHY ethtool selftests");
 MODULE_LICENSE("GPL v2");
