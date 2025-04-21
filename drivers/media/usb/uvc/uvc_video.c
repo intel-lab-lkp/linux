@@ -1898,13 +1898,18 @@ static void uvc_video_stop_transfer(struct uvc_streaming *stream,
 /*
  * Compute the maximum number of bytes per interval for an endpoint.
  */
-u16 uvc_endpoint_max_bpi(struct usb_device *dev, struct usb_host_endpoint *ep)
+u32 uvc_endpoint_max_bpi(struct usb_device *dev, struct usb_host_endpoint *ep)
 {
-	u16 psize;
+	u32 psize;
 
 	switch (dev->speed) {
-	case USB_SPEED_SUPER:
 	case USB_SPEED_SUPER_PLUS:
+		/* check for the SS+ Isoc EP Companion descriptor */
+		if (USB_SS_SSP_ISOC_COMP(ep->ss_ep_comp.bmAttributes))
+			return le32_to_cpu(ep->ssp_isoc_ep_comp.dwBytesPerInterval);
+		fallthrough;
+	case USB_SPEED_SUPER:
+		/* use the SS EP Companion descriptor */
 		return le16_to_cpu(ep->ss_ep_comp.wBytesPerInterval);
 	default:
 		psize = usb_endpoint_maxp(&ep->desc);
@@ -1923,7 +1928,7 @@ static int uvc_init_video_isoc(struct uvc_streaming *stream,
 	struct urb *urb;
 	struct uvc_urb *uvc_urb;
 	unsigned int npackets, i;
-	u16 psize;
+	u32 psize;
 	u32 size;
 
 	psize = uvc_endpoint_max_bpi(stream->dev->udev, ep);
