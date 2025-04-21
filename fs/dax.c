@@ -369,7 +369,6 @@ static void dax_associate_entry(void *entry, struct address_space *mapping,
 		if (shared) {
 			dax_page_share_get(page);
 		} else {
-			WARN_ON_ONCE(page->mapping);
 			page->mapping = mapping;
 			page->index = index + i++;
 		}
