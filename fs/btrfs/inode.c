@@ -5661,16 +5661,22 @@ struct btrfs_inode *btrfs_iget(u64 ino, struct btrfs_root *root)
 		return inode;
 
 	path = btrfs_alloc_path();
-	if (!path)
-		return ERR_PTR(-ENOMEM);
+	if (!path) {
+		ret = -ENOMEM;
+		goto bad_inode;
+	}
 
 	ret = btrfs_read_locked_inode(inode, path);
 	btrfs_free_path(path);
 	if (ret)
-		return ERR_PTR(ret);
+		goto bad_inode;
 
 	unlock_new_inode(&inode->vfs_inode);
 	return inode;
+
+bad_inode:
+	iget_failed(&inode->vfs_inode);
+	return ERR_PTR(ret);
 }
 
 static struct btrfs_inode *new_simple_dir(struct inode *dir,
