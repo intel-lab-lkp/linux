@@ -9,10 +9,7 @@
 
 #include <crypto/utils.h>
 #include <linux/align.h>
-#include <linux/cache.h>
 #include <linux/crypto.h>
-#include <linux/list.h>
-#include <linux/types.h>
 #include <linux/workqueue.h>
 
 /*

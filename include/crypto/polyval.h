@@ -8,7 +8,6 @@
 #ifndef _CRYPTO_POLYVAL_H
 #define _CRYPTO_POLYVAL_H
 
-#include <linux/types.h>
 #include <linux/crypto.h>
 
 #define POLYVAL_BLOCK_SIZE	16

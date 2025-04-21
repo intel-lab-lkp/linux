@@ -8,7 +8,6 @@
 #ifndef _CRYPTO_KRB5_H
 #define _CRYPTO_KRB5_H
 
-#include <linux/crypto.h>
 #include <crypto/aead.h>
 #include <crypto/hash.h>
 

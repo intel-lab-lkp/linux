@@ -6,7 +6,6 @@
 #ifndef _CRYPTO_POLY1305_H
 #define _CRYPTO_POLY1305_H
 
-#include <linux/types.h>
 #include <linux/crypto.h>
 
 #define POLY1305_BLOCK_SIZE	16

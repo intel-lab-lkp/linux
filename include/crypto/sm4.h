@@ -9,7 +9,6 @@
 #ifndef _CRYPTO_SM4_H
 #define _CRYPTO_SM4_H
 
-#include <linux/types.h>
 #include <linux/crypto.h>
 
 #define SM4_KEY_SIZE	16

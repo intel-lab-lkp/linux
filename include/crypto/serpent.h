@@ -6,7 +6,6 @@
 #ifndef _CRYPTO_SERPENT_H
 #define _CRYPTO_SERPENT_H
 
-#include <linux/types.h>
 #include <linux/crypto.h>
 
 #define SERPENT_MIN_KEY_SIZE		  0

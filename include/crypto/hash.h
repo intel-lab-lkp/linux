@@ -8,9 +8,7 @@
 #ifndef _CRYPTO_HASH_H
 #define _CRYPTO_HASH_H
 
-#include <linux/atomic.h>
 #include <linux/crypto.h>
-#include <linux/slab.h>
 #include <linux/string.h>
 
 /* Set this bit for virtual address instead of SG list. */
