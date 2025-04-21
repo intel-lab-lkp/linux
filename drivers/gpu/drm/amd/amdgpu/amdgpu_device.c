@@ -2093,6 +2093,10 @@ static int amdgpu_device_check_arguments(struct amdgpu_device *adev)
 		dev_warn(adev->dev, "sched hw submission jobs (%d) must be at least 2\n",
 			 amdgpu_sched_hw_submission);
 		amdgpu_sched_hw_submission = 2;
+	} else if (amdgpu_sched_hw_submission > 65536) {
+		dev_warn(adev->dev, "sched hw submission jobs (%d) is too large\n",
+			 amdgpu_sched_hw_submission);
+		amdgpu_sched_hw_submission = 65536;
 	} else if (!is_power_of_2(amdgpu_sched_hw_submission)) {
 		dev_warn(adev->dev, "sched hw submission jobs (%d) must be a power of 2\n",
 			 amdgpu_sched_hw_submission);
