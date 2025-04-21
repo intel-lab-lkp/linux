@@ -405,6 +405,9 @@ fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
 	fmap_size = args.out_args[0].size;
 	pr_notice("%s: nodei=%lld fmap_size=%ld\n", __func__, nodeid, fmap_size);
 
+	/* Convert fmap into in-memory format and hang from inode */
+	famfs_file_init_dax(fm, inode, fmap_buf, fmap_size);
+
 	return 0;
 }
 #endif

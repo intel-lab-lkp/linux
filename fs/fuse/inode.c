@@ -118,7 +118,7 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 		fuse_inode_backing_set(fi, NULL);
 
 	if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX))
-		famfs_meta_set(fi, NULL);
+		fi->famfs_meta = NULL; /* XXX new inodes currently not zeroed; why not? */
 
 	return &fi->inode;
 
