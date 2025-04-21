@@ -775,8 +775,10 @@ void intel_guc_slpc_dec_waiters(struct intel_guc_slpc *slpc)
 	 * set_param fails.
 	 */
 	mutex_lock(&slpc->lock);
-	if (atomic_dec_and_test(&slpc->num_waiters))
-		slpc_force_min_freq(slpc, slpc->min_freq_softlimit);
+	if (atomic_read(&slpc->num_waiters) > 0)
+		if (atomic_dec_and_test(&slpc->num_waiters))
+			slpc_force_min_freq(slpc, slpc->min_freq_softlimit);
+
 	mutex_unlock(&slpc->lock);
 }
 
