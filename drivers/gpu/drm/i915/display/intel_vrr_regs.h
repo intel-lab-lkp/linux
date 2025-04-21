@@ -9,6 +9,50 @@
 #include "intel_display_reg_defs.h"
 
 /* VRR registers */
+#define _TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_A		0x604D4
+#define _TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_B		0x614D4
+#define _TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_C		0x624D4
+#define _TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_D		0x634D4
+#define _TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_E		0x6B4D4
+#define TRANS_VRR_DCB_ADJ_FLIPLINE_CFG(dev_priv, trans)	\
+					_MMIO_TRANS2(dev_priv, \
+						     trans, \
+						     _TRANS_VRR_DCB_ADJ_FLIPLINE_CFG_A)
+
+#define _TRANS_VRR_DCB_ADJ_VMAX_CFG_A			0x604D8
+#define _TRANS_VRR_DCB_ADJ_VMAX_CFG_B			0x614D8
+#define _TRANS_VRR_DCB_ADJ_VMAX_CFG_C			0x624D8
+#define _TRANS_VRR_DCB_ADJ_VMAX_CFG_D			0x634D8
+#define _TRANS_VRR_DCB_ADJ_VMAX_CFG_E			0x6B4D8
+#define TRANS_VRR_DCB_ADJ_VMAX_CFG(dev_priv, trans)	_MMIO_TRANS2(dev_priv, \
+								     trans, \
+								     _TRANS_VRR_DCB_ADJ_VMAX_CFG_A)
+
+#define _TRANS_VRR_FLIPLINE_DCB_A		0x60418
+#define _TRANS_VRR_FLIPLINE_DCB_B		0x61418
+#define _TRANS_VRR_FLIPLINE_DCB_C		0x62418
+#define _TRANS_VRR_FLIPLINE_DCB_D		0x63418
+#define _TRANS_VRR_FLIPLINE_DCB_E		0x6B418
+#define TRANS_VRR_FLIPLINE_DCB(dev_priv, trans) _MMIO_TRANS2(dev_priv, \
+							     trans, \
+							     _TRANS_VRR_FLIPLINE_DCB_A)
+
+#define _TRANS_VRR_VMAX_DCB_A			0x60414
+#define _TRANS_VRR_VMAX_DCB_B			0x61414
+#define _TRANS_VRR_VMAX_DCB_C			0x62414
+#define _TRANS_VRR_VMAX_DCB_D			0x63414
+#define _TRANS_VRR_VMAX_DCB_E			0x6B414
+#define TRANS_VRR_VMAX_DCB(dev_priv, trans)	_MMIO_TRANS2(dev_priv, \
+							     trans, \
+							     _TRANS_VRR_VMAX_DCB_A)
+
+#define VRR_DCB_ADJ_FLIPLINE_CNT_MASK		REG_GENMASK(31, 24)
+#define VRR_DCB_ADJ_FLIPLINE_MASK		REG_GENMASK(19, 0)
+#define VRR_DCB_ADJ_VMAX_CNT_MASK		REG_GENMASK(31, 24)
+#define VRR_DCB_ADJ_VMAX_MASK			REG_GENMASK(19, 0)
+#define VRR_FLIPLINE_DCB_MASK			REG_GENMASK(19, 0)
+#define VRR_VMAX_DCB_MASK			REG_GENMASK(19, 0)
+
 #define _TRANS_VRR_CTL_A			0x60420
 #define _TRANS_VRR_CTL_B			0x61420
 #define _TRANS_VRR_CTL_C			0x62420
