@@ -804,6 +804,7 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 
 	if (HAS_DC_BALANCE(display)) {
 		dcb_ctl = intel_de_read(display, PIPEDMC_DCB_CTL(display, cpu_transcoder));
+		crtc_state->vrr.dc_balance.enable = dcb_ctl & PIPEDMC_ADAPTIVE_DCB_ENABLE;
 		crtc_state->vrr.dc_balance.vmin =
 			intel_de_read(display, PIPEDMC_DCB_VMIN(display, cpu_transcoder)) + 1;
 		crtc_state->vrr.dc_balance.vmax =
