@@ -6793,7 +6793,7 @@ static ssize_t tracing_splice_read_pipe(struct file *filp,
 	};
 	ssize_t ret;
 	size_t rem;
-	unsigned int i;
+	unsigned int i, copy_len;
 
 	if (splice_grow_spd(pipe, &spd))
 		return -ENOMEM;
@@ -6827,16 +6827,18 @@ static ssize_t tracing_splice_read_pipe(struct file *filp,
 
 		rem = tracing_fill_pipe_page(rem, iter);
 
+		copy_len = trace_seq_used(&iter->seq);
+
 		/* Copy the data into the page, so we can start over. */
 		ret = trace_seq_to_buffer(&iter->seq,
 					  page_address(spd.pages[i]),
-					  trace_seq_used(&iter->seq));
+					  min(copy_len, PAGE_SIZE));
 		if (ret < 0) {
 			__free_page(spd.pages[i]);
 			break;
 		}
 		spd.partial[i].offset = 0;
-		spd.partial[i].len = trace_seq_used(&iter->seq);
+		spd.partial[i].len = min(copy_len, PAGE_SIZE);
 
 		trace_seq_init(&iter->seq);
 	}
