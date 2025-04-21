@@ -865,7 +865,7 @@ tx_error (struct net_device *dev, int tx_status)
 	frame_id = (tx_status & 0xffff0000);
 	printk (KERN_ERR "%s: Transmit error, TxStatus %4.4x, FrameId %d.\n",
 		dev->name, tx_status, frame_id);
-	dev->stats.tx_errors++;
+	np->tx_errors++;
 	/* Ttransmit Underrun */
 	if (tx_status & 0x10) {
 		dev->stats.tx_fifo_errors++;
@@ -904,7 +904,7 @@ tx_error (struct net_device *dev, int tx_status)
 	}
 	/* Maximum Collisions */
 	if (tx_status & 0x08)
-		dev->stats.collisions++;
+		np->collisions++;
 	/* Restart the Tx */
 	dw32(MACCtrl, dr16(MACCtrl) | TxEnable);
 }
@@ -1074,6 +1074,7 @@ get_stats (struct net_device *dev)
 #endif
 	unsigned int stat_reg;
 
+	spin_lock_irq(&np->stats_lock);
 	/* All statistics registers need to be acknowledged,
 	   else statistic overflow could cause problems */
 
@@ -1085,6 +1086,7 @@ get_stats (struct net_device *dev)
 	dev->stats.multicast = dr32(McstFramesRcvdOk);
 	dev->stats.collisions += dr32(SingleColFrames)
 			     +  dr32(MultiColFrames);
+	dev->stats.collisions += np->collisions;
 
 	/* detailed tx errors */
 	stat_reg = dr16(FramesAbortXSColls);
@@ -1094,6 +1096,8 @@ get_stats (struct net_device *dev)
 	stat_reg = dr16(CarrierSenseErrors);
 	dev->stats.tx_carrier_errors += stat_reg;
 	dev->stats.tx_errors += stat_reg;
+
+	dev->stats.tx_errors += np->tx_errors;
 
 	/* Clear all other statistic register. */
 	dr32(McstOctetXmtOk);
@@ -1123,6 +1127,9 @@ get_stats (struct net_device *dev)
 	dr16(TCPCheckSumErrors);
 	dr16(UDPCheckSumErrors);
 	dr16(IPCheckSumErrors);
+
+	spin_unlock_irq(&np->stats_lock);
+
 	return &dev->stats;
 }
 
