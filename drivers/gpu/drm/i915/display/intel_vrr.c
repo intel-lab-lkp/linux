@@ -255,7 +255,12 @@ void intel_vrr_compute_cmrr_timings(struct intel_crtc_state *crtc_state)
 static
 void intel_vrr_compute_vrr_timings(struct intel_crtc_state *crtc_state)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	crtc_state->vrr.enable = true;
+
+	if (HAS_DC_BALANCE(display))
+		crtc_state->vrr.dc_balance.enable = true;
+
 	crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
 }
 
