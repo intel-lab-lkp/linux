@@ -182,7 +182,7 @@ static inline struct kpp_request *kpp_request_alloc(struct crypto_kpp *tfm,
 {
 	struct kpp_request *req;
 
-	req = kmalloc(sizeof(*req) + crypto_kpp_reqsize(tfm), gfp);
+	req = kmalloc(size_add(sizeof(*req), crypto_kpp_reqsize(tfm)), gfp);
 	if (likely(req))
 		kpp_request_set_tfm(req, tfm);
 
