@@ -952,6 +952,8 @@ static int sd_power_on(struct rtsx_usb_sdmmc *host)
 	struct rtsx_ucr *ucr = host->ucr;
 	int err;
 
+	msleep(100);
+
 	dev_dbg(sdmmc_dev(host), "%s\n", __func__);
 	rtsx_usb_init_cmd(ucr);
 	rtsx_usb_add_cmd(ucr, WRITE_REG_CMD, CARD_SELECT, 0x07, SD_MOD_SEL);
