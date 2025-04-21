@@ -10,6 +10,7 @@
 #include "intel_de.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
+#include "intel_dmc_regs.h"
 #include "intel_vrr.h"
 #include "intel_vrr_regs.h"
 
@@ -601,6 +602,23 @@ void intel_vrr_enable(const struct intel_crtc_state *crtc_state)
 				       VRR_CTL_VRR_ENABLE | trans_vrr_ctl(crtc_state));
 		}
 	}
+
+	if (crtc_state->vrr.dc_balance.enable && HAS_DC_BALANCE(display)) {
+		intel_de_write(display, PIPEDMC_DCB_VMIN(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.vmin - 1);
+		intel_de_write(display, PIPEDMC_DCB_VMAX(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.vmax - 1);
+		intel_de_write(display, PIPEDMC_DCB_MAX_INCREASE(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.max_increase);
+		intel_de_write(display, PIPEDMC_DCB_MAX_DECREASE(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.max_decrease);
+		intel_de_write(display, PIPEDMC_DCB_GUARDBAND(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.guardband);
+		intel_de_write(display, PIPEDMC_DCB_SLOPE(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.slope);
+		intel_de_write(display, PIPEDMC_DCB_VBLANK(display, cpu_transcoder),
+			       crtc_state->vrr.dc_balance.vblank_target);
+	}
 }
 
 void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
@@ -610,6 +628,17 @@ void intel_vrr_disable(const struct intel_crtc_state *old_crtc_state)
 
 	if (!old_crtc_state->vrr.enable)
 		return;
+
+	if (old_crtc_state->vrr.dc_balance.enable && HAS_DC_BALANCE(display)) {
+		intel_de_write(display, TRANS_ADAPTIVE_SYNC_DCB_CTL(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_VMIN(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_VMAX(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_MAX_INCREASE(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_MAX_DECREASE(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_GUARDBAND(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_SLOPE(display, cpu_transcoder), 0);
+		intel_de_write(display, PIPEDMC_DCB_VBLANK(display, cpu_transcoder), 0);
+	}
 
 	if (!intel_vrr_always_use_vrr_tg(display)) {
 		intel_de_write(display, TRANS_VRR_CTL(display, cpu_transcoder),
