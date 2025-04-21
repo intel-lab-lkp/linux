@@ -763,6 +763,24 @@ Description:
 		0, write zeroes is not supported by the device.
 
 
+What:		/sys/block/<disk>/queue/write_zeroes_unmap
+Date:		January 2025
+Contact:	Zhang Yi <yi.zhang@huawei.com>
+Description:
+		[RO] Devices that explicitly support the unmap write zeroes
+		operation in which a single write zeroes request with the unmap
+		bit set to zero out the range of contiguous blocks on storage
+		by freeing blocks, rather than writing physical zeroes to the
+		media. If the write_zeroes_unmap is set to 1, this indicates
+		that the device explicitly supports the write zero command.
+		However, this may be a best-effort optimization rather than a
+		mandatory requirement, some devices may partially fall back to
+		writing physical zeroes due to factors such as receiving
+		unaligned commands. If the parameter is set to 0, the device
+		either does not support this operation, or its support status is
+		unknown.
+
+
 What:		/sys/block/<disk>/queue/zone_append_max_bytes
 Date:		May 2020
 Contact:	linux-block@vger.kernel.org

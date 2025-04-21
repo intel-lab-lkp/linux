@@ -342,6 +342,9 @@ typedef unsigned int __bitwise blk_features_t;
 #define BLK_FEAT_ATOMIC_WRITES \
 	((__force blk_features_t)(1u << 16))
 
+/* supports unmap write zeroes command */
+#define BLK_FEAT_WRITE_ZEROES_UNMAP	((__force blk_features_t)(1u << 17))
+
 /*
  * Flags automatically inherited when stacking limits.
  */
@@ -1339,6 +1342,11 @@ bdev_max_secure_erase_sectors(struct block_device *bdev)
 static inline unsigned int bdev_write_zeroes_sectors(struct block_device *bdev)
 {
 	return bdev_limits(bdev)->max_write_zeroes_sectors;
+}
+
+static inline bool bdev_write_zeroes_unmap(struct block_device *bdev)
+{
+	return bdev_limits(bdev)->features & BLK_FEAT_WRITE_ZEROES_UNMAP;
 }
 
 static inline bool bdev_nonrot(struct block_device *bdev)
