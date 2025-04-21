@@ -870,6 +870,9 @@ struct fuse_conn {
 	/* Use io_uring for communication */
 	unsigned int io_uring;
 
+	/* dev_dax_iomap support for famfs */
+	unsigned int famfs_iomap:1;
+
 	/** Maximum stack depth for passthrough backing files */
 	int max_stack_depth;
 
