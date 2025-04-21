@@ -20,6 +20,7 @@ TEST_PROGS = \
 	pp_alloc_fail.py \
 	rss_ctx.py \
 	rss_input_xfrm.py \
+	rx_buf_len.py \
 	tso.py \
 	#
 
