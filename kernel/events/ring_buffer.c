@@ -710,6 +710,12 @@ int rb_alloc_aux(struct perf_buffer *rb, struct perf_event *event,
 		max_order = ilog2(nr_pages);
 		watermark = 0;
 	}
+	/*
+	 * When the PMU doesn't prefer contiguous AUX buffer pages, favor
+	 * low-order allocations to reduce memory fragmentation.
+	 */
+	if (event->pmu->capabilities & PERF_PMU_CAP_AUX_NON_CONTIGUOUS_PAGES)
+		max_order = 0;
 
 	/*
 	 * kcalloc_node() is unable to allocate buffer if the size is larger
