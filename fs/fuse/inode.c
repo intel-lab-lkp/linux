@@ -117,6 +117,9 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_inode_backing_set(fi, NULL);
 
+	if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX))
+		famfs_meta_set(fi, NULL);
+
 	return &fi->inode;
 
 out_free_forget:
@@ -137,6 +140,13 @@ static void fuse_free_inode(struct inode *inode)
 #endif
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_put(fuse_inode_backing(fi));
+
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	if (S_ISREG(inode->i_mode) && fi->famfs_meta) {
+		famfs_meta_free(fi);
+		famfs_meta_set(fi, NULL);
+	}
+#endif
 
 	kmem_cache_free(fuse_inode_cachep, fi);
 }
@@ -1001,6 +1011,11 @@ void fuse_conn_init(struct fuse_conn *fc, struct fuse_mount *fm,
 
 	if (IS_ENABLED(CONFIG_FUSE_PASSTHROUGH))
 		fuse_backing_files_init(fc);
+
+	if (IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)) {
+		pr_notice("%s: Kernel is FUSE_FAMFS_DAX capable\n", __func__);
+		init_rwsem(&fc->famfs_devlist_sem);
+	}
 
 	INIT_LIST_HEAD(&fc->mounts);
 	list_add(&fm->fc_entry, &fc->mounts);

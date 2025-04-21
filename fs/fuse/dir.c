@@ -359,6 +359,56 @@ bool fuse_invalid_attr(struct fuse_attr *attr)
 	return !fuse_valid_type(attr->mode) || !fuse_valid_size(attr->size);
 }
 
+#define FMAP_BUFSIZE 4096
+
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+static void
+fuse_get_fmap_init(
+	struct fuse_conn *fc,
+	struct fuse_args *args,
+	u64 nodeid,
+	void *outbuf,
+	size_t outbuf_size)
+{
+	memset(outbuf, 0, outbuf_size);
+	args->opcode = FUSE_GET_FMAP;
+	args->nodeid = nodeid;
+
+	args->in_numargs = 0;
+
+	args->out_numargs = 1;
+	args->out_args[0].size = FMAP_BUFSIZE;
+	args->out_args[0].value = outbuf;
+}
+
+static int
+fuse_get_fmap(struct fuse_mount *fm, struct inode *inode, u64 nodeid)
+{
+	size_t fmap_size;
+	void *fmap_buf;
+	int err;
+
+	pr_notice("%s: nodeid=%lld, inode=%llx\n", __func__,
+		  nodeid, (u64)inode);
+	fmap_buf = kcalloc(1, FMAP_BUFSIZE, GFP_KERNEL);
+	FUSE_ARGS(args);
+	fuse_get_fmap_init(fm->fc, &args, nodeid, fmap_buf, FMAP_BUFSIZE);
+
+	/* Send GET_FMAP command */
+	err = fuse_simple_request(fm, &args);
+	if (err) {
+		pr_err("%s: err=%d from fuse_simple_request()\n",
+		       __func__, err);
+		return err;
+	}
+
+	fmap_size = args.out_args[0].size;
+	pr_notice("%s: nodei=%lld fmap_size=%ld\n", __func__, nodeid, fmap_size);
+
+	return 0;
+}
+#endif
+
 int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name,
 		     struct fuse_entry_out *outarg, struct inode **inode)
 {
@@ -404,6 +454,25 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
 		goto out;
 	}
+
+#if IS_ENABLED(CONFIG_FUSE_FAMFS_DAX)
+	if (fm->fc->famfs_iomap) {
+		if (S_ISREG((*inode)->i_mode)) {
+			/* Note Lookup returns the looked-up inode in the attr
+			 * struct, but not in outarg->nodeid !
+			 */
+			pr_notice("%s: outarg: size=%d nodeid=%lld attr.ino=%lld\n",
+				 __func__, args.out_args[0].size, outarg->nodeid,
+				 outarg->attr.ino);
+			/* Get the famfs fmap */
+			fuse_get_fmap(fm, *inode, outarg->attr.ino);
+		} else
+			pr_notice("%s: no get_fmap for non-regular file\n",
+				 __func__);
+	} else
+		pr_notice("%s: fc->dax_iomap is not set\n", __func__);
+#endif
+
 	err = 0;
 
  out_put_forget:
