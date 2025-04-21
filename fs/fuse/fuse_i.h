@@ -1561,9 +1561,9 @@ extern void fuse_sysctl_unregister(void);
 int famfs_file_init_dax(struct fuse_mount *fm,
 			     struct inode *inode, void *fmap_buf,
 			     size_t fmap_size);
-ssize_t famfs_dax_write_iter(struct kiocb *iocb, struct iov_iter *from);
-ssize_t famfs_dax_read_iter(struct kiocb *iocb, struct iov_iter	*to);
-int famfs_file_mmap(struct file *file, struct vm_area_struct *vma);
+ssize_t famfs_fuse_write_iter(struct kiocb *iocb, struct iov_iter *from);
+ssize_t famfs_fuse_read_iter(struct kiocb *iocb, struct iov_iter	*to);
+int famfs_fuse_mmap(struct file *file, struct vm_area_struct *vma);
 void __famfs_meta_free(void *map);
 void famfs_teardown(struct fuse_conn *fc);
 #endif
