@@ -95,6 +95,11 @@ related to allocation:
 		some platforms support devices that have their
 		own settings for cache use which can over-ride
 		these bits.
+
+		When the "io_alloc" feature is enabled, a portion of the cache
+		is reserved for shared use between hardware and software. Refer
+		to "bit_usage" to see which portion is allocated for this purpose.
+
 "bit_usage":
 		Annotated capacity bitmasks showing how all
 		instances of the resource are used. The legend is:
@@ -134,6 +139,35 @@ related to allocation:
 			      Only contiguous 1s value in CBM is supported.
 			"1":
 			      Non-contiguous 1s value in CBM is supported.
+
+"io_alloc":
+		The "io_alloc" enables system software to configure the portion
+		of the L3 cache allocated for I/O traffic.
+
+		The feature routes the I/O traffic via specific CLOSID reserved
+		for io_alloc feature. By configuring the CBM (Capacity Bit Mask)
+		for the CLOSID, users can control the L3 portions available for
+		I/0 traffic. The reserved CLOSID will be excluded for group creation.
+
+		The interface provides a means to query the status of feature support.
+
+		Example::
+
+			# cat /sys/fs/resctrl/info/L3/io_alloc
+			disabled
+
+		Feature can be enabled/disabled by writing to the interface.
+		Example::
+
+			# echo 1 > /sys/fs/resctrl/info/L3/io_alloc
+			# cat /sys/fs/resctrl/info/L3/io_alloc
+			enabled
+
+		On AMD systems, the io_alloc feature is supported by the L3 Smart
+		Data Cache Injection Allocation Enforcement (SDCIAE). The CLOSID for
+		io_alloc is determined by the highest CLOSID supported by the resource.
+		When CDP is enabled, io_alloc routes I/O traffic using the highest
+		CLOSID allocated for the instruction cache (L3CODE).
 
 Memory bandwidth(MB) subdirectory contains the following files
 with respect to allocation:
