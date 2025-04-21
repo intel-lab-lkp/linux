@@ -38,6 +38,7 @@ description: |
         msm8660
         msm8916
         msm8917
+        msm8937
         msm8926
         msm8929
         msm8939
@@ -271,6 +272,11 @@ properties:
           - enum:
               - xiaomi,riva
           - const: qcom,msm8917
+
+      - items:
+          - enum:
+              - xiaomi,land
+          - const: qcom,msm8937
 
       - items:
           - enum:
@@ -1225,6 +1231,7 @@ allOf:
               - qcom,apq8094
               - qcom,apq8096
               - qcom,msm8917
+              - qcom,msm8937
               - qcom,msm8939
               - qcom,msm8953
               - qcom,msm8956
