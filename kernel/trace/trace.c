@@ -1826,6 +1826,8 @@ static ssize_t trace_seq_to_buffer(struct trace_seq *s, void *buf, size_t cnt)
 	len = trace_seq_used(s) - s->readpos;
 	if (cnt > len)
 		cnt = len;
+	if (cnt > PAGE_SIZE)
+		return -EINVAL;
 	memcpy(buf, s->buffer + s->readpos, cnt);
 
 	s->readpos += cnt;
