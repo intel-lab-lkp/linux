@@ -2095,22 +2095,18 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 		return ublk_unregister_io_buf(cmd, ub_cmd->addr, issue_flags);
 	case UBLK_IO_FETCH_REQ:
 		ret = ublk_fetch(cmd, ubq, io, ub_cmd->addr);
-		if (ret)
-			goto out;
 		break;
 	case UBLK_IO_COMMIT_AND_FETCH_REQ:
 		ret = ublk_commit_and_fetch(ubq, io, cmd, ub_cmd);
-		if (ret)
-			goto out;
 		break;
 	case UBLK_IO_NEED_GET_DATA:
 		ret = ublk_get_data(ubq, io, cmd, ub_cmd);
-		if (ret)
-			goto out;
 		break;
 	default:
 		goto out;
 	}
+	if (ret)
+		goto out;
 	ublk_prep_cancel(cmd, issue_flags, ubq, tag);
 	return -EIOCBQUEUED;
 
