@@ -4,7 +4,7 @@
 #
 
 # Needed for trace events
-ccflags-y = -I$(src)
+ccflags-y = -I$(src) -g -DDEBUG -fno-inline -fno-omit-frame-pointer
 
 obj-$(CONFIG_FUSE_FS) += fuse.o
 obj-$(CONFIG_CUSE) += cuse.o

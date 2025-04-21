@@ -30,6 +30,60 @@
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
 
+static char *opname[] = {
+	[FUSE_LOOKUP]	   =   "LOOKUP",
+	[FUSE_FORGET]	   =   "FORGET",
+	[FUSE_GETATTR]	   =   "GETATTR",
+	[FUSE_SETATTR]	   =   "SETATTR",
+	[FUSE_READLINK]	   =   "READLINK",
+	[FUSE_SYMLINK]	   =   "SYMLINK",
+	[FUSE_MKNOD]	   =   "MKNOD",
+	[FUSE_MKDIR]	   =   "MKDIR",
+	[FUSE_UNLINK]	   =   "UNLINK",
+	[FUSE_RMDIR]	   =   "RMDIR",
+	[FUSE_RENAME]	   =   "RENAME",
+	[FUSE_LINK]	   =   "LINK",
+	[FUSE_OPEN]	   =   "OPEN",
+	[FUSE_READ]	   =   "READ",
+	[FUSE_WRITE]	   =   "WRITE",
+	[FUSE_STATFS]	   =   "STATFS",
+	[FUSE_STATX]       =   "STATX",
+	[FUSE_RELEASE]	   =   "RELEASE",
+	[FUSE_FSYNC]	   =   "FSYNC",
+	[FUSE_SETXATTR]	   =   "SETXATTR",
+	[FUSE_GETXATTR]	   =   "GETXATTR",
+	[FUSE_LISTXATTR]   =   "LISTXATTR",
+	[FUSE_REMOVEXATTR] =   "REMOVEXATTR",
+	[FUSE_FLUSH]	   =   "FLUSH",
+	[FUSE_INIT]	   =   "INIT",
+	[FUSE_OPENDIR]	   =   "OPENDIR",
+	[FUSE_READDIR]	   =   "READDIR",
+	[FUSE_RELEASEDIR]  =   "RELEASEDIR",
+	[FUSE_FSYNCDIR]	   =   "FSYNCDIR",
+	[FUSE_GETLK]	   =   "GETLK",
+	[FUSE_SETLK]	   =   "SETLK",
+	[FUSE_SETLKW]	   =   "SETLKW",
+	[FUSE_ACCESS]	   =  "ACCESS",
+	[FUSE_CREATE]	   =  "CREATE",
+	[FUSE_INTERRUPT]   =  "INTERRUPT",
+	[FUSE_BMAP]	   =  "BMAP",
+	[FUSE_IOCTL]	   =  "IOCTL",
+	[FUSE_POLL]	   =  "POLL",
+	[FUSE_FALLOCATE]   =  "FALLOCATE",
+	[FUSE_DESTROY]	   =  "DESTROY",
+	[FUSE_NOTIFY_REPLY] = "NOTIFY_REPLY",
+	[FUSE_BATCH_FORGET] = "BATCH_FORGET",
+	[FUSE_READDIRPLUS] = "READDIRPLUS",
+	[FUSE_RENAME2]     =  "RENAME2",
+	[FUSE_COPY_FILE_RANGE] = "COPY_FILE_RANGE",
+	[FUSE_LSEEK]	   = "LSEEK",
+	[CUSE_INIT]	   = "CUSE_INIT",
+	[FUSE_TMPFILE]     = "TMPFILE",
+	[FUSE_SYNCFS]      = "SYNCFS",
+	[FUSE_GET_FMAP]    = "GET_FMAP",
+	[FUSE_GET_DAXDEV]  = "GET_DAXDEV",
+};
+
 static struct kmem_cache *fuse_req_cachep;
 
 static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
@@ -565,6 +619,13 @@ ssize_t __fuse_simple_request(struct mnt_idmap *idmap,
 		ret = args->out_args[args->out_numargs - 1].size;
 	}
 	fuse_put_request(req);
+
+	pr_debug("%s: opcode=%s (%d) nodeid=%lld out_numargs=%d len[0]=%d len[1]=%d\n",
+		  __func__, opname[args->opcode], args->opcode,
+		  args->nodeid,
+		  args->out_numargs,
+		  args->out_args[0].size,
+		  (args->out_numargs > 1) ? args->out_args[1].size : 0);
 
 	return ret;
 }
