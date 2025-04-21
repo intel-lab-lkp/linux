@@ -1196,12 +1196,21 @@ static void virtio_transport_wait_close(struct sock *sk, long timeout)
 {
 	if (timeout) {
 		DEFINE_WAIT_FUNC(wait, woken_wake_function);
+		ssize_t (*unsent)(struct vsock_sock *vsk);
+		struct vsock_sock *vsk = vsock_sk(sk);
+
+		/* Some transports (Hyper-V, VMCI) do not implement
+		 * unsent_bytes. For those, no lingering on close().
+		 */
+		unsent = vsk->transport->unsent_bytes;
+		if (!unsent)
+			return;
 
 		add_wait_queue(sk_sleep(sk), &wait);
 
 		do {
-			if (sk_wait_event(sk, &timeout,
-					  sock_flag(sk, SOCK_DONE), &wait))
+			if (sk_wait_event(sk, &timeout, unsent(vsk) == 0,
+					  &wait))
 				break;
 		} while (!signal_pending(current) && timeout);
 
