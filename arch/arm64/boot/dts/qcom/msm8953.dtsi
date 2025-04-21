@@ -1052,18 +1052,18 @@
 			reg-names = "kgsl_3d0_reg_memory";
 			interrupts = <GIC_SPI 33 IRQ_TYPE_LEVEL_HIGH>;
 
-			clocks = <&gcc GCC_OXILI_GFX3D_CLK>,
+			clocks = <&gcc GCC_BIMC_GPU_CLK>,
+				 <&gcc GCC_OXILI_AON_CLK>,
+				 <&gcc GCC_OXILI_GFX3D_CLK>,
 				 <&gcc GCC_OXILI_AHB_CLK>,
 				 <&gcc GCC_BIMC_GFX_CLK>,
-				 <&gcc GCC_BIMC_GPU_CLK>,
-				 <&gcc GCC_OXILI_TIMER_CLK>,
-				 <&gcc GCC_OXILI_AON_CLK>;
-			clock-names = "core",
+				 <&gcc GCC_OXILI_TIMER_CLK>;
+			clock-names = "alt_mem_iface",
+				      "alwayson",
+				      "core",
 				      "iface",
 				      "mem_iface",
-				      "alt_mem_iface",
-				      "rbbmtimer",
-				      "alwayson";
+				      "rbbmtimer";
 			power-domains = <&gcc OXILI_GX_GDSC>;
 
 			iommus = <&gpu_iommu 0>;
