@@ -230,9 +230,9 @@ int mipi_dbi_buf_copy(void *dst, struct iosys_map *src, struct drm_framebuffer *
 })
 
 #ifdef CONFIG_DEBUG_FS
-void mipi_dbi_debugfs_init(struct drm_minor *minor);
+void mipi_dbi_debugfs_init(struct mipi_dbi_dev *dbidev);
 #else
-static inline void mipi_dbi_debugfs_init(struct drm_minor *minor) {}
+static inline void mipi_dbi_debugfs_init(struct mipi_dbi_dev *dbidev) {}
 #endif
 
 /**

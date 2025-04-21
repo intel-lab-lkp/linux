@@ -115,7 +115,6 @@ static struct drm_driver ili9163_driver = {
 	.fops			= &ili9163_fops,
 	DRM_GEM_DMA_DRIVER_OPS_VMAP,
 	DRM_FBDEV_DMA_DRIVER_OPS,
-	.debugfs_init		= mipi_dbi_debugfs_init,
 	.name			= "ili9163",
 	.desc			= "Ilitek ILI9163",
 	.major			= 1,
@@ -181,6 +180,8 @@ static int ili9163_probe(struct spi_device *spi)
 		return ret;
 
 	drm_mode_config_reset(drm);
+
+	mipi_dbi_debugfs_init(dbidev);
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)

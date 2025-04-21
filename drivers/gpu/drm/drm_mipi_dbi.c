@@ -1488,17 +1488,17 @@ static const struct file_operations mipi_dbi_debugfs_command_fops = {
  *
  * This function creates a 'command' debugfs file for sending commands to the
  * controller or getting the read command values.
- * Drivers can use this as their &drm_driver->debugfs_init callback.
+ * Drivers can call this function before registering their device to drm.
  *
  */
-void mipi_dbi_debugfs_init(struct drm_minor *minor)
+void mipi_dbi_debugfs_init(struct mipi_dbi_dev *dbidev)
 {
-	struct mipi_dbi_dev *dbidev = drm_to_mipi_dbi_dev(minor->dev);
 	umode_t mode = S_IFREG | S_IWUSR;
 
 	if (dbidev->dbi.read_commands)
 		mode |= S_IRUGO;
-	debugfs_create_file("command", mode, minor->debugfs_root, dbidev,
+
+	debugfs_create_file("command", mode, dbidev->drm.debugfs_root, dbidev,
 			    &mipi_dbi_debugfs_command_fops);
 }
 EXPORT_SYMBOL(mipi_dbi_debugfs_init);

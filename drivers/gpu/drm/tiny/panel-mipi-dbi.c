@@ -267,7 +267,6 @@ static const struct drm_driver panel_mipi_dbi_driver = {
 	.fops			= &panel_mipi_dbi_fops,
 	DRM_GEM_DMA_DRIVER_OPS_VMAP,
 	DRM_FBDEV_DMA_DRIVER_OPS,
-	.debugfs_init		= mipi_dbi_debugfs_init,
 	.name			= "panel-mipi-dbi",
 	.desc			= "MIPI DBI compatible display panel",
 	.major			= 1,
@@ -383,6 +382,8 @@ static int panel_mipi_dbi_spi_probe(struct spi_device *spi)
 		return ret;
 
 	drm_mode_config_reset(drm);
+
+	mipi_dbi_debugfs_init(dbidev);
 
 	ret = drm_dev_register(drm, 0);
 	if (ret)
