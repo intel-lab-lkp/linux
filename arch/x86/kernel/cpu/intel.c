@@ -513,6 +513,19 @@ static void init_intel_misc_features(struct cpuinfo_x86 *c)
 }
 
 /*
+ * These CPUs have buggy MWAIT/MONITOR implementations that
+ * usually manifest as hangs or stalls at boot.
+ */
+#define MWAIT_VFM(_vfm)	\
+	X86_MATCH_VFM_FEATURE(_vfm, X86_FEATURE_MWAIT, 0)
+static const struct x86_cpu_id monitor_bug_list[] = {
+	MWAIT_VFM(INTEL_ATOM_GOLDMONT),
+	MWAIT_VFM(INTEL_LUNARLAKE_M),
+	MWAIT_VFM(INTEL_ICELAKE_X),	/* Erratum ICX143 */
+	{},
+};
+
+/*
  * This is a list of Intel CPUs that are known to suffer from downclocking when
  * ZMM registers (512-bit vectors) are used.  On these CPUs, when the kernel
  * executes SIMD-optimized code such as cryptography functions or CRCs, it
@@ -565,9 +578,7 @@ static void init_intel(struct cpuinfo_x86 *c)
 	     c->x86_vfm == INTEL_WESTMERE_EX))
 		set_cpu_bug(c, X86_BUG_CLFLUSH_MONITOR);
 
-	if (boot_cpu_has(X86_FEATURE_MWAIT) &&
-	    (c->x86_vfm == INTEL_ATOM_GOLDMONT ||
-	     c->x86_vfm == INTEL_LUNARLAKE_M))
+	if (x86_match_cpu(monitor_bug_list))
 		set_cpu_bug(c, X86_BUG_MONITOR);
 
 #ifdef CONFIG_X86_64

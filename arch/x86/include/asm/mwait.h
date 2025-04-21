@@ -110,6 +110,9 @@ static __always_inline void __sti_mwait(unsigned long eax, unsigned long ecx)
  * through MWAIT. Whenever someone changes need_resched, we would be woken
  * up from MWAIT (without an IPI).
  *
+ * Buggy (X86_BUG_MONITOR) CPUs will never set the polling bit and will
+ * always be sent IPIs.
+ *
  * New with Core Duo processors, MWAIT can take some hints based on CPU
  * capability.
  */
