@@ -241,6 +241,12 @@ struct rdtgroup {
 	struct pseudo_lock_region	*plr;
 };
 
+struct rdt_parse_data {
+	u32			closid;
+	enum rdtgrp_mode	mode;
+	char			*buf;
+};
+
 /* rdtgroup.flags */
 #define	RDT_DELETED		1
 
