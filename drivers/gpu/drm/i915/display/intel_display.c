@@ -7194,6 +7194,17 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 	}
 
 	if (new_crtc_state->use_dsb) {
+		/*
+		 * Pause the DMC DC balancing for the remainder of the
+		 * commit so that vmin/vmax won't change after we've baked
+		 * them into the DSB vblank evasion commands.
+		 *
+		 * FIXME maybe need a small delay here to make sure DMC has
+		 * finished updating the values? Or we need a better DMC<->driver
+		 * protocol that gives is real guarantees about that...
+		 */
+		intel_pipedmc_dcb_disable(NULL, crtc);
+
 		if (intel_crtc_needs_color_update(new_crtc_state))
 			intel_color_commit_noarm(new_crtc_state->dsb_commit,
 						 new_crtc_state);
@@ -7230,6 +7241,8 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 			intel_vrr_send_push(new_crtc_state->dsb_commit, new_crtc_state);
 			intel_dsb_wait_vblank_delay(state, new_crtc_state->dsb_commit);
 			intel_vrr_check_push_sent(new_crtc_state->dsb_commit, new_crtc_state);
+			if (new_crtc_state->vrr.dc_balance.enable)
+				intel_pipedmc_dcb_enable(new_crtc_state->dsb_commit, crtc);
 			intel_dsb_interrupt(new_crtc_state->dsb_commit);
 		}
 	}
