@@ -594,11 +594,11 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 {
 	long long int now_ms = div_u64(ktime_get_ns(), 1000 * 1000);
 	long long int long_delta_ms;
+	long long int delta_ms;
 	struct dp_meter_band *band;
 	struct dp_meter *meter;
 	int i, band_exceeded_max = -1;
 	u32 band_exceeded_rate = 0;
-	u32 delta_ms;
 	u32 cost;
 
 	meter = lookup_meter(&dp->meter_tbl, meter_id);
@@ -623,7 +623,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 	 * wrap around below.
 	 */
 	delta_ms = (long_delta_ms > (long long int)meter->max_delta_t)
-		   ? meter->max_delta_t : (u32)long_delta_ms;
+		   ? meter->max_delta_t : long_delta_ms;
 
 	/* Update meter statistics.
 	 */
