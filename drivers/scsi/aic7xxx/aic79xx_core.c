@@ -2998,6 +2998,10 @@ ahd_handle_pkt_busfree(struct ahd_softc *ahd, u_int busfreetime)
 		ahd_print_path(ahd, scb);
 		printk("Unexpected PKT busfree condition\n");
 		ahd_dump_card_state(ahd);
+		if (scb == NULL) {
+			printk("scb pointer is NULL\n");
+			return (1);
+		}
 		ahd_abort_scbs(ahd, SCB_GET_TARGET(ahd, scb), 'A',
 			       SCB_GET_LUN(scb), SCB_GET_TAG(scb),
 			       ROLE_INITIATOR, CAM_UNEXP_BUSFREE);
