@@ -988,7 +988,7 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 			/* write/read request */
 			if (i + 1 < num && (msg[i + 1].flags & I2C_M_RD)) {
 				req = 0xB9;
-				if (msg[i].len < 1) {
+				if (msg[i].len < 1 || msg[i + 1].len + 5 > sizeof(data)) {
 					i = -EOPNOTSUPP;
 					break;
 				}
@@ -1005,7 +1005,7 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 
 				/* demod 16bit addr */
 				req = 0xBD;
-				if (msg[i].len < 1) {
+				if (msg[i].len < 1 || msg[i].len - 2 > sizeof(data)) {
 					i = -EOPNOTSUPP;
 					break;
 				}
@@ -1034,7 +1034,7 @@ static int az6027_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msg[], int n
 			} else {
 
 				req = 0xBD;
-				if (msg[i].len < 1) {
+				if (msg[i].len < 1 || msg[i].len - 1 > sizeof(data)) {
 					i = -EOPNOTSUPP;
 					break;
 				}
