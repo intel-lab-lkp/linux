@@ -974,7 +974,7 @@ threshold value, header and data will be split.
 ``ETHTOOL_A_RINGS_RX_BUF_LEN`` controls the size of the buffer chunks driver
 uses to receive packets. If the device uses different memory polls for headers
 and payload this setting may control the size of the header buffers but must
-control the size of the payload buffers.
+control the size of the payload buffers. Setting to 0 restores driver default.
 
 CHANNELS_GET
 ============
