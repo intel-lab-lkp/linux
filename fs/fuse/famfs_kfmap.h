@@ -60,4 +60,27 @@ struct famfs_file_meta {
 	};
 };
 
+/*
+ * dax_devlist
+ *
+ * This is the in-memory daxdev metadata that is populated by
+ * the responses to GET_FMAP messages
+ */
+struct famfs_daxdev {
+	/* Include dev uuid? */
+	bool valid;
+	bool error;
+	dev_t devno;
+	struct dax_device *devp;
+	char *name;
+};
+
+#define MAX_DAXDEVS 24
+
+struct famfs_dax_devlist {
+	int nslots;
+	int ndevs;
+	struct famfs_daxdev *devlist; /* XXX: make this an xarray! */
+};
+
 #endif /* FAMFS_KFMAP_H */

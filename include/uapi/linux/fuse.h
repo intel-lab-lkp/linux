@@ -1328,4 +1328,19 @@ struct fuse_famfs_fmap_header {
 	uint64_t file_size;
 	uint64_t reserved1;
 };
+
+struct fuse_get_daxdev_in {
+	uint32_t        daxdev_num;
+};
+
+#define DAXDEV_NAME_MAX 256
+struct fuse_daxdev_out {
+	uint16_t index;
+	uint16_t reserved;
+	uint32_t reserved2;
+	uint64_t reserved3; /* enough space for a uuid if we need it */
+	uint64_t reserved4;
+	char name[DAXDEV_NAME_MAX];
+};
+
 #endif /* _LINUX_FUSE_H */
