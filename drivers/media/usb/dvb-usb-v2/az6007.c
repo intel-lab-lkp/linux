@@ -752,8 +752,13 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	int length;
 	u8 req, addr;
 
-	if (mutex_lock_interruptible(&st->mutex) < 0)
+	if (!usb_trylock_device(d->udev))
+		return -EBUSY;
+
+	if (mutex_lock_interruptible(&st->mutex) < 0) {
+		usb_unlock_device(d->udev);
 		return -EAGAIN;
+	}
 
 	for (i = 0; i < num; i++) {
 		addr = msgs[i].addr << 1;
@@ -821,6 +826,7 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	}
 err:
 	mutex_unlock(&st->mutex);
+	usb_unlock_device(d->udev);
 	if (ret < 0) {
 		pr_info("%s ERROR: %i\n", __func__, ret);
 		return ret;
