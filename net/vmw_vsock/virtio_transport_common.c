@@ -1194,28 +1194,28 @@ static void virtio_transport_remove_sock(struct vsock_sock *vsk)
 
 static void virtio_transport_wait_close(struct sock *sk, long timeout)
 {
-	if (timeout) {
-		DEFINE_WAIT_FUNC(wait, woken_wake_function);
-		ssize_t (*unsent)(struct vsock_sock *vsk);
-		struct vsock_sock *vsk = vsock_sk(sk);
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	ssize_t (*unsent)(struct vsock_sock *vsk);
+	struct vsock_sock *vsk = vsock_sk(sk);
 
-		/* Some transports (Hyper-V, VMCI) do not implement
-		 * unsent_bytes. For those, no lingering on close().
-		 */
-		unsent = vsk->transport->unsent_bytes;
-		if (!unsent)
-			return;
+	if (!timeout)
+		return;
 
-		add_wait_queue(sk_sleep(sk), &wait);
+	/* Some transports (Hyper-V, VMCI) do not implement unsent_bytes.
+	 * For those, no lingering on close().
+	 */
+	unsent = vsk->transport->unsent_bytes;
+	if (!unsent)
+		return;
 
-		do {
-			if (sk_wait_event(sk, &timeout, unsent(vsk) == 0,
-					  &wait))
-				break;
-		} while (!signal_pending(current) && timeout);
+	add_wait_queue(sk_sleep(sk), &wait);
 
-		remove_wait_queue(sk_sleep(sk), &wait);
-	}
+	do {
+		if (sk_wait_event(sk, &timeout, unsent(vsk) == 0, &wait))
+			break;
+	} while (!signal_pending(current) && timeout);
+
+	remove_wait_queue(sk_sleep(sk), &wait);
 }
 
 static void virtio_transport_cancel_close_work(struct vsock_sock *vsk,
