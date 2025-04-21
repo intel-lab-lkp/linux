@@ -125,7 +125,7 @@ static int adis16201_read_raw(struct iio_dev *indio_dev,
 		case IIO_TEMP:
 			*val = -470;
 			*val2 = 0;
-			return IIO_VAL_INT_PLUS_MICRO;
+			return IIO_VAL_INT;
 		case IIO_ACCEL:
 			/*
 			 * IIO base unit for sensitivity of accelerometer
