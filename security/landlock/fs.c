@@ -1376,14 +1376,14 @@ static void
 log_fs_change_topology_path(const struct landlock_cred_security *const subject,
 			    size_t handle_layer, const struct path *const path)
 {
-	landlock_log_denial(subject, &(struct landlock_request) {
+	struct landlock_request request = {
 		.type = LANDLOCK_REQUEST_FS_CHANGE_TOPOLOGY,
-		.audit = {
-			.type = LSM_AUDIT_DATA_PATH,
-			.u.path = *path,
-		},
+		.audit.type = LSM_AUDIT_DATA_PATH,
 		.layer_plus_one = handle_layer + 1,
-	});
+	};
+	request.audit.u.path = *path;
+
+	landlock_log_denial(subject, &request);
 }
 
 static void log_fs_change_topology_dentry(
@@ -1720,6 +1720,7 @@ static int hook_file_truncate(struct file *const file)
 static int hook_file_ioctl_common(const struct file *const file,
 				  const unsigned int cmd, const bool is_compat)
 {
+	struct lsm_ioctlop_audit audit_log;
 	access_mask_t allowed_access = landlock_file(file)->allowed_access;
 
 	/*
@@ -1738,14 +1739,13 @@ static int hook_file_ioctl_common(const struct file *const file,
 				  is_masked_device_ioctl(cmd))
 		return 0;
 
+	audit_log.path = file->f_path;
+	audit_log.cmd = cmd;
 	landlock_log_denial(landlock_cred(file->f_cred), &(struct landlock_request) {
 		.type = LANDLOCK_REQUEST_FS_ACCESS,
 		.audit = {
 			.type = LSM_AUDIT_DATA_IOCTL_OP,
-			.u.op = &(struct lsm_ioctlop_audit) {
-				.path = file->f_path,
-				.cmd = cmd,
-			},
+			.u.op = &audit_log,
 		},
 		.all_existing_optional_access = _LANDLOCK_ACCESS_FS_OPTIONAL,
 		.access = LANDLOCK_ACCESS_FS_IOCTL_DEV,
