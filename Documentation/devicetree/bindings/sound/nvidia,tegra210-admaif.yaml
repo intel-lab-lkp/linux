@@ -24,6 +24,7 @@ properties:
   compatible:
     oneOf:
       - enum:
+          - nvidia,tegra264-admaif
           - nvidia,tegra210-admaif
           - nvidia,tegra186-admaif
       - items:
