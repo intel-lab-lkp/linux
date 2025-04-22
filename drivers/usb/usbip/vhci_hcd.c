@@ -1345,6 +1345,9 @@ static int vhci_hcd_probe(struct platform_device *pdev)
 
 	usbip_dbg_vhci_hc("name %s id %d\n", pdev->name, pdev->id);
 
+	/* Set the dma mask to support 64bit for vhci-hcd driver. */
+	dma_set_mask(&pdev->dev, DMA_BIT_MASK(64));
+
 	/*
 	 * Allocate and initialize hcd.
 	 * Our private data is also allocated automatically.
