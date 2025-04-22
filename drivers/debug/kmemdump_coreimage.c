@@ -3,6 +3,7 @@
 #include <linux/init.h>
 #include <linux/elfcore.h>
 #include <linux/kmemdump.h>
+#include <linux/kmsg_dump.h>
 #include <linux/utsname.h>
 #include <linux/sched/stat.h>
 #include <linux/vmcore_info.h>
@@ -71,6 +72,8 @@ void register_coreinfo(void)
 			  sizeof(cpumask_t));
 	kmemdump_register("jiffies", (void *)&jiffies_64,
 			  sizeof(jiffies_64));
+
+	kmsg_kmemdump_register();
 }
 
 static struct elf_phdr *elf_phdr_entry_addr(struct elfhdr *ehdr, int idx)
