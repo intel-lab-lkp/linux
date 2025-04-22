@@ -45,6 +45,10 @@ properties:
   reset-gpios:
     maxItems: 1
 
+  no-reset-pull-up:
+    type: boolean
+    description: There is no pull-up on reset pin
+
   AVDD28-supply:
     description: Analog power supply regulator on AVDD28 pin
 
