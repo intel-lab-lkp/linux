@@ -1083,7 +1083,8 @@ static void acpi_battery_notify(acpi_handle handle, u32 event, void *data)
 		msleep(battery_notification_delay_ms);
 	if (event == ACPI_BATTERY_NOTIFY_INFO)
 		acpi_battery_refresh(battery);
-	acpi_battery_update(battery, false);
+	if (event == ACPI_BATTERY_NOTIFY_STATUS)
+		acpi_battery_update(battery, false);
 	acpi_bus_generate_netlink_event(device->pnp.device_class,
 					dev_name(&device->dev), event,
 					acpi_battery_present(battery));
