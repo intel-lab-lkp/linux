@@ -3633,7 +3633,7 @@ static int caam_cra_init(struct crypto_skcipher *tfm)
 		fallback = crypto_alloc_skcipher(tfm_name, 0,
 						 CRYPTO_ALG_NEED_FALLBACK);
 		if (IS_ERR(fallback)) {
-			pr_err("Failed to allocate %s fallback: %ld\n",
+			dev_err(ctx->jrdev, "Failed to allocate %s fallback: %ld\n",
 			       tfm_name, PTR_ERR(fallback));
 			return PTR_ERR(fallback);
 		}
@@ -3814,8 +3814,8 @@ int caam_algapi_init(struct device *ctrldev)
 
 		err = crypto_engine_register_skcipher(&t_alg->skcipher);
 		if (err) {
-			pr_warn("%s alg registration failed\n",
-				t_alg->skcipher.base.base.cra_driver_name);
+			dev_warn(ctrldev, "%s alg registration failed\n",
+				 t_alg->skcipher.base.base.cra_driver_name);
 			continue;
 		}
 
@@ -3866,8 +3866,8 @@ int caam_algapi_init(struct device *ctrldev)
 
 		err = crypto_engine_register_aead(&t_alg->aead);
 		if (err) {
-			pr_warn("%s alg registration failed\n",
-				t_alg->aead.base.base.cra_driver_name);
+			dev_warn(ctrldev, "%s alg registration failed\n",
+				 t_alg->aead.base.base.cra_driver_name);
 			continue;
 		}
 
@@ -3876,7 +3876,7 @@ int caam_algapi_init(struct device *ctrldev)
 	}
 
 	if (registered)
-		pr_info("caam algorithms registered in /proc/crypto\n");
+		dev_info(ctrldev, "caam algorithms registered in /proc/crypto\n");
 
 	return err;
 }
