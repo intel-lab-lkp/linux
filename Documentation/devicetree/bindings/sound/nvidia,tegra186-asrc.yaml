@@ -31,7 +31,9 @@ properties:
 
   compatible:
     oneOf:
-      - const: nvidia,tegra186-asrc
+      - enum:
+          - nvidia,tegra264-asrc
+          - nvidia,tegra186-asrc
       - items:
           - enum:
               - nvidia,tegra234-asrc
