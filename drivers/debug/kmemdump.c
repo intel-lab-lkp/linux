@@ -58,6 +58,7 @@ int kmemdump_register(char *handle, void *zone, size_t size)
 			return ret;
 		}
 		z->registered = true;
+		update_elfheader(z);
 	}
 
 	mutex_unlock(&kmemdump_lock);
@@ -84,6 +85,7 @@ void kmemdump_unregister(int id)
 	if (z->registered && backend)
 		backend->unregister_region(z->id);
 
+	clear_elfheader(z);
 	idr_remove(&kmemdump_idr, id);
 	kfree(z);
 
@@ -103,6 +105,7 @@ static int kmemdump_register_fn(int id, void *p, void *data)
 	if (ret)
 		return ret;
 	z->registered = true;
+	update_elfheader(z);
 
 	return 0;
 }
@@ -130,6 +133,14 @@ int kmemdump_register_backend(struct kmemdump_backend *be)
 	pr_info("kmemdump backend %s registered successfully.\n",
 		backend->name);
 
+	init_elfheader(backend);
+
+	mutex_unlock(&kmemdump_lock);
+
+	register_coreinfo();
+
+	mutex_lock(&kmemdump_lock);
+
 	/* Try to call the backend for all previously requested zones */
 	idr_for_each(&kmemdump_idr, kmemdump_register_fn, NULL);
 
@@ -151,6 +162,7 @@ static int kmemdump_unregister_fn(int id, void *p, void *data)
 	if (ret)
 		return ret;
 	z->registered = false;
+	clear_elfheader(z);
 
 	return 0;
 }

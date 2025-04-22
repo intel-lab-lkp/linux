@@ -14,6 +14,16 @@ config DRIVER_KMEMDUMP
 	  Note that modules using this feature must be rebuilt if option
 	  changes.
 
+config DRIVER_KMEMDUMP_COREIMAGE
+	depends on DRIVER_KMEMDUMP
+	bool "Assemble memory regions into a coredump readable with debuggers"
+	help
+	  Enabling this will assemble all the memory regions into a
+	  core ELF file. The first region will include program headers for
+	  all the regions, together with vmcoreinfo and specific coredump
+	  structures. The coredump file can then be loaded into GDB or crash
+	  tool and further inspected.
+
 config QCOM_MD_KMEMDUMP_BACKEND
 	tristate "Qualcomm Minidump kmemdump backend driver"
 	depends on ARCH_QCOM || COMPILE_TEST

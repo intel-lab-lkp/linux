@@ -49,4 +49,29 @@ static inline void kmemdump_unregister(int id)
 
 int kmemdump_register_backend(struct kmemdump_backend *backend);
 void kmemdump_unregister_backend(struct kmemdump_backend *backend);
+
+#ifdef CONFIG_DRIVER_KMEMDUMP_COREIMAGE
+int init_elfheader(struct kmemdump_backend *be);
+void update_elfheader(const struct kmemdump_zone *z);
+int clear_elfheader(const struct kmemdump_zone *z);
+void register_coreinfo(void);
+#else
+static inline int init_elfheader(struct kmemdump_backend *be)
+{
+	return 0;
+}
+
+static inline void update_elfheader(const struct kmemdump_zone *z)
+{
+}
+
+static inline int clear_elfheader(const struct kmemdump_zone *z)
+{
+	return 0;
+}
+
+static inline void register_coreinfo(void)
+{
+}
+#endif
 #endif
