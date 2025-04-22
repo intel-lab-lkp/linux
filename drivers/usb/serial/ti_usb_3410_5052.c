@@ -708,6 +708,13 @@ static int ti_open(struct tty_struct *tty, struct usb_serial_port *port)
 	/* reset the data toggle on the bulk endpoints to work around bug in
 	 * host controllers where things get out of sync some times */
 	usb_clear_halt(dev, port->write_urb->pipe);
+
+	if (!port->read_urb) {
+		dev_err(&port->dev, "%s - no read urb\n", __func__);
+		status = -EINVAL;
+		goto unlink_int_urb;
+	}
+
 	usb_clear_halt(dev, port->read_urb->pipe);
 
 	if (tty)
