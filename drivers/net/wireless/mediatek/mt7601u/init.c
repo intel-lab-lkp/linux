@@ -562,8 +562,9 @@ mt76_init_sband_2g(struct mt7601u_dev *dev)
 
 	dev->hw->wiphy->bands[NL80211_BAND_2GHZ] = dev->sband_2g;
 
-	WARN_ON(dev->ee->reg.start - 1 + dev->ee->reg.num >
-		ARRAY_SIZE(mt76_channels_2ghz));
+	if (WARN_ON(dev->ee->reg.start - 1 + dev->ee->reg.num >
+		ARRAY_SIZE(mt76_channels_2ghz)))
+		return -EINVAL;
 
 	return mt76_init_sband(dev, dev->sband_2g,
 			       &mt76_channels_2ghz[dev->ee->reg.start - 1],
