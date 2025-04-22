@@ -5746,7 +5746,6 @@ static void md_kobj_release(struct kobject *ko)
 	if (mddev->sysfs_level)
 		sysfs_put(mddev->sysfs_level);
 
-	del_gendisk(mddev->gendisk);
 	put_disk(mddev->gendisk);
 }
 
@@ -6597,6 +6596,8 @@ static int do_md_stop(struct mddev *mddev, int mode)
 		md_clean(mddev);
 		if (mddev->hold_active == UNTIL_STOP)
 			mddev->hold_active = 0;
+
+		del_gendisk(mddev->gendisk);
 	}
 	md_new_event();
 	sysfs_notify_dirent_safe(mddev->sysfs_state);
