@@ -13,6 +13,13 @@
 #include <linux/dmapool.h>
 #include <linux/dmaengine.h>
 
+/* Physical addressing capability */
+#if defined(CONFIG_E6500_CPU) || defined(CONFIG_E5500_CPU)
+#define ELO_MAX_PHYS_BITS	40
+#else
+#define ELO_MAX_PHYS_BITS	36
+#endif
+
 /* Define data structures needed by Freescale
  * MPC8540 and MPC8349 DMA controller.
  */
