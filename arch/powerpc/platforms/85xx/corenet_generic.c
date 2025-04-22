@@ -62,6 +62,9 @@ static const struct of_device_id of_device_ids[] = {
 		.compatible	= "simple-bus"
 	},
 	{
+		.compatible	= "fsl,ifc"
+	},
+	{
 		.compatible	= "mdio-mux-gpio"
 	},
 	{
@@ -90,6 +93,12 @@ static const struct of_device_id of_device_ids[] = {
 	},
 	{
 		.compatible	= "fsl,qe",
+	},
+	{
+		.name           = "localbus",
+	},
+	{
+		.name		= "rapidio",
 	},
 	/* The following two are for the Freescale hypervisor */
 	{
