@@ -794,19 +794,19 @@ const struct powerpc_operand powerpc_operands[] =
 #define PSWM WS + 1
   /* The BO16 field in a BD8 form instruction.  */
 #define BO16 PSWM
-  {  0x1, 10, 0, 0, 0 },
+  {  0x1, 10, NULL, NULL, 0 },
 
   /* IDX bits for quantization in the pair singles instructions.  */
 #define PSQ PSWM + 1
-  {  0x7, 12, 0, 0, 0 },
+  {  0x7, 12, NULL, NULL, 0 },
 
   /* IDX bits for quantization in the pair singles x-type instructions.  */
 #define PSQM PSQ + 1
-  {  0x7, 7, 0, 0, 0 },
+  {  0x7, 7, NULL, NULL, 0 },
 
   /* Smaller D field for quantization in the pair singles instructions.  */
 #define PSD PSQM + 1
-  {  0xfff, 0, 0, 0,  PPC_OPERAND_PARENS | PPC_OPERAND_SIGNED },
+  {  0xfff, 0, NULL, NULL,  PPC_OPERAND_PARENS | PPC_OPERAND_SIGNED },
 
   /* The L field in an mtmsrd or A form instruction or R or W in an X form.  */
 #define A_L PSD + 1
@@ -860,25 +860,25 @@ const struct powerpc_operand powerpc_operands[] =
   /* Xilinx APU related masks and macros */
 #define FCRT XFL_L + 1
 #define FCRT_MASK (0x1f << 21)
-  { 0x1f, 21, 0, 0, PPC_OPERAND_FCR },
+  { 0x1f, 21, NULL, NULL, PPC_OPERAND_FCR },
 
   /* Xilinx FSL related masks and macros */
 #define FSL FCRT + 1
 #define FSL_MASK (0x1f << 11)
-  { 0x1f, 11, 0, 0, PPC_OPERAND_FSL },
+  { 0x1f, 11, NULL, NULL, PPC_OPERAND_FSL },
 
   /* Xilinx UDI related masks and macros */
 #define URT FSL + 1
-  { 0x1f, 21, 0, 0, PPC_OPERAND_UDI },
+  { 0x1f, 21, NULL, NULL, PPC_OPERAND_UDI },
 
 #define URA URT + 1
-  { 0x1f, 16, 0, 0, PPC_OPERAND_UDI },
+  { 0x1f, 16, NULL, NULL, PPC_OPERAND_UDI },
 
 #define URB URA + 1
-  { 0x1f, 11, 0, 0, PPC_OPERAND_UDI },
+  { 0x1f, 11, NULL, NULL, PPC_OPERAND_UDI },
 
 #define URC URB + 1
-  { 0x1f, 6, 0, 0, PPC_OPERAND_UDI },
+  { 0x1f, 6, NULL, NULL, PPC_OPERAND_UDI },
 
   /* The VLESIMM field in a D form instruction.  */
 #define VLESIMM URC + 1
