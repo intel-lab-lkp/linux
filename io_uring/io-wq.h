@@ -70,13 +70,21 @@ enum io_wq_cancel io_wq_cancel_cb(struct io_wq *wq, work_cancel_fn *cancel,
 					void *data, bool cancel_all);
 
 #if defined(CONFIG_IO_WQ)
-extern void io_wq_worker_sleeping(struct task_struct *);
-extern void io_wq_worker_running(struct task_struct *);
+extern void io_wq_worker_sleeping(struct task_struct *tsk);
+extern void io_wq_worker_running(struct task_struct *tsk);
+extern void set_userfault_flag_for_ioworker(void);
+extern void clear_userfault_flag_for_ioworker(void);
 #else
 static inline void io_wq_worker_sleeping(struct task_struct *tsk)
 {
 }
 static inline void io_wq_worker_running(struct task_struct *tsk)
+{
+}
+static inline void set_userfault_flag_for_ioworker(void)
+{
+}
+static inline void clear_userfault_flag_for_ioworker(void)
 {
 }
 #endif

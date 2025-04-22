@@ -30,6 +30,7 @@ enum {
 	IO_WORKER_F_UP		= 0,	/* up and active */
 	IO_WORKER_F_RUNNING	= 1,	/* account as running */
 	IO_WORKER_F_FREE	= 2,	/* worker on free list */
+	IO_WORKER_F_FAULT   = 3,    /* used for userfault */
 };
 
 enum {
@@ -706,6 +707,26 @@ static int io_wq_worker(void *data)
 	return 0;
 }
 
+void set_userfault_flag_for_ioworker(void)
+{
+	struct io_worker *worker;
+
+	if (!(current->flags & PF_IO_WORKER))
+		return;
+	worker = current->worker_private;
+	set_bit(IO_WORKER_F_FAULT, &worker->flags);
+}
+
+void clear_userfault_flag_for_ioworker(void)
+{
+	struct io_worker *worker;
+
+	if (!(current->flags & PF_IO_WORKER))
+		return;
+	worker = current->worker_private;
+	clear_bit(IO_WORKER_F_FAULT, &worker->flags);
+}
+
 /*
  * Called when a worker is scheduled in. Mark us as currently running.
  */
@@ -715,12 +736,14 @@ void io_wq_worker_running(struct task_struct *tsk)
 
 	if (!worker)
 		return;
-	if (!test_bit(IO_WORKER_F_UP, &worker->flags))
-		return;
-	if (test_bit(IO_WORKER_F_RUNNING, &worker->flags))
-		return;
-	set_bit(IO_WORKER_F_RUNNING, &worker->flags);
-	io_wq_inc_running(worker);
+	if (!test_bit(IO_WORKER_F_FAULT, &worker->flags)) {
+		if (!test_bit(IO_WORKER_F_UP, &worker->flags))
+			return;
+		if (test_bit(IO_WORKER_F_RUNNING, &worker->flags))
+			return;
+		set_bit(IO_WORKER_F_RUNNING, &worker->flags);
+		io_wq_inc_running(worker);
+	}
 }
 
 /*
