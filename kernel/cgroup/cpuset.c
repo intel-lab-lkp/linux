@@ -4275,6 +4275,32 @@ bool cpuset_current_node_allowed(int node, gfp_t gfp_mask)
 	return allowed;
 }
 
+bool cpuset_node_allowed(struct cgroup *cgroup, int nid)
+{
+	struct cgroup_subsys_state *css;
+	struct cpuset *cs;
+	bool allowed;
+
+	/*
+	 * In v1, mem_cgroup and cpuset are unlikely in the same hierarchy
+	 * and mems_allowed is likely to be empty even if we could get to it,
+	 * so return true to avoid taking a global lock on the empty check.
+	 */
+	if (!cpuset_v2())
+		return true;
+
+	css = cgroup_get_e_css(cgroup, &cpuset_cgrp_subsys);
+	if (!css)
+		return true;
+
+	cs = container_of(css, struct cpuset, css);
+	rcu_read_lock();
+	allowed = node_isset(nid, cs->effective_mems);
+	rcu_read_unlock();
+	css_put(css);
+	return allowed;
+}
+
 /**
  * cpuset_spread_node() - On which node to begin search for a page
  * @rotor: round robin rotor
