@@ -451,9 +451,6 @@ static int sw_sync_ioctl_get_deadline(struct sync_timeline *obj, unsigned long a
 
 	dma_fence_put(fence);
 
-	if (ret)
-		return ret;
-
 	if (copy_to_user((void __user *)arg, &data, sizeof(data)))
 		return -EFAULT;
 
