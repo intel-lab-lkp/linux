@@ -81,6 +81,8 @@
 };
 
 &sysgpio {
+	starfive,force-high-inputs = <GPI_SYS_USB_OVERCURRENT>;
+
 	usb0_pins: usb0-0 {
 		vbus-pins {
 			pinmux = <GPIOMUX(25,  GPOUT_SYS_USB_DRIVE_VBUS,
