@@ -1401,6 +1401,16 @@ static int alps_do_register_bare_ps2_mouse(struct alps_data *priv)
 	struct psmouse *psmouse = priv->psmouse;
 	struct input_dev *dev3;
 	int error;
+	int n;
+
+	n = snprintf(priv->phys3, sizeof(priv->phys3), "%s/%s",
+		     psmouse->ps2dev.serio->phys,
+		     priv->dev2 ? "input2" : "input1");
+	if (n >= sizeof(priv->phys3)) {
+		psmouse_err(psmouse,
+			    "failed to prepare path to the secondary device\n");
+		return -E2BIG;
+	}
 
 	dev3 = input_allocate_device();
 	if (!dev3) {
@@ -1408,9 +1418,6 @@ static int alps_do_register_bare_ps2_mouse(struct alps_data *priv)
 		return -ENOMEM;
 	}
 
-	snprintf(priv->phys3, sizeof(priv->phys3), "%s/%s",
-		 psmouse->ps2dev.serio->phys,
-		 (priv->dev2 ? "input2" : "input1"));
 	dev3->phys = priv->phys3;
 
 	/*
@@ -3094,6 +3101,16 @@ int alps_init(struct psmouse *psmouse)
 
 	if (priv->flags & ALPS_DUALPOINT) {
 		struct input_dev *dev2;
+		int n;
+
+		n = snprintf(priv->phys2, sizeof(priv->phys2), "%s/input1",
+			     psmouse->ps2dev.serio->phys);
+		if (n >= sizeof(priv->phys2)) {
+			psmouse_err(psmouse,
+				    "failed to prepare path to the trackstick device\n");
+			error = -E2BIG;
+			goto init_fail;
+		}
 
 		dev2 = input_allocate_device();
 		if (!dev2) {
@@ -3103,8 +3120,6 @@ int alps_init(struct psmouse *psmouse)
 			goto init_fail;
 		}
 
-		snprintf(priv->phys2, sizeof(priv->phys2), "%s/input1",
-			 psmouse->ps2dev.serio->phys);
 		dev2->phys = priv->phys2;
 
 		/*
