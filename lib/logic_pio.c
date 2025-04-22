@@ -141,7 +141,15 @@ struct logic_pio_hwaddr *find_io_range_by_fwnode(const struct fwnode_handle *fwn
 }
 EXPORT_SYMBOL(find_io_range_by_fwnode);
 
-/* Return a registered range given an input PIO token */
+/**
+ * find_io_range - find a registered range by PIO
+ * @pio: logical PIO value
+ *
+ * Traverse the io_range_list to find the registered node for @pio.
+ * The input PIO should be unique in the whole logical PIO space.
+ *
+ * Returns a registered range, NULL otherwise.
+ */
 static struct logic_pio_hwaddr *find_io_range(unsigned long pio)
 {
 	struct logic_pio_hwaddr *range, *found_range = NULL;
@@ -209,6 +217,14 @@ unsigned long logic_pio_trans_hwaddr(const struct fwnode_handle *fwnode,
 }
 EXPORT_SYMBOL(logic_pio_trans_hwaddr);
 
+/**
+ * logic_pio_trans_cpuaddr - translate CPU address to logical PIO
+ * @addr: Host-relative CPU address
+ *
+ * translate CPU address to logical PIO
+ *
+ * Returns Logical PIO value if successful, ~0UL otherwise
+ */
 unsigned long logic_pio_trans_cpuaddr(resource_size_t addr)
 {
 	struct logic_pio_hwaddr *range;
