@@ -26,6 +26,7 @@
 #include <linux/mm.h>
 #include <linux/rbtree.h>
 #include <linux/refcount.h>
+#include <linux/rwsem.h>
 
 extern unsigned long stack_guard_gap;
 #ifdef CONFIG_MMU
@@ -172,6 +173,8 @@ struct anon_vma {
 	struct anon_vma *root;
 	struct rb_root_cached rb_root;
 
+	unsigned long num_children;
+
 	/* Test fields. */
 	bool was_cloned;
 	bool was_unlinked;
@@ -227,6 +230,8 @@ struct mm_struct {
 	unsigned long def_flags;
 
 	unsigned long flags; /* Must use atomic bitops to access */
+
+	struct rw_semaphore mmap_lock;
 };
 
 struct file {
@@ -1238,6 +1243,34 @@ static inline int mapping_map_writable(struct address_space *mapping)
 	} while (!__sync_bool_compare_and_swap(&mapping->i_mmap_writable, c, c+1));
 
 	return 0;
+}
+
+static int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
+		struct list_head *uf)
+{
+	(void)mm;
+	(void)start;
+	(void)len;
+	(void)uf;
+
+	return 0;
+}
+
+static inline int rwsem_is_locked(struct rw_semaphore *sem)
+{
+	(void)sem;
+
+	return 0;
+}
+
+static inline void anon_vma_lock_read(struct anon_vma *anon_vma)
+{
+	(void)anon_vma;
+}
+
+static inline void anon_vma_unlock_read(struct anon_vma *anon_vma)
+{
+	(void)anon_vma;
 }
 
 #endif	/* __MM_VMA_INTERNAL_H */
