@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config WLAN_VENDOR_NORDIC
+	bool "Nordic Semiconductor devices"
+	default y
+	help
+	  If you have a wireless card belonging to this class, say Y.
+
+	  Note that the answer to this question doesn't directly affect the
+	  kernel: saying N will just cause the configurator to skip all the
+	  questions about these cards. If you say Y, you will be asked for
+	  your specific card in the following questions.
+
+if WLAN_VENDOR_NORDIC
+
+config NRF70
+	tristate "Nordic Semiconductor nRF70 series wireless companion IC"
+	depends on CFG80211 && INET && SPI_MEM && CPU_LITTLE_ENDIAN
+	help
+	  This enables support for the Nordic Semiconductor nRF70 family of
+	  wireless companion ICs.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called nrf70.
+
+endif # WLAN_VENDOR_NORDIC
