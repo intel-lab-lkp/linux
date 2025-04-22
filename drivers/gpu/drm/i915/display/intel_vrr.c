@@ -422,8 +422,26 @@ void intel_vrr_compute_config_late(struct intel_crtc_state *crtc_state)
 		return;
 
 	if (DISPLAY_VER(display) >= 13) {
-		crtc_state->vrr.guardband =
-			crtc_state->vrr.vmin - adjusted_mode->crtc_vblank_start;
+		/*
+		 * Comment on SRD_STATUS register in Bspec:
+		 *
+		 * To deterministically capture the transition of the state
+		 * machine going from SRDOFFACK to IDLE, the delayed V. Blank
+		 * should be at least one line after the non-delayed V. Blank.
+		 * This can be done by ensuring the VRR Guardband programming is
+		 * less than the non-delayed V. Blank.
+		 *
+		 * TRANS_VRR_CTL[ VRR Guardband ] < (TRANS_VRR_VMAX[ VRR Vmax ]
+		 * - TRANS_VTOTAL[ Vertical Active ])
+		 */
+		if (intel_vrr_always_use_vrr_tg(display) || crtc_state->vrr.enable)
+			crtc_state->vrr.guardband = min(crtc_state->vrr.vmin -
+							adjusted_mode->crtc_vblank_start,
+							crtc_state->vrr.vmax -
+							adjusted_mode->vdisplay - 1);
+		else
+			crtc_state->vrr.guardband = crtc_state->vrr.vmin -
+				adjusted_mode->crtc_vblank_start;
 	} else {
 		/* hardware imposes one extra scanline somewhere */
 		crtc_state->vrr.pipeline_full =
