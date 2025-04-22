@@ -837,6 +837,41 @@ static void jh7110_disable_clock(void *data)
 	clk_disable_unprepare(data);
 }
 
+static int jh7110_force_input_pins(struct jh7110_pinctrl *sfp,
+				   const char *property, u32 forced_input)
+{
+	int i, nforce;
+	int ret;
+	u32 pin, val;
+	unsigned int offset, shift;
+	struct device *dev = sfp->dev;
+	const struct jh7110_pinctrl_soc_info *info = sfp->info;
+
+	nforce = of_property_count_u32_elems(dev->of_node, property);
+
+	if (nforce > 0) {
+		for (i = 0; i < nforce; i++) {
+			ret = of_property_read_u32_index(dev->of_node, property,
+							 i, &pin);
+			if (ret)
+				return ret;
+
+			offset = 4 * (pin / 4);
+			shift  = 8 * (pin % 4);
+
+			val = readl_relaxed(sfp->base +
+					    info->gpi_reg_base + offset);
+			val &= info->gpi_mask << shift;
+			val |= (forced_input & info->gpi_mask) << shift;
+
+			writel_relaxed(val, sfp->base +
+					    info->gpi_reg_base + offset);
+		}
+	}
+
+	return 0;
+}
+
 int jh7110_pinctrl_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -963,6 +998,14 @@ int jh7110_pinctrl_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, ret, "could not register gpiochip\n");
 
 	dev_info(dev, "StarFive GPIO chip registered %d GPIOs\n", sfp->gc.ngpio);
+
+	ret = jh7110_force_input_pins(sfp, "starfive,force-low-inputs", 0);
+	if (ret)
+		return ret;
+
+	ret = jh7110_force_input_pins(sfp, "starfive,force-high-inputs", 1);
+	if (ret)
+		return ret;
 
 	return pinctrl_enable(sfp->pctl);
 }
