@@ -97,5 +97,6 @@ extern const char *print_tainted_verbose(void);
 extern void add_taint(unsigned flag, enum lockdep_ok);
 extern int test_taint(unsigned flag);
 extern unsigned long get_taint(void);
+extern void panic_kmemdump_register(void);
 
 #endif	/* _LINUX_PANIC_H */

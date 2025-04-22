@@ -38,6 +38,7 @@
 #include <linux/seq_buf.h>
 #include <trace/events/error_report.h>
 #include <asm/sections.h>
+#include <linux/kmemdump.h>
 
 #define PANIC_TIMER_STEP 100
 #define PANIC_BLINK_SPD 18
@@ -589,6 +590,13 @@ unsigned long get_taint(void)
 {
 	return tainted_mask;
 }
+
+void panic_kmemdump_register(void)
+{
+	kmemdump_register("taint", (void *)&tainted_mask, sizeof(tainted_mask));
+	kmemdump_register("taintflags", (void *)&taint_flags, sizeof(taint_flags));
+}
+EXPORT_SYMBOL_GPL(panic_kmemdump_register);
 
 /**
  * add_taint: add a taint flag if not already set.
