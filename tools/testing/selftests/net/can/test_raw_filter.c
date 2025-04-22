@@ -101,94 +101,113 @@ FIXTURE_VARIANT(can_filters) {
 	int exp_num_rx;
 	int exp_rxbits;
 };
+#define T_EFF (CAN_EFF_FLAG >> 28)
+#define T_RTR (CAN_RTR_FLAG >> 28)
 
+/* Receive all frames when filtering for the ID in standard frame format */
 FIXTURE_VARIANT_ADD(can_filters, base) {
 	.testcase = 1,
 	.id = ID,
 	.mask = CAN_SFF_MASK,
 	.exp_num_rx = 4,
-	.exp_rxbits = 4369,
+	.exp_rxbits = (1 | 1 << (T_EFF) | 1 << (T_RTR) | 1 << (T_EFF | T_RTR)),
 };
+/* Ignore EFF flag in filter ID if not covered by filter mask */
 FIXTURE_VARIANT_ADD(can_filters, base_eff) {
 	.testcase = 2,
 	.id = ID | CAN_EFF_FLAG,
 	.mask = CAN_SFF_MASK,
 	.exp_num_rx = 4,
-	.exp_rxbits = 4369,
+	.exp_rxbits = (1 | 1 << (T_EFF) | 1 << (T_RTR) | 1 << (T_EFF | T_RTR)),
 };
+/* Ignore RTR flag in filter ID if not covered by filter mask */
 FIXTURE_VARIANT_ADD(can_filters, base_rtr) {
 	.testcase = 3,
 	.id = ID | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK,
 	.exp_num_rx = 4,
-	.exp_rxbits = 4369,
+	.exp_rxbits = (1 | 1 << (T_EFF) | 1 << (T_RTR) | 1 << (T_EFF | T_RTR)),
 };
+/* Ignore EFF and RTR flags in filter ID if not covered by filter mask */
 FIXTURE_VARIANT_ADD(can_filters, base_effrtr) {
 	.testcase = 4,
 	.id = ID | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK,
 	.exp_num_rx = 4,
-	.exp_rxbits = 4369,
+	.exp_rxbits = (1 | 1 << (T_EFF) | 1 << (T_RTR) | 1 << (T_EFF | T_RTR)),
 };
 
+/* Receive only SFF frames when expecting no EFF flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_eff) {
 	.testcase = 5,
 	.id = ID,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 17,
+	.exp_rxbits = (1 | 1 << (T_RTR)),
 };
+/* Receive only EFF frames when filter id and filter mask include EFF flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_eff_eff) {
 	.testcase = 6,
 	.id = ID | CAN_EFF_FLAG,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 4352,
+	.exp_rxbits = (1 << (T_EFF) | 1 << (T_EFF | T_RTR)),
 };
+/* Receive only SFF frames when expecting no EFF flag, ignoring RTR flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_eff_rtr) {
 	.testcase = 7,
 	.id = ID | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 17,
+	.exp_rxbits = (1 | 1 << (T_RTR)),
 };
+/* Receive only EFF frames when filter id and filter mask include EFF flag,
+ * ignoring RTR flag
+ */
 FIXTURE_VARIANT_ADD(can_filters, filter_eff_effrtr) {
 	.testcase = 8,
 	.id = ID | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 4352,
+	.exp_rxbits = (1 << (T_EFF) | 1 << (T_EFF | T_RTR)),
 };
 
+/* Receive no remote frames when filtering for no RTR flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_rtr) {
 	.testcase = 9,
 	.id = ID,
 	.mask = CAN_SFF_MASK | CAN_RTR_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 257,
+	.exp_rxbits = (1 | 1 << (T_EFF)),
 };
+/* Receive no remote frames when filtering for no RTR flag, ignoring EFF flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_rtr_eff) {
 	.testcase = 10,
 	.id = ID | CAN_EFF_FLAG,
 	.mask = CAN_SFF_MASK | CAN_RTR_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 257,
+	.exp_rxbits = (1 | 1 << (T_EFF)),
 };
+/* Receive only remote frames when filter includes RTR flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_rtr_rtr) {
 	.testcase = 11,
 	.id = ID | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK | CAN_RTR_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 4112,
+	.exp_rxbits = (1 << (T_RTR) | 1 << (T_EFF | T_RTR)),
 };
+/* Receive only remote frames when filter includes RTR flag, ignoring EFF
+ * flag
+ */
 FIXTURE_VARIANT_ADD(can_filters, filter_rtr_effrtr) {
 	.testcase = 12,
 	.id = ID | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK | CAN_RTR_FLAG,
 	.exp_num_rx = 2,
-	.exp_rxbits = 4112,
+	.exp_rxbits = (1 << (T_RTR) | 1 << (T_EFF | T_RTR)),
 };
 
+/* Receive only SFF data frame when filtering for no flags */
 FIXTURE_VARIANT_ADD(can_filters, filter_effrtr) {
 	.testcase = 13,
 	.id = ID,
@@ -196,28 +215,34 @@ FIXTURE_VARIANT_ADD(can_filters, filter_effrtr) {
 	.exp_num_rx = 1,
 	.exp_rxbits = 1,
 };
+/* Receive only EFF data frame when filtering for EFF but no RTR flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_effrtr_eff) {
 	.testcase = 14,
 	.id = ID | CAN_EFF_FLAG,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.exp_num_rx = 1,
-	.exp_rxbits = 256,
+	.exp_rxbits = (1 << (T_EFF)),
 };
+/* Receive only SFF remote frame when filtering for RTR but no EFF flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_effrtr_rtr) {
 	.testcase = 15,
 	.id = ID | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.exp_num_rx = 1,
-	.exp_rxbits = 16,
+	.exp_rxbits = (1 << (T_RTR)),
 };
+/* Receive only EFF remote frame when filtering for EFF and RTR flag */
 FIXTURE_VARIANT_ADD(can_filters, filter_effrtr_effrtr) {
 	.testcase = 16,
 	.id = ID | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.mask = CAN_SFF_MASK | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.exp_num_rx = 1,
-	.exp_rxbits = 4096,
+	.exp_rxbits = (1 << (T_EFF | T_RTR)),
 };
 
+/* Receive only SFF data frame when filtering for no EFF flag and no RTR flag
+ * but based on EFF mask
+ */
 FIXTURE_VARIANT_ADD(can_filters, eff) {
 	.testcase = 17,
 	.id = ID,
@@ -225,14 +250,22 @@ FIXTURE_VARIANT_ADD(can_filters, eff) {
 	.exp_num_rx = 1,
 	.exp_rxbits = 1,
 };
+/* Receive only EFF data frame when filtering for EFF flag and no RTR flag but
+ * based on EFF mask
+ */
 FIXTURE_VARIANT_ADD(can_filters, eff_eff) {
 	.testcase = 18,
 	.id = ID | CAN_EFF_FLAG,
 	.mask = CAN_EFF_MASK | CAN_EFF_FLAG | CAN_RTR_FLAG,
 	.exp_num_rx = 1,
-	.exp_rxbits = 256,
+	.exp_rxbits = (1 << (T_EFF)),
 };
 
+/* This test verifies that the raw CAN filters work, by checking if only frames
+ * with the expected set of flags are received. For each test case, the given
+ * filter (id and mask) is added and four CAN frames are sent with every
+ * combination of set/unset EFF/RTR flags.
+ */
 TEST_F(can_filters, test_filter)
 {
 	fd_set rdfs;
