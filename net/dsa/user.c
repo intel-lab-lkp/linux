@@ -1993,7 +1993,16 @@ int dsa_user_manage_vlan_filtering(struct net_device *user,
 			user->features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 			return err;
 		}
+
+		if (user->flags & IFF_UP) {
+			pr_info("dsa: adding VLAN 0 to HW filter on device %s\n",
+				user->name);
+			vlan_vid_add(user, htons(ETH_P_8021Q), 0);
+		}
 	} else {
+		if (user->flags & IFF_UP)
+			vlan_vid_del(user, htons(ETH_P_8021Q), 0);
+
 		err = vlan_for_each(user, dsa_user_clear_vlan, user);
 		if (err)
 			return err;
