@@ -1178,10 +1178,10 @@ static void atkbd_set_keycode_table(struct atkbd *atkbd)
  * atkbd_set_device_attrs() sets up keyboard's input device structure
  */
 
-static void atkbd_set_device_attrs(struct atkbd *atkbd)
+static int atkbd_set_device_attrs(struct atkbd *atkbd)
 {
 	struct input_dev *input_dev = atkbd->dev;
-	int i;
+	int i, n;
 
 	if (atkbd->extra)
 		snprintf(atkbd->name, sizeof(atkbd->name),
@@ -1191,8 +1191,10 @@ static void atkbd_set_device_attrs(struct atkbd *atkbd)
 			 "AT %s Set %d keyboard",
 			 atkbd->translated ? "Translated" : "Raw", atkbd->set);
 
-	snprintf(atkbd->phys, sizeof(atkbd->phys),
-		 "%s/input0", atkbd->ps2dev.serio->phys);
+	n = snprintf(atkbd->phys, sizeof(atkbd->phys),
+		     "%s/input0", atkbd->ps2dev.serio->phys);
+	if (n >= sizeof(atkbd->phys))
+		return -E2BIG;
 
 	input_dev->name = atkbd->name;
 	input_dev->phys = atkbd->phys;
@@ -1245,6 +1247,8 @@ static void atkbd_set_device_attrs(struct atkbd *atkbd)
 			__set_bit(atkbd->keycode[i], input_dev->keybit);
 		}
 	}
+
+	return 0;
 }
 
 static void atkbd_parse_fwnode_data(struct serio *serio)
@@ -1331,7 +1335,10 @@ static int atkbd_connect(struct serio *serio, struct serio_driver *drv)
 	atkbd_parse_fwnode_data(serio);
 
 	atkbd_set_keycode_table(atkbd);
-	atkbd_set_device_attrs(atkbd);
+
+	err = atkbd_set_device_attrs(atkbd);
+	if (err)
+		goto fail3;
 
 	atkbd_enable(atkbd);
 	if (serio->write)
