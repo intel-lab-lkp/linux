@@ -355,20 +355,19 @@ static inline bool xfs_inode_has_bigrtalloc(const struct xfs_inode *ip)
 #define xfs_inode_buftarg(ip) \
 	(XFS_IS_REALTIME_INODE(ip) ? \
 		(ip)->i_mount->m_rtdev_targp : (ip)->i_mount->m_ddev_targp)
+/*
+ * Return max atomic write unit for a given inode.
+ */
+#define xfs_inode_hw_atomicwrite_max(ip) \
+	(XFS_IS_REALTIME_INODE(ip) ? \
+		(ip)->i_mount->m_rt_awu_hw_max : \
+		(ip)->i_mount->m_dd_awu_hw_max)
 
 static inline bool
 xfs_inode_can_hw_atomicwrite(
 	struct xfs_inode	*ip)
 {
-	struct xfs_mount	*mp = ip->i_mount;
-	struct xfs_buftarg	*target = xfs_inode_buftarg(ip);
-
-	if (mp->m_sb.sb_blocksize < target->bt_bdev_awu_min)
-		return false;
-	if (mp->m_sb.sb_blocksize > target->bt_bdev_awu_max)
-		return false;
-
-	return true;
+	return xfs_inode_hw_atomicwrite_max(ip);
 }
 
 /*

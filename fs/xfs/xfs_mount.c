@@ -1082,6 +1082,20 @@ xfs_mountfs(
 		xfs_zone_gc_start(mp);
 	}
 
+	/*
+	 * Set atomic write unit max for mp. Ignore devices which cannot atomic
+	 * a single block, as they would be uncommon and more difficult to
+	 * support.
+	 */
+	if (mp->m_ddev_targp->bt_bdev_awu_min <= mp->m_sb.sb_blocksize &&
+	    mp->m_ddev_targp->bt_bdev_awu_max >= mp->m_sb.sb_blocksize)
+		mp->m_dd_awu_hw_max = mp->m_ddev_targp->bt_bdev_awu_max;
+
+	if (mp->m_rtdev_targp &&
+	    mp->m_rtdev_targp->bt_bdev_awu_min <= mp->m_sb.sb_blocksize &&
+	    mp->m_rtdev_targp->bt_bdev_awu_max >= mp->m_sb.sb_blocksize)
+		mp->m_rt_awu_hw_max = mp->m_rtdev_targp->bt_bdev_awu_max;
+
 	return 0;
 
  out_agresv:

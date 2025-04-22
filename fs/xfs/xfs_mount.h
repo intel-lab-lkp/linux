@@ -231,6 +231,10 @@ typedef struct xfs_mount {
 	unsigned int		m_max_open_zones;
 	unsigned int		m_zonegc_low_space;
 
+	/* ddev and rtdev HW max atomic write size */
+	unsigned int		m_dd_awu_hw_max;
+	unsigned int		m_rt_awu_hw_max;
+
 	/*
 	 * Bitsets of per-fs metadata that have been checked and/or are sick.
 	 * Callers must hold m_sb_lock to access these two fields.
