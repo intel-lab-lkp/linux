@@ -310,6 +310,7 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 	mutex_init(&sdev->inquiry_mutex);
 	INIT_WORK(&sdev->event_work, scsi_evt_thread);
 	INIT_WORK(&sdev->requeue_work, scsi_requeue_run_queue);
+	ratelimit_state_init(&sdev->error_ratelimit, 5 * HZ, 10);
 
 	sdev->sdev_gendev.parent = get_device(&starget->dev);
 	sdev->sdev_target = starget;
@@ -362,6 +363,9 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 	}
 
 	scsi_change_queue_depth(sdev, depth);
+
+	/* All devices support error events */
+	set_bit(SDEV_EVT_ERROR, sdev->supported_events);
 
 	scsi_sysfs_device_initialize(sdev);
 

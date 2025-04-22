@@ -1029,6 +1029,9 @@ static int scsi_io_completion_nz_result(struct scsi_cmnd *cmd, int result,
 		result = 0;
 		*blk_statp = BLK_STS_OK;
 	}
+#ifdef CONFIG_SCSI_ERROR_UEVENT
+	scsi_emit_error(cmd);
+#endif
 	return result;
 }
 
@@ -1548,6 +1551,9 @@ static void scsi_complete(struct request *rq)
 		scsi_finish_command(cmd);
 		break;
 	case NEEDS_RETRY:
+#ifdef CONFIG_SCSI_ERROR_UEVENT
+		scsi_emit_error(cmd);
+#endif
 		scsi_queue_insert(cmd, SCSI_MLQUEUE_EH_RETRY);
 		break;
 	case ADD_TO_MLQUEUE:
@@ -2563,43 +2569,77 @@ EXPORT_SYMBOL(scsi_device_set_state);
  */
 static void scsi_evt_emit(struct scsi_device *sdev, struct scsi_event *evt)
 {
-	int idx = 0;
-	char *envp[3];
+	struct kobj_uevent_env *env;
+
+	env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
+	if (!env)
+		return;
 
 	switch (evt->evt_type) {
 	case SDEV_EVT_MEDIA_CHANGE:
-		envp[idx++] = "SDEV_MEDIA_CHANGE=1";
+		if (add_uevent_var(env, "SDEV_MEDIA_CHANGE=1"))
+			goto exit;
 		break;
 	case SDEV_EVT_INQUIRY_CHANGE_REPORTED:
 		scsi_rescan_device(sdev);
-		envp[idx++] = "SDEV_UA=INQUIRY_DATA_HAS_CHANGED";
+		if (add_uevent_var(env,	"SDEV_UA=INQUIRY_DATA_HAS_CHANGED"))
+			goto exit;
 		break;
 	case SDEV_EVT_CAPACITY_CHANGE_REPORTED:
-		envp[idx++] = "SDEV_UA=CAPACITY_DATA_HAS_CHANGED";
+		if (add_uevent_var(env,	"SDEV_UA=CAPACITY_DATA_HAS_CHANGED"))
+			goto exit;
 		break;
 	case SDEV_EVT_SOFT_THRESHOLD_REACHED_REPORTED:
-	       envp[idx++] = "SDEV_UA=THIN_PROVISIONING_SOFT_THRESHOLD_REACHED";
+		if (add_uevent_var(env,
+			"SDEV_UA=THIN_PROVISIONING_SOFT_THRESHOLD_REACHED"))
+			goto exit;
 		break;
 	case SDEV_EVT_MODE_PARAMETER_CHANGE_REPORTED:
-		envp[idx++] = "SDEV_UA=MODE_PARAMETERS_CHANGED";
+		if (add_uevent_var(env, "SDEV_UA=MODE_PARAMETERS_CHANGED"))
+			goto exit;
 		break;
 	case SDEV_EVT_LUN_CHANGE_REPORTED:
-		envp[idx++] = "SDEV_UA=REPORTED_LUNS_DATA_HAS_CHANGED";
+		if (add_uevent_var(env,
+			"SDEV_UA=REPORTED_LUNS_DATA_HAS_CHANGED"))
+			goto exit;
 		break;
 	case SDEV_EVT_ALUA_STATE_CHANGE_REPORTED:
-		envp[idx++] = "SDEV_UA=ASYMMETRIC_ACCESS_STATE_CHANGED";
+		if (add_uevent_var(env,
+			"SDEV_UA=ASYMMETRIC_ACCESS_STATE_CHANGED"))
+			goto exit;
+		break;
+	case SDEV_EVT_ERROR:
+		if (add_uevent_var(env, "SDEV_ERROR=1"))
+			goto exit;
+		if (add_uevent_var(env, "SDEV_ERROR_RETRY=%u",
+					evt->error_evt.retry))
+			goto exit;
+		if (add_uevent_var(env, "SDEV_ERROR_RESULT=%u",
+					evt->error_evt.result))
+			goto exit;
+		if (add_uevent_var(env, "SDEV_ERROR_SK=%u",
+					evt->error_evt.sk))
+			goto exit;
+		if (add_uevent_var(env, "SDEV_ERROR_ASC=%u",
+					evt->error_evt.asc))
+			goto exit;
+		if (add_uevent_var(env, "SDEV_ERROR_ASCQ=%u",
+					evt->error_evt.ascq))
+			goto exit;
 		break;
 	case SDEV_EVT_POWER_ON_RESET_OCCURRED:
-		envp[idx++] = "SDEV_UA=POWER_ON_RESET_OCCURRED";
+		if (add_uevent_var(env, "SDEV_UA=POWER_ON_RESET_OCCURRED"))
+			goto exit;
 		break;
 	default:
 		/* do nothing */
 		break;
 	}
 
-	envp[idx++] = NULL;
+	kobject_uevent_env(&sdev->sdev_gendev.kobj, KOBJ_CHANGE, env->envp);
 
-	kobject_uevent_env(&sdev->sdev_gendev.kobj, KOBJ_CHANGE, envp);
+exit:
+	kfree(env);
 }
 
 /**
@@ -2697,6 +2737,7 @@ struct scsi_event *sdev_evt_alloc(enum scsi_device_event evt_type,
 	case SDEV_EVT_LUN_CHANGE_REPORTED:
 	case SDEV_EVT_ALUA_STATE_CHANGE_REPORTED:
 	case SDEV_EVT_POWER_ON_RESET_OCCURRED:
+	case SDEV_EVT_ERROR:
 	default:
 		/* do nothing */
 		break;
@@ -2727,6 +2768,41 @@ void sdev_evt_send_simple(struct scsi_device *sdev,
 	sdev_evt_send(sdev, evt);
 }
 EXPORT_SYMBOL_GPL(sdev_evt_send_simple);
+
+/**
+ *	sdev_evt_send_error - send error event to uevent thread
+ *	@sdev: scsi_device event occurred on
+ *	@gfpflags: GFP flags for allocation
+ *	@retry: if non-zero, command failed, will retry, otherwise final attempt
+ *	@result: host byte of result
+ *	@sk: sense key
+ *	@asc: additional sense code
+ *	@ascq: additional sense code qualifier
+ *
+ *	Assert scsi device error event asynchronously.
+ */
+void sdev_evt_send_error(struct scsi_device *sdev, gfp_t gfpflags,
+			 u8 retry, u8 result, u8 sk, u8 asc, u8 ascq)
+{
+	struct scsi_event *evt;
+
+	evt = sdev_evt_alloc(SDEV_EVT_ERROR, gfpflags);
+	if (!evt) {
+		sdev_printk(KERN_ERR, sdev, "error event eaten due to OOM: retry=%u result=%u sk=%u asc=%u ascq=%u\n",
+			    retry, result, sk, asc, ascq);
+		return;
+	}
+
+	evt->error_evt.retry = retry;
+	evt->error_evt.result = result;
+	evt->error_evt.sk = sk;
+	evt->error_evt.asc = asc;
+	evt->error_evt.ascq = ascq;
+
+	if (___ratelimit(&sdev->error_ratelimit, "SCSI error"))
+		sdev_evt_send(sdev, evt);
+}
+EXPORT_SYMBOL_GPL(sdev_evt_send_error);
 
 /**
  *	scsi_device_quiesce - Block all commands except power management.

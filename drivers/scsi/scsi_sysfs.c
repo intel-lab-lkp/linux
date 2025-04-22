@@ -1025,6 +1025,7 @@ DECLARE_EVT(capacity_change_reported, CAPACITY_CHANGE_REPORTED)
 DECLARE_EVT(soft_threshold_reached, SOFT_THRESHOLD_REACHED_REPORTED)
 DECLARE_EVT(mode_parameter_change_reported, MODE_PARAMETER_CHANGE_REPORTED)
 DECLARE_EVT(lun_change_reported, LUN_CHANGE_REPORTED)
+DECLARE_EVT(error, ERROR)
 
 static ssize_t
 sdev_store_queue_depth(struct device *dev, struct device_attribute *attr,
@@ -1345,6 +1346,7 @@ static struct attribute *scsi_sdev_attrs[] = {
 	REF_EVT(soft_threshold_reached),
 	REF_EVT(mode_parameter_change_reported),
 	REF_EVT(lun_change_reported),
+	REF_EVT(error),
 	NULL
 };
 

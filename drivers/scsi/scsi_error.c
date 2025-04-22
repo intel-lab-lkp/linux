@@ -2227,6 +2227,9 @@ void scsi_eh_flush_done_q(struct list_head *done_q)
 				scmd_printk(KERN_INFO, scmd,
 					     "%s: flush retry cmd\n",
 					     current->comm));
+#ifdef CONFIG_SCSI_ERROR_UEVENT
+				scsi_emit_error(scmd);
+#endif
 				scsi_queue_insert(scmd, SCSI_MLQUEUE_EH_RETRY);
 				blk_mq_kick_requeue_list(sdev->request_queue);
 		} else {
@@ -2595,3 +2598,66 @@ bool scsi_get_sense_info_fld(const u8 *sense_buffer, int sb_len,
 	}
 }
 EXPORT_SYMBOL(scsi_get_sense_info_fld);
+
+/**
+ * scsi_emit_error - Emit an error event.
+ *
+ * May be called from scsi_softirq_done(). Cannot sleep.
+ *
+ * @cmd: the scsi command
+ */
+void scsi_emit_error(struct scsi_cmnd *cmd)
+{
+	struct scsi_sense_hdr sshdr;
+	u8 result, sk, asc, ascq;
+	int sense_valid;
+	int retry;
+
+	if (unlikely(cmd->result)) {
+		result = host_byte(cmd->result);
+		if (result == DID_BAD_TARGET ||
+		    result == DID_IMM_RETRY)
+			/*
+			 * Do not report an error upstream, the situation is
+			 * not stable. Will report once the IO really fails.
+			 */
+			return;
+		sk = 0;
+		asc = 0;
+		ascq = 0;
+
+		if (result == DID_OK) {
+			sense_valid = scsi_command_normalize_sense(cmd, &sshdr);
+			if (!sense_valid) {
+				/*
+				 * With libata, this happens when the error
+				 * handler is called but the error causes are
+				 * not identified yet.
+				 */
+				return;
+			}
+
+			sk = sshdr.sense_key;
+			asc = sshdr.asc;
+			ascq = sshdr.ascq;
+
+			/*
+			 * asc == 0 && ascq == 0x1D means "ATA pass through
+			 * information available"; this is not an error, but
+			 * rather the driver returning some data.
+			 */
+			if (sk == NO_SENSE ||
+			    (sk == RECOVERED_ERROR &&
+			     asc == 0x0 &&
+			     ascq == 0x1D)) {
+				return;
+			}
+		}
+
+		retry = (!scsi_noretry_cmd(cmd) &&
+			 cmd->retries > 0 &&
+			 cmd->retries <= cmd->allowed);
+		sdev_evt_send_error(cmd->device, GFP_ATOMIC,
+				    retry, result, sk, asc, ascq);
+	}
+}

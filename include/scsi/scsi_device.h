@@ -64,7 +64,8 @@ enum scsi_scan_mode {
 };
 
 enum scsi_device_event {
-	SDEV_EVT_MEDIA_CHANGE	= 1,	/* media has changed */
+	SDEV_EVT_MEDIA_CHANGE	= 0,	/* media has changed */
+	SDEV_EVT_ERROR		= 1,	/* command failed */
 	SDEV_EVT_INQUIRY_CHANGE_REPORTED,		/* 3F 03  UA reported */
 	SDEV_EVT_CAPACITY_CHANGE_REPORTED,		/* 2A 09  UA reported */
 	SDEV_EVT_SOFT_THRESHOLD_REACHED_REPORTED,	/* 38 07  UA reported */
@@ -79,6 +80,19 @@ enum scsi_device_event {
 	SDEV_EVT_MAXBITS	= SDEV_EVT_LAST + 1
 };
 
+struct scsi_error_event {
+	/* A retry event */
+	u8 retry;
+	/* Host byte */
+	u8 result;
+	/* Sense key */
+	u8 sk;
+	/* Additional sense code */
+	u8 asc;
+	/* Additional sense code qualifier */
+	u8 ascq;
+};
+
 struct scsi_event {
 	enum scsi_device_event	evt_type;
 	struct list_head	node;
@@ -86,6 +100,9 @@ struct scsi_event {
 	/* put union of data structures, for non-simple event types,
 	 * here
 	 */
+	union {
+		struct scsi_error_event error_evt;
+	};
 };
 
 /**
@@ -269,6 +286,7 @@ struct scsi_device {
 				sdev_dev;
 
 	struct work_struct	requeue_work;
+	struct ratelimit_state	error_ratelimit;
 
 	struct scsi_device_handler *handler;
 	void			*handler_data;
@@ -474,6 +492,8 @@ extern struct scsi_event *sdev_evt_alloc(enum scsi_device_event evt_type,
 extern void sdev_evt_send(struct scsi_device *sdev, struct scsi_event *evt);
 extern void sdev_evt_send_simple(struct scsi_device *sdev,
 			  enum scsi_device_event evt_type, gfp_t gfpflags);
+extern void sdev_evt_send_error(struct scsi_device *sdev, gfp_t gfpflags,
+	u8 retry, u8 result, u8 sk, u8 asc, u8 ascq);
 extern int scsi_device_quiesce(struct scsi_device *sdev);
 extern void scsi_device_resume(struct scsi_device *sdev);
 extern void scsi_target_quiesce(struct scsi_target *);

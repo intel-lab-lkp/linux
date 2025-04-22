@@ -240,6 +240,23 @@ config SCSI_SCAN_ASYNC
 	  Note that this setting also affects whether resuming from
 	  system suspend will be performed asynchronously.
 
+config SCSI_ERROR_UEVENT
+	bool "Enable SCSI error uevent reporting"
+	depends on SCSI
+	default n
+	help
+	  If enabled, the SCSI mid-layer will emit kobject uevents when
+	  SCSI commands fail or are retried by the error handler. These
+	  events provide details about the error, including the command
+	  result (host byte), sense key (SK), additional sense code (ASC),
+	  additional sense code qualifier (ASCQ), and whether the command
+	  is being retried (SDEV_ERROR_RETRY=1) or finally failing because
+	  of error in completion path (SDEV_ERROR_RETRY=0).
+
+	  Events are filtered for certain conditions (e.g., DID_BAD_TARGET,
+	  DID_IMM_RETRY) and are also ratelimited per device to prevent
+	  excessive noise.
+
 config SCSI_PROTO_TEST
 	tristate "scsi_proto.h unit tests" if !KUNIT_ALL_TESTS
 	depends on SCSI && KUNIT
