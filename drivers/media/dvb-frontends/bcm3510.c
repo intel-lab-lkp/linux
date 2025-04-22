@@ -270,10 +270,22 @@ static int bcm3510_bert_reset(struct bcm3510_state *st)
 	if ((ret = bcm3510_readB(st,0xfa,&b)) < 0)
 		return ret;
 
-	b.BERCTL_fa.RESYNC = 0; bcm3510_writeB(st,0xfa,b);
-	b.BERCTL_fa.RESYNC = 1; bcm3510_writeB(st,0xfa,b);
-	b.BERCTL_fa.RESYNC = 0; bcm3510_writeB(st,0xfa,b);
-	b.BERCTL_fa.CNTCTL = 1; b.BERCTL_fa.BITCNT = 1; bcm3510_writeB(st,0xfa,b);
+	b.BERCTL_fa.RESYNC = 0;
+	ret = bcm3510_writeB(st, 0xfa, b);
+	if (ret < 0)
+		return ret;
+	b.BERCTL_fa.RESYNC = 1;
+	ret = bcm3510_writeB(st, 0xfa, b);
+	if (ret < 0)
+		return ret;
+	b.BERCTL_fa.RESYNC = 0;
+	ret = bcm3510_writeB(st, 0xfa, b);
+	if (ret < 0)
+		return ret;
+	b.BERCTL_fa.CNTCTL = 1; b.BERCTL_fa.BITCNT = 1;
+	ret = bcm3510_writeB(st, 0xfa, b);
+	if (ret < 0)
+		return ret;
 
 	/* clear residual bit counter TODO  */
 	return 0;
@@ -566,7 +578,9 @@ static int bcm3510_set_frontend(struct dvb_frontend *fe)
 	bcm3510_do_hab_cmd(st, CMD_STATE_CONTROL, MSGID_BERT_CONTROL, (u8 *) &bert, sizeof(bert), NULL, 0);
 	bcm3510_do_hab_cmd(st, CMD_STATE_CONTROL, MSGID_BERT_SET, (u8 *) &bert, sizeof(bert), NULL, 0);
 
-	bcm3510_bert_reset(st);
+	ret = bcm3510_bert_reset(st);
+	if (ret < 0)
+		return ret;
 
 	ret = bcm3510_set_freq(st, c->frequency);
 	if (ret < 0)
