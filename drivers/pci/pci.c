@@ -3266,6 +3266,7 @@ void pci_pm_init(struct pci_dev *dev)
 	pci_read_config_word(dev, PCI_STATUS, &status);
 	if (status & PCI_STATUS_IMM_READY)
 		dev->imm_ready = 1;
+	pci_set_power_state(dev, PCI_D0);
 }
 
 static unsigned long pci_ea_flags(struct pci_dev *dev, u8 prop)
