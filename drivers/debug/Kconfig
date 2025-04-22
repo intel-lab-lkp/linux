@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "Generic Driver Debug Options"
+
+config DRIVER_KMEMDUMP
+	bool "Allow drivers to register memory for dumping"
+	help
+	  Kmemdump mechanism allows any driver to mark a specific memory area
+	  for later dumping purpose, depending on the functionality
+	  of the attached backend. The backend would interface any hardware
+	  mechanism that will allow dumping to complete regardless of the
+	  state of the kernel (running, frozen, crashed, or any particular
+	  state).
+
+	  Note that modules using this feature must be rebuilt if option
+	  changes.
+endmenu
