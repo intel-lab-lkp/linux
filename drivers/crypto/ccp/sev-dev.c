@@ -232,6 +232,7 @@ static int sev_cmd_buffer_len(int cmd)
 	case SEV_CMD_SNP_GUEST_REQUEST:		return sizeof(struct sev_data_snp_guest_request);
 	case SEV_CMD_SNP_CONFIG:		return sizeof(struct sev_user_data_snp_config);
 	case SEV_CMD_SNP_COMMIT:		return sizeof(struct sev_data_snp_commit);
+	case SEV_CMD_SNP_FEATURE_INFO:		return sizeof(struct snp_feature_info);
 	default:				return 0;
 	}
 
@@ -1070,6 +1071,50 @@ static inline int __sev_do_init_locked(int *psp_ret)
 static void snp_set_hsave_pa(void *arg)
 {
 	wrmsrq(MSR_VM_HSAVE_PA, 0);
+}
+
+static void snp_get_platform_data(void)
+{
+	struct sev_device *sev = psp_master->sev_data;
+	struct sev_data_snp_feature_info snp_feat_info;
+	struct snp_feature_info *feat_info;
+	struct sev_data_snp_addr buf;
+	int error = 0, rc;
+
+	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
+		return;
+
+	/*
+	 * The output buffer must be firmware page if SEV-SNP is
+	 * initialized.
+	 */
+	if (sev->snp_initialized)
+		return;
+
+	buf.address = __psp_pa(&sev->snp_plat_status);
+	rc = __sev_do_cmd_locked(SEV_CMD_SNP_PLATFORM_STATUS, &buf, &error);
+
+	/*
+	 * Do feature discovery of the currently loaded firmware,
+	 * and cache feature information from CPUID 0x8000_0024,
+	 * sub-function 0.
+	 */
+	if (!rc && sev->snp_plat_status.feature_info) {
+		/*
+		 * Use dynamically allocated structure for the SNP_FEATURE_INFO
+		 * command to handle any alignment and page boundary check
+		 * requirements.
+		 */
+		feat_info = kzalloc(sizeof(*feat_info), GFP_KERNEL);
+		snp_feat_info.length = sizeof(snp_feat_info);
+		snp_feat_info.ecx_in = 0;
+		snp_feat_info.feature_info_paddr = __psp_pa(feat_info);
+
+		rc = __sev_do_cmd_locked(SEV_CMD_SNP_FEATURE_INFO, &snp_feat_info, &error);
+		if (!rc)
+			sev->feat_info = *feat_info;
+		kfree(feat_info);
+	}
 }
 
 static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
@@ -2542,6 +2587,8 @@ void sev_pci_init(void)
 		dev_info(sev->dev, "SEV firmware updated from %d.%d.%d to %d.%d.%d\n",
 			 api_major, api_minor, build,
 			 sev->api_major, sev->api_minor, sev->build);
+
+	snp_get_platform_data();
 
 	return;
 
