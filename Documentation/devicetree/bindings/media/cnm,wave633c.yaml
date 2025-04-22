@@ -1,0 +1,165 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/media/cnm,wave633c.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Chips&Media Wave6 Series multi-standard codec IP.
+
+maintainers:
+  - Nas Chung <nas.chung@chipsnmedia.com>
+  - Jackson Lee <jackson.lee@chipsnmedia.com>
+
+description:
+  The Chips&Media Wave6 codec IP is a multi-standard video encoder/decoder.
+  On NXP i.MX SoCs, Wave6 codec IP functionality is split between
+  the VPU control region and the VPU core region.
+  The VPU control region manages shared resources such as firmware memory,
+  while the VPU core region provides encoding and decoding
+  capabilities. The VPU core cannot operate independently without
+  the VPU control region.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - nxp,imx95-vpu
+      - const: cnm,wave633c
+
+  clocks:
+    items:
+      - description: VPU clock
+      - description: VPU associated block clock
+
+  clock-names:
+    items:
+      - const: vpu
+      - const: vpublk_wave
+
+  power-domains:
+    maxItems: 1
+    description: Main VPU power domain
+
+  "#address-cells": true
+
+  "#size-cells": true
+
+  ranges: true
+
+patternProperties:
+  "^video-core@[0-9a-f]+$":
+    type: object
+
+    properties:
+      compatible:
+        items:
+          - enum:
+              - nxp,imx95-vpu-core
+
+      reg:
+        maxItems: 1
+
+      interrupts:
+        maxItems: 1
+
+    required:
+      - compatible
+      - reg
+      - interrupts
+
+    additionalProperties: false
+
+  "^video-controller@[0-9a-f]+$":
+    type: object
+
+    properties:
+      compatible:
+        items:
+          - enum:
+              - nxp,imx95-vpu-ctrl
+
+      reg:
+        maxItems: 1
+
+      memory-region:
+        maxItems: 1
+
+      power-domains:
+        maxItems: 1
+        description: Performance power domain
+
+      '#cooling-cells':
+        const: 2
+
+      sram:
+        $ref: /schemas/types.yaml#/definitions/phandle
+        description: phandle of the SRAM memory region node.
+
+    required:
+      - compatible
+      - reg
+      - memory-region
+      - power-domains
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - clocks
+  - power-domains
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/nxp,imx95-clock.h>
+
+    soc {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      vpu: video-codec {
+        compatible = "nxp,imx95-vpu", "cnm,wave633c";
+        clocks = <&scmi_clk 115>,
+                 <&vpu_blk_ctrl IMX95_CLK_VPUBLK_WAVE>;
+        clock-names = "vpu", "vpublk_wave";
+        power-domains = <&scmi_devpd 21>;
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        vpucore0: video-core@4c480000 {
+          compatible = "nxp,imx95-vpu-core";
+          reg = <0x0 0x4c480000 0x0 0x10000>;
+          interrupts = <GIC_SPI 299 IRQ_TYPE_LEVEL_HIGH>;
+        };
+
+        vpucore1: video-core@4c490000 {
+          compatible = "nxp,imx95-vpu-core";
+          reg = <0x0 0x4c490000 0x0 0x10000>;
+          interrupts = <GIC_SPI 300 IRQ_TYPE_LEVEL_HIGH>;
+        };
+
+        vpucore2: video-core@4c4a0000 {
+          compatible = "nxp,imx95-vpu-core";
+          reg = <0x0 0x4c4a0000 0x0 0x10000>;
+          interrupts = <GIC_SPI 301 IRQ_TYPE_LEVEL_HIGH>;
+        };
+
+        vpucore3: video-core@4c4b0000 {
+          compatible = "nxp,imx95-vpu-core";
+          reg = <0x0 0x4c4b0000 0x0 0x10000>;
+          interrupts = <GIC_SPI 302 IRQ_TYPE_LEVEL_HIGH>;
+        };
+
+        vpuctrl: video-controller@4c4c0000 {
+          compatible = "nxp,imx95-vpu-ctrl";
+          reg = <0x0 0x4c4c0000 0x0 0x10000>;
+          memory-region = <&vpu_boot>;
+          power-domains = <&scmi_perf 10>;
+          #cooling-cells = <2>;
+          sram = <&sram1>;
+        };
+      };
+    };
