@@ -43,20 +43,6 @@ struct mnt_idmap invalid_mnt_idmap = {
 EXPORT_SYMBOL_GPL(invalid_mnt_idmap);
 
 /**
- * initial_idmapping - check whether this is the initial mapping
- * @ns: idmapping to check
- *
- * Check whether this is the initial mapping, mapping 0 to 0, 1 to 1,
- * [...], 1000 to 1000 [...].
- *
- * Return: true if this is the initial mapping, false if not.
- */
-static inline bool initial_idmapping(const struct user_namespace *ns)
-{
-	return ns == &init_user_ns;
-}
-
-/**
  * make_vfsuid - map a filesystem kuid according to an idmapping
  * @idmap: the mount's idmapping
  * @fs_userns: the filesystem's idmapping
@@ -64,13 +50,6 @@ static inline bool initial_idmapping(const struct user_namespace *ns)
  *
  * Take a @kuid and remap it from @fs_userns into @idmap. Use this
  * function when preparing a @kuid to be reported to userspace.
- *
- * If initial_idmapping() determines that this is not an idmapped mount
- * we can simply return @kuid unchanged.
- * If initial_idmapping() tells us that the filesystem is not mounted with an
- * idmapping we know the value of @kuid won't change when calling
- * from_kuid() so we can simply retrieve the value via __kuid_val()
- * directly.
  *
  * Return: @kuid mapped according to @idmap.
  * If @kuid has no mapping in either @idmap or @fs_userns INVALID_UID is
@@ -87,12 +66,7 @@ vfsuid_t make_vfsuid(struct mnt_idmap *idmap,
 		return VFSUIDT_INIT(kuid);
 	if (idmap == &invalid_mnt_idmap)
 		return INVALID_VFSUID;
-	if (initial_idmapping(fs_userns))
-		uid = __kuid_val(kuid);
-	else
-		uid = from_kuid(fs_userns, kuid);
-	if (uid == (uid_t)-1)
-		return INVALID_VFSUID;
+	uid = from_kuid(fs_userns, kuid);
 	return VFSUIDT_INIT_RAW(map_id_down(&idmap->uid_map, uid));
 }
 EXPORT_SYMBOL_GPL(make_vfsuid);
@@ -105,13 +79,6 @@ EXPORT_SYMBOL_GPL(make_vfsuid);
  *
  * Take a @kgid and remap it from @fs_userns into @idmap. Use this
  * function when preparing a @kgid to be reported to userspace.
- *
- * If initial_idmapping() determines that this is not an idmapped mount
- * we can simply return @kgid unchanged.
- * If initial_idmapping() tells us that the filesystem is not mounted with an
- * idmapping we know the value of @kgid won't change when calling
- * from_kgid() so we can simply retrieve the value via __kgid_val()
- * directly.
  *
  * Return: @kgid mapped according to @idmap.
  * If @kgid has no mapping in either @idmap or @fs_userns INVALID_GID is
@@ -126,12 +93,7 @@ vfsgid_t make_vfsgid(struct mnt_idmap *idmap,
 		return VFSGIDT_INIT(kgid);
 	if (idmap == &invalid_mnt_idmap)
 		return INVALID_VFSGID;
-	if (initial_idmapping(fs_userns))
-		gid = __kgid_val(kgid);
-	else
-		gid = from_kgid(fs_userns, kgid);
-	if (gid == (gid_t)-1)
-		return INVALID_VFSGID;
+	gid = from_kgid(fs_userns, kgid);
 	return VFSGIDT_INIT_RAW(map_id_down(&idmap->gid_map, gid));
 }
 EXPORT_SYMBOL_GPL(make_vfsgid);
@@ -159,8 +121,6 @@ kuid_t from_vfsuid(struct mnt_idmap *idmap,
 	uid = map_id_up(&idmap->uid_map, __vfsuid_val(vfsuid));
 	if (uid == (uid_t)-1)
 		return INVALID_UID;
-	if (initial_idmapping(fs_userns))
-		return KUIDT_INIT(uid);
 	return make_kuid(fs_userns, uid);
 }
 EXPORT_SYMBOL_GPL(from_vfsuid);
@@ -188,8 +148,6 @@ kgid_t from_vfsgid(struct mnt_idmap *idmap,
 	gid = map_id_up(&idmap->gid_map, __vfsgid_val(vfsgid));
 	if (gid == (gid_t)-1)
 		return INVALID_GID;
-	if (initial_idmapping(fs_userns))
-		return KGIDT_INIT(gid);
 	return make_kgid(fs_userns, gid);
 }
 EXPORT_SYMBOL_GPL(from_vfsgid);
