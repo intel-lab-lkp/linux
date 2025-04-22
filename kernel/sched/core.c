@@ -66,6 +66,7 @@
 #include <linux/vtime.h>
 #include <linux/wait_api.h>
 #include <linux/workqueue_api.h>
+#include <linux/kmemdump.h>
 
 #ifdef CONFIG_PREEMPT_DYNAMIC
 # ifdef CONFIG_GENERIC_ENTRY
@@ -8727,6 +8728,12 @@ void __init sched_init(void)
 
 	scheduler_running = 1;
 }
+
+void sched_kmemdump_register(void)
+{
+	kmemdump_register("runqueues", (void *)&runqueues, sizeof(runqueues));
+}
+EXPORT_SYMBOL_GPL(sched_kmemdump_register);
 
 #ifdef CONFIG_DEBUG_ATOMIC_SLEEP
 
