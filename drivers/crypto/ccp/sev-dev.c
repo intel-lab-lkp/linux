@@ -1073,6 +1073,25 @@ static void snp_set_hsave_pa(void *arg)
 	wrmsrq(MSR_VM_HSAVE_PA, 0);
 }
 
+bool is_sev_snp_ciphertext_hiding_supported(void)
+{
+	struct psp_device *psp = psp_master;
+	struct sev_device *sev;
+
+	sev = psp->sev_data;
+
+	/*
+	 * Check if CipherTextHiding feature is supported and enabled
+	 * in the Platform/BIOS.
+	 */
+	if ((sev->feat_info.ecx & SNP_CIPHER_TEXT_HIDING_SUPPORTED) &&
+	    sev->snp_plat_status.ciphertext_hiding_cap)
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL_GPL(is_sev_snp_ciphertext_hiding_supported);
+
 static void snp_get_platform_data(void)
 {
 	struct sev_device *sev = psp_master->sev_data;
@@ -1147,7 +1166,7 @@ static int snp_filter_reserved_mem_regions(struct resource *rs, void *arg)
 	return 0;
 }
 
-static int __sev_snp_init_locked(int *error)
+static int __sev_snp_init_locked(int *error, bool cipher_text_hiding_en, unsigned int snp_max_snp_asid)
 {
 	struct psp_device *psp = psp_master;
 	struct sev_data_snp_init_ex data;
@@ -1208,6 +1227,12 @@ static int __sev_snp_init_locked(int *error)
 		}
 
 		memset(&data, 0, sizeof(data));
+
+		if (cipher_text_hiding_en) {
+			data.ciphertext_hiding_en = 1;
+			data.max_snp_asid = snp_max_snp_asid;
+		}
+
 		data.init_rmp = 1;
 		data.list_paddr_en = 1;
 		data.list_paddr = __psp_pa(snp_range_list);
@@ -1392,7 +1417,7 @@ static int _sev_platform_init_locked(struct sev_platform_init_args *args)
 	if (sev->state == SEV_STATE_INIT)
 		return 0;
 
-	rc = __sev_snp_init_locked(&args->error);
+	rc = __sev_snp_init_locked(&args->error, args->cipher_text_hiding_en, args->snp_max_snp_asid);
 	if (rc && rc != -ENODEV)
 		return rc;
 
@@ -1475,7 +1500,7 @@ static int snp_move_to_init_state(struct sev_issue_cmd *argp, bool *shutdown_req
 {
 	int error, rc;
 
-	rc = __sev_snp_init_locked(&error);
+	rc = __sev_snp_init_locked(&error, false, 0);
 	if (rc) {
 		argp->error = SEV_RET_INVALID_PLATFORM_STATE;
 		return rc;

@@ -746,10 +746,13 @@ struct sev_data_snp_guest_request {
 struct sev_data_snp_init_ex {
 	u32 init_rmp:1;
 	u32 list_paddr_en:1;
-	u32 rsvd:30;
+	u32 rapl_dis:1;
+	u32 ciphertext_hiding_en:1;
+	u32 rsvd:28;
 	u32 rsvd1;
 	u64 list_paddr;
-	u8  rsvd2[48];
+	u16 max_snp_asid;
+	u8  rsvd2[46];
 } __packed;
 
 /**
@@ -798,10 +801,16 @@ struct sev_data_snp_shutdown_ex {
  * @probe: True if this is being called as part of CCP module probe, which
  *  will defer SEV_INIT/SEV_INIT_EX firmware initialization until needed
  *  unless psp_init_on_probe module param is set
+ *  @cipher_text_hiding_en: True if SEV-SNP CipherTextHiding support is
+ *  enabled
+ *  @snp_max_snp_asid: maximum ASID usable for SEV-SNP guest if
+ *  CipherTextHiding is enabled
  */
 struct sev_platform_init_args {
 	int error;
 	bool probe;
+	bool cipher_text_hiding_en;
+	unsigned int snp_max_snp_asid;
 };
 
 /**
@@ -840,6 +849,8 @@ struct snp_feature_info {
 	u32 ecx;
 	u32 edx;
 } __packed;
+
+#define SNP_CIPHER_TEXT_HIDING_SUPPORTED	BIT(3)
 
 #ifdef CONFIG_CRYPTO_DEV_SP_PSP
 
@@ -984,6 +995,7 @@ void *psp_copy_user_blob(u64 uaddr, u32 len);
 void *snp_alloc_firmware_page(gfp_t mask);
 void snp_free_firmware_page(void *addr);
 void sev_platform_shutdown(void);
+bool is_sev_snp_ciphertext_hiding_supported(void);
 
 #else	/* !CONFIG_CRYPTO_DEV_SP_PSP */
 
@@ -1019,6 +1031,8 @@ static inline void *snp_alloc_firmware_page(gfp_t mask)
 static inline void snp_free_firmware_page(void *addr) { }
 
 static inline void sev_platform_shutdown(void) { }
+
+static inline bool is_sev_snp_ciphertext_hiding_supported(void) { return FALSE; }
 
 #endif	/* CONFIG_CRYPTO_DEV_SP_PSP */
 
