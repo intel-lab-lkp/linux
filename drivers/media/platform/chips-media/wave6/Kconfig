@@ -22,3 +22,14 @@ config VIDEO_WAVE6_VPU_SUPPORT_FOLLOWER
 	default n
 	help
 	  Indicates whether the VPU domain power always on.
+
+config VIDEO_WAVE6_VPU_CTRL
+	tristate "Chips&Media Wave6 Codec Control Driver"
+	depends on VIDEO_WAVE6_VPU
+	default VIDEO_WAVE6_VPU if ARCH_MXC || COMPILE_TEST
+	help
+	  Chips&Media Wave6 control driver.
+	  The control driver manages shared resources such as
+	  firmware memory.
+	  To compile this driver as modules, choose M here: the
+	  modules will be called wave6-ctrl.
