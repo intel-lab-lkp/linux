@@ -466,6 +466,7 @@ static int usbhsf_dcp_data_stage_prepare_pop(struct usbhs_pkt *pkt,
 	struct usbhs_pipe *pipe = pkt->pipe;
 	struct usbhs_priv *priv = usbhs_pipe_to_priv(pipe);
 	struct usbhs_fifo *fifo = usbhsf_get_cfifo(priv);
+	int ret;
 
 	if (usbhs_pipe_is_busy(pipe))
 		return 0;
@@ -480,10 +481,14 @@ static int usbhsf_dcp_data_stage_prepare_pop(struct usbhs_pkt *pkt,
 
 	usbhs_pipe_sequence_data1(pipe); /* DATA1 */
 
-	usbhsf_fifo_select(pipe, fifo, 0);
+	ret = usbhsf_fifo_select(pipe, fifo, 0);
+	if (ret < 0)
+		goto usbhsf_pio_prepare_pop;
+
 	usbhsf_fifo_clear(pipe, fifo);
 	usbhsf_fifo_unselect(pipe, fifo);
 
+usbhsf_pio_prepare_pop:
 	/*
 	 * change handler to PIO pop
 	 */
