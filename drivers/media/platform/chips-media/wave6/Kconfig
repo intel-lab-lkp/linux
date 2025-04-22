@@ -13,7 +13,7 @@ config VIDEO_WAVE6_VPU
 	  The codec driver provides encoding and decoding capabilities
 	  for H.264, HEVC, and other video formats.
 	  To compile this driver as modules, choose M here: the
-	  modules will be called wave6.
+	  modules will be called wave6 and wave6-core.
 
 config VIDEO_WAVE6_VPU_SUPPORT_FOLLOWER
 	bool "Support Wave6 VPU follower"
