@@ -43,6 +43,28 @@ static ssize_t show_package_id(struct kobject *kobj, struct kobj_attribute *attr
 	return sprintf(buf, "%u\n", data->package_id);
 }
 
+static ssize_t show_agent_types(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	struct uncore_data *data = container_of(attr, struct uncore_data, agent_types_kobj_attr);
+	int length = 0;
+
+	if (data->agent_type_mask & AGENT_TYPE_CORE)
+		length += sysfs_emit_at(buf, length, "core ");
+
+	if (data->agent_type_mask & AGENT_TYPE_CACHE)
+		length += sysfs_emit_at(buf, length, "cache ");
+
+	if (data->agent_type_mask & AGENT_TYPE_MEMORY)
+		length += sysfs_emit_at(buf, length, "memory ");
+
+	if (data->agent_type_mask & AGENT_TYPE_IO)
+		length += sysfs_emit_at(buf, length, "io ");
+
+	length += sysfs_emit_at(buf, length, "\n");
+
+	return length;
+}
+
 static ssize_t show_attr(struct uncore_data *data, char *buf, enum uncore_index index)
 {
 	unsigned int value;
@@ -179,6 +201,8 @@ static int create_attr_group(struct uncore_data *data, char *name)
 		data->uncore_attrs[index++] = &data->fabric_cluster_id_kobj_attr.attr;
 		init_attribute_root_ro(package_id);
 		data->uncore_attrs[index++] = &data->package_id_kobj_attr.attr;
+		init_attribute_ro(agent_types);
+		data->uncore_attrs[index++] = &data->agent_types_kobj_attr.attr;
 	}
 
 	data->uncore_attrs[index++] = &data->max_freq_khz_kobj_attr.attr;
