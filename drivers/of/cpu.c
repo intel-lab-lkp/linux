@@ -174,6 +174,46 @@ int of_cpu_node_to_id(struct device_node *cpu_node)
 EXPORT_SYMBOL(of_cpu_node_to_id);
 
 /**
+ * of_cpu_phandle_to_id: Get the logical CPU number for a given device_node
+ *
+ * @node: Pointer to the device_node containing CPU phandle.
+ * @cpu_np: Pointer to the device_node for CPU.
+ * @prop: String of property holding the phandle.
+ *
+ * Return: The logical CPU number of the given CPU device_node or -ENODEV if
+ * the CPU is not found. If the property is not found, it returns -1. On
+ * success, cpu_np will always point to the retrieved CPU device_node.
+ */
+int of_cpu_phandle_to_id(const struct device_node *node,
+			 const struct device_node *cpu_np,
+			 const char * prop)
+{
+	bool found = false;
+	int cpu, ret;
+	struct device_node *np;
+	struct of_phandle_args args;
+
+	if (!node || !prop)
+		return -1;
+
+	ret = of_parse_phandle_with_args(node, prop, NULL, 0, &args);
+	if (ret < 0)
+		return ret;
+
+	cpu_np = args.np;
+	for_each_possible_cpu(cpu) {
+		np = of_cpu_device_node_get(cpu);
+		found = (cpu_np == np);
+		of_node_put(np);
+		if (found)
+			return cpu;
+	}
+
+	return -ENODEV;
+}
+EXPORT_SYMBOL(of_cpu_phandle_to_id);
+
+/**
  * of_get_cpu_state_node - Get CPU's idle state node at the given index
  *
  * @cpu_node: The device node for the CPU
