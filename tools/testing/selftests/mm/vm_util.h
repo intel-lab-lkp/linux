@@ -95,6 +95,9 @@ static inline int open_self_procmap(struct procmap_fd *procmap_out)
 	return open_procmap(pid, procmap_out);
 }
 
+void *sys_mremap(void *old_address, unsigned long old_size,
+		 unsigned long new_size, int flags, void *new_address);
+
 /*
  * On ppc64 this will only work with radix 2M hugepage size
  */
