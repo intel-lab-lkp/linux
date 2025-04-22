@@ -9,6 +9,7 @@ unsigned int irq_get_nr_irqs(void) __pure;
 unsigned int irq_set_nr_irqs(unsigned int nr);
 extern struct irq_desc *irq_to_desc(unsigned int irq);
 unsigned int irq_get_next_irq(unsigned int offset);
+void irq_kmemdump_register(void);
 
 #define for_each_irq_desc(irq, desc)                                      \
 	for (unsigned int __nr_irqs__ = irq_get_nr_irqs(); __nr_irqs__;   \

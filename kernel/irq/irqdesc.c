@@ -12,6 +12,7 @@
 #include <linux/export.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
+#include <linux/kmemdump.h>
 #include <linux/maple_tree.h>
 #include <linux/irqdomain.h>
 #include <linux/sysfs.h>
@@ -163,6 +164,12 @@ unsigned int irq_set_nr_irqs(unsigned int nr)
 	return nr;
 }
 EXPORT_SYMBOL_GPL(irq_set_nr_irqs);
+
+void irq_kmemdump_register(void)
+{
+	kmemdump_register("irq", (void *)&nr_irqs, sizeof(nr_irqs));
+}
+EXPORT_SYMBOL_GPL(irq_kmemdump_register);
 
 static DEFINE_MUTEX(sparse_irq_lock);
 static struct maple_tree sparse_irqs = MTREE_INIT_EXT(sparse_irqs,
