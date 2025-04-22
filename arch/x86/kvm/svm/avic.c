@@ -783,8 +783,9 @@ static void svm_ir_list_del(struct vcpu_svm *svm, struct amd_iommu_pi_data *pi)
 		if (cur->data != pi->ir_data)
 			continue;
 		list_del(&cur->node);
+		spin_unlock_irqrestore(&svm->ir_list_lock, flags);
 		kfree(cur);
-		break;
+		return;
 	}
 	spin_unlock_irqrestore(&svm->ir_list_lock, flags);
 }
