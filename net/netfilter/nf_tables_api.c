@@ -16,6 +16,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter/nf_tables.h>
+#include <linux/sysctl.h>
 #include <net/netfilter/nf_flow_table.h>
 #include <net/netfilter/nf_tables_core.h>
 #include <net/netfilter/nf_tables.h>
@@ -25,9 +26,13 @@
 
 #define NFT_MODULE_AUTOLOAD_LIMIT (MODULE_NAME_LEN - sizeof("nft-expr-255-"))
 #define NFT_SET_MAX_ANONLEN 16
+#define NFT_DEFAULT_MAX_TABLE_JUMPS 8192
 
 /* limit compaction to avoid huge kmalloc/krealloc sizes. */
 #define NFT_MAX_SET_NELEMS ((2048 - sizeof(struct nft_trans_elem)) / sizeof(struct nft_trans_one_elem))
+
+u32 sysctl_nf_max_table_jumps __read_mostly = NFT_DEFAULT_MAX_TABLE_JUMPS;
+EXPORT_SYMBOL(sysctl_nf_max_table_jumps);
 
 unsigned int nf_tables_net_id __read_mostly;
 
@@ -4012,7 +4017,8 @@ int nft_chain_validate(const struct nft_ctx *ctx, const struct nft_chain *chain)
 	struct nft_rule *rule;
 	int err;
 
-	if (ctx->level == NFT_JUMP_STACK_SIZE)
+	if (ctx->level == NFT_JUMP_STACK_SIZE ||
+	    ctx->total_jump_count >= sysctl_nf_max_table_jumps)
 		return -EMLINK;
 
 	list_for_each_entry(rule, &chain->rules, list) {
@@ -4045,6 +4051,7 @@ static int nft_table_validate(struct net *net, const struct nft_table *table)
 	struct nft_ctx ctx = {
 		.net	= net,
 		.family	= table->family,
+		.total_jump_count = 0,
 	};
 	int err;
 
@@ -4084,6 +4091,7 @@ int nft_setelem_validate(const struct nft_ctx *ctx, struct nft_set *set,
 	case NFT_JUMP:
 	case NFT_GOTO:
 		pctx->level++;
+		pctx->total_jump_count++;
 		err = nft_chain_validate(ctx, data->verdict.chain);
 		if (err < 0)
 			return err;
@@ -11890,6 +11898,67 @@ static struct notifier_block nft_nl_notifier = {
 	.notifier_call  = nft_rcv_nl_event,
 };
 
+#ifdef CONFIG_SYSCTL
+static struct ctl_table nf_limit_control_sysctl_table[] = {
+	{
+		.procname	= "nf_max_table_jumps",
+		.data		= &sysctl_nf_max_table_jumps,
+		.maxlen		= sizeof(sysctl_nf_max_table_jumps),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+};
+
+static int netfilter_limit_control_sysctl_init(struct net *net)
+{
+	if (net_eq(net, &init_net)) {
+		net->nf.nf_limit_control_dir_header = register_net_sysctl(
+				net,
+				"net/netfilter",
+				nf_limit_control_sysctl_table);
+		if (!net->nf.nf_limit_control_dir_header)
+			goto err_alloc;
+	}
+	return 0;
+
+err_alloc:
+	return -ENOMEM;
+}
+
+static void netfilter_limit_control_sysctl_exit(struct net *net)
+{
+	unregister_net_sysctl_table(net->nf.nf_limit_control_dir_header);
+}
+#else
+static int netfilter_limit_control_sysctl_init(struct net *net)
+{
+	return 0;
+}
+
+static void netfilter_limit_control_sysctl_exit(struct net *net)
+{
+}
+#endif /* CONFIG_SYSCTL */
+
+static int __net_init nf_limit_control_net_init(struct net *net)
+{
+	int ret = netfilter_limit_control_sysctl_init(net);
+
+	if (ret < 0)
+		return ret;
+	return 0;
+}
+
+static void __net_exit nf_limit_control_net_exit(struct net *net)
+{
+	netfilter_limit_control_sysctl_exit(net);
+}
+
+static struct pernet_operations nf_limit_control_net_ops = {
+	.init = nf_limit_control_net_init,
+	.exit = nf_limit_control_net_exit,
+};
+
 static int __net_init nf_tables_init_net(struct net *net)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
@@ -11974,6 +12043,10 @@ static int __init nf_tables_module_init(void)
 	BUILD_BUG_ON(offsetof(struct nft_trans_flowtable, nft_trans) != 0);
 
 	err = register_pernet_subsys(&nf_tables_net_ops);
+	if (err < 0)
+		return err;
+
+	err = register_pernet_subsys(&nf_limit_control_net_ops);
 	if (err < 0)
 		return err;
 
