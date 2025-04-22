@@ -1204,6 +1204,23 @@ EXPORT_SYMBOL_GPL(of_nvmem_device_get);
 #endif
 
 /**
+ * nvmem_device_get_by_name - Look up an NVMEM device by its device name
+ * @name: String matching device name in the provider
+ *
+ * Return: A valid pointer to struct nvmem_device on success,
+ * or ERR_PTR(...) on failure. The caller must later call nvmem_device_put() to
+ * release the reference.
+ */
+struct nvmem_device *nvmem_device_get_by_name(const char *name)
+{
+	if (!name)
+		return ERR_PTR(-EINVAL);
+
+	return __nvmem_device_get((void *)name, device_match_name);
+}
+EXPORT_SYMBOL_GPL(nvmem_device_get_by_name);
+
+/**
  * nvmem_device_get() - Get nvmem device from a given id
  *
  * @dev: Device that uses the nvmem device.
@@ -1515,6 +1532,94 @@ struct nvmem_cell *of_nvmem_cell_get(struct device_node *np, const char *id)
 }
 EXPORT_SYMBOL_GPL(of_nvmem_cell_get);
 #endif
+
+/**
+ * nvmem_find_cell_entry_by_sysfs_name - Find an NVMEM cell entry by its sysfs
+ *					 name.
+ * @nvmem:      The nvmem_device pointer where the cell is located.
+ * @sysfs_name: The full sysfs cell name, e.g. "mycell@0x100,8".
+ *
+ * This function constructs the sysfs-like name for each cell and compares it
+ * to @sysfs_name. If a match is found, the matching nvmem_cell_entry pointer
+ * is returned. This is analogous to nvmem_find_cell_entry_by_name(), except
+ * it matches on the sysfs naming convention used in the device's attributes.
+ *
+ * Return: Pointer to the matching nvmem_cell_entry on success, or NULL if no
+ * match is found.
+ */
+static struct nvmem_cell_entry *
+nvmem_find_cell_entry_by_sysfs_name(struct nvmem_device *nvmem,
+				    const char *sysfs_name)
+{
+	struct nvmem_cell_entry *entry;
+	char tmp[NVMEM_CELL_NAME_MAX];
+
+	mutex_lock(&nvmem_mutex);
+	list_for_each_entry(entry, &nvmem->cells, node) {
+		int len = snprintf(tmp, NVMEM_CELL_NAME_MAX, "%s@%x,%u",
+				   entry->name, entry->offset,
+				   entry->bit_offset);
+
+		if (len >= NVMEM_CELL_NAME_MAX) {
+			pr_warn("nvmem: cell name too long (max %zu bytes): %s\n",
+				NVMEM_CELL_NAME_MAX, sysfs_name);
+			continue;
+		}
+
+		if (len < 0) {
+			pr_warn("nvmem: error formatting cell name\n");
+			continue;
+		}
+
+		if (!strcmp(tmp, sysfs_name)) {
+			mutex_unlock(&nvmem_mutex);
+			return entry;
+		}
+	}
+
+	mutex_unlock(&nvmem_mutex);
+	return NULL;
+}
+
+/**
+ * nvmem_cell_get_by_sysfs_name - Retrieve an NVMEM cell using a sysfs-style
+ *				  name.
+ * @nvmem: Pointer to the `struct nvmem_device` containing the cell.
+ * @sysfs_name: The sysfs-style cell name, formatted as
+ *		"<cell_name>@<offset>,<bits>".
+ *
+ * This function enables dynamic lookup of NVMEM cells via sysfs-style
+ * identifiers. It is useful when devicetree-based lookup is unavailable or when
+ * cells are managed dynamically.
+ *
+ * Example Usage:
+ *   nvmem_cell_get_by_sysfs_name(nvmem, "mycell@0x100,8");
+ *
+ * Return: Pointer to `struct nvmem_cell` on success. On error, an ERR_PTR() is
+ * returned with the appropriate error code.
+ */
+struct nvmem_cell *nvmem_cell_get_by_sysfs_name(struct nvmem_device *nvmem,
+						const char *sysfs_name)
+{
+	struct nvmem_cell_entry *entry;
+	struct nvmem_cell *cell;
+
+	entry = nvmem_find_cell_entry_by_sysfs_name(nvmem, sysfs_name);
+	if (!entry)
+		return ERR_PTR(-ENOENT);
+
+	if (!try_module_get(nvmem->owner))
+		return ERR_PTR(-EINVAL);
+
+	kref_get(&nvmem->refcnt);
+
+	cell = nvmem_create_cell(entry, entry->name, 0);
+	if (IS_ERR(cell))
+		__nvmem_device_put(nvmem);
+
+	return cell;
+}
+EXPORT_SYMBOL_GPL(nvmem_cell_get_by_sysfs_name);
 
 /**
  * nvmem_cell_get() - Get nvmem cell of device form a given cell name
