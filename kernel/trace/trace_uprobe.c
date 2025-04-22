@@ -441,20 +441,21 @@ static bool trace_uprobe_has_same_uprobe(struct trace_uprobe *orig,
 	return false;
 }
 
-static int append_trace_uprobe(struct trace_uprobe *tu, struct trace_uprobe *to)
+static int append_trace_uprobe(struct trace_probe_log *tpl, struct trace_uprobe *tu,
+				struct trace_uprobe *to)
 {
 	int ret;
 
 	ret = trace_probe_compare_arg_type(&tu->tp, &to->tp);
 	if (ret) {
 		/* Note that argument starts index = 2 */
-		trace_probe_log_set_index(ret + 1);
-		trace_probe_log_err(0, DIFF_ARG_TYPE);
+		trace_probe_log_set_index(tpl, ret + 1);
+		trace_probe_log_err(tpl, 0, DIFF_ARG_TYPE);
 		return -EEXIST;
 	}
 	if (trace_uprobe_has_same_uprobe(to, tu)) {
-		trace_probe_log_set_index(0);
-		trace_probe_log_err(0, SAME_PROBE);
+		trace_probe_log_set_index(tpl, 0);
+		trace_probe_log_err(tpl, 0, SAME_PROBE);
 		return -EEXIST;
 	}
 
@@ -493,7 +494,7 @@ static int validate_ref_ctr_offset(struct trace_uprobe *new)
 }
 
 /* Register a trace_uprobe and probe_event */
-static int register_trace_uprobe(struct trace_uprobe *tu)
+static int register_trace_uprobe(struct trace_probe_log *tpl, struct trace_uprobe *tu)
 {
 	struct trace_uprobe *old_tu;
 	int ret;
@@ -509,18 +510,18 @@ static int register_trace_uprobe(struct trace_uprobe *tu)
 				  trace_probe_group_name(&tu->tp));
 	if (old_tu) {
 		if (is_ret_probe(tu) != is_ret_probe(old_tu)) {
-			trace_probe_log_set_index(0);
-			trace_probe_log_err(0, DIFF_PROBE_TYPE);
+			trace_probe_log_set_index(tpl, 0);
+			trace_probe_log_err(tpl, 0, DIFF_PROBE_TYPE);
 			return -EEXIST;
 		}
-		return append_trace_uprobe(tu, old_tu);
+		return append_trace_uprobe(tpl, tu, old_tu);
 	}
 
 	ret = register_uprobe_event(tu);
 	if (ret) {
 		if (ret == -EEXIST) {
-			trace_probe_log_set_index(0);
-			trace_probe_log_err(0, EVENT_EXIST);
+			trace_probe_log_set_index(tpl, 0);
+			trace_probe_log_err(tpl, 0, EVENT_EXIST);
 		} else
 			pr_warn("Failed to register probe event(%d)\n", ret);
 		return ret;
@@ -563,11 +564,11 @@ static int __trace_uprobe_create(int argc, const char **argv)
 	if (argc < 2)
 		return -ECANCELED;
 
-	trace_probe_log_init("trace_uprobe", argc, argv);
+	struct trace_probe_log tpl = trace_probe_log_create("trace_uprobe", argc, argv);
 
 	if (argc - 2 > MAX_TRACE_ARGS) {
-		trace_probe_log_set_index(2);
-		trace_probe_log_err(0, TOO_MANY_ARGS);
+		trace_probe_log_set_index(&tpl, 2);
+		trace_probe_log_err(&tpl, 0, TOO_MANY_ARGS);
 		return -E2BIG;
 	}
 
@@ -588,18 +589,17 @@ static int __trace_uprobe_create(int argc, const char **argv)
 		return -ECANCELED;
 	}
 
-	trace_probe_log_set_index(1);	/* filename is the 2nd argument */
+	trace_probe_log_set_index(&tpl, 1);	/* filename is the 2nd argument */
 
 	*arg++ = '\0';
 	ret = kern_path(filename, LOOKUP_FOLLOW, &path);
 	if (ret) {
-		trace_probe_log_err(0, FILE_NOT_FOUND);
+		trace_probe_log_err(&tpl, 0, FILE_NOT_FOUND);
 		kfree(filename);
-		trace_probe_log_clear();
 		return ret;
 	}
 	if (!d_is_reg(path.dentry)) {
-		trace_probe_log_err(0, NO_REGULAR_FILE);
+		trace_probe_log_err(&tpl, 0, NO_REGULAR_FILE);
 		ret = -EINVAL;
 		goto fail_address_parse;
 	}
@@ -611,12 +611,12 @@ static int __trace_uprobe_create(int argc, const char **argv)
 		if (!rctr_end) {
 			ret = -EINVAL;
 			rctr_end = rctr + strlen(rctr);
-			trace_probe_log_err(rctr_end - filename,
+			trace_probe_log_err(&tpl, rctr_end - filename,
 					    REFCNT_OPEN_BRACE);
 			goto fail_address_parse;
 		} else if (rctr_end[1] != '\0') {
 			ret = -EINVAL;
-			trace_probe_log_err(rctr_end + 1 - filename,
+			trace_probe_log_err(&tpl, rctr_end + 1 - filename,
 					    BAD_REFCNT_SUFFIX);
 			goto fail_address_parse;
 		}
@@ -625,7 +625,7 @@ static int __trace_uprobe_create(int argc, const char **argv)
 		*rctr_end = '\0';
 		ret = kstrtoul(rctr, 0, &ref_ctr_offset);
 		if (ret) {
-			trace_probe_log_err(rctr - filename, BAD_REFCNT);
+			trace_probe_log_err(&tpl, rctr - filename, BAD_REFCNT);
 			goto fail_address_parse;
 		}
 	}
@@ -637,7 +637,7 @@ static int __trace_uprobe_create(int argc, const char **argv)
 			*tmp = '\0';
 			is_return = true;
 		} else {
-			trace_probe_log_err(tmp - filename, BAD_ADDR_SUFFIX);
+			trace_probe_log_err(&tpl, tmp - filename, BAD_ADDR_SUFFIX);
 			ret = -EINVAL;
 			goto fail_address_parse;
 		}
@@ -646,15 +646,15 @@ static int __trace_uprobe_create(int argc, const char **argv)
 	/* Parse uprobe offset. */
 	ret = kstrtoul(arg, 0, &offset);
 	if (ret) {
-		trace_probe_log_err(arg - filename, BAD_UPROBE_OFFS);
+		trace_probe_log_err(&tpl, arg - filename, BAD_UPROBE_OFFS);
 		goto fail_address_parse;
 	}
 
 	/* setup a probe */
-	trace_probe_log_set_index(0);
+	trace_probe_log_set_index(&tpl, 0);
 	if (event) {
 		ret = traceprobe_parse_event_name(&event, &group, gbuf,
-						  event - argv[0]);
+						  event - argv[0], &tpl);
 		if (ret)
 			goto fail_address_parse;
 	}
@@ -699,8 +699,8 @@ static int __trace_uprobe_create(int argc, const char **argv)
 			.flags = (is_return ? TPARG_FL_RETURN : 0) | TPARG_FL_USER,
 		};
 
-		trace_probe_log_set_index(i + 2);
-		ret = traceprobe_parse_probe_arg(&tu->tp, i, argv[i], &ctx);
+		trace_probe_log_set_index(&tpl, i + 2);
+		ret = traceprobe_parse_probe_arg(&tu->tp, i, argv[i], &ctx, &tpl);
 		traceprobe_finish_parse(&ctx);
 		if (ret)
 			goto error;
@@ -711,18 +711,16 @@ static int __trace_uprobe_create(int argc, const char **argv)
 	if (ret < 0)
 		goto error;
 
-	ret = register_trace_uprobe(tu);
+	ret = register_trace_uprobe(&tpl, tu);
 	if (!ret)
 		goto out;
 
 error:
 	free_trace_uprobe(tu);
 out:
-	trace_probe_log_clear();
 	return ret;
 
 fail_address_parse:
-	trace_probe_log_clear();
 	path_put(&path);
 	kfree(filename);
 

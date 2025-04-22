@@ -795,7 +795,8 @@ find_and_get_event(const char *system, const char *event_name)
 	return NULL;
 }
 
-static int trace_eprobe_tp_update_arg(struct trace_eprobe *ep, const char *argv[], int i)
+static int trace_eprobe_tp_update_arg(struct trace_eprobe *ep, const char *argv[], int i,
+			struct trace_probe_log *tpl)
 {
 	struct traceprobe_parse_context ctx = {
 		.event = ep->event,
@@ -803,7 +804,7 @@ static int trace_eprobe_tp_update_arg(struct trace_eprobe *ep, const char *argv[
 	};
 	int ret;
 
-	ret = traceprobe_parse_probe_arg(&ep->tp, i, argv[i], &ctx);
+	ret = traceprobe_parse_probe_arg(&ep->tp, i, argv[i], &ctx, tpl);
 	/* Handle symbols "@" */
 	if (!ret)
 		ret = traceprobe_update_arg(&ep->tp.args[i]);
@@ -812,14 +813,17 @@ static int trace_eprobe_tp_update_arg(struct trace_eprobe *ep, const char *argv[
 	return ret;
 }
 
-static int trace_eprobe_parse_filter(struct trace_eprobe *ep, int argc, const char *argv[])
+static int trace_eprobe_parse_filter(struct trace_eprobe *ep,
+			struct trace_probe_log *tpl,
+			int argc,
+			const char *argv[])
 {
 	struct event_filter *dummy = NULL;
 	int i, ret, len = 0;
 	char *p;
 
 	if (argc == 0) {
-		trace_probe_log_err(0, NO_EP_FILTER);
+		trace_probe_log_err(tpl, 0, NO_EP_FILTER);
 		return -EINVAL;
 	}
 
@@ -879,22 +883,22 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 	if (argc < 2 || argv[0][0] != 'e')
 		return -ECANCELED;
 
-	trace_probe_log_init("event_probe", argc, argv);
+	struct trace_probe_log tpl = trace_probe_log_create("event_probe", argc, argv);
 
 	event = strchr(&argv[0][1], ':');
 	if (event) {
 		event++;
 		ret = traceprobe_parse_event_name(&event, &group, gbuf,
-						  event - argv[0]);
+						  event - argv[0], &tpl);
 		if (ret)
 			goto parse_error;
 	}
 
-	trace_probe_log_set_index(1);
+	trace_probe_log_set_index(&tpl, 1);
 	sys_event = argv[1];
-	ret = traceprobe_parse_event_name(&sys_event, &sys_name, buf2, 0);
+	ret = traceprobe_parse_event_name(&sys_event, &sys_name, buf2, 0, &tpl);
 	if (ret || !sys_event || !sys_name) {
-		trace_probe_log_err(0, NO_EVENT_INFO);
+		trace_probe_log_err(&tpl, 0, NO_EVENT_INFO);
 		goto parse_error;
 	}
 
@@ -913,8 +917,8 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 	}
 
 	if (argc - 2 > MAX_TRACE_ARGS) {
-		trace_probe_log_set_index(2);
-		trace_probe_log_err(0, TOO_MANY_ARGS);
+		trace_probe_log_set_index(&tpl, 2);
+		trace_probe_log_err(&tpl, 0, TOO_MANY_ARGS);
 		ret = -E2BIG;
 		goto error;
 	}
@@ -927,7 +931,7 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 	if (IS_ERR(ep)) {
 		ret = PTR_ERR(ep);
 		if (ret == -ENODEV)
-			trace_probe_log_err(0, BAD_ATTACH_EVENT);
+			trace_probe_log_err(&tpl, 0, BAD_ATTACH_EVENT);
 		/* This must return -ENOMEM or missing event, else there is a bug */
 		WARN_ON_ONCE(ret != -ENOMEM && ret != -ENODEV);
 		ep = NULL;
@@ -935,8 +939,8 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 	}
 
 	if (filter_idx) {
-		trace_probe_log_set_index(filter_idx);
-		ret = trace_eprobe_parse_filter(ep, filter_cnt, argv + filter_idx);
+		trace_probe_log_set_index(&tpl, filter_idx);
+		ret = trace_eprobe_parse_filter(ep, &tpl, filter_cnt, argv + filter_idx);
 		if (ret)
 			goto parse_error;
 	} else
@@ -945,8 +949,8 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 	argc -= 2; argv += 2;
 	/* parse arguments */
 	for (i = 0; i < argc; i++) {
-		trace_probe_log_set_index(i + 2);
-		ret = trace_eprobe_tp_update_arg(ep, argv, i);
+		trace_probe_log_set_index(&tpl, i + 2);
+		ret = trace_eprobe_tp_update_arg(ep, argv, i, &tpl);
 		if (ret)
 			goto error;
 	}
@@ -958,8 +962,8 @@ static int __trace_eprobe_create(int argc, const char *argv[])
 		ret = trace_probe_register_event_call(&ep->tp);
 		if (ret) {
 			if (ret == -EEXIST) {
-				trace_probe_log_set_index(0);
-				trace_probe_log_err(0, EVENT_EXIST);
+				trace_probe_log_set_index(&tpl, 0);
+				trace_probe_log_err(&tpl, 0, EVENT_EXIST);
 			}
 			goto error;
 		}

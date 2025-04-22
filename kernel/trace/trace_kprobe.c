@@ -591,20 +591,21 @@ static bool trace_kprobe_has_same_kprobe(struct trace_kprobe *orig,
 	return false;
 }
 
-static int append_trace_kprobe(struct trace_kprobe *tk, struct trace_kprobe *to)
+static int append_trace_kprobe(struct trace_kprobe *tk, struct trace_kprobe *to,
+				struct trace_probe_log *tpl)
 {
 	int ret;
 
 	ret = trace_probe_compare_arg_type(&tk->tp, &to->tp);
 	if (ret) {
 		/* Note that argument starts index = 2 */
-		trace_probe_log_set_index(ret + 1);
-		trace_probe_log_err(0, DIFF_ARG_TYPE);
+		trace_probe_log_set_index(tpl, ret + 1);
+		trace_probe_log_err(tpl, 0, DIFF_ARG_TYPE);
 		return -EEXIST;
 	}
 	if (trace_kprobe_has_same_kprobe(to, tk)) {
-		trace_probe_log_set_index(0);
-		trace_probe_log_err(0, SAME_PROBE);
+		trace_probe_log_set_index(tpl, 0);
+		trace_probe_log_err(tpl, 0, SAME_PROBE);
 		return -EEXIST;
 	}
 
@@ -629,7 +630,7 @@ static int append_trace_kprobe(struct trace_kprobe *tk, struct trace_kprobe *to)
 }
 
 /* Register a trace_probe and probe_event */
-static int register_trace_kprobe(struct trace_kprobe *tk)
+static int register_trace_kprobe(struct trace_kprobe *tk, struct trace_probe_log *tpl)
 {
 	struct trace_kprobe *old_tk;
 	int ret;
@@ -640,19 +641,19 @@ static int register_trace_kprobe(struct trace_kprobe *tk)
 				   trace_probe_group_name(&tk->tp));
 	if (old_tk) {
 		if (trace_kprobe_is_return(tk) != trace_kprobe_is_return(old_tk)) {
-			trace_probe_log_set_index(0);
-			trace_probe_log_err(0, DIFF_PROBE_TYPE);
+			trace_probe_log_set_index(tpl, 0);
+			trace_probe_log_err(tpl, 0, DIFF_PROBE_TYPE);
 			return -EEXIST;
 		}
-		return append_trace_kprobe(tk, old_tk);
+		return append_trace_kprobe(tk, old_tk, tpl);
 	}
 
 	/* Register new event */
 	ret = register_kprobe_event(tk);
 	if (ret) {
 		if (ret == -EEXIST) {
-			trace_probe_log_set_index(0);
-			trace_probe_log_err(0, EVENT_EXIST);
+			trace_probe_log_set_index(tpl, 0);
+			trace_probe_log_err(tpl, 0, EVENT_EXIST);
 		} else
 			pr_warn("Failed to register probe event(%d)\n", ret);
 		return ret;
@@ -834,7 +835,8 @@ static int trace_kprobe_entry_handler(struct kretprobe_instance *ri,
 				      struct pt_regs *regs);
 
 static int trace_kprobe_create_internal(int argc, const char *argv[],
-					struct traceprobe_parse_context *ctx)
+					struct traceprobe_parse_context *ctx,
+				    struct trace_probe_log *tpl)
 {
 	/*
 	 * Argument syntax:
@@ -894,7 +896,7 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 
 	if (isdigit(argv[0][1])) {
 		if (!is_return) {
-			trace_probe_log_err(1, BAD_MAXACT_TYPE);
+			trace_probe_log_err(tpl, 1, BAD_MAXACT_TYPE);
 			return -EINVAL;
 		}
 		if (event)
@@ -902,21 +904,21 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 		else
 			len = strlen(&argv[0][1]);
 		if (len > MAX_EVENT_NAME_LEN - 1) {
-			trace_probe_log_err(1, BAD_MAXACT);
+			trace_probe_log_err(tpl, 1, BAD_MAXACT);
 			return -EINVAL;
 		}
 		memcpy(buf, &argv[0][1], len);
 		buf[len] = '\0';
 		ret = kstrtouint(buf, 0, &maxactive);
 		if (ret || !maxactive) {
-			trace_probe_log_err(1, BAD_MAXACT);
+			trace_probe_log_err(tpl, 1, BAD_MAXACT);
 			return -EINVAL;
 		}
 		/* kretprobes instances are iterated over via a list. The
 		 * maximum should stay reasonable.
 		 */
 		if (maxactive > KRETPROBE_MAXACTIVE_MAX) {
-			trace_probe_log_err(1, MAXACT_TOO_BIG);
+			trace_probe_log_err(tpl, 1, MAXACT_TOO_BIG);
 			return -EINVAL;
 		}
 	}
@@ -924,7 +926,7 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 	/* try to parse an address. if that fails, try to read the
 	 * input as a symbol. */
 	if (kstrtoul(argv[1], 0, (unsigned long *)&addr)) {
-		trace_probe_log_set_index(1);
+		trace_probe_log_set_index(tpl, 1);
 		/* Check whether uprobe event specified */
 		if (strchr(argv[1], '/') && strchr(argv[1], ':'))
 			return -ECANCELED;
@@ -940,7 +942,7 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 				*tmp = '\0';
 				is_return = true;
 			} else {
-				trace_probe_log_err(tmp - symbol, BAD_ADDR_SUFFIX);
+				trace_probe_log_err(tpl, tmp - symbol, BAD_ADDR_SUFFIX);
 				return -EINVAL;
 			}
 		}
@@ -948,15 +950,15 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 		/* TODO: support .init module functions */
 		ret = traceprobe_split_symbol_offset(symbol, &offset);
 		if (ret || offset < 0 || offset > UINT_MAX) {
-			trace_probe_log_err(0, BAD_PROBE_ADDR);
+			trace_probe_log_err(tpl, 0, BAD_PROBE_ADDR);
 			return -EINVAL;
 		}
 		ret = validate_probe_symbol(symbol);
 		if (ret) {
 			if (ret == -EADDRNOTAVAIL)
-				trace_probe_log_err(0, NON_UNIQ_SYMBOL);
+				trace_probe_log_err(tpl, 0, NON_UNIQ_SYMBOL);
 			else
-				trace_probe_log_err(0, BAD_PROBE_ADDR);
+				trace_probe_log_err(tpl, 0, BAD_PROBE_ADDR);
 			return -EINVAL;
 		}
 		if (is_return)
@@ -966,15 +968,15 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 			ctx->flags |= TPARG_FL_FENTRY;
 		/* Defer the ENOENT case until register kprobe */
 		if (ret == -EINVAL && is_return) {
-			trace_probe_log_err(0, BAD_RETPROBE);
+			trace_probe_log_err(tpl, 0, BAD_RETPROBE);
 			return -EINVAL;
 		}
 	}
 
-	trace_probe_log_set_index(0);
+	trace_probe_log_set_index(tpl, 0);
 	if (event) {
 		ret = traceprobe_parse_event_name(&event, &group, gbuf,
-						  event - argv[0]);
+						  event - argv[0], tpl);
 		if (ret)
 			return ret;
 	}
@@ -994,7 +996,7 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 	argc -= 2; argv += 2;
 	ctx->funcname = symbol;
 	new_argv = traceprobe_expand_meta_args(argc, argv, &new_argc,
-					       abuf, MAX_BTF_ARGS_LEN, ctx);
+					       abuf, MAX_BTF_ARGS_LEN, ctx, tpl);
 	if (IS_ERR(new_argv)) {
 		ret = PTR_ERR(new_argv);
 		new_argv = NULL;
@@ -1005,8 +1007,8 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 		argv = new_argv;
 	}
 	if (argc > MAX_TRACE_ARGS) {
-		trace_probe_log_set_index(2);
-		trace_probe_log_err(0, TOO_MANY_ARGS);
+		trace_probe_log_set_index(tpl, 2);
+		trace_probe_log_err(tpl, 0, TOO_MANY_ARGS);
 		return -E2BIG;
 	}
 
@@ -1026,9 +1028,9 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 
 	/* parse arguments */
 	for (i = 0; i < argc; i++) {
-		trace_probe_log_set_index(i + 2);
+		trace_probe_log_set_index(tpl, i + 2);
 		ctx->offset = 0;
-		ret = traceprobe_parse_probe_arg(&tk->tp, i, argv[i], ctx);
+		ret = traceprobe_parse_probe_arg(&tk->tp, i, argv[i], ctx, tpl);
 		if (ret)
 			return ret;	/* This can be -ENOMEM */
 	}
@@ -1043,15 +1045,15 @@ static int trace_kprobe_create_internal(int argc, const char *argv[],
 	if (ret < 0)
 		return ret;
 
-	ret = register_trace_kprobe(tk);
+	ret = register_trace_kprobe(tk, tpl);
 	if (ret) {
-		trace_probe_log_set_index(1);
+		trace_probe_log_set_index(tpl, 1);
 		if (ret == -EILSEQ)
-			trace_probe_log_err(0, BAD_INSN_BNDRY);
+			trace_probe_log_err(tpl, 0, BAD_INSN_BNDRY);
 		else if (ret == -ENOENT)
-			trace_probe_log_err(0, BAD_PROBE_ADDR);
+			trace_probe_log_err(tpl, 0, BAD_PROBE_ADDR);
 		else if (ret != -ENOMEM && ret != -EEXIST)
-			trace_probe_log_err(0, FAIL_REG_PROBE);
+			trace_probe_log_err(tpl, 0, FAIL_REG_PROBE);
 		return ret;
 	}
 	/*
@@ -1068,12 +1070,11 @@ static int trace_kprobe_create_cb(int argc, const char *argv[])
 	struct traceprobe_parse_context ctx = { .flags = TPARG_FL_KERNEL };
 	int ret;
 
-	trace_probe_log_init("trace_kprobe", argc, argv);
+	struct trace_probe_log tpl = trace_probe_log_create("trace_kprobe", argc, argv);
 
-	ret = trace_kprobe_create_internal(argc, argv, &ctx);
+	ret = trace_kprobe_create_internal(argc, argv, &ctx, &tpl);
 
 	traceprobe_finish_parse(&ctx);
-	trace_probe_log_clear();
 	return ret;
 }
 

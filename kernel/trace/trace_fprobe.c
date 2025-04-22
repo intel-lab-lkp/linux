@@ -837,26 +837,27 @@ static bool trace_fprobe_has_same_fprobe(struct trace_fprobe *orig,
 	return false;
 }
 
-static int append_trace_fprobe(struct trace_fprobe *tf, struct trace_fprobe *to)
+static int append_trace_fprobe(struct trace_fprobe *tf, struct trace_fprobe *to,
+			struct trace_probe_log *tpl)
 {
 	int ret;
 
 	if (trace_fprobe_is_return(tf) != trace_fprobe_is_return(to) ||
 	    trace_fprobe_is_tracepoint(tf) != trace_fprobe_is_tracepoint(to)) {
-		trace_probe_log_set_index(0);
-		trace_probe_log_err(0, DIFF_PROBE_TYPE);
+		trace_probe_log_set_index(tpl, 0);
+		trace_probe_log_err(tpl, 0, DIFF_PROBE_TYPE);
 		return -EEXIST;
 	}
 	ret = trace_probe_compare_arg_type(&tf->tp, &to->tp);
 	if (ret) {
 		/* Note that argument starts index = 2 */
-		trace_probe_log_set_index(ret + 1);
-		trace_probe_log_err(0, DIFF_ARG_TYPE);
+		trace_probe_log_set_index(tpl, ret + 1);
+		trace_probe_log_err(tpl, 0, DIFF_ARG_TYPE);
 		return -EEXIST;
 	}
 	if (trace_fprobe_has_same_fprobe(to, tf)) {
-		trace_probe_log_set_index(0);
-		trace_probe_log_err(0, SAME_PROBE);
+		trace_probe_log_set_index(tpl, 0);
+		trace_probe_log_err(tpl, 0, SAME_PROBE);
 		return -EEXIST;
 	}
 
@@ -875,7 +876,7 @@ static int append_trace_fprobe(struct trace_fprobe *tf, struct trace_fprobe *to)
 }
 
 /* Register a trace_probe and probe_event */
-static int register_trace_fprobe(struct trace_fprobe *tf)
+static int register_trace_fprobe(struct trace_fprobe *tf, struct trace_probe_log *tpl)
 {
 	struct trace_fprobe *old_tf;
 	int ret;
@@ -885,14 +886,14 @@ static int register_trace_fprobe(struct trace_fprobe *tf)
 	old_tf = find_trace_fprobe(trace_probe_name(&tf->tp),
 				   trace_probe_group_name(&tf->tp));
 	if (old_tf)
-		return append_trace_fprobe(tf, old_tf);
+		return append_trace_fprobe(tf, old_tf, tpl);
 
 	/* Register new event */
 	ret = register_fprobe_event(tf);
 	if (ret) {
 		if (ret == -EEXIST) {
-			trace_probe_log_set_index(0);
-			trace_probe_log_err(0, EVENT_EXIST);
+			trace_probe_log_set_index(tpl, 0);
+			trace_probe_log_err(tpl, 0, EVENT_EXIST);
 		} else
 			pr_warn("Failed to register probe event(%d)\n", ret);
 		return ret;
@@ -1030,7 +1031,7 @@ static struct notifier_block tracepoint_module_nb = {
 };
 #endif /* CONFIG_MODULES */
 
-static int parse_symbol_and_return(int argc, const char *argv[],
+static int parse_symbol_and_return(struct trace_probe_log *tpl, int argc, const char *argv[],
 				   char **symbol, bool *is_return,
 				   bool is_tracepoint)
 {
@@ -1043,7 +1044,7 @@ static int parse_symbol_and_return(int argc, const char *argv[],
 		if (!is_tracepoint && !strcmp(tmp, "%return")) {
 			*is_return = true;
 		} else {
-			trace_probe_log_err(len, BAD_ADDR_SUFFIX);
+			trace_probe_log_err(tpl, len, BAD_ADDR_SUFFIX);
 			return -EINVAL;
 		}
 		*symbol = kmemdup_nul(argv[1], len, GFP_KERNEL);
@@ -1061,7 +1062,7 @@ static int parse_symbol_and_return(int argc, const char *argv[],
 			tmp++;
 		if (*tmp) {
 			/* find a wrong character. */
-			trace_probe_log_err(tmp - *symbol, BAD_TP_NAME);
+			trace_probe_log_err(tpl, tmp - *symbol, BAD_TP_NAME);
 			kfree(*symbol);
 			*symbol = NULL;
 			return -EINVAL;
@@ -1073,8 +1074,8 @@ static int parse_symbol_and_return(int argc, const char *argv[],
 		tmp = strstr(argv[i], "$retval");
 		if (tmp && !isalnum(tmp[7]) && tmp[7] != '_') {
 			if (is_tracepoint) {
-				trace_probe_log_set_index(i);
-				trace_probe_log_err(tmp - argv[i], RETVAL_ON_PROBE);
+				trace_probe_log_set_index(tpl, i);
+				trace_probe_log_err(tpl, tmp - argv[i], RETVAL_ON_PROBE);
 				kfree(*symbol);
 				*symbol = NULL;
 				return -EINVAL;
@@ -1089,7 +1090,8 @@ static int parse_symbol_and_return(int argc, const char *argv[],
 DEFINE_FREE(module_put, struct module *, if (_T) module_put(_T))
 
 static int trace_fprobe_create_internal(int argc, const char *argv[],
-					struct traceprobe_parse_context *ctx)
+					struct traceprobe_parse_context *ctx,
+					struct trace_probe_log *tpl)
 {
 	/*
 	 * Argument syntax:
@@ -1140,24 +1142,24 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 
 	if (argv[0][1] != '\0') {
 		if (argv[0][1] != ':') {
-			trace_probe_log_set_index(0);
-			trace_probe_log_err(1, BAD_MAXACT);
+			trace_probe_log_set_index(tpl, 0);
+			trace_probe_log_err(tpl, 1, BAD_MAXACT);
 			return -EINVAL;
 		}
 		event = &argv[0][2];
 	}
 
-	trace_probe_log_set_index(1);
+	trace_probe_log_set_index(tpl, 1);
 
 	/* a symbol(or tracepoint) must be specified */
-	ret = parse_symbol_and_return(argc, argv, &symbol, &is_return, is_tracepoint);
+	ret = parse_symbol_and_return(tpl, argc, argv, &symbol, &is_return, is_tracepoint);
 	if (ret < 0)
 		return -EINVAL;
 
-	trace_probe_log_set_index(0);
+	trace_probe_log_set_index(tpl, 0);
 	if (event) {
 		ret = traceprobe_parse_event_name(&event, &group, gbuf,
-						  event - argv[0]);
+						  event - argv[0], tpl);
 		if (ret)
 			return -EINVAL;
 	}
@@ -1191,8 +1193,8 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 				tpoint = TRACEPOINT_STUB;
 				ctx->funcname = symbol;
 		} else {
-			trace_probe_log_set_index(1);
-			trace_probe_log_err(0, NO_TRACEPOINT);
+			trace_probe_log_set_index(tpl, 1);
+			trace_probe_log_err(tpl, 0, NO_TRACEPOINT);
 			return -EINVAL;
 		}
 	} else
@@ -1200,7 +1202,7 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 
 	argc -= 2; argv += 2;
 	new_argv = traceprobe_expand_meta_args(argc, argv, &new_argc,
-					       abuf, MAX_BTF_ARGS_LEN, ctx);
+					       abuf, MAX_BTF_ARGS_LEN, ctx, tpl);
 	if (IS_ERR(new_argv))
 		return PTR_ERR(new_argv);
 	if (new_argv) {
@@ -1208,8 +1210,8 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 		argv = new_argv;
 	}
 	if (argc > MAX_TRACE_ARGS) {
-		trace_probe_log_set_index(2);
-		trace_probe_log_err(0, TOO_MANY_ARGS);
+		trace_probe_log_set_index(tpl, 2);
+		trace_probe_log_err(tpl, 0, TOO_MANY_ARGS);
 		return -E2BIG;
 	}
 
@@ -1229,9 +1231,9 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 
 	/* parse arguments */
 	for (i = 0; i < argc; i++) {
-		trace_probe_log_set_index(i + 2);
+		trace_probe_log_set_index(tpl, i + 2);
 		ctx->offset = 0;
-		ret = traceprobe_parse_probe_arg(&tf->tp, i, argv[i], ctx);
+		ret = traceprobe_parse_probe_arg(&tf->tp, i, argv[i], ctx, tpl);
 		if (ret)
 			return ret;	/* This can be -ENOMEM */
 	}
@@ -1240,8 +1242,8 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 		tf->fp.entry_handler = trace_fprobe_entry_handler;
 		tf->fp.entry_data_size = traceprobe_get_entry_data_size(&tf->tp);
 		if (ALIGN(tf->fp.entry_data_size, sizeof(long)) > MAX_FPROBE_DATA_SIZE) {
-			trace_probe_log_set_index(2);
-			trace_probe_log_err(0, TOO_MANY_EARGS);
+			trace_probe_log_set_index(tpl, 2);
+			trace_probe_log_err(tpl, 0, TOO_MANY_EARGS);
 			return -E2BIG;
 		}
 	}
@@ -1251,15 +1253,15 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 	if (ret < 0)
 		return ret;
 
-	ret = register_trace_fprobe(tf);
+	ret = register_trace_fprobe(tf, tpl);
 	if (ret) {
-		trace_probe_log_set_index(1);
+		trace_probe_log_set_index(tpl, 1);
 		if (ret == -EILSEQ)
-			trace_probe_log_err(0, BAD_INSN_BNDRY);
+			trace_probe_log_err(tpl, 0, BAD_INSN_BNDRY);
 		else if (ret == -ENOENT)
-			trace_probe_log_err(0, BAD_PROBE_ADDR);
+			trace_probe_log_err(tpl, 0, BAD_PROBE_ADDR);
 		else if (ret != -ENOMEM && ret != -EEXIST)
-			trace_probe_log_err(0, FAIL_REG_PROBE);
+			trace_probe_log_err(tpl, 0, FAIL_REG_PROBE);
 		return -EINVAL;
 	}
 
@@ -1276,10 +1278,12 @@ static int trace_fprobe_create_cb(int argc, const char *argv[])
 	};
 	int ret;
 
-	trace_probe_log_init("trace_fprobe", argc, argv);
-	ret = trace_fprobe_create_internal(argc, argv, &ctx);
+	struct trace_probe_log tpl = trace_probe_log_create(
+		"trace_fprobe",
+		argc,
+		argv);
+	ret = trace_fprobe_create_internal(argc, argv, &ctx, &tpl);
 	traceprobe_finish_parse(&ctx);
-	trace_probe_log_clear();
 	return ret;
 }
 

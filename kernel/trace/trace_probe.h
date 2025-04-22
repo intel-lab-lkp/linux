@@ -422,12 +422,16 @@ struct traceprobe_parse_context {
 	int offset;
 };
 
+struct trace_probe_log;
+
 extern int traceprobe_parse_probe_arg(struct trace_probe *tp, int i,
 				      const char *argv,
-				      struct traceprobe_parse_context *ctx);
+				      struct traceprobe_parse_context *ctx,
+					  struct trace_probe_log *tpl);
 const char **traceprobe_expand_meta_args(int argc, const char *argv[],
 					 int *new_argc, char *buf, int bufsize,
-					 struct traceprobe_parse_context *ctx);
+					 struct traceprobe_parse_context *ctx,
+					 struct trace_probe_log *tpl);
 extern int traceprobe_expand_dentry_args(int argc, const char *argv[], char **buf);
 
 extern int traceprobe_update_arg(struct probe_arg *arg);
@@ -441,7 +445,7 @@ void traceprobe_finish_parse(struct traceprobe_parse_context *ctx);
 
 extern int traceprobe_split_symbol_offset(char *symbol, long *offset);
 int traceprobe_parse_event_name(const char **pevent, const char **pgroup,
-				char *buf, int offset);
+				char *buf, int offset, struct trace_probe_log *tpl);
 
 enum probe_print_type {
 	PROBE_PRINT_NORMAL,
@@ -563,13 +567,12 @@ struct trace_probe_log {
 	int		index;
 };
 
-void trace_probe_log_init(const char *subsystem, int argc, const char **argv);
-void trace_probe_log_set_index(int index);
-void trace_probe_log_clear(void);
-void __trace_probe_log_err(int offset, int err);
+struct trace_probe_log trace_probe_log_create(const char *subsystem, int argc, const char **argv);
+void trace_probe_log_set_index(struct trace_probe_log *tpl, int index);
+void __trace_probe_log_err(struct trace_probe_log *tpl, int offset, int err);
 
-#define trace_probe_log_err(offs, err)	\
-	__trace_probe_log_err(offs, TP_ERR_##err)
+#define trace_probe_log_err(tpl, offs, err)	\
+	__trace_probe_log_err(tpl, offs, TP_ERR_##err)
 
 struct uprobe_dispatch_data {
 	struct trace_uprobe	*tu;
