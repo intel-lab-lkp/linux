@@ -69,7 +69,7 @@ struct isp1760_udc {
 	char *irqname;
 
 	struct regmap *regs;
-	struct regmap_field *fields[DC_FIELD_MAX];
+	struct regmap_field *fields[FIELD_MAX];
 
 	struct usb_gadget_driver *driver;
 	struct usb_gadget gadget;
