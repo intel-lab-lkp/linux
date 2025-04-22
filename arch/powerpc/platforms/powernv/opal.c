@@ -48,7 +48,7 @@ static LIST_HEAD(msg_list);
 /* /sys/firmware/opal */
 struct kobject *opal_kobj;
 
-struct opal {
+static struct opal {
 	u64 base;
 	u64 entry;
 	u64 size;

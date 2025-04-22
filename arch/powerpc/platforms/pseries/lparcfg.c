@@ -185,7 +185,7 @@ static long h_pic(unsigned long *pool_idle_time,
 	return rc;
 }
 
-unsigned long boot_pool_idle_time;
+static unsigned long boot_pool_idle_time;
 
 /*
  * parse_ppp_data
