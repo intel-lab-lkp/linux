@@ -15,6 +15,13 @@ enum {
 	IO_WQ_HASH_SHIFT	= 24,	/* upper 8 bits are used for hash key */
 };
 
+enum {
+	IO_WORKER_F_UP		= 0,	/* up and active */
+	IO_WORKER_F_RUNNING	= 1,	/* account as running */
+	IO_WORKER_F_FREE	= 2,	/* worker on free list */
+	IO_WORKER_F_FAULT	= 3,	/* used for userfault */
+};
+
 enum io_wq_cancel {
 	IO_WQ_CANCEL_OK,	/* cancelled before started */
 	IO_WQ_CANCEL_RUNNING,	/* found, running, and attempted cancelled */
@@ -23,6 +30,32 @@ enum io_wq_cancel {
 
 typedef struct io_wq_work *(free_work_fn)(struct io_wq_work *);
 typedef void (io_wq_work_fn)(struct io_wq_work *);
+
+/*
+ * One for each thread in a wq pool
+ */
+struct io_worker {
+	refcount_t ref;
+	unsigned long flags;
+	struct hlist_nulls_node nulls_node;
+	struct list_head all_list;
+	struct task_struct *task;
+	struct io_wq *wq;
+	struct io_wq_acct *acct;
+
+	struct io_wq_work *cur_work;
+	raw_spinlock_t lock;
+	struct completion ref_done;
+
+	unsigned long create_state;
+	struct callback_head create_work;
+	int init_retries;
+
+	union {
+		struct rcu_head rcu;
+		struct delayed_work work;
+	};
+};
 
 struct io_wq_hash {
 	refcount_t refs;
@@ -70,13 +103,21 @@ enum io_wq_cancel io_wq_cancel_cb(struct io_wq *wq, work_cancel_fn *cancel,
 					void *data, bool cancel_all);
 
 #if defined(CONFIG_IO_WQ)
-extern void io_wq_worker_sleeping(struct task_struct *);
-extern void io_wq_worker_running(struct task_struct *);
+extern void io_wq_worker_sleeping(struct task_struct *tsk);
+extern void io_wq_worker_running(struct task_struct *tsk);
+extern void set_userfault_flag_for_ioworker(struct io_worker *worker);
+extern void clear_userfault_flag_for_ioworker(struct io_worker *worker);
 #else
 static inline void io_wq_worker_sleeping(struct task_struct *tsk)
 {
 }
 static inline void io_wq_worker_running(struct task_struct *tsk)
+{
+}
+static inline void set_userfault_flag_for_ioworker(struct io_worker *worker)
+{
+}
+static inline void clear_userfault_flag_for_ioworker(struct io_worker *worker)
 {
 }
 #endif

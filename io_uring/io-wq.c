@@ -27,44 +27,11 @@
 #define WORKER_INIT_LIMIT	3
 
 enum {
-	IO_WORKER_F_UP		= 0,	/* up and active */
-	IO_WORKER_F_RUNNING	= 1,	/* account as running */
-	IO_WORKER_F_FREE	= 2,	/* worker on free list */
-};
-
-enum {
 	IO_WQ_BIT_EXIT		= 0,	/* wq exiting */
 };
 
 enum {
 	IO_ACCT_STALLED_BIT	= 0,	/* stalled on hash */
-};
-
-/*
- * One for each thread in a wq pool
- */
-struct io_worker {
-	refcount_t ref;
-	unsigned long flags;
-	struct hlist_nulls_node nulls_node;
-	struct list_head all_list;
-	struct task_struct *task;
-	struct io_wq *wq;
-	struct io_wq_acct *acct;
-
-	struct io_wq_work *cur_work;
-	raw_spinlock_t lock;
-
-	struct completion ref_done;
-
-	unsigned long create_state;
-	struct callback_head create_work;
-	int init_retries;
-
-	union {
-		struct rcu_head rcu;
-		struct delayed_work work;
-	};
 };
 
 #if BITS_PER_LONG == 64
@@ -706,6 +673,16 @@ static int io_wq_worker(void *data)
 	return 0;
 }
 
+void set_userfault_flag_for_ioworker(struct io_worker *worker)
+{
+	set_bit(IO_WORKER_F_FAULT, &worker->flags);
+}
+
+void clear_userfault_flag_for_ioworker(struct io_worker *worker)
+{
+	clear_bit(IO_WORKER_F_FAULT, &worker->flags);
+}
+
 /*
  * Called when a worker is scheduled in. Mark us as currently running.
  */
@@ -715,12 +692,14 @@ void io_wq_worker_running(struct task_struct *tsk)
 
 	if (!worker)
 		return;
-	if (!test_bit(IO_WORKER_F_UP, &worker->flags))
-		return;
-	if (test_bit(IO_WORKER_F_RUNNING, &worker->flags))
-		return;
-	set_bit(IO_WORKER_F_RUNNING, &worker->flags);
-	io_wq_inc_running(worker);
+	if (!test_bit(IO_WORKER_F_FAULT, &worker->flags)) {
+		if (!test_bit(IO_WORKER_F_UP, &worker->flags))
+			return;
+		if (test_bit(IO_WORKER_F_RUNNING, &worker->flags))
+			return;
+		set_bit(IO_WORKER_F_RUNNING, &worker->flags);
+		io_wq_inc_running(worker);
+	}
 }
 
 /*
