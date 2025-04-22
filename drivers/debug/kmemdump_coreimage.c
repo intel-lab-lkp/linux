@@ -78,6 +78,7 @@ void register_coreinfo(void)
 	kmsg_kmemdump_register();
 	irq_kmemdump_register();
 	panic_kmemdump_register();
+	sched_kmemdump_register();
 }
 
 static struct elf_phdr *elf_phdr_entry_addr(struct elfhdr *ehdr, int idx)
