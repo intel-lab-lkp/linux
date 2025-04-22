@@ -56,6 +56,8 @@ int sdw_bus_master_add(struct sdw_bus *bus, struct device *parent,
 		return ret;
 	}
 
+	ida_init(&bus->slave_ida);
+
 	ret = sdw_master_device_add(bus, parent, fwnode);
 	if (ret < 0) {
 		dev_err(parent, "Failed to add master device at link %d\n",
@@ -730,11 +732,7 @@ static int sdw_get_device_num(struct sdw_slave *slave)
 		if (bit < 0)
 			goto err;
 	} else {
-		bit = find_first_zero_bit(bus->assigned, SDW_MAX_DEVICES);
-		if (bit == SDW_MAX_DEVICES) {
-			bit = -ENODEV;
-			goto err;
-		}
+		bit = slave->index;
 	}
 
 	/*

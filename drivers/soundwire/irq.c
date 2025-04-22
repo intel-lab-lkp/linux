@@ -50,12 +50,12 @@ static void sdw_irq_dispose_mapping(void *data)
 {
 	struct sdw_slave *slave = data;
 
-	irq_dispose_mapping(irq_find_mapping(slave->bus->domain, slave->dev_num));
+	irq_dispose_mapping(slave->irq);
 }
 
 void sdw_irq_create_mapping(struct sdw_slave *slave)
 {
-	slave->irq = irq_create_mapping(slave->bus->domain, slave->dev_num);
+	slave->irq = irq_create_mapping(slave->bus->domain, slave->index);
 	if (!slave->irq)
 		dev_warn(&slave->dev, "Failed to map IRQ\n");
 
