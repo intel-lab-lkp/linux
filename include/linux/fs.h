@@ -663,6 +663,7 @@ is_uncached_acl(struct posix_acl *acl)
 #define IOP_DEFAULT_READLINK	0x0010
 #define IOP_MGTIME	0x0020
 #define IOP_CACHED_LINK	0x0040
+#define IOP_USERNS	0x0080
 
 /*
  * Keep mostly read-only and often accessed (especially for
@@ -1454,7 +1455,13 @@ struct super_block {
 
 static inline struct user_namespace *i_user_ns(const struct inode *inode)
 {
-	return inode->i_sb->s_user_ns;
+	VFS_WARN_ON_ONCE(!(inode->i_opflags & IOP_USERNS) &&
+			 (inode->i_sb->s_user_ns != &init_user_ns));
+	VFS_WARN_ON_ONCE((inode->i_opflags & IOP_USERNS) &&
+			 (inode->i_sb->s_user_ns == &init_user_ns));
+	if (unlikely(inode->i_opflags & IOP_USERNS))
+		return inode->i_sb->s_user_ns;
+	return &init_user_ns;
 }
 
 /* Helper functions so that in most cases filesystems will
@@ -1493,6 +1500,8 @@ static inline void i_gid_write(struct inode *inode, gid_t gid)
 static inline vfsuid_t i_uid_into_vfsuid(struct mnt_idmap *idmap,
 					 const struct inode *inode)
 {
+	if (likely(is_nop_mnt_idmap(idmap)))
+		return VFSUIDT_INIT(inode->i_uid);
 	return make_vfsuid(idmap, i_user_ns(inode), inode->i_uid);
 }
 
@@ -1545,6 +1554,8 @@ static inline void i_uid_update(struct mnt_idmap *idmap,
 static inline vfsgid_t i_gid_into_vfsgid(struct mnt_idmap *idmap,
 					 const struct inode *inode)
 {
+	if (likely(is_nop_mnt_idmap(idmap)))
+		return VFSGIDT_INIT(inode->i_gid);
 	return make_vfsgid(idmap, i_user_ns(inode), inode->i_gid);
 }
 
@@ -1597,7 +1608,10 @@ static inline void i_gid_update(struct mnt_idmap *idmap,
 static inline void inode_fsuid_set(struct inode *inode,
 				   struct mnt_idmap *idmap)
 {
-	inode->i_uid = mapped_fsuid(idmap, i_user_ns(inode));
+	if (likely(is_nop_mnt_idmap(idmap)))
+		inode->i_uid = current_fsuid();
+	else
+		inode->i_uid = mapped_fsuid(idmap, i_user_ns(inode));
 }
 
 /**
@@ -1611,7 +1625,10 @@ static inline void inode_fsuid_set(struct inode *inode,
 static inline void inode_fsgid_set(struct inode *inode,
 				   struct mnt_idmap *idmap)
 {
-	inode->i_gid = mapped_fsgid(idmap, i_user_ns(inode));
+	if (likely(is_nop_mnt_idmap(idmap)))
+		inode->i_gid = current_fsgid();
+	else
+		inode->i_gid = mapped_fsgid(idmap, i_user_ns(inode));
 }
 
 /**

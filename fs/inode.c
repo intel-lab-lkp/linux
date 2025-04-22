@@ -245,6 +245,8 @@ int inode_init_always_gfp(struct super_block *sb, struct inode *inode, gfp_t gfp
 		inode->i_opflags |= IOP_XATTR;
 	if (sb->s_type->fs_flags & FS_MGTIME)
 		inode->i_opflags |= IOP_MGTIME;
+	if (unlikely(sb->s_user_ns != &init_user_ns))
+		inode->i_opflags |= IOP_USERNS;
 	i_uid_write(inode, 0);
 	i_gid_write(inode, 0);
 	atomic_set(&inode->i_writecount, 0);
@@ -1863,6 +1865,12 @@ static void iput_final(struct inode *inode)
 	int drop;
 
 	WARN_ON(inode->i_state & I_NEW);
+
+	/* This is security sensitive so catch missing IOP_USERNS. */
+	VFS_WARN_ON_ONCE(!(inode->i_opflags & IOP_USERNS) &&
+			 (inode->i_sb->s_user_ns != &init_user_ns));
+	VFS_WARN_ON_ONCE((inode->i_opflags & IOP_USERNS) &&
+			 (inode->i_sb->s_user_ns == &init_user_ns));
 
 	if (op->drop_inode)
 		drop = op->drop_inode(inode);

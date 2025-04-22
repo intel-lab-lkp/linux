@@ -25,6 +25,11 @@ static_assert(sizeof(vfsgid_t) == sizeof(kgid_t));
 static_assert(offsetof(vfsuid_t, val) == offsetof(kuid_t, val));
 static_assert(offsetof(vfsgid_t, val) == offsetof(kgid_t, val));
 
+static __always_inline bool is_nop_mnt_idmap(const struct mnt_idmap *idmap)
+{
+	return idmap == &nop_mnt_idmap;
+}
+
 static inline bool is_valid_mnt_idmap(const struct mnt_idmap *idmap)
 {
 	return idmap != &nop_mnt_idmap && idmap != &invalid_mnt_idmap;
