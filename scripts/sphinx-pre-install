@@ -42,6 +42,7 @@ my $latest_avail_ver;
 my $pdf = 1;
 my $virtualenv = 1;
 my $version_check = 0;
+my $interactive = 0;
 
 #
 # List of required texlive packages on Fedora and OpenSuse
@@ -338,12 +339,96 @@ sub which($)
 	return undef;
 }
 
+sub run_if_interactive($)
+{
+	my $command = shift;
+	printf("\n\t$command\n");
+
+	if($interactive) {
+		printf("Run the command now? [Y/n, default:Y]: ");
+		my $user_input = <STDIN>;
+		chomp $user_input;
+		# Default = Y
+		if ($user_input eq '' or $user_input =~ /^y(es)?$/i) {
+			system($command) == 0 or warn "Failed to run the command";
+		}
+	}
+}
+
+sub fallback_unknown_distro()
+{
+	# Fall-back to generic hint code for other distros
+	# That's far from ideal, specially for LaTeX dependencies.
+	my %map = (
+		"sphinx-build" => "sphinx"
+	);
+	check_missing_tex(2) if ($pdf);
+	check_missing(\%map);
+	print "I don't know distro $system_release.\n";
+	print "So, I can't provide you a hint with the install procedure.\n";
+	print "There are likely missing dependencies.\n";
+}
+
+# checks if a package exists in path
+sub is_in_path($)
+{
+    my $cmd = shift;
+    for my $dir (split /:/, $ENV{PATH}) {
+        return 1 if -x "$dir/$cmd";
+    }
+    return 0;
+}
+
+# adding a check in --interactive
+# Reason: Selecting an incorrect distribution in cases where the user's distribution is unrecognized may lead to unexpected behavior.
+sub check_user_choice($)
+{
+	my $package_manager = shift;
+	if ($interactive) {
+		# checks if the package manager exists. hence, confirming the distribution
+		if (!is_in_path($package_manager)) {
+			print "$package_manager not found\n";
+			fallback_unknown_distro();
+			return 0;
+		}
+		return 1; # package_manager found
+	}
+	return 1; # non-interactive
+}
+
+# checks if either of the package manager exists
+sub check_user_choice_two($$)
+{
+	my ($pm1, $pm2) = @_;
+	if ($interactive) {
+		my $found = 0;
+		# checks if either of the package managers exists. hence, confirming the distribution
+		if(is_in_path($pm1)) {
+			$found = 1;
+		}
+		if(is_in_path($pm2)) {
+			$found = 1;
+		}
+		if(!$found) {
+			print "both $pm1 and $pm2 not found\n";
+			fallback_unknown_distro();
+			return 0; # package_manager not found
+		}
+		return 1; # package_manager found
+	}
+	return 1; # non-interactive
+}
+
 #
 # Subroutines that check distro-specific hints
 #
 
 sub give_debian_hints()
 {
+	if (!check_user_choice("apt-get")) {
+		return;
+	}
+
 	my %map = (
 		"python-sphinx"		=> "python3-sphinx",
 		"yaml"			=> "python3-yaml",
@@ -374,11 +459,16 @@ sub give_debian_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo apt-get install $install\n");
+	my $command = "sudo apt-get install $install";
+	run_if_interactive($command);
 }
 
 sub give_redhat_hints()
 {
+	if (!check_user_choice_two("dnf", "yum")) {
+		return;
+	}
+
 	my %map = (
 		"python-sphinx"		=> "python3-sphinx",
 		"yaml"			=> "python3-pyyaml",
@@ -452,16 +542,21 @@ sub give_redhat_hints()
 	if (!$old) {
 		# dnf, for Fedora 18+
 		printf("You should run:\n") if ($verbose_warn_install);
-		printf("\n\tsudo dnf install -y $install\n");
+		my $command = "sudo dnf install -y $install";
+		run_if_interactive($command);
 	} else {
 		# yum, for RHEL (and clones) or Fedora version < 18
 		printf("You should run:\n") if ($verbose_warn_install);
-		printf("\n\tsudo yum install -y $install\n");
+		my $command = "sudo yum install -y $install";
+		run_if_interactive($command);
 	}
 }
 
 sub give_opensuse_hints()
 {
+	if (!check_user_choice("zypper")) {
+		return;
+	}
 	my %map = (
 		"python-sphinx"		=> "python3-sphinx",
 		"yaml"			=> "python3-pyyaml",
@@ -505,11 +600,16 @@ sub give_opensuse_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo zypper install --no-recommends $install\n");
+	my $command = "sudo zypper install --no-recommends $install";
+	run_if_interactive($command);
+
 }
 
 sub give_mageia_hints()
 {
+	if (!check_user_choice_two("dnf", "urpmi")) {
+		return;
+	}
 	my %map = (
 		"python-sphinx"		=> "python3-sphinx",
 		"yaml"			=> "python3-yaml",
@@ -538,7 +638,6 @@ sub give_mageia_hints()
 		$noto_sans = "google-noto-sans-cjk-ttc-fonts";
 	}
 
-
 	if ($pdf) {
 		check_missing_file(["/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
 				    "/usr/share/fonts/TTF/NotoSans-Regular.ttf"],
@@ -550,11 +649,17 @@ sub give_mageia_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo $packager_cmd $install\n");
+	my $command = "sudo $packager_cmd $install";
+	run_if_interactive($command);
+
 }
 
 sub give_arch_linux_hints()
 {
+	if (!check_user_choice("pacman")) {
+		return;
+	}
+
 	my %map = (
 		"yaml"			=> "python-yaml",
 		"virtualenv"		=> "python-virtualenv",
@@ -581,11 +686,16 @@ sub give_arch_linux_hints()
 
 	return if (!$need && !$optional);
 	printf("You should run:\n") if ($verbose_warn_install);
-	printf("\n\tsudo pacman -S $install\n");
+	my $command = "sudo pacman -S $install";
+	run_if_interactive($command);
 }
 
 sub give_gentoo_hints()
 {
+	if (!check_user_choice("emerge")) {
+		return;
+	}
+
 	my %map = (
 		"yaml"			=> "dev-python/pyyaml",
 		"virtualenv"		=> "dev-python/virtualenv",
@@ -617,14 +727,15 @@ sub give_gentoo_hints()
 	my $portage_cairo = "/etc/portage/package.use/graphviz";
 
 	if (qx(grep imagemagick $portage_imagemagick 2>/dev/null) eq "") {
-		printf("\tsudo su -c 'echo \"$imagemagick\" > $portage_imagemagick'\n")
+		my $imagemagick_command = "sudo su -c 'echo \"$imagemagick\" > $portage_imagemagick'";
+		run_if_interactive($imagemagick_command);
 	}
 	if (qx(grep graphviz $portage_cairo 2>/dev/null) eq  "") {
-		printf("\tsudo su -c 'echo \"$cairo\" > $portage_cairo'\n");
+		my $portage_command = "sudo su -c 'echo \"$cairo\" > $portage_cairo'";
+		run_if_interactive($portage_command);
 	}
-
-	printf("\tsudo emerge --ask $install\n");
-
+	my $command = "sudo emerge --ask $install";
+	run_if_interactive($command);
 }
 
 sub check_distros()
@@ -678,19 +789,35 @@ sub check_distros()
 		give_gentoo_hints;
 		return;
 	}
+	# if the distro is not recognised
+	# but it is derived from the available options
+	if ($interactive) {
+		my @distros = (
+			{ name => "Debian/Ubuntu", func => \&give_debian_hints },
+			{ name => "RedHat/CentOS/Fedora", func => \&give_redhat_hints },
+			{ name => "OpenSUSE", func => \&give_opensuse_hints },
+			{ name => "Mageia", func => \&give_mageia_hints },
+			{ name => "Arch Linux", func => \&give_arch_linux_hints },
+			{ name => "Gentoo", func => \&give_gentoo_hints },
+		);
+		print "Which distro is your OS based on?\n";
+		for my $i (0 .. $#distros) {
+			printf("[%d] %s\n", $i + 1, $distros[$i]->{name});
+		}
+		print "[0] Others\n";
 
-	#
-	# Fall-back to generic hint code for other distros
-	# That's far from ideal, specially for LaTeX dependencies.
-	#
-	my %map = (
-		"sphinx-build" => "sphinx"
-	);
-	check_missing_tex(2) if ($pdf);
-	check_missing(\%map);
-	print "I don't know distro $system_release.\n";
-	print "So, I can't provide you a hint with the install procedure.\n";
-	print "There are likely missing dependencies.\n";
+		print "Select a number: ";
+		my $choice = <STDIN>;
+		chomp $choice;
+
+		if ($choice =~ /^\d+$/ && $choice >= 1 && $choice <= scalar(@distros)) {
+			$distros[$choice - 1]->{func}->();
+		} else {
+			fallback_unknown_distro();
+		}
+	} else {
+		fallback_unknown_distro();
+	}
 }
 
 #
@@ -1002,12 +1129,20 @@ while (@ARGV) {
 		$pdf = 0;
 	} elsif ($arg eq "--version-check"){
 		$version_check = 1;
+	} elsif ($arg eq "--interactive") {
+		# check if the user can interact with the script
+		if (-t STDIN) {
+			$interactive = 1;
+		} else {
+    		print "Non-interactive environment\n";
+		}
 	} else {
 		print "Usage:\n\t$0 <--no-virtualenv> <--no-pdf> <--version-check>\n\n";
 		print "Where:\n";
 		print "\t--no-virtualenv\t- Recommend installing Sphinx instead of using a virtualenv\n";
 		print "\t--version-check\t- if version is compatible, don't check for missing dependencies\n";
-		print "\t--no-pdf\t- don't check for dependencies required to build PDF docs\n\n";
+		print "\t--no-pdf\t- don't check for dependencies required to build PDF docs\n";
+		print "\t--interactuve\t- Ask to intsall missing dependencies\n\n";
 		exit -1;
 	}
 }
