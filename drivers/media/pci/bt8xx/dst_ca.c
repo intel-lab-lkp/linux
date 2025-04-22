@@ -66,7 +66,10 @@ static int dst_ci_command(struct dst_state* state, u8 * data, u8 *ca_string, u8 
 	u8 reply;
 
 	mutex_lock(&state->dst_mutex);
-	dst_comm_init(state);
+	if (dst_comm_init(state) < 0) {
+		dprintk(verbose, DST_CA_ERROR, 1, "DST initialization failed.");
+		goto error;
+	}
 	msleep(65);
 
 	if (write_dst(state, data, len)) {
