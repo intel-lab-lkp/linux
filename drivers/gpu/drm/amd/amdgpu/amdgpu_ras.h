@@ -941,7 +941,7 @@ void amdgpu_ras_inst_reset_ras_error_count(struct amdgpu_device *adev,
 					   uint32_t reg_list_size,
 					   uint32_t instance);
 
-int amdgpu_ras_error_data_init(struct ras_err_data *err_data);
+void amdgpu_ras_error_data_init(struct ras_err_data *err_data);
 void amdgpu_ras_error_data_fini(struct ras_err_data *err_data);
 int amdgpu_ras_error_statistic_ce_count(struct ras_err_data *err_data,
 					struct amdgpu_smuio_mcm_config_info *mcm_info,
