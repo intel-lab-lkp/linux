@@ -189,21 +189,26 @@ int of_cpu_phandle_to_id(const struct device_node *node,
 			 const char * prop)
 {
 	bool found = false;
-	int cpu, ret;
+	int cpu, ret = -1;
+	uint32_t local_thread, thread_index;
 	struct device_node *np;
 	struct of_phandle_args args;
 
 	if (!node || !prop)
-		return -1;
-
-	ret = of_parse_phandle_with_args(node, prop, NULL, 0, &args);
-	if (ret < 0)
 		return ret;
 
+	ret = of_parse_phandle_with_args(node, prop, "#cpu-cells", 0, &args);
+	if (ret < 0) {
+		ret = of_parse_phandle_with_args(node, prop, NULL, 0, &args);
+		if (ret < 0)
+			return ret;
+	}
+
 	cpu_np = args.np;
+	thread_index = args.args_count == 1 ? args.args[0] : 0;
 	for_each_possible_cpu(cpu) {
-		np = of_cpu_device_node_get(cpu);
-		found = (cpu_np == np);
+		np = of_get_cpu_node(cpu, &local_thread);
+		found = (cpu_np == np) && (local_thread == thread_index);
 		of_node_put(np);
 		if (found)
 			return cpu;
