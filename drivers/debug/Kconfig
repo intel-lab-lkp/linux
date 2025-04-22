@@ -13,4 +13,17 @@ config DRIVER_KMEMDUMP
 
 	  Note that modules using this feature must be rebuilt if option
 	  changes.
+
+config QCOM_MD_KMEMDUMP_BACKEND
+	tristate "Qualcomm Minidump kmemdump backend driver"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on DRIVER_KMEMDUMP
+	help
+	  Say y here to enable the Qualcomm Minidump kmemdump backend
+	  driver.
+	  With this backend, the registered regions are being linked
+	  into the minidump table of contents. Further on, the firmware
+	  will be able to read the table of contents and extract the
+	  memory regions on case-by-case basis.
+
 endmenu
