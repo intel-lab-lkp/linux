@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/wireless/nordic,nrf70.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Nordic Semiconductor nRF70 series wireless companion IC
+
+maintainers:
+  - Artur Rojek <artur@conclusive.tech>
+
+properties:
+  compatible:
+    const: nordic,nrf70
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+    description: HOST_IRQ line, used for host processor interrupt requests.
+
+  interrupt-names:
+    description: Name for the HOST_IRQ line. This must be set to "host-irq".
+    const: host-irq
+
+  vpwr-supply:
+    description: BUCKEN line, used for PWR IP state control.
+
+  vio-supply:
+    description: IOVDD line, used for I/O pins voltage control. Optional.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-names
+  - vpwr-supply
+
+allOf:
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    reg_nrf70_buck: regulator-nrf70-buck {
+        compatible = "regulator-fixed";
+        regulator-name = "nrf70_buck";
+        gpio = <&gpio2 24 GPIO_ACTIVE_HIGH>;
+        enable-active-high;
+    };
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        nrf7002@0 {
+            compatible = "nordic,nrf70";
+            reg = <0>;
+            spi-max-frequency = <32000000>;
+            interrupt-parent = <&gpio2>;
+            interrupts = <13 GPIO_ACTIVE_HIGH>;
+            interrupt-names = "host-irq";
+            vpwr-supply = <&reg_nrf70_buck>;
+            spi-rx-bus-width = <4>;
+            spi-tx-bus-width = <4>;
+        };
+    };
