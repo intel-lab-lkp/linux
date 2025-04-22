@@ -12,6 +12,7 @@
 #include <dt-bindings/interconnect/qcom,icc.h>
 #include <dt-bindings/interconnect/qcom,osm-l3.h>
 #include <dt-bindings/interconnect/qcom,sc8180x.h>
+#include <dt-bindings/clock/qcom,sc8180x-camcc.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/phy/phy-qcom-qmp.h>
 #include <dt-bindings/power/qcom-rpmpd.h>
@@ -2932,6 +2933,18 @@
 					};
 				};
 			};
+		};
+
+		camcc: clock-controller@ad00000 {
+			compatible = "qcom,sc8180x-camcc";
+			reg = <0 0x0ad00000 0 0x20000>;
+			clocks = <&rpmhcc RPMH_CXO_CLK>,
+				 <&sleep_clk>;
+			power-domains = <&rpmhpd SC8180X_MMCX>;
+			required-opps = <&rpmhpd_opp_low_svs>;
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+			#power-domain-cells = <1>;
 		};
 
 		mdss: mdss@ae00000 {
