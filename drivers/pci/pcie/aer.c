@@ -237,6 +237,17 @@ int pcie_aer_is_native(struct pci_dev *dev)
 }
 EXPORT_SYMBOL_NS_GPL(pcie_aer_is_native, "CXL");
 
+bool pci_aer_in_progress(struct pci_dev *dev)
+{
+	u16 reg16;
+
+	if (!pcie_aer_is_native(dev))
+		return false;
+
+	pcie_capability_read_word(dev, PCI_EXP_DEVSTA, &reg16);
+	return !!(reg16 & PCI_EXP_AER_FLAGS);
+}
+
 static int pci_enable_pcie_error_reporting(struct pci_dev *dev)
 {
 	int rc;

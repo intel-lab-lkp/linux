@@ -883,7 +883,8 @@ static int pci_pm_suspend_noirq(struct device *dev)
 		}
 	}
 
-	if (!pci_dev->state_saved) {
+	/* Avoid suspending the device with errors */
+	if (!pci_aer_in_progress(pci_dev) && !pci_dev->state_saved) {
 		pci_save_state(pci_dev);
 
 		/*
