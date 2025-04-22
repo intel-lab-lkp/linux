@@ -817,6 +817,58 @@ definitions:
         name: drop-overmemory
         type: u32
   -
+    name: tc-dualpi2-xstats
+    type: struct
+    members:
+      -
+        name: prob
+        type: uint
+        doc: Current probability
+      -
+        name: delay_c
+        type: uint
+        doc: Current C-queue delay in microseconds
+      -
+        name: delay_l
+        type: uint
+        doc: Current L-queue delay in microseconds
+      -
+        name: pkts_in_c
+        type: uint
+        doc: Number of packets enqueued in the C-queue
+      -
+        name: pkts_in_l
+        type: uint
+        doc: Number of packets enqueued in the L-queue
+      -
+        name: maxq
+        type: uint
+        doc: Maximum number of packets seen by the DualPI2
+      -
+        name: ecn_mark
+        type: uint
+        doc: All packets marked with ecn
+      -
+        name: step_mark
+        type: uint
+        doc: Only packets marked with ecn due to L-queue step AQM
+      -
+        name: credit
+        type: int
+        doc: Current credit value for WRR
+      -
+        name: memory_used
+        type: uint
+        doc: Memory used in bytes by the DualPI2
+      -
+        name: max_memory_used
+        type: uint
+        doc: Maximum memory used in bytes by the DualPI2
+      -
+        name: memory_limit
+        type: uint
+        doc: Memory limit in bytes
+  -
     name: tc-fq-pie-xstats
     type: struct
     members:
@@ -2300,6 +2352,92 @@ attribute-sets:
         name: quantum
         type: u32
   -
+    name: tc-dualpi2-attrs
+    attributes:
+      -
+        name: limit
+        type: uint
+        doc: Limit of total number of packets in queue
+      -
+        name: memlimit
+        type: uint
+        doc: Memory limit of total number of packets in queue
+      -
+        name: target
+        type: uint
+        doc: Classic target delay in microseconds
+      -
+        name: tupdate
+        type: uint
+        doc: Drop probability update interval time in microseconds
+      -
+        name: alpha
+        type: uint
+        doc: Integral gain factor in Hz for PI controller
+      -
+        name: beta
+        type: uint
+        doc: Proportional gain factor in Hz for PI controller
+      -
+        name: step_thresh
+        type: uint
+        doc: L4S step marking threshold in microseconds or in packet (see step_packets)
+      -
+        name: step_packets
+        type: flags
+        doc: L4S Step marking threshold unit
+        entries:
+        - microseconds
+        - packets
+      -
+        name: min_qlen_step
+        type: uint
+        doc: Packets enqueued to the L-queue can apply the step threshold when the queue length of L-queue is larger than this value. (0 is recommended)
+      -
+        name: coupling_factor
+        type: uint
+        doc: Probability coupling factor between Classic and L4S (2 is recommended)
+      -
+        name: drop_overload
+        type: flags
+        doc: Control the overload strategy (drop to preserve latency or let the queue overflow)
+        entries:
+        - drop_on_overload
+        - overflow
+      -
+        name: drop_early
+        type: flags
+        doc: Decide where the Classic packets are PI-based dropped or marked
+        entries:
+        - drop_enqueue
+        - drop_dequeue
+      -
+        name: classic_protection
+        type: uint
+        doc: Classic WRR weight in percentage (from 0 to 100)
+      -
+        name: ecn_mask
+        type: flags
+        doc: Configure the L-queue ECN classifier
+        entries:
+        - l4s_ect
+        - any_ect
+      -
+        name: gso_split
+        type: flags
+        doc: Split aggregated skb or not
+        entries:
+        - split_gso
+        - no_split_gso
+      -
+        name: max_rtt
+        type: uint
+        doc: The maximum expected RTT of the traffic that is controlled by DualPI2 in usec
+      -
+        name: typical_rtt
+        type: uint
+        doc: The typical base RTT of the traffic that is controlled by DualPI2 in usec
+  -
     name: tc-ematch-attrs
     attributes:
       -
@@ -3680,6 +3818,9 @@ sub-messages:
         value: drr
         attribute-set: tc-drr-attrs
       -
+        value: dualpi2
+        attribute-set: tc-dualpi2-attrs
+      -
         value: etf
         attribute-set: tc-etf-attrs
       -
@@ -3846,6 +3987,9 @@ sub-messages:
       -
         value: codel
         fixed-header: tc-codel-xstats
+      -
+        value: dualpi2
+        fixed-header: tc-dualpi2-xstats
       -
         value: fq
         fixed-header: tc-fq-qd-stats
