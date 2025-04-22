@@ -606,6 +606,7 @@
 		ti,itap-del-sel-sd-hs = <0x0>;
 		ti,itap-del-sel-sdr12 = <0x0>;
 		ti,itap-del-sel-sdr25 = <0x0>;
+		ti,suppress-v1p8-ena;
 		status = "disabled";
 	};
 
