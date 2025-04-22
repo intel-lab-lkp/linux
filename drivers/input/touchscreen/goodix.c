@@ -775,7 +775,8 @@ int goodix_reset_no_int_sync(struct goodix_ts_data *ts)
 	 * power. Only do this in the non ACPI case since some ACPI boards
 	 * don't have a pull-up, so there the reset pin must stay active-high.
 	 */
-	if (ts->irq_pin_access_method == IRQ_PIN_ACCESS_GPIO) {
+	if (ts->irq_pin_access_method == IRQ_PIN_ACCESS_GPIO &&
+	    ts->gpiod_rst_flags == GPIOD_IN) {
 		error = gpiod_direction_input(ts->gpiod_rst);
 		if (error)
 			goto error;
@@ -968,6 +969,13 @@ static int goodix_get_gpio_config(struct goodix_ts_data *ts)
 	 * high-impedance when not resetting the controller to save power.
 	 */
 	ts->gpiod_rst_flags = GPIOD_IN;
+
+	/*
+	 * Devices that does not have pull-up on reset signal should not be
+	 * changed to input
+	 */
+	if (device_property_read_bool(dev, "no-reset-pull-up"))
+		ts->gpiod_rst_flags = GPIOD_ASIS;
 
 	ts->avdd28 = devm_regulator_get(dev, "AVDD28");
 	if (IS_ERR(ts->avdd28))
