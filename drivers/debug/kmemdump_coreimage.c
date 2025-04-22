@@ -2,6 +2,7 @@
 
 #include <linux/init.h>
 #include <linux/elfcore.h>
+#include <linux/irqnr.h>
 #include <linux/kmemdump.h>
 #include <linux/kmsg_dump.h>
 #include <linux/utsname.h>
@@ -74,6 +75,7 @@ void register_coreinfo(void)
 			  sizeof(jiffies_64));
 
 	kmsg_kmemdump_register();
+	irq_kmemdump_register();
 }
 
 static struct elf_phdr *elf_phdr_entry_addr(struct elfhdr *ehdr, int idx)
