@@ -32,6 +32,7 @@
 #include <linux/swapops.h>
 #include <linux/miscdevice.h>
 #include <linux/uio.h>
+#include "../io_uring/io-wq.h"
 
 static int sysctl_unprivileged_userfaultfd __read_mostly;
 
@@ -369,7 +370,10 @@ vm_fault_t handle_userfault(struct vm_fault *vmf, unsigned long reason)
 	vm_fault_t ret = VM_FAULT_SIGBUS;
 	bool must_wait;
 	unsigned int blocking_state;
+	struct io_worker *worker = current->worker_private;
 
+	if (worker)
+		set_userfault_flag_for_ioworker(worker);
 	/*
 	 * We don't do userfault handling for the final child pid update
 	 * and when coredumping (faults triggered by get_dump_page()).
@@ -505,6 +509,9 @@ vm_fault_t handle_userfault(struct vm_fault *vmf, unsigned long reason)
 	}
 
 	__set_current_state(TASK_RUNNING);
+
+	if (worker)
+		clear_userfault_flag_for_ioworker(worker);
 
 	/*
 	 * Here we race with the list_del; list_add in
