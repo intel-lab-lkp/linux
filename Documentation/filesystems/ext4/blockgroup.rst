@@ -108,7 +108,7 @@ block groups which can be described by a single block group descriptor
 block. Since the size of the block group descriptor structure is 64
 bytes, a meta-block group contains 16 block groups for filesystems with
 a 1KB block size, and 64 block groups for filesystems with a 4KB
-blocksize. Filesystems can either be created using this new block group
+block size. Filesystems can either be created using this new block group
 descriptor layout, or existing filesystems can be resized on-line, and
 the field s_first_meta_bg in the superblock will indicate the first
 block group using this new layout.
