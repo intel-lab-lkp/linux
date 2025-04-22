@@ -1578,7 +1578,8 @@ static int psmouse_connect(struct serio *serio, struct serio_driver *drv)
 {
 	struct psmouse *psmouse, *parent = NULL;
 	struct input_dev *input_dev;
-	int retval = 0, error = -ENOMEM;
+	int error = -ENOMEM;
+	int n;
 
 	mutex_lock(&psmouse_mutex);
 
@@ -1600,7 +1601,12 @@ static int psmouse_connect(struct serio *serio, struct serio_driver *drv)
 		 psmouse_pre_receive_byte, psmouse_receive_byte);
 	INIT_DELAYED_WORK(&psmouse->resync_work, psmouse_resync);
 	psmouse->dev = input_dev;
-	snprintf(psmouse->phys, sizeof(psmouse->phys), "%s/input0", serio->phys);
+
+	n = snprintf(psmouse->phys, sizeof(psmouse->phys), "%s/input0", serio->phys);
+	if (n >= sizeof(psmouse->phys)) {
+		error = -E2BIG;
+		goto err_free;
+	}
 
 	psmouse_set_state(psmouse, PSMOUSE_INITIALIZING);
 
@@ -1654,7 +1660,7 @@ static int psmouse_connect(struct serio *serio, struct serio_driver *drv)
 		psmouse_activate(parent);
 
 	mutex_unlock(&psmouse_mutex);
-	return retval;
+	return error;
 
  err_protocol_disconnect:
 	if (psmouse->disconnect)
@@ -1668,7 +1674,6 @@ static int psmouse_connect(struct serio *serio, struct serio_driver *drv)
 	input_free_device(input_dev);
 	kfree(psmouse);
 
-	retval = error;
 	goto out;
 }
 
