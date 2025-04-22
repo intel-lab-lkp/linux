@@ -18,6 +18,8 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 
+#include "../../kselftest_harness.h"
+
 #define ID 0x123
 #define TC 18 /* # of testcases */
 
@@ -53,7 +55,38 @@ canid_t calc_mask(int testcase)
 	return mask;
 }
 
-int main(int argc, char **argv)
+int send_can_frames(int sock, int testcase)
+{
+	struct can_frame frame;
+
+	frame.can_dlc = 1;
+	frame.data[0] = testcase;
+
+	frame.can_id = ID;
+	if (write(sock, &frame, sizeof(frame)) < 0) {
+		perror("write");
+		return 1;
+	}
+	frame.can_id = (ID | CAN_RTR_FLAG);
+	if (write(sock, &frame, sizeof(frame)) < 0) {
+		perror("write");
+		return 1;
+	}
+	frame.can_id = (ID | CAN_EFF_FLAG);
+	if (write(sock, &frame, sizeof(frame)) < 0) {
+		perror("write");
+		return 1;
+	}
+	frame.can_id = (ID | CAN_EFF_FLAG | CAN_RTR_FLAG);
+	if (write(sock, &frame, sizeof(frame)) < 0) {
+		perror("write");
+		return 1;
+	}
+
+	return 0;
+}
+
+TEST(can_filter)
 {
 	fd_set rdfs;
 	struct timeval tv;
@@ -67,34 +100,26 @@ int main(int argc, char **argv)
 	int rxbits, rxbitval;
 	int ret;
 	int recv_own_msgs = 1;
-	int err = 0;
 	struct ifreq ifr;
 
-	if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0) {
-		perror("socket");
-		err = 1;
-		goto out;
-	}
+	s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+	ASSERT_LT(0, s)
+		TH_LOG("failed to create CAN_RAW socket (%d)", errno);
 
 	strcpy(ifr.ifr_name, VCANIF);
-	if (ioctl(s, SIOCGIFINDEX, &ifr) < 0) {
-		perror("SIOCGIFINDEX");
-		err = 1;
-		goto out_socket;
-	}
+	ret = ioctl(s, SIOCGIFINDEX, &ifr);
+	ASSERT_LE(0, ret)
+		TH_LOG("failed SIOCGIFINDEX (%d)", errno);
+
 	addr.can_family = AF_CAN;
 	addr.can_ifindex = ifr.ifr_ifindex;
 
 	setsockopt(s, SOL_CAN_RAW, CAN_RAW_RECV_OWN_MSGS,
 		   &recv_own_msgs, sizeof(recv_own_msgs));
 
-	if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		perror("bind");
-		err = 1;
-		goto out_socket;
-	}
-
-	printf("---\n");
+	ret = bind(s, (struct sockaddr *)&addr, sizeof(addr));
+	ASSERT_EQ(0, ret)
+		TH_LOG("failed bind socket (%d)", errno);
 
 	for (testcase = 0; testcase < TC; testcase++) {
 
@@ -103,36 +128,14 @@ int main(int argc, char **argv)
 		setsockopt(s, SOL_CAN_RAW, CAN_RAW_FILTER,
 			   &rfilter, sizeof(rfilter));
 
-		printf("testcase %2d filters : can_id = 0x%08X can_mask = 0x%08X\n",
+		TH_LOG("testcase %2d filters : can_id = 0x%08X can_mask = 0x%08X",
 		       testcase, rfilter.can_id, rfilter.can_mask);
 
-		printf("testcase %2d sending patterns ... ", testcase);
+		TH_LOG("testcase %2d sending patterns...", testcase);
 
-		frame.can_dlc = 1;
-		frame.data[0] = testcase;
-
-		frame.can_id = ID;
-		if (write(s, &frame, sizeof(frame)) < 0) {
-			perror("write");
-			exit(1);
-		}
-		frame.can_id = (ID | CAN_RTR_FLAG);
-		if (write(s, &frame, sizeof(frame)) < 0) {
-			perror("write");
-			exit(1);
-		}
-		frame.can_id = (ID | CAN_EFF_FLAG);
-		if (write(s, &frame, sizeof(frame)) < 0) {
-			perror("write");
-			exit(1);
-		}
-		frame.can_id = (ID | CAN_EFF_FLAG | CAN_RTR_FLAG);
-		if (write(s, &frame, sizeof(frame)) < 0) {
-			perror("write");
-			exit(1);
-		}
-
-		printf("ok\n");
+		ret = send_can_frames(s, testcase);
+		ASSERT_EQ(0, ret)
+			TH_LOG("failed to send CAN frames");
 
 		have_rx = 1;
 		rx = 0;
@@ -147,58 +150,45 @@ int main(int argc, char **argv)
 			tv.tv_usec = 50000; /* 50ms timeout */
 
 			ret = select(s+1, &rdfs, NULL, NULL, &tv);
-			if (ret < 0) {
-				perror("select");
-				exit(1);
-			}
+			ASSERT_LE(0, ret)
+				TH_LOG("failed select for frame %d (%d)", rx, errno);
 
 			if (FD_ISSET(s, &rdfs)) {
 				have_rx = 1;
 				ret = read(s, &frame, sizeof(struct can_frame));
-				if (ret < 0) {
-					perror("read");
-					exit(1);
-				}
-				if ((frame.can_id & CAN_SFF_MASK) != ID) {
-					fprintf(stderr, "received wrong can_id!\n");
-					exit(1);
-				}
-				if (frame.data[0] != testcase) {
-					fprintf(stderr, "received wrong testcase!\n");
-					exit(1);
-				}
+				ASSERT_LE(0, ret)
+					TH_LOG("failed to read frame %d (%d)", rx, errno);
+
+				ASSERT_EQ(ID, frame.can_id & CAN_SFF_MASK)
+					TH_LOG("received wrong can_id");
+				ASSERT_EQ(testcase, frame.data[0])
+					TH_LOG("received wrong test case");
 
 				/* test & calc rxbits */
 				rxbitval = 1 << ((frame.can_id & (CAN_EFF_FLAG|CAN_RTR_FLAG|CAN_ERR_FLAG)) >> 28);
 
 				/* only receive a rxbitval once */
-				if ((rxbits & rxbitval) == rxbitval) {
-					fprintf(stderr, "received rxbitval %d twice!\n", rxbitval);
-					exit(1);
-				}
+				ASSERT_NE(rxbitval, rxbits & rxbitval)
+					TH_LOG("received rxbitval %d twice", rxbitval);
 				rxbits |= rxbitval;
 				rx++;
 
-				printf("testcase %2d rx : can_id = 0x%08X rx = %d rxbits = %d\n",
+				TH_LOG("testcase %2d rx : can_id = 0x%08X rx = %d rxbits = %d",
 				       testcase, frame.can_id, rx, rxbits);
 			}
 		}
 		/* rx timed out -> check the received results */
-		if (rx_res[testcase] != rx) {
-			fprintf(stderr, "wrong rx value in testcase %d : %d (expected %d)\n",
-				testcase, rx, rx_res[testcase]);
-			exit(1);
-		}
-		if (rxbits_res[testcase] != rxbits) {
-			fprintf(stderr, "wrong rxbits value in testcase %d : %d (expected %d)\n",
-				testcase, rxbits, rxbits_res[testcase]);
-			exit(1);
-		}
-		printf("testcase %2d ok\n---\n", testcase);
+		ASSERT_EQ(rx_res[testcase], rx)
+			TH_LOG("wrong number of received frames %d", testcase);
+		ASSERT_EQ(rxbits_res[testcase], rxbits)
+			TH_LOG("wrong rxbits value in testcase %d", testcase);
+
+		TH_LOG("testcase %2d ok", testcase);
+		TH_LOG("---");
 	}
 
-out_socket:
 	close(s);
-out:
-	return err;
+	return;
 }
+
+TEST_HARNESS_MAIN
