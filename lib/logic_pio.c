@@ -99,6 +99,7 @@ end_register:
 	mutex_unlock(&io_range_mutex);
 	return ret;
 }
+EXPORT_SYMBOL(logic_pio_register_range);
 
 /**
  * logic_pio_unregister_range - unregister a logical PIO range for a host
@@ -113,6 +114,7 @@ void logic_pio_unregister_range(struct logic_pio_hwaddr *range)
 	mutex_unlock(&io_range_mutex);
 	synchronize_rcu();
 }
+EXPORT_SYMBOL(logic_pio_unregister_range);
 
 /**
  * find_io_range_by_fwnode - find logical PIO range for given FW node
@@ -137,6 +139,7 @@ struct logic_pio_hwaddr *find_io_range_by_fwnode(const struct fwnode_handle *fwn
 
 	return found_range;
 }
+EXPORT_SYMBOL(find_io_range_by_fwnode);
 
 /* Return a registered range given an input PIO token */
 static struct logic_pio_hwaddr *find_io_range(unsigned long pio)
@@ -177,6 +180,7 @@ resource_size_t logic_pio_to_hwaddr(unsigned long pio)
 
 	return (resource_size_t)~0;
 }
+EXPORT_SYMBOL(logic_pio_to_hwaddr);
 
 /**
  * logic_pio_trans_hwaddr - translate HW address to logical PIO
@@ -203,6 +207,7 @@ unsigned long logic_pio_trans_hwaddr(const struct fwnode_handle *fwnode,
 	}
 	return addr - range->hw_start + range->io_start;
 }
+EXPORT_SYMBOL(logic_pio_trans_hwaddr);
 
 unsigned long logic_pio_trans_cpuaddr(resource_size_t addr)
 {
@@ -227,6 +232,7 @@ unsigned long logic_pio_trans_cpuaddr(resource_size_t addr)
 
 	return ~0UL;
 }
+EXPORT_SYMBOL(logic_pio_trans_cpuaddr);
 
 #if defined(CONFIG_INDIRECT_PIO) && defined(PCI_IOBASE)
 #define BUILD_LOGIC_IO(bwl, type)					\
