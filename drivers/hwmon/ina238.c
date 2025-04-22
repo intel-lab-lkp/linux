@@ -273,7 +273,7 @@ static int ina238_read_current(struct device *dev, u32 attr, long *val)
 			return err;
 
 		/* Signed register, fixed 1mA current lsb. result in mA */
-		*val = div_s64((s16)regval * INA238_FIXED_SHUNT * data->gain,
+		*val = div_s64((s64)((s16)regval * INA238_FIXED_SHUNT) * data->gain,
 			       data->rshunt * 4);
 		break;
 	default:
