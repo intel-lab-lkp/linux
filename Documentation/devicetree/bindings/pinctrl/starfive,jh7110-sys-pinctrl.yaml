@@ -46,6 +46,16 @@ properties:
   '#gpio-cells':
     const: 2
 
+  starfive,force-low-inputs:
+    description:
+      The list of input signals forced to be low inside the SoC itself.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
+  starfive,force-high-inputs:
+    description:
+      The list of input signals forced to be high inside the SoC itself.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+
 patternProperties:
   '-[0-9]+$':
     type: object
