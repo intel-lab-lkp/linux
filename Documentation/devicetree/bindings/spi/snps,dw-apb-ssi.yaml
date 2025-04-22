@@ -67,6 +67,7 @@ properties:
               - mscc,jaguar2-spi
               - renesas,rzn1-spi
               - thead,th1520-spi
+              - sophgo,sg2042-spi
           - const: snps,dw-apb-ssi
       - description: Intel Keem Bay SPI Controller
         const: intel,keembay-ssi
