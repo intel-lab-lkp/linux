@@ -42,6 +42,13 @@ struct pamu_mmap_regs {
 	u32 olal;
 };
 
+/* Physical addressing capability */
+#if defined(CONFIG_E6500_CPU) || defined(CONFIG_E5500_CPU)
+#define PAMU_MAX_PHYS_BITS	40
+#else
+#define PAMU_MAX_PHYS_BITS	36
+#endif
+
 /* PAMU Error Registers */
 #define PAMU_POES1 0x0040
 #define PAMU_POES2 0x0044

@@ -198,7 +198,7 @@ int pamu_config_ppaace(int liodn, u32 omi, u32 stashid, int prot)
 
 	/* window size is 2^(WSE+1) bytes */
 	set_bf(ppaace->addr_bitfields, PPAACE_AF_WSE,
-	       map_addrspace_size_to_wse(1ULL << 36));
+	       map_addrspace_size_to_wse(1ULL << PAMU_MAX_PHYS_BITS));
 
 	pamu_init_ppaace(ppaace);
 
@@ -475,7 +475,8 @@ static void setup_liodns(void)
 			ppaace = pamu_get_ppaace(liodn);
 			pamu_init_ppaace(ppaace);
 			/* window size is 2^(WSE+1) bytes */
-			set_bf(ppaace->addr_bitfields, PPAACE_AF_WSE, 35);
+			set_bf(ppaace->addr_bitfields, PPAACE_AF_WSE,
+			       (PAMU_MAX_PHYS_BITS - 1));
 			ppaace->wbah = 0;
 			set_bf(ppaace->addr_bitfields, PPAACE_AF_WBAL, 0);
 			set_bf(ppaace->impl_attr, PAACE_IA_ATM,

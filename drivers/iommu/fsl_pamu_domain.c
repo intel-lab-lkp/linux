@@ -214,9 +214,10 @@ static struct iommu_domain *fsl_pamu_domain_alloc(unsigned type)
 	INIT_LIST_HEAD(&dma_domain->devices);
 	spin_lock_init(&dma_domain->domain_lock);
 
-	/* default geometry 64 GB i.e. maximum system address */
+	/* Set default geometry based on physical address limit. */
 	dma_domain->iommu_domain. geometry.aperture_start = 0;
-	dma_domain->iommu_domain.geometry.aperture_end = (1ULL << 36) - 1;
+	dma_domain->iommu_domain.geometry.aperture_end =
+		(1ULL << PAMU_MAX_PHYS_BITS) - 1;
 	dma_domain->iommu_domain.geometry.force_aperture = true;
 
 	return &dma_domain->iommu_domain;
