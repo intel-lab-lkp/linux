@@ -1740,6 +1740,7 @@ static int _iwl_pci_resume(struct device *device, bool restore)
 	struct iwl_trans *trans = pci_get_drvdata(pdev);
 	struct iwl_trans_pcie *trans_pcie = IWL_TRANS_GET_PCIE_TRANS(trans);
 	bool device_was_powered_off = false;
+	int err;
 
 	/* Before you put code here, think about WoWLAN. You cannot check here
 	 * whether WoWLAN is enabled or not, and your code will run even if
@@ -1771,7 +1772,11 @@ static int _iwl_pci_resume(struct device *device, bool restore)
 		 * won't really know how to recover.
 		 */
 		iwl_pcie_prepare_card_hw(trans);
-		iwl_finish_nic_init(trans);
+		err = iwl_finish_nic_init(trans);
+		if (err)
+			IWL_ERR(trans,
+				"NIC initialization failed after power-off (error %d).",
+				err);
 		iwl_op_mode_device_powered_off(trans->op_mode);
 	}
 
