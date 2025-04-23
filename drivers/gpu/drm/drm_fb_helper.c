@@ -33,6 +33,7 @@
 #include <linux/pci.h>
 #include <linux/sysrq.h>
 #include <linux/vga_switcheroo.h>
+#include <linux/sched.h>
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_drv.h>
@@ -1650,7 +1651,7 @@ static int drm_fb_helper_single_fb_probe(struct drm_fb_helper *fb_helper)
 	if (ret < 0)
 		return ret;
 
-	strcpy(fb_helper->fb->comm, "[fbcon]");
+	strscpy(fb_helper->fb->comm, "[fbcon]", TASK_COMM_LEN);
 
 	info = fb_helper->info;
 
