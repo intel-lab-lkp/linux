@@ -38,6 +38,9 @@
 #define AWCC_METHOD_GET_FAN_SENSORS		0x13
 #define AWCC_METHOD_THERMAL_INFORMATION		0x14
 #define AWCC_METHOD_THERMAL_CONTROL		0x15
+#define AWCC_METHOD_FWUP_GPIO_CONTROL		0x20
+#define AWCC_METHOD_READ_TOTAL_GPIOS		0x21
+#define AWCC_METHOD_READ_GPIO_STATUS		0x22
 #define AWCC_METHOD_GAME_SHIFT_STATUS		0x25
 
 #define AWCC_FAILURE_CODE			0xFFFFFFFF
@@ -64,6 +67,10 @@ MODULE_PARM_DESC(force_platform_profile, "Forces auto-detecting thermal profiles
 static bool force_gmode;
 module_param_unsafe(force_gmode, bool, 0);
 MODULE_PARM_DESC(force_gmode, "Forces G-Mode when performance profile is selected");
+
+static bool gpio_debug;
+module_param_unsafe(gpio_debug, bool, 0);
+MODULE_PARM_DESC(gpio_debug, "Exposes GPIO debug methods to DebugFS");
 
 struct awcc_quirks {
 	bool hwmon;
@@ -215,6 +222,11 @@ enum AWCC_SPECIAL_THERMAL_CODES {
 enum AWCC_TEMP_SENSOR_TYPES {
 	AWCC_TEMP_SENSOR_CPU			= 0x01,
 	AWCC_TEMP_SENSOR_GPU			= 0x06,
+};
+
+enum AWCC_GPIO_PINS {
+	AWCC_GPIO_PIN_DFU			= 0x00,
+	AWCC_GPIO_PIN_NRST			= 0x01,
 };
 
 enum awcc_thermal_profile {
@@ -569,6 +581,38 @@ static int awcc_thermal_information(struct wmi_device *wdev, u8 operation, u8 ar
 	};
 
 	return awcc_wmi_command(wdev, AWCC_METHOD_THERMAL_INFORMATION, &args, out);
+}
+
+static int awcc_fwup_gpio_control(struct wmi_device *wdev, u8 pin, u8 status)
+{
+	struct wmax_u32_args args = {
+		.operation = pin,
+		.arg1 = status,
+		.arg2 = 0,
+		.arg3 = 0,
+	};
+	u32 out;
+
+	return awcc_wmi_command(wdev, AWCC_METHOD_FWUP_GPIO_CONTROL, &args, &out);
+}
+
+static int awcc_read_total_gpios(struct wmi_device *wdev, u32 *count)
+{
+	struct wmax_u32_args args = {};
+
+	return awcc_wmi_command(wdev, AWCC_METHOD_READ_TOTAL_GPIOS, &args, count);
+}
+
+static int awcc_read_gpio_status(struct wmi_device *wdev, u8 pin, u32 *status)
+{
+	struct wmax_u32_args args = {
+		.operation = pin,
+		.arg1 = 0,
+		.arg2 = 0,
+		.arg3 = 0,
+	};
+
+	return awcc_wmi_command(wdev, AWCC_METHOD_READ_GPIO_STATUS, &args, status);
 }
 
 static int awcc_game_shift_status(struct wmi_device *wdev, u8 operation,
@@ -1318,6 +1362,63 @@ static int awcc_debugfs_pprof_data_read(struct seq_file *seq, void *data)
 	return 0;
 }
 
+static int awcc_debugfs_total_gpios_read(struct seq_file *seq, void *data)
+{
+	struct device *dev = seq->private;
+	struct wmi_device *wdev = to_wmi_device(dev);
+	u32 count;
+	int ret;
+
+	ret = awcc_read_total_gpios(wdev, &count);
+	if (ret)
+		return ret;
+
+	seq_printf(seq, "%u\n", count);
+
+	return 0;
+}
+
+static int awcc_gpio_pin_show(struct seq_file *seq, void *data)
+{
+	unsigned long pin = debugfs_get_aux_num(seq->file);
+	struct wmi_device *wdev = seq->private;
+	u32 status;
+	int ret;
+
+	ret = awcc_read_gpio_status(wdev, pin, &status);
+	if (ret)
+		return ret;
+
+	seq_printf(seq, "%u\n", status);
+
+	return 0;
+}
+
+static ssize_t awcc_gpio_pin_write(struct file *file, const char __user *buf,
+				   size_t count, loff_t *ppos)
+{
+	unsigned long pin = debugfs_get_aux_num(file);
+	struct seq_file *seq = file->private_data;
+	struct wmi_device *wdev = seq->private;
+	bool status;
+	int ret;
+
+	if (!ppos || *ppos)
+		return -EINVAL;
+
+	ret = kstrtobool_from_user(buf, count, &status);
+	if (ret)
+		return ret;
+
+	ret = awcc_fwup_gpio_control(wdev, pin, status);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+DEFINE_SHOW_STORE_ATTRIBUTE(awcc_gpio_pin);
+
 static void awcc_debugfs_remove(void *data)
 {
 	struct dentry *root = data;
@@ -1327,7 +1428,7 @@ static void awcc_debugfs_remove(void *data)
 
 static void awcc_debugfs_init(struct wmi_device *wdev)
 {
-	struct dentry *root;
+	struct dentry *root, *gpio_ctl;
 	char name[64];
 
 	scnprintf(name, sizeof(name), "%s-%s", "alienware-wmi", dev_name(&wdev->dev));
@@ -1343,6 +1444,19 @@ static void awcc_debugfs_init(struct wmi_device *wdev)
 	if (awcc->pprof)
 		debugfs_create_devm_seqfile(&wdev->dev, "pprof_data", root,
 					    awcc_debugfs_pprof_data_read);
+
+	if (gpio_debug) {
+		gpio_ctl = debugfs_create_dir("gpio_ctl", root);
+
+		debugfs_create_devm_seqfile(&wdev->dev, "total_gpios", gpio_ctl,
+					    awcc_debugfs_total_gpios_read);
+		debugfs_create_file_aux_num("dfu_pin", 0644, gpio_ctl, wdev,
+					    AWCC_GPIO_PIN_DFU,
+					    &awcc_gpio_pin_fops);
+		debugfs_create_file_aux_num("nrst_pin", 0644, gpio_ctl, wdev,
+					    AWCC_GPIO_PIN_NRST,
+					    &awcc_gpio_pin_fops);
+	}
 
 	devm_add_action_or_reset(&wdev->dev, awcc_debugfs_remove, root);
 }
