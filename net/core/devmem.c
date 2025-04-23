@@ -299,6 +299,7 @@ err_put_dmabuf:
 int mp_dmabuf_devmem_init(struct page_pool *pool)
 {
 	struct net_devmem_dmabuf_binding *binding = pool->mp_priv;
+	size_t size;
 
 	if (!binding)
 		return -EINVAL;
@@ -311,6 +312,16 @@ int mp_dmabuf_devmem_init(struct page_pool *pool)
 
 	if (pool->p.order != 0)
 		return -E2BIG;
+
+	/* Validate that the underlying dmabuf has enough memory to satisfy
+	 * requested pool size.
+	 */
+	size = gen_pool_size(binding->chunk_pool) >> PAGE_SHIFT;
+	if (size < pool->p.pool_size) {
+		pr_warn("%s: Insufficient dmabuf memory (%zu pages) to satisfy pool_size (%u pages)\n",
+			__func__, size, pool->p.pool_size);
+		return -ENOMEM;
+	}
 
 	net_devmem_dmabuf_binding_get(binding);
 	return 0;
