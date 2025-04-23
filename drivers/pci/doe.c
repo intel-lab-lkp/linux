@@ -119,7 +119,7 @@ static bool pci_doe_features_sysfs_group_visible(struct kobject *kobj)
 
 	return !xa_empty(&pdev->doe_mbs);
 }
-DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(pci_doe_features_sysfs)
+DEFINE_SYSFS_GROUP_VISIBILITY(pci_doe_features_sysfs)
 
 const struct attribute_group pci_doe_sysfs_group = {
 	.name	    = "doe_features",
