@@ -11,6 +11,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
 #include <linux/property.h>
@@ -706,6 +707,7 @@ static const struct iio_trigger_ops mcp3911_trigger_ops = {
 static int mcp3911_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
+	struct gpio_desc *gpio_reset;
 	struct iio_dev *indio_dev;
 	struct mcp3911 *adc;
 	bool external_vref;
@@ -749,6 +751,21 @@ static int mcp3911_probe(struct spi_device *spi)
 				     adc->dev_addr);
 	}
 	dev_dbg(dev, "use device address %i\n", adc->dev_addr);
+
+	gpio_reset = devm_gpiod_get_optional(&spi->dev, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(gpio_reset))
+		return dev_err_probe(dev, PTR_ERR(gpio_reset),
+				     "Cannot get reset GPIO\n");
+
+	if (gpio_reset) {
+		gpiod_set_value_cansleep(gpio_reset, 0);
+		dev_dbg(dev, "gpio reset de-asserted.\n");
+
+		/* Settling time after Hard Reset Mode (determined experimentally):
+		 *  330 micro-seconds are too few; 470 micro-seconds are sufficient.
+		 * Just in case, we add some safety factor... */
+		fsleep(680);
+	}
 
 	ret = adc->chip->config(adc, external_vref);
 	if (ret)
