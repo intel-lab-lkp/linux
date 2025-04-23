@@ -34,6 +34,14 @@ struct device;
  * @pcc_subspace:	Pointer to local data structure for PCC communication
  * @pcc_lock:		Pointer to PCC lock to provide mutually exclusive access
  *			to PCC channel subspace
+ * @instance:		Feature instance
+ * @base:		Base address of the memory region to scrub
+ * @size:		Size of the memory region to scrub
+ * @scrub_cycle_hrs:	Current scrub rate in hours
+ * @min_scrub_cycle:	Minimum scrub rate supported
+ * @max_scrub_cycle:	Maximum scrub rate supported
+ * @od_scrub_sts:	Status of demand scrubbing (memory region)
+ * @bg_scrub:		Status of background patrol scrubbing
  */
 struct ras2_mem_ctx {
 	int				id;
@@ -42,6 +50,14 @@ struct ras2_mem_ctx {
 	struct device			*dev;
 	void				*pcc_subspace;
 	struct mutex			*pcc_lock;
+	u8				instance;
+	u64				base;
+	u64				size;
+	u8				scrub_cycle_hrs;
+	u8				min_scrub_cycle;
+	u8				max_scrub_cycle;
+	u8				od_scrub_sts;
+	bool				bg_scrub;
 };
 
 #ifdef CONFIG_ACPI_RAS2
