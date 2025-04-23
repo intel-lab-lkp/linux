@@ -890,13 +890,14 @@ static void blk_complete_request(struct request *req)
 	do {
 		struct bio *next = bio->bi_next;
 
-		/* Completion has already been traced */
-		bio_clear_flag(bio, BIO_TRACE_COMPLETION);
-
 		blk_zone_update_request_bio(req, bio);
 
 		if (!is_flush)
 			bio_endio(bio);
+
+		/* Completion has already been traced */
+		bio_clear_flag(bio, BIO_TRACE_COMPLETION);
+
 		bio = next;
 	} while (bio);
 
@@ -983,8 +984,6 @@ bool blk_update_request(struct request *req, blk_status_t error,
 			bio->bi_status = BLK_STS_IOERR;
 		}
 
-		/* Completion has already been traced */
-		bio_clear_flag(bio, BIO_TRACE_COMPLETION);
 		if (unlikely(quiet))
 			bio_set_flag(bio, BIO_QUIET);
 
@@ -996,6 +995,9 @@ bool blk_update_request(struct request *req, blk_status_t error,
 			if (!is_flush)
 				bio_endio(bio);
 		}
+
+		/* Completion has already been traced */
+		bio_clear_flag(bio, BIO_TRACE_COMPLETION);
 
 		total_bytes += bio_bytes;
 		nr_bytes -= bio_bytes;
