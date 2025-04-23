@@ -2900,6 +2900,8 @@ drop_buffers(struct folio *folio, struct buffer_head **buffers_to_free)
 	struct buffer_head *head = folio_buffers(folio);
 	struct buffer_head *bh;
 
+	if (!head)
+		goto detach_folio;
 	bh = head;
 	do {
 		if (buffer_busy(bh))
@@ -2914,6 +2916,7 @@ drop_buffers(struct folio *folio, struct buffer_head **buffers_to_free)
 			__remove_assoc_queue(bh);
 		bh = next;
 	} while (bh != head);
+detach_folio:
 	*buffers_to_free = head;
 	folio_detach_private(folio);
 	return true;
