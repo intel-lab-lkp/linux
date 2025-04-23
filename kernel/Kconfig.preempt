@@ -176,3 +176,12 @@ config SCHED_CLASS_EXT
 	  For more information:
 	    Documentation/scheduler/sched-ext.rst
 	    https://github.com/sched-ext/scx
+
+config SCHED_EEVDF_TESTING
+	bool "EEVDF testing"
+	help
+	  This option is a debug option to test that your changes to the
+	  fair scheduling code do not break EEVDF invariants. There are
+	  controls exposted in debugfs to allow tests to be run. This has a
+	  performance impact, so do not enable unless you are a scheduler
+	  developer and know what you are doing.

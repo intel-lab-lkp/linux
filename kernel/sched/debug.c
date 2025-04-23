@@ -536,6 +536,8 @@ static __init int sched_init_debug(void)
 
 	debugfs_fair_server_init();
 
+	debugfs_eevdf_testing_init(debugfs_sched);
+
 	return 0;
 }
 late_initcall(sched_init_debug);
