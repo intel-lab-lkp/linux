@@ -476,7 +476,8 @@ static void __init fdt_reserve_elfcorehdr(void)
 		return;
 
 	if (memblock_is_region_reserved(elfcorehdr_addr, elfcorehdr_size)) {
-		pr_warn("elfcorehdr is overlapped\n");
+		pr_warn("elfcorehdr is overlapped (addr=0x%llx, size=%llu)\n",
+			elfcorehdr_addr, elfcorehdr_size);
 		return;
 	}
 
@@ -1135,12 +1136,19 @@ static void * __init early_init_dt_alloc_memory_arch(u64 size, u64 align)
 
 bool __init early_init_dt_verify(void *dt_virt, phys_addr_t dt_phys)
 {
-	if (!dt_virt)
+	int rc;
+
+	if (!dt_virt) {
+		pr_warn("FDT wasn't correctly mapped");
 		return false;
+	}
 
 	/* check device tree validity */
-	if (fdt_check_header(dt_virt))
+	rc = fdt_check_header(dt_virt);
+	if (rc) {
+		pr_warn("FDT header is invalid: status=%d", rc);
 		return false;
+	}
 
 	/* Setup flat device-tree pointer */
 	initial_boot_params = dt_virt;
