@@ -118,6 +118,28 @@ out:
 }
 EXPORT_SYMBOL(mlx5_core_query_vendor_id);
 
+int mlx5_core_query_vuid(struct mlx5_core_dev *dev, bool data_direct,
+			 char *out_vuid)
+{
+	u8 out[MLX5_ST_SZ_BYTES(query_vuid_out) +
+		MLX5_ST_SZ_BYTES(array1024_auto)] = {};
+	u8 in[MLX5_ST_SZ_BYTES(query_vuid_in)] = {};
+	char *vuid;
+	int err;
+
+	MLX5_SET(query_vuid_in, in, opcode, MLX5_CMD_OPCODE_QUERY_VUID);
+	MLX5_SET(query_vuid_in, in, vhca_id, MLX5_CAP_GEN(dev, vhca_id));
+	MLX5_SET(query_vuid_in, in, data_direct, data_direct);
+	err = mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
+	if (err)
+		return err;
+
+	vuid = MLX5_ADDR_OF(query_vuid_out, out, vuid);
+	memcpy(out_vuid, vuid, MLX5_ST_SZ_BYTES(array1024_auto));
+	return 0;
+}
+EXPORT_SYMBOL(mlx5_core_query_vuid);
+
 static int mlx5_get_pcam_reg(struct mlx5_core_dev *dev)
 {
 	return mlx5_query_pcam_reg(dev, dev->caps.pcam,
