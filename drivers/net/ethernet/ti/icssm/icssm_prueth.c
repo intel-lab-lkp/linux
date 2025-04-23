@@ -30,6 +30,7 @@
 
 #include "icssm_prueth.h"
 #include "icssm_vlan_mcast_filter_mmap.h"
+#include "icssm_prueth_ecap.h"
 #include "../icssg/icssg_mii_rt.h"
 #include "../icssg/icss_iep.h"
 
@@ -1207,8 +1208,10 @@ static int icssm_emac_ndo_open(struct net_device *ndev)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
 	struct prueth *prueth = emac->prueth;
+	struct prueth_ecap *ecap;
 	int ret;
 
+	ecap = prueth->ecap;
 	/* set h/w MAC as user might have re-configured */
 	ether_addr_copy(emac->mac_addr, ndev->dev_addr);
 
@@ -1218,6 +1221,9 @@ static int icssm_emac_ndo_open(struct net_device *ndev)
 	icssm_prueth_emac_config(emac);
 
 	icssm_emac_set_stats(emac, &emac->stats);
+	/* initialize ecap for interrupt pacing */
+	if (!IS_ERR(ecap))
+		ecap->init(emac);
 
 	if (!prueth->emac_configured) {
 		icssm_iptp_dram_init(emac);
@@ -2158,12 +2164,25 @@ static int icssm_prueth_probe(struct platform_device *pdev)
 		goto netdev_exit;
 	}
 
+	/* Make rx interrupt pacing optional so that users can use ECAP for
+	 * other use cases if needed
+	 */
+	prueth->ecap = icssm_prueth_ecap_get(np);
+	if (IS_ERR(prueth->ecap)) {
+		ret = PTR_ERR(prueth->ecap);
+		if (ret != -EPROBE_DEFER)
+			dev_info(dev,
+				 "No ECAP. Rx interrupt pacing disabled\n");
+		else
+			goto iep_put;
+	}
+
 	/* register the network devices */
 	if (eth0_node) {
 		ret = register_netdev(prueth->emac[PRUETH_MAC0]->ndev);
 		if (ret) {
 			dev_err(dev, "can't register netdev for port MII0");
-			goto iep_put;
+			goto ecap_put;
 		}
 
 		prueth->registered_netdevs[PRUETH_MAC0] =
@@ -2198,6 +2217,10 @@ netdev_unregister:
 			continue;
 		unregister_netdev(prueth->registered_netdevs[i]);
 	}
+
+ecap_put:
+	if (!IS_ERR(prueth->ecap))
+		icssm_prueth_ecap_put(prueth->ecap);
 
 iep_put:
 	icss_iep_put(prueth->iep);
