@@ -116,7 +116,7 @@ struct attribute_group {
 #define SYSFS_GROUP_INVISIBLE	020000
 
 /*
- * DEFINE_SYSFS_GROUP_VISIBLE(name):
+ * DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(name):
  *	A helper macro to pair with the assignment of ".is_visible =
  *	SYSFS_GROUP_VISIBLE(name)", that arranges for the directory
  *	associated with a named attribute_group to optionally be hidden.
@@ -142,7 +142,7 @@ struct attribute_group {
  *       return true;
  * }
  *
- * DEFINE_SYSFS_GROUP_VISIBLE(example);
+ * DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(example);
  *
  * static struct attribute_group example_group = {
  *       .name = "example",
@@ -153,9 +153,9 @@ struct attribute_group {
  * Note that it expects <name>_attr_visible and <name>_group_visible to
  * be defined. For cases where individual attributes do not need
  * separate visibility consideration, only entire group visibility at
- * once, see DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE().
+ * once, see DEFINE_SYSFS_GROUP_VISIBILITY().
  */
-#define DEFINE_SYSFS_GROUP_VISIBLE(name)                             \
+#define DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(name)                          \
 	static inline umode_t sysfs_group_visible_##name(            \
 		struct kobject *kobj, struct attribute *attr, int n) \
 	{                                                            \
@@ -165,9 +165,9 @@ struct attribute_group {
 	}
 
 /*
- * DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(name):
+ * DEFINE_SYSFS_GROUP_VISIBILITY(name):
  *	A helper macro to pair with SYSFS_GROUP_VISIBLE() that like
- *	DEFINE_SYSFS_GROUP_VISIBLE() controls group visibility, but does
+ *	DEFINE_SYSFS_GROUP_COMBO_VISIBILITY() controls group visibility, but does
  *	not require the implementation of a per-attribute visibility
  *	callback.
  * Ex.
@@ -179,7 +179,7 @@ struct attribute_group {
  *       return true;
  * }
  *
- * DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(example);
+ * DEFINE_SYSFS_GROUP_VISIBILITY(example);
  *
  * static struct attribute_group example_group = {
  *       .name = "example",
@@ -187,7 +187,7 @@ struct attribute_group {
  *       .attrs = &example_attrs,
  * };
  */
-#define DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(name)                   \
+#define DEFINE_SYSFS_GROUP_VISIBILITY(name)                 \
 	static inline umode_t sysfs_group_visible_##name(         \
 		struct kobject *kobj, struct attribute *a, int n) \
 	{                                                         \
@@ -197,12 +197,12 @@ struct attribute_group {
 	}
 
 /*
- * Same as DEFINE_SYSFS_GROUP_VISIBLE, but for groups with only binary
+ * Same as DEFINE_SYSFS_GROUP_COMBO_VISIBILITY, but for groups with only binary
  * attributes. If an attribute_group defines both text and binary
  * attributes, the group visibility is determined by the function
  * specified to is_visible() not is_bin_visible()
  */
-#define DEFINE_SYSFS_BIN_GROUP_VISIBLE(name)                                   \
+#define DEFINE_SYSFS_BIN_GROUP_COMBO_VISIBILITY(name)                                \
 	static inline umode_t sysfs_group_visible_##name(                      \
 		struct kobject *kobj, const struct bin_attribute *attr, int n) \
 	{                                                                      \
@@ -211,7 +211,7 @@ struct attribute_group {
 		return name##_attr_visible(kobj, attr, n);                     \
 	}
 
-#define DEFINE_SIMPLE_SYSFS_BIN_GROUP_VISIBLE(name)                         \
+#define DEFINE_SYSFS_BIN_GROUP_VISIBILITY(name)                       \
 	static inline umode_t sysfs_group_visible_##name(                   \
 		struct kobject *kobj, const struct bin_attribute *a, int n) \
 	{                                                                   \
@@ -219,6 +219,12 @@ struct attribute_group {
 			return SYSFS_GROUP_INVISIBLE;                       \
 		return a->mode;                                             \
 	}
+
+/* Transitional aliases: so legacy code using old names continues to work */
+#define DEFINE_SYSFS_GROUP_VISIBLE(name) DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(name)
+#define DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(name) DEFINE_SYSFS_GROUP_VISIBILITY(name)
+#define DEFINE_SYSFS_BIN_GROUP_VISIBLE(name) DEFINE_SYSFS_BIN_GROUP_COMBO_VISIBILITY(name)
+#define DEFINE_SIMPLE_SYSFS_BIN_GROUP_VISIBLE(name) DEFINE_SYSFS_BIN_GROUP_VISIBILITY(name)
 
 #define SYSFS_GROUP_VISIBLE(fn) sysfs_group_visible_##fn
 
