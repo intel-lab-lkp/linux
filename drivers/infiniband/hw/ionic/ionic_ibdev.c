@@ -22,9 +22,24 @@ static const struct auxiliary_device_id ionic_aux_id_table[] = {
 
 MODULE_DEVICE_TABLE(auxiliary, ionic_aux_id_table);
 
+void ionic_port_event(struct ionic_ibdev *dev, enum ib_event_type event)
+{
+	struct ib_event ev;
+
+	ev.device = &dev->ibdev;
+	ev.element.port_num = 1;
+	ev.event = event;
+
+	ib_dispatch_event(&ev);
+}
+
 static void ionic_destroy_ibdev(struct ionic_ibdev *dev)
 {
+	ionic_kill_rdma_admin(dev, false);
 	ib_unregister_device(&dev->ibdev);
+	ionic_destroy_rdma_admin(dev);
+	ionic_resid_destroy(&dev->inuse_cqid);
+	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 }
 
@@ -62,7 +77,55 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 	dev->handle = handle;
 	dev->lif_index = lif_index;
 	dev->ident = ident;
+	ionic_api_kernel_dbpage(handle, &dev->intr_ctrl, &dev->dbid,
+				&dev->dbpage);
+
 	dev->rdma_version = ident->rdma.version;
+	dev->qp_opcodes = ident->rdma.qp_opcodes;
+	dev->admin_opcodes = ident->rdma.admin_opcodes;
+
+	dev->aq_base = le32_to_cpu(ident->rdma.aq_qtype.qid_base);
+	dev->cq_base = le32_to_cpu(ident->rdma.cq_qtype.qid_base);
+	dev->eq_base = le32_to_cpu(ident->rdma.eq_qtype.qid_base);
+
+	/*
+	 * ionic_create_rdma_admin() may reduce aq_count or eq_count if
+	 * it is unable to allocate all that were requested.
+	 * aq_count is tunable; see ionic_aq_count
+	 * eq_count is tunable; see ionic_eq_count
+	 */
+	dev->aq_count = le32_to_cpu(ident->rdma.aq_qtype.qid_count);
+	dev->eq_count = le32_to_cpu(ident->rdma.eq_qtype.qid_count);
+
+	dev->aq_qtype = ident->rdma.aq_qtype.qtype;
+	dev->sq_qtype = ident->rdma.sq_qtype.qtype;
+	dev->rq_qtype = ident->rdma.rq_qtype.qtype;
+	dev->cq_qtype = ident->rdma.cq_qtype.qtype;
+	dev->eq_qtype = ident->rdma.eq_qtype.qtype;
+
+	dev->udma_qgrp_shift = ident->rdma.udma_shift;
+	dev->udma_count = 2;
+
+	xa_init_flags(&dev->cq_tbl, GFP_ATOMIC);
+	rwlock_init(&dev->cq_tbl_rw);
+
+	rc = ionic_resid_init(&dev->inuse_cqid,
+			      le32_to_cpu(ident->rdma.cq_qtype.qid_count));
+	if (rc)
+		goto err_cqid;
+
+	dev->next_cqid[0] = 0;
+	dev->next_cqid[1] = dev->inuse_cqid.inuse_size / dev->udma_count;
+	dev->half_cqid_udma_shift =
+		order_base_2(dev->inuse_cqid.inuse_size / dev->udma_count);
+
+	rc = ionic_rdma_reset_devcmd(dev);
+	if (rc)
+		goto err_reset;
+
+	rc = ionic_create_rdma_admin(dev);
+	if (rc)
+		goto err_register;
 
 	ibdev = &dev->ibdev;
 	ibdev->dev.parent = dev->hwdev;
@@ -73,6 +136,9 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 	ibdev->node_type = RDMA_NODE_IB_CA;
 	ibdev->phys_port_cnt = 1;
 
+	/* the first two eq are reserved for async events */
+	ibdev->num_comp_vectors = dev->eq_count - 2;
+
 	addrconf_ifid_eui48((u8 *)&ibdev->node_guid, ndev);
 
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
@@ -82,6 +148,12 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 	return dev;
 
 err_register:
+	ionic_kill_rdma_admin(dev, false);
+	ionic_destroy_rdma_admin(dev);
+err_reset:
+	ionic_resid_destroy(&dev->inuse_cqid);
+err_cqid:
+	xa_destroy(&dev->cq_tbl);
 	ib_dealloc_device(&dev->ibdev);
 err_dev:
 	return ERR_PTR(rc);
@@ -133,6 +205,10 @@ static int __init ionic_mod_init(void)
 {
 	int rc;
 
+	ionic_evt_workq = create_workqueue(DRIVER_NAME "-evt");
+	if (!ionic_evt_workq)
+		return -ENOMEM;
+
 	rc = auxiliary_driver_register(&ionic_aux_r_driver);
 	if (rc)
 		goto err_aux;
@@ -140,12 +216,15 @@ static int __init ionic_mod_init(void)
 	return 0;
 
 err_aux:
+	destroy_workqueue(ionic_evt_workq);
+
 	return rc;
 }
 
 static void __exit ionic_mod_exit(void)
 {
 	auxiliary_driver_unregister(&ionic_aux_r_driver);
+	destroy_workqueue(ionic_evt_workq);
 }
 
 module_init(ionic_mod_init);
