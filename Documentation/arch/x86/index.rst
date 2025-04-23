@@ -27,6 +27,7 @@ x86-specific Documentation
    intel_txt
    amd-memory-encryption
    amd_hsmp
+   amd-hfi
    tdx
    pti
    mds
