@@ -231,6 +231,77 @@ WMI method MemoryOCControl([in] uint32 arg2, [out] uint32 argr)
 AWCC supports memory overclocking, but this method is very intricate and has
 not been deciphered yet.
 
+GPIO control Methods
+====================
+
+Alienware and Dell G Series devices with the AWCC interface, usually have an
+embedded STM32 RGB lighting controller with USB/HID capabilities. It's vendor ID
+is `187c` while it's product ID may vary from model to model.
+
+The control of two GPIO pins of this MCU is exposed as WMI methods for debugging
+purposes.
+
++--------------+--------------------------------------------------------------+
+| Pin          | Description                                                  |
++==============+==============================================================+
+| 0            | Device Firmware Update (DFU) mode pin.                       |
+|              |                                                              |
+|              | **HIGH**: Enables DFU mode on next MCU boot.                 |
+|              |                                                              |
+|              | **LOW**: Disables DFU mode on next MCU boot. (default)       |
++--------------+--------------------------------------------------------------+
+| 1            | Negative Reset (NRST) pin.                                   |
+|              |                                                              |
+|              | **HIGH**: Turn on MCU. (default)                             |
+|              |                                                              |
+|              | **LOW**: Turn off MCU.                                       |
++--------------+--------------------------------------------------------------+
+
+See :ref:`acknowledgements` for more information on this MCU.
+
+.. warning::
+   The following methods are only exposed to DebugFS if the ``gpio_debug``
+   unsafe module parameter is set, as you could end up bricking the MCU.
+
+WMI method FWUpdateGPIOtoggle([in] uint32 arg2, [out] uint32 argr)
+------------------------------------------------------------------
+
++--------------------+------------------------------------+--------------------+
+| Operation (Byte 0) | Description                        | Arguments          |
++====================+====================================+====================+
+| 0x00               | Set the Device Firmware Update     | - Byte 1: Pin      |
+|                    | (DFU) pin status.                  |   status           |
++--------------------+------------------------------------+--------------------+
+| 0x01               | Set the Negative Reset (NRST) pin  | - Byte 1: Pin      |
+|                    | status.                            |   status           |
++--------------------+------------------------------------+--------------------+
+
+WMI method ReadTotalofGPIOs([out] uint32 argr)
+----------------------------------------------
+
++--------------------+------------------------------------+--------------------+
+| Operation (Byte 0) | Description                        | Arguments          |
++====================+====================================+====================+
+| 0x00               | Get the total number of GPIOs.     | - None             |
++--------------------+------------------------------------+--------------------+
+
+WMI method ReadGPIOpPinStatus([in] uint32 arg2, [out] uint32 argr)
+------------------------------------------------------------------
+
++--------------------+------------------------------------+--------------------+
+| Operation (Byte 0) | Description                        | Arguments          |
++====================+====================================+====================+
+| 0x00               | Get the Device Firmware Update     | - None             |
+|                    | (DFU) pin status.                  |                    |
++--------------------+------------------------------------+--------------------+
+| 0x01               | Get the Negative Reset (NRST) pin  | - None             |
+|                    | status.                            |                    |
++--------------------+------------------------------------+--------------------+
+
+.. warning::
+   There known firmware bug in some laptops where reading the status of a pin
+   also flips it.
+
 Other information Methods
 =========================
 
@@ -239,10 +310,16 @@ WMI method ReadChassisColor([out] uint32 argr)
 
 Returns the chassis color internal ID.
 
+.. _acknowledgements:
+
 Acknowledgements
 ================
 
-Kudos to `AlexIII <https://github.com/AlexIII/tcc-g15>`_ and
-`T-Troll <https://github.com/T-Troll/alienfx-tools/>`_ for documenting and
-testing some of this device's functionality, making it possible to generalize
-this driver.
+Kudos to
+
+* `AlexIII <https://github.com/AlexIII/tcc-g15>`_
+* `T-Troll <https://github.com/T-Troll/alienfx-tools/>`_
+* `Gabriel Marcano <https://gabriel.marcanobrady.family/blog/2024/12/16/dell-g5-5505-se-acpi-or-figuring-out-how-to-reset-the-rgb-controller/>`_
+
+for documenting and testing some of this device's functionality, making it
+possible to generalize this driver.
