@@ -115,6 +115,7 @@
 
 #define UART_RESET_REG				0x94
 #define UART_RESET_D3_RESET_DISABLE		BIT(16)
+#define UART_RESET_HOT_RESET_DISABLE            BIT(17)
 
 #define UART_BURST_STATUS_REG			0x9C
 #define UART_TX_BURST_FIFO			0xA0
@@ -620,7 +621,13 @@ static int pci1xxxx_suspend(struct device *dev)
 	}
 
 	data = readl(p + UART_RESET_REG);
-	writel(data | UART_RESET_D3_RESET_DISABLE, p + UART_RESET_REG);
+
+	if (priv->dev_rev >= 0xC0)
+		writel(data | (UART_RESET_D3_RESET_DISABLE |
+		       UART_RESET_HOT_RESET_DISABLE), p + UART_RESET_REG);
+	else
+		writel(data | UART_RESET_D3_RESET_DISABLE,
+		       p + UART_RESET_REG);
 
 	if (wakeup)
 		writeb(UART_PCI_CTRL_D3_CLK_ENABLE, p + UART_PCI_CTRL_REG);
@@ -647,7 +654,14 @@ static int pci1xxxx_resume(struct device *dev)
 	}
 
 	data = readl(p + UART_RESET_REG);
-	writel(data & ~UART_RESET_D3_RESET_DISABLE, p + UART_RESET_REG);
+
+	if (priv->dev_rev >= 0xC0)
+		writel(data & ~(UART_RESET_D3_RESET_DISABLE |
+		       UART_RESET_HOT_RESET_DISABLE), p + UART_RESET_REG);
+	else
+		writel(data & ~UART_RESET_D3_RESET_DISABLE,
+		       p + UART_RESET_REG);
+
 	iounmap(p);
 
 	for (i = 0; i < priv->nr; i++) {
