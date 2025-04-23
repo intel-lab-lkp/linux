@@ -10,9 +10,7 @@
 #include <linux/skbuff.h>
 #include <linux/bpf_trace.h>
 
-#include "ionic_if.h"
-#include "ionic_regs.h"
-#include "ionic_api.h"
+#include <linux/ionic/ionic_api.h>
 
 #define IONIC_MAX_TX_DESC		8192
 #define IONIC_MAX_RX_DESC		16384

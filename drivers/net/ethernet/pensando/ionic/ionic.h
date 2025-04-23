@@ -6,7 +6,7 @@
 
 struct ionic_lif;
 
-#include "ionic_if.h"
+#include <linux/ionic/ionic_if.h>
 #include "ionic_dev.h"
 #include "ionic_devlink.h"
 

@@ -5,8 +5,8 @@
 #define _IONIC_API_H_
 
 #include <linux/auxiliary_bus.h>
-#include "ionic_if.h"
-#include "ionic_regs.h"
+#include <linux/ionic/ionic_if.h>
+#include <linux/ionic/ionic_regs.h>
 
 /**
  * struct ionic_aux_dev - Auxiliary device information
