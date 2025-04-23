@@ -7,17 +7,22 @@
  */
 
 #include <linux/acpi.h>
-#include <linux/console.h>
+#include <linux/bits.h>
 #include <linux/delay.h>
+#include <linux/err.h>
 #include <linux/io.h>
+#include <linux/ioport.h>
 #include <linux/logic_pio.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
-#include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/pci.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/serial_8250.h>
-#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/types.h>
+
+#include <asm/byteorder.h>
 
 #define DRV_NAME "hisi-lpc"
 
