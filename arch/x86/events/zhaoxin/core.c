@@ -20,15 +20,15 @@
 #include "../perf_event.h"
 
 /*
- * Zhaoxin PerfMon, used on zxc and later.
+ * Zhaoxin PerfMon, used on Lujiazui and later.
  */
 static u64 zx_pmon_event_map[PERF_COUNT_HW_MAX] __read_mostly = {
 
 	[PERF_COUNT_HW_CPU_CYCLES]        = 0x0082,
 	[PERF_COUNT_HW_INSTRUCTIONS]      = 0x00c0,
-	[PERF_COUNT_HW_CACHE_REFERENCES]  = 0x0515,
-	[PERF_COUNT_HW_CACHE_MISSES]      = 0x051a,
 	[PERF_COUNT_HW_BUS_CYCLES]        = 0x0083,
+	[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = 0x0028,
+	[PERF_COUNT_HW_BRANCH_MISSES]	= 0x0029,
 };
 
 static struct event_constraint zxc_event_constraints[] __read_mostly = {
@@ -560,6 +560,8 @@ __init int zhaoxin_pmu_init(void)
 			zx_pmon_event_map[PERF_COUNT_HW_CACHE_REFERENCES] = 0;
 			zx_pmon_event_map[PERF_COUNT_HW_CACHE_MISSES] = 0;
 			zx_pmon_event_map[PERF_COUNT_HW_BUS_CYCLES] = 0;
+			zx_pmon_event_map[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = 0;
+			zx_pmon_event_map[PERF_COUNT_HW_BRANCH_MISSES] = 0;
 
 			pr_cont("ZXC events, ");
 			break;
@@ -580,6 +582,9 @@ __init int zhaoxin_pmu_init(void)
 
 			x86_pmu.event_constraints = wudaokou_event_constraints;
 
+			zx_pmon_event_map[PERF_COUNT_HW_CACHE_REFERENCES]  = 0x0515,
+			zx_pmon_event_map[PERF_COUNT_HW_CACHE_MISSES]      = 0x051a,
+
 			zx_pmon_event_map[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = 0x0700;
 			zx_pmon_event_map[PERF_COUNT_HW_BRANCH_MISSES] = 0x0709;
 
@@ -591,10 +596,25 @@ __init int zhaoxin_pmu_init(void)
 
 			x86_pmu.event_constraints = wudaokou_event_constraints;
 
-			zx_pmon_event_map[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = 0x0028;
-			zx_pmon_event_map[PERF_COUNT_HW_BRANCH_MISSES] = 0x0029;
+			zx_pmon_event_map[PERF_COUNT_HW_CACHE_REFERENCES]  = 0x0515,
+			zx_pmon_event_map[PERF_COUNT_HW_CACHE_MISSES]      = 0x051a,
 
 			pr_cont("Lujiazui events, ");
+			break;
+		case ZHAOXIN_FAM7_YONGFENG:
+			zx_pmon_event_map[PERF_COUNT_HW_STALLED_CYCLES_FRONTEND] =
+				X86_CONFIG(.event = 0x02, .umask = 0x01, .inv = 0x01,
+						.cmask = 0x01);
+
+			memcpy(hw_cache_event_ids, lujiazui_hw_cache_event_ids,
+					sizeof(hw_cache_event_ids));
+
+			x86_pmu.event_constraints = wudaokou_event_constraints;
+
+			zx_pmon_event_map[PERF_COUNT_HW_CACHE_REFERENCES]  = 0x051a;
+			zx_pmon_event_map[PERF_COUNT_HW_CACHE_MISSES]      = 0;
+
+			pr_cont("Yongfeng events, ");
 			break;
 		default:
 			return -ENODEV;
