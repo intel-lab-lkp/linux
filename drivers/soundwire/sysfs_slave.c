@@ -103,7 +103,7 @@ static DEVICE_ATTR_RO(modalias);
 
 static struct attribute *slave_attrs[] = {
 	&dev_attr_modalias.attr,
-	NULL,
+	NULL
 };
 
 static const struct attribute_group slave_attr_group = {
@@ -126,7 +126,7 @@ static struct attribute *slave_dev_attrs[] = {
 	&dev_attr_master_count.attr,
 	&dev_attr_source_ports.attr,
 	&dev_attr_sink_ports.attr,
-	NULL,
+	NULL
 };
 
 static const struct attribute_group sdw_slave_dev_attr_group = {
@@ -170,16 +170,6 @@ static ssize_t words_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(words);
 
-static struct attribute *dp0_attrs[] = {
-	&dev_attr_max_word.attr,
-	&dev_attr_min_word.attr,
-	&dev_attr_words.attr,
-	&dev_attr_BRA_flow_controlled.attr,
-	&dev_attr_simple_ch_prep_sm.attr,
-	&dev_attr_imp_def_interrupts.attr,
-	NULL,
-};
-
 static umode_t dp0_attr_visible(struct kobject *kobj, struct attribute *attr,
 			      int n)
 {
@@ -198,19 +188,23 @@ static bool dp0_group_visible(struct kobject *kobj)
 		return true;
 	return false;
 }
-DEFINE_SYSFS_GROUP_VISIBLE(dp0);
 
-static const struct attribute_group dp0_group = {
-	.attrs = dp0_attrs,
-	.is_visible = SYSFS_GROUP_VISIBLE(dp0),
-	.name = "dp0",
+static struct attribute *dp0_attrs[] = {
+	&dev_attr_max_word.attr,
+	&dev_attr_min_word.attr,
+	&dev_attr_words.attr,
+	&dev_attr_BRA_flow_controlled.attr,
+	&dev_attr_simple_ch_prep_sm.attr,
+	&dev_attr_imp_def_interrupts.attr,
+	NULL
 };
+NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE(dp0);
 
 const struct attribute_group *sdw_attr_groups[] = {
 	&slave_attr_group,
 	&sdw_slave_dev_attr_group,
 	&dp0_group,
-	NULL,
+	NULL
 };
 
 /*
@@ -249,7 +243,7 @@ static DEVICE_ATTR_RO(device_number);
 static struct attribute *slave_status_attrs[] = {
 	&dev_attr_status.attr,
 	&dev_attr_device_number.attr,
-	NULL,
+	NULL
 };
 
 /*
