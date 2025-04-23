@@ -3267,7 +3267,7 @@ int ionic_lif_alloc(struct ionic *ionic)
 	lif->netdev->max_mtu =
 		le32_to_cpu(lif->identity->eth.max_frame_size) - VLAN_ETH_HLEN;
 
-	lif->neqs = ionic->neqs_per_lif;
+	lif->nrdma_eqs = ionic->nrdma_eqs_per_lif;
 	lif->nxqs = ionic->ntxqs_per_lif;
 
 	lif->index = 0;
@@ -4022,19 +4022,20 @@ int ionic_lif_size(struct ionic *ionic)
 {
 	struct ionic_identity *ident = &ionic->ident;
 	unsigned int nintrs, dev_nintrs;
+	unsigned int nrdma_eqs_per_lif;
 	union ionic_lif_config *lc;
 	unsigned int ntxqs_per_lif;
 	unsigned int nrxqs_per_lif;
-	unsigned int neqs_per_lif;
 	unsigned int nnqs_per_lif;
-	unsigned int nxqs, neqs;
+	unsigned int nrdma_eqs;
 	unsigned int min_intrs;
+	unsigned int nxqs;
 	int err;
 
 	/* retrieve basic values from FW */
 	lc = &ident->lif.eth.config;
 	dev_nintrs = le32_to_cpu(ident->dev.nintrs);
-	neqs_per_lif = le32_to_cpu(ident->lif.rdma.eq_qtype.qid_count);
+	nrdma_eqs_per_lif = le32_to_cpu(ident->lif.rdma.eq_qtype.qid_count);
 	nnqs_per_lif = le32_to_cpu(lc->queue_count[IONIC_QTYPE_NOTIFYQ]);
 	ntxqs_per_lif = le32_to_cpu(lc->queue_count[IONIC_QTYPE_TXQ]);
 	nrxqs_per_lif = le32_to_cpu(lc->queue_count[IONIC_QTYPE_RXQ]);
@@ -4042,7 +4043,6 @@ int ionic_lif_size(struct ionic *ionic)
 	/* limit values to play nice with kdump */
 	if (is_kdump_kernel()) {
 		dev_nintrs = 2;
-		neqs_per_lif = 0;
 		nnqs_per_lif = 0;
 		ntxqs_per_lif = 1;
 		nrxqs_per_lif = 1;
@@ -4060,7 +4060,7 @@ int ionic_lif_size(struct ionic *ionic)
 
 	nxqs = min(ntxqs_per_lif, nrxqs_per_lif);
 	nxqs = min(nxqs, num_online_cpus());
-	neqs = min(neqs_per_lif, num_online_cpus());
+	nrdma_eqs = min(nrdma_eqs_per_lif, num_online_cpus());
 
 try_again:
 	/* interrupt usage:
@@ -4068,7 +4068,7 @@ try_again:
 	 *    1 for each CPU for master lif TxRx queue pairs
 	 *    whatever's left is for RDMA queues
 	 */
-	nintrs = 1 + nxqs + neqs;
+	nintrs = 1 + nxqs + nrdma_eqs;
 	min_intrs = 2;  /* adminq + 1 TxRx queue pair */
 
 	if (nintrs > dev_nintrs)
@@ -4088,7 +4088,7 @@ try_again:
 	}
 
 	ionic->nnqs_per_lif = nnqs_per_lif;
-	ionic->neqs_per_lif = neqs;
+	ionic->nrdma_eqs_per_lif = nrdma_eqs;
 	ionic->ntxqs_per_lif = nxqs;
 	ionic->nrxqs_per_lif = nxqs;
 	ionic->nintrs = nintrs;
@@ -4102,8 +4102,8 @@ try_fewer:
 		nnqs_per_lif >>= 1;
 		goto try_again;
 	}
-	if (neqs > 1) {
-		neqs >>= 1;
+	if (nrdma_eqs > 1) {
+		nrdma_eqs >>= 1;
 		goto try_again;
 	}
 	if (nxqs > 1) {

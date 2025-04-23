@@ -202,7 +202,7 @@ struct ionic_lif {
 	u64 last_eid;
 	unsigned int kern_pid;
 	u64 __iomem *kern_dbpage;
-	unsigned int neqs;
+	unsigned int nrdma_eqs;
 	unsigned int nxqs;
 	unsigned int ntxq_descs;
 	unsigned int nrxq_descs;
