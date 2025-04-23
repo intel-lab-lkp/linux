@@ -568,10 +568,10 @@ static int fiemap_find_last_extent_offset(struct btrfs_inode *inode,
 	 * there might be preallocation past i_size.
 	 */
 	ret = btrfs_lookup_file_extent(NULL, root, path, ino, (u64)-1, 0);
-	/* There can't be a file extent item at offset (u64)-1 */
-	ASSERT(ret != 0);
 	if (ret < 0)
 		return ret;
+	/* There can't be a file extent item at offset (u64)-1 */
+	ASSERT(ret == 1);
 
 	/*
 	 * For a non-existing key, btrfs_search_slot() always leaves us at a
