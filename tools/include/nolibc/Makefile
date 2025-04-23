@@ -35,6 +35,7 @@ all_files := \
 		fcntl.h \
 		getopt.h \
 		limits.h \
+		math.h \
 		nolibc.h \
 		signal.h \
 		stackprotector.h \
