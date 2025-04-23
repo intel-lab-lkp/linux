@@ -4769,7 +4769,7 @@ static noinline_for_stack int
 nf_tables_fill_set_info(struct sk_buff *skb, const struct nft_set *set)
 {
 	unsigned int nelems;
-	char str[32];
+	char str[40];
 	int ret;
 
 	ret = snprintf(str, sizeof(str), "%ps", set->ops);
