@@ -84,5 +84,10 @@ ifeq ($(CONFIG_DEBUG_EFI),y)
 AFLAGS_head.o += -DVMLINUX_PATH="\"$(realpath $(objtree)/vmlinux)\""
 endif
 
+ifeq ($(CONFIG_DEBUG_EARLY_BOOT),y)
+AFLAGS_head.o += -march=armv8.1-a
+CFLAGS_setup.o += -march=armv8.1-a
+endif
+
 # for cleaning
 subdir- += vdso vdso32

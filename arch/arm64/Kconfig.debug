@@ -20,4 +20,10 @@ config ARM64_RELOC_TEST
 	depends on m
 	tristate "Relocation testing module"
 
+config DEBUG_EARLY_BOOT
+	bool "Early boot debugging"
+	help
+	  Enable this option to use contextidr_el2 register for storing
+	  bootcodes from the early assembly code.
+
 source "drivers/hwtracing/coresight/Kconfig"

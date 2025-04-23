@@ -42,6 +42,34 @@
 #error PAGE_OFFSET must be at least 2MB aligned
 #endif
 
+#ifdef CONFIG_DEBUG_EARLY_BOOT
+/*
+ * This debugging enhancement makes use of contextidr_el2 for the purpose
+ * of storing bootcodes.
+ */
+.macro _emit_bootcode val, t1
+	/* Check if in EL2 */
+	mrs	\t1, CurrentEL
+	ubfx    \t1, \t1, #2, #2
+	cmp	\t1, #2
+	b.ne	1f
+
+	/* Check if we're at least ARMv8.1 */
+	mrs	\t1, ID_AA64DFR0_EL1
+	ubfx	\t1, \t1, #0, #4
+	cmp	\t1, #7
+	b.lt	1f
+
+	mov	\t1, #\val
+	msr	contextidr_el2, \t1
+1:
+	/* Quit */
+.endm
+#define emit_bootcode(reg) _emit_bootcode __LINE__, reg
+#else
+#define emit_bootcode(reg)
+#endif
+
 /*
  * Kernel startup entry point.
  * ---------------------------
@@ -86,6 +114,7 @@ SYM_CODE_START(primary_entry)
 	bl	record_mmu_state
 	bl	preserve_boot_args
 
+	emit_bootcode(x22)
 	adrp	x1, early_init_stack
 	mov	sp, x1
 	mov	x29, xzr
@@ -101,6 +130,7 @@ SYM_CODE_START(primary_entry)
 	cbnz	x19, 0f
 	dmb     sy
 	mov	x1, x0				// end of used region
+	emit_bootcode(x22)
 	adrp    x0, init_idmap_pg_dir
 	adr_l	x2, dcache_inval_poc
 	blr	x2
@@ -126,7 +156,9 @@ SYM_CODE_START(primary_entry)
 	 * On return, the CPU will be ready for the MMU to be turned on and
 	 * the TCR will have been set.
 	 */
+	emit_bootcode(x22)
 	bl	__cpu_setup			// initialise processor
+	emit_bootcode(x22)
 	b	__primary_switch
 SYM_CODE_END(primary_entry)
 
@@ -220,10 +252,12 @@ SYM_CODE_END(preserve_boot_args)
 SYM_FUNC_START_LOCAL(__primary_switched)
 	adr_l	x4, init_task
 	init_cpu_task x4, x5, x6
+	emit_bootcode(x22)
 
 	adr_l	x8, vectors			// load VBAR_EL1 with virtual
 	msr	vbar_el1, x8			// vector table address
 	isb
+	emit_bootcode(x22)
 
 	stp	x29, x30, [sp, #-16]!
 	mov	x29, sp
@@ -236,6 +270,7 @@ SYM_FUNC_START_LOCAL(__primary_switched)
 
 	mov	x0, x20
 	bl	set_cpu_boot_mode_flag
+	emit_bootcode(x22)
 
 #if defined(CONFIG_KASAN_GENERIC) || defined(CONFIG_KASAN_SW_TAGS)
 	bl	kasan_early_init
@@ -243,6 +278,7 @@ SYM_FUNC_START_LOCAL(__primary_switched)
 	mov	x0, x20
 	bl	finalise_el2			// Prefer VHE if possible
 	ldp	x29, x30, [sp], #16
+	emit_bootcode(x22)
 	bl	start_kernel
 	ASM_BUG()
 SYM_FUNC_END(__primary_switched)
@@ -464,6 +500,7 @@ SYM_FUNC_START(__enable_mmu)
 	cmp     x3, #ID_AA64MMFR0_EL1_TGRAN_SUPPORTED_MAX
 	b.gt    __no_granule_support
 	phys_to_ttbr x2, x2
+	emit_bootcode(x22)
 	msr	ttbr0_el1, x2			// load TTBR0
 	load_ttbr1 x1, x1, x3
 
@@ -506,16 +543,19 @@ SYM_FUNC_START_LOCAL(__no_granule_support)
 SYM_FUNC_END(__no_granule_support)
 
 SYM_FUNC_START_LOCAL(__primary_switch)
+	emit_bootcode(x22)
 	adrp	x1, reserved_pg_dir
 	adrp	x2, init_idmap_pg_dir
 	bl	__enable_mmu
 
+	emit_bootcode(x22)
 	adrp	x1, early_init_stack
 	mov	sp, x1
 	mov	x29, xzr
 	mov	x0, x20				// pass the full boot status
 	mov	x1, x21				// pass the FDT
 	bl	__pi_early_map_kernel		// Map and relocate the kernel
+	emit_bootcode(x22)
 
 	ldr	x8, =__primary_switched
 	adrp	x0, KERNEL_START		// __pa(KERNEL_START)
