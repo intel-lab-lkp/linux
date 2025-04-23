@@ -203,6 +203,7 @@ struct kvm_io_range {
 #define NR_IOBUS_DEVS 1000
 
 struct kvm_io_bus {
+	struct rcu_head rcu;
 	int dev_count;
 	int ioeventfd_count;
 	struct kvm_io_range range[];
