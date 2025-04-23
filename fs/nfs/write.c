@@ -359,8 +359,12 @@ static void nfs_folio_end_writeback(struct folio *folio)
 static void nfs_page_end_writeback(struct nfs_page *req)
 {
 	if (nfs_page_group_sync_on_bit(req, PG_WB_END)) {
+		struct folio *folio = nfs_page_to_folio(req);
+
+		if (folio_test_clear_dropbehind(folio))
+			set_bit(PG_DROPBEHIND, &req->wb_flags);
 		nfs_unlock_request(req);
-		nfs_folio_end_writeback(nfs_page_to_folio(req));
+		nfs_folio_end_writeback(folio);
 	} else
 		nfs_unlock_request(req);
 }
@@ -813,6 +817,9 @@ static void nfs_inode_remove_request(struct nfs_page *req)
 			clear_bit(PG_MAPPED, &req->wb_head->wb_flags);
 		}
 		spin_unlock(&mapping->i_private_lock);
+
+		if (test_bit(PG_DROPBEHIND, &req->wb_flags))
+			folio_end_dropbehind(folio);
 	}
 
 	if (test_and_clear_bit(PG_INODE_REF, &req->wb_flags)) {
@@ -2093,6 +2100,7 @@ int nfs_wb_folio(struct inode *inode, struct folio *folio)
 		.range_start = range_start,
 		.range_end = range_start + len - 1,
 	};
+	bool dropbehind = folio_test_clear_dropbehind(folio);
 	int ret;
 
 	trace_nfs_writeback_folio(inode, range_start, len);
@@ -2113,6 +2121,8 @@ int nfs_wb_folio(struct inode *inode, struct folio *folio)
 			goto out_error;
 	}
 out_error:
+	if (dropbehind)
+		folio_set_dropbehind(folio);
 	trace_nfs_writeback_folio_done(inode, range_start, len, ret);
 	return ret;
 }
