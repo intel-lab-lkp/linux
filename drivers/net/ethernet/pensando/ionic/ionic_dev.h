@@ -12,6 +12,7 @@
 
 #include "ionic_if.h"
 #include "ionic_regs.h"
+#include "ionic_api.h"
 
 #define IONIC_MAX_TX_DESC		8192
 #define IONIC_MAX_RX_DESC		16384
@@ -138,13 +139,6 @@ static_assert(sizeof(struct ionic_vf_getattr_comp) == 16);
 static_assert(sizeof(struct ionic_vf_ctrl_cmd) == 64);
 static_assert(sizeof(struct ionic_vf_ctrl_comp) == 16);
 #endif /* __CHECKER__ */
-
-struct ionic_devinfo {
-	u8 asic_type;
-	u8 asic_rev;
-	char fw_version[IONIC_DEVINFO_FWVERS_BUFLEN + 1];
-	char serial_num[IONIC_DEVINFO_SERIAL_BUFLEN + 1];
-};
 
 struct ionic_dev {
 	union ionic_dev_info_regs __iomem *dev_info_regs;
