@@ -100,6 +100,8 @@ static const struct devlink_port_ops mlx5_esw_pf_vf_dl_port_ops = {
 #endif /* CONFIG_XFRM_OFFLOAD */
 	.port_fn_max_io_eqs_get = mlx5_devlink_port_fn_max_io_eqs_get,
 	.port_fn_max_io_eqs_set = mlx5_devlink_port_fn_max_io_eqs_set,
+	.port_fn_uid_get = mlx5_devlink_port_fn_uid_get,
+	.port_fn_uid_max_size = MLX5_VUID_STR_MAX_SIZE,
 };
 
 static void mlx5_esw_offloads_sf_devlink_port_attrs_set(struct mlx5_eswitch *esw,

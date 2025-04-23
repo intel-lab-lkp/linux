@@ -580,6 +580,8 @@ int mlx5_devlink_port_fn_max_io_eqs_set(struct devlink_port *port,
 					struct netlink_ext_ack *extack);
 int mlx5_devlink_port_fn_max_io_eqs_set_sf_default(struct devlink_port *port,
 						   struct netlink_ext_ack *extack);
+int mlx5_devlink_port_fn_uid_get(struct devlink_port *port, char *fuid,
+				 struct netlink_ext_ack *extack);
 
 void *mlx5_eswitch_get_uplink_priv(struct mlx5_eswitch *esw, u8 rep_type);
 

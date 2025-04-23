@@ -4701,3 +4701,37 @@ mlx5_devlink_port_fn_max_io_eqs_set_sf_default(struct devlink_port *port,
 						   MLX5_ESW_DEFAULT_SF_COMP_EQS,
 						   extack);
 }
+
+int mlx5_devlink_port_fn_uid_get(struct devlink_port *port, char *fuid,
+				 struct netlink_ext_ack *extack)
+{
+	struct mlx5_vport *vport = mlx5_devlink_port_vport_get(port);
+	u16 vport_num = vport->vport;
+	struct mlx5_eswitch *esw;
+	u16 vhca_id;
+	int err;
+
+	if (vport_num != MLX5_VPORT_PF)
+		return -EOPNOTSUPP;
+
+	esw = mlx5_devlink_eswitch_nocheck_get(port->devlink);
+	if (!MLX5_CAP_GEN(esw->dev, vhca_resource_manager))
+		return -EOPNOTSUPP;
+
+	if (!MLX5_CAP_GEN_2(esw->dev, query_vuid))
+		return -EOPNOTSUPP;
+
+	err = mlx5_vport_get_vhca_id(esw->dev, vport_num, &vhca_id);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Failed getting vhca_id of vport");
+		return err;
+	}
+
+	err = mlx5_core_query_vuid(esw->dev, vhca_id, false, fuid);
+	if (err) {
+		NL_SET_ERR_MSG_MOD(extack, "Failed querying vuid");
+		return err;
+	}
+
+	return 0;
+}
