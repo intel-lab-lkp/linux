@@ -1913,9 +1913,9 @@ atombios_set_encoder_crtc_source(struct drm_encoder *encoder)
 			if (radeon_encoder_get_dp_bridge_encoder_id(encoder) != ENCODER_OBJECT_ID_NONE) {
 				struct drm_connector *connector = radeon_get_connector_for_encoder(encoder);
 
-				if (connector->connector_type == DRM_MODE_CONNECTOR_LVDS)
+				if (connector && connector->connector_type == DRM_MODE_CONNECTOR_LVDS)
 					args.v2.ucEncodeMode = ATOM_ENCODER_MODE_LVDS;
-				else if (connector->connector_type == DRM_MODE_CONNECTOR_VGA)
+				else if (connector && connector->connector_type == DRM_MODE_CONNECTOR_VGA)
 					args.v2.ucEncodeMode = ATOM_ENCODER_MODE_CRT;
 				else
 					args.v2.ucEncodeMode = atombios_get_encoder_mode(encoder);
