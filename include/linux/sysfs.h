@@ -303,6 +303,30 @@ static const struct attribute_group _name##_group = {		\
 };								\
 __ATTRIBUTE_GROUPS(_name)
 
+#define NAMED_ATTRIBUTE_GROUP_VISIBLE(_name)		\
+DEFINE_SYSFS_GROUP_VISIBILITY(_name);			\
+static const struct attribute_group _name##_group = {	\
+	.name = __stringify(_name),			\
+	.attrs = _name##_attrs,				\
+	.is_visible = SYSFS_GROUP_VISIBLE(_name),	\
+}
+
+#define NAMED_ATTRIBUTE_GROUPS_VISIBLE(_name)	\
+NAMED_ATTRIBUTE_GROUP_VISIBLE(_name);		\
+__ATTRIBUTE_GROUPS(_name)
+
+#define NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE(_name)	\
+DEFINE_SYSFS_GROUP_COMBO_VISIBILITY(_name);		\
+static const struct attribute_group _name##_group = {	\
+	.name = __stringify(_name),			\
+	.attrs = _name##_attrs,				\
+	.is_visible = SYSFS_GROUP_VISIBLE(_name),	\
+}
+
+#define NAMED_ATTRIBUTE_GROUPS_COMBO_VISIBLE(_name)	\
+NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE(_name);		\
+__ATTRIBUTE_GROUPS(_name)
+
 struct file;
 struct vm_area_struct;
 struct address_space;
