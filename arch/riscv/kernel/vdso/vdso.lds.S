@@ -79,8 +79,8 @@ VERSION
 		__vdso_flush_icache;
 #ifndef COMPAT_VDSO
 		__vdso_riscv_hwprobe;
-#endif
 		__vdso_getrandom;
+#endif
 	local: *;
 	};
 }
