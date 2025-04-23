@@ -34,7 +34,7 @@
 #include "irq_impl.h"
 #include "pci_impl.h"
 #include "machvec_impl.h"
-
+#include "err_impl.h"
 
 /* Note mask bit is true for ENABLED irqs.  */
 static unsigned long cached_irq_mask;
@@ -282,6 +282,15 @@ dp264_init_irq(void)
 	init_i8259a_irqs();
 	init_tsunami_irqs(&dp264_irq_type, 16, 47);
 }
+static void __init
+tsunami_late_init(void)
+{
+	tsunami_register_error_handlers();
+	/*
+	 * Check if the console left us any error logs.
+	 */
+	cdl_check_console_data_log();
+}
 
 static void __init
 clipper_init_irq(void)
@@ -521,6 +530,12 @@ monet_init_pci(void)
 static void __init
 clipper_init_pci(void)
 {
+/*
+ * This isn't really the right place, but there's some init
+ * that needs to be done after everything is basically up.
+ */
+	tsunami_late_init();
+
 	common_init_pci();
 	locate_and_init_vga(NULL);
 }

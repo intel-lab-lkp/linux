@@ -54,7 +54,7 @@ obj-$(CONFIG_ALPHA_MARVEL)	+= core_marvel.o gct.o
 obj-$(CONFIG_ALPHA_MCPCIA)	+= core_mcpcia.o
 obj-$(CONFIG_ALPHA_POLARIS)	+= core_polaris.o
 obj-$(CONFIG_ALPHA_T2)		+= core_t2.o
-obj-$(CONFIG_ALPHA_TSUNAMI)	+= core_tsunami.o
+obj-$(CONFIG_ALPHA_TSUNAMI)	+= core_tsunami.o err_ev6.o err_tsunami.o
 obj-$(CONFIG_ALPHA_TITAN)	+= core_titan.o
 obj-$(CONFIG_ALPHA_WILDFIRE)	+= core_wildfire.o
 
