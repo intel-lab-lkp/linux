@@ -100,7 +100,7 @@ struct dcn31_apg {
 	const struct dcn31_apg_mask *apg_mask;
 };
 
-void apg31_construct(struct dcn31_apg *apg3,
+void dcn31_apg_construct(struct dcn31_apg *apg3,
 	struct dc_context *ctx,
 	uint32_t inst,
 	const struct dcn31_apg_registers *apg_regs,

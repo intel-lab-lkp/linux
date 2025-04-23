@@ -1170,7 +1170,7 @@ static struct apg *dcn321_apg_create(
 	apg_regs_init(2),
 	apg_regs_init(3);
 
-	apg31_construct(apg31, ctx, inst,
+	dcn31_apg_construct(apg31, ctx, inst,
 			&apg_regs[inst],
 			&apg_shift,
 			&apg_mask);
