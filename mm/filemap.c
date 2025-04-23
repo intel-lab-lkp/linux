@@ -4136,6 +4136,11 @@ retry:
 		copied = copy_folio_from_iter_atomic(folio, offset, bytes, i);
 		flush_dcache_folio(folio);
 
+		if (iocb->ki_flags & IOCB_DONTCACHE)
+			folio_set_dropbehind(folio);
+		else if (folio_test_dropbehind(folio))
+			folio_clear_dropbehind(folio);
+
 		status = a_ops->write_end(file, mapping, pos, bytes, copied,
 						folio, fsdata);
 		if (unlikely(status != copied)) {
