@@ -141,5 +141,11 @@
 #define SYM_FUNC_START_WEAK_NOALIGN(name)		\
 	SYM_START(name, SYM_L_WEAK, SYM_A_NONE)
 
+#ifdef __ASSEMBLER__
+#define SYM_PI_ALIAS(sym)	SYM_ALIAS(__pi_ ## sym, sym, SYM_L_GLOBAL)
+#else
+#define SYM_PI_ALIAS(sym)	extern typeof(sym) __PASTE(__pi_, sym) __alias(sym)
+#endif
+
 #endif /* _ASM_X86_LINKAGE_H */
 
