@@ -43,15 +43,11 @@ properties:
   fsl,phy-tx-vref-tune-percent:
     description:
       Tunes the HS DC level relative to the nominal level
-    minimum: 94
-    maximum: 124
 
   fsl,phy-tx-rise-tune-percent:
     description:
       Adjusts the rise/fall time duration of the HS waveform relative to
       its nominal value
-    minimum: 97
-    maximum: 103
 
   fsl,phy-tx-preemp-amp-tune-microamp:
     description:
@@ -63,15 +59,12 @@ properties:
   fsl,phy-tx-vboost-level-microvolt:
     description:
       Adjust the boosted transmit launch pk-pk differential amplitude
-    minimum: 880
-    maximum: 1120
+    enum: [844, 1008, 1156]
 
   fsl,phy-comp-dis-tune-percent:
     description:
       Adjust the voltage level used to detect a disconnect event at the host
       relative to the nominal value
-    minimum: 91
-    maximum: 115
 
   fsl,phy-pcs-tx-deemph-3p5db-attenuation-db:
     description:
@@ -111,6 +104,40 @@ allOf:
       properties:
         reg:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - fsl,imx8mq-usb-phy
+            - fsl,imx8mp-usb-phy
+    then:
+      properties:
+        fsl,phy-tx-vref-tune-percent:
+          minimum: -6
+          maximum: 24
+        fsl,phy-tx-rise-tune-percent:
+          enum: [-3, -1, 0, 3]
+        fsl,phy-comp-dis-tune-percent:
+          enum: [-9, -6, -3, 0, 4, 7, 11, 15]
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - fsl,imx95-usb-phy
+    then:
+      properties:
+        fsl,phy-tx-vref-tune-percent:
+          description: 100x the original
+          minimum: -1000
+          maximum: 875
+        fsl,phy-tx-rise-tune-percent:
+          enum: [-10, 0, 15, 20]
+        fsl,phy-comp-dis-tune-percent:
+          description: 10x the original
+          enum: [-60, -45, -30, -15, 0, 15, 30, 45]
 
   - if:
       required:
