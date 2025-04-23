@@ -1590,6 +1590,22 @@ int folio_wait_private_2_killable(struct folio *folio)
 EXPORT_SYMBOL(folio_wait_private_2_killable);
 
 /*
+ * Helper for filesystems that want to implement dropbehind, and that
+ * need to keep the folio around after folio_end_writeback, e.g. due to
+ * the need to first commit NFS stable writes.
+ */
+void folio_end_dropbehind(struct folio *folio)
+{
+	if (folio_trylock(folio)) {
+		if (folio->mapping && !folio_test_dirty(folio) &&
+		    !folio_test_writeback(folio))
+			folio_unmap_invalidate(folio->mapping, folio, 0);
+		folio_unlock(folio);
+	}
+}
+EXPORT_SYMBOL(folio_end_dropbehind);
+
+/*
  * If folio was marked as dropbehind, then pages should be dropped when writeback
  * completes. Do that now. If we fail, it's likely because of a big folio -
  * just reset dropbehind for that case and latter completions should invalidate.
