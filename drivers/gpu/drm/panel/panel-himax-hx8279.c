@@ -835,8 +835,7 @@ static int hx8279_check_goa_config(struct hx8279 *hx, struct device *dev)
 			num_zero++;
 	}
 
-	if (num_zero == ARRAY_SIZE(desc->goa_even_timing))
-		goa_even_valid = false;
+	goa_even_valid = (num_zero != ARRAY_SIZE(desc->goa_even_timing));
 
 	/* Programming one without the other would make no sense! */
 	if (goa_odd_valid != goa_even_valid)
