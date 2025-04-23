@@ -1627,6 +1627,11 @@ void devlink_free(struct devlink *devlink);
  *			    of event queues. Should be used by device drivers to
  *			    configure maximum number of event queues
  *			    of a function managed by the devlink port.
+ * @port_fn_uid_get: Callback used to get port function's uid. Should be used by
+ *		     device drivers to report the uid of the function managed by
+ *		     the devlink port.
+ * @port_fn_uid_max_size: The maximum size of the port function's uid including
+ *			  the null terminating byte.
  *
  * Note: Driver should return -EOPNOTSUPP if it doesn't support
  * port function (@port_fn_*) handling for a particular port.
@@ -1682,6 +1687,9 @@ struct devlink_port_ops {
 	int (*port_fn_max_io_eqs_set)(struct devlink_port *devlink_port,
 				      u32 max_eqs,
 				      struct netlink_ext_ack *extack);
+	int (*port_fn_uid_get)(struct devlink_port *devlink_port, char *fuid,
+			       struct netlink_ext_ack *extack);
+	size_t port_fn_uid_max_size;
 };
 
 void devlink_port_init(struct devlink *devlink,

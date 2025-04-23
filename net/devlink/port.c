@@ -207,6 +207,35 @@ static int devlink_port_fn_max_io_eqs_fill(struct devlink_port *port,
 	return 0;
 }
 
+static int devlink_port_fn_uid_fill(struct devlink_port *port,
+				    struct sk_buff *msg,
+				    struct netlink_ext_ack *extack,
+				    bool *msg_updated)
+{
+	char *fuid;
+	int err;
+
+	if (!port->ops->port_fn_uid_get)
+		return 0;
+
+	fuid = kzalloc(port->ops->port_fn_uid_max_size, GFP_KERNEL);
+	if (!fuid)
+		return -ENOMEM;
+
+	err = port->ops->port_fn_uid_get(port, fuid, extack);
+	if (err) {
+		kfree(fuid);
+		return err == -EOPNOTSUPP ? 0 : err;
+	}
+
+	err = nla_put_string(msg, DEVLINK_PORT_FN_ATTR_UID, fuid);
+	if (!err)
+		*msg_updated = true;
+
+	kfree(fuid);
+	return err;
+}
+
 int devlink_nl_port_handle_fill(struct sk_buff *msg, struct devlink_port *devlink_port)
 {
 	if (devlink_nl_put_handle(msg, devlink_port->devlink))
@@ -468,6 +497,9 @@ devlink_nl_port_function_attrs_put(struct sk_buff *msg, struct devlink_port *por
 	if (err)
 		goto out;
 	err = devlink_port_fn_max_io_eqs_fill(port, msg, extack, &msg_updated);
+	if (err)
+		goto out;
+	err = devlink_port_fn_uid_fill(port, msg, extack, &msg_updated);
 	if (err)
 		goto out;
 	err = devlink_rel_devlink_handle_put(msg, port->devlink,

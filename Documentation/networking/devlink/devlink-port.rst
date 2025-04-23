@@ -328,6 +328,18 @@ interrupt vector.
         function:
             hw_addr 00:00:00:00:00:00 ipsec_packet disabled max_io_eqs 32
 
+Function unique identifier
+--------------------------
+A function unique identifier (UID) is a vendor defined string of arbitrary
+length that universally identifies a function. The function UID can be reported
+via devlink dev info.
+
+The devlink port function UID attribute reports the UID of the function that
+pertains to the devlink port.
+
+This can be used to unambiguously map between a function and the devlink port
+that manages it, and vice versa.
+
 Subfunction
 ============
 

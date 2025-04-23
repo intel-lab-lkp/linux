@@ -894,6 +894,9 @@ attribute-sets:
         type: bitfield32
         enum: port-fn-attr-cap
         enum-as-flags: True
+      -
+       name: uid
+       type: string
 
   -
     name: dl-dpipe-tables
