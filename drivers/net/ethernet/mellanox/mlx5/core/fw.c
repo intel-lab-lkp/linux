@@ -118,8 +118,8 @@ out:
 }
 EXPORT_SYMBOL(mlx5_core_query_vendor_id);
 
-int mlx5_core_query_vuid(struct mlx5_core_dev *dev, bool data_direct,
-			 char *out_vuid)
+int mlx5_core_query_vuid(struct mlx5_core_dev *dev, u16 vhca_id,
+			 bool data_direct, char *out_vuid)
 {
 	u8 out[MLX5_ST_SZ_BYTES(query_vuid_out) +
 		MLX5_ST_SZ_BYTES(array1024_auto)] = {};
@@ -128,7 +128,7 @@ int mlx5_core_query_vuid(struct mlx5_core_dev *dev, bool data_direct,
 	int err;
 
 	MLX5_SET(query_vuid_in, in, opcode, MLX5_CMD_OPCODE_QUERY_VUID);
-	MLX5_SET(query_vuid_in, in, vhca_id, MLX5_CAP_GEN(dev, vhca_id));
+	MLX5_SET(query_vuid_in, in, vhca_id, vhca_id);
 	MLX5_SET(query_vuid_in, in, data_direct, data_direct);
 	err = mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
 	if (err)

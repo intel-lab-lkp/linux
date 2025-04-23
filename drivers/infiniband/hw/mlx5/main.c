@@ -3594,7 +3594,8 @@ static int mlx5_ib_data_direct_init(struct mlx5_ib_dev *dev)
 	    !MLX5_CAP_GEN_2(dev->mdev, query_vuid))
 		return 0;
 
-	ret = mlx5_core_query_vuid(dev->mdev, true, vuid);
+	ret = mlx5_core_query_vuid(dev->mdev, MLX5_CAP_GEN(dev->mdev, vhca_id),
+				   true, vuid);
 	if (ret)
 		return ret;
 
