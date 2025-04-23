@@ -3873,6 +3873,7 @@
 			clocks = <&bi_tcxo_div2>,
 				 <&gcc GCC_GPU_GPLL0_CPH_CLK_SRC>,
 				 <&gcc GCC_GPU_GPLL0_DIV_CPH_CLK_SRC>;
+			power-domains = <&rpmhpd RPMHPD_GFX>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
