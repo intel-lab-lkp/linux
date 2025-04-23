@@ -166,6 +166,24 @@
 		interrupt-controller;
 		#interrupt-cells = <2>;
 	};
+
+	eth0_pps_out: eth0_pps_out {
+		samsung,pins = "gph3-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+	};
+
+	eth0_rgmii: eth0_rgmii {
+		samsung,pins = "gph3-1", "gph3-2", "gph3-3", "gph3-4",
+				"gph3-5", "gph3-6", "gph3-7", "gph4-0",
+				"gph4-1", "gph4-2", "gph4-3", "gph4-4";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+	};
+
+	eth0_mdc_mdio: eth0_mdc_mdio {
+		samsung,pins = "gph4-5", "gph4-6";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+	};
 };
 
 &pinctrl_hsi2ufs {
@@ -750,6 +768,29 @@
 		samsung,pin-function = <EXYNOS_PIN_FUNC_4>;
 		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
 	};
+
+	eth_extpll_avb: eth_extpll_avb {
+		samsung,pins = "gpg3-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+		samsung,pin-pud = <EXYNOS_PIN_PULL_NONE>;
+		samsung,pin-drv = <EXYNOS5420_PIN_DRV_LV3>;
+	};
+
+	eth0_pps_out0: eth0_pps_out0 {
+		samsung,pins = "gpg0-0";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+	};
+
+	eth0_pps_out1: eth0_pps_out1 {
+		samsung,pins = "gpg0-1";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_2>;
+	};
+
+	eth_phy_reset: eth_phy_reset {
+		samsung,pins = "gpg3-1";
+		samsung,pin-function = <EXYNOS_PIN_FUNC_OUTPUT>;
+	};
+
 };
 
 &pinctrl_peric1 {
