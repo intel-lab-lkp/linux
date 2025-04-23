@@ -31,12 +31,28 @@ static inline int pfn_valid(unsigned long pfn)
 }
 #define pfn_valid pfn_valid
 
+static inline bool first_valid_pfn(unsigned long *pfn)
+{
+	/* avoid <linux/mm.h> include hell */
+	extern unsigned long max_mapnr;
+	unsigned long pfn_offset = ARCH_PFN_OFFSET;
+
+	if (*pfn < pfn_offset) {
+		*pfn = pfn_offset;
+		return true;
+	}
+
+	if ((*pfn - pfn_offset) < max_mapnr)
+		return true;
+
+	return false;
+}
+
 #ifndef for_each_valid_pfn
-#define for_each_valid_pfn(pfn, start_pfn, end_pfn)			 \
-	for ((pfn) = max_t(unsigned long, (start_pfn), ARCH_PFN_OFFSET); \
-	     (pfn) < min_t(unsigned long, (end_pfn),			 \
-			   ARCH_PFN_OFFSET + max_mapnr);		 \
-	     (pfn)++)
+#define for_each_valid_pfn(pfn, start_pfn, end_pfn)			       \
+	for (pfn = max_t(unsigned long, start_pfn, ARCH_PFN_OFFSET);	\
+	     pfn < min_t(unsigned long, end_pfn, ARCH_PFN_OFFSET + max_mapnr); \
+			 pfn++)
 #endif /* for_each_valid_pfn */
 #endif /* valid_pfn */
 
