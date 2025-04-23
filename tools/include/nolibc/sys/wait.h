@@ -29,12 +29,6 @@ pid_t sys_wait4(pid_t pid, int *status, int options, struct rusage *rusage)
 }
 
 static __attribute__((unused))
-pid_t wait(int *status)
-{
-	return __sysret(sys_wait4(-1, status, 0, NULL));
-}
-
-static __attribute__((unused))
 pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage)
 {
 	return __sysret(sys_wait4(pid, status, options, rusage));
@@ -108,6 +102,12 @@ pid_t waitpid(pid_t pid, int *status, int options)
 	}
 
 	return info.si_pid;
+}
+
+static __attribute__((unused))
+pid_t wait(int *status)
+{
+	return waitpid(-1, status, 0);
 }
 
 
