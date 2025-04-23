@@ -74,6 +74,39 @@ const struct ionic_devinfo *ionic_api_get_devinfo(void *handle);
  */
 void ionic_api_request_reset(void *handle);
 
+#define IONIC_EXPDB_64B_WQE	BIT(0)
+#define IONIC_EXPDB_128B_WQE	BIT(1)
+#define IONIC_EXPDB_256B_WQE	BIT(2)
+#define IONIC_EXPDB_512B_WQE	BIT(3)
+struct ionic_qtype_info {
+	u64 features;
+	u16 desc_sz;
+	u16 comp_sz;
+	u16 sg_desc_sz;
+	u16 max_sg_elems;
+	u16 sg_desc_stride;
+	u8  version;
+	u8  supported;
+};
+
+/**
+ * ionic_api_get_queue_identity - Get queue identity
+ * @handle:     Handle to lif
+ * @qtype:      Queue type (enum ionic_logical_qtype)
+ *
+ * Return: pointer to queue identity
+ */
+struct ionic_qtype_info *
+ionic_api_get_queue_identity(void *handle, enum ionic_logical_qtype qtype);
+
+/**
+ * ionic_api_get_expdb - Get express DB capability
+ * @handle:     Handle to lif
+ *
+ * Return: express DB capability flag
+ */
+u8 ionic_api_get_expdb(void *handle);
+
 /**
  * ionic_api_get_intr - Reserve a device interrupt index
  * @handle:     Handle to lif
@@ -95,6 +128,28 @@ int ionic_api_get_intr(void *handle, int *irq);
 void ionic_api_put_intr(void *handle, int intr);
 
 /**
+ * ionic_api_get_cmb - Reserve cmb pages
+ * @handle:      Handle to lif
+ * @pgid:        First page index
+ * @pgaddr:      First page bus addr (contiguous)
+ * @order:       Log base two number of pages (PAGE_SIZE)
+ * @stride_log2: Size of stride to determine CMB pool
+ * @expdb:       Will be set to true if this CMB region has expdb enabled
+ *
+ * Return: zero or negative error status
+ */
+int ionic_api_get_cmb(void *handle, u32 *pgid, phys_addr_t *pgaddr, int order,
+		      u8 stride_log2, bool *expdb);
+
+/**
+ * ionic_api_put_cmb - Release cmb pages
+ * @handle:     Handle to lif
+ * @pgid:       First page index
+ * @order:      Log base two number of pages (PAGE_SIZE)
+ */
+void ionic_api_put_cmb(void *handle, u32 pgid, int order);
+
+/**
  * ionic_api_kernel_dbpage - Get mapped doorbell page for use in kernel space
  * @handle:     Handle to lif
  * @intr_ctrl:  Interrupt control registers
@@ -110,6 +165,29 @@ void ionic_api_put_intr(void *handle, int intr);
 void ionic_api_kernel_dbpage(void *handle,
 			     struct ionic_intr __iomem **intr_ctrl,
 			     u32 *dbid, u64 __iomem **dbpage);
+
+/**
+ * ionic_api_get_dbid - Reserve a doorbell id
+ * @handle:     Handle to lif
+ * @dbid:       Doorbell id
+ * @addr:       Phys address of doorbell page
+ *
+ * Reserve a doorbell id.  This corresponds with exactly one doorbell page at
+ * an offset from the doorbell page base address, that can be mapped into a
+ * user space process.
+ *
+ * Return: zero on success or negative error status
+ */
+int ionic_api_get_dbid(void *handle, u32 *dbid, phys_addr_t *addr);
+
+/**
+ * ionic_api_put_dbid - Release a doorbell id
+ * @handle:     Handle to lif
+ * @dbid:       Doorbell id
+ *
+ * Mark the doorbell id unused, so that it can be reserved again.
+ */
+void ionic_api_put_dbid(void *handle, int dbid);
 
 /**
  * struct ionic_admin_ctx - Admin command context

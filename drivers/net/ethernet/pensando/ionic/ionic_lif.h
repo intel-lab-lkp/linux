@@ -167,17 +167,6 @@ enum ionic_lif_state_flags {
 	IONIC_LIF_F_STATE_SIZE
 };
 
-struct ionic_qtype_info {
-	u8  version;
-	u8  supported;
-	u64 features;
-	u16 desc_sz;
-	u16 comp_sz;
-	u16 sg_desc_sz;
-	u16 max_sg_elems;
-	u16 sg_desc_stride;
-};
-
 struct ionic_phc;
 
 #define IONIC_LIF_NAME_MAX_SZ		32
