@@ -610,6 +610,13 @@ struct sched_entity {
 	 */
 	struct sched_avg		avg;
 #endif
+#ifdef CONFIG_SCHED_EEVDF_TESTING
+	/*
+	 * Add a list element so that we don't recurse
+	 * in the EEVDF unit test
+	 */
+	struct list_head tg_entry;
+#endif
 };
 
 struct sched_rt_entity {

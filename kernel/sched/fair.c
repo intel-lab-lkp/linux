@@ -13473,6 +13473,9 @@ void init_tg_cfs_entry(struct task_group *tg, struct cfs_rq *cfs_rq,
 	/* guarantee group entities always have weight */
 	update_load_set(&se->load, NICE_0_LOAD);
 	se->parent = parent;
+#ifdef CONFIG_SCHED_EEVDF_TESTING
+	INIT_LIST_HEAD(&(se->group_node));
+#endif
 }
 
 static DEFINE_MUTEX(shares_mutex);
