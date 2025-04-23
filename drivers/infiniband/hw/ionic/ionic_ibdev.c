@@ -203,6 +203,7 @@ static struct ionic_ibdev *ionic_create_ibdev(void *handle,
 
 	addrconf_ifid_eui48((u8 *)&ibdev->node_guid, ndev);
 
+	ionic_datapath_setops(dev);
 	ionic_controlpath_setops(dev);
 	rc = ib_register_device(ibdev, "ionic_%d", ibdev->dev.parent);
 	if (rc)
