@@ -980,6 +980,8 @@ found:
 	if (!best || (curr && entity_before(curr, best)))
 		best = curr;
 
+	test_eevdf_positive_lag(cfs_rq, best);
+
 	return best;
 }
 
