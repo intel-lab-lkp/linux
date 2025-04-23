@@ -394,6 +394,7 @@ SYM_CODE_START(__x86_return_thunk)
 #endif
 	int3
 SYM_CODE_END(__x86_return_thunk)
+SYM_PI_ALIAS(__x86_return_thunk)
 EXPORT_SYMBOL(__x86_return_thunk)
 
 #endif /* CONFIG_MITIGATION_RETHUNK */
