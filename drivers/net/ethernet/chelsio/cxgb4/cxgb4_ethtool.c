@@ -2238,7 +2238,6 @@ int cxgb4_init_ethtool_filters(struct adapter *adap)
 	struct cxgb4_ethtool_filter *eth_filter;
 	struct tid_info *tids = &adap->tids;
 	u32 nentries, i;
-	int ret;
 
 	eth_filter = kzalloc(sizeof(*eth_filter), GFP_KERNEL);
 	if (!eth_filter)
@@ -2247,10 +2246,8 @@ int cxgb4_init_ethtool_filters(struct adapter *adap)
 	eth_filter_info = kcalloc(adap->params.nports,
 				  sizeof(*eth_filter_info),
 				  GFP_KERNEL);
-	if (!eth_filter_info) {
-		ret = -ENOMEM;
+	if (!eth_filter_info)
 		goto free_eth_filter;
-	}
 
 	eth_filter->port = eth_filter_info;
 
@@ -2262,14 +2259,11 @@ int cxgb4_init_ethtool_filters(struct adapter *adap)
 
 	for (i = 0; i < adap->params.nports; i++) {
 		eth_filter->port[i].loc_array = kvzalloc(nentries, GFP_KERNEL);
-		if (!eth_filter->port[i].loc_array) {
-			ret = -ENOMEM;
+		if (!eth_filter->port[i].loc_array)
 			goto free_eth_finfo;
-		}
 
 		eth_filter->port[i].bmap = bitmap_zalloc(nentries, GFP_KERNEL);
 		if (!eth_filter->port[i].bmap) {
-			ret = -ENOMEM;
 			kvfree(eth_filter->port[i].loc_array);
 			goto free_eth_finfo;
 		}
@@ -2287,8 +2281,7 @@ free_eth_finfo:
 
 free_eth_filter:
 	kfree(eth_filter);
-
-	return ret;
+	return -ENOMEM;
 }
 
 void cxgb4_set_ethtool_ops(struct net_device *netdev)
