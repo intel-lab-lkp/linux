@@ -354,7 +354,10 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			btrfs_set_opt(ctx->mount_opt, COMPRESS);
 			btrfs_clear_opt(ctx->mount_opt, NODATACOW);
 			btrfs_clear_opt(ctx->mount_opt, NODATASUM);
-		} else if (strncmp(param->string, "zlib", 4) == 0) {
+		} else if (strncmp(param->string, "zlib", 4) == 0 &&
+				(param->string[4] == ':' ||
+				 param->string[4] == ',' ||
+				 param->string[4] == '\0')) {
 			ctx->compress_type = BTRFS_COMPRESS_ZLIB;
 			ctx->compress_level =
 				btrfs_compress_str2level(BTRFS_COMPRESS_ZLIB,
@@ -362,13 +365,18 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			btrfs_set_opt(ctx->mount_opt, COMPRESS);
 			btrfs_clear_opt(ctx->mount_opt, NODATACOW);
 			btrfs_clear_opt(ctx->mount_opt, NODATASUM);
-		} else if (strncmp(param->string, "lzo", 3) == 0) {
+		} else if (strncmp(param->string, "lzo", 3) == 0 &&
+				(param->string[3] == ',' ||
+				 param->string[3] == '\0')) {
 			ctx->compress_type = BTRFS_COMPRESS_LZO;
 			ctx->compress_level = 0;
 			btrfs_set_opt(ctx->mount_opt, COMPRESS);
 			btrfs_clear_opt(ctx->mount_opt, NODATACOW);
 			btrfs_clear_opt(ctx->mount_opt, NODATASUM);
-		} else if (strncmp(param->string, "zstd", 4) == 0) {
+		} else if (strncmp(param->string, "zstd", 4) == 0 &&
+				(param->string[4] == ':' ||
+				 param->string[4] == ',' ||
+				 param->string[4] == '\0')) {
 			ctx->compress_type = BTRFS_COMPRESS_ZSTD;
 			ctx->compress_level =
 				btrfs_compress_str2level(BTRFS_COMPRESS_ZSTD,
@@ -376,7 +384,12 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			btrfs_set_opt(ctx->mount_opt, COMPRESS);
 			btrfs_clear_opt(ctx->mount_opt, NODATACOW);
 			btrfs_clear_opt(ctx->mount_opt, NODATASUM);
-		} else if (strncmp(param->string, "no", 2) == 0) {
+		} else if ((strncmp(param->string, "no", 2) == 0 &&
+				(param->string[2] == ',' ||
+				 param->string[2] == '\0')) ||
+			   (strncmp(param->string, "none", 4) == 0 &&
+				(param->string[4] == ',' ||
+				 param->string[4] == '\0'))) {
 			ctx->compress_level = 0;
 			ctx->compress_type = 0;
 			btrfs_clear_opt(ctx->mount_opt, COMPRESS);
