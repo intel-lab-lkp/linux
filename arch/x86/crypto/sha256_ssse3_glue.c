@@ -36,6 +36,8 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 
+#include <asm/fpu/api.h>
+
 asmlinkage void sha256_transform_ssse3(struct crypto_sha256_state *state,
 				       const u8 *data, int blocks);
 
