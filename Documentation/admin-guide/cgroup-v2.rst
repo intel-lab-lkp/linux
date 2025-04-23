@@ -1480,6 +1480,9 @@ The following nested keys are defined.
 	  vmalloc (npn)
 		Amount of memory used for vmap backed memory.
 
+	  gpu (npn)
+		Amount of memory used for GPU device system RAM.
+
 	  shmem
 		Amount of cached filesystem data that is swap-backed,
 		such as tmpfs, shm segments, shared anonymous mmap()s
