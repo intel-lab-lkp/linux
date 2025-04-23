@@ -467,7 +467,7 @@ static struct svc_xprt *svc_rdma_accept(struct svc_xprt *xprt)
 	 * progress even if the client is using one rkey per page
 	 * in each Read chunk.
 	 */
-	ctxts = 3 * RPCSVC_MAXPAGES;
+	ctxts = 3 * svc_serv_maxpages(xprt->xpt_server);
 	newxprt->sc_sq_depth = rq_depth + ctxts;
 	if (newxprt->sc_sq_depth > dev->attrs.max_qp_wr)
 		newxprt->sc_sq_depth = dev->attrs.max_qp_wr;
