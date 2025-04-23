@@ -258,7 +258,7 @@ static void panic_other_cpus_shutdown(bool crash_kexec)
 	if (panic_print & PANIC_PRINT_ALL_CPU_BT) {
 		/* Temporary allow non-panic CPUs to write their backtraces. */
 		panic_triggering_all_cpu_backtrace = true;
-		trigger_all_cpu_backtrace();
+		trigger_allbutcpu_cpu_backtrace(raw_smp_processor_id());
 		panic_triggering_all_cpu_backtrace = false;
 	}
 
