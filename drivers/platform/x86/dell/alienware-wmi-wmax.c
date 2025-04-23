@@ -13,6 +13,7 @@
 #include <linux/dmi.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_profile.h>
+#include <linux/sysfs.h>
 #include <linux/wmi.h>
 #include "alienware-wmi.h"
 
@@ -356,7 +357,7 @@ static bool hdmi_group_visible(struct kobject *kobj)
 {
 	return alienware_interface == WMAX && alienfx->hdmi_mux;
 }
-DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(hdmi);
+DEFINE_SYSFS_GROUP_VISIBILITY(hdmi);
 
 static struct attribute *hdmi_attrs[] = {
 	&dev_attr_cable.attr,
@@ -404,7 +405,7 @@ static bool amplifier_group_visible(struct kobject *kobj)
 {
 	return alienware_interface == WMAX && alienfx->amplifier;
 }
-DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(amplifier);
+DEFINE_SYSFS_GROUP_VISIBILITY(amplifier);
 
 static struct attribute *amplifier_attrs[] = {
 	&dev_attr_status.attr,
@@ -475,7 +476,7 @@ static bool deepsleep_group_visible(struct kobject *kobj)
 {
 	return alienware_interface == WMAX && alienfx->deepslp;
 }
-DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(deepsleep);
+DEFINE_SYSFS_GROUP_VISIBILITY(deepsleep);
 
 static struct attribute *deepsleep_attrs[] = {
 	&dev_attr_deepsleep.attr,

@@ -10,10 +10,11 @@
 
 #include <linux/acpi.h>
 #include <linux/cleanup.h>
-#include <linux/module.h>
-#include <linux/platform_device.h>
 #include <linux/dmi.h>
 #include <linux/leds.h>
+#include <linux/module.h>
+#include <linux/platform_device.h>
+#include <linux/sysfs.h>
 #include "alienware-wmi.h"
 
 MODULE_AUTHOR("Mario Limonciello <mario.limonciello@outlook.com>");
@@ -326,8 +327,8 @@ static ssize_t lighting_control_state_store(struct device *dev,
 
 static DEVICE_ATTR_RW(lighting_control_state);
 
-static umode_t zone_attr_visible(struct kobject *kobj,
-				 struct attribute *attr, int n)
+static umode_t rgb_zones_attr_visible(struct kobject *kobj,
+				      struct attribute *attr, int n)
 {
 	if (n < alienfx->num_zones + 1)
 		return attr->mode;
@@ -335,13 +336,12 @@ static umode_t zone_attr_visible(struct kobject *kobj,
 	return 0;
 }
 
-static bool zone_group_visible(struct kobject *kobj)
+static bool rgb_zones_group_visible(struct kobject *kobj)
 {
 	return alienfx->num_zones > 0;
 }
-DEFINE_SYSFS_GROUP_VISIBLE(zone);
 
-static struct attribute *zone_attrs[] = {
+static struct attribute *rgb_zones_attrs[] = {
 	&dev_attr_lighting_control_state.attr,
 	&dev_attr_zone00.attr,
 	&dev_attr_zone01.attr,
@@ -349,12 +349,7 @@ static struct attribute *zone_attrs[] = {
 	&dev_attr_zone03.attr,
 	NULL
 };
-
-static struct attribute_group zone_attribute_group = {
-	.name = "rgb_zones",
-	.is_visible = SYSFS_GROUP_VISIBLE(zone),
-	.attrs = zone_attrs,
-};
+NAMED_ATTRIBUTE_GROUP_COMBO_VISIBLE(rgb_zones);
 
 /*
  * LED Brightness (Global)
@@ -410,7 +405,7 @@ static int alienfx_probe(struct platform_device *pdev)
 }
 
 static const struct attribute_group *alienfx_groups[] = {
-	&zone_attribute_group,
+	&rgb_zones_group,
 	WMAX_DEV_GROUPS
 	NULL
 };
